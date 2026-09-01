@@ -1,0 +1,33 @@
+name: Generate morning greeting image
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: "JST date (YYYY-MM-DD); blank uses today's JST date"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: morning-greeting-image
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Generate and store one image
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          MORNING_GREETING_DATE: ${{ inputs.target_date }}
+        run: node --experimental-strip-types scripts/morning-greeting-image.ts
