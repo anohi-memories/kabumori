@@ -97,11 +97,74 @@ test("existing same-day object skips generation and performs no write", async ()
     date: "2026-09-01",
     fetchImpl: async (input) => {
       calls.push(String(input));
-      return new Response(new Uint8Array([137]), { status: 206 });
+      return new Response(new Uint8Array([137]), { status: 200 });
     },
   });
   assert.equal(result.skipped, true);
   assert.equal(result.image_api_called, 0);
+  assert.equal(calls.length, 1);
+});
+
+test("Supabase 400 Object not found is treated as a missing same-day object", async () => {
+  const calls: string[] = [];
+  const result = await runMorningGreetingImageWorkflow({
+    supabaseUrl: SUPABASE_URL,
+    serviceRoleKey: "service-role-test",
+    openAiApiKey: "openai-test",
+    date: "2026-09-01",
+    fetchImpl: async (input, init) => {
+      const url = String(input);
+      calls.push(url);
+      if (calls.length === 1) {
+        return new Response(JSON.stringify({
+          statusCode: "404",
+          error: "not_found",
+          message: "Object not found",
+        }), {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.endsWith("canonical/yume-reference.png")) return pngResponse();
+      if (url === OPENAI_MORNING_GREETING_IMAGE_ENDPOINT) {
+        return new Response(JSON.stringify({ data: [{ b64_json: "iVBORw==" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      assert.equal(init?.method, "POST");
+      return new Response("stored", { status: 200 });
+    },
+  });
+  assert.equal(result.skipped, false);
+  assert.equal(result.image_api_called, 1);
+  assert.equal(result.retry_count, 0);
+  assert.equal(calls.filter((url) => url === OPENAI_MORNING_GREETING_IMAGE_ENDPOINT).length, 1);
+});
+
+test("unrelated Supabase 400 error stops safely before image generation", async () => {
+  const calls: string[] = [];
+  await assert.rejects(
+    () => runMorningGreetingImageWorkflow({
+      supabaseUrl: SUPABASE_URL,
+      serviceRoleKey: "service-role-test",
+      openAiApiKey: "openai-test",
+      date: "2026-09-01",
+      fetchImpl: async (input) => {
+        calls.push(String(input));
+        return new Response(JSON.stringify({ message: "Invalid request" }), {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof MorningGreetingImageWorkflowError);
+      assert.equal(error.imageApiCalled, 0);
+      assert.match(error.message, /OUTPUT_EXISTENCE_CHECK_FAILED:400/u);
+      return true;
+    },
+  );
   assert.equal(calls.length, 1);
 });
 

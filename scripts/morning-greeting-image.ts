@@ -50,6 +50,27 @@ function serviceRoleHeaders(serviceRoleKey: string): Record<string, string> {
   };
 }
 
+async function isStorageObjectMissing(response: Response): Promise<boolean> {
+  if (response.status === 404) return true;
+  if (response.status !== 400) return false;
+
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > 4096) return false;
+  const body = await response.text();
+  if (body.length > 4096) return false;
+
+  const normalized = body.trim().toLowerCase();
+  if (normalized === "object not found") return true;
+  try {
+    const payload = JSON.parse(body) as Record<string, unknown>;
+    return [payload.message, payload.error, payload.code].some((value) =>
+      typeof value === "string" && value.trim().toLowerCase() === "object not found"
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function resolveJstDate(now: Date = new Date()): string {
   if (!Number.isFinite(now.getTime())) throw new Error("MORNING_GREETING_DATE_INVALID");
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -115,7 +136,7 @@ export async function runMorningGreetingImageWorkflow(args: {
         scheduled_posts_changed: 0,
       };
     }
-    if (existing.status !== 404) {
+    if (!(await isStorageObjectMissing(existing))) {
       throw new Error(`MORNING_GREETING_OUTPUT_EXISTENCE_CHECK_FAILED:${existing.status}`);
     }
 
