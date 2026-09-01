@@ -83,6 +83,11 @@ import {
   MorningGreetingImageTestError,
   runMorningGreetingImageTest,
 } from "./morning_greeting_image_logic.ts";
+import {
+  MORNING_GREETING_PAYLOAD_TEST_MODE,
+  MorningGreetingPayloadDryRunError,
+  runMorningGreetingPayloadDryRun,
+} from "./morning_greeting_payload_logic.ts";
 export {
   generateMorningGreeting,
   selectMorningGreetingTheme,
@@ -2881,8 +2886,10 @@ Deno.serve(async (req) => {
     const isCloseReportDryRun = requestBody.mode === "close_report_dry_run";
     const isUsPremarketDryRun = requestBody.mode === "us_premarket_report_dry_run";
     const isMorningGreetingImageTest = requestBody.mode === MORNING_GREETING_IMAGE_TEST_MODE;
+    const isMorningGreetingPayloadTest = requestBody.mode === MORNING_GREETING_PAYLOAD_TEST_MODE;
     const isAnyDryRun = isUsefulTipDryRun || isVoiceDryRun || isMorningReportDryRun ||
-      isCloseReportDryRun || isUsPremarketDryRun || isMorningGreetingImageTest;
+      isCloseReportDryRun || isUsPremarketDryRun || isMorningGreetingImageTest ||
+      isMorningGreetingPayloadTest;
     const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
     const xAccessToken = Deno.env.get("X_OAUTH2_ACCESS_TOKEN");
     const xRefreshToken = Deno.env.get("X_OAUTH2_REFRESH_TOKEN");
@@ -2898,6 +2905,49 @@ Deno.serve(async (req) => {
 
     supabaseUrlForFailure = supabaseUrl;
     serviceRoleKeyForFailure = serviceRoleKey;
+
+    if (isMorningGreetingPayloadTest) {
+      const referenceTime = typeof requestBody.reference_time_iso === "string"
+        ? new Date(requestBody.reference_time_iso)
+        : new Date();
+      try {
+        const result = await runMorningGreetingPayloadDryRun({
+          supabaseUrl,
+          serviceRoleKey,
+          openAiApiKey,
+          now: referenceTime,
+        });
+        return jsonResponse(result, 200);
+      } catch (error) {
+        return jsonResponse({
+          success: false,
+          date_jst: Number.isFinite(referenceTime.getTime())
+            ? new Intl.DateTimeFormat("en-CA", {
+              timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit",
+            }).format(referenceTime)
+            : null,
+          text: null,
+          theme: null,
+          theme_name: null,
+          visual_theme: null,
+          image_path: null,
+          image_exists: error instanceof MorningGreetingPayloadDryRunError
+            ? error.imageExists
+            : false,
+          theme_match: error instanceof MorningGreetingPayloadDryRunError
+            ? error.themeMatch
+            : false,
+          payload_ready: false,
+          openai_text_api_called: error instanceof MorningGreetingPayloadDryRunError
+            ? error.openAiTextApiCalled
+            : 0,
+          retry_count: 0,
+          x_api_called: 0,
+          x_posted: false,
+          error: safeErrorCode(error),
+        }, 422);
+      }
+    }
 
     if (isMorningGreetingImageTest) {
       try {
