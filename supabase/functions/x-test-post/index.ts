@@ -1648,7 +1648,7 @@ async function generateMorningReport(
     lanes: collections.map((collection) => ({
       lane: collection.packet.lane,
       candidateCount: collection.packet.candidates.length,
-      aiReturnedCandidateCount: collection.packet.candidates.length,
+      aiReturnedCandidateCount: collection.responseDiagnostics.candidateReturnedCount,
       mechanicallyCheckedCandidateCount: checked.filter((candidate) => candidate.lane === collection.packet.lane).length,
       qualifiedCandidateCount: selection.decisions.filter((decision) =>
         decision.candidate.lane === collection.packet.lane &&

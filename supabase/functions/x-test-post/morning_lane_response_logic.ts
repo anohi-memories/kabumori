@@ -31,6 +31,18 @@ export type MorningLaneFailureCategory =
   | "JSON_PARSE_FAILED"
   | "SCHEMA_INVALID";
 
+// One candidate could not be safely normalized and was dropped; the rest of the lane continues.
+export type MorningLaneCandidateExclusion = {
+  index: number;
+  reasons: string[];
+};
+
+// A candidate's field value was rewritten into a valid equivalent (e.g. timestamp separator), not fabricated.
+export type MorningLaneCandidateNormalization = {
+  index: number;
+  fields: string[];
+};
+
 export type MorningLaneResponseDiagnostics = {
   lane: MorningSearchLane;
   responseStatus: string | null;
@@ -44,6 +56,9 @@ export type MorningLaneResponseDiagnostics = {
   schemaValidationPassed: boolean;
   failureCategory: MorningLaneFailureCategory | null;
   schemaIssues: string[];
+  candidateReturnedCount: number;
+  candidateExclusions: MorningLaneCandidateExclusion[];
+  candidateNormalizations: MorningLaneCandidateNormalization[];
 };
 
 export class MorningLaneResponseError extends Error {
@@ -92,41 +107,137 @@ function isHttpUrl(value: unknown): value is string {
   }
 }
 
-function isTimestamp(value: unknown, precision: unknown): boolean {
-  if (typeof value !== "string") return false;
-  if (precision === "date") return /^\d{4}-\d{2}-\d{2}$/.test(value);
-  return precision === "datetime" && /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value));
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const DATE_TIME = /^\d{4}-\d{2}-\d{2}T/;
+
+// Format variants that unambiguously mean the same instant (space/slash separators, missing seconds) are
+// rewritten to the canonical form. Nothing here invents a date, time, or precision the model did not supply.
+function normalizeCandidateTimestamp(
+  rawValue: unknown,
+  precision: unknown,
+): { value: string; normalized: boolean } | null {
+  if (typeof rawValue !== "string") return null;
+  const trimmed = rawValue.trim();
+  const slashFixed = trimmed.replace(/^(\d{4})\/(\d{2})\/(\d{2})/, "$1-$2-$3");
+  if (precision === "date") {
+    if (DATE_ONLY.test(slashFixed)) return { value: slashFixed, normalized: slashFixed !== trimmed };
+    const datePart = slashFixed.slice(0, 10);
+    if (DATE_ONLY.test(datePart) && /^[T ]/.test(slashFixed.slice(10))) {
+      return { value: datePart, normalized: true };
+    }
+    return null;
+  }
+  if (precision === "datetime") {
+    if (DATE_TIME.test(trimmed) && Number.isFinite(Date.parse(trimmed))) {
+      return { value: trimmed, normalized: false };
+    }
+    const separatorFixed = slashFixed.replace(
+      /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)$/,
+      "$1T$2",
+    );
+    if (DATE_TIME.test(separatorFixed) && Number.isFinite(Date.parse(separatorFixed))) {
+      return { value: separatorFixed, normalized: separatorFixed !== trimmed };
+    }
+    return null;
+  }
+  return null;
 }
 
-function validateCandidate(value: unknown, path: string, issues: string[]): boolean {
-  const keys = [
-    "title", "summary", "publisher", "source_url", "supporting_source_urls", "timestamp",
-    "timestamp_precision", "material_type", "japan_relevance", "japan_relevance_level",
-    "market_impact", "importance_class", "causal_claim_strength", "affected_sectors", "what_to_watch",
-  ];
-  if (!isRecord(value)) {
-    issues.push(`${path}:not_object`);
-    return false;
+const CANDIDATE_KEYS = [
+  "title", "summary", "publisher", "source_url", "supporting_source_urls", "timestamp",
+  "timestamp_precision", "material_type", "japan_relevance", "japan_relevance_level",
+  "market_impact", "importance_class", "causal_claim_strength", "affected_sectors", "what_to_watch",
+] as const;
+
+type NormalizedCandidate = Omit<MorningCandidate, "lane">;
+
+// A single candidate's problems never take down the rest of the lane: fields with a safe, unambiguous
+// rewrite are normalized in place, everything else falls back to excluding just this candidate with reasons.
+function normalizeCandidateEntry(
+  value: unknown,
+): { candidate: NormalizedCandidate; normalizedFields: string[] } | { excludedReasons: string[] } {
+  if (!isRecord(value)) return { excludedReasons: ["not_object"] };
+  // Unknown keys are ignored rather than rejected: they carry no data this pipeline reads.
+  const reasons: string[] = [];
+  const normalizedFields: string[] = [];
+
+  const stringField = (key: (typeof CANDIDATE_KEYS)[number]): string => {
+    const raw = value[key];
+    const trimmed = typeof raw === "string" ? raw.trim() : "";
+    if (!trimmed) reasons.push(key);
+    return trimmed;
+  };
+  const title = stringField("title");
+  const summary = stringField("summary");
+  const publisher = stringField("publisher");
+  const japanRelevance = stringField("japan_relevance");
+  const whatToWatch = stringField("what_to_watch");
+
+  const sourceUrl = typeof value.source_url === "string" ? value.source_url.trim() : "";
+  if (!isHttpUrl(sourceUrl)) reasons.push("source_url");
+
+  let supportingSourceUrls: string[] = [];
+  if (Array.isArray(value.supporting_source_urls)) {
+    const validUrls = value.supporting_source_urls.filter(
+      (item): item is string => typeof item === "string" && isHttpUrl(item),
+    );
+    if (validUrls.length !== value.supporting_source_urls.length) normalizedFields.push("supporting_source_urls");
+    supportingSourceUrls = validUrls.slice(0, 3);
+  } else {
+    reasons.push("supporting_source_urls");
   }
-  if (!hasOnlyKeys(value, keys)) issues.push(`${path}:additional_property`);
-  for (const key of ["title", "summary", "publisher", "japan_relevance", "what_to_watch"] as const) {
-    if (typeof value[key] !== "string" || !value[key].trim()) issues.push(`${path}.${key}:invalid_string`);
+
+  const precision = value.timestamp_precision;
+  if (precision !== "date" && precision !== "datetime") reasons.push("timestamp_precision");
+  let timestamp = "";
+  if (precision === "date" || precision === "datetime") {
+    const normalized = normalizeCandidateTimestamp(value.timestamp, precision);
+    if (!normalized) {
+      reasons.push("timestamp");
+    } else {
+      timestamp = normalized.value;
+      if (normalized.normalized) normalizedFields.push("timestamp");
+    }
   }
-  if (!isHttpUrl(value.source_url)) issues.push(`${path}.source_url:invalid_url`);
-  if (!isStringArray(value.supporting_source_urls, 0, 3) || !value.supporting_source_urls.every(isHttpUrl)) {
-    issues.push(`${path}.supporting_source_urls:invalid_urls`);
+
+  const materialType = value.material_type;
+  if (!MATERIAL_TYPES.has(materialType as ReportMaterialType)) reasons.push("material_type");
+  const japanRelevanceLevel = value.japan_relevance_level;
+  if (!LEVELS.has(japanRelevanceLevel as string)) reasons.push("japan_relevance_level");
+  const marketImpact = value.market_impact;
+  if (!LEVELS.has(marketImpact as string)) reasons.push("market_impact");
+  const importanceClass = value.importance_class;
+  if (!IMPORTANCE.has(importanceClass as string)) reasons.push("importance_class");
+  const causalClaimStrength = value.causal_claim_strength;
+  if (!CAUSAL_STRENGTH.has(causalClaimStrength as string)) reasons.push("causal_claim_strength");
+
+  let affectedSectors: string[] = [];
+  if (Array.isArray(value.affected_sectors) && value.affected_sectors.every((item) => typeof item === "string")) {
+    if (value.affected_sectors.length === 0) {
+      reasons.push("affected_sectors");
+    } else if (value.affected_sectors.length > 6) {
+      affectedSectors = value.affected_sectors.slice(0, 6);
+      normalizedFields.push("affected_sectors");
+    } else {
+      affectedSectors = value.affected_sectors;
+    }
+  } else {
+    reasons.push("affected_sectors");
   }
-  if (value.timestamp_precision !== "date" && value.timestamp_precision !== "datetime") {
-    issues.push(`${path}.timestamp_precision:invalid_enum`);
-  }
-  if (!isTimestamp(value.timestamp, value.timestamp_precision)) issues.push(`${path}.timestamp:invalid`);
-  if (!MATERIAL_TYPES.has(value.material_type as ReportMaterialType)) issues.push(`${path}.material_type:invalid_enum`);
-  if (!LEVELS.has(value.japan_relevance_level as string)) issues.push(`${path}.japan_relevance_level:invalid_enum`);
-  if (!LEVELS.has(value.market_impact as string)) issues.push(`${path}.market_impact:invalid_enum`);
-  if (!IMPORTANCE.has(value.importance_class as string)) issues.push(`${path}.importance_class:invalid_enum`);
-  if (!CAUSAL_STRENGTH.has(value.causal_claim_strength as string)) issues.push(`${path}.causal_claim_strength:invalid_enum`);
-  if (!isStringArray(value.affected_sectors, 1, 6)) issues.push(`${path}.affected_sectors:invalid_array`);
-  return issues.length === 0;
+
+  if (reasons.length > 0) return { excludedReasons: reasons };
+  return {
+    candidate: {
+      title, summary, publisher, source_url: sourceUrl, supporting_source_urls: supportingSourceUrls,
+      timestamp, timestamp_precision: precision, material_type: materialType as ReportMaterialType,
+      japan_relevance: japanRelevance, japan_relevance_level: japanRelevanceLevel as MorningCandidate["japan_relevance_level"],
+      market_impact: marketImpact as MorningCandidate["market_impact"],
+      importance_class: importanceClass as MorningCandidate["importance_class"],
+      causal_claim_strength: causalClaimStrength as MorningCandidate["causal_claim_strength"],
+      affected_sectors: affectedSectors, what_to_watch: whatToWatch,
+    },
+    normalizedFields,
+  };
 }
 
 function validateConditionalFactor(value: unknown, path: string, issues: string[]): boolean {
@@ -148,23 +259,52 @@ function validateConditionalFactor(value: unknown, path: string, issues: string[
 export function validateMorningLanePacket(
   value: unknown,
   lane: MorningSearchLane,
-): { passed: boolean; issues: string[] } {
+): {
+  passed: boolean;
+  issues: string[];
+  candidates: NormalizedCandidate[];
+  candidateReturnedCount: number;
+  candidateExclusions: MorningLaneCandidateExclusion[];
+  candidateNormalizations: MorningLaneCandidateNormalization[];
+} {
   const issues: string[] = [];
+  const candidateExclusions: MorningLaneCandidateExclusion[] = [];
+  const candidateNormalizations: MorningLaneCandidateNormalization[] = [];
+  const candidates: NormalizedCandidate[] = [];
   const keys = [
     "lane", "us_session_date", "candidates", "conditional_factors", "source_urls",
     "date_consistency_passed", "fact_check_notes",
   ];
-  if (!isRecord(value)) return { passed: false, issues: ["root:not_object"] };
+  if (!isRecord(value)) {
+    return { passed: false, issues: ["root:not_object"], candidates, candidateReturnedCount: 0, candidateExclusions, candidateNormalizations };
+  }
   if (!hasOnlyKeys(value, keys)) issues.push("root:additional_property");
   if (value.lane !== lane) issues.push("lane:mismatch");
   if (typeof value.us_session_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.us_session_date)) {
     issues.push("us_session_date:invalid");
   }
+  // Packet-level structure (candidates must be an array within the lane's cap) is still a hard failure —
+  // only what happens *inside* each candidate is now handled per-item below.
   const maxCandidates = lane === "lane_c_supplement" ? 2 : 3;
+  let candidateReturnedCount = 0;
   if (!Array.isArray(value.candidates) || value.candidates.length > maxCandidates) {
     issues.push("candidates:invalid_array");
   } else {
-    value.candidates.forEach((candidate, index) => validateCandidate(candidate, `candidates[${index}]`, issues));
+    candidateReturnedCount = value.candidates.length;
+    value.candidates.forEach((item, index) => {
+      const result = normalizeCandidateEntry(item);
+      if ("excludedReasons" in result) {
+        candidateExclusions.push({
+          index,
+          reasons: result.excludedReasons.map((field) => `LANE_CANDIDATE_SCHEMA_INVALID:${field}`),
+        });
+      } else {
+        candidates.push(result.candidate);
+        if (result.normalizedFields.length > 0) {
+          candidateNormalizations.push({ index, fields: result.normalizedFields });
+        }
+      }
+    });
   }
   if (!Array.isArray(value.conditional_factors) || value.conditional_factors.length > 2) {
     issues.push("conditional_factors:invalid_array");
@@ -178,7 +318,7 @@ export function validateMorningLanePacket(
   }
   if (typeof value.date_consistency_passed !== "boolean") issues.push("date_consistency_passed:invalid_boolean");
   if (!isStringArray(value.fact_check_notes, 1, 5)) issues.push("fact_check_notes:invalid_array");
-  return { passed: issues.length === 0, issues };
+  return { passed: issues.length === 0, issues, candidates, candidateReturnedCount, candidateExclusions, candidateNormalizations };
 }
 
 function baseDiagnostics(response: unknown, lane: MorningSearchLane): MorningLaneResponseDiagnostics {
@@ -207,6 +347,9 @@ function baseDiagnostics(response: unknown, lane: MorningSearchLane): MorningLan
     schemaValidationPassed: false,
     failureCategory: null,
     schemaIssues: [],
+    candidateReturnedCount: 0,
+    candidateExclusions: [],
+    candidateNormalizations: [],
   };
 }
 
@@ -242,8 +385,21 @@ export function parseMorningLaneResponse(
   const validation = validateMorningLanePacket(parsed, lane);
   diagnostics.schemaIssues = validation.issues;
   diagnostics.schemaValidationPassed = validation.passed;
+  diagnostics.candidateReturnedCount = validation.candidateReturnedCount;
+  diagnostics.candidateExclusions = validation.candidateExclusions;
+  diagnostics.candidateNormalizations = validation.candidateNormalizations;
   if (!validation.passed) throw new MorningLaneResponseError("SCHEMA_INVALID", diagnostics);
-  return { packet: parsed as MorningLanePacket, diagnostics };
+  const parsedRecord = parsed as Record<string, unknown>;
+  const packet: MorningLanePacket = {
+    lane: parsedRecord.lane as MorningSearchLane,
+    us_session_date: parsedRecord.us_session_date as string,
+    candidates: validation.candidates,
+    conditional_factors: parsedRecord.conditional_factors as MorningLanePacket["conditional_factors"],
+    source_urls: parsedRecord.source_urls as string[],
+    date_consistency_passed: parsedRecord.date_consistency_passed as boolean,
+    fact_check_notes: parsedRecord.fact_check_notes as string[],
+  };
+  return { packet, diagnostics };
 }
 
 export function attachMorningLaneFailureContext(
