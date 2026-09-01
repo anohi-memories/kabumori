@@ -9,6 +9,8 @@ import {
 } from "./morning-greeting-image.ts";
 import { OPENAI_MORNING_GREETING_IMAGE_ENDPOINT } from
   "../supabase/functions/x-test-post/morning_greeting_image_logic.ts";
+import { selectMorningGreetingTheme } from
+  "../supabase/functions/x-test-post/morning_greeting_logic.ts";
 
 const SUPABASE_URL = "https://example.supabase.co";
 
@@ -61,7 +63,41 @@ test("successful run fetches canonical, calls image edit once, and stores genera
   assert.equal(result.retry_count, 0);
   assert.equal(result.x_api_called, 0);
   assert.equal(result.scheduled_posts_changed, 0);
+  assert.deepEqual(result.theme, selectMorningGreetingTheme("2026-09-01"));
   assert.equal(calls.filter((call) => call.url === OPENAI_MORNING_GREETING_IMAGE_ENDPOINT).length, 1);
+});
+
+test("2026-09-02 image workflow uses the same generic theme as greeting text", async () => {
+  let imagePrompt = "";
+  const expectedTheme = selectMorningGreetingTheme("2026-09-02");
+  const result = await runMorningGreetingImageWorkflow({
+    supabaseUrl: SUPABASE_URL,
+    serviceRoleKey: "service-role-test",
+    openAiApiKey: "openai-test",
+    date: "2026-09-02",
+    fetchImpl: async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("generated/2026-09-02.png")) {
+        if (init?.method === "POST") return new Response("stored", { status: 200 });
+        return new Response("missing", { status: 404 });
+      }
+      if (url.endsWith("canonical/yume-reference.png")) return pngResponse();
+      if (url === OPENAI_MORNING_GREETING_IMAGE_ENDPOINT) {
+        imagePrompt = String((init?.body as FormData).get("prompt"));
+        return new Response(JSON.stringify({ data: [{ b64_json: "iVBORw==" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      throw new Error(`unexpected mock URL: ${url}`);
+    },
+  });
+
+  assert.equal(expectedTheme.theme_type, "generic");
+  assert.equal(expectedTheme.theme_name, null);
+  assert.deepEqual(result.theme, expectedTheme);
+  assert.match(imagePrompt, new RegExp(expectedTheme.visual_theme, "u"));
+  assert.doesNotMatch(imagePrompt, /防災の日|preparedness backpack|stored water/u);
 });
 
 test("canonical fetch failure stops before image API and upload", async () => {

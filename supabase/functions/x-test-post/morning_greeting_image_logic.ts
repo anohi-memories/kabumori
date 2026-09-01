@@ -21,7 +21,7 @@ export const MORNING_GREETING_IMAGE_TEST_VISUAL_THEME =
 
 export type MorningGreetingImageGenerationMetadata = {
   date: string;
-  theme_name: string;
+  theme_name: string | null;
   canonical_reference_path: string;
   visual_theme: string;
   requested_size: "1024x1024";
@@ -61,7 +61,7 @@ export class MorningGreetingImageTestError extends Error {
 
 export function buildMorningGreetingImagePrompt(args: {
   date: string;
-  themeName: string;
+  themeName: string | null;
   reference: YumeCanonicalReference;
   context: MorningGreetingImageGenerationContext;
 }): MorningGreetingImageGenerationMetadata {
@@ -69,15 +69,16 @@ export function buildMorningGreetingImagePrompt(args: {
     throw new Error("MORNING_GREETING_IMAGE_REFERENCE_MISMATCH");
   }
   if (!args.context.visual_theme.trim()) throw new Error("MORNING_GREETING_IMAGE_VISUAL_THEME_MISSING");
+  const themeLabel = args.themeName ?? "通常の自然な朝";
   const prompt = [
     "Use case: identity-preserve",
     "Asset type: square illustration for a friendly morning post on X",
-    `Primary request: Use the supplied canonical reference image as the highest-priority identity reference for Yume. Create one new illustration for ${args.date}, ${args.themeName}.`,
+    `Primary request: Use the supplied canonical reference image as the highest-priority identity reference for Yume. Create one new illustration for ${args.date}, ${themeLabel}.`,
     "Input image: the canonical reference image defines Yume herself. Preserve her facial features, warm brown eyes, medium-long to long softly wavy brown hair with side-parted bangs, young-adult age impression, friendly overall warmth, illustration style, and character identity.",
     "Only Yume appears. Her clothing, accessories, expression, pose, background, props, and composition may change for today's theme.",
-    `Scene/backdrop and props: ${args.context.visual_theme}. Show a bright, friendly disaster-preparedness scene. Yume looks cheerful and positive. Naturally include a preparedness backpack, flashlight, stored water, and a few emergency supplies; a safety helmet is optional.`,
+    `Scene/backdrop and props: ${args.context.visual_theme}. Follow only this date-derived visual theme. Yume looks cheerful, natural, and positive.`,
     "Composition: polished square SNS illustration, one person, clear focal point, comfortable spacing, naturally connected to the canonical reference style.",
-    "Lighting/mood: bright morning light, reassuring, approachable, upbeat, calm preparedness rather than fear.",
+    "Lighting/mood: bright morning light, reassuring, approachable, and upbeat.",
     "Constraints: preserve Yume's identity from the reference. Do not copy the original clothing, jewelry, pose, background, or composition unless they fit naturally.",
     "Avoid: other people, robots, stock-market objects, books about stocks, monitors, charts, logos, text, captions, speech bubbles, watermarks, disaster damage, collapsed streets, fear, injury, panic, dark or threatening atmosphere.",
     "No text anywhere in the image.",
@@ -104,7 +105,7 @@ export async function generateMorningGreetingImageWithOpenAi(args: {
   serviceRoleKey: string;
   openAiApiKey: string;
   date: string;
-  themeName: string;
+  themeName: string | null;
   visualTheme: string;
   fetchImpl?: typeof fetch;
 }): Promise<MorningGreetingGeneratedImage> {

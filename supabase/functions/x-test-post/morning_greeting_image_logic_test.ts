@@ -29,9 +29,25 @@ test("Disaster Prevention Day prompt preserves Yume and changes only theme eleme
   assert.equal(metadata.requested_size, "1024x1024");
   assert.match(metadata.prompt, /warm brown eyes/u);
   assert.match(metadata.prompt, /softly wavy brown hair with side-parted bangs/u);
-  assert.match(metadata.prompt, /preparedness backpack/u);
+  assert.match(metadata.prompt, /防災リュック/u);
   assert.match(metadata.prompt, /No text anywhere/u);
   assert.match(metadata.prompt, /Avoid: other people, robots, stock-market objects/u);
+});
+
+test("generic theme prompt does not add disaster-preparedness props", () => {
+  const reference = resolveYumeCanonicalReference();
+  const visualTheme = "朝の窓辺、コーヒー、観葉植物、やわらかい朝日";
+  const context = buildMorningGreetingImageGenerationContext(visualTheme, reference);
+  const metadata = buildMorningGreetingImagePrompt({
+    date: "2026-09-02",
+    themeName: null,
+    reference,
+    context,
+  });
+  assert.equal(metadata.theme_name, null);
+  assert.equal(metadata.visual_theme, visualTheme);
+  assert.match(metadata.prompt, /通常の自然な朝/u);
+  assert.doesNotMatch(metadata.prompt, /防災の日|preparedness backpack|stored water/u);
 });
 
 test("reference mismatch stops before image generation", () => {

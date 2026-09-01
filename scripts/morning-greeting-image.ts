@@ -4,14 +4,15 @@ import {
   OPENAI_MORNING_GREETING_IMAGE_ENDPOINT,
 } from "../supabase/functions/x-test-post/morning_greeting_image_logic.ts";
 import {
+  type MorningGreetingTheme,
+  selectMorningGreetingTheme,
+} from "../supabase/functions/x-test-post/morning_greeting_logic.ts";
+import {
   YUME_CANONICAL_REFERENCE_BUCKET,
   YUME_CANONICAL_REFERENCE_PATH,
 } from "../supabase/functions/x-test-post/yume_reference_logic.ts";
 
 export const MORNING_GREETING_GENERATED_PREFIX = "generated";
-export const MORNING_GREETING_WORKFLOW_THEME_NAME = "防災の日";
-export const MORNING_GREETING_WORKFLOW_VISUAL_THEME =
-  "防災の日を自然に意識した朝の挨拶。明るい朝の場面で、防災リュック、懐中電灯、保存水などの防災用品を自然に配置する。災害被害や不安を描かず、文字、ロゴ、ロボット、株価、チャート、宣伝文は入れない。";
 
 export type MorningGreetingImageWorkflowResult = {
   success: true;
@@ -21,6 +22,7 @@ export type MorningGreetingImageWorkflowResult = {
   retry_count: 0;
   x_api_called: 0;
   scheduled_posts_changed: 0;
+  theme: MorningGreetingTheme;
 };
 
 export class MorningGreetingImageWorkflowError extends Error {
@@ -108,6 +110,7 @@ export async function runMorningGreetingImageWorkflow(args: {
   if (!args.openAiApiKey.trim()) throw new Error("MORNING_GREETING_OPENAI_API_KEY_MISSING");
   const fetchImpl = args.fetchImpl ?? fetch;
   const date = args.date?.trim() || resolveJstDate();
+  const theme = selectMorningGreetingTheme(date);
   const outputObjectPath = buildMorningGreetingGeneratedPath(date);
   const outputStoragePath = `storage://${YUME_CANONICAL_REFERENCE_BUCKET}/${outputObjectPath}`;
   const outputUrl = storageObjectUrl(args.supabaseUrl, outputObjectPath);
@@ -134,6 +137,7 @@ export async function runMorningGreetingImageWorkflow(args: {
         retry_count: 0,
         x_api_called: 0,
         scheduled_posts_changed: 0,
+        theme,
       };
     }
     if (!(await isStorageObjectMissing(existing))) {
@@ -145,8 +149,8 @@ export async function runMorningGreetingImageWorkflow(args: {
       serviceRoleKey: args.serviceRoleKey,
       openAiApiKey: args.openAiApiKey,
       date,
-      themeName: MORNING_GREETING_WORKFLOW_THEME_NAME,
-      visualTheme: MORNING_GREETING_WORKFLOW_VISUAL_THEME,
+      themeName: theme.theme_name,
+      visualTheme: theme.visual_theme,
       fetchImpl: guardedFetch,
     });
     const upload = await fetchImpl(outputUrl, {
@@ -168,6 +172,7 @@ export async function runMorningGreetingImageWorkflow(args: {
       retry_count: 0,
       x_api_called: 0,
       scheduled_posts_changed: 0,
+      theme,
     };
   } catch (error) {
     throw new MorningGreetingImageWorkflowError(
