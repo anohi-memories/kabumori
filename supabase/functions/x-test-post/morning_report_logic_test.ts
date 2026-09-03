@@ -58,14 +58,16 @@ test("model target date must match the deterministic code target", () => {
   assert.equal(morningTargetMatches(context, "2026-08-31", true), true);
 });
 
-test("target mismatch makes the existing fact check fail", () => {
+test("evaluateMorningFacts no longer takes a self-reported date consistency flag", () => {
+  // US session date consistency is now enforced per-candidate (classifyMaterialFreshness against a
+  // code-computed expected session date), not as a packet-level LLM self-report gate here.
   const result = evaluateMorningFacts({
     required: [], optional: [], trustedSourceCount: 2,
-    dateConsistencyPassed: false, importantNewsPresent: false,
+    importantNewsPresent: false,
     importantNewsVerified: false, mode: "live",
   });
-  assert.equal(result.status, "failed");
-  assert.match(result.notes.join(" | "), /取引日またはセッション日付の取り違え/);
+  assert.equal(result.status, "passed");
+  assert.deepEqual(result.notes, []);
 });
 
 test("reference override is accepted only for morning report dry-run", () => {
@@ -84,7 +86,7 @@ test("reference override is accepted only for morning report dry-run", () => {
 test("important news absence is distinct from verification failure", () => {
   const basis = {
     required: [], optional: [], trustedSourceCount: 2,
-    dateConsistencyPassed: true, mode: "live" as const,
+    mode: "live" as const,
   };
   assert.deepEqual(evaluateMorningFacts({
     ...basis, importantNewsPresent: false, importantNewsVerified: false,
@@ -102,7 +104,7 @@ test("important news absence is distinct from verification failure", () => {
 test("market overview can pass with no concrete market metrics", () => {
   assert.deepEqual(evaluateMorningFacts({
     required: [], strictRequired: [], optional: [], verifiedImportantPointCount: 3,
-    trustedSourceCount: 2, dateConsistencyPassed: true,
+    trustedSourceCount: 2,
     importantNewsPresent: false, importantNewsVerified: false, mode: "live",
   }), { status: "passed", notes: [] });
 });
@@ -110,7 +112,7 @@ test("market overview can pass with no concrete market metrics", () => {
 test("unverified important facts safely stop the morning report", () => {
   const result = evaluateMorningFacts({
     required: [], optional: [], verifiedImportantPointCount: 2,
-    trustedSourceCount: 2, dateConsistencyPassed: true,
+    trustedSourceCount: 2,
     importantNewsPresent: false, importantNewsVerified: false, mode: "live",
   });
   assert.equal(result.status, "failed");
@@ -124,7 +126,7 @@ test("a stale optional material alone does not fail the morning report", () => {
   assert.equal(staleOptional.freshness, "stale");
   assert.equal(evaluateMorningFacts({
     required: [], optional: [staleOptional], verifiedImportantPointCount: 3,
-    trustedSourceCount: 2, dateConsistencyPassed: true,
+    trustedSourceCount: 2,
     importantNewsPresent: false, importantNewsVerified: false, mode: "live",
   }).status, "passed");
 });
@@ -132,7 +134,7 @@ test("a stale optional material alone does not fail the morning report", () => {
 test("future or invalid optional material still safely stops the morning report", () => {
   const result = evaluateMorningFacts({
     required: [], optional: [], verifiedImportantPointCount: 3,
-    trustedSourceCount: 2, dateConsistencyPassed: true,
+    trustedSourceCount: 2,
     importantNewsPresent: false, importantNewsVerified: false,
     unsafeOptionalMaterialCount: 1, mode: "live",
   });
@@ -143,7 +145,7 @@ test("future or invalid optional material still safely stops the morning report"
 test("removing stale material still stops safely when fewer than three points remain", () => {
   const result = evaluateMorningFacts({
     required: [], optional: [], verifiedImportantPointCount: 2,
-    trustedSourceCount: 2, dateConsistencyPassed: true,
+    trustedSourceCount: 2,
     importantNewsPresent: false, importantNewsVerified: false, mode: "live",
   });
   assert.equal(result.status, "failed");
@@ -201,7 +203,7 @@ const fixedIndexFact = (metric: RawMorningMetric) => {
   const normalized = normalizeFixedUsIndexMetric(metric, reference, "live");
   return evaluateMorningFacts({
     required: [normalized], strictRequired: [normalized], optional: [],
-    trustedSourceCount: 2, dateConsistencyPassed: true,
+    trustedSourceCount: 2,
     importantNewsPresent: false, importantNewsVerified: false, mode: "live",
   });
 };
@@ -283,7 +285,7 @@ test("fact check is independent from text length and emoji count", () => {
     }), index === 4 ? "nikkei_futures" : "us_close", reference, "live")
   );
   assert.deepEqual(evaluateMorningFacts({
-    required, optional: [], trustedSourceCount: 3, dateConsistencyPassed: true,
+    required, optional: [], trustedSourceCount: 3,
     importantNewsPresent: true, importantNewsVerified: true, mode: "live",
   }), { status: "passed", notes: [] });
 });
@@ -292,7 +294,7 @@ test("fact check stops on missing required data or insufficient trusted sources"
   const missing = normalizeMorningMetric(metric({ label: "日経225先物", value: "", source_url: "" }), "nikkei_futures", reference, "live");
   const result = evaluateMorningFacts({
     required: [missing], optional: [], trustedSourceCount: 1,
-    dateConsistencyPassed: true, importantNewsPresent: false,
+    importantNewsPresent: false,
     importantNewsVerified: false, mode: "live",
   });
   assert.equal(result.status, "failed");
@@ -312,7 +314,7 @@ test("verified Nikkei futures can be included as an optional metric", () => {
   assert.equal(isNikkeiFuturesAvailable(futures), true);
   assert.equal(evaluateMorningFacts({
     required: normalizedUsIndices(), optional: [futures], trustedSourceCount: 3,
-    dateConsistencyPassed: true, importantNewsPresent: false,
+    importantNewsPresent: false,
     importantNewsVerified: false, mode: "live",
   }).status, "passed");
 });
@@ -325,7 +327,7 @@ test("missing Nikkei futures are omitted without failing morning facts", () => {
   assert.equal(isNikkeiFuturesAvailable(futures), false);
   assert.equal(evaluateMorningFacts({
     required: normalizedUsIndices(), optional: [], trustedSourceCount: 3,
-    dateConsistencyPassed: true, importantNewsPresent: false,
+    importantNewsPresent: false,
     importantNewsVerified: false, mode: "live",
   }).status, "passed");
 });
@@ -338,7 +340,7 @@ test("partial Nikkei futures are omitted without failing morning facts", () => {
   assert.equal(isNikkeiFuturesAvailable(futures), false);
   assert.equal(evaluateMorningFacts({
     required: normalizedUsIndices(), optional: [], trustedSourceCount: 3,
-    dateConsistencyPassed: true, importantNewsPresent: false,
+    importantNewsPresent: false,
     importantNewsVerified: false, mode: "live",
   }).status, "passed");
 });
@@ -349,7 +351,7 @@ test("missing one of the four required US indices still safely fails", () => {
     label: "NASDAQ", value: "", source_url: "",
   }), "us_close", reference, "live");
   const result = evaluateMorningFacts({
-    required, optional: [], trustedSourceCount: 3, dateConsistencyPassed: true,
+    required, optional: [], trustedSourceCount: 3,
     importantNewsPresent: false, importantNewsVerified: false, mode: "live",
   });
   assert.equal(result.status, "failed");

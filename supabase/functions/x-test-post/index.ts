@@ -10,6 +10,7 @@ import {
   type MorningRunMode,
   type NormalizedMorningMetric,
 } from "./morning_report_logic.ts";
+import { getExpectedUsSessionDate } from "./us_session_date_logic.ts";
 import {
   evaluateCloseFacts,
   normalizeCloseMetric,
@@ -1384,6 +1385,7 @@ async function generateMorningReport(
   openAiApiKey: string,
   referenceTimeIso: string,
   tradingDay: JpxTradingDayState,
+  expectedUsSessionDate: string,
 ): Promise<MorningReportDraft> {
   const reference = resolveMorningReferenceContext(referenceTimeIso, tradingDay);
   const runMode = resolveMorningRunMode(referenceTimeIso);
@@ -1426,11 +1428,12 @@ async function generateMorningReport(
           "市場影響と日本株との関係をそれぞれhigh/medium/low、材料重要度をmajor/standard/administrativeで保守的に分類します。一次情報という理由だけで高評価にしません。",
           "単なる予定表、公表スケジュール、軽微な統計訂正、事務的更新はadministrativeまたはlowにします。決算、業績修正、M&A、TOB、自社株買い、大型受注、重大政策は内容に応じてmajor候補です。",
           "timestampは確認できた精度のまま返し、時刻不明ならYYYY-MM-DDとします。00:00等を推測しません。古い材料を今朝発生したように表現しません。",
+          "material_typeがmarket_sessionの候補は、必ずexpected US session dateと同じ日付の米国通常取引セッションを扱う材料にします。それ以外(central_bank_policy、economic_indicator、geopolitics等)は、expected US session dateと同日である必要はなく、内容として妥当な直近の日付であれば構いません。",
           "conditional_factorsへ入れてよいのはreference UTC以前に発生・公表済みで、source URLからtimestampまたは日付を具体的に確認できる材料だけです。",
           "未来の経済指標・決算・Fedや政策イベント、upcoming・scheduled・expected・due・公表予定・発表予定・今日発表予定の未発表材料、timestamp不明・date未確認の材料はconditional_factorsへ返しません。重要そうでも例外にしません。",
           "強い因果関係を断定する場合だけcausal_claim_strength=strongとし、独立報道2系統または一次情報＋信頼報道をsource_urlとsupporting_source_urlsへ入れます。裏取りできない場合はqualifiedにします。",
           "実際に検索結果で開いた許可ドメインのURLだけを返します。検索結果本文、APIキー、秘密値は返しません。日経先物や具体的市場数値は扱いません。",
-          "reference dateとtarget trading dateはコード側で確定済みです。変更・翌日補正しません。候補全体でpublisherが偏らないようにします。",
+          "reference date、target trading date、expected US session dateはコード側で確定済みです。変更・翌日補正・独自の判定をしません。候補全体でpublisherが偏らないようにします。",
         ].join("\n"),
         input: [
           `lane: ${lane}`,
@@ -1438,6 +1441,7 @@ async function generateMorningReport(
           `reference JST: ${reference.referenceJst}`,
           `target trading date: ${reference.targetTradingDate}`,
           `JPX trading day: ${reference.isTargetTradingDay}`,
+          `expected US session date: ${expectedUsSessionDate}`,
           `run mode: ${runMode}`,
           ...(supplementContext ? [
             `Lane C supplement context: ${JSON.stringify(supplementContext)}`,
@@ -1447,7 +1451,6 @@ async function generateMorningReport(
           type: "object",
           properties: {
             lane: { type: "string", enum: [lane] },
-            us_session_date: { type: "string" },
             candidates: { type: "array", minItems: 0, maxItems: maxCandidates, items: MORNING_CANDIDATE_SCHEMA },
             conditional_factors: {
               type: "array", minItems: 0, maxItems: 2,
@@ -1463,10 +1466,9 @@ async function generateMorningReport(
               },
             },
             source_urls: { type: "array", items: { type: "string" }, minItems: 0, maxItems: 8 },
-            date_consistency_passed: { type: "boolean" },
             fact_check_notes: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 5 },
           },
-          required: ["lane", "us_session_date", "candidates", "conditional_factors", "source_urls", "date_consistency_passed", "fact_check_notes"],
+          required: ["lane", "candidates", "conditional_factors", "source_urls", "fact_check_notes"],
           additionalProperties: false,
         } } },
       }),
@@ -1530,7 +1532,7 @@ async function generateMorningReport(
           timestamp: candidate.timestamp,
           referenceIso: referenceTimeIso,
           targetTradingDate: reference.targetTradingDate,
-          expectedSessionDate: laneCollections[0]?.packet.us_session_date,
+          expectedSessionDate: expectedUsSessionDate,
         }),
         causal_support_passed: !strongCausality || hasIndependentCausalSupport(
           [candidate.source_url, ...supportingSourceUrls], MORNING_SOURCE_DOMAINS,
@@ -1582,7 +1584,7 @@ async function generateMorningReport(
     throw new Error("MORNING_REPORT_SEARCH_BUDGET_EXCEEDED");
   }
   const webSearchCalls = finalSearchBudget.totalSearchQueryCount;
-  const usSessionDate = collections[0]?.packet.us_session_date ?? "";
+  const usSessionDate = expectedUsSessionDate;
   const importantPoints: MorningPoint[] = selection.selected.map((candidate) => ({
     title: candidate.title,
     what_happened: candidate.summary,
@@ -1639,15 +1641,11 @@ async function generateMorningReport(
     importantPoints.flatMap((point) => [point.source_url ?? "", ...(point.supporting_source_urls ?? [])]),
     MORNING_SOURCE_DOMAINS,
   );
-  const dateConsistencyPassed = collections.every((collection) =>
-    collection.packet.date_consistency_passed && collection.packet.us_session_date === usSessionDate
-  );
   const selectedMajor = selection.selected.filter((candidate) => candidate.importance_class === "major");
   const factResult = evaluateMorningFacts({
     required: [], strictRequired: [], optional: [],
     verifiedImportantPointCount: importantPoints.length,
     trustedSourceCount: finalPublisherCount,
-    dateConsistencyPassed,
     importantNewsPresent: selectedMajor.length > 0,
     importantNewsVerified: selectedMajor.every((candidate) => candidate.source_verified),
     unsafeOptionalMaterialCount,
@@ -3041,12 +3039,13 @@ Deno.serve(async (req) => {
         new Date().toISOString(),
       );
       const tradingDay = await getJpxTradingDay(supabaseUrl, serviceRoleKey, referenceTime);
+      const expectedUsSessionDate = await getExpectedUsSessionDate(supabaseUrl, serviceRoleKey, referenceTime);
       const runId = await createMorningReportRun(
         supabaseUrl, serviceRoleKey, referenceTime, null,
       );
       let draft: MorningReportDraft | null = null;
       try {
-        draft = await generateMorningReport(openAiApiKey, referenceTime, tradingDay);
+        draft = await generateMorningReport(openAiApiKey, referenceTime, tradingDay, expectedUsSessionDate);
         if (draft.text) {
           await updateMorningReportRun(supabaseUrl, serviceRoleKey, runId, {
             generated_at: new Date().toISOString(), source_urls: draft.sourceUrls,
@@ -3425,7 +3424,8 @@ Deno.serve(async (req) => {
         );
         const referenceTime = new Date().toISOString();
         const tradingDay = await getJpxTradingDay(supabaseUrl, serviceRoleKey, referenceTime);
-        draft = await generateMorningReport(openAiApiKey, referenceTime, tradingDay);
+        const expectedUsSessionDate = await getExpectedUsSessionDate(supabaseUrl, serviceRoleKey, referenceTime);
+        draft = await generateMorningReport(openAiApiKey, referenceTime, tradingDay, expectedUsSessionDate);
         if (draft.text) {
           await updateMorningReportRun(supabaseUrl, serviceRoleKey, morningRunId, {
             generated_at: new Date().toISOString(), source_urls: draft.sourceUrls,

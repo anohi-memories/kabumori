@@ -16,11 +16,9 @@ export type MorningLaneConditionalFactor = {
 
 export type MorningLanePacket = {
   lane: MorningSearchLane;
-  us_session_date: string;
   candidates: Array<Omit<MorningCandidate, "lane">>;
   conditional_factors: MorningLaneConditionalFactor[];
   source_urls: string[];
-  date_consistency_passed: boolean;
   fact_check_notes: string[];
 };
 
@@ -271,18 +269,12 @@ export function validateMorningLanePacket(
   const candidateExclusions: MorningLaneCandidateExclusion[] = [];
   const candidateNormalizations: MorningLaneCandidateNormalization[] = [];
   const candidates: NormalizedCandidate[] = [];
-  const keys = [
-    "lane", "us_session_date", "candidates", "conditional_factors", "source_urls",
-    "date_consistency_passed", "fact_check_notes",
-  ];
+  const keys = ["lane", "candidates", "conditional_factors", "source_urls", "fact_check_notes"];
   if (!isRecord(value)) {
     return { passed: false, issues: ["root:not_object"], candidates, candidateReturnedCount: 0, candidateExclusions, candidateNormalizations };
   }
   if (!hasOnlyKeys(value, keys)) issues.push("root:additional_property");
   if (value.lane !== lane) issues.push("lane:mismatch");
-  if (typeof value.us_session_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.us_session_date)) {
-    issues.push("us_session_date:invalid");
-  }
   // Packet-level structure (candidates must be an array within the lane's cap) is still a hard failure —
   // only what happens *inside* each candidate is now handled per-item below.
   const maxCandidates = lane === "lane_c_supplement" ? 2 : 3;
@@ -316,7 +308,6 @@ export function validateMorningLanePacket(
   if (!isStringArray(value.source_urls, 0, 8) || !value.source_urls.every(isHttpUrl)) {
     issues.push("source_urls:invalid_urls");
   }
-  if (typeof value.date_consistency_passed !== "boolean") issues.push("date_consistency_passed:invalid_boolean");
   if (!isStringArray(value.fact_check_notes, 1, 5)) issues.push("fact_check_notes:invalid_array");
   return { passed: issues.length === 0, issues, candidates, candidateReturnedCount, candidateExclusions, candidateNormalizations };
 }
@@ -392,11 +383,9 @@ export function parseMorningLaneResponse(
   const parsedRecord = parsed as Record<string, unknown>;
   const packet: MorningLanePacket = {
     lane: parsedRecord.lane as MorningSearchLane,
-    us_session_date: parsedRecord.us_session_date as string,
     candidates: validation.candidates,
     conditional_factors: parsedRecord.conditional_factors as MorningLanePacket["conditional_factors"],
     source_urls: parsedRecord.source_urls as string[],
-    date_consistency_passed: parsedRecord.date_consistency_passed as boolean,
     fact_check_notes: parsedRecord.fact_check_notes as string[],
   };
   return { packet, diagnostics };

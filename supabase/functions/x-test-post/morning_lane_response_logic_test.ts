@@ -27,11 +27,9 @@ const candidate = {
 
 const packet = (lane: MorningSearchLane) => ({
   lane,
-  us_session_date: "2026-08-28",
   candidates: [{ ...candidate }],
   conditional_factors: [],
   source_urls: [candidate.source_url],
-  date_consistency_passed: true,
   fact_check_notes: ["確認済み"],
 });
 
@@ -100,13 +98,13 @@ test("malformed JSON has a parse-specific error", () => {
 
 test("a packet with a structurally broken root is still rejected outright", () => {
   const invalid = packet("lane_c_supplement") as unknown as Record<string, unknown>;
-  invalid.us_session_date = "not-a-date";
+  invalid.source_urls = "not-an-array";
   const error = expectCategory(
     () => parseMorningLaneResponse(response("lane_c_supplement", JSON.stringify(invalid)), "lane_c_supplement"),
     "SCHEMA_INVALID",
   );
   assert.equal(error.diagnostics.jsonParsePassed, true);
-  assert.equal(error.diagnostics.schemaIssues.some((issue) => issue.includes("us_session_date")), true);
+  assert.equal(error.diagnostics.schemaIssues.some((issue) => issue.includes("source_urls")), true);
 });
 
 test("a candidate missing a required field is excluded, not the whole packet", () => {

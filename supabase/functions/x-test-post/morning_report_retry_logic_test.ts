@@ -38,6 +38,7 @@ test("a raw network failure (fetch rejecting) is classified as retryable", () =>
 
 test("a Supabase REST read/write failure before generation is classified as retryable", () => {
   assert.equal(classifyMorningReportFailure(new Error("JPX_CALENDAR_SELECT_FAILED")).retryable, true);
+  assert.equal(classifyMorningReportFailure(new Error("US_MARKET_CALENDAR_SELECT_FAILED")).retryable, true);
   assert.equal(classifyMorningReportFailure(new Error("MORNING_REPORT_LOG_CREATE_FAILED")).retryable, true);
 });
 

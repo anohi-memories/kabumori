@@ -232,7 +232,6 @@ export function evaluateMorningFacts(args: {
   optional: NormalizedMorningMetric[];
   verifiedImportantPointCount?: number;
   trustedSourceCount: number;
-  dateConsistencyPassed: boolean;
   importantNewsPresent: boolean;
   importantNewsVerified: boolean;
   unsafeOptionalMaterialCount?: number;
@@ -270,7 +269,6 @@ export function evaluateMorningFacts(args: {
   freshnessFailures.push(...args.optional.filter((metric) => metric.freshness === "invalid_timestamp"));
   if (freshnessFailures.length) notes.push(`鮮度基準外: ${freshnessFailures.map((metric) => metric.label).join(", ")}`);
   if ((args.unsafeOptionalMaterialCount ?? 0) > 0) notes.push("optional材料に未来時刻または不正なtimestampが混入");
-  if (!args.dateConsistencyPassed) notes.push("取引日またはセッション日付の取り違え");
   if (args.trustedSourceCount < 2) notes.push("信頼できる独立ソースが不足");
   if (args.importantNewsPresent && !args.importantNewsVerified) {
     notes.push("重要ニュース候補の裏取り不能");
