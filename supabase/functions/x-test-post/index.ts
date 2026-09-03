@@ -79,6 +79,12 @@ import {
   type MorningLaneResponseDiagnostics,
 } from "./morning_lane_response_logic.ts";
 import {
+  MORNING_REPORT_MAX_ATTEMPTS,
+  computeMorningReportRetryTime,
+  reconcileStaleMorningReportRuns,
+  shouldRetryMorningReport,
+} from "./morning_report_retry_logic.ts";
+import {
   MORNING_GREETING_IMAGE_TEST_MODE,
   MorningGreetingImageTestError,
   runMorningGreetingImageTest,
@@ -454,6 +460,7 @@ type ScheduledPost = {
   post_type: string;
   slot_no: number;
   scheduled_for: string;
+  attempt_count: number;
   target_difficulty: Tip["difficulty"] | null;
   target_question_format: string | null;
 };
@@ -3396,6 +3403,12 @@ Deno.serve(async (req) => {
       refreshExecuted: false,
     };
 
+    try {
+      await reconcileStaleMorningReportRuns({ supabaseUrl, serviceRoleKey });
+    } catch {
+      console.error("Failed to reconcile stale morning report runs");
+    }
+
     const scheduledPost = await claimDuePost(supabaseUrl, serviceRoleKey);
     if (!scheduledPost) {
       return jsonResponse({ status: "idle", message: "No post is due" }, 200);
@@ -3405,6 +3418,7 @@ Deno.serve(async (req) => {
     if (scheduledPost.post_type === "morning_report") {
       let morningRunId: string | null = null;
       let draft: MorningReportDraft | null = null;
+      let xPostAttempted = false;
       try {
         morningRunId = await createMorningReportRun(
           supabaseUrl, serviceRoleKey, scheduledPost.scheduled_for, scheduledPost.id,
@@ -3444,6 +3458,7 @@ Deno.serve(async (req) => {
           fact_check_notes: draft.factCheckNotes,
           market_data: morningRunMarketData(draft, voiceEvaluation, "completed"),
         });
+        xPostAttempted = true;
         const xResult = await postToX(xAuth, draft.text);
         const xPostId = getXPostId(xResult);
         if (!xPostId) throw new Error("X_RESPONSE_MISSING_POST_ID");
@@ -3484,6 +3499,35 @@ Deno.serve(async (req) => {
               } : {}),
             });
           } catch { console.error("Failed to record morning report failure"); }
+        }
+
+        const retryDecision = shouldRetryMorningReport({
+          error,
+          postAttempted: xPostAttempted,
+          attemptNumber: scheduledPost.attempt_count,
+          maxAttempts: MORNING_REPORT_MAX_ATTEMPTS,
+        });
+        if (retryDecision.retryable) {
+          const retryAt = computeMorningReportRetryTime(new Date(), scheduledPost.attempt_count);
+          try {
+            await callRpc(supabaseUrl, serviceRoleKey, "retry_scheduled_post", {
+              p_scheduled_post_id: scheduledPost.id,
+              p_retry_at: retryAt.toISOString(),
+              p_message: `${retryDecision.reasonCode}:${safeErrorCode(error)}`,
+            });
+            return jsonResponse({
+              status: "retry_scheduled",
+              postType: "morning_report",
+              scheduledPostId: scheduledPost.id,
+              attemptNumber: scheduledPost.attempt_count,
+              maxAttempts: MORNING_REPORT_MAX_ATTEMPTS,
+              retryAt: retryAt.toISOString(),
+              reasonCode: retryDecision.reasonCode,
+            }, 200);
+          } catch {
+            console.error("Failed to schedule morning report retry");
+            // Fall through: the outer catch marks the row failed instead of leaving it stuck running.
+          }
         }
         throw error;
       }
@@ -3765,7 +3809,10 @@ Deno.serve(async (req) => {
       !code.startsWith("RPC_FAILED:complete_tip_post") &&
       !code.startsWith("RPC_FAILED:complete_interaction_post") &&
       !code.startsWith("RPC_FAILED:complete_morning_report_post") &&
-      !code.startsWith("RPC_FAILED:complete_us_premarket_report_post")
+      !code.startsWith("RPC_FAILED:complete_us_premarket_report_post") &&
+      // The X API call itself returned success but the response body had no post id — whether the post
+      // exists is unknown, so this must not be recorded as a failure (which could otherwise invite a retry).
+      code !== "X_RESPONSE_MISSING_POST_ID"
     ) {
       try {
         await callRpc(
