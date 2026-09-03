@@ -67,6 +67,38 @@ test("a voice safety/schema failure is never retryable", () => {
   assert.equal(result.retryable, false);
 });
 
+test("a completed voice evaluation that judged the text unsafe (passed=false) is never retryable", () => {
+  const result = classifyMorningReportFailure(new Error("MORNING_REPORT_VOICE_CHECK_FAILED"));
+  assert.equal(result.retryable, false);
+});
+
+test("D: the three voice-related failure shapes are classified independently", () => {
+  // 1. The evaluation call itself failed at the HTTP layer (transient, retryable).
+  const httpFailure = classifyMorningReportFailure(new Error("VOICE_EVALUATION_OPENAI_FAILED:503"));
+  assert.equal(httpFailure.retryable, true);
+
+  // 2. The call succeeded but the output couldn't be parsed/validated (content-shaped, not retryable).
+  const outputFailure = classifyMorningReportFailure(new VoiceEvaluationOutputError("VOICE_EVALUATION_JSON_PARSE_FAILED", {
+    http_status: 200, response_status: "completed", incomplete_details: null, finish_state: "completed",
+    output_character_count: 10, extracted_text_character_count: 10, output_item_types: [], output_item_statuses: [],
+  }));
+  assert.equal(outputFailure.retryable, false);
+
+  // 3. The evaluation completed and returned passed=false (a genuine quality-gate stop, not retryable).
+  const judgementFailure = classifyMorningReportFailure(new Error("MORNING_REPORT_VOICE_CHECK_FAILED"));
+  assert.equal(judgementFailure.retryable, false);
+});
+
+test("C: a voice check failure is never retried even with attempts remaining and no post attempted", () => {
+  const decision = shouldRetryMorningReport({
+    error: new Error("MORNING_REPORT_VOICE_CHECK_FAILED"),
+    postAttempted: false,
+    attemptNumber: 1,
+    maxAttempts: MORNING_REPORT_MAX_ATTEMPTS,
+  });
+  assert.equal(decision.retryable, false);
+});
+
 test("an unrecognized error defaults to non-retryable", () => {
   const result = classifyMorningReportFailure(new Error("SOMETHING_NEW_AND_UNEXPECTED"));
   assert.equal(result.retryable, false);

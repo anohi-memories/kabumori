@@ -3062,10 +3062,19 @@ Deno.serve(async (req) => {
           ? await evaluateKabumoriVoice(openAiApiKey, "morning_report", draft.text, morningFactBasis(draft))
           : skippedVoiceEvaluation("Fact check不合格のため文体評価を未実施");
         const factCheckPassed = draft.factCheckStatus === "passed";
+        const voicePassed = voiceEvaluation.passed;
+        const wouldPublish = factCheckPassed && voicePassed;
         const totalInputTokens = draft.inputTokens + voiceEvaluation.inputTokens;
         const totalOutputTokens = draft.outputTokens + voiceEvaluation.outputTokens;
         const totalCost = Number((draft.apiCostUsd + voiceEvaluation.apiCostUsd).toFixed(6));
         const marketData = morningRunMarketData(draft, voiceEvaluation, "completed");
+        // Voice FAIL alone does not fail the dry-run itself (it's a confirmation run, not a gate) — it is
+        // only recorded via `error`/`wouldPublish` so it's visible without blocking the response.
+        const dryRunError = !factCheckPassed
+          ? "MORNING_REPORT_FACT_CHECK_FAILED"
+          : !voicePassed
+          ? "MORNING_REPORT_VOICE_CHECK_FAILED"
+          : null;
         await updateMorningReportRun(supabaseUrl, serviceRoleKey, runId, {
           generated_at: new Date().toISOString(),
           source_urls: draft.sourceUrls,
@@ -3075,7 +3084,7 @@ Deno.serve(async (req) => {
           web_search_calls: draft.webSearchCalls,
           api_cost_usd: totalCost,
           status: factCheckPassed ? "dry_run_succeeded" : "failed",
-          error: factCheckPassed ? null : "MORNING_REPORT_FACT_CHECK_FAILED",
+          error: dryRunError,
           generated_text: draft.text,
           character_count: Array.from(draft.text).length,
           fact_check_status: factCheckPassed ? "passed" : "failed",
@@ -3109,6 +3118,10 @@ Deno.serve(async (req) => {
             status: factCheckPassed ? "passed" : "failed",
             notes: draft.factCheckNotes,
           },
+          voiceCheck: {
+            status: voicePassed ? "passed" : "failed",
+          },
+          wouldPublish,
           voiceEvaluation,
         }, 200);
       } catch (error) {
@@ -3458,6 +3471,7 @@ Deno.serve(async (req) => {
           fact_check_notes: draft.factCheckNotes,
           market_data: morningRunMarketData(draft, voiceEvaluation, "completed"),
         });
+        if (!voiceEvaluation.passed) throw new Error("MORNING_REPORT_VOICE_CHECK_FAILED");
         xPostAttempted = true;
         const xResult = await postToX(xAuth, draft.text);
         const xPostId = getXPostId(xResult);
@@ -3482,10 +3496,14 @@ Deno.serve(async (req) => {
           const code = safeErrorCode(error);
           const voiceFailure = error instanceof VoiceEvaluationOutputError ? error : null;
           const laneFailure = error instanceof MorningLaneResponseError ? error : null;
+          // Both a broken voice-evaluation call (VoiceEvaluationOutputError) and a completed evaluation
+          // that judged the text unsafe (MORNING_REPORT_VOICE_CHECK_FAILED) are voice-layer outcomes, not
+          // fact check failures — the underlying Fact Check result must not be overwritten by either.
+          const isVoiceLayerFailure = Boolean(voiceFailure) || code === "MORNING_REPORT_VOICE_CHECK_FAILED";
           try {
             await updateMorningReportRun(supabaseUrl, serviceRoleKey, morningRunId, {
               generated_at: new Date().toISOString(), status: "failed", error: code,
-              fact_check_status: voiceFailure && draft?.factCheckStatus === "passed" ? "passed" : "failed",
+              fact_check_status: isVoiceLayerFailure && draft?.factCheckStatus === "passed" ? "passed" : "failed",
               ...(voiceFailure && draft ? {
                 fact_check_notes: [...draft.factCheckNotes, ...voiceEvaluationFailureNotes(error)],
                 market_data: morningRunMarketData(draft, null, "failed", voiceFailure),
