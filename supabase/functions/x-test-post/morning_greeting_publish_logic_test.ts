@@ -51,6 +51,15 @@ test("uploads one image, creates one X post, then records its id", async () => {
       if (url.includes(`/published/${DATE}.json`) && !init?.method) {
         return new Response(JSON.stringify({ message: "Object not found" }), { status: 400 });
       }
+      if (url.includes("/rest/v1/publish_claims") && init?.method === "POST") {
+        return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "publishing" }]);
+      }
+      if (url.includes("/rest/v1/publish_claims") && init?.method === "PATCH") {
+        const body = JSON.parse(String(init.body));
+        assert.equal(body.status, "published");
+        assert.equal(body.x_post_id, "987654321");
+        return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "published" }]);
+      }
       if (url.includes("/storage/v1/object/")) {
         return new Response(new Uint8Array([137, 80, 78, 71]), {
           status: 200,
@@ -90,6 +99,8 @@ test("uploads one image, creates one X post, then records its id", async () => {
   assert.equal(calls.filter(({ url }) => url === "https://api.x.com/2/tweets").length, 1);
   assert.ok(calls.findIndex(({ url }) => url === "https://api.x.com/2/tweets") <
     calls.findIndex(({ url, init }) => url.includes(`/published/${DATE}.json`) && init?.method === "POST"));
+  assert.ok(calls.findIndex(({ url, init }) => url.includes("/rest/v1/publish_claims") && init?.method === "POST") <
+    calls.findIndex(({ url }) => url === "https://api.x.com/2/media/upload"));
 });
 
 test("an existing same-day post skips generation, upload and posting", async () => {
@@ -128,9 +139,13 @@ test("missing image stops before any X API call", async () => {
       xAccessToken: "x-secret",
       now: new Date("2026-09-01T15:30:00Z"),
       buildPayload: async () => readyPayload(),
-      fetchImpl: async (input) => String(input).includes(`/published/${DATE}.json`)
-        ? new Response("missing", { status: 404 })
-        : new Response("missing", { status: 404 }),
+      fetchImpl: async (input, init) => {
+        const url = String(input);
+        if (url.includes("/rest/v1/publish_claims") && init?.method === "POST") {
+          return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "publishing" }]);
+        }
+        return new Response("missing", { status: 404 });
+      },
     }),
     (error: unknown) => {
       assert.ok(error instanceof MorningGreetingManualPublishError);
@@ -153,10 +168,19 @@ test("media upload failure is not retried and never posts text alone", async () 
       xAccessToken: "x-secret",
       now: new Date("2026-09-01T15:30:00Z"),
       buildPayload: async () => readyPayload(),
-      fetchImpl: async (input) => {
+      fetchImpl: async (input, init) => {
         const url = String(input);
         if (url.includes(`/published/${DATE}.json`)) {
           return new Response("Object not found", { status: 400 });
+        }
+        if (url.includes("/rest/v1/publish_claims") && init?.method === "POST") {
+          return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "publishing" }]);
+        }
+        if (url.includes("/rest/v1/publish_claims") && init?.method === "PATCH") {
+          const body = JSON.parse(String(init.body));
+          assert.equal(body.status, "failed");
+          assert.equal(body.error_code, "MORNING_GREETING_MEDIA_UPLOAD_FAILED:403");
+          return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "failed" }]);
         }
         if (url.includes("/storage/v1/object/")) return new Response(new Uint8Array([1]));
         if (url.includes("/media/upload")) {
@@ -178,6 +202,43 @@ test("media upload failure is not retried and never posts text alone", async () 
   );
   assert.equal(mediaCalls, 1);
   assert.equal(postCalls, 0);
+});
+
+test("4: a lost DB claim race stops before any X API call", async () => {
+  let xApiCalls = 0;
+  await assert.rejects(
+    () => runMorningGreetingManualPublish({
+      supabaseUrl: "https://example.supabase.co",
+      serviceRoleKey: "service-secret",
+      openAiApiKey: "openai-secret",
+      xAccessToken: "x-secret",
+      now: new Date("2026-09-01T15:30:00Z"),
+      buildPayload: async () => readyPayload(),
+      fetchImpl: async (input, init) => {
+        const url = String(input);
+        if (url.includes(`/published/${DATE}.json`)) {
+          return new Response("Object not found", { status: 400 });
+        }
+        if (url.includes("/rest/v1/publish_claims") && init?.method === "POST") {
+          // Another execution already holds today's claim: ignore-duplicates returns no rows.
+          return Response.json([]);
+        }
+        if (url.includes("/2/media/upload") || url.includes("/2/tweets")) {
+          xApiCalls += 1;
+          throw new Error("must not be called");
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof MorningGreetingManualPublishError);
+      assert.equal(error.message, "MORNING_GREETING_PUBLISH_ALREADY_CLAIMED");
+      assert.equal(error.xApiCalled, 0);
+      assert.equal(error.xPosted, false);
+      return true;
+    },
+  );
+  assert.equal(xApiCalls, 0);
 });
 
 test("manual mode is service-role protected and branches before dispatcher", async () => {

@@ -4,6 +4,12 @@ import {
   runMorningGreetingPayloadDryRun,
   type MorningGreetingPayloadDryRunResult,
 } from "./morning_greeting_payload_logic.ts";
+import {
+  MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE,
+  claimPublishSlot,
+  completePublishSlot,
+  failPublishSlot,
+} from "./publish_claim_logic.ts";
 
 export const MORNING_GREETING_MANUAL_PUBLISH_MODE = "publish_morning_greeting_manual";
 const X_MEDIA_UPLOAD_URL = "https://api.x.com/2/media/upload";
@@ -139,6 +145,7 @@ export async function runMorningGreetingManualPublish(args: {
   let xPostApiCalled = 0;
   let xPosted = false;
   let xPostId: string | null = null;
+  let claimed = false;
 
   try {
     const existingPostId = await previouslyPublishedPostId({
@@ -167,6 +174,20 @@ export async function runMorningGreetingManualPublish(args: {
         retry_count: 0,
       };
     }
+
+    // The atomic DB claim, not the Storage receipt check above, is what actually guarantees at most one
+    // execution ever reaches the X API calls below for this date — the receipt check is TOCTOU-racy on
+    // its own and kept only for backward compatibility.
+    const claim = await claimPublishSlot({
+      supabaseUrl: args.supabaseUrl,
+      serviceRoleKey: args.serviceRoleKey,
+      postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE,
+      dateJst,
+      executionId: crypto.randomUUID(),
+      fetcher: fetchImpl,
+    });
+    if (!claim.claimed) throw new Error("MORNING_GREETING_PUBLISH_ALREADY_CLAIMED");
+    claimed = true;
 
     const payload = await (args.buildPayload ?? runMorningGreetingPayloadDryRun)({
       supabaseUrl: args.supabaseUrl,
@@ -222,6 +243,17 @@ export async function runMorningGreetingManualPublish(args: {
     if (!xPostId) throw new Error("MORNING_GREETING_X_POST_ID_MISSING");
     xPosted = true;
 
+    // The DB claim is the authoritative "this date is published" record; it is updated before the legacy
+    // Storage receipt so that record stays correct even if the receipt write below fails.
+    await completePublishSlot({
+      supabaseUrl: args.supabaseUrl,
+      serviceRoleKey: args.serviceRoleKey,
+      postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE,
+      dateJst,
+      xPostId,
+      fetcher: fetchImpl,
+    });
+
     const recordResponse = await fetchImpl(
       publishedReceiptUrl(args.supabaseUrl, dateJst),
       {
@@ -261,8 +293,24 @@ export async function runMorningGreetingManualPublish(args: {
       retry_count: 0,
     };
   } catch (error) {
+    const code = error instanceof Error ? error.message : String(error);
+    // Best-effort only: if the row already transitioned to 'published' this is a safe no-op (the
+    // status=publishing filter matches nothing), and a failure to record 'failed' here must never mask
+    // the original error or be treated as license to retry.
+    if (claimed && code !== "MORNING_GREETING_PUBLISH_ALREADY_CLAIMED") {
+      try {
+        await failPublishSlot({
+          supabaseUrl: args.supabaseUrl,
+          serviceRoleKey: args.serviceRoleKey,
+          postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE,
+          dateJst,
+          errorCode: code,
+          fetcher: fetchImpl,
+        });
+      } catch { /* best-effort; the original error below still surfaces */ }
+    }
     throw new MorningGreetingManualPublishError(
-      error instanceof Error ? error.message : String(error),
+      code,
       { imageUploadSucceeded, xApiCalled, xPostApiCalled, xPosted, xPostId },
     );
   }
