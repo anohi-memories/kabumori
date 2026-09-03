@@ -76,7 +76,7 @@ export function morningGreetingThemesMatch(
     textTheme.visual_theme === imageTheme.visual_theme;
 }
 
-function storageObjectUrl(supabaseUrl: string, dateJst: string): string {
+export function morningGreetingStorageObjectUrl(supabaseUrl: string, dateJst: string): string {
   const path = `${MORNING_GREETING_GENERATED_PREFIX}/${dateJst}.png`;
   const encodedPath = path.split("/").map(encodeURIComponent).join("/");
   return `${supabaseUrl.replace(/\/$/u, "")}/storage/v1/object/${
@@ -117,7 +117,7 @@ export async function runMorningGreetingPayloadDryRun(args: {
     );
     if (openAiTextApiCalled !== 1) throw new Error("MORNING_GREETING_TEXT_API_CALL_COUNT_INVALID");
 
-    const imageResponse = await fetchImpl(storageObjectUrl(args.supabaseUrl, dateJst), {
+    const imageResponse = await fetchImpl(morningGreetingStorageObjectUrl(args.supabaseUrl, dateJst), {
       method: "GET",
       headers: {
         apikey: args.serviceRoleKey,

@@ -88,6 +88,11 @@ import {
   MorningGreetingPayloadDryRunError,
   runMorningGreetingPayloadDryRun,
 } from "./morning_greeting_payload_logic.ts";
+import {
+  MORNING_GREETING_MANUAL_PUBLISH_MODE,
+  MorningGreetingManualPublishError,
+  runMorningGreetingManualPublish,
+} from "./morning_greeting_publish_logic.ts";
 export {
   generateMorningGreeting,
   selectMorningGreetingTheme,
@@ -2887,6 +2892,7 @@ Deno.serve(async (req) => {
     const isUsPremarketDryRun = requestBody.mode === "us_premarket_report_dry_run";
     const isMorningGreetingImageTest = requestBody.mode === MORNING_GREETING_IMAGE_TEST_MODE;
     const isMorningGreetingPayloadTest = requestBody.mode === MORNING_GREETING_PAYLOAD_TEST_MODE;
+    const isMorningGreetingManualPublish = requestBody.mode === MORNING_GREETING_MANUAL_PUBLISH_MODE;
     const isAnyDryRun = isUsefulTipDryRun || isVoiceDryRun || isMorningReportDryRun ||
       isCloseReportDryRun || isUsPremarketDryRun || isMorningGreetingImageTest ||
       isMorningGreetingPayloadTest;
@@ -2905,6 +2911,55 @@ Deno.serve(async (req) => {
 
     supabaseUrlForFailure = supabaseUrl;
     serviceRoleKeyForFailure = serviceRoleKey;
+
+    if (isMorningGreetingManualPublish) {
+      if (req.headers.get("Authorization") !== `Bearer ${serviceRoleKey}`) {
+        return jsonResponse({
+          success: false,
+          error: "MORNING_GREETING_MANUAL_PUBLISH_UNAUTHORIZED",
+          x_api_called: 0,
+          x_posted: false,
+          retry_count: 0,
+        }, 403);
+      }
+      const referenceTime = typeof requestBody.reference_time_iso === "string"
+        ? new Date(requestBody.reference_time_iso)
+        : new Date();
+      try {
+        const tokens = await loadXTokens(
+          supabaseUrl,
+          serviceRoleKey,
+          xClientSecret!,
+          xAccessToken!,
+          xRefreshToken!,
+        );
+        const result = await runMorningGreetingManualPublish({
+          supabaseUrl,
+          serviceRoleKey,
+          openAiApiKey,
+          xAccessToken: tokens.accessToken,
+          now: referenceTime,
+        });
+        return jsonResponse(result, result.skipped ? 200 : 201);
+      } catch (error) {
+        const publishError = error instanceof MorningGreetingManualPublishError ? error : null;
+        return jsonResponse({
+          success: false,
+          date_jst: Number.isFinite(referenceTime.getTime())
+            ? new Intl.DateTimeFormat("en-CA", {
+              timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit",
+            }).format(referenceTime)
+            : null,
+          error: safeErrorCode(error),
+          image_upload_succeeded: publishError?.imageUploadSucceeded ?? false,
+          x_api_called: publishError?.xApiCalled ?? 0,
+          x_post_api_called: publishError?.xPostApiCalled ?? 0,
+          x_posted: publishError?.xPosted ?? false,
+          x_post_id: publishError?.xPostId ?? null,
+          retry_count: 0,
+        }, 422);
+      }
+    }
 
     if (isMorningGreetingPayloadTest) {
       const referenceTime = typeof requestBody.reference_time_iso === "string"
