@@ -120,3 +120,13 @@ test("5: the service role key is never sent to the auth verification call (only 
   assert.equal(authCallApikey, ANON_KEY);
   assert.notEqual(authCallApikey, SERVICE_ROLE_KEY);
 });
+
+test("6: presenting the service role key itself as the caller's Bearer token is rejected, not treated as admin", async () => {
+  // No code path compares the incoming Authorization header to SUPABASE_SERVICE_ROLE_KEY directly — the
+  // key is only ever used server-side for the admin_users lookup. A caller who sends the service role key
+  // as their own bearer token is verified via /auth/v1/user exactly like any other token: since it is not
+  // a real end-user session token, Supabase Auth does not resolve it to a user, so it fails closed here.
+  const result = await authorize(`Bearer ${SERVICE_ROLE_KEY}`);
+  assert.equal(result.authorized, false);
+  assert.equal(result.userId, null);
+});
