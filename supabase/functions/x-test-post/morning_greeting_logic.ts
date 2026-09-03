@@ -16,6 +16,7 @@ export type MorningGreetingResult = MorningGreetingTheme & {
   model: "gpt-5.6-luna";
   input_tokens: number;
   output_tokens: number;
+  retry_count: number;
 };
 
 type MajorThemeDefinition = {
@@ -25,8 +26,15 @@ type MajorThemeDefinition = {
 
 const MODEL = "gpt-5.6-luna" as const;
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
+// The final, enforced range. validateMorningGreetingOutput is the only place this is checked.
 export const MORNING_GREETING_MIN_CHARACTERS = 100;
 export const MORNING_GREETING_MAX_CHARACTERS = 180;
+// A narrower generation target, aimed well inside the validator's range so ordinary variance in the
+// model's output still lands safely inside 100-180 without needing a retry.
+export const MORNING_GREETING_TARGET_MIN_CHARACTERS = 110;
+export const MORNING_GREETING_TARGET_MAX_CHARACTERS = 160;
+export const MORNING_GREETING_TARGET_MIN_EMOJI = 1;
+export const MORNING_GREETING_TARGET_MAX_EMOJI = 3;
 
 // Deliberately small, stable allowlist. Minor commemorative days never become
 // themes merely because a model or search result mentions them.
@@ -165,7 +173,8 @@ export function morningGreetingGenerationInstructions(theme: MorningGreetingThem
   return [
     ...KABUMORI_VOICE,
     "朝の短い挨拶投稿です。株の解説記事ではなく、普段のXで自然におはようと声をかける文章にしてください。",
-    `本文は日本語で${MORNING_GREETING_MIN_CHARACTERS}〜${MORNING_GREETING_MAX_CHARACTERS}文字。明るめで柔らかく、かわいさや絵文字を盛りすぎません。`,
+    `本文は絵文字・改行を含めて日本語で${MORNING_GREETING_TARGET_MIN_CHARACTERS}〜${MORNING_GREETING_TARGET_MAX_CHARACTERS}文字程度を目標にします。明るめで柔らかく書きます。`,
+    `絵文字は${MORNING_GREETING_TARGET_MIN_EMOJI}〜${MORNING_GREETING_TARGET_MAX_EMOJI}個程度にします。`,
     "おはようの挨拶、確定済みテーマへの短い言及、自然な一言を入れますが、毎回同じ構成や締めに固定しません。",
     "テーマはプログラム側で確定済みです。別の記念日へ変更、追加、再解釈しないでください。theme_type、theme_name、visual_themeは入力値をそのまま返してください。",
     "本人の外出、買い物、食事、家族行事などの実体験を作りません。現在地や天気も入力にないため書きません。",
@@ -288,16 +297,20 @@ function responseUsage(response: unknown): { input: number; output: number } {
   };
 }
 
-export async function generateMorningGreeting(
+export const MORNING_GREETING_LENGTH_RETRY_TOO_SHORT_INSTRUCTION =
+  `内容を自然に少し具体化し、絵文字・改行を含めて${MORNING_GREETING_TARGET_MIN_CHARACTERS}〜${MORNING_GREETING_TARGET_MAX_CHARACTERS}文字程度にしてください。`;
+export const MORNING_GREETING_LENGTH_RETRY_TOO_LONG_INSTRUCTION =
+  `内容と雰囲気を保ったまま簡潔にし、絵文字・改行を含めて${MORNING_GREETING_TARGET_MIN_CHARACTERS}〜${MORNING_GREETING_TARGET_MAX_CHARACTERS}文字程度にしてください。`;
+
+async function requestMorningGreetingCompletion(
   openAiApiKey: string,
-  date: string,
-  fetchImpl: typeof fetch = fetch,
-): Promise<MorningGreetingResult> {
-  const request = buildMorningGreetingRequest(date);
+  body: Record<string, unknown>,
+  fetchImpl: typeof fetch,
+): Promise<{ parsed: unknown; usage: { input: number; output: number } }> {
   const response = await fetchImpl(OPENAI_RESPONSES_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify(request.body),
+    body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(`MORNING_GREETING_OPENAI_FAILED:${response.status}`);
   const raw = await response.json();
@@ -308,12 +321,56 @@ export async function generateMorningGreeting(
   } catch {
     throw new Error("MORNING_GREETING_JSON_PARSE_FAILED");
   }
-  const validated = validateMorningGreetingOutput(parsed, request.theme);
-  const usage = responseUsage(raw);
-  return {
-    ...validated,
-    model: MODEL,
-    input_tokens: usage.input,
-    output_tokens: usage.output,
-  };
+  return { parsed, usage: responseUsage(raw) };
+}
+
+// The raw (pre-validation) length of generated_text, used only to pick which direction the one allowed
+// retry should push in. Independent of validateMorningGreetingOutput, which is not modified.
+function rawGeneratedTextLength(parsed: unknown): number | null {
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const text = (parsed as { generated_text?: unknown }).generated_text;
+  return typeof text === "string" ? Array.from(text.trim()).length : null;
+}
+
+export async function generateMorningGreeting(
+  openAiApiKey: string,
+  date: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<MorningGreetingResult> {
+  const request = buildMorningGreetingRequest(date);
+  const first = await requestMorningGreetingCompletion(openAiApiKey, request.body, fetchImpl);
+
+  try {
+    const validated = validateMorningGreetingOutput(first.parsed, request.theme);
+    return {
+      ...validated,
+      model: MODEL,
+      input_tokens: first.usage.input,
+      output_tokens: first.usage.output,
+      retry_count: 0,
+    };
+  } catch (error) {
+    // Only a length miss is safe to retry, and only once: it is caught before any X API call, and asking
+    // for the same content within range does not relax any of the content/safety checks below it. Every
+    // other failure (schema, salutation, fabricated experience, voice guards, ...) is not retried here.
+    if (!(error instanceof Error) || error.message !== "MORNING_GREETING_TEXT_LENGTH_INVALID") throw error;
+
+    const length = rawGeneratedTextLength(first.parsed);
+    const retryInstruction = length !== null && length < MORNING_GREETING_MIN_CHARACTERS
+      ? MORNING_GREETING_LENGTH_RETRY_TOO_SHORT_INSTRUCTION
+      : MORNING_GREETING_LENGTH_RETRY_TOO_LONG_INSTRUCTION;
+    const retryBody: Record<string, unknown> = {
+      ...request.body,
+      instructions: `${request.body.instructions as string}\n${retryInstruction}`,
+    };
+    const retry = await requestMorningGreetingCompletion(openAiApiKey, retryBody, fetchImpl);
+    const validated = validateMorningGreetingOutput(retry.parsed, request.theme);
+    return {
+      ...validated,
+      model: MODEL,
+      input_tokens: first.usage.input + retry.usage.input,
+      output_tokens: first.usage.output + retry.usage.output,
+      retry_count: 1,
+    };
+  }
 }

@@ -33,7 +33,7 @@ export type MorningGreetingManualPublishResult = {
   x_post_api_called: number;
   x_posted: boolean;
   x_post_id: string | null;
-  retry_count: 0;
+  retry_count: number;
 };
 
 export class MorningGreetingManualPublishError extends Error {
@@ -290,7 +290,7 @@ export async function runMorningGreetingManualPublish(args: {
       x_post_api_called: xPostApiCalled,
       x_posted: true,
       x_post_id: xPostId,
-      retry_count: 0,
+      retry_count: payload.retry_count,
     };
   } catch (error) {
     const code = error instanceof Error ? error.message : String(error);

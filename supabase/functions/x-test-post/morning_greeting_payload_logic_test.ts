@@ -55,6 +55,44 @@ test("existing image builds a safe pre-publish payload with one text API call", 
   assert.doesNotMatch(JSON.stringify(result), /service-role-secret|openai-secret/u);
 });
 
+test("10: a length-invalid first draft retries text generation once, entirely before Storage/X are touched", async () => {
+  const theme = selectMorningGreetingTheme("2026-09-02");
+  const shortText = "おはようございます。今日も一日、無理のないペースで過ごせますように。";
+  let textCalls = 0;
+  const calls: string[] = [];
+  const result = await runMorningGreetingPayloadDryRun({
+    supabaseUrl: "https://example.supabase.co",
+    serviceRoleKey: "service-role-secret",
+    openAiApiKey: "openai-secret",
+    now: new Date("2026-09-01T15:30:00Z"),
+    fetchImpl: async (input) => {
+      const url = String(input);
+      calls.push(url);
+      if (url === "https://api.openai.com/v1/responses") {
+        textCalls += 1;
+        const text = textCalls === 1 ? shortText : GENERATED_TEXT;
+        return new Response(JSON.stringify({
+          status: "completed",
+          output: [{ content: [{ type: "output_text", text: JSON.stringify({
+            theme_type: theme.theme_type, theme_name: theme.theme_name,
+            visual_theme: theme.visual_theme, generated_text: text,
+          }) }] }],
+          usage: { input_tokens: 10, output_tokens: 10 },
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return new Response(new Uint8Array([137]), { status: 206 });
+    },
+  });
+
+  assert.equal(result.openai_text_api_called, 2);
+  assert.equal(result.retry_count, 1);
+  assert.equal(result.x_api_called, 0);
+  assert.equal(calls.filter((url) => url.includes("api.openai.com")).length, 2);
+  // Both text-generation calls happened before the Storage check (the first non-OpenAI URL in the log).
+  const firstStorageCallIndex = calls.findIndex((url) => !url.includes("api.openai.com"));
+  assert.equal(firstStorageCallIndex, 2);
+});
+
 test("missing image stops safely after one text API call", async () => {
   await assert.rejects(
     () => runMorningGreetingPayloadDryRun({

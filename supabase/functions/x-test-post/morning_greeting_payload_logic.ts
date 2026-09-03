@@ -21,8 +21,8 @@ export type MorningGreetingPayloadDryRunResult = {
   image_exists: true;
   theme_match: true;
   payload_ready: true;
-  openai_text_api_called: 1;
-  retry_count: 0;
+  openai_text_api_called: number;
+  retry_count: number;
   x_api_called: 0;
   x_posted: false;
   payload: {
@@ -99,10 +99,12 @@ export async function runMorningGreetingPayloadDryRun(args: {
   let imageExists = false;
   let themeMatch = false;
 
+  // generateMorningGreeting may retry once, and only once, on a length-invalid result — so up to 2 calls
+  // here is expected, not a runaway loop. Anything beyond that is not.
   const guardedFetch: typeof fetch = async (input, init) => {
     if (String(input) === OPENAI_RESPONSES_URL) {
       openAiTextApiCalled += 1;
-      if (openAiTextApiCalled > 1) {
+      if (openAiTextApiCalled > 2) {
         throw new Error("MORNING_GREETING_TEXT_API_CALL_LIMIT_EXCEEDED");
       }
     }
@@ -115,7 +117,9 @@ export async function runMorningGreetingPayloadDryRun(args: {
       dateJst,
       guardedFetch,
     );
-    if (openAiTextApiCalled !== 1) throw new Error("MORNING_GREETING_TEXT_API_CALL_COUNT_INVALID");
+    if (openAiTextApiCalled < 1 || openAiTextApiCalled > 2) {
+      throw new Error("MORNING_GREETING_TEXT_API_CALL_COUNT_INVALID");
+    }
 
     const imageResponse = await fetchImpl(morningGreetingStorageObjectUrl(args.supabaseUrl, dateJst), {
       method: "GET",
@@ -145,8 +149,8 @@ export async function runMorningGreetingPayloadDryRun(args: {
       image_exists: true,
       theme_match: true,
       payload_ready: true,
-      openai_text_api_called: 1,
-      retry_count: 0,
+      openai_text_api_called: openAiTextApiCalled,
+      retry_count: greeting.retry_count,
       x_api_called: 0,
       x_posted: false,
       payload: {
