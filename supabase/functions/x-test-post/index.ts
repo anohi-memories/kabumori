@@ -85,6 +85,7 @@ import {
   reconcileStaleMorningReportRuns,
   shouldRetryMorningReport,
 } from "./morning_report_retry_logic.ts";
+import { resolveAdminAuthorization } from "./admin_auth_logic.ts";
 import {
   MORNING_GREETING_IMAGE_TEST_MODE,
   MorningGreetingImageTestError,
@@ -2918,7 +2919,14 @@ Deno.serve(async (req) => {
     serviceRoleKeyForFailure = serviceRoleKey;
 
     if (isMorningGreetingManualPublish) {
-      if (req.headers.get("Authorization") !== `Bearer ${serviceRoleKey}`) {
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+      const adminAuth = anonKey
+        ? await resolveAdminAuthorization({
+          authorizationHeader: req.headers.get("Authorization"),
+          supabaseUrl, anonKey, serviceRoleKey,
+        })
+        : { authorized: false, userId: null };
+      if (!adminAuth.authorized) {
         return jsonResponse({
           success: false,
           error: "MORNING_GREETING_MANUAL_PUBLISH_UNAUTHORIZED",
