@@ -68,7 +68,7 @@ test("text length and emoji count are not fact-check inputs", () => {
 
 test("close report can pass without Nikkei TOPIX or futures values", () => {
   assert.deepEqual(evaluateCloseFacts({
-    requiredIndices: [], futures: null, optional: [], verifiedImportantPointCount: 3,
+    requiredIndices: [], futures: null, optional: [], verifiedTodayPointCount: 3,
     trustedSourceCount: 2, dateConsistencyPassed: true,
     importantNewsPresent: false, importantNewsVerified: false,
     futureInformationAbsent: true, mode: "live",
@@ -77,13 +77,12 @@ test("close report can pass without Nikkei TOPIX or futures values", () => {
 
 test("unverified close report facts safely stop generation", () => {
   const result = evaluateCloseFacts({
-    requiredIndices: [], futures: null, optional: [], verifiedImportantPointCount: 2,
+    requiredIndices: [], futures: null, optional: [], verifiedTodayPointCount: 2,
     trustedSourceCount: 2, dateConsistencyPassed: true,
     importantNewsPresent: true, importantNewsVerified: false,
     futureInformationAbsent: true, mode: "live",
   });
   assert.equal(result.status, "failed");
-  assert.match(result.notes.join(" | "), /今日のポイントが3件未満/);
   assert.match(result.notes.join(" | "), /重要ニュース候補の裏取り不能/);
 });
 
@@ -93,7 +92,7 @@ test("a stale optional material alone does not fail the close report", () => {
   }), "realtime_optional", reference, "live");
   assert.equal(staleOptional.freshness, "stale");
   assert.equal(evaluateCloseFacts({
-    requiredIndices: [], futures: null, optional: [staleOptional], verifiedImportantPointCount: 3,
+    requiredIndices: [], futures: null, optional: [staleOptional], verifiedTodayPointCount: 3,
     trustedSourceCount: 2, dateConsistencyPassed: true,
     importantNewsPresent: false, importantNewsVerified: false,
     futureInformationAbsent: true, mode: "live",
@@ -102,7 +101,7 @@ test("a stale optional material alone does not fail the close report", () => {
 
 test("future or invalid optional material still safely stops the close report", () => {
   const result = evaluateCloseFacts({
-    requiredIndices: [], futures: null, optional: [], verifiedImportantPointCount: 3,
+    requiredIndices: [], futures: null, optional: [], verifiedTodayPointCount: 3,
     trustedSourceCount: 2, dateConsistencyPassed: true,
     importantNewsPresent: false, importantNewsVerified: false,
     futureInformationAbsent: false, unsafeOptionalMaterialCount: 1, mode: "live",
@@ -111,15 +110,40 @@ test("future or invalid optional material still safely stops the close report", 
   assert.match(result.notes.join(" | "), /optional材料/);
 });
 
-test("removing stale material still stops safely when fewer than three close points remain", () => {
+// --- TODAY/NEXT material scope (STEP 2-6) -----------------------------------------------------------
+
+test("1: zero verified TODAY points safely stops generation (no anchor to what happened today)", () => {
   const result = evaluateCloseFacts({
-    requiredIndices: [], futures: null, optional: [], verifiedImportantPointCount: 2,
+    requiredIndices: [], futures: null, optional: [], verifiedTodayPointCount: 0,
     trustedSourceCount: 2, dateConsistencyPassed: true,
     importantNewsPresent: false, importantNewsVerified: false,
     futureInformationAbsent: true, mode: "live",
   });
   assert.equal(result.status, "failed");
-  assert.match(result.notes.join(" | "), /今日のポイントが3件未満/);
+  assert.match(result.notes.join(" | "), /出典確認済みの本日の重要ポイントが0件/);
+});
+
+test("3: one or two verified TODAY points is enough for a safe, shorter report (no longer forced to 3)", () => {
+  for (const count of [1, 2]) {
+    const result = evaluateCloseFacts({
+      requiredIndices: [], futures: null, optional: [], verifiedTodayPointCount: count,
+      trustedSourceCount: 2, dateConsistencyPassed: true,
+      importantNewsPresent: false, importantNewsVerified: false,
+      futureInformationAbsent: true, mode: "live",
+    });
+    assert.equal(result.status, "passed", `expected count=${count} to pass`);
+    assert.deepEqual(result.notes, []);
+  }
+});
+
+test("4: three or more verified TODAY points still passes as a normal report", () => {
+  const result = evaluateCloseFacts({
+    requiredIndices: [], futures: null, optional: [], verifiedTodayPointCount: 4,
+    trustedSourceCount: 2, dateConsistencyPassed: true,
+    importantNewsPresent: false, importantNewsVerified: false,
+    futureInformationAbsent: true, mode: "live",
+  });
+  assert.equal(result.status, "passed");
 });
 
 test("close report format keeps three points at the top and required sections", () => {
@@ -238,6 +262,36 @@ test("generateCloseReport appends fixed hashtags and runs the local safety check
   const safetyIdx = fnSource.indexOf("localCloseReportSafetyIssues(text)");
   const appendIdx = fnSource.indexOf("appendFixedCloseReportHashtags(text)");
   assert.ok(formatIdx < safetyIdx && safetyIdx < appendIdx);
+});
+
+test("2+7: generateCloseReport only counts material_scope 'today' points toward the safety gate, never 'next'", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const start = source.indexOf("async function generateCloseReport(");
+  const end = source.indexOf("\nasync function", start + 1);
+  const fnSource = source.slice(start, end);
+  assert.match(fnSource, /const todayPoints = importantPoints\.filter\(\(point\) => point\.material_scope === "today"\)/u);
+  assert.match(fnSource, /verifiedTodayPointCount:\s*todayPoints\.length/u);
+  // The filtered `importantPoints` set (which still includes "next" points, e.g. for the writer's
+  // 明日への注目点 section) is deliberately NOT what's passed to the safety gate below.
+  assert.doesNotMatch(fnSource, /verifiedTodayPointCount:\s*importantPoints\.length/u);
+});
+
+test("6: the collection schema tags every important_point with material_scope (today/next), close_report-only", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  assert.match(source, /CLOSE_REPORT_MATERIAL_SCOPE_SCHEMA\s*=\s*\{\s*type:\s*"string",\s*enum:\s*\["today",\s*"next"\]/u);
+  assert.match(source, /material_scope:\s*CLOSE_REPORT_MATERIAL_SCOPE_SCHEMA/u);
+  assert.match(source, /required:\s*\[\.\.\.REPORT_POINT_REQUIRED,\s*"material_scope"\]/u);
+  // The shared morning_report constants themselves are untouched.
+  assert.doesNotMatch(source, /REPORT_POINT_REQUIRED\s*=\s*\[[^\]]*material_scope/u);
+});
+
+test("collection prompt tells the model to prefer today's own material over padding with next-scope items", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const start = source.indexOf("async function generateCloseReport(");
+  const end = source.indexOf("\nasync function", start + 1);
+  const fnSource = source.slice(start, end);
+  assert.match(fnSource, /件数を揃えるためだけにnextを使わず/u);
+  assert.match(fnSource, /max_tool_calls:\s*4/u);
 });
 
 test("14: plan_close_report() already excludes weekends and JPX holidays (verified against the applied migration)", async () => {

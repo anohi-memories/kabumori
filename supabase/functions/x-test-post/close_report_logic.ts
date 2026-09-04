@@ -99,7 +99,12 @@ export function evaluateCloseFacts(args: {
   requiredIndices: NormalizedCloseMetric[];
   futures: NormalizedCloseMetric | null;
   optional: NormalizedCloseMetric[];
-  verifiedImportantPointCount?: number;
+  // Only points tagged material_scope "today" (something that happened within today's Japan market
+  // session) should ever be counted here — a "next" (upcoming/scheduled) point does not establish that
+  // today's move can be explained, no matter how well-sourced it is. Safety requirement is "at least one
+  // verified today-fact exists", not "exactly three points survived" — a scarce-material day can still
+  // produce a safe, shorter report as long as it has a real anchor to what happened today.
+  verifiedTodayPointCount?: number;
   trustedSourceCount: number;
   dateConsistencyPassed: boolean;
   importantNewsPresent?: boolean;
@@ -109,8 +114,8 @@ export function evaluateCloseFacts(args: {
   mode: CloseRunMode;
 }): CloseFactResult {
   const notes: string[] = [];
-  if ((args.verifiedImportantPointCount ?? 3) < 3) {
-    notes.push("出典確認済みの今日のポイントが3件未満");
+  if ((args.verifiedTodayPointCount ?? 1) === 0) {
+    notes.push("出典確認済みの本日の重要ポイントが0件（今日の相場を説明する裏取り済み事実がありません）");
   }
   const missing = args.requiredIndices.filter((metric) =>
     parseMarketNumber(metric.value) === null || !metric.timestamp || !metric.source_url

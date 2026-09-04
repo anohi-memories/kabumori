@@ -314,7 +314,7 @@ type CloseCarryover = {
 type CloseReportDraft = {
   text: string;
   tradingDate: string;
-  importantPoints: MorningPoint[];
+  importantPoints: ClosePoint[];
   nikkei: NormalizedCloseMetric;
   topix: NormalizedCloseMetric;
   growth250: NormalizedCloseMetric | null;
@@ -1782,10 +1782,16 @@ async function generateMorningReport(
   };
 }
 
+// close_report-only: distinguishes a point that happened within today's Japan market session from one
+// that is a scheduled/confirmed future event. Extends the shared MorningPoint type rather than modifying
+// it, since morning_report's own packet never populates or reads this field.
+const CLOSE_REPORT_MATERIAL_SCOPE_SCHEMA = { type: "string", enum: ["today", "next"] };
+type ClosePoint = MorningPoint & { material_scope: "today" | "next" };
+
 type CloseMarketPacket = {
   trading_date: string;
   market_data_timestamp: string;
-  important_points: MorningPoint[];
+  important_points: ClosePoint[];
   nikkei: RawMarketMetric;
   topix: RawMarketMetric;
   growth250: RawMarketMetric;
@@ -1893,7 +1899,7 @@ async function generateCloseReport(
     headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: "gpt-5.6-luna", store: false, reasoning: { effort: "low" },
-      max_output_tokens: 2800, max_tool_calls: 3,
+      max_output_tokens: 2800, max_tool_calls: 4,
       tools: [{
         type: "web_search",
         filters: { allowed_domains: MORNING_SOURCE_DOMAINS },
@@ -1904,7 +1910,9 @@ async function generateCloseReport(
       include: ["web_search_call.action.sources"],
       instructions: [
         "あなたは大引けレポートの事実収集担当です。投稿文は書かず、今日の日本市場で重要だった流れ、背景、企業材料、明日への材料を必要最小限の検索でJSONへ整理してください。推測は禁止です。",
-        "important_pointsは必ず3件とし、何が起きたか、なぜ重要か、日本株との関係、明日見る点をまとめ、各件に実際に開いて確認したsource_url、公開timestamp、material_typeを付けてください。3件全体で最低2つの独立publisherを確保し、可能なら一次・公式情報と信頼報道を組み合わせます。",
+        "まず今日の取引時間中・引け後に公開された、今日の日本株の値動き・セクター動向・個別企業材料そのものを優先して検索してください。来週以降の予定やマクロ日程だけで検索を終えないでください。",
+        "important_pointsは必ず3件とし、各件にmaterial_scopeを付けます。todayは今日の取引時間中または引け後に確認できた、今日の日本株に直接関係する出来事（値動き、企業材料、当日中のニュース）です。nextは来週の指標発表や日銀会合日程のように、今日は起きておらず今後の予定・確認済み事実として役立つ材料です。件数を揃えるためだけにnextを使わず、todayの材料が十分見つかった場合はtodayを優先してください。",
+        "何が起きたか、なぜ重要か、日本株との関係、明日見る点をまとめ、各件に実際に開いて確認したsource_url、公開timestamp、material_typeを付けてください。3件全体で最低2つの独立publisherを確保し、可能なら一次・公式情報と信頼報道を組み合わせます。",
         "timestampは確認できた精度のまま返してください。時刻不明ならYYYY-MM-DDとし、00:00等を推測しません。今日の市場の流れはmarket_session、現在値ベースはrealtime_market、政策・経済指標・企業材料は対応するmaterial_typeを指定します。古い材料を今日発生したように扱いません。",
         "強い因果関係を断定する場合はcausal_claim_strength=strongとし、独立報道2系統または一次情報＋信頼報道をsource_urlとsupporting_source_urlsへ入れます。裏取りできなければ断定を避けてqualifiedにするか、その材料を使いません。",
         "日経平均、TOPIX、グロース指数、日経先物の具体値を集めるためだけの検索は不要です。偶然取得できた場合だけ各指標欄へ入れ、取得不能は空文字にします。数値不足は異常ではなく、数字を作りません。",
@@ -1926,8 +1934,13 @@ async function generateCloseReport(
             type: "array", minItems: 3, maxItems: 3,
             items: {
               type: "object",
-              properties: REPORT_POINT_PROPERTIES,
-              required: REPORT_POINT_REQUIRED,
+              // close_report-only extension of the shared point schema: material_scope distinguishes
+              // "today" (happened within today's Japan market session) from "next" (a scheduled/
+              // confirmed future event) so the Fact-check safety gate never lets forward-looking
+              // material stand in for a verified same-day anchor. morning_report's own schema is
+              // untouched — it doesn't reference this extended shape.
+              properties: { ...REPORT_POINT_PROPERTIES, material_scope: CLOSE_REPORT_MATERIAL_SCOPE_SCHEMA },
+              required: [...REPORT_POINT_REQUIRED, "material_scope"],
               additionalProperties: false,
             },
           },
@@ -2021,6 +2034,9 @@ async function generateCloseReport(
       ? [{ ...point, supporting_source_urls: supportingSourceUrls }]
       : [];
   });
+  // Only "today" points anchor the report to something that actually happened today; a "next" point
+  // (however well-verified) must never substitute for that in the safety gate below.
+  const todayPoints = importantPoints.filter((point) => point.material_scope === "today");
   const verifiedMetric = (metric: RawMarketMetric): RawMarketMetric =>
     sourceVerified(metric.source_url) ? metric : { ...metric, source_url: "" };
   const nikkei = normalizeCloseMetric(verifiedMetric(packet.nikkei), "jpx_close", referenceTimeIso, runMode);
@@ -2068,7 +2084,7 @@ async function generateCloseReport(
   const factResult = evaluateCloseFacts({
     requiredIndices: [], futures: null,
     optional: [],
-    verifiedImportantPointCount: importantPoints.length,
+    verifiedTodayPointCount: todayPoints.length,
     trustedSourceCount: independentPublisherCount(usedFactSourceUrls, MORNING_SOURCE_DOMAINS),
     dateConsistencyPassed: packet.date_consistency_passed,
     importantNewsPresent: packet.important_news_present,
@@ -2091,6 +2107,7 @@ async function generateCloseReport(
           ...kabumoriVoice("close_report", `close-report:${packet.trading_date}`),
           "入力の出典確認済み事実だけを使い、市場概況＋初心者にも分かる解説型の大引けレポートを1投稿で作成してください。数値・日時・因果関係を追加推測しません。",
           "先頭は必ず『【大引け】きょうの日本株まとめ🌙』、直後に『📌 今日の3ポイント』と重要度順の箇条書き3件を置きます。続けて市場全体の流れと、3ポイントをそれぞれ詳しく説明します。",
+          "importantPointsの各件にはmaterial_scopeが付いています。todayを優先して3ポイントを構成してください。todayが3件に満たない場合はnextで補って構いませんが、nextの内容は『来週◯◯が予定されています』のように今後の予定として書き、今日すでに起きたことのように書きません。",
           "外部市場データ由来の日経平均、TOPIX、日経先物、為替、金利の具体値は書きません。入力で確認済みの方向感やニュースだけを使い、未確認の方向感も作りません。",
           "終盤に『🔎 強かった・弱かったテーマ』『👀 明日への注目点』『💬 今日のひとこと』をこの順で必ず入れます。市場解釈を事実として断定せず、売買指示はしません。",
           "500〜800文字は目安です。材料が少なければ短く、必要なら長くして構いません。文字数合わせの水増しは禁止です。",
