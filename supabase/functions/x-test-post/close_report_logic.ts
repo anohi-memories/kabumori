@@ -104,11 +104,17 @@ export function evaluateCloseFacts(args: {
   // today's move can be explained, no matter how well-sourced it is. Safety requirement is "at least one
   // verified today-fact exists", not "exactly three points survived" — a scarce-material day can still
   // produce a safe, shorter report as long as it has a real anchor to what happened today.
+  //
+  // "重要ニュース候補が未確認" is deliberately NOT one of this function's inputs. Whether a specific
+  // important-news candidate is usable is decided per-item, upstream, by the same source/freshness/
+  // causal-support filter every point already goes through before it ever reaches this gate or the
+  // writer — an unconfirmed candidate is simply absent from verifiedTodayPointCount, not a reason to
+  // fail the whole report. A close report is not required to contain a "重要ニュース" at all (see
+  // ケースA/B/C in the brief this implements); it only needs at least one verified today-fact, of
+  // whatever kind, from requiredIndices/optional/points feeding verifiedTodayPointCount.
   verifiedTodayPointCount?: number;
   trustedSourceCount: number;
   dateConsistencyPassed: boolean;
-  importantNewsPresent?: boolean;
-  importantNewsVerified: boolean;
   futureInformationAbsent: boolean;
   unsafeOptionalMaterialCount?: number;
   mode: CloseRunMode;
@@ -136,9 +142,6 @@ export function evaluateCloseFacts(args: {
   if ((args.unsafeOptionalMaterialCount ?? 0) > 0) notes.push("optional材料に未来時刻または不正なtimestampが混入");
   if (!args.dateConsistencyPassed) notes.push("取引日の日付取り違え");
   if (args.trustedSourceCount < 2) notes.push("信頼できる独立ソースが不足");
-  if ((args.importantNewsPresent ?? true) && !args.importantNewsVerified) {
-    notes.push("重要ニュース候補の裏取り不能");
-  }
   if (!args.futureInformationAbsent) notes.push("16:00以降に公開された未来情報が混入");
   if (args.mode === "preflight") notes.push("事前dry-run: 最新取得可能データで構造と取得経路を確認");
   return { status: notes.some((note) => !note.startsWith("事前dry-run:")) ? "failed" : "passed", notes };

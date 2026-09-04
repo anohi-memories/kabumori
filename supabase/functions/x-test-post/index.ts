@@ -2087,8 +2087,6 @@ async function generateCloseReport(
     verifiedTodayPointCount: todayPoints.length,
     trustedSourceCount: independentPublisherCount(usedFactSourceUrls, MORNING_SOURCE_DOMAINS),
     dateConsistencyPassed: packet.date_consistency_passed,
-    importantNewsPresent: packet.important_news_present,
-    importantNewsVerified: packet.important_news_verified,
     futureInformationAbsent,
     unsafeOptionalMaterialCount,
     mode: runMode,

@@ -7,6 +7,7 @@ import {
   evaluateCloseFacts, hasFixedCloseReportHashtagsExactlyOnce, localCloseReportSafetyIssues,
   normalizeCloseMetric, resolveCloseRunMode, validateCloseFreshness,
   validateCloseReportFormat,
+  type NormalizedCloseMetric,
   type RawMarketMetric,
 } from "./close_report_logic.ts";
 
@@ -40,7 +41,7 @@ test("contradictory change and future timestamps stop publication", () => {
   const future = normalizeCloseMetric(raw({ label: "TOPIX", timestamp: "2026-08-31T07:10:00.000Z" }), "jpx_close", reference, "live");
   const result = evaluateCloseFacts({
     requiredIndices: [contradiction, future], futures: null, optional: [], trustedSourceCount: 2,
-    dateConsistencyPassed: true, importantNewsVerified: true, futureInformationAbsent: true, mode: "live",
+    dateConsistencyPassed: true, futureInformationAbsent: true, mode: "live",
   });
   assert.equal(result.status, "failed");
   assert.match(result.notes.join(" | "), /数値矛盾/);
@@ -52,7 +53,7 @@ test("missing futures can be omitted without failing required-index facts", () =
     .map((metric) => normalizeCloseMetric(metric, "jpx_close", reference, "live"));
   assert.deepEqual(evaluateCloseFacts({
     requiredIndices: indices, futures: null, optional: [], trustedSourceCount: 2,
-    dateConsistencyPassed: true, importantNewsVerified: true, futureInformationAbsent: true, mode: "live",
+    dateConsistencyPassed: true, futureInformationAbsent: true, mode: "live",
   }), { status: "passed", notes: [] });
 });
 
@@ -62,7 +63,7 @@ test("text length and emoji count are not fact-check inputs", () => {
   );
   assert.equal(evaluateCloseFacts({
     requiredIndices: indices, futures: null, optional: [], trustedSourceCount: 2,
-    dateConsistencyPassed: true, importantNewsVerified: true, futureInformationAbsent: true, mode: "live",
+    dateConsistencyPassed: true, futureInformationAbsent: true, mode: "live",
   }).status, "passed");
 });
 
@@ -70,20 +71,27 @@ test("close report can pass without Nikkei TOPIX or futures values", () => {
   assert.deepEqual(evaluateCloseFacts({
     requiredIndices: [], futures: null, optional: [], verifiedTodayPointCount: 3,
     trustedSourceCount: 2, dateConsistencyPassed: true,
-    importantNewsPresent: false, importantNewsVerified: false,
     futureInformationAbsent: true, mode: "live",
   }), { status: "passed", notes: [] });
 });
 
-test("unverified close report facts safely stop generation", () => {
-  const result = evaluateCloseFacts({
-    requiredIndices: [], futures: null, optional: [], verifiedTodayPointCount: 2,
+test("2+3+4: an important-news candidate is no longer a whole-report gate at all — 'today' facts alone decide", () => {
+  // evaluateCloseFacts() no longer even accepts an important-news present/verified signal: whether a
+  // specific candidate is usable is decided per-item, upstream (source/freshness/causal filtering),
+  // before verifiedTodayPointCount is computed. So a day with no important news (case A), a verified
+  // one (case B), or an unconfirmed one excluded upstream (case C) are all indistinguishable here — the
+  // only thing that matters is how many verified "today" facts made it through.
+  const baseArgs = {
+    requiredIndices: [], futures: null, optional: [] as NormalizedCloseMetric[],
     trustedSourceCount: 2, dateConsistencyPassed: true,
-    importantNewsPresent: true, importantNewsVerified: false,
-    futureInformationAbsent: true, mode: "live",
-  });
-  assert.equal(result.status, "failed");
-  assert.match(result.notes.join(" | "), /重要ニュース候補の裏取り不能/);
+    futureInformationAbsent: true, mode: "live" as const,
+  };
+  // Case A: no important news at all, just one ordinary today-fact.
+  assert.equal(evaluateCloseFacts({ ...baseArgs, verifiedTodayPointCount: 1 }).status, "passed");
+  // Case B/C: whether that one today-fact happens to BE a verified important-news item, or an
+  // unconfirmed one was silently excluded upstream leaving this same count, is invisible here by
+  // design — both look identical: one verified today-fact, still passes.
+  assert.equal(evaluateCloseFacts({ ...baseArgs, verifiedTodayPointCount: 1 }).status, "passed");
 });
 
 test("a stale optional material alone does not fail the close report", () => {
@@ -94,7 +102,6 @@ test("a stale optional material alone does not fail the close report", () => {
   assert.equal(evaluateCloseFacts({
     requiredIndices: [], futures: null, optional: [staleOptional], verifiedTodayPointCount: 3,
     trustedSourceCount: 2, dateConsistencyPassed: true,
-    importantNewsPresent: false, importantNewsVerified: false,
     futureInformationAbsent: true, mode: "live",
   }).status, "passed");
 });
@@ -103,7 +110,6 @@ test("future or invalid optional material still safely stops the close report", 
   const result = evaluateCloseFacts({
     requiredIndices: [], futures: null, optional: [], verifiedTodayPointCount: 3,
     trustedSourceCount: 2, dateConsistencyPassed: true,
-    importantNewsPresent: false, importantNewsVerified: false,
     futureInformationAbsent: false, unsafeOptionalMaterialCount: 1, mode: "live",
   });
   assert.equal(result.status, "failed");
@@ -116,7 +122,6 @@ test("1: zero verified TODAY points safely stops generation (no anchor to what h
   const result = evaluateCloseFacts({
     requiredIndices: [], futures: null, optional: [], verifiedTodayPointCount: 0,
     trustedSourceCount: 2, dateConsistencyPassed: true,
-    importantNewsPresent: false, importantNewsVerified: false,
     futureInformationAbsent: true, mode: "live",
   });
   assert.equal(result.status, "failed");
@@ -128,8 +133,7 @@ test("3: one or two verified TODAY points is enough for a safe, shorter report (
     const result = evaluateCloseFacts({
       requiredIndices: [], futures: null, optional: [], verifiedTodayPointCount: count,
       trustedSourceCount: 2, dateConsistencyPassed: true,
-      importantNewsPresent: false, importantNewsVerified: false,
-      futureInformationAbsent: true, mode: "live",
+        futureInformationAbsent: true, mode: "live",
     });
     assert.equal(result.status, "passed", `expected count=${count} to pass`);
     assert.deepEqual(result.notes, []);
@@ -140,10 +144,23 @@ test("4: three or more verified TODAY points still passes as a normal report", (
   const result = evaluateCloseFacts({
     requiredIndices: [], futures: null, optional: [], verifiedTodayPointCount: 4,
     trustedSourceCount: 2, dateConsistencyPassed: true,
-    importantNewsPresent: false, importantNewsVerified: false,
     futureInformationAbsent: true, mode: "live",
   });
   assert.equal(result.status, "passed");
+});
+
+test("5: many NEXT-scope points cannot substitute for zero verified TODAY points", () => {
+  // todayPoints is computed upstream in index.ts by filtering importantPoints on material_scope ===
+  // "today" before this count is ever passed in, so however many "next" points exist is irrelevant —
+  // they never contribute to verifiedTodayPointCount at all. Simulated here directly at this
+  // function's boundary: passing 0 fails regardless of how much NEXT material existed.
+  const result = evaluateCloseFacts({
+    requiredIndices: [], futures: null, optional: [], verifiedTodayPointCount: 0,
+    trustedSourceCount: 2, dateConsistencyPassed: true,
+    futureInformationAbsent: true, mode: "live",
+  });
+  assert.equal(result.status, "failed");
+  assert.match(result.notes.join(" | "), /出典確認済みの本日の重要ポイントが0件/);
 });
 
 test("close report format keeps three points at the top and required sections", () => {
@@ -246,6 +263,24 @@ test("15: the close_report dry-run branch in index.ts never calls the X API", as
   assert.ok(branch >= 0 && nextBranch > branch, "close_report dry-run branch not found");
   const branchSource = source.slice(branch, nextBranch);
   assert.doesNotMatch(branchSource, /postToX|claimDuePost|loadXTokens/u);
+});
+
+test("6: the writer never receives important_news_present/verified, and evaluateCloseFacts is no longer called with them", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const start = source.indexOf("async function generateCloseReport(");
+  const end = source.indexOf("\nasync function", start + 1);
+  const fnSource = source.slice(start, end);
+  // The writing step's own `input:` JSON (what the model actually sees).
+  const writingInputStart = fnSource.indexOf("input: JSON.stringify({\n          tradingDate: packet.trading_date");
+  const writingInputEnd = fnSource.indexOf("}),", writingInputStart);
+  assert.ok(writingInputStart >= 0, "writing step input not found");
+  const writingInput = fnSource.slice(writingInputStart, writingInputEnd);
+  assert.doesNotMatch(writingInput, /important_news/u);
+  // The evaluateCloseFacts() call site itself.
+  const gateStart = fnSource.indexOf("const factResult = evaluateCloseFacts({");
+  const gateEnd = fnSource.indexOf("});", gateStart);
+  const gateCall = fnSource.slice(gateStart, gateEnd);
+  assert.doesNotMatch(gateCall, /importantNewsPresent|importantNewsVerified/u);
 });
 
 test("generateCloseReport appends fixed hashtags and runs the local safety check before returning text", async () => {
