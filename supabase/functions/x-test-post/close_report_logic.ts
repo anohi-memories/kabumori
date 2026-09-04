@@ -149,3 +149,45 @@ export function validateCloseReportFormat(text: string): boolean {
     normalized.includes("👀 明日への注目点") &&
     normalized.includes("💬 今日のひとこと");
 }
+
+// Fixed, code-side hashtags — never left to the model to generate or omit. Shared with 朝刊 by spec,
+// but only wired into the close-report path here; morning_report is out of this change's scope.
+const CLOSE_REPORT_FIXED_HASHTAG_LIST = ["#日本株", "#日経平均", "#株式投資", "#かぶモリ"] as const;
+export const CLOSE_REPORT_FIXED_HASHTAGS = CLOSE_REPORT_FIXED_HASHTAG_LIST.join(" ");
+
+export function appendFixedCloseReportHashtags(text: string): string {
+  return `${text.trim()}\n\n${CLOSE_REPORT_FIXED_HASHTAGS}`;
+}
+
+function countOccurrences(haystack: string, needle: string): number {
+  if (!needle) return 0;
+  let count = 0;
+  let index = haystack.indexOf(needle);
+  while (index !== -1) {
+    count += 1;
+    index = haystack.indexOf(needle, index + needle.length);
+  }
+  return count;
+}
+
+export function hasFixedCloseReportHashtagsExactlyOnce(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed.endsWith(CLOSE_REPORT_FIXED_HASHTAGS)) return false;
+  return CLOSE_REPORT_FIXED_HASHTAG_LIST.every((tag) => countOccurrences(trimmed, tag) === 1);
+}
+
+// A deterministic, local safety net ahead of the AI Voice check — mirrors the important-news-monitor
+// local-guard pattern. Investment-advice and fabricated-experience phrasing are already prohibited in
+// the writing prompt and the shared Voice evaluation; this catches the clearest violations in code so
+// a close report can never publish on an unlucky Voice-check miss alone.
+const INVESTMENT_ADVICE_PATTERN =
+  /絶対(?:に)?上がる|必ず上がる|買うべき|売るべき|今すぐ買|今すぐ売|買い時です|売り時です|儲かります|損はしません/u;
+const FABRICATED_EXPERIENCE_PATTERN =
+  /私(?:は|も)(?:今日|先ほど|さっき)?[^。！？\n]{0,20}(?:買いました|売りました|保有して|含み益|含み損|利益が出)/u;
+
+export function localCloseReportSafetyIssues(text: string): string[] {
+  const issues: string[] = [];
+  if (INVESTMENT_ADVICE_PATTERN.test(text)) issues.push("INVESTMENT_ADVICE_DETECTED");
+  if (FABRICATED_EXPERIENCE_PATTERN.test(text)) issues.push("FABRICATED_EXPERIENCE_DETECTED");
+  return issues;
+}

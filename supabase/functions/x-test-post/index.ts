@@ -12,7 +12,9 @@ import {
 } from "./morning_report_logic.ts";
 import { getExpectedUsSessionDate } from "./us_session_date_logic.ts";
 import {
+  appendFixedCloseReportHashtags,
   evaluateCloseFacts,
+  localCloseReportSafetyIssues,
   normalizeCloseMetric,
   resolveCloseRunMode,
   validateCloseReportFormat,
@@ -2112,6 +2114,11 @@ async function generateCloseReport(
     if (typeof parsed.text !== "string" || !parsed.text.trim()) throw new Error("CLOSE_REPORT_WRITING_INVALID");
     text = removeInlineCitations(parsed.text);
     if (!validateCloseReportFormat(text)) throw new Error("CLOSE_REPORT_FORMAT_INVALID");
+    const safetyIssues = localCloseReportSafetyIssues(text);
+    if (safetyIssues.length > 0) {
+      throw new Error(`CLOSE_REPORT_SAFETY_CHECK_FAILED:${safetyIssues.join(",")}`);
+    }
+    text = appendFixedCloseReportHashtags(text);
     writingUsage = getUsage(writingRaw);
   }
   const totalInput = collectionUsage.input + writingUsage.input;
