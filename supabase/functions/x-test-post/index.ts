@@ -103,6 +103,19 @@ import {
   MorningGreetingManualPublishError,
   runMorningGreetingManualPublish,
 } from "./morning_greeting_publish_logic.ts";
+import {
+  UsefulTipAttemptError,
+  UsefulTipGenerationError,
+  appendUsefulTipAttempt,
+  runUsefulTipLunaWithTruncationRetry,
+  runUsefulTipVoiceGatedPublish,
+  shouldEscalateUsefulTipToSol,
+  usefulTipStoredDiagnostics,
+  type UsefulTipAttemptDiagnostic,
+  type UsefulTipAttemptSuccess,
+  type UsefulTipGenerationDiagnostics,
+  type UsefulTipModel,
+} from "./useful_tip_generation_logic.ts";
 export {
   generateMorningGreeting,
   selectMorningGreetingTheme,
@@ -176,11 +189,12 @@ type UsefulTipDraft = {
   sourceUrls: string[];
   factCheckStatus: "passed" | "failed";
   factCheckNotes: string[];
-  model: "gpt-5.6-luna" | "gpt-5.6-sol";
+  model: UsefulTipModel;
   escalatedToSol: boolean;
   inputTokens: number;
   outputTokens: number;
   apiCostUsd: number;
+  generationDiagnostics: UsefulTipGenerationDiagnostics;
 };
 
 type ParsedUsefulTipOutput = {
@@ -707,19 +721,44 @@ async function selectUsefulTipsByTitles(
   return await response.json() as UsefulTip[];
 }
 
-async function createUsefulTipDraft(
+type UsefulTipDraftAttempt = Omit<UsefulTipDraft, "generationDiagnostics"> & { needsSol: boolean };
+
+function usefulTipAttemptDiagnostic(
+  raw: unknown,
+  model: UsefulTipModel,
+  attempt: number,
+  maxOutputTokens: number,
+): UsefulTipAttemptDiagnostic {
+  const item = typeof raw === "object" && raw !== null ? raw as Record<string, unknown> : {};
+  const details = typeof item.incomplete_details === "object" && item.incomplete_details !== null
+    ? item.incomplete_details as Record<string, unknown>
+    : {};
+  return {
+    model,
+    attempt,
+    maxOutputTokens,
+    responseStatus: typeof item.status === "string" ? item.status : null,
+    incompleteReason: typeof details.reason === "string" ? details.reason : null,
+    truncated: isUsefulTipOutputTruncated(raw),
+  };
+}
+
+async function createUsefulTipDraftAttempt(
   openAiApiKey: string,
   tip: UsefulTip,
-  model: UsefulTipDraft["model"] = "gpt-5.6-luna",
-): Promise<UsefulTipDraft & { needsSol: boolean }> {
+  model: UsefulTipModel,
+  maxOutputTokens: number,
+  attempt: number,
+): Promise<UsefulTipAttemptSuccess<UsefulTipDraftAttempt>> {
   const voiceKey = `${tip.id}:${new Date().toISOString().slice(0, 10)}`;
-  const response = await fetchOpenAiWithSingleRetry(() => fetch(OPENAI_RESPONSES_URL, {
+  const response = await fetch(OPENAI_RESPONSES_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model,
       store: false,
-      max_output_tokens: 2400,
+      reasoning: { effort: "low" },
+      max_output_tokens: maxOutputTokens,
       tools: [{
         type: "web_search",
         filters: { allowed_domains: OFFICIAL_SOURCE_DOMAINS },
@@ -765,19 +804,36 @@ async function createUsefulTipDraft(
         additionalProperties: false,
       } } },
     }),
-  }));
-  if (!response.ok) throw new Error(`USEFUL_TIP_OPENAI_FAILED:${response.status}`);
-  const raw = await response.json();
+  });
+  if (!response.ok) {
+    throw new UsefulTipAttemptError(`USEFUL_TIP_OPENAI_FAILED:${response.status}`, {
+      model, attempt, maxOutputTokens, responseStatus: `http_${response.status}`,
+      incompleteReason: null, truncated: false,
+    });
+  }
+  let raw: unknown;
+  try {
+    raw = await response.json();
+  } catch {
+    throw new UsefulTipAttemptError("USEFUL_TIP_RESPONSE_INVALID", {
+      model, attempt, maxOutputTokens, responseStatus: `http_${response.status}`,
+      incompleteReason: null, truncated: false,
+    });
+  }
+  const diagnostic = usefulTipAttemptDiagnostic(raw, model, attempt, maxOutputTokens);
   const output = extractOutputText(raw);
-  if (isUsefulTipOutputTruncated(raw)) {
+  if (diagnostic.truncated) {
     console.warn("Useful tip output rejected", {
       rawOutputLength: output ? Array.from(output).length : 0,
       parseAttemptCount: 0,
       errorCategory: "USEFUL_TIP_OUTPUT_TRUNCATED",
+      attempt,
+      responseStatus: diagnostic.responseStatus,
+      incompleteReason: diagnostic.incompleteReason,
     });
-    throw new Error("USEFUL_TIP_OUTPUT_TRUNCATED");
+    throw new UsefulTipAttemptError("USEFUL_TIP_OUTPUT_TRUNCATED", diagnostic);
   }
-  if (!output) throw new Error("USEFUL_TIP_EMPTY_OUTPUT");
+  if (!output) throw new UsefulTipAttemptError("USEFUL_TIP_EMPTY_OUTPUT", diagnostic);
   let parsedResult: { value: ParsedUsefulTipOutput; parseAttemptCount: number };
   try {
     parsedResult = parseUsefulTipOutput(output);
@@ -788,7 +844,7 @@ async function createUsefulTipDraft(
       parseAttemptCount: error instanceof UsefulTipOutputError ? error.parseAttemptCount : 0,
       errorCategory: category,
     });
-    throw error;
+    throw new UsefulTipAttemptError(category, diagnostic);
   }
   const parsed = parsedResult.value;
   const actualSources = collectWebSourceUrls(raw);
@@ -802,16 +858,19 @@ async function createUsefulTipDraft(
   const status = parsed.fact_check_status === "passed" && sourceUrls.length > 0 ? "passed" : "failed";
   const usage = getUsage(raw);
   return {
-    text: status === "passed" ? removeInlineCitations(parsed.text) : "",
-    sourceUrls,
-    factCheckStatus: status,
-    factCheckNotes: parsed.fact_check_notes,
-    model,
-    escalatedToSol: model === "gpt-5.6-sol",
-    inputTokens: usage.input,
-    outputTokens: usage.output,
-    apiCostUsd: modelCostUsd(model, usage.input, usage.output),
-    needsSol: parsed.needs_sol,
+    value: {
+      text: status === "passed" ? removeInlineCitations(parsed.text) : "",
+      sourceUrls,
+      factCheckStatus: status,
+      factCheckNotes: parsed.fact_check_notes,
+      model,
+      escalatedToSol: model === "gpt-5.6-sol",
+      inputTokens: usage.input,
+      outputTokens: usage.output,
+      apiCostUsd: modelCostUsd(model, usage.input, usage.output),
+      needsSol: parsed.needs_sol,
+    },
+    diagnostic,
   };
 }
 
@@ -828,6 +887,43 @@ async function saveUsefulTipVerification(
       api_cost_usd: draft.apiCostUsd, fact_check_status: draft.factCheckStatus,
       generated_text: draft.text || null,
       error_code: draft.factCheckStatus === "failed" ? draft.factCheckNotes.join(" | ").slice(0, 1000) : null,
+      generation_diagnostics: usefulTipStoredDiagnostics(
+        tip.id, tip.title, draft.generationDiagnostics,
+      ),
+    }),
+  });
+  if (!response.ok) throw new Error("USEFUL_TIP_VERIFICATION_SAVE_FAILED");
+}
+
+async function saveUsefulTipFailureVerification(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  tip: UsefulTip,
+  error: unknown,
+): Promise<void> {
+  const failure = error instanceof UsefulTipGenerationError ? error : null;
+  const diagnostics = failure?.diagnostics ?? {
+    attemptCount: 0, retryCount: 0, truncated: false, attempts: [], xApiCalled: 0 as const,
+  };
+  const lastAttempt = diagnostics.attempts.at(-1);
+  const response = await fetch(`${supabaseUrl}/rest/v1/useful_tip_verifications`, {
+    method: "POST",
+    headers: { ...supabaseHeaders(serviceRoleKey), Prefer: "return=minimal" },
+    body: JSON.stringify({
+      useful_tip_id: tip.id,
+      source_urls: [],
+      verified_at: new Date().toISOString(),
+      model: lastAttempt?.model ?? "gpt-5.6-luna",
+      escalated_to_sol: lastAttempt?.model === "gpt-5.6-sol",
+      input_tokens: null,
+      output_tokens: null,
+      api_cost_usd: null,
+      fact_check_status: "failed",
+      generated_text: null,
+      error_code: safeErrorCode(error),
+      generation_diagnostics: usefulTipStoredDiagnostics(
+        tip.id, tip.title, diagnostics, safeErrorCode(error),
+      ),
     }),
   });
   if (!response.ok) throw new Error("USEFUL_TIP_VERIFICATION_SAVE_FAILED");
@@ -855,16 +951,64 @@ async function selectUsefulTip(
 async function generateVerifiedUsefulTip(
   openAiApiKey: string, tip: UsefulTip,
 ): Promise<UsefulTipDraft> {
-  const luna = await createUsefulTipDraft(openAiApiKey, tip);
-  if (!luna.needsSol && luna.factCheckStatus === "passed") return luna;
-  const sol = await createUsefulTipDraft(openAiApiKey, tip, "gpt-5.6-sol");
+  const lunaResult = await runUsefulTipLunaWithTruncationRetry((maxOutputTokens, attempt) =>
+    createUsefulTipDraftAttempt(openAiApiKey, tip, "gpt-5.6-luna", maxOutputTokens, attempt)
+  );
+  const luna = { ...lunaResult.value, generationDiagnostics: lunaResult.diagnostics };
+  if (!shouldEscalateUsefulTipToSol(luna.needsSol, luna.factCheckStatus)) return luna;
+
+  let solResult: UsefulTipAttemptSuccess<UsefulTipDraftAttempt>;
+  const solAttempt = luna.generationDiagnostics.attemptCount + 1;
+  try {
+    solResult = await createUsefulTipDraftAttempt(openAiApiKey, tip, "gpt-5.6-sol", 2400, solAttempt);
+  } catch (error) {
+    if (error instanceof UsefulTipAttemptError) {
+      throw new UsefulTipGenerationError(
+        error.message,
+        appendUsefulTipAttempt(luna.generationDiagnostics, error.diagnostic),
+      );
+    }
+    throw error;
+  }
+  const sol = solResult.value;
   return {
     ...sol,
     escalatedToSol: true,
     inputTokens: luna.inputTokens + sol.inputTokens,
     outputTokens: luna.outputTokens + sol.outputTokens,
     apiCostUsd: Number((luna.apiCostUsd + sol.apiCostUsd).toFixed(6)),
+    generationDiagnostics: appendUsefulTipAttempt(luna.generationDiagnostics, solResult.diagnostic),
   };
+}
+
+async function generateAndSaveUsefulTip(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  openAiApiKey: string,
+  tip: UsefulTip,
+): Promise<UsefulTipDraft> {
+  let draft: UsefulTipDraft;
+  try {
+    draft = await generateVerifiedUsefulTip(openAiApiKey, tip);
+  } catch (error) {
+    try {
+      await saveUsefulTipFailureVerification(supabaseUrl, serviceRoleKey, tip, error);
+    } catch {
+      console.error("Failed to record useful tip generation failure", { code: safeErrorCode(error) });
+    }
+    throw error;
+  }
+  await saveUsefulTipVerification(supabaseUrl, serviceRoleKey, tip, draft);
+  return draft;
+}
+
+function usefulTipFactBasis(tip: UsefulTip, draft: UsefulTipDraft): string {
+  return [
+    `テーマ: ${tip.title}`,
+    `説明: ${tip.topic_description}`,
+    `Fact status: ${draft.factCheckStatus}`,
+    `factCheckNotes: ${draft.factCheckNotes.join(" | ")}`,
+  ].join("\n");
 }
 
 async function selectTip(
@@ -3405,15 +3549,18 @@ Deno.serve(async (req) => {
         const topics = await selectUsefulTipsByTitles(supabaseUrl, serviceRoleKey, ["NISAで配当を非課税にするための受取方法"]);
         const topic = topics[0];
         if (!topic) return jsonResponse({ error: "NO_USEFUL_TIP_FOR_PREVIEW" }, 404);
-        const draft = await generateVerifiedUsefulTip(openAiApiKey, topic);
-        await saveUsefulTipVerification(supabaseUrl, serviceRoleKey, topic, draft);
+        const draft = await generateAndSaveUsefulTip(supabaseUrl, serviceRoleKey, openAiApiKey, topic);
+        if (draft.factCheckStatus !== "passed" || !draft.text) {
+          throw new Error("USEFUL_TIP_FACT_CHECK_FAILED");
+        }
         const voiceEvaluation = await evaluateKabumoriVoice(
-          openAiApiKey, "useful_tip", draft.text,
-          [`テーマ: ${topic.title}`, `説明: ${topic.topic_description}`, `公式情報による事前検証: ${draft.factCheckStatus}`, ...draft.factCheckNotes].join("\n"),
+          openAiApiKey, "useful_tip", draft.text, usefulTipFactBasis(topic, draft),
         );
+        if (!voiceEvaluation.passed) throw new Error("USEFUL_TIP_VOICE_CHECK_FAILED");
         return jsonResponse({
           mode: "dry_run", published: false, postType, title: topic.title, text: draft.text,
           factCheck: draft.factCheckStatus, model: draft.model, escalatedToSol: draft.escalatedToSol,
+          retryCount: draft.generationDiagnostics.retryCount,
           voiceEvaluation,
         }, 200);
       }
@@ -3442,8 +3589,14 @@ Deno.serve(async (req) => {
       const results = [];
       for (const tip of tips) {
         try {
-          const draft = await generateVerifiedUsefulTip(openAiApiKey, tip);
-          await saveUsefulTipVerification(supabaseUrl, serviceRoleKey, tip, draft);
+          const draft = await generateAndSaveUsefulTip(supabaseUrl, serviceRoleKey, openAiApiKey, tip);
+          if (draft.factCheckStatus !== "passed" || !draft.text) {
+            throw new Error("USEFUL_TIP_FACT_CHECK_FAILED");
+          }
+          const voiceEvaluation = await evaluateKabumoriVoice(
+            openAiApiKey, "useful_tip", draft.text, usefulTipFactBasis(tip, draft),
+          );
+          if (!voiceEvaluation.passed) throw new Error("USEFUL_TIP_VOICE_CHECK_FAILED");
           results.push({
             topicId: tip.id,
             title: tip.title,
@@ -3453,8 +3606,10 @@ Deno.serve(async (req) => {
             factCheck: { status: draft.factCheckStatus, notes: draft.factCheckNotes },
             model: draft.model,
             escalatedToSol: draft.escalatedToSol,
+            retryCount: draft.generationDiagnostics.retryCount,
             tokenUsage: { input: draft.inputTokens, output: draft.outputTokens },
             apiCostUsd: draft.apiCostUsd,
+            voiceEvaluation,
           });
         } catch (error) {
           results.push({
@@ -3760,12 +3915,16 @@ Deno.serve(async (req) => {
     if (scheduledPost.post_type === "useful_tip") {
       const usefulTip = await selectUsefulTip(supabaseUrl, serviceRoleKey);
       if (!usefulTip) throw new Error("NO_ELIGIBLE_USEFUL_TIP");
-      const draft = await generateVerifiedUsefulTip(openAiApiKey, usefulTip);
-      await saveUsefulTipVerification(supabaseUrl, serviceRoleKey, usefulTip, draft);
-      if (draft.factCheckStatus !== "passed" || !draft.text) {
-        throw new Error("USEFUL_TIP_FACT_CHECK_FAILED");
-      }
-      const xResult = await postToX(xAuth, draft.text);
+      const draft = await generateAndSaveUsefulTip(supabaseUrl, serviceRoleKey, openAiApiKey, usefulTip);
+      const gated = await runUsefulTipVoiceGatedPublish({
+        factCheckStatus: draft.factCheckStatus,
+        text: draft.text,
+        evaluateVoice: () => evaluateKabumoriVoice(
+          openAiApiKey, "useful_tip", draft.text, usefulTipFactBasis(usefulTip, draft),
+        ),
+        publish: () => postToX(xAuth, draft.text),
+      });
+      const xResult = gated.publishResult;
       const xPostId = getXPostId(xResult);
       if (!xPostId) throw new Error("X_RESPONSE_MISSING_POST_ID");
       await callRpc(supabaseUrl, serviceRoleKey, "complete_useful_tip_post", {
@@ -3786,6 +3945,8 @@ Deno.serve(async (req) => {
         sourceUrls: draft.sourceUrls,
         model: draft.model,
         escalatedToSol: draft.escalatedToSol,
+        retryCount: draft.generationDiagnostics.retryCount,
+        voiceEvaluation: gated.voice,
         xPostId,
         refreshExecuted: xAuth.refreshExecuted,
       }, 201);
