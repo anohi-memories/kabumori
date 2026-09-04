@@ -193,6 +193,110 @@ test("specific TOB roles can pass local Fact", () => {
   assert.deepEqual(localFactIssues(target, text), []);
 });
 
+// --- company_identity extraction: TOB / subsidiary-change / press-release formats -----------------
+
+test("1: an existing 会社名-header disclosure (kessan-tanshin style) still confirms the same company", () => {
+  const identity = companyIdentityEvidence(candidate({
+    sourceType: "tdnet",
+    sourceName: "tdnet",
+    sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
+    companyName: "コロンビア・ワークス",
+    companyCode: "146A0",
+    entityKey: "company:146a0",
+    bodySummary: "各 位\n会社名 コロンビア・ワークス株式会社\n代表者名 代表取締役 中内 準",
+  }));
+  assert.equal(identity.sameCompanyConfirmed, true);
+  assert.equal(identity.primarySourceName, "コロンビア・ワークス株式会社");
+});
+
+test("2: a self-tender (TOB) results notice confirms the issuer via 公開買付者の名称", () => {
+  const identity = companyIdentityEvidence(candidate({
+    sourceType: "tdnet",
+    sourceName: "tdnet",
+    sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
+    companyName: "伊藤忠",
+    companyCode: "80010",
+    entityKey: "company:80010",
+    bodySummary: "自己株式の公開買付けの結果並びに市場買付の開始に関するお知らせ\n" +
+      "１．買付け等の概要\n（１）公開買付者の名称及び所在地\n伊藤忠商事株式会社 大阪市北区梅田３丁目１番３号",
+  }));
+  assert.equal(identity.sameCompanyConfirmed, true);
+  assert.equal(identity.primarySourceName, "伊藤忠商事株式会社");
+});
+
+test("3: a subsidiary-change (孫会社の異動) notice confirms the issuer via its 当社 self-reference", () => {
+  const identity = companyIdentityEvidence(candidate({
+    sourceType: "tdnet",
+    sourceName: "tdnet",
+    sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
+    companyName: "第一ライフグループ",
+    companyCode: "87500",
+    entityKey: "company:87500",
+    bodySummary: "Fidelity Life 社の子会社化（孫会社の異動）について\n" +
+      "株式会社第一ライフグループ（代表取締役社長グループ CEO：菊田 徹也、以下「当社」）のニュージーランド子会社である " +
+      "Partners Group Holdings Limited（以下、「パートナーズ・ライフ社」）は、Fidelity Life Assurance Company Limited" +
+      "（以下、「Fidelity Life 社」）を買収することを決定しました。",
+  }));
+  assert.equal(identity.sameCompanyConfirmed, true);
+  assert.equal(identity.primarySourceName, "株式会社第一ライフグループ");
+});
+
+test("4: a press-release style disclosure confirms the issuer via its own 以下-alias, without a 当社 marker", () => {
+  const identity = companyIdentityEvidence(candidate({
+    sourceType: "tdnet",
+    sourceName: "tdnet",
+    sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
+    companyName: "エーザイ",
+    companyCode: "45230",
+    entityKey: "company:45230",
+    bodySummary: "「レケンビ」の皮下注射製剤、早期アルツハイマー病に対する初期療法として中国で承認取得\n" +
+      "エーザイ株式会社（本社：東京都、代表執行役 CEO：内藤晴夫、以下 エーザイ）とバイオジェン・インクは、承認を取得したことをお知らせします。",
+  }));
+  assert.equal(identity.sameCompanyConfirmed, true);
+  assert.equal(identity.primarySourceName, "エーザイ株式会社");
+});
+
+test("5: a plain acquisition mention of the target company does not confirm the target as the issuer", () => {
+  const identity = companyIdentityEvidence(candidate({
+    sourceType: "tdnet",
+    sourceName: "tdnet",
+    sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
+    companyName: "B社",
+    companyCode: "99990",
+    entityKey: "company:99990",
+    bodySummary: "A社がB社を買収することを決定しました。",
+  }));
+  assert.equal(identity.sameCompanyConfirmed, false);
+  assert.equal(identity.primarySourceName, null);
+});
+
+test("6: only a subsidiary being named (no issuer 当社/alias match) does not confirm the parent company", () => {
+  const identity = companyIdentityEvidence(candidate({
+    sourceType: "tdnet",
+    sourceName: "tdnet",
+    sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
+    companyName: "親会社ホールディングス",
+    companyCode: "88880",
+    entityKey: "company:88880",
+    bodySummary: "子会社の異動について\n子会社サービス株式会社（以下「子会社サービス」）の株式を譲渡することを決定しました。",
+  }));
+  assert.equal(identity.sameCompanyConfirmed, false);
+});
+
+test("7: a document with no extractable company name stays unconfirmed (fail-closed)", () => {
+  const identity = companyIdentityEvidence(candidate({
+    sourceType: "tdnet",
+    sourceName: "tdnet",
+    sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
+    companyName: "テスト株式会社",
+    companyCode: "1234",
+    entityKey: "company:1234",
+    bodySummary: "業績予想の一部を修正しましたのでお知らせします。",
+  }));
+  assert.equal(identity.sameCompanyConfirmed, false);
+  assert.equal(identity.primarySourceName, null);
+});
+
 test("Fact instructions receive only verified company identity evidence", async () => {
   const target = candidate({
     sourceType: "tdnet",

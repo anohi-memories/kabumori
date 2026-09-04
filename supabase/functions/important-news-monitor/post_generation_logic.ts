@@ -153,22 +153,69 @@ const MARKET_ASSERTION_RULES: Array<{ claim: RegExp; evidence: RegExp }> = [
 
 const AMBIGUOUS_ENTITY_RELATIONSHIP = /(?:対象|関係)(?:と)?なるのは[^。！？\n]+(?:と|、)[^。！？\n]+(?:です|です。)|影響を受けるのは[^。！？\n]+(?:と|、)[^。！？\n]+(?:です|です。)/u;
 
-function extractPrimarySourceCompanyName(bodySummary: string | null): string | null {
-  if (!bodySummary) return null;
-  const match = bodySummary.normalize("NFKC").match(/^会\s*社\s*名\s+([^\n]+)$/mu);
+function extractHeaderCompanyName(normalizedBody: string): string | null {
+  const match = normalizedBody.match(/^会\s*社\s*名\s+([^\n]+)$/mu);
   return match?.[1]?.trim() || null;
 }
+
+// TOB / self-tender notices (e.g. a company buying back its own shares) identify the issuing company
+// under this labeled field instead of the "会社名" header used by kessan-tanshin style documents.
+function extractTobOfferorName(normalizedBody: string): string | null {
+  const match = normalizedBody.match(/公開買付者の名称(?:及び所在地)?\s*\n?\s*([^\s\n]+)/u);
+  return match?.[1]?.trim() || null;
+}
+
+// Many disclosure formats (subsidiary changes, overseas M&A, press releases, ...) introduce every
+// named party — issuer, subsidiary, or counterparty alike — as "NAME（…、以下「ALIAS」）" instead of a
+// fixed header. This collects every such (name, alias) pair without judging which party is the
+// discloser: safety comes from requiring a match against the already-trusted candidate.companyName in
+// companyIdentityEvidence below, not from guessing a party's role here.
+function extractAliasedEntityNames(normalizedBody: string): string[] {
+  const names: string[] = [];
+  const pattern = /([^\s(（]{2,40})[(（]([^)）]{0,120})[)）]/gu;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(normalizedBody)) !== null) {
+    const aliasMatch = match[2].match(/以下[、,]?\s*[「『]?\s*([^」』、,)）\s]{1,20})/u);
+    if (!aliasMatch) continue;
+    names.push(match[1].trim());
+    names.push(aliasMatch[1].trim());
+  }
+  return names;
+}
+
+// Gathers every plausible "this text names a specific company" candidate from the primary source
+// body, across several disclosure formats. companyIdentityEvidence() below only trusts a candidate
+// once it safely matches the candidate's already-known companyName — this function does not decide
+// identity by itself.
+function primarySourceCompanyNameCandidates(bodySummary: string | null): string[] {
+  if (!bodySummary) return [];
+  const normalized = bodySummary.normalize("NFKC");
+  const candidates = [
+    extractHeaderCompanyName(normalized),
+    extractTobOfferorName(normalized),
+    ...extractAliasedEntityNames(normalized),
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+  return [...new Set(candidates)];
+}
+
+// A small, explicit allowlist of generic Japanese trading-company business-type words that function
+// like a legal-entity suffix for historically zaibatsu-lineage names (e.g. 伊藤忠商事 vs. the company's
+// common short form 伊藤忠) and do not indicate a distinct entity. Unlike ホールディングス／グループ／HD —
+// which almost always DO name a legally distinct (holding) company — these are deliberately never
+// added here, so an unrelated but similarly-prefixed company is never conflated by this stripping.
+const GENERIC_TRADING_COMPANY_WORDS = /商事|物産/gu;
 
 function normalizedCompanyIdentity(value: string, stripTdnetMarketPrefix: boolean): string {
   let normalized = value.normalize("NFKC").trim().toLowerCase();
   if (stripTdnetMarketPrefix) normalized = normalized.replace(/^[gps]-/u, "");
   return normalized
     .replace(/株式会社|有限会社|合同会社|合資会社|合名会社|\(株\)|（株）/gu, "")
+    .replace(GENERIC_TRADING_COMPANY_WORDS, "")
     .replace(/[\s・･._・\-]/gu, "");
 }
 
 export function companyIdentityEvidence(candidate: GenerationCandidate): CompanyIdentityEvidence {
-  const primarySourceName = extractPrimarySourceCompanyName(candidate.bodySummary);
+  const candidateNames = primarySourceCompanyNameCandidates(candidate.bodySummary);
   const companyCode = candidate.companyCode?.trim() || null;
   const metadataName = candidate.companyName?.trim() || null;
   let trustedTdnetSource = false;
@@ -183,14 +230,17 @@ export function companyIdentityEvidence(candidate: GenerationCandidate): Company
   const identitySignalsVerified = trustedTdnetSource &&
     companyCode !== null && /^[0-9a-z]{4,5}$/iu.test(companyCode) &&
     candidate.entityKey === `company:${companyCode.toLowerCase()}`;
-  const namesMatch = metadataName !== null && primarySourceName !== null &&
-    normalizedCompanyIdentity(metadataName, true) === normalizedCompanyIdentity(primarySourceName, false) &&
-    normalizedCompanyIdentity(primarySourceName, false).length >= 2;
+  const matchedName = metadataName !== null
+    ? candidateNames.find((name) =>
+      normalizedCompanyIdentity(metadataName, true) === normalizedCompanyIdentity(name, false) &&
+      normalizedCompanyIdentity(name, false).length >= 2
+    ) ?? null
+    : null;
   return {
     metadataName,
-    primarySourceName,
+    primarySourceName: matchedName ?? candidateNames[0] ?? null,
     companyCode,
-    sameCompanyConfirmed: identitySignalsVerified && namesMatch,
+    sameCompanyConfirmed: identitySignalsVerified && matchedName !== null,
   };
 }
 
