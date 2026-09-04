@@ -187,3 +187,63 @@ LAN IP経由でモバイル viewportエミュレーションを使い、実際�
 - 正しい管理者パスワードでの実ログイン成功確認（`/`への遷移確認を含む）は、本セッションではパスワードを扱わない方針のため未実施。ユーザーが新パスワードへ変更後、Mac・iPhone実機の双方で確認をお願いします。
 - `allowedDevOrigins` は `192.168.*.*` のみを許可している。別のLANレンジ（`10.*.*.*` 等）で開発する場合は追加設定が必要。
 - 今回の無限リロードループはdev server限定の問題であり、Vercel等の本番ビルドでは`allowedDevOrigins`の保護自体が存在しないため発生しない。
+
+---
+
+## 追記3: 2026-09-04 Vercel公開
+
+### 今回の目的
+
+完成済みのWeb管理画面V1（`apps/admin`）をVercelへ公開し、外出先からスマホでも安全に閲覧できるようにする。公開作業のみ。X投稿システム・Edge Function・DBには一切触れていない。
+
+### Git
+
+- `apps/admin/**`（31ファイル）と `HANDOFF.md` のみをstage・commit・push（他の未コミット変更 — ルート`package.json`/`package-lock.json`、`.env`、`src/lib/`、`supabase/**`のmigration・functions — には一切触れていない。事前にユーザーへ確認済み）。
+- commit: `7bc6620` "Add Web admin dashboard (apps/admin)"、`origin/main`へpush済み。
+
+### Vercel構成
+
+- Vercel CLIをこの場でインストール・デバイスコード認証（ユーザーがブラウザで承認）。
+- `vercel link --yes` で新規プロジェクト作成：team `kabumori` / project `admin`。
+- Root Directoryを明示的に `apps/admin` に設定（`vercel project update admin --root-directory apps/admin`）。初回linkでは`.`のままだったが、これは今回CLIから`apps/admin`ディレクトリを直接deployしたため実害はない。ただし将来Git連携した場合はリポジトリ全体をcloneしてbuildするため、明示設定が必須だった。
+- Framework Preset：Next.js（自動検出）。Build Command / Output Directory：既定のまま（`next build` / Next.js既定）。Node.js Version：24.x（Vercel既定、build成功済み）。
+
+### 環境変数
+
+Production・Preview両方に設定（値はローカルの`.env.local`からstdin経由で登録、CLI引数・ログ・報告文には一切出していない）：
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+
+service role key・X API secret・OpenAI secret等は未設定（不要）。
+
+### デプロイ
+
+- `vercel --prod --yes` でビルド・デプロイ成功。
+- 本番エイリアスURL：`https://admin-lime-one-zucdop4nh7.vercel.app`（公開・SSO保護なし、200応答を確認）
+- デプロイ個別URL（`https://admin-jrs5driy6-kabumori.vercel.app`）はVercelチームのDeployment Protection（SSO）が既定でかかっており302でVercelログインへリダイレクトされる。これはVercel側の仕様で、共有・確認には上記の本番エイリアスURLを使うこと。
+
+### GitHub連携（未完了）
+
+- `vercel git connect` を2回試行したが、いずれも `Failed to link anohi-memories/kabumori. You need to add a Login Connection to your GitHub account first. (400)` で失敗。
+- 原因：Vercelアカウント（`cocopan1312-4542`）にGitHubのLogin Connectionが未登録のため。これはVercelアカウント側のOAuth連携であり、本人にしか実行できない。
+- 対応：ユーザーがVercelダッシュボード（Account Settings → Login Connections）でGitHubを接続後、`apps/admin`から `vercel git connect` を再実行すれば、以後 `main` へのpushで自動デプロイされるようになる。それまでは手動で `vercel --prod` を実行する必要がある。
+
+### Supabase Auth設定変更
+
+変更なし。理由：管理画面はメール・パスワードの直接サインイン（`signInWithPassword`）のみを使用しており、OAuth・マジックリンク・パスワードリセットなどSupabase側のSite URL/Redirect URLsに依存するリダイレクトフローを一切使用していないため、新しいVercel URLを追加する必要が無いと判断した。
+
+### 動作確認
+
+- `/`・`/posts`・`/important-news` を未ログインでアクセス → いずれも307で`/login`へリダイレクトされることを本番URLで確認。
+- `/login`：200で正常表示、HTMLに`<form>`タグが存在しないこと、ボタンが`type="button"`であることを確認（前回のcredential漏洩対策が本番でも有効なことを確認）。
+- HTTPでのアクセスは308で自動的にHTTPSへリダイレクトされることを確認（Vercel既定）。
+- `/login`のHTML・参照JSチャンクに`service_role`等の秘密情報らしき文字列が含まれていないことを確認。
+- モバイルviewport（Browser tool、375×812）で`/login`が正常表示されることを確認。コンソールエラー無し。
+- **実際の管理者アカウントでのログイン成功確認（`/`への遷移含む）は未実施**。管理者パスワードを本セッションで扱わない方針のため、ユーザー本人によるMac・iPhone実機での最終確認をお願いします。
+
+### 残課題
+
+- GitHub連携（上記参照）。完了すれば`main`へのpushで自動デプロイが有効になる。
+- 独自ドメイン（`admin.kabumori.jp`）は未設定。指示書通り、まずは上記の一時URLでの動作確認を優先し、DNS操作はユーザー確認後に着手する。
+- 実管理者アカウントでのログイン成功確認（Mac・iPhone双方）はユーザー側で実施をお願いします。
