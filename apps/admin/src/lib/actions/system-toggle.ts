@@ -8,7 +8,15 @@ import { createAdminServerClient } from "@/lib/supabase/server";
 // The client only ever sends one of these keys plus a boolean — never a
 // table, column, or post_type — so there is no way to point an update at
 // anything outside this list.
-export const SYSTEM_TOGGLE_KEYS = [
+//
+// Not exported: a "use server" file may only export async functions (plus
+// types, which are erased before this rule applies). Exporting this const
+// directly used to fail in production with "A 'use server' file can only
+// export async functions, found object" — every request that touched this
+// module 500'd before setSystemEnabled ever ran, so no toggle actually
+// updated the DB. Nothing outside this file needs the array itself; only
+// the derived SystemToggleKey type is exported.
+const SYSTEM_TOGGLE_KEYS = [
   "important_news_monitor",
   "important_news_auto_publish",
   "morning_report",
