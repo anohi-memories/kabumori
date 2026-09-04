@@ -1,0 +1,243 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+export type SystemStatusState = "active" | "inactive" | "unavailable";
+export type SystemStatusTone = "success" | "unknown" | "pending";
+
+export type SystemStatusDetail = {
+  label: string;
+  value: string;
+};
+
+export type SystemStatusItem = {
+  key: string;
+  name: string;
+  state: SystemStatusState;
+  stateLabel: string;
+  tone: SystemStatusTone;
+  details: SystemStatusDetail[];
+  note: string | null;
+  unavailableReason: string | null;
+};
+
+export type SystemStatusResult = {
+  systems: SystemStatusItem[];
+};
+
+const STATE_LABELS: Readonly<Record<SystemStatusState, string>> = {
+  active: "稼働中",
+  inactive: "停止中",
+  unavailable: "状態確認不可",
+};
+
+const STATE_TONES: Readonly<Record<SystemStatusState, SystemStatusTone>> = {
+  active: "success",
+  inactive: "unknown",
+  unavailable: "pending",
+};
+
+function formatTime(time: string | null) {
+  if (!time) return "-";
+  return time.length >= 5 ? time.slice(0, 5) : time;
+}
+
+function onOffLabel(value: boolean | null) {
+  if (value === null) return "-";
+  return value ? "ON" : "OFF";
+}
+
+function logQueryError(source: string, code: string) {
+  console.error(`[admin/system-status] ${source} query failed`, { code });
+}
+
+function buildItem(
+  key: string,
+  name: string,
+  isActive: boolean | null,
+  details: SystemStatusDetail[],
+  options?: { note?: string | null; unavailableReason?: string | null },
+): SystemStatusItem {
+  const state: SystemStatusState = options?.unavailableReason
+    ? "unavailable"
+    : isActive
+      ? "active"
+      : "inactive";
+
+  return {
+    key,
+    name,
+    state,
+    stateLabel: STATE_LABELS[state],
+    tone: STATE_TONES[state],
+    details: state === "unavailable" ? [] : details,
+    note: options?.note ?? null,
+    unavailableReason: state === "unavailable" ? (options?.unavailableReason ?? null) : null,
+  };
+}
+
+type ImportantNewsSettingsRow = {
+  is_active: boolean;
+  interval_minutes: number;
+  auto_publish: boolean;
+  luna_enabled: boolean;
+  sol_escalation_enabled: boolean;
+};
+
+async function getImportantNewsStatus(supabase: SupabaseClient): Promise<SystemStatusItem> {
+  const { data, error } = await supabase
+    .from("important_news_monitor_settings")
+    .select("is_active,interval_minutes,auto_publish,luna_enabled,sol_escalation_enabled")
+    .eq("id", true)
+    .maybeSingle();
+
+  if (error) {
+    logQueryError("important_news_monitor_settings", error.code);
+    return buildItem("important_news", "重要ニュース", null, [], {
+      unavailableReason: "設定を取得できませんでした。",
+    });
+  }
+  if (!data) {
+    return buildItem("important_news", "重要ニュース", null, [], {
+      unavailableReason: "設定が見つかりません。",
+    });
+  }
+
+  const row = data as ImportantNewsSettingsRow;
+  return buildItem("important_news", "重要ニュース", row.is_active, [
+    { label: "監視間隔", value: `${row.interval_minutes}分` },
+    { label: "X自動投稿", value: onOffLabel(row.auto_publish) },
+    { label: "Luna", value: onOffLabel(row.luna_enabled) },
+    { label: "Sol escalation", value: onOffLabel(row.sol_escalation_enabled) },
+  ]);
+}
+
+type ReportSettingsRow = {
+  is_active: boolean;
+  center_time: string;
+  timezone: string;
+};
+
+async function getReportStatus(
+  supabase: SupabaseClient,
+  table: "morning_report_settings" | "close_report_settings",
+  key: string,
+  name: string,
+): Promise<SystemStatusItem> {
+  const { data, error } = await supabase
+    .from(table)
+    .select("is_active,center_time,timezone")
+    .eq("id", true)
+    .maybeSingle();
+
+  if (error) {
+    logQueryError(table, error.code);
+    return buildItem(key, name, null, [], { unavailableReason: "設定を取得できませんでした。" });
+  }
+  if (!data) {
+    return buildItem(key, name, null, [], { unavailableReason: "設定が見つかりません。" });
+  }
+
+  const row = data as ReportSettingsRow;
+  return buildItem(key, name, row.is_active, [
+    { label: "投稿時間", value: `${formatTime(row.center_time)}前後` },
+    { label: "タイムゾーン", value: row.timezone },
+  ]);
+}
+
+type PostingWindowRow = {
+  is_active: boolean;
+  start_time: string;
+  end_time: string;
+  timezone: string;
+};
+
+async function getMorningGreetingStatus(supabase: SupabaseClient): Promise<SystemStatusItem> {
+  const { data, error } = await supabase
+    .from("posting_windows")
+    .select("is_active,start_time,end_time,timezone")
+    .eq("post_type", "morning_greeting")
+    .order("slot_no", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    logQueryError("posting_windows(morning_greeting)", error.code);
+    return buildItem("morning_greeting", "朝の挨拶", null, [], {
+      unavailableReason: "設定を取得できませんでした。",
+    });
+  }
+  if (!data) {
+    return buildItem("morning_greeting", "朝の挨拶", null, [], {
+      unavailableReason: "スケジュール設定が見つかりません。",
+    });
+  }
+
+  const row = data as PostingWindowRow;
+  return buildItem(
+    "morning_greeting",
+    "朝の挨拶",
+    row.is_active,
+    [
+      { label: "投稿時間帯", value: `${formatTime(row.start_time)}〜${formatTime(row.end_time)}` },
+      { label: "タイムゾーン", value: row.timezone },
+    ],
+    {
+      note: "スケジュール設定のみ表示しています。実行トリガー（Cron）自体の稼働状況はDBから確認できません。",
+    },
+  );
+}
+
+type UsPremarketSettingsRow = {
+  is_active: boolean;
+  summer_window_start: string;
+  summer_window_end: string;
+  winter_window_start: string;
+  winter_window_end: string;
+  timezone: string;
+};
+
+async function getUsPremarketStatus(supabase: SupabaseClient): Promise<SystemStatusItem> {
+  const { data, error } = await supabase
+    .from("us_premarket_report_settings")
+    .select(
+      "is_active,summer_window_start,summer_window_end,winter_window_start,winter_window_end,timezone",
+    )
+    .eq("id", true)
+    .maybeSingle();
+
+  if (error) {
+    logQueryError("us_premarket_report_settings", error.code);
+    return buildItem("us_premarket", "米国プレマーケット", null, [], {
+      unavailableReason: "設定を取得できませんでした。",
+    });
+  }
+  if (!data) {
+    return buildItem("us_premarket", "米国プレマーケット", null, [], {
+      unavailableReason: "設定が見つかりません。",
+    });
+  }
+
+  const row = data as UsPremarketSettingsRow;
+  return buildItem("us_premarket", "米国プレマーケット", row.is_active, [
+    {
+      label: "投稿時間帯（夏時間）",
+      value: `${formatTime(row.summer_window_start)}〜${formatTime(row.summer_window_end)}`,
+    },
+    {
+      label: "投稿時間帯（冬時間）",
+      value: `${formatTime(row.winter_window_start)}〜${formatTime(row.winter_window_end)}`,
+    },
+    { label: "タイムゾーン", value: row.timezone },
+  ]);
+}
+
+export async function getSystemStatus(supabase: SupabaseClient): Promise<SystemStatusResult> {
+  const systems = await Promise.all([
+    getImportantNewsStatus(supabase),
+    getReportStatus(supabase, "morning_report_settings", "morning_report", "朝刊"),
+    getMorningGreetingStatus(supabase),
+    getReportStatus(supabase, "close_report_settings", "close_report", "大引けレポート"),
+    getUsPremarketStatus(supabase),
+  ]);
+
+  return { systems };
+}
