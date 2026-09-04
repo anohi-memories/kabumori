@@ -431,6 +431,58 @@ test("14: report-level 2-independent-publisher requirement stays removed (truste
   assert.deepEqual(result.notes, []);
 });
 
+// --- dry-run-only reference-time cutoff override (late-hour quality check) -------------------------
+
+async function generateCloseReportSource(): Promise<string> {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const start = source.indexOf("async function generateCloseReport(");
+  const end = source.indexOf("\nasync function", start + 1);
+  assert.ok(start >= 0 && end > start, "generateCloseReport not found");
+  return source.slice(start, end);
+}
+
+test("1+2: the default cutoff instruction (no override) still mentions the normal 16:00 JST operating window", async () => {
+  const fnSource = await generateCloseReportSource();
+  assert.match(fnSource, /options\.allowCurrentTimeReferenceForDryRun\s*\n?\s*\?/u);
+  assert.match(fnSource, /通常運用では16:00 JSTまでに公開済みのものだけを使用します/u);
+});
+
+test("3+8: the override cutoff instruction is scoped to reference time, and still enforces a future-info boundary (not removed)", async () => {
+  const fnSource = await generateCloseReportSource();
+  assert.match(fnSource, /参照時刻（reference time、このリクエストに渡された実行時刻）までに公開済みのものだけを使用します/u);
+  assert.match(fnSource, /参照時刻より後に公開された情報だけをfuture扱いとし/u);
+  // The override never removes the 16:00 sentence outright — it's a second, alternate string, selected
+  // conditionally; the literal "16:00 JST" wording is not present in the override's own sentence.
+  const overrideSentenceStart = fnSource.indexOf("options.allowCurrentTimeReferenceForDryRun");
+  const ternaryStart = fnSource.indexOf("? \"", overrideSentenceStart);
+  const ternaryElse = fnSource.indexOf(": \"", ternaryStart);
+  const overrideSentence = fnSource.slice(ternaryStart, ternaryElse);
+  assert.doesNotMatch(overrideSentence, /16:00/u);
+});
+
+test("4+5: the live/scheduled close_report path never reads or passes the override — it cannot be reached from publish", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  // The live path's own generateCloseReport() call site (post_type === 'close_report' branch) passes no
+  // third argument at all, so it always gets the default {} (allowCurrentTimeReferenceForDryRun
+  // undefined/false) regardless of anything in the request body.
+  const liveCallIdx = source.indexOf('draft = await generateCloseReport(openAiApiKey, new Date().toISOString());');
+  assert.ok(liveCallIdx >= 0, "live generateCloseReport call site not found, or it now passes options");
+  // The live scheduled-post handler block (post_type === 'close_report') itself never mentions the flag.
+  const liveBranchStart = source.indexOf('if (scheduledPost.post_type === "close_report") {');
+  const liveBranchEnd = source.indexOf('if (scheduledPost.post_type === "us_premarket_report")', liveBranchStart);
+  assert.ok(liveBranchStart >= 0 && liveBranchEnd > liveBranchStart, "live close_report handler block not found");
+  const liveBranch = source.slice(liveBranchStart, liveBranchEnd);
+  assert.doesNotMatch(liveBranch, /allow_current_time_reference_for_dry_run/u);
+});
+
+test("dry-run defaults the override to false unless explicitly set to true", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  assert.match(
+    source,
+    /const allowCurrentTimeReferenceForDryRun = requestBody\.allow_current_time_reference_for_dry_run === true;/u,
+  );
+});
+
 test("generateCloseReport appends fixed hashtags and runs the local safety check before returning text", async () => {
   const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
   const start = source.indexOf("async function generateCloseReport(");

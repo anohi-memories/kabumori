@@ -1892,8 +1892,20 @@ function closeRunMarketData(
 async function generateCloseReport(
   openAiApiKey: string,
   referenceTimeIso: string,
+  // dry-run only, and only when the caller explicitly opts in (index.ts's own dry-run branch is the
+  // only call site that ever reads a request-body flag into this — the live/scheduled path below always
+  // calls this with the default, so normal 16:00 JST operation is never affected). When true, the
+  // collection prompt's cutoff instruction is phrased around the actual referenceTimeIso passed in
+  // instead of literally mentioning "16:00 JST", so a dry-run executed well after the normal 15:58-16:02
+  // window can still evaluate "is there anything future relative to right now" instead of being pushed
+  // to treat everything after 16:00 as out of bounds. sourceVerified/freshness/causal-safety/TODAY-NEXT/
+  // Voice/hashtags are all completely unaffected — this changes only that one sentence.
+  options: { allowCurrentTimeReferenceForDryRun?: boolean } = {},
 ): Promise<CloseReportDraft> {
   const runMode = resolveCloseRunMode(referenceTimeIso);
+  const cutoffInstruction = options.allowCurrentTimeReferenceForDryRun
+    ? "ニュース・IRは参照時刻（reference time、このリクエストに渡された実行時刻）までに公開済みのものだけを使用します。参照時刻より後に公開された情報だけをfuture扱いとし、future_information_absentで非混入を確認してください。"
+    : "ニュース・IRは参照時刻まで、通常運用では16:00 JSTまでに公開済みのものだけを使用します。future_information_absentで未来情報の非混入を確認してください。";
   const collectionResponse = await fetchOpenAiWithSingleRetry(() => fetch(OPENAI_RESPONSES_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
@@ -1918,7 +1930,7 @@ async function generateCloseReport(
         "日経平均、TOPIX、グロース指数、日経先物の具体値を集めるためだけの検索は不要です。偶然取得できた場合だけ各指標欄へ入れ、取得不能は空文字にします。数値不足は異常ではなく、数字を作りません。",
         "強かった・弱かった業種やテーマは、その日の値動きまたは材料を信頼できる出典で確認できるものだけ入れます。目立たない側は空配列で構いません。",
         "値動きの理由は確認できた事実と報道だけを使います。因果を確認できない場合は断定せず、important_pointsの説明で確度を弱めてください。",
-        "ニュース・IRは参照時刻まで、通常運用では16:00 JSTまでに公開済みのものだけを使用します。future_information_absentで未来情報の非混入を確認してください。",
+        cutoffInstruction,
         "為替・金利・原油・地政学・中国・日銀・米国材料・経済指標は、今日の日本株を説明するために必要なものだけconditional_factorsへ入れます。",
         "明日への材料は今日の相場とつながり、参照時刻までに予定または事実を確認できるものを1〜3件にします。単なる一般的イベント一覧にしません。",
         "重要ニュース候補がなければimportant_news_present=false、important_news_verified=falseとし、候補がある場合だけ裏取り成否をimportant_news_verifiedへ入れてください。",
@@ -2916,7 +2928,10 @@ Deno.serve(async (req) => {
   let serviceRoleKeyForFailure: string | null = null;
 
   try {
-    let requestBody: { mode?: unknown; titles?: unknown; post_type?: unknown; reference_time_iso?: unknown } = {};
+    let requestBody: {
+      mode?: unknown; titles?: unknown; post_type?: unknown; reference_time_iso?: unknown;
+      allow_current_time_reference_for_dry_run?: unknown;
+    } = {};
     try { requestBody = await req.json(); } catch { /* body is optional */ }
     const isUsefulTipDryRun = requestBody.mode === "useful_tip_dry_run";
     const isVoiceDryRun = requestBody.mode === "kabumori_voice_dry_run";
@@ -3204,10 +3219,13 @@ Deno.serve(async (req) => {
 
     if (isCloseReportDryRun) {
       const referenceTime = new Date().toISOString();
+      // dry-run only, opt-in only: never read by the live/scheduled close_report path below, and
+      // defaults to false even for an ordinary dry-run that doesn't pass this explicitly.
+      const allowCurrentTimeReferenceForDryRun = requestBody.allow_current_time_reference_for_dry_run === true;
       const runId = await createCloseReportRun(supabaseUrl, serviceRoleKey, referenceTime, null);
       let draft: CloseReportDraft | null = null;
       try {
-        draft = await generateCloseReport(openAiApiKey, referenceTime);
+        draft = await generateCloseReport(openAiApiKey, referenceTime, { allowCurrentTimeReferenceForDryRun });
         if (draft.text) {
           await updateCloseReportRun(supabaseUrl, serviceRoleKey, runId, {
             generated_at: new Date().toISOString(), source_urls: draft.sourceUrls,
