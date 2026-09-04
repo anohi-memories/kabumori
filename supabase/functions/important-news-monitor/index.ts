@@ -744,7 +744,10 @@ async function selectNextPublishCandidateId(
   const params = new URLSearchParams({
     select: "id,importance,generated_at",
     status: "eq.ready_for_publish",
-    importance: "in.(important,most_important)",
+    // Auto-publish is scoped to most_important only for now — important candidates are still
+    // generated and saved as ready_for_publish, they just never get selected here, so they're
+    // never claimed or attempted (not merely rejected downstream).
+    importance: "eq.most_important",
     generated_text: "not.is.null",
     generation_fact_status: "eq.passed",
     generation_voice_status: "eq.passed",

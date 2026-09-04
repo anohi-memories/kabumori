@@ -76,7 +76,9 @@ export function checkPublishCandidate(
   catch { validSourceUrl = false; }
   const checks = {
     status: candidate.status === expectedStatus,
-    importance: candidate.importance === "important" || candidate.importance === "most_important",
+    // Auto-publish is scoped to most_important only for now — "important" is generated and saved as
+    // ready_for_publish exactly as before, it just never becomes eligible to actually post.
+    importance: candidate.importance === "most_important",
     generatedText: typeof candidate.generatedText === "string" && candidate.generatedText.trim().length > 0,
     factPassed: candidate.generationFactStatus === "passed",
     voicePassed: candidate.generationVoiceStatus === "passed",
@@ -156,8 +158,7 @@ export async function publishImportantNewsCandidate(
 ): Promise<PublishResult> {
   const candidate = await repository.read(candidateId);
   const initialCheck = checkPublishCandidate(candidate);
-  if (!candidate || candidate.status !== "ready_for_publish" ||
-    (candidate.importance !== "important" && candidate.importance !== "most_important")) {
+  if (!candidate || candidate.status !== "ready_for_publish" || candidate.importance !== "most_important") {
     return blockedResult(candidateId, candidate, initialCheck);
   }
   const overnightHold = evaluateImportantNewsOvernightHold(candidate.importance, now);

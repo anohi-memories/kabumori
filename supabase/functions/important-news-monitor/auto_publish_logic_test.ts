@@ -13,12 +13,15 @@ import {
 
 const sourceUrl = "https://www.release.tdnet.info/inbs/example.pdf";
 
+// Auto-publish is scoped to most_important only (publish_logic.ts), so these tests — which exercise
+// the auto_publish on/off wrapper itself, not importance-tier eligibility — use a most_important
+// candidate so overnight-hold/rate-control are still reachable to test.
 function candidate(): PublishCandidate {
   return {
     id: "candidate-1",
-    importance: "important",
+    importance: "most_important",
     status: "ready_for_publish",
-    generatedText: `【速報】重要ニュース本文です。\n\n出典: ${sourceUrl}`,
+    generatedText: `【重大速報】重要ニュース本文です。\n\n出典: ${sourceUrl}`,
     generationFactStatus: "passed",
     generationVoiceStatus: "passed",
     sourceUrl,
@@ -92,36 +95,27 @@ test("auto_publish=true enters the existing publish flow", async () => {
   assert.equal(store.state.publishAttempts, 1);
 });
 
-test("auto_publish=true preserves overnight hold", async () => {
-  const store = repository(candidate());
+// most_important (the only importance eligible for auto-publish, see publish_logic.ts) unconditionally
+// bypasses both overnight hold and rate control (rate_control_logic.ts / overnight_hold_logic.ts), so a
+// "held"/"rate-limited" result can no longer be produced end-to-end through this wrapper for any
+// candidate that's actually eligible to reach it. That bypass-always behavior is verified directly by
+// publish_logic_test.ts ("overnight window and post-release rate control still work correctly for
+// most_important"), and the underlying hold/rate-control mechanics themselves remain fully covered by
+// overnight_hold_logic_test.ts / rate_control_logic_test.ts. What this wrapper still needs to prove is
+// that it propagates a blocked result unmodified rather than forcing success — covered below using the
+// (still reachable) importance-tier rejection.
+
+test("auto_publish=true propagates a blocked result unmodified, without forcing publication", async () => {
+  const store = repository({ ...candidate(), importance: "important" });
   const result = await executeWhenAutoPublishEnabled(true, () =>
-    publishImportantNewsCandidate(
-      "candidate-1",
-      false,
-      store,
-      async () => ({ id: "unexpected", httpStatus: 201, refreshExecuted: false }),
-      new Date("2026-09-01T17:00:00Z"),
-    )
+    publishImportantNewsCandidate("candidate-1", false, store, async () => ({
+      id: "unexpected", httpStatus: 201, refreshExecuted: false,
+    }))
   );
 
-  assert.equal(result.result?.blockReason, "NEWS_PUBLISH_OVERNIGHT_HOLD");
-  assert.equal(store.claimCalls(), 0);
-  assert.equal(store.state.status, "ready_for_publish");
-});
-
-test("auto_publish=true preserves rate control", async () => {
-  const store = repository(candidate(), "2026-08-31T06:15:00Z");
-  const result = await executeWhenAutoPublishEnabled(true, () =>
-    publishImportantNewsCandidate(
-      "candidate-1",
-      false,
-      store,
-      async () => ({ id: "unexpected", httpStatus: 201, refreshExecuted: false }),
-      new Date("2026-08-31T06:20:00Z"),
-    )
-  );
-
-  assert.equal(result.result?.blockReason, "NEWS_PUBLISH_RATE_LIMITED");
+  assert.equal(result.executed, true);
+  assert.equal(result.result?.published, false);
+  assert.equal(result.result?.blockReason, "NEWS_PUBLISH_BLOCKED:importance");
   assert.equal(store.claimCalls(), 0);
   assert.equal(store.state.status, "ready_for_publish");
 });
