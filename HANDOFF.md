@@ -355,5 +355,76 @@ UI側 [`apps/admin/src/app/system-status-list.tsx`](apps/admin/src/app/system-st
 
 ### 未完事項
 
-- `tip`のON/OFFは、`posting_windows`のUPDATE権限追加（「追記4」の変更案と同じmigration）がされない限り対応不可。かつ`tip`は1系統ではなく3スロット（`posting_windows`の3行）を個別に持つため、UPDATE権限を追加した場合も「まとめてON/OFF」か「スロット単位」か設計判断が別途必要になる。
+- `tip`のON/OFFは、`posting_windows`のUPDATE権限追加（「追記4」の変更案と同じmigration）がされない限り対応不可。かつ`tip`は1系統ではなく3スロット（`posting_windows`の3行）を個別に持つため、UPDATE権限を追加した場合も「まとめてON/OFF」か「スロット単位」か設計判断が別途必要になる。→ 「追記6」で対応。
 - `useful_tip`の実際のON/OFF動作確認はユーザー本人による実施が必要（本番稼働中のため、テストで不用意にOFFにしないよう注意）。
+
+---
+
+## 追記6: 2026-09-04 posting_windows UPDATE権限追加＋朝の挨拶/tip ON/OFF対応
+
+### 今回の目的
+
+「追記4」で見送っていた朝の挨拶と株の小ネタ`tip`のON/OFFを、`posting_windows`への管理者限定UPDATE権限追加（例外的にDB変更を許可されたスコープ）によって対応する。
+
+### 事前確認結果
+
+- `public.posting_windows`：実在、`post_type`・`is_active`・`slot_no`列すべて実在（`20260828203000_create_post_scheduler.sql`）。PKは`id uuid`、`unique(post_type, slot_no)`。
+- 朝の挨拶：`post_type='morning_greeting'`、`slot_no=1`の1行のみ（`20260901044548_add_morning_greeting_schedule.sql`で挿入。他に同post_typeの行を挿入するmigrationは無し）。
+- `tip`：`post_type='tip'`、`slot_no`1〜3の3行（`20260828203000_create_post_scheduler.sql`で挿入。以後この3行への追加行は無し）。3スロット独立と確認済み。
+- 既存SELECT policy：`admin_select_posting_windows`（`for select`のみ、`20260901064201_add_admin_dashboard_access.sql`）。
+- `private.is_admin()`：`admin_users`テーブルを`auth.uid()`で照会するsecurity definer関数。既存の全`admin_update_*`policyと同一の使い方。
+- policy名衝突：`admin_update_posting_windows`という名前は既存migration内に一切登場せず、衝突なし。他テーブルの命名規則（`admin_update_<table>`）とも一致。
+
+### 【重要】migrationは作成したが、本番DBへは未適用
+
+新規migration [`supabase/migrations/20260904170000_add_posting_windows_admin_update.sql`](supabase/migrations/20260904170000_add_posting_windows_admin_update.sql) を作成した（内容は指示書の通り、`grant update`と`admin_update_posting_windows` policyの追加のみ）。
+
+ただし`supabase db push`を試みたところ、**このmigrationより前に、他の並行作業由来と思われる未適用migrationが2件残っていることが判明**した（`supabase migration list`で`remote`欄が空欄）：
+
+1. `20260901044548_add_morning_greeting_schedule.sql` — `posting_windows`へ朝挨拶rowを挿入し、**Cronディスパッチャ関数`claim_due_post()`を再定義**する内容
+2. `20260904010000_add_important_news_generation_issues.sql` — `important_news_candidates`に`generation_fact_issues`/`generation_voice_issues`列を追加
+
+実際にリモートのスキーマを`supabase db dump --schema public`で確認した結果、上記2列は**本番DBに存在しないこと**を確認した。また朝挨拶用のrowもこの状況では存在しないと考えられる（該当migration未適用のため）。
+
+`supabase db push`はmigrationを古い順に適用するため、`--include-all`を付けない限りこの2件を素通りして自分のmigrationだけを適用することができない。`--include-all`を付けると、Cron関数の再定義を含むこの2件も一緒に本番へ適用されることになり、「Cron変更しない」「他テーブルは変更しない」という今回の指示に反するおそれがあったため、**ユーザーに確認**。
+
+→ ユーザーの判断：「自分のSQLだけ手動で適用（推奨）」。よって、このセッションでは`supabase db push`等によるDB適用を一切実行していない。以下のSQL（migrationファイルと同一内容）を、ユーザーまたは担当者がSupabase StudioのSQL Editor等で手動実行する想定：
+
+```sql
+grant update on table public.posting_windows to authenticated;
+
+create policy admin_update_posting_windows
+on public.posting_windows
+for update
+to authenticated
+using ((select private.is_admin()))
+with check ((select private.is_admin()));
+```
+
+手動適用後、`supabase migration list`の`remote`欄をこのmigrationについて合わせたい場合は `supabase migration repair --status applied 20260904170000` の実行を検討（CLIのbookkeeping同期のみ、任意）。
+
+### 実装内容（コードはmigration適用前提で作成済み、適用後に有効化される）
+
+- [`system-toggle.ts`](apps/admin/src/lib/actions/system-toggle.ts)：allowlistに `morning_greeting` と `tip` を追加。`posting_windows`向けの新モード（`mode: "posting_window"`）を導入し、`post_type`で絞り込んで該当行**すべて**を同じ`is_active`へ更新する（`tip`なら3行同時、個別スロット操作は無し）。現在値がすでに揃っていれば書き込みをスキップする点は既存の単一行モードと同じ。
+- [`system-status.ts`](apps/admin/src/lib/system-status.ts)：
+  - `getMorningGreetingStatus`：トグルを追加。注記を「投稿ウィンドウ設定のON/OFFです。Cron実行自体とは別です。」に更新。
+  - `getTipStatus`（新規）：`posting_windows`の`tip`3行を取得し、「投稿枠：3件」「有効な投稿枠：X/3件」を表示。3行が不揃いな場合はその旨を注記し、トグル操作で揃えられるようにした。
+- UI（`system-status-list.tsx`）：`tip`の確認ダイアログのみ「{システム名}3枠をすべてON/OFFにしますか？」という専用文言に変更（複数row更新であることを明示）。朝の挨拶はトグルのlabelを「投稿設定」にし、既存の汎用文言で「朝の挨拶の投稿設定をON/OFFにしますか？」となるようにした。
+
+### 現状の動作（migration未適用のため）
+
+- 朝の挨拶：該当rowが存在しないため、システム状態カードは引き続き「状態確認不可」表示のまま（トグルも出ない）。
+- `tip`：SELECTは既存権限で可能なため、カード自体は新たに表示され現在値（3/3件有効など）を確認できるが、トグル操作をするとRLSがUPDATEを拒否し（`42501`）、「設定を変更できませんでした」という安全なエラー表示になる（クラッシュはしない）。migration適用後に初めて機能する。
+
+### テスト
+
+- `npm run lint`：成功
+- `npm run build`：成功
+- local：devサーバー起動、エラー無しを確認
+- **本番DBへの変更は一切行っていない**（migrationファイルの作成のみ、適用はユーザー側で実施予定）
+
+### 未完事項
+
+- 上記SQLの本番適用（ユーザー側で実施予定）。
+- 適用後、実際のON/OFF動作確認（朝の挨拶・tip 3枠一括、および復元）はユーザー本人による実施をお願いします。
+- `20260901044548`・`20260904010000`の2件が本番未適用のままである点は、今回のスコープ外だが重要な既知の問題として記録。特に`20260904010000`が未適用だと、既存の「重要ニュース候補」ページ（`/important-news`）のクエリが本番で失敗している可能性がある。担当者への確認を推奨。

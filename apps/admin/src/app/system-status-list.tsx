@@ -59,6 +59,12 @@ function ToggleControl({
   const nextEnabled = !enabled;
   const isDangerOn = toggle.kind === "danger" && nextEnabled;
   const actionLabel = `${toggle.label}を${nextEnabled ? "ON" : "OFF"}にする`;
+  // tip covers three independent posting_windows rows updated together —
+  // make that explicit in the confirmation instead of the generic phrasing.
+  const confirmMessage =
+    toggle.key === "tip"
+      ? `${systemName}3枠をすべて${nextEnabled ? "ON" : "OFF"}にしますか？`
+      : `${systemName}の${toggle.label}を${nextEnabled ? "ON" : "OFF"}にしますか？`;
 
   function openConfirm() {
     setFeedback(null);
@@ -102,9 +108,7 @@ function ToggleControl({
       ) : null}
 
       <dialog ref={dialogRef} className="toggle-dialog">
-        <p className="toggle-dialog-message">
-          {systemName}の{toggle.label}を{nextEnabled ? "ON" : "OFF"}にしますか？
-        </p>
+        <p className="toggle-dialog-message">{confirmMessage}</p>
         {isDangerOn ? (
           <p className="toggle-dialog-warning">
             ONにすると、重要ニュースが条件成立時に自動的にXへ投稿されます。

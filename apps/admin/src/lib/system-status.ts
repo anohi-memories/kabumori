@@ -222,8 +222,57 @@ async function getMorningGreetingStatus(supabase: SupabaseClient): Promise<Syste
     ],
     {
       note:
-        "スケジュール設定のみ表示しています。実行トリガー（Cron）自体の稼働状況はDBから確認できません。" +
-        "ON/OFF操作にも未対応です（このテーブルには管理者用の更新権限がまだ設定されていません）。",
+        "投稿ウィンドウ設定のON/OFFです。Cron実行自体とは別です。" +
+        "実行トリガー（Cron）自体の稼働状況はDBから確認できません。",
+      toggles: [
+        { key: "morning_greeting", label: "投稿設定", enabled: row.is_active, kind: "normal" },
+      ],
+    },
+  );
+}
+
+type TipPostingWindowRow = {
+  is_active: boolean;
+};
+
+async function getTipStatus(supabase: SupabaseClient): Promise<SystemStatusItem> {
+  const { data, error } = await supabase
+    .from("posting_windows")
+    .select("is_active")
+    .eq("post_type", "tip")
+    .order("slot_no", { ascending: true });
+
+  if (error) {
+    logQueryError("posting_windows(tip)", error.code);
+    return buildItem("tip", "株の小ネタ", null, [], {
+      unavailableReason: "設定を取得できませんでした。",
+    });
+  }
+  if (!data || data.length === 0) {
+    return buildItem("tip", "株の小ネタ", null, [], {
+      unavailableReason: "投稿枠が見つかりません。",
+    });
+  }
+
+  const rows = data as TipPostingWindowRow[];
+  const activeCount = rows.filter((row) => row.is_active).length;
+  const allActive = activeCount === rows.length;
+  const noneActive = activeCount === 0;
+
+  return buildItem(
+    "tip",
+    "株の小ネタ",
+    !noneActive,
+    [
+      { label: "投稿枠", value: `${rows.length}件` },
+      { label: "有効な投稿枠", value: `${activeCount}/${rows.length}件` },
+    ],
+    {
+      note:
+        allActive || noneActive
+          ? "3つの投稿枠をまとめてON/OFFします。個別の時間帯だけを操作することはできません。"
+          : "投稿枠ごとに有効・無効が揃っていません。ON/OFF操作で3枠すべてを同じ状態に揃えられます。",
+      toggles: [{ key: "tip", label: "株の小ネタ", enabled: allActive, kind: "normal" }],
     },
   );
 }
@@ -342,6 +391,7 @@ export async function getSystemStatus(supabase: SupabaseClient): Promise<SystemS
     getReportStatus(supabase, "close_report_settings", "close_report", "大引けレポート", "close_report"),
     getUsPremarketStatus(supabase),
     getUsefulTipStatus(supabase),
+    getTipStatus(supabase),
   ]);
 
   return { systems };
