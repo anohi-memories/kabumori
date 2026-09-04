@@ -40,7 +40,7 @@ test("contradictory change and future timestamps stop publication", () => {
   const contradiction = normalizeCloseMetric(raw({ change: "-300" }), "jpx_close", reference, "live");
   const future = normalizeCloseMetric(raw({ label: "TOPIX", timestamp: "2026-08-31T07:10:00.000Z" }), "jpx_close", reference, "live");
   const result = evaluateCloseFacts({
-    requiredIndices: [contradiction, future], futures: null, optional: [], trustedSourceCount: 2,
+    requiredIndices: [contradiction, future], futures: null, optional: [],
     dateConsistencyPassed: true, futureInformationAbsent: true, mode: "live",
   });
   assert.equal(result.status, "failed");
@@ -52,7 +52,7 @@ test("missing futures can be omitted without failing required-index facts", () =
   const indices = [raw(), raw({ label: "TOPIX", value: "3,100", previous_close: "3,090", change: "+10" })]
     .map((metric) => normalizeCloseMetric(metric, "jpx_close", reference, "live"));
   assert.deepEqual(evaluateCloseFacts({
-    requiredIndices: indices, futures: null, optional: [], trustedSourceCount: 2,
+    requiredIndices: indices, futures: null, optional: [],
     dateConsistencyPassed: true, futureInformationAbsent: true, mode: "live",
   }), { status: "passed", notes: [] });
 });
@@ -62,7 +62,7 @@ test("text length and emoji count are not fact-check inputs", () => {
     normalizeCloseMetric(metric, "jpx_close", reference, "live")
   );
   assert.equal(evaluateCloseFacts({
-    requiredIndices: indices, futures: null, optional: [], trustedSourceCount: 2,
+    requiredIndices: indices, futures: null, optional: [],
     dateConsistencyPassed: true, futureInformationAbsent: true, mode: "live",
   }).status, "passed");
 });
@@ -70,7 +70,7 @@ test("text length and emoji count are not fact-check inputs", () => {
 test("close report can pass without Nikkei TOPIX or futures values", () => {
   assert.deepEqual(evaluateCloseFacts({
     requiredIndices: [], futures: null, optional: [], verifiedTodayPointCount: 3,
-    trustedSourceCount: 2, dateConsistencyPassed: true,
+    dateConsistencyPassed: true,
     futureInformationAbsent: true, mode: "live",
   }), { status: "passed", notes: [] });
 });
@@ -83,7 +83,7 @@ test("2+3+4: an important-news candidate is no longer a whole-report gate at all
   // only thing that matters is how many verified "today" facts made it through.
   const baseArgs = {
     requiredIndices: [], futures: null, optional: [] as NormalizedCloseMetric[],
-    trustedSourceCount: 2, dateConsistencyPassed: true,
+    dateConsistencyPassed: true,
     futureInformationAbsent: true, mode: "live" as const,
   };
   // Case A: no important news at all, just one ordinary today-fact.
@@ -101,7 +101,7 @@ test("a stale optional material alone does not fail the close report", () => {
   assert.equal(staleOptional.freshness, "stale");
   assert.equal(evaluateCloseFacts({
     requiredIndices: [], futures: null, optional: [staleOptional], verifiedTodayPointCount: 3,
-    trustedSourceCount: 2, dateConsistencyPassed: true,
+    dateConsistencyPassed: true,
     futureInformationAbsent: true, mode: "live",
   }).status, "passed");
 });
@@ -109,7 +109,7 @@ test("a stale optional material alone does not fail the close report", () => {
 test("future or invalid optional material still safely stops the close report", () => {
   const result = evaluateCloseFacts({
     requiredIndices: [], futures: null, optional: [], verifiedTodayPointCount: 3,
-    trustedSourceCount: 2, dateConsistencyPassed: true,
+    dateConsistencyPassed: true,
     futureInformationAbsent: false, unsafeOptionalMaterialCount: 1, mode: "live",
   });
   assert.equal(result.status, "failed");
@@ -121,7 +121,7 @@ test("future or invalid optional material still safely stops the close report", 
 test("1: zero verified TODAY points safely stops generation (no anchor to what happened today)", () => {
   const result = evaluateCloseFacts({
     requiredIndices: [], futures: null, optional: [], verifiedTodayPointCount: 0,
-    trustedSourceCount: 2, dateConsistencyPassed: true,
+    dateConsistencyPassed: true,
     futureInformationAbsent: true, mode: "live",
   });
   assert.equal(result.status, "failed");
@@ -132,7 +132,7 @@ test("3: one or two verified TODAY points is enough for a safe, shorter report (
   for (const count of [1, 2]) {
     const result = evaluateCloseFacts({
       requiredIndices: [], futures: null, optional: [], verifiedTodayPointCount: count,
-      trustedSourceCount: 2, dateConsistencyPassed: true,
+      dateConsistencyPassed: true,
         futureInformationAbsent: true, mode: "live",
     });
     assert.equal(result.status, "passed", `expected count=${count} to pass`);
@@ -143,7 +143,7 @@ test("3: one or two verified TODAY points is enough for a safe, shorter report (
 test("4: three or more verified TODAY points still passes as a normal report", () => {
   const result = evaluateCloseFacts({
     requiredIndices: [], futures: null, optional: [], verifiedTodayPointCount: 4,
-    trustedSourceCount: 2, dateConsistencyPassed: true,
+    dateConsistencyPassed: true,
     futureInformationAbsent: true, mode: "live",
   });
   assert.equal(result.status, "passed");
@@ -156,11 +156,67 @@ test("5: many NEXT-scope points cannot substitute for zero verified TODAY points
   // function's boundary: passing 0 fails regardless of how much NEXT material existed.
   const result = evaluateCloseFacts({
     requiredIndices: [], futures: null, optional: [], verifiedTodayPointCount: 0,
-    trustedSourceCount: 2, dateConsistencyPassed: true,
+    dateConsistencyPassed: true,
     futureInformationAbsent: true, mode: "live",
   });
   assert.equal(result.status, "failed");
   assert.match(result.notes.join(" | "), /出典確認済みの本日の重要ポイントが0件/);
+});
+
+// --- independent-source requirement: simple facts vs. causal claims (STEP 2-7) ----------------------
+
+test("1: one verified simple fact from a single trusted source is usable — no report-wide source count exists", () => {
+  const result = evaluateCloseFacts({
+    requiredIndices: [], futures: null, optional: [], verifiedTodayPointCount: 1,
+    dateConsistencyPassed: true, futureInformationAbsent: true, mode: "live",
+  });
+  assert.equal(result.status, "passed");
+  assert.deepEqual(result.notes, []);
+});
+
+test("2: several verified simple facts from the same single trusted source are usable together — no blanket 2-publisher requirement", () => {
+  // Previously this exact scenario (e.g. three points all citing the same nikkei.com article) failed
+  // the whole report on "信頼できる独立ソースが不足" alone, even though each point had already passed
+  // its own sourceVerified/freshness check individually. evaluateCloseFacts() no longer has any
+  // parameter that could even express "how many distinct publishers were used" — source diversity is
+  // simply not a report-wide gate anymore.
+  const result = evaluateCloseFacts({
+    requiredIndices: [], futures: null, optional: [], verifiedTodayPointCount: 3,
+    dateConsistencyPassed: true, futureInformationAbsent: true, mode: "live",
+  });
+  assert.equal(result.status, "passed");
+  assert.deepEqual(result.notes, []);
+});
+
+test("evaluateCloseFacts() no longer accepts a trustedSourceCount parameter at all (structural confirmation)", async () => {
+  const source = await readFile(new URL("./close_report_logic.ts", import.meta.url), "utf8");
+  const start = source.indexOf("export function evaluateCloseFacts(");
+  const end = source.indexOf("\nexport function", start + 1);
+  const fnSource = source.slice(start, end);
+  assert.doesNotMatch(fnSource, /trustedSourceCount/u);
+  assert.doesNotMatch(fnSource, /信頼できる独立ソースが不足/u);
+});
+
+test("3+4+10: strong causal claims still require independent corroboration — enforced per-point in generateCloseReport, unchanged", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const start = source.indexOf("async function generateCloseReport(");
+  const end = source.indexOf("\nasync function", start + 1);
+  const fnSource = source.slice(start, end);
+  // The exact fact/causal-claim distinction this task is about: a point only needs sourceVerified +
+  // usable freshness UNLESS it makes a strong causal assertion, in which case it additionally needs
+  // hasIndependentCausalSupport() (>= 2 independent publishers) or it is dropped entirely — this
+  // per-point logic is untouched by today's report-level change.
+  assert.match(fnSource, /const strongCausality = point\.causal_claim_strength === "strong" \|\| hasStrongCausalAssertion\(pointText\)/u);
+  assert.match(fnSource, /const causalSupportPassed = !strongCausality \|\| hasIndependentCausalSupport\(/u);
+  assert.match(fnSource, /sourceVerified\(sourceUrl\) && freshness === "usable" && causalSupportPassed/u);
+});
+
+test("5+9: sourceVerified and numeric freshness/verification are untouched (structural confirmation)", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const start = source.indexOf("async function generateCloseReport(");
+  const end = source.indexOf("\nasync function", start + 1);
+  const fnSource = source.slice(start, end);
+  assert.match(fnSource, /const verifiedMetric = \(metric: RawMarketMetric\): RawMarketMetric =>\s*\n\s*sourceVerified\(metric\.source_url\) \? metric : \{ \.\.\.metric, source_url: "" \}/u);
 });
 
 test("close report format keeps three points at the top and required sections", () => {

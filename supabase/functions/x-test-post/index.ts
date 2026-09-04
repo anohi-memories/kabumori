@@ -2074,18 +2074,10 @@ async function generateCloseReport(
   );
   const futureInformationAbsent = packet.future_information_absent && unsafeOptionalMaterialCount === 0;
   const sourceUrls = packet.source_urls.filter(sourceVerified).slice(0, 18);
-  const usedFactSourceUrls = [
-    ...importantPoints.flatMap((point) => [point.source_url ?? "", ...(point.supporting_source_urls ?? [])]),
-    ...strongThemes.map((theme) => theme.source_url),
-    ...weakThemes.map((theme) => theme.source_url),
-    ...conditionalFactors.map((factor) => factor.source_url),
-    ...carryovers.map((item) => item.source_url),
-  ].filter(Boolean);
   const factResult = evaluateCloseFacts({
     requiredIndices: [], futures: null,
     optional: [],
     verifiedTodayPointCount: todayPoints.length,
-    trustedSourceCount: independentPublisherCount(usedFactSourceUrls, MORNING_SOURCE_DOMAINS),
     dateConsistencyPassed: packet.date_consistency_passed,
     futureInformationAbsent,
     unsafeOptionalMaterialCount,

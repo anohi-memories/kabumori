@@ -112,8 +112,15 @@ export function evaluateCloseFacts(args: {
   // fail the whole report. A close report is not required to contain a "重要ニュース" at all (see
   // ケースA/B/C in the brief this implements); it only needs at least one verified today-fact, of
   // whatever kind, from requiredIndices/optional/points feeding verifiedTodayPointCount.
+  // A blanket "the whole report must cite >=2 independent publisher domains" requirement used to live
+  // here too. Removed: it conflated source DIVERSITY with fact RELIABILITY. Every point already carries
+  // its own appropriately-scoped source requirement — a simple verified fact (sourceVerified=true,
+  // trusted domain) is usable from one reliable outlet, exactly as a human close-report writer would
+  // cite "日経平均は806円高で引けた" from a single trusted publisher without needing a second outlet to
+  // repeat the same number. A STRONG causal/interpretive claim ("〜を背景に買われた") still requires
+  // independent corroboration — but that is hasIndependentCausalSupport()'s job, enforced per-point
+  // where importantPoints/strongThemes/weakThemes are filtered (index.ts), not a report-wide aggregate.
   verifiedTodayPointCount?: number;
-  trustedSourceCount: number;
   dateConsistencyPassed: boolean;
   futureInformationAbsent: boolean;
   unsafeOptionalMaterialCount?: number;
@@ -141,7 +148,6 @@ export function evaluateCloseFacts(args: {
   if (freshnessFailures.length) notes.push(`鮮度または未来時刻エラー: ${freshnessFailures.map((metric) => metric.label).join(", ")}`);
   if ((args.unsafeOptionalMaterialCount ?? 0) > 0) notes.push("optional材料に未来時刻または不正なtimestampが混入");
   if (!args.dateConsistencyPassed) notes.push("取引日の日付取り違え");
-  if (args.trustedSourceCount < 2) notes.push("信頼できる独立ソースが不足");
   if (!args.futureInformationAbsent) notes.push("16:00以降に公開された未来情報が混入");
   if (args.mode === "preflight") notes.push("事前dry-run: 最新取得可能データで構造と取得経路を確認");
   return { status: notes.some((note) => !note.startsWith("事前dry-run:")) ? "failed" : "passed", notes };
