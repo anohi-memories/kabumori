@@ -9,6 +9,8 @@ import {
   MORNING_GREETING_TARGET_MAX_EMOJI,
   MORNING_GREETING_TARGET_MIN_CHARACTERS,
   MORNING_GREETING_TARGET_MIN_EMOJI,
+  MorningGreetingLengthInvalidError,
+  buildMorningGreetingLengthFailureDiagnostics,
   buildMorningGreetingRequest,
   generateMorningGreeting,
   isVerifiedMajorTheme,
@@ -171,20 +173,35 @@ test("4+5: a too-long first attempt retries once and a valid retry succeeds", as
   assert.equal(Array.from(result.generated_text).length, 150);
 });
 
-test("6: still too short after the retry safely stops with TEXT_LENGTH_INVALID", async () => {
+test("6: still too short after the retry safely stops with TEXT_LENGTH_INVALID, carrying stage=retry diagnostics", async () => {
   const { fetch: mockFetch, callCount } = sequencedGreetingFetch([textOfLength(99), textOfLength(50)]);
   await assert.rejects(
     () => generateMorningGreeting("test-key", DATE, mockFetch),
-    /MORNING_GREETING_TEXT_LENGTH_INVALID/,
+    (error: unknown) => {
+      assert.ok(error instanceof MorningGreetingLengthInvalidError);
+      assert.equal(error.message, "MORNING_GREETING_TEXT_LENGTH_INVALID");
+      assert.equal(error.retryCount, 1);
+      assert.equal(error.firstLength, 99);
+      assert.equal(error.retryLength, 50);
+      assert.equal(error.stage, "retry");
+      return true;
+    },
   );
   assert.equal(callCount(), 2);
 });
 
-test("7: still too long after the retry safely stops with TEXT_LENGTH_INVALID", async () => {
+test("7: still too long after the retry safely stops with TEXT_LENGTH_INVALID, carrying stage=retry diagnostics", async () => {
   const { fetch: mockFetch, callCount } = sequencedGreetingFetch([textOfLength(181), textOfLength(200)]);
   await assert.rejects(
     () => generateMorningGreeting("test-key", DATE, mockFetch),
-    /MORNING_GREETING_TEXT_LENGTH_INVALID/,
+    (error: unknown) => {
+      assert.ok(error instanceof MorningGreetingLengthInvalidError);
+      assert.equal(error.retryCount, 1);
+      assert.equal(error.firstLength, 181);
+      assert.equal(error.retryLength, 200);
+      assert.equal(error.stage, "retry");
+      return true;
+    },
   );
   assert.equal(callCount(), 2);
 });
@@ -213,9 +230,35 @@ test("9: a non-length failure on the first attempt is not retried", async () => 
   ]);
   await assert.rejects(
     () => generateMorningGreeting("test-key", DATE, mockFetch),
-    /MORNING_GREETING_SALUTATION_MISSING/,
+    (error: unknown) => {
+      assert.match((error as Error).message, /MORNING_GREETING_SALUTATION_MISSING/);
+      // A non-length failure must never be reported as (or carry the diagnostics of) a length failure.
+      assert.ok(!(error instanceof MorningGreetingLengthInvalidError));
+      return true;
+    },
   );
   assert.equal(callCount(), 1, "no retry should have been attempted for a non-length failure");
+});
+
+// --- failure-path length diagnostics (retry_count / first_length / retry_length / length_failure_stage) -----
+
+test("diagnostics 1: buildMorningGreetingLengthFailureDiagnostics with only a first attempt reports stage=first, retry_count=0, retry_length=null", () => {
+  const diagnostics = buildMorningGreetingLengthFailureDiagnostics({ generated_text: textOfLength(50) });
+  assert.equal(diagnostics.retryCount, 0);
+  assert.equal(diagnostics.firstLength, 50);
+  assert.equal(diagnostics.retryLength, null);
+  assert.equal(diagnostics.stage, "first");
+});
+
+test("diagnostics 2: buildMorningGreetingLengthFailureDiagnostics with both attempts reports stage=retry, retry_count=1", () => {
+  const diagnostics = buildMorningGreetingLengthFailureDiagnostics(
+    { generated_text: textOfLength(99) },
+    { generated_text: textOfLength(200) },
+  );
+  assert.equal(diagnostics.retryCount, 1);
+  assert.equal(diagnostics.firstLength, 99);
+  assert.equal(diagnostics.retryLength, 200);
+  assert.equal(diagnostics.stage, "retry");
 });
 
 test("11: the enforced validator range is unchanged at 100-180", () => {

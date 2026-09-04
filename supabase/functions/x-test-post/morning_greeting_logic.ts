@@ -332,6 +332,44 @@ function rawGeneratedTextLength(parsed: unknown): number | null {
   return typeof text === "string" ? Array.from(text.trim()).length : null;
 }
 
+export type MorningGreetingLengthFailureDiagnostics = {
+  retryCount: 0 | 1;
+  firstLength: number | null;
+  retryLength: number | null;
+  stage: "first" | "retry";
+};
+
+// Carries length-retry diagnostics (never the generated text itself) so a caller can tell, even on
+// failure, whether the first or the retried attempt is the one that was still out of range.
+export class MorningGreetingLengthInvalidError extends Error {
+  readonly retryCount: 0 | 1;
+  readonly firstLength: number | null;
+  readonly retryLength: number | null;
+  readonly stage: "first" | "retry";
+
+  constructor(diagnostics: MorningGreetingLengthFailureDiagnostics) {
+    super("MORNING_GREETING_TEXT_LENGTH_INVALID");
+    this.name = "MorningGreetingLengthInvalidError";
+    this.retryCount = diagnostics.retryCount;
+    this.firstLength = diagnostics.firstLength;
+    this.retryLength = diagnostics.retryLength;
+    this.stage = diagnostics.stage;
+  }
+}
+
+// Pure and independently testable from the retry flow itself: pass only firstParsed for the
+// no-retry-yet snapshot, or both once a retry attempt has also run.
+export function buildMorningGreetingLengthFailureDiagnostics(
+  firstParsed: unknown,
+  retryParsed?: unknown,
+): MorningGreetingLengthFailureDiagnostics {
+  const firstLength = rawGeneratedTextLength(firstParsed);
+  if (retryParsed === undefined) {
+    return { retryCount: 0, firstLength, retryLength: null, stage: "first" };
+  }
+  return { retryCount: 1, firstLength, retryLength: rawGeneratedTextLength(retryParsed), stage: "retry" };
+}
+
 export async function generateMorningGreeting(
   openAiApiKey: string,
   date: string,
@@ -364,7 +402,22 @@ export async function generateMorningGreeting(
       instructions: `${request.body.instructions as string}\n${retryInstruction}`,
     };
     const retry = await requestMorningGreetingCompletion(openAiApiKey, retryBody, fetchImpl);
-    const validated = validateMorningGreetingOutput(retry.parsed, request.theme);
+    let validated: ReturnType<typeof validateMorningGreetingOutput>;
+    try {
+      validated = validateMorningGreetingOutput(retry.parsed, request.theme);
+    } catch (retryError) {
+      // Only surface length diagnostics when the retry's own failure is also a length miss — any other
+      // retry failure (schema, salutation, ...) is a different problem and is rethrown as-is.
+      if (
+        retryError instanceof Error &&
+        retryError.message === "MORNING_GREETING_TEXT_LENGTH_INVALID"
+      ) {
+        throw new MorningGreetingLengthInvalidError(
+          buildMorningGreetingLengthFailureDiagnostics(first.parsed, retry.parsed),
+        );
+      }
+      throw retryError;
+    }
     return {
       ...validated,
       model: MODEL,

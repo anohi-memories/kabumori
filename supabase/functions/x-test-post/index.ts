@@ -2933,6 +2933,9 @@ Deno.serve(async (req) => {
           x_api_called: 0,
           x_posted: false,
           retry_count: 0,
+          first_length: null,
+          retry_length: null,
+          length_failure_stage: null,
         }, 403);
       }
       const referenceTime = typeof requestBody.reference_time_iso === "string"
@@ -2969,7 +2972,10 @@ Deno.serve(async (req) => {
           x_post_api_called: publishError?.xPostApiCalled ?? 0,
           x_posted: publishError?.xPosted ?? false,
           x_post_id: publishError?.xPostId ?? null,
-          retry_count: 0,
+          retry_count: publishError?.retryCount ?? 0,
+          first_length: publishError?.firstLength ?? null,
+          retry_length: publishError?.retryLength ?? null,
+          length_failure_stage: publishError?.lengthFailureStage ?? null,
         }, 422);
       }
     }
@@ -3009,7 +3015,18 @@ Deno.serve(async (req) => {
           openai_text_api_called: error instanceof MorningGreetingPayloadDryRunError
             ? error.openAiTextApiCalled
             : 0,
-          retry_count: 0,
+          retry_count: error instanceof MorningGreetingPayloadDryRunError
+            ? (error.retryCount ?? 0)
+            : 0,
+          first_length: error instanceof MorningGreetingPayloadDryRunError
+            ? error.firstLength
+            : null,
+          retry_length: error instanceof MorningGreetingPayloadDryRunError
+            ? error.retryLength
+            : null,
+          length_failure_stage: error instanceof MorningGreetingPayloadDryRunError
+            ? error.lengthFailureStage
+            : null,
           x_api_called: 0,
           x_posted: false,
           error: safeErrorCode(error),

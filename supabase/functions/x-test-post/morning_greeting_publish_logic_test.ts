@@ -6,7 +6,10 @@ import {
   MorningGreetingManualPublishError,
   runMorningGreetingManualPublish,
 } from "./morning_greeting_publish_logic.ts";
-import type { MorningGreetingPayloadDryRunResult } from "./morning_greeting_payload_logic.ts";
+import {
+  MorningGreetingPayloadDryRunError,
+  type MorningGreetingPayloadDryRunResult,
+} from "./morning_greeting_payload_logic.ts";
 
 const TEXT = "おはようございます☕️ 9月の朝ですね。今日も無理なく、ひとつずつ進めていきましょう🌿";
 const DATE = "2026-09-02";
@@ -239,6 +242,86 @@ test("4: a lost DB claim race stops before any X API call", async () => {
     },
   );
   assert.equal(xApiCalls, 0);
+});
+
+test("6+7: a length-invalid failure surfaces real retry_count/first_length/retry_length/length_failure_stage, never a hardcoded 0", async () => {
+  await assert.rejects(
+    () => runMorningGreetingManualPublish({
+      supabaseUrl: "https://example.supabase.co",
+      serviceRoleKey: "service-secret",
+      openAiApiKey: "openai-secret",
+      xAccessToken: "x-secret",
+      now: new Date("2026-09-01T15:30:00Z"),
+      buildPayload: async () => {
+        throw new MorningGreetingPayloadDryRunError("MORNING_GREETING_TEXT_LENGTH_INVALID", {
+          openAiTextApiCalled: 2,
+          imageExists: true,
+          themeMatch: true,
+          retryCount: 1,
+          firstLength: 99,
+          retryLength: 200,
+          lengthFailureStage: "retry",
+        });
+      },
+      fetchImpl: async (input, init) => {
+        const url = String(input);
+        if (url.includes(`/published/${DATE}.json`)) return new Response("Object not found", { status: 400 });
+        if (url.includes("/rest/v1/publish_claims") && init?.method === "POST") {
+          return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "publishing" }]);
+        }
+        if (url.includes("/rest/v1/publish_claims") && init?.method === "PATCH") {
+          const body = JSON.parse(String(init.body));
+          assert.equal(body.status, "failed");
+          assert.equal(body.error_code, "MORNING_GREETING_TEXT_LENGTH_INVALID");
+          return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "failed" }]);
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof MorningGreetingManualPublishError);
+      assert.equal(error.message, "MORNING_GREETING_TEXT_LENGTH_INVALID");
+      assert.equal(error.retryCount, 1);
+      assert.equal(error.firstLength, 99);
+      assert.equal(error.retryLength, 200);
+      assert.equal(error.lengthFailureStage, "retry");
+      assert.equal(error.xApiCalled, 0);
+      return true;
+    },
+  );
+});
+
+test("a non-length failure carries null length diagnostics instead of a misleading value", async () => {
+  await assert.rejects(
+    () => runMorningGreetingManualPublish({
+      supabaseUrl: "https://example.supabase.co",
+      serviceRoleKey: "service-secret",
+      openAiApiKey: "openai-secret",
+      xAccessToken: "x-secret",
+      now: new Date("2026-09-01T15:30:00Z"),
+      buildPayload: async () => readyPayload(),
+      fetchImpl: async (input, init) => {
+        const url = String(input);
+        if (url.includes(`/published/${DATE}.json`)) return new Response("Object not found", { status: 400 });
+        if (url.includes("/rest/v1/publish_claims") && init?.method === "POST") {
+          return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "publishing" }]);
+        }
+        if (url.includes("/rest/v1/publish_claims") && init?.method === "PATCH") {
+          return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "failed" }]);
+        }
+        return new Response("missing", { status: 404 });
+      },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof MorningGreetingManualPublishError);
+      assert.equal(error.message, "MORNING_GREETING_IMAGE_DOWNLOAD_FAILED:404");
+      assert.equal(error.retryCount, null);
+      assert.equal(error.firstLength, null);
+      assert.equal(error.retryLength, null);
+      assert.equal(error.lengthFailureStage, null);
+      return true;
+    },
+  );
 });
 
 test("manual mode is service-role protected and branches before dispatcher", async () => {

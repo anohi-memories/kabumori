@@ -137,6 +137,47 @@ test("theme mismatch stops safely", async () => {
   );
 });
 
+test("a length-invalid retry that is still invalid surfaces retry_count/first_length/retry_length/length_failure_stage on the thrown error", async () => {
+  const theme = selectMorningGreetingTheme("2026-09-02");
+  const tooShortFirst = "おはようございます。今日も一日、無理のないペースで過ごせますように。";
+  const stillTooLong = "おはようございます。".repeat(30);
+  let textCalls = 0;
+  await assert.rejects(
+    () => runMorningGreetingPayloadDryRun({
+      supabaseUrl: "https://example.supabase.co",
+      serviceRoleKey: "service-role-secret",
+      openAiApiKey: "openai-secret",
+      now: new Date("2026-09-01T15:30:00Z"),
+      fetchImpl: async (input) => {
+        const url = String(input);
+        if (url === "https://api.openai.com/v1/responses") {
+          textCalls += 1;
+          const text = textCalls === 1 ? tooShortFirst : stillTooLong;
+          return new Response(JSON.stringify({
+            status: "completed",
+            output: [{ content: [{ type: "output_text", text: JSON.stringify({
+              theme_type: theme.theme_type, theme_name: theme.theme_name,
+              visual_theme: theme.visual_theme, generated_text: text,
+            }) }] }],
+            usage: { input_tokens: 10, output_tokens: 10 },
+          }), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof MorningGreetingPayloadDryRunError);
+      assert.equal(error.message, "MORNING_GREETING_TEXT_LENGTH_INVALID");
+      assert.equal(error.retryCount, 1);
+      assert.equal(error.firstLength, Array.from(tooShortFirst).length);
+      assert.equal(error.retryLength, Array.from(stillTooLong).length);
+      assert.equal(error.lengthFailureStage, "retry");
+      return true;
+    },
+  );
+  assert.equal(textCalls, 2);
+});
+
 test("text generation failure is not retried and never checks Storage", async () => {
   const calls: string[] = [];
   await assert.rejects(

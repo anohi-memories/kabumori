@@ -1,4 +1,5 @@
 import {
+  MorningGreetingPayloadDryRunError,
   morningGreetingStorageObjectUrl,
   resolveMorningGreetingJstDate,
   runMorningGreetingPayloadDryRun,
@@ -42,6 +43,10 @@ export class MorningGreetingManualPublishError extends Error {
   readonly xPostApiCalled: number;
   readonly xPosted: boolean;
   readonly xPostId: string | null;
+  readonly retryCount: number | null;
+  readonly firstLength: number | null;
+  readonly retryLength: number | null;
+  readonly lengthFailureStage: "first" | "retry" | null;
 
   constructor(message: string, diagnostics: {
     imageUploadSucceeded: boolean;
@@ -49,6 +54,10 @@ export class MorningGreetingManualPublishError extends Error {
     xPostApiCalled: number;
     xPosted: boolean;
     xPostId: string | null;
+    retryCount?: number | null;
+    firstLength?: number | null;
+    retryLength?: number | null;
+    lengthFailureStage?: "first" | "retry" | null;
   }) {
     super(message);
     this.name = "MorningGreetingManualPublishError";
@@ -57,6 +66,10 @@ export class MorningGreetingManualPublishError extends Error {
     this.xPostApiCalled = diagnostics.xPostApiCalled;
     this.xPosted = diagnostics.xPosted;
     this.xPostId = diagnostics.xPostId;
+    this.retryCount = diagnostics.retryCount ?? null;
+    this.firstLength = diagnostics.firstLength ?? null;
+    this.retryLength = diagnostics.retryLength ?? null;
+    this.lengthFailureStage = diagnostics.lengthFailureStage ?? null;
   }
 }
 
@@ -309,9 +322,16 @@ export async function runMorningGreetingManualPublish(args: {
         });
       } catch { /* best-effort; the original error below still surfaces */ }
     }
+    const payloadError = error instanceof MorningGreetingPayloadDryRunError ? error : null;
     throw new MorningGreetingManualPublishError(
       code,
-      { imageUploadSucceeded, xApiCalled, xPostApiCalled, xPosted, xPostId },
+      {
+        imageUploadSucceeded, xApiCalled, xPostApiCalled, xPosted, xPostId,
+        retryCount: payloadError?.retryCount ?? null,
+        firstLength: payloadError?.firstLength ?? null,
+        retryLength: payloadError?.retryLength ?? null,
+        lengthFailureStage: payloadError?.lengthFailureStage ?? null,
+      },
     );
   }
 }

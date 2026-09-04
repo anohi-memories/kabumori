@@ -1,4 +1,5 @@
 import {
+  MorningGreetingLengthInvalidError,
   generateMorningGreeting,
   selectMorningGreetingTheme,
   type MorningGreetingResult,
@@ -37,16 +38,32 @@ export class MorningGreetingPayloadDryRunError extends Error {
   readonly openAiTextApiCalled: number;
   readonly imageExists: boolean;
   readonly themeMatch: boolean;
+  readonly retryCount: number | null;
+  readonly firstLength: number | null;
+  readonly retryLength: number | null;
+  readonly lengthFailureStage: "first" | "retry" | null;
 
   constructor(
     message: string,
-    diagnostics: { openAiTextApiCalled: number; imageExists: boolean; themeMatch: boolean },
+    diagnostics: {
+      openAiTextApiCalled: number;
+      imageExists: boolean;
+      themeMatch: boolean;
+      retryCount?: number | null;
+      firstLength?: number | null;
+      retryLength?: number | null;
+      lengthFailureStage?: "first" | "retry" | null;
+    },
   ) {
     super(message);
     this.name = "MorningGreetingPayloadDryRunError";
     this.openAiTextApiCalled = diagnostics.openAiTextApiCalled;
     this.imageExists = diagnostics.imageExists;
     this.themeMatch = diagnostics.themeMatch;
+    this.retryCount = diagnostics.retryCount ?? null;
+    this.firstLength = diagnostics.firstLength ?? null;
+    this.retryLength = diagnostics.retryLength ?? null;
+    this.lengthFailureStage = diagnostics.lengthFailureStage ?? null;
   }
 }
 
@@ -161,9 +178,18 @@ export async function runMorningGreetingPayloadDryRun(args: {
       },
     };
   } catch (error) {
+    const lengthError = error instanceof MorningGreetingLengthInvalidError ? error : null;
     throw new MorningGreetingPayloadDryRunError(
       error instanceof Error ? error.message : String(error),
-      { openAiTextApiCalled, imageExists, themeMatch },
+      {
+        openAiTextApiCalled,
+        imageExists,
+        themeMatch,
+        retryCount: lengthError?.retryCount ?? null,
+        firstLength: lengthError?.firstLength ?? null,
+        retryLength: lengthError?.retryLength ?? null,
+        lengthFailureStage: lengthError?.stage ?? null,
+      },
     );
   }
 }
