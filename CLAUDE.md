@@ -8,3 +8,5 @@
 ルールが競合する場合は `PROJECT_RULES.md` を優先する。`HANDOFF.md` がまだ存在しない場合は、その旨を共有し、引き継ぎが必要な作業では `HANDOFF_TEMPLATE.md` を基に作成する。
 
 `CLAUDE.md` 自体には詳細な運用ルールを重複させず、Claude向けの入口として保つ。
+
+GitHub共有タスク運用は `.agent/ORCHESTRATION.md` を参照する。競合時は `PROJECT_RULES.md` を優先する。
