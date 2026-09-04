@@ -297,6 +297,62 @@ test("7: a document with no extractable company name stays unconfirmed (fail-clo
   assert.equal(identity.primarySourceName, null);
 });
 
+// --- company_identity: no generic 商事/物産 stripping, only a companyCode-keyed alias -----------------
+
+test("8: ABC商事 and ABC as an unrelated, differently-coded company are not conflated (no generic 商事 strip)", () => {
+  const identity = companyIdentityEvidence(candidate({
+    sourceType: "tdnet",
+    sourceName: "tdnet",
+    sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
+    companyName: "ABC",
+    companyCode: "99010",
+    entityKey: "company:99010",
+    bodySummary: "会社名 ABC商事株式会社\n代表者名 代表取締役",
+  }));
+  assert.equal(identity.sameCompanyConfirmed, false);
+});
+
+test("9: ABC物産 and ABC as an unrelated, differently-coded company are not conflated (no generic 物産 strip)", () => {
+  const identity = companyIdentityEvidence(candidate({
+    sourceType: "tdnet",
+    sourceName: "tdnet",
+    sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
+    companyName: "ABC",
+    companyCode: "99020",
+    entityKey: "company:99020",
+    bodySummary: "会社名 ABC物産株式会社\n代表者名 代表取締役",
+  }));
+  assert.equal(identity.sameCompanyConfirmed, false);
+});
+
+test("the 伊藤忠 alias is scoped to companyCode 80010 and never applies to a different code sharing the same short name", () => {
+  const identity = companyIdentityEvidence(candidate({
+    sourceType: "tdnet",
+    sourceName: "tdnet",
+    sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
+    companyName: "伊藤忠",
+    companyCode: "12340", // a different, unrelated company that happens to share the DB short name
+    entityKey: "company:12340",
+    bodySummary: "（１）公開買付者の名称及び所在地\n伊藤忠商事株式会社 大阪市北区梅田３丁目１番３号",
+  }));
+  assert.equal(identity.sameCompanyConfirmed, false);
+});
+
+test("10: 伊藤忠 (companyCode 80010) is confirmed via the explicit alias, not a generic linguistic rule", () => {
+  const identity = companyIdentityEvidence(candidate({
+    sourceType: "tdnet",
+    sourceName: "tdnet",
+    sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
+    companyName: "伊藤忠",
+    companyCode: "80010",
+    entityKey: "company:80010",
+    bodySummary: "自己株式の公開買付けの結果並びに市場買付の開始に関するお知らせ\n" +
+      "１．買付け等の概要\n（１）公開買付者の名称及び所在地\n伊藤忠商事株式会社 大阪市北区梅田３丁目１番３号",
+  }));
+  assert.equal(identity.sameCompanyConfirmed, true);
+  assert.equal(identity.primarySourceName, "伊藤忠商事株式会社");
+});
+
 test("Fact instructions receive only verified company identity evidence", async () => {
   const target = candidate({
     sourceType: "tdnet",

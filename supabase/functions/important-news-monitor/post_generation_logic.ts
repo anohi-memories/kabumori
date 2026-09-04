@@ -198,21 +198,24 @@ function primarySourceCompanyNameCandidates(bodySummary: string | null): string[
   return [...new Set(candidates)];
 }
 
-// A small, explicit allowlist of generic Japanese trading-company business-type words that function
-// like a legal-entity suffix for historically zaibatsu-lineage names (e.g. 伊藤忠商事 vs. the company's
-// common short form 伊藤忠) and do not indicate a distinct entity. Unlike ホールディングス／グループ／HD —
-// which almost always DO name a legally distinct (holding) company — these are deliberately never
-// added here, so an unrelated but similarly-prefixed company is never conflated by this stripping.
-const GENERIC_TRADING_COMPANY_WORDS = /商事|物産/gu;
-
 function normalizedCompanyIdentity(value: string, stripTdnetMarketPrefix: boolean): string {
   let normalized = value.normalize("NFKC").trim().toLowerCase();
   if (stripTdnetMarketPrefix) normalized = normalized.replace(/^[gps]-/u, "");
   return normalized
     .replace(/株式会社|有限会社|合同会社|合資会社|合名会社|\(株\)|（株）/gu, "")
-    .replace(GENERIC_TRADING_COMPANY_WORDS, "")
     .replace(/[\s・･._・\-]/gu, "");
 }
+
+// A small, hand-curated, companyCode-keyed allowlist of "the DB's short display name is a verified
+// abbreviation of this specific full legal name" pairs (e.g. 伊藤忠 for TSE 8001 伊藤忠商事株式会社).
+// This intentionally replaces a earlier generic "商事/物産 are never entity-distinguishing" stripping
+// rule: a rule applied to every company's name risked a false positive whenever some OTHER, unrelated
+// company's own name happened to end the same way. Keying by companyCode instead means an alias can
+// only ever apply to the one specific company it was added for — never to a different company that
+// happens to share a name fragment — and each entry here must be added and reviewed individually.
+const KNOWN_COMPANY_NAME_ALIASES: Readonly<Record<string, string>> = {
+  "80010": "伊藤忠商事", // TSE 8001 伊藤忠商事株式会社 — DB short display name is "伊藤忠"
+};
 
 export function companyIdentityEvidence(candidate: GenerationCandidate): CompanyIdentityEvidence {
   const candidateNames = primarySourceCompanyNameCandidates(candidate.bodySummary);
@@ -230,10 +233,20 @@ export function companyIdentityEvidence(candidate: GenerationCandidate): Company
   const identitySignalsVerified = trustedTdnetSource &&
     companyCode !== null && /^[0-9a-z]{4,5}$/iu.test(companyCode) &&
     candidate.entityKey === `company:${companyCode.toLowerCase()}`;
-  const matchedName = metadataName !== null
+  // The alias map is only ever consulted once identitySignalsVerified has already confirmed companyCode
+  // is well-formed and matches entityKey — so a lookup can never be keyed by an unverified/spoofed code.
+  const aliasName = identitySignalsVerified && companyCode !== null
+    ? KNOWN_COMPANY_NAME_ALIASES[companyCode] ?? null
+    : null;
+  const acceptableMetadataNames = [metadataName, aliasName].filter(
+    (value): value is string => value !== null,
+  );
+  const matchedName = acceptableMetadataNames.length > 0
     ? candidateNames.find((name) =>
-      normalizedCompanyIdentity(metadataName, true) === normalizedCompanyIdentity(name, false) &&
-      normalizedCompanyIdentity(name, false).length >= 2
+      acceptableMetadataNames.some((accepted) =>
+        normalizedCompanyIdentity(accepted, true) === normalizedCompanyIdentity(name, false) &&
+        normalizedCompanyIdentity(name, false).length >= 2
+      )
     ) ?? null
     : null;
   return {
