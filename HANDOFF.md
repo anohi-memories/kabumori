@@ -519,3 +519,47 @@ order by slot_no;
 - local：devサーバー起動、エラー無し確認
 - **本番DB・本番値の変更は一切行っていない**
 - `20260901044548`・`20260904010000`の2件が本番未適用のままである点は、今回のスコープ外だが重要な既知の問題として記録。特に`20260904010000`が未適用だと、既存の「重要ニュース候補」ページ（`/important-news`）のクエリが本番で失敗している可能性がある。担当者への確認を推奨。
+
+---
+
+## 追記8: 2026-09-04 22:43頃 本番tip OFF操作でServer Error（緊急修正）
+
+### 何が起きたか
+
+ユーザーが本番管理画面で「株の小ネタ」をOFFにしようとしたところ、iPhone Safariで `A server error occurred` （error ID `2772002555@E352`）。操作後にDBを直接確認したところ`posting_windows`の`tip`3行は`is_active=true`のまま変わっておらず、UPDATEが実行されていなかった。
+
+### 真の原因
+
+`apps/admin/src/lib/actions/system-toggle.ts`は`"use server"`ファイルだが、`export const SYSTEM_TOGGLE_KEYS = [...] as const;`という**非関数の値**をexportしていた。Next.jsの制約で、`"use server"`ファイルはasync関数（と型のみ）しかexportできない。本番ビルドでこのモジュールが実際に評価される際（＝サーバーアクションが呼ばれた瞬間）に、
+
+```
+Error: A "use server" file can only export async functions, found object.
+digest: '2772002555@E352'
+```
+
+でモジュール評価自体が失敗し、`setSystemEnabled()`の中身が一切実行される前に500エラーになっていた。これは`tip`固有の問題ではなく、**この日追加した全てのON/OFFトグル（重要ニュース監視・朝刊・大引け・米国プレマーケット・useful_tip・朝の挨拶・tip・interaction）が同様に本番で機能していなかった**ことを意味する。
+
+Vercel本番ログ（`vercel logs --environment production --status-code 500 --since 6h`）でdigestが完全一致する例外を確認し特定した。
+
+### なぜlocal lint/buildで検出できなかったか
+
+この「use serverファイルのexport形状チェック」はNext.js/Turbopackの**モジュール評価時（実行時）のチェック**であり、`next build`のコンパイル・型チェック段階では検出されない。また、ローカルではログイン済みセッションが無く実際にサーバーアクションを呼び出すテストができなかったため（本セッションは管理者パスワードを扱わない方針のため）、本番で実際にクリックされるまで発覚しなかった。
+
+### 修正内容
+
+`SYSTEM_TOGGLE_KEYS`の`export`キーワードを削除しただけ（1行）。この配列は同ファイル内の`isToggleKey()`とtype導出でのみ使われており、他のファイルからは参照されていなかった（外部からは既に`export type SystemToggleKey`という型のみを参照）。
+
+### 修正ファイル
+
+- [`apps/admin/src/lib/actions/system-toggle.ts`](apps/admin/src/lib/actions/system-toggle.ts)
+
+### DB/RLS変更なしの確認
+
+一切変更していない。`posting_windows`の`tip`3行も、修正前後を通じて私からは一切書き込んでいない（ユーザー報告の通り3行とも`is_active=true`のまま）。
+
+### テスト
+
+- `npm run lint`：成功
+- `npm run build`：成功（このエラーはbuildでは検出されない性質のため、build成功は今回の修正の直接的な証明にはならない点に注意）
+- Vercel自動デプロイ：成功（`Ready`確認、production alias 200応答確認）
+- **実際のtip OFF操作の再テストはユーザー本人にお願いします**（ログインが必要なため）
