@@ -7,6 +7,13 @@ on:
         description: "JST date (YYYY-MM-DD); blank uses today's JST date"
         required: false
         type: string
+  schedule:
+    # 20:30 UTC = 05:30 JST the following day (JST = UTC+9), well ahead of the ~06:30-07:00 JST morning
+    # greeting post. target_date is intentionally left unset here (see the "Generate and store one image"
+    # step below): the script resolves the JST calendar date at the moment it actually runs
+    # (resolveJstDate() in scripts/morning-greeting-image.ts), not the UTC date GitHub's scheduler used to
+    # fire the job — so this always targets the correct JST day regardless of that UTC/JST offset.
+    - cron: "30 20 * * *"
 
 permissions:
   contents: read

@@ -241,17 +241,52 @@ test("default date uses Asia Tokyo calendar date", () => {
   assert.equal(resolveJstDate(new Date("2026-08-31T23:30:00Z")), "2026-09-01");
 });
 
-test("workflow is manual-only and injects only the required secrets", async () => {
+// The scheduled trigger fires at 20:30 UTC, which is 05:30 JST *the following calendar day* — this is
+// the exact case the daily schedule depends on: resolveJstDate() must land on that following JST date,
+// not the UTC date the cron fired on, or every scheduled run would generate the wrong day's image.
+test("20:30 UTC (the scheduled trigger time) resolves to 05:30 JST the next day", () => {
+  assert.equal(resolveJstDate(new Date("2026-09-05T20:30:00Z")), "2026-09-06");
+});
+
+test("a JST date just before midnight and just after are on opposite sides of the UTC/JST boundary", () => {
+  // 2026-09-05T14:59:59Z = 2026-09-05T23:59:59+09:00 (still 9/5 JST)
+  assert.equal(resolveJstDate(new Date("2026-09-05T14:59:59Z")), "2026-09-05");
+  // 2026-09-05T15:00:00Z = 2026-09-06T00:00:00+09:00 (now 9/6 JST)
+  assert.equal(resolveJstDate(new Date("2026-09-05T15:00:00Z")), "2026-09-06");
+});
+
+test("workflow keeps workflow_dispatch (with target_date) and adds a daily 20:30 UTC schedule, injecting only the required secrets", async () => {
   const workflow = await readFile(
     new URL("../.github/workflows/morning-greeting-image.yml", import.meta.url),
     "utf8",
   );
+  // workflow_dispatch must still exist, unchanged, with its target_date input intact.
   assert.match(workflow, /workflow_dispatch:/u);
-  assert.doesNotMatch(workflow, /^\s*schedule:/mu);
+  assert.match(workflow, /target_date:/u);
+  assert.match(workflow, /MORNING_GREETING_DATE: \$\{\{ inputs\.target_date \}\}/u);
+  // schedule must now exist, at exactly 20:30 UTC daily (05:30 JST the next day).
+  assert.match(workflow, /^\s*schedule:/mu);
+  assert.match(workflow, /cron:\s*"30 20 \* \* \*"/u);
   assert.match(workflow, /OPENAI_API_KEY: \$\{\{ secrets\.OPENAI_API_KEY \}\}/u);
   assert.match(workflow, /SUPABASE_URL: \$\{\{ secrets\.SUPABASE_URL \}\}/u);
   assert.match(workflow, /SUPABASE_SERVICE_ROLE_KEY: \$\{\{ secrets\.SUPABASE_SERVICE_ROLE_KEY \}\}/u);
   assert.match(workflow, /timeout-minutes: 30/u);
   assert.match(workflow, /node --experimental-strip-types scripts\/morning-greeting-image\.ts/u);
   assert.doesNotMatch(workflow, /X_API|scheduled_posts|dispatcher/u);
+});
+
+test("an empty target_date input (as GitHub Actions passes for a schedule-triggered run) falls back to resolveJstDate, not a literal empty date", async () => {
+  const calls: string[] = [];
+  const result = await runMorningGreetingImageWorkflow({
+    supabaseUrl: SUPABASE_URL,
+    serviceRoleKey: "service-role-test",
+    openAiApiKey: "openai-test",
+    date: "",
+    fetchImpl: async (input) => {
+      calls.push(String(input));
+      return new Response(new Uint8Array([137]), { status: 200 });
+    },
+  });
+  assert.equal(result.skipped, true);
+  assert.ok(calls[0].includes(`generated/${resolveJstDate()}.png`));
 });
