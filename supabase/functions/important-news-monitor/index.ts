@@ -14,6 +14,7 @@ import {
   type ImportantNewsCandidateGroup,
 } from "./important_news_grouping_logic.ts";
 import {
+  MAX_MARKET_MACRO_CANDIDATES_PER_FETCH,
   planImportantNewsCandidateBatch,
   planImportantNewsFetchGroups,
 } from "./fetch_resource_limit_logic.ts";
@@ -29,6 +30,11 @@ import {
   type CompanyIrSource,
   type NewsSourceProvider,
 } from "./official_source_fetchers.ts";
+import {
+  fetchMarketMacroSource,
+  MARKET_MACRO_ALLOWED_DOMAINS,
+  MARKET_MACRO_SOURCES,
+} from "./market_macro_source_fetchers.ts";
 import {
   judgeCandidateWithEscalation,
   requestImportantNewsJudgement,
@@ -61,6 +67,7 @@ const UNPDF_EDGE_TEST_URL = "https://www.release.tdnet.info/inbs/140120260828528
 const SOURCE_POLICY: Record<string, { type: ImportantNewsSourceType; priority: 1; domains?: string[] }> = {
   tdnet: { type: "tdnet", priority: 1, domains: ["tdnet.info"] },
   company_ir: { type: "company_ir", priority: 1 },
+  market_macro: { type: "market_macro", priority: 1, domains: MARKET_MACRO_ALLOWED_DOMAINS },
 };
 
 const BLOCKED_SOURCE_DOMAINS = [
@@ -1145,6 +1152,39 @@ Deno.serve(async (req) => {
         }
       }
     }
+
+    // market_macro lane: fetched, batch-capped, and inserted entirely independently of the corporate
+    // (tdnet/company_ir) lane above — it never shares MAX_CANDIDATES_PER_REQUEST's 100-candidate budget,
+    // so a heavy TDnet day can never starve it out. No grouping/PDF-enrichment step: macro categories are
+    // never earnings/M&A/buyback bundles (see importantNewsEventFamily), and RSS descriptions already
+    // serve as body_summary, so there is nothing for planImportantNewsFetchGroups' PDF quota to bound.
+    const marketMacroResults: CandidateResult[] = [];
+    let marketMacroDuplicateCount = 0;
+    let marketMacroNewCandidateCount = 0;
+    let marketMacroFetchedCount = 0;
+    if (body.fetchSources === true) {
+      const marketMacroProviders: NewsSourceProvider[] = MARKET_MACRO_SOURCES.map((source) => ({
+        key: `market_macro:${source.key}`,
+        fetchCandidates: () => fetchMarketMacroSource(source),
+      }));
+      const collectedMacro = await runNewsSourceProviders(marketMacroProviders);
+      sourceErrors.push(...collectedMacro.errors);
+      marketMacroFetchedCount = collectedMacro.candidates.length;
+      const marketMacroBatch = planImportantNewsCandidateBatch(
+        collectedMacro.candidates,
+        MAX_MARKET_MACRO_CANDIDATES_PER_FETCH,
+      );
+      for (const value of marketMacroBatch.selectedCandidates) {
+        const candidate = parseIncoming(value);
+        const prepared = await prepareNewsCandidate(candidate);
+        const duplicate = await findStoredDuplicate(supabaseUrl, serviceRoleKey, prepared);
+        const saved = await insertCandidate(supabaseUrl, serviceRoleKey, prepared, duplicate?.id ?? null);
+        marketMacroResults.push(saved);
+        if (saved.status === "duplicate") marketMacroDuplicateCount += 1;
+        else marketMacroNewCandidateCount += 1;
+      }
+    }
+
     const allCandidates: unknown[] = [...suppliedCandidates, ...acquiredCandidates];
     const candidateBatch = planImportantNewsCandidateBatch(allCandidates, MAX_CANDIDATES_PER_REQUEST);
     let duplicateCount = 0;
@@ -1230,9 +1270,9 @@ Deno.serve(async (req) => {
     }
     await updateRun(supabaseUrl, serviceRoleKey, runId, {
       status: "completed",
-      fetched_count: allCandidates.length,
-      duplicate_count: duplicateCount,
-      new_candidate_count: newCandidateCount,
+      fetched_count: allCandidates.length + marketMacroFetchedCount,
+      duplicate_count: duplicateCount + marketMacroDuplicateCount,
+      new_candidate_count: newCandidateCount + marketMacroNewCandidateCount,
       completed_at: new Date().toISOString(),
       error: sourceErrors.length ? sourceErrors.join(" | ").slice(0, 2000) : null,
     });
@@ -1248,6 +1288,12 @@ Deno.serve(async (req) => {
         fetchedCandidateCount: candidateBatch.fetchedCandidateCount,
         lightweightProcessedCount: candidateBatch.lightweightProcessedCount,
         deferredCandidateCount: candidateBatch.deferredCandidateCount,
+      },
+      marketMacro: {
+        fetchedCount: marketMacroFetchedCount,
+        duplicateCount: marketMacroDuplicateCount,
+        newCandidateCount: marketMacroNewCandidateCount,
+        results: marketMacroResults,
       },
       staleRunsReconciled: runStart.reconciliation.reconciledCount,
       staleRunReconciliationError: runStart.reconciliation.error,

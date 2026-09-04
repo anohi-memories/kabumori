@@ -4,6 +4,12 @@ export const MAX_IMPORTANT_NEWS_FETCH_GROUPS = 3;
 export const MAX_IMPORTANT_NEWS_PDF_ENRICHMENTS = 3;
 export const MAX_IMPORTANT_NEWS_LIGHTWEIGHT_CANDIDATES = 100;
 
+// market_macro has its own quota, deliberately separate from the corporate (TDnet/company_ir) lane's
+// MAX_IMPORTANT_NEWS_LIGHTWEIGHT_CANDIDATES cap above — a busy corporate-disclosure day must never
+// starve macro/geopolitical candidates out of a shared budget. See planImportantNewsCandidateBatch,
+// which both lanes call independently with their own max.
+export const MAX_MARKET_MACRO_CANDIDATES_PER_FETCH = 30;
+
 export type ImportantNewsCandidateBatchPlan<T> = {
   selectedCandidates: T[];
   deferredCandidates: T[];

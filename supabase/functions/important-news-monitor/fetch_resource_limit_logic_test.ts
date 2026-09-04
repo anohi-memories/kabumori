@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { groupImportantNewsCandidates } from "./important_news_grouping_logic.ts";
 import {
   MAX_IMPORTANT_NEWS_LIGHTWEIGHT_CANDIDATES,
   MAX_IMPORTANT_NEWS_FETCH_GROUPS,
   MAX_IMPORTANT_NEWS_PDF_ENRICHMENTS,
+  MAX_MARKET_MACRO_CANDIDATES_PER_FETCH,
   planImportantNewsCandidateBatch,
   planImportantNewsFetchGroups,
 } from "./fetch_resource_limit_logic.ts";
@@ -127,10 +129,46 @@ test("already enriched candidates do not consume the PDF budget", async () => {
   assert.equal(plan.selectedPdfCount, 0);
 });
 
+// market_macro P0: the lane must have its own quota, entirely independent of the corporate
+// (TDnet/company_ir) lane's MAX_IMPORTANT_NEWS_LIGHTWEIGHT_CANDIDATES=100 budget — a busy corporate
+// disclosure day must never starve macro candidates out. Both lanes call planImportantNewsCandidateBatch
+// separately (see index.ts), so this is true by construction; these tests pin that down as a regression
+// guard against a future change that folds the two into one shared array/cap.
+test("2: market_macro has its own quota, distinct from the corporate lane's 100-candidate cap", () => {
+  assert.notEqual(MAX_MARKET_MACRO_CANDIDATES_PER_FETCH, MAX_IMPORTANT_NEWS_LIGHTWEIGHT_CANDIDATES);
+  assert.ok(MAX_MARKET_MACRO_CANDIDATES_PER_FETCH > 0);
+});
+
+test("3: a full (150-candidate) corporate lane does not reduce the market_macro batch size", () => {
+  const corporateCandidates = Array.from({ length: 150 }, (_, index) => ({ id: `corp-${index}` }));
+  const macroCandidates = Array.from(
+    { length: MAX_MARKET_MACRO_CANDIDATES_PER_FETCH + 20 },
+    (_, index) => ({ id: `macro-${index}` }),
+  );
+  const corporateBatch = planImportantNewsCandidateBatch(corporateCandidates, MAX_IMPORTANT_NEWS_LIGHTWEIGHT_CANDIDATES);
+  const macroBatch = planImportantNewsCandidateBatch(macroCandidates, MAX_MARKET_MACRO_CANDIDATES_PER_FETCH);
+  assert.equal(corporateBatch.selectedCandidates.length, MAX_IMPORTANT_NEWS_LIGHTWEIGHT_CANDIDATES);
+  assert.equal(macroBatch.selectedCandidates.length, MAX_MARKET_MACRO_CANDIDATES_PER_FETCH);
+  assert.equal(macroBatch.deferredCandidateCount, 20);
+});
+
 test("invalid fetch limits fail safely", async () => {
   const eventGroups = await groups([input(1)]);
   assert.throws(
     () => planImportantNewsFetchGroups(eventGroups, { maxGroups: 0 }),
     /IMPORTANT_NEWS_FETCH_LIMIT_INVALID/,
   );
+});
+
+test("index.ts wires market_macro through its own batch call, never through acquiredCandidates/MAX_CANDIDATES_PER_REQUEST", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  // The market_macro fetch+batch block must be fully assembled (collectedMacro -> marketMacroBatch)
+  // before allCandidates is built from suppliedCandidates/acquiredCandidates, and must never push into
+  // acquiredCandidates itself — that is what keeps it out of the corporate lane's 100-candidate cap.
+  const macroBatchIndex = source.indexOf("planImportantNewsCandidateBatch(\n        collectedMacro.candidates,\n        MAX_MARKET_MACRO_CANDIDATES_PER_FETCH,");
+  const allCandidatesIndex = source.indexOf("const allCandidates: unknown[] = [...suppliedCandidates, ...acquiredCandidates];");
+  assert.ok(macroBatchIndex >= 0, "expected the market_macro batch call to exist verbatim in index.ts");
+  assert.ok(allCandidatesIndex > macroBatchIndex);
+  assert.ok(!/acquiredCandidates\.push\(\.\.\.collectedMacro/.test(source));
+  assert.ok(!source.includes("collectedMacro.candidates, MAX_CANDIDATES_PER_REQUEST"));
 });

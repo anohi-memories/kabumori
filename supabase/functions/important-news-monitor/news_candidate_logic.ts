@@ -19,7 +19,7 @@ export const IMPORTANT_NEWS_STATUSES = [
 export type ImportantNewsCategory = typeof IMPORTANT_NEWS_CATEGORIES[number];
 export type ImportantNewsImportance = typeof IMPORTANT_NEWS_IMPORTANCE[number];
 export type ImportantNewsStatus = typeof IMPORTANT_NEWS_STATUSES[number];
-export type ImportantNewsSourceType = "tdnet" | "company_ir";
+export type ImportantNewsSourceType = "tdnet" | "company_ir" | "market_macro";
 
 export const DEFAULT_IMPORTANT_NEWS_SETTINGS = {
   isActive: false,

@@ -66,6 +66,39 @@ test("most_important candidate remains eligible for generation", async () => {
   assert.equal((result.generatedText?.match(/【(?:重大)?速報】/g) ?? []).length, 1);
 });
 
+// market_macro P0: generation must not require company identity — generationEligibility has no
+// companyCode/companyName check at all, and companyIdentityEvidence must resolve safely (not throw,
+// not falsely confirm) when there is no company to identify.
+test("4: a market_macro candidate with no company identity remains eligible for generation", () => {
+  const target = candidate({
+    sourceType: "market_macro", sourceName: "market_macro",
+    sourceUrl: "https://www.boj.or.jp/about/press/kk260904.pdf",
+    companyName: null, companyCode: null, entityKey: "macro:boj",
+    category: "boj", bodySummary: null,
+    judgementReason: "日銀が金融政策の変更を決定したため",
+  });
+  assert.equal(generationEligibility(target), null);
+  const identity = companyIdentityEvidence(target);
+  assert.equal(identity.sameCompanyConfirmed, false);
+  assert.equal(identity.metadataName, null);
+  assert.equal(identity.companyCode, null);
+});
+
+test("market_macro candidate generates a post without a company name or security code", async () => {
+  const target = candidate({
+    sourceType: "market_macro", sourceName: "market_macro",
+    sourceUrl: "https://www.boj.or.jp/about/press/kk260904.pdf",
+    companyName: null, companyCode: null, entityKey: "macro:boj",
+    category: "boj", bodySummary: null,
+    judgementReason: "日銀が金融政策の変更を決定したため",
+  });
+  const result = await generateImportantNewsPost(target, runner({
+    draft: { text: "日銀は金融政策決定会合で政策変更を決定しました。", sufficient_information: true, notes: [] },
+  }));
+  assert.equal(result.status, "ready_for_publish");
+  assert.match(result.generatedText ?? "", /日銀/);
+});
+
 test("important candidate with model-supplied breaking label is deduplicated", async () => {
   const result = await generateImportantNewsPost(candidate(), runner({
     draft: { text: "【速報】テスト株式会社が通期業績予想を上方修正しました。", sufficient_information: true, notes: [] },

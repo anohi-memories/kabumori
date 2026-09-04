@@ -107,6 +107,66 @@ test("insufficient facts are safely rejected after review", async () => {
   assert.equal(result.status, "rejected");
 });
 
+// market_macro P0: candidates with no company identity at all must still reach judgement, and must be
+// classifiable to all three importance tiers — company identity is a corporate-lane concept, not a
+// prerequisite for judgement itself.
+const marketMacroCandidate: JudgementCandidate = {
+  id: "candidate-macro-1",
+  sourceType: "market_macro",
+  sourceUrl: "https://www.boj.or.jp/about/press/kk260904.pdf",
+  sourceName: "market_macro",
+  title: "日銀金融政策決定会合の結果について",
+  bodySummary: null,
+  companyName: null,
+  companyCode: null,
+  entityKey: "macro:boj",
+  category: "boj",
+  publishedAt: "2026-09-04T07:00:00.000Z",
+};
+
+test("13+14: a market_macro candidate with no company identity reaches judgement without being force-rejected", async () => {
+  const result = await judgeCandidateWithEscalation(
+    marketMacroCandidate,
+    { solEscalationEnabled: true },
+    async () => judgement({ importance: "important", category: "boj", affectedEntities: ["日銀"] }),
+  );
+  assert.equal(result.final.importance, "important");
+  assert.equal(result.status, "ready_for_generation");
+});
+
+test("15: a market_macro candidate can be judged no_post", async () => {
+  const result = await judgeCandidateWithEscalation(
+    marketMacroCandidate,
+    { solEscalationEnabled: true },
+    async () => judgement({ importance: "no_post", category: "boj", japanMarketRelevance: "low" }),
+  );
+  assert.equal(result.final.importance, "no_post");
+  assert.equal(result.status, "rejected");
+});
+
+test("16: a market_macro candidate can be judged important", async () => {
+  const result = await judgeCandidateWithEscalation(
+    marketMacroCandidate,
+    { solEscalationEnabled: true },
+    async () => judgement({ importance: "important", category: "boj" }),
+  );
+  assert.equal(result.final.importance, "important");
+});
+
+test("17: a market_macro candidate can be judged most_important and is escalated to Sol", async () => {
+  const models: string[] = [];
+  const result = await judgeCandidateWithEscalation(
+    marketMacroCandidate,
+    { solEscalationEnabled: true },
+    async (_candidate, model) => {
+      models.push(model);
+      return judgement({ importance: "most_important", category: "boj", model });
+    },
+  );
+  assert.deepEqual(models, ["gpt-5.6-luna", "gpt-5.6-sol"]);
+  assert.equal(result.final.importance, "most_important");
+});
+
 test("structured result validation and DB status mapping accept declared values", () => {
   const parsed = parseModelJudgement({
     importance: "important",

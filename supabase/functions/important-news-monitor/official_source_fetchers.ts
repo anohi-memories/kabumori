@@ -167,7 +167,7 @@ function textContent(value: string): string {
     .replace(/\s+/g, " ").trim();
 }
 
-function tagValue(xml: string, names: string[]): string {
+export function tagValue(xml: string, names: string[]): string {
   for (const name of names) {
     const match = xml.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${name}>`, "i"));
     if (match) return textContent(match[1].replace(/^<!\[CDATA\[|\]\]>$/g, ""));
@@ -175,7 +175,7 @@ function tagValue(xml: string, names: string[]): string {
   return "";
 }
 
-function hrefValue(fragment: string, baseUrl: string): string {
+export function hrefValue(fragment: string, baseUrl: string): string {
   const href = fragment.match(/<a\b[^>]*href=["']([^"']+)["']/i)?.[1] ||
     fragment.match(/<link\b[^>]*href=["']([^"']+)["']/i)?.[1] || tagValue(fragment, ["link"]);
   if (!href) return "";
