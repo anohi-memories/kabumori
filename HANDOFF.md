@@ -244,6 +244,6 @@ service role key・X API secret・OpenAI secret等は未設定（不要）。
 
 ### 残課題
 
-- GitHub連携（上記参照）。完了すれば`main`へのpushで自動デプロイが有効になる。
+- ~~GitHub連携~~ → ユーザーがVercelダッシュボードでGitHubのLogin Connectionを追加し、`anohi-memories/kabumori`をVercel側で接続済み（`vercel git connect`で`already connected`を確認、Root Directoryも`apps/admin`のまま維持されていることを確認）。以後`main`へのpushで自動デプロイされる。過去のcommit（`7bc6620`・`7e0d11e`）は接続前のため自動ビルドは走っておらず、現在の本番エイリアスは手動`vercel --prod`時点のビルドのまま。次に`main`へpushがあった際に自動デプロイが実際に動くか確認するとよい。
 - 独自ドメイン（`admin.kabumori.jp`）は未設定。指示書通り、まずは上記の一時URLでの動作確認を優先し、DNS操作はユーザー確認後に着手する。
 - 実管理者アカウントでのログイン成功確認（Mac・iPhone双方）はユーザー側で実施をお願いします。
