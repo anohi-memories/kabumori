@@ -7,6 +7,7 @@ import {
   generationEligibility,
   generationModelInput,
   hasMatchingRequiredNewsLabel,
+  isRetryableVoiceFailure,
   localFactIssues,
   localVoiceIssues,
   normalizeSecurityCodeForComparison,
@@ -744,7 +745,7 @@ test("12: the Voice prompt defines style-only concerns as non-blocking (warning)
       usage: { input_tokens: 10, output_tokens: 5 },
     }), { status: 200, headers: { "content-type": "application/json" } });
   });
-  assert.match(instructions, /定型的.*ニュース原稿・証券レポート寄りの語感/);
+  assert.match(instructions, /定型的.*ニュース原稿っぽい.*AI要約っぽい.*報道文体が強い.*会話調が弱い/);
   assert.match(instructions, /issuesには具体的に記録した上でpassedをtrueにしてください/);
 });
 
@@ -867,4 +868,219 @@ test("normal generation transitions only after both checks pass", async () => {
   assert.equal(result.status, "ready_for_publish");
   assert.equal(result.inputTokens, 300);
   assert.equal(result.outputTokens, 150);
+});
+
+// ============================================================================================
+// P0.6: voice_retry — classification, single retry, re-verification (STEP 3 test cases 1-8)
+// ============================================================================================
+
+function scriptedRunner(
+  script: Array<{ step: GenerationStep; payload: unknown }>,
+): { runner: GenerationRunner; calls: GenerationStep[] } {
+  const calls: GenerationStep[] = [];
+  let index = 0;
+  const runner: GenerationRunner = async (step) => {
+    calls.push(step);
+    const entry = script[index];
+    if (!entry || entry.step !== step) {
+      throw new Error(`UNEXPECTED_STEP_CALL:${step} (expected ${entry?.step ?? "end of script"})`);
+    }
+    index += 1;
+    return { payload: entry.payload, model: "gpt-5.6-luna", inputTokens: 100, outputTokens: 50, estimatedCost: 0.00008 };
+  };
+  return { runner, calls };
+}
+
+const draftPayload = {
+  text: "米・イラン間の戦闘が継続しています。ホルムズ海峡の船舶運航が低迷しています。エネルギー輸送や原油価格への影響が見込まれます。エネルギー輸送や原油価格への影響が見込まれます。",
+  sufficient_information: true,
+  notes: [],
+};
+
+test("classifier 1: duplicated market-impact sentence is retryable", () => {
+  assert.equal(isRetryableVoiceFailure(["同じ市場影響を2文連続で重ねている"]), true);
+});
+
+test("classifier 2: 'news-manuscript-like / AI-summary-like' alone is treated as an allowed, safe-to-retry tone note (never blocking; the prompt itself keeps Voice passing for this case, see test 12 above)", () => {
+  assert.equal(isRetryableVoiceFailure(["ニュース原稿っぽい"]), true);
+  assert.equal(isRetryableVoiceFailure(["AI要約っぽい"]), true);
+});
+
+test("classifier 3: duplication + news-manuscript tone together is still retryable (tone never blocks an otherwise-retryable set)", () => {
+  assert.equal(isRetryableVoiceFailure(["重複表現がある", "ニュース原稿・AI要約の語感が強い"]), true);
+});
+
+test("classifier 5: unsupported impact / no-source assertion is never retryable", () => {
+  assert.equal(isRetryableVoiceFailure(["元ソースにない断定"]), false);
+  assert.equal(isRetryableVoiceFailure(["根拠のない市場影響"]), false);
+  assert.equal(isRetryableVoiceFailure(["重複表現", "元ソースにない断定"]), false);
+});
+
+test("classifier: numeric/entity/safety/insufficient-information issues are never retryable", () => {
+  assert.equal(isRetryableVoiceFailure(["数字の誤り"]), false);
+  assert.equal(isRetryableVoiceFailure(["企業の取り違え"]), false);
+  assert.equal(isRetryableVoiceFailure(["安全性上の問題"]), false);
+  assert.equal(isRetryableVoiceFailure(["情報不足"]), false);
+  assert.equal(isRetryableVoiceFailure(["unsupported claim"]), false);
+});
+
+test("classifier: an unrecognized issue defaults to not-retryable (safe default, never silently retried)", () => {
+  assert.equal(isRetryableVoiceFailure(["何か未知の指摘"]), false);
+});
+
+test("3: retryable Voice failure triggers exactly one voice_retry, and a passing revision reaches ready_for_publish", async () => {
+  const { runner, calls } = scriptedRunner([
+    { step: "draft", payload: draftPayload },
+    { step: "fact", payload: { passed: true, issues: [] } },
+    { step: "voice", payload: { passed: false, issues: ["重複表現がある", "ニュース原稿っぽい"] } },
+    { step: "voice_retry", payload: { text: "米・イラン間の戦闘が継続し、ホルムズ海峡の船舶運航が低迷しています。エネルギー輸送や原油価格への影響が見込まれます。" } },
+    { step: "fact", payload: { passed: true, issues: [] } },
+    { step: "voice", payload: { passed: true, issues: [] } },
+  ]);
+  const result = await generateImportantNewsPost(candidate({ importance: "most_important" }), runner);
+  assert.deepEqual(calls, ["draft", "fact", "voice", "voice_retry", "fact", "voice"]);
+  assert.equal(result.status, "ready_for_publish");
+  assert.equal(result.voiceRetry.attempted, true);
+  assert.deepEqual(result.voiceRetry.initialVoiceIssues, ["重複表現がある", "ニュース原稿っぽい"]);
+  assert.equal(result.voiceRetry.factStatus, "passed");
+  assert.equal(result.voiceRetry.voiceStatus, "passed");
+  assert.match(result.generatedText ?? "", /エネルギー輸送や原油価格への影響が見込まれます。\n\n出典:/);
+  // the revised text must not contain the duplicated sentence twice
+  const occurrences = (result.generatedText?.match(/エネルギー輸送や原油価格への影響が見込まれます。/g) ?? []).length;
+  assert.equal(occurrences, 1);
+});
+
+test("4: Fact failed is never retried even if the Voice issues look minor", async () => {
+  const { runner, calls } = scriptedRunner([
+    { step: "draft", payload: draftPayload },
+    { step: "fact", payload: { passed: false, issues: ["数字の誤り"] } },
+  ]);
+  const result = await generateImportantNewsPost(candidate(), runner);
+  assert.deepEqual(calls, ["draft", "fact"]);
+  assert.equal(result.status, "generation_failed");
+  assert.equal(result.voiceRetry.attempted, false);
+});
+
+test("5: unsupported-impact Voice failure is never retried", async () => {
+  const { runner, calls } = scriptedRunner([
+    { step: "draft", payload: draftPayload },
+    { step: "fact", payload: { passed: true, issues: [] } },
+    { step: "voice", payload: { passed: false, issues: ["元ソースにない断定"] } },
+  ]);
+  const result = await generateImportantNewsPost(candidate(), runner);
+  assert.deepEqual(calls, ["draft", "fact", "voice"]);
+  assert.equal(result.status, "generation_failed");
+  assert.equal(result.voiceRetry.attempted, false);
+});
+
+test("6: retry succeeds on Voice but Fact fails on the revision -> generation_failed", async () => {
+  const { runner, calls } = scriptedRunner([
+    { step: "draft", payload: draftPayload },
+    { step: "fact", payload: { passed: true, issues: [] } },
+    { step: "voice", payload: { passed: false, issues: ["重複表現がある"] } },
+    { step: "voice_retry", payload: { text: "修正後の本文です。" } },
+    { step: "fact", payload: { passed: false, issues: ["数字の誤り"] } },
+  ]);
+  const result = await generateImportantNewsPost(candidate(), runner);
+  assert.deepEqual(calls, ["draft", "fact", "voice", "voice_retry", "fact"]);
+  assert.equal(result.status, "generation_failed");
+  assert.equal(result.voiceRetry.attempted, true);
+  assert.equal(result.voiceRetry.factStatus, "failed");
+  assert.equal(result.voiceRetry.voiceStatus, null);
+});
+
+test("7: retry's own Voice re-check still fails -> generation_failed", async () => {
+  const { runner, calls } = scriptedRunner([
+    { step: "draft", payload: draftPayload },
+    { step: "fact", payload: { passed: true, issues: [] } },
+    { step: "voice", payload: { passed: false, issues: ["重複表現がある"] } },
+    { step: "voice_retry", payload: { text: "修正後もまだ重複している本文です。修正後もまだ重複している本文です。" } },
+    { step: "fact", payload: { passed: true, issues: [] } },
+    { step: "voice", payload: { passed: false, issues: ["重複表現がまだ残っている"] } },
+  ]);
+  const result = await generateImportantNewsPost(candidate(), runner);
+  assert.deepEqual(calls, ["draft", "fact", "voice", "voice_retry", "fact", "voice"]);
+  assert.equal(result.status, "generation_failed");
+  assert.equal(result.voiceRetry.attempted, true);
+  assert.equal(result.voiceRetry.factStatus, "passed");
+  assert.equal(result.voiceRetry.voiceStatus, "failed");
+});
+
+test("8: a second retry never happens even if the revision is itself flagged retryable again", async () => {
+  const { runner, calls } = scriptedRunner([
+    { step: "draft", payload: draftPayload },
+    { step: "fact", payload: { passed: true, issues: [] } },
+    { step: "voice", payload: { passed: false, issues: ["重複表現がある"] } },
+    { step: "voice_retry", payload: { text: "まだ重複している本文です。まだ重複している本文です。" } },
+    { step: "fact", payload: { passed: true, issues: [] } },
+    { step: "voice", payload: { passed: false, issues: ["重複表現がまだ残っている"] } },
+  ]);
+  const result = await generateImportantNewsPost(candidate(), runner);
+  const voiceRetryCalls = calls.filter((step) => step === "voice_retry");
+  assert.equal(voiceRetryCalls.length, 1);
+  assert.equal(result.status, "generation_failed");
+});
+
+test("a local (pre-AI) UNNATURAL_EXPLANATORY_CLOSING voice issue is also retried once, not just AI-flagged issues", async () => {
+  const { runner, calls } = scriptedRunner([
+    {
+      step: "draft",
+      payload: {
+        text: "テスト株式会社が通期業績予想を上方修正しました。\n\nつまり業績予想の上方修正というニュースです。",
+        sufficient_information: true,
+        notes: [],
+      },
+    },
+    { step: "fact", payload: { passed: true, issues: [] } },
+    { step: "voice_retry", payload: { text: "テスト株式会社が通期業績予想を上方修正しました。" } },
+    { step: "fact", payload: { passed: true, issues: [] } },
+    { step: "voice", payload: { passed: true, issues: [] } },
+  ]);
+  const result = await generateImportantNewsPost(candidate(), runner);
+  assert.deepEqual(calls, ["draft", "fact", "voice_retry", "fact", "voice"]);
+  assert.equal(result.status, "ready_for_publish");
+  assert.deepEqual(result.voiceRetry.initialVoiceIssues, ["UNNATURAL_EXPLANATORY_CLOSING"]);
+});
+
+test("voice_retry step failing outright (runner throws) is caught and safely finishes generation_failed with a retry_error", async () => {
+  const script = scriptedRunner([
+    { step: "draft", payload: draftPayload },
+    { step: "fact", payload: { passed: true, issues: [] } },
+    { step: "voice", payload: { passed: false, issues: ["重複表現がある"] } },
+  ]);
+  const throwingRunner: GenerationRunner = async (step, candidateArg, text, voiceIssues) => {
+    if (step === "voice_retry") throw new Error("NEWS_GENERATION_OPENAI_FAILED:500");
+    return script.runner(step, candidateArg, text, voiceIssues);
+  };
+  const result = await generateImportantNewsPost(candidate(), throwingRunner);
+  assert.equal(result.status, "generation_failed");
+  assert.equal(result.voiceRetry.attempted, true);
+  assert.equal(result.voiceRetry.error, "NEWS_GENERATION_OPENAI_FAILED:500");
+});
+
+test("a non-retryable Voice failure never calls voice_retry at all", async () => {
+  const { runner, calls } = scriptedRunner([
+    { step: "draft", payload: draftPayload },
+    { step: "fact", payload: { passed: true, issues: [] } },
+    { step: "voice", payload: { passed: false, issues: ["元ソースにない断定"] } },
+  ]);
+  await generateImportantNewsPost(candidate(), runner);
+  assert.equal(calls.includes("voice_retry"), false);
+});
+
+test("voice_retry request instructions are narrowly scoped to wording-only fixes and forbid new facts/interpretation", async () => {
+  let instructions = "";
+  let input = "";
+  await requestGenerationStep("test-key", "voice_retry", candidate(), "元の本文です。", async (_url, init) => {
+    const body = JSON.parse(String(init?.body)) as { instructions?: unknown; input?: unknown };
+    instructions = typeof body.instructions === "string" ? body.instructions : "";
+    input = typeof body.input === "string" ? body.input : "";
+    return new Response(JSON.stringify({
+      output: [{ content: [{ type: "output_text", text: JSON.stringify({ text: "修正後の本文です。" }) }] }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  }, ["重複表現がある"]);
+  assert.match(instructions, /事実・数字・固有名詞・意味・出典を一切変えず/);
+  assert.match(instructions, /新しい事実、解釈、市場影響、因果関係を追加しません/);
+  assert.match(input, /"voice_issues":\["重複表現がある"\]/);
 });

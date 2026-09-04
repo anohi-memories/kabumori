@@ -12,7 +12,7 @@ export const IMPORTANT_NEWS_CATEGORIES = [
 export const IMPORTANT_NEWS_IMPORTANCE = ["no_post", "important", "most_important"] as const;
 export const IMPORTANT_NEWS_STATUSES = [
   "fetched", "duplicate", "pending_judgement", "rejected",
-  "ready_for_generation", "ready_for_publish", "generation_failed",
+  "ready_for_generation", "generating", "ready_for_publish", "generation_failed",
   "publishing", "publish_failed", "published", "failed",
 ] as const;
 

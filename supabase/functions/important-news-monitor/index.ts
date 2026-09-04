@@ -52,8 +52,13 @@ import {
   generateImportantNewsPost,
   requestGenerationStep,
   type GenerationCandidate,
+  type GenerationRunner,
   type PostGenerationResult,
 } from "./post_generation_logic.ts";
+import {
+  dispatchGeneration,
+  type GenerationDispatchRepository,
+} from "./generation_dispatch_logic.ts";
 import {
   loadXTokens,
   postToXWithRefresh,
@@ -587,7 +592,21 @@ async function saveCandidateJudgement(
   if (rows.length !== 1) throw new Error("NEWS_JUDGEMENT_CANDIDATE_CHANGED");
 }
 
-function judgementResponse(candidate: JudgementCandidate, judgement: FinalJudgement, dryRun: boolean) {
+// P0.6: immediateGeneration is omitted entirely for dry runs and for no_post candidates (nothing was
+// ever attempted), present with claimed=false when another caller already claimed the row first (a
+// normal, safe race outcome — never an error), and carries the outcome otherwise.
+type ImmediateGenerationOutcome =
+  | { attempted: false }
+  | { attempted: true; claimed: false }
+  | { attempted: true; claimed: true; status: PostGenerationResult["status"]; error: string | null }
+  | { attempted: true; claimed: true; error: string };
+
+function judgementResponse(
+  candidate: JudgementCandidate,
+  judgement: FinalJudgement,
+  dryRun: boolean,
+  immediateGeneration: ImmediateGenerationOutcome = { attempted: false },
+) {
   return {
     candidate,
     luna: judgement.luna,
@@ -602,6 +621,7 @@ function judgementResponse(candidate: JudgementCandidate, judgement: FinalJudgem
     outputTokens: judgement.outputTokens,
     estimatedCost: judgement.estimatedCost,
     databaseUpdated: !dryRun,
+    immediateGeneration,
   };
 }
 
@@ -644,56 +664,103 @@ async function selectCandidatesForGeneration(
   return (await result.json() as StoredGenerationCandidate[]).map(toGenerationCandidate);
 }
 
-async function saveCandidateGeneration(
-  supabaseUrl: string,
-  serviceRoleKey: string,
-  candidateId: string,
-  generated: PostGenerationResult,
-): Promise<void> {
-  const params = new URLSearchParams({ id: `eq.${candidateId}`, status: "eq.ready_for_generation" });
-  const result = await fetch(`${supabaseUrl}/rest/v1/important_news_candidates?${params}`, {
-    method: "PATCH",
-    headers: headers(serviceRoleKey, "return=representation"),
-    body: JSON.stringify({
-      generated_text: generated.generatedText,
-      generation_model: generated.model,
-      generation_input_tokens: generated.inputTokens,
-      generation_output_tokens: generated.outputTokens,
-      generation_estimated_cost_usd: generated.estimatedCost,
-      generation_fact_status: generated.fact.status,
-      generation_fact_issues: generated.fact.issues,
-      generation_voice_status: generated.voice.status,
-      generation_voice_issues: generated.voice.issues,
-      generation_error: generated.stoppedReason,
-      generated_at: new Date().toISOString(),
-      status: generated.status,
-    }),
-  });
-  if (!result.ok) throw new Error("NEWS_GENERATION_SAVE_FAILED");
-  const rows = await result.json() as unknown[];
-  if (rows.length !== 1) throw new Error("NEWS_GENERATION_CANDIDATE_CHANGED");
+// P0.6: candidate must already be claimed (status = 'generating', see claimCandidateForGeneration) before
+// this can succeed — the same atomic-conditional-PATCH pattern the publish flow already uses for
+// 'publishing'. A row is never live in "ready_for_generation" while a generation call is in flight.
+function voiceRetryDiagnosticsPayload(voiceRetry: PostGenerationResult["voiceRetry"]) {
+  return {
+    voice_retry_count: voiceRetry.attempted ? 1 : 0,
+    attempted: voiceRetry.attempted,
+    used_model: voiceRetry.usedModel,
+    initial_voice_issues: voiceRetry.initialVoiceIssues,
+    retry_fact_status: voiceRetry.factStatus,
+    retry_voice_status: voiceRetry.voiceStatus,
+    retry_voice_issues: voiceRetry.voiceIssues,
+    retry_error: voiceRetry.error,
+  };
 }
 
-async function saveGenerationError(
+// P0.6: real DB-backed implementation of GenerationDispatchRepository (generation_dispatch_logic.ts).
+// claim() is a single atomic conditional PATCH (ready_for_generation -> generating), mirroring
+// createPublishRepository's claim() (-> publishing) below — the same proven pattern, applied to
+// generation. The row PostgREST returns already reflects the post-update "generating" status, but the
+// GenerationCandidate handed back has status normalized to "ready_for_generation": that field means
+// "eligible to generate", which generationEligibility() checks — "generating" is only the DB's transient
+// lock value, not something the generation pipeline itself needs to reason about.
+function createGenerationRepository(
   supabaseUrl: string,
   serviceRoleKey: string,
-  candidateId: string,
-  code: string,
-): Promise<void> {
-  const params = new URLSearchParams({ id: `eq.${candidateId}`, status: "eq.ready_for_generation" });
-  const result = await fetch(`${supabaseUrl}/rest/v1/important_news_candidates?${params}`, {
-    method: "PATCH",
-    headers: headers(serviceRoleKey, "return=minimal"),
-    body: JSON.stringify({
-      generation_model: "gpt-5.6-luna",
-      generation_fact_status: "not_run",
-      generation_voice_status: "not_run",
-      generation_error: code,
-      generated_at: new Date().toISOString(),
-      status: "generation_failed",
-    }),
-  });
-  if (!result.ok) throw new Error("NEWS_GENERATION_SAVE_FAILED");
+): GenerationDispatchRepository {
+  return {
+    async claim(candidateId) {
+      const params = new URLSearchParams({
+        id: `eq.${candidateId}`,
+        status: "eq.ready_for_generation",
+        importance: "in.(important,most_important)",
+        select: [
+          "id", "source_type", "source_url", "source_name", "title", "body_summary",
+          "company_name", "company_code", "entity_key", "category", "published_at",
+          "importance", "affected_entities", "japan_market_relevance", "judgement_reason",
+          "fact_check_status", "status",
+        ].join(","),
+      });
+      const result = await fetch(`${supabaseUrl}/rest/v1/important_news_candidates?${params}`, {
+        method: "PATCH",
+        headers: headers(serviceRoleKey, "return=representation"),
+        body: JSON.stringify({ status: "generating" }),
+      });
+      if (!result.ok) throw new Error("NEWS_GENERATION_CLAIM_FAILED");
+      const rows = await result.json() as StoredGenerationCandidate[];
+      if (!rows[0]) return null;
+      return { ...toGenerationCandidate(rows[0]), status: "ready_for_generation" };
+    },
+    async save(candidateId, generated) {
+      const params = new URLSearchParams({ id: `eq.${candidateId}`, status: "eq.generating" });
+      const result = await fetch(`${supabaseUrl}/rest/v1/important_news_candidates?${params}`, {
+        method: "PATCH",
+        headers: headers(serviceRoleKey, "return=representation"),
+        body: JSON.stringify({
+          generated_text: generated.generatedText,
+          generation_model: generated.model,
+          generation_input_tokens: generated.inputTokens,
+          generation_output_tokens: generated.outputTokens,
+          generation_estimated_cost_usd: generated.estimatedCost,
+          generation_fact_status: generated.fact.status,
+          generation_fact_issues: generated.fact.issues,
+          generation_voice_status: generated.voice.status,
+          generation_voice_issues: generated.voice.issues,
+          generation_voice_retry: voiceRetryDiagnosticsPayload(generated.voiceRetry),
+          generation_error: generated.stoppedReason,
+          generated_at: new Date().toISOString(),
+          status: generated.status,
+        }),
+      });
+      if (!result.ok) throw new Error("NEWS_GENERATION_SAVE_FAILED");
+      const rows = await result.json() as unknown[];
+      if (rows.length !== 1) throw new Error("NEWS_GENERATION_CANDIDATE_CHANGED");
+    },
+    async saveError(candidateId, code) {
+      const params = new URLSearchParams({ id: `eq.${candidateId}`, status: "eq.generating" });
+      const result = await fetch(`${supabaseUrl}/rest/v1/important_news_candidates?${params}`, {
+        method: "PATCH",
+        headers: headers(serviceRoleKey, "return=minimal"),
+        body: JSON.stringify({
+          generation_model: "gpt-5.6-luna",
+          generation_fact_status: "not_run",
+          generation_voice_status: "not_run",
+          generation_error: code,
+          generated_at: new Date().toISOString(),
+          status: "generation_failed",
+        }),
+      });
+      if (!result.ok) throw new Error("NEWS_GENERATION_SAVE_FAILED");
+    },
+  };
+}
+
+function generationRunner(openAiApiKey: string): GenerationRunner {
+  return (step, item, text, voiceIssues) =>
+    requestGenerationStep(openAiApiKey, step, item, text, undefined, voiceIssues);
 }
 
 function generationResponse(
@@ -1029,24 +1096,35 @@ Deno.serve(async (req) => {
         return response({ mode: body.mode, processed: 0, databaseUpdated: false, results: [] });
       }
       const generationResults: unknown[] = [];
+      const generationRepository = createGenerationRepository(supabaseUrl, serviceRoleKey);
       for (const candidate of generationCandidates) {
+        if (dryRun) {
+          // Dry run never claims/mutates a real row — it only simulates what generation would produce.
+          try {
+            const generated = await generateImportantNewsPost(
+              candidate,
+              (step, item, text) => requestGenerationStep(openAiApiKey, step, item, text),
+            );
+            generationResults.push(generationResponse(candidate, generated, dryRun));
+          } catch (error) {
+            generationResults.push({ candidateId: candidate.id, error: safeError(error), databaseUpdated: false });
+          }
+          continue;
+        }
         try {
-          const generated = await generateImportantNewsPost(
-            candidate,
-            (step, item, text) => requestGenerationStep(openAiApiKey, step, item, text),
+          if (!candidate.id) throw new Error("NEWS_GENERATION_CANDIDATE_ID_MISSING");
+          const outcome = await dispatchGeneration(
+            candidate.id, generationRepository, generationRunner(openAiApiKey),
           );
-          if (!dryRun) {
-            if (!candidate.id) throw new Error("NEWS_GENERATION_CANDIDATE_ID_MISSING");
-            await saveCandidateGeneration(supabaseUrl, serviceRoleKey, candidate.id, generated);
+          if (!outcome.claimed) {
+            generationResults.push({ candidateId: candidate.id, claimed: false, databaseUpdated: false });
+          } else if ("result" in outcome) {
+            generationResults.push(generationResponse(candidate, outcome.result, dryRun));
+          } else {
+            generationResults.push({ candidateId: candidate.id, error: outcome.error, databaseUpdated: true });
           }
-          generationResults.push(generationResponse(candidate, generated, dryRun));
         } catch (error) {
-          const code = safeError(error);
-          if (!dryRun && candidate.id) {
-            try { await saveGenerationError(supabaseUrl, serviceRoleKey, candidate.id, code); }
-            catch { console.error("Failed to save important news generation error"); }
-          }
-          generationResults.push({ candidateId: candidate.id, error: code, databaseUpdated: false });
+          generationResults.push({ candidateId: candidate.id, error: safeError(error), databaseUpdated: false });
         }
       }
       return response({
@@ -1099,7 +1177,35 @@ Deno.serve(async (req) => {
             if (!candidate.id) throw new Error("NEWS_JUDGEMENT_CANDIDATE_ID_MISSING");
             await saveCandidateJudgement(supabaseUrl, serviceRoleKey, candidate.id, judgement);
           }
-          judgementResults.push(judgementResponse(candidate, judgement, dryRun));
+          // P0.6: fire generation immediately for a candidate that just became ready_for_generation,
+          // instead of waiting for the next generate_ready cron. This is best-effort and isolated in its
+          // own try/catch: any failure here — including a failed claim, which just means the
+          // generate_ready cron (or another concurrent immediate trigger) already has it — is logged and
+          // never turns a successful judgement into a reported failure. dispatchGeneration's own atomic
+          // claim (ready_for_generation -> generating) is what actually prevents double generation when
+          // this and the cron race; nothing here needs its own locking on top of that.
+          let immediateGeneration: ImmediateGenerationOutcome = { attempted: false };
+          if (!dryRun && judgement.status === "ready_for_generation" && candidate.id) {
+            try {
+              const outcome = await dispatchGeneration(
+                candidate.id,
+                createGenerationRepository(supabaseUrl, serviceRoleKey),
+                generationRunner(openAiApiKey),
+              );
+              immediateGeneration = outcome.claimed
+                ? ("result" in outcome
+                  ? { attempted: true, claimed: true, status: outcome.result.status, error: outcome.result.stoppedReason }
+                  : { attempted: true, claimed: true, error: outcome.error })
+                : { attempted: true, claimed: false };
+            } catch (error) {
+              const code = safeError(error);
+              console.error("Immediate important news generation failed; generate_ready cron will retry", {
+                candidateId: candidate.id, code,
+              });
+              immediateGeneration = { attempted: true, claimed: true, error: code };
+            }
+          }
+          judgementResults.push(judgementResponse(candidate, judgement, dryRun, immediateGeneration));
         } catch (error) {
           const code = safeError(error);
           judgementResults.push({ candidateId: candidate.id ?? null, error: code, databaseUpdated: false });
