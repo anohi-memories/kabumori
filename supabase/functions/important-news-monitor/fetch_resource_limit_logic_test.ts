@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { groupImportantNewsCandidates } from "./important_news_grouping_logic.ts";
 import {
+  MAX_BREAKING_MARKET_CANDIDATES_PER_FETCH,
   MAX_IMPORTANT_NEWS_LIGHTWEIGHT_CANDIDATES,
   MAX_IMPORTANT_NEWS_FETCH_GROUPS,
   MAX_IMPORTANT_NEWS_PDF_ENRICHMENTS,
@@ -158,6 +159,39 @@ test("invalid fetch limits fail safely", async () => {
     () => planImportantNewsFetchGroups(eventGroups, { maxGroups: 0 }),
     /IMPORTANT_NEWS_FETCH_LIMIT_INVALID/,
   );
+});
+
+// breaking_market P0.5: a third independent lane, quota separate from BOTH corporate (100) and
+// market_macro (30) — a busy corporate or official_macro fetch must never starve it out.
+test("4+5: a full corporate lane AND a full market_macro lane do not reduce the breaking_market batch size", () => {
+  const corporateCandidates = Array.from({ length: 150 }, (_, index) => ({ id: `corp-${index}` }));
+  const macroCandidates = Array.from({ length: 60 }, (_, index) => ({ id: `macro-${index}` }));
+  const breakingCandidates = Array.from(
+    { length: MAX_BREAKING_MARKET_CANDIDATES_PER_FETCH + 5 },
+    (_, index) => ({ id: `breaking-${index}` }),
+  );
+  const corporateBatch = planImportantNewsCandidateBatch(corporateCandidates, MAX_IMPORTANT_NEWS_LIGHTWEIGHT_CANDIDATES);
+  const macroBatch = planImportantNewsCandidateBatch(macroCandidates, MAX_MARKET_MACRO_CANDIDATES_PER_FETCH);
+  const breakingBatch = planImportantNewsCandidateBatch(breakingCandidates, MAX_BREAKING_MARKET_CANDIDATES_PER_FETCH);
+  assert.equal(corporateBatch.selectedCandidates.length, MAX_IMPORTANT_NEWS_LIGHTWEIGHT_CANDIDATES);
+  assert.equal(macroBatch.selectedCandidates.length, MAX_MARKET_MACRO_CANDIDATES_PER_FETCH);
+  assert.equal(breakingBatch.selectedCandidates.length, MAX_BREAKING_MARKET_CANDIDATES_PER_FETCH);
+});
+
+test("breaking_market's quota is distinct from both the corporate and market_macro quotas", () => {
+  assert.notEqual(MAX_BREAKING_MARKET_CANDIDATES_PER_FETCH, MAX_IMPORTANT_NEWS_LIGHTWEIGHT_CANDIDATES);
+  assert.notEqual(MAX_BREAKING_MARKET_CANDIDATES_PER_FETCH, MAX_MARKET_MACRO_CANDIDATES_PER_FETCH);
+});
+
+test("index.ts wires breaking_market through its own batch call, never through acquiredCandidates/collectedMacro.candidates", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const breakingBatchIndex = source.indexOf("planImportantNewsCandidateBatch(\n          collectedBreaking.candidates,\n          MAX_BREAKING_MARKET_CANDIDATES_PER_FETCH,");
+  const allCandidatesIndex = source.indexOf("const allCandidates: unknown[] = [...suppliedCandidates, ...acquiredCandidates];");
+  assert.ok(breakingBatchIndex >= 0, "expected the breaking_market batch call to exist verbatim in index.ts");
+  assert.ok(allCandidatesIndex > breakingBatchIndex);
+  assert.ok(!/acquiredCandidates\.push\(\.\.\.collectedBreaking/.test(source));
+  assert.ok(!source.includes("collectedBreaking.candidates, MAX_CANDIDATES_PER_REQUEST"));
+  assert.ok(!source.includes("collectedBreaking.candidates, MAX_MARKET_MACRO_CANDIDATES_PER_FETCH"));
 });
 
 test("index.ts wires market_macro through its own batch call, never through acquiredCandidates/MAX_CANDIDATES_PER_REQUEST", async () => {

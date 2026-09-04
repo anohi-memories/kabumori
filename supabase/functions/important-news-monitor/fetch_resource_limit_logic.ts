@@ -10,6 +10,12 @@ export const MAX_IMPORTANT_NEWS_LIGHTWEIGHT_CANDIDATES = 100;
 // which both lanes call independently with their own max.
 export const MAX_MARKET_MACRO_CANDIDATES_PER_FETCH = 30;
 
+// breaking_market (P0.5) has its own quota too, independent of both lanes above — a busy corporate or
+// official_macro fetch must never starve it out. In practice this rarely binds: each fetch cycle runs at
+// most MAX_BREAKING_MARKET_SEARCHES_PER_FETCH web_search queries (see breaking_market_source_fetchers.ts),
+// each returning at most 3 candidates, so the natural ceiling per cycle is already small.
+export const MAX_BREAKING_MARKET_CANDIDATES_PER_FETCH = 15;
+
 export type ImportantNewsCandidateBatchPlan<T> = {
   selectedCandidates: T[];
   deferredCandidates: T[];

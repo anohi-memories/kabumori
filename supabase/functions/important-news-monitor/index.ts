@@ -14,6 +14,7 @@ import {
   type ImportantNewsCandidateGroup,
 } from "./important_news_grouping_logic.ts";
 import {
+  MAX_BREAKING_MARKET_CANDIDATES_PER_FETCH,
   MAX_MARKET_MACRO_CANDIDATES_PER_FETCH,
   planImportantNewsCandidateBatch,
   planImportantNewsFetchGroups,
@@ -35,6 +36,12 @@ import {
   MARKET_MACRO_ALLOWED_DOMAINS,
   MARKET_MACRO_SOURCES,
 } from "./market_macro_source_fetchers.ts";
+import {
+  BREAKING_MARKET_QUERIES,
+  BREAKING_MARKET_SOURCE_DOMAINS,
+  fetchBreakingMarketQuery,
+  selectBreakingMarketQueriesForCycle,
+} from "./breaking_market_source_fetchers.ts";
 import {
   judgeCandidateWithEscalation,
   requestImportantNewsJudgement,
@@ -68,6 +75,7 @@ const SOURCE_POLICY: Record<string, { type: ImportantNewsSourceType; priority: 1
   tdnet: { type: "tdnet", priority: 1, domains: ["tdnet.info"] },
   company_ir: { type: "company_ir", priority: 1 },
   market_macro: { type: "market_macro", priority: 1, domains: MARKET_MACRO_ALLOWED_DOMAINS },
+  breaking_market: { type: "breaking_market", priority: 1, domains: BREAKING_MARKET_SOURCE_DOMAINS },
 };
 
 const BLOCKED_SOURCE_DOMAINS = [
@@ -1185,6 +1193,48 @@ Deno.serve(async (req) => {
       }
     }
 
+    // breaking_market lane (P0.5): same independence guarantee as market_macro above — its own quota,
+    // its own fetch/dedupe/insert loop, never touching acquiredCandidates/allCandidates. Runs at most
+    // MAX_BREAKING_MARKET_SEARCHES_PER_FETCH web_search queries this cycle (selectBreakingMarketQueriesForCycle
+    // is a pure, deterministic rotation — never more, regardless of how many queries exist in the list).
+    // A missing OPENAI_API_KEY or a per-query failure only disables this lane for the run; it never fails
+    // the corporate/official_macro lanes, which have already completed by this point.
+    const breakingMarketResults: CandidateResult[] = [];
+    let breakingMarketDuplicateCount = 0;
+    let breakingMarketNewCandidateCount = 0;
+    let breakingMarketFetchedCount = 0;
+    let breakingMarketQueriesRun: string[] = [];
+    if (body.fetchSources === true) {
+      const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
+      if (!openAiApiKey) {
+        sourceErrors.push("breaking_market:OPENAI_API_KEY_MISSING");
+      } else {
+        const now = new Date();
+        const selectedQueries = selectBreakingMarketQueriesForCycle(BREAKING_MARKET_QUERIES, now);
+        breakingMarketQueriesRun = selectedQueries.map((query) => query.key);
+        const breakingMarketProviders: NewsSourceProvider[] = selectedQueries.map((query) => ({
+          key: `breaking_market:${query.key}`,
+          fetchCandidates: () => fetchBreakingMarketQuery(openAiApiKey, query, now),
+        }));
+        const collectedBreaking = await runNewsSourceProviders(breakingMarketProviders);
+        sourceErrors.push(...collectedBreaking.errors);
+        breakingMarketFetchedCount = collectedBreaking.candidates.length;
+        const breakingMarketBatch = planImportantNewsCandidateBatch(
+          collectedBreaking.candidates,
+          MAX_BREAKING_MARKET_CANDIDATES_PER_FETCH,
+        );
+        for (const value of breakingMarketBatch.selectedCandidates) {
+          const candidate = parseIncoming(value);
+          const prepared = await prepareNewsCandidate(candidate);
+          const duplicate = await findStoredDuplicate(supabaseUrl, serviceRoleKey, prepared);
+          const saved = await insertCandidate(supabaseUrl, serviceRoleKey, prepared, duplicate?.id ?? null);
+          breakingMarketResults.push(saved);
+          if (saved.status === "duplicate") breakingMarketDuplicateCount += 1;
+          else breakingMarketNewCandidateCount += 1;
+        }
+      }
+    }
+
     const allCandidates: unknown[] = [...suppliedCandidates, ...acquiredCandidates];
     const candidateBatch = planImportantNewsCandidateBatch(allCandidates, MAX_CANDIDATES_PER_REQUEST);
     let duplicateCount = 0;
@@ -1270,9 +1320,9 @@ Deno.serve(async (req) => {
     }
     await updateRun(supabaseUrl, serviceRoleKey, runId, {
       status: "completed",
-      fetched_count: allCandidates.length + marketMacroFetchedCount,
-      duplicate_count: duplicateCount + marketMacroDuplicateCount,
-      new_candidate_count: newCandidateCount + marketMacroNewCandidateCount,
+      fetched_count: allCandidates.length + marketMacroFetchedCount + breakingMarketFetchedCount,
+      duplicate_count: duplicateCount + marketMacroDuplicateCount + breakingMarketDuplicateCount,
+      new_candidate_count: newCandidateCount + marketMacroNewCandidateCount + breakingMarketNewCandidateCount,
       completed_at: new Date().toISOString(),
       error: sourceErrors.length ? sourceErrors.join(" | ").slice(0, 2000) : null,
     });
@@ -1294,6 +1344,13 @@ Deno.serve(async (req) => {
         duplicateCount: marketMacroDuplicateCount,
         newCandidateCount: marketMacroNewCandidateCount,
         results: marketMacroResults,
+      },
+      breakingMarket: {
+        queriesRun: breakingMarketQueriesRun,
+        fetchedCount: breakingMarketFetchedCount,
+        duplicateCount: breakingMarketDuplicateCount,
+        newCandidateCount: breakingMarketNewCandidateCount,
+        results: breakingMarketResults,
       },
       staleRunsReconciled: runStart.reconciliation.reconciledCount,
       staleRunReconciliationError: runStart.reconciliation.error,

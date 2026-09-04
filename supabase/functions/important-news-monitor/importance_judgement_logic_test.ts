@@ -167,6 +167,56 @@ test("17: a market_macro candidate can be judged most_important and is escalated
   assert.equal(result.final.importance, "most_important");
 });
 
+// breaking_market P0.5: same guarantee as market_macro above — no company identity, and it must reach
+// all three importance tiers through the unmodified, shared judgement pipeline.
+const breakingMarketCandidate: JudgementCandidate = {
+  id: "candidate-breaking-1",
+  sourceType: "breaking_market",
+  sourceUrl: "https://www.reuters.com/technology/us-tariffs-china-semiconductor-2026-09-04/",
+  sourceName: "breaking_market",
+  title: "US announces new semiconductor tariffs on China",
+  bodySummary: "The US announced new tariffs targeting semiconductor exports to China.",
+  companyName: null,
+  companyCode: null,
+  entityKey: "breaking:trump_tariff",
+  category: "tariffs",
+  publishedAt: "2026-09-04T10:00:00.000Z",
+};
+
+test("18: a breaking_market candidate can be judged no_post", async () => {
+  const result = await judgeCandidateWithEscalation(
+    breakingMarketCandidate,
+    { solEscalationEnabled: true },
+    async () => judgement({ importance: "no_post", category: "tariffs", japanMarketRelevance: "low" }),
+  );
+  assert.equal(result.final.importance, "no_post");
+  assert.equal(result.status, "rejected");
+});
+
+test("19: a breaking_market candidate can be judged important without company identity", async () => {
+  const result = await judgeCandidateWithEscalation(
+    breakingMarketCandidate,
+    { solEscalationEnabled: true },
+    async () => judgement({ importance: "important", category: "tariffs" }),
+  );
+  assert.equal(result.final.importance, "important");
+  assert.equal(result.status, "ready_for_generation");
+});
+
+test("20: a breaking_market candidate can be judged most_important and is escalated to Sol", async () => {
+  const models: string[] = [];
+  const result = await judgeCandidateWithEscalation(
+    breakingMarketCandidate,
+    { solEscalationEnabled: true },
+    async (_candidate, model) => {
+      models.push(model);
+      return judgement({ importance: "most_important", category: "tariffs", model });
+    },
+  );
+  assert.deepEqual(models, ["gpt-5.6-luna", "gpt-5.6-sol"]);
+  assert.equal(result.final.importance, "most_important");
+});
+
 test("structured result validation and DB status mapping accept declared values", () => {
   const parsed = parseModelJudgement({
     importance: "important",
