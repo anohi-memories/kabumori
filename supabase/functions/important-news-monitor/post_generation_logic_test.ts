@@ -5,6 +5,7 @@ import {
   companyIdentityEvidence,
   generateImportantNewsPost,
   generationEligibility,
+  generationModelInput,
   hasMatchingRequiredNewsLabel,
   localFactIssues,
   localVoiceIssues,
@@ -149,6 +150,7 @@ test("TDnet metadata and primary issuer name are safely confirmed as the same co
     primarySourceName: "BASE 株式会社",
     companyCode: "44770",
     normalizedSecurityCode: "4477",
+    displaySecurityCode: "4477",
     sameCompanyConfirmed: true,
   });
 });
@@ -370,6 +372,11 @@ test("3: a 5-character code NOT ending in 0 is left unchanged (a real, different
   assert.equal(normalizeSecurityCodeForComparison("15571"), "15571");
 });
 
+test("3b: an alphanumeric 5-character code ending in 0 normalizes to its 4-character root", () => {
+  assert.equal(normalizeSecurityCodeForComparison("406A0"), "406A");
+  assert.equal(normalizeSecurityCodeForComparison("406A"), "406A");
+});
+
 test("4: unrelated codes never normalize to the same value", () => {
   assert.notEqual(normalizeSecurityCodeForComparison("37790"), normalizeSecurityCodeForComparison("72790"));
   assert.notEqual(normalizeSecurityCodeForComparison("80010"), normalizeSecurityCodeForComparison("80020"));
@@ -384,6 +391,45 @@ test("5+6: raw companyCode is preserved in company_identity; only normalizedSecu
   }));
   assert.equal(identity.companyCode, "72790");
   assert.equal(identity.normalizedSecurityCode, "7279");
+  assert.equal(identity.displaySecurityCode, "7279");
+});
+
+test("the generation input preserves raw metadata for audit but exposes only the normalized display code on candidate", () => {
+  const target = candidate({ companyCode: "406A0", entityKey: "company:406a0" });
+  const input = generationModelInput(target);
+  assert.equal(target.companyCode, "406A0");
+  assert.equal(input.company_identity.companyCode, "406A0");
+  assert.equal(input.company_identity.normalizedSecurityCode, "406A");
+  assert.equal(input.company_identity.displaySecurityCode, "406A");
+  assert.equal(input.candidate.companyCode, "406A");
+});
+
+test("P-環境のミカタHD is confirmed only through its companyCode-scoped explicit alias", () => {
+  const identity = companyIdentityEvidence(candidate({
+    sourceType: "tdnet",
+    sourceName: "tdnet",
+    sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
+    companyName: "Ｐ－環境のミカタＨＤ",
+    companyCode: "406A0",
+    entityKey: "company:406a0",
+    bodySummary: "各 位\n会 社 名 環境のミカタホールディングス株式会社\n代表者名 代表取締役",
+  }));
+  assert.equal(identity.sameCompanyConfirmed, true);
+  assert.equal(identity.primarySourceName, "環境のミカタホールディングス株式会社");
+  assert.equal(identity.displaySecurityCode, "406A");
+});
+
+test("the P-環境 alias never applies to a different companyCode", () => {
+  const identity = companyIdentityEvidence(candidate({
+    sourceType: "tdnet",
+    sourceName: "tdnet",
+    sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
+    companyName: "Ｐ－環境のミカタＨＤ",
+    companyCode: "99990",
+    entityKey: "company:99990",
+    bodySummary: "各 位\n会 社 名 環境のミカタホールディングス株式会社\n代表者名 代表取締役",
+  }));
+  assert.equal(identity.sameCompanyConfirmed, false);
 });
 
 test("7: J・エスコムHD (companyCode 37790, 4-digit code in body + abbreviated DB name) no longer false-fails identity", () => {
@@ -420,7 +466,7 @@ test("9: ツインバード (already-passing candidate) keeps passing after this
   assert.equal(identity.normalizedSecurityCode, "6897");
 });
 
-test("Fact instructions mention normalizedSecurityCode so a differing digit count alone is not a code error", async () => {
+test("Fact instructions mention normalized/display security codes so a differing digit count alone is not a code error", async () => {
   const target = candidate({
     sourceType: "tdnet", sourceName: "tdnet",
     sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
@@ -428,7 +474,14 @@ test("Fact instructions mention normalizedSecurityCode so a differing digit coun
     bodySummary: "会社名 株式会社ハイレックスコーポレーション",
   });
   let instructions = "";
-  let input: { company_identity?: { normalizedSecurityCode?: unknown; companyCode?: unknown } } = {};
+  let input: {
+    candidate?: { companyCode?: unknown };
+    company_identity?: {
+      normalizedSecurityCode?: unknown;
+      displaySecurityCode?: unknown;
+      companyCode?: unknown;
+    };
+  } = {};
   await requestGenerationStep("test-key", "fact", target, "【速報】本文（7279）", async (_url, init) => {
     const body = JSON.parse(String(init?.body)) as { instructions?: unknown; input?: unknown };
     instructions = typeof body.instructions === "string" ? body.instructions : "";
@@ -440,7 +493,38 @@ test("Fact instructions mention normalizedSecurityCode so a differing digit coun
   });
   assert.equal(input.company_identity?.companyCode, "72790");
   assert.equal(input.company_identity?.normalizedSecurityCode, "7279");
+  assert.equal(input.company_identity?.displaySecurityCode, "7279");
+  assert.equal(input.candidate?.companyCode, "7279");
   assert.match(instructions, /normalizedSecurityCodeを基準にしてください/);
+  assert.match(instructions, /displaySecurityCode/);
+});
+
+test("draft instructions require conclusion-changing forecast facts without forcing every number", async () => {
+  const instructions = await draftInstructions(candidate({
+    title: "2026年7月期 決算説明資料",
+    category: "earnings",
+    bodySummary: "営業利益は業績予想比で上振れしました。",
+    judgementReason: "実績は業績予想を上回った。",
+  }));
+  assert.match(instructions, /予想比の上振れ・下振れ/);
+  assert.match(instructions, /結論となる重要事実/);
+  assert.match(instructions, /すべての数値を詰め込む必要はありません/);
+});
+
+test("draft instructions forbid invented interpretation or causality and allow a short factual ending", async () => {
+  const instructions = await draftInstructions(candidate());
+  assert.match(instructions, /説明、因果、影響、対象を補いません/);
+  assert.match(instructions, /確認できる事実だけを短く伝えて終えて構いません/);
+});
+
+test("Landnet-style unsupported affected-target interpretation fails local Fact", () => {
+  const target = candidate({
+    title: "業績予想の修正に関するお知らせ",
+    bodySummary: "主力の不動産売買事業で売上総利益率が想定を下回りました。",
+    judgementReason: "通期業績予想を下方修正した。",
+  });
+  const text = `【速報】通期業績予想を下方修正しました。不動産売買事業の動きが影響を受ける対象です。\n\n出典: ${target.sourceUrl}`;
+  assert.ok(localFactIssues(target, text).includes("UNSUPPORTED_MARKET_INTERPRETATION"));
 });
 
 test("Fact instructions receive only verified company identity evidence", async () => {
