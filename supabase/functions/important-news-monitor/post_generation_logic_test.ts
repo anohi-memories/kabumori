@@ -8,6 +8,7 @@ import {
   hasMatchingRequiredNewsLabel,
   localFactIssues,
   localVoiceIssues,
+  normalizeSecurityCodeForComparison,
   requestGenerationStep,
   type GenerationCandidate,
   type GenerationRunner,
@@ -147,6 +148,7 @@ test("TDnet metadata and primary issuer name are safely confirmed as the same co
     metadataName: "Ｇ－ＢＡＳＥ",
     primarySourceName: "BASE 株式会社",
     companyCode: "44770",
+    normalizedSecurityCode: "4477",
     sameCompanyConfirmed: true,
   });
 });
@@ -353,6 +355,94 @@ test("10: 伊藤忠 (companyCode 80010) is confirmed via the explicit alias, not
   assert.equal(identity.primarySourceName, "伊藤忠商事株式会社");
 });
 
+// --- companyCode 5-digit/4-digit false positive (Fact) ----------------------------------------------
+
+test("1: a 5-character code ending in 0 normalizes to its 4-character root (37790 -> 3779)", () => {
+  assert.equal(normalizeSecurityCodeForComparison("37790"), "3779");
+});
+
+test("2: a 5-character code ending in 0 normalizes to its 4-character root (72790 -> 7279)", () => {
+  assert.equal(normalizeSecurityCodeForComparison("72790"), "7279");
+});
+
+test("3: a 5-character code NOT ending in 0 is left unchanged (a real, different share class)", () => {
+  assert.equal(normalizeSecurityCodeForComparison("587A4"), "587A4");
+  assert.equal(normalizeSecurityCodeForComparison("15571"), "15571");
+});
+
+test("4: unrelated codes never normalize to the same value", () => {
+  assert.notEqual(normalizeSecurityCodeForComparison("37790"), normalizeSecurityCodeForComparison("72790"));
+  assert.notEqual(normalizeSecurityCodeForComparison("80010"), normalizeSecurityCodeForComparison("80020"));
+});
+
+test("5+6: raw companyCode is preserved in company_identity; only normalizedSecurityCode is the comparison value", () => {
+  const identity = companyIdentityEvidence(candidate({
+    sourceType: "tdnet", sourceName: "tdnet",
+    sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
+    companyName: "ハイレックス", companyCode: "72790", entityKey: "company:72790",
+    bodySummary: "会社名 株式会社ハイレックスコーポレーション",
+  }));
+  assert.equal(identity.companyCode, "72790");
+  assert.equal(identity.normalizedSecurityCode, "7279");
+});
+
+test("7: J・エスコムHD (companyCode 37790, 4-digit code in body + abbreviated DB name) no longer false-fails identity", () => {
+  const identity = companyIdentityEvidence(candidate({
+    sourceType: "tdnet", sourceName: "tdnet",
+    sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
+    companyName: "Ｊ・エスコムＨＤ", companyCode: "37790", entityKey: "company:37790",
+    bodySummary: "各 位\n会 社 名 ｼﾞｪｲ･ｴｽｺﾑﾎｰﾙﾃﾞｨﾝｸﾞｽ株式会社\n代表者名 代表取締役社長 大谷 利興",
+  }));
+  assert.equal(identity.sameCompanyConfirmed, true);
+  assert.equal(identity.normalizedSecurityCode, "3779");
+});
+
+test("8: ハイレックス 決算短信 (companyCode 72790, 上場会社名 header + own registered name) no longer false-fails identity", () => {
+  const identity = companyIdentityEvidence(candidate({
+    sourceType: "tdnet", sourceName: "tdnet",
+    sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
+    companyName: "ハイレックス", companyCode: "72790", entityKey: "company:72790",
+    bodySummary: "2026年９月４日\n上場会社名 株式会社ハイレックスコーポレーション 上場取引所 東\nコード番号 7279 ＵＲＬ https://www.hi-lex.co.jp/",
+  }));
+  assert.equal(identity.sameCompanyConfirmed, true);
+  assert.equal(identity.primarySourceName, "株式会社ハイレックスコーポレーション");
+  assert.equal(identity.normalizedSecurityCode, "7279");
+});
+
+test("9: ツインバード (already-passing candidate) keeps passing after this change", () => {
+  const identity = companyIdentityEvidence(candidate({
+    sourceType: "tdnet", sourceName: "tdnet",
+    sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
+    companyName: "ツインバード", companyCode: "68970", entityKey: "company:68970",
+    bodySummary: "各位\n会 社 名 株式会社ツインバード\n代 表 者 名 代表取締役社長 野水 重明",
+  }));
+  assert.equal(identity.sameCompanyConfirmed, true);
+  assert.equal(identity.normalizedSecurityCode, "6897");
+});
+
+test("Fact instructions mention normalizedSecurityCode so a differing digit count alone is not a code error", async () => {
+  const target = candidate({
+    sourceType: "tdnet", sourceName: "tdnet",
+    sourceUrl: "https://www.release.tdnet.info/inbs/example.pdf",
+    companyName: "ハイレックス", companyCode: "72790", entityKey: "company:72790",
+    bodySummary: "会社名 株式会社ハイレックスコーポレーション",
+  });
+  let instructions = "";
+  let input: { company_identity?: { normalizedSecurityCode?: unknown; companyCode?: unknown } } = {};
+  await requestGenerationStep("test-key", "fact", target, "【速報】本文（7279）", async (_url, init) => {
+    const body = JSON.parse(String(init?.body)) as { instructions?: unknown; input?: unknown };
+    instructions = typeof body.instructions === "string" ? body.instructions : "";
+    input = JSON.parse(String(body.input));
+    return new Response(JSON.stringify({
+      output: [{ content: [{ type: "output_text", text: JSON.stringify({ passed: true, issues: [] }) }] }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  });
+  assert.equal(input.company_identity?.companyCode, "72790");
+  assert.equal(input.company_identity?.normalizedSecurityCode, "7279");
+  assert.match(instructions, /normalizedSecurityCodeを基準にしてください/);
+});
+
 test("Fact instructions receive only verified company identity evidence", async () => {
   const target = candidate({
     sourceType: "tdnet",
@@ -472,7 +562,17 @@ test("natural fact listing is not a local Voice failure", () => {
   assert.deepEqual(localVoiceIssues(text), []);
 });
 
-test("unnecessary related-entities closing fails Voice", async () => {
+test("11: a plain 'the parties involved are X' sentence no longer locally fails Voice (unbanked finding)", () => {
+  // Real production case: "関係するのはｕｎｂａｎｋｅｄと、取引先のアニススタイルです。" previously
+  // hard-failed on this pattern alone even though it's ordinary informational content (who is
+  // involved), not self-referential meta-commentary like "つまり〜というニュースです".
+  assert.deepEqual(
+    localVoiceIssues("【速報】本文です。\n\n関係するのはテスト株式会社と取引先です。\n\n出典: https://example.com/source.pdf"),
+    [],
+  );
+});
+
+test("11: that same sentence now reaches the AI Voice step instead of hard-failing locally beforehand", async () => {
   const result = await generateImportantNewsPost(candidate(), runner({
     draft: {
       text: "テスト株式会社が通期業績予想を上方修正しました。\n\n関係するのはテスト株式会社です。",
@@ -481,8 +581,9 @@ test("unnecessary related-entities closing fails Voice", async () => {
     },
   }));
   assert.equal(result.fact.status, "passed");
-  assert.deepEqual(result.voice.issues, ["UNNATURAL_EXPLANATORY_CLOSING"]);
-  assert.equal(result.status, "generation_failed");
+  // No local pre-check blocks it, so the default (passing) runner voice mock is actually reached.
+  assert.equal(result.voice.status, "passed");
+  assert.equal(result.status, "ready_for_publish");
 });
 
 test("つまりというニュースです closing fails Voice", () => {
@@ -510,7 +611,46 @@ test("Voice instructions accept concise facts and reject explanatory recaps", as
     }), { status: 200, headers: { "content-type": "application/json" } });
   });
   assert.match(instructions, /事実中心・事実列挙であることだけを理由にfailedにしません/);
-  assert.match(instructions, /『関係するのは〜』『つまり〜というニュースです』『〜に関する発表です』/);
+  assert.match(instructions, /『つまり〜というニュースです』『〜に関する発表です』/);
+  assert.match(instructions, /関係するのはAとBです』.*それだけでは不自然な締めに当たりません/);
+});
+
+// --- Voice hard-fail vs. warning separation (STEP 5/6) -----------------------------------------------
+
+test("12: the Voice prompt defines style-only concerns as non-blocking (warning), recorded but not failing", async () => {
+  let instructions = "";
+  await requestGenerationStep("test-key", "voice", candidate(), "【速報】本文", async (_url, init) => {
+    const body = JSON.parse(String(init?.body)) as { instructions?: unknown };
+    instructions = typeof body.instructions === "string" ? body.instructions : "";
+    return new Response(JSON.stringify({
+      output: [{ content: [{ type: "output_text", text: JSON.stringify({ passed: true, issues: [] }) }] }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  });
+  assert.match(instructions, /定型的.*ニュース原稿・証券レポート寄りの語感/);
+  assert.match(instructions, /issuesには具体的に記録した上でpassedをtrueにしてください/);
+});
+
+test("13: the Voice prompt keeps factual-precision wording issues (e.g. 3事業 vs 3BU) as blocking, not a style warning", async () => {
+  let instructions = "";
+  await requestGenerationStep("test-key", "voice", candidate(), "【速報】本文", async (_url, init) => {
+    const body = JSON.parse(String(init?.body)) as { instructions?: unknown };
+    instructions = typeof body.instructions === "string" ? body.instructions : "";
+    return new Response(JSON.stringify({
+      output: [{ content: [{ type: "output_text", text: JSON.stringify({ passed: true, issues: [] }) }] }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  });
+  assert.match(instructions, /事実の精度・区分を損なう指摘.*軽微な指摘として扱わず、passedをfalseにしてください/);
+});
+
+test("14: a Voice check that passes despite noting style-only issues still keeps the issues for observability", async () => {
+  const result = await generateImportantNewsPost(candidate(), runner({
+    voice: { passed: true, issues: ["【速報】が定型的で証券レポート風にやや見えます"] },
+  }));
+  assert.equal(result.voice.status, "passed");
+  assert.deepEqual(result.voice.issues, ["【速報】が定型的で証券レポート風にやや見えます"]);
+  assert.equal(result.status, "ready_for_publish");
 });
 
 test("source_url is appended exactly once at the end", async () => {

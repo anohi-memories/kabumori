@@ -44,6 +44,7 @@ export type CompanyIdentityEvidence = {
   metadataName: string | null;
   primarySourceName: string | null;
   companyCode: string | null;
+  normalizedSecurityCode: string | null;
   sameCompanyConfirmed: boolean;
 };
 
@@ -158,6 +159,14 @@ function extractHeaderCompanyName(normalizedBody: string): string | null {
   return match?.[1]?.trim() || null;
 }
 
+// The 決算短信 body's own cover line uses "上場会社名" instead of "会社名", and — unlike the standalone
+// "会社名" line above — is often followed by "上場取引所 東" on the same line (table-cell boundaries lost
+// during PDF-to-text extraction), so the name must stop there rather than at end-of-line.
+function extractListedCompanyName(normalizedBody: string): string | null {
+  const match = normalizedBody.match(/上場会社名\s+([^\n]+?)(?:\s+上場取引所|\n|$)/u);
+  return match?.[1]?.trim() || null;
+}
+
 // TOB / self-tender notices (e.g. a company buying back its own shares) identify the issuing company
 // under this labeled field instead of the "会社名" header used by kessan-tanshin style documents.
 function extractTobOfferorName(normalizedBody: string): string | null {
@@ -192,6 +201,7 @@ function primarySourceCompanyNameCandidates(bodySummary: string | null): string[
   const normalized = bodySummary.normalize("NFKC");
   const candidates = [
     extractHeaderCompanyName(normalized),
+    extractListedCompanyName(normalized),
     extractTobOfferorName(normalized),
     ...extractAliasedEntityNames(normalized),
   ].filter((value): value is string => typeof value === "string" && value.length > 0);
@@ -206,6 +216,18 @@ function normalizedCompanyIdentity(value: string, stripTdnetMarketPrefix: boolea
     .replace(/[\s・･._・\-]/gu, "");
 }
 
+// A 5-character securities code whose final character is literally "0" denotes the ordinary/common
+// share class of the 4-character root code (TSE's 5-character code-format convention) — the two forms
+// name the exact same listed security, and this is why one次資料 documents and TDnet's own disclosure
+// listing can legitimately disagree on 4 vs. 5 characters for the identical company. A non-zero final
+// character denotes a specific, different share class (e.g. one ETF unit class among several sharing a
+// root code) and must never be treated as equivalent to the root code alone — only an exact "…0" suffix
+// is ever stripped here. This is comparison-only: the raw companyCode value itself is never rewritten.
+export function normalizeSecurityCodeForComparison(code: string): string {
+  const trimmed = code.trim();
+  return /^[0-9a-z]{4}0$/iu.test(trimmed) ? trimmed.slice(0, 4) : trimmed;
+}
+
 // A small, hand-curated, companyCode-keyed allowlist of "the DB's short display name is a verified
 // abbreviation of this specific full legal name" pairs (e.g. 伊藤忠 for TSE 8001 伊藤忠商事株式会社).
 // This intentionally replaces a earlier generic "商事/物産 are never entity-distinguishing" stripping
@@ -215,6 +237,8 @@ function normalizedCompanyIdentity(value: string, stripTdnetMarketPrefix: boolea
 // happens to share a name fragment — and each entry here must be added and reviewed individually.
 const KNOWN_COMPANY_NAME_ALIASES: Readonly<Record<string, string>> = {
   "80010": "伊藤忠商事", // TSE 8001 伊藤忠商事株式会社 — DB short display name is "伊藤忠"
+  "37790": "ジェイ・エスコムホールディングス", // TSE 3779 ジェイ・エスコムホールディングス — DB short display name is "Ｊ・エスコムＨＤ"
+  "72790": "ハイレックスコーポレーション", // TSE 7279 ハイレックスコーポレーション — DB short display name is "ハイレックス"
 };
 
 export function companyIdentityEvidence(candidate: GenerationCandidate): CompanyIdentityEvidence {
@@ -253,6 +277,7 @@ export function companyIdentityEvidence(candidate: GenerationCandidate): Company
     metadataName,
     primarySourceName: matchedName ?? candidateNames[0] ?? null,
     companyCode,
+    normalizedSecurityCode: companyCode !== null ? normalizeSecurityCodeForComparison(companyCode) : null,
     sameCompanyConfirmed: identitySignalsVerified && matchedName !== null,
   };
 }
@@ -289,8 +314,12 @@ export function localFactIssues(candidate: GenerationCandidate, generatedText: s
   return issues;
 }
 
+// Only self-referential meta-commentary about the article itself ("this is basically an announcement
+// about X") is treated as an unnatural closing. A plain "関係するのはAとBです" sentence just names the
+// parties involved — legitimate informational content, not a lazy restatement — so it was removed from
+// this list; a genuinely ambiguous version of that phrasing (unclear roles) is still caught separately
+// by localFactIssues' AMBIGUOUS_ENTITY_RELATIONSHIP check above.
 const UNNATURAL_EXPLANATORY_CLOSINGS = [
-  /^関係するのは.+(?:です|です。)$/u,
   /^(?:つまり|要するに).+(?:というニュース|という発表|に関するニュース)(?:です|です。)$/u,
   /^.+に関する発表です。?$/u,
 ];
@@ -498,15 +527,18 @@ export async function requestGenerationStep(
     "あなたは重要ニュース投稿の厳格なFactチェッカーです。入力候補・AI判定結果と生成文だけを照合し、Web検索や外部知識は使いません。",
     "数値・日付の改変、企業名・証券コード誤り、元情報にない断定、重要条件の欠落、因果や規模の捏造、source_url不整合を検出してください。",
     "入力のcompany_identity.sameCompanyConfirmedがtrueの場合に限り、metadataNameとprimarySourceNameは同一企業の安全に確認済みの表記差です。全角半角、市場表示prefix、法人格の違いだけを会社不一致にしません。falseの場合は名前の類似や部分一致で同一企業と推測せず、従来どおり厳格に判定してください。",
+    "証券コードの一致判定はcompany_identity.normalizedSecurityCodeを基準にしてください。生成文中のコードがnormalizedSecurityCodeと一致すれば、company_identity.companyCode（5桁表記）と桁数が異なっていても証券コード誤り・改変として扱いません。normalizedSecurityCodeとも一致しない場合のみ証券コード誤りです。",
     "柔らかい言い換えは許可しますが、意味や確度が変わっていればfailedです。issuesは短い日本語または識別しやすいコードで返してください。",
   ].join("\n") : [
     ...kabumoriImportantNewsVoice(variationKey),
     "あなたはかぶモリ投稿のVoiceチェッカーです。Factの正否ではなく、重要ニュースとして自然で読みやすく、既存のkabumori_voiceに合っているかを判定してください。",
     "重要ニュースは正確性と簡潔さを優先します。正確な事実を自然な2〜4段落で簡潔に伝えている場合、事実中心・事実列挙であることだけを理由にfailedにしません。",
     "人間らしさのために市場解釈、感想、まとめ、投資判断を追加する必要はありません。それらがないことをfailed理由にしません。",
-    "本文ですでに明らかな内容を『関係するのは〜』『つまり〜というニュースです』『〜に関する発表です』などと説明し直す不自然な締め、定型的な総括、説明のための説明はfailedです。",
+    "本文ですでに明らかな内容を『つまり〜というニュースです』『〜に関する発表です』などと説明し直す不自然な締め、定型的な総括、説明のための説明はfailedです。関係者や対象企業を淡々と述べるだけの一文（例：『関係するのはAとBです』）は、それだけでは不自然な締めに当たりません。",
     "証券会社レポート風、過剰な煽り、売買推奨、定型フック、綺麗すぎるAI文章、架空の経験・保有・感情があればfailedです。",
     "文字数や絵文字数だけを理由にfailedにしません。正確性を損なう書き直し提案は不要です。",
+    "『定型的』『ニュース原稿・証券レポート寄りの語感がやや残る』『締めの言い回しに改善余地がある』『より自然な言い回しがある』といった軽微な指摘は、それだけではpassedをfalseにする理由にしません。issuesには具体的に記録した上でpassedをtrueにしてください。",
+    "ただし、用語や言い換えが事実の精度・区分を損なう指摘（例：正式な単位や事業区分名を不正確な言い換えに変えている）は軽微な指摘として扱わず、passedをfalseにしてください。",
   ].join("\n");
   const response = await fetchImpl(OPENAI_RESPONSES_URL, {
     method: "POST",
