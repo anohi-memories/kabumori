@@ -334,22 +334,69 @@ test("no_post candidate is not generated", async () => {
   assert.equal(result.stoppedReason, "NEWS_NOT_GENERATION_IMPORTANCE");
 });
 
-test("Fact failure never transitions to ready_for_publish", async () => {
+test("2: Fact failure never transitions to ready_for_publish, and the AI's own issues are preserved on the result", async () => {
   const result = await generateImportantNewsPost(candidate(), runner({
     fact: { passed: false, issues: ["元情報にない数値"] },
   }));
   assert.equal(result.fact.status, "failed");
+  assert.deepEqual(result.fact.issues, ["元情報にない数値"]);
   assert.equal(result.voice.status, "not_run");
   assert.equal(result.status, "generation_failed");
 });
 
-test("Voice failure never transitions to ready_for_publish", async () => {
+test("4: Voice failure never transitions to ready_for_publish, and the AI's own issues are preserved on the result", async () => {
   const result = await generateImportantNewsPost(candidate(), runner({
     voice: { passed: false, issues: ["証券会社レポート風"] },
   }));
   assert.equal(result.fact.status, "passed");
+  assert.deepEqual(result.fact.issues, []);
   assert.equal(result.voice.status, "failed");
+  assert.deepEqual(result.voice.issues, ["証券会社レポート風"]);
   assert.equal(result.status, "generation_failed");
+});
+
+test("1+3: Fact/Voice pass preserves an empty issues array (not null/undefined) without changing the outcome", async () => {
+  const result = await generateImportantNewsPost(candidate(), runner());
+  assert.equal(result.fact.status, "passed");
+  assert.deepEqual(result.fact.issues, []);
+  assert.equal(result.voice.status, "passed");
+  assert.deepEqual(result.voice.issues, []);
+  assert.equal(result.status, "ready_for_publish");
+});
+
+test("5: an AI response with several issues keeps every one of them, safely, up to the existing cap", async () => {
+  const manyIssues = ["issue1", "issue2", "issue3"];
+  const result = await generateImportantNewsPost(candidate(), runner({
+    fact: { passed: false, issues: manyIssues },
+  }));
+  assert.deepEqual(result.fact.issues, manyIssues);
+});
+
+test("6: a Fact response missing issues still fails safely, unchanged by this diagnostics addition", async () => {
+  await assert.rejects(
+    () => generateImportantNewsPost(candidate(), runner({ fact: { passed: false } as unknown })),
+    /NEWS_GENERATION_FACT_INVALID_OUTPUT/,
+  );
+});
+
+test("6: a Voice response with a malformed issues field still fails safely, unchanged by this diagnostics addition", async () => {
+  await assert.rejects(
+    () => generateImportantNewsPost(candidate(), runner({ voice: { passed: false, issues: "not-an-array" } as unknown })),
+    /NEWS_GENERATION_VOICE_INVALID_OUTPUT/,
+  );
+});
+
+test("7: differing issues content never changes the ready_for_publish/generation_failed outcome by itself", async () => {
+  const a = await generateImportantNewsPost(candidate(), runner({
+    fact: { passed: false, issues: ["元情報にない数値"] },
+  }));
+  const b = await generateImportantNewsPost(candidate(), runner({
+    fact: { passed: false, issues: ["別の理由", "もうひとつ別の理由"] },
+  }));
+  assert.equal(a.status, "generation_failed");
+  assert.equal(b.status, "generation_failed");
+  assert.equal(a.status, b.status);
+  assert.notDeepEqual(a.fact.issues, b.fact.issues);
 });
 
 test("concise fact-focused breaking news can pass Voice", async () => {
