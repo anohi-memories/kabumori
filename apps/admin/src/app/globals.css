@@ -285,6 +285,47 @@ a { color: inherit; }
 .system-status-details dd { margin: 0; font-size: 0.86rem; font-weight: 700; text-align: right; overflow-wrap: anywhere; }
 .system-status-reason { margin: 13px 0 0; color: var(--pending); font-size: 0.88rem; }
 .system-status-note { margin: 11px 0 0; color: var(--muted); font-size: 0.78rem; }
+.system-status-toggles { display: grid; gap: 10px; margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--border); }
+.toggle-control { display: grid; gap: 6px; }
+.toggle-button {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: white;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+.toggle-button:hover { background: #f7f9f8; }
+.toggle-button:disabled { cursor: wait; opacity: 0.6; }
+.toggle-button-danger { border-color: #e3b6a8; background: var(--failed-bg); color: var(--danger); }
+.toggle-feedback { margin: 0; font-size: 0.82rem; }
+.toggle-feedback-success { color: var(--success); }
+.toggle-feedback-error { color: var(--danger); }
+.toggle-dialog {
+  width: min(92vw, 420px);
+  padding: 22px;
+  border: 0;
+  border-radius: 16px;
+  box-shadow: 0 18px 50px rgba(24, 46, 55, 0.18);
+}
+.toggle-dialog::backdrop { background: rgba(17, 26, 30, 0.45); }
+.toggle-dialog-message { margin: 0; font-size: 1rem; font-weight: 700; line-height: 1.5; }
+.toggle-dialog-warning {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: var(--failed-bg);
+  color: var(--danger);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+.toggle-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.toggle-dialog-actions .secondary-button,
+.toggle-dialog-actions .primary-button { min-height: 46px; padding: 0 18px; }
+.primary-button-danger { background: var(--danger); }
+.primary-button-danger:hover { background: #8f3830; }
 .important-news-card { grid-column: 1 / -1; min-height: 260px; }
 .important-news-list { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
 .important-news-item {
@@ -335,4 +376,8 @@ a { color: inherit; }
   .admin-site-header-inner .secondary-button { width: auto; margin-left: auto; }
   .dashboard-grid { grid-template-columns: 1fr; }
   .dashboard-card { min-height: auto; }
+  .toggle-button { width: 100%; }
+  .toggle-dialog-actions { flex-direction: column-reverse; }
+  .toggle-dialog-actions .secondary-button,
+  .toggle-dialog-actions .primary-button { width: 100%; }
 }

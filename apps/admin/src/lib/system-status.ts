@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { SystemToggleKey } from "@/lib/actions/system-toggle";
 
 export type SystemStatusState = "active" | "inactive" | "unavailable";
 export type SystemStatusTone = "success" | "unknown" | "pending";
@@ -6,6 +7,16 @@ export type SystemStatusTone = "success" | "unknown" | "pending";
 export type SystemStatusDetail = {
   label: string;
   value: string;
+};
+
+export type SystemToggleControl = {
+  key: SystemToggleKey;
+  label: string;
+  enabled: boolean;
+  // "danger" gets an extra warning and a stronger confirmation in the UI —
+  // used for important_news_auto_publish, where turning it on starts real
+  // automatic X posting.
+  kind: "normal" | "danger";
 };
 
 export type SystemStatusItem = {
@@ -17,6 +28,7 @@ export type SystemStatusItem = {
   details: SystemStatusDetail[];
   note: string | null;
   unavailableReason: string | null;
+  toggles: SystemToggleControl[];
 };
 
 export type SystemStatusResult = {
@@ -54,7 +66,11 @@ function buildItem(
   name: string,
   isActive: boolean | null,
   details: SystemStatusDetail[],
-  options?: { note?: string | null; unavailableReason?: string | null },
+  options?: {
+    note?: string | null;
+    unavailableReason?: string | null;
+    toggles?: SystemToggleControl[];
+  },
 ): SystemStatusItem {
   const state: SystemStatusState = options?.unavailableReason
     ? "unavailable"
@@ -71,6 +87,7 @@ function buildItem(
     details: state === "unavailable" ? [] : details,
     note: options?.note ?? null,
     unavailableReason: state === "unavailable" ? (options?.unavailableReason ?? null) : null,
+    toggles: state === "unavailable" ? [] : (options?.toggles ?? []),
   };
 }
 
@@ -102,12 +119,28 @@ async function getImportantNewsStatus(supabase: SupabaseClient): Promise<SystemS
   }
 
   const row = data as ImportantNewsSettingsRow;
-  return buildItem("important_news", "重要ニュース", row.is_active, [
-    { label: "監視間隔", value: `${row.interval_minutes}分` },
-    { label: "X自動投稿", value: onOffLabel(row.auto_publish) },
-    { label: "Luna", value: onOffLabel(row.luna_enabled) },
-    { label: "Sol escalation", value: onOffLabel(row.sol_escalation_enabled) },
-  ]);
+  return buildItem(
+    "important_news",
+    "重要ニュース",
+    row.is_active,
+    [
+      { label: "監視間隔", value: `${row.interval_minutes}分` },
+      { label: "X自動投稿", value: onOffLabel(row.auto_publish) },
+      { label: "Luna", value: onOffLabel(row.luna_enabled) },
+      { label: "Sol escalation", value: onOffLabel(row.sol_escalation_enabled) },
+    ],
+    {
+      toggles: [
+        { key: "important_news_monitor", label: "監視", enabled: row.is_active, kind: "normal" },
+        {
+          key: "important_news_auto_publish",
+          label: "X自動投稿",
+          enabled: row.auto_publish,
+          kind: "danger",
+        },
+      ],
+    },
+  );
 }
 
 type ReportSettingsRow = {
@@ -121,6 +154,7 @@ async function getReportStatus(
   table: "morning_report_settings" | "close_report_settings",
   key: string,
   name: string,
+  toggleKey: Extract<SystemToggleKey, "morning_report" | "close_report">,
 ): Promise<SystemStatusItem> {
   const { data, error } = await supabase
     .from(table)
@@ -137,10 +171,16 @@ async function getReportStatus(
   }
 
   const row = data as ReportSettingsRow;
-  return buildItem(key, name, row.is_active, [
-    { label: "投稿時間", value: `${formatTime(row.center_time)}前後` },
-    { label: "タイムゾーン", value: row.timezone },
-  ]);
+  return buildItem(
+    key,
+    name,
+    row.is_active,
+    [
+      { label: "投稿時間", value: `${formatTime(row.center_time)}前後` },
+      { label: "タイムゾーン", value: row.timezone },
+    ],
+    { toggles: [{ key: toggleKey, label: name, enabled: row.is_active, kind: "normal" }] },
+  );
 }
 
 type PostingWindowRow = {
@@ -181,7 +221,61 @@ async function getMorningGreetingStatus(supabase: SupabaseClient): Promise<Syste
       { label: "タイムゾーン", value: row.timezone },
     ],
     {
-      note: "スケジュール設定のみ表示しています。実行トリガー（Cron）自体の稼働状況はDBから確認できません。",
+      note:
+        "スケジュール設定のみ表示しています。実行トリガー（Cron）自体の稼働状況はDBから確認できません。" +
+        "ON/OFF操作にも未対応です（このテーブルには管理者用の更新権限がまだ設定されていません）。",
+    },
+  );
+}
+
+type UsefulTipScheduleSettingsRow = {
+  is_active: boolean;
+  posts_per_week: number;
+  window_a_start: string;
+  window_a_end: string;
+  window_b_start: string;
+  window_b_end: string;
+  timezone: string;
+};
+
+async function getUsefulTipStatus(supabase: SupabaseClient): Promise<SystemStatusItem> {
+  const { data, error } = await supabase
+    .from("useful_tip_schedule_settings")
+    .select("is_active,posts_per_week,window_a_start,window_a_end,window_b_start,window_b_end,timezone")
+    .eq("id", true)
+    .maybeSingle();
+
+  if (error) {
+    logQueryError("useful_tip_schedule_settings", error.code);
+    return buildItem("useful_tip", "お役立ち情報", null, [], {
+      unavailableReason: "設定を取得できませんでした。",
+    });
+  }
+  if (!data) {
+    return buildItem("useful_tip", "お役立ち情報", null, [], {
+      unavailableReason: "設定が見つかりません。",
+    });
+  }
+
+  const row = data as UsefulTipScheduleSettingsRow;
+  return buildItem(
+    "useful_tip",
+    "お役立ち情報",
+    row.is_active,
+    [
+      { label: "投稿頻度", value: `週${row.posts_per_week}回` },
+      {
+        label: "投稿時間帯A",
+        value: `${formatTime(row.window_a_start)}〜${formatTime(row.window_a_end)}`,
+      },
+      {
+        label: "投稿時間帯B",
+        value: `${formatTime(row.window_b_start)}〜${formatTime(row.window_b_end)}`,
+      },
+      { label: "タイムゾーン", value: row.timezone },
+    ],
+    {
+      toggles: [{ key: "useful_tip", label: "お役立ち情報", enabled: row.is_active, kind: "normal" }],
     },
   );
 }
@@ -217,26 +311,37 @@ async function getUsPremarketStatus(supabase: SupabaseClient): Promise<SystemSta
   }
 
   const row = data as UsPremarketSettingsRow;
-  return buildItem("us_premarket", "米国プレマーケット", row.is_active, [
+  return buildItem(
+    "us_premarket",
+    "米国プレマーケット",
+    row.is_active,
+    [
+      {
+        label: "投稿時間帯（夏時間）",
+        value: `${formatTime(row.summer_window_start)}〜${formatTime(row.summer_window_end)}`,
+      },
+      {
+        label: "投稿時間帯（冬時間）",
+        value: `${formatTime(row.winter_window_start)}〜${formatTime(row.winter_window_end)}`,
+      },
+      { label: "タイムゾーン", value: row.timezone },
+    ],
     {
-      label: "投稿時間帯（夏時間）",
-      value: `${formatTime(row.summer_window_start)}〜${formatTime(row.summer_window_end)}`,
+      toggles: [
+        { key: "us_premarket", label: "米国プレマーケット", enabled: row.is_active, kind: "normal" },
+      ],
     },
-    {
-      label: "投稿時間帯（冬時間）",
-      value: `${formatTime(row.winter_window_start)}〜${formatTime(row.winter_window_end)}`,
-    },
-    { label: "タイムゾーン", value: row.timezone },
-  ]);
+  );
 }
 
 export async function getSystemStatus(supabase: SupabaseClient): Promise<SystemStatusResult> {
   const systems = await Promise.all([
     getImportantNewsStatus(supabase),
-    getReportStatus(supabase, "morning_report_settings", "morning_report", "朝刊"),
+    getReportStatus(supabase, "morning_report_settings", "morning_report", "朝刊", "morning_report"),
     getMorningGreetingStatus(supabase),
-    getReportStatus(supabase, "close_report_settings", "close_report", "大引けレポート"),
+    getReportStatus(supabase, "close_report_settings", "close_report", "大引けレポート", "close_report"),
     getUsPremarketStatus(supabase),
+    getUsefulTipStatus(supabase),
   ]);
 
   return { systems };

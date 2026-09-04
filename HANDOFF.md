@@ -247,3 +247,113 @@ service role key・X API secret・OpenAI secret等は未設定（不要）。
 - ~~GitHub連携~~ → ユーザーがVercelダッシュボードでGitHubのLogin Connectionを追加し、`anohi-memories/kabumori`をVercel側で接続済み（`vercel git connect`で`already connected`を確認、Root Directoryも`apps/admin`のまま維持されていることを確認）。以後`main`へのpushで自動デプロイされる。過去のcommit（`7bc6620`・`7e0d11e`）は接続前のため自動ビルドは走っておらず、現在の本番エイリアスは手動`vercel --prod`時点のビルドのまま。次に`main`へpushがあった際に自動デプロイが実際に動くか確認するとよい。
 - 独自ドメイン（`admin.kabumori.jp`）は未設定。指示書通り、まずは上記の一時URLでの動作確認を優先し、DNS操作はユーザー確認後に着手する。
 - 実管理者アカウントでのログイン成功確認（Mac・iPhone双方）はユーザー側で実施をお願いします。
+
+---
+
+## 追記4: 2026-09-04 システム状態のON/OFF操作（V1.1）
+
+### 今回の目的
+
+読み取り専用だった「システム状態」に、管理者本人が各自動投稿機能をON/OFFできる操作を追加する。投稿時間・監視間隔・Luna/Sol設定・Cron・prompt・生成ロジック・X投稿ロジックは一切変更しない。
+
+### DB確認結果（実装前に必ず確認、UPDATE不可なら実装しない方針で調査）
+
+| テーブル | SELECT | UPDATE | RLS policy |
+|---|---|---|---|
+| `important_news_monitor_settings` | ✅ | ✅ | `admin_update_important_news_monitor_settings`（既存、`20260901064201_add_admin_dashboard_access.sql`） |
+| `morning_report_settings` | ✅ | ✅ | `admin_update_morning_report_settings`（既存、同上） |
+| `close_report_settings` | ✅ | ✅ | `admin_update_close_report_settings`（既存、同上） |
+| `us_premarket_report_settings` | ✅ | ✅ | `admin_update_us_premarket_report_settings`（既存、同上） |
+| `posting_windows`（朝の挨拶） | ✅ | ❌ | SELECTポリシーのみ、UPDATE用grant/policyが存在しない |
+
+`posting_windows`はUPDATE不可のため、朝の挨拶のON/OFF操作は実装せず、read-onlyのまま。migration・RLS変更は一切行っていない。
+
+### 実装方式
+
+Server Action [`apps/admin/src/lib/actions/system-toggle.ts`](apps/admin/src/lib/actions/system-toggle.ts) の `setSystemEnabled(systemKey, enabled)`：
+
+- 固定allowlist（`SYSTEM_TOGGLE_KEYS`）でtable/columnをserver側マッピング。clientはテーブル名・カラム名を一切送信できない。
+- 呼び出しごとに `auth.getUser()` → `admin_users` 確認を再実施（画面表示時の認証を信用しない）。
+- 更新前に現在値を読み、既に目的の値なら書き込みをスキップ（他操作との競合時の無駄な書き込み回避）。
+- 成功時 `revalidatePath("/")` で最新状態を反映。
+- service role不使用。既存RLSが独立した第二の防御層として機能。
+
+UI側 [`apps/admin/src/app/system-status-list.tsx`](apps/admin/src/app/system-status-list.tsx) をclient componentに変更し、トグルボタン押下→確認ダイアログ（native `<dialog>`）→確定で実行、という2段階フローを実装。ワンクリック即変更は無し。押下中はボタンdisabledで二重送信を防止。
+
+### 操作可能システム（このV1.1時点）
+
+1. 重要ニュース監視 ON/OFF（`important_news_monitor_settings.is_active`）
+2. 重要ニュース X自動投稿 ON/OFF（`important_news_monitor_settings.auto_publish`、監視とは独立）
+3. 朝刊 ON/OFF（`morning_report_settings.is_active`）
+4. 大引けレポート ON/OFF（`close_report_settings.is_active`）
+5. 米国プレマーケット ON/OFF（`us_premarket_report_settings.is_active`）
+6. 朝の挨拶 — 操作不可（上記の通りUPDATE policy不足）
+
+### 確認ダイアログ
+
+- 通常操作：「{システム名}の{項目}をON/OFFにしますか？」+ キャンセル/明示ボタン文言（例：「監視をOFFにする」）
+- 重要ニュース `auto_publish` をONにする場合のみ：赤枠警告「ONにすると、重要ニュースが条件成立時に自動的にXへ投稿されます。」を追加表示し、確認ボタンも赤系スタイル（`primary-button-danger`）で一段強調
+
+### 変更履歴（audit log）
+
+既存DBにaudit/change-logに相当するテーブルは存在しない（全migration検索で確認）。V1.1では履歴機能なし。将来のV1.2候補として引き継ぐ。
+
+### 変更ファイル
+
+- 新規：`apps/admin/src/lib/actions/system-toggle.ts`
+- 更新：`apps/admin/src/lib/system-status.ts`（`toggles`フィールド追加）
+- 更新：`apps/admin/src/app/system-status-list.tsx`（client化、確認ダイアログ実装）
+- 更新：`apps/admin/src/app/globals.css`（トグルボタン・確認ダイアログのスタイル追加）
+
+### テスト
+
+- `npm run lint`：成功
+- `npm run build`：成功
+- local：devサーバー起動、エラー無しを確認
+- **本番値の変更は一切行っていない**。実際のON/OFF操作確認は管理者ログインが必要なため、パスワードを扱わない方針により本セッションでは未実施。
+
+### 未完事項
+
+- `posting_windows`（朝の挨拶）にUPDATE権限が無い。追加すれば同じパターンで対応可能な変更案（未実施）：
+  ```sql
+  grant update on table public.posting_windows to authenticated;
+  create policy admin_update_posting_windows on public.posting_windows
+    for update to authenticated
+    using ((select private.is_admin()))
+    with check ((select private.is_admin()));
+  ```
+- 実際のON/OFF動作確認（重要ニュース監視のOFF→ON復元含む）はユーザー本人による実施が必要。
+
+---
+
+## 追記5: 2026-09-04 株の小ネタ（tip）/ お役立ち情報（useful_tip）のON/OFF確認・実装
+
+### 確認結果
+
+**`tip`（株の小ネタ）**
+- 制御元：`posting_windows`（`post_type = 'tip'`、slot 1〜3の3行、それぞれ独立した`is_active`）。専用settingsテーブルは無い。
+- UPDATE可否：**不可**。`posting_windows`は「追記4」で確認済みの通り、authenticated向けのUPDATE grant/policyが存在しない。
+- → **実装せず**。ON/OFF操作は追加していない。
+
+**`useful_tip`（お役立ち情報）**
+- 制御元：専用テーブル`useful_tip_schedule_settings`（`is_active`カラムあり、PK `id boolean = true`の単一行）。
+- UPDATE可否：**可能**。`20260901064201_add_admin_dashboard_access.sql`で`grant update ... to authenticated` と `admin_update_useful_tip_schedule_settings`ポリシーが既に付与されている（重要ニュース等と同じ既存パターン）。
+- `is_active`は`plan_weekly_useful_tips()`内で`if not found or not s.is_active then return;`として使われており、Cronディスパッチャ（`claim_due_post`）自体は毎回呼ばれ続けるが、候補生成だけを止める仕組み。Edge Function変更は不要。
+- → 既存Server Action allowlist方式に**追加実装した**。
+
+### 実装内容
+
+- [`system-toggle.ts`](apps/admin/src/lib/actions/system-toggle.ts)：allowlistに `useful_tip` を追加（`useful_tip_schedule_settings.is_active`）。
+- [`system-status.ts`](apps/admin/src/lib/system-status.ts)：`getUsefulTipStatus()` を追加。表示項目は投稿頻度（週n回）・投稿時間帯A/B・タイムゾーン。トグル付き。
+- UI（`system-status-list.tsx`）は既存の汎用データ駆動実装のため変更不要。
+
+### テスト
+
+- `npm run lint`：成功
+- `npm run build`：成功
+- **本番値の変更は一切行っていない**。`useful_tip_schedule_settings.is_active`は現在`true`（本番稼働中、週7回）で、テストのために変更していない。
+
+### 未完事項
+
+- `tip`のON/OFFは、`posting_windows`のUPDATE権限追加（「追記4」の変更案と同じmigration）がされない限り対応不可。かつ`tip`は1系統ではなく3スロット（`posting_windows`の3行）を個別に持つため、UPDATE権限を追加した場合も「まとめてON/OFF」か「スロット単位」か設計判断が別途必要になる。
+- `useful_tip`の実際のON/OFF動作確認はユーザー本人による実施が必要（本番稼働中のため、テストで不用意にOFFにしないよう注意）。
