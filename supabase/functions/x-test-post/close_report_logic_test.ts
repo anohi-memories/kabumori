@@ -10,6 +10,7 @@ import {
   type NormalizedCloseMetric,
   type RawMarketMetric,
 } from "./close_report_logic.ts";
+import { hasIndependentCausalSupport, hasStrongCausalAssertion } from "./report_material_logic.ts";
 
 const reference = "2026-08-31T07:00:00.000Z"; // 16:00 JST
 const raw = (overrides: Partial<RawMarketMetric> = {}): RawMarketMetric => ({
@@ -337,6 +338,97 @@ test("6: the writer never receives important_news_present/verified, and evaluate
   const gateEnd = fnSource.indexOf("});", gateStart);
   const gateCall = fnSource.slice(gateStart, gateEnd);
   assert.doesNotMatch(gateCall, /importantNewsPresent|importantNewsVerified/u);
+});
+
+// --- causal safety symmetry across all material types (STEP 1-7) -----------------------------------
+
+// A minimal stand-in for index.ts's private MORNING_SOURCE_DOMAINS (not exported) — only the two
+// domains these tests actually exercise are needed here.
+const TRUSTED_DOMAINS_FOR_TEST = ["nikkei.com", "reuters.com"];
+
+const NIKKEI_UP_FACT = "日経平均は806円高で取引を終了した";
+const GROWTH_STOCKS_UP_FACT = "成長株が上昇した";
+const RATE_PAUSE_CAUSAL = "金利上昇一服を受けて成長株が上昇した";
+const BOJ_WATCH_CONDITIONAL = "日銀利上げ観測が意識された";
+const BOJ_CAUSAL = "日銀利上げ観測が株価上昇の原因だった";
+
+test("1: a simple verified fact is not treated as a strong causal assertion (important_point, and shared by all material types)", () => {
+  assert.equal(hasStrongCausalAssertion(NIKKEI_UP_FACT), false);
+  assert.equal(hasStrongCausalAssertion(GROWTH_STOCKS_UP_FACT), false);
+});
+
+test("2+3: a strong causal claim needs independent support; one source alone is not enough, two trusted domains is", () => {
+  assert.equal(hasStrongCausalAssertion(RATE_PAUSE_CAUSAL), true);
+  assert.equal(hasIndependentCausalSupport(["https://www.nikkei.com/a"], TRUSTED_DOMAINS_FOR_TEST), false);
+  assert.equal(
+    hasIndependentCausalSupport(["https://www.nikkei.com/a", "https://www.reuters.com/b"], TRUSTED_DOMAINS_FOR_TEST),
+    true,
+  );
+});
+
+test("10: a hedged/conditional causal mention ('意識された') is not over-flagged as strong causal", () => {
+  assert.equal(hasStrongCausalAssertion(BOJ_WATCH_CONDITIONAL), false);
+  // But phrasing it as a firm cause ("が原因だった") is correctly still strong.
+  assert.equal(hasStrongCausalAssertion(BOJ_CAUSAL), true);
+});
+
+test("4+5+6+7+8+9: strong_theme/weak_theme/conditional_factor/carryover each gate on the same causal-safety check as important_points", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const start = source.indexOf("async function generateCloseReport(");
+  const end = source.indexOf("\nasync function", start + 1);
+  const fnSource = source.slice(start, end);
+  // The shared helper reuses the existing pure functions rather than a new causal-safety mechanism.
+  assert.match(fnSource, /const passesCausalSafety = \(sourceUrl: string, text: string\): boolean => \{/u);
+  assert.match(fnSource, /hasStrongCausalAssertion\(text\)/u);
+  assert.match(fnSource, /hasIndependentCausalSupport\(\[sourceUrl\], MORNING_SOURCE_DOMAINS\)/u);
+  // Each of the four filters calls it; important_points keeps its own pre-existing, unchanged check
+  // (which additionally supplies supporting_source_urls, since that field only exists on points).
+  const conditionalFactorsStart = fnSource.indexOf("const conditionalFactors = packet.conditional_factors.filter(");
+  const strongThemesStart = fnSource.indexOf("const strongThemes = packet.strong_themes.filter(");
+  const weakThemesStart = fnSource.indexOf("const weakThemes = packet.weak_themes.filter(");
+  const carryoversStart = fnSource.indexOf("const carryovers = packet.carryovers.filter(");
+  for (const [name, blockStart] of [
+    ["conditionalFactors", conditionalFactorsStart], ["strongThemes", strongThemesStart],
+    ["weakThemes", weakThemesStart], ["carryovers", carryoversStart],
+  ] as const) {
+    assert.ok(blockStart >= 0, `${name} filter not found`);
+    const block = fnSource.slice(blockStart, fnSource.indexOf(");", blockStart));
+    assert.match(block, /passesCausalSafety\(/u, `${name} does not call passesCausalSafety`);
+  }
+  const importantPointsBlock = fnSource.slice(
+    fnSource.indexOf("const importantPoints = packet.important_points.flatMap("),
+    fnSource.indexOf("const todayPoints ="),
+  );
+  assert.match(importantPointsBlock, /hasStrongCausalAssertion\(pointText\)/u);
+  assert.match(importantPointsBlock, /hasIndependentCausalSupport\(\s*\[sourceUrl, \.\.\.supportingSourceUrls\]/u);
+});
+
+test("11+12: sourceVerified=false and stale material are still rejected for every material type (unchanged)", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const start = source.indexOf("async function generateCloseReport(");
+  const end = source.indexOf("\nasync function", start + 1);
+  const fnSource = source.slice(start, end);
+  const conditionalFactorsBlock = fnSource.slice(
+    fnSource.indexOf("const conditionalFactors = packet.conditional_factors.filter("),
+    fnSource.indexOf("const strongThemes ="),
+  );
+  assert.match(conditionalFactorsBlock, /sourceVerified\(factor\.source_url\)/u);
+  assert.match(conditionalFactorsBlock, /retainMaterial\(/u);
+  const strongThemesBlock = fnSource.slice(
+    fnSource.indexOf("const strongThemes = packet.strong_themes.filter("),
+    fnSource.indexOf("const weakThemes ="),
+  );
+  assert.match(strongThemesBlock, /sourceVerified\(theme\.source_url\)/u);
+  assert.match(strongThemesBlock, /retainMaterial\(/u);
+});
+
+test("14: report-level 2-independent-publisher requirement stays removed (trustedSourceCount is no longer a parameter)", () => {
+  const result = evaluateCloseFacts({
+    requiredIndices: [], futures: null, optional: [], verifiedTodayPointCount: 1,
+    dateConsistencyPassed: true, futureInformationAbsent: true, mode: "live",
+  });
+  assert.equal(result.status, "passed");
+  assert.deepEqual(result.notes, []);
 });
 
 test("generateCloseReport appends fixed hashtags and runs the local safety check before returning text", async () => {

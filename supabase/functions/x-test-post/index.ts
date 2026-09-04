@@ -2056,21 +2056,34 @@ async function generateCloseReport(
     if (freshness === "future" || freshness === "invalid_timestamp") unsafeOptionalMaterialCount += 1;
     return freshness === "usable";
   };
+  // strong_themes/weak_themes/conditional_factors/carryovers carry no supporting_source_urls field (only
+  // important_points does), so a strong causal claim here can never itself supply independent
+  // corroboration — hasIndependentCausalSupport([sourceUrl], ...) is always false for a single URL, so
+  // this safely drops the item rather than publishing an unsupported strong causal claim. A material with
+  // no strong causal assertion (a simple verified fact, or a hedged/qualified causal mention such as "を
+  // 背景に") is unaffected and still only needs sourceVerified, exactly as before.
+  const passesCausalSafety = (sourceUrl: string, text: string): boolean => {
+    const strongCausality = hasStrongCausalAssertion(text);
+    return !strongCausality || hasIndependentCausalSupport([sourceUrl], MORNING_SOURCE_DOMAINS);
+  };
   const conditionalFactors = packet.conditional_factors.filter((factor) =>
     sourceVerified(factor.source_url) && retainMaterial(
       factor.timestamp, resolveConditionalMaterialType(factor.category, factor.material_type),
-    )
+    ) && passesCausalSafety(factor.source_url, [factor.headline, factor.value, factor.japan_relevance].join("\n"))
   );
   const strongThemes = packet.strong_themes.filter((theme) =>
     theme.direction === "strong" && sourceVerified(theme.source_url) &&
-    retainMaterial(theme.timestamp, "market_session")
+    retainMaterial(theme.timestamp, "market_session") &&
+    passesCausalSafety(theme.source_url, [theme.name, theme.explanation].join("\n"))
   );
   const weakThemes = packet.weak_themes.filter((theme) =>
     theme.direction === "weak" && sourceVerified(theme.source_url) &&
-    retainMaterial(theme.timestamp, "market_session")
+    retainMaterial(theme.timestamp, "market_session") &&
+    passesCausalSafety(theme.source_url, [theme.name, theme.explanation].join("\n"))
   );
   const carryovers = packet.carryovers.filter((item) =>
-    sourceVerified(item.source_url) && retainMaterial(item.timestamp, item.material_type ?? "other")
+    sourceVerified(item.source_url) && retainMaterial(item.timestamp, item.material_type ?? "other") &&
+    passesCausalSafety(item.source_url, [item.item, item.connection_to_today].join("\n"))
   );
   const futureInformationAbsent = packet.future_information_absent && unsafeOptionalMaterialCount === 0;
   const sourceUrls = packet.source_urls.filter(sourceVerified).slice(0, 18);
