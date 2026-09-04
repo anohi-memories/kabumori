@@ -427,4 +427,95 @@ with check ((select private.is_admin()));
 
 - 上記SQLの本番適用（ユーザー側で実施予定）。
 - 適用後、実際のON/OFF動作確認（朝の挨拶・tip 3枠一括、および復元）はユーザー本人による実施をお願いします。
+
+---
+
+## 追記7: 2026-09-04 スキーマ調査ミスの訂正、posting_windows UPDATE適用の再試行、交流投稿(interaction)追加
+
+### 【訂正】「追記6」の調査ミスについて
+
+「追記6」で報告した「`important_news_candidates.generation_fact_issues`/`generation_voice_issues`が本番DBに存在しない」は**誤りでした**。原因は`supabase db dump`がDocker Desktop依存で実際には失敗していたのに、その失敗時の空/エラー出力を「列が存在しない証拠」と誤読したこと。
+
+Docker非依存の`supabase gen types typescript --linked`（本番スキーマを直接イントロスペクトする読み取り専用コマンド）で再確認した結果、**両列とも実際には存在**していることを確認した。管理画面で実際に表示できていた内容と一致する。
+
+再調査の結果（プロジェクトref 4者一致、`wsmznyzcvmuitkglfeuj`で確認済み）：
+
+| migration | schema効果 | DB反映済みか | remote history記録 |
+|---|---|---|---|
+| `20260901044548_add_morning_greeting_schedule.sql` | morning_greeting行insert、`claim_due_post()`再定義 | 未反映と推定（`posting_windows`の総行数8が、morning_greeting抜きの合計と一致するため。関数定義自体は直接確認できず、確信度は中） | 未記録 |
+| `20260904010000_add_important_news_generation_issues.sql` | `generation_fact_issues`/`generation_voice_issues`列追加 | **反映済み（確認済み）** | 未記録（trackingの記録漏れのみ） |
+
+### posting_windows UPDATE権限の本番適用について（再試行するも今回も未実施）
+
+ユーザーからの明示的な許可（「実施してよいこと」としてSQLが提示された）を受け、改めてCLIから安全に適用できないか検証したが、**今回も技術的な制約により適用できていない**：
+
+- `supabase db push`：migrationの順序制約により、`20260901044548`・`20260904010000`より後ろにある新migrationだけを単独適用することができない（`--include-all`が必要だが、これは禁止事項に抵触するため使用せず）。
+- `migration repair`：禁止事項のため使用せず。
+- 直接`psql`接続：DBパスワードを保持しておらず、取得もしていない。
+- `supabase db dump`/`db diff`：Docker Desktop依存のため、この環境では実行不可。
+- Supabase Studio SQL Editor：ブラウザでのログインセッションが必要で、本セッションからは操作不可（Vercelの場合と同様の制約）。
+
+以上より、**本番へのSQL適用は今回も私からは実施していません**。下記SQLをユーザーご自身（またはSupabaseダッシュボードにアクセスできる担当者）がSupabase StudioのSQL Editorで実行してください。合わせて、実行後にそのまま自己確認いただけるread-onlyの確認クエリも用意した（私はこれらを実行して確認する手段を持たないため）：
+
+適用SQL（指示書と同一）：
+```sql
+grant update on table public.posting_windows to authenticated;
+
+create policy admin_update_posting_windows
+on public.posting_windows
+for update
+to authenticated
+using ((select private.is_admin()))
+with check ((select private.is_admin()));
+```
+
+適用後の自己確認用SQL（read-only、副作用なし）：
+```sql
+-- 1. authenticatedへのUPDATE grant確認
+select grantee, privilege_type
+from information_schema.role_table_grants
+where table_schema='public' and table_name='posting_windows' and grantee='authenticated';
+
+-- 2. admin_update_posting_windows policyの存在と内容確認
+select policyname, cmd, qual, with_check
+from pg_policies
+where schemaname='public' and tablename='posting_windows';
+
+-- 3. tip 3行が変更されていないことの確認
+select post_type, slot_no, is_active, start_time, end_time
+from public.posting_windows
+where post_type='tip'
+order by slot_no;
+```
+
+適用が完了したとご連絡いただければ、私の方でも`supabase migration list`・`gen types`等の読み取り専用コマンドで裏どり確認します。
+
+### interaction（交流投稿）の追加
+
+**row数・現在値はmigration履歴からの推定**（前述の理由によりライブクエリでの直接確認ができないため）：
+
+- `post_type='interaction'`：2行（`slot_no=1,2`）。`20260828223000_create_interaction_posts.sql`で挿入。
+- slot 1：`start_time='14:00'`, `end_time='16:30'`, `timezone='Asia/Tokyo'`
+- slot 2：`start_time='20:00'`, `end_time='22:00'`, `timezone='Asia/Tokyo'`
+- `is_active`：migration履歴上は**2行とも`false`**。`20260828225000_expand_interaction_topics.sql`と`20260828234000_add_interaction_collision_avoidance.sql`の両方で明示的に`is_active=false`に設定されており（後者のコメント: "Keep interaction publication disabled until the explicit activation step."）、以後これを覆すmigrationは無い。
+- `posting_windows`全体の行数8（tip3+interaction2+morning_report1+close_report1+us_premarket_report1=8）と整合。
+
+コード自体は実際の管理画面上ではその時点のライブ値を正しく表示する（この確信度の話は今回私が確認できる範囲の話であり、コードのロジックには影響しない）。
+
+### 実装内容
+
+- [`system-toggle.ts`](apps/admin/src/lib/actions/system-toggle.ts)：allowlistに`interaction`を追加（`posting_windows`、`post_type='interaction'`、該当2行を同時更新）。
+- [`system-status.ts`](apps/admin/src/lib/system-status.ts)：`tip`と`interaction`共通の`getPostingWindowGroupStatus()`ヘルパーへリファクタリングし、`interaction`用の呼び出しを追加（投稿枠数・有効枠数・各枠の時間帯を表示）。
+- UI（`system-status-list.tsx`）：確認ダイアログの複数枠文言（「◯枠をすべてON/OFFにしますか？」）を`tip`専用のハードコードから、`toggle.slotCount`を使った汎用ロジックへ変更（`interaction`にも自動的に適用される）。
+
+### 安全条件の遵守
+
+`posting_windows`のUPDATE policyは本番未適用のため、`interaction`のトグル操作は現時点でRLSに拒否され「設定を変更できませんでした」と安全に失敗する（クラッシュなし）。指示通り「実装だけ行って本番操作はさせない」状態。
+
+### テスト
+
+- `npm run lint`：成功
+- `npm run build`：成功
+- local：devサーバー起動、エラー無し確認
+- **本番DB・本番値の変更は一切行っていない**
 - `20260901044548`・`20260904010000`の2件が本番未適用のままである点は、今回のスコープ外だが重要な既知の問題として記録。特に`20260904010000`が未適用だと、既存の「重要ニュース候補」ページ（`/important-news`）のクエリが本番で失敗している可能性がある。担当者への確認を推奨。

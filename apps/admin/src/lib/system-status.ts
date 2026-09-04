@@ -17,6 +17,10 @@ export type SystemToggleControl = {
   // used for important_news_auto_publish, where turning it on starts real
   // automatic X posting.
   kind: "normal" | "danger";
+  // Set when this toggle updates several posting_windows rows together
+  // (e.g. tip's 3 slots) so the UI can spell out "all N slots" in the
+  // confirmation instead of implying a single setting.
+  slotCount?: number;
 };
 
 export type SystemStatusItem = {
@@ -231,48 +235,61 @@ async function getMorningGreetingStatus(supabase: SupabaseClient): Promise<Syste
   );
 }
 
-type TipPostingWindowRow = {
+type PostingWindowGroupRow = {
   is_active: boolean;
+  start_time: string;
+  end_time: string;
 };
 
-async function getTipStatus(supabase: SupabaseClient): Promise<SystemStatusItem> {
+// Shared by every posting_windows post_type with several independent slots
+// (tip, interaction) that this admin panel only ever flips together — there
+// is no per-slot control in V1.1.
+async function getPostingWindowGroupStatus(
+  supabase: SupabaseClient,
+  postType: Extract<SystemToggleKey, "tip" | "interaction">,
+  key: string,
+  name: string,
+  showTimeRanges: boolean,
+): Promise<SystemStatusItem> {
   const { data, error } = await supabase
     .from("posting_windows")
-    .select("is_active")
-    .eq("post_type", "tip")
+    .select("is_active,start_time,end_time")
+    .eq("post_type", postType)
     .order("slot_no", { ascending: true });
 
   if (error) {
-    logQueryError("posting_windows(tip)", error.code);
-    return buildItem("tip", "株の小ネタ", null, [], {
-      unavailableReason: "設定を取得できませんでした。",
-    });
+    logQueryError(`posting_windows(${postType})`, error.code);
+    return buildItem(key, name, null, [], { unavailableReason: "設定を取得できませんでした。" });
   }
   if (!data || data.length === 0) {
-    return buildItem("tip", "株の小ネタ", null, [], {
-      unavailableReason: "投稿枠が見つかりません。",
-    });
+    return buildItem(key, name, null, [], { unavailableReason: "投稿枠が見つかりません。" });
   }
 
-  const rows = data as TipPostingWindowRow[];
+  const rows = data as PostingWindowGroupRow[];
   const activeCount = rows.filter((row) => row.is_active).length;
   const allActive = activeCount === rows.length;
   const noneActive = activeCount === 0;
 
   return buildItem(
-    "tip",
-    "株の小ネタ",
+    key,
+    name,
     !noneActive,
     [
       { label: "投稿枠", value: `${rows.length}件` },
       { label: "有効な投稿枠", value: `${activeCount}/${rows.length}件` },
+      ...(showTimeRanges
+        ? rows.map((row, index) => ({
+            label: `投稿時間帯${index + 1}`,
+            value: `${formatTime(row.start_time)}〜${formatTime(row.end_time)}`,
+          }))
+        : []),
     ],
     {
       note:
         allActive || noneActive
-          ? "3つの投稿枠をまとめてON/OFFします。個別の時間帯だけを操作することはできません。"
-          : "投稿枠ごとに有効・無効が揃っていません。ON/OFF操作で3枠すべてを同じ状態に揃えられます。",
-      toggles: [{ key: "tip", label: "株の小ネタ", enabled: allActive, kind: "normal" }],
+          ? `${rows.length}つの投稿枠をまとめてON/OFFします。個別の時間帯だけを操作することはできません。`
+          : `投稿枠ごとに有効・無効が揃っていません。ON/OFF操作で${rows.length}枠すべてを同じ状態に揃えられます。`,
+      toggles: [{ key: postType, label: name, enabled: allActive, kind: "normal", slotCount: rows.length }],
     },
   );
 }
@@ -391,7 +408,8 @@ export async function getSystemStatus(supabase: SupabaseClient): Promise<SystemS
     getReportStatus(supabase, "close_report_settings", "close_report", "大引けレポート", "close_report"),
     getUsPremarketStatus(supabase),
     getUsefulTipStatus(supabase),
-    getTipStatus(supabase),
+    getPostingWindowGroupStatus(supabase, "tip", "tip", "株の小ネタ", false),
+    getPostingWindowGroupStatus(supabase, "interaction", "interaction", "交流投稿", true),
   ]);
 
   return { systems };

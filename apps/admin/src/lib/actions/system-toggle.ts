@@ -17,6 +17,7 @@ export const SYSTEM_TOGGLE_KEYS = [
   "useful_tip",
   "morning_greeting",
   "tip",
+  "interaction",
 ] as const;
 
 export type SystemToggleKey = (typeof SYSTEM_TOGGLE_KEYS)[number];
@@ -33,11 +34,12 @@ type SingleRowToggleConfig = {
 };
 
 // posting_windows has one row per (post_type, slot_no). "morning_greeting"
-// has a single slot, but "tip" has three independent slots that this mode
-// always updates together — there is no per-slot control in V1.1.
+// has a single slot, but "tip" and "interaction" have several independent
+// slots that this mode always updates together — there is no per-slot
+// control in V1.1.
 type PostingWindowToggleConfig = {
   mode: "posting_window";
-  postType: "morning_greeting" | "tip";
+  postType: "morning_greeting" | "tip" | "interaction";
 };
 
 type ToggleConfig = SingleRowToggleConfig | PostingWindowToggleConfig;
@@ -59,6 +61,7 @@ const TOGGLE_CONFIG: Readonly<Record<SystemToggleKey, ToggleConfig>> = {
   useful_tip: { mode: "single", table: "useful_tip_schedule_settings", column: "is_active" },
   morning_greeting: { mode: "posting_window", postType: "morning_greeting" },
   tip: { mode: "posting_window", postType: "tip" },
+  interaction: { mode: "posting_window", postType: "interaction" },
 };
 
 export type ToggleResult =

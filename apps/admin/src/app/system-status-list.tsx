@@ -59,12 +59,12 @@ function ToggleControl({
   const nextEnabled = !enabled;
   const isDangerOn = toggle.kind === "danger" && nextEnabled;
   const actionLabel = `${toggle.label}を${nextEnabled ? "ON" : "OFF"}にする`;
-  // tip covers three independent posting_windows rows updated together —
-  // make that explicit in the confirmation instead of the generic phrasing.
-  const confirmMessage =
-    toggle.key === "tip"
-      ? `${systemName}3枠をすべて${nextEnabled ? "ON" : "OFF"}にしますか？`
-      : `${systemName}の${toggle.label}を${nextEnabled ? "ON" : "OFF"}にしますか？`;
+  // A toggle with slotCount covers several independent posting_windows rows
+  // updated together (tip, interaction) — make that explicit in the
+  // confirmation instead of the generic single-setting phrasing.
+  const confirmMessage = toggle.slotCount
+    ? `${systemName}${toggle.slotCount}枠をすべて${nextEnabled ? "ON" : "OFF"}にしますか？`
+    : `${systemName}の${toggle.label}を${nextEnabled ? "ON" : "OFF"}にしますか？`;
 
   function openConfirm() {
     setFeedback(null);
