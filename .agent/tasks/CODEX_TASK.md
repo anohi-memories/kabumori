@@ -4,7 +4,7 @@ Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは
 
 - task_id: kabumori-important-news-history-align-and-e2e-prep
 - owner: codex
-- status: ready
+- status: review_required
 - purpose: 本番適用済みのKabumori「重要ニュース」RPCについて、ローカルmigration履歴とのversion差を安全に解消し、アプリ側実装を既存workstreamと混ぜずに整理して、認証ユーザー/iOS実画面E2Eへ進められる状態にする。本番DB定義は変更しない。
 - scope:
   - 作業開始前にorigin/mainをfresh-checkし、ORCHESTRATION / CURRENT_STATE / 本TASKを確認
