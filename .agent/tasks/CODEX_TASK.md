@@ -2,64 +2,70 @@
 
 Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは、`.agent/ORCHESTRATION.md` と既存のプロジェクトルールを確認したうえで、このファイルだけを自分の担当タスク正本として扱います。
 
-- task_id: kabumori-important-news-rpc-privilege-fix
+- task_id: kabumori-important-news-rpc-production-apply
 - owner: codex
-- status: review_required
-- purpose: ローカル実装済みのKabumori「重要ニュース」取得RPCについて、レビューで判明したprivate関数の権限境界不一致を修正し、本番適用可能な最小migration案にする。本番適用はまだ行わない。
+- status: ready
+- purpose: Cレビューで承認したKabumori「重要ニュース」RPC migrationを本番へ安全に適用し、権限境界と取得経路を検証する。既存X自動投稿系や他workstreamを変更しない。
 - scope:
-  - `supabase/migrations/20260905042052_get_my_important_stock_news.sql` の権限設計だけを必要最小限で修正
-  - authenticatedが`private` schema / private helperを直接実行できない構成にする
-  - public RPCだけをauthenticatedへ公開する
-  - `auth.uid()`本人限定、`is_active=true`、holding/watch、company_code形式検証、重要度フィルタ、最大50件、返却列最小化は維持
-  - SECURITY DEFINERを使う場合は`set search_path = ''`と完全修飾名を維持
-  - 修正後のSQLをローカルで静的確認し、可能な範囲のテストを実施
-  - 完了報告とレビュー資料を`.agent/CODEX_REPORT.md`へ反映し、実装コードがlocal onlyでも`.agent/`だけはGitHubへ同期
+  - 作業開始前にorigin/mainをfetchし、`.agent/ORCHESTRATION.md` / `.agent/CURRENT_STATE.md` / 本TASKをfresh-check
+  - ローカルの `supabase/migrations/20260905042052_get_my_important_stock_news.sql` が前回Cレビュー済み内容・SHA-256 `c02c5a3c54c279990d681118d5836e16a63a000448f535c56941cf5f34cdf271` と一致することを確認
+  - migration一覧を確認し、今回対象以外のLocal-only migrationや並行作業のmigrationがある場合は誤適用防止を最優先する
+  - 本番へ今回のKabumori RPC migrationだけを安全に適用
+  - 適用後、関数定義・SECURITY DEFINER・`search_path=''`・EXECUTE権限をread-onlyで確認
+  - `PUBLIC` / `anon` が `public.get_my_important_stock_news(integer)` を実行できず、`authenticated` のみ実行可能であることを確認
+  - `private.get_my_important_stock_news(integer)` が存在しないことを確認
+  - 返却列が news_id / ticker_code / company_name / tracking_type / title / summary / importance / news_time / source_url のみに限定されていることを確認
+  - `auth.uid()`本人限定、`is_active=true`、holding/watch、5文字company_code、important/most_important、duplicate除外、最大50件の条件が本番定義に維持されていることを確認
+  - Supabase Advisor等で今回の関数に関連する警告が出る場合は内容を確認し、意図的なSECURITY DEFINER警告か、それ以外の実問題かを区別して報告
+  - 認証ユーザーでのRPC E2Eを安全に実施できる既存手段がある場合は実施。ユーザー資格情報が必要なら勝手に作成・変更せず、アプリ実画面テストを次工程として残す
+  - 完了報告を `.agent/CODEX_REPORT.md` に記録し、TASKを `review_required` にする
+  - 実装コードを安全に分離してcommit/pushできる場合のみ対象ファイルだけcommit/push。既存dirty worktreeや他workstreamを混ぜない
 - forbidden:
-  - `supabase db push`
-  - 本番migration適用
-  - 本番GRANT変更
-  - Edge Function deploy
-  - 本番データ変更
+  - `--include-all` 等で今回と無関係なmigrationをまとめて適用すること
+  - 今回対象外のmigration / RPC / DB schema / GRANT変更
   - `important-news-monitor` / `x-test-post` / Cron / X投稿ロジック変更
-  - ニュース画面の仕様変更
-  - 新規機能追加
-  - 他workstreamの未コミット変更をstage・commit・push
+  - Edge Function deploy
+  - ニュース画面の仕様変更・新規機能追加
+  - 他workstreamの未コミット変更を変更・stage・commit・push
+  - テスト目的で本番ユーザーのパスワードや認証情報を変更すること
   - secrets・認証情報の表示/記載
 - completion_criteria:
-  - authenticatedに`private` schemaのUSAGEを付与しない
-  - authenticatedに`private.get_my_important_stock_news(integer)`のEXECUTEを付与しない
-  - PUBLIC/anonはpublic/private両関数とも実行不可
-  - authenticatedは`public.get_my_important_stock_news(integer)`だけ実行可能
-  - public入口からの呼び出しは機能しつつ、private helperはDB権限上も直接呼べない
-  - `auth.uid()`は呼出ユーザーのJWT subjectを使って本人のtracked_stocksだけに限定される
-  - SECURITY DEFINERを採用する関数は`search_path=''`かつ参照先を完全修飾する
-  - 返却列にX投稿生成文、判定理由、コスト、投稿ID等を含めない
-  - migration全文と変更理由を`.agent/CODEX_REPORT.md`に記載
-  - 本番適用はせず`review_required`で終了
-- commit: 実装コードはlocal onlyでよい。`.agent/`報告は安全に分離してcommit可能
-- push: `.agent/`の完了報告は必ずorigin/mainへ反映。実装コードや他workstream変更を混ぜない
-- deploy: 禁止
+  - Cレビュー済みmigrationとローカル実物のhash一致を適用前に確認
+  - 今回migrationだけが本番適用され、無関係migrationは未適用
+  - `public.get_my_important_stock_news(integer)` が本番に存在
+  - public RPCはSECURITY DEFINERかつ`search_path=''`
+  - `PUBLIC` / `anon` EXECUTEなし、`authenticated` EXECUTEあり
+  - private helper関数なし
+  - authenticatedへprivate helper用の新規USAGE/EXECUTE付与なし
+  - 本人のactiveなholding/watchだけに限定するSQL条件が維持
+  - X投稿内部情報を返さない
+  - 本番適用後のDB定義・権限確認結果を報告
+  - 認証ユーザーRPC E2Eが可能なら結果を報告。不可能なら理由を明示し、iOS実画面確認を未完了として残す
+  - 本番適用後も既存X自動投稿系に変更なし
+  - `.agent/CODEX_REPORT.md` をGitHubへ必ず同期
+  - 完了時status=`review_required`
+- commit: 実装コードを安全に分離できる場合のみ最小差分。無理ならlocal onlyのままでよい
+- push: `.agent/`完了報告は必ずorigin/mainへ反映。実装コードは安全に分離できる場合のみ
+- deploy: Edge Function deployは禁止。DB migrationの今回対象のみ本番適用を許可
 - next_owner: chatgpt
 
 ## C Review decision
 
-前タスク `kabumori-personal-important-news-v1-review-artifacts` のレビュー結果：修正必須。
+前タスク `kabumori-important-news-rpc-privilege-fix` は承認。
 
-問題点：
+承認理由：
+- private helperを廃止し、authenticatedからprivate helperを直接呼べる経路を削除
+- public SECURITY DEFINER RPC 1本へ統合
+- `auth.uid()`で本人のtracked_stocksだけに限定
+- `search_path=''` と完全修飾名を維持
+- PUBLIC/anon/authenticated/service_roleの既定EXECUTEをrevoke後、authenticatedにpublic RPCだけ再grant
+- 返却列をKabumori表示に必要な最小列へ限定
+- 本番未適用のため、次工程で本番定義・権限を実確認する
 
-```sql
-grant usage on schema private to authenticated;
-grant execute on function private.get_my_important_stock_news(integer)
-  to authenticated;
-```
+SECURITY DEFINERがpublic schemaにあること自体は、今回の用途では意図的なper-user APIとして許容する。ただし本番適用後に権限・auth.uid()条件・Advisor警告を再確認すること。
 
-これにより、PostgRESTでprivate schemaを通常公開していないとしても、DB権限上はauthenticatedがprivate helperを直接EXECUTE可能であり、当初のセキュリティ要件「private関数はauthenticatedから直接呼べない」を満たさない。
+## Migration safety
 
-推奨方向：
+過去にKabumoriとは別workstreamのLocal-only migrationが存在した経緯があるため、`supabase db push --include-all` は禁止。
 
-- authenticatedへのprivate schema USAGE / private helper EXECUTEを削除する
-- `public.get_my_important_stock_news(integer)`のみauthenticatedへEXECUTE付与
-- public入口側を必要に応じてSECURITY DEFINERにし、関数owner権限でprivate helperを呼ぶ。ただし`auth.uid()`による本人限定、`search_path=''`、完全修飾名を必須とする
-- あるいはprivate helperを廃止し、public SECURITY DEFINER関数1本に安全なクエリを閉じ込める方法でもよい。より単純かつ安全な方を採用する
-
-修正後も本番適用は禁止。C再レビュー待ちにする。
+適用前に必ずmigration一覧/dry-run相当を確認し、今回の `20260905042052_get_my_important_stock_news.sql` 以外が同時適用対象になる場合は停止して報告する。
