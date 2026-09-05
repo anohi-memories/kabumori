@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - task_id: important-news-trump-fed-trade-coverage-20260905
 - owner: claude
 - slot: claude-1
-- status: in_progress
+- status: review_required
 - purpose: `breaking_market` の検索カバレッジ不足により、トランプ米政権の市場インパクト政策（特に「FRBが利下げしなければ貿易を止める」類の、貿易政策とFRBへの金利圧力が交差するニュース）を候補取得前に取りこぼす問題を最小差分で修正する。
 - scope:
   - `supabase/functions/important-news-monitor/breaking_market_source_fetchers.ts`
@@ -43,3 +43,32 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 ## Completion report
 
 完了時はこのファイルの末尾に `## Report` を追加し、task_id / result / changed_files / tests / commit_hash / push / deploy / remaining_issues / safety_checks / next_recommendation を記録する。
+
+## Report
+
+- task_id: important-news-trump-fed-trade-coverage-20260905
+- result: 実装・テスト・commit/push完了。`trump_tariff_semiconductor`クエリの検索語彙に「Federal Reserve rate cut pressure threat to halt trade」を追加し、「トランプがFRBに利下げを迫るため貿易停止を脅す」種のニュースがカバー範囲に入るよう修正した。クエリ数・rotation構造・コスト/安全ゲートは無変更。
+- changed_files:
+  - `supabase/functions/important-news-monitor/breaking_market_source_fetchers.ts`（`trump_tariff_semiconductor`のsearchQueryのみ変更、他5クエリ・関数ロジックは無変更）
+  - `supabase/functions/important-news-monitor/breaking_market_source_fetchers_test.ts`（新規2テスト追加: 語彙カバレッジ固定、クエリ数=6の固定）
+- tests: important-news-monitor全体回帰 224/224 pass（`breaking_market_source_fetchers_test.ts`は20/20、新規2件含む）
+- commit_hash: `af73cf2`
+- push: 完了（origin/main反映済み、push前後でdrift確認済み）
+- deploy: 未実施（scope指示どおり、K1レビュー後に別途判断）
+- remaining_issues:
+  - 実際のOpenAI web_search呼び出しでこの語彙変更が意図通りの候補を拾うかは、deploy後のfetch実行でしか確認できない（今回はunit testのみ、live fetchは未実施）
+  - 「Trump threatens to halt trade with countries if Fed does not cut rates」に類する実例が今後の自然cycleで実際に拾われるかは継続観測が必要
+- safety_checks:
+  - `MAX_BREAKING_MARKET_SEARCHES_PER_FETCH=2`: 無変更（テストで確認）
+  - `max_tool_calls=1`（1検索あたり）: 無変更、コード未接触
+  - `BREAKING_MARKET_SOURCE_DOMAINS`: 無変更
+  - 24h freshness window: 無変更（テストで確認）
+  - actual visited URL検証: 無変更（テストで確認）
+  - クエリ数=6、rotation構造: 無変更（新規テストで固定）
+  - P0.7 corporate X market-impact gate: 未着手・未変更
+  - `importance_judgement_logic.ts` / 投稿生成 / `auto_publish` / X投稿ロジック: 未接触
+  - Cron頻度・DB schema/migration・本番設定: 未変更
+  - 2026-09-05のmorning greeting failed claim・朝挨拶系: 未接触
+  - 他workstreamの未コミット変更（`package.json`, `apps/admin/*`, `src/app/*`等）: 未stage・未commit
+  - secrets: 非表示・非変更
+- next_recommendation: K1レビュー後、問題なければ`important-news-monitor`をdeployし、次の自然fetch cycleでこのクエリが実際に候補を拾うかread-onlyで観測することを推奨。

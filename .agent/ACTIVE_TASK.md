@@ -21,7 +21,7 @@
 ### Claude slot 1
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: review_required
 - task_id: important-news-trump-fed-trade-coverage-20260905
 - start_code: G1
 - finish_code: K1
