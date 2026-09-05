@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット2の現在タスクです。`G
 - task_id: kabumori-expo-auth-foundation-mainline-20260906
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - purpose: 現在ローカルで混在しているExpo/Auth/MVP共通基盤とPush通知差分を、クリーンな`origin/main`ベースの一時worktree等を使って安全に分離・再構成し、まずExpo/Auth/MVP共通基盤だけを`origin/main`へ最小commit/pushできる状態にする。
 - scope:
   - 作業開始時に`origin/main`をfresh-checkし、`.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、このTASKを確認する

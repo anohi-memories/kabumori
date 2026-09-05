@@ -30,8 +30,8 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: kabumori-expo-push-foundation-v1-20260905
+- status: in_progress
+- task_id: kabumori-expo-auth-foundation-mainline-20260906
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
