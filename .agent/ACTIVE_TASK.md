@@ -21,8 +21,8 @@
 ### Claude slot 1
 - owner: claude
 - slot: claude-1
-- status: idle
-- task_id: none
+- status: ready
+- task_id: important-news-trump-fed-trade-coverage-20260905
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
