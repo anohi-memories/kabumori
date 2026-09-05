@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - task_id: important-news-deploy-voice-guided-retry-20260905
 - owner: claude
 - slot: claude-1
-- status: in_progress
+- status: review_required
 - purpose: K1承認済みcommit `f45ca12` のVoice guided retry改善を、本番 `important-news-monitor` に安全にdeployし、自然運用でretryが発火できる状態にする。
 - scope:
   - origin/mainをfresh-check
@@ -64,3 +64,32 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 ## Completion report
 
 完了時はこのファイル末尾に `## Report` を追加し、task_id / result / deploy / deployed_version / natural_cycle_check / voice_retry_observation / safety_checks / remaining_issues / next_recommendation を記録する。
+
+## Report
+
+- task_id: important-news-deploy-voice-guided-retry-20260905
+- result: `important-news-monitor`のみdeploy完了。deploy前後で`verify_jwt`・`auto_publish`・`interval_minutes`・`is_active`・Cronはすべて無変更を確認。deploy後、自然fetch cycleが1回正常完了（error無し）。Voice retryの自然発火事例はこの観測期間内ではまだ発生していない（該当するVoice failureが発生していないだけで、異常ではない）。
+- deploy:
+  - コード変更・新規commitなし（本タスクの禁止事項どおり）
+  - deploy直前、ローカルの`post_generation_logic.ts`にK1承認済みの修正（`国名`厳格化、`英単語`等の新規retryableパターン、voice_retryプロンプト文言更新）が含まれていることをgrepで確認
+- deployed_version:
+  - deploy前: v27 ACTIVE, verify_jwt=false
+  - deploy後: **v28 ACTIVE, verify_jwt=false**（維持確認済み）
+- natural_cycle_check:
+  - deploy直後（2026-09-05 14:28 UTC以降）に`important-news-fetch`が1回実行され、`status=completed`, `error=null`（新規候補0件、正常稼働を確認）
+  - この観測期間内では新規candidateがgeneration対象にならなかったため、judgement/generation自体は未実行
+- voice_retry_observation:
+  - 観測期間内でVoice retryが発火した実例は**未観測**。該当するFact=passed かつ Voice=failed（修正可能な品質問題のみ）のcandidateがまだ発生していないため（それ自体は失敗扱いしない、と明記されている通り）
+  - deploy直前に確認した最新のgeneration_failed実例（13:07 UTC, `generation_voice_retry.attempted=false`）はdeploy**前**の生成であり、旧ロジックによるもの。今回の修正の効果はまだ実例で確認できていない
+- safety_checks:
+  - `verify_jwt=false`: 維持確認済み
+  - `auto_publish=false`: 維持確認済み
+  - `interval_minutes=20` / `is_active=true`: 維持確認済み
+  - Cron（7ジョブ、スケジュール）: 無変更確認済み
+  - コード変更・新規commit/push: なし（禁止事項どおり）
+  - P0.7 / breaking_market検索 / TDnet・market_macro取得 / X投稿実行 / morning greeting系 / model変更 / retry回数・Fact・Voiceルール変更: すべて未着手・未接触
+  - 他workstreamの未コミット変更・並行スロットの作業（Codexの`.agent/CODEX_REPORT.md`・`.agent/tasks/CODEX_TASK.md`、Claude slot 2の`.agent/tasks/CLAUDE_TASK.md`を含む）: 変更・stage・commitなし。`git reset --mixed`でbranch pointerのみ移動し、working tree上の他エージェントの編集・進行中タスクファイルは一切触れていないことを確認済み
+  - secrets: 非表示・非変更
+- remaining_issues:
+  - Voice retryが実際のVoice checker出力に対して意図通り機能するかは、該当するFact=passed/Voice=failed（修正可能な品質問題）のcandidateが自然発生するまで実証できない。継続的なread-only観測が必要
+- next_recommendation: 現状で安全に稼働中のため追加対応は不要。今後の自然cycleで`generation_voice_retry.attempted=true`の実例が観測できたら、その内容（initial/retry issues、fact/voice status）を任意タイミングで報告する。
