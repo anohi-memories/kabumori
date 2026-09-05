@@ -13,13 +13,9 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - commit: 必要な場合のみ最小差分
 - push: 指示がある場合のみ
 - deploy: 指示がある場合のみ
-- report: `.agent/reports/CLAUDE_REPORT_1.md`
+- report_mode: inline
 - next_owner: chatgpt
 
-## Status values
+## Completion report
 
-- `idle`: 有効な指示なし
-- `ready`: 作業開始可能
-- `in_progress`: 作業中
-- `review_required`: 実装済み・ちゃっぴー確認待ち
-- `done`: 完了
+完了時はこのファイルの末尾に `## Report` を追加し、task_id / result / changed_files / tests / commit_hash / push / deploy / remaining_issues / safety_checks / next_recommendation を記録する。
