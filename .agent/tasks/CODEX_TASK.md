@@ -4,7 +4,7 @@ Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは
 
 - task_id: kabumori-important-news-rpc-production-apply
 - owner: codex
-- status: ready
+- status: review_required
 - purpose: Cレビューで承認したKabumori「重要ニュース」RPC migrationを本番へ安全に適用し、権限境界と取得経路を検証する。既存X自動投稿系や他workstreamを変更しない。
 - scope:
   - 作業開始前にorigin/mainをfetchし、`.agent/ORCHESTRATION.md` / `.agent/CURRENT_STATE.md` / 本TASKをfresh-check
