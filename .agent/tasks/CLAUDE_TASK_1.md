@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - task_id: important-news-voice-guided-retry-20260905
 - owner: claude
 - slot: claude-1
-- status: review_required
+- status: done
 - purpose: important-news生成後のVoiceチェックで、AI自身が具体的な修正点を特定できているにもかかわらず再生成せず `generation_failed` になるケースを改善する。Factがpassedで、Voice issueが修正可能な表現・文法・単複・不自然な和英混在などに限定される場合は、そのVoice指摘を明示的な修正指示として1回だけ再生成し、再度Fact + Voiceを通して安全に復帰できるようにする。
 - scope:
   - `supabase/functions/important-news-monitor/post_generation_logic.ts`
@@ -99,3 +99,10 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
   - 実際のOpenAI Voice checkerが「英単語混在」「単複」等を実際どう表現するかには自然文のバリエーションがあり、今回追加した正規表現パターンで完全に網羅できているかはdeploy後の自然運用でしか実証できない
   - `/国名/`への厳格化により、今後「国名」という単語を使わずに国名誤りを表現するVoice issue（例:「アメリカではなくイギリスの誤り」）は`誤り`パターンで引き続き捕捉されるが、念のため今後の自然観測で見ておきたい
 - next_recommendation: K1レビュー後、問題なければ`important-news-monitor`をdeployし、次回以降Voice retryが実際に発火する自然事例をread-onlyで観測することを推奨。
+
+## K1 Review
+
+- reviewed_by: chatgpt
+- decision: approved
+- reason: 変更は `post_generation_logic.ts` とそのテストに限定され、Fact gate・1回制限・再Fact/Voiceチェック・未知issueの安全側defaultを維持したまま、今回の実例を確実にretry対象へ広げている。bare `国` の部分一致を `国名` に狭める修正も、国名誤り自体は `誤り` 等のnon-retryableパターンで引き続き止まるため妥当。commit `f45ca12` の差分は報告と一致し、全体回帰231/231 pass。
+- followup: 本番deployは別タスクで実施し、自然運用で `generation_voice_retry.attempted=true` と再Fact/Voice結果をread-only観測する。
