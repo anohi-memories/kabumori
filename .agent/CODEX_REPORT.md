@@ -9,8 +9,8 @@
   - `git diff --check`: PASS
   - 対象5ファイルのSHA-256を取得し、下記掲載物の採取元を固定
   - 新規実装・再ビルド・本番接続テストは今回のscope外のため未実施
-- commit_hash: このレポートcommitで確定予定
-- push: `.agent/` 2ファイルのみorigin/mainへpush予定。実装コードはlocal onlyのまま
+- commit_hash: `24713ef`（レビュー資料本体とstatus更新）
+- push: `24713ef`をorigin/mainへ反映済み。実装コードはlocal onlyのまま
 - deploy: 未実施（禁止）
 - remaining_issues:
   - private関数はData API非公開スキーマにあるが、現SQLは`authenticated`へ`USAGE`と`EXECUTE`を明示付与している。このため「authenticatedから直接呼べない」という完了条件をDB権限レベルでは満たさない
