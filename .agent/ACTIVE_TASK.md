@@ -1,33 +1,50 @@
 # Active Tasks Index
 
-このファイルはF/G運用の後方互換用インデックスです。実装指示の正本は担当者ごとの専用タスクファイルです。
+このファイルは共有オーケストレーションの後方互換用インデックスです。実装指示の正本は各専用TASKです。
 
-- Codex正本: `.agent/tasks/CODEX_TASK.md`
-- Claude Code正本: `.agent/tasks/CLAUDE_TASK.md`
+- Codex: `.agent/tasks/CODEX_TASK.md`
+- Claude slot 1: `.agent/tasks/CLAUDE_TASK_1.md`
+- Claude slot 2: `.agent/tasks/CLAUDE_TASK.md`
 - 共通ルール: `.agent/ORCHESTRATION.md`
 - 現在地: `.agent/CURRENT_STATE.md`
 
 ## Current slots
 
 ### Codex
-
 - owner: codex
 - status: idle
 - task_id: none
+- start_code: G
+- finish_code: C
 - source: `.agent/tasks/CODEX_TASK.md`
 
-### Claude Code
-
+### Claude slot 1
 - owner: claude
+- slot: claude-1
 - status: idle
 - task_id: none
+- start_code: G1
+- finish_code: K1
+- source: `.agent/tasks/CLAUDE_TASK_1.md`
+
+### Claude slot 2
+- owner: claude
+- slot: claude-2
+- status: idle
+- task_id: none
+- start_code: G2
+- finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
 
-## F/G compatibility
+## Control codes
 
-古いF/G指示でこのファイルだけを読んだ場合でも、上記の各専用タスクファイルまで必ず確認してください。
+- `G`: Codex開始。Claudeではready/in_progressが1枠だけならその枠開始。
+- `G1`: Claude slot 1開始。
+- `G2`: Claude slot 2開始。
+- `C`: ChatGPTがCodex完了だけ確認。
+- `K1`: ChatGPTがClaude slot 1完了だけ確認。
+- `K2`: ChatGPTがClaude slot 2完了だけ確認。
+- `K`: Claude側の完了対象が1枠だけで明白な場合の簡易コード。
+- `F`: 全3スロットの全体状況・競合・空き状況を確認する統括コード。
 
-- `F`: ChatGPTは両タスクスロット、CURRENT_STATE、両REPORTを確認して全体判断する。
-- `G`: Codex/Claude Codeは自分専用タスクを確認し、`ready` または `in_progress` の場合だけ作業する。
-
-CodexとClaude Codeは、task_idと変更対象が分離され、競合しない場合に限り同時進行できます。
+3スロットの並行実行は、task_idと変更対象が分離され競合しない場合に限る。
