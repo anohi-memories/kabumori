@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - task_id: important-news-middle-east-oil-shipping-coverage-20260905
 - owner: claude
 - slot: claude-1
-- status: review_required
+- status: done
 - purpose: breaking_marketが、今回見逃した「米軍によるイラン原油タンカー複数隻への攻撃」相当の、軍事衝突＋原油輸送・海上交通・エネルギーインフラに直結する重要ニュースを安定して拾えるように検索カバレッジを最小差分で強化する。
 - scope:
   - `supabase/functions/important-news-monitor/breaking_market_source_fetchers.ts`
@@ -101,3 +101,10 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
   - 実際のOpenAI web_search呼び出しでこの語彙・ドメイン追加が意図通り候補を拾うかは、deploy後のfetch実行でしか確認できない（今回はunit testのみ、live fetchは未実施）
   - centcom.mil/defense.govが実際にOpenAIのweb_search経由でクロール可能か（curlでは403が返るが、これはBot対策の可能性が高く実際のOpenAI側クローラーの挙動は別途確認が必要）は継続観測が必要
 - next_recommendation: K1レビュー後、問題なければ`important-news-monitor`をdeployし、次の自然fetch cycleでこのクエリ・ドメインが実際に候補を拾うか（特にcentcom.mil/defense.govが実際にクロール可能か）read-onlyで観測することを推奨。
+
+## K1 Review
+
+- reviewed_by: chatgpt
+- decision: approved
+- reason: 変更は `breaking_market_source_fetchers.ts` と直接対応テストに限定され、既存6-query rotation・2検索/cycle・20分rotation・24h freshness・max_tool_calls=1・actual visited URL検証・importance/generation/Voice/TDnet/IR/market_macro系を維持したまま、今回の実例に必要な Iran / Israel / Hormuz / oil tanker / maritime attack / energy infrastructure / CENTCOM 語彙を追加している。commit `e67b825` の差分はReportと一致し、centcom.mil / defense.gov 追加後も allowlist 単独では通らずactual visited URLが必須で、army.mil等の未許可ドメインは拒否されるテストがある。全体回帰235/235 pass。
+- followup: 本番deployは別タスクで実施し、自然fetchで `war_geopolitics_taiwan` の実ヒットと、centcom.mil / defense.gov がOpenAI web_search経由で実際に利用可能かをread-only観測する。
