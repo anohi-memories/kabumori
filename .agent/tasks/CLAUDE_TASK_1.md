@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - task_id: morning-greeting-x-oauth-refresh-20260906
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - purpose: 2026-09-06朝の `morning_greeting` が、期限切れX OAuth access tokenを使った画像アップロードで401になり失敗した問題を、既存の重複投稿防止設計を維持したまま最小修正する。
 - scope:
   - 作業開始時に `origin/main` をfresh-checkし、`.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、このTASKを確認する
