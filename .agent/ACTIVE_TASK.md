@@ -6,7 +6,7 @@
 
 - task_id: morning-greeting-enable-2026-09-06
 - owner: claude
-- status: in_progress
+- status: review_required
 - purpose: 2026-09-06朝の挨拶を、fresh-dateテストではなく本番自動投稿として安全に1回動かせる状態へする。ユーザーは投稿予定時刻を確認し、異常投稿があれば自身ですぐ削除できる体制を取る。
 - scope:
   - 朝の挨拶の自動投稿設定・スケジュール・起動経路のread-only確認
