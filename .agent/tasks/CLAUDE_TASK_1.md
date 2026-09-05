@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - task_id: important-news-deploy-voice-guided-retry-20260905
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - purpose: K1承認済みcommit `f45ca12` のVoice guided retry改善を、本番 `important-news-monitor` に安全にdeployし、自然運用でretryが発火できる状態にする。
 - scope:
   - origin/mainをfresh-check
