@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - task_id: important-news-middle-east-oil-shipping-coverage-20260905
 - owner: claude
 - slot: claude-1
-- status: in_progress
+- status: review_required
 - purpose: breaking_marketが、今回見逃した「米軍によるイラン原油タンカー複数隻への攻撃」相当の、軍事衝突＋原油輸送・海上交通・エネルギーインフラに直結する重要ニュースを安定して拾えるように検索カバレッジを最小差分で強化する。
 - scope:
   - `supabase/functions/important-news-monitor/breaking_market_source_fetchers.ts`
@@ -64,3 +64,40 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 ## Completion report
 
 完了時はこのファイル末尾に `## Report` を追加し、task_id / result / changed_files / tests / commit_hash / push / deploy / query_changes / source_domain_changes / safety_checks / remaining_issues / next_recommendation を記録し、statusを `review_required` にする。
+
+## Report
+
+- task_id: important-news-middle-east-oil-shipping-coverage-20260905
+- result: 実装・テスト・commit/push完了。`war_geopolitics_taiwan`クエリの検索語彙に「Iran / Israel / Strait of Hormuz / oil tanker / maritime attack / energy infrastructure / CENTCOM」を追加し、「米軍がイランの原油タンカー3隻を攻撃」相当のニュースがカバー範囲に入るよう修正。あわせて、DNS解決で実在確認済みの`centcom.mil`・`defense.gov`をallowed domainsへ追加した。
+- changed_files:
+  - `supabase/functions/important-news-monitor/breaking_market_source_fetchers.ts`（`war_geopolitics_taiwan`のsearchQueryのみ変更、`BREAKING_MARKET_SOURCE_DOMAINS`へ2ドメイン追加、他クエリ・関数ロジックは無変更）
+  - `supabase/functions/important-news-monitor/breaking_market_source_fetchers_test.ts`（新規5テスト追加: 語彙カバレッジ固定、新ドメイン2件のallow確認、新ドメインでも「実際に訪問したURLのみ許可」ゲートが効くことの確認、無関係な`.mil`ドメイン(army.mil)が引き続き拒否されることの確認）
+- tests: important-news-monitor全体回帰 **235/235 pass**（`breaking_market_source_fetchers_test.ts`は24/24、新規5件含む）
+- commit_hash: `e67b825`
+- push: 完了（origin/main反映済み、push前後でdrift確認済み）
+- deploy: 未実施（scope指示どおり禁止。K1レビュー後に別タスクで対応）
+- query_changes:
+  - `war_geopolitics_taiwan`のsearchQuery: `"war ceasefire military conflict Taiwan Middle East breaking news today"` → `"war ceasefire military conflict Taiwan Middle East Iran Israel Strait of Hormuz oil tanker maritime attack energy infrastructure CENTCOM breaking news today"`
+  - query数は6のまま変更なし（新規query追加なし、既存query語彙拡張のみ）
+  - `MAX_BREAKING_MARKET_SEARCHES_PER_FETCH=2`、20分rotation、`max_tool_calls=1`、24h freshness: すべて無変更
+- source_domain_changes:
+  - `centcom.mil`・`defense.gov`を追加。両ドメインとも実装前にDNS解決を実施し、実在する`.mil`/`.gov`ドメイン（Akamai配信の政府インフラ）であることを確認済み。推測での追加ではない
+  - 追加後もactual visited URL検証・https限定・freshness・categoryの全ゲートは無変更で適用される。テストで「allowlistにあるだけでは不十分（未訪問なら拒否）」「無関係な`.mil`ドメイン(army.mil)は引き続き拒否」の両方を確認済み
+- safety_checks:
+  - `MAX_BREAKING_MARKET_SEARCHES_PER_FETCH=2`: 無変更（テストで確認）
+  - `max_tool_calls=1`（1検索あたり）: 無変更、コード未接触
+  - 24h freshness window: 無変更
+  - actual visited URL検証: 無変更・強化なし（新ドメインにも同一ゲートを適用しテストで確認）
+  - クエリ数=6、rotation構造: 無変更
+  - allowed domainsの追加は根拠（DNS解決確認）を伴う2件のみ。推測でのドメイン追加なし
+  - importance judgement / generation / Voice retryロジック: 未接触
+  - TDnet / company IR / market_macro取得: 未接触
+  - auto_publish、X投稿ロジック、Cron、DB schema/migration/GRANT、本番設定: 未変更
+  - morning greeting系: 未接触
+  - model: 未変更
+  - 他workstreamの未コミット変更・並行スロットの作業（Codex、Claude slot 2関連ファイル含む）: 変更・stage・commitなし。`git reset --mixed`でbranch pointerのみ移動し、他エージェントの編集は無傷を確認
+  - secrets: 非表示・非変更
+- remaining_issues:
+  - 実際のOpenAI web_search呼び出しでこの語彙・ドメイン追加が意図通り候補を拾うかは、deploy後のfetch実行でしか確認できない（今回はunit testのみ、live fetchは未実施）
+  - centcom.mil/defense.govが実際にOpenAIのweb_search経由でクロール可能か（curlでは403が返るが、これはBot対策の可能性が高く実際のOpenAI側クローラーの挙動は別途確認が必要）は継続観測が必要
+- next_recommendation: K1レビュー後、問題なければ`important-news-monitor`をdeployし、次の自然fetch cycleでこのクエリ・ドメインが実際に候補を拾うか（特にcentcom.mil/defense.govが実際にクロール可能か）read-onlyで観測することを推奨。
