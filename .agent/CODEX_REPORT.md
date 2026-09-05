@@ -17,10 +17,10 @@
   - iOS bundle: `npx expo export --platform ios` PASS（1,560 modules）
 - commit_hash:
   - migration整合: `32d0cd0`（origin/mainへ反映済み）
-  - `.agent/`完了報告: commit後に確定
+  - `.agent/`完了報告: `460301d`（origin/mainへ反映済み）
 - push:
   - migration整合commit `32d0cd0`をorigin/mainへ反映済み
-  - `.agent/`完了報告は別の最小commitでorigin/mainへ反映予定
+  - `.agent/`完了報告commit `460301d`をorigin/mainへ反映済み
 - deploy: なし。本番DB / Edge Function / Cron / X投稿系は変更していない。
 - migration_alignment:
   - ローカルファイル名を本番履歴version`20260905140638`へ合わせた
