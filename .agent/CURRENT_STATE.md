@@ -2,11 +2,17 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様やWeb管理画面の履歴は既存文書を参照してください。
 
-- checked_at: 2026-09-05 JST（morning-greeting-enable-2026-09-06完了時点）
+- checked_at: 2026-09-05 JST（F/Gマルチタスク化完了時点）
 - repo: kabumori
 - branch: main
 - verified_base_commit: `c4427ea`（morning greeting auto-dispatch実装commit、origin/main一致確認済み）
-- active_workstream: なし（review_required、ちゃっぴーの確認待ち）
+- orchestration:
+  - F/GはCodex・Claude Codeの2スロット並行運用へ移行済み
+  - Codex正本: `.agent/tasks/CODEX_TASK.md`
+  - Claude Code正本: `.agent/tasks/CLAUDE_TASK.md`
+  - `.agent/ACTIVE_TASK.md` は後方互換用インデックス
+  - 両者は変更対象が競合しない別taskのみ同時進行可
+- active_workstream: なし（Codex/Claude両スロット idle）
 - parallel_work:
   - Web admin / Expo / stocks sync関連の未コミット作業あり。今回の共有運用とは別workstream
   - 既存変更を変更・stage・commitしないこと
