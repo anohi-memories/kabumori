@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - task_id: important-news-middle-east-oil-shipping-coverage-20260905
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - purpose: breaking_marketが、今回見逃した「米軍によるイラン原油タンカー複数隻への攻撃」相当の、軍事衝突＋原油輸送・海上交通・エネルギーインフラに直結する重要ニュースを安定して拾えるように検索カバレッジを最小差分で強化する。
 - scope:
   - `supabase/functions/important-news-monitor/breaking_market_source_fetchers.ts`
