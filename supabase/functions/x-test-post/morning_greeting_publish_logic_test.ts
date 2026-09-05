@@ -10,9 +10,21 @@ import {
   MorningGreetingPayloadDryRunError,
   type MorningGreetingPayloadDryRunResult,
 } from "./morning_greeting_payload_logic.ts";
+import type { XAuthContext } from "../_shared/x_oauth2_post.ts";
 
 const TEXT = "おはようございます☕️ 9月の朝ですね。今日も無理なく、ひとつずつ進めていきましょう🌿";
 const DATE = "2026-09-02";
+
+function freshXAuth(): XAuthContext {
+  return {
+    tokens: { accessToken: "x-secret", refreshToken: "refresh-old" },
+    clientId: "client-id",
+    clientSecret: "client-secret",
+    supabaseUrl: "https://example.supabase.co",
+    serviceRoleKey: "service-secret",
+    refreshExecuted: false,
+  };
+}
 
 function readyPayload(): MorningGreetingPayloadDryRunResult {
   return {
@@ -45,7 +57,7 @@ test("uploads one image, creates one X post, then records its id", async () => {
     supabaseUrl: "https://example.supabase.co",
     serviceRoleKey: "service-secret",
     openAiApiKey: "openai-secret",
-    xAccessToken: "x-secret",
+    xAuth: freshXAuth(),
     now: new Date("2026-09-01T15:30:00Z"),
     buildPayload: async () => readyPayload(),
     fetchImpl: async (input, init) => {
@@ -113,7 +125,7 @@ test("an existing same-day post skips generation, upload and posting", async () 
     supabaseUrl: "https://example.supabase.co",
     serviceRoleKey: "service-secret",
     openAiApiKey: "openai-secret",
-    xAccessToken: "x-secret",
+    xAuth: freshXAuth(),
     now: new Date("2026-09-01T15:30:00Z"),
     buildPayload: async () => {
       payloadCalls += 1;
@@ -139,7 +151,7 @@ test("missing image stops before any X API call", async () => {
       supabaseUrl: "https://example.supabase.co",
       serviceRoleKey: "service-secret",
       openAiApiKey: "openai-secret",
-      xAccessToken: "x-secret",
+      xAuth: freshXAuth(),
       now: new Date("2026-09-01T15:30:00Z"),
       buildPayload: async () => readyPayload(),
       fetchImpl: async (input, init) => {
@@ -168,7 +180,7 @@ test("media upload failure is not retried and never posts text alone", async () 
       supabaseUrl: "https://example.supabase.co",
       serviceRoleKey: "service-secret",
       openAiApiKey: "openai-secret",
-      xAccessToken: "x-secret",
+      xAuth: freshXAuth(),
       now: new Date("2026-09-01T15:30:00Z"),
       buildPayload: async () => readyPayload(),
       fetchImpl: async (input, init) => {
@@ -207,6 +219,262 @@ test("media upload failure is not retried and never posts text alone", async () 
   assert.equal(postCalls, 0);
 });
 
+// Production incident (2026-09-06): the stored X access token expired between refreshes, media upload
+// returned 401, and the whole run failed with MORNING_GREETING_MEDIA_UPLOAD_FAILED:401 even though a
+// single OAuth refresh would have recovered it — exactly like the existing plain-tweet path already does.
+test("a 401 on media upload refreshes the token once and retries media upload, then posts normally", async () => {
+  const calls: string[] = [];
+  let mediaAttempts = 0;
+  let refreshCalls = 0;
+  const result = await runMorningGreetingManualPublish({
+    supabaseUrl: "https://example.supabase.co",
+    serviceRoleKey: "service-secret",
+    openAiApiKey: "openai-secret",
+    xAuth: freshXAuth(),
+    now: new Date("2026-09-01T15:30:00Z"),
+    buildPayload: async () => readyPayload(),
+    fetchImpl: async (input, init) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.includes(`/published/${DATE}.json`) && !init?.method) {
+        return new Response(JSON.stringify({ message: "Object not found" }), { status: 400 });
+      }
+      if (url.includes("/rest/v1/publish_claims") && init?.method === "POST") {
+        return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "publishing" }]);
+      }
+      if (url.includes("/rest/v1/publish_claims") && init?.method === "PATCH") {
+        return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "published" }]);
+      }
+      if (url.includes("/storage/v1/object/") && url.includes("morning-greeting-assets/generated")) {
+        return new Response(new Uint8Array([137, 80, 78, 71]), { status: 200 });
+      }
+      if (url === "https://api.x.com/2/media/upload") {
+        mediaAttempts += 1;
+        if (mediaAttempts === 1) {
+          assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer x-secret");
+          return new Response(JSON.stringify({ error: "expired" }), { status: 401 });
+        }
+        assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer access-new");
+        return Response.json({ data: { id: "123456789" } });
+      }
+      if (url === "https://api.x.com/2/oauth2/token") {
+        refreshCalls += 1;
+        return Response.json({ access_token: "access-new", refresh_token: "refresh-new", expires_in: 7200 });
+      }
+      if (url.startsWith("https://example.supabase.co/rest/v1/oauth_token_store")) {
+        return new Response(null, { status: 204 });
+      }
+      if (url === "https://api.x.com/2/tweets") {
+        assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer access-new");
+        return Response.json({ data: { id: "987654321" } });
+      }
+      if (url.includes(`/published/${DATE}.json`) && init?.method === "POST") {
+        return new Response(null, { status: 201 });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+  assert.equal(result.x_posted, true);
+  assert.equal(result.x_post_id, "987654321");
+  assert.equal(mediaAttempts, 2);
+  assert.equal(refreshCalls, 1);
+  assert.equal(calls.filter((url) => url === "https://api.x.com/2/media/upload").length, 2);
+});
+
+test("a 401 on the tweet send (after media upload already succeeded) also refreshes once and retries the tweet", async () => {
+  let postAttempts = 0;
+  let refreshCalls = 0;
+  const result = await runMorningGreetingManualPublish({
+    supabaseUrl: "https://example.supabase.co",
+    serviceRoleKey: "service-secret",
+    openAiApiKey: "openai-secret",
+    xAuth: freshXAuth(),
+    now: new Date("2026-09-01T15:30:00Z"),
+    buildPayload: async () => readyPayload(),
+    fetchImpl: async (input, init) => {
+      const url = String(input);
+      if (url.includes(`/published/${DATE}.json`) && !init?.method) {
+        return new Response(JSON.stringify({ message: "Object not found" }), { status: 400 });
+      }
+      if (url.includes("/rest/v1/publish_claims") && init?.method === "POST") {
+        return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "publishing" }]);
+      }
+      if (url.includes("/rest/v1/publish_claims") && init?.method === "PATCH") {
+        return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "published" }]);
+      }
+      if (url.includes("/storage/v1/object/") && url.includes("morning-greeting-assets/generated")) {
+        return new Response(new Uint8Array([137, 80, 78, 71]), { status: 200 });
+      }
+      if (url === "https://api.x.com/2/media/upload") {
+        assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer x-secret");
+        return Response.json({ data: { id: "123456789" } });
+      }
+      if (url === "https://api.x.com/2/tweets") {
+        postAttempts += 1;
+        if (postAttempts === 1) return new Response(JSON.stringify({ error: "expired" }), { status: 401 });
+        assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer access-new");
+        return Response.json({ data: { id: "987654321" } });
+      }
+      if (url === "https://api.x.com/2/oauth2/token") {
+        refreshCalls += 1;
+        return Response.json({ access_token: "access-new", refresh_token: "refresh-new", expires_in: 7200 });
+      }
+      if (url.startsWith("https://example.supabase.co/rest/v1/oauth_token_store")) {
+        return new Response(null, { status: 204 });
+      }
+      if (url.includes(`/published/${DATE}.json`) && init?.method === "POST") {
+        return new Response(null, { status: 201 });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+  assert.equal(result.x_posted, true);
+  assert.equal(postAttempts, 2);
+  assert.equal(refreshCalls, 1);
+});
+
+test("a second 401 after the one refresh already ran this execution fails immediately, marks publish_claims failed, and never sends the tweet", async () => {
+  let mediaAttempts = 0;
+  let refreshCalls = 0;
+  let tweetCalls = 0;
+  await assert.rejects(
+    () => runMorningGreetingManualPublish({
+      supabaseUrl: "https://example.supabase.co",
+      serviceRoleKey: "service-secret",
+      openAiApiKey: "openai-secret",
+      xAuth: freshXAuth(),
+      now: new Date("2026-09-01T15:30:00Z"),
+      buildPayload: async () => readyPayload(),
+      fetchImpl: async (input, init) => {
+        const url = String(input);
+        if (url.includes(`/published/${DATE}.json`) && !init?.method) {
+          return new Response("Object not found", { status: 400 });
+        }
+        if (url.includes("/rest/v1/publish_claims") && init?.method === "POST") {
+          return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "publishing" }]);
+        }
+        if (url.includes("/rest/v1/publish_claims") && init?.method === "PATCH") {
+          const body = JSON.parse(String(init.body));
+          assert.equal(body.status, "failed");
+          assert.equal(body.error_code, "MORNING_GREETING_MEDIA_UPLOAD_FAILED:401");
+          return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "failed" }]);
+        }
+        if (url.includes("/storage/v1/object/") && url.includes("morning-greeting-assets/generated")) {
+          return new Response(new Uint8Array([1]), { status: 200 });
+        }
+        if (url === "https://api.x.com/2/media/upload") {
+          mediaAttempts += 1;
+          return new Response(JSON.stringify({ error: "still expired" }), { status: 401 });
+        }
+        if (url === "https://api.x.com/2/oauth2/token") {
+          refreshCalls += 1;
+          if (refreshCalls > 1) throw new Error("must not refresh twice");
+          return Response.json({ access_token: "access-new", refresh_token: "refresh-new", expires_in: 7200 });
+        }
+        if (url.startsWith("https://example.supabase.co/rest/v1/oauth_token_store")) {
+          return new Response(null, { status: 204 });
+        }
+        if (url === "https://api.x.com/2/tweets") { tweetCalls += 1; throw new Error("must not be called"); }
+        throw new Error(`Unexpected URL: ${url}`);
+      },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof MorningGreetingManualPublishError);
+      assert.equal(error.message, "MORNING_GREETING_MEDIA_UPLOAD_FAILED:401");
+      assert.equal(error.xPosted, false);
+      return true;
+    },
+  );
+  assert.equal(mediaAttempts, 2); // one original + exactly one retry after the single refresh
+  assert.equal(refreshCalls, 1);
+  assert.equal(tweetCalls, 0);
+});
+
+test("a token-refresh call that itself fails stops immediately without ever retrying media upload or reaching the tweet API", async () => {
+  let mediaAttempts = 0;
+  await assert.rejects(
+    () => runMorningGreetingManualPublish({
+      supabaseUrl: "https://example.supabase.co",
+      serviceRoleKey: "service-secret",
+      openAiApiKey: "openai-secret",
+      xAuth: freshXAuth(),
+      now: new Date("2026-09-01T15:30:00Z"),
+      buildPayload: async () => readyPayload(),
+      fetchImpl: async (input, init) => {
+        const url = String(input);
+        if (url.includes(`/published/${DATE}.json`) && !init?.method) {
+          return new Response("Object not found", { status: 400 });
+        }
+        if (url.includes("/rest/v1/publish_claims") && init?.method === "POST") {
+          return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "publishing" }]);
+        }
+        if (url.includes("/rest/v1/publish_claims") && init?.method === "PATCH") {
+          return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "failed" }]);
+        }
+        if (url.includes("/storage/v1/object/") && url.includes("morning-greeting-assets/generated")) {
+          return new Response(new Uint8Array([1]), { status: 200 });
+        }
+        if (url === "https://api.x.com/2/media/upload") {
+          mediaAttempts += 1;
+          return new Response(JSON.stringify({ error: "expired" }), { status: 401 });
+        }
+        if (url === "https://api.x.com/2/oauth2/token") {
+          return new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 });
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof MorningGreetingManualPublishError);
+      assert.match(error.message, /X_TOKEN_REFRESH_FAILED:400/);
+      assert.equal(error.xPosted, false);
+      return true;
+    },
+  );
+  assert.equal(mediaAttempts, 1);
+});
+
+test("a non-401 media failure (e.g. 429/5xx) is never treated as a refresh case and is not retried", async () => {
+  let mediaAttempts = 0;
+  await assert.rejects(
+    () => runMorningGreetingManualPublish({
+      supabaseUrl: "https://example.supabase.co",
+      serviceRoleKey: "service-secret",
+      openAiApiKey: "openai-secret",
+      xAuth: freshXAuth(),
+      now: new Date("2026-09-01T15:30:00Z"),
+      buildPayload: async () => readyPayload(),
+      fetchImpl: async (input, init) => {
+        const url = String(input);
+        if (url.includes(`/published/${DATE}.json`) && !init?.method) {
+          return new Response("Object not found", { status: 400 });
+        }
+        if (url.includes("/rest/v1/publish_claims") && init?.method === "POST") {
+          return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "publishing" }]);
+        }
+        if (url.includes("/rest/v1/publish_claims") && init?.method === "PATCH") {
+          return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "failed" }]);
+        }
+        if (url.includes("/storage/v1/object/") && url.includes("morning-greeting-assets/generated")) {
+          return new Response(new Uint8Array([1]), { status: 200 });
+        }
+        if (url === "https://api.x.com/2/media/upload") {
+          mediaAttempts += 1;
+          return new Response("rate limited", { status: 429 });
+        }
+        if (url === "https://api.x.com/2/oauth2/token") throw new Error("must not refresh for a non-401");
+        throw new Error(`Unexpected URL: ${url}`);
+      },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof MorningGreetingManualPublishError);
+      assert.equal(error.message, "MORNING_GREETING_MEDIA_UPLOAD_FAILED:429");
+      return true;
+    },
+  );
+  assert.equal(mediaAttempts, 1);
+});
+
 test("4: a lost DB claim race stops before any X API call", async () => {
   let xApiCalls = 0;
   await assert.rejects(
@@ -214,7 +482,7 @@ test("4: a lost DB claim race stops before any X API call", async () => {
       supabaseUrl: "https://example.supabase.co",
       serviceRoleKey: "service-secret",
       openAiApiKey: "openai-secret",
-      xAccessToken: "x-secret",
+      xAuth: freshXAuth(),
       now: new Date("2026-09-01T15:30:00Z"),
       buildPayload: async () => readyPayload(),
       fetchImpl: async (input, init) => {
@@ -250,7 +518,7 @@ test("6+7: a length-invalid failure surfaces real retry_count/first_length/retry
       supabaseUrl: "https://example.supabase.co",
       serviceRoleKey: "service-secret",
       openAiApiKey: "openai-secret",
-      xAccessToken: "x-secret",
+      xAuth: freshXAuth(),
       now: new Date("2026-09-01T15:30:00Z"),
       buildPayload: async () => {
         throw new MorningGreetingPayloadDryRunError("MORNING_GREETING_TEXT_LENGTH_INVALID", {
@@ -297,7 +565,7 @@ test("a non-length failure carries null length diagnostics instead of a misleadi
       supabaseUrl: "https://example.supabase.co",
       serviceRoleKey: "service-secret",
       openAiApiKey: "openai-secret",
-      xAccessToken: "x-secret",
+      xAuth: freshXAuth(),
       now: new Date("2026-09-01T15:30:00Z"),
       buildPayload: async () => readyPayload(),
       fetchImpl: async (input, init) => {

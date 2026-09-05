@@ -5,15 +5,15 @@ import test from "node:test";
 // index.ts has no exports (it's the Deno.serve entrypoint), so the new scheduled-dispatch wiring for
 // morning_greeting is verified structurally here, the same way P0.x quota/wiring changes are checked in
 // important-news-monitor's own index.ts. The actual publish behavior (claim, image check, length-safe
-// generation, X post, completion/failure) is already fully covered by
+// generation, refresh-capable X media+post, completion/failure) is already fully covered by
 // morning_greeting_publish_logic_test.ts, which exercises runMorningGreetingManualPublish directly — this
-// file only confirms the dispatcher calls that same, unmodified function correctly.
+// file only confirms the dispatcher calls that same function correctly.
 
 async function readIndexSource(): Promise<string> {
   return await readFile(new URL("./index.ts", import.meta.url), "utf8");
 }
 
-test("the morning_greeting dispatch branch calls the existing, unmodified runMorningGreetingManualPublish (no bespoke auto-post logic)", async () => {
+test("the morning_greeting dispatch branch calls runMorningGreetingManualPublish with the shared, refresh-capable xAuth (no bespoke auto-post logic)", async () => {
   const source = await readIndexSource();
   const branchStart = source.indexOf('if (scheduledPost.post_type === "morning_greeting") {');
   assert.ok(branchStart >= 0, "morning_greeting dispatch branch not found");
@@ -21,8 +21,11 @@ test("the morning_greeting dispatch branch calls the existing, unmodified runMor
   assert.ok(branchEnd > branchStart);
   const branch = source.slice(branchStart, branchEnd);
   assert.match(branch, /await runMorningGreetingManualPublish\(\{/u);
-  // Reuses the already-loaded X tokens (xAuth.tokens.accessToken) rather than loading a second time.
-  assert.match(branch, /xAccessToken:\s*xAuth\.tokens\.accessToken/u);
+  // Passes the already-loaded, refresh-capable xAuth object directly (not a bare access token string) so
+  // a 401 during media upload or the tweet send can be refreshed and retried, exactly like every other
+  // scheduled post type's own X call already can.
+  assert.match(branch, /xAuth,/u);
+  assert.doesNotMatch(branch, /xAccessToken:/u);
   assert.match(branch, /complete_morning_greeting_post/u);
   assert.match(branch, /p_x_post_id:\s*result\.x_post_id/u);
 });

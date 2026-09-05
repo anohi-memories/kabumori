@@ -3135,11 +3135,19 @@ Deno.serve(async (req) => {
           xAccessToken!,
           xRefreshToken!,
         );
+        const manualXAuth: XAuthContext = {
+          tokens,
+          clientId: xClientId!,
+          clientSecret: xClientSecret!,
+          supabaseUrl,
+          serviceRoleKey,
+          refreshExecuted: false,
+        };
         const result = await runMorningGreetingManualPublish({
           supabaseUrl,
           serviceRoleKey,
           openAiApiKey,
-          xAccessToken: tokens.accessToken,
+          xAuth: manualXAuth,
           now: referenceTime,
         });
         return jsonResponse(result, result.skipped ? 200 : 201);
@@ -3953,17 +3961,19 @@ Deno.serve(async (req) => {
     }
 
     if (scheduledPost.post_type === "morning_greeting") {
-      // Reuses runMorningGreetingManualPublish exactly as-is (no changes to that function): it already
-      // has its own atomic publish_claims-based same-day claim, image-existence check, length-safe
-      // generation, X media+post, and completion/failure recording — this is defense in depth on top of
-      // claim_due_post()'s own row-level claim, not a replacement for it. Only the admin-auth check that
-      // wraps it for the manual HTTP endpoint is intentionally skipped here, since the caller is the
-      // trusted internal per-minute dispatcher, not an external request.
+      // Reuses runMorningGreetingManualPublish's atomic publish_claims-based same-day claim,
+      // image-existence check, length-safe generation, refresh-capable X media+post, and
+      // completion/failure recording — this is defense in depth on top of claim_due_post()'s own
+      // row-level claim, not a replacement for it. Only the admin-auth check that wraps it for the manual
+      // HTTP endpoint is intentionally skipped here, since the caller is the trusted internal per-minute
+      // dispatcher, not an external request. Passes the same xAuth already built above (shared with
+      // every other scheduled post type here), so a mid-run token refresh is visible to whichever post
+      // type runs next in this same execution too.
       const result = await runMorningGreetingManualPublish({
         supabaseUrl,
         serviceRoleKey,
         openAiApiKey,
-        xAccessToken: xAuth.tokens.accessToken,
+        xAuth,
       });
       await callRpc(supabaseUrl, serviceRoleKey, "complete_morning_greeting_post", {
         p_scheduled_post_id: scheduledPost.id,

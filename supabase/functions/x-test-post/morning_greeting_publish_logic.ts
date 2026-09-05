@@ -11,6 +11,7 @@ import {
   completePublishSlot,
   failPublishSlot,
 } from "./publish_claim_logic.ts";
+import { requestXWithAuthRefresh, type XAuthContext } from "../_shared/x_oauth2_post.ts";
 
 export const MORNING_GREETING_MANUAL_PUBLISH_MODE = "publish_morning_greeting_manual";
 const X_MEDIA_UPLOAD_URL = "https://api.x.com/2/media/upload";
@@ -139,7 +140,7 @@ export async function runMorningGreetingManualPublish(args: {
   supabaseUrl: string;
   serviceRoleKey: string;
   openAiApiKey: string;
-  xAccessToken: string;
+  xAuth: XAuthContext;
   now?: Date;
   fetchImpl?: FetchLike;
   buildPayload?: (args: {
@@ -221,38 +222,51 @@ export async function runMorningGreetingManualPublish(args: {
     const imageBytes = await imageResponse.arrayBuffer();
     if (imageBytes.byteLength === 0) throw new Error("MORNING_GREETING_IMAGE_EMPTY");
 
-    const form = new FormData();
-    form.append("media", new Blob([imageBytes], { type: "image/png" }), `${dateJst}.png`);
-    form.append("media_category", "tweet_image");
     xApiCalled += 1;
-    const mediaResponse = await fetchImpl(X_MEDIA_UPLOAD_URL, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${args.xAccessToken}` },
-      body: form,
-    });
-    const mediaBody = await responseJson(mediaResponse);
-    if (!mediaResponse.ok) throw new Error(`MORNING_GREETING_MEDIA_UPLOAD_FAILED:${mediaResponse.status}`);
-    const mediaId = responseDataId(mediaBody);
+    // A 401 here means the access token expired between the last refresh (anywhere in the process) and
+    // this call — refreshed at most once per execution (auth.refreshExecuted gates it, shared with the
+    // tweet-post call below), then this exact same request is retried once with the new token. Any other
+    // status (403, 5xx, ...) is not retried — those are not "the token expired", so retrying could double
+    // a request whose outcome is otherwise ambiguous.
+    const mediaResult = await requestXWithAuthRefresh(args.xAuth, async (accessToken) => {
+      const form = new FormData();
+      form.append("media", new Blob([imageBytes], { type: "image/png" }), `${dateJst}.png`);
+      form.append("media_category", "tweet_image");
+      const response = await fetchImpl(X_MEDIA_UPLOAD_URL, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: form,
+      });
+      return { status: response.status, body: await responseJson(response) };
+    }, fetchImpl);
+    if (mediaResult.status < 200 || mediaResult.status >= 300) {
+      throw new Error(`MORNING_GREETING_MEDIA_UPLOAD_FAILED:${mediaResult.status}`);
+    }
+    const mediaId = responseDataId(mediaResult.body);
     if (!mediaId) throw new Error("MORNING_GREETING_MEDIA_ID_MISSING");
     imageUploadSucceeded = true;
 
     xApiCalled += 1;
     xPostApiCalled += 1;
-    const postResponse = await fetchImpl(X_POST_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${args.xAccessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        text: payload.text,
-        made_with_ai: true,
-        media: { media_ids: [mediaId] },
-      }),
-    });
-    const postBody = await responseJson(postResponse);
-    if (!postResponse.ok) throw new Error(`MORNING_GREETING_X_POST_FAILED:${postResponse.status}`);
-    xPostId = responseDataId(postBody);
+    const postResult = await requestXWithAuthRefresh(args.xAuth, async (accessToken) => {
+      const response = await fetchImpl(X_POST_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: payload.text,
+          made_with_ai: true,
+          media: { media_ids: [mediaId] },
+        }),
+      });
+      return { status: response.status, body: await responseJson(response) };
+    }, fetchImpl);
+    if (postResult.status < 200 || postResult.status >= 300) {
+      throw new Error(`MORNING_GREETING_X_POST_FAILED:${postResult.status}`);
+    }
+    xPostId = responseDataId(postResult.body);
     if (!xPostId) throw new Error("MORNING_GREETING_X_POST_ID_MISSING");
     xPosted = true;
 

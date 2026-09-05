@@ -164,6 +164,27 @@ async function refreshXTokens(auth: XAuthContext, fetchImpl: typeof fetch): Prom
   auth.refreshExecuted = true;
 }
 
+export type XRefreshableRequestResult = { status: number; body: unknown };
+
+// Generic 401-aware retry, usable for any X API call shape (JSON tweet POST, multipart media upload,
+// etc.) — not just the plain-text tweet path postToXWithRefresh below already covers. On a 401, refreshes
+// the access token at most once per execution (mirrors postToXWithRefresh's exact safety property:
+// auth.refreshExecuted gates it) and retries the SAME request once with the new token. Any other status,
+// or a repeated 401 after a refresh already ran this execution, is returned as-is — the caller decides
+// how to interpret it, and this function itself never retries more than once.
+export async function requestXWithAuthRefresh(
+  auth: XAuthContext,
+  performRequest: (accessToken: string) => Promise<XRefreshableRequestResult>,
+  fetchImpl: typeof fetch = fetch,
+): Promise<XRefreshableRequestResult> {
+  let result = await performRequest(auth.tokens.accessToken);
+  if (result.status === 401 && !auth.refreshExecuted) {
+    await refreshXTokens(auth, fetchImpl);
+    result = await performRequest(auth.tokens.accessToken);
+  }
+  return result;
+}
+
 async function requestXPost(
   accessToken: string,
   text: string,
