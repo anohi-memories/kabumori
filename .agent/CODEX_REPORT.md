@@ -19,8 +19,8 @@
   - 認証ユーザーRPC E2E: 資格情報がないため未実施。ユーザー作成・パスワード変更はしていない
   - Supabase Security Advisor: 対象関数に0029 WARN。authenticated向けper-user SECURITY DEFINER APIのため想定内。他の警告は既存・対象外
   - Performance Advisor: 対象関数に固有の新規問題は確認されず。既存RLS/initplan等は対象外
-- commit_hash: `.agent/`本番適用報告commitで確定予定
-- push: `.agent/CODEX_REPORT.md`のみorigin/mainへ反映予定
+- commit_hash: `6938968d1ed583d011de2d0b9b951fac09413d1c`
+- push: 上記commitで`.agent/CODEX_REPORT.md`のみorigin/mainへ反映済み
 - deploy: DB migrationのみ実施。Edge Function deployなし
 - remaining_issues:
   - 認証済みユーザーでのRPC E2EとiOS実画面確認が未完了
