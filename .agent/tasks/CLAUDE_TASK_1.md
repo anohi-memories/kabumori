@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - task_id: important-news-voice-guided-retry-20260905
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - purpose: important-news生成後のVoiceチェックで、AI自身が具体的な修正点を特定できているにもかかわらず再生成せず `generation_failed` になるケースを改善する。Factがpassedで、Voice issueが修正可能な表現・文法・単複・不自然な和英混在などに限定される場合は、そのVoice指摘を明示的な修正指示として1回だけ再生成し、再度Fact + Voiceを通して安全に復帰できるようにする。
 - scope:
   - `supabase/functions/important-news-monitor/post_generation_logic.ts`
