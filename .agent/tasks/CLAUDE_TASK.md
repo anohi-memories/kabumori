@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット2の現在タスクです。`G
 - task_id: kabumori-expo-push-foundation-v1-20260905
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - purpose: 株アプリPush通知V1のうち、重要ニュース判定ロジックには触れず、Expo Push Token登録と独立したPush配信基盤を実装する。後続タスクで重要ニュース→対象ユーザー→notifications生成を接続できる状態まで整える。
 - scope:
   - 現在のExpo/React Native構成と認証フローを確認する
