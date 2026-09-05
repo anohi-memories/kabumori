@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - task_id: important-news-deploy-middle-east-oil-shipping-coverage-20260905
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - purpose: K1承認済みcommit `e67b825` の中東・原油輸送リスク取得強化を、本番 `important-news-monitor` に安全にdeployし、自然fetchで実運用上の取得可否を確認できる状態にする。
 - scope:
   - origin/main fresh-check
