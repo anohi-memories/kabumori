@@ -62,6 +62,82 @@ test("the vocabulary fix did not add or remove a query slot", () => {
   assert.equal(BREAKING_MARKET_QUERIES.length, 6);
 });
 
+// Production coverage gap (2026-09-05): "US military strikes multiple Iranian oil tankers" — reported by
+// CENTCOM as retaliation for an Iranian missile attack on a US Navy vessel, with the market-relevant risk
+// being disrupted oil shipping through the Strait of Hormuz — fell through war_geopolitics_taiwan's
+// original vocabulary, which covered general Middle East conflict but not oil tankers/shipping/energy
+// infrastructure/CENTCOM specifically.
+test("war_geopolitics_taiwan query vocabulary covers Iran/Hormuz oil-tanker and maritime-attack scenarios without losing existing war/ceasefire/Taiwan/Middle East coverage", () => {
+  const query = BREAKING_MARKET_QUERIES.find((item) => item.key === "war_geopolitics_taiwan");
+  assert.ok(query, "war_geopolitics_taiwan query must still exist");
+  const text = query!.searchQuery.toLowerCase();
+  // New coverage: Iran/Israel/Hormuz oil-shipping and maritime-attack angle.
+  assert.match(text, /\biran\b/);
+  assert.match(text, /\bisrael\b/);
+  assert.match(text, /hormuz/);
+  assert.match(text, /oil tanker/);
+  assert.match(text, /maritime attack/);
+  assert.match(text, /energy infrastructure/);
+  assert.match(text, /centcom/);
+  // Existing coverage must not be lost.
+  assert.match(text, /\bwar\b/);
+  assert.match(text, /ceasefire/);
+  assert.match(text, /taiwan/);
+  assert.match(text, /middle east/);
+});
+
+// CENTCOM/DoD official domains: verified real, DNS-resolvable .mil/.gov domains (not guessed), added for
+// official military statements on strikes affecting oil shipping. Confirms they're recognized as allowed
+// WITHOUT weakening the existing actual-visited-URL/https/domain gates any other source has to pass.
+test("centcom.mil and defense.gov are recognized as allowed source domains for a candidate the tool actually visited", () => {
+  const query = BREAKING_MARKET_QUERIES.find((item) => item.key === "war_geopolitics_taiwan")!;
+  const raw = [{
+    title: "CENTCOM: U.S. forces strike Iranian oil tankers in the Gulf",
+    summary: "U.S. Central Command announced strikes on multiple Iranian oil tankers.",
+    source_url: "https://www.centcom.mil/MEDIA/PRESS-RELEASES/Press-Release-View/Article/1234567/",
+    published_at: now.toISOString(),
+    category: "war_ceasefire",
+  }];
+  const visited = new Set(["https://www.centcom.mil/MEDIA/PRESS-RELEASES/Press-Release-View/Article/1234567/"]);
+  const accepted = collectBreakingMarketCandidates(query, raw, visited, now);
+  assert.equal(accepted.length, 1);
+
+  const defenseRaw = [{
+    title: "DoD statement on Iranian tanker strikes",
+    summary: "The Department of Defense issued a statement.",
+    source_url: "https://www.defense.gov/News/Releases/Release/Article/1234567/",
+    published_at: now.toISOString(),
+    category: "war_ceasefire",
+  }];
+  const defenseVisited = new Set(["https://www.defense.gov/News/Releases/Release/Article/1234567/"]);
+  const defenseAccepted = collectBreakingMarketCandidates(query, defenseRaw, defenseVisited, now);
+  assert.equal(defenseAccepted.length, 1);
+});
+
+test("a .mil/.gov-looking domain the tool never actually visited is still rejected — being on the allowlist alone is not enough", () => {
+  const query = BREAKING_MARKET_QUERIES.find((item) => item.key === "war_geopolitics_taiwan")!;
+  const raw = [{
+    title: "CENTCOM: U.S. forces strike Iranian oil tankers in the Gulf",
+    summary: "U.S. Central Command announced strikes on multiple Iranian oil tankers.",
+    source_url: "https://www.centcom.mil/MEDIA/PRESS-RELEASES/Press-Release-View/Article/1234567/",
+    published_at: now.toISOString(),
+    category: "war_ceasefire",
+  }];
+  const accepted = collectBreakingMarketCandidates(query, raw, new Set(), now);
+  assert.equal(accepted.length, 0);
+});
+
+test("an unrelated .mil/.gov-shaped domain not on the allowlist is still rejected", () => {
+  const query = BREAKING_MARKET_QUERIES.find((item) => item.key === "war_geopolitics_taiwan")!;
+  const raw = [{
+    title: "Fake military update", summary: "x",
+    source_url: "https://www.army.mil/some-article", published_at: now.toISOString(), category: "war_ceasefire",
+  }];
+  const visited = new Set(["https://www.army.mil/some-article"]);
+  const accepted = collectBreakingMarketCandidates(query, raw, visited, now);
+  assert.equal(accepted.length, 0);
+});
+
 // STEP 11 #3: independent quota — the rotation selector itself never exceeds the hard cap regardless of
 // how many queries exist, and never depends on how many corporate/market_macro candidates were fetched
 // this cycle (they are computed in entirely separate code paths in index.ts).

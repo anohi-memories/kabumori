@@ -41,7 +41,12 @@ export const BREAKING_MARKET_QUERIES: BreakingMarketQuery[] = [
   },
   {
     key: "war_geopolitics_taiwan",
-    searchQuery: "war ceasefire military conflict Taiwan Middle East breaking news today",
+    // Covers general war/ceasefire/Taiwan coverage AND the specific intersection of military conflict
+    // with oil shipping/energy infrastructure (e.g. a strike on oil tankers near the Strait of Hormuz) —
+    // a real production gap where general Middle East vocabulary missed a story whose market-impact hook
+    // was disrupted oil transport, not the military conflict framing alone.
+    searchQuery:
+      "war ceasefire military conflict Taiwan Middle East Iran Israel Strait of Hormuz oil tanker maritime attack energy infrastructure CENTCOM breaking news today",
     defaultCategory: "geopolitics",
     defaultTopicKey: "breaking:conflict",
   },
@@ -79,6 +84,12 @@ export const BREAKING_MARKET_SOURCE_DOMAINS = [
   "mof.go.jp", "boj.or.jp", "federalreserve.gov", "ustr.gov",
   "whitehouse.gov", "commerce.gov", "bis.doc.gov", "state.gov",
   "bls.gov", "bea.gov", "treasury.gov",
+  // Verified real, resolvable .mil/.gov domains (DNS-confirmed, not guessed) for official US military
+  // statements on strikes/incidents affecting oil shipping and energy infrastructure — e.g. CENTCOM's own
+  // press releases on an attack on oil tankers. Being on this list only makes a candidate's source_url
+  // eligible; every other gate (actual-visited-URL check, https, freshness, category) still applies
+  // exactly as before — a .mil/.gov domain is never trusted on domain alone.
+  "centcom.mil", "defense.gov",
 ];
 
 const MAX_BREAKING_MARKET_ITEM_AGE_MS = 24 * 60 * 60 * 1000;
