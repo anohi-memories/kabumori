@@ -10,8 +10,8 @@
   - `git diff --check`: PASS
   - 本番read-only確認: `get_my_important_stock_news`はpublic/privateとも未作成
   - SQL実行テスト: 未実施（ローカルPostgres/Dockerなし、本番DDLは禁止）
-- commit_hash: `.agent/`レビュー資料commitで確定予定
-- push: `.agent/`のみorigin/mainへ反映予定。migration本体はlocal only
+- commit_hash: `ac0cf55`（修正版レビュー資料とstatus更新）
+- push: `ac0cf55`をorigin/mainへ反映済み。migration本体はlocal only
 - deploy: 未実施（本番migration、GRANT、データ変更すべてなし）
 - remaining_issues:
   - 本番適用前にCレビューが必要
