@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - task_id: important-news-trump-fed-trade-coverage-20260905
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - purpose: `breaking_market` の検索カバレッジ不足により、トランプ米政権の市場インパクト政策（特に「FRBが利下げしなければ貿易を止める」類の、貿易政策とFRBへの金利圧力が交差するニュース）を候補取得前に取りこぼす問題を最小差分で修正する。
 - scope:
   - `supabase/functions/important-news-monitor/breaking_market_source_fetchers.ts`
