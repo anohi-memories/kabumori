@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - task_id: important-news-deploy-voice-guided-retry-20260905
 - owner: claude
 - slot: claude-1
-- status: review_required
+- status: done
 - purpose: K1承認済みcommit `f45ca12` のVoice guided retry改善を、本番 `important-news-monitor` に安全にdeployし、自然運用でretryが発火できる状態にする。
 - scope:
   - origin/mainをfresh-check
@@ -61,10 +61,6 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 
 現在の本番は `important-news-monitor` v27 ACTIVE、verify_jwt=false、auto_publish=false。今回のdeploy後もこれらの安全設定を維持すること。
 
-## Completion report
-
-完了時はこのファイル末尾に `## Report` を追加し、task_id / result / deploy / deployed_version / natural_cycle_check / voice_retry_observation / safety_checks / remaining_issues / next_recommendation を記録する。
-
 ## Report
 
 - task_id: important-news-deploy-voice-guided-retry-20260905
@@ -93,3 +89,16 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - remaining_issues:
   - Voice retryが実際のVoice checker出力に対して意図通り機能するかは、該当するFact=passed/Voice=failed（修正可能な品質問題）のcandidateが自然発生するまで実証できない。継続的なread-only観測が必要
 - next_recommendation: 現状で安全に稼働中のため追加対応は不要。今後の自然cycleで`generation_voice_retry.attempted=true`の実例が観測できたら、その内容（initial/retry issues、fact/voice status）を任意タイミングで報告する。
+
+## K1 Review decision
+
+承認。
+
+- `important-news-monitor` は v28 ACTIVE へ更新済み
+- `verify_jwt=false`、`auto_publish=false`、interval、Cronは維持
+- deploy対象は `important-news-monitor` のみ
+- コード変更・DB変更・X投稿実行・他workstream変更なし
+- deploy後の自然fetch cycleは正常完了
+- Voice retry自然実例が未観測なのは、対象candidateがまだ発生していないためであり失敗扱いしない
+
+本タスクは完了とする。Voice retry実例の観測は任意のread-onlyフォローアップとし、追加実装は要求しない。
