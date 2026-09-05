@@ -2,97 +2,88 @@
 
 Claude Code（くろちゃん）並列スロット1の現在タスクです。`G1` を受けたClaude Codeは、`.agent/ORCHESTRATION.md` と既存のプロジェクトルールを確認したうえで、このファイルを自分の担当タスク正本として扱います。
 
-- task_id: important-news-deploy-middle-east-oil-shipping-coverage-20260905
+- task_id: morning-greeting-x-oauth-refresh-20260906
 - owner: claude
 - slot: claude-1
-- status: review_required
-- purpose: K1承認済みcommit `e67b825` の中東・原油輸送リスク取得強化を、本番 `important-news-monitor` に安全にdeployし、自然fetchで実運用上の取得可否を確認できる状態にする。
+- status: ready
+- purpose: 2026-09-06朝の `morning_greeting` が、期限切れX OAuth access tokenを使った画像アップロードで401になり失敗した問題を、既存の重複投稿防止設計を維持したまま最小修正する。
 - scope:
-  - origin/main fresh-check
-  - commit `e67b825` がmainに含まれることを確認
-  - deploy前の `important-news-monitor` version/status/verify_jwt を確認
-  - `important-news-monitor` のみ本番deploy
-  - deploy後に ACTIVE/version/verify_jwt を確認
-  - `auto_publish=false`、interval、Cron等が変わっていないことをread-only確認
-  - 次の自然 `important-news-fetch` cycleをread-only観測し、`war_geopolitics_taiwan` 系の取得処理がerrorなく動くことを確認
-  - 可能なら `centcom.mil` / `defense.gov` がOpenAI web_search経由で実際に利用されたか、またはIran/Hormuz/oil tanker系候補が取得されたかをread-only確認
+  - 作業開始時に `origin/main` をfresh-checkし、`.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、このTASKを確認する
+  - `supabase/functions/x-test-post/**` の朝の挨拶 publish 経路と既存X OAuth refresh経路だけを必要最小限で調査する
+  - 既存の通常X投稿では401時に `refreshXTokens()` → 1回再試行する設計を確認し、その考え方を朝の挨拶のX media upload / X tweet送信にも安全に共有または適用する
+  - 朝の挨拶で最初の media upload が401の場合、X OAuth tokenを1回だけrefreshし、新access tokenでmedia uploadを1回だけ再試行できるようにする
+  - media upload成功後のtweet送信が401の場合も、401は認証拒否でXに受理されていない前提の範囲で、refreshがまだ未実施なら1回だけrefreshしてtweet送信を1回だけ再試行できるようにする
+  - refresh済みなのに再度401なら即失敗する。429/5xx/network timeoutなど、投稿受理の成否が曖昧になり得る失敗を自動再送対象へ広げない
+  - scheduled `morning_greeting` と admin manual publish の両経路で、同じ安全なrefresh-capable auth経路が使われることを確認する
+  - mock/fake fetchで、期限切れaccess token→media 401→refresh成功→media成功→tweet成功の回帰テストを追加する
+  - refresh失敗、media再401、tweet送信後の曖昧失敗で危険な再送をしないことをテストする
+  - `publish_claims` の atomic same-day claim、安全なfailed状態、Storage receipt等の既存重複防止設計は維持する
 - forbidden:
-  - コード変更
-  - 新規commit/push
-  - P0.7 corporate X market-impact gate開始
-  - importance judgement / generation / Voice retry変更
-  - TDnet / company IR / market_macro変更
-  - auto_publish変更
-  - X投稿実行・投稿ロジック変更
-  - Cron変更
-  - DB schema/migration/GRANT変更
-  - morning greeting系変更
-  - model変更
-  - breaking_marketのquery数、最大2検索/cycle、20分rotation、24h freshness、max_tool_calls=1、actual visited URL検証を変更しない
-  - secrets表示・変更
+  - 2026-09-06のfailed `publish_claims` を削除・更新・再claimしない
+  - 2026-09-06の朝の挨拶を手動投稿・再投稿しない
+  - 実X APIへテスト投稿・画像アップロードを行わない
+  - production secrets / OAuth token値を表示・変更しない
+  - OAuth refresh token自体の運用ルールを変更しない
+  - failed claimの自動reclaim・stale reclaimを追加しない
+  - 401以外の曖昧なX送信失敗へ自動retryを広げない
+  - `important-news-monitor/**`、重要ニュース、P0.7を変更しない
+  - Expo/Auth/MVP/Push通知workstreamを変更しない
+  - Cron、GitHub Actions、morning greeting画像生成workflowを変更しない
+  - DB schema/migration/GRANT/production dataを変更しない
+  - 本番deployを行わない
   - 他workstreamの未コミット変更を変更・stage・commitしない
 - completion_criteria:
-  - K1承認済みcommit `e67b825` がmainに存在することを確認
-  - `important-news-monitor` のみdeploy完了
-  - deploy後ACTIVE
-  - 既存 `verify_jwt=false` 維持
-  - `auto_publish=false` 維持
-  - Cron/interval/DB/X投稿等に意図しない変更なし
-  - 自然fetch cycleを少なくとも1回read-only観測し、errorなく正常稼働していることを報告
-  - Iran/Hormuz/oil tanker/CENTCOM系の実ヒットが無ければ「未観測」と明記し、それ自体を失敗扱いしない
-  - `centcom.mil` / `defense.gov` の実クロール可否も観測できなければ未確認として明記
-  - コード変更・新規commitなし
-  - TASK末尾に `## Report` を追加し status を `review_required` にする
-- commit: 禁止
-- push: 不要
-- deploy: 必須。`important-news-monitor` のみ
+  - 期限切れaccess tokenでmedia uploadが401になった場合に、refresh→media upload 1回再試行で復旧できる
+  - refresh実行は1 executionあたり最大1回で、refresh後の再401は失敗する
+  - tweet側も401のみ安全な1回refresh/retryが可能で、401以外の曖昧失敗は再送しない
+  - scheduled / manual publishの両経路で同じ安全性が成立する
+  - 既存の `publish_claims` same-day one-claim、failed claim block、X post後の重複防止方針が維持される
+  - 今日2026-09-06のfailed claim・scheduled row・Xには一切変更なし
+  - 関連テストと `x-test-post` 回帰テストがPASSする
+  - 必要な変更だけを最小commitし、fresh-check後に `origin/main` へpushする
+  - 本番deployはしない。deployはK1承認後の別タスクにする
+  - TASK末尾に `## Report` を追加し、statusを `review_required`、next_ownerを `chatgpt` にする
+- commit: 必須。朝の挨拶OAuth refresh修正の最小差分のみ
+- push: fresh-checkで競合がなければ `origin/main` へpush
+- deploy: 禁止
 - report_mode: inline
 - next_owner: chatgpt
 
-## Background
+## Incident evidence
 
-直前の実装タスク `important-news-middle-east-oil-shipping-coverage-20260905` はK1承認済み。
+2026-09-06 JSTの本番read-only確認結果:
+- 画像 `morning-greeting-assets/generated/2026-09-06.png` は生成済み
+  - created_at: `2026-09-05 20:41:40.469918+00` = 2026-09-06 05:41:40 JST
+- `scheduled_posts`
+  - id: `e0c6da3b-ed6f-45d8-81cb-05b1796d1a2b`
+  - post_type: `morning_greeting`
+  - scheduled_for: `2026-09-05 21:51:58+00` = 2026-09-06 06:51:58 JST
+  - status: `failed`
+  - attempt_count: 1
+- `publish_claims`
+  - id: `6202d89e-1369-4837-b64a-9de65d53f5e1`
+  - date_jst: `2026-09-06`
+  - status: `failed`
+  - execution_id: `0fe1c7af-f4a8-4905-904c-ca40a644bad7`
+  - x_post_id: null
+  - error_code: `MORNING_GREETING_MEDIA_UPLOAD_FAILED:401`
+- `oauth_token_store` metadata
+  - provider: `x`
+  - expires_at: `2026-09-05 13:27:12.53+00` = 2026-09-05 22:27:12 JST
+  - updated_at: `2026-09-05 11:27:12.53+00`
+- 本番 `x-test-post` は incident確認時点で v86 ACTIVE / verify_jwt=false
 
-承認済み内容:
-- commit `e67b825`
-- important-news-monitor全体回帰 235/235 pass
-- `war_geopolitics_taiwan` に Iran / Israel / Strait of Hormuz / oil tanker / maritime attack / energy infrastructure / CENTCOM を追加
-- `centcom.mil` / `defense.gov` をallowed domainsへ追加
-- query数6、最大2検索/cycle、20分rotation、24h freshness、max_tool_calls=1、actual visited URL検証はすべて維持
-- auto_publish=false維持
+コード確認で判明した原因:
+- 通常tweet経路 `postToX()` は401時に `refreshXTokens(auth)` を実行し、new access tokenで1回再試行する
+- 朝の挨拶 `runMorningGreetingManualPublish()` は `xAccessToken` 文字列だけを受け取り、`https://api.x.com/2/media/upload` と `https://api.x.com/2/tweets` を直接呼ぶため401時のOAuth refresh経路がない
+- 今回は期限切れaccess tokenでmedia uploadが401となり、tweet API到達前に安全に失敗した
 
-現在の本番は直前K1で `important-news-monitor` v28 ACTIVE、verify_jwt=false、auto_publish=false。今回のdeploy後も安全設定を維持すること。
+## Safety intent
+
+今回の目的は「失敗した朝の挨拶を無理に再投稿すること」ではなく、**次回以降の正規scheduled executionがaccess token期限切れでも、401という明確な認証拒否だけを1回refreshして安全に継続できるようにすること**。
+
+今日のfailed claimは、既存設計どおり人間レビュー対象としてそのまま残す。自動reclaimや手動削除は行わない。
 
 ## Completion report
 
-完了時はこのファイル末尾に `## Report` を追加し、task_id / result / deploy / deployed_version / natural_fetch_check / middle_east_oil_observation / source_domain_observation / safety_checks / remaining_issues / next_recommendation を記録する。
-
-## Report
-
-- task_id: important-news-deploy-middle-east-oil-shipping-coverage-20260905
-- result: `important-news-monitor`のみdeploy完了。deploy前後で`verify_jwt`・`auto_publish`・`interval_minutes`・`is_active`・Cronはすべて無変更を確認。deploy後、自然fetch cycleが1回正常完了（error無し）。Iran/Hormuz/oil tanker/CENTCOM系の実ヒット、および`centcom.mil`/`defense.gov`の実クロールは、この観測期間内ではまだ発生していない（該当ニュースの発生とrotation選択タイミング次第であり、異常ではない）。
-- deploy:
-  - コード変更・新規commitなし（本タスクの禁止事項どおり）
-  - deploy直前、ローカルの`breaking_market_source_fetchers.ts`にK1承認済みの修正（`Strait of Hormuz`等の語彙追加、`centcom.mil`ドメイン追加）が含まれていることをgrepで確認
-- deployed_version:
-  - deploy前: v28 ACTIVE, verify_jwt=false
-  - deploy後: **v29 ACTIVE, verify_jwt=false**（維持確認済み）
-- natural_fetch_check:
-  - deploy直後（2026-09-05 15:04 UTC以降）に`important-news-fetch`が1回実行され、`status=completed`, `error=null`（新規候補0件、正常稼働を確認）
-- middle_east_oil_observation:
-  - **未観測**。`important_news_candidates`をtitle/source_urlで`hormuz`/`tanker`検索したが該当行なし。6クエリ中2つ/cycleのローテーション性質上、`war_geopolitics_taiwan`が選択されたか・該当ニュースが実際に発生しているかの両方に依存するため、未観測＝異常ではない
-- source_domain_observation:
-  - **未確認**。`centcom.mil`・`defense.gov`からのcandidateはこれまで一度も無し（過去分含めて検索したが該当なし）。OpenAI web_search側が実際にこれらのドメインをクロールできるかは、実ヒットが発生するまで検証できない
-- safety_checks:
-  - `verify_jwt=false`: 維持確認済み
-  - `auto_publish=false`: 維持確認済み
-  - `interval_minutes=20` / `is_active=true`: 維持確認済み
-  - Cron（7ジョブ、スケジュール、2026-09-07の一時job含む）: 無変更確認済み
-  - コード変更・新規commit/push: なし（禁止事項どおり）
-  - P0.7 / importance judgement・generation・Voice retry / TDnet・company IR・market_macro / X投稿実行 / morning greeting系 / model変更: すべて未着手・未接触
-  - breaking_marketのquery数・最大2検索/cycle・20分rotation・24h freshness・max_tool_calls=1・actual visited URL検証: 無変更確認済み
-  - 他workstreamの未コミット変更・並行スロットの作業: 変更・stage・commitなし。`git reset --mixed`でbranch pointerのみ移動し、他エージェントの編集は無傷を確認
-  - secrets: 非表示・非変更
-- remaining_issues:
-  - Iran/Hormuz/oil tanker系の実ヒット、および`centcom.mil`/`defense.gov`の実クロール可否は、該当ニュースの発生とrotation選択タイミング次第であり、継続的なread-only観測が必要
-- next_recommendation: 現状で安全に稼働中のため追加対応は不要。今後の自然cycleでcentcom.mil/defense.gov経由の候補、またはHormuz/tanker系候補が観測できたら、その内容を任意タイミングで報告する。
+完了時はこのファイル末尾に `## Report` を追加し、task_id / result / root_cause_confirmed / changed_files / auth_refresh_behavior / retry_safety / tests / commit_hash / push / deploy / production_changes / remaining_issues / next_recommendation を記録する。
