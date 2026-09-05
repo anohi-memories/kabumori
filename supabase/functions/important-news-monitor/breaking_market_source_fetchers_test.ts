@@ -35,6 +35,33 @@ test("1: breaking_market queries are a distinct, additive list", () => {
   assert.equal(new Set(keys).size, keys.length);
 });
 
+// Production coverage gap (2026-09-05): a "Trump threatens to halt trade with countries unless the Fed
+// cuts rates" style story sits at the intersection of trade-policy threats and pressure on the Federal
+// Reserve, and fell through the vocabulary gap of the original trump_tariff_semiconductor query text
+// (which only covered tariffs/sanctions/export-controls, with no Fed/rate-cut/trade-halt terms at all).
+test("trump_tariff_semiconductor query vocabulary covers Trump trade-policy pressure on the Fed (rate cut / halt trade) without losing existing tariff/export-control coverage", () => {
+  const query = BREAKING_MARKET_QUERIES.find((item) => item.key === "trump_tariff_semiconductor");
+  assert.ok(query, "trump_tariff_semiconductor query must still exist");
+  const text = query!.searchQuery.toLowerCase();
+  // New coverage: Trump pressuring the Fed via trade-policy threats.
+  assert.match(text, /federal reserve|\bfed\b/);
+  assert.match(text, /rate cut/);
+  assert.match(text, /halt trade/);
+  // Existing coverage must not be lost.
+  assert.match(text, /tariff/);
+  assert.match(text, /china/);
+  assert.match(text, /japan/);
+  assert.match(text, /semiconductor/);
+  assert.match(text, /export controls/);
+  assert.match(text, /trump/);
+});
+
+// Rotation shape must stay exactly as it was: 6 queries, 2 per 20-minute cycle. This is a fix to one
+// query's vocabulary, not a new query — adding a 7th would dilute how often every other topic is checked.
+test("the vocabulary fix did not add or remove a query slot", () => {
+  assert.equal(BREAKING_MARKET_QUERIES.length, 6);
+});
+
 // STEP 11 #3: independent quota — the rotation selector itself never exceeds the hard cap regardless of
 // how many queries exist, and never depends on how many corporate/market_macro candidates were fetched
 // this cycle (they are computed in entirely separate code paths in index.ts).

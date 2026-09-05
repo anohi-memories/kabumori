@@ -30,7 +30,12 @@ export type BreakingMarketQuery = {
 export const BREAKING_MARKET_QUERIES: BreakingMarketQuery[] = [
   {
     key: "trump_tariff_semiconductor",
-    searchQuery: "Trump tariff sanctions China Japan semiconductor export controls announcement today",
+    // Covers both the original tariff/export-control announcements AND the intersection of trade policy
+    // with pressure on the Federal Reserve (e.g. "Trump threatens to halt trade with countries unless the
+    // Fed cuts rates") — a real production coverage gap where trade-policy vocabulary alone missed
+    // stories whose news hook was the Fed-pressure angle rather than tariffs/export-controls themselves.
+    searchQuery:
+      "Trump tariff trade policy sanctions China Japan semiconductor export controls Federal Reserve rate cut pressure threat to halt trade today",
     defaultCategory: "tariffs",
     defaultTopicKey: "breaking:trump_tariff",
   },
