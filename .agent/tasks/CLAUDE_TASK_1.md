@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - task_id: morning-greeting-x-oauth-refresh-20260906
 - owner: claude
 - slot: claude-1
-- status: in_progress
+- status: review_required
 - purpose: 2026-09-06朝の `morning_greeting` が、期限切れX OAuth access tokenを使った画像アップロードで401になり失敗した問題を、既存の重複投稿防止設計を維持したまま最小修正する。
 - scope:
   - 作業開始時に `origin/main` をfresh-checkし、`.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、このTASKを確認する
@@ -87,3 +87,37 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 ## Completion report
 
 完了時はこのファイル末尾に `## Report` を追加し、task_id / result / root_cause_confirmed / changed_files / auth_refresh_behavior / retry_safety / tests / commit_hash / push / deploy / production_changes / remaining_issues / next_recommendation を記録する。
+
+## Report
+
+- task_id: morning-greeting-x-oauth-refresh-20260906
+- result: 実装・テスト・commit/push完了。朝の挨拶のmedia upload/tweet送信に、既存の通常tweet経路と同じ「401時に1回だけrefresh→1回だけ再試行」を追加。今回の実インシデント（期限切れaccess tokenによるmedia upload 401失敗）は次回以降のscheduled executionで自動復旧できる状態になった。
+- root_cause_confirmed: 確認済み。`runMorningGreetingManualPublish()`は`xAccessToken`という文字列のみを受け取り、X media/tweet APIを直接呼んでいたためOAuth refresh経路が一切なかった。通常tweet経路（`postToX`/`postThreadToX`）は401時に`refreshXTokens()`→1回再試行する設計が既にあり、今回はその考え方を朝の挨拶にも共有・適用した。
+- changed_files:
+  - `supabase/functions/_shared/x_oauth2_post.ts`（新規export `requestXWithAuthRefresh()` のみ追加。既存export・既存関数は無変更）
+  - `supabase/functions/_shared/x_oauth2_post_test.ts`（新規4テスト追加）
+  - `supabase/functions/x-test-post/morning_greeting_publish_logic.ts`（`xAccessToken: string`→`xAuth: XAuthContext`に変更、media upload・tweet送信の両方を`requestXWithAuthRefresh`経由に変更）
+  - `supabase/functions/x-test-post/morning_greeting_publish_logic_test.ts`（既存テストを`xAuth`形式に更新、新規6テスト追加）
+  - `supabase/functions/x-test-post/index.ts`（admin manual-publish経路・scheduled dispatch経路の両方で`XAuthContext`を構築・渡すよう変更）
+  - `supabase/functions/x-test-post/morning_greeting_dispatch_test.ts`（`xAccessToken:`アサーションを`xAuth,`へ更新）
+- auth_refresh_behavior:
+  - media upload: 401 → `auth.refreshExecuted`が`false`なら1回だけrefresh→新tokenで1回だけ再試行。401以外（403/429/5xxなど）はrefreshせず即失敗
+  - tweet送信: media upload成功後、tweet送信が401の場合も同じ`auth`オブジェクトを共有するため、まだrefresh未実施なら1回だけrefresh→再試行。media側で既にrefresh済みなら、tweet側の401は即失敗（1 executionで最大1回のrefreshを厳守）
+  - scheduled `morning_greeting`とadmin manual publishの両経路で、同一の`XAuthContext`ベースの refresh-capable auth を使用することを確認済み（scheduled経路は他の投稿種別と共有する`xAuth`をそのまま渡す設計）
+- retry_safety:
+  - refresh実行は1 executionあたり最大1回（`auth.refreshExecuted`フラグで保証、既存`postToXWithRefresh`と同一の安全プロパティ）
+  - refresh後の再401は即失敗（無限retryなし）
+  - 401以外の曖昧な失敗（429/5xx等）は自動再送対象に含めない（テストで確認済み）
+  - refresh自体が失敗した場合も即失敗し、media/tweetへの再試行は行わない
+- tests:
+  - `_shared`: 5/5 pass（新規4件含む）
+  - `x-test-post`全体回帰: **298/298 pass**（`morning_greeting_publish_logic_test.ts`13/13、`morning_greeting_dispatch_test.ts`4/4含む、新規テストで実インシデント相当のmedia 401復旧・tweet側401復旧・二重401での安全な失敗・refresh失敗時の安全な失敗・非401（429等）での非retryをすべて固定）
+  - `important-news-monitor`全体回帰: **235/235 pass**（同じ`_shared/x_oauth2_post.ts`を使用するため影響有無を確認、無影響）
+- commit_hash: `b459024`
+- push: 完了（origin/main反映済み、push前後でdrift確認済み）
+- deploy: 未実施（scope指示どおり禁止。K1レビュー後に別タスクで対応）
+- production_changes: なし。DB・secrets・本番設定への書き込みは一切行っていない
+- remaining_issues:
+  - 実際のX APIでこのrefresh-retryが意図通り機能するかは、次回以降の実運用（scheduled executionまたは手動publish）でしか実証できない
+  - 2026-09-06のfailed claim（`6202d89e-...`）・scheduled_posts行（`e0c6da3b-...`）は明示的に未変更・未削除・未再claimであることを確認済み（read-only確認済み）
+- next_recommendation: K1レビュー後、問題なければ`x-test-post`をdeployし、明日以降のscheduled `morning_greeting`実行が正常にX投稿まで到達するかread-onlyで観測することを推奨。
