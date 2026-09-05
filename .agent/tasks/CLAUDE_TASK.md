@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット2の現在タスクです。`G
 - task_id: kabumori-expo-auth-foundation-mainline-20260906
 - owner: claude
 - slot: claude-2
-- status: review_required
+- status: done
 - purpose: 現在ローカルで混在しているExpo/Auth/MVP共通基盤とPush通知差分を、クリーンな`origin/main`ベースの一時worktree等を使って安全に分離・再構成し、まずExpo/Auth/MVP共通基盤だけを`origin/main`へ最小commit/pushできる状態にする。
 - scope:
   - 作業開始時に`origin/main`をfresh-checkし、`.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、このTASKを確認する
@@ -88,3 +88,20 @@ Claude Code（くろちゃん）並列スロット2の現在タスクです。`G
   - secrets・認証情報：commitに含めていない。ビルド確認用の`.env`一時コピーはcommit前に削除済み
   - commit/pushはすべて`origin/main`ベースの一時worktree（`/private/tmp/.../scratchpad/kabumori-foundation-worktree`）上で実施し、元の共有作業ディレクトリのgit HEAD・staged内容には触れていない
 - next_recommendation: (a) 今回のcommit`a24ba18`をレビューし問題なければK2、(b) 承認後はPush通知follow-upタスクとして上記remaining_issuesの5点を`origin/main`ベースで再適用しcommit/push（`kabumori-expo-push-foundation-v1-20260905`のReportに実装済み内容と実質同一のため再実装は不要、rebaseのみ）、(c) 重要ニュースworkstream側でも`app-tabs`への`news`タブ再適用が必要な旨を申し送り
+
+## K2 Review
+
+- decision: approved
+- reviewed_by: chatgpt
+- reviewed_task_id: kabumori-expo-auth-foundation-mainline-20260906
+- approval_basis:
+  - Expo/Auth/MVP共通基盤がcommit `a24ba18`として`origin/main`へ安全に反映済み
+  - Push通知固有差分（`expo-notifications`、Push Token登録、Push送信Edge Function等）が共通基盤commitへ混入していない
+  - `package.json` / `package-lock.json`は共通基盤に必要な依存のみで整合し、lockfileは正規インストール手順で再生成済み
+  - `npx expo export --platform web`成功
+  - TypeScript上の残存エラーは今回差分外の既存事象として切り分け済み
+  - 本番deploy、DB/Cron/X/morning greeting/important-news-monitorへの変更なし
+- follow_up:
+  - 次はPush通知follow-upタスクで、Report記載のPush固有5点を`origin/main`ベースへ安全に再適用する
+  - 重要ニュースworkstreamの`news`タブ再適用はCodex側の別タスクとして扱い、Push follow-upへ混ぜない
+- next_owner: chatgpt
