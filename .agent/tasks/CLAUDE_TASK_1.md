@@ -2,103 +2,65 @@
 
 Claude Code（くろちゃん）並列スロット1の現在タスクです。`G1` を受けたClaude Codeは、`.agent/ORCHESTRATION.md` と既存のプロジェクトルールを確認したうえで、このファイルを自分の担当タスク正本として扱います。
 
-- task_id: important-news-deploy-voice-guided-retry-20260905
+- task_id: important-news-middle-east-oil-shipping-coverage-20260905
 - owner: claude
 - slot: claude-1
-- status: done
-- purpose: K1承認済みcommit `f45ca12` のVoice guided retry改善を、本番 `important-news-monitor` に安全にdeployし、自然運用でretryが発火できる状態にする。
+- status: ready
+- purpose: breaking_marketが、今回見逃した「米軍によるイラン原油タンカー複数隻への攻撃」相当の、軍事衝突＋原油輸送・海上交通・エネルギーインフラに直結する重要ニュースを安定して拾えるように検索カバレッジを最小差分で強化する。
 - scope:
-  - origin/mainをfresh-check
-  - commit `f45ca12` がmainに含まれることを確認
-  - deploy前の `important-news-monitor` version/status/verify_jwt を確認
-  - `important-news-monitor` のみ本番deploy
-  - deploy後にACTIVE/version/verify_jwtを確認
-  - `auto_publish=false`、interval、Cron等が変わっていないことをread-only確認
-  - 時間的に可能なら次の自然 `important-news-fetch` / judgement / generation cycleをread-only観測し、エラーなく稼働することを確認
-  - Voice retryの自然事例が発生した場合のみ、`generation_voice_retry.attempted=true`、`voice_retry_count=1`、retry fact/voice status等をread-onlyで確認
+  - `supabase/functions/important-news-monitor/breaking_market_source_fetchers.ts`
+  - 直接対応するテストファイルのみ
+  - 必要に応じて既存allowed-domain検証テストを最小修正
 - forbidden:
-  - コード変更
-  - 新規commit/push
-  - P0.7 corporate X market-impact gate開始
-  - auto_publish変更
-  - X投稿実行・投稿ロジック変更
-  - Cron変更
-  - DB schema/migration/GRANT変更
-  - breaking_market検索、TDnet/IR取得、market_macro変更
-  - morning greeting系変更
-  - model変更
-  - retry回数・Fact/Voiceルール変更
-  - secrets表示・変更
+  - P0.7 corporate X market-impact gateを開始しない
+  - importance judgement / generation / Voice retryロジックを変更しない
+  - TDnet / company IR / market_macro取得を変更しない
+  - auto_publishを変更しない
+  - X投稿実行・投稿ロジック変更をしない
+  - Cron、DB schema/migration/GRANT、本番設定を変更しない
+  - morning greeting系を変更しない
+  - modelを変更しない
+  - breaking_marketの最大検索数2/cycle、20分rotation、24h freshness、max_tool_calls=1を変更しない
+  - actual visited URL検証を弱めない
+  - 信頼できる根拠なしにallowed domainsを広げない
   - 他workstreamの未コミット変更を変更・stage・commitしない
 - completion_criteria:
-  - K1承認済みcommit `f45ca12` がmainに存在することを確認
-  - `important-news-monitor` のみdeploy完了
-  - deploy後ACTIVEであること
-  - 既存の `verify_jwt=false` を維持
-  - `auto_publish=false` を維持
-  - Cron/interval/DB/X投稿等に意図しない変更なし
-  - 自然cycleを観測できた場合は正常性を報告。Voice retry実例がまだ無ければ未観測と明記し、それ自体を失敗扱いしない
-  - コード変更・新規commitなし
-  - TASK末尾に `## Report` を追加し `status: review_required` にする
-- commit: 禁止
-- push: 不要
-- deploy: 必須。`important-news-monitor` のみ
+  - `war_geopolitics_taiwan` など既存の中東・戦争系検索が、少なくとも以下を明示的にカバーするよう改善する：Iran / Israel / Strait of Hormuz / Hormuz / oil tanker / crude tanker / oil shipping / shipping route / energy infrastructure / oil facility / maritime attack / CENTCOM 等
+  - 今回の実例「米軍がイランの原油タンカー3隻を攻撃」「報復→タンカー攻撃→ホルムズ海峡通航悪化→原油上昇リスク」相当が検索語彙上の明確な対象になること
+  - 既存の戦争・停戦・台湾・中東一般ニュースのカバレッジを落とさないこと
+  - 既存allowed domains（Reuters / AP / Bloomberg / Nikkei等）は維持すること
+  - CENTCOMや米国防総省の公式発表を一次情報として安全に使えるなら、実在する公式ドメインを確認したうえでallowed listへ追加してよい。ただし推測でドメインを追加しないこと
+  - 公式ドメインを追加する場合は、そのドメインだけを理由に候補を信用せず、従来どおりweb_searchが実際に訪問したURLであること、https、freshness、category等の全安全ゲートを維持すること
+  - query総数をむやみに増やさず、既存6-query rotation / 最大2検索/cycleを維持すること。可能なら既存queryの語彙拡張で対応すること
+  - 変更に対するunit testを追加し、今回の語彙（Iran/Hormuz/tanker/oil shipping等）と公式source domain追加がある場合はそのallow/deny挙動を固定すること
+  - important-news-monitor全体テストを実行して回帰なしを確認すること
+  - 実装後、最小差分でcommit/pushしてよい
+  - 本番deployは禁止。K1レビュー後に別タスクでdeployする
+- commit: 今回のClaude slot 1作業として安全に分離できる最小差分のみ
+- push: fresh-checkで競合がなければorigin/mainへpushしてよい。drift/競合があれば停止して報告
+- deploy: 禁止。K1承認後に別タスク化
 - report_mode: inline
 - next_owner: chatgpt
 
-## Background
+## Background / production gap
 
-直前の実装タスク `important-news-voice-guided-retry-20260905` はK1承認済み。
+2026-09-05夜、ユーザーがChatGPTの「株式材料総合監視」で受け取った以下のような重要ニュースを、かぶモリ本番のbreaking_marketが拾えていないことを確認した。
 
-承認済み内容:
-- commit `f45ca12`
-- important-news-monitor全体回帰 231/231 pass
-- Fact=passedかつ全Voice issueが修正可能な表現品質問題のときだけ1回retry
-- retry後は必ずFact→Voiceを再チェックし、両方passedだけ `ready_for_publish`
-- 数字/日付/人物/企業/国名/制度/事実誤認/捏造等はnon-retryable
-- 未知issueは安全側でretryしない
-- production実例「欧州のリスク sentiment」「米国の特使が→特使ら」をテスト固定済み
+- 米中央軍（CENTCOM）が、米軍がイランの原油タンカー3隻を攻撃したと公式発表
+- イランによる米海軍艦艇への弾道ミサイル攻撃への報復とされる
+- AP報道では複数隻が航行不能/破壊
+- 日本株への主要リスクは、軍事衝突そのものに加えて、原油輸送資産への攻撃拡大→ホルムズ海峡の通航悪化→原油上昇→日経平均/航空/陸運/化学/電力ガス等への波及
 
-現在の本番は `important-news-monitor` v27 ACTIVE、verify_jwt=false、auto_publish=false。今回のdeploy後もこれらの安全設定を維持すること。
+現行 `war_geopolitics_taiwan` query は `war ceasefire military conflict Taiwan Middle East breaking news today` で、中東戦争一般は対象だが Iran / Hormuz / tanker / oil shipping / energy infrastructure / maritime attack が明示されていない。
 
-## Report
+現行 allowed domains は Reuters / AP / Bloomberg / Nikkei / MOF / BOJ / Federal Reserve / USTR / White House / Commerce / BIS / State / BLS / BEA / Treasury 等で、CENTCOM / DoD系公式ドメインは少なくとも現在のリストには無い。
 
-- task_id: important-news-deploy-voice-guided-retry-20260905
-- result: `important-news-monitor`のみdeploy完了。deploy前後で`verify_jwt`・`auto_publish`・`interval_minutes`・`is_active`・Cronはすべて無変更を確認。deploy後、自然fetch cycleが1回正常完了（error無し）。Voice retryの自然発火事例はこの観測期間内ではまだ発生していない（該当するVoice failureが発生していないだけで、異常ではない）。
-- deploy:
-  - コード変更・新規commitなし（本タスクの禁止事項どおり）
-  - deploy直前、ローカルの`post_generation_logic.ts`にK1承認済みの修正（`国名`厳格化、`英単語`等の新規retryableパターン、voice_retryプロンプト文言更新）が含まれていることをgrepで確認
-- deployed_version:
-  - deploy前: v27 ACTIVE, verify_jwt=false
-  - deploy後: **v28 ACTIVE, verify_jwt=false**（維持確認済み）
-- natural_cycle_check:
-  - deploy直後（2026-09-05 14:28 UTC以降）に`important-news-fetch`が1回実行され、`status=completed`, `error=null`（新規候補0件、正常稼働を確認）
-  - この観測期間内では新規candidateがgeneration対象にならなかったため、judgement/generation自体は未実行
-- voice_retry_observation:
-  - 観測期間内でVoice retryが発火した実例は**未観測**。該当するFact=passed かつ Voice=failed（修正可能な品質問題のみ）のcandidateがまだ発生していないため（それ自体は失敗扱いしない、と明記されている通り）
-  - deploy直前に確認した最新のgeneration_failed実例（13:07 UTC, `generation_voice_retry.attempted=false`）はdeploy**前**の生成であり、旧ロジックによるもの。今回の修正の効果はまだ実例で確認できていない
-- safety_checks:
-  - `verify_jwt=false`: 維持確認済み
-  - `auto_publish=false`: 維持確認済み
-  - `interval_minutes=20` / `is_active=true`: 維持確認済み
-  - Cron（7ジョブ、スケジュール）: 無変更確認済み
-  - コード変更・新規commit/push: なし（禁止事項どおり）
-  - P0.7 / breaking_market検索 / TDnet・market_macro取得 / X投稿実行 / morning greeting系 / model変更 / retry回数・Fact・Voiceルール変更: すべて未着手・未接触
-  - 他workstreamの未コミット変更・並行スロットの作業（Codexの`.agent/CODEX_REPORT.md`・`.agent/tasks/CODEX_TASK.md`、Claude slot 2の`.agent/tasks/CLAUDE_TASK.md`を含む）: 変更・stage・commitなし。`git reset --mixed`でbranch pointerのみ移動し、working tree上の他エージェントの編集・進行中タスクファイルは一切触れていないことを確認済み
-  - secrets: 非表示・非変更
-- remaining_issues:
-  - Voice retryが実際のVoice checker出力に対して意図通り機能するかは、該当するFact=passed/Voice=failed（修正可能な品質問題）のcandidateが自然発生するまで実証できない。継続的なread-only観測が必要
-- next_recommendation: 現状で安全に稼働中のため追加対応は不要。今後の自然cycleで`generation_voice_retry.attempted=true`の実例が観測できたら、その内容（initial/retry issues、fact/voice status）を任意タイミングで報告する。
+ユーザー方針：こうした「軍事衝突＋原油輸送・ホルムズ海峡・エネルギーインフラ」のニュースは、個別企業IRよりも日本株全体への影響が大きく、かぶモリが優先的に拾うべき重要材料とする。
 
-## K1 Review decision
+## Safety intent
 
-承認。
+目的は検索カバレッジ強化のみ。重要度判定を甘くしたり、出所検証を弱めたり、検索回数を増やしてコストを膨らませる変更はしない。
 
-- `important-news-monitor` は v28 ACTIVE へ更新済み
-- `verify_jwt=false`、`auto_publish=false`、interval、Cronは維持
-- deploy対象は `important-news-monitor` のみ
-- コード変更・DB変更・X投稿実行・他workstream変更なし
-- deploy後の自然fetch cycleは正常完了
-- Voice retry自然実例が未観測なのは、対象candidateがまだ発生していないためであり失敗扱いしない
+## Completion report
 
-本タスクは完了とする。Voice retry実例の観測は任意のread-onlyフォローアップとし、追加実装は要求しない。
+完了時はこのファイル末尾に `## Report` を追加し、task_id / result / changed_files / tests / commit_hash / push / deploy / query_changes / source_domain_changes / safety_checks / remaining_issues / next_recommendation を記録し、statusを `review_required` にする。
