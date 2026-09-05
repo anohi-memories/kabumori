@@ -2,49 +2,43 @@
 
 Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは、`.agent/ORCHESTRATION.md` と既存のプロジェクトルールを確認したうえで、このファイルだけを自分の担当タスク正本として扱います。
 
-- task_id: kabumori-personal-important-news-v1
+- task_id: kabumori-personal-important-news-v1-review-artifacts
 - owner: codex
-- status: review_required
-- purpose: 現在ログイン中ユーザーの `tracked_stocks` と既存X自動投稿システム側の `important_news_candidates` を安全に結びつけ、「自分が登録している銘柄に関係する重大ニュース」をKabumoriアプリ内で確認できる最小機能を作る。Push通知は今回対象外。
+- status: ready
+- purpose: 前タスクでローカル実装した「登録銘柄に関係する重要ニュース」機能について、ChatGPTが本番適用可否をレビューできるよう、実装差分を安全にGitHub共有する。新規実装や本番適用は行わない。
 - scope:
-  - 本人の `is_active=true` のholding/watchだけを対象に重大ニュースを取得
-  - `stocks_master.ticker_code = left(important_news_candidates.company_code, 4)` を基本マッチとする
-  - 「重要ニュース」画面/タブを追加
-  - 銘柄、会社名、保有/監視、見出し、短い要約、重要度、日時を表示
-  - 最大50件、最新順、Pull to Refresh、空状態/失敗UI
-  - ExpoからX内部テーブルへ広いSELECT権限を与えず、安全なKabumori専用取得経路を使用
+  - ローカル実装済みの `supabase/migrations/20260905042052_get_my_important_stock_news.sql` 全文をレビュー可能な形で共有する
+  - `src/lib/important-news.ts` の今回差分を共有する
+  - `src/app/news.tsx` の今回差分を共有する
+  - ニュースタブ追加に伴い変更した他ファイルがあれば、その今回差分も共有する
+  - SECURITY DEFINER関数の `search_path` 設定を明示する
+  - `auth.uid()` をどこで検証しているか明示する
+  - PUBLIC / anon / authenticated の EXECUTE権限SQLを明示する
+  - private関数をauthenticatedから直接呼べないことを明示する
+  - company_code形式異常を除外する具体条件を明示する
+  - 一覧対象が `important` / `most_important` のどちらか、または両方かを明示する
+  - 上記レビュー資料を `.agent/CODEX_REPORT.md` に記録し、実装コードをpushできない場合でも `.agent/` 制御ファイルだけは安全にGitHubへ同期する
 - forbidden:
-  - Push通知、メール通知、ニュースAI再生成、重要度再判定
-  - `important-news-monitor` / `x-test-post` / X投稿処理 / Cron変更
-  - 既存X自動投稿DBロジック変更
-  - `important_news_candidates` へのauthenticated広範SELECT GRANT
-  - service_role / secret / Vault secretをExpoへ入れる
-  - ChatGPT承認前の本番migration、GRANT変更、deploy
-  - 他workstreamの未コミット変更を変更・stage・commitすること
+  - 新規機能実装
+  - 既存ローカル実装の仕様変更
+  - `supabase db push`
+  - 本番migration適用
+  - 本番GRANT変更
+  - Edge Function deploy
+  - 本番データ変更
+  - `important-news-monitor` / `x-test-post` / Cron / X投稿ロジック変更
+  - 他workstreamの未コミット変更をstage・commit・pushすること
+  - secrets・認証情報の記載
 - completion_criteria:
-  - 実装・TypeScript・iOS bundle確認
-  - 本番DB変更なしで停止
-  - RPC migration / SECURITY DEFINER / search_path / auth.uid() / EXECUTE権限をレビュー可能な形で提示
-  - 本番適用はChatGPTのCレビュー後
-- commit: 実装コードはlocal only。安全に分離できるまでcommitしない
-- push: 実装コードは未push
+  - ChatGPTがSQL・権限・認証境界・アプリ側呼び出しを実差分ベースでレビューできる
+  - 実装コードがlocal onlyのままでも、レビュー資料と完了報告はGitHubからCで取得できる
+  - `.agent/CODEX_REPORT.md` に task_id / result / changed_files / tests / commit_hash / push / deploy / remaining_issues / safety_checks / next_recommendation を含める
+  - 完了時は status を `review_required` にする
+- commit: 実装コードはcommit不要。`.agent/` のレビュー共有だけを安全に分離できる場合は最小commit可
+- push: `.agent/` のレビュー共有は必ずGitHubへ反映する。実装コードや他workstream変更を混ぜない
 - deploy: 禁止
 - next_owner: chatgpt
 
-## Current review state
-
-Codexからユーザー経由で、ローカル実装完了・`review_required` の報告を受領済み。
-
-報告概要:
-- `src/app/news.tsx`
-- `src/lib/important-news.ts`
-- `supabase/migrations/20260905042052_get_my_important_stock_news.sql`
-- TypeScript PASS
-- iOS Expo bundle PASS
-- 本番migration / GRANT / deploy未実施
-
-詳細は `.agent/CODEX_REPORT.md` を参照。
-
 ## Important
 
-このタスクは `review_required` のため、`G` を受けても新規実装を再開しない。ChatGPTの `C` レビュー待ち。
+今回は本番適用承認ではなく、レビュー資料共有だけが目的です。新しいコード変更は行わず、ローカルに存在する実装の正確な内容を共有してください。
