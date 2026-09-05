@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - task_id: important-news-trump-fed-trade-coverage-20260905
 - owner: claude
 - slot: claude-1
-- status: review_required
+- status: done
 - purpose: `breaking_market` の検索カバレッジ不足により、トランプ米政権の市場インパクト政策（特に「FRBが利下げしなければ貿易を止める」類の、貿易政策とFRBへの金利圧力が交差するニュース）を候補取得前に取りこぼす問題を最小差分で修正する。
 - scope:
   - `supabase/functions/important-news-monitor/breaking_market_source_fetchers.ts`
@@ -26,9 +26,9 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
   - `BREAKING_MARKET_SOURCE_DOMAINS`、freshness、actual source URL validationを維持する
   - 既存テストと追加テストを実行し成功を確認する
   - 本番デプロイは行わない。実装・テスト・commit/push後、ChatGPTのK1レビュー待ちにする
-- commit: 必須。今回のscopeだけを最小差分でcommitする
-- push: 必須。fresh-check後にmainへpushする
-- deploy: 禁止。K1レビュー後に別途判断する
+- commit: 完了 `af73cf2`
+- push: 完了
+- deploy: 未実施（当タスクでは禁止。K1承認後のdeploy/自然cycle観測は別タスクとして扱う）
 - report_mode: inline
 - next_owner: chatgpt
 
@@ -72,3 +72,10 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
   - 他workstreamの未コミット変更（`package.json`, `apps/admin/*`, `src/app/*`等）: 未stage・未commit
   - secrets: 非表示・非変更
 - next_recommendation: K1レビュー後、問題なければ`important-news-monitor`をdeployし、次の自然fetch cycleでこのクエリが実際に候補を拾うかread-onlyで観測することを推奨。
+
+## K1 Review
+
+- reviewed_by: chatgpt
+- decision: approved
+- reason: scope内2ファイルのみの最小差分で、検索語彙の不足を補いながら既存語彙・6クエリ構成・2検索/20分上限・freshness/URL検証等の安全/コストゲートを維持している。追加テストで新旧カバレッジとクエリ数を固定し、全体回帰224/224 pass。commit `af73cf2` の差分も報告内容と一致。
+- followup: 本番deployと自然fetch cycleでの実観測は別タスクとして扱う。
