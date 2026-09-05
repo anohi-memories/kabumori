@@ -8,52 +8,85 @@
 - `AGENTS.md` / `CLAUDE.md` の開始手順にも従う。
 - `.agent/` は共有タスク運用専用であり、既存の `HANDOFF.md` / `HANDOFF_TEMPLATE.md` の用途を置き換えない。
 - `HANDOFF.md` はWeb-admin系を含む既存引き継ぎ用途のため、この共有運用だけを理由に変更しない。
-- 今回は完全自動化せず、ユーザーが各エージェント間を中継する。
+- 完全自動化せず、ユーザーが各エージェント間を中継する。
+- CodexとClaude Codeは、担当ファイル・DB・deploy対象が競合しない別タスクなら同時進行できる。
 
-## F — ChatGPTへの完了確認指示
+## タスク正本
+
+実装担当ごとに1つの専用タスクスロットを持ちます。
+
+- Codex: `.agent/tasks/CODEX_TASK.md`
+- Claude Code: `.agent/tasks/CLAUDE_TASK.md`
+
+`.agent/ACTIVE_TASK.md` は後方互換用の一覧・案内ファイルです。実装担当は自分の専用タスクファイルを正本として扱います。
+
+各専用タスクの `status` は `idle / ready / in_progress / review_required / done` を使用します。
+
+## F — ChatGPTへの完了確認・全体調整指示
 
 ユーザーがChatGPT（ちゃっぴー）に `F` とだけ送った場合、次を意味します。
 
-> 担当エージェントの作業が終わったようなので、GitHub上の最新共有状態と完了報告を確認し、結果を評価して次の指示を作る。
+> GitHub上の全共有タスクと各担当の完了報告を確認し、完了判定・競合確認・次の割当を行う。
 
-ChatGPTはGitHub上の最新状態を取得し、次の4ファイルを確認します。
+ChatGPTは原則として次を確認します。
 
 1. `.agent/ACTIVE_TASK.md`
 2. `.agent/CURRENT_STATE.md`
-3. `.agent/CODEX_REPORT.md`
-4. `.agent/CLAUDE_REPORT.md`
+3. `.agent/tasks/CODEX_TASK.md`
+4. `.agent/tasks/CLAUDE_TASK.md`
+5. `.agent/CODEX_REPORT.md`
+6. `.agent/CLAUDE_REPORT.md`
 
-その後、`ACTIVE_TASK.md` の `owner` と `task_id` に対応する担当者の最新REPORTを評価します。完了条件、テスト、commit/push/deploy条件、残課題、安全確認を判定し、必要なら次の `ACTIVE_TASK.md` を作る方針に進みます。報告不足や不整合がある場合は、完了扱いにせず確認事項を明示します。
+各タスクについて、担当者のREPORTと突き合わせて、完了条件、テスト、commit/push/deploy条件、残課題、安全確認を判定します。
+
+- 一方が作業中でも、もう一方に競合しない別タスクを割り当ててよい。
+- 同じファイル、同じmigration、同じEdge Function、同じ設定行などに触れる可能性がある場合は同時進行させない。
+- 報告不足や不整合があるタスクは完了扱いにしない。
+- 次タスクを割り当てる場合は対象エージェントの専用タスクファイルだけを更新する。
+- 必要に応じて `.agent/ACTIVE_TASK.md` の一覧も同期する。
 
 ## G — Codex / Claude Codeへの作業開始指示
 
 ユーザーがCodexまたはClaude Codeに `G` とだけ送った場合、次を意味します。
 
-> GitHub上の最新指示を読み、自分が担当なら作業を開始する。
+> GitHub上の自分専用タスクを読み、担当タスクがあれば開始する。
 
 既存ルールで要求される開始時確認を行ったうえで、必ず次の順序で進めます。
 
 1. `origin/main` をfetchし、ローカルとの差分をfresh-checkする。
-2. `.agent/ACTIVE_TASK.md` を読む。
+2. `.agent/ORCHESTRATION.md` を読む。
 3. `.agent/CURRENT_STATE.md` を読む。
-4. `owner` が自分（`codex` または `claude`）か確認する。
-5. `scope`、`forbidden`、完了条件、commit/push/deploy条件を確認する。
-6. ownerでなければ作業せず、「現在の担当は○○」とだけ報告する。
-7. ownerなら、開始を共有する必要がある場合は `status: in_progress` に更新してから作業する。
-8. 完了後、自分のREPORT（`CODEX_REPORT.md` または `CLAUDE_REPORT.md`）を最新結果で置き換える。
-9. `ACTIVE_TASK.md` のstatusを `done` または `review_required` に更新する。
-10. 指示された場合のみ、対象ファイルを限定してcommit / push / deployする。
+4. 自分専用のタスクファイルを読む。
+   - Codex: `.agent/tasks/CODEX_TASK.md`
+   - Claude Code: `.agent/tasks/CLAUDE_TASK.md`
+5. `status` が `ready` または `in_progress` か確認する。
+6. `idle` / `done` / `review_required` なら新規作業を開始せず、現在状態だけ報告する。
+7. `scope`、`forbidden`、完了条件、commit/push/deploy条件を確認する。
+8. 他エージェントのタスクと変更対象が競合する可能性がある場合は、勝手に進めず停止して報告する。
+9. 作業開始時は自分の専用タスクだけ `status: in_progress` に更新する。
+10. 完了後、自分のREPORT（`CODEX_REPORT.md` または `CLAUDE_REPORT.md`）を最新結果で置き換える。
+11. 自分の専用タスクを `done` または `review_required` に更新する。
+12. 指示された場合のみ、対象ファイルを限定してcommit / push / deployする。
 
 fresh-checkの結果、`origin/main` が進んでいる、競合がある、または安全に同期できない場合は勝手に上書きせず停止して報告します。
 
-## Ownerと競合防止
+## 並行作業と競合防止
 
-- `ACTIVE_TASK.md` の `owner` を、そのtaskの唯一の実装担当として扱う。
-- CodexとClaude Codeが同じ `task_id` を同時に実装してはならない。
-- owner以外が `G` を受けても、ファイル変更・commit・push・deployを行わない。
-- 並行作業は、別taskとしてscopeと変更対象が完全に分離され、`ACTIVE_TASK.md` に明記されている場合だけ許可する。
-- ownerやscopeが曖昧な場合は作業を開始せず、ユーザーまたはChatGPTに確認する。
+- CodexとClaude Codeは、**別task_idかつ変更対象が分離されている場合のみ**同時進行できる。
+- 同じtask_idを両者へ割り当てない。
+- 同じファイルを同時編集しない。
+- 同じDB migration / RPC / Edge Function / workflow / production settingを双方が同時変更しない。
+- 一方のcommitが他方の作業対象へ影響した場合、後からpushする側はfresh-checkをやり直す。
 - 既存の未コミット変更は他workstreamの所有物として扱い、上書き・削除・stage・commitしない。
+- scopeが曖昧、または競合可能性を安全に判定できない場合は並行作業を開始しない。
+
+## ACTIVE_TASK.md の役割
+
+`.agent/ACTIVE_TASK.md` は、古いF/Gルールや別チャットとの互換性を保つため残します。
+
+- 現在のCodex/Claude両スロットの状態と参照先を一覧表示する。
+- 新しい実装指示の正本は各 `.agent/tasks/*_TASK.md` とする。
+- 古いクライアントが `ACTIVE_TASK.md` だけを読んでも、どのファイルを見るべきか分かる状態を維持する。
 
 ## REPORT更新ルール
 
