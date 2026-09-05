@@ -2,80 +2,68 @@
 
 Claude Code（くろちゃん）並列スロット1の現在タスクです。`G1` を受けたClaude Codeは、`.agent/ORCHESTRATION.md` と既存のプロジェクトルールを確認したうえで、このファイルを自分の担当タスク正本として扱います。
 
-- task_id: important-news-deploy-trump-fed-coverage-20260905
+- task_id: important-news-voice-guided-retry-20260905
 - owner: claude
 - slot: claude-1
-- status: done
-- purpose: K1承認済みcommit `af73cf2` の `breaking_market` 検索カバレッジ修正を本番 `important-news-monitor` へ安全にdeployし、自然fetchで反映確認できる状態にする。
+- status: ready
+- purpose: important-news生成後のVoiceチェックで、AI自身が具体的な修正点を特定できているにもかかわらず再生成せず `generation_failed` になるケースを改善する。Factがpassedで、Voice issueが修正可能な表現・文法・単複・不自然な和英混在などに限定される場合は、そのVoice指摘を明示的な修正指示として1回だけ再生成し、再度Fact + Voiceを通して安全に復帰できるようにする。
 - scope:
-  - origin/main fresh-check
-  - commit `af73cf2` がmainに含まれることを確認
-  - `important-news-monitor` だけを本番deploy
-  - 既存の verify_jwt 設定を維持する（現在の本番値を確認して同じ値でdeploy）
-  - deploy後、functionがACTIVEになったこととversionを確認
-  - 可能なら次の自然 `important-news-fetch` cycle後にread-onlyでfetch正常性を確認
+  - `supabase/functions/important-news-monitor/post_generation_logic.ts`
+  - `supabase/functions/important-news-monitor/post_generation_logic_test.ts`
+  - 必要なら `generation_persistence_test.ts` / `generation_dispatch_logic_test.ts` 等、今回のretry挙動を直接固定するテストのみ
+  - 既存の `generation_voice_retry` 診断情報の整合性確認
 - forbidden:
-  - コード変更
-  - 新規commit
-  - P0.7開始
-  - auto_publish変更
-  - Cron変更
-  - DB schema/migration/GRANT変更
-  - X投稿実行
-  - morning greeting系変更
-  - 他workstreamの変更
-  - secrets表示・変更
+  - P0.7 corporate X market-impact gateを開始しない
+  - `importance_judgement_logic.ts`、breaking_market検索、TDnet取得、market_macro取得を変更しない
+  - auto_publishを変更しない
+  - X投稿実行・投稿ロジック変更をしない
+  - Cron、DB schema/migration/GRANT、本番設定を変更しない
+  - morning greeting系を変更しない
+  - モデルを変更しない（現行 generation model を維持）
+  - retry回数を1回より増やさない
+  - Fact failure / source不一致 / 数字・固有名詞・日付・引用・因果・安全性など、事実性に関わる問題をVoice retryで無理に直さない
+  - 他workstreamの未コミット変更を変更・stage・commitしない
 - completion_criteria:
-  - `important-news-monitor` のみdeploy完了
-  - deploy前後で安全設定に意図しない変更がない
-  - ACTIVE/versionを報告
-  - 自然fetch観測が時間的に可能なら結果を報告。不可能なら未確認として明記
-  - TASK末尾に `## Report` を追加し status を review_required にする
-- commit: 禁止（コード変更なし）
-- push: 不要
-- deploy: 完了。`important-news-monitor` v27 ACTIVE
+  - 初回Factが `passed` かつVoiceが `failed` の場合、Voice issuesの内容が「具体的に修正可能な表現品質問題」であれば1回だけ `voice_retry` を実行する
+  - retry時は初回Voice issuesをそのまま修正指示としてrunnerへ渡し、元記事/候補情報の事実関係を変えず、指摘箇所だけを直す constrained retry にする
+  - retry生成後は必ず再度FactチェックとVoiceチェックを実行し、両方passedのときだけ `ready_for_publish`
+  - retry後Factがfailed、またはVoiceがfailedなら `generation_failed` のままにする
+  - 「日本語として不自然な英単語混在」「助詞・単複・敬体などの軽微な文法」「冗長・ニュース原稿調・不自然な言い回し」など、Voiceが具体的修正案を出せるケースをretry対象に含める
+  - 今回の実例相当をテストで固定する：
+    - `欧州のリスク sentiment` → 自然な日本語への修正を促せる
+    - `米国の特使が` に対してVoice checkerが「原文は複数なので『特使ら』が自然」と指摘した場合、Factがpassedであればretry対象にできる
+  - ただし、Voice issueに「事実誤認」「数字不一致」「人物/企業/地域/日付の誤り」「ソースにない断定」「因果の捏造」などが含まれる場合はretryしない、またはretry後Factで確実に止める
+  - `generation_voice_retry.attempted=true`、`voice_retry_count=1`、initial/retry issues、retry fact/voice status等の既存診断情報が正しく残ることを確認する
+  - retryしないケースは従来どおり `attempted=false`
+  - 既存の重要ニュース生成テスト全体を実行し回帰なしを確認する
+  - 実装・テスト後、最小差分でcommit/pushしてよい
+  - 本番deployは禁止。K1レビュー待ちで `review_required` にする
+- commit: 今回のClaude slot 1作業として安全に分離できる変更のみ最小差分でcommit
+- push: fresh-checkで競合がないことを確認してorigin/mainへpushしてよい。drift/競合があれば停止して報告
+- deploy: 禁止。K1承認後に別タスクとして行う
 - report_mode: inline
 - next_owner: chatgpt
 
-## Background
+## Background / production example
 
-- 直前タスク `important-news-trump-fed-trade-coverage-20260905` はK1承認済み。
-- commit `af73cf2` はorigin/mainへpush済み。
-- important-news-monitor全体回帰 224/224 pass。
-- 修正内容は `trump_tariff_semiconductor` queryに `Federal Reserve rate cut pressure threat to halt trade` を追加した最小差分。
-- クエリ数6、最大2検索/20分、1検索 max_tool_calls=1、allowed domains、24h freshness、actual visited URL検証は維持済み。
-- 本番 important-news auto_publish=false を維持する。
+2026-09-05の自然運用で以下の `breaking_market` 候補が `generation_failed` になった。
 
-## Report
+- title: `Putin orders a 72-hour pause in strikes on Kyiv as U.S. envoys visit Russia and Ukraine`
+- generation_fact_status: `passed`
+- generation_voice_status: `failed`
+- generation_error: `NEWS_GENERATION_VOICE_FAILED`
+- generated text included: `欧州のリスク sentiment`
+- Voice issues:
+  - `「欧州のリスク sentiment」は日本語として不自然で、英単語が混在しています。「欧州のリスク選好」や「欧州の市場心理」などに直す必要があります。`
+  - `「米国の特使が」は原文の複数形と合っていないため、「米国の特使ら」などが自然です。`
+- しかし `generation_voice_retry.attempted=false` だった。
 
-- task_id: important-news-deploy-trump-fed-coverage-20260905
-- result: `important-news-monitor`のみdeploy完了。deploy前後で`verify_jwt`・`auto_publish`・`interval_minutes`・`is_active`・Cronはすべて無変更を確認。deploy後、複数回の自然fetch cycleが正常完了し、breaking_marketが実際に新規候補を1件取得したことも確認した。
-- deploy:
-  - コード変更・新規commitなし（本タスクの禁止事項どおり）
-  - deploy対象ファイル（`breaking_market_source_fetchers.ts`）にK1承認済みの修正（`trump_tariff_semiconductor`クエリへの`Federal Reserve rate cut pressure threat to halt trade`追加）が含まれていることをdeploy直前にgrepで確認
-- deployed_version:
-  - deploy前: v26 ACTIVE, verify_jwt=false
-  - deploy後: **v27 ACTIVE, verify_jwt=false**（維持確認済み）
-- natural_fetch_check:
-  - deploy直後（2026-09-05 04:54 UTC以降）から現在（19:41 JST時点）まで、`important-news-fetch`は20分毎に継続実行、全run `status=completed`, `error=null`（source_errorsなし）
-  - breaking_marketは複数cycleで正常稼働し、`war_geopolitics_taiwan`クエリ経由で新規候補1件（"Months after ceasefire, Israel and Hezbollah battle over a strategic hill in Lebanon"）を実際に取得・保存できたことを確認（パイプライン自体が壊れていないことの実証）
-  - `trump_tariff_semiconductor`クエリ自体が選択されたcycleで実際にTrump/Fed関連の新規候補を拾った事例は、確認した期間内ではまだ観測できていない（6クエリ中2つ/cycleのローテーション性質上、対象クエリが選ばれるか・該当ニュースが実際に発生しているかの両方に依存するため、未観測＝異常ではない）
-- remaining_issues:
-  - `trump_tariff_semiconductor`クエリの修正が「Trump threatens to halt trade unless Fed cuts rates」相当の実ニュースを実際に拾えるかの直接的な実証は、該当ニュースの発生とクエリのローテーション選択タイミング次第であり、継続的なread-only観測が必要
-- safety_checks:
-  - `verify_jwt=false`: 維持確認済み
-  - `auto_publish=false`: 維持確認済み
-  - `interval_minutes=20` / `is_active=true`: 維持確認済み
-  - Cron（7ジョブ、スケジュール）: 無変更確認済み
-  - コード変更・新規commit: なし（禁止事項どおり）
-  - P0.7 / auto_publish変更 / DB schema・migration・GRANT変更 / X投稿実行 / morning greeting系: すべて未着手・未接触
-  - 他workstreamの未コミット変更（Codexの`.agent/CODEX_REPORT.md`・`.agent/tasks/CODEX_TASK.md`を含む）: 変更・stage・commitなし。`git reset --mixed`でbranch pointerのみ移動し、working tree上のCodexの未コミット編集は一切触れていないことを確認済み
-  - secrets: 非表示・非変更
-- next_recommendation: 現状で安全に稼働中のため追加対応は不要。継続的なread-only観測で`trump_tariff_semiconductor`クエリの実際のヒット事例が確認できたら、その旨を任意タイミングで報告する。
+ユーザー方針：Voice checker自身が「何をどう直せばいいか」を具体的に示しているなら、その修正指示を使って1回だけ作り直し、Fact + Voiceを再確認して通れば採用する。新しい情報や解釈を追加する再生成ではなく、指摘箇所だけを直す安全な修正retryにする。
 
-## K1 Review
+## Safety intent
 
-- reviewed_by: chatgpt
-- decision: approved
-- reason: `important-news-monitor`のみv27へdeployされ、verify_jwt=false / auto_publish=false / interval_minutes=20 / is_active=true / Cronが維持されている。コード変更や新規commit、DB/X/morning greeting/P0.7への越境もなく、自然fetchも複数回completed・errorなしで継続しているため、本番反映タスクとして完了判定する。
-- followup: Trump/Fed対象クエリの直接ヒットは未観測だが、自然発生待ちの観測事項であり、このタスクの未完了条件ではない。
+この変更の目的は「失敗を減らすこと」ではなく、「修正可能な文章品質エラーだけを安全に自己修正すること」。Fact gateを弱めないことを最優先にする。
+
+## Completion report
+
+完了時はこのファイル末尾に `## Report` を追加し、task_id / result / changed_files / tests / commit_hash / push / deploy / retry_rule / safety_checks / remaining_issues / next_recommendation を記録する。
