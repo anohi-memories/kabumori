@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - task_id: important-news-deploy-trump-fed-coverage-20260905
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - purpose: K1承認済みcommit `af73cf2` の `breaking_market` 検索カバレッジ修正を本番 `important-news-monitor` へ安全にdeployし、自然fetchで反映確認できる状態にする。
 - scope:
   - origin/main fresh-check
