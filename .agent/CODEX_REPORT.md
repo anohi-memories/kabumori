@@ -12,8 +12,8 @@
   - 対象SQLだけのmigration適用要求: 安全審査で拒否、SQL実行前に停止
   - 拒否後の本番関数確認: public/privateとも`get_my_important_stock_news`は0件
   - 拒否後の本番migration履歴: 対象migration追加なし
-- commit_hash: `.agent/`停止報告commitで確定予定
-- push: `.agent/`のみorigin/mainへ反映予定
+- commit_hash: `962bd97`（停止報告とstatus更新）
+- push: `962bd97`をorigin/mainへ反映済み
 - deploy: 未実施。DB migration、GRANT、Edge Function、データ変更すべてなし
 - remaining_issues:
   - ユーザーからこのチャット上で「`get_my_important_stock_news` migrationを本番Supabaseへ適用してよい」という明示承認が必要
