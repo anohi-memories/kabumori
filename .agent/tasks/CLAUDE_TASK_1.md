@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - task_id: important-news-deploy-trump-fed-coverage-20260905
 - owner: claude
 - slot: claude-1
-- status: review_required
+- status: done
 - purpose: K1承認済みcommit `af73cf2` の `breaking_market` 検索カバレッジ修正を本番 `important-news-monitor` へ安全にdeployし、自然fetchで反映確認できる状態にする。
 - scope:
   - origin/main fresh-check
@@ -33,7 +33,7 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
   - TASK末尾に `## Report` を追加し status を review_required にする
 - commit: 禁止（コード変更なし）
 - push: 不要
-- deploy: 必須。`important-news-monitor` のみ
+- deploy: 完了。`important-news-monitor` v27 ACTIVE
 - report_mode: inline
 - next_owner: chatgpt
 
@@ -45,10 +45,6 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - 修正内容は `trump_tariff_semiconductor` queryに `Federal Reserve rate cut pressure threat to halt trade` を追加した最小差分。
 - クエリ数6、最大2検索/20分、1検索 max_tool_calls=1、allowed domains、24h freshness、actual visited URL検証は維持済み。
 - 本番 important-news auto_publish=false を維持する。
-
-## Completion report
-
-完了時はこのファイル末尾に `## Report` を追加し、task_id / result / deploy / deployed_version / natural_fetch_check / remaining_issues / safety_checks / next_recommendation を記録する。
 
 ## Report
 
@@ -76,3 +72,10 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
   - 他workstreamの未コミット変更（Codexの`.agent/CODEX_REPORT.md`・`.agent/tasks/CODEX_TASK.md`を含む）: 変更・stage・commitなし。`git reset --mixed`でbranch pointerのみ移動し、working tree上のCodexの未コミット編集は一切触れていないことを確認済み
   - secrets: 非表示・非変更
 - next_recommendation: 現状で安全に稼働中のため追加対応は不要。継続的なread-only観測で`trump_tariff_semiconductor`クエリの実際のヒット事例が確認できたら、その旨を任意タイミングで報告する。
+
+## K1 Review
+
+- reviewed_by: chatgpt
+- decision: approved
+- reason: `important-news-monitor`のみv27へdeployされ、verify_jwt=false / auto_publish=false / interval_minutes=20 / is_active=true / Cronが維持されている。コード変更や新規commit、DB/X/morning greeting/P0.7への越境もなく、自然fetchも複数回completed・errorなしで継続しているため、本番反映タスクとして完了判定する。
+- followup: Trump/Fed対象クエリの直接ヒットは未観測だが、自然発生待ちの観測事項であり、このタスクの未完了条件ではない。
