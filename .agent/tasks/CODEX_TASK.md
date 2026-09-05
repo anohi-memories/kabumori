@@ -4,7 +4,7 @@ Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは
 
 - task_id: kabumori-important-news-rpc-privilege-fix
 - owner: codex
-- status: ready
+- status: review_required
 - purpose: ローカル実装済みのKabumori「重要ニュース」取得RPCについて、レビューで判明したprivate関数の権限境界不一致を修正し、本番適用可能な最小migration案にする。本番適用はまだ行わない。
 - scope:
   - `supabase/migrations/20260905042052_get_my_important_stock_news.sql` の権限設計だけを必要最小限で修正
