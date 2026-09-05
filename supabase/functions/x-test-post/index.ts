@@ -3952,6 +3952,35 @@ Deno.serve(async (req) => {
       }, 201);
     }
 
+    if (scheduledPost.post_type === "morning_greeting") {
+      // Reuses runMorningGreetingManualPublish exactly as-is (no changes to that function): it already
+      // has its own atomic publish_claims-based same-day claim, image-existence check, length-safe
+      // generation, X media+post, and completion/failure recording — this is defense in depth on top of
+      // claim_due_post()'s own row-level claim, not a replacement for it. Only the admin-auth check that
+      // wraps it for the manual HTTP endpoint is intentionally skipped here, since the caller is the
+      // trusted internal per-minute dispatcher, not an external request.
+      const result = await runMorningGreetingManualPublish({
+        supabaseUrl,
+        serviceRoleKey,
+        openAiApiKey,
+        xAccessToken: xAuth.tokens.accessToken,
+      });
+      await callRpc(supabaseUrl, serviceRoleKey, "complete_morning_greeting_post", {
+        p_scheduled_post_id: scheduledPost.id,
+        p_x_post_id: result.x_post_id,
+      });
+      return jsonResponse({
+        schedule: {
+          id: scheduledPost.id, postType: "morning_greeting", scheduledFor: scheduledPost.scheduled_for,
+        },
+        dateJst: result.date_jst,
+        skipped: result.skipped,
+        alreadyPosted: result.already_posted,
+        xPostId: result.x_post_id,
+        retryCount: result.retry_count,
+      }, result.skipped ? 200 : 201);
+    }
+
     if (scheduledPost.post_type === "interaction") {
       const tradingDay = await getJpxTradingDay(
         supabaseUrl,
@@ -4059,9 +4088,11 @@ Deno.serve(async (req) => {
       !code.startsWith("RPC_FAILED:complete_interaction_post") &&
       !code.startsWith("RPC_FAILED:complete_morning_report_post") &&
       !code.startsWith("RPC_FAILED:complete_us_premarket_report_post") &&
+      !code.startsWith("RPC_FAILED:complete_morning_greeting_post") &&
       // The X API call itself returned success but the response body had no post id — whether the post
       // exists is unknown, so this must not be recorded as a failure (which could otherwise invite a retry).
-      code !== "X_RESPONSE_MISSING_POST_ID"
+      code !== "X_RESPONSE_MISSING_POST_ID" &&
+      code !== "MORNING_GREETING_X_POST_ID_MISSING"
     ) {
       try {
         await callRpc(

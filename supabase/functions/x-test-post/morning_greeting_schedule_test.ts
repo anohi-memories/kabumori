@@ -3,6 +3,14 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+// NOTE: this file documents 20260901044548_add_morning_greeting_schedule.sql, which was a draft "STEP 1"
+// never applied to production. 20260905010000_enable_morning_greeting_auto_dispatch.sql (see
+// morning_greeting_dispatch_test.ts) supersedes it in production: it uses a 06:30-07:00 JST window
+// instead of 07:00-07:30, and morning_greeting IS now claimed and dispatched to X (via the new
+// post_type === "morning_greeting" branch in index.ts). The assertions below remain true statements about
+// this specific (unapplied, superseded) file's own static content — they are not a description of
+// current production behavior.
+
 const migrationUrl = new URL(
   "../../migrations/20260901044548_add_morning_greeting_schedule.sql",
   import.meta.url,
