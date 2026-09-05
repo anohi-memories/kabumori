@@ -928,6 +928,58 @@ test("classifier: an unrecognized issue defaults to not-retryable (safe default,
   assert.equal(isRetryableVoiceFailure(["何か未知の指摘"]), false);
 });
 
+// Production example (2026-09-05): a Putin/Kyiv breaking_market candidate had Fact=passed but Voice
+// failed on two purely cosmetic issues — unnatural English-word mixing and a singular/plural mismatch —
+// and generation_voice_retry.attempted stayed false, so a fixable candidate was lost as generation_failed.
+test("classifier: unnatural English/foreign-word mixing in Japanese text is retryable", () => {
+  assert.equal(
+    isRetryableVoiceFailure([
+      "「欧州のリスク sentiment」は日本語として不自然で、英単語が混在しています。「欧州のリスク選好」や「欧州の市場心理」などに直す必要があります。",
+    ]),
+    true,
+  );
+});
+
+test("classifier: a singular/plural mismatch noted by the Voice checker is retryable, even when it names a country in passing", () => {
+  assert.equal(
+    isRetryableVoiceFailure([
+      "「米国の特使が」は原文の複数形と合っていないため、「米国の特使ら」などが自然です。",
+    ]),
+    true,
+  );
+});
+
+test("classifier: both production example issues together are retryable", () => {
+  assert.equal(
+    isRetryableVoiceFailure([
+      "「欧州のリスク sentiment」は日本語として不自然で、英単語が混在しています。「欧州のリスク選好」や「欧州の市場心理」などに直す必要があります。",
+      "「米国の特使が」は原文の複数形と合っていないため、「米国の特使ら」などが自然です。",
+    ]),
+    true,
+  );
+});
+
+// The old bare /国/ pattern would have wrongly blocked the plural-mismatch example above (it matches
+// any mention of 米国/中国/韓国/英国/...), treating an ordinary country name as an entity-mixup signal.
+// Only an explicit "国名" (country NAME is wrong) claim should be treated as a factual entity error.
+test("classifier: mentioning a country by name is not itself a non-retryable signal — only an explicit 国名 (country-name) error claim is", () => {
+  assert.equal(isRetryableVoiceFailure(["米国の特使という表現がやや硬いです"]), false); // unrecognized -> safe default false, not a false "blocked as factual" case
+  assert.equal(isRetryableVoiceFailure(["重複表現があり、米国の記述が続きます"]), true); // recognized retryable pattern, country mention doesn't block it
+  assert.equal(isRetryableVoiceFailure(["国名の誤りがあります（米国ではなく英国が正しい）"]), false); // genuine country-name factual error stays blocked
+});
+
+test("classifier: grammar/particle-level issues (助詞・単複・文法・敬体) are retryable", () => {
+  assert.equal(isRetryableVoiceFailure(["助詞の使い方が不自然です"]), true);
+  assert.equal(isRetryableVoiceFailure(["文法的にやや不自然な箇所があります"]), true);
+  assert.equal(isRetryableVoiceFailure(["敬体と常体が混在しています"]), true);
+});
+
+test("classifier: entity/person/company mix-ups (not mere country mentions) remain non-retryable", () => {
+  assert.equal(isRetryableVoiceFailure(["人物名の取り違えがあります"]), false);
+  assert.equal(isRetryableVoiceFailure(["企業名を誤っています"]), false);
+  assert.equal(isRetryableVoiceFailure(["制度の説明が事実と異なります"]), false);
+});
+
 test("3: retryable Voice failure triggers exactly one voice_retry, and a passing revision reaches ready_for_publish", async () => {
   const { runner, calls } = scriptedRunner([
     { step: "draft", payload: draftPayload },
@@ -948,6 +1000,49 @@ test("3: retryable Voice failure triggers exactly one voice_retry, and a passing
   // the revised text must not contain the duplicated sentence twice
   const occurrences = (result.generatedText?.match(/エネルギー輸送や原油価格への影響が見込まれます。/g) ?? []).length;
   assert.equal(occurrences, 1);
+});
+
+// Production example fixed end-to-end (2026-09-05): Putin/Kyiv candidate, Fact passed, Voice failed on
+// English-word mixing + a singular/plural mismatch, generation_voice_retry.attempted stayed false and the
+// candidate was lost as generation_failed. This reproduces it through generateImportantNewsPost and
+// confirms the fix reaches ready_for_publish via exactly one voice_retry.
+test("production example: Putin/Kyiv candidate with English-word-mixing + plural-mismatch Voice issues is retried once and recovers", async () => {
+  const putinDraft = {
+    text: "プーチン大統領はキーウへの攻撃を72時間停止するよう命じました。米国の特使がロシアとウクライナを訪問しています。欧州のリスク sentimentへの影響が注目されます。",
+    sufficient_information: true,
+    notes: [],
+  };
+  const { runner, calls } = scriptedRunner([
+    { step: "draft", payload: putinDraft },
+    { step: "fact", payload: { passed: true, issues: [] } },
+    {
+      step: "voice",
+      payload: {
+        passed: false,
+        issues: [
+          "「欧州のリスク sentiment」は日本語として不自然で、英単語が混在しています。「欧州のリスク選好」や「欧州の市場心理」などに直す必要があります。",
+          "「米国の特使が」は原文の複数形と合っていないため、「米国の特使ら」などが自然です。",
+        ],
+      },
+    },
+    {
+      step: "voice_retry",
+      payload: {
+        text: "プーチン大統領はキーウへの攻撃を72時間停止するよう命じました。米国の特使らがロシアとウクライナを訪問しています。欧州のリスク選好への影響が注目されます。",
+      },
+    },
+    { step: "fact", payload: { passed: true, issues: [] } },
+    { step: "voice", payload: { passed: true, issues: [] } },
+  ]);
+  const result = await generateImportantNewsPost(candidate({ importance: "most_important" }), runner);
+  assert.deepEqual(calls, ["draft", "fact", "voice", "voice_retry", "fact", "voice"]);
+  assert.equal(result.status, "ready_for_publish");
+  assert.equal(result.voiceRetry.attempted, true);
+  assert.equal(result.voiceRetry.factStatus, "passed");
+  assert.equal(result.voiceRetry.voiceStatus, "passed");
+  assert.match(result.generatedText ?? "", /特使ら/);
+  assert.match(result.generatedText ?? "", /リスク選好/);
+  assert.doesNotMatch(result.generatedText ?? "", /sentiment/);
 });
 
 test("4: Fact failed is never retried even if the Voice issues look minor", async () => {

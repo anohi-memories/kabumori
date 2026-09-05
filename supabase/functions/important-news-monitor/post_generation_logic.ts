@@ -419,12 +419,19 @@ const RETRYABLE_VOICE_ISSUE_PATTERNS: RegExp[] = [
   /^UNNATURAL_EXPLANATORY_CLOSING$/,
   // Part A: allowed for important news outright — must never block an otherwise-retryable issue set.
   /ニュース原稿/, /AI要約/, /報道文体/, /会話調/, /定型的/, /証券レポート/,
+  // Wording/grammar-only issues the Voice checker itself already knows how to fix: unnatural
+  // English/foreign-word mixing, singular/plural mismatches, particle/register-level grammar. These
+  // never touch what happened, who/what/when, or numbers — only how it's phrased.
+  /英単語/, /和英混在/, /日本語として不自然/, /単複/, /複数形/, /単数形/, /助詞/, /文法/, /敬体/,
 ];
 
 const NON_RETRYABLE_VOICE_ISSUE_PATTERNS: RegExp[] = [
   /断定/, /誤り/, /取り違え/, /改変/, /根拠/, /出典/, /ソース/, /意味が変わる/,
   /安全性/, /情報不足/, /unsupported/i, /証券コード/, /数字/, /日付/,
-  /人物|企業|国|制度/, /事実/, /捏造/,
+  // "国名" (a country's NAME being wrong), not bare "国" — a bare "国" would match almost any mention
+  // of a country (米国, 中国, 韓国, 英国, ...) and wrongly block ordinary grammar-only issues like
+  // "「米国の特使が」は複数形と合っていない" that just happen to name a country in passing.
+  /人物|企業|国名|制度/, /事実/, /捏造/,
 ];
 
 export function isRetryableVoiceFailure(issues: string[]): boolean {
@@ -714,7 +721,7 @@ export async function requestGenerationStep(
   const isVoiceRetry = step === "voice_retry";
   const schema = isDraft ? DRAFT_SCHEMA : isVoiceRetry ? VOICE_RETRY_SCHEMA : CHECK_SCHEMA;
   const instructions = isVoiceRetry ? [
-    "あなたは重要ニュース投稿の限定修正担当です。事実・数字・固有名詞・意味・出典を一切変えず、指摘された文章品質の問題（重複表現、同義反復、同内容の連続説明、冗長、不自然な接続・締め）だけを修正してください。",
+    "あなたは重要ニュース投稿の限定修正担当です。事実・数字・固有名詞・意味・出典を一切変えず、指摘された文章品質の問題（重複表現、同義反復、同内容の連続説明、冗長、不自然な接続・締め、不自然な英単語・和英混在、助詞や単複などの軽微な文法）だけを修正してください。",
     "新しい事実、解釈、市場影響、因果関係を追加しません。元のgenerated_textにない情報を補いません。文の順序や構成は必要な範囲でのみ整えます。",
     "voice_issuesに指摘のない箇所は極力そのまま維持します。見出しラベル（【速報】【重大速報】）やURL、『出典』表記はtextに含めません。プログラム側で処理します。",
     "修正後の本文だけをtextとして返します。修正できない、または修正すると事実が変わってしまう場合は、generated_textをそのままtextに返してください。",
