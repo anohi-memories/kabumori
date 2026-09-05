@@ -4,7 +4,7 @@ Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは
 
 - task_id: kabumori-personal-important-news-v1-review-artifacts
 - owner: codex
-- status: ready
+- status: review_required
 - purpose: 前タスクでローカル実装した「登録銘柄に関係する重要ニュース」機能について、ChatGPTが本番適用可否をレビューできるよう、実装差分を安全にGitHub共有する。新規実装や本番適用は行わない。
 - scope:
   - ローカル実装済みの `supabase/migrations/20260905042052_get_my_important_stock_news.sql` 全文をレビュー可能な形で共有する
