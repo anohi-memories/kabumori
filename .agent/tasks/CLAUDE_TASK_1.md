@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - task_id: important-news-deploy-trump-fed-coverage-20260905
 - owner: claude
 - slot: claude-1
-- status: in_progress
+- status: review_required
 - purpose: K1承認済みcommit `af73cf2` の `breaking_market` 検索カバレッジ修正を本番 `important-news-monitor` へ安全にdeployし、自然fetchで反映確認できる状態にする。
 - scope:
   - origin/main fresh-check
@@ -49,3 +49,30 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 ## Completion report
 
 完了時はこのファイル末尾に `## Report` を追加し、task_id / result / deploy / deployed_version / natural_fetch_check / remaining_issues / safety_checks / next_recommendation を記録する。
+
+## Report
+
+- task_id: important-news-deploy-trump-fed-coverage-20260905
+- result: `important-news-monitor`のみdeploy完了。deploy前後で`verify_jwt`・`auto_publish`・`interval_minutes`・`is_active`・Cronはすべて無変更を確認。deploy後、複数回の自然fetch cycleが正常完了し、breaking_marketが実際に新規候補を1件取得したことも確認した。
+- deploy:
+  - コード変更・新規commitなし（本タスクの禁止事項どおり）
+  - deploy対象ファイル（`breaking_market_source_fetchers.ts`）にK1承認済みの修正（`trump_tariff_semiconductor`クエリへの`Federal Reserve rate cut pressure threat to halt trade`追加）が含まれていることをdeploy直前にgrepで確認
+- deployed_version:
+  - deploy前: v26 ACTIVE, verify_jwt=false
+  - deploy後: **v27 ACTIVE, verify_jwt=false**（維持確認済み）
+- natural_fetch_check:
+  - deploy直後（2026-09-05 04:54 UTC以降）から現在（19:41 JST時点）まで、`important-news-fetch`は20分毎に継続実行、全run `status=completed`, `error=null`（source_errorsなし）
+  - breaking_marketは複数cycleで正常稼働し、`war_geopolitics_taiwan`クエリ経由で新規候補1件（"Months after ceasefire, Israel and Hezbollah battle over a strategic hill in Lebanon"）を実際に取得・保存できたことを確認（パイプライン自体が壊れていないことの実証）
+  - `trump_tariff_semiconductor`クエリ自体が選択されたcycleで実際にTrump/Fed関連の新規候補を拾った事例は、確認した期間内ではまだ観測できていない（6クエリ中2つ/cycleのローテーション性質上、対象クエリが選ばれるか・該当ニュースが実際に発生しているかの両方に依存するため、未観測＝異常ではない）
+- remaining_issues:
+  - `trump_tariff_semiconductor`クエリの修正が「Trump threatens to halt trade unless Fed cuts rates」相当の実ニュースを実際に拾えるかの直接的な実証は、該当ニュースの発生とクエリのローテーション選択タイミング次第であり、継続的なread-only観測が必要
+- safety_checks:
+  - `verify_jwt=false`: 維持確認済み
+  - `auto_publish=false`: 維持確認済み
+  - `interval_minutes=20` / `is_active=true`: 維持確認済み
+  - Cron（7ジョブ、スケジュール）: 無変更確認済み
+  - コード変更・新規commit: なし（禁止事項どおり）
+  - P0.7 / auto_publish変更 / DB schema・migration・GRANT変更 / X投稿実行 / morning greeting系: すべて未着手・未接触
+  - 他workstreamの未コミット変更（Codexの`.agent/CODEX_REPORT.md`・`.agent/tasks/CODEX_TASK.md`を含む）: 変更・stage・commitなし。`git reset --mixed`でbranch pointerのみ移動し、working tree上のCodexの未コミット編集は一切触れていないことを確認済み
+  - secrets: 非表示・非変更
+- next_recommendation: 現状で安全に稼働中のため追加対応は不要。継続的なread-only観測で`trump_tariff_semiconductor`クエリの実際のヒット事例が確認できたら、その旨を任意タイミングで報告する。
