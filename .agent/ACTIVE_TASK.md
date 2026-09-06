@@ -30,8 +30,8 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: kabumori-eas-project-and-push-runtime-prep-20260906
+- status: in_progress
+- task_id: kabumori-eas-linked-push-device-e2e-20260907
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`

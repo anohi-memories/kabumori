@@ -3,7 +3,7 @@
 - task_id: kabumori-eas-linked-push-device-e2e-20260907
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - purpose: ユーザー側でExpo/EASログインとKabumori project連携が完了したため、`extra.eas.projectId` を安全にmainへ反映し、実機iPhoneでExpo Push Tokenを取得できるところまでEAS/Push実行環境を整えて検証する。
