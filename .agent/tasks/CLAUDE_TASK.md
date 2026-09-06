@@ -3,8 +3,8 @@
 - task_id: kabumori-eas-linked-push-device-e2e-20260907
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: user
 - priority: high
 - purpose: ユーザー側でExpo/EASログインとKabumori project連携が完了したため、`extra.eas.projectId` を安全にmainへ反映し、実機iPhoneでExpo Push Tokenを取得できるところまでEAS/Push実行環境を整えて検証する。
 
@@ -132,3 +132,19 @@ Apple/EASの対話的認証、端末操作、証明書作成などユーザー�
   - projectId・アカウントメールアドレス等の個人情報・識別子：このReport・commitメッセージのいずれにも再掲していない
   - 他workstream（stocks sync関連、`.env`、`.claude/launch.json`、`apps/admin`、Codexの`.agent`ファイル等）：一切変更・stage・commitしていない。元の共有作業ディレクトリのgit HEAD・staged内容には触れていない
 - next_recommendation: (a) 今回のcommit`e768178`をレビューし問題なければK2、(b) ユーザー本人に`eas build --platform ios --profile development`の実行（Apple ID連携含む）を依頼、(c) development build完了後、次のClaude slotタスクで実機E2E（token upsert・logout cleanup確認）を実施、(d) それと独立に`send-push-notifications`のsecret/config/deployタスクも計画可能
+
+## K2 Review
+
+- decision: approved
+- reviewed_by: chatgpt
+- result:
+  - `app.json` のEAS project連携差分と最小`eas.json`追加を確認し、task scope内の変更として承認
+  - commit `e768178` は親 `3f46dec` に対して `app.json` と `eas.json` のみ変更しており、Codex/important-newsやSupabase production領域との競合なし
+  - EAS project association、iOS export、Push runtime readinessの確認結果を承認
+  - 実機E2EをApple Developer認証が必要な地点で停止した判断は安全方針どおりで妥当
+  - production deploy / secret / Cron / DB / `supabase/config.toml` は未変更を維持
+- remaining:
+  - ユーザー本人による iOS development build 作成・Apple認証
+  - development build実機導入後のPush Token upsert / logout cleanup E2E
+  - `send-push-notifications` production deployは別タスク
+- next_owner: user
