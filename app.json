@@ -44,6 +44,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "eb80adf3-861e-4a48-a373-2d9a85b58899"
+      }
+    },
+    "owner": "anohi-memoriess-team"
   }
 }
