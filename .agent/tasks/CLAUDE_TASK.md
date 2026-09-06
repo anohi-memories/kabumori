@@ -3,7 +3,7 @@
 - task_id: kabumori-push-settings-enforcement-20260907
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - purpose: 既存の`alert_settings`を実際のPush送信判定に接続し、将来ユーザーが通知ON/OFFを変更したとき本当に効くバックエンド経路を作る。Codexのimportant-news-monitor作業とは競合させず、`send-push-notifications`側だけで完結できる最小実装を優先する。
