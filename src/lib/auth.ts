@@ -1,5 +1,6 @@
 import { AuthError, Session } from '@supabase/supabase-js';
 
+import { removeThisDevicePushTokenBestEffort } from '@/lib/push-notifications';
 import { supabase } from '@/lib/supabase';
 
 export async function ensureProfile(userId: string) {
@@ -38,6 +39,9 @@ export async function signUpWithEmail(email: string, password: string) {
 }
 
 export async function signOut() {
+  // Best-effort, while the session (and its RLS authorization) is still
+  // valid -- removing this device's own token, not other devices'.
+  await removeThisDevicePushTokenBestEffort();
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
 }

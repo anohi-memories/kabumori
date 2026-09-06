@@ -5,6 +5,7 @@ import { ActivityIndicator, StyleSheet, useColorScheme, View } from 'react-nativ
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
 import { AuthScreen } from '@/components/auth-screen';
+import { useRegisterPushToken } from '@/hooks/use-register-push-token';
 import { AuthProvider, useAuth } from '@/providers/auth-provider';
 
 SplashScreen.preventAutoHideAsync();
@@ -12,6 +13,7 @@ SplashScreen.preventAutoHideAsync();
 function AuthGate() {
   const { session, loading, error, retry } = useAuth();
   const colorScheme = useColorScheme();
+  useRegisterPushToken(session);
 
   if (loading) {
     return (
