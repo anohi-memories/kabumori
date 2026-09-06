@@ -3,7 +3,7 @@
 - task_id: kabumori-mvp-completion-nonapple-20260907
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - purpose: Apple Developer Program加入を後回しにしたまま、Kabumori iPhone MVPを「加入直前まで完成」に近づける。既存のログイン・銘柄検索/登録・重要ニュース・Push foundationを壊さず、アプリ側で残っている主要導線を監査し、Apple有料登録なしで実装・検証できる範囲を完成させる。
