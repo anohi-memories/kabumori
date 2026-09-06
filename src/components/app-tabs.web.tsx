@@ -25,6 +25,9 @@ export default function AppTabs() {
           <TabTrigger name="explore" href="/explore" asChild>
             <TabButton>登録銘柄</TabButton>
           </TabTrigger>
+          <TabTrigger name="news" href="/news" asChild>
+            <TabButton>重要ニュース</TabButton>
+          </TabTrigger>
         </CustomTabList>
       </TabList>
     </Tabs>
