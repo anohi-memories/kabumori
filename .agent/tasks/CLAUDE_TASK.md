@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット2の現在タスクです。`G
 - task_id: kabumori-expo-push-foundation-mainline-20260906
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - purpose: K2承認済みのExpo/Auth/MVP共通基盤と重要ニュース画面本線を土台に、既にローカル実装済みのPush通知固有差分を安全にorigin/mainへ再適用し、Push Token登録・送信基盤を本線へ反映できる状態にする。
 
 ## Scope
