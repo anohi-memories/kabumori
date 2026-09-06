@@ -4,7 +4,8 @@ Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは
 
 - task_id: important-news-freshness-coverage-diagnosis-20260906
 - owner: codex
-- status: ready
+- status: review_required
+- next_owner: chatgpt
 - purpose: 2026-09-06 JST 03:20前後に雇用統計関連ニュースが遅れて取得された件と、同日全体で重要ニュース取得量が少ない件について、本番データと取得ロジックをread-onlyで調査し、遅延・取りこぼしの根本原因を切り分ける。
 - priority: high
 
@@ -87,3 +88,38 @@ Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは
 - deploy: 禁止
 - report_mode: inline
 - next_owner: chatgpt
+
+## Report
+
+- result: review_required
+- detailed_report: `.agent/CODEX_REPORT.md`
+- observation_cutoff: 2026-09-06 22:03:25 JST
+- production_function: `important-news-monitor` v29 ACTIVE / verify_jwt=false
+- summary:
+  - 2026-09-06 JST 00:00〜22:03の自然Fetchは67回、全67回completed、error/source error 0。20分間隔の実行障害はない。
+  - 当日新規candidateは3件で、全件`breaking_market`。`market_macro` / `tdnet` / `company_ir` / その他は0件。
+  - 03:20 JSTの雇用統計AP記事は23:11:18 JST公開、03:20:22 JST候補化で249.1分（4時間9分）遅延。`us_economic_data_surprise` queryの:20 rotation slotで取得したと特定した。
+  - 同queryは記事公開後の23:20、00:20、01:20、02:20の4回で候補0、03:20に初めて取得。各runは正常終了しており、実行障害ではない。raw Responses/search-result diagnosticsが保存されないため、検索結果未出現とpost-validation除外の最終分離はできない。
+  - 03:20の候補と同じ雇用統計は、BLS一次資料で9/4 22:38 JSTに既に候補化済み。記事公開時刻だけの24h freshnessとcross-source event dedupe不足により、古い同一イベントのAP後追い記事を新規速報候補として再許可している。
+  - 6 queryを2本ずつ回すため各queryは実質60分に1回。67 cycle / 134 Responses requestに対し、validation後breaking candidateは延べ24件、49 cycle（73.1%）が0件、当日unique新規は3件。
+  - `market_macro`は各cycleで56件を取得する一方、固定source順の先頭30件をdedupe前にcapし、30件すべて既存duplicate、残り26件を毎回deferしている。後段source（EIA等に候補がある場合）が恒常的に飢餓する構造がある。
+- root_causes:
+  - 主因（速報遅延）: query rotationで重要テーマも1時間間隔 + `search_context_size=low` / 1 search / 検索結果品質・indexingの変動。
+  - 主因（件数不足）: breaking取得段階の低yieldと強い候補化prompt + market_macroのdedupe前global capによる後段source starvation。
+  - 副因: 24h article freshnessが速報用途に広く、event occurrence freshnessとcross-source event identityを検証しない。
+  - 非原因: Fetch/Cron/runtime/quota/timeout、DB後段のimportance判定。当日3件は全件importantまたはmost_importantで、no_post 0件。
+- minimum_fix_recommendation:
+  - 雇用/CPI/緊急政策/市場急変など速報性が高いqueryを毎20分の固定枠にし、残り1枠だけrotationする。
+  - `breaking_market`を短い速報freshness（例2〜3時間）へ寄せ、event時刻も要求・検証する。24h記事は速報ではなく補完扱いに分離する。
+  - `market_macro`は保存済みduplicateを除外してからcapするか、source別quota/round-robinで30件を配分する。
+  - per-queryのresponse status、web_search call数、raw candidate数、URL/domain/time別除外数をrun diagnosticsへ保存する。
+- structural_fix_recommendation:
+  - `breaking_now`（毎20分、直接一次資料/速報検索、event age短）と`daily_context`（24h補完）を分離し、共通normalization/judgementへ合流する。
+  - `entity_key + event type + event/release timestamp`でcross-source event identityを作り、同一統計の一次資料・後追い記事を統合する。
+- changed_files: `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md`のみ（共有Report同期）。実装コード変更0。
+- tests: read-only本番DB、Cron、Edge Function metadata、origin/mainコード照合。テスト実行なし（調査タスク）。
+- deploy: なし
+- production_writes: 0
+- cron_changes: 0
+- x_posts: 0
+- secrets_exposed: 0
