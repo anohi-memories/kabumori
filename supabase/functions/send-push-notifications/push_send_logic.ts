@@ -15,6 +15,32 @@ export type PendingNotification = {
   source_id: string;
 };
 
+// Mirrors public.alert_settings' column defaults (20260901061217_add_kabumori_mvp_tables.sql)
+// for a user who has never saved a settings row -- absent means "on", so
+// existing users are never silently cut off by this enforcement.
+export type AlertSettings = {
+  push_enabled: boolean;
+  important_news: boolean;
+};
+
+const DEFAULT_ALERT_SETTINGS: AlertSettings = {
+  push_enabled: true,
+  important_news: true,
+};
+
+// The only per-source_type opt-out wired up so far is important_news; any
+// other source_type is governed by push_enabled alone until it gets its own
+// alert_settings column read here.
+export function shouldSendNotification(
+  notification: Pick<PendingNotification, 'source_type'>,
+  settings: AlertSettings | undefined,
+): boolean {
+  const resolved = settings ?? DEFAULT_ALERT_SETTINGS;
+  if (!resolved.push_enabled) return false;
+  if (notification.source_type === 'important_news' && !resolved.important_news) return false;
+  return true;
+}
+
 export type ExpoPushMessage = {
   to: string;
   title: string;

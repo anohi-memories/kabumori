@@ -5,7 +5,9 @@ import {
   chunk,
   classifyTicket,
   decideNotificationPushStatus,
+  shouldSendNotification,
   tokenIdsToDeactivate,
+  type AlertSettings,
   type DeliveryOutcome,
   type PendingNotification,
 } from "./push_send_logic.ts";
@@ -90,4 +92,42 @@ test("chunk: splits into groups of the given size, including a smaller final gro
 
 test("chunk: an empty array yields no chunks", () => {
   assert.deepEqual(chunk([], 10), []);
+});
+
+const enabled: AlertSettings = { push_enabled: true, important_news: true };
+const otherSourceNotification: Pick<PendingNotification, "source_type"> = { source_type: "future_source" };
+
+test("shouldSendNotification: no settings row is treated as fully enabled (never cuts off existing users)", () => {
+  assert.equal(shouldSendNotification(sampleNotification, undefined), true);
+});
+
+test("shouldSendNotification: push_enabled=true and important_news=true sends", () => {
+  assert.equal(shouldSendNotification(sampleNotification, enabled), true);
+});
+
+test("shouldSendNotification: push_enabled=false blocks regardless of source_type", () => {
+  const settings: AlertSettings = { push_enabled: false, important_news: true };
+  assert.equal(shouldSendNotification(sampleNotification, settings), false);
+  assert.equal(shouldSendNotification(otherSourceNotification, settings), false);
+});
+
+test("shouldSendNotification: important_news=false blocks only source_type='important_news'", () => {
+  const settings: AlertSettings = { push_enabled: true, important_news: false };
+  assert.equal(shouldSendNotification(sampleNotification, settings), false);
+});
+
+test("shouldSendNotification: important_news=false does not affect a future unrelated source_type while push_enabled stays true", () => {
+  const settings: AlertSettings = { push_enabled: true, important_news: false };
+  assert.equal(shouldSendNotification(otherSourceNotification, settings), true);
+});
+
+test("shouldSendNotification: settings for one user never affect another user's notification", () => {
+  const settingsByUser = new Map<string, AlertSettings>([
+    ["user-a", { push_enabled: false, important_news: true }],
+    ["user-b", { push_enabled: true, important_news: true }],
+  ]);
+  const notificationA = { ...sampleNotification, id: "notif-a" };
+  const notificationB = { ...sampleNotification, id: "notif-b" };
+  assert.equal(shouldSendNotification(notificationA, settingsByUser.get("user-a")), false);
+  assert.equal(shouldSendNotification(notificationB, settingsByUser.get("user-b")), true);
 });

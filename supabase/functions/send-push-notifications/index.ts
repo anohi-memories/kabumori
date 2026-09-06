@@ -17,7 +17,9 @@ import {
   classifyTicket,
   decideNotificationPushStatus,
   EXPO_PUSH_BATCH_SIZE,
+  shouldSendNotification,
   tokenIdsToDeactivate,
+  type AlertSettings,
   type DeliveryOutcome,
   type ExpoPushTicket,
   type PendingNotification,
@@ -74,6 +76,24 @@ async function fetchPendingNotifications(supabaseUrl: string, secretKey: string)
   );
   if (!result.ok) throw new Error(`FETCH_PENDING_NOTIFICATIONS_FAILED:${result.status}`);
   return (await result.json()) as PendingNotificationRow[];
+}
+
+async function fetchAlertSettingsForUsers(
+  supabaseUrl: string,
+  secretKey: string,
+  userIds: string[],
+): Promise<Map<string, AlertSettings>> {
+  const byUser = new Map<string, AlertSettings>();
+  if (userIds.length === 0) return byUser;
+  const idList = userIds.map((id) => encodeURIComponent(id)).join(",");
+  const result = await fetch(
+    `${supabaseUrl}/rest/v1/alert_settings?user_id=in.(${idList})&select=user_id,push_enabled,important_news`,
+    { headers: headers(secretKey) },
+  );
+  if (!result.ok) throw new Error(`FETCH_ALERT_SETTINGS_FAILED:${result.status}`);
+  const rows = (await result.json()) as (AlertSettings & { user_id: string })[];
+  for (const row of rows) byUser.set(row.user_id, { push_enabled: row.push_enabled, important_news: row.important_news });
+  return byUser;
 }
 
 async function fetchDeviceTokensForUsers(
@@ -146,7 +166,28 @@ Deno.serve(async (req) => {
     }
 
     const userIds = Array.from(new Set(pending.map((n) => n.user_id)));
-    const deviceTokens = await fetchDeviceTokensForUsers(supabaseUrl, secretKey, userIds);
+    const alertSettingsByUser = await fetchAlertSettingsForUsers(supabaseUrl, secretKey, userIds);
+
+    // A user who opted out (or opted out of important_news specifically)
+    // never reaches the device-token/Expo-API pipeline below -- their
+    // notifications go straight to 'skipped', same terminal status already
+    // used for "no registered devices" (decideNotificationPushStatus), so no
+    // schema change or new push_status value is needed. This also means we
+    // never re-fetch their device tokens for nothing.
+    const sendable: PendingNotificationRow[] = [];
+    const settingsSkipped: PendingNotificationRow[] = [];
+    for (const notification of pending) {
+      const settings = alertSettingsByUser.get(notification.user_id);
+      if (shouldSendNotification(notification, settings)) sendable.push(notification);
+      else settingsSkipped.push(notification);
+    }
+
+    for (const notification of settingsSkipped) {
+      await updateNotificationStatus(supabaseUrl, secretKey, notification.id, "skipped");
+    }
+
+    const sendableUserIds = Array.from(new Set(sendable.map((n) => n.user_id)));
+    const deviceTokens = await fetchDeviceTokensForUsers(supabaseUrl, secretKey, sendableUserIds);
     const tokensByUser = new Map<string, DeviceTokenRow[]>();
     for (const row of deviceTokens) {
       const list = tokensByUser.get(row.user_id) ?? [];
@@ -158,7 +199,7 @@ Deno.serve(async (req) => {
     // track of which pair each Expo ticket in the batched response
     // corresponds to (Expo preserves request order across one batch).
     const pairs: { notification: PendingNotificationRow; deviceToken: DeviceTokenRow }[] = [];
-    for (const notification of pending) {
+    for (const notification of sendable) {
       const devices = tokensByUser.get(notification.user_id) ?? [];
       for (const deviceToken of devices) pairs.push({ notification, deviceToken });
     }
@@ -180,7 +221,7 @@ Deno.serve(async (req) => {
       if (outcome === "device_not_registered") tokensToDeactivate.push(pair.deviceToken.id);
     });
 
-    for (const notification of pending) {
+    for (const notification of sendable) {
       const deliveries = deliveriesByNotification.get(notification.id) ?? [];
       const status = decideNotificationPushStatus(deliveries);
       await updateNotificationStatus(supabaseUrl, secretKey, notification.id, status);
@@ -190,6 +231,7 @@ Deno.serve(async (req) => {
     return response({
       status: "completed",
       processedCount: pending.length,
+      settingsSkippedCount: settingsSkipped.length,
       messagesSent: messages.length,
       deactivatedTokenCount: new Set(tokensToDeactivate).size,
     });
