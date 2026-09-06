@@ -3,7 +3,7 @@
 - task_id: kabumori-eas-project-and-push-runtime-prep-20260906
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - purpose: K2承認済みのPush通知本線を土台に、Expo Push Tokenを実機で取得できるようEAS project設定を整え、`send-push-notifications`を本番deployできる直前まで安全に準備する。重要ニュースmonitor/X/Cron/DB schemaには触れない。
 
 ## Previous K2 Review
