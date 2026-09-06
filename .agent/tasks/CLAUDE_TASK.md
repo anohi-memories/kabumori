@@ -3,7 +3,7 @@
 - task_id: kabumori-important-news-mainline-and-ios-e2e-20260906
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - purpose: K2承認済みのExpo/Auth/MVP共通基盤を土台に、ローカル実装済みのKabumori「重要ニュース」画面・取得コード・newsタブを安全にorigin/mainへ反映し、認証済みユーザー/iOSでのE2E確認へ進める。
 
 ## Scope
