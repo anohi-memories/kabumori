@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - task_id: morning-greeting-x-oauth-refresh-deploy-20260906
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - purpose: K1承認済みcommit `b459024` の朝の挨拶X OAuth 401 refresh修正を、本番 `x-test-post` に安全にdeployし、既存の重複投稿防止・Cron・DB・他workstreamを一切変更せず、次回scheduled `morning_greeting`を観測できる状態にする。
 - scope:
   - 作業開始時に `origin/main` をfresh-checkし、`.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、このTASKを確認する
