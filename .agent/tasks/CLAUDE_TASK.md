@@ -3,8 +3,8 @@
 - task_id: kabumori-eas-linked-push-device-e2e-20260907
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - purpose: ユーザー側でExpo/EASログインとKabumori project連携が完了したため、`extra.eas.projectId` を安全にmainへ反映し、実機iPhoneでExpo Push Tokenを取得できるところまでEAS/Push実行環境を整えて検証する。
 
@@ -96,3 +96,39 @@ Apple/EASの対話的認証、端末操作、証明書作成などユーザー�
 - 完了なら `status: review_required`
 - `next_owner: chatgpt`
 - control-plane更新をorigin/mainへ同期してからK2可能と報告
+
+## Report
+
+- task_id: kabumori-eas-linked-push-device-e2e-20260907
+- result: Scope A（projectId mainline）・Scope B（Push runtime readiness確認）は完了。Scope C（実機iPhone E2E）はApple Developer認証・証明書発行というユーザー本人操作が必要な地点まで到達し、そこで停止した。projectId本体やアカウントメールアドレスはこのReportに再掲していない。
+- scope_a_projectid_mainline:
+  - ユーザーの`eas init`によって生じた`app.json`差分を確認：`expo-notifications` plugin等の既存内容には変更なし、追加されたのは`extra.eas.projectId`と`owner`のみで、意図しない差分の混入はなかった
+  - この2点のみを`origin/main`ベースの一時worktreeでcommit/push（commit `e768178`、親は本タスクの`in_progress`commit `3f46dec`）
+  - 実機development buildを将来作成できるよう、標準的な最小`eas.json`（development/preview/production の3 build profile、`developmentClient: true`）を新規追加。build実行やApple資格情報の設定は行っていない
+- scope_b_push_runtime_readiness:
+  - `npx expo config --type public --json`で`extra.eas.projectId`が正しく解決されることを確認（値は非表示）
+  - `npx eas-cli project:info`でapp.json記載のprojectIdとEAS側のproject IDが一致することを確認（値は非表示）
+  - `src/lib/push-notifications.ts`の`resolveProjectId()`が`Constants.expoConfig?.extra?.eas?.projectId`を正しく参照する実装のままであることを確認（コード変更なし、projectId未設定時の`skipped`分岐は今後実機で`registered`に進めるようになる）
+  - `src/hooks/use-register-push-token.ts`・`_layout.tsx`・`auth.ts`のauth/layout連携、`Device.isDevice`ガードは前task（`43a2628`）から無変更であることを確認
+  - `npx expo export --platform ios`：exit code 0
+  - `npx tsc --noEmit`：今回変更した`app.json`/`eas.json`はJSON/設定ファイルでありtsc対象外。src配下の新規エラーなし（既存の`animated-icon.web.tsx`/`theme.ts`の2件のみ、前task同様の既知事象）
+- scope_c_physical_iphone_e2e: **停止**。理由と次の1手は以下の通り。
+  - `npx eas-cli build:list --limit 5 --non-interactive`で本projectのbuild履歴を確認 → **0件**。development buildはまだ一度も作成されていない
+  - 実機へインストールするdevelopment buildを作るには`eas build --platform ios --profile development`の実行が必要
+  - このコマンドは初回実行時、Apple Developer Programアカウントとの連携（Apple ID対話的ログイン、証明書/プロビジョニングプロファイルの発行または既存分の選択）を要求する。これはユーザー本人のApple ID・場合によっては有料のApple Developer Program登録が必要な操作であり、勝手に認証情報を要求・入力・記録しないという本タスクの制約に従い、ここで停止した
+  - **次にユーザーが行う最短1手**: ターミナルで`npx eas build --platform ios --profile development`を実行し、初回はApple IDでのログインと（Apple Developer Programに未登録なら）登録、証明書発行の対話プロンプトに従う。完了後、TestFlightまたは直接インストールでdevelopment buildを実機に入れれば、ログイン→通知権限→Expo Push Token取得→`device_push_tokens`upsert→logout時削除、の一連が実機で検証できる状態になる
+  - 上記が完了すれば、次のClaude slotタスクでtoken upsert/logout cleanupの結果をsecret/token値を晒さずに確認・報告できる
+- commit_hash: `e768178`（`origin/main`へpush済み、親は本タスクの`in_progress`commit `3f46dec`）
+- push: 完了。push前に2回（in_progress commit時・実装commit時）`origin/main`をfresh-checkし、いずれもdrift無し。
+- deploy: 未実施（`send-push-notifications`のproduction deployはexplicitly out of scope）。
+- remaining_issues:
+  - 実機Push Token取得のE2Eは、ユーザー本人によるEAS development build作成（Apple Developer認証含む）が完了するまで実施不可
+  - `send-push-notifications`のsecret登録・`supabase/config.toml`変更・deployは引き続き別タスク
+- safety_checks:
+  - `supabase/functions/important-news-monitor/**`、Codex現在task対象：一切変更していない
+  - `send-push-notifications` production deploy、Supabase secret設定、Cron設定、`supabase/config.toml`、DB migration/DDL/GRANT：一切変更していない
+  - important-news-monitor、X投稿系、auto_publish設定：一切変更していない
+  - Apple/EASの対話的認証、証明書作成、build実行：一切行っていない（`eas build`は未実行）
+  - projectId・アカウントメールアドレス等の個人情報・識別子：このReport・commitメッセージのいずれにも再掲していない
+  - 他workstream（stocks sync関連、`.env`、`.claude/launch.json`、`apps/admin`、Codexの`.agent`ファイル等）：一切変更・stage・commitしていない。元の共有作業ディレクトリのgit HEAD・staged内容には触れていない
+- next_recommendation: (a) 今回のcommit`e768178`をレビューし問題なければK2、(b) ユーザー本人に`eas build --platform ios --profile development`の実行（Apple ID連携含む）を依頼、(c) development build完了後、次のClaude slotタスクで実機E2E（token upsert・logout cleanup確認）を実施、(d) それと独立に`send-push-notifications`のsecret/config/deployタスクも計画可能
