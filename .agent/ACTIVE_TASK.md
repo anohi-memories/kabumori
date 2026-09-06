@@ -30,7 +30,7 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: review_required
+- status: in_progress
 - task_id: kabumori-mvp-completion-nonapple-20260907
 - start_code: G2
 - finish_code: K2

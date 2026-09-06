@@ -3,7 +3,7 @@
 - task_id: kabumori-mvp-completion-nonapple-20260907
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - purpose: Kabumori MVPのApple加入不要部分を完成に近づける。前回実装 `24ee8bb` のK2レビューで1点修正必須となったため、そこだけ安全に是正する。
