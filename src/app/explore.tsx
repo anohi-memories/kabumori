@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { NotificationSettings } from '@/components/notification-settings';
 import { TrackedStockEditor } from '@/components/tracked-stock-editor';
 import { authErrorMessage, signOut } from '@/lib/auth';
 import { TrackedStock } from '@/lib/stocks';
@@ -25,7 +24,6 @@ export default function TrackedStocksScreen() {
   const [selected, setSelected] = useState<TrackedStock | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
-  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,14 +66,9 @@ export default function TrackedStocksScreen() {
       <View style={styles.container}>
         <View style={styles.headingRow}>
           <Text style={styles.eyebrow}>MY STOCKS</Text>
-          <View style={styles.headingActions}>
-            <Pressable onPress={() => setSettingsOpen(true)} style={styles.settingsButton}>
-              <Text style={styles.settingsText}>通知設定</Text>
-            </Pressable>
-            <Pressable onPress={() => void logOut()} style={styles.logoutButton}>
-              <Text style={styles.logoutText}>ログアウト</Text>
-            </Pressable>
-          </View>
+          <Pressable onPress={() => void logOut()} style={styles.logoutButton}>
+            <Text style={styles.logoutText}>ログアウト</Text>
+          </Pressable>
         </View>
         <Text style={styles.title}>登録銘柄</Text>
         <Text style={styles.description}>保有株と、気になる監視銘柄をまとめて確認できます。</Text>
@@ -126,7 +119,6 @@ export default function TrackedStocksScreen() {
         onSaved={() => { setSelected(null); void load(); }}
         onDeleted={() => { setSelected(null); void load(); }}
       />
-      <NotificationSettings visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </SafeAreaView>
   );
 }
@@ -136,9 +128,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 20 },
   eyebrow: { color: '#548161', fontWeight: '900', letterSpacing: 2, fontSize: 12 },
   headingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  headingActions: { flexDirection: 'row', gap: 8 },
-  settingsButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, backgroundColor: '#e9ede9' },
-  settingsText: { color: '#526058', fontSize: 12, fontWeight: '800' },
   logoutButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, backgroundColor: '#e9ede9' },
   logoutText: { color: '#526058', fontSize: 12, fontWeight: '800' },
   title: { color: '#17211a', fontSize: 32, fontWeight: '900', marginTop: 6 },
