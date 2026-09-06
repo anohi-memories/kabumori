@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - task_id: morning-greeting-x-oauth-refresh-deploy-20260906
 - owner: claude
 - slot: claude-1
-- status: in_progress
+- status: review_required
 - purpose: K1承認済みcommit `b459024` の朝の挨拶X OAuth 401 refresh修正を、本番 `x-test-post` に安全にdeployし、既存の重複投稿防止・Cron・DB・他workstreamを一切変更せず、次回scheduled `morning_greeting`を観測できる状態にする。
 - scope:
   - 作業開始時に `origin/main` をfresh-checkし、`.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、このTASKを確認する
@@ -70,3 +70,37 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 ## Completion report
 
 完了時はこのファイル末尾に `## Report` を追加し、task_id / result / pre_deploy / deploy / deployed_version / verify_jwt / safety_checks / production_observation / remaining_issues / next_recommendation を記録する。
+
+## Report
+
+- task_id: morning-greeting-x-oauth-refresh-deploy-20260906
+- result: `x-test-post`のみdeploy完了。commit `b459024`がmainに含まれることを確認済み。deploy前後でCron・DB・morning greeting設定・2026-09-06のfailed claim/scheduled rowはすべて無変更を確認。次回scheduled `morning_greeting`（明日2026-09-07 06:30-07:00 JST予定）はまだ実行されていないため未観測。
+- pre_deploy:
+  - commit `b459024`確認: `git log --oneline --all | grep b459024`で存在確認済み
+  - deploy前`x-test-post`: v86 ACTIVE, verify_jwt=false
+  - deploy直前、ローカルの`morning_greeting_publish_logic.ts`にK1承認済みの修正（`requestXWithAuthRefresh`のimport・使用、`xAuth: XAuthContext`）が含まれていることをgrepで確認
+- deploy:
+  - コード変更・新規実装commitなし（本タスクの禁止事項どおり、TASK status/report更新のみ）
+  - `b459024`以外の未承認差分は混入していない（deploy対象は現在のmain HEADの`x-test-post`ディレクトリそのもの）
+- deployed_version:
+  - deploy前: v86 ACTIVE, verify_jwt=false
+  - deploy後: **v87 ACTIVE, verify_jwt=false**（維持確認済み）
+- verify_jwt: 維持確認済み（false のまま）
+- safety_checks:
+  - Cron（7ジョブ、スケジュール）: 無変更確認済み
+  - `posting_windows`（morning_greeting: 06:30-07:00 JST, daily_probability=1, is_active=true）: 無変更確認済み
+  - 2026-09-06の`publish_claims`（id: `6202d89e-...`, status=failed, error_code=`MORNING_GREETING_MEDIA_UPLOAD_FAILED:401`）: 未変更・未削除・未再claim確認済み
+  - 2026-09-06の`scheduled_posts`（id: `e0c6da3b-...`, status=failed, attempt_count=1）: 未変更確認済み
+  - 実X APIへの手動テスト投稿・画像アップロード: なし
+  - production secrets / OAuth token値: 非表示・非変更
+  - OAuth refresh token運用ルール: 無変更
+  - failed/stale claim reclaim: 追加なし
+  - 401以外へのretry拡張: なし
+  - important-news-monitor/**、重要ニュース、P0.7、Expo/Auth/MVP/Push通知workstream、Cron、GitHub Actions workflow、morning greeting画像生成workflow、DB schema/migration/GRANT/production data: すべて未接触
+  - 他workstreamの未コミット変更: 変更・stage・commitなし
+- production_observation:
+  - **未観測**。現在時刻2026-09-06 17:56 JST時点で、今日の06:30-07:00 JST投稿windowは既に経過済み（今日分は既存のfailed rowのまま、`schedule_date`一意制約により再作成されない）
+  - 次回のscheduled `morning_greeting`実行は明日2026-09-07 06:30-07:00 JST予定（画像生成は05:30 JST予定）。それまで新しいscheduled_posts行は作成されない
+- remaining_issues:
+  - このOAuth refresh修正が実際のX APIで意図通り機能するかは、明日2026-09-07のscheduled実行を待って初めて実証できる
+- next_recommendation: 明日2026-09-07 06:30-07:00 JST以降に、新しい`scheduled_posts`/`publish_claims`行のstatus（`published`になるか、401以外の別の理由でfailedになるか）をread-onlyで確認することを推奨。
