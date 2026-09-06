@@ -16,6 +16,7 @@ import {
   fetchMyImportantStockNews,
   ImportantStockNews,
 } from '@/lib/important-news';
+import { markImportantNewsNotificationsRead } from '@/lib/notifications';
 
 const trackingLabels = { holding: '保有', watch: '監視' } as const;
 
@@ -59,7 +60,10 @@ export default function ImportantNewsScreen() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { void load(); }, [load]));
+  useFocusEffect(useCallback(() => {
+    void load();
+    void markImportantNewsNotificationsRead();
+  }, [load]));
 
   const emptyMessage = error
     || (!hasTrackedStocks
