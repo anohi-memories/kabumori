@@ -2,71 +2,146 @@
 
 Claude Code（くろちゃん）並列スロット1の現在タスクです。`G1` を受けたClaude Codeは、`.agent/ORCHESTRATION.md` と既存のプロジェクトルールを確認したうえで、このファイルを自分の担当タスク正本として扱います。
 
-- task_id: morning-greeting-x-oauth-refresh-deploy-20260906
+- task_id: morning-greeting-length-tolerance-20260907
 - owner: claude
 - slot: claude-1
-- status: done
-- purpose: K1承認済みcommit `b459024` の朝の挨拶X OAuth 401 refresh修正を、本番 `x-test-post` に安全にdeployし、既存の重複投稿防止・Cron・DB・他workstreamを一切変更せず、次回scheduled `morning_greeting`を観測できる状態にする。
-- deploy: `x-test-post` のみ完了
-- deployed_version: v87 / ACTIVE
-- verify_jwt: false（維持）
+- status: ready
+- next_owner: claude
+- priority: high
+- purpose: 2026-09-07朝のscheduled `morning_greeting` が `MORNING_GREETING_TEXT_LENGTH_INVALID` でX API到達前に失敗したため、朝の挨拶らしい短さを維持しつつ、生成揺れで投稿全体が消える確率を下げる。
+
+## Background
+
+2026-09-07本番のread-only確認結果:
+
+- `scheduled_posts`
+  - scheduled_for: 2026-09-07 06:47:23 JST
+  - started_at: 06:48:01 JST
+  - finished_at: 06:48:07 JST
+  - status: failed
+- `post_execution_logs`: `MORNING_GREETING_TEXT_LENGTH_INVALID`
+- `publish_claims`: failed / x_post_idなし
+- 画像 `generated/2026-09-07.png` は05:42:33 JSTに正常生成済み
+- `posting_windows` は06:30-07:00 JST / active / probability=1で正常
+- 前日の401とは別原因。今回の失敗は本文文字数判定であり、X APIへ到達していない。
+- 本番 `x-test-post` はv87 ACTIVE。前タスクのOAuth 401 refresh修正は維持すること。
+
+## Required behavior
+
+### 1. 投稿許容文字数を100〜300文字へ拡張
+
+`morning_greeting` 本文の最終validatorを以下に変更する。
+
+- minimum: **100文字**
+- maximum: **300文字**
+
+100文字未満または300文字超だけを `MORNING_GREETING_TEXT_LENGTH_INVALID` とする。
+
+### 2. 生成目標は120〜200文字
+
+AIへの通常生成instructionは、許容上限300文字いっぱいを狙わせず、以下を目標とする。
+
+- target minimum: **120文字**
+- target maximum: **200文字**
+
+目的は「普段は短めの朝の挨拶」を維持しつつ、多少長く生成されても投稿中止にしないこと。
+
+### 3. length retryも120〜200文字を狙う
+
+初回が許容範囲100〜300を外れた場合だけ、既存どおり最大1回retryしてよい。
+
+- short retry: 自然に具体化して120〜200文字を狙う
+- long retry: 内容を保ちながら120〜200文字を狙う
+- 2回目も100〜300文字外なら停止
+- retry回数上限は増やさない
+
+### 4. 文字数diagnosticsを残す
+
+今回のような失敗を後から切り分けられるよう、少なくとも以下がread-only確認で分かる形にする。
+
+- retry_count
+- first_length
+- retry_length
+- length_failure_stage (`first` / `retry`)
+
+既存の `MorningGreetingLengthInvalidError` / payload diagnosticsを活用し、**DB migrationなしで可能な範囲**を優先する。
+
+既存テーブルへ保存できる安全なフィールド/ログ経路があるならそこへ残す。DB schema変更が必要なら勝手にmigrationせず、`review_required` で必要性を報告する。
+
+### 5. 既存安全策は維持
+
+以下は変更しない。
+
+- 挨拶に「おはよう」を必須とする判定
+- theme整合性
+- 架空の実体験禁止
+- 未確認天気禁止
+- 投資助言禁止
+- 架空の記念日禁止
+- URL / hashtag禁止
+- 絵文字上限の安全策
+- 画像存在確認
+- 同日重複投稿防止 (`publish_claims` / receipt)
+- OAuth 401時のみ1回refresh + 同一request 1回retry
+- 401以外の曖昧失敗を自動retryしない方針
+
+## Scope
+
+主対象:
+
+- `supabase/functions/x-test-post/morning_greeting_logic.ts`
+- 必要なら `morning_greeting_payload_logic.ts`
+- 必要なら `morning_greeting_publish_logic.ts`
+- 関連テスト
+
+上記以外へ広げないこと。
+
+Codexは `important-news-monitor` の別タスクを担当中/readyのため、重要ニュース系ファイルには触れない。
+Claude slot 2のExpo/Auth/MVP/Push関連にも触れない。
+
+## Validation
+
+最低限、以下をテストする。
+
+1. 99文字 -> reject
+2. 100文字 -> accept
+3. 120〜200文字 -> accept
+4. 180〜250文字 -> accept
+5. 300文字 -> accept
+6. 301文字 -> reject
+7. 初回99文字 -> retry -> 120〜200文字ならaccept
+8. 初回301文字超 -> retry -> 120〜200文字ならaccept
+9. retry後も範囲外 -> `MORNING_GREETING_TEXT_LENGTH_INVALID`
+10. retryは最大1回のまま
+11. 既存のsalutation/theme/safety testsがpass
+12. OAuth/media/posting pathへ不要な変更がない
+
+関連テスト・typecheck/lintを実行し、結果をReportへ記載する。
+
+## Production policy
+
+このタスクは**ローカル実装・検証まで**。
+
+- production deploy: 禁止
+- production DB write: 禁止
+- migration / DDL / GRANT: 禁止
+- Cron変更: 禁止
+- secrets変更・表示: 禁止
+- Xへの手動投稿: 禁止
+- 2026-09-07 failed `scheduled_posts` / `publish_claims` の再実行・削除・再claim: 禁止
+- 朝画像生成workflow変更: 禁止
+
+## Completion criteria
+
+- 100〜300文字のvalidatorへ変更
+- 120〜200文字の生成目標へ変更
+- retry上限1回を維持
+- 可能な範囲でlength diagnosticsを観測可能にする
+- 関連テストpass
+- 変更ファイルとテスト結果を `## Report` に記載
+- statusを `review_required` に変更
 - next_owner: chatgpt
-
-## Approved previous task
-
-- previous_task_id: `morning-greeting-x-oauth-refresh-20260906`
-- K1_result: approved
-- approved_commit: `b459024`
-- approved_behavior:
-  - media upload / tweet送信の401時のみ、1回だけOAuth refreshして1回だけretry
-  - 1 executionあたりrefresh最大1回
-  - 429 / 5xx / network系など401以外の曖昧失敗は自動retryしない
-  - 2026-09-06 failed claim / scheduled rowは未変更
-- approved_tests:
-  - `_shared`: 5/5 pass
-  - `x-test-post`: 298/298 pass
-  - `important-news-monitor`: 235/235 pass
-
-## Report
-
-- task_id: morning-greeting-x-oauth-refresh-deploy-20260906
-- result: `x-test-post`のみdeploy完了。commit `b459024`がmainに含まれることを確認済み。deploy前後でCron・DB・morning greeting設定・2026-09-06のfailed claim/scheduled rowはすべて無変更を確認。次回scheduled `morning_greeting`（2026-09-07 06:30-07:00 JST予定）はまだ実行されていないため未観測。
-- pre_deploy:
-  - commit `b459024`確認済み
-  - deploy前`x-test-post`: v86 ACTIVE, verify_jwt=false
-  - deploy対象にK1承認済みOAuth 401 refresh修正が含まれることを確認済み
-- deploy:
-  - コード変更・新規実装commitなし
-  - `x-test-post` のみdeploy
-- deployed_version:
-  - deploy前: v86 ACTIVE, verify_jwt=false
-  - deploy後: **v87 ACTIVE, verify_jwt=false**
-- safety_checks:
-  - Cron（7ジョブ、スケジュール）: 無変更確認済み
-  - `posting_windows`（morning_greeting: 06:30-07:00 JST, daily_probability=1, is_active=true）: 無変更確認済み
-  - 2026-09-06の`publish_claims` failed row: 未変更・未削除・未再claim確認済み
-  - 2026-09-06の`scheduled_posts` failed row: 未変更確認済み
-  - 実X APIへの手動テスト投稿・画像アップロード: なし
-  - production secrets / OAuth token値: 非表示・非変更
-  - OAuth refresh token運用ルール: 無変更
-  - failed/stale claim reclaim: 追加なし
-  - 401以外へのretry拡張: なし
-  - important-news-monitor/**、重要ニュース、P0.7、Expo/Auth/MVP/Push通知、Cron、GitHub Actions、morning greeting画像生成workflow、DB schema/migration/GRANT/production data: 未接触
-  - 他workstreamの未コミット変更: 変更・stage・commitなし
-- production_observation:
-  - **未観測**。2026-09-06分は既存failed rowのまま。
-  - 次回scheduled `morning_greeting`実行は2026-09-07 06:30-07:00 JST予定（画像生成05:30 JST予定）。
-- remaining_issues:
-  - OAuth refresh修正が実X APIで意図どおり機能するかは、2026-09-07のscheduled実行後にread-only確認が必要。
-- next_recommendation: 2026-09-07 06:30-07:00 JST以降に、新しい`scheduled_posts`/`publish_claims`行のstatusをread-only確認する。
-
-## K1 Review
-
-- reviewed_by: chatgpt
-- result: approved
-- status: done
-- rationale:
-  - 指定どおり `x-test-post` のみdeployされ、v87 ACTIVE / verify_jwt=false を確認。
-  - 禁止されていた手動X投稿、Cron変更、DB変更、failed claim再利用、他workstream変更は報告上なし。
-  - 次回scheduled実行が未観測なのはTASK completion criteria上許容される。
-- follow_up: 2026-09-07朝のscheduled `morning_greeting` 実行結果をread-only確認する。
+- commit: 可
+- push: 原則禁止。必要なら勝手にpushせず報告
+- deploy: 禁止
+- report_mode: inline
