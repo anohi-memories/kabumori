@@ -1,49 +1,153 @@
 # Claude Task 1
 
-- task_id: x-test-post-deploy-verify-20260907
+- task_id: close-report-final-hardening-20260907
 - owner: claude
 - slot: claude-1
-- status: done
-- next_owner: chatgpt
-- priority: high
-- purpose: K1承認済みcommit `a1d2735` の `x-test-post` 改修を本番へ反映し、安全なdry-run/read-only確認で動作確認する。
+- status: ready
+- next_owner: claude
+- priority: urgent
+- purpose: 2026-09-07の大引けレポートを本番有効化する前に、morning_reportで修正したVoice誤判定耐性と同等の安全な投稿前フローをclose_reportにも適用し、Voice不合格の見逃し・タグ順序・dry-run判定を最小修正で整える。
 
-## K1 Review
+## Confirmed current state
 
-- decision: approved
-- reviewed_by: chatgpt
-- deployed_from_commit: `a1d2735`
-- deployed_function_version: v88 ACTIVE
-- result:
-  - `x-test-post` のみ本番deploy済み
-  - morning_report dry-run: HTTP 200 / wouldPublish=true / factCheck=passed / voiceCheck=passed
-  - 通常の相場表現「見たいところです」がVoice誤判定されないことを実地確認
-  - 固定タグ `#日本株 #日経平均 #株式投資 #かぶモリ` が末尾に空行1つを挟んで1回だけ付与されることを確認
-  - morning_greeting dry-run: HTTP 200 / success=true / payload_ready=true / x_api_called=0 / x_posted=false / retry_count=0
-  - morning_greeting本文106文字で100〜300 validator内。target 120〜200は生成目標のため、validator内ならretryなしでacceptする設計どおり
-  - X実投稿0件、2026-09-07 failed rowsの再実行・再claim・status変更なし
-  - DB migration / schema / GRANT / Cron / secrets / production settings変更なし
-  - deploy対象は `x-test-post` のみ、他Function・Codex担当・Claude slot 2担当領域への変更なし
-- remaining:
-  - 今回のdry-runでは初回Voiceがpassしたため、Voice fail→rewrite→再Voiceの本番実発火は未観測。コードレベルテストは前タスクで網羅済み
-  - 次回自然実行のmorning_greeting / morning_reportをread-onlyで確認するのが望ましい
-- next_owner: chatgpt
+- production `x-test-post`: v88 ACTIVE
+- shared `evaluateKabumoriVoice()` は既に以下の一般的な相場コメントを単独ではfailにしない:
+  - 「気になるところです」
+  - 「注目したいところです」
+  - 「見ておきたいところです」
+  - 「確認したいポイントです」
+- close_reportの固定タグは既に共有helperで以下4タグ:
+  - `#日本株 #日経平均 #株式投資 #かぶモリ`
+- ただし現在のscheduled live close_reportはVoice評価を実行して保存するだけで、`voiceEvaluation.passed === false`でも`postToX()`へ進む。
+- 現在の`generateCloseReport()`はVoice評価前に固定タグを本文へ付与して返しており、morning_reportの「最終Voice後にコード側でタグ付与」と順序が異なる。
+- close_report dry-runもVoice結果を返すが、`wouldPublish`/最終Voice gateを明示していない。
+- production `posting_windows` のclose_reportは `15:58-16:02 Asia/Tokyo`, `daily_probability=1`, **is_active=false**。このTASKでは有効化しない。
 
-## Report
+## Required implementation
 
-- task_id: x-test-post-deploy-verify-20260907
-- result: 完了。`x-test-post`を承認済みcommit `a1d2735`の内容でdeployし、read-onlyのdry-run/DB確認で正常動作を確認した。X実投稿は一切行っていない。
-- deployed_from_commit: `a1d2735`
-- deployed_function_version: v87 (ACTIVE, deploy前) → **v88 (ACTIVE, deploy後)**
-- deploy_result: 成功。`supabase functions deploy x-test-post`。他Function変更なし。
-- morning_report_dry_run_result: HTTP 200、`wouldPublish: true`、`factCheck.status: passed`、`voiceCheck.status: passed`。
-- morning_report_hashtags_check: 固定4タグが末尾に空行1つを挟んでちょうど1回。
-- morning_report_voice/rewrite diagnostics: `first_voice_passed: true`, `voice_rewrite_attempted: false`, `second_voice_passed: null`, `final_voice_failure_stage: null`。
-- morning_greeting_dry_run_result: HTTP 200、`success: true`、`payload_ready: true`、`x_api_called: 0`、`x_posted: false`、`retry_count: 0`。
-- morning_greeting_character_count: 106文字。100〜300 validator内。
-- x_post_created: no
-- production_side_effects: deploy以外なし。failed rows未変更、publish_claims新規0、Cron/DB/secrets/settings変更なし。
-- tests/checks: 前タスク316 passed / 0 failed。deploy後v88 ACTIVE確認。dry-run 2件をHTTP経由で実行しレスポンス・DB値を確認。
-- remaining_issues: Voice fail→rewrite実発火は未観測。次回自然Voice fail時にdiagnosticsをread-only確認推奨。
-- safety_checks: X実投稿0、DB/Cron/secrets/settings変更0、他workstream変更0。
-- next_recommendation: 通常運用へ戻し、次回のmorning_greeting / morning_report自然実行結果をread-only確認する。
+### 1. close_report Voice gateを本番投稿前に必須化
+
+scheduled live close_reportで:
+
+1. generation成功
+2. format validation成功
+3. fact check成功
+4. local safety成功
+5. Voice評価
+
+の順に確認し、**最終Voiceがpassed=trueの場合だけ**X APIへ進む。
+
+最終Voiceがfailなら `CLOSE_REPORT_VOICE_CHECK_FAILED` でX API到達前に停止する。
+
+### 2. Voice単体fail時に最大1回だけ限定rewrite
+
+morning_reportと同じ考え方で、generation/format/fact/local safetyがすべてpassし、Voiceだけfailした場合に限り同一実行内で最大1回rewriteしてよい。
+
+rewrite制約:
+- Voice notesで指摘された表現だけ修正
+- 新しい事実・数値・日時・固有名詞・因果関係を追加/変更しない
+- close_report固定構造を維持
+  - `【大引け】きょうの日本株まとめ🌙`
+  - `📌 今日の3ポイント` 3件
+  - `🔎 強かった・弱かったテーマ`
+  - `👀 明日への注目点`
+  - `💬 今日のひとこと`
+- URL/hashtagをAIに追加させない
+- 投資助言・価格断定を追加しない
+- 架空の本人売買/保有/損益/具体的な現在体験を追加しない
+
+rewrite候補は最低限:
+- `validateCloseReportFormat`
+- fact-drift防止の決定的チェック（morning_report方式を再利用/一般化してよい）
+- `localCloseReportSafetyIssues`
+- 2回目Voice
+を通す。
+
+2回目Voice passなら採用。failまたはrewrite不採用ならX投稿せず停止。rewriteループは禁止。
+
+### 3. 固定タグを最終Voice後へ移動
+
+`generateCloseReport()`内ではAI本文にタグを付けず、本文だけ返す。
+
+最終fact/format/local safety/Voiceがすべて通った後、Xへ渡す直前にコード側で
+`appendKabumoriReportFixedHashtags()` を1回だけ適用する。
+
+- 本文とタグの間は空行1つ
+- 4タグは各1回だけ
+- rewrite有無にかかわらず重複しない
+- morning_reportと同じ共有定義を維持
+
+### 4. close_report dry-runを本番前判定に使える形へ
+
+`close_report_dry_run`でもliveと同じ最終判定順を通す。ただしX投稿は絶対にしない。
+
+レスポンス/diagnosticsで少なくとも確認できるようにする:
+- factCheck.status
+- first_voice_passed
+- voice_rewrite_attempted
+- second_voice_passed
+- final_voice_failure_stage (`first` / `after_rewrite` / null)
+- voiceCheck.status
+- wouldPublish
+- final generatedText（wouldPublishなら固定4タグ付き）
+
+Voice failだけでdry-run HTTP自体を落とす必要はない。`wouldPublish=false`とerror/diagnosticsで確認できればよい。
+
+### 5. X重複安全
+
+- `postToX()`は最終Voice pass後に1回だけ
+- X API呼び出し後の曖昧失敗を自動retryする新機構は追加しない
+- close_reportの外側retry基盤を新設しない
+
+## Tests
+
+最低限:
+1. benign market wordingをshared Voice instructionが許容すること（既存テスト再利用可）
+2. first Voice pass -> rewrite 0 -> wouldPublish true
+3. first fail -> rewrite 1 -> second pass -> wouldPublish true
+4. first fail -> rewrite 1 -> second fail -> wouldPublish false / X 0
+5. rewrite candidateがformat破壊 -> reject / X 0
+6. rewrite candidateが新規数字追加 -> reject / X 0
+7. final Voice pass後だけ固定タグ付与
+8. fixed tags exactly once
+9. live path `postToX`はfinal Voice pass後のみ
+10. existing close_report tests/regression pass
+
+## Scope / conflicts
+
+主対象:
+- `supabase/functions/x-test-post/index.ts`
+- `supabase/functions/x-test-post/close_report_logic.ts`
+- 必要ならreport共通rewrite helper（morning用を安全に一般化する最小変更可）
+- 関連tests
+
+触らない:
+- Codex `important-news-monitor/**`
+- Claude slot2 `send-push-notifications/**`
+- DB migration/schema/GRANT
+- Cron
+- secrets
+- posting_windows設定
+- 他Edge Function
+
+## Production policy
+
+このTASKはまず **local implementation + tests + commitまで**。
+
+- production deploy: 禁止
+- `posting_windows.close_report.is_active`変更: 禁止
+- X実投稿: 禁止
+- DB write: 禁止（通常の開発作業に必要ない）
+- push: 原則禁止。完了時に必要なら報告して確認を取る
+
+## Completion
+
+完了時:
+- `## Report` を追記
+- status: `review_required`
+- next_owner: `chatgpt`
+- changed files
+- tests
+- commit hash
+- production changesなしを明記
+- 次工程として「K1承認 → push/deploy → close_report dry-run → posting window有効化」を提案
