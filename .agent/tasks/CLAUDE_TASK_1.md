@@ -5,7 +5,7 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - task_id: morning-content-resilience-20260907
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - purpose: 2026-09-07朝に発生した2種類の `x-test-post` 投稿停止（morning_greetingの文字数判定、morning_reportのVoice誤判定）を、既存安全策を維持したまま最小修正で再発しにくくし、朝刊へ既存の固定ハッシュタグを確実に付与する。
