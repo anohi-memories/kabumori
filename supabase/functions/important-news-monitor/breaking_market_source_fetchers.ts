@@ -17,17 +17,32 @@ import {
 // 2. A candidate is discarded unless its source_url is one the web_search tool actually visited (present
 //    in web_search_call.action.sources on the raw response) — never trust a model-claimed URL on its own.
 // 3. A candidate is discarded unless the source host is in BREAKING_MARKET_SOURCE_DOMAINS.
-// 4. A candidate is discarded unless its published_at falls inside the freshness window (24h default,
-//    much tighter than market_macro's 14 days — breaking news that's already a day old is not breaking).
+// 4. A candidate is discarded unless its article and, when supplied, event timestamps fall inside the
+//    freshness window. The critical query additionally requires an exact event timestamp so a fresh
+//    follow-up article cannot re-surface an old scheduled release as breaking news.
 
 export type BreakingMarketQuery = {
   key: string;
   searchQuery: string;
   defaultCategory: ImportantNewsCategory;
   defaultTopicKey: string;
+  requireEventTimestamp?: boolean;
 };
 
+export const CRITICAL_BREAKING_MARKET_QUERY_KEY = "critical_market_events";
+
 export const BREAKING_MARKET_QUERIES: BreakingMarketQuery[] = [
+  {
+    key: CRITICAL_BREAKING_MARKET_QUERY_KEY,
+    // One fixed slot every 20-minute cycle. Keeping the highest-impact scheduled releases, emergency
+    // policy actions, and live market shocks together prevents any one of them waiting an hour for a
+    // six-query rotation while preserving the existing two-search cost ceiling.
+    searchQuery:
+      "breaking today US jobs payrolls employment report CPI inflation release emergency BOJ Fed rate decision Ministry of Finance FX intervention USDJPY Nikkei futures NASDAQ SOX crude oil surge plunge crash",
+    defaultCategory: "other_market_moving",
+    defaultTopicKey: "breaking:critical_market_events",
+    requireEventTimestamp: true,
+  },
   {
     key: "trump_tariff_semiconductor",
     // Covers both the original tariff/export-control announcements AND the intersection of trade policy
@@ -49,24 +64,6 @@ export const BREAKING_MARKET_QUERIES: BreakingMarketQuery[] = [
       "war ceasefire military conflict Taiwan Middle East Iran Israel Strait of Hormuz oil tanker maritime attack energy infrastructure CENTCOM breaking news today",
     defaultCategory: "geopolitics",
     defaultTopicKey: "breaking:conflict",
-  },
-  {
-    key: "fx_intervention_boj_fed_emergency",
-    searchQuery: "Japan yen FX intervention Ministry of Finance emergency BOJ Fed rate decision today",
-    defaultCategory: "fx",
-    defaultTopicKey: "breaking:fx_intervention",
-  },
-  {
-    key: "us_economic_data_surprise",
-    searchQuery: "US CPI inflation jobs report payrolls surprise data today",
-    defaultCategory: "us_government_policy",
-    defaultTopicKey: "breaking:us_economic_data",
-  },
-  {
-    key: "market_move_breaking",
-    searchQuery: "USDJPY yen Nikkei futures NASDAQ SOX crude oil surge plunge crash today",
-    defaultCategory: "other_market_moving",
-    defaultTopicKey: "breaking:market_move",
   },
   {
     key: "bank_china_stimulus",
@@ -92,25 +89,31 @@ export const BREAKING_MARKET_SOURCE_DOMAINS = [
   "centcom.mil", "defense.gov",
 ];
 
-const MAX_BREAKING_MARKET_ITEM_AGE_MS = 24 * 60 * 60 * 1000;
+export const MAX_BREAKING_MARKET_ITEM_AGE_MS = 3 * 60 * 60 * 1000;
 const MAX_BREAKING_MARKET_FUTURE_SKEW_MS = 60 * 60 * 1000;
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const MODEL = "gpt-5.6-luna" as const;
 
-// Deterministic, stateless rotation: which queries run this cycle depends only on the current time, so
-// two concurrent/retried calls within the same 20-minute window pick the same queries (no drift, no DB
-// state needed), and every query gets a turn roughly every ceil(queries.length / maxPerCycle) cycles.
+// Deterministic, stateless selection: the critical query is fixed in every cycle and the remaining slot
+// rotates. Concurrent/retried calls within the same 20-minute window therefore pick the same queries.
 export function selectBreakingMarketQueriesForCycle(
   queries: BreakingMarketQuery[],
   now: Date = new Date(),
   maxPerCycle: number = MAX_BREAKING_MARKET_SEARCHES_PER_FETCH,
 ): BreakingMarketQuery[] {
-  if (queries.length === 0) return [];
+  if (queries.length === 0 || !Number.isInteger(maxPerCycle) || maxPerCycle < 1) return [];
   const cycleIndex = Math.floor(now.getTime() / BREAKING_MARKET_ROTATION_INTERVAL_MS);
-  const start = (cycleIndex * maxPerCycle) % queries.length;
-  const selected: BreakingMarketQuery[] = [];
-  for (let offset = 0; offset < Math.min(maxPerCycle, queries.length); offset += 1) {
-    selected.push(queries[(start + offset) % queries.length]);
+  const critical = queries.find((query) => query.key === CRITICAL_BREAKING_MARKET_QUERY_KEY);
+  if (!critical) {
+    const start = (cycleIndex * maxPerCycle) % queries.length;
+    return Array.from({ length: Math.min(maxPerCycle, queries.length) }, (_, offset) =>
+      queries[(start + offset) % queries.length]
+    );
+  }
+  const selected: BreakingMarketQuery[] = [critical];
+  const rotating = queries.filter((query) => query !== critical);
+  for (let offset = 0; offset < Math.min(maxPerCycle - 1, rotating.length); offset += 1) {
+    selected.push(rotating[(cycleIndex + offset) % rotating.length]);
   }
   return selected;
 }
@@ -175,8 +178,47 @@ type RawBreakingMarketCandidate = {
   summary: string | null;
   source_url: string;
   published_at: string;
+  event_at?: string | null;
   category: string;
 };
+
+export const BREAKING_MARKET_REJECTION_REASONS = [
+  "invalid_candidate_shape", "empty_title", "invalid_url", "non_https", "disallowed_domain", "source_not_visited",
+  "invalid_published_at", "stale_published_at", "missing_event_at", "invalid_event_at", "stale_event_at",
+] as const;
+
+export type BreakingMarketRejectionReason = typeof BREAKING_MARKET_REJECTION_REASONS[number];
+export type BreakingMarketValidationDiagnostics = {
+  rawCandidateCount: number;
+  validatedCandidateCount: number;
+  rejectionCounts: Record<BreakingMarketRejectionReason, number>;
+};
+
+export type BreakingMarketQueryDiagnostics = BreakingMarketValidationDiagnostics & {
+  queryKey: string;
+  query: string;
+  providerStatus: "succeeded" | "failed";
+  httpStatus: number | null;
+  responseStatus: string | null;
+  incompleteReason: string | null;
+  webSearchCallCount: number;
+  failureCode: string | null;
+};
+
+export type BreakingMarketQueryResult = {
+  candidates: IncomingNewsCandidate[];
+  diagnostics: BreakingMarketQueryDiagnostics;
+};
+
+export class BreakingMarketQueryError extends Error {
+  readonly diagnostics: BreakingMarketQueryDiagnostics;
+
+  constructor(message: string, diagnostics: BreakingMarketQueryDiagnostics) {
+    super(message);
+    this.name = "BreakingMarketQueryError";
+    this.diagnostics = diagnostics;
+  }
+}
 
 function extractOutputText(response: unknown): string | null {
   if (typeof response !== "object" || response === null) return null;
@@ -194,17 +236,87 @@ function extractOutputText(response: unknown): string | null {
   return text || null;
 }
 
-function parseRawCandidates(value: unknown): RawBreakingMarketCandidate[] {
+function parseRawCandidates(value: unknown): {
+  candidates: RawBreakingMarketCandidate[];
+  rawCandidateCount: number;
+  invalidCandidateShapeCount: number;
+} {
   if (typeof value !== "object" || value === null) throw new Error("BREAKING_MARKET_INVALID_OUTPUT");
   const candidates = (value as { candidates?: unknown }).candidates;
   if (!Array.isArray(candidates)) throw new Error("BREAKING_MARKET_INVALID_OUTPUT");
-  return candidates.filter((item): item is RawBreakingMarketCandidate =>
-    typeof item === "object" && item !== null &&
-    typeof (item as Record<string, unknown>).title === "string" &&
-    typeof (item as Record<string, unknown>).source_url === "string" &&
-    typeof (item as Record<string, unknown>).published_at === "string" &&
-    typeof (item as Record<string, unknown>).category === "string"
-  );
+  let invalidCandidateShapeCount = 0;
+  const parsedCandidates: RawBreakingMarketCandidate[] = [];
+  for (const item of candidates) {
+    if (typeof item !== "object" || item === null) {
+      invalidCandidateShapeCount += 1;
+      continue;
+    }
+    const record = item as Record<string, unknown>;
+    if (typeof record.title !== "string" || typeof record.source_url !== "string" ||
+      typeof record.published_at !== "string" || typeof record.category !== "string") {
+      invalidCandidateShapeCount += 1;
+      continue;
+    }
+    parsedCandidates.push({
+      title: record.title,
+      summary: typeof record.summary === "string" ? record.summary : null,
+      source_url: record.source_url,
+      published_at: record.published_at,
+      event_at: typeof record.event_at === "string" ? record.event_at : null,
+      category: record.category,
+    });
+  }
+  return {
+    candidates: parsedCandidates,
+    rawCandidateCount: candidates.length,
+    invalidCandidateShapeCount,
+  };
+}
+
+function emptyRejectionCounts(): Record<BreakingMarketRejectionReason, number> {
+  return Object.fromEntries(BREAKING_MARKET_REJECTION_REASONS.map((reason) => [reason, 0])) as
+    Record<BreakingMarketRejectionReason, number>;
+}
+
+function hasExactTimestamp(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
+    Number.isFinite(Date.parse(value));
+}
+
+function breakingEventKind(item: RawBreakingMarketCandidate): string | null {
+  const text = `${item.title}\n${item.summary ?? ""}`.normalize("NFKC").toLowerCase();
+  if (/nonfarm payroll|payrolls|jobs report|employment situation/.test(text)) return "us_payrolls";
+  if (/\bcpi\b|consumer price index/.test(text)) return "us_cpi";
+  if (/(ministry of finance|\bmof\b|財務省).*(interven|介入)|(interven|介入).*(yen|円|currency|為替)/.test(text)) {
+    return "mof_fx_intervention";
+  }
+  if (/(bank of japan|\bboj\b|日銀).*(rate|policy|利上げ|利下げ|金融政策|緊急)/.test(text)) return "boj_policy";
+  if (/(federal reserve|\bfed\b|\bfomc\b).*(rate|policy|cut|hike|金利|金融政策|緊急)/.test(text)) {
+    return "fed_policy";
+  }
+  if (/usdjpy|dollar.?yen|ドル.?円|\byen\b/.test(text)) return "market_usdjpy";
+  if (/nikkei futures|日経.*先物/.test(text)) return "market_nikkei_futures";
+  if (/\bnasdaq\b/.test(text)) return "market_nasdaq";
+  if (/\bsox\b|semiconductor index/.test(text)) return "market_sox";
+  if (/crude oil|\boil\b|原油/.test(text)) return "market_oil";
+  if (/semiconductor|chip/.test(text) && /export control|restriction|輸出規制/.test(text)) {
+    return "semiconductor_export_controls";
+  }
+  if (/tariff|関税/.test(text)) return "tariff";
+  if (/ceasefire|truce|停戦/.test(text)) return "ceasefire";
+  if (/bank/.test(text) && /fail|collapse|破綻/.test(text)) return "bank_failure";
+  return null;
+}
+
+function breakingEntityKey(
+  query: BreakingMarketQuery,
+  item: RawBreakingMarketCandidate,
+  eventAt: string | null,
+): string {
+  const kind = breakingEventKind(item);
+  if (!kind || !eventAt) return query.defaultTopicKey;
+  const eventMinute = `${eventAt.slice(0, 16)}Z`;
+  return `breaking:event:${kind}:${eventMinute}`;
 }
 
 // Turns validated raw model output into IncomingNewsCandidate[], applying every safety gate: the
@@ -217,25 +329,45 @@ export function collectBreakingMarketCandidates(
   actualSourceUrls: Set<string>,
   now: Date = new Date(),
 ): IncomingNewsCandidate[] {
+  return collectBreakingMarketCandidatesWithDiagnostics(query, raw, actualSourceUrls, now).candidates;
+}
+
+export function collectBreakingMarketCandidatesWithDiagnostics(
+  query: BreakingMarketQuery,
+  raw: RawBreakingMarketCandidate[],
+  actualSourceUrls: Set<string>,
+  now: Date = new Date(),
+): { candidates: IncomingNewsCandidate[]; diagnostics: BreakingMarketValidationDiagnostics } {
   const actualCanonical = new Set(
     Array.from(actualSourceUrls).map(canonicalizeUrl).filter((url): url is string => url !== null),
   );
   const results: IncomingNewsCandidate[] = [];
+  const rejectionCounts = emptyRejectionCounts();
+  const reject = (reason: BreakingMarketRejectionReason) => {
+    rejectionCounts[reason] += 1;
+  };
   for (const item of raw) {
     const title = item.title.trim();
-    if (!title) continue;
+    if (!title) { reject("empty_title"); continue; }
     let sourceUrl: URL;
     try {
       sourceUrl = new URL(item.source_url);
     } catch {
+      reject("invalid_url");
       continue;
     }
-    if (sourceUrl.protocol !== "https:" || !isAllowedBreakingMarketUrl(item.source_url)) continue;
+    if (sourceUrl.protocol !== "https:") { reject("non_https"); continue; }
+    if (!isAllowedBreakingMarketUrl(item.source_url)) { reject("disallowed_domain"); continue; }
     const canonical = canonicalizeUrl(item.source_url);
-    if (!canonical || !actualCanonical.has(canonical)) continue;
-    if (!Number.isFinite(Date.parse(item.published_at))) continue;
+    if (!canonical || !actualCanonical.has(canonical)) { reject("source_not_visited"); continue; }
+    if (!Number.isFinite(Date.parse(item.published_at))) { reject("invalid_published_at"); continue; }
     const publishedAt = new Date(item.published_at).toISOString();
-    if (!isFreshBreakingMarketPublishedAt(publishedAt, now)) continue;
+    if (!isFreshBreakingMarketPublishedAt(publishedAt, now)) { reject("stale_published_at"); continue; }
+    const rawEventAt = item.event_at?.trim() || null;
+    if (query.requireEventTimestamp && !rawEventAt) { reject("missing_event_at"); continue; }
+    if (rawEventAt && !hasExactTimestamp(rawEventAt)) { reject("invalid_event_at"); continue; }
+    const eventAt = rawEventAt ? new Date(rawEventAt).toISOString() : null;
+    if (eventAt && !isFreshBreakingMarketPublishedAt(eventAt, now)) { reject("stale_event_at"); continue; }
     const category = isImportantNewsCategory(item.category) ? item.category : query.defaultCategory;
     results.push({
       sourceType: "breaking_market",
@@ -245,24 +377,50 @@ export function collectBreakingMarketCandidates(
       bodySummary: item.summary?.trim() || null,
       companyName: null,
       companyCode: null,
-      entityKey: query.defaultTopicKey,
+      entityKey: breakingEntityKey(query, item, eventAt),
       category,
       publishedAt,
     });
   }
-  return results;
+  return {
+    candidates: results,
+    diagnostics: {
+      rawCandidateCount: raw.length,
+      validatedCandidateCount: results.length,
+      rejectionCounts,
+    },
+  };
 }
 
-export async function fetchBreakingMarketQuery(
+function diagnosticBase(query: BreakingMarketQuery): BreakingMarketQueryDiagnostics {
+  return {
+    queryKey: query.key,
+    query: query.searchQuery,
+    providerStatus: "failed",
+    httpStatus: null,
+    responseStatus: null,
+    incompleteReason: null,
+    webSearchCallCount: 0,
+    rawCandidateCount: 0,
+    validatedCandidateCount: 0,
+    rejectionCounts: emptyRejectionCounts(),
+    failureCode: null,
+  };
+}
+
+export async function fetchBreakingMarketQueryWithDiagnostics(
   openAiApiKey: string,
   query: BreakingMarketQuery,
   now: Date = new Date(),
   fetchImpl: typeof fetch = fetch,
-): Promise<IncomingNewsCandidate[]> {
-  const response = await fetchImpl(OPENAI_RESPONSES_URL, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
+): Promise<BreakingMarketQueryResult> {
+  const diagnostics = diagnosticBase(query);
+  let response: Response;
+  try {
+    response = await fetchImpl(OPENAI_RESPONSES_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
       model: MODEL,
       store: false,
       reasoning: { effort: "low" },
@@ -277,8 +435,11 @@ export async function fetchBreakingMarketQuery(
       include: ["web_search_call.action.sources"],
       instructions: [
         "あなたは市場に影響しうる速報ニュース収集の担当です。1回だけ検索し、投稿文ではなく候補JSONを返します。推測や捏造は禁止です。",
-        "許可ドメインの検索結果で実際に確認できた、直近24時間以内に公開が確認できる材料だけを候補にします。該当がなければcandidatesは空配列にします。",
-        "candidatesは最大3件。各候補にはtitle、summary（1-2文の事実要約）、source_url（実際に開いた許可ドメインのURL）、published_at（確認できた日時、ISO 8601かYYYY-MM-DD）、categoryを含めます。",
+        "許可ドメインの検索結果で実際に確認できた、直近3時間以内に発生・発表され、記事も直近3時間以内に公開された材料だけを候補にします。該当がなければcandidatesは空配列にします。",
+        "candidatesは最大3件。各候補にはtitle、summary（1-2文の事実要約）、source_url（実際に開いた許可ドメインのURL）、published_at（記事公開日時、時刻付きISO 8601）、event_at（実際の発生・公表日時、確認できない場合null）、categoryを含めます。",
+        query.requireEventTimestamp
+          ? "この検索枠ではevent_atをsource_urlで時刻まで確認できる候補だけを返します。event_at不明、日付だけ、過去イベントの後追い記事は候補にしません。"
+          : "event_atが確認できる場合は必ず時刻付きISO 8601で返します。過去イベントの後追い記事を新しい速報として返しません。",
         "categoryは次のいずれかから最も近いものを選びます: " + IMPORTANT_NEWS_CATEGORIES.join(", "),
         "未確定・予定・観測記事・分析記事ではなく、既に発生・発表が確認された事実だけを対象にします。日本株や世界市場への影響が具体的に見込まれない軽微な話題は候補にしません。",
         "source_urlが無い、または検索結果で実際に開いていないURLを候補にしません。APIキーや秘密値は返しません。",
@@ -298,9 +459,10 @@ export async function fetchBreakingMarketQuery(
                 summary: { type: "string" },
                 source_url: { type: "string" },
                 published_at: { type: "string" },
+                event_at: { type: ["string", "null"] },
                 category: { type: "string", enum: IMPORTANT_NEWS_CATEGORIES },
               },
-              required: ["title", "summary", "source_url", "published_at", "category"],
+              required: ["title", "summary", "source_url", "published_at", "event_at", "category"],
               additionalProperties: false,
             },
           },
@@ -308,15 +470,75 @@ export async function fetchBreakingMarketQuery(
         required: ["candidates"],
         additionalProperties: false,
       } } },
-    }),
-  });
-  if (!response.ok) throw new Error(`BREAKING_MARKET_SEARCH_FAILED:${query.key}:${response.status}`);
-  const raw = await response.json();
+      }),
+    });
+  } catch {
+    const code = `BREAKING_MARKET_REQUEST_FAILED:${query.key}`;
+    diagnostics.failureCode = code;
+    throw new BreakingMarketQueryError(code, diagnostics);
+  }
+  diagnostics.httpStatus = response.status;
+  if (!response.ok) {
+    const code = `BREAKING_MARKET_SEARCH_FAILED:${query.key}:${response.status}`;
+    diagnostics.failureCode = code;
+    throw new BreakingMarketQueryError(code, diagnostics);
+  }
+  let raw: unknown;
+  try {
+    raw = await response.json();
+  } catch {
+    const code = `BREAKING_MARKET_INVALID_RESPONSE:${query.key}`;
+    diagnostics.failureCode = code;
+    throw new BreakingMarketQueryError(code, diagnostics);
+  }
+  if (typeof raw === "object" && raw !== null) {
+    const record = raw as { status?: unknown; incomplete_details?: { reason?: unknown } };
+    diagnostics.responseStatus = typeof record.status === "string" ? record.status : null;
+    diagnostics.incompleteReason = typeof record.incomplete_details?.reason === "string"
+      ? record.incomplete_details.reason : null;
+  }
+  diagnostics.webSearchCallCount = countBreakingMarketWebSearchCalls(raw);
+  if (diagnostics.responseStatus === "incomplete") {
+    const code = `BREAKING_MARKET_INCOMPLETE:${query.key}:${diagnostics.incompleteReason ?? "unknown"}`;
+    diagnostics.failureCode = code;
+    throw new BreakingMarketQueryError(code, diagnostics);
+  }
   const output = extractOutputText(raw);
-  if (!output) throw new Error(`BREAKING_MARKET_EMPTY_OUTPUT:${query.key}`);
+  if (!output) {
+    const code = `BREAKING_MARKET_EMPTY_OUTPUT:${query.key}`;
+    diagnostics.failureCode = code;
+    throw new BreakingMarketQueryError(code, diagnostics);
+  }
   let parsed: unknown;
-  try { parsed = JSON.parse(output); } catch { throw new Error(`BREAKING_MARKET_INVALID_OUTPUT:${query.key}`); }
-  const rawCandidates = parseRawCandidates(parsed);
+  try { parsed = JSON.parse(output); } catch {
+    const code = `BREAKING_MARKET_INVALID_OUTPUT:${query.key}`;
+    diagnostics.failureCode = code;
+    throw new BreakingMarketQueryError(code, diagnostics);
+  }
+  let parsedCandidates: ReturnType<typeof parseRawCandidates>;
+  try { parsedCandidates = parseRawCandidates(parsed); } catch {
+    const code = `BREAKING_MARKET_INVALID_OUTPUT:${query.key}`;
+    diagnostics.failureCode = code;
+    throw new BreakingMarketQueryError(code, diagnostics);
+  }
   const actualSourceUrls = collectBreakingMarketSourceUrls(raw);
-  return collectBreakingMarketCandidates(query, rawCandidates, actualSourceUrls, now);
+  const collected = collectBreakingMarketCandidatesWithDiagnostics(
+    query,
+    parsedCandidates.candidates,
+    actualSourceUrls,
+    now,
+  );
+  collected.diagnostics.rawCandidateCount = parsedCandidates.rawCandidateCount;
+  collected.diagnostics.rejectionCounts.invalid_candidate_shape += parsedCandidates.invalidCandidateShapeCount;
+  Object.assign(diagnostics, collected.diagnostics, { providerStatus: "succeeded", failureCode: null });
+  return { candidates: collected.candidates, diagnostics };
+}
+
+export async function fetchBreakingMarketQuery(
+  openAiApiKey: string,
+  query: BreakingMarketQuery,
+  now: Date = new Date(),
+  fetchImpl: typeof fetch = fetch,
+): Promise<IncomingNewsCandidate[]> {
+  return (await fetchBreakingMarketQueryWithDiagnostics(openAiApiKey, query, now, fetchImpl)).candidates;
 }

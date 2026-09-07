@@ -47,6 +47,54 @@ test("canonical source URL is detected as duplicate", async () => {
   assert.equal(findNewsDuplicate(candidate, existing)?.id, "existing");
 });
 
+test("the same verified breaking event is deduplicated across sources with different headlines", async () => {
+  const candidate = await prepareNewsCandidate(input({
+    sourceType: "breaking_market",
+    sourceName: "breaking_market",
+    sourceUrl: "https://apnews.com/article/jobs-follow-up",
+    title: "Markets react after US payrolls decline",
+    bodySummary: "A follow-up report on the same payroll release.",
+    companyCode: null,
+    entityKey: "breaking:event:us_payrolls:2026-09-04T12:30Z",
+    category: "us_government_policy",
+    publishedAt: "2026-09-04T13:00:00.000Z",
+  }));
+  const existing: DuplicateComparable[] = [{
+    id: "bls-primary",
+    sourceUrl: "https://www.bls.gov/news.release/empsit.nr0.htm",
+    normalizedTitle: "employment situation released",
+    contentHash: "0".repeat(64),
+    companyCode: null,
+    entityKey: "breaking:event:us_payrolls:2026-09-04T12:30Z",
+    publishedAt: "2026-09-04T12:35:00.000Z",
+  }];
+  assert.equal(findNewsDuplicate(candidate, existing)?.id, "bls-primary");
+});
+
+test("different verified event timestamps are not merged merely because kind and date match", async () => {
+  const candidate = await prepareNewsCandidate(input({
+    sourceType: "breaking_market",
+    sourceName: "breaking_market",
+    sourceUrl: "https://www.reuters.com/world/second-fed-event",
+    title: "Fed announces a second emergency action",
+    bodySummary: "A separate policy action later the same day.",
+    companyCode: null,
+    entityKey: "breaking:event:fed_policy:2026-09-04T18:00Z",
+    category: "frb",
+    publishedAt: "2026-09-04T18:05:00.000Z",
+  }));
+  const existing: DuplicateComparable[] = [{
+    id: "first-fed-event",
+    sourceUrl: "https://www.federalreserve.gov/newsevents/pressreleases/first.htm",
+    normalizedTitle: "fed announces first emergency action",
+    contentHash: "0".repeat(64),
+    companyCode: null,
+    entityKey: "breaking:event:fed_policy:2026-09-04T12:00Z",
+    publishedAt: "2026-09-04T12:05:00.000Z",
+  }];
+  assert.equal(findNewsDuplicate(candidate, existing), null);
+});
+
 test("initial settings keep monitoring and publication off", () => {
   assert.equal(DEFAULT_IMPORTANT_NEWS_SETTINGS.isActive, false);
   assert.equal(DEFAULT_IMPORTANT_NEWS_SETTINGS.autoPublish, false);

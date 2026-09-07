@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   BREAKING_MARKET_QUERIES,
+  CRITICAL_BREAKING_MARKET_QUERY_KEY,
   MAX_BREAKING_MARKET_SEARCHES_PER_FETCH,
   collectBreakingMarketCandidates,
+  collectBreakingMarketCandidatesWithDiagnostics,
   collectBreakingMarketSourceUrls,
   countBreakingMarketWebSearchCalls,
   fetchBreakingMarketQuery,
+  fetchBreakingMarketQueryWithDiagnostics,
   isFreshBreakingMarketPublishedAt,
   selectBreakingMarketQueriesForCycle,
   type BreakingMarketQuery,
@@ -16,6 +19,7 @@ const now = new Date("2026-09-04T12:00:00Z");
 
 function rawResponse(candidatesJson: unknown, sourceUrls: string[]) {
   return {
+    status: "completed",
     output: [
       {
         type: "web_search_call",
@@ -56,10 +60,9 @@ test("trump_tariff_semiconductor query vocabulary covers Trump trade-policy pres
   assert.match(text, /trump/);
 });
 
-// Rotation shape must stay exactly as it was: 6 queries, 2 per 20-minute cycle. This is a fix to one
-// query's vocabulary, not a new query — adding a 7th would dilute how often every other topic is checked.
-test("the vocabulary fix did not add or remove a query slot", () => {
-  assert.equal(BREAKING_MARKET_QUERIES.length, 6);
+test("the critical query occupies one fixed slot and three broader topics rotate through the second", () => {
+  assert.equal(BREAKING_MARKET_QUERIES.length, 4);
+  assert.equal(BREAKING_MARKET_QUERIES.filter((item) => item.key === CRITICAL_BREAKING_MARKET_QUERY_KEY).length, 1);
 });
 
 // Production coverage gap (2026-09-05): "US military strikes multiple Iranian oil tankers" — reported by
@@ -147,7 +150,14 @@ test("3: at most MAX_BREAKING_MARKET_SEARCHES_PER_FETCH queries are ever selecte
     const selected = selectBreakingMarketQueriesForCycle(BREAKING_MARKET_QUERIES, t);
     assert.ok(selected.length <= MAX_BREAKING_MARKET_SEARCHES_PER_FETCH);
     assert.ok(selected.length > 0);
+    assert.equal(selected[0].key, CRITICAL_BREAKING_MARKET_QUERY_KEY);
   }
+});
+
+test("a non-positive or non-integer query limit fails closed with no selected searches", () => {
+  assert.deepEqual(selectBreakingMarketQueriesForCycle(BREAKING_MARKET_QUERIES, now, 0), []);
+  assert.deepEqual(selectBreakingMarketQueriesForCycle(BREAKING_MARKET_QUERIES, now, -1), []);
+  assert.deepEqual(selectBreakingMarketQueriesForCycle(BREAKING_MARKET_QUERIES, now, 1.5), []);
 });
 
 test("rotation is deterministic within a cycle and covers every query within a few cycles", () => {
@@ -256,7 +266,7 @@ test("15: semiconductor export restriction candidate normalizes", () => {
     title: "Commerce Department tightens export rules for AI chips",
     summary: "New export restrictions target advanced semiconductor shipments.",
     source_url: "https://www.commerce.gov/news/press-releases/2026/09/export-controls-ai-chips",
-    published_at: "2026-09-04T08:00:00Z",
+    published_at: "2026-09-04T10:00:00Z",
     category: "semiconductor_ai",
   }];
   const visited = new Set(["https://www.commerce.gov/news/press-releases/2026/09/export-controls-ai-chips"]);
@@ -274,7 +284,7 @@ test("16: bank collapse candidate normalizes with a valid category fallback", ()
     title: "Major US regional bank fails, FDIC takes over",
     summary: "Regulators seized the bank after a run on deposits.",
     source_url: "https://www.reuters.com/business/finance/bank-failure-2026-09-04/",
-    published_at: "2026-09-04T07:00:00Z",
+    published_at: "2026-09-04T10:00:00Z",
     category: "not_a_real_category",
   }];
   const visited = new Set(["https://www.reuters.com/business/finance/bank-failure-2026-09-04/"]);
@@ -318,9 +328,9 @@ test("7: invalid (non-https or disallowed domain) source URL is rejected", () =>
   assert.equal(accepted.length, 0);
 });
 
-test("8: stale (older than 24h) breaking news is rejected; a future timestamp beyond skew is rejected", () => {
-  assert.equal(isFreshBreakingMarketPublishedAt("2026-09-02T12:00:00Z", now), false);
-  assert.equal(isFreshBreakingMarketPublishedAt("2026-09-04T00:00:00Z", now), true);
+test("8: breaking freshness is inclusive at 3h and rejects older or too-far-future timestamps", () => {
+  assert.equal(isFreshBreakingMarketPublishedAt("2026-09-04T09:00:00Z", now), true);
+  assert.equal(isFreshBreakingMarketPublishedAt("2026-09-04T08:59:59Z", now), false);
   assert.equal(isFreshBreakingMarketPublishedAt(
     new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString(), now,
   ), false);
@@ -369,7 +379,7 @@ test("fetchBreakingMarketQuery only returns candidates whose URLs the tool actua
     ["https://www.reuters.com/technology/us-tariffs-china-semiconductor-2026-09-04/"],
   );
   const candidates = await fetchBreakingMarketQuery(
-    "test-key", query, now, async () => new Response(JSON.stringify(raw), { status: 200 }),
+    "test-key", query, now, () => Promise.resolve(new Response(JSON.stringify(raw), { status: 200 })),
   );
   assert.equal(candidates.length, 1);
   assert.equal(candidates[0].sourceType, "breaking_market");
@@ -377,15 +387,114 @@ test("fetchBreakingMarketQuery only returns candidates whose URLs the tool actua
 
 test("fetchBreakingMarketQuery surfaces a stable error code that includes the query key on HTTP failure", async () => {
   await assert.rejects(
-    () => fetchBreakingMarketQuery("test-key", query, now, async () => new Response("", { status: 503 })),
+    () => fetchBreakingMarketQuery(
+      "test-key",
+      query,
+      now,
+      () => Promise.resolve(new Response("", { status: 503 })),
+    ),
     /BREAKING_MARKET_SEARCH_FAILED:trump_tariff_semiconductor:503/,
+  );
+});
+
+test("provider request failures retain per-query diagnostics", async () => {
+  await assert.rejects(
+    () => fetchBreakingMarketQueryWithDiagnostics(
+      "test-key",
+      query,
+      now,
+      () => Promise.reject(new Error("network detail must not escape")),
+    ),
+    (error: unknown) => {
+      assert.equal(error instanceof Error, true);
+      assert.equal((error as Error).message, "BREAKING_MARKET_REQUEST_FAILED:trump_tariff_semiconductor");
+      return true;
+    },
   );
 });
 
 test("fetchBreakingMarketQuery returns no candidates when the model finds nothing (empty candidates array)", async () => {
   const raw = rawResponse([], []);
   const candidates = await fetchBreakingMarketQuery(
-    "test-key", query, now, async () => new Response(JSON.stringify(raw), { status: 200 }),
+    "test-key", query, now, () => Promise.resolve(new Response(JSON.stringify(raw), { status: 200 })),
   );
   assert.deepEqual(candidates, []);
+});
+
+test("critical query requires a verified, fresh event timestamp", () => {
+  const critical = BREAKING_MARKET_QUERIES.find((item) => item.key === CRITICAL_BREAKING_MARKET_QUERY_KEY)!;
+  const sourceUrl = "https://www.bls.gov/news.release/empsit.nr0.htm";
+  const base = {
+    title: "US payrolls fall sharply",
+    summary: "The Employment Situation release showed a sharp decline.",
+    source_url: sourceUrl,
+    published_at: "2026-09-04T11:05:00Z",
+    category: "us_government_policy",
+  };
+  const missing = collectBreakingMarketCandidatesWithDiagnostics(critical, [{ ...base, event_at: null }], new Set([sourceUrl]), now);
+  assert.equal(missing.candidates.length, 0);
+  assert.equal(missing.diagnostics.rejectionCounts.missing_event_at, 1);
+
+  const stale = collectBreakingMarketCandidatesWithDiagnostics(
+    critical,
+    [{ ...base, event_at: "2026-09-04T08:59:59Z" }],
+    new Set([sourceUrl]),
+    now,
+  );
+  assert.equal(stale.candidates.length, 0);
+  assert.equal(stale.diagnostics.rejectionCounts.stale_event_at, 1);
+
+  const fresh = collectBreakingMarketCandidates(
+    critical,
+    [{ ...base, event_at: "2026-09-04T11:00:30Z" }],
+    new Set([sourceUrl]),
+    now,
+  );
+  assert.equal(fresh.length, 1);
+  assert.equal(fresh[0].entityKey, "breaking:event:us_payrolls:2026-09-04T11:00Z");
+});
+
+test("query diagnostics preserve true raw count and classify malformed candidate shape", async () => {
+  const sourceUrl = "https://www.reuters.com/world/valid-story";
+  const raw = rawResponse([
+    {
+      title: "Valid tariff announcement",
+      summary: "A verified announcement was published.",
+      source_url: sourceUrl,
+      published_at: "2026-09-04T11:00:00Z",
+      event_at: null,
+      category: "tariffs",
+    },
+    { title: "Missing required fields" },
+  ], [sourceUrl]);
+  const result = await fetchBreakingMarketQueryWithDiagnostics(
+    "test-key",
+    query,
+    now,
+    () => Promise.resolve(new Response(JSON.stringify(raw), { status: 200 })),
+  );
+  assert.equal(result.diagnostics.rawCandidateCount, 2);
+  assert.equal(result.diagnostics.validatedCandidateCount, 1);
+  assert.equal(result.diagnostics.rejectionCounts.invalid_candidate_shape, 1);
+});
+
+test("incomplete Responses output is classified with its reason before parsing", async () => {
+  const raw = {
+    status: "incomplete",
+    incomplete_details: { reason: "max_output_tokens" },
+    output: [],
+  };
+  await assert.rejects(
+    () => fetchBreakingMarketQueryWithDiagnostics(
+      "test-key",
+      query,
+      now,
+      () => Promise.resolve(new Response(JSON.stringify(raw), { status: 200 })),
+    ),
+    (error: unknown) => {
+      assert.equal(error instanceof Error, true);
+      assert.match((error as Error).message, /BREAKING_MARKET_INCOMPLETE:trump_tariff_semiconductor:max_output_tokens/);
+      return true;
+    },
+  );
 });

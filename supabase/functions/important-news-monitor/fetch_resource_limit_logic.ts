@@ -24,6 +24,11 @@ export type ImportantNewsCandidateBatchPlan<T> = {
   deferredCandidateCount: number;
 };
 
+export type SourceCandidateGroup<T> = {
+  sourceKey: string;
+  candidates: T[];
+};
+
 export function planImportantNewsCandidateBatch<T>(
   candidates: T[],
   maxCandidates = MAX_IMPORTANT_NEWS_LIGHTWEIGHT_CANDIDATES,
@@ -38,6 +43,40 @@ export function planImportantNewsCandidateBatch<T>(
     fetchedCandidateCount: candidates.length,
     lightweightProcessedCount: boundary,
     deferredCandidateCount: candidates.length - boundary,
+  };
+}
+
+// Used by market_macro after stored duplicates have been removed. One candidate is taken from each
+// source in turn, so an older/noisier feed cannot consume the whole 30-item quota ahead of newer items
+// from the other official feeds. Candidate order inside each source remains unchanged.
+export function planSourceFairCandidateBatch<T>(
+  sourceGroups: SourceCandidateGroup<T>[],
+  maxCandidates: number,
+): ImportantNewsCandidateBatchPlan<T> {
+  if (!Number.isInteger(maxCandidates) || maxCandidates < 1) {
+    throw new Error("IMPORTANT_NEWS_CANDIDATE_BATCH_LIMIT_INVALID");
+  }
+  const positions = sourceGroups.map(() => 0);
+  const selectedCandidates: T[] = [];
+  while (selectedCandidates.length < maxCandidates) {
+    let advanced = false;
+    for (let index = 0; index < sourceGroups.length && selectedCandidates.length < maxCandidates; index += 1) {
+      const candidate = sourceGroups[index].candidates[positions[index]];
+      if (candidate === undefined) continue;
+      selectedCandidates.push(candidate);
+      positions[index] += 1;
+      advanced = true;
+    }
+    if (!advanced) break;
+  }
+  const deferredCandidates = sourceGroups.flatMap((group, index) => group.candidates.slice(positions[index]));
+  const fetchedCandidateCount = sourceGroups.reduce((sum, group) => sum + group.candidates.length, 0);
+  return {
+    selectedCandidates,
+    deferredCandidates,
+    fetchedCandidateCount,
+    lightweightProcessedCount: selectedCandidates.length,
+    deferredCandidateCount: deferredCandidates.length,
   };
 }
 

@@ -135,8 +135,13 @@ export function findNewsDuplicate(
   return existing.find((item) => {
     const existingIdentity = normalizeText(item.entityKey || item.companyCode || "");
     const existingPublishedAt = Date.parse(item.publishedAt);
-    return item.normalizedTitle === candidate.normalizedTitle &&
-      existingIdentity === identity && Number.isFinite(existingPublishedAt) &&
-      Math.abs(existingPublishedAt - publishedAt) <= 24 * 60 * 60 * 1000;
+    if (existingIdentity !== identity || !Number.isFinite(existingPublishedAt)) return false;
+    const distance = Math.abs(existingPublishedAt - publishedAt);
+    // breaking:event:* identities are derived from the concrete release/event kind and verified event minute.
+    // This deliberately narrow prefix lets two sources with different headlines collapse when they
+    // report the same release within the breaking freshness window, without treating two unrelated
+    // disclosures from the same company as duplicates.
+    if (identity.startsWith("breaking:event:")) return distance <= 3 * 60 * 60 * 1000;
+    return item.normalizedTitle === candidate.normalizedTitle && distance <= 24 * 60 * 60 * 1000;
   }) ?? null;
 }

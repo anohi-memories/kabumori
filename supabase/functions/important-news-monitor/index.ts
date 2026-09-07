@@ -18,6 +18,7 @@ import {
   MAX_MARKET_MACRO_CANDIDATES_PER_FETCH,
   planImportantNewsCandidateBatch,
   planImportantNewsFetchGroups,
+  planSourceFairCandidateBatch,
 } from "./fetch_resource_limit_logic.ts";
 import {
   reconcileStaleImportantNewsRuns,
@@ -39,8 +40,10 @@ import {
 import {
   BREAKING_MARKET_QUERIES,
   BREAKING_MARKET_SOURCE_DOMAINS,
-  fetchBreakingMarketQuery,
+  BreakingMarketQueryError,
+  fetchBreakingMarketQueryWithDiagnostics,
   selectBreakingMarketQueriesForCycle,
+  type BreakingMarketQueryDiagnostics,
 } from "./breaking_market_source_fetchers.ts";
 import {
   judgeCandidateWithEscalation,
@@ -303,10 +306,11 @@ async function selectCandidates(
   supabaseUrl: string,
   serviceRoleKey: string,
   filters: Record<string, string | string[]>,
+  limit = 20,
 ): Promise<StoredCandidate[]> {
   const params = new URLSearchParams({
     select: "id,source_url,normalized_title,content_hash,company_code,entity_key,published_at",
-    limit: "20",
+    limit: String(limit),
   });
   for (const [key, value] of Object.entries(filters)) {
     for (const item of Array.isArray(value) ? value : [value]) params.append(key, item);
@@ -318,15 +322,36 @@ async function selectCandidates(
   return await result.json() as StoredCandidate[];
 }
 
+async function selectStoredCandidatesByHashes(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  hashes: string[],
+): Promise<Map<string, DuplicateComparable>> {
+  const found = new Map<string, DuplicateComparable>();
+  const unique = Array.from(new Set(hashes));
+  for (let offset = 0; offset < unique.length; offset += 40) {
+    const chunk = unique.slice(offset, offset + 40);
+    if (chunk.length === 0) continue;
+    const rows = await selectCandidates(supabaseUrl, serviceRoleKey, {
+      content_hash: `in.(${chunk.join(",")})`,
+    }, chunk.length);
+    for (const row of rows) found.set(row.content_hash, comparable(row));
+  }
+  return found;
+}
+
 async function findStoredDuplicate(
   supabaseUrl: string,
   serviceRoleKey: string,
   candidate: PreparedNewsCandidate,
+  skipContentHashLookup = false,
 ): Promise<DuplicateComparable | null> {
-  const byHash = await selectCandidates(supabaseUrl, serviceRoleKey, {
-    content_hash: `eq.${candidate.contentHash}`,
-  });
-  if (byHash[0]) return comparable(byHash[0]);
+  if (!skipContentHashLookup) {
+    const byHash = await selectCandidates(supabaseUrl, serviceRoleKey, {
+      content_hash: `eq.${candidate.contentHash}`,
+    });
+    if (byHash[0]) return comparable(byHash[0]);
+  }
   const byUrl = await selectCandidates(supabaseUrl, serviceRoleKey, {
     source_url: `eq.${candidate.sourceUrl}`,
   });
@@ -340,7 +365,20 @@ async function findStoredDuplicate(
       `lte.${new Date(published + 24 * 60 * 60 * 1000).toISOString()}`,
     ],
   });
-  return findNewsDuplicate(candidate, nearby.map(comparable));
+  const titleDuplicate = findNewsDuplicate(candidate, nearby.map(comparable));
+  if (titleDuplicate) return titleDuplicate;
+
+  if (candidate.entityKey?.startsWith("breaking:event:")) {
+    const eventNearby = await selectCandidates(supabaseUrl, serviceRoleKey, {
+      entity_key: `eq.${candidate.entityKey}`,
+      published_at: [
+        `gte.${new Date(published - 3 * 60 * 60 * 1000).toISOString()}`,
+        `lte.${new Date(published + 3 * 60 * 60 * 1000).toISOString()}`,
+      ],
+    });
+    return findNewsDuplicate(candidate, eventNearby.map(comparable));
+  }
+  return null;
 }
 
 async function insertCandidate(
@@ -1276,23 +1314,68 @@ Deno.serve(async (req) => {
     let marketMacroDuplicateCount = 0;
     let marketMacroNewCandidateCount = 0;
     let marketMacroFetchedCount = 0;
+    let marketMacroDeferredCount = 0;
+    const marketMacroProviderDiagnostics: Array<{
+      sourceKey: string;
+      providerStatus: "succeeded" | "failed";
+      candidateCount: number;
+      failureCode: string | null;
+    }> = [];
     if (body.fetchSources === true) {
-      const marketMacroProviders: NewsSourceProvider[] = MARKET_MACRO_SOURCES.map((source) => ({
-        key: `market_macro:${source.key}`,
-        fetchCandidates: () => fetchMarketMacroSource(source),
-      }));
-      const collectedMacro = await runNewsSourceProviders(marketMacroProviders);
-      sourceErrors.push(...collectedMacro.errors);
-      marketMacroFetchedCount = collectedMacro.candidates.length;
-      const marketMacroBatch = planImportantNewsCandidateBatch(
-        collectedMacro.candidates,
+      const fetchedBySource: Array<{ sourceKey: string; candidates: IncomingNewsCandidate[] }> = [];
+      for (const source of MARKET_MACRO_SOURCES) {
+        try {
+          const candidates = await fetchMarketMacroSource(source);
+          marketMacroFetchedCount += candidates.length;
+          fetchedBySource.push({ sourceKey: source.key, candidates });
+          marketMacroProviderDiagnostics.push({
+            sourceKey: source.key, providerStatus: "succeeded", candidateCount: candidates.length, failureCode: null,
+          });
+        } catch (error) {
+          const code = safeError(error);
+          sourceErrors.push(`market_macro:${source.key}:${code}`);
+          marketMacroProviderDiagnostics.push({
+            sourceKey: source.key, providerStatus: "failed", candidateCount: 0, failureCode: code,
+          });
+        }
+      }
+
+      const preparedBySource: Array<{ sourceKey: string; candidates: PreparedNewsCandidate[] }> = [];
+      for (const group of fetchedBySource) {
+        const prepared: PreparedNewsCandidate[] = [];
+        for (const value of group.candidates) {
+          prepared.push(await prepareNewsCandidate(parseIncoming(value)));
+        }
+        preparedBySource.push({ sourceKey: group.sourceKey, candidates: prepared });
+      }
+      const existingByHash = await selectStoredCandidatesByHashes(
+        supabaseUrl,
+        serviceRoleKey,
+        preparedBySource.flatMap((group) => group.candidates.map((candidate) => candidate.contentHash)),
+      );
+      const novelBySource: Array<{ sourceKey: string; candidates: PreparedNewsCandidate[] }> = [];
+      for (const group of preparedBySource) {
+        const novel: PreparedNewsCandidate[] = [];
+        for (const prepared of group.candidates) {
+          const exact = existingByHash.get(prepared.contentHash);
+          const duplicate = exact ?? await findStoredDuplicate(supabaseUrl, serviceRoleKey, prepared, true);
+          if (duplicate) {
+            marketMacroDuplicateCount += 1;
+            marketMacroResults.push({ id: duplicate.id, status: "duplicate", duplicateOf: duplicate.id });
+          } else {
+            novel.push(prepared);
+          }
+        }
+        novelBySource.push({ sourceKey: group.sourceKey, candidates: novel });
+      }
+
+      const marketMacroBatch = planSourceFairCandidateBatch(
+        novelBySource,
         MAX_MARKET_MACRO_CANDIDATES_PER_FETCH,
       );
-      for (const value of marketMacroBatch.selectedCandidates) {
-        const candidate = parseIncoming(value);
-        const prepared = await prepareNewsCandidate(candidate);
-        const duplicate = await findStoredDuplicate(supabaseUrl, serviceRoleKey, prepared);
-        const saved = await insertCandidate(supabaseUrl, serviceRoleKey, prepared, duplicate?.id ?? null);
+      marketMacroDeferredCount = marketMacroBatch.deferredCandidateCount;
+      for (const prepared of marketMacroBatch.selectedCandidates) {
+        const saved = await insertCandidate(supabaseUrl, serviceRoleKey, prepared, null);
         marketMacroResults.push(saved);
         if (saved.status === "duplicate") marketMacroDuplicateCount += 1;
         else marketMacroNewCandidateCount += 1;
@@ -1310,6 +1393,7 @@ Deno.serve(async (req) => {
     let breakingMarketNewCandidateCount = 0;
     let breakingMarketFetchedCount = 0;
     let breakingMarketQueriesRun: string[] = [];
+    const breakingMarketDiagnostics: BreakingMarketQueryDiagnostics[] = [];
     if (body.fetchSources === true) {
       const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
       if (!openAiApiKey) {
@@ -1318,15 +1402,27 @@ Deno.serve(async (req) => {
         const now = new Date();
         const selectedQueries = selectBreakingMarketQueriesForCycle(BREAKING_MARKET_QUERIES, now);
         breakingMarketQueriesRun = selectedQueries.map((query) => query.key);
-        const breakingMarketProviders: NewsSourceProvider[] = selectedQueries.map((query) => ({
-          key: `breaking_market:${query.key}`,
-          fetchCandidates: () => fetchBreakingMarketQuery(openAiApiKey, query, now),
-        }));
-        const collectedBreaking = await runNewsSourceProviders(breakingMarketProviders);
-        sourceErrors.push(...collectedBreaking.errors);
-        breakingMarketFetchedCount = collectedBreaking.candidates.length;
+        const breakingCandidates: IncomingNewsCandidate[] = [];
+        for (const query of selectedQueries) {
+          try {
+            const result = await fetchBreakingMarketQueryWithDiagnostics(openAiApiKey, query, now);
+            breakingCandidates.push(...result.candidates);
+            breakingMarketDiagnostics.push(result.diagnostics);
+            console.info("Important news breaking market query diagnostics", result.diagnostics);
+          } catch (error) {
+            const code = error instanceof BreakingMarketQueryError ? error.message : safeError(error);
+            sourceErrors.push(`breaking_market:${query.key}:${code}`);
+            if (error instanceof BreakingMarketQueryError) {
+              breakingMarketDiagnostics.push(error.diagnostics);
+              console.error("Important news breaking market query failed", error.diagnostics);
+            } else {
+              console.error("Important news breaking market query failed", { queryKey: query.key, code });
+            }
+          }
+        }
+        breakingMarketFetchedCount = breakingCandidates.length;
         const breakingMarketBatch = planImportantNewsCandidateBatch(
-          collectedBreaking.candidates,
+          breakingCandidates,
           MAX_BREAKING_MARKET_CANDIDATES_PER_FETCH,
         );
         for (const value of breakingMarketBatch.selectedCandidates) {
@@ -1449,10 +1545,13 @@ Deno.serve(async (req) => {
         fetchedCount: marketMacroFetchedCount,
         duplicateCount: marketMacroDuplicateCount,
         newCandidateCount: marketMacroNewCandidateCount,
+        deferredCount: marketMacroDeferredCount,
+        providers: marketMacroProviderDiagnostics,
         results: marketMacroResults,
       },
       breakingMarket: {
         queriesRun: breakingMarketQueriesRun,
+        queryDiagnostics: breakingMarketDiagnostics,
         fetchedCount: breakingMarketFetchedCount,
         duplicateCount: breakingMarketDuplicateCount,
         newCandidateCount: breakingMarketNewCandidateCount,

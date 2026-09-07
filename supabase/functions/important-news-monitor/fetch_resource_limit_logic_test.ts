@@ -10,6 +10,7 @@ import {
   MAX_MARKET_MACRO_CANDIDATES_PER_FETCH,
   planImportantNewsCandidateBatch,
   planImportantNewsFetchGroups,
+  planSourceFairCandidateBatch,
 } from "./fetch_resource_limit_logic.ts";
 import { prepareNewsCandidate, type IncomingNewsCandidate } from "./news_candidate_logic.ts";
 
@@ -153,6 +154,26 @@ test("3: a full (150-candidate) corporate lane does not reduce the market_macro 
   assert.equal(macroBatch.deferredCandidateCount, 20);
 });
 
+test("market_macro round-robin gives each source a turn before taking a second item", () => {
+  const plan = planSourceFairCandidateBatch([
+    { sourceKey: "fed", candidates: ["fed-1", "fed-2", "fed-3"] },
+    { sourceKey: "boj", candidates: ["boj-1", "boj-2"] },
+    { sourceKey: "eia", candidates: ["eia-1", "eia-2"] },
+  ], 5);
+  assert.deepEqual(plan.selectedCandidates, ["fed-1", "boj-1", "eia-1", "fed-2", "boj-2"]);
+  assert.deepEqual(plan.deferredCandidates, ["fed-3", "eia-2"]);
+  assert.equal(plan.fetchedCandidateCount, 7);
+  assert.equal(plan.lightweightProcessedCount, 5);
+  assert.equal(plan.deferredCandidateCount, 2);
+});
+
+test("market_macro round-robin rejects invalid limits before selecting candidates", () => {
+  assert.throws(
+    () => planSourceFairCandidateBatch([{ sourceKey: "fed", candidates: ["fed-1"] }], 0),
+    /IMPORTANT_NEWS_CANDIDATE_BATCH_LIMIT_INVALID/,
+  );
+});
+
 test("invalid fetch limits fail safely", async () => {
   const eventGroups = await groups([input(1)]);
   assert.throws(
@@ -185,7 +206,7 @@ test("breaking_market's quota is distinct from both the corporate and market_mac
 
 test("index.ts wires breaking_market through its own batch call, never through acquiredCandidates/collectedMacro.candidates", async () => {
   const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
-  const breakingBatchIndex = source.indexOf("planImportantNewsCandidateBatch(\n          collectedBreaking.candidates,\n          MAX_BREAKING_MARKET_CANDIDATES_PER_FETCH,");
+  const breakingBatchIndex = source.indexOf("planImportantNewsCandidateBatch(\n          breakingCandidates,\n          MAX_BREAKING_MARKET_CANDIDATES_PER_FETCH,");
   const allCandidatesIndex = source.indexOf("const allCandidates: unknown[] = [...suppliedCandidates, ...acquiredCandidates];");
   assert.ok(breakingBatchIndex >= 0, "expected the breaking_market batch call to exist verbatim in index.ts");
   assert.ok(allCandidatesIndex > breakingBatchIndex);
@@ -194,14 +215,17 @@ test("index.ts wires breaking_market through its own batch call, never through a
   assert.ok(!source.includes("collectedBreaking.candidates, MAX_MARKET_MACRO_CANDIDATES_PER_FETCH"));
 });
 
-test("index.ts wires market_macro through its own batch call, never through acquiredCandidates/MAX_CANDIDATES_PER_REQUEST", async () => {
+test("index.ts removes stored macro duplicates before source-fair cap and never uses the corporate budget", async () => {
   const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
   // The market_macro fetch+batch block must be fully assembled (collectedMacro -> marketMacroBatch)
   // before allCandidates is built from suppliedCandidates/acquiredCandidates, and must never push into
   // acquiredCandidates itself — that is what keeps it out of the corporate lane's 100-candidate cap.
-  const macroBatchIndex = source.indexOf("planImportantNewsCandidateBatch(\n        collectedMacro.candidates,\n        MAX_MARKET_MACRO_CANDIDATES_PER_FETCH,");
+  const duplicateLookupIndex = source.indexOf("const existingByHash = await selectStoredCandidatesByHashes(");
+  const macroBatchIndex = source.indexOf("const marketMacroBatch = planSourceFairCandidateBatch(");
   const allCandidatesIndex = source.indexOf("const allCandidates: unknown[] = [...suppliedCandidates, ...acquiredCandidates];");
+  assert.ok(duplicateLookupIndex >= 0, "expected stored duplicates to be looked up before the macro cap");
   assert.ok(macroBatchIndex >= 0, "expected the market_macro batch call to exist verbatim in index.ts");
+  assert.ok(macroBatchIndex > duplicateLookupIndex);
   assert.ok(allCandidatesIndex > macroBatchIndex);
   assert.ok(!/acquiredCandidates\.push\(\.\.\.collectedMacro/.test(source));
   assert.ok(!source.includes("collectedMacro.candidates, MAX_CANDIDATES_PER_REQUEST"));
