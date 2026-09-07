@@ -4,8 +4,8 @@ Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは
 
 - task_id: important-news-freshness-coverage-fix-20260906
 - owner: codex
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - purpose: 直前のread-only調査で特定した重要ニュース取得の速報遅延と `market_macro` の取りこぼしを、既存構成を大きく壊さない最小修正で改善する。
 - priority: high
 
@@ -142,3 +142,38 @@ DB schema変更なしでdiagnostics追加できない場合は、勝手にmigrat
 - deploy: 禁止
 - report_mode: inline
 - next_owner: chatgpt
+
+## Report
+
+- task_id: important-news-freshness-coverage-fix-20260906
+- result: review_required
+- changed_files:
+  - `supabase/functions/important-news-monitor/breaking_market_source_fetchers.ts`
+  - `supabase/functions/important-news-monitor/breaking_market_source_fetchers_test.ts`
+  - `supabase/functions/important-news-monitor/fetch_resource_limit_logic.ts`
+  - `supabase/functions/important-news-monitor/fetch_resource_limit_logic_test.ts`
+  - `supabase/functions/important-news-monitor/index.ts`
+  - `supabase/functions/important-news-monitor/news_candidate_logic.ts`
+  - `supabase/functions/important-news-monitor/news_candidate_logic_test.ts`
+- implementation:
+  - 毎20分cycleの2検索枠を維持し、主要米指標・緊急BOJ/Fed/MOF・市場急変を含むcritical queryを毎cycle固定。残り1枠で関税/半導体、地政学、銀行/中国刺激策をrotation。
+  - `breaking_market` freshnessを24時間から3時間へ短縮。critical queryはsourceで確認できる時刻付き`event_at`を必須とし、欠落・不正・staleを候補化前に除外。
+  - 確認済みevent種別とevent minuteから`breaking:event:*` identityを生成し、別source・別見出しでも同一eventの再浮上を3時間範囲で抑制。event timestampが異なるものは統合しない。
+  - `market_macro`は保存済みduplicateをcap前に除外し、source round-robinで既存30件上限を公平配分。後段sourceの恒常的starvationを解消。
+  - query key、provider/HTTP/Responses状態、incomplete reason、web search call数、raw/validated candidate数、主要除外理由をresponse/structured logへ追加。DB schema変更禁止のため新規DB永続化は行わず、raw response/secretも保存しない。
+- tests:
+  - changed modules type-checked tests: 55/55 pass
+  - important-news-monitor regression (`--no-check --allow-read`): 244/244 pass
+  - changed helper/test lint: pass (6 files)
+  - `git diff --check`: pass
+  - full `deno check index.ts`: baseline failure reproduced before/after（`_shared/x_oauth2_post.ts` BufferSource型、既存GenerationCandidate id型）。scope外のため未変更。
+  - full-suite type-check: baseline `official_source_fetchers_test.ts` の既存`never.id`型エラー。scope外のため未変更。
+- commit_hash: `bd01665`（最新origin系clean worktree上のlocal-only implementation checkpoint。pushなし）
+- push: implementation code 0。本Report/TASKの共有同期だけ実施予定。
+- deploy: 0
+- production_changes: DB write 0 / migration 0 / Cron 0 / settings 0 / OpenAI実API 0 / X API 0 / X投稿 0
+- untouched: `apps/admin/**`, `HANDOFF.md`, 他Edge Function、正式repo既存未コミット変更
+- remaining_issues:
+  - diagnosticsは既存responseとstructured logで確認可能。run DBへ恒久保存するにはschema変更が必要なため未実施。
+  - 実装コードはタスク方針どおり未push。ChatGPTレビュー後に、最新originへlocal checkpointを安全に載せてcommit/pushする判断が必要。
+- next_recommendation: ChatGPTが`C`で差分と上記既存type-check制約を確認し、実装コードpush/deployを別途明示判断する。
