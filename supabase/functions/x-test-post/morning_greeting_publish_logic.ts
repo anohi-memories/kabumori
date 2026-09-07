@@ -136,6 +136,32 @@ async function responseJson(response: Response): Promise<unknown> {
   }
 }
 
+// Extracts only X's documented, non-secret problem-detail fields (title/detail/type/reason and the first
+// errors[] entry's message/code) from an X API error response body, so a media upload failure -- e.g. the
+// scope-insufficiency incident this was added for (morning-greeting-x-media-scope-reauth-20260908) -- can
+// be diagnosed from publish_claims.error_code (a plain text column) without ever risking a token/secret
+// there. Deliberately an allowlist rather than a dump of the body, so an unexpected field (however
+// unlikely for an error response) can never leak through.
+function safeXApiErrorDetail(body: unknown): string | null {
+  if (typeof body !== "object" || body === null) return null;
+  const record = body as Record<string, unknown>;
+  const parts: string[] = [];
+  const pick = (key: string, value: unknown) => {
+    if (typeof value === "string" && value) parts.push(`${key}=${value.slice(0, 200)}`);
+  };
+  pick("title", record.title);
+  pick("detail", record.detail);
+  pick("type", record.type);
+  pick("reason", record.reason);
+  const errors = record.errors;
+  if (Array.isArray(errors) && errors[0] && typeof errors[0] === "object") {
+    const first = errors[0] as Record<string, unknown>;
+    pick("errorMessage", first.message);
+    if (typeof first.code === "number" || typeof first.code === "string") parts.push(`errorCode=${first.code}`);
+  }
+  return parts.length ? parts.join(";") : null;
+}
+
 export async function runMorningGreetingManualPublish(args: {
   supabaseUrl: string;
   serviceRoleKey: string;
@@ -240,7 +266,8 @@ export async function runMorningGreetingManualPublish(args: {
       return { status: response.status, body: await responseJson(response) };
     }, fetchImpl);
     if (mediaResult.status < 200 || mediaResult.status >= 300) {
-      throw new Error(`MORNING_GREETING_MEDIA_UPLOAD_FAILED:${mediaResult.status}`);
+      const detail = safeXApiErrorDetail(mediaResult.body);
+      throw new Error(`MORNING_GREETING_MEDIA_UPLOAD_FAILED:${mediaResult.status}${detail ? `:${detail}` : ""}`);
     }
     const mediaId = responseDataId(mediaResult.body);
     if (!mediaId) throw new Error("MORNING_GREETING_MEDIA_ID_MISSING");

@@ -219,6 +219,97 @@ test("media upload failure is not retried and never posts text alone", async () 
   assert.equal(postCalls, 0);
 });
 
+// Production incident (2026-09-08): morning_greeting failed with MORNING_GREETING_MEDIA_UPLOAD_FAILED:403
+// and no way to tell from publish_claims.error_code alone whether it was a scope problem, a suspended
+// account, or something else -- the X error response body was fetched but never recorded. This asserts
+// the safe (non-secret) diagnostic fields X actually documents for its error responses now flow through.
+test("a media upload 403 with an X problem-detail body carries title/detail/reason into the failure record", async () => {
+  await assert.rejects(
+    () => runMorningGreetingManualPublish({
+      supabaseUrl: "https://example.supabase.co",
+      serviceRoleKey: "service-secret",
+      openAiApiKey: "openai-secret",
+      xAuth: freshXAuth(),
+      now: new Date("2026-09-01T15:30:00Z"),
+      buildPayload: async () => readyPayload(),
+      fetchImpl: async (input, init) => {
+        const url = String(input);
+        if (url.includes(`/published/${DATE}.json`)) return new Response("Object not found", { status: 400 });
+        if (url.includes("/rest/v1/publish_claims") && init?.method === "POST") {
+          return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "publishing" }]);
+        }
+        if (url.includes("/rest/v1/publish_claims") && init?.method === "PATCH") {
+          const body = JSON.parse(String(init.body));
+          assert.equal(
+            body.error_code,
+            "MORNING_GREETING_MEDIA_UPLOAD_FAILED:403:title=Forbidden;detail=Missing required scope: media.write;reason=oauth-scope-insufficient",
+          );
+          return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "failed" }]);
+        }
+        if (url.includes("/storage/v1/object/")) return new Response(new Uint8Array([1]));
+        if (url.includes("/media/upload")) {
+          return Response.json({
+            title: "Forbidden",
+            detail: "Missing required scope: media.write",
+            reason: "oauth-scope-insufficient",
+            // A real X error response would never actually contain this, but it proves the extractor is
+            // an allowlist -- an unexpected field can never leak through, secret-shaped or not.
+            access_token: "should-never-appear-anywhere",
+          }, { status: 403 });
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof MorningGreetingManualPublishError);
+      assert.equal(
+        error.message,
+        "MORNING_GREETING_MEDIA_UPLOAD_FAILED:403:title=Forbidden;detail=Missing required scope: media.write;reason=oauth-scope-insufficient",
+      );
+      assert.doesNotMatch(error.message, /should-never-appear-anywhere/u);
+      return true;
+    },
+  );
+});
+
+test("a media upload 403 with an errors[] body carries the first error's message/code, still never leaking unlisted fields", async () => {
+  await assert.rejects(
+    () => runMorningGreetingManualPublish({
+      supabaseUrl: "https://example.supabase.co",
+      serviceRoleKey: "service-secret",
+      openAiApiKey: "openai-secret",
+      xAuth: freshXAuth(),
+      now: new Date("2026-09-01T15:30:00Z"),
+      buildPayload: async () => readyPayload(),
+      fetchImpl: async (input, init) => {
+        const url = String(input);
+        if (url.includes(`/published/${DATE}.json`)) return new Response("Object not found", { status: 400 });
+        if (url.includes("/rest/v1/publish_claims") && init?.method === "POST") {
+          return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "publishing" }]);
+        }
+        if (url.includes("/rest/v1/publish_claims") && init?.method === "PATCH") return Response.json([{}]);
+        if (url.includes("/storage/v1/object/")) return new Response(new Uint8Array([1]));
+        if (url.includes("/media/upload")) {
+          return Response.json({
+            errors: [{ message: "This request is not allowed for this account.", code: 220 }],
+            refresh_token: "should-never-appear-anywhere",
+          }, { status: 403 });
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof MorningGreetingManualPublishError);
+      assert.equal(
+        error.message,
+        "MORNING_GREETING_MEDIA_UPLOAD_FAILED:403:errorMessage=This request is not allowed for this account.;errorCode=220",
+      );
+      assert.doesNotMatch(error.message, /should-never-appear-anywhere/u);
+      return true;
+    },
+  );
+});
+
 // Production incident (2026-09-06): the stored X access token expired between refreshes, media upload
 // returned 401, and the whole run failed with MORNING_GREETING_MEDIA_UPLOAD_FAILED:401 even though a
 // single OAuth refresh would have recovered it — exactly like the existing plain-tweet path already does.
