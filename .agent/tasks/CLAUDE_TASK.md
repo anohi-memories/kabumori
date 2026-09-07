@@ -3,7 +3,7 @@
 - task_id: close-report-factcheck-dryrun-live-parity-20260907
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: urgent
 - purpose: 2026-09-07 の close_report で、同じ production v89 に対し `close_report_dry_run` は `factCheck=passed / wouldPublish=true` だった一方、1回だけ実行した live close_report は `CLOSE_REPORT_FACT_CHECK_FAILED` で X API 前に安全停止した。dry-run/live の差分を根本原因まで特定し、最小修正する。
