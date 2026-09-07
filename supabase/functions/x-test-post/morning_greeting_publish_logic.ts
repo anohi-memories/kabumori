@@ -321,6 +321,15 @@ export async function runMorningGreetingManualPublish(args: {
     };
   } catch (error) {
     const code = error instanceof Error ? error.message : String(error);
+    const payloadError = error instanceof MorningGreetingPayloadDryRunError ? error : null;
+    // No DB migration: publish_claims.error_code is a plain text column, so a length failure's
+    // diagnostics (otherwise only visible in the admin JSON response) are encoded into that same existing
+    // field as a suffix, read-only-observable for the scheduled/unattended path too. The bare `code` is
+    // still what MorningGreetingManualPublishError.message carries below — this enrichment is
+    // failPublishSlot-only, so it never changes what callers see or compare against.
+    const failedErrorCode = payloadError?.lengthFailureStage
+      ? `${code}:retryCount=${payloadError.retryCount};firstLength=${payloadError.firstLength};retryLength=${payloadError.retryLength};stage=${payloadError.lengthFailureStage}`
+      : code;
     // Best-effort only: if the row already transitioned to 'published' this is a safe no-op (the
     // status=publishing filter matches nothing), and a failure to record 'failed' here must never mask
     // the original error or be treated as license to retry.
@@ -331,12 +340,11 @@ export async function runMorningGreetingManualPublish(args: {
           serviceRoleKey: args.serviceRoleKey,
           postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE,
           dateJst,
-          errorCode: code,
+          errorCode: failedErrorCode,
           fetcher: fetchImpl,
         });
       } catch { /* best-effort; the original error below still surfaces */ }
     }
-    const payloadError = error instanceof MorningGreetingPayloadDryRunError ? error : null;
     throw new MorningGreetingManualPublishError(
       code,
       {

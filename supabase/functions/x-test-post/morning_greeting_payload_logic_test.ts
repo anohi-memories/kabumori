@@ -140,7 +140,7 @@ test("theme mismatch stops safely", async () => {
 test("a length-invalid retry that is still invalid surfaces retry_count/first_length/retry_length/length_failure_stage on the thrown error", async () => {
   const theme = selectMorningGreetingTheme("2026-09-02");
   const tooShortFirst = "おはようございます。今日も一日、無理のないペースで過ごせますように。";
-  const stillTooLong = "おはようございます。".repeat(30);
+  const stillTooLong = "おはようございます。".repeat(32);
   let textCalls = 0;
   await assert.rejects(
     () => runMorningGreetingPayloadDryRun({

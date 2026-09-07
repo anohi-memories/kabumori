@@ -1,4 +1,9 @@
 import { parseMarketNumber, type RawMorningMetric as RawMarketMetric } from "./morning_report_logic.ts";
+import {
+  appendKabumoriReportFixedHashtags,
+  hasKabumoriReportFixedHashtagsExactlyOnce,
+  KABUMORI_REPORT_FIXED_HASHTAGS,
+} from "./fixed_hashtags_logic.ts";
 
 export type CloseMetricKind = "jpx_close" | "nikkei_futures_1545" | "realtime_optional";
 export type CloseRunMode = "live" | "preflight";
@@ -164,31 +169,13 @@ export function validateCloseReportFormat(text: string): boolean {
     normalized.includes("💬 今日のひとこと");
 }
 
-// Fixed, code-side hashtags — never left to the model to generate or omit. Shared with 朝刊 by spec,
-// but only wired into the close-report path here; morning_report is out of this change's scope.
-const CLOSE_REPORT_FIXED_HASHTAG_LIST = ["#日本株", "#日経平均", "#株式投資", "#かぶモリ"] as const;
-export const CLOSE_REPORT_FIXED_HASHTAGS = CLOSE_REPORT_FIXED_HASHTAG_LIST.join(" ");
-
-export function appendFixedCloseReportHashtags(text: string): string {
-  return `${text.trim()}\n\n${CLOSE_REPORT_FIXED_HASHTAGS}`;
-}
-
-function countOccurrences(haystack: string, needle: string): number {
-  if (!needle) return 0;
-  let count = 0;
-  let index = haystack.indexOf(needle);
-  while (index !== -1) {
-    count += 1;
-    index = haystack.indexOf(needle, index + needle.length);
-  }
-  return count;
-}
-
-export function hasFixedCloseReportHashtagsExactlyOnce(text: string): boolean {
-  const trimmed = text.trim();
-  if (!trimmed.endsWith(CLOSE_REPORT_FIXED_HASHTAGS)) return false;
-  return CLOSE_REPORT_FIXED_HASHTAG_LIST.every((tag) => countOccurrences(trimmed, tag) === 1);
-}
+// Fixed, code-side hashtags — never left to the model to generate or omit. The actual definition now
+// lives in fixed_hashtags_logic.ts, shared with morning_report, so the two report types can never drift
+// apart. Re-exported here under the existing close-report-specific names so nothing else in this
+// codebase (index.ts, close_report_logic_test.ts) needs to change.
+export const CLOSE_REPORT_FIXED_HASHTAGS = KABUMORI_REPORT_FIXED_HASHTAGS;
+export const appendFixedCloseReportHashtags = appendKabumoriReportFixedHashtags;
+export const hasFixedCloseReportHashtagsExactlyOnce = hasKabumoriReportFixedHashtagsExactlyOnce;
 
 // A deterministic, local safety net ahead of the AI Voice check — mirrors the important-news-monitor
 // local-guard pattern. Investment-advice and fabricated-experience phrasing are already prohibited in

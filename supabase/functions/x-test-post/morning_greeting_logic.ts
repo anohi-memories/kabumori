@@ -27,12 +27,17 @@ type MajorThemeDefinition = {
 const MODEL = "gpt-5.6-luna" as const;
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 // The final, enforced range. validateMorningGreetingOutput is the only place this is checked.
+// Widened from 100-180 after a 2026-09-07 production incident: a first-attempt generation that missed
+// the (then 110-160) target, plus a retry that still missed the (then 100-180) validator range, posted
+// nothing. 100-300 gives ordinary model variance far more room to still land inside the accepted range,
+// without changing what "too short"/"too long" means for the salutation/theme/safety checks below it.
 export const MORNING_GREETING_MIN_CHARACTERS = 100;
-export const MORNING_GREETING_MAX_CHARACTERS = 180;
-// A narrower generation target, aimed well inside the validator's range so ordinary variance in the
-// model's output still lands safely inside 100-180 without needing a retry.
-export const MORNING_GREETING_TARGET_MIN_CHARACTERS = 110;
-export const MORNING_GREETING_TARGET_MAX_CHARACTERS = 160;
+export const MORNING_GREETING_MAX_CHARACTERS = 300;
+// A narrower generation target — still "usually a short morning greeting" — aimed well inside the
+// validator's range so ordinary variance in the model's output still lands safely inside 100-300 without
+// needing a retry.
+export const MORNING_GREETING_TARGET_MIN_CHARACTERS = 120;
+export const MORNING_GREETING_TARGET_MAX_CHARACTERS = 200;
 export const MORNING_GREETING_TARGET_MIN_EMOJI = 1;
 export const MORNING_GREETING_TARGET_MAX_EMOJI = 3;
 

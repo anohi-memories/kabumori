@@ -513,6 +513,11 @@ test("4: a lost DB claim race stops before any X API call", async () => {
 });
 
 test("6+7: a length-invalid failure surfaces real retry_count/first_length/retry_length/length_failure_stage, never a hardcoded 0", async () => {
+  // Captured outside the mock rather than asserted inline inside fetchImpl: an assertion thrown from
+  // within the mocked failPublishSlot call would otherwise be silently swallowed by
+  // runMorningGreetingManualPublish's own best-effort try/catch around that call, letting a wrong
+  // error_code pass unnoticed.
+  let publishClaimsPatchBody: Record<string, unknown> | null = null;
   await assert.rejects(
     () => runMorningGreetingManualPublish({
       supabaseUrl: "https://example.supabase.co",
@@ -538,9 +543,7 @@ test("6+7: a length-invalid failure surfaces real retry_count/first_length/retry
           return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "publishing" }]);
         }
         if (url.includes("/rest/v1/publish_claims") && init?.method === "PATCH") {
-          const body = JSON.parse(String(init.body));
-          assert.equal(body.status, "failed");
-          assert.equal(body.error_code, "MORNING_GREETING_TEXT_LENGTH_INVALID");
+          publishClaimsPatchBody = JSON.parse(String(init.body));
           return Response.json([{ post_type: "morning_greeting", date_jst: DATE, status: "failed" }]);
         }
         throw new Error(`Unexpected URL: ${url}`);
@@ -556,6 +559,14 @@ test("6+7: a length-invalid failure surfaces real retry_count/first_length/retry
       assert.equal(error.xApiCalled, 0);
       return true;
     },
+  );
+  assert.equal(publishClaimsPatchBody?.status, "failed");
+  // publish_claims.error_code is a plain text column (no migration): the length diagnostics are encoded
+  // into it as a suffix so they're read-only-observable for the scheduled/unattended path too, not just
+  // via the admin JSON response's structured fields (already covered by the assertions above).
+  assert.equal(
+    publishClaimsPatchBody?.error_code,
+    "MORNING_GREETING_TEXT_LENGTH_INVALID:retryCount=1;firstLength=99;retryLength=200;stage=retry",
   );
 });
 

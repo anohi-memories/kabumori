@@ -5,8 +5,8 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - task_id: morning-content-resilience-20260907
 - owner: claude
 - slot: claude-1
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - purpose: 2026-09-07朝に発生した2種類の `x-test-post` 投稿停止（morning_greetingの文字数判定、morning_reportのVoice誤判定）を、既存安全策を維持したまま最小修正で再発しにくくし、朝刊へ既存の固定ハッシュタグを確実に付与する。
 
@@ -318,3 +318,78 @@ Claude slot 2のExpo/Auth/MVP/Push関連にも触れない。
 - push: 原則禁止。必要なら勝手にpushせず報告
 - deploy: 禁止
 - report_mode: inline
+
+## Report
+
+- task_id: morning-content-resilience-20260907
+- result: 完了（Part 1/2/3すべて実装・テスト済み、ローカルのみ、未push）
+- production_changes: なし（実装・テストはすべてローカル。本番`x-test-post`は前タスク完了時点のv87のまま。2026-09-07に失敗した`scheduled_posts`/`publish_claims`（morning_greeting/morning_report双方）・失敗したmorning_reportの再実行/再投稿/削除/再claimは一切行っていない。DB書き込み・migration・Cron・secrets変更もなし）
+
+### Part 1: morning_greeting length tolerance
+
+- `morning_greeting_logic.ts`: `MORNING_GREETING_MAX_CHARACTERS` を180→300へ、`MORNING_GREETING_TARGET_MIN/MAX_CHARACTERS` を110-160→120-200へ変更。`MORNING_GREETING_MIN_CHARACTERS`(100)は変更なし。validatorロジック・retry構造（最大1回、targetを狙う）・診断用エラー型は既存のまま再利用。
+- DB migration: **不要と判断**。`publish_claims.error_code`は既存の`text`型カラムであり、`MorningGreetingPayloadDryRunError`の`retryCount`/`firstLength`/`retryLength`/`lengthFailureStage`を`"MORNING_GREETING_TEXT_LENGTH_INVALID:retryCount=1;firstLength=99;retryLength=200;stage=retry"`という形式のsuffixへエンコードして既存カラムへ格納する方式にした（`morning_greeting_publish_logic.ts`）。スキーマ変更は一切行っていない。
+- validation 1-11相当のテストを`morning_greeting_logic_test.ts`へ全面的に書き換え（100/300文字境界、120-200/180-250文字帯、初回失敗→retry成功、初回失敗→retry後も範囲外→`stage:"retry"`診断、retry上限1回、既存のsalutation/theme/safetyテストは無変更）。
+- 既存のOAuth 401 refresh実装（前タスク）・重複防止・画像存在確認等には触れていない。
+
+### Part 2: morning_report Voice false-positive resilience
+
+- `index.ts`内`evaluateKabumoriVoice()`のinstructionsを修正し、「気になるところです」「注目したいところです」「見ておきたいところです」「確認したいポイントです」を単独では違反にしないと明記。一方「今朝からずっと気になっています」「さっき見て驚きました」のような具体的な現在・直近の個人的状態/行動を実在した事実として語る表現、および架空の売買・保有・損益経験は引き続き明示的にNGとした（インシデント文言そのままで実際に再現・修正確認済み）。
+- 新規ファイル `morning_report_voice_rewrite_logic.ts`: rewrite用リクエスト構築・レスポンス解析・fact-drift防止チェック・ローカル安全パターンチェックを純粋関数として実装。
+  - `morningReportVoiceRewritePreservesFacts()`: rewrite後テキストに含まれる数字列（全角含む）がすべて元テキストにも存在することを要求する決定的チェック。新しい数値・日付の追加を機械的に拒否する。
+  - `morningReportVoiceRewriteSafetyIssues()`: URL/ハッシュタグ・投資助言断定・架空の売買/保有/含み益損表現をローカル正規表現で検出（close_report_logic.tsの`localCloseReportSafetyIssues`と同系統のdefense-in-depth）。
+- `index.ts`に`attemptMorningReportVoiceRewrite()`を追加。OpenAI呼び出し→出力抽出→fact-drift/safety/`validateMorningReportFormat`の3チェックを直列に通過した場合のみ書き換え候補を返し、いずれか1つでも失敗した場合は`null`（=rewrite不採用、従来どおり`MORNING_REPORT_VOICE_CHECK_FAILED`）。
+- fact safety再検証の方式について: **既存fact checker（`evaluateMorningFacts`）は再利用不可と判断**。この関数は検索・候補選定パイプラインの出力（ソース検証・鮮度等）を検証するものであり、自由記述テキストの内容を検証する設計ではない。rewriteのためだけに検索パイプライン全体を再実行することは、要件7（同一条件での全生成ループ回避、duplicate投稿リスク増加回避）に反するため、その場で機械的に判定可能な「rewrite後テキストの数字列は元テキストの数字列の部分集合」という決定的no-driftガードを採用した。この判断根拠は`morning_report_voice_rewrite_logic.ts`冒頭コメントにも明記。
+- `index.ts`の`morning_report` dry-runパス・scheduled-dispatch（live）パス双方に同一のrewrite-and-reverifyオーケストレーションを配線:
+  1. 初回Voice評価が`passed=false`の場合のみ、最大1回`attemptMorningReportVoiceRewrite()`を呼ぶ（構造テストで呼び出し回数1回・`evaluateKabumoriVoice`呼び出し回数2回であることを確認済み）。
+  2. rewrite候補が得られ、2回目のVoice評価が`passed=true`ならそのテキストを最終テキストとして採用。得られない/2回目もfailの場合は元のテキストのまま`finalVoiceEvaluation`は初回の失敗結果を維持し、従来どおり`MORNING_REPORT_VOICE_CHECK_FAILED`で停止（liveパスはX API到達前、dry-runパスはそもそもpostToXを呼ばない）。
+  3. 外側`shouldRetryMorningReport()`呼び出し・引数は一切変更していない（構造テストで確認済み）。
+- Voice diagnosticsは`morning_report_runs.market_data`（既存の非migration JSONフィールド）内`pipeline`オブジェクトへ`first_voice_passed`/`voice_rewrite_attempted`/`second_voice_passed`/`final_voice_failure_stage`として追加。Voice notes全文やraw model responseの新規永続化は行っていない（既存の`voiceEvaluation`埋め込み自体は変更前から存在する挙動でありPart 2では変更していない）。
+
+### Part 3: morning_report fixed hashtags
+
+- 新規ファイル `fixed_hashtags_logic.ts`: `close_report_logic.ts`にあった固定タグ定義（`#日本株 #日経平均 #株式投資 #かぶモリ`）と付与/検証関数をreport非依存な形で抽出。
+- `close_report_logic.ts`は抽出後のモジュールを`import`し、既存の`CLOSE_REPORT_FIXED_HASHTAGS`/`appendFixedCloseReportHashtags`/`hasFixedCloseReportHashtagsExactlyOnce`という名前をそのままエイリアス再exportすることで、`index.ts`・`close_report_logic_test.ts`双方を無変更のまま維持（既存43テストは無変更で全pass、大引け側の挙動・呼び出し順は一切変更していない）。
+- `index.ts`のmorning_report live/dry-runパスへ`appendKabumoriReportFixedHashtags()`を配線。呼び出しは各パスにつき1回のみ、`if (!finalVoiceEvaluation.passed) throw ...`（最終Voice判定）より後・`postToX()`呼び出しより前という順序を構造テストで確認済み。AIプロンプト・Voice rewriteのどちらにもタグ生成をさせていない。
+
+### Validation coverage（タスク記載の25項目との対応）
+
+- 1-11 (morning_greeting): `morning_greeting_logic_test.ts`で網羅。全pass。
+- 12-13 (Voice文言の許容/禁止): `voice_evaluation_instructions_test.ts`で構造的に検証（instructions文字列に許容表現・禁止表現が明記されていることを確認）。
+- 14-20 (rewrite-and-reverifyフロー): `morning_report_voice_rewrite_logic_test.ts`（純粋関数7件）+ `morning_report_voice_rewrite_wiring_test.ts`（index.ts配線6件、rewrite最大1回・postToX呼び出し1回・outer retry分類不変を含む）で検証。
+- 21-25 (hashtags): `fixed_hashtags_logic_test.ts`（既存5件、無変更で全pass）+ `morning_report_voice_rewrite_wiring_test.ts`のhashtag配線順序テストで検証。close_report側43テストも無変更で全pass、回帰なし。
+
+### changed_files
+
+- `supabase/functions/x-test-post/morning_greeting_logic.ts`
+- `supabase/functions/x-test-post/morning_greeting_logic_test.ts`
+- `supabase/functions/x-test-post/morning_greeting_payload_logic_test.ts`（Part 1の許容範囲拡張に伴い、境界値ちょうど300文字だったテスト用フィクスチャを320文字へ修正。新range下で意図通り「範囲外」を再現するための修正で、production側ロジックは無変更）
+- `supabase/functions/x-test-post/morning_greeting_publish_logic.ts`
+- `supabase/functions/x-test-post/morning_greeting_publish_logic_test.ts`
+- `supabase/functions/x-test-post/index.ts`
+- `supabase/functions/x-test-post/close_report_logic.ts`
+- `supabase/functions/x-test-post/fixed_hashtags_logic.ts`（新規）
+- `supabase/functions/x-test-post/fixed_hashtags_logic_test.ts`（新規）
+- `supabase/functions/x-test-post/morning_report_voice_rewrite_logic.ts`（新規）
+- `supabase/functions/x-test-post/morning_report_voice_rewrite_logic_test.ts`（新規）
+- `supabase/functions/x-test-post/morning_report_voice_rewrite_wiring_test.ts`（新規）
+- `supabase/functions/x-test-post/voice_evaluation_instructions_test.ts`（新規）
+
+Codex担当の`important-news-monitor`関連ファイル、Claude slot 2担当のExpo/Auth/Push関連ファイルには一切触れていない（`git status`で確認済み、他エージェントの未コミット変更もすべて無傷）。
+
+### tests
+
+- `deno test --no-check --allow-read --allow-env`で`x-test-post`配下の全`*_test.ts`を実行（`useful_tip_output_test.ts`を除く。この1ファイルは今回のいずれの変更とも無関係で、この検証環境のdeno 2.9.6が`globalThis.Deno`への再代入を拒否するため単体でも失敗する既存の環境依存issueであることを確認済み。詳細は下記備考）。
+- 結果: **316 passed / 0 failed**（新規追加分: `fixed_hashtags_logic_test.ts` 5件 [既存] + `voice_evaluation_instructions_test.ts` 3件 + `morning_report_voice_rewrite_logic_test.ts` 7件 + `morning_report_voice_rewrite_wiring_test.ts` 6件 = 今回のPart 2/3向け新規16件を含む）。
+- `deno check index.ts` および今回変更・新規作成した全ファイルの型検査を実施。今回の変更に起因する新規の型エラーは0件。検出された既存6件の型エラー（`_shared/x_oauth2_post.ts`・`morning_greeting_image_logic.ts`・`morning_lane_response_logic.ts`のUint8Array/BufferSourceおよびretry_count関連）はすべて`origin/main`時点から存在する、今回のdenoバージョン(2.9.6、今回この検証のため新規インストール)固有のTypeScript lib差分による既存issueであることを`git show origin/main:...`で照合し確認済み。今回のタスクの変更対象外。
+- `deno lint`を今回変更・新規作成した全ファイルに対し実施。今回の変更に起因する新規lint issueは0件（検出された`index.ts`の2件・`morning_greeting_payload_logic_test.ts`の3件は同様に既存issueであることを確認済み）。
+
+### 備考（環境）
+
+- この検証環境にはdenoが未インストールだったため、Homebrewでdeno 2.9.6を新規インストールして検証した。以降のセッションでも同様に必要になる可能性がある。
+
+### next_recommendation
+
+- push可否をご判断ください（本タスクの指示`push: 原則禁止。必要なら勝手にpushせず報告`に従い、ここではpushしていません。ローカルコミットのみ完了しています）。
+- 本番反映（deploy）は今回禁止のため未実施。review後、別タスクとしてv87→v88のデプロイ・本番でのdry-run確認（`morning_report_dry_run`モード等）を推奨します。
+- `useful_tip_output_test.ts`の`globalThis.Deno`再代入issueは今回のタスクと無関係ですが、deno更新後の別環境でも同様に顕在化する可能性があるため、別タスクでの切り分けを推奨します（今回は触れていません）。
