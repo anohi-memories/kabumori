@@ -8,7 +8,7 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - status: ready
 - next_owner: claude
 - priority: high
-- purpose: 2026-09-07朝に発生した2種類の `x-test-post` 投稿停止（morning_greetingの文字数判定、morning_reportのVoice誤判定）を、既存安全策を維持したまま最小修正で再発しにくくする。
+- purpose: 2026-09-07朝に発生した2種類の `x-test-post` 投稿停止（morning_greetingの文字数判定、morning_reportのVoice誤判定）を、既存安全策を維持したまま最小修正で再発しにくくし、朝刊へ既存の固定ハッシュタグを確実に付与する。
 
 ## Background
 
@@ -52,6 +52,14 @@ Claude Code（くろちゃん）並列スロット1の現在タスクです。`G
 - 「さっき見て驚きました」
 - 「私はこの銘柄を保有しています」
 - 実際には入力されていない売買、損益、保有、体験、感情の断定
+
+### C. morning_report fixed hashtags
+
+既存の大引けレポートではコード側で以下の固定タグを付与している。
+
+`#日本株 #日経平均 #株式投資 #かぶモリ`
+
+`close_report_logic.ts` のコメント上も朝刊と共有する仕様だが、現状は大引け側にしか配線されていない。朝刊も同じ4タグを投稿末尾へ確実に付ける。
 
 ## Required behavior
 
@@ -139,7 +147,7 @@ rewrite条件:
 - 元のverified fact basisから新しい事実を追加しない
 - 数値、固有名詞、日付、因果関係を勝手に追加・変更しない
 - 朝刊の固定見出し・3つの注目ポイント・注意点・今日のひとこと構造を維持
-- URL / hashtagを追加しない
+- URL / hashtagをAIに追加させない
 - 投資助言へ寄せない
 - 架空の個人的実体験・売買・保有・感情を追加しない
 
@@ -176,6 +184,24 @@ DB migrationなしで可能な既存ログ/diagnostics経路を使い、少な�
 
 Voice notes全文を不用意に永続化する必要はない。secretやraw model response全文は保存しない。
 
+# Part 3: morning_report fixed hashtags
+
+### 9. 朝刊末尾へ固定4タグをコード側で付与する
+
+朝刊の最終X投稿本文の末尾へ、既存の大引けレポートと同じ順序で以下を**ちょうど1回だけ**付与する。
+
+`#日本株 #日経平均 #株式投資 #かぶモリ`
+
+要件:
+
+- AI生成promptへタグ生成を任せない
+- Voice rewriteにもタグ生成を任せない
+- 本文のformat / fact / Voiceの最終判定が完了した後、X APIへ渡す直前の確定本文へコード側で付与する
+- 本文とタグの間は空行1つ（`\n\n`）
+- retry/rewriteがあっても重複付与しない
+- 可能なら既存の大引け固定タグ定義を共有・再利用し、同じ4タグを別々にハードコードして将来ずれないようにする
+- 大引け側の既存挙動は壊さない
+
 ## Existing safety requirements to preserve
 
 以下は変更しない。
@@ -186,7 +212,7 @@ Voice notes全文を不用意に永続化する必要はない。secretやraw mo
 - 未確認天気禁止
 - 投資助言禁止
 - 架空の記念日禁止
-- URL / hashtag禁止
+- morning_greetingのURL / hashtag禁止
 - 絵文字上限の安全策
 - 画像存在確認
 - 同日重複投稿防止 (`publish_claims` / receipt)
@@ -205,6 +231,8 @@ Voice notes全文を不用意に永続化する必要はない。secretやraw mo
 - 必要なら `morning_greeting_payload_logic.ts`
 - 必要なら `morning_greeting_publish_logic.ts`
 - `supabase/functions/x-test-post/index.ts` のVoice評価instruction / morning_report実行部分
+- `supabase/functions/x-test-post/close_report_logic.ts` の既存固定タグ定義（共有化のため必要な最小変更のみ）
+- 必要ならfixed hashtag共有用の小さなhelper/module
 - 必要ならVoice rewrite用の小さなhelper/module
 - 関連テスト
 
@@ -241,6 +269,14 @@ Claude slot 2のExpo/Auth/MVP/Push関連にも触れない。
 19. X投稿処理は最終validation完了後に1回だけ呼ばれること
 20. scheduled retry分類は従来のままであること
 
+### morning_report hashtags
+
+21. 正常朝刊の最終投稿本文が `#日本株 #日経平均 #株式投資 #かぶモリ` で終わること
+22. 4タグがそれぞれ1回だけ存在すること
+23. Voice rewriteありでもタグが重複しないこと
+24. Voice最終fail時はタグ付与後に誤ってX投稿へ進まないこと
+25. 大引け側の固定タグ出力に回帰がないこと
+
 ### regression
 
 - OAuth/media/posting pathへ不要な変更がない
@@ -272,6 +308,8 @@ Claude slot 2のExpo/Auth/MVP/Push関連にも触れない。
 - rewrite後のformat / fact safety / Voice再確認を実装
 - scheduled Voice failureの外側retry分類は変更しない
 - Voice diagnosticsを可能な範囲で観測可能にする
+- 朝刊末尾へ固定4タグをコード側でちょうど1回付与
+- 大引け側の固定タグ挙動を維持
 - relevant tests pass
 - 変更ファイルとテスト結果を `## Report` に記載
 - statusを `review_required` に変更
