@@ -3,7 +3,7 @@
 - task_id: close-report-final-hardening-20260907
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: urgent
 - purpose: 2026-09-07の大引けレポートを本番有効化する前に、morning_reportで修正したVoice誤判定耐性と同等の安全な投稿前フローをclose_reportにも適用し、Voice不合格の見逃し・タグ順序・dry-run判定を最小修正で整える。
