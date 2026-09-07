@@ -3,7 +3,7 @@
 - task_id: morning-greeting-x-media-scope-reauth-20260908
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: urgent
 - purpose: 2026-09-08朝の`morning_greeting`が`MORNING_GREETING_MEDIA_UPLOAD_FAILED:403`で安全停止した原因を、X OAuth 2.0のmedia upload権限と実装方式まで確認し、画像付き朝の挨拶を安全に復旧できる状態へ整える。
