@@ -3,7 +3,7 @@
 - task_id: x-test-post-deploy-verify-20260907
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - purpose: K1承認済みcommit `a1d2735` の `x-test-post` 改修を本番へ反映し、安全なdry-run/read-only確認で動作確認する。
