@@ -441,7 +441,21 @@ test("14: report-level 2-independent-publisher requirement stays removed (truste
   assert.deepEqual(result.notes, []);
 });
 
-// --- dry-run-only reference-time cutoff override (late-hour quality check) -------------------------
+// --- dry-run/live Fact Check cutoff parity (close-report-factcheck-dryrun-live-parity-20260907) -----
+//
+// Incident: on 2026-09-07, close_report_dry_run reported factCheck=passed/wouldPublish=true, then a
+// live close_report run against the same production version failed with CLOSE_REPORT_FACT_CHECK_FAILED
+// before ever reaching the X API. Root cause: generateCloseReport's cutoff instruction used to branch on
+// a dry-run-only opt-in flag (allowCurrentTimeReferenceForDryRun) -- a literal "16:00 JST" wording by
+// default (used by both an ordinary dry-run AND the live path), or a reference-time-anchored wording only
+// reachable by a dry-run request that explicitly opted in. The literal wording failed
+// future_information_absent even when executed essentially on schedule; the reference-time wording is
+// what actually passed. Fix: removed the branch entirely so there is exactly one instruction, always
+// reference-time-anchored, for both dry-run and live. A second, related gap: the live path's failure
+// handler only wrote fact_check_notes for a voice-layer failure, so the common
+// CLOSE_REPORT_FACT_CHECK_FAILED case left the DB with no diagnostic trail at all (this is what made the
+// incident hard to read back from close_report_runs) -- fixed to always fall back to draft.factCheckNotes
+// in both the dry-run and live catch blocks.
 
 async function generateCloseReportSource(): Promise<string> {
   const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
@@ -451,46 +465,38 @@ async function generateCloseReportSource(): Promise<string> {
   return source.slice(start, end);
 }
 
-test("1+2: the default cutoff instruction (no override) still mentions the normal 16:00 JST operating window", async () => {
+test("generateCloseReport has exactly one cutoff instruction, with no dry-run/live mode branch", async () => {
   const fnSource = await generateCloseReportSource();
-  assert.match(fnSource, /options\.allowCurrentTimeReferenceForDryRun\s*\n?\s*\?/u);
-  assert.match(fnSource, /通常運用では16:00 JSTまでに公開済みのものだけを使用します/u);
-});
-
-test("3+8: the override cutoff instruction is scoped to reference time, and still enforces a future-info boundary (not removed)", async () => {
-  const fnSource = await generateCloseReportSource();
+  assert.doesNotMatch(fnSource, /allowCurrentTimeReferenceForDryRun/u);
+  // Only the reference-time-anchored wording remains; the old literal "16:00 JST" default sentence is gone.
+  assert.doesNotMatch(fnSource, /通常運用では16:00 JSTまでに公開済みのものだけを使用します/u);
   assert.match(fnSource, /参照時刻（reference time、このリクエストに渡された実行時刻）までに公開済みのものだけを使用します/u);
   assert.match(fnSource, /参照時刻より後に公開された情報だけをfuture扱いとし/u);
-  // The override never removes the 16:00 sentence outright — it's a second, alternate string, selected
-  // conditionally; the literal "16:00 JST" wording is not present in the override's own sentence.
-  const overrideSentenceStart = fnSource.indexOf("options.allowCurrentTimeReferenceForDryRun");
-  const ternaryStart = fnSource.indexOf("? \"", overrideSentenceStart);
-  const ternaryElse = fnSource.indexOf(": \"", ternaryStart);
-  const overrideSentence = fnSource.slice(ternaryStart, ternaryElse);
-  assert.doesNotMatch(overrideSentence, /16:00/u);
+  // Exactly one occurrence of the cutoff sentence -- not a ternary selecting between two.
+  const occurrences = fnSource.match(/参照時刻（reference time、このリクエストに渡された実行時刻）までに公開済みのものだけを使用します/gu) ?? [];
+  assert.equal(occurrences.length, 1);
 });
 
-test("4+5: the live/scheduled close_report path never reads or passes the override — it cannot be reached from publish", async () => {
+test("generateCloseReport no longer accepts an options parameter, and neither call site passes one", async () => {
   const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
-  // The live path's own generateCloseReport() call site (post_type === 'close_report' branch) passes no
-  // third argument at all, so it always gets the default {} (allowCurrentTimeReferenceForDryRun
-  // undefined/false) regardless of anything in the request body.
+  assert.doesNotMatch(source, /allow_current_time_reference_for_dry_run/u);
+  const dryRunCallIdx = source.indexOf("draft = await generateCloseReport(openAiApiKey, referenceTime);");
+  assert.ok(dryRunCallIdx >= 0, "dry-run generateCloseReport call site not found, or it now passes options");
   const liveCallIdx = source.indexOf('draft = await generateCloseReport(openAiApiKey, new Date().toISOString());');
   assert.ok(liveCallIdx >= 0, "live generateCloseReport call site not found, or it now passes options");
-  // The live scheduled-post handler block (post_type === 'close_report') itself never mentions the flag.
-  const liveBranchStart = source.indexOf('if (scheduledPost.post_type === "close_report") {');
-  const liveBranchEnd = source.indexOf('if (scheduledPost.post_type === "us_premarket_report")', liveBranchStart);
-  assert.ok(liveBranchStart >= 0 && liveBranchEnd > liveBranchStart, "live close_report handler block not found");
-  const liveBranch = source.slice(liveBranchStart, liveBranchEnd);
-  assert.doesNotMatch(liveBranch, /allow_current_time_reference_for_dry_run/u);
 });
 
-test("dry-run defaults the override to false unless explicitly set to true", async () => {
+test("both the dry-run and live close_report failure handlers fall back to draft.factCheckNotes, not just [code], for a non-voice fact-check failure", async () => {
   const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
-  assert.match(
-    source,
-    /const allowCurrentTimeReferenceForDryRun = requestBody\.allow_current_time_reference_for_dry_run === true;/u,
-  );
+  const dryRunCatchStart = source.indexOf('} catch { console.error("Failed to record close report dry-run failure"); }');
+  const liveCatchStart = source.indexOf('} catch { console.error("Failed to record close report failure"); }');
+  assert.ok(dryRunCatchStart >= 0, "close_report dry-run failure catch not found");
+  assert.ok(liveCatchStart >= 0, "close_report live failure catch not found");
+  const dryRunBlock = source.slice(source.lastIndexOf("} catch (error) {", dryRunCatchStart), dryRunCatchStart);
+  const liveBlock = source.slice(source.lastIndexOf("} catch (error) {", liveCatchStart), liveCatchStart);
+  for (const block of [dryRunBlock, liveBlock]) {
+    assert.match(block, /fact_check_notes:\s*draft\s*\n?\s*\?\s*\(voiceFailure \? \[\.\.\.draft\.factCheckNotes,/u);
+  }
 });
 
 test("generateCloseReport runs the local safety check after format validation, and no longer appends fixed hashtags itself", async () => {

@@ -2047,20 +2047,20 @@ function closeRunMarketData(
 async function generateCloseReport(
   openAiApiKey: string,
   referenceTimeIso: string,
-  // dry-run only, and only when the caller explicitly opts in (index.ts's own dry-run branch is the
-  // only call site that ever reads a request-body flag into this — the live/scheduled path below always
-  // calls this with the default, so normal 16:00 JST operation is never affected). When true, the
-  // collection prompt's cutoff instruction is phrased around the actual referenceTimeIso passed in
-  // instead of literally mentioning "16:00 JST", so a dry-run executed well after the normal 15:58-16:02
-  // window can still evaluate "is there anything future relative to right now" instead of being pushed
-  // to treat everything after 16:00 as out of bounds. sourceVerified/freshness/causal-safety/TODAY-NEXT/
-  // Voice/hashtags are all completely unaffected — this changes only that one sentence.
-  options: { allowCurrentTimeReferenceForDryRun?: boolean } = {},
 ): Promise<CloseReportDraft> {
   const runMode = resolveCloseRunMode(referenceTimeIso);
-  const cutoffInstruction = options.allowCurrentTimeReferenceForDryRun
-    ? "ニュース・IRは参照時刻（reference time、このリクエストに渡された実行時刻）までに公開済みのものだけを使用します。参照時刻より後に公開された情報だけをfuture扱いとし、future_information_absentで非混入を確認してください。"
-    : "ニュース・IRは参照時刻まで、通常運用では16:00 JSTまでに公開済みのものだけを使用します。future_information_absentで未来情報の非混入を確認してください。";
+  // Anchored to the actual reference time passed to this request, never a literal "16:00 JST" string.
+  // Previously this sentence branched on a dry-run-only opt-in flag, so a normal (no-flag) dry-run and
+  // the live/scheduled path shared the same literal-"16:00 JST" wording while an explicit dry-run request
+  // could get this reference-time wording instead -- two different Fact Check conditions for what should
+  // be one code path. close-report-factcheck-dryrun-live-parity-20260907 showed the literal wording
+  // failing future_information_absent even when executed essentially on schedule (it gives the model no
+  // clear anchor once the true current time isn't exactly 16:00:00), while this reference-time wording
+  // passed reliably in the same incident. There is now exactly one instruction, so dry-run and live always
+  // face an identical Fact Check condition. sourceVerified/freshness/causal-safety/TODAY-NEXT/Voice/
+  // hashtags are all completely unaffected — this changes only this one sentence.
+  const cutoffInstruction =
+    "ニュース・IRは参照時刻（reference time、このリクエストに渡された実行時刻）までに公開済みのものだけを使用します。参照時刻より後に公開された情報だけをfuture扱いとし、future_information_absentで非混入を確認してください。";
   const collectionResponse = await fetchOpenAiWithSingleRetry(() => fetch(OPENAI_RESPONSES_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
@@ -3160,7 +3160,6 @@ Deno.serve(async (req) => {
   try {
     let requestBody: {
       mode?: unknown; titles?: unknown; post_type?: unknown; reference_time_iso?: unknown;
-      allow_current_time_reference_for_dry_run?: unknown;
     } = {};
     try { requestBody = await req.json(); } catch { /* body is optional */ }
     const isUsefulTipDryRun = requestBody.mode === "useful_tip_dry_run";
@@ -3488,13 +3487,10 @@ Deno.serve(async (req) => {
 
     if (isCloseReportDryRun) {
       const referenceTime = new Date().toISOString();
-      // dry-run only, opt-in only: never read by the live/scheduled close_report path below, and
-      // defaults to false even for an ordinary dry-run that doesn't pass this explicitly.
-      const allowCurrentTimeReferenceForDryRun = requestBody.allow_current_time_reference_for_dry_run === true;
       const runId = await createCloseReportRun(supabaseUrl, serviceRoleKey, referenceTime, null);
       let draft: CloseReportDraft | null = null;
       try {
-        draft = await generateCloseReport(openAiApiKey, referenceTime, { allowCurrentTimeReferenceForDryRun });
+        draft = await generateCloseReport(openAiApiKey, referenceTime);
         if (draft.text) {
           await updateCloseReportRun(supabaseUrl, serviceRoleKey, runId, {
             generated_at: new Date().toISOString(), source_urls: draft.sourceUrls,
@@ -3600,8 +3596,11 @@ Deno.serve(async (req) => {
           await updateCloseReportRun(supabaseUrl, serviceRoleKey, runId, {
             generated_at: new Date().toISOString(), status: "failed", error: code,
             fact_check_status: voiceFailure && draft?.factCheckStatus === "passed" ? "passed" : "failed",
-            fact_check_notes: voiceFailure && draft
-              ? [...draft.factCheckNotes, ...voiceEvaluationFailureNotes(error)]
+            // Falls back to draft.factCheckNotes (not just [code]) whenever draft exists, even for a
+            // plain fact-check failure with no voice layer involved -- see the matching live-path fix,
+            // both from close-report-factcheck-dryrun-live-parity-20260907.
+            fact_check_notes: draft
+              ? (voiceFailure ? [...draft.factCheckNotes, ...voiceEvaluationFailureNotes(error)] : draft.factCheckNotes)
               : [code],
             ...(voiceFailure && draft ? {
               voice_evaluation: {
@@ -4094,8 +4093,14 @@ Deno.serve(async (req) => {
             await updateCloseReportRun(supabaseUrl, serviceRoleKey, closeRunId, {
               generated_at: new Date().toISOString(), status: "failed", error: code,
               fact_check_status: isVoiceLayerFailure && draft?.factCheckStatus === "passed" ? "passed" : "failed",
+              // Always record why, mirroring the dry-run branch's identical fix. Previously this was only
+              // written for a voice-layer failure, so a plain CLOSE_REPORT_FACT_CHECK_FAILED -- the common
+              // case, and exactly what close-report-factcheck-dryrun-live-parity-20260907 hit -- left
+              // fact_check_notes at its empty default, with no diagnostic trail of what actually failed.
+              fact_check_notes: draft
+                ? (voiceFailure ? [...draft.factCheckNotes, ...voiceEvaluationFailureNotes(error)] : draft.factCheckNotes)
+                : [code],
               ...(voiceFailure && draft ? {
-                fact_check_notes: [...draft.factCheckNotes, ...voiceEvaluationFailureNotes(error)],
                 voice_evaluation: {
                   status: "failed", code,
                   response: voiceFailure.responseDiagnostics,
