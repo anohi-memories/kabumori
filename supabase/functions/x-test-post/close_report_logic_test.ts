@@ -322,6 +322,16 @@ test("15: the close_report dry-run branch in index.ts never calls the X API", as
   assert.doesNotMatch(branchSource, /postToX|claimDuePost|loadXTokens/u);
 });
 
+test("close_report dry-run previews the same rewrite-then-hashtag decision as the live path, still never posting to X", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const branch = source.indexOf("if (isCloseReportDryRun)");
+  const nextBranch = source.indexOf("if (isUsPremarketDryRun)", branch);
+  const branchSource = source.slice(branch, nextBranch);
+  assert.match(branchSource, /attemptCloseReportVoiceRewrite\(/u);
+  assert.match(branchSource, /const finalTextWithHashtags = wouldPublish \? appendKabumoriReportFixedHashtags\(finalText\) : finalText;/u);
+  assert.doesNotMatch(branchSource, /postToX\(/u);
+});
+
 test("6: the writer never receives important_news_present/verified, and evaluateCloseFacts is no longer called with them", async () => {
   const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
   const start = source.indexOf("async function generateCloseReport(");
@@ -483,20 +493,64 @@ test("dry-run defaults the override to false unless explicitly set to true", asy
   );
 });
 
-test("generateCloseReport appends fixed hashtags and runs the local safety check before returning text", async () => {
+test("generateCloseReport runs the local safety check after format validation, and no longer appends fixed hashtags itself", async () => {
+  // Fixed hashtags moved out of generateCloseReport as part of close-report-final-hardening-20260907:
+  // they are now appended by the caller (index.ts's dry-run/live dispatch), exactly once, only after the
+  // *final* Voice check (first pass or a successful rewrite) has passed — never unconditionally right
+  // after generation, so a Voice-rejected report can never end up tagged.
   const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
   const start = source.indexOf("async function generateCloseReport(");
   const end = source.indexOf("\nasync function", start + 1);
   assert.ok(start >= 0 && end > start, "generateCloseReport not found");
   const fnSource = source.slice(start, end);
   assert.match(fnSource, /localCloseReportSafetyIssues\(text\)/u);
-  assert.match(fnSource, /appendFixedCloseReportHashtags\(text\)/u);
-  // The safety check and hashtag append must both come after format validation, and the append after
-  // the safety check, so a rejected report never gets hashtags appended.
+  assert.doesNotMatch(fnSource, /appendFixedCloseReportHashtags\(text\)|appendKabumoriReportFixedHashtags\(text\)/u);
   const formatIdx = fnSource.indexOf("validateCloseReportFormat(text)");
   const safetyIdx = fnSource.indexOf("localCloseReportSafetyIssues(text)");
-  const appendIdx = fnSource.indexOf("appendFixedCloseReportHashtags(text)");
-  assert.ok(formatIdx < safetyIdx && safetyIdx < appendIdx);
+  assert.ok(formatIdx < safetyIdx);
+});
+
+test("the live close_report dispatch appends fixed hashtags exactly once, only after the final Voice check, right before the one X post call", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const start = source.indexOf('if (scheduledPost.post_type === "close_report") {');
+  const end = source.indexOf('if (scheduledPost.post_type === "us_premarket_report")', start);
+  assert.ok(start >= 0 && end > start);
+  const block = source.slice(start, end);
+  const hashtagCallCount = (block.match(/appendKabumoriReportFixedHashtags\(/gu) ?? []).length;
+  assert.equal(hashtagCallCount, 1);
+  const postToXCallCount = (block.match(/postToX\(/gu) ?? []).length;
+  assert.equal(postToXCallCount, 1);
+  const voiceCheckIdx = block.indexOf('throw new Error("CLOSE_REPORT_VOICE_CHECK_FAILED")');
+  const hashtagIdx = block.indexOf("appendKabumoriReportFixedHashtags(");
+  const postToXIdx = block.indexOf("postToX(xAuth, textWithHashtags)");
+  assert.ok(voiceCheckIdx >= 0 && hashtagIdx > voiceCheckIdx);
+  assert.ok(postToXIdx > hashtagIdx);
+});
+
+test("the live close_report dispatch now gates the X post on the final Voice result — previously it posted unconditionally", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const start = source.indexOf('if (scheduledPost.post_type === "close_report") {');
+  const end = source.indexOf('if (scheduledPost.post_type === "us_premarket_report")', start);
+  const block = source.slice(start, end);
+  assert.match(block, /if \(!finalVoiceEvaluation\.passed\) throw new Error\("CLOSE_REPORT_VOICE_CHECK_FAILED"\);/u);
+  assert.doesNotMatch(block, /if \(!firstVoiceEvaluation\.passed\) throw/u);
+});
+
+test("close_report's rewrite is attempted at most once, only when the first Voice check failed, and never adds a second outer retry mechanism", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const start = source.indexOf('if (scheduledPost.post_type === "close_report") {');
+  const end = source.indexOf('if (scheduledPost.post_type === "us_premarket_report")', start);
+  const block = source.slice(start, end);
+  assert.match(
+    block,
+    /if \(draft\.text && !firstVoiceEvaluation\.passed\) \{\s*\n\s*voiceRewriteAttempted = true;\s*\n\s*const rewriteAttempt = await attemptCloseReportVoiceRewrite\(/u,
+  );
+  const rewriteCallCount = (block.match(/attemptCloseReportVoiceRewrite\(/gu) ?? []).length;
+  assert.equal(rewriteCallCount, 1);
+  const evaluateVoiceCallCount = (block.match(/evaluateKabumoriVoice\(/gu) ?? []).length;
+  assert.equal(evaluateVoiceCallCount, 2);
+  // This task explicitly must not introduce a new outer scheduled-retry mechanism for close_report.
+  assert.doesNotMatch(block, /shouldRetryCloseReport|retry_scheduled_post/u);
 });
 
 test("2+7: generateCloseReport only counts material_scope 'today' points toward the safety gate, never 'next'", async () => {

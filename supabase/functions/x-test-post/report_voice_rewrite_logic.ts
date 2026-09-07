@@ -1,18 +1,23 @@
-// A single, at-most-once, same-execution rewrite pass for morning_report: used only when generation,
-// format validation, and fact check have all already passed, and the shared Voice evaluator
+// A single, at-most-once, same-execution rewrite pass for morning_report / close_report: used only when
+// generation, format validation, and fact check have all already passed, and the shared Voice evaluator
 // (evaluateKabumoriVoice in index.ts) alone judged the text passed=false. This module only builds/parses
 // the OpenAI request and provides deterministic, local re-checks on the candidate rewrite — the actual
 // HTTP call and the second Voice evaluation (reusing the same shared evaluateKabumoriVoice used
 // everywhere else) happen in index.ts, so there remains exactly one Voice-evaluation implementation.
+//
+// The digit-drift guard, the local safety-pattern check, and the response parser below are report-agnostic
+// (originally written for morning_report, kept under their original names to avoid touching the
+// already-deployed morning_report wiring) and are reused as-is by close_report. Only the request builder
+// differs per report, since each report has its own fixed heading/structure to preserve.
 
-export const MORNING_REPORT_VOICE_REWRITE_MODEL = "gpt-5.6-luna" as const;
+export const REPORT_VOICE_REWRITE_MODEL = "gpt-5.6-luna" as const;
 
 export function buildMorningReportVoiceRewriteRequestBody(
   originalText: string,
   voiceNotes: string[],
 ): Record<string, unknown> {
   return {
-    model: MORNING_REPORT_VOICE_REWRITE_MODEL,
+    model: REPORT_VOICE_REWRITE_MODEL,
     store: false,
     reasoning: { effort: "low" },
     max_output_tokens: 1500,
@@ -29,6 +34,40 @@ export function buildMorningReportVoiceRewriteRequestBody(
       format: {
         type: "json_schema",
         name: "morning_report_voice_rewrite",
+        strict: true,
+        schema: {
+          type: "object",
+          properties: { text: { type: "string" } },
+          required: ["text"],
+          additionalProperties: false,
+        },
+      },
+    },
+  };
+}
+
+export function buildCloseReportVoiceRewriteRequestBody(
+  originalText: string,
+  voiceNotes: string[],
+): Record<string, unknown> {
+  return {
+    model: REPORT_VOICE_REWRITE_MODEL,
+    store: false,
+    reasoning: { effort: "low" },
+    max_output_tokens: 1500,
+    instructions: [
+      "あなたは大引けレポート本文の文体修正担当です。元の本文とVoice評価の指摘だけを見て、指摘された言い回しだけを直してください。",
+      "新しい事実、数値、日時、固有名詞、因果関係を追加してはいけません。元の本文に書かれていない情報を書き加えません。",
+      "見出し『【大引け】きょうの日本株まとめ🌙』、『📌 今日の3ポイント』の3件の箇条書き、『🔎 強かった・弱かったテーマ』、『👀 明日への注目点』、『💬 今日のひとこと』という構成と順序を保ちます。",
+      "URL、ハッシュタグは追加しません。売買指示、投資助言、断定的な価格予想は追加しません。",
+      "実在した個人の経験・保有・売買・損益・感情を新たに作りません。",
+      "指摘のない部分の言い回しはできる限り元の本文のまま保ちます。",
+    ].join("\n"),
+    input: JSON.stringify({ original_text: originalText, voice_notes: voiceNotes }),
+    text: {
+      format: {
+        type: "json_schema",
+        name: "close_report_voice_rewrite",
         strict: true,
         schema: {
           type: "object",

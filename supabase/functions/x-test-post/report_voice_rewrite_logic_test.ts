@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildCloseReportVoiceRewriteRequestBody,
   buildMorningReportVoiceRewriteRequestBody,
   morningReportVoiceRewritePreservesFacts,
   morningReportVoiceRewriteSafetyIssues,
   parseMorningReportVoiceRewriteOutputText,
-} from "./morning_report_voice_rewrite_logic.ts";
+} from "./report_voice_rewrite_logic.ts";
 
 test("the rewrite request forbids new facts/numbers/dates/proper nouns and preserves the fixed structure", () => {
   const body = buildMorningReportVoiceRewriteRequestBody("元の本文です。", ["気になるところですが不自然と判定されました"]);
@@ -66,4 +67,29 @@ test("morningReportVoiceRewriteSafetyIssues flags URLs, hashtags, investment adv
   assert.deepEqual(morningReportVoiceRewriteSafetyIssues("本文の最後 #日本株"), ["URL_OR_HASHTAG_DETECTED"]);
   assert.deepEqual(morningReportVoiceRewriteSafetyIssues("今すぐ買うべきです"), ["INVESTMENT_ADVICE_DETECTED"]);
   assert.deepEqual(morningReportVoiceRewriteSafetyIssues("私も今日買いました"), ["FABRICATED_EXPERIENCE_DETECTED"]);
+});
+
+test("the close_report rewrite request forbids new facts/numbers/dates/proper nouns and preserves the close_report fixed structure", () => {
+  const body = buildCloseReportVoiceRewriteRequestBody("元の本文です。", ["気になるところですが不自然と判定されました"]);
+  const instructions = String((body as { instructions: string }).instructions);
+  assert.match(instructions, /新しい事実、数値、日時、固有名詞、因果関係を追加してはいけません/u);
+  assert.match(instructions, /URL、ハッシュタグは追加しません/u);
+  assert.match(instructions, /実在した個人の経験・保有・売買・損益・感情を新たに作りません/u);
+  assert.match(instructions, /【大引け】きょうの日本株まとめ🌙/u);
+  assert.match(instructions, /🔎 強かった・弱かったテーマ/u);
+  assert.match(instructions, /👀 明日への注目点/u);
+  // Confirms this is genuinely the close_report-specific builder, not a copy-paste of the morning one.
+  assert.doesNotMatch(instructions, /【朝刊】きょうの日本株、ここをチェック☀️/u);
+  const input = JSON.parse((body as { input: string }).input);
+  assert.equal(input.original_text, "元の本文です。");
+  assert.deepEqual(input.voice_notes, ["気になるところですが不自然と判定されました"]);
+});
+
+test("close_report and morning_report rewrite requests use distinct json_schema names so responses never cross-contaminate", () => {
+  const morning = buildMorningReportVoiceRewriteRequestBody("本文", []);
+  const close = buildCloseReportVoiceRewriteRequestBody("本文", []);
+  const schemaName = (body: Record<string, unknown>): unknown =>
+    ((body.text as { format?: { name?: unknown } }).format ?? {}).name;
+  assert.equal(schemaName(morning), "morning_report_voice_rewrite");
+  assert.equal(schemaName(close), "close_report_voice_rewrite");
 });

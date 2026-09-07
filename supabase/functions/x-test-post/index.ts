@@ -12,7 +12,6 @@ import {
 } from "./morning_report_logic.ts";
 import { getExpectedUsSessionDate } from "./us_session_date_logic.ts";
 import {
-  appendFixedCloseReportHashtags,
   evaluateCloseFacts,
   localCloseReportSafetyIssues,
   normalizeCloseMetric,
@@ -24,11 +23,12 @@ import {
 } from "./close_report_logic.ts";
 import { appendKabumoriReportFixedHashtags } from "./fixed_hashtags_logic.ts";
 import {
+  buildCloseReportVoiceRewriteRequestBody,
   buildMorningReportVoiceRewriteRequestBody,
   morningReportVoiceRewritePreservesFacts,
   morningReportVoiceRewriteSafetyIssues,
   parseMorningReportVoiceRewriteOutputText,
-} from "./morning_report_voice_rewrite_logic.ts";
+} from "./report_voice_rewrite_logic.ts";
 import {
   evaluateUsPremarketFacts,
   normalizeUsPremarketMetric,
@@ -1977,7 +1977,7 @@ function morningRunMarketData(
   voiceEvaluation: VoiceEvaluation | null,
   voiceStatus: "pending" | "completed" | "failed",
   voiceFailure: VoiceEvaluationOutputError | null = null,
-  voiceRewrite: MorningReportVoiceRewriteDiagnostics | null = null,
+  voiceRewrite: ReportVoiceRewriteDiagnostics | null = null,
 ): Record<string, unknown> {
   return {
     targetTradingDate: draft.targetTradingDate,
@@ -2013,6 +2013,7 @@ function closeRunMarketData(
   voiceEvaluation: VoiceEvaluation | null,
   voiceStatus: "pending" | "completed" | "failed",
   voiceFailure: VoiceEvaluationOutputError | null = null,
+  voiceRewrite: ReportVoiceRewriteDiagnostics | null = null,
 ): Record<string, unknown> {
   return {
     tradingDate: draft.tradingDate,
@@ -2030,6 +2031,7 @@ function closeRunMarketData(
       generation_status: "completed",
       format_check_status: "passed",
       voice_evaluation_status: voiceStatus,
+      ...(voiceRewrite ?? {}),
     },
     ...(voiceEvaluation ? { voiceEvaluation } : {}),
     ...(voiceFailure ? {
@@ -2303,7 +2305,9 @@ async function generateCloseReport(
     if (safetyIssues.length > 0) {
       throw new Error(`CLOSE_REPORT_SAFETY_CHECK_FAILED:${safetyIssues.join(",")}`);
     }
-    text = appendFixedCloseReportHashtags(text);
+    // Fixed hashtags are no longer appended here — the caller (index.ts's dry-run/live dispatch) applies
+    // them exactly once, in code, only after the final Voice check (first pass or successful rewrite)
+    // has passed, immediately before the text is handed to postToX. See appendKabumoriReportFixedHashtags.
     writingUsage = getUsage(writingRaw);
   }
   const totalInput = collectionUsage.input + writingUsage.input;
@@ -2795,14 +2799,14 @@ function skippedVoiceEvaluation(reason: string): VoiceEvaluation {
   };
 }
 
-type MorningReportVoiceRewriteDiagnostics = {
+type ReportVoiceRewriteDiagnostics = {
   first_voice_passed: boolean;
   voice_rewrite_attempted: boolean;
   second_voice_passed: boolean | null;
   final_voice_failure_stage: "first" | "after_rewrite" | null;
 };
 
-type MorningReportVoiceRewriteAttempt = { text: string; inputTokens: number; outputTokens: number; apiCostUsd: number };
+type ReportVoiceRewriteAttempt = { text: string; inputTokens: number; outputTokens: number; apiCostUsd: number };
 
 // At most one same-execution rewrite attempt, used only when generation, format, and fact check have all
 // already passed and the shared Voice evaluator alone judged the text passed=false. Any failure along the
@@ -2813,7 +2817,7 @@ async function attemptMorningReportVoiceRewrite(
   originalText: string,
   voiceNotes: string[],
   fetchImpl: typeof fetch = fetch,
-): Promise<MorningReportVoiceRewriteAttempt | null> {
+): Promise<ReportVoiceRewriteAttempt | null> {
   try {
     const response = await fetchImpl(OPENAI_RESPONSES_URL, {
       method: "POST",
@@ -2828,6 +2832,39 @@ async function attemptMorningReportVoiceRewrite(
     if (!morningReportVoiceRewritePreservesFacts(originalText, cleaned)) return null;
     if (morningReportVoiceRewriteSafetyIssues(cleaned).length > 0) return null;
     if (!validateMorningReportFormat(cleaned)) return null;
+    const usage = getUsage(raw);
+    return { text: cleaned, inputTokens: usage.input, outputTokens: usage.output, apiCostUsd: modelCostUsd("gpt-5.6-luna", usage.input, usage.output) };
+  } catch {
+    return null;
+  }
+}
+
+// close_report's counterpart to attemptMorningReportVoiceRewrite — same at-most-once, same-execution
+// contract, same fact-drift guard and safety pattern check (both report-agnostic), but its own request
+// builder (close_report's fixed heading/structure) and its own format validator, plus
+// localCloseReportSafetyIssues as the additional check the close-report-final-hardening task specifically
+// requires re-running on the rewrite candidate.
+async function attemptCloseReportVoiceRewrite(
+  openAiApiKey: string,
+  originalText: string,
+  voiceNotes: string[],
+  fetchImpl: typeof fetch = fetch,
+): Promise<ReportVoiceRewriteAttempt | null> {
+  try {
+    const response = await fetchImpl(OPENAI_RESPONSES_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify(buildCloseReportVoiceRewriteRequestBody(originalText, voiceNotes)),
+    });
+    if (!response.ok) return null;
+    const raw = await response.json();
+    const rewritten = parseMorningReportVoiceRewriteOutputText(raw);
+    if (!rewritten) return null;
+    const cleaned = removeInlineCitations(rewritten);
+    if (!morningReportVoiceRewritePreservesFacts(originalText, cleaned)) return null;
+    if (morningReportVoiceRewriteSafetyIssues(cleaned).length > 0) return null;
+    if (!validateCloseReportFormat(cleaned)) return null;
+    if (localCloseReportSafetyIssues(cleaned).length > 0) return null;
     const usage = getUsage(raw);
     return { text: cleaned, inputTokens: usage.input, outputTokens: usage.output, apiCostUsd: modelCostUsd("gpt-5.6-luna", usage.input, usage.output) };
   } catch {
@@ -3351,7 +3388,7 @@ Deno.serve(async (req) => {
             secondVoicePassed = false;
           }
         }
-        const voiceRewriteDiagnostics: MorningReportVoiceRewriteDiagnostics = {
+        const voiceRewriteDiagnostics: ReportVoiceRewriteDiagnostics = {
           first_voice_passed: firstVoiceEvaluation.passed,
           voice_rewrite_attempted: voiceRewriteAttempted,
           second_voice_passed: secondVoicePassed,
@@ -3473,14 +3510,58 @@ Deno.serve(async (req) => {
             market_data: closeRunMarketData(draft, null, "pending"),
           });
         }
-        const voiceEvaluation = draft.text
+        const firstVoiceEvaluation = draft.text
           ? await evaluateKabumoriVoice(openAiApiKey, "close_report", draft.text, closeFactBasis(draft))
           : skippedVoiceEvaluation("Fact check不合格のため文体評価を未実施");
         const factCheckPassed = draft.factCheckStatus === "passed";
-        const totalInputTokens = draft.inputTokens + voiceEvaluation.inputTokens;
-        const totalOutputTokens = draft.outputTokens + voiceEvaluation.outputTokens;
-        const totalCost = Number((draft.apiCostUsd + voiceEvaluation.apiCostUsd).toFixed(6));
-        const marketData = closeRunMarketData(draft, voiceEvaluation, "completed");
+
+        // Same rewrite-and-reverify preview as morning_report's dry-run: the whole isCloseReportDryRun
+        // branch never reaches the X API, so it is safe to actually exercise the rewrite path here to
+        // preview what the live path would decide, including the final tagged text.
+        let finalText = draft.text;
+        let finalVoiceEvaluation = firstVoiceEvaluation;
+        let voiceRewriteAttempted = false;
+        let secondVoicePassed: boolean | null = null;
+        if (factCheckPassed && draft.text && !firstVoiceEvaluation.passed) {
+          voiceRewriteAttempted = true;
+          const rewriteAttempt = await attemptCloseReportVoiceRewrite(openAiApiKey, draft.text, firstVoiceEvaluation.notes);
+          if (rewriteAttempt) {
+            const secondVoiceEvaluation = await evaluateKabumoriVoice(
+              openAiApiKey, "close_report", rewriteAttempt.text, closeFactBasis(draft),
+            );
+            secondVoicePassed = secondVoiceEvaluation.passed;
+            if (secondVoiceEvaluation.passed) {
+              finalText = rewriteAttempt.text;
+              finalVoiceEvaluation = secondVoiceEvaluation;
+            }
+          } else {
+            secondVoicePassed = false;
+          }
+        }
+        const voiceRewriteDiagnostics: ReportVoiceRewriteDiagnostics = {
+          first_voice_passed: firstVoiceEvaluation.passed,
+          voice_rewrite_attempted: voiceRewriteAttempted,
+          second_voice_passed: secondVoicePassed,
+          final_voice_failure_stage: finalVoiceEvaluation.passed ? null : (voiceRewriteAttempted ? "after_rewrite" : "first"),
+        };
+        const voicePassed = finalVoiceEvaluation.passed;
+        const wouldPublish = factCheckPassed && voicePassed;
+        const finalTextWithHashtags = wouldPublish ? appendKabumoriReportFixedHashtags(finalText) : finalText;
+        const totalInputTokens = draft.inputTokens + firstVoiceEvaluation.inputTokens
+          + (finalVoiceEvaluation === firstVoiceEvaluation ? 0 : finalVoiceEvaluation.inputTokens);
+        const totalOutputTokens = draft.outputTokens + firstVoiceEvaluation.outputTokens
+          + (finalVoiceEvaluation === firstVoiceEvaluation ? 0 : finalVoiceEvaluation.outputTokens);
+        const totalCost = Number((draft.apiCostUsd + firstVoiceEvaluation.apiCostUsd
+          + (finalVoiceEvaluation === firstVoiceEvaluation ? 0 : finalVoiceEvaluation.apiCostUsd)).toFixed(6));
+        const marketData = closeRunMarketData(draft, finalVoiceEvaluation, "completed", null, voiceRewriteDiagnostics);
+        // Voice FAIL alone does not fail the dry-run itself (it's a confirmation run, not a gate) — it is
+        // only recorded via `error`/`wouldPublish` so it's visible without blocking the response, mirroring
+        // morning_report's dry-run.
+        const dryRunError = !factCheckPassed
+          ? "CLOSE_REPORT_FACT_CHECK_FAILED"
+          : !voicePassed
+          ? "CLOSE_REPORT_VOICE_CHECK_FAILED"
+          : null;
         await updateCloseReportRun(supabaseUrl, serviceRoleKey, runId, {
           generated_at: new Date().toISOString(), source_urls: draft.sourceUrls,
           market_data_timestamp: draft.marketDataTimestamp,
@@ -3489,26 +3570,28 @@ Deno.serve(async (req) => {
           input_tokens: totalInputTokens, output_tokens: totalOutputTokens,
           web_search_calls: draft.webSearchCalls, api_cost_usd: totalCost,
           status: factCheckPassed ? "dry_run_succeeded" : "failed",
-          error: factCheckPassed ? null : "CLOSE_REPORT_FACT_CHECK_FAILED",
-          generated_text: draft.text, character_count: Array.from(draft.text).length,
+          error: dryRunError,
+          generated_text: finalText, character_count: finalText ? Array.from(finalText).length : 0,
           fact_check_status: factCheckPassed ? "passed" : "failed",
-          fact_check_notes: draft.factCheckNotes, voice_evaluation: voiceEvaluation,
+          fact_check_notes: draft.factCheckNotes, voice_evaluation: finalVoiceEvaluation,
           market_data: marketData,
         });
         return jsonResponse({
           mode: "dry_run", published: false, postType: "close_report", runId,
-          generatedText: draft.text, importantPoints: draft.importantPoints,
+          generatedText: finalTextWithHashtags, importantPoints: draft.importantPoints,
           nikkei: draft.nikkei, topix: draft.topix, growth250: draft.growth250,
           strongThemes: draft.strongThemes, weakThemes: draft.weakThemes,
           nikkeiFutures1545: draft.nikkeiFutures1545,
           conditionalFactors: draft.conditionalFactors, carryovers: draft.carryovers,
           sourceUrls: draft.sourceUrls, marketDataTimestamp: draft.marketDataTimestamp,
           tradingDate: draft.tradingDate, runMode: draft.runMode,
-          characterCount: Array.from(draft.text).length, model: draft.model,
+          characterCount: finalText ? Array.from(finalText).length : 0, model: draft.model,
           tokenUsage: { input: totalInputTokens, output: totalOutputTokens },
           webSearchCalls: draft.webSearchCalls, apiCostUsd: totalCost,
           factCheck: { status: factCheckPassed ? "passed" : "failed", notes: draft.factCheckNotes },
-          voiceEvaluation,
+          voiceCheck: { status: voicePassed ? "passed" : "failed" },
+          wouldPublish,
+          voiceEvaluation: finalVoiceEvaluation,
         }, 200);
       } catch (error) {
         const code = safeErrorCode(error);
@@ -3793,7 +3876,7 @@ Deno.serve(async (req) => {
             secondVoicePassed = false;
           }
         }
-        const voiceRewriteDiagnostics: MorningReportVoiceRewriteDiagnostics = {
+        const voiceRewriteDiagnostics: ReportVoiceRewriteDiagnostics = {
           first_voice_passed: firstVoiceEvaluation.passed,
           voice_rewrite_attempted: voiceRewriteAttempted,
           second_voice_passed: secondVoicePassed,
@@ -3925,13 +4008,48 @@ Deno.serve(async (req) => {
             market_data: closeRunMarketData(draft, null, "pending"),
           });
         }
-        const voiceEvaluation = draft.text
+        const firstVoiceEvaluation = draft.text
           ? await evaluateKabumoriVoice(openAiApiKey, "close_report", draft.text, closeFactBasis(draft))
           : skippedVoiceEvaluation("Fact check不合格のため文体評価を未実施");
         if (draft.factCheckStatus !== "passed") throw new Error("CLOSE_REPORT_FACT_CHECK_FAILED");
-        const totalInputTokens = draft.inputTokens + voiceEvaluation.inputTokens;
-        const totalOutputTokens = draft.outputTokens + voiceEvaluation.outputTokens;
-        const totalCost = Number((draft.apiCostUsd + voiceEvaluation.apiCostUsd).toFixed(6));
+
+        // Same at-most-once, same-execution, pre-X-API rewrite pattern as morning_report: only when
+        // generation/format/fact all already passed and only the Voice evaluator rejected the text. This
+        // task also newly gates postToX on the final Voice result below — previously live close_report
+        // saved the Voice evaluation but posted to X unconditionally regardless of voiceEvaluation.passed.
+        let finalText = draft.text;
+        let finalVoiceEvaluation = firstVoiceEvaluation;
+        let voiceRewriteAttempted = false;
+        let secondVoicePassed: boolean | null = null;
+        if (draft.text && !firstVoiceEvaluation.passed) {
+          voiceRewriteAttempted = true;
+          const rewriteAttempt = await attemptCloseReportVoiceRewrite(openAiApiKey, draft.text, firstVoiceEvaluation.notes);
+          if (rewriteAttempt) {
+            const secondVoiceEvaluation = await evaluateKabumoriVoice(
+              openAiApiKey, "close_report", rewriteAttempt.text, closeFactBasis(draft),
+            );
+            secondVoicePassed = secondVoiceEvaluation.passed;
+            if (secondVoiceEvaluation.passed) {
+              finalText = rewriteAttempt.text;
+              finalVoiceEvaluation = secondVoiceEvaluation;
+            }
+          } else {
+            secondVoicePassed = false;
+          }
+        }
+        const voiceRewriteDiagnostics: ReportVoiceRewriteDiagnostics = {
+          first_voice_passed: firstVoiceEvaluation.passed,
+          voice_rewrite_attempted: voiceRewriteAttempted,
+          second_voice_passed: secondVoicePassed,
+          final_voice_failure_stage: finalVoiceEvaluation.passed ? null : (voiceRewriteAttempted ? "after_rewrite" : "first"),
+        };
+
+        const totalInputTokens = draft.inputTokens + firstVoiceEvaluation.inputTokens
+          + (finalVoiceEvaluation === firstVoiceEvaluation ? 0 : finalVoiceEvaluation.inputTokens);
+        const totalOutputTokens = draft.outputTokens + firstVoiceEvaluation.outputTokens
+          + (finalVoiceEvaluation === firstVoiceEvaluation ? 0 : finalVoiceEvaluation.outputTokens);
+        const totalCost = Number((draft.apiCostUsd + firstVoiceEvaluation.apiCostUsd
+          + (finalVoiceEvaluation === firstVoiceEvaluation ? 0 : finalVoiceEvaluation.apiCostUsd)).toFixed(6));
         await updateCloseReportRun(supabaseUrl, serviceRoleKey, closeRunId, {
           generated_at: new Date().toISOString(), source_urls: draft.sourceUrls,
           market_data_timestamp: draft.marketDataTimestamp,
@@ -3939,12 +4057,16 @@ Deno.serve(async (req) => {
           nikkei_futures_1545_data: draft.nikkeiFutures1545,
           input_tokens: totalInputTokens, output_tokens: totalOutputTokens,
           web_search_calls: draft.webSearchCalls, api_cost_usd: totalCost,
-          generated_text: draft.text, character_count: Array.from(draft.text).length,
+          generated_text: finalText, character_count: finalText ? Array.from(finalText).length : 0,
           fact_check_status: "passed", fact_check_notes: draft.factCheckNotes,
-          voice_evaluation: voiceEvaluation,
-          market_data: closeRunMarketData(draft, voiceEvaluation, "completed"),
+          voice_evaluation: finalVoiceEvaluation,
+          market_data: closeRunMarketData(draft, finalVoiceEvaluation, "completed", null, voiceRewriteDiagnostics),
         });
-        const xResult = await postToX(xAuth, draft.text);
+        if (!finalVoiceEvaluation.passed) throw new Error("CLOSE_REPORT_VOICE_CHECK_FAILED");
+        // Fixed, code-side hashtags — never left to the AI prompt or the Voice-rewrite step — appended
+        // exactly once, only after every check above has passed, immediately before the X post itself.
+        const textWithHashtags = appendKabumoriReportFixedHashtags(finalText);
+        const xResult = await postToX(xAuth, textWithHashtags);
         const xPostId = getXPostId(xResult);
         if (!xPostId) throw new Error("X_RESPONSE_MISSING_POST_ID");
         await callRpc(supabaseUrl, serviceRoleKey, "complete_close_report_post", {
@@ -3954,7 +4076,7 @@ Deno.serve(async (req) => {
         });
         return jsonResponse({
           schedule: { id: scheduledPost.id, postType: "close_report", scheduledFor: scheduledPost.scheduled_for },
-          runId: closeRunId, generatedText: draft.text, sourceUrls: draft.sourceUrls,
+          runId: closeRunId, generatedText: textWithHashtags, sourceUrls: draft.sourceUrls,
           marketDataTimestamp: draft.marketDataTimestamp, model: draft.model,
           xPostId, refreshExecuted: xAuth.refreshExecuted,
         }, 201);
@@ -3962,10 +4084,16 @@ Deno.serve(async (req) => {
         if (closeRunId) {
           const code = safeErrorCode(error);
           const voiceFailure = error instanceof VoiceEvaluationOutputError ? error : null;
+          // Both a broken voice-evaluation call (VoiceEvaluationOutputError) and a completed evaluation
+          // that judged the text unsafe (CLOSE_REPORT_VOICE_CHECK_FAILED, possibly after an unsuccessful
+          // rewrite) are voice-layer outcomes, not fact check failures — the underlying Fact Check result
+          // (already recorded correctly by the "completed" write just before the throw) must not be
+          // overwritten to "failed" by either. Mirrors morning_report's identical fix.
+          const isVoiceLayerFailure = Boolean(voiceFailure) || code === "CLOSE_REPORT_VOICE_CHECK_FAILED";
           try {
             await updateCloseReportRun(supabaseUrl, serviceRoleKey, closeRunId, {
               generated_at: new Date().toISOString(), status: "failed", error: code,
-              fact_check_status: voiceFailure && draft?.factCheckStatus === "passed" ? "passed" : "failed",
+              fact_check_status: isVoiceLayerFailure && draft?.factCheckStatus === "passed" ? "passed" : "failed",
               ...(voiceFailure && draft ? {
                 fact_check_notes: [...draft.factCheckNotes, ...voiceEvaluationFailureNotes(error)],
                 voice_evaluation: {
