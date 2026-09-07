@@ -3,7 +3,7 @@
 - task_id: close-report-factcheck-dryrun-live-parity-20260907
 - owner: claude
 - slot: claude-2
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: urgent
 - purpose: 2026-09-07 の close_report で、同じ production v89 に対し `close_report_dry_run` は `factCheck=passed / wouldPublish=true` だった一方、1回だけ実行した live close_report は `CLOSE_REPORT_FACT_CHECK_FAILED` で X API 前に安全停止した。dry-run/live の差分を根本原因まで特定し、最小修正する。
@@ -127,3 +127,19 @@
   - 本番deploy、X実投稿：一切実施していない
   - 他workstream（stocks sync関連、`.env`、`.claude/launch.json`、`apps/admin`、Codexの`.agent`ファイル等）：一切変更・stage・commitしていない
 - next_recommendation: (a) 今回のcommit`ce15350`をレビューし問題なければK2、(b) 承認後、次回の`x-test-post`本番deployでこの修正を反映（deployは本タスクのforbidden対象のため未実施）、(c) deploy後は`close_report_dry_run`を通常運用時刻（16:00 JST付近）で再実行し、新しい参照時刻ベース文言でfactCheck=passedが安定して得られることをread-onlyで確認することを推奨、(d) `close_report_runs.fact_check_notes`が今後のlive失敗で正しく埋まることも合わせて確認
+
+## K2 Review
+
+- decision: approved
+- reviewed_by: chatgpt
+- reviewed_commit: `ce15350`
+- result:
+  - dry-run/liveでFact Check cutoff instructionが分岐していた問題を解消し、参照時刻ベースの単一条件へ統一した修正を承認
+  - live Fact Check失敗時に`fact_check_notes`が空になる診断欠落を、dry-run/live両方で`draft.factCheckNotes`へフォールバックする形で解消したことを確認
+  - close_report Voice gate、Voice rewrite最大1回、固定4タグの最終Voice後付与、X二重投稿防止に変更がないことを確認
+  - close_report 46/46、full regression 330/330 PASS
+  - production deploy / X実投稿 / posting_windows / DB migration / Cron / secrets / 他Function変更なし
+- next:
+  - `ce15350`を反映した`x-test-post`本番deploy
+  - deploy後`close_report_dry_run`でFact Check/Voice/wouldPublish/固定4タグを再確認
+  - 問題なければclose_report posting window有効化を検討
