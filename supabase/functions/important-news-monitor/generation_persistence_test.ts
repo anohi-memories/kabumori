@@ -31,6 +31,12 @@ test("6+9: repository.save persists the AI Fact/Voice check's own issues, not a 
   assert.match(fn, /generation_voice_status:\s*generated\.voice\.status/u);
 });
 
+test("Fact retry diagnostics are persisted inside the existing JSONB retry column without a migration", async () => {
+  const fn = await repositoryMethodSource("async save(candidateId, generated) {");
+  assert.match(fn, /generationRetryDiagnosticsPayload\(generated\.voiceRetry, generated\.factRetry\)/u);
+  assert.doesNotMatch(fn, /generation_fact_retry:/u);
+});
+
 test("10: repository.save's persisted body never includes prompt text, instructions, or secrets", async () => {
   const fn = await repositoryMethodSource("async save(candidateId, generated) {");
   const bodyStart = fn.indexOf("body: JSON.stringify({");

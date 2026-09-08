@@ -4,7 +4,7 @@ Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは
 
 - task_id: important-news-generation-reliability-fix-20260908
 - owner: codex
-- status: ready
+- status: review_required
 - next_owner: codex
 - purpose: `important` / `most_important` に採用された重要ニュースが、企業同一性判定や軽微なFact不整合で生成全落ちする問題を、安全性を維持したまま最小修正する。
 - priority: high
@@ -175,3 +175,31 @@ DB schema追加が必要なら勝手にmigrationせず、既存JSON列等で安�
 - push: 実装完了後、既存運用に従う。競合や不明点があれば勝手にpushせずReport。
 - deploy: 禁止
 - report_mode: inline
+
+## Report
+
+- task_id: important-news-generation-reliability-fix-20260908
+- result: review_required
+- changed_files:
+  - `supabase/functions/important-news-monitor/post_generation_logic.ts`
+  - `supabase/functions/important-news-monitor/post_generation_logic_test.ts`
+  - `supabase/functions/important-news-monitor/index.ts`
+  - `supabase/functions/important-news-monitor/generation_persistence_test.ts`
+- implementation: trusted TDnet company-code/entity evidence now permits only narrow primary-header suffix differences, including 小森/小森コーポレーション and 旭コンクリ/旭コンクリート工業; unrelated prefixes, unsafe suffixes, and mismatched identity signals remain rejected.
+- fact_retry: safe, single `fact_retry` is allowed only for explicit year/date restoration, deterministic unsupported market interpretation removal, confirmed company spelling, or minor label consistency. The revised text is rechecked locally and by AI Fact before Voice.
+- voice_retry: existing one-at-most Voice retry remains bounded; Fact and Voice retries cannot recursively repeat.
+- diagnostics: Fact retry details are placed inside the existing `generation_voice_retry` JSONB payload as a nested `fact_retry` object. No migration was added.
+- tests: relevant post-generation plus persistence tests `106/106` passed; full important-news-monitor suite `255/255` passed with `--no-check --allow-read`; `git diff --check` passed; post-generation and dispatch type checks passed. Full index type check remains blocked by the existing missing `npm:unpdf@1.8.1` dependency in this clean environment; no new type error was observed in changed modules.
+- commit_hash: `f43a95e` (local, ready to push)
+- push: pending
+- deploy: 0
+- production_db_write: 0
+- migration: 0
+- cron/settings: 0
+- OpenAI_real_api: 0
+- X_API: 0
+- X_post: 0
+- apps/admin: 0
+- HANDOFF.md: 0
+- secrets_exposed: 0
+- next_owner: chatgpt

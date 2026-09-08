@@ -718,6 +718,30 @@ function voiceRetryDiagnosticsPayload(voiceRetry: PostGenerationResult["voiceRet
   };
 }
 
+function factRetryDiagnosticsPayload(factRetry: PostGenerationResult["factRetry"]) {
+  return {
+    fact_retry_count: factRetry.attempted ? 1 : 0,
+    attempted: factRetry.attempted,
+    used_model: factRetry.usedModel,
+    initial_fact_issues: factRetry.initialFactIssues,
+    local_fact_status: factRetry.localFactStatus,
+    local_fact_issues: factRetry.localFactIssues,
+    retry_fact_status: factRetry.retryFactStatus,
+    retry_fact_issues: factRetry.retryFactIssues,
+    retry_error: factRetry.error,
+  };
+}
+
+function generationRetryDiagnosticsPayload(
+  voiceRetry: PostGenerationResult["voiceRetry"],
+  factRetry: PostGenerationResult["factRetry"],
+) {
+  return {
+    ...voiceRetryDiagnosticsPayload(voiceRetry),
+    fact_retry: factRetryDiagnosticsPayload(factRetry),
+  };
+}
+
 // P0.6: real DB-backed implementation of GenerationDispatchRepository (generation_dispatch_logic.ts).
 // claim() is a single atomic conditional PATCH (ready_for_generation -> generating), mirroring
 // createPublishRepository's claim() (-> publishing) below — the same proven pattern, applied to
@@ -767,7 +791,9 @@ function createGenerationRepository(
           generation_fact_issues: generated.fact.issues,
           generation_voice_status: generated.voice.status,
           generation_voice_issues: generated.voice.issues,
-          generation_voice_retry: voiceRetryDiagnosticsPayload(generated.voiceRetry),
+          // Keep the existing JSONB column and shape for Voice diagnostics, adding the Fact retry
+          // object alongside it without a schema migration.
+          generation_voice_retry: generationRetryDiagnosticsPayload(generated.voiceRetry, generated.factRetry),
           generation_error: generated.stoppedReason,
           generated_at: new Date().toISOString(),
           status: generated.status,
@@ -819,6 +845,8 @@ function generationResponse(
     estimatedCost: generated.estimatedCost,
     status: generated.status,
     stoppedReason: generated.stoppedReason,
+    factRetry: generated.factRetry,
+    voiceRetry: generated.voiceRetry,
     databaseUpdated: !dryRun,
   };
 }

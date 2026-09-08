@@ -26,7 +26,7 @@ export type GenerationCheck = {
   issues: string[];
 };
 
-export type GenerationStep = "draft" | "fact" | "voice" | "voice_retry";
+export type GenerationStep = "draft" | "fact" | "fact_retry" | "voice" | "voice_retry";
 export type GenerationStepResult = {
   payload: unknown;
   model: "gpt-5.6-luna";
@@ -38,8 +38,30 @@ export type GenerationRunner = (
   step: GenerationStep,
   candidate: GenerationCandidate,
   generatedText?: string,
-  voiceIssues?: string[],
+  checkIssues?: string[],
 ) => Promise<GenerationStepResult>;
+
+export type FactRetryDiagnostics = {
+  attempted: boolean;
+  usedModel: "gpt-5.6-luna" | null;
+  initialFactIssues: string[];
+  localFactStatus: GenerationCheck["status"] | null;
+  localFactIssues: string[];
+  retryFactStatus: GenerationCheck["status"] | null;
+  retryFactIssues: string[];
+  error: string | null;
+};
+
+export const NO_FACT_RETRY: FactRetryDiagnostics = {
+  attempted: false,
+  usedModel: null,
+  initialFactIssues: [],
+  localFactStatus: null,
+  localFactIssues: [],
+  retryFactStatus: null,
+  retryFactIssues: [],
+  error: null,
+};
 
 // P0.6: at most one voice_retry per candidate, and only when the initial Fact check already passed and
 // every reported Voice issue is a recognized minor wording problem (see isRetryableVoiceFailure below) —
@@ -84,6 +106,7 @@ export type PostGenerationResult = {
   estimatedCost: number;
   status: "ready_for_publish" | "generation_failed";
   stoppedReason: string | null;
+  factRetry: FactRetryDiagnostics;
   voiceRetry: VoiceRetryDiagnostics;
 };
 
@@ -272,8 +295,46 @@ const KNOWN_COMPANY_NAME_ALIASES: Readonly<Record<string, string>> = {
   "72790": "ハイレックスコーポレーション", // TSE 7279 ハイレックスコーポレーション — DB short display name is "ハイレックス"
 };
 
+// A code/entity match is necessary but not by itself sufficient to accept a name difference.  The
+// primary source must still contain the candidate company name (or a safe display alias) and the
+// longer form must only add a conventional corporate suffix.  This covers TDnet's common short-name
+// extraction cases such as 小森 -> 小森コーポレーション and 旭コンクリ -> 旭コンクリート工業,
+// while deliberately rejecting generic 商事/物産 suffixes and arbitrary partial matches.
+const SAFE_COMPANY_NAME_SUFFIXES = [
+  /コーポレーション$/u,
+  /ホールディングス?$/u,
+  /グループ$/u,
+  /工業$/u,
+  /産業$/u,
+  /製作所$/u,
+];
+
+function namesMatchWithSafeSuffix(
+  acceptedName: string,
+  primaryName: string,
+  allowSafeSuffix: boolean,
+): boolean {
+  const accepted = normalizedCompanyIdentity(acceptedName, true);
+  const primary = normalizedCompanyIdentity(primaryName, false);
+  if (accepted.length < 2 || primary.length < 2) return false;
+  if (accepted === primary) return true;
+  if (!allowSafeSuffix) return false;
+  // Only the already-known metadata/display name may be the short form.  Accepting the inverse
+  // direction would turn a source's short name into an alias for a longer metadata name (e.g.
+  // G-BASE -> BASE), which is exactly the kind of false integration this guard is meant to prevent.
+  if (accepted.length >= primary.length || !primary.startsWith(accepted)) return false;
+  const suffix = primary.slice(accepted.length);
+  return suffix.length >= 2 && SAFE_COMPANY_NAME_SUFFIXES.some((pattern) => pattern.test(primary));
+}
+
 export function companyIdentityEvidence(candidate: GenerationCandidate): CompanyIdentityEvidence {
   const candidateNames = primarySourceCompanyNameCandidates(candidate.bodySummary);
+  const normalizedBody = candidate.bodySummary?.normalize("NFKC") ?? "";
+  const headerNames = new Set([
+    extractHeaderCompanyName(normalizedBody),
+    extractListedCompanyName(normalizedBody),
+    extractTobOfferorName(normalizedBody),
+  ].filter((value): value is string => typeof value === "string" && value.length > 0));
   const companyCode = candidate.companyCode?.trim() || null;
   const metadataName = candidate.companyName?.trim() || null;
   let trustedTdnetSource = false;
@@ -299,8 +360,7 @@ export function companyIdentityEvidence(candidate: GenerationCandidate): Company
   const matchedName = acceptableMetadataNames.length > 0
     ? candidateNames.find((name) =>
       acceptableMetadataNames.some((accepted) =>
-        normalizedCompanyIdentity(accepted, true) === normalizedCompanyIdentity(name, false) &&
-        normalizedCompanyIdentity(name, false).length >= 2
+        namesMatchWithSafeSuffix(accepted, name, headerNames.has(name))
       )
     ) ?? null
     : null;
@@ -320,7 +380,8 @@ export function companyIdentityEvidence(candidate: GenerationCandidate): Company
 export function generationModelInput(
   candidate: GenerationCandidate,
   generatedText?: string,
-  voiceIssues?: string[],
+  checkIssues?: string[],
+  factRetry = false,
 ) {
   const companyIdentity = companyIdentityEvidence(candidate);
   return {
@@ -330,7 +391,7 @@ export function generationModelInput(
     },
     company_identity: companyIdentity,
     generated_text: generatedText ?? null,
-    ...(voiceIssues ? { voice_issues: voiceIssues } : {}),
+    ...(checkIssues ? { [factRetry ? "fact_issues" : "voice_issues"]: checkIssues } : {}),
   };
 }
 
@@ -343,6 +404,18 @@ function hasUnsupportedMarketAssertion(candidate: GenerationCandidate, generated
   return MARKET_ASSERTION_RULES.some(({ claim, evidence: grounding }) =>
     claim.test(text) && !grounding.test(evidence)
   );
+}
+
+function explicitYears(candidate: GenerationCandidate): string[] {
+  const evidence = [candidate.title, candidate.bodySummary, candidate.judgementReason]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join("\n");
+  return [...new Set(evidence.match(/(?:19|20)\d{2}/gu) ?? [])];
+}
+
+function hasMissingExplicitYear(candidate: GenerationCandidate, generatedText: string): boolean {
+  const years = explicitYears(candidate);
+  return years.length > 0 && years.some((year) => !generatedText.includes(year));
 }
 
 export function localFactIssues(candidate: GenerationCandidate, generatedText: string): string[] {
@@ -359,6 +432,9 @@ export function localFactIssues(candidate: GenerationCandidate, generatedText: s
   }
   if (hasUnsupportedMarketAssertion(candidate, generatedText)) {
     issues.push("UNSUPPORTED_MARKET_INTERPRETATION");
+  }
+  if (hasMissingExplicitYear(candidate, generatedText)) {
+    issues.push("MISSING_EXPLICIT_YEAR");
   }
   if (AMBIGUOUS_ENTITY_RELATIONSHIP.test(generatedText)) {
     issues.push("AMBIGUOUS_ENTITY_RELATIONSHIP");
@@ -442,13 +518,150 @@ export function isRetryableVoiceFailure(issues: string[]): boolean {
   );
 }
 
-function parseRetryText(value: unknown): { text: string } {
-  if (typeof value !== "object" || value === null) throw new Error("NEWS_GENERATION_VOICE_RETRY_INVALID_OUTPUT");
+function parseRevisionText(value: unknown, errorCode: string): { text: string } {
+  if (typeof value !== "object" || value === null) throw new Error(errorCode);
   const item = value as Record<string, unknown>;
   if (typeof item.text !== "string" || !item.text.trim()) {
-    throw new Error("NEWS_GENERATION_VOICE_RETRY_INVALID_OUTPUT");
+    throw new Error(errorCode);
   }
   return { text: item.text.trim() };
+}
+
+function parseRetryText(value: unknown): { text: string } {
+  return parseRevisionText(value, "NEWS_GENERATION_VOICE_RETRY_INVALID_OUTPUT");
+}
+
+const NON_RETRYABLE_FACT_ISSUE_PATTERNS: RegExp[] = [
+  /数字|数値|金額|割合|コード|証券|日時|時刻|発生|規模|対象範囲|条件|出典|URL|source|情報不足|不明|取り違え|同一性|別企業/iu,
+];
+
+function isRetryableFactIssue(
+  candidate: GenerationCandidate,
+  generatedText: string,
+  issue: string,
+  deterministicIssues: string[],
+): boolean {
+  // A local deterministic hit means this is specifically an unsupported assertion in the generated
+  // text; removing that assertion is safe even when the model phrases the issue as "根拠のない因果".
+  if (
+    deterministicIssues.includes("UNSUPPORTED_MARKET_INTERPRETATION") &&
+    /市場|影響|因果|解釈/u.test(issue) &&
+    !/因果関係.*(?:不明|疑義|曖昧|成立)|規模|対象範囲|条件/u.test(issue)
+  ) {
+    return true;
+  }
+  if (NON_RETRYABLE_FACT_ISSUE_PATTERNS.some((pattern) => pattern.test(issue))) return false;
+  if (issue === "MISSING_EXPLICIT_YEAR" || /年|日付|年月日.*(?:欠落|不足|抜け|記載)/u.test(issue)) {
+    return deterministicIssues.includes("MISSING_EXPLICIT_YEAR") && hasMissingExplicitYear(candidate, generatedText);
+  }
+  if (issue === "UNSUPPORTED_MARKET_INTERPRETATION" || /市場|影響|因果|解釈/u.test(issue)) {
+    return deterministicIssues.includes("UNSUPPORTED_MARKET_INTERPRETATION");
+  }
+  if (/会社名|企業名|法人名|略称|正式名称|表記/u.test(issue)) {
+    return companyIdentityEvidence(candidate).sameCompanyConfirmed;
+  }
+  if (/ラベル|軽微な表記|表記整合|スペル|綴り/u.test(issue)) {
+    return deterministicIssues.includes("NEWS_LABEL_IMPORTANCE_MISMATCH");
+  }
+  return false;
+}
+
+export function isRetryableFactFailure(
+  candidate: GenerationCandidate,
+  generatedText: string,
+  issues: string[],
+): boolean {
+  if (issues.length === 0) return false;
+  const deterministicIssues = localFactIssues(candidate, generatedText);
+  return issues.every((issue) => isRetryableFactIssue(candidate, generatedText, issue, deterministicIssues));
+}
+
+async function attemptFactRetry(
+  candidate: GenerationCandidate,
+  originalText: string,
+  initialFactIssues: string[],
+  runner: GenerationRunner,
+  usage: GenerationStepResult[],
+): Promise<{ text: string | null; fact: GenerationCheck; diagnostics: FactRetryDiagnostics }> {
+  let retryStep: GenerationStepResult;
+  try {
+    retryStep = await runner("fact_retry", candidate, originalText, initialFactIssues);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "NEWS_GENERATION_FACT_RETRY_FAILED";
+    return {
+      text: null,
+      fact: { status: "failed", issues: initialFactIssues },
+      diagnostics: { ...NO_FACT_RETRY, attempted: true, initialFactIssues, error: message },
+    };
+  }
+  usage.push(retryStep);
+  let revised: { text: string };
+  try {
+    revised = parseRevisionText(retryStep.payload, "NEWS_GENERATION_FACT_RETRY_INVALID_OUTPUT");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "NEWS_GENERATION_FACT_RETRY_INVALID_OUTPUT";
+    return {
+      text: null,
+      fact: { status: "failed", issues: ["FACT_RETRY_INVALID_OUTPUT"] },
+      diagnostics: {
+        attempted: true, usedModel: retryStep.model, initialFactIssues,
+        localFactStatus: null, localFactIssues: [], retryFactStatus: "failed", retryFactIssues: [], error: message,
+      },
+    };
+  }
+  const revisedText = appendSourceUrl(applyRequiredNewsLabel(revised.text, candidate.importance), candidate.sourceUrl);
+  const localIssues = localFactIssues(candidate, revisedText);
+  if (localIssues.length > 0) {
+    return {
+      text: revisedText,
+      fact: { status: "failed", issues: localIssues },
+      diagnostics: {
+        attempted: true, usedModel: retryStep.model, initialFactIssues,
+        localFactStatus: "failed", localFactIssues: localIssues,
+        retryFactStatus: null, retryFactIssues: [], error: null,
+      },
+    };
+  }
+  let retryFactStep: GenerationStepResult;
+  try {
+    retryFactStep = await runner("fact", candidate, revisedText);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "NEWS_GENERATION_FACT_RETRY_FAILED";
+    return {
+      text: revisedText,
+      fact: { status: "failed", issues: ["FACT_RETRY_FAILED"] },
+      diagnostics: {
+        attempted: true, usedModel: retryStep.model, initialFactIssues,
+        localFactStatus: "passed", localFactIssues: [],
+        retryFactStatus: "failed", retryFactIssues: ["FACT_RETRY_FAILED"], error: message,
+      },
+    };
+  }
+  usage.push(retryFactStep);
+  let retryFact: GenerationCheck;
+  try {
+    retryFact = parseCheck(retryFactStep.payload, "NEWS_GENERATION_FACT_INVALID_OUTPUT");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "NEWS_GENERATION_FACT_INVALID_OUTPUT";
+    return {
+      text: revisedText,
+      fact: { status: "failed", issues: ["FACT_RETRY_INVALID_OUTPUT"] },
+      diagnostics: {
+        attempted: true, usedModel: retryStep.model, initialFactIssues,
+        localFactStatus: "passed", localFactIssues: [],
+        retryFactStatus: "failed", retryFactIssues: ["FACT_RETRY_INVALID_OUTPUT"], error: message,
+      },
+    };
+  }
+  return {
+    text: revisedText,
+    fact: retryFact,
+    diagnostics: {
+      attempted: true, usedModel: retryStep.model, initialFactIssues,
+      localFactStatus: "passed", localFactIssues: [],
+      retryFactStatus: retryFact.status, retryFactIssues: retryFact.issues, error: null,
+    },
+  };
 }
 
 // Exactly one retry attempt: called from at most one of the two Voice-failure branches in
@@ -538,13 +751,14 @@ async function finishWithVoiceRetry(
   initialVoiceIssues: string[],
   runner: GenerationRunner,
   usage: GenerationStepResult[],
+  factRetry: FactRetryDiagnostics = NO_FACT_RETRY,
 ): Promise<PostGenerationResult> {
   const retry = await attemptVoiceRetry(candidate, originalText, initialVoiceIssues, runner, usage);
   const finalText = retry.text ?? originalText;
   const stoppedReason = retry.fact.status === "passed" && retry.voice.status === "passed"
     ? null
     : "NEWS_GENERATION_VOICE_FAILED";
-  return finish(finalText, candidate.sourceUrl, usage, retry.fact, retry.voice, stoppedReason, retry.diagnostics);
+  return finish(finalText, candidate.sourceUrl, usage, retry.fact, retry.voice, stoppedReason, retry.diagnostics, factRetry);
 }
 
 export async function generateImportantNewsPost(
@@ -564,6 +778,7 @@ export async function generateImportantNewsPost(
       estimatedCost: 0,
       status: "generation_failed",
       stoppedReason: eligibilityError,
+      factRetry: NO_FACT_RETRY,
       voiceRetry: NO_VOICE_RETRY,
     };
   }
@@ -579,34 +794,58 @@ export async function generateImportantNewsPost(
     }, { status: "not_run", issues: ["FACT_NOT_PASSED"] }, "NEWS_GENERATION_INFORMATION_INSUFFICIENT");
   }
 
-  const generatedText = appendSourceUrl(
+  let generatedText = appendSourceUrl(
     applyRequiredNewsLabel(draft.text, candidate.importance),
     candidate.sourceUrl,
   );
+  let factRetry = NO_FACT_RETRY;
+  let fact: GenerationCheck;
   const deterministicIssues = localFactIssues(candidate, generatedText);
   if (deterministicIssues.length > 0) {
-    return finish(generatedText, candidate.sourceUrl, usage, {
-      status: "failed", issues: deterministicIssues,
-    }, { status: "not_run", issues: ["FACT_NOT_PASSED"] }, "NEWS_GENERATION_LOCAL_FACT_FAILED");
-  }
-
-  const factStep = await runner("fact", candidate, generatedText);
-  usage.push(factStep);
-  const fact = parseCheck(factStep.payload, "NEWS_GENERATION_FACT_INVALID_OUTPUT");
-  if (fact.status !== "passed") {
-    return finish(generatedText, candidate.sourceUrl, usage, fact, {
-      status: "not_run", issues: ["FACT_NOT_PASSED"],
-    }, "NEWS_GENERATION_FACT_FAILED");
+    if (!isRetryableFactFailure(candidate, generatedText, deterministicIssues)) {
+      return finish(generatedText, candidate.sourceUrl, usage, {
+        status: "failed", issues: deterministicIssues,
+      }, { status: "not_run", issues: ["FACT_NOT_PASSED"] }, "NEWS_GENERATION_LOCAL_FACT_FAILED");
+    }
+    const retry = await attemptFactRetry(candidate, generatedText, deterministicIssues, runner, usage);
+    factRetry = retry.diagnostics;
+    if (retry.fact.status !== "passed" || !retry.text) {
+      return finish(retry.text ?? generatedText, candidate.sourceUrl, usage, retry.fact, {
+        status: "not_run", issues: ["FACT_NOT_PASSED"],
+      }, "NEWS_GENERATION_FACT_RETRY_FAILED", NO_VOICE_RETRY, factRetry);
+    }
+    generatedText = retry.text;
+    fact = retry.fact;
+  } else {
+    const factStep = await runner("fact", candidate, generatedText);
+    usage.push(factStep);
+    fact = parseCheck(factStep.payload, "NEWS_GENERATION_FACT_INVALID_OUTPUT");
+    if (fact.status !== "passed") {
+      if (!isRetryableFactFailure(candidate, generatedText, fact.issues)) {
+        return finish(generatedText, candidate.sourceUrl, usage, fact, {
+          status: "not_run", issues: ["FACT_NOT_PASSED"],
+        }, "NEWS_GENERATION_FACT_FAILED");
+      }
+      const retry = await attemptFactRetry(candidate, generatedText, fact.issues, runner, usage);
+      factRetry = retry.diagnostics;
+      if (retry.fact.status !== "passed" || !retry.text) {
+        return finish(retry.text ?? generatedText, candidate.sourceUrl, usage, retry.fact, {
+          status: "not_run", issues: ["FACT_NOT_PASSED"],
+        }, "NEWS_GENERATION_FACT_RETRY_FAILED", NO_VOICE_RETRY, factRetry);
+      }
+      generatedText = retry.text;
+      fact = retry.fact;
+    }
   }
 
   const deterministicVoiceIssues = localVoiceIssues(generatedText);
   if (deterministicVoiceIssues.length > 0) {
     if (isRetryableVoiceFailure(deterministicVoiceIssues)) {
-      return await finishWithVoiceRetry(candidate, generatedText, deterministicVoiceIssues, runner, usage);
+      return await finishWithVoiceRetry(candidate, generatedText, deterministicVoiceIssues, runner, usage, factRetry);
     }
     return finish(generatedText, candidate.sourceUrl, usage, fact, {
       status: "failed", issues: deterministicVoiceIssues,
-    }, "NEWS_GENERATION_VOICE_FAILED");
+    }, "NEWS_GENERATION_VOICE_FAILED", NO_VOICE_RETRY, factRetry);
   }
 
   const voiceStep = await runner("voice", candidate, generatedText);
@@ -614,11 +853,11 @@ export async function generateImportantNewsPost(
   const voice = parseCheck(voiceStep.payload, "NEWS_GENERATION_VOICE_INVALID_OUTPUT");
   if (voice.status !== "passed") {
     if (isRetryableVoiceFailure(voice.issues)) {
-      return await finishWithVoiceRetry(candidate, generatedText, voice.issues, runner, usage);
+      return await finishWithVoiceRetry(candidate, generatedText, voice.issues, runner, usage, factRetry);
     }
-    return finish(generatedText, candidate.sourceUrl, usage, fact, voice, "NEWS_GENERATION_VOICE_FAILED");
+    return finish(generatedText, candidate.sourceUrl, usage, fact, voice, "NEWS_GENERATION_VOICE_FAILED", NO_VOICE_RETRY, factRetry);
   }
-  return finish(generatedText, candidate.sourceUrl, usage, fact, voice, null);
+  return finish(generatedText, candidate.sourceUrl, usage, fact, voice, null, NO_VOICE_RETRY, factRetry);
 }
 
 function finish(
@@ -629,6 +868,7 @@ function finish(
   voice: GenerationCheck,
   stoppedReason: string | null,
   voiceRetry: VoiceRetryDiagnostics = NO_VOICE_RETRY,
+  factRetry: FactRetryDiagnostics = NO_FACT_RETRY,
 ): PostGenerationResult {
   return {
     generatedText,
@@ -641,6 +881,7 @@ function finish(
     estimatedCost: Number(usage.reduce((total, item) => total + item.estimatedCost, 0).toFixed(8)),
     status: generationStatus(fact.status, voice.status),
     stoppedReason,
+    factRetry,
     voiceRetry,
   };
 }
@@ -718,9 +959,15 @@ export async function requestGenerationStep(
   const variationKey = `${candidate.id ?? candidate.sourceUrl}:${candidate.publishedAt}`;
   const isDraft = step === "draft";
   const isFact = step === "fact";
+  const isFactRetry = step === "fact_retry";
   const isVoiceRetry = step === "voice_retry";
-  const schema = isDraft ? DRAFT_SCHEMA : isVoiceRetry ? VOICE_RETRY_SCHEMA : CHECK_SCHEMA;
-  const instructions = isVoiceRetry ? [
+  const schema = isDraft ? DRAFT_SCHEMA : isFactRetry || isVoiceRetry ? VOICE_RETRY_SCHEMA : CHECK_SCHEMA;
+  const instructions = isFactRetry ? [
+    "あなたは重要ニュース投稿の限定Fact修正担当です。入力候補・一次情報・judgementにある事実を変えず、指摘された軽微なFact不整合だけを機械的に修正してください。",
+    "許可される修正は、入力に明示された年・日付を本文へ戻すこと、根拠のない市場解釈・影響解釈・因果表現を削除すること、確認済み同一企業の安全な正式表記へ統一すること、軽微なラベル/表記整合だけです。",
+    "数値、企業・証券コードの同一性、日付や出来事の発生時刻、因果関係・規模・対象範囲・条件、元情報、source URLに疑義がある場合は推測で直しません。新しい事実・解釈・市場影響・因果関係を追加しません。",
+    "fact_issuesに指摘のない箇所は極力そのまま維持し、修正後の本文だけをtextとして返してください。見出しラベルやURL、『出典』表記はtextに含めず、プログラム側で処理します。",
+  ].join("\n") : isVoiceRetry ? [
     "あなたは重要ニュース投稿の限定修正担当です。事実・数字・固有名詞・意味・出典を一切変えず、指摘された文章品質の問題（重複表現、同義反復、同内容の連続説明、冗長、不自然な接続・締め、不自然な英単語・和英混在、助詞や単複などの軽微な文法）だけを修正してください。",
     "新しい事実、解釈、市場影響、因果関係を追加しません。元のgenerated_textにない情報を補いません。文の順序や構成は必要な範囲でのみ整えます。",
     "voice_issuesに指摘のない箇所は極力そのまま維持します。見出しラベル（【速報】【重大速報】）やURL、『出典』表記はtextに含めません。プログラム側で処理します。",
@@ -767,9 +1014,14 @@ export async function requestGenerationStep(
       model: MODEL,
       store: false,
       reasoning: { effort: "low" },
-      max_output_tokens: isDraft || isVoiceRetry ? 1400 : 650,
+      max_output_tokens: isDraft || isFactRetry || isVoiceRetry ? 1400 : 650,
       instructions,
-      input: JSON.stringify(generationModelInput(candidate, generatedText, isVoiceRetry ? voiceIssues : undefined)),
+      input: JSON.stringify(generationModelInput(
+        candidate,
+        generatedText,
+        isFactRetry || isVoiceRetry ? voiceIssues : undefined,
+        isFactRetry,
+      )),
       text: { format: { type: "json_schema", name: `important_news_${step}`, strict: true, schema } },
     }),
   });

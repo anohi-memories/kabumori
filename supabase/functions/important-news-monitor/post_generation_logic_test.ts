@@ -8,6 +8,7 @@ import {
   generationModelInput,
   hasMatchingRequiredNewsLabel,
   isRetryableVoiceFailure,
+  isRetryableFactFailure,
   localFactIssues,
   localVoiceIssues,
   normalizeSecurityCodeForComparison,
@@ -213,6 +214,41 @@ test("clearly different companies cannot be confirmed by partial similarity", ()
     bodySummary: "会 社 名 BASE 株式会社",
   }));
   assert.equal(identity.sameCompanyConfirmed, false);
+});
+
+test("TDnet short name 小森 is confirmed against the primary source's 小森コーポレーション only with trusted identity signals", () => {
+  const identity = companyIdentityEvidence(candidate({
+    companyName: "小森",
+    companyCode: "63490",
+    entityKey: "company:63490",
+    bodySummary: "各 位\n会 社 名 株式会社 小森コーポレーション\n代表者名 代表取締役",
+  }));
+  assert.equal(identity.sameCompanyConfirmed, true);
+  assert.equal(identity.primarySourceName, "株式会社 小森コーポレーション");
+});
+
+test("TDnet short name 旭コンクリ is confirmed against 旭コンクリート工業 only with trusted identity signals", () => {
+  const identity = companyIdentityEvidence(candidate({
+    companyName: "旭コンクリ",
+    companyCode: "52680",
+    entityKey: "company:52680",
+    bodySummary: "各 位\n会 社 名 旭コンクリート工業株式会社\n代表者名 代表取締役",
+  }));
+  assert.equal(identity.sameCompanyConfirmed, true);
+  assert.equal(identity.primarySourceName, "旭コンクリート工業株式会社");
+});
+
+test("short-name matching never overrides a mismatched company code or an unsafe suffix", () => {
+  const mismatchedCode = companyIdentityEvidence(candidate({
+    companyName: "小森", companyCode: "63490", entityKey: "company:99990",
+    bodySummary: "各 位\n会 社 名 株式会社 小森コーポレーション",
+  }));
+  const unsafeSuffix = companyIdentityEvidence(candidate({
+    companyName: "小森", companyCode: "63490", entityKey: "company:63490",
+    bodySummary: "各 位\n会 社 名 小森商事株式会社",
+  }));
+  assert.equal(mismatchedCode.sameCompanyConfirmed, false);
+  assert.equal(unsafeSuffix.sameCompanyConfirmed, false);
 });
 
 test("ambiguous grouping of companies with different roles fails local Fact", () => {
@@ -794,7 +830,8 @@ test("unsupported EC and finance theme interpretation fails local Fact", async (
     },
   }));
   assert.equal(result.fact.status, "failed");
-  assert.deepEqual(result.fact.issues, ["UNSUPPORTED_MARKET_INTERPRETATION"]);
+  assert.equal(result.factRetry.attempted, true);
+  assert.deepEqual(result.factRetry.retryFactIssues, []);
   assert.equal(result.voice.status, "not_run");
 });
 
@@ -812,7 +849,7 @@ test("label normalization keeps unsupported market interpretation detection", as
     },
   }));
   assert.equal(result.fact.status, "failed");
-  assert.deepEqual(result.fact.issues, ["UNSUPPORTED_MARKET_INTERPRETATION"]);
+  assert.equal(result.factRetry.attempted, true);
   assert.equal(result.generatedText?.startsWith("【速報】"), true);
   assert.equal((result.generatedText?.match(/【(?:重大)?速報】/g) ?? []).length, 1);
   assert.equal(result.voice.status, "not_run");
@@ -868,6 +905,112 @@ test("normal generation transitions only after both checks pass", async () => {
   assert.equal(result.status, "ready_for_publish");
   assert.equal(result.inputTokens, 300);
   assert.equal(result.outputTokens, 150);
+});
+
+test("Fact retry restores an explicit year, rechecks Fact, then reaches Voice exactly once", async () => {
+  const target = candidate({
+    title: "2026年8月期 通期業績予想の上方修正について",
+    bodySummary: "2026年8月期の営業利益予想を上方修正",
+  });
+  const { runner, calls } = scriptedRunner([
+    { step: "draft", payload: { text: "通期業績予想を上方修正しました。", sufficient_information: true, notes: [] } },
+    { step: "fact_retry", payload: { text: "2026年8月期の通期業績予想を上方修正しました。" } },
+    { step: "fact", payload: { passed: true, issues: [] } },
+    { step: "voice", payload: { passed: true, issues: [] } },
+  ]);
+  const result = await generateImportantNewsPost(target, runner);
+  assert.deepEqual(calls, ["draft", "fact_retry", "fact", "voice"]);
+  assert.equal(result.status, "ready_for_publish");
+  assert.equal(result.factRetry.attempted, true);
+  assert.deepEqual(result.factRetry.initialFactIssues, ["MISSING_EXPLICIT_YEAR"]);
+  assert.equal(result.factRetry.localFactStatus, "passed");
+  assert.equal(result.factRetry.retryFactStatus, "passed");
+  assert.match(result.generatedText ?? "", /2026年/);
+});
+
+test("an unsupported market interpretation can be removed once, then must pass both Fact checks before Voice", async () => {
+  const target = candidate({
+    bodySummary: "公開買付けへの賛同に伴い、自己株式の取得を中止しました。",
+    judgementReason: "公開買付けへの賛同に伴う自己株式取得中止",
+    category: "tob",
+  });
+  const { runner, calls } = scriptedRunner([
+    {
+      step: "draft",
+      payload: {
+        text: "自己株式の取得を中止しました。関連するECテーマで意識される可能性があります。",
+        sufficient_information: true,
+        notes: [],
+      },
+    },
+    { step: "fact_retry", payload: { text: "自己株式の取得を中止しました。" } },
+    { step: "fact", payload: { passed: true, issues: [] } },
+    { step: "voice", payload: { passed: true, issues: [] } },
+  ]);
+  const result = await generateImportantNewsPost(target, runner);
+  assert.deepEqual(calls, ["draft", "fact_retry", "fact", "voice"]);
+  assert.equal(result.status, "ready_for_publish");
+  assert.equal(result.factRetry.attempted, true);
+  assert.equal(result.factRetry.retryFactStatus, "passed");
+  assert.doesNotMatch(result.generatedText ?? "", /ECテーマ/);
+});
+
+test("numeric uncertainty is never eligible for Fact retry", async () => {
+  const { runner, calls } = scriptedRunner([
+    { step: "draft", payload: draftPayload },
+    { step: "fact", payload: { passed: false, issues: ["数字の誤り"] } },
+  ]);
+  const result = await generateImportantNewsPost(candidate(), runner);
+  assert.deepEqual(calls, ["draft", "fact"]);
+  assert.equal(result.factRetry.attempted, false);
+  assert.equal(result.status, "generation_failed");
+});
+
+test("Fact retry classifier refuses identity doubt and unknown issues", () => {
+  const target = candidate();
+  const text = `【速報】本文\n\n出典: ${target.sourceUrl}`;
+  assert.equal(isRetryableFactFailure(target, text, ["企業の同一性に疑義"]), false);
+  assert.equal(isRetryableFactFailure(target, text, ["未分類のFact指摘"]), false);
+});
+
+test("Fact retry is capped at one and a failed recheck never reaches Voice", async () => {
+  const target = candidate({ title: "2026年8月期 通期業績予想", bodySummary: "2026年8月期の予想を修正" });
+  const { runner, calls } = scriptedRunner([
+    { step: "draft", payload: { text: "通期業績予想を修正しました。", sufficient_information: true, notes: [] } },
+    { step: "fact_retry", payload: { text: "通期業績予想を修正しました。" } },
+  ]);
+  const result = await generateImportantNewsPost(target, runner);
+  assert.deepEqual(calls, ["draft", "fact_retry"]);
+  assert.equal(result.factRetry.attempted, true);
+  assert.equal(result.status, "generation_failed");
+  assert.equal(result.voice.status, "not_run");
+});
+
+test("Fact retry diagnostics keep the initial and retry Fact issues", async () => {
+  const target = candidate({ title: "2026年8月期 通期業績予想", bodySummary: "2026年8月期の予想を修正" });
+  const { runner } = scriptedRunner([
+    { step: "draft", payload: { text: "通期業績予想を修正しました。", sufficient_information: true, notes: [] } },
+    { step: "fact_retry", payload: { text: "2026年8月期の通期業績予想を修正しました。" } },
+    { step: "fact", payload: { passed: false, issues: ["因果関係が不明"] } },
+  ]);
+  const result = await generateImportantNewsPost(target, runner);
+  assert.deepEqual(result.factRetry.initialFactIssues, ["MISSING_EXPLICIT_YEAR"]);
+  assert.deepEqual(result.factRetry.retryFactIssues, ["因果関係が不明"]);
+  assert.equal(result.factRetry.retryFactStatus, "failed");
+});
+
+test("Fact retry instructions receive fact_issues and prohibit new interpretation", async () => {
+  let body: Record<string, unknown> = {};
+  await requestGenerationStep("test-key", "fact_retry", candidate(), "【速報】本文", async (_url, init) => {
+    body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return new Response(JSON.stringify({
+      output: [{ content: [{ type: "output_text", text: JSON.stringify({ text: "修正本文" }) }] }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  }, ["市場解釈を削除"]);
+  const input = JSON.parse(String(body.input)) as { fact_issues?: string[] };
+  assert.deepEqual(input.fact_issues, ["市場解釈を削除"]);
+  assert.match(String(body.instructions), /新しい事実・解釈・市場影響・因果関係を追加しません/);
 });
 
 // ============================================================================================
