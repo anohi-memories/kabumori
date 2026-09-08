@@ -4,8 +4,8 @@ Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは
 
 - task_id: important-news-safe-publish-production-activation-20260908
 - owner: codex
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - purpose: ChatGPT承認済みの安全publish trigger実装を本番へ反映し、過去ready候補を一切投稿せず、反映後に自然発生した新規 `most_important` だけが既存安全条件を満たした時に自動投稿されるproduction状態へ安全に移行する。
 
@@ -128,3 +128,15 @@ updated_at更新方法が安全に一意特定できない場合はCronを有効
 - production migration/Cron: 上記publish_ready jobのみ許可
 - production settings write: cutover更新に必要な最小変更のみ許可
 - report_mode: inline
+
+## Report
+
+- task_id: important-news-safe-publish-production-activation-20260908
+- result: review_required
+- deploy: `important-news-monitor` only was deployed successfully from approved origin/main; ACTIVE version is v31 and `verify_jwt=false`.
+- precheck: settings were `is_active=true`, `interval_minutes=20`, `auto_publish=true`, `luna_enabled=true`, `sol_escalation_enabled=true`; existing ready backlog was important 23 / most_important 6, with publish_attempts 0 and x_post_id 0.
+- cutover: not updated. The production SQL transaction for the required `true -> false -> true` cutover refresh was rejected by the safety gate because explicit user approval for this production setting write was not available in the current turn.
+- cron: `important-news-publish-ready` was not applied. Existing Fetch/Judgement/Generation Cron jobs remain unchanged; publish_ready Cron remains 0.
+- safety: no candidate status change, no claim, no backfill, no manual publish, no X API/X post, and no other setting/function/deploy change.
+- blocker: explicit user approval is required before retrying the production cutover setting write and then applying the single approved publish_ready Cron.
+- next_owner: chatgpt
