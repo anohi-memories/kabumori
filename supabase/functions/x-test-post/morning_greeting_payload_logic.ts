@@ -1,5 +1,6 @@
 import {
   MorningGreetingLengthInvalidError,
+  appendMorningGreetingFixedHashtags,
   generateMorningGreeting,
   selectMorningGreetingTheme,
   type MorningGreetingResult,
@@ -155,10 +156,11 @@ export async function runMorningGreetingPayloadDryRun(args: {
     if (!themeMatch) throw new Error("MORNING_GREETING_THEME_MISMATCH");
 
     const imagePath = morningGreetingImagePath(dateJst);
+    const finalText = appendMorningGreetingFixedHashtags(greeting.generated_text);
     return {
       success: true,
       date_jst: dateJst,
-      text: greeting.generated_text,
+      text: finalText,
       theme: greeting.theme_type,
       theme_name: greeting.theme_name,
       visual_theme: greeting.visual_theme,
@@ -171,7 +173,7 @@ export async function runMorningGreetingPayloadDryRun(args: {
       x_api_called: 0,
       x_posted: false,
       payload: {
-        text: greeting.generated_text,
+        text: finalText,
         image_path: imagePath,
         scheduled_date: dateJst,
         theme: greeting.theme_type,

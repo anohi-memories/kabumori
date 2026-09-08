@@ -1,47 +1,51 @@
 # Codex Slot 2 Report
 
-- task_id: morning-report-us-holiday-session-labeling-20260908
-- result: review_required。2026-09-08の米国休場翌朝に前営業日データを最新値と誤認させないため、既存の休場開示・セッション判定を確認し、具体日付ラベルを決定済みUSセッション日と照合する最小修正を追加した。
-- incident_reproduction:
-  - 2026-09-08 JST朝は、前夜2026-09-07のLabor Day休場をコード判定し、前営業日2026-09-04を期待セッション日とする
-  - `米国半導体株が広く上昇。半導体指数も約3%上昇` は `US_SESSION_DATE_LABEL_MISSING` でreject
-  - `昨夜の米国株はLabor Dayで休場。以下は前営業日9/4の動きです。` と `前営業日9/4の...` はaccept
-  - `前営業日9/5の...` のような誤った具体日付もreject
-- root_cause:
-  - 休場判定と冒頭開示は既に実装済みだったが、本文の具体日付ラベルは「何らかの日付がある」だけで受け入れており、`usSessionDate`との整合を厳密に検査していなかった
+- task_id: morning-greeting-soft-daily-copy-20260909
+- result: review_required
+- next_owner: chatgpt
 - changed_files:
-  - `supabase/functions/x-test-post/morning_report_logic.ts`
-    - 米国セッションの明示日付を解析し、`expectedUsSessionDate`と一致する場合だけ許可
-    - `前営業日` / `前週末` の一般ラベルは日付を捏造しない表現として許可
-    - 同じ行に複数の具体日付がある場合はすべて期待日と一致することを要求
-  - `supabase/functions/x-test-post/morning_report_logic_test.ts`
-    - 誤った9/5ラベルのrejectテスト
-    - 一般的な`前営業日`ラベルのacceptテスト
-  - `supabase/functions/x-test-post/useful_tip_output_test.ts`
-    - Deno 2.9の読み取り専用`globalThis.Deno`を壊さないモック初期化へ修正し、既存全体回帰を実行可能化
-- tests:
-  - `deno test --no-check supabase/functions/x-test-post/morning_report_logic_test.ts supabase/functions/x-test-post/us_session_date_logic_test.ts`: 54 passed / 0 failed
-  - `deno check supabase/functions/x-test-post/morning_report_logic.ts supabase/functions/x-test-post/us_session_date_logic.ts`: PASS
-  - `deno test --no-check --allow-read supabase/functions/x-test-post/*_test.ts`: 362 passed / 0 failed
-  - `git diff --check`: PASS
-- commit_hash: `dd80e20`
-- report_commit_hash: `b47a083`
-- push: `dd80e20`をorigin/mainへ反映済み。push直前にorigin/mainをfresh-checkし、対象3ファイル以外の差分がないことを確認
-- deploy: なし。本番Edge Function deploy、X投稿、Cron変更、DB write、migration/schema/GRANT変更は行っていない
-- production_change: なし。既存production設定・secrets・投稿データは変更していない
-- session_logic:
-  - `getUsSessionContext`がNY時間と`market_holidays`のNYSE休日を使い、期待セッション日と休場理由/名称を決定
-  - 生成プロンプトへ休場開示・前営業日ラベルを要求し、生成後にも機械的開示挿入とformat/session validatorを通す
-  - 通常営業日では既存の「昨夜の米国市場」表現を維持
-- conflicts_checked:
-  - 作業開始時にorigin/mainをfetchし、ORCHESTRATION / CURRENT_STATE / CODEX_TASK_2を確認
-  - Claude slot 1はclose_reportのproduction設定確認のみでコード変更禁止、Claude slot 2はidle。今回の`x-test-post`コード3ファイルと競合しないことを確認
-  - Codex slot 1領域、Expo/Push、DB migration/RPC、Edge Function deployは変更していない
-- safety_checks:
-  - production deploy / X実投稿 / DB writeなし
-  - `posting_windows`、`close_report_settings`、Cron、secrets、OAuth、migration/schema/GRANTなし
-  - 認証情報・秘密値・個人情報を表示/記録していない
-- remaining_issues:
-  - 実productionの次回自然朝刊での観測は未実施。人工生成・手動投稿は行っていない
-  - `market_holidays`に将来年の休日データが未登録の場合は既存の安全エラー経路で停止するため、将来年の休日投入は別タスクで判断が必要
-- next_recommendation: `C2`で変更・テスト・安全確認をレビュー。承認後、別タスクでproduction自然cycleをread-only観測する。
+  - `supabase/functions/x-test-post/morning_greeting_logic.ts`
+  - `supabase/functions/x-test-post/morning_greeting_logic_test.ts`
+  - `supabase/functions/x-test-post/morning_greeting_payload_logic.ts`
+  - `supabase/functions/x-test-post/morning_greeting_payload_logic_test.ts`
+  - `supabase/functions/x-test-post/morning_greeting_publish_logic.ts`
+  - `supabase/functions/x-test-post/morning_greeting_publish_logic_test.ts`
+
+## Root cause
+
+共通`KABUMORI_VOICE`には金融投稿向けの説明・指導表現が含まれるため、既存の朝挨拶専用指示だけでは相場解説寄りの硬さを十分に抑えられませんでした。また旧validatorの本文100〜300文字目標が短い日常挨拶の長文化を誘発し、ハッシュタグをLLM任せにすると欠落し得る状態でした。
+
+## Implementation
+
+- morning_greeting専用指示を共通voiceの後段に追加し、日常の短い朝挨拶を最優先化。相場材料・決算・指数解説・先生/指導口調を明示的に禁止。
+- 本文validatorを60〜140文字、生成targetを80〜120文字へ変更。本文部分だけを計測し、固定タグ行は別扱い。
+- `#おはよう #日本株 #日経平均 #かぶモリ #ブルバ100`をコード側で決定論的に最終本文へ1回だけ付与。部分/重複タグは`MORNING_GREETING_FIXED_HASHTAG_INVALID`で安全停止。
+- payload dry-runと本番manual publishの双方で同じタグ付与helperを使用し、Xへ渡る最終本文を統一。
+- 画像ロジック、canonical reference、画像model/quality/size、Storage生成経路、Cron、OAuth、他post_typeは変更していません。
+
+## Length / retry
+
+- 本文validator: 60〜140文字
+- 生成target: 80〜120文字
+- 既存のlength retry最大1回を維持
+- 非長さエラーは再試行せず、60未満/140超だけ1回再生成
+
+## Tests
+
+- morning_greeting関連: **60 passed / 0 failed**
+- x-test-post全体回帰: **365 passed / 0 failed**
+- `git diff --check`: PASS
+
+## Git / production safety
+
+- commit_hash: 未コミット
+- push: 未実施
+- deploy: なし
+- production変更: なし
+- OpenAI実API / X API / X投稿 / 本番DB / Cron / secrets変更: 0
+
+## Remaining issues / recommendation
+
+- 実production自然投稿での文体確認は未実施。今回のTASKではdeploy/本番投稿を禁止しているため、次工程でread-only観測が必要です。
+- 2026-09-09に確認されたStorage receipt 400問題は別件として未変更です。
+- `C2`で6ファイルの差分、60/140境界、固定5タグの最終本文、365件回帰結果をレビューしてください。承認後に別タスクでdeployと自然投稿観測を判断します。

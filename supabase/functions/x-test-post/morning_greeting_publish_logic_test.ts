@@ -11,6 +11,7 @@ import {
   type MorningGreetingPayloadDryRunResult,
 } from "./morning_greeting_payload_logic.ts";
 import type { XAuthContext } from "../_shared/x_oauth2_post.ts";
+import { MORNING_GREETING_FIXED_HASHTAGS } from "./morning_greeting_logic.ts";
 
 const TEXT = "おはようございます☕️ 9月の朝ですね。今日も無理なく、ひとつずつ進めていきましょう🌿";
 const DATE = "2026-09-02";
@@ -89,7 +90,7 @@ test("uploads one image, creates one X post, then records its id", async () => {
       }
       if (url === "https://api.x.com/2/tweets") {
         const body = JSON.parse(String(init?.body));
-        assert.equal(body.text, TEXT);
+        assert.equal(body.text, `${TEXT}\n\n${MORNING_GREETING_FIXED_HASHTAGS}`);
         assert.deepEqual(body.media.media_ids, ["123456789"]);
         assert.equal(body.made_with_ai, true);
         return Response.json({ data: { id: "987654321" } });

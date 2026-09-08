@@ -5,6 +5,7 @@ import {
   runMorningGreetingPayloadDryRun,
   type MorningGreetingPayloadDryRunResult,
 } from "./morning_greeting_payload_logic.ts";
+import { appendMorningGreetingFixedHashtags } from "./morning_greeting_logic.ts";
 import {
   MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE,
   claimPublishSlot,
@@ -239,6 +240,7 @@ export async function runMorningGreetingManualPublish(args: {
     if (!payload.image_exists) throw new Error("MORNING_GREETING_IMAGE_NOT_FOUND");
     if (!payload.theme_match) throw new Error("MORNING_GREETING_THEME_MISMATCH");
     if (!payload.payload_ready) throw new Error("MORNING_GREETING_PAYLOAD_NOT_READY");
+    const finalText = appendMorningGreetingFixedHashtags(payload.text);
 
     const imageResponse = await fetchImpl(
       morningGreetingStorageObjectUrl(args.supabaseUrl, dateJst),
@@ -283,7 +285,7 @@ export async function runMorningGreetingManualPublish(args: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          text: payload.text,
+          text: finalText,
           made_with_ai: true,
           media: { media_ids: [mediaId] },
         }),
@@ -333,7 +335,7 @@ export async function runMorningGreetingManualPublish(args: {
       skipped: false,
       already_posted: false,
       date_jst: dateJst,
-      text: payload.text,
+      text: finalText,
       theme: payload.theme,
       image_path: payload.image_path,
       image_exists: true,

@@ -6,7 +6,10 @@ import {
   MorningGreetingPayloadDryRunError,
   runMorningGreetingPayloadDryRun,
 } from "./morning_greeting_payload_logic.ts";
-import { selectMorningGreetingTheme } from "./morning_greeting_logic.ts";
+import {
+  MORNING_GREETING_FIXED_HASHTAGS,
+  selectMorningGreetingTheme,
+} from "./morning_greeting_logic.ts";
 
 const GENERATED_TEXT =
   "おはようございます☀️ いつもの朝からゆっくり始めます。コーヒーでも飲みながら、焦らず自分のペースを整えていけたら十分です。平日の真ん中、やることを詰め込みすぎず、少し肩の力を抜いて進んでいきましょう🌱";
@@ -49,6 +52,9 @@ test("existing image builds a safe pre-publish payload with one text API call", 
   assert.equal(result.payload_ready, true);
   assert.equal(result.openai_text_api_called, 1);
   assert.equal(result.retry_count, 0);
+  assert.equal(result.text.endsWith(MORNING_GREETING_FIXED_HASHTAGS), true);
+  assert.equal(result.text.split(MORNING_GREETING_FIXED_HASHTAGS).length - 1, 1);
+  assert.equal(result.payload.text, result.text);
   assert.equal(result.x_api_called, 0);
   assert.equal(result.x_posted, false);
   assert.equal(calls.filter((url) => url.includes("api.openai.com/v1/responses")).length, 1);

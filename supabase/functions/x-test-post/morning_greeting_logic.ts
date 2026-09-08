@@ -31,20 +31,55 @@ type MajorThemeDefinition = {
 
 const MODEL = "gpt-5.6-luna" as const;
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
-// The final, enforced range. validateMorningGreetingOutput is the only place this is checked.
-// Widened from 100-180 after a 2026-09-07 production incident: a first-attempt generation that missed
-// the (then 110-160) target, plus a retry that still missed the (then 100-180) validator range, posted
-// nothing. 100-300 gives ordinary model variance far more room to still land inside the accepted range,
-// without changing what "too short"/"too long" means for the salutation/theme/safety checks below it.
-export const MORNING_GREETING_MIN_CHARACTERS = 100;
-export const MORNING_GREETING_MAX_CHARACTERS = 300;
-// A narrower generation target — still "usually a short morning greeting" — aimed well inside the
-// validator's range so ordinary variance in the model's output still lands safely inside 100-300 without
-// needing a retry.
-export const MORNING_GREETING_TARGET_MIN_CHARACTERS = 120;
-export const MORNING_GREETING_TARGET_MAX_CHARACTERS = 200;
+// Morning greeting is intentionally shorter than reports. The validator measures the generated body
+// before the fixed hashtag line is appended, so a natural 60-140 character greeting remains easy to
+// read while still leaving room for the deterministic tags in the final X text.
+export const MORNING_GREETING_MIN_CHARACTERS = 60;
+export const MORNING_GREETING_MAX_CHARACTERS = 140;
+export const MORNING_GREETING_TARGET_MIN_CHARACTERS = 80;
+export const MORNING_GREETING_TARGET_MAX_CHARACTERS = 120;
 export const MORNING_GREETING_TARGET_MIN_EMOJI = 1;
 export const MORNING_GREETING_TARGET_MAX_EMOJI = 3;
+
+export const MORNING_GREETING_FIXED_HASHTAG_LIST = [
+  "#おはよう",
+  "#日本株",
+  "#日経平均",
+  "#かぶモリ",
+  "#ブルバ100",
+] as const;
+export const MORNING_GREETING_FIXED_HASHTAGS = MORNING_GREETING_FIXED_HASHTAG_LIST.join(" ");
+
+function countMorningGreetingHashtagOccurrences(text: string, tag: string): number {
+  let count = 0;
+  let offset = text.indexOf(tag);
+  while (offset !== -1) {
+    count += 1;
+    offset = text.indexOf(tag, offset + tag.length);
+  }
+  return count;
+}
+
+export function hasMorningGreetingFixedHashtagsExactlyOnce(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed.endsWith(MORNING_GREETING_FIXED_HASHTAGS)) return false;
+  return MORNING_GREETING_FIXED_HASHTAG_LIST.every((tag) =>
+    countMorningGreetingHashtagOccurrences(trimmed, tag) === 1
+  );
+}
+
+/**
+ * Appends the morning-greeting tags at the code boundary, never relying on Luna to remember them.
+ * Partial/duplicate tag input fails closed rather than silently creating an ambiguous final post.
+ */
+export function appendMorningGreetingFixedHashtags(text: string): string {
+  const trimmed = text.trim();
+  if (hasMorningGreetingFixedHashtagsExactlyOnce(trimmed)) return trimmed;
+  if (MORNING_GREETING_FIXED_HASHTAG_LIST.some((tag) => trimmed.includes(tag))) {
+    throw new Error("MORNING_GREETING_FIXED_HASHTAG_INVALID");
+  }
+  return `${trimmed}\n\n${MORNING_GREETING_FIXED_HASHTAGS}`;
+}
 
 // Deliberately small, stable allowlist. Minor commemorative days never become
 // themes merely because a model or search result mentions them.
@@ -186,12 +221,14 @@ export function selectMorningGreetingTheme(date: string): MorningGreetingTheme {
 export function morningGreetingGenerationInstructions(theme: MorningGreetingTheme): string[] {
   return [
     ...KABUMORI_VOICE,
-    "朝の短い挨拶投稿です。相場や株の解説ではなく、普段のXで自然におはようと声をかける、気持ちよく読める朝の挨拶にしてください。",
+    "最優先のmorning_greeting専用ルールです。共通の金融投稿向け説明・指導ルールよりも、日常の短い朝挨拶としての自然さを優先してください。",
+    "朝の短い挨拶投稿です。普段のXで自然におはようと声をかける、気持ちよく読める日常の一言にしてください。",
     "このアカウントには`morning_report`という別の投稿で相場・ニュース・日本株見通しを扱う役割があります。morning_greetingはその役割を持ちません。原則として株・相場・投資のテーマは使わず、親しみ・季節感・日常・確定済みテーマ・気持ちのよい朝の空気感を書いてください。",
-    "市場材料、指数の動き、決算、海外市場、個別銘柄、値動きの解説は一切入れません。株に触れたくなっても、内容の中心にしないでください。",
+    "市場材料、指数の動き、決算、海外市場、個別銘柄、値動きの解説は一切入れません。株に触れたくなっても、内容へ足しません。",
     `本文は絵文字・改行を含めて日本語で${MORNING_GREETING_TARGET_MIN_CHARACTERS}〜${MORNING_GREETING_TARGET_MAX_CHARACTERS}文字程度を目標にします。明るめで柔らかく書きます。`,
     `絵文字は${MORNING_GREETING_TARGET_MIN_EMOJI}〜${MORNING_GREETING_TARGET_MAX_EMOJI}個程度にします。`,
-    "おはようの挨拶、確定済みテーマへの短い言及、自然な一言を入れますが、毎回同じ構成や締めに固定しません。",
+    "「おはようございます」などの挨拶、確定済みテーマへの短い言及、日常の一言、柔らかい締めを基本にしますが、毎回同じ構成や語尾に固定しません。",
+    "読者を教えたり導いたりする文章にしません。「整理しやすいです」「ひとつずつ見ていけたら」「確認していきましょう」「焦らず見ていきましょう」などの先生・相場解説者の口調は避けます。",
     "テーマはプログラム側で確定済みです。別の記念日へ変更、追加、再解釈しないでください。theme_type、theme_name、visual_themeは入力値をそのまま返してください。",
     "本人の外出、買い物、食事、家族行事などの実体験を作りません。現在地や天気も入力にないため書きません。",
     "相場予想、株価方向の断定、売買推奨、投資助言、存在しないニュースや数値を追加しません。",
@@ -199,7 +236,7 @@ export function morningGreetingGenerationInstructions(theme: MorningGreetingThem
       ? "今日は○○の日、○○記念日という表現は禁止です。無理に日付テーマを作らず、普通の朝として書いてください。特別なテーマが無い日に、無理に豆知識・ニュース・相場の話題を差し込む必要もありません。ただ気持ちのよい朝の挨拶であれば十分です。"
       : `使用できるテーマ名は「${theme.theme_name}」だけです。一般的な範囲を超える由来や豆知識は追加しません。`,
     "説教くさい語り口、自己啓発的な締め、AIが書いた金融コラムのような硬さを避けます。友達に送るような自然な一言として書いてください。",
-    "ハッシュタグ、URL、画像の説明、生成手順は本文へ入れません。",
+    `ハッシュタグ、URL、画像の説明、生成手順は本文へ入れません。固定タグ（${MORNING_GREETING_FIXED_HASHTAGS}）は生成後にコード側で1回だけ付与します。`,
   ];
 }
 

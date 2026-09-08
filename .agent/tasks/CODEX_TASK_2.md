@@ -3,8 +3,8 @@
 - task_id: morning-greeting-soft-daily-copy-20260909
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - purpose: 朝の挨拶投稿の文章が朝刊・相場解説のように固くなっているため、morning_greetingの文章だけを「日常の軽い朝挨拶」へ寄せ、ユーザーが以前指定した固定ハッシュタグを必ず付ける。画像生成・画像品質・投稿経路は変更しない。
 
@@ -184,3 +184,36 @@ morning_greeting投稿の末尾に、以下5タグを必ず付ける。
 - production変更なし
 - remaining issues
 - next recommendation
+
+## Report
+
+- task_id: morning-greeting-soft-daily-copy-20260909
+- result: review_required
+- next_owner: chatgpt
+- changed_files:
+  - `supabase/functions/x-test-post/morning_greeting_logic.ts`
+  - `supabase/functions/x-test-post/morning_greeting_logic_test.ts`
+  - `supabase/functions/x-test-post/morning_greeting_payload_logic.ts`
+  - `supabase/functions/x-test-post/morning_greeting_payload_logic_test.ts`
+  - `supabase/functions/x-test-post/morning_greeting_publish_logic.ts`
+  - `supabase/functions/x-test-post/morning_greeting_publish_logic_test.ts`
+- root_cause: 共通`KABUMORI_VOICE`には金融投稿向けの説明・指導表現が含まれるため、既存の朝挨拶専用指示だけでは相場解説寄りの硬さを十分に抑えられなかった。さらに旧validatorの本文100〜300文字目標が短い日常挨拶の長文化を誘発し、ハッシュタグをLLM任せにすると欠落し得た。
+- implementation:
+  - morning_greeting専用指示を共通voiceの後段に追加し、日常の短い朝挨拶を最優先化。相場材料・決算・指数解説・先生/指導口調を明示的に禁止。
+  - 本文validatorを60〜140文字、生成targetを80〜120文字へ変更。本文部分だけを計測し、固定タグ行は別扱い。
+  - `#おはよう #日本株 #日経平均 #かぶモリ #ブルバ100`をコード側で決定論的に最終本文へ1回だけ付与。部分/重複タグは`MORNING_GREETING_FIXED_HASHTAG_INVALID`で安全停止。
+  - payload dry-runと本番manual publishの双方で同じタグ付与helperを使用し、Xへ渡る最終本文を統一。
+  - 画像ロジック、canonical reference、画像model/quality/size、Storage生成経路、Cron、OAuth、他post_typeは変更していない。
+- length_retry: 既存の最大1回を維持。非長さエラーは再試行せず、60未満/140超だけ1回再生成。
+- tests:
+  - morning_greeting関連: 60 passed / 0 failed
+  - x-test-post全体回帰: 365 passed / 0 failed
+  - `git diff --check`: PASS
+- commit_hash: 未コミット（次のpushでコード6ファイルとH2管理ファイルを同期予定）
+- push: 未実施（このReportとTASKを含め、push直前にorigin/mainを再fresh-checkする）
+- deploy: なし
+- production_change: なし。OpenAI実API、X API、X投稿、本番DB、Cron、secrets変更は0。
+- remaining_issues:
+  - 実production自然投稿での文体確認は未実施。今回のTASKではdeploy/本番投稿を禁止しているため、次工程でread-only観測が必要。
+  - 2026-09-09に確認されたStorage receipt 400問題は別件として未変更。
+- next_recommendation: `C2`で6ファイルの差分、60/140境界、固定5タグの最終本文、365件回帰結果をレビュー。承認後に別タスクでdeployと自然投稿観測を判断する。

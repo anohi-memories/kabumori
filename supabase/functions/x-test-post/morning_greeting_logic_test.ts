@@ -9,7 +9,9 @@ import {
   MORNING_GREETING_TARGET_MAX_EMOJI,
   MORNING_GREETING_TARGET_MIN_CHARACTERS,
   MORNING_GREETING_TARGET_MIN_EMOJI,
+  MORNING_GREETING_FIXED_HASHTAGS,
   MorningGreetingLengthInvalidError,
+  appendMorningGreetingFixedHashtags,
   buildMorningGreetingLengthFailureDiagnostics,
   buildMorningGreetingRequest,
   generateMorningGreeting,
@@ -65,7 +67,7 @@ test("generated text is constrained to the intended length", () => {
   const theme = selectMorningGreetingTheme("2026-09-02");
   const validated = validateMorningGreetingOutput(outputFor("2026-09-02"), theme);
   const length = Array.from(validated.generated_text).length;
-  assert.ok(length >= 100 && length <= 300, `length=${length}`);
+  assert.ok(length >= 60 && length <= 140, `length=${length}`);
 });
 
 test("every selected theme has a visual theme for the later image step", () => {
@@ -150,80 +152,80 @@ function sequencedGreetingFetch(texts: string[]): { fetch: typeof fetch; callCou
   return { fetch: fetchImpl, callCount: () => calls };
 }
 
-// STEP 3 (2026-09-07 production incident fix) validation cases 1-11, against the widened 100-300
-// validator range and the 120-200 generation target.
+// Morning-greeting-soft-daily-copy validation cases: short daily copy is accepted without padding it
+// with market commentary, while the one length retry remains bounded.
 
-test("1: 99 characters is rejected", () => {
+test("1: 59 characters is rejected", () => {
   assert.throws(
-    () => validateMorningGreetingOutput(outputFor(DATE, textOfLength(99)), selectMorningGreetingTheme(DATE)),
+    () => validateMorningGreetingOutput(outputFor(DATE, textOfLength(59)), selectMorningGreetingTheme(DATE)),
     /MORNING_GREETING_TEXT_LENGTH_INVALID/,
   );
 });
 
-test("2: 100 characters is accepted", () => {
-  const validated = validateMorningGreetingOutput(outputFor(DATE, textOfLength(100)), selectMorningGreetingTheme(DATE));
-  assert.equal(Array.from(validated.generated_text).length, 100);
+test("2: 60 characters is accepted", () => {
+  const validated = validateMorningGreetingOutput(outputFor(DATE, textOfLength(60)), selectMorningGreetingTheme(DATE));
+  assert.equal(Array.from(validated.generated_text).length, 60);
 });
 
-test("3: 120-200 characters (the generation target range) is accepted", () => {
-  for (const length of [120, 160, 200]) {
+test("3: 80-120 characters (the generation target range) is accepted", () => {
+  for (const length of [80, 100, 120]) {
     const validated = validateMorningGreetingOutput(outputFor(DATE, textOfLength(length)), selectMorningGreetingTheme(DATE));
     assert.equal(Array.from(validated.generated_text).length, length);
   }
 });
 
-test("4: 180-250 characters (above the old 180 cap, inside the new 100-300 range) is accepted", () => {
-  for (const length of [180, 220, 250]) {
+test("4: 121-140 characters remain accepted without adding advice", () => {
+  for (const length of [121, 140]) {
     const validated = validateMorningGreetingOutput(outputFor(DATE, textOfLength(length)), selectMorningGreetingTheme(DATE));
     assert.equal(Array.from(validated.generated_text).length, length);
   }
 });
 
-test("5: 300 characters (the new upper boundary) is accepted", () => {
-  const validated = validateMorningGreetingOutput(outputFor(DATE, textOfLength(300)), selectMorningGreetingTheme(DATE));
-  assert.equal(Array.from(validated.generated_text).length, 300);
+test("5: 140 characters (the upper boundary) is accepted", () => {
+  const validated = validateMorningGreetingOutput(outputFor(DATE, textOfLength(140)), selectMorningGreetingTheme(DATE));
+  assert.equal(Array.from(validated.generated_text).length, 140);
 });
 
-test("6: 301 characters is rejected", () => {
+test("6: 141 characters is rejected", () => {
   assert.throws(
-    () => validateMorningGreetingOutput(outputFor(DATE, textOfLength(301)), selectMorningGreetingTheme(DATE)),
+    () => validateMorningGreetingOutput(outputFor(DATE, textOfLength(141)), selectMorningGreetingTheme(DATE)),
     /MORNING_GREETING_TEXT_LENGTH_INVALID/,
   );
 });
 
 test("1(generation): a first attempt inside range succeeds without retrying", async () => {
-  const { fetch: mockFetch, callCount } = sequencedGreetingFetch([textOfLength(150)]);
+  const { fetch: mockFetch, callCount } = sequencedGreetingFetch([textOfLength(100)]);
   const result = await generateMorningGreeting("test-key", DATE, mockFetch);
   assert.equal(result.retry_count, 0);
   assert.equal(callCount(), 1);
-  assert.equal(Array.from(result.generated_text).length, 150);
+  assert.equal(Array.from(result.generated_text).length, 100);
 });
 
-test("7: a first attempt at 99 chars retries once and a 120-200 retry succeeds", async () => {
-  const { fetch: mockFetch, callCount } = sequencedGreetingFetch([textOfLength(99), textOfLength(150)]);
+test("7: a first attempt at 59 chars retries once and an 80-120 retry succeeds", async () => {
+  const { fetch: mockFetch, callCount } = sequencedGreetingFetch([textOfLength(59), textOfLength(100)]);
   const result = await generateMorningGreeting("test-key", DATE, mockFetch);
   assert.equal(result.retry_count, 1);
   assert.equal(callCount(), 2);
-  assert.equal(Array.from(result.generated_text).length, 150);
+  assert.equal(Array.from(result.generated_text).length, 100);
 });
 
-test("8: a first attempt over 301 chars retries once and a 120-200 retry succeeds", async () => {
-  const { fetch: mockFetch, callCount } = sequencedGreetingFetch([textOfLength(350), textOfLength(180)]);
+test("8: a first attempt over 141 chars retries once and an 80-120 retry succeeds", async () => {
+  const { fetch: mockFetch, callCount } = sequencedGreetingFetch([textOfLength(141), textOfLength(100)]);
   const result = await generateMorningGreeting("test-key", DATE, mockFetch);
   assert.equal(result.retry_count, 1);
   assert.equal(callCount(), 2);
-  assert.equal(Array.from(result.generated_text).length, 180);
+  assert.equal(Array.from(result.generated_text).length, 100);
 });
 
-test("9a: still too short (under 100) after the retry safely stops with TEXT_LENGTH_INVALID, carrying stage=retry diagnostics", async () => {
-  const { fetch: mockFetch, callCount } = sequencedGreetingFetch([textOfLength(99), textOfLength(50)]);
+test("9a: still too short (under 60) after the retry safely stops with TEXT_LENGTH_INVALID, carrying stage=retry diagnostics", async () => {
+  const { fetch: mockFetch, callCount } = sequencedGreetingFetch([textOfLength(59), textOfLength(50)]);
   await assert.rejects(
     () => generateMorningGreeting("test-key", DATE, mockFetch),
     (error: unknown) => {
       assert.ok(error instanceof MorningGreetingLengthInvalidError);
       assert.equal(error.message, "MORNING_GREETING_TEXT_LENGTH_INVALID");
       assert.equal(error.retryCount, 1);
-      assert.equal(error.firstLength, 99);
+      assert.equal(error.firstLength, 59);
       assert.equal(error.retryLength, 50);
       assert.equal(error.stage, "retry");
       return true;
@@ -232,15 +234,15 @@ test("9a: still too short (under 100) after the retry safely stops with TEXT_LEN
   assert.equal(callCount(), 2);
 });
 
-test("9b: still too long (over 300) after the retry safely stops with TEXT_LENGTH_INVALID, carrying stage=retry diagnostics", async () => {
-  const { fetch: mockFetch, callCount } = sequencedGreetingFetch([textOfLength(350), textOfLength(320)]);
+test("9b: still too long (over 140) after the retry safely stops with TEXT_LENGTH_INVALID, carrying stage=retry diagnostics", async () => {
+  const { fetch: mockFetch, callCount } = sequencedGreetingFetch([textOfLength(141), textOfLength(150)]);
   await assert.rejects(
     () => generateMorningGreeting("test-key", DATE, mockFetch),
     (error: unknown) => {
       assert.ok(error instanceof MorningGreetingLengthInvalidError);
       assert.equal(error.retryCount, 1);
-      assert.equal(error.firstLength, 350);
-      assert.equal(error.retryLength, 320);
+      assert.equal(error.firstLength, 141);
+      assert.equal(error.retryLength, 150);
       assert.equal(error.stage, "retry");
       return true;
     },
@@ -250,7 +252,7 @@ test("9b: still too long (over 300) after the retry safely stops with TEXT_LENGT
 
 test("10: retry never happens more than once, even after a second length failure", async () => {
   const { fetch: mockFetch, callCount } = sequencedGreetingFetch([
-    textOfLength(50), textOfLength(50), textOfLength(150),
+    textOfLength(50), textOfLength(50), textOfLength(100),
   ]);
   await assert.rejects(() => generateMorningGreeting("test-key", DATE, mockFetch));
   assert.equal(callCount(), 2, "a third call would mean an unbounded retry loop");
@@ -294,25 +296,25 @@ test("diagnostics 1: buildMorningGreetingLengthFailureDiagnostics with only a fi
 
 test("diagnostics 2: buildMorningGreetingLengthFailureDiagnostics with both attempts reports stage=retry, retry_count=1", () => {
   const diagnostics = buildMorningGreetingLengthFailureDiagnostics(
-    { generated_text: textOfLength(99) },
-    { generated_text: textOfLength(200) },
+    { generated_text: textOfLength(59) },
+    { generated_text: textOfLength(100) },
   );
   assert.equal(diagnostics.retryCount, 1);
-  assert.equal(diagnostics.firstLength, 99);
-  assert.equal(diagnostics.retryLength, 200);
+  assert.equal(diagnostics.firstLength, 59);
+  assert.equal(diagnostics.retryLength, 100);
   assert.equal(diagnostics.stage, "retry");
 });
 
-test("11: the enforced validator range is widened to 100-300", () => {
-  assert.equal(MORNING_GREETING_MIN_CHARACTERS, 100);
-  assert.equal(MORNING_GREETING_MAX_CHARACTERS, 300);
+test("11: the enforced validator range is 60-140", () => {
+  assert.equal(MORNING_GREETING_MIN_CHARACTERS, 60);
+  assert.equal(MORNING_GREETING_MAX_CHARACTERS, 140);
 });
 
-test("the generation target is narrower, at 120-200, and stated in the prompt", () => {
-  assert.equal(MORNING_GREETING_TARGET_MIN_CHARACTERS, 120);
-  assert.equal(MORNING_GREETING_TARGET_MAX_CHARACTERS, 200);
+test("the generation target is 80-120 and stated in the prompt", () => {
+  assert.equal(MORNING_GREETING_TARGET_MIN_CHARACTERS, 80);
+  assert.equal(MORNING_GREETING_TARGET_MAX_CHARACTERS, 120);
   const instructions = buildMorningGreetingRequest(DATE).body.instructions as string;
-  assert.match(instructions, /120.*200/u);
+  assert.match(instructions, /80.*120/u);
 });
 
 test("13: the prompt states a 1-3 emoji target", () => {
@@ -345,6 +347,26 @@ test("3: a plain day with no theme is told not to force news/trivia/market conte
 test("6: the prompt discourages preachy/self-help/AI-financial-column tone", () => {
   const instructions = buildMorningGreetingRequest(DATE).body.instructions as string;
   assert.match(instructions, /説教くさい語り口、自己啓発的な締め、AIが書いた金融コラムのような硬さを避けます/u);
+});
+
+test("morning greeting prompt explicitly suppresses market-teacher phrasing", () => {
+  const instructions = buildMorningGreetingRequest(DATE).body.instructions as string;
+  assert.match(instructions, /日常の短い朝挨拶としての自然さを優先/u);
+  assert.match(instructions, /整理しやすいです.*ひとつずつ見ていけたら.*確認していきましょう/u);
+});
+
+test("fixed morning greeting hashtags are appended exactly once by code", () => {
+  const text = appendMorningGreetingFixedHashtags("おはようございます☀️ 今日もゆっくり始めましょう。");
+  assert.equal(text.split(MORNING_GREETING_FIXED_HASHTAGS).length - 1, 1);
+  assert.ok(text.endsWith(MORNING_GREETING_FIXED_HASHTAGS));
+  assert.match(text, /#おはよう #日本株 #日経平均 #かぶモリ #ブルバ100/u);
+});
+
+test("partial or duplicate morning greeting hashtags fail closed", () => {
+  assert.throws(
+    () => appendMorningGreetingFixedHashtags("おはようございます。\n#おはよう"),
+    /MORNING_GREETING_FIXED_HASHTAG_INVALID/u,
+  );
 });
 
 test("2: a memorial-day theme is still told to use exactly that theme name (unchanged existing behavior)", () => {
