@@ -4,8 +4,8 @@ Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは
 
 - task_id: important-news-auto-publish-enable-20260908
 - owner: codex
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - purpose: 本番検証済みの重要ニュース自動生成について、既存のpublish eligibilityを一切緩めず `auto_publish` のみを安全に有効化し、最初の自然投稿経路を確認する。
 
@@ -101,3 +101,18 @@ production write前に必ず確認する。
 - push: TASK/Report更新は許可
 - deploy: 禁止
 - report_mode: inline
+
+## Report
+
+- task_id: important-news-auto-publish-enable-20260908
+- result: review_required
+- changed_files: `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md` の制御情報のみ
+- precheck: `important-news-monitor` ACTIVE v30 / `verify_jwt=false`。既存コードのpublish eligibilityは `most_important`、`ready_for_publish`、generated textあり、Fact passed、Voice passed、https source URL、未投稿を要求し、`important` は自動投稿対象外。duplicate/claim/rate control/overnight hold/publish safetyは変更なし。
+- production_change: `public.important_news_monitor_settings.auto_publish` のみ `false -> true`。read-backで `is_active=true`, `interval_minutes=20`, `auto_publish=true`, `luna_enabled=true`, `sol_escalation_enabled=true` を確認。
+- cron: 既存のFetch/Judgement/Generation 3本のみ（active、schedule変更なし）。`publish_ready` Cronは0本。
+- existing_candidates: `ready_for_publish` 28件（うち `most_important` 6件）、publish_attempts>0=0、x_post_idあり=0。過去候補の再claim・再生成・手動投稿は未実施。
+- natural_observation: 設定反映後のread-only health確認まで実施。自然な新規publish対象とX投稿は未成立。publish_ready Cronが存在しないため、人工的なpublish_ready実行は行わず停止。
+- safety_checks: DB writeはauto_publish設定1項目のみ、migration/DDL/GRANT=0、コード変更=0、deploy=0、Cron変更=0、secrets変更/表示=0、OpenAI手動API=0、X API/X投稿=0、他投稿種別設定変更=0、apps/admin/HANDOFF変更=0。
+- commit_hash: control-only commit pending
+- push: control-only TASK/Report updateをorigin/mainへpush予定
+- next_recommendation: ChatGPT review。自然投稿を確認するには既存の正規publish_ready起動経路の有無を別途判断する。今回、過去候補の再処理や手動投稿は行わない。

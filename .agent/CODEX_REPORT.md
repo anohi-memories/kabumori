@@ -1,61 +1,43 @@
 # Codex Report
 
-- task_id: important-news-deploy-and-natural-cycle-verification-20260908
+- task_id: important-news-auto-publish-enable-20260908
 - result: review_required
 - next_owner: chatgpt
-- implementation_commits: `7bed84e063dbe5fc98bd0c12fa77720eead7936e`, `710d5e8e42374a94fa163aac11098c6f02ce05ac` (既存の承認済みorigin/main)
-- deploy: `important-news-monitor` のみ
-- deploy_before: ACTIVE v29 / verify_jwt=false
-- deploy_after: ACTIVE v30 / verify_jwt=false
+- deploy: なし（既存 `important-news-monitor` ACTIVE v30を維持）
+- production_change: `public.important_news_monitor_settings.auto_publish` のみ `false -> true`
 
-## 自然サイクル観測
+## Pre-check
 
-### 1回目
+- `important-news-monitor`: ACTIVE v30 / `verify_jwt=false`
+- publish eligibility: `most_important`、`ready_for_publish`、generated textあり、Fact passed、Voice passed、https source URL、未投稿をすべて要求
+- `important` は自動投稿対象外。duplicate/claim/rate control/overnight hold/publish safetyは変更なし
+- auto_publish=trueは既存 `publish_ready` 分岐を有効化するだけで、生成・判定条件を緩めない
 
-- Fetch: 07:00 UTC（16:00 JST）、`completed`
-- fetched: 168
-- duplicate: 86
-- new candidates: 27
-- error: なし
-- 新規source内訳: `market_macro` 24、`tdnet` 3
-- Generation: `most_important` 1件が `ready_for_publish`
-- Fact: passed
-- Voice: passed
+## Read-back / safety
 
-### 2回目
+- settings: `is_active=true`, `interval_minutes=20`, `auto_publish=true`, `luna_enabled=true`, `sol_escalation_enabled=true`
+- Cron: Fetch/Judgement/Generationの既存3本のみ、active/schedule変更なし
+- `publish_ready` Cron: 0本
+- existing `ready_for_publish`: 28件（`most_important` 6件）
+- existing publish_attempts>0: 0件
+- existing x_post_idあり: 0件
+- 過去候補の再claim・再生成・手動投稿: 0
+- post_execution_logsの設定反映後important_news投稿記録: 0件
 
-- Fetch: 07:20 UTC（16:20 JST）、`completed`
-- fetched: 168
-- duplicate: 113
-- new candidates: 3
-- error: なし
-- 新規source内訳: `tdnet` 3
-- Generation: `important` 1件、`no_post` 2件
-- Fact: 初回 `MISSING_EXPLICIT_YEAR`、既定のfact retryを1回だけ実施したが再検証もfailed
-- failure: `NEWS_GENERATION_FACT_RETRY_FAILED`
-- Voice: `not_run`（Fact未通過のため）
+## Observation
 
-## 設定・安全確認
+設定反映後のread-only health確認まで実施したが、自然な新規publish対象とX投稿は未成立。publish_ready Cronが存在しないため、人工的なpublish_ready実行や過去候補の再処理は行わず停止した。
 
-- settings: `is_active=true`, `interval_minutes=20`, `auto_publish=false`, `luna_enabled=true`, `sol_escalation_enabled=true`
-- Cron: Fetch/Judgement/Generationの既存3本、schedule/active変更なし
-- observed fetch runs: 2回ともcompleted、errorなし
-- generation_error: 1件、generation_failed: 1件
-- publish_attempts>0: 0件
-- observed fetch runsのrunning残存: 0件
-- production DB write: 0
+## Safety
+
+- DB write: auto_publish設定1項目のみ
 - migration / DDL / GRANT: 0
-- Cron / settings変更: 0
-- secrets変更・表示: 0
+- code / deploy / Cron / secrets変更: 0
+- OpenAI手動API: 0
 - X API / X投稿: 0 / 0
-- 他Function deploy: 0
-- 既存candidateの手動変更・再claim・再生成: 0
-- apps/admin / HANDOFF.md / コード変更: 0
+- 他投稿種別の設定変更: 0
+- apps/admin / HANDOFF.md変更: 0
 
-## 判定
-
-承認済みmainから対象Functionのみをdeployし、2回の自然Fetch→Judgement→Generationを確認した。coverage側ではmarket_macro候補の取得と生成成功を確認できた。generation側では成功経路を確認できた一方、2回目に `MISSING_EXPLICIT_YEAR` のfact retry後失敗が1件発生したため、追加修正・再処理は行わず `review_required` とする。
-
-- commit_hash: `7f53c49`
-- push: `7f53c49` をorigin/mainへpush済み
-- next_recommendation: ChatGPT review
+- commit_hash: control-only commit pending
+- push: control-only TASK/Report updateをorigin/mainへpush予定
+- next_recommendation: ChatGPT review。自然投稿を確認するには、既存の正規publish_ready起動経路の有無を別途判断する。
