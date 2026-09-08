@@ -3,8 +3,8 @@
 - task_id: morning-greeting-production-recovery-verify-20260908
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - purpose: `morning_greeting` のX画像投稿403復旧後、本番でdry-runを確認し、全安全条件を満たした場合のみ今日分のmanual publishを1回だけ実施して復旧を完了確認する。
 
@@ -123,3 +123,57 @@ Report必須:
 - deploy有無
 - production変更内容（投稿以外に変更が無いこと）
 - 失敗時はerror code / safe diagnosticsのみ
+
+## Report
+
+- task_id: morning-greeting-production-recovery-verify-20260908
+- result: Step 1（dry-run）は完全成功。Step 2（manual publish）は**ユーザー判断により今回は実施せず**、明日以降の定時Cron自然実行に委ねることになった。X実投稿は今回0件。
+
+### production x-test-post version
+
+- `x-test-post`: **v89 / ACTIVE**（`verify_jwt: false`）。前タスク（`x-test-post-deploy-verify-20260907`）でのv88から、Claude slot 2のX media scope reauthタスク（診断強化コミット`1088081`）で既にv89へdeploy済みだったことを確認。今回はdeployしていない（token更新のみで既存production codeが動作するため、pre-check5の判断どおり）。
+
+### pre-check結果
+
+- `scheduled_posts`: 今日（2026-09-08 JST）の`morning_greeting`行は1件のみ、`scheduled_for: 2026-09-07 21:55:22+00`（=06:55 JST）、`status: failed`、`attempt_count: 1`。
+- `publish_claims`: 同上1件のみ、`status: failed`、`error_code: MORNING_GREETING_MEDIA_UPLOAD_FAILED:403`、`x_post_id: null`。
+- `post_execution_logs`: `started`→`failed`の2件、`x_post_id`はいずれも`null`。
+- 今日分の`posted`/`x_post_id`あり行は**存在しない** → 再投稿リスクなしを確認。
+- 既存manual publish path（`publish_morning_greeting_manual`モード）はコード上、`resolveAdminAuthorization()`で実在の管理者Supabase Authセッション（`admin_users`登録済みuser_id）を必須とする設計を確認（`admin_auth_logic.ts`）。サービスロール/anon keyでの迂回は不可能（意図的な安全ゲートと判断）。DB直書きでの迂回はしていない。
+
+### dry-run結果（Step 1）
+
+`test_morning_greeting_payload`モードで本番へ1回POST:
+
+- HTTP 200 / `success: true` / `payload_ready: true`
+- 本文: 116文字（既存100〜300文字validator範囲内、`retry_count: 0`で初回accept）
+- 「おはよう」必須判定・テーマ整合性（`theme_match: true`、`theme: "generic"`）を満たす
+- 画像: `generated/2026-09-08.png`、`image_exists: true`
+- `x_api_called: 0` / `x_posted: false` — X API呼び出しは一切なし
+- dry-run前後でread-only確認: `scheduled_posts`/`publish_claims`に新規行なし（DBにposted扱いを作らないことを確認）
+
+**Step 1は確認項目すべてPASS。**
+
+ユーザーへ本文・画像・安全確認結果を提示し、Step 2（実投稿）の実行可否を確認したところ、**ユーザーは「2」（今日の手動publishは行わず、明日以降の定時Cron自然実行に委ねる）を選択**。加えて、manual publish path自体が管理者ログインセッションを要求する設計であり、この場での実行手段を私は保持していないことも判明済み。
+
+### manual publish実施有無
+
+- **未実施**。上記の理由（ユーザー判断、および管理者認証の構造的制約）により、今日分のStep 2/Step 3は実行していない。
+
+### duplicateなし確認
+
+- 上記pre-check・dry-run後確認のとおり、今日分の`morning_greeting`は`failed`1件のみで変化なし。二重投稿・二重claimは発生していない。
+
+### deploy有無
+
+- **なし**。production `x-test-post`は既存のv89のまま。
+
+### production変更内容
+
+- **なし**。今回のセッションで実行したのは read-only DB確認（複数回）と、副作用のないdry-run HTTP呼び出し1回のみ。DB migration/schema/GRANT、Cron、secrets/token、`posting_windows`、他Edge Functionへの変更は一切なし。X実投稿も0件。
+
+### remaining_issues / next_recommendation
+
+- media upload権限の本番復旧そのものは、dry-run結果と非投稿テスト（トークンローテーション時点で確認済み、media id `2097199343459823616`）から見て解消されていると判断してよい。ただし**実際の投稿成功は今回未確認**のまま。
+- 次回の定時Cron（明日06:30-07:00 JST帯）で`morning_greeting`が自然実行された際、`MORNING_GREETING_MEDIA_UPLOAD_FAILED:403`が再発しないか、read-onlyで確認することを推奨。
+- 今日分（2026-09-08）の投稿は結果として見送られたため、今日のmorning_greetingは欠番のまま。再投稿するかどうかは別途ユーザー/ちゃっぴー判断（今回のタスクスコープ外）。
