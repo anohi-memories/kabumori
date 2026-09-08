@@ -3,7 +3,7 @@
 - task_id: morning-report-us-holiday-session-labeling-20260908
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: review_required
 - next_owner: codex
 - priority: urgent
 - purpose: 2026-09-08朝刊で、前夜の米国市場がLabor Day休場だったにもかかわらず、前営業日9/4の半導体上昇をトップ項目で「米国半導体株が広く上昇。半導体指数も約3%上昇」と出し、読者に「昨夜の値動き」と誤認させる時間軸問題が発生した。米国市場の休場判定と前営業日ラベルを機械的に保証し、朝刊が古いセッションを最新セッションのように表現しないよう最小修正する。
