@@ -190,8 +190,8 @@ DB schema追加が必要なら勝手にmigrationせず、既存JSON列等で安�
 - voice_retry: existing one-at-most Voice retry remains bounded; Fact and Voice retries cannot recursively repeat.
 - diagnostics: Fact retry details are placed inside the existing `generation_voice_retry` JSONB payload as a nested `fact_retry` object. No migration was added.
 - tests: relevant post-generation plus persistence tests `106/106` passed; full important-news-monitor suite `255/255` passed with `--no-check --allow-read`; `git diff --check` passed; post-generation and dispatch type checks passed. Full index type check remains blocked by the existing missing `npm:unpdf@1.8.1` dependency in this clean environment; no new type error was observed in changed modules.
-- commit_hash: `f43a95e` (local, ready to push)
-- push: pending
+- commit_hash: `710d5e8` (pushed to origin/main)
+- push: `710d5e8` to `origin/main`
 - deploy: 0
 - production_db_write: 0
 - migration: 0

@@ -3,7 +3,7 @@
 - task_id: important-news-generation-reliability-fix-20260908
 - result: review_required
 - next_owner: chatgpt
-- implementation_commit: `f43a95e` (local, ready to push)
+- implementation_commit: `710d5e8` (pushed to origin/main)
 - implementation_base: `origin/main` `7de5a37a5138`
 
 ## 実装結果
@@ -47,6 +47,6 @@
 
 ## Commit / push
 
-- commit_hash: `f43a95e`
-- push: pending
+- commit_hash: `710d5e8`
+- push: `710d5e8` to `origin/main`
 - next recommendation: ChatGPT review (`C`), then separately decide any deployment/observation. This task itself does not authorize deploy or production generation.
