@@ -2,148 +2,129 @@
 
 Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは、`.agent/ORCHESTRATION.md` と既存のプロジェクトルールを確認したうえで、このファイルだけを自分の担当タスク正本として扱います。
 
-- task_id: important-news-safe-publish-trigger-implementation-20260908
+- task_id: important-news-safe-publish-production-activation-20260908
 - owner: codex
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: urgent
-- purpose: `auto_publish=true` 済みの重要ニュースについて、過去のready候補を誤投稿せず、新規の `most_important` 候補だけが既存安全条件を満たした時に自然自動投稿される起動経路を安全に実装する。
+- purpose: ChatGPT承認済みの安全publish trigger実装を本番へ反映し、過去ready候補を一切投稿せず、反映後に自然発生した新規 `most_important` だけが既存安全条件を満たした時に自動投稿されるproduction状態へ安全に移行する。
 
-## Previous C Review
+## Previous task review
 
-前タスク `important-news-auto-publish-enable-20260908` の調査結果は承認済み。
+前タスク `important-news-safe-publish-trigger-implementation-20260908` はChatGPTレビューで承認。
 
-確認済み:
-- `important-news-monitor` v30 ACTIVE
-- `auto_publish=true`
-- `publish_ready` mode自体は存在
-- Generation完了時の内部publish dispatchは存在しない
-- production CronはFetch/Judgement/Generationの3本のみ
-- `publish_ready` Cronは0本
-- x-test-postのscheduled_posts dispatcherはimportant-news用ではない
-- `ready_for_publish` は29件、そのうち `most_important` 6件
-- publish_attempts>0 = 0、x_post_idあり = 0
-- 過去candidateの再claim・再生成・手動投稿は未実施
+承認内容:
+- `important_news_monitor_settings.updated_at` をcutover境界として `generated_at >= updated_at` の候補だけauto-publish対象にするguard。
+- 明示candidateIdでもcutover以前/不正timestampはclaim前にfail-closed。
+- cutover timestamp取得不能時はfail-closed。
+- `most_important`限定、ready_for_publish、Fact/Voice passed、HTTPS source、未投稿、atomic claim、duplicate/rate/overnight/publish safetyを維持。
+- `publish_ready` を5分間隔で呼ぶCron SQL案。
+- important-news全テスト 261 passed / 0 failed、`git diff --check` pass。
+- production変更/X投稿は0。
 
-前タスクの調査は完了。自動投稿というユーザー目的を達成するには新規の安全な起動経路実装が必要。
+## Critical activation safety
 
-## Critical safety requirement
+**過去の `ready_for_publish` 候補を投稿してはならない。**
 
-**既存の過去 `ready_for_publish` 候補を自動投稿してはならない。**
+特に、以前から残っている `most_important` backlogをCron有効化直後に拾わないこと。
 
-特に、現在残っている `most_important` 6件を、Cron追加直後にbacklogとして投稿する実装は禁止。
+前実装はsettingsの `updated_at` をcutoverに使うため、単にコードdeploy→Cron有効化だけを行うと、`auto_publish=true` にした時刻以降〜今回deploy前までに生成された候補がcutover後として扱われる可能性がある。
 
-新しい自動投稿は、今回の安全起動経路を有効化した後に自然発生した新規候補だけを対象にすること。
+そのため、本番activationでは **deploy完了後かつCron有効化前にcutover時刻を更新** し、その時刻より前の候補が1件もpublish対象にならないことをread-only確認してからCronを有効化する。
 
-## Required investigation before implementation
+## Required pre-check
 
-1. `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, 本TASKを確認。
-2. `important-news-monitor` の `publish_ready` repository/claim/order/filterを確認し、現在どのready候補を拾う設計か特定。
-3. `important_news_monitor_settings` の既存列（updated_at等を含む）やcandidateのgenerated_at/created_at等を確認し、schema変更なしで安全なcutover境界を作れるか確認。
-4. 既存のduplicate protection / atomic claim / rate control / overnight hold / Fact / Voice / https source / `most_important` eligibilityをそのまま維持。
-5. Claude側のclose_report/morning_report作業と同一Cron/dispatcher/Functionを変更する必要がある場合は競合として開始せず報告。
+1. `.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、本TASKを確認。
+2. origin/mainに前タスクの承認済み実装が含まれ、未承認ローカル差分がないことを確認。
+3. Claude/他workstreamが `important-news-monitor`、同一Cron名、同一settings rowを変更中でないことを確認。競合時はproduction変更せず報告。
+4. productionの現在値をread-only確認:
+   - `important-news-monitor` version/status
+   - `auto_publish=true`
+   - settings `updated_at`
+   - ready_for_publish / most_important backlog件数
+   - publish_attempts / x_post_id
+5. 実装コードが `generated_at >= settings.updated_at` をclaim前に適用していることを再確認。
 
-## Preferred design
+## Authorized production activation
 
-最小で安全なら以下を優先:
+以下の順序に限定して許可する。
 
-- `publish_ready` が「auto_publish有効化後に生成/ready化された候補」だけを対象にできるcutover guardを追加。
-- cutover時刻は既存settingの `updated_at` 等、productionで既に確定している安全な時刻を再利用できるなら優先。
-- 既存列で安全に表現できない場合、勝手にmigrationせず `review_required` で必要性を報告。
-- natural triggerは既存設計に沿った明示的Cronなど、単一路線にする。
-- Cronは短時間隔でよいが、既存rate controlとatomic claimを必ず通す。無制限投稿ループは禁止。
+### Step 1: Edge Function deploy
+- 承認済みmainから `important-news-monitor` のみdeploy。
+- 他Function deploy禁止。
+- deploy後ACTIVE/起動エラーなしを確認。
 
-## Implementation scope
+### Step 2: cutover timestamp refresh
+Cronを有効化する**前**に、重要ニュースsettingsのcutover境界 `updated_at` をdeploy後時刻へ更新する。
 
-ローカル実装とテストまで。
+安全な最小方法を選ぶ:
+- settings rowにupdated_atを安全に更新できる既存正規経路があるならそれを使用。
+- それがない場合、`auto_publish` を一時 `true -> false -> true` としてupdated_atが確実に更新される既存仕様なら、その2回の設定変更のみ許可。
 
-許可:
-- `important-news-monitor` 内の必要最小限コード変更
-- 関連test追加/修正
-- Cron SQL/migrationファイルが既存repo運用上必要なら、**本番適用せず**ローカル成果物として作成してよい
-- commit / push
+条件:
+- 最終状態は必ず `auto_publish=true`。
+- `is_active`, `interval_minutes`, Luna/Sol設定、threshold等は変更しない。
+- cutover時刻がdeploy完了後であることをread-back確認。
+- `generated_at < cutover` の既存候補がpublish対象に入らないことをread-only確認。
 
-禁止:
-- production Edge Function deploy
-- production Cron追加/変更
-- production DB write
-- migration/DDL/GRANTの本番適用
-- secrets変更/表示
-- X API / X投稿
+updated_at更新方法が安全に一意特定できない場合はCronを有効化せず `review_required` で停止。
+
+### Step 3: publish_ready Cron activation
+- 承認済みmigration/Cron SQL案だけを適用。
+- `publish_ready` を5分間隔で呼ぶ単一job。
+- `is_active=true` かつ `auto_publish=true` の場合のみ実行。
+- 同名job重複なし。
+- Fetch/Judgement/Generation既存Cronを変更しない。
+
+## Explicitly forbidden
+
 - 過去candidateのstatus変更・再claim・再生成・backfill
+- 手動candidate注入
+- テスト目的の手動X投稿
 - `important` を自動投稿対象へ拡大
 - Fact/Voice/importance thresholdの緩和
-- close_report/morning_report/morning_greeting/useful_tipの変更
+- secrets変更/表示
+- 不要なmigration/DDL/GRANT
+- x-test-post / close_report / morning_report / morning_greeting / useful_tip等の変更
 - Claude TASK/Report変更
+- 承認済みコード以外の追加実装
 
-## Required tests
+## Verification after activation
 
-最低限:
-
-1. backlog safety
-- cutover以前の `most_important + ready_for_publish + Fact/Voice passed` はpublish対象にならない。
-- cutover以前の既存6件相当fixtureが1件もclaimされない。
-
-2. new candidate path
-- cutover後の新規 `most_important` で既存eligibilityを満たす候補だけclaim可能。
-- `important` は対象外。
-- Fact fail / Voice fail / http source / already posted は対象外。
-
-3. duplicate/rate safety
-- atomic claimが維持される。
-- 同一candidateの二重投稿が発生しない。
-- rate control / overnight holdを迂回しない。
-
-4. trigger
-- 自然起動用Cron/trigger案が `publish_ready` を正しいmodeで呼ぶこと。
-- 既存Fetch/Judgement/Generation Cronを壊さない。
-
-5. regression
-- relevant tests
-- important-news-monitor full regression可能範囲
-- lint/typecheck可能範囲
-- `git diff --check`
+1. `important-news-monitor` ACTIVE、起動/import errorなし。
+2. `auto_publish=true`、cutover `updated_at` がdeploy後時刻。
+3. publish_ready Cronが1本だけactive、5分間隔。
+4. 既存Fetch/Judgement/Generation Cronはschedule/active不変。
+5. cutover以前の既存most_important ready候補について:
+   - publish_attemptsが増えていない
+   - x_post_idが付いていない
+   - claimされていない
+6. 次に自然発生するcutover後の新規 `most_important` のみ観測。
+7. 自然投稿が成立した場合:
+   - candidate id
+   - generated_at >= cutover
+   - Fact/Voice passed
+   - publish claim 1回
+   - X post id / timestamp
+   - duplicateなし
+   をReport。
+8. 観測時間内に対象が出なければ人工的に作らず、「自動起動経路有効化済み・初回自然投稿未成立」とReport。
 
 ## Completion criteria
 
-- 安全なcutover guardと自然publish triggerの実装案が完成。
-- 過去ready候補を誤投稿しないテストがpass。
-- 既存publish eligibilityを緩めていない。
-- production変更0、X投稿0。
+- 承認済みsafe trigger実装だけを本番deploy。
+- deploy後かつCron有効化前にcutover境界更新。
+- 過去ready候補が対象外であることを確認。
+- publish_ready Cronを単一経路で有効化。
+- 既存安全条件維持。
+- 過去候補誤投稿0、手動X投稿0。
 - TASK末尾に `## Report` を追加。
 - status: `review_required`
 - next_owner: `chatgpt`
 
-- commit: 許可
-- push: 許可
-- deploy: 禁止
-- production changes: 禁止
+- commit: TASK/Report更新のみ許可
+- push: TASK/Report更新は許可
+- deploy: `important-news-monitor` のみ許可
+- production migration/Cron: 上記publish_ready jobのみ許可
+- production settings write: cutover更新に必要な最小変更のみ許可
 - report_mode: inline
-
-## Report
-
-- task_id: important-news-safe-publish-trigger-implementation-20260908
-- result: review_required
-- changed_files:
-  - `supabase/functions/important-news-monitor/index.ts`
-  - `supabase/functions/important-news-monitor/publish_logic.ts`
-  - `supabase/functions/important-news-monitor/publish_logic_test.ts`
-  - `supabase/functions/important-news-monitor/auto_publish_cutover_logic.ts`
-  - `supabase/functions/important-news-monitor/auto_publish_cutover_logic_test.ts`
-  - `supabase/functions/important-news-monitor/important_news_publish_cron_test.ts`
-  - `supabase/migrations/20260908110000_add_important_news_publish_ready_cron.sql`（ローカル提案のみ・本番未適用）
-- implementation:
-  - `important_news_monitor_settings.updated_at`を既存cutover境界として読み取り、`generated_at >= updated_at`の候補だけauto-publish選択対象にした。
-  - `candidateId`明示時もcutover以前/不正timestampは`NEWS_AUTO_PUBLISH_CUTOVER_BLOCKED`でclaim前に停止。
-  - `updated_at`取得不能時は候補選択をfail-closed。
-  - `publish_ready`を5分間隔で呼ぶCron SQL案を追加。`is_active=true`かつ`auto_publish=true`のみ呼び出し、重複jobは作成しない。
-- safety:
-  - `most_important`限定、ready_for_publish、Fact/Voice passed、HTTPS source、未投稿、atomic claim、rate/overnight/publish safetyは維持。
-  - `important`の自動投稿拡大、過去候補の再claim/reprocess、X API、production write、deployは未実施。
-- tests:
-  - 新規cutover/triggerを含むimportant-news全テスト: 261 passed / 0 failed（`deno test --no-check`）。
-  - `git diff --check`: pass。
-  - `deno check --no-config`: 既存の無関係な2エラーで失敗（`supabase/functions/_shared/x_oauth2_post.ts:66`、既存`important-news-monitor/index.ts:683`）。今回変更箇所のエラーではない。
-- production: `auto_publish=true`は既存状態を維持。Cron/migration/deploy/DB write/X投稿は0。
-- commit: TASK/Reportと実装コードのローカルcommit/pushは許可。production適用は別レビュー後。
-- next_owner: chatgpt
