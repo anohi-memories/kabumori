@@ -4,7 +4,7 @@ Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは
 
 - task_id: important-news-generation-reliability-fix-20260908
 - owner: codex
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - purpose: `important` / `most_important` に採用された重要ニュースが、企業同一性判定や軽微なFact不整合で生成全落ちする問題を、安全性を維持したまま最小修正する。
 - priority: high
