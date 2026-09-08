@@ -140,3 +140,14 @@ updated_at更新方法が安全に一意特定できない場合はCronを有効
 - safety: no candidate status change, no claim, no backfill, no manual publish, no X API/X post, and no other setting/function/deploy change.
 - blocker: explicit user approval is required before retrying the production cutover setting write and then applying the single approved publish_ready Cron.
 - next_owner: chatgpt
+
+## C Review
+
+- result: blocked_pending_explicit_user_approval
+- reviewed_by: chatgpt
+- approved_so_far: `important-news-monitor` v31 deploy is accepted; no unsafe backlog processing occurred.
+- remaining_production_actions_requiring_explicit_user_approval:
+  1. temporarily toggle `auto_publish` true -> false -> true solely to refresh `updated_at` as the cutover boundary, ending with `auto_publish=true`;
+  2. after confirming old backlog is excluded, apply exactly one approved `important-news-publish-ready` Cron job at 5-minute intervals.
+- no other production settings, code, candidate rows, thresholds, or posting types may change.
+- status remains `review_required` until the user explicitly approves these two production actions.
