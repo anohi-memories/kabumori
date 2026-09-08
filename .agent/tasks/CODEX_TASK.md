@@ -4,8 +4,8 @@ Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは
 
 - task_id: important-news-deploy-and-natural-cycle-verification-20260908
 - owner: codex
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - purpose: 直前までにmainへ反映済みの重要ニュース取得改善・生成信頼性改善を `important-news-monitor` 本番へ安全にdeployし、自然20分サイクルで取得→判定→生成まで正常に通るかread-only確認する。
 - priority: high
 
@@ -108,3 +108,19 @@ market_macroが走った場合:
 - push: TASK/Report更新は許可
 - deploy: `important-news-monitor` のみ許可
 - report_mode: inline
+
+## Report
+
+- task_id: important-news-deploy-and-natural-cycle-verification-20260908
+- result: review_required
+- changed_files: `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md` の制御情報のみ
+- deploy: `important-news-monitor` のみ。deploy前ACTIVE v29、deploy後ACTIVE v30、`verify_jwt=false` を確認。
+- predeploy: origin/main が承認済み `7bed84e063dbe5fc98bd0c12fa77720eead7936e` と `710d5e8e42374a94fa163aac11098c6f02ce05ac` を含むこと、Claude側に同Function競合がないこと、clean worktreeからのdeployであることを確認。
+- natural_cycle_1: Fetch 07:00 UTC / 16:00 JST、completed、fetched=168、duplicate=86、new=27、errorなし。新規は market_macro=24、tdnet=3。Judgement/Generationで `most_important` 1件が `ready_for_publish`、Fact/Voiceともpassed。
+- natural_cycle_2: Fetch 07:20 UTC / 16:20 JST、completed、fetched=168、duplicate=113、new=3、errorなし。新規3件はtdnet。Judgement/Generationでimportant 1件を処理し、Fact初回失敗 `MISSING_EXPLICIT_YEAR` に対して既定のfact_retryを1回だけ実施したが再検証もfailed。`NEWS_GENERATION_FACT_RETRY_FAILED` で安全停止し、Voiceはnot_run。no_post 2件。
+- generation_verification: 成功経路（most_important→Fact/Voice passed→ready_for_publish）と、失敗時の診断保持・1回限定retry・安全停止を自然サイクルで確認。全候補でgeneration_error=1、generation_failed=1、publish_attempts>0=0、observed fetch runsのrunning残存=0。
+- settings: `is_active=true`, `interval_minutes=20`, `auto_publish=false`, `luna_enabled=true`, `sol_escalation_enabled=true` を維持。Cron 3本のschedule/activeも変更なし。
+- safety_checks: production DB write=0、migration/DDL/GRANT=0、Cron/settings変更=0、secrets変更/表示=0、X API/X投稿=0、他Function deploy=0、既存候補の手動変更・再claim・再生成=0、apps/admin/HANDOFF/code変更=0。
+- commit_hash: control-only commit pending
+- push: control-only TASK/Report更新をorigin/mainへpush予定
+- next_recommendation: ChatGPT review。generation自然確認は成立したが、2回目に `MISSING_EXPLICIT_YEAR` のretry後失敗が1件あり、追加修正や再処理はこのTASKでは行わない。

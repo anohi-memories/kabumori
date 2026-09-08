@@ -1,52 +1,61 @@
 # Codex Report
 
-- task_id: important-news-generation-reliability-fix-20260908
+- task_id: important-news-deploy-and-natural-cycle-verification-20260908
 - result: review_required
 - next_owner: chatgpt
-- implementation_commit: `710d5e8` (pushed to origin/main)
-- implementation_base: `origin/main` `7de5a37a5138`
+- implementation_commits: `7bed84e063dbe5fc98bd0c12fa77720eead7936e`, `710d5e8e42374a94fa163aac11098c6f02ce05ac` (既存の承認済みorigin/main)
+- deploy: `important-news-monitor` のみ
+- deploy_before: ACTIVE v29 / verify_jwt=false
+- deploy_after: ACTIVE v30 / verify_jwt=false
 
-## 実装結果
+## 自然サイクル観測
 
-1. 信頼済みTDnetの `company_code` と `entity_key` が一致する場合に限り、一次資料の会社名ヘッダーに現れる安全な法人 suffix 差を許容。小森/小森コーポレーション、旭コンクリ/旭コンクリート工業を追加し、異なるコード・unsafe suffix・単なる部分一致は拒否。
-2. Fact失敗後、明示された年・日付の復元、根拠のない市場解釈/影響/因果表現の削除、確認済み企業の安全な表記統一、軽微な表記整合だけを対象に `fact_retry` を最大1回実行。
-3. retry本文へは見出し・source URLをプログラム側で再付与し、local Fact → AI Factを再実行。両方passedの場合だけ既存Voiceへ進む。Fact/Voice retryは各1回で、再帰的なretryはない。
-4. 既存の `generation_voice_retry` JSONBを維持し、内部に `fact_retry` 診断を追加。attempted、initial issues、model、local/retry Fact status/issues、errorを保存可能にした。migrationは追加していない。
+### 1回目
 
-## 変更ファイル
+- Fetch: 07:00 UTC（16:00 JST）、`completed`
+- fetched: 168
+- duplicate: 86
+- new candidates: 27
+- error: なし
+- 新規source内訳: `market_macro` 24、`tdnet` 3
+- Generation: `most_important` 1件が `ready_for_publish`
+- Fact: passed
+- Voice: passed
 
-- `supabase/functions/important-news-monitor/post_generation_logic.ts`
-- `supabase/functions/important-news-monitor/post_generation_logic_test.ts`
-- `supabase/functions/important-news-monitor/index.ts`
-- `supabase/functions/important-news-monitor/generation_persistence_test.ts`
-- `.agent/tasks/CODEX_TASK.md`
-- `.agent/CODEX_REPORT.md`
+### 2回目
 
-## 検証
+- Fetch: 07:20 UTC（16:20 JST）、`completed`
+- fetched: 168
+- duplicate: 113
+- new candidates: 3
+- error: なし
+- 新規source内訳: `tdnet` 3
+- Generation: `important` 1件、`no_post` 2件
+- Fact: 初回 `MISSING_EXPLICIT_YEAR`、既定のfact retryを1回だけ実施したが再検証もfailed
+- failure: `NEWS_GENERATION_FACT_RETRY_FAILED`
+- Voice: `not_run`（Fact未通過のため）
 
-- relevant generation/persistence tests: `106/106` passed.
-- important-news-monitor full regression: `255/255` passed (`deno test --no-check --allow-read .../*_test.ts`).
-- `deno check` for changed generation/dispatch modules: passed.
-- full `index.ts` check: this clean environment lacks cached `npm:unpdf@1.8.1`; dependency resolution stops before type checking. No production command was run.
-- `git diff --check`: passed.
+## 設定・安全確認
 
-## 制約と安全確認
-
+- settings: `is_active=true`, `interval_minutes=20`, `auto_publish=false`, `luna_enabled=true`, `sol_escalation_enabled=true`
+- Cron: Fetch/Judgement/Generationの既存3本、schedule/active変更なし
+- observed fetch runs: 2回ともcompleted、errorなし
+- generation_error: 1件、generation_failed: 1件
+- publish_attempts>0: 0件
+- observed fetch runsのrunning残存: 0件
 - production DB write: 0
 - migration / DDL / GRANT: 0
-- Edge Function deploy: 0
-- Cron / settings: 0
-- OpenAI real API: 0
-- X API / X post: 0 / 0
-- existing failed candidates: untouched; no reprocessing or backfill
-- `apps/admin/**`: 0
-- `HANDOFF.md`: 0
-- other functions/features: 0
-- secrets exposed: 0
-- formal dirty worktree: untouched; implementation was isolated in a clean temporary worktree
+- Cron / settings変更: 0
+- secrets変更・表示: 0
+- X API / X投稿: 0 / 0
+- 他Function deploy: 0
+- 既存candidateの手動変更・再claim・再生成: 0
+- apps/admin / HANDOFF.md / コード変更: 0
 
-## Commit / push
+## 判定
 
-- commit_hash: `710d5e8`
-- push: `710d5e8` to `origin/main`
-- next recommendation: ChatGPT review (`C`), then separately decide any deployment/observation. This task itself does not authorize deploy or production generation.
+承認済みmainから対象Functionのみをdeployし、2回の自然Fetch→Judgement→Generationを確認した。coverage側ではmarket_macro候補の取得と生成成功を確認できた。generation側では成功経路を確認できた一方、2回目に `MISSING_EXPLICIT_YEAR` のfact retry後失敗が1件発生したため、追加修正・再処理は行わず `review_required` とする。
+
+- commit_hash: control-only update pending
+- push: control-only TASK/Report updateをorigin/mainへpush予定
+- next_recommendation: ChatGPT review
