@@ -1,100 +1,139 @@
 # Codex Task 2
 
-- task_id: morning-report-us-holiday-session-labeling-20260908
+- task_id: morning-greeting-soft-daily-copy-20260909
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: chatgpt
-- priority: urgent
-- purpose: 2026-09-08朝刊で、前夜の米国市場がLabor Day休場だったにもかかわらず、前営業日9/4の半導体上昇をトップ項目で「米国半導体株が広く上昇。半導体指数も約3%上昇」と出し、読者に「昨夜の値動き」と誤認させる時間軸問題が発生した。米国市場の休場判定と前営業日ラベルを機械的に保証し、朝刊が古いセッションを最新セッションのように表現しないよう最小修正する。
+- status: ready
+- next_owner: codex
+- priority: high
+- purpose: 朝の挨拶投稿の文章が朝刊・相場解説のように固くなっているため、morning_greetingの文章だけを「日常の軽い朝挨拶」へ寄せる。画像生成・画像品質・投稿経路は変更しない。
 
-## Confirmed incident
+## User feedback / incident
 
-2026-09-08朝刊では:
-- 前夜2026-09-07の米国株式市場はLabor Dayで休場
-- 実際の約3%半導体上昇は前営業日2026-09-04の動き
-- 本文途中では「前週末の米国市場では」と書けていた
-- しかしトップ3では「米国半導体株が広く上昇。半導体指数も約3%上昇」とだけ表示され、通常読者は昨夜の値動きと解釈する
+2026-09-09の自然投稿は画像は良好だったが、本文が朝から固すぎた。
 
-これは「数字自体の捏造」ではなく、セッション日付・休場情報の表示欠落による重大な時間軸誤認。
+実例:
+- `朝の値動きは、数字だけ追うと情報が多く見えますが、決算やニュースと照らすと少し整理しやすいです。`
+- `急いで答えを出さず、今日もひとつずつ見ていけたら。`
+
+このような相場解説・指導口調はmorning_greetingには不要。
+
+ユーザーが望む方向感の例:
+`おはようございます☀️\n朝の空気が少し気持ちいいですね😊\n今日も無理せず、ぼちぼちいきましょう。\n良い1日になりますように☕️`
+
+※上記例を毎日固定で出すのではなく、自然な日常挨拶のトーン例として使う。
 
 ## Required investigation
 
-1. 現在の`morning_report`が米国市場セッション日をどう決めているか確認する。
-2. 既存の`getExpectedUsSessionDate()`や米国市場営業日/休日判定を再利用できるか確認する。
-3. Labor DayなどNYSE/Nasdaq休場日の翌朝に、前営業日の指数・SOX等を使う場合どのフィールド/ロジックで区別できるか確認する。
-4. 生成プロンプト、fact-check、format validator、local safetyのどこに「セッション日ラベル強制」を入れるのが最も決定的で安全か判断する。
-5. 9/8 incidentを再現するテストを先に追加する。
+1. `morning_greeting_logic.ts` の現在の共通KABUMORI_VOICE継承と専用instructionが、なぜ相場解説・先生口調を誘発するか確認する。
+2. morning_greeting専用で、他投稿タイプの品質ルールを壊さずに文章だけ柔らかくできる最小変更箇所を特定する。
+3. 現在の100〜300文字validator、120〜200文字target、length retryが今回の「固さ」にどう影響しているか確認する。
+4. 既存の安全ガード（架空体験、未確認天気、売買助言、未確認記念日、URL/タグ禁止等）は維持する。
 
 ## Required implementation
 
-### 1. 米国市場休場を機械判定
+### 1. 朝挨拶を日常投稿へ寄せる
 
-朝刊生成時に、対象となる「前夜の米国市場」が休場だったかを明示的に判定できる状態にする。
-- 休日判定をLLM推測だけに任せない
-- 既存の米国セッション日ロジックが使えるなら再利用
-- 新たな外部依存を増やさない最小実装を優先
+morning_greeting専用prompt/instructionを次の方向へ変更する。
 
-### 2. 休場翌朝は冒頭で明示
+- 株の解説は原則入れない。
+- 朝刊のような相場解説、決算・ニュース整理、投資の考え方の説明をしない。
+- 読者を指導する文章にしない。
+- `整理しやすいです`、`ひとつずつ見ていけたら`、`確認していきましょう`、`焦らず見ていきましょう` 等の先生・解説者口調を避ける。
+- 「おはようございます」＋軽い日常の一言＋柔らかい締め、を基本にする。
+- 毎回同じ構成・定型文に固定しない。
+- その日の確定テーマ（special_day / seasonal / weekday / generic）がある場合は短く自然に触れるだけでよい。豆知識や解説へ広げない。
+- 天気・外出・食事・家族行事など、入力にない本人の現実を作らない。
 
-前夜が米国休場だった場合、朝刊本文の上部（少なくともトップ3より前または最初の注目ポイント内）に、読者が誤認しない形で必ず明示する。
-例:
-- `昨夜の米国株はLabor Dayで休場。以下は前営業日9/4の動きです。`
-休日名が安全に確定できない場合は:
-- `昨夜の米国株は休場。以下は前営業日の動きです。`
+### 2. 文字数を朝挨拶向けに軽くする
 
-### 3. 前営業日データのラベル強制
+目安を **60〜140文字程度** に変更する方向で実装する。
 
-休場翌朝に前営業日の指数・SOX・個別株の値動きを扱う場合、無日付表現を禁止し、`前営業日9/4`、`前週末`、具体日付など、古いセッションであることが見出し/要約だけ読んでも分かる表現を必須とする。
+- validatorも、自然な60〜140文字程度が正常に通るように調整する。
+- generation targetはvalidator範囲の内側に十分余裕を持たせる。
+- length retryは既存の「最大1回のみ」を維持する。
+- 文字数を埋めるために株解説・一般論・助言を足さない。
+- 短く自然に成立している文章を不必要に長文化しない。
 
-### 4. セッション日整合性をvalidator/fact checkで保証
+具体的な最終min/maxは、既存テストと生成安定性を見て安全側で決めてよいが、今回の目的は「100文字以上を埋めるための相場解説」を不要にすること。
 
-最低限:
-- 前夜休場時に`昨夜/前夜の米国市場が上昇・下落した`と読める表現を許さない
-- 前営業日データを使う場合、本文または該当ポイントに`前営業日`/具体日付/`前週末`等のラベルがあること
-- `usSessionDate`と本文のセッション参照が矛盾しないこと
+### 3. 絵文字
 
-### 5. 休場日は古い材料を最新材料扱いしない
+- 1〜3個程度を目安。
+- 朝の柔らかさに合う範囲で自然に使う。
+- 個数合わせのための装飾はしない。
 
-米国休場日に前営業日の株価材料を再利用する場合でも、その後に発生した新しいマクロ/為替/金利/地政学材料があれば時間軸上そちらを優先できるようにする。ただし大規模な材料ランキング再設計は不要。
+### 4. 画像は一切変更しない
+
+2026-09-09の画像品質はユーザー評価が良好。
+
+変更禁止:
+- `morning_greeting_image_logic.ts`
+- `yume_reference_logic.ts`
+- canonical reference
+- 画像prompt
+- 画像model / quality / size
+- Storage画像生成経路
+- 画像テーマ選択ロジック（文章と共有する既存theme selection自体の必要最小限参照を除く）
+
+### 5. 投稿・OAuth・Storage receiptの失敗処理は今回触らない
+
+2026-09-09にはX投稿成功後のlegacy Storage receipt保存がHTTP 400となり、scheduled_postsだけfailed扱いになる別問題が確認されている。
+
+このTASKは文章の柔らかさだけを対象とし、以下は変更しない:
+- `morning_greeting_publish_logic.ts`
+- publish_claims
+- OAuth / token refresh
+- X media upload
+- X POST
+- published receipt
+- `scheduled_posts`
+- Cron / scheduler
+
+この別問題をついでに直さない。
 
 ## Tests
 
 最低限:
-1. 2026-09-08 JST朝 → 前夜2026-09-07 Labor Day休場と判定できる
-2. 休場翌朝に9/4のSOX上昇を使う場合、`前営業日`/`前週末`/具体日付ラベルなしの出力をreject
-3. `米国半導体株が広く上昇。半導体指数も約3%上昇`のような無日付表現を9/8条件でreject
-4. `昨夜の米国株は休場。前営業日9/4のSOXは約3%上昇`はaccept
-5. 通常の米国営業日翌朝では既存の「昨夜の米国市場」表現を不必要に壊さない
-6. weekend後の月曜朝など既存セッション日ロジックと整合する
-7. morning_report relevant tests pass
-8. full x-test-post regression pass
+1. 60〜140文字程度の自然な朝挨拶がacceptされる。
+2. `おはようございます`を含む短い日常挨拶が、旧100文字下限だけを理由にrejectされない。
+3. `朝の値動きは〜決算やニュースと照らすと〜` のような相場解説寄り文を生成instruction上で明確に抑制できる。
+4. `急いで答えを出さず〜ひとつずつ見ていけたら` のような指導口調を抑制する。
+5. special_day / seasonal themeは短く自然に触れられ、別記念日の捏造は引き続きreject。
+6. 未確認天気、架空体験、売買助言、URL/ハッシュタグの既存guardが維持される。
+7. length retryは最大1回のまま。
+8. morning_greeting relevant tests pass。
+9. full x-test-post regression pass。
 
 ## Scope / conflicts
 
 主対象:
-- `supabase/functions/x-test-post/morning_report_logic.ts`
-- `supabase/functions/x-test-post/index.ts`
-- `supabase/functions/x-test-post/us_session_date_logic.ts`（必要な場合のみ）
-- 関連tests
+- `supabase/functions/x-test-post/morning_greeting_logic.ts`
+- 関連するmorning_greeting tests
+
+必要なら最小限:
+- morning_greeting専用のtest helper
 
 触らない:
-- Codex slot1担当領域
-- Claude slot1担当領域
-- `send-push-notifications/**`
-- morning_greeting OAuth/media upload関連
+- `morning_greeting_image_logic.ts`
+- `yume_reference_logic.ts`
+- `morning_greeting_publish_logic.ts`
+- morning_report
 - close_report
+- important-news-monitor
 - DB migration/schema/GRANT
-- Cron
-- `posting_windows`
+- Cron / scheduler
+- posting_windows
 - secrets
 - 他Edge Function
 
-他slotが同じ`x-test-post`配下を変更中または未pushの場合は、同時編集・同時pushせず競合確認を優先する。push前に`origin/main`をfresh-checkする。
+開始時・push前にorigin/mainをfresh-checkする。
+同じ`x-test-post` Edge Functionまたは同じ対象ファイルを他slotが変更中なら、同時編集・同時pushせず競合を報告して停止する。
 
 ## Production policy
 
-このTASKは **調査 + local実装 + tests + commitまで**。
+このTASKは **調査 + local実装 + tests + commit/pushまで**。
+
 禁止:
 - production deploy
 - X実投稿
@@ -109,33 +148,14 @@
 完了時:
 - status: `review_required`
 - next_owner: `chatgpt`
-- `.agent/CODEX_REPORT_2.md` にReport
-- incident再現条件
+- `.agent/CODEX_REPORT_2.md` を最新結果で置き換える
 - root cause
-- 休場判定方法
-- 前営業日ラベル保証方法
+- 変更した文体ルール
+- final length target / validator range
 - changed files
-- reproduction/relevant/full test結果
+- relevant/full test結果
 - commit hash
+- push結果
 - production変更なし
-- 次工程推奨
-
-## C2 Review
-
-- result: approved
-- reviewed_by: chatgpt
-- decision: 実装・テスト・安全条件を満たしており、Codex slot 2として完了承認。
-- verified:
-  - 2026-09-08 Labor Day翌朝条件で無日付の米国市場値動きをreject
-  - `前営業日9/5`のような誤った具体日付をreject
-  - 正しい前営業日ラベル・一般的な`前営業日`/`前週末`ラベルは許可
-  - morning report/session tests 54 passed / 0 failed
-  - full x-test-post regression 362 passed / 0 failed
-  - commit `dd80e20` はorigin/main反映済み
-- safety:
-  - production deployなし
-  - X投稿なし
-  - DB write/Cron/posting_windows/secrets/OAuth/migration/schema/GRANT変更なし
-- note:
-  - `useful_tip_output_test.ts`の変更はDeno 2.9で全体回帰を実行可能にするtest-only互換修正で、本番ロジック変更ではない
-  - 次回自然朝刊でのproduction挙動観測は別タスク扱い
+- remaining issues
+- next recommendation
