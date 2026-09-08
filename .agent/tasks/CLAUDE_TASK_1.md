@@ -3,7 +3,7 @@
 - task_id: close-report-immediate-live-test-20260908
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: urgent
 - purpose: 2026-09-08の大引けレポートについて、自動タスク経由ではSupabase実行まで到達しなかったため、現在のproduction状態を使って今すぐ安全にdry-runを実行し、全必須ゲートを通過した場合に限りXへlive投稿を1回だけ試す。
