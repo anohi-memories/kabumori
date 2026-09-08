@@ -2,8 +2,8 @@
 
 - task_id: important-news-safe-publish-production-activation-20260908
 - owner: codex
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - purpose: 過去のready候補を投稿せず、今後自然発生する新規most_importantだけを安全に自動投稿できるproduction状態へ移行する。
 
@@ -53,3 +53,48 @@
 - 出なければ人工生成せず「初回自然投稿未成立」とReport
 - status: review_required
 - next_owner: chatgpt
+
+## Report
+
+- task_id: important-news-safe-publish-production-activation-20260908
+- status: review_required
+- completed_at: 2026-09-08 JST
+
+### Production execution
+
+- `important-news-monitor` deploy: success
+- ACTIVE version: v31
+- `verify_jwt`: false
+- cutover: `auto_publish` was toggled `true -> false -> true`; final `auto_publish=true`
+- cutover `updated_at`: `2026-09-08 14:02:56.23617+00`
+- settings read-back: `is_active=true`, `interval_minutes=20`, `luna_enabled=true`, `sol_escalation_enabled=true`
+
+### Backlog safety
+
+- pre-cutover ready `most_important`: 6
+- post-cutover ready `most_important`: 0
+- ready candidates with `publish_attempts > 0`: 0
+- ready candidates with `x_post_id` set: 0
+- existing candidates were not modified, reclaimed, regenerated, or backfilled
+
+### Cron
+
+- `important-news-publish-ready`: created exactly once, active, `*/5 * * * *`
+- publish request body: `{"mode":"publish_ready"}`
+- execution guard: `is_active=true and auto_publish=true`
+- existing Fetch/Judgement/Generation Cron schedules unchanged
+- publish_ready was not manually invoked
+
+### Observation and safety
+
+- natural post-cutover candidate observation: no artificial/manual candidate was created; initial natural post was not forced
+- manual X publish: 0
+- X API calls: 0
+- candidate status changes: 0
+- other functions/settings/DB schema changes: 0
+- secrets exposed: 0
+
+### Tests / deploy
+
+- important-news regression before deploy: 261 passed, 0 failed
+- deploy target: `important-news-monitor` only
