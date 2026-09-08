@@ -3,7 +3,7 @@
 - task_id: morning-greeting-tone-image-variety-20260908
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - review_status: changes_required
