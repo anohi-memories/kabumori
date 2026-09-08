@@ -4,7 +4,7 @@ Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは
 
 - task_id: important-news-freshness-coverage-fix-20260906
 - owner: codex
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - purpose: 直前のread-only調査で特定した重要ニュース取得の速報遅延と `market_macro` の取りこぼしを、既存構成を大きく壊さない最小修正で改善する。
 - priority: high
@@ -177,3 +177,17 @@ DB schema変更なしでdiagnostics追加できない場合は、勝手にmigrat
   - diagnosticsは既存responseとstructured logで確認可能。run DBへ恒久保存するにはschema変更が必要なため未実施。
   - deployと本番効果確認は未実施。ChatGPTレビュー後に別途判断が必要。
 - next_recommendation: ChatGPTが`C`で差分と上記既存type-check制約を確認し、deploy/自然サイクル観測を別途明示判断する。
+
+## C Review
+
+- result: approved
+- reviewed_by: chatgpt
+- implementation_commit: `7bed84e063dbe5fc98bd0c12fa77720eead7936e`
+- review_summary:
+  - GitHub上の実装差分を確認済み。
+  - 変更moduleの型チェック付きtest 55/55 pass。
+  - important-news-monitor回帰 244/244 pass。
+  - lint / `git diff --check` pass。
+  - production DB / migration / Cron / settings / X / deploy の変更は0。
+  - deployと本番自然サイクル観測は本タスク完了後の別工程として扱う。
+- decision: Codex実装タスクは完了。`status: done`。
