@@ -3,7 +3,7 @@
 - task_id: close-report-one-time-live-20260908
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: urgent
 
