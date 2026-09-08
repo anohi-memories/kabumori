@@ -2,7 +2,7 @@
 
 - task_id: important-news-safe-publish-production-activation-20260908
 - owner: codex
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: urgent
 - purpose: 過去のready候補を投稿せず、今後自然発生する新規most_importantだけを安全に自動投稿できるproduction状態へ移行する。
@@ -98,3 +98,12 @@
 
 - important-news regression before deploy: 261 passed, 0 failed
 - deploy target: `important-news-monitor` only
+
+## C Review
+
+- result: approved
+- reviewed_by: chatgpt
+- decision: production activation completed safely.
+- verified: v31 ACTIVE, final auto_publish=true, cutover refreshed after deploy, pre-cutover backlog excluded, exactly one 5-minute publish_ready Cron active, existing Fetch/Judgement/Generation Cron unchanged.
+- safety: old backlog was not claimed or posted; manual X activity 0; other settings/functions unchanged.
+- note: first natural post-cutover most_important publication is not yet observed, but this does not block activation completion because the trigger path is active and backlog safety is verified.
