@@ -3,217 +3,70 @@
 - task_id: morning-greeting-soft-daily-copy-20260909
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
-- purpose: 朝の挨拶投稿の文章が朝刊・相場解説のように固くなっているため、morning_greetingの文章だけを「日常の軽い朝挨拶」へ寄せ、ユーザーが以前指定した固定ハッシュタグを必ず付ける。画像生成・画像品質・投稿経路は変更しない。
+- purpose: 朝の挨拶本文を柔らかい日常挨拶へ変更し、固定5タグを決定論的に付与する実装のcommit/pushを完了する。
 
-## User feedback / incident
+## C2 Review continuation
 
-2026-09-09の自然投稿は画像は良好だったが、本文が朝から固すぎた。また、以前ユーザーが指定した朝挨拶用ハッシュタグが投稿に入っていなかった。
+- review_result: follow_up_required
+- reviewed_by: chatgpt
+- implementation_review: pass
+- blocker: 実装6ファイルは未コミット、push未実施。元TASKのCompletionはcommit/pushまで必須のため、現時点ではdone承認不可。
 
-実例:
-- `朝の値動きは、数字だけ追うと情報が多く見えますが、決算やニュースと照らすと少し整理しやすいです。`
-- `急いで答えを出さず、今日もひとつずつ見ていけたら。`
+## Verified implementation from current Report
 
-このような相場解説・指導口調はmorning_greetingには不要。
+- morning_greeting専用指示で相場解説・決算/指数説明・先生/指導口調を抑制。
+- 本文validator: 60〜140文字。
+- generation target: 80〜120文字。
+- length retry: 最大1回を維持。
+- 固定タグ `#おはよう #日本株 #日経平均 #かぶモリ #ブルバ100` をコード側で決定論的に1回だけ付与。
+- 固定タグの部分/重複は `MORNING_GREETING_FIXED_HASHTAG_INVALID` で安全停止。
+- morning_greeting関連 tests: 60 passed / 0 failed。
+- x-test-post全体回帰: 365 passed / 0 failed。
+- git diff --check: PASS。
+- production変更なし。
 
-ユーザーが望む方向感の例:
-`おはようございます☀️\n朝の空気が少し気持ちいいですね😊\n今日も無理せず、ぼちぼちいきましょう。\n良い1日になりますように☕️`
+## Required continuation
 
-※上記例を毎日固定で出すのではなく、自然な日常挨拶のトーン例として使う。
+1. `.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、このTASKを再確認する。
+2. `origin/main` をfresh-checkする。
+3. 他workstreamの未コミット変更を絶対にstage/commitしない。
+4. 今回のmorning_greeting実装6ファイルだけを対象に差分を再確認する。
+5. 同じ `x-test-post` 対象ファイルに競合する新規変更がないことを確認する。
+6. 安全なら今回の実装6ファイルをcommitし、origin/mainへpushする。
+7. push後のcommit hashを確認する。
+8. `.agent/CODEX_REPORT_2.md` を最新結果へ更新し、commit_hash / push結果を明記する。
+9. このTASKを `review_required`、`next_owner: chatgpt` に更新してGitHubへ同期する。
 
-固定ハッシュタグは以下を必須とする:
-`#おはよう #日本株 #日経平均 #かぶモリ #ブルバ100`
+## Changed code files expected
 
-## Required investigation
-
-1. `morning_greeting_logic.ts` の現在の共通KABUMORI_VOICE継承と専用instructionが、なぜ相場解説・先生口調を誘発するか確認する。
-2. morning_greeting専用で、他投稿タイプの品質ルールを壊さずに文章だけ柔らかくできる最小変更箇所を特定する。
-3. 現在の100〜300文字validator、120〜200文字target、length retryが今回の「固さ」にどう影響しているか確認する。
-4. 現在の「ハッシュタグ禁止」guardがmorning_greetingにも適用されている箇所を特定し、他投稿タイプへ影響を広げずmorning_greetingだけ固定5タグを許可・必須化する。
-5. 既存の安全ガード（架空体験、未確認天気、売買助言、未確認記念日、URL禁止等）は維持する。
-
-## Required implementation
-
-### 1. 朝挨拶を日常投稿へ寄せる
-
-morning_greeting専用prompt/instructionを次の方向へ変更する。
-
-- 株の解説は原則入れない。
-- 朝刊のような相場解説、決算・ニュース整理、投資の考え方の説明をしない。
-- 読者を指導する文章にしない。
-- `整理しやすいです`、`ひとつずつ見ていけたら`、`確認していきましょう`、`焦らず見ていきましょう` 等の先生・解説者口調を避ける。
-- 「おはようございます」＋軽い日常の一言＋柔らかい締め、を基本にする。
-- 毎回同じ構成・定型文に固定しない。
-- その日の確定テーマ（special_day / seasonal / weekday / generic）がある場合は短く自然に触れるだけでよい。豆知識や解説へ広げない。
-- 天気・外出・食事・家族行事など、入力にない本人の現実を作らない。
-
-### 2. 文字数を朝挨拶向けに軽くする
-
-本文部分の目安を **60〜140文字程度** に変更する方向で実装する。
-
-- 固定ハッシュタグ行は本文文字数とは分けて扱ってよい。
-- validatorも、自然な60〜140文字程度の本文 + 固定ハッシュタグが正常に通るように調整する。
-- generation targetはvalidator範囲の内側に十分余裕を持たせる。
-- length retryは既存の「最大1回のみ」を維持する。
-- 文字数を埋めるために株解説・一般論・助言を足さない。
-- 短く自然に成立している文章を不必要に長文化しない。
-
-具体的な最終min/maxは、既存テストと生成安定性を見て安全側で決めてよいが、今回の目的は「100文字以上を埋めるための相場解説」を不要にすること。
-
-### 3. 固定ハッシュタグを必ず付ける
-
-morning_greeting投稿の末尾に、以下5タグを必ず付ける。
-
-`#おはよう #日本株 #日経平均 #かぶモリ #ブルバ100`
-
-要件:
-- 5タグすべて必須。
-- 重複させない。
-- 表記を勝手に変更しない。
-- 原則として本文の後に改行して1行で付与する。
-- LLM任せで欠落させない。可能なら生成後の決定論的付与を優先する。
-- morning_greeting以外の投稿タイプのハッシュタグルールを変更しない。
-- URLは禁止のまま維持する。
-
-### 4. 絵文字
-
-- 本文中1〜3個程度を目安。
-- 朝の柔らかさに合う範囲で自然に使う。
-- 個数合わせのための装飾はしない。
-
-### 5. 画像は一切変更しない
-
-2026-09-09の画像品質はユーザー評価が良好。
-
-変更禁止:
-- `morning_greeting_image_logic.ts`
-- `yume_reference_logic.ts`
-- canonical reference
-- 画像prompt
-- 画像model / quality / size
-- Storage画像生成経路
-- 画像テーマ選択ロジック（文章と共有する既存theme selection自体の必要最小限参照を除く）
-
-### 6. 投稿・OAuth・Storage receiptの失敗処理は今回触らない
-
-2026-09-09にはX投稿成功後のlegacy Storage receipt保存がHTTP 400となり、scheduled_postsだけfailed扱いになる別問題が確認されている。
-
-このTASKは文章の柔らかさ + 固定ハッシュタグだけを対象とし、以下は変更しない:
-- `morning_greeting_publish_logic.ts`
-- publish_claims
-- OAuth / token refresh
-- X media upload
-- X POST
-- published receipt
-- `scheduled_posts`
-- Cron / scheduler
-
-この別問題をついでに直さない。
-
-## Tests
-
-最低限:
-1. 60〜140文字程度の自然な朝挨拶本文がacceptされる。
-2. `おはようございます`を含む短い日常挨拶が、旧100文字下限だけを理由にrejectされない。
-3. `朝の値動きは〜決算やニュースと照らすと〜` のような相場解説寄り文を生成instruction上で明確に抑制できる。
-4. `急いで答えを出さず〜ひとつずつ見ていけたら` のような指導口調を抑制する。
-5. special_day / seasonal themeは短く自然に触れられ、別記念日の捏造は引き続きreject。
-6. 未確認天気、架空体験、売買助言、URL禁止など既存guardが維持される。
-7. morning_greetingの最終本文に `#おはよう #日本株 #日経平均 #かぶモリ #ブルバ100` が必ず1回ずつ入る。
-8. 固定5タグのうち1つでも欠ける状態を最終出力として通さない、または決定論的付与で必ず補完する。
-9. morning_greeting以外の投稿タイプの既存ハッシュタグ禁止/制御を壊さない。
-10. length retryは最大1回のまま。
-11. morning_greeting relevant tests pass。
-12. full x-test-post regression pass。
-
-## Scope / conflicts
-
-主対象:
 - `supabase/functions/x-test-post/morning_greeting_logic.ts`
-- 関連するmorning_greeting tests
+- `supabase/functions/x-test-post/morning_greeting_logic_test.ts`
+- `supabase/functions/x-test-post/morning_greeting_payload_logic.ts`
+- `supabase/functions/x-test-post/morning_greeting_payload_logic_test.ts`
+- `supabase/functions/x-test-post/morning_greeting_publish_logic.ts`
+- `supabase/functions/x-test-post/morning_greeting_publish_logic_test.ts`
 
-必要なら最小限:
-- morning_greeting専用のtest helper
-- morning_greeting最終テキスト整形箇所（固定タグの決定論的付与に必要な場合のみ）
+## Safety / forbidden
 
-触らない:
-- `morning_greeting_image_logic.ts`
-- `yume_reference_logic.ts`
-- `morning_greeting_publish_logic.ts`（固定タグ付与に不要なら触らない。X送信/OAuth/receiptロジック変更は禁止）
-- morning_report
-- close_report
-- important-news-monitor
-- DB migration/schema/GRANT
-- Cron / scheduler
-- posting_windows
-- secrets
-- 他Edge Function
-
-開始時・push前にorigin/mainをfresh-checkする。
-同じ`x-test-post` Edge Functionまたは同じ対象ファイルを他slotが変更中なら、同時編集・同時pushせず競合を報告して停止する。
-
-## Production policy
-
-このTASKは **調査 + local実装 + tests + commit/pushまで**。
-
-禁止:
-- production deploy
-- X実投稿
-- 本番DB write
-- migration/schema/GRANT
-- Cron変更
-- posting_windows変更
-- secrets変更/表示
+- production deploy禁止。
+- X実投稿禁止。
+- 本番DB write禁止。
+- Cron / scheduler / posting_windows変更禁止。
+- secrets変更・表示禁止。
+- 画像生成・画像prompt・canonical reference・画像model/quality/sizeは変更禁止。
+- Storage receipt 400問題はこのTASKで修正しない。
+- morning_report / close_report / important-news-monitorは触らない。
+- 他workstreamの変更をstage/commitしない。
 
 ## Completion
 
 完了時:
 - status: `review_required`
 - next_owner: `chatgpt`
-- `.agent/CODEX_REPORT_2.md` を最新結果で置き換える
-- root cause
-- 変更した文体ルール
-- final length target / validator range
-- 固定5タグの付与方法と欠落防止方法
-- changed files
-- relevant/full test結果
-- commit hash
-- push結果
-- production変更なし
-- remaining issues
-- next recommendation
-
-## Report
-
-- task_id: morning-greeting-soft-daily-copy-20260909
-- result: review_required
-- next_owner: chatgpt
-- changed_files:
-  - `supabase/functions/x-test-post/morning_greeting_logic.ts`
-  - `supabase/functions/x-test-post/morning_greeting_logic_test.ts`
-  - `supabase/functions/x-test-post/morning_greeting_payload_logic.ts`
-  - `supabase/functions/x-test-post/morning_greeting_payload_logic_test.ts`
-  - `supabase/functions/x-test-post/morning_greeting_publish_logic.ts`
-  - `supabase/functions/x-test-post/morning_greeting_publish_logic_test.ts`
-- root_cause: 共通`KABUMORI_VOICE`には金融投稿向けの説明・指導表現が含まれるため、既存の朝挨拶専用指示だけでは相場解説寄りの硬さを十分に抑えられなかった。さらに旧validatorの本文100〜300文字目標が短い日常挨拶の長文化を誘発し、ハッシュタグをLLM任せにすると欠落し得た。
-- implementation:
-  - morning_greeting専用指示を共通voiceの後段に追加し、日常の短い朝挨拶を最優先化。相場材料・決算・指数解説・先生/指導口調を明示的に禁止。
-  - 本文validatorを60〜140文字、生成targetを80〜120文字へ変更。本文部分だけを計測し、固定タグ行は別扱い。
-  - `#おはよう #日本株 #日経平均 #かぶモリ #ブルバ100`をコード側で決定論的に最終本文へ1回だけ付与。部分/重複タグは`MORNING_GREETING_FIXED_HASHTAG_INVALID`で安全停止。
-  - payload dry-runと本番manual publishの双方で同じタグ付与helperを使用し、Xへ渡る最終本文を統一。
-  - 画像ロジック、canonical reference、画像model/quality/size、Storage生成経路、Cron、OAuth、他post_typeは変更していない。
-- length_retry: 既存の最大1回を維持。非長さエラーは再試行せず、60未満/140超だけ1回再生成。
-- tests:
-  - morning_greeting関連: 60 passed / 0 failed
-  - x-test-post全体回帰: 365 passed / 0 failed
-  - `git diff --check`: PASS
-- commit_hash: 未コミット（次のpushでコード6ファイルとH2管理ファイルを同期予定）
-- push: 未実施（このReportとTASKを含め、push直前にorigin/mainを再fresh-checkする）
-- deploy: なし
-- production_change: なし。OpenAI実API、X API、X投稿、本番DB、Cron、secrets変更は0。
-- remaining_issues:
-  - 実production自然投稿での文体確認は未実施。今回のTASKではdeploy/本番投稿を禁止しているため、次工程でread-only観測が必要。
-  - 2026-09-09に確認されたStorage receipt 400問題は別件として未変更。
-- next_recommendation: `C2`で6ファイルの差分、60/140境界、固定5タグの最終本文、365件回帰結果をレビュー。承認後に別タスクでdeployと自然投稿観測を判断する。
+- `.agent/CODEX_REPORT_2.md` 更新
+- commit_hashを実値で記録
+- push成功を記録
+- production変更なしを再確認
