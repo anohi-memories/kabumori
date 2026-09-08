@@ -2,204 +2,109 @@
 
 Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは、`.agent/ORCHESTRATION.md` と既存のプロジェクトルールを確認したうえで、このファイルだけを自分の担当タスク正本として扱います。
 
-- task_id: important-news-generation-reliability-fix-20260908
+- task_id: important-news-deploy-and-natural-cycle-verification-20260908
 - owner: codex
-- status: done
-- next_owner: chatgpt
-- purpose: `important` / `most_important` に採用された重要ニュースが、企業同一性判定や軽微なFact不整合で生成全落ちする問題を、安全性を維持したまま最小修正する。
+- status: ready
+- next_owner: codex
+- purpose: 直前までにmainへ反映済みの重要ニュース取得改善・生成信頼性改善を `important-news-monitor` 本番へ安全にdeployし、自然20分サイクルで取得→判定→生成まで正常に通るかread-only確認する。
 - priority: high
 
-## Background
+## Approved implementation commits
 
-2026-09-08の本番read-only確認で、重要ニュース候補から `important` に採用された3件がすべて `generation_failed` となり、生成成功0件だった。
+- freshness / coverage fix: `7bed84e063dbe5fc98bd0c12fa77720eead7936e`
+- generation reliability fix: `710d5e8e42374a94fa163aac11098c6f02ce05ac`
 
-確認できた代表例:
+両タスクはChatGPTレビュー済み。今回のタスクでは新機能実装や仕様変更を行わず、deployと本番観測に限定する。
 
-1. TDnetの企業名表記差
-   - DB/一覧側: `小森`
-   - 一次資料側: `株式会社 小森コーポレーション`
-   - DB/一覧側: `旭コンクリ`
-   - 一次資料側: `旭コンクリート工業`
-   - 信頼済みTDnetの `company_code` / `entity_key` は同一企業を指しているのに、略称と正式社名の差で company identity Fact check が失敗した。
+## Pre-deploy checks
 
-2. 軽微な生成Fact不整合
-   - 外貨準備ニュースで、生成文が入力にない市場解釈を追加した。
-   - 入力にある年を生成文で落とした。
-   - 事実そのものは投稿可能でも、軽微な修正可能事項1箇所で投稿全体が `generation_failed` になった。
+1. `.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、本TASKを確認する。
+2. `origin/main` が上記承認済み実装を含むことを確認する。
+3. Claudeスロットや他workstreamが `important-news-monitor` の同一ファイル・同一Edge Functionを変更中でないことを確認する。競合があればdeployせず報告。
+4. deploy対象差分が `important-news-monitor` に限定され、未承認のローカル変更・未コミット変更を含まないことを確認する。
+5. 可能な範囲で直前のrelevant tests / diff checkを再確認する。新たな失敗が出たらdeployせず報告。
 
-このタスクは取得・重要度判定を緩めるものではない。採用後の生成パイプラインの信頼性改善に限定する。
+## Deployment scope
 
-## Implementation scope
+Supabase production projectの既存 `important-news-monitor` Edge Functionのみをdeployする。
 
-### 1. 企業同一性判定を安全に改善
+許可:
+- `important-news-monitor` Edge Function deploy
+- deploy前後のversion/status read
+- deploy後のlogs / DB rows / run diagnosticsのread-only確認
+- 自然Cronサイクルの観測
 
-主対象はTDnet由来候補。
+禁止:
+- production DB write / 手動row更新
+- migration / DDL / GRANT
+- Cron変更
+- secrets変更・表示
+- `x-test-post` その他Edge Function deploy
+- auto_publish設定変更
+- 過去failed candidateのstatus変更・再claim・再生成
+- 手動で重要ニュース候補を注入すること
+- X投稿を発生させる設定変更
 
-- 信頼済みTDnet sourceであることを既存条件どおり必須とする。
-- `company_code` が正規形式で、`entity_key === company:<company_code>` のような既存の強いidentity signalが一致している場合に限り、DB略称と一次資料正式社名の安全な表記差を許容できるよう改善する。
-- `小森` ↔ `小森コーポレーション`、`旭コンクリ` ↔ `旭コンクリート工業` のような実例をテストへ追加する。
-- 別企業の誤統合を防ぐことを最優先する。
-- 無制限の部分一致、前方一致、曖昧な会社名類似だけで同一企業とみなす実装は禁止。
-- 既存の会社コード正規化・5文字末尾0の安全ルールは壊さない。
-- 既存手動alias mapを全社分増やすだけの実装は避け、可能なら強いidentity signalと一次資料内の名称証拠を組み合わせた一般化を優先する。ただし一般化が危険なら安全側へ倒す。
+## Natural-cycle verification
 
-### 2. 軽微なFact失敗だけ最大1回の限定retry
+deploy後、原則として既存Cronによる自然20分サイクルを観測する。テスト目的の人工的なproduction candidate作成はしない。
 
-Fact check失敗後、以下のように「事実を変えずに機械的に修正可能」なケースだけ、Lunaで最大1回の限定修正を許可する。
+最低限確認する内容:
 
-許可候補:
-- 入力に明示された年・日付の欠落を戻す。
-- 入力根拠にない市場解釈・影響解釈・因果表現を削除する。
-- 確認済み同一企業の表記を、入力にある正式/安全な表記へ統一する。
-- 事実を変更しない軽微なラベル/表記整合。
+### A. Function health
+- deployした `important-news-monitor` がACTIVEであること。
+- deploy直後に起動エラー・import error・依存解決エラーがないこと。
+- Cron/fetchの既存実行が継続していること。
 
-retry禁止:
-- 数値そのものが疑わしい。
-- 企業・証券コードの同一性に疑義がある。
-- 日付や出来事の発生時刻そのものが不明。
-- 因果関係・規模・対象範囲・重要条件に疑義がある。
-- 元情報不足。
-- source URL / source identityに疑義がある。
-- Fact checkerのissueが未分類または安全に限定できない。
+### B. Freshness / coverage diagnostics
+自然cycleでbreaking laneが走った場合:
+- `critical_market_events` が固定枠として選択されていること。
+- query/provider diagnosticsが取得できること。
+- raw/validated candidate countと主要rejection reasonが確認可能であること。
+- 3時間freshness / event timestamp必須化による異常な全滅や例外がないこと。
 
-### 3. retry後はFactを必ず再検証
+market_macroが走った場合:
+- fetch自体が正常完了すること。
+- dedupe後cap / round-robin変更による例外や処理停止がないこと。
 
-- retry修正文をそのまま通さない。
-- local deterministic Fact checkを再実行。
-- AI Fact checkも再実行。
-- Factがpassedした場合のみVoiceへ進む。
-- retry後もFact failなら `generation_failed`。
+### C. Generation reliability
+自然cycleで `important` / `most_important` が発生した場合のみ確認:
+- generation claimが正常に行われること。
+- TDnet略称/正式社名差だけで不当にFact failしないこと。
+- Fact failが軽微かつretry可能な場合、`fact_retry` が最大1回だけ動くこと。
+- retry後はlocal FactとAI Factを再検証していること。
+- Voice retryを含め無限retryがないこと。
+- 成功時 `ready_for_publish` 相当の既存正常状態へ進むこと。
+- 失敗時は診断情報が残り、安全側に停止すること。
 
-### 4. 既存Voice retryとの上限を明確化
+重要ニュースが観測時間内に1件も `important` にならない場合、人工的に作らず「generation自然確認は未成立」とReportする。
 
-- Fact retry: 最大1回。
-- Voice retry: 既存最大1回。
-- Fact retryとVoice retryが連鎖して無限化しないこと。
-- 同一段階を2回以上retryしない。
-- 既存のatomic generation claim / duplicate generation防止を壊さない。
+## Observation window
 
-### 5. diagnostics
+- deploy直後のhealth確認に加え、少なくとも自然20分cycleを2回以上確認する。
+- 可能なら40〜60分程度の範囲で観測する。
+- 長時間待機が必要な場合は、確認できた範囲をReportし、未成立項目を明記して `review_required` にする。
 
-可能な範囲で既存の `generation_voice_retry` と同様に、Fact retryについても後から確認できる診断情報を保持する。
+## X / publish safety
 
-最低限ほしい内容:
-- attempted
-- initial fact issues
-- retry used model
-- retry後local fact status/issues
-- retry後AI fact status/issues
-- retry error
-
-DB schema追加が必要なら勝手にmigrationせず、既存JSON列等で安全に保存できるか確認し、無理ならReportに必要変更を明記する。
-
-## Safety / behavior requirements
-
-- `important` / `most_important` の重要度判定基準は緩めない。
-- 取得候補数を増やす修正はしない。
-- Fact checkerそのものを甘くして通過率だけ上げる修正は禁止。
-- retryは「安全に直せる既知の軽微問題」に限定する。
-- 別企業誤認は絶対に避ける。
-- 元情報にない市場解釈を追加しない。
-- 数値・日付・固有名詞を推測で補わない。
-- 今日すでに `generation_failed` になった候補を勝手に再生成しない。
-- 過去failed candidateのstatus変更、再claim、再投稿は禁止。
-- `auto_publish` / X公開設定は変更しない。
-- X投稿しない。
-- Claude側TASK/Reportには触れない。
-- 他workstreamと同一ファイル競合がある場合は開始せず報告する。
-
-## Expected files
-
-主対象:
-- `supabase/functions/important-news-monitor/post_generation_logic.ts`
-- `supabase/functions/important-news-monitor/post_generation_logic_test.ts`
-
-必要最小限で追加可:
-- `supabase/functions/important-news-monitor/index.ts`
-- generation dispatch / diagnostics関連helperとtest
-
-今回完了済みのfreshness/coverage修正ファイルを不要に再編集しないこと。
-
-## Validation
-
-最低限:
-
-1. company identity
-   - `小森` / `株式会社 小森コーポレーション` が強いTDnet identity signal一致時に安全に同一企業と判定できる。
-   - `旭コンクリ` / `旭コンクリート工業` も同様。
-   - company_code/entity_key不一致時は名前が似ていても通さない。
-   - unrelated companyの誤一致fixtureを入れる。
-
-2. Fact retry
-   - 年の欠落を安全に戻すケース。
-   - 根拠のない市場解釈を削除するケース。
-   - 数値誤りはretry禁止。
-   - 企業同一性疑義はretry禁止。
-   - 未分類issueはretry禁止。
-   - retryは最大1回。
-
-3. retry後再検証
-   - local Fact failで停止。
-   - AI Fact failで停止。
-   - Fact pass後のみVoiceへ進む。
-
-4. regression
-   - 既存generation / Fact / Voice / Voice retry / publish eligibilityを壊さない。
-   - relevant tests, lint, typecheck可能範囲, `git diff --check`。
-
-## Production policy
-
-このタスクはローカル実装・検証まで。
-
-- production DB write: 禁止
-- migration / DDL / GRANT: 禁止。必要ならReportのみ
-- Edge Function deploy: 禁止
-- Cron変更: 禁止
-- secrets変更・表示: 禁止
-- OpenAI実APIによる本番候補再生成: 禁止
-- X API / X投稿: 禁止
-- auto_publish変更: 禁止
+- `auto_publish` は変更しない。
+- 現在のproduction設定を勝手にONにしない。
+- `most_important` が生成されても、既存設定に従うだけで設定変更は禁止。
+- X投稿を意図的に発生させるテストは禁止。
 
 ## Completion criteria
 
-- 上記scopeを安全に実装。
-- 代表失敗ケースとnegative casesをtest化。
-- lint / relevant tests / typecheck可能範囲 / diff checkを報告。
-- 変更ファイル一覧と設計判断をReport。
-- production変更0。
+- deploy前競合チェック済み。
+- 承認済みmainから `important-news-monitor` のみdeploy。
+- deploy version/statusを記録。
+- 自然cycleを最低2回観測、確認できたhealth/diagnosticsをReport。
+- production DB/Cron/secrets/X設定の変更0。
+- generation自然確認が成立したか未成立かを明確化。
 - TASK末尾に `## Report` を追加。
 - status: `review_required`
 - next_owner: `chatgpt`
 
-- commit: 許可
-- push: 実装完了後、既存運用に従う。競合や不明点があれば勝手にpushせずReport。
-- deploy: 禁止
+- commit: TASK/Report更新のみ許可
+- push: TASK/Report更新は許可
+- deploy: `important-news-monitor` のみ許可
 - report_mode: inline
-
-## Report
-
-- task_id: important-news-generation-reliability-fix-20260908
-- result: review_required
-- changed_files:
-  - `supabase/functions/important-news-monitor/post_generation_logic.ts`
-  - `supabase/functions/important-news-monitor/post_generation_logic_test.ts`
-  - `supabase/functions/important-news-monitor/index.ts`
-  - `supabase/functions/important-news-monitor/generation_persistence_test.ts`
-- implementation: trusted TDnet company-code/entity evidence now permits only narrow primary-header suffix differences, including 小森/小森コーポレーション and 旭コンクリ/旭コンクリート工業; unrelated prefixes, unsafe suffixes, and mismatched identity signals remain rejected.
-- fact_retry: safe, single `fact_retry` is allowed only for explicit year/date restoration, deterministic unsupported market interpretation removal, confirmed company spelling, or minor label consistency. The revised text is rechecked locally and by AI Fact before Voice.
-- voice_retry: existing one-at-most Voice retry remains bounded; Fact and Voice retries cannot recursively repeat.
-- diagnostics: Fact retry details are placed inside the existing `generation_voice_retry` JSONB payload as a nested `fact_retry` object. No migration was added.
-- tests: relevant post-generation plus persistence tests `106/106` passed; full important-news-monitor suite `255/255` passed with `--no-check --allow-read`; `git diff --check` passed; post-generation and dispatch type checks passed. Full index type check remains blocked by the existing missing `npm:unpdf@1.8.1` dependency in this clean environment; no new type error was observed in changed modules.
-- commit_hash: `710d5e8` (pushed to origin/main)
-- push: `710d5e8` to `origin/main`
-- deploy: 0
-- production_db_write: 0
-- migration: 0
-- cron/settings: 0
-- OpenAI_real_api: 0
-- X_API: 0
-- X_post: 0
-- apps/admin: 0
-- HANDOFF.md: 0
-- secrets_exposed: 0
-- next_owner: chatgpt
