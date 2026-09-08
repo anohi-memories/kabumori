@@ -25,6 +25,7 @@
   - `deno test --no-check --allow-read supabase/functions/x-test-post/*_test.ts`: 362 passed / 0 failed
   - `git diff --check`: PASS
 - commit_hash: `dd80e20`
+- report_commit_hash: `b47a083`
 - push: `dd80e20`をorigin/mainへ反映済み。push直前にorigin/mainをfresh-checkし、対象3ファイル以外の差分がないことを確認
 - deploy: なし。本番Edge Function deploy、X投稿、Cron変更、DB write、migration/schema/GRANT変更は行っていない
 - production_change: なし。既存production設定・secrets・投稿データは変更していない
