@@ -7,37 +7,45 @@
 - `PROJECT_RULES.md` を最優先とする。
 - `AGENTS.md` / `CLAUDE.md` の開始手順にも従う。
 - `.agent/` は共有タスク運用専用。`HANDOFF.md` / `HANDOFF_TEMPLATE.md` は置き換えない。
-- Codex 1枠、Claude Code 2枠を同時運用できる。
+- Codex 2枠、Claude Code 2枠の計4枠を同時運用できる。
 - 並行作業は変更対象が安全に分離されている場合だけ許可する。
 
 ## タスク正本
 
-- Codex: `.agent/tasks/CODEX_TASK.md`
+- Codex slot 1: `.agent/tasks/CODEX_TASK.md`
+- Codex slot 2: `.agent/tasks/CODEX_TASK_2.md`
 - Claude slot 1: `.agent/tasks/CLAUDE_TASK_1.md`
 - Claude slot 2: `.agent/tasks/CLAUDE_TASK.md`
 
-`.agent/ACTIVE_TASK.md` は後方互換用インデックス。実装指示の正本は上記3ファイル。
+`.agent/ACTIVE_TASK.md` は後方互換用インデックス。実装指示の正本は上記4ファイル。
 
 ## コード
 
-### G / G1 / G2 — 作業開始
+### G / G1 / G2 / G3 — 作業開始
 
-- Codexに `G`: `.agent/tasks/CODEX_TASK.md` を確認して開始。
+- Codexに `G`: Codex slot 1として `.agent/tasks/CODEX_TASK.md` を確認して開始。
 - Claude Codeに `G1`: `.agent/tasks/CLAUDE_TASK_1.md` を確認して開始。
 - Claude Codeに `G2`: `.agent/tasks/CLAUDE_TASK.md` を確認して開始。
+- Codexに `G3`: Codex slot 2として `.agent/tasks/CODEX_TASK_2.md` を確認して開始。
 - Claude Codeに単独で `G` が来た場合、ready/in_progressのClaudeスロットが1つだけならそのスロットを開始してよい。2つとも対象なら推測せず `G1` / `G2` の指定を求める。
 
 開始時は origin/main をfresh-checkし、ORCHESTRATION/CURRENT_STATE/自分のTASKを確認する。statusがreadyまたはin_progressのときだけ作業する。idle/done/review_requiredでは新規作業を始めない。
 
-### C — Codex完了確認
+### C / C2 — Codex完了確認
 
-ChatGPTに `C` とだけ送られた場合、Codex系だけを確認する。
+ChatGPTに `C` とだけ送られた場合、既存の意味を維持してCodex slot 1だけを確認する。
 
 - `.agent/tasks/CODEX_TASK.md`
 - `.agent/CODEX_REPORT.md`
 - 必要な範囲の `.agent/CURRENT_STATE.md`
 
-Claude側の完了報告・タスクは勝手に処理しない。Codexの完了条件、テスト、commit/push/deploy、残課題、安全確認を評価し、必要ならCodex TASKだけ更新する。
+ChatGPTに `C2` とだけ送られた場合、Codex slot 2だけを確認する。
+
+- `.agent/tasks/CODEX_TASK_2.md`
+- `.agent/CODEX_REPORT_2.md`
+- 必要な範囲の `.agent/CURRENT_STATE.md`
+
+Claude側やもう一方のCodexスロットの完了報告・タスクは勝手に処理しない。対象Codexスロットの完了条件、テスト、commit/push/deploy、残課題、安全確認を評価し、必要なら対象TASKだけ更新する。
 
 ### K1 / K2 — Claude完了確認
 
@@ -65,22 +73,31 @@ ChatGPTに `F` とだけ送られた場合は、特定担当の完了コード�
 - `.agent/ACTIVE_TASK.md`
 - `.agent/CURRENT_STATE.md`
 - `.agent/tasks/CODEX_TASK.md`
+- `.agent/tasks/CODEX_TASK_2.md`
 - `.agent/tasks/CLAUDE_TASK_1.md`
 - `.agent/tasks/CLAUDE_TASK.md`
 - `.agent/CODEX_REPORT.md`
+- `.agent/CODEX_REPORT_2.md`
 
-Fでは3スロットの状態・競合・空き状況を整理し、必要なら次の割当方針を決める。別チャットが担当している個別タスクを、文脈なしに勝手に完了判定・次工程へ進めない。
+Fでは4スロットの状態・競合・空き状況を整理し、必要なら次の割当方針を決める。別チャットが担当している個別タスクを、文脈なしに勝手に完了判定・次工程へ進めない。
 
 ## 完了報告のGitHub同期は必須
 
-G/C/K運用が成立するため、実装コードをpushできない場合でも、完了・停止時の `.agent/` 制御情報だけは必ずGitHub `origin/main` へ反映する。
+G/C/C2/K運用が成立するため、実装コードをpushできない場合でも、完了・停止時の `.agent/` 制御情報だけは必ずGitHub `origin/main` へ反映する。
 
-### Codex
+### Codex slot 1
 
 作業を終了・停止するときは必ず以下をGitHubへ同期する。
 
 - `.agent/tasks/CODEX_TASK.md` の `status` を `done` または `review_required` に更新
 - `.agent/CODEX_REPORT.md` を最新結果で置き換える
+
+### Codex slot 2
+
+作業を終了・停止するときは必ず以下をGitHubへ同期する。
+
+- `.agent/tasks/CODEX_TASK_2.md` の `status` を `done` または `review_required` に更新
+- `.agent/CODEX_REPORT_2.md` を最新結果で置き換える
 
 ### Claude
 
@@ -98,9 +115,9 @@ G/C/K運用が成立するため、実装コードをpushできない場合で�
 - non-fast-forwardや同じ制御ファイルの競合が出た場合は上書きせず停止し、同期失敗をユーザーへ明示する
 - 「実装コードはlocal only」「commit/pushなし」等の事実はReportへ明記する
 
-`.agent/` のGitHub同期まで終わって初めて、ユーザーへ「C」「K1」「K2」で確認可能と報告する。
+`.agent/` のGitHub同期まで終わって初めて、ユーザーへ対象スロットに応じて「C」「C2」「K1」「K2」で確認可能と報告する。
 
-## Claude並列スロットの完了報告
+## スロット別の完了報告
 
 Claude slot 1/2は各TASKファイル末尾の `## Report` をそのスロット専用完了報告として使う。これにより同時完了時の上書きを防ぐ。
 
@@ -116,20 +133,20 @@ Report必須項目:
 - safety_checks
 - next_recommendation
 
-Codexは `.agent/CODEX_REPORT.md` を使用する。
+Codex slot 1は `.agent/CODEX_REPORT.md`、Codex slot 2は `.agent/CODEX_REPORT_2.md` を使用する。同時完了時も互いのReportを上書きしない。
 
 ## 並行作業と競合防止
 
-- 3スロットは別task_idかつ変更対象が分離される場合のみ同時進行可能。
-- 同じファイルを同時編集しない。
-- 同じDB migration / RPC / Edge Function / workflow / production settingを複数スロットが同時変更しない。
+- 4スロットは別task_idかつ変更対象が分離される場合のみ同時進行可能。
+- Codex/Claudeの別を問わず、同じファイルを複数スロットで同時編集しない。
+- Codex/Claudeの別を問わず、同じDB migration / RPC / Edge Function / workflow / production設定を複数スロットで同時変更しない。
 - 一方のpush後、他スロットはpush前にfresh-checkをやり直す。
 - 既存未コミット変更は他workstreamの所有物として扱い、変更・削除・stage・commitしない。
 - scopeが曖昧、競合可能性を安全に判定できない場合は作業を開始しない。
 
 ## ACTIVE_TASK.md の役割
 
-`.agent/ACTIVE_TASK.md` は古いF/Gルールや別チャットとの互換性を保つため残す。3スロットの状態と正本への参照だけを一覧表示し、詳細指示は各TASKへ置く。
+`.agent/ACTIVE_TASK.md` は古いF/Gルールや別チャットとの互換性を保つため残す。4スロットの状態と正本への参照だけを一覧表示し、詳細指示は各TASKへ置く。
 
 ## 共通安全ルール
 
