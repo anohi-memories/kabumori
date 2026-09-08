@@ -3,7 +3,7 @@
 - task_id: morning-greeting-tone-image-variety-20260908
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - purpose: `morning_greeting` を「朝刊のミニ版」ではなく、気持ちよく読める朝の挨拶として再設計し、同時に画像生成が毎日ほぼ同じ構図へ収束する問題を解消する。人物の一貫性は維持しつつ、文章テーマ・場所・行動・構図・小物・服装・天候・季節感に十分なバリエーションを持たせ、APIコストに見合う出力へ改善する。
