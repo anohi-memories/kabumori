@@ -12,6 +12,7 @@ export type PublishCandidate = {
   id: string;
   importance: string;
   status: string;
+  generatedAt?: string | null;
   generatedText: string | null;
   generationFactStatus: string | null;
   generationVoiceStatus: string | null;

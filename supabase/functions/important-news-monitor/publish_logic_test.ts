@@ -16,6 +16,7 @@ const candidate = (overrides: Partial<PublishCandidate> = {}): PublishCandidate 
   id: "candidate-1",
   importance: "most_important",
   status: "ready_for_publish",
+  generatedAt: "2026-09-01T00:00:00Z",
   generatedText: `【重大速報】重要ニュース本文です。\n\n出典: ${sourceUrl}`,
   generationFactStatus: "passed",
   generationVoiceStatus: "passed",

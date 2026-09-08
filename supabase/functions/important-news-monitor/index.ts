@@ -73,6 +73,10 @@ import {
   type PublishRepository,
 } from "./publish_logic.ts";
 import { executeWhenAutoPublishEnabled } from "./auto_publish_logic.ts";
+import {
+  AUTO_PUBLISH_CUTOVER_BLOCKED,
+  isCandidateAfterAutoPublishCutover,
+} from "./auto_publish_cutover_logic.ts";
 import { orderImportantNewsPublishQueue } from "./rate_control_logic.ts";
 
 const jsonHeaders = { "Content-Type": "application/json; charset=utf-8" };
@@ -148,6 +152,7 @@ type StoredPublishCandidate = {
   id: string;
   importance: string;
   status: string;
+  generated_at: string | null;
   generated_text: string | null;
   generation_fact_status: string | null;
   generation_voice_status: string | null;
@@ -469,14 +474,25 @@ async function monitorIsActive(supabaseUrl: string, serviceRoleKey: string): Pro
   return rows[0]?.is_active === true;
 }
 
-async function autoPublishIsEnabled(supabaseUrl: string, serviceRoleKey: string): Promise<boolean> {
+type AutoPublishSettings = {
+  enabled: boolean;
+  cutoverAt: string | null;
+};
+
+async function autoPublishIsEnabled(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+): Promise<AutoPublishSettings> {
   const result = await fetch(
-    `${supabaseUrl}/rest/v1/important_news_monitor_settings?id=eq.true&select=auto_publish`,
+    `${supabaseUrl}/rest/v1/important_news_monitor_settings?id=eq.true&select=auto_publish,updated_at`,
     { headers: headers(serviceRoleKey) },
   );
   if (!result.ok) throw new Error("NEWS_MONITOR_SETTINGS_FAILED");
-  const rows = await result.json() as Array<{ auto_publish?: unknown }>;
-  return rows[0]?.auto_publish === true;
+  const rows = await result.json() as Array<{ auto_publish?: unknown; updated_at?: unknown }>;
+  return {
+    enabled: rows[0]?.auto_publish === true,
+    cutoverAt: typeof rows[0]?.updated_at === "string" ? rows[0].updated_at : null,
+  };
 }
 
 async function selectCompanyIrSources(
@@ -856,6 +872,7 @@ function toPublishCandidate(row: StoredPublishCandidate): PublishCandidate {
     id: row.id,
     importance: row.importance,
     status: row.status,
+    generatedAt: row.generated_at,
     generatedText: row.generated_text,
     generationFactStatus: row.generation_fact_status,
     generationVoiceStatus: row.generation_voice_status,
@@ -867,7 +884,7 @@ function toPublishCandidate(row: StoredPublishCandidate): PublishCandidate {
 }
 
 const PUBLISH_SELECT = [
-  "id", "importance", "status", "generated_text", "generation_fact_status",
+  "id", "importance", "status", "generated_at", "generated_text", "generation_fact_status",
   "generation_voice_status", "source_url", "x_post_id", "x_published_at", "publish_attempts",
 ].join(",");
 
@@ -888,7 +905,9 @@ async function selectPublishCandidate(
 async function selectNextPublishCandidateId(
   supabaseUrl: string,
   serviceRoleKey: string,
+  cutoverAt: string | null,
 ): Promise<string | null> {
+  if (!cutoverAt) return null;
   const params = new URLSearchParams({
     select: "id,importance,generated_at",
     status: "eq.ready_for_publish",
@@ -902,6 +921,7 @@ async function selectNextPublishCandidateId(
     source_url: "not.is.null",
     x_post_id: "is.null",
     x_published_at: "is.null",
+    generated_at: `gte.${cutoverAt}`,
     limit: "100",
   });
   const result = await fetch(`${supabaseUrl}/rest/v1/important_news_candidates?${params}`, {
@@ -1082,13 +1102,32 @@ Deno.serve(async (req) => {
         return response({ mode: body.mode, ...result, autoPublish: false });
       }
 
-      const autoPublishEnabled = await autoPublishIsEnabled(supabaseUrl, serviceRoleKey);
-      const guarded = await executeWhenAutoPublishEnabled(autoPublishEnabled, async () => {
-        const candidateId = typeof body.candidateId === "string"
-          ? body.candidateId
-          : await selectNextPublishCandidateId(supabaseUrl, serviceRoleKey);
+      const autoPublishSettings = await autoPublishIsEnabled(supabaseUrl, serviceRoleKey);
+      const guarded = await executeWhenAutoPublishEnabled(autoPublishSettings.enabled, async () => {
+        const requestedCandidateId = typeof body.candidateId === "string" ? body.candidateId : null;
+        const candidateId = requestedCandidateId ??
+          await selectNextPublishCandidateId(supabaseUrl, serviceRoleKey, autoPublishSettings.cutoverAt);
         if (!candidateId) {
           return { mode: body.mode, published: false, wouldPublish: false, blockReason: "NO_READY_CANDIDATE" };
+        }
+        // Explicit candidate IDs are accepted for backwards-compatible manual invocation, but the
+        // live auto-publish route must still fail closed for pre-cutover backlog rows.
+        if (requestedCandidateId) {
+          const requestedCandidate = await selectPublishCandidate(
+            supabaseUrl,
+            serviceRoleKey,
+            requestedCandidateId,
+          );
+          if (!isCandidateAfterAutoPublishCutover(requestedCandidate?.generatedAt, autoPublishSettings.cutoverAt)) {
+            return {
+              mode: body.mode,
+              candidateId: requestedCandidateId,
+              published: false,
+              wouldPublish: false,
+              skipped: true,
+              blockReason: AUTO_PUBLISH_CUTOVER_BLOCKED,
+            };
+          }
         }
         const repository = createPublishRepository(supabaseUrl, serviceRoleKey);
         const xAccessToken = Deno.env.get("X_OAUTH2_ACCESS_TOKEN");

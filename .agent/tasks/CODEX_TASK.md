@@ -4,8 +4,8 @@ Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは
 
 - task_id: important-news-safe-publish-trigger-implementation-20260908
 - owner: codex
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - purpose: `auto_publish=true` 済みの重要ニュースについて、過去のready候補を誤投稿せず、新規の `most_important` 候補だけが既存安全条件を満たした時に自然自動投稿される起動経路を安全に実装する。
 
@@ -119,3 +119,31 @@ Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは
 - deploy: 禁止
 - production changes: 禁止
 - report_mode: inline
+
+## Report
+
+- task_id: important-news-safe-publish-trigger-implementation-20260908
+- result: review_required
+- changed_files:
+  - `supabase/functions/important-news-monitor/index.ts`
+  - `supabase/functions/important-news-monitor/publish_logic.ts`
+  - `supabase/functions/important-news-monitor/publish_logic_test.ts`
+  - `supabase/functions/important-news-monitor/auto_publish_cutover_logic.ts`
+  - `supabase/functions/important-news-monitor/auto_publish_cutover_logic_test.ts`
+  - `supabase/functions/important-news-monitor/important_news_publish_cron_test.ts`
+  - `supabase/migrations/20260908110000_add_important_news_publish_ready_cron.sql`（ローカル提案のみ・本番未適用）
+- implementation:
+  - `important_news_monitor_settings.updated_at`を既存cutover境界として読み取り、`generated_at >= updated_at`の候補だけauto-publish選択対象にした。
+  - `candidateId`明示時もcutover以前/不正timestampは`NEWS_AUTO_PUBLISH_CUTOVER_BLOCKED`でclaim前に停止。
+  - `updated_at`取得不能時は候補選択をfail-closed。
+  - `publish_ready`を5分間隔で呼ぶCron SQL案を追加。`is_active=true`かつ`auto_publish=true`のみ呼び出し、重複jobは作成しない。
+- safety:
+  - `most_important`限定、ready_for_publish、Fact/Voice passed、HTTPS source、未投稿、atomic claim、rate/overnight/publish safetyは維持。
+  - `important`の自動投稿拡大、過去候補の再claim/reprocess、X API、production write、deployは未実施。
+- tests:
+  - 新規cutover/triggerを含むimportant-news全テスト: 261 passed / 0 failed（`deno test --no-check`）。
+  - `git diff --check`: pass。
+  - `deno check --no-config`: 既存の無関係な2エラーで失敗（`supabase/functions/_shared/x_oauth2_post.ts:66`、既存`important-news-monitor/index.ts:683`）。今回変更箇所のエラーではない。
+- production: `auto_publish=true`は既存状態を維持。Cron/migration/deploy/DB write/X投稿は0。
+- commit: TASK/Reportと実装コードのローカルcommit/pushは許可。production適用は別レビュー後。
+- next_owner: chatgpt
