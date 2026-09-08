@@ -3,8 +3,8 @@
 - task_id: close-report-auto-post-enable-20260908
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 
 ## Goal

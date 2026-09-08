@@ -1,63 +1,65 @@
 # Codex Report
 
-- task_id: important-news-safe-publish-production-activation-20260908
+- task_id: close-report-auto-post-enable-20260908
 - result: review_required
 - next_owner: chatgpt
-- completed_at: 2026-09-08 JST
+- completed_at: 2026-09-09 JST
 
 ## Result
 
-明示承認された順序で、safe cutoverとpublish_ready Cronを本番反映しました。
+本番のclose_report自動投稿を、既存の正規scheduler経路だけで有効化しました。
 
-### Deploy
+### 採用したscheduler経路
 
-- `important-news-monitor`のみdeploy成功
-- ACTIVE version: v31
-- `verify_jwt=false`
-- deploy前のimportant-news regression: 261 passed / 0 failed
+- active Cron `dispatch-scheduled-posts`（`* * * * *`）
+- `x-test-post` の毎分dispatch
+- `claim_due_post()` → `plan_close_report()`
+- `plan_close_report()` は `close_report_settings.is_active` とJPX営業日を確認して `scheduled_posts` を生成
 
-### Cutover settings
+`posting_windows.close_report` + `plan_daily_posts()` は別経路ですが、二重生成防止のため有効化していません。
 
-- `auto_publish`: `true -> false -> true`を実施
-- 最終 `auto_publish=true`
-- `updated_at` cutover: `2026-09-08 14:02:56.23617+00`
-- `is_active=true`
-- `interval_minutes=20`
-- `luna_enabled=true`
-- `sol_escalation_enabled=true`
+### Production変更
 
-### Backlog exclusion
+- `public.close_report_settings.is_active`: `false` → `true`
+- 変更時刻: `2026-09-08 23:51:59.763339+00`（2026-09-09 08:51:59 JST）
+- `window_start=15:58`, `center_time=16:00`, `window_end=16:02`
+- `timezone=Asia/Tokyo`, `holiday_edition_enabled=false` は変更なし
+- `public.posting_windows` の `close_report` 行は `is_active=false` のまま
 
-cutover前の既存ready候補は投稿対象から除外されることを確認しました。
+### 2026-09-09対象確認
 
-- pre-cutover ready `most_important`: 6
-- post-cutover ready `most_important`: 0
-- ready candidates with `publish_attempts > 0`: 0
-- ready candidates with `x_post_id`: 0
-- 既存候補のstatus変更・再claim・再生成・backfill: 0
+- JST現在時刻: `2026-09-09 08:51`頃
+- 2026-09-09は平日（ISO day 3）、JPX holidayではない
+- Cronの自然実行により `scheduled_posts` に1件だけ生成済み
+- `scheduled_for=2026-09-09 07:00:00+00`（16:00 JST）、status=`pending`, attempt_count=`0`
+- 同日 `close_report` は1行、重複なし
 
-### Cron
+### Duplicate / claim / security確認
 
-`important-news-publish-ready`を1本だけ作成しました。
+- `scheduled_posts` の `UNIQUE (schedule_date, post_type, slot_no)` を確認
+- `plan_close_report()` の `on conflict (schedule_date, post_type, slot_no) do nothing` を確認
+- `claim_due_post()` は `plan_close_report()` を呼び、`for update skip locked` で1件だけclaim
+- `plan_close_report(date)` / `claim_due_post()` のEXECUTEは `service_role` のみ（既存ACL）
+- `posting_windows` 側を同時有効化していないため、close_reportの二重planner経路は発生しない
 
-- schedule: `*/5 * * * *`
-- active: true
-- body: `{"mode":"publish_ready"}`
-- SQL側guard: `is_active=true and auto_publish=true`
+### Safety / unchanged
 
-既存の以下3本は変更していません。
+- `x-test-post` はACTIVE version `v89`を確認。今回deployしていない
+- Cron、Edge Function、コード、migration/schema、GRANT、secret、OAuth、他post_type設定は変更していない
+- `scheduled_posts`への手動直書き、planner手動実行、2026-09-08分のX手動投稿は行っていない
+- X API呼び出し・X投稿は行っていない
 
-- Fetch: `0,20,40 * * * *`
-- Judgement: `7,27,47 * * * *`
-- Generation: `14,34,54 * * * *`
+## Tests / verification
 
-### Safety / observation
+- production read-only SQLでsettings、scheduler、2026-09-09営業日判定、scheduled row、function定義、ACL、UNIQUE制約を確認
+- 変更対象コードなしのため、アプリ/Edge Functionテストは未実施
+- 管理ファイルの`git diff --check`: PASS
 
-- publish_ready手動実行: 0
-- 人工candidate作成: 0
-- 手動X投稿: 0
-- X API呼び出し: 0
-- X投稿: 0
-- 自然発生のpost-cutover候補は今回の確認時点で未成立（人工生成・再処理はしていません）
-- 他Function・他settings・DB schema・既存candidateへの変更: 0
-- secret露出: 0
+## Remaining issues
+
+- 16:00 JSTの実際のX投稿成功（`scheduled_posts.status` / `x_post_id`）は予定時刻前のため未観測
+- 予定時刻後はread-onlyでclaim・投稿結果を確認する必要がある
+
+## Next recommendation
+
+`C1`でこのproduction設定変更、9/9のscheduled row、二重投稿防止、未deployをレビューしてください。
