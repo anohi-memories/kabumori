@@ -5,14 +5,26 @@
 - このファイルを、長期的な方針・共通ルール・決定事項の唯一の正本とする。
 - `AGENTS.md` と `CLAUDE.md` は担当ツール向けの入口に限定し、詳細ルールを重複させない。
 - 短期的な作業の現在地、未完了事項、注意点は `HANDOFF.md` に記録する。
+- GitHub共有タスク運用の正本は `.agent/ORCHESTRATION.md` と各 `.agent/tasks/*` とする。
 - 記載が競合する場合は、このファイルを優先する。
+
+## Codex / Claude の短縮開始コード
+
+このプロジェクトでは、単独の `H1` / `H2` / `G1` / `G2` は見出し指定や一般文字列ではなく、実装スロット開始コードとして扱う。意味をユーザーに聞き返さない。
+
+- Codexに `H1` とだけ送られた場合: Codex slot 1。`.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、`.agent/tasks/CODEX_TASK.md` を確認し、TASKが `ready` または `in_progress` のときだけ作業開始する。
+- Codexに `H2` とだけ送られた場合: Codex slot 2。`.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、`.agent/tasks/CODEX_TASK_2.md` を確認し、TASKが `ready` または `in_progress` のときだけ作業開始する。
+- `H1` / `H2` が `idle` / `done` / `review_required` の場合は勝手に新規作業を作らない。
+- Claude Codeに `G1` とだけ送られた場合は `.agent/tasks/CLAUDE_TASK_1.md`、`G2` は `.agent/tasks/CLAUDE_TASK.md` を自分のTASKとして扱う。
+- 並行作業・完了コード・競合防止の詳細は `.agent/ORCHESTRATION.md` に従う。
 
 ## 作業開始時
 
 1. `PROJECT_RULES.md` を読む。
 2. `HANDOFF.md` を読む。
-3. リポジトリの状態を確認し、既存の未コミット変更を作業者の変更として尊重する。
-4. 依頼範囲と無関係なファイルを変更しない。
+3. GitHub共有タスク開始コードを受けた場合は `.agent/ORCHESTRATION.md` と該当TASKも読む。
+4. リポジトリの状態を確認し、既存の未コミット変更を作業者の変更として尊重する。
+5. 依頼範囲と無関係なファイルを変更しない。
 
 ## 変更と合意
 
