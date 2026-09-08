@@ -21,19 +21,19 @@
 
 ## コード
 
-### G / G1 / G2 / G3 — 作業開始
+### H1 / G1 / G2 / H2 — 作業開始
 
-- Codexに `G`: Codex slot 1として `.agent/tasks/CODEX_TASK.md` を確認して開始。
+- Codexに `H1`: Codex slot 1として `.agent/tasks/CODEX_TASK.md` を確認して開始。
 - Claude Codeに `G1`: `.agent/tasks/CLAUDE_TASK_1.md` を確認して開始。
 - Claude Codeに `G2`: `.agent/tasks/CLAUDE_TASK.md` を確認して開始。
-- Codexに `G3`: Codex slot 2として `.agent/tasks/CODEX_TASK_2.md` を確認して開始。
+- Codexに `H2`: Codex slot 2として `.agent/tasks/CODEX_TASK_2.md` を確認して開始。
 - Claude Codeに単独で `G` が来た場合、ready/in_progressのClaudeスロットが1つだけならそのスロットを開始してよい。2つとも対象なら推測せず `G1` / `G2` の指定を求める。
 
 開始時は origin/main をfresh-checkし、ORCHESTRATION/CURRENT_STATE/自分のTASKを確認する。statusがreadyまたはin_progressのときだけ作業する。idle/done/review_requiredでは新規作業を始めない。
 
-### C / C2 — Codex完了確認
+### C1 / C2 — Codex完了確認
 
-ChatGPTに `C` とだけ送られた場合、既存の意味を維持してCodex slot 1だけを確認する。
+ChatGPTに `C1` とだけ送られた場合、Codex slot 1だけを確認する。
 
 - `.agent/tasks/CODEX_TASK.md`
 - `.agent/CODEX_REPORT.md`
@@ -83,7 +83,7 @@ Fでは4スロットの状態・競合・空き状況を整理し、必要なら
 
 ## 完了報告のGitHub同期は必須
 
-G/C/C2/K運用が成立するため、実装コードをpushできない場合でも、完了・停止時の `.agent/` 制御情報だけは必ずGitHub `origin/main` へ反映する。
+H1/H2/C1/C2/K運用が成立するため、実装コードをpushできない場合でも、完了・停止時の `.agent/` 制御情報だけは必ずGitHub `origin/main` へ反映する。
 
 ### Codex slot 1
 
@@ -115,7 +115,7 @@ G/C/C2/K運用が成立するため、実装コードをpushできない場合�
 - non-fast-forwardや同じ制御ファイルの競合が出た場合は上書きせず停止し、同期失敗をユーザーへ明示する
 - 「実装コードはlocal only」「commit/pushなし」等の事実はReportへ明記する
 
-`.agent/` のGitHub同期まで終わって初めて、ユーザーへ対象スロットに応じて「C」「C2」「K1」「K2」で確認可能と報告する。
+`.agent/` のGitHub同期まで終わって初めて、ユーザーへ対象スロットに応じて「C1」「C2」「K1」「K2」で確認可能と報告する。
 
 ## スロット別の完了報告
 

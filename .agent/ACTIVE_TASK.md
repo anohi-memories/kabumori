@@ -16,8 +16,8 @@
 - slot: codex-1
 - status: done
 - task_id: important-news-safe-publish-production-activation-20260908
-- start_code: G
-- finish_code: C
+- start_code: H1
+- finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 
 ### Codex slot 2
@@ -25,7 +25,7 @@
 - slot: codex-2
 - status: idle
 - task_id: none
-- start_code: G3
+- start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 
@@ -49,11 +49,12 @@
 
 ## Control codes
 
-- `G`: Codex slot 1開始。Claudeではready/in_progressが1枠だけならその枠開始。
+- `H1`: Codex slot 1開始。
+- `G`: Claudeではready/in_progressが1枠だけならその枠開始。
 - `G1`: Claude slot 1開始。
 - `G2`: Claude slot 2開始。
-- `G3`: Codex slot 2開始。
-- `C`: ChatGPTがCodex slot 1完了だけ確認。
+- `H2`: Codex slot 2開始。
+- `C1`: ChatGPTがCodex slot 1完了だけ確認。
 - `C2`: ChatGPTがCodex slot 2完了だけ確認。
 - `K1`: ChatGPTがClaude slot 1完了だけ確認。
 - `K2`: ChatGPTがClaude slot 2完了だけ確認。

@@ -13,8 +13,8 @@
   - Claude slot 1: `.agent/tasks/CLAUDE_TASK_1.md`
   - Claude slot 2: `.agent/tasks/CLAUDE_TASK.md`
   - `.agent/ACTIVE_TASK.md` は後方互換・全体一覧
-  - Codex slot1開始=`G`、完了確認=`C`
-  - Codex slot2開始=`G3`、完了確認=`C2`
+  - Codex slot1開始=`H1`、完了確認=`C1`
+  - Codex slot2開始=`H2`、完了確認=`C2`
   - Claude slot1開始=`G1`、完了確認=`K1`
   - Claude slot2開始=`G2`、完了確認=`K2`
   - `K` はClaude完了対象が1枠だけ明白な場合のみ

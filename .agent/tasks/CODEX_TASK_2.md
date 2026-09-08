@@ -1,6 +1,6 @@
 # Codex Task 2
 
-Codex（こでさん）並列スロット2の現在タスクです。`G3` を受けたCodexは、`.agent/ORCHESTRATION.md` と既存のプロジェクトルールを確認したうえで、このファイルだけを自分の担当タスク正本として扱います。
+Codex（こでさん）並列スロット2の現在タスクです。`H2` を受けたCodexは、`.agent/ORCHESTRATION.md` と既存のプロジェクトルールを確認したうえで、このファイルだけを自分の担当タスク正本として扱います。
 
 - task_id: none
 - owner: codex
