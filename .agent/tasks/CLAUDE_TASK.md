@@ -1,50 +1,145 @@
 # Claude Task 2
 
-- task_id: morning-greeting-x-media-scope-reauth-20260908
+- task_id: morning-report-us-holiday-session-labeling-20260908
 - owner: claude
 - slot: claude-2
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: urgent
-- purpose: 2026-09-08朝の`morning_greeting`が`MORNING_GREETING_MEDIA_UPLOAD_FAILED:403`で安全停止した原因を、X OAuth 2.0のmedia upload権限と実装方式まで確認し、画像付き朝の挨拶を安全に復旧できる状態へ整える。
+- purpose: 2026-09-08朝刊で、前夜の米国市場がLabor Day休場だったにもかかわらず、前営業日9/4の半導体上昇をトップ項目で「米国半導体株が広く上昇。半導体指数も約3%上昇」と出し、読者に「昨夜の値動き」と誤認させる時間軸問題が発生した。米国市場の休場判定と前営業日ラベルを機械的に保証し、朝刊が古いセッションを最新セッションのように表現しないよう最小修正する。
 
-## Report
+## Confirmed incident
 
-- result: 403の最有力原因を特定。現行の`POST /2/media/upload`実装形式はX v2仕様と整合しており、既存OAuth 2.0 user tokenに`media.write` scopeが無い可能性が最も高い。
-- OAuth初回認証フロー: リポジトリ内にauthorization URL生成、scope定義、PKCE、callback/token exchangeは存在しない。現在のコードは保存済みtoken読込とrefreshのみ。
-- 既存refresh tokenのrefreshでは新scopeは追加できないため、`media.write`取得にはユーザー本人による再認証が必要。
-- X側403 response bodyを従来破棄していたため、`title`/`detail`/`type`/`reason`/`errors[0].message`/`errors[0].code`だけをallowlistで記録する安全診断を追加。token/secret系フィールドは記録しない。
-- 403は自動retryしない。401時のみ既存どおり最大1回refreshして同一media requestを再試行する。
-- changed files:
-  - `supabase/functions/x-test-post/morning_greeting_publish_logic.ts`
-  - `supabase/functions/x-test-post/morning_greeting_publish_logic_test.ts`
-- tests:
-  - morning greeting publish: 15/15 pass
-  - full x-test-post regression: 332/332 pass
-  - shared x_oauth2_post: 5/5 pass
-- commit: `1088081`
-- production変更なし: deploy / X実投稿 / OAuth再認証 / Developer Console変更 / secrets / DB migration/schema/GRANT / Cron / posting_windows は未実施。
+2026-09-08朝刊では:
+- 前夜2026-09-07の米国株式市場はLabor Dayで休場
+- 実際の約3%半導体上昇は前営業日2026-09-04の動き
+- 本文途中では「前週末の米国市場では」と書けていた
+- しかしトップ3では「米国半導体株が広く上昇。半導体指数も約3%上昇」とだけ表示され、通常読者は昨夜の値動きと解釈する
 
-## Required user action
+これは「数字自体の捏造」ではなく、セッション日付・休場情報の表示欠落による重大な時間軸誤認。
 
-実際の復旧には次工程で以下が必要:
-1. X Developer Portalで対象Appの登録済みredirect URIを確認。
-2. App permissionsがRead and write以上であることを確認。
-3. OAuth 2.0 + PKCEで `tweet.read tweet.write users.read offline.access media.write` を要求して再認証。
-4. authorization codeをtoken endpointで新しいaccess/refresh tokenへ交換。
-5. tokenをチャットや平文へ貼らず、既存暗号化方式で`oauth_token_store`へ安全に保存。
-6. media upload単体テスト後、morning_greeting manual publishを1回だけ安全確認。
+## Required investigation
 
-## K2 Review
+1. 現在の`morning_report`が米国市場セッション日をどう決めているか確認する。
+2. 既存の`getExpectedUsSessionDate()`や米国市場営業日/休日判定を再利用できるか確認する。
+3. Labor DayなどNYSE/Nasdaq休場日の翌朝に、前営業日の指数・SOX等を使う場合どのフィールド/ロジックで区別できるか確認する。
+4. 生成プロンプト、fact-check、format validator、local safetyのどこに「セッション日ラベル強制」を入れるのが最も決定的で安全か判断する。
+5. 9/8 incidentを再現するテストを先に追加する。
 
-- decision: approved
-- reviewed_by: chatgpt
-- reviewed_commit: `1088081`
-- result:
-  - 403の最有力原因として`media.write`不足を示す根拠は十分で、request形式のバグではないことを確認。
-  - リポジトリ内に初回OAuth認証フローが存在しないため、今回scope追加をコードで完結できなかった判断は妥当。
-  - allowlist方式の403 diagnosticsはsecret/token漏洩を避ける最小変更で、既存の403 non-retry / 401 single-refresh / 二重投稿防止を維持。
-  - 15/15、332/332、5/5 PASSを確認。
-  - 本番変更なし。
-- remaining:
-  - 実際の復旧はX Developer Portalでredirect URI確認 → PKCE再認証 → 新token安全保存 → media upload testが必要。
+## Required implementation
+
+### 1. 米国市場休場を機械判定
+
+朝刊生成時に、対象となる「前夜の米国市場」が休場だったかを明示的に判定できる状態にする。
+
+- 休日判定をLLM推測だけに任せない
+- 既存の米国セッション日ロジックが使えるなら再利用
+- 新たな外部依存を増やさない最小実装を優先
+
+### 2. 休場翌朝は冒頭で明示
+
+前夜が米国休場だった場合、朝刊本文の上部（少なくともトップ3より前または最初の注目ポイント内）に、読者が誤認しない形で必ず明示する。
+
+例:
+- `昨夜の米国株はLabor Dayで休場。以下は前営業日9/4の動きです。`
+
+休日名が安全に確定できない場合は:
+- `昨夜の米国株は休場。以下は前営業日の動きです。`
+
+のように、休場事実と前営業日参照を最低限保証する。
+
+### 3. 前営業日データのラベル強制
+
+休場翌朝に前営業日の指数・SOX・個別株の値動きを扱う場合:
+
+禁止:
+- `米国半導体株が上昇`
+- `SOXが3%上昇`
+- `米株は下落`
+
+のように、いつの値動きか不明なトップ見出し。
+
+必須:
+- `前営業日9/4の米国市場では…`
+- `前週末のSOXは約3%上昇`
+- `前営業日の米半導体株は…`
+
+など、古いセッションであることが見出し/要約だけ読んでも分かる表現。
+
+### 4. セッション日整合性をvalidator/fact checkで保証
+
+LLMプロンプトだけではなく、可能な範囲で決定的チェックを追加する。
+
+最低限:
+- 前夜休場時に`昨夜/前夜の米国市場が上昇・下落した`と読める表現を許さない
+- 前営業日データを使う場合、本文または該当ポイントに`前営業日`/具体日付/`前週末`等のラベルがあること
+- `usSessionDate`と本文のセッション参照が矛盾しないこと
+
+### 5. 休場日は古い材料を最新材料扱いしない
+
+米国休場日に前営業日の株価材料を再利用する場合でも:
+- その後に発生した新しいマクロ/為替/金利/地政学材料があれば、時間軸上そちらを優先できるようにする
+- 「前営業日の株価材料」だけでトップ3を埋めない
+
+ただし今回は大規模な材料ランキング再設計は不要。まず時間軸誤認を確実に防ぐ最小修正を優先する。
+
+## Tests
+
+最低限:
+1. 2026-09-08 JST朝 → 前夜2026-09-07 Labor Day休場と判定できる
+2. 休場翌朝に9/4のSOX上昇を使う場合、`前営業日`/`前週末`/具体日付ラベルなしの出力をreject
+3. `米国半導体株が広く上昇。半導体指数も約3%上昇`のような無日付表現を9/8条件でreject
+4. `昨夜の米国株は休場。前営業日9/4のSOXは約3%上昇`はaccept
+5. 通常の米国営業日翌朝では既存の「昨夜の米国市場」表現を不必要に壊さない
+6. weekend後の月曜朝など既存セッション日ロジックと整合する
+7. morning_report relevant tests pass
+8. full x-test-post regression pass
+
+## Scope / conflicts
+
+主対象:
+- `supabase/functions/x-test-post/morning_report_logic.ts`
+- `supabase/functions/x-test-post/index.ts`
+- `supabase/functions/x-test-post/us_session_date_logic.ts`（必要な場合のみ）
+- 関連tests
+
+触らない:
+- Codex `important-news-monitor/**`
+- Claude slot1担当領域
+- `send-push-notifications/**`
+- morning_greeting OAuth/media upload関連
+- close_report
+- DB migration/schema/GRANT
+- Cron
+- `posting_windows`
+- secrets
+- 他Edge Function
+
+## Production policy
+
+このTASKは **調査 + local実装 + tests + commitまで**。
+
+禁止:
+- production deploy
+- X実投稿
+- 本番DB write
+- migration/schema/GRANT
+- Cron変更
+- posting_windows変更
+- secrets変更/表示
+
+## Completion
+
+完了時:
+- status: `review_required`
+- next_owner: `chatgpt`
+- `## Report`追記
+- incident再現条件
+- root cause
+- 休場判定方法
+- 前営業日ラベル保証方法
+- changed files
+- reproduction/relevant/full test結果
+- commit hash
+- production変更なし
+- 次工程推奨
