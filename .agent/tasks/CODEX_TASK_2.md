@@ -3,8 +3,8 @@
 - task_id: morning-report-us-holiday-session-labeling-20260908
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: codex
+- status: done
+- next_owner: chatgpt
 - priority: urgent
 - purpose: 2026-09-08朝刊で、前夜の米国市場がLabor Day休場だったにもかかわらず、前営業日9/4の半導体上昇をトップ項目で「米国半導体株が広く上昇。半導体指数も約3%上昇」と出し、読者に「昨夜の値動き」と誤認させる時間軸問題が発生した。米国市場の休場判定と前営業日ラベルを機械的に保証し、朝刊が古いセッションを最新セッションのように表現しないよう最小修正する。
 
@@ -119,3 +119,23 @@
 - commit hash
 - production変更なし
 - 次工程推奨
+
+## C2 Review
+
+- result: approved
+- reviewed_by: chatgpt
+- decision: 実装・テスト・安全条件を満たしており、Codex slot 2として完了承認。
+- verified:
+  - 2026-09-08 Labor Day翌朝条件で無日付の米国市場値動きをreject
+  - `前営業日9/5`のような誤った具体日付をreject
+  - 正しい前営業日ラベル・一般的な`前営業日`/`前週末`ラベルは許可
+  - morning report/session tests 54 passed / 0 failed
+  - full x-test-post regression 362 passed / 0 failed
+  - commit `dd80e20` はorigin/main反映済み
+- safety:
+  - production deployなし
+  - X投稿なし
+  - DB write/Cron/posting_windows/secrets/OAuth/migration/schema/GRANT変更なし
+- note:
+  - `useful_tip_output_test.ts`の変更はDeno 2.9で全体回帰を実行可能にするtest-only互換修正で、本番ロジック変更ではない
+  - 次回自然朝刊でのproduction挙動観測は別タスク扱い
