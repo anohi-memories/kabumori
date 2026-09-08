@@ -2,192 +2,176 @@
 
 Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは、`.agent/ORCHESTRATION.md` と既存のプロジェクトルールを確認したうえで、このファイルだけを自分の担当タスク正本として扱います。
 
-- task_id: important-news-freshness-coverage-fix-20260906
+- task_id: important-news-generation-reliability-fix-20260908
 - owner: codex
-- status: done
-- next_owner: chatgpt
-- purpose: 直前のread-only調査で特定した重要ニュース取得の速報遅延と `market_macro` の取りこぼしを、既存構成を大きく壊さない最小修正で改善する。
+- status: ready
+- next_owner: codex
+- purpose: `important` / `most_important` に採用された重要ニュースが、企業同一性判定や軽微なFact不整合で生成全落ちする問題を、安全性を維持したまま最小修正する。
 - priority: high
 
 ## Background
 
-前タスク `important-news-freshness-coverage-diagnosis-20260906` で以下を確認済み。
+2026-09-08の本番read-only確認で、重要ニュース候補から `important` に採用された3件がすべて `generation_failed` となり、生成成功0件だった。
 
-- Cron/Fetch自体は正常。2026-09-06 JST 00:00〜22:03の自然Fetch 67回は全件completed、error/source error 0。
-- `breaking_market` は6 queryを2本ずつ回すため、各queryは実質60分に1回。
-- 03:20 JSTに拾われた雇用統計AP記事は公開から249.1分遅延。
-- `breaking_market` は67 cycle中49 cycle（73.1%）で候補0。
-- 24h article freshness と event時刻未検証により、古いイベントの後追い記事が速報候補として再浮上する。
-- `market_macro` は各cycleで56件取得する一方、固定source順の先頭30件をdedupe前にcapしており、30件が既存duplicateのまま後段26件が恒常的にdeferされる。
+確認できた代表例:
 
-詳細は `.agent/CODEX_REPORT.md` の前タスク報告を参照。
+1. TDnetの企業名表記差
+   - DB/一覧側: `小森`
+   - 一次資料側: `株式会社 小森コーポレーション`
+   - DB/一覧側: `旭コンクリ`
+   - 一次資料側: `旭コンクリート工業`
+   - 信頼済みTDnetの `company_code` / `entity_key` は同一企業を指しているのに、略称と正式社名の差で company identity Fact check が失敗した。
+
+2. 軽微な生成Fact不整合
+   - 外貨準備ニュースで、生成文が入力にない市場解釈を追加した。
+   - 入力にある年を生成文で落とした。
+   - 事実そのものは投稿可能でも、軽微な修正可能事項1箇所で投稿全体が `generation_failed` になった。
+
+このタスクは取得・重要度判定を緩めるものではない。採用後の生成パイプラインの信頼性改善に限定する。
 
 ## Implementation scope
 
-### 1. `breaking_market` の重要テーマを毎cycle固定枠化
+### 1. 企業同一性判定を安全に改善
 
-- 現行の「6 queryから2本ずつrotation」を見直す。
-- 毎20分cycleで最低1本は、速報性が特に高いテーマを必ず検索する。
-- 対象には少なくとも以下を含める。
-  - 米雇用統計 / CPI 等の主要米経済指標
-  - 緊急BOJ/Fed/MOF介入・政策変更
-  - 市場急変（株価指数先物、NASDAQ/SOX、USDJPY、原油等）
-- 残り枠は地政学・関税・中国刺激策などをrotationしてよい。
-- 目的は「雇用統計系が60分待ちになる」状態をなくすこと。
-- コスト増を最小化し、原則1 cycleあたりのResponses検索本数は現行と同等程度に保つ。
+主対象はTDnet由来候補。
 
-### 2. `breaking_market` の速報freshnessを短縮
+- 信頼済みTDnet sourceであることを既存条件どおり必須とする。
+- `company_code` が正規形式で、`entity_key === company:<company_code>` のような既存の強いidentity signalが一致している場合に限り、DB略称と一次資料正式社名の安全な表記差を許容できるよう改善する。
+- `小森` ↔ `小森コーポレーション`、`旭コンクリ` ↔ `旭コンクリート工業` のような実例をテストへ追加する。
+- 別企業の誤統合を防ぐことを最優先する。
+- 無制限の部分一致、前方一致、曖昧な会社名類似だけで同一企業とみなす実装は禁止。
+- 既存の会社コード正規化・5文字末尾0の安全ルールは壊さない。
+- 既存手動alias mapを全社分増やすだけの実装は避け、可能なら強いidentity signalと一次資料内の名称証拠を組み合わせた一般化を優先する。ただし一般化が危険なら安全側へ倒す。
 
-- 速報候補として許容する article freshness を現行24hから大幅短縮する。
-- 初期値の目安は2〜3時間。ただし既存仕様との整合を見て妥当な値を選ぶ。
-- 単純に記事公開時刻だけでなく、可能な範囲で `event/release timestamp` をモデル出力または検証対象に含める。
-- 古いイベントを扱う後追い記事は、速報候補として新規登録しない方向にする。
-- 24h相当の補完レーン新設は今回必須ではない。大規模構造変更は避ける。
+### 2. 軽微なFact失敗だけ最大1回の限定retry
 
-### 3. cross-source同一イベントの再浮上を抑制
+Fact check失敗後、以下のように「事実を変えずに機械的に修正可能」なケースだけ、Lunaで最大1回の限定修正を許可する。
 
-- BLS一次資料を既に取得済みなのに、同じ雇用統計のAP後追い記事が新規速報候補になる問題を軽減する。
-- 既存 `entity_key` / category / release timestamp 等を利用して、同一イベントと判断できる場合は重複候補化しない。
-- 完全なイベント同一性基盤の新設までは不要。今回の最小修正で安全にできる範囲を優先。
-- URL/sourceだけのdedupeでは不十分。
+許可候補:
+- 入力に明示された年・日付の欠落を戻す。
+- 入力根拠にない市場解釈・影響解釈・因果表現を削除する。
+- 確認済み同一企業の表記を、入力にある正式/安全な表記へ統一する。
+- 事実を変更しない軽微なラベル/表記整合。
 
-### 4. `market_macro` のdedupe前global capを修正
+retry禁止:
+- 数値そのものが疑わしい。
+- 企業・証券コードの同一性に疑義がある。
+- 日付や出来事の発生時刻そのものが不明。
+- 因果関係・規模・対象範囲・重要条件に疑義がある。
+- 元情報不足。
+- source URL / source identityに疑義がある。
+- Fact checkerのissueが未分類または安全に限定できない。
 
-- 現行の「固定source順に連結 → 先頭30件cap → dedupe」を改める。
-- 少なくとも保存済みduplicateを除外してからcapする。
-- 可能ならsource別quotaまたはround-robinを採用し、後段source（EIA等）が恒常的に飢餓しないようにする。
-- 既存の最大処理件数やコスト上限は維持する。
+### 3. retry後はFactを必ず再検証
 
-### 5. diagnosticsを最低限追加
+- retry修正文をそのまま通さない。
+- local deterministic Fact checkを再実行。
+- AI Fact checkも再実行。
+- Factがpassedした場合のみVoiceへ進む。
+- retry後もFact failなら `generation_failed`。
 
-後続調査で「検索結果に出なかったのか」「validationで落ちたのか」を切り分けられるよう、既存run diagnosticsへ低コストで保存可能な情報を追加する。
+### 4. 既存Voice retryとの上限を明確化
 
-最低限ほしい項目:
+- Fact retry: 最大1回。
+- Voice retry: 既存最大1回。
+- Fact retryとVoice retryが連鎖して無限化しないこと。
+- 同一段階を2回以上retryしない。
+- 既存のatomic generation claim / duplicate generation防止を壊さない。
 
-- selected query key
-- provider/response成功失敗
-- raw candidate count（取得可能な範囲）
-- validation後candidate count
-- URL/domain/time等の主要除外理由件数
+### 5. diagnostics
 
-raw response全文やsecretは保存しない。
+可能な範囲で既存の `generation_voice_retry` と同様に、Fact retryについても後から確認できる診断情報を保持する。
+
+最低限ほしい内容:
+- attempted
+- initial fact issues
+- retry used model
+- retry後local fact status/issues
+- retry後AI fact status/issues
+- retry error
+
+DB schema追加が必要なら勝手にmigrationせず、既存JSON列等で安全に保存できるか確認し、無理ならReportに必要変更を明記する。
 
 ## Safety / behavior requirements
 
-- 本人のholding/watchを基準にする既存の重要ニュース表示・通知仕様を壊さない。
-- `important` / `most_important` の既存判定フローをむやみに緩めない。
-- 「件数を増やすためだけにノイズニュースを通す」修正は禁止。
-- 速報性と取りこぼし改善が目的。
-- X自動投稿の公開設定やauto_publishは変更しない。
-- 他workstreamのファイル・DB migration/RPC・Edge Functionと競合する場合は作業を開始せず報告する。
+- `important` / `most_important` の重要度判定基準は緩めない。
+- 取得候補数を増やす修正はしない。
+- Fact checkerそのものを甘くして通過率だけ上げる修正は禁止。
+- retryは「安全に直せる既知の軽微問題」に限定する。
+- 別企業誤認は絶対に避ける。
+- 元情報にない市場解釈を追加しない。
+- 数値・日付・固有名詞を推測で補わない。
+- 今日すでに `generation_failed` になった候補を勝手に再生成しない。
+- 過去failed candidateのstatus変更、再claim、再投稿は禁止。
+- `auto_publish` / X公開設定は変更しない。
+- X投稿しない。
+- Claude側TASK/Reportには触れない。
+- 他workstreamと同一ファイル競合がある場合は開始せず報告する。
 
 ## Expected files
 
-主対象は `important-news-monitor` とその周辺。
+主対象:
+- `supabase/functions/important-news-monitor/post_generation_logic.ts`
+- `supabase/functions/important-news-monitor/post_generation_logic_test.ts`
 
-実際のファイル構成を確認し、必要最小限の変更に留めること。
+必要最小限で追加可:
+- `supabase/functions/important-news-monitor/index.ts`
+- generation dispatch / diagnostics関連helperとtest
+
+今回完了済みのfreshness/coverage修正ファイルを不要に再編集しないこと。
 
 ## Validation
 
-最低限、以下を確認する。
+最低限:
 
-1. query schedule
-   - 主要経済指標系が各20分cycleで固定枠として走ること。
-   - その他queryがrotation継続できること。
+1. company identity
+   - `小森` / `株式会社 小森コーポレーション` が強いTDnet identity signal一致時に安全に同一企業と判定できる。
+   - `旭コンクリ` / `旭コンクリート工業` も同様。
+   - company_code/entity_key不一致時は名前が似ていても通さない。
+   - unrelated companyの誤一致fixtureを入れる。
 
-2. freshness
-   - 速報window外の記事が `breaking_market` 新規候補にならないこと。
-   - future skewの既存安全策を壊さないこと。
+2. Fact retry
+   - 年の欠落を安全に戻すケース。
+   - 根拠のない市場解釈を削除するケース。
+   - 数値誤りはretry禁止。
+   - 企業同一性疑義はretry禁止。
+   - 未分類issueはretry禁止。
+   - retryは最大1回。
 
-3. event duplicate
-   - 同じrelease/eventを別sourceが後追いしても重複候補化を抑えられること。
+3. retry後再検証
+   - local Fact failで停止。
+   - AI Fact failで停止。
+   - Fact pass後のみVoiceへ進む。
 
-4. market_macro
-   - 既存duplicateを除外した後にcapされること。
-   - 後段sourceが恒常的にdeferされないこと。
-
-5. diagnostics
-   - query/候補数/主要除外理由を後から確認できること。
-
-6. regression
-   - lint / typecheck / relevant testsを実行。
-   - 可能ならローカルfixtureまたはモックで代表ケースを確認。
+4. regression
+   - 既存generation / Fact / Voice / Voice retry / publish eligibilityを壊さない。
+   - relevant tests, lint, typecheck可能範囲, `git diff --check`。
 
 ## Production policy
 
-このタスクはまずローカル実装・検証まで。
+このタスクはローカル実装・検証まで。
 
 - production DB write: 禁止
-- migration / DDL / GRANT: 必要性が出たら実施せず `review_required` で報告
+- migration / DDL / GRANT: 禁止。必要ならReportのみ
 - Edge Function deploy: 禁止
 - Cron変更: 禁止
 - secrets変更・表示: 禁止
-- X投稿: 禁止
+- OpenAI実APIによる本番候補再生成: 禁止
+- X API / X投稿: 禁止
 - auto_publish変更: 禁止
-
-DB schema変更なしでdiagnostics追加できない場合は、勝手にmigrationせず必要変更をReportに明記すること。
 
 ## Completion criteria
 
-- 上記1〜5の実装が可能な範囲で完了
-- lint / typecheck / relevant testsの結果を報告
-- 変更ファイル一覧と要点を報告
-- production変更は行わない
-- TASK末尾に `## Report` を追加
-- status を `review_required`
-- next_owner: chatgpt
+- 上記scopeを安全に実装。
+- 代表失敗ケースとnegative casesをtest化。
+- lint / relevant tests / typecheck可能範囲 / diff checkを報告。
+- 変更ファイル一覧と設計判断をReport。
+- production変更0。
+- TASK末尾に `## Report` を追加。
+- status: `review_required`
+- next_owner: `chatgpt`
 
-- commit: 許可（ローカル/通常のGit運用上必要なら可）
-- push: 原則禁止。既存運用上main同期が必須なら勝手にpushせず報告
+- commit: 許可
+- push: 実装完了後、既存運用に従う。競合や不明点があれば勝手にpushせずReport。
 - deploy: 禁止
 - report_mode: inline
-- next_owner: chatgpt
-
-## Report
-
-- task_id: important-news-freshness-coverage-fix-20260906
-- result: review_required
-- changed_files:
-  - `supabase/functions/important-news-monitor/breaking_market_source_fetchers.ts`
-  - `supabase/functions/important-news-monitor/breaking_market_source_fetchers_test.ts`
-  - `supabase/functions/important-news-monitor/fetch_resource_limit_logic.ts`
-  - `supabase/functions/important-news-monitor/fetch_resource_limit_logic_test.ts`
-  - `supabase/functions/important-news-monitor/index.ts`
-  - `supabase/functions/important-news-monitor/news_candidate_logic.ts`
-  - `supabase/functions/important-news-monitor/news_candidate_logic_test.ts`
-- implementation:
-  - 毎20分cycleの2検索枠を維持し、主要米指標・緊急BOJ/Fed/MOF・市場急変を含むcritical queryを毎cycle固定。残り1枠で関税/半導体、地政学、銀行/中国刺激策をrotation。
-  - `breaking_market` freshnessを24時間から3時間へ短縮。critical queryはsourceで確認できる時刻付き`event_at`を必須とし、欠落・不正・staleを候補化前に除外。
-  - 確認済みevent種別とevent minuteから`breaking:event:*` identityを生成し、別source・別見出しでも同一eventの再浮上を3時間範囲で抑制。event timestampが異なるものは統合しない。
-  - `market_macro`は保存済みduplicateをcap前に除外し、source round-robinで既存30件上限を公平配分。後段sourceの恒常的starvationを解消。
-  - query key、provider/HTTP/Responses状態、incomplete reason、web search call数、raw/validated candidate数、主要除外理由をresponse/structured logへ追加。DB schema変更禁止のため新規DB永続化は行わず、raw response/secretも保存しない。
-- tests:
-  - changed modules type-checked tests: 55/55 pass
-  - important-news-monitor regression (`--no-check --allow-read`): 244/244 pass
-  - changed helper/test lint: pass (6 files)
-  - `git diff --check`: pass
-  - full `deno check index.ts`: baseline failure reproduced before/after（`_shared/x_oauth2_post.ts` BufferSource型、既存GenerationCandidate id型）。scope外のため未変更。
-  - full-suite type-check: baseline `official_source_fetchers_test.ts` の既存`never.id`型エラー。scope外のため未変更。
-- commit_hash: `7bed84e063db`（最新origin/main上のclean worktreeで検証・commit）
-- push: `origin/main`へ成功。
-- deploy: 0
-- production_changes: DB write 0 / migration 0 / Cron 0 / settings 0 / OpenAI実API 0 / X API 0 / X投稿 0
-- untouched: `apps/admin/**`, `HANDOFF.md`, 他Edge Function、正式repo既存未コミット変更
-- remaining_issues:
-  - diagnosticsは既存responseとstructured logで確認可能。run DBへ恒久保存するにはschema変更が必要なため未実施。
-  - deployと本番効果確認は未実施。ChatGPTレビュー後に別途判断が必要。
-- next_recommendation: ChatGPTが`C`で差分と上記既存type-check制約を確認し、deploy/自然サイクル観測を別途明示判断する。
-
-## C Review
-
-- result: approved
-- reviewed_by: chatgpt
-- implementation_commit: `7bed84e063dbe5fc98bd0c12fa77720eead7936e`
-- review_summary:
-  - GitHub上の実装差分を確認済み。
-  - 変更moduleの型チェック付きtest 55/55 pass。
-  - important-news-monitor回帰 244/244 pass。
-  - lint / `git diff --check` pass。
-  - production DB / migration / Cron / settings / X / deploy の変更は0。
-  - deployと本番自然サイクル観測は本タスク完了後の別工程として扱う。
-- decision: Codex実装タスクは完了。`status: done`。
