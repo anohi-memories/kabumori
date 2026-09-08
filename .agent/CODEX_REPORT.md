@@ -56,6 +56,6 @@
 
 承認済みmainから対象Functionのみをdeployし、2回の自然Fetch→Judgement→Generationを確認した。coverage側ではmarket_macro候補の取得と生成成功を確認できた。generation側では成功経路を確認できた一方、2回目に `MISSING_EXPLICIT_YEAR` のfact retry後失敗が1件発生したため、追加修正・再処理は行わず `review_required` とする。
 
-- commit_hash: control-only update pending
-- push: control-only TASK/Report updateをorigin/mainへpush予定
+- commit_hash: `7f53c49`
+- push: `7f53c49` をorigin/mainへpush済み
 - next_recommendation: ChatGPT review

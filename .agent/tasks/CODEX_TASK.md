@@ -121,6 +121,6 @@ market_macroが走った場合:
 - generation_verification: 成功経路（most_important→Fact/Voice passed→ready_for_publish）と、失敗時の診断保持・1回限定retry・安全停止を自然サイクルで確認。全候補でgeneration_error=1、generation_failed=1、publish_attempts>0=0、observed fetch runsのrunning残存=0。
 - settings: `is_active=true`, `interval_minutes=20`, `auto_publish=false`, `luna_enabled=true`, `sol_escalation_enabled=true` を維持。Cron 3本のschedule/activeも変更なし。
 - safety_checks: production DB write=0、migration/DDL/GRANT=0、Cron/settings変更=0、secrets変更/表示=0、X API/X投稿=0、他Function deploy=0、既存候補の手動変更・再claim・再生成=0、apps/admin/HANDOFF/code変更=0。
-- commit_hash: control-only commit pending
-- push: control-only TASK/Report更新をorigin/mainへpush予定
+- commit_hash: `7f53c49`
+- push: `7f53c49` をorigin/mainへpush済み
 - next_recommendation: ChatGPT review。generation自然確認は成立したが、2回目に `MISSING_EXPLICIT_YEAR` のretry後失敗が1件あり、追加修正や再処理はこのTASKでは行わない。
