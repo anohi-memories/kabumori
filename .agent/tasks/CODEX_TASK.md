@@ -3,7 +3,7 @@
 - task_id: close-report-auto-post-enable-20260908
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: urgent
 
@@ -82,3 +82,22 @@
 - 二重投稿防止確認
 - production version / deploy変更なし確認
 - 自動実行見込み時刻
+
+## C1 Review
+
+- result: approved
+- reviewed_by: chatgpt
+- decision: close_report自動投稿のproduction有効化は完了承認。
+- verified:
+  - 正規scheduler経路は `dispatch-scheduled-posts` → `x-test-post` → `claim_due_post()` → `plan_close_report()`
+  - `close_report_settings.is_active` のみ false → true
+  - `posting_windows.close_report.is_active` はfalseのままで二重plannerを回避
+  - 2026-09-09 16:00 JST分のscheduled_postsが自然Cronで1件だけ生成済み
+  - UNIQUE制約、on conflict do nothing、skip lockedによりduplicate/claim保護を維持
+  - x-test-post v89はdeployなし
+- safety:
+  - scheduled_posts手動直書きなし
+  - X API/X投稿なし
+  - Cron/Edge Function/コード/migration/schema/GRANT/secrets/OAuth/他post_type変更なし
+- note:
+  - 16:00 JSTの実X投稿成功は予定時刻前のため未観測。これは有効化完了を妨げず、予定時刻後のread-only観測を別確認事項とする。
