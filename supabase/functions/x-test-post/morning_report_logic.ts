@@ -287,11 +287,36 @@ export function evaluateMorningFacts(args: {
 }
 
 const US_SESSION_MOVEMENT_PATTERN = /(?:米国(?:株|市場|半導体株|半導体セクター)|米株|SOX|S&P\s*500|NASDAQ|Nasdaq|ナスダック|Dow|ダウ|半導体指数).{0,80}(?:上昇|下落|反発|続伸|続落|急伸|急落|高値|安値|上向き|下向き|rose|rallied|fell|slid|gained|lost)/iu;
-const US_SESSION_LABEL_PATTERN = /前営業日|前週末|(?:20\d{2}[年\/-]\d{1,2}[月\/-]\d{1,2}日?)|(?:\d{1,2}\/\d{1,2})/u;
+const US_SESSION_LABEL_PATTERN = /前営業日|前週末|(?:20\d{2}[年\/-]\d{1,2}[月\/-]\d{1,2}日?)|(?:\d{1,2}[\/]\d{1,2})|(?:\d{1,2}月\d{1,2}日)/gu;
 
 function formatUsSessionDate(dateOnly: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(dateOnly);
   return match ? `${Number(match[2])}/${Number(match[3])}` : dateOnly;
+}
+
+function explicitUsSessionDates(text: string): string[] {
+  return Array.from(text.matchAll(US_SESSION_LABEL_PATTERN))
+    .map((match) => match[0])
+    .filter((value) => !/^前営業日$|^前週末$/u.test(value))
+    .map((value) => {
+      const full = /^(20\d{2})[年\/-](\d{1,2})[月\/-](\d{1,2})日?$/u.exec(value);
+      if (full) return `${full[1]}-${full[2].padStart(2, "0")}-${full[3].padStart(2, "0")}`;
+      const shortSlash = /^(\d{1,2})\/(\d{1,2})$/u.exec(value);
+      if (shortSlash) return `--${shortSlash[1].padStart(2, "0")}-${shortSlash[2].padStart(2, "0")}`;
+      const shortJapanese = /^(\d{1,2})月(\d{1,2})日$/u.exec(value);
+      return shortJapanese ? `--${shortJapanese[1].padStart(2, "0")}-${shortJapanese[2].padStart(2, "0")}` : "";
+    })
+    .filter(Boolean);
+}
+
+function hasExpectedUsSessionLabel(line: string, expectedUsSessionDate: string): boolean {
+  const explicitDates = explicitUsSessionDates(line);
+  if (explicitDates.length > 0) {
+    const expectedFull = expectedUsSessionDate;
+    const expectedShort = `--${expectedUsSessionDate.slice(5)}`;
+    return explicitDates.every((value) => value === expectedFull || value === expectedShort);
+  }
+  return /前営業日|前週末/u.test(line);
 }
 
 export function buildUsSessionClosureDisclosure(context: MorningUsSessionContext): string | null {
@@ -325,7 +350,10 @@ export function morningReportSessionLabelIssues(
     issues.push("US_MARKET_CLOSED_DISCLOSURE_MISSING");
   }
   for (const line of text.split(/\r?\n/u)) {
-    if (US_SESSION_MOVEMENT_PATTERN.test(line) && !US_SESSION_LABEL_PATTERN.test(line)) {
+    if (
+      US_SESSION_MOVEMENT_PATTERN.test(line) &&
+      !hasExpectedUsSessionLabel(line, context.expectedUsSessionDate)
+    ) {
       issues.push("US_SESSION_DATE_LABEL_MISSING");
       break;
     }

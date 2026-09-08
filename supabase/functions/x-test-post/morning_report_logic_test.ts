@@ -225,6 +225,18 @@ test("holiday morning accepts an explicit closure and prior-session label", () =
   assert.equal(validateMorningReportFormat(text, laborDayMorningUsContext), true);
 });
 
+test("holiday morning rejects a concrete label for the wrong US session date", () => {
+  const text = morningReportWithPoint("前営業日9/5の米国半導体株が広く上昇。SOXも約3%上昇");
+  assert.equal(validateMorningReportFormat(text, laborDayMorningUsContext), false);
+  assert.ok(morningReportSessionLabelIssues(text, laborDayMorningUsContext).includes("US_SESSION_DATE_LABEL_MISSING"));
+});
+
+test("holiday morning accepts the generic prior-session label without inventing a date", () => {
+  const text = morningReportWithPoint("前営業日の米国半導体株が広く上昇。SOXも約3%上昇");
+  const disclosed = ensureUsSessionClosureDisclosure(text, laborDayMorningUsContext);
+  assert.equal(validateMorningReportFormat(disclosed, laborDayMorningUsContext), true);
+});
+
 test("holiday disclosure is inserted mechanically before the top points", () => {
   const text = ensureUsSessionClosureDisclosure(
     morningReportWithPoint("前営業日9/4の米国市場では半導体株が上昇"),

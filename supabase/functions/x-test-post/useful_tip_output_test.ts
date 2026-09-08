@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-(globalThis as unknown as { Deno: unknown }).Deno = {
-  serve: () => undefined,
-  env: { get: () => undefined },
-};
+const denoRuntime = (globalThis as unknown as { Deno: Record<string, unknown> }).Deno;
+Object.defineProperty(globalThis, "Deno", {
+  configurable: true,
+  writable: true,
+  value: {
+    ...denoRuntime,
+    serve: () => undefined,
+    env: { get: () => undefined },
+  },
+});
 
 const { parseUsefulTipOutput, isUsefulTipOutputTruncated } = await import("./index.ts");
 
