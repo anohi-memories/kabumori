@@ -3,8 +3,8 @@
 - task_id: important-news-freshness-coverage-fix-20260906
 - result: review_required
 - next_owner: chatgpt
-- implementation_commit: `bd01665`（local-only、未push）
-- implementation_base: `origin/main` `e0f9cd440f13`。その後の`e80b3c2e55c0`はClaude task制御更新のみで、実装対象7ファイルとの競合なし。
+- implementation_commit: `7bed84e063db`（`origin/main`へpush済み）
+- implementation_base: `origin/main` `81f7c0a8828e`。clean worktreeで載せ替え・全検証後にpush。
 
 ## 実装結果
 
@@ -38,8 +38,8 @@
 ## 制約と残課題
 
 - DB schema変更禁止のためdiagnosticsの新規DBカラム/永続化は未実施。現状はHTTP responseとEdge structured logで確認可能。
-- 実装コードはタスクのpush方針に従い未push。`bd01665`は一時clean worktreeのlocal-only checkpoint。
-- 実デプロイ・本番Fetch・OpenAI実APIは未実施。効果確認はレビュー後のpush/deploy判断が必要。
+- 実装コードはユーザーの明示承認後、`origin/main`へpush済み。
+- 実デプロイ・本番Fetch・OpenAI実APIは未実施。効果確認はレビュー後のdeploy判断が必要。
 
 ## Safety
 
@@ -57,4 +57,4 @@
 
 ## 次工程
 
-ChatGPTが`C`で本Reportとlocal checkpointをレビューし、最新originへの実装コードpush/deployを別途明示判断する。
+ChatGPTが`C`で本Reportと実装commitをレビューし、deploy/自然サイクル観測を別途明示判断する。

@@ -168,12 +168,12 @@ DB schema変更なしでdiagnostics追加できない場合は、勝手にmigrat
   - `git diff --check`: pass
   - full `deno check index.ts`: baseline failure reproduced before/after（`_shared/x_oauth2_post.ts` BufferSource型、既存GenerationCandidate id型）。scope外のため未変更。
   - full-suite type-check: baseline `official_source_fetchers_test.ts` の既存`never.id`型エラー。scope外のため未変更。
-- commit_hash: `bd01665`（最新origin系clean worktree上のlocal-only implementation checkpoint。pushなし）
-- push: implementation code 0。本Report/TASKの共有同期だけ実施予定。
+- commit_hash: `7bed84e063db`（最新origin/main上のclean worktreeで検証・commit）
+- push: `origin/main`へ成功。
 - deploy: 0
 - production_changes: DB write 0 / migration 0 / Cron 0 / settings 0 / OpenAI実API 0 / X API 0 / X投稿 0
 - untouched: `apps/admin/**`, `HANDOFF.md`, 他Edge Function、正式repo既存未コミット変更
 - remaining_issues:
   - diagnosticsは既存responseとstructured logで確認可能。run DBへ恒久保存するにはschema変更が必要なため未実施。
-  - 実装コードはタスク方針どおり未push。ChatGPTレビュー後に、最新originへlocal checkpointを安全に載せてcommit/pushする判断が必要。
-- next_recommendation: ChatGPTが`C`で差分と上記既存type-check制約を確認し、実装コードpush/deployを別途明示判断する。
+  - deployと本番効果確認は未実施。ChatGPTレビュー後に別途判断が必要。
+- next_recommendation: ChatGPTが`C`で差分と上記既存type-check制約を確認し、deploy/自然サイクル観測を別途明示判断する。
