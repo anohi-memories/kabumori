@@ -3,7 +3,7 @@
 - task_id: morning-greeting-production-deploy-verify-20260908
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: urgent
 - purpose: K1承認済みのmorning_greeting本文トーン改善と画像scene多様化を、2026-09-09朝の自動実行に間に合うよう安全に本番反映し、非投稿dry-runで確認する。
