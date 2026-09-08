@@ -26,6 +26,14 @@ export type MorningFactResult = {
   notes: string[];
 };
 
+export type MorningUsSessionContext = {
+  referenceUsCalendarDate: string;
+  expectedUsSessionDate: string;
+  previousNightWasClosed: boolean;
+  closureReason: "weekend" | "holiday" | null;
+  closureName: string | null;
+};
+
 export type MorningReferenceContext = {
   referenceUtc: string;
   referenceJst: string;
@@ -278,12 +286,63 @@ export function evaluateMorningFacts(args: {
   return { status: notes.some((note) => !note.startsWith("事前dry-run:")) ? "failed" : "passed", notes };
 }
 
-export function validateMorningReportFormat(text: string): boolean {
+const US_SESSION_MOVEMENT_PATTERN = /(?:米国(?:株|市場|半導体株|半導体セクター)|米株|SOX|S&P\s*500|NASDAQ|Nasdaq|ナスダック|Dow|ダウ|半導体指数).{0,80}(?:上昇|下落|反発|続伸|続落|急伸|急落|高値|安値|上向き|下向き|rose|rallied|fell|slid|gained|lost)/iu;
+const US_SESSION_LABEL_PATTERN = /前営業日|前週末|(?:20\d{2}[年\/-]\d{1,2}[月\/-]\d{1,2}日?)|(?:\d{1,2}\/\d{1,2})/u;
+
+function formatUsSessionDate(dateOnly: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(dateOnly);
+  return match ? `${Number(match[2])}/${Number(match[3])}` : dateOnly;
+}
+
+export function buildUsSessionClosureDisclosure(context: MorningUsSessionContext): string | null {
+  if (!context.previousNightWasClosed) return null;
+  const closure = context.closureName ? `${context.closureName}で` : "";
+  return `昨夜の米国株は${closure}休場。以下は前営業日${formatUsSessionDate(context.expectedUsSessionDate)}の動きです。`;
+}
+
+export function ensureUsSessionClosureDisclosure(
+  text: string,
+  context: MorningUsSessionContext,
+): string {
+  const disclosure = buildUsSessionClosureDisclosure(context);
+  if (!disclosure || /米国(?:株|市場)[^\n]{0,50}休場/u.test(text)) return text;
+  const heading = "【朝刊】きょうの日本株、ここをチェック☀️";
+  return text.startsWith(`${heading}\n`)
+    ? text.replace(`${heading}\n`, `${heading}\n${disclosure}\n`)
+    : text;
+}
+
+export function morningReportSessionLabelIssues(
+  text: string,
+  context?: MorningUsSessionContext,
+): string[] {
+  if (!context?.previousNightWasClosed) return [];
+  const issues: string[] = [];
+  const pointsMarker = "📌 今日の注目ポイント";
+  const pointsIndex = text.indexOf(pointsMarker);
+  const beforePoints = pointsIndex >= 0 ? text.slice(0, pointsIndex) : "";
+  if (!/米国(?:株|市場)[^\n]{0,50}休場/u.test(beforePoints)) {
+    issues.push("US_MARKET_CLOSED_DISCLOSURE_MISSING");
+  }
+  for (const line of text.split(/\r?\n/u)) {
+    if (US_SESSION_MOVEMENT_PATTERN.test(line) && !US_SESSION_LABEL_PATTERN.test(line)) {
+      issues.push("US_SESSION_DATE_LABEL_MISSING");
+      break;
+    }
+  }
+  return issues;
+}
+
+export function validateMorningReportFormat(
+  text: string,
+  context?: MorningUsSessionContext,
+): boolean {
   const normalized = text.replace(/\r\n/g, "\n").trim();
   const points = normalized.match(
-    /^【朝刊】きょうの日本株、ここをチェック☀️\n+📌 今日の注目ポイント\n((?:・[^\n]+\n){2}・[^\n]+)/,
+    /^【朝刊】きょうの日本株、ここをチェック☀️\n+(?:[^\n]*米国(?:株|市場)[^\n]*休場[^\n]*\n+)?📌 今日の注目ポイント\n((?:・[^\n]+\n){2}・[^\n]+)/,
   );
   if (!points || points[1].split("\n").length !== 3) return false;
   return normalized.includes("⚠️ きょう注意したいこと") &&
-    normalized.includes("💬 今日のひとこと");
+    normalized.includes("💬 今日のひとこと") &&
+    morningReportSessionLabelIssues(normalized, context).length === 0;
 }

@@ -1,5 +1,6 @@
 import {
   evaluateMorningFacts,
+  ensureUsSessionClosureDisclosure,
   mentionsUnavailableNikkeiFutures,
   normalizeMorningMetric,
   parseMarketNumber,
@@ -9,8 +10,9 @@ import {
   validateMorningReportFormat,
   type MorningRunMode,
   type NormalizedMorningMetric,
+  type MorningUsSessionContext,
 } from "./morning_report_logic.ts";
-import { getExpectedUsSessionDate } from "./us_session_date_logic.ts";
+import { getUsSessionContext, type UsSessionContext } from "./us_session_date_logic.ts";
 import {
   evaluateCloseFacts,
   localCloseReportSafetyIssues,
@@ -258,6 +260,7 @@ type MorningReportDraft = {
   targetTradingDate: string;
   isJpxBusinessDay: boolean;
   usSessionDate: string;
+  usSessionContext: UsSessionContext;
   importantPoints: MorningPoint[];
   usIndices: { dow: MorningMetric; sp500: MorningMetric; nasdaq: MorningMetric };
   semiconductor: { sox: MorningMetric; leaders: MorningMetric[] };
@@ -1528,6 +1531,7 @@ function morningFactBasis(draft: MorningReportDraft): string {
     targetTradingDate: draft.targetTradingDate,
     isJpxBusinessDay: draft.isJpxBusinessDay,
     usSessionDate: draft.usSessionDate,
+    usSessionContext: draft.usSessionContext,
     importantPoints: draft.importantPoints,
     conditionalFactors: draft.conditionalFactors,
     marketDataTimestamp: draft.marketDataTimestamp,
@@ -1539,10 +1543,11 @@ async function generateMorningReport(
   openAiApiKey: string,
   referenceTimeIso: string,
   tradingDay: JpxTradingDayState,
-  expectedUsSessionDate: string,
+  usSessionContext: UsSessionContext,
 ): Promise<MorningReportDraft> {
   const reference = resolveMorningReferenceContext(referenceTimeIso, tradingDay);
   const runMode = resolveMorningRunMode(referenceTimeIso);
+  const expectedUsSessionDate = usSessionContext.expectedUsSessionDate;
   type LaneCollection = {
     packet: MorningLanePacket;
     raw: unknown;
@@ -1583,6 +1588,10 @@ async function generateMorningReport(
           "単なる予定表、公表スケジュール、軽微な統計訂正、事務的更新はadministrativeまたはlowにします。決算、業績修正、M&A、TOB、自社株買い、大型受注、重大政策は内容に応じてmajor候補です。",
           "timestampは確認できた精度のまま返し、時刻不明ならYYYY-MM-DDとします。00:00等を推測しません。古い材料を今朝発生したように表現しません。",
           "material_typeがmarket_sessionの候補は、必ずexpected US session dateと同じ日付の米国通常取引セッションを扱う材料にします。それ以外(central_bank_policy、economic_indicator、geopolitics等)は、expected US session dateと同日である必要はなく、内容として妥当な直近の日付であれば構いません。",
+          ...(usSessionContext.previousNightWasClosed ? [
+            `前夜の米国市場はコード判定で休場です。本文の冒頭（注目ポイントより前）に「昨夜の米国株は${usSessionContext.closureName ? `${usSessionContext.closureName}で` : ""}休場。以下は前営業日${expectedUsSessionDate.slice(5).replace("-", "/")}の動きです。」という趣旨を必ず明記します。`,
+            "前営業日の米国指数・SOX・米国個別株の値動きを書く行には、前営業日・前週末・具体日付のいずれかを同じ行に必ず付けます。昨夜・前夜の米国市場が上昇/下落したように読める無日付表現は禁止です。",
+          ] : []),
           "conditional_factorsへ入れてよいのはreference UTC以前に発生・公表済みで、source URLからtimestampまたは日付を具体的に確認できる材料だけです。",
           "未来の経済指標・決算・Fedや政策イベント、upcoming・scheduled・expected・due・公表予定・発表予定・今日発表予定の未発表材料、timestamp不明・date未確認の材料はconditional_factorsへ返しません。重要そうでも例外にしません。",
           "強い因果関係を断定する場合だけcausal_claim_strength=strongとし、独立報道2系統または一次情報＋信頼報道をsource_urlとsupporting_source_urlsへ入れます。裏取りできない場合はqualifiedにします。",
@@ -1596,6 +1605,9 @@ async function generateMorningReport(
           `target trading date: ${reference.targetTradingDate}`,
           `JPX trading day: ${reference.isTargetTradingDay}`,
           `expected US session date: ${expectedUsSessionDate}`,
+          `US market was closed on the prior overnight date: ${usSessionContext.previousNightWasClosed}`,
+          `US market closure reason: ${usSessionContext.closureReason ?? "none"}`,
+          `US market closure name: ${usSessionContext.closureName ?? "unknown"}`,
           `run mode: ${runMode}`,
           ...(supplementContext ? [
             `Lane C supplement context: ${JSON.stringify(supplementContext)}`,
@@ -1872,6 +1884,7 @@ async function generateMorningReport(
           targetTradingDate: reference.targetTradingDate,
           isJpxBusinessDay: reference.isTargetTradingDay,
           usSessionDate,
+          usSessionContext,
           importantPoints,
           conditionalFactors, runMode,
         }),
@@ -1887,7 +1900,8 @@ async function generateMorningReport(
     const parsedWriting = JSON.parse(writingOutput) as { text?: unknown };
     if (typeof parsedWriting.text !== "string" || !parsedWriting.text.trim()) throw new Error("MORNING_REPORT_WRITING_INVALID");
     text = removeInlineCitations(parsedWriting.text);
-    if (!validateMorningReportFormat(text)) throw new Error("MORNING_REPORT_FORMAT_INVALID");
+    text = ensureUsSessionClosureDisclosure(text, usSessionContext);
+    if (!validateMorningReportFormat(text, usSessionContext)) throw new Error("MORNING_REPORT_FORMAT_INVALID");
     writingUsage = getUsage(writingRaw);
   }
 
@@ -1910,6 +1924,7 @@ async function generateMorningReport(
     targetTradingDate: reference.targetTradingDate,
     isJpxBusinessDay: reference.isTargetTradingDay,
     usSessionDate,
+    usSessionContext,
     importantPoints,
     usIndices,
     semiconductor,
@@ -1983,6 +1998,7 @@ function morningRunMarketData(
     targetTradingDate: draft.targetTradingDate,
     isJpxBusinessDay: draft.isJpxBusinessDay,
     usSessionDate: draft.usSessionDate,
+    usSessionContext: draft.usSessionContext,
     importantPoints: draft.importantPoints,
     usIndices: draft.usIndices,
     semiconductor: draft.semiconductor,
@@ -2816,6 +2832,7 @@ async function attemptMorningReportVoiceRewrite(
   openAiApiKey: string,
   originalText: string,
   voiceNotes: string[],
+  usSessionContext?: MorningUsSessionContext,
   fetchImpl: typeof fetch = fetch,
 ): Promise<ReportVoiceRewriteAttempt | null> {
   try {
@@ -2831,9 +2848,12 @@ async function attemptMorningReportVoiceRewrite(
     const cleaned = removeInlineCitations(rewritten);
     if (!morningReportVoiceRewritePreservesFacts(originalText, cleaned)) return null;
     if (morningReportVoiceRewriteSafetyIssues(cleaned).length > 0) return null;
-    if (!validateMorningReportFormat(cleaned)) return null;
+    const contextAwareText = usSessionContext
+      ? ensureUsSessionClosureDisclosure(cleaned, usSessionContext)
+      : cleaned;
+    if (!validateMorningReportFormat(contextAwareText, usSessionContext)) return null;
     const usage = getUsage(raw);
-    return { text: cleaned, inputTokens: usage.input, outputTokens: usage.output, apiCostUsd: modelCostUsd("gpt-5.6-luna", usage.input, usage.output) };
+    return { text: contextAwareText, inputTokens: usage.input, outputTokens: usage.output, apiCostUsd: modelCostUsd("gpt-5.6-luna", usage.input, usage.output) };
   } catch {
     return null;
   }
@@ -3343,13 +3363,13 @@ Deno.serve(async (req) => {
         new Date().toISOString(),
       );
       const tradingDay = await getJpxTradingDay(supabaseUrl, serviceRoleKey, referenceTime);
-      const expectedUsSessionDate = await getExpectedUsSessionDate(supabaseUrl, serviceRoleKey, referenceTime);
+      const usSessionContext = await getUsSessionContext(supabaseUrl, serviceRoleKey, referenceTime);
       const runId = await createMorningReportRun(
         supabaseUrl, serviceRoleKey, referenceTime, null,
       );
       let draft: MorningReportDraft | null = null;
       try {
-        draft = await generateMorningReport(openAiApiKey, referenceTime, tradingDay, expectedUsSessionDate);
+        draft = await generateMorningReport(openAiApiKey, referenceTime, tradingDay, usSessionContext);
         if (draft.text) {
           await updateMorningReportRun(supabaseUrl, serviceRoleKey, runId, {
             generated_at: new Date().toISOString(), source_urls: draft.sourceUrls,
@@ -3373,7 +3393,9 @@ Deno.serve(async (req) => {
         let secondVoicePassed: boolean | null = null;
         if (factCheckPassed && draft.text && !firstVoiceEvaluation.passed) {
           voiceRewriteAttempted = true;
-          const rewriteAttempt = await attemptMorningReportVoiceRewrite(openAiApiKey, draft.text, firstVoiceEvaluation.notes);
+          const rewriteAttempt = await attemptMorningReportVoiceRewrite(
+            openAiApiKey, draft.text, firstVoiceEvaluation.notes, draft.usSessionContext,
+          );
           if (rewriteAttempt) {
             const secondVoiceEvaluation = await evaluateKabumoriVoice(
               openAiApiKey, "morning_report", rewriteAttempt.text, morningFactBasis(draft),
@@ -3832,8 +3854,8 @@ Deno.serve(async (req) => {
         );
         const referenceTime = new Date().toISOString();
         const tradingDay = await getJpxTradingDay(supabaseUrl, serviceRoleKey, referenceTime);
-        const expectedUsSessionDate = await getExpectedUsSessionDate(supabaseUrl, serviceRoleKey, referenceTime);
-        draft = await generateMorningReport(openAiApiKey, referenceTime, tradingDay, expectedUsSessionDate);
+        const usSessionContext = await getUsSessionContext(supabaseUrl, serviceRoleKey, referenceTime);
+        draft = await generateMorningReport(openAiApiKey, referenceTime, tradingDay, usSessionContext);
         if (draft.text) {
           await updateMorningReportRun(supabaseUrl, serviceRoleKey, morningRunId, {
             generated_at: new Date().toISOString(), source_urls: draft.sourceUrls,
@@ -3861,7 +3883,9 @@ Deno.serve(async (req) => {
         let secondVoicePassed: boolean | null = null;
         if (draft.text && !firstVoiceEvaluation.passed) {
           voiceRewriteAttempted = true;
-          const rewriteAttempt = await attemptMorningReportVoiceRewrite(openAiApiKey, draft.text, firstVoiceEvaluation.notes);
+          const rewriteAttempt = await attemptMorningReportVoiceRewrite(
+            openAiApiKey, draft.text, firstVoiceEvaluation.notes, draft.usSessionContext,
+          );
           if (rewriteAttempt) {
             const secondVoiceEvaluation = await evaluateKabumoriVoice(
               openAiApiKey, "morning_report", rewriteAttempt.text, morningFactBasis(draft),

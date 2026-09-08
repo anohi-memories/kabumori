@@ -3,6 +3,19 @@
 // JPX side. No LLM ever derives or votes on this value; Lane A/B are only ever told the answer.
 export const US_MARKET_CALENDAR_SELECT_FAILED = "US_MARKET_CALENDAR_SELECT_FAILED";
 
+export type UsMarketHoliday = {
+  holiday_date: string;
+  name?: string;
+};
+
+export type UsSessionContext = {
+  referenceUsCalendarDate: string;
+  expectedUsSessionDate: string;
+  previousNightWasClosed: boolean;
+  closureReason: "weekend" | "holiday" | null;
+  closureName: string | null;
+};
+
 // Standard NYSE/Nasdaq regular-session hours, in America/New_York wall-clock time. Early-close days (the
 // Friday after Thanksgiving, and Dec 24/Jul 3 when they fall on a trading day) close at 13:00 ET instead
 // of 16:00, but market_holidays has no early-close data to detect them. Using the standard 16:00 close is
@@ -73,6 +86,25 @@ export function resolveExpectedUsSessionDate(
   throw new Error("US_SESSION_DATE_RESOLUTION_FAILED");
 }
 
+export function resolveUsSessionContext(
+  referenceTimeIso: string,
+  holidays: ReadonlyArray<UsMarketHoliday>,
+): UsSessionContext {
+  const { date, weekday, minutes } = nyWallClock(referenceTimeIso);
+  const holidayDates = new Set(holidays.map((holiday) => holiday.holiday_date));
+  const expectedUsSessionDate = resolveExpectedUsSessionDate(referenceTimeIso, holidayDates);
+  const referenceDateIsTradingDay = isNyseTradingDay(date, weekday, holidayDates);
+  const previousNightWasClosed = !referenceDateIsTradingDay && minutes >= MARKET_CLOSE_MINUTES;
+  const holiday = holidays.find((item) => item.holiday_date === date);
+  return {
+    referenceUsCalendarDate: date,
+    expectedUsSessionDate,
+    previousNightWasClosed,
+    closureReason: previousNightWasClosed ? (holiday ? "holiday" : "weekend") : null,
+    closureName: previousNightWasClosed ? (holiday?.name ?? null) : null,
+  };
+}
+
 // Only used by isMarketOpenNow-style diagnostics if ever needed; kept out of the main resolver's return
 // value since the report only needs the completed-session date, not live market status.
 export function isNyseMarketOpen(referenceTimeIso: string, holidayDates: ReadonlySet<string>): boolean {
@@ -87,13 +119,23 @@ export async function getExpectedUsSessionDate(
   referenceTimeIso: string,
   fetcher: typeof fetch = fetch,
 ): Promise<string> {
+  const context = await getUsSessionContext(supabaseUrl, serviceRoleKey, referenceTimeIso, fetcher);
+  return context.expectedUsSessionDate;
+}
+
+export async function getUsSessionContext(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  referenceTimeIso: string,
+  fetcher: typeof fetch = fetch,
+): Promise<UsSessionContext> {
   const { date: referenceDate } = nyWallClock(referenceTimeIso);
   const windowStart = (() => {
     let cursor = referenceDate;
     for (let i = 0; i < MAX_BACKWARD_STEPS; i += 1) cursor = previousCalendarDate(cursor);
     return cursor;
   })();
-  const params = new URLSearchParams({ select: "holiday_date", market: "eq.NYSE" });
+  const params = new URLSearchParams({ select: "holiday_date,name", market: "eq.NYSE" });
   params.append("holiday_date", `gte.${windowStart}`);
   params.append("holiday_date", `lte.${referenceDate}`);
   const response = await fetcher(`${supabaseUrl}/rest/v1/market_holidays?${params}`, {
@@ -102,9 +144,16 @@ export async function getExpectedUsSessionDate(
   if (!response.ok) throw new Error(US_MARKET_CALENDAR_SELECT_FAILED);
   const rows = await response.json();
   if (!Array.isArray(rows)) throw new Error(US_MARKET_CALENDAR_SELECT_FAILED);
-  const holidayDates = new Set(
-    rows.map((row) => (typeof row === "object" && row !== null ? (row as { holiday_date?: unknown }).holiday_date : null))
-      .filter((value): value is string => typeof value === "string"),
-  );
-  return resolveExpectedUsSessionDate(referenceTimeIso, holidayDates);
+  const holidays = rows
+    .map((row): UsMarketHoliday | null => {
+      if (typeof row !== "object" || row === null) return null;
+      const value = row as { holiday_date?: unknown; name?: unknown };
+      if (typeof value.holiday_date !== "string") return null;
+      return {
+        holiday_date: value.holiday_date,
+        ...(typeof value.name === "string" ? { name: value.name } : {}),
+      };
+    })
+    .filter((value): value is UsMarketHoliday => value !== null);
+  return resolveUsSessionContext(referenceTimeIso, holidays);
 }

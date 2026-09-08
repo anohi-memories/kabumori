@@ -3,7 +3,9 @@ import test from "node:test";
 import {
   US_MARKET_CALENDAR_SELECT_FAILED,
   getExpectedUsSessionDate,
+  getUsSessionContext,
   resolveExpectedUsSessionDate,
+  resolveUsSessionContext,
 } from "./us_session_date_logic.ts";
 
 // 2026 NYSE holidays actually present in market_holidays (see the migration), for realistic tests.
@@ -57,6 +59,26 @@ test("8b: day after a holiday, after that day's own close -> that day's own sess
   assert.equal(resolveExpectedUsSessionDate("2026-09-09T01:00:00Z", NYSE_2026_HOLIDAYS), "2026-09-08");
 });
 
+test("9: 2026-09-08 JST morning identifies Labor Day closure and 9/4 session", () => {
+  const context = resolveUsSessionContext("2026-09-07T23:18:00Z", [
+    { holiday_date: "2026-09-07", name: "Labor Day" },
+  ]);
+  assert.deepEqual(context, {
+    referenceUsCalendarDate: "2026-09-07",
+    expectedUsSessionDate: "2026-09-04",
+    previousNightWasClosed: true,
+    closureReason: "holiday",
+    closureName: "Labor Day",
+  });
+});
+
+test("10: Monday morning after the weekend is also marked closed and uses Friday", () => {
+  const context = resolveUsSessionContext("2026-09-06T23:18:00Z", []);
+  assert.equal(context.expectedUsSessionDate, "2026-09-04");
+  assert.equal(context.previousNightWasClosed, true);
+  assert.equal(context.closureReason, "weekend");
+});
+
 test("9: year-end boundary (New Year's Day) is walked back correctly", () => {
   // Synthetic holiday set including a hypothetical 2027-01-01 New Year's Day, since production
   // market_holidays does not yet have 2027 NYSE dates (flagged separately in the report).
@@ -81,7 +103,7 @@ test("resolution throws rather than looping forever if holiday data implies an i
 
 // --- getExpectedUsSessionDate (REST query + resolution) -----------------------------------------------
 
-function fetcher(holidayRows: Array<{ holiday_date: string }>) {
+function fetcher(holidayRows: Array<{ holiday_date: string; name?: string }>) {
   return async (input: string | URL | Request): Promise<Response> => {
     const url = new URL(String(input));
     assert.equal(url.searchParams.get("market"), "eq.NYSE");
@@ -98,6 +120,16 @@ test("getExpectedUsSessionDate queries market_holidays with market=NYSE and reso
     "https://example.supabase.co", "test-key", "2026-09-08T12:00:00Z", fetcher(rows),
   );
   assert.equal(result, "2026-09-04");
+});
+
+test("getUsSessionContext keeps the holiday name for deterministic disclosure", async () => {
+  const rows = [{ holiday_date: "2026-09-07", name: "Labor Day" }];
+  const result = await getUsSessionContext(
+    "https://example.supabase.co", "test-key", "2026-09-07T23:18:00Z", fetcher(rows),
+  );
+  assert.equal(result.previousNightWasClosed, true);
+  assert.equal(result.expectedUsSessionDate, "2026-09-04");
+  assert.equal(result.closureName, "Labor Day");
 });
 
 test("getExpectedUsSessionDate surfaces a dedicated error on a failed lookup", async () => {

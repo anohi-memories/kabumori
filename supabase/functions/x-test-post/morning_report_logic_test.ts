@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   evaluateMorningFacts,
+  ensureUsSessionClosureDisclosure,
   isNikkeiFuturesAvailable,
   isVerifiedFixedMorningSource,
   mentionsUnavailableNikkeiFutures,
@@ -13,8 +14,10 @@ import {
   resolveMorningReferenceContext,
   resolveMorningReferenceTime,
   resolveMorningRunMode,
-  SP500_FIXED_SOURCE_URL,
+  morningReportSessionLabelIssues,
   validateMorningReportFormat,
+  type MorningUsSessionContext,
+  SP500_FIXED_SOURCE_URL,
   validateMetricFreshness,
   type RawMorningMetric,
 } from "./morning_report_logic.ts";
@@ -173,6 +176,77 @@ test("morning report format keeps three points at the top and required closing s
 注意
 💬 今日のひとこと
 ひとこと`), false);
+});
+
+const laborDayMorningUsContext: MorningUsSessionContext = {
+  referenceUsCalendarDate: "2026-09-07",
+  expectedUsSessionDate: "2026-09-04",
+  previousNightWasClosed: true,
+  closureReason: "holiday",
+  closureName: "Labor Day",
+};
+
+const morningReportWithPoint = (point: string): string => `【朝刊】きょうの日本株、ここをチェック☀️
+📌 今日の注目ポイント
+・${point}
+・金融政策の材料
+・国内企業の発表
+
+海外市場では確認済みの材料がありました。
+
+⚠️ きょう注意したいこと
+未確認情報を追いかけないこと。
+
+💬 今日のひとこと
+寄り後の広がりを見たい朝です。`;
+
+test("2026-09-08 incident: an unlabeled 9/4 semiconductor move is rejected", () => {
+  const text = morningReportWithPoint("米国半導体株が広く上昇。半導体指数も約3%上昇");
+  assert.equal(validateMorningReportFormat(text, laborDayMorningUsContext), false);
+  assert.ok(morningReportSessionLabelIssues(text, laborDayMorningUsContext).includes("US_SESSION_DATE_LABEL_MISSING"));
+});
+
+test("holiday morning accepts an explicit closure and prior-session label", () => {
+  const text = `【朝刊】きょうの日本株、ここをチェック☀️
+昨夜の米国株はLabor Dayで休場。以下は前営業日9/4の動きです。
+📌 今日の注目ポイント
+・前営業日9/4の米国半導体株が広く上昇。SOXも約3%上昇
+・金融政策の材料
+・国内企業の発表
+
+海外市場では確認済みの材料がありました。
+
+⚠️ きょう注意したいこと
+未確認情報を追いかけないこと。
+
+💬 今日のひとこと
+寄り後の広がりを見たい朝です。`;
+  assert.deepEqual(morningReportSessionLabelIssues(text, laborDayMorningUsContext), []);
+  assert.equal(validateMorningReportFormat(text, laborDayMorningUsContext), true);
+});
+
+test("holiday disclosure is inserted mechanically before the top points", () => {
+  const text = ensureUsSessionClosureDisclosure(
+    morningReportWithPoint("前営業日9/4の米国市場では半導体株が上昇"),
+    laborDayMorningUsContext,
+  );
+  assert.match(text, /昨夜の米国株はLabor Dayで休場。以下は前営業日9\/4の動きです。/u);
+  assert.ok(text.indexOf("休場") < text.indexOf("📌 今日の注目ポイント"));
+});
+
+test("normal US session keeps the existing unqualified overnight wording valid", () => {
+  const normalContext: MorningUsSessionContext = {
+    ...laborDayMorningUsContext,
+    referenceUsCalendarDate: "2026-09-08",
+    expectedUsSessionDate: "2026-09-08",
+    previousNightWasClosed: false,
+    closureReason: null,
+    closureName: null,
+  };
+  assert.equal(
+    validateMorningReportFormat(morningReportWithPoint("昨夜の米国市場では半導体株が上昇"), normalContext),
+    true,
+  );
 });
 
 test("invalid dry-run reference override is rejected", () => {
