@@ -4,7 +4,7 @@ Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは
 
 - task_id: important-news-deploy-and-natural-cycle-verification-20260908
 - owner: codex
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - purpose: 直前までにmainへ反映済みの重要ニュース取得改善・生成信頼性改善を `important-news-monitor` 本番へ安全にdeployし、自然20分サイクルで取得→判定→生成まで正常に通るかread-only確認する。
 - priority: high
@@ -124,3 +124,13 @@ market_macroが走った場合:
 - commit_hash: `7f53c49`
 - push: `7f53c49` をorigin/mainへpush済み
 - next_recommendation: ChatGPT review。generation自然確認は成立したが、2回目に `MISSING_EXPLICIT_YEAR` のretry後失敗が1件あり、追加修正や再処理はこのTASKでは行わない。
+
+## C Review
+
+- result: approved
+- reviewed_by: chatgpt
+- decision: deploy / natural-cycle verification task complete; status done.
+- production_result: `important-news-monitor` v30 ACTIVE. Natural 20-minute cycles were observed twice with no fetch errors.
+- generation_result: one `most_important` candidate completed Fact/Voice and reached `ready_for_publish`; one separate `important` candidate failed after the single permitted `MISSING_EXPLICIT_YEAR` Fact retry and stopped safely before Voice.
+- safety: no DB/Cron/settings/secrets/X changes beyond the authorized `important-news-monitor` deploy.
+- follow_up: `MISSING_EXPLICIT_YEAR` retry failure is a separate improvement item and does not block completion of this deploy/verification task.
