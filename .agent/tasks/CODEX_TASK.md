@@ -2,137 +2,120 @@
 
 Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは、`.agent/ORCHESTRATION.md` と既存のプロジェクトルールを確認したうえで、このファイルだけを自分の担当タスク正本として扱います。
 
-- task_id: important-news-auto-publish-enable-20260908
+- task_id: important-news-safe-publish-trigger-implementation-20260908
 - owner: codex
-- status: review_required
-- next_owner: chatgpt
-- priority: high
-- purpose: 本番検証済みの重要ニュース自動生成について、既存のpublish eligibilityを一切緩めず、自動投稿が実際に自然実行されるproduction経路まで安全に有効化する。
+- status: ready
+- next_owner: codex
+- priority: urgent
+- purpose: `auto_publish=true` 済みの重要ニュースについて、過去のready候補を誤投稿せず、新規の `most_important` 候補だけが既存安全条件を満たした時に自然自動投稿される起動経路を安全に実装する。
 
-## Background
+## Previous C Review
 
-直前タスクで `important-news-monitor` v30 を本番deployし、自然20分サイクルを2回確認済み。
+前タスク `important-news-auto-publish-enable-20260908` の調査結果は承認済み。
 
-- `most_important` 1件が Fact/Voiceともpassedし `ready_for_publish` まで正常到達。
-- 別の `important` 1件は `MISSING_EXPLICIT_YEAR` のFact retry後もfailedとなり、安全停止した。
-- 取得・判定・生成・Fact/Voice安全停止は本番自然サイクルで確認済み。
+確認済み:
+- `important-news-monitor` v30 ACTIVE
+- `auto_publish=true`
+- `publish_ready` mode自体は存在
+- Generation完了時の内部publish dispatchは存在しない
+- production CronはFetch/Judgement/Generationの3本のみ
+- `publish_ready` Cronは0本
+- x-test-postのscheduled_posts dispatcherはimportant-news用ではない
+- `ready_for_publish` は29件、そのうち `most_important` 6件
+- publish_attempts>0 = 0、x_post_idあり = 0
+- 過去candidateの再claim・再生成・手動投稿は未実施
 
-本タスク第1段階で `public.important_news_monitor_settings.auto_publish` は `false -> true` に変更済み。
+前タスクの調査は完了。自動投稿というユーザー目的を達成するには新規の安全な起動経路実装が必要。
 
-確認結果:
-- `important-news-monitor`: ACTIVE v30 / `verify_jwt=false`
-- publish eligibilityは `most_important`、`ready_for_publish`、generated textあり、Fact passed、Voice passed、https source URL、未投稿を要求
-- `important` は自動投稿対象外
-- duplicate/claim/rate control/overnight hold/publish safetyは変更なし
-- settings read-back: `is_active=true`, `interval_minutes=20`, `auto_publish=true`, `luna_enabled=true`, `sol_escalation_enabled=true`
-- ただし production Cron は Fetch/Judgement/Generation の既存3本のみで、`publish_ready` Cron は0本
-- 設定反映後のimportant_news自然X投稿も0件
+## Critical safety requirement
 
-このため `auto_publish=true` だけでは、実際の自動投稿起動経路が存在しない/未確認の可能性がある。ユーザー意図は「設定値だけON」ではなく「重要ニュースが条件を満たしたら自然に自動投稿される状態」にすること。
+**既存の過去 `ready_for_publish` 候補を自動投稿してはならない。**
 
-## C Review continuation
+特に、現在残っている `most_important` 6件を、Cron追加直後にbacklogとして投稿する実装は禁止。
 
-- review_result: follow_up_required
-- reviewed_by: chatgpt
-- reason: `auto_publish=true` の反映自体は承認できるが、`publish_ready` の自然起動経路が確認できず、自動投稿というユーザー目的の完了をまだ確認できない。
-- previous production change `auto_publish=false -> true` は維持してよい。
-- 過去candidateの再処理や手動X投稿は禁止のまま。
+新しい自動投稿は、今回の安全起動経路を有効化した後に自然発生した新規候補だけを対象にすること。
 
-## Required investigation before any additional production write
+## Required investigation before implementation
 
-1. `.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、本TASKを確認する。
-2. 既存コード/DB/Cron/dispatcherを調査し、`publish_ready` が本来どの正規経路で呼ばれる設計か特定する。
-   - Generation完了時の内部dispatchなのか
-   - pg_cron / scheduler / dispatcher経由なのか
-   - `x-test-post` 等の別Function経由なのか
-   - 現在欠落しているのか
-3. 既存の duplicate protection / atomic claim / rate control / overnight hold / auto_publish判定がどこで適用されるか確認する。
-4. `most_important` だけが既存publish eligibilityを満たした時に投稿されることを再確認する。
-5. Claude側の close_report / morning_report 作業と同一Cron・同一dispatcher・同一Functionを変更する必要がある場合は、競合としてproduction変更せず報告する。
+1. `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, 本TASKを確認。
+2. `important-news-monitor` の `publish_ready` repository/claim/order/filterを確認し、現在どのready候補を拾う設計か特定。
+3. `important_news_monitor_settings` の既存列（updated_at等を含む）やcandidateのgenerated_at/created_at等を確認し、schema変更なしで安全なcutover境界を作れるか確認。
+4. 既存のduplicate protection / atomic claim / rate control / overnight hold / Fact / Voice / https source / `most_important` eligibilityをそのまま維持。
+5. Claude側のclose_report/morning_report作業と同一Cron/dispatcher/Functionを変更する必要がある場合は競合として開始せず報告。
 
-## Authorized continuation
+## Preferred design
 
-ユーザーは重要ニュースの「自動投稿ON」を明示承認済み。調査で正規の自動起動経路が一意に特定でき、既存安全条件を維持できる場合に限り、重要ニュース `publish_ready` を自然実行させるための最小限のproduction設定/Cron有効化を許可する。
+最小で安全なら以下を優先:
 
-許可条件:
-- 既存設計に沿った正規経路のみ
-- `most_important` + ready_for_publish + Fact passed + Voice passed + https source + 未投稿など既存eligibilityを維持
-- duplicate protection / atomic claim / rate control / overnight holdを維持
-- 投稿頻度・重要度thresholdを広げない
-- 他投稿種別へ影響させない
+- `publish_ready` が「auto_publish有効化後に生成/ready化された候補」だけを対象にできるcutover guardを追加。
+- cutover時刻は既存settingの `updated_at` 等、productionで既に確定している安全な時刻を再利用できるなら優先。
+- 既存列で安全に表現できない場合、勝手にmigrationせず `review_required` で必要性を報告。
+- natural triggerは既存設計に沿った明示的Cronなど、単一路線にする。
+- Cronは短時間隔でよいが、既存rate controlとatomic claimを必ず通す。無制限投稿ループは禁止。
 
-もし新規コード実装、Edge Function変更/deploy、migration、複数経路の新設が必要なら、このTASKでは実施せず `review_required` で必要事項を報告する。
+## Implementation scope
 
-## Explicitly forbidden
+ローカル実装とテストまで。
 
-- 重要度判定条件の緩和
-- Fact / Voice checkerの緩和
-- `important` を自動投稿対象へ広げること
+許可:
+- `important-news-monitor` 内の必要最小限コード変更
+- 関連test追加/修正
+- Cron SQL/migrationファイルが既存repo運用上必要なら、**本番適用せず**ローカル成果物として作成してよい
+- commit / push
+
+禁止:
+- production Edge Function deploy
+- production Cron追加/変更
+- production DB write
+- migration/DDL/GRANTの本番適用
+- secrets変更/表示
+- X API / X投稿
 - 過去candidateのstatus変更・再claim・再生成・backfill
-- 手動candidate注入
-- テスト目的の手動X投稿
-- secrets変更・表示
-- migration / DDL / GRANT
-- close_report / morning_report / morning_greeting / useful_tip 等の設定変更
-- Claude側TASK/Reportの変更
-- 正規経路が不明なまま新しいCronを推測で追加すること
+- `important` を自動投稿対象へ拡大
+- Fact/Voice/importance thresholdの緩和
+- close_report/morning_report/morning_greeting/useful_tipの変更
+- Claude TASK/Report変更
 
-## Verification after activation
+## Required tests
 
-正規の自然起動経路を有効化できた場合:
+最低限:
 
-1. production設定/Cron read-backで意図した項目だけ変更されたことを確認。
-2. `auto_publish=true` が維持されていることを確認。
-3. Function/Cron healthをread-only確認。
-4. 過去の `ready_for_publish` 候補を勝手に再処理しないこと。
-5. 次に自然発生する新規 `most_important` 候補のみを観測する。
-6. 自然投稿が成立した場合:
-   - candidate id
-   - Fact/Voice passed
-   - publish claim 1回
-   - X post id / timestamp
-   - duplicate投稿なし
-   をReportする。
-7. 観測時間内に自然対象が出なければ人工的に作らず、「自動起動経路有効化済み・初回自然投稿未成立」とReportする。
+1. backlog safety
+- cutover以前の `most_important + ready_for_publish + Fact/Voice passed` はpublish対象にならない。
+- cutover以前の既存6件相当fixtureが1件もclaimされない。
+
+2. new candidate path
+- cutover後の新規 `most_important` で既存eligibilityを満たす候補だけclaim可能。
+- `important` は対象外。
+- Fact fail / Voice fail / http source / already posted は対象外。
+
+3. duplicate/rate safety
+- atomic claimが維持される。
+- 同一candidateの二重投稿が発生しない。
+- rate control / overnight holdを迂回しない。
+
+4. trigger
+- 自然起動用Cron/trigger案が `publish_ready` を正しいmodeで呼ぶこと。
+- 既存Fetch/Judgement/Generation Cronを壊さない。
+
+5. regression
+- relevant tests
+- important-news-monitor full regression可能範囲
+- lint/typecheck可能範囲
+- `git diff --check`
 
 ## Completion criteria
 
-- `publish_ready` の正規起動経路を特定。
-- 必要なら安全な最小production設定/Cron変更のみ実施。
-- 自動投稿が自然に起動可能な状態であることをread-back/healthで確認。
-- 過去候補の再処理0、手動X投稿0。
-- TASK末尾に新しい `## Report` を追加。
+- 安全なcutover guardと自然publish triggerの実装案が完成。
+- 過去ready候補を誤投稿しないテストがpass。
+- 既存publish eligibilityを緩めていない。
+- production変更0、X投稿0。
+- TASK末尾に `## Report` を追加。
 - status: `review_required`
 - next_owner: `chatgpt`
 
-- commit: TASK/Report更新のみ許可
-- push: TASK/Report更新は許可
-- code change: 禁止
-- Edge Function deploy: 禁止
+- commit: 許可
+- push: 許可
+- deploy: 禁止
+- production changes: 禁止
 - report_mode: inline
-
-## Previous Report
-
-- production_change: `public.important_news_monitor_settings.auto_publish` のみ `false -> true`
-- existing publish eligibilityは安全条件を維持
-- `publish_ready` Cron: 0本
-- natural X post: 0件
-- DB writeはauto_publish設定1項目のみ
-- migration/code/deploy/Cron/secrets/X手動投稿: 0
-
-## Report
-
-- task_id: important-news-auto-publish-enable-20260908
-- result: review_required
-- investigation: `publish_ready` の正規自然起動経路は現行コード・DB・Cronから特定できず
-- code: `important-news-monitor` は `mode=publish_ready` を受けた場合だけ既存publish処理へ進む。Generation完了時の内部publish dispatchは存在しない。
-- cron: productionのimportant-news CronはFetch/Judgement/Generationの3本のみ。`publish_ready` Cronは0本。x-test-postの既存dispatcherはscheduled_posts用で、important-newsのpublish_readyを呼ばない。
-- eligibility: `most_important`、`ready_for_publish`、generated text、Fact passed、Voice passed、https source URL、未投稿を維持。`important`は自動投稿対象外。
-- production_readback: `is_active=true`, `interval_minutes=20`, `auto_publish=true`, `luna_enabled=true`, `sol_escalation_enabled=true`
-- candidates: `ready_for_publish` 29件（important 23件、most_important 6件）、publish_attempts>0 0件、x_post_idあり0件。既存candidateの変更・再claim・再生成なし。
-- production_change: 追加変更なし（auto_publish=trueは既存反映を維持）
-- deploy: 0
-- manual_publish: 0
-- x_api: 0
-- x_post: 0
-- next_action: 正規経路のコード実装または新規Cronが必要なら、別タスクで設計・レビュー後に実施する。今回は推測で作成せず停止。
