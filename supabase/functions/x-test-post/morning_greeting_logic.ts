@@ -1,4 +1,9 @@
 import { KABUMORI_VOICE } from "../_shared/kabumori_voice.ts";
+import {
+  buildMorningGreetingScenePlan,
+  renderFullScenePlanVisualTheme,
+  renderThemeSyncedVisualTheme,
+} from "./morning_greeting_scene_logic.ts";
 
 export type MorningGreetingThemeType = "special_day" | "seasonal" | "weekday" | "generic";
 export type MorningGreetingThemeConfidence = "high" | "medium";
@@ -121,6 +126,10 @@ function seasonalTheme(month: number, day: number): MajorThemeDefinition | null 
 
 export function selectMorningGreetingTheme(date: string): MorningGreetingTheme {
   const { year, month, day, weekday } = parseCalendarDate(date);
+  // A pure function of `date` alone — no generation-history lookup, no DB dependency, no migration
+  // needed. See morning_greeting_scene_logic.ts for why a deterministic date-seeded rotation is used
+  // instead of tracking real history.
+  const scenePlan = buildMorningGreetingScenePlan(date);
   const major = majorThemeForDate(date);
   if (major) {
     return {
@@ -128,7 +137,7 @@ export function selectMorningGreetingTheme(date: string): MorningGreetingTheme {
       theme_name: major.name,
       reason: "一般に広く知られ、日付との対応をコード側の限定リストで確認できるため",
       confidence: "high",
-      visual_theme: major.visualTheme,
+      visual_theme: renderThemeSyncedVisualTheme(major.visualTheme, scenePlan),
     };
   }
 
@@ -139,7 +148,7 @@ export function selectMorningGreetingTheme(date: string): MorningGreetingTheme {
       theme_name: seasonal.name,
       reason: "特定の記念日ではなく、日付から確認できる一般的な季節イベントの期間内であるため",
       confidence: "medium",
-      visual_theme: seasonal.visualTheme,
+      visual_theme: renderThemeSyncedVisualTheme(seasonal.visualTheme, scenePlan),
     };
   }
 
@@ -161,7 +170,7 @@ export function selectMorningGreetingTheme(date: string): MorningGreetingTheme {
       theme_name: weekdayTheme,
       reason: "記念日を作らず、カレンダーから直接確認できる日の区切りを使うため",
       confidence: "high",
-      visual_theme: "朝の窓辺、コーヒー、観葉植物、やわらかい朝日",
+      visual_theme: renderFullScenePlanVisualTheme(scenePlan),
     };
   }
 
@@ -170,14 +179,16 @@ export function selectMorningGreetingTheme(date: string): MorningGreetingTheme {
     theme_name: null,
     reason: "広く知られた日付テーマがないため、記念日を使わない通常の朝の挨拶にする",
     confidence: "high",
-    visual_theme: "朝の窓辺、コーヒー、観葉植物、やわらかい朝日",
+    visual_theme: renderFullScenePlanVisualTheme(scenePlan),
   };
 }
 
 export function morningGreetingGenerationInstructions(theme: MorningGreetingTheme): string[] {
   return [
     ...KABUMORI_VOICE,
-    "朝の短い挨拶投稿です。株の解説記事ではなく、普段のXで自然におはようと声をかける文章にしてください。",
+    "朝の短い挨拶投稿です。相場や株の解説ではなく、普段のXで自然におはようと声をかける、気持ちよく読める朝の挨拶にしてください。",
+    "このアカウントには`morning_report`という別の投稿で相場・ニュース・日本株見通しを扱う役割があります。morning_greetingはその役割を持ちません。原則として株・相場・投資のテーマは使わず、親しみ・季節感・日常・確定済みテーマ・気持ちのよい朝の空気感を書いてください。",
+    "市場材料、指数の動き、決算、海外市場、個別銘柄、値動きの解説は一切入れません。株に触れたくなっても、内容の中心にしないでください。",
     `本文は絵文字・改行を含めて日本語で${MORNING_GREETING_TARGET_MIN_CHARACTERS}〜${MORNING_GREETING_TARGET_MAX_CHARACTERS}文字程度を目標にします。明るめで柔らかく書きます。`,
     `絵文字は${MORNING_GREETING_TARGET_MIN_EMOJI}〜${MORNING_GREETING_TARGET_MAX_EMOJI}個程度にします。`,
     "おはようの挨拶、確定済みテーマへの短い言及、自然な一言を入れますが、毎回同じ構成や締めに固定しません。",
@@ -185,8 +196,9 @@ export function morningGreetingGenerationInstructions(theme: MorningGreetingThem
     "本人の外出、買い物、食事、家族行事などの実体験を作りません。現在地や天気も入力にないため書きません。",
     "相場予想、株価方向の断定、売買推奨、投資助言、存在しないニュースや数値を追加しません。",
     theme.theme_name === null
-      ? "今日は○○の日、○○記念日という表現は禁止です。無理に日付テーマを作らず、普通の朝として書いてください。"
+      ? "今日は○○の日、○○記念日という表現は禁止です。無理に日付テーマを作らず、普通の朝として書いてください。特別なテーマが無い日に、無理に豆知識・ニュース・相場の話題を差し込む必要もありません。ただ気持ちのよい朝の挨拶であれば十分です。"
       : `使用できるテーマ名は「${theme.theme_name}」だけです。一般的な範囲を超える由来や豆知識は追加しません。`,
+    "説教くさい語り口、自己啓発的な締め、AIが書いた金融コラムのような硬さを避けます。友達に送るような自然な一言として書いてください。",
     "ハッシュタグ、URL、画像の説明、生成手順は本文へ入れません。",
   ];
 }

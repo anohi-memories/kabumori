@@ -14,6 +14,7 @@ import {
   buildMorningGreetingRequest,
   generateMorningGreeting,
   isVerifiedMajorTheme,
+  morningGreetingGenerationInstructions,
   selectMorningGreetingTheme,
   validateMorningGreetingOutput,
 } from "./morning_greeting_logic.ts";
@@ -319,4 +320,36 @@ test("13: the prompt states a 1-3 emoji target", () => {
   assert.equal(MORNING_GREETING_TARGET_MAX_EMOJI, 3);
   const instructions = buildMorningGreetingRequest(DATE).body.instructions as string;
   assert.match(instructions, /絵文字は1〜3個程度/u);
+});
+
+// --- morning-greeting-tone-image-variety-20260908: text no longer drifts into market commentary --------
+
+test("1+4: the prompt tells the model morning_greeting is not morning_report's role and bans market specifics", () => {
+  const instructions = buildMorningGreetingRequest(DATE).body.instructions as string;
+  assert.match(instructions, /morning_report.*相場・ニュース・日本株見通し/u);
+  assert.match(instructions, /原則として株・相場・投資のテーマは使わず/u);
+});
+
+test("3+5: the prompt explicitly bans concrete market materials (indices, earnings, overseas markets, individual stocks, price commentary)", () => {
+  const instructions = buildMorningGreetingRequest(DATE).body.instructions as string;
+  assert.match(instructions, /市場材料、指数の動き、決算、海外市場、個別銘柄、値動きの解説は一切入れません/u);
+});
+
+test("3: a plain day with no theme is told not to force news/trivia/market content into the greeting", () => {
+  const noThemeInstructions = morningGreetingGenerationInstructions({
+    theme_type: "generic", theme_name: null, reason: "test", confidence: "high", visual_theme: "x",
+  }).join("\n");
+  assert.match(noThemeInstructions, /無理に豆知識・ニュース・相場の話題を差し込む必要もありません/u);
+});
+
+test("6: the prompt discourages preachy/self-help/AI-financial-column tone", () => {
+  const instructions = buildMorningGreetingRequest(DATE).body.instructions as string;
+  assert.match(instructions, /説教くさい語り口、自己啓発的な締め、AIが書いた金融コラムのような硬さを避けます/u);
+});
+
+test("2: a memorial-day theme is still told to use exactly that theme name (unchanged existing behavior)", () => {
+  const withTheme = morningGreetingGenerationInstructions({
+    theme_type: "special_day", theme_name: "元日", reason: "test", confidence: "high", visual_theme: "x",
+  }).join("\n");
+  assert.match(withTheme, /使用できるテーマ名は「元日」だけです/u);
 });
