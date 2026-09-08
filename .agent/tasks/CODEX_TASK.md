@@ -2,135 +2,102 @@
 
 Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは、`.agent/ORCHESTRATION.md` と既存のプロジェクトルールを確認したうえで、このファイルだけを自分の担当タスク正本として扱います。
 
-- task_id: important-news-deploy-and-natural-cycle-verification-20260908
+- task_id: important-news-auto-publish-enable-20260908
 - owner: codex
-- status: done
-- next_owner: chatgpt
-- purpose: 直前までにmainへ反映済みの重要ニュース取得改善・生成信頼性改善を `important-news-monitor` 本番へ安全にdeployし、自然20分サイクルで取得→判定→生成まで正常に通るかread-only確認する。
+- status: ready
+- next_owner: codex
 - priority: high
+- purpose: 本番検証済みの重要ニュース自動生成について、既存のpublish eligibilityを一切緩めず `auto_publish` のみを安全に有効化し、最初の自然投稿経路を確認する。
 
-## Approved implementation commits
+## Background
 
-- freshness / coverage fix: `7bed84e063dbe5fc98bd0c12fa77720eead7936e`
-- generation reliability fix: `710d5e8e42374a94fa163aac11098c6f02ce05ac`
+直前タスクで `important-news-monitor` v30 を本番deployし、自然20分サイクルを2回確認済み。
 
-両タスクはChatGPTレビュー済み。今回のタスクでは新機能実装や仕様変更を行わず、deployと本番観測に限定する。
+- `most_important` 1件が Fact/Voiceともpassedし `ready_for_publish` まで正常到達。
+- 別の `important` 1件は `MISSING_EXPLICIT_YEAR` のFact retry後もfailedとなり、安全停止した。
+- 現在確認済み設定は `auto_publish=false`。
+- 取得・判定・生成・Fact/Voice安全停止は本番自然サイクルで確認済み。
 
-## Pre-deploy checks
+今回の目的は投稿条件を広げることではなく、既存の安全なpublish eligibilityをそのまま使って自動投稿を有効化すること。
 
-1. `.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、本TASKを確認する。
-2. `origin/main` が上記承認済み実装を含むことを確認する。
-3. Claudeスロットや他workstreamが `important-news-monitor` の同一ファイル・同一Edge Functionを変更中でないことを確認する。競合があればdeployせず報告。
-4. deploy対象差分が `important-news-monitor` に限定され、未承認のローカル変更・未コミット変更を含まないことを確認する。
-5. 可能な範囲で直前のrelevant tests / diff checkを再確認する。新たな失敗が出たらdeployせず報告。
+## Concurrency
 
-## Deployment scope
+- Claude slot 1 は `close-report-auto-post-enable-20260908` を進行中。
+- Claude slot 2 は `morning-report-us-holiday-session-labeling-20260908` がready。
+- 本タスクは `important-news-monitor` の `auto_publish` 設定のみを対象とし、close_report / morning_report / x-test-post / posting_windows 等には触れない。
+- 同一DB row / 同一設定 / 同一Edge Functionを他slotが変更中と判明した場合は、production変更せず `review_required` で競合報告する。
 
-Supabase production projectの既存 `important-news-monitor` Edge Functionのみをdeployする。
+## Required pre-check
 
-許可:
-- `important-news-monitor` Edge Function deploy
-- deploy前後のversion/status read
-- deploy後のlogs / DB rows / run diagnosticsのread-only確認
-- 自然Cronサイクルの観測
+production write前に必ず確認する。
 
-禁止:
-- production DB write / 手動row更新
+1. 現在の `important-news-monitor` がACTIVEで、直前deployのv30相当が稼働していること。
+2. 現在の重要ニュース設定で `auto_publish=false` であること。
+3. `auto_publish=true` が既存コード上どの候補を自動投稿対象にするか確認する。
+4. `important` / `most_important` の判定、Fact、Voice、publish eligibility、duplicate protection、claim条件を変更しないことを確認する。
+5. `auto_publish=true` にするだけで、ユーザー意図より広く「全importantを無条件投稿」等になる場合はONにせず停止して報告する。
+
+## Authorized production change
+
+上記pre-checkで既存の安全なpublish eligibilityが維持されると確認できた場合に限り、productionの重要ニュース設定について:
+
+- `auto_publish: false -> true`
+
+のみ変更を許可する。
+
+その他のproduction設定変更は禁止。
+
+## Explicitly forbidden
+
+- コード変更
+- Edge Function deploy
 - migration / DDL / GRANT
 - Cron変更
 - secrets変更・表示
-- `x-test-post` その他Edge Function deploy
-- auto_publish設定変更
-- 過去failed candidateのstatus変更・再claim・再生成
-- 手動で重要ニュース候補を注入すること
-- X投稿を発生させる設定変更
+- `is_active`, `interval_minutes`, Luna/Sol設定、重要度threshold等の変更
+- important / most_important 判定条件の緩和
+- Fact / Voice checkerの緩和
+- publish eligibilityの変更
+- 過去candidateのstatus変更・再claim・再生成・backfill
+- 手動candidate注入
+- テスト投稿のための手動X投稿
+- close_report / morning_report / morning_greeting / useful_tip 等、他投稿種別の設定変更
+- Claude側TASK/Reportの変更
 
-## Natural-cycle verification
+## Verification after enabling
 
-deploy後、原則として既存Cronによる自然20分サイクルを観測する。テスト目的の人工的なproduction candidate作成はしない。
+`auto_publish=true` 反映後:
 
-最低限確認する内容:
+1. 設定read-backで `auto_publish=true` を確認。
+2. 他の重要ニュース設定が変更されていないことを確認。
+3. 既存Cron/Function healthが正常であることをread-only確認。
+4. 過去の `ready_for_publish` 候補を勝手に再処理しないこと。
+5. 次に自然発生する新規候補のみを対象に、既存の通常経路を観測する。
+6. 観測時間内に新しい投稿対象が自然発生した場合:
+   - Fact/Voice passed済みであること
+   - publish claimが1回だけであること
+   - X投稿成功時はpost id / timestamp / candidate idをReport
+   - duplicate投稿がないこと
+7. 自然な投稿対象が発生しない場合は、人工的に作らず「初回自然投稿は未成立」とReportする。
 
-### A. Function health
-- deployした `important-news-monitor` がACTIVEであること。
-- deploy直後に起動エラー・import error・依存解決エラーがないこと。
-- Cron/fetchの既存実行が継続していること。
+## Observation policy
 
-### B. Freshness / coverage diagnostics
-自然cycleでbreaking laneが走った場合:
-- `critical_market_events` が固定枠として選択されていること。
-- query/provider diagnosticsが取得できること。
-- raw/validated candidate countと主要rejection reasonが確認可能であること。
-- 3時間freshness / event timestamp必須化による異常な全滅や例外がないこと。
-
-market_macroが走った場合:
-- fetch自体が正常完了すること。
-- dedupe後cap / round-robin変更による例外や処理停止がないこと。
-
-### C. Generation reliability
-自然cycleで `important` / `most_important` が発生した場合のみ確認:
-- generation claimが正常に行われること。
-- TDnet略称/正式社名差だけで不当にFact failしないこと。
-- Fact failが軽微かつretry可能な場合、`fact_retry` が最大1回だけ動くこと。
-- retry後はlocal FactとAI Factを再検証していること。
-- Voice retryを含め無限retryがないこと。
-- 成功時 `ready_for_publish` 相当の既存正常状態へ進むこと。
-- 失敗時は診断情報が残り、安全側に停止すること。
-
-重要ニュースが観測時間内に1件も `important` にならない場合、人工的に作らず「generation自然確認は未成立」とReportする。
-
-## Observation window
-
-- deploy直後のhealth確認に加え、少なくとも自然20分cycleを2回以上確認する。
-- 可能なら40〜60分程度の範囲で観測する。
-- 長時間待機が必要な場合は、確認できた範囲をReportし、未成立項目を明記して `review_required` にする。
-
-## X / publish safety
-
-- `auto_publish` は変更しない。
-- 現在のproduction設定を勝手にONにしない。
-- `most_important` が生成されても、既存設定に従うだけで設定変更は禁止。
-- X投稿を意図的に発生させるテストは禁止。
+- 設定ON後、すぐに人工投稿はしない。
+- 長時間待機が必要な場合、設定反映とhealth確認までで `review_required` にしてよい。
+- 初回自然投稿確認が未成立でも、設定ON自体が安全に完了していればその旨を明確にReportする。
 
 ## Completion criteria
 
-- deploy前競合チェック済み。
-- 承認済みmainから `important-news-monitor` のみdeploy。
-- deploy version/statusを記録。
-- 自然cycleを最低2回観測、確認できたhealth/diagnosticsをReport。
-- production DB/Cron/secrets/X設定の変更0。
-- generation自然確認が成立したか未成立かを明確化。
+- pre-checkでauto_publishの実際の対象範囲を確認。
+- 安全条件を満たす場合のみ `auto_publish=true` をproduction反映。
+- 変更したproduction値はその1項目のみ。
+- read-back確認済み。
+- 可能な範囲で初回自然投稿経路をread-only観測。
 - TASK末尾に `## Report` を追加。
 - status: `review_required`
 - next_owner: `chatgpt`
 
 - commit: TASK/Report更新のみ許可
 - push: TASK/Report更新は許可
-- deploy: `important-news-monitor` のみ許可
+- deploy: 禁止
 - report_mode: inline
-
-## Report
-
-- task_id: important-news-deploy-and-natural-cycle-verification-20260908
-- result: review_required
-- changed_files: `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md` の制御情報のみ
-- deploy: `important-news-monitor` のみ。deploy前ACTIVE v29、deploy後ACTIVE v30、`verify_jwt=false` を確認。
-- predeploy: origin/main が承認済み `7bed84e063dbe5fc98bd0c12fa77720eead7936e` と `710d5e8e42374a94fa163aac11098c6f02ce05ac` を含むこと、Claude側に同Function競合がないこと、clean worktreeからのdeployであることを確認。
-- natural_cycle_1: Fetch 07:00 UTC / 16:00 JST、completed、fetched=168、duplicate=86、new=27、errorなし。新規は market_macro=24、tdnet=3。Judgement/Generationで `most_important` 1件が `ready_for_publish`、Fact/Voiceともpassed。
-- natural_cycle_2: Fetch 07:20 UTC / 16:20 JST、completed、fetched=168、duplicate=113、new=3、errorなし。新規3件はtdnet。Judgement/Generationでimportant 1件を処理し、Fact初回失敗 `MISSING_EXPLICIT_YEAR` に対して既定のfact_retryを1回だけ実施したが再検証もfailed。`NEWS_GENERATION_FACT_RETRY_FAILED` で安全停止し、Voiceはnot_run。no_post 2件。
-- generation_verification: 成功経路（most_important→Fact/Voice passed→ready_for_publish）と、失敗時の診断保持・1回限定retry・安全停止を自然サイクルで確認。全候補でgeneration_error=1、generation_failed=1、publish_attempts>0=0、observed fetch runsのrunning残存=0。
-- settings: `is_active=true`, `interval_minutes=20`, `auto_publish=false`, `luna_enabled=true`, `sol_escalation_enabled=true` を維持。Cron 3本のschedule/activeも変更なし。
-- safety_checks: production DB write=0、migration/DDL/GRANT=0、Cron/settings変更=0、secrets変更/表示=0、X API/X投稿=0、他Function deploy=0、既存候補の手動変更・再claim・再生成=0、apps/admin/HANDOFF/code変更=0。
-- commit_hash: `7f53c49`
-- push: `7f53c49` をorigin/mainへpush済み
-- next_recommendation: ChatGPT review。generation自然確認は成立したが、2回目に `MISSING_EXPLICIT_YEAR` のretry後失敗が1件あり、追加修正や再処理はこのTASKでは行わない。
-
-## C Review
-
-- result: approved
-- reviewed_by: chatgpt
-- decision: deploy / natural-cycle verification task complete; status done.
-- production_result: `important-news-monitor` v30 ACTIVE. Natural 20-minute cycles were observed twice with no fetch errors.
-- generation_result: one `most_important` candidate completed Fact/Voice and reached `ready_for_publish`; one separate `important` candidate failed after the single permitted `MISSING_EXPLICIT_YEAR` Fact retry and stopped safely before Voice.
-- safety: no DB/Cron/settings/secrets/X changes beyond the authorized `important-news-monitor` deploy.
-- follow_up: `MISSING_EXPLICIT_YEAR` retry failure is a separate improvement item and does not block completion of this deploy/verification task.
