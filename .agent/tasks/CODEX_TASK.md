@@ -4,8 +4,8 @@ Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは
 
 - task_id: important-news-auto-publish-enable-20260908
 - owner: codex
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - purpose: 本番検証済みの重要ニュース自動生成について、既存のpublish eligibilityを一切緩めず、自動投稿が実際に自然実行されるproduction経路まで安全に有効化する。
 
@@ -119,3 +119,20 @@ Codex（こでさん）専用の現在タスクです。`G` を受けたCodexは
 - natural X post: 0件
 - DB writeはauto_publish設定1項目のみ
 - migration/code/deploy/Cron/secrets/X手動投稿: 0
+
+## Report
+
+- task_id: important-news-auto-publish-enable-20260908
+- result: review_required
+- investigation: `publish_ready` の正規自然起動経路は現行コード・DB・Cronから特定できず
+- code: `important-news-monitor` は `mode=publish_ready` を受けた場合だけ既存publish処理へ進む。Generation完了時の内部publish dispatchは存在しない。
+- cron: productionのimportant-news CronはFetch/Judgement/Generationの3本のみ。`publish_ready` Cronは0本。x-test-postの既存dispatcherはscheduled_posts用で、important-newsのpublish_readyを呼ばない。
+- eligibility: `most_important`、`ready_for_publish`、generated text、Fact passed、Voice passed、https source URL、未投稿を維持。`important`は自動投稿対象外。
+- production_readback: `is_active=true`, `interval_minutes=20`, `auto_publish=true`, `luna_enabled=true`, `sol_escalation_enabled=true`
+- candidates: `ready_for_publish` 29件（important 23件、most_important 6件）、publish_attempts>0 0件、x_post_idあり0件。既存candidateの変更・再claim・再生成なし。
+- production_change: 追加変更なし（auto_publish=trueは既存反映を維持）
+- deploy: 0
+- manual_publish: 0
+- x_api: 0
+- x_post: 0
+- next_action: 正規経路のコード実装または新規Cronが必要なら、別タスクで設計・レビュー後に実施する。今回は推測で作成せず停止。

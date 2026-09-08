@@ -3,41 +3,42 @@
 - task_id: important-news-auto-publish-enable-20260908
 - result: review_required
 - next_owner: chatgpt
-- deploy: なし（既存 `important-news-monitor` ACTIVE v30を維持）
-- production_change: `public.important_news_monitor_settings.auto_publish` のみ `false -> true`
 
-## Pre-check
+## 結果
 
-- `important-news-monitor`: ACTIVE v30 / `verify_jwt=false`
-- publish eligibility: `most_important`、`ready_for_publish`、generated textあり、Fact passed、Voice passed、https source URL、未投稿をすべて要求
-- `important` は自動投稿対象外。duplicate/claim/rate control/overnight hold/publish safetyは変更なし
-- auto_publish=trueは既存 `publish_ready` 分岐を有効化するだけで、生成・判定条件を緩めない
+`auto_publish=true` は維持されているが、現行の正式repoと本番DB/Cronを調査した結果、important-newsの `publish_ready` を自然に起動する正規経路は確認できなかった。
 
-## Read-back / safety
+## 調査結果
 
+- `important-news-monitor` の `mode=publish_ready` 分岐は存在するが、呼び出し元は現行コード内で確認できない。
+- Generation完了時は候補を `ready_for_publish` にできるが、publish処理へ自動dispatchする実装はない。
+- 本番CronはFetch/Judgement/Generationの3本のみ。`publish_ready` Cronは0本。
+- `dispatch-scheduled-posts` はx-test-postを呼ぶscheduled_posts用で、important-newsの `publish_ready` は呼ばない。
+- したがって、推測で新規Cronや別dispatcherを追加せず、今回は停止した。
+
+## 安全条件・本番状態
+
+- ACTIVE: `important-news-monitor v30`, `verify_jwt=false`
 - settings: `is_active=true`, `interval_minutes=20`, `auto_publish=true`, `luna_enabled=true`, `sol_escalation_enabled=true`
-- Cron: Fetch/Judgement/Generationの既存3本のみ、active/schedule変更なし
-- `publish_ready` Cron: 0本
-- existing `ready_for_publish`: 28件（`most_important` 6件）
-- existing publish_attempts>0: 0件
-- existing x_post_idあり: 0件
-- 過去候補の再claim・再生成・手動投稿: 0
-- post_execution_logsの設定反映後important_news投稿記録: 0件
+- publish eligibility: `most_important`、`ready_for_publish`、generated textあり、Fact passed、Voice passed、HTTPS source URL、未投稿
+- `important` は自動投稿対象外
+- ready_for_publish: 29件（important 23件、most_important 6件）
+- publish_attempts>0: 0件
+- x_post_idあり: 0件
+- 過去candidateのstatus変更・再claim・再生成・手動投稿: 0件
 
-## Observation
+## 実施・未実施
 
-設定反映後のread-only health確認まで実施したが、自然な新規publish対象とX投稿は未成立。publish_ready Cronが存在しないため、人工的なpublish_ready実行や過去候補の再処理は行わず停止した。
+- 追加production write: 0
+- code変更: 0
+- deploy: 0
+- Cron変更: 0
+- migration/DDL/GRANT: 0
+- OpenAI API: 0
+- X API/X投稿: 0/0
+- secrets表示・変更: 0
+- apps/admin・HANDOFF.md・他投稿種別: 変更なし
 
-## Safety
+## 次の判断
 
-- DB write: auto_publish設定1項目のみ
-- migration / DDL / GRANT: 0
-- code / deploy / Cron / secrets変更: 0
-- OpenAI手動API: 0
-- X API / X投稿: 0 / 0
-- 他投稿種別の設定変更: 0
-- apps/admin / HANDOFF.md変更: 0
-
-- commit_hash: control-only commit pending
-- push: control-only TASK/Report updateをorigin/mainへpush予定
-- next_recommendation: ChatGPT review。自然投稿を確認するには、既存の正規publish_ready起動経路の有無を別途判断する。
+自然な重要ニュース自動投稿を実現するには、既存設計に沿った `publish_ready` 起動経路（コード内dispatchまたは明示的Cron等）を別タスクで設計・レビューする必要がある。今回は正規経路が特定できないため実装・設定追加は行わない。
