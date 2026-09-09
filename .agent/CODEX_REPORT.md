@@ -5,7 +5,7 @@
 - next_owner: chatgpt
 - commit_hash: `afcc79d0e5442deef958e779de95ecad30de2177`
 - push: `origin/main`へpush済み（`ccce2d1..afcc79d`）
-- deploy: 未実施（本番Edge Function deployは安全確認で停止）
+- deploy: 未実施（Supabase安全ゲートが明示承認待ちで拒否）
 
 ## Summary
 
@@ -51,11 +51,11 @@
 
 - production Supabaseはread-only確認のみ。`important-news-monitor`は確認時点でversion 31、active。直近runは10:00 UTC開始のrunning、直前5 runは`NEWS_MONITOR_STALE_RUNTIME_TERMINATION`、08:00 UTC以前は20–30秒程度でcompletedだった。
 - `important-news-company-ir_sources` active countは0で、今回のstale連続の直接原因とは確認できなかった。外部fetch timeout未設定が残る経路を修正した。
-- 本番Edge Function deployは、Supabase deploy toolがservice-role DBアクセスとlive X投稿を伴うproduction変更として明示承認を要求し、安全ゲートで拒否されたため未実施。明示的な本番deploy承認後に`important-news-monitor`だけをdeployし、自然Cron経路でrun/candidate/publish_attemptsを再確認する必要がある。
+- 本番Edge Function deployを1回試行したが、Supabase安全ゲートが「service-role DBアクセスとlive X投稿を伴うproduction変更で、信頼済み指示では明示承認されていない」として拒否。CLI等で迂回していない。`important-news-monitor`だけの本番deployを明示承認後に実施し、自然Cron経路でrun/candidate/publish_attemptsを再確認する必要がある。
 - deploy前のproduction X API callは0、手動X投稿は0、旧backlog一括投稿は0。`stocks_master`およびDB schemaは変更していない。
 
 ## Remaining / next action
 
-1. 本番`important-news-monitor` deployの明示承認を受ける。
+1. 本番`important-news-monitor` deployの明示承認を受ける（現在のブロッカー）。
 2. deploy後、5分Cronの自然経路で新規cutover後候補がclaimされ、`publish_attempts`またはX投稿まで進むことをread-only確認する（旧候補は対象外のまま）。
 3. stale runがtimeout追加後に再発しないことを数サイクル確認する。

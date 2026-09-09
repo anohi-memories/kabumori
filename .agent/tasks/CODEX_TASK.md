@@ -3,8 +3,8 @@
 - task_id: important-news-throughput-and-coverage-hardening-20260909
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol
 
