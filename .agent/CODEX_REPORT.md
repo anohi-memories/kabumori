@@ -6,8 +6,8 @@
 - changed_files:
   - `src/lib/push-notifications.ts`
   - `src/hooks/use-push-notification-navigation.ts`
-- implementation_commit: pending
-- push: pending
+- implementation_commit: `5242bf5`
+- push: `origin/main`へpush済み
 - deploy: none
 
 ## 実装内容
