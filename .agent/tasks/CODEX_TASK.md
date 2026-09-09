@@ -3,7 +3,7 @@
 - task_id: expo-ios-push-client-20260909
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 
@@ -169,3 +169,23 @@ Report必須:
 - remaining_issues
 - safety_checks
 - next_recommendation
+
+## C1 Review
+
+- result: approved
+- reviewed_by: chatgpt
+- decision: Expo iOS Pushクライアント基盤の実装を承認。
+- verified:
+  - implementation commit `5242bf556bfdc1a27e835f778617396098baf06c` は `origin/main` へpush済み
+  - 変更は `src/lib/push-notifications.ts` と `src/hooks/use-push-notification-navigation.ts` のPushクライアント領域に限定
+  - foreground handler、physical-device判定、permission denied path、EAS projectId解決、Expo Push Token取得、Android channel、通知タップlistener、cold-launch response処理を確認
+  - listener cleanupと通知response dedupeを確認
+  - 既存 `important_news -> /news` routing以外のdeep link仕様を追加していない
+  - iOS bundleIdentifierは未設定のまま保持し、勝手なidentifierを追加していない
+  - Supabase migration/schema/RLS/GRANT/RPC/Edge Function/production secretsの変更なし
+  - targeted TypeScript check、git diff --check、expo config、web exportはPASS
+- accepted_limitations:
+  - `npm run lint` は環境要因で未完了。依存ファイル変更なし、他の型/Expo検証がPASSのため今回の承認を妨げない
+  - Apple Developer有効化前のためiPhone実機Push E2Eは未実施。実機成功としては扱わず次工程で必須確認とする
+- next:
+  - Apple Developer Program有効化後、正式Bundle ID設定とAPNs/EAS credential準備を行い、development buildで実機Push E2Eを確認する
