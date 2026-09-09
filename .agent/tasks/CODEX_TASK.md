@@ -1,38 +1,33 @@
 # Codex Task
 
-- task_id: expo-ios-push-client-20260909
+- task_id: expo-ios-push-e2e-20260909
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
+- recommended_model: Sol
 
 ## Goal
 
-かぶモリExpoアプリで、Apple Developer Program有効化後すぐにiPhone実機Push通知テストへ進めるよう、Expo SDK 57に対応したクライアント側Push通知基盤を実装する。
+かぶモリExpoアプリで、iPhone実機へPush通知を送受信できるdevelopment環境を完成させる。
 
-今回のスコープは **Expoアプリ側のみ**。Supabase migration、Edge Function、production secrets、Apple Developer Portalの変更は行わない。
+前TASKでPushクライアント基盤は実装済み。今回は、正式Bundle ID、EAS/iOS資格情報、development build、実機Push E2Eの確認までを進める。
 
-## Confirmed current state
+## Confirmed starting point
 
-GitHub main上で以下を確認済み。
-
-- Expo SDK: `~57.0.18`
-- `expo-notifications`: `~57.0.17`
-- `expo-device`: `~57.0.1`
-- `expo-constants`: `~57.0.16`
-- `app.json` に `expo-notifications` plugin設定済み
-- EAS projectId: `eb80adf3-861e-4a48-a373-2d9a85b58899`
-- `eas.json` に developmentClient + internal distribution設定済み
-- GitHub code searchでは `getExpoPushTokenAsync` / `Notifications.` のアプリ実装は未検出
-
-## User authorization
-
-ユーザーは2026-09-09にApple Developer Programへ登録し、かぶモリのPush通知実機テストへ進めることを明示している。
-
-Apple側のメンバーシップ有効化は待機中の可能性があるため、Apple Portal / APNs credential作成が必要な工程は無理に進めない。
+- Expo SDK `~57.0.18`
+- `expo-notifications` `~57.0.17`
+- EAS projectId `eb80adf3-861e-4a48-a373-2d9a85b58899`
+- previous push client implementation commit: `5242bf556bfdc1a27e835f778617396098baf06c`
+- Push registration / token取得 / foreground handler / notification tap / cold launch処理は実装済み
+- `public.device_push_tokens` 保存先は既存
+- iOS `bundleIdentifier` は未設定
+- Apple Developer Programはユーザーが2026-09-09に登録済み。メンバーシップ有効化状況は未確認の可能性あり
 
 ## Required investigation before write
+
+開始時に必ず:
 
 1. `PROJECT_RULES.md`
 2. `.agent/ORCHESTRATION.md`
@@ -40,152 +35,151 @@ Apple側のメンバーシップ有効化は待機中の可能性があるため
 4. このTASK
 5. `HANDOFF.md`
 6. `app.json`, `eas.json`, `package.json`
-7. Expoアプリのroute/layout/auth構成、Supabase client構成
-8. Expo SDK 57公式ドキュメントのNotifications / Push Notifications / Development Buildsの該当箇所
+7. Push関連実装
+8. Expo SDK 57 / EAS Build / Push Notificationsの公式ドキュメント
+9. origin/main fresh-check
+10. shared worktreeの既存未コミット変更確認
 
-開始時にorigin/mainをfresh-checkし、既存未コミット変更を他workstreamの所有物として尊重する。
+既存未コミット変更は他workstream所有物として扱い、変更・stage・commitしない。
 
-## Implementation scope
+## Model guidance
 
-Expoアプリ側に、再利用可能なPush通知登録基盤を実装する。
+このTASKはApple Developer / EAS credential / Bundle ID / native build / Push E2Eが絡むため **Sol推奨**。
 
-最低限必要:
+## Step 1: Apple membership / EAS readiness
 
-1. **実機判定**
-   - `expo-device` を使い、Push token取得はphysical deviceのみで行う。
-   - simulator/emulatorでは安全にskipし、例外でアプリを落とさない。
+Apple Developer Programの有効化状態を、利用可能なCLI/EAS情報で安全に確認する。
 
-2. **通知権限**
-   - 現在権限を確認。
-   - 未許可ならOS permission requestを実行。
-   - deniedの場合はアプリを壊さず、呼び出し側が状態を判定できる戻り値にする。
+- 有効化されていない、またはApple login/2FA等でユーザー操作が必要な場合は、その時点までの準備を行い、必要なユーザー操作をReportに具体的に記載する。
+- Apple ID password、2FA code、APNs private key等の秘密情報をReport・Git・ログへ残さない。
+- 対話操作が必要な場合、無理に回避しない。
 
-3. **Expo Push Token取得**
-   - `Notifications.getExpoPushTokenAsync({ projectId })` をSDK 57公式手順に沿って使用。
-   - projectIdはExpo Constants / EAS設定から安全に取得し、ハードコード重複を避ける。
-   - projectId欠落時は明示的に失敗理由を返す。
-   - tokenをconsoleへ不要に全文出力しない。
+## Step 2: Bundle ID
 
-4. **Notification handler**
-   - foreground受信時の挙動を明示設定。
-   - iOSで通知表示をテスト可能にする。
-   - SDK 57の型・APIに合わせる。
+正式Bundle IDを決定・設定する。
 
-5. **Notification response listener**
-   - 通知タップを受け取れる基盤を用意する。
-   - 今回は未知のdeep-link仕様を勝手に決めない。
-   - `data` を安全に受け取って将来routingへ繋げられる境界を作る。
-   - 既にrouting仕様が存在する場合のみ、その既存仕様へ接続してよい。
+優先順位:
 
-6. **ライフサイクル**
-   - root layout等の適切な場所でlistenerを1回だけ登録し、cleanupする。
-   - Fast Refresh / re-renderでlistenerが重複しない設計にする。
+1. リポジトリ/既存Apple/EAS設定内に正式なBundle IDが既に存在するなら、それを使用。
+2. 存在しない場合、かぶモリ専用として衝突しにくく自然なreverse-DNS identifierを選定する。
 
-7. **Android compatibility**
-   - iOS実機テストが主目的だが、Android側を明確に壊さない。
-   - Android channelがSDK 57公式実装上必要なら最小限追加してよい。
+候補として `com.anohimemories.kabumori` を使用してよい。ただしApple/EAS側で既存競合・命名方針との不一致がある場合は別名に変更し、その理由をReportへ記載する。
 
-## Token persistence boundary
+`app.json` の `expo.ios.bundleIdentifier` を設定する。
 
-今回、Supabase DB schemaを勝手に追加・変更しない。
+Android package名は今回勝手に変更しない。
 
-- 既存にpush token保存先（table/RPC）が存在する場合のみ、安全性・RLSを確認して既存APIを利用してよい。
-- 保存先が存在しない場合は、token取得まで実装し、保存処理は明確なTODO/境界として残す。
-- migration、RLS変更、RPC追加、Edge Function変更は禁止。
+## Step 3: EAS / APNs credentials
 
-Reportには以下を明記する:
-- 既存保存先の有無
-- tokenをどこまで取得できる実装になったか
-- server persistenceに何が不足しているか
+Expo SDK 57 / EAS公式手順に沿ってdevelopment build用iOS credentialsを準備する。
 
-## App config check
+許可:
+- EASが自動管理するiOS distribution/development credentialsの作成
+- Push Notifications capabilityに必要なAPNs credentialのEAS管理設定
+- development buildに必要なdevice registration
 
-`app.json` のiOS `bundleIdentifier` が未設定なら、**勝手なidentifierを決めてproduction向け変更しない**。
+禁止:
+- credentials/private keyの値をReport・Git・consoleログへ転記
+- production App Store submit
+- 不要なcertificate/key乱造
+- 既存他アプリのcredential破壊・revoke
 
-Reportで「Apple Developer有効化後/EAS build前に必要」と明示し、候補や現在値を確認する。
+既存credentialがある場合は可能な限り再利用する。
 
-既にプロジェクト内で正式Bundle IDが決定済みなら、その根拠を確認した上で使用してよい。
+## Step 4: Device registration / development build
+
+ユーザー自身のiPhoneをdevelopment build対象として登録し、iOS development buildを作成できる状態へ進める。
+
+- 端末登録でユーザー側の操作（QR/URLをiPhoneで開く等）が必要なら、作業を安全に止めて手順を明記する。
+- EAS Buildを実行できる条件が揃っている場合はdevelopment profileでbuildしてよい。
+- App Store submitはしない。
+
+## Step 5: Push E2E
+
+実機buildがインストール可能になったら、最低限以下を確認する。
+
+1. アプリ起動
+2. 通知permission prompt
+3. Expo Push Token取得
+4. `device_push_tokens` への保存
+5. テストPush送信
+6. backgroundで通知受信
+7. foregroundでbanner/list表示
+8. 通知タップで既存 `important_news -> /news` routing
+9. cold launchで通知タップ routing
+
+テスト通知はユーザー自身の端末だけを対象とする。
+
+既存send-push Edge Function /安全な既存送信経路が使える場合のみ利用してよい。新しい本番配信機構を勝手に作らない。
+
+## Supabase / production boundaries
+
+今回の目的は既存Push経路の実機確認。
+
+原則禁止:
+- migration/schema/RLS/GRANT/RPC変更
+- X自動投稿関連変更
+- Web admin変更
+- unrelated Edge Function変更
+- production scheduler/Cron変更
+
+既存Push Edge Functionの**read-only調査**と、ユーザー自身への安全なテスト送信は許可。
+
+実機E2Eに不可欠な軽微なPush専用コード修正が判明した場合のみ、原因を確認して最小修正してよい。
 
 ## Verification
 
-最低限:
+コード変更がある場合:
+- targeted TypeScript check
+- `git diff --check`
+- Expo config確認
+- 可能なら既存lint
 
-- `npm run lint`
-- TypeScript/Expoの既存チェック手段があれば実行
-- import/type errorなし
-- listener cleanup確認
-- simulatorでtoken取得を強行しないこと
-- permission denied pathでcrashしないこと
-- projectIdがEAS projectIdへ解決されることをコード上確認
+EAS/Apple:
+- Bundle ID解決
+- credentials準備結果
+- build結果
+- device registration結果
 
-Apple Developerメンバーシップ有効化前で実機build/Push受信まで実施できない場合、それを未実施として正直にReportする。成功扱いにしない。
+実機:
+- 実際に確認した項目だけPASS扱い
+- 未確認項目は未確認と明記
 
-## Safety / prohibited
+## Safety / conflict rules
 
-禁止:
-- Supabase migration/schema/RLS/GRANT/RPC変更
-- Edge Function変更/deploy
-- production secrets変更
-- APNs key/certificate/token等の秘密情報を表示・commit・ログ出力
-- Apple Developer Portalを推測で変更
-- EAS production submit
-- App Store submission
-- X投稿関連ファイル・scheduler・production設定変更
-- Web admin変更
-- 既存未コミット変更のstage/commit
-- 他slotのTASK/Report変更
-
-## Scope / conflicts
-
-このTASKはExpoクライアントのPush基盤専用。
-
-他slotが同時にExpo root layout、app.json、package.json、通知関連ファイルを変更中なら競合するため開始せず報告する。
-
-push直前にorigin/mainをfresh-checkする。
+- 他slotが `app.json`, `eas.json`, Push関連ファイル、同じEAS/Apple production設定を変更中なら競合として停止
+- push前にorigin/mainをfresh-check
+- 他workstream未コミット変更をstage/commitしない
+- secret / Apple credential / token全文をReportへ残さない
+- Expo Push Tokenも原則全文をReportへ残さない
+- App Store submissionはしない
 
 ## Completion
 
-作業終了時:
+終了時:
 
 - `status: review_required`
 - `next_owner: chatgpt`
-- `.agent/CODEX_REPORT.md` を更新
-- `.agent/ORCHESTRATION.md` の規定どおりGitHubへ同期
+- `.agent/CODEX_REPORT.md` 更新
+- `.agent/` 制御情報をGitHubへ同期
 
 Report必須:
 - task_id
 - result
+- model_used（可能なら）
+- Apple Developer membership確認結果
+- Bundle ID
 - changed_files
-- 実装したPushフロー
-- Expo SDK 57公式仕様との整合
-- token保存先の有無
-- Bundle ID確認結果
+- EAS credential結果（秘密値なし）
+- device registration結果
+- development build結果
+- 実機インストール結果
+- Push E2E各項目のPASS/未確認
 - tests
 - commit_hash
 - push
-- deploy
-- Apple側で残る手動作業
-- 実機Pushテスト未実施/実施の事実
+- deploy/build
+- user_action_required
 - remaining_issues
 - safety_checks
 - next_recommendation
-
-## C1 Review
-
-- result: approved
-- reviewed_by: chatgpt
-- decision: Expo iOS Pushクライアント基盤の実装を承認。
-- verified:
-  - implementation commit `5242bf556bfdc1a27e835f778617396098baf06c` は `origin/main` へpush済み
-  - 変更は `src/lib/push-notifications.ts` と `src/hooks/use-push-notification-navigation.ts` のPushクライアント領域に限定
-  - foreground handler、physical-device判定、permission denied path、EAS projectId解決、Expo Push Token取得、Android channel、通知タップlistener、cold-launch response処理を確認
-  - listener cleanupと通知response dedupeを確認
-  - 既存 `important_news -> /news` routing以外のdeep link仕様を追加していない
-  - iOS bundleIdentifierは未設定のまま保持し、勝手なidentifierを追加していない
-  - Supabase migration/schema/RLS/GRANT/RPC/Edge Function/production secretsの変更なし
-  - targeted TypeScript check、git diff --check、expo config、web exportはPASS
-- accepted_limitations:
-  - `npm run lint` は環境要因で未完了。依存ファイル変更なし、他の型/Expo検証がPASSのため今回の承認を妨げない
-  - Apple Developer有効化前のためiPhone実機Push E2Eは未実施。実機成功としては扱わず次工程で必須確認とする
-- next:
-  - Apple Developer Program有効化後、正式Bundle ID設定とAPNs/EAS credential準備を行い、development buildで実機Push E2Eを確認する
