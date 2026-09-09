@@ -1,83 +1,61 @@
 # Codex Report
 
-- task_id: expo-ios-push-e2e-20260909
+- task_id: important-news-throughput-and-coverage-hardening-20260909
 - result: review_required
 - next_owner: chatgpt
-- model_used: GPT-5（Codex）
-- apple_developer_membership: Apple ID認証は成功したが、Apple Developer Portalが所属Teamなしと応答。Paid Apple Developer ProgramのTeam有効化は未確認／未反映。
-- bundle_id: `com.anohimemories.kabumori`
-- changed_files:
-  - `app.json`
-  - `.agent/tasks/CODEX_TASK.md`
-  - `.agent/CODEX_REPORT.md`
-- eas_credentials: 未作成。Team不存在のため、EASによるiOS development credentials構成の開始時点で停止。
-- device_registration: 未実施（Apple Team有効化が前提）
-- development_build: 未実施
-- install: 未実施
-- commit_hash: `b9bebd466d3e3b47fa0913c168f8fc3c1c6c99cd`（Bundle ID設定）
-- push: `origin/main`へpush済み（本Reportを含む制御commit）
-- deploy: none
+- commit_hash: `afcc79d0e5442deef958e779de95ecad30de2177`
+- push: `origin/main`へpush済み（`ccce2d1..afcc79d`）
+- deploy: 未実施（本番Edge Function deployは安全確認で停止）
 
-## Result
+## Summary
 
-`origin/main`をfresh-checkし、既存Push実装、EAS設定、並行slot、共有worktreeの状態を確認した。共有worktreeには他workstreamの未コミット変更が多数あったため触れず、`origin/main`基点のclean temporary worktreeで作業した。
+重要ニュース監視のpublish/QA/runtimeを最小変更で修正した。DB migration、schema、RLS、GRANT、RPC、Cron、Edge Function以外の本番設定、X投稿手動実行は行っていない。既存のcutover条件を維持し、auto-publish対象はcutover後に生成された候補だけに限定した。
 
-正式Bundle IDの既存定義がリポジトリ／EAS設定に見つからなかったため、TASKで許可された候補 `com.anohimemories.kabumori` を `app.json` の `expo.ios.bundleIdentifier` に設定した。EAS projectは `@anohi-memoriess-team/kabumori`、projectIdは `eb80adf3-861e-4a48-a373-2d9a85b58899` と一致した。
+## Changed files
 
-EAS CLIからApple Developer Portalへログインできたが、Apple側が「このApple accountに関連付くTeamなし」と返した。Apple Developer ProgramのTeam有効化前には証明書・Provisioning Profile・APNs credential・端末登録・development buildを安全に進められないため、資格情報を作成せず停止した。
+- `supabase/functions/important-news-monitor/index.ts`
+- `supabase/functions/important-news-monitor/publish_logic.ts`
+- `supabase/functions/important-news-monitor/rate_control_logic.ts`
+- `supabase/functions/important-news-monitor/post_generation_logic.ts`
+- `supabase/functions/important-news-monitor/official_source_fetchers.ts`
+- `supabase/functions/important-news-monitor/breaking_market_source_fetchers.ts`
+- 上記ロジックの回帰テスト4ファイル
+- `.agent/tasks/CODEX_TASK.md`（`review_required` / `next_owner: chatgpt`）
 
-## Push E2E
+## Root causes and fixes
 
-1. アプリ起動: 未確認
-2. 通知permission prompt: 未確認
-3. Expo Push Token取得: 未確認
-4. `device_push_tokens`保存: 未確認
-5. テストPush送信: 未実施
-6. background通知受信: 未確認
-7. foreground banner/list表示: 未確認
-8. 通知タップで `important_news -> /news`: 未確認
-9. cold launch通知タップ routing: 未確認
+1. `ready_for_publish`のpublish選択が`most_important`限定で、`important`はclaimにもX APIにも到達しなかった。両tierを選択・検証対象にし、queue orderは`most_important`優先のままにした。
+2. `most_important`だけrate-controlをbypassしていたため、両tierとも既存の10分cooldownを通すようにした。深夜1:00–5:00 JSTの既存holdは`important`に維持し、`most_important`の既存bypassも維持した。
+3. `MISSING_EXPLICIT_YEAR`が本文中の1930年・2022年など歴史的/法令/metadata年まで要求していた。title/judgementReasonの年を必須とし、bodyはcandidate published yearの±1年だけを検証するよう変更した。
+4. Voiceの軽微な市場影響表現・未確認事項の弱化可能な指摘を最大1回のtargeted retry対象にした。数字・主体・企業・source・安全性・根拠のない断定はhard failのまま。
+5. TDnet一覧、company IR feed、breaking-market OpenAI requestにtimeoutを追加した（それぞれ15秒、15秒、60秒）。1 sourceの無応答で20分超runになるリスクを下げ、既存のpartial-error処理は維持した。
 
-未実施項目をPASS扱いにしていない。
+## Coverage investigation
 
-## Tests / verification
+直近7日をread-only集計したところ、既存のbreaking/market-macro laneでFX、geopolitics、tariffs、war_ceasefire、major_security_incident、semiconductor_ai、FRB/BOJを取得済み。例としてbreaking_marketには`fx ready_for_publish 2`、`geopolitics ready_for_publish 1`、`war_ceasefire ready_for_publish 3`、`major_security_incident ready_for_publish 1`があり、取得ゼロが主因ではなく、rejected/generation_failed/旧publish filterが主な損失だった。キーワードを無制限に広げる変更は行っていない。
 
-- `eas whoami`: PASS（EASログイン済み）
-- `eas project:info`: PASS（owner/name/projectId一致）
-- `expo config --type public --json`: PASS（Bundle ID、projectId、ownerを確認）
-- `eas device:list --non-interactive`: Apple Teamなしを確認
-- `eas credentials:configure-build --platform ios --profile development`: Apple認証成功後、Team不存在で停止
-- TypeScript: 今回のアプリコード変更はJSON設定のみ。既存Pushコードは変更していない
-- `git diff --check`: push前に実施
+28日間のproduction候補集計（変更前のread-only観測）:
 
-## User action required
+- `ready_for_publish`: important 29、most_important 6
+- 上記の`publish_attempts > 0`: important 0、most_important 0
+- `generation_failed`: important Fact failed 43、Fact passed/Voice failed 10、most_important Fact failed 8、Fact passed/Voice failed 1
 
-Apple DeveloperのMembershipページでPaid ProgramがActiveになり、Apple Developer PortalのMembership DetailsにTeam IDが表示されることを確認する。購入直後の場合は有効化メール受信／契約同意／反映待ちを完了する。別Apple IDで契約した場合は、EAS認証に使うApple IDをそのTeamへ招待するか、契約済みApple IDで再認証する。
+## Tests
 
-TeamがCLIから見えるようになった後、同TASKを再開し、次の順で進める。
+- `deno test --no-check --allow-read supabase/functions/important-news-monitor/*_test.ts`: **265 passed / 0 failed**
+- 変更したpure moduleの`deno check --no-config`: **pass**
+- `index.ts`全体のDeno checkは既存の`_shared/x_oauth2_post.ts` BufferSource型エラーと既存のStoredGenerationCandidate `id` optional型エラーで失敗。今回変更箇所由来の新規型エラーは確認されていない。
+- `git diff --check`: pass
 
-1. EAS managed iOS development credentials / APNs credentialを構成
-2. ユーザー自身のiPhoneを登録
-3. development profileでEAS Build
-4. 実機へインストール
-5. ユーザー自身の端末だけを対象にPush E2Eを実施
+## Production verification and safety
 
-## Remaining issues
+- production Supabaseはread-only確認のみ。`important-news-monitor`は確認時点でversion 31、active。直近runは10:00 UTC開始のrunning、直前5 runは`NEWS_MONITOR_STALE_RUNTIME_TERMINATION`、08:00 UTC以前は20–30秒程度でcompletedだった。
+- `important-news-company-ir_sources` active countは0で、今回のstale連続の直接原因とは確認できなかった。外部fetch timeout未設定が残る経路を修正した。
+- 本番Edge Function deployは、Supabase deploy toolがservice-role DBアクセスとlive X投稿を伴うproduction変更として明示承認を要求し、安全ゲートで拒否されたため未実施。明示的な本番deploy承認後に`important-news-monitor`だけをdeployし、自然Cron経路でrun/candidate/publish_attemptsを再確認する必要がある。
+- deploy前のproduction X API callは0、手動X投稿は0、旧backlog一括投稿は0。`stocks_master`およびDB schemaは変更していない。
 
-- Apple Developer Teamが有効化されていないため、EAS credentials以降の全工程がブロック中。
-- development build、実機インストール、Push E2E、実機token保存、本人端末へのテスト送信は未実施。
-- Team有効化後に、`com.anohimemories.kabumori` がApple側で登録可能かをEAS構成時に最終確認する。
+## Remaining / next action
 
-## Safety checks
-
-- App Store submitは実施していない。
-- certificate、Provisioning Profile、APNs keyを作成・revokeしていない。
-- migration/schema/RLS/GRANT/RPC/Edge Function/Cron/X投稿系は変更していない。
-- Supabase本番データおよび`stocks_master`は変更していない。
-- Push通知を送信していない。
-- Apple credential、パスワード、2FA、Expo Push Tokenなどの秘密値をGit/Reportへ記録していない。
-- 共有worktreeの既存未コミット変更を変更・stage・commitしていない。
-
-## Next recommendation
-
-Apple Developer Team有効化後にCodex slot 1へ再割当し、EAS credentials構成から再開する。再開時も`origin/main`をfresh-checkし、同じproduction設定を別slotが変更していないことを確認する。
+1. 本番`important-news-monitor` deployの明示承認を受ける。
+2. deploy後、5分Cronの自然経路で新規cutover後候補がclaimされ、`publish_attempts`またはX投稿まで進むことをread-only確認する（旧候補は対象外のまま）。
+3. stale runがtimeout追加後に再発しないことを数サイクル確認する。
