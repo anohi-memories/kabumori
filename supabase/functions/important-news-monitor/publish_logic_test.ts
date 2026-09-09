@@ -10,8 +10,8 @@ import {
 
 const sourceUrl = "https://www.release.tdnet.info/inbs/example.pdf";
 const daytimeNow = new Date("2026-09-01T00:00:00Z");
-// Auto-publish is scoped to most_important only for now, so that is the default fixture importance —
-// "important" candidates are covered by their own dedicated tests below (6+7: rejected up front).
+// Both safe importance tiers are eligible; queue ordering and the rate-control gate keep
+// most_important ahead of important without allowing unlimited publication.
 const candidate = (overrides: Partial<PublishCandidate> = {}): PublishCandidate => ({
   id: "candidate-1",
   importance: "most_important",
@@ -84,16 +84,15 @@ test("importance and label mismatch is blocked before publish", () => {
   assert.equal(check.blockReason, "NEWS_PUBLISH_BLOCKED:labelMatchesImportance");
 });
 
-// --- auto-publish scoped to most_important only (STEP 2-4) ------------------------------------------
+// --- safe importance tiers and publication gates ---------------------------------------------------
 
-test("2: an 'important' candidate — otherwise fully valid — is never eligible to auto-publish", () => {
+test("2: an 'important' candidate — otherwise fully valid — is eligible to auto-publish", () => {
   const check = checkPublishCandidate(candidate({
     importance: "important",
     generatedText: `【速報】重要ニュース本文です。\n\n出典: ${sourceUrl}`,
   }));
-  assert.equal(check.passed, false);
-  assert.equal(check.checks.importance, false);
-  assert.equal(check.blockReason, "NEWS_PUBLISH_BLOCKED:importance");
+  assert.equal(check.passed, true);
+  assert.equal(check.checks.importance, true);
 });
 
 test("1: a no_post candidate is never eligible to auto-publish", () => {
@@ -102,7 +101,7 @@ test("1: a no_post candidate is never eligible to auto-publish", () => {
   assert.equal(check.checks.importance, false);
 });
 
-test("6+7: an important candidate is rejected at the earliest gate, before rate control or overnight hold are ever evaluated", async () => {
+test("6+7: an important candidate reaches the normal rate-control and overnight gates", async () => {
   const repository = memoryRepository(candidate({
     importance: "important",
     generatedText: `【速報】重要ニュース本文です。\n\n出典: ${sourceUrl}`,
@@ -112,14 +111,12 @@ test("6+7: an important candidate is rejected at the earliest gate, before rate 
     xCalls += 1;
     return { id: "unexpected", httpStatus: 201, refreshExecuted: false };
   });
-  assert.equal(result.published, false);
-  assert.equal(result.blockReason, "NEWS_PUBLISH_BLOCKED:importance");
-  // Neither safety mechanism is even consulted — blocked before either runs.
-  assert.equal(result.rateControl, null);
-  assert.equal(result.overnightHold, null);
-  assert.equal(repository.state.status, "ready_for_publish");
-  assert.equal(repository.state.publishAttempts, 0);
-  assert.equal(xCalls, 0);
+  assert.equal(result.published, true);
+  assert.equal(result.rateControl?.bypassed, false);
+  assert.equal(result.overnightHold?.held, false);
+  assert.equal(repository.state.status, "published");
+  assert.equal(repository.state.publishAttempts, 1);
+  assert.equal(xCalls, 1);
 });
 
 test("Fact failure is blocked", () => {
@@ -204,11 +201,11 @@ test("dry-run never calls X or changes the database", async () => {
 // from the live publish integration right now, per the "6+7" test above — important is rejected before
 // either one is ever evaluated, so there is nothing further to exercise here at the integration level.
 
-test("most_important bypasses rate control and can publish", async () => {
+test("most_important observes the publication cooldown and can publish after it elapses", async () => {
   const repository = memoryRepository(candidate({
     importance: "most_important",
     generatedText: `【重大速報】重要ニュース本文です。\n\n出典: ${sourceUrl}`,
-  }), "2026-08-31T06:19:00Z");
+  }), "2026-08-31T06:09:00Z");
   const result = await runPublish(
     "candidate-1",
     false,
@@ -217,7 +214,7 @@ test("most_important bypasses rate control and can publish", async () => {
     new Date("2026-08-31T06:20:00Z"),
   );
   assert.equal(result.published, true);
-  assert.equal(result.rateControl?.bypassed, true);
+  assert.equal(result.rateControl?.bypassed, false);
 });
 
 test("duplicate or grouped member is blocked before rate control", async () => {
@@ -233,7 +230,7 @@ test("duplicate or grouped member is blocked before rate control", async () => {
   assert.equal(xCalls, 0);
 });
 
-test("overnight window and post-release rate control still work correctly for most_important (always bypassed)", async () => {
+test("overnight window and post-release rate control still work correctly for most_important", async () => {
   const overnight = await runPublish("candidate-1", false, memoryRepository(candidate()), async () => ({
     id: "x-1", httpStatus: 201, refreshExecuted: false,
   }), new Date("2026-09-01T17:00:00Z")); // 02:00 JST — inside the overnight window
@@ -244,6 +241,6 @@ test("overnight window and post-release rate control still work correctly for mo
     id: "x-2", httpStatus: 201, refreshExecuted: false,
   }), new Date("2026-09-01T20:00:00Z")); // 05:00 JST — window just released
   assert.equal(postRelease.overnightHold?.held, false);
-  assert.equal(postRelease.rateControl?.bypassed, true);
+  assert.equal(postRelease.rateControl?.bypassed, false);
   assert.equal(postRelease.published, true);
 });

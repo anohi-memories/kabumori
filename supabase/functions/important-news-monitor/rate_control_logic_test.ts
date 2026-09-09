@@ -22,10 +22,11 @@ test("exactly ten minutes is publishable", () => {
   assert.equal(evaluateImportantNewsRateControl("important", "2026-08-31T06:10:00Z", now).allowed, true);
 });
 
-test("most_important bypasses the ordinary ten-minute interval", () => {
+test("most_important also observes the ten-minute publication cooldown", () => {
   const result = evaluateImportantNewsRateControl("most_important", "2026-08-31T06:19:00Z", now);
-  assert.equal(result.allowed, true);
-  assert.equal(result.bypassed, true);
+  assert.equal(result.allowed, false);
+  assert.equal(result.bypassed, false);
+  assert.equal(result.reason, "NEWS_PUBLISH_RATE_LIMITED");
 });
 
 test("important with no prior important-news post remains publishable", () => {

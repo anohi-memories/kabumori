@@ -928,6 +928,26 @@ test("Fact retry restores an explicit year, rechecks Fact, then reaches Voice ex
   assert.match(result.generatedText ?? "", /2026年/);
 });
 
+test("explicit years are required for current/future event dates, not historical legal references", () => {
+  const target = candidate({
+    title: "Canada tariff response",
+    bodySummary: "Section 338 of the Tariff Act of 1930; actions dated 2026-09-09 and 2027年3月31日.",
+    judgementReason: "2026年9月9日に公表された追加措置",
+  });
+  const text = `【速報】2026年9月9日に追加措置が公表され、対応は2027年3月31日まで続きます。\n\n出典: ${target.sourceUrl}`;
+  assert.deepEqual(localFactIssues(target, text), []);
+});
+
+test("explicit year regression cases distinguish ISO dates, multiple dates, and yearless dates", () => {
+  const target = candidate({
+    title: "重要な市場発表",
+    bodySummary: "発表日 2026-09-09、適用日 2027-03-31",
+  });
+  const source = `\n\n出典: ${target.sourceUrl}`;
+  assert.deepEqual(localFactIssues(target, `【速報】発表は2026-09-09、適用は2027-03-31です。${source}`), []);
+  assert.ok(localFactIssues(target, `【速報】発表は9月9日、適用は3月31日です。${source}`).includes("MISSING_EXPLICIT_YEAR"));
+});
+
 test("an unsupported market interpretation can be removed once, then must pass both Fact checks before Voice", async () => {
   const target = candidate({
     bodySummary: "公開買付けへの賛同に伴い、自己株式の取得を中止しました。",
@@ -1115,6 +1135,17 @@ test("classifier: grammar/particle-level issues (助詞・単複・文法・敬�
   assert.equal(isRetryableVoiceFailure(["助詞の使い方が不自然です"]), true);
   assert.equal(isRetryableVoiceFailure(["文法的にやや不自然な箇所があります"]), true);
   assert.equal(isRetryableVoiceFailure(["敬体と常体が混在しています"]), true);
+});
+
+test("classifier: weak market-impact and unverified-follow-up wording is retryable", () => {
+  assert.equal(isRetryableVoiceFailure([
+    "市場への影響を断定できないため、可能性に弱めるべきです",
+    "追加措置は確認されていませんという断定は強すぎます",
+  ]), true);
+});
+
+test("classifier: numeric or entity errors remain non-retryable even when market impact is mentioned", () => {
+  assert.equal(isRetryableVoiceFailure(["市場への影響の数字が誤っています"]), false);
 });
 
 test("classifier: entity/person/company mix-ups (not mere country mentions) remain non-retryable", () => {

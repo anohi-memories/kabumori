@@ -20,10 +20,7 @@ export function evaluateImportantNewsRateControl(
   latestPublishedAt: string | null,
   now: Date,
 ): ImportantNewsRateControlDecision {
-  if (importance === "most_important") {
-    return { allowed: true, bypassed: true, rateLimitedUntil: null, reason: null };
-  }
-  if (importance !== "important") {
+  if (importance !== "important" && importance !== "most_important") {
     return {
       allowed: false,
       bypassed: false,

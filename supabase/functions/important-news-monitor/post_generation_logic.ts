@@ -407,10 +407,23 @@ function hasUnsupportedMarketAssertion(candidate: GenerationCandidate, generated
 }
 
 function explicitYears(candidate: GenerationCandidate): string[] {
-  const evidence = [candidate.title, candidate.bodySummary, candidate.judgementReason]
+  const headlineEvidence = [candidate.title, candidate.judgementReason]
     .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
     .join("\n");
-  return [...new Set(evidence.match(/(?:19|20)\d{2}/gu) ?? [])];
+  const headlineYears = headlineEvidence.match(/(?:19|20)\d{2}/gu) ?? [];
+
+  // PDF/RSS bodies often contain historical legal references, page metadata, or URLs (for example
+  // the 1930 Tariff Act and a 2022 performance reference). Requiring every such year in a short post
+  // creates false Fact failures. Keep body years only when they are close to the candidate's event
+  // year; headline/judgement years remain required because they define the candidate itself.
+  const publishedYear = Number(candidate.publishedAt.slice(0, 4));
+  const bodyYears = typeof candidate.bodySummary === "string"
+    ? candidate.bodySummary.match(/(?:19|20)\d{2}/gu) ?? []
+    : [];
+  const relevantBodyYears = Number.isFinite(publishedYear)
+    ? bodyYears.filter((year) => Math.abs(Number(year) - publishedYear) <= 1)
+    : bodyYears;
+  return [...new Set([...headlineYears, ...relevantBodyYears])];
 }
 
 function hasMissingExplicitYear(candidate: GenerationCandidate, generatedText: string): boolean {
@@ -499,10 +512,13 @@ const RETRYABLE_VOICE_ISSUE_PATTERNS: RegExp[] = [
   // English/foreign-word mixing, singular/plural mismatches, particle/register-level grammar. These
   // never touch what happened, who/what/when, or numbers — only how it's phrased.
   /英単語/, /和英混在/, /日本語として不自然/, /単複/, /複数形/, /単数形/, /助詞/, /文法/, /敬体/,
+  // A market-impact forecast or an unverified follow-up claim can be weakened or removed without
+  // changing the underlying event; this is a wording repair after Fact already passed.
+  /市場(?:への)?影響|市場見通し|影響可能性|確認範囲|確認されていません|追加措置.*確認|断定できない|断定が強い/,
 ];
 
 const NON_RETRYABLE_VOICE_ISSUE_PATTERNS: RegExp[] = [
-  /断定/, /誤り/, /取り違え/, /改変/, /根拠/, /出典/, /ソース/, /意味が変わる/,
+  /誤り/, /取り違え/, /改変/, /出典/, /ソース/, /意味が変わる/, /根拠のない/, /根拠がない/,
   /安全性/, /情報不足/, /unsupported/i, /証券コード/, /数字/, /日付/,
   // "国名" (a country's NAME being wrong), not bare "国" — a bare "国" would match almost any mention
   // of a country (米国, 中国, 韓国, 英国, ...) and wrongly block ordinary grammar-only issues like
@@ -513,8 +529,12 @@ const NON_RETRYABLE_VOICE_ISSUE_PATTERNS: RegExp[] = [
 export function isRetryableVoiceFailure(issues: string[]): boolean {
   if (issues.length === 0) return false;
   return issues.every((issue) =>
-    !NON_RETRYABLE_VOICE_ISSUE_PATTERNS.some((pattern) => pattern.test(issue)) &&
-    RETRYABLE_VOICE_ISSUE_PATTERNS.some((pattern) => pattern.test(issue))
+    // Market-impact wording is explicitly repairable once Fact has passed, even if the checker says
+    // the assertion is too strong or weakly grounded. Numeric/entity/source/safety errors remain hard.
+    ((/(市場(?:への)?影響|市場見通し|影響可能性|確認範囲|確認されていません|追加措置.*確認)/u.test(issue) &&
+      !/(数字|数値|金額|株数|日付|企業|会社|主体|事実誤認|捏造|証券コード|根拠のない|根拠がない)/u.test(issue)) ||
+      (!NON_RETRYABLE_VOICE_ISSUE_PATTERNS.some((pattern) => pattern.test(issue)) &&
+        RETRYABLE_VOICE_ISSUE_PATTERNS.some((pattern) => pattern.test(issue))))
   );
 }
 

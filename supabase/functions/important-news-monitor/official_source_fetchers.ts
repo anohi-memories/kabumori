@@ -31,6 +31,7 @@ const MAX_TDNET_PDF_BYTES = 10 * 1024 * 1024;
 const MAX_TDNET_PDF_PAGES = 40;
 const MAX_TDNET_PDF_TEXT_CHARS = 120_000;
 const MAX_TDNET_BODY_SUMMARY_CHARS = 6_000;
+const SOURCE_FETCH_TIMEOUT_MS = 15_000;
 
 const TDNET_IMPORTANT_LINE_PATTERN = new RegExp([
   "業績", "売上", "利益", "修正前", "修正後", "増減", "配当", "自己株式",
@@ -249,7 +250,10 @@ export async function fetchTdnetCandidates(args: {
   for (let page = 1; page <= maxPages; page += 1) {
     const pageNumber = String(page).padStart(3, "0");
     const url = `https://www.release.tdnet.info/inbs/I_list_${pageNumber}_${compactDate}.html`;
-    const result = await fetcher(url, { headers: { Accept: "text/html" } });
+    const result = await fetcher(url, {
+      headers: { Accept: "text/html" },
+      signal: AbortSignal.timeout(SOURCE_FETCH_TIMEOUT_MS),
+    });
     if (!result.ok) {
       if (page > 1 && result.status === 404) break;
       throw new Error(`TDNET_FETCH_FAILED:${result.status}`);
@@ -325,7 +329,10 @@ export async function fetchCompanyIrSource(
   source: CompanyIrSource,
   fetcher: typeof fetch = fetch,
 ): Promise<IncomingNewsCandidate[]> {
-  const result = await fetcher(source.feedUrl, { headers: { Accept: "application/rss+xml, application/json, text/xml" } });
+  const result = await fetcher(source.feedUrl, {
+    headers: { Accept: "application/rss+xml, application/json, text/xml" },
+    signal: AbortSignal.timeout(SOURCE_FETCH_TIMEOUT_MS),
+  });
   if (!result.ok) throw new Error(`COMPANY_IR_FETCH_FAILED:${result.status}`);
   if (source.feedFormat === "json") return parseCompanyIrJson(source, await result.json());
   return parseCompanyIrRss(source, await result.text());

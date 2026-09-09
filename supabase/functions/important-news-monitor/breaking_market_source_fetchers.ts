@@ -93,6 +93,7 @@ export const MAX_BREAKING_MARKET_ITEM_AGE_MS = 3 * 60 * 60 * 1000;
 const MAX_BREAKING_MARKET_FUTURE_SKEW_MS = 60 * 60 * 1000;
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const MODEL = "gpt-5.6-luna" as const;
+const BREAKING_MARKET_REQUEST_TIMEOUT_MS = 60_000;
 
 // Deterministic, stateless selection: the critical query is fixed in every cycle and the remaining slot
 // rotates. Concurrent/retried calls within the same 20-minute window therefore pick the same queries.
@@ -420,6 +421,7 @@ export async function fetchBreakingMarketQueryWithDiagnostics(
     response = await fetchImpl(OPENAI_RESPONSES_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(BREAKING_MARKET_REQUEST_TIMEOUT_MS),
       body: JSON.stringify({
       model: MODEL,
       store: false,
