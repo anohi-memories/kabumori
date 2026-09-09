@@ -1,51 +1,83 @@
 # Codex Report
 
-- task_id: expo-ios-push-client-20260909
+- task_id: expo-ios-push-e2e-20260909
 - result: review_required
 - next_owner: chatgpt
+- model_used: GPT-5（Codex）
+- apple_developer_membership: Apple ID認証は成功したが、Apple Developer Portalが所属Teamなしと応答。Paid Apple Developer ProgramのTeam有効化は未確認／未反映。
+- bundle_id: `com.anohimemories.kabumori`
 - changed_files:
-  - `src/lib/push-notifications.ts`
-  - `src/hooks/use-push-notification-navigation.ts`
-- implementation_commit: `5242bf5`
-- push: `origin/main`へpush済み
+  - `app.json`
+  - `.agent/tasks/CODEX_TASK.md`
+  - `.agent/CODEX_REPORT.md`
+- eas_credentials: 未作成。Team不存在のため、EASによるiOS development credentials構成の開始時点で停止。
+- device_registration: 未実施（Apple Team有効化が前提）
+- development_build: 未実施
+- install: 未実施
+- commit_hash: `b9bebd466d3e3b47fa0913c168f8fc3c1c6c99cd`（Bundle ID設定）
+- push: `origin/main`へpush済み（本Reportを含む制御commit）
 - deploy: none
 
-## 実装内容
+## Result
 
-既存のExpo Push基盤を重複実装せず、不足していた安全性とSDK 57向けforeground挙動を最小修正しました。
+`origin/main`をfresh-checkし、既存Push実装、EAS設定、並行slot、共有worktreeの状態を確認した。共有worktreeには他workstreamの未コミット変更が多数あったため触れず、`origin/main`基点のclean temporary worktreeで作業した。
 
-- `Notifications.setNotificationHandler` をアプリモジュール読込時に1回だけ設定。foreground受信時にbanner/list/sound/badgeを明示的に許可。
-- permission確認・permission request・Android channel作成・projectId解決・token取得を1つの安全なtry/catch境界に収め、native API例外でアプリ起動を壊さないように変更。
-- simulator/emulator/webは従来どおりtoken取得をskipし、deniedは`{ status: 'denied' }`、その他はtyped errorを返す。
-- Expo tokenが空で返る異常ケースをerrorとして扱い、token全文をログ出力しない。
-- 通知タップlistenerのcleanupを維持しつつ、cold launch時の`getLastNotificationResponseAsync()`も同じdedupe境界で処理。既存の`important_news -> /news` routing仕様以外は追加していない。
+正式Bundle IDの既存定義がリポジトリ／EAS設定に見つからなかったため、TASKで許可された候補 `com.anohimemories.kabumori` を `app.json` の `expo.ios.bundleIdentifier` に設定した。EAS projectは `@anohi-memoriess-team/kabumori`、projectIdは `eb80adf3-861e-4a48-a373-2d9a85b58899` と一致した。
 
-## Expo / Supabase確認
+EAS CLIからApple Developer Portalへログインできたが、Apple側が「このApple accountに関連付くTeamなし」と返した。Apple Developer ProgramのTeam有効化前には証明書・Provisioning Profile・APNs credential・端末登録・development buildを安全に進められないため、資格情報を作成せず停止した。
 
-- Expo SDK 57の公式Notifications仕様に合わせ、foreground handlerの`shouldShowBanner` / `shouldShowList`、Android channel先行、`getExpoPushTokenAsync({ projectId })`を使用。
-- `app.json`のEAS projectIdは `eb80adf3-861e-4a48-a373-2d9a85b58899` を解決可能。
-- iOS `bundleIdentifier` は未設定。勝手なidentifierは追加していない。Apple Developer有効化後、EAS build前に正式Bundle IDを設定する必要がある。
-- 既存token保存先 `public.device_push_tokens` は本番に存在。既存RLSは `authenticated` の本人行限定（`auth.uid() = user_id`）で、既存clientのpublishable keyからのみupsertする。service role・secretはExpoコードに存在しない。
-- migration/schema/RLS/GRANT/RPC/Edge Function/production secretは変更していない。
+## Push E2E
+
+1. アプリ起動: 未確認
+2. 通知permission prompt: 未確認
+3. Expo Push Token取得: 未確認
+4. `device_push_tokens`保存: 未確認
+5. テストPush送信: 未実施
+6. background通知受信: 未確認
+7. foreground banner/list表示: 未確認
+8. 通知タップで `important_news -> /news`: 未確認
+9. cold launch通知タップ routing: 未確認
+
+未実施項目をPASS扱いにしていない。
 
 ## Tests / verification
 
-- targeted TypeScript check（Push関連3ファイル + Supabase client）: PASS
-- `git diff --check`: PASS
-- `expo config --type public --json`: PASS（projectId / notifications pluginを確認）
-- `expo export --platform web` with dummy public Supabase env: PASS（Expo Router 5 routes / web bundle生成）。実値は読み出していない。
-- production read-only SQL: `device_push_tokens` table/columns、RLS policy、authenticated grantsを確認
-- `npm run lint`: clean worktreeにはESLintが無く実行開始時に自動installを試みたが、ネットワーク/compatibility endpoint到達不可で完了せず。依存ファイルは変更していない。
-- Apple Developer有効化前のため、iPhone実機build、permission prompt、APNs/Expo token取得、foreground表示、通知タップ実機確認は未実施。成功扱いにしていない。
+- `eas whoami`: PASS（EASログイン済み）
+- `eas project:info`: PASS（owner/name/projectId一致）
+- `expo config --type public --json`: PASS（Bundle ID、projectId、ownerを確認）
+- `eas device:list --non-interactive`: Apple Teamなしを確認
+- `eas credentials:configure-build --platform ios --profile development`: Apple認証成功後、Team不存在で停止
+- TypeScript: 今回のアプリコード変更はJSON設定のみ。既存Pushコードは変更していない
+- `git diff --check`: push前に実施
+
+## User action required
+
+Apple DeveloperのMembershipページでPaid ProgramがActiveになり、Apple Developer PortalのMembership DetailsにTeam IDが表示されることを確認する。購入直後の場合は有効化メール受信／契約同意／反映待ちを完了する。別Apple IDで契約した場合は、EAS認証に使うApple IDをそのTeamへ招待するか、契約済みApple IDで再認証する。
+
+TeamがCLIから見えるようになった後、同TASKを再開し、次の順で進める。
+
+1. EAS managed iOS development credentials / APNs credentialを構成
+2. ユーザー自身のiPhoneを登録
+3. development profileでEAS Build
+4. 実機へインストール
+5. ユーザー自身の端末だけを対象にPush E2Eを実施
+
+## Remaining issues
+
+- Apple Developer Teamが有効化されていないため、EAS credentials以降の全工程がブロック中。
+- development build、実機インストール、Push E2E、実機token保存、本人端末へのテスト送信は未実施。
+- Team有効化後に、`com.anohimemories.kabumori` がApple側で登録可能かをEAS構成時に最終確認する。
 
 ## Safety checks
 
-- 既存未コミット変更のある共有worktreeは変更・stage・commitしていない。
-- app.json/package.json/eas.json、Supabase migration、Edge Function、server persistence schemaは変更していない。
-- Expo token、Supabase key、Apple credentialなどの秘密情報をログ・Reportへ出していない。
+- App Store submitは実施していない。
+- certificate、Provisioning Profile、APNs keyを作成・revokeしていない。
+- migration/schema/RLS/GRANT/RPC/Edge Function/Cron/X投稿系は変更していない。
+- Supabase本番データおよび`stocks_master`は変更していない。
+- Push通知を送信していない。
+- Apple credential、パスワード、2FA、Expo Push Tokenなどの秘密値をGit/Reportへ記録していない。
+- 共有worktreeの既存未コミット変更を変更・stage・commitしていない。
 
-## Remaining issues / next recommendation
+## Next recommendation
 
-- 正式なiOS Bundle ID設定とApple/APNs credential有効化後、development buildで実機Push E2Eを行う。
-- 実機でpermission denied、foreground表示、cold-launch tap、token保存/RLSをread-only含めて確認する。
-- `C1`で変更2ファイルと、lint未完了・実機未確認をレビューしてください。
+Apple Developer Team有効化後にCodex slot 1へ再割当し、EAS credentials構成から再開する。再開時も`origin/main`をfresh-checkし、同じproduction設定を別slotが変更していないことを確認する。
