@@ -51,7 +51,7 @@
 
 ## Production verification and safety
 
-- `important-news-monitor` version 33をACTIVEでread-back確認。version 32 deploy後の11:20 UTC runはstaleになったが、version 33 deploy後の11:40 UTC runは`fetched_count=183`、`new_candidate_count=2`、約24秒でcompletedした。
+- `important-news-monitor` version 33をACTIVEでread-back確認。version 32 deploy後の10:40 UTC runはstaleになり、version 33 deploy後の11:20 UTC runもstaleになったが、次の11:40 UTC runは`fetched_count=183`、`new_candidate_count=2`、約24秒でcompletedした。
 - `important-news-company-ir_sources` active countは0で、今回のstale連続の直接原因とは確認できなかった。外部fetch timeout未設定が残る経路を修正した。
 - 自然publish Cronで`important`候補が`publish_attempts=1`、`status=published`、`x_post_id=2097633619498143775`となることを確認。手動X投稿・手動candidate注入は行っていない。
 - cutover `2026-09-08 14:02:56+00`より前に生成されたcandidateの投稿は0件、cutover後投稿は1件だった。旧backlog一括投稿は発生していない。
