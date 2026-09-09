@@ -1,37 +1,72 @@
 # Codex Task 2
 
-- task_id: morning-greeting-soft-daily-copy-20260909
+- task_id: morning-greeting-soft-copy-production-deploy-20260909
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
-- purpose: 朝の挨拶本文を柔らかい日常挨拶へ変更し、固定5タグを決定論的に付与する。
+- purpose: commit `7fc7f9c` の morning_greeting 文体緩和 + 固定5タグ実装を production の `x-test-post` へ安全にdeployし、自然投稿で確認できる状態にする。
 
-## C2 Review
+## User authorization
 
-- result: approved
-- reviewed_by: chatgpt
-- decision: 実装・テスト・commit/push・安全条件を満たしており、Codex slot 2として完了承認。
-- implementation_commit: `7fc7f9c`
-- push: `origin/main` 反映済み
-- verified:
-  - morning_greeting専用指示で相場解説・決算/指数説明・先生/指導口調を抑制
-  - 本文validator 60〜140文字
-  - generation target 80〜120文字
-  - length retry 最大1回を維持
-  - 固定タグ `#おはよう #日本株 #日経平均 #かぶモリ #ブルバ100` をコード側で決定論的に1回だけ付与
-  - 部分/重複タグは `MORNING_GREETING_FIXED_HASHTAG_INVALID` で安全停止
-  - morning_greeting関連 tests 60 passed / 0 failed
-  - x-test-post全体回帰 365 passed / 0 failed
-  - git diff --check PASS
-- safety:
-  - production deployなし
-  - X実投稿なし
-  - 本番DB writeなし
-  - Cron / scheduler / posting_windows変更なし
-  - secrets変更なし
-  - 画像生成・画像prompt・canonical reference・画像model/quality/size変更なし
-  - Storage receipt 400問題は別件として未変更
-- remaining:
-  - 実production自然投稿での文体確認は未実施。必要なら別タスクでdeploy/自然投稿観測を行う。
+2026-09-09、ユーザーが明示的に「デプロイしじだして」と承認。
+
+## Preconditions
+
+1. `.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、このTASKを確認。
+2. `origin/main` をfresh-check。
+3. commit `7fc7f9c` が `origin/main` に含まれることを確認。
+4. 他slotが同じ `x-test-post` Edge Functionをproduction deploy中、または同じproduction設定を変更中なら競合として停止・報告する。
+5. deploy前に現在のproduction `x-test-post` version/statusを確認し、推測で旧versionを上書きしない。
+
+## Authorized production action
+
+- deploy対象は **`supabase/functions/x-test-post` のみ**。
+- `origin/main` の最新安全状態をproductionへdeployする。
+- deploy後に `x-test-post` がACTIVEであることと新versionをread-back確認する。
+
+## Verification
+
+最低限:
+- deploy成功 / ACTIVE確認。
+- morning_greetingのsoft-copy実装がproduction bundleに含まれることを確認。
+- 本文validator 60〜140文字、generation target 80〜120文字、length retry最大1回を維持。
+- 固定タグ `#おはよう #日本株 #日経平均 #かぶモリ #ブルバ100` の決定論的付与がproductionに入ったことを確認。
+- 画像関連ロジックが今回変更されていないことを再確認。
+- 既存morning_greetingスケジュールは変更しない。
+
+## Natural observation policy
+
+- 手動X投稿は禁止。
+- 手動でmorning_greeting候補を注入しない。
+- Cronやposting_windowsを変更しない。
+- 次の自然morning_greetingが発生した場合のみread-onlyで、本文が柔らかい日常挨拶になっているか、固定5タグが1回ずつ付いているか、画像が従来どおりかを確認する。
+- このTASK中に自然投稿がまだ発生しなくても、deployが正しく完了していれば「自然投稿未観測」と明記してreview_requiredへ進めてよい。
+
+## Explicitly forbidden
+
+- X実投稿 / manual publish
+- 本番DB write
+- Cron / scheduler / posting_windows変更
+- secrets変更・表示
+- OAuth変更
+- 画像prompt / canonical reference / image model / quality / size変更
+- `important-news-monitor`変更
+- morning_report / close_reportのロジック変更
+- Storage receipt 400問題の修正（別タスク）
+- 他Edge Function deploy
+
+## Completion
+
+完了時:
+- status: `review_required`
+- next_owner: `chatgpt`
+- `.agent/CODEX_REPORT_2.md` 更新
+- deploy前version/status
+- deploy後version/status
+- deploy対象
+- production read-back
+- natural投稿観測の有無
+- X手動投稿0 / Cron変更0 / DB write0を明記
+- remaining issues
