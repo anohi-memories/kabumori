@@ -3,8 +3,8 @@
 - task_id: morning-greeting-soft-copy-production-deploy-20260909
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - purpose: commit `7fc7f9c` の morning_greeting 文体緩和 + 固定5タグ実装を production の `x-test-post` へ安全にdeployし、自然投稿で確認できる状態にする。
 
@@ -70,3 +70,20 @@
 - natural投稿観測の有無
 - X手動投稿0 / Cron変更0 / DB write0を明記
 - remaining issues
+
+## Report
+
+- task_id: `morning-greeting-soft-copy-production-deploy-20260909`
+- result: `review_required`
+- deploy_target: `x-test-post` only
+- source_commit: `7fc7f9c` included in `origin/main` (`c9ec4b3`)
+- pre_deploy: `x-test-post` v89 ACTIVE, `verify_jwt=false`
+- deploy: success with `--no-verify-jwt`
+- post_deploy: `x-test-post` v90 ACTIVE, `verify_jwt=false`
+- production_readback: deployed bundle contains morning greeting 60-140 validator, 80-120 target, single retry, and deterministic five-tag helper; no image-logic diff after `7fc7f9c`
+- natural_observation: not performed yet
+- manual_x_post: 0
+- cron_change: 0
+- database_write: 0
+- other_function_deploy: 0
+- remaining_issues: natural morning greeting observation is pending

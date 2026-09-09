@@ -1,51 +1,40 @@
 # Codex Slot 2 Report
 
-- task_id: morning-greeting-soft-daily-copy-20260909
-- result: review_required
-- next_owner: chatgpt
-- implementation_commit: `7fc7f9c`
-- code_push: already present on `origin/main`
-- control_sync: this continuation updates only the slot-2 TASK/REPORT state
+- task_id: `morning-greeting-soft-copy-production-deploy-20260909`
+- result: `review_required`
+- next_owner: `chatgpt`
+- deploy_target: `x-test-post` only
+- source_commit: `7fc7f9c` included in `origin/main` at deploy time
 
-## Changed code files
+## Deployment
 
-- `supabase/functions/x-test-post/morning_greeting_logic.ts`
-- `supabase/functions/x-test-post/morning_greeting_logic_test.ts`
-- `supabase/functions/x-test-post/morning_greeting_payload_logic.ts`
-- `supabase/functions/x-test-post/morning_greeting_payload_logic_test.ts`
-- `supabase/functions/x-test-post/morning_greeting_publish_logic.ts`
-- `supabase/functions/x-test-post/morning_greeting_publish_logic_test.ts`
+- pre_deploy: `x-test-post` v89 ACTIVE, `verify_jwt=false`
+- deploy: success with `--no-verify-jwt`
+- post_deploy: `x-test-post` v90 ACTIVE, `verify_jwt=false`
+- production read-back: ACTIVE v90 confirmed; deployed source includes the morning greeting soft-copy rules, 60-140 character validator, 80-120 target, one length retry, and deterministic five-tag helper.
+- image logic: no image-related diff after implementation commit `7fc7f9c`.
 
-These six files are already present in `origin/main` at `7fc7f9c`; no duplicate code commit was created.
-
-## Implementation summary
-
-- morning_greeting専用指示を共通voiceの後段に追加し、日常の短い朝挨拶を優先。相場解説・決算/指数説明・先生/指導口調を抑制。
-- 本文validatorを60〜140文字、生成targetを80〜120文字へ変更。本文部分だけを計測し、固定タグ行は別扱い。
-- `#おはよう #日本株 #日経平均 #かぶモリ #ブルバ100`をコード側で決定論的に1回だけ付与。部分/重複タグは`MORNING_GREETING_FIXED_HASHTAG_INVALID`で安全停止。
-- payload dry-runと本番manual publishの双方で同じタグ付与helperを使用。
-- 画像ロジック、canonical reference、画像model/quality/size、Storage生成経路、Cron、OAuth、他post_typeは変更なし。
-
-## Tests
+## Tests / implementation basis
 
 - morning_greeting関連: **60 passed / 0 failed**
 - x-test-post全体回帰: **365 passed / 0 failed**
 - `git diff --check`: PASS
+- No code changes were made during this deploy-only task.
 
-Tests were not rerun in this continuation because the six implementation files had no diff from `origin/main`.
+## Safety
 
-## Production safety
+- natural observation: not performed yet
+- manual X post: 0
+- X API manual call: 0
+- OpenAI API manual call: 0
+- database write: 0
+- Cron / scheduler / posting window change: 0
+- other Edge Function deploy: 0
+- secrets changed or exposed: 0
+- image generation / Storage change: 0
+- apps/admin and HANDOFF.md: untouched
+- formal repository existing uncommitted changes: untouched
 
-- deploy: 0
-- OpenAI実API: 0
-- X API / X投稿: 0
-- 本番DB write: 0
-- Cron / scheduler変更: 0
-- secrets変更・表示: 0
-- 既存Storage変更: 0
+## Remaining issues
 
-Formal repositoryの既存未コミット変更は操作せず、apps/admin、HANDOFF.md、他workstreamにも変更なし。
-
-## Remaining
-
-実production自然投稿での文体確認は未実施。別タスクでread-only観測が必要です。
+Natural morning greeting observation is pending. No manual candidate injection or manual posting was performed.
