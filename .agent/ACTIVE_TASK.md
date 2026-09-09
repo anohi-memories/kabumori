@@ -15,7 +15,7 @@
 - owner: codex
 - slot: codex-1
 - status: done
-- task_id: important-news-safe-publish-production-activation-20260908
+- task_id: close-report-auto-post-enable-20260908
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
@@ -23,8 +23,8 @@
 ### Codex slot 2
 - owner: codex
 - slot: codex-2
-- status: idle
-- task_id: none
+- status: done
+- task_id: morning-greeting-soft-copy-production-deploy-20260909
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
@@ -32,8 +32,8 @@
 ### Claude slot 1
 - owner: claude
 - slot: claude-1
-- status: in_progress
-- task_id: close-report-auto-post-enable-20260908
+- status: idle
+- task_id: none
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
@@ -41,8 +41,8 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: ready
-- task_id: morning-report-us-holiday-session-labeling-20260908
+- status: idle
+- task_id: none
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
@@ -50,10 +50,10 @@
 ## Control codes
 
 - `H1`: Codex slot 1開始。
+- `H2`: Codex slot 2開始。
 - `G`: Claudeではready/in_progressが1枠だけならその枠開始。
 - `G1`: Claude slot 1開始。
 - `G2`: Claude slot 2開始。
-- `H2`: Codex slot 2開始。
 - `C1`: ChatGPTがCodex slot 1完了だけ確認。
 - `C2`: ChatGPTがCodex slot 2完了だけ確認。
 - `K1`: ChatGPTがClaude slot 1完了だけ確認。
