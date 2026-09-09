@@ -3,76 +3,65 @@
 - task_id: important-news-throughput-and-coverage-hardening-20260909
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol
 
-## C1 Review continuation
+## C1 Final Review
 
-- review_result: follow_up_required
+- review_result: approved
 - reviewed_by: chatgpt
 - implementation_review: pass
-- blocker: `important-news-monitor` production deploy and post-deploy natural-path verification are not completed.
+- production_review: pass_with_observation
+
+## Approved result
+
+- implementation commit/push completed
+- `important-news-monitor` production deploy completed
+- ACTIVE version: 33
+- natural Cron path confirmed an `important` candidate reached publication
+  - `publish_attempts=1`
+  - `status=published`
+  - X post ID recorded in production report
+- manual X post: 0
+- manual candidate injection: 0
+- cutover-before backlog publication: 0
+- unrelated Edge Functions / Cron / DB schema / secrets / OAuth unchanged
 
 ## Verified implementation
 
-- commit: `afcc79d0e5442deef958e779de95ecad30de2177`
-- push: `origin/main` 済み
-- important / most_important の両tierを安全条件付きpublish対象へ変更
-- most_important優先を維持
-- 両tierとも既存10分cooldownを適用
-- importantの深夜hold維持、most_importantの既存bypass維持
-- `MISSING_EXPLICIT_YEAR` 誤判定を修正し、historical metadata年を過剰要求しないよう改善
-- Voice軽微違反を最大1回targeted retry対象へ拡張
-- 数字・主体・会社・source・重大Fact・safety違反はhard fail維持
-- TDnet / company IR / breaking-marketにtimeout追加
-- 海外重要材料はfetch自体より rejected / generation_failed / publish filterで失われていたことをread-only分析済み
+- `important` / `most_important` both eligible under safety gates
+- `most_important` priority retained
+- existing 10-minute cooldown retained for both tiers
+- `important` overnight hold retained; `most_important` existing bypass retained
+- `MISSING_EXPLICIT_YEAR` false positive reduced without weakening core date safety
+- retryable Voice issues get at most one targeted rewrite; material Fact/entity/source/safety errors remain hard-fail
+- source/model request timeouts added to reduce monitor stalls
+- overseas coverage loss was confirmed to be primarily downstream rejection/generation/publish filtering rather than total source absence
 
 ## Tests verified
 
 - important-news-monitor tests: 265 passed / 0 failed
-- changed pure modules deno check: pass
-- git diff --check: pass
-- index.ts全体checkの既存型エラーは今回変更由来ではない
+- additional timeout/judgement/generation tests: 120 passed / 0 failed
+- changed pure-module Deno checks: pass
+- `git diff --check`: pass
+- remaining full `index.ts` type-check failures are pre-existing and not introduced by this task
 
-## Required continuation
+## Residual observation
 
-1. `.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、このTASK、`.agent/CODEX_REPORT.md` を再確認。
-2. `origin/main` fresh-check。
-3. 他slotが `important-news-monitor` / publish_ready Cron / 同じproduction設定を変更していないことを確認。
-4. 本TASKで既に承認済みの範囲内で `important-news-monitor` のみproduction deployする。
-5. unrelated Edge Function / DB schema / migration / GRANT / secrets / OAuth / morning系 / Pushアプリには触れない。
-6. deploy後ACTIVE versionをread-back確認。
-7. 旧ready backlogがcutover条件で引き続き除外されることを確認。
-8. 手動candidate注入・手動X投稿は行わない。
-9. 自然Cronで新規candidateが生成された場合、read-onlyで以下を確認:
-   - important / most_important の安全候補がpublish選択へ進むこと
-   - `publish_attempts > 0` または自然X投稿へ到達すること
-   - most_important優先・10分cooldown・重複防止が維持されること
-10. monitor runを複数サイクル観測し、`NEWS_MONITOR_STALE_RUNTIME_TERMINATION` がtimeout追加後も再発するか確認。
-11. `.agent/CODEX_REPORT.md` を更新し、deploy version / post-deploy observation / X API calls / old backlog safety / remaining issuesを明記。
-12. 完了時 `status: review_required`, `next_owner: chatgpt`。
+`NEWS_MONITOR_STALE_RUNTIME_TERMINATION` was still observed once after version 33 deployment, so the stale-runtime issue is not considered proven eliminated. However, the following natural run completed successfully with 183 fetched items, 2 new candidates, and ~24-second completion time. This does not block this task because the required post-deploy observation was completed and the main publish-path objective is verified in production.
+
+Future action: continue read-only monitoring of stale recurrence. If stale repeats materially, create a dedicated runtime-stall task rather than reopening this completed throughput/publish task.
 
 ## Safety
 
-禁止:
-- 旧ready backlogの一括投稿・再claim・再生成
-- 手動candidate注入
-- 手動X投稿で成功扱い
-- Fact重大gateの緩和
-- unlimited retry
-- 全ニュース無差別収集
-- unrelated deploy
-- migration/schema/GRANT/secrets/OAuth変更
-- morning_greeting / morning_report / close_report / Pushアプリ変更
-
-## Completion
-
-- `important-news-monitor` production deploy成功
-- ACTIVE version確認
-- 旧backlog誤投稿0
-- 自然経路でpublish selectionが動くことを確認（自然candidateが無ければ人工生成せず、その旨をReport）
-- stale runtimeのpost-deploy観測結果をReport
-- status: `review_required`
-- next_owner: `chatgpt`
+- old ready backlog was not batch-published or re-claimed
+- no manual candidate injection
+- no manual X posting used as proof of success
+- no Fact major-gate removal
+- no unlimited retry
+- no indiscriminate all-news expansion
+- no unrelated deploy
+- no migration/schema/GRANT/secrets/OAuth change
+- no morning_greeting / morning_report / close_report / Push-app change
