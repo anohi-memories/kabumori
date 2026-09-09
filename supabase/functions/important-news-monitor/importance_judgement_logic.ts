@@ -63,6 +63,7 @@ type ModelRunner = (
 ) => Promise<ModelJudgement>;
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
+const OPENAI_REQUEST_TIMEOUT_MS = 60_000;
 const DEFAULT_CONFIDENCE_THRESHOLD = 0.7;
 
 function extractOutputText(response: unknown): string | null {
@@ -204,6 +205,7 @@ export async function requestImportantNewsJudgement(
   const response = await fetchImpl(OPENAI_RESPONSES_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(OPENAI_REQUEST_TIMEOUT_MS),
     body: JSON.stringify({
       model,
       store: false,

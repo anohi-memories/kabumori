@@ -112,6 +112,7 @@ export type PostGenerationResult = {
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const MODEL = "gpt-5.6-luna" as const;
+const OPENAI_REQUEST_TIMEOUT_MS = 60_000;
 
 export function generationEligibility(candidate: GenerationCandidate): string | null {
   if (!["important", "most_important"].includes(candidate.importance)) return "NEWS_NOT_GENERATION_IMPORTANCE";
@@ -1030,6 +1031,7 @@ export async function requestGenerationStep(
   const response = await fetchImpl(OPENAI_RESPONSES_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(OPENAI_REQUEST_TIMEOUT_MS),
     body: JSON.stringify({
       model: MODEL,
       store: false,
