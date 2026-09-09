@@ -2,10 +2,9 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様やWeb管理画面の履歴は既存文書を参照してください。
 
-- checked_at: 2026-09-08 JST（Codex 2枠・Claude 2枠の4スロット運用更新後）
+- checked_at: 2026-09-09 JST
 - repo: kabumori
 - branch: main
-- verified_base_commit: `25b2eea`（今回の4スロット運用更新を開始した`origin/main`）
 - orchestration:
   - 共通ルール: `.agent/ORCHESTRATION.md`
   - Codex slot 1: `.agent/tasks/CODEX_TASK.md`
@@ -22,23 +21,33 @@
   - task_idと変更対象が分離され、競合しない場合のみ並行作業可
   - Codex/Claudeの別を問わず、同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数スロットで同時変更しない
 - active_workstream:
-  - Codex slot 1: `done`（重要ニュース自動投稿のproduction有効化）
-  - Codex slot 2: `idle`（新規割当可能）
-  - Claude slot 1: `in_progress`（大引け自動投稿のproduction有効化）
-  - Claude slot 2: `ready`（朝刊の米国休場・前営業日ラベル修正）
+  - Codex slot 1: `done`（close_report自動投稿のproduction有効化完了）
+  - Codex slot 2: `done`（morning_greeting柔らかい文体 + 固定5タグをx-test-post v90へdeploy完了）
+  - Claude slot 1: `idle`
+  - Claude slot 2: `idle`
+- free_slots:
+  - Codex slot 1: 新規割当可能
+  - Codex slot 2: 新規割当可能
+  - Claude slot 1: 新規割当可能
+  - Claude slot 2: 新規割当可能
 - parallel_work:
   - Web admin / Expo / stocks sync関連の未コミット作業が存在し得る。既存変更を変更・stage・commitしないこと
+  - 新規並行作業は変更対象を分離して割り当てること
 - deploy_version:
-  - `important-news-monitor`: v31 / ACTIVE
-  - `x-test-post`: v86 / ACTIVE（morning_greeting自動dispatch分岐を追加）
+  - `important-news-monitor`: v31 / ACTIVE（直近確認済み）
+  - `x-test-post`: v90 / ACTIVE / verify_jwt=false（2026-09-09 morning_greeting soft-copy deploy後に確認）
 - important_settings:
   - important news auto_publish=true / safe cutover適用済み / publish-ready Cronは5分間隔で1本active
   - useful tip schedule active
   - morning greeting: 06:30-07:00 JST / daily_probability=1 / active
-- pending:
-  - Claude slot 1の大引け自動投稿有効化は作業中。完了前のproduction状態を推測しない
-  - Claude slot 2の朝刊修正は未着手。production変更は禁止
-  - 重要ニュースのcutover後初回自然投稿は未観測。人工生成・手動投稿しない
+  - close_report_settings.is_active=true
+  - posting_windows.close_report.is_active=false（二重planner防止）
+- pending_observation:
+  - morning_greeting: 次回自然投稿で柔らかい文体・固定5タグ・画像をread-only確認
+  - close_report: 2026-09-09 16:00 JSTの自然X投稿結果を予定時刻後にread-only確認
+  - important news: cutover後の自然most_important投稿は、確認する場合はread-onlyで再確認
+- known_issue:
+  - 2026-09-09 morning_greetingはX投稿自体は成功したがlegacy Storage receipt保存HTTP 400によりscheduled_posts側がfailed扱いになった別問題が未修正
 - model_usage:
   - 普段はGPT-5.6 Sol
   - 必要時のみSol高を提案
