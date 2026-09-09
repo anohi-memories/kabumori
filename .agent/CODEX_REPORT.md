@@ -1,65 +1,51 @@
 # Codex Report
 
-- task_id: close-report-auto-post-enable-20260908
+- task_id: expo-ios-push-client-20260909
 - result: review_required
 - next_owner: chatgpt
-- completed_at: 2026-09-09 JST
+- changed_files:
+  - `src/lib/push-notifications.ts`
+  - `src/hooks/use-push-notification-navigation.ts`
+- implementation_commit: pending
+- push: pending
+- deploy: none
 
-## Result
+## 実装内容
 
-本番のclose_report自動投稿を、既存の正規scheduler経路だけで有効化しました。
+既存のExpo Push基盤を重複実装せず、不足していた安全性とSDK 57向けforeground挙動を最小修正しました。
 
-### 採用したscheduler経路
+- `Notifications.setNotificationHandler` をアプリモジュール読込時に1回だけ設定。foreground受信時にbanner/list/sound/badgeを明示的に許可。
+- permission確認・permission request・Android channel作成・projectId解決・token取得を1つの安全なtry/catch境界に収め、native API例外でアプリ起動を壊さないように変更。
+- simulator/emulator/webは従来どおりtoken取得をskipし、deniedは`{ status: 'denied' }`、その他はtyped errorを返す。
+- Expo tokenが空で返る異常ケースをerrorとして扱い、token全文をログ出力しない。
+- 通知タップlistenerのcleanupを維持しつつ、cold launch時の`getLastNotificationResponseAsync()`も同じdedupe境界で処理。既存の`important_news -> /news` routing仕様以外は追加していない。
 
-- active Cron `dispatch-scheduled-posts`（`* * * * *`）
-- `x-test-post` の毎分dispatch
-- `claim_due_post()` → `plan_close_report()`
-- `plan_close_report()` は `close_report_settings.is_active` とJPX営業日を確認して `scheduled_posts` を生成
+## Expo / Supabase確認
 
-`posting_windows.close_report` + `plan_daily_posts()` は別経路ですが、二重生成防止のため有効化していません。
-
-### Production変更
-
-- `public.close_report_settings.is_active`: `false` → `true`
-- 変更時刻: `2026-09-08 23:51:59.763339+00`（2026-09-09 08:51:59 JST）
-- `window_start=15:58`, `center_time=16:00`, `window_end=16:02`
-- `timezone=Asia/Tokyo`, `holiday_edition_enabled=false` は変更なし
-- `public.posting_windows` の `close_report` 行は `is_active=false` のまま
-
-### 2026-09-09対象確認
-
-- JST現在時刻: `2026-09-09 08:51`頃
-- 2026-09-09は平日（ISO day 3）、JPX holidayではない
-- Cronの自然実行により `scheduled_posts` に1件だけ生成済み
-- `scheduled_for=2026-09-09 07:00:00+00`（16:00 JST）、status=`pending`, attempt_count=`0`
-- 同日 `close_report` は1行、重複なし
-
-### Duplicate / claim / security確認
-
-- `scheduled_posts` の `UNIQUE (schedule_date, post_type, slot_no)` を確認
-- `plan_close_report()` の `on conflict (schedule_date, post_type, slot_no) do nothing` を確認
-- `claim_due_post()` は `plan_close_report()` を呼び、`for update skip locked` で1件だけclaim
-- `plan_close_report(date)` / `claim_due_post()` のEXECUTEは `service_role` のみ（既存ACL）
-- `posting_windows` 側を同時有効化していないため、close_reportの二重planner経路は発生しない
-
-### Safety / unchanged
-
-- `x-test-post` はACTIVE version `v89`を確認。今回deployしていない
-- Cron、Edge Function、コード、migration/schema、GRANT、secret、OAuth、他post_type設定は変更していない
-- `scheduled_posts`への手動直書き、planner手動実行、2026-09-08分のX手動投稿は行っていない
-- X API呼び出し・X投稿は行っていない
+- Expo SDK 57の公式Notifications仕様に合わせ、foreground handlerの`shouldShowBanner` / `shouldShowList`、Android channel先行、`getExpoPushTokenAsync({ projectId })`を使用。
+- `app.json`のEAS projectIdは `eb80adf3-861e-4a48-a373-2d9a85b58899` を解決可能。
+- iOS `bundleIdentifier` は未設定。勝手なidentifierは追加していない。Apple Developer有効化後、EAS build前に正式Bundle IDを設定する必要がある。
+- 既存token保存先 `public.device_push_tokens` は本番に存在。既存RLSは `authenticated` の本人行限定（`auth.uid() = user_id`）で、既存clientのpublishable keyからのみupsertする。service role・secretはExpoコードに存在しない。
+- migration/schema/RLS/GRANT/RPC/Edge Function/production secretは変更していない。
 
 ## Tests / verification
 
-- production read-only SQLでsettings、scheduler、2026-09-09営業日判定、scheduled row、function定義、ACL、UNIQUE制約を確認
-- 変更対象コードなしのため、アプリ/Edge Functionテストは未実施
-- 管理ファイルの`git diff --check`: PASS
+- targeted TypeScript check（Push関連3ファイル + Supabase client）: PASS
+- `git diff --check`: PASS
+- `expo config --type public --json`: PASS（projectId / notifications pluginを確認）
+- `expo export --platform web` with dummy public Supabase env: PASS（Expo Router 5 routes / web bundle生成）。実値は読み出していない。
+- production read-only SQL: `device_push_tokens` table/columns、RLS policy、authenticated grantsを確認
+- `npm run lint`: clean worktreeにはESLintが無く実行開始時に自動installを試みたが、ネットワーク/compatibility endpoint到達不可で完了せず。依存ファイルは変更していない。
+- Apple Developer有効化前のため、iPhone実機build、permission prompt、APNs/Expo token取得、foreground表示、通知タップ実機確認は未実施。成功扱いにしていない。
 
-## Remaining issues
+## Safety checks
 
-- 16:00 JSTの実際のX投稿成功（`scheduled_posts.status` / `x_post_id`）は予定時刻前のため未観測
-- 予定時刻後はread-onlyでclaim・投稿結果を確認する必要がある
+- 既存未コミット変更のある共有worktreeは変更・stage・commitしていない。
+- app.json/package.json/eas.json、Supabase migration、Edge Function、server persistence schemaは変更していない。
+- Expo token、Supabase key、Apple credentialなどの秘密情報をログ・Reportへ出していない。
 
-## Next recommendation
+## Remaining issues / next recommendation
 
-`C1`でこのproduction設定変更、9/9のscheduled row、二重投稿防止、未deployをレビューしてください。
+- 正式なiOS Bundle ID設定とApple/APNs credential有効化後、development buildで実機Push E2Eを行う。
+- 実機でpermission denied、foreground表示、cold-launch tap、token保存/RLSをread-only含めて確認する。
+- `C1`で変更2ファイルと、lint未完了・実機未確認をレビューしてください。

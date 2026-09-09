@@ -5,6 +5,21 @@ import { Platform } from 'react-native';
 
 import { supabase } from '@/lib/supabase';
 
+// SDK 57 does not present remote notifications while the app is foregrounded
+// unless an explicit handler is configured. Keep this at module scope so the
+// handler is installed once when the root push module is loaded, rather than
+// on every render or auth-state change.
+if (Platform.OS !== 'web') {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
+
 export type PushRegistrationResult =
   | { status: 'registered'; token: string }
   | { status: 'skipped'; reason: string }
@@ -51,24 +66,26 @@ export async function registerForPushNotificationsAsync(): Promise<PushRegistrat
     return { status: 'skipped', reason: 'シミュレータ/エミュレータではPush Tokenを取得できません。' };
   }
 
-  const granted = await requestPermission();
-  if (!granted) return { status: 'denied' };
-
-  await ensureAndroidChannel();
-
-  const projectId = resolveProjectId();
-  if (!projectId) {
-    // Expected until this app has an EAS project configured (no eas.json /
-    // app.json extra.eas.projectId exists yet as of this task). Documented
-    // as a known prerequisite gap in the handoff, not silently swallowed.
-    return {
-      status: 'skipped',
-      reason: 'EAS projectIdが未設定のため、Expo Push Tokenを取得できません（eas.json / app.jsonの設定が必要）。',
-    };
-  }
-
   try {
+    const granted = await requestPermission();
+    if (!granted) return { status: 'denied' };
+
+    // Expo's SDK 57 docs require the Android channel to exist before asking
+    // the native push service for a token. This is a no-op on iOS.
+    await ensureAndroidChannel();
+
+    const projectId = resolveProjectId();
+    if (!projectId) {
+      return {
+        status: 'skipped',
+        reason: 'EAS projectIdが未設定のため、Expo Push Tokenを取得できません（app.jsonのextra.eas.projectIdが必要です）。',
+      };
+    }
+
     const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
+    if (!token) {
+      return { status: 'error', message: 'Expo Push Tokenを取得できませんでした。' };
+    }
     cachedToken = token;
     return { status: 'registered', token };
   } catch (error) {
