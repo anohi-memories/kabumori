@@ -19,19 +19,26 @@
   - `K` はClaude完了対象が1枠だけ明白な場合のみ
   - `F` は4スロット全体の統括。別チャット担当タスクを文脈なしに完了処理しない
   - task_idと変更対象が分離され、競合しない場合のみ並行作業可
-  - Codex/Claudeの別を問わず、同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数スロットで同時変更しない
+  - Codex/Claudeの別を問わず、同じファイル・DB migration/RPC・Edge Function/workflow/production設定を複数スロットで同時変更しない
 - active_workstream:
-  - Codex slot 1: `done`（close_report自動投稿のproduction有効化完了）
+  - Codex slot 1: `ready`（`expo-ios-push-client-20260909`：Expoアプリ側Push通知基盤。DB/Edge Function/production設定は対象外）
   - Codex slot 2: `done`（morning_greeting柔らかい文体 + 固定5タグをx-test-post v90へdeploy完了）
   - Claude slot 1: `idle`
   - Claude slot 2: `idle`
 - free_slots:
-  - Codex slot 1: 新規割当可能
+  - Codex slot 1: 割当済み。`H1`で開始可能
   - Codex slot 2: 新規割当可能
   - Claude slot 1: 新規割当可能
   - Claude slot 2: 新規割当可能
+- app_push_work:
+  - Apple Developer Programは2026-09-09にユーザー登録済み。有効化待ちの可能性あり
+  - Expo SDK 57 / `expo-notifications` / `expo-device` / EAS projectId / development build設定はmainに存在
+  - GitHub検索ではPush token取得・通知listener実装は未検出
+  - Codex slot 1でクライアント側Push登録基盤を先行実装する
+  - Supabase token保存schema / Edge Function / APNs credential / production secretsは今回のH1対象外
 - parallel_work:
   - Web admin / Expo / stocks sync関連の未コミット作業が存在し得る。既存変更を変更・stage・commitしないこと
+  - Codex slot 1がExpo root layout、app.json、package.json、通知関連ファイルを変更する可能性があるため、他slotは同領域を同時変更しない
   - 新規並行作業は変更対象を分離して割り当てること
 - deploy_version:
   - `important-news-monitor`: v31 / ACTIVE（直近確認済み）
