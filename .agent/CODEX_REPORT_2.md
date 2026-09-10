@@ -47,6 +47,16 @@
 - Post-push read-back confirmed `origin/main` contains that commit.
 - status remains `review_required`; next_owner remains `chatgpt` for C2 review.
 
+### Production deploy confirmation
+
+- pre-deploy `origin/main` fresh-check: `566958f992f62684d76c9979f0e6d13c616c2bb3`.
+- H2 implementation commit `4e66d49787a4fdf80ccafb680e2dc8079edff497` was found in `git rev-list origin/main`; deploy source was a clean worktree at that exact commit.
+- deployed function: `x-test-post` only, with `--no-verify-jwt`.
+- deploy result: **success**; post-deploy `x-test-post v94 ACTIVE`, `verify_jwt=false`.
+- other production changes: 0 (no other Edge Function deploy, DB/migration/RLS/RPC, Cron/scheduler/posting_windows, secrets/OAuth, or manual Function/API/X execution).
+- natural close_report path was not manually run; same-day artificial execution was not performed.
+- status remains `review_required`; next_owner remains `chatgpt` for C2 review.
+
 ## Current H2 completion — close-report-live-data-and-voice-retry-hardening-20260910
 
 - task_id: `close-report-live-data-and-voice-retry-hardening-20260910`
