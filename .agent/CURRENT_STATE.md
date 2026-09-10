@@ -24,7 +24,7 @@
   - Codex slot 1: `ready`（`expo-ios-push-client-20260909`：Expoアプリ側Push通知基盤。DB/Edge Function/production設定は対象外）
   - Codex slot 2: `done`（morning_greeting柔らかい文体 + 固定5タグをx-test-post v90へdeploy完了）
   - Claude slot 1: `idle`
-  - Claude slot 2: `ready`（`x-multibrand-phase1-local-baseline-20260910`：複垢化Phase 1。Docker + ローカルSupabaseで現行かぶモリ1ブランドの安全な再現基盤を構築。本番変更・認証接続・X投稿は禁止）
+  - Claude slot 2: `ready`（`x-multibrand-phase2-brand-context-20260910`：複垢化Phase 2。brand/account基礎schema・BrandContext・kabumori互換導入。本番変更・認証接続・X投稿は禁止）
 - free_slots:
   - Codex slot 1: 割当済み。`H1`で開始可能
   - Codex slot 2: 新規割当可能
@@ -34,12 +34,12 @@
   - 初期対象: `kabumori` / `ai_salaryman_lab` / `mio`
   - 安全な分離作業コピーと初期調査は `feature/multibrand-foundation` / commit `56244c7` で完了済み
   - 正式設計は `docs/multibrand/ARCHITECTURE.md` / commit `bfa4c7b` で完了・K2承認済み
-  - 承認済み判断: X Appは当面3ブランド共通1 App、トークンはSupabase Vault、シングルトン設定はin-place多行化、Phase 1前にDocker Desktop導入
-  - 既存テスト680件成功がベースライン
-  - Phase 1ではDocker + ローカルSupabaseで現行かぶモリ1ブランドを再現し、Phase 2のbrand_id導入前の安全な検証基盤を作る
-  - 本番DB変更、deploy、Cron変更、X投稿、OAuth、トークン取得、実アカウント接続は禁止
-  - 会社員AIラボ・みおのXアカウントは用意済みだが、Phase 1では接続しない
-  - Phase 1は通常Sonnet系でよい。重大な設計変更判断が必要な場合は停止し、必要に応じてOpusへ切り替える
+  - Phase 1は `docs/multibrand/PHASE1.md` / commit `719249f` で完了・K2承認済み。PodmanでローカルDB、全41 migration、RPC、Edge Functions serve、680/680テストを確認。本番変更ゼロ
+  - Phase 1でローカルmigration再生時に本番URL入りCronが登録され得るリスクを発見し、local-only unschedule migrationと安全チェックで恒久対策済み
+  - 承認済み判断: X Appは当面3ブランド共通1 App、トークンはSupabase Vault、シングルトン設定はin-place多行化
+  - Phase 2では `brand_id` / BrandContextの基礎を導入し、まず `kabumori` 1ブランドで従来互換を確認する
+  - 会社員AIラボ・みおはPhase 2では未接続・未有効化。本番DB変更、deploy、Cron変更、X投稿、OAuth、トークン取得は禁止
+  - Phase 2は通常Sonnet系でよい。正式設計変更、Vault/Cron/認証再設計、互換性衝突が出た場合は停止し、必要に応じてOpusへ切り替える
 - app_push_work:
   - Apple Developer Programは2026-09-09にユーザー登録済み。有効化待ちの可能性あり
   - Expo SDK 57 / `expo-notifications` / `expo-device` / EAS projectId / development build設定はmainに存在
@@ -49,7 +49,7 @@
 - parallel_work:
   - Web admin / Expo / stocks sync関連の未コミット作業が存在し得る。既存変更を変更・stage・commitしないこと
   - Codex slot 1がExpo root layout、app.json、package.json、通知関連ファイルを変更する可能性があるため、他slotは同領域を同時変更しない
-  - Claude slot 2のPhase 1は `/Users/yuya/Developer/kabumori-multibrand` の分離環境とローカルSupabase中心。実装へ進む前に他slotとの変更対象競合を再確認する
+  - Claude slot 2のPhase 2はDB migration/RPC/x-test-post/_shared brand関連へ入るため、開始前に他slotの変更対象をfresh-checkし、同じDB migration/RPC/Edge Functionに触れるタスクがあれば開始しない
   - 新規並行作業は変更対象を分離して割り当てること
 - deploy_version:
   - `important-news-monitor`: v31 / ACTIVE（直近確認済み）
