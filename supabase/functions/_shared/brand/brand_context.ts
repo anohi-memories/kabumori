@@ -22,6 +22,7 @@ export type SocialAccountRecord = {
   handle: string;
   publish_enabled: boolean;
   oauth_client_ref: string;
+  platform_user_id?: string | null;
 };
 
 export type BrandOperationalSettings = {
@@ -103,7 +104,7 @@ export async function loadBrandContext({
   if (!brand) throw new BrandContextError("BRAND_NOT_FOUND");
 
   const accountParams = new URLSearchParams({
-    select: "id,brand_id,platform,handle,publish_enabled,oauth_client_ref",
+    select: "id,brand_id,platform,handle,publish_enabled,oauth_client_ref,platform_user_id",
     brand_id: `eq.${brand.id}`,
     platform: "eq.x",
     limit: "1",
