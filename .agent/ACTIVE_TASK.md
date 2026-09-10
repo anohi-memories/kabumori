@@ -42,7 +42,7 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - task_id: x-multibrand-phase3c-ai-lab-x-oauth-connect-20260910
 - start_code: G2
 - finish_code: K2

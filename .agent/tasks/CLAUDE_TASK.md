@@ -3,7 +3,7 @@
 - task_id: x-multibrand-phase3c-ai-lab-x-oauth-connect-20260910
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Sonnet
