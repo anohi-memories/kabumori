@@ -41,7 +41,7 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: in_progress
+- status: review_required
 - task_id: x-multibrand-architecture-design-20260910
 - start_code: G2
 - finish_code: K2
