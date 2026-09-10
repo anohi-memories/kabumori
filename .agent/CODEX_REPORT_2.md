@@ -1,5 +1,46 @@
 # Codex Slot 2 Report
 
+## H2 follow-up — same-day close acquisition
+
+- task_id: `close-report-live-data-and-voice-retry-hardening-20260910`
+- status: `review_required`
+- next_owner: `chatgpt`
+- source_base: `origin/main` at `d8fcffb40d6aca554e63bee4a2757b7a1b554537`
+- worktree: new temporary clean worktree; formal repository working tree was not modified
+
+### Root cause confirmed
+
+- The prior close-report collection used one broad web-search request with up to four calls and explicitly told the model that Nikkei/TOPIX concrete values were unnecessary and should only be filled if encountered incidentally.
+- Therefore close values, timestamp precision, and source URL depended on incidental article/search coverage; front-session values could be returned and there was no code-owned same-day close acquisition path before the safety gate.
+
+### Minimal follow-up implementation
+
+- Added `close_report_data_logic.ts`, a narrow sequential fetch of the existing allowed Yahoo Finance chart source for `^N225` and `^TPX` at 1-minute resolution. It accepts a metric only when numeric, same JST date, and observed at/after 15:00 JST; failed/stale/front-session/unknown responses return null without throwing.
+- `generateCloseReport` now performs this direct acquisition before the material search, prioritizes successfully fetched values over model-filled values, includes the fetched source URLs in diagnostics, and keeps the existing model search only as a supplement for materials or as a fallback source.
+- The collection prompt now explicitly prioritizes code-provided close inputs and forbids padding with front-session or guessed values. Existing `hasSameDayCloseData` / `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE` remains the final live safety gate.
+- No Fact/Voice threshold, freshness rule, source policy, retry policy, DB schema, Cron, or publish behavior was relaxed or changed.
+
+### Follow-up files
+
+- `supabase/functions/x-test-post/index.ts`
+- `supabase/functions/x-test-post/close_report_data_logic.ts`
+- `supabase/functions/x-test-post/close_report_data_logic_test.ts`
+- `supabase/functions/x-test-post/close_report_logic_test.ts`
+
+### Follow-up verification
+
+- Direct close acquisition + close_report + Voice retry targeted tests: **55 passed / 0 failed**
+- Full `x-test-post` regression: **376 passed / 0 failed**
+- Pure-module `deno check` (including new acquisition module): **PASS**
+- `git diff --check`: **PASS**
+- Whole `index.ts` check retains six pre-existing errors in unchanged OAuth/image/morning modules only.
+
+### Safety
+
+- deploy / production Function execution / OpenAI or X API calls / X posts: **0**
+- DB schema/migration/RLS/RPC, Cron/scheduler/settings, secrets/OAuth: **0**
+- Formal repository changes, `apps/admin/**`, and `HANDOFF.md`: untouched
+
 ## Current H2 completion — close-report-live-data-and-voice-retry-hardening-20260910
 
 - task_id: `close-report-live-data-and-voice-retry-hardening-20260910`

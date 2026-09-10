@@ -571,6 +571,17 @@ test("live close_report requires same-day Nikkei and TOPIX close data before Fac
   assert.match(fnSource, /CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE/u);
 });
 
+test("live close_report prioritizes the narrow direct close-value acquisition path", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const start = source.indexOf("async function generateCloseReport(");
+  const end = source.indexOf("\nasync function", start + 1);
+  const fnSource = source.slice(start, end);
+  assert.match(fnSource, /fetchJpxCloseMetrics\(referenceTimeIso\)/u);
+  assert.match(fnSource, /directCloseMetrics\.nikkei \?\? packet\.nikkei/u);
+  assert.match(fnSource, /directCloseMetrics\.topix \?\? packet\.topix/u);
+  assert.match(fnSource, /コード側の限定された指数取得経路/u);
+});
+
 test("close_report Voice transport failures have a single retry while normal rejection remains non-retryable", async () => {
   const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
   const helperStart = source.indexOf("function shouldRetryCloseReportVoice");

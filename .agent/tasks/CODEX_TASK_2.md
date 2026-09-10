@@ -3,8 +3,8 @@
 - task_id: close-report-live-data-and-voice-retry-hardening-20260910
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: 2026-09-10 16:00 JSTのclose_report失敗を受け、①Voice評価がmax_output_tokens/empty output/JSON parse系で壊れた場合の安全な1回だけの再評価、②大引けなのに終値を取得できず前場データ中心の低品質原稿が生成される問題を修正する。

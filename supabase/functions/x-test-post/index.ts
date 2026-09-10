@@ -25,6 +25,9 @@ import {
   type RawMarketMetric,
 } from "./close_report_logic.ts";
 import { runWithSingleRetry, SingleRetryExhaustedError } from "./voice_retry_logic.ts";
+import {
+  fetchJpxCloseMetrics,
+} from "./close_report_data_logic.ts";
 import { appendKabumoriReportFixedHashtags } from "./fixed_hashtags_logic.ts";
 import {
   buildCloseReportVoiceRewriteRequestBody,
@@ -2067,6 +2070,19 @@ async function generateCloseReport(
   referenceTimeIso: string,
 ): Promise<CloseReportDraft> {
   const runMode = resolveCloseRunMode(referenceTimeIso);
+  // Fetch the two required close values through a narrow, code-owned index endpoint before the
+  // material search. If this route is unavailable, the existing model collection remains a
+  // read-only supplement and the live same-day close gate below still fails safely.
+  const directCloseMetrics = runMode === "live"
+    ? await fetchJpxCloseMetrics(referenceTimeIso)
+    : { nikkei: null, topix: null };
+  const directCloseSourceUrlValues = [
+    directCloseMetrics.nikkei?.source_url,
+    directCloseMetrics.topix?.source_url,
+  ].filter((url): url is string => Boolean(url));
+  const directCloseSourceUrls = new Set(
+    directCloseSourceUrlValues.map((url) => canonicalizeUrl(url)).filter((url): url is string => url !== null),
+  );
   // Anchored to the actual reference time passed to this request, never a literal "16:00 JST" string.
   // Previously this sentence branched on a dry-run-only opt-in flag, so a normal (no-flag) dry-run and
   // the live/scheduled path shared the same literal-"16:00 JST" wording while an explicit dry-run request
@@ -2100,7 +2116,7 @@ async function generateCloseReport(
         "何が起きたか、なぜ重要か、日本株との関係、明日見る点をまとめ、各件に実際に開いて確認したsource_url、公開timestamp、material_typeを付けてください。3件全体で最低2つの独立publisherを確保し、可能なら一次・公式情報と信頼報道を組み合わせます。",
         "timestampは確認できた精度のまま返してください。時刻不明ならYYYY-MM-DDとし、00:00等を推測しません。今日の市場の流れはmarket_session、現在値ベースはrealtime_market、政策・経済指標・企業材料は対応するmaterial_typeを指定します。古い材料を今日発生したように扱いません。",
         "強い因果関係を断定する場合はcausal_claim_strength=strongとし、独立報道2系統または一次情報＋信頼報道をsource_urlとsupporting_source_urlsへ入れます。裏取りできなければ断定を避けてqualifiedにするか、その材料を使いません。",
-        "日経平均、TOPIX、グロース指数、日経先物の具体値を集めるためだけの検索は不要です。偶然取得できた場合だけ各指標欄へ入れ、取得不能は空文字にします。数値不足は異常ではなく、数字を作りません。",
+        "日経平均とTOPIXの終値は、コード側の限定された指数取得経路から取得できた入力値を最優先します。入力に値がない場合だけ信頼できる許可sourceの検索結果を補助的に使い、取得不能は空文字にします。前場値や推測値で埋めません。グロース指数・日経先物の具体値は必須ではありません。",
         "強かった・弱かった業種やテーマは、その日の値動きまたは材料を信頼できる出典で確認できるものだけ入れます。目立たない側は空配列で構いません。",
         "値動きの理由は確認できた事実と報道だけを使います。因果を確認できない場合は断定せず、important_pointsの説明で確度を弱めてください。",
         cutoffInstruction,
@@ -2109,7 +2125,13 @@ async function generateCloseReport(
         "重要ニュース候補がなければimportant_news_present=false、important_news_verified=falseとし、候補がある場合だけ裏取り成否をimportant_news_verifiedへ入れてください。",
         "JPX、TDnet、公式IR、官公庁、日銀を優先し、次にReuters、Bloomberg、日経などを使います。実際に開いたURLだけsource_urlsへ入れてください。",
       ].join("\n"),
-      input: [`参照時刻（UTC）: ${referenceTimeIso}`, "タイムゾーン: Asia/Tokyo", `実行区分: ${runMode}`].join("\n"),
+      input: [
+        `参照時刻（UTC）: ${referenceTimeIso}`,
+        "タイムゾーン: Asia/Tokyo",
+        `実行区分: ${runMode}`,
+        `コード側の当日終値取得（日経平均）: ${directCloseMetrics.nikkei?.value ?? "未取得"}`,
+        `コード側の当日終値取得（TOPIX）: ${directCloseMetrics.topix?.value ?? "未取得"}`,
+      ].join("\n"),
       text: { format: { type: "json_schema", name: "close_market_packet", strict: true, schema: {
         type: "object",
         properties: {
@@ -2198,7 +2220,7 @@ async function generateCloseReport(
   const actualCanonical = new Set(Array.from(actualSources).map(canonicalizeUrl).filter((url): url is string => url !== null));
   const sourceVerified = (url: string): boolean => {
     const canonical = canonicalizeUrl(url);
-    return Boolean(canonical && isAllowedMorningUrl(url) && actualCanonical.has(canonical));
+    return Boolean(canonical && isAllowedMorningUrl(url) && (actualCanonical.has(canonical) || directCloseSourceUrls.has(canonical)));
   };
   const importantPoints = packet.important_points.flatMap((point) => {
     const sourceUrl = point.source_url ?? "";
@@ -2224,8 +2246,8 @@ async function generateCloseReport(
   const todayPoints = importantPoints.filter((point) => point.material_scope === "today");
   const verifiedMetric = (metric: RawMarketMetric): RawMarketMetric =>
     sourceVerified(metric.source_url) ? metric : { ...metric, source_url: "" };
-  const nikkei = normalizeCloseMetric(verifiedMetric(packet.nikkei), "jpx_close", referenceTimeIso, runMode);
-  const topix = normalizeCloseMetric(verifiedMetric(packet.topix), "jpx_close", referenceTimeIso, runMode);
+  const nikkei = normalizeCloseMetric(verifiedMetric(directCloseMetrics.nikkei ?? packet.nikkei), "jpx_close", referenceTimeIso, runMode);
+  const topix = normalizeCloseMetric(verifiedMetric(directCloseMetrics.topix ?? packet.topix), "jpx_close", referenceTimeIso, runMode);
   const growthRaw = verifiedMetric(packet.growth250);
   const growth250 = parseMarketNumber(growthRaw.value) === null
     ? null : normalizeCloseMetric(growthRaw, "jpx_close", referenceTimeIso, runMode);
@@ -2271,7 +2293,10 @@ async function generateCloseReport(
     passesCausalSafety(item.source_url, [item.item, item.connection_to_today].join("\n"))
   );
   const futureInformationAbsent = packet.future_information_absent && unsafeOptionalMaterialCount === 0;
-  const sourceUrls = packet.source_urls.filter(sourceVerified).slice(0, 18);
+  const sourceUrls = [...new Set([
+    ...packet.source_urls.filter(sourceVerified),
+    ...directCloseSourceUrlValues,
+  ])].slice(0, 18);
   const factResult = evaluateCloseFacts({
     requiredIndices: runMode === "live" ? [nikkei, topix] : [], futures: null,
     optional: [],
