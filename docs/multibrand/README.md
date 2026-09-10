@@ -64,4 +64,4 @@ verify_jwt = false
 - 新ブランドは `is_active=false` で作成し、ブランドごとに明示的に有効化する。
 - 同じ内容や似た内容を複数アカウントへ自動投稿しない（X の自動化ルールに違反し、凍結のリスクがある）。ブランド間でネタの重複を防ぐ仕組みを設計に含める。
 
-調査結果は [SURVEY.md](SURVEY.md) にまとめています。
+調査結果は [SURVEY.md](SURVEY.md) にまとめています。正式アーキテクチャ設計（承認待ち）は [ARCHITECTURE.md](ARCHITECTURE.md) です。
