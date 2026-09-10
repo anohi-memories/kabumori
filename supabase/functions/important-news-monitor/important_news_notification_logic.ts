@@ -21,6 +21,7 @@ export const IMPORTANT_NEWS_NOTIFICATION_SOURCE_TYPE = "important_news";
 export const IMPORTANT_NEWS_NOTIFICATION_TITLE_MAX_CHARACTERS = 60;
 export const IMPORTANT_NEWS_NOTIFICATION_SUMMARY_MAX_CHARACTERS = 140;
 export const IMPORTANT_NEWS_NOTIFICATION_COMPANY_MAX_CHARACTERS = 20;
+export const IMPORTANT_NEWS_NOTIFICATION_EMPTY_FALLBACK = "登録銘柄の重要ニュースが公開されました。";
 
 const PUSHABLE_IMPORTANCE = ["important", "most_important"] as const;
 
@@ -31,6 +32,9 @@ export type ImportantNewsNotificationSource = {
   importance: string;
   title: string;
   bodySummary: string | null;
+  generatedText?: string | null;
+  generationFactStatus?: string | null;
+  generationVoiceStatus?: string | null;
 };
 
 /** One active tracked_stocks row whose stock matches the candidate's ticker. */
@@ -128,15 +132,166 @@ export function buildImportantNewsNotificationTitle(
   return truncate(`${prefix}${headline}`, IMPORTANT_NEWS_NOTIFICATION_TITLE_MAX_CHARACTERS);
 }
 
-export function buildImportantNewsNotificationSummary(
+// ---------------------------------------------------------------------------
+// Push body
+//
+// TDnet body_summary is text scraped from the disclosure PDF, so it usually
+// opens with the letterhead ("各 位 会社名 … 代表者名 … （TEL …）", "本店所在地 …",
+// "Copyright …") and often has a space between every character. Using it as the
+// push body put an address on the lock screen instead of the news.
+//
+// The body is therefore chosen deterministically, most trustworthy first:
+//   1. verified_post_text   - the generated X post text, but ONLY when it passed
+//                             both the Fact and the Voice checks. The producer
+//                             only runs after a successful publish, and publishing
+//                             itself requires both checks, so on the live path
+//                             this is exactly the text that already went out on X.
+//   2. cleaned_body_summary - the PDF text after the headline (or from "当社は"),
+//                             with the letterhead dropped and PDF character
+//                             spacing removed.
+//   3. headline             - the news title; last resort, never empty.
+// No AI is called for the push.
+// ---------------------------------------------------------------------------
+
+export type ImportantNewsNotificationSummaryStrategy =
+  | "verified_post_text"
+  | "cleaned_body_summary"
+  | "headline";
+
+export type ImportantNewsNotificationSummary = {
+  text: string;
+  strategy: ImportantNewsNotificationSummaryStrategy;
+};
+
+const LEADING_NEWS_LABELS = /^\s*(?:【(?:重大)?速報】\s*)+/u;
+const TRAILING_SOURCE_LINE = /\s*出典\s*[:：]\s*https?:\/\/\S+\s*$/u;
+const CJK_RANGE = "\\u3000-\\u30ff\\u3400-\\u9fff\\uf900-\\ufaff\\uff00-\\uffef";
+// PDF extraction spaces characters out ("業 績 予 想"). Whitespace touching a
+// CJK/full-width character carries no meaning in Japanese, while spaces between
+// two ASCII words ("Mitsui High-tec") are kept.
+const SPACE_TOUCHING_CJK = new RegExp(`(?<=[${CJK_RANGE}])\\s+|\\s+(?=[${CJK_RANGE}])`, "gu");
+const SENTENCE_END = new Set(["。", "！", "？", "!", "?"]);
+const OPENING_BRACKETS = new Set(["（", "(", "「", "『", "【", "［", "["]);
+const CLOSING_BRACKETS = new Set(["）", ")", "」", "』", "】", "］", "]"]);
+const NUMBER_CHARACTER = /[0-9０-９,，.．]/u;
+
+/**
+ * Splits on 。！？ that are NOT inside brackets. Disclosures define terms inline
+ * ("（以下「ＳＬＣ社」という。）"), and ending a sentence at that inner 。 leaves a
+ * fragment with an unclosed bracket.
+ */
+function splitSentences(text: string): string[] {
+  const sentences: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (const character of Array.from(text)) {
+    current += character;
+    if (OPENING_BRACKETS.has(character)) depth += 1;
+    else if (CLOSING_BRACKETS.has(character)) depth = Math.max(0, depth - 1);
+    else if (depth === 0 && SENTENCE_END.has(character)) {
+      sentences.push(current);
+      current = "";
+    }
+  }
+  if (current.trim()) sentences.push(current);
+  return sentences;
+}
+
+/** The published X post minus its 【速報】 label and trailing 出典 line. */
+export function extractVerifiedPostBody(generatedText: string | null | undefined): string | null {
+  if (typeof generatedText !== "string") return null;
+  const body = collapseWhitespace(
+    generatedText.replace(TRAILING_SOURCE_LINE, "").replace(LEADING_NEWS_LABELS, ""),
+  );
+  return body.length > 0 ? body : null;
+}
+
+function removePdfSpacing(value: string): string {
+  return collapseWhitespace(value).replace(SPACE_TOUCHING_CJK, "");
+}
+
+/**
+ * Returns the prose that follows the disclosure's own headline, or null when no
+ * trustworthy starting point exists. Matching ignores whitespace because the
+ * PDF text frequently spaces the headline out character by character.
+ */
+export function cleanDisclosureBodySummary(
   bodySummary: string | null | undefined,
-  newsTitle: string,
+  headline: string,
+): string | null {
+  if (typeof bodySummary !== "string" || bodySummary.trim().length === 0) return null;
+  const compactChars: string[] = [];
+  const originalIndex: number[] = [];
+  for (let index = 0; index < bodySummary.length; index += 1) {
+    const character = bodySummary[index];
+    if (/\s/.test(character)) continue;
+    compactChars.push(character);
+    originalIndex.push(index);
+  }
+  const compact = compactChars.join("");
+  const compactHeadline = headline.replace(/\s+/g, "");
+
+  let start = -1;
+  if (compactHeadline.length >= 6) {
+    const at = compact.indexOf(compactHeadline);
+    if (at >= 0) start = originalIndex[at + compactHeadline.length - 1] + 1;
+  }
+  if (start < 0) {
+    const companyStatement = bodySummary.search(/当\s*社\s*(?:グ\s*ル\s*ー\s*プ\s*)?[はが]/u);
+    if (companyStatement >= 0) start = companyStatement;
+  }
+  if (start < 0) return null;
+
+  const prose = removePdfSpacing(bodySummary.slice(start));
+  // Only accept something that reads as a sentence; otherwise the headline is safer.
+  if (!prose.includes("。") || Array.from(prose).length < 15) return null;
+  return prose;
+}
+
+/**
+ * Keeps whole sentences up to the limit. Only when even the first sentence is
+ * too long is it cut, and never inside a number: a figure is either shown in
+ * full or not at all, so "300億円" can never be displayed as "30…".
+ */
+export function fitImportantNewsNotificationText(
+  text: string,
+  maxCharacters = IMPORTANT_NEWS_NOTIFICATION_SUMMARY_MAX_CHARACTERS,
 ): string {
-  const summary = collapseWhitespace(typeof bodySummary === "string" ? bodySummary : "");
-  // notifications.summary is NOT NULL; fall back to the headline rather than
-  // inventing text when a candidate has no stored summary.
-  const source = summary.length > 0 ? summary : collapseWhitespace(newsTitle);
-  return truncate(source, IMPORTANT_NEWS_NOTIFICATION_SUMMARY_MAX_CHARACTERS);
+  const normalized = collapseWhitespace(text);
+  if (Array.from(normalized).length <= maxCharacters) return normalized;
+
+  let fitted = "";
+  for (const rawSentence of splitSentences(normalized)) {
+    const sentence = rawSentence.trim();
+    if (!sentence) continue;
+    const next = `${fitted}${sentence}`;
+    if (Array.from(next).length > maxCharacters) break;
+    fitted = next;
+  }
+  if (fitted) return fitted;
+
+  const characters = Array.from(normalized);
+  let cut = maxCharacters - 1;
+  while (cut > 1 && NUMBER_CHARACTER.test(characters[cut - 1]) && NUMBER_CHARACTER.test(characters[cut])) {
+    cut -= 1;
+  }
+  return `${characters.slice(0, cut).join("").trimEnd()}…`;
+}
+
+export function selectImportantNewsNotificationSummary(
+  source: ImportantNewsNotificationSource,
+): ImportantNewsNotificationSummary {
+  if (source.generationFactStatus === "passed" && source.generationVoiceStatus === "passed") {
+    const post = extractVerifiedPostBody(source.generatedText);
+    if (post) return { text: fitImportantNewsNotificationText(post), strategy: "verified_post_text" };
+  }
+  const cleaned = cleanDisclosureBodySummary(source.bodySummary, source.title);
+  if (cleaned) return { text: fitImportantNewsNotificationText(cleaned), strategy: "cleaned_body_summary" };
+  const headline = collapseWhitespace(source.title ?? "");
+  return {
+    text: fitImportantNewsNotificationText(headline.length > 0 ? headline : IMPORTANT_NEWS_NOTIFICATION_EMPTY_FALLBACK),
+    strategy: "headline",
+  };
 }
 
 /**
@@ -161,6 +316,7 @@ export function buildImportantNewsNotificationRows(
       bestByUser.set(target.userId, target);
     }
   }
+  const summary = selectImportantNewsNotificationSummary(source).text;
   return Array.from(bestByUser.values())
     .sort((left, right) => left.userId < right.userId ? -1 : left.userId > right.userId ? 1 : 0)
     .map((target) => ({
@@ -169,7 +325,7 @@ export function buildImportantNewsNotificationRows(
       source_type: IMPORTANT_NEWS_NOTIFICATION_SOURCE_TYPE,
       source_id: source.candidateId,
       title: buildImportantNewsNotificationTitle(target.companyName, source.title),
-      summary: buildImportantNewsNotificationSummary(source.bodySummary, source.title),
+      summary,
       importance: source.importance,
       push_status: "pending",
     }));

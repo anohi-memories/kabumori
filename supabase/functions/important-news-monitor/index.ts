@@ -82,6 +82,7 @@ import {
   buildImportantNewsNotificationRows,
   evaluateImportantNewsNotificationEnqueue,
   extractImportantNewsTickerCode,
+  selectImportantNewsNotificationSummary,
   type ImportantNewsNotificationSource,
   type ImportantNewsNotificationTarget,
   type ImportantNewsPublishOutcome,
@@ -1084,7 +1085,10 @@ async function selectImportantNewsNotificationSource(
   candidateId: string,
 ): Promise<ImportantNewsNotificationSource | null> {
   const params = new URLSearchParams({
-    select: "id,company_code,importance,title,body_summary",
+    select: [
+      "id", "company_code", "importance", "title", "body_summary",
+      "generated_text", "generation_fact_status", "generation_voice_status",
+    ].join(","),
     id: `eq.${candidateId}`,
     limit: "1",
   });
@@ -1098,6 +1102,9 @@ async function selectImportantNewsNotificationSource(
     importance: string;
     title: string;
     body_summary: string | null;
+    generated_text: string | null;
+    generation_fact_status: string | null;
+    generation_voice_status: string | null;
   }>;
   const row = rows[0];
   if (!row) return null;
@@ -1107,6 +1114,9 @@ async function selectImportantNewsNotificationSource(
     importance: row.importance,
     title: row.title,
     bodySummary: row.body_summary,
+    generatedText: row.generated_text,
+    generationFactStatus: row.generation_fact_status,
+    generationVoiceStatus: row.generation_voice_status,
   };
 }
 
@@ -1286,6 +1296,8 @@ Deno.serve(async (req) => {
         companyCode: source.companyCode,
         tickerCode,
         targetCount: rows.length,
+        // Which body source was chosen (verified_post_text / cleaned_body_summary / headline).
+        summaryStrategy: selectImportantNewsNotificationSummary(source).strategy,
         reason: !tickerCode ? "NO_COMPANY_CODE" : rows.length === 0 ? "NO_TRACKING_USER" : "WOULD_ENQUEUE",
         // User ids stay out of the response; only the push payload is shown.
         rows: rows.map((row) => ({
