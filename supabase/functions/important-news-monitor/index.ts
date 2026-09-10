@@ -78,6 +78,14 @@ import {
   isCandidateAfterAutoPublishCutover,
 } from "./auto_publish_cutover_logic.ts";
 import { orderImportantNewsPublishQueue } from "./rate_control_logic.ts";
+import {
+  buildImportantNewsNotificationRows,
+  evaluateImportantNewsNotificationEnqueue,
+  extractImportantNewsTickerCode,
+  type ImportantNewsNotificationSource,
+  type ImportantNewsNotificationTarget,
+  type ImportantNewsPublishOutcome,
+} from "./important_news_notification_logic.ts";
 
 const jsonHeaders = { "Content-Type": "application/json; charset=utf-8" };
 const MAX_CANDIDATES_PER_REQUEST = 100;
@@ -1061,6 +1069,179 @@ function createPublishRepository(
   };
 }
 
+type ImportantNewsNotificationDiagnostics = {
+  attempted: boolean;
+  reason: string;
+  tickerCode: string | null;
+  targetCount: number;
+  insertedCount: number;
+  duplicateCount: number;
+};
+
+async function selectImportantNewsNotificationSource(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  candidateId: string,
+): Promise<ImportantNewsNotificationSource | null> {
+  const params = new URLSearchParams({
+    select: "id,company_code,importance,title,body_summary",
+    id: `eq.${candidateId}`,
+    limit: "1",
+  });
+  const result = await fetch(`${supabaseUrl}/rest/v1/important_news_candidates?${params}`, {
+    headers: headers(serviceRoleKey),
+  });
+  if (!result.ok) throw new Error("NEWS_NOTIFICATION_SOURCE_LOOKUP_FAILED");
+  const rows = await result.json() as Array<{
+    id: string;
+    company_code: string | null;
+    importance: string;
+    title: string;
+    body_summary: string | null;
+  }>;
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    candidateId: row.id,
+    companyCode: row.company_code,
+    importance: row.importance,
+    title: row.title,
+    bodySummary: row.body_summary,
+  };
+}
+
+async function selectImportantNewsNotificationTargets(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  tickerCode: string,
+): Promise<ImportantNewsNotificationTarget[]> {
+  // Same audience the in-app feed uses: active tracked stocks on this ticker.
+  const params = new URLSearchParams({
+    select: "id,user_id,stocks_master!inner(ticker_code,company_name)",
+    is_active: "eq.true",
+    "stocks_master.ticker_code": `eq.${tickerCode}`,
+  });
+  const result = await fetch(`${supabaseUrl}/rest/v1/tracked_stocks?${params}`, {
+    headers: headers(serviceRoleKey),
+  });
+  if (!result.ok) throw new Error("NEWS_NOTIFICATION_TARGET_LOOKUP_FAILED");
+  const rows = await result.json() as Array<{
+    id: string;
+    user_id: string;
+    stocks_master: { ticker_code: string; company_name: string } | null;
+  }>;
+  return rows.map((row) => ({
+    userId: row.user_id,
+    trackedStockId: row.id,
+    tickerCode: row.stocks_master?.ticker_code ?? tickerCode,
+    companyName: row.stocks_master?.company_name ?? "",
+  }));
+}
+
+async function insertImportantNewsNotifications(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  rows: readonly Record<string, unknown>[],
+): Promise<{ inserted: number; duplicates: number }> {
+  let inserted = 0;
+  let duplicates = 0;
+  // One request per row on purpose. The notifications_dedupe unique constraint
+  // (user_id, tracked_stock_id, source_type, source_id) is what prevents a repeat
+  // producer run from queueing a second push, and PostgREST reports that
+  // violation as 409. Inserting row by row means one already-queued user cannot
+  // suppress another user's notification.
+  for (const row of rows) {
+    const result = await fetch(`${supabaseUrl}/rest/v1/notifications`, {
+      method: "POST",
+      headers: headers(serviceRoleKey, "return=minimal"),
+      body: JSON.stringify(row),
+    });
+    if (result.status === 409) {
+      duplicates += 1;
+      continue;
+    }
+    if (!result.ok) throw new Error("NEWS_NOTIFICATION_INSERT_FAILED");
+    inserted += 1;
+  }
+  return { inserted, duplicates };
+}
+
+/**
+ * Enqueue the push rows for a candidate that has just been published to X.
+ *
+ * This runs strictly after markPublished() has committed, and it never throws:
+ * an X post that already exists must not be rolled back, retried, or reported as
+ * failed because the notification queue misbehaved. The outcome is returned as
+ * diagnostics and logged with reason codes so a zero-notification publication can
+ * be explained afterwards.
+ */
+async function enqueueImportantNewsNotifications(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  candidateId: string,
+  outcome: ImportantNewsPublishOutcome,
+): Promise<ImportantNewsNotificationDiagnostics> {
+  const decision = evaluateImportantNewsNotificationEnqueue(outcome);
+  if (!decision.enqueue) {
+    return {
+      attempted: false,
+      reason: decision.reason,
+      tickerCode: null,
+      targetCount: 0,
+      insertedCount: 0,
+      duplicateCount: 0,
+    };
+  }
+  const diagnostics: ImportantNewsNotificationDiagnostics = {
+    attempted: true,
+    reason: "ENQUEUED",
+    tickerCode: null,
+    targetCount: 0,
+    insertedCount: 0,
+    duplicateCount: 0,
+  };
+  try {
+    const source = await selectImportantNewsNotificationSource(supabaseUrl, serviceRoleKey, candidateId);
+    if (!source) {
+      diagnostics.reason = "SOURCE_NOT_FOUND";
+      return diagnostics;
+    }
+    const tickerCode = extractImportantNewsTickerCode(source.companyCode);
+    diagnostics.tickerCode = tickerCode;
+    // Market-wide news carries no company code, so it has no per-user audience
+    // and is deliberately not broadcast to everyone.
+    if (!tickerCode) {
+      diagnostics.reason = "NO_COMPANY_CODE";
+      return diagnostics;
+    }
+    const targets = await selectImportantNewsNotificationTargets(supabaseUrl, serviceRoleKey, tickerCode);
+    const rows = buildImportantNewsNotificationRows(source, targets);
+    diagnostics.targetCount = rows.length;
+    if (rows.length === 0) {
+      diagnostics.reason = "NO_TRACKING_USER";
+      return diagnostics;
+    }
+    const written = await insertImportantNewsNotifications(supabaseUrl, serviceRoleKey, rows);
+    diagnostics.insertedCount = written.inserted;
+    diagnostics.duplicateCount = written.duplicates;
+    diagnostics.reason = written.inserted === 0 ? "ALREADY_ENQUEUED" : "ENQUEUED";
+    return diagnostics;
+  } catch (error) {
+    diagnostics.reason = safeError(error);
+    return diagnostics;
+  } finally {
+    console.log(JSON.stringify({
+      event: "important_news_notification_enqueue",
+      candidate_id: candidateId,
+      ticker_code: diagnostics.tickerCode,
+      reason: diagnostics.reason,
+      target_count: diagnostics.targetCount,
+      inserted_count: diagnostics.insertedCount,
+      duplicate_count: diagnostics.duplicateCount,
+    }));
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return response({ error: "POST_REQUIRED" }, 405);
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -1082,6 +1263,40 @@ Deno.serve(async (req) => {
     if (body.mode === "unpdf_edge_verification") {
       const result = await runUnpdfEdgeVerification();
       return response(result, result.success === true ? 200 : 500);
+    }
+    if (body.mode === "notification_enqueue_dry_run") {
+      // Read-only view of what the push producer would queue for a candidate.
+      // Nothing is written, so this can be pointed at a real published candidate
+      // to verify targeting in production without fabricating any state.
+      if (typeof body.candidateId !== "string") {
+        return response({ error: "NOTIFICATION_DRY_RUN_CANDIDATE_ID_REQUIRED" }, 400);
+      }
+      const candidateId = body.candidateId;
+      const source = await selectImportantNewsNotificationSource(supabaseUrl, serviceRoleKey, candidateId);
+      if (!source) return response({ mode: body.mode, candidateId, reason: "SOURCE_NOT_FOUND" }, 404);
+      const tickerCode = extractImportantNewsTickerCode(source.companyCode);
+      const targets = tickerCode
+        ? await selectImportantNewsNotificationTargets(supabaseUrl, serviceRoleKey, tickerCode)
+        : [];
+      const rows = buildImportantNewsNotificationRows(source, targets);
+      return response({
+        mode: body.mode,
+        candidateId,
+        importance: source.importance,
+        companyCode: source.companyCode,
+        tickerCode,
+        targetCount: rows.length,
+        reason: !tickerCode ? "NO_COMPANY_CODE" : rows.length === 0 ? "NO_TRACKING_USER" : "WOULD_ENQUEUE",
+        // User ids stay out of the response; only the push payload is shown.
+        rows: rows.map((row) => ({
+          source_type: row.source_type,
+          source_id: row.source_id,
+          title: row.title,
+          summary: row.summary,
+          importance: row.importance,
+          push_status: row.push_status,
+        })),
+      });
     }
     if (body.mode === "publish_dry_run" || body.mode === "publish_ready") {
       const dryRun = body.mode === "publish_dry_run";
@@ -1162,7 +1377,15 @@ Deno.serve(async (req) => {
             };
           },
         );
-        return { mode: body.mode, ...result, autoPublish: true };
+        // Producer for the push pipeline. Runs only after the X publication has
+        // been finalized, and cannot fail the publication itself.
+        const notificationEnqueue = await enqueueImportantNewsNotifications(
+          supabaseUrl,
+          serviceRoleKey,
+          candidateId,
+          result,
+        );
+        return { mode: body.mode, ...result, autoPublish: true, notificationEnqueue };
       });
       if (!guarded.executed) {
         return response({
