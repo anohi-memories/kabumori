@@ -16,63 +16,26 @@
   - Codex slot2開始=`H2`、完了確認=`C2`
   - Claude slot1開始=`G1`、完了確認=`K1`
   - Claude slot2開始=`G2`、完了確認=`K2`
-  - `K` はClaude完了対象が1枠だけ明白な場合のみ
-  - `F` は4スロット全体の統括。別チャット担当タスクを文脈なしに完了処理しない
-  - task_idと変更対象が分離され、競合しない場合のみ並行作業可
-  - Codex/Claudeの別を問わず、同じファイル・DB migration/RPC・Edge Function/workflow/production設定を複数スロットで同時変更しない
 - active_workstream:
-  - Codex slot 1: `ready`（`expo-ios-push-client-20260909`：Expoアプリ側Push通知基盤。DB/Edge Function/production設定は対象外）
-  - Codex slot 2: `done`（morning_greeting柔らかい文体 + 固定5タグをx-test-post v90へdeploy完了）
-  - Claude slot 1: `idle`
-  - Claude slot 2: `ready`（`x-multibrand-phase2-brand-context-20260910`：複垢化Phase 2。brand/account基礎schema・BrandContext・kabumori互換導入。本番変更・認証接続・X投稿は禁止）
-- free_slots:
-  - Codex slot 1: 割当済み。`H1`で開始可能
-  - Codex slot 2: 新規割当可能
-  - Claude slot 1: 新規割当可能
-  - Claude slot 2: 割当済み。`G2`で開始可能
+  - Codex slot 1: `ready`（`x-multibrand-phase2-brand-context-20260910`：X自動投稿システム複垢化Phase 2。G2から移管。brand/account基礎schema・BrandContext・kabumori互換導入。本番変更・認証接続・X投稿は禁止）
+  - Codex slot 2: `done`
+  - Claude slot 1: 別タスク管理
+  - Claude slot 2: `done`（上記Phase 2をH1へ移管済み。G2では継続しない）
 - multibrand_work:
   - 初期対象: `kabumori` / `ai_salaryman_lab` / `mio`
-  - 安全な分離作業コピーと初期調査は `feature/multibrand-foundation` / commit `56244c7` で完了済み
-  - 正式設計は `docs/multibrand/ARCHITECTURE.md` / commit `bfa4c7b` で完了・K2承認済み
-  - Phase 1は `docs/multibrand/PHASE1.md` / commit `719249f` で完了・K2承認済み。PodmanでローカルDB、全41 migration、RPC、Edge Functions serve、680/680テストを確認。本番変更ゼロ
-  - Phase 1でローカルmigration再生時に本番URL入りCronが登録され得るリスクを発見し、local-only unschedule migrationと安全チェックで恒久対策済み
-  - 承認済み判断: X Appは当面3ブランド共通1 App、トークンはSupabase Vault、シングルトン設定はin-place多行化
-  - Phase 2では `brand_id` / BrandContextの基礎を導入し、まず `kabumori` 1ブランドで従来互換を確認する
-  - 会社員AIラボ・みおはPhase 2では未接続・未有効化。本番DB変更、deploy、Cron変更、X投稿、OAuth、トークン取得は禁止
-  - Phase 2は通常Sonnet系でよい。正式設計変更、Vault/Cron/認証再設計、互換性衝突が出た場合は停止し、必要に応じてOpusへ切り替える
-- app_push_work:
-  - Apple Developer Programは2026-09-09にユーザー登録済み。有効化待ちの可能性あり
-  - Expo SDK 57 / `expo-notifications` / `expo-device` / EAS projectId / development build設定はmainに存在
-  - GitHub検索ではPush token取得・通知listener実装は未検出
-  - Codex slot 1でクライアント側Push登録基盤を先行実装する
-  - Supabase token保存schema / Edge Function / APNs credential / production secretsは今回のH1対象外
+  - 安全な分離作業コピーと初期調査: `feature/multibrand-foundation` / commit `56244c7`
+  - 正式設計: `docs/multibrand/ARCHITECTURE.md` / commit `bfa4c7b`、K2承認済み
+  - Phase 1: `docs/multibrand/PHASE1.md` / commit `719249f`、K2承認済み
+  - Phase 2は2026-09-10にユーザー指示でClaude G2からCodex H1へ移管
+  - 承認済み判断: 共通パイプライン+brand_id、brands/social_accounts分離、X App当面共通1 App、トークンSupabase Vault、シングルトンin-place多行化、新ブランド既定OFF、expand->switch->contract
+  - Phase 2の目標は `kabumori` 1ブランドだけをbrand-aware構造で従来互換にすること。会社員AIラボ・みおは未接続・未有効化
+  - 本番Supabase link、DB/migration/RPC/Edge Function/Cron/Secret変更、OAuth、X実投稿、main mergeは禁止
+  - Phase 1で発見したローカルmigration再生時の本番URL入りCronリスクに対するlocal-only unschedule対策とcheck-safe-envを維持
 - parallel_work:
-  - Web admin / Expo / stocks sync関連の未コミット作業が存在し得る。既存変更を変更・stage・commitしないこと
-  - Codex slot 1がExpo root layout、app.json、package.json、通知関連ファイルを変更する可能性があるため、他slotは同領域を同時変更しない
-  - Claude slot 2のPhase 2はDB migration/RPC/x-test-post/_shared brand関連へ入るため、開始前に他slotの変更対象をfresh-checkし、同じDB migration/RPC/Edge Functionに触れるタスクがあれば開始しない
-  - 新規並行作業は変更対象を分離して割り当てること
-- deploy_version:
-  - `important-news-monitor`: v31 / ACTIVE（直近確認済み）
-  - `x-test-post`: v90 / ACTIVE / verify_jwt=false（2026-09-09 morning_greeting soft-copy deploy後に確認）
-- important_settings:
-  - important news auto_publish=true / safe cutover適用済み / publish-ready Cronは5分間隔で1本active
-  - useful tip schedule active
-  - morning greeting: 06:30-07:00 JST / daily_probability=1 / active
-  - close_report_settings.is_active=true
-  - posting_windows.close_report.is_active=false（二重planner防止）
-- pending_observation:
-  - morning_greeting: 次回自然投稿で柔らかい文体・固定5タグ・画像をread-only確認
-  - close_report: 2026-09-09 16:00 JSTの自然X投稿結果を予定時刻後にread-only確認
-  - important news: cutover後の自然most_important投稿は、確認する場合はread-onlyで再確認
+  - 既存未コミット変更は他workstreamの所有物として扱い、変更・stage・commitしない
+  - H1開始前にorigin/mainと他スロットTASKをfresh-checkし、同じDB migration/RPC/Edge Function/workflow/production設定に触れる競合があれば開始しない
 - known_issue:
-  - 2026-09-09 morning_greetingはX投稿自体は成功したがlegacy Storage receipt保存HTTP 400によりscheduled_posts側がfailed扱いになった別問題が未修正
-- model_usage:
-  - 普段はGPT-5.6 Sol
-  - 必要時のみSol高を提案
-  - Astraは大規模設計変更・全体レビュー・複数領域をまたぐ難題など明確に価値がある時だけ提案し、容量節約を優先
-- handoff_note:
-  - 新しいChatGPT部屋は `.agent/CHATGPT_HANDOFF.md` → `.agent/CURRENT_STATE.md` → 必要時 `.agent/ORCHESTRATION.md` の順で確認する
-  - `HANDOFF.md` はWeb-admin系を含む既存用途のため今回の部屋移動では変更しない
+  - 2026-09-09 morning_greetingはX投稿成功後、legacy Storage receipt保存HTTP 400によりscheduled_posts側がfailed扱いになった別問題が未修正
 
 ## 更新ルール
 
