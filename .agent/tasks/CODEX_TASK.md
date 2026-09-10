@@ -3,8 +3,8 @@
 - task_id: x-multibrand-phase2-brand-context-20260910
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: default
 - purpose: 複垢化Phase 2として、現行かぶモリの挙動を維持したまま `brand_id` / BrandContext の基礎を導入し、まず `kabumori` 1ブランドだけで完全互換を確認する。本番反映・新ブランド接続は行わない。
@@ -185,3 +185,7 @@ Kong/PostgREST/Auth/Storageを含む完全結合テストが必要になった�
 - remaining_issues
 - Phase 3 readiness
 - next_recommendation
+
+## Completion
+
+2026-09-10、Phase 2実装を `feature/multibrand-foundation` の commit `5806e85` としてpush済み。詳細は `.agent/CODEX_REPORT.md` を参照。本番への適用・deploy・OAuth・Secret/Vault・Cron・X投稿・main mergeは行っていない。
