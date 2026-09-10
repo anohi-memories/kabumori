@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様やWeb管理画面の履歴は既存文書を参照してください。
 
-- checked_at: 2026-09-09 JST
+- checked_at: 2026-09-10 JST
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -24,12 +24,20 @@
   - Codex slot 1: `ready`（`expo-ios-push-client-20260909`：Expoアプリ側Push通知基盤。DB/Edge Function/production設定は対象外）
   - Codex slot 2: `done`（morning_greeting柔らかい文体 + 固定5タグをx-test-post v90へdeploy完了）
   - Claude slot 1: `idle`
-  - Claude slot 2: `idle`
+  - Claude slot 2: `ready`（`x-multibrand-architecture-design-20260910`：X自動投稿システム複垢化の正式設計。設計のみ、本番変更・認証接続・実装は禁止）
 - free_slots:
   - Codex slot 1: 割当済み。`H1`で開始可能
   - Codex slot 2: 新規割当可能
   - Claude slot 1: 新規割当可能
-  - Claude slot 2: 新規割当可能
+  - Claude slot 2: 割当済み。`G2`で開始可能
+- multibrand_work:
+  - 初期対象: `kabumori` / `ai_salaryman_lab` / `mio`
+  - 安全な分離作業コピーと初期調査は `feature/multibrand-foundation` / commit `56244c7` で完了済み
+  - `docs/multibrand/README.md`、`docs/multibrand/SURVEY.md`、`scripts/multibrand/check-safe-env.sh` を基準資料とする
+  - 既存テスト680件成功
+  - 本番DB変更、deploy、Cron変更、X投稿、OAuth、トークン取得、実アカウント接続、Docker導入は未実施
+  - 会社員AIラボ・みおのXアカウントは用意済みだが、正式設計承認前は接続しない
+  - 今回はDB・X認証・Cron・重複防止・後方互換性をまたぐ設計フェーズのためOpus推奨
 - app_push_work:
   - Apple Developer Programは2026-09-09にユーザー登録済み。有効化待ちの可能性あり
   - Expo SDK 57 / `expo-notifications` / `expo-device` / EAS projectId / development build設定はmainに存在
@@ -39,6 +47,7 @@
 - parallel_work:
   - Web admin / Expo / stocks sync関連の未コミット作業が存在し得る。既存変更を変更・stage・commitしないこと
   - Codex slot 1がExpo root layout、app.json、package.json、通知関連ファイルを変更する可能性があるため、他slotは同領域を同時変更しない
+  - Claude slot 2の複垢化設計は現時点では設計資料中心。実装へ進む前に他slotとの変更対象競合を再確認する
   - 新規並行作業は変更対象を分離して割り当てること
 - deploy_version:
   - `important-news-monitor`: v31 / ACTIVE（直近確認済み）
