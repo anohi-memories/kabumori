@@ -42,7 +42,7 @@
 - owner: claude
 - slot: claude-2
 - status: review_required
-- task_id: x-multibrand-architecture-design-20260910
+- task_id: x-multibrand-phase1-local-baseline-20260910
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
