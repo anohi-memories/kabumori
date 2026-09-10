@@ -58,7 +58,10 @@ Deno.serve(async (req) => {
     // callback, token exchange, identity reads, and every other Function path
     // never use this bypass. Ordinary clients retain admin_users JWT checks.
     const authorizationHeader = req.headers.get("Authorization");
-    const dashboardSecretOperator = authorizationHeader === `Bearer ${serviceRoleKey}`;
+    // The Dashboard test console supplies the project secret key as `apikey`.
+    // Accept it only in this POST-start branch; never in callback handling.
+    const dashboardSecretOperator = authorizationHeader === `Bearer ${serviceRoleKey}` ||
+      req.headers.get("apikey") === serviceRoleKey;
     const admin = dashboardSecretOperator
       ? { authorized: true, userId: null }
       : await resolveAdminAuthorization({ authorizationHeader, supabaseUrl, anonKey, serviceRoleKey });
