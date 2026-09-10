@@ -64,4 +64,8 @@ verify_jwt = false
 - 新ブランドは `is_active=false` で作成し、ブランドごとに明示的に有効化する。
 - 同じ内容や似た内容を複数アカウントへ自動投稿しない（X の自動化ルールに違反し、凍結のリスクがある）。ブランド間でネタの重複を防ぐ仕組みを設計に含める。
 
-調査結果は [SURVEY.md](SURVEY.md) にまとめています。正式アーキテクチャ設計（承認待ち）は [ARCHITECTURE.md](ARCHITECTURE.md) です。
+調査結果は [SURVEY.md](SURVEY.md) にまとめています。正式アーキテクチャ設計（承認済み）は [ARCHITECTURE.md](ARCHITECTURE.md)、Phase 1（ローカル再現）の結果は [PHASE1.md](PHASE1.md) です。
+
+## ローカルSupabaseを使う場合の注意（Phase 1で判明）
+
+既存migrationの `cron.schedule(...)` は本番プロジェクトURLをジョブ本文に埋め込んでいる。ローカルDBへ全migrationを再生すると、同じジョブがローカルのpg_cronにも登録される。`99999999999999_local_only_disable_cron_jobs.sql`（`supabase db reset`のたびに全ローカルcronジョブを自動でunscheduleする）と `00000000000000_local_only_enable_extensions.sql` は、この事故を防ぐためのローカル専用ファイル。**本番チェックアウトやmainへは絶対にコピー・マージしない。** 詳細は [PHASE1.md](PHASE1.md) の「安全上の発見と対処」を参照。

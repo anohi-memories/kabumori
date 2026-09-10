@@ -41,3 +41,8 @@ example
 # generated native folders
 /ios
 /android
+
+# local-only Supabase CLI state (never linked to production; see docs/multibrand/README.md)
+supabase/.temp/
+supabase/.branches/
+supabase/config.toml
