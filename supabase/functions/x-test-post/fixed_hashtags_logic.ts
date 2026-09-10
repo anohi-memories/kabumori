@@ -2,11 +2,16 @@
 // any future report that wants the same tags). Never left to the model, or to a Voice rewrite pass, to
 // generate, omit, or duplicate: appended exactly once, after every format/fact/Voice check has already
 // finished, directly onto the text handed to the X API.
-export const KABUMORI_REPORT_FIXED_HASHTAG_LIST = ["#日本株", "#日経平均", "#株式投資", "#かぶモリ"] as const;
+import {
+  appendProfileReportFixedHashtags,
+  KABUMORI_CODE_PROFILE,
+} from "../_shared/brand/brand_profiles.ts";
+
+export const KABUMORI_REPORT_FIXED_HASHTAG_LIST = KABUMORI_CODE_PROFILE.reportFixedHashtags;
 export const KABUMORI_REPORT_FIXED_HASHTAGS = KABUMORI_REPORT_FIXED_HASHTAG_LIST.join(" ");
 
 export function appendKabumoriReportFixedHashtags(text: string): string {
-  return `${text.trim()}\n\n${KABUMORI_REPORT_FIXED_HASHTAGS}`;
+  return appendProfileReportFixedHashtags(KABUMORI_CODE_PROFILE, text);
 }
 
 function countOccurrences(haystack: string, needle: string): number {

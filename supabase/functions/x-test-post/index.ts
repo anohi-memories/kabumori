@@ -57,6 +57,12 @@ import {
 } from "./tip_voice_logic.ts";
 import { KABUMORI_VOICE as SHARED_KABUMORI_VOICE } from "../_shared/kabumori_voice.ts";
 import {
+  brandIdFromScheduledRow,
+  loadBrandContext,
+} from "../_shared/brand/brand_context.ts";
+import { assertBrandPublishAllowed } from "../_shared/brand/publish_guard.ts";
+import { loadBrandXTokens } from "../_shared/brand/token_loader.ts";
+import {
   collectVoiceResponseDiagnostics,
   parseVoiceEvaluationOutput,
   VoiceEvaluationOutputError,
@@ -490,6 +496,7 @@ function kabumoriVoice(postType: KabumoriPostType, variationKey: string): string
 
 type ScheduledPost = {
   id: string;
+  brand_id?: string | null;
   post_type: string;
   slot_no: number;
   scheduled_for: string;
@@ -3005,46 +3012,6 @@ async function decryptToken(
   return new TextDecoder().decode(decrypted);
 }
 
-async function loadXTokens(
-  supabaseUrl: string,
-  serviceRoleKey: string,
-  clientSecret: string,
-  fallbackAccessToken: string,
-  fallbackRefreshToken: string,
-): Promise<XTokenState> {
-  const params = new URLSearchParams({
-    select: "access_token_ciphertext,access_token_iv,refresh_token_ciphertext,refresh_token_iv",
-    provider: "eq.x",
-    limit: "1",
-  });
-  const response = await fetch(`${supabaseUrl}/rest/v1/oauth_token_store?${params}`, {
-    headers: supabaseHeaders(serviceRoleKey),
-  });
-  if (!response.ok) throw new Error("OAUTH_TOKEN_STORE_READ_FAILED");
-  const rows = await response.json() as Array<Record<string, string>>;
-  if (!rows[0]) {
-    return { accessToken: fallbackAccessToken, refreshToken: fallbackRefreshToken };
-  }
-  try {
-    const key = await tokenEncryptionKey(clientSecret);
-    return {
-      accessToken: await decryptToken(
-        rows[0].access_token_ciphertext,
-        rows[0].access_token_iv,
-        key,
-      ),
-      refreshToken: await decryptToken(
-        rows[0].refresh_token_ciphertext,
-        rows[0].refresh_token_iv,
-        key,
-      ),
-    };
-  } catch {
-    console.error("Stored OAuth tokens could not be decrypted; using server secrets");
-    return { accessToken: fallbackAccessToken, refreshToken: fallbackRefreshToken };
-  }
-}
-
 async function saveXTokens(
   auth: XAuthContext,
   tokens: XTokenState,
@@ -3302,13 +3269,20 @@ Deno.serve(async (req) => {
         ? new Date(requestBody.reference_time_iso)
         : new Date();
       try {
-        const tokens = await loadXTokens(
+        const brandContext = await loadBrandContext({
           supabaseUrl,
           serviceRoleKey,
-          xClientSecret!,
-          xAccessToken!,
-          xRefreshToken!,
-        );
+          brandId: "kabumori",
+        });
+        assertBrandPublishAllowed(brandContext);
+        const tokens = await loadBrandXTokens({
+          context: brandContext,
+          supabaseUrl,
+          serviceRoleKey,
+          clientSecret: xClientSecret!,
+          fallbackAccessToken: xAccessToken!,
+          fallbackRefreshToken: xRefreshToken!,
+        });
         const manualXAuth: XAuthContext = {
           tokens,
           clientId: xClientId!,
@@ -3898,21 +3872,6 @@ Deno.serve(async (req) => {
       return jsonResponse({ mode: "dry_run", published: false, results }, 200);
     }
 
-    const xAuth: XAuthContext = {
-      tokens: await loadXTokens(
-        supabaseUrl,
-        serviceRoleKey,
-        xClientSecret!,
-        xAccessToken!,
-        xRefreshToken!,
-      ),
-      clientId: xClientId!,
-      clientSecret: xClientSecret!,
-      supabaseUrl,
-      serviceRoleKey,
-      refreshExecuted: false,
-    };
-
     try {
       await reconcileStaleMorningReportRuns({ supabaseUrl, serviceRoleKey });
     } catch {
@@ -3924,6 +3883,31 @@ Deno.serve(async (req) => {
       return jsonResponse({ status: "idle", message: "No post is due" }, 200);
     }
     scheduledPostId = scheduledPost.id;
+
+    // Legacy scheduled rows created before the schema change are explicitly
+    // Kabumori. New/unknown/disabled brands are rejected before OAuth loading
+    // and therefore before any X API request can be made.
+    const brandContext = await loadBrandContext({
+      supabaseUrl,
+      serviceRoleKey,
+      brandId: brandIdFromScheduledRow(scheduledPost.brand_id),
+    });
+    assertBrandPublishAllowed(brandContext);
+    const xAuth: XAuthContext = {
+      tokens: await loadBrandXTokens({
+        context: brandContext,
+        supabaseUrl,
+        serviceRoleKey,
+        clientSecret: xClientSecret!,
+        fallbackAccessToken: xAccessToken!,
+        fallbackRefreshToken: xRefreshToken!,
+      }),
+      clientId: xClientId!,
+      clientSecret: xClientSecret!,
+      supabaseUrl,
+      serviceRoleKey,
+      refreshExecuted: false,
+    };
 
     if (scheduledPost.post_type === "morning_report") {
       let morningRunId: string | null = null;

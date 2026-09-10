@@ -207,16 +207,17 @@ test("text generation failure is not retried and never checks Storage", async ()
   assert.deepEqual(calls, ["https://api.openai.com/v1/responses"]);
 });
 
-test("index branches payload dry-run before X auth and dispatcher", async () => {
+test("index branches payload dry-run before dispatcher and defers X auth until after brand selection", async () => {
   const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
   const mode = source.indexOf("isMorningGreetingPayloadTest");
   const branch = source.indexOf("if (isMorningGreetingPayloadTest)");
   const xAuth = source.indexOf("const xAuth: XAuthContext");
-  const dispatcher = source.indexOf("await claimDuePost(", xAuth);
+  const dispatcher = source.indexOf("await claimDuePost(");
   assert.ok(mode >= 0);
   assert.ok(branch > mode);
   assert.ok(xAuth > branch);
-  assert.ok(dispatcher > xAuth);
+  assert.ok(dispatcher > branch);
+  assert.ok(xAuth > dispatcher);
   const branchSource = source.slice(branch, source.indexOf("if (isMorningGreetingImageTest)", branch));
   assert.match(branchSource, /x_api_called: 0/u);
   assert.match(branchSource, /x_posted: false/u);
