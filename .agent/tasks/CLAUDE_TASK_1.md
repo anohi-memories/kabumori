@@ -3,8 +3,8 @@
 - task_id: expo-ios-push-e2e-resume-20260910
 - owner: claude
 - slot: claude-1
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - purpose: Apple Developer Program有効化後、かぶモリExpoアプリのiPhone実機Push通知E2Eを完成させる。
 
@@ -146,3 +146,95 @@ Report必須:
 - remaining_issues
 - safety_checks
 - next_recommendation
+
+## Report
+
+- task_id: expo-ios-push-e2e-resume-20260910
+- result: **Step 1（Apple Team visibility）でユーザー操作待ちのため停止**。Step 2以降（credentials/APNs、device registration、development build、実機E2E）は未着手。コード変更・production変更・秘密情報の取得/記録は一切なし。
+
+### changed_files
+
+- なし（コード変更0件）。
+
+### 事前確認結果
+
+- `PROJECT_RULES.md` / `.agent/ORCHESTRATION.md` / `.agent/CURRENT_STATE.md` / `HANDOFF.md`を確認。`HANDOFF.md`は2026-09-04時点のWeb admin向け内容で本タスクとは無関係と判断（`CURRENT_STATE.md`の既存注記どおり）。
+- `app.json`: `ios.bundleIdentifier: "com.anohimemories.kabumori"`、`extra.eas.projectId: "eb80adf3-861e-4a48-a373-2d9a85b58899"`、`owner: "anohi-memoriess-team"`を確認。
+- `eas.json`: `development`（developmentClient=true, distribution=internal）、`preview`、`production` buildプロファイルが定義済みであることを確認。
+- `origin/main` fresh-check実施、他slotとの競合なし。`supabase/functions/x-test-post/**`はCodex slot 2の担当と認識しており、今回一切触れていない。
+- 共有worktree上の他エージェント未コミット変更（`.agent/CODEX_REPORT.md`等、`important-news-monitor/**`、`x-test-post/**`の一部ファイル）を確認したが、変更・stage・commitしていない。
+
+### Apple Team確認結果
+
+- `npx eas-cli whoami`: ログイン済み（`anohi-memories` / `voxy1948.p3@gmail.com`、accounts: `anohi-memories`・`anohi-memoriess-team`いずれもOwner）。
+- `npx eas-cli project:info`: `@anohi-memoriess-team/kabumori`（ID: `eb80adf3-861e-4a48-a373-2d9a85b58899`）を確認、EAS project自体への接続は正常。
+- **Apple Developer Team自体の可視性は未確認**。`eas credentials --platform ios`はメニュー選択を含む完全対話型コマンドで、本セッションのBashツールにはTTYが存在しないため`Input is required, but stdin is not readable`で即座に失敗する（パイプ入力を試したが同様に拒否された。ライブラリが`stdin`のTTY性を直接チェックしているとみられる）。
+- ローカルにApple Developer関連のcredential cache（`~/.expo`配下、`credentials.json`等）は存在しないことを確認。過去の対話ログイン痕跡なし。
+- Apple ID/2FAの実際のログインは、パスワード・認証コードを本セッションで扱わない方針のため、**いずれにせよユーザー本人が対話的に行う必要がある**（本タスクの明示的な安全方針とも一致）。
+
+### Bundle ID
+
+- `com.anohimemories.kabumori`（`app.json`記載どおり、変更なし）。Apple Developer側での登録可否は上記の理由により未確認。
+
+### EAS credentials/APNs結果
+
+- 未確認（Apple Team可視性確認が前提のため未着手）。
+
+### device registration結果
+
+- 未実施（前提未達のため）。
+
+### development build結果
+
+- 未実施（前提未達のため）。
+
+### install結果
+
+- 未実施。
+
+### Push E2E 1〜9
+
+- 全項目未確認（1〜9のいずれも実施していない）。
+
+### tests
+
+- コード変更なしのため実施していない。
+
+### commit_hash / push
+
+- `.agent/tasks/CLAUDE_TASK_1.md`のstatus更新のみコミット予定（本Report追記後）。push可否はTASKのpush方針に明示の禁止記載がないため、他TASK同様に実行する。
+
+### deploy/build
+
+- なし。
+
+### user_action_required（ここが再開のボトルネック）
+
+以下のいずれかの方法で、ユーザー自身が対話的にEAS/Apple連携を完了させる必要がある:
+
+1. ユーザーの手元ターミナル（TTYが使える環境）で `npx eas-cli credentials --platform ios` を実行し、Apple ID/2FAでログインする（development build profileを選択）。
+2. または `npx eas-cli login` で既にEAS自体にはログイン済みのため、Apple連携だけが必要なら `eas build:configure -p ios`（これも対話型のため同様にユーザー環境での実行が必要）。
+3. ログインが完了した後で改めてこのTASKを再開すれば、Apple Team visibility以降（Bundle ID登録確認、EAS managed credentials/APNs構成、device registration、development build、実機E2E）に進められる。
+
+パスワード・2FAコード・private key等の秘密値は、この報告にもgitにも一切記録していない。
+
+### remaining_issues
+
+- Step 1（Apple Team visibility）が完了するまで、Step 2以降はすべて未着手のまま。
+- `CURRENT_STATE.md`記載の「2026-09-09 morning_greetingはX投稿成功もlegacy Storage receipt保存HTTP 400でscheduled_posts側がfailed扱い」という既知の問題は、本タスクのスコープ外（`x-test-post`非対象）のため未対応・未確認のまま。
+
+### safety_checks
+
+- Apple ID password / 2FA code / private key等の秘密値: 取得・記録・表示0件。
+- 既存certificate/keyのrevoke・破壊: 0件（Apple連携自体が未実施のため対象操作なし）。
+- App Store submit: 実施していない。
+- `x-test-post`、重要ニュース、朝刊、大引け、Web admin: 一切変更していない。
+- migration/schema/RLS/GRANT/RPC/Edge Function/Cron変更: 0件。
+- 本人以外の端末への登録・送信: 0件（実施していないため）。
+- 他agentの未コミット変更: 変更・stage・commit 0件。
+
+### next_recommendation
+
+- ユーザーに、手元の対話可能なターミナルで `npx eas-cli credentials --platform ios` （development profile）を実行し、Apple ID/2FAでログインしてもらうことを推奨する。
+- ログイン完了後、`G1`で本タスクを再開すれば、Bundle ID登録確認・EAS managed iOS credentials/APNs構成・device registration・development build・実機Push E2Eへ進められる。
+- 現在のBashツール環境には、対話型CLIコマンド（TTY必須）を実行する手段が無いことが判明した。今後同種の対話型EAS/Apple操作が必要な場合、同じ制約に当たる可能性が高い点をあらかじめ共有しておく。
