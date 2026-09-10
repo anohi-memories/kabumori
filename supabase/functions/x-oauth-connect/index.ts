@@ -10,7 +10,9 @@ import { loadBrandContext, BrandContextError } from "../_shared/brand/brand_cont
 
 const X_AUTHORIZE_URL = "https://x.com/i/oauth2/authorize";
 const X_TOKEN_URL = "https://api.x.com/2/oauth2/token";
-const SCOPES = "users.read offline.access";
+// GET /2/users/me requires both tweet.read and users.read. Read-only on purpose: no posting scopes
+// until a later phase explicitly asks the account owner to re-consent for them.
+const SCOPES = "tweet.read users.read offline.access";
 const ACCOUNT_ID = "ai_salaryman_lab_x";
 const BRAND_ID = "ai_salaryman_lab";
 
@@ -42,7 +44,9 @@ async function callback(req: Request, url: string, serviceRoleKey: string, clien
   if (!tokenResponse.ok) throw new BrandContextError(`X_TOKEN_EXCHANGE_FAILED:${tokenResponse.status}`);
   const tokens = await tokenResponse.json() as { access_token?: unknown; refresh_token?: unknown };
   if (typeof tokens.access_token !== "string" || typeof tokens.refresh_token !== "string") throw new BrandContextError("X_TOKEN_EXCHANGE_INVALID_RESPONSE");
-  const identity = await verifyReadOnlyXIdentity({ accessToken: tokens.access_token, expectedPlatformUserId: consumed[0].expected_platform_user_id });
+  const expectedHandle = context.socialAccount?.handle;
+  if (!expectedHandle) throw new BrandContextError("AI_LAB_HANDLE_NOT_CONFIGURED");
+  const identity = await verifyReadOnlyXIdentity({ accessToken: tokens.access_token, expectedPlatformUserId: consumed[0].expected_platform_user_id, expectedHandle });
   await rpc(url, serviceRoleKey, "complete_ai_salaryman_lab_oauth_connection", { p_access_token: tokens.access_token, p_refresh_token: tokens.refresh_token, p_platform_user_id: identity.platformUserId });
   return json({ success: true, connection_status: "identity_verified", publish_mode: "dry_run", publish_enabled: false });
 }

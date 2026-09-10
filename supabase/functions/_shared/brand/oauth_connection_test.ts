@@ -20,8 +20,26 @@ test("OAuth callback rejects tampered, expired, and cross-account state before t
 
 test("identity verification calls only read-only users/me and rejects account mismatch", async () => {
   const calls: string[] = [];
-  const fetchImpl: typeof fetch = async (input) => { calls.push(String(input)); return Response.json({ data: { id: "expected-user" } }); };
-  await assert.doesNotReject(() => verifyReadOnlyXIdentity({ accessToken: "fixture-only", expectedPlatformUserId: "expected-user", fetchImpl }));
+  const fetchImpl: typeof fetch = async (input) => { calls.push(String(input)); return Response.json({ data: { id: "expected-user", username: "kaishain_ai_lab" } }); };
+  await assert.doesNotReject(() => verifyReadOnlyXIdentity({ accessToken: "fixture-only", expectedPlatformUserId: "expected-user", expectedHandle: "kaishain_ai_lab", fetchImpl }));
   assert.deepEqual(calls, ["https://api.x.com/2/users/me"]);
-  await assert.rejects(() => verifyReadOnlyXIdentity({ accessToken: "fixture-only", expectedPlatformUserId: "other", fetchImpl }), { message: "X_IDENTITY_ACCOUNT_MISMATCH" });
+  await assert.rejects(() => verifyReadOnlyXIdentity({ accessToken: "fixture-only", expectedPlatformUserId: "other", expectedHandle: "kaishain_ai_lab", fetchImpl }), { message: "X_IDENTITY_ACCOUNT_MISMATCH" });
+});
+
+// Phase 3C: a first connection has no stored platform user id, so the username is the only thing
+// standing between "the account the operator meant" and "whichever X account the browser was logged in to".
+test("first connection binds only the registered handle, case-insensitively, and rejects any other logged-in account", async () => {
+  const respondAs = (username: unknown): typeof fetch => async () => Response.json({ data: { id: "some-user", username } });
+  await assert.doesNotReject(() => verifyReadOnlyXIdentity({ accessToken: "fixture-only", expectedPlatformUserId: null, expectedHandle: "kaishain_ai_lab", fetchImpl: respondAs("Kaishain_AI_Lab") }));
+  await assert.doesNotReject(() => verifyReadOnlyXIdentity({ accessToken: "fixture-only", expectedPlatformUserId: null, expectedHandle: "@kaishain_ai_lab", fetchImpl: respondAs("kaishain_ai_lab") }));
+  await assert.rejects(() => verifyReadOnlyXIdentity({ accessToken: "fixture-only", expectedPlatformUserId: null, expectedHandle: "kaishain_ai_lab", fetchImpl: respondAs("kabumori") }), { message: "X_IDENTITY_HANDLE_MISMATCH" });
+  await assert.rejects(() => verifyReadOnlyXIdentity({ accessToken: "fixture-only", expectedPlatformUserId: null, expectedHandle: "kaishain_ai_lab", fetchImpl: respondAs(undefined) }), { message: "X_IDENTITY_INVALID_RESPONSE" });
+});
+
+test("x-oauth-connect requests read-only scopes that include tweet.read (required by users/me) and never posting scopes", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("../../x-oauth-connect/index.ts", import.meta.url), "utf8");
+  assert.match(source, /const SCOPES = "tweet\.read users\.read offline\.access";/u);
+  assert.doesNotMatch(source, /tweet\.write|media\.write|like\.write|follows\.write/u);
+  assert.match(source, /expectedHandle/u);
 });

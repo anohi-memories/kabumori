@@ -40,20 +40,29 @@ export async function assertOAuthCallbackState({
 export async function verifyReadOnlyXIdentity({
   accessToken,
   expectedPlatformUserId,
+  expectedHandle,
   fetchImpl = fetch,
 }: {
   accessToken: string;
   expectedPlatformUserId: string | null;
+  // The handle registered on social_accounts. On a first connection there is no platform user id to
+  // compare yet, so without this whichever X account happens to be logged in to the browser at consent
+  // time would be bound to this brand (e.g. the operator's own kabumori account).
+  expectedHandle: string;
   fetchImpl?: typeof fetch;
 }): Promise<{ platformUserId: string }> {
   const response = await fetchImpl("https://api.x.com/2/users/me", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!response.ok) throw new BrandContextError(`X_IDENTITY_READ_FAILED:${response.status}`);
-  const body = await response.json() as { data?: { id?: unknown } };
+  const body = await response.json() as { data?: { id?: unknown; username?: unknown } };
   const platformUserId = body.data?.id;
-  if (typeof platformUserId !== "string" || !platformUserId) {
+  const username = body.data?.username;
+  if (typeof platformUserId !== "string" || !platformUserId || typeof username !== "string" || !username) {
     throw new BrandContextError("X_IDENTITY_INVALID_RESPONSE");
+  }
+  if (username.toLowerCase() !== expectedHandle.replace(/^@/u, "").toLowerCase()) {
+    throw new BrandContextError("X_IDENTITY_HANDLE_MISMATCH");
   }
   if (expectedPlatformUserId && expectedPlatformUserId !== platformUserId) {
     throw new BrandContextError("X_IDENTITY_ACCOUNT_MISMATCH");
