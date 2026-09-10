@@ -3,8 +3,8 @@
 - task_id: x-multibrand-phase3a-second-brand-dryrun-20260910
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: terra
 - purpose: 複垢化Phase 3Aとして、Phase 2で完成したbrand-aware基盤の上に2ブランド目 `ai_salaryman_lab` を「未接続・dry-run専用」で安全に通せる配管を実装する。今回は実OAuth・実Token・X実投稿・本番反映を行わない。
