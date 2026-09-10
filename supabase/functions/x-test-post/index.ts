@@ -62,6 +62,7 @@ import {
 } from "../_shared/brand/brand_context.ts";
 import { assertBrandPublishAllowed } from "../_shared/brand/publish_guard.ts";
 import { loadBrandXTokens } from "../_shared/brand/token_loader.ts";
+import { buildBrandDryRunPreview } from "../_shared/brand/dry_run.ts";
 import {
   collectVoiceResponseDiagnostics,
   parseVoiceEvaluationOutput,
@@ -3215,7 +3216,7 @@ Deno.serve(async (req) => {
 
   try {
     let requestBody: {
-      mode?: unknown; titles?: unknown; post_type?: unknown; reference_time_iso?: unknown;
+      mode?: unknown; titles?: unknown; post_type?: unknown; reference_time_iso?: unknown; brand_id?: unknown;
     } = {};
     try { requestBody = await req.json(); } catch { /* body is optional */ }
     const isUsefulTipDryRun = requestBody.mode === "useful_tip_dry_run";
@@ -3226,9 +3227,10 @@ Deno.serve(async (req) => {
     const isMorningGreetingImageTest = requestBody.mode === MORNING_GREETING_IMAGE_TEST_MODE;
     const isMorningGreetingPayloadTest = requestBody.mode === MORNING_GREETING_PAYLOAD_TEST_MODE;
     const isMorningGreetingManualPublish = requestBody.mode === MORNING_GREETING_MANUAL_PUBLISH_MODE;
+    const isBrandContextDryRun = requestBody.mode === "brand_context_dry_run";
     const isAnyDryRun = isUsefulTipDryRun || isVoiceDryRun || isMorningReportDryRun ||
       isCloseReportDryRun || isUsPremarketDryRun || isMorningGreetingImageTest ||
-      isMorningGreetingPayloadTest;
+      isMorningGreetingPayloadTest || isBrandContextDryRun;
     const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
     const xAccessToken = Deno.env.get("X_OAUTH2_ACCESS_TOKEN");
     const xRefreshToken = Deno.env.get("X_OAUTH2_REFRESH_TOKEN");
@@ -3244,6 +3246,21 @@ Deno.serve(async (req) => {
 
     supabaseUrlForFailure = supabaseUrl;
     serviceRoleKeyForFailure = serviceRoleKey;
+
+    if (isBrandContextDryRun) {
+      const brandId = typeof requestBody.brand_id === "string" && requestBody.brand_id.length > 0
+        ? requestBody.brand_id
+        : "kabumori";
+      const postType = typeof requestBody.post_type === "string"
+        ? requestBody.post_type
+        : "profile_preview";
+      const context = await loadBrandContext({ supabaseUrl, serviceRoleKey, brandId });
+      return jsonResponse({
+        mode: "dry_run",
+        published: false,
+        ...buildBrandDryRunPreview(context, postType),
+      }, 200);
+    }
 
     if (isMorningGreetingManualPublish) {
       const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
