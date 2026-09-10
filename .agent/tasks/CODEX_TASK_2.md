@@ -3,8 +3,8 @@
 - task_id: morning-report-fact-diagnostics-and-greeting-status-fix-20260910
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: `x-test-post` の朝系2件を最小変更で修正する。① morning_report のFact失敗時に実際の失敗理由・retrieval diagnosticsが消えて原因不明になる問題、② morning_greeting がX投稿成功後のlegacy Storage receipt保存400で scheduled_posts / 管理画面上だけfailedになる問題。
@@ -95,3 +95,12 @@ Production DB確認はread-onlyのみ。
 - unrelated production変更なし
 - status: `review_required`
 - next_owner: `chatgpt`
+
+## H2 deployment attempt (2026-09-10)
+
+- `origin/main` fresh-check: `f26b9dbe2b262eb072eb9254e049fd86c46d3f6a`
+- implementation commit `41de66bd4b4eb69bbdf0b6718274c519912f8a24` included: YES
+- clean worktree: created and clean
+- pre-deploy production state: `x-test-post` v90 ACTIVE / `verify_jwt=false`
+- deploy: not performed; production update approval was rejected because `H2` alone was not accepted as explicit authorization for a production deploy
+- required next action: user must explicitly approve deploying `x-test-post` from current `origin/main` with `--no-verify-jwt`

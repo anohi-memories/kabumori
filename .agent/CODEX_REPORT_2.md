@@ -57,6 +57,20 @@
 - formal repository existing uncommitted changes: untouched
 - secrets changed or exposed: 0
 
+## H2 deployment continuation (2026-09-10)
+
+- `origin/main` fresh-check: `f26b9dbe2b262eb072eb9254e049fd86c46d3f6a`
+- implementation commit `41de66bd4b4eb69bbdf0b6718274c519912f8a24` included: YES
+- conflict check: no active slot changes `supabase/functions/x-test-post/**`; Claude slot 1 is isolated to the Push workstream
+- clean worktree: created from current `origin/main`; clean state confirmed
+- pre-deploy read-back: `x-test-post` v90 ACTIVE / `verify_jwt=false`
+- deploy command prepared: `x-test-post` only with `--no-verify-jwt`
+- deploy result: **not performed**. The production mutation was rejected because the `H2` start code alone was not accepted as explicit deploy authorization.
+- production/manual execution: 0
+- X/OpenAI API calls: 0
+- DB/Cron/settings changes: 0
+- formal repository dirty worktree: untouched
+
 ## Review / next step
 
-ChatGPT should perform C2 review. Production `x-test-post` deploy requires a separate explicit approval after review.
+Await explicit user approval to deploy current `origin/main` `x-test-post` with `--no-verify-jwt`. After approval, deploy only that function, read back ACTIVE version/`verify_jwt`, do not manually invoke it, and return to natural-path observation.
