@@ -41,8 +41,8 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: x-multibrand-phase1-local-baseline-20260910
+- status: ready
+- task_id: x-multibrand-phase2-brand-context-20260910
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
