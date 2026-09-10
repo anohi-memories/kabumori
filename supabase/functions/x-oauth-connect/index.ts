@@ -53,7 +53,15 @@ Deno.serve(async (req) => {
   try {
     if (req.method === "GET" && new URL(req.url).pathname.endsWith("/callback")) return await callback(req, supabaseUrl, serviceRoleKey, clientId, clientSecret);
     if (req.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
-    const admin = await resolveAdminAuthorization({ authorizationHeader: req.headers.get("Authorization"), supabaseUrl, anonKey, serviceRoleKey });
+    // This is intentionally limited to this POST start branch. Supabase's
+    // Dashboard injects its secret key without revealing it to the operator;
+    // callback, token exchange, identity reads, and every other Function path
+    // never use this bypass. Ordinary clients retain admin_users JWT checks.
+    const authorizationHeader = req.headers.get("Authorization");
+    const dashboardSecretOperator = authorizationHeader === `Bearer ${serviceRoleKey}`;
+    const admin = dashboardSecretOperator
+      ? { authorized: true, userId: null }
+      : await resolveAdminAuthorization({ authorizationHeader, supabaseUrl, anonKey, serviceRoleKey });
     if (!admin.authorized) return json({ error: "OAUTH_CONNECTION_UNAUTHORIZED" }, 403);
     const body = await req.json() as { handle?: unknown };
     if (typeof body.handle !== "string") return json({ error: "AI_LAB_HANDLE_REQUIRED" }, 400);
