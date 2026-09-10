@@ -120,10 +120,12 @@ export default function ImportantNewsScreen() {
                 <View style={styles.badgeRow}>
                   <View style={[styles.typeBadge, holding ? styles.holdingBadge : styles.watchBadge]}>
                     <Text style={[styles.typeText, holding ? styles.holdingText : styles.watchText]}>
-                      {trackingLabels[item.tracking_type]}
+                      {item.matched_sector ? '市場' : trackingLabels[item.tracking_type]}
                     </Text>
                   </View>
-                  <Text style={styles.ticker}>{item.ticker_code}</Text>
+                  <Text style={styles.ticker}>
+                    {item.matched_sector ? `関連: ${item.matched_sector}` : item.ticker_code}
+                  </Text>
                   <View style={[styles.importanceBadge, label.subtle && styles.subtleBadge]}>
                     <Text style={[styles.importanceText, label.subtle && styles.subtleText]}>
                       {label.text}

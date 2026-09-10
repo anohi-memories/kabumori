@@ -2,7 +2,8 @@ import { supabase } from '@/lib/supabase';
 
 export type ImportantStockNews = {
   news_id: string;
-  ticker_code: string;
+  // null for market-wide news, which is shown through a matching sector instead of a ticker.
+  ticker_code: string | null;
   company_name: string;
   tracking_type: 'holding' | 'watch';
   title: string;
@@ -14,6 +15,10 @@ export type ImportantStockNews = {
   // App-facing severity from get_my_important_stock_news. Optional so an
   // older RPC without the column still renders.
   severity?: 'critical' | 'high' | 'medium';
+  // Market-wide items only: the tracked sector that made the item relevant, and
+  // the transmission themes (e.g. "fx,rates"). null for per-stock items.
+  matched_sector?: string | null;
+  relevance_reason?: string | null;
 };
 
 export type ImportantNewsFeed = {
