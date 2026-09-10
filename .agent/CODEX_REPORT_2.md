@@ -71,6 +71,22 @@
 - DB/Cron/settings changes: 0
 - formal repository dirty worktree: untouched
 
+## Explicitly approved production deployment (2026-09-10)
+
+- approval: explicit user approval received after the blocked attempt
+- deploy source: current `origin/main` at `de19c6eb599d456342c82fe20cd41e32ebe6350a`
+- implementation commit included: `41de66bd4b4eb69bbdf0b6718274c519912f8a24`
+- pre-deploy: `x-test-post` v90 ACTIVE / `verify_jwt=false`
+- command scope: `x-test-post` only with `--no-verify-jwt`
+- deploy: success
+- post-deploy: `x-test-post` v91 ACTIVE / `verify_jwt=false`
+- other Edge Function deploys: 0
+- DB / migration / RLS / RPC / Cron / scheduler / settings / secrets / OAuth changes: 0
+- manual Function invocation / morning_greeting publish / candidate injection: 0
+- manual X/OpenAI API calls and X posts: 0
+- formal repository existing uncommitted changes: untouched
+- natural-path observation: not yet available. Deployment completed at 2026-09-10 14:53 JST, after the natural morning_report and morning_greeting slots. No artificial same-day rerun was performed; the next naturally occurring morning paths must be checked read-only.
+
 ## Review / next step
 
-Await explicit user approval to deploy current `origin/main` `x-test-post` with `--no-verify-jwt`. After approval, deploy only that function, read back ACTIVE version/`verify_jwt`, do not manually invoke it, and return to natural-path observation.
+ChatGPT should review the successful v91 deployment. After the next natural morning cycle, verify read-only that a morning_report Fact failure preserves concrete draft diagnostics and that a successful morning_greeting remains successful even if its legacy receipt write returns 400. Do not force either path or rerun a same-day post.

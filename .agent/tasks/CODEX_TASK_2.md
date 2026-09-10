@@ -104,3 +104,14 @@ Production DB確認はread-onlyのみ。
 - pre-deploy production state: `x-test-post` v90 ACTIVE / `verify_jwt=false`
 - deploy: not performed; production update approval was rejected because `H2` alone was not accepted as explicit authorization for a production deploy
 - required next action: user must explicitly approve deploying `x-test-post` from current `origin/main` with `--no-verify-jwt`
+
+## Explicitly approved deployment completion (2026-09-10)
+
+- explicit production deploy approval: received
+- deploy source: current `origin/main` at `de19c6eb599d456342c82fe20cd41e32ebe6350a`
+- deploy target: `x-test-post` only
+- deploy option: `--no-verify-jwt`
+- deploy result: success
+- post-deploy read-back: `x-test-post` v91 ACTIVE / `verify_jwt=false`
+- manual Function invocation / X post / OpenAI call / candidate injection: 0
+- natural-path observation: pending; deployment completed at 2026-09-10 14:53 JST, after the day's natural morning slots, so no artificial same-day rerun was performed
