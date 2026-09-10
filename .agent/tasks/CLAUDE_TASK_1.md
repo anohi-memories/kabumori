@@ -3,7 +3,7 @@
 - task_id: broader-stock-news-coverage-phase3-market-relevance-20260911
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Opus 5
