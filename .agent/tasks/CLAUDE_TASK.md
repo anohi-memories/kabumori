@@ -3,7 +3,7 @@
 - task_id: x-multibrand-architecture-design-20260910
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - purpose: 現行かぶモリ本番を壊さず、X自動投稿システムを複数ブランド／複数Xアカウントへ拡張するための正式アーキテクチャ設計を行う。今回は設計のみで、本番変更・実装・認証接続は行わない。
