@@ -3,97 +3,86 @@
 - task_id: close-report-live-data-and-voice-retry-hardening-20260910
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: urgent
 - recommended_model: Sol High
 - purpose: 2026-09-10 16:00 JSTのclose_report失敗を受け、①Voice評価がmax_output_tokens/empty output/JSON parse系で壊れた場合の安全な1回だけの再評価、②大引けなのに終値を取得できず前場データ中心の低品質原稿が生成される問題を修正する。
 
-## Context
+## C2 Review — 2026-09-10
 
-直前TASK `morning-report-fact-diagnostics-and-greeting-status-fix-20260910` は実装・本番deployまで完了し、`x-test-post` v91 ACTIVE / `verify_jwt=false`。自然path観測のみ翌朝待ち。今回のTASKは同じ `x-test-post` を触るため、別slotではなくH2に継続して割り当てる。
+- review_result: follow_up_required
+- reviewed_by: chatgpt
+- implementation_commit: `835e426f5aeaf5affe14de28b451ed39dfcc4604`
+- voice_retry_review: pass
+- close_data_safety_gate_review: pass
+- completion_review: not yet approved
+- reason: 実終値が無い場合に安全停止するgateは実装されたが、今回TASKで要求した「なぜ16:00時点で前場情報しか取れなかったかの取得経路分析」と「当日終値を安定して取得する経路」の実装・検証がReport上未完了。現状のままでは品質事故は防げるが、毎日終値取得に失敗してclose_report自体が投稿されない可能性が残る。
 
-## Confirmed production incident: close_report 2026-09-10
+## Already verified / keep unchanged
 
-- scheduled: 2026-09-10 16:00 JST
-- scheduled_posts: failed
-- X post: 0
-- generated_text: 663 chars
-- Fact Check: passed
-- direct failure: `VOICE_EVALUATION_EMPTY_OUTPUT`
-- Voice evaluator response:
-  - HTTP 200
-  - response_status=`incomplete`
-  - finish_state=`max_output_tokens`
-  - incomplete_details.reason=`max_output_tokens`
-  - reasoning items only
-  - extracted text chars=0
-- Therefore X API was correctly not called.
+### A. Voice evaluator transport/output retry
 
-## Quality issue found in same run
+- close_reportのみ、以下のevaluator output failureを最大1回retryする実装は承認。
+  - `VOICE_EVALUATION_EMPTY_OUTPUT`
+  - `VOICE_EVALUATION_JSON_PARSE_FAILED`
+  - `incomplete_details.reason=max_output_tokens`
+- ordinary Voice rejectionや無関係エラーはretryしない。
+- 同一本文・同一Fact basisを再評価し、Fact/Voice基準を緩和しない。
+- retry診断を既存market_dataへ保存。
+- unlimited retryなし。
 
-16:00の「大引け」なのに、取得できた主要市場データは主に前場時点だった。
+### B. Close-data safety gate
 
-- 日経平均終値: 未取得
-- TOPIX終値: 未取得
-- Growth250終値: 未取得
-- 15:45前後の先物: 未取得
-- generated_text itself stated that final values were not confirmed and relied on 11:xx JST market information.
+- live close_reportで日経平均・TOPIXを必須化する実装は承認。
+- numeric / source-backed / fresh / same JST date / 15:00 JST以降を要求。
+- 前場値・11時台値はgateを通過しない。
+- 不足時は `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE` でX前に停止。
+- AIに「終値未確認」と言い訳させて投稿するfallbackは禁止のまま維持。
 
-今回たまたまVoice gateで止まったが、この品質の原稿を「大引け」としてXへ出してはいけない。
+### Tests already accepted
 
-## Required work A: Voice evaluator transport/output retry
+- targeted close_report + Voice retry: 51 passed / 0 failed
+- full `x-test-post`: 372 passed / 0 failed
+- pure-module deno check: pass
+- git diff --check: pass
+- whole index.tsの既存6 type errorsは今回scope外として分離可。
 
-1. close_reportのVoice評価で、以下のような evaluator transport/output failure のみ最大1回再評価する。
-   - `VOICE_EVALUATION_EMPTY_OUTPUT`
-   - `VOICE_EVALUATION_JSON_PARSE_FAILED`
-   - response incomplete / `max_output_tokens` により最終判定JSONが取得できない同等ケース
-2. 再評価は同一本文・同一Fact basisに対して行い、本文の意味変更やFact gate緩和はしない。
-3. 「評価結果として文章が不適切」と判定された通常のVoice failと、評価API自体が壊れたケースを分離する。
-4. retryは最大1回。unlimited retry禁止。
-5. 2回目も evaluator output failureならX投稿せず安全にfailed。
-6. retry回数・1回目/2回目のdiagnosticsを既存runログへ安全に残す。secret/raw token等は保存しない。
-7. morning_report / useful_tip等への横展開は今回必須ではない。共通化が安全かつ最小差分なら検討可だが、scopeを無用に拡大しない。
+## Required follow-up C: actually acquire same-day close values reliably
 
-## Required work B: Close report must have real close data
+1. `origin/main`をfresh-checkし、他slotが `supabase/functions/x-test-post/**` や同じproduction設定を変更中でないことを再確認する。
+2. 既存ローカル未コミット変更には触れず、必要ならclean worktreeを使う。
+3. 2026-09-10 16:00 runで、なぜ日経平均/TOPIXが前場情報しか取得できなかったのか、現在のcollection request・source selection・timestamp extraction経路をコード上で具体的に特定する。
+4. 「gateで止めるだけ」で終わらず、15:30以降に当日の日経平均・TOPIX終値を安定して取得できる既存許可source / 直接指数ページを優先する経路を実装または既存collectionへ明示的に誘導する。
+5. ユーザー確認では株探トップ/指数ページのように15:30確定値を直接表示する経路が利用可能だった。特定サイトの無断スクレイピング固定を前提にせず、現在の許可sourceポリシーと取得方式を確認した上で、記事検索より指数の確定値ページを優先できる安全な最小実装を選ぶ。
+6. 日経平均・TOPIXそれぞれ、取得値に以下を必須とする。
+   - same JST trading date
+   - observed timestamp >= 15:00 JST（可能なら15:30以降を優先）
+   - numeric close value
+   - source URL
+   - stale/front-session rejection
+7. 大引け記事の検索インデックス反映待ちだけに依存しないこと。指数確定値を取る経路と、材料/テーマを集めるニュース検索を分離できるならその方針を優先する。
+8. 無差別なweb search追加は禁止。必要な追加取得は日経/TOPIX closeのための限定的なものにする。
+9. 取得経路が一時的に失敗した場合は、既に実装済み `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE` gateで安全停止する。
+10. Production DBはread-only確認のみ可。手動X投稿、手動close_report publish、人工candidate、本番OpenAI/API invocationは禁止。
 
-8. live close_reportを「大引け」として投稿するための最低限の市場データ品質gateを追加する。
-9. 少なくとも以下を必須候補として扱い、実際の16:00 close_reportで当日終値が取得できない場合はX投稿しない。
-   - 日経平均 当日終値
-   - TOPIX 当日終値
-10. Growth Market 250 / 売買代金 / 15:45頃先物等は取得経路と安定性を調べ、確実に取得可能なら品質向上に使う。ただし必須gateをむやみに増やして可用性を壊さない。
-11. 前場値・11時台の市場データを「大引け」の終値として代用しない。
-12. timestamp/freshnessを厳格に確認し、当日大引け後の値であることを検証する。
-13. 終値取得不能なら、`CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE` 等の明確なreasonをrunへ保存してX投稿前に停止する。
-14. 取得不能をAIに文章で言い訳させて投稿するfallbackは禁止。
-15. Fact gateを緩めない。
+## Required tests for follow-up
 
-## Investigation
-
-16. 現在のclose_report取得経路を確認し、なぜ16:00時点で前場情報しか取れなかったかを特定する。
-17. 公式/信頼できる既存許可sourceで当日終値を安定取得できる経路を優先する。
-18. 取得元追加が必要なら最小限。無差別web検索増加は禁止。
-19. read-only production確認は可。手動X投稿/人工candidate/本番DB書込は禁止。
-
-## Tests
-
-- close_report Fact/data freshness/format tests
-- Voice evaluator retry tests
-- 1回目 EMPTY_OUTPUT → 2回目 success → X投稿可能になること
-- 1回目/2回目とも evaluator output failure → X未到達
-- 普通のVoice rejectionを無限retryしないこと
-- 16:00 liveで日経/TOPIX当日終値不足 → X未到達
-- 前場データだけではclose data gateを通過しないこと
-- valid当日終値あり →既存Fact/Voiceを経て投稿可能
-- full `x-test-post` regression
-- changed pure modules `deno check`（既存由来エラーは分離）
-- `git diff --check`
+- 15:30以降のsame-day Nikkei closeを正しく採用する。
+- 15:30以降のsame-day TOPIX closeを正しく採用する。
+- 同日でも前場/11時台データは採用しない。
+- 前日終値・timestamp不明・source不明は採用しない。
+- valid close valuesが取れた場合、close-data gateを通過して既存Fact/Voice経路へ進む。
+- close source取得失敗時は `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE` でX未到達。
+- 既存Voice single-retry testsを維持。
+- targeted + full `x-test-post` regression。
+- changed pure modules deno check。
+- `git diff --check`。
 
 ## Production / safety
 
-今回の割当は実装・テスト・commit/pushまで。
-
-本番 `x-test-post` deployはC2レビュー後に別途明示承認を受けること。
+- 今回のfollow-up承認は実装・テスト・commit/pushまで。
+- 本番 `x-test-post` deployはまだ禁止。C2再レビュー後に明示承認を受ける。
 
 禁止:
 - 手動X投稿
@@ -106,14 +95,14 @@
 - important-news / Pushアプリ変更
 - Fact gate緩和
 - unlimited retry
-
-既存未コミット変更は他workstream所有として触れない。必要ならclean worktreeを使用し、作業前にorigin/mainをfresh-checkする。
+- 無差別web検索増加
 
 ## Completion
 
-- root cause分析
-- close data quality gate実装
-- Voice evaluator output failureの最大1回retry実装
+- Voice single retry実装済み
+- close-data safety gate実装済み
+- close data取得失敗の具体的root causeをReport
+- same-day Nikkei/TOPIX closeの安定取得経路を実装/検証
 - targeted + full tests pass
 - commit/push済み
 - `.agent/CODEX_REPORT_2.md` 更新
