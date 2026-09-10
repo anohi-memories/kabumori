@@ -33,6 +33,19 @@ function jstParts(value: string): { date: string; weekday: string; minutes: numb
   };
 }
 
+/** Live close reports require same-day post-session index values, not front-session snapshots. */
+export function hasSameDayCloseData(
+  metric: NormalizedCloseMetric,
+  referenceIso: string,
+  mode: CloseRunMode,
+): boolean {
+  if (mode !== "live") return true;
+  if (parseMarketNumber(metric.value) === null || !metric.source_url || metric.freshness !== "fresh") return false;
+  const observed = jstParts(metric.timestamp);
+  const reference = jstParts(referenceIso);
+  return Boolean(observed && reference && observed.date === reference.date && observed.minutes >= 15 * 60);
+}
+
 export function resolveCloseRunMode(referenceIso: string): CloseRunMode {
   const parts = jstParts(referenceIso);
   if (!parts) return "preflight";

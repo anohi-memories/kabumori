@@ -15,6 +15,7 @@ import {
 import { getUsSessionContext, type UsSessionContext } from "./us_session_date_logic.ts";
 import {
   evaluateCloseFacts,
+  hasSameDayCloseData,
   localCloseReportSafetyIssues,
   normalizeCloseMetric,
   resolveCloseRunMode,
@@ -23,6 +24,7 @@ import {
   type NormalizedCloseMetric,
   type RawMarketMetric,
 } from "./close_report_logic.ts";
+import { runWithSingleRetry, SingleRetryExhaustedError } from "./voice_retry_logic.ts";
 import { appendKabumoriReportFixedHashtags } from "./fixed_hashtags_logic.ts";
 import {
   buildCloseReportVoiceRewriteRequestBody,
@@ -2271,7 +2273,7 @@ async function generateCloseReport(
   const futureInformationAbsent = packet.future_information_absent && unsafeOptionalMaterialCount === 0;
   const sourceUrls = packet.source_urls.filter(sourceVerified).slice(0, 18);
   const factResult = evaluateCloseFacts({
-    requiredIndices: [], futures: null,
+    requiredIndices: runMode === "live" ? [nikkei, topix] : [], futures: null,
     optional: [],
     verifiedTodayPointCount: todayPoints.length,
     dateConsistencyPassed: packet.date_consistency_passed,
@@ -2279,6 +2281,11 @@ async function generateCloseReport(
     unsafeOptionalMaterialCount,
     mode: runMode,
   });
+  if (runMode === "live" && (!hasSameDayCloseData(nikkei, referenceTimeIso, runMode) ||
+    !hasSameDayCloseData(topix, referenceTimeIso, runMode))) {
+    factResult.status = "failed";
+    factResult.notes.push("CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE");
+  }
   const collectionUsage = getUsage(collectionRaw);
   const webSearchCalls = countWebSearchCalls(collectionRaw);
   let text = "";
@@ -2797,6 +2804,41 @@ async function evaluateKabumoriVoice(
   };
 }
 
+function shouldRetryCloseReportVoice(error: unknown): boolean {
+  if (!(error instanceof VoiceEvaluationOutputError)) return false;
+  return error.message === "VOICE_EVALUATION_EMPTY_OUTPUT" ||
+    error.message === "VOICE_EVALUATION_JSON_PARSE_FAILED" ||
+    error.responseDiagnostics.incomplete_details?.reason === "max_output_tokens";
+}
+
+function closeReportVoiceFailureCode(error: unknown): string {
+  return error instanceof Error ? error.message.slice(0, 160) : "VOICE_EVALUATION_FAILED";
+}
+
+async function evaluateCloseReportVoiceWithRetry(
+  openAiApiKey: string,
+  text: string,
+  factBasis: string,
+): Promise<{ evaluation: VoiceEvaluation; retryCount: number; failureCodes: string[] }> {
+  const result = await runWithSingleRetry(
+    () => evaluateKabumoriVoice(openAiApiKey, "close_report", text, factBasis),
+    shouldRetryCloseReportVoice,
+  );
+  return { evaluation: result.value, retryCount: result.retryCount, failureCodes: result.failures.map(closeReportVoiceFailureCode) };
+}
+
+function closeReportVoiceRetryDiagnostics(error: unknown): { retryCount: number; failureCodes: string[] } {
+  if (!(error instanceof SingleRetryExhaustedError)) return { retryCount: 0, failureCodes: [] };
+  return { retryCount: 1, failureCodes: [error.firstError, error.secondError].map(closeReportVoiceFailureCode) };
+}
+
+function closeReportVoiceFailure(error: unknown): VoiceEvaluationOutputError | null {
+  if (error instanceof VoiceEvaluationOutputError) return error;
+  if (!(error instanceof SingleRetryExhaustedError)) return null;
+  if (error.secondError instanceof VoiceEvaluationOutputError) return error.secondError;
+  return error.firstError instanceof VoiceEvaluationOutputError ? error.firstError : null;
+}
+
 function skippedVoiceEvaluation(reason: string): VoiceEvaluation {
   return {
     factCheckStatus: "needs_review",
@@ -2820,6 +2862,8 @@ type ReportVoiceRewriteDiagnostics = {
   voice_rewrite_attempted: boolean;
   second_voice_passed: boolean | null;
   final_voice_failure_stage: "first" | "after_rewrite" | null;
+  voice_evaluation_retry_count?: number;
+  voice_evaluation_retry_failure_codes?: string[];
 };
 
 type ReportVoiceRewriteAttempt = { text: string; inputTokens: number; outputTokens: number; apiCostUsd: number };
@@ -3528,9 +3572,10 @@ Deno.serve(async (req) => {
             market_data: closeRunMarketData(draft, null, "pending"),
           });
         }
-        const firstVoiceEvaluation = draft.text
-          ? await evaluateKabumoriVoice(openAiApiKey, "close_report", draft.text, closeFactBasis(draft))
-          : skippedVoiceEvaluation("Fact check不合格のため文体評価を未実施");
+        const firstVoiceAttempt = draft.text
+          ? await evaluateCloseReportVoiceWithRetry(openAiApiKey, draft.text, closeFactBasis(draft))
+          : { evaluation: skippedVoiceEvaluation("Fact check不合格のため文体評価を未実施"), retryCount: 0, failureCodes: [] };
+        const firstVoiceEvaluation = firstVoiceAttempt.evaluation;
         const factCheckPassed = draft.factCheckStatus === "passed";
 
         // Same rewrite-and-reverify preview as morning_report's dry-run: the whole isCloseReportDryRun
@@ -3557,10 +3602,12 @@ Deno.serve(async (req) => {
           }
         }
         const voiceRewriteDiagnostics: ReportVoiceRewriteDiagnostics = {
-          first_voice_passed: firstVoiceEvaluation.passed,
+          first_voice_passed: firstVoiceAttempt.retryCount === 0 && firstVoiceEvaluation.passed,
           voice_rewrite_attempted: voiceRewriteAttempted,
           second_voice_passed: secondVoicePassed,
           final_voice_failure_stage: finalVoiceEvaluation.passed ? null : (voiceRewriteAttempted ? "after_rewrite" : "first"),
+          voice_evaluation_retry_count: firstVoiceAttempt.retryCount,
+          voice_evaluation_retry_failure_codes: firstVoiceAttempt.failureCodes,
         };
         const voicePassed = finalVoiceEvaluation.passed;
         const wouldPublish = factCheckPassed && voicePassed;
@@ -3576,7 +3623,9 @@ Deno.serve(async (req) => {
         // only recorded via `error`/`wouldPublish` so it's visible without blocking the response, mirroring
         // morning_report's dry-run.
         const dryRunError = !factCheckPassed
-          ? "CLOSE_REPORT_FACT_CHECK_FAILED"
+          ? (draft.factCheckNotes.includes("CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE")
+            ? "CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE"
+            : "CLOSE_REPORT_FACT_CHECK_FAILED")
           : !voicePassed
           ? "CLOSE_REPORT_VOICE_CHECK_FAILED"
           : null;
@@ -3613,7 +3662,8 @@ Deno.serve(async (req) => {
         }, 200);
       } catch (error) {
         const code = safeErrorCode(error);
-        const voiceFailure = error instanceof VoiceEvaluationOutputError ? error : null;
+        const voiceFailure = closeReportVoiceFailure(error);
+        const voiceRetry = closeReportVoiceRetryDiagnostics(error);
         try {
           await updateCloseReportRun(supabaseUrl, serviceRoleKey, runId, {
             generated_at: new Date().toISOString(), status: "failed", error: code,
@@ -3624,13 +3674,19 @@ Deno.serve(async (req) => {
             fact_check_notes: draft
               ? (voiceFailure ? [...draft.factCheckNotes, ...voiceEvaluationFailureNotes(error)] : draft.factCheckNotes)
               : [code],
-            ...(voiceFailure && draft ? {
-              voice_evaluation: {
-                status: "failed", code,
-                response: voiceFailure.responseDiagnostics,
-                schema: voiceFailure.schemaDiagnostics,
-              },
-              market_data: closeRunMarketData(draft, null, "failed", voiceFailure),
+            ...((voiceFailure || voiceRetry.retryCount > 0) && draft ? {
+              ...(voiceFailure ? {
+                voice_evaluation: {
+                  status: "failed", code,
+                  response: voiceFailure.responseDiagnostics,
+                  schema: voiceFailure.schemaDiagnostics,
+                },
+              } : { voice_evaluation: { status: "failed", code } }),
+              market_data: closeRunMarketData(draft, null, "failed", voiceFailure, {
+                first_voice_passed: false, voice_rewrite_attempted: false, second_voice_passed: null,
+                final_voice_failure_stage: "first", voice_evaluation_retry_count: voiceRetry.retryCount,
+                voice_evaluation_retry_failure_codes: voiceRetry.failureCodes,
+              }),
             } : {}),
           });
         } catch { console.error("Failed to record close report dry-run failure"); }
@@ -4046,10 +4102,15 @@ Deno.serve(async (req) => {
             market_data: closeRunMarketData(draft, null, "pending"),
           });
         }
-        const firstVoiceEvaluation = draft.text
-          ? await evaluateKabumoriVoice(openAiApiKey, "close_report", draft.text, closeFactBasis(draft))
-          : skippedVoiceEvaluation("Fact check不合格のため文体評価を未実施");
-        if (draft.factCheckStatus !== "passed") throw new Error("CLOSE_REPORT_FACT_CHECK_FAILED");
+        const firstVoiceAttempt = draft.text
+          ? await evaluateCloseReportVoiceWithRetry(openAiApiKey, draft.text, closeFactBasis(draft))
+          : { evaluation: skippedVoiceEvaluation("Fact check不合格のため文体評価を未実施"), retryCount: 0, failureCodes: [] };
+        const firstVoiceEvaluation = firstVoiceAttempt.evaluation;
+        if (draft.factCheckStatus !== "passed") {
+          throw new Error(draft.factCheckNotes.includes("CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE")
+            ? "CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE"
+            : "CLOSE_REPORT_FACT_CHECK_FAILED");
+        }
 
         // Same at-most-once, same-execution, pre-X-API rewrite pattern as morning_report: only when
         // generation/format/fact all already passed and only the Voice evaluator rejected the text. This
@@ -4076,10 +4137,12 @@ Deno.serve(async (req) => {
           }
         }
         const voiceRewriteDiagnostics: ReportVoiceRewriteDiagnostics = {
-          first_voice_passed: firstVoiceEvaluation.passed,
+          first_voice_passed: firstVoiceAttempt.retryCount === 0 && firstVoiceEvaluation.passed,
           voice_rewrite_attempted: voiceRewriteAttempted,
           second_voice_passed: secondVoicePassed,
           final_voice_failure_stage: finalVoiceEvaluation.passed ? null : (voiceRewriteAttempted ? "after_rewrite" : "first"),
+          voice_evaluation_retry_count: firstVoiceAttempt.retryCount,
+          voice_evaluation_retry_failure_codes: firstVoiceAttempt.failureCodes,
         };
 
         const totalInputTokens = draft.inputTokens + firstVoiceEvaluation.inputTokens
@@ -4121,13 +4184,14 @@ Deno.serve(async (req) => {
       } catch (error) {
         if (closeRunId) {
           const code = safeErrorCode(error);
-          const voiceFailure = error instanceof VoiceEvaluationOutputError ? error : null;
+          const voiceFailure = closeReportVoiceFailure(error);
+          const voiceRetry = closeReportVoiceRetryDiagnostics(error);
           // Both a broken voice-evaluation call (VoiceEvaluationOutputError) and a completed evaluation
           // that judged the text unsafe (CLOSE_REPORT_VOICE_CHECK_FAILED, possibly after an unsuccessful
           // rewrite) are voice-layer outcomes, not fact check failures — the underlying Fact Check result
           // (already recorded correctly by the "completed" write just before the throw) must not be
           // overwritten to "failed" by either. Mirrors morning_report's identical fix.
-          const isVoiceLayerFailure = Boolean(voiceFailure) || code === "CLOSE_REPORT_VOICE_CHECK_FAILED";
+          const isVoiceLayerFailure = Boolean(voiceFailure) || voiceRetry.retryCount > 0 || code === "CLOSE_REPORT_VOICE_CHECK_FAILED";
           try {
             await updateCloseReportRun(supabaseUrl, serviceRoleKey, closeRunId, {
               generated_at: new Date().toISOString(), status: "failed", error: code,
@@ -4139,13 +4203,19 @@ Deno.serve(async (req) => {
               fact_check_notes: draft
                 ? (voiceFailure ? [...draft.factCheckNotes, ...voiceEvaluationFailureNotes(error)] : draft.factCheckNotes)
                 : [code],
-              ...(voiceFailure && draft ? {
-                voice_evaluation: {
-                  status: "failed", code,
-                  response: voiceFailure.responseDiagnostics,
-                  schema: voiceFailure.schemaDiagnostics,
-                },
-                market_data: closeRunMarketData(draft, null, "failed", voiceFailure),
+              ...((voiceFailure || voiceRetry.retryCount > 0) && draft ? {
+                ...(voiceFailure ? {
+                  voice_evaluation: {
+                    status: "failed", code,
+                    response: voiceFailure.responseDiagnostics,
+                    schema: voiceFailure.schemaDiagnostics,
+                  },
+                } : { voice_evaluation: { status: "failed", code } }),
+                market_data: closeRunMarketData(draft, null, "failed", voiceFailure, {
+                  first_voice_passed: false, voice_rewrite_attempted: false, second_voice_passed: null,
+                  final_voice_failure_stage: "first", voice_evaluation_retry_count: voiceRetry.retryCount,
+                  voice_evaluation_retry_failure_codes: voiceRetry.failureCodes,
+                }),
               } : {}),
             });
           } catch { console.error("Failed to record close report failure"); }

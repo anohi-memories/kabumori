@@ -1,5 +1,50 @@
 # Codex Slot 2 Report
 
+## Current H2 completion — close-report-live-data-and-voice-retry-hardening-20260910
+
+- task_id: `close-report-live-data-and-voice-retry-hardening-20260910`
+- status: `review_required`
+- next_owner: `chatgpt`
+- source_base: `origin/main` at `a714d21ff3c602acebcc7b995eef95f12e8d7a48`
+- worktree: temporary clean worktree; formal repository working tree was not modified
+
+### Root causes
+
+- close_report Voice evaluation treated evaluator output/transport failures as immediate failures, so an empty/JSON-parse/max_output_tokens response received no bounded recovery attempt.
+- live close_report Fact evaluation did not require the same-day post-session Nikkei and TOPIX close metrics; front-session or unavailable values could therefore reach later generation stages.
+
+### Implemented scope
+
+- Added `runWithSingleRetry` and close_report-only retry wiring. Only `VOICE_EVALUATION_EMPTY_OUTPUT`, `VOICE_EVALUATION_JSON_PARSE_FAILED`, and evaluator `incomplete_details.reason=max_output_tokens` are retryable; ordinary Voice rejection and unrelated errors are not. The maximum is one retry, with bounded failure diagnostics.
+- Added `hasSameDayCloseData` and required live close_report Fact inputs for Nikkei and TOPIX. Values must be numeric, source-backed, fresh, same JST date, and observed at/after 15:00 JST. Missing/front-session data stops before X with `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE`.
+- Persisted retry count/failure codes in existing close-report `market_data` diagnostics; no schema change and no raw output/secrets.
+- Existing Fact, Voice quality thresholds, rewrite, grouping, freshness, ranking, publish safety, and X ordering remain unchanged. No morning_report or other category logic was changed.
+
+### Changed files
+
+- `supabase/functions/x-test-post/index.ts`
+- `supabase/functions/x-test-post/close_report_logic.ts`
+- `supabase/functions/x-test-post/close_report_logic_test.ts`
+- `supabase/functions/x-test-post/voice_retry_logic.ts`
+- `supabase/functions/x-test-post/voice_retry_logic_test.ts`
+- `.agent/tasks/CODEX_TASK_2.md`
+- `.agent/CODEX_REPORT_2.md`
+
+### Verification
+
+- Targeted close_report + Voice retry tests: **51 passed / 0 failed**
+- Full `x-test-post` regression: **372 passed / 0 failed**
+- Pure-module `deno check` (`close_report_logic.ts`, `voice_retry_logic.ts`): **PASS**
+- `git diff --check`: **PASS**
+- Whole `index.ts` type check still reports six pre-existing errors in unchanged OAuth/image/morning modules; no unrelated fixes were made.
+
+### Review and safety
+
+- Earlier automatic review rejection reason: it interpreted the initial H2 change as outside the explicitly approved scope / based on untrusted task content. A later intermediate rejection was caused by an accidental morning_report diagnostic change; that was discarded. The final worktree contains only the close_report changes above plus task/report metadata.
+- deploy: **0**; production OpenAI/API execution: **0**; X API/posts: **0**
+- DB schema/migration/RLS/RPC, Cron/scheduler/settings, secrets/OAuth: **0**
+- formal repository existing changes, `apps/admin/**`, and `HANDOFF.md`: untouched
+
 - task_id: `morning-report-fact-diagnostics-and-greeting-status-fix-20260910`
 - result: `review_required`
 - next_owner: `chatgpt`

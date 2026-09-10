@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   CLOSE_REPORT_FIXED_HASHTAGS,
   appendFixedCloseReportHashtags,
-  evaluateCloseFacts, hasFixedCloseReportHashtagsExactlyOnce, localCloseReportSafetyIssues,
+  evaluateCloseFacts, hasFixedCloseReportHashtagsExactlyOnce, hasSameDayCloseData, localCloseReportSafetyIssues,
   normalizeCloseMetric, resolveCloseRunMode, validateCloseFreshness,
   validateCloseReportFormat,
   type NormalizedCloseMetric,
@@ -554,9 +554,36 @@ test("close_report's rewrite is attempted at most once, only when the first Voic
   const rewriteCallCount = (block.match(/attemptCloseReportVoiceRewrite\(/gu) ?? []).length;
   assert.equal(rewriteCallCount, 1);
   const evaluateVoiceCallCount = (block.match(/evaluateKabumoriVoice\(/gu) ?? []).length;
-  assert.equal(evaluateVoiceCallCount, 2);
+  assert.equal(evaluateVoiceCallCount, 1);
+  assert.match(block, /evaluateCloseReportVoiceWithRetry\(openAiApiKey, draft\.text, closeFactBasis\(draft\)\)/u);
   // This task explicitly must not introduce a new outer scheduled-retry mechanism for close_report.
   assert.doesNotMatch(block, /shouldRetryCloseReport|retry_scheduled_post/u);
+});
+
+test("live close_report requires same-day Nikkei and TOPIX close data before Fact can pass", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const start = source.indexOf("async function generateCloseReport(");
+  const end = source.indexOf("\nasync function", start + 1);
+  const fnSource = source.slice(start, end);
+  assert.match(fnSource, /requiredIndices:\s*runMode === "live" \? \[nikkei, topix\] : \[\]/u);
+  assert.match(fnSource, /hasSameDayCloseData\(nikkei, referenceTimeIso, runMode\)/u);
+  assert.match(fnSource, /hasSameDayCloseData\(topix, referenceTimeIso, runMode\)/u);
+  assert.match(fnSource, /CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE/u);
+});
+
+test("close_report Voice transport failures have a single retry while normal rejection remains non-retryable", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const helperStart = source.indexOf("function shouldRetryCloseReportVoice");
+  const helperEnd = source.indexOf("\nfunction skippedVoiceEvaluation", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart);
+  const helper = source.slice(helperStart, helperEnd);
+  assert.match(helper, /error instanceof VoiceEvaluationOutputError/u);
+  assert.match(helper, /VOICE_EVALUATION_EMPTY_OUTPUT/u);
+  assert.match(helper, /VOICE_EVALUATION_JSON_PARSE_FAILED/u);
+  assert.match(helper, /max_output_tokens/u);
+  assert.doesNotMatch(helper, /VOICE_EVALUATION_OPENAI_FAILED|TypeError/u);
+  assert.match(helper, /runWithSingleRetry/u);
+  assert.match(helper, /retryCount/u);
 });
 
 test("2+7: generateCloseReport only counts material_scope 'today' points toward the safety gate, never 'next'", async () => {
