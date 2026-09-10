@@ -3,8 +3,8 @@
 - task_id: x-multibrand-phase3b-auth-connection-prep-20260910
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: terra
 - purpose: 複垢化Phase 3Bとして、会社員AIラボの実Xアカウントを安全に接続できるよう、Supabase Vaultを使う認証情報管理・OAuth接続・検証手順の実装準備を行う。ただし今回のtaskではX実投稿・live有効化・本番自動投稿開始は行わない。
