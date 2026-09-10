@@ -14,8 +14,8 @@
 ### Codex slot 1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: close-report-auto-post-enable-20260908
+- status: ready
+- task_id: x-multibrand-phase2-brand-context-20260910
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
@@ -32,8 +32,8 @@
 ### Claude slot 1
 - owner: claude
 - slot: claude-1
-- status: idle
-- task_id: none
+- status: in_progress_or_assigned_elsewhere
+- task_id: see `.agent/tasks/CLAUDE_TASK_1.md`
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
@@ -41,11 +41,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: done
 - task_id: x-multibrand-phase2-brand-context-20260910
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
+- note: 2026-09-10にユーザー指示でCodex slot 1（H1）へ移管済み。G2では継続しない。
 
 ## Control codes
 
