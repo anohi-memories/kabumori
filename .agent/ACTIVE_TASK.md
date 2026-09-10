@@ -14,11 +14,12 @@
 ### Codex slot 1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: done
 - task_id: x-multibrand-phase3c-ai-lab-x-oauth-connect-20260910
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
+- note: 2026-09-10にClaude slot 2へ移管済み。H1では継続しない。
 
 ### Codex slot 2
 - owner: codex
@@ -32,8 +33,8 @@
 ### Claude slot 1
 - owner: claude
 - slot: claude-1
-- status: in_progress_or_assigned_elsewhere
-- task_id: see `.agent/tasks/CLAUDE_TASK_1.md`
+- status: ready
+- task_id: broader-stock-news-coverage-phase1-20260910
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
@@ -41,12 +42,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: done
-- task_id: x-multibrand-phase2-brand-context-20260910
+- status: ready
+- task_id: x-multibrand-phase3c-ai-lab-x-oauth-connect-20260910
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: 2026-09-10にユーザー指示でCodex slot 1（H1）へ移管済み。G2では継続しない。
+- note: Codex H1からPhase 3Cを引継ぎ。OAuth開始→本人認可→Vault保存→read-only本人確認まで。X投稿/live化/Cron変更は禁止。
 
 ## Control codes
 
