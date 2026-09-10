@@ -3,7 +3,7 @@
 - task_id: push-dispatcher-cron-enable-20260910
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Opus 5
