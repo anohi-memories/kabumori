@@ -3,7 +3,7 @@
 - task_id: expo-ios-push-e2e-resume-20260910
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - purpose: Apple Developer Program有効化後、かぶモリExpoアプリのiPhone実機Push通知E2Eを完成させる。
