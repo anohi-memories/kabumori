@@ -7,9 +7,13 @@ export type ImportantStockNews = {
   tracking_type: 'holding' | 'watch';
   title: string;
   summary: string | null;
-  importance: 'important' | 'most_important';
+  // X-oriented tier. Items shown for app relevance only (severity 'medium') can be 'no_post'.
+  importance: 'important' | 'most_important' | 'no_post';
   news_time: string;
   source_url: string | null;
+  // App-facing severity from get_my_important_stock_news. Optional so an
+  // older RPC without the column still renders.
+  severity?: 'critical' | 'high' | 'medium';
 };
 
 export type ImportantNewsFeed = {

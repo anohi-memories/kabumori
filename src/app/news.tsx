@@ -20,6 +20,15 @@ import { markImportantNewsNotificationsRead } from '@/lib/notifications';
 
 const trackingLabels = { holding: '保有', watch: '監視' } as const;
 
+// Prefer the app severity; fall back to the X importance for an RPC without it.
+function importanceLabel(item: ImportantStockNews): { text: string; subtle: boolean } {
+  const severity = item.severity
+    ?? (item.importance === 'most_important' ? 'critical' : item.importance === 'important' ? 'high' : 'medium');
+  if (severity === 'critical') return { text: '最重要', subtle: false };
+  if (severity === 'high') return { text: '重要', subtle: false };
+  return { text: '注目', subtle: true };
+}
+
 function formatNewsTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
@@ -105,6 +114,7 @@ export default function ImportantNewsScreen() {
           renderItem={({ item }) => {
             const holding = item.tracking_type === 'holding';
             const sourceAvailable = canOpenSource(item.source_url);
+            const label = importanceLabel(item);
             return (
               <View style={styles.card}>
                 <View style={styles.badgeRow}>
@@ -114,9 +124,9 @@ export default function ImportantNewsScreen() {
                     </Text>
                   </View>
                   <Text style={styles.ticker}>{item.ticker_code}</Text>
-                  <View style={styles.importanceBadge}>
-                    <Text style={styles.importanceText}>
-                      {item.importance === 'most_important' ? '最重要' : '重要'}
+                  <View style={[styles.importanceBadge, label.subtle && styles.subtleBadge]}>
+                    <Text style={[styles.importanceText, label.subtle && styles.subtleText]}>
+                      {label.text}
                     </Text>
                   </View>
                 </View>
@@ -166,6 +176,8 @@ const styles = StyleSheet.create({
   ticker: { color: '#4b5b51', fontWeight: '900' },
   importanceBadge: { marginLeft: 'auto', borderRadius: 99, backgroundColor: '#fde8e5', paddingHorizontal: 10, paddingVertical: 5 },
   importanceText: { color: '#a23e37', fontSize: 12, fontWeight: '900' },
+  subtleBadge: { backgroundColor: '#eef1ee' },
+  subtleText: { color: '#5e6d63' },
   company: { color: '#526058', fontWeight: '700', fontSize: 14, marginTop: 11 },
   newsTitle: { color: '#17211a', fontWeight: '900', fontSize: 18, lineHeight: 25, marginTop: 8 },
   summary: { color: '#647068', fontSize: 14, lineHeight: 21, marginTop: 9 },

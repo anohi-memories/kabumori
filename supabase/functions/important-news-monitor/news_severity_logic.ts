@@ -98,7 +98,10 @@ export type CorporateIrSubtype =
 
 // Order matters: the first match wins, and the routine patterns come last so a
 // headline that mentions both (e.g. 監査役 + 代表取締役) is not buried as routine.
-const CORPORATE_IR_SUBTYPE_RULES: Array<{ subtype: Exclude<CorporateIrSubtype, "routine">; pattern: RegExp }> = [
+// Exported because public.important_news_ir_subtype (migration
+// 20260911090000_app_severity_news_feed.sql) mirrors these patterns verbatim for
+// the /news feed; a test pins that the two stay identical.
+export const CORPORATE_IR_SUBTYPE_RULES: Array<{ subtype: Exclude<CorporateIrSubtype, "routine">; pattern: RegExp }> = [
   { subtype: "delisting_or_listing_change", pattern: /上場廃止|整理銘柄|監理銘柄|特別注意銘柄|市場区分の変更|上場市場の変更/u },
   { subtype: "regulatory_approval", pattern: /承認(?:取得|申請)|審査完了報告|CRL|製造販売|薬事|治験|許認可|認可取得/u },
   { subtype: "business_disruption", pattern: /停止|休止|操業|火災|事故|障害|不正アクセス|サイバー|リコール|延期|中止/u },
