@@ -15,7 +15,7 @@
 - owner: codex
 - slot: codex-1
 - status: ready
-- task_id: x-multibrand-phase3a-second-brand-dryrun-20260910
+- task_id: x-multibrand-phase3b-auth-connection-prep-20260910
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
