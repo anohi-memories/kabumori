@@ -1,29 +1,42 @@
 # Codex Report
 
-- task_id: x-multibrand-phase3b-auth-connection-prep-20260910
+- task_id: kabumori-production-scheduler-restore-20260911
 - result: review_required
 - next_owner: chatgpt
-- implementation_branch: `feature/multibrand-foundation`
-- commit_hash: `d04d36d`
-- push: `origin/feature/multibrand-foundation`へpush済み
+- implementation_branch: `codex/scheduler-restore-20260911`
+- commit_hash: `246f080`
+- push: `origin/codex/scheduler-restore-20260911`へpush済み
 - deploy: なし
 - production_changes: なし
 
 ## Result
 
-- `social_accounts`へVault access/refresh secret ID（opaque UUID）、connection status、verified identity metadataをexpand-onlyで追加するmigrationを作成。本体Secretは通常テーブルに保存しない。
-- OAuth state tableは state hash、brand/account、PKCE verifierのVault secret ID参照、redirect URI、有効期限、consumed時刻のみを保存。tamper/unknown/expired/account mismatchはtoken exchange前に拒否する。
-- read-only identity verificationは `GET https://api.x.com/2/users/me` のみ。write/post APIは存在しない。
-- Kabumori legacy `oauth_token_store` は未変更。AIサラリーマン研究所はdry_run/publish disabledのまま、mioはdisabledのまま。
+- root cause: 複垢化Phase 2の `20260910170000_add_multibrand_brand_context_foundation.sql` が `claim_due_post()` を再定義した際、既存の専用planner呼出しを `plan_daily_posts()` だけへ縮小していた。
+- 最小復旧migration: `20260911130000_restore_claim_due_post_planners.sql`。`claim_due_post()` だけを再定義し、`plan_morning_report()`、`plan_close_report()`、既存の `plan_daily_posts()`、`plan_weekly_useful_tips()`、`plan_us_premarket_report()` を順に呼び戻す。
+- report用 `posting_windows` は変更しない。専用planner自身のJPX営業日・祝日・center time・既存unique制約/`ON CONFLICT`による重複防止を維持する。
+- `claim_due_post()` の実行権限はpublic/anon/authenticatedからrevokeし、service_roleだけへgrantする。
+
+## Production read-only confirmation
+
+- 現在の本番 `claim_due_post()` は `plan_daily_posts()` だけを呼ぶ定義だった。
+- `morning_report_settings`: active、center `08:20`、Asia/Tokyo。`close_report_settings`: active、center `16:00`、Asia/Tokyo。
+- 両reportの `posting_windows` は重複防止のためinactive。本日分 `scheduled_posts` は両reportとも0件。
+- 専用planner 4種は本番に存在し、現行 `claim_due_post()` はanon/authenticated不可・service_roleのみ実行可。
 
 ## Verification
 
-- local `supabase db reset --local --no-seed`: pass（新migrationを含む）。
-- OAuth state/identity tests: 2 passed。tamper、expiry、brand/account混線、identity mismatchを検証。
-- full Edge Function tests: **688 passed / 0 failed**。
-- `check-safe-env.sh`: **SAFE**、local `cron.job=0`。
-- 本番Supabase、Vault書込み、OAuth認可、X投稿、deploy、Cron、live有効化、main mergeはすべてゼロ。
+- `git diff --check`: pass。
+- Deno静的検証: 5 plannerが各1回・正しい順序で呼ばれること、`posting_windows`への書込みが無いこと、RPC権限境界を確認してpass。
+- ローカルSQL実行テスト: **未実施**。既存Podman VMは `podman machine start` 後に停止し、socket接続が拒否されるため、local Supabaseを起動できなかった。再試行は2回で打ち切った。本番へはSQLを実行していない。
 
-## User action required / next
+## Safety checks
 
-実OAuth認可と実Vault secret登録はユーザー本人のXログイン・明示承認が必要なため未実施。次段階では、承認後に管理者認証済み開始/callback Edge Function をdeployする前に、redirect URI・X App scopes・対象social account・Vault作成手順を再確認する必要がある。
+- X投稿、手動publish、Cron、Edge Function、OAuth/Vault/secrets、brands/social_accounts、H2 close-reportコードは変更ゼロ。
+- production DB migration/function適用はゼロ。
+- G2のOAuth作業と同一worktreeを使わず、`origin/main`起点の独立worktreeで実装した。
+
+## Remaining issues / next recommendation
+
+1. C1では最小diffと本番read-only事実を確認する。
+2. 本番適用前に、Podmanまたは同等の隔離Postgresを復旧し、平日・週末・JPX休日・二重dispatch・generic planner回帰のSQL実行テストを完了する。
+3. その後、ユーザーの明示承認を受けた場合のみ、このmigration単体を本番へ適用し、自然dispatchで当日予定が補完されることをread-only確認する。
