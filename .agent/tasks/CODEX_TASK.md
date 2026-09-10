@@ -9,6 +9,35 @@
 - recommended_model: terra
 - purpose: 複垢化Phase 3Cとして、会社員AIラボの実Xアカウントを既存共通X Appへ安全にOAuth接続し、tokenをSupabase Vaultへ保存、read-only identity verificationまで完了する。X実投稿・live化・自動投稿開始は行わない。
 
+## Explicit ChatGPT approval — 2026-09-10
+
+Phase 3Cについて、以下を**明示承認する**。従来の「important-news-monitorのみ本番deploy可」という限定より、本TASKの範囲に限ってこの承認を優先する。
+
+承認する本番操作:
+
+- OAuth接続用の必要最小限のexpand-only migration追加および本番適用
+- `x-oauth-connect` Edge Functionの追加および本番deploy
+- 会社員AIラボ用 `social_accounts` 行の作成・設定
+- Supabase Vaultへの会社員AIラボOAuth Access Token / Refresh Token保存
+- OAuth state / PKCE / connection metadataの必要な本番DB書込み
+- X `GET /2/users/me` によるread-only本人確認
+
+この承認は以下を**含まない**。引き続き禁止:
+
+- X投稿APIの呼び出し
+- 会社員AIラボの `publish_mode=live`
+- `publish_enabled=true`
+- 会社員AIラボ向けCron追加・有効化
+- Kabumori既存tokenの変更・移行
+- Kabumori既存投稿パイプラインの変更
+- `mio` の接続・有効化
+- Instagram / Threads対応
+- Secret値をGit / Report / ログ / 通常テーブル / ChatGPTへ露出すること
+
+OAuth認可画面でのXログイン・同意はユーザー本人が行う。Codexはパスワード・2FAコードを要求・保存しない。本人操作が必要な時点で停止し、対象アカウント、redirect URI、scopeを明示して案内する。
+
+接続成功後も会社員AIラボは必ず `publish_mode=dry_run` / `publish_enabled=false` を維持し、read-only本人確認までで停止する。Phase 3Dへは進まない。
+
 ## Background / handoff
 
 このworkstreamの続き。
