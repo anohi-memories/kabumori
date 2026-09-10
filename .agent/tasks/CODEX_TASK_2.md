@@ -3,89 +3,74 @@
 - task_id: morning-report-fact-diagnostics-and-greeting-status-fix-20260910
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: urgent
 - recommended_model: Sol High
 - purpose: `x-test-post` の朝系2件を最小変更で修正する。① morning_report のFact失敗時に実際の失敗理由・retrieval diagnosticsが消えて原因不明になる問題、② morning_greeting がX投稿成功後のlegacy Storage receipt保存400で scheduled_posts / 管理画面上だけfailedになる問題。
 
-## Confirmed production symptoms
+## C2 Review continuation
 
-### A. morning_report 2026-09-10
+- review_result: follow_up_required
+- reviewed_by: chatgpt
+- implementation_review: pass
+- implementation_commit: `41de66bd4b4eb69bbdf0b6718274c519912f8a24`
+- push: `origin/main` 済み
+- blocker: production `x-test-post` deploy and post-deploy natural-path verification are not completed.
 
-- scheduled_post: 2026-09-10 08:20 JST
-- result: `failed`
-- error: `MORNING_REPORT_FACT_CHECK_FAILED`
-- model: `gpt-5.6-luna`
-- `fact_check_notes=[]`
-- `source_urls=[]`
-- `market_data={}`
-- `generated_text=null`
-- X投稿前に停止している。
-- 現コードでは通常のFact失敗catch時に `draft.factCheckNotes` / retrieval diagnostics を保存せず、voice/lane系だけ詳細保存するため、どのFact gateで落ちたか本番記録から特定不能。
-
-### B. morning_greeting 2026-09-10
-
-- X投稿自体は成功。
-- authoritative `publish_claims` は `status=published`、X post ID保存済み。
-- その後のlegacy Storage receipt `published/YYYY-MM-DD.json` 保存がHTTP 400。
-- `morning-greeting-assets` bucketは image/png, image/jpeg, image/webp のみ許可され、JSON receiptと不整合。
-- error: `MORNING_GREETING_X_POST_RECORD_FAILED:400`
-- その例外により scheduled_posts / 管理画面上は `failed` になる。
-- コードコメント上もDB `publish_claims` がauthoritativeで、Storage receiptはbackward compatibility用。
-
-## Required work
-
-1. `.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、このTASK、`.agent/CODEX_REPORT_2.md` を確認。
-2. `origin/main` fresh-checkし、他slotが `supabase/functions/x-test-post/**` または同じproduction設定を変更中でないことを確認。競合があれば開始せず具体的に報告。
-3. 既存未コミット変更は他workstream所有として触れない・stageしない・commitしない。
+## Verified implementation
 
 ### A. Morning report Fact failure observability
 
-4. live scheduled morning_report のplain Fact失敗時にも、draftが存在する限り次を失わず `morning_report_runs` へ保存する。
-   - `fact_check_notes = draft.factCheckNotes`
-   - `source_urls`
-   - `market_data_timestamp`
-   - token / web search / cost（取得済みなら）
-   - retrieval diagnostics / candidate counts / publisher count 等、既存 `morningRunMarketData(...)` で安全に保存できる診断情報
-   - generated_text / character_count は実際にdraft textがある場合のみ正しく保存
-5. `MORNING_REPORT_FACT_CHECK_FAILED` のFact gate自体は今回緩和しない。原因追跡可能性の修正が主目的。
-6. Fact失敗をVoice失敗扱いにしない。既存Voice/Lane failure loggingとretry semanticsを壊さない。
-7. dry-run / liveで診断保存の意味が乖離しないよう確認する。
-8. regression testで、plain Fact failure時に `fact_check_notes` が `[MORNING_REPORT_FACT_CHECK_FAILED]` や空配列へ潰れず、draft由来の具体的理由を保存することを固定する。
+- plain `MORNING_REPORT_FACT_CHECK_FAILED` で draft が存在する場合、以下を `morning_report_runs` に保持する実装を確認。
+  - `fact_check_notes = draft.factCheckNotes`
+  - `source_urls`
+  - `market_data_timestamp`
+  - input/output tokens
+  - web search calls
+  - API cost
+  - `morningRunMarketData(...)` の retrieval diagnostics
+  - draft textが存在する場合のみ generated_text / character_count
+- Fact gate自体は緩和していない。
+- retry classification、Voice/Lane failure loggingは変更していない。
 
 ### B. Morning greeting X-success / admin-failed split brain
 
-9. `publish_claims` をauthoritativeな投稿完了記録として維持する。
-10. X投稿成功 + `completePublishSlot(...)` 成功後のlegacy Storage receipt保存失敗を、投稿全体の失敗へ昇格させない。
-11. 最小安全案を優先:
-    - legacy receipt writeをbest-effort化してwarningのみ、または
-    - backward compatibility上不要と確認できればwriteを廃止。
-    どちらでも `x_posted=true` / DB claim `published` 後に `MORNING_GREETING_X_POST_RECORD_FAILED:*` でscheduled postをfailedへ落とさないこと。
-12. duplicate preventionはatomic DB `publish_claims` を維持し、二重X投稿を絶対に増やさない。
-13. 既存receiptが存在する過去日のduplicate check互換性を壊さない。
-14. regression testで以下を固定する。
-    - X post成功
-    - DB claim complete成功
-    - legacy receipt write 400
-    - runは投稿成功として扱われる
-    - `failPublishSlot` でpublished claimをfailedへ戻さない
-    - 同日再実行でXへ二重投稿しない
-15. scheduled path側でも、成功結果がscheduled_postsを成功扱いにできることを既存mock/test範囲で確認する。
+- `completePublishSlot(...)` 成功後のlegacy Storage receipt writeをbest-effort化。
+- Storage receipt HTTP 400でも、既に成功したX投稿とauthoritative `publish_claims=published`を失敗へ覆さない。
+- atomic `publish_claims` claimによる同日二重X投稿防止を維持。
+- legacy receipt read互換性は維持。
 
-## Testing
+## Tests verified
 
-- morning_report関連テスト
-- morning_greeting publish / claim / scheduled path関連テスト
-- `x-test-post` 全体回帰テスト
-- changed pure modules `deno check`（既存由来エラーは分離報告）
-- `git diff --check`
+- targeted morning report + morning greeting publish/claim/scheduled tests: 69 passed / 0 failed
+- full `x-test-post` regression: 367 passed / 0 failed
+- `git diff --check`: pass
+- `deno check morning_greeting_publish_logic.ts` は unchanged dependency の既存2エラーのみ:
+  - `_shared/x_oauth2_post.ts` BufferSource typing
+  - `morning_greeting_logic.ts` retry_count return-type mismatch
+- 今回変更由来の新規type errorはReport上確認されていない。
+
+## Required continuation after explicit deploy approval
+
+1. `.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、このTASK、`.agent/CODEX_REPORT_2.md` を再確認。
+2. `origin/main` fresh-check。
+3. 他slotが `supabase/functions/x-test-post/**` / 同じproduction設定を変更中でないことを確認。競合時は停止して報告。
+4. 既存ローカル未コミット変更には一切触れない。必要なら既に許可済みのclean worktree方式を使う。
+5. production deployは `x-test-post` のみ。
+6. deploy後ACTIVE version / `verify_jwt` をread-back確認。
+7. 手動X投稿・手動morning_greeting publish・手動candidate注入は行わない。
+8. 自然経路で次回対象が発生した場合、read-onlyで確認:
+   - morning_report Fact failureなら具体的 `fact_check_notes` / diagnosticsが保存されること
+   - morning_greeting X成功時にlegacy receipt 400が起きても scheduled_posts / 管理画面がfailedへ落ちないこと
+   - `publish_claims` がauthoritative publishedを維持し、二重投稿がないこと
+9. 自然対象がすぐ発生しない場合は人工生成せず、その旨をReportする。
+10. `.agent/CODEX_REPORT_2.md` にdeploy version / verification / safety / remaining issueを記録。
+11. 完了時 `status: review_required`, `next_owner: chatgpt`。
 
 ## Production / safety
 
-今回のTASK割当は **実装・テスト・commit/pushまで** を承認する。
-
-本番 `x-test-post` deployはこのTASKではまだ実行しない。C2レビュー後、必要なら明示承認を受けてdeployする。
+現時点では本番deploy未実施。
 
 禁止:
 - 手動X投稿
@@ -96,16 +81,17 @@
 - DB schema / migration / RLS / GRANT / RPC変更
 - secrets / OAuth変更
 - 他Edge Function deploy
-- important-news / close_report / Pushアプリの変更
+- important-news / close_report / Pushアプリ変更
 - legacy backlog再実行
 
-Production DB確認が必要な場合はread-onlyのみ。
+Production DB確認はread-onlyのみ。
 
 ## Completion
 
-- root causeに対応する最小実装完成
-- targeted + full regression tests pass
-- commit/push済み
-- `.agent/CODEX_REPORT_2.md` に変更点、テスト、残課題、本番deploy未実施を明記
-- `status: review_required`
-- `next_owner: chatgpt`
+- implementation review: pass
+- production `x-test-post` deploy成功
+- ACTIVE version確認
+- post-deploy natural-path observation結果をReport
+- unrelated production変更なし
+- status: `review_required`
+- next_owner: `chatgpt`
