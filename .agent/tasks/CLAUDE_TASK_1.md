@@ -299,7 +299,7 @@ TASKの安全条件をすべて満たしたため実施した（実施直前に`
 
 ### commit_hash
 
-- `20260910163500_add_send_push_notifications_dispatch_cron.sql`を含むcommit（本Report追記と合わせてpush）。
+- `7e56146` — Enable send-push-notifications dispatch cron（migration追加＋本Report追記）。本行の追記のみ直後のcommitで反映。
 
 ### push
 
