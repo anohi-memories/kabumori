@@ -17,27 +17,30 @@
   - Claude slot1開始=`G1`、完了確認=`K1`
   - Claude slot2開始=`G2`、完了確認=`K2`
 - active_workstream:
-  - Codex slot 1: `ready`（`x-multibrand-phase3c-ai-lab-x-oauth-connect-20260910`：会社員AIラボの実X OAuth接続 + Supabase Vault token登録 + read-only identity verification。X投稿/live化/Cron追加は禁止）
+  - Codex slot 1: `done`（Phase 3CをClaude slot 2へ移管済み）
   - Codex slot 2: `done`
-  - Claude slot 1: 別タスク管理
-  - Claude slot 2: `done`（複垢化Phase 2はH1へ移管済み。G2では継続しない）
+  - Claude slot 1: `ready`（別ニュース基盤タスク。複垢化とは競合させない）
+  - Claude slot 2: `ready`（`x-multibrand-phase3c-ai-lab-x-oauth-connect-20260910`：Codex H1から移管。会社員AIラボOAuth接続→Vault保存→read-only本人確認まで。X投稿/live化/Cron変更は禁止）
 - multibrand_work:
   - 初期対象: `kabumori` / `ai_salaryman_lab` / `mio`
   - 初期安全調査: `feature/multibrand-foundation` / commit `56244c7`
   - 正式設計: `docs/multibrand/ARCHITECTURE.md` / commit `bfa4c7b`、K2承認済み
-  - Phase 1: commit `719249f`、K2承認済み。ローカル再現とCron安全対策
-  - Phase 2: commit `5806e85`、C1承認済み。brand/account基礎、BrandContext、Kabumori互換
-  - Phase 3A: commit `34cb78c`、C1承認済み。会社員AIラボ独立profile + dry-run基盤
-  - Phase 3B: commit `d04d36d`、C1承認済み。Vault opaque refs、brand/account-aware OAuth state、read-only X identity verification準備。688/688 tests、SAFE、本番変更ゼロ
-  - Phase 3Cは会社員AIラボの実OAuth接続とVault token登録、read-only本人確認までを行う
-  - 接続後も `publish_mode=dry_run` / `publish_enabled=false` を維持し、X投稿と自動投稿Cronは解放しない
-  - Xログイン・認可同意はユーザー本人操作が必要。パスワード/2FAコードを取得・保存しない
-  - Kabumori legacy oauth_token_store/token/投稿挙動を変更しない
-  - `mio` はdisabledのまま
+  - Phase 1: commit `719249f`、K2承認済み
+  - Phase 2: commit `5806e85`、C1承認済み
+  - Phase 3A: commit `34cb78c`、C1承認済み
+  - Phase 3B: commit `d04d36d`、C1承認済み
+  - Phase 3C最新実装: `feature/multibrand-foundation` commit `a8414d9` (`Accept dashboard secret key for OAuth start`)
+  - `x-oauth-connect` のみ本番deploy済み
+  - OAuth開始POSTに限りDashboard secret key `apikey` を許可。callback/token読取/X投稿には使わない
+  - Dashboardテスト画面で `{"handle":"kaishain_ai_lab"}` とsecret key header設定まで完了。`Send Request` は未実行
+  - 現時点でOAuth state / Vault / social_accountsへの新規書込み、X API、Xログインは未実行
+  - 次はG2でOAuth開始→authorization URL確認→ユーザー本人Xログイン/同意で停止→callback後Vault保存→`GET /2/users/me` read-only確認
+  - 接続後も `publish_mode=dry_run` / `publish_enabled=false`
+  - X投稿・Cron変更・live化・publish有効化・Kabumori token変更・mio操作は禁止
 - parallel_work:
   - 既存未コミット変更は他workstreamの所有物として扱い、変更・stage・commitしない
-  - H1開始前と本番反映直前にorigin/mainと他スロットTASKをfresh-checkし、同じDB migration/RPC/Edge Function/workflow/production設定に触れる競合があれば開始しない
-  - 実装は `/Users/yuya/Developer/kabumori-multibrand` / `feature/multibrand-foundation`
+  - G2開始前にorigin/mainと他slot TASKをfresh-checkし、同じmigration/RPC/Edge Function/workflow/production設定へ触れる競合があれば開始しない
+  - 複垢化実装は `/Users/yuya/Developer/kabumori-multibrand` / `feature/multibrand-foundation`
 - known_issue:
   - 2026-09-09 morning_greetingはX投稿成功後、legacy Storage receipt保存HTTP 400によりscheduled_posts側がfailed扱いになった別問題が未修正
 
