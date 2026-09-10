@@ -1,27 +1,34 @@
 # Claude Task 2
 
-- task_id: x-multibrand-phase1-local-baseline-20260910
+- task_id: x-multibrand-phase2-brand-context-20260910
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: high
-- purpose: 複垢化正式設計の承認済み判断を反映し、本番へ一切影響を与えずにPhase 1（ローカルSupabaseで現行かぶモリ1ブランドの再現・検証基盤構築）を進める。
+- purpose: 複垢化Phase 2として、現行かぶモリの挙動を維持したまま `brand_id` / BrandContext の基礎を導入し、まず `kabumori` 1ブランドだけで完全互換を確認する。本番反映・新ブランド接続は行わない。
 
-## Approved architecture decisions
+## Approved decisions
 
-ChatGPT側で以下を正式決定済み。
+以下はChatGPT側で承認済み。
 
-1. X Appは当面3ブランドで共通1 Appを使用する。将来分離できるよう `oauth_client_ref` は設計上残す。
-2. Xトークン管理は自前AES-GCMではなくSupabase Vaultを採用する。通常テーブルへSecret値を平文保存しない。
-3. 既存のシングルトン設定は、新テーブルへ全面移行せずin-placeでブランド対応へ多行化する方針。
-4. Phase 1開始前にDocker Desktopを導入し、ローカルSupabaseを使って本番から分離したDB検証環境を作る。
+- 共通パイプライン + 行ごとの `brand_id` を基本構造とする。
+- `brands` と `social_accounts` を分離する。
+- 初期ブランドIDは `kabumori` / `ai_salaryman_lab` / `mio`。
+- X Appは当面3ブランド共通1 App。将来分離可能な `oauth_client_ref` は残す。
+- XトークンはSupabase Vaultを採用する。通常テーブルへSecret値を平文保存しない。
+- 既存シングルトン設定はin-placeでブランド対応へ多行化する。
+- 新ブランドは既定OFF、`disabled -> dry_run -> live` の明示段階解放。
+- migrationは expand -> switch -> contract。Phase 2では原則expand/switchまでで、旧互換を壊すcontractは行わない。
+- ブランド文脈解決失敗・未知brand・安全ゲート不明時はfail-closedで投稿しない。
 
-正式設計書は `docs/multibrand/ARCHITECTURE.md`（feature/multibrand-foundation commit `bfa4c7b`）を正本とする。
+正式設計: `docs/multibrand/ARCHITECTURE.md`
+Phase 1結果: `docs/multibrand/PHASE1.md`
+Phase 1 branch commit: `719249f` on `feature/multibrand-foundation`
 
-## Read First
+## Read First / Start Safety
 
-開始時に必ず確認する。
+開始時に必ず以下を確認する。
 
 - `.agent/ORCHESTRATION.md`
 - `.agent/CURRENT_STATE.md`
@@ -29,124 +36,157 @@ ChatGPT側で以下を正式決定済み。
 - `docs/multibrand/README.md`
 - `docs/multibrand/SURVEY.md`
 - `docs/multibrand/ARCHITECTURE.md`
+- `docs/multibrand/PHASE1.md`
 
-開始前に `origin/main` をfresh-checkすること。既存未コミット変更は他workstreamの所有物として扱い、編集・削除・stage・commitしない。
+その上で `origin/main` をfresh-checkし、他スロットのTASKも確認して変更対象が競合しないことを確認する。競合がある場合は開始しない。
+
+複垢作業は `/Users/yuya/Developer/kabumori-multibrand` / `feature/multibrand-foundation` を使用し、既存 `kabumori` checkout の未コミット差分は他workstreamの所有物として触らない。
+
+作業開始前・DB reset後・完了前に `scripts/multibrand/check-safe-env.sh` を実行しSAFEを確認する。Phase 1で判明した「ローカルmigration再生時に本番URL入りCronが登録され得る」リスクを必ず認識し、local-only Cron無効化を維持する。
 
 ## Model Guidance
 
-Phase 1は環境構築・再現・テストが中心なので通常はSonnet系でよい。設計の再判断、DB構造の重大な変更判断、Vault/Cron/認証まわりで設計変更が必要になった場合は勝手に決めず停止してChatGPTへ報告する。その際は必要ならOpusへ切り替える。
+通常はSonnet系で進めてよい。
 
-## Scope — Phase 1 only
+ただし以下が必要になった場合は勝手に設計変更せず停止してChatGPTへ報告する。
 
-目的は「複垢化実装」ではなく、現行かぶモリ1ブランドの安全なローカル再現基盤を作ること。
+- ARCHITECTURE.mdのbrand/accountモデルを変更したい
+- migration戦略を大きく変更したい
+- Vault / X認証方式の再設計が必要
+- Cron構造を今回変更する必要が出た
+- 既存本番互換性と複垢化が両立しない
 
-実施してよいこと：
+その場合は必要に応じてOpusへ切り替える。
 
-- `/Users/yuya/Developer/kabumori-multibrand` の分離作業環境を使用
-- 最新 `origin/main` と `feature/multibrand-foundation` の差分・競合を確認
-- Docker Desktopの導入と起動（必要な範囲のみ）
-- Supabase CLI / ローカルSupabaseの初期化・起動
-- 本番へlinkされていないことの確認
-- リポジトリに存在するmigrationからローカルDBを再構築
-- 既存Edge Functions/RPC/DB schemaのローカル再現性確認
-- 既存テスト680件の再実行
-- 必要ならローカル再現用の安全な設定・スクリプト・文書の追加
-- 本番依存があってローカル再現できない箇所の洗い出し
-- Phase 2へ進むための不足条件を明文化
+## Scope — Phase 2
 
-## Non-Negotiable Safety Rules
+Phase 2のゴールは「3ブランド運用」ではない。
 
-- 本番Supabaseへのlink禁止
-- 本番DBへの書き込み禁止
-- 本番migration適用禁止
-- 本番RPC変更禁止
-- 本番Edge Function deploy禁止
-- 本番Cron変更禁止
-- 本番Secret/Vault変更禁止
-- X OAuth・トークン取得・実アカウント接続禁止
-- X実投稿禁止
-- 会社員AIラボ／みおの有効化禁止
-- mainへのmerge禁止
-- Secret値・認証情報をGit、ログ、文書へ出さない
-- `kabumori`既存本番挙動を変えるコード変更はPhase 1では行わない
+**`kabumori` 1ブランドだけを新しいbrand-aware構造で従来どおり動かせる基礎を作ること。**
 
-特に、ローカルSupabaseの起動前後で `scripts/multibrand/check-safe-env.sh` を実行し、本番project ref/linkを拾っていないことを確認する。
+実施対象は、ARCHITECTURE.mdのPhase 2に沿って必要最小限に限定する。
 
-## Important known gaps
+### A. DB expand
 
-以下は現行Gitと本番の不整合として既知。Phase 1で勝手に解消・取り込みしない。
+ローカル環境で以下の基礎を実装・検証する。
 
-- GitHubに存在しない本番コード（銘柄マスタ同期Function 2本、DB変更9本）
-- 本番で動いている重要ニュースX公開Cron migrationが既存作業側では削除状態
-- 本番migration適用状況が完全確認できていない
+- `brands`
+- `social_accounts`
+- 必要なブランド設定基盤
+- 既存投稿関連テーブルへの `brand_id` 追加
+- 既存行を大量UPDATEせず `kabumori` として扱える後方互換
+- 既存一意制約を壊さず、新しいbrand-aware制約を安全に追加する方法
+- シングルトン設定のin-place多行化のうちPhase 2に必要な範囲
 
-これらがローカル再現の妨げになる場合は、事実と影響範囲を報告して停止する。複垢化タスクへ混ぜない。
+migrationはfeature branch専用。**本番へ適用しない。**
+
+### B. BrandContext 基礎
+
+`supabase/functions` 側へ、ブランド文脈を一箇所で解決する共有層を追加する。
+
+例としてARCHITECTURE.md記載の `_shared/brand/*` 相当を実装し、少なくとも以下を型として明確化する。
+
+- brand identity
+- social account identity
+- publish mode / enabled gates
+- brand code profile
+- operational settings
+
+`kabumori` の既存ブランド名・文体・ハッシュタグ・プロンプト等を、挙動を変えずにBrandContext/BrandCodeProfile経由へ移せる土台を作る。
+
+### C. 投稿パイプラインへbrand_idを通す
+
+Phase 2で安全に変更できる範囲で、planner / scheduled row / claim / execution / completionまで `brand_id` が消えないようにする。
+
+特に `claim_due_post()` と `x-test-post` の境界を優先する。
+
+- 引数省略・旧経路は `kabumori` として互換動作
+- 新コード内で暗黙の「唯一のブランド」を参照しない
+- 未知brandはfail-closed
+
+### D. X token loaderの分離準備
+
+既存 `oauth_token_store` は**かぶモリ専用legacyとして凍結**する。
+
+Phase 2では新ブランドのOAuthやVault token登録を行わない。
+
+ただし、後続Phaseでbrand/social_account単位のtoken resolverへ切り替えられるよう、X token読込ロジックの重複を整理し、`kabumori` legacy token経路を明示的に1箇所へ寄せることは実施可。
+
+### E. 互換テスト
+
+`kabumori`について、brand-aware化前後で以下が変わらないことを固定する。
+
+- 投稿種別選定
+- 生成プロンプト主要部分
+- ハッシュタグ
+- planner / schedule / claimの意味
+- dry-run時にX APIを呼ばないこと
+- 既存投稿時間・Cron前提を今回変更していないこと
+
+可能ならゴールデンスナップショット等で、かぶモリ文面・設定の意図しない変化を検知する。
+
+## Explicitly out of scope / 禁止
+
+Phase 2では以下を行わない。
+
+- 本番Supabaseへのlink
+- 本番DBへのmigration適用・schema変更
+- 本番RPC変更
+- 本番Edge Function deploy
+- 本番Cron変更
+- 本番Secret/Vault変更
+- X OAuth
+- 新規X token取得
+- 会社員AIラボ・みおの実アカウント接続
+- X実投稿
+- 会社員AIラボ・みおの自動投稿有効化
+- Instagram / Threads実装
+- 管理画面ブランド切替実装
+- mainへのmerge
+- ARCHITECTURE.mdでPhase 3以降とされているブランド固有実装の先取り
+- 既知の「GitHubにない本番コード」「本番migration不整合」の解消をこのtaskへ混ぜること
+
+## Local environment note
+
+Phase 1ではDocker Desktopの非対話インストールがsudoで止まり、Podmanを代替使用した。
+
+現状でもDB migration / 直接SQL RPC / Edge Function serve / Deno testは可能なのでPhase 2は開始可。
+
+Kong/PostgREST/Auth/Storageを含む完全結合テストが必要になった場合は、未検証のまま成功扱いせずReportへ明記する。Docker Desktop導入が本当にブロッカーになった時点で停止して報告する。
 
 ## Completion Criteria
 
-- Docker + ローカルSupabaseが本番非接続状態で起動できる
-- repository管理下のmigrationでローカルDBを再構築できる、または再構築不能な具体的理由が特定できる
-- 現行かぶモリ1ブランドのDB/RPC/主要投稿パイプラインについて、ローカルでどこまで再現可能か一覧化されている
-- X実投稿なしで検証できるdry-run/テスト経路を明確化している
-- 既存テスト680件を再実行し結果を記録する
-- 本番への変更がゼロである
-- Phase 2（brand_id導入）へ進めるかどうかを判定できる状態にする
+以下を満たしたら停止してK2へ回す。
 
-## Deliverables
-
-必要に応じて `docs/multibrand/` 配下へPhase 1結果を追記・新規文書化する。
-
-最低限Reportで以下を明記する。
-
-- Docker / Supabase localの状態
-- 使用したローカル構成
-- migration再現結果
-- RPC / Edge Functions / Cron相当のローカル検証可否
-- 680テスト結果
-- 本番非接続・誤投稿防止確認
-- 作成／変更ファイル
-- commit hash / push先
-- 残課題
-- Phase 2開始可否
-
-完了後は勝手にPhase 2へ進まず、statusを `review_required` にして停止する。ChatGPT側でK2確認を行う。
+1. brand/account基礎schemaをfeature branch上のmigrationとして実装し、ローカルresetで再現できる。
+2. 既存データが `kabumori` として互換的に扱われる。
+3. `kabumori` 用BrandContext/BrandCodeProfile基礎が実装される。
+4. 主要投稿経路で `brand_id` がplanner/claim/x-test-postまで保持される、または今回安全に到達できた境界と未対応箇所を明示する。
+5. 未知brand / disabled brandがfail-closedになるテストがある。
+6. 既存 `oauth_token_store` に新ブランド情報を入れていない。
+7. 会社員AIラボ・みおは未接続・未有効化。
+8. 既存680テストを含む関連テストがpassし、追加テスト結果も記録される。
+9. `check-safe-env.sh` が完了時SAFE。
+10. 本番変更・deploy・Cron変更・Secret変更・OAuth・X投稿がゼロ。
+11. feature branchへcommit/pushし、mainへmergeしない。
+12. Phase 3へ勝手に進まない。
 
 ## Report
 
-- task_id: x-multibrand-phase1-local-baseline-20260910
-- result: ローカルSupabase再現基盤を構築し、`feature/multibrand-foundation` にcommit/push（mainへはmergeしていない）。本番への変更ゼロ。Docker Desktop導入は環境制約により未完了だが、Podmanで代替し検証を完了した。作業中に本番へ実影響しうる安全上の懸念を発見しその場で解消した（下記）。ここで停止し、Phase 2へは進んでいない。
-- deliverable: `docs/multibrand/PHASE1.md`（commit `719249f`、親は設計commit `bfa4c7b`）。詳細な検証結果・表・手順は同ファイルを正本とする。以下は要約。
-- Docker / Supabase localの状態:
-  - Docker Desktop（`brew install --cask docker`）: **失敗**。`docker-credential-osxkeychain`配置の`sudo mkdir`が対話式パスワード入力を要求し、この実行環境には対話端末が無いため完了不能
-  - 代替としてPodman（`brew install podman`、sudo不要）を導入し、`podman machine init/start`（Apple Virtualization.framework、sudo不要）でVMを起動
-  - `supabase start`フル構成: 失敗（`statfs`エラー、Podman経由のDocker API互換層の既知の制限）。DB本体のmigration適用は最後まで成功した後、補助コンテナ作成で失敗
-  - `supabase start -x <補助サービス全部>`（DBのみ）: **成功**。healthy状態で起動
-  - `supabase functions serve`: **成功**。important-news-monitor / send-push-notifications / x-test-post の3関数ともローカルでサーブ確認
-  - Kong/PostgREST/GoTrue/Storage/Studio: 起動せず（Podmanの制限。Docker Desktop導入後に要再検証）
-- migration再現結果: リポジトリ管理下の既存39件＋ローカル専用2件、**全41件が成功**。適用後テーブル32・public関数20・拡張(pg_cron,pg_net)2・tipsシード50行を確認
-- RPC / Edge Functions / Cron検証可否:
-  - RPC: 直接psql経由で`claim_due_post()`/`plan_daily_posts()`等を実行し正常応答を確認（PostgRESTが無いためREST経由ではなく直接SQL）
-  - Edge Functions: `functions serve`でプロセス起動を確認（Kong無しのためHTTPエンドポイント経由の呼び出し自体は未検証）。ロジック単体は既存`deno test`（fetchモック、本番非接続）で680件検証
-  - Cron定期実行そのものは意図的に未検証（下記安全上の理由）
-  - X実投稿なしで検証できる経路: 既存dry-runモード群（テストで「Xを呼ばない」ことが固定済み）。ただし今回はOPENAI_API_KEY等のSecret受け渡し方法が未整備のため、dry-run呼び出し自体は次回以降
-- 680テスト結果: 作業開始時・Phase1完了後の両方で **680 passed / 0 failed**（`deno test --no-check --allow-env --allow-read --allow-net=127.0.0.1 supabase/functions`）
-- **安全上の発見と対処（重要）**: 既存migrationの`cron.schedule(...)`はジョブ本文に本番プロジェクトURL（`https://wsmznyzcvmuitkglfeuj.supabase.co/...`）を直接埋め込んでいる。ローカルDBへ全migrationを再生すると同じジョブがローカルpg_cronにも登録され、条件が揃えばローカルのpg_cronワーカーが実際に本番Edge Functionへ`net.http_post`してしまう構造的リスクがあった。今回は`important_news_monitor_settings`の`is_active`/`auto_publish`がいずれも`false`、ローカルVaultにSecretが0件だったため実害は発生しなかったが、値次第では発火しうる状態だった。発見直後にローカルDBで`cron.unschedule`し即座に解消、恒久対策として全migration適用後に必ずcron.jobを空にするローカル専用migrationと、`check-safe-env.sh`への`cron.job`件数チェックを追加した。本番のCron・DB・Secretには一切触れていない
-- 作成／変更ファイル（`feature/multibrand-foundation`、commit `719249f`）:
-  - 追加: `supabase/migrations/00000000000000_local_only_enable_extensions.sql`（pg_cron/pg_net、ローカル専用、本番へは絶対適用しない旨を冒頭に明記）
-  - 追加: `supabase/migrations/99999999999999_local_only_disable_cron_jobs.sql`（同上、cron.job全unschedule）
-  - 追加: `docs/multibrand/PHASE1.md`
-  - 変更: `scripts/multibrand/check-safe-env.sh`（cron.job件数チェック追加）
-  - 変更: `docs/multibrand/README.md`（PHASE1.mdへのリンクと注意書き追加）
-  - 変更: `.gitignore`（`supabase/.temp/` `supabase/.branches/` `supabase/config.toml`を追加、ローカルCLI生成物のコミット防止）
-  - 本番チェックアウト（`/Users/yuya/Developer/kabumori`）・mainブランチへの変更なし
-- commit_hash: `719249f`（`feature/multibrand-foundation`、親は設計commit `bfa4c7b`）。main側は本Report更新の`.agent/`2ファイルのみ
-- push: `origin/feature/multibrand-foundation`へpush済み（`bfa4c7b..719249f`）。mainへのmergeなし
-- 本番非接続・誤投稿防止確認: `check-safe-env.sh`を節目ごとに実行し常に`SAFE`を確認。`supabase/.temp/`にlink情報が生成されていないことを確認。`--project-ref`/`--linked`は一度も実行していない。上記cron安全対処により、ローカルpg_cronが本番URLへ到達しうる状態は解消済み。X OAuth・トークン取得・実アカウント接続・X実投稿は一切実施していない
-- 残課題:
-  1. Docker Desktop未導入。ユーザー本人がパスワード入力で`brew install --cask docker`を完了させる必要がある（詳細はPHASE1.md「ユーザーが次に行えること」）
-  2. Kong/PostgREST/Auth/Storageを伴う結合検証はDocker Desktop導入後（またはPodmanの`podman-mac-helper`導入、要sudo）に再実施が必要
-  3. dry-runモードのローカルEdge Function実行にはOPENAI_API_KEY等のSecret受け渡し方法の安全な設計がPhase 2以降で必要（`.env`を複垢worktreeに置くのは禁止のため）
-  4. Cron定期実行そのもののローカル検証は安全のため意図的に見送った。必要になれば、ジョブ本文をローカルURLへ差し替える別設計が必要
-  5. `ARCHITECTURE.md` §19記載の既存残課題（本番migration適用状況未確定、Cron 1〜4がmigration外等）はPhase1の対象外のまま
-- Phase 2開始可否: **条件付きで開始可能**。DB migration・RPC・Edge Functionsのロジックはローカルで再現・検証できる状態にあり、`ARCHITECTURE.md`のPhase 2（brand_id導入、`_shared/brand/*`追加、`loadXTokens`重複解消等）はこの環境で着手できる。PostgREST/Auth等を伴う結合テストは、Docker Desktop導入までdeno testと直接SQL検証で代替する
-- next_recommendation: (a) K2でレビュー、(b) Docker Desktop導入をユーザーに依頼（任意、Phase2着手をブロックしない）、(c) Phase 2（brand_id導入のコード変更・migration）を新タスクとして割当
+完了・停止時はこのファイル末尾に以下を記録し、`status: review_required`、`next_owner: chatgpt` としてGitHub mainへ制御情報を同期する。
+
+- task_id
+- result
+- changed_files
+- DB/migration details
+- brand context / pipeline details
+- tests
+- commit_hash
+- push
+- deploy
+- production_changes
+- safety_checks
+- known_gaps
+- remaining_issues
+- Phase 3 readiness
+- next_recommendation
