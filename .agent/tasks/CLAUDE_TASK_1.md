@@ -238,3 +238,117 @@ Report必須:
 - ユーザーに、手元の対話可能なターミナルで `npx eas-cli credentials --platform ios` （development profile）を実行し、Apple ID/2FAでログインしてもらうことを推奨する。
 - ログイン完了後、`G1`で本タスクを再開すれば、Bundle ID登録確認・EAS managed iOS credentials/APNs構成・device registration・development build・実機Push E2Eへ進められる。
 - 現在のBashツール環境には、対話型CLIコマンド（TTY必須）を実行する手段が無いことが判明した。今後同種の対話型EAS/Apple操作が必要な場合、同じ制約に当たる可能性が高い点をあらかじめ共有しておく。
+
+## Report（最終・完了）
+
+- task_id: expo-ios-push-e2e-resume-20260910
+- result: **完了。Step 1〜9すべてPASS**。development build成功、実機インストール、ログイン、Push Token取得・DB保存、`send-push-notifications`のみをuser承認のうえ本番deploy、実機での送受信・タップ遷移・cold launch routingまですべて実機で確認できた。
+
+### 経緯（前回report以降）
+
+前回reportで「Apple Team visibility確認は対話型ログインが必要でBLOCKED」と報告した後、ユーザーが手元の対話可能なターミナルでApple ID/2FAログインを完了。以降、以下を順に対応:
+
+1. **worktree依存関係不整合**（ユーザー指摘）: clean worktree `/Users/yuya/Developer/kabumori/.claude/worktrees/ios-push-e2e` で`npx expo start --dev-client`実行時に`Cannot find module './plugin/build/withRouter'`が発生。原因はmacOSユーザー共有の`$TMPDIR/metro-cache`（プロジェクト非分離）に前回試行の残骸が残っていたこと。`node_modules`削除→`npm ci`（package.json/package-lock.json無変更、依存バージョン変更なし）→`expo start --dev-client --clear`でキャッシュを明示的にクリアし解消。curlで実際のmanifest/bundleを取得しHTTP 200・`withRouter`関連エラー0件を確認。
+2. **development build 1回目成功**（`384a1d6b-...`）も、実機インストール後「No script URL provided」で起動不可。原因調査の結果、**`expo-dev-client`パッケージがpackage.jsonの依存関係に含まれていなかった**（`eas.json`のdevelopmentClient=trueだけでは不十分）。ユーザー承認のうえ`npx expo install expo-dev-client`（SDK互換版 ~57.0.18）で追加・commit（`4f93f75`）し、development build 2回目（`48021a29-...`）を実行して解消。
+3. development client起動後、`Uncaught Error: supabaseUrl is required.`が発生。原因は`.env`（gitignore対象・未コミット）がworktreeに複製されていなかったこと。メインrepoの`.env`をworktreeへコピー（非秘密の公開URL/publishable keyのみ、元ファイルは無変更）し、Metro再起動で解消。ログイン成功を確認。
+4. `send-push-notifications`をレビュー（`push_send_logic.ts`の17テストすべてPASS、`alert_settings`によるopt-out・`DeviceNotRegistered`の永続失敗分類・pending通知への影響範囲がuser単位で閉じている設計を確認）。ユーザーへ提示のうえ、**本Edge Functionのみ**deployの明示承認を得た。
+5. deployに必須な`SEND_PUSH_NOTIFICATIONS_CRON_SECRET`が本番未設定と判明。他secretsは一切変更しないことを明示したうえで、この1つだけ新規発行・設定する承認を別途得た（値はrandom hex 32byte、Report/Gitに残していない）。
+6. `supabase functions deploy send-push-notifications`実行（対象はこの1関数のみ、他4関数のversion/updated_atが今回の操作と無関係であることをタイムスタンプで確認済み）。
+7. テスト通知1件（本人のみ対象、`push_status=pending`は実行時点で0件だったため、他ユーザーへ誤配信されないことを確認済みで作成）を送信したところ`push_status=failed`（Expo ticketがerror）。診断のためExpo Push APIへ直接1回だけ確認送信し、`InvalidCredentials: Could not find APNs credentials`が判明。**APNs Key未生成**がタスクのStep 2で元々許可されていた作業だったため、ユーザーに`eas credentials --platform ios`でのAPNs Key生成・割り当てを依頼。完了後、診断送信でticket/receiptとも`ok`、実機着信を確認。
+8. 以降、`send-push-notifications`経由の正規テスト通知5件（作成→送信→実機確認→都度DB削除でクリーンアップ）でStep 6〜9を1つずつ実機確認。
+
+### changed_files
+
+- `package.json` / `package-lock.json`（`expo-dev-client` ~57.0.18 追加のみ、他バージョン変更なし）— commit `4f93f75`
+- `.env`（worktreeへのコピーのみ、gitignore対象・未コミット、内容は公開URL/publishable keyのみ）
+- production: `send-push-notifications` Edge Functionを新規deploy（v1）
+- production secrets: `SEND_PUSH_NOTIFICATIONS_CRON_SECRET`を新規追加（値非公開）
+- production: Apple Developer側でAPNs Key生成・kabumoriアプリへの割り当て（ユーザー本人が対話的に実施、私は関与していない）
+- `notifications`テーブルへテスト行5件を作成し、確認後すべて削除（クリーンアップ済み、残存0件）
+
+`x-test-post` / `important-news-monitor` / `stocks-master-sync` / `stocks-new-listing-sync`は無変更・未deploy。DB migration/schema/RLS/GRANT/RPC/Cron変更は0件。
+
+### Apple Team確認結果
+
+- `H2899GWC8N`（YUYA TANO, Individual）。ユーザーによる対話ログイン後に確認。
+
+### Bundle ID
+
+- `com.anohimemories.kabumori`（無変更）。Apple Developer側で問題なく利用可能なことをbuild成功で確認。
+
+### EAS credentials/APNs結果（秘密値なし）
+
+- Distribution Certificate: Serial `728291BA9A956C893E616EFC96697FD9`, 有効期限2027-09-10
+- Provisioning Profile: Developer Portal ID `5M79MS9DFQ`, active, 端末1台(UDID: `00008150-001C09C00AC0401C`)登録済み
+- APNs Key: ユーザーが対話的に生成・割り当て済み（診断送信のticket/receiptとも`ok`で動作確認済み）
+
+### device registration結果
+
+- iPhone 1台登録済み（UDID `00008150-001C09C00AC0401C`、ユーザー本人の端末）。
+
+### development build結果
+
+- 2回実施。1回目（`384a1d6b-...`）は`expo-dev-client`欠落によりdev-launcher起動不可、2回目（`48021a29-...`）で解消・成功。
+
+### install結果
+
+- 実機へインストール成功（development build、internal distribution）。
+
+### Push E2E 1〜9
+
+1. アプリ起動: **PASS**
+2. 通知permission prompt: **PASS**（token取得成功が示す暗黙的確認）
+3. Expo Push Token取得: **PASS**（`ExponentPushToken[...]`取得、DB保存確認、全文はReportに残していない）
+4. `public.device_push_tokens`への本人token保存: **PASS**（`platform=ios`, `device_id="Apple iPhone 17 Pro"`で確認）
+5. 安全な既存送信経路（`send-push-notifications`）で本人端末だけへテストPush送信: **PASS**
+6. background通知受信: **PASS**（実機で通知バナー受信を確認）
+7. foreground banner/list表示: **PASS**（アプリ起動中に表示を確認）
+8. 通知タップで`important_news -> /news` routing: **PASS**（別タブにいる状態からタップし、ニュース画面へ遷移することを確認）
+9. cold launch通知タップ routing: **PASS**（アプリ完全終了状態からタップし、ニュース画面へ直接起動することを確認）
+
+### tests
+
+- `deno test --no-check --allow-read --allow-env push_send_logic_test.ts`: **17 passed / 0 failed**（deploy前にレビューの一環として実行）。
+- Expo/TypeScript側の追加テストは今回実施していない（コード変更が依存関係追加のみのため）。
+
+### commit_hash
+
+- `4f93f75`（Add expo-dev-client dependency for iOS Push E2E development build）。worktreeブランチ上で作成後、`origin/main`（`dc04ed5`時点）へrebaseしfast-forward可能な状態。
+
+### push
+
+- 本Report・commitとも`origin/main`へpush予定（このタスクにpush禁止の明記なし）。
+
+### deploy/build
+
+- `send-push-notifications`: 本番deploy済み（v1、ユーザー承認済み）。
+- iOS development build: 2回実施、2回目が最終成功。
+
+### user_action_required
+
+- 完了。以下はユーザー本人が対話的に実施済み:
+  - `eas credentials --platform ios`でのApple ID/2FAログイン
+  - APNs Keyの生成・kabumoriアプリへの割り当て
+  - 実機での各種確認操作（インストール・通知許可・タップ等）
+
+### remaining_issues
+
+- `CURRENT_STATE.md`記載の「2026-09-09 morning_greetingのlegacy Storage receipt保存HTTP 400」問題は、本タスクのスコープ外（`x-test-post`非対象）のため今回も未対応・未確認のまま。
+- `app.json`の`ios.infoPlist.ITSAppUsesNonExemptEncryption`未設定の警告は、development build配布には影響しないが、将来TestFlight/App Store提出時に対応が必要（今回は未対応）。
+- `send-push-notifications`は現在Cronに未接続（手動invokeのみで動作確認）。定期実行を有効化する場合は別途Cron設定タスクが必要（今回のTASK範囲外、Cron変更禁止のため未実施）。
+
+### safety_checks
+
+- Apple ID password / 2FA code / private key等の秘密値: 本セッションで取得・記録・表示0件（すべてユーザー本人が対話的に入力）。
+- 既存certificate/keyのrevoke・破壊: 0件。
+- App Store submit: 実施していない。
+- deploy対象は`send-push-notifications`のみ（他4 Function、`x-test-post`含め無変更・未deploy、タイムスタンプで確認済み）。
+- DB migration/schema/RLS/GRANT/RPC/Cron変更: 0件（`notifications`テーブルへのテスト行insert/deleteは既存スキーマの範囲内のデータ操作のみ）。
+- 送信は常に本人（`c3b05fc3-...`）の登録済み1端末のみを対象にしたことを、送信前に`device_push_tokens`全件・`notifications` pending件数を確認したうえで実施。他ユーザーへの誤配信は発生していない。
+- Expo Push Token全文: このReportにもGitにも記録していない（会話内の一時的なツール出力のみで、永続化していない）。
+- 共有worktree（`/Users/yuya/Developer/kabumori`本体）の他agent未コミット変更（`important-news-monitor`、`x-test-post`の一部ファイル等）には一切触れていない。全作業は隔離されたworktree内で完結。
+
+### next_recommendation
+
+- 実機Push E2Eは完了。今後`send-push-notifications`を定期実行したい場合は、Cron設定（`config.toml`のverify_jwt設定含む）を別タスクとして明示的に依頼・承認する形を推奨。
+- worktree（`.claude/worktrees/ios-push-e2e`）は作業ログとして保持するか、不要であれば削除して構わない。
