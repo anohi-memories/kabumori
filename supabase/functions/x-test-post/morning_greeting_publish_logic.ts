@@ -327,7 +327,12 @@ export async function runMorningGreetingManualPublish(args: {
       },
     );
     if (!recordResponse.ok) {
-      throw new Error(`MORNING_GREETING_X_POST_RECORD_FAILED:${recordResponse.status}`);
+      // publish_claims is authoritative and has already been completed above. The legacy Storage
+      // receipt remains best-effort compatibility data, so a bucket/MIME-policy failure must not turn
+      // a successfully posted and DB-completed greeting into a failed scheduled post.
+      console.warn("Morning greeting legacy Storage receipt write failed", {
+        status: recordResponse.status,
+      });
     }
 
     return {

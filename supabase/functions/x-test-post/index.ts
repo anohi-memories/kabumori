@@ -3958,10 +3958,25 @@ Deno.serve(async (req) => {
           // that judged the text unsafe (MORNING_REPORT_VOICE_CHECK_FAILED) are voice-layer outcomes, not
           // fact check failures — the underlying Fact Check result must not be overwritten by either.
           const isVoiceLayerFailure = Boolean(voiceFailure) || code === "MORNING_REPORT_VOICE_CHECK_FAILED";
+          const factFailureDraft = code === "MORNING_REPORT_FACT_CHECK_FAILED" ? draft : null;
           try {
             await updateMorningReportRun(supabaseUrl, serviceRoleKey, morningRunId, {
               generated_at: new Date().toISOString(), status: "failed", error: code,
               fact_check_status: isVoiceLayerFailure && draft?.factCheckStatus === "passed" ? "passed" : "failed",
+              ...(factFailureDraft ? {
+                source_urls: factFailureDraft.sourceUrls,
+                market_data_timestamp: factFailureDraft.marketDataTimestamp,
+                input_tokens: factFailureDraft.inputTokens,
+                output_tokens: factFailureDraft.outputTokens,
+                web_search_calls: factFailureDraft.webSearchCalls,
+                api_cost_usd: factFailureDraft.apiCostUsd,
+                ...(factFailureDraft.text ? {
+                  generated_text: factFailureDraft.text,
+                  character_count: Array.from(factFailureDraft.text).length,
+                } : {}),
+                fact_check_notes: factFailureDraft.factCheckNotes,
+                market_data: morningRunMarketData(factFailureDraft, null, "failed"),
+              } : {}),
               ...(voiceFailure && draft ? {
                 fact_check_notes: [...draft.factCheckNotes, ...voiceEvaluationFailureNotes(error)],
                 market_data: morningRunMarketData(draft, null, "failed", voiceFailure),

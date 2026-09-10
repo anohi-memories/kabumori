@@ -1,40 +1,62 @@
 # Codex Slot 2 Report
 
-- task_id: `morning-greeting-soft-copy-production-deploy-20260909`
+- task_id: `morning-report-fact-diagnostics-and-greeting-status-fix-20260910`
 - result: `review_required`
 - next_owner: `chatgpt`
-- deploy_target: `x-test-post` only
-- source_commit: `7fc7f9c` included in `origin/main` at deploy time
+- source_base: `origin/main` at `6365c4955f95b5cdc461c7eb59ec421c96fda1ca`
+- worktree: clean temporary worktree; formal repository working tree was not modified
 
-## Deployment
+## Root cause and changes
 
-- pre_deploy: `x-test-post` v89 ACTIVE, `verify_jwt=false`
-- deploy: success with `--no-verify-jwt`
-- post_deploy: `x-test-post` v90 ACTIVE, `verify_jwt=false`
-- production read-back: ACTIVE v90 confirmed; deployed source includes the morning greeting soft-copy rules, 60-140 character validator, 80-120 target, one length retry, and deterministic five-tag helper.
-- image logic: no image-related diff after implementation commit `7fc7f9c`.
+### Morning report Fact diagnostics
 
-## Tests / implementation basis
+- Root cause: the live scheduled `morning_report` catch only persisted detailed draft diagnostics for Voice/Lane failures. A plain `MORNING_REPORT_FACT_CHECK_FAILED` could therefore leave only the generic error code and lose the draft's concrete Fact notes and retrieval data.
+- Fix: when that exact Fact failure occurs and a draft exists, the run update now persists:
+  - `fact_check_notes` from `draft.factCheckNotes`
+  - `source_urls`, `market_data_timestamp`
+  - input/output tokens, web-search calls, API cost
+  - existing `morningRunMarketData(...)` diagnostics
+  - `generated_text` and `character_count` only when draft text actually exists
+- Fact gate, retry classification, and existing Voice/Lane failure logging were not changed.
+- Dry-run already stored the same draft Fact notes and market diagnostics on its normal Fact-failed completion path; a regression assertion now fixes that parity.
 
-- morning_greeting関連: **60 passed / 0 failed**
-- x-test-post全体回帰: **365 passed / 0 failed**
+### Morning greeting legacy receipt
+
+- Root cause: after X posting and authoritative `publish_claims` completion succeeded, a legacy Storage JSON receipt failure still threw `MORNING_GREETING_X_POST_RECORD_FAILED:*`. The outer scheduled handler then marked the scheduled post failed even though X and the DB claim already recorded success.
+- Fix: legacy receipt write remains for backward compatibility but is now best-effort after `completePublishSlot(...)`; failure logs only the HTTP status and does not overturn the successful result.
+- Atomic DB `publish_claims` remains authoritative. Existing legacy receipt reads remain intact. A same-day rerun still loses the atomic claim and stops before any X request.
+
+## Changed files
+
+- `supabase/functions/x-test-post/index.ts`
+- `supabase/functions/x-test-post/morning_report_logic_test.ts`
+- `supabase/functions/x-test-post/morning_greeting_publish_logic.ts`
+- `supabase/functions/x-test-post/morning_greeting_publish_logic_test.ts`
+- `.agent/tasks/CODEX_TASK_2.md`
+- `.agent/CODEX_REPORT_2.md`
+
+## Tests
+
+- Targeted morning report + morning greeting publish/claim/scheduled tests: **69 passed / 0 failed**
+- Full `x-test-post` regression: **367 passed / 0 failed**
 - `git diff --check`: PASS
-- No code changes were made during this deploy-only task.
+- `deno check morning_greeting_publish_logic.ts`: blocked by 2 pre-existing errors in unchanged dependencies:
+  - `_shared/x_oauth2_post.ts`: current Deno `BufferSource` typing for AES-GCM IV
+  - `morning_greeting_logic.ts`: existing `retry_count` return-type mismatch
+- Runtime tests were therefore run with type checking separated (`--no-check`); all passed. No scope expansion was made to alter those unrelated files.
 
 ## Safety
 
-- natural observation: not performed yet
-- manual X post: 0
-- X API manual call: 0
-- OpenAI API manual call: 0
-- database write: 0
-- Cron / scheduler / posting window change: 0
-- other Edge Function deploy: 0
-- secrets changed or exposed: 0
-- image generation / Storage change: 0
-- apps/admin and HANDOFF.md: untouched
+- production deploy: not performed
+- manual X/OpenAI/API execution: 0
+- X posts: 0
+- DB / migration / RLS / RPC writes: 0
+- Cron / scheduler / settings changes: 0
+- other Edge Functions or workstreams changed: 0
+- `apps/admin/**` and `HANDOFF.md`: untouched
 - formal repository existing uncommitted changes: untouched
+- secrets changed or exposed: 0
 
-## Remaining issues
+## Review / next step
 
-Natural morning greeting observation is pending. No manual candidate injection or manual posting was performed.
+ChatGPT should perform C2 review. Production `x-test-post` deploy requires a separate explicit approval after review.

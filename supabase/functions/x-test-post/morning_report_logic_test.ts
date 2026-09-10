@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   evaluateMorningFacts,
@@ -448,4 +449,29 @@ test("Nikkei futures claims are blocked when verified futures are unavailable", 
   assert.equal(mentionsUnavailableNikkeiFutures("日経先物は堅調です"), true);
   assert.equal(mentionsUnavailableNikkeiFutures("先物は前日比プラスです"), true);
   assert.equal(mentionsUnavailableNikkeiFutures("米国4指数と半導体株の動きを見たい朝です"), false);
+});
+
+test("dry-run and scheduled Fact failures persist the completed draft diagnostics", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const dryRunStart = source.indexOf("const dryRunError = !factCheckPassed");
+  const dryRunEnd = source.indexOf("} catch (error) {", dryRunStart);
+  const dryRunCompletion = source.slice(dryRunStart, dryRunEnd);
+  assert.match(dryRunCompletion, /fact_check_notes:\s*draft\.factCheckNotes/u);
+  assert.match(dryRunCompletion, /market_data:\s*marketData/u);
+
+  const liveFailureStart = source.indexOf(
+    'const factFailureDraft = code === "MORNING_REPORT_FACT_CHECK_FAILED" ? draft : null;',
+  );
+  assert.ok(liveFailureStart >= 0, "scheduled morning-report Fact failure handler not found");
+  const liveFailure = source.slice(liveFailureStart, liveFailureStart + 2600);
+  assert.match(liveFailure, /source_urls:\s*factFailureDraft\.sourceUrls/u);
+  assert.match(liveFailure, /market_data_timestamp:\s*factFailureDraft\.marketDataTimestamp/u);
+  assert.match(liveFailure, /input_tokens:\s*factFailureDraft\.inputTokens/u);
+  assert.match(liveFailure, /output_tokens:\s*factFailureDraft\.outputTokens/u);
+  assert.match(liveFailure, /web_search_calls:\s*factFailureDraft\.webSearchCalls/u);
+  assert.match(liveFailure, /api_cost_usd:\s*factFailureDraft\.apiCostUsd/u);
+  assert.match(liveFailure, /generated_text:\s*factFailureDraft\.text/u);
+  assert.match(liveFailure, /character_count:\s*Array\.from\(factFailureDraft\.text\)\.length/u);
+  assert.match(liveFailure, /fact_check_notes:\s*factFailureDraft\.factCheckNotes/u);
+  assert.match(liveFailure, /market_data:\s*morningRunMarketData\(factFailureDraft, null, "failed"\)/u);
 });

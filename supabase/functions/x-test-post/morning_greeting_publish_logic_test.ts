@@ -119,6 +119,78 @@ test("uploads one image, creates one X post, then records its id", async () => {
     calls.findIndex(({ url }) => url === "https://api.x.com/2/media/upload"));
 });
 
+test("legacy receipt 400 after X success keeps the DB claim published and a same-day rerun stops before X", async () => {
+  let claimAttempts = 0;
+  let xApiCalls = 0;
+  const claimPatchBodies: Record<string, unknown>[] = [];
+  const fetchImpl = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const url = String(input);
+    if (url.includes(`/published/${DATE}.json`) && !init?.method) {
+      return new Response(JSON.stringify({ message: "Object not found" }), { status: 400 });
+    }
+    if (url.includes("/rest/v1/publish_claims") && init?.method === "POST") {
+      claimAttempts += 1;
+      return Response.json(claimAttempts === 1
+        ? [{ post_type: "morning_greeting", date_jst: DATE, status: "publishing" }]
+        : []);
+    }
+    if (url.includes("/rest/v1/publish_claims") && init?.method === "PATCH") {
+      const body = JSON.parse(String(init.body));
+      claimPatchBodies.push(body);
+      return Response.json([{ post_type: "morning_greeting", date_jst: DATE, ...body }]);
+    }
+    if (url.includes("/storage/v1/object/") && url.includes("morning-greeting-assets/generated")) {
+      return new Response(new Uint8Array([137, 80, 78, 71]), { status: 200 });
+    }
+    if (url === "https://api.x.com/2/media/upload") {
+      xApiCalls += 1;
+      return Response.json({ data: { id: "123456789" } });
+    }
+    if (url === "https://api.x.com/2/tweets") {
+      xApiCalls += 1;
+      return Response.json({ data: { id: "987654321" } });
+    }
+    if (url.includes(`/published/${DATE}.json`) && init?.method === "POST") {
+      return new Response(JSON.stringify({ message: "mime type application/json is not supported" }), {
+        status: 400,
+      });
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  };
+
+  const first = await runMorningGreetingManualPublish({
+    supabaseUrl: "https://example.supabase.co",
+    serviceRoleKey: "service-secret",
+    openAiApiKey: "openai-secret",
+    xAuth: freshXAuth(),
+    now: new Date("2026-09-01T15:30:00Z"),
+    buildPayload: async () => readyPayload(),
+    fetchImpl,
+  });
+  assert.equal(first.x_posted, true);
+  assert.equal(first.x_post_id, "987654321");
+  assert.equal(claimPatchBodies.length, 1);
+  assert.equal(claimPatchBodies[0].status, "published");
+  assert.equal(claimPatchBodies[0].x_post_id, "987654321");
+  assert.equal(typeof claimPatchBodies[0].published_at, "string");
+  assert.equal(xApiCalls, 2);
+
+  await assert.rejects(
+    () => runMorningGreetingManualPublish({
+      supabaseUrl: "https://example.supabase.co",
+      serviceRoleKey: "service-secret",
+      openAiApiKey: "openai-secret",
+      xAuth: freshXAuth(),
+      now: new Date("2026-09-01T15:30:00Z"),
+      buildPayload: async () => readyPayload(),
+      fetchImpl,
+    }),
+    /MORNING_GREETING_PUBLISH_ALREADY_CLAIMED/u,
+  );
+  assert.equal(xApiCalls, 2, "the rerun must stop at the atomic DB claim before any X request");
+  assert.equal(claimPatchBodies.some((body) => body.status === "failed"), false);
+});
+
 test("an existing same-day post skips generation, upload and posting", async () => {
   let payloadCalls = 0;
   let fetchCalls = 0;

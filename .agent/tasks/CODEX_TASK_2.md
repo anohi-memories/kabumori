@@ -3,8 +3,8 @@
 - task_id: morning-report-fact-diagnostics-and-greeting-status-fix-20260910
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: `x-test-post` の朝系2件を最小変更で修正する。① morning_report のFact失敗時に実際の失敗理由・retrieval diagnosticsが消えて原因不明になる問題、② morning_greeting がX投稿成功後のlegacy Storage receipt保存400で scheduled_posts / 管理画面上だけfailedになる問題。
