@@ -3,8 +3,8 @@
 - task_id: x-close-report-topix-source-correction-20260911
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: X版 close_report が Yahoo `^TPX` をTOPIXとして扱っている問題を調査・修正し、誤った指数データを大引けレポートへ混入させない。既存17:00運用・Nikkei取得・Fact/Voice/X品質gateは維持する。

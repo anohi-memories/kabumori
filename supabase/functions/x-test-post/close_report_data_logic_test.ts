@@ -10,8 +10,8 @@ function response(body: unknown, ok = true): Response {
   return new Response(JSON.stringify(body), { status: ok ? 200 : 503, headers: { "content-type": "application/json" } });
 }
 
-function chart(timestamp: number, close: number, previous = 38_000): unknown {
-  return { chart: { result: [{ meta: { chartPreviousClose: previous }, timestamp: [timestamp], indicators: { quote: [{ close: [close] }] } }] } };
+function chart(timestamp: number, close: number, previous = 38_000, meta: Record<string, unknown> = {}): unknown {
+  return { chart: { result: [{ meta: { chartPreviousClose: previous, ...meta }, timestamp: [timestamp], indicators: { quote: [{ close: [close] }] } }] } };
 }
 
 const reference = "2026-09-10T08:00:00.000Z"; // 17:00 JST
@@ -31,7 +31,7 @@ test("same-day Nikkei close at 15:30 JST is accepted from the direct chart sourc
   assert.equal(metric?.timestamp, "2026-09-10T06:30:00.000Z");
 });
 
-test("same-day TOPIX close at 15:30 JST is accepted and both indices are fetched", async () => {
+test("TOPIX is unavailable in the production path and only Nikkei is fetched", async () => {
   const calls: string[] = [];
   const metrics = await fetchJpxCloseMetrics(reference, async (url) => {
     calls.push(url);
@@ -39,8 +39,63 @@ test("same-day TOPIX close at 15:30 JST is accepted and both indices are fetched
     return response(chart(Date.parse("2026-09-10T06:30:00.000Z") / 1000, value));
   });
   assert.equal(metrics.nikkei?.value, "3200");
-  assert.equal(metrics.topix?.value, "3050");
-  assert.equal(calls.length, 2);
+  assert.equal(metrics.topix, null);
+  assert.equal(calls.length, 1);
+});
+
+test("Yahoo ^TPX is rejected instead of being labeled as Japanese TOPIX", async () => {
+  let calls = 0;
+  const metric = await fetchYahooJpxCloseMetric(
+    "https://query2.finance.yahoo.com/v8/finance/chart/%5ETPX?range=5d&interval=1m&events=history",
+    "TOPIX",
+    reference,
+    async () => {
+      calls += 1;
+      return response(chart(Date.parse("2026-09-10T06:30:00.000Z") / 1000, 3_050));
+    },
+  );
+  assert.equal(metric, null);
+  assert.equal(calls, 0);
+});
+
+test("same-day 15:30 TOPIX is accepted only with matching JPX/Japanese metadata", async () => {
+  const metric = await fetchYahooJpxCloseMetric(
+    "https://example.test/topix-structured",
+    "TOPIX",
+    reference,
+    async () => response(chart(
+      Date.parse("2026-09-10T06:30:00.000Z") / 1000,
+      3_050,
+      3_020,
+      { symbol: "TOPIX", exchangeName: "JPX", currency: "JPY" },
+    )),
+  );
+  assert.equal(metric?.value, "3050");
+  assert.equal(metric?.timestamp, "2026-09-10T06:30:00.000Z");
+});
+
+test("TOPIX source metadata mismatch is rejected", async () => {
+  const metric = await fetchYahooJpxCloseMetric(
+    "https://example.test/topix-structured",
+    "TOPIX",
+    reference,
+    async () => response(chart(
+      Date.parse("2026-09-10T06:30:00.000Z") / 1000,
+      105.18,
+      105.18,
+      { symbol: "^TPX", exchangeName: "CBO", fullExchangeName: "OPRA Indices", currency: "USD" },
+    )),
+  );
+  assert.equal(metric, null);
+});
+
+test("TOPIX unavailable is fail-safe and does not block Nikkei acquisition", async () => {
+  const metrics = await fetchJpxCloseMetrics(reference, async (url) => {
+    assert.match(url, /%5EN225/u);
+    return response(chart(Date.parse("2026-09-10T06:30:00.000Z") / 1000, 42_123.45));
+  });
+  assert.equal(metrics.nikkei?.value, "42123.45");
+  assert.equal(metrics.topix, null);
 });
 
 test("15:29 JST is rejected as intraday", async () => {

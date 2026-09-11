@@ -310,3 +310,35 @@
 ## Review / next step
 
 ChatGPT should review the successful v91 deployment. After the next natural morning cycle, verify read-only that a morning_report Fact failure preserves concrete draft diagnostics and that a successful morning_greeting remains successful even if its legacy receipt write returns 400. Do not force either path or rerun a same-day post.
+
+## H2: TOPIX source correction (2026-09-11)
+
+- task_id: `x-close-report-topix-source-correction-20260911`
+- result: `review_required`
+- model_used: `gpt-5.6-sol`
+- root_cause: the close_report direct source treated Yahoo `^TPX` as Japanese TOPIX without validating instrument identity. A live read-only query returned `exchangeName=CBO`, `fullExchangeName=OPRA Indices`, `currency=USD`, `regularMarketPrice=105.18`, and no chart timestamps, so it is not a usable same-day Japanese TOPIX close source.
+- old_tpx_source_behavior: `fetchJpxCloseMetrics()` fetched `https://query2.finance.yahoo.com/v8/finance/chart/%5ETPX?...` and relabeled the latest numeric chart point as `TOPIX`, with no source metadata validation.
+- production evidence: recent `public.close_report_runs` rows contained empty TOPIX values with `freshness=invalid_timestamp`; the latest run failed closed with `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE`.
+- chosen_topix_source_or_fail_safe: no formally verified structured TOPIX source exists in the current allowed implementation. The `^TPX` path is now rejected and the production acquisition returns `topix: null`; live close_report's existing required-index gate therefore fails safe instead of publishing a false TOPIX value. No 1306 ETF or article-derived substitute was introduced.
+- code_changes:
+  - `close_report_data_logic.ts` rejects the Yahoo `^TPX` endpoint for TOPIX, validates Japanese TOPIX metadata (`TOPIX` symbol, JPX/Tokyo/Japan exchange identity, JPY) for any future structured TOPIX source, and leaves TOPIX unavailable in the current production acquisition path.
+  - Nikkei acquisition, 15:30 JST cutoff, same-day/previous-day handling, Fact/Voice/X gates, 17:00 schedule, and all other categories are unchanged.
+- tests:
+  - targeted close-data + close-report tests: **61 passed / 0 failed**
+  - full `x-test-post` regression (`deno test --no-check --allow-read --allow-env supabase/functions/x-test-post/*_test.ts`): **385 passed / 0 failed**
+  - pure module checks (`deno check close_report_data_logic.ts close_report_logic.ts`): PASS
+  - `git diff --check`: PASS
+  - coverage includes `^TPX` rejection, valid same-day 15:30 TOPIX metadata acceptance, 15:29 rejection, previous-day rejection, metadata mismatch rejection, TOPIX-unavailable fail-safe, and Nikkei regression.
+- production_deploy: not performed; no manual close_report, OpenAI, X, DB, Cron, settings, secrets, or OAuth operations.
+- deploy_verification: N/A.
+- unchanged_scopes: 17:00 scheduler/posting windows/Cron, Nikkei acquisition, Fact/Voice/X gates, morning_report, morning_greeting, important-news, personalized reports, `apps/admin/**`, and `HANDOFF.md`.
+- changed_files:
+  - `supabase/functions/x-test-post/close_report_data_logic.ts`
+  - `supabase/functions/x-test-post/close_report_data_logic_test.ts`
+  - `.agent/tasks/CODEX_TASK_2.md`
+  - `.agent/CODEX_REPORT_2.md`
+- commit_hash: pending
+- push: pending
+- remaining_issues: a formally verified structured same-day TOPIX source still needs to be selected in a separate review; until then live close_report safely stops when TOPIX is unavailable.
+- safety_checks: clean temporary worktree from fresh `origin/main`; formal repository and other workstreams untouched; no secrets exposed; no Storage/DB writes; no X posts.
+- next_recommendation: ChatGPT C2 review. Do not deploy or run a manual close_report until the source choice is approved.
