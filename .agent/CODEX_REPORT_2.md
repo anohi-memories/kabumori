@@ -370,7 +370,7 @@ ChatGPT should review the successful v91 deployment. After the next natural morn
   - `.agent/tasks/CODEX_TASK_2.md`
   - `.agent/CODEX_REPORT_2.md`
 - commit_hash: `44630c8` (implementation + TASK/REPORT status update)
-- push: implementation commit `44630c8` is present on `origin/main`; this report update will be pushed as a metadata-only follow-up.
+- push: implementation commit `44630c8` and report metadata commit `15b60c5` are present on `origin/main`.
 - remaining_issues: 1306.T is an explicitly labeled ETF proxy and not a formal TOPIX index source; replace it with a formally verified TOPIX source in a separately approved task when available.
 - safety_checks: clean temporary worktree from fresh `origin/main` (`d907f6c4ca45ef3ee8e88bdc1b70d64f8bbb4a7f`); no secrets exposed; no production writes or API calls.
 - next_recommendation: ChatGPT C2 review. Production deployment remains a separate explicit decision.
