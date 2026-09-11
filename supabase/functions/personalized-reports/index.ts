@@ -33,12 +33,14 @@ import {
   type PriceSeries,
   type ReportType,
   type TrackedInput,
+  BENCHMARK_LABEL,
+  BENCHMARK_SYMBOL,
   CLOSE_SESSION_END_MINUTES,
 } from "./report_logic.ts";
 
 const jsonHeaders = { "Content-Type": "application/json; charset=utf-8" };
 const YAHOO_CHART_URL = "https://query2.finance.yahoo.com/v8/finance/chart/";
-const INDEX_SYMBOLS = [{ label: "日経平均", symbol: "^N225" }, { label: "TOPIX", symbol: "^TPX" }];
+const INDEX_SYMBOLS = [{ label: "日経平均", symbol: "^N225" }, { label: BENCHMARK_LABEL, symbol: BENCHMARK_SYMBOL }];
 const PRICE_CONCURRENCY = 6;
 const TIME_BUDGET_MS = 110_000;
 const MAX_USERS_PER_RUN = 20;

@@ -48,6 +48,8 @@ export type ReportSnapshot = {
     day_pl: number | null;
     day_change_percent: number | null;
     unrealized_pl: number | null;
+    // The comparison benchmark (TOPIX-tracking ETF 1306); the topix_* names are kept for stability.
+    benchmark_label?: string;
     topix_change_percent: number | null;
     relative_to_topix_pt: number | null;
     relative_label: 'stronger' | 'weaker' | 'similar' | null;
@@ -161,8 +163,9 @@ export function relativeText(snapshot: ReportSnapshot): string | null {
   const label = snapshot.totals.relative_label;
   const diff = snapshot.totals.relative_to_topix_pt;
   if (!label || diff === null) return null;
-  const words = { stronger: 'TOPIXより強い', weaker: 'TOPIXより弱い', similar: 'TOPIXとほぼ同じ' } as const;
-  return `${words[label]}（差 ${diff > 0 ? '+' : diff < 0 ? '-' : '±'}${Math.abs(diff).toFixed(2)}ポイント）`;
+  const benchmark = snapshot.totals.benchmark_label || 'TOPIX連動ETF（1306）';
+  const words = { stronger: 'より強い', weaker: 'より弱い', similar: 'とほぼ同じ' } as const;
+  return `${benchmark}${words[label]}（差 ${diff > 0 ? '+' : diff < 0 ? '-' : '±'}${Math.abs(diff).toFixed(2)}ポイント）`;
 }
 
 export type StockRow = {

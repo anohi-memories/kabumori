@@ -149,7 +149,7 @@ test("unavailable prices never show a guessed number", () => {
 });
 
 test("relative strength and data-gap notes", () => {
-  assert.equal(relativeText(report().portfolio_snapshot!), "TOPIXより強い（差 +9.00ポイント）");
+  assert.equal(relativeText(report().portfolio_snapshot!), "TOPIX連動ETF（1306）より強い（差 +9.00ポイント）");
   assert.deepEqual(dataGapNotes(report().portfolio_snapshot!), [
     "1銘柄の価格を取得できませんでした。",
     "数量が未登録の保有銘柄があるため、ポート全体の損益は計算していません。",

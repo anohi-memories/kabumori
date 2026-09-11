@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   allowedNumbers,
+  BENCHMARK_LABEL,
+  latinWords,
   buildPacket,
   buildSnapshot,
   generateReport,
@@ -67,7 +69,7 @@ function news(overrides: Partial<NewsInput> & { newsId: string }): NewsInput {
 
 const INDICES = [
   { label: "日経平均", series: series([["2026-09-10", 40000], ["2026-09-11", 40400]]) },
-  { label: "TOPIX", series: series([["2026-09-10", 2800], ["2026-09-11", 2828]]) },
+  { label: BENCHMARK_LABEL, series: series([["2026-09-10", 2800], ["2026-09-11", 2828]]) },
 ];
 
 function closeSnapshot(extra: { tracked?: TrackedInput[]; prices?: Map<string, PriceSeries | null>; news?: NewsInput[] } = {}) {
@@ -238,7 +240,10 @@ test("packet carries only Fact-passed news text and preformatted numbers", () =>
   const text = JSON.stringify(packet);
   assert.ok(text.includes("自己株式の取得を決定"));
   assert.ok(text.includes("+11,000円"));
-  assert.ok(text.includes("TOPIXより強い"));
+  assert.ok(text.includes("TOPIX連動ETF（1306）より強い"));
+  assert.ok(text.includes("9月11日（金）"), "dates reach the model in Japanese form");
+  assert.ok(!/\d{4}-\d{2}-\d{2}/.test(text), "no ISO dates reach the model");
+  assert.ok(text.includes("会社1111（1111）"), "gainers are named, not bare codes");
   assert.ok(!text.includes("https://"), "no URLs go to the model");
   assert.ok(!text.includes("n1"), "no internal ids go to the model");
 });
@@ -247,10 +252,10 @@ test("packet carries only Fact-passed news text and preformatted numbers", () =>
 
 function body(overrides: Partial<ReportBody> = {}): ReportBody {
   return {
-    title_ja: "保有株は上昇、TOPIXより強い一日",
+    title_ja: "保有株は上昇、TOPIX連動ETFより強い一日",
     summary_ja: "保有銘柄は前日比+10.00%でした。",
     tone: "positive",
-    overview_ja: "ポートは+11,000円で、TOPIXより強い結果でした。",
+    overview_ja: "ポートは+11,000円で、TOPIX連動ETF（1306）より強い結果でした。",
     stock_notes: [{ ticker_code: "1111", note_ja: "終値は1,210円、前日比+10.00%でした。自己株式の取得を決定したと確認できます。" }],
     watch_notes: [],
     risk_notes_ja: [],
@@ -293,6 +298,11 @@ test("unknown tickers, advice and URLs fail the local checks", () => {
   assert.ok(localReportIssues({ ...base, overview_ja: "詳しくは https://example.com へ。" }, snapshot, packet)
     .includes("CONTAINS_URL"));
   assert.ok(localReportIssues({ ...base, stock_notes: [] }, snapshot, packet).includes("MISSING_HOLDING_NOTES"));
+  assert.ok(localReportIssues({ ...base, overview_ja: "2026-09-11のポートは上昇しました。" }, snapshot, packet)
+    .includes("CONTAINS_ISO_DATE"));
+  assert.ok(localReportIssues({ ...base, risk_notes_ja: ["セクターウェightsはサービス業です。"] }, snapshot, packet)
+    .some((issue) => issue.startsWith("CONTAINS_LATIN_WORD")));
+  assert.deepEqual(latinWords("TOPIX連動ETFとTDnetの開示"), []);
   assert.ok(localReportIssues({ ...base, checkpoints_ja: [] }, snapshot, packet).includes("CHECKPOINTS_INVALID"));
 });
 

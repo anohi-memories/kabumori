@@ -58,6 +58,11 @@ export const CLOSE_SESSION_END_MINUTES = 15 * 60 + 30;
 export const RELATIVE_STRENGTH_BAND_PT = 0.3;
 export const MAX_NEWS_PER_STOCK = 3;
 export const MAX_MARKET_NEWS = 5;
+// Yahoo's ^TPX is an unrelated, long-dead CBOE symbol and TOPIX itself is not
+// available there, so the benchmark is the TOPIX-tracking ETF 1306, labelled as
+// such everywhere (it is not the index; ex-dividend days can differ).
+export const BENCHMARK_LABEL = "TOPIX連動ETF（1306）";
+export const BENCHMARK_SYMBOL = "1306.T";
 
 // ---------------------------------------------------------------------------
 // Dates
@@ -210,6 +215,8 @@ export type PortfolioSnapshot = {
     day_pl: number | null;
     day_change_percent: number | null;
     unrealized_pl: number | null;
+    benchmark_label: string;
+    // Field names keep "topix" for stability; the value is BENCHMARK_LABEL's move.
     topix_change_percent: number | null;
     relative_to_topix_pt: number | null;
     relative_label: "stronger" | "weaker" | "similar" | null;
@@ -324,7 +331,7 @@ export function buildSnapshot(input: {
   const unrealized = allValued && withAverage.length === holdings.length
     ? round(sum(withAverage.map((stock) => stock.unrealized_pl)), 0)
     : null;
-  const topix = indices.find((index) => index.label === "TOPIX")?.price;
+  const topix = indices.find((index) => index.label === BENCHMARK_LABEL)?.price;
   const topixPercent = reportType === "close" && topix?.status === "ok" ? topix.changePercent : null;
   const relative = dayChangePercent !== null && topixPercent !== null ? round(dayChangePercent - topixPercent, 2) : null;
 
@@ -376,6 +383,7 @@ export function buildSnapshot(input: {
       day_pl: dayPl,
       day_change_percent: dayChangePercent,
       unrealized_pl: unrealized,
+      benchmark_label: BENCHMARK_LABEL,
       topix_change_percent: topixPercent,
       relative_to_topix_pt: relative,
       relative_label: relative === null
@@ -414,6 +422,14 @@ export function snapshotBlockers(snapshot: PortfolioSnapshot): string[] {
 // Packet (the only thing the LLM sees) — preformatted strings, no arithmetic
 // ---------------------------------------------------------------------------
 
+/** "2026-09-11" → "9月11日（金）" (the only date form the model sees). */
+export function formatDateJa(date: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) return date;
+  const weekday = ["日", "月", "火", "水", "木", "金", "土"][new Date(`${date}T00:00:00Z`).getUTCDay()];
+  return `${Number(match[2])}月${Number(match[3])}日（${weekday}）`;
+}
+
 export function formatYen(value: number | null): string | null {
   if (value === null) return null;
   const rounded = Math.round(value);
@@ -442,7 +458,11 @@ export function formatPoints(value: number | null): string | null {
   return `${value > 0 ? "+" : value < 0 ? "-" : "±"}${Math.abs(value).toFixed(2)}ポイント`;
 }
 
-const RELATIVE_TEXT = { stronger: "TOPIXより強い", weaker: "TOPIXより弱い", similar: "TOPIXとほぼ同じ" } as const;
+const RELATIVE_TEXT = {
+  stronger: `${BENCHMARK_LABEL}より強い`,
+  weaker: `${BENCHMARK_LABEL}より弱い`,
+  similar: `${BENCHMARK_LABEL}とほぼ同じ`,
+} as const;
 
 function stockPacket(stock: StockSnapshot, reportType: ReportType, newsById: Map<string, NewsInput>) {
   const ownNews = stock.news_ids.map((id) => newsById.get(id)).filter((item): item is NewsInput => !!item);
@@ -485,11 +505,13 @@ export function buildPacket(snapshot: PortfolioSnapshot, news: NewsInput[]) {
   const newsById = new Map(news.map((item) => [item.newsId, item]));
   const close = snapshot.report_type === "close";
   const marketNewsIds = new Set(snapshot.news.filter((item) => !item.ticker_code).map((item) => item.news_id));
+  const names = new Map([...snapshot.holdings, ...snapshot.watch].map((stock) => [stock.ticker_code, stock.company_name]));
+  const nameOf = (ticker: string) => `${names.get(ticker) ?? ticker}（${ticker}）`;
   return {
     report_type: close ? "大引けレポート" : "朝刊",
-    trading_date: snapshot.trading_date,
+    trading_date: formatDateJa(snapshot.trading_date),
     price_basis: close ? "当日の終値" : "前営業日の終値",
-    price_basis_date: snapshot.price_basis_date,
+    price_basis_date: snapshot.price_basis_date ? formatDateJa(snapshot.price_basis_date) : null,
     indices: snapshot.indices.map((index) => ({
       label: index.label,
       value: index.price.status === "ok" ? formatPrice(index.price.close) : "取得できず",
@@ -508,9 +530,9 @@ export function buildPacket(snapshot: PortfolioSnapshot, news: NewsInput[]) {
       sector_weights: snapshot.sector_weights.map((entry) =>
         `${entry.sector} ${entry.weight_percent}%（${entry.basis === "market_value" ? "評価額ベース" : "銘柄数ベース"}）`),
     },
-    top_impact_holdings: snapshot.top_impact,
-    gainers: snapshot.gainers,
-    decliners: snapshot.decliners,
+    top_impact_holdings: snapshot.top_impact.map(nameOf),
+    gainers: snapshot.gainers.map(nameOf),
+    decliners: snapshot.decliners.map(nameOf),
     holdings: snapshot.holdings.map((stock) => stockPacket(stock, snapshot.report_type, newsById)),
     watch: snapshot.watch.map((stock) => stockPacket(stock, snapshot.report_type, newsById)),
     market_news: news.filter((item) => marketNewsIds.has(item.newsId)).map((item) => ({
@@ -548,6 +570,8 @@ const COMMON_INSTRUCTIONS = [
   "売買の推奨・断定（買うべき、売るべき、買い時、売り時、目標株価、必ず上がる等）は書きません。将来の値動きを断定しません。",
   "価格未取得・未登録の項目は推測で埋めず、必要なら「取得できませんでした」「未登録です」と書きます。",
   "URL、ハッシュタグ、絵文字、HTML、見出しラベル（【速報】等）は使いません。自然で落ち着いた日本語で書きます。",
+  "銘柄は文章中では会社名で呼びます（例: サイバーエージェント）。証券コードだけで呼びません。日付は入力の表記（例: 9月11日（金））を使い、2026-09-11 のような形式は使いません。英単語やフィールド名（weights 等）を文中に書きません。",
+  "市場全体の方向は、入力の indices にある指数・ETFの値動きとして書くだけにします。「市場全体が下落」のように、入力より広い範囲を断定しません。比較に使える指標は indices と portfolio.relative_to_topix だけです。TOPIX連動ETF（1306）はTOPIXそのものではないので、その名前のまま書きます。",
 ].join("\n");
 
 const MORNING_INSTRUCTIONS = [
@@ -733,6 +757,13 @@ const MARKUP = /<[a-zA-Z/!][^>]*>|&[a-z]+;|&#\d+;/i;
 const URL_PATTERN = /https?:\/\/|www\./i;
 const EMOJI = /\p{Extended_Pictographic}/u;
 const JAPANESE = /[ぁ-んァ-ヶ一-龠]/u;
+const ISO_DATE = /\d{4}-\d{2}-\d{2}/;
+const ALLOWED_LATIN = new Set(["TOPIX", "ETF", "TDnet"]);
+
+/** Latin words of 3+ letters other than the few proper names the packet itself uses. */
+export function latinWords(value: string): string[] {
+  return (value.match(/[A-Za-zＡ-Ｚａ-ｚ]{3,}/g) ?? []).filter((word) => !ALLOWED_LATIN.has(word));
+}
 
 function length(value: string): number {
   return Array.from(value).length;
@@ -787,6 +818,9 @@ export function localReportIssues(
   if (texts.some((text) => MARKUP.test(text))) issues.push("CONTAINS_MARKUP");
   if (texts.some((text) => URL_PATTERN.test(text))) issues.push("CONTAINS_URL");
   if (texts.some((text) => EMOJI.test(text))) issues.push("CONTAINS_EMOJI");
+  if (texts.some((text) => ISO_DATE.test(text))) issues.push("CONTAINS_ISO_DATE");
+  const latin = texts.flatMap(latinWords);
+  if (latin.length > 0) issues.push(`CONTAINS_LATIN_WORD:${[...new Set(latin)].slice(0, 3).join("/")}`);
   return issues;
 }
 
