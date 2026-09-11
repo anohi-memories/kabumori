@@ -62,7 +62,9 @@ export async function fetchYahooJpxCloseMetric(
     if (!close) return null;
     const observed = jstDateAndMinutes(close.timestamp);
     const reference = jstDateAndMinutes(referenceIso);
-    if (!observed || !reference || observed.date !== reference.date || observed.minutes < 15 * 60) return null;
+    // The Tokyo Stock Exchange cash-session close is 15:30 JST. Values from
+    // 15:00-15:29 are still intraday and must not be treated as the close.
+    if (!observed || !reference || observed.date !== reference.date || observed.minutes < (15 * 60 + 30)) return null;
     const previous = result?.meta?.chartPreviousClose ?? result?.meta?.previousClose;
     return {
       label,

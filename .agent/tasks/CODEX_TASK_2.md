@@ -3,8 +3,8 @@
 - task_id: close-report-live-data-and-voice-retry-hardening-20260910
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: 2026-09-10 16:00 JSTのclose_report失敗を受け、①Voice評価がmax_output_tokens/empty output/JSON parse系で壊れた場合の安全な1回だけの再評価、②大引けなのに終値を取得できず前場データ中心の低品質原稿が生成される問題を修正する。
@@ -113,3 +113,12 @@
 - `.agent/CODEX_REPORT_2.md` 更新
 - status: review_required
 - next_owner: chatgpt
+
+## Follow-up D completion — 2026-09-11
+
+- The direct Yahoo Finance JPX close path now accepts a same-JST-day metric only at or after **15:30 JST**. Same-day 15:00–15:29 values are explicitly rejected as intraday.
+- The existing `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE` fail-closed gate, Fact/Voice thresholds, material search, publish safety, and all other H2 behavior remain unchanged.
+- Tests: targeted close-report/data suite **55 passed / 0 failed**; full `x-test-post` regression **379 passed / 0 failed**; changed pure module `deno check` passed; `git diff --check` passed.
+- No deploy, production execution, OpenAI/X API call, X post, DB/migration/RLS/RPC, Cron/scheduler/settings, secrets/OAuth, or other workstream changes.
+- status: `review_required`
+- next_owner: `chatgpt`

@@ -1,5 +1,41 @@
 # Codex Slot 2 Report
 
+## H2 Follow-up D — close timestamp boundary
+
+- task_id: `close-report-live-data-and-voice-retry-hardening-20260910`
+- result: implemented; C2 review required
+- source_base: `origin/main` at `cc223256f3d2fc2a996e1919adefcd7185e982c1`
+- worktree: temporary clean clone; formal repository working tree was not modified
+
+### Change
+
+- `fetchYahooJpxCloseMetric()` now accepts a direct Nikkei/TOPIX value only when its same-JST-day observation is **15:30 JST or later**.
+- Same-day 15:00–15:29 values are rejected as intraday. A latest chart point before 15:30 therefore remains unavailable and the existing `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE` live safety gate stops before X.
+- No fallback to material/news search, model-filled values, or relaxed Fact/Voice/publish criteria was added.
+
+### Changed files
+
+- `supabase/functions/x-test-post/close_report_data_logic.ts`
+- `supabase/functions/x-test-post/close_report_data_logic_test.ts`
+- `.agent/tasks/CODEX_TASK_2.md`
+- `.agent/CODEX_REPORT_2.md`
+
+### Verification
+
+- Targeted close-data + close-report regression: **55 passed / 0 failed**
+- Full `x-test-post` regression: **379 passed / 0 failed**
+- Changed pure module `deno check`: **PASS**
+- `git diff --check`: **PASS**
+- Added explicit acceptance at 15:30 JST and rejection tests at 15:29, 15:15, and 15:00 JST.
+
+### Safety
+
+- deploy / production Function execution / OpenAI or X API calls / X posts: **0**
+- DB schema/migration/RLS/RPC, Cron/scheduler/settings, secrets/OAuth: **0**
+- Existing formal-repo uncommitted changes, `apps/admin/**`, and `HANDOFF.md`: untouched
+- status: `review_required`
+- next_owner: `chatgpt`
+
 ## H2 follow-up — same-day close acquisition
 
 - task_id: `close-report-live-data-and-voice-retry-hardening-20260910`

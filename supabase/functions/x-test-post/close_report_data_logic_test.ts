@@ -16,7 +16,7 @@ function chart(timestamp: number, close: number, previous = 38_000): unknown {
 
 const reference = "2026-09-10T07:00:00.000Z"; // 16:00 JST
 
-test("same-day Nikkei close after 15:00 JST is accepted from the direct chart source", async () => {
+test("same-day Nikkei close at 15:30 JST is accepted from the direct chart source", async () => {
   const metric = await fetchYahooJpxCloseMetric(
     YAHOO_NIKKEI_CLOSE_URL, "日経平均", reference,
     async () => response(chart(Date.parse("2026-09-10T06:30:00.000Z") / 1000, 42_123.45)),
@@ -26,16 +26,40 @@ test("same-day Nikkei close after 15:00 JST is accepted from the direct chart so
   assert.equal(metric?.timestamp, "2026-09-10T06:30:00.000Z");
 });
 
-test("same-day TOPIX close after 15:00 JST is accepted and both indices are fetched", async () => {
+test("same-day TOPIX close at 15:30 JST is accepted and both indices are fetched", async () => {
   const calls: string[] = [];
   const metrics = await fetchJpxCloseMetrics(reference, async (url) => {
     calls.push(url);
     const value = url.includes("N225") ? 3_200 : 3_050;
-    return response(chart(Date.parse("2026-09-10T06:31:00.000Z") / 1000, value));
+    return response(chart(Date.parse("2026-09-10T06:30:00.000Z") / 1000, value));
   });
   assert.equal(metrics.nikkei?.value, "3200");
   assert.equal(metrics.topix?.value, "3050");
   assert.equal(calls.length, 2);
+});
+
+test("15:29 JST is rejected as intraday", async () => {
+  const beforeClose = await fetchYahooJpxCloseMetric(
+    YAHOO_NIKKEI_CLOSE_URL, "日経平均", reference,
+    async () => response(chart(Date.parse("2026-09-10T06:29:00.000Z") / 1000, 42_000)),
+  );
+  assert.equal(beforeClose, null);
+});
+
+test("15:15 JST is rejected as intraday", async () => {
+  const beforeClose = await fetchYahooJpxCloseMetric(
+    YAHOO_NIKKEI_CLOSE_URL, "日経平均", reference,
+    async () => response(chart(Date.parse("2026-09-10T06:15:00.000Z") / 1000, 42_000)),
+  );
+  assert.equal(beforeClose, null);
+});
+
+test("15:00 JST is rejected as intraday", async () => {
+  const beforeClose = await fetchYahooJpxCloseMetric(
+    YAHOO_NIKKEI_CLOSE_URL, "日経平均", reference,
+    async () => response(chart(Date.parse("2026-09-10T06:00:00.000Z") / 1000, 42_000)),
+  );
+  assert.equal(beforeClose, null);
 });
 
 test("front-session, previous-day, unknown, and failed responses are rejected", async () => {
