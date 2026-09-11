@@ -79,6 +79,14 @@ import {
 } from "./auto_publish_cutover_logic.ts";
 import { orderImportantNewsPublishQueue } from "./rate_control_logic.ts";
 import {
+  APP_COPY_BATCH_LIMIT,
+  appCopyUpdate,
+  type AppCopySource,
+  generateAppCopy,
+  needsAppCopy,
+  openAiAppCopyRequester,
+} from "./app_copy_logic.ts";
+import {
   buildImportantNewsNotificationRows,
   evaluateImportantNewsNotificationEnqueue,
   extractImportantNewsTickerCode,
@@ -1252,6 +1260,141 @@ async function enqueueImportantNewsNotifications(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Japanese app copy (K1-approved). Runs at the end of generate_ready, writes
+// only the app_* columns, and never affects X generation, publishing or push.
+// ---------------------------------------------------------------------------
+
+type AppCopyRow = {
+  id: string;
+  title: string;
+  body_summary: string | null;
+  source_url: string | null;
+  source_type: string | null;
+  published_at: string | null;
+  category: string | null;
+  affected_entities: unknown;
+  generated_text: string | null;
+  generation_fact_status: string | null;
+  app_copy_fact_status: string | null;
+};
+
+const APP_COPY_SELECT = [
+  "id", "title", "body_summary", "source_url", "source_type", "published_at", "category",
+  "affected_entities", "generated_text", "generation_fact_status", "app_copy_fact_status",
+].join(",");
+
+function toAppCopySource(row: AppCopyRow): AppCopySource {
+  return {
+    id: row.id,
+    title: row.title,
+    bodySummary: row.body_summary,
+    sourceUrl: row.source_url,
+    sourceType: row.source_type,
+    publishedAt: row.published_at,
+    category: row.category,
+    affectedEntities: Array.isArray(row.affected_entities)
+      ? row.affected_entities.filter((entity): entity is string => typeof entity === "string")
+      : [],
+  };
+}
+
+async function selectAppCopyTargetIds(supabaseUrl: string, serviceRoleKey: string, limit: number): Promise<string[]> {
+  // The visibility rule lives in SQL (public.important_news_app_copy_targets) so it is
+  // exactly the /news feed rule; only items some user actually sees are translated.
+  const result = await fetch(`${supabaseUrl}/rest/v1/rpc/important_news_app_copy_targets`, {
+    method: "POST",
+    headers: headers(serviceRoleKey),
+    body: JSON.stringify({ p_limit: limit }),
+  });
+  if (!result.ok) throw new Error(`APP_COPY_TARGETS_FAILED:${result.status}`);
+  const rows = await result.json() as Array<{ id?: unknown }>;
+  return rows.map((row) => row.id).filter((id): id is string => typeof id === "string");
+}
+
+async function selectAppCopyRows(supabaseUrl: string, serviceRoleKey: string, ids: string[]): Promise<AppCopyRow[]> {
+  if (ids.length === 0) return [];
+  const params = new URLSearchParams({ select: APP_COPY_SELECT, id: `in.(${ids.join(",")})` });
+  const result = await fetch(`${supabaseUrl}/rest/v1/important_news_candidates?${params}`, {
+    headers: headers(serviceRoleKey),
+  });
+  if (!result.ok) throw new Error("APP_COPY_SELECT_FAILED");
+  return await result.json() as AppCopyRow[];
+}
+
+/** Claim one never-attempted row; a concurrent run cannot claim it twice. */
+async function claimAppCopy(supabaseUrl: string, serviceRoleKey: string, candidateId: string): Promise<boolean> {
+  const params = new URLSearchParams({
+    id: `eq.${candidateId}`,
+    app_copy_fact_status: "is.null",
+    app_copy_attempts: "eq.0",
+  });
+  const result = await fetch(`${supabaseUrl}/rest/v1/important_news_candidates?${params}`, {
+    method: "PATCH",
+    headers: headers(serviceRoleKey, "return=representation"),
+    body: JSON.stringify({ app_copy_fact_status: "generating", app_copy_attempts: 1 }),
+  });
+  if (!result.ok) throw new Error("APP_COPY_CLAIM_FAILED");
+  const rows = await result.json() as unknown[];
+  return rows.length === 1;
+}
+
+async function storeAppCopy(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  candidateId: string,
+  update: Record<string, unknown>,
+): Promise<void> {
+  const params = new URLSearchParams({ id: `eq.${candidateId}`, app_copy_fact_status: "eq.generating" });
+  const result = await fetch(`${supabaseUrl}/rest/v1/important_news_candidates?${params}`, {
+    method: "PATCH",
+    headers: headers(serviceRoleKey, "return=minimal"),
+    body: JSON.stringify(update),
+  });
+  if (!result.ok) throw new Error("APP_COPY_STORE_FAILED");
+}
+
+async function runAppCopyGeneration(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  openAiApiKey: string,
+  limit = APP_COPY_BATCH_LIMIT,
+): Promise<Record<string, unknown>> {
+  const results: Record<string, unknown>[] = [];
+  try {
+    const ids = await selectAppCopyTargetIds(supabaseUrl, serviceRoleKey, limit);
+    const rows = await selectAppCopyRows(supabaseUrl, serviceRoleKey, ids);
+    const requester = openAiAppCopyRequester(openAiApiKey);
+    for (const row of rows) {
+      if (!needsAppCopy(row)) {
+        results.push({ candidateId: row.id, skipped: "NOT_NEEDED" });
+        continue;
+      }
+      try {
+        if (!await claimAppCopy(supabaseUrl, serviceRoleKey, row.id)) {
+          results.push({ candidateId: row.id, claimed: false });
+          continue;
+        }
+        const outcome = await generateAppCopy(toAppCopySource(row), requester);
+        await storeAppCopy(supabaseUrl, serviceRoleKey, row.id, appCopyUpdate(outcome));
+        results.push({
+          candidateId: row.id,
+          status: outcome.status,
+          error: outcome.error,
+          issues: outcome.issues,
+          calls: outcome.calls,
+          estimatedCost: outcome.estimatedCost,
+        });
+      } catch (error) {
+        results.push({ candidateId: row.id, error: safeError(error) });
+      }
+    }
+    return { targets: ids.length, results };
+  } catch (error) {
+    return { targets: 0, error: safeError(error), results };
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return response({ error: "POST_REQUIRED" }, 405);
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -1273,6 +1416,25 @@ Deno.serve(async (req) => {
     if (body.mode === "unpdf_edge_verification") {
       const result = await runUnpdfEdgeVerification();
       return response(result, result.success === true ? 200 : 500);
+    }
+    if (body.mode === "app_copy_dry_run") {
+      // Generates Japanese app copy for one candidate and returns it WITHOUT storing
+      // anything (2 model calls). For review before relying on the generate_ready run.
+      const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
+      if (!openAiApiKey) return response({ error: "OPENAI_API_KEY_MISSING" }, 500);
+      if (typeof body.candidateId !== "string") {
+        return response({ error: "APP_COPY_DRY_RUN_CANDIDATE_ID_REQUIRED" }, 400);
+      }
+      const [row] = await selectAppCopyRows(supabaseUrl, serviceRoleKey, [body.candidateId]);
+      if (!row) return response({ mode: body.mode, candidateId: body.candidateId, error: "NOT_FOUND" }, 404);
+      const outcome = await generateAppCopy(toAppCopySource(row), openAiAppCopyRequester(openAiApiKey));
+      return response({
+        mode: body.mode,
+        candidateId: row.id,
+        needsAppCopy: needsAppCopy(row),
+        databaseUpdated: false,
+        ...outcome,
+      });
     }
     if (body.mode === "notification_enqueue_dry_run") {
       // Read-only view of what the push producer would queue for a candidate.
@@ -1431,7 +1593,9 @@ Deno.serve(async (req) => {
         limit: requestedLimit,
       });
       if (generationCandidates.length === 0) {
-        return response({ mode: body.mode, processed: 0, databaseUpdated: false, results: [] });
+        // App copy still runs when there is nothing new to post.
+        const appCopy = dryRun ? undefined : await runAppCopyGeneration(supabaseUrl, serviceRoleKey, openAiApiKey);
+        return response({ mode: body.mode, processed: 0, databaseUpdated: false, results: [], appCopy });
       }
       const generationResults: unknown[] = [];
       const generationRepository = createGenerationRepository(supabaseUrl, serviceRoleKey);
@@ -1465,12 +1629,16 @@ Deno.serve(async (req) => {
           generationResults.push({ candidateId: candidate.id, error: safeError(error), databaseUpdated: false });
         }
       }
+      // After X generation is fully done, so a slow or failing app-copy call can
+      // never delay or change the X-side results above.
+      const appCopy = dryRun ? undefined : await runAppCopyGeneration(supabaseUrl, serviceRoleKey, openAiApiKey);
       return response({
         mode: body.mode,
         processed: generationResults.length,
         databaseUpdated: !dryRun,
         results: generationResults,
         autoPublish: false,
+        appCopy,
       });
     }
     if (body.mode === "judgement_dry_run" || body.mode === "judge_pending") {

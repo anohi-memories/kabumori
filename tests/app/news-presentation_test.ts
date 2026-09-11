@@ -172,6 +172,44 @@ test("sources get a readable Japanese label", () => {
   assert.equal(sourceLabelFor(null), null);
 });
 
+test("Fact-passed Japanese app copy turns an English item fully Japanese", () => {
+  const p = buildNewsPresentation({
+    ...GREER,
+    app_title_ja: "米国、カナダ原産品500億ドル相当を政府調達から除外　USTRが声明",
+    app_summary_ja: "米通商代表部のグリア代表は、カナダの報復措置に対するトランプ大統領の対応を説明しました。",
+    app_detail_ja: "米通商代表部のグリア代表が声明を出しました。\n\n大統領は、カナダ原産品500億ドル相当を政府調達の対象から外すよう指示しました。",
+    app_key_points_ja: ["USTRのグリア代表が声明", "カナダ原産品500億ドル相当を政府調達から除外"],
+  });
+  assert.equal(p.origin, "app_copy");
+  assert.equal(p.titleIsJapanese, true);
+  assert.ok(p.title.startsWith("米国、カナダ原産品500億ドル相当"));
+  assert.equal(p.originalTitle, GREER.title);
+  assert.equal(p.detailParagraphs.length, 2);
+  assert.deepEqual(p.keyPoints, ["USTRのグリア代表が声明", "カナダ原産品500億ドル相当を政府調達から除外"]);
+  assert.ok(p.listSummary.startsWith("米通商代表部のグリア代表は"));
+  assert.equal(p.originalExcerpt, null);
+  assert.ok(!/[<>]/.test(allText(p)));
+});
+
+test("without Fact-passed app copy (the RPC returns null) the item stays on the pending fallback", () => {
+  const p = buildNewsPresentation({ ...GREER, app_title_ja: null, app_summary_ja: null, app_detail_ja: null, app_key_points_ja: null });
+  assert.equal(p.origin, "original_only");
+  assert.equal(p.listSummary, "");
+});
+
+test("a verified X post still wins over app copy, and app copy markup is stripped", () => {
+  const both = buildNewsPresentation({ ...YEN, app_title_ja: "別の見出し", app_detail_ja: "別の本文です。" });
+  assert.equal(both.origin, "verified_post");
+  const dirty = buildNewsPresentation({
+    ...GREER,
+    app_title_ja: "<b>米国</b>がカナダ製品を除外",
+    app_detail_ja: "<p>本文です。</p> https://ustr.gov/x",
+    app_summary_ja: "要約です。",
+  });
+  assert.equal(dirty.title, "米国 がカナダ製品を除外".replace(" ", " "));
+  assert.ok(!/[<>]|https?:/.test(allText(dirty)), allText(dirty));
+});
+
 test("a forced cut never lands inside a number", () => {
   const text = fitText(`${"あ".repeat(190)}1,234,567億円`, LIST_SUMMARY_MAX);
   assert.ok(!/[0-9,]…$/.test(text) || text.includes("1,234,567"), text);

@@ -24,9 +24,14 @@ export type NewsPresentationInput = {
   company_name: string;
   matched_sector?: string | null;
   relevance_reason?: string | null;
+  // Japanese app copy; the RPC returns these only when their Fact check passed.
+  app_title_ja?: string | null;
+  app_summary_ja?: string | null;
+  app_detail_ja?: string | null;
+  app_key_points_ja?: unknown;
 };
 
-export type NewsTextOrigin = 'verified_post' | 'disclosure' | 'japanese_body' | 'original_only';
+export type NewsTextOrigin = 'verified_post' | 'app_copy' | 'disclosure' | 'japanese_body' | 'original_only';
 
 export type NewsPresentation = {
   title: string;
@@ -290,6 +295,30 @@ export function buildNewsPresentation(item: NewsPresentationInput): NewsPresenta
       detailParagraphs: verified,
       originalExcerpt: null,
       origin: 'verified_post',
+    };
+  }
+
+  // Japanese app copy generated from the original and Fact-checked against it.
+  const appTitle = collapse(stripMarkup(item.app_title_ja));
+  const appDetail = typeof item.app_detail_ja === 'string'
+    ? item.app_detail_ja.split(/\n\s*\n/).map((paragraph) => collapse(removeUrls(stripMarkup(paragraph)))).filter(Boolean)
+    : [];
+  if (appTitle && isJapanese(appTitle) && appDetail.length > 0) {
+    const points = Array.isArray(item.app_key_points_ja) ? item.app_key_points_ja : [];
+    const appSummary = collapse(removeUrls(stripMarkup(item.app_summary_ja)));
+    return {
+      ...base,
+      title: fitText(appTitle, TITLE_MAX),
+      titleIsJapanese: true,
+      listSummary: fitText(appSummary || appDetail.join(''), LIST_SUMMARY_MAX),
+      keyPoints: points
+        .filter((point): point is string => typeof point === 'string')
+        .map((point) => fitText(collapse(removeUrls(stripMarkup(point))), 120))
+        .filter(Boolean)
+        .slice(0, 4),
+      detailParagraphs: appDetail,
+      originalExcerpt: null,
+      origin: 'app_copy',
     };
   }
 

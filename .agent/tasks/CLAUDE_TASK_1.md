@@ -3,8 +3,8 @@
 - task_id: in-app-news-japanese-detail-summary-20260911
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: in_progress
+- next_owner: claude
 - priority: high
 - recommended_model: Opus 5
 - purpose: 重要ニュース画面を、英語ソースへの単なるリンク集ではなく「日本語タイトル＋アプリ内詳細＋十分な日本語要約」で内容を把握できる体験へ改善する。外部ソースは確認用の二次導線にする。

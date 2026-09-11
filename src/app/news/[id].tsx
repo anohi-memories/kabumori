@@ -93,6 +93,9 @@ export default function ImportantNewsDetailScreen() {
           {view.detailParagraphs.map((paragraph, index) => (
             <Text key={index} style={styles.paragraph}>{paragraph}</Text>
           ))}
+          {view.origin === 'app_copy' && (
+            <Text style={styles.aiNote}>この日本語要約は、元記事をもとにAIが作成し、内容を元記事と照合しています。</Text>
+          )}
         </View>
       ) : (
         <View style={[styles.section, styles.noticeCard]}>
@@ -158,6 +161,7 @@ const styles = StyleSheet.create({
   pointDot: { color: '#397449', fontWeight: '900', width: 16 },
   pointText: { flex: 1, color: '#17211a', fontSize: 15, lineHeight: 23, fontWeight: '600' },
   paragraph: { color: '#2f3a33', fontSize: 15, lineHeight: 25, marginBottom: 12 },
+  aiNote: { color: '#89918c', fontSize: 12, lineHeight: 18 },
   noticeCard: { backgroundColor: '#eef3ed', borderRadius: 16, padding: 16 },
   noticeTitle: { color: '#2c6940', fontWeight: '900', fontSize: 15 },
   noticeText: { color: '#5e6d63', fontSize: 13, lineHeight: 20, marginTop: 6 },

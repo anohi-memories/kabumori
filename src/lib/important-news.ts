@@ -24,6 +24,12 @@ export type ImportantStockNews = {
   // Japanese post text generated at publish time; the RPC returns it only when
   // its Fact check passed, otherwise null.
   verified_text?: string | null;
+  // Japanese app copy generated from the original article; returned only when its
+  // own Fact check passed, otherwise null.
+  app_title_ja?: string | null;
+  app_summary_ja?: string | null;
+  app_detail_ja?: string | null;
+  app_key_points_ja?: string[] | null;
 };
 
 // The detail screen reuses the feed RPC so it inherits exactly the same access
