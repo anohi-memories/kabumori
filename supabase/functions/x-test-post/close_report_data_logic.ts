@@ -4,6 +4,9 @@ export const YAHOO_NIKKEI_CLOSE_URL =
   "https://query2.finance.yahoo.com/v8/finance/chart/%5EN225?range=5d&interval=1m&events=history";
 export const YAHOO_TOPIX_CLOSE_URL =
   "https://query2.finance.yahoo.com/v8/finance/chart/%5ETPX?range=5d&interval=1m&events=history";
+export const YAHOO_TOPIX_ETF_CLOSE_URL =
+  "https://query2.finance.yahoo.com/v8/finance/chart/1306.T?range=5d&interval=1m&events=history";
+export const TOPIX_PROXY_LABEL = "TOPIX連動ETF（1306）";
 
 type YahooChartResult = {
   meta?: { chartPreviousClose?: number; previousClose?: number; symbol?: string; exchangeName?: string; fullExchangeName?: string; currency?: string };
@@ -55,6 +58,14 @@ function hasJapaneseTopixIdentity(result: YahooChartResult | null | undefined): 
   return /topix/i.test(symbol) && /jpx|tokyo|japan/i.test(exchange) && meta.currency === "JPY";
 }
 
+function hasJapaneseTopixEtfIdentity(result: YahooChartResult | null | undefined): boolean {
+  const meta = result?.meta;
+  if (!meta) return false;
+  const symbol = typeof meta.symbol === "string" ? meta.symbol.toUpperCase() : "";
+  const exchange = `${meta.exchangeName ?? ""} ${meta.fullExchangeName ?? ""}`;
+  return symbol === "1306.T" && /jpx|tokyo|japan/i.test(exchange) && meta.currency === "JPY";
+}
+
 export async function fetchYahooJpxCloseMetric(
   url: string,
   label: string,
@@ -64,13 +75,17 @@ export async function fetchYahooJpxCloseMetric(
   // Yahoo's ^TPX endpoint is not a reliable TOPIX source: it has returned
   // an OPRA/CBO USD instrument with no Tokyo-session timestamps. Never allow
   // that endpoint to be relabeled as the Japanese TOPIX.
-  if (label === "TOPIX" && url === YAHOO_TOPIX_CLOSE_URL) return null;
+  if (url === YAHOO_TOPIX_CLOSE_URL) return null;
+  // 1306.T is accepted only under its explicit ETF label; it must never be
+  // represented as the TOPIX index itself.
+  if (url === YAHOO_TOPIX_ETF_CLOSE_URL && label !== TOPIX_PROXY_LABEL) return null;
   try {
     const response = await fetchImpl(url, { headers: { Accept: "application/json" } });
     if (!response.ok) return null;
     const body = await response.json() as YahooChartResponse;
     const result = body.chart?.result?.[0];
     if (label === "TOPIX" && !hasJapaneseTopixIdentity(result)) return null;
+    if (label === TOPIX_PROXY_LABEL && !hasJapaneseTopixEtfIdentity(result)) return null;
     const close = latestClose(result);
     if (!close) return null;
     const observed = jstDateAndMinutes(close.timestamp);
@@ -98,8 +113,6 @@ export async function fetchJpxCloseMetrics(
   fetchImpl: typeof fetch = fetch,
 ): Promise<{ nikkei: RawMorningMetric | null; topix: RawMorningMetric | null }> {
   const nikkei = await fetchYahooJpxCloseMetric(YAHOO_NIKKEI_CLOSE_URL, "日経平均", referenceIso, fetchImpl);
-  // No formally verified structured TOPIX source is available in the current
-  // implementation. Keep TOPIX unavailable rather than using a mismatched
-  // Yahoo instrument or relabeling an ETF as the index.
-  return { nikkei, topix: null };
+  const topixProxy = await fetchYahooJpxCloseMetric(YAHOO_TOPIX_ETF_CLOSE_URL, TOPIX_PROXY_LABEL, referenceIso, fetchImpl);
+  return { nikkei, topix: topixProxy };
 }

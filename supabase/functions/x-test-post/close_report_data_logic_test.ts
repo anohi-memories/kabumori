@@ -4,6 +4,8 @@ import {
   fetchJpxCloseMetrics,
   fetchYahooJpxCloseMetric,
   YAHOO_NIKKEI_CLOSE_URL,
+  YAHOO_TOPIX_ETF_CLOSE_URL,
+  TOPIX_PROXY_LABEL,
 } from "./close_report_data_logic.ts";
 
 function response(body: unknown, ok = true): Response {
@@ -31,16 +33,22 @@ test("same-day Nikkei close at 15:30 JST is accepted from the direct chart sourc
   assert.equal(metric?.timestamp, "2026-09-10T06:30:00.000Z");
 });
 
-test("TOPIX is unavailable in the production path and only Nikkei is fetched", async () => {
+test("production path fetches 1306.T as the explicitly labeled TOPIX ETF proxy", async () => {
   const calls: string[] = [];
   const metrics = await fetchJpxCloseMetrics(reference, async (url) => {
     calls.push(url);
-    const value = url.includes("N225") ? 3_200 : 3_050;
-    return response(chart(Date.parse("2026-09-10T06:30:00.000Z") / 1000, value));
+    const isEtf = url.includes("1306.T");
+    return response(chart(
+      Date.parse("2026-09-10T06:30:00.000Z") / 1000,
+      isEtf ? 3_050 : 3_200,
+      isEtf ? 3_020 : 3_180,
+      isEtf ? { symbol: "1306.T", exchangeName: "JPX", currency: "JPY" } : {},
+    ));
   });
   assert.equal(metrics.nikkei?.value, "3200");
-  assert.equal(metrics.topix, null);
-  assert.equal(calls.length, 1);
+  assert.equal(metrics.topix?.value, "3050");
+  assert.equal(metrics.topix?.label, TOPIX_PROXY_LABEL);
+  assert.equal(calls.length, 2);
 });
 
 test("Yahoo ^TPX is rejected instead of being labeled as Japanese TOPIX", async () => {
@@ -74,6 +82,21 @@ test("same-day 15:30 TOPIX is accepted only with matching JPX/Japanese metadata"
   assert.equal(metric?.timestamp, "2026-09-10T06:30:00.000Z");
 });
 
+test("1306.T is never accepted under the bare TOPIX label", async () => {
+  const metric = await fetchYahooJpxCloseMetric(
+    YAHOO_TOPIX_ETF_CLOSE_URL,
+    "TOPIX",
+    reference,
+    async () => response(chart(
+      Date.parse("2026-09-10T06:30:00.000Z") / 1000,
+      3_050,
+      3_020,
+      { symbol: "1306.T", exchangeName: "JPX", currency: "JPY" },
+    )),
+  );
+  assert.equal(metric, null);
+});
+
 test("TOPIX source metadata mismatch is rejected", async () => {
   const metric = await fetchYahooJpxCloseMetric(
     "https://example.test/topix-structured",
@@ -89,9 +112,36 @@ test("TOPIX source metadata mismatch is rejected", async () => {
   assert.equal(metric, null);
 });
 
-test("TOPIX unavailable is fail-safe and does not block Nikkei acquisition", async () => {
+test("1306.T rejects pre-close and previous-day observations", async () => {
+  const preClose = await fetchYahooJpxCloseMetric(
+    YAHOO_TOPIX_ETF_CLOSE_URL,
+    TOPIX_PROXY_LABEL,
+    reference,
+    async () => response(chart(
+      Date.parse("2026-09-10T06:29:00.000Z") / 1000,
+      3_050,
+      3_020,
+      { symbol: "1306.T", exchangeName: "JPX", currency: "JPY" },
+    )),
+  );
+  const previous = await fetchYahooJpxCloseMetric(
+    YAHOO_TOPIX_ETF_CLOSE_URL,
+    TOPIX_PROXY_LABEL,
+    reference,
+    async () => response(chart(
+      Date.parse("2026-09-09T06:30:00.000Z") / 1000,
+      3_050,
+      3_020,
+      { symbol: "1306.T", exchangeName: "JPX", currency: "JPY" },
+    )),
+  );
+  assert.equal(preClose, null);
+  assert.equal(previous, null);
+});
+
+test("missing 1306.T is fail-safe and does not fabricate a TOPIX value", async () => {
   const metrics = await fetchJpxCloseMetrics(reference, async (url) => {
-    assert.match(url, /%5EN225/u);
+    if (url.includes("1306.T")) return response({}, false);
     return response(chart(Date.parse("2026-09-10T06:30:00.000Z") / 1000, 42_123.45));
   });
   assert.equal(metrics.nikkei?.value, "42123.45");

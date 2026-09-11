@@ -27,6 +27,7 @@ import {
 import { runWithSingleRetry, SingleRetryExhaustedError } from "./voice_retry_logic.ts";
 import {
   fetchJpxCloseMetrics,
+  TOPIX_PROXY_LABEL,
 } from "./close_report_data_logic.ts";
 import { appendKabumoriReportFixedHashtags } from "./fixed_hashtags_logic.ts";
 import {
@@ -2116,7 +2117,7 @@ async function generateCloseReport(
         "何が起きたか、なぜ重要か、日本株との関係、明日見る点をまとめ、各件に実際に開いて確認したsource_url、公開timestamp、material_typeを付けてください。3件全体で最低2つの独立publisherを確保し、可能なら一次・公式情報と信頼報道を組み合わせます。",
         "timestampは確認できた精度のまま返してください。時刻不明ならYYYY-MM-DDとし、00:00等を推測しません。今日の市場の流れはmarket_session、現在値ベースはrealtime_market、政策・経済指標・企業材料は対応するmaterial_typeを指定します。古い材料を今日発生したように扱いません。",
         "強い因果関係を断定する場合はcausal_claim_strength=strongとし、独立報道2系統または一次情報＋信頼報道をsource_urlとsupporting_source_urlsへ入れます。裏取りできなければ断定を避けてqualifiedにするか、その材料を使いません。",
-        "日経平均とTOPIXの終値は、コード側の限定された指数取得経路から取得できた入力値を最優先します。入力に値がない場合だけ信頼できる許可sourceの検索結果を補助的に使い、取得不能は空文字にします。前場値や推測値で埋めません。グロース指数・日経先物の具体値は必須ではありません。",
+        `日経平均と${TOPIX_PROXY_LABEL}の確定値は、コード側の限定された指数取得経路から取得できた入力値を最優先します。${TOPIX_PROXY_LABEL}はTOPIXそのものではなく、1306.Tの代替比較指標です。入力に値がない場合は検索結果で埋めず、取得不能は空文字にします。前場値や推測値で埋めません。グロース指数・日経先物の具体値は必須ではありません。`,
         "強かった・弱かった業種やテーマは、その日の値動きまたは材料を信頼できる出典で確認できるものだけ入れます。目立たない側は空配列で構いません。",
         "値動きの理由は確認できた事実と報道だけを使います。因果を確認できない場合は断定せず、important_pointsの説明で確度を弱めてください。",
         cutoffInstruction,
@@ -2130,7 +2131,7 @@ async function generateCloseReport(
         "タイムゾーン: Asia/Tokyo",
         `実行区分: ${runMode}`,
         `コード側の当日終値取得（日経平均）: ${directCloseMetrics.nikkei?.value ?? "未取得"}`,
-        `コード側の当日終値取得（TOPIX）: ${directCloseMetrics.topix?.value ?? "未取得"}`,
+        `コード側の当日終値取得（${TOPIX_PROXY_LABEL}）: ${directCloseMetrics.topix?.value ?? "未取得"}`,
       ].join("\n"),
       text: { format: { type: "json_schema", name: "close_market_packet", strict: true, schema: {
         type: "object",
@@ -2247,7 +2248,17 @@ async function generateCloseReport(
   const verifiedMetric = (metric: RawMarketMetric): RawMarketMetric =>
     sourceVerified(metric.source_url) ? metric : { ...metric, source_url: "" };
   const nikkei = normalizeCloseMetric(verifiedMetric(directCloseMetrics.nikkei ?? packet.nikkei), "jpx_close", referenceTimeIso, runMode);
-  const topix = normalizeCloseMetric(verifiedMetric(directCloseMetrics.topix ?? packet.topix), "jpx_close", referenceTimeIso, runMode);
+  // In live mode the explicit 1306.T proxy is code-owned and cannot be
+  // replaced by an AI/article-supplied value. This preserves the fail-closed
+  // behavior when the proxy is unavailable; preflight may still inspect the
+  // packet shape without treating it as a publishable close.
+  const topixRaw = runMode === "live"
+    ? (directCloseMetrics.topix ?? {
+      label: TOPIX_PROXY_LABEL, value: "", previous_close: "", change: "", change_percent: "",
+      timestamp: "", source_url: "",
+    })
+    : (directCloseMetrics.topix ?? packet.topix);
+  const topix = normalizeCloseMetric(verifiedMetric(topixRaw), "jpx_close", referenceTimeIso, runMode);
   const growthRaw = verifiedMetric(packet.growth250);
   const growth250 = parseMarketNumber(growthRaw.value) === null
     ? null : normalizeCloseMetric(growthRaw, "jpx_close", referenceTimeIso, runMode);
@@ -2326,7 +2337,7 @@ async function generateCloseReport(
           "入力の出典確認済み事実だけを使い、市場概況＋初心者にも分かる解説型の大引けレポートを1投稿で作成してください。数値・日時・因果関係を追加推測しません。",
           "先頭は必ず『【大引け】きょうの日本株まとめ🌙』、直後に『📌 今日の3ポイント』と重要度順の箇条書き3件を置きます。続けて市場全体の流れと、3ポイントをそれぞれ詳しく説明します。",
           "importantPointsの各件にはmaterial_scopeが付いています。todayを優先して3ポイントを構成してください。todayが3件に満たない場合はnextで補って構いませんが、nextの内容は『来週◯◯が予定されています』のように今後の予定として書き、今日すでに起きたことのように書きません。",
-          "外部市場データ由来の日経平均、TOPIX、日経先物、為替、金利の具体値は書きません。入力で確認済みの方向感やニュースだけを使い、未確認の方向感も作りません。",
+          `外部市場データ由来の日経平均、${TOPIX_PROXY_LABEL}、日経先物、為替、金利の具体値は書きません。${TOPIX_PROXY_LABEL}をTOPIXそのものと表現せず、入力で確認済みの方向感やニュースだけを使い、未確認の方向感も作りません。`,
           "終盤に『🔎 強かった・弱かったテーマ』『👀 明日への注目点』『💬 今日のひとこと』をこの順で必ず入れます。市場解釈を事実として断定せず、売買指示はしません。",
           "500〜800文字は目安です。材料が少なければ短く、必要なら長くして構いません。文字数合わせの水増しは禁止です。",
           "因果の確度が弱い場合は断定を避けます。売買推奨、利益保証、URL、ハッシュタグは入れません。絵文字数は自然さを優先します。",
@@ -2699,7 +2710,7 @@ async function generateFuturePostPreview(
     : [
       "文体確認用の架空データです。外部の事実を追加しないでください。",
       "日経平均: 前日比+0.7%",
-      "TOPIX: 前日比+0.4%",
+      `${TOPIX_PROXY_LABEL}: 前日比+0.4%（TOPIXそのものではありません）`,
       "強かった業種: 半導体、銀行",
       "重かった分野: 新興グロース株",
       "明日の注目: 米国の雇用関連指標と為替の反応",

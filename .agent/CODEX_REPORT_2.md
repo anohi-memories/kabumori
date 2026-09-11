@@ -342,3 +342,35 @@ ChatGPT should review the successful v91 deployment. After the next natural morn
 - remaining_issues: a formally verified structured same-day TOPIX source still needs to be selected in a separate review; until then live close_report safely stops when TOPIX is unavailable.
 - safety_checks: clean temporary worktree from fresh `origin/main`; formal repository and other workstreams untouched; no secrets exposed; no Storage/DB writes; no X posts.
 - next_recommendation: ChatGPT C2 review. Do not deploy or run a manual close_report until the source choice is approved.
+
+## H2 Follow-up F1: clearly labeled TOPIX ETF proxy (2026-09-12)
+
+- task_id: `x-close-report-topix-source-correction-20260911`
+- result: `review_required`
+- model_used: `gpt-5.6-sol`
+- proxy_source_validation: Yahoo structured chart `1306.T` was verified read-only with metadata `symbol=1306.T`, `instrumentType=ETF`, `exchangeName=JPX`, `fullExchangeName=Tokyo`, `currency=JPY`, and a populated multi-day chart. This is used only as a market-comparison proxy, not as the TOPIX index.
+- label_invariants: proxy label is the exact explicit `TOPIX連動ETF（1306）`; `^TPX` remains rejected; `1306.T` is rejected if called `TOPIX`; prompts and diagnostics state that the proxy is not TOPIX itself. No 1306 value is relabeled as TOPIX.
+- code_changes:
+  - `close_report_data_logic.ts` adds the 1306.T structured endpoint and explicit label, validates 1306.T/JPX-Tokyo/JPY metadata, retains `^TPX` rejection, and keeps same-JST-date, numeric, 15:30+ and freshness checks.
+  - `index.ts` uses the proxy in the direct close acquisition and live required-index gate, prevents live fallback to AI/article-supplied `packet.topix`, and updates collection/writer prompts, input diagnostics, and preview data to preserve the ETF label.
+  - Nikkei acquisition and existing 17:00 scheduler, Fact/Voice/X gates are unchanged.
+- tests:
+  - targeted close-data + close-report tests: **63 passed / 0 failed**
+  - full `x-test-post` regression (`deno test --no-check --allow-read --allow-env supabase/functions/x-test-post/*_test.ts`): **387 passed / 0 failed**
+  - pure modules (`deno check close_report_data_logic.ts close_report_logic.ts`): PASS
+  - `git diff --check`: PASS
+  - coverage includes `^TPX` rejection, valid 1306.T same-day close, explicit-label invariant, metadata mismatch, 15:29 and previous-day rejection, missing-proxy fail-safe, and existing close-report regressions.
+- production_deploy: not performed; no manual close_report, OpenAI/X API, X post, DB, Cron, settings, secrets, or OAuth operation.
+- deploy_verification: N/A.
+- unchanged_scopes: 17:00 schedule/posting windows/Cron, Nikkei path, Fact/Voice/X safety gates, morning_report, morning_greeting, important-news, personalized reports, `apps/admin/**`, `HANDOFF.md`, and formal repository working tree.
+- changed_files:
+  - `supabase/functions/x-test-post/close_report_data_logic.ts`
+  - `supabase/functions/x-test-post/close_report_data_logic_test.ts`
+  - `supabase/functions/x-test-post/index.ts`
+  - `.agent/tasks/CODEX_TASK_2.md`
+  - `.agent/CODEX_REPORT_2.md`
+- commit_hash: pending
+- push: pending
+- remaining_issues: 1306.T is an explicitly labeled ETF proxy and not a formal TOPIX index source; replace it with a formally verified TOPIX source in a separately approved task when available.
+- safety_checks: clean temporary worktree from fresh `origin/main` (`d907f6c4ca45ef3ee8e88bdc1b70d64f8bbb4a7f`); no secrets exposed; no production writes or API calls.
+- next_recommendation: ChatGPT C2 review. Production deployment remains a separate explicit decision.
