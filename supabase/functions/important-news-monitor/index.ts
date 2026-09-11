@@ -1395,6 +1395,35 @@ async function runAppCopyGeneration(
   }
 }
 
+// Market-wide Critical pushes (opt-in). All targeting lives in SQL
+// (public.enqueue_market_critical_notifications): users with
+// alert_settings.market_critical_news, push_enabled and important_news on, whose
+// tracked sectors the item reaches, Fact-passed Japanese text only, fresh items
+// only, never the same news/event twice per user. Never throws.
+const MARKET_CRITICAL_PUSH_WINDOW_HOURS = 6;
+
+async function enqueueMarketCriticalNotifications(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+): Promise<Record<string, unknown>> {
+  try {
+    const result = await fetch(`${supabaseUrl}/rest/v1/rpc/enqueue_market_critical_notifications`, {
+      method: "POST",
+      headers: headers(serviceRoleKey),
+      body: JSON.stringify({ p_window_hours: MARKET_CRITICAL_PUSH_WINDOW_HOURS }),
+    });
+    if (!result.ok) throw new Error(`MARKET_CRITICAL_ENQUEUE_FAILED:${result.status}`);
+    const rows = await result.json() as unknown[];
+    const inserted = Array.isArray(rows) ? rows.length : 0;
+    console.log(JSON.stringify({ event: "market_critical_notification_enqueue", inserted }));
+    return { inserted };
+  } catch (error) {
+    const code = safeError(error);
+    console.log(JSON.stringify({ event: "market_critical_notification_enqueue", inserted: 0, error: code }));
+    return { inserted: 0, error: code };
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return response({ error: "POST_REQUIRED" }, 405);
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -1559,7 +1588,12 @@ Deno.serve(async (req) => {
           candidateId,
           result,
         );
-        return { mode: body.mode, ...result, autoPublish: true, notificationEnqueue };
+        // A just-published market Critical item reaches opted-in users without waiting
+        // for the next generate_ready run.
+        const marketCritical = result.published
+          ? await enqueueMarketCriticalNotifications(supabaseUrl, serviceRoleKey)
+          : undefined;
+        return { mode: body.mode, ...result, autoPublish: true, notificationEnqueue, marketCritical };
       });
       if (!guarded.executed) {
         return response({
@@ -1595,7 +1629,8 @@ Deno.serve(async (req) => {
       if (generationCandidates.length === 0) {
         // App copy still runs when there is nothing new to post.
         const appCopy = dryRun ? undefined : await runAppCopyGeneration(supabaseUrl, serviceRoleKey, openAiApiKey);
-        return response({ mode: body.mode, processed: 0, databaseUpdated: false, results: [], appCopy });
+        const marketCritical = dryRun ? undefined : await enqueueMarketCriticalNotifications(supabaseUrl, serviceRoleKey);
+        return response({ mode: body.mode, processed: 0, databaseUpdated: false, results: [], appCopy, marketCritical });
       }
       const generationResults: unknown[] = [];
       const generationRepository = createGenerationRepository(supabaseUrl, serviceRoleKey);
@@ -1632,6 +1667,8 @@ Deno.serve(async (req) => {
       // After X generation is fully done, so a slow or failing app-copy call can
       // never delay or change the X-side results above.
       const appCopy = dryRun ? undefined : await runAppCopyGeneration(supabaseUrl, serviceRoleKey, openAiApiKey);
+      // After app copy, so a Critical item translated in this run can be pushed right away.
+      const marketCritical = dryRun ? undefined : await enqueueMarketCriticalNotifications(supabaseUrl, serviceRoleKey);
       return response({
         mode: body.mode,
         processed: generationResults.length,
@@ -1639,6 +1676,7 @@ Deno.serve(async (req) => {
         results: generationResults,
         autoPublish: false,
         appCopy,
+        marketCritical,
       });
     }
     if (body.mode === "judgement_dry_run" || body.mode === "judge_pending") {

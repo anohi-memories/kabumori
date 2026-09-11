@@ -29,6 +29,8 @@ export type NewsPresentationInput = {
   app_summary_ja?: string | null;
   app_detail_ja?: string | null;
   app_key_points_ja?: unknown;
+  // Market-wide items: matched sectors, most tracked stocks first.
+  matched_sectors?: string[] | null;
 };
 
 export type NewsTextOrigin = 'verified_post' | 'app_copy' | 'disclosure' | 'japanese_body' | 'original_only';
@@ -222,14 +224,17 @@ const THEME_LABELS: Record<string, string> = {
 export function marketRelationText(
   matchedSector: string | null | undefined,
   relevanceReason: string | null | undefined,
+  matchedSectors?: string[] | null,
 ): string | null {
   if (!matchedSector) return null;
   const themes = (relevanceReason ?? '')
     .split(',')
     .map((theme) => THEME_LABELS[theme.trim()])
     .filter((label): label is string => !!label);
+  const sectors = (matchedSectors ?? []).filter((sector) => typeof sector === 'string' && sector.length > 0).slice(0, 3);
+  const sectorText = (sectors.length ? sectors : [matchedSector]).join('・');
   const topic = themes.length ? `${themes.join('・')}に関するニュースです。` : '市場全体に関するニュースです。';
-  return `${topic}登録している${matchedSector}の銘柄に関係する可能性があるため表示しています。`;
+  return `${topic}登録している${sectorText}の銘柄に関係する可能性があるため表示しています。`;
 }
 
 const SOURCE_LABELS: Array<[RegExp, string]> = [
@@ -271,7 +276,7 @@ export function buildNewsPresentation(item: NewsPresentationInput): NewsPresenta
   const sourceUrl = item.source_url && /^https?:\/\//i.test(item.source_url) ? item.source_url : null;
   const base = {
     originalTitle,
-    marketRelation: marketRelationText(item.matched_sector, item.relevance_reason),
+    marketRelation: marketRelationText(item.matched_sector, item.relevance_reason, item.matched_sectors),
     sourceLabel: sourceLabelFor(sourceUrl),
     sourceUrl,
   };

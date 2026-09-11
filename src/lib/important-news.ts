@@ -30,6 +30,8 @@ export type ImportantStockNews = {
   app_summary_ja?: string | null;
   app_detail_ja?: string | null;
   app_key_points_ja?: string[] | null;
+  // Market-wide items: every tracked sector the item reaches, most tracked stocks first.
+  matched_sectors?: string[] | null;
 };
 
 // The detail screen reuses the feed RPC so it inherits exactly the same access

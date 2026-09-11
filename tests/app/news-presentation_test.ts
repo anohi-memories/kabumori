@@ -210,6 +210,25 @@ test("a verified X post still wins over app copy, and app copy markup is strippe
   assert.ok(!/[<>]|https?:/.test(allText(dirty)), allText(dirty));
 });
 
+test("market relation names the ranked matched sectors, still without direction", () => {
+  assert.equal(
+    marketRelationText("電気機器", "fx", ["電気機器", "機械", "輸送用機器"]),
+    "為替に関するニュースです。登録している電気機器・機械・輸送用機器の銘柄に関係する可能性があるため表示しています。",
+  );
+  assert.equal(
+    marketRelationText("電気機器", "fx", ["電気機器", "機械", "輸送用機器", "精密機器"]),
+    "為替に関するニュースです。登録している電気機器・機械・輸送用機器の銘柄に関係する可能性があるため表示しています。",
+    "at most three sectors",
+  );
+  assert.equal(
+    marketRelationText("銀行業", "rates", null),
+    "金利に関するニュースです。登録している銀行業の銘柄に関係する可能性があるため表示しています。",
+    "older RPC without the list",
+  );
+  const p = buildNewsPresentation({ ...YEN, matched_sectors: ["電気機器", "機械"] });
+  assert.ok(p.marketRelation!.includes("電気機器・機械"));
+});
+
 test("a forced cut never lands inside a number", () => {
   const text = fitText(`${"あ".repeat(190)}1,234,567億円`, LIST_SUMMARY_MAX);
   assert.ok(!/[0-9,]…$/.test(text) || text.includes("1,234,567"), text);

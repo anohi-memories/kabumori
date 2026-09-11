@@ -15,9 +15,13 @@ export function importanceLabel(
 
 /** Badge text and the line next to it: 市場 + 関連業種, or 保有/監視 + ticker. */
 export function targetLabel(
-  item: Pick<ImportantStockNews, 'matched_sector' | 'tracking_type' | 'ticker_code'>,
+  item: Pick<ImportantStockNews, 'matched_sector' | 'matched_sectors' | 'tracking_type' | 'ticker_code'>,
 ): { badge: string; detail: string } {
-  if (item.matched_sector) return { badge: '市場', detail: `関連: ${item.matched_sector}` };
+  if (item.matched_sector) {
+    // Up to two sectors, most tracked stocks first (the RPC already orders them).
+    const sectors = item.matched_sectors?.filter(Boolean).slice(0, 2) ?? [];
+    return { badge: '市場', detail: `関連: ${(sectors.length ? sectors : [item.matched_sector]).join('・')}` };
+  }
   return { badge: trackingLabels[item.tracking_type] ?? '', detail: item.ticker_code ?? '' };
 }
 

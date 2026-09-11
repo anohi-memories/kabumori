@@ -6,6 +6,7 @@ import {
   Pressable,
   RefreshControl,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from 'react-native';
@@ -15,6 +16,7 @@ import {
   fetchMyImportantStockNews,
   ImportantStockNews,
 } from '@/lib/important-news';
+import { fetchMarketCriticalAlert, setMarketCriticalAlert } from '@/lib/alert-settings';
 import { formatNewsTime, importanceLabel, targetLabel } from '@/lib/news-labels';
 import { buildNewsPresentation } from '@/lib/news-presentation';
 import { markImportantNewsNotificationsRead } from '@/lib/notifications';
@@ -24,6 +26,34 @@ export default function ImportantNewsScreen() {
   const [loading, setLoading] = useState(true);
   const [hasTrackedStocks, setHasTrackedStocks] = useState(false);
   const [error, setError] = useState('');
+  // null until loaded; the switch stays disabled rather than showing a guess.
+  const [marketAlert, setMarketAlert] = useState<boolean | null>(null);
+  const [savingAlert, setSavingAlert] = useState(false);
+  const [alertError, setAlertError] = useState('');
+
+  const loadMarketAlert = useCallback(async () => {
+    try {
+      setMarketAlert(await fetchMarketCriticalAlert());
+      setAlertError('');
+    } catch (loadError) {
+      setAlertError(loadError instanceof Error ? loadError.message : '通知設定を取得できませんでした。');
+    }
+  }, []);
+
+  const toggleMarketAlert = useCallback(async (enabled: boolean) => {
+    const previous = marketAlert;
+    setMarketAlert(enabled);
+    setSavingAlert(true);
+    setAlertError('');
+    try {
+      await setMarketCriticalAlert(enabled);
+    } catch (saveError) {
+      setMarketAlert(previous);
+      setAlertError(saveError instanceof Error ? saveError.message : '通知設定を保存できませんでした。');
+    } finally {
+      setSavingAlert(false);
+    }
+  }, [marketAlert]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -46,8 +76,9 @@ export default function ImportantNewsScreen() {
 
   useFocusEffect(useCallback(() => {
     void load();
+    void loadMarketAlert();
     void markImportantNewsNotificationsRead();
-  }, [load]));
+  }, [load, loadMarketAlert]));
 
   const emptyMessage = error
     || (!hasTrackedStocks
@@ -62,6 +93,23 @@ export default function ImportantNewsScreen() {
         <Text style={styles.description}>
           保有・監視している銘柄の、大切なニュースだけをまとめます。
         </Text>
+
+        <View style={styles.alertCard}>
+          <View style={styles.alertTextBox}>
+            <Text style={styles.alertTitle}>市場全体の重大ニュースを通知</Text>
+            <Text style={styles.alertDescription}>
+              関税・戦争・為替介入などの最重要ニュースのうち、登録銘柄の業種に関係するものをプッシュ通知します。
+            </Text>
+            {!!alertError && <Text style={styles.alertError}>{alertError}</Text>}
+          </View>
+          <Switch
+            value={marketAlert === true}
+            onValueChange={(enabled) => void toggleMarketAlert(enabled)}
+            disabled={marketAlert === null || savingAlert}
+            trackColor={{ true: '#397449', false: '#d7dcd8' }}
+            accessibilityLabel="市場全体の重大ニュースを通知"
+          />
+        </View>
 
         {loading && !items.length ? (
           <ActivityIndicator color="#397449" style={styles.status} />
@@ -137,6 +185,11 @@ const styles = StyleSheet.create({
   title: { color: '#17211a', fontSize: 30, fontWeight: '900', marginTop: 6 },
   description: { color: '#667169', fontSize: 15, lineHeight: 22, marginTop: 8, marginBottom: 12 },
   status: { marginTop: 36 },
+  alertCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#eef3ed', borderRadius: 16, padding: 14, marginBottom: 12 },
+  alertTextBox: { flex: 1 },
+  alertTitle: { color: '#17211a', fontWeight: '800', fontSize: 14 },
+  alertDescription: { color: '#5e6d63', fontSize: 12, lineHeight: 18, marginTop: 3 },
+  alertError: { color: '#9a403b', fontSize: 12, marginTop: 4 },
   list: { paddingTop: 8, paddingBottom: 110, gap: 12 },
   emptyList: { flexGrow: 1 },
   emptyCard: { marginTop: 24, borderRadius: 18, backgroundColor: '#eef3ed', padding: 22, alignItems: 'center' },
