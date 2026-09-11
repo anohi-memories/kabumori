@@ -3,8 +3,8 @@
 - task_id: kabumori-production-scheduler-restore-20260911
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: default
 - purpose: 複垢化作業で意図せず変更された、かぶモリ本番の投稿スケジューラーを安全に復旧する。新機能追加ではなく復旧専用。朝刊・大引けの専用plannerが再び通常の自動dispatch経路から呼ばれ、明日以降の予定が欠落しない状態へ戻す。

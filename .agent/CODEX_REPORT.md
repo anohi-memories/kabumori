@@ -1,7 +1,7 @@
 # Codex Report
 
 - task_id: kabumori-production-scheduler-restore-20260911
-- result: review_required
+- result: review_required — local SQL runtime blocked
 - next_owner: chatgpt
 - implementation_branch: `codex/scheduler-restore-20260911`
 - commit_hash: `246f080`
@@ -27,7 +27,8 @@
 
 - `git diff --check`: pass。
 - Deno静的検証: 5 plannerが各1回・正しい順序で呼ばれること、`posting_windows`への書込みが無いこと、RPC権限境界を確認してpass。
-- ローカルSQL実行テスト: **未実施**。既存Podman VMは `podman machine start` 後に停止し、socket接続が拒否されるため、local Supabaseを起動できなかった。再試行は2回で打ち切った。本番へはSQLを実行していない。
+- ローカルSQL実行テスト: **未実施**。初回のPodman VMは `podman machine start` 後に停止し、socket接続が拒否された。
+- C1 follow-up再試行: `podman machine start --update-connection` と、VM起動・`supabase start`・`supabase db reset --local --no-seed` の同一プロセス連続実行を試行したが、image確認時に `ssh: handshake failed: EOF` で停止した。隔離Postgresは利用不能。本番へはSQLを実行していない。
 
 ## Safety checks
 
@@ -38,5 +39,5 @@
 ## Remaining issues / next recommendation
 
 1. C1では最小diffと本番read-only事実を確認する。
-2. 本番適用前に、Podmanまたは同等の隔離Postgresを復旧し、平日・週末・JPX休日・二重dispatch・generic planner回帰のSQL実行テストを完了する。
+2. 本番適用前に、Podman VMを再作成するかDocker Desktop等の隔離Postgresを利用可能にし、平日・週末・JPX休日・二重dispatch・generic planner回帰のSQL実行テストを完了する。
 3. その後、ユーザーの明示承認を受けた場合のみ、このmigration単体を本番へ適用し、自然dispatchで当日予定が補完されることをread-only確認する。
