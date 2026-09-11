@@ -3,8 +3,8 @@
 - task_id: kabumori-production-scheduler-restore-20260911
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: user
 - priority: urgent
 - recommended_model: default
 - purpose: 複垢化作業で意図せず変更された、かぶモリ本番の投稿スケジューラーを安全に復旧する。新機能追加ではなく復旧専用。朝刊・大引けの専用plannerが再び通常の自動dispatch経路から呼ばれ、明日以降の予定が欠落しない状態へ戻す。
@@ -111,3 +111,14 @@ PodmanのDocker互換socketが必要な場合は、現在のPodman MachineのAPI
 テスト完了後は `.agent/CODEX_REPORT.md` に実行方法・結果を追記し、このTASKを `review_required / next_owner: chatgpt` に戻して再C1を待つ。
 
 **本番適用・Edge deploy・X投稿・Cron変更は引き続き禁止。**
+
+## C1 Review — 2026-09-11
+
+- result: PASS
+- local SQL runtime tests: PASS
+- implementation commit: `246f080`
+- implementation branch: `codex/scheduler-restore-20260911`
+- production changes: none
+- deploy: none
+- safety boundaries: maintained
+- next step: user explicit approval is required before applying only `20260911130000_restore_claim_due_post_planners.sql` to production. After application, verify function definition, EXECUTE grants, and natural scheduling read-only; do not manually insert scheduled rows or publish posts.
