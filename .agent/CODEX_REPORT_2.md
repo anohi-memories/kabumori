@@ -1,5 +1,30 @@
 # Codex Slot 2 Report
 
+## H2 Follow-up E — production deploy verification
+
+- task_id: `close-report-live-data-and-voice-retry-hardening-20260910`
+- result: deployed and byte-verified; C2 review required
+- deploy source: clean clone of `origin/main` at `d46f495459f06a660b63d97f8dab74ed4dd02b8a`
+- approved implementation commit `491eb46f4294324d3736419e57a3e510f319d0ca`: included; no `x-test-post` changes after it
+- worktree-local temporary config: project ref `wsmznyzcvmuitkglfeuj`, `[functions.x-test-post] verify_jwt = false`; not committed to `origin/main`
+
+### Deploy and read-back
+
+- deployed function: `x-test-post` only, with `--no-verify-jwt`
+- deploy result: **success**
+- post-deploy: `x-test-post v95 ACTIVE`, `verify_jwt=false`
+- `supabase functions download x-test-post --use-api` completed
+- byte comparison: every downloaded function file matched the exact pre-deploy source snapshot
+- other Edge Functions: versions and `updated_at` values unchanged from pre-deploy read-back
+
+### Safety
+
+- no manual Function execution, close_report execution, OpenAI/X API call, or X post
+- no DB/migration/RLS/RPC, Cron/scheduler/posting_windows/settings, secrets, or OAuth changes
+- temporary `supabase/config.toml` was local to the clean clone and was not committed or added to the formal repo
+- status: `review_required`
+- next_owner: `chatgpt`
+
 ## H2 Follow-up D — close timestamp boundary
 
 - task_id: `close-report-live-data-and-voice-retry-hardening-20260910`

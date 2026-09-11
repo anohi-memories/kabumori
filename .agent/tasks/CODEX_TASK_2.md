@@ -3,8 +3,8 @@
 - task_id: close-report-live-data-and-voice-retry-hardening-20260910
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Luna
 - purpose: 2026-09-10 16:00 JSTのclose_report失敗を受け、Voice評価の限定retry、当日終値の安全取得、15:30大引け境界を本番へ安全に反映する。
@@ -66,3 +66,13 @@ Required:
 ### Completion condition
 
 Do not mark this task done until production deploy verification is complete. Natural close_report observation can remain a post-deploy monitoring item; do not force a same-day run.
+
+## Follow-up E completion — 2026-09-11
+
+- `x-test-post` only deployed from current `origin/main` with `--no-verify-jwt`.
+- Post-deploy: `x-test-post` v95 ACTIVE, `verify_jwt=false`.
+- `supabase functions download x-test-post --use-api` completed; every downloaded function file byte-compared equal to the pre-deploy source snapshot.
+- Other Edge Function versions and `updated_at` values were unchanged.
+- No manual Function execution, close_report run, OpenAI/X API call, X post, DB/migration/RLS/RPC, Cron/scheduler/settings, secrets, or OAuth change.
+- status: `review_required`
+- next_owner: `chatgpt`
