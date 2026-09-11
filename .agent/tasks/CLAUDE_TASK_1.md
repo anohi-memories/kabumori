@@ -3,7 +3,7 @@
 - task_id: personalized-portfolio-morning-close-reports-phase1-20260911
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: urgent
 - recommended_model: Opus 5
