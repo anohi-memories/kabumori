@@ -494,3 +494,107 @@ K1で Phase 1B を承認してほしい。
 3. Cron を登録する。
 
 3の前に、morning_report / close_report の既定値を true のままにするか、オプトインにするかを決めておいてほしい。
+
+
+## Phase 1B Report
+
+- task_id: personalized-portfolio-morning-close-reports-phase1-20260911（Phase 1B）
+- result: **完了**。dry_run の結果から3点を直し、そのうえで次を終えた。
+  1. 本番で大引けを1件生成（completed / Fact passed）
+  2. 完成通知1件を既存経路でiPhoneへ送信（sent）
+  3. アプリで一覧と詳細が見られることを本人が確認
+  4. personalized-reports 専用の Cron 2件を登録
+- model_used: 実装は Claude Opus 5。生成は gpt-5.6-luna（生成1回＋Factチェック1回）。
+
+### 1. dry_run（保存なし・Pushなし）
+- 呼び出し方: SQL から `net.http_post` を使った（secret は Vault から名前で読むだけで、DBの外に出していない。cron と同じ経路）。対象は本人ユーザーのみ、`{"mode":"close","dry_run":true}`。
+- **1回目（v1）**: 処理は最後まで動き、Factチェックで failed になった。見つかった問題は次の3つ。
+  - **TOPIXが取れていなかった**: Yahoo の `^TPX` は CBOE（OPRA）の別シンボルで、データは2015年で止まっていた。^TOPX / 998405.T も存在しない。stooq はボット確認があるので使わない（回避はしない）。
+    - → 比較対象を **TOPIX連動ETF（1306.T）** にした。表示名は「TOPIX連動ETF（1306）」で、TOPIXそのものとは書かない（アプリの比較表示・注記も同じ）。
+    - ※ X版の close_report も `^TPX` を使っているので、同じ問題があるはず（X側は触っていない。別タスクの候補）。
+  - Factチェックは「市場全体も下落」を、根拠が足りないとして正しく落とした。
+  - 文章の品質: 「2026-09-11」形式の日付、証券コードだけで銘柄を呼ぶ、「セクターウェights」という英字の混入。
+    - → packet には「9月11日（金）」形式の日付と「会社名（コード）」を渡すようにした。指示文を強化し、ローカルチェックに ISO日付と英単語の検出を追加した。
+- **2回目（v2 = 3b5e1ed）**: completed、Fact passed、issues 0。価格・指数とも欠損なし。数字を手で検算して、すべて一致した。
+  - ファルコHD: 2,824円、-43円 / -1.50%、当日損益 -4,300円、含み損益 +42,400円（+17.67%）
+  - サイバーエージェント: 1,231.5円、当日損益 -400円、含み損益 +12,050円
+  - ポート全体: -4,700円 / -1.15%（基準は前日の評価額 410,250円）
+  - TOPIX連動ETF: -0.71%。差は -0.44pt で「弱い」
+  - 日経平均: -1.93%
+
+### 2. 大引けの実生成
+- **1回目（v2）**: Fact failed。理由は、1日分のデータしかないのにタイトルで「続落」と書いたため。
+  - 失敗時の安全装置は想定どおり働いた: 保存されたのは failed 行だけ（アプリには表示されない）で、通知は0件。
+- 修正（4590ba6 = v3）: 「続落・続伸・反発・反落・年初来・最高値」など、複数日の推移を前提にする言葉は、packet 自体にその語が無いかぎりローカルチェックで弾くようにした（指示文にも追加）。
+- 本人の承認を得て、1回目の failed 行（ddaa7f25、通知なし）だけを条件付き DELETE で消し、1回だけ再実行した。
+- **再実行**: `4090b7fa-1700-4b0b-b26c-e2cfa03d360d`、completed / passed、issues 0、コスト $0.0025。
+  - タイトル: 「保有銘柄は下落、指数より弱い一日」
+  - 同じ日の重複防止は維持している（unique 制約）。朝刊は生成していない。
+
+### 3. 完成通知
+- `enqueue_personalized_report_notification` が1件だけINSERTした（source_type personalized_report、source_id = report id、importance normal）。notified_at も記録された。
+- 次の send-push-notifications-dispatch（既存の毎分cron）で `processedCount 1 / messagesSent 1` となり、push_status は sent になった。
+- 他の通知には触れていない（notifications は合計1件で、それがこの通知）。dispatcher は無変更（v4）。
+
+### 4. アプリでの確認
+- 最初は「通知は来たがアプリが開けない」状態だった。原因と対処:
+  - 原因1: レポート画面を追加する前に起動した Metro が、新しいルートを反映していなかった。
+  - 原因2: Mac のLANアドレスが 192.168.1.19 に変わっていた。
+  - 対処: Metro を worktree から `--clear` で起動し直した。実際のアプリと同じ条件（routerRoot=src/app）でバンドルを組み、レポート画面と重要ニュース画面が入っていることを確認した。
+- 起動し直した後、本人から「ちゃんと見れました」の確認をもらった。
+  - 画面上の数字: レポート一覧、詳細、保有・監視銘柄、数量・取得単価、当日損益と含み損益の分離表示、日経平均とTOPIX連動ETFとの比較。
+  - 関連ニュース: 当日は登録銘柄に関係するニュースが0件だったため、今回はリンクが表示されない。news_inputs の経路自体は Phase 1A の事前テストで確認済み（4件）。
+  - 長いスクロール: 本人の確認に含まれている。
+- 未確認: 通知をタップして詳細へ直接飛ぶ動作は、今回の「開けない」問題を挟んだため、明示的には確認できていない。ルーティングのロジックは単体テストで確認済み。次回の通知で確認する。
+
+### 5. Cron 登録（E2E 成功後）
+- migration ファイルは追加せず、SQL（`cron.schedule`、存在チェックつき）で登録した。
+  - `personalized-reports-morning`: `35 23 * * 0-4`（平日 8:35 JST）、body `{"mode":"morning"}`
+  - `personalized-reports-close`: `15 8 * * 1-5`（平日 17:15 JST）、body `{"mode":"close"}`
+- secret は既存の Vault エントリ `send_push_notifications_cron_secret` を名前で読む（表示していない）。secret が無いときは何も送らずに終わる。
+- 既存の8件は変更なし（X の朝刊・大引けを動かす dispatch-scheduled-posts を含む）。合計10件。
+- 祝日と土日は Function 側で NOT_TRADING_DAY として skip する。
+
+### production_changes（Phase 1B）
+- `personalized-reports` を v1 → v2（3b5e1ed）→ v3（4590ba6）と deploy した。どちらも download して、index.ts と report_logic.ts がバイト単位で一致することを確認した。他の Function は version / updated_at とも変わっていない（x-test-post v96、important-news-monitor v40、send-push-notifications v4 ほか）。
+- personalized_reports: 1行（本日の close、completed）。
+  - 失敗行1行を本人の承認のうえで削除した。
+- notifications: 1行（sent）。
+- cron.job: 2件追加。
+- 本人の設定は変更していない（morning / close / push はすべて ON のまま）。auto_publish=true のまま。
+
+### tests
+- report_logic_test 22/22 pass。追加したチェック: TOPIX連動ETFとの比較、日本語の日付、会社名表記、ISO日付、英単語、複数日を前提にする語、packet に同じ語がある場合の許可。
+- アプリ側 25/25 pass（比較表示を TOPIX連動ETF 表記に変更）。
+- deno check OK。src/ の tsc エラー 0件。git diff --check OK。
+
+### changed_files（Phase 1B）
+- supabase/functions/personalized-reports/index.ts、report_logic.ts、report_logic_test.ts
+- src/lib/report-presentation.ts、tests/app/report-presentation_test.ts
+
+### commit_hash
+- 3b5e1ed878f388e4b9ae3284ea7bd0776b89b184（TOPIX連動ETF・文言の品質）
+- 4590ba6965e0e021201941011f7241869ba698f2（複数日を前提にする語の検出）
+- Report: このコミット
+
+### remaining_issues
+- X版の close_report の TOPIX（Yahoo `^TPX`）は、存在しないデータを見ている可能性が高い。別タスクで確認してほしい。
+- 比較対象は TOPIXそのものではなく ETF（1306）。配当落ち日などはズレる。正式な TOPIX の取得元が見つかれば差し替える。
+- 生成1回目でFactが不合格になった。まだ試行は少ないので、平日数日分の completed 率を見る必要がある（失敗しても再試行はせず、その日はレポート・通知とも無しになる）。
+- 通知タップからの直接遷移は、次回の通知で明示的に確認する。
+- 開発ビルドのため、アプリを開くには Metro と同じWi-Fiが必要（LANアドレスは変わりうる）。本番ビルドにすれば不要になる。
+- 朝刊の初回は月曜 8:35 JST（前営業日＝金曜の終値と、それ以降のニュース）。
+- 既存の課題（migration履歴のずれ、テスト用の監視銘柄17件、config.toml がGit管理外など）は引き続き残っている。
+
+### safety_checks
+- X投稿・X設定・x-test-post・important-news-monitor・OAuth・Vault・social_accounts は変更していない。`supabase db push` は使っておらず、migration も追加していない。
+- 架空の銘柄は追加していない。ユーザー設定も変更していない。secret は表示していない。
+- 本番データへの書き込みは次の4つだけ:
+  - personalized_reports の生成行（failed 1行 → 承認のうえ削除、completed 1行）
+  - それに対応する notification 1行
+  - Cron 2件
+
+### next_recommendation
+1. 月曜の朝刊（8:35）と大引け（17:15）の自動実行結果を確認する（completed 率、Fact の issues、通知タップからの直接遷移）。
+2. X版の close_report の TOPIX 取得元の調査を、別タスクとして起こす。
+3. 数日分の結果を見てから、Phase 2（米国市場・先物などの夜間材料、失敗時の再試行方針）を検討する。
