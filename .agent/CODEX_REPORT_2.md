@@ -337,8 +337,8 @@ ChatGPT should review the successful v91 deployment. After the next natural morn
   - `supabase/functions/x-test-post/close_report_data_logic_test.ts`
   - `.agent/tasks/CODEX_TASK_2.md`
   - `.agent/CODEX_REPORT_2.md`
-- commit_hash: pending
-- push: pending
+- commit_hash: `9b8b14379eb013052b60833a28df142e7ff3fb2c`
+- push: implementation commit `9b8b14379eb013052b60833a28df142e7ff3fb2c` is present on `origin/main`.
 - remaining_issues: a formally verified structured same-day TOPIX source still needs to be selected in a separate review; until then live close_report safely stops when TOPIX is unavailable.
 - safety_checks: clean temporary worktree from fresh `origin/main`; formal repository and other workstreams untouched; no secrets exposed; no Storage/DB writes; no X posts.
 - next_recommendation: ChatGPT C2 review. Do not deploy or run a manual close_report until the source choice is approved.
