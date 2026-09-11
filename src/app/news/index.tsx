@@ -1,9 +1,8 @@
 import { useCallback, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import {
   ActivityIndicator,
   FlatList,
-  Linking,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -16,33 +15,9 @@ import {
   fetchMyImportantStockNews,
   ImportantStockNews,
 } from '@/lib/important-news';
+import { formatNewsTime, importanceLabel, targetLabel } from '@/lib/news-labels';
+import { buildNewsPresentation } from '@/lib/news-presentation';
 import { markImportantNewsNotificationsRead } from '@/lib/notifications';
-
-const trackingLabels = { holding: '保有', watch: '監視' } as const;
-
-// Prefer the app severity; fall back to the X importance for an RPC without it.
-function importanceLabel(item: ImportantStockNews): { text: string; subtle: boolean } {
-  const severity = item.severity
-    ?? (item.importance === 'most_important' ? 'critical' : item.importance === 'important' ? 'high' : 'medium');
-  if (severity === 'critical') return { text: '最重要', subtle: false };
-  if (severity === 'high') return { text: '重要', subtle: false };
-  return { text: '注目', subtle: true };
-}
-
-function formatNewsTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return new Intl.DateTimeFormat('ja-JP', {
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
-}
-
-function canOpenSource(url: string | null): url is string {
-  return !!url && /^https?:\/\//i.test(url);
-}
 
 export default function ImportantNewsScreen() {
   const [items, setItems] = useState<ImportantStockNews[]>([]);
@@ -113,19 +88,22 @@ export default function ImportantNewsScreen() {
           }
           renderItem={({ item }) => {
             const holding = item.tracking_type === 'holding';
-            const sourceAvailable = canOpenSource(item.source_url);
             const label = importanceLabel(item);
+            const target = targetLabel(item);
+            const view = buildNewsPresentation(item);
             return (
-              <View style={styles.card}>
+              <Pressable
+                onPress={() => router.push({ pathname: '/news/[id]', params: { id: item.news_id } })}
+                style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+                accessibilityRole="button"
+                accessibilityHint="ニュースの詳細を開きます">
                 <View style={styles.badgeRow}>
                   <View style={[styles.typeBadge, holding ? styles.holdingBadge : styles.watchBadge]}>
                     <Text style={[styles.typeText, holding ? styles.holdingText : styles.watchText]}>
-                      {item.matched_sector ? '市場' : trackingLabels[item.tracking_type]}
+                      {target.badge}
                     </Text>
                   </View>
-                  <Text style={styles.ticker}>
-                    {item.matched_sector ? `関連: ${item.matched_sector}` : item.ticker_code}
-                  </Text>
+                  <Text style={styles.ticker}>{target.detail}</Text>
                   <View style={[styles.importanceBadge, label.subtle && styles.subtleBadge]}>
                     <Text style={[styles.importanceText, label.subtle && styles.subtleText]}>
                       {label.text}
@@ -133,17 +111,17 @@ export default function ImportantNewsScreen() {
                   </View>
                 </View>
                 <Text style={styles.company}>{item.company_name}</Text>
-                <Text style={styles.newsTitle}>{item.title}</Text>
-                {!!item.summary && <Text style={styles.summary} numberOfLines={3}>{item.summary}</Text>}
+                <Text style={styles.newsTitle}>{view.title}</Text>
+                {view.listSummary ? (
+                  <Text style={styles.summary} numberOfLines={4}>{view.listSummary}</Text>
+                ) : (
+                  <Text style={styles.pendingSummary}>日本語の要約は準備中です（詳細で元記事の抜粋を確認できます）</Text>
+                )}
                 <View style={styles.footer}>
                   <Text style={styles.time}>{formatNewsTime(item.news_time)}</Text>
-                  {sourceAvailable && (
-                    <Pressable onPress={() => void Linking.openURL(item.source_url!)} hitSlop={8}>
-                      <Text style={styles.sourceLink}>記事を開く</Text>
-                    </Pressable>
-                  )}
+                  <Text style={styles.moreLink}>詳しく見る ›</Text>
                 </View>
-              </View>
+              </Pressable>
             );
           }}
         />
@@ -168,6 +146,7 @@ const styles = StyleSheet.create({
   retryButton: { marginTop: 16, borderRadius: 10, backgroundColor: '#397449', paddingHorizontal: 16, paddingVertical: 10 },
   retryText: { color: '#fff', fontWeight: '800' },
   card: { backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: '#e1e5e2', padding: 17 },
+  cardPressed: { opacity: 0.85 },
   badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   typeBadge: { borderRadius: 99, paddingHorizontal: 10, paddingVertical: 5 },
   holdingBadge: { backgroundColor: '#e4f1e7' },
@@ -183,7 +162,8 @@ const styles = StyleSheet.create({
   company: { color: '#526058', fontWeight: '700', fontSize: 14, marginTop: 11 },
   newsTitle: { color: '#17211a', fontWeight: '900', fontSize: 18, lineHeight: 25, marginTop: 8 },
   summary: { color: '#647068', fontSize: 14, lineHeight: 21, marginTop: 9 },
+  pendingSummary: { color: '#89918c', fontSize: 13, lineHeight: 19, marginTop: 9 },
   footer: { flexDirection: 'row', alignItems: 'center', marginTop: 14 },
   time: { color: '#89918c', fontSize: 12 },
-  sourceLink: { color: '#397449', fontSize: 13, fontWeight: '800', marginLeft: 16 },
+  moreLink: { color: '#397449', fontSize: 13, fontWeight: '800', marginLeft: 'auto' },
 });

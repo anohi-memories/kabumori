@@ -19,7 +19,20 @@ export type ImportantStockNews = {
   // the transmission themes (e.g. "fx,rates"). null for per-stock items.
   matched_sector?: string | null;
   relevance_reason?: string | null;
+  // 'tdnet' / 'company_ir' / 'market_macro' / 'breaking_market'.
+  source_type?: string | null;
+  // Japanese post text generated at publish time; the RPC returns it only when
+  // its Fact check passed, otherwise null.
+  verified_text?: string | null;
 };
+
+// The detail screen reuses the feed RPC so it inherits exactly the same access
+// boundary (own active tracked stocks / related market items); an id outside the
+// user's feed simply is not found.
+export async function fetchMyImportantNewsItem(newsId: string): Promise<ImportantStockNews | null> {
+  const feed = await fetchMyImportantStockNews();
+  return feed.items.find((item) => item.news_id === newsId) ?? null;
+}
 
 export type ImportantNewsFeed = {
   hasTrackedStocks: boolean;
