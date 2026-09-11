@@ -3,8 +3,8 @@
 - task_id: in-app-news-japanese-detail-summary-20260911
 - owner: claude
 - slot: claude-1
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Opus 5
 - purpose: 重要ニュース画面を、英語ソースへの単なるリンク集ではなく「日本語タイトル＋アプリ内詳細＋十分な日本語要約」で内容を把握できる体験へ改善する。外部ソースは確認用の二次導線にする。
@@ -249,7 +249,7 @@ Report必須:
 ## Report
 
 - task_id: in-app-news-japanese-detail-summary-20260911
-- result: **一部完了（AI を使わない範囲は本番反映済み。日本語が無い英語記事の翻訳は設計まで、K1 待ち）**。
+- result: **完了（K1 follow-up 反映済み）**。最初の提出時点では「AI を使わない範囲は本番反映済み・英語記事4件は設計まで」だった。K1 の承認を受けて AI 日本語コピー生成を実装・本番 deploy し、本人フィードの英語タイトルは **0件** になった。詳細は末尾の「## K1 follow-up: AI 日本語コピー」を参照。以下は最初の提出時点の記録。
   - カードのタップ先を、外部サイトからアプリ内の詳細画面 `/news/[id]` に変えた。元記事は、詳細画面の下にある「元記事を確認（外部サイト）↗」で開く二次導線にした。
   - タイトルと要約は、既存の検証済みの日本語テキストだけを使う決定論的な整形で作る。HTMLやエンティティの混入は、本人フィード12件で**0件**になった。
   - 英語の市場ニュースのうち、Fact を通過した日本語テキストがある3件は、日本語のタイトル・要約・詳細になった。
@@ -472,3 +472,205 @@ Report必須:
 1. **K1: 英語の市場ニュースの AI 翻訳の経路を承認するか判断する**（上記の設計。モデル luna、1件あたり最大2回、Fact チェック付き、月 $1 未満の見込み、既存の生成 Cron の中で動かす）。承認されれば、列を追加する migration → `important-news-monitor` の実装とテスト → deploy → RPC の拡張、の順で進める。
 2. アプリの実機で、一覧 → 詳細 → 元記事 → 戻る、の導線と、長文のスクロール・タブバーとの重なりを確認する。
 3. TDnet の開示の要約を、数字（取得株式数・金額・期間など）の抜き出しで充実させる（remaining_issues 3・4）。
+
+## K1 follow-up: AI 日本語コピー（2026-09-11）
+
+K1 の判断（follow_up_required）で承認された範囲の AI 日本語コピー生成を実装し、本番に反映した。
+
+### result
+
+**完了**。本人フィード12件の英語タイトルは **0件**（変更前は4件）。
+- AI 日本語コピー: 4件。4件とも Fact チェックに passed
+  - Ambassador Greer / トランプ氏のカナダ関税
+  - 外貨準備
+  - 米雇用統計 ×2
+- Fact passed の X 投稿文: 3件
+- TDnet の開示: 5件
+
+Fact チェックに不合格のコピーが RPC やアプリに漏れた件数は0件。X・Push・Cron・auto_publish・OAuth・secrets は無変更。
+
+### 実装（承認範囲どおり）
+
+- **対象**: `public.important_news_app_copy_targets(p_limit)`（新規・SECURITY DEFINER・**service_role のみ実行可**）。次の条件を**すべて**満たすものだけ:
+  - `get_my_important_stock_news` と同じ個別銘柄・市場全体の条件で、**少なくとも1人のユーザーの /news に実際に表示されるもの**
+  - タイトルに日本語が無い
+  - Fact passed の日本語 `generated_text` が無い
+  - 未試行（`app_copy_fact_status is null` かつ `app_copy_attempts = 0`）
+
+  Edge 側でも `needsAppCopy()` で二重に確認する。
+- **タイミング**: 既存の `generate_ready` の最後（X 投稿文の生成がすべて終わった後）。1回の実行で最大5件。**Cron のスケジュールは変更していない**。生成対象が0件の回も実行する。画面を表示するときに AI は呼ばない。
+- **モデル・回数**: `gpt-5.6-luna`。1候補につき**生成1回 + Fact チェック1回**。再試行しない（失敗したら failed のまま、アプリは準備中の表示を続ける）。
+  - Web 検索のツールは使わない
+  - `store: false`、strict な JSON schema
+- **入力**: 保存済みの `title` と `body_summary`（HTML・エンティティ・URL を除去し、3,000字まで）。`affected_entities` は、固有名詞の表記の参考としてだけ渡す（事実の根拠にはしない）。
+- **生成の制約**（プロンプト）: 次のものは加えない。
+  - 原文に無い数字・日付・固有名詞・因果・背景・予測・市場影響・投資判断
+  - 絵文字、URL、HTML、見出しラベル
+
+  数字・単位換算・方向は原文どおりにする。情報が足りなければ `sufficient_information=false` にさせる。
+- **プログラム側の確認**（Fact チェックの前・どれか1つでも当てはまれば failed）:
+  - 日本語でない
+  - 文字数の上限（タイトル60・要約200・詳細800・要点80字×4）を超えている
+  - HTML・エンティティ・URL・【速報】ラベル・絵文字・売買推奨や株価の断定の表現が含まれている
+- **Fact チェック**: 原文と日本語コピーだけを照合する。確認するのは、数字・単位換算・日付・方向・主体の誤り、原文に無い事実・因果・予測・投資判断の追加、条件の欠落、意味・確度の変化。`passed === true` のときだけ passed にする。
+- **確保**: `app_copy_fact_status is null and app_copy_attempts = 0` の行だけを `generating` にしてから処理する。同時に実行されても、二重には生成しない。
+- **保存**: `app_*` 列だけに書き込む。X 投稿文・X 公開の条件・Push の本文や対象・candidate の status には一切触れない。
+- **表示**: RPC は `app_copy_fact_status = 'passed'` のときだけ `app_title_ja` / `app_summary_ja` / `app_detail_ja` / `app_key_points_ja` を返す。
+  - アプリが使う優先順位: Fact passed の X 投稿文 → **AI 日本語コピー** → TDnet の開示 → 準備中
+  - AI のコピーの詳細画面には「この日本語要約は、元記事をもとにAIが作成し、内容を元記事と照合しています。」と明示する
+- **確認用**: `app_copy_dry_run`（candidateId 指定・DB に書き込まない・AI を2回呼ぶ）を追加した。今回の本番確認では使っていない（自然な Cron の実行で確認した）。
+
+### schema_or_rpc_changes（follow-up）
+
+`supabase/migrations/20260911170000_news_app_copy_ja.sql`（1トランザクション・本番適用済み）:
+- `important_news_candidates` への列の追加（**追加のみ**、`add column if not exists`）:
+  - `app_title_ja` / `app_summary_ja` / `app_detail_ja` / `app_key_points_ja` (jsonb)
+  - `app_copy_fact_status`（制約: generating / passed / failed）
+  - `app_copy_fact_issues` (jsonb) / `app_copy_model` / `app_copy_generated_at`
+  - `app_copy_attempts smallint not null default 0` / `app_copy_error`
+- `important_news_app_copy_targets(integer)` を新規作成（service_role のみ）。
+- `get_my_important_stock_news` を作り直し、末尾に上記4列を追加（Fact passed のときだけ値を返す）。表示する記事の選び方・並び順・件数上限・権限は、前回と同一。
+
+### tests（follow-up）
+
+- `app_copy_logic_test.ts`（新規・11件）:
+  - 対象の条件（日本語タイトル・Fact passed の X 投稿文・試行済み・確保済みは対象外）
+  - 入力の整形（HTML・URL の除去、上限）
+  - luna・`store:false`・strict schema・ツール無し
+  - 生成1回 + Fact 1回、Fact 不合格なら failed
+  - プログラム側の確認8種（Fact を呼ぶ前に落とす）
+  - 情報不足・空の値・壊れた出力、API エラーでも再試行しない
+  - Fact の結果が true 以外なら failed、書き込みは `app_*` 列だけ
+- `app_copy_sql_static_test.ts`（新規・5件）:
+  - 4列とも、2つの CTE の両方で Fact passed の条件付きでしか読まれない
+  - 表示する記事の選び方・並び順・件数上限が前回と同一
+  - 列の追加だけ・行の書き込み無し・notifications / Cron / auto_publish / x_post_id に触れない
+  - 対象を選ぶ関数は service_role のみで、日本語のもの・Fact passed のテキストがあるもの・試行済みのものを除く
+  - 権限は同じ
+- `tests/app/news-presentation_test.ts`（3件追加 → 15件）: AI コピーで英語の記事が完全に日本語になる / RPC が null を返すと準備中の表示のまま / X 投稿文を優先し、AI コピーの HTML・URL を除去する
+- 本番データのロールバック付きテスト（適用前）:
+  - 対象はちょうど4件（Greer・外貨準備・雇用統計×2）で、どれも Fact 不合格の生成文を持つ
+  - 対象に日本語タイトルが混ざった件数・Fact passed のテキストがあるものが混ざった件数は、ともに0
+  - 関数の実行権限は service_role のみ（authenticated・anon は不可）
+  - フィードは12件・並び順も同じ・AI コピーの列はすべて null
+  - トランザクション内で Greer の行に **failed** のコピーを書くと、フィードに出ない（漏れ0）。passed にすると出る
+  - 試行済みは対象から外れる。不正な status は制約で拒否される
+- important-news-monitor 全体の回帰: **343 passed / 0 failed**
+- 表示: 15 passed、アプリ `tsc --noEmit` の `src/` のエラー0件、`deno check`（新しいモジュールとテスト）OK、`git diff --check` clean
+
+### deploy / verification
+
+- **migration**: `db push` は使わず、対象ファイル1本だけを `supabase db query --linked -f` で適用した。直前に root を確認した（pwd = worktree、HEAD `c007be7`、`supabase/config.toml`、project ref `wsmznyzcvmuitkglfeuj`）。事前にロールバック付きで検証済み。
+- **important-news-monitor の deploy**: 事前確認はすべて期待どおりだった。
+  - pwd = worktree、HEAD **`0a61571`**、project ref `wsmznyzcvmuitkglfeuj`
+  - `config.toml` の `[functions.important-news-monitor] verify_jwt = false`
+  - `supabase/functions` の作業ツリーは HEAD と一致。前回の deploy 以降に Function を変えた commit は `0a61571` だけ（Codex の `d4fcb07` はタスクファイルのみ）
+
+  `supabase functions deploy important-news-monitor --no-verify-jwt` → **v39**、ACTIVE、`verify_jwt=false`、2026-09-11 01:28:50 UTC。
+- **byte compare**: `supabase functions download --use-api` で v39 を取得 → **`0a61571` と 18/18 ファイルがバイト一致**（`app_copy_logic.ts` を含む）。
+- **他の Function の updated_at は不変**:
+
+| function | version / updated_at |
+|---|---|
+| x-test-post | v94 / 09-10 10:04:06 |
+| send-push-notifications | v4 / 09-10 10:07:17 |
+| stocks-master-sync | v6 / 09-04 05:15:26 |
+| stocks-new-listing-sync | v5 / 09-04 05:15:26 |
+| x-oauth-connect | v4 / 09-10 15:09:47 |
+
+- **自然な実行**（手動では呼んでいない）: 01:34:00 UTC の `important-news-generation` の Cron（`generate_ready`）の応答。
+  - `appCopy.targets = 4`、4件とも `status: passed`・`calls: 2`・`issues: []`
+  - 費用: $0.0015 / $0.0006 / $0.0008 / $0.0007（合計 約 $0.0036）
+
+### 実データの確認（アプリの表示と同じ整形を適用）
+
+**Ambassador Greer / トランプ氏のカナダ関税**（critical・関連: 機械・出典: 米通商代表部（USTR））
+- タイトル: 米国、カナダ製品の一部輸入禁止と関税措置の変更を発表
+- 要約: 米国のジャミーソン・グリア大使は、トランプ大統領がカナダ製品の一部を米国市場から締め出し、関税措置の範囲を変更したと発表しました。米政府はまた、カナダ原産製品500億ドル相当を政府調達の対象から外すよう指示しました。
+- 要点:
+  - カナダ製品の一部について米国への輸入禁止措置を実施
+  - 7月20日の338条措置の範囲を変更
+  - 自動車・乳製品・アルコール飲料が対象
+  - カナダ原産製品500億ドル相当を GSA の調達対象から除外するよう指示
+- 詳細: 3段落（1930年関税法338条、差別的措置による負担の相殺、交渉からの離脱と報復の主張、USTR と GSA への指示、7月20日の3つの措置）
+
+**外貨準備**（high・関連: 機械・出典: 財務省）
+- タイトル: 日本の公的準備資産、8月末に795.75億ドル減少
+- 要約: 日本の財務省によると、8月末の公的準備資産は1兆2075億ドルとなった。7月末から795.75億ドル減少した。
+- 要点:
+  - 1兆2075億ドル
+  - 795.75億ドル減少
+  - 発表だけでは新たな為替介入の実施は確認できない
+- 詳細: 2段落
+
+**米雇用統計（AP）**（high・関連: 機械）
+- タイトル: 米8月非農業部門雇用者数、16万2000人増で予想上回る
+- 要約: 非農業部門雇用者数は16万2000人増加し予想を上回った・失業率4.1％で横ばい
+- 詳細: 2段落。FRB の政策や米国債利回りへの見方に影響する可能性に触れているが、これは原文の記述に基づくもので、Fact チェック passed
+
+**米雇用統計（BLS）**（high・関連: 銀行業・出典: 米労働統計局）
+- タイトル: 米8月非農業部門雇用者数、16万2000人増
+- 要約: 16万2000人増・失業率4.1％横ばい・平均時給 前月比0.3％・前年同月比3.1％
+- 要点: 上記に加えて、6・7月の合計5万5000人の上方修正
+- 詳細: 2段落
+
+数字は、どれも原文の値のまま（単位の換算を含む）。売買推奨や株価の方向の断定は無い。
+
+### 漏れ・不変条件の確認（本番・read-only）
+
+- フィードで AI コピー付きの行: 4件。**Fact passed 以外のコピーが出た件数: 0**（RPC の条件と、ロールバック付きテストの failed 行の両方で確認）
+- 本人フィード: 12件（個別5・市場7）で、中身・並び順は前回と同じ
+- **X**: deploy 後の X 投稿は0件（今回の変更は `app_*` 列の書き込みと、X 生成の後の処理だけ）。X 投稿文・`checkPublishCandidate`・auto_publish は無変更。`auto_publish = true`、設定の `updated_at`（2026-09-10 08:53:08）は変化なし
+- **Push**: notifications = 0（増加なし）。`send-push-notifications` と producer は無変更
+- **Cron**: active は8本、スケジュールは変化なし
+- **OAuth / secrets**: 変更なし（既存の `OPENAI_API_KEY` を使っただけ）
+
+### changed_files（follow-up）
+
+- `supabase/migrations/20260911170000_news_app_copy_ja.sql`（新規・本番適用済み）
+- `supabase/functions/important-news-monitor/app_copy_logic.ts`（新規）
+- `supabase/functions/important-news-monitor/app_copy_logic_test.ts`（新規）
+- `supabase/functions/important-news-monitor/app_copy_sql_static_test.ts`（新規）
+- `supabase/functions/important-news-monitor/index.ts`（`generate_ready` の最後の日本語コピー生成、対象の取得・確保・保存、`app_copy_dry_run`）
+- `src/lib/news-presentation.ts`（`app_copy` の段階）
+- `src/lib/important-news.ts`（`app_*_ja` の型）
+- `src/app/news/[id].tsx`（AI 作成の注記）
+- `tests/app/news-presentation_test.ts`（テストの追加）
+- `.agent/tasks/CLAUDE_TASK_1.md`（status / Report）
+
+### commit_hash（follow-up）
+
+- `0a61571` — Generate Fact-checked Japanese app copy for English news（本番 v39 の中身）
+- 本 Report は、この直後の commit で記録する
+
+### push
+
+- `origin/main` へ同期済み
+
+### remaining_issues（follow-up）
+
+1. **失敗したものは再試行しない**（承認範囲どおり）。API エラーなどの一時的な失敗でも failed のままで、その記事はずっと準備中の表示になる。必要なら、手動で `app_copy_*` をリセットする手順か、一時的なエラーに限った再試行を検討する。
+2. **`generating` のまま止まる可能性**: 確保した後、保存の前に処理が落ちると `generating` のまま残り、再生成されない（安全側）。今回の4件では発生していない。
+3. 同じ出来事の別ソース（雇用統計の AP 版と BLS 版）は、それぞれ別に生成・表示される（Phase 3 から継続する、ソースをまたいだ重複の課題）。
+4. AI コピーの品質は、Fact チェックの判定に依存する。今回の4件は目視でも原文と一致していたが、継続して抜き取りで確認するのが望ましい。
+5. 実機での表示確認は未実施（dev build は、Metro から新しい JS を読めば反映される）。
+6. migration 履歴の乖離（`20260911170000` も個別に適用し、履歴には未記録）、前タスクまでの既知課題は継続。
+
+### safety_checks（follow-up）
+
+- 承認範囲の外の変更なし:
+  - X 投稿文・X 公開の条件、Push の本文・対象
+  - `send-push-notifications`・`x-test-post`
+  - Cron・auto_publish・OAuth・secrets
+- AI を呼ぶのは、生成の Cron の中だけ（1件あたり最大2回・再試行なし）。画面を表示するときには呼ばない
+- Fact が passed のコピーだけを表示する（RPC の条件・静的テスト・ロールバック付きテスト・本番の read-only 確認）
+- 人工の candidate の投入なし。candidate の status の変更なし（書き込むのは `app_*` 列だけ）
+- 破壊的な migration なし（列は追加だけ。関数の作り直しは、同じトランザクションの中で権限まで含めて復元）
+- `db push` は使っていない。deploy の前後に root・HEAD・project ref・config を確認し、本番のソースとバイト照合した
+- 共有 checkout の未コミット変更、他の slot の担当範囲には触れていない
+
+### next_recommendation（follow-up）
+
+1. アプリの実機で、英語の元記事4件の一覧 → 詳細（日本語タイトル・要約・要点・詳細・AI の注記・元記事の確認）を確認する。
+2. 今後の自然な英語ニュースで、AI コピーの passed の比率と費用を観測する（今回は4件すべて passed、合計約 $0.0036）。
+3. 一時的な失敗のときの扱い（remaining_issues 1・2）と、ソースをまたいだ重複（3）を、次のタスクの候補にする。
