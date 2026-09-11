@@ -37,9 +37,23 @@
 - pg_cron job 1 remains `* * * * *` and still calls only `x-test-post`; no Cron definition was changed.
 - No scheduled post was manually inserted, claimed, regenerated, or published.
 
-### Pending deployment / sync
+### Commit / push / deployment
 
-- x-test-post deploy: pending push of this implementation; when performed it will be x-test-post only with `--no-verify-jwt`, followed by source download/byte comparison and ACTIVE/verify_jwt read-back.
+- changed files: `supabase/functions/x-test-post/index.ts`, `close_report_logic.ts`, `close_report_logic_test.ts`, `close_report_data_logic.ts`, `close_report_data_logic_test.ts`, `.agent/tasks/CODEX_TASK_2.md`, `.agent/CODEX_REPORT_2.md`
+- commit: `955a3ab5edc95a63fce181c07c0d7460b7e2961c`
+- push: successful; post-push fresh-check confirmed `origin/main` contains `955a3ab5edc95a63fce181c07c0d7460b7e2961c`
+- deploy source: clean clone at `origin/main` `955a3ab5edc95a63fce181c07c0d7460b7e2961c`
+- deployed function: `x-test-post` only, `--no-verify-jwt`
+- deploy result: success; post-deploy `x-test-post v96 ACTIVE`, `verify_jwt=false`
+- `supabase functions download x-test-post --use-api` completed; every non-test runtime file byte-matched the deploy source. Download omitted local `*_test.ts` files as expected.
+- other Edge Functions: unchanged (important-news-monitor v40, stocks-master-sync v6, stocks-new-listing-sync v5, send-push-notifications v4, x-oauth-connect v4; versions/updated_at unchanged)
+- worktree-local temporary `supabase/config.toml` was used only for deploy and removed afterward; it was not committed.
+
+### Safety / remaining issue
+
+- no manual close_report run, scheduled-post injection, OpenAI/X API execution, or X post
+- no DB schema/migration/RLS/RPC, Cron definition, secrets, OAuth, or unrelated category changes
+- existing close_report rows were not edited; the next natural JPX business-day 17:00 path is still required for production outcome observation
 - status: `review_required`
 - next_owner: `chatgpt`
 
