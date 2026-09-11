@@ -3,8 +3,8 @@
 - task_id: x-close-report-topix-source-correction-20260911
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: user
 - priority: urgent
 - recommended_model: Sol High
 - purpose: X版 close_report の誤った Yahoo `^TPX` 利用を停止し、正式TOPIX取得元が未確定の間も大引けレポートを安全に稼働させる。
@@ -94,5 +94,18 @@ Report must include:
 - DB / migrations / RLS / RPC / Cron / scheduler / posting_windows / settings / secrets / OAuth / Vault / social_accounts: no writes or changes performed; read-only snapshots remained unchanged
 - manual close_report, Function invocation, OpenAI/X API calls, candidate injection, and X posts: 0
 - remaining_issue: formal TOPIX source is still a future replacement; 1306 remains an explicitly labeled ETF proxy
-- status: `review_required`
-- next_owner: `chatgpt`
+
+## C2 Final Approval — 2026-09-12
+
+- review_result: approved
+- production: `x-test-post v97 ACTIVE`, `verify_jwt=false`
+- production source verification: all 27 runtime files matched deploy source; no mismatches
+- other Edge Functions: unchanged
+- safety: no manual close_report, no artificial X post, no DB/Cron/OAuth/Vault changes
+- remaining monitoring: next natural 17:00 close_report should be observed read-only
+- remaining technical debt: replace 1306 ETF proxy with a formally verified TOPIX source when one is available
+
+## Completion
+
+- status: done
+- next_owner: user
