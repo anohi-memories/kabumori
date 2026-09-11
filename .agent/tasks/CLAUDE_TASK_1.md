@@ -290,162 +290,207 @@ Report必須:
 ## Report
 
 - task_id: personalized-portfolio-morning-close-reports-phase1-20260911
-- result: Phase 1A complete (foundation deployed, not yet running). DB/RLS/RPC, the generation function, and the app UI are in production and main. Per K1 instructions, no manual generation, saving, Push, or Cron registration was done. Phase 1B (real-data dry-run → one E2E → Cron registration) is left for K1 approval.
-- model_used: Claude Opus 5 (implementation). Report generation model = `gpt-5.6-luna` (same as app copy; 1 generation + 1 Fact check per report).
+- result: **Phase 1A 完了（土台を本番反映。まだ稼働はしていない）**。DB・RLS・RPC、生成Function、アプリUIを本番とmainに反映した。K1の指示どおり、手動生成・保存・Push・Cron登録はしていない。Phase 1B（実データのdry-run → 1件のE2E → Cron登録）はK1の承認待ち。
+- model_used: 実装は Claude Opus 5。レポート生成は `gpt-5.6-luna`（アプリコピーと同じ。1レポートにつき生成1回＋Factチェック1回）。
 
 ### current_architecture_audit
-- The X morning_report / close_report runs are unreliable as a shared input: in the last 4 days, close failed on 09-10 (VOICE_EVALUATION_EMPTY_OUTPUT) and 09-11 (CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE); morning failed on 09-10 (FACT_CHECK_FAILED) and 09-11 (SEARCH_BUDGET_EXCEEDED). close_report_runs.market_data is often empty.
-- No per-stock price table exists in the DB. The Yahoo chart API (`<code>.T`, interval=1d) returns daily closes for all 20 tracked stocks, including 285A. The X side uses the same source for Nikkei/TOPIX.
-- tracked_stocks: holding/watch, quantity, average_price, position_type (cash/margin), side (long/short) are available. Only 1 production user (2 holdings with quantity/average price, 18 watches).
-- alert_settings.morning_report / close_report already exist (default true). send-push-notifications gates any source_type other than important_news on push_enabled only, so no dispatcher change is needed. The payload's source_type/source_id work for deep links.
-- notifications_dedupe includes tracked_stock_id (NULL for report notifications), so it cannot prevent duplicate report pushes → added a partial unique index.
+- X版の morning_report / close_report の run は、共通の入力として使えるほど安定していない。直近4日で次のとおり失敗している。
+  - close: 09-10 VOICE_EVALUATION_EMPTY_OUTPUT、09-11 CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE
+  - morning: 09-10 FACT_CHECK_FAILED、09-11 SEARCH_BUDGET_EXCEEDED
+  - close_report_runs.market_data は空のことが多い。
+- DBには個別銘柄の株価テーブルが無い。Yahoo chart API（`<code>.T`、interval=1d）で、登録中の20銘柄すべて（285A を含む）の日足終値が取れることを確認した。日経平均・TOPIXはX側も同じ取得元を使っている。
+- tracked_stocks で使える項目: 保有/監視の区分、数量、取得単価、現物/信用（position_type）、買い/売り（side）。本番ユーザーは1人で、保有2銘柄（数量・取得単価あり）と監視18銘柄。
+- alert_settings.morning_report / close_report は既存（既定は true）。send-push-notifications は important_news 以外の source_type を push_enabled だけで判定するので、dispatcher の変更は不要。通知データの source_type / source_id でディープリンクできる。
+- notifications_dedupe には tracked_stock_id が含まれ、レポート通知ではこれが NULL になるため、重複通知を防げない。そのため部分ユニークインデックスを追加した。
 
 ### chosen_design
-- A standalone lane separate from X: new Edge Function `personalized-reports` + new table. It does not read, write, or wait on X runs, scheduled_posts, or OAuth. The app version is generated even when the X side fails.
-- Every number (prices, change, same-day P/L, unrealized P/L, weights, relative strength vs TOPIX) is computed deterministically in code (`report_logic.ts`) and stored in `portfolio_snapshot`. The app renders the numbers from the snapshot.
-- The LLM only writes the commentary. Its input is a packet of formatted strings plus Fact-passed news; no URLs or internal IDs are included.
-- Local checks run first: numbers not in the packet, unknown tickers, advice/assertive language, URLs, emoji, markup, length limits. Only if those pass does the Fact check run against the packet. Only `completed` + `fact_status=passed` can be displayed or pushed.
-- The row claim (INSERT generating + unique) makes the same user/type/date run only once. No retry.
+- Xとは独立したレーンにした。新しい Edge Function `personalized-reports` と新しいテーブルを追加し、X の run・scheduled_posts・OAuth は読まない・書かない・待たない。X側が失敗してもアプリ版は作られる。
+- 数字はすべてコード（`report_logic.ts`）で決定的に計算し、`portfolio_snapshot` に保存する。対象は株価、前日比、当日損益、含み損益、業種比率、TOPIXとの比較。アプリはこの snapshot から数字を表示する。
+- LLMは解説文だけを書く。LLMへの入力は、整形済みの文字列と Fact passed のニュースだけにした。URLや内部IDは渡さない。
+- まずローカルで次をチェックし、通ったものだけを packet と照合する Factチェックに回す。
+  - packetに無い数字、未知の銘柄コード
+  - 助言・断定表現、URL、絵文字、マークアップ
+  - 文字数
+- 表示もPushも、`completed` かつ `fact_status=passed` のものだけ。
+- 生成開始時に行を確保する（generating 行の INSERT ＋ unique制約）ので、同じユーザー・種別・日付は1回しか実行されない。再試行はしない。
 
-### schema_rpc_rls_changes (`20260911230000_personalized_reports.sql`, expand-only)
-- `personalized_reports` table: user_id / report_type(morning|close) / trading_date / status(generating|completed|failed) / title_ja / summary_ja / body jsonb / portfolio_snapshot jsonb / source_basis jsonb / fact_status / fact_issues / model_used / tokens / api_cost_usd / error / generated_at / notified_at.
-  - UNIQUE(user_id, report_type, trading_date)
-  - CHECK(completed ⇒ fact passed)
-  - RLS: SELECT only for authenticated users on their own completed+passed rows. authenticated has SELECT only (no INSERT/UPDATE/DELETE); service_role has full access.
-- `notifications_personalized_report_once`: partial UNIQUE(user_id, source_type, source_id) WHERE source_type='personalized_report'.
-- `personalized_report_news_inputs(p_user_id, p_since)`: service_role only, SECURITY DEFINER, search_path=''.
-  - Runs the existing `get_my_important_stock_news` as the target user, so it uses the same gate, dedupe, and sector ranking.
-  - Passes on only 3 kinds of text: app copy (Fact passed), verified post (Fact passed), and verbatim TDnet/company IR titles. Restores claims afterwards.
-- `enqueue_personalized_report_notification(p_report_id)`: service_role only.
-  - Inserts 1 row only when completed+passed and push_enabled and the matching morning_report/close_report is true. Sets notified_at.
-  - Title is fixed: 「今日のあなたのポート見通しができました」 / 「今日のポート振り返りができました」. Body = title_ja (Fact passed). importance normal.
-- Not recorded in migration history (single-file apply via db query). schema_migrations max is 20260911020704 (recorded by another slot; not a change from this task).
+### schema_rpc_rls_changes（`20260911230000_personalized_reports.sql`、expand-only）
+- `personalized_reports` テーブル
+  - 列: user_id / report_type（morning|close）/ trading_date / status（generating|completed|failed）/ title_ja / summary_ja / body jsonb / portfolio_snapshot jsonb / source_basis jsonb / fact_status / fact_issues / model_used / tokens / api_cost_usd / error / generated_at / notified_at
+  - 制約: UNIQUE(user_id, report_type, trading_date)、CHECK（completed なら Fact passed）
+  - RLS: authenticated は自分の completed かつ passed の行だけ SELECT できる。authenticated の権限は SELECT のみ（INSERT/UPDATE/DELETE なし）。service_role は全権限。
+- `notifications_personalized_report_once`: source_type='personalized_report' の行だけを対象にした部分 UNIQUE(user_id, source_type, source_id)。
+- `personalized_report_news_inputs(p_user_id, p_since)`（service_role 専用、SECURITY DEFINER、search_path=''）
+  - 既存の `get_my_important_stock_news` を対象ユーザーとして実行するので、/news と同じ gate・重複排除・業種の並び順になる。
+  - 後段に渡すテキストは次の3種類だけ: アプリコピー（Fact passed）、verified post（Fact passed）、TDnet / 会社IR のタイトル原文。
+  - 実行後、claims を元に戻す。
+- `enqueue_personalized_report_notification(p_report_id)`（service_role 専用）
+  - completed かつ passed で、push_enabled と該当する morning_report / close_report が true のときだけ1行INSERTし、notified_at を記録する。
+  - 通知タイトルは固定: 「今日のあなたのポート見通しができました」/「今日のポート振り返りができました」。
+  - 本文は title_ja（Fact passed）。importance は normal。
+- migration履歴には記録されていない（db query による単独適用）。schema_migrations の最大値は 20260911020704。これは他スロットが記録したもので、本タスクによる変更ではない。
 
 ### generation_pipeline
-1. X-Cron-Secret auth (reuses the existing `SEND_PUSH_NOTIFICATIONS_CRON_SECRET`, no new secret).
-2. Skip weekends and market_holidays (JPX). close is skipped before 15:30 JST.
-3. Fetch the active tracked stocks per user (max 20 users per run, 110 s time budget).
-4. Fetch Yahoo daily prices for all stocks plus ^N225 and ^TPX (6 in parallel).
-   - close: uses the day's bar only when regularMarketTime is on the day at or after 15:30 JST.
-   - morning: last completed session vs the one before.
-5. Insert a claim row (`generating`). If it already exists, skip.
-6. `personalized_report_news_inputs` (news since 15:00 JST of the previous trading day).
-7. Snapshot → packet → generation → local checks → Fact check.
-8. Save.
-9. Only if completed, call the enqueue RPC.
+1. X-Cron-Secret で認証する（既存の `SEND_PUSH_NOTIFICATIONS_CRON_SECRET` を流用。新しいsecretは追加していない）。
+2. 土日と market_holidays（JPX）は skip。close は 15:30 JST より前なら skip。
+3. ユーザーごとに有効な登録銘柄を取得する（1回の実行で最大20ユーザー、時間予算110秒）。
+4. Yahoo の日足を全銘柄と ^N225・^TPX について取得する（6並列）。
+   - close: regularMarketTime が当日の 15:30 JST 以降のときだけ、当日の足を使う。
+   - morning: 直近の確定セッションと、その前のセッションを比べる。
+5. 生成開始の行（generating）を INSERT する。既に行があれば skip。
+6. `personalized_report_news_inputs` を呼ぶ（前営業日 15:00 JST 以降のニュース）。
+7. snapshot → packet → 生成 → ローカルチェック → Factチェック。
+8. 保存する。
+9. completed のときだけ enqueue RPC を呼ぶ。
 
-`dry_run: true` writes nothing and enqueues nothing (not run this time).
+`dry_run: true` のときは書き込みも enqueue もしない（今回は実行していない）。
 
 ### personalization_inputs
-holding/watch split; quantity, average price, cash/margin, long/short; ticker code, company name, sector; the day's per-stock important news (Fact-gated); market-wide critical/high news matching tracked sectors (the /news logic as-is); Nikkei and TOPIX; holding sector weights (by market value when every holding is valued, otherwise by count).
+- 保有/監視の区分、数量、取得単価、現物/信用、買い/売り
+- 銘柄コード、銘柄名、業種
+- 当日の銘柄関連の重要ニュース（Fact gate 済み）
+- 登録業種に関係する市場全体の critical / high ニュース（/news のロジックをそのまま使用）
+- 日経平均・TOPIX
+- 保有の業種比率（保有が全銘柄とも評価額を出せるときは評価額ベース、出せないときは銘柄数ベース）
 
 ### morning_report_output
-- The AI writes: title / summary / tone (positive|neutral|cautious, never assertive) / 今日のポート見通し / notes for the TOP3 holdings by impact and all holdings (priority = own news severity > sector-matched market news > position size) / notable watch stocks (max 5) / risks such as sector concentration (max 3) / today's checkpoints (1–4).
-- The code computes: previous close, previous-session change, market value, unrealized P/L vs average price, and index figures.
+- AIが書く部分
+  - タイトル、要約、トーン（positive|neutral|cautious、断定しない）
+  - 今日のポート見通し
+  - 影響が大きそうな保有銘柄のTOP3と、保有全銘柄の注目点。優先順位は「その銘柄自身のニュースの重大度 ＞ 業種が一致する市場ニュース ＞ 保有規模」。
+  - 注目の監視銘柄（最大5）
+  - 業種の偏りなどのリスク（最大3）
+  - 今日のチェックポイント（1〜4）
+- コードが計算する部分: 前日終値、前営業日比、評価額、取得単価からの含み損益、指数
 
 ### close_report_output
-- The AI writes: 今日のポート総括 (uses the code-computed TOPIX comparison label only when available) / price move and confirmed news per holding / watch stocks with notable moves or news / points to watch tomorrow.
-- The code computes: close, change vs previous day, same-day P/L (sign × quantity × (close − previous close)), unrealized P/L (shown separately to avoid confusion), portfolio P/L and %, the pt difference vs TOPIX (±0.3pt = about the same), and the top 3 up/down contributors.
-- The AI is forbidden from stating causes. It lists them as facts confirmed on the same day.
+- AIが書く部分
+  - 今日のポート総括。TOPIXとの比較は、コードが計算したラベルがあるときだけ使う。
+  - 保有銘柄ごとの値動きと、確認できた材料
+  - 値動きや材料が目立った監視銘柄
+  - 明日見るポイント
+- コードが計算する部分
+  - 終値、前日比
+  - 当日損益（符号 × 数量 × (終値 − 前日終値)）
+  - 含み損益（当日損益と混同しないよう別表示）
+  - ポート全体の損益と騰落率
+  - TOPIXとの差（ポイント差。±0.3 ポイント以内は「ほぼ同じ」）
+  - 上昇・下落に効いた銘柄の上位3
+- AIには因果関係を断定させず、「同じ日に確認できた事実」として並べさせる。
 
 ### notification_behavior
-- One completion push per report. The body shows only the title; details are in the app. Tapping opens `/reports/<id>`.
-- No push when: generation failed / Fact failed / morning_report OFF / close_report OFF / push_enabled OFF / second attempt.
-- The dispatcher (send-push-notifications) is unchanged. Existing important_news pushes are unchanged; this task adds only new functions.
+- 1レポートにつき完成通知を1回だけ送る。本文はタイトルだけで、詳細はアプリで見る。タップすると `/reports/<id>` が開く。
+- 通知しないケース: 生成失敗、Fact失敗、morning_report OFF、close_report OFF、push_enabled OFF、2回目。
+- dispatcher（send-push-notifications）は変更していない。既存の important_news Push も無変更（関数を追加しただけ）。
 
 ### app_ui_changes
-- New 「レポート」 tab (native: SF chart.line.uptrend.xyaxis / web: text tab), separate from the news tab.
-- List: today's 朝刊 and 大引け cards (with updated time; an empty card with the schedule when none exists), 朝刊通知 / 大引けレポート通知 switches, past reports.
-- Detail: tone badge, index and portfolio figures (from code), TOPIX comparison, summary, up/down contributors, per-holding cards (TOP3 numbered in the morning; price, P/L, unrealized, note, links to related news), watch stocks, sector-weight bars, points of caution, market news, checkpoints, missing-data notes, disclaimer (numbers computed by the app / AI text checked against the data / not a trading recommendation).
-- `use-push-notification-navigation`: routes `personalized_report` to the report detail (important_news behaviour unchanged).
+- 新しい「レポート」タブを追加した（native は SF chart.line.uptrend.xyaxis、web は文字タブ）。ニュースタブとは別枠。
+- 一覧画面
+  - 今日の朝刊・大引けのカード（更新時刻つき。まだ無いときは予定時刻を書いた空カード）
+  - 朝刊通知・大引けレポート通知のスイッチ
+  - 過去のレポート
+- 詳細画面
+  - トーンのバッジ
+  - 指数とポートの数字（コードが計算した値）、TOPIXとの比較
+  - 総括、上昇・下落に効いた銘柄
+  - 保有銘柄カード（朝刊ではTOP3に番号。価格・損益・含み損益・解説・関連ニュースへのリンク）
+  - 監視銘柄、業種比率のバー、気をつけたい点、市場ニュース、チェックポイント
+  - 欠けているデータの注記、免責（数字はアプリの計算／文章はAIが書いてデータと照合／売買推奨ではない）
+- `use-push-notification-navigation`: `personalized_report` の通知をレポート詳細へ振り分ける（important_news の挙動は変えていない）。
 
 ### tests
-- `supabase/functions/personalized-reports/report_logic_test.ts`: 22/22 pass. Covers:
-  - trading days / holidays / news window
-  - Yahoo parsing, close requires 15:30 or later, morning uses the previous session
-  - holding/watch separation, holding priority
-  - safe fallback when quantity or average price is missing; short position signs
-  - blocking when all prices are missing
-  - no URLs or IDs in the packet
-  - numbers not in the packet, unknown tickers, advice/assertion, URLs
-  - positive morning and positive close
-  - Fact failure → no text (no push); local check failure → no Fact call
-  - missing data → 0 model calls; transport errors mapped to safe codes
-- `tests/app/report-presentation_test.ts` + the existing news tests: 25/25 pass. Covers:
-  - formatting; holding/watch display (watch shows no P/L)
-  - fallback when quantity is missing; no guessed values when a price is missing
-  - morning wording; TOPIX comparison and missing-data notes
-  - deep link (only personalized_report routes, invalid IDs go to `/reports`)
-- Rolled-back production pre-test (all ROLLBACK). Results:
-  - RLS: own rows 1 (failed rows hidden) / other user 0; authenticated INSERT denied.
-  - Both RPCs denied to authenticated.
-  - Duplicate same-day row blocked; completed with fact failed blocked.
-  - Pushes: failed report 0 / morning OFF 0 / close OFF 0 / push_enabled OFF 0 / first 1 / second 0; notified_at set.
-  - news inputs 4 of 4 rows (app_copy 2, verified_post 1, disclosure_title 1); 0 rows violating the gate; claims restored.
-- `deno check` (index.ts, test) OK. App `tsc --noEmit`: 0 errors under src/ (existing errors outside apps/admin, supabase/, and tests are unrelated). `git diff --check` OK.
+- `supabase/functions/personalized-reports/report_logic_test.ts`: 22/22 pass。確認した内容:
+  - 営業日・祝日・ニュースの取得期間
+  - Yahoo の解析、close は 15:30 以降が必須、morning は前セッション
+  - 保有と監視の分離、保有の優先順位
+  - 数量・取得単価が無いときの安全な fallback、売りポジションの符号
+  - 全銘柄の価格が無いときは生成しない
+  - packet に URL・ID を入れない
+  - packet に無い数字、未知の銘柄コード、助言・断定、URL の検出
+  - 朝刊と大引けの正常系
+  - Fact失敗なら本文なし（Pushなし）、ローカルチェック失敗なら Factチェックを呼ばない
+  - データ欠損ならモデル呼び出し0回、通信エラーは安全なコードに変換
+- `tests/app/report-presentation_test.ts` と既存ニュースのテスト: 25/25 pass。確認した内容:
+  - 数字の整形、保有/監視の表示（監視には損益を出さない）
+  - 数量が無いときの fallback、価格が無いときに推測値を出さない
+  - 朝刊の文言、TOPIXとの比較、欠損の注記
+  - ディープリンク（personalized_report だけ振り分け、不正なIDは `/reports` へ）
+- 本番DBでの取り消し前提の事前テスト（すべて ROLLBACK）の結果:
+  - RLS: 本人には1件（failed の行は見えない）、他人には0件。authenticated の INSERT は拒否。
+  - 2つの RPC はどちらも authenticated から呼べない。
+  - 同じ日の重複行と、「completed なのに Fact failed」の行は作れない。
+  - Push: failed 0 / 朝刊OFF 0 / 大引けOFF 0 / push_enabled OFF 0 / 1回目 1 / 2回目 0。notified_at が記録される。
+  - news inputs は4件中4件（app_copy 2、verified_post 1、disclosure_title 1）。gate違反は0件。claims は元に戻っている。
+- `deno check`（index.ts・test）OK。アプリの `tsc --noEmit` は src/ でエラー0件（apps/admin・supabase/・tests にある既存エラーは今回と無関係）。`git diff --check` OK。
 
 ### real_data_proof
-- Not run, per the K1 instruction (no manual generation, save, or Push). Confirmed instead with read-only checks:
-  - Yahoo returns daily data for all 20 production tracked stocks, including 285A.
-  - The production feed passes through the Fact gate without leaks (pre-test above).
+- K1の指示（手動生成・保存・Pushはしない）に従い、未実施。代わりに read-only で次を確認した。
+  - 本番の登録銘柄20件すべて（285A を含む）について、Yahoo の日足が取れる。
+  - 本番フィードが Fact gate を漏れなく通る（上の事前テスト）。
 
 ### production_changes
-1. Applied `supabase/migrations/20260911230000_personalized_reports.sql` alone (`supabase db query --linked -f`, no db push). Result: rows=[] (success).
-2. Deployed the new Edge Function `personalized-reports` v1 (`--no-verify-jwt`, from the worktree, HEAD=ed7c2f7, ref wsmznyzcvmuitkglfeuj, verify_jwt=false entry added to the local config.toml).
+1. `supabase/migrations/20260911230000_personalized_reports.sql` を単独で適用した（`supabase db query --linked -f`。db push は使っていない）。結果は rows=[]（成功）。
+2. 新しい Edge Function `personalized-reports` v1 を deploy した（`--no-verify-jwt`、worktree から、HEAD=ed7c2f7、ref wsmznyzcvmuitkglfeuj）。ローカルの config.toml に verify_jwt=false の設定を追加した。
 
 ### deploy_verification
-- `supabase functions download personalized-reports --use-api` into an empty directory:
-  - index.ts matches ed7c2f7 byte for byte (cmp)
-  - report_logic.ts matches ed7c2f7 byte for byte (cmp)
-- Other functions' version/updated_at unchanged before and after deploy: x-test-post v96, important-news-monitor v40, send-push-notifications v4, stocks-master-sync v6, stocks-new-listing-sync v5, x-oauth-connect v4.
-- POST without the secret → 401; POST with a wrong secret → 401 (generates nothing).
-- Read-only DB check:
-  - personalized_reports: 0 rows, RLS enabled, 1 policy (SELECT authenticated, own + completed + passed)
-  - grants: authenticated SELECT only
-  - both RPCs: service_role EXECUTE only, SECURITY DEFINER, search_path=''
-  - partial unique index present
-  - notifications 0 (personalized_report 0); report HTTP calls in net._http_response 0
-  - cron 8 jobs, unchanged (no report cron); auto_publish=true unchanged
-  - user settings unchanged (morning/close/push/important/market all true, i.e. DB defaults plus the user's own ON)
+- 空のディレクトリに `supabase functions download personalized-reports --use-api` で取得し、ed7c2f7 と比較した。
+  - index.ts: バイト単位で一致（cmp）
+  - report_logic.ts: バイト単位で一致（cmp）
+- 他の Function の version / updated_at は deploy 前後で変わっていない: x-test-post v96、important-news-monitor v40、send-push-notifications v4、stocks-master-sync v6、stocks-new-listing-sync v5、x-oauth-connect v4。
+- secret なしの POST は 401、間違った secret の POST も 401（何も生成されない）。
+- DB の read-only 確認
+  - personalized_reports: 0行。RLS有効。policy は1つ（SELECT authenticated、本人かつ completed かつ passed）。
+  - 権限: authenticated は SELECT のみ。
+  - 2つの RPC: service_role だけが EXECUTE できる。SECURITY DEFINER、search_path=''。
+  - 部分ユニークインデックス: あり。
+  - notifications: 0件（personalized_report 0件）。net._http_response にレポート関連のリクエスト0件。
+  - cron: 8件で変化なし（レポート用の cron は無い）。auto_publish=true のまま。
+  - ユーザー設定は変更していない（morning / close / push / important / market がすべて true。DBの既定値と、本人が自分でONにした設定）。
 
 ### changed_files
-- supabase/migrations/20260911230000_personalized_reports.sql (new)
-- supabase/functions/personalized-reports/index.ts, report_logic.ts, report_logic_test.ts (new)
-- src/app/reports/_layout.tsx, index.tsx, [id].tsx (new)
-- src/lib/personalized-reports.ts, src/lib/report-presentation.ts (new)
-- tests/app/report-presentation_test.ts (new)
-- src/components/app-tabs.tsx, src/components/app-tabs.web.tsx, src/hooks/use-push-notification-navigation.ts (modified)
-- Local only, not in Git: supabase/config.toml (added a verify_jwt=false entry for personalized-reports)
+- 新規
+  - supabase/migrations/20260911230000_personalized_reports.sql
+  - supabase/functions/personalized-reports/index.ts、report_logic.ts、report_logic_test.ts
+  - src/app/reports/_layout.tsx、index.tsx、[id].tsx
+  - src/lib/personalized-reports.ts、src/lib/report-presentation.ts
+  - tests/app/report-presentation_test.ts
+- 変更
+  - src/components/app-tabs.tsx、src/components/app-tabs.web.tsx
+  - src/hooks/use-push-notification-navigation.ts
+- ローカルのみ（Git外）: supabase/config.toml（personalized-reports の verify_jwt=false を追加）
 
 ### commit_hash
-- Implementation: `ed7c2f7fb9f7100a599d720c22207319fb92c30f`
-- Report: this commit
+- 実装: `ed7c2f7fb9f7100a599d720c22207319fb92c30f`
+- Report: このコミット
 
 ### push
-- origin/main (fast-forward)
+- origin/main（fast-forward）
 
 ### remaining_issues
-- Phase 1B (needs K1 approval):
-  1. `dry_run` run on production data to check quality: from SQL, call via net.http_post with the Vault secret, as cron does; the secret never leaves the DB.
-  2. One real generation → push delivered to the device → tap opens the report.
-  3. Cron registration (planned: morning 08:35 JST = `35 23 * * 0-4` UTC, close 17:15 JST = `15 8 * * 1-5` UTC, Vault `send_push_notifications_cron_secret`, after the X close report at 17:00).
-- alert_settings.morning_report / close_report default to true, so the existing user will get pushes once Cron starts. The in-app switches can turn them OFF. Please decide in K1 whether defaults should change to opt-in (not changed this time).
-- No retry after a failure (a transient Yahoo or OpenAI failure means no report that day). The claim also stays failed when the time budget is exceeded. A retry policy needs a separate design.
-- The morning report has no overnight US market or futures input (no reusable source that passed Fact checks; the X morning report runs are unreliable). To be considered in Phase 2.
-- The Yahoo chart API is unofficial (same dependency as the X side).
-- Existing issues carried over: migration history drift (this migration is not recorded either), 17 test watch stocks to delete after E2E, config.toml untracked, etc.
+- Phase 1B（K1の承認が必要）
+  1. 本番データで `dry_run` して品質を確認する。cron と同じく、SQL から Vault の secret を使って net.http_post で呼ぶ（secret はDBの外に出ない）。
+  2. 実際に1件生成し、端末にPushが届き、タップでレポートが開くことを確認する。
+  3. Cron を登録する。
+     - 予定: 朝刊 8:35 JST（`35 23 * * 0-4` UTC）、大引け 17:15 JST（`15 8 * * 1-5` UTC）
+     - secret は Vault の `send_push_notifications_cron_secret`
+     - 大引けは X の大引け（17:00）の後にする
+- alert_settings の morning_report / close_report は既定が true なので、Cron を始めると既存ユーザーにそのまま通知が届く（アプリのスイッチでOFFにはできる）。既定をオプトインに変えるかどうかはK1で判断してほしい（今回は変更していない）。
+- 失敗しても再試行しないので、Yahoo や OpenAI の一時的な失敗があるとその日のレポートは無くなる。時間予算を超えた場合も、確保した行は failed のまま残る。再試行方針は別途設計が必要。
+- 朝刊には米国市場・先物の夜間の動きが入っていない（Fact確認済みで再利用できる入力元が無く、X版の朝刊 run も不安定なため）。Phase 2 で検討する。
+- Yahoo chart API は非公式（X側と同じ依存）。
+- 既存の課題も引き続き残っている: migration履歴のずれ（今回のmigrationも未記録）、E2E後に削除する監視テスト銘柄17件、config.toml がGit管理外、など。
 
 ### safety_checks
-- No `supabase db push`. No changes to other migrations, RPCs, Edge Functions, Cron, secrets, OAuth, Vault, or social_accounts.
-- No X-related changes (x-test-post unchanged at v96; X quality gates, posting times, and volume untouched).
-- No personalized report generation, saving, or push. notifications 0; personalized_reports 0 rows.
-- No changes to production user settings; no fake holdings added.
-- Did not touch the shared checkout's uncommitted changes; no secrets printed.
+- `supabase db push` は使っていない。他の migration / RPC / Edge Function / Cron / secrets / OAuth / Vault / social_accounts は変更していない。
+- X関連は変更していない（x-test-post は v96 のまま。X の品質gate・投稿時刻・投稿量はそのまま）。
+- personalized report の生成・保存・Pushはしていない。notifications 0件、personalized_reports 0行。
+- 本番のユーザー設定は変更しておらず、架空の保有銘柄も追加していない。
+- 共有 checkout の未コミット変更には触れていない。secret は表示していない。
 
 ### next_recommendation
-In K1, approve Phase 1B:
-1. Production dry_run: check quality, including the local-check and Fact pass rate.
-2. One real close report E2E: generate → push → tap opens the report.
-3. Cron registration.
+K1で Phase 1B を承認してほしい。
+1. 本番で dry_run して品質を確認する（ローカルチェックと Factチェックの通過率を含む）。
+2. 大引けを1件、実際に生成して E2E を確認する（生成 → Push → タップで開く）。
+3. Cron を登録する。
 
-Before item 3, decide whether morning_report / close_report should default to true or become opt-in.
+3の前に、morning_report / close_report の既定値を true のままにするか、オプトインにするかを決めておいてほしい。
