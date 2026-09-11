@@ -3,7 +3,7 @@
 - task_id: in-app-news-japanese-detail-summary-20260911
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Opus 5
