@@ -374,3 +374,20 @@ ChatGPT should review the successful v91 deployment. After the next natural morn
 - remaining_issues: 1306.T is an explicitly labeled ETF proxy and not a formal TOPIX index source; replace it with a formally verified TOPIX source in a separately approved task when available.
 - safety_checks: clean temporary worktree from fresh `origin/main` (`d907f6c4ca45ef3ee8e88bdc1b70d64f8bbb4a7f`); no secrets exposed; no production writes or API calls.
 - next_recommendation: ChatGPT C2 review. Production deployment remains a separate explicit decision.
+
+## H2 Final Follow-up F2: production deploy verification (2026-09-12)
+
+- task_id: `x-close-report-topix-source-correction-20260911`
+- deploy_head: `090af349d771d1f73fe82dd65859eca531464209` (fresh `origin/main`)
+- implementation commit `44630c8` contained in deploy HEAD: YES
+- clean deploy worktree: `/private/tmp/kabumori-h2-f2-20260912`; temporary config was worktree-local and removed after deploy
+- deploy scope: `x-test-post` only, with `--no-verify-jwt`
+- worktree-local config: project ref `wsmznyzcvmuitkglfeuj`; `[functions.x-test-post] verify_jwt = false`
+- production result: x-test-post **v97 ACTIVE**, `verify_jwt=false`
+- source verification: production v97 source read-back matched all 27 runtime files from the deploy source (content length and deterministic byte hash); no mismatches
+- CLI download note: `supabase functions download x-test-post --use-api` was attempted in a separate clean worktree but the CLI required a missing `SUPABASE_ACCESS_TOKEN`; the failed read operation changed no source or production state. Equivalent production source read-back and byte comparison were completed through the Supabase API.
+- other Edge Functions: versions and `updated_at` unchanged in pre/post list comparison
+- forbidden scopes: DB / migrations / RLS / RPC / Cron / scheduler / posting_windows / settings / secrets / OAuth / Vault / social_accounts had no writes or changes; read-only snapshots remained unchanged
+- safety checks: no manual close_report, Function invocation, candidate injection, OpenAI API, X API, or X post
+- remaining_issue: formal TOPIX source is still a future replacement; 1306 remains an explicitly labeled ETF proxy
+- status: `review_required`; next_owner: `chatgpt`

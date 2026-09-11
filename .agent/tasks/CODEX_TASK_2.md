@@ -3,8 +3,8 @@
 - task_id: x-close-report-topix-source-correction-20260911
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: X版 close_report の誤った Yahoo `^TPX` 利用を停止し、正式TOPIX取得元が未確定の間も大引けレポートを安全に稼働させる。
@@ -79,3 +79,20 @@ Report must include:
 - forbidden_scopes_unchanged
 - safety_checks
 - remaining_issue: formal TOPIX source is still a future replacement; 1306 remains an explicitly labeled ETF proxy
+
+## Final Follow-up F2: production deploy verification (2026-09-12)
+
+- deploy_head: `090af349d771d1f73fe82dd65859eca531464209` (fresh `origin/main`)
+- implementation commit `44630c8` contained in deploy HEAD: YES
+- clean deploy worktree: `/private/tmp/kabumori-h2-f2-20260912`; temporary config removed after deploy
+- worktree-local config used: project ref `wsmznyzcvmuitkglfeuj`, `verify_jwt = false`
+- deploy scope: `x-test-post` only, `--no-verify-jwt`
+- production result: x-test-post **v97 ACTIVE**, `verify_jwt=false`
+- production source verification: Supabase source read-back for v97 matched all 27 runtime files in deploy source (content length and deterministic byte hash); no mismatches
+- CLI download note: `supabase functions download x-test-post --use-api` was attempted in a separate clean worktree and blocked by missing `SUPABASE_ACCESS_TOKEN`; no state was changed. Equivalent production-source read-back/byte comparison completed through the Supabase API.
+- other Edge Functions: versions and `updated_at` unchanged in pre/post list comparison
+- DB / migrations / RLS / RPC / Cron / scheduler / posting_windows / settings / secrets / OAuth / Vault / social_accounts: no writes or changes performed; read-only snapshots remained unchanged
+- manual close_report, Function invocation, OpenAI/X API calls, candidate injection, and X posts: 0
+- remaining_issue: formal TOPIX source is still a future replacement; 1306 remains an explicitly labeled ETF proxy
+- status: `review_required`
+- next_owner: `chatgpt`
