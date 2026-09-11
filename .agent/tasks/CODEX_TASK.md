@@ -3,8 +3,8 @@
 - task_id: kabumori-production-scheduler-restore-20260911
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: urgent
 - recommended_model: default
 - purpose: 複垢化作業で意図せず変更された、かぶモリ本番の投稿スケジューラーを安全に復旧する。新機能追加ではなく復旧専用。朝刊・大引けの専用plannerが再び通常の自動dispatch経路から呼ばれ、明日以降の予定が欠落しない状態へ戻す。
@@ -90,3 +90,20 @@ C1で復旧内容を確認後、ChatGPT/ユーザーから本番適用を明示�
 - tests pass
 - commit/push/report完了
 - production未適用（C1後の別明示承認待ち）
+
+## C1 follow-up — 2026-09-11
+
+初回C1では復旧patch自体は妥当と評価したが、必須のローカルSQL実行テストが未完了だったため差し戻し。
+
+今回の再開では新規機能を追加しない。既存patch `20260911130000_restore_claim_due_post_planners.sql` を対象に、Podman復旧または同等の隔離Postgresで以下のSQL実行テストを完了すること。
+
+- 平日営業日: morning_report / close_report が各1件だけ計画される
+- 土日: 両reportが計画されない
+- JPX休日: 両reportが計画されない
+- report用 `posting_windows` がinactiveでも専用planner経由で計画される
+- 同日複数dispatchでもduplicateされない
+- tip / useful_tip / interaction / morning_greeting等の既存planner回帰なし
+
+テスト完了後は `.agent/CODEX_REPORT.md` に実行方法・結果を追記し、このTASKを `review_required / next_owner: chatgpt` に戻して再C1を待つ。
+
+**本番適用・Edge deploy・X投稿・Cron変更は引き続き禁止。**
