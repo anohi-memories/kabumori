@@ -19,6 +19,7 @@ import {
   reportUpdate,
   snapshotBlockers,
   unknownNumbers,
+  unsupportedMultiDayWords,
   type NewsInput,
   type PriceSeries,
   type ReportBody,
@@ -303,6 +304,10 @@ test("unknown tickers, advice and URLs fail the local checks", () => {
   assert.ok(localReportIssues({ ...base, risk_notes_ja: ["セクターウェightsはサービス業です。"] }, snapshot, packet)
     .some((issue) => issue.startsWith("CONTAINS_LATIN_WORD")));
   assert.deepEqual(latinWords("TOPIX連動ETFとTDnetの開示"), []);
+  assert.ok(localReportIssues({ ...base, title_ja: "保有株は続落" }, snapshot, packet)
+    .some((issue) => issue.startsWith("UNSUPPORTED_MULTI_DAY_WORD:続落")));
+  assert.deepEqual(unsupportedMultiDayWords(["年初来高値を更新したと発表"], { news: "年初来高値を更新したと発表" }), [],
+    "allowed when the packet itself says it");
   assert.ok(localReportIssues({ ...base, checkpoints_ja: [] }, snapshot, packet).includes("CHECKPOINTS_INVALID"));
 });
 

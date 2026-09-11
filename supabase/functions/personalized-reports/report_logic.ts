@@ -572,6 +572,7 @@ const COMMON_INSTRUCTIONS = [
   "URL、ハッシュタグ、絵文字、HTML、見出しラベル（【速報】等）は使いません。自然で落ち着いた日本語で書きます。",
   "銘柄は文章中では会社名で呼びます（例: サイバーエージェント）。証券コードだけで呼びません。日付は入力の表記（例: 9月11日（金））を使い、2026-09-11 のような形式は使いません。英単語やフィールド名（weights 等）を文中に書きません。",
   "市場全体の方向は、入力の indices にある指数・ETFの値動きとして書くだけにします。「市場全体が下落」のように、入力より広い範囲を断定しません。比較に使える指標は indices と portfolio.relative_to_topix だけです。TOPIX連動ETF（1306）はTOPIXそのものではないので、その名前のまま書きます。",
+  "入力にあるのは1日分の値動き（当日と前日の終値）だけです。「続落」「続伸」「反発」「反落」「年初来」「最高値」のような、複数日の推移や記録を前提にする言葉は使いません。",
 ].join("\n");
 
 const MORNING_INSTRUCTIONS = [
@@ -758,6 +759,15 @@ const URL_PATTERN = /https?:\/\/|www\./i;
 const EMOJI = /\p{Extended_Pictographic}/u;
 const JAPANESE = /[ぁ-んァ-ヶ一-龠]/u;
 const ISO_DATE = /\d{4}-\d{2}-\d{2}/;
+// Multi-day / record wording needs history the packet does not carry (it has
+// one session and its previous close), so it is rejected unless the packet
+// itself contains the word (e.g. inside a Fact-passed news summary).
+const MULTI_DAY_WORDS = ["続落", "続伸", "反発", "反落", "連騰", "連落", "連敗", "連勝", "年初来", "上場来", "最高値", "最安値", "高値更新", "安値更新"];
+
+export function unsupportedMultiDayWords(texts: string[], packet: unknown): string[] {
+  const source = JSON.stringify(packet);
+  return MULTI_DAY_WORDS.filter((word) => !source.includes(word) && texts.some((text) => text.includes(word)));
+}
 const ALLOWED_LATIN = new Set(["TOPIX", "ETF", "TDnet"]);
 
 /** Latin words of 3+ letters other than the few proper names the packet itself uses. */
@@ -819,6 +829,8 @@ export function localReportIssues(
   if (texts.some((text) => URL_PATTERN.test(text))) issues.push("CONTAINS_URL");
   if (texts.some((text) => EMOJI.test(text))) issues.push("CONTAINS_EMOJI");
   if (texts.some((text) => ISO_DATE.test(text))) issues.push("CONTAINS_ISO_DATE");
+  const multiDay = unsupportedMultiDayWords(texts, packet);
+  if (multiDay.length > 0) issues.push(`UNSUPPORTED_MULTI_DAY_WORD:${multiDay.slice(0, 3).join("/")}`);
   const latin = texts.flatMap(latinWords);
   if (latin.length > 0) issues.push(`CONTAINS_LATIN_WORD:${[...new Set(latin)].slice(0, 3).join("/")}`);
   return issues;
