@@ -3,8 +3,8 @@
 - task_id: close-report-1700-schedule-and-close-source-hardening-20260911
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: 大引けレポートを16:00 JSTから17:00 JSTへ変更し、生成・Cron・posting_windows・自動投稿判定を整合させる。あわせて、2026-09-11 16:00自然実行でNikkei/TOPIX終値が取得できず `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE` になった原因を踏まえ、17:00時点で当日終値を安定取得できる経路を監査・改善する。

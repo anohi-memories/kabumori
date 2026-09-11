@@ -2083,13 +2083,13 @@ async function generateCloseReport(
   const directCloseSourceUrls = new Set(
     directCloseSourceUrlValues.map((url) => canonicalizeUrl(url)).filter((url): url is string => url !== null),
   );
-  // Anchored to the actual reference time passed to this request, never a literal "16:00 JST" string.
+  // Anchored to the actual reference time passed to this request, never a literal scheduled-time string.
   // Previously this sentence branched on a dry-run-only opt-in flag, so a normal (no-flag) dry-run and
-  // the live/scheduled path shared the same literal-"16:00 JST" wording while an explicit dry-run request
+  // the live/scheduled path shared the same literal scheduled-time wording while an explicit dry-run request
   // could get this reference-time wording instead -- two different Fact Check conditions for what should
   // be one code path. close-report-factcheck-dryrun-live-parity-20260907 showed the literal wording
   // failing future_information_absent even when executed essentially on schedule (it gives the model no
-  // clear anchor once the true current time isn't exactly 16:00:00), while this reference-time wording
+  // clear anchor once the true current time isn't exactly the scheduled close time), while this reference-time wording
   // passed reliably in the same incident. There is now exactly one instruction, so dry-run and live always
   // face an identical Fact Check condition. sourceVerified/freshness/causal-safety/TODAY-NEXT/Voice/
   // hashtags are all completely unaffected — this changes only this one sentence.

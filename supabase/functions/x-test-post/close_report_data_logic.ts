@@ -1,9 +1,9 @@
 import type { RawMorningMetric } from "./morning_report_logic.ts";
 
 export const YAHOO_NIKKEI_CLOSE_URL =
-  "https://query1.finance.yahoo.com/v8/finance/chart/%5EN225?range=1d&interval=1m&events=history";
+  "https://query2.finance.yahoo.com/v8/finance/chart/%5EN225?range=5d&interval=1m&events=history";
 export const YAHOO_TOPIX_CLOSE_URL =
-  "https://query1.finance.yahoo.com/v8/finance/chart/%5ETPX?range=1d&interval=1m&events=history";
+  "https://query2.finance.yahoo.com/v8/finance/chart/%5ETPX?range=5d&interval=1m&events=history";
 
 type YahooChartResult = {
   meta?: { chartPreviousClose?: number; previousClose?: number };

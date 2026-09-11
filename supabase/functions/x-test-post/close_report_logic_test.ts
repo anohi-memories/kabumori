@@ -12,22 +12,36 @@ import {
 } from "./close_report_logic.ts";
 import { hasIndependentCausalSupport, hasStrongCausalAssertion } from "./report_material_logic.ts";
 
-const reference = "2026-08-31T07:00:00.000Z"; // 16:00 JST
+const reference = "2026-08-31T08:00:00.000Z"; // 17:00 JST
 const raw = (overrides: Partial<RawMarketMetric> = {}): RawMarketMetric => ({
   label: "日経平均", value: "65,800", previous_close: "65,500", change: "+300",
   change_percent: "+9.99%", timestamp: "2026-08-31T06:30:00.000Z",
   source_url: "https://www.jpx.co.jp/example", ...overrides,
 });
 
-test("15:45〜16:05 JST is live close-report mode", () => {
+test("17:00 JST is live close-report mode and pre-17:00 is never the scheduled claim time", () => {
   assert.equal(resolveCloseRunMode(reference), "live");
+  assert.equal(resolveCloseRunMode("2026-08-31T06:59:00.000Z"), "preflight"); // 15:59 JST
+  assert.equal(resolveCloseRunMode("2026-08-31T07:59:00.000Z"), "live"); // 16:59 JST: safe execution window, but DB due time is still 17:00
+  assert.equal(resolveCloseRunMode("2026-08-31T07:59:59.000Z"), "live"); // 16:59:59 JST: same
+  assert.equal(resolveCloseRunMode("2026-08-31T08:00:00.000Z"), "live"); // 17:00 JST / UTC 08:00
+  assert.equal(resolveCloseRunMode("2026-08-31T08:05:00.000Z"), "live"); // 17:05 boundary
+  assert.equal(resolveCloseRunMode("2026-08-31T08:06:00.000Z"), "preflight");
   assert.equal(resolveCloseRunMode("2026-08-29T07:00:00.000Z"), "preflight");
+});
+
+test("live close data requires a post-session observation at or after 15:30 JST", () => {
+  const accepted = normalizeCloseMetric(raw({ timestamp: "2026-08-31T06:30:00.000Z" }), "jpx_close", reference, "live");
+  const rejected = normalizeCloseMetric(raw({ timestamp: "2026-08-31T06:29:00.000Z" }), "jpx_close", reference, "live");
+  assert.equal(hasSameDayCloseData(accepted, reference, "live"), true);
+  assert.equal(hasSameDayCloseData(rejected, reference, "live"), false);
 });
 
 test("close index and 15:45 futures use separate freshness rules", () => {
   assert.equal(validateCloseFreshness("jpx_close", "2026-08-31T06:30:00.000Z", reference, "live"), "fresh");
-  assert.equal(validateCloseFreshness("nikkei_futures_1545", "2026-08-31T06:45:00.000Z", reference, "live"), "fresh");
-  assert.equal(validateCloseFreshness("nikkei_futures_1545", "2026-08-31T06:15:00.000Z", reference, "live"), "stale");
+  const futuresReference = "2026-08-31T07:00:00.000Z"; // 16:00 JST, preserves the existing 15:45 freshness contract
+  assert.equal(validateCloseFreshness("nikkei_futures_1545", "2026-08-31T06:45:00.000Z", futuresReference, "live"), "fresh");
+  assert.equal(validateCloseFreshness("nikkei_futures_1545", "2026-08-31T06:15:00.000Z", futuresReference, "live"), "stale");
 });
 
 test("change percent is recalculated from raw values", () => {
@@ -39,7 +53,7 @@ test("change percent is recalculated from raw values", () => {
 
 test("contradictory change and future timestamps stop publication", () => {
   const contradiction = normalizeCloseMetric(raw({ change: "-300" }), "jpx_close", reference, "live");
-  const future = normalizeCloseMetric(raw({ label: "TOPIX", timestamp: "2026-08-31T07:10:00.000Z" }), "jpx_close", reference, "live");
+  const future = normalizeCloseMetric(raw({ label: "TOPIX", timestamp: "2026-08-31T08:10:00.000Z" }), "jpx_close", reference, "live");
   const result = evaluateCloseFacts({
     requiredIndices: [contradiction, future], futures: null, optional: [],
     dateConsistencyPassed: true, futureInformationAbsent: true, mode: "live",

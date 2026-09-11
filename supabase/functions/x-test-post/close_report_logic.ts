@@ -43,14 +43,14 @@ export function hasSameDayCloseData(
   if (parseMarketNumber(metric.value) === null || !metric.source_url || metric.freshness !== "fresh") return false;
   const observed = jstParts(metric.timestamp);
   const reference = jstParts(referenceIso);
-  return Boolean(observed && reference && observed.date === reference.date && observed.minutes >= 15 * 60);
+  return Boolean(observed && reference && observed.date === reference.date && observed.minutes >= 15 * 60 + 30);
 }
 
 export function resolveCloseRunMode(referenceIso: string): CloseRunMode {
   const parts = jstParts(referenceIso);
   if (!parts) return "preflight";
   return !["Sat", "Sun"].includes(parts.weekday) &&
-      parts.minutes >= 15 * 60 + 45 && parts.minutes <= 16 * 60 + 5
+      parts.minutes >= 16 * 60 + 45 && parts.minutes <= 17 * 60 + 5
     ? "live" : "preflight";
 }
 
@@ -166,7 +166,7 @@ export function evaluateCloseFacts(args: {
   if (freshnessFailures.length) notes.push(`鮮度または未来時刻エラー: ${freshnessFailures.map((metric) => metric.label).join(", ")}`);
   if ((args.unsafeOptionalMaterialCount ?? 0) > 0) notes.push("optional材料に未来時刻または不正なtimestampが混入");
   if (!args.dateConsistencyPassed) notes.push("取引日の日付取り違え");
-  if (!args.futureInformationAbsent) notes.push("16:00以降に公開された未来情報が混入");
+  if (!args.futureInformationAbsent) notes.push("17:00以降に公開された未来情報が混入");
   if (args.mode === "preflight") notes.push("事前dry-run: 最新取得可能データで構造と取得経路を確認");
   return { status: notes.some((note) => !note.startsWith("事前dry-run:")) ? "failed" : "passed", notes };
 }

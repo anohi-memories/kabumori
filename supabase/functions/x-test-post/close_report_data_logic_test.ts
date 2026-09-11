@@ -14,7 +14,12 @@ function chart(timestamp: number, close: number, previous = 38_000): unknown {
   return { chart: { result: [{ meta: { chartPreviousClose: previous }, timestamp: [timestamp], indicators: { quote: [{ close: [close] }] } }] } };
 }
 
-const reference = "2026-09-10T07:00:00.000Z"; // 16:00 JST
+const reference = "2026-09-10T08:00:00.000Z"; // 17:00 JST
+
+test("direct close source uses the query2 structured chart with a multi-day window", () => {
+  assert.match(YAHOO_NIKKEI_CLOSE_URL, /^https:\/\/query2\.finance\.yahoo\.com\/v8\/finance\/chart\//u);
+  assert.match(YAHOO_NIKKEI_CLOSE_URL, /range=5d&interval=1m/u);
+});
 
 test("same-day Nikkei close at 15:30 JST is accepted from the direct chart source", async () => {
   const metric = await fetchYahooJpxCloseMetric(

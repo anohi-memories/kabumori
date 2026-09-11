@@ -1,5 +1,48 @@
 # Codex Slot 2 Report
 
+## H2 — close-report 17:00 schedule and close-source hardening (2026-09-11)
+
+- task_id: `close-report-1700-schedule-and-close-source-hardening-20260911`
+- result: implementation and production schedule alignment complete; C2 review required
+- model_used: Sol High
+- source_base: `origin/main` `0b9adcb904cfe23b0b8d563827a8fd2059b8eb13`
+- worktree: temporary clean clone; formal repository working tree was not modified
+
+### Schedule audit / source of truth
+
+- `pg_cron` job 1 calls `x-test-post` every minute (`* * * * *`); it does not contain a close-specific hour.
+- `public.plan_close_report()` is the scheduling source of truth: it reads `close_report_settings.center_time` and inserts one same-day `scheduled_posts` row with the existing unique key.
+- `claim_due_post()` claims rows only when `scheduled_for <= now()`, preserving at-most-once claim behavior.
+- `posting_windows` is an administrative/display window and is not used by `plan_close_report()` for the due calculation. Its close row was time-aligned but its existing `is_active=false` state was preserved.
+- `morning_report`, `morning_greeting`, `tip`, `interaction`, and `us_premarket_report` schedules were not changed.
+
+### Implementation
+
+- `resolveCloseRunMode()` now uses a tolerant 16:45–17:05 JST execution window around the 17:00 scheduled claim; the database due time remains exactly 17:00 JST / UTC 08:00.
+- Live close-data validation now requires same-JST-day observation at or after 15:30 JST in both the direct acquisition path and the final live gate.
+- Direct JPX close acquisition now uses Yahoo's structured `query2.finance.yahoo.com` chart endpoint with `range=5d&interval=1m`; it remains sequential, source-backed, numeric, same-day, and fail-closed. The previous `query1` 1-day endpoint could return no usable chart response at the 16:00 run (the stored run had empty Nikkei/TOPIX/source diagnostics); a read-only comparison confirmed query2 returned the current 15:30 point while query1 range=1d was rate-limited. No HTML scraping or search fallback was added.
+- The 17:00 Fact/Voice gates, existing Voice single-retry, source policy, and `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE` safety stop remain intact.
+
+### Verification
+
+- targeted close-data/close-report/Voice tests: **60 passed / 0 failed**
+- full `x-test-post` regression: **381 passed / 0 failed**
+- `deno check` (`close_report_logic.ts`, `close_report_data_logic.ts`): **PASS**
+- `git diff --check`: **PASS**
+
+### Production schedule change
+
+- Before: `close_report_settings` 15:58–16:00–16:02 JST; `posting_windows` 15:58–16:02 JST, inactive.
+- After: `close_report_settings` 16:58–17:00–17:02 JST; `posting_windows` 16:58–17:02 JST, inactive state preserved; timezone remains `Asia/Tokyo`, `is_active=true` remains unchanged in `close_report_settings`, and `futures_target_time=15:45` remains unchanged.
+- pg_cron job 1 remains `* * * * *` and still calls only `x-test-post`; no Cron definition was changed.
+- No scheduled post was manually inserted, claimed, regenerated, or published.
+
+### Pending deployment / sync
+
+- x-test-post deploy: pending push of this implementation; when performed it will be x-test-post only with `--no-verify-jwt`, followed by source download/byte comparison and ACTIVE/verify_jwt read-back.
+- status: `review_required`
+- next_owner: `chatgpt`
+
 ## H2 Follow-up E — production deploy verification
 
 - task_id: `close-report-live-data-and-voice-retry-hardening-20260910`
