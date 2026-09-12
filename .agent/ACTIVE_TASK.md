@@ -14,18 +14,18 @@
 ### Codex slot 1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: x-multibrand-phase3c-ai-lab-x-oauth-connect-20260910
+- status: ready
+- task_id: x-multibrand-phase3c-oauth-start-void-rpc-fix-20260912
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: 2026-09-10にClaude slot 2へ移管済み。H1では継続しない。
+- note: Claude slot 2から正式移管。OAuth開始POSTのvoid RPCレスポンス処理バグを最小修正する。X投稿/live化/Cron変更は禁止。
 
 ### Codex slot 2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: morning-greeting-soft-copy-production-deploy-20260909
+- status: ready
+- task_id: x-close-report-topix-source-correction-20260911
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
@@ -33,8 +33,8 @@
 ### Claude slot 1
 - owner: claude
 - slot: claude-1
-- status: ready
-- task_id: broader-stock-news-coverage-phase1-20260910
+- status: review_required
+- task_id: personalized-portfolio-morning-close-reports-phase1-20260911
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
@@ -42,12 +42,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: in_progress
+- status: done
 - task_id: x-multibrand-phase3c-ai-lab-x-oauth-connect-20260910
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: Codex H1からPhase 3Cを引継ぎ。OAuth開始→本人認可→Vault保存→read-only本人確認まで。X投稿/live化/Cron変更は禁止。
+- note: 2026-09-12 Codex slot 1へ正式移管済み。同じx-oauth-connect/OAuth/Vault領域を並行変更しない。
 
 ## Control codes
 
