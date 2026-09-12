@@ -199,7 +199,7 @@ create table if not exists public.market_metrics (
   -- time_precision instead of this column.
   dedupe_anchor_at timestamptz generated always as (
     coalesce(observed_at, (observed_date::timestamp at time zone 'UTC'))
-  ) stored
+  ) stored not null
 );
 
 -- The dedupe key: re-ingesting the same observation from the same source is
@@ -324,7 +324,7 @@ revoke all on public.ai_usage_events from anon, authenticated;
 
 grant select, insert, update, delete on public.mic_source_registry to service_role;
 grant select, insert, update on public.market_events to service_role;
-grant select, insert on public.market_metrics to service_role;
+grant select, insert, update on public.market_metrics to service_role;
 grant select, insert, update on public.mic_ingestion_runs to service_role;
 grant select, insert on public.ai_usage_events to service_role;
 
