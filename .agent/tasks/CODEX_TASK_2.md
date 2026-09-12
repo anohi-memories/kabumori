@@ -3,174 +3,113 @@
 - task_id: push-delivery-deduplication-hardening-20260912
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Sol High
-- purpose: 重要ニュース・市場Critical・個別朝刊/大引けで共有するPush通知経路について、二重enqueue・二重claim・retry・Cron重複・Expo再送などの重複通知リスクを監査し、既存機能を壊さず必要最小限のhardeningを行う。
+- purpose: Push通知経路の二重送信防止hardeningを、安全確認済みのmigration/RPCとdispatcherで本番反映する。
 
-## C2 Review — 2026-09-12
+## C2 Review — disposable DB proof approved (2026-09-12)
 
-### Review result
+### Approved evidence
 
-- architecture audit: approved
-- producer dedupe audit: approved
-- P0 concurrent dispatcher risk identification: approved
-- proposed atomic claim / SKIP LOCKED design: approved in principle
-- settings re-check policy: approved in principle
-- dispatcher retry/fail-safe design: approved in principle
-- tests: approved for source/pure/contract level
-  - combined relevant suite: 83/83 PASS
-  - deno check: PASS
-  - git diff --check: PASS
-- implementation commit: `b83d73a25089a4a7b99bf1dc14985a6a8206fe59`
-- push: confirmed on origin/main
-- production changes: correctly none
+- exact migration `supabase/migrations/20260912100000_harden_push_notification_claims.sql` applied successfully in a disposable Supabase PostgreSQL 17.6 container.
+- migration objects verified: five notification columns, two partial indexes, `processing` status support, RPC signature, `SECURITY DEFINER`, empty `search_path`, intended grants.
+- transaction containment behavior verified; disposable container was removed after proof.
+- true two-session concurrent claim proof: 6/6 races produced exactly one winner and one empty loser; 0 duplicate claims.
+- claim-token CAS: wrong token updates 0 rows; correct token finalizes once; second finalize fails.
+- sent row is terminal and not reclaimable.
+- retry behavior proven on the same row for attempts 1/2/3 with 120s/600s timing; no fourth claim and terminal failure at the bound.
+- stale/ambiguous processing rows become terminal `failed / PUSH_DELIVERY_OUTCOME_UNKNOWN` and are not replayed.
+- settings/source fail-closed behavior verified for global push, market-critical, personalized reports, missing mappings.
+- RPC permission checks: service role allowed; anon/authenticated denied.
+- legacy `pending/sent/failed/skipped` rows remain compatible; existing producer dedupe was not weakened.
+- combined regressions: 83/83 PASS; `deno check` PASS; `git diff --check` PASS.
+- proof commits are on `origin/main`; latest proof-record main observed at `6c974c6cdc560f213c35e99312ee6e374aa6c407`.
 
-### Blocking issue before production
+C2 result: **DB proof approved. Production rollout may proceed under the constraints below.**
 
-The proposed migration and claim path have NOT yet been proven in a disposable real PostgreSQL/Supabase database.
-
-Still required before production approval:
-- apply migration in disposable DB
-- rollback-contained migration proof
-- two-session concurrent claim test proving one notification row is claimed at most once
-- sent row cannot be reclaimed
-- stale processing reclaim bounded
-- retry state transitions verified against actual SQL behavior
-- service-role-only RPC permissions verified
-- settings opt-out claim behavior verified in DB
-
-Current Supabase production project has no development branches (`list_branches` returned 0). Do NOT use production as the disposable test environment without a separate explicit user decision.
-
-### Production remains prohibited
-
-Do not perform any of the following until a later C2 approval:
-- apply `20260912100000_harden_push_notification_claims.sql` to production
-- `supabase db push`
-- deploy `send-push-notifications`
-- deploy `important-news-monitor`
-- modify Cron
-- send a real/test Push
-- insert synthetic production notifications
-
-### Remaining design notes
-
-- Residual setting TOCTOU between atomic claim commit and external Expo request remains small but real; acceptable only after DB proof and final C2 review.
-- Provider-accepted-but-client-timeout remains fundamentally ambiguous; current proposal intentionally fails terminally rather than risk duplicate resend.
-- Migration history is divergent; `supabase db push` remains prohibited.
-
-## Follow-up F1 — free local disposable DB proof
-
-User selected the free path. Do not use a paid Supabase branch.
+## H2 Follow-up F2 — production rollout
 
 ### Required startup checks
 
 1. Read `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, this TASK, and `.agent/CODEX_REPORT_2.md`.
-2. Fresh-check `origin/main` before any work.
-3. Use an isolated temporary clean worktree/clone.
-4. Read other slot TASKs and stop if any active slot is modifying `send-push-notifications`, `important-news-monitor`, notifications RPC/migration, or the same migration file.
-5. Do not touch the formal checkout or unrelated uncommitted changes.
-6. `supabase db push` remains prohibited.
+2. Fresh-check `origin/main` immediately before work and again before push/deploy.
+3. Use an isolated clean worktree/clone. Do not modify or stage unrelated existing changes.
+4. Read the other task slots and stop if another active slot now overlaps `send-push-notifications`, notifications schema/RPC, the same migration, Cron, or production Push settings.
+5. Verify `pwd`, worktree-local `supabase/config.toml`, linked project ref, and source HEAD before every Supabase production operation.
 
-### Environment
+### Production DB preflight
 
-Use a FREE disposable local PostgreSQL/Supabase environment only.
+Before DDL, perform read-only inspection of the actual production definitions needed by this migration, including at minimum:
+- `public.notifications` columns/check constraints/indexes
+- `public.alert_settings` columns used by claim settings recheck
+- `public.personalized_reports`
+- `public.important_news_candidates`
+- existing `claim_pending_push_notifications` presence/signature if any
 
-Preferred order:
-1. Existing local Docker + Supabase CLI, if already available.
-2. Existing local PostgreSQL instance, if available.
-3. A temporary Docker PostgreSQL container if Docker is available.
+Confirm the migration remains compatible with the live schema. If anything differs materially from the disposable fixture assumptions or the migration would require destructive correction, STOP and report for C2.
 
-Do not install paid services or create paid cloud resources. If Docker/PostgreSQL required for a disposable DB is unavailable, stop and report the exact missing prerequisite. Do not use production as a substitute.
+### Migration application — strict rule
 
-### DB proof requirements
+Production migration history is divergent. Therefore:
+- **NEVER run `supabase db push`.**
+- Apply **only** `supabase/migrations/20260912100000_harden_push_notification_claims.sql` as the explicitly approved migration, using the linked production project and an absolute/verified file path (for example `supabase db query --linked -f <absolute-path>` if supported in the installed CLI).
+- Do not mark unrelated migration versions as applied/reverted and do not reconcile migration history in this task.
+- The migration is expand-only. Do not create a destructive down-migration.
 
-Against the disposable DB, prove the proposed migration `supabase/migrations/20260912100000_harden_push_notification_claims.sql` and claim path with actual PostgreSQL behavior, not only static tests.
+Immediately after application, read back and verify:
+- all added notification columns/defaults
+- status constraint includes `processing`
+- both indexes
+- RPC body/signature
+- `SECURITY DEFINER`
+- empty search_path
+- execute privileges service-role-only as designed
 
-Required:
+If migration application fails transactionally, do not improvise partial fixes; verify rollback state and STOP for C2.
 
-1. **Migration apply**
-   - Prepare only the minimal prerequisite schema/data needed to represent the current `notifications`, `alert_settings`, `personalized_reports`, tracked-stock/news relationships, and roles referenced by the migration/RPC.
-   - Apply the proposed migration successfully.
-   - Verify new columns/status/indexes/RPC exist with expected definitions.
+### Dispatcher deploy
 
-2. **Rollback-contained proof**
-   - Demonstrate the migration can be exercised in a disposable transaction/schema and cleaned up without affecting any production resource.
-   - Record exact SQL/reproduction steps.
-   - If the migration is intentionally forward-only and not transactionally reversible, prove all changes are expand-only and document a safe rollback/disable strategy before production.
+Only after DB verification succeeds:
+- deploy **`send-push-notifications` only** from the fresh approved `origin/main` source.
+- preserve the production auth mode (`verify_jwt=false`; deploy with the existing `--no-verify-jwt` convention unless fresh config proves otherwise).
+- do **not** deploy `important-news-monitor`; producer code was not changed for this hardening.
+- download/read back the deployed `send-push-notifications` source with API mode and byte-compare all runtime files to the exact deploy source.
+- confirm unrelated Edge Function versions/updated_at remain unchanged.
 
-3. **True concurrent claim**
-   - Use two independent PostgreSQL sessions/connections.
-   - Start claims concurrently against the same eligible pending notification set.
-   - Prove a notification row is returned to at most one session due to `FOR UPDATE SKIP LOCKED` / atomic state transition.
-   - Repeat enough times to exclude a single lucky ordering; record results.
+### Rollback / disable strategy
 
-4. **Claim-token CAS**
-   - Prove a dispatcher with the wrong/old claim token cannot finalize another dispatcher's row.
-   - Correct token can finalize exactly once.
+If the new dispatcher shows a production problem:
+- redeploy the immediately previous known-good `send-push-notifications` v4 source.
+- leave the expand-only columns/indexes/RPC in place; the old dispatcher is expected to remain compatible with the expanded schema.
+- do not attempt destructive schema rollback during incident handling.
 
-5. **Sent terminality**
-   - Prove a `sent` row is not reclaimable.
+### Observation
 
-6. **Retry semantics**
-   - Prove retry uses the same notification row, does not create another row, increments/bounds attempts correctly, and respects next-retry timing.
-   - Prove terminal failure after the configured maximum attempt count.
+No manual/test Push is required or allowed in this rollout.
+- Do not insert synthetic production notifications.
+- Do not call Expo/OpenAI/X manually.
+- Do not change Cron or user settings.
+- After deploy, perform only read-only checks of function state, Cron health, and notification queue/status behavior from natural traffic. If no natural event exists during the task window, record that observation is pending rather than fabricating one.
 
-7. **Stale processing**
-   - If stale-processing reclaim is implemented, prove it is bounded and does not allow unlimited resend.
-   - Ambiguous provider outcome must not be automatically replayed if design says terminal fail.
+### Still prohibited
 
-8. **Settings opt-out at claim**
-   - `push_enabled=false` -> queued row is not delivered/claimed for send and is handled per design.
-   - `market_critical_news=false` -> safely identified pending market-critical row is skipped.
-   - `morning_report=false` / `close_report=false` -> safely identified matching personalized-report notification is skipped.
-   - Unknown/deleted source mapping must fail closed rather than guess.
-
-9. **Permissions**
-   - Verify claim RPC is not callable by anon/authenticated roles if intended service-role-only.
-   - Verify `SECURITY DEFINER` and search_path safety as implemented.
-
-10. **Compatibility**
-   - Existing pending/sent/failed/skipped rows remain valid after migration.
-   - Existing producer dedupe constraints are not weakened.
-
-### Tests after DB proof
-
-Re-run at minimum:
-- push dispatcher tests
-- queue claim contract tests
-- important-news regression if touched
-- market-critical regression if touched
-- personalized-report regression if touched
-- `deno check` for changed modules
-- `git diff --check`
-
-Add only narrowly scoped integration/proof scripts if necessary. Do not add a permanent heavy test framework unless required.
-
-### Production safety
-
-This follow-up is proof-only. Still prohibited:
-- production DB migration/RPC changes
 - `supabase db push`
-- Edge Function deploy
+- migration-history reconciliation or repair
+- any unrelated migration/RPC/schema change
+- `important-news-monitor` deploy
 - Cron changes
-- real/test Push
-- synthetic production notifications
-- OpenAI/X API calls
 - user setting changes
-- x-test-post changes/deploy
+- real/test Push or synthetic production notifications
+- OpenAI/X API calls
+- unrelated x-test-post/admin changes
 
 ### Completion
 
-If all proof passes:
-- update `.agent/CODEX_REPORT_2.md` with environment, exact SQL/procedure, concurrent-session evidence, results, regressions, changed files if any, commit/push, and production rollout recommendation.
-- set TASK `status: review_required`
-- set `next_owner: chatgpt`
-- push only proof/test/report changes to `origin/main`.
+If migration + dispatcher deployment + source read-back all pass:
+- update `.agent/CODEX_REPORT_2.md` with exact preflight, applied SQL file, production read-back, deployed function version, byte comparison, unrelated-function check, observation state, and rollback readiness.
+- set this TASK to `status: review_required`, `next_owner: chatgpt`.
+- push only the corresponding task/report metadata if needed.
 
-If local disposable DB proof cannot be performed for environmental reasons:
-- do not weaken the requirement;
-- report the missing prerequisite precisely;
-- leave production rollout blocked;
-- set `status: review_required`, `next_owner: chatgpt`.
+If any safety check fails, STOP without broadening scope; leave `status: review_required`, `next_owner: chatgpt`, and document the blocker precisely.
