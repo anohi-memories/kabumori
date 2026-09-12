@@ -469,3 +469,94 @@ ChatGPT should review the successful v91 deployment. After the next natural morn
 - remaining_issues: run the migration and true concurrent-claim/rollback proof in a disposable database; review residual settings TOCTOU and the bounded HTTP 5xx retry policy; reconcile migration-history divergence before any production migration.
 - safety_checks: formal repo/dirty checkout untouched; `apps/admin/**` and `HANDOFF.md` untouched; no production DB/Cron/settings/secrets/OAuth, Edge deploy, Expo/OpenAI/X API, or push-send operation.
 - next_recommendation: ChatGPT C2 review. Do not apply migration or deploy dispatcher until C2 approves the SQL proof and production rollout plan.
+
+## H2 Follow-up F1 — disposable PostgreSQL proof (2026-09-12)
+
+- task_id: `push-delivery-deduplication-hardening-20260912`
+- result: `review_required`; `next_owner: chatgpt`
+- source_base: `origin/main` fresh-checked at `72fcb00484570f5ecacd544b0ae330f1c12f20d7`; isolated clone HEAD matched; push-time state will be recorded below.
+- worktree: clean temporary clone at `/private/tmp/kabumori-h2-f1-20260912-tDGet5/repo`. Formal checkout and existing local changes were not accessed or modified.
+- parallel_slot_check: Codex slot 1 is `done`; Claude slot 1 is `review_required`; Claude slot 2 is working on `x-multibrand-phase3c-ai-lab-x-oauth-connect-20260910` (OAuth/Vault and `x-oauth-connect` only). No active slot overlaps this push-claim migration, `send-push-notifications`, or H2 RPC.
+
+### Disposable database and migration proof
+
+- environment: existing local Podman runtime with cached `public.ecr.aws/supabase/postgres:17.6.1.165` (PostgreSQL 17.6, arm64). A new `--rm` container was created with no host port, bind mount, or persistent volume; a throwaway local password was used. Existing unrelated local test containers were only listed, not changed.
+- fixture: only in that disposable database, created minimal `profiles`, `tracked_stocks`, `alert_settings`, `notifications` (with the pre-migration `pending/sent/failed/skipped` check), `important_news_candidates`, and `personalized_reports`; Supabase roles `anon`, `authenticated`, and `service_role` were already present. Synthetic fixture rows only; no production data.
+- migration: applied the exact repository file `supabase/migrations/20260912100000_harden_push_notification_claims.sql` through `psql`; transaction completed successfully. Verified all five new notification columns, both partial indexes, the `processing` status constraint, RPC signature, `SECURITY DEFINER`, empty search path, and grants.
+- rollback containment: the migration itself is wrapped in `BEGIN` / `COMMIT`. In the disposable DB, separately ran `BEGIN; ALTER TABLE public.notifications ADD COLUMN h2_rollback_probe integer; SELECT 1 / 0; COMMIT;` with `ON_ERROR_STOP`; PostgreSQL aborted, and a follow-up catalog query returned 0 for that column. After all proof, stopped the exact temporary container; `podman ps --all --filter name=kabumori-h2-push-proof-20260912` returned no rows. No cloud or production resource was used.
+
+#### Reproduction record
+
+The disposable container used the already-cached image, had no published port or mount, and was deleted at the end:
+
+```sh
+podman run --detach --rm --name kabumori-h2-push-proof-20260912 \
+  --env POSTGRES_PASSWORD=<throwaway-local-password> \
+  public.ecr.aws/supabase/postgres:17.6.1.165
+```
+
+Minimal prerequisite DDL (all created only in that container):
+
+```sql
+CREATE TABLE public.profiles (id uuid PRIMARY KEY);
+CREATE TABLE public.tracked_stocks (
+  id uuid PRIMARY KEY,
+  user_id uuid REFERENCES public.profiles(id)
+);
+CREATE TABLE public.alert_settings (
+  user_id uuid PRIMARY KEY REFERENCES public.profiles(id),
+  push_enabled boolean NOT NULL DEFAULT true,
+  important_news boolean NOT NULL DEFAULT true,
+  market_critical_news boolean NOT NULL DEFAULT false,
+  morning_report boolean NOT NULL DEFAULT true,
+  close_report boolean NOT NULL DEFAULT true
+);
+CREATE TABLE public.notifications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES public.profiles(id),
+  tracked_stock_id uuid REFERENCES public.tracked_stocks(id),
+  source_type text NOT NULL,
+  source_id text NOT NULL,
+  title text NOT NULL,
+  summary text NOT NULL,
+  importance text NOT NULL DEFAULT 'normal',
+  push_status text NOT NULL DEFAULT 'pending'
+    CHECK (push_status IN ('pending','sent','failed','skipped')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT notifications_dedupe
+    UNIQUE (user_id, tracked_stock_id, source_type, source_id)
+);
+CREATE TABLE public.important_news_candidates (
+  id uuid PRIMARY KEY,
+  company_code text
+);
+CREATE TABLE public.personalized_reports (
+  id uuid PRIMARY KEY,
+  user_id uuid NOT NULL,
+  report_type text NOT NULL
+);
+```
+
+Then apply the exact migration file via `podman exec -i <container> psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres < supabase/migrations/20260912100000_harden_push_notification_claims.sql`. The concurrent sessions each used `BEGIN; SELECT id, claim_token, attempt_count FROM public.claim_pending_push_notifications(1); SELECT pg_sleep(0.7); COMMIT;`; only one due fixture row was eligible per race. Metadata/role checks used `has_function_privilege`, `pg_proc.prosecdef`, `pg_proc.proconfig`, `information_schema.columns`, `pg_indexes`, and `pg_get_constraintdef`.
+
+### Claim-path behavior
+
+- concurrency: two independent `psql` connections each ran `BEGIN; SELECT id, claim_token, attempt_count FROM public.claim_pending_push_notifications(1); SELECT pg_sleep(0.7); COMMIT;` against a set with exactly one due target row; the loser returned zero rows. Repeated across six independent races (one initial race plus five repeated rounds, alternating launch order): **6/6 one winner, 6/6 loser empty, 0 duplicate claims**. Winner was connection B in five rounds and A in one.
+- claim-token CAS: updating with a wrong token affected 0 rows; the correct token/status updated exactly 1 row; a second finalization could not update it. After setting `sent`, a subsequent claim returned 0 rows.
+- retry: exercised actual RPC state transitions on a single fixture row. Claim attempts were 1, 2, 3 on the same row; retry due times of 120s and 600s blocked immediate re-claims (0 rows), then became claimable after advancing the fixture due time. At attempt 3 the dispatcher-equivalent terminal decision was `failed / PUSH_ATTEMPT_LIMIT_REACHED`; no fourth claim occurred and exactly one row remained. Pure dispatcher tests independently verify the three-attempt bound and error policy.
+- stale processing: rows with `push_claimed_at` 16 minutes old and `NULL` were both changed to `failed / PUSH_DELIVERY_OUTCOME_UNKNOWN`, claim fields cleared, and attempt counts left unchanged; neither was automatically replayed.
+- settings and source mapping: in a rollback-only transaction, `push_enabled=false`, market-critical opt-out, `close_report=false`, missing important-news candidate, and missing personalized-report mapping were skipped and not returned. The opted-in market-critical event and a mapped company-news event were returned. No source mapping was guessed.
+- permissions: `service_role` invoked the RPC successfully; actual calls as `anon` and `authenticated` both returned permission denied. Catalog checks confirmed `SECURITY DEFINER`, empty `search_path`, and only the intended service-role execute grant.
+- compatibility: pre-existing fixture rows in all four legacy states (`pending`, `sent`, `failed`, `skipped`) remained valid after migration; attempt count defaulted to 0. Existing producer dedupe constraints were not modified by the migration.
+
+### Regression and safety
+
+- combined push / queue / important-news producer / market-critical / personalized-report regression: **83 passed / 0 failed**.
+- `deno check supabase/functions/send-push-notifications/index.ts supabase/functions/send-push-notifications/push_send_logic.ts`: PASS.
+- `git diff --check`: PASS; no source or test files changed for this follow-up.
+- changed files for this follow-up: `.agent/tasks/CODEX_TASK_2.md`, `.agent/CODEX_REPORT_2.md` only.
+- production: migration/RPC not applied; `supabase db push` not run; no Edge Function deploy, Cron/settings/secrets/OAuth changes, Push, OpenAI/X API, or X post.
+- remaining_issues: the known settings change window between database claim and the external Expo request remains; migration-history divergence remains. C2 should review these and the rollout/disable plan before any production migration or dispatcher deployment.
+- commit_hash: pending.
+- push: pending.
+- next_recommendation: C2 review. Production rollout remains blocked pending C2 approval; do not apply the migration or deploy the dispatcher.

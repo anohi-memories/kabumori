@@ -3,8 +3,8 @@
 - task_id: push-delivery-deduplication-hardening-20260912
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol High
 - purpose: 重要ニュース・市場Critical・個別朝刊/大引けで共有するPush通知経路について、二重enqueue・二重claim・retry・Cron重複・Expo再送などの重複通知リスクを監査し、既存機能を壊さず必要最小限のhardeningを行う。
