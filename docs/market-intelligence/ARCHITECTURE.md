@@ -55,7 +55,7 @@ Raw Sources → Normalized Facts → Current Market State → Current Stock Stat
 
 - `_shared/kabumori_voice.ts` — 実行コードではなくプロンプト文字列群（かぶモリの人格・文体指示）。MICのFact記述には不要だが、将来「AI Interpretation」をかぶモリ文体で語る場面（Excel向けサマリ文等）があれば再利用候補。
 - `_shared/x_oauth2_post.ts` — X API v2への汎用401-retry付きOAuth2投稿ビルディングブロック（`requestXWithAuthRefresh`）。MIC自体はPhase 0でX投稿しないため直接利用はしないが、将来「重要な市場状態変化をXに投稿する」機能を作る際に再利用可能。
-- `send-push-notifications` — **未デプロイ**（コード上に明記）。`notifications`＋`device_push_tokens`を読みExpo Push APIで送信するのみで、何が重要かの判断は一切持たない。MICが将来`notifications`に書き込めば自動的に使える設計。
+- `send-push-notifications` — Phase 0調査時点ではコード上のコメントに基づき「未デプロイ」と記載していたが、2026-09-12時点でproduction v4としてACTIVE稼働済み（Phase 1A着手時にユーザーより訂正）。`notifications`＋`device_push_tokens`を読みExpo Push APIで送信するのみで、何が重要かの判断は一切持たない。MICが将来`notifications`に書き込めば自動的に使える設計である点は変わらない。
 
 ### 1.4 既存DBスキーマ（全48 migration監査）
 
@@ -561,6 +561,16 @@ Cronジョブ数は「fetch系」と「state評価系」を分離し、fetch系�
 6. `important-news-monitor`（market_macro/breaking_marketレーン）と`x-test-post`（各レポートのweb_search）が類似ドメインに対して独立にOpenAI web_searchを実行しており、重複コストが発生している可能性が高い。Phase 3での統合が本命の解決策だが、Phase 1でも「新規MIC fetchは共有元にする」ことで新たな重複を増やさないようにする。
 7. JPX昼休み（11:30-12:30）等のセッション粒度が既存`market_holidays`だけでは表現できない。Phase 1で`is_trading_session()`関数の新設が必要。
 8. SNS投稿を政治カテゴリの一次情報として扱う場合の検証基準（公式アカウント・本人性・timestamp・削除リスク）は本ドキュメントで方針のみ提示。実装時の具体的な検証ロジックはPhase 1詳細設計で確定させる。
+
+---
+
+## Phase 1A 実装ノート（2026-09-12）
+
+本設計（5章）に基づき、「Factを安全に蓄積する土台」のみを実装した。production migration適用・Edge Function deploy・secrets設定・AI呼び出しは一切行っていない（詳細はPhase 1A完了報告を参照）。
+
+- Migration: `supabase/migrations/20260912090000_add_market_intelligence_core_phase1a.sql`（`mic_source_registry` / `market_events` / `market_metrics` / `mic_ingestion_runs` / `ai_usage_events`の5テーブル、5章の設計を踏襲。`market_metrics`は当初案のJSONB中心からレビューを受け、`provider`/`fetched_at`/`is_delayed`/`delay_minutes`/`quality_tier`/`is_official`を明示カラム化）。
+- Edge Function: `supabase/functions/market-intelligence-ingest/`（FRED / 財務省JGB / EIA / SEC EDGARの4アダプタ。コード未deploy）。
+- 調査で判明した追加情報（本文は書き換えず、ここに追記）: `supabase/functions/personalized-reports/`（2章執筆時点では未存在、Phase 1A開始時のfresh-checkでorigin/mainに存在すると判明）が、Yahoo Finance chart API（`https://query2.finance.yahoo.com/v8/finance/chart/{symbol}`、非公式だが構造化JSON）から個別銘柄および日経平均/TOPIXの日次終値を取得している。2章で「無料の公式構造化APIが存在しない」としたのは日中リアルタイム値についての評価であり、日次終値についてはこの既存実装が部分的な解になり得る。Phase 1Bでの評価候補として記録する。
 
 ---
 
