@@ -13,7 +13,30 @@ export type MarketMacroSource = {
   defaultCategory: ImportantNewsCategory;
   defaultTopicKey: string;
   refine?: (title: string) => { category: ImportantNewsCategory; topicKey: string } | null;
+  /**
+   * Optional gate for a feed that publishes routine items alongside the ones
+   * that matter. Only used by the JMA feed, whose titles are fixed strings
+   * ("気象特別警報・警報・注意報", "降灰予報（定時）") with the actual grade in
+   * the body — without this, every ash forecast and advisory would become a
+   * candidate. Returning false drops the item before it is normalised.
+   */
+  include?: (title: string, summary: string | null) => boolean;
 };
+
+// Grades worth a candidate: a shindo-5+ quake, any tsunami warning, an eruption
+// warning, or a J-Alert-grade emergency quake bulletin. Advisories (注意報),
+// scheduled ash forecasts and drills are deliberately excluded.
+const JMA_SIGNIFICANT_TITLE =
+  /震度速報|震源・震度に関する情報|津波警報・注意報・予報|津波情報|緊急地震速報|噴火警報|噴火速報|火口周辺警報/u;
+const JMA_SIGNIFICANT_BODY =
+  /大津波警報|津波警報|震度\s*[5-7５-７]|マグニチュード\s*[6-9６-９]|緊急地震速報（警報）|噴火警報|噴火速報|噴火警戒レベル\s*[4-5４-５]/u;
+
+export function isSignificantJmaItem(title: string, summary: string | null): boolean {
+  const normalizedTitle = title.normalize("NFKC");
+  const normalizedBody = (summary ?? "").normalize("NFKC");
+  if (!JMA_SIGNIFICANT_TITLE.test(normalizedTitle)) return false;
+  return JMA_SIGNIFICANT_BODY.test(normalizedBody) || JMA_SIGNIFICANT_BODY.test(normalizedTitle);
+}
 
 export const MARKET_MACRO_SOURCES: MarketMacroSource[] = [
   {
@@ -63,6 +86,25 @@ export const MARKET_MACRO_SOURCES: MarketMacroSource[] = [
       return null;
     },
   },
+  // Phase 2: the only Japanese primary feed that is actually subscribable. A
+  // read-only probe on 2026-09-12 found eqvol.xml and extra.xml returning 200
+  // Atom, while mod.go.jp (403), jpx.co.jp / mof.go.jp / kantei.go.jp (404 on the
+  // documented paths), treasury.gov and bis.doc.gov (redirect to HTML) do not
+  // offer a usable feed; those categories stay on breaking_market web search
+  // rather than gaining a fragile scraper. extra.xml (weather warnings) is left
+  // out too: its grade is only in the body, and the volume is dominated by
+  // advisories.
+  {
+    key: "jma_eqvol",
+    sourceName: "market_macro",
+    feedUrl: "https://www.data.jma.go.jp/developer/xml/feed/eqvol.xml",
+    defaultCategory: "disaster",
+    defaultTopicKey: "disaster:jma_eqvol",
+    include: isSignificantJmaItem,
+    refine: (title) => /津波/u.test(title.normalize("NFKC"))
+      ? { category: "disaster", topicKey: "disaster:tsunami" }
+      : null,
+  },
   {
     key: "eia",
     sourceName: "market_macro",
@@ -75,7 +117,7 @@ export const MARKET_MACRO_SOURCES: MarketMacroSource[] = [
 // Domains SOURCE_POLICY.market_macro allows in index.ts must match these feed hosts exactly — kept here
 // too so a future added source can't silently rely on parseIncoming's allowlist alone.
 export const MARKET_MACRO_ALLOWED_DOMAINS = [
-  "boj.or.jp", "federalreserve.gov", "ustr.gov", "news.un.org", "eia.gov",
+  "boj.or.jp", "federalreserve.gov", "ustr.gov", "news.un.org", "eia.gov", "jma.go.jp",
 ];
 
 const MAX_MARKET_MACRO_ITEM_AGE_MS = 14 * 24 * 60 * 60 * 1000;
@@ -99,6 +141,7 @@ export function normalizeMarketMacroItem(
 ): IncomingNewsCandidate | null {
   const title = item.title.trim();
   if (!title || !item.url || !Number.isFinite(Date.parse(item.publishedAt))) return null;
+  if (source.include && !source.include(title, item.summary)) return null;
   const publishedAt = new Date(item.publishedAt).toISOString();
   if (!isFreshMarketMacroPublishedAt(publishedAt, now)) return null;
 

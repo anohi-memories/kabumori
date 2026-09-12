@@ -67,6 +67,7 @@ export const NEWS_CATEGORY_TAXONOMY: Record<ImportantNewsCategory, {
   sanctions: { scope: "market", transmission: "制裁→エネルギー・商社・対象国関連", holderRelevant: false },
   major_security_incident: { scope: "market", transmission: "重大事件・サイバー攻撃→複数業種", holderRelevant: false },
   semiconductor_ai: { scope: "market", transmission: "半導体・AI規制/需要→SOX・半導体株", holderRelevant: false },
+  disaster: { scope: "market", transmission: "地震・津波・噴火・大規模障害→インフラ・保険・建設・供給網", holderRelevant: false },
   other_market_moving: { scope: "market", transmission: "指標・原油・株価急変", holderRelevant: false },
 };
 

@@ -27,6 +27,13 @@ export type BreakingMarketQuery = {
   defaultCategory: ImportantNewsCategory;
   defaultTopicKey: string;
   requireEventTimestamp?: boolean;
+  /**
+   * "fixed" topics run in every cycle; "rotating" topics share the remaining
+   * slot. Phase 2 promotes the two topics whose events are only useful within
+   * the hour (Japan security, disaster) to fixed slots, because a rotation of
+   * eight topics would leave them unwatched for up to 160 minutes.
+   */
+  slot?: "fixed" | "rotating";
 };
 
 export const CRITICAL_BREAKING_MARKET_QUERY_KEY = "critical_market_events";
@@ -71,9 +78,71 @@ export const BREAKING_MARKET_QUERIES: BreakingMarketQuery[] = [
     defaultCategory: "china_policy",
     defaultTopicKey: "breaking:bank_or_china_policy",
   },
+  // --- Phase 2 (broad coverage) -------------------------------------------
+  // The 2026-09-12 North Korean launch was never fetched: no topic mentioned
+  // North Korea, missiles, J-Alert or Japan's EEZ, and no primary Japanese
+  // security source was subscribed. A launch matters to Japanese equities only
+  // within the hour, so this topic takes a fixed slot.
+  {
+    key: "japan_security_emergency",
+    searchQuery:
+      "North Korea missile launch ballistic projectile J-Alert Japan EEZ Sea of Japan Taiwan Strait military escalation incursion Japan Ministry of Defense breaking today",
+    defaultCategory: "major_security_incident",
+    defaultTopicKey: "breaking:japan_security",
+    slot: "fixed",
+  },
+  // Earthquakes, tsunami and large infrastructure outages move insurers,
+  // construction, utilities and supply chains, and were previously only
+  // reachable by accident. Also a fixed slot: the market reaction is immediate.
+  {
+    key: "disaster_infrastructure",
+    searchQuery:
+      "major earthquake tsunami warning volcanic eruption typhoon evacuation Japan power grid blackout refinery plant shutdown infrastructure outage breaking today",
+    defaultCategory: "disaster",
+    defaultTopicKey: "breaking:disaster",
+    slot: "fixed",
+  },
+  {
+    key: "shipping_chokepoints",
+    searchQuery:
+      "Strait of Hormuz Suez Canal Red Sea Bab el-Mandeb Panama Canal closure blockade tanker attack seizure Gulf shipping container freight rates disruption today",
+    defaultCategory: "geopolitics",
+    defaultTopicKey: "breaking:chokepoint",
+  },
+  {
+    key: "financial_system_infrastructure",
+    searchQuery:
+      "stock exchange outage trading halt clearing settlement failure bank run deposit insurance systemic risk cyber attack financial institution today",
+    defaultCategory: "major_security_incident",
+    defaultTopicKey: "breaking:financial_system",
+  },
+  {
+    key: "commodities_energy_supply",
+    searchQuery:
+      "OPEC production cut crude oil supply disruption export ban LNG natural gas gold copper iron ore rare earth restriction price surge today",
+    defaultCategory: "other_market_moving",
+    defaultTopicKey: "breaking:commodities",
+  },
+  {
+    key: "us_market_session",
+    searchQuery:
+      "Nasdaq S&P 500 Dow Jones selloff rally SOX semiconductor index Nvidia AI data center capex US Treasury yields today",
+    defaultCategory: "other_market_moving",
+    defaultTopicKey: "breaking:us_session",
+  },
+  {
+    key: "japan_market_session",
+    searchQuery:
+      "Nikkei 225 Topix Tokyo stocks yen USDJPY Bank of Japan policy Japanese government economic package today",
+    defaultCategory: "other_market_moving",
+    defaultTopicKey: "breaking:japan_session",
+  },
 ];
 
-export const MAX_BREAKING_MARKET_SEARCHES_PER_FETCH = 2;
+// Phase 2: 2 -> 4 per cycle. Three fixed topics (critical market events, Japan
+// security, disaster) plus one rotating slot, so the cost is 12 searches/hour
+// instead of 6 and no rotating topic waits longer than 160 minutes.
+export const MAX_BREAKING_MARKET_SEARCHES_PER_FETCH = 4;
 export const BREAKING_MARKET_ROTATION_INTERVAL_MS = 20 * 60 * 1000;
 
 export const BREAKING_MARKET_SOURCE_DOMAINS = [
@@ -87,6 +156,13 @@ export const BREAKING_MARKET_SOURCE_DOMAINS = [
   // eligible; every other gate (actual-visited-URL check, https, freshness, category) still applies
   // exactly as before — a .mil/.gov domain is never trusted on domain alone.
   "centcom.mil", "defense.gov",
+  // Phase 2: Japanese primary sources for security, disaster and market
+  // infrastructure events. Their own RSS/HTML endpoints are not subscribable
+  // (mod.go.jp returns 403 to a plain request, jpx.co.jp / kantei.go.jp / mof.go.jp
+  // return 404 for the documented feed paths), so these hosts reach the pipeline
+  // as web_search results instead. Being listed only makes a source_url eligible;
+  // the actual-visited-URL, https, freshness and category gates all still apply.
+  "jma.go.jp", "mod.go.jp", "kantei.go.jp", "jpx.co.jp", "fdma.go.jp", "nhk.or.jp",
 ];
 
 export const MAX_BREAKING_MARKET_ITEM_AGE_MS = 3 * 60 * 60 * 1000;
@@ -95,8 +171,15 @@ const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const MODEL = "gpt-5.6-luna" as const;
 const BREAKING_MARKET_REQUEST_TIMEOUT_MS = 60_000;
 
-// Deterministic, stateless selection: the critical query is fixed in every cycle and the remaining slot
-// rotates. Concurrent/retried calls within the same 20-minute window therefore pick the same queries.
+/** The critical topic is always fixed; Phase 2 topics may declare slot: "fixed" too. */
+export function isFixedBreakingMarketQuery(query: BreakingMarketQuery): boolean {
+  return query.key === CRITICAL_BREAKING_MARKET_QUERY_KEY || query.slot === "fixed";
+}
+
+// Deterministic, stateless selection: the fixed queries run in every cycle and the remaining slots
+// rotate. Concurrent/retried calls within the same 20-minute window therefore pick the same queries.
+// maxPerCycle is still the hard ceiling: with more fixed topics than slots the extra fixed topics are
+// dropped (in declaration order) rather than exceeding the search budget.
 export function selectBreakingMarketQueriesForCycle(
   queries: BreakingMarketQuery[],
   now: Date = new Date(),
@@ -104,19 +187,33 @@ export function selectBreakingMarketQueriesForCycle(
 ): BreakingMarketQuery[] {
   if (queries.length === 0 || !Number.isInteger(maxPerCycle) || maxPerCycle < 1) return [];
   const cycleIndex = Math.floor(now.getTime() / BREAKING_MARKET_ROTATION_INTERVAL_MS);
-  const critical = queries.find((query) => query.key === CRITICAL_BREAKING_MARKET_QUERY_KEY);
-  if (!critical) {
+  const fixed = queries.filter(isFixedBreakingMarketQuery);
+  const rotating = queries.filter((query) => !isFixedBreakingMarketQuery(query));
+  if (fixed.length === 0) {
     const start = (cycleIndex * maxPerCycle) % queries.length;
     return Array.from({ length: Math.min(maxPerCycle, queries.length) }, (_, offset) =>
       queries[(start + offset) % queries.length]
     );
   }
-  const selected: BreakingMarketQuery[] = [critical];
-  const rotating = queries.filter((query) => query !== critical);
-  for (let offset = 0; offset < Math.min(maxPerCycle - 1, rotating.length); offset += 1) {
-    selected.push(rotating[(cycleIndex + offset) % rotating.length]);
+  const selected = fixed.slice(0, maxPerCycle);
+  const rotatingSlots = Math.min(maxPerCycle - selected.length, rotating.length);
+  for (let offset = 0; offset < rotatingSlots; offset += 1) {
+    selected.push(rotating[(cycleIndex * rotatingSlots + offset) % rotating.length]);
   }
   return selected;
+}
+
+/** How long a rotating topic can go unwatched, in minutes — stated so the cost/latency trade-off is explicit. */
+export function maxUnwatchedMinutes(
+  queries: BreakingMarketQuery[] = BREAKING_MARKET_QUERIES,
+  maxPerCycle: number = MAX_BREAKING_MARKET_SEARCHES_PER_FETCH,
+): number {
+  const fixedCount = Math.min(queries.filter(isFixedBreakingMarketQuery).length, maxPerCycle);
+  const rotating = queries.filter((query) => !isFixedBreakingMarketQuery(query)).length;
+  const rotatingSlots = Math.max(0, maxPerCycle - fixedCount);
+  if (rotating === 0) return 0;
+  if (rotatingSlots === 0) return Number.POSITIVE_INFINITY;
+  return Math.ceil(rotating / rotatingSlots) * (BREAKING_MARKET_ROTATION_INTERVAL_MS / 60_000);
 }
 
 export function isFreshBreakingMarketPublishedAt(publishedAtIso: string, now: Date): boolean {

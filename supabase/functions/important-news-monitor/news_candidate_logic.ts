@@ -6,7 +6,12 @@ export const IMPORTANT_NEWS_CATEGORIES = [
   "large_shareholding", "other_corporate_ir", "boj", "frb", "interest_rates",
   "fx", "tariffs", "china_policy", "us_government_policy", "geopolitics",
   "war_ceasefire", "sanctions", "major_security_incident",
-  "semiconductor_ai", "other_market_moving",
+  "semiconductor_ai",
+  // Phase 2: earthquakes, tsunami, eruptions, typhoons and large infrastructure
+  // outages had no category at all, so they could only be stored as
+  // major_security_incident or other_market_moving.
+  "disaster",
+  "other_market_moving",
 ] as const;
 
 export const IMPORTANT_NEWS_IMPORTANCE = ["no_post", "important", "most_important"] as const;

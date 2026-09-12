@@ -60,8 +60,14 @@ test("trump_tariff_semiconductor query vocabulary covers Trump trade-policy pres
   assert.match(text, /trump/);
 });
 
-test("the critical query occupies one fixed slot and three broader topics rotate through the second", () => {
-  assert.equal(BREAKING_MARKET_QUERIES.length, 4);
+// Phase 2 (2026-09-12) widened this from "1 fixed + 1 rotating of 4" to
+// "3 fixed + 1 rotating of 11": the North Korean launch was missed because no
+// topic covered Japan security, and a launch or a quake is only useful within
+// the hour, so those two topics joined the critical one in fixed slots.
+// The per-topic latency and the search cost are pinned in
+// news_coverage_wiring_test.ts.
+test("the critical query is still exactly one fixed topic among the declared set", () => {
+  assert.equal(BREAKING_MARKET_QUERIES.length, 11);
   assert.equal(BREAKING_MARKET_QUERIES.filter((item) => item.key === CRITICAL_BREAKING_MARKET_QUERY_KEY).length, 1);
 });
 

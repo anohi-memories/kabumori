@@ -9,6 +9,11 @@ import {
   type PreparedNewsCandidate,
 } from "./news_candidate_logic.ts";
 import {
+  classifyCollectionCoverage,
+  classifyCoverage,
+  isEmergencyClass,
+} from "./news_coverage_logic.ts";
+import {
   aggregateImportantNewsGroup,
   groupImportantNewsCandidates,
   type ImportantNewsCandidateGroup,
@@ -149,6 +154,7 @@ type StoredJudgementCandidate = {
   entity_key: string | null;
   category: IncomingNewsCandidate["category"];
   published_at: string;
+  emergency_class?: string | null;
 };
 
 type JudgementSettings = {
@@ -411,6 +417,18 @@ async function insertCandidate(
 ): Promise<CandidateResult> {
   const policy = SOURCE_POLICY[candidate.sourceName];
   const status = candidateStatusForDuplicate(duplicateOf);
+  // Coverage classification at storage time: categories always, and the
+  // emergency flag while the item is still fresh. Severity beyond that needs the
+  // judgement, so saveCandidateJudgement fills it in later. This decides nothing
+  // about pushes — the notification producers do not read these columns.
+  const coverage = classifyCollectionCoverage({
+    category: candidate.category,
+    title: candidate.title,
+    bodySummary: candidate.bodySummary ?? null,
+    companyCode: candidate.companyCode ?? null,
+    sourceUrl: candidate.sourceUrl,
+    publishedAt: candidate.publishedAt,
+  });
   const result = await fetch(`${supabaseUrl}/rest/v1/important_news_candidates`, {
     method: "POST",
     headers: headers(serviceRoleKey, "return=representation"),
@@ -431,6 +449,10 @@ async function insertCandidate(
       importance: "no_post",
       status,
       duplicate_of: duplicateOf,
+      coverage_categories: coverage.categories,
+      coverage_severity: coverage.severity,
+      emergency_class: coverage.emergencyClass,
+      coverage_classified_at: new Date().toISOString(),
     }),
   });
   if (result.status === 409) {
@@ -551,7 +573,14 @@ async function markCompanyIrSourceFetched(
   if (!result.ok) throw new Error("COMPANY_IR_SOURCE_UPDATE_FAILED");
 }
 
-function toJudgementCandidate(row: StoredJudgementCandidate): JudgementCandidate {
+/**
+ * A judgement candidate plus the coverage emergency recorded at collection
+ * (Phase 2). Kept local to this module so the shared JudgementCandidate the
+ * prompt and the generation path use stays exactly as it was.
+ */
+type JudgementWorkItem = JudgementCandidate & { emergencyClass: string | null };
+
+function toJudgementCandidate(row: StoredJudgementCandidate): JudgementWorkItem {
   return {
     id: row.id,
     sourceType: row.source_type,
@@ -564,10 +593,11 @@ function toJudgementCandidate(row: StoredJudgementCandidate): JudgementCandidate
     entityKey: row.entity_key,
     category: row.category,
     publishedAt: row.published_at,
-  };
+    emergencyClass: isEmergencyClass(row.emergency_class) ? row.emergency_class : null,
+  } satisfies JudgementWorkItem;
 }
 
-function parseDryRunCandidate(value: unknown): JudgementCandidate {
+function parseDryRunCandidate(value: unknown): JudgementWorkItem {
   const parsed = parseIncoming(value);
   const item = value as Record<string, unknown>;
   return {
@@ -582,6 +612,7 @@ function parseDryRunCandidate(value: unknown): JudgementCandidate {
     entityKey: parsed.entityKey ?? null,
     category: parsed.category,
     publishedAt: parsed.publishedAt,
+    emergencyClass: null,
   };
 }
 
@@ -612,11 +643,12 @@ async function selectCandidatesForJudgement(
   supabaseUrl: string,
   serviceRoleKey: string,
   options: { candidateId?: string; limit?: number },
-): Promise<JudgementCandidate[]> {
+): Promise<JudgementWorkItem[]> {
   const params = new URLSearchParams({
     select: [
       "id", "source_type", "source_url", "source_name", "title", "body_summary",
       "company_name", "company_code", "entity_key", "category", "published_at",
+      "emergency_class",
     ].join(","),
     order: "source_priority.asc,published_at.asc",
     limit: String(options.candidateId ? 1 : options.limit ?? 10),
@@ -635,8 +667,27 @@ async function saveCandidateJudgement(
   serviceRoleKey: string,
   candidateId: string,
   judgement: FinalJudgement,
+  candidate?: JudgementWorkItem,
 ): Promise<void> {
   const final = judgement.final;
+  // Coverage severity needs the judged importance / relevance / Fact status, so
+  // it is derived here rather than at insert. An emergency already recorded at
+  // collection is preserved (judgement runs later, past the freshness window).
+  const coverage = candidate
+    ? classifyCoverage({
+      importance: final.importance,
+      category: final.category,
+      title: candidate.title,
+      bodySummary: candidate.bodySummary,
+      sourceType: candidate.sourceType,
+      sourceUrl: candidate.sourceUrl,
+      publishedAt: candidate.publishedAt,
+      companyCode: candidate.companyCode,
+      japanMarketRelevance: final.japanMarketRelevance,
+      factCheckStatus: final.factCheckStatus,
+      priorEmergencyClass: isEmergencyClass(candidate.emergencyClass) ? candidate.emergencyClass : null,
+    })
+    : null;
   const params = new URLSearchParams({ id: `eq.${candidateId}`, status: "eq.pending_judgement" });
   const result = await fetch(`${supabaseUrl}/rest/v1/important_news_candidates?${params}`, {
     method: "PATCH",
@@ -656,6 +707,14 @@ async function saveCandidateJudgement(
       estimated_cost_usd: judgement.estimatedCost,
       judged_at: new Date().toISOString(),
       status: judgement.status,
+      ...(coverage
+        ? {
+          coverage_severity: coverage.severity,
+          coverage_categories: coverage.categories,
+          emergency_class: coverage.emergencyClass,
+          coverage_classified_at: new Date().toISOString(),
+        }
+        : {}),
     }),
   });
   if (!result.ok) throw new Error("NEWS_JUDGEMENT_SAVE_FAILED");
@@ -697,8 +756,12 @@ function judgementResponse(
 }
 
 function toGenerationCandidate(row: StoredGenerationCandidate): GenerationCandidate {
+  // emergencyClass is a judgement-stage concern only; the generation path keeps
+  // exactly the shape it had before Phase 2.
+  const { emergencyClass: _emergencyClass, ...base } = toJudgementCandidate(row);
   return {
-    ...toJudgementCandidate(row),
+    ...base,
+    id: row.id,
     importance: row.importance,
     affectedEntities: Array.isArray(row.affected_entities)
       ? row.affected_entities.filter((item): item is string => typeof item === "string")
@@ -1685,7 +1748,7 @@ Deno.serve(async (req) => {
       const settings = await selectJudgementSettings(supabaseUrl, serviceRoleKey);
       if (!settings.lunaEnabled) return response({ error: "NEWS_JUDGEMENT_DISABLED" }, 409);
       const dryRun = body.mode === "judgement_dry_run";
-      let judgementCandidates: JudgementCandidate[];
+      let judgementCandidates: JudgementWorkItem[];
       if (dryRun && body.candidate !== undefined) {
         judgementCandidates = [parseDryRunCandidate(body.candidate)];
       } else if (dryRun && typeof body.candidateId === "string") {
@@ -1719,7 +1782,7 @@ Deno.serve(async (req) => {
           );
           if (!dryRun) {
             if (!candidate.id) throw new Error("NEWS_JUDGEMENT_CANDIDATE_ID_MISSING");
-            await saveCandidateJudgement(supabaseUrl, serviceRoleKey, candidate.id, judgement);
+            await saveCandidateJudgement(supabaseUrl, serviceRoleKey, candidate.id, judgement, candidate);
           }
           // P0.6: fire generation immediately for a candidate that just became ready_for_generation,
           // instead of waiting for the next generate_ready cron. This is best-effort and isolated in its

@@ -1,8 +1,11 @@
-// "Collect broadly, notify by user choice" — Phase 1 design, UNWIRED.
+// "Collect broadly, notify by user choice" — see docs/news-coverage/REDESIGN.md.
 //
-// Nothing here is imported by index.ts, and no schema, source, Cron or AI call
-// is touched. It exists so the model can be reviewed and tested before any
-// production change (see docs/news-coverage/REDESIGN.md).
+// Phase 2 wires the CLASSIFICATION half only: index.ts calls
+// classifyCollectionCoverage when a candidate is stored and classifyCoverage
+// when the judgement is saved, writing coverage_severity / coverage_categories /
+// emergency_class. The NOTIFICATION half below (presets, category mutes,
+// notificationEligibility) stays unwired: no producer reads it, so no user's
+// push volume changes in this phase.
 //
 // Three separate decisions, deliberately kept apart:
 //   1. coverage categories — what a stored item is about (many per item)
@@ -79,6 +82,7 @@ export const COVERAGE_FROM_NEWS_CATEGORY: Record<ImportantNewsCategory, Coverage
   sanctions: ["geopolitics", "regulation_policy"],
   major_security_incident: ["geopolitics"],
   semiconductor_ai: ["semiconductors", "ai_tech"],
+  disaster: ["disaster"],
   other_market_moving: [],
 };
 
@@ -139,6 +143,10 @@ export const EMERGENCY_CLASSES = [
 ] as const;
 
 export type EmergencyClass = typeof EMERGENCY_CLASSES[number];
+
+export function isEmergencyClass(value: unknown): value is EmergencyClass {
+  return typeof value === "string" && (EMERGENCY_CLASSES as readonly string[]).includes(value);
+}
 
 /**
  * Each class needs BOTH an event pattern and a severity qualifier, so "North
@@ -296,6 +304,12 @@ export function classifyCoverage(input: NewsSeverityInput & {
   bodySummary?: string | null;
   japanMarketRelevance: JapanMarketRelevance | string | null;
   now?: Date;
+  /**
+   * An emergency already recorded at collection time. Judgement runs minutes to
+   * hours later, so re-deriving it there would silently demote an item that has
+   * simply aged past the freshness window.
+   */
+  priorEmergencyClass?: EmergencyClass | null;
 }): CoverageDecision {
   const app = deriveNewsSeverity(input);
   const categories = coverageCategoriesFor({
@@ -312,15 +326,41 @@ export function classifyCoverage(input: NewsSeverityInput & {
     publishedAt: input.publishedAt,
     now: input.now,
   });
+  const prior = input.priorEmergencyClass ?? null;
+  const emergencyClass = emergency.emergencyClass ?? prior;
+  const isEmergency = emergency.isEmergency || prior !== null;
   return {
-    severity: emergency.isEmergency ? "emergency" : app.severity,
+    severity: isEmergency ? "emergency" : app.severity,
     scope: app.scope,
     categories,
-    emergencyClass: emergency.emergencyClass,
-    bypassesSectorMatch: emergency.isEmergency,
+    emergencyClass,
+    bypassesSectorMatch: isEmergency,
     appSeverity: app.severity,
     appReason: app.reason,
-    emergencyReason: emergency.reason,
+    emergencyReason: emergency.isEmergency ? emergency.reason
+      : prior !== null ? "EMERGENCY" : emergency.reason,
+  };
+}
+
+/**
+ * What can be decided the moment a candidate is stored, before any AI
+ * judgement: its coverage categories and whether it is an emergency. The
+ * severity beyond that needs the judgement, so it stays null here.
+ */
+export function classifyCollectionCoverage(input: {
+  category: ImportantNewsCategory;
+  title: string;
+  bodySummary?: string | null;
+  companyCode?: string | null;
+  sourceUrl: string | null;
+  publishedAt: string | null;
+  now?: Date;
+}): { categories: CoverageCategory[]; emergencyClass: EmergencyClass | null; severity: "emergency" | null } {
+  const emergency = detectEmergency(input);
+  return {
+    categories: coverageCategoriesFor(input),
+    emergencyClass: emergency.emergencyClass,
+    severity: emergency.isEmergency ? "emergency" : null,
   };
 }
 

@@ -16,9 +16,12 @@ const source = (overrides: Partial<MarketMacroSource> = {}): MarketMacroSource =
 });
 
 test("1: corporate lane sources are unaffected — market_macro sources are a distinct, additive list", () => {
-  assert.equal(MARKET_MACRO_SOURCES.length, 5);
+  // Phase 2 (2026-09-12) added the JMA earthquake/volcano feed, the one Japanese
+  // primary feed that is actually subscribable; the five original feeds are
+  // unchanged. Its filter is covered in news_coverage_wiring_test.ts.
+  assert.equal(MARKET_MACRO_SOURCES.length, 6);
   assert.deepEqual(MARKET_MACRO_SOURCES.map((item) => item.key).sort(), [
-    "boj", "eia", "fed", "un_peace_security", "ustr",
+    "boj", "eia", "fed", "jma_eqvol", "un_peace_security", "ustr",
   ]);
 });
 
