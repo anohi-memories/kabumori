@@ -216,7 +216,7 @@ Report必須:
 - task_id: broad-market-news-coverage-phase2-production-wiring-20260912
 - result: **ローカル実装・テスト完了。本番変更は0件。** 収集トピックを4本→11本（1サイクル2検索→4検索）、気象庁の一次フィードを追加、`disaster` カテゴリを追加、coverage分類（カテゴリ・emergency・severity）を既存パイプラインへ接続した。通知側（プリセット・カテゴリ設定・emergency Push）は未接続のままで、**誰のPush条件も変えていない**。K1承認までdeployしない。
 - model_used: Claude Opus 5
-- source_base: `origin/main` `7e1b9e9`（Phase 1 = `2329a76` の続き）。実装コミット `1dfaeb4`。
+- source_base: `origin/main` `7e1b9e9`（Phase 1 = `2329a76` の続き）。実装コミット `d4a85c6`。
 
 ### query_topics_before_after
 
@@ -317,7 +317,7 @@ read-onlyで候補8本を実際に叩いて確認した（2026-09-12）。
 
 ### changed_files
 
-実装コミット `1dfaeb4`（10ファイル、+738 / -30）。
+実装コミット `d4a85c6`（10ファイル、+738 / -30）。
 
 | ファイル | 変更 |
 | --- | --- |
