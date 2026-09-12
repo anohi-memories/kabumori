@@ -4,7 +4,7 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- next_owner: chatgpt
+- next_owner: user
 - priority: high
 - recommended_model: terra
 - purpose: 会社員AIラボOAuth開始POSTがDB/Vault書込み成功後に400 `X_OAUTH_CONNECTION_FAILED` を返すバグを最小修正し、OAuth開始レスポンスを正常化する。Claude slot 2から正式移管。投稿・live化は行わない。
@@ -112,6 +112,18 @@ OAuth開始の再試行は1回だけ。成功レスポンスの`scopes`と`autho
 - テストと本番 `x-oauth-connect` v11 deploy/read-back/byte compareは合格。詳細は `.agent/CODEX_REPORT.md`。
 - deploy後のOAuth開始POSTは未実行。実行環境にDashboardの認証済みリクエスト操作がないため、旧・期限切れstateを再利用せずここで停止。
 - 次の操作は、既存のSupabase Dashboard設定で `POST {"handle":"kaishain_ai_lab"}` を一度だけ送ること。secret値の共有は不要。authorization_urlが返ったら開いてX認可画面まで進み、本人のログイン・同意はユーザー自身が行う。認可画面到達後は停止する。
+
+## C1 Review — 2026-09-12
+
+- result: IMPLEMENTATION PASS / USER VALIDATION PENDING
+- root cause confirmation: PASS。`RETURNS void` RPC成功後の空bodyを旧helperがJSON parseしてgeneric 400へ変換する経路をテストで再現・修正済み。
+- code scope: PASS。`x-oauth-connect`内のresponse handlingとテスト分離のみ。無関係なDB/RPC/Cron/x-test-post変更なし。
+- regression tests: PASS。Edge Function 695 passed / 0 failed、`deno check`、`git diff --check`合格。
+- production deploy: PASS。`x-oauth-connect` v11 ACTIVE / `verify_jwt=false`、本番read-back byte compare一致。
+- safety: PASS。`dry_run` / `publish_enabled=false`維持、access/refresh token未保存、X投稿0、Kabumori token変更0、mio操作0。
+- remaining completion gate: deploy後のDashboard OAuth開始POSTをまだ再試行していないため、実際に `authorization_url` と `tweet.read users.read offline.access` が返る本番E2E確認は未完了。
+- next_owner: user。既存Dashboardから `POST {"handle":"kaishain_ai_lab"}` を1回だけ実行し、generic 400ではなくauthorization responseが返ることを確認する。secret/token/JWTは共有しない。authorization_url取得後は本人X認可へ進む前にChatGPTへ結果共有でも可。
+- task status: `review_required` のまま。上記本番再試行が成功したらC1を最終PASSとしてclose可能。
 
 Report必須:
 - task_id
