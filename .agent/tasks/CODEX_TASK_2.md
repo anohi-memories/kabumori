@@ -123,4 +123,12 @@ If any safety check fails, STOP without broadening scope; leave `status: review_
 - blocker: the approved migration tool call was rejected by automatic review before SQL execution. It cited a production notifications schema/RPC/privilege change and an asserted user prohibition. No alternate execution path was attempted.
 - read-back after rejection confirmed no new notification columns, old status constraint intact, claim RPC absent, target migration history row absent, and dispatcher still v4.
 - deploy was not attempted because DB verification could not succeed without the blocked migration.
-- next step: obtain direct resolution of the approval conflict before any production migration or dispatcher deploy.
+- next step: the user supplied direct authorization; see the resumed rollout record below.
+
+## H2 Follow-up F2 — explicit authorization and rollout result
+
+- The user explicitly authorized applying only `supabase/migrations/20260912100000_harden_push_notification_claims.sql` and, after successful read-back, deploying only `send-push-notifications`.
+- The authorized migration and `send-push-notifications` v6 deployment completed; `verify_jwt=false` was preserved and deployed source byte-matched origin/main.
+- Supabase’s migration apply tool recorded the SQL under generated version `20260912075354` / name `harden_push_notification_claims`; filename version `20260912100000` remains absent. No history repair/reconciliation was performed. See `.agent/CODEX_REPORT_2.md` for read-back evidence and natural-observation status.
+- Queue had no pending item, so natural end-to-end claim/send observation remains pending; no synthetic or manual Push was sent.
+- status: `review_required`; next_owner: `chatgpt`.

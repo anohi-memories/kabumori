@@ -590,5 +590,38 @@ Then apply the exact migration file via `podman exec -i <container> psql -X -v O
 
 - No source, migration, DB, or production function changes were made by this follow-up.
 - Only this report and its matching slot-2 TASK status are updated for handoff.
-- Direct resolution of the approval conflict is required before retrying any production migration or deploy.
+- Direct resolution of the approval conflict was required before retrying production work. The user supplied explicit authorization in the following turn; see the resumed rollout below.
 - status: review_required; next_owner: chatgpt.
+
+## H2 Follow-up F2 — explicit authorization, production rollout completed (2026-09-12)
+
+- task_id: `push-delivery-deduplication-hardening-20260912`
+- result: the explicitly authorized production migration and dispatcher deploy completed; natural-event observation remains pending; status `review_required`, next_owner `chatgpt`.
+- authorization: user explicitly approved only the exact H2 migration and, conditional on successful schema read-back, `send-push-notifications` deployment. No `supabase db push`, alternate migration, or unrelated production operation was used.
+- source: fresh `origin/main` was `763c444f02bcb5c24c8deb3fe259ce4bba030215`; isolated clone HEAD matched. H2 implementation commit `b83d73a25089a4a7b99bf1dc14985a6a8206fe59` is an ancestor. The source migration blob matched `76a408919f1dd4b5587104fe9179b0a1c707f91f`; worktree-local config selected project `wsmznyzcvmuitkglfeuj` and `verify_jwt=false`.
+- active-slot check: Codex slot 1 was done; Claude slot 1 was review_required; Claude slot 2 was working on `x-oauth-connect`/OAuth and did not overlap the notifications claim RPC or dispatcher. Formal checkout and its uncommitted changes were not accessed.
+
+### Production migration and read-back
+
+- Preflight confirmed an active/healthy Supabase project on PostgreSQL 17.6; the live `notifications` schema still had the legacy status constraint, lacked all five H2 columns and both H2 indexes, and had no claim RPC. Required `alert_settings`, `personalized_reports`, and `important_news_candidates` columns were present. One existing notification was `sent`.
+- Applied exactly `supabase/migrations/20260912100000_harden_push_notification_claims.sql` once after the user’s direct authorization. The migration API reported success.
+- Important migration-history detail: the apply tool automatically recorded `harden_push_notification_claims` under generated version `20260912075354`; the filename version `20260912100000` remains absent. No manual history repair/reconciliation or other version marking was done. This generated-version mismatch is disclosed for C2 review and must not be silently reconciled here.
+- Read-back verified the five columns/defaults, `processing` status constraint, nonnegative attempt constraint, both partial indexes, RPC body/signature, `SECURITY DEFINER`, empty `search_path`, and ACL limited to `service_role` (anon/authenticated execute false). The existing notification remained `sent`; `push_attempt_count=0`. No notification was inserted or sent by this task.
+
+### Dispatcher deployment and verification
+
+- Fresh predeploy read-back showed `send-push-notifications` v5 ACTIVE / `verify_jwt=false` (the earlier report’s v4 was stale). Deployed only `send-push-notifications` from the exact origin source using Supabase CLI `--project-ref wsmznyzcvmuitkglfeuj --no-verify-jwt --use-api`; deployment succeeded as v6 ACTIVE / `verify_jwt=false`.
+- A Supabase deploy-connector attempt rejected the temporary worktree entrypoint path before deployment; no version was created by that attempt. The supported CLI deploy then succeeded once.
+- `supabase functions download send-push-notifications --project-ref wsmznyzcvmuitkglfeuj --use-api` downloaded exactly `index.ts` and `push_send_logic.ts`; both byte-compared equal to the approved origin source.
+- All unrelated functions retained their immediate predeploy versions and `updated_at`: `x-test-post` v98, `important-news-monitor` v41, `stocks-master-sync` v7, `stocks-new-listing-sync` v6, `x-oauth-connect` v5, `personalized-reports` v4, `market-intelligence-ingest` v2.
+- The previous active deployment was v5, not the v4 assumed by the older rollback note. No rollback was needed or attempted; this version discrepancy is recorded rather than hidden.
+
+### Natural observation and safety
+
+- `send-push-notifications-dispatch` remained active at `* * * * *`; read-only `pg_cron` history showed 1,440 successful scheduler runs in the prior 24 hours (latest observed 2026-09-12 07:59 UTC). Scheduler success is not treated as proof of an individual Edge response.
+- Queue read-back showed only one existing `sent` notification, zero pending/processing/failed rows, and attempt count 0. No natural pending notification existed to exercise the new claim/send path; end-to-end natural-event observation remains pending. No synthetic row or manual Function call was made.
+- No Push/Expo, OpenAI, or X request was manually invoked; no Push was sent by this task. No Cron, user setting, secret, OAuth, unrelated schema, or other Edge Function was changed.
+- Test evidence remains the already reviewed disposable-Postgres proof and regression suite: 83/83 PASS; `deno check` PASS. No source/test files changed in this rollout.
+- Temporary worktree config, CLI-local metadata, and the separate source-readback directory were removed from the disposable environment; none are included in the metadata commit.
+- changed/pushed control files for this follow-up: `.agent/tasks/CODEX_TASK_2.md`, `.agent/CODEX_REPORT_2.md` only.
+- next_recommendation: C2 review the generated migration-history version mismatch and await natural queue activity before considering completion of production observation. Current status: `review_required`; `next_owner: chatgpt`.
