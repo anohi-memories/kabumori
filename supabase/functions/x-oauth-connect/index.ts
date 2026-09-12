@@ -7,6 +7,8 @@ import "@supabase/functions-js/edge-runtime.d.ts";
 import { resolveAdminAuthorization } from "../x-test-post/admin_auth_logic.ts";
 import { assertOAuthCallbackState, hashOAuthState, verifyReadOnlyXIdentity } from "../_shared/brand/oauth_connection.ts";
 import { loadBrandContext, BrandContextError } from "../_shared/brand/brand_context.ts";
+import { rpc } from "./rpc.ts";
+import { createOAuthStartResponse } from "./start_logic.ts";
 
 const X_AUTHORIZE_URL = "https://x.com/i/oauth2/authorize";
 const X_TOKEN_URL = "https://api.x.com/2/oauth2/token";
@@ -18,16 +20,7 @@ const BRAND_ID = "ai_salaryman_lab";
 
 function json(body: Record<string, unknown>, status = 200) { return Response.json(body, { status }); }
 function serviceHeaders(key: string) { return { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" }; }
-function b64url(bytes: Uint8Array) { return btoa(String.fromCharCode(...bytes)).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", ""); }
-async function challenge(verifier: string) { return b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)))); }
-function randomValue(bytes = 32) { const data = crypto.getRandomValues(new Uint8Array(bytes)); return b64url(data); }
 function safeCode(error: unknown) { return error instanceof BrandContextError ? error.message : "X_OAUTH_CONNECTION_FAILED"; }
-
-async function rpc(url: string, key: string, name: string, body: Record<string, unknown>) {
-  const response = await fetch(`${url}/rest/v1/rpc/${name}`, { method: "POST", headers: serviceHeaders(key), body: JSON.stringify(body) });
-  if (!response.ok) throw new BrandContextError("OAUTH_CONNECTION_DB_WRITE_FAILED");
-  return await response.json();
-}
 
 async function callback(req: Request, url: string, serviceRoleKey: string, clientId: string, clientSecret: string) {
   const query = new URL(req.url).searchParams;
@@ -72,11 +65,15 @@ Deno.serve(async (req) => {
     if (!admin.authorized) return json({ error: "OAUTH_CONNECTION_UNAUTHORIZED" }, 403);
     const body = await req.json() as { handle?: unknown };
     if (typeof body.handle !== "string") return json({ error: "AI_LAB_HANDLE_REQUIRED" }, 400);
-    const redirectUri = `${supabaseUrl}/functions/v1/x-oauth-connect/callback`;
-    const state = randomValue(); const verifier = randomValue(48); const stateHash = await hashOAuthState(state);
-    await rpc(supabaseUrl, serviceRoleKey, "begin_ai_salaryman_lab_oauth_connection", { p_handle: body.handle, p_state_hash: stateHash, p_code_verifier: verifier, p_redirect_uri: redirectUri, p_expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString() });
-    const authorize = new URL(X_AUTHORIZE_URL); authorize.search = new URLSearchParams({ response_type: "code", client_id: clientId, redirect_uri: redirectUri, scope: SCOPES, state, code_challenge: await challenge(verifier), code_challenge_method: "S256" }).toString();
-    return json({ authorization_url: authorize.toString(), brand_id: BRAND_ID, social_account_id: ACCOUNT_ID, redirect_uri: redirectUri, scopes: SCOPES, publish_mode: "dry_run", publish_enabled: false });
+    return json(await createOAuthStartResponse({
+      supabaseUrl,
+      serviceRoleKey,
+      clientId,
+      handle: body.handle,
+      brandId: BRAND_ID,
+      socialAccountId: ACCOUNT_ID,
+      scopes: SCOPES,
+    }));
   } catch (error) { return json({ error: safeCode(error) }, 400); }
 });
 
