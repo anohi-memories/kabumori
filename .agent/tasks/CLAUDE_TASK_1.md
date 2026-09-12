@@ -356,6 +356,8 @@ read-onlyで候補8本を実際に叩いて確認した（2026-09-12）。
 
 ### production_changes
 
+（ローカル実装時点の記録。K1承認後の本番反映は末尾「Phase 2 production rollout」を参照）
+
 **0件。** 実施したのは read-only 調査のみ。
 - DB: migration未適用（新しい列も `disaster` カテゴリも本番には存在しない）。書き込み0。
 - Edge Function: deployしていない（`important-news-monitor` は本番 v46 のまま。他スロットのdeployで版が進んでいる）。
@@ -364,7 +366,7 @@ read-onlyで候補8本を実際に叩いて確認した（2026-09-12）。
 
 ### deploy_status
 
-**未deploy。K1承認待ち。** 承認後の想定手順:
+**→ K1承認後に反映済み（末尾「Phase 2 production rollout」）。** 以下は承認前の記録と手順:
 1. `supabase/migrations/20260912180000_news_coverage_classification.sql` をロールバック前提のテストで検証 → 単独適用（`supabase db query --linked -f`、`db push` は使わない）。
 2. `important-news-monitor` を worktree から deploy し、download してコミットとbyte比較。他Functionの版が変わっていないことを確認。
 3. 順序は必須: **migrationが先**。列が無い状態で新コードが走ると、保存時のPATCH/POSTが失敗する。
@@ -389,3 +391,141 @@ read-onlyで候補8本を実際に叩いて確認した（2026-09-12）。
    - 判定・生成のAIコスト増分
    - 既存のX投稿量・通知量が変わっていないこと（このPhaseでは変わらないはず）
 3. 観測結果を見て、設計のrollout段階2（アプリ表示を medium まで広げる）→段階4（通知プリセットとカテゴリ設定）へ進む。
+
+
+## Report — Phase 2 production rollout（K1承認後）
+
+- task_id: broad-market-news-coverage-phase2-production-wiring-20260912
+- result: **本番反映完了**。許可された2操作（migration単独適用 → deploy）のみを実施し、確認項目はすべて成功した。反映後の自然収集では、**北朝鮮・災害・ホルムズ等を狙う収集経路が実際に稼働していることを確認**（該当する事象は観測時間内に発生していないため、候補化された実物はまだ0件）。
+- model_used: Claude Opus 5
+- source_base: `origin/main` `8c9ab22`（fresh-check 済み、ff済み）。適用したmigrationとdeployしたコードは `d4a85c6` の内容。
+
+### 事前確認
+
+- `origin/main` fresh-check → `8c9ab22` に fast-forward（自分のPhase 2コミットは既に含まれている）。
+- 他slotとの競合: なし。
+  - Claude slot 2 = X複垢OAuth（done / next_owner codex）
+  - Codex slot 1 = OAuth start void RPC fix（review_required / user）
+  - Codex slot 2 = push配信の重複防止強化（review_required / chatgpt）
+  - `important-news-monitor` と `supabase/migrations` を触った直近のコミットは自分の `d4a85c6` のみ。他slotは `x-oauth-connect` と `send-push-notifications` で、ファイル・Function・RPCの重複なし。
+- migration file: `20260912180000_news_coverage_classification.sql`（sha256 `88cc9cf1d3ce4ecdaa9d03ebac1fecce7ac9e650214a62f8a7daab67d19b6cbc`）。
+- 適用前に**ロールバック前提の事前テスト**を1回実施（`begin; … rollback;`）。新列4つ・制約3つ・索引3つが作られ、`disaster` が許容され、既存関数のmd5・`alert_settings` 12列・通知1件が不変であることを確認。合成candidateは一切insertしていない。
+
+### 1. migration 単独適用
+
+- 実行: `supabase db query --linked -f <この1ファイルのみ>`。**`supabase db push` は使用せず**、他のmigrationは適用していない。migration履歴の修復もしていない。
+- 結果: 成功（`rows: []`）。
+
+### read-back 確認（適用直後）
+
+| 項目 | 結果 |
+| --- | --- |
+| 新列 | `coverage_categories`（ARRAY / NOT NULL / 既定 `'{}'`）、`coverage_severity`（text / NULL可）、`emergency_class`（text / NULL可）、`coverage_classified_at`（timestamptz / NULL可） |
+| 制約 | `..._coverage_severity_check` / `..._emergency_class_check` / `..._emergency_is_market_wide` の3つ |
+| 索引 | `idx_important_news_coverage_severity` / `idx_important_news_coverage_categories` / `idx_important_news_emergency` |
+| `disaster` カテゴリ | 許容（category checkに含まれる） |
+| 既存候補行 | 1069行のまま。`coverage_severity` が入った行は0（既存行は書き換えていない） |
+| フィードRPC | md5 `2b9c575bab3579476879dbe0e69bfb7d`（事前テスト時と同一 = 未変更） |
+| 市場Push producer | md5 `3cb3e858b686cfe74a9663a0f932483a`（同一 = 未変更） |
+| `alert_settings` | 12列のまま。ユーザー設定も変更なし（market/push/morning/close すべて true） |
+| notifications | 1件のまま |
+| Cron | 10件、内容変化なし |
+| migration履歴 | `20260912075354` のまま（既知の乖離を維持。修復していない） |
+
+### 2. Edge Function deploy
+
+read-back成功を確認したうえで実施。
+
+- 事前: pwd = worktree、HEAD = `8c9ab22`、project ref = `wsmznyzcvmuitkglfeuj`、`supabase/config.toml` に7 Functionの `verify_jwt=false` を確認。deploy前の全Function版を記録。
+- 実行: `supabase functions deploy important-news-monitor --no-verify-jwt`（script size 693 kB）。
+- 結果: `important-news-monitor` **v46 → v47**（updated_at 1789099151779 → 1789225463633）。
+
+### deploy 後の byte 比較
+
+- `supabase functions download important-news-monitor --use-api` を空ディレクトリで実行。
+- runtime source 20ファイルすべてがリポジトリと差分なし（`diff -rq` で差分ファイル0）。worktreeに未コミット変更が無いことも確認済み。
+- 主要変更ファイルはHEADと**バイト単位で一致**（`cmp`）: `index.ts` / `news_coverage_logic.ts` / `breaking_market_source_fetchers.ts` / `market_macro_source_fetchers.ts`。
+
+### 無関係Functionの不変確認
+
+| Function | before | after |
+| --- | --- | --- |
+| x-test-post | v103 / 1789169005998 | **unchanged** |
+| send-push-notifications | v11 / 1789199846117 | **unchanged** |
+| x-oauth-connect | v11 / 1789211313465 | **unchanged** |
+| personalized-reports | v9 / 1789134583041 | **unchanged** |
+| market-intelligence-ingest | v7 / 1789198463413 | **unchanged** |
+| stocks-master-sync | v12 | **unchanged** |
+| stocks-new-listing-sync | v11 | **unchanged** |
+| important-news-monitor | v46 | **v47（今回の対象）** |
+
+`verify_jwt` は全Function false のまま（変化なし）。
+
+### 反映後の自然収集 read-only 観測
+
+観測窓: deploy 2026-09-12 15:04 UTC（=09-13 00:04 JST）〜 16:11 UTC（=01:11 JST）。fetch cron 3回（15:20 / 15:40 / 16:00）。**手動invoke・合成candidate・手動Push・X投稿は一切していない。**
+
+**新しい収集経路が実際に動いていることの確認（これが今回の主眼）**
+
+- 各サイクルの `queriesRun`（1サイクル4検索＝固定3＋回転1）
+  - 15:20 → `critical_market_events`, **`japan_security_emergency`**, **`disaster_infrastructure`**, `us_market_session`
+  - 15:40 → 固定3本 ＋ `japan_market_session`
+  - 16:00 → 固定3本 ＋ `trump_tariff_semiconductor`
+  - **北朝鮮・ミサイル・Jアラート・EEZを狙う `japan_security_emergency` と、地震・津波・停電を狙う `disaster_infrastructure` が毎サイクル走っている**。設計どおり固定枠で、回転枠は1本ずつ入れ替わっている。
+- 検索の実行状況: 全トピック `providerStatus: succeeded` / `httpStatus: 200` / `webSearchCallCount: 1`、`failureCode: null`。rejectionCountsは全ゼロ。
+- 公式フィード（market_macro）: 6ソースすべて `succeeded`。内訳 boj 34 / fed 3 / ustr 4 / un_peace_security 24 / **jma_eqvol 0** / eia 1。
+  - **新設の気象庁フィードが本番で正常に取得できている**。0件は「観測時間内に震度5以上・津波警報・噴火警報が無かった」ためで、フィルタが意図どおり routine を落としている（降灰予報などは候補化しない）。
+- `sourceErrors` は毎回空配列。ホルムズ向けの `shipping_chokepoints` は回転枠のため、この3サイクルでは未到来（最大160分で一周する設計どおり）。
+
+**候補化・分類の実データ**
+
+| 項目 | 値 |
+| --- | --- |
+| deploy以降の新規candidate | **0件** |
+| `coverage_classified_at` が入った行 | 0件 |
+| `emergency_class` が入った行 | 0件 |
+| deploy以降のX投稿 | 0件 |
+| notifications | 1件（昨日の大引けレポート通知のみ、sent） |
+| pending_judgement | 0件 |
+
+- 0件の理由は、観測窓が**土曜深夜〜日曜未明（JST）**で、TDnetの開示が無く、breaking_marketの鮮度条件（3時間以内）を満たす新しい海外ニュースも出なかったため。既存66件のフィード項目はすべて既知＝duplicate 判定で、insertは発生していない。
+- したがって「**収集経路は稼働している／分類列はDBに存在し受け入れ可能**」までは確認できたが、**実物のニュースに `coverage_severity` / `coverage_categories` / `emergency_class` が書かれた行はまだ0件**。書き込み経路の実データ確認は、平日の自然発生を待つ必要がある（合成candidateは投入しない方針のため）。
+
+**既存挙動への影響**
+
+- X投稿0件、通知0件増（1件のまま）、`auto_publish=true` のまま、monitor `is_active=true` のまま、設定の更新日時も 2026-09-10 のまま（誰も触っていない）。
+- Cron 10件のまま。`alert_settings` と `send-push-notifications` は未変更。
+
+**観測中に見つけた別件（自分の担当外・未対応）**
+
+- 15:53 UTC に1件だけ HTTP 500: `{"error":"UNEXPECTED_ERROR","detail":"CLAIM_PENDING_NOTIFICATIONS_FAILED:504"}`。
+  - これは Codex slot 2 が本番反映した push claim RPC（`claim_pending_push_notifications`）のタイムアウトで、**今回のdeployとは無関係**（`send-push-notifications` は未変更・v11のまま）。
+  - 影響: 当該分の通知は無し（pending 0件、sent 1件のまま）。1分後の次サイクルで正常に戻っている。
+  - 対応はしていない（他slotの領域）。C2レビューで共有されるべき事象として記録する。
+
+### production_changes（この反映で行ったこと、これ以外は無し）
+
+1. `20260912180000_news_coverage_classification.sql` の単独適用（DDLのみ。データ行の更新・削除は0）。
+2. `important-news-monitor` の deploy（v46 → v47）。
+
+やっていないこと: `db push` / 他migration適用 / migration履歴修復 / Cron変更 / `alert_settings` 変更 / Push条件変更 / `send-push-notifications` 変更 / 合成candidate / 手動Push / X投稿 / 他Functionのdeploy / 手動invoke。
+
+### remaining_issues（更新）
+
+- **実データでの分類確認が未了**。平日（月曜以降）の自然収集で、`coverage_severity` / `coverage_categories` / `emergency_class` が実際に書かれること、および emergency の誤検出・見逃しを観測する必要がある。
+- `shipping_chokepoints`（ホルムズ）は回転枠のため最大160分の空きがある。観測後、固定枠へ昇格させるか（＝検索コスト増）を判断したい。
+- 検索は6回/時 → 12回/時に増えた。AI費用の増分は、平日の候補件数が出てから評価する。
+- 収集が広がっても、アプリ表示と通知は従来のまま（`coverage_severity` は保存のみ）。medium帯のニュースは引き続きアプリに出ない。設計のrollout段階2（表示拡大）・段階4（通知プリセット）は未実施。
+- 気象庁の気象警報フィード（`extra.xml`）と防衛省・JPX・官邸・財務省の一次配信は未購読のまま（403/404のため）。Web検索頼みの部分が残る。
+- 既存の課題は継続: migration履歴の乖離（今回の適用も未記録）、テスト用の監視銘柄17件、`supabase/config.toml` がGit管理外。
+- 別件: 上記 push claim RPC の 504（Codex slot 2 の領域）。
+
+### next_recommendation
+
+1. 月曜（2026-09-14）の日本市場の開示と海外ニュースで、以下をread-only観測する。
+   - 新規candidateに `coverage_categories` / `coverage_severity` が入っているか
+   - `emergency_class` が付く件数と、その妥当性（誤検出・見逃し）
+   - 候補件数の増加量とAI費用の増分
+   - 既存のX投稿量・通知量が変わっていないこと
+2. 観測が問題なければ、設計のrollout段階2（アプリ表示を medium まで広げる）へ進む。
+3. `shipping_chokepoints` の固定枠昇格と、気象警報フィードの購読可否は、段階2と合わせて判断する。
