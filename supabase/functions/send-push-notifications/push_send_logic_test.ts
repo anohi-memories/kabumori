@@ -4,12 +4,16 @@ import {
   buildExpoPushMessage,
   chunk,
   classifyTicket,
+  decideNotificationPushDispatch,
   decideNotificationPushStatus,
-  shouldSendNotification,
-  tokenIdsToDeactivate,
-  type AlertSettings,
+  decidePreSendRetry,
   type DeliveryOutcome,
+  expoRequestRetryDelayMs,
+  MAX_EXPO_REQUEST_ATTEMPTS,
+  MAX_PUSH_ATTEMPTS,
   type PendingNotification,
+  shouldRetryExpoRequest,
+  tokenIdsToDeactivate,
 } from "./push_send_logic.ts";
 
 const sampleNotification: PendingNotification = {
@@ -22,7 +26,10 @@ const sampleNotification: PendingNotification = {
 };
 
 test("buildExpoPushMessage: carries the ids needed for in-app tap navigation in data", () => {
-  const message = buildExpoPushMessage(sampleNotification, "ExponentPushToken[abc]");
+  const message = buildExpoPushMessage(
+    sampleNotification,
+    "ExponentPushToken[abc]",
+  );
   assert.equal(message.to, "ExponentPushToken[abc]");
   assert.equal(message.title, "重要ニュース");
   assert.equal(message.body, "トヨタ自動車が上方修正を発表しました。");
@@ -47,7 +54,11 @@ test("classifyTicket: DeviceNotRegistered is treated as permanent, not retried",
 });
 
 test("classifyTicket: any other error is treated as transient (left for next run)", () => {
-  const result = classifyTicket({ status: "error", message: "rate limited", details: { error: "MessageRateExceeded" } });
+  const result = classifyTicket({
+    status: "error",
+    message: "rate limited",
+    details: { error: "MessageRateExceeded" },
+  });
   assert.equal(result, "transient_error");
 });
 
@@ -76,6 +87,103 @@ test("decideNotificationPushStatus: failed when every device failed", () => {
   assert.equal(decideNotificationPushStatus(deliveries), "failed");
 });
 
+test("dispatch decision: explicit transient ticket retries the same row with bounded backoff", () => {
+  const deliveries: DeliveryOutcome[] = [{
+    tokenId: "t1",
+    outcome: "transient_error",
+  }];
+  assert.deepEqual(decideNotificationPushDispatch(deliveries, 1), {
+    status: "pending",
+    errorCode: "EXPO_TICKET_TRANSIENT_ERROR",
+    retryAfterSeconds: 120,
+  });
+  assert.deepEqual(decideNotificationPushDispatch(deliveries, 2), {
+    status: "pending",
+    errorCode: "EXPO_TICKET_TRANSIENT_ERROR",
+    retryAfterSeconds: 600,
+  });
+  assert.deepEqual(
+    decideNotificationPushDispatch(deliveries, MAX_PUSH_ATTEMPTS),
+    {
+      status: "failed",
+      errorCode: "PUSH_ATTEMPT_LIMIT_REACHED",
+      retryAfterSeconds: null,
+    },
+  );
+});
+
+test("dispatch decision: successful device makes notification terminally sent", () => {
+  const deliveries: DeliveryOutcome[] = [
+    { tokenId: "t1", outcome: "ok" },
+    { tokenId: "t2", outcome: "transient_error" },
+  ];
+  assert.deepEqual(decideNotificationPushDispatch(deliveries, 1), {
+    status: "sent",
+    errorCode: null,
+    retryAfterSeconds: null,
+  });
+});
+
+test("dispatch decision: missing ticket is uncertain and is never auto-retried", () => {
+  assert.deepEqual(
+    decideNotificationPushDispatch([{ tokenId: "t1", outcome: "unknown" }], 1),
+    {
+      status: "failed",
+      errorCode: "PUSH_DELIVERY_OUTCOME_UNKNOWN",
+      retryAfterSeconds: null,
+    },
+  );
+});
+
+test("dispatch decision: all permanently invalid tokens fail without retry", () => {
+  assert.deepEqual(
+    decideNotificationPushDispatch([{
+      tokenId: "t1",
+      outcome: "device_not_registered",
+    }], 1),
+    {
+      status: "failed",
+      errorCode: "EXPO_DEVICE_NOT_REGISTERED",
+      retryAfterSeconds: null,
+    },
+  );
+});
+
+test("pre-send lookup failure retries the same row only up to the attempt limit", () => {
+  assert.deepEqual(decidePreSendRetry(1), {
+    status: "pending",
+    errorCode: "PUSH_PRE_SEND_FAILURE",
+    retryAfterSeconds: 120,
+  });
+  assert.deepEqual(decidePreSendRetry(2), {
+    status: "pending",
+    errorCode: "PUSH_PRE_SEND_FAILURE",
+    retryAfterSeconds: 600,
+  });
+  assert.deepEqual(decidePreSendRetry(3), {
+    status: "failed",
+    errorCode: "PUSH_ATTEMPT_LIMIT_REACHED",
+    retryAfterSeconds: null,
+  });
+});
+
+test("Expo explicit 429 and 5xx responses retry with bounded backoff", () => {
+  assert.equal(MAX_EXPO_REQUEST_ATTEMPTS, 3);
+  for (const status of [429, 500, 503, 599]) {
+    assert.equal(shouldRetryExpoRequest(status, 1), true);
+    assert.equal(shouldRetryExpoRequest(status, 2), true);
+    assert.equal(shouldRetryExpoRequest(status, 3), false);
+  }
+  assert.equal(expoRequestRetryDelayMs(1), 2000);
+  assert.equal(expoRequestRetryDelayMs(2), 4000);
+});
+
+test("Expo client/other 4xx responses do not retry", () => {
+  for (const status of [400, 401, 404, 408, 422]) {
+    assert.equal(shouldRetryExpoRequest(status, 1), false);
+  }
+});
+
 test("tokenIdsToDeactivate: only collects device_not_registered tokens, not transient failures", () => {
   const deliveries: DeliveryOutcome[] = [
     { tokenId: "t1", outcome: "device_not_registered" },
@@ -92,42 +200,4 @@ test("chunk: splits into groups of the given size, including a smaller final gro
 
 test("chunk: an empty array yields no chunks", () => {
   assert.deepEqual(chunk([], 10), []);
-});
-
-const enabled: AlertSettings = { push_enabled: true, important_news: true };
-const otherSourceNotification: Pick<PendingNotification, "source_type"> = { source_type: "future_source" };
-
-test("shouldSendNotification: no settings row is treated as fully enabled (never cuts off existing users)", () => {
-  assert.equal(shouldSendNotification(sampleNotification, undefined), true);
-});
-
-test("shouldSendNotification: push_enabled=true and important_news=true sends", () => {
-  assert.equal(shouldSendNotification(sampleNotification, enabled), true);
-});
-
-test("shouldSendNotification: push_enabled=false blocks regardless of source_type", () => {
-  const settings: AlertSettings = { push_enabled: false, important_news: true };
-  assert.equal(shouldSendNotification(sampleNotification, settings), false);
-  assert.equal(shouldSendNotification(otherSourceNotification, settings), false);
-});
-
-test("shouldSendNotification: important_news=false blocks only source_type='important_news'", () => {
-  const settings: AlertSettings = { push_enabled: true, important_news: false };
-  assert.equal(shouldSendNotification(sampleNotification, settings), false);
-});
-
-test("shouldSendNotification: important_news=false does not affect a future unrelated source_type while push_enabled stays true", () => {
-  const settings: AlertSettings = { push_enabled: true, important_news: false };
-  assert.equal(shouldSendNotification(otherSourceNotification, settings), true);
-});
-
-test("shouldSendNotification: settings for one user never affect another user's notification", () => {
-  const settingsByUser = new Map<string, AlertSettings>([
-    ["user-a", { push_enabled: false, important_news: true }],
-    ["user-b", { push_enabled: true, important_news: true }],
-  ]);
-  const notificationA = { ...sampleNotification, id: "notif-a" };
-  const notificationB = { ...sampleNotification, id: "notif-b" };
-  assert.equal(shouldSendNotification(notificationA, settingsByUser.get("user-a")), false);
-  assert.equal(shouldSendNotification(notificationB, settingsByUser.get("user-b")), true);
 });

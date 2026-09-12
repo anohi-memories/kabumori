@@ -15,41 +15,18 @@ export type PendingNotification = {
   source_id: string;
 };
 
-// Mirrors public.alert_settings' column defaults (20260901061217_add_kabumori_mvp_tables.sql)
-// for a user who has never saved a settings row -- absent means "on", so
-// existing users are never silently cut off by this enforcement.
-export type AlertSettings = {
-  push_enabled: boolean;
-  important_news: boolean;
-};
-
-const DEFAULT_ALERT_SETTINGS: AlertSettings = {
-  push_enabled: true,
-  important_news: true,
-};
-
-// The only per-source_type opt-out wired up so far is important_news; any
-// other source_type is governed by push_enabled alone until it gets its own
-// alert_settings column read here.
-export function shouldSendNotification(
-  notification: Pick<PendingNotification, 'source_type'>,
-  settings: AlertSettings | undefined,
-): boolean {
-  const resolved = settings ?? DEFAULT_ALERT_SETTINGS;
-  if (!resolved.push_enabled) return false;
-  if (notification.source_type === 'important_news' && !resolved.important_news) return false;
-  return true;
-}
-
 export type ExpoPushMessage = {
   to: string;
   title: string;
   body: string;
   data: { notification_id: string; source_type: string; source_id: string };
-  sound?: 'default';
+  sound?: "default";
 };
 
-export function buildExpoPushMessage(notification: PendingNotification, expoPushToken: string): ExpoPushMessage {
+export function buildExpoPushMessage(
+  notification: PendingNotification,
+  expoPushToken: string,
+): ExpoPushMessage {
   return {
     to: expoPushToken,
     title: notification.title,
@@ -59,7 +36,7 @@ export function buildExpoPushMessage(notification: PendingNotification, expoPush
       source_type: notification.source_type,
       source_id: notification.source_id,
     },
-    sound: 'default',
+    sound: "default",
   };
 }
 
@@ -69,15 +46,21 @@ export function buildExpoPushMessage(notification: PendingNotification, expoPush
 // token will never work again, e.g. app uninstalled) -- every other error is
 // treated as transient and simply left for the next run to retry.
 export type ExpoPushTicket =
-  | { status: 'ok'; id: string }
-  | { status: 'error'; message: string; details?: { error?: string } };
+  | { status: "ok"; id: string }
+  | { status: "error"; message: string; details?: { error?: string } };
 
-export type TicketOutcome = 'ok' | 'device_not_registered' | 'transient_error';
+export type TicketOutcome =
+  | "ok"
+  | "device_not_registered"
+  | "transient_error"
+  | "unknown";
 
 export function classifyTicket(ticket: ExpoPushTicket): TicketOutcome {
-  if (ticket.status === 'ok') return 'ok';
-  if (ticket.details?.error === 'DeviceNotRegistered') return 'device_not_registered';
-  return 'transient_error';
+  if (ticket.status === "ok") return "ok";
+  if (ticket.details?.error === "DeviceNotRegistered") {
+    return "device_not_registered";
+  }
+  return "transient_error";
 }
 
 export type DeliveryOutcome = { tokenId: string; outcome: TicketOutcome };
@@ -89,14 +72,99 @@ export type DeliveryOutcome = { tokenId: string; outcome: TicketOutcome };
 // per-device regardless of the notification's overall status.
 export function decideNotificationPushStatus(
   deliveries: DeliveryOutcome[],
-): 'sent' | 'failed' | 'skipped' {
-  if (deliveries.length === 0) return 'skipped'; // user has no registered devices
-  if (deliveries.some((d) => d.outcome === 'ok')) return 'sent';
-  return 'failed';
+): "sent" | "failed" | "skipped" {
+  if (deliveries.length === 0) return "skipped"; // user has no registered devices
+  if (deliveries.some((d) => d.outcome === "ok")) return "sent";
+  return "failed";
+}
+
+export type PushDispatchDecision = {
+  status: "sent" | "failed" | "skipped" | "pending";
+  errorCode: string | null;
+  retryAfterSeconds: number | null;
+};
+
+export const MAX_PUSH_ATTEMPTS = 3;
+export const PUSH_RETRY_DELAYS_SECONDS = [120, 600] as const;
+export const MAX_EXPO_REQUEST_ATTEMPTS = 3;
+
+/** Retry only explicit whole-request rate/server rejection, never transport ambiguity. */
+export function shouldRetryExpoRequest(status: number, attemptNumber: number): boolean {
+  return attemptNumber < MAX_EXPO_REQUEST_ATTEMPTS &&
+    (status === 429 || (status >= 500 && status < 600));
+}
+
+export function expoRequestRetryDelayMs(attemptNumber: number): number {
+  return 2000 * 2 ** Math.max(0, attemptNumber - 1);
+}
+
+/** A lookup failure before any Expo request is safe to retry on the same row. */
+export function decidePreSendRetry(attemptCount: number): PushDispatchDecision {
+  if (attemptCount < MAX_PUSH_ATTEMPTS) {
+    return {
+      status: "pending",
+      errorCode: "PUSH_PRE_SEND_FAILURE",
+      retryAfterSeconds:
+        PUSH_RETRY_DELAYS_SECONDS[Math.max(0, attemptCount - 1)] ?? 600,
+    };
+  }
+  return {
+    status: "failed",
+    errorCode: "PUSH_ATTEMPT_LIMIT_REACHED",
+    retryAfterSeconds: null,
+  };
+}
+
+/**
+ * Decide the persisted state after a complete, successful Expo HTTP response.
+ * Only explicit per-message transient tickets are retried. A missing ticket is
+ * ambiguous (Expo may have accepted the message), so it is terminally failed
+ * rather than risking a duplicate push. Retries reuse the same notification row.
+ */
+export function decideNotificationPushDispatch(
+  deliveries: DeliveryOutcome[],
+  attemptCount: number,
+): PushDispatchDecision {
+  if (deliveries.length === 0) {
+    return { status: "skipped", errorCode: null, retryAfterSeconds: null };
+  }
+  if (deliveries.some((delivery) => delivery.outcome === "ok")) {
+    return { status: "sent", errorCode: null, retryAfterSeconds: null };
+  }
+  if (deliveries.some((delivery) => delivery.outcome === "unknown")) {
+    return {
+      status: "failed",
+      errorCode: "PUSH_DELIVERY_OUTCOME_UNKNOWN",
+      retryAfterSeconds: null,
+    };
+  }
+  if (deliveries.some((delivery) => delivery.outcome === "transient_error")) {
+    if (attemptCount < MAX_PUSH_ATTEMPTS) {
+      const retryAfterSeconds =
+        PUSH_RETRY_DELAYS_SECONDS[Math.max(0, attemptCount - 1)] ?? 600;
+      return {
+        status: "pending",
+        errorCode: "EXPO_TICKET_TRANSIENT_ERROR",
+        retryAfterSeconds,
+      };
+    }
+    return {
+      status: "failed",
+      errorCode: "PUSH_ATTEMPT_LIMIT_REACHED",
+      retryAfterSeconds: null,
+    };
+  }
+  return {
+    status: "failed",
+    errorCode: "EXPO_DEVICE_NOT_REGISTERED",
+    retryAfterSeconds: null,
+  };
 }
 
 export function tokenIdsToDeactivate(deliveries: DeliveryOutcome[]): string[] {
-  return deliveries.filter((d) => d.outcome === 'device_not_registered').map((d) => d.tokenId);
+  return deliveries.filter((d) => d.outcome === "device_not_registered").map((
+    d,
+  ) => d.tokenId);
 }
 
 // Expo's API accepts a batch (array) per request, capped at 100 messages;
@@ -105,6 +173,8 @@ export const EXPO_PUSH_BATCH_SIZE = 90;
 
 export function chunk<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
-  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
   return chunks;
 }

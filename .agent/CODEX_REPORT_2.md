@@ -391,3 +391,80 @@ ChatGPT should review the successful v91 deployment. After the next natural morn
 - safety checks: no manual close_report, Function invocation, candidate injection, OpenAI API, X API, or X post
 - remaining_issue: formal TOPIX source is still a future replacement; 1306 remains an explicitly labeled ETF proxy
 - status: `review_required`; next_owner: `chatgpt`
+
+## H2 — push delivery deduplication hardening (2026-09-12)
+
+- task_id: `push-delivery-deduplication-hardening-20260912`
+- status: `review_required`; next_owner: `chatgpt`
+- model_used: `gpt-5.6-sol`
+- source_base: `origin/main` at task start `441803c102104c5078e34ce34d8f01fbb32c475d`
+- fresh_source_check: latest `origin/main` read-only GitHub API check is `b850f6fb31de84b7100b7e8b7f55342cb9cf60a9`; it is one commit ahead of the task base (`441803c`), changes only Market Intelligence Core docs/function/migration files, and does not overlap any H2 source, test, migration, or report path. Local `git fetch` could not resolve github.com in this environment; GitHub API read-back was used to fresh-check.
+- worktree: isolated temporary clean clone; the formal checkout and its unrelated local changes were not touched.
+
+### Current architecture / producer dedupe audit
+
+- `important-news-monitor` enqueues only after an actual published important/most-important X outcome. The producer resolves a deterministic matching tracked stock and uses existing notifications unique keys / duplicate handling; reprocessing the same source retains the same dedupe key. No producer code was changed.
+- Market-critical enqueue is limited to market-wide candidates (`company_code IS NULL`), opted-in users, and one deterministic tracked-stock row per user/event. Existing SQL checks and conflict handling preserve same-event dedupe. No producer code was changed.
+- `personalized-reports` enqueue requires a completed, Fact-passed report and current push plus morning/close opt-ins. Its partial unique index `(user_id, source_type, source_id) WHERE source_type='personalized_report'` covers nullable `tracked_stock_id`; `ON CONFLICT ... DO NOTHING` makes repeated enqueue idempotent. No producer code was changed.
+- Existing producers therefore have row-level dedupe. The main concrete duplicate risk was downstream concurrent dispatch, not an observed producer creating a second row.
+
+### Queue, dispatcher, Cron, and settings audit
+
+- Production `notifications` previously had only `pending/sent/failed/skipped`; no atomic claim, lock token, retry count, retry time, or stored provider error/receipt fields. Dispatcher v4 selected up to 200 pending rows without order or claim, then sent Expo batches; overlapping Edge invocations could select and send the same row.
+- Cron `send-push-notifications-dispatch` is active every minute. The last-7-day read-only snapshot showed 2,523 successful `pg_cron` runs, zero non-success runs, max SQL job duration 80.088 ms, and no overlapping SQL job pairs. Its `net.http_post` is asynchronous, so this does not prove that long-running Edge invocations cannot overlap; atomic DB claiming is still required.
+- Old dispatcher checked global `push_enabled` and `important_news` after selection, but did not re-check market-critical, morning-report, or close-report settings. The proposed claim RPC re-checks global push; `important_news`; market-critical only when a candidate can be identified as market-wide; and report-type settings only when the matching report row exists. Unknown/deleted sources fail closed rather than guessing.
+- A user can still change a setting after the atomic claim transaction and before the external Expo request; a database transaction cannot safely be held open across network delivery. This small TOCTOU window remains and must be part of C2's policy review.
+
+### Risk classification
+
+| Risk | Before hardening | Proposed handling |
+|---|---|---|
+| Two dispatcher invocations send one pending row | P0 | Atomic `FOR UPDATE SKIP LOCKED` claim changes the same row to `processing` and assigns a per-claim UUID; final updates compare status and claim token. |
+| Edge runtime ends after Expo may have accepted a request | P1 | Expired processing claim becomes `failed / PUSH_DELIVERY_OUTCOME_UNKNOWN`; it is never reset to pending automatically. |
+| Provider ticket explicitly reports transient per-message error | P1 | Same row only, bounded to three claim attempts with 2-minute then 10-minute delay; any successful device ticket makes row `sent`; after the bound it is terminal `failed`. |
+| Expo 429/5xx HTTP response | P1 | At most three attempts for the same batch with 2s/4s backoff; other 4xx responses do not retry. Transport exceptions/timeouts are ambiguous and not retried. Expo tickets still indicate Expo acceptance, not device delivery. |
+| No ticket / response cardinality mismatch | P1 | Positional mapping is treated as unknown; row is terminally failed without resend. |
+| Settings disabled before claim | P1 | Atomic claim RPC marks safely identified queued rows `skipped` before delivery. The short claim-to-Expo TOCTOU described above remains. |
+| Producer receives same event twice / NULL stock key | P2 / protected | Existing important-news/market-critical conflict logic and personalized-report partial unique index retained; no dedupe key weakened. |
+| Cron launches overlapping HTTP invocations | P1 capability, no observed overlap in SQL job history | `SKIP LOCKED` claim makes row ownership atomic even if HTTP invocations overlap. |
+
+### Code / schema proposal
+
+- Dispatcher now obtains work only via `claim_pending_push_notifications`; it no longer performs an unclaimed pending-row GET or JavaScript-side settings filter.
+- The proposed expand-only migration adds `processing`, attempt/next-retry/claim/error columns and due/stale indexes, plus a service-role-only `SECURITY DEFINER` claim RPC with an empty search path, 200-row clamp, `SKIP LOCKED`, opt-out checks, and per-row claim token. It does not insert notification rows or alter producers.
+- Final status PATCH is compare-and-set on notification id + `processing` + claim token and requires exactly one returned row. Pre-send token lookup failures can retry the same row only within the attempt bound. No-device rows become `skipped`.
+- An ambiguous transport exception after a request starts terminally fails rows in started batches and only retries rows in later, not-yet-started batches. Failed DB finalization never silently returns a possibly delivered row to pending.
+- Production schema is not changed; migration is local/proposed only. Existing production state remains unchanged.
+
+### Migration history / production safety
+
+- Production migration history and current `origin/main` migration files are two-way divergent: 17 local-only and 11 remote-only versions were observed. Several structures needed by H2 are present in production, but migration history is not a safe basis for automated application.
+- `supabase db push` was not used. No production migration/RPC, Edge Function deployment, Cron/settings change, manual Expo/OpenAI/X API call, or push send was performed.
+- There is no local PostgreSQL/Docker runtime in the work environment. The transactional migration was not executed or rollback-proven against a disposable database, and true concurrent-session claim behavior was not integration-tested. Static SQL/source contract checks are not a substitute for that proof.
+
+### Tests
+
+- Push dispatcher pure tests: **18 passed / 0 failed**.
+- Queue claim SQL/source contract tests: **6 passed / 0 failed**.
+- Important-news producer regression: **29 passed / 0 failed**.
+- Market-critical producer SQL regression: **6 passed / 0 failed**.
+- Personalized-report regression + dedupe contracts: **24 passed / 0 failed**.
+- Combined relevant suite: **83 passed / 0 failed** (`deno test --no-check`; tests are runtime-tested without the unavailable Node type package).
+- `deno check` for `send-push-notifications/index.ts` and `push_send_logic.ts`: PASS.
+- `git diff --check`: PASS.
+- Not verified: actual two-session `SKIP LOCKED` race, disposable-DB migration/rollback, live Expo response behavior. These require C2 review and a disposable Postgres/Supabase environment before any production application/deploy.
+
+### Changed files and handoff
+
+- `supabase/functions/send-push-notifications/index.ts`
+- `supabase/functions/send-push-notifications/push_send_logic.ts`
+- `supabase/functions/send-push-notifications/push_send_logic_test.ts`
+- `supabase/functions/send-push-notifications/push_queue_claim_contract_test.ts` (new)
+- `supabase/functions/personalized-reports/push_dedupe_contract_test.ts` (new, contract tests only)
+- `supabase/migrations/20260912100000_harden_push_notification_claims.sql` (proposed; not applied)
+- `.agent/tasks/CODEX_TASK_2.md`
+- `.agent/CODEX_REPORT_2.md`
+- commit_hash / push: pending; fresh GitHub check confirmed current main `b850f6fb31de84b7100b7e8b7f55342cb9cf60a9` and confirmed upstream changes do not overlap H2. Git CLI fetch is blocked by DNS in this environment; if GitHub Git-data commit/ref APIs are used, the commit must be based directly on that exact fresh main SHA and fast-forward only.
+- remaining_issues: run the migration and true concurrent-claim/rollback proof in a disposable database; review residual settings TOCTOU and the bounded HTTP 5xx retry policy; reconcile migration-history divergence before any production migration.
+- safety_checks: formal repo/dirty checkout untouched; `apps/admin/**` and `HANDOFF.md` untouched; no production DB/Cron/settings/secrets/OAuth, Edge deploy, Expo/OpenAI/X API, or push-send operation.
+- next_recommendation: ChatGPT C2 review. Do not apply migration or deploy dispatcher until C2 approves the SQL proof and production rollout plan.
