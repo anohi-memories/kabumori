@@ -464,7 +464,8 @@ ChatGPT should review the successful v91 deployment. After the next natural morn
 - `supabase/migrations/20260912100000_harden_push_notification_claims.sql` (proposed; not applied)
 - `.agent/tasks/CODEX_TASK_2.md`
 - `.agent/CODEX_REPORT_2.md`
-- commit_hash / push: pending; fresh GitHub check confirmed current main `b850f6fb31de84b7100b7e8b7f55342cb9cf60a9` and confirmed upstream changes do not overlap H2. Git CLI fetch is blocked by DNS in this environment; if GitHub Git-data commit/ref APIs are used, the commit must be based directly on that exact fresh main SHA and fast-forward only.
+- commit_hash: `b83d73a25089a4a7b99bf1dc14985a6a8206fe59` (H2 implementation commit, rebased onto the fresh upstream main before push).
+- push: successful via normal Git fast-forward push. Push-time `origin/main` was `b850f6fb31de84b7100b7e8b7f55342cb9cf60a9`; post-push fresh-fetch confirmed `origin/main` is `b83d73a25089a4a7b99bf1dc14985a6a8206fe59` and contains the H2 commit.
 - remaining_issues: run the migration and true concurrent-claim/rollback proof in a disposable database; review residual settings TOCTOU and the bounded HTTP 5xx retry policy; reconcile migration-history divergence before any production migration.
 - safety_checks: formal repo/dirty checkout untouched; `apps/admin/**` and `HANDOFF.md` untouched; no production DB/Cron/settings/secrets/OAuth, Edge deploy, Expo/OpenAI/X API, or push-send operation.
 - next_recommendation: ChatGPT C2 review. Do not apply migration or deploy dispatcher until C2 approves the SQL proof and production rollout plan.
