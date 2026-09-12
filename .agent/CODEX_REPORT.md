@@ -1,49 +1,44 @@
 # Codex Report
 
-- task_id: kabumori-production-scheduler-restore-20260911
-- result: review_required — implementation and required local SQL runtime tests pass
+- task_id: x-multibrand-phase3c-oauth-start-void-rpc-fix-20260912
+- result: review_required — 最小修正・テスト・本番deploy/read-back完了。deploy後のOAuth開始再試行はDashboard操作待ち。
 - next_owner: chatgpt
-- implementation_branch: `codex/scheduler-restore-20260911`
-- commit_hash: `246f080`
-- push: `origin/codex/scheduler-restore-20260911`へpush済み
-- deploy: なし
-- production_changes: なし
+- implementation_branch: `codex/oauth-start-void-rpc-fix-20260912`
+- commit_hash: `926f29a1d4ee2ec492ed3d7197ab356e74a8fa49`
+- push: `origin/codex/oauth-start-void-rpc-fix-20260912` と `origin/feature/multibrand-foundation` にpush済み
+- production_deploy: `x-oauth-connect` v11 ACTIVE / `verify_jwt=false`; deploy後read-backで9 runtime filesをsourceとbyte compareし一致確認
+- oauth_start_retry_result: 未実行。利用可能な実行環境に認証済みDashboardのFunction invoke操作がなく、認証情報の移送も行わないため停止。期限切れの旧stateは再利用しない。
+- current_social_account_brand_state: 最終read-only確認では `ai_salaryman_lab_x` が `authorization_pending` / `publish_enabled=false`、brandは `is_active=true` / `publish_mode=dry_run`。access/refresh token refなし。deploy前後で状態不変を確認。
+- X_login_consent_status: 未実施。新しいauthorization_url取得後、本人がXログイン・同意する段階で停止予定。
+- production_changes: `x-oauth-connect`のみv10→v11 deploy。DB/RPC/schema、Cron、secrets/Vault contents、他Edge Functionは変更なし。
+- forbidden_changes_zero: X投稿、Cron変更、live化、publish有効化、Kabumori token変更、mio接続、x-test-post変更はゼロ。
 
-## Result
+## Root cause
 
-- root cause: 複垢化Phase 2の `20260910170000_add_multibrand_brand_context_foundation.sql` が `claim_due_post()` を再定義した際、既存の専用planner呼出しを `plan_daily_posts()` だけへ縮小していた。
-- 最小復旧migration: `20260911130000_restore_claim_due_post_planners.sql`。`claim_due_post()` だけを再定義し、`plan_morning_report()`、`plan_close_report()`、既存の `plan_daily_posts()`、`plan_weekly_useful_tips()`、`plan_us_premarket_report()` を順に呼び戻す。
-- report用 `posting_windows` は変更しない。専用planner自身のJPX営業日・祝日・center time・既存unique制約/`ON CONFLICT`による重複防止を維持する。
-- `claim_due_post()` の実行権限はpublic/anon/authenticatedからrevokeし、service_roleだけへgrantする。
+PostgRESTのRPC応答は関数の戻り型に応じて返り、void型関数ではJSON documentがない。`begin_ai_salaryman_lab_oauth_connection` は `RETURNS void` だが、旧Edge Functionの共通RPC helperは全成功応答へ `response.json()` を実行していた。空bodyのJSON parse失敗が開始済み処理を汎用400へ変換する経路を確認し、空/204成功を許容する最小修正を実装した。JSON応答RPCは従来どおりJSON parseし、HTTP非2xxはfail-closedを維持。
 
-## Production read-only confirmation
+## Changed files
 
-- 現在の本番 `claim_due_post()` は `plan_daily_posts()` だけを呼ぶ定義だった。
-- `morning_report_settings`: active、center `08:20`、Asia/Tokyo。`close_report_settings`: active、center `16:00`、Asia/Tokyo。
-- 両reportの `posting_windows` は重複防止のためinactive。本日分 `scheduled_posts` は両reportとも0件。
-- 専用planner 4種は本番に存在し、現行 `claim_due_post()` はanon/authenticated不可・service_roleのみ実行可。
+- `supabase/functions/x-oauth-connect/index.ts`
+- `supabase/functions/x-oauth-connect/rpc.ts` (new)
+- `supabase/functions/x-oauth-connect/start_logic.ts` (new)
+- `supabase/functions/x-oauth-connect/rpc_test.ts` (new)
 
-## Verification
+## Tests
 
+- 追加テスト: 204/空body成功、JSON応答維持、非2xxのfail-closedとbody非漏えい、OAuth authorize URL/scopes/安全設定を確認。対象テスト9件pass。
+- Supabase Edge Function全テスト: 695 passed / 0 failed（baseline 690）。
+- `deno check` (index.tsおよび追加module): pass。
 - `git diff --check`: pass。
-- 静的検証: 5 plannerが各1回・正しい順序で呼ばれること、`posting_windows`への書込みが無いこと、RPC権限境界を確認してpass。
-- 隔離ローカルSupabase/Postgresで候補migrationを一時適用し、SQLテストを `BEGIN` / `ROLLBACK` 内で実行してpass。Podman machineの現在のAPI socketは実行時に `podman machine inspect` から取得し、固定path・本番link・`--linked` は使用していない。
-  - 2026-09-11（金・JPX営業日）に morning_report / close_report が各1件だけ計画されること。
-  - report用 `posting_windows` が両方inactiveでも、専用plannerが計画できること。
-  - 同じplanner呼出しと `claim_due_post()` を複数回実行しても各1件のままになること。
-  - 土日と `market_holidays` のJPX休日で両reportが計画されないこと。
-  - 既存の `morning_greeting` / `tip` / `interaction` と `useful_tip` plannerが計画行を作ること。
-- テスト後、対象日・対象post_typeの検証用 `scheduled_posts` は0行であることを確認。ローカルDBにもテスト行を残していない。
-- 候補関数の定義で5 planner呼出しを確認。実行権限は anon=false / authenticated=false / service_role=true を確認。
+- authorization scopeは `tweet.read users.read offline.access` のまま。posting scopeなし、`dry_run` / `publish_enabled=false`を維持。
 
-## Safety checks
+## Production safety checks
 
-- X投稿、手動publish、Cron、Edge Function、OAuth/Vault/secrets、brands/social_accounts、H2 close-reportコードは変更ゼロ。
-- production DB migration/function適用はゼロ。
-- G2のOAuth作業と同一worktreeを使わず、独立worktreeで実装・ローカル検証した。
+- 対象Function以外の7 Edge Functionsはdeploy前後で不変。
+- DB/Cron read-only baselineはdeploy前後で不変（Cron count 10、OAuth state count 1、unexpired state 0、AI Lab Vault secret count 1）。
+- `x-oauth-connect` v11の9 runtime filesを本番からread-backし、source commitとbyte-for-byte一致。
+- X API、OAuth start retry、token exchange、本人確認は未実施。secret値は取得・表示・記録していない。
 
-## Remaining issues / next recommendation
+## Next recommendation
 
-1. C1では最小diffとローカルSQLテスト結果を確認する。
-2. 本番適用は未承認・未実施。C1後にユーザーが明示承認した場合のみ、このmigration単体を本番へ適用する。
-3. 適用後は関数定義・EXECUTE権限・翌営業日の自然dispatchによる朝刊/大引け予定補完をread-onlyで確認する。手動投稿・手動予定INSERTは行わない。
+既存Dashboardの認証済み画面から `POST {"handle":"kaishain_ai_lab"}` を一度だけ再試行し、authorization_urlが返ればユーザー自身のブラウザで開く。secret値は共有しない。X認可画面到達後に停止し、以降の本人ログイン・同意を待つ。

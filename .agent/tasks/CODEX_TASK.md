@@ -3,8 +3,8 @@
 - task_id: x-multibrand-phase3c-oauth-start-void-rpc-fix-20260912
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: terra
 - purpose: 会社員AIラボOAuth開始POSTがDB/Vault書込み成功後に400 `X_OAUTH_CONNECTION_FAILED` を返すバグを最小修正し、OAuth開始レスポンスを正常化する。Claude slot 2から正式移管。投稿・live化は行わない。
@@ -105,6 +105,13 @@ OAuth開始の再試行は1回だけ。成功レスポンスの`scopes`と`autho
 - `next_owner: chatgpt`
 - `.agent/CODEX_REPORT.md` 更新
 - feature/main管理同期
+
+## H1 Stop — 2026-09-12
+
+- 修正 commit `926f29a1d4ee2ec492ed3d7197ab356e74a8fa49` を `origin/codex/oauth-start-void-rpc-fix-20260912` と `origin/feature/multibrand-foundation` にpush済み。
+- テストと本番 `x-oauth-connect` v11 deploy/read-back/byte compareは合格。詳細は `.agent/CODEX_REPORT.md`。
+- deploy後のOAuth開始POSTは未実行。実行環境にDashboardの認証済みリクエスト操作がないため、旧・期限切れstateを再利用せずここで停止。
+- 次の操作は、既存のSupabase Dashboard設定で `POST {"handle":"kaishain_ai_lab"}` を一度だけ送ること。secret値の共有は不要。authorization_urlが返ったら開いてX認可画面まで進み、本人のログイン・同意はユーザー自身が行う。認可画面到達後は停止する。
 
 Report必須:
 - task_id

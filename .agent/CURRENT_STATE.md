@@ -12,7 +12,7 @@
   - Claude slot1開始=`G1`、完了確認=`K1`
   - Claude slot2開始=`G2`、完了確認=`K2`
 - active_workstream:
-  - Codex slot 1: `ready` — `x-multibrand-phase3c-oauth-start-void-rpc-fix-20260912`
+  - Codex slot 1: `review_required` — `x-multibrand-phase3c-oauth-start-void-rpc-fix-20260912`（void RPC応答修正をdeploy済み、OAuth開始再試行待ち）
   - Codex slot 2: `ready` — close-report TOPIX source correction production deploy verification
   - Claude slot 1: `review_required` — personalized portfolio morning/close reports Phase 1A
   - Claude slot 2: `done` — Phase 3C OAuth workstream transferred to Codex slot 1; do not modify same OAuth/Vault/x-oauth-connect area in parallel
@@ -21,14 +21,14 @@
   - Phase 2 `5806e85` C1 approved
   - Phase 3A `34cb78c` C1 approved
   - Phase 3B `d04d36d` C1 approved
-  - Phase 3C latest implementation `4f1ae53`; production `x-oauth-connect` v4 ACTIVE / verify_jwt=false
+  - Phase 3C implementation: base `4f1ae53`, void RPC fix `926f29a`; production `x-oauth-connect` v11 ACTIVE / verify_jwt=false
   - scope is `tweet.read users.read offline.access`; no posting scope
   - first connection verifies `/2/users/me` username matches `kaishain_ai_lab` before Vault token save
-  - 2026-09-12 Dashboard Send Request executed once and UI returned HTTP400 `X_OAUTH_CONNECTION_FAILED`
+  - 2026-09-12 initial Dashboard Send Request returned HTTP400 `X_OAUTH_CONNECTION_FAILED`; fix was deployed to `x-oauth-connect` v11 and read back byte-identical
   - read-only production verification confirmed OAuth start RPC actually succeeded before the 400: `ai_salaryman_lab_x` exists, handle `kaishain_ai_lab`, `connection_status=authorization_pending`, `publish_enabled=false`; brand is `is_active=true/publish_mode=dry_run`; one OAuth state and one PKCE Vault secret were created; no access/refresh token ref yet
   - that OAuth state is now expired; do not reuse it
   - likely root cause: SQL `begin_ai_salaryman_lab_oauth_connection` returns void while Edge Function `rpc()` always calls `response.json()` after success, causing empty-response JSON parse failure and generic 400 after DB write
-  - Codex H1 must reproduce/confirm, minimally fix void/empty RPC success handling, preserve JSON RPC behavior, test, deploy only `x-oauth-connect`, then retry OAuth start once
+  - void/empty RPC success handling fixed and tested; JSON RPC behavior preserved; only `x-oauth-connect` deployed. One post-deploy OAuth start retry remains pending Dashboard action; expired prior state must not be reused
   - X login/consent/token exchange/read-only identity verification remain not completed
   - connection must remain `dry_run` / `publish_enabled=false`
   - X posting, Cron change, live enable, Kabumori token change, mio operation remain prohibited
