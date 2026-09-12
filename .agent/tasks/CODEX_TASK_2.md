@@ -1,111 +1,196 @@
 # Codex Task 2
 
-- task_id: x-close-report-topix-source-correction-20260911
+- task_id: push-delivery-deduplication-hardening-20260912
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: user
-- priority: urgent
+- status: ready
+- next_owner: codex
+- priority: high
 - recommended_model: Sol High
-- purpose: X版 close_report の誤った Yahoo `^TPX` 利用を停止し、正式TOPIX取得元が未確定の間も大引けレポートを安全に稼働させる。
+- purpose: 重要ニュース・市場Critical・個別朝刊/大引けで共有するPush通知経路について、二重enqueue・二重claim・retry・Cron重複・Expo再送などの重複通知リスクを監査し、既存機能を壊さず必要最小限のhardeningを行う。
 
-## C2 Review — 2026-09-12
+## Context
 
-### Approved implementation
+現在のPush系統:
+- important-news-monitor → notifications → send-push-notifications
+- market critical news → notifications → send-push-notifications
+- personalized-reports → enqueue_personalized_report_notification → notifications → send-push-notifications
 
-- Yahoo `^TPX` を日本TOPIXとしてreject: approved
-- 1306.Tを代替市場比較指標として利用: approved
-- 表示ラベル `TOPIX連動ETF（1306）`: approved
-- 1306を `TOPIX` と表示しない invariant: approved
-- metadata validation: 1306.T / JPX-Tokyo / JPY: approved
-- same JST date / numeric / source-backed / 15:30+ gate: approved
-- Nikkei path / 17:00 schedule / Fact / Voice / X publish gate unchanged: approved
-- targeted tests: 63/63 PASS
-- full x-test-post regression: 387/387 PASS
-- deno check: PASS
-- git diff --check: PASS
-- implementation commit: `44630c8`
+既知事項:
+- personalized_reportは source_type/source_id の部分ユニークindexで同一report通知を防止済み。
+- market critical producer側は同一 user/news/event の重複防止あり。
+- important news producerにも重複防止が存在する。
+- send-push-notificationsは本番 v4。
+- dispatcherはenqueue後に market_critical_news settingを再checkしないため、設定OFF直後の小さなraceが残っている。
+- 重要ニュース系統が増えたため、producerだけでなくdispatcher/claim/retry/Cronまでend-to-endで重複耐性を確認する必要がある。
 
-## Final Follow-up F2: production deploy verification only
+## Required startup checks
 
-Implementation is approved. Remaining work is production deployment and verification only.
+1. `.agent/ORCHESTRATION.md`
+2. `.agent/CURRENT_STATE.md`
+3. このTASK
+4. fresh `origin/main`
+5. clean temporary worktree
+6. 他slot TASKをread-only確認
+7. `important-news-monitor` / `send-push-notifications` / notifications関連RPC・migrationを他slotが変更中なら競合報告して開始しない
+8. 既存未コミット変更には触れない
+9. migration history divergenceを確認し、`supabase db push` は使用しない
 
-### Pre-deploy checks
+## Phase A — read-only architecture audit
 
-1. fresh `origin/main`
-2. confirm implementation commit `44630c8` is contained in deploy HEAD
-3. clean temporary worktree
-4. verify worktree-local `supabase/config.toml`
-5. verify project ref `wsmznyzcvmuitkglfeuj`
-6. verify no other slot is modifying `supabase/functions/x-test-post/**`
-7. do not touch existing unrelated uncommitted changes
+まず変更せず、以下をend-to-endで整理する。
 
-### Production deploy
+### Producers
+- important news enqueue経路
+- market critical enqueue経路
+- personalized report enqueue経路
+- 各経路のdedupe key / unique index / RPC idempotency
+- 同一eventをproducerが2回処理した場合の挙動
 
-Deploy **`x-test-post` only**.
+### Queue / DB
+- notifications tableのstatus lifecycle
+- pending / processing / sent / failed 等の実際の状態
+- claim方法
+- row locking / SKIP LOCKED / atomic update等の有無
+- retry_count / next_retry / provider receipt等の保持
+- unique制約がNULLを含むケースで抜けないか
 
-- use `--no-verify-jwt`
-- do not deploy any other Edge Function
-- do not manually invoke close_report
-- do not make an artificial X post
-- do not call OpenAI/X APIs manually
+### Dispatcher
+- send-push-notifications v4 のclaim処理
+- 同時に2つのdispatcherが走った場合に同じnotificationを送らないか
+- Function timeout直前・送信成功後DB更新失敗の挙動
+- Expo API 5xx / timeout / transport retryの挙動
+- provider側で受理済みなのにclient側timeoutした場合の重複リスク
+- push_status更新順序
 
-### Post-deploy verification
+### Cron
+- dispatcher cronの頻度と重複起動可能性
+- net.http_post / pg_cron側のre-entry
+- 前回実行が終わる前に次回が始まった場合の安全性
 
-1. confirm `x-test-post` ACTIVE and `verify_jwt=false`
-2. record new production version
-3. `supabase functions download x-test-post --use-api`
-4. byte-compare every downloaded runtime file against exact deploy source
-5. confirm other Edge Function versions / updated_at unchanged
-6. confirm DB / migrations / RLS / RPC unchanged
-7. confirm Cron / scheduler / posting_windows unchanged
-8. confirm secrets / OAuth / Vault / social_accounts unchanged
-9. no manual same-day close_report rerun
+### Settings race
+- enqueue後、dispatch直前に push_enabled / market_critical_news / morning_report / close_report をOFFにした場合の挙動
+- product intentに照らしてdispatcherで再checkすべきものと、enqueue時snapshotで良いものを区別する
 
-### Completion
+## Phase B — risk classification
 
-After successful deploy verification:
-- update `.agent/CODEX_REPORT_2.md`
-- set this TASK to `review_required`
-- `next_owner: chatgpt`
-- push metadata to origin/main
+監査結果を少なくとも以下で分類する。
+- P0: 現実に同一Pushが重複送信され得る
+- P1: 障害時のみ重複し得る
+- P2: 理論上あるが現状保護済み
+- no issue
 
-Report must include:
-- deploy_head
-- production_version
-- verify_jwt
-- byte_compare_result
-- other_functions_unchanged
-- forbidden_scopes_unchanged
-- safety_checks
-- remaining_issue: formal TOPIX source is still a future replacement; 1306 remains an explicitly labeled ETF proxy
+各riskに対し、再現可能なテストまたはDB rollback-contained proofを作る。
 
-## Final Follow-up F2: production deploy verification (2026-09-12)
+## Phase C — minimal hardening
 
-- deploy_head: `090af349d771d1f73fe82dd65859eca531464209` (fresh `origin/main`)
-- implementation commit `44630c8` contained in deploy HEAD: YES
-- clean deploy worktree: `/private/tmp/kabumori-h2-f2-20260912`; temporary config removed after deploy
-- worktree-local config used: project ref `wsmznyzcvmuitkglfeuj`, `verify_jwt = false`
-- deploy scope: `x-test-post` only, `--no-verify-jwt`
-- production result: x-test-post **v97 ACTIVE**, `verify_jwt=false`
-- production source verification: Supabase source read-back for v97 matched all 27 runtime files in deploy source (content length and deterministic byte hash); no mismatches
-- CLI download note: `supabase functions download x-test-post --use-api` was attempted in a separate clean worktree and blocked by missing `SUPABASE_ACCESS_TOKEN`; no state was changed. Equivalent production-source read-back/byte comparison completed through the Supabase API.
-- other Edge Functions: versions and `updated_at` unchanged in pre/post list comparison
-- DB / migrations / RLS / RPC / Cron / scheduler / posting_windows / settings / secrets / OAuth / Vault / social_accounts: no writes or changes performed; read-only snapshots remained unchanged
-- manual close_report, Function invocation, OpenAI/X API calls, candidate injection, and X posts: 0
-- remaining_issue: formal TOPIX source is still a future replacement; 1306 remains an explicitly labeled ETF proxy
+本当に必要な箇所だけ変更する。
 
-## C2 Final Approval — 2026-09-12
+設計原則:
+- producer固有dedupeを維持
+- queue claimはatomic/idempotent
+- 同じnotification rowを複数dispatcherが同時送信できない
+- retryで別rowを作らない
+- Expo送信後のDB更新失敗時に無制限再送しない
+- sent済みrowは二度送らない
+- notification dedupe keyを弱めない
+- important news / market critical / personalized reportの既存通知条件を壊さない
 
-- review_result: approved
-- production: `x-test-post v97 ACTIVE`, `verify_jwt=false`
-- production source verification: all 27 runtime files matched deploy source; no mismatches
-- other Edge Functions: unchanged
-- safety: no manual close_report, no artificial X post, no DB/Cron/OAuth/Vault changes
-- remaining monitoring: next natural 17:00 close_report should be observed read-only
-- remaining technical debt: replace 1306 ETF proxy with a formally verified TOPIX source when one is available
+必要なら以下を検討してよい:
+- claim token / locked_at / processing timeout
+- atomic RPCでのclaim
+- attempt identifier
+- provider ticket ID保持
+- bounded retry
+- stale processing reclaim
+- dispatcher直前の設定再check
+
+ただし大規模なqueue再設計は避け、必要最小限にする。
+
+## Settings policy
+
+特に以下を明確にする。
+
+- `push_enabled=false` はdispatch直前にも尊重する方向を優先。
+- `market_critical_news=false` は、market critical通知がまだ未送信ならdispatch直前にも尊重する方向を優先。
+- `morning_report` / `close_report` も、未送信notificationなら可能ならdispatch直前に尊重する。
+- ただし既存notification schemaでsource_typeから安全に判別できない場合、推測で適用しない。
+
+## Required tests
+
+最低限:
+- same producer enqueue twice -> 1 notification
+- same personalized_report enqueue twice -> 1 notification
+- same market critical enqueue twice -> 1 notification
+- two concurrent dispatcher claims -> same row is sent at most once
+- sent row cannot be reclaimed
+- failed/retry row does not create duplicate row
+- stale processing reclaim is bounded if implemented
+- push_enabled OFF before dispatch -> no send
+- market_critical_news OFF before dispatch -> pending market critical no send（実装した場合）
+- morning_report / close_report OFF before dispatch -> corresponding pending report no send（安全に判定可能なら）
+- unrelated important_news regression
+- Expo provider error / timeout fail-safe
+- Cron overlap simulation
+- existing send-push tests
+- important-news-monitor regression if touched
+- personalized-reports regression if touched
+- `deno check` for changed modules
+- `git diff --check`
+
+DB変更が必要な場合:
+- expand-only
+- rollback-contained proof
+- `supabase db push` 禁止
+- 本番適用はC2承認前に勝手に行わない。まず実装・テスト・Reportまで。
+
+## Production safety
+
+原則、このTASKの最初の完了点は **実装 + テスト + production change proposal** まで。
+
+以下はC2の追加承認なしで実施しない:
+- DB migration本番適用
+- send-push-notifications本番deploy
+- important-news-monitor本番deploy
+- Cron変更
+- 実Push送信テスト
+
+read-only本番監査は可。
+
+禁止:
+- X投稿系変更
+- x-test-post変更/deploy
+- personalized reportの内容生成ロジック変更
+- OAuth/Vault/social_accounts変更
+- user設定の変更
+- 架空notificationの本番投入
+- `supabase db push`
 
 ## Completion
 
-- status: done
-- next_owner: user
+完了時:
+- status: `review_required`
+- next_owner: `chatgpt`
+- `.agent/CODEX_REPORT_2.md` 更新
+- origin/main同期
+
+Report必須:
+- task_id
+- model_used
+- current_architecture
+- producer_dedupe_audit
+- queue_claim_audit
+- dispatcher_retry_audit
+- cron_overlap_audit
+- settings_race_audit
+- risk_classification
+- code_changes
+- schema_changes_if_any
+- tests
+- production_changes: none / proposed only
+- changed_files
+- commit_hash
+- push
+- remaining_issues
+- safety_checks
+- next_recommendation
