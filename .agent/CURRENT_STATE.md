@@ -2,47 +2,44 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様やWeb管理画面の履歴は既存文書を参照してください。
 
-- checked_at: 2026-09-10 JST
+- checked_at: 2026-09-12 JST
 - repo: kabumori
 - branch: main
 - orchestration:
   - 共通ルール: `.agent/ORCHESTRATION.md`
-  - Codex slot 1: `.agent/tasks/CODEX_TASK.md`
-  - Codex slot 2: `.agent/tasks/CODEX_TASK_2.md`
-  - Claude slot 1: `.agent/tasks/CLAUDE_TASK_1.md`
-  - Claude slot 2: `.agent/tasks/CLAUDE_TASK.md`
-  - `.agent/ACTIVE_TASK.md` は後方互換・全体一覧
   - Codex slot1開始=`H1`、完了確認=`C1`
   - Codex slot2開始=`H2`、完了確認=`C2`
   - Claude slot1開始=`G1`、完了確認=`K1`
   - Claude slot2開始=`G2`、完了確認=`K2`
 - active_workstream:
-  - Codex slot 1: `done`（Phase 3CをClaude slot 2へ移管済み）
-  - Codex slot 2: `done`
-  - Claude slot 1: `ready`（別ニュース基盤タスク。複垢化とは競合させない）
-  - Claude slot 2: `ready`（`x-multibrand-phase3c-ai-lab-x-oauth-connect-20260910`：Codex H1から移管。会社員AIラボOAuth接続→Vault保存→read-only本人確認まで。X投稿/live化/Cron変更は禁止）
+  - Codex slot 1: `ready` — `x-multibrand-phase3c-oauth-start-void-rpc-fix-20260912`
+  - Codex slot 2: `ready` — close-report TOPIX source correction production deploy verification
+  - Claude slot 1: `review_required` — personalized portfolio morning/close reports Phase 1A
+  - Claude slot 2: `done` — Phase 3C OAuth workstream transferred to Codex slot 1; do not modify same OAuth/Vault/x-oauth-connect area in parallel
 - multibrand_work:
-  - 初期対象: `kabumori` / `ai_salaryman_lab` / `mio`
-  - 初期安全調査: `feature/multibrand-foundation` / commit `56244c7`
-  - 正式設計: `docs/multibrand/ARCHITECTURE.md` / commit `bfa4c7b`、K2承認済み
-  - Phase 1: commit `719249f`、K2承認済み
-  - Phase 2: commit `5806e85`、C1承認済み
-  - Phase 3A: commit `34cb78c`、C1承認済み
-  - Phase 3B: commit `d04d36d`、C1承認済み
-  - Phase 3C最新実装: `feature/multibrand-foundation` commit `a8414d9` (`Accept dashboard secret key for OAuth start`)
-  - `x-oauth-connect` のみ本番deploy済み
-  - OAuth開始POSTに限りDashboard secret key `apikey` を許可。callback/token読取/X投稿には使わない
-  - Dashboardテスト画面で `{"handle":"kaishain_ai_lab"}` とsecret key header設定まで完了。`Send Request` は未実行
-  - 現時点でOAuth state / Vault / social_accountsへの新規書込み、X API、Xログインは未実行
-  - 次はG2でOAuth開始→authorization URL確認→ユーザー本人Xログイン/同意で停止→callback後Vault保存→`GET /2/users/me` read-only確認
-  - 接続後も `publish_mode=dry_run` / `publish_enabled=false`
-  - X投稿・Cron変更・live化・publish有効化・Kabumori token変更・mio操作は禁止
+  - Phase 1 `719249f` K2 approved
+  - Phase 2 `5806e85` C1 approved
+  - Phase 3A `34cb78c` C1 approved
+  - Phase 3B `d04d36d` C1 approved
+  - Phase 3C latest implementation `4f1ae53`; production `x-oauth-connect` v4 ACTIVE / verify_jwt=false
+  - scope is `tweet.read users.read offline.access`; no posting scope
+  - first connection verifies `/2/users/me` username matches `kaishain_ai_lab` before Vault token save
+  - 2026-09-12 Dashboard Send Request executed once and UI returned HTTP400 `X_OAUTH_CONNECTION_FAILED`
+  - read-only production verification confirmed OAuth start RPC actually succeeded before the 400: `ai_salaryman_lab_x` exists, handle `kaishain_ai_lab`, `connection_status=authorization_pending`, `publish_enabled=false`; brand is `is_active=true/publish_mode=dry_run`; one OAuth state and one PKCE Vault secret were created; no access/refresh token ref yet
+  - that OAuth state is now expired; do not reuse it
+  - likely root cause: SQL `begin_ai_salaryman_lab_oauth_connection` returns void while Edge Function `rpc()` always calls `response.json()` after success, causing empty-response JSON parse failure and generic 400 after DB write
+  - Codex H1 must reproduce/confirm, minimally fix void/empty RPC success handling, preserve JSON RPC behavior, test, deploy only `x-oauth-connect`, then retry OAuth start once
+  - X login/consent/token exchange/read-only identity verification remain not completed
+  - connection must remain `dry_run` / `publish_enabled=false`
+  - X posting, Cron change, live enable, Kabumori token change, mio operation remain prohibited
 - parallel_work:
-  - 既存未コミット変更は他workstreamの所有物として扱い、変更・stage・commitしない
-  - G2開始前にorigin/mainと他slot TASKをfresh-checkし、同じmigration/RPC/Edge Function/workflow/production設定へ触れる競合があれば開始しない
-  - 複垢化実装は `/Users/yuya/Developer/kabumori-multibrand` / `feature/multibrand-foundation`
+  - Codex H1 may touch `x-oauth-connect` only for the minimal OAuth response fix
+  - Claude slot2 must not touch same area until H1 completes
+  - Codex slot2 may touch `x-test-post` only; if scope overlaps, stop and report conflict
+  - existing uncommitted changes belong to other workstreams and must not be modified/staged/committed
 - known_issue:
-  - 2026-09-09 morning_greetingはX投稿成功後、legacy Storage receipt保存HTTP 400によりscheduled_posts側がfailed扱いになった別問題が未修正
+  - multibrand migrations `20260910170000/180000/190000` objects exist in production but migration history may not record them; do not use blind `supabase db push`
+  - 2026-09-09 morning_greeting legacy Storage receipt HTTP400 is a separate unresolved issue
 
 ## 更新ルール
 
