@@ -24,6 +24,10 @@ export async function createOAuthStartResponse({
   brandId,
   socialAccountId,
   scopes,
+  beginRpc = "begin_ai_salaryman_lab_oauth_connection",
+  includeHandleInRpc = true,
+  publishMode = "dry_run",
+  publishEnabled = false,
   fetchImpl = fetch,
 }: {
   supabaseUrl: string;
@@ -33,6 +37,10 @@ export async function createOAuthStartResponse({
   brandId: string;
   socialAccountId: string;
   scopes: string;
+  beginRpc?: string;
+  includeHandleInRpc?: boolean;
+  publishMode?: "dry_run" | "live";
+  publishEnabled?: boolean;
   fetchImpl?: typeof fetch;
 }): Promise<Record<string, unknown>> {
   const redirectUri = `${supabaseUrl}/functions/v1/x-oauth-connect/callback`;
@@ -40,8 +48,8 @@ export async function createOAuthStartResponse({
   const verifier = randomValue(48);
   const stateHash = await hashOAuthState(state);
 
-  await rpc(supabaseUrl, serviceRoleKey, "begin_ai_salaryman_lab_oauth_connection", {
-    p_handle: handle,
+  await rpc(supabaseUrl, serviceRoleKey, beginRpc, {
+    ...(includeHandleInRpc ? { p_handle: handle } : {}),
     p_state_hash: stateHash,
     p_code_verifier: verifier,
     p_redirect_uri: redirectUri,
@@ -65,7 +73,7 @@ export async function createOAuthStartResponse({
     social_account_id: socialAccountId,
     redirect_uri: redirectUri,
     scopes,
-    publish_mode: "dry_run",
-    publish_enabled: false,
+    publish_mode: publishMode,
+    publish_enabled: publishEnabled,
   };
 }

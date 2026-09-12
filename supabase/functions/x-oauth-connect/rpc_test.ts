@@ -65,5 +65,36 @@ test("OAuth start continues after a void RPC and returns the read-only authoriza
   assert.equal(requestCount, 1);
 
   const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
-  assert.match(source, /return json\(await createOAuthStartResponse\(/u);
+  assert.match(source, /const response = await createOAuthStartResponse\(/u);
+});
+
+test("Kabumori OAuth start omits handle from its account-specific RPC and returns write scopes", async () => {
+  const fetchImpl: typeof fetch = async (input, init) => {
+    assert.equal(String(input), `${SUPABASE_URL}/rest/v1/rpc/begin_kabumori_oauth_recovery`);
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    assert.equal("p_handle" in body, false);
+    assert.equal(typeof body.p_state_hash, "string");
+    assert.equal(typeof body.p_code_verifier, "string");
+    return new Response(null, { status: 204 });
+  };
+  const scopes = "tweet.read users.read tweet.write media.write offline.access";
+  const result = await createOAuthStartResponse({
+    supabaseUrl: SUPABASE_URL,
+    serviceRoleKey: "",
+    clientId: "test-client-id",
+    handle: "kabumori",
+    brandId: "kabumori",
+    socialAccountId: "kabumori_x",
+    scopes,
+    beginRpc: "begin_kabumori_oauth_recovery",
+    includeHandleInRpc: false,
+    publishMode: "live",
+    publishEnabled: true,
+    fetchImpl,
+  });
+  const authorizationUrl = new URL(String(result.authorization_url));
+  assert.equal(authorizationUrl.searchParams.get("scope"), scopes);
+  assert.equal(authorizationUrl.searchParams.get("code_challenge_method"), "S256");
+  assert.equal(result.publish_mode, "live");
+  assert.equal(result.publish_enabled, true);
 });

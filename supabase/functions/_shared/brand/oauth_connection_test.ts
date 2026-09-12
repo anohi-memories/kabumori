@@ -36,10 +36,11 @@ test("first connection binds only the registered handle, case-insensitively, and
   await assert.rejects(() => verifyReadOnlyXIdentity({ accessToken: "fixture-only", expectedPlatformUserId: null, expectedHandle: "kaishain_ai_lab", fetchImpl: respondAs(undefined) }), { message: "X_IDENTITY_INVALID_RESPONSE" });
 });
 
-test("x-oauth-connect requests read-only scopes that include tweet.read (required by users/me) and never posting scopes", async () => {
-  const { readFile } = await import("node:fs/promises");
-  const source = await readFile(new URL("../../x-oauth-connect/index.ts", import.meta.url), "utf8");
-  assert.match(source, /const SCOPES = "tweet\.read users\.read offline\.access";/u);
-  assert.doesNotMatch(source, /tweet\.write|media\.write|like\.write|follows\.write/u);
-  assert.match(source, /expectedHandle/u);
+test("AI Lab OAuth remains read-only while the account-specific recovery flow is additive", async () => {
+  const { resolveOAuthStartConfig } = await import("../../x-oauth-connect/account_config.ts");
+  const config = resolveOAuthStartConfig("kaishain_ai_lab");
+  assert.equal(config.scopes, "tweet.read users.read offline.access");
+  assert.doesNotMatch(config.scopes, /tweet\.write|media\.write|like\.write|follows\.write/u);
+  assert.equal(config.publishEnabled, false);
+  assert.equal(config.publishMode, "dry_run");
 });

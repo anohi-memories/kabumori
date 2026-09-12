@@ -9,14 +9,11 @@ import { assertOAuthCallbackState, hashOAuthState, verifyReadOnlyXIdentity } fro
 import { loadBrandContext, BrandContextError } from "../_shared/brand/brand_context.ts";
 import { rpc } from "./rpc.ts";
 import { createOAuthStartResponse } from "./start_logic.ts";
+import { resolveOAuthCallbackConfig, resolveOAuthStartConfig } from "./account_config.ts";
+import { probeLegacyXTokenStore } from "./legacy_token_store.ts";
+import { runKabumoriRefreshOnlyProof } from "./kabumori_recovery.ts";
 
-const X_AUTHORIZE_URL = "https://x.com/i/oauth2/authorize";
 const X_TOKEN_URL = "https://api.x.com/2/oauth2/token";
-// GET /2/users/me requires both tweet.read and users.read. Read-only on purpose: no posting scopes
-// until a later phase explicitly asks the account owner to re-consent for them.
-const SCOPES = "tweet.read users.read offline.access";
-const ACCOUNT_ID = "ai_salaryman_lab_x";
-const BRAND_ID = "ai_salaryman_lab";
 
 function json(body: Record<string, unknown>, status = 200) { return Response.json(body, { status }); }
 function serviceHeaders(key: string) { return { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" }; }
@@ -29,19 +26,49 @@ async function callback(req: Request, url: string, serviceRoleKey: string, clien
   const stateHash = await hashOAuthState(state);
   const lookup = await fetch(`${url}/rest/v1/social_account_oauth_states?select=social_account_id,brand_id,state_hash,code_verifier_vault_secret_id,redirect_uri,expires_at,consumed_at&state_hash=eq.${stateHash}&limit=1`, { headers: serviceHeaders(serviceRoleKey) });
   const records = lookup.ok ? await lookup.json() : [];
-  const context = await loadBrandContext({ supabaseUrl: url, serviceRoleKey, brandId: BRAND_ID });
-  await assertOAuthCallbackState({ context, state, record: records[0] ? { socialAccountId: records[0].social_account_id, brandId: records[0].brand_id, stateHash: records[0].state_hash, codeVerifierVaultSecretId: records[0].code_verifier_vault_secret_id, redirectUri: records[0].redirect_uri, expiresAt: records[0].expires_at, consumedAt: records[0].consumed_at } : null });
-  const consumed = await rpc(url, serviceRoleKey, "consume_ai_salaryman_lab_oauth_state", { p_state_hash: stateHash }) as Array<{ code_verifier: string; redirect_uri: string; expected_platform_user_id: string | null }>;
+  const record = records[0];
+  if (!record) throw new BrandContextError("OAUTH_STATE_UNKNOWN");
+  const config = resolveOAuthCallbackConfig(record.social_account_id, record.brand_id);
+  const context = await loadBrandContext({ supabaseUrl: url, serviceRoleKey, brandId: config.brandId });
+  await assertOAuthCallbackState({ context, state, record: { socialAccountId: record.social_account_id, brandId: record.brand_id, stateHash: record.state_hash, codeVerifierVaultSecretId: record.code_verifier_vault_secret_id, redirectUri: record.redirect_uri, expiresAt: record.expires_at, consumedAt: record.consumed_at } });
+  const consumed = await rpc(url, serviceRoleKey, config.consumeRpc, { p_state_hash: stateHash }) as Array<{ code_verifier: string; redirect_uri: string; expected_platform_user_id: string | null }>;
   if (!consumed[0]?.code_verifier || !consumed[0]?.redirect_uri) throw new BrandContextError("OAUTH_PKCE_VERIFIER_NOT_CONFIGURED");
   const tokenResponse = await fetch(X_TOKEN_URL, { method: "POST", headers: { Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`, "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: consumed[0].redirect_uri, code_verifier: consumed[0].code_verifier, client_id: clientId }) });
   if (!tokenResponse.ok) throw new BrandContextError(`X_TOKEN_EXCHANGE_FAILED:${tokenResponse.status}`);
   const tokens = await tokenResponse.json() as { access_token?: unknown; refresh_token?: unknown };
   if (typeof tokens.access_token !== "string" || typeof tokens.refresh_token !== "string") throw new BrandContextError("X_TOKEN_EXCHANGE_INVALID_RESPONSE");
   const expectedHandle = context.socialAccount?.handle;
-  if (!expectedHandle) throw new BrandContextError("AI_LAB_HANDLE_NOT_CONFIGURED");
+  if (!expectedHandle || expectedHandle.replace(/^@/u, "").toLowerCase() !== config.expectedHandle) {
+    throw new BrandContextError("OAUTH_EXPECTED_HANDLE_NOT_CONFIGURED");
+  }
   const identity = await verifyReadOnlyXIdentity({ accessToken: tokens.access_token, expectedPlatformUserId: consumed[0].expected_platform_user_id, expectedHandle });
-  await rpc(url, serviceRoleKey, "complete_ai_salaryman_lab_oauth_connection", { p_access_token: tokens.access_token, p_refresh_token: tokens.refresh_token, p_platform_user_id: identity.platformUserId });
-  return json({ success: true, connection_status: "identity_verified", publish_mode: "dry_run", publish_enabled: false });
+  if (config.tokenDestination === "vault") {
+    await rpc(url, serviceRoleKey, config.completeRpc, { p_access_token: tokens.access_token, p_refresh_token: tokens.refresh_token, p_platform_user_id: identity.platformUserId });
+    return json({ success: true, connection_status: "identity_verified", publish_mode: config.publishMode, publish_enabled: config.publishEnabled });
+  }
+  const proof = await runKabumoriRefreshOnlyProof({
+    supabaseUrl: url,
+    serviceRoleKey,
+    clientId,
+    clientSecret,
+    initialTokens: { accessToken: tokens.access_token, refreshToken: tokens.refresh_token },
+    expectedPlatformUserId: identity.platformUserId,
+    expectedHandle,
+  });
+  await rpc(url, serviceRoleKey, config.completeRpc, { p_platform_user_id: proof.platformUserId });
+  return json({
+    success: true,
+    connection_status: "identity_verified",
+    publish_mode: config.publishMode,
+    publish_enabled: config.publishEnabled,
+    refresh_only_proof: {
+      token_endpoint_2xx: proof.tokenEndpoint2xx,
+      saved_and_reloaded: proof.savedAndReloaded,
+      identity_verified: proof.identityVerified,
+      x_post_api_calls: 0,
+      media_upload_api_calls: 0,
+    },
+  });
 }
 
 Deno.serve(async (req) => {
@@ -64,16 +91,28 @@ Deno.serve(async (req) => {
       : await resolveAdminAuthorization({ authorizationHeader, supabaseUrl, anonKey, serviceRoleKey });
     if (!admin.authorized) return json({ error: "OAUTH_CONNECTION_UNAUTHORIZED" }, 403);
     const body = await req.json() as { handle?: unknown };
-    if (typeof body.handle !== "string") return json({ error: "AI_LAB_HANDLE_REQUIRED" }, 400);
-    return json(await createOAuthStartResponse({
+    if (typeof body.handle !== "string") return json({ error: "OAUTH_HANDLE_REQUIRED" }, 400);
+    const config = resolveOAuthStartConfig(body.handle);
+    const legacyTokenStoreStatus = config.tokenDestination === "legacy_store"
+      ? await probeLegacyXTokenStore({ supabaseUrl, serviceRoleKey, clientSecret })
+      : null;
+    const response = await createOAuthStartResponse({
       supabaseUrl,
       serviceRoleKey,
       clientId,
       handle: body.handle,
-      brandId: BRAND_ID,
-      socialAccountId: ACCOUNT_ID,
-      scopes: SCOPES,
-    }));
+      brandId: config.brandId,
+      socialAccountId: config.socialAccountId,
+      scopes: config.scopes,
+      beginRpc: config.beginRpc,
+      includeHandleInRpc: config.tokenDestination === "vault",
+      publishMode: config.publishMode,
+      publishEnabled: config.publishEnabled,
+    });
+    return json({
+      ...response,
+      ...(legacyTokenStoreStatus ? { legacy_token_store_status: legacyTokenStoreStatus } : {}),
+    });
   } catch (error) { return json({ error: safeCode(error) }, 400); }
 });
 
