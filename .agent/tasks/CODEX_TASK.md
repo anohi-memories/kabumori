@@ -3,7 +3,7 @@
 - task_id: x-multibrand-phase3c-oauth-start-void-rpc-fix-20260912
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: user
 - priority: high
 - recommended_model: terra
@@ -115,15 +115,20 @@ OAuth開始の再試行は1回だけ。成功レスポンスの`scopes`と`autho
 
 ## C1 Review — 2026-09-12
 
-- result: IMPLEMENTATION PASS / USER VALIDATION PENDING
+- result: PASS
 - root cause confirmation: PASS。`RETURNS void` RPC成功後の空bodyを旧helperがJSON parseしてgeneric 400へ変換する経路をテストで再現・修正済み。
 - code scope: PASS。`x-oauth-connect`内のresponse handlingとテスト分離のみ。無関係なDB/RPC/Cron/x-test-post変更なし。
 - regression tests: PASS。Edge Function 695 passed / 0 failed、`deno check`、`git diff --check`合格。
 - production deploy: PASS。`x-oauth-connect` v11 ACTIVE / `verify_jwt=false`、本番read-back byte compare一致。
-- safety: PASS。`dry_run` / `publish_enabled=false`維持、access/refresh token未保存、X投稿0、Kabumori token変更0、mio操作0。
-- remaining completion gate: deploy後のDashboard OAuth開始POSTをまだ再試行していないため、実際に `authorization_url` と `tweet.read users.read offline.access` が返る本番E2E確認は未完了。
-- next_owner: user。既存Dashboardから `POST {"handle":"kaishain_ai_lab"}` を1回だけ実行し、generic 400ではなくauthorization responseが返ることを確認する。secret/token/JWTは共有しない。authorization_url取得後は本人X認可へ進む前にChatGPTへ結果共有でも可。
-- task status: `review_required` のまま。上記本番再試行が成功したらC1を最終PASSとしてclose可能。
+- user validation: PASS。deploy後のDashboard OAuth開始POSTでgeneric 400は再発せず、`authorization_url` が正常返却された。
+- scopes: `tweet.read users.read offline.access`。posting scopeなし。
+- returned account: `ai_salaryman_lab` / `ai_salaryman_lab_x`。
+- returned safety settings: `publish_mode=dry_run` / `publish_enabled=false`。
+- redirect URI: expected `x-oauth-connect/callback`。
+- safety: PASS。X投稿0、Cron変更0、Kabumori token変更0、mio操作0。
+- implementation commit: `926f29a1d4ee2ec492ed3d7197ab356e74a8fa49`。
+- task status: done。
+- next_owner: user。今回新規発行されたauthorization URLを本人ブラウザで開き、@kaishain_ai_labとしてXログイン・同意する。旧期限切れstateは再利用しない。パスワード・2FA・token等はチャットへ共有しない。
 
 Report必須:
 - task_id
