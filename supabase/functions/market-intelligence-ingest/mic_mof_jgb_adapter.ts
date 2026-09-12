@@ -94,8 +94,13 @@ export function normalizeMofObservation(observation: MofObservation, fetchedAt: 
     metricKey: observation.metricKey,
     value: observation.value,
     unit: "percent",
-    // 15:00 JST (the published reference time for this series) == 06:00 UTC.
-    observedAt: `${observation.date}T06:00:00.000Z`,
+    // MOF's CSV gives only a calendar date (era-dated), never a time of
+    // day. Per Phase 1A review, this is not converted into a fabricated
+    // timestamp (e.g. "15:00 JST") -- observedAt stays null and
+    // timePrecision is "date".
+    observedDate: observation.date,
+    observedAt: null,
+    timePrecision: "date",
     fetchedAt: fetchedAt.toISOString(),
     sourceKey: MOF_SOURCE_KEY,
     provider: "MOF",

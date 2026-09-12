@@ -149,10 +149,19 @@ for each row execute function public.kabumori_set_updated_at();
 --    rates, FX, commodities). Per Phase 0 review: provenance/freshness are
 --    explicit columns, not buried in metadata jsonb, because stale-checks,
 --    forecasting inputs and the future Excel export all filter/sort on them
---    directly. observed_at (when the value is true in the real world) and
---    fetched_at (when this system retrieved it) are intentionally separate
---    columns -- for most free sources used in Phase 1A the two differ by
---    up to a day (see is_delayed/delay_minutes).
+--    directly. fetched_at (when this system retrieved it) is always known;
+--    the *observation* time is split into observed_date (always known --
+--    every source below gives at least a calendar date) and observed_at
+--    (only set when the source itself reports a real sub-day timestamp).
+--
+--    Per Phase 1A review: do not fabricate a time of day for a date-only
+--    source (e.g. "FRED's daily value happened at 21:00 UTC"). None of
+--    this phase's 4 adapters (FRED, MOF, EIA; SEC EDGAR writes
+--    market_events, not metrics) report an intraday time, so for every row
+--    they write, observed_at is NULL and time_precision is 'date' --
+--    callers doing stale-checks or building forecast inputs must branch on
+--    time_precision and must never treat a 'date' row as if it had a known
+--    intraday instant.
 -- ---------------------------------------------------------------------------
 create table if not exists public.market_metrics (
   id bigint generated always as identity primary key,
@@ -162,7 +171,13 @@ create table if not exists public.market_metrics (
   metric_key text not null,
   value numeric not null,
   unit text not null,
-  observed_at timestamptz not null,
+  -- Always known -- the calendar date the observation pertains to, exactly
+  -- as given by the source (no timezone conversion invented here).
+  observed_date date not null,
+  -- Only set when the source itself reports a real timestamp, not derived
+  -- or guessed from observed_date. NULL whenever time_precision='date'.
+  observed_at timestamptz,
+  time_precision text not null check (time_precision in ('date', 'timestamp')),
   fetched_at timestamptz not null,
   source_key text not null references public.mic_source_registry(source_key),
   provider text not null,
@@ -173,16 +188,30 @@ create table if not exists public.market_metrics (
   is_official boolean not null default false,
   metadata jsonb,
   created_at timestamptz not null default now(),
-  check (is_delayed or delay_minutes is null or delay_minutes = 0)
+  check (is_delayed or delay_minutes is null or delay_minutes = 0),
+  check ((time_precision = 'timestamp') = (observed_at is not null)),
+  -- Internal dedupe/ordering anchor ONLY -- NEVER read this as the real
+  -- observation time. For 'timestamp' rows it equals the real observed_at
+  -- fact; for 'date' rows it is midnight UTC of observed_date, which is a
+  -- deterministic placeholder for uniqueness/sorting, not a claim about
+  -- when in the day the value actually occurred. Any code that needs the
+  -- true observation time must read observed_date/observed_at/
+  -- time_precision instead of this column.
+  dedupe_anchor_at timestamptz generated always as (
+    coalesce(observed_at, (observed_date::timestamp at time zone 'UTC'))
+  ) stored
 );
 
 -- The dedupe key: re-ingesting the same observation from the same source is
 -- an idempotent upsert (fetched_at/metadata refresh), not a new row and not
--- an error.
+-- an error. Keyed on dedupe_anchor_at (always non-null) rather than the
+-- nullable observed_at directly, so two 'date'-precision rows for the same
+-- (metric_key, source_key, observed_date) correctly collide -- NULL <> NULL
+-- in a unique index would otherwise let duplicates through.
 create unique index if not exists market_metrics_dedupe_uidx
-  on public.market_metrics (metric_key, observed_at, source_key);
+  on public.market_metrics (metric_key, source_key, dedupe_anchor_at);
 create index if not exists market_metrics_latest_idx
-  on public.market_metrics (metric_key, observed_at desc);
+  on public.market_metrics (metric_key, dedupe_anchor_at desc);
 create index if not exists market_metrics_source_key_idx
   on public.market_metrics (source_key, fetched_at desc);
 
@@ -190,18 +219,36 @@ alter table public.market_metrics enable row level security;
 
 -- ---------------------------------------------------------------------------
 -- 4. mic_ingestion_runs -- per-source ingestion run audit log AND the
---    idempotency/claim mechanism. The unique (source_key, run_window)
---    constraint *is* the lock, mirroring publish_claims: the first insert
---    for a given window wins, every later attempt for the same window is
---    ignored by Postgres rather than by racy application-level checks.
+--    idempotency/claim mechanism.
+--
+--    Per Phase 1A review: a single table-wide unique(source_key, run_window)
+--    makes a window permanently stuck once its one allowed row becomes
+--    'failed' (e.g. a transient API timeout) -- nothing could ever retry
+--    that window again. Instead, the partial unique index below only
+--    applies while status is 'running' or 'completed': that still blocks
+--    two concurrent claims (running vs running) and blocks re-running an
+--    already-succeeded window (running/completed vs completed), but a
+--    'failed' row no longer occupies the slot, so a new row (the next
+--    attempt_no) for the same (source_key, run_window) can be claimed
+--    again. The claim is a plain INSERT that the partial index either
+--    allows or rejects with a unique-violation (caught as a 409 by the
+--    writer, same pattern as market_events.content_hash) -- there is no
+--    separate "check then insert" step for the exclusivity itself, so
+--    there is no race window there. attempt_no is best-effort sequential
+--    (computed from a prior read of this table) purely for audit counting;
+--    it is not itself load-bearing for correctness.
 -- ---------------------------------------------------------------------------
 create table if not exists public.mic_ingestion_runs (
   id uuid primary key default gen_random_uuid(),
   source_key text not null references public.mic_source_registry(source_key),
-  -- A caller-computed bucket key (e.g. "fred:2026-09-12T09") that makes two
-  -- invocations for the same source within the same window collide on the
-  -- unique constraint below instead of double-fetching.
+  -- A caller-computed bucket key (e.g. "fred:2026-09-12T09") that scopes
+  -- retries to "this same window", rather than letting a retry silently
+  -- drift into fetching a different window's data.
   run_window text not null,
+  -- 1 for the first claim attempt of a given (source_key, run_window); a
+  -- retry after a failed/stale attempt increments this. Not itself unique
+  -- (see the partial index below) -- it is audit metadata, not a lock.
+  attempt_no integer not null default 1 check (attempt_no >= 1),
   trigger_type text not null default 'manual' check (trigger_type in ('manual', 'scheduled')),
   status text not null default 'running' check (status in (
     'running', 'completed', 'failed', 'skipped_inactive', 'skipped_duplicate'
@@ -212,15 +259,25 @@ create table if not exists public.mic_ingestion_runs (
   error text,
   started_at timestamptz not null default now(),
   completed_at timestamptz,
-  created_at timestamptz not null default now(),
-  unique (source_key, run_window)
+  created_at timestamptz not null default now()
 );
+
+-- THE lock: at most one 'running' or 'completed' row per (source_key,
+-- run_window) at any time. 'failed' rows are deliberately excluded, so
+-- they accumulate as an audit trail without blocking a future retry.
+create unique index if not exists mic_ingestion_runs_active_claim_uidx
+  on public.mic_ingestion_runs (source_key, run_window)
+  where status in ('running', 'completed');
 
 create index if not exists mic_ingestion_runs_started_at_idx
   on public.mic_ingestion_runs (started_at desc);
 create index if not exists mic_ingestion_runs_running_idx
   on public.mic_ingestion_runs (source_key, started_at)
   where status = 'running';
+-- Supports the "what's the next attempt_no for this window" lookup the
+-- claim path performs before each insert.
+create index if not exists mic_ingestion_runs_window_attempt_idx
+  on public.mic_ingestion_runs (source_key, run_window, attempt_no desc);
 
 alter table public.mic_ingestion_runs enable row level security;
 

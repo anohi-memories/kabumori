@@ -40,7 +40,9 @@ test("normalizeEiaObservation produces an official, delayed metric", () => {
   );
   assert.equal(metric.metricKey, "WTI");
   assert.equal(metric.value, 65.12);
-  assert.equal(metric.observedAt, "2026-09-10T21:00:00.000Z");
+  assert.equal(metric.observedDate, "2026-09-10");
+  assert.equal(metric.observedAt, null);
+  assert.equal(metric.timePrecision, "date");
   assert.equal(metric.sourceKey, "eia");
   assert.equal(metric.isOfficial, true);
 });

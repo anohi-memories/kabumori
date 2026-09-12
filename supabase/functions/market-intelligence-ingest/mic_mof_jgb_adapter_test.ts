@@ -85,7 +85,9 @@ test("fetchMofJgbMetrics: normal path decodes real Shift-JIS bytes and returns J
   // Newest row in the captured sample (R8.8.31 = 2026-08-31) carries a
   // quoted 10年 value (2.943); the file's first row (S49.9.24) has "-".
   assert.equal(jgb10y!.value, 2.943);
-  assert.equal(jgb10y!.observedAt, "2026-08-31T06:00:00.000Z");
+  assert.equal(jgb10y!.observedDate, "2026-08-31");
+  assert.equal(jgb10y!.observedAt, null);
+  assert.equal(jgb10y!.timePrecision, "date");
   assert.equal(jgb10y!.sourceKey, "mof_jgb");
   assert.equal(jgb10y!.isOfficial, true);
   const jgb2y = metrics.find((m) => m.metricKey === "JGB2Y");

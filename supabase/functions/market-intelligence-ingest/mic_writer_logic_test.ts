@@ -29,7 +29,9 @@ function sampleMetric(): NormalizedMarketMetric {
     metricKey: "US10Y",
     value: 4.05,
     unit: "percent",
-    observedAt: "2026-09-11T21:00:00.000Z",
+    observedDate: "2026-09-11",
+    observedAt: null,
+    timePrecision: "date",
     fetchedAt: "2026-09-12T00:00:00.000Z",
     sourceKey: "fred",
     provider: "FRED",
@@ -90,11 +92,14 @@ test("upsertMarketMetric posts with on_conflict + merge-duplicates", async () =>
   const result = await upsertMarketMetric(ctx, sampleMetric(), fetchImpl as typeof fetch);
   assert.deepEqual(result, { outcome: "upserted" });
   assert.equal(calls.length, 1);
-  assert.match(calls[0].url, /on_conflict=metric_key,observed_at,source_key/);
+  assert.match(calls[0].url, /on_conflict=metric_key,source_key,dedupe_anchor_at/);
   const prefer = (calls[0].init?.headers as Record<string, string>)?.Prefer;
   assert.match(prefer, /resolution=merge-duplicates/);
   const body = JSON.parse(String(calls[0].init?.body));
   assert.equal(body.metric_key, "US10Y");
+  assert.equal(body.observed_date, "2026-09-11");
+  assert.equal(body.observed_at, null);
+  assert.equal(body.time_precision, "date");
   assert.equal(body.is_delayed, true);
 });
 

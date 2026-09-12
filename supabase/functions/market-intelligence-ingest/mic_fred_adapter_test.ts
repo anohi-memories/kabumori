@@ -4,10 +4,10 @@ import {
   buildFredObservationsUrl,
   FredAdapterError,
   fetchFredMetrics,
-  fredObservedAtFromDate,
   latestValidFredObservation,
   normalizeFredObservation,
   parseFredObservations,
+  validateFredObservationDate,
 } from "./mic_fred_adapter.ts";
 
 test("buildFredObservationsUrl shapes the documented query params", () => {
@@ -38,15 +38,15 @@ test("latestValidFredObservation returns null when every observation is missing"
   assert.equal(latestValidFredObservation([{ date: "2026-09-11", value: "." }]), null);
 });
 
-test("fredObservedAtFromDate anchors to a fixed UTC time for the date", () => {
-  assert.equal(fredObservedAtFromDate("2026-09-10"), "2026-09-10T21:00:00.000Z");
+test("validateFredObservationDate returns the date unchanged -- never fabricates a time of day", () => {
+  assert.equal(validateFredObservationDate("2026-09-10"), "2026-09-10");
 });
 
-test("fredObservedAtFromDate rejects a non YYYY-MM-DD date", () => {
-  assert.throws(() => fredObservedAtFromDate("09/10/2026"), FredAdapterError);
+test("validateFredObservationDate rejects a non YYYY-MM-DD date", () => {
+  assert.throws(() => validateFredObservationDate("09/10/2026"), FredAdapterError);
 });
 
-test("normalizeFredObservation produces an official, delayed metric", () => {
+test("normalizeFredObservation produces an official, delayed, date-precision metric with no fabricated time", () => {
   const metric = normalizeFredObservation(
     { seriesId: "DGS10", metricKey: "US10Y", unit: "percent" },
     { date: "2026-09-10", value: "4.05" },
@@ -54,6 +54,9 @@ test("normalizeFredObservation produces an official, delayed metric", () => {
   );
   assert.equal(metric.metricKey, "US10Y");
   assert.equal(metric.value, 4.05);
+  assert.equal(metric.observedDate, "2026-09-10");
+  assert.equal(metric.observedAt, null);
+  assert.equal(metric.timePrecision, "date");
   assert.equal(metric.sourceKey, "fred");
   assert.equal(metric.isDelayed, true);
   assert.equal(metric.isOfficial, true);
@@ -84,6 +87,7 @@ test("fetchFredMetrics: normal path returns one metric per mapping", async () =>
   );
   assert.equal(metrics.length, 2);
   assert.deepEqual(metrics.map((m) => m.metricKey).sort(), ["US10Y", "US2Y"]);
+  assert.ok(metrics.every((m) => m.observedDate === "2026-09-10" && m.observedAt === null && m.timePrecision === "date"));
 });
 
 test("fetchFredMetrics: malformed response surfaces FRED_MALFORMED_RESPONSE", async () => {

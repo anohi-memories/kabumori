@@ -79,9 +79,13 @@ export function normalizeEiaObservation(
     metricKey: mapping.metricKey,
     value,
     unit: mapping.unit,
-    // Daily spot price with no intraday time; treated as the US market
-    // close for that date (21:00 UTC), same convention as the FRED adapter.
-    observedAt: `${datum.period}T21:00:00.000Z`,
+    // EIA's daily spot price series gives only a calendar date, never a
+    // time of day. Per Phase 1A review, this is not converted into a
+    // fabricated timestamp (e.g. "21:00 UTC") -- observedAt stays null and
+    // timePrecision is "date".
+    observedDate: datum.period,
+    observedAt: null,
+    timePrecision: "date",
     fetchedAt: fetchedAt.toISOString(),
     sourceKey: EIA_SOURCE_KEY,
     provider: "EIA",

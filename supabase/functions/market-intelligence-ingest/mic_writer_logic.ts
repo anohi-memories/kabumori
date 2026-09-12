@@ -101,12 +101,14 @@ export async function writeMarketEvent(
 
 export type UpsertMarketMetricResult = { outcome: "upserted" };
 
-// Upserts one market_metrics row keyed on (metric_key, observed_at,
-// source_key). Re-ingesting the exact same observation from the same
-// source is expected (every adapter run re-fetches "latest"), so this is a
-// merge-duplicates upsert, not an insert-or-fail -- the value for a given
-// key triple is deterministic, so overwriting with a republished value is
-// a safe no-op in practice, and refreshes fetched_at/metadata.
+// Upserts one market_metrics row keyed on (metric_key, source_key,
+// dedupe_anchor_at) -- a generated column, never set directly by this
+// writer (see the migration's column comment). Re-ingesting the exact same
+// observation from the same source is expected (every adapter run
+// re-fetches "latest"), so this is a merge-duplicates upsert, not an
+// insert-or-fail -- the value for a given key triple is deterministic, so
+// overwriting with a republished value is a safe no-op in practice, and
+// refreshes fetched_at/metadata.
 export async function upsertMarketMetric(
   ctx: RestContext,
   metric: NormalizedMarketMetric,
@@ -116,7 +118,9 @@ export async function upsertMarketMetric(
     metric_key: metric.metricKey,
     value: metric.value,
     unit: metric.unit,
+    observed_date: metric.observedDate,
     observed_at: metric.observedAt,
+    time_precision: metric.timePrecision,
     fetched_at: metric.fetchedAt,
     source_key: metric.sourceKey,
     provider: metric.provider,
@@ -129,7 +133,7 @@ export async function upsertMarketMetric(
   };
 
   const result = await fetchImpl(
-    `${ctx.supabaseUrl}/rest/v1/market_metrics?on_conflict=metric_key,observed_at,source_key`,
+    `${ctx.supabaseUrl}/rest/v1/market_metrics?on_conflict=metric_key,source_key,dedupe_anchor_at`,
     {
       method: "POST",
       headers: restHeaders(ctx.secretKey, "resolution=merge-duplicates,return=minimal"),

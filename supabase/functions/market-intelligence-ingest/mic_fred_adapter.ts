@@ -72,14 +72,15 @@ export function latestValidFredObservation(observations: FredObservation[]): Fre
   return null;
 }
 
-// FRED daily observations carry a date with no intraday time. Treated as
-// the US market close for that date (21:00 UTC) -- adequate for a daily
-// series, not meant to imply intraday precision.
-export function fredObservedAtFromDate(dateStr: string): string {
+// FRED daily observations carry a date with no intraday time. Per Phase 1A
+// review, this is NOT converted into a fabricated timestamp (e.g. "21:00
+// UTC") -- it is validated and returned as-is for use as observedDate,
+// with observedAt left null and timePrecision set to "date".
+export function validateFredObservationDate(dateStr: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
     throw new FredAdapterError("FRED_INVALID_DATE", `unexpected date format: ${dateStr}`);
   }
-  return `${dateStr}T21:00:00.000Z`;
+  return dateStr;
 }
 
 export function normalizeFredObservation(
@@ -95,7 +96,9 @@ export function normalizeFredObservation(
     metricKey: mapping.metricKey,
     value,
     unit: mapping.unit,
-    observedAt: fredObservedAtFromDate(observation.date),
+    observedDate: validateFredObservationDate(observation.date),
+    observedAt: null,
+    timePrecision: "date",
     fetchedAt: fetchedAt.toISOString(),
     sourceKey: FRED_SOURCE_KEY,
     provider: "FRED",

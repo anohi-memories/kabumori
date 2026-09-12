@@ -7,12 +7,22 @@
 // only in each adapter's own `metadata`.
 
 export type QualityTier = "official" | "official_delayed" | "trusted_free" | "fallback";
+export type TimePrecision = "date" | "timestamp";
 
 export type NormalizedMarketMetric = {
   metricKey: string;
   value: number;
   unit: string;
-  observedAt: string; // ISO timestamp
+  // Always the calendar date the observation pertains to, exactly as given
+  // by the source -- "YYYY-MM-DD", no timezone conversion invented here.
+  observedDate: string;
+  // Only set when the source itself reports a real sub-day timestamp.
+  // MUST be null when timePrecision is "date" -- never fabricate a time of
+  // day for a date-only source (e.g. do not claim a FRED daily value
+  // "happened at 21:00 UTC"). See mic_writer_logic.ts / the migration's
+  // dedupe_anchor_at comment for how dedupe still works safely without it.
+  observedAt: string | null;
+  timePrecision: TimePrecision;
   fetchedAt: string; // ISO timestamp
   sourceKey: string;
   provider: string;

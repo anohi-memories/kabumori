@@ -115,6 +115,7 @@ async function fetchActiveSourceKeys(ctx: RestContext, fetchImpl: typeof fetch):
 type SourceRunResult = {
   sourceKey: SourceKey;
   status: "completed" | "failed" | "skipped_duplicate";
+  attemptNo?: number;
   fetchedCount?: number;
   newCount?: number;
   duplicateCount?: number;
@@ -156,11 +157,11 @@ async function runSource(
     }
 
     await completeIngestionRun(ctx, claim.runId, { fetchedCount, newCount, duplicateCount });
-    return { sourceKey, status: "completed", fetchedCount, newCount, duplicateCount };
+    return { sourceKey, status: "completed", attemptNo: claim.attemptNo ?? undefined, fetchedCount, newCount, duplicateCount };
   } catch (error) {
     const reason = safeErrorMessage(error);
     await failIngestionRun(ctx, claim.runId, reason);
-    return { sourceKey, status: "failed", error: reason };
+    return { sourceKey, status: "failed", attemptNo: claim.attemptNo ?? undefined, error: reason };
   }
 }
 
