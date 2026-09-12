@@ -474,7 +474,7 @@ ChatGPT should review the successful v91 deployment. After the next natural morn
 
 - task_id: `push-delivery-deduplication-hardening-20260912`
 - result: `review_required`; `next_owner: chatgpt`
-- source_base: `origin/main` fresh-checked at `72fcb00484570f5ecacd544b0ae330f1c12f20d7`; isolated clone HEAD matched; push-time state will be recorded below.
+- source_base: `origin/main` fresh-checked at `72fcb00484570f5ecacd544b0ae330f1c12f20d7`; isolated clone HEAD matched. Before the proof commit, push-time `origin/main` was fresh-checked and still matched this SHA.
 - worktree: clean temporary clone at `/private/tmp/kabumori-h2-f1-20260912-tDGet5/repo`. Formal checkout and existing local changes were not accessed or modified.
 - parallel_slot_check: Codex slot 1 is `done`; Claude slot 1 is `review_required`; Claude slot 2 is working on `x-multibrand-phase3c-ai-lab-x-oauth-connect-20260910` (OAuth/Vault and `x-oauth-connect` only). No active slot overlaps this push-claim migration, `send-push-notifications`, or H2 RPC.
 
@@ -557,6 +557,6 @@ Then apply the exact migration file via `podman exec -i <container> psql -X -v O
 - changed files for this follow-up: `.agent/tasks/CODEX_TASK_2.md`, `.agent/CODEX_REPORT_2.md` only.
 - production: migration/RPC not applied; `supabase db push` not run; no Edge Function deploy, Cron/settings/secrets/OAuth changes, Push, OpenAI/X API, or X post.
 - remaining_issues: the known settings change window between database claim and the external Expo request remains; migration-history divergence remains. C2 should review these and the rollout/disable plan before any production migration or dispatcher deployment.
-- commit_hash: pending.
-- push: pending.
+- commit_hash: `7a42df9bf3aa756063cc0a9d994eac360eb9bb70` (proof/status control-file commit).
+- push: successful; the commit above was fetched back from `origin/main` and verified there. This report-only revision records the successful push.
 - next_recommendation: C2 review. Production rollout remains blocked pending C2 approval; do not apply the migration or deploy the dispatcher.
