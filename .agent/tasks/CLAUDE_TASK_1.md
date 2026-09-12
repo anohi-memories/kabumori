@@ -3,7 +3,7 @@
 - task_id: broad-market-news-collection-and-user-notification-control-20260912
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: urgent
 - recommended_model: Opus 5
