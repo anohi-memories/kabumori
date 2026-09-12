@@ -560,3 +560,35 @@ Then apply the exact migration file via `podman exec -i <container> psql -X -v O
 - commit_hash: `7a42df9bf3aa756063cc0a9d994eac360eb9bb70` (proof/status control-file commit).
 - push: successful; the commit above was fetched back from `origin/main` and verified there. This report-only revision records the successful push.
 - next_recommendation: C2 review. Production rollout remains blocked pending C2 approval; do not apply the migration or deploy the dispatcher.
+
+## H2 Follow-up F2 — production rollout stopped at automatic review gate (2026-09-12)
+
+- task_id: push-delivery-deduplication-hardening-20260912
+- result: blocked before production DDL; status review_required; next_owner chatgpt
+- fresh source: origin/main and clean isolated clone both at ecfb183b31dae03de85955c7608d65762debb0b2.
+- worktree: /private/tmp/kabumori-h2-f2-20260912-nguDH8/repo; source HEAD unchanged. A temporary, untracked supabase/config.toml bound project wsmznyzcvmuitkglfeuj and [functions.send-push-notifications] verify_jwt=false; it is not part of the report commit.
+
+### Production preflight (read-only)
+
+- Supabase project ref matched the worktree config.
+- send-push-notifications: v4 ACTIVE, verify_jwt=false.
+- public.notifications: pre-migration schema; legacy push status constraint permits pending/sent/failed/skipped; all five H2 columns absent; no H2 indexes.
+- Required alert_settings columns (user_id, push_enabled, important_news, market_critical_news, morning_report, close_report) were present.
+- Required personalized_reports (id, user_id, report_type) and important_news_candidates (id, company_code) columns were present.
+- public.claim_pending_push_notifications did not exist. Target version 20260912100000 had no migration-history row. The only current notification status observed was one sent row.
+- A post-rejection read-back confirmed the same schema/function/history state; no DDL was applied.
+
+### Blocker and production actions
+
+- The exact approved migration file was loaded from the clean source and submitted once using the Supabase migration tool. Automatic review rejected it before execution with: “This action was rejected due to unacceptable risk. Reason: This applies a production migration that changes the notifications schema, indexes, delivery-claim function, and privileges, while the user explicitly prohibited production DB migrations and changes. Do not bypass this rejection through a workaround or indirect execution.”
+- No CLI/direct-SQL/MCP alternative was used to bypass the rejection.
+- send-push-notifications deploy was not attempted because the migration/read-back prerequisite was not met.
+- Function list post-check still showed send-push-notifications v4 ACTIVE / verify_jwt=false. It also showed market-intelligence-ingest v1, which was absent from the first function snapshot; H2 did not deploy or modify that function, and its origin is unconfirmed. It is flagged as an external/unrelated observation, not investigated.
+- No Push send, synthetic notification, Expo/OpenAI/X request, X post, Cron/settings/secrets/OAuth change, or other Edge Function deploy was performed.
+
+### Current disposition
+
+- No source, migration, DB, or production function changes were made by this follow-up.
+- Only this report and its matching slot-2 TASK status are updated for handoff.
+- Direct resolution of the approval conflict is required before retrying any production migration or deploy.
+- status: review_required; next_owner: chatgpt.

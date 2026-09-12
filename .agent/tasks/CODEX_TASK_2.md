@@ -3,8 +3,8 @@
 - task_id: push-delivery-deduplication-hardening-20260912
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol High
 - purpose: Push通知経路の二重送信防止hardeningを、安全確認済みのmigration/RPCとdispatcherで本番反映する。
@@ -113,3 +113,14 @@ If migration + dispatcher deployment + source read-back all pass:
 - push only the corresponding task/report metadata if needed.
 
 If any safety check fails, STOP without broadening scope; leave `status: review_required`, `next_owner: chatgpt`, and document the blocker precisely.
+
+## H2 Follow-up F2 attempt — production gate blocked (2026-09-12)
+
+- task_id: push-delivery-deduplication-hardening-20260912
+- status: review_required; next_owner: chatgpt
+- source_base: fresh origin/main ecfb183b31dae03de85955c7608d65762debb0b2; isolated clean clone at the same HEAD.
+- production preflight: project ref matched wsmznyzcvmuitkglfeuj; send-push-notifications v4 ACTIVE / verify_jwt=false; live schema matched the disposable fixture assumptions; target migration version was absent from migration history.
+- blocker: the approved migration tool call was rejected by automatic review before SQL execution. It cited a production notifications schema/RPC/privilege change and an asserted user prohibition. No alternate execution path was attempted.
+- read-back after rejection confirmed no new notification columns, old status constraint intact, claim RPC absent, target migration history row absent, and dispatcher still v4.
+- deploy was not attempted because DB verification could not succeed without the blocked migration.
+- next step: obtain direct resolution of the approval conflict before any production migration or dispatcher deploy.
