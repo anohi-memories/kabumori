@@ -53,7 +53,7 @@ test("generates real AI Lab content using only its own voice instructions, and r
   assert.equal(draft.inputTokens, 150);
   assert.equal(draft.outputTokens, 90);
   assert.ok(draft.apiCostUsd > 0);
-  assert.match(capturedInstructions, /未確認の人物像、実績、勤務先、投資経験は作らないでください/u);
+  assert.match(capturedInstructions, /未確認の人物像、実績、勤務先、投資経験、具体的な収益額・成果は作らないでください/u);
   // The instructions legitimately *mention* Kabumori in the negative ("don't use Kabumori's voice/tags")
   // -- what must never appear is the generated text itself carrying Kabumori's actual voice/hashtags.
   assert.doesNotMatch(draft.text, /かぶモリ|#日本株|#日経平均|#株式投資/u);
