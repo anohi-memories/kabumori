@@ -1,12 +1,12 @@
 # Codex Report
 
 - task_id: `x-multibrand-phase3h-ai-lab-prelive-safeguards-20260913`
-- result: `review_required` — implementation and tests are complete locally, but the implementation branch is not yet available at its final commit on GitHub for C1 review. Two exact push attempts were rejected by the environment safety reviewer. This is not production E2E proof: migrations are unapplied, `x-test-post` is undeployed, no write scopes were added, and no X post was sent.
+- result: `review_required` — implementation and tests are complete and the approved source branch is available on GitHub for C1 review. This is not production E2E proof: migrations are unapplied, `x-test-post` is undeployed, no write scopes were added, and no X post was sent.
 - model_used: GPT-5.6 Sol
-- source_base: `origin/feature/multibrand-foundation` `341e5dc5c03147394a99b2b71d148d2ba06c9c89`; control metadata based on fresh `origin/main` `db5f63f34b308dee03bc5995e8c8aff44a88a7ea`
+- source_base: `origin/feature/multibrand-foundation` `341e5dc5c03147394a99b2b71d148d2ba06c9c89`; control metadata based on fresh `origin/main` `9dbbb5156b5d72cda1b6839110b45772f5b8ac55`
 - implementation_branch: `codex/ai-lab-prelive-safeguards-20260913`
 - commit_hash: `6ce4ad8` (safeguards) + `406b53c2a2838a5ac2a446fffb6e6feef954eb7a` (Vault-backed dispatch)
-- push: the implementation branch is not pushed. Before both attempts, checks showed local `HEAD=406b53c2a2838a5ac2a446fffb6e6feef954eb7a`, remote branch `6ce4ad8ea983dd617c6227dd6f628e3e3b4f945b`, and a clean fast-forward path. The first exact push was rejected because approval existed only in untrusted task-file content. After the user replied `しょうにんします`, a second exact push was rejected because that terse approval did not itself specify the exact payload and destination. No further retry, workaround, or alternate egress was attempted. The `.agent/`-only control sync does not include implementation source.
+- push: after two earlier attempts were rejected, the user explicitly authorized the exact repository, branch, commit, and code payload in chat. The exact branch push then succeeded. Post-push fetch verified remote `HEAD=406b53c2a2838a5ac2a446fffb6e6feef954eb7a` (parent `6ce4ad8ea983dd617c6227dd6f628e3e3b4f945b`): [branch](https://github.com/anohi-memories/kabumori/tree/codex/ai-lab-prelive-safeguards-20260913) / [commit](https://github.com/anohi-memories/kabumori/commit/406b53c2a2838a5ac2a446fffb6e6feef954eb7a). This was source synchronization for C1 only. No production authorization was used.
 - next_owner: chatgpt
 
 ## Length policy
@@ -53,10 +53,10 @@
 
 - production_changes: 0. This code-only continuation did not access production. The prior read-only state remains the last verified state: AI Lab `publish_mode=dry_run`, `publish_enabled=false`; no token values were read. No production DDL/data/RPC write occurred.
 - deploy_status: none; no Edge Function deployed. X POST/media calls: 0. Cron, OAuth scopes, secrets, account settings, Kabumori, and Mio were not changed.
-- remaining_issues: a direct explicit authorization naming the private repository, exact branch, exact commit, and payload (including the Vault reader migration and `x-test-post` change) is needed before any further source push attempt; then C1 review. Separately, static/review and exact approval are needed before applying either local migration; production deploy/read-back; confirmed schedule data; separately approved `tweet.write` reauthorization and identity check; separate approval before changing live flags or sending a first post. iOS is not relevant to this Edge Function task.
+- remaining_issues: C1 review. Separately, static/review and exact approval are needed before applying either local migration; production deploy/read-back; confirmed schedule data; separately approved `tweet.write` reauthorization and identity check; separate approval before changing live flags or sending a first post. iOS is not relevant to this Edge Function task.
 - exact steps before first AI Lab live post: (1) C1 review this code and both migrations; (2) obtain separate exact approval before applying the two migrations, then read back function definition/ACL and verify the fixed account/token reference guard; (3) obtain separate approval before deploying only `x-test-post`, then verify deployed source/version; (4) confirm exact AI Lab posting-window values from its source of truth (do not invent or change Cron); (5) separately approve OAuth reauthorization adding `tweet.write` while retaining current read scopes, then use read-only `/2/users/me` to verify `kaishain_ai_lab`; (6) only after separate explicit approval may publishing flags be changed and a first real X text post be sent. No step beyond local implementation/testing is authorized here.
 - safety_checks: no live mode/publish enablement, DB change, deploy, X post, media upload, token refresh, OAuth scope change, Cron/posting-window change, Kabumori token/path change, or Mio change. AI Lab routing has no legacy fallback and does not refresh. Secret/token values were not emitted to logs, responses, Git, or this report.
-- next_recommendation: ask the user to provide direct, specific trusted authorization in chat naming the exact private repository, branch, commit, and source payload if they still want the code visible for C1. Do not retry or route the source through another channel before that. After a successful push, stop for C1; keep all production operations behind their own exact approval.
+- next_recommendation: C1 review the pushed branch/diff and commit integrity. Stop here; do not apply migrations, deploy, change OAuth scopes or publishing flags, or send an X post without their separate explicit approvals.
 
 ---
 

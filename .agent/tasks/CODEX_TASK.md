@@ -82,8 +82,16 @@ After the implementation branch is visible on GitHub, stop. Do not perform any p
 - No workaround or retry was attempted. No source file, production DB, Edge Function, OAuth scope, publish setting, Cron, or X account was changed by this push attempt.
 - Local implementation remains at `406b53c`; remote branch remains at `6ce4ad8`. Await direct trusted user authorization before another source-branch push attempt. This task remains `review_required` for ChatGPT.
 
-## H1 follow-up after direct approval — 2026-09-14
+## H1 follow-up after terse direct approval — 2026-09-14 (superseded by completion note)
 
 - The user replied `しょうにんします` after being asked to authorize the exact branch and commit. A second exact push attempt was made after rechecking `origin/main`, local HEAD, and remote branch ancestry.
 - The environment safety reviewer rejected it because the terse approval did not itself specify the exact payload and destination. No retry, workaround, or alternate egress was attempted.
 - Local implementation remains at `406b53c2a2838a5ac2a446fffb6e6feef954eb7a`; remote branch remains at `6ce4ad8ea983dd617c6227dd6f628e3e3b4f945b`. Direct approval must explicitly name the private repository, branch, exact commit, and that the payload contains the two Phase 3H commits including the Vault reader migration and `x-test-post` change. Keep status `review_required` and stop until then.
+
+## H1 push completion — 2026-09-14
+
+- The user supplied direct chat authorization naming `anohi-memories/kabumori`, branch `codex/ai-lab-prelive-safeguards-20260913`, commit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a`, the Phase 3H Vault-reader / `x-test-post` payload, and the prohibition on production apply/deploy.
+- The existing branch was fast-forward pushed after fresh remote checks; no rebase/merge was needed. A post-push fetch verified remote `HEAD=406b53c2a2838a5ac2a446fffb6e6feef954eb7a`, parent `6ce4ad8ea983dd617c6227dd6f628e3e3b4f945b`.
+- Branch: https://github.com/anohi-memories/kabumori/tree/codex/ai-lab-prelive-safeguards-20260913
+- Commit: https://github.com/anohi-memories/kabumori/commit/406b53c2a2838a5ac2a446fffb6e6feef954eb7a
+- No production DB migration/write, Edge Function deploy, OAuth/scope or publish setting change, Cron change, token refresh, X post, or media upload occurred. Set/keep `status: review_required`, `next_owner: chatgpt`; stop for C1.
