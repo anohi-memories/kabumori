@@ -42,12 +42,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: done
-- task_id: x-multibrand-phase3c-ai-lab-x-oauth-connect-20260910
+- status: in_progress
+- task_id: x-multibrand-phase3d-ai-lab-dry-run-routing-safety-20260913
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: 2026-09-12 Codex slot 1へ正式移管済み。同じx-oauth-connect/OAuth/Vault領域を並行変更しない。
+- note: OAuth/Vault領域はCodex slot1のkabumori-x-oauth-recovery（done）で確定済み。Phase 3Dはbrand-routing/claim/publish/dedupeの安全性確認。
 
 ## Control codes
 

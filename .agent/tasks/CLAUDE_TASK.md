@@ -3,7 +3,7 @@
 - task_id: x-multibrand-phase3d-ai-lab-dry-run-routing-safety-20260913
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Opus 5
