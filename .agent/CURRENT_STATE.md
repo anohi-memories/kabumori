@@ -12,7 +12,7 @@
   - Claude slot1開始=`G1`、完了確認=`K1`
   - Claude slot2開始=`G2`、完了確認=`K2`
 - active_workstream:
-  - Codex slot 1: `review_required` — `x-multibrand-phase3h-ai-lab-prelive-safeguards-20260913`（AI Lab向け280文字制限・fingerprint完了処理・Vault-backed scheduled dispatchをローカル実装、commit `406b53c`、コードbranch pushは環境安全審査で拒否、production変更0件、C1待ち）
+  - Codex slot 1: `review_required` — `x-multibrand-phase3h-ai-lab-prelive-safeguards-20260913`（Phase 3H実装commit `406b53c` はローカルのみ。指定branchのpushはTASK内承認のみでは安全審査を通らず拒否。再試行・迂回なし。production変更0件。直接のユーザー承認後にpushし、C1待ち）
   - Codex slot 2: `ready` — close-report TOPIX source correction production deploy verification
   - Claude slot 1: `review_required` — personalized portfolio morning/close reports Phase 1A
   - Claude slot 2: `done` — Phase 3C OAuth workstream transferred to Codex slot 1; do not modify same OAuth/Vault/x-oauth-connect area in parallel
@@ -41,7 +41,7 @@
   - OAuth経路のX post/media callは各0。publish claimsはtotal 11 / published 4のまま。9/13 failed rowは人工retryなし
   - AI Lab identity/Vault refs/dry_run/publish無効は不変。Cron/scheduler/x-test-post/Pushは変更なし
 - parallel_work:
-  - Codex H1 Phase 3Hはreview待ち。実装branch `codex/ai-lab-prelive-safeguards-20260913` はlocal commit `6ce4ad8` / `406b53c` のみで、GitHubへ未push。実装コードはpush審査を迂回しない。本番migration未適用、`x-test-post`未deploy、AI Labはdry_run / publish無効のまま。`important-news-monitor` / app news / Phase 3 preset migration領域を別スロットで変更しない
+  - Codex H1 Phase 3Hはreview待ち。実装branch `codex/ai-lab-prelive-safeguards-20260913` はlocal commit `6ce4ad8` / `406b53c` のみで、remote branchは`6ce4ad8`。pushはTASKファイル内の承認だけでは環境安全審査が拒否したため、直接ユーザー承認待ち。実装コードpushの再試行・迂回なし。本番migration未適用、`x-test-post`未deploy、AI Labはdry_run / publish無効のまま。`important-news-monitor` / app news / Phase 3 preset migration領域を別スロットで変更しない
   - Claude slot2 must not touch same area until H1 completes
   - Codex slot2 may touch `x-test-post` only; if scope overlaps, stop and report conflict
   - existing uncommitted changes belong to other workstreams and must not be modified/staged/committed
