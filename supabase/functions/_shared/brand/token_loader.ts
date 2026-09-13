@@ -27,6 +27,7 @@ export async function loadBrandXTokens({
   clientSecret,
   fallbackAccessToken,
   fallbackRefreshToken,
+  fetchImpl = fetch,
 }: {
   context: BrandContext;
   supabaseUrl: string;
@@ -34,7 +35,12 @@ export async function loadBrandXTokens({
   clientSecret: string;
   fallbackAccessToken: string;
   fallbackRefreshToken: string;
+  fetchImpl?: typeof fetch;
 }): Promise<XTokenState> {
+  // Both checks below must resolve before loadXTokens ever runs -- that call is what reads the shared
+  // legacy oauth_token_store, so any brand other than the one it was built for (or a misconfigured
+  // account) must never reach it. This is Kabumori's only production credential source today; a brand
+  // gets its own resolver (loadVaultBackedXTokens) once it is wired into the live dispatch path.
   if (context.brand.id !== LEGACY_KABUMORI_BRAND_ID) {
     throw new BrandContextError("BRAND_TOKEN_RESOLVER_NOT_CONFIGURED");
   }
@@ -47,6 +53,7 @@ export async function loadBrandXTokens({
     clientSecret,
     fallbackAccessToken,
     fallbackRefreshToken,
+    fetchImpl,
   );
 }
 
