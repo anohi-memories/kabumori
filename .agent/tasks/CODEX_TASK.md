@@ -1,148 +1,256 @@
 # Codex Task
 
-- task_id: kabumori-x-oauth-recovery-20260913
+- task_id: broad-news-display-and-notification-presets-phase3-20260913
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: user
+- status: ready
+- next_owner: codex
 - priority: urgent
-- recommended_model: Sol High
-- purpose: 2026-09-13朝の `morning_greeting` が `X_TOKEN_REFRESH_FAILED:400` で失敗したため、かぶモリX OAuth認証だけを安全に復旧する。投稿生成・scheduler・複垢化の他ブランド挙動は変更しない。
+- recommended_model: Sol Medium
+- purpose: Phase 2で本番接続した広域ニュース収集をユーザー体験へつなげる。まずアプリのニュース表示範囲をmediumまで広げてカテゴリ/重要度を見える化し、その上でユーザーが通知量を選べるプリセット設計・実装を行う。収集ロジックとPush配信基盤の安全性は維持する。
 
-## User authorization
+## Context
 
-2026-09-13、ユーザーが「直して」と明示承認済み。
+Phase 2 `broad-market-news-coverage-phase2-production-wiring-20260912` はK1承認・本番反映済み。
 
-この承認で許可されるのは、かぶモリX OAuth復旧に必要な最小実装・テスト・対象Edge Function deploy・本人OAuth再認証フロー・read-only本人確認・refresh-only検証まで。
+確認済み:
+- `important-news-monitor` v47 が本番稼働中。
+- 北朝鮮/ミサイル/Jアラート、災害は固定検索で毎サイクル実行。
+- ホルムズ/海運/原油/金融システム等は回転検索。
+- 気象庁フィード稼働。
+- `coverage_categories` / `coverage_severity` / `emergency_class` / `coverage_classified_at` が本番schemaへ追加済み。
+- 自然データで新分類が少なくとも1件付与済み。
+- 直近24hのPush 0件は端末や設定故障ではなく、現行通知条件がまだ狭いことが主因。
+- Push設定は `push_enabled=true`, `important_news=true`, `market_critical_news=true`、iOS Push tokenも存在。
 
-**Xへの手動投稿は許可しない。Cron変更も許可しない。**
+重要原則:
+**collection / app visibility / push notification policy を分離する。**
+収集範囲を広げたこと自体を理由に、勝手にPushを大量送信しない。
 
-## Confirmed production facts
+## Goal
 
-read-only確認済み:
+### Phase 3A — app visibility
 
-- 2026-09-13 `morning_greeting` は予定生成済み。
-- scheduled_for: 2026-09-13 06:39:09 JST頃。
-- claim: 正常。
-- failure: `X_TOKEN_REFRESH_FAILED:400`。
-- `publish_claims` も同じ `X_TOKEN_REFRESH_FAILED:400`。
-- 今日用画像 `morning-greeting-assets/generated/2026-09-13.png` は存在。生成失敗ではない。
-- legacy `oauth_token_store` の `expires_at` は 2026-09-12 22:47 JST頃、`updated_at` は20:47 JST頃。
-- 2026-09-12 20:47 JST頃の interaction はX投稿成功。
-- その後、会社員AIラボOAuthは 22:24 JST頃に `identity_verified` まで完了。
-- `ai_salaryman_lab_x`: Vault access/refresh refsあり、publish_enabled=false。
-- `kabumori_x`: 当初publish_enabled=trueだが `connection_status=unconnected`、platform_user_idなし、Vault token refsなし。ユーザー確認により実X handleは `yume_daka` と判明。現行投稿はlegacy `oauth_token_store` / x-test-post経路。
-- `x-test-post` は `oauth_token_store` を `X_CLIENT_SECRET` 由来AES keyで復号し、復号不能時は server secrets `X_OAUTH2_ACCESS_TOKEN` / `X_OAUTH2_REFRESH_TOKEN` へfallbackする。
-- X API 401時、refresh endpoint `POST /2/oauth2/token` を呼び、非2xxなら `X_TOKEN_REFRESH_FAILED:<status>`。
-- 現行ログはX refresh error bodyを保存しないため、400の `invalid_grant` 等の詳細は未確認。
+- 現在のmarket-wideニュース表示条件を監査する。
+- `medium` 以上をアプリニュース一覧へ表示できるようにする。
+- `low` は原則一覧対象外のまま。
+- company/holding/watch関連ニュースの既存表示を壊さない。
+- market-wide medium/high/critical/emergencyを表示対象にする。
+- `emergency` は最上位表示。
+- categoryを日本語ラベルで表示する。
+  - geopolitics → 地政学
+  - disaster → 災害
+  - monetary_policy → 金融政策
+  - fx → 為替
+  - rates → 金利
+  - oil_energy → 原油・エネルギー
+  - commodities → コモディティ
+  - shipping_logistics → 海運・物流
+  - semiconductors → 半導体
+  - ai_tech → AI・テック
+  - us_market → 米国市場
+  - japan_market → 日本市場
+  - regulation_policy → 政策・規制
+  - corporate → 企業
+  - earnings → 決算
+  - financial_system → 金融システム
+- severityも日本語で表示する。
+  - emergency → 緊急
+  - critical → 最重要
+  - high → 重要
+  - medium → 注目
+- list/detailの両方でカテゴリ/重要度を確認できるようにする。
+- 既存Fact-passed日本語本文/内部detail routeを維持する。
 
-## High-priority hypothesis to verify
+### Phase 3B — notification presets
 
-時系列上、以下を必ず検証する:
+最低限4段階:
 
-1. 20:47 JSTにlegacy token storeが正常更新された後、22:24 JSTにAI Lab OAuthが完了し、翌06:40にKabumoriだけrefresh 400。
-2. `x-test-post` と production `x-oauth-connect` が同名の `X_CLIENT_ID` / `X_CLIENT_SECRET` を参照している。
-3. もし共有client credentialが途中で別X App用へ変更されていれば、legacy token storeの復号失敗→古いserver-secret fallback→refresh 400の連鎖が成立する。
+1. `quiet` / 静かめ
+   - holding/watch: critical以上
+   - market-wide: emergencyのみ
+2. `standard` / 標準
+   - holding/watch: high以上
+   - market-wide: critical以上
+3. `many` / 多め
+   - holding/watch: medium以上
+   - market-wide: high以上
+4. `all_useful` / かなり多め
+   - holding/watch: medium以上
+   - market-wide: medium以上
+   - lowは当面Pushしない
 
-ただし、secret値そのものを取得・表示・Git/Reportへ記録しない。変更履歴を安全に証明できない場合は推測と事実を分ける。
+既定値は既存ユーザーの体験を急変させないことを優先する。
+既存 `important_news` / `market_critical_news` 設定との互換性を設計し、migrationで勝手に全員の通知量を増やさない。
 
-## Scope / preferred recovery
+### Emergency
 
-まず原因確認。復旧は以下の安全順位で行う。
+- `emergency_alerts` 専用設定を設計する。
+- market emergency はtracked stock / sector一致を不要にする。
+- Fact passed / 日本語app copy / freshness / dedupe / push_enabled を必須にする。
+- `important_news` master toggleとの関係を明示する。
+- 既定ON案を使う場合も、既存ユーザーへの影響をReportで定量評価してから本番適用する。
 
-### A. 既存tokenを安全に復旧可能な場合
+### Categories
 
-- client credential不変かつ単純なrefresh token失効等と確認できるなら、Kabumori本人のOAuth再認証でfresh tokenを取得する。
-- 必要scopeは現行投稿に必要な最小限: `tweet.read users.read tweet.write media.write offline.access` を基準に、実際のX API endpoint requirementsと既存機能を照合する。
+可能ならカテゴリ別ON/OFFを実装する。
+schemaは行形式の `alert_category_settings(user_id, category, enabled)` を優先し、カテゴリ追加でmigration不要な構造にする。
 
-### B. client credential共有衝突が原因の場合
+## Data/schema direction
 
-- AI Lab用に共有 `X_CLIENT_ID` / `X_CLIENT_SECRET` を上書きすることは禁止。
-- KabumoriとAI Labが別X Appを必要とする構成なら、brand/account別credentialへ分離する最小設計を行う。
-- 既存AI Lab `identity_verified` / Vault token refs / dry_run / publish_enabled=false を壊さない。
-- 大規模な複垢化リファクタへ広げない。
+`docs/news-coverage/REDESIGN.md` を再確認。
+候補:
+- `alert_settings.notification_preset text not null default 'standard'`
+- `alert_settings.emergency_alerts boolean not null ...`
+- `alert_category_settings(user_id, category, enabled)`
 
-### Kabumori reauthorization safety
+原則:
+- expand-only
+- RLS本人のみ
+- service role producer
+- authenticated app settings updateは必要列のみ
+- migration history乖離があるため `supabase db push` 禁止
+- 既存schema/RPCと重複するなら最小変更へ修正
 
-必要なら既存 `x-oauth-connect` を最小拡張してKabumori recoveryを扱ってよいが、以下を必須とする:
+## Producer / dispatcher boundary
 
-- admin-only start。
-- PKCE + random state。
-- callback state / expiry / one-time consume検証。
-- authorization後 `GET /2/users/me` でユーザー確認済みhandle `yume_daka` と照合し、別アカウントならtoken保存前にreject。
-- token/secret/code/verifierをログ・Report・Gitへ出さない。
-- fresh tokenは **現行x-test-postが実際に読む安全な保存先** へ保存する。legacy storeを使うなら現行暗号化形式を維持する。
-- AI Lab token/Vault rowsは変更しない。
+- `send-push-notifications` のclaim/retry/CAS/Expo送信ロジックは変更しない。
+- `claim_pending_push_notifications` RPCは変更しない。
+- producer側でnotification eligibilityを決め、既存notifications queueへenqueueする。
+- Push hardeningで入ったsource/settings recheckと矛盾しないこと。
+- dispatcherまたはclaim RPCを変更しないと実現できない場合はSTOPしてReportする。
 
-## Refresh-only proof required
+## Existing settings compatibility
 
-再認証後、投稿成功をテストするためにX投稿を行ってはいけない。
+既存トグル:
+- push_enabled
+- important_news
+- market_critical_news
+- morning_report
+- close_report
 
-代わりに、同じclient/token保存経路を使う **refresh-only proof** を実施する:
+今回触るのは重要ニュース関連だけ。朝刊・大引け設定は変更しない。
+`market_critical_news` をlegacy互換で残すか、preset + emergency_alertsへ段階移行するかを設計してReportする。
+既存ユーザーが何も操作しなくても突然「多め」相当へならないこと。
 
-- fresh refresh tokenでX token endpointが2xx。
-- rotated tokenが安全に保存される。
-- 保存後に同じ実行系で再読込・復号できる。
-- `GET /2/users/me` read-onlyでKabumori本人を再確認。
-- X post/media uploadは0回。
+## Required startup / parallel safety
 
-これで次回自然投稿時のrefresh経路まで確認する。
+開始前:
+1. `.agent/ORCHESTRATION.md`
+2. `.agent/CURRENT_STATE.md`
+3. このTASK
+4. `.agent/tasks/CODEX_TASK_2.md`
+5. `.agent/tasks/CLAUDE_TASK_1.md`
+6. `.agent/tasks/CLAUDE_TASK.md`
+7. `docs/news-coverage/REDESIGN.md`
+8. origin/main fresh-check
+9. production schema/read-only current state
 
-## Required procedure
+必ずisolated clean worktree/cloneを使い、既存未コミット変更は他workstream所有物として触らない。
 
-1. `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, this TASK, `.agent/tasks/CODEX_TASK_2.md`, `.agent/tasks/CLAUDE_TASK.md` を読む。
-2. origin/main fresh-check。H2はPush通知workstreamなので触らない。
-3. clean isolated worktreeを使う。既存未コミット変更は触らない。
-4. production read-onlyで上記factsを再確認。
-5. production Edge Function version/sourceとGit sourceを確認。`x-test-post` / `x-oauth-connect` の実際のauth code pathを特定。
-6. 原因を再現可能なテストで確認。
-7. 最小修正を実装。無関係なposting/content/schedulerを変更しない。
-8. tests / deno check / git diff --check。
-9. deployが必要なら対象Functionだけ。deploy後source read-back/byte compare。
-10. OAuth authorization URLが必要になったら、ユーザー本人操作が必要な時点で停止して明確に案内。パスワード/2FA/secretの共有を求めない。
-11. callback後は本人確認 + refresh-only proof。手動X投稿はしない。
-12. `.agent/CODEX_REPORT.md` 更新、TASKを `review_required / next_owner: chatgpt` に戻す。
+競合禁止:
+- G2 OAuth / Vault / social_accounts / x-oauth-connect
+- H2 Push dispatcher claim/retry / notification claim RPC
+- 他slotが同じ important-news producer/app news files/schemaを触っている場合
 
-## Explicitly prohibited
+競合がある場合は開始せず、具体的なファイル/RPC/Functionを報告する。
 
-- 手動X投稿 / テスト投稿
+## Production safety
+
+まずローカル実装・テストまで。
+
+C1前は禁止:
+- production migration/RPC変更
+- Edge Function deploy
+- user settings変更
+- manual/synthetic Push
+- synthetic candidate
 - Cron変更
-- scheduled_postsの人工INSERT
-- morning_greeting/朝刊/大引け本文ロジック変更
-- scheduler planner変更
-- Push通知領域
-- AI Labのlive化 / publish_enabled=true
-- AI Lab token/Vault書換え（Kabumori復旧に不要）
-- mio操作
-- secret/token/password/2FAの表示・保存・Report記録
-- productionでの破壊的DB変更
-- migration history修復
-- 無関係なEdge Function deploy
+- X投稿
+- migration history repair
+- `supabase db push`
 
-## Completion criteria
+read-only production auditは可。
 
-- `X_TOKEN_REFRESH_FAILED:400` の根因を事実/仮説で明確化。
-- Kabumori本人OAuth tokenが安全に再発行・保存される。
-- 別Xアカウント誤接続を防止。
-- refresh-only proof 2xx + token再読込/復号 + `/2/users/me`本人確認pass。
-- X投稿0件であること。
-- AI Lab状態不変。
-- Cron/scheduler/posting logic不変。
-- commit/push/report完了。
-- `review_required / next_owner: chatgpt`。
+## Tests
 
-## C1 Review — 2026-09-13
+### App visibility
+- emergency / critical / high / medium market-wideが表示対象
+- low market-wideは非表示
+- company news既存表示回帰なし
+- category日本語ラベル
+- severity日本語ラベル
+- list/detail rendering
+- Fact failed itemは安全側
 
-- result: PASS
-- implementation: PASS。Kabumori OAuth recoveryはaccount allowlist、PKCE/state、one-time consume、handle/identity verification、legacy token store暗号化保存、refresh-only proofに限定。AI Lab read-only flowは維持。
-- root cause handling: PASS。旧400 subtypeは既存ログ不足で未確定と明示し、client-secret変更による復号失敗仮説はproduction probeで否定。推測を事実化していない。
-- identity safety: PASS。実アカウント `yume_daka` を本人確認し、誤登録handle `kabumori` をguard付きmigrationで訂正。別handleはtoken保存前にreject。
-- tests: PASS。対象15/15、全Edge Function 705/705、deno check、git diff --check、migration BEGIN/ROLLBACK proof、RPC ACL/search_path確認。
-- production: PASS。`x-oauth-connect` v13 ACTIVE / `verify_jwt=false`、12 runtime files read-back一致。本番DDLはreview対象2migrationのみ。
-- refresh-only proof: PASS。token endpoint 2xx、rotated token暗号化保存、再読込/復号、`GET /2/users/me`本人再確認。X post/media callは各0。
-- boundaries: PASS。AI Lab identity/Vault/dry_run/publish無効不変。Cron/scheduler/x-test-post/Push/他Function変更なし。手動投稿・人工retryなし。
-- natural production evidence: PASS。復旧後、2026-09-13 11:40 JST頃の `tip` が自然Cron経路でclaimされ、`X post created` / `succeeded` をread-only確認。ユーザーからも自動投稿復旧確認あり。
-- implementation branch: `codex/kabumori-x-oauth-recovery-20260913`
-- commits: `ed4c8c038e88274e59460997fa75e3f4721dfbf7`, `13cb948684785cdd189882b7434b981fabf96385`
-- task status: done
-- next_owner: user
+### Presets
+- quiet: company critical+, market emergency only
+- standard: company high+, market critical+
+- many: company medium+, market high+
+- all_useful: company medium+, market medium+
+- lowは全presetでPushしない
+- push_enabled=false → 0
+- important_news=false → 0
+- emergency_alerts=false → market emergency 0
+- category OFF → 該当category 0
+- category設定なし時のdefault挙動を明示・テスト
+- tracked/sector不一致でもmarket emergencyはpreset条件次第でeligible
+- Fact fail → 0
+- duplicate → 0
+- existing important-news company producer regression
+- existing market-critical regression
+- personalized report Push regression
+- dispatcher claim/retry testsは変更しないが既存suiteが壊れていないこと
+
+### Static
+- app tsc
+- Deno check
+- git diff --check
+
+## Resource / UX review
+
+Reportで最低限:
+- 直近7日データに各presetを当てた場合のPush対象件数見込みをread-only試算
+- emergency誤検出の有無
+- mediumをアプリ表示へ広げた場合の一覧件数見込み
+
+実送信はしない。
+
+## Completion
+
+実装・テスト完了時:
+- `.agent/CODEX_REPORT.md` を今回結果で更新
+- このTASKを `status: review_required`, `next_owner: chatgpt` に更新
+- origin/mainへ安全に同期
+
+Report必須:
+- task_id
+- result
+- model_used
+- source_base
+- current_app_visibility
+- new_app_visibility
+- category_labels
+- severity_labels
+- current_notification_logic
+- proposed_or_implemented_presets
+- legacy_settings_compatibility
+- emergency_behavior
+- category_setting_behavior
+- schema_changes
+- producer_changes
+- dispatcher_changes (expected: none)
+- 7day_notification_volume_estimate
+- medium_feed_volume_estimate
+- tests
+- production_changes
+- deploy_status
+- changed_files
+- commit_hash
+- push
+- remaining_issues
+- safety_checks
+- next_recommendation
+
+本番変更が0件なら明記する。
+C1で承認されるまでproduction migration/deployは行わない。
