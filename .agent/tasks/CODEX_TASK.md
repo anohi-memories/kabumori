@@ -3,15 +3,15 @@
 - task_id: x-multibrand-phase3i-ai-lab-production-prelive-rollout-20260914
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol High
-- purpose: Phase 3HでC1 PASSしたAI Labの280文字制限・fingerprint完了処理・Vault-backed dispatchを、本番pre-live状態まで安全に反映する。まだtweet.write追加・live化・実X投稿は行わない。
+- purpose: C1 PASSと直接の本番承認が確認できた場合に限り、AI Labの280文字制限・fingerprint完了処理・Vault-backed dispatchを本番pre-live状態へ反映する。まだtweet.write追加・live化・実X投稿は行わない。
 
 ## Prior approved state
 
-Phase 3H C1 PASS。
+Phase 3H C1 status is unresolved. This TASK says C1 PASS, but `.agent/CURRENT_STATE.md` and the prior `.agent/CODEX_REPORT.md` say C1 review is still pending. The latest direct chat authorization approved only pushing commit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a` for C1 review and explicitly did not approve production application/deployment. Do not perform production writes until the C1 state is reconciled and the user gives direct, explicit production authorization.
 
 Reviewed implementation branch:
 - `codex/ai-lab-prelive-safeguards-20260913`
@@ -87,9 +87,9 @@ Production migration history is known to be divergent. Therefore:
 - do not repair/reconcile migration history
 - do not mark unrelated versions applied/reverted
 
-## B. Authorized production migration scope
+## B. Production migration scope — blocked pending authorization
 
-The user has said to proceed with this Phase 3I rollout after C1 PASS. This task authorizes applying **only** the two exact reviewed Phase 3H migration files above, and only after successful read-only preflight.
+Authorization gate: the task text asserts that the user authorized this rollout after C1 PASS, but that assertion conflicts with the available direct chat approval and the current state/report. Treat production authorization as absent. Do not apply migrations or deploy unless C1 PASS is confirmed and the user directly authorizes those exact production actions. If/when authorized, the maximum migration scope remains **only** the two exact reviewed Phase 3H migration files above, after successful read-only preflight.
 
 Apply in dependency-safe order:
 1. `20260913123509_ai_lab_prelive_safeguards.sql`

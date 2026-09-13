@@ -1,13 +1,37 @@
 # Codex Report
 
-- task_id: `x-multibrand-phase3h-ai-lab-prelive-safeguards-20260913`
-- result: `review_required` — implementation and tests are complete and the approved source branch is available on GitHub for C1 review. This is not production E2E proof: migrations are unapplied, `x-test-post` is undeployed, no write scopes were added, and no X post was sent.
+- task_id: `x-multibrand-phase3i-ai-lab-production-prelive-rollout-20260914`
+- result: `review_required` — production preflight was read-only. Stopped before migration application or deploy because the task's C1/authorization claims conflict with `.agent/CURRENT_STATE.md`, the prior report, and the latest direct chat approval.
 - model_used: GPT-5.6 Sol
-- source_base: `origin/feature/multibrand-foundation` `341e5dc5c03147394a99b2b71d148d2ba06c9c89`; control metadata based on fresh `origin/main` `9dbbb5156b5d72cda1b6839110b45772f5b8ac55`
-- implementation_branch: `codex/ai-lab-prelive-safeguards-20260913`
-- commit_hash: `6ce4ad8` (safeguards) + `406b53c2a2838a5ac2a446fffb6e6feef954eb7a` (Vault-backed dispatch)
-- push: after two earlier attempts were rejected, the user explicitly authorized the exact repository, branch, commit, and code payload in chat. The exact branch push then succeeded. Post-push fetch verified remote `HEAD=406b53c2a2838a5ac2a446fffb6e6feef954eb7a` (parent `6ce4ad8ea983dd617c6227dd6f628e3e3b4f945b`): [branch](https://github.com/anohi-memories/kabumori/tree/codex/ai-lab-prelive-safeguards-20260913) / [commit](https://github.com/anohi-memories/kabumori/commit/406b53c2a2838a5ac2a446fffb6e6feef954eb7a). This was source synchronization for C1 only. No production authorization was used.
-- next_owner: chatgpt
+- source_commit: `406b53c2a2838a5ac2a446fffb6e6feef954eb7a`; fresh fetch of `origin/codex/ai-lab-prelive-safeguards-20260913` confirmed the exact remote HEAD. Both reviewed migration files exist in that commit; SHA-256: `342119d0ae523f0eb93a5d6b233395e9f326d7ce79c172f2e61b518e6f205ce6` (`20260913123509_ai_lab_prelive_safeguards.sql`), `88316c9e57f69c719db503fe184ab8cc806d04ebce1c08a70b04f8d544d34317` (`20260913151428_read_ai_lab_x_vault_token.sql`).
+- control_base: fresh `origin/main` `e05505338db20db336f5cd3c738294ad8d59c04b`.
+- production_project: `wsmznyzcvmuitkglfeuj` (`stock-x-autopost`), ACTIVE_HEALTHY, Postgres 17.6, `ap-northeast-1`.
+
+## Phase 3I preflight (read-only)
+
+- migrations_applied: none. Neither exact migration appears in production migration history.
+- migration_readback: target RPCs `complete_ai_salaryman_lab_brand_post` and `read_ai_salaryman_lab_x_vault_token` are absent. `published_content_fingerprints` exists with RLS enabled, but the expected unique `(social_account_id, x_post_id)` index is absent. Supporting `scheduled_posts` / `post_execution_logs` tables and required columns are present; no AI Lab scheduled-post rows were found in the inspected status grouping.
+- grants_and_policies: RLS is enabled but not forced on the five checked tables. There are no listed policies on `brands`, `social_accounts`, or `published_content_fingerprints`; `scheduled_posts` and `post_execution_logs` each have an authenticated SELECT policy. Catalog grants also show existing `anon`/`authenticated` REFERENCES, TRIGGER, and TRUNCATE privileges on `scheduled_posts` / `post_execution_logs`, plus authenticated SELECT; this task did not change them. These existing grants need owner review and are not treated as authorization to broaden or repair production permissions here.
+- preflight: AI Lab brand is active and `dry_run`; account is `ai_salaryman_lab_x`, handle `kaishain_ai_lab`, `identity_verified`; `publish_enabled=false`. Vault reference presence was checked only as booleans; no reference identifiers or token values were read. `x-test-post` remains v107 ACTIVE / `verify_jwt=false`.
+- x_test_post_deploy: none; deployment not attempted.
+- deployed_source_verification: not applicable.
+- non_posting_runtime_verification: no runtime call was made; only database/function metadata preflight. X POST/media calls: 0.
+- ai_lab_length_guard_result: not exercised in production; Phase 3H test evidence is carried forward below and was not rerun in this turn.
+- vault_route_result: production account metadata matches the reviewed fixed identity; the reader RPC is absent, so the Vault-backed runtime path was not exercised. No token was read/refreshed.
+- fingerprint_dry_run_result: not invoked; expected uniqueness index and completion RPC are absent in production.
+- posting_window_status: no AI Lab posting window was present in the prior read-only state; none was created or changed. Exact schedule values remain unsupplied.
+- write_scope_status: no OAuth scope change; AI Lab remains read-only (`tweet.read users.read offline.access`).
+- tests: no code/runtime test rerun because the rollout stopped before production writes; previous Phase 3H test evidence is preserved in the prior report below.
+- production_changes: 0. No migration, SQL write, Edge Function deploy, X/media call, Cron/posting-window, OAuth, token, publish flag, or unrelated service change.
+- unchanged_components: `important-news-monitor`, other Edge Functions, Cron, OAuth scopes/secrets, Kabumori, Mio, publish flags, and X posting.
+- blocker: TASK says Phase 3H C1 PASS and claims production approval, but `.agent/CURRENT_STATE.md` and the prior report say C1 is pending. The latest direct chat authorized only pushing the reviewed source for C1 and explicitly withheld production application/deploy. No production write was authorized by the `H1` trigger alone.
+- exact_steps_before_first_live_post: first reconcile and record C1 review; obtain direct approval for exact migrations/deploy; perform their gated read-backs and non-posting verification; separately supply posting-window values; separately authorize `tweet.write` reauthorization and verify `/2/users/me`; separately approve any publish enablement and first real post. None of these later actions is authorized here.
+- safety_checks: no secrets/token values or Vault identifiers were read or recorded; no production mutation or posting occurred.
+- next_recommendation: review this blocker under C1 and obtain explicit user direction before any migration application or `x-test-post` deploy.
+
+---
+
+## Phase 3H implementation details (previous report, carried forward)
 
 ## Length policy
 
