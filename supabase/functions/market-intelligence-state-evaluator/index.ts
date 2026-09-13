@@ -104,7 +104,7 @@ function buildNumericBaselineSnapshot(metrics: MetricObservationRow[]): Record<
 // computed once per domain and reused by both the pre-pass (to get an
 // accurate cross-domain material count for Sol escalation) and the actual
 // claimed evaluation, so the two never disagree with each other.
-type DomainDecision = {
+export type DomainDecision = {
   domain: Domain;
   metrics: MetricObservationRow[];
   recentEvents: EventFact[];
@@ -118,7 +118,7 @@ type DomainDecision = {
   latestAsOf: string | null;
 };
 
-type DomainDecisionOrError = { ok: true; decision: DomainDecision } | { ok: false; domain: Domain; error: string };
+export type DomainDecisionOrError = { ok: true; decision: DomainDecision } | { ok: false; domain: Domain; error: string };
 
 // Never throws -- a failure reading one domain's Facts must not prevent
 // any other domain from being claimed/evaluated (failure isolation, same
@@ -178,14 +178,14 @@ async function computeDomainDecision(ctx: RestContext, domain: Domain): Promise<
   };
 }
 
-type DomainEvalResult = {
+export type DomainEvalResult = {
   domain: Domain;
   status: "no_change" | "evaluated" | "failed" | "skipped_duplicate";
   reason?: string;
   error?: string;
 };
 
-async function evaluateDomain(
+export async function evaluateDomain(
   ctx: RestContext,
   domain: Domain,
   decisionResult: DomainDecisionOrError,
@@ -264,33 +264,47 @@ async function evaluateDomain(
       fetchStatus: decision.fetchStatus,
     };
     const lunaResult = await requestStateEvaluation({ apiKey: openAiApiKey, model: STATE_EVAL_LUNA_MODEL, input: aiInput });
+    // Every actual OpenAI call gets its own ai_usage_events row -- record
+    // Luna's usage immediately, before the escalation decision, so a Sol
+    // escalation never leaves Luna's tokens/cost untracked.
+    const lunaUsageRecord = await recordStateAiUsageEvent(ctx, {
+      domain,
+      model: lunaResult.model,
+      inputTokens: lunaResult.inputTokens,
+      outputTokens: lunaResult.outputTokens,
+      costUsd: lunaResult.costUsd,
+      relatedId: domain,
+    });
 
     const hasCriticalGeopoliticalEvent = domain === "geopolitical" &&
       decision.recentEvents.some((e) => e.importance === "critical");
     let finalResult = lunaResult;
+    let finalUsageEventId = lunaUsageRecord.id;
     if (
       shouldEscalateToSol({
         domain,
         lunaOutput: lunaResult.output,
         materialDomainCountThisPass,
         hasCriticalGeopoliticalEvent,
+        dataConfidence: decision.dataConfidence,
       })
     ) {
-      finalResult = await requestStateEvaluation({
+      const solResult = await requestStateEvaluation({
         apiKey: openAiApiKey,
         model: "gpt-5.6-sol",
         input: aiInput,
       });
+      const solUsageRecord = await recordStateAiUsageEvent(ctx, {
+        domain,
+        model: solResult.model,
+        inputTokens: solResult.inputTokens,
+        outputTokens: solResult.outputTokens,
+        costUsd: solResult.costUsd,
+        relatedId: domain,
+      });
+      finalResult = solResult;
+      finalUsageEventId = solUsageRecord.id;
     }
-
-    const usageRecord = await recordStateAiUsageEvent(ctx, {
-      domain,
-      model: finalResult.model,
-      inputTokens: finalResult.inputTokens,
-      outputTokens: finalResult.outputTokens,
-      costUsd: finalResult.costUsd,
-      relatedId: domain,
-    });
 
     const reason = decision.metricDecision.isMaterial ? decision.metricDecision.reason : decision.eventDecision.reason;
     await applyMaterialChangeUpdate(
@@ -323,7 +337,7 @@ async function evaluateDomain(
     await completeStateEvaluationRun(ctx, claim.runId, {
       status: "evaluated",
       decisionDetail: { material: true, reason },
-      aiUsageEventId: usageRecord.id,
+      aiUsageEventId: finalUsageEventId,
     });
     return { domain, status: "evaluated" };
   } catch (error) {
@@ -333,7 +347,15 @@ async function evaluateDomain(
   }
 }
 
-Deno.serve(async (req) => {
+// Guarded so importing this module (e.g. from index_test.ts, to unit-test
+// evaluateDomain's orchestration with a mocked fetch) never binds a real
+// listener -- import.meta.main is only true when this file is the actual
+// entry point, which is how the Supabase Edge Runtime invokes it.
+if (import.meta.main) {
+  Deno.serve(handleRequest);
+}
+
+export async function handleRequest(req: Request): Promise<Response> {
   if (req.method !== "POST") return response({ error: "POST_REQUIRED" }, 405);
   if (!isAuthorizedCronCaller(req)) return response({ error: "UNAUTHORIZED" }, 401);
 
@@ -369,4 +391,4 @@ Deno.serve(async (req) => {
   }
 
   return response({ status: "completed", results });
-});
+}

@@ -193,49 +193,53 @@ function output(overrides: Partial<StateEvaluationOutput> = {}): StateEvaluation
   return { narrative: "n", bullishFactors: [], bearishFactors: [], keyRisks: [], confidence: 0.9, needsSol: false, ...overrides };
 }
 
-test("shouldEscalateToSol: Luna self-flagging needs_sol escalates", () => {
+test("shouldEscalateToSol: Luna self-flagging needs_sol escalates when data_confidence is sufficient", () => {
   assert.equal(
     shouldEscalateToSol({
       domain: "rates",
       lunaOutput: output({ needsSol: true }),
       materialDomainCountThisPass: 1,
       hasCriticalGeopoliticalEvent: false,
+      dataConfidence: 0.9,
     }),
     true,
   );
 });
 
-test("shouldEscalateToSol: low confidence escalates", () => {
+test("shouldEscalateToSol: low Luna confidence escalates when data_confidence is sufficient", () => {
   assert.equal(
     shouldEscalateToSol({
       domain: "rates",
       lunaOutput: output({ confidence: 0.5 }),
       materialDomainCountThisPass: 1,
       hasCriticalGeopoliticalEvent: false,
+      dataConfidence: 0.9,
     }),
     true,
   );
 });
 
-test("shouldEscalateToSol: more than one domain material in the same pass escalates", () => {
+test("shouldEscalateToSol: more than one domain material in the same pass escalates when data_confidence is sufficient", () => {
   assert.equal(
     shouldEscalateToSol({
       domain: "rates",
       lunaOutput: output(),
       materialDomainCountThisPass: 2,
       hasCriticalGeopoliticalEvent: false,
+      dataConfidence: 0.9,
     }),
     true,
   );
 });
 
-test("shouldEscalateToSol: geopolitical + critical event escalates even with confident Luna output", () => {
+test("shouldEscalateToSol: geopolitical + critical event escalates even with confident Luna output and low data_confidence", () => {
   assert.equal(
     shouldEscalateToSol({
       domain: "geopolitical",
       lunaOutput: output(),
       materialDomainCountThisPass: 1,
       hasCriticalGeopoliticalEvent: true,
+      dataConfidence: 0.1,
     }),
     true,
   );
@@ -248,6 +252,7 @@ test("shouldEscalateToSol: a critical geopolitical event does NOT escalate a dif
       lunaOutput: output(),
       materialDomainCountThisPass: 1,
       hasCriticalGeopoliticalEvent: true,
+      dataConfidence: 0.9,
     }),
     false,
   );
@@ -260,7 +265,103 @@ test("shouldEscalateToSol: confident single-domain Luna output does not escalate
       lunaOutput: output({ confidence: 0.95, needsSol: false }),
       materialDomainCountThisPass: 1,
       hasCriticalGeopoliticalEvent: false,
+      dataConfidence: 0.9,
     }),
     false,
+  );
+});
+
+// --- data_confidence gate (Phase 1B hardening: never escalate to "fix"
+// low-quality input data -- Sol cannot make stale/missing Facts current) ---
+
+test("[A] low data_confidence + low Luna confidence + needs_sol -> does NOT escalate (this is the production rates case: stale JGB dragged data_confidence to 0.6)", () => {
+  assert.equal(
+    shouldEscalateToSol({
+      domain: "rates",
+      lunaOutput: output({ confidence: 0.55, needsSol: true }),
+      materialDomainCountThisPass: 1,
+      hasCriticalGeopoliticalEvent: false,
+      dataConfidence: 0.6,
+    }),
+    false,
+  );
+});
+
+test("[B] sufficient data_confidence + low Luna confidence -> escalates", () => {
+  assert.equal(
+    shouldEscalateToSol({
+      domain: "rates",
+      lunaOutput: output({ confidence: 0.55 }),
+      materialDomainCountThisPass: 1,
+      hasCriticalGeopoliticalEvent: false,
+      dataConfidence: 0.9,
+    }),
+    true,
+  );
+});
+
+test("[C] sufficient data_confidence + needs_sol -> escalates", () => {
+  assert.equal(
+    shouldEscalateToSol({
+      domain: "rates",
+      lunaOutput: output({ needsSol: true }),
+      materialDomainCountThisPass: 1,
+      hasCriticalGeopoliticalEvent: false,
+      dataConfidence: 0.9,
+    }),
+    true,
+  );
+});
+
+test("[D] geopolitical critical event escalates regardless of data_confidence", () => {
+  assert.equal(
+    shouldEscalateToSol({
+      domain: "geopolitical",
+      lunaOutput: output(),
+      materialDomainCountThisPass: 1,
+      hasCriticalGeopoliticalEvent: true,
+      dataConfidence: 0.05,
+    }),
+    true,
+  );
+});
+
+test("low data_confidence also suppresses the multiple-domains-material escalation path", () => {
+  assert.equal(
+    shouldEscalateToSol({
+      domain: "rates",
+      lunaOutput: output(),
+      materialDomainCountThisPass: 3,
+      hasCriticalGeopoliticalEvent: false,
+      dataConfidence: 0.4,
+    }),
+    false,
+  );
+});
+
+test("data_confidence exactly at the threshold counts as sufficient", () => {
+  assert.equal(
+    shouldEscalateToSol({
+      domain: "rates",
+      lunaOutput: output({ needsSol: true }),
+      materialDomainCountThisPass: 1,
+      hasCriticalGeopoliticalEvent: false,
+      dataConfidence: 0.7,
+    }),
+    true,
+  );
+});
+
+test("dataConfidenceThreshold override is respected", () => {
+  assert.equal(
+    shouldEscalateToSol({
+      domain: "rates",
+      lunaOutput: output({ needsSol: true }),
+      materialDomainCountThisPass: 1,
+      hasCriticalGeopoliticalEvent: false,
+      dataConfidence: 0.5,
+      dataConfidenceThreshold: 0.4,
+    }),
+    true,
   );
 });

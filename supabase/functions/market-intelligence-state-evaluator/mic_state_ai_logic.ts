@@ -231,22 +231,38 @@ export function parseStateEvaluationResponse(payload: unknown): StateEvaluationO
   };
 }
 
-// Sol escalation conditions, per design doc section 7:
-// - Luna self-flags needs_sol
-// - Luna confidence below threshold
-// - more than one domain hit material_change in the same evaluation pass
-// - geopolitical domain with a critical-importance event involved
+// Sol escalation conditions (Phase 1B hardening, revised after the first
+// production rates evaluation escalated purely because JGB staleness/
+// partial coverage put data_confidence at 0.6 -- Sol is a stronger *model*,
+// it cannot make stale or missing Facts more current, so paying its higher
+// rate to re-read the exact same low-quality input never helps).
+//
+// The two kinds of "uncertainty" are handled separately:
+// - Model-reasoning uncertainty (Luna itself unsure, multiple domains
+//   material at once, or Luna wants a second opinion) only ever warrants
+//   Sol when the underlying data was actually good enough to reason about
+//   (dataConfidence >= dataConfidenceThreshold). If the data itself is the
+//   problem, Luna's own (correctly) low-confidence output is kept as-is.
+// - A critical geopolitical event is escalated unconditionally -- that is
+//   about event severity, not data quality, so it stays independent of
+//   dataConfidence.
 export function shouldEscalateToSol(params: {
   domain: Domain;
   lunaOutput: StateEvaluationOutput;
   materialDomainCountThisPass: number;
   hasCriticalGeopoliticalEvent: boolean;
+  dataConfidence: number;
   confidenceThreshold?: number;
+  dataConfidenceThreshold?: number;
 }): boolean {
-  const threshold = params.confidenceThreshold ?? 0.7;
-  if (params.lunaOutput.needsSol) return true;
-  if (params.lunaOutput.confidence < threshold) return true;
-  if (params.materialDomainCountThisPass > 1) return true;
   if (params.domain === "geopolitical" && params.hasCriticalGeopoliticalEvent) return true;
+
+  const dataConfidenceThreshold = params.dataConfidenceThreshold ?? 0.7;
+  if (params.dataConfidence < dataConfidenceThreshold) return false;
+
+  const confidenceThreshold = params.confidenceThreshold ?? 0.7;
+  if (params.lunaOutput.needsSol) return true;
+  if (params.materialDomainCountThisPass > 1) return true;
+  if (params.lunaOutput.confidence < confidenceThreshold) return true;
   return false;
 }
