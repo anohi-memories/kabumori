@@ -15,11 +15,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: broad-news-display-and-notification-presets-phase3-20260913
+- task_id: x-multibrand-phase3h-ai-lab-prelive-safeguards-20260913
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: アプリmedium+表示・日本語カテゴリ/重要度・通知プリセットを実装。本番変更0件、C1レビュー待ち。
+- note: AI Labの280文字制限とfingerprint完了記録をローカル準備。Vault-backed live dispatch統合は安全審査で停止。本番変更0件、C1レビュー待ち。
 
 ### Codex slot 2
 - owner: codex
