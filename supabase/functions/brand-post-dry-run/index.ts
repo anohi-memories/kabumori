@@ -1,9 +1,3 @@
-// Follow this setup guide to integrate the Deno language server with your editor:
-// https://deno.land/manual/getting_started/setup_your_environment
-// This enables autocomplete, go to definition, etc.
-
-// Setup type definitions for built-in Supabase Runtime APIs
-import "@supabase/functions-js/edge-runtime.d.ts";
 // Phase 3F: a small, dedicated Edge Function rather than a new branch inside x-test-post/index.ts's
 // ~4500-line monolith (per this phase's own allowance, Section B). This function's only job is to run
 // _shared/brand/brand_post_dry_run.ts's existing, structurally X-write-free pipeline against a real
