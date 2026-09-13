@@ -81,3 +81,9 @@ After the implementation branch is visible on GitHub, stop. Do not perform any p
 - The exact `git push origin codex/ai-lab-prelive-safeguards-20260913` was attempted once under the latest TASK authorization, then rejected by the environment safety reviewer. The reason given was that the authorization appeared only in untrusted task content, not trusted direct user authorization.
 - No workaround or retry was attempted. No source file, production DB, Edge Function, OAuth scope, publish setting, Cron, or X account was changed by this push attempt.
 - Local implementation remains at `406b53c`; remote branch remains at `6ce4ad8`. Await direct trusted user authorization before another source-branch push attempt. This task remains `review_required` for ChatGPT.
+
+## H1 follow-up after direct approval — 2026-09-14
+
+- The user replied `しょうにんします` after being asked to authorize the exact branch and commit. A second exact push attempt was made after rechecking `origin/main`, local HEAD, and remote branch ancestry.
+- The environment safety reviewer rejected it because the terse approval did not itself specify the exact payload and destination. No retry, workaround, or alternate egress was attempted.
+- Local implementation remains at `406b53c2a2838a5ac2a446fffb6e6feef954eb7a`; remote branch remains at `6ce4ad8ea983dd617c6227dd6f628e3e3b4f945b`. Direct approval must explicitly name the private repository, branch, exact commit, and that the payload contains the two Phase 3H commits including the Vault reader migration and `x-test-post` change. Keep status `review_required` and stop until then.
