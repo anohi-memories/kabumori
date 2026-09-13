@@ -1,44 +1,84 @@
 # Codex Report
 
-- task_id: x-multibrand-phase3c-oauth-start-void-rpc-fix-20260912
-- result: review_required — 最小修正・テスト・本番deploy/read-back完了。deploy後のOAuth開始再試行はDashboard操作待ち。
+- task_id: kabumori-x-oauth-recovery-20260913
+- result: review_required — Kabumori本人OAuth再認証、暗号化token置換、refresh-only proof、本番read-backまで完了
 - next_owner: chatgpt
-- implementation_branch: `codex/oauth-start-void-rpc-fix-20260912`
-- commit_hash: `926f29a1d4ee2ec492ed3d7197ab356e74a8fa49`
-- push: `origin/codex/oauth-start-void-rpc-fix-20260912` と `origin/feature/multibrand-foundation` にpush済み
-- production_deploy: `x-oauth-connect` v11 ACTIVE / `verify_jwt=false`; deploy後read-backで9 runtime filesをsourceとbyte compareし一致確認
-- oauth_start_retry_result: 未実行。利用可能な実行環境に認証済みDashboardのFunction invoke操作がなく、認証情報の移送も行わないため停止。期限切れの旧stateは再利用しない。
-- current_social_account_brand_state: 最終read-only確認では `ai_salaryman_lab_x` が `authorization_pending` / `publish_enabled=false`、brandは `is_active=true` / `publish_mode=dry_run`。access/refresh token refなし。deploy前後で状態不変を確認。
-- X_login_consent_status: 未実施。新しいauthorization_url取得後、本人がXログイン・同意する段階で停止予定。
-- production_changes: `x-oauth-connect`のみv10→v11 deploy。DB/RPC/schema、Cron、secrets/Vault contents、他Edge Functionは変更なし。
-- forbidden_changes_zero: X投稿、Cron変更、live化、publish有効化、Kabumori token変更、mio接続、x-test-post変更はゼロ。
+- implementation_branch: `codex/kabumori-x-oauth-recovery-20260913`
+- commit_hashes: `ed4c8c038e88274e59460997fa75e3f4721dfbf7`, `13cb948`
+- push: `origin/codex/kabumori-x-oauth-recovery-20260913` へpush済み
+- production_deploy: `x-oauth-connect` v13 ACTIVE / `verify_jwt=false`; 12 runtime filesをdeploy後にread-backし完全一致
+- production_migrations:
+  - repo `20260912232914_add_kabumori_oauth_recovery_rpc.sql` / production history `20260912235802`
+  - repo `20260913000926_correct_kabumori_x_handle.sql` / production history `20260913010947`
 
 ## Root cause
 
-PostgRESTのRPC応答は関数の戻り型に応じて返り、void型関数ではJSON documentがない。`begin_ai_salaryman_lab_oauth_connection` は `RETURNS void` だが、旧Edge Functionの共通RPC helperは全成功応答へ `response.json()` を実行していた。空bodyのJSON parse失敗が開始済み処理を汎用400へ変換する経路を確認し、空/204成功を許容する最小修正を実装した。JSON応答RPCは従来どおりJSON parseし、HTTP非2xxはfail-closedを維持。
+- 2026-09-13 `morning_greeting` は既存refresh tokenでX token endpointがHTTP 400を返し、`X_TOKEN_REFRESH_FAILED:400` で失敗した。
+- 本番開始probeでlegacy token storeは現行 `X_CLIENT_SECRET` 由来鍵により復号可能だった。このため「client secret変更 → legacy復号失敗 → server-secret fallback」の第一仮説は否定された。
+- 旧refresh失敗のX response bodyは既存実装が保存していないため、`invalid_grant` 等の厳密なsubtypeは未確定。事実として確認できる範囲では、保存済みrefresh tokenがX側で無効だった。
+- 初回再認証ではDBの誤登録handle `kabumori` と実アカウントが一致せず、token保存前に `X_IDENTITY_HANDLE_MISMATCH` で安全停止した。ユーザー確認で実X handleは `yume_daka` と判明し、固定allowlist・DB row・Kabumori専用RPCを訂正した。
 
 ## Changed files
 
 - `supabase/functions/x-oauth-connect/index.ts`
-- `supabase/functions/x-oauth-connect/rpc.ts` (new)
-- `supabase/functions/x-oauth-connect/start_logic.ts` (new)
-- `supabase/functions/x-oauth-connect/rpc_test.ts` (new)
+- `supabase/functions/x-oauth-connect/start_logic.ts`
+- `supabase/functions/x-oauth-connect/account_config.ts`
+- `supabase/functions/x-oauth-connect/legacy_token_store.ts`
+- `supabase/functions/x-oauth-connect/kabumori_recovery.ts`
+- `supabase/functions/x-oauth-connect/rpc_test.ts`
+- `supabase/functions/x-oauth-connect/account_config_test.ts`
+- `supabase/functions/x-oauth-connect/kabumori_recovery_test.ts`
+- `supabase/functions/_shared/brand/oauth_connection_test.ts`
+- `supabase/migrations/20260912232914_add_kabumori_oauth_recovery_rpc.sql`
+- `supabase/migrations/20260913000926_correct_kabumori_x_handle.sql`
+
+## Implementation
+
+- OAuth開始は既存admin JWTまたはDashboard secret-keyのPOST開始専用経路のみ。
+- Kabumori/AI Labを固定allowlistで分離。AI Labは既存read-only scope、dry_run、Vault保存を維持。
+- KabumoriはPKCE、random state、expiry、一回限りconsume、`GET /2/users/me` のhandle照合を通過してからlegacy token storeへAES-GCM暗号化保存。
+- fresh refresh tokenを即時に一度rotateし、同じ保存先から再読込・復号後に `GET /2/users/me` で同一本人を再確認。
+- Kabumori専用RPC 3件は `SECURITY DEFINER`、空の `search_path`、service roleのみEXECUTE。brand/account/handleを固定し、publish設定を変更しない。
+- OAuth Function runtimeにはX投稿・media upload endpointを実装していない。
 
 ## Tests
 
-- 追加テスト: 204/空body成功、JSON応答維持、非2xxのfail-closedとbody非漏えい、OAuth authorize URL/scopes/安全設定を確認。対象テスト9件pass。
-- Supabase Edge Function全テスト: 695 passed / 0 failed（baseline 690）。
-- `deno check` (index.tsおよび追加module): pass。
+- 対象テスト: 15 passed / 0 failed。
+- Supabase Edge Function全テスト: 705 passed / 0 failed。
+- `deno check --config supabase/functions/x-oauth-connect/deno.json supabase/functions/x-oauth-connect/index.ts`: pass。
 - `git diff --check`: pass。
-- authorization scopeは `tweet.read users.read offline.access` のまま。posting scopeなし、`dry_run` / `publish_enabled=false`を維持。
+- 2つのmigrationをローカルPostgresのBEGIN/ROLLBACK内で検証。handle guard、state consume、本人完了、RPC ACL、空search_pathを確認し、永続テストデータ0件。
+- Supabase advisors: 今回追加した3関数はmutable search_path / anon / authenticated SECURITY DEFINER警告の対象外。既存の別オブジェクトに関する警告は本タスクで変更していない。
 
-## Production safety checks
+## Production proof
 
-- 対象Function以外の7 Edge Functionsはdeploy前後で不変。
-- DB/Cron read-only baselineはdeploy前後で不変（Cron count 10、OAuth state count 1、unexpired state 0、AI Lab Vault secret count 1）。
-- `x-oauth-connect` v11の9 runtime filesを本番からread-backし、source commitとbyte-for-byte一致。
-- X API、OAuth start retry、token exchange、本人確認は未実施。secret値は取得・表示・記録していない。
+- callback: success / `connection_status=identity_verified`。
+- refresh-only proof:
+  - X token endpoint 2xx
+  - rotated tokenを暗号化保存
+  - 同じruntimeで再読込・復号成功
+  - `GET /2/users/me` で `yume_daka` 本人を再確認
+  - X post API 0 call
+  - media upload API 0 call
+- `oauth_token_store` は2026-09-13 10:15 JST頃に更新され、有効期限は同日12:15 JST頃。暗号文と16文字base64 IVのみ保存されていることをread-only確認。
+- `kabumori_x`: handle=`yume_daka`、`identity_verified`、platform user id設定済み、既存publish_enabled=trueを維持、Vault token refsなし。
+- OAuth stateは2回ともconsume済み、unconsumed 0。初回handle mismatchではtoken metadata不変。
+- publish claimsは開始前後ともtotal 11 / published 4。最新の9/13 morning_greeting claimは従来のfailedのままで、人工retryや新規投稿は行っていない。
+- `ai_salaryman_lab_x` のidentity、Vault refs、`publish_enabled=false`、brand `dry_run` は開始前後で不変。
+- Cron、scheduler、`x-test-post`、他Edge Function、他ブランド、Push領域は変更なし。
+
+## Remaining issues
+
+- 旧refresh tokenがX側で無効になった厳密な理由は、旧400 response bodyが記録されていないため確定不能。
+- 自然Cron経路での次回投稿到達はまだ発生していない。手動投稿は禁止のため実施していないが、同じrefresh・保存・復号経路はrefresh-only proofで検証済み。
+
+## Safety checks
+
+- 手動X投稿0件、手動candidate/scheduled row注入0件、Cron変更0件。
+- AI Lab token/Vault row変更0件、live化0件、publish有効化0件。
+- secret/token/code/verifier値はGit・Report・DB平文列・Function responseへ記録していない。Dashboard secret keyはPOST開始専用の組み込み操作だけで使用。
+- 本番DDLは上記2migrationのみ。通常の一括db push、`--include-all`、migration history修復は未実施。
 
 ## Next recommendation
 
-既存Dashboardの認証済み画面から `POST {"handle":"kaishain_ai_lab"}` を一度だけ再試行し、authorization_urlが返ればユーザー自身のブラウザで開く。secret値は共有しない。X認可画面到達後に停止し、以降の本人ログイン・同意を待つ。
+`C1` で本報告と実装branchをレビューする。次回の自然投稿でpublish到達を確認し、旧9/13 failed rowは人工再実行しない。

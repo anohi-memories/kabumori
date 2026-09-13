@@ -3,8 +3,8 @@
 - task_id: kabumori-x-oauth-recovery-20260913
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: 2026-09-13朝の `morning_greeting` が `X_TOKEN_REFRESH_FAILED:400` で失敗したため、かぶモリX OAuth認証だけを安全に復旧する。投稿生成・scheduler・複垢化の他ブランド挙動は変更しない。
@@ -31,7 +31,7 @@ read-only確認済み:
 - 2026-09-12 20:47 JST頃の interaction はX投稿成功。
 - その後、会社員AIラボOAuthは 22:24 JST頃に `identity_verified` まで完了。
 - `ai_salaryman_lab_x`: Vault access/refresh refsあり、publish_enabled=false。
-- `kabumori_x`: publish_enabled=trueだが `connection_status=unconnected`、platform_user_idなし、Vault token refsなし。現行投稿はlegacy `oauth_token_store` / x-test-post経路。
+- `kabumori_x`: 当初publish_enabled=trueだが `connection_status=unconnected`、platform_user_idなし、Vault token refsなし。ユーザー確認により実X handleは `yume_daka` と判明。現行投稿はlegacy `oauth_token_store` / x-test-post経路。
 - `x-test-post` は `oauth_token_store` を `X_CLIENT_SECRET` 由来AES keyで復号し、復号不能時は server secrets `X_OAUTH2_ACCESS_TOKEN` / `X_OAUTH2_REFRESH_TOKEN` へfallbackする。
 - X API 401時、refresh endpoint `POST /2/oauth2/token` を呼び、非2xxなら `X_TOKEN_REFRESH_FAILED:<status>`。
 - 現行ログはX refresh error bodyを保存しないため、400の `invalid_grant` 等の詳細は未確認。
@@ -69,7 +69,7 @@ read-only確認済み:
 - admin-only start。
 - PKCE + random state。
 - callback state / expiry / one-time consume検証。
-- authorization後 `GET /2/users/me` で登録handle `kabumori` と照合し、別アカウントならtoken保存前にreject。
+- authorization後 `GET /2/users/me` でユーザー確認済みhandle `yume_daka` と照合し、別アカウントならtoken保存前にreject。
 - token/secret/code/verifierをログ・Report・Gitへ出さない。
 - fresh tokenは **現行x-test-postが実際に読む安全な保存先** へ保存する。legacy storeを使うなら現行暗号化形式を維持する。
 - AI Lab token/Vault rowsは変更しない。
