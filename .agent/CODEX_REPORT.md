@@ -98,7 +98,7 @@
 
 ## Push
 
-- push: completion control commitとともに `origin/main` へfast-forward同期予定。
+- push: implementation commit `f7c17b915c551ba81b1dfc62a0731fd3eba6f008` と本completion control情報を `origin/main` / `origin/codex/broad-news-presets-phase3-20260913` へfast-forward同期済み。
 
 ## Next recommendation
 
