@@ -3,8 +3,8 @@
 - task_id: kabumori-x-oauth-recovery-20260913
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: user
 - priority: urgent
 - recommended_model: Sol High
 - purpose: 2026-09-13朝の `morning_greeting` が `X_TOKEN_REFRESH_FAILED:400` で失敗したため、かぶモリX OAuth認証だけを安全に復旧する。投稿生成・scheduler・複垢化の他ブランド挙動は変更しない。
@@ -130,3 +130,19 @@ read-only確認済み:
 - Cron/scheduler/posting logic不変。
 - commit/push/report完了。
 - `review_required / next_owner: chatgpt`。
+
+## C1 Review — 2026-09-13
+
+- result: PASS
+- implementation: PASS。Kabumori OAuth recoveryはaccount allowlist、PKCE/state、one-time consume、handle/identity verification、legacy token store暗号化保存、refresh-only proofに限定。AI Lab read-only flowは維持。
+- root cause handling: PASS。旧400 subtypeは既存ログ不足で未確定と明示し、client-secret変更による復号失敗仮説はproduction probeで否定。推測を事実化していない。
+- identity safety: PASS。実アカウント `yume_daka` を本人確認し、誤登録handle `kabumori` をguard付きmigrationで訂正。別handleはtoken保存前にreject。
+- tests: PASS。対象15/15、全Edge Function 705/705、deno check、git diff --check、migration BEGIN/ROLLBACK proof、RPC ACL/search_path確認。
+- production: PASS。`x-oauth-connect` v13 ACTIVE / `verify_jwt=false`、12 runtime files read-back一致。本番DDLはreview対象2migrationのみ。
+- refresh-only proof: PASS。token endpoint 2xx、rotated token暗号化保存、再読込/復号、`GET /2/users/me`本人再確認。X post/media callは各0。
+- boundaries: PASS。AI Lab identity/Vault/dry_run/publish無効不変。Cron/scheduler/x-test-post/Push/他Function変更なし。手動投稿・人工retryなし。
+- natural production evidence: PASS。復旧後、2026-09-13 11:40 JST頃の `tip` が自然Cron経路でclaimされ、`X post created` / `succeeded` をread-only確認。ユーザーからも自動投稿復旧確認あり。
+- implementation branch: `codex/kabumori-x-oauth-recovery-20260913`
+- commits: `ed4c8c038e88274e59460997fa75e3f4721dfbf7`, `13cb948684785cdd189882b7434b981fabf96385`
+- task status: done
+- next_owner: user
