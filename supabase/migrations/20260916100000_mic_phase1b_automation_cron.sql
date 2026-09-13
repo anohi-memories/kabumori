@@ -27,16 +27,25 @@
 --    explicitly (`{"domains":["rates"]}` / `{"domains":["commodities"]}`)
 --    -- never an all-domain call, and never SEC/corporate_events (still
 --    BLOCKED, out of scope).
--- 5. Every evaluator job additionally requires a `recent_ingest` CTE to
---    return a row -- the specific source that feeds that domain must have
---    a `mic_ingestion_runs` row with status='completed' completed within
---    the last 60 minutes (the job itself fires 15 minutes after its
---    paired ingest job; 60 minutes of tolerance comfortably covers normal
---    ingest latency without matching a stale run from hours earlier). If
---    the triggering ingest failed or never ran, this CTE is empty too, so
---    the evaluator is never invoked against Facts that were never
---    refreshed -- no wasted runs, no noise in mic_state_evaluation_runs
---    for a source that just failed.
+-- 5. Every evaluator job additionally gates on a `latest_ingest` CTE: the
+--    single most recent `mic_ingestion_runs` row for its specific
+--    triggering source, restricted to started_at within the last 60
+--    minutes (the job fires 15 minutes after its paired ingest job; 60
+--    minutes comfortably covers normal ingest latency without reaching
+--    back to a stale run from hours earlier). The gate is
+--    `latest_ingest.status = 'completed'` -- deliberately "take the latest
+--    run in the window, then check its status" rather than "does a
+--    completed row exist somewhere in the window", so a sequence like
+--    (30 min ago: completed) -> (just now: failed) correctly reads the
+--    failed run as the latest one and skips the evaluator, instead of
+--    matching the older completed row and evaluating stale Facts anyway.
+--    If there is no run at all in the window, or the latest one is
+--    'failed'/'running'/anything but 'completed', latest_ingest still
+--    returns a row (or zero, if no run exists) but the `where
+--    latest_ingest.status = 'completed'` filter empties the result either
+--    way -- no wasted evaluator runs, no noise in
+--    mic_state_evaluation_runs for a source that just failed or hasn't
+--    finished yet.
 -- 6. `cron.schedule(name, ...)` upserts by job name, so re-running this
 --    migration is safe and never creates a duplicate job, and it never
 --    touches any job name outside the `mic-ingest-*` / `mic-evaluator-*`
@@ -187,9 +196,9 @@ select cron.schedule(
 );
 
 -- ---------------------------------------------------------------------------
--- State evaluator jobs -- each gated on secret presence AND a completed
--- mic_ingestion_runs row for its specific triggering source within the
--- last 60 minutes (see point 5 above).
+-- State evaluator jobs -- each gated on secret presence AND the LATEST
+-- mic_ingestion_runs row for its specific triggering source (within the
+-- last 60 minutes) actually being status='completed' (see point 5 above).
 -- ---------------------------------------------------------------------------
 
 select cron.schedule(
@@ -203,12 +212,12 @@ select cron.schedule(
       and decrypted_secret is not null and decrypted_secret <> ''
     limit 1
   ),
-  recent_ingest as (
-    select 1
+  latest_ingest as (
+    select status, completed_at, started_at, run_window
     from public.mic_ingestion_runs
     where source_key = 'fred'
-      and status = 'completed'
-      and completed_at > now() - interval '60 minutes'
+      and started_at > now() - interval '60 minutes'
+    order by started_at desc
     limit 1
   )
   select net.http_post(
@@ -217,7 +226,9 @@ select cron.schedule(
     body := '{"domains":["rates"]}'::jsonb,
     timeout_milliseconds := 150000
   )
-  from secret, recent_ingest;
+  from secret
+  cross join latest_ingest
+  where latest_ingest.status = 'completed';
   $$
 );
 
@@ -232,12 +243,12 @@ select cron.schedule(
       and decrypted_secret is not null and decrypted_secret <> ''
     limit 1
   ),
-  recent_ingest as (
-    select 1
+  latest_ingest as (
+    select status, completed_at, started_at, run_window
     from public.mic_ingestion_runs
     where source_key = 'fred'
-      and status = 'completed'
-      and completed_at > now() - interval '60 minutes'
+      and started_at > now() - interval '60 minutes'
+    order by started_at desc
     limit 1
   )
   select net.http_post(
@@ -246,7 +257,9 @@ select cron.schedule(
     body := '{"domains":["rates"]}'::jsonb,
     timeout_milliseconds := 150000
   )
-  from secret, recent_ingest;
+  from secret
+  cross join latest_ingest
+  where latest_ingest.status = 'completed';
   $$
 );
 
@@ -261,12 +274,12 @@ select cron.schedule(
       and decrypted_secret is not null and decrypted_secret <> ''
     limit 1
   ),
-  recent_ingest as (
-    select 1
+  latest_ingest as (
+    select status, completed_at, started_at, run_window
     from public.mic_ingestion_runs
     where source_key = 'mof_jgb'
-      and status = 'completed'
-      and completed_at > now() - interval '60 minutes'
+      and started_at > now() - interval '60 minutes'
+    order by started_at desc
     limit 1
   )
   select net.http_post(
@@ -275,7 +288,9 @@ select cron.schedule(
     body := '{"domains":["rates"]}'::jsonb,
     timeout_milliseconds := 150000
   )
-  from secret, recent_ingest;
+  from secret
+  cross join latest_ingest
+  where latest_ingest.status = 'completed';
   $$
 );
 
@@ -290,12 +305,12 @@ select cron.schedule(
       and decrypted_secret is not null and decrypted_secret <> ''
     limit 1
   ),
-  recent_ingest as (
-    select 1
+  latest_ingest as (
+    select status, completed_at, started_at, run_window
     from public.mic_ingestion_runs
     where source_key = 'mof_jgb'
-      and status = 'completed'
-      and completed_at > now() - interval '60 minutes'
+      and started_at > now() - interval '60 minutes'
+    order by started_at desc
     limit 1
   )
   select net.http_post(
@@ -304,7 +319,9 @@ select cron.schedule(
     body := '{"domains":["rates"]}'::jsonb,
     timeout_milliseconds := 150000
   )
-  from secret, recent_ingest;
+  from secret
+  cross join latest_ingest
+  where latest_ingest.status = 'completed';
   $$
 );
 
@@ -319,12 +336,12 @@ select cron.schedule(
       and decrypted_secret is not null and decrypted_secret <> ''
     limit 1
   ),
-  recent_ingest as (
-    select 1
+  latest_ingest as (
+    select status, completed_at, started_at, run_window
     from public.mic_ingestion_runs
     where source_key = 'eia'
-      and status = 'completed'
-      and completed_at > now() - interval '60 minutes'
+      and started_at > now() - interval '60 minutes'
+    order by started_at desc
     limit 1
   )
   select net.http_post(
@@ -333,7 +350,9 @@ select cron.schedule(
     body := '{"domains":["commodities"]}'::jsonb,
     timeout_milliseconds := 150000
   )
-  from secret, recent_ingest;
+  from secret
+  cross join latest_ingest
+  where latest_ingest.status = 'completed';
   $$
 );
 
@@ -348,12 +367,12 @@ select cron.schedule(
       and decrypted_secret is not null and decrypted_secret <> ''
     limit 1
   ),
-  recent_ingest as (
-    select 1
+  latest_ingest as (
+    select status, completed_at, started_at, run_window
     from public.mic_ingestion_runs
     where source_key = 'eia'
-      and status = 'completed'
-      and completed_at > now() - interval '60 minutes'
+      and started_at > now() - interval '60 minutes'
+    order by started_at desc
     limit 1
   )
   select net.http_post(
@@ -362,6 +381,8 @@ select cron.schedule(
     body := '{"domains":["commodities"]}'::jsonb,
     timeout_milliseconds := 150000
   )
-  from secret, recent_ingest;
+  from secret
+  cross join latest_ingest
+  where latest_ingest.status = 'completed';
   $$
 );
