@@ -3,8 +3,8 @@
 - task_id: x-multibrand-phase3h-ai-lab-prelive-safeguards-20260913
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Sol High
 - purpose: 会社員AIラボの初回live投稿前に、280文字制限・fingerprint永続化・Vault-backed dispatch配線・posting window準備を安全に仕上げる。実X投稿、live化、write scope追加はまだ行わない。
@@ -237,3 +237,29 @@ Phase 3H does NOT authorize the first live X post.
 - result: `review_required` / partial. Generic 280-character enforcement and local fingerprint completion preparation are implemented on `codex/ai-lab-prelive-safeguards-20260913` (`6ce4ad8`).
 - The final AI Lab Vault-backed X dispatch was not integrated. A safety review blocked edits that would add Vault token reads and a live X-post path to `x-test-post`; no workaround was attempted. This task remains incomplete pending explicit approval for that code-only integration.
 - No migration was applied, no Edge Function deployed, and no production setting/scope/Cron/posting window/X post changed.
+
+## Follow-up authorization — 2026-09-14
+
+User explicitly authorizes the **local/code-only** continuation needed to integrate the AI Lab Vault-backed dispatch path into `x-test-post`.
+
+Authorized scope:
+- modify local/source code for `x-test-post` as narrowly as necessary to wire `brand_id=ai_salaryman_lab` to the Vault-backed brand token loader and the existing X text-post dispatch abstraction
+- preserve Kabumori legacy behavior unchanged
+- require zero fallback from AI Lab to Kabumori legacy `oauth_token_store`
+- keep/extend tests proving correct AI Lab account routing, expected handle `kaishain_ai_lab`, no legacy fallback, no token logging, dispatch-level 280-char guard, and fingerprint persistence semantics
+- mocks/read-only metadata checks are allowed
+
+Still strictly NOT authorized:
+- no production deploy
+- no production DB write/migration
+- no `publish_mode=live`
+- no `publish_enabled=true`
+- no OAuth scope change / re-authorization
+- no `tweet.write` / `media.write` addition
+- no token refresh merely to prove liveness
+- no real/test X post or media upload
+- no Kabumori OAuth/token/Cron change
+- no Mio change
+- no secret/token value output
+
+When this code-only integration and tests are complete, return to `status: review_required`, `next_owner: chatgpt`, update `.agent/CODEX_REPORT.md`, and stop for C1 review before any production operation.
