@@ -42,12 +42,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: in_progress
+- status: review_required
 - task_id: x-multibrand-phase3g-ai-lab-live-readiness-20260913
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: Phase 3F (`215eeff`, K2承認待ちから継続) を土台に、cross-brand dedupeの実データ接続、AI Lab posting window無効状態での準備、Vault token routingのread-only証明に着手。
+- note: cross-brand dedupeを実データ（かぶモリ実投稿4件、close/morning report runsテーブル由来）へ接続し実呼び出しで証明。実装過程でpost_execution_logsに存在しないカラムを参照するバグを発見・修正・再検証。Vault token routing(read-only/no-secret)も実呼び出しで確認。published_content_fingerprints migrationを本番適用済み。posting_windows/publish_claimsは判断のみ(DB変更なし)。X write/legacy token読込は実測0。live化・実投稿は未実施。K2待ち。
 
 ## Control codes
 
