@@ -106,11 +106,11 @@ test("fact gates, grants and no writes to candidates", async () => {
 
 test("important-news-monitor calls the producer only on real runs, after publish or app copy", async () => {
   const index = await Deno.readTextFile(INDEX);
-  const calls = [...index.matchAll(/await enqueueMarketCriticalNotifications\(/g)].length;
+  const calls = [...index.matchAll(/await enqueuePresetImportantNewsNotifications\(/g)].length;
   assert.equal(calls, 3, "generate_ready (two exits) and publish_ready");
-  assert.match(index, /const marketCritical = dryRun \? undefined : await enqueueMarketCriticalNotifications/);
-  assert.match(index, /const marketCritical = result\.published\s+\? await enqueueMarketCriticalNotifications/);
+  assert.match(index, /const importantNewsNotifications = result\.published\s+\? await enqueuePresetImportantNewsNotifications/);
+  assert.match(index, /: await enqueuePresetImportantNewsNotifications\(supabaseUrl, serviceRoleKey\)/);
   // The dry-run and notification preview modes never enqueue.
   const dryRunMode = section(index, 'if (body.mode === "app_copy_dry_run")', 'if (body.mode === "notification_enqueue_dry_run")');
-  assert.ok(!dryRunMode.includes("enqueueMarketCriticalNotifications"));
+  assert.ok(!dryRunMode.includes("enqueuePresetImportantNewsNotifications"));
 });

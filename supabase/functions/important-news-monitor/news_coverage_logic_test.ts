@@ -220,7 +220,7 @@ test("preset thresholds per scope", () => {
     ["quiet", ["geopolitics"], false, false, false],
     ["standard", ["geopolitics"], true, true, false],
     ["many", ["geopolitics"], true, true, true],
-    ["all", ["geopolitics"], true, true, true],
+    ["all_useful", ["geopolitics"], true, true, true],
   ];
   for (const [preset, categories, companyHigh, marketCritical, marketHigh] of cases) {
     assert.equal(
@@ -235,7 +235,7 @@ test("preset thresholds per scope", () => {
   }
   assert.equal(notificationEligibility(candidate({ scope: "company", severity: "critical" }), settings({ preset: "quiet" })).send, true);
   assert.equal(notificationEligibility(candidate({ scope: "company", severity: "medium" }), settings({ preset: "many" })).send, true);
-  assert.equal(notificationEligibility(candidate({ severity: "medium" }), settings({ preset: "all" })).send, true);
+  assert.equal(notificationEligibility(candidate({ severity: "medium" }), settings({ preset: "all_useful" })).send, true);
 });
 
 test("low is never pushed by any preset", () => {
@@ -258,9 +258,9 @@ test("an emergency reaches every preset, with no tracked match, and its own off 
 });
 
 test("hard blocks win over any preset", () => {
-  assert.equal(notificationEligibility(candidate({ hasFactPassedText: false }), settings({ preset: "all" })).reason,
+  assert.equal(notificationEligibility(candidate({ hasFactPassedText: false }), settings({ preset: "all_useful" })).reason,
     "NO_FACT_PASSED_TEXT");
-  assert.equal(notificationEligibility(candidate({ alreadyNotified: true }), settings({ preset: "all" })).reason,
+  assert.equal(notificationEligibility(candidate({ alreadyNotified: true }), settings({ preset: "all_useful" })).reason,
     "ALREADY_NOTIFIED");
   assert.equal(notificationEligibility(candidate({ severity: "emergency", hasFactPassedText: false }), settings()).reason,
     "NO_FACT_PASSED_TEXT");

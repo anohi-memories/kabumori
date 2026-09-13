@@ -308,7 +308,7 @@ test("judgement fills in the wider severity and keeps an emergency recorded at c
   assert.equal(aged.bypassesSectorMatch, true);
 });
 
-test("the monitor writes only the new coverage columns, and no push logic reads them", async () => {
+test("the monitor persists coverage and invokes the preset-aware SQL producer", async () => {
   const source = await Deno.readTextFile(INDEX);
   // Wired at both classification points.
   assert.match(source, /classifyCollectionCoverage\(\{/);
@@ -316,12 +316,11 @@ test("the monitor writes only the new coverage columns, and no push logic reads 
   assert.match(source, /coverage_categories: coverage\.categories/);
   assert.match(source, /coverage_severity: coverage\.severity/);
   assert.match(source, /emergency_class: coverage\.emergencyClass/);
-  // The notification half stays out of the function entirely.
+  // Eligibility stays centralized in SQL rather than duplicated in the Edge Function.
   assert.ok(!source.includes("notificationEligibility"), "notification policy must stay unwired");
   assert.ok(!source.includes("PRESET_THRESHOLDS"), "presets must stay unwired");
   assert.ok(!source.includes("notification_preset"), "no preset column is read or written");
-  // The existing X publish gate and producers are untouched by this phase.
-  assert.match(source, /enqueue_market_critical_notifications/);
+  assert.match(source, /enqueue_important_news_notifications/);
   assert.ok(!source.includes("coverage_severity=eq."), "no producer selects on coverage_severity yet");
 });
 

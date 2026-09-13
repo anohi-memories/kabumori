@@ -2,12 +2,36 @@ import type { ImportantStockNews } from '@/lib/important-news';
 
 export const trackingLabels = { holding: '保有', watch: '監視' } as const;
 
+export const coverageCategoryLabels: Record<string, string> = {
+  geopolitics: '地政学',
+  disaster: '災害',
+  monetary_policy: '金融政策',
+  fx: '為替',
+  rates: '金利',
+  oil_energy: '原油・エネルギー',
+  commodities: 'コモディティ',
+  shipping_logistics: '海運・物流',
+  semiconductors: '半導体',
+  ai_tech: 'AI・テック',
+  us_market: '米国市場',
+  japan_market: '日本市場',
+  regulation_policy: '政策・規制',
+  corporate: '企業',
+  earnings: '決算',
+  financial_system: '金融システム',
+};
+
+export function categoryLabels(categories: string[] | null | undefined): string[] {
+  return (categories ?? []).map((category) => coverageCategoryLabels[category] ?? category);
+}
+
 // Prefer the app severity; fall back to the X importance for an RPC without it.
 export function importanceLabel(
   item: Pick<ImportantStockNews, 'severity' | 'importance'>,
 ): { text: string; subtle: boolean } {
   const severity = item.severity
     ?? (item.importance === 'most_important' ? 'critical' : item.importance === 'important' ? 'high' : 'medium');
+  if (severity === 'emergency') return { text: '緊急', subtle: false };
   if (severity === 'critical') return { text: '最重要', subtle: false };
   if (severity === 'high') return { text: '重要', subtle: false };
   return { text: '注目', subtle: true };
@@ -22,6 +46,7 @@ export function targetLabel(
     const sectors = item.matched_sectors?.filter(Boolean).slice(0, 2) ?? [];
     return { badge: '市場', detail: `関連: ${(sectors.length ? sectors : [item.matched_sector]).join('・')}` };
   }
+  if (!item.ticker_code) return { badge: '市場', detail: '市場全体' };
   return { badge: trackingLabels[item.tracking_type] ?? '', detail: item.ticker_code ?? '' };
 }
 

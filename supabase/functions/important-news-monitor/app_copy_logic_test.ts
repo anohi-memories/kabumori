@@ -50,6 +50,11 @@ test("only items without Japanese title and without Fact-passed Japanese text ne
   assert.equal(needsAppCopy(base), true);
   assert.equal(needsAppCopy({ ...base, generation_fact_status: "passed" }), false, "Fact-passed Japanese post exists");
   assert.equal(needsAppCopy({ ...base, title: "自己株式の取得状況に関するお知らせ" }), false, "already Japanese");
+  assert.equal(needsAppCopy({
+    ...base,
+    title: "大津波警報を発表",
+    forceVerifiedCopy: true,
+  }), true, "a market emergency still needs independently Fact-checked app copy");
   assert.equal(needsAppCopy({ ...base, app_copy_fact_status: "failed" }), false, "one attempt only");
   assert.equal(needsAppCopy({ ...base, app_copy_fact_status: "generating" }), false, "claimed elsewhere");
   assert.equal(needsAppCopy({ ...base, generation_fact_status: "passed", generated_text: "  " }), true, "empty passed text is unusable");

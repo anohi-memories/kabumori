@@ -5,8 +5,9 @@
 // Exactly one generation call and one Fact-check call per item, run inside the
 // existing generate_ready invocation (no Cron change), never at display time.
 // Only copy whose Fact check passed is shown; anything else leaves the app on its
-// "日本語の要約は準備中" fallback. X post text, X publish conditions and push
-// copy are not touched: this writes only the app_* columns.
+// "日本語の要約は準備中" fallback. X post text and X publish conditions are
+// not touched. Phase 3's producer may reuse only Fact-passed app copy for push;
+// this module itself still writes only the app_* columns.
 
 export const APP_COPY_MODEL = "gpt-5.6-luna" as const;
 export const APP_COPY_TITLE_MAX = 60;
@@ -95,8 +96,9 @@ export function needsAppCopy(row: {
   generated_text: string | null;
   generation_fact_status: string | null;
   app_copy_fact_status: string | null;
+  forceVerifiedCopy?: boolean;
 }): boolean {
-  if (isJapaneseText(row.title)) return false;
+  if (!row.forceVerifiedCopy && isJapaneseText(row.title)) return false;
   if (row.generation_fact_status === "passed" && (row.generated_text ?? "").trim().length > 0) return false;
   return row.app_copy_fact_status === null;
 }

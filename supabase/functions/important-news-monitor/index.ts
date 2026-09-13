@@ -1330,6 +1330,8 @@ async function enqueueImportantNewsNotifications(
 
 type AppCopyRow = {
   id: string;
+  company_code: string | null;
+  coverage_severity: string | null;
   title: string;
   body_summary: string | null;
   source_url: string | null;
@@ -1343,7 +1345,7 @@ type AppCopyRow = {
 };
 
 const APP_COPY_SELECT = [
-  "id", "title", "body_summary", "source_url", "source_type", "published_at", "category",
+  "id", "company_code", "coverage_severity", "title", "body_summary", "source_url", "source_type", "published_at", "category",
   "affected_entities", "generated_text", "generation_fact_status", "app_copy_fact_status",
 ].join(",");
 
@@ -1429,7 +1431,10 @@ async function runAppCopyGeneration(
     const rows = await selectAppCopyRows(supabaseUrl, serviceRoleKey, ids);
     const requester = openAiAppCopyRequester(openAiApiKey);
     for (const row of rows) {
-      if (!needsAppCopy(row)) {
+      if (!needsAppCopy({
+        ...row,
+        forceVerifiedCopy: row.company_code === null && row.coverage_severity === "emergency",
+      })) {
         results.push({ candidateId: row.id, skipped: "NOT_NEEDED" });
         continue;
       }
@@ -1458,31 +1463,29 @@ async function runAppCopyGeneration(
   }
 }
 
-// Market-wide Critical pushes (opt-in). All targeting lives in SQL
-// (public.enqueue_market_critical_notifications): users with
-// alert_settings.market_critical_news, push_enabled and important_news on, whose
-// tracked sectors the item reaches, Fact-passed Japanese text only, fresh items
-// only, never the same news/event twice per user. Never throws.
-const MARKET_CRITICAL_PUSH_WINDOW_HOURS = 6;
+// Preset/category/emergency-aware important-news pushes. All eligibility lives
+// in the service-role-only SQL producer. The dispatcher and claim RPC are not
+// part of this decision and remain unchanged.
+const IMPORTANT_NEWS_PUSH_WINDOW_HOURS = 6;
 
-async function enqueueMarketCriticalNotifications(
+async function enqueuePresetImportantNewsNotifications(
   supabaseUrl: string,
   serviceRoleKey: string,
 ): Promise<Record<string, unknown>> {
   try {
-    const result = await fetch(`${supabaseUrl}/rest/v1/rpc/enqueue_market_critical_notifications`, {
+    const result = await fetch(`${supabaseUrl}/rest/v1/rpc/enqueue_important_news_notifications`, {
       method: "POST",
       headers: headers(serviceRoleKey),
-      body: JSON.stringify({ p_window_hours: MARKET_CRITICAL_PUSH_WINDOW_HOURS }),
+      body: JSON.stringify({ p_window_hours: IMPORTANT_NEWS_PUSH_WINDOW_HOURS }),
     });
-    if (!result.ok) throw new Error(`MARKET_CRITICAL_ENQUEUE_FAILED:${result.status}`);
+    if (!result.ok) throw new Error(`IMPORTANT_NEWS_PRESET_ENQUEUE_FAILED:${result.status}`);
     const rows = await result.json() as unknown[];
     const inserted = Array.isArray(rows) ? rows.length : 0;
-    console.log(JSON.stringify({ event: "market_critical_notification_enqueue", inserted }));
+    console.log(JSON.stringify({ event: "important_news_preset_notification_enqueue", inserted }));
     return { inserted };
   } catch (error) {
     const code = safeError(error);
-    console.log(JSON.stringify({ event: "market_critical_notification_enqueue", inserted: 0, error: code }));
+    console.log(JSON.stringify({ event: "important_news_preset_notification_enqueue", inserted: 0, error: code }));
     return { inserted: 0, error: code };
   }
 }
@@ -1523,7 +1526,10 @@ Deno.serve(async (req) => {
       return response({
         mode: body.mode,
         candidateId: row.id,
-        needsAppCopy: needsAppCopy(row),
+        needsAppCopy: needsAppCopy({
+          ...row,
+          forceVerifiedCopy: row.company_code === null && row.coverage_severity === "emergency",
+        }),
         databaseUpdated: false,
         ...outcome,
       });
@@ -1643,20 +1649,12 @@ Deno.serve(async (req) => {
             };
           },
         );
-        // Producer for the push pipeline. Runs only after the X publication has
-        // been finalized, and cannot fail the publication itself.
-        const notificationEnqueue = await enqueueImportantNewsNotifications(
-          supabaseUrl,
-          serviceRoleKey,
-          candidateId,
-          result,
-        );
-        // A just-published market Critical item reaches opted-in users without waiting
-        // for the next generate_ready run.
-        const marketCritical = result.published
-          ? await enqueueMarketCriticalNotifications(supabaseUrl, serviceRoleKey)
+        // Scan only the fresh window after publication. SQL owns all preset,
+        // category, Fact, audience and dedupe decisions.
+        const importantNewsNotifications = result.published
+          ? await enqueuePresetImportantNewsNotifications(supabaseUrl, serviceRoleKey)
           : undefined;
-        return { mode: body.mode, ...result, autoPublish: true, notificationEnqueue, marketCritical };
+        return { mode: body.mode, ...result, autoPublish: true, importantNewsNotifications };
       });
       if (!guarded.executed) {
         return response({
@@ -1692,8 +1690,10 @@ Deno.serve(async (req) => {
       if (generationCandidates.length === 0) {
         // App copy still runs when there is nothing new to post.
         const appCopy = dryRun ? undefined : await runAppCopyGeneration(supabaseUrl, serviceRoleKey, openAiApiKey);
-        const marketCritical = dryRun ? undefined : await enqueueMarketCriticalNotifications(supabaseUrl, serviceRoleKey);
-        return response({ mode: body.mode, processed: 0, databaseUpdated: false, results: [], appCopy, marketCritical });
+        const importantNewsNotifications = dryRun
+          ? undefined
+          : await enqueuePresetImportantNewsNotifications(supabaseUrl, serviceRoleKey);
+        return response({ mode: body.mode, processed: 0, databaseUpdated: false, results: [], appCopy, importantNewsNotifications });
       }
       const generationResults: unknown[] = [];
       const generationRepository = createGenerationRepository(supabaseUrl, serviceRoleKey);
@@ -1730,8 +1730,10 @@ Deno.serve(async (req) => {
       // After X generation is fully done, so a slow or failing app-copy call can
       // never delay or change the X-side results above.
       const appCopy = dryRun ? undefined : await runAppCopyGeneration(supabaseUrl, serviceRoleKey, openAiApiKey);
-      // After app copy, so a Critical item translated in this run can be pushed right away.
-      const marketCritical = dryRun ? undefined : await enqueueMarketCriticalNotifications(supabaseUrl, serviceRoleKey);
+      // After app copy, so only Fact-passed Japanese text can enter the queue.
+      const importantNewsNotifications = dryRun
+        ? undefined
+        : await enqueuePresetImportantNewsNotifications(supabaseUrl, serviceRoleKey);
       return response({
         mode: body.mode,
         processed: generationResults.length,
@@ -1739,7 +1741,7 @@ Deno.serve(async (req) => {
         results: generationResults,
         autoPublish: false,
         appCopy,
-        marketCritical,
+        importantNewsNotifications,
       });
     }
     if (body.mode === "judgement_dry_run" || body.mode === "judge_pending") {

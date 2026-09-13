@@ -14,7 +14,9 @@ export type ImportantStockNews = {
   source_url: string | null;
   // App-facing severity from get_my_important_stock_news. Optional so an
   // older RPC without the column still renders.
-  severity?: 'critical' | 'high' | 'medium';
+  severity?: 'emergency' | 'critical' | 'high' | 'medium';
+  // Coverage categories are independent of the X-oriented single category.
+  coverage_categories?: string[] | null;
   // Market-wide items only: the tracked sector that made the item relevant, and
   // the transmission themes (e.g. "fx,rates"). null for per-stock items.
   matched_sector?: string | null;
@@ -64,8 +66,6 @@ export async function fetchMyImportantStockNews(): Promise<ImportantNewsFeed> {
   }
 
   const hasTrackedStocks = !!tracked?.length;
-  if (!hasTrackedStocks) return { hasTrackedStocks, items: [] };
-
   const { data, error } = await supabase.rpc('get_my_important_stock_news', {
     p_limit: 50,
   });

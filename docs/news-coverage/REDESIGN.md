@@ -128,9 +128,9 @@ Collection（広く集める）→ Classification（重要度・カテゴリ・�
 | 静かめ | critical 以上 | なし | 受け取る |
 | 標準 | high 以上 | critical 以上 | 受け取る |
 | 多め | medium 以上 | high 以上 | 受け取る |
-| 全部通知 | medium 以上 | medium 以上 | 受け取る |
+| かなり多め | medium 以上 | medium 以上 | 受け取る |
 
-- `low` はどのプリセットでも通知しない（アプリの一覧には残す）。
+- `low` はどのプリセットでも通知せず、Phase 3のアプリ一覧にも出さない（収集・分類には残す）。
 - カテゴリ別OFFを併用できる。全カテゴリがOFFのときだけ通知を止める。
 - emergency は専用スイッチ（既定ON）。プリセットのしきい値には従わない。
 - 判定順は「push_enabled → 通知マスタ → 重複 → Fact passedの日本語テキスト → カテゴリ → emergency → 銘柄/業種一致 → しきい値」。**プリセットを広げてもFactゲートと重複防止は超えられない。**
@@ -145,10 +145,14 @@ Collection（広く集める）→ Classification（重要度・カテゴリ・�
 
 ```sql
 -- 1) 通知の広さ（ユーザー設定）
+-- 既存行をNULLのまま残してmigration適用だけで通知量を変えず、
+-- 追加後に新規行用defaultを設定する。
 alter table public.alert_settings
-  add column if not exists notification_preset text not null default 'standard'
-    check (notification_preset in ('quiet', 'standard', 'many', 'all')),
-  add column if not exists emergency_alerts boolean not null default true;
+  add column if not exists notification_preset text,
+  add column if not exists emergency_alerts boolean;
+alter table public.alert_settings
+  alter column notification_preset set default 'standard',
+  alter column emergency_alerts set default true;
 grant select, insert, update (notification_preset) on public.alert_settings to authenticated;
 grant select, insert, update (emergency_alerts) on public.alert_settings to authenticated;
 

@@ -3,7 +3,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { fetchMyImportantNewsItem, ImportantStockNews } from '@/lib/important-news';
-import { formatNewsTime, importanceLabel, targetLabel } from '@/lib/news-labels';
+import { categoryLabels, formatNewsTime, importanceLabel, targetLabel } from '@/lib/news-labels';
 import { buildNewsPresentation } from '@/lib/news-presentation';
 
 export default function ImportantNewsDetailScreen() {
@@ -55,6 +55,7 @@ export default function ImportantNewsDetailScreen() {
   const label = importanceLabel(item);
   const target = targetLabel(item);
   const holding = item.tracking_type === 'holding';
+  const categories = categoryLabels(item.coverage_categories);
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
@@ -74,6 +75,16 @@ export default function ImportantNewsDetailScreen() {
         <Text style={styles.originalTitle} numberOfLines={3}>原題: {view.originalTitle}</Text>
       )}
       <Text style={styles.time}>{formatNewsTime(item.news_time, true)}</Text>
+
+      {categories.length > 0 ? (
+        <View style={styles.categoryRow}>
+          {categories.map((category) => (
+            <View key={category} style={styles.categoryBadge}>
+              <Text style={styles.categoryText}>{category}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
 
       {view.keyPoints.length > 0 && (
         <View style={styles.section}>
@@ -155,6 +166,9 @@ const styles = StyleSheet.create({
   title: { color: '#17211a', fontWeight: '900', fontSize: 22, lineHeight: 31, marginTop: 6 },
   originalTitle: { color: '#89918c', fontSize: 12, lineHeight: 18, marginTop: 6 },
   time: { color: '#89918c', fontSize: 12, marginTop: 8 },
+  categoryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 12 },
+  categoryBadge: { backgroundColor: '#e9f1e9', borderRadius: 99, paddingHorizontal: 10, paddingVertical: 5 },
+  categoryText: { color: '#477054', fontSize: 12, fontWeight: '800' },
   section: { marginTop: 22 },
   sectionTitle: { color: '#548161', fontWeight: '900', fontSize: 13, letterSpacing: 1, marginBottom: 8 },
   pointRow: { flexDirection: 'row', marginBottom: 6 },

@@ -6,18 +6,17 @@ import {
   Pressable,
   RefreshControl,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ImportantNewsAlertSettings } from '@/components/important-news-alert-settings';
 import {
   fetchMyImportantStockNews,
   ImportantStockNews,
 } from '@/lib/important-news';
-import { fetchMarketCriticalAlert, setMarketCriticalAlert } from '@/lib/alert-settings';
-import { formatNewsTime, importanceLabel, targetLabel } from '@/lib/news-labels';
+import { categoryLabels, formatNewsTime, importanceLabel, targetLabel } from '@/lib/news-labels';
 import { buildNewsPresentation } from '@/lib/news-presentation';
 import { markImportantNewsNotificationsRead } from '@/lib/notifications';
 
@@ -26,35 +25,6 @@ export default function ImportantNewsScreen() {
   const [loading, setLoading] = useState(true);
   const [hasTrackedStocks, setHasTrackedStocks] = useState(false);
   const [error, setError] = useState('');
-  // null until loaded; the switch stays disabled rather than showing a guess.
-  const [marketAlert, setMarketAlert] = useState<boolean | null>(null);
-  const [savingAlert, setSavingAlert] = useState(false);
-  const [alertError, setAlertError] = useState('');
-
-  const loadMarketAlert = useCallback(async () => {
-    try {
-      setMarketAlert(await fetchMarketCriticalAlert());
-      setAlertError('');
-    } catch (loadError) {
-      setAlertError(loadError instanceof Error ? loadError.message : '通知設定を取得できませんでした。');
-    }
-  }, []);
-
-  const toggleMarketAlert = useCallback(async (enabled: boolean) => {
-    const previous = marketAlert;
-    setMarketAlert(enabled);
-    setSavingAlert(true);
-    setAlertError('');
-    try {
-      await setMarketCriticalAlert(enabled);
-    } catch (saveError) {
-      setMarketAlert(previous);
-      setAlertError(saveError instanceof Error ? saveError.message : '通知設定を保存できませんでした。');
-    } finally {
-      setSavingAlert(false);
-    }
-  }, [marketAlert]);
-
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -76,9 +46,8 @@ export default function ImportantNewsScreen() {
 
   useFocusEffect(useCallback(() => {
     void load();
-    void loadMarketAlert();
     void markImportantNewsNotificationsRead();
-  }, [load, loadMarketAlert]));
+  }, [load]));
 
   const emptyMessage = error
     || (!hasTrackedStocks
@@ -88,37 +57,21 @@ export default function ImportantNewsScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.container}>
-        <Text style={styles.eyebrow}>FOR YOUR STOCKS</Text>
-        <Text style={styles.title}>あなたの重要ニュース</Text>
-        <Text style={styles.description}>
-          保有・監視している銘柄の、大切なニュースだけをまとめます。
-        </Text>
-
-        <View style={styles.alertCard}>
-          <View style={styles.alertTextBox}>
-            <Text style={styles.alertTitle}>市場全体の重大ニュースを通知</Text>
-            <Text style={styles.alertDescription}>
-              関税・戦争・為替介入などの最重要ニュースのうち、登録銘柄の業種に関係するものをプッシュ通知します。
-            </Text>
-            {!!alertError && <Text style={styles.alertError}>{alertError}</Text>}
-          </View>
-          <Switch
-            value={marketAlert === true}
-            onValueChange={(enabled) => void toggleMarketAlert(enabled)}
-            disabled={marketAlert === null || savingAlert}
-            trackColor={{ true: '#397449', false: '#d7dcd8' }}
-            accessibilityLabel="市場全体の重大ニュースを通知"
-          />
-        </View>
-
-        {loading && !items.length ? (
-          <ActivityIndicator color="#397449" style={styles.status} />
-        ) : null}
-
         <FlatList
           data={items}
           keyExtractor={(item) => item.news_id}
           contentContainerStyle={[styles.list, !items.length && styles.emptyList]}
+          ListHeaderComponent={(
+            <View>
+              <Text style={styles.eyebrow}>FOR YOUR STOCKS</Text>
+              <Text style={styles.title}>あなたの重要ニュース</Text>
+              <Text style={styles.description}>
+                保有・監視銘柄と、市場全体の注目ニュースをまとめます。
+              </Text>
+              <ImportantNewsAlertSettings />
+              {loading && !items.length ? <ActivityIndicator color="#397449" style={styles.status} /> : null}
+            </View>
+          )}
           refreshControl={
             <RefreshControl refreshing={loading && !!items.length} onRefresh={load} tintColor="#397449" />
           }
@@ -139,6 +92,7 @@ export default function ImportantNewsScreen() {
             const label = importanceLabel(item);
             const target = targetLabel(item);
             const view = buildNewsPresentation(item);
+            const categories = categoryLabels(item.coverage_categories);
             return (
               <Pressable
                 onPress={() => router.push({ pathname: '/news/[id]', params: { id: item.news_id } })}
@@ -160,6 +114,15 @@ export default function ImportantNewsScreen() {
                 </View>
                 <Text style={styles.company}>{item.company_name}</Text>
                 <Text style={styles.newsTitle}>{view.title}</Text>
+                {categories.length > 0 ? (
+                  <View style={styles.categoryRow}>
+                    {categories.slice(0, 3).map((category) => (
+                      <View key={category} style={styles.categoryBadge}>
+                        <Text style={styles.categoryText}>{category}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
                 {view.listSummary ? (
                   <Text style={styles.summary} numberOfLines={4}>{view.listSummary}</Text>
                 ) : (
@@ -185,11 +148,6 @@ const styles = StyleSheet.create({
   title: { color: '#17211a', fontSize: 30, fontWeight: '900', marginTop: 6 },
   description: { color: '#667169', fontSize: 15, lineHeight: 22, marginTop: 8, marginBottom: 12 },
   status: { marginTop: 36 },
-  alertCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#eef3ed', borderRadius: 16, padding: 14, marginBottom: 12 },
-  alertTextBox: { flex: 1 },
-  alertTitle: { color: '#17211a', fontWeight: '800', fontSize: 14 },
-  alertDescription: { color: '#5e6d63', fontSize: 12, lineHeight: 18, marginTop: 3 },
-  alertError: { color: '#9a403b', fontSize: 12, marginTop: 4 },
   list: { paddingTop: 8, paddingBottom: 110, gap: 12 },
   emptyList: { flexGrow: 1 },
   emptyCard: { marginTop: 24, borderRadius: 18, backgroundColor: '#eef3ed', padding: 22, alignItems: 'center' },
@@ -214,6 +172,9 @@ const styles = StyleSheet.create({
   subtleText: { color: '#5e6d63' },
   company: { color: '#526058', fontWeight: '700', fontSize: 14, marginTop: 11 },
   newsTitle: { color: '#17211a', fontWeight: '900', fontSize: 18, lineHeight: 25, marginTop: 8 },
+  categoryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 9 },
+  categoryBadge: { backgroundColor: '#edf3ed', borderRadius: 99, paddingHorizontal: 9, paddingVertical: 4 },
+  categoryText: { color: '#477054', fontSize: 11, fontWeight: '800' },
   summary: { color: '#647068', fontSize: 14, lineHeight: 21, marginTop: 9 },
   pendingSummary: { color: '#89918c', fontSize: 13, lineHeight: 19, marginTop: 9 },
   footer: { flexDirection: 'row', alignItems: 'center', marginTop: 14 },

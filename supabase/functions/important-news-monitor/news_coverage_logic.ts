@@ -394,7 +394,7 @@ export function shouldStoreForCoverage(input: {
 // 5. Notification policy
 // ---------------------------------------------------------------------------
 
-export const NOTIFICATION_PRESETS = ["quiet", "standard", "many", "all"] as const;
+export const NOTIFICATION_PRESETS = ["quiet", "standard", "many", "all_useful"] as const;
 export type NotificationPreset = typeof NOTIFICATION_PRESETS[number];
 
 /**
@@ -410,7 +410,7 @@ export const PRESET_THRESHOLDS: Record<NotificationPreset, {
   quiet: { company: "critical", market: "emergency", label: "静かめ" },
   standard: { company: "high", market: "critical", label: "標準" },
   many: { company: "medium", market: "high", label: "多め" },
-  all: { company: "medium", market: "medium", label: "全部通知" },
+  all_useful: { company: "medium", market: "medium", label: "かなり多め" },
 };
 
 export type UserNotificationSettings = {
