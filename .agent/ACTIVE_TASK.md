@@ -42,12 +42,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: x-multibrand-phase3d-ai-lab-dry-run-routing-safety-20260913
+- status: in_progress
+- task_id: x-multibrand-phase3e-ai-lab-real-dry-run-generation-20260913
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: brand-routing安全性は既存fail-closedゲートで確認済み。post_execution_logsのbrand_id誤帰属（10 RPC）修正とcross-brand重複防止をfeature/multibrand-foundation `472cdac`へ実装、本番未適用でK2待ち。
+- note: Phase 3DはK2承認済み（`472cdac`）。Phase 3EはAI Lab専用の実AI生成器＋dry-run通し経路。実X投稿・live化は禁止のまま。
 
 ## Control codes
 

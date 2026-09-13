@@ -3,7 +3,7 @@
 - task_id: x-multibrand-phase3e-ai-lab-real-dry-run-generation-20260913
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Sonnet 5
