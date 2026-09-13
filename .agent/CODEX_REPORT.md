@@ -1,34 +1,35 @@
 # Codex Report
 
 - task_id: `x-multibrand-phase3h-ai-lab-prelive-safeguards-20260913`
-- result: `review_required` — partial. 280-character enforcement and local fingerprint-completion preparation are implemented. AI Lab Vault-backed live dispatch is not wired; task is incomplete pending explicit approval for that code-only change.
+- result: `review_required` — the explicitly authorized local/code-only Phase 3H implementation and tests are complete for C1 review. This is not production E2E proof: migrations are unapplied, `x-test-post` is undeployed, no write scopes were added, and no X post was sent.
 - model_used: GPT-5.6 Sol
-- source_base: `origin/feature/multibrand-foundation` `341e5dc5c03147394a99b2b71d148d2ba06c9c89`; control metadata based on fresh `origin/main` `ef0e782ff6982f3b3a666aaca9a4042dfb7414bf`
+- source_base: `origin/feature/multibrand-foundation` `341e5dc5c03147394a99b2b71d148d2ba06c9c89`; control metadata based on fresh `origin/main` `3a3c16fe4aff612413b1d32af35fdb4361f4a6bb`
 - implementation_branch: `codex/ai-lab-prelive-safeguards-20260913`
-- commit_hash: `6ce4ad8`
-- push: implementation branch pushed to `origin/codex/ai-lab-prelive-safeguards-20260913`; this task/report/active-index update is committed for fast-forward synchronization to `origin/main`.
+- commit_hash: `6ce4ad8` (safeguards) + `406b53c2a2838a5ac2a446fffb6e6feef954eb7a` (Vault-backed dispatch)
+- push: implementation branch push was rejected by the environment safety reviewer because it would export the Vault-token migration and Edge Function source to GitHub without established egress authorization. It was not retried or bypassed; both implementation commits remain local-only. Control metadata is handled in a separate commit containing only `.agent/` files; no implementation source is included.
 - next_owner: chatgpt
 
 ## Length policy
 
 - length_policy_design: shared discriminated union: finite `{mode: "limited", maxChars: positive integer}` or explicit `{mode: "unlimited", maxChars: null}`. Suitable for future app settings; no magic large maximum.
 - Character counting uses JavaScript Unicode code points (`Array.from(text).length`): Japanese code points count one each and a surrogate-pair emoji such as 😀 counts one. This is not claimed to match X weighted-length rules.
-- ai_lab_280_char_result: AI Lab profile sets 280. The generation prompt requests the limit; post-generation validation fails closed above 280 without truncation or retry.
+- ai_lab_280_char_result: AI Lab profile sets 280. The generation prompt requests the limit; post-generation validation fails closed above 280 without truncation or retry. Tests cover 279/280 pass and 281 rejection, including Japanese and surrogate-pair emoji cases.
 - unlimited_mode_design: tested explicitly; removes only the finite count limit. Brand, post type, and publish gates remain separate.
 - Kabumori regression: its profile remains without a finite policy and retains the previous 200–400-character prompt; no live Kabumori dispatch code changed.
-- dispatch_length_guard_result: a pure final-boundary helper independently checks account/type and length (279/280 pass, 281 rejects). It is unit-tested but is **not wired into `x-test-post`** because the live integration was blocked.
+- dispatch_length_guard_result: wired into the AI Lab scheduled `brand_post` path and independently rejects over-limit text immediately before X dispatch. Wrong brand/type fails closed. No live post was made.
 
 ## Fingerprints / dispatch
 
-- fingerprint_persistence_result: local-only migration adds a partial unique key on `(social_account_id, x_post_id)` and service-role-only `complete_ai_salaryman_lab_brand_post`. The RPC attempts the hash insert after confirmed X success and marks the scheduled row succeeded even if that insert fails, preventing automatic repost of that row. A small REST adapter and failure-result test are prepared, but neither is connected to the production dispatcher; no production write was made.
-- Current dry-run structurally does not import/call the fingerprint store; that boundary has a regression assertion.
-- vault_dispatch_routing_result: not wired. No token value was read. Read-only metadata confirms `ai_salaryman_lab_x`, handle `kaishain_ai_lab`, `identity_verified`, both Vault references present, `publish_enabled=false`, brand active with `publish_mode=dry_run`.
-- posting_window_status: read-only query found no AI Lab or `brand_post` posting-window rows. No row was added. Source-of-truth values still needed: post type confirmation, exact local start/end time(s), timezone, slot count/slot numbers, and `daily_probability` for each slot.
-- write_scope_readiness: no scope change or reauthorization. A text-only `POST /2/tweets` requires `tweet.read`, `tweet.write`, and `users.read`; `offline.access` is needed to retain refresh capability. `media.write` is only needed if a later flow uploads media. See [X OAuth 2.0 scopes](https://docs.x.com/fundamentals/authentication/oauth-2-0/authorization-code) and [v2 endpoint/scope mapping](https://docs.x.com/fundamentals/authentication/guides/v2-authentication-mapping).
+- fingerprint_persistence_result: after a confirmed X success, `x-test-post` calls `complete_ai_salaryman_lab_brand_post`, which inserts the normalized-content fingerprint under a unique `(social_account_id, x_post_id)` key and marks the scheduled row terminal. Fingerprint insert failure is reported while terminal completion prevents automatic repost. If completion confirmation itself is uncertain after X success, a dedicated error path skips generic scheduled-post failure/retry handling to avoid duplicate resend. Dry-run does not call this live completion path; regression-tested.
+- vault_dispatch_routing_result: AI Lab scheduled `brand_post` routes only through the fixed `ai_salaryman_lab_x` account, expected handle `kaishain_ai_lab`, `identity_verified` state, and that row's Vault token reference. A new local SQL RPC returns only the referenced token for that fixed account and is executable by `service_role` only. AI Lab has no fallback to Kabumori `oauth_token_store`; refresh is disabled. No token value was read or logged.
+- posting_window_status: no AI Lab/`brand_post` posting-window row was present in the prior read-only check; none was added. Exact source-of-truth values still needed: post type confirmation, local start/end time(s), timezone, slot count/slot numbers, and `daily_probability` per slot.
+- write_scope_readiness: no OAuth scope change or reauthorization. Existing AI Lab scopes remain read-only (`tweet.read users.read offline.access`); text posting requires separately approved `tweet.write`. `media.write` is only needed for a future media-upload flow. Before enabling publishing, separately reauthorize and verify `/2/users/me` still returns `kaishain_ai_lab`. No scope is authorized by this task.
 
 ## Files and database code
 
 - changed_files:
+  - `supabase/functions/_shared/brand/ai_lab_scheduled_brand_post.ts` / `_test.ts`
+  - `supabase/functions/_shared/brand/ai_lab_vault_token_source.ts` / `_test.ts`
   - `supabase/functions/_shared/brand/post_length_policy.ts` / `_test.ts`
   - `supabase/functions/_shared/brand/brand_profiles.ts`
   - `supabase/functions/_shared/brand/brand_post_generator.ts` / `_test.ts`
@@ -36,27 +37,26 @@
   - `supabase/functions/_shared/brand/brand_post_dry_run_test.ts`
   - `supabase/functions/_shared/brand/kabumori_recent_fingerprints.ts` / `_test.ts` (optional strict failure mode for future live dedupe; existing default fail-safe behavior unchanged)
   - `supabase/functions/_shared/brand/ai_lab_brand_post_store.ts` / `_test.ts`
+  - `supabase/functions/x-test-post/index.ts`
   - `supabase/migrations/20260913123509_ai_lab_prelive_safeguards.sql`
-- migrations/rpcs/functions_changed: one **local, unapplied** migration adding the partial fingerprint idempotency index and `complete_ai_salaryman_lab_brand_post`; no Edge Function source changed. `x-test-post` is unchanged.
+  - `supabase/migrations/20260913151428_read_ai_lab_x_vault_token.sql`
+- migrations/rpcs/functions_changed: two **local, unapplied** migrations. The first adds fingerprint idempotency and `complete_ai_salaryman_lab_brand_post`; the second adds fixed-account `read_ai_salaryman_lab_x_vault_token` (`SECURITY DEFINER`, empty `search_path`, `service_role` EXECUTE only). `x-test-post` is the only Edge Function source changed; it is not deployed.
 
 ## Tests
 
-- AI Lab brand helper tests: 73 passed / 0 failed (`deno test --no-check --allow-read=...`).
-- Existing `x-test-post` suite: 376 passed / 0 failed. This is regression evidence only; the function source was not edited.
-- `deno check` on changed non-test TypeScript modules: pass.
-- `deno fmt --check` on changed TypeScript files: pass.
-- `git diff --check`: pass.
+- `deno test --no-check --allow-read=. supabase/functions/x-test-post supabase/functions/_shared/brand`: 460 passed / 0 failed, including AI Lab routing/guard/completion and Kabumori regression tests.
+- `deno check --no-config` for the changed helpers and `x-test-post/index.ts` reports the same six pre-existing diagnostics as a clean source-base checkout. They concern AES-GCM `Uint8Array`/`BufferSource`, `Uint8Array` Blob/body typing, missing `retry_count`, and unknown timestamp precision. No new type issue was identified versus baseline.
+- `deno fmt --check` on the five new helper/test/migration files: pass. `git diff --check`: pass. The existing ~4.5k-line `x-test-post/index.ts` was not reformatted wholesale.
 - Test files ran with `--no-check` because this worktree has no installed `npm:@types/node`; changed non-test modules were separately type-checked. SQL was not applied or executed in a local Postgres instance; `psql`/Docker were unavailable.
 
 ## Production, blocker, and next steps
 
-- production_changes: 0. Read-only checks only: fingerprint table rows `0`, duplicate account/X-post pairs `0`, AI Lab posting-window rows `0`, and account/publish state above.
-- deploy_status: none; no Edge Function deployed. X POST/media calls: 0. Cron, OAuth scopes, secrets, account settings, Kabumori, and Mio unchanged.
-- Safety reviewer rejected the proposed `x-test-post` integration because it would add Vault-token reading and a live X-post path. The change was not retried through another path; no Vault-read adapter remains in the branch. The generic length guard/store preparation does not provide an active X dispatch path.
-- remaining_issues: dispatcher integration; server-side AI Lab Vault token retrieval and strict account routing; local SQL execution/review; confirmed schedule data; separate approval for production migration/deploy; later OAuth write-scope reauthorization; separate approval for enabling live and the first post.
-- exact steps before first AI Lab live post: (1) explicitly approve the local `x-test-post` + narrowly allowlisted Vault-backed routing implementation only; (2) review/test the final dispatcher guard, cross-brand preflight, one-shot X call, and completion behavior; (3) confirm schedule values from the AI Lab source of truth; (4) separately approve/apply the exact migration and deploy only the intended function; (5) separately approve X reauthorization with text-write scope and read-only `/2/users/me` identity check for `kaishain_ai_lab`; (6) only under a further explicit approval, set live/account flags and permit the first X post. No step after (1) is authorized by this report.
-- safety_checks: AI Lab remains `dry_run` + publish disabled; write scopes absent; no production writes, deploys, Cron edits, posting-window changes, or X posts. No token values were fetched or recorded.
-- next_recommendation: user decision required on the narrowly scoped **local source-code integration** into `x-test-post` and a server-only AI Lab Vault-read RPC. Production migration/deploy, OAuth scope change, live flag, and actual post remain separate approvals.
+- production_changes: 0. This code-only continuation did not access production. The prior read-only state remains the last verified state: AI Lab `publish_mode=dry_run`, `publish_enabled=false`; no token values were read. No production DDL/data/RPC write occurred.
+- deploy_status: none; no Edge Function deployed. X POST/media calls: 0. Cron, OAuth scopes, secrets, account settings, Kabumori, and Mio were not changed.
+- remaining_issues: C1 review; static/review and exact approval before applying either local migration; production deploy/read-back; confirmed schedule data; separately approved `tweet.write` reauthorization and identity check; separate approval before changing live flags or sending a first post. iOS is not relevant to this Edge Function task.
+- exact steps before first AI Lab live post: (1) C1 review this code and both migrations; (2) obtain separate exact approval before applying the two migrations, then read back function definition/ACL and verify the fixed account/token reference guard; (3) obtain separate approval before deploying only `x-test-post`, then verify deployed source/version; (4) confirm exact AI Lab posting-window values from its source of truth (do not invent or change Cron); (5) separately approve OAuth reauthorization adding `tweet.write` while retaining current read scopes, then use read-only `/2/users/me` to verify `kaishain_ai_lab`; (6) only after separate explicit approval may publishing flags be changed and a first real X text post be sent. No step beyond local implementation/testing is authorized here.
+- safety_checks: no live mode/publish enablement, DB change, deploy, X post, media upload, token refresh, OAuth scope change, Cron/posting-window change, Kabumori token/path change, or Mio change. AI Lab routing has no legacy fallback and does not refresh. Secret/token values were not emitted to logs, responses, Git, or this report.
+- next_recommendation: run C1 review. Implementation source remains local because its push was rejected; do not work around that rejection. Continue only after source-review/egress authorization is resolved, and keep all production operations behind their own exact approval.
 
 ---
 
