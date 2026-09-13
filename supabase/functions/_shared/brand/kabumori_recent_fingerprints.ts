@@ -19,10 +19,17 @@
 // never returned, logged, or included in any response this module's caller builds. Only the brand id,
 // the normalized-text SHA-256, and the publish timestamp leave this function -- the same shape
 // PublishedFingerprint already requires. No Kabumori token, OAuth, or Vault table is read here.
-import { fingerprintText, type PublishedFingerprint } from "./cross_brand_dedupe.ts";
+import {
+  fingerprintText,
+  type PublishedFingerprint,
+} from "./cross_brand_dedupe.ts";
 import { LEGACY_KABUMORI_BRAND_ID } from "./brand_context.ts";
 
-const REPORT_RUN_TABLES = ["close_report_runs", "morning_report_runs", "us_premarket_report_runs"] as const;
+const REPORT_RUN_TABLES = [
+  "close_report_runs",
+  "morning_report_runs",
+  "us_premarket_report_runs",
+] as const;
 
 function supabaseHeaders(serviceRoleKey: string): Record<string, string> {
   return { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` };
@@ -36,13 +43,15 @@ async function fetchFromReportRunTable({
   serviceRoleKey,
   limit,
   fetchImpl,
+  strict,
 }: {
   table: string;
   supabaseUrl: string;
   serviceRoleKey: string;
   limit: number;
   fetchImpl: typeof fetch;
-}): Promise<RawRow[]> {
+  strict: boolean;
+}): Promise<RawRow[] | null> {
   const params = new URLSearchParams({
     select: "generated_text,generated_at",
     status: "eq.succeeded",
@@ -52,16 +61,19 @@ async function fetchFromReportRunTable({
     limit: String(limit),
   });
   try {
-    const response = await fetchImpl(`${supabaseUrl}/rest/v1/${table}?${params}`, {
-      headers: supabaseHeaders(serviceRoleKey),
-    });
+    const response = await fetchImpl(
+      `${supabaseUrl}/rest/v1/${table}?${params}`,
+      {
+        headers: supabaseHeaders(serviceRoleKey),
+      },
+    );
     // Fails safe per table: one table's read failure must never block (or falsely allow) AI Lab's own
     // dry-run generation, and must never abort the other tables' reads.
-    if (!response.ok) return [];
+    if (!response.ok) return strict ? null : [];
     const rows = await response.json();
-    return Array.isArray(rows) ? rows : [];
+    return Array.isArray(rows) ? rows : strict ? null : [];
   } catch {
-    return [];
+    return strict ? null : [];
   }
 }
 
@@ -69,30 +81,48 @@ export async function fetchRecentKabumoriFingerprints({
   supabaseUrl,
   serviceRoleKey,
   limit = 20,
+  strict = false,
   fetchImpl = fetch,
 }: {
   supabaseUrl: string;
   serviceRoleKey: string;
   limit?: number;
+  /** A live pre-publish dedupe read must fail closed if any source table is unavailable. */
+  strict?: boolean;
   fetchImpl?: typeof fetch;
 }): Promise<PublishedFingerprint[]> {
   const perTableRows = await Promise.all(
     REPORT_RUN_TABLES.map((table) =>
-      fetchFromReportRunTable({ table, supabaseUrl, serviceRoleKey, limit, fetchImpl })
+      fetchFromReportRunTable({
+        table,
+        supabaseUrl,
+        serviceRoleKey,
+        limit,
+        fetchImpl,
+        strict,
+      })
     ),
   );
+  if (strict && perTableRows.some((rows) => rows === null)) {
+    throw new Error("KABUMORI_FINGERPRINT_READ_FAILED");
+  }
 
   const candidates: Array<{ generatedText: string; generatedAt: string }> = [];
   for (const rows of perTableRows) {
+    if (!rows) continue;
     for (const row of rows) {
       const generatedText = row.generated_text;
       const generatedAt = row.generated_at;
-      if (typeof generatedText !== "string" || generatedText.length === 0) continue;
+      if (typeof generatedText !== "string" || generatedText.length === 0) {
+        continue;
+      }
       if (typeof generatedAt !== "string") continue;
       candidates.push({ generatedText, generatedAt });
     }
   }
-  candidates.sort((a, b) => Date.parse(b.generatedAt) - Date.parse(a.generatedAt));
+  candidates.sort((a, b) =>
+    Date.parse(b.generatedAt) - Date.parse(a.generatedAt)
+  );
 
   const fingerprints: PublishedFingerprint[] = [];
   for (const candidate of candidates.slice(0, limit)) {

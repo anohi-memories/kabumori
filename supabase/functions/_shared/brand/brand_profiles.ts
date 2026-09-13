@@ -1,4 +1,5 @@
 import { KABUMORI_VOICE } from "../kabumori_voice.ts";
+import type { PostLengthPolicy } from "./post_length_policy.ts";
 
 export type BrandCodeProfile = {
   key: string;
@@ -7,13 +8,21 @@ export type BrandCodeProfile = {
   reportFixedHashtags: readonly string[];
   dryRunPostTypes: readonly string[];
   dryRunPromptPreamble: string;
+  /** Omit to preserve existing behavior; future user settings can provide either generic mode. */
+  postLengthPolicy?: PostLengthPolicy;
 };
 
 export const KABUMORI_CODE_PROFILE: BrandCodeProfile = {
   key: "kabumori_v1",
   voiceInstructions: KABUMORI_VOICE,
   reportFixedHashtags: ["#日本株", "#日経平均", "#株式投資", "#かぶモリ"],
-  dryRunPostTypes: ["tip", "interaction", "useful_tip", "morning", "market_close"],
+  dryRunPostTypes: [
+    "tip",
+    "interaction",
+    "useful_tip",
+    "morning",
+    "market_close",
+  ],
   dryRunPromptPreamble: "かぶモリ既存の生成ルールを使う。",
 };
 
@@ -41,7 +50,9 @@ export const AI_SALARYMAN_LAB_CODE_PROFILE: BrandCodeProfile = {
   ],
   reportFixedHashtags: [],
   dryRunPostTypes: ["profile_preview", "brand_post"],
-  dryRunPromptPreamble: "会社員AIラボの独立した dry-run。事実を追加せず、公開用本文や投稿戦略を完成させない。",
+  dryRunPromptPreamble:
+    "会社員AIラボの独立した dry-run。事実を追加せず、公開用本文や投稿戦略を完成させない。",
+  postLengthPolicy: { mode: "limited", maxChars: 280 },
 };
 
 const CODE_PROFILES: ReadonlyMap<string, BrandCodeProfile> = new Map([

@@ -7,7 +7,12 @@
 // this module never reaches "kabumori" through any of its own logic (it works from whatever
 // BrandContext it is given).
 import { assertBrandDryRunAllowed } from "./publish_guard.ts";
-import { BrandContextError, type BrandContext } from "./brand_context.ts";
+import { type BrandContext, BrandContextError } from "./brand_context.ts";
+import {
+  assertPostWithinLengthPolicy,
+  postCharacterCount,
+  postLengthInstruction,
+} from "./post_length_policy.ts";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const MODEL = "gpt-5.6-luna";
@@ -20,6 +25,7 @@ export type BrandPostDraft = {
   inputTokens: number;
   outputTokens: number;
   apiCostUsd: number;
+  characterCount: number;
 };
 
 // Local, brand-agnostic copies of the same three mechanical helpers x-test-post/index.ts defines for its
@@ -43,12 +49,19 @@ function extractOutputText(response: unknown): string | null {
 }
 
 function getUsage(response: unknown): { input: number; output: number } {
-  if (typeof response !== "object" || response === null) return { input: 0, output: 0 };
+  if (typeof response !== "object" || response === null) {
+    return { input: 0, output: 0 };
+  }
   const usage = (response as { usage?: unknown }).usage;
-  if (typeof usage !== "object" || usage === null) return { input: 0, output: 0 };
+  if (typeof usage !== "object" || usage === null) {
+    return { input: 0, output: 0 };
+  }
   const input = (usage as { input_tokens?: unknown }).input_tokens;
   const output = (usage as { output_tokens?: unknown }).output_tokens;
-  return { input: typeof input === "number" ? input : 0, output: typeof output === "number" ? output : 0 };
+  return {
+    input: typeof input === "number" ? input : 0,
+    output: typeof output === "number" ? output : 0,
+  };
 }
 
 // Same per-token rates x-test-post/index.ts uses for its default (non-Sol) model tier.
@@ -79,19 +92,29 @@ export async function generateBrandPost({
     throw new BrandContextError("BRAND_POST_TYPE_UNSUPPORTED");
   }
 
-  const hashtagInstruction = context.operationalSettings.fixed_hashtags.length > 0
-    ? `本文の末尾にこのハッシュタグをそのまま付けてください: ${context.operationalSettings.fixed_hashtags.join(" ")}`
-    : "ハッシュタグは付けないでください。";
+  const hashtagInstruction =
+    context.operationalSettings.fixed_hashtags.length > 0
+      ? `本文の末尾にこのハッシュタグをそのまま付けてください: ${
+        context.operationalSettings.fixed_hashtags.join(" ")
+      }`
+      : "ハッシュタグは付けないでください。";
+  const lengthPolicy = context.codeProfile.postLengthPolicy;
   const instructions = [
     ...context.codeProfile.voiceInstructions,
-    "日本語で、200〜400文字程度の自然な一つの投稿本文だけを書いてください。見出し・箇条書き記号・前置きは不要です。",
+    lengthPolicy
+      ? "日本語で、自然な一つの投稿本文だけを書いてください。見出し・箇条書き記号・前置きは不要です。"
+      : "日本語で、200〜400文字程度の自然な一つの投稿本文だけを書いてください。見出し・箇条書き記号・前置きは不要です。",
+    ...(lengthPolicy ? [postLengthInstruction(lengthPolicy)] : []),
     hashtagInstruction,
   ].join("\n");
   const topic = topicSeed?.trim() || DEFAULT_TOPIC_SEED;
 
   const response = await fetchImpl(OPENAI_RESPONSES_URL, {
     method: "POST",
-    headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
+    headers: {
+      Authorization: `Bearer ${openAiApiKey}`,
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({
       model: MODEL,
       store: false,
@@ -101,10 +124,27 @@ export async function generateBrandPost({
       input: `今日のテーマ: ${topic}`,
     }),
   });
-  if (!response.ok) throw new BrandContextError(`BRAND_POST_GENERATION_FAILED:${response.status}`);
+  if (!response.ok) {
+    throw new BrandContextError(
+      `BRAND_POST_GENERATION_FAILED:${response.status}`,
+    );
+  }
   const raw = await response.json();
   const text = extractOutputText(raw);
   if (!text) throw new BrandContextError("BRAND_POST_EMPTY_OUTPUT");
+  let characterCount = postCharacterCount(text);
+  if (lengthPolicy) {
+    try {
+      characterCount = assertPostWithinLengthPolicy(lengthPolicy, text);
+    } catch (error) {
+      if (
+        error instanceof Error && error.message === "POST_LENGTH_LIMIT_EXCEEDED"
+      ) {
+        throw new BrandContextError("BRAND_POST_LENGTH_LIMIT_EXCEEDED");
+      }
+      throw error;
+    }
+  }
   const usage = getUsage(raw);
 
   return {
@@ -115,5 +155,6 @@ export async function generateBrandPost({
     inputTokens: usage.input,
     outputTokens: usage.output,
     apiCostUsd: costUsd(usage.input, usage.output),
+    characterCount,
   };
 }
