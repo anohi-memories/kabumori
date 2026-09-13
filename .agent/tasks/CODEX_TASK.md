@@ -3,8 +3,8 @@
 - task_id: x-multibrand-phase3i-ai-lab-production-prelive-rollout-20260914
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol High
 - purpose: Phase 3H C1 PASS済み実装を、本番pre-live状態へ安全に反映する。AI Labの実X投稿・live化・write scope追加はまだ行わない。
@@ -46,6 +46,13 @@ The user said to proceed, and ChatGPT is explicitly authorizing the following ex
 5. Perform only non-posting/read-only/dry-run verification that cannot send an X post or media upload.
 
 This is a direct authorization for the above production DB migration application and `x-test-post` deployment only. It is **not** authorization for live publishing, OAuth write scopes, posting windows, Cron changes, or any real/test X post.
+
+## Phase 3I rollout checkpoint — 2026-09-14
+
+- Both exact migrations were applied and their RPC/index/security read-backs passed. Supabase recorded versions `20260913230852` (`ai_lab_prelive_safeguards`) and `20260913231013` (`read_ai_lab_x_vault_token`).
+- Before deploying, a read-only comparison found production `x-test-post` v107 differs from the exact reviewed commit in four existing runtime files; three (`close_report_data_logic.ts`, `close_report_logic.ts`, `fixed_hashtags_logic.ts`) are not changed by Phase 3H. The reviewed commit also adds 13 brand helper modules absent from the current deployment. Deploying the exact commit would replace the current versions of those existing files, potentially regressing other post types in the shared Function.
+- Therefore no Function was deployed. Production remains `x-test-post` v107 / `verify_jwt=false`; no X or media call occurred. The two additive migrations remain applied.
+- Keep this task `review_required`. Do not deploy until the user either approves a newly reviewed source that includes the current runtime changes, or explicitly confirms that replacing those exact live files with commit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a` is intended.
 
 ## Start / parallel safety
 

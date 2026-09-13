@@ -12,7 +12,7 @@
   - Claude slot1開始=`G1`、完了確認=`K1`
   - Claude slot2開始=`G2`、完了確認=`K2`
 - active_workstream:
-  - Codex slot 1: `review_required` — `x-multibrand-phase3i-ai-lab-production-prelive-rollout-20260914`。Phase 3H branch先端 `406b53c2a2838a5ac2a446fffb6e6feef954eb7a` はGitHub上で再確認済み。本番read-only preflightのみ実施し、production変更0件。TASKの「C1 PASS・本番承認済み」記載が既存CURRENT_STATE/REPORTおよび直近の直接承認と矛盾するため、C1確認・明示的な本番承認待ち。
+  - Codex slot 1: `review_required` — `x-multibrand-phase3i-ai-lab-production-prelive-rollout-20260914`。Phase 3H commit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a` の対象migration 2本を適用し、RPC/ACL/index read-back済み（Supabase記録version `20260913230852` / `20260913231013`）。deploy直前に現行`x-test-post` v107との差分を検出。承認commitにはPhase 3H外の現行runtime変更が含まれず、それらを置き換えるためFunction deployを停止。dry_run / publish無効、write scope/Cronは不変。新レビューsourceまたは差分置換の明示確認待ち。
   - Codex slot 2: `ready` — close-report TOPIX source correction production deploy verification
   - Claude slot 1: `review_required` — personalized portfolio morning/close reports Phase 1A
   - Claude slot 2: `done` — Phase 3C OAuth workstream transferred to Codex slot 1; do not modify same OAuth/Vault/x-oauth-connect area in parallel
@@ -41,7 +41,7 @@
   - OAuth経路のX post/media callは各0。publish claimsはtotal 11 / published 4のまま。9/13 failed rowは人工retryなし
   - AI Lab identity/Vault refs/dry_run/publish無効は不変。Cron/scheduler/x-test-post/Pushは変更なし
 - parallel_work:
-  - Codex H1 Phase 3Iは`review_required`。Phase 3H実装branch `codex/ai-lab-prelive-safeguards-20260913` のGitHub先端はcommit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a`。read-only preflightでは両migration未適用、対象RPC/一意indexなし、`x-test-post` v107のまま。AI Labは`dry_run` / publish無効。TASKのC1 PASS・本番承認主張が既存状態・直近の直接承認と不一致のため、本番適用/deploy前に解消が必要。`important-news-monitor` / app news / Phase 3 preset migration領域を別スロットで変更しない
+  - Codex H1 Phase 3Iは`review_required`。migration 2本（記録version `20260913230852` / `20260913231013`）は適用/read-back済み。対象Functionはv107のまま。commit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a` と現行runtimeのPhase 3H外差分を検出したためdeploy停止中。差分を含む再レビューsource、または既存live code置換について明示確認が必要。`important-news-monitor` / app news / Phase 3 preset migration領域を別スロットで変更しない
   - Claude slot2 must not touch same area until H1 completes
   - Codex slot2 may touch `x-test-post` only; if scope overlaps, stop and report conflict
   - existing uncommitted changes belong to other workstreams and must not be modified/staged/committed
