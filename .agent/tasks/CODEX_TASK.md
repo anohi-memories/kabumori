@@ -3,32 +3,27 @@
 - task_id: x-multibrand-phase3i-ai-lab-production-prelive-rollout-20260914
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Sol High
-- purpose: C1 PASSと直接の本番承認が確認できた場合に限り、AI Labの280文字制限・fingerprint完了処理・Vault-backed dispatchを本番pre-live状態へ反映する。まだtweet.write追加・live化・実X投稿は行わない。
+- purpose: Phase 3H C1 PASS済み実装を、本番pre-live状態へ安全に反映する。AI Labの実X投稿・live化・write scope追加はまだ行わない。
 
-## Prior approved state
+## Reconciled C1 state
 
-Phase 3H C1 status is unresolved. This TASK says C1 PASS, but `.agent/CURRENT_STATE.md` and the prior `.agent/CODEX_REPORT.md` say C1 review is still pending. The latest direct chat authorization approved only pushing commit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a` for C1 review and explicitly did not approve production application/deployment. Do not perform production writes until the C1 state is reconciled and the user gives direct, explicit production authorization.
+ChatGPT C1 review is **PASS** for Phase 3H implementation at commit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a`.
 
-Reviewed implementation branch:
-- `codex/ai-lab-prelive-safeguards-20260913`
-- base: `341e5dc5c03147394a99b2b71d148d2ba06c9c89`
-- commits: `6ce4ad8ea983dd617c6227dd6f628e3e3b4f945b` -> `406b53c2a2838a5ac2a446fffb6e6feef954eb7a`
-
-C1 confirmed:
-- AI Lab finite 280 Unicode-codepoint policy and future explicit unlimited mode
+Confirmed in C1:
+- AI Lab finite 280 Unicode-codepoint policy and explicit future unlimited mode
 - independent final dispatch length guard
 - cross-brand dedupe before dispatch
 - fixed AI Lab Vault-backed route for `ai_salaryman_lab_x` / `kaishain_ai_lab`
 - zero fallback to Kabumori legacy token storage
-- no refresh on AI Lab live dispatch path
-- fingerprint completion path after confirmed X success
+- refresh disabled on the AI Lab dispatch path
+- fingerprint completion only after confirmed X success
 - duplicate-resend protection when completion result is uncertain
-- migrations use fixed-account/service-role-only safety boundaries
-- reported tests 460/460 PASS
+- both new RPC designs use fixed-account / service-role-only safety boundaries
+- implementation branch is visible on GitHub and points to reviewed commit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a`
 
 Current production AI Lab remains:
 - `publish_mode=dry_run`
@@ -36,6 +31,21 @@ Current production AI Lab remains:
 - OAuth scopes read-only: `tweet.read users.read offline.access`
 - no AI Lab posting_window
 - no real AI Lab X post
+- `x-test-post` currently v107 before this task
+
+## Direct production authorization — 2026-09-14
+
+The user said to proceed, and ChatGPT is explicitly authorizing the following exact production pre-live actions for private project `anohi-memories/kabumori`:
+
+1. After a fresh read-only production preflight confirms compatibility, apply **only** these two reviewed Phase 3H migrations from commit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a`:
+   - `supabase/migrations/20260913123509_ai_lab_prelive_safeguards.sql`
+   - `supabase/migrations/20260913151428_read_ai_lab_x_vault_token.sql`
+2. Immediately read back and verify the resulting RPCs/index/ACL/security properties.
+3. Only if both migration read-backs pass, deploy **only** `x-test-post` from the exact reviewed commit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a`.
+4. Preserve the current production auth mode (`verify_jwt=false` if still current) and byte-verify deployed runtime source against the reviewed commit.
+5. Perform only non-posting/read-only/dry-run verification that cannot send an X post or media upload.
+
+This is a direct authorization for the above production DB migration application and `x-test-post` deployment only. It is **not** authorization for live publishing, OAuth write scopes, posting windows, Cron changes, or any real/test X post.
 
 ## Start / parallel safety
 
@@ -49,55 +59,41 @@ Before work:
 - use isolated clean worktree/clone
 - do not modify/stage unrelated existing changes
 
-Codex slot 2 currently concerns Push delivery hardening (`send-push-notifications`) and must not be touched. If another active slot is changing `x-test-post`, the same Phase 3H migrations, OAuth/Vault account routing, or AI Lab production settings, STOP and report conflict.
+Codex slot 2 concerns Push delivery hardening (`send-push-notifications`) and must not be touched. If another active slot is changing `x-test-post`, either Phase 3H migration, OAuth/Vault account routing, or AI Lab production settings, STOP and report conflict.
 
-## Goal
+## Mandatory preflight
 
-Bring Phase 3H code to a production **pre-live** state without authorizing an actual AI Lab X post:
-
-1. perform read-only production preflight for both Phase 3H migrations
-2. if exact live schema matches assumptions, apply only those two exact migrations
-3. read back RPC/index/security definitions and privileges
-4. deploy only Phase 3H `x-test-post` source from commit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a`
-5. read back deployed Function source/version and byte-compare runtime files
-6. run only non-posting/read-only or dry-run verification sufficient to prove 280 guard + brand/Vault route wiring
-7. leave OAuth scopes, publish flags, posting windows, Cron, and X posting untouched
-
-## A. Production preflight — mandatory before writes
-
-Inspect live production read-only and verify assumptions for:
+Perform read-only production inspection first and verify assumptions for:
 - `published_content_fingerprints` columns/indexes/constraints/RLS/grants
 - `scheduled_posts` columns/status values/brand attribution
 - `post_execution_logs` columns required by completion RPC
 - `brands` row for `ai_salaryman_lab`
 - `social_accounts` row for `ai_salaryman_lab_x`
 - current connection_status / expected handle `kaishain_ai_lab`
-- Vault secret-reference columns are present (do not read secret values)
+- Vault secret-reference columns present (do not read secret values)
 - existing functions/RPCs that may collide with the two new names
 - current `x-test-post` version/auth mode
 
-Confirm the following migration files exactly match reviewed commit `406b53c2...`:
-- `supabase/migrations/20260913123509_ai_lab_prelive_safeguards.sql`
-- `supabase/migrations/20260913151428_read_ai_lab_x_vault_token.sql`
+Confirm both migration files exactly match reviewed commit `406b53c2...`.
 
 If production differs materially or destructive correction would be needed, STOP before writes.
 
-Production migration history is known to be divergent. Therefore:
-- **never run `supabase db push`**
+Known migration-history divergence remains. Therefore:
+- never run `supabase db push`
 - do not repair/reconcile migration history
 - do not mark unrelated versions applied/reverted
 
-## B. Production migration scope — blocked pending authorization
+The broad table-grant finding (`anon` / `authenticated` including TRUNCATE-like privileges despite RLS) is outside this Phase 3I scope. Do not change it here. Record it separately for owner review unless it directly blocks the two approved migrations.
 
-Authorization gate: the task text asserts that the user authorized this rollout after C1 PASS, but that assertion conflicts with the available direct chat approval and the current state/report. Treat production authorization as absent. Do not apply migrations or deploy unless C1 PASS is confirmed and the user directly authorizes those exact production actions. If/when authorized, the maximum migration scope remains **only** the two exact reviewed Phase 3H migration files above, after successful read-only preflight.
+## Exact migration application
 
-Apply in dependency-safe order:
+Apply in this order only:
 1. `20260913123509_ai_lab_prelive_safeguards.sql`
 2. `20260913151428_read_ai_lab_x_vault_token.sql`
 
 No other SQL/migration is authorized.
 
-Immediately read back and verify at minimum:
+Immediately read back and verify:
 
 ### `complete_ai_salaryman_lab_brand_post`
 - expected signature
@@ -115,43 +111,41 @@ Immediately read back and verify at minimum:
 - `SECURITY DEFINER`
 - empty `search_path`
 - execute privilege service_role-only
-- requires fixed account id/brand/platform/handle/identity_verified
-- only accepts secret references belonging to that account's access/refresh ref columns
+- fixed account id/brand/platform/handle/identity_verified checks
+- only accepts secret refs belonging to the AI Lab account's access/refresh ref columns
 - do not output or inspect decrypted token values in Report/logs
 
-If either application fails transactionally, do not improvise broad fixes; inspect rollback/read-back and STOP.
+If either migration fails transactionally, do not improvise broad fixes; inspect rollback/read-back and STOP.
 
-## C. `x-test-post` deployment
+## `x-test-post` deployment
 
 Only after both migration read-backs pass:
 - deploy **`x-test-post` only**
 - deploy reviewed source at commit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a`
 - preserve current production auth mode; if current config is `verify_jwt=false`, keep `--no-verify-jwt`
 - do not deploy any other Edge Function
-- download/read back deployed source/runtime files and byte-compare against the exact source commit
-- verify unrelated Functions' versions/updated_at are unchanged where practical
+- download/read back deployed runtime files and byte-compare against exact source commit
+- verify unrelated Functions' versions/updated_at remain unchanged where practical
 
-## D. Non-posting verification after deploy
+## Non-posting verification after deploy
 
 No real/test X post is authorized.
 
 Allowed verification:
 - dry-run/admin request that cannot pass publish gate
 - read-only metadata route checks
-- verify AI Lab still resolves to `ai_salaryman_lab_x` / `kaishain_ai_lab`
+- verify AI Lab resolves to `ai_salaryman_lab_x` / `kaishain_ai_lab`
 - verify publish gate remains blocked by `dry_run` / `publish_enabled=false`
-- verify 280-character rule can be observed through generation/dry-run or unit/runtime evidence without dispatching to X
-- verify `legacyFallbackUsed=false` / no Kabumori token-store path
+- verify 280-character rule through dry-run/runtime evidence without dispatching to X
+- verify no Kabumori legacy token fallback
 - verify no fingerprint row is inserted by dry-run
-- verify no X POST/media call occurred
+- verify X POST/media calls remain 0
 
-Do **not** call the Vault reader merely to reveal/check token values. Do not refresh tokens.
+Do not call the Vault reader merely to reveal/check token values. Do not refresh tokens.
 
-## E. Posting window
+## Posting window
 
-Do not invent schedule values and do not create/enable a posting_window in this task unless exact source-of-truth values have been supplied separately.
-
-Report the fields still required:
+Do not create/update/enable an AI Lab posting_window in this task. Exact source-of-truth values are still required:
 - post_type confirmation
 - timezone
 - local start/end time or exact desired posting time(s)
@@ -160,13 +154,13 @@ Report the fields still required:
 
 No Cron change.
 
-## F. OAuth/write scope boundary
+## OAuth/write scope boundary
 
-Still do not add or request `tweet.write` / `media.write` in this task.
+Still do not add/request `tweet.write` or `media.write`.
 
-Document the next-step requirement:
-- text posting requires adding `tweet.write` while retaining `tweet.read users.read offline.access`
-- reauthorization must verify `/2/users/me` is still `kaishain_ai_lab` before saving/replacing usable token refs
+Next-step requirement after Phase 3I:
+- text posting needs `tweet.write` while retaining `tweet.read users.read offline.access`
+- reauthorization must verify `/2/users/me` remains `kaishain_ai_lab` before replacing usable token refs
 - `media.write` remains unnecessary until a media-upload feature is intentionally enabled
 
 ## Strictly prohibited
@@ -177,27 +171,28 @@ Document the next-step requirement:
 - OAuth reauthorization or scope change
 - `tweet.write` / `media.write` addition
 - token refresh/liveness write test
-- posting_window insert/update without confirmed schedule input
+- posting_window insert/update
 - Cron changes
 - Kabumori OAuth/token/handle/publish/Cron mutation
 - Mio changes
 - any non-Phase-3H migration/RPC/schema change
 - `supabase db push`
 - migration-history repair/reconcile
+- broad privilege cleanup from the unrelated table-grant finding
 - exposing token/secret/password/2FA values
 
 ## Tests / verification
 
-Before production operations, rerun relevant local tests from reviewed source:
+Before production writes, rerun relevant local tests from reviewed source where environment permits:
 - Phase 3H brand/shared tests
 - `x-test-post` relevant suite
 - `git diff --check`
 - changed-file `deno check` or baseline-equivalence evidence for existing diagnostics
 
-After production rollout, record:
+After rollout, record:
 - exact project ref
 - preflight results
-- exact SQL files applied and actual recorded migration versions/names if the tooling assigns generated values
+- exact SQL files applied and actual recorded migration versions/names if tooling assigns generated values
 - RPC/index/ACL/security read-back
 - deployed `x-test-post` version and auth mode
 - byte comparison result
@@ -239,8 +234,8 @@ Report must include:
 ## Success gate
 
 Phase 3I PASS requires:
-- both exact Phase 3H migrations safely applied/read back, or a clearly documented safe blocker before any partial broadening
-- reviewed `x-test-post` deployed and byte-verified if migrations succeeded
+- both exact Phase 3H migrations safely applied/read back
+- reviewed `x-test-post` deployed and byte-verified
 - AI Lab still dry_run + publish_disabled
 - OAuth write scopes still absent
 - no posting window/Cron changes
