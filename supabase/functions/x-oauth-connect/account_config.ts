@@ -3,7 +3,7 @@ import { BrandContextError } from "../_shared/brand/brand_context.ts";
 export type OAuthAccountConfig = {
   brandId: "ai_salaryman_lab" | "kabumori";
   socialAccountId: "ai_salaryman_lab_x" | "kabumori_x";
-  expectedHandle: "kaishain_ai_lab" | "kabumori";
+  expectedHandle: "kaishain_ai_lab" | "yume_daka";
   scopes: string;
   publishMode: "dry_run" | "live";
   publishEnabled: boolean;
@@ -29,7 +29,7 @@ const AI_LAB: OAuthAccountConfig = {
 const KABUMORI: OAuthAccountConfig = {
   brandId: "kabumori",
   socialAccountId: "kabumori_x",
-  expectedHandle: "kabumori",
+  expectedHandle: "yume_daka",
   scopes: "tweet.read users.read tweet.write media.write offline.access",
   publishMode: "live",
   publishEnabled: true,

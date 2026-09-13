@@ -87,7 +87,7 @@ test("refresh-only proof rotates, stores, reloads, and identifies Kabumori witho
       trace.push("identity");
       identityCalls += 1;
       return Response.json({
-        data: { id: "kabumori-platform-id", username: "Kabumori" },
+        data: { id: "kabumori-platform-id", username: "yume_daka" },
       });
     }
     if (
@@ -123,7 +123,7 @@ test("refresh-only proof rotates, stores, reloads, and identifies Kabumori witho
       refreshToken: "fresh-auth-refresh",
     },
     expectedPlatformUserId: "kabumori-platform-id",
-    expectedHandle: "kabumori",
+    expectedHandle: "yume_daka",
     fetchImpl,
   });
 

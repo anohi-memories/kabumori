@@ -7,11 +7,11 @@ import {
   resolveOAuthStartConfig,
 } from "./account_config.ts";
 
-test("Kabumori recovery requests only the scopes required by the existing posting path", () => {
-  const config = resolveOAuthStartConfig("@Kabumori");
+test("Kabumori recovery binds to the account owner's confirmed X handle", () => {
+  const config = resolveOAuthStartConfig("@yume_daka");
   assert.equal(config.brandId, "kabumori");
   assert.equal(config.socialAccountId, "kabumori_x");
-  assert.equal(config.expectedHandle, "kabumori");
+  assert.equal(config.expectedHandle, "yume_daka");
   assert.equal(
     config.scopes,
     "tweet.read users.read tweet.write media.write offline.access",
@@ -20,6 +20,15 @@ test("Kabumori recovery requests only the scopes required by the existing postin
   assert.equal(config.tokenDestination, "legacy_store");
   assert.equal(config.publishMode, "live");
   assert.equal(config.publishEnabled, true);
+});
+
+test("the obsolete Kabumori label cannot start OAuth as an X handle", () => {
+  assert.throws(
+    () => resolveOAuthStartConfig("kabumori"),
+    (error: unknown) =>
+      error instanceof BrandContextError &&
+      error.message === "OAUTH_HANDLE_NOT_ALLOWED",
+  );
 });
 
 test("AI Lab OAuth remains read-only and resolves to its existing Vault flow", () => {
@@ -85,6 +94,28 @@ test("Kabumori recovery RPC migration is service-role-only and uses an empty sea
     migration,
     /publish_enabled\s*=\s*true|publish_mode\s*=\s*'live'/u,
   );
+});
+
+test("production correction migration changes only the guarded Kabumori handle and keeps RPCs locked down", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../migrations/20260913000926_correct_kabumori_x_handle.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(
+    migration,
+    /where id = 'kabumori_x'\s+and brand_id = 'kabumori'\s+and platform = 'x'\s+and handle = 'kabumori'/u,
+  );
+  assert.match(migration, /set handle = 'yume_daka'/u);
+  assert.doesNotMatch(
+    migration,
+    /publish_enabled\s*=|publish_mode\s*=|vault_access_token_secret_id\s*=|vault_refresh_token_secret_id\s*=/u,
+  );
+  assert.equal((migration.match(/security definer/gu) ?? []).length, 3);
+  assert.equal((migration.match(/set search_path = ''/gu) ?? []).length, 3);
+  assert.equal((migration.match(/to service_role;/gu) ?? []).length, 3);
 });
 
 test("x-oauth-connect runtime contains no X post or media-upload endpoint", async () => {
