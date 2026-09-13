@@ -17,16 +17,21 @@ export const KABUMORI_CODE_PROFILE: BrandCodeProfile = {
   dryRunPromptPreamble: "かぶモリ既存の生成ルールを使う。",
 };
 
-// Phase 3A intentionally defines only the minimum identity needed to exercise
-// an isolated dry-run. It is not a finished persona or publishing strategy.
-// In particular, it never imports Kabumori's voice, tags, or prompt fragments.
+// Phase 3A intentionally defined only the minimum identity needed to exercise an isolated dry-run --
+// not a finished persona or publishing strategy, and never importing Kabumori's voice, tags, or prompt
+// fragments. Phase 3E adds "brand_post" so a real (OpenAI-generated) dry-run has something to generate,
+// while keeping the same constraint: no fabricated personal experience, employer, or track record. The
+// actual brand strategy/topics/tone for AI Lab are still a pending decision for the user (see
+// docs/multibrand/ARCHITECTURE.md sec.20) -- this profile stays deliberately generic and safe until then.
 export const AI_SALARYMAN_LAB_CODE_PROFILE: BrandCodeProfile = {
   key: "ai_salaryman_lab_v1",
   voiceInstructions: [
-    "会社員AIラボの dry-run 用プロファイルです。未確認の人物像、実績、勤務先、投資経験は作らないでください。",
+    "会社員AIラボの投稿プロファイルです。未確認の人物像、実績、勤務先、投資経験は作らないでください。",
+    "一人称の体験談（「私は〜しました」「私の職場では〜」等）は使わないでください。",
+    "株式投資・売買・銘柄に関する内容は扱いません。かぶモリの話題・文体・ハッシュタグを一切使わないでください。",
   ],
   reportFixedHashtags: [],
-  dryRunPostTypes: ["profile_preview"],
+  dryRunPostTypes: ["profile_preview", "brand_post"],
   dryRunPromptPreamble: "会社員AIラボの独立した dry-run。事実を追加せず、公開用本文や投稿戦略を完成させない。",
 };
 
