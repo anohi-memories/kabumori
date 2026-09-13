@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { resolveBrandContext, type BrandContext, type BrandOperationalSettings } from "../_shared/brand/brand_context.ts";
 import { runBrandPostDryRun } from "../_shared/brand/brand_post_dry_run.ts";
-import { runCrossBrandDedupeProbe } from "../_shared/brand/cross_brand_dedupe_probe.ts";
+import { fingerprintText } from "../_shared/brand/cross_brand_dedupe.ts";
 import { handleBrandPostDryRunRequest, type BrandPostDryRunHandlerDeps } from "./dry_run_handler.ts";
 
 const aiLabSettings: BrandOperationalSettings = {
@@ -28,7 +28,18 @@ function baseDeps(overrides: Partial<BrandPostDryRunHandlerDeps> = {}): BrandPos
       return aiLabContext();
     },
     runBrandPostDryRun: (args) => runBrandPostDryRun({ ...args, fetchImpl: fixtureFetch("AI活用の小さな工夫を紹介します。") }),
-    runCrossBrandDedupeProbe,
+    fetchRecentKabumoriFingerprints: async () => [],
+    resolveVaultTokenRoutingMetadata: async ({ context }) => ({
+      brandId: context.brand.id,
+      socialAccountId: context.socialAccount?.id ?? "",
+      handle: context.socialAccount?.handle ?? "",
+      oauthClientRef: context.socialAccount?.oauth_client_ref ?? "",
+      connectionStatus: "identity_verified",
+      accessTokenRefPresent: true,
+      refreshTokenRefPresent: true,
+      tokenSource: "vault_backed_social_account",
+      legacyFallbackUsed: false,
+    }),
     openAiApiKey: "fixture-only",
     supabaseUrl: "https://example.supabase.co",
     serviceRoleKey: "fixture-service-role-key",
@@ -36,7 +47,7 @@ function baseDeps(overrides: Partial<BrandPostDryRunHandlerDeps> = {}): BrandPos
   };
 }
 
-test("happy path: real (fixture-simulated) generation carries brand_id=ai_salaryman_lab, x_write_calls=0, legacy token reads=0, dedupe wired", async () => {
+test("happy path: real (fixture-simulated) generation carries brand_id=ai_salaryman_lab, x_write_calls=0, legacy token reads=0", async () => {
   const result = await handleBrandPostDryRunRequest({ brand_id: "ai_salaryman_lab", post_type: "brand_post" }, baseDeps());
   assert.equal(result.status, 200);
   assert.equal(result.body.brand_id, "ai_salaryman_lab");
@@ -47,9 +58,9 @@ test("happy path: real (fixture-simulated) generation carries brand_id=ai_salary
   const generated = result.body.generated as Record<string, unknown>;
   assert.equal(typeof generated.text, "string");
   assert.ok((generated.text as string).length > 0);
-  const dedupe = result.body.cross_brand_dedupe as Record<string, { blocked: boolean }>;
-  assert.equal(dedupe.would_block_on_exact_match.blocked, true);
-  assert.equal(dedupe.would_allow_on_distinct_text.blocked, false);
+  const dedupe = result.body.cross_brand_dedupe as { kabumori_posts_checked: number; result: { blocked: boolean } };
+  assert.equal(dedupe.kabumori_posts_checked, 0);
+  assert.equal(dedupe.result.blocked, false);
   assert.deepEqual(result.body.publish_gate, { blocked: true, reason: "BRAND_PUBLISH_MODE_DRY_RUN" });
 });
 
@@ -63,7 +74,7 @@ test("defaults brand_id to ai_salaryman_lab and post_type to brand_post when omi
 test("refuses any brand_id other than the phase's approved target, before ever calling loadBrandContext", async () => {
   let loadBrandContextCalls = 0;
   const deps = baseDeps({
-    loadBrandContext: async (args) => {
+    loadBrandContext: async () => {
       loadBrandContextCalls += 1;
       return aiLabContext();
     },
@@ -128,6 +139,77 @@ test("a generation failure (e.g. OpenAI non-2xx) fails closed with a 502, never 
   const result = await handleBrandPostDryRunRequest({}, deps);
   assert.equal(result.status, 502);
   assert.equal(result.body.error, "BRAND_POST_GENERATION_FAILED:429");
+});
+
+test("Phase 3G: a known published Kabumori post's real fingerprint is read and reflected, and an AI Lab candidate identical after normalization to it blocks as a cross-brand duplicate", async () => {
+  const kabumoriRealText = "日経平均は本日、前日比で反発しました。";
+  const deps = baseDeps({
+    // The candidate AI Lab text below is engineered to normalize identically to a real, already-
+    // published Kabumori post -- proving the block path fires against genuinely real (fixture-sourced)
+    // data, not a synthetic self-reference.
+    runBrandPostDryRun: (args) => runBrandPostDryRun({ ...args, fetchImpl: fixtureFetch(kabumoriRealText) }),
+    fetchRecentKabumoriFingerprints: async () => [
+      { brandId: "kabumori", normalizedTextSha256: await fingerprintText(kabumoriRealText), publishedAt: "2026-09-10T09:00:00.000Z" },
+    ],
+  });
+  const result = await handleBrandPostDryRunRequest({}, deps);
+  assert.equal(result.status, 200);
+  const dedupe = result.body.cross_brand_dedupe as { kabumori_posts_checked: number; result: Record<string, unknown> };
+  assert.equal(dedupe.kabumori_posts_checked, 1);
+  assert.equal(dedupe.result.blocked, true);
+  assert.equal(dedupe.result.reason, "CROSS_BRAND_EXACT_DUPLICATE");
+  assert.equal(dedupe.result.matchedBrandId, "kabumori");
+});
+
+test("Phase 3G: a sufficiently distinct AI Lab candidate is allowed even against a real recent Kabumori fingerprint window", async () => {
+  const deps = baseDeps({
+    fetchRecentKabumoriFingerprints: async () => [
+      { brandId: "kabumori", normalizedTextSha256: await fingerprintText("日経平均は本日、前日比で反発しました。"), publishedAt: "2026-09-10T09:00:00.000Z" },
+    ],
+  });
+  const result = await handleBrandPostDryRunRequest({}, deps);
+  assert.equal(result.status, 200);
+  const dedupe = result.body.cross_brand_dedupe as { kabumori_posts_checked: number; result: { blocked: boolean } };
+  assert.equal(dedupe.kabumori_posts_checked, 1);
+  assert.equal(dedupe.result.blocked, false);
+});
+
+test("Phase 3G: a real-data repository failure fails safe (empty window) and never blocks or aborts AI Lab's own generation", async () => {
+  const deps = baseDeps({
+    fetchRecentKabumoriFingerprints: async () => [],
+  });
+  const result = await handleBrandPostDryRunRequest({}, deps);
+  assert.equal(result.status, 200);
+  const dedupe = result.body.cross_brand_dedupe as { kabumori_posts_checked: number; result: { blocked: boolean } };
+  assert.equal(dedupe.kabumori_posts_checked, 0);
+  assert.equal(dedupe.result.blocked, false);
+});
+
+test("Phase 3G: reflects Vault token routing metadata (brand/account matched, refs present, legacy fallback used=false) without exposing secret values", async () => {
+  const result = await handleBrandPostDryRunRequest({}, baseDeps());
+  assert.equal(result.status, 200);
+  const routing = result.body.vault_token_routing as Record<string, unknown>;
+  assert.equal(routing.brandId, "ai_salaryman_lab");
+  assert.equal(routing.socialAccountId, "ai_salaryman_lab_x");
+  assert.equal(routing.handle, "kaishain_ai_lab");
+  assert.equal(routing.accessTokenRefPresent, true);
+  assert.equal(routing.refreshTokenRefPresent, true);
+  assert.equal(routing.tokenSource, "vault_backed_social_account");
+  assert.equal(routing.legacyFallbackUsed, false);
+  assert.equal(Object.hasOwn(routing, "accessToken"), false);
+  assert.equal(Object.hasOwn(routing, "refreshToken"), false);
+});
+
+test("Phase 3G: a Vault token routing lookup failure is reported as its own field and never hides an otherwise-successful generation result", async () => {
+  const deps = baseDeps({
+    resolveVaultTokenRoutingMetadata: async () => {
+      throw new (await import("../_shared/brand/brand_context.ts")).BrandContextError("BRAND_SOCIAL_ACCOUNT_NOT_FOUND");
+    },
+  });
+  const result = await handleBrandPostDryRunRequest({}, deps);
+  assert.equal(result.status, 200);
+  assert.equal(typeof (result.body.generated as Record<string, unknown>).text, "string");
+  assert.deepEqual(result.body.vault_token_routing, { error: "BRAND_SOCIAL_ACCOUNT_NOT_FOUND" });
 });
 
 test("this module never imports the legacy token loader, OAuth module, or the x-test-post monolith", async () => {

@@ -7,7 +7,8 @@
 import { resolveAdminAuthorization } from "../x-test-post/admin_auth_logic.ts";
 import { loadBrandContext } from "../_shared/brand/brand_context.ts";
 import { runBrandPostDryRun } from "../_shared/brand/brand_post_dry_run.ts";
-import { runCrossBrandDedupeProbe } from "../_shared/brand/cross_brand_dedupe_probe.ts";
+import { fetchRecentKabumoriFingerprints } from "../_shared/brand/kabumori_recent_fingerprints.ts";
+import { resolveVaultTokenRoutingMetadata } from "../_shared/brand/vault_token_routing.ts";
 import { handleBrandPostDryRunRequest } from "./dry_run_handler.ts";
 
 function json(body: Record<string, unknown>, status = 200) {
@@ -47,7 +48,8 @@ Deno.serve(async (req) => {
     const result = await handleBrandPostDryRunRequest(body, {
       loadBrandContext,
       runBrandPostDryRun,
-      runCrossBrandDedupeProbe,
+      fetchRecentKabumoriFingerprints,
+      resolveVaultTokenRoutingMetadata,
       openAiApiKey,
       supabaseUrl,
       serviceRoleKey,

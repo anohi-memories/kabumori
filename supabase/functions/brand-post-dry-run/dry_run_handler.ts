@@ -1,14 +1,19 @@
 // Phase 3F: pure, injectable request-handling logic for the admin-only "brand-post-dry-run" Edge
 // Function. Kept separate from index.ts's Deno.serve wrapper so this can be exercised in `deno test`
 // with fixture dependencies (no real network/DB/OpenAI call) while index.ts wires the real
-// loadBrandContext / runBrandPostDryRun / runCrossBrandDedupeProbe at request time.
+// loadBrandContext / runBrandPostDryRun / fetchRecentKabumoriFingerprints at request time.
 //
 // This module never imports token_loader.ts, x_oauth2_post.ts, or index.ts from x-test-post -- there is
 // no code path here that could reach the legacy Kabumori token store or call the X API. x_write_calls and
 // legacy_kabumori_token_reads are therefore both 0 by construction, not by runtime luck.
+//
+// Phase 3G: cross-brand dedupe now runs against real recent Kabumori content (via
+// fetchRecentKabumoriFingerprints, which reads post_execution_logs read-only and returns only
+// fingerprints) instead of Phase 3F's synthetic self-referential probe.
 import { BrandContextError, type BrandContext } from "../_shared/brand/brand_context.ts";
 import { toScheduledPostPayload, type BrandPostDryRunResult } from "../_shared/brand/brand_post_dry_run.ts";
-import type { CrossBrandDedupeProbeResult } from "../_shared/brand/cross_brand_dedupe_probe.ts";
+import type { PublishedFingerprint } from "../_shared/brand/cross_brand_dedupe.ts";
+import type { VaultTokenRoutingMetadata } from "../_shared/brand/vault_token_routing.ts";
 
 // This phase's approved production execution target is ai_salaryman_lab only (Phase 3F Section B). The
 // handler itself stays brand-agnostic -- extending this list is the only change a future brand needs.
@@ -21,12 +26,17 @@ export type BrandPostDryRunHandlerDeps = {
     context: BrandContext;
     postType: string;
     topicSeed?: string;
+    recentFingerprints?: PublishedFingerprint[];
   }) => Promise<BrandPostDryRunResult>;
-  runCrossBrandDedupeProbe: (args: {
-    brandId: string;
-    candidateText: string;
-    now?: Date;
-  }) => Promise<CrossBrandDedupeProbeResult>;
+  fetchRecentKabumoriFingerprints: (args: {
+    supabaseUrl: string;
+    serviceRoleKey: string;
+  }) => Promise<PublishedFingerprint[]>;
+  resolveVaultTokenRoutingMetadata: (args: {
+    context: BrandContext;
+    supabaseUrl: string;
+    serviceRoleKey: string;
+  }) => Promise<VaultTokenRoutingMetadata>;
   openAiApiKey: string;
   supabaseUrl: string;
   serviceRoleKey: string;
@@ -83,6 +93,15 @@ export async function handleBrandPostDryRunRequest(
     };
   }
 
+  // Read-only, real-data window: recent successfully published Kabumori post text, fingerprinted in
+  // fetchRecentKabumoriFingerprints itself -- this handler never sees the raw text, only the hashes a
+  // dedupe check against a different brand can use. A repository failure fails safe to an empty window
+  // (never blocks AI Lab's own generation), so it is never allowed to abort this request.
+  const recentFingerprints = await deps.fetchRecentKabumoriFingerprints({
+    supabaseUrl: deps.supabaseUrl,
+    serviceRoleKey: deps.serviceRoleKey,
+  });
+
   let result: BrandPostDryRunResult;
   try {
     result = await deps.runBrandPostDryRun({
@@ -90,16 +109,25 @@ export async function handleBrandPostDryRunRequest(
       context,
       postType,
       topicSeed,
+      recentFingerprints,
     });
   } catch (error) {
     return { status: 502, body: { error: errorCode(error) } };
   }
 
-  const dedupeProbe = await deps.runCrossBrandDedupeProbe({
-    brandId: context.brand.id,
-    candidateText: result.generated.text,
-    now: deps.now,
-  });
+  // Read-only, no-secret proof of the intended live routing (brand_id -> social_account -> Vault token
+  // refs). A failure here must never hide a real generation result behind a 5xx -- it is reported as its
+  // own field so the caller can see the routing check failed without losing the dry-run proof.
+  let vaultTokenRouting: VaultTokenRoutingMetadata | { error: string };
+  try {
+    vaultTokenRouting = await deps.resolveVaultTokenRoutingMetadata({
+      context,
+      supabaseUrl: deps.supabaseUrl,
+      serviceRoleKey: deps.serviceRoleKey,
+    });
+  } catch (error) {
+    vaultTokenRouting = { error: errorCode(error) };
+  }
 
   return {
     status: 200,
@@ -119,10 +147,11 @@ export async function handleBrandPostDryRunRequest(
       },
       scheduled_post_payload_preview: toScheduledPostPayload(result),
       cross_brand_dedupe: {
-        would_block_on_exact_match: dedupeProbe.wouldBlockOnExactMatch,
-        would_allow_on_distinct_text: dedupeProbe.wouldAllowOnDistinctText,
+        kabumori_posts_checked: recentFingerprints.length,
+        result: result.crossBrandDedupe,
       },
       publish_gate: result.publishGate,
+      vault_token_routing: vaultTokenRouting,
       x_write_calls: result.xWriteCalls,
       legacy_kabumori_token_reads: 0,
     },
