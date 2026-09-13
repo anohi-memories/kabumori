@@ -268,7 +268,7 @@ Report必須:
 
 ### natural_cron_observation（read-only、manual runなし）
 
-観測窓: deploy 2026-09-13 05:27 UTC（14:27 JST）〜 05:41 UTC（fetch 3サイクル相当）。
+観測窓: deploy 2026-09-13 05:27 UTC（14:27 JST）〜 05:52 UTC（fetch 3サイクル相当）。05:41 と 05:52 の2回の読み取りで値は同一（変化なし）。
 
 | 項目 | 結果 |
 | --- | --- |
