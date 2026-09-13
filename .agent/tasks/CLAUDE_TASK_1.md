@@ -3,7 +3,7 @@
 - task_id: broad-news-phase3-production-rollout-20260913
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: urgent
 - recommended_model: Opus 5
