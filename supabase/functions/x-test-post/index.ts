@@ -62,6 +62,15 @@ import {
 } from "../_shared/brand/brand_context.ts";
 import { assertBrandPublishAllowed } from "../_shared/brand/publish_guard.ts";
 import { loadBrandXTokens } from "../_shared/brand/token_loader.ts";
+import { loadAiLabVaultBackedXTokens } from "../_shared/brand/ai_lab_vault_token_source.ts";
+import {
+  loadAiLabRecentDedupeFingerprints,
+  recordAndCompleteAiLabBrandPost,
+} from "../_shared/brand/ai_lab_brand_post_store.ts";
+import {
+  AiLabConfirmedPostCompletionError,
+  dispatchAiLabScheduledBrandPost,
+} from "../_shared/brand/ai_lab_scheduled_brand_post.ts";
 import { buildBrandDryRunPreview } from "../_shared/brand/dry_run.ts";
 import {
   collectVoiceResponseDiagnostics,
@@ -179,6 +188,7 @@ type XAuthContext = {
   supabaseUrl: string;
   serviceRoleKey: string;
   refreshExecuted: boolean;
+  allowRefresh?: boolean;
 };
 
 type InteractionTopic = {
@@ -3018,6 +3028,7 @@ async function saveXTokens(
   tokens: XTokenState,
   expiresIn: number | null,
 ): Promise<void> {
+  if (!auth.clientSecret) throw new Error("X_TOKEN_REFRESH_NOT_CONFIGURED");
   const key = await tokenEncryptionKey(auth.clientSecret);
   const access = await encryptToken(tokens.accessToken, key);
   const refresh = await encryptToken(tokens.refreshToken, key);
@@ -3046,6 +3057,9 @@ async function saveXTokens(
 }
 
 async function refreshXTokens(auth: XAuthContext): Promise<void> {
+  if (auth.allowRefresh === false || !auth.clientId || !auth.clientSecret) {
+    throw new Error("X_TOKEN_REFRESH_NOT_CONFIGURED");
+  }
   const credentials = btoa(`${auth.clientId}:${auth.clientSecret}`);
   const response = await fetch(X_TOKEN_URL, {
     method: "POST",
@@ -3127,7 +3141,9 @@ async function postToX(
     pollOptions,
   );
   if (result.status === 401) {
-    if (auth.refreshExecuted) throw new Error("X_REQUEST_FAILED:401");
+    if (auth.allowRefresh === false || auth.refreshExecuted) {
+      throw new Error("X_REQUEST_FAILED:401");
+    }
     await refreshXTokens(auth);
     result = await requestXPost(
       auth.tokens.accessToken,
@@ -3213,6 +3229,7 @@ Deno.serve(async (req) => {
   let scheduledPostId: string | null = null;
   let supabaseUrlForFailure: string | null = null;
   let serviceRoleKeyForFailure: string | null = null;
+  let aiLabXPostConfirmedWithoutCompletion = false;
 
   try {
     let requestBody: {
@@ -3228,19 +3245,10 @@ Deno.serve(async (req) => {
     const isMorningGreetingPayloadTest = requestBody.mode === MORNING_GREETING_PAYLOAD_TEST_MODE;
     const isMorningGreetingManualPublish = requestBody.mode === MORNING_GREETING_MANUAL_PUBLISH_MODE;
     const isBrandContextDryRun = requestBody.mode === "brand_context_dry_run";
-    const isAnyDryRun = isUsefulTipDryRun || isVoiceDryRun || isMorningReportDryRun ||
-      isCloseReportDryRun || isUsPremarketDryRun || isMorningGreetingImageTest ||
-      isMorningGreetingPayloadTest || isBrandContextDryRun;
     const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
-    const xAccessToken = Deno.env.get("X_OAUTH2_ACCESS_TOKEN");
-    const xRefreshToken = Deno.env.get("X_OAUTH2_REFRESH_TOKEN");
-    const xClientId = Deno.env.get("X_CLIENT_ID");
-    const xClientSecret = Deno.env.get("X_CLIENT_SECRET");
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!openAiApiKey || !supabaseUrl || !serviceRoleKey || (!isAnyDryRun && (
-      !xAccessToken || !xRefreshToken || !xClientId || !xClientSecret
-    ))) {
+    if (!openAiApiKey || !supabaseUrl || !serviceRoleKey) {
       return jsonResponse({ error: "Required server secret is missing" }, 500);
     }
 
@@ -3263,6 +3271,13 @@ Deno.serve(async (req) => {
     }
 
     if (isMorningGreetingManualPublish) {
+      const xAccessToken = Deno.env.get("X_OAUTH2_ACCESS_TOKEN");
+      const xRefreshToken = Deno.env.get("X_OAUTH2_REFRESH_TOKEN");
+      const xClientId = Deno.env.get("X_CLIENT_ID");
+      const xClientSecret = Deno.env.get("X_CLIENT_SECRET");
+      if (!xAccessToken || !xRefreshToken || !xClientId || !xClientSecret) {
+        return jsonResponse({ error: "Required server secret is missing" }, 500);
+      }
       const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
       const adminAuth = anonKey
         ? await resolveAdminAuthorization({
@@ -3910,21 +3925,102 @@ Deno.serve(async (req) => {
       brandId: brandIdFromScheduledRow(scheduledPost.brand_id),
     });
     assertBrandPublishAllowed(brandContext);
-    const xAuth: XAuthContext = {
-      tokens: await loadBrandXTokens({
-        context: brandContext,
+    const xAuth: XAuthContext = await (async () => {
+      if (brandContext.brand.id === "ai_salaryman_lab") {
+        if (scheduledPost.post_type !== "brand_post") {
+          throw new Error("AI_LAB_POST_TYPE_NOT_ENABLED");
+        }
+        return {
+          tokens: await loadAiLabVaultBackedXTokens({
+            context: brandContext,
+            supabaseUrl,
+            serviceRoleKey,
+          }),
+          // AI Lab dispatch never refreshes or writes to the legacy token store.
+          clientId: "",
+          clientSecret: "",
+          supabaseUrl,
+          serviceRoleKey,
+          refreshExecuted: false,
+          // AI Lab refresh tokens remain untouched; an expired access token fails closed for separate
+          // re-authorization/approval instead of falling back to Kabumori's oauth_token_store.
+          allowRefresh: false,
+        };
+      }
+
+      const xAccessToken = Deno.env.get("X_OAUTH2_ACCESS_TOKEN");
+      const xRefreshToken = Deno.env.get("X_OAUTH2_REFRESH_TOKEN");
+      const xClientId = Deno.env.get("X_CLIENT_ID");
+      const xClientSecret = Deno.env.get("X_CLIENT_SECRET");
+      if (!xAccessToken || !xRefreshToken || !xClientId || !xClientSecret) {
+        throw new Error("Required server secret is missing");
+      }
+      return {
+        tokens: await loadBrandXTokens({
+          context: brandContext,
+          supabaseUrl,
+          serviceRoleKey,
+          clientSecret: xClientSecret,
+          fallbackAccessToken: xAccessToken,
+          fallbackRefreshToken: xRefreshToken,
+        }),
+        clientId: xClientId,
+        clientSecret: xClientSecret,
         supabaseUrl,
         serviceRoleKey,
-        clientSecret: xClientSecret!,
-        fallbackAccessToken: xAccessToken!,
-        fallbackRefreshToken: xRefreshToken!,
-      }),
-      clientId: xClientId!,
-      clientSecret: xClientSecret!,
-      supabaseUrl,
-      serviceRoleKey,
-      refreshExecuted: false,
-    };
+        refreshExecuted: false,
+      };
+    })();
+
+    if (scheduledPost.post_type === "brand_post") {
+      if (brandContext.brand.id !== "ai_salaryman_lab") {
+        throw new Error("AI_LAB_DISPATCH_BRAND_MISMATCH");
+      }
+      try {
+        const result = await dispatchAiLabScheduledBrandPost({
+          context: brandContext,
+          postType: scheduledPost.post_type,
+          scheduledPostId: scheduledPost.id,
+          openAiApiKey,
+          loadRecentFingerprints: () => loadAiLabRecentDedupeFingerprints({
+            supabaseUrl,
+            serviceRoleKey,
+          }),
+          publishText: (text) => postToX(xAuth, text),
+          completePublishedPost: (args) => recordAndCompleteAiLabBrandPost({
+            supabaseUrl,
+            serviceRoleKey,
+            ...args,
+          }),
+        });
+        if (!result.fingerprintPersisted) {
+          console.error("AI_LAB_POST_FINGERPRINT_PERSISTENCE_FAILED", {
+            scheduledPostId: scheduledPost.id,
+            xPostId: result.xPostId,
+          });
+        }
+        return jsonResponse({
+          schedule: {
+            id: scheduledPost.id,
+            postType: result.postType,
+            scheduledFor: scheduledPost.scheduled_for,
+          },
+          brandId: result.brandId,
+          characterCount: result.characterCount,
+          xPostId: result.xPostId,
+          fingerprintPersisted: result.fingerprintPersisted,
+          refreshExecuted: xAuth.refreshExecuted,
+        }, 201);
+      } catch (error) {
+        if (error instanceof AiLabConfirmedPostCompletionError) {
+          aiLabXPostConfirmedWithoutCompletion = true;
+          console.error("AI_LAB_POST_CONFIRMED_BUT_COMPLETION_UNCONFIRMED", {
+            scheduledPostId: scheduledPost.id,
+          });
+        }
+        throw error;
+      }
+    }
 
     if (scheduledPost.post_type === "morning_report") {
       let morningRunId: string | null = null;
@@ -4481,6 +4577,7 @@ Deno.serve(async (req) => {
 
     if (
       scheduledPostId && supabaseUrlForFailure && serviceRoleKeyForFailure &&
+      !aiLabXPostConfirmedWithoutCompletion &&
       !code.startsWith("RPC_FAILED:complete_tip_post") &&
       !code.startsWith("RPC_FAILED:complete_interaction_post") &&
       !code.startsWith("RPC_FAILED:complete_morning_report_post") &&
