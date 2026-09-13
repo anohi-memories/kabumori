@@ -1,225 +1,255 @@
 # Claude Task 2
 
-- task_id: x-multibrand-phase3g-ai-lab-live-readiness-20260913
+- task_id: x-multibrand-phase3h-ai-lab-prelive-safeguards-20260913
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: high
 - recommended_model: Sonnet 5
-- purpose: 会社員AIラボの初回実X投稿直前まで安全に仕上げる。cross-brand dedupeを実データへ接続し、AI Lab posting windowを無効状態で準備し、brand_id→social_account→Vault token refsの実経路をread-onlyで証明する。まだlive化・X実投稿・write scope追加は行わない。
+- purpose: 会社員AIラボの初回live投稿前に、280文字制限・fingerprint永続化・Vault-backed dispatch配線・posting window準備を安全に仕上げる。実X投稿、live化、write scope追加はまだ行わない。
 
 ## Source of truth
 
-会社員AIラボの投稿内容・文体・note送客・ブランド運用の正本は、別の「会社員AIラボ」ChatGPTプロジェクト側。今回も本repo側で新しい人格・投稿戦略を創作しない。
+会社員AIラボの実際の投稿内容・文体・note送客・ブランド運用の正本は別の「会社員AIラボ」ChatGPTプロジェクト側。
+本repoで人格や投稿戦略を新しく創作しない。
+
+今回ユーザーから追加で確定した要件:
+- 現在の会社員AIラボX運用は **280文字以内** が必須。
+- 将来アプリ化する際は「280文字以内モード」と「無制限モード」を選べる設計にしたい。
+- そのため固定ハードコードではなく、将来ユーザー設定へ一般化しやすい `max_chars` / length mode 相当で設計する。
 
 ## Prior approved state
 
-Phase 3F K2 PASS。
+Phase 3G K2 PASS。
 
-- Phase 3F commits: `b77c8c7` → `215eeff` on `feature/multibrand-foundation`
-- `brand-post-dry-run` deployed and byte-verified
-- real OpenAI generation confirmed with `brand_id=ai_salaryman_lab`
+- Phase 3G commits: `8f3b789` -> `341e5dc` on `feature/multibrand-foundation`
+- `published_content_fingerprints` production-applied and verified
+- real Kabumori published content 4件を使うcross-brand dedupe proof成功
+- `brand-post-dry-run` deployed, byte-verified
+- AI Lab Vault route metadata proof成功:
+  - brand_id=`ai_salaryman_lab`
+  - handle=`kaishain_ai_lab`
+  - access/refresh token refs present
+  - legacy fallback=false
+- `publish_claims` is not required for `brand_post`
+- AI Lab posting_windowsは未作成（正本の時間帯/スロット数/daily_probability未確定）
 - AI Lab remains `publish_mode=dry_run`, `publish_enabled=false`
-- X write calls = 0
-- legacy Kabumori token reads on AI Lab path = 0
+- X writes=0
 - AI Lab OAuth scopes remain read-only: `tweet.read users.read offline.access`
-- `20260913130000_fix_post_execution_logs_brand_attribution.sql` production-applied and 10 RPCs read-back verified
-- `20260913120000_add_published_content_fingerprints.sql` is still production-unapplied
-- posting_windows for AI Lab not yet created
-- live Vault token loader path not yet proven end-to-end
-- Mio untouched
+- Kabumori/Mio/Cron unchanged
 
 ## Start / parallel safety
 
-Before work:
-- read `.agent/ORCHESTRATION.md`
-- read `.agent/CURRENT_STATE.md`
-- read this TASK
-- read other active slot TASK files only for conflict detection
-- fresh-check `origin/main`
-- fresh-check `origin/feature/multibrand-foundation`
-- use isolated clean worktree/clone
-- do not touch/stage/commit existing uncommitted changes from another workstream
+開始前に必ず:
+- `.agent/ORCHESTRATION.md`
+- `.agent/CURRENT_STATE.md`
+- this TASK
+- 他3slot TASK（競合確認に必要な範囲のみ）
+- origin/main fresh-check
+- origin/feature/multibrand-foundation fresh-check
+- isolated clean worktree/clone
 
-If any other slot is changing the same migration/RPC/Function/workflow/production config, stop and report the exact conflict.
+同じFunction/RPC/migration/workflow/production configを他slotが変更中なら停止して競合報告。
+既存未コミット変更は他workstream所有物として触らない。
 
-Use Sonnet 5 normally. If a DB/RPC/Cron redesign or unclear production inconsistency appears, stop before broad changes and recommend Opus.
+通常はSonnet 5。dispatch/OAuth/token refresh/Cronの根本設計変更が必要になったら大変更前に停止し、Opus切替を推奨。
 
 ## Goal
 
-Complete the final non-posting live-readiness layer for AI Lab:
+初回AI Lab live投稿の直前まで、以下を完成させる。
 
-1. safely production-apply `20260913120000_add_published_content_fingerprints.sql` if preflight matches expectations
-2. replace synthetic cross-brand probe with a real-data dedupe path suitable for live routing
-3. verify recent/published Kabumori content can be fingerprinted/read without cross-tenant leakage
-4. prepare AI Lab posting window in production only as disabled/inactive
-5. prove `ai_salaryman_lab -> social_account -> Vault token refs` resolution in read-only/no-secret mode
-6. identify whether `publish_claims` needs brand-aware work before first live `brand_post`
-7. leave AI Lab fully non-live at end
+1. AI Lab生成文を280文字以内に強制する、将来一般化可能な文字数制御
+2. 生成後にもサーバー側で上限検証し、超過文がpublish経路へ進めないことを保証
+3. `published_content_fingerprints` をlive publish完了経路へ安全に書き込むための共通処理を実装・テスト
+4. Kabumori既存publish完了経路へ回帰を起こさない形でfingerprint記録を配線できるところまで仕上げる
+5. AI Lab `brand_id -> social_account -> Vault-backed token loader` を実dispatch経路へ配線する。ただしpublish gateが閉じた状態でのみ検証し、X writeは0
+6. AI Lab posting_windowsの必要入力を明確化し、正本が確定していればinactive行のみ準備。未確定なら推測しない
+7. 初回live投稿に必要なOAuth write scope変更のexact planを確定するが、scope追加・再OAuthはまだ実行しない
+8. AI Labを最後までdry_run/publish_disabledのまま維持
 
-## A. published_content_fingerprints production migration
+## A. Length mode / max_chars
 
-Migration candidate:
-`supabase/migrations/20260913120000_add_published_content_fingerprints.sql`
+将来の一般ユーザーアプリを意識した設計にする。
 
-Before applying:
-- inspect exact migration SQL
-- read-only preflight live schema for target table/index/function dependencies
-- confirm no destructive DDL
-- confirm no overlap with another slot
-- confirm migration history mismatch does NOT require repair/reconcile
+最低要件:
+- 文字数制限をprofile/settings側の設定として表現できる
+- AI Labは現時点で `max_chars=280`
+- 無制限モードを将来表現可能（例: `max_chars=null` または明示的mode）
+- generator promptにも上限を伝える
+- **prompt依存だけにしない**。生成後にサーバー側で実文字数検証する
+- 280超過ならpublish candidateとして成功扱いにしない
+- 安全な自動再生成/圧縮を実装する場合、回数上限を設ける。無限retry禁止
+- 最終的に280以内にならない場合はfail closed
+- URL・改行・日本語を含むXの実際の文字数計算との差異を調査し、単純JS `.length` で十分でないなら専用count関数を分離する
+- ただしX API writeはしない
 
-If safe and exact:
-- apply only this exact migration
-- `supabase db push` prohibited
-- migration history repair/reconcile prohibited
-- read back table/index/constraints/RLS/grants as applicable
-- record exact production change
+テスト:
+- 279/280/281相当境界
+- 日本語
+- ASCII
+- 改行
+- URLを含むケース
+- unlimited mode
+- AI Labは280、Kabumori既存挙動は不変
+- 超過文がpublish gate以降へ進めない
 
-If live schema differs materially, do not apply; stop and report.
+## B. Fingerprint write path
 
-## B. Real-data cross-brand dedupe
+`published_content_fingerprints`を「作っただけ」で終わらせず、将来のlive publish成功後に記録される共通処理を作る。
 
-Replace Phase 3F synthetic-only proof with a production-like real-data path.
+要件:
+- X publish **成功後のみ** fingerprintを記録する設計
+- 失敗投稿/未投稿/dry-runでは記録しない
+- brand_id/social_account_id/post_type/published_at/hashの帰属を保持
+- normalized exact hashは既存cross-brand dedupeと同一規則を使う
+- raw post bodyをfingerprintテーブルへ保存しない
+- duplicate insert/retryに対して安全（必要ならidempotency設計）
+- Kabumori既存publish完了経路への配線は回帰テストを十分に行う
+- AI Lab live経路でも同じ共通処理を再利用できる設計
 
-Requirements:
-- normalized exact duplicate across different brands must block
-- distinct wording about the same broad topic must remain allowed
-- same-brand behavior must not be accidentally over-blocked
-- no full production post bodies in logs unless strictly necessary
-- do not expose secrets
-- preserve `brand_id` throughout
+本番で実Kabumori投稿を発生させてテストしてはいけない。
+既存成功データをread-only利用するか、ローカル/fixtureで証明する。
 
-Use the new fingerprint table for actual recent published content where safe.
+本番DBへのbackfillはこのタスクでは禁止。必要性が判明したら提案だけする。
 
-At minimum prove:
-- a known published Kabumori post fingerprint can be read/represented
-- an AI Lab candidate identical after normalization would block as cross-brand duplicate
-- a sufficiently distinct AI Lab candidate would allow
-- no Kabumori token/OAuth access is required for dedupe
+## C. Vault-backed dispatch routing
 
-Do not create a real X post just to test dedupe.
+AI Labの実dispatchでlegacy Kabumori token storeへ落ちない構造にする。
 
-## C. AI Lab posting_windows preparation
+目標経路:
+`scheduled_post.brand_id`
+-> BrandContext
+-> social_account
+-> Vault refs
+-> Vault-backed token loader
+-> publish safety gate
+-> （Phase 3Hではここで停止）
 
-Inspect current posting window schema/selection logic first.
+要件:
+- `ai_salaryman_lab`はVault-backed loaderのみ
+- Kabumori legacy fallback禁止
+- Kabumori現行token経路は変更しない、または同等性を厳密に維持
+- token値をログ/Report/responseへ出さない
+- token refreshが必要でも、Phase 3Hでは不用意に実行しない。安全なread-only/metadata proofで足りるならそれを優先
+- live X POST/media uploadへ到達しないことをテストで固定
+- `publish_mode=dry_run` / `publish_enabled=false` の既存gateを維持
 
-Prepare AI Lab schedule only if it can be done without changing Kabumori behavior.
+もし巨大 `x-test-post/index.ts` 変更が高リスクなら、薄い共通router抽出など最小変更を検討する。広範なリファクタは禁止。
 
-Production row is allowed only when:
+## D. Posting windows
+
+会社員AIラボ側の正本で以下が確定しているか確認:
+- 投稿時間帯
+- 1日のslot数
+- daily_probability
+- 曜日差/平日休日差の有無
+
+このrepo/現TASKから確認できなければ**推測しない**。
+
+確定値が無い場合:
+- DB変更なし
+- Reportに必要入力を明記
+
+確定値がある場合:
 - `brand_id=ai_salaryman_lab`
-- disabled/inactive (`is_active=false` or exact equivalent)
-- no Cron behavior can claim/publish it while inactive
-- no existing Kabumori row is edited
+- `is_active=false`
+- Kabumori rowは変更しない
+- Cron変更なし
+- inactiveではclaimされないことをread-back/test
 
-Do NOT guess final posting times if not already specified by the AI Lab source-of-truth. If exact times are not known, either:
-- create only a structurally valid disabled placeholder with clearly non-operational semantics, if safe, or
-- leave DB unchanged and report the exact required input.
+## E. OAuth write scope readiness
 
-No Cron changes in Phase 3G.
+初回live投稿に必要なwrite scopeを正確に調査して、次タスク用の変更手順を作る。
 
-## D. Vault token routing read-only proof
+Phase 3Hで禁止:
+- `tweet.write`追加
+- `media.write`追加
+- 再OAuth実行
+- AI Lab token mutation
+- X POST/media upload
 
-Verify the intended live routing:
+Reportには:
+- text-only初回投稿に必要な最小scope
+- 画像投稿を後日行う場合の追加要否
+- scope変更後に既存read-only tokenをどう更新/再認可するか
+- rollback方法
+を明記。
 
-`brand_id=ai_salaryman_lab`
-→ social account lookup
-→ Vault access_token/refresh_token references
-→ token loader result metadata
+## F. Dry-run proof
 
-Safety:
-- do not print token values
-- do not refresh tokens unless strictly required for a non-writing verification and explicitly safe
-- no X POST/media upload
-- no fallback to Kabumori legacy `oauth_token_store`
-- no Kabumori OAuth/token mutation
+更新後 `brand-post-dry-run` もしくは専用safe proofで最低限確認:
+- generated text <= 280 for AI Lab
+- `brand_id=ai_salaryman_lab`
+- cross-brand real-data dedupe正常
+- vault routing = Vault-backed AI Lab account
+- legacy fallback=false
+- publish gate blocks
+- x_write_calls=0
+- fingerprint write count=0 in dry-run
 
-Preferred proof returns only metadata such as:
-- brand/account matched
-- expected handle/account identity
-- token refs present / resolvable
-- token source = Vault-backed brand account
-- legacy fallback used = false
-
-If validating token liveness would require changing scopes or writing to X, do not do it in this phase.
-
-## E. publish_claims readiness
-
-Inspect whether `brand_post` requires `publish_claims` in the first live path.
-
-- If not required for initial live AI Lab posting, document why and leave unchanged.
-- If required and existing logic is Kabumori/default-brand dependent, draft the minimal brand-aware change and tests.
-- Do not production-apply a broad publish_claims redesign in this task unless the change is trivially isolated and clearly required; otherwise leave for the next live-post task.
-
-## F. Brand/account isolation
-
-Add/keep tests proving:
-- `ai_salaryman_lab` never resolves to `kabumori`
-- AI Lab handle is `kaishain_ai_lab`
-- Kabumori internal id remains `kabumori`, X handle remains `yume_daka`
-- dedupe data lookup is cross-brand content-only, not cross-brand credentials
-- AI Lab token route has zero legacy Kabumori token reads
-- Mio is unaffected
+deployが必要ならexact diffを確認し、**brand-post-dry-runのみ**ならユーザー承認を求めてからproduction deployする。
+他Functionのproduction deployが必要なら必ず個別に止めて承認を取る。
 
 ## Required tests
 
-At minimum:
-- fingerprint normalization exact-match tests
-- cross-brand real-table/proxy repository tests
-- same-brand non-regression
-- distinct-text allow case
-- AI Lab brand attribution preserved
-- AI Lab posting window inactive/non-claimable test if a row/path is added
-- Vault route metadata-only test
-- legacy Kabumori token fallback = 0 on AI Lab path
-- existing Kabumori publish/generation regression tests
+最低限:
+- 280-char boundary tests
+- unlimited mode tests
+- AI Lab max_chars=280 profile/settings proof
+- over-limit fail-closed/retry-cap test
+- Kabumori generation regression
+- fingerprint normalization/write helper tests
+- dry-run never writes fingerprint
+- failed publish never writes fingerprint
+- successful publish semantic path writes exactly once (mock/local)
+- AI Lab Vault route no legacy fallback
+- X write endpoint unreachable while dry_run/publish_disabled
+- brand isolation regression
+- cross-brand dedupe regression
 - all relevant Edge Function tests
 - `git diff --check`
-- `deno check` changed files; if blocked by known environment issue, prove same issue on unchanged baseline and report it
-
-## Production changes allowed in Phase 3G
-
-Allowed only after read-only preflight:
-- exact `20260913120000_add_published_content_fingerprints.sql` migration
-- an AI Lab posting-window row only in disabled/inactive state, if exact schedule semantics are known and safe
-- deployment of a narrowly scoped read-only/dry-run helper Function if needed for proof
+- `deno check` changed files; known environment failures must be compared with unchanged baseline
 
 ## Production prohibitions
 
-Strictly prohibited:
+厳禁:
 - AI Lab `publish_mode=live`
 - AI Lab `publish_enabled=true`
-- `tweet.write` / `media.write` scope addition
-- AI Lab X post/test post/media upload
-- Kabumori manual test/retry post
-- Kabumori OAuth/token/handle/Cron changes
-- Mio changes
-- Cron changes
+- `tweet.write` / `media.write` scope追加
+- AI Lab実X投稿/test post/media upload
+- Kabumori manual retry/test post
+- Kabumori OAuth/token/handle/Cron変更
+- Mio変更
+- Cron変更
 - blind `supabase db push`
 - migration history repair/reconcile
 - destructive DB change
-- secret/token/password/2FA output or storage in Report
+- fingerprint backfill
+- secret/token/password/2FAの表示・保存・Report記載
 
 ## Completion / Report
 
-When finished:
-- set status `review_required`
-- set next_owner `chatgpt`
-- append `## Report`
-- safely sync control info to origin/main
+完了時:
+- status: `review_required`
+- next_owner: `chatgpt`
+- task末尾に `## Report`
+- origin/mainへ制御情報を安全に同期
 
-Report must include:
+Report必須:
 - task_id
 - result
 - model_used
 - source_base
-- fingerprint_migration_status
-- real_data_dedupe_result
+- length_mode_design
+- ai_lab_280_char_result
+- fingerprint_write_path_status
+- vault_dispatch_routing_status
 - posting_window_status
-- vault_token_routing_result
-- publish_claims_readiness
-- brand_isolation_result
+- oauth_write_scope_readiness
+- dry_run_proof
+- x_write_calls_count
+- fingerprint_writes_in_dry_run
 - changed_files
 - migrations/rpcs/functions changed
 - tests
@@ -234,71 +264,17 @@ Report must include:
 
 ## Success gate
 
-Phase 3G PASS requires:
-- cross-brand dedupe proven against real production-backed fingerprint data or an equivalently faithful production table path
-- AI Lab posting window either safely prepared inactive or explicitly blocked pending exact source-of-truth schedule input
-- Vault-backed AI Lab credential routing proven without exposing secrets and with zero Kabumori legacy fallback
-- publish_claims requirement for first live post clearly resolved
-- Kabumori regression tests pass
+Phase 3H PASS条件:
+- AI Lab生成本文がサーバー側検証込みで280文字以内に制御される
+- unlimited modeへ一般化可能な設計
+- fingerprint write helper/live-success semanticsが実装・テストされる
+- dry-run/failed publishではfingerprintを書かない
+- AI Lab Vault-backed dispatch routeがlegacy fallbackなしで証明される
+- posting_windowsは正本未確定なら推測せず保留
+- OAuth write scopeのexact next-stepが確定
 - AI Lab remains dry_run + publish_disabled
-- X write = 0
+- X write=0
 - write scopes still absent
-- no Kabumori/Mio/Cron regression
+- Kabumori/Mio/Cron regressionなし
 
-Phase 3G does NOT authorize the first live X post. That requires a separate explicit next task and user approval.
-## Report
-
-- task_id: x-multibrand-phase3g-ai-lab-live-readiness-20260913
-- result: 成功。cross-brand dedupeを実データ（かぶモリの実際に公開済みのレポート本文4件）に接続し、実呼び出しで動作証明した。Vault token routingもbrand_id→social_account→Vaultトークン参照(uuid)の存在確認をread-only/no-secretで証明。posting_windowsは正本未確定のためDB変更なしで必要入力を明記。publish_claimsはbrand_postに不要と判断し変更なし。実装過程で1件、実バグ（存在しないカラムを参照していた）を実呼び出しで発見・修正・再検証済み。AI Labはlive化・実X投稿を一切行っていない。
-- model_used: Claude Sonnet 5
-- source_base: feature/multibrand-foundationを`215eeff`（Phase 3F, K2レビュー中）から開始し、本タスクのコミット`8f3b789`→`341e5dc`を積み上げ。他スロットとの競合なし（Codex slot1/slot2、Claude slot1いずれも別領域）。
-- fingerprint_migration_status: `supabase/migrations/20260913120000_add_published_content_fingerprints.sql`を本番適用済み（ユーザー許可後）。適用前にexact migration SQLを検査し、対象テーブル未存在・FK型一致（`brands.id`/`social_accounts.id`ともにtext）・破壊的DDLなしをread-onlyで確認。適用は`supabase db query --linked --file`のみで実行（`db push`・migration history repair/reconcileは未使用）。適用後にread-backで以下を確認: 全7カラムが意図通りの型・NULL制約、両インデックス（`published_content_fingerprints_pkey`, `published_content_fingerprints_recent_idx`）、両FK制約とCHECK制約、RLS有効（`relrowsecurity=true`）、`anon`/`authenticated`への権限なし・`service_role`のみSELECT/INSERT。全て意図通りで異常なし。
-- real_data_dedupe_result: 実装当初は`post_execution_logs.generated_text`を参照していたが、これは存在しないカラムだったため実呼び出しで`kabumori_posts_checked: 0`となる不具合が発生。ユーザー指示によりread-only調査を実施し、`information_schema.columns`で`post_execution_logs`に`generated_text`列が存在しないこと、実際の投稿本文は投稿タイプ別の`close_report_runs`/`morning_report_runs`/`us_premarket_report_runs`（各`generated_text`/`status`/`brand_id`列を持つ）に保存されていることを確認。read-onlyで実データ件数も確認（`close_report_runs`: `status=succeeded`かつ`brand_id=kabumori`が1件、`morning_report_runs`: 同3件、`us_premarket_report_runs`: 0件）。バックフィルは不要と判断（既存の実データをread-onlyで読めば足りるため）し、`kabumori_recent_fingerprints.ts`をこの3テーブルを並行クエリ・マージする実装に修正。修正版を再デプロイ・byte-verify後、実呼び出しで`kabumori_posts_checked: 4`（read-onlyで確認した件数と一致）、`result.blocked: false`（生成テキストがかぶモリの実データと十分異なるため、意図通り）を確認。生のかぶモリ投稿本文はこの関数内でハッシュ化のためだけに使われ、response・ログのいずれにも一切出力されない（返り値・レスポンスに本文が含まれないことをテストでも実データ呼び出しでも確認）。tip/interaction/useful_tip/morning_greetingは投稿ごとの本文を保存する列がスキーマ上存在しないためこの実データ窓の対象外（将来的に必要になれば別途スキーマ検討が必要）。
-- posting_window_status: 変更なし。`posting_windows`には既にbrand_id列とbrand-aware unique index（`brand_id, post_type, slot_no`）が存在し、`plan_daily_posts()`も`is_active=false`の行は`where w.is_active`で完全に除外する設計であることをコード読解で確認済み（安全にinactive行を追加できることは技術的に確認済み）。ただしAI Labの実際の投稿時間帯・スロット数・daily_probabilityは会社員AIラボ側の正本が未確定のため、推測でのDB行追加はせず、DBは無変更のまま必要入力をremaining_issuesに明記した。
-- vault_token_routing_result: `_shared/brand/vault_token_routing.ts`（新規）で`brand_id→social_accounts→Vaultトークン参照(uuid)`の存在確認のみを行う読み取り専用モジュールを実装（`vault.readSecret`/`vault.decrypted_secrets`への経路はコード上一切なし）。`brand-post-dry-run`のレスポンスへ`vault_token_routing`として配線し、実呼び出しで確認: `brandId=ai_salaryman_lab`, `socialAccountId=ai_salaryman_lab_x`, `handle=kaishain_ai_lab`, `oauthClientRef=default`, `connectionStatus=identity_verified`, `accessTokenRefPresent=true`, `refreshTokenRefPresent=true`, `tokenSource=vault_backed_social_account`, `legacyFallbackUsed=false`。トークン値そのものは一度も読まれておらず、レスポンスにも含まれない。
-- publish_claims_readiness: `publish_claims`は`(post_type, date_jst)`のunique制約による「1日1回」TOCTOU対策で、実際のコード参照は`x-test-post/publish_claim_logic.ts`の`claimPublishSlot`/`completePublishSlot`/`failPublishSlot`のみ、呼び出し元は`morning_greeting`専用（`MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE`）であることをコード調査で確認。`brand_post`（AI Lab）はこの経路を一切呼び出さない。AI Labの初回live投稿は通常の`claim_due_post()`→`plan_daily_posts()`→`scheduled_posts`経路を想定しており、`scheduled_posts`自体に既にbrand-aware unique index（`brand_id, schedule_date, post_type, slot_no`）が存在するため、`publish_claims`の brand対応は不要と判断し、変更していない。
-- brand_isolation_result: 新規`_shared/brand/brand_isolation_test.ts`（5テスト）で以下を一括検証: `ai_salaryman_lab`はid/code_profile_key/social_accountいずれもkabumoriと異なる、Kabumoriの内部id=`kabumori`・X handle=`yume_daka`が既存の正本`x-oauth-connect/account_config.ts`と一致、Mioには`resolveOAuthStartConfig`/`resolveOAuthCallbackConfig`いずれにも設定が存在せず例外で拒否される、AI Lab側`loadBrandXTokens`はfetch呼び出し前に拒否される（legacy token読込0）、Kabumori（`oauth_client_ref=default`）のみがlegacy storeへ到達する。Mioは本フェーズで一切変更していない（read-only確認のみ、Phase 3F時点のis_active=false/publish_mode=disabledから不変）。
-- changed_files:
-  - `supabase/functions/_shared/brand/kabumori_recent_fingerprints.ts`（新規→バグ修正）
-  - `supabase/functions/_shared/brand/kabumori_recent_fingerprints_test.ts`（新規→バグ修正に伴い全面改訂）
-  - `supabase/functions/_shared/brand/vault_token_routing.ts`（新規）
-  - `supabase/functions/_shared/brand/vault_token_routing_test.ts`（新規）
-  - `supabase/functions/_shared/brand/brand_isolation_test.ts`（新規）
-  - `supabase/functions/_shared/brand/cross_brand_dedupe_probe.ts`（削除、Phase 3Fの合成probeを実データ経路へ置き換え）
-  - `supabase/functions/_shared/brand/cross_brand_dedupe_probe_test.ts`（削除）
-  - `supabase/functions/brand-post-dry-run/dry_run_handler.ts`（更新、実データdedupe+vault routing配線）
-  - `supabase/functions/brand-post-dry-run/dry_run_handler_test.ts`（更新）
-  - `supabase/functions/brand-post-dry-run/index.ts`（更新）
-- migrations/rpcs/functions changed:
-  - migration: `supabase/migrations/20260913120000_add_published_content_fingerprints.sql` — 本番適用済み
-  - Edge Function: `brand-post-dry-run` — 更新・再デプロイ済み（バグ修正のため2回デプロイ: 1回目は実データ配線版、2回目はpost_execution_logs参照バグの修正版）。他のFunctionは一切デプロイ・変更していない。
-- tests: `deno test --no-check --allow-env --allow-read --allow-net=127.0.0.1 supabase/functions`で769/769 pass（Phase 3F終了時点747 + 本フェーズ新規/更新22）。`git diff --check`で空白エラーなし。`deno check`は本フェーズ変更ファイルで新規エラーなし（`brand-post-dry-run/index.ts`のみ既知の`@supabase/functions-js/edge-runtime.d.ts`型解決問題があったが、これはPhase 3F由来の問題で既に対処済み。それ以外の`@types/node`解決エラーは既存未変更ファイルでも同一コマンドで再現する既知の環境要因で、リグレッションではない）。
-- production_changes:
-  1. `published_content_fingerprints`テーブルを新規追加（読み取り専用preflight → 適用 → read-back検証済み）
-  2. `brand-post-dry-run` Edge Functionを更新・再デプロイ（2回、うち2回目はバグ修正）
-  - 上記以外の本番変更なし（他Function、DB、OAuth、token、Cronは一切触れていない）
-- deploy_status: 成功（2回）。1回目: 実データdedupe配線+vault routing追加版をデプロイ、byte-verify完全一致確認、実呼び出しで`kabumori_posts_checked: 0`という想定外の結果を検出。2回目: 原因調査後の修正版（`341e5dc`）を再デプロイ、byte-verify完全一致確認、実呼び出しで`kabumori_posts_checked: 4`を確認し修正を実証。両回とも`brand-post-dry-run`以外のFunctionはアップロード対象に含まれていないことをデプロイログで確認済み。
-- commit_hash: `341e5dc`（`8f3b789`の後続）、feature/multibrand-foundationへpush済み
-- push: origin/feature/multibrand-foundationへpush済み（`8f3b789`, `341e5dc`）
-- remaining_issues:
-  1. AI Labのposting_windows実行時間帯・スロット数・daily_probabilityは会社員AIラボ側ちゃでの確認が必要（確認でき次第、`is_active=false`の行として安全に追加可能なことは技術検証済み）
-  2. `published_content_fingerprints`テーブルは作成済みだが、実際のlive publish完了経路からの書き込み配線（Kabumori/AI Lab双方）は別タスク（このテーブルへの書き込みが始まれば、read経路もこのテーブル優先へ切り替える設計変更が必要）
-  3. tip/interaction/useful_tip/morning_greeting投稿タイプは本文保存列が無いため、cross-brand dedupeの実データ窓の対象外のまま（close_report/morning_report/us_premarket_reportのみ対象）
-  4. Vault実tokenの生存確認（実際にリフレッシュ・使用可能かの検証）は本フェーズでは未実施（スコープ外、Section Dの指示通り）
-  5. 管理者専用dry-run入口は依然`ai_salaryman_lab`のみ許可のハードコード
-- exact steps before first AI Lab live post:
-  1. 会社員AIラボ側ちゃでの実際の投稿方針（トピック配分・文面ニュアンス）確定（Phase 3F由来、継続）
-  2. AI Labの投稿時間帯・スロット数・daily_probabilityの確定 → `posting_windows`へ`is_active=false`の行を追加 → レビュー後に`is_active=true`へ
-  3. live publish完了経路から`published_content_fingerprints`への書き込み配線（Kabumori/AI Lab両方）
-  4. Vault token loaderの実配線（`loadVaultBackedXTokens`を実際のdispatch経路へ接続）とtoken生存確認
-  5. `tweet.write`等のwrite scope追加判断（AI Lab用に必要な場合のみ、別途承認）
-  6. 管理者による最終レビューと、`publish_enabled=true`/`publish_mode=live`への段階的・手動承認ゲート付き切り替え
-- safety_checks:
-  - AI Lab: `publish_mode=live`にしていない / `publish_enabled=true`にしていない / write scope追加なし / 実X投稿・メディアアップロードなし（実呼び出しで`x_write_calls=0`を確認）
-  - Kabumori: OAuth/token/ハンドル/Cron一切変更なし、実投稿・手動テスト投稿も一切なし
-  - Mio: 一切触れていない
-  - DBマイグレーション: 適用は`published_content_fingerprints`のみ、`db push`・migration history repair/reconcileは未使用、破壊的変更なし、事前・事後のread-only検証を実施
-  - Vault: 実token値は一度も読み取っていない・表示していない（`vault_token_routing.ts`に`readSecret`呼び出し経路が存在しないことをソース検査テストで確認）
-  - cross-brand dedupe: 生のかぶモリ投稿本文はresponse/ログに一切出力されない（ハッシュ化のみに使用、テスト・実呼び出し両方で確認）
-  - 秘密情報: token/password/2FA/service role keyの値をチャット・ログ・Reportに一切記載していない
-- next_recommendation: 次の技術タスクとして、(a) live publish完了経路から`published_content_fingerprints`への書き込み配線、(b) Vault token loaderの実配線とtoken生存確認、の2つを進めるのが良い。並行して会社員AIラボ側ちゃとの投稿時間帯・トピック確定を進め、両方揃った時点で`posting_windows`の`is_active=false`行追加→レビュー→段階的live化、という順序を推奨。
+Phase 3Hは初回実X投稿を許可しない。実投稿は別タスク + ユーザーの明示承認が必要。
