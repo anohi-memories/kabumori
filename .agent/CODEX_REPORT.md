@@ -1,5 +1,113 @@
 # Codex Report
 
+- task_id: `broad-news-display-and-notification-presets-phase3-20260913`
+- result: `review_required` — Phase 3のアプリ表示・通知プリセットをローカル実装し、回帰テストまで完了。本番変更は0件
+- model_used: GPT-5.6 Sol
+- source_base: `origin/main` `2c7e3745885d659af0b67af1261587af3ed39eff`
+- implementation_branch: `codex/broad-news-presets-phase3-20260913`
+- commit_hash: `f7c17b915c551ba81b1dfc62a0731fd3eba6f008`
+- next_owner: chatgpt
+
+## App visibility
+
+- current_app_visibility: 本番RPCは、登録銘柄の既存companyニュースと、登録銘柄の業種に関連するmarket-wide critical/highを表示する。market mediumは対象外で、登録銘柄0件ならアプリ側がRPCを呼ばず空表示だった。
+- new_app_visibility: companyは既存の保有/監視紐付けを維持してmedium以上を表示。market-wideは関連業種があるmedium/high/criticalを表示し、emergencyは登録銘柄・業種一致なしでも表示。lowは収集・分類に残すが一覧には出さない。登録銘柄0件でもRPCを呼ぶ。表示用app copyはFact-passedだけを返し、emergencyは元見出しが日本語でも独立したFact check済みcopyを要求する。
+- category_labels: list/detailの両方に16カテゴリの日本語チップを追加（地政学、災害、金融政策、為替、金利、原油・エネルギー、コモディティ、海運・物流、半導体、AI・テック、米国市場、日本市場、政策・規制、企業、決算、金融システム）。
+- severity_labels: `emergency=緊急`, `critical=最重要`, `high=重要`, `medium=注目`。
+
+## Notification policy
+
+- current_notification_logic: companyはX publish後の個別producer、market criticalは既存market producerが対象判定し、dispatcher/claim RPCが配信直前に `push_enabled` / `important_news` / `market_critical_news` を再確認する。
+- proposed_or_implemented_presets:
+  - `quiet / 静かめ`: company critical以上、market emergencyのみ。
+  - `standard / 標準`: company high以上、market critical以上。
+  - `many / 多め`: company medium以上、market high以上。
+  - `all_useful / かなり多め`: company/marketともmedium以上。
+  - lowは全プリセットでPushしない。
+- legacy_settings_compatibility: 既存行はmigration時に新2列をNULLのまま残す。producer上のNULL presetは既存company相当のstandard、NULL emergencyはOFF。既存 `market_critical_news` はdispatcher互換ゲートとして維持し、保存RPCが同一トランザクションで同期する。UIは既存rowのmarket=trueをstandard、falseをquietとして表示する。既存false rowは保存するまでcompany thresholdが従来どおりstandardで、保存後に明示したquietへ移行する。新規rowだけstandard/emergency ONがdefault。
+- emergency_behavior: Fact-passed日本語copy、freshness、exact/cross-source event dedupe、push_enabled、important_news、emergency_alertsを必須化。market emergencyはtracked stock/sector一致不要で、通知行の `tracked_stock_id` もNULL。
+- category_setting_behavior: `alert_category_settings(user_id, category, enabled)` の行形式。RLSは本人のみ。設定行なし・候補カテゴリなしは有効扱い。複数カテゴリ候補は1つでもONなら対象。
+
+## Database / producer
+
+- schema_changes: `alert_settings.notification_preset` / `emergency_alerts` を既存行safeなnullable追加（新規rowのみdefault）。owner-only RLS付き `alert_category_settings`、atomic保存RPC、NULL-stock market通知のpartial unique index、更新版app-copy selector/feed RPC、service-role専用統一producer RPCを追加するmigrationを作成。
+- producer_changes: `important-news-monitor` の実runでapp copy完了後、およびpublish成功後に統一producer RPCを呼ぶ。eligibilityはSQL producerが決定し、既存notifications queueへだけenqueue。dry-runでは呼ばない。
+- dispatcher_changes: none。`send-push-notifications` と `claim_pending_push_notifications` は変更なし。
+
+## Read-only production estimate (2026-09-13 JST)
+
+- 7day_notification_volume_estimate:
+  - 母数: profiles 1、alert_settings 1、Push/important_news有効1、market_critical_news有効1、tracked user 1、Push token user 1。
+  - 現在の実ユーザー・実候補へFact-passed日本語/対象条件を当てた見込み: quiet 0、standard 1、many 3、all_useful 3。
+  - 7日窓ではcompany対象0、market対象はstandard 1 / many 3 / all_useful 3。
+  - 実送信、candidate注入、settings変更はしていない。
+- medium_feed_volume_estimate: effective severityはemergency 0、critical 1、high 7、medium 8、low 40。現行critical/high相当8件からmedium以上16件へ最大+8件の見込み。
+- emergency_false_positive_review: 7日窓のemergency候補0件。誤検出0件で誤検出クラスなし。ただし実例母数0のため自然データ監視が必要。
+
+## Tests
+
+- important-news-monitor全runtime suite: 395 passed / 0 failed。
+- dispatcher + personalized report regression: 48 passed / 0 failed。
+- app presentation/label tests: 27 passed / 0 failed。
+- 変更Expoアプリファイル限定TypeScript strict check: pass。
+- iOS Expo export: pass（1,638 modules、Hermes bundle 4.3 MB）。
+- `git diff --check`: pass。
+- `deno check supabase/functions/important-news-monitor/index.ts`: 変更外の既知エラー `supabase/functions/_shared/x_oauth2_post.ts:66`（Uint8Array/BufferSource型差）で停止。変更ファイル由来の新規エラーは検出されていない。
+- migrationはC1前の本番適用禁止を守り、PostgreSQL実行パーサでは未実行。静的契約テストとproduction schema read-only監査まで。
+
+## Production / deployment
+
+- production_changes: 0件。DB row/schema/RPC/user settings、Push、candidate、Cron、X、secretを変更していない。
+- deploy_status: 未deploy。C1承認待ち。
+- production_read_only_audit: schema/RLS/grants/RPC、migration履歴乖離、直近7日候補と現在audienceだけをread-only確認。通常の `supabase db push` / `--include-all` は未使用。
+
+## Changed files
+
+- `docs/news-coverage/REDESIGN.md`
+- `src/app/news/[id].tsx`
+- `src/app/news/index.tsx`
+- `src/components/important-news-alert-settings.tsx`
+- `src/lib/alert-settings.ts`
+- `src/lib/important-news.ts`
+- `src/lib/news-labels.ts`
+- `supabase/functions/important-news-monitor/app_copy_logic.ts`
+- `supabase/functions/important-news-monitor/app_copy_logic_test.ts`
+- `supabase/functions/important-news-monitor/index.ts`
+- `supabase/functions/important-news-monitor/market_critical_sql_static_test.ts`
+- `supabase/functions/important-news-monitor/news_coverage_logic.ts`
+- `supabase/functions/important-news-monitor/news_coverage_logic_test.ts`
+- `supabase/functions/important-news-monitor/news_coverage_wiring_test.ts`
+- `supabase/functions/important-news-monitor/notification_presets_sql_static_test.ts`
+- `supabase/migrations/20260913140000_broad_news_visibility_notification_presets.sql`
+- `tests/app/news-labels_test.ts`
+
+## Remaining issues
+
+- iOS simulator/Development Buildの実画面操作は未実施。未適用schema/RPCへ接続すると設定画面が失敗するため、C1後にexact migration適用とFunction deployを行ってから確認する。
+- 新migrationの本番SQL実行、Function deploy、自然Cronでのenqueue/Push到達は未実施。
+- 7日窓にemergency実例がなく、false-positive評価は自然候補で継続が必要。
+- repository全体のtyped Deno suiteには上記の変更外型エラーがある。runtime suiteは全通過。
+
+## Safety checks
+
+- isolated clean worktreeを使用し、元worktreeの未コミット変更へ未接触。
+- 最新 `origin/main` へrebase済み。競合なし。
+- dispatcher/claim RPC、他Edge Function、他migration、Cron、X投稿、secrets、OAuth、他post_typeは変更なし。
+- service roleはproducer RPCだけ。アプリはauthenticated/RLS経路だけを使用。
+- synthetic/manual Push 0、synthetic candidate 0、production write 0。
+
+## Push
+
+- push: completion control commitとともに `origin/main` へfast-forward同期予定。
+
+## Next recommendation
+
+`C1` でmigration SQL、legacy互換、通知量試算、app UI、producer境界をレビューする。承認後も一括db pushは使わず、exact migration適用 → 関数/ACL/RLS read-back → `important-news-monitor` のみdeploy → iOS Simulator/Development Build → 自然Cron監視の順で進める。
+
+---
+
+## Previous report — kabumori-x-oauth-recovery-20260913
+
 - task_id: kabumori-x-oauth-recovery-20260913
 - result: review_required — Kabumori本人OAuth再認証、暗号化token置換、refresh-only proof、本番read-backまで完了
 - next_owner: chatgpt

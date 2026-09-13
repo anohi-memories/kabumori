@@ -14,12 +14,12 @@
 ### Codex slot 1
 - owner: codex
 - slot: codex-1
-- status: ready
-- task_id: x-multibrand-phase3c-oauth-start-void-rpc-fix-20260912
+- status: review_required
+- task_id: broad-news-display-and-notification-presets-phase3-20260913
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: Claude slot 2から正式移管。OAuth開始POSTのvoid RPCレスポンス処理バグを最小修正する。X投稿/live化/Cron変更は禁止。
+- note: アプリmedium+表示・日本語カテゴリ/重要度・通知プリセットを実装。本番変更0件、C1レビュー待ち。
 
 ### Codex slot 2
 - owner: codex

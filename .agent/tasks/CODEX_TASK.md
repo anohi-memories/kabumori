@@ -3,8 +3,8 @@
 - task_id: broad-news-display-and-notification-presets-phase3-20260913
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol Medium
 - purpose: Phase 2で本番接続した広域ニュース収集をユーザー体験へつなげる。まずアプリのニュース表示範囲をmediumまで広げてカテゴリ/重要度を見える化し、その上でユーザーが通知量を選べるプリセット設計・実装を行う。収集ロジックとPush配信基盤の安全性は維持する。

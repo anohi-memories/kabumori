@@ -12,7 +12,7 @@
   - Claude slot1開始=`G1`、完了確認=`K1`
   - Claude slot2開始=`G2`、完了確認=`K2`
 - active_workstream:
-  - Codex slot 1: `review_required` — `kabumori-x-oauth-recovery-20260913`（本人OAuth再認証・refresh-only proof・本番read-back完了）
+  - Codex slot 1: `review_required` — `broad-news-display-and-notification-presets-phase3-20260913`（アプリmedium+表示・日本語ラベル・通知プリセットを実装、production変更0件、C1待ち）
   - Codex slot 2: `ready` — close-report TOPIX source correction production deploy verification
   - Claude slot 1: `review_required` — personalized portfolio morning/close reports Phase 1A
   - Claude slot 2: `done` — Phase 3C OAuth workstream transferred to Codex slot 1; do not modify same OAuth/Vault/x-oauth-connect area in parallel
@@ -41,7 +41,7 @@
   - OAuth経路のX post/media callは各0。publish claimsはtotal 11 / published 4のまま。9/13 failed rowは人工retryなし
   - AI Lab identity/Vault refs/dry_run/publish無効は不変。Cron/scheduler/x-test-post/Pushは変更なし
 - parallel_work:
-  - Codex H1はreview待ち。`x-oauth-connect` / Kabumori OAuth領域を別スロットで変更しない
+  - Codex H1はreview待ち。`important-news-monitor` / app news / Phase 3 preset migration領域を別スロットで変更しない
   - Claude slot2 must not touch same area until H1 completes
   - Codex slot2 may touch `x-test-post` only; if scope overlaps, stop and report conflict
   - existing uncommitted changes belong to other workstreams and must not be modified/staged/committed
