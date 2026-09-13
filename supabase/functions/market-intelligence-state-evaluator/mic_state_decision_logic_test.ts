@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  clampAiConfidence,
   computeCoverageStatus,
   computeDataConfidence,
   computeRunWindow,
@@ -10,6 +11,7 @@ import {
   evaluateMaterialChange,
   rollUpFetchStatus,
   rollUpObservationStatus,
+  shouldSkipAiForStaleness,
 } from "./mic_state_decision_logic.ts";
 import type { EventFact, MetricDomainMapRow, MetricObservationRow } from "./mic_state_types.ts";
 
@@ -251,4 +253,69 @@ test("computeDataConfidence: full + fresh + fresh is highest", () => {
 test("computeDataConfidence: stays within [0, 1]", () => {
   const value = computeDataConfidence("partial", "stale", "stale");
   assert.ok(value >= 0 && value <= 1);
+});
+
+// --- all-stale AI guard ---
+
+function noMaterialEvents(): ReturnType<typeof evaluateEventMaterialChange> {
+  return evaluateEventMaterialChange([]);
+}
+
+test("shouldSkipAiForStaleness: all metrics stale -> skip", () => {
+  const metrics = [
+    metric({ observationStatus: "stale" }),
+    metric({ metricKey: "US2Y", observationStatus: "stale" }),
+  ];
+  assert.equal(shouldSkipAiForStaleness(metrics, noMaterialEvents()), true);
+});
+
+test("shouldSkipAiForStaleness: all metrics unknown -> skip", () => {
+  const metrics = [metric({ observationStatus: "unknown" })];
+  assert.equal(shouldSkipAiForStaleness(metrics, noMaterialEvents()), true);
+});
+
+test("shouldSkipAiForStaleness: mix of stale and unknown -> still skip", () => {
+  const metrics = [
+    metric({ observationStatus: "stale" }),
+    metric({ metricKey: "US2Y", observationStatus: "unknown" }),
+  ];
+  assert.equal(shouldSkipAiForStaleness(metrics, noMaterialEvents()), true);
+});
+
+test("shouldSkipAiForStaleness: one fresh metric -> do not skip", () => {
+  const metrics = [
+    metric({ observationStatus: "fresh" }),
+    metric({ metricKey: "JGB2Y", observationStatus: "stale" }),
+  ];
+  assert.equal(shouldSkipAiForStaleness(metrics, noMaterialEvents()), false);
+});
+
+test("shouldSkipAiForStaleness: delayed_expected counts as not-stale -> do not skip", () => {
+  const metrics = [metric({ observationStatus: "delayed_expected" })];
+  assert.equal(shouldSkipAiForStaleness(metrics, noMaterialEvents()), false);
+});
+
+test("shouldSkipAiForStaleness: a material event overrides the guard even if all metrics are stale", () => {
+  const metrics = [metric({ observationStatus: "stale" })];
+  const eventDecision = evaluateEventMaterialChange([event({ importance: "high" })]);
+  assert.equal(shouldSkipAiForStaleness(metrics, eventDecision), false);
+});
+
+test("shouldSkipAiForStaleness: no registered metrics at all -> do not skip (nothing to guard)", () => {
+  assert.equal(shouldSkipAiForStaleness([], noMaterialEvents()), false);
+});
+
+// --- confidence clamp ---
+
+test("clampAiConfidence: AI confidence above data confidence is clamped down", () => {
+  assert.equal(clampAiConfidence(0.85, 0.55), 0.55);
+});
+
+test("clampAiConfidence: AI confidence at or below data confidence passes through unchanged", () => {
+  assert.equal(clampAiConfidence(0.4, 0.55), 0.4);
+  assert.equal(clampAiConfidence(0.55, 0.55), 0.55);
+});
+
+test("clampAiConfidence: zero data confidence clamps to zero regardless of AI confidence", () => {
+  assert.equal(clampAiConfidence(0.99, 0), 0);
 });

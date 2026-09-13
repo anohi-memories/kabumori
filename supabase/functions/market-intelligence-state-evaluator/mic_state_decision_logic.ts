@@ -19,6 +19,35 @@ import type {
   PriorState,
 } from "./mic_state_types.ts";
 
+// All-stale guard (Phase 1B hardening, design doc section 9 addendum):
+// a domain can be "material" purely because a metric's first-ever
+// observation arrived (see evaluateMaterialChange below) while every
+// metric in the domain is simultaneously stale/unknown -- i.e. the value
+// is only "new" in the sense that we've never captured a baseline for it,
+// not in the sense that it reflects anything close to the current market.
+// Calling AI on that data would risk a narrative that reads as a current
+// assessment when it is actually built entirely from old numbers. This
+// guard is deliberately narrow: an event-driven material change (a real
+// high/critical event just happened) always overrides it, since that is
+// never about metric staleness.
+export function shouldSkipAiForStaleness(
+  metrics: MetricObservationRow[],
+  eventDecision: MaterialChangeDecision,
+): boolean {
+  if (metrics.length === 0) return false;
+  if (eventDecision.isMaterial) return false;
+  return metrics.every((m) => m.observationStatus === "stale" || m.observationStatus === "unknown");
+}
+
+// Confidence clamp (Phase 1B hardening): the AI's self-reported confidence
+// must never be trusted above what the deterministic data quality actually
+// supports. dataConfidence already accounts for coverage/fetch/observation
+// status (mic_state_decision_logic.computeDataConfidence); this is the
+// floor-independent ceiling applied on top of the AI's own number.
+export function clampAiConfidence(aiConfidence: number, dataConfidence: number): number {
+  return Math.min(aiConfidence, dataConfidence);
+}
+
 export function computeRunWindow(domain: string, now: Date = new Date()): string {
   const bucket = now.toISOString().slice(0, 13); // "YYYY-MM-DDTHH"
   return `${domain}:${bucket}`;

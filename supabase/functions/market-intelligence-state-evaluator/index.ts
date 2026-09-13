@@ -26,6 +26,7 @@ import {
   type ObservationStatus,
 } from "./mic_state_types.ts";
 import {
+  clampAiConfidence,
   computeCoverageStatus,
   computeDataConfidence,
   detectNewObservations,
@@ -33,6 +34,7 @@ import {
   evaluateMaterialChange,
   rollUpFetchStatus,
   rollUpObservationStatus,
+  shouldSkipAiForStaleness,
 } from "./mic_state_decision_logic.ts";
 import {
   fetchDomainMetricMap,
@@ -218,6 +220,34 @@ async function evaluateDomain(
       return { domain, status: "no_change", reason: decision.metricDecision.reason };
     }
 
+    // All-stale guard (Phase 1B hardening): isMaterial can be true purely
+    // because a metric's first-ever observation arrived (see
+    // evaluateMaterialChange) while every metric in the domain is
+    // simultaneously stale/unknown -- there is no fresh signal to actually
+    // ground an AI narrative in. Skip AI here the same way a no_change
+    // pass does (status-only refresh, no narrative/baseline write), but
+    // record in decisionDetail that this was a material decision the guard
+    // suppressed, not a genuine absence of new data.
+    if (shouldSkipAiForStaleness(decision.metrics, decision.eventDecision)) {
+      await refreshStatusOnly(ctx, domain, {
+        asOf: decision.latestAsOf,
+        coverageStatus: decision.coverageStatus,
+        fetchStatus: decision.fetchStatus,
+        observationStatus: decision.observationStatus,
+        dataConfidence: decision.dataConfidence,
+      });
+      await completeStateEvaluationRun(ctx, claim.runId, {
+        status: "no_change",
+        decisionDetail: {
+          material: true,
+          ai_skipped: true,
+          skip_reason: "all_metrics_stale_or_unknown",
+          reason: decision.metricDecision.reason,
+        },
+      });
+      return { domain, status: "no_change", reason: "all_metrics_stale_or_unknown" };
+    }
+
     const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
     if (!openAiApiKey) {
       throw new Error("SECRET_MISSING:OPENAI_API_KEY");
@@ -229,6 +259,9 @@ async function evaluateDomain(
       materialMetricKeys: decision.metricDecision.materialMetricKeys,
       events: decision.recentEvents,
       priorNarrative: null as string | null,
+      dataConfidence: decision.dataConfidence,
+      coverageStatus: decision.coverageStatus,
+      fetchStatus: decision.fetchStatus,
     };
     const lunaResult = await requestStateEvaluation({ apiKey: openAiApiKey, model: STATE_EVAL_LUNA_MODEL, input: aiInput });
 
@@ -277,7 +310,9 @@ async function evaluateDomain(
         sourceMetricKeys: decision.metricDecision.materialMetricKeys,
         sourceEventIds: decision.recentEvents.map((e) => e.id),
         aiModel: finalResult.model,
-        aiConfidence: finalResult.output.confidence,
+        // Phase 1B hardening: never persist the model's raw self-reported
+        // confidence above what the deterministic data quality supports.
+        aiConfidence: clampAiConfidence(finalResult.output.confidence, decision.dataConfidence),
         aiInputTokens: finalResult.inputTokens,
         aiOutputTokens: finalResult.outputTokens,
         aiCostUsd: finalResult.costUsd,

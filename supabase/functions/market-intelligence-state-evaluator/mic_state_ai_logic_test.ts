@@ -19,6 +19,9 @@ function sampleInput(overrides: Partial<StateEvaluationInput> = {}): StateEvalua
     materialMetricKeys: ["US10Y"],
     events: [],
     priorNarrative: null,
+    dataConfidence: 1.0,
+    coverageStatus: "full",
+    fetchStatus: "fresh",
     ...overrides,
   };
 }
@@ -48,6 +51,59 @@ test("buildStateEvaluationRequestBody: strict JSON schema output, facts passed a
   const userMessage = JSON.parse(input.find((m) => m.role === "user")!.content);
   assert.equal(userMessage.domain, "rates");
   assert.deepEqual(userMessage.material_metric_keys, ["US10Y"]);
+});
+
+test("buildStateEvaluationRequestBody: domain-level data_confidence/coverage_status/fetch_status are included in the facts payload", () => {
+  const body = buildStateEvaluationRequestBody(
+    STATE_EVAL_LUNA_MODEL,
+    sampleInput({ dataConfidence: 0.55, coverageStatus: "partial", fetchStatus: "stale" }),
+  ) as Record<string, unknown>;
+  const input = body.input as Array<{ role: string; content: string }>;
+  const userMessage = JSON.parse(input.find((m) => m.role === "user")!.content);
+  assert.equal(userMessage.data_confidence, 0.55);
+  assert.equal(userMessage.coverage_status, "partial");
+  assert.equal(userMessage.fetch_status, "stale");
+});
+
+test("buildStateEvaluationRequestBody: per-metric observation_status is still included unchanged", () => {
+  const body = buildStateEvaluationRequestBody(
+    STATE_EVAL_LUNA_MODEL,
+    sampleInput({
+      metrics: [{
+        metricKey: "JGB10Y",
+        domain: "rates",
+        currentValue: 2.943,
+        previousValue: null,
+        pctChange: null,
+        absChange: null,
+        unit: "percent",
+        observedDate: "2026-08-31",
+        observedAt: null,
+        timePrecision: "date",
+        fetchedAt: "2026-09-13T04:14:22.409Z",
+        sourceKey: "mof_jgb",
+        provider: "MOF",
+        isOfficial: true,
+        expectedLagMinutes: 1440,
+        observationAgeMinutes: 18720,
+        observationStatus: "stale",
+      }],
+    }),
+  ) as Record<string, unknown>;
+  const input = body.input as Array<{ role: string; content: string }>;
+  const userMessage = JSON.parse(input.find((m) => m.role === "user")!.content);
+  assert.equal(userMessage.metrics[0].observation_status, "stale");
+  assert.equal(userMessage.metrics[0].metric_key, "JGB10Y");
+});
+
+test("buildStateEvaluationRequestBody: system prompt tells the model not to treat stale/delayed data as current", () => {
+  const body = buildStateEvaluationRequestBody(STATE_EVAL_LUNA_MODEL, sampleInput()) as Record<string, unknown>;
+  const input = body.input as Array<{ role: string; content: string }>;
+  const systemMessage = input.find((m) => m.role === "system")?.content ?? "";
+  assert.match(systemMessage, /stale/);
+  assert.match(systemMessage, /delayed_expected/);
+  assert.match(systemMessage, /data_confidence/);
+  assert.match(systemMessage, /coverage_status/);
 });
 
 test("buildStateEvaluationRequestBody: sol gets higher reasoning effort than luna", () => {
