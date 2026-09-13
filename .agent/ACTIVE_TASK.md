@@ -42,12 +42,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: in_progress
+- status: review_required
 - task_id: x-multibrand-phase3f-ai-lab-production-like-dry-run-20260913
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: Phase 3E (`60dd7e4`, K2承認済み) を土台に、会社員AIラボの共有済みブランド方針をprofile/settingsへ反映し、実OpenAI APIを使う管理者専用dry-run入口を実装する作業に着手。
+- note: AI Labプロファイルを共有済みブランド方針へ更新し、実OpenAI生成を使う管理者専用dry-run入口(`brand-post-dry-run`)を新設・デプロイ・実呼び出しで検証。Phase 3D由来のK2承認済みmigration(post_execution_logs brand_id修正)も本番適用済み。X write/legacy token読込は実測0。live化・実投稿は未実施。K2待ち。
 
 ## Control codes
 
