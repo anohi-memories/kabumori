@@ -42,12 +42,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: in_progress
+- status: review_required
 - task_id: x-multibrand-phase3d-ai-lab-dry-run-routing-safety-20260913
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: OAuth/Vault領域はCodex slot1のkabumori-x-oauth-recovery（done）で確定済み。Phase 3Dはbrand-routing/claim/publish/dedupeの安全性確認。
+- note: brand-routing安全性は既存fail-closedゲートで確認済み。post_execution_logsのbrand_id誤帰属（10 RPC）修正とcross-brand重複防止をfeature/multibrand-foundation `472cdac`へ実装、本番未適用でK2待ち。
 
 ## Control codes
 
