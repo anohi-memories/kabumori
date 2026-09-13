@@ -3,7 +3,7 @@
 - task_id: broad-news-phase4-natural-push-observation-20260913
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Opus 5
