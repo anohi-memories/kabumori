@@ -51,8 +51,8 @@ export default function ImportantNewsScreen() {
 
   const emptyMessage = error
     || (!hasTrackedStocks
-      ? '登録銘柄がありません。検索から保有または監視に追加してみましょう。'
-      : '登録銘柄に該当する重大ニュースはまだありません。');
+      ? '表示できる重要ニュースはまだありません。市場全体のニュースは「かなり多め」で表示されます。'
+      : '登録銘柄や市場全体に該当する重要ニュースはまだありません。');
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -89,6 +89,7 @@ export default function ImportantNewsScreen() {
           }
           renderItem={({ item }) => {
             const holding = item.tracking_type === 'holding';
+            const marketWide = item.tracking_type === 'market';
             const label = importanceLabel(item);
             const target = targetLabel(item);
             const view = buildNewsPresentation(item);
@@ -100,8 +101,14 @@ export default function ImportantNewsScreen() {
                 accessibilityRole="button"
                 accessibilityHint="ニュースの詳細を開きます">
                 <View style={styles.badgeRow}>
-                  <View style={[styles.typeBadge, holding ? styles.holdingBadge : styles.watchBadge]}>
-                    <Text style={[styles.typeText, holding ? styles.holdingText : styles.watchText]}>
+                  <View style={[
+                    styles.typeBadge,
+                    marketWide ? styles.marketBadge : holding ? styles.holdingBadge : styles.watchBadge,
+                  ]}>
+                    <Text style={[
+                      styles.typeText,
+                      marketWide ? styles.marketText : holding ? styles.holdingText : styles.watchText,
+                    ]}>
                       {target.badge}
                     </Text>
                   </View>
@@ -162,9 +169,11 @@ const styles = StyleSheet.create({
   typeBadge: { borderRadius: 99, paddingHorizontal: 10, paddingVertical: 5 },
   holdingBadge: { backgroundColor: '#e4f1e7' },
   watchBadge: { backgroundColor: '#fff0d7' },
+  marketBadge: { backgroundColor: '#e8eefb' },
   typeText: { fontSize: 12, fontWeight: '900' },
   holdingText: { color: '#2c6940' },
   watchText: { color: '#946222' },
+  marketText: { color: '#3b568c' },
   ticker: { color: '#4b5b51', fontWeight: '900' },
   importanceBadge: { marginLeft: 'auto', borderRadius: 99, backgroundColor: '#fde8e5', paddingHorizontal: 10, paddingVertical: 5 },
   importanceText: { color: '#a23e37', fontSize: 12, fontWeight: '900' },

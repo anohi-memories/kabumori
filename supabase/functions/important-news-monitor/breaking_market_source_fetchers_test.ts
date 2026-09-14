@@ -11,6 +11,7 @@ import {
   fetchBreakingMarketQuery,
   fetchBreakingMarketQueryWithDiagnostics,
   isFreshBreakingMarketPublishedAt,
+  maxUnwatchedMinutes,
   selectBreakingMarketQueriesForCycle,
   type BreakingMarketQuery,
 } from "./breaking_market_source_fetchers.ts";
@@ -67,7 +68,7 @@ test("trump_tariff_semiconductor query vocabulary covers Trump trade-policy pres
 // The per-topic latency and the search cost are pinned in
 // news_coverage_wiring_test.ts.
 test("the critical query is still exactly one fixed topic among the declared set", () => {
-  assert.equal(BREAKING_MARKET_QUERIES.length, 11);
+  assert.equal(BREAKING_MARKET_QUERIES.length, 12);
   assert.equal(BREAKING_MARKET_QUERIES.filter((item) => item.key === CRITICAL_BREAKING_MARKET_QUERY_KEY).length, 1);
 });
 
@@ -340,6 +341,46 @@ test("8: breaking freshness is inclusive at 3h and rejects older or too-far-futu
   assert.equal(isFreshBreakingMarketPublishedAt(
     new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString(), now,
   ), false);
+});
+
+test("the follow-up topic covers ongoing-event updates without increasing the search-call ceiling", () => {
+  const query = BREAKING_MARKET_QUERIES.find((item) => item.key === "market_event_followups");
+  assert.ok(query);
+  assert.equal(query!.followUpOnly, true);
+  assert.equal(query!.maxItemAgeMs, 6 * 60 * 60 * 1000);
+  for (const term of ["Saudi Arabia", "Aramco", "East-West", "pipeline repair", "restoration", "supply volume", "shipping route"]) {
+    assert.ok(query!.searchQuery.toLowerCase().includes(term.toLowerCase()), `missing follow-up coverage: ${term}`);
+  }
+  for (const term of ["pipeline repair", "restoration timeline", "supply volume", "shipping route", "resumption", "sanctions", "policy change", "financial system outage"]) {
+    assert.ok(query!.searchQuery.includes(term), `missing follow-up coverage: ${term}`);
+  }
+  assert.equal(MAX_BREAKING_MARKET_SEARCHES_PER_FETCH, 4);
+  assert.equal(selectBreakingMarketQueriesForCycle(BREAKING_MARKET_QUERIES, now).length, 4);
+  assert.equal(maxUnwatchedMinutes(BREAKING_MARKET_QUERIES), 180);
+});
+
+test("follow-up freshness accepts a recent update through 6h and rejects stale updates; other topics stay at 3h", () => {
+  const query = BREAKING_MARKET_QUERIES.find((item) => item.key === "market_event_followups")!;
+  const url = "https://www.reuters.com/world/middle-east/saudi-pipeline-repair-update/";
+  const visited = new Set([url]);
+  const make = (publishedAt: string, eventAt = publishedAt) => collectBreakingMarketCandidates(query, [{
+    title: "Saudi oil pipeline repair timeline extended",
+    summary: "A new restoration estimate was issued for the ongoing outage.",
+    source_url: url,
+    published_at: publishedAt,
+    event_at: eventAt,
+    category: "oil_supply_disruption",
+  }], visited, now);
+  assert.equal(make(new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString()).length, 1);
+  assert.equal(make(new Date(now.getTime() - 6 * 60 * 60 * 1000 - 1).toISOString()).length, 0);
+  assert.equal(make(now.toISOString(), "").length, 0, "follow-up update timestamp is required");
+
+  const ordinary = BREAKING_MARKET_QUERIES.find((item) => item.key === "war_geopolitics_taiwan")!;
+  const ordinaryCandidate = [{
+    title: "New conflict update", summary: "Confirmed update.", source_url: url,
+    published_at: new Date(now.getTime() - 3 * 60 * 60 * 1000 - 1).toISOString(), category: "war_ceasefire",
+  }];
+  assert.equal(collectBreakingMarketCandidates(ordinary, ordinaryCandidate, visited, now).length, 0);
 });
 
 test("9: the same event across two searches shares dedupe-relevant fields (title/url) for downstream dedupe", async () => {

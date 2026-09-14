@@ -474,7 +474,8 @@ export function notificationEligibility(
     if (!settings.emergencyAlerts) return { send: false, reason: "EMERGENCY_DISABLED" };
     return { send: true, reason: "SEND" };
   }
-  if (candidate.scope === "market" && !candidate.trackedMatch && !candidate.bypassesSectorMatch) {
+  if (candidate.scope === "market" && !candidate.trackedMatch && !candidate.bypassesSectorMatch &&
+    settings.preset !== "all_useful") {
     return { send: false, reason: "NO_TRACKED_MATCH" };
   }
   if (candidate.scope === "company" && !candidate.trackedMatch) {

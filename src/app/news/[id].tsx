@@ -55,13 +55,20 @@ export default function ImportantNewsDetailScreen() {
   const label = importanceLabel(item);
   const target = targetLabel(item);
   const holding = item.tracking_type === 'holding';
+  const marketWide = item.tracking_type === 'market';
   const categories = categoryLabels(item.coverage_categories);
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
       <View style={styles.badgeRow}>
-        <View style={[styles.typeBadge, holding ? styles.holdingBadge : styles.watchBadge]}>
-          <Text style={[styles.typeText, holding ? styles.holdingText : styles.watchText]}>{target.badge}</Text>
+        <View style={[
+          styles.typeBadge,
+          marketWide ? styles.marketBadge : holding ? styles.holdingBadge : styles.watchBadge,
+        ]}>
+          <Text style={[
+            styles.typeText,
+            marketWide ? styles.marketText : holding ? styles.holdingText : styles.watchText,
+          ]}>{target.badge}</Text>
         </View>
         <Text style={styles.target}>{target.detail}</Text>
         <View style={[styles.importanceBadge, label.subtle && styles.subtleBadge]}>
@@ -154,9 +161,11 @@ const styles = StyleSheet.create({
   typeBadge: { borderRadius: 99, paddingHorizontal: 10, paddingVertical: 5 },
   holdingBadge: { backgroundColor: '#e4f1e7' },
   watchBadge: { backgroundColor: '#fff0d7' },
+  marketBadge: { backgroundColor: '#e8eefb' },
   typeText: { fontSize: 12, fontWeight: '900' },
   holdingText: { color: '#2c6940' },
   watchText: { color: '#946222' },
+  marketText: { color: '#3b568c' },
   target: { color: '#4b5b51', fontWeight: '900' },
   importanceBadge: { marginLeft: 'auto', borderRadius: 99, backgroundColor: '#fde8e5', paddingHorizontal: 10, paddingVertical: 5 },
   importanceText: { color: '#a23e37', fontSize: 12, fontWeight: '900' },

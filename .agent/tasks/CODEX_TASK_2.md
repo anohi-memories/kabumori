@@ -3,8 +3,8 @@
 - task_id: broad-news-phase5-coverage-expansion-and-all-useful-scope-20260914
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: Phase 4自然観測で判明した「収集段階の取りこぼし」と「all_usefulでも市場ニュースに登録業種一致が必要で通知・アプリ表示・日本語化が狭い」問題を、安全に改善する。collection / app visibility / push policy の分離原則を維持しつつ、広く集め、ユーザーが選んだ通知量に応じて市場全体ニュースを正しく届ける。

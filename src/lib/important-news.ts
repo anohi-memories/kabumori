@@ -2,10 +2,10 @@ import { supabase } from '@/lib/supabase';
 
 export type ImportantStockNews = {
   news_id: string;
-  // null for market-wide news, which is shown through a matching sector instead of a ticker.
+  // null for market-wide news; tracking_type distinguishes matched and all_useful-wide rows.
   ticker_code: string | null;
   company_name: string;
-  tracking_type: 'holding' | 'watch';
+  tracking_type: 'holding' | 'watch' | 'market';
   title: string;
   summary: string | null;
   // X-oriented tier. Items shown for app relevance only (severity 'medium') can be 'no_post'.

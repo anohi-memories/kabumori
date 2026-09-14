@@ -27,6 +27,10 @@ export type BreakingMarketQuery = {
   defaultCategory: ImportantNewsCategory;
   defaultTopicKey: string;
   requireEventTimestamp?: boolean;
+  /** Per-topic article/event freshness. The default remains the strict three-hour breaking-news window. */
+  maxItemAgeMs?: number;
+  /** This query must return a newly reported update to an ongoing event, not an old recap. */
+  followUpOnly?: boolean;
   /**
    * "fixed" topics run in every cycle; "rotating" topics share the remaining
    * slot. Phase 2 promotes the two topics whose events are only useful within
@@ -137,11 +141,20 @@ export const BREAKING_MARKET_QUERIES: BreakingMarketQuery[] = [
     defaultCategory: "other_market_moving",
     defaultTopicKey: "breaking:japan_session",
   },
+  {
+    key: "market_event_followups",
+    searchQuery:
+      "new follow-up update published today ongoing market-moving event Saudi Arabia Aramco East-West oil pipeline repair restoration timeline 5-6 weeks outage duration supply volume shipping route vessel transit resumption sanctions policy change damage update financial system outage",
+    defaultCategory: "other_market_moving",
+    defaultTopicKey: "breaking:event_followup",
+    maxItemAgeMs: 6 * 60 * 60 * 1000,
+    followUpOnly: true,
+  },
 ];
 
-// Phase 2: 2 -> 4 per cycle. Three fixed topics (critical market events, Japan
-// security, disaster) plus one rotating slot, so the cost is 12 searches/hour
-// instead of 6 and no rotating topic waits longer than 160 minutes.
+// Three fixed topics plus one rotating slot. Phase 5 adds one follow-up topic
+// without increasing the per-cycle/per-hour search ceiling; the larger rotating
+// set changes the worst-case revisit interval from 160 to 180 minutes.
 export const MAX_BREAKING_MARKET_SEARCHES_PER_FETCH = 4;
 export const BREAKING_MARKET_ROTATION_INTERVAL_MS = 20 * 60 * 1000;
 
@@ -216,11 +229,15 @@ export function maxUnwatchedMinutes(
   return Math.ceil(rotating / rotatingSlots) * (BREAKING_MARKET_ROTATION_INTERVAL_MS / 60_000);
 }
 
-export function isFreshBreakingMarketPublishedAt(publishedAtIso: string, now: Date): boolean {
+export function isFreshBreakingMarketPublishedAt(
+  publishedAtIso: string,
+  now: Date,
+  maxAgeMs: number = MAX_BREAKING_MARKET_ITEM_AGE_MS,
+): boolean {
   const parsed = Date.parse(publishedAtIso);
   if (!Number.isFinite(parsed)) return false;
   const delta = now.getTime() - parsed;
-  return delta <= MAX_BREAKING_MARKET_ITEM_AGE_MS && delta >= -MAX_BREAKING_MARKET_FUTURE_SKEW_MS;
+  return delta <= maxAgeMs && delta >= -MAX_BREAKING_MARKET_FUTURE_SKEW_MS;
 }
 
 function isAllowedBreakingMarketUrl(value: string): boolean {
@@ -460,12 +477,13 @@ export function collectBreakingMarketCandidatesWithDiagnostics(
     if (!canonical || !actualCanonical.has(canonical)) { reject("source_not_visited"); continue; }
     if (!Number.isFinite(Date.parse(item.published_at))) { reject("invalid_published_at"); continue; }
     const publishedAt = new Date(item.published_at).toISOString();
-    if (!isFreshBreakingMarketPublishedAt(publishedAt, now)) { reject("stale_published_at"); continue; }
+    const maxItemAgeMs = query.maxItemAgeMs ?? MAX_BREAKING_MARKET_ITEM_AGE_MS;
+    if (!isFreshBreakingMarketPublishedAt(publishedAt, now, maxItemAgeMs)) { reject("stale_published_at"); continue; }
     const rawEventAt = item.event_at?.trim() || null;
-    if (query.requireEventTimestamp && !rawEventAt) { reject("missing_event_at"); continue; }
+    if ((query.requireEventTimestamp || query.followUpOnly) && !rawEventAt) { reject("missing_event_at"); continue; }
     if (rawEventAt && !hasExactTimestamp(rawEventAt)) { reject("invalid_event_at"); continue; }
     const eventAt = rawEventAt ? new Date(rawEventAt).toISOString() : null;
-    if (eventAt && !isFreshBreakingMarketPublishedAt(eventAt, now)) { reject("stale_event_at"); continue; }
+    if (eventAt && !isFreshBreakingMarketPublishedAt(eventAt, now, maxItemAgeMs)) { reject("stale_event_at"); continue; }
     const category = isImportantNewsCategory(item.category) ? item.category : query.defaultCategory;
     results.push({
       sourceType: "breaking_market",
@@ -534,10 +552,14 @@ export async function fetchBreakingMarketQueryWithDiagnostics(
       include: ["web_search_call.action.sources"],
       instructions: [
         "あなたは市場に影響しうる速報ニュース収集の担当です。1回だけ検索し、投稿文ではなく候補JSONを返します。推測や捏造は禁止です。",
-        "許可ドメインの検索結果で実際に確認できた、直近3時間以内に発生・発表され、記事も直近3時間以内に公開された材料だけを候補にします。該当がなければcandidatesは空配列にします。",
+        query.followUpOnly
+          ? "許可ドメインで実際に確認できた、直近6時間以内に新たに公表された『進行中事象の具体的な続報』だけを候補にします。復旧見通し、停止期間、供給量、航行再開、被害更新、追加制裁、政策変更など新しい情報が必要です。元の事象が古くても、今回の更新自体が直近6時間以内なら対象です。過去記事の再掲、初報、分析、単なる現状まとめは除外します。記事は6時間以内に公開されている必要があります。該当がなければcandidatesは空配列にします。"
+          : "許可ドメインの検索結果で実際に確認できた、直近3時間以内に発生・発表され、記事も直近3時間以内に公開された材料だけを候補にします。該当がなければcandidatesは空配列にします。",
         "candidatesは最大3件。各候補にはtitle、summary（1-2文の事実要約）、source_url（実際に開いた許可ドメインのURL）、published_at（記事公開日時、時刻付きISO 8601）、event_at（実際の発生・公表日時、確認できない場合null）、categoryを含めます。",
         query.requireEventTimestamp
           ? "この検索枠ではevent_atをsource_urlで時刻まで確認できる候補だけを返します。event_at不明、日付だけ、過去イベントの後追い記事は候補にしません。"
+          : query.followUpOnly
+          ? "event_atは報告対象となる今回の続報・復旧見通し等が公表された具体的時刻（元の危機発生日ではない）を確認して必ず時刻付きISO 8601で返します。今回の更新時刻を確認できない候補は除外します。記事公開時刻も必須です。"
           : "event_atが確認できる場合は必ず時刻付きISO 8601で返します。過去イベントの後追い記事を新しい速報として返しません。",
         "categoryは次のいずれかから最も近いものを選びます: " + IMPORTANT_NEWS_CATEGORIES.join(", "),
         "未確定・予定・観測記事・分析記事ではなく、既に発生・発表が確認された事実だけを対象にします。日本株や世界市場への影響が具体的に見込まれない軽微な話題は候補にしません。",

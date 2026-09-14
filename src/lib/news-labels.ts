@@ -1,6 +1,6 @@
 import type { ImportantStockNews } from '@/lib/important-news';
 
-export const trackingLabels = { holding: '保有', watch: '監視' } as const;
+export const trackingLabels = { holding: '保有', watch: '監視', market: '市場' } as const;
 
 export const coverageCategoryLabels: Record<string, string> = {
   geopolitics: '地政学',
@@ -37,7 +37,7 @@ export function importanceLabel(
   return { text: '注目', subtle: true };
 }
 
-/** Badge text and the line next to it: 市場 + 関連業種, or 保有/監視 + ticker. */
+/** Badge text and detail: market scope/sectors or a tracked holding/watch ticker. */
 export function targetLabel(
   item: Pick<ImportantStockNews, 'matched_sector' | 'matched_sectors' | 'tracking_type' | 'ticker_code'>,
 ): { badge: string; detail: string } {

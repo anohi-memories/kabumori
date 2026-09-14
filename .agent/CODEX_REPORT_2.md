@@ -625,3 +625,84 @@ Then apply the exact migration file via `podman exec -i <container> psql -X -v O
 - Temporary worktree config, CLI-local metadata, and the separate source-readback directory were removed from the disposable environment; none are included in the metadata commit.
 - changed/pushed control files for this follow-up: `.agent/tasks/CODEX_TASK_2.md`, `.agent/CODEX_REPORT_2.md` only.
 - next_recommendation: C2 review the generated migration-history version mismatch and await natural queue activity before considering completion of production observation. Current status: `review_required`; `next_owner: chatgpt`.
+
+## H2 — broad-news-phase5-coverage-expansion-and-all-useful-scope-20260914
+
+- task_id: `broad-news-phase5-coverage-expansion-and-all-useful-scope-20260914`
+- result: Phase 5 code, review-only migration candidate, tests, and read-only production estimates prepared; **C2 review required**. Production migration/deploy remain prohibited and were not performed.
+- status: `review_required`
+- next_owner: `chatgpt`
+- source_base: `origin/main` was fresh-checked at `83b2f89bf24c45e6c18fb17286142ce3ec7c0c4a`; this clean isolated worktree was based on that commit. Formal checkout and its pre-existing changes were not accessed.
+- model_used: Codex; exact model identifier was not available in the task metadata.
+
+### Current collection bottleneck
+
+- Phase 4 observed a Saudi Aramco East-West oil pipeline restoration-duration follow-up was not surfaced by web search (`rawCandidateCount=0` for the relevant oil/energy topic), rather than being rejected by downstream quality gates.
+- Current collection still uses allowlisted/visited-source validation and a bounded four searches per 20-minute fetch. The gap was follow-up query coverage and a short 3-hour freshness window, not a missing downstream company identity.
+
+### Collection changes
+
+- Added a rotating `market_event_followups` search query covering Saudi/Aramco pipeline repair and restoration timelines, outage duration, supply volumes, shipping resumption, sanctions/policy changes, damage updates, and financial-system outages.
+- Follow-up results must carry a concrete `event_at` update timestamp and be within 6 hours; normal queries retain their 3-hour window. The prompt distinguishes a new update timestamp from the original incident and rejects old recaps/analysis.
+- No source domains were added or allowlist rules loosened. Existing URL validation, actually-visited-source requirement, HTTPS check, and source policy remain.
+- Search budget before/after: maximum 4 per fetch × 3 fetches/hour = **12/hour, 288/day**, unchanged. The new rotating set lengthens the worst-case revisit interval for one rotating query from about 160 to 180 minutes; it does not increase per-hour call volume.
+- Follow-up topic behavior: one rotating query slot per fetch; no extra Cron, fetch, or parallel search was added.
+- Zero-result diagnostics: added bounded per-run provider/query result and rejection counts, distinguishing successful zero results from provider errors. Diagnostics are best-effort persisted into the existing run record before candidate processing and returned in the response. Consecutive zero counts can be derived from run rows; no cumulative streak column/table was added.
+
+### all_useful, app, and producer changes
+
+- Current all_useful behavior: non-emergency market-wide items generally required a registered-sector match; emergency continued through its separate existing policy.
+- New all_useful behavior: market-wide **medium/high/critical** items no longer require registered ticker/sector matching. Low remains ineligible. Category-off, push opt-outs, Fact/Japanese-copy, freshness, same-event, and duplicate gates remain required. Emergency keeps its prior dedicated path. Other presets and company/holding/watch matching are not broadened.
+- App visibility: all_useful users can see unmatched market-wide medium+ items; low remains hidden. Existing severity/category labels, detail route, and Fact-passed Japanese display gates are retained. Market-only records are labelled `market` / 「市場全体」 and render when the user has no tracked stocks.
+- App copy: eligible English market-wide medium+ records can enter Japanese app-copy generation without sector matching; only the existing Fact-passed Japanese copy is displayable. The copy target RPC remains service-role-only.
+- Producer changes: review-only wrapper candidate for `enqueue_important_news_notifications()` retains the prior producer and adds all_useful unmatched market medium/high/critical candidates subject to settings/category/push opt-in, Fact/Japanese text, freshness, event and row dedupe. No dispatcher change; `send-push-notifications` source and claim RPC are untouched.
+
+### Schema / migration candidate
+
+- Added `supabase/migrations/20260917120000_broad_news_phase5_all_useful_scope_and_run_diagnostics.sql` as a review candidate only. It adds `important_news_monitor_runs.diagnostics jsonb` and replacement/wrapper RPC definitions for app-copy targeting, the authenticated user's app feed, and enqueue eligibility while retaining base behavior/permissions and safety gates.
+- The migration was not applied. Local rollback-contained PostgreSQL proof could not run: no local server was listening at `127.0.0.1:54322`; `supabase db lint --local --schema public` failed to connect. An initial local Supabase/container metadata check was blocked by a sandbox permission error writing the user's Podman config. These failures were not worked around against production. Static migration checks passed, but SQL execution/rollback behavior remains **unverified** and must be reviewed/proved in an isolated disposable PostgreSQL environment before any C2 production decision.
+- No production migration, RPC/schema change, migration-history repair, `supabase db push`, Edge Function deploy, Cron/settings change, synthetic candidate, manual Push, or X/OpenAI API invocation occurred.
+
+### Read-only production estimates (last 7 days)
+
+- Candidate rows observed: **592** total — TDnet **519** (87.7%), `market_macro` **59** (10.0%), `breaking_market` **14** (2.4%). These are source/class counts, not unique event counts.
+- One active all_useful user was observed with 20 active tracked stocks and all 16 categories enabled; this is a snapshot, not a population-wide forecast.
+- Under the old all_useful market rule, the read-only eligibility query found **1 critical + 1 high** candidate. Under the new unmatched-market medium+ rule it found **1 critical + 6 high**: **+5 high** over seven days (about **0.71 additional candidate/day**), with no incremental critical or medium item in that stricter push-eligibility estimate. No notification was enqueued or sent by the estimate.
+- App-feed raw-row upper bound for unmatched market medium+ was **12 rows** in seven days (critical 1, high 6, medium 5); this is not a guaranteed distinct-event/user-visible count because it is before event-level presentation dedupe. Existing notification rows in the queried seven-day window: **0**.
+- Collection increment cannot be measured from the historical week because the follow-up query was not in effect; no numeric candidate uplift is claimed. Expected search-call increment is **0/day**; stale recap risk is bounded by required update timestamp plus 6-hour freshness, with normal duplicate/same-event gates unchanged.
+
+### Changed files
+
+- `src/app/news/[id].tsx`
+- `src/app/news/index.tsx`
+- `src/lib/important-news.ts`
+- `src/lib/news-labels.ts`
+- `supabase/functions/important-news-monitor/breaking_market_source_fetchers.ts`
+- `supabase/functions/important-news-monitor/breaking_market_source_fetchers_test.ts`
+- `supabase/functions/important-news-monitor/index.ts`
+- `supabase/functions/important-news-monitor/news_coverage_logic.ts`
+- `supabase/functions/important-news-monitor/news_coverage_logic_test.ts`
+- `supabase/functions/important-news-monitor/news_coverage_wiring_test.ts`
+- `supabase/functions/important-news-monitor/news_collection_diagnostics.ts`
+- `supabase/functions/important-news-monitor/news_collection_diagnostics_test.ts`
+- `supabase/functions/important-news-monitor/phase5_migration_static_test.ts`
+- `supabase/migrations/20260917120000_broad_news_phase5_all_useful_scope_and_run_diagnostics.sql`
+- `tests/app/news-labels_test.ts`
+- `.agent/tasks/CODEX_TASK_2.md`
+- `.agent/CODEX_REPORT_2.md`
+
+### Verification
+
+- `deno test --no-check --allow-read supabase/functions/important-news-monitor/*test.ts`: **402 passed / 0 failed**.
+- `deno test --no-check --allow-read supabase/functions/send-push-notifications/*test.ts supabase/functions/personalized-reports/*test.ts tests/app/*test.ts`: **76 passed / 0 failed**.
+- Migration static test: **3 passed / 0 failed** (also included in the 402-test monitor suite).
+- `deno check` for changed pure modules (`breaking_market_source_fetchers.ts`, `news_coverage_logic.ts`, `news_collection_diagnostics.ts`): **PASS**.
+- `git diff --check`: **PASS**.
+- App TypeScript/npm lint/build were not run: this clean worktree has no `node_modules`, and no dependency installation was permitted or performed.
+
+### Safety / disposition
+
+- Production DB/RPC/migration: **0**; Edge deploy: **0**; Cron/settings: **0**; manual candidate/Push: **0**; OpenAI/X API: **0**; X posts: **0**.
+- Formal checkout, other H1/Claude workstreams, `apps/admin/**`, and `HANDOFF.md`: untouched.
+- remaining_issues: isolated PostgreSQL migration execution/rollback proof is outstanding; app package-level type/build checks are outstanding because dependencies are absent. Historical collection uplift cannot be quantified before natural observation.
+- next_recommendation: C2 review the migration SQL and require disposable-database apply/rollback proof before considering production migration/deploy. Keep status `review_required`, next_owner `chatgpt`.

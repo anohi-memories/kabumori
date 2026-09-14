@@ -50,6 +50,7 @@ import {
   selectBreakingMarketQueriesForCycle,
   type BreakingMarketQueryDiagnostics,
 } from "./breaking_market_source_fetchers.ts";
+import { buildCollectionRunDiagnostics } from "./news_collection_diagnostics.ts";
 import {
   judgeCandidateWithEscalation,
   requestImportantNewsJudgement,
@@ -2008,6 +2009,22 @@ Deno.serve(async (req) => {
       }
     }
 
+    const collectionDiagnostics = buildCollectionRunDiagnostics({
+      marketMacroProviders: marketMacroProviderDiagnostics,
+      breakingMarketQueries: breakingMarketDiagnostics,
+    });
+    if (body.fetchSources === true) {
+      // Store query/source zero counts before the remaining candidate processing. Diagnostics are
+      // best-effort so an optional observability write never blocks the collection pipeline.
+      try {
+        await updateRun(supabaseUrl, serviceRoleKey, runId, { diagnostics: collectionDiagnostics });
+      } catch {
+        console.error("Important news collection diagnostics persistence failed", {
+          code: "NEWS_MONITOR_DIAGNOSTICS_WRITE_FAILED",
+        });
+      }
+    }
+
     const allCandidates: unknown[] = [...suppliedCandidates, ...acquiredCandidates];
     const candidateBatch = planImportantNewsCandidateBatch(allCandidates, MAX_CANDIDATES_PER_REQUEST);
     let duplicateCount = 0;
@@ -2128,6 +2145,7 @@ Deno.serve(async (req) => {
         newCandidateCount: breakingMarketNewCandidateCount,
         results: breakingMarketResults,
       },
+      collectionDiagnostics,
       staleRunsReconciled: runStart.reconciliation.reconciledCount,
       staleRunReconciliationError: runStart.reconciliation.error,
       sourceErrors, autoPublish: false, results,

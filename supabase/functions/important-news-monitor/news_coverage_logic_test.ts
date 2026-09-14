@@ -269,6 +269,29 @@ test("hard blocks win over any preset", () => {
     "NO_TRACKED_MATCH");
 });
 
+test("all_useful widens only market medium+ sector matching; other presets and company matching stay unchanged", () => {
+  for (const severity of ["medium", "high", "critical"] as const) {
+    assert.equal(notificationEligibility(
+      candidate({ scope: "market", severity, trackedMatch: false }),
+      settings({ preset: "all_useful" }),
+    ).send, true, `all_useful ${severity}`);
+  }
+  assert.equal(notificationEligibility(
+    candidate({ scope: "market", severity: "low", trackedMatch: false }),
+    settings({ preset: "all_useful" }),
+  ).reason, "BELOW_PRESET_THRESHOLD");
+  for (const preset of ["quiet", "standard", "many"] as const) {
+    assert.equal(notificationEligibility(
+      candidate({ scope: "market", severity: "critical", trackedMatch: false }),
+      settings({ preset }),
+    ).reason, "NO_TRACKED_MATCH", `${preset} must keep the sector gate`);
+  }
+  assert.equal(notificationEligibility(
+    candidate({ scope: "company", severity: "critical", trackedMatch: false }),
+    settings({ preset: "all_useful" }),
+  ).reason, "NO_TRACKED_MATCH");
+});
+
 test("a muted category blocks the push only when every category is muted", () => {
   const shipping = candidate({ categories: ["geopolitics", "shipping_logistics"] });
   assert.equal(notificationEligibility(shipping, settings({ mutedCategories: ["geopolitics"] })).send, true);

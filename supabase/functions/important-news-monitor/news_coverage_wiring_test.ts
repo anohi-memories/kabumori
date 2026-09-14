@@ -56,8 +56,8 @@ test("the search budget grows to 4 per cycle, with 3 fixed topics and a stated w
   assert.equal(MAX_BREAKING_MARKET_SEARCHES_PER_FETCH, 4);
   const fixed = BREAKING_MARKET_QUERIES.filter(isFixedBreakingMarketQuery).map((query) => query.key);
   assert.deepEqual(fixed, ["critical_market_events", "japan_security_emergency", "disaster_infrastructure"]);
-  // 8 rotating topics over 1 rotating slot every 20 minutes.
-  assert.equal(maxUnwatchedMinutes(), 160);
+  // 9 rotating topics over 1 rotating slot every 20 minutes.
+  assert.equal(maxUnwatchedMinutes(), 180);
   const selected = selectBreakingMarketQueriesForCycle(BREAKING_MARKET_QUERIES, NOW);
   assert.equal(selected.length, 4);
   assert.deepEqual(selected.slice(0, 3).map((query) => query.key), fixed);

@@ -23,3 +23,12 @@ test("market emergency has a market label without a tracked sector", () => {
     ticker_code: null,
   }), { badge: "市場", detail: "市場全体" });
 });
+
+test("all-useful unmatched market news is labelled as market-wide", () => {
+  assert.deepEqual(targetLabel({
+    matched_sector: null,
+    matched_sectors: null,
+    tracking_type: "market",
+    ticker_code: null,
+  }), { badge: "市場", detail: "市場全体" });
+});
