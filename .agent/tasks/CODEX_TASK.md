@@ -1,60 +1,50 @@
 # Codex Task
 
-- task_id: x-multibrand-phase3i-ai-lab-production-prelive-rollout-20260914
+- task_id: x-multibrand-phase3i-runtime-reconciliation-20260914
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Sol High
-- purpose: Phase 3H C1 PASS済み実装を、本番pre-live状態へ安全に反映する。AI Labの実X投稿・live化・write scope追加はまだ行わない。
+- purpose: 本番x-test-post v107の現行runtimeを保持したまま、Phase 3HのAI Lab変更だけを安全に取り込み、新しいレビュー可能commitを作る。今回は本番deployしない。
 
-## Reconciled C1 state
+## Confirmed state
 
-ChatGPT C1 review is **PASS** for Phase 3H implementation at commit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a`.
+Phase 3H C1: PASS.
 
-Confirmed in C1:
-- AI Lab finite 280 Unicode-codepoint policy and explicit future unlimited mode
-- independent final dispatch length guard
-- cross-brand dedupe before dispatch
-- fixed AI Lab Vault-backed route for `ai_salaryman_lab_x` / `kaishain_ai_lab`
-- zero fallback to Kabumori legacy token storage
-- refresh disabled on the AI Lab dispatch path
-- fingerprint completion only after confirmed X success
-- duplicate-resend protection when completion result is uncertain
-- both new RPC designs use fixed-account / service-role-only safety boundaries
-- implementation branch is visible on GitHub and points to reviewed commit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a`
+Phase 3I DB rollout:
+- `20260913123509_ai_lab_prelive_safeguards.sql` は本番適用済み
+- `20260913151428_read_ai_lab_x_vault_token.sql` は本番適用済み
+- Supabase migration history recorded versions:
+  - `20260913230852` / `ai_lab_prelive_safeguards`
+  - `20260913231013` / `read_ai_lab_x_vault_token`
+- RPC / ACL / SECURITY DEFINER / empty search_path / unique index read-back: PASS
+- migration history repair/reconcileは行っていない
 
-Current production AI Lab remains:
+Current production Function:
+- `x-test-post` v107
+- `verify_jwt=false`
+- Phase 3H source commit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a` はまだdeployしていない
+- deploy前比較で、現行v107と`406b53c`の間にPhase 3H変更外の既存runtime差分が見つかった
+- 特に `close_report_data_logic.ts`, `close_report_logic.ts`, `fixed_hashtags_logic.ts` はPhase 3Hで変更していないため、`406b53c`をそのままdeployすると既存処理を巻き戻す可能性がある
+
+AI Lab production remains:
 - `publish_mode=dry_run`
 - `publish_enabled=false`
 - OAuth scopes read-only: `tweet.read users.read offline.access`
-- no AI Lab posting_window
-- no real AI Lab X post
-- `x-test-post` currently v107 before this task
+- no posting_window
+- X/media writes 0
 
-## Direct production authorization — 2026-09-14
+## Decision
 
-The user said to proceed, and ChatGPT is explicitly authorizing the following exact production pre-live actions for private project `anohi-memories/kabumori`:
+**Do not deploy commit `406b53c` as-is.**
 
-1. After a fresh read-only production preflight confirms compatibility, apply **only** these two reviewed Phase 3H migrations from commit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a`:
-   - `supabase/migrations/20260913123509_ai_lab_prelive_safeguards.sql`
-   - `supabase/migrations/20260913151428_read_ai_lab_x_vault_token.sql`
-2. Immediately read back and verify the resulting RPCs/index/ACL/security properties.
-3. Only if both migration read-backs pass, deploy **only** `x-test-post` from the exact reviewed commit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a`.
-4. Preserve the current production auth mode (`verify_jwt=false` if still current) and byte-verify deployed runtime source against the reviewed commit.
-5. Perform only non-posting/read-only/dry-run verification that cannot send an X post or media upload.
+The safe path is to reconcile Phase 3H changes onto the current production v107 runtime/source, preserve all unrelated current runtime behavior, create a new reviewable commit, and stop for C1 review before any Function deploy.
 
-This is a direct authorization for the above production DB migration application and `x-test-post` deployment only. It is **not** authorization for live publishing, OAuth write scopes, posting windows, Cron changes, or any real/test X post.
+This task does NOT authorize replacing the current v107 versions of unrelated runtime files with the older `406b53c` versions.
 
-## Phase 3I rollout checkpoint — 2026-09-14
-
-- Both exact migrations were applied and their RPC/index/security read-backs passed. Supabase recorded versions `20260913230852` (`ai_lab_prelive_safeguards`) and `20260913231013` (`read_ai_lab_x_vault_token`).
-- Before deploying, a read-only comparison found production `x-test-post` v107 differs from the exact reviewed commit in four existing runtime files; three (`close_report_data_logic.ts`, `close_report_logic.ts`, `fixed_hashtags_logic.ts`) are not changed by Phase 3H. The reviewed commit also adds 13 brand helper modules absent from the current deployment. Deploying the exact commit would replace the current versions of those existing files, potentially regressing other post types in the shared Function.
-- Therefore no Function was deployed. Production remains `x-test-post` v107 / `verify_jwt=false`; no X or media call occurred. The two additive migrations remain applied.
-- Keep this task `review_required`. Do not deploy until the user either approves a newly reviewed source that includes the current runtime changes, or explicitly confirms that replacing those exact live files with commit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a` is intended.
-
-## Start / parallel safety
+## Start / safety
 
 Before work:
 - read `.agent/ORCHESTRATION.md`
@@ -62,192 +52,149 @@ Before work:
 - read this TASK and `.agent/CODEX_REPORT.md`
 - fresh-check `origin/main`
 - fresh-check `origin/codex/ai-lab-prelive-safeguards-20260913`
-- inspect other active slots for overlap
+- inspect other active slots for overlap with `x-test-post`
 - use isolated clean worktree/clone
 - do not modify/stage unrelated existing changes
 
-Codex slot 2 concerns Push delivery hardening (`send-push-notifications`) and must not be touched. If another active slot is changing `x-test-post`, either Phase 3H migration, OAuth/Vault account routing, or AI Lab production settings, STOP and report conflict.
+If another active slot is changing `x-test-post` or the same runtime files, STOP and report exact overlap.
 
-## Mandatory preflight
+## Goal
 
-Perform read-only production inspection first and verify assumptions for:
-- `published_content_fingerprints` columns/indexes/constraints/RLS/grants
-- `scheduled_posts` columns/status values/brand attribution
-- `post_execution_logs` columns required by completion RPC
-- `brands` row for `ai_salaryman_lab`
-- `social_accounts` row for `ai_salaryman_lab_x`
-- current connection_status / expected handle `kaishain_ai_lab`
-- Vault secret-reference columns present (do not read secret values)
-- existing functions/RPCs that may collide with the two new names
-- current `x-test-post` version/auth mode
+Create one new source commit that:
+1. preserves the current production v107 runtime behavior for all non-Phase-3H code
+2. carries forward the already C1-approved Phase 3H AI Lab safeguards
+3. contains no production deployment
+4. is pushed to a review branch so ChatGPT can C1-review the exact deploy candidate
 
-Confirm both migration files exactly match reviewed commit `406b53c2...`.
+## A. Establish the v107 source baseline
 
-If production differs materially or destructive correction would be needed, STOP before writes.
+Determine the exact source corresponding to production `x-test-post` v107.
 
-Known migration-history divergence remains. Therefore:
-- never run `supabase db push`
-- do not repair/reconcile migration history
-- do not mark unrelated versions applied/reverted
+Preferred evidence, in order:
+- downloaded deployed Function source/runtime files from Supabase API/tooling, or
+- exact repository commit previously recorded as the v107 deploy source if byte identity can be proven
 
-The broad table-grant finding (`anon` / `authenticated` including TRUNCATE-like privileges despite RLS) is outside this Phase 3I scope. Do not change it here. Record it separately for owner review unless it directly blocks the two approved migrations.
+Do not guess the baseline from current `main` if byte identity to v107 is not proven.
 
-## Exact migration application
+Record:
+- v107 runtime file list
+- hashes/byte comparison where available
+- the three known differing unrelated files and any additional differences
+- whether the baseline maps exactly to a Git commit
 
-Apply in this order only:
-1. `20260913123509_ai_lab_prelive_safeguards.sql`
-2. `20260913151428_read_ai_lab_x_vault_token.sql`
+Do not expose secrets or token values.
 
-No other SQL/migration is authorized.
+## B. Reconcile Phase 3H changes onto v107
 
-Immediately read back and verify:
+Starting from the proven v107 source baseline, apply only the Phase 3H functional changes from:
+- `6ce4ad8ea983dd617c6227dd6f628e3e3b4f945b`
+- `406b53c2a2838a5ac2a446fffb6e6feef954eb7a`
 
-### `complete_ai_salaryman_lab_brand_post`
-- expected signature
-- `SECURITY DEFINER`
-- empty `search_path`
-- execute privilege service_role-only
-- fixed `brand_id=ai_salaryman_lab`
-- fixed `social_account_id=ai_salaryman_lab_x`
-- fixed `post_type=brand_post`
-- terminal scheduled-post behavior after confirmed X success
-- unique `(social_account_id, x_post_id)` fingerprint index exists
+Preserve current v107 versions of unrelated runtime logic, especially:
+- `close_report_data_logic.ts`
+- `close_report_logic.ts`
+- `fixed_hashtags_logic.ts`
+- any other runtime file whose difference is unrelated to Phase 3H
 
-### `read_ai_salaryman_lab_x_vault_token`
-- expected signature
-- `SECURITY DEFINER`
-- empty `search_path`
-- execute privilege service_role-only
-- fixed account id/brand/platform/handle/identity_verified checks
-- only accepts secret refs belonging to the AI Lab account's access/refresh ref columns
-- do not output or inspect decrypted token values in Report/logs
+Required Phase 3H behavior to preserve:
+- AI Lab finite 280 Unicode-codepoint policy
+- explicit future unlimited mode
+- independent final dispatch length guard
+- cross-brand dedupe before dispatch
+- `ai_salaryman_lab_x` / `kaishain_ai_lab` fixed Vault-backed routing
+- no fallback to Kabumori legacy token storage
+- no refresh on AI Lab dispatch path
+- fingerprint completion after confirmed X success
+- duplicate-resend protection on uncertain completion
+- dry_run / publish-disabled gates unchanged
 
-If either migration fails transactionally, do not improvise broad fixes; inspect rollback/read-back and STOP.
+The two DB migrations are already applied in production. Do not create replacement migrations and do not apply any SQL in this task.
 
-## `x-test-post` deployment
+## C. Diff discipline
 
-Only after both migration read-backs pass:
-- deploy **`x-test-post` only**
-- deploy reviewed source at commit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a`
-- preserve current production auth mode; if current config is `verify_jwt=false`, keep `--no-verify-jwt`
-- do not deploy any other Edge Function
-- download/read back deployed runtime files and byte-compare against exact source commit
-- verify unrelated Functions' versions/updated_at remain unchanged where practical
+Produce a three-way review summary:
+- current production v107 -> reconciled candidate
+- Phase 3H reviewed commit `406b53c` -> reconciled candidate
+- unrelated current v107 runtime logic preserved vs `406b53c`
 
-## Non-posting verification after deploy
+The candidate must not contain accidental rollback of unrelated runtime changes.
 
-No real/test X post is authorized.
+If the reconciliation requires semantic choices in unrelated logic, STOP instead of guessing.
 
-Allowed verification:
-- dry-run/admin request that cannot pass publish gate
-- read-only metadata route checks
-- verify AI Lab resolves to `ai_salaryman_lab_x` / `kaishain_ai_lab`
-- verify publish gate remains blocked by `dry_run` / `publish_enabled=false`
-- verify 280-character rule through dry-run/runtime evidence without dispatching to X
-- verify no Kabumori legacy token fallback
-- verify no fingerprint row is inserted by dry-run
-- verify X POST/media calls remain 0
+## D. Tests
 
-Do not call the Vault reader merely to reveal/check token values. Do not refresh tokens.
+Run at minimum:
+- Phase 3H brand/shared tests
+- relevant `x-test-post` suite
+- regression tests covering close report / fixed hashtags / any preserved runtime areas implicated by the v107 differences
+- `git diff --check`
+- changed-file `deno check`, or prove only pre-existing baseline-equivalent diagnostics remain
 
-## Posting window
+Specifically verify:
+- 279/280 pass, 281 blocked
+- dry_run cannot reach X dispatch
+- AI Lab Vault route has no legacy fallback
+- no token refresh on AI Lab route
+- fingerprint completion semantics remain idempotent / duplicate-resend safe
+- Kabumori existing behavior remains unchanged
+- the v107 close-report/fixed-hashtag behavior is retained
 
-Do not create/update/enable an AI Lab posting_window in this task. Exact source-of-truth values are still required:
-- post_type confirmation
-- timezone
-- local start/end time or exact desired posting time(s)
-- slot count / slot numbers
-- `daily_probability` per slot
+## E. Commit / push / stop
 
-No Cron change.
+Create a new review branch/commit for the reconciled deploy candidate.
 
-## OAuth/write scope boundary
+Push to the private repo `anohi-memories/kabumori` for C1 review.
 
-Still do not add/request `tweet.write` or `media.write`.
+Report:
+- exact branch
+- exact commit SHA
+- proven v107 baseline/source evidence
+- files changed from v107
+- files intentionally preserved from v107
+- tests
+- comparison to `406b53c`
 
-Next-step requirement after Phase 3I:
-- text posting needs `tweet.write` while retaining `tweet.read users.read offline.access`
-- reauthorization must verify `/2/users/me` remains `kaishain_ai_lab` before replacing usable token refs
-- `media.write` remains unnecessary until a media-upload feature is intentionally enabled
+Then set:
+- status: `review_required`
+- next_owner: `chatgpt`
 
-## Strictly prohibited
+**STOP before deploy.**
 
-- AI Lab real/test X post or media upload
+## Production boundary
+
+Already-applied Phase 3I migrations remain in place.
+
+Still strictly prohibited in this task:
+- `x-test-post` deploy
+- any other Edge Function deploy
+- production DB write/migration
+- `supabase db push`
+- migration history repair/reconcile
 - `publish_mode=live`
 - `publish_enabled=true`
-- OAuth reauthorization or scope change
+- OAuth reauthorization/scope change
 - `tweet.write` / `media.write` addition
-- token refresh/liveness write test
-- posting_window insert/update
-- Cron changes
-- Kabumori OAuth/token/handle/publish/Cron mutation
-- Mio changes
-- any non-Phase-3H migration/RPC/schema change
-- `supabase db push`
-- migration-history repair/reconcile
-- broad privilege cleanup from the unrelated table-grant finding
-- exposing token/secret/password/2FA values
+- token refresh/liveness test
+- real/test X post or media upload
+- posting_window change
+- Cron change
+- Kabumori OAuth/token/handle/publish mutation
+- Mio change
+- broad privilege cleanup for the separately observed anon/authenticated table grants
+- secret/token/password/2FA output
 
-## Tests / verification
+## Separate security observation
 
-Before production writes, rerun relevant local tests from reviewed source where environment permits:
-- Phase 3H brand/shared tests
-- `x-test-post` relevant suite
-- `git diff --check`
-- changed-file `deno check` or baseline-equivalence evidence for existing diagnostics
+Existing broad table grants (including TRUNCATE-like privileges for anon/authenticated despite RLS) are a separate owner-review item. Do not modify them here. Record exact affected objects only if already known from read-only evidence; do not broaden scope.
 
-After rollout, record:
-- exact project ref
-- preflight results
-- exact SQL files applied and actual recorded migration versions/names if tooling assigns generated values
-- RPC/index/ACL/security read-back
-- deployed `x-test-post` version and auth mode
-- byte comparison result
-- non-posting verification result
-- explicit X write count = 0 / media write count = 0
+## Completion gate
 
-## Completion / Report
+This reconciliation task passes only when:
+- exact v107 source baseline is proven
+- Phase 3H changes are rebased/ported onto that baseline without unrelated rollback
+- regression tests pass
+- new candidate is pushed for review
+- production Function remains v107 and unchanged
+- X/media writes remain 0
 
-When complete:
-- set status `review_required`
-- next_owner `chatgpt`
-- update `.agent/CODEX_REPORT.md`
-- safely sync control metadata to origin/main
-
-Report must include:
-- task_id
-- result
-- model_used
-- source_commit
-- preflight
-- migrations_applied
-- migration_readback
-- x_test_post_deploy
-- deployed_source_verification
-- non_posting_runtime_verification
-- ai_lab_length_guard_result
-- vault_route_result
-- fingerprint_dry_run_result
-- posting_window_status
-- write_scope_status
-- tests
-- production_changes
-- unchanged_components
-- remaining_issues
-- exact_steps_before_first_live_post
-- safety_checks
-- next_recommendation
-
-## Success gate
-
-Phase 3I PASS requires:
-- both exact Phase 3H migrations safely applied/read back
-- reviewed `x-test-post` deployed and byte-verified
-- AI Lab still dry_run + publish_disabled
-- OAuth write scopes still absent
-- no posting window/Cron changes
-- no X/media write
-- no Kabumori/Mio regression
-- next live-post prerequisites explicitly documented
-
-Phase 3I does **not** authorize live publishing or the first real X post.
+After C1 review of the new candidate, a separate explicit authorization will be required to deploy `x-test-post`.
