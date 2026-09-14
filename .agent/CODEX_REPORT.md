@@ -4,6 +4,7 @@
 
 - task_id: `x-multibrand-phase3i-runtime-reconciliation-deploy-20260914`
 - result: `review_required` — C1-approved candidate and production preflight were verified, but the execution environment's safety review blocked the production deploy before command execution. The review found that trusted user authorization covers review/push, not production deploy; task-file metadata alone is not sufficient. No workaround or alternate deploy path was attempted.
+- resume: the user has now directly approved deploying only this exact candidate commit to `x-test-post`, retaining `verify_jwt=false`, followed immediately by source read-back/byte verification and non-posting dry-run verification. H1 is resumed; this report will be updated with the final outcome.
 - candidate: branch `codex/x-multibrand-phase3i-runtime-reconciliation-20260914`, exact commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d`.
 - tests: not rerun during this deploy-gating turn. The C1 report for this exact immutable candidate records 448/448 relevant tests passing and no new Deno type diagnostics versus the v107 baseline.
 - preflight: `x-test-post` read-back was ACTIVE v107, `verify_jwt=false`, SHA-256 `54e8dae698415305185bb6e59f0cf4b1d12c0ca1df9750d44ff6d9772364fc71`. No deploy request was sent to Supabase.
