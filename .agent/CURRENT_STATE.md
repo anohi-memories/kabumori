@@ -14,7 +14,7 @@
 - active_workstream:
   - Codex slot 1: `review_required` — `x-multibrand-phase3i-ai-lab-production-prelive-rollout-20260914`。Phase 3H commit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a` の対象migration 2本を適用し、RPC/ACL/index read-back済み（Supabase記録version `20260913230852` / `20260913231013`）。deploy直前に現行`x-test-post` v107との差分を検出。承認commitにはPhase 3H外の現行runtime変更が含まれず、それらを置き換えるためFunction deployを停止。dry_run / publish無効、write scope/Cronは不変。新レビューsourceまたは差分置換の明示確認待ち。
   - Codex slot 2: `ready` — close-report TOPIX source correction production deploy verification
-  - Claude slot 1: `review_required` — personalized portfolio morning/close reports Phase 1A
+  - Claude slot 1: `review_required` — `broad-news-phase4-natural-push-observation-20260913`。read-only観測のみで本番変更0件。収集→分類→判定→X公開は自然データで確認（ホルムズ海峡付近での商船攻撃 `coverage_severity=high` / `[geopolitics, shipping_logistics]`、TDnetの浜岡原発報告書で企業IRにも複数カテゴリ付与を確認）。統合producerの正のenqueueとPush到達は**未観測**（`all_useful` でも市場ニュースは業種一致必須、企業ニュースは銘柄登録必須で該当なし）。新規に3件の未解決事象を特定: サウジ原油パイプライン復旧見通しの収集取りこぼし（web_searchがrawCandidateCount 0、ゲート除外ではない）/ 2026-09-14 朝刊レポートが `REPORT_FACT_FAILED` で欠落（リトライなし）/ X投稿本文の `generation_failed` 4件。以降の作業はCodexへ引き継ぐ前提でReportに引き継ぎ章を記載。監視タスクと予約タスクは停止・削除済み。
   - Claude slot 2: `done` — Phase 3C OAuth workstream transferred to Codex slot 1; do not modify same OAuth/Vault/x-oauth-connect area in parallel
 - multibrand_work:
   - Phase 1 `719249f` K2 approved
@@ -48,6 +48,10 @@
 - known_issue:
   - multibrand migrations `20260910170000/180000/190000` objects exist in production but migration history may not record them; do not use blind `supabase db push`
   - 2026-09-09 morning_greeting legacy Storage receipt HTTP400 is a separate unresolved issue
+  - 2026-09-14 morning personalized report failed Fact check (`REPORT_FACT_FAILED`: packetに無い「指数→保有銘柄」の因果表現) and was not saved; 生成は1回のみでリトライなし。`personalized-reports` は現在v13
+  - `important_news_app_copy_targets` / `visible_market` はアプリ表示・日本語コピー生成にも業種一致条件を課すため、通知条件の緩和は表示・日本語化と一体で設計する
+  - `CLAIM_PENDING_NOTIFICATIONS_FAILED:504` が2026-09-14未明に3回目。monitor/dispatcherのDB読み取り失敗を5経路で観測（実害は未確認、滞留0）
+  - `net._http_response` は約6時間で消えるためエラーの長期傾向を追えない
 
 ## 更新ルール
 
