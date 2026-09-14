@@ -3,8 +3,8 @@
 - task_id: x-multibrand-phase3i-runtime-reconciliation-deploy-20260914
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: user
 - priority: high
 - recommended_model: Sol High
 - purpose: C1 PASS済みのreconciled candidate `c4eb2855f2adc66e5518feaa51eef63bbf139e4d` を、本番 `x-test-post` にだけ安全にdeployし、非投稿検証まで行う。live化・write scope追加・実X投稿は行わない。
@@ -50,6 +50,14 @@ The user said `おk` after C1 PASS. ChatGPT explicitly authorizes the following 
 **Deploy only `x-test-post` from exact commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d` to the existing production project, preserving `verify_jwt=false`, then perform source read-back/byte verification and non-posting verification.**
 
 This authorization does NOT include any other production change.
+
+## Latest execution status — 2026-09-14
+
+- C1 approval and all read-only preflight checks passed, but the production deploy command was blocked by the execution environment's safety review before it ran. The review determined that the trusted user authorization available to the runner covers GitHub review/push only, not production deployment; task metadata alone cannot expand that authorization.
+- Do not retry through Supabase MCP, another CLI, or another indirect path. Production deployment requires a fresh, direct user approval for this exact action.
+- No deploy request reached Supabase. Production `x-test-post` remains ACTIVE v107 / `verify_jwt=false` with the preflight hash unchanged. AI Lab remains `dry_run` / `publish_enabled=false`.
+- Candidate worktree is still at exact commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d`; the temporary local config created only for preflight was removed. No implementation source was changed.
+- To resume, obtain direct user authorization to deploy only `x-test-post` from the exact candidate commit above, preserve `verify_jwt=false`, then perform the exact-source read-back and non-posting verification already specified in this task.
 
 ## Mandatory startup checks
 

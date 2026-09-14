@@ -1,5 +1,18 @@
 # Codex Report
 
+## Latest H1 result — Phase 3I deployment gate (2026-09-14)
+
+- task_id: `x-multibrand-phase3i-runtime-reconciliation-deploy-20260914`
+- result: `review_required` — C1-approved candidate and production preflight were verified, but the execution environment's safety review blocked the production deploy before command execution. The review found that trusted user authorization covers review/push, not production deploy; task-file metadata alone is not sufficient. No workaround or alternate deploy path was attempted.
+- candidate: branch `codex/x-multibrand-phase3i-runtime-reconciliation-20260914`, exact commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d`.
+- tests: not rerun during this deploy-gating turn. The C1 report for this exact immutable candidate records 448/448 relevant tests passing and no new Deno type diagnostics versus the v107 baseline.
+- preflight: `x-test-post` read-back was ACTIVE v107, `verify_jwt=false`, SHA-256 `54e8dae698415305185bb6e59f0cf4b1d12c0ca1df9750d44ff6d9772364fc71`. No deploy request was sent to Supabase.
+- AI Lab read-only state: brand `is_active=true`, `publish_mode=dry_run`; account `ai_salaryman_lab_x`, handle `kaishain_ai_lab`, `connection_status=identity_verified`, `publish_enabled=false`; Vault reference presence checked only as booleans. No token/ref values read.
+- candidate checkout: clean exact candidate commit before preflight. A temporary `supabase/config.toml` containing only the verified project ref and `x-test-post` `verify_jwt=false` was removed after the blocked attempt. No implementation source changed.
+- production_changes: 0. No DB/RPC/migration, Edge Function, Cron, OAuth/token, publish setting, X, or media mutation. No function invocation or test post.
+- next action: direct user approval is required for the exact `x-test-post` deploy from commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d`, preserving `verify_jwt=false`. After approval, redeploy only if the same preflight still matches, then immediately byte-compare read-back and perform non-posting checks.
+- control_sync: this report, slot-1 task status, and current state are being synced to `origin/main`; no implementation commit was changed.
+
 - task_id: `x-multibrand-phase3i-runtime-reconciliation-20260914`
 - result: `review_required` — source reconciliation passed local tests and was pushed for C1 review. Production remains on `x-test-post` v107; no deploy or new DB operation was performed.
 - model_used: GPT-5.6 Sol
