@@ -1,5 +1,35 @@
 # Codex Report
 
+## Latest H1 result — Phase 3J AI Lab posting schedule (2026-09-14)
+
+- task_id: `x-multibrand-phase3j-ai-lab-posting-schedule-20260914`
+- result: `review_required` — the approved schedule values are stored for AI Lab only, with all ten rows inactive. Publishing remains disabled and in dry-run mode.
+- production writes: exactly 10 `INSERT` rows in `public.posting_windows`; no updates/deletes, schema/migration/RPC changes, or source changes.
+- schedule rows read back exactly:
+
+| Slot | JST window | Probability | Active |
+|---:|:---|---:|:---:|
+| 1 | 07:30–08:30 | 1.0 | No |
+| 2 | 09:00–10:00 | 1.0 | No |
+| 3 | 10:30–11:30 | 1.0 | No |
+| 4 | 12:00–13:00 | 1.0 | No |
+| 5 | 13:30–14:30 | 1.0 | No |
+| 6 | 15:30–16:30 | 1.0 | No |
+| 7 | 17:30–18:30 | 1.0 | No |
+| 8 | 19:00–20:00 | 1.0 | No |
+| 9 | 20:30–21:30 | 1.0 | No |
+| 10 | 22:00–23:00 | 1.0 | No |
+
+- every row is `brand_id='ai_salaryman_lab'`, `post_type='brand_post'`, `timezone='Asia/Tokyo'`, `daily_probability=1.0`, `is_active=false`.
+- planner semantics read from production `public.plan_daily_posts(date)`: it ignores rows unless the window is active, the brand is active, and `publish_mode` is dry_run/live. Probability 1.0 passes the deterministic per-date gate; execution time is randomized within each window using the row timezone. No planner invocation was made by this task.
+- safety preflight: before insert, no `brand_post` posting windows existed for any brand and no `brand_post` scheduled rows existed for the next ten days. `posting_windows` has no triggers. After insert, exact read-back showed ten inactive AI Lab rows; all existing non-AI-Lab rows were unchanged (the nine existing rows belong to Kabumori; no Mio row existed); upcoming `brand_post` scheduled-post count remains 0.
+- constraints caveat: both `posting_windows` and `scheduled_posts` also have brand-agnostic uniqueness (`(post_type, slot_no)` and `(schedule_date, post_type, slot_no)`). No current competing `brand_post` row exists, so these ten inactive settings fit safely; future same-type/same-slot scheduling for another brand needs separate schema/planner review.
+- runtime state after read-back: AI Lab brand `is_active=true`, `publish_mode='dry_run'`; account `ai_salaryman_lab_x` / `kaishain_ai_lab` remains `identity_verified`, `publish_enabled=false`.
+- unchanged systems: existing `dispatch-scheduled-posts` Cron remains active every minute and was not edited; no OAuth, scope, token, publish flag, Function, migration, or schema operation was performed. No planner or `x-test-post` invocation was triggered manually for this task; this task made no direct X API or media-write call. No real/test post was attempted.
+- tests/verification: production catalog/schema and planner definition inspected read-only; SQL INSERT RETURNING and subsequent full row read-back matched the ten requested slots. Upcoming scheduled-post side effect count=0. No application source code changed, so no code test suite was run.
+- commit/push: control/report metadata only. Implementation-code commit/deploy: none.
+- next gate: keep rows inactive. OAuth write-scope readiness and any later activation/live publishing require separate task/authorization; this result does not authorize a first post.
+
 ## Latest H1 result — Phase 3I deployment gate (2026-09-14)
 
 - task_id: `x-multibrand-phase3i-runtime-reconciliation-deploy-20260914`
