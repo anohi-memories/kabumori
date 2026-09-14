@@ -757,6 +757,7 @@ Then apply the exact migration file via `podman exec -i <container> psql -X -v O
 - status: `review_required`
 - next_owner: `chatgpt`
 - source_base: freshly fetched `origin/main` at `a34319a107bd2337bf55c3b5a5970ac92cbe96a9`.
+- integrated_base: `b39f7cf2ffbbc32b2a98c11e0d7fa9545613e1b8` (H1 Phase 3K TASK-only update; no overlap with H2 files).
 - Scope: address only C2's app-copy freshness finding; no producer/feed, other preset, client, or unrelated source change.
 
 ### Change
@@ -784,6 +785,7 @@ Then apply the exact migration file via `podman exec -i <container> psql -X -v O
 - Production migration/RPC/schema: **0**; `supabase db push`: **0**; production deploy: **0**.
 - Production Cron/settings changes: **0**; synthetic production candidate/Push and production manual invoke: **0**; X/OpenAI API calls and X posts: **0**.
 - Changed files for this follow-up: migration, migration static test, `.agent/tasks/CODEX_TASK_2.md`, and this report only.
-- commit_hash / push: pending H2 synchronization.
+- implementation_commit: `9b1281637f1ea8f1bed6863ff5e786ef918f51fa` (`Align Phase 5 app copy freshness gate`), rebased onto the fresh `origin/main` above.
+- report_sync_commit / push: pending final synchronization.
 - remaining_issues: no production action is authorized by this follow-up; C2 should re-review the updated migration candidate before any separate production approval.
 - next_recommendation: return to C2 with status `review_required`, next_owner `chatgpt`.
