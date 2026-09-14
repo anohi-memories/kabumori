@@ -1,155 +1,122 @@
 # Codex Task
 
-- task_id: x-multibrand-phase3i-runtime-reconciliation-deploy-20260914
+- task_id: x-multibrand-phase3j-ai-lab-posting-schedule-20260914
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Sol High
-- purpose: C1 PASS済みのreconciled candidate `c4eb2855f2adc66e5518feaa51eef63bbf139e4d` を、本番 `x-test-post` にだけ安全にdeployし、非投稿検証まで行う。live化・write scope追加・実X投稿は行わない。
+- purpose: ユーザー指定の「1日10回程度・時間は適当」をAI Labの具体的なposting scheduleへ落とし込み、live化前の安全な設定状態まで進める。実X投稿・OAuth write scope変更・publish有効化はまだ行わない。
 
-## C1 result
+## Confirmed production state
 
-Phase 3I runtime reconciliation candidate is C1 **PASS**.
+- Phase 3I C1: PASS
+- production `x-test-post`: ACTIVE v108 / `verify_jwt=false`
+- deployed source: exact commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d`, 39/39 runtime files byte-verified
+- AI Lab brand: `publish_mode=dry_run`
+- AI Lab social account: `ai_salaryman_lab_x` / handle `kaishain_ai_lab` / `identity_verified` / `publish_enabled=false`
+- OAuth scopes remain read-only: `tweet.read users.read offline.access`
+- no real AI Lab X post yet
+- no AI Lab posting window currently enabled
 
-Approved deploy candidate:
-- repository: `anohi-memories/kabumori`
-- branch: `codex/x-multibrand-phase3i-runtime-reconciliation-20260914`
-- commit: `c4eb2855f2adc66e5518feaa51eef63bbf139e4d`
-- production v107 baseline: `25998fc8927d8bd45a89478b1fec8b4bc5ba782b`
+## User schedule decision — source of truth
 
-C1 confirmed:
-- production v107 source baseline was proven byte-identical 27/27 files
-- reconciled candidate preserves all unrelated v107 runtime behavior
-- `close_report_data_logic.ts`, `close_report_logic.ts`, `fixed_hashtags_logic.ts` remain at v107 bytes
-- only `x-test-post/index.ts` changes among existing v107 runtime files; imported Phase 3H brand modules are added
-- AI Lab 280 Unicode-codepoint guard remains enforced before X dispatch
-- AI Lab route remains fixed to `ai_salaryman_lab_x` / `kaishain_ai_lab`
-- no Kabumori legacy token fallback
-- refresh disabled on AI Lab route
-- fingerprint completion / duplicate-resend safeguards retained
-- 448/448 relevant tests PASS
-- deno check diagnostics are baseline-equivalent only
-- at the time of C1 review, production was x-test-post v107 / verify_jwt=false; the approved deployment result is recorded below
+User instruction: **「投稿スケジュールは1日10回程度適当に」**
 
-## Production state already completed
+Interpretation for initial production schedule design:
+- timezone: `Asia/Tokyo`
+- post_type: `brand_post`
+- 10 slots per calendar day
+- same schedule on weekdays/weekends initially
+- random execution time inside each slot/window is preferred over fixed minute posting
+- no overnight posting
+- target windows (JST):
+  1. 07:30–08:30
+  2. 09:00–10:00
+  3. 10:30–11:30
+  4. 12:00–13:00
+  5. 13:30–14:30
+  6. 15:30–16:30
+  7. 17:30–18:30
+  8. 19:00–20:00
+  9. 20:30–21:30
+  10. 22:00–23:00
+- initial `daily_probability`: 1.0 per slot. "程度" is satisfied by random timing inside windows; if the existing scheduler semantics make exact 10/day inappropriate, stop and report before changing semantics rather than inventing a different probability model.
 
-The following two migrations are already applied and MUST NOT be reapplied, replaced, repaired, or reconciled:
-- `20260913123509_ai_lab_prelive_safeguards.sql`
-  - production recorded version `20260913230852`
-- `20260913151428_read_ai_lab_x_vault_token.sql`
-  - production recorded version `20260913231013`
+## Goal
 
-Their RPC/index/ACL/SECURITY DEFINER/empty search_path read-back already passed.
+1. Inspect current `posting_windows` schema and planner semantics read-only.
+2. Confirm how window start/end, timezone, slot_no, daily_probability and `is_active` are interpreted.
+3. Prepare/apply only the minimum AI Lab schedule rows needed for the 10 slots above.
+4. Keep them **inactive** unless the current schema/planner cannot represent inactive configured rows safely; if so, stop and report instead of enabling them.
+5. Verify the rows read back correctly and are brand-scoped to `ai_salaryman_lab` / `brand_post`.
+6. Do not change Cron, OAuth scopes, publish flags, token state, or X posting.
 
-## Direct deploy authorization — 2026-09-14
+## Production authorization boundary
 
-The user directly approved the following production action on 2026-09-14:
-
-**Deploy only `x-test-post` from exact commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d` to the existing production project, preserving `verify_jwt=false`, then perform source read-back/byte verification and non-posting verification.**
-
-This authorization does NOT include any other production change.
-
-## Latest execution status — 2026-09-14
-
-- Deployment completed under the user's direct, exact-scope approval. Only `x-test-post` from candidate commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d` was deployed; production is ACTIVE v108 with `verify_jwt=false`.
-- Immediate read-back returned 39 runtime files, aggregate SHA-256 `5d26b55b0d9474807b152e59461866b52d146fe26a4284dd2f1657abe61f4fef`; every file matched the exact candidate bytes (39/39, no missing, mismatched, or extra files).
-- Compared with the pre-deploy snapshot, only `x-test-post` changed (v107 → v108). All other observed Function versions remained unchanged.
-- One approved non-posting smoke call returned HTTP 200, `mode=dry_run`, `published=false`. This exercised the synthetic Kabumori voice preview branch, not the AI Lab scheduled-brand branch; `voiceEvaluation.passed=false` was returned by the preview evaluator. It did not reach DB claim, token, X POST, or media-upload paths. The AI Lab-specific production route was not invoked.
-- AI Lab read-only state immediately after remained `is_active=true`, `publish_mode=dry_run`, account `ai_salaryman_lab_x`, `connection_status=identity_verified`, `publish_enabled=false`. Fingerprint row count was 0 before and 0 after the dry-run.
-- The deployed source retains the C1-reviewed AI Lab 280-code-point guard, fixed Vault-backed account routing, no Kabumori legacy-token fallback, and disabled refresh. The exact candidate's relevant test suite had passed 448/448 in C1; no new test run was needed for this immutable deployment. No token value was read.
-- No migration/DB write, other Function deploy, OAuth/scope/token change, Cron or posting-window change, publish flag change, real X post, or media upload was performed. X POST and media-upload calls in this approved verification: 0.
-- Candidate worktree's temporary CLI project config and version marker were removed. No implementation source was changed by the deploy/report task.
-- H1 is complete for the approved deploy gate and awaits ChatGPT review. First live AI Lab publishing remains unauthorized and requires all separate readiness/approval gates described below.
-
-## Mandatory startup checks
-
-Before deploy:
-- read `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, this TASK, `.agent/CODEX_REPORT.md`
-- fresh-check `origin/main`
-- fresh-check exact candidate branch/commit
-- verify no other active slot is modifying `x-test-post`
-- use isolated clean worktree/clone
-- verify project ref and worktree-local Supabase config before deployment
-- confirm production is still `x-test-post` v107 / `verify_jwt=false`; if it changed, STOP and report
-- do not modify/stage unrelated existing changes
-
-## Authorized action
-
-1. Deploy **only `x-test-post`** from exact candidate commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d`.
-2. Preserve production auth mode `verify_jwt=false` (`--no-verify-jwt` if using CLI convention).
-3. Do not deploy any other Edge Function.
-4. Immediately read back the deployed Function source/runtime files and byte-compare them against the exact candidate source.
-5. Verify version/auth mode and, where practical, that unrelated Function versions/updated_at are unchanged.
-
-If source byte comparison fails or the deploy source is not exact, STOP. Do not improvise another deploy.
-
-## Non-posting verification after deploy
+The user's schedule instruction authorizes configuring the schedule values above, but does **not** authorize live publishing.
 
 Allowed:
-- dry-run/admin invocation that is guaranteed to remain behind `dry_run` / `publish_enabled=false`
-- read-only metadata verification
-- verify AI Lab resolves to `ai_salaryman_lab_x` / `kaishain_ai_lab`
-- verify final 280-character guard through dry-run/runtime evidence without X dispatch
-- verify no Kabumori legacy fallback path is used
-- verify refresh remains disabled on AI Lab route
-- verify dry-run does not insert `published_content_fingerprints`
-- verify X POST count = 0 and media write count = 0
+- read-only inspection of `posting_windows` and planner/RPC semantics
+- insert/update only AI Lab `posting_windows` rows required to represent the 10-slot schedule
+- keep those rows `is_active=false`
+- read-back verification
+- code/test changes only if needed to support the existing schema semantics safely; any source change must stop for C1 before deploy
 
-Do not invoke the Vault reader merely to expose/check token values. Do not refresh tokens.
+Not allowed:
+- `is_active=true` for AI Lab posting windows
+- `publish_mode=live`
+- `publish_enabled=true`
+- `tweet.write` / `media.write`
+- OAuth reauthorization
+- token refresh/liveness test
+- real/test X post or media upload
+- Cron changes
+- Kabumori or Mio schedule/settings changes
+- unrelated DB/schema/RPC changes
+- `supabase db push`
+- migration history repair/reconcile
+- secret/token/password/2FA output
 
-## Production boundaries — still strictly prohibited
+## Mandatory safety checks
 
-- no DB migration/write (the two migrations are already applied)
-- no `supabase db push`
-- no migration history repair/reconcile
-- no OAuth reauthorization/scope change
-- no `tweet.write` / `media.write` addition
-- no `publish_mode=live`
-- no `publish_enabled=true`
-- no real/test X post or media upload
-- no token refresh/liveness test
-- no AI Lab posting_window insert/update
-- no Cron change
-- no Kabumori OAuth/token/handle/publish/Cron mutation
-- no Mio change
-- no broad privilege cleanup for the separate anon/authenticated grant observation
-- no secret/token/password/2FA output
+Before any DB write:
+- read `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, this TASK, `.agent/CODEX_REPORT.md`
+- fresh-check `origin/main`
+- inspect other active slots for overlap with `posting_windows`, planner RPCs, Cron, or `x-test-post`
+- read production `posting_windows` schema/indexes/constraints and existing AI Lab rows
+- verify unique/index key expected for brand/post_type/slot_no
+- inspect `plan_daily_posts()` / related planner logic and confirm inactive rows are ignored
+
+If another slot overlaps the same table/planner/Cron, STOP and report conflict.
+
+## Verification
+
+After schedule configuration:
+- read back exactly 10 AI Lab `brand_post` rows
+- confirm timezone `Asia/Tokyo`
+- confirm slot numbers 1–10 and expected windows
+- confirm `daily_probability=1.0`
+- confirm all rows `is_active=false`
+- confirm Kabumori/Mio rows unchanged
+- confirm no scheduled post was created as a side effect
+- confirm no Cron change
+- confirm X/media writes 0
 
 ## Completion
 
-If deploy + byte verification + non-posting verification pass:
+When complete:
+- set `status: review_required`
+- set `next_owner: chatgpt`
 - update `.agent/CODEX_REPORT.md`
-- set this TASK to `status: review_required`, `next_owner: chatgpt`
-- safely sync only control/report metadata as needed
+- sync only control/report metadata as needed
 
-Report:
-- exact candidate commit deployed
-- production Function version after deploy
-- verify_jwt state
-- runtime file count/hash and byte-compare result
-- non-posting verification result
-- AI Lab dry_run/publish_enabled state
-- 280-char guard evidence
-- Vault route / legacy fallback / refresh evidence without token disclosure
-- fingerprint dry-run evidence
-- explicit X/media write counts
-- unchanged components
-- remaining requirements before first live post
+Report exact rows/values, planner semantics, DB writes performed, unchanged components, and next required gate.
 
-If any safety check fails, STOP without broadening scope and leave `review_required` with the blocker documented.
+## Next gate after this task
 
-## Success gate
-
-This deploy task passes only when:
-- exact `c4eb2855f2adc66e5518feaa51eef63bbf139e4d` candidate is deployed to `x-test-post`
-- deployed source is byte-verified
-- `verify_jwt=false` preserved
-- AI Lab remains `dry_run` + `publish_enabled=false`
-- OAuth write scopes remain absent
-- no posting_window/Cron change
-- X/media writes remain 0
-- Kabumori/Mio behavior remains unchanged
-
-This task does **not** authorize first live posting.
+After schedule rows are safely configured and reviewed, the next separate phase is OAuth write readiness:
+- add `tweet.write` while retaining `tweet.read users.read offline.access`
+- reauthorize and verify `/2/users/me` remains `kaishain_ai_lab`
+- still keep publish disabled until a separate first-live-post approval.
