@@ -786,6 +786,6 @@ Then apply the exact migration file via `podman exec -i <container> psql -X -v O
 - Production Cron/settings changes: **0**; synthetic production candidate/Push and production manual invoke: **0**; X/OpenAI API calls and X posts: **0**.
 - Changed files for this follow-up: migration, migration static test, `.agent/tasks/CODEX_TASK_2.md`, and this report only.
 - implementation_commit: `9b1281637f1ea8f1bed6863ff5e786ef918f51fa` (`Align Phase 5 app copy freshness gate`), rebased onto the fresh `origin/main` above.
-- report_sync_commit / push: pending final synchronization.
+- GitHub sync: successful. The implementation and H2 status/report commits were pushed; post-push fresh fetch confirmed `origin/main` at `4f9bcc23a1fc291be1f7679de99e6f49a75c4010`, containing implementation commit `9b1281637f1ea8f1bed6863ff5e786ef918f51fa`. This report-only update records that verified result.
 - remaining_issues: no production action is authorized by this follow-up; C2 should re-review the updated migration candidate before any separate production approval.
 - next_recommendation: return to C2 with status `review_required`, next_owner `chatgpt`.
