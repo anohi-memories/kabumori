@@ -3,7 +3,7 @@
 - task_id: x-multibrand-phase3j-ai-lab-posting-schedule-20260914
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: in_progress
 - next_owner: codex
 - priority: high
 - recommended_model: Sol High
