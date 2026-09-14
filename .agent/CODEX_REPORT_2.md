@@ -708,3 +708,45 @@ Then apply the exact migration file via `podman exec -i <container> psql -X -v O
 - push: successful to `origin/main`; a post-push fresh fetch confirmed `origin/main` contains `18807d51b671c1bfbafe372e491174bcd982f89b`.
 - remaining_issues: isolated PostgreSQL migration execution/rollback proof is outstanding; app package-level type/build checks are outstanding because dependencies are absent. Historical collection uplift cannot be quantified before natural observation.
 - next_recommendation: C2 review the migration SQL and require disposable-database apply/rollback proof before considering production migration/deploy. Keep status `review_required`, next_owner `chatgpt`.
+
+## H2 Phase 5 verification follow-up — 2026-09-14
+
+- task_id: `broad-news-phase5-coverage-expansion-and-all-useful-scope-20260914`
+- status: `review_required`
+- next_owner: `chatgpt`
+- source_base: freshly checked `origin/main` at `736afe1b95bc7d0afce85fb6ba5ec2d7d2882765`
+- scope: disposable local PostgreSQL migration/RPC proof, app package validation, and regression rerun only; no implementation source changes.
+
+### Disposable PostgreSQL migration proof
+
+- A separate temporary worktree (`/private/tmp/kabumori-h2-phase5-20260914/db-proof`) ran the full migration chain through `20260917120000_broad_news_phase5_all_useful_scope_and_run_diagnostics.sql` on a local PostgreSQL 17.6 database. It was not linked to a Supabase production project.
+- A temporary local-only `cron.schedule` no-op shim was used because older migrations contain production endpoint command strings. This prevented any Cron scheduling/execution during replay and exists only in the disposable proof worktree; it is not a repository migration.
+- The Phase 5 migration applied successfully against the existing schema. Read-back confirmed `important_news_monitor_runs.diagnostics` is `jsonb NOT NULL DEFAULT '{}'::jsonb`, and an insert/read-back of JSON diagnostics succeeded.
+- The three replacement RPCs were present with `SECURITY DEFINER` and `search_path=''`. Grants read back as: authenticated-only for `get_my_important_stock_news(integer)`; service-role-only for `important_news_app_copy_targets(integer)` and `enqueue_important_news_notifications(integer)`. `anon` had no execute on any wrapper. The renamed compatibility-base RPCs had owner-only execution; no public, anon, authenticated, or service-role execution remained.
+- Rollback was demonstrated by rebuilding the disposable DB to the immediately preceding migration version `20260916100000`. Read-back then showed the Phase 5 migration history row and diagnostics column absent, original RPC names restored, all Phase 5 base-name wrappers absent, and zero temporary user/candidate/notification/run fixtures.
+
+### RPC behavior proof and remaining issue
+
+- A rollback-contained `DO` proof passed for unmatched market medium/high/critical visibility for an `all_useful` user with no tracked stocks; low and duplicate rows were absent from that feed.
+- Producer proof passed for one unmatched market medium/high/critical enqueue to the eligible `all_useful` user. Low, category-off, generation-Fact-failed, stale (>6h), and duplicate candidates were not enqueued. `push_enabled=false` and `important_news=false` users received none. Repeated producer invocation created no additional notification.
+- Existing behavior proof passed: unmatched market rows did not expand `quiet` / `standard` / `many`; a high company candidate still reached standard/holding and many/watch users with the correct tracked-stock IDs, while quiet/high remained excluded.
+- App-copy targeting included an eligible unmatched English medium candidate and excluded low, category-off, app-copy-Fact-failed, and duplicate candidates.
+- **Review blocker found:** an 8-hour-old unmatched English medium candidate was still returned by `important_news_app_copy_targets(integer)`. The Phase 5 broad app-copy target branch has no freshness predicate. This does not affect the producer's tested 6-hour stale gate, but the app-copy target does not meet a blanket stale-exclusion expectation. No code/migration edit was made in this verification-only follow-up; agree/fix the app-copy freshness policy and repeat the isolated proof before production approval.
+- Feed category preferences remain separate from push eligibility; the category-off fixture was excluded from producer and app-copy targeting. No Push dispatcher was called; only temporary local `notifications` rows from the SQL proof were inserted and cleaned within the same `DO` block.
+
+### Verification rerun
+
+- Phase 5 / important-news-monitor suite: **402 passed / 0 failed**.
+- Related send-push-notifications, personalized-reports, and app suites: **76 passed / 0 failed**.
+- `apps/admin` lockfile install with lifecycle scripts disabled: **completed**; package/lock files unchanged.
+- `npm exec tsc -- --noEmit`: **PASS**.
+- `npm run lint`: **PASS**.
+- `npm run build`: **PASS** (Next.js 16.3.4).
+- `git diff --check`: **PASS**.
+
+### Safety
+
+- Production migration/RPC/schema change: **0**; production deploy: **0**; `supabase db push` / migration-history repair: **0**.
+- Production Cron/settings changes: **0**; synthetic production candidate/Push: **0**; production manual invoke: **0**; X/OpenAI API calls and X posts: **0**.
+- No source code or migration file changed in this follow-up. Existing Phase 5 TASK remains `review_required` / `next_owner: chatgpt`.
+- Historical collection uplift still awaits natural observation; the app-copy stale-target finding above remains for C2 review.
