@@ -3,8 +3,8 @@
 - task_id: x-multibrand-phase3i-runtime-reconciliation-20260914
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol High
 - purpose: 本番x-test-post v107の現行runtimeを保持したまま、Phase 3HのAI Lab変更だけを安全に取り込み、新しいレビュー可能commitを作る。今回は本番deployしない。
@@ -198,3 +198,16 @@ This reconciliation task passes only when:
 - X/media writes remain 0
 
 After C1 review of the new candidate, a separate explicit authorization will be required to deploy `x-test-post`.
+
+## Report
+
+- task_id: `x-multibrand-phase3i-runtime-reconciliation-20260914`
+- result: `review_required` — reconciled candidate pushed; stopped before deploy.
+- changed_files: `x-test-post/index.ts`; 12 imported `_shared/brand` runtime modules and their relevant tests; two `x-test-post` test files updated for deferred X-auth ordering; the two exact, already-applied Phase 3I migration source files included unchanged for static security tests. Full paths are in `.agent/CODEX_REPORT.md`.
+- production_source_base: `25998fc8927d8bd45a89478b1fec8b4bc5ba782b`, proven byte-identical to all 27 files returned by the deployed v107 Function API.
+- candidate: branch `codex/x-multibrand-phase3i-runtime-reconciliation-20260914`, commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d`, pushed to origin for C1.
+- tests: 448/448 relevant Deno tests passed; ten core Phase 3H files pass `deno fmt --check`; `git diff --check` pass. `deno check` has exactly the six same diagnostics as v107 baseline and no new diagnostics. Broader brand formatting check reports 10 source files unformatted in the reviewed source; no formatting-only edits made.
+- deploy: none. Production re-read remained ACTIVE v107, verify_jwt=false, same 27 files and aggregate hash. No SQL, migration, DB write, Edge Function deploy/invocation, Cron/OAuth/token/settings change, X post, or media upload in this task.
+- remaining_issues: C1 review and a separate explicit deploy authorization remain required. Do not reapply/replace the two migrations.
+- safety_checks: preserved the v107 close-report TOPIX behavior and exact `close_report_data_logic.ts`, `close_report_logic.ts`, and `fixed_hashtags_logic.ts`; preserved the other 25 existing runtime files; AI Lab stays dry_run/publishing-disabled and its route has no legacy-token fallback or refresh.
+- next_recommendation: C1-review the exact candidate branch/commit; do not deploy until separately authorized.

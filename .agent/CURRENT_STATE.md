@@ -12,8 +12,8 @@
   - Claude slot1開始=`G1`、完了確認=`K1`
   - Claude slot2開始=`G2`、完了確認=`K2`
 - active_workstream:
-  - Codex slot 1: `review_required` — `x-multibrand-phase3i-ai-lab-production-prelive-rollout-20260914`。Phase 3H commit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a` の対象migration 2本を適用し、RPC/ACL/index read-back済み（Supabase記録version `20260913230852` / `20260913231013`）。deploy直前に現行`x-test-post` v107との差分を検出。承認commitにはPhase 3H外の現行runtime変更が含まれず、それらを置き換えるためFunction deployを停止。dry_run / publish無効、write scope/Cronは不変。新レビューsourceまたは差分置換の明示確認待ち。
-  - Codex slot 2: `ready` — close-report TOPIX source correction production deploy verification
+  - Codex slot 1: `review_required` — `x-multibrand-phase3i-runtime-reconciliation-20260914`。本番`x-test-post` v107の正確なsource baselineをcommit `25998fc8927d8bd45a89478b1fec8b4bc5ba782b` と27/27ファイル完全一致で証明。Phase 3HのAI Lab経路だけを保持したcandidate `c4eb2855f2adc66e5518feaa51eef63bbf139e4d` を専用branchへpushし、C1待ち。v107 FunctionはACTIVE v107 / verify_jwt=false / 同一hashのまま。過去に承認済みmigration 2本は適用済みだが、この作業で新たなDB変更・deployなし。
+  - Codex slot 2: `ready` — `broad-news-phase5-coverage-expansion-and-all-useful-scope-20260914`。重要ニュース収集・app visibility・通知scope。最新TASKは`x-test-post`、OAuth、Vaultを明示的に除外。
   - Claude slot 1: `review_required` — `broad-news-phase4-natural-push-observation-20260913`。read-only観測のみで本番変更0件。収集→分類→判定→X公開は自然データで確認（ホルムズ海峡付近での商船攻撃 `coverage_severity=high` / `[geopolitics, shipping_logistics]`、TDnetの浜岡原発報告書で企業IRにも複数カテゴリ付与を確認）。統合producerの正のenqueueとPush到達は**未観測**（`all_useful` でも市場ニュースは業種一致必須、企業ニュースは銘柄登録必須で該当なし）。新規に3件の未解決事象を特定: サウジ原油パイプライン復旧見通しの収集取りこぼし（web_searchがrawCandidateCount 0、ゲート除外ではない）/ 2026-09-14 朝刊レポートが `REPORT_FACT_FAILED` で欠落（リトライなし）/ X投稿本文の `generation_failed` 4件。以降の作業はCodexへ引き継ぐ前提でReportに引き継ぎ章を記載。監視タスクと予約タスクは停止・削除済み。
   - Claude slot 2: `done` — Phase 3C OAuth workstream transferred to Codex slot 1; do not modify same OAuth/Vault/x-oauth-connect area in parallel
 - multibrand_work:
@@ -41,9 +41,9 @@
   - OAuth経路のX post/media callは各0。publish claimsはtotal 11 / published 4のまま。9/13 failed rowは人工retryなし
   - AI Lab identity/Vault refs/dry_run/publish無効は不変。Cron/scheduler/x-test-post/Pushは変更なし
 - parallel_work:
-  - Codex H1 Phase 3Iは`review_required`。migration 2本（記録version `20260913230852` / `20260913231013`）は適用/read-back済み。対象Functionはv107のまま。commit `406b53c2a2838a5ac2a446fffb6e6feef954eb7a` と現行runtimeのPhase 3H外差分を検出したためdeploy停止中。差分を含む再レビューsource、または既存live code置換について明示確認が必要。`important-news-monitor` / app news / Phase 3 preset migration領域を別スロットで変更しない
+  - Codex H1 Phase 3I runtime reconciliationは`review_required`。`x-test-post` v107 source commit `25998fc8927d8bd45a89478b1fec8b4bc5ba782b` をAPI内容27/27完全一致で確認し、candidate branch `codex/x-multibrand-phase3i-runtime-reconciliation-20260914` / commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d` をC1用にpush。生産Functionはv107で不変、deployなし。slot 2のPhase5 news変更とは対象分離。
   - Claude slot2 must not touch same area until H1 completes
-  - Codex slot2 may touch `x-test-post` only; if scope overlaps, stop and report conflict
+  - Codex slot2の現行Phase5 TASKは`x-test-post` / OAuth / Vaultを対象外としており、H1との競合なし
   - existing uncommitted changes belong to other workstreams and must not be modified/staged/committed
 - known_issue:
   - multibrand migrations `20260910170000/180000/190000` objects exist in production but migration history may not record them; do not use blind `supabase db push`

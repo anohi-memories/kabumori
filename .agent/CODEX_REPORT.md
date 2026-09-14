@@ -1,13 +1,89 @@
 # Codex Report
 
+- task_id: `x-multibrand-phase3i-runtime-reconciliation-20260914`
+- result: `review_required` — source reconciliation passed local tests and was pushed for C1 review. Production remains on `x-test-post` v107; no deploy or new DB operation was performed.
+- model_used: GPT-5.6 Sol
+- production_source_base: `25998fc8927d8bd45a89478b1fec8b4bc5ba782b` (recorded v107 source, independently proven below)
+- control_base: fresh `origin/main` `97c624267ab9d2ecb0b03487d5c5cdacdc5ab8dd`
+- reviewed_source: Phase 3H commits `6ce4ad8ea983dd617c6227dd6f628e3e3b4f945b` and `406b53c2a2838a5ac2a446fffb6e6feef954eb7a`
+- candidate_branch: `codex/x-multibrand-phase3i-runtime-reconciliation-20260914`
+- candidate_commit: `c4eb2855f2adc66e5518feaa51eef63bbf139e4d`
+- push: candidate branch pushed to `origin` for C1 review; no force push.
+- production_project: `wsmznyzcvmuitkglfeuj` (`stock-x-autopost`), ACTIVE_HEALTHY, Postgres 17.6, `ap-northeast-1`.
+
+## Latest H1 result — Phase 3I runtime reconciliation
+
+### Proven v107 baseline
+
+- `supabase_get_edge_function(x-test-post)` returned ACTIVE version 107, `verify_jwt=false`, 27 runtime files, aggregate SHA-256 `54e8dae698415305185bb6e59f0cf4b1d12c0ca1df9750d44ff6d9772364fc71`.
+- Each of the 27 API-returned file contents was compared directly with commit `25998fc8927d8bd45a89478b1fec8b4bc5ba782b`; all 27/27 were byte-identical. The deployed API entrypoint also pointed to this recorded source checkout.
+- A second read-only function read after the candidate push still returned version 107 and the same aggregate hash; all 27/27 files matched the pre-work read exactly.
+- v107 runtime file list:
+  - `supabase/functions/x-test-post/index.ts`
+  - `supabase/functions/x-test-post/morning_report_logic.ts`
+  - `supabase/functions/x-test-post/us_session_date_logic.ts`
+  - `supabase/functions/x-test-post/close_report_logic.ts`
+  - `supabase/functions/x-test-post/fixed_hashtags_logic.ts`
+  - `supabase/functions/x-test-post/voice_retry_logic.ts`
+  - `supabase/functions/x-test-post/close_report_data_logic.ts`
+  - `supabase/functions/x-test-post/report_voice_rewrite_logic.ts`
+  - `supabase/functions/x-test-post/us_premarket_logic.ts`
+  - `supabase/functions/x-test-post/interaction_quality_logic.ts`
+  - `supabase/functions/x-test-post/tip_voice_logic.ts`
+  - `supabase/functions/_shared/kabumori_voice.ts`
+  - `supabase/functions/x-test-post/voice_evaluation_logic.ts`
+  - `supabase/functions/x-test-post/report_material_logic.ts`
+  - `supabase/functions/x-test-post/morning_candidate_logic.ts`
+  - `supabase/functions/x-test-post/morning_lane_response_logic.ts`
+  - `supabase/functions/x-test-post/morning_report_retry_logic.ts`
+  - `supabase/functions/x-test-post/admin_auth_logic.ts`
+  - `supabase/functions/x-test-post/morning_greeting_image_logic.ts`
+  - `supabase/functions/x-test-post/yume_reference_logic.ts`
+  - `supabase/functions/x-test-post/morning_greeting_payload_logic.ts`
+  - `supabase/functions/x-test-post/morning_greeting_logic.ts`
+  - `supabase/functions/x-test-post/morning_greeting_scene_logic.ts`
+  - `supabase/functions/x-test-post/morning_greeting_publish_logic.ts`
+  - `supabase/functions/x-test-post/publish_claim_logic.ts`
+  - `supabase/functions/_shared/x_oauth2_post.ts`
+  - `supabase/functions/x-test-post/useful_tip_generation_logic.ts`
+
+### Reconciliation and three-way diff
+
+- v107 → candidate: only `x-test-post/index.ts` changes among the 27 existing runtime files; the other 26 remain byte-identical. Twelve imported brand runtime modules were added for brand context, guarded token routing, AI Lab generation/dispatch, length enforcement, fingerprints, and dedupe.
+- Phase 3H `406b53c` → candidate: the three unrelated files `close_report_data_logic.ts`, `close_report_logic.ts`, and `fixed_hashtags_logic.ts` remain at the proven v107 bytes. The unrelated TOPIX/report prompt and live-close selection hunks in `index.ts` were also restored to v107. The approved AI Lab Vault-backed dispatch and completion safeguards remain.
+- Non-imported brand context dry-run routing and unrelated standalone OAuth/Vault metadata helper modules/tests from `406b53c` were not carried into this deploy candidate. This keeps the runtime candidate limited to modules imported by the reconciled `x-test-post` path. The two migration files are included unchanged from `406b53c` for source traceability/static security testing; they were not executed in this task.
+- Existing-file edits are limited to `x-test-post/index.ts` and two tests whose ordering assertions now match deferred X-auth construction after scheduled-row brand selection. The close-report and hashtag source files and tests are unchanged from v107.
+
+### Changed files
+
+- Runtime entry: `supabase/functions/x-test-post/index.ts`.
+- New runtime modules under `supabase/functions/_shared/brand/`: `ai_lab_brand_post_store.ts`, `ai_lab_scheduled_brand_post.ts`, `ai_lab_vault_token_source.ts`, `brand_context.ts`, `brand_post_dispatch_guard.ts`, `brand_post_generator.ts`, `brand_profiles.ts`, `cross_brand_dedupe.ts`, `kabumori_recent_fingerprints.ts`, `post_length_policy.ts`, `publish_guard.ts`, `token_loader.ts`.
+- New/updated tests under the same directory: `ai_lab_brand_post_store_test.ts`, `ai_lab_scheduled_brand_post_test.ts`, `ai_lab_vault_token_source_test.ts`, `brand_context_test.ts`, `brand_post_dispatch_guard_test.ts`, `brand_post_generator_test.ts`, `brand_profiles_test.ts`, `cross_brand_dedupe_test.ts`, `dispatch_gate_test.ts`, `kabumori_recent_fingerprints_test.ts`, `post_length_policy_test.ts`, `publish_guard_test.ts`, `token_loader_test.ts`.
+- Updated tests in `supabase/functions/x-test-post/`: `morning_greeting_payload_logic_test.ts`, `morning_greeting_publish_logic_test.ts`.
+- Included exact, unchanged source files for the migrations already applied in the prior authorized task: `supabase/migrations/20260913123509_ai_lab_prelive_safeguards.sql`, `supabase/migrations/20260913151428_read_ai_lab_x_vault_token.sql`.
+
+### Tests and safety
+
+- `deno test --no-check --allow-read=. supabase/functions/x-test-post supabase/functions/_shared/brand`: 448 passed / 0 failed. Includes 279/280 pass, 281 blocked, dry-run no X callback, fixed AI Lab Vault routing/no legacy fallback/no refresh, duplicate blocking, confirmed-success completion and uncertain-completion duplicate-resend protection, plus Kabumori, close-report, TOPIX-source, and fixed-hashtag regressions.
+- `deno check --no-config supabase/functions/x-test-post/index.ts`: six diagnostics, exactly the same six as clean v107 baseline `25998fc` (AES-GCM `Uint8Array/BufferSource`, image `BlobPart/BodyInit`, `retry_count`, timestamp precision). No new diagnostic from reconciliation.
+- `deno fmt --check` on the ten core Phase 3H helper/test files: pass. A broader check of the curated 25-file brand directory still reports 10 files from the reviewed source as unformatted; no formatting-only edits were made.
+- `git diff --check`: pass.
+- Production read-back after work: `x-test-post` still ACTIVE v107, `verify_jwt=false`, same 27 files/hash. No Function deploy, runtime invocation, SQL/migration execution, DB write, migration history edit, Cron/settings/OAuth/token change, X post, or media upload. X/media writes: 0.
+
+### Remaining gate
+
+Candidate awaits C1 review. Stop before any Edge Function deploy; a separate explicit deploy authorization is required after C1. The two pre-existing Phase 3I migrations remain applied and must not be reapplied or replaced.
+
+## Previous task metadata — Phase 3I pre-live rollout
+
 - task_id: `x-multibrand-phase3i-ai-lab-production-prelive-rollout-20260914`
 - result: `review_required` — both explicitly authorized migrations were applied and read back successfully. Stopped before Function deploy after discovering material differences between current production `x-test-post` and the exact reviewed commit that would replace non-Phase-3H code.
 - model_used: GPT-5.6 Sol
 - source_commit: `406b53c2a2838a5ac2a446fffb6e6feef954eb7a`; fresh fetch of `origin/codex/ai-lab-prelive-safeguards-20260913` confirmed the exact remote HEAD. Both reviewed migration files exist in that commit; SHA-256: `342119d0ae523f0eb93a5d6b233395e9f326d7ce79c172f2e61b518e6f205ce6` (`20260913123509_ai_lab_prelive_safeguards.sql`), `88316c9e57f69c719db503fe184ab8cc806d04ebce1c08a70b04f8d544d34317` (`20260913151428_read_ai_lab_x_vault_token.sql`).
-- control_base: fresh `origin/main` `6c4a05a9e6aa583d5a7336aac7e41b3ca7af54fb`.
+- control_base: `6c4a05a9e6aa583d5a7336aac7e41b3ca7af54fb`.
 - production_project: `wsmznyzcvmuitkglfeuj` (`stock-x-autopost`), ACTIVE_HEALTHY, Postgres 17.6, `ap-northeast-1`.
 
-## Phase 3I preflight and rollout results
+## Previous Phase 3I preflight and rollout results
 
 - migrations_applied: only `20260913123509_ai_lab_prelive_safeguards.sql` and `20260913151428_read_ai_lab_x_vault_token.sql`, both read from exact commit `406b53c2...`. Supabase recorded `20260913230852` / `ai_lab_prelive_safeguards` and `20260913231013` / `read_ai_lab_x_vault_token`. No other SQL/migration applied.
 - migration_readback: `complete_ai_salaryman_lab_brand_post(uuid,text,text)` and `read_ai_salaryman_lab_x_vault_token(uuid)` are present, both `SECURITY DEFINER`, empty `search_path`, service_role EXECUTE true and anon/authenticated false. Function bodies match the reviewed fixed brand/account/type/handle/identity/ref guards; completion marks only a matching running AI Lab `brand_post` row succeeded after confirmed success and handles fingerprint/log failure without repost eligibility. Partial unique `(social_account_id,x_post_id) WHERE x_post_id IS NOT NULL` index exists. Vault reader was not invoked.
