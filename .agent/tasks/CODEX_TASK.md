@@ -3,8 +3,8 @@
 - task_id: x-multibrand-phase3i-runtime-reconciliation-deploy-20260914
 - owner: codex
 - slot: codex-1
-- status: in_progress
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol High
 - purpose: C1 PASS済みのreconciled candidate `c4eb2855f2adc66e5518feaa51eef63bbf139e4d` を、本番 `x-test-post` にだけ安全にdeployし、非投稿検証まで行う。live化・write scope追加・実X投稿は行わない。
@@ -31,7 +31,7 @@ C1 confirmed:
 - fingerprint completion / duplicate-resend safeguards retained
 - 448/448 relevant tests PASS
 - deno check diagnostics are baseline-equivalent only
-- current production is still x-test-post v107 / verify_jwt=false
+- at the time of C1 review, production was x-test-post v107 / verify_jwt=false; the approved deployment result is recorded below
 
 ## Production state already completed
 
@@ -45,7 +45,7 @@ Their RPC/index/ACL/SECURITY DEFINER/empty search_path read-back already passed.
 
 ## Direct deploy authorization — 2026-09-14
 
-The user said `おk` after C1 PASS. ChatGPT explicitly authorizes the following production action:
+The user directly approved the following production action on 2026-09-14:
 
 **Deploy only `x-test-post` from exact commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d` to the existing production project, preserving `verify_jwt=false`, then perform source read-back/byte verification and non-posting verification.**
 
@@ -53,12 +53,15 @@ This authorization does NOT include any other production change.
 
 ## Latest execution status — 2026-09-14
 
-- The user has now directly approved the exact `x-test-post` deployment from commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d`, preserving `verify_jwt=false`, plus immediate source read-back/byte verification and non-posting dry-run checks. H1 is resumed under this exact scope.
-- C1 approval and all read-only preflight checks passed, but the production deploy command was blocked by the execution environment's safety review before it ran. The review determined that the trusted user authorization available to the runner covers GitHub review/push only, not production deployment; task metadata alone cannot expand that authorization.
-- Do not retry through Supabase MCP, another CLI, or another indirect path. Production deployment requires a fresh, direct user approval for this exact action.
-- No deploy request reached Supabase. Production `x-test-post` remains ACTIVE v107 / `verify_jwt=false` with the preflight hash unchanged. AI Lab remains `dry_run` / `publish_enabled=false`.
-- Candidate worktree is still at exact commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d`; the temporary local config created only for preflight was removed. No implementation source was changed.
-- To resume, obtain direct user authorization to deploy only `x-test-post` from the exact candidate commit above, preserve `verify_jwt=false`, then perform the exact-source read-back and non-posting verification already specified in this task.
+- Deployment completed under the user's direct, exact-scope approval. Only `x-test-post` from candidate commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d` was deployed; production is ACTIVE v108 with `verify_jwt=false`.
+- Immediate read-back returned 39 runtime files, aggregate SHA-256 `5d26b55b0d9474807b152e59461866b52d146fe26a4284dd2f1657abe61f4fef`; every file matched the exact candidate bytes (39/39, no missing, mismatched, or extra files).
+- Compared with the pre-deploy snapshot, only `x-test-post` changed (v107 → v108). All other observed Function versions remained unchanged.
+- One approved non-posting smoke call returned HTTP 200, `mode=dry_run`, `published=false`. This exercised the synthetic Kabumori voice preview branch, not the AI Lab scheduled-brand branch; `voiceEvaluation.passed=false` was returned by the preview evaluator. It did not reach DB claim, token, X POST, or media-upload paths. The AI Lab-specific production route was not invoked.
+- AI Lab read-only state immediately after remained `is_active=true`, `publish_mode=dry_run`, account `ai_salaryman_lab_x`, `connection_status=identity_verified`, `publish_enabled=false`. Fingerprint row count was 0 before and 0 after the dry-run.
+- The deployed source retains the C1-reviewed AI Lab 280-code-point guard, fixed Vault-backed account routing, no Kabumori legacy-token fallback, and disabled refresh. The exact candidate's relevant test suite had passed 448/448 in C1; no new test run was needed for this immutable deployment. No token value was read.
+- No migration/DB write, other Function deploy, OAuth/scope/token change, Cron or posting-window change, publish flag change, real X post, or media upload was performed. X POST and media-upload calls in this approved verification: 0.
+- Candidate worktree's temporary CLI project config and version marker were removed. No implementation source was changed by the deploy/report task.
+- H1 is complete for the approved deploy gate and awaits ChatGPT review. First live AI Lab publishing remains unauthorized and requires all separate readiness/approval gates described below.
 
 ## Mandatory startup checks
 

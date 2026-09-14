@@ -12,7 +12,7 @@
   - Claude slot1開始=`G1`、完了確認=`K1`
   - Claude slot2開始=`G2`、完了確認=`K2`
 - active_workstream:
-  - Codex slot 1: `in_progress` — `x-multibrand-phase3i-runtime-reconciliation-deploy-20260914`。ユーザーからexact commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d` の `x-test-post` 単独deploy / `verify_jwt=false` 維持 / 即時source read-backと非投稿dry-run確認の直接承認を受領し、H1再開。本番の最新read-only状態はACTIVE v107 / `verify_jwt=false` / hash `54e8dae698415305185bb6e59f0cf4b1d12c0ca1df9750d44ff6d9772364fc71`、AI Labは `dry_run` / `publish_enabled=false`。
+  - Codex slot 1: `review_required` — `x-multibrand-phase3i-runtime-reconciliation-deploy-20260914`。ユーザー承認どおりexact commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d` の `x-test-post` のみ本番deploy完了。ACTIVE v108 / `verify_jwt=false`、read-back 39/39 files byte-identical（aggregate SHA-256 `5d26b55b0d9474807b152e59461866b52d146fe26a4284dd2f1657abe61f4fef`）。他Function versionは不変。非投稿previewはHTTP 200 / `published=false`。AI Labは `dry_run` / `publish_enabled=false`、fingerprint countは前後0。実X投稿、media、DB/OAuth/Cron変更なし。AI Lab実経路の本番dry-runは未実施。詳細は`.agent/CODEX_REPORT.md`。
   - Codex slot 2: `ready` — `broad-news-phase5-coverage-expansion-and-all-useful-scope-20260914`。重要ニュース収集・app visibility・通知scope。最新TASKは`x-test-post`、OAuth、Vaultを明示的に除外。
   - Claude slot 1: `review_required` — `broad-news-phase4-natural-push-observation-20260913`。read-only観測のみで本番変更0件。収集→分類→判定→X公開は自然データで確認（ホルムズ海峡付近での商船攻撃 `coverage_severity=high` / `[geopolitics, shipping_logistics]`、TDnetの浜岡原発報告書で企業IRにも複数カテゴリ付与を確認）。統合producerの正のenqueueとPush到達は**未観測**（`all_useful` でも市場ニュースは業種一致必須、企業ニュースは銘柄登録必須で該当なし）。新規に3件の未解決事象を特定: サウジ原油パイプライン復旧見通しの収集取りこぼし（web_searchがrawCandidateCount 0、ゲート除外ではない）/ 2026-09-14 朝刊レポートが `REPORT_FACT_FAILED` で欠落（リトライなし）/ X投稿本文の `generation_failed` 4件。以降の作業はCodexへ引き継ぐ前提でReportに引き継ぎ章を記載。監視タスクと予約タスクは停止・削除済み。
   - Claude slot 2: `done` — Phase 3C OAuth workstream transferred to Codex slot 1; do not modify same OAuth/Vault/x-oauth-connect area in parallel
@@ -41,7 +41,7 @@
   - OAuth経路のX post/media callは各0。publish claimsはtotal 11 / published 4のまま。9/13 failed rowは人工retryなし
   - AI Lab identity/Vault refs/dry_run/publish無効は不変。Cron/scheduler/x-test-post/Pushは変更なし
 - parallel_work:
-  - Codex H1 Phase 3I runtime reconciliation candidateはC1 PASS。direct user approval後にdeploy slotを再開中。candidate branch `codex/x-multibrand-phase3i-runtime-reconciliation-20260914` / commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d` のみ対象。本番最新確認では `x-test-post` v107のまま。slot 2のPhase5 news変更とは対象分離。
+  - Codex H1 Phase 3I runtime reconciliation candidateはC1 PASS済み。exact candidate `c4eb2855f2adc66e5518feaa51eef63bbf139e4d` を承認範囲どおり `x-test-post` のみにdeploy/read-back済み（v108）。H1はChatGPTレビュー待ち。slot 2のPhase5 news変更とは対象分離。
   - Claude slot2 must not touch same area until H1 completes
   - Codex slot2の現行Phase5 TASKは`x-test-post` / OAuth / Vaultを対象外としており、H1との競合なし
   - existing uncommitted changes belong to other workstreams and must not be modified/staged/committed

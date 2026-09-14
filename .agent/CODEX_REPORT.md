@@ -3,16 +3,17 @@
 ## Latest H1 result — Phase 3I deployment gate (2026-09-14)
 
 - task_id: `x-multibrand-phase3i-runtime-reconciliation-deploy-20260914`
-- result: `review_required` — C1-approved candidate and production preflight were verified, but the execution environment's safety review blocked the production deploy before command execution. The review found that trusted user authorization covers review/push, not production deploy; task-file metadata alone is not sufficient. No workaround or alternate deploy path was attempted.
-- resume: the user has now directly approved deploying only this exact candidate commit to `x-test-post`, retaining `verify_jwt=false`, followed immediately by source read-back/byte verification and non-posting dry-run verification. H1 is resumed; this report will be updated with the final outcome.
-- candidate: branch `codex/x-multibrand-phase3i-runtime-reconciliation-20260914`, exact commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d`.
-- tests: not rerun during this deploy-gating turn. The C1 report for this exact immutable candidate records 448/448 relevant tests passing and no new Deno type diagnostics versus the v107 baseline.
-- preflight: `x-test-post` read-back was ACTIVE v107, `verify_jwt=false`, SHA-256 `54e8dae698415305185bb6e59f0cf4b1d12c0ca1df9750d44ff6d9772364fc71`. No deploy request was sent to Supabase.
-- AI Lab read-only state: brand `is_active=true`, `publish_mode=dry_run`; account `ai_salaryman_lab_x`, handle `kaishain_ai_lab`, `connection_status=identity_verified`, `publish_enabled=false`; Vault reference presence checked only as booleans. No token/ref values read.
-- candidate checkout: clean exact candidate commit before preflight. A temporary `supabase/config.toml` containing only the verified project ref and `x-test-post` `verify_jwt=false` was removed after the blocked attempt. No implementation source changed.
-- production_changes: 0. No DB/RPC/migration, Edge Function, Cron, OAuth/token, publish setting, X, or media mutation. No function invocation or test post.
-- next action: direct user approval is required for the exact `x-test-post` deploy from commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d`, preserving `verify_jwt=false`. After approval, redeploy only if the same preflight still matches, then immediately byte-compare read-back and perform non-posting checks.
-- control_sync: this report, slot-1 task status, and current state are being synced to `origin/main`; no implementation commit was changed.
+- result: `review_required` — exact approved candidate deployed, byte-verified, and non-posting smoke check completed. No first/live post was authorized or attempted.
+- authorization: user directly approved only deployment of `x-test-post` from exact commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d`, retaining `verify_jwt=false`, followed by source read-back/byte verification and non-posting dry-run verification.
+- candidate: branch `codex/x-multibrand-phase3i-runtime-reconciliation-20260914`, exact deployed commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d`.
+- deployment: production `x-test-post` ACTIVE v108, `verify_jwt=false`. Read-back contained 39 runtime files, aggregate SHA-256 `5d26b55b0d9474807b152e59461866b52d146fe26a4284dd2f1657abe61f4fef`; byte comparison against the exact candidate passed 39/39, with no missing, mismatched, or extra files.
+- function isolation: pre/post version comparison showed only `x-test-post` changed (v107 → v108). Other observed Functions remained at their pre-deploy versions.
+- non-posting smoke: one explicit synthetic voice-preview call returned HTTP 200, `mode=dry_run`, `published=false`. It took the synthetic Kabumori preview branch and returned `voiceEvaluation.passed=false`; no DB claim, token, X POST, or media-upload path was reached. This was not an AI Lab scheduled-brand invocation.
+- AI Lab state: immediately-after read-only check remained brand `is_active=true`, `publish_mode=dry_run`; account `ai_salaryman_lab_x`, handle `kaishain_ai_lab`, `connection_status=identity_verified`, `publish_enabled=false`. Fingerprint count was 0 before and 0 after the smoke call. No token value was read.
+- runtime safeguards: exact deployed source is the C1-reviewed candidate, whose 448/448 relevant tests passed. It retains the AI Lab 280-code-point pre-dispatch guard, fixed Vault-backed account routing, no Kabumori legacy-token fallback, and refresh disabled. This turn did not separately exercise the AI Lab route in production.
+- mutations excluded: no migration/DB write, other Function deploy, OAuth/scope/token change, Cron/posting-window change, publish flag change, real X post, or media upload. X POST calls=0; media-upload calls=0.
+- cleanup: temporary candidate `supabase/config.toml` and CLI version marker were removed. No implementation source changed during deployment.
+- next_owner: ChatGPT review. Remaining before any first live AI Lab post: separately authorize scope changes if needed, verify exact posting-window requirements, and obtain distinct approval for publish enablement and the first real post. No such action is covered here.
 
 - task_id: `x-multibrand-phase3i-runtime-reconciliation-20260914`
 - result: `review_required` — source reconciliation passed local tests and was pushed for C1 review. Production remains on `x-test-post` v107; no deploy or new DB operation was performed.
