@@ -47,6 +47,7 @@ as $$
     select candidate.id, coalesce(candidate.published_at, candidate.created_at) as news_time
     from market_candidates as candidate
     where candidate.effective_severity in ('critical', 'high', 'medium')
+      and coalesce(candidate.published_at, candidate.created_at) >= now() - interval '6 hours'
       and (candidate.status <> 'rejected' or candidate.source_type in ('tdnet', 'company_ir'))
       and (candidate.title !~ '[ぁ-んァ-ヶ一-龠]')
       and not (candidate.generation_fact_status = 'passed' and coalesce(btrim(candidate.generated_text), '') <> '')

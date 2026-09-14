@@ -296,3 +296,14 @@ Report必須:
 - next_recommendation
 
 C2承認までは本番反映しない。
+
+## C2 freshness follow-up — 2026-09-15
+
+- task_id: `broad-news-phase5-coverage-expansion-and-all-useful-scope-20260914`
+- status: `review_required`
+- next_owner: `chatgpt`
+- C2指摘に対応し、Phase 5 `important_news_app_copy_targets(integer)` のmarket-wide `all_useful` branchだけに、producerと同じ `coalesce(published_at, created_at)` 基準の6時間以内（境界含む）条件を追加。
+- producer/feed、low・category OFF・Fact fail・duplicate gate、quiet/standard/many/company挙動は変更なし。
+- 同一disposable PostgreSQLでapply → RPC proof → 直前migration versionへのrollbackとread-backを完了。詳細は `.agent/CODEX_REPORT_2.md` の同名follow-up節。
+- monitor 403/403、related 76/76、admin TypeScript/lint/build、`git diff --check` はPASS。
+- production migration/deploy/DB/RPC/Cron/settings/Push変更なし。C2再レビュー待ち。

@@ -31,6 +31,16 @@ test("all_useful app feed/copy adds only unmatched market medium+ and keeps Japa
   assert.doesNotMatch(broadFeed, /public\.tracked_stocks/i);
 });
 
+test("all_useful market-wide app-copy targets use producer-aligned inclusive six-hour freshness", () => {
+  const appCopy = migration.slice(migration.indexOf("create function public.important_news_app_copy_targets("));
+  const broadTargets = appCopy.slice(appCopy.indexOf("broad_targets as ("), appCopy.indexOf("visible as ("));
+  assert.match(
+    broadTargets,
+    /coalesce\(candidate\.published_at, candidate\.created_at\)\s*>=\s*now\(\)\s*-\s*interval '6 hours'/i,
+  );
+  assert.doesNotMatch(broadTargets, /<\s*now\(\)\s*-\s*interval '6 hours'/i);
+});
+
 test("all_useful push scope retains push, important-news, category, freshness, Fact, event, and row dedupe gates", () => {
   const producer = migration.slice(migration.indexOf("create function public.enqueue_important_news_notifications("));
   assert.match(producer, /settings\.push_enabled = true/i);

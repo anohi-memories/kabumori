@@ -750,3 +750,40 @@ Then apply the exact migration file via `podman exec -i <container> psql -X -v O
 - Production Cron/settings changes: **0**; synthetic production candidate/Push: **0**; production manual invoke: **0**; X/OpenAI API calls and X posts: **0**.
 - No source code or migration file changed in this follow-up. Existing Phase 5 TASK remains `review_required` / `next_owner: chatgpt`.
 - Historical collection uplift still awaits natural observation; the app-copy stale-target finding above remains for C2 review.
+
+## H2 Phase 5 app-copy freshness follow-up — 2026-09-15
+
+- task_id: `broad-news-phase5-coverage-expansion-and-all-useful-scope-20260914`
+- status: `review_required`
+- next_owner: `chatgpt`
+- source_base: freshly fetched `origin/main` at `a34319a107bd2337bf55c3b5a5970ac92cbe96a9`.
+- Scope: address only C2's app-copy freshness finding; no producer/feed, other preset, client, or unrelated source change.
+
+### Change
+
+- Updated `supabase/migrations/20260917120000_broad_news_phase5_all_useful_scope_and_run_diagnostics.sql` in `important_news_app_copy_targets(integer)`'s Phase 5 `broad_targets` CTE with `coalesce(candidate.published_at, candidate.created_at) >= now() - interval '6 hours'`.
+- This is the same timestamp precedence used by the Phase 5 producer. The inclusive `>=` accepts the exact six-hour boundary. The predicate is limited to market-wide `all_useful` app-copy targets; feed/producer and `quiet` / `standard` / `many` / company / holding / watch behavior were not changed.
+- Updated `phase5_migration_static_test.ts` with a scoped assertion for the app-copy CTE and the inclusive six-hour predicate.
+
+### Disposable PostgreSQL apply / behavior proof / rollback
+
+- Used the existing isolated `/private/tmp/kabumori-h2-phase5-20260914/db-proof` Supabase local project (`project_id=db-proof`, local Postgres port 55432; no production project link). Its temporary `cron.schedule` no-op shim remained local-only so historical migration replay could not schedule production endpoint commands.
+- Replayed the local migration chain with the updated candidate migration. Read-back confirmed the migration was applied, `important_news_monitor_runs.diagnostics` remained `jsonb NOT NULL DEFAULT '{}'`, the app-copy RPC contained the six-hour predicate, and its existing `SECURITY DEFINER`, empty `search_path`, and service-role-only execute grant remained intact (`anon` and `authenticated` execute false).
+- Rollback-contained RPC behavior proof passed: an English, sector-mismatched medium candidate exactly six hours old was included; an eight-hour-old fixture was excluded. Existing low, category-OFF, app-copy Fact-failed, and duplicate exclusions passed. The same proof retained unmatched-market feed behavior, producer medium/high/critical eligibility, category/Fact/stale/duplicate and opt-out exclusions, repeated-enqueue idempotency, and `quiet` / `standard` / `many` plus company holding/watch behavior.
+- Post-proof read-back found zero fixture users, candidates, notifications, and run rows. Reset local DB to immediately preceding migration version `20260916100000`; read-back confirmed Phase 5 migration record/diagnostics column/base wrappers absent, original RPC names restored, and fixtures still zero. Stopped and removed only the disposable `db-proof` local DB volumes; other local Podman project was left untouched.
+
+### Verification
+
+- `deno test --no-check --allow-read supabase/functions/important-news-monitor/*test.ts`: **403 passed / 0 failed** (402 previous tests plus the new migration freshness regression).
+- `deno test --no-check --allow-read supabase/functions/send-push-notifications/*test.ts supabase/functions/personalized-reports/*test.ts tests/app/*test.ts`: **76 passed / 0 failed**.
+- `apps/admin`: lockfile-based `npm ci --ignore-scripts --no-audit --no-fund` completed; `npm exec tsc -- --noEmit`, `npm run lint`, and `npm run build` all passed. `package.json`/lockfile unchanged; Next's generated `next-env.d.ts` edit was restored and generated `deno.lock` removed.
+- `git diff --check`: PASS.
+
+### Safety / disposition
+
+- Production migration/RPC/schema: **0**; `supabase db push`: **0**; production deploy: **0**.
+- Production Cron/settings changes: **0**; synthetic production candidate/Push and production manual invoke: **0**; X/OpenAI API calls and X posts: **0**.
+- Changed files for this follow-up: migration, migration static test, `.agent/tasks/CODEX_TASK_2.md`, and this report only.
+- commit_hash / push: pending H2 synchronization.
+- remaining_issues: no production action is authorized by this follow-up; C2 should re-review the updated migration candidate before any separate production approval.
+- next_recommendation: return to C2 with status `review_required`, next_owner `chatgpt`.
