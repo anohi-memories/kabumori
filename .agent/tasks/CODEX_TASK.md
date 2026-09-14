@@ -1,37 +1,22 @@
 # Codex Task
 
-- task_id: x-multibrand-phase3j-ai-lab-posting-schedule-20260914
+- task_id: x-multibrand-phase3k-ai-lab-first-live-test-20260916
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Sol High
-- purpose: ユーザー指定の「1日10回程度・時間は適当」をAI Labの具体的なposting scheduleへ落とし込み、live化前の安全な設定状態まで進める。実X投稿・OAuth write scope変更・publish有効化はまだ行わない。
+- purpose: 2026-09-16 JSTから会社員AIラボの実投稿テストを段階的に開始する。まずOAuth write readinessと本人確認を行い、1件の制御された実投稿を確認した後に10枠の自動投稿テストを開始する。問題があれば自動化へ進まず停止する。
 
-## Confirmed production state
+## Confirmed state
 
-- Phase 3I C1: PASS
+- Phase 3I production pre-live deploy: C1 PASS
 - production `x-test-post`: ACTIVE v108 / `verify_jwt=false`
-- deployed source: exact commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d`, 39/39 runtime files byte-verified
-- AI Lab brand: `publish_mode=dry_run`
-- AI Lab social account: `ai_salaryman_lab_x` / handle `kaishain_ai_lab` / `identity_verified` / `publish_enabled=false`
-- OAuth scopes remain read-only: `tweet.read users.read offline.access`
-- no real AI Lab X post yet
-- no AI Lab posting window currently enabled
-
-## User schedule decision — source of truth
-
-User instruction: **「投稿スケジュールは1日10回程度適当に」**
-
-Interpretation for initial production schedule design:
-- timezone: `Asia/Tokyo`
-- post_type: `brand_post`
-- 10 slots per calendar day
-- same schedule on weekdays/weekends initially
-- random execution time inside each slot/window is preferred over fixed minute posting
-- no overnight posting
-- target windows (JST):
+- deployed source: exact reviewed commit `c4eb2855f2adc66e5518feaa51eef63bbf139e4d`
+- Phase 3J posting schedule: C1 PASS
+- AI Lab `posting_windows`: 10 rows, `brand_post`, `Asia/Tokyo`, all `is_active=false`
+- windows:
   1. 07:30–08:30
   2. 09:00–10:00
   3. 10:30–11:30
@@ -42,92 +27,165 @@ Interpretation for initial production schedule design:
   8. 19:00–20:00
   9. 20:30–21:30
   10. 22:00–23:00
-- initial `daily_probability`: 1.0 per slot. "程度" is satisfied by random timing inside windows; if the existing scheduler semantics make exact 10/day inappropriate, stop and report before changing semantics rather than inventing a different probability model.
+- each `daily_probability=1.0`
+- current AI Lab brand `publish_mode=dry_run`
+- current AI Lab social account `ai_salaryman_lab_x` / handle `kaishain_ai_lab` / `identity_verified` / `publish_enabled=false`
+- current AI Lab OAuth scopes: `tweet.read users.read offline.access`
+- no real AI Lab X post yet
 
-## Goal
+## User decision — source of truth
 
-1. Inspect current `posting_windows` schema and planner semantics read-only.
-2. Confirm how window start/end, timezone, slot_no, daily_probability and `is_active` are interpreted.
-3. Prepare/apply only the minimum AI Lab schedule rows needed for the 10 slots above.
-4. Keep them **inactive** unless the current schema/planner cannot represent inactive configured rows safely; if so, stop and report instead of enabling them.
-5. Verify the rows read back correctly and are brand-scoped to `ai_salaryman_lab` / `brand_post`.
-6. Do not change Cron, OAuth scopes, publish flags, token state, or X posting.
+User instruction on 2026-09-15 JST: **「16日からテスト開始しよ」**.
 
-## Production authorization boundary
+Interpretation:
+- target test start date: **2026-09-16 JST**
+- user authorizes beginning a controlled real-post test on that date, followed by the already-approved 10-slot schedule only if the controlled first post succeeds and safety checks pass
+- this is a test rollout, not an unconditional authorization to continue after errors
 
-The user's schedule instruction authorizes configuring the schedule values above, but does **not** authorize live publishing.
+## Start rule
 
-Allowed:
-- read-only inspection of `posting_windows` and planner/RPC semantics
-- insert/update only AI Lab `posting_windows` rows required to represent the 10-slot schedule
-- keep those rows `is_active=false`
-- read-back verification
-- code/test changes only if needed to support the existing schema semantics safely; any source change must stop for C1 before deploy
+Do not perform write-scope reauthorization, publish enablement, posting-window activation, or real X posting before **2026-09-16 JST**.
 
-Not allowed:
-- `is_active=true` for AI Lab posting windows
-- `publish_mode=live`
-- `publish_enabled=true`
-- `tweet.write` / `media.write`
-- OAuth reauthorization
-- token refresh/liveness test
-- real/test X post or media upload
-- Cron changes
-- Kabumori or Mio schedule/settings changes
-- unrelated DB/schema/RPC changes
+At/after 2026-09-16 JST, begin only after mandatory fresh checks below pass.
+
+## Mandatory fresh checks
+
+1. Read `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, this TASK, `.agent/CODEX_REPORT.md`.
+2. Fresh-check `origin/main` and current production Function state.
+3. Inspect all other active slots. Stop on overlap with `x-oauth-connect`, `x-test-post`, `social_accounts`, AI Lab `brands`, AI Lab posting windows, planner/Cron, or OAuth/Vault routing.
+4. Confirm production still has:
+   - `x-test-post` v108 or a separately reviewed newer equivalent
+   - AI Lab `publish_mode=dry_run`
+   - AI Lab `publish_enabled=false`
+   - 10 AI Lab `brand_post` windows present and inactive
+   - handle `kaishain_ai_lab`
+5. Confirm no unexpected scheduled `brand_post` rows or prior AI Lab real posts appeared.
+
+If any expected state differs, STOP for C1 instead of improvising.
+
+## Phase A — OAuth write readiness
+
+Goal: obtain a fresh AI Lab authorization that can post text while retaining read/refresh access.
+
+Required scopes:
+- `tweet.read`
+- `tweet.write`
+- `users.read`
+- `offline.access`
+
+Do not add `media.write` in this task.
+
+Safety requirements:
+- use only the AI Lab account path
+- no Kabumori token fallback or mutation
+- before replacing/saving usable token refs, verify X `/2/users/me` returns username exactly `kaishain_ai_lab`
+- if handle mismatches, reject and STOP without enabling publishing
+- do not expose access/refresh tokens, Vault secret values, password, or 2FA
+- preserve fixed account id `ai_salaryman_lab_x`
+- verify token refs are Vault-backed after success
+
+If current `x-oauth-connect` source cannot safely request the additional write scope without code change, implement only the minimum isolated AI Lab scope change, test it, push for C1, and STOP before deploy/re-authorization. Do not silently broaden Kabumori or Mio scope behavior.
+
+## Phase B — controlled first real post
+
+Only after Phase A succeeds and `/2/users/me` verified `kaishain_ai_lab`:
+
+1. Keep all ten posting windows inactive.
+2. Prepare exactly one AI Lab `brand_post` through the production path.
+3. Confirm generated text is <=280 Unicode code points under the implemented server-side rule and cross-brand dedupe passes.
+4. Change only the minimum AI Lab flags required for the single controlled test:
+   - `publish_mode=live`
+   - `publish_enabled=true`
+5. Execute **one** real text-only AI Lab X post.
+6. Confirm:
+   - returned X post id exists
+   - scheduled/completion state is terminal and not retryable
+   - fingerprint is persisted or completion safely records the persisted=false terminal outcome without replay risk
+   - post appears under `kaishain_ai_lab`
+   - no Kabumori/Mio mutation
+   - no media call
+
+If any uncertainty exists after the X write, do not retry automatically. Use the existing duplicate-resend-safe terminal/hold behavior and STOP for review.
+
+## Phase C — begin 10-slot test schedule
+
+Only if the single controlled post is confirmed successful and no safety issue is found:
+
+- keep `publish_mode=live`
+- keep `publish_enabled=true`
+- set only the ten existing AI Lab `brand_post` posting-window rows to `is_active=true`
+- do not alter their time windows, timezone, slot numbers, or probability
+- do not change Cron cadence
+- ensure planner creates only AI Lab `brand_post` rows as expected
+- do not backfill missed slots from before activation time on 2026-09-16
+- activation should apply prospectively from the remaining windows on/after activation
+
+Initial test target: approximately 10 posts/day according to the configured ten windows. Do not create extra manual posts beyond the one controlled first post unless specifically required to recover from a non-posting pre-X failure and explicitly justified in Report.
+
+## Automatic stop conditions
+
+Immediately disable the ten AI Lab windows (`is_active=false`) and set AI Lab publishing back to a safe disabled state if practical, then STOP and report if any of these occur:
+- wrong X account/handle
+- duplicate or suspected duplicate post
+- over-280 dispatch attempt
+- unexpected Kabumori/Mio route use
+- token refresh/routing anomaly
+- completion uncertainty that could cause duplicate resend
+- repeated generation failure suggesting a loop
+- any unexpected media call
+- more than one post from a single intended slot
+- unexpected scheduler/backfill behavior
+
+Do not delete data to hide failures.
+
+## Explicitly authorized by this task
+
+At/after 2026-09-16 JST, subject to the staged gates above:
+- AI Lab OAuth reauthorization adding only `tweet.write` while retaining `tweet.read users.read offline.access`
+- exact-account `/2/users/me` verification
+- one controlled real text-only AI Lab X post
+- AI Lab-only `publish_mode=live` and `publish_enabled=true` for the test
+- activation of the existing ten AI Lab posting-window rows after first-post success
+- read-only/read-back verification and necessary planner invocation already used by the normal system
+
+## Still prohibited
+
+- `media.write` or media upload
+- changes to Kabumori OAuth/token/handle/publish/schedule/Cron
+- Mio changes
+- unrelated Function deploys
+- unrelated DB/schema/RPC/migration changes
 - `supabase db push`
-- migration history repair/reconcile
-- secret/token/password/2FA output
+- migration-history repair/reconcile
+- changing the ten schedule window values without a new user decision
+- hiding or deleting failed execution evidence
+- exposing token/secret/password/2FA values
 
-## Mandatory safety checks
+## Verification / observation
 
-Before any DB write:
-- read `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, this TASK, `.agent/CODEX_REPORT.md`
-- fresh-check `origin/main`
-- inspect other active slots for overlap with `posting_windows`, planner RPCs, Cron, or `x-test-post`
-- read production `posting_windows` schema/indexes/constraints and existing AI Lab rows
-- verify unique/index key expected for brand/post_type/slot_no
-- inspect `plan_daily_posts()` / related planner logic and confirm inactive rows are ignored
-
-If another slot overlaps the same table/planner/Cron, STOP and report conflict.
-
-## Verification
-
-After schedule configuration:
-- read back exactly 10 AI Lab `brand_post` rows
-- confirm timezone `Asia/Tokyo`
-- confirm slot numbers 1–10 and expected windows
-- confirm `daily_probability=1.0`
-- confirm all rows `is_active=false`
-- confirm Kabumori/Mio rows unchanged
-- confirm no scheduled post was created as a side effect
-- confirm no Cron change
-- confirm X/media writes 0
+Record at minimum:
+- exact OAuth scopes after reauthorization
+- `/2/users/me` result as username only (no sensitive token data)
+- first real post id and timestamp
+- first real post character count
+- fingerprint/completion result
+- AI Lab flags before/after
+- posting-window active state before/after
+- planner result for 2026-09-16 prospectively
+- any naturally executed scheduled test posts observed during task window
+- explicit X text-write count and media-write count
+- Kabumori/Mio unchanged evidence
 
 ## Completion
 
-When complete:
+After staged rollout/observation:
 - set `status: review_required`
 - set `next_owner: chatgpt`
 - update `.agent/CODEX_REPORT.md`
-- sync only control/report metadata as needed
+- sync only the necessary task/report/current-state metadata
 
-Report exact rows/values, planner semantics, DB writes performed, unchanged components, and next required gate.
+If Phase A requires a code change, stop before production deployment and leave `review_required` for C1.
+If Phase B fails, do not activate the ten windows.
+If Phase B succeeds and Phase C activates, report exact activation time and which 2026-09-16 windows remain eligible prospectively.
 
-## Next gate after this task
-
-After schedule rows are safely configured and reviewed, the next separate phase is OAuth write readiness:
-- add `tweet.write` while retaining `tweet.read users.read offline.access`
-- reauthorize and verify `/2/users/me` remains `kaishain_ai_lab`
-- still keep publish disabled until a separate first-live-post approval.
-
-## Execution result — 2026-09-14
-
-- Production schema/planner preflight passed. `posting_windows` is RLS-enabled and has `UNIQUE(post_type, slot_no)` plus `UNIQUE(brand_id, post_type, slot_no)`. Before insertion there were no `brand_post` windows for any brand and no `brand_post` scheduled rows in the next 10 days.
-- The current `plan_daily_posts(date)` implementation selects only rows with `w.is_active=true`, an active brand, and `publish_mode IN ('dry_run','live')`. `daily_probability=1.0` always passes its deterministic probability gate; each candidate time is randomized in its window using the row timezone. Therefore `is_active=false` safely prevents planning even while the AI Lab brand remains active/dry_run.
-- Inserted exactly 10 rows for `brand_id='ai_salaryman_lab'`, `post_type='brand_post'`, slots 1–10, `timezone='Asia/Tokyo'`, `daily_probability=1.0`, all `is_active=false`. Exact times are in `.agent/CODEX_REPORT.md`.
-- Read-back confirmed the 10 exact rows, all disabled. Existing non-AI-Lab rows (all Kabumori) were unchanged; no Mio posting-window rows existed before or after. Upcoming `brand_post` scheduled_posts remain 0.
-- The active `dispatch-scheduled-posts` Cron remains unchanged at every minute. There are no triggers on `posting_windows`; no planner or `x-test-post` invocation was triggered manually for this task, and no direct X API/media call was made.
-- No schema/migration/RPC, OAuth/scope/token, publish flag, Cron, source code, or other production setting was changed. AI Lab remains `publish_mode='dry_run'`, account `identity_verified`, `publish_enabled=false`.
-- Schema caveat for future multi-brand use: both `posting_windows(post_type, slot_no)` and `scheduled_posts(schedule_date, post_type, slot_no)` are brand-agnostic unique keys. There is no current competing `brand_post` schedule, so this inactive AI Lab configuration is representable; do not add another brand's same `brand_post` slots without separately resolving/reviewing that uniqueness design.
-- Result: `review_required`. No first/live post is authorized.
+This task authorizes a controlled test start on 2026-09-16, not an unchecked production rollout.
