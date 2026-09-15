@@ -789,3 +789,32 @@ Then apply the exact migration file via `podman exec -i <container> psql -X -v O
 - GitHub sync: successful. The implementation and H2 status/report commits were pushed; post-push fresh fetch confirmed `origin/main` at `4f9bcc23a1fc291be1f7679de99e6f49a75c4010`, containing implementation commit `9b1281637f1ea8f1bed6863ff5e786ef918f51fa`. This report-only update records that verified result.
 - remaining_issues: no production action is authorized by this follow-up; C2 should re-review the updated migration candidate before any separate production approval.
 - next_recommendation: return to C2 with status `review_required`, next_owner `chatgpt`.
+
+## H2 Phase 5 production rollout — 2026-09-15
+
+- task_id: `broad-news-phase5-coverage-expansion-and-all-useful-scope-20260914`
+- status: `review_required`
+- next_owner: `chatgpt`
+- production preflight: fresh `origin/main` at `244fbf5963d80d121a373278881d6c8b7f319c67`; approved implementation commit `9b1281637f1ea8f1bed6863ff5e786ef918f51fa` is an ancestor. H1 is isolated to AI Lab/x-test-post; Claude observation is read-only; no migration/RPC/function overlap was found.
+
+### Production migration
+
+- Applied exactly the approved Phase 5 migration SQL from `supabase/migrations/20260917120000_broad_news_phase5_all_useful_scope_and_run_diagnostics.sql` through the Supabase migration API. `supabase db push` and migration-history repair/reconcile were not used.
+- Apply result: **success**.
+- Supabase recorded the migration under server-assigned history version `20260915130756` with name `broad_news_phase5_all_useful_scope_and_run_diagnostics`; no manual history edit was made. The requested file timestamp remains a repository filename only.
+- Read-back: `important_news_monitor_runs.diagnostics` is `jsonb NOT NULL DEFAULT '{}'::jsonb`; all three replacement RPCs exist; each is `SECURITY DEFINER` with empty `search_path`; `get_my_important_stock_news(integer)` is authenticated-only, while `important_news_app_copy_targets(integer)` and `enqueue_important_news_notifications(integer)` are service-role-only. The app-copy definition contains the inclusive `coalesce(published_at, created_at) >= now() - interval '6 hours'` gate plus medium/high/critical, all_useful, category, Fact, app-copy-attempt, stale, and duplicate gates. Producer/feed definitions retain their approved medium+ all_useful branch and existing preset/company/holding/watch paths.
+
+### important-news-monitor deploy
+
+- Deployed **only** `important-news-monitor` from the clean `origin/main` worktree with `--no-verify-jwt` / `verify_jwt=false`.
+- Result: **success**, ACTIVE version **53**. Previous version was 52. `x-test-post` remained v108; all unrelated Function versions and metadata were unchanged.
+- Post-deploy source read-back via `supabase functions download ... --use-api`: all 21 deployed runtime files byte-compared equal to the approved local deploy source (`0` mismatches). Test-only files are not part of the deployed bundle and were not included in the runtime comparison.
+
+### Natural observation
+
+- Read-only observation after deployment found no post-deploy completed monitor cycle yet. The latest observed scheduled runs were completed and error-free, with `fetched_count` 241, `duplicate_count` 108/105/102, `new_candidate_count` 3, and diagnostics `{}`; no fresh unmatched market medium+ candidate, app-copy target, or important-news notification was present in the queried window. Notification queue counts were pending 0 / processing 0 / failed 0. Natural Phase 5 behavior is therefore **未観測**; no synthetic candidate, enqueue, Push, manual invoke, X, or OpenAI call was performed.
+
+### Safety
+
+- No other Edge Function deploy; no Cron/scheduler/settings/user-setting change; no OAuth/Vault change; no `supabase db push`; no migration-history repair; no synthetic candidate/Push; no manual Function/OpenAI/X invocation; no X post.
+- `apps/admin/**`, `HANDOFF.md`, formal checkout, and other workstreams were untouched. TASK remains `review_required` / `next_owner: chatgpt` for C2.
