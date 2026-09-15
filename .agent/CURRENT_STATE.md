@@ -52,6 +52,10 @@
   - `important_news_app_copy_targets` / `visible_market` はアプリ表示・日本語コピー生成にも業種一致条件を課すため、通知条件の緩和は表示・日本語化と一体で設計する
   - `CLAIM_PENDING_NOTIFICATIONS_FAILED:504` が2026-09-14未明に3回目。monitor/dispatcherのDB読み取り失敗を5経路で観測（実害は未確認、滞留0）
   - `net._http_response` は約6時間で消えるためエラーの長期傾向を追えない
+  - 2026-09-14 20:40 JST `Houthis seize 2 strategic Red Sea islands`（breaking_market）が `coverage_severity=emergency` / `emergency_class=chokepoint_disruption` と判定され、20:50 に `important_news` Push が1件 sent。**Phase 4で未観測だった「市場全体ニュースの正のenqueue→Push到達」を実データで初確認**（業種一致なし、emergency bypass経路）
+  - 同一事象の先行記事（09-14 17:20、同じく emergency）はPushされておらず、重複Pushは発生していない
+  - 2026-09-15 の朝刊 08:35 / 大引け 17:15 はいずれも `completed` / Fact `passed` で保存・Push sent。9/14 の朝刊・大引け2件連続Fact不合格からは回復したが、Fact不合格時のリトライが無い点は未対応
+  - `status='generation_failed'` は累計142件（`NEWS_GENERATION_FACT_RETRY_FAILED` 64 / `NEWS_GENERATION_FACT_FAILED` 59 / `NEWS_GENERATION_VOICE_FAILED` 17 / `NEWS_GENERATION_LOCAL_FACT_FAILED` 2、09-01〜09-15）。日次では 09-14 が失敗18/公開1、09-15 が失敗12/公開4 で、**X投稿用本文の生成失敗が公開数を上回る**。Push・アプリ表示には影響しないがX投稿の取りこぼしとして要対応（次タスク候補）
 
 ## 更新ルール
 
