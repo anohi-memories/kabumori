@@ -3,8 +3,8 @@
 - task_id: x-news-generation-failure-hardening-20260916
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: urgent
 - recommended_model: Sol High
 - purpose: X向け重要ニュース本文の `generation_failed` が累計142件まで積み上がっている問題を、実データで原因分類し、Fact安全性を落とさず公開取りこぼしを減らす。同時に、同じ重要ニュース生成経路がOpenAI API token消費の最大要因になっているため、品質を維持したままAI呼び出し回数・入力token・無駄なretryも削減する。
@@ -246,3 +246,21 @@ C2レビューで見るもの:
 ## Next task after C2
 
 このタスクがC2 PASSした後、別タスクとして「personalized morning/close reportの `REPORT_FACT_FAILED` 時に安全なbounded retryを追加」をCodex slot 2へ割り当てる。
+
+## C2 review result — 2026-09-16
+
+C2 cannot be completed yet because the required slot-2 completion report is not synchronized to `origin/main`.
+
+Observed:
+- this TASK was moved to `review_required`
+- `.agent/CODEX_REPORT_2.md` still contains the previous close-report diagnosis as its current/top report and does not contain `task_id: x-news-generation-failure-hardening-20260916`
+- `.agent/CURRENT_STATE.md` is also stale for slot 2, but TASK/REPORT mismatch alone is sufficient to block C2
+
+Required H2 follow-up:
+1. Do not redo implementation unless needed; first recover the actual completed work from the H2 worktree/branch.
+2. Update `.agent/CODEX_REPORT_2.md` with the required current-task report: root-cause analysis, changed files, tests, commit/push, no-deploy boundary, AI call/token before-after, reduction rate, safety checks, remaining issues.
+3. If implementation commit/branch was not pushed, push it safely after a fresh `origin/main` check. Do not mix H1 or other workstream changes.
+4. Update `.agent/CURRENT_STATE.md` only as needed to reflect the actual slot-2 state.
+5. Then set this TASK back to `review_required`, `next_owner: chatgpt`, sync control files to `origin/main`, and stop for C2.
+
+Do not deploy to production in this follow-up. Do not touch `x-test-post`, AI Lab/OAuth/Vault, personalized-reports, morning-greeting workflow/script, Cron, production DB/schema/RPC/settings, or manual X/OpenAI calls.
