@@ -3,7 +3,7 @@
 - task_id: x-ai-lab-brand-post-production-hotfix-20260916
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: in_progress
 - next_owner: codex
 - priority: urgent
 - recommended_model: Sol High
