@@ -60,7 +60,7 @@ test("non-2xx RPC response remains fail-closed without exposing its body", async
   );
 });
 
-test("OAuth start continues after a void RPC and returns the read-only authorization response", async () => {
+test("OAuth start continues after a void RPC and returns the text-write authorization response", async () => {
   let requestCount = 0;
   const fetchImpl: typeof fetch = async (input, init) => {
     requestCount += 1;
@@ -83,7 +83,7 @@ test("OAuth start continues after a void RPC and returns the read-only authoriza
     handle: "kaishain_ai_lab",
     brandId: "ai_salaryman_lab",
     socialAccountId: "ai_salaryman_lab_x",
-    scopes: "tweet.read users.read offline.access",
+    scopes: "tweet.read users.read tweet.write offline.access",
     fetchImpl,
   });
 
@@ -92,13 +92,20 @@ test("OAuth start continues after a void RPC and returns the read-only authoriza
   assert.equal(authorizationUrl.pathname, "/i/oauth2/authorize");
   assert.equal(
     authorizationUrl.searchParams.get("scope"),
-    "tweet.read users.read offline.access",
+    "tweet.read users.read tweet.write offline.access",
+  );
+  assert.match(
+    authorizationUrl.searchParams.get("scope") ?? "",
+    /tweet\.write/u,
   );
   assert.doesNotMatch(
     authorizationUrl.searchParams.get("scope") ?? "",
-    /tweet\.write|media\.write|like\.write|follows\.write/u,
+    /media\.write|like\.write|follows\.write/u,
   );
-  assert.equal(result.scopes, "tweet.read users.read offline.access");
+  assert.equal(
+    result.scopes,
+    "tweet.read users.read tweet.write offline.access",
+  );
   assert.equal(result.publish_mode, "dry_run");
   assert.equal(result.publish_enabled, false);
   assert.equal(requestCount, 1);

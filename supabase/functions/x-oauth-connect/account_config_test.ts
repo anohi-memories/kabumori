@@ -31,10 +31,17 @@ test("the obsolete Kabumori label cannot start OAuth as an X handle", () => {
   );
 });
 
-test("AI Lab OAuth remains read-only and resolves to its existing Vault flow", () => {
+test("AI Lab OAuth adds only text-write and keeps its existing Vault safeguards", () => {
   const config = resolveOAuthStartConfig("kaishain_ai_lab");
-  assert.equal(config.scopes, "tweet.read users.read offline.access");
-  assert.doesNotMatch(config.scopes, /tweet\.write|media\.write/u);
+  assert.equal(
+    config.scopes,
+    "tweet.read users.read tweet.write offline.access",
+  );
+  assert.match(config.scopes, /tweet\.write/u);
+  assert.doesNotMatch(
+    config.scopes,
+    /media\.write|like\.write|follows\.write/u,
+  );
   assert.equal(config.tokenDestination, "vault");
   assert.equal(config.publishMode, "dry_run");
   assert.equal(config.publishEnabled, false);

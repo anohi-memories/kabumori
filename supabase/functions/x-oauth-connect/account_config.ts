@@ -17,7 +17,7 @@ const AI_LAB: OAuthAccountConfig = {
   brandId: "ai_salaryman_lab",
   socialAccountId: "ai_salaryman_lab_x",
   expectedHandle: "kaishain_ai_lab",
-  scopes: "tweet.read users.read offline.access",
+  scopes: "tweet.read users.read tweet.write offline.access",
   publishMode: "dry_run",
   publishEnabled: false,
   beginRpc: "begin_ai_salaryman_lab_oauth_connection",
