@@ -1,120 +1,91 @@
 # Codex Task 2
 
-- task_id: x-close-report-freshness-boundary-fix-20260916
+- task_id: x-close-report-freshness-production-deploy-20260916
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: urgent
 - recommended_model: Luna first
-- purpose: X大引けレポートが17:00直後の通常遅延で `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE` になる再現性のあるfreshness境界バグを、最小修正で直す。
+- purpose: C2 PASS済みのX大引けfreshness境界修正を、`x-test-post` のみに安全に本番反映し、runtime sourceとdeploy sourceの一致を確認する。
 
-## Confirmed incident evidence
+## Approved implementation
 
-2026-09-16 production read-only確認:
-- X close_report scheduled_for 17:00:00 JST
-- started_at 17:00:00.719 JST
-- close_report_runs reference/fact note 17:00:01.337 JST
-- status failed / `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE`
-- required indices: 日経平均 / TOPIX連動ETF（1306）
-- notes included both `必須指数取得不能` and `鮮度または未来時刻エラー`
-- app personalized close report at 17:15 JST completed and had same-day valid Nikkei / 1306 daily data.
+C2で承認済み:
+- implementation commit: `04bfe490a53fea95892ea6e225251b5e129aa87e`
+- change: `jpx_close`について、同一JST日・15:30以降の観測値を16:45〜17:05 JSTのlive close-report実行窓ではfreshとして扱うsemantic same-session rule
+- existing 90-minute rule is retained as fallback outside that window
+- previous-day / future / invalid timestamp / pre-15:30 / missing or nonnumeric / source identity failures remain rejected
+- Fact/Voice fail-closed, no-fallback policy, posting schedule 17:00 are unchanged
+- targeted tests: 64/64 PASS
+- full `x-test-post` regression: 388/388 PASS
+- changed source `deno check`: PASS
+- `git diff --check`: PASS
 
-Current code in `supabase/functions/x-test-post/close_report_logic.ts`:
-- `validateCloseFreshness()` treats `jpx_close` as fresh only when `ageMinutes <= 90`.
-- Therefore an observed 15:30:00 JST close is fresh at exactly 17:00:00 but stale at 17:00:01+.
-- This same boundary risk was already reproduced on 2026-09-15. Two consecutive days now support treating this as a real production bug, not a theoretical edge case.
+## User authorization
 
-## Goal
+2026-09-16 JST、ユーザーはC2 PASS後に「指示」と明示し、この承認済みfreshness修正を本番反映する工程の開始を承認した。
 
-Keep X close report at 17:00 JST and make same-session official close data valid despite ordinary seconds/minutes of scheduler/function delay.
+## Mandatory fresh checks
 
-Do NOT solve by moving the report earlier unless a blocker makes the direct fix unsafe.
+開始前に:
+1. `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, this TASK, `.agent/CODEX_REPORT_2.md` を読む。
+2. `origin/main` をfresh-checkする。
+3. H1/G1/G2の現行TASKを確認し、`x-test-post`を同時変更/deployするworkstreamがあればSTOP。
+4. latest `origin/main` のruntime sourceに `04bfe490a53fea95892ea6e225251b5e129aa87e` のfreshness修正が含まれることを確認する。
+5. production `x-test-post` の現在version/status/verify_jwt/updated_atを記録する。
 
-## Required behavior
+期待状態が違う場合は勝手に補正せずSTOPしてC2へ戻す。
 
-For `jpx_close` in live close-report mode:
-- must still require same JST trading date as the report reference
-- must still require observed time at or after 15:30 JST
-- same-day official close data must remain valid through the normal 17:00 execution window, including 17:00:01+ delay
-- previous-day data must remain rejected
-- future timestamps must remain rejected
-- 15:30-before-session-close/intraday values must remain rejected by existing same-day close gate
-- invalid/missing numeric value, source URL, symbol/source identity checks remain unchanged
-- no search/morning-data fallback
-- Fact/Voice fail-closed behavior remains unchanged
+## Authorized production action
 
-Prefer a semantic same-session-close rule over a magic enlarged 90-minute number. If the existing architecture makes that impractical, use the narrowest safe bounded window and document why.
+許可するのは以下のみ:
+- clean checkout/worktreeの最新 `origin/main` をdeploy sourceに使用
+- `x-test-post` Edge Functionだけをdeploy
+- 現行functionのJWT設定を事前確認し、その設定を維持
+- deploy後に `x-test-post` version/status/verify_jwt/updated_atをread-back
+- production function sourceを可能な方法でdownload/read-backし、deploy sourceのruntime filesと一致確認
+- 他Edge Functionのversion/updated_atが意図せず変化していないことを確認
 
-## Scope
+## Prohibited
 
-Expected files only as needed:
-- `supabase/functions/x-test-post/close_report_logic.ts`
-- corresponding close-report tests
-- if required for diagnosis/observability, the smallest related close-report data helper/test
-- `.agent/CODEX_REPORT_2.md`
-- this TASK
-
-Do not touch:
-- app personalized report implementation
-- morning report
-- important-news-monitor
-- AI Lab/OAuth/Vault/multibrand paths
-- DB/schema/RPC/migration/Cron/settings
-- posting schedule time
-- unrelated x-test-post behavior
-
-## Required tests
-
-At minimum deterministic tests for:
-1. observed 15:30:00 JST, reference 17:00:00 => fresh/accepted
-2. observed 15:30:00 JST, reference 17:00:01 and 17:00+ ordinary delay => fresh/accepted
-3. same-day post-close value remains accepted within intended close-report live window
-4. previous-day 15:30 => stale/rejected
-5. same-day pre-15:30 observation => rejected by close-data gate
-6. future timestamp => rejected
-7. invalid timestamp => rejected
-8. existing close report Fact/Voice and X-post suppression tests remain green
-9. `git diff --check`
-10. changed-file `deno check` or baseline-equivalent diagnostics
-
-Run the relevant full x-test-post regression if practical.
-
-## Production boundary
-
-This task is implementation/review first.
-
-Do NOT deploy unless the user separately and explicitly authorizes the production deploy after C2 review.
-
-Also prohibited:
-- production DB writes
-- Cron/settings changes
-- manual/synthetic X post
-- manual OpenAI/X/Push invocation
-- schedule time change
+- 新しいsource修正（deploy blockerが見つかった場合は修正せずSTOP）
+- `important-news-monitor`や他Edge Functionのdeploy
+- app personalized report変更/deploy
+- morning report変更
+- AI Lab/OAuth/Vault/social_accounts変更
+- DB/schema/migration/RPC/RLS変更
+- Cron/settings/posting schedule変更
 - `supabase db push`
-- secret/token output
+- migration history repair
+- manual/synthetic close-report実行
+- manual OpenAI/X/Push invocation
+- manual X投稿
+- secret/tokenの表示
 
-Production read-only checks are allowed.
+自然Cronによる通常処理は止めない。
+
+## Verification
+
+最低限:
+- deploy前 `origin/main` fresh-check
+- deploy sourceに `04bfe490...` のruntime差分が存在
+- `x-test-post` deploy success
+- deploy後 ACTIVE/status/JWT設定確認
+- runtime source read-back一致
+- 他Function無変更確認
+- production DB/Cron/settings/posting schedule変更0
+- manual OpenAI/X/Push/close-report/X投稿0
+
+次の自然17:00 close-reportで実運用確認する。人工的にclose-reportを起動しない。
 
 ## Completion
 
-When implementation is complete:
-- push the implementation safely after fresh `origin/main` check
-- write `.agent/CODEX_REPORT_2.md` with root cause, exact rule change, changed files, tests, commit/push, no-deploy statement, safety checks, remaining issues
-- set TASK to `review_required`, `next_owner: chatgpt`
-- read back origin/main and stop for C2
-
-## C2 review result — 2026-09-16
-
-PASS.
-
-Confirmed:
-- implementation commit `04bfe490a53fea95892ea6e225251b5e129aa87e` changes only the scoped close-report freshness logic/tests plus slot-2 control files
-- semantic same-session rule accepts same-day observations at/after 15:30 during the bounded 16:45–17:05 live close-report window instead of relying solely on the exact 90-minute age boundary
-- the existing age-based rule remains fallback outside that window
-- prior-day and invalid data protections, source identity, numeric validation, Fact/Voice fail-closed behavior, no-fallback policy and posting schedule remain unchanged
-- targeted close/direct-data tests passed 64/64; full x-test-post regression passed 388/388; changed source deno check and git diff --check passed
-- production deploy/API/manual posting/DB/Cron/settings changes were 0
-
-Implementation is approved. Production deployment remains a separate explicit step.
+完了時:
+- `.agent/CODEX_REPORT_2.md` 先頭に今回taskのReportを追加
+- Reportに deploy前後version、deploy source commit、runtime read-back一致、他Function無変更、安全確認、次の自然17:00確認待ちを記録
+- source codeの追加commitは原則0
+- `.agent/tasks/CODEX_TASK_2.md` を `status: review_required`, `next_owner: chatgpt` に更新
+- push前に再度 `origin/main` fresh-check
+- `.agent/`制御ファイルのみ安全にpush
+- origin/main read-back後にSTOPしてC2待ち
