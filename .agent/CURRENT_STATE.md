@@ -12,7 +12,7 @@
   - Claude slot1開始=`G1`、完了確認=`K1`
   - Claude slot2開始=`G2`、完了確認=`K2`
 - active_workstream:
-  - Codex slot 1: `review_required` — `x-multibrand-phase3k-ai-lab-first-live-test-20260916`。production v17の12 runtime filesと完全一致する`13cb948`をbaseに、AI Labだけへ`tweet.write`を追加する候補`a469dcc7`をpush済み。C1前のためdeploy・OAuth再認可・token変更・publish有効化・実投稿・window有効化は行っていない。
+  - Codex slot 1: `in_progress` — `x-multibrand-phase3k-ai-lab-first-live-test-20260916`。C1 PASS後の継続を開始。production fresh-checkはv17、AI Lab `dry_run` / publish無効、10枠inactive、予定投稿・fingerprint・execution log 0。承認commitのdeploy前段階。
   - Codex slot 2: `ready` — `broad-news-phase5-coverage-expansion-and-all-useful-scope-20260914`。重要ニュース収集・app visibility・通知scope。最新TASKは`x-test-post`、OAuth、Vaultを明示的に除外。
   - Claude slot 1: `review_required` — `broad-news-phase4-natural-push-observation-20260913`。read-only観測のみで本番変更0件。収集→分類→判定→X公開は自然データで確認（ホルムズ海峡付近での商船攻撃 `coverage_severity=high` / `[geopolitics, shipping_logistics]`、TDnetの浜岡原発報告書で企業IRにも複数カテゴリ付与を確認）。統合producerの正のenqueueとPush到達は**未観測**（`all_useful` でも市場ニュースは業種一致必須、企業ニュースは銘柄登録必須で該当なし）。新規に3件の未解決事象を特定: サウジ原油パイプライン復旧見通しの収集取りこぼし（web_searchがrawCandidateCount 0、ゲート除外ではない）/ 2026-09-14 朝刊レポートが `REPORT_FACT_FAILED` で欠落（リトライなし）/ X投稿本文の `generation_failed` 4件。以降の作業はCodexへ引き継ぐ前提でReportに引き継ぎ章を記載。監視タスクと予約タスクは停止・削除済み。
   - Claude slot 2: `done` — Phase 3C OAuth workstream transferred to Codex slot 1; do not modify same OAuth/Vault/x-oauth-connect area in parallel
