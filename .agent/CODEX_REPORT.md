@@ -1,5 +1,24 @@
 # Codex Report
 
+## Latest H1 result — Phase 3K AI Lab text-write OAuth candidate (2026-09-16)
+
+- task_id: `x-multibrand-phase3k-ai-lab-first-live-test-20260916`
+- result: `review_required` — production `x-oauth-connect` needs a source change before AI Lab can request `tweet.write`, so the task stopped at the mandatory C1 gate before deploy or reauthorization.
+- user approval: after the write-capable-token risk was stated explicitly, the user approved the code-only scope change, tests, candidate push, and C1 report. This approval did not execute a production deployment or OAuth flow.
+- production baseline: `x-oauth-connect` ACTIVE v17 / `verify_jwt=false`. Its 12 runtime files were read back and matched commit `13cb948684785cdd189882b7434b981fabf96385` byte-for-byte (12/12), so that exact commit was used as the implementation base rather than the unrelated current `origin/main` source state.
+- candidate: branch `codex/ai-lab-write-scope-20260916`, commit `a469dcc50acc443efd65ebb933d527d3b21f5dca` (`Add AI Lab text-write OAuth scope`).
+- source change: AI Lab only changes from `tweet.read users.read offline.access` to `tweet.read users.read tweet.write offline.access`. `media.write`, `like.write`, and `follows.write` remain absent. Kabumori's existing scope string is unchanged.
+- safety retained: fixed `ai_salaryman_lab_x` / `kaishain_ai_lab` routing, Vault destination, callback `/2/users/me` identity verification before token completion, `publish_mode=dry_run`, and `publish_enabled=false` are unchanged. The runtime still contains no X post or media-upload endpoint.
+- changed files:
+  - `supabase/functions/x-oauth-connect/account_config.ts`
+  - `supabase/functions/x-oauth-connect/account_config_test.ts`
+  - `supabase/functions/x-oauth-connect/rpc_test.ts`
+  - `supabase/functions/_shared/brand/oauth_connection_test.ts`
+- tests: `deno test --no-check --allow-read=. supabase/functions/x-oauth-connect supabase/functions/_shared/brand` passed 25/25. `deno check --no-config` on all four changed files passed. `deno fmt --check` passed on the three already-formatted x-oauth-connect files; the shared test has pre-existing whole-file formatting drift and was not reformatted beyond the touched assertions. `git diff --check` passed.
+- production fresh-check before implementation: AI Lab brand remained active in `dry_run`; account `ai_salaryman_lab_x` / `kaishain_ai_lab` remained `identity_verified` with `publish_enabled=false` and Vault refs present; all ten AI Lab `brand_post` windows remained inactive; no unexpected scheduled AI Lab `brand_post` or published fingerprint was observed. No secret/ref value was read.
+- production changes: 0. No Function deploy, OAuth start/callback, reauthorization, token save/refresh, DB/schema/RPC/migration/Cron/window/flag change, planner invocation, X post, or media upload occurred. Text-write calls=0; media-write calls=0. Kabumori and Mio were not changed.
+- next gate: C1 must review exact commit `a469dcc50acc443efd65ebb933d527d3b21f5dca`. Only after a separate approved deployment may the AI Lab OAuth reauthorization be started; the callback must verify `/2/users/me` username exactly `kaishain_ai_lab` before any new Vault-backed token refs are accepted. Phase B/C were not entered.
+
 ## Latest H1 result — Phase 3J AI Lab posting schedule (2026-09-14)
 
 - task_id: `x-multibrand-phase3j-ai-lab-posting-schedule-20260914`

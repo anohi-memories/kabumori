@@ -3,8 +3,8 @@
 - task_id: x-multibrand-phase3k-ai-lab-first-live-test-20260916
 - owner: codex
 - slot: codex-1
-- status: in_progress
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol High
 - purpose: 2026-09-16 JSTから会社員AIラボの実投稿テストを段階的に開始する。まずOAuth write readinessと本人確認を行い、1件の制御された実投稿を確認した後に10枠の自動投稿テストを開始する。問題があれば自動化へ進まず停止する。
