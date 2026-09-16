@@ -1,309 +1,209 @@
 # Codex Task 2
 
-- task_id: broad-news-phase5-coverage-expansion-and-all-useful-scope-20260914
+- task_id: close-report-dual-failure-diagnosis-and-hardening-20260916
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: urgent
 - recommended_model: Sol High
-- purpose: Phase 4自然観測で判明した「収集段階の取りこぼし」と「all_usefulでも市場ニュースに登録業種一致が必要で通知・アプリ表示・日本語化が狭い」問題を、安全に改善する。collection / app visibility / push policy の分離原則を維持しつつ、広く集め、ユーザーが選んだ通知量に応じて市場全体ニュースを正しく届ける。
+- purpose: 2026-09-15 JSTの大引けで「Xの大引け投稿」と「アプリの大引け personalized report」が両方失敗した事象を、production read-only evidenceから切り分け、再発防止に必要な最小修正を安全に準備する。
 
-## Approved prior state
+## User intent
 
-Phase 4 `broad-news-phase4-natural-push-observation-20260913` はK1 PASS。
+ユーザーは、今日の大引けでX投稿もアプリ側も失敗したため修正したい。Phase 5 broad-newsは本番rollout済みで、このH2は別タスクとして大引け障害に集中する。
 
-自然観測で確認済み:
-- ホルムズ海峡付近の商船攻撃を自然取得→分類→判定→X公開まで確認。
-- `coverage_categories=[geopolitics, shipping_logistics]`, `coverage_severity=high` の複数カテゴリ分類が実データで動作。
-- TDnet企業IRにも複数カテゴリ付与が動作。
-- duplicate enqueue 0、pending/processing backlog 0、failed notification 0。
-- 統合producerの正のenqueue / Push到達は未観測。
-- 現在ユーザー設定は本人操作により `notification_preset='all_useful'`, `emergency_alerts=true`, 16カテゴリすべてenabled=true。
-- `supabase db push` は引き続き禁止。migration履歴乖離あり。
+## Critical parallel-safety boundary
 
-Phase 4で判明した直接問題:
+現在Codex H1は `x-multibrand-phase3k-ai-lab-first-live-test-20260916` が `ready` で、`x-test-post` / X OAuth / AI Lab publish path / posting windows を扱う。
 
-1. **収集取りこぼし**
-   - 2026-09-13の「サウジの原油パイプライン復旧に5〜6週間」という続報がcandidateに入らなかった。
-   - fetch Cron自体は正常。
-   - `commodities_energy_supply` topicも実行されたが `rawCandidateCount=0`。
-   - ゲート除外ではなく、web_searchから候補自体が上がっていない。
-   - 現状は許可ドメイン、1 topicあたり検索回数、鮮度3時間、続報専用クエリの不足が主因候補。
+したがってこのH2では、H1が完了するまで以下を厳守:
 
-2. **all_usefulの意味が狭すぎる**
-   - 現状market-wideはemergency以外、登録銘柄の業種一致が必要。
-   - そのため `all_useful` でも原油・海運・地政学など、保有外だが市場全体に重要なニュースが通知されない。
-   - 同じ業種一致条件が、Pushだけでなく **アプリ表示** と **日本語app copy生成対象** にも効いている。
-   - 例: ホルムズ商船攻撃はseverity highだが登録業種一致0のため、通知0・アプリ表示対象外・app copy対象外。
+- `x-test-post` sourceを変更しない
+- `x-oauth-connect` を変更しない
+- OAuth/Vault/social_accounts/AI Lab publish設定を変更しない
+- posting_windows / planner / X Cronを変更しない
+- H1と同じproduction設定を書き換えない
 
-ユーザー方針:
-**まず広く収集する。通知量はユーザー設定で調整する。収集や市場全体ニュースを保有業種だけに狭めて静かにする設計にはしない。**
+X大引け側は **read-only診断のみ** 可。
+X側の修正に `x-test-post` 変更が必要と判明した場合は、その具体箇所・原因・修正案をReportして停止し、H1完了後の別承認を待つ。
 
-## Goal
+一方、`personalized-reports` 側がH1と競合しないことをfresh-checkで確認できた場合のみ、アプリ大引け側の最小修正・テストをこのH2で進めてよい。
 
-### Phase 5A — collection expansion
+競合判定が曖昧なら書き込みせず停止する。
 
-重要な市場ニュース、とくに続報を拾う確率を上げる。
+## Mandatory startup
 
-最低限、以下を監査し、過剰コストやノイズを避けながら改善する:
+開始前に必ず確認:
 
-1. 許可ソース / domain coverage
-   - Reuters / AP / Bloomberg / 日経 / 政府系だけで不足しているエネルギー・商品・海運の一次/準一次ソースを追加候補にする。
-   - 例: S&P Global Commodity Insights / Platts系、Argus Media、EIA、IEA、OPEC、主要取引所・当局等。
-   - 有料本文依存や信頼性不明サイトを安易に広げない。
-   - URLを無条件許可するのではなくsource policyを維持。
-
-2. web_search breadth
-   - 現在1 topicあたり1 searchなら、重要固定topic / 続報topicのみ2 search等の段階的拡張を検討。
-   - 全topic一律で無制限に増やさない。
-   - 1時間あたりsearch数 / 想定コストをReportする。
-
-3. freshness
-   - breaking marketの3時間制限が続報を落とす場合、6時間程度へ緩和を第一候補にする。
-   - 必要なら「初報」と「進行中事象の続報」で別freshnessを持つ。
-   - 12時間等へ広げる場合は重複・古報再浮上リスクを定量評価。
-
-4. follow-up topic
-   - 進行中事象の「復旧見通し / 停止期間 / 供給量 / 航行再開 / 被害更新 / 制裁追加 / 政策変更」などを拾う専用query/topicを追加する。
-   - oil_energy / shipping_logistics / geopolitics / financial_system等に効く設計。
-
-5. zero-result diagnostics
-   - topicごとの `rawCandidateCount=0` 連続回数を診断できるようにする。
-   - 連続空振りが可視化できればよい。新しい永続DBテーブルが不要なら既存run diagnosticsへ載せる。
-   - 収集改善のためだけにCron増設はしない。
-
-### Phase 5B — `all_useful` market-wide semantics
-
-**設計判断: `all_useful` は market-wide medium以上を、登録銘柄/業種一致なしでも対象にする。**
-
-理由:
-- Phase 3で定義した `all_useful` は「market-wide medium以上」。
-- 現行の業種一致は、その意味を実質的に狭めている。
-- ユーザーは原油・海運・地政学など保有外の重要ニュースも受け取りたい。
-
-必須:
-- `all_useful`
-  - market-wide: medium / high / critical / emergency → 業種一致不要
-  - low → 引き続きPushしない
-  - category OFFは尊重
-  - push_enabled / important_news / Fact passed / 日本語copy / freshness / dedupeは必須
-- `quiet / standard / many`
-  - 既存プリセットの意図を壊さない。
-  - 原則として現行market thresholdを維持し、業種一致を残すか外すかは実データ件数を比較してReportする。
-  - **勝手に全presetを広げない。** 今回の確定変更対象は `all_useful`。
-- emergency
-  - 従来どおり全presetで専用gateに従い、業種一致不要。
-- company/holding/watch
-  - 既存挙動を壊さない。
-
-### Phase 5C — app visibility / Japanese app copy alignment
-
-`all_useful` ユーザーについて、通知だけ広げてアプリに記事が無い状態を作らない。
-
-必須:
-- `all_useful` の market medium+ は登録業種一致なしでもアプリ一覧対象。
-- 英語ニュースならapp copy生成対象にも入る。
-- Fact-passed日本語copyのみ表示する既存安全条件を維持。
-- lowは一覧対象外のまま。
-- category/severity日本語ラベルを維持。
-- detail routeを維持。
-- `quiet / standard / many` のアプリ表示方針は現行仕様との整合を確認し、不要に狭めたり広げたりしない。
-
-## Important design boundary
-
-collection / app visibility / push notification policy は分離する。
-
-- collectionはユーザーpresetに関係なく広く取る。
-- app feed / app copy / push eligibilityはユーザー設定に基づいて決める。
-- 収集を狭めて通知量を抑える設計に戻さない。
-
-## Required startup / parallel safety
-
-開始前に必ず読む:
 1. `.agent/ORCHESTRATION.md`
 2. `.agent/CURRENT_STATE.md`
 3. this TASK
 4. `.agent/tasks/CODEX_TASK.md`
-5. `.agent/tasks/CLAUDE_TASK_1.md`
-6. `.agent/tasks/CLAUDE_TASK.md`
-7. Phase 4 Report in `.agent/tasks/CLAUDE_TASK_1.md`
-8. `docs/news-coverage/REDESIGN.md`
-9. fresh `origin/main`
-10. production read-only current state
+5. `.agent/CODEX_REPORT_2.md`
+6. fresh `origin/main`
+7. production Function versions / relevant Cron / settings read-only
+8. 2026-09-15 JST大引け前後のproduction evidence
 
-必ずisolated clean worktree/cloneを使用。
-既存未コミット変更は他workstream所有物として触らない。
+必ずisolated clean worktree/cloneを使う。
+既存の未コミット変更は他workstream所有物として触らない。
 
-現在H1は `x-test-post` / AI Lab multibrand系を扱っている。今回H2は原則以下に限定:
-- `important-news-monitor`
-- broad news coverage pure logic/tests
-- app important-news feed/settings関連
-- 必要なら新しいapproved migration候補
+## Phase A — 2026-09-15 dual-failure forensic audit
 
-H1の `x-test-post`, OAuth, Vault, social_accounts, AI Lab routing, close report等には触らない。
+まずコード変更なしで、Xとアプリを別々に時系列化する。
 
-Push hardening境界:
-- `send-push-notifications` sourceは変更しない。
-- `claim_pending_push_notifications` RPCは変更しない。
-- notifications claim/retry/CAS schemaは変更しない。
-- Push eligibilityはproducer側で決定し、既存queueへenqueueする。
+### A1. X大引け
 
-競合が見つかった場合は開始せず、具体的なファイル/RPC/FunctionをReportする。
+2026-09-15 JSTの大引けについて最低限確認:
 
-## DB / migration safety
+- `plan_close_report()` が当日rowを生成したか
+- `scheduled_posts` の対象row
+  - scheduled_for
+  - claim / status
+  - retry/error
+  - published_at / external post id相当
+- `close_report_runs` / diagnostics
+- `x-test-post` invocation結果
+- Nikkei取得
+- `TOPIX連動ETF（1306）` 取得
+- source URL / observed_at / freshness
+- 15:30以降の同日終値gate
+- Fact評価
+- Voice評価 / retry
+- generation / publish直前のstop reason
+- X APIまで到達したか
+- 同じ時刻帯のDB/HTTP timeoutや504等
 
-market visibility / producer RPCの変更でSQLが必要なら、新しいexpand/replace migrationを作ってよい。
+「スケジュールされなかった」「claimされなかった」「市場データ不足」「Fact/Voice失敗」「publish失敗」を混同しない。
 
-ただしC2前は:
-- production migration適用禁止
-- production RPC変更禁止
-- production Edge Function deploy禁止
-- `supabase db push` 禁止
-- migration history repair/reconcile禁止
+### A2. アプリ personalized close report
 
-migration履歴は既知の乖離あり。
-C2承認後の本番反映も1ファイル単位 + rollback-contained proof + read-back前提。
+同じ2026-09-15 JSTについて最低限確認:
 
-## Tests — collection
+- `personalized_reports` の close report row有無
+- scheduled/started/completed/failed時刻
+- status / fact_status / error code
+- packet / market-data diagnostics（秘密情報を含めない）
+- generation回数
+- Fact retry有無
+- report保存まで到達したか
+- notification enqueue有無
+- notification queue status
+- Push dispatcher到達有無
+- user setting `close_report` / push opt-inをread-only確認
 
-最低限:
-- サウジ原油パイプラインのような「同一事象の重要続報」をquery/topicが対象にできるfixture
-- oil_energy / shipping_logistics / geopolitics / financial_system follow-up query coverage
-- source allowlist追加先のaccept/reject
-- freshness境界（現行3hと新しい閾値）
-- stale再浮上防止
-- duplicate / same_event回帰
-- zero-result diagnostic count
-- search budget cap
-- North Korea/J-Alert/disaster fixed coverage回帰
-- existing broad-news source validation回帰
+### A3. 共通原因判定
 
-## Tests — `all_useful`
+Xとアプリで以下の共通依存を確認:
 
-以下を明示的に証明:
-- all_useful + market medium + sector mismatch → eligible
-- all_useful + market high + sector mismatch → eligible
-- all_useful + market critical + sector mismatch → eligible
-- all_useful + market low → ineligible
-- all_useful + category OFF → ineligible
-- all_useful + Fact fail → ineligible
-- all_useful + stale → ineligible
-- all_useful + duplicate → 0 additional enqueue
-- emergency + sector mismatch → existing eligible behavior preserved
-- push_enabled=false → 0
-- important_news=false → 0
-- company holding/watch regression
-- quiet / standard / many regression
-- market_critical legacy compatibility regression
+- 同日市場データ source / timestamp
+- Nikkei / TOPIX proxy扱い
+- source freshness
+- OpenAI/Fact evaluator availability
+- Supabase/pg_net timeout
+- scheduler/Cron時刻
 
-## Tests — app visibility / copy
+共通原因か、独立した2障害かを明示する。
 
-- all_useful + market medium + sector mismatch → feed visible
-- all_useful + English market medium + sector mismatch → app copy target
-- generated app copy Fact fail → hidden/fail-closed
-- low → hidden
-- old company behavior regression
-- registered-sector matching behavior regression
-- category/severity label regression
-- no tracked stocksでもall_useful market medium+ feedを取得できること
+## Phase B — app close-report hardening
 
-## Volume / cost review
+H1と競合しないことを確認できた場合のみ実装可。
 
-Report必須:
+特に既知事象:
+- 2026-09-14 morning personalized reportは `REPORT_FACT_FAILED`
+- packetにない「指数→保有銘柄へ影響」という因果表現を生成し、fail-closed
+- retryがなく朝刊自体が欠落した
 
-### Collection
-- 現行 vs 変更後の1時間あたりweb_search最大回数
-- 1日あたり概算増分
-- 直近7日データに対する追加候補見込み
-- 古い/重複ニュース再流入リスク
+今回のclose reportが同系統なら、以下を検討:
 
-### Notification / app
-直近7日実データで:
-- all_useful旧条件（業種一致あり）対象件数
-- all_useful新条件（業種一致なし）対象件数
-- severity/category別増分
-- 1日平均Push見込み
-- app feed件数増分
-- 原油/海運/地政学の具体例
+1. prompt / writer rule
+   - packetにない因果関係を断定しない
+   - 「指数が保有銘柄に影響した/する」等は根拠がpacketにある場合だけ
 
-通知が極端に増える場合、実装を勝手に縮めずC2へ件数と選択肢をReportする。
+2. bounded retry
+   - Fact fail時に最大1回だけ再生成→再Fact check
+   - 無限retry禁止
+   - retry後もfailなら従来どおりfail-closed
+   - 同一reportの重複保存/重複Pushを起こさない
 
-## Static / regression
+3. deterministic guard
+   - 明確な未根拠因果フレーズを事前/事後に検知できるならpure logic化
+   - 根拠のある表現まで過剰除外しない
 
-- important-news-monitor relevant runtime suite
-- personalized report / dispatcher regression（source変更なしでも既存suite確認）
-- app tests
-- app `tsc`
-- changed Deno checks
+4. observability
+   - first Fact fail / retry result / terminal reasonを既存diagnosticsに安全に残す
+   - raw secret/model内部出力を保存しない
+
+今回の障害原因が別なら、実データに基づき最小修正に変更してよいが、scopeを拡大しすぎない。
+
+## Phase C — X close-report fix boundary
+
+X側の原因が `x-test-post` sourceにある場合:
+
+- このH2では修正しない
+- 原因箇所、該当function/file、再現条件、必要テスト、最小修正案をReport
+- H1が完了した後に新しいH2/Codex taskとして実装する
+
+X側がsource変更不要で、read-only監査だけで運用上の既知原因が確定した場合も、production設定を勝手に変更しない。
+
+## Tests — personalized reports
+
+コード変更した場合、最低限:
+
+- close report Fact fail → 1回だけretry
+- retry success → completed exactly once
+- retry fail → terminal failed / no notification
+- unsupported causality is rejected or rewritten without fabricated relation
+- supported causality remains allowed
+- duplicate report saveなし
+- duplicate notificationなし
+- morning report regression
+- close report regression
+- push deep-link/source type regression
+- report_logic tests
+- `deno check` changed modules
+- app relevant tests if client changes occur
 - `git diff --check`
 
-既知の無関係エラーは新規エラーと分離してReportする。
+## Production policy before C2
 
-## Production prohibitions before C2
+このH2ではC2前に以下禁止:
 
-- Edge Function deploy
-- DB migration/RPC/schema apply
-- Cron変更
-- user settings変更
-- manual/synthetic Push
-- synthetic production candidate
-- X投稿 / manual X API
-- OpenAI production manual invoke
+- `x-test-post` deploy
+- `personalized-reports` deploy
+- DB migration/schema/RPC apply
 - `supabase db push`
+- Cron/settings変更
+- manual/synthetic close report
+- manual/synthetic Push
+- scheduled_postsの人工挿入/再claim
+- X/OpenAI production manual invoke
+- X投稿
+- OAuth/Vault/token変更
 - migration history repair/reconcile
-- OAuth/Vault/token操作
 
-read-only production auditは可。
+production read-only auditは可。
+
+## Deliverables
+
+Reportに必須:
+
+1. 2026-09-15 X大引けの正確な失敗地点
+2. 2026-09-15 app大引けの正確な失敗地点
+3. 共通原因か独立障害か
+4. 各failure code / timestamp / relevant diagnostics
+5. X API / Push APIまで実際に到達したか
+6. app側修正をした場合の変更ファイル・テスト結果
+7. X側に必要な次修正（H1競合がある場合）
+8. production変更0件の確認
+9. remaining issues
+10. next recommendation
 
 ## Completion
 
-実装・テスト・read-only試算まで完了したら:
-- status: `review_required`
-- next_owner: `chatgpt`
-- `.agent/CODEX_REPORT_2.md` を今回結果で更新
-- origin/mainへ安全に同期
-
-Report必須:
-- task_id
-- result
-- model_used
-- source_base
-- current_collection_bottlenecks
-- collection_changes
-- source_policy_changes
-- search_budget_before_after
-- freshness_before_after
-- followup_topic_behavior
-- zero_result_diagnostics
-- current_all_useful_behavior
-- new_all_useful_behavior
-- app_visibility_changes
-- app_copy_changes
-- producer_changes
-- dispatcher_changes (expected: none)
-- schema_or_migration_changes
-- 7day_collection_estimate
-- 7day_notification_estimate
-- app_feed_estimate
-- tests
-- production_changes (expected: 0 before C2)
-- changed_files
-- commit_hash
-- push
-- remaining_issues
-- safety_checks
-- next_recommendation
-
-C2承認までは本番反映しない。
-
-## C2 freshness follow-up — 2026-09-15
-
-- task_id: `broad-news-phase5-coverage-expansion-and-all-useful-scope-20260914`
-- status: `review_required`
-- next_owner: `chatgpt`
-- C2指摘に対応し、Phase 5 `important_news_app_copy_targets(integer)` のmarket-wide `all_useful` branchだけに、producerと同じ `coalesce(published_at, created_at)` 基準の6時間以内（境界含む）条件を追加。
-- producer/feed、low・category OFF・Fact fail・duplicate gate、quiet/standard/many/company挙動は変更なし。
-- 同一disposable PostgreSQLでapply → RPC proof → 直前migration versionへのrollbackとread-backを完了。詳細は `.agent/CODEX_REPORT_2.md` の同名follow-up節。
-- monitor 403/403、related 76/76、admin TypeScript/lint/build、`git diff --check` はPASS。
-- production migration/deploy/DB/RPC/Cron/settings/Push変更なし。C2再レビュー待ち。
+- 原因調査だけで終わる場合も `status: review_required`
+- app側の非競合修正まで完了した場合も `status: review_required`
+- `next_owner: chatgpt`
+- `.agent/CODEX_REPORT_2.md` を更新
+- 必要最小限のTASK/Report/sourceのみcommit/push
+- C2前に本番反映しない
