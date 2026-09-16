@@ -1,117 +1,88 @@
 # Codex Task 2
 
-- task_id: kabumori-news-url-removal-cost-control-20260916
+- task_id: kabumori-news-url-removal-production-deploy-20260917
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: urgent
 - recommended_model: Sol Medium
-- purpose: かぶモリのXニュース投稿から外部URLを原則外し、URL付きX投稿のAPI原価を抑える。ニュース本文自体の要約・株への影響・Fact/Voice安全策は維持する。
+- purpose: C2 PASS済みの「かぶモリ通常ニュースX本文から外部URLを除去する」変更を、`important-news-monitor` のみに安全に本番反映し、runtime source一致と影響範囲を確認する。
 
-## User decision / source of truth
+## C2 review — 2026-09-17
 
-2026-09-16 JST、ユーザーはX APIのURL付き投稿コストが高いことを踏まえ、かぶモリの通常ニュース投稿ではURLを付けない方針を明示し、「とりあえず早急にそれやるべき」と変更を承認した。
+PASS.
 
-方針:
-- 通常のかぶモリ自動ニュース投稿はURLなしを標準にする。
-- ニュース内容は本文だけで読める形を維持する。
-- ニュース取得元URL/出典情報をDB内部に保持している場合、それは削除しない。今回止めるのはXへ公開する投稿本文へのURL付与。
-- 将来、自社記事/note/重要導線など明示的にURLを付けたい投稿は別設定・別枠で扱う。今回それらまで一律禁止する設計変更はしない。
+承認対象:
+- implementation commit: `bd97a56c8f4f9321070bcdef7970062090308a49`
+- metadata/report commit: `8757416`
+- merge/read-back commit: `940cea6518e3b816f3c4f4b9be0e9457eeb203f8`
 
-## Mandatory startup / parallel safety
+確認済み:
+- 変更対象は `supabase/functions/important-news-monitor/publish_logic.ts` とそのtestのみ。
+- `stripExternalUrlsFromNewsPost()` は important-news のX publisher直前だけで適用される。
+- `http://` / `https://` と末尾の `出典: <URL>` をX送信本文から除去する。
+- candidate側 `generated_text`、`sourceUrl`、Fact/Voice、dedupe/fingerprint、claim/publish stateは変更しない。
+- AI Lab / Mio / `x-test-post` / 朝刊 / 大引け / tips / media / Admin / DB schema / Cronは変更しない。
+- focused 19/19、important-news全体 407/407、`deno check --no-config`、`git diff --check` PASS。
+- C2時点でproduction deploy 0、DB/Cron/settings変更0、OpenAI/X/API/Push手動実行0、X投稿0。
 
-開始前に必ず読む:
-- `.agent/ORCHESTRATION.md`
-- `.agent/CURRENT_STATE.md`
-- this TASK
-- `.agent/tasks/CODEX_TASK.md`
-- `.agent/tasks/CLAUDE_TASK_1.md`
-- `.agent/tasks/CLAUDE_TASK.md`
-- fresh `origin/main`
+## Mandatory fresh checks
 
-最優先の競合ルール:
-- H1が現在AI Lab live testで`x-test-post` / OAuth / AI Lab posting windows / planner周辺を所有している可能性がある。
-- URL付与箇所が`supabase/functions/x-test-post/**`またはH1が触っている同一workflow/fileにある場合、同時変更してはいけない。実装を開始せず、具体的な競合ファイルをReportしてSTOPする。
-- URL付与がH1と完全分離された別function/fileであるとfresh-checkで証明できる場合のみ実装してよい。
-- G2のmorning-greeting image cost gate、G1のnews observation範囲とも同じファイル/workflowを触らない。
-- 既存未コミット変更は他workstreamの所有物として扱う。
+開始前に:
+1. `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, this TASK, `.agent/CODEX_REPORT_2.md` を読む。
+2. fresh `origin/main` を確認し、上記approved implementationが最新mainに含まれることを確認する。
+3. H1/G1/G2の現行TASKを確認し、`important-news-monitor` を同時変更/deployするworkstreamがあればSTOP。
+4. production `important-news-monitor` の現在version/status/verify_jwt/updated_atを記録する。
+5. deploy sourceに未レビューの `important-news-monitor` runtime差分が混入していないことを確認する。混入があればSTOPしてC2へ戻す。
 
-## Phase A — exact source identification
+## Authorized production action
 
-まずread-onlyで、かぶモリの自動ニュースX投稿にURLがどこで付与されているか特定する。
+許可するのは以下のみ:
+- clean checkout/worktreeのfresh `origin/main` をdeploy sourceとして使用
+- `important-news-monitor` Edge Functionのみdeploy
+- 現行 `verify_jwt` 設定を事前確認し、その設定を維持
+- deploy後にversion/status/verify_jwt/updated_atをread-back
+- production function sourceをdownload/read-backし、deploy sourceのruntime filesと一致確認
+- 他Edge Functionのversion/updated_atが意図せず変化していないことを確認
 
-最低限確認:
-- URLが生成prompt由来か、publish前の文字列連結か、DB保存済み本文に含まれるか
-- 対象post_type / news path
-- Xへ送る最終本文を組み立てる関数/ファイル
-- URL削除がニュース以外（朝刊、大引け、挨拶、tips、AI Lab brand_post等）へ波及しないか
-- URLを除いても出典/source URLがDB内部・アプリ内部で必要なら保持されるか
+## Prohibited
 
-対象が曖昧なら変更せずSTOP。
-
-## Goal
-
-かぶモリの通常ニュース自動投稿についてのみ、Xへ送信する最終本文に外部URLを含めない。
-
-期待:
-- ニュース本文の要点/株への影響/ハッシュタグ等、既存の非URL部分は可能な限り不変
-- Fact/Voice/dedupe/fingerprint/publish guardの順序と意味を変えない
-- source URL自体の収集・DB保存・アプリ表示用途は壊さない
-- AI Lab / Mio / Kabumoriの非ニュース投稿に影響しない
-- media挙動は変更しない
-
-## Tests
-
-少なくとも:
-- 対象ニュース投稿本文に`http://` / `https://`が含まれない
-- URL以外の既存本文が維持される
-- 非ニュース投稿が不変
-- source URL metadataが必要箇所で保持される
-- dedupe/fingerprintが意図せず壊れない
-- 対象周辺の既存テスト
-- `deno check`（対象TS）
-- `git diff --check`
-
-可能ならURLありfixture→最終X本文URLなしの明示テストを追加する。
-
-## Production boundary
-
-このTASKではまずsource修正・テスト・candidate pushまで。
-
-C2前に禁止:
-- production Edge Function deploy
-- manual/synthetic X投稿
-- Cron変更
-- posting_windows変更
-- OAuth/Vault/token変更
-- DB/schema/RPC/migration変更
+- 新しいsource修正（deploy blockerがあれば修正せずSTOP）
+- `x-test-post` / OAuth / Vault / AI Lab / Mio変更
+- DB/schema/migration/RPC/RLS変更
+- Cron / posting_windows / settings変更
 - `supabase db push`
-- source URLデータの削除
-- AI Lab/Mio設定変更
+- migration history repair/reconcile
+- manual/synthetic important-news生成
+- manual OpenAI/X/Push/API invocation
+- manual X投稿
+- source URL metadata削除
+- 他Edge Function deploy
+- secret/token表示
+
+自然Cronによる通常処理は止めない。
+
+## Verification
+
+最低限:
+- deploy前 fresh `origin/main`
+- approved URL-removal sourceがdeploy sourceに存在
+- `important-news-monitor` deploy success
+- post-deploy ACTIVE/status/JWT設定確認
+- runtime source read-back一致
+- 他Function無変更確認
+- production DB/Cron/settings変更0
+- manual OpenAI/X/Push/API/X投稿0
+
+本番動作確認は次の自然な重要ニュース投稿で行う。人工的に投稿を発生させない。
 
 ## Completion
 
-実装可能で競合なしの場合:
-- `status: review_required`
-- `next_owner: chatgpt`
-- `.agent/CODEX_REPORT_2.md`へReport
-- candidate commit/branchを明記
-- changed files、tests、URL removal scope、non-news regression、安全確認を記録
-- production changesは0のままC2へ渡す
-
-競合で実装不可の場合:
-- 同じく`review_required`
-- 競合ファイル/workflowを具体的にReport
-- H1完了後の最短再開手順を記録
-
-このタスクの目的は『かぶモリ通常ニュースのX本文からURLを外す』だけで、アプリ全体のURL課金設計や将来のURL付き投稿機能は別タスクとする。
-
-## Completion report
-
-- result: implemented and locally verified; C2 review required
-- implementation_commit: `bd97a56` (`Remove external URLs from news X posts`)
-- changed_files: `supabase/functions/important-news-monitor/publish_logic.ts`, `supabase/functions/important-news-monitor/publish_logic_test.ts`
-- url_scope: source URL remains in candidate generated text/metadata and all existing Fact/Voice/dedupe/fingerprint checks; only the final important-news X publisher input removes `http://`/`https://` links and the trailing 出典 URL line
-- tests: focused publish suite 19/19; full important-news suite 407/407; `deno check --no-config supabase/functions/important-news-monitor/publish_logic.ts` PASS; `git diff --check` PASS
-- production: deploy 0, DB/schema/RPC/migration/Cron/settings 0, OpenAI/X/API calls 0, X posts 0
+完了時:
+- `.agent/CODEX_REPORT_2.md` 先頭にdeploy reportを追加
+- deploy前後version、deploy source commit、runtime read-back一致、他Function無変更、安全確認、自然投稿観測待ちを記録
+- `.agent/tasks/CODEX_TASK_2.md` を `status: review_required`, `next_owner: chatgpt` に更新
+- push前に再度fresh `origin/main`確認
+- `.agent/` control/report metadataのみ安全にpush
+- origin/main read-back後STOPしてC2待ち
