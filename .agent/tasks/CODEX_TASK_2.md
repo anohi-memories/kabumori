@@ -1,66 +1,88 @@
 # Codex Task 2
 
-- task_id: x-news-generation-failure-hardening-20260916
+- task_id: important-news-cost-hardening-production-deploy-20260916
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
-- priority: urgent
-- recommended_model: Luna first; switch to Sol High only if the cost-path or safety design becomes ambiguous
-- purpose: Complete the C2 follow-up for important-news API cost reduction without weakening Fact/Voice safety or narrowing broad collection.
+- status: ready
+- next_owner: codex
+- priority: high
+- recommended_model: Luna first
+- purpose: C2 PASS済みの重要ニュース生成コスト削減実装を、`important-news-monitor` のみに安全に本番反映し、deploy sourceとproduction read-backの一致を確認する。
 
-## C2 review state — 2026-09-16
+## Approved implementation
 
-Implementation commit `44ffe59d29e666ce158efc3445efbf7b4b2985c5` is real, pushed, and locally well-tested. It safely reduces payload sent to Voice and adds a draft constraint against unsupported market forecasts. The current report sync is fixed.
+C2で承認済み:
+- implementation commit: `44ffe59d29e666ce158efc3445efbf7b4b2985c5`
+- follow-up audit commit: `58d6ec08270c0b93f6bfaac4336ba95a3cb885b5`（監査fixture/Report/TASK。production runtime変更ではない）
+- production source changeは `supabase/functions/important-news-monitor/post_generation_logic.ts` のstage-specific packet化と、unsupported forecast抑制prompt。
+- Fact/Voice fail-closed、bounded retry、dedupe、coverage、app-copy、Push、collection policyは維持。
+- full important-news tests: 405/405 PASS。
+- realistic mixed fixture: X生成入力約24.16%削減、重要ニュース経路全体推定約13.38%削減。30%全体削減とは表現しない。
 
-C2 is not yet PASS because the cost-reduction requirement was measured only on the X post-generation path (`draft -> fact -> voice`). The production audit that motivated this task showed `important_news_candidates` consumed roughly 3.16M input tokens over 14 days, and the original TASK required auditing the broader important-news AI call path: importance judgement, coverage/severity/category classification, app/Japanese copy, X generation, Fact/Voice/retries, and any web-search-enabled model calls.
+## User authorization
 
-The reported 32.7% reduction is valid for the synthetic large-body X-generation fixture, but it is not yet evidence of a 30% reduction for the overall important-news workload or actual billing driver. Do not describe the whole important-news system as 32.7% cheaper yet.
+2026-09-16 JST、ユーザーはC2 PASS後に「じゃあそれ」と指示し、今回の承認済み変更を本番deployする工程を明示承認した。
 
-## Required follow-up
+## Mandatory fresh checks
 
-1. Fresh-check `origin/main`, ORCHESTRATION, CURRENT_STATE, H1 boundaries, this TASK, and current `CODEX_REPORT_2.md`.
-2. Do not redo or revert implementation commit `44ffe59d29e666ce158efc3445efbf7b4b2985c5` unless a concrete regression is found.
-3. Audit the full important-news AI path in code and report, at minimum:
-   - candidate importance/judgement
-   - coverage/severity/category classification
-   - app/Japanese copy generation and Fact check
-   - X draft / Fact / Voice / correction retries
-   - web-search-enabled OpenAI stages, if any
-4. For each stage record: model, eligibility frequency, approximate call count per candidate/event, major input fields, retry conditions, and whether the same article body/metadata is resent.
-5. Using local fixtures/mocks only, estimate before/after token or serialized-input cost on a representative mixed workload, not only a 4,000-repeat stress body. Use several realistic body sizes/source types if possible. Report separately:
-   - X-generation reduction
-   - estimated whole important-news-path reduction
-   - which stages dominate remaining cost
-6. If a clearly safe additional reduction exists inside `important-news-monitor` (duplicate payload removal, stage-specific packets, deterministic prefilter after collection, or unnecessary AI call avoidance), implement the minimum scoped change and test it. Do not narrow collection or weaken coverage/emergency/app visibility/notification semantics.
-7. Preserve Fact/Voice fail-closed behavior. Do not remove final independent checks merely to save tokens.
-8. If the full audit shows the largest remaining cost is outside the X-generation code changed here, report that plainly rather than forcing a risky 30% target.
+開始前に:
+1. `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, this TASK, `.agent/CODEX_REPORT_2.md` を読む。
+2. `origin/main` をfresh-checkする。
+3. H1/G1/G2の現行TASKを確認し、`important-news-monitor`を同時変更/deployするworkstreamがあればSTOP。
+4. `origin/main` のruntime sourceに承認済み実装 `44ffe59d...` が含まれることを確認する。
+5. production `important-news-monitor` の現在version/updated_atを記録する。
 
-## Required verification
+期待状態が違う場合は勝手に補正せずSTOPしてC2へ戻す。
 
-- Existing important-news generation/fact/voice regression tests
-- Coverage/category/emergency/dedupe/app-copy/notification eligibility regressions relevant to any changed path
-- New cost-path fixture(s) for representative mixed workloads
-- `deno check` for changed modules
-- `git diff --check`
+## Authorized production action
 
-## Production boundary
+許可するのは以下のみ:
+- clean checkout/worktreeの最新 `origin/main` をdeploy sourceに使用
+- `important-news-monitor` Edge Functionだけをdeploy
+- 現行functionのJWT設定を事前確認し、既存設定を維持する
+- deploy後にfunction version/status/updated_atをread-back
+- production function sourceを可能な方法でdownload/read-backし、deploy sourceのruntime filesと一致確認
+- 他Edge Functionのversion/updated_atが意図せず変化していないことを確認
 
-Still prohibited in this follow-up:
-- production deploy
-- production DB/schema/RPC/migration/settings/Cron writes
-- manual/synthetic X post or Push
-- paid/manual OpenAI execution
-- `x-test-post`, AI Lab/OAuth/Vault, `personalized-reports`, morning-greeting workflow/script changes
+## Prohibited
+
+- 新しいproduction source実装（deploy blockerが見つかったら修正せずSTOP）
+- `x-test-post`変更/deploy
+- AI Lab/OAuth/Vault/social_accounts変更
+- morning-greeting workflow/script変更
+- `personalized-reports`変更/deploy
+- DB/schema/migration/RPC/RLS変更
+- Cron/settings/user notification設定変更
 - `supabase db push`
+- migration history repair
+- manual/synthetic candidate生成
+- manual OpenAI/X/Push invocation
+- manual X投稿
+- secret/tokenの表示
 
-Production read-only audit is allowed. Do not expose secrets or raw private data.
+自然Cronによる通常処理は止めない。
+
+## Verification
+
+最低限:
+- deploy前 `origin/main` fresh-check
+- deploy sourceに `44ffe59d...` のruntime差分が存在
+- `important-news-monitor` deploy success
+- deploy後 ACTIVE/status確認
+- runtime source read-back一致
+- 他Function無変更確認
+- production DB/Cron/settings変更0
+- manual OpenAI/X/Push/X投稿0
+
+可能ならdeploy直後の自然実行で致命的エラーが増えていないかread-onlyで短時間確認してよい。ただし人工実行はしない。
 
 ## Completion
 
-When complete:
-- push implementation/report safely after fresh-check
-- place the current task report at the top of `.agent/CODEX_REPORT_2.md`
-- include implementation commit(s), tests, no-deploy statement, full AI call-path audit, representative before/after measurements, whole-path estimated reduction, safety checks, and remaining issues
-- set this TASK to `review_required`, `next_owner: chatgpt`
-- read back origin/main and confirm the report/task are visible before stopping for C2
+完了時:
+- `.agent/CODEX_REPORT_2.md` 先頭に今回taskのReportを追加
+- Reportに deploy前後version、deploy source commit、read-back一致、他Function無変更、安全確認を記録
+- source codeの追加commitは原則0
+- `.agent/tasks/CODEX_TASK_2.md` を `status: review_required`, `next_owner: chatgpt` に更新
+- push前に再度 `origin/main` fresh-check
+- `.agent/`制御ファイルのみ安全にpush
+- origin/main read-back後にSTOPしてC2待ち
