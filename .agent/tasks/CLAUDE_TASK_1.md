@@ -3,8 +3,8 @@
 - task_id: broad-news-phase4-natural-push-observation-20260913
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: user
 - priority: high
 - recommended_model: Opus 5
 - purpose: Phase 3本番反映後の自然ニュース経路をread-only中心で観測し、統合producerの実enqueue、Push到達、重複0、滞留0、coverage分類とアプリカテゴリ表示までを実データで確認する。新規実装や本番変更は原則行わない。
