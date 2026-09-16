@@ -3,8 +3,8 @@
 - task_id: kabumori-news-url-removal-cost-control-20260916
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol Medium
 - purpose: かぶモリのXニュース投稿から外部URLを原則外し、URL付きX投稿のAPI原価を抑える。ニュース本文自体の要約・株への影響・Fact/Voice安全策は維持する。
@@ -106,3 +106,12 @@ C2前に禁止:
 - H1完了後の最短再開手順を記録
 
 このタスクの目的は『かぶモリ通常ニュースのX本文からURLを外す』だけで、アプリ全体のURL課金設計や将来のURL付き投稿機能は別タスクとする。
+
+## Completion report
+
+- result: implemented and locally verified; C2 review required
+- implementation_commit: `bd97a56` (`Remove external URLs from news X posts`)
+- changed_files: `supabase/functions/important-news-monitor/publish_logic.ts`, `supabase/functions/important-news-monitor/publish_logic_test.ts`
+- url_scope: source URL remains in candidate generated text/metadata and all existing Fact/Voice/dedupe/fingerprint checks; only the final important-news X publisher input removes `http://`/`https://` links and the trailing 出典 URL line
+- tests: focused publish suite 19/19; full important-news suite 407/407; `deno check --no-config supabase/functions/important-news-monitor/publish_logic.ts` PASS; `git diff --check` PASS
+- production: deploy 0, DB/schema/RPC/migration/Cron/settings 0, OpenAI/X/API calls 0, X posts 0

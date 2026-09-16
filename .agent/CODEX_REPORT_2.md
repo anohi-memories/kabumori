@@ -1,5 +1,20 @@
 # Codex Slot 2 Report
 
+## H2 — Kabumori news URL removal cost control (2026-09-16)
+
+- task_id: `kabumori-news-url-removal-cost-control-20260916`
+- result: implemented in the isolated important-news publish path; C2 review required
+- root_cause: normal important-news generation appends `出典: <source_url>` to the stored `generated_text`, and the live publisher previously sent that URL-bearing text directly to X. This increased URL-bearing X payload cost.
+- changed_files: `supabase/functions/important-news-monitor/publish_logic.ts`, `supabase/functions/important-news-monitor/publish_logic_test.ts`
+- implementation_commit: `bd97a56` (`Remove external URLs from news X posts`)
+- implementation: `stripExternalUrlsFromNewsPost()` runs only at the important-news X publisher boundary. It removes `http://`/`https://` tokens and the trailing `出典` URL line from the outbound body while leaving the candidate's stored `generated_text`, `sourceUrl`, Fact/Voice gates, dedupe/fingerprint, claim, and publish state unchanged.
+- scope safety: `x-test-post`, AI Lab/Mio, morning/close reports, tips, interaction, media handling, app/push source metadata, DB schema, Cron/settings and other Functions are unchanged. No URL metadata is deleted.
+- tests: focused `publish_logic_test.ts` **19/19 passed** (including http/https removal, non-URL text preservation, and source metadata retention); full `important-news-monitor` suite **407/407 passed**; changed module `deno check --no-config` **PASS**; `git diff --check` **PASS**.
+- production: deploy 0; production DB/schema/RPC/migration/Cron/settings 0; manual OpenAI/X/API/Push execution 0; X posts 0; secrets/log exposure 0.
+- push: source implementation commit created locally; metadata/TASK sync is pending the final isolated push after fresh origin verification.
+- remaining_issues: C2 should review the exact outbound-boundary removal and confirm whether future URL-enabled post types need an explicit opt-in path.
+- safety_checks: formal checkout and its existing uncommitted changes untouched; `apps/admin/**`, `HANDOFF.md`, H1/G1/G2 workstreams untouched; no production changes.
+
 ## H2 — close-report freshness production deploy (2026-09-16)
 
 - task_id: `x-close-report-freshness-production-deploy-20260916`
