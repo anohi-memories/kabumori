@@ -3,8 +3,8 @@
 - task_id: close-report-dual-failure-diagnosis-and-hardening-20260916
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: 2026-09-15 JSTの大引けで「Xの大引け投稿」と「アプリの大引け personalized report」が両方失敗した事象を、production read-only evidenceから切り分け、再発防止に必要な最小修正を安全に準備する。

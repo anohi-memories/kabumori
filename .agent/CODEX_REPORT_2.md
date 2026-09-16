@@ -1,5 +1,54 @@
 # Codex Slot 2 Report
 
+## Current H2 — close-report dual-failure diagnosis (2026-09-16)
+
+- task_id: `close-report-dual-failure-diagnosis-and-hardening-20260916`
+- status: `review_required`
+- next_owner: `chatgpt`
+- source_base / pre-share fresh-check: `origin/main` `fd2f69995ecb1a3ce5e3338d0cc1856f866b6724`.
+- isolated worktree: `/private/tmp/kabumori-h2-dual-close-ad2hJy/impl`; formal checkout and its existing changes were untouched.
+- Result: **X close report failed closed; app close report completed and its notification was marked sent. The 2026-09-15 dual-failure premise is not supported by the production records.** Diagnosis-only completion, as permitted by TASK. No application or Function source changed.
+
+### 2026-09-15 X close report — exact observed stop
+
+- `scheduled_posts` `7a443a88-11a9-4808-9b7c-65550d4a3477` exists for `close_report`, brand `kabumori`, schedule date 2026-09-15. Scheduled 17:00:00 JST; claimed 17:00:01.880663; finished failed 17:00:32.107346; attempt_count **1**.
+- Execution logs 324/325 show `Scheduled post claimed` then `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE`. No X post ID; HTTP status and structured error_code are null. This was not a missing schedule/claim or a demonstrated publish API failure.
+- `close_report_runs` `44b68923-51a4-43cf-88f8-fda466fb8592` was created 17:00:02.930434 JST and marked failed 17:00:32.053; error `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE`, fact_check_status failed. Notes explicitly state both same-day Nikkei and TOPIX-tracking ETF (1306) values were unavailable, and required-index/timestamp validation failed. The collection reference in the notes is 17:00:02 JST.
+- Persisted nikkei_data/topix_data/market_data are `{}`, source_urls `[]`, market_data_timestamp null, voice_evaluation `{}`, X post ID null. Collection returned enough for a draft object/Fact notes, but no final text was generated. Scheduled branch skips Voice when draft.text is empty and throws on Fact failure before `postToX`; therefore this path did not reach Voice retry or X posting.
+- `close_report_settings` remains Asia/Tokyo, active true, 16:58–17:00–17:02; futures_target_time 15:45. Dispatcher Cron job 1 runs every minute. Its relevant 16:59–17:16 Cron SQL runs are succeeded. Cron SQL success means HTTP enqueue succeeded, not that the Function succeeded. Durable claim/failure writes completed; no DB/504 timeout is established by these records.
+
+### X acquisition/validation findings — confirmed logic versus incident uncertainty
+
+- `supabase/functions/x-test-post/close_report_data_logic.ts`: `fetchJpxCloseMetrics` fetches Nikkei then 1306 sequentially via Yahoo query2 chart `range=5d&interval=1m&events=history`. The ETF requires symbol `1306.T`, Tokyo/JPX exchange, JPY, and its explicit ETF label; unrelated `^TPX` is rejected. Same JST date and observation at/after 15:30 remain mandatory.
+- `fetchYahooJpxCloseMetric` collapses non-2xx, JSON/transport errors, identity mismatch, missing closes, and rejected observation time to `null`. It supplies only Accept, without an explicit timeout or classified failure diagnostics. Incident HTTP response and rejected source timestamp cannot be reconstructed from the saved row.
+- `index.ts` `generateCloseReport` normalizes direct values, applies source verification and `hasSameDayCloseData`, and adds `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE` on missing valid live closes. The scheduled catch persists Fact notes but, for a non-Voice Fact failure, does not persist draft metrics/source URLs/usage. **Empty saved metric objects alone do not prove that the external requests returned no values.**
+- Additional deterministic bug/risk in `close_report_logic.ts` `validateCloseFreshness`: jpx_close accepts age <=90 minutes. Pure local proof with observed `2026-09-15T06:30:00Z` (15:30 JST) returns fresh at `08:00:00Z` and stale at `08:00:02Z`. Thus normal seconds of scheduling delay at 17:00 can reject a valid same-day 15:30 close. The incident reference has those extra seconds, but its actual Yahoo observation time was not saved: this is a reproducible candidate cause, **not a proven sole cause of 9/15**.
+- Minimum next X work after H1 completes: classified, secret-free direct-fetch diagnostics and persistence on Fact failure; then a narrow same-session-close freshness treatment compatible with 17:00 plus ordinary execution delay. Preserve source identity, same-date, >=15:30, numeric, Fact/Voice and fail-closed gates; do not use morning values/search fallback. Required tests: exact 15:30 close at 17:00+seconds, intraday/previous-day/future/invalid rejection, HTTP/JSON/identity/missing-data diagnostic distinction, Fact-failure persistence, X API zero on rejected closes, existing close/Voice regression.
+- H1 `x-multibrand-phase3k-ai-lab-first-live-test-20260916` is ready and owns x-test-post/OAuth/AI Lab/posting windows. Per H2 boundary, **no X source fix was attempted**. Separate post-H1 approval/review is required.
+
+### 2026-09-15 app personalized close report — successful path
+
+- `personalized_reports` `29a7bda2-20a8-46a9-865b-1b4d0205bbf3`: close / trading_date 2026-09-15; created 17:15:01.747778 JST; generated 17:15:17.230; status completed, fact_status passed, fact_issues `[]`, error null. Title: 「保有2銘柄がそろって上昇した大引け」.
+- Snapshot price_basis_date 2026-09-15; data_gaps `[]`. Nikkei and explicit TOPIX ETF (1306) prices both status ok / sessionDate 2026-09-15. Source basis `app_personalized_v1`, `yahoo_chart_1d`, symbols `^N225` and `1306.T`. No private holdings/user IDs or token values are included here.
+- App acquisition differs from X: query2 daily bars `range=1mo&interval=1d`, User-Agent Mozilla/5.0 and 15-second timeout; `priceFactFor` requires today's bar plus regularMarketTime on the same JST day at/after 15:30. Raw regularMarketTime is not retained in the saved snapshot, so its exact source timestamp cannot be reported retrospectively.
+- Current generator performs one draft + one Fact call, with no regeneration retry. Saved usage Luna input 5534 / output 1217; exact call count is not a dedicated DB column, but the completed path in source is two calls. Report saved once, then enqueue RPC only for completed/Fact-passed rows. Existing unique claim and notification deduplication remain unchanged.
+- notified_at 17:15:17.305641 JST; notification `16ab98e2-efc9-4fef-9f42-f675f3651b43`, source_type personalized_report, source_id matching report, push_status **sent**, push_attempt_count **1**, last_error null. This proves enqueue and dispatcher marked-sent, not end-device receipt/read confirmation.
+- Cron job 11 is active `15 8 * * 1-5` (17:15 JST); its 9/15 run succeeded. Relevant opt-in aggregate has one close-enabled/push-enabled user. RPC read-back requires current push_enabled + close_report opt-in and completed/Fact-passed/nonempty title; conflict do-nothing prevents duplicate notification.
+
+### Prior failure / common-cause assessment
+
+- 9/14 app close report `101d8d0c-59e1-4026-bdbb-ac17179f2027` did fail `REPORT_FACT_FAILED`: 「『半導体関連銘柄』はpacketに明記されていない分類です。」 This is a different date and an unsupported classification issue, not evidence that 9/15 app close failed.
+- X and app share Yahoo provider/instrument choices, but use different chart intervals, metadata checks, timeouts/headers and execution times. App's 9/15 completed Fact/notification contradicts a simultaneous general market-data/OpenAI/DB outage. X's live close availability/validation failed; **two simultaneous independent failures or a shared outage are not established**.
+- App prompt/local/Fact gates already reject unsupported numbers/claims and fail closed; generator has no bounded Fact retry. Because the target-date app close succeeded, no app source hardening was justified by this incident, and no speculative retry was added. A separately scoped follow-up may address the actual 9/14 unsupported-classification failure with bounded retry/diagnostics if desired.
+
+### Verification / safety / C2 handoff
+
+- Existing personalized report logic + Push dedupe contract tests: **24 passed / 0 failed** (`deno test --no-check --no-lock --allow-read ...report_logic_test.ts ...push_dedupe_contract_test.ts`). Includes close/morning success, Fact-fail no body/no Push, missing-data zero model calls, notification idempotency and opt-in checks.
+- Pure local 90-minute boundary proof: fresh at 17:00:00, stale at 17:00:02 for a 15:30:00 observation. No external API was called by that proof.
+- `git diff --check`: PASS. Source changes: **0**; changed files: this REPORT and `.agent/tasks/CODEX_TASK_2.md` only.
+- Production DB/schema/RPC/migration/settings/Cron changes **0**; deploy **0**; manual Function/OpenAI/X/Push calls **0**; manual X posts **0**; synthetic report/candidate and reclaims **0**; secrets exposed **0**.
+- apps/admin, HANDOFF, formal checkout, H1 and other workstreams unchanged. C2 should review the corrected incident premise and authorize a separate non-conflicting X close acquisition/freshness/diagnostic follow-up after H1. This task remains review_required / next_owner chatgpt.
+
 ## H2 — close-report 17:00 schedule and close-source hardening (2026-09-11)
 
 - task_id: `close-report-1700-schedule-and-close-source-hardening-20260911`
