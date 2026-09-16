@@ -18,6 +18,10 @@ export type NormalizedCloseMetric = RawMarketMetric & {
 
 export type CloseFactResult = { status: "passed" | "failed"; notes: string[] };
 
+const JAPAN_CASH_CLOSE_MINUTES = 15 * 60 + 30;
+const CLOSE_REPORT_LIVE_START_MINUTES = 16 * 60 + 45;
+const CLOSE_REPORT_LIVE_END_MINUTES = 17 * 60 + 5;
+
 function jstParts(value: string): { date: string; weekday: string; minutes: number } | null {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
@@ -71,7 +75,17 @@ export function validateCloseFreshness(
   if (ageMinutes < -2) return "future";
   if (mode === "preflight") return "preflight_latest";
   if (observedParts.date !== referenceParts.date) return "stale";
-  if (kind === "jpx_close") return ageMinutes <= 90 ? "fresh" : "stale";
+  if (kind === "jpx_close") {
+    // A same-session cash close remains valid throughout the bounded 17:00
+    // execution window. This is intentionally semantic (same JST date,
+    // post-close observation, and close-report window) rather than an
+    // enlarged age-only threshold, so late or cross-session data is not
+    // silently accepted.
+    const sameSessionClose = observedParts.minutes >= JAPAN_CASH_CLOSE_MINUTES &&
+      referenceParts.minutes >= CLOSE_REPORT_LIVE_START_MINUTES &&
+      referenceParts.minutes <= CLOSE_REPORT_LIVE_END_MINUTES;
+    return sameSessionClose || ageMinutes <= 90 ? "fresh" : "stale";
+  }
   if (kind === "nikkei_futures_1545") {
     const around1545 = observedParts.minutes >= 15 * 60 + 35 && observedParts.minutes <= 15 * 60 + 55;
     return around1545 && ageMinutes <= 30 ? "fresh" : "stale";

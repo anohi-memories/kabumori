@@ -44,6 +44,15 @@ test("close index and 15:45 futures use separate freshness rules", () => {
   assert.equal(validateCloseFreshness("nikkei_futures_1545", "2026-08-31T06:15:00.000Z", futuresReference, "live"), "stale");
 });
 
+test("same-session 15:30 close stays fresh through ordinary 17:00 execution delay", () => {
+  const closeAt1530 = "2026-08-31T06:30:00.000Z";
+  assert.equal(validateCloseFreshness("jpx_close", closeAt1530, "2026-08-31T08:00:00.000Z", "live"), "fresh");
+  assert.equal(validateCloseFreshness("jpx_close", closeAt1530, "2026-08-31T08:00:01.000Z", "live"), "fresh");
+  assert.equal(validateCloseFreshness("jpx_close", closeAt1530, "2026-08-31T08:02:30.000Z", "live"), "fresh");
+  assert.equal(validateCloseFreshness("jpx_close", "2026-08-31T06:45:00.000Z", "2026-08-31T08:05:00.000Z", "live"), "fresh");
+  assert.equal(validateCloseFreshness("jpx_close", closeAt1530, "2026-08-31T08:06:00.000Z", "live"), "stale");
+});
+
 test("change percent is recalculated from raw values", () => {
   const metric = normalizeCloseMetric(raw(), "jpx_close", reference, "live");
   assert.equal(metric.change, "+300");

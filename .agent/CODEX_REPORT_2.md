@@ -1,5 +1,16 @@
 # Codex Slot 2 Report
 
+## H2 — close-report freshness boundary fix (2026-09-16)
+
+- task_id: `x-close-report-freshness-boundary-fix-20260916`
+- result: implemented and locally verified; C2 review required
+- root_cause: `validateCloseFreshness()` used an age-only `jpx_close` limit of 90 minutes. A 15:30:00 JST close therefore became stale at 17:00:01+ due to ordinary scheduler/function delay, causing the live gate to emit `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE` even for a same-session close.
+- exact rule: in live mode, a `jpx_close` remains fresh when it is on the same JST calendar date, observed at/after the 15:30 JST cash close, and the reference is within the bounded 16:45–17:05 JST close execution window. The existing 90-minute age rule remains the fallback outside that semantic window; future, previous-day, invalid, missing, nonnumeric, source-identity, and pre-15:30 data remain rejected by existing gates.
+- changed_files: `supabase/functions/x-test-post/close_report_logic.ts`, `supabase/functions/x-test-post/close_report_logic_test.ts`, plus this report and `.agent/tasks/CODEX_TASK_2.md`.
+- tests: close-report + direct close-data targeted **64/64 passed**; full `x-test-post` regression **388/388 passed**; changed source `deno check` **PASS**. Test-file `deno check` is environment-blocked because this disposable checkout has no `npm:@types/node`; no implementation type error was reported. `git diff --check` **PASS**.
+- safety: Fact/Voice gates, source identity, same-day/15:30 close-data gate, no fallback to morning/search/model-filled close values, X-post suppression, schedule time, DB/schema/RPC/migration/Cron/settings, and all other categories remain unchanged. No production deploy, Function execution, OpenAI/X/Push API call, or X post.
+- remaining_issue: production outcome must be observed on the next natural 17:00 close cycle; no manual close-report run is allowed. Keep `status: review_required` / `next_owner: chatgpt`.
+
 ## H2 — important-news cost hardening production deploy (2026-09-16)
 
 - task_id: `important-news-cost-hardening-production-deploy-20260916`

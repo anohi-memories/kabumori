@@ -3,8 +3,8 @@
 - task_id: x-close-report-freshness-boundary-fix-20260916
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Luna first
 - purpose: X大引けレポートが17:00直後の通常遅延で `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE` になる再現性のあるfreshness境界バグを、最小修正で直す。
