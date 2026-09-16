@@ -11,7 +11,7 @@
 - scope safety: `x-test-post`, AI Lab/Mio, morning/close reports, tips, interaction, media handling, app/push source metadata, DB schema, Cron/settings and other Functions are unchanged. No URL metadata is deleted.
 - tests: focused `publish_logic_test.ts` **19/19 passed** (including http/https removal, non-URL text preservation, and source metadata retention); full `important-news-monitor` suite **407/407 passed**; changed module `deno check --no-config` **PASS**; `git diff --check` **PASS**.
 - production: deploy 0; production DB/schema/RPC/migration/Cron/settings 0; manual OpenAI/X/API/Push execution 0; X posts 0; secrets/log exposure 0.
-- push: source implementation commit created locally; metadata/TASK sync is pending the final isolated push after fresh origin verification.
+- push: source implementation commit `bd97a56` and metadata/TASK commit `8757416` were pushed to `origin/main`; merge commit `940cea6` preserved concurrent origin work, and post-push read-back confirmed both commits plus this report/TASK state.
 - remaining_issues: C2 should review the exact outbound-boundary removal and confirm whether future URL-enabled post types need an explicit opt-in path.
 - safety_checks: formal checkout and its existing uncommitted changes untouched; `apps/admin/**`, `HANDOFF.md`, H1/G1/G2 workstreams untouched; no production changes.
 
