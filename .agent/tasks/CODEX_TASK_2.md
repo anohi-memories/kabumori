@@ -3,8 +3,8 @@
 - task_id: x-close-report-freshness-production-deploy-20260916
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Luna first
 - purpose: C2 PASS済みのX大引けfreshness境界修正を、`x-test-post` のみに安全に本番反映し、runtime sourceとdeploy sourceの一致を確認する。

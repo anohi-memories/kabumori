@@ -1,5 +1,18 @@
 # Codex Slot 2 Report
 
+## H2 — close-report freshness production deploy (2026-09-16)
+
+- task_id: `x-close-report-freshness-production-deploy-20260916`
+- result: approved freshness fix deployed and read-back verified; C2 review required
+- deploy source: fresh `origin/main` `af28c10cc7be6f9554e6a048eb3e04bca38b1117`, containing implementation commit `04bfe490a53fea95892ea6e225251b5e129aa87e`
+- pre-deploy: `x-test-post` v108 ACTIVE, `verify_jwt=false`; H1/G1/G2 TASKs checked and no concurrent x-test-post source/deploy workstream found
+- deploy: `x-test-post` only, with `--no-verify-jwt`; success
+- post-deploy: `x-test-post` v109 ACTIVE, `verify_jwt=false`, updated_at advanced as expected
+- runtime read-back: `supabase functions download x-test-post --use-api` in a separate disposable worktree; all 54 downloaded x-test-post files and shared `_shared` dependencies byte-matched the deploy source, including `close_report_logic.ts` and its tests
+- other Functions unchanged: important-news-monitor v54, stocks-master-sync v16, stocks-new-listing-sync v15, send-push-notifications v15, x-oauth-connect v18, personalized-reports v13, market-intelligence-ingest v11, market-intelligence-state-evaluator v7, and brand-post-dry-run v5 retained their pre-deploy versions/updated_at
+- no production DB/schema/RPC/migration/RLS/Cron/settings/posting schedule change; no manual/synthetic close-report run, OpenAI/X/Push/API invocation, or X post
+- next step is the natural 17:00 close-report observation only; no manual invoke. Keep `status: review_required` / `next_owner: chatgpt`.
+
 ## H2 — close-report freshness boundary fix (2026-09-16)
 
 - task_id: `x-close-report-freshness-boundary-fix-20260916`
