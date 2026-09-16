@@ -1,5 +1,41 @@
 # Codex Slot 2 Report
 
+## H2 C2 follow-up — full important-news AI cost-path audit (2026-09-16)
+
+- task_id: `x-news-generation-failure-hardening-20260916`
+- result: C2 follow-up audit and local cost fixture complete; implementation remains fail-closed and is ready for C2 review
+- source_base: fresh `origin/main` `51cdd4cb6bcf4867fb17af00d362522ec8d48f18`; no H1/other-workstream file overlap
+- root_cause / 142 analysis: the 142 `generation_failed` rows from 2026-09-01 through 2026-09-15 are primarily legitimate Fact/Voice fail-closed outcomes (unsupported or imprecise claims, missing explicit years, identity/role uncertainty, and wording/precision issues), not a safe reason to weaken Fact gates. Corrected failure mix is `NEWS_GENERATION_FACT_RETRY_FAILED` 64, `NEWS_GENERATION_FACT_FAILED` 59, `NEWS_GENERATION_VOICE_FAILED` 17, and `NEWS_GENERATION_LOCAL_FACT_FAILED` 2. The existing Fact/Voice retries are bounded and fail-closed; no retry-policy or safety relaxation was added.
+
+### Full AI path audit
+
+- deterministic coverage/severity/category, duplicate, freshness, source and required-field checks: **0 AI calls**; broad collection is not narrowed.
+- importance judgement: every selected candidate invokes Luna (`gpt-5.6-luna`, low reasoning, max output 1000); conditional Sol escalation uses the existing path (`gpt-5.6-sol`, medium reasoning) for low confidence/`most_important`/insufficient evidence. In the 14-day production read-only sample: 1,185 judged rows, 3,181,087 input tokens, 322,897 output tokens, 316 Sol escalations (~26.7%). The judgement packet contains the candidate and compact prior result where applicable; no new retry was introduced.
+- app/Japanese copy: selected rows use one Luna draft plus one independent Fact call, no retry. The source is sanitized/capped at 3,000 characters; app-copy token usage is not persisted. The sample had 10 attempted rows (~20 calls).
+- web-search-enabled collection: `breaking_market_source_fetchers.ts` uses Luna low reasoning with one `web_search` tool call per selected query, at most 4 queries per fetch, max output 1200, and no retry. Search inputs are topic/reference strings; visited-source and freshness gates remain code-owned.
+- X generation: normal path is draft → Fact → Voice (three calls) with the existing bounded Fact/Voice correction/recheck paths. The retained implementation (`44ffe59d29e666ce158efc3445efbf7b4b2985c5`) sends stage-specific packets: draft/Fact retain necessary evidence, while style-only Voice omits disclosure body and affected entities; the draft prompt forbids unsupported forecasts/market reactions. Fact/Voice safety, dedupe, coverage, app-copy and publish gates are unchanged.
+
+### Production read-only cost sample (14 days)
+
+- `important_news_candidates`: 1,185 judged rows; judgement 3,181,087 input / 322,897 output tokens; 316 Sol escalations. 194 generated rows; generation 1,616,665 input / 137,706 output tokens. Source split: tdnet 1,042 judged / 168 generated; market_macro 106 / 7; breaking_market 37 / 19. App-copy attempts: 10 rows.
+- Dominant remaining measured input costs are judgement (3.18M) and generation (1.62M); app-copy token usage is not stored, so its contribution is estimated only by local fixture.
+
+### Mixed realistic local fixture (no production data or paid API replay)
+
+- added test-only `supabase/functions/important-news-monitor/cost_path_audit_test.ts` with three mixed candidates (900/1,400/650-character bodies; tdnet, market_macro, breaking_market), one representative Sol escalation, two app-copy calls, and four web-search topics.
+- pre-hardening X baseline (full candidate packet to draft/Fact/Voice): **15,159** serialized input characters; current stage packets: **11,496** (**24.16% X-path reduction**).
+- unchanged judgement/app-copy/search inputs: 6,454 + 4,987 + 777 characters. Whole fixture: **27,377 → 23,714** (**13.38% reduction**). This is below the 30% whole-workload target; the report does not overstate it.
+- no clearly safe additional reduction was identified without risking evidence loss or changing collection/quality semantics. The remaining safe opportunity is future measurement/targeting of judgement and app-copy packets, not a new broad source filter.
+
+### Files, tests and safety
+
+- changed file in this follow-up: `supabase/functions/important-news-monitor/cost_path_audit_test.ts` (test-only). Prior implementation commit `44ffe59d29e666ce158efc3445efbf7b4b2985c5` is retained; no additional production source change was necessary.
+- new mixed fixture: **1/1 passed**.
+- full important-news suite: **405/405 passed** (including prior 404 tests).
+- changed production module `deno check`: **PASS**. Fixture `deno check` is environment-blocked because this disposable checkout lacks `npm:@types/node`; no source error was reported. `git diff --check`: **PASS**.
+- no deploy, production DB/schema/migration/RPC/Cron/settings change, manual Function/OpenAI/X/Push call, synthetic candidate, or X post. `apps/admin/**`, `HANDOFF.md`, formal checkout and other workstreams were untouched.
+- remaining issue: C2 review of the broader cost-path measurement. Keep status `review_required` / `next_owner: chatgpt`.
+
 ## H2 current task — X news generation failure hardening (2026-09-16)
 
 - task_id: `x-news-generation-failure-hardening-20260916`

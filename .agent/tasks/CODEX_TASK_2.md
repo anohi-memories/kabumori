@@ -3,8 +3,8 @@
 - task_id: x-news-generation-failure-hardening-20260916
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Luna first; switch to Sol High only if the cost-path or safety design becomes ambiguous
 - purpose: Complete the C2 follow-up for important-news API cost reduction without weakening Fact/Voice safety or narrowing broad collection.
