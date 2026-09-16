@@ -1,5 +1,19 @@
 # Codex Slot 2 Report
 
+## H2 current task — X news generation failure hardening (2026-09-16)
+
+- task_id: `x-news-generation-failure-hardening-20260916`
+- result: implemented and locally verified; awaiting C2 review
+- root_cause: the 142-row generation_failed backlog is primarily legitimate fail-closed Fact/Voice outcomes (missing explicit years, unsupported market interpretation/causality, company-identity uncertainty, and wording/precision failures), with bounded retries already present; it is not a reason to weaken safety gates.
+- changed_files: `supabase/functions/important-news-monitor/post_generation_logic.ts`, `supabase/functions/important-news-monitor/post_generation_logic_test.ts`, plus this report. The TASK status is updated separately after GitHub read-back as required.
+- implementation: stage-specific packets now keep full evidence for draft/Fact while omitting the disclosure body and affectedEntities from the style-only Voice stages; the draft prompt also forbids unsupported forecasts/market reactions in its closing sentence. Existing Fact/Voice checks, retry limits, dedupe, coverage, app-copy, and publish safety are unchanged.
+- tests: targeted **107/107**, full important-news suite **404/404**, related suites **76/76**, changed-module `deno check` PASS, `git diff --check` PASS.
+- ai_call_token_before_after: representative 4,000-repeat-body fixture was approximately **97,845 → 65,807 JSON input characters** across draft/fact/voice (same three stages), a **32.7% reduction**. Fact retains body evidence; Voice receives only style-relevant metadata plus generated text. Retry policy remains bounded and fail-closed.
+- implementation_commit: `44ffe59d29e666ce158efc3445efbf7b4b2985c5`; report-sync commit will be recorded after this front-matter update; push target is `origin/main`.
+- deploy: **0**. Production DB/schema/migration/RPC/Cron/settings/API/X changes: **0**. No production or paid OpenAI/X call was made.
+- remaining_issues: C2 review of the input-packet reduction and fixture measurement; no production deploy is authorized by this task.
+- safety_checks: formal checkout, existing uncommitted changes, H1/Claude workstreams, `apps/admin/**`, and `HANDOFF.md` untouched; no secrets or raw production text included.
+
 ## Current H2 — close-report dual-failure diagnosis (2026-09-16)
 
 - task_id: `close-report-dual-failure-diagnosis-and-hardening-20260916`
