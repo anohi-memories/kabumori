@@ -1,5 +1,18 @@
 # Codex Slot 2 Report
 
+## H2 — important-news cost hardening production deploy (2026-09-16)
+
+- task_id: `important-news-cost-hardening-production-deploy-20260916`
+- result: approved `important-news-monitor` deployment completed; C2 review required
+- deploy source: fresh `origin/main` `bfabcee0c70ec1915513e297af77f06d88e6ed7b`, containing implementation commit `44ffe59d29e666ce158efc3445efbf7b4b2985c5` and audit/report commit `58d6ec08270c0b93f6bfaac4336ba95a3cb885b5`
+- pre-deploy: `important-news-monitor` v53 ACTIVE, `verify_jwt=false`; H1/G1/G2 boundaries checked and no concurrent `important-news-monitor` workstream found
+- deploy: `important-news-monitor` only, with `--no-verify-jwt`; success
+- post-deploy: `important-news-monitor` v54 ACTIVE, `verify_jwt=false`, updated_at advanced as expected
+- runtime read-back: `supabase functions download important-news-monitor --use-api` in a separate disposable worktree; all 53 downloaded function files byte-matched the deploy source, including `post_generation_logic.ts`, tests, and `_shared` dependencies
+- other Functions unchanged: `x-test-post` v108, `stocks-master-sync` v16, `stocks-new-listing-sync` v15, `send-push-notifications` v15, `x-oauth-connect` v18, `personalized-reports` v13, `market-intelligence-ingest` v11, `market-intelligence-state-evaluator` v7, and `brand-post-dry-run` v5 retained their pre-deploy versions/updated_at
+- no production DB/schema/RPC/migration/RLS/Cron/settings/user-setting change; no manual/synthetic candidate, OpenAI/X/Push/API invocation, or X post
+- no source commit was created for deployment; this report and TASK status are the only follow-up edits. Keep `status: review_required` / `next_owner: chatgpt` and stop for C2.
+
 ## H2 C2 follow-up — full important-news AI cost-path audit (2026-09-16)
 
 - task_id: `x-news-generation-failure-hardening-20260916`

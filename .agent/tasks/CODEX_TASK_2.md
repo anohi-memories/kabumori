@@ -3,8 +3,8 @@
 - task_id: important-news-cost-hardening-production-deploy-20260916
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna first
 - purpose: C2 PASS済みの重要ニュース生成コスト削減実装を、`important-news-monitor` のみに安全に本番反映し、deploy sourceとproduction read-backの一致を確認する。
