@@ -1,5 +1,46 @@
 # Codex Report
 
+## Latest H1 result — Phase 3K AI Lab first live rollout (2026-09-16)
+
+- task_id: `x-multibrand-phase3k-ai-lab-first-live-test-20260916`
+- result: `review_required` — Phase A/B/C completed. AI Lab write OAuth was deployed and reauthorized, one controlled text-only post succeeded once, and the existing ten posting windows were activated only after that success.
+- authorization boundaries: only AI Lab was changed. No media scope/upload, Kabumori/Mio change, Cron change, schema/RPC/migration change, `supabase db push`, token refresh, or unrelated Function deploy was performed.
+
+### Phase A — deploy and OAuth
+
+- deployed only `x-oauth-connect` from exact approved commit `a469dcc50acc443efd65ebb933d527d3b21f5dca`.
+- production read-back: ACTIVE v18, `verify_jwt=false`, 12/12 runtime files byte-identical to the approved candidate, no missing/extra files; aggregate source hash `96a5d3ea5a938a1f972e1a74aa6013f6a18934926ffcd30c2b4fb0f1746b7f98`.
+- exact requested OAuth scopes: `tweet.read users.read tweet.write offline.access`; `media.write`, `like.write`, and `follows.write` were absent.
+- user completed X authorization while signed in as `@kaishain_ai_lab`. Callback consumed the fresh state and completed identity verification at 2026-09-16 18:48:19 JST.
+- `/2/users/me` verified username: `kaishain_ai_lab`. Only after this check were Vault-backed access/refresh references accepted. No token/secret/ref value was read or recorded.
+- after callback: `ai_salaryman_lab_x` remained `identity_verified`, fixed handle `kaishain_ai_lab`, with both Vault references present; publishing was still disabled until Phase B.
+
+### Phase B — controlled first real post
+
+- preconditions: all ten existing AI Lab `brand_post` windows remained inactive; no same-day/future AI Lab `brand_post` schedule, fingerprint, or execution log existed.
+- atomically changed AI Lab only: `publish_mode=dry_run → live`, `publish_enabled=false → true`, and `enabled_post_types=[] → [\"brand_post\"]`; inserted one controlled same-day row using reserved test `slot_no=0`, scheduled three minutes ahead. No window was activated at this point.
+- execution: the existing every-minute natural Cron claimed the row at 18:58:00 JST and completed at 18:58:05 JST. Status `succeeded`, `attempt_count=1`, no error, no retry.
+- first real post: X post id `2100162295930511602`, published 2026-09-16 18:58:05 JST, 115 Unicode code points, text only. It was visually confirmed on `@kaishain_ai_lab` at the matching status URL.
+- completion safety: one succeeded execution log and one matching `published_content_fingerprints` row were persisted at the terminal completion timestamp. Observed AI Lab X text writes=1; media writes/uploads=0.
+
+### Phase C — prospective ten-slot activation
+
+- after explicit user confirmation of the recurring-production blast radius, exactly the existing ten AI Lab `brand_post` rows were changed from inactive to active in one guarded transaction.
+- read-back matched all approved values unchanged: slots 1–10, `Asia/Tokyo`, daily probability 1.0, and the original windows 07:30–08:30 through 22:00–23:00. Active count changed 0 → 10; no time, slot, probability, or Cron cadence was changed.
+- production `plan_daily_posts` definition was read before activation. For the current JST date it skips windows whose end time has passed and, for an in-progress window, starts no earlier than current time +1 minute.
+- natural Cron at 19:14 JST produced only the prospective remaining rows: slot 8 at 19:52:05, slot 9 at 21:09:06, and slot 10 at 22:57:39 JST, all pending with `attempt_count=0`. Backfill count for expired slots 1–7 was 0.
+- naturally executed rows observed during this rollout: the controlled slot 0 row completed once; the newly planned slots 8–10 were future pending at final read-back and were not manually invoked.
+
+### Final state and isolation
+
+- AI Lab: brand active/live; account identity verified and publish enabled; enabled post type `[\"brand_post\"]`; ten windows active; one succeeded controlled row and three future pending rows.
+- Kabumori final read-back: brand active/live; `kabumori_x` handle `yume_daka`, identity verified, publish enabled; its brand/account timestamps and seven existing posting-window active states were not modified by this work.
+- Mio final read-back: brand inactive/disabled and no social-account/window row observed; unchanged by this work.
+- Function isolation: `x-test-post` remained v108 with its previously verified source hash. Only `x-oauth-connect` was deployed by H1. The independently updated `important-news-monitor` belongs to another slot and was not touched here.
+- automatic stop conditions observed: none. No wrong account, duplicate, over-280 dispatch, token routing/refresh anomaly, uncertain completion, generation loop, media call, multi-post per slot, or scheduler/backfill anomaly occurred.
+- source/tests: no new application source was edited in this continuation. The deployed candidate retained its prior 25/25 tests, changed-file type checks, format checks, and `git diff --check` evidence from C1.
+- remaining observation: slot 8–10 are scheduled for later natural execution. Their delivery outcome is not claimed here; no manual execution or backfill was used.
+
 ## Latest H1 result — Phase 3K AI Lab text-write OAuth candidate (2026-09-16)
 
 - task_id: `x-multibrand-phase3k-ai-lab-first-live-test-20260916`
