@@ -3,7 +3,7 @@
 - task_id: x-close-report-freshness-production-deploy-20260916
 - owner: codex
 - slot: codex-2
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: urgent
 - recommended_model: Luna first
@@ -89,3 +89,18 @@ C2で承認済み:
 - push前に再度 `origin/main` fresh-check
 - `.agent/`制御ファイルのみ安全にpush
 - origin/main read-back後にSTOPしてC2待ち
+
+## C2 review result — 2026-09-16
+
+PASS.
+
+Confirmed from the production deploy report:
+- deploy source was fresh `origin/main` `af28c10cc7be6f9554e6a048eb3e04bca38b1117` and contained approved implementation commit `04bfe490a53fea95892ea6e225251b5e129aa87e`
+- only `x-test-post` was deployed
+- production advanced from v108 ACTIVE to v109 ACTIVE with `verify_jwt=false` preserved
+- runtime read-back byte-matched the deploy source across all 54 x-test-post files and shared dependencies
+- listed other Edge Functions retained their pre-deploy versions/updated_at
+- production DB/schema/RPC/migration/RLS/Cron/settings/posting schedule changes were 0
+- manual/synthetic close-report execution, OpenAI/X/Push/API invocation, and manual X post were 0
+
+Deployment task is complete. The remaining verification is observational only: confirm the next natural 17:00 close-report succeeds without the prior freshness-boundary failure.
