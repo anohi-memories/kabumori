@@ -383,13 +383,35 @@ export function generationModelInput(
   generatedText?: string,
   checkIssues?: string[],
   factRetry = false,
+  step?: GenerationStep,
 ) {
   const companyIdentity = companyIdentityEvidence(candidate);
-  return {
-    candidate: {
+  // Draft needs the complete normalized candidate. Fact needs only the source/judgement evidence
+  // used by the checker; Voice is a style-only check and must not receive the full disclosure body
+  // again. Keeping these stage-specific packets also prevents large PDF-derived body summaries from
+  // being retransmitted to every subsequent model call.
+  const stageCandidate = step === "voice" || step === "voice_retry"
+    ? {
+      id: candidate.id, sourceType: candidate.sourceType, sourceUrl: candidate.sourceUrl,
+      sourceName: candidate.sourceName, title: candidate.title, companyName: candidate.companyName,
+      companyCode: companyIdentity.displaySecurityCode, category: candidate.category,
+      publishedAt: candidate.publishedAt, importance: candidate.importance, status: candidate.status,
+    }
+    : step === "fact" || step === "fact_retry"
+    ? {
+      id: candidate.id, sourceType: candidate.sourceType, sourceUrl: candidate.sourceUrl,
+      sourceName: candidate.sourceName, title: candidate.title, bodySummary: candidate.bodySummary,
+      companyName: candidate.companyName, companyCode: companyIdentity.displaySecurityCode,
+      entityKey: candidate.entityKey, category: candidate.category, publishedAt: candidate.publishedAt,
+      importance: candidate.importance, judgementReason: candidate.judgementReason,
+      judgementFactStatus: candidate.judgementFactStatus, status: candidate.status,
+    }
+    : {
       ...candidate,
       companyCode: companyIdentity.displaySecurityCode,
-    },
+    };
+  return {
+    candidate: stageCandidate,
     company_identity: companyIdentity,
     generated_text: generatedText ?? null,
     ...(checkIssues ? { [factRetry ? "fact_issues" : "voice_issues"]: checkIssues } : {}),
@@ -1003,6 +1025,7 @@ export async function requestGenerationStep(
     "元情報にない数値、日付、固有名詞、因果、規模、将来予測を追加しません。",
     "一次情報または確定済みjudgementに直接の根拠がない市場解釈は、断定を避けた表現でも追加しません。『材料として意識される』『テーマとして意識される』『関連銘柄へ波及する』『市場の注目を集める』『株価材料になる』『業界全体へ影響する』『投資家心理へ影響する』等は禁止です。",
     "読者向けに自然に見せるためだけの説明、因果、影響、対象を補いません。直接の根拠がない場合は、確認できる事実だけを短く伝えて終えて構いません。",
+    "最後の一文にも、根拠のない見通し・可能性・今後の変化・市場反応を足しません。確認できる事実で終えてください。",
     "M&A・TOB・資本業務提携では、対象会社、買付者、親会社、提携先、株主の役割を区別します。『対象となるのはAとB』『関係するのはAとB』『影響を受けるのはAとB』のように異なる役割を一括りにせず、不要なら関係者をまとめる一文自体を省略してください。",
     "見出しラベルはプログラム側でimportanceに応じて付与します。textには【速報】や【重大速報】を含めず、見出し本文から始めてください。",
     candidate.importance === "most_important"
@@ -1043,6 +1066,7 @@ export async function requestGenerationStep(
         generatedText,
         isFactRetry || isVoiceRetry ? voiceIssues : undefined,
         isFactRetry,
+        step,
       )),
       text: { format: { type: "json_schema", name: `important_news_${step}`, strict: true, schema } },
     }),

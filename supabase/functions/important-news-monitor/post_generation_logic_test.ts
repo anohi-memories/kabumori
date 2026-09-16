@@ -474,6 +474,34 @@ test("the generation input preserves raw metadata for audit but exposes only the
   assert.equal(input.candidate.companyCode, "406A");
 });
 
+test("stage-specific generation packets do not resend disclosure bodies to Voice", async () => {
+  const target = candidate({
+    bodySummary: "一次資料の本文。".repeat(4000),
+    affectedEntities: ["テスト株式会社", "1234", "不要な対象"],
+  });
+  let draftInput = "";
+  let voiceInput = "";
+  const response = new Response(JSON.stringify({
+    output: [{ content: [{ type: "output_text", text: JSON.stringify({ passed: true, issues: [] }) }] }],
+    usage: { input_tokens: 10, output_tokens: 5 },
+  }), { status: 200, headers: { "content-type": "application/json" } });
+  await requestGenerationStep("test-key", "draft", target, undefined, async (_url, init) => {
+    draftInput = String((JSON.parse(String(init?.body)) as { input?: unknown }).input ?? "");
+    return new Response(JSON.stringify({
+      output: [{ content: [{ type: "output_text", text: JSON.stringify({ text: "本文", sufficient_information: true, notes: [] }) }] }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  });
+  await requestGenerationStep("test-key", "voice", target, "【速報】本文", async (_url, init) => {
+    voiceInput = String((JSON.parse(String(init?.body)) as { input?: unknown }).input ?? "");
+    return response.clone();
+  });
+  assert.match(draftInput, /一次資料の本文/u);
+  assert.doesNotMatch(voiceInput, /一次資料の本文/u);
+  assert.doesNotMatch(voiceInput, /affectedEntities/u);
+  assert.ok(voiceInput.length < draftInput.length / 3, `voice input was not reduced: ${voiceInput.length}/${draftInput.length}`);
+});
+
 test("P-環境のミカタHD is confirmed only through its companyCode-scoped explicit alias", () => {
   const identity = companyIdentityEvidence(candidate({
     sourceType: "tdnet",

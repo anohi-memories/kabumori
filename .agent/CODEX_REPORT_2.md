@@ -867,3 +867,44 @@ Then apply the exact migration file via `podman exec -i <container> psql -X -v O
 
 - No other Edge Function deploy; no Cron/scheduler/settings/user-setting change; no OAuth/Vault change; no `supabase db push`; no migration-history repair; no synthetic candidate/Push; no manual Function/OpenAI/X invocation; no X post.
 - `apps/admin/**`, `HANDOFF.md`, formal checkout, and other workstreams were untouched. TASK remains `review_required` / `next_owner: chatgpt` for C2.
+
+## H2 X news generation failure hardening — 2026-09-16
+
+- task_id: `x-news-generation-failure-hardening-20260916`
+- status: `review_required`
+- next_owner: `chatgpt`
+- source_base: fresh `origin/main` `81422dd7df1dd6f40f8f07bce3b4ba9fcf81b585`; isolated clean worktree `/private/tmp/kabumori-h2-news-hardening-1789529652`.
+
+### Production diagnosis (read-only)
+
+- `important_news_candidates` `generation_failed` rows in the requested 14-day window: **141** (the shared corrected cumulative figure remains 142 for 2026-09-01 through 2026-09-15).
+- Failure codes: `NEWS_GENERATION_FACT_RETRY_FAILED` 67, `NEWS_GENERATION_FACT_FAILED` 54, `NEWS_GENERATION_VOICE_FAILED` 17, `NEWS_GENERATION_LOCAL_FACT_FAILED` 2, `NEWS_GENERATION_INVALID_OUTPUT` 1.
+- Source distribution is dominated by `tdnet` (66/49/13/2/1 respectively), with smaller `breaking_market` and `market_macro` contributions. Representative Fact stops were chiefly missing explicit event years, unsupported market interpretation/causality, and unconfirmed company identity; representative Voice stops were wording/role precision and unnatural explanatory closures. These are safety stops or bounded-retry failures, not evidence for weakening Fact/Voice gates.
+- No production row was written, regenerated, or resent. Secrets and raw production text were not copied into this report.
+
+### AI call path and cost audit
+
+- Normal X generation path remains: `draft` → `fact` → `voice`, each using `gpt-5.6-luna`, reasoning effort `low`; output caps are 1400 tokens for draft/retry steps and 650 for Fact/Voice checks. Fact correction and Voice wording retries remain conservative and bounded at one each; final Fact/Voice checks remain independent and fail-closed.
+- Existing retry paths were retained: a retryable Fact failure can add `fact_retry` plus a final Fact recheck; a retryable Voice failure can add one `voice_retry` plus Fact and Voice rechecks. Non-retryable safety failures do not trigger retries.
+- Before/after local fixture measurement used a 4,000-repeat disclosure body. Before the change, the same full candidate packet was sent to all three stages (about 97,845 JSON input characters). After the change, draft/fact/voice packets were about 32,678 / 32,615 / 514 characters (65,807 total), a **32.7% reduction** for this representative three-stage workload. The Voice packet intentionally omits the disclosure body and `affectedEntities`; Fact still receives the body evidence it needs.
+- The draft prompt now explicitly forbids adding unsupported forecasts, future changes, or market reactions in the closing sentence. No collection, severity, category, dedupe, app-copy, Push, or publication policy was changed.
+
+### Changed files and safety-preserving implementation
+
+- `supabase/functions/important-news-monitor/post_generation_logic.ts`: added stage-specific normalized input packets to `generationModelInput`; `draft` keeps the full candidate, `fact` keeps source/judgement evidence including `bodySummary`, and `voice`/`voice_retry` receives only fields needed for style checking plus the generated text. Added one explicit no-unsupported-forecast instruction to the existing draft prompt.
+- `supabase/functions/important-news-monitor/post_generation_logic_test.ts`: added a regression fixture proving Voice does not receive the disclosure body/affected-entity payload and that the serialized Voice input is less than one third of the draft input for a large body.
+- No other source, migration, DB, Cron, settings, `x-test-post`, `personalized-reports`, app, OAuth, or workflow files changed.
+
+### Verification
+
+- Targeted `post_generation_logic_test.ts`: **107 passed / 0 failed**.
+- Full `important-news-monitor/*test.ts`: **404 passed / 0 failed**.
+- Changed-module `deno check --no-lock`: **PASS**.
+- `git diff --check`: **PASS**.
+- No production API or paid model call was made; all verification used local mocks/fixtures.
+
+### Safety / disposition
+
+- Production DB/schema/migration/RPC: **0**; deploy: **0**; Cron/settings: **0**; manual candidate or X/OpenAI invocation: **0**; X posts: **0**.
+- Formal checkout and its existing uncommitted changes, H1/Claude workstreams, `apps/admin/**`, and `HANDOFF.md` were untouched.
+- Remaining item for C2: review the bounded input-packet change and fixture measurement before any separately authorized production deploy. Status is `review_required`; next owner is `chatgpt`.
