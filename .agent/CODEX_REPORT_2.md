@@ -874,6 +874,7 @@ Then apply the exact migration file via `podman exec -i <container> psql -X -v O
 - status: `review_required`
 - next_owner: `chatgpt`
 - source_base: fresh `origin/main` `81422dd7df1dd6f40f8f07bce3b4ba9fcf81b585`; isolated clean worktree `/private/tmp/kabumori-h2-news-hardening-1789529652`.
+- implementation_commit: `44ffe59d29e666ce158efc3445efbf7b4b2985c5` (pushed to `origin/main`).
 
 ### Production diagnosis (read-only)
 
