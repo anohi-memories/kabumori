@@ -43,6 +43,17 @@ export type XPublisher = (text: string) => Promise<{
   refreshExecuted: boolean;
 }>;
 
+/**
+ * Keep source attribution in the candidate/Fact record, but omit external URLs
+ * from the public Kabumori news post.  This is applied only at the X publisher
+ * boundary; all upstream generated text, source metadata, and safety checks are
+ * intentionally left unchanged.
+ */
+export function stripExternalUrlsFromNewsPost(text: string): string {
+  const withoutSourceLine = text.replace(/\s*出典\s*[:：]\s*https?:\/\/\S+\s*$/u, "");
+  return withoutSourceLine.replace(/[ \t]*https?:\/\/\S+/gu, "").trimEnd();
+}
+
 export type PublishResult = {
   candidateId: string;
   importance: string | null;
@@ -200,7 +211,7 @@ export async function publishImportantNewsCandidate(
 
   let posted: Awaited<ReturnType<XPublisher>>;
   try {
-    posted = await publisher(claimed.generatedText);
+    posted = await publisher(stripExternalUrlsFromNewsPost(claimed.generatedText));
   } catch (error) {
     const code = error instanceof Error ? error.message : "X_REQUEST_FAILED";
     const httpStatus = typeof error === "object" && error !== null &&

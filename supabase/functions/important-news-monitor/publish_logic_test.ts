@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   checkPublishCandidate,
   publishImportantNewsCandidate,
+  stripExternalUrlsFromNewsPost,
   type PublishCandidate,
   type PublishRepository,
   type XPublisher,
@@ -168,6 +169,26 @@ test("X success alone transitions candidate to published", async () => {
   assert.equal(result.published, true);
   assert.equal(repository.state.status, "published");
   assert.equal(repository.state.xPostId, "x-2");
+});
+
+test("public news body omits external URLs while retaining source metadata", async () => {
+  const repository = memoryRepository(candidate({
+    generatedText: `【重大速報】本文の要点です。詳細は https://example.com/extra を確認。\n\n出典: ${sourceUrl}`,
+  }));
+  let publishedText = "";
+  const result = await runPublish("candidate-1", false, repository, async (text) => {
+    publishedText = text;
+    return { id: "x-url-free", httpStatus: 201, refreshExecuted: false };
+  });
+  assert.equal(result.published, true);
+  assert.doesNotMatch(publishedText, /https?:\/\//u);
+  assert.equal(result.generatedText?.includes(sourceUrl), true);
+  assert.equal(result.sourceUrl, sourceUrl);
+});
+
+test("URL stripping preserves non-URL news text and removes http and https links", () => {
+  const text = "【速報】本文 https://example.com/a と http://example.com/b を除く。";
+  assert.equal(stripExternalUrlsFromNewsPost(text), "【速報】本文 と を除く。");
 });
 
 test("X failure never transitions candidate to published", async () => {
