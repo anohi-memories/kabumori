@@ -3,8 +3,8 @@
 - task_id: x-news-generation-failure-hardening-20260916
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: X向け重要ニュース本文の `generation_failed` が累計142件まで積み上がっている問題を、実データで原因分類し、Fact安全性を落とさず公開取りこぼしを減らす。同時に、同じ重要ニュース生成経路がOpenAI API token消費の最大要因になっているため、品質を維持したままAI呼び出し回数・入力token・無駄なretryも削減する。
