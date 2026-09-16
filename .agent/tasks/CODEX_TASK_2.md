@@ -1,106 +1,108 @@
 # Codex Task 2
 
-- task_id: x-close-report-freshness-production-deploy-20260916
+- task_id: kabumori-news-url-removal-cost-control-20260916
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: urgent
-- recommended_model: Luna first
-- purpose: C2 PASS済みのX大引けfreshness境界修正を、`x-test-post` のみに安全に本番反映し、runtime sourceとdeploy sourceの一致を確認する。
+- recommended_model: Sol Medium
+- purpose: かぶモリのXニュース投稿から外部URLを原則外し、URL付きX投稿のAPI原価を抑える。ニュース本文自体の要約・株への影響・Fact/Voice安全策は維持する。
 
-## Approved implementation
+## User decision / source of truth
 
-C2で承認済み:
-- implementation commit: `04bfe490a53fea95892ea6e225251b5e129aa87e`
-- change: `jpx_close`について、同一JST日・15:30以降の観測値を16:45〜17:05 JSTのlive close-report実行窓ではfreshとして扱うsemantic same-session rule
-- existing 90-minute rule is retained as fallback outside that window
-- previous-day / future / invalid timestamp / pre-15:30 / missing or nonnumeric / source identity failures remain rejected
-- Fact/Voice fail-closed, no-fallback policy, posting schedule 17:00 are unchanged
-- targeted tests: 64/64 PASS
-- full `x-test-post` regression: 388/388 PASS
-- changed source `deno check`: PASS
-- `git diff --check`: PASS
+2026-09-16 JST、ユーザーはX APIのURL付き投稿コストが高いことを踏まえ、かぶモリの通常ニュース投稿ではURLを付けない方針を明示し、「とりあえず早急にそれやるべき」と変更を承認した。
 
-## User authorization
+方針:
+- 通常のかぶモリ自動ニュース投稿はURLなしを標準にする。
+- ニュース内容は本文だけで読める形を維持する。
+- ニュース取得元URL/出典情報をDB内部に保持している場合、それは削除しない。今回止めるのはXへ公開する投稿本文へのURL付与。
+- 将来、自社記事/note/重要導線など明示的にURLを付けたい投稿は別設定・別枠で扱う。今回それらまで一律禁止する設計変更はしない。
 
-2026-09-16 JST、ユーザーはC2 PASS後に「指示」と明示し、この承認済みfreshness修正を本番反映する工程の開始を承認した。
+## Mandatory startup / parallel safety
 
-## Mandatory fresh checks
+開始前に必ず読む:
+- `.agent/ORCHESTRATION.md`
+- `.agent/CURRENT_STATE.md`
+- this TASK
+- `.agent/tasks/CODEX_TASK.md`
+- `.agent/tasks/CLAUDE_TASK_1.md`
+- `.agent/tasks/CLAUDE_TASK.md`
+- fresh `origin/main`
 
-開始前に:
-1. `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, this TASK, `.agent/CODEX_REPORT_2.md` を読む。
-2. `origin/main` をfresh-checkする。
-3. H1/G1/G2の現行TASKを確認し、`x-test-post`を同時変更/deployするworkstreamがあればSTOP。
-4. latest `origin/main` のruntime sourceに `04bfe490a53fea95892ea6e225251b5e129aa87e` のfreshness修正が含まれることを確認する。
-5. production `x-test-post` の現在version/status/verify_jwt/updated_atを記録する。
+最優先の競合ルール:
+- H1が現在AI Lab live testで`x-test-post` / OAuth / AI Lab posting windows / planner周辺を所有している可能性がある。
+- URL付与箇所が`supabase/functions/x-test-post/**`またはH1が触っている同一workflow/fileにある場合、同時変更してはいけない。実装を開始せず、具体的な競合ファイルをReportしてSTOPする。
+- URL付与がH1と完全分離された別function/fileであるとfresh-checkで証明できる場合のみ実装してよい。
+- G2のmorning-greeting image cost gate、G1のnews observation範囲とも同じファイル/workflowを触らない。
+- 既存未コミット変更は他workstreamの所有物として扱う。
 
-期待状態が違う場合は勝手に補正せずSTOPしてC2へ戻す。
+## Phase A — exact source identification
 
-## Authorized production action
+まずread-onlyで、かぶモリの自動ニュースX投稿にURLがどこで付与されているか特定する。
 
-許可するのは以下のみ:
-- clean checkout/worktreeの最新 `origin/main` をdeploy sourceに使用
-- `x-test-post` Edge Functionだけをdeploy
-- 現行functionのJWT設定を事前確認し、その設定を維持
-- deploy後に `x-test-post` version/status/verify_jwt/updated_atをread-back
-- production function sourceを可能な方法でdownload/read-backし、deploy sourceのruntime filesと一致確認
-- 他Edge Functionのversion/updated_atが意図せず変化していないことを確認
+最低限確認:
+- URLが生成prompt由来か、publish前の文字列連結か、DB保存済み本文に含まれるか
+- 対象post_type / news path
+- Xへ送る最終本文を組み立てる関数/ファイル
+- URL削除がニュース以外（朝刊、大引け、挨拶、tips、AI Lab brand_post等）へ波及しないか
+- URLを除いても出典/source URLがDB内部・アプリ内部で必要なら保持されるか
 
-## Prohibited
+対象が曖昧なら変更せずSTOP。
 
-- 新しいsource修正（deploy blockerが見つかった場合は修正せずSTOP）
-- `important-news-monitor`や他Edge Functionのdeploy
-- app personalized report変更/deploy
-- morning report変更
-- AI Lab/OAuth/Vault/social_accounts変更
-- DB/schema/migration/RPC/RLS変更
-- Cron/settings/posting schedule変更
+## Goal
+
+かぶモリの通常ニュース自動投稿についてのみ、Xへ送信する最終本文に外部URLを含めない。
+
+期待:
+- ニュース本文の要点/株への影響/ハッシュタグ等、既存の非URL部分は可能な限り不変
+- Fact/Voice/dedupe/fingerprint/publish guardの順序と意味を変えない
+- source URL自体の収集・DB保存・アプリ表示用途は壊さない
+- AI Lab / Mio / Kabumoriの非ニュース投稿に影響しない
+- media挙動は変更しない
+
+## Tests
+
+少なくとも:
+- 対象ニュース投稿本文に`http://` / `https://`が含まれない
+- URL以外の既存本文が維持される
+- 非ニュース投稿が不変
+- source URL metadataが必要箇所で保持される
+- dedupe/fingerprintが意図せず壊れない
+- 対象周辺の既存テスト
+- `deno check`（対象TS）
+- `git diff --check`
+
+可能ならURLありfixture→最終X本文URLなしの明示テストを追加する。
+
+## Production boundary
+
+このTASKではまずsource修正・テスト・candidate pushまで。
+
+C2前に禁止:
+- production Edge Function deploy
+- manual/synthetic X投稿
+- Cron変更
+- posting_windows変更
+- OAuth/Vault/token変更
+- DB/schema/RPC/migration変更
 - `supabase db push`
-- migration history repair
-- manual/synthetic close-report実行
-- manual OpenAI/X/Push invocation
-- manual X投稿
-- secret/tokenの表示
-
-自然Cronによる通常処理は止めない。
-
-## Verification
-
-最低限:
-- deploy前 `origin/main` fresh-check
-- deploy sourceに `04bfe490...` のruntime差分が存在
-- `x-test-post` deploy success
-- deploy後 ACTIVE/status/JWT設定確認
-- runtime source read-back一致
-- 他Function無変更確認
-- production DB/Cron/settings/posting schedule変更0
-- manual OpenAI/X/Push/close-report/X投稿0
-
-次の自然17:00 close-reportで実運用確認する。人工的にclose-reportを起動しない。
+- source URLデータの削除
+- AI Lab/Mio設定変更
 
 ## Completion
 
-完了時:
-- `.agent/CODEX_REPORT_2.md` 先頭に今回taskのReportを追加
-- Reportに deploy前後version、deploy source commit、runtime read-back一致、他Function無変更、安全確認、次の自然17:00確認待ちを記録
-- source codeの追加commitは原則0
-- `.agent/tasks/CODEX_TASK_2.md` を `status: review_required`, `next_owner: chatgpt` に更新
-- push前に再度 `origin/main` fresh-check
-- `.agent/`制御ファイルのみ安全にpush
-- origin/main read-back後にSTOPしてC2待ち
+実装可能で競合なしの場合:
+- `status: review_required`
+- `next_owner: chatgpt`
+- `.agent/CODEX_REPORT_2.md`へReport
+- candidate commit/branchを明記
+- changed files、tests、URL removal scope、non-news regression、安全確認を記録
+- production changesは0のままC2へ渡す
 
-## C2 review result — 2026-09-16
+競合で実装不可の場合:
+- 同じく`review_required`
+- 競合ファイル/workflowを具体的にReport
+- H1完了後の最短再開手順を記録
 
-PASS.
-
-Confirmed from the production deploy report:
-- deploy source was fresh `origin/main` `af28c10cc7be6f9554e6a048eb3e04bca38b1117` and contained approved implementation commit `04bfe490a53fea95892ea6e225251b5e129aa87e`
-- only `x-test-post` was deployed
-- production advanced from v108 ACTIVE to v109 ACTIVE with `verify_jwt=false` preserved
-- runtime read-back byte-matched the deploy source across all 54 x-test-post files and shared dependencies
-- listed other Edge Functions retained their pre-deploy versions/updated_at
-- production DB/schema/RPC/migration/RLS/Cron/settings/posting schedule changes were 0
-- manual/synthetic close-report execution, OpenAI/X/Push/API invocation, and manual X post were 0
-
-Deployment task is complete. The remaining verification is observational only: confirm the next natural 17:00 close-report succeeds without the prior freshness-boundary failure.
+このタスクの目的は『かぶモリ通常ニュースのX本文からURLを外す』だけで、アプリ全体のURL課金設計や将来のURL付き投稿機能は別タスクとする。
