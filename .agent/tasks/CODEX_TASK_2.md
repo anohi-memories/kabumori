@@ -3,7 +3,7 @@
 - task_id: important-news-cost-hardening-production-deploy-20260916
 - owner: codex
 - slot: codex-2
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Luna first
@@ -86,3 +86,18 @@ C2で承認済み:
 - push前に再度 `origin/main` fresh-check
 - `.agent/`制御ファイルのみ安全にpush
 - origin/main read-back後にSTOPしてC2待ち
+
+## C2 review result — 2026-09-16
+
+PASS.
+
+Confirmed from `origin/main` report:
+- deploy source was fresh `origin/main` `bfabcee0c70ec1915513e297af77f06d88e6ed7b` and contained the approved implementation commit `44ffe59d29e666ce158efc3445efbf7b4b2985c5`
+- only `important-news-monitor` was deployed
+- production advanced from v53 ACTIVE to v54 ACTIVE with `verify_jwt=false` preserved
+- runtime source read-back matched deploy source across all downloaded function files
+- listed other Edge Functions retained their pre-deploy versions/updated_at
+- production DB/schema/RPC/migration/RLS/Cron/settings/user-setting changes were 0
+- manual/synthetic candidate, OpenAI/X/Push/API invocation and manual X post were 0
+
+This deploy task is complete. Any further optimization (for example judgement-stage cost reduction) must be a separate task.
