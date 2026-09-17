@@ -3,8 +3,8 @@
 - task_id: x-ai-lab-oauth-401-recovery-20260917
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: AI Lab通常`brand_post` dispatcher復旧後のX API `401`を解消する。OAuth再認可後に自然投稿が1回成功したが、その次の自然slotで再び401になったため、再現条件を安全に特定し、AI Labだけの認証経路を安定化する。

@@ -1,5 +1,36 @@
 # Codex Report
 
+## Latest H1 result — AI Lab recurring 401 read-only investigation (2026-09-17)
+
+- task_id: `x-ai-lab-oauth-401-recovery-20260917`
+- result: `review_required` — the recurring-401 cause was narrowed to an invalid/expired/revoked AI Lab access token that the current runtime intentionally does not refresh. No source, Function, database, Vault, OAuth, Cron, schedule, token, or posting mutation was performed.
+
+### Fresh control and runtime evidence
+
+- Fresh `origin/main` was fetched and used as the control base. At the final pre-report check it contained this task in `status: ready`; H2/G1/G2 have no OAuth/Vault/x-oauth-connect overlap.
+- Production Edge Function inventory is unchanged for the relevant path: `x-test-post` is ACTIVE with the previously verified v110 bundle/hash (Supabase version counter currently reports 112), `verify_jwt=false`; `x-oauth-connect` is ACTIVE v20 with the previously verified v18 bundle/hash. No deploy occurred in this investigation.
+- Read-back of the deployed `x-test-post` source shows the AI Lab branch loads only the fixed `ai_salaryman_lab_x` / `ai_salaryman_lab` / `kaishain_ai_lab` account, requires `identity_verified` and `publish_enabled=true`, reads both Vault references through `read_ai_salaryman_lab_x_vault_token`, and passes the loaded access token to the normal `POST /2/tweets` Bearer path.
+- The AI Lab branch sets empty client credentials and `allowRefresh=false`; on a 401 it fails immediately as `X_REQUEST_FAILED:401`. It never falls back to `oauth_token_store`, and it never writes refreshed tokens.
+
+### Success-versus-failure comparison
+
+- Natural slot 6 (`2026-09-17 16:23 JST`) and slot 7 (`17:34 JST`) are the same AI Lab `brand_post` route. Each was claimed once (`attempt_count=1`) with one started log. Slot 6 has one succeeded log, one X post id, and one fingerprint; slot 7 has one failed log with `X_REQUEST_FAILED:401`, no HTTP status column value, no X post id, and no fingerprint. No retry/backfill occurred.
+- At read time the non-secret account state was unchanged: brand `ai_salaryman_lab` is active/live; account `ai_salaryman_lab_x` is `identity_verified`, handle `kaishain_ai_lab`, `publish_enabled=true`, with both Vault refs present. The latest OAuth callback set the account and both named Vault secrets at `2026-09-17 05:47:20 UTC`; there is no later OAuth state or account mutation in the observed period.
+- The only legacy `oauth_token_store` row is unrelated to the AI Lab path (it has no brand/account columns). Its presence does not affect AI Lab because the deployed dispatcher selects the Vault resolver before any legacy resolver.
+- The Vault reader is a `SECURITY DEFINER` function with `search_path=''`; `information_schema.routine_privileges` shows EXECUTE only for `service_role` (and owner `postgres`), not `anon`/`authenticated`/PUBLIC. Function definition was read-only; no secret value or Vault id was read.
+
+### Root-cause conclusion and remaining uncertainty
+
+- Proven: this is not a slot-routing, duplicate, wrong-account, missing-ref, scope-string, or legacy-token selection problem. The same fixed Vault-backed account/ref path produced one success and then an X 401, while the application deliberately has no refresh path for AI Lab.
+- Most likely cause: the access token stored by the OAuth callback became invalid/expired/revoked between the successful and failed calls. X’s OAuth 2.0 PKCE documentation states that `offline.access` supplies a refresh token and that a refresh request is the supported way to obtain a new access token; X’s error guidance describes invalid/expired credentials as an authorization failure. The runtime currently does neither refresh-on-401 nor expiry tracking for the Vault-backed AI Lab token.
+- Not proven read-only: whether X expired the access token unusually early, revoked it, or rejected the token for an account/app permission condition. Production logs retain only `X_REQUEST_FAILED:401`; response headers/body are not persisted, so the specific X error subtype cannot be recovered from DB metadata.
+
+### Required next fix / blast radius
+
+- The next implementation must be separately reviewed by C1 before any mutation. It is limited to the AI Lab token lifecycle: refresh the Vault-backed refresh token on access-token expiry/401, persist any rotated access/refresh pair back to the same AI Lab Vault refs, and preserve fixed identity/account checks. It must not touch Kabumori/Mio, legacy `oauth_token_store`, scopes, schedules, Cron, schema/RPC definitions, or posting behavior.
+- No future AI Lab slot was manually invoked, no failed row was retried, and no token refresh/re-authentication was attempted during this investigation.
+
+
 ## Latest H1 result — AI Lab OAuth 401 recovery (2026-09-17)
 
 - task_id: `x-ai-lab-oauth-401-recovery-20260917`

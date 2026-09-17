@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-17 JST
+- checked_at: 2026-09-17 JST (H1 read-only follow-up)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,13 +14,13 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `x-ai-lab-oauth-401-recovery-20260917`
+- Codex slot 1: `review_required` — `x-ai-lab-oauth-401-recovery-20260917`
   - dispatcher復旧済み。
   - AI LabのみOAuth再認可済み。
   - 2026-09-17 16:23 JSTの自然slot 6は1回成功し、X post id 1件 / fingerprint 1件。
   - その次の17:34 JST自然slot 7で `X_REQUEST_FAILED:401` が再発。x_post_id追加なし / fingerprint追加なし / retry/backfillなし。
-  - 次のH1は、credential値を表示せず、成功slotと401再発slotの差分、token load path、OAuth後のaccount/token-ref state変化をread-only中心に調査する。
-  - source変更、token refresh/rotation実装、Vault/token mutation、OAuth再々認可、DB/Cron変更が必要と判明したら実施前にSTOPしてC1へ戻す。
+  - H1 read-only調査で、slot6成功→slot7 401は同じ固定Vault-backed経路で再現。AI Lab runtimeはrefresh無効・legacy fallbackなし。
+  - token refresh/rotation実装、Vault/token mutation、OAuth再々認可、DB/Cron変更が必要なため、実施前にC1へ戻す。
 
 - Codex slot 2: `done` — `kabumori-news-url-removal-production-deploy-20260917`
   - `important-news-monitor` v55へ、通常重要ニュースX本文の外部URL除去を本番反映済み。
