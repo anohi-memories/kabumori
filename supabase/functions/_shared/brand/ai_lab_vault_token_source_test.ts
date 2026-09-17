@@ -4,7 +4,10 @@ import {
   type BrandOperationalSettings,
   resolveBrandContext,
 } from "./brand_context.ts";
-import { loadAiLabVaultBackedXTokens } from "./ai_lab_vault_token_source.ts";
+import {
+  loadAiLabVaultBackedXTokenBundle,
+  loadAiLabVaultBackedXTokens,
+} from "./ai_lab_vault_token_source.ts";
 
 const settings: BrandOperationalSettings = {
   brand_id: "ai_salaryman_lab",
@@ -92,6 +95,40 @@ test("AI Lab loads only its verified account Vault refs and never requests the l
     paths.some((path) => path.endsWith("/oauth_token_store")),
     false,
   );
+});
+
+test("AI Lab token bundle returns opaque fixed references for the refresh writer", async () => {
+  const bundle = await loadAiLabVaultBackedXTokenBundle({
+    context: context(),
+    supabaseUrl: "https://example.test",
+    serviceRoleKey: "fixture-only",
+    fetchImpl: async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/social_accounts")) {
+        return Response.json([accountRow]);
+      }
+      if (url.pathname.endsWith("/rpc/read_ai_salaryman_lab_x_vault_token")) {
+        const body = JSON.parse(String(init?.body)) as {
+          p_vault_secret_id: string;
+        };
+        const token =
+          body.p_vault_secret_id === accountRow.vault_access_token_secret_id
+            ? "fixture-access-token"
+            : "fixture-refresh-token";
+        return Response.json([{ token_value: token }]);
+      }
+      throw new Error(`unexpected request: ${url.pathname}`);
+    },
+  });
+  assert.deepEqual(bundle.tokens, {
+    accessToken: "fixture-access-token",
+    refreshToken: "fixture-refresh-token",
+  });
+  assert.deepEqual(bundle.tokenReference, {
+    socialAccountId: "ai_salaryman_lab_x",
+    accessTokenSecretRef: accountRow.vault_access_token_secret_id,
+    refreshTokenSecretRef: accountRow.vault_refresh_token_secret_id,
+  });
 });
 
 test("a mismatched X handle fails before any Vault secret RPC", async () => {

@@ -68,7 +68,16 @@ import {
 } from "../_shared/brand/brand_context.ts";
 import { assertBrandPublishAllowed } from "../_shared/brand/publish_guard.ts";
 import { loadBrandXTokens } from "../_shared/brand/token_loader.ts";
-import { loadAiLabVaultBackedXTokens } from "../_shared/brand/ai_lab_vault_token_source.ts";
+import {
+  loadAiLabVaultBackedXTokenBundle,
+} from "../_shared/brand/ai_lab_vault_token_source.ts";
+import {
+  publishAiLabWithRefresh,
+  type AiLabRefreshContext,
+  type AiLabVaultTokenReference,
+  type PersistAiLabTokens,
+} from "../_shared/brand/ai_lab_token_refresh.ts";
+import { createAiLabVaultTokenPersistence } from "../_shared/brand/ai_lab_vault_token_persistence.ts";
 import {
   loadAiLabRecentDedupeFingerprints,
   recordAndCompleteAiLabBrandPost,
@@ -194,6 +203,13 @@ type XAuthContext = {
   serviceRoleKey: string;
   refreshExecuted: boolean;
   allowRefresh?: boolean;
+  aiLabRefresh?: {
+    context: AiLabRefreshContext;
+    tokenReference: AiLabVaultTokenReference;
+    clientId: string;
+    clientSecret: string;
+    persist: PersistAiLabTokens;
+  };
 };
 
 type InteractionTopic = {
@@ -3149,6 +3165,27 @@ async function postToX(
   replyToId?: string,
   pollOptions?: string[] | null,
 ): Promise<unknown> {
+  if (auth.aiLabRefresh) {
+    const result = await publishAiLabWithRefresh({
+      context: auth.aiLabRefresh.context,
+      tokenReference: auth.aiLabRefresh.tokenReference,
+      currentTokens: auth.tokens,
+      clientId: auth.aiLabRefresh.clientId,
+      clientSecret: auth.aiLabRefresh.clientSecret,
+      tokenEndpoint: X_TOKEN_URL,
+      persist: auth.aiLabRefresh.persist,
+      publish: (accessToken) => requestXPost(
+        accessToken,
+        text,
+        replyToId,
+        pollOptions,
+      ),
+    });
+    auth.tokens = result.tokens;
+    auth.refreshExecuted = auth.refreshExecuted || result.refreshExecuted;
+    return result.publishResult.body;
+  }
+
   let result = await requestXPost(
     auth.tokens.accessToken,
     text,
@@ -3929,21 +3966,35 @@ Deno.serve(async (req) => {
         if (scheduledPost.post_type !== "brand_post") {
           throw new Error("AI_LAB_POST_TYPE_NOT_ENABLED");
         }
+        const xClientId = Deno.env.get("X_CLIENT_ID") ?? "";
+        const xClientSecret = Deno.env.get("X_CLIENT_SECRET") ?? "";
+        const databaseUrl = Deno.env.get("SUPABASE_DB_URL") ?? "";
+        const tokenBundle = await loadAiLabVaultBackedXTokenBundle({
+          context: brandContext,
+          supabaseUrl,
+          serviceRoleKey,
+        });
         return {
-          tokens: await loadAiLabVaultBackedXTokens({
-            context: brandContext,
-            supabaseUrl,
-            serviceRoleKey,
-          }),
-          // AI Lab dispatch never refreshes or writes to the legacy token store.
-          clientId: "",
-          clientSecret: "",
+          tokens: tokenBundle.tokens,
+          clientId: xClientId,
+          clientSecret: xClientSecret,
           supabaseUrl,
           serviceRoleKey,
           refreshExecuted: false,
-          // AI Lab refresh tokens remain untouched; an expired access token fails closed for separate
-          // re-authorization/approval instead of falling back to Kabumori's oauth_token_store.
-          allowRefresh: false,
+          // The AI Lab path uses publishAiLabWithRefresh below; it never enters
+          // refreshXTokens or writes the legacy oauth_token_store.
+          allowRefresh: true,
+          aiLabRefresh: {
+            context: {
+              brandId: "ai_salaryman_lab",
+              socialAccountId: "ai_salaryman_lab_x",
+              handle: "kaishain_ai_lab",
+            },
+            tokenReference: tokenBundle.tokenReference,
+            clientId: xClientId,
+            clientSecret: xClientSecret,
+            persist: createAiLabVaultTokenPersistence({ databaseUrl }),
+          },
         };
       }
 

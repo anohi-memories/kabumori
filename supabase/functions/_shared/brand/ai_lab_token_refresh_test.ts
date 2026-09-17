@@ -92,6 +92,7 @@ test("first 401 refreshes once, persists, then retries once", async () => {
       accessToken: "new-access-token",
       refreshToken: "new-refresh-token",
     },
+    expectedRefreshToken: "old-refresh-token",
     refreshTokenRotated: true,
   });
 });

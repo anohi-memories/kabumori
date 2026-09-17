@@ -25,6 +25,7 @@ export type AiLabPublishResult = {
 export type PersistAiLabTokens = (args: {
   tokenReference: AiLabVaultTokenReference;
   tokens: AiLabTokenPair;
+  expectedRefreshToken: string;
   refreshTokenRotated: boolean;
 }) => Promise<void>;
 
@@ -139,9 +140,15 @@ export async function refreshAiLabTokens({
     await persist({
       tokenReference,
       tokens,
+      expectedRefreshToken: currentTokens.refreshToken,
       refreshTokenRotated: refreshToken !== currentTokens.refreshToken,
     });
-  } catch {
+  } catch (error) {
+    if (
+      error instanceof Error && error.message === "AI_LAB_TOKEN_REFRESH_STALE"
+    ) {
+      throw error;
+    }
     throw new Error("AI_LAB_TOKEN_PERSIST_FAILED");
   }
   return tokens;

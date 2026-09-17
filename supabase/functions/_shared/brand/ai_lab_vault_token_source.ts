@@ -1,5 +1,6 @@
 import { type BrandContext, BrandContextError } from "./brand_context.ts";
 import { loadVaultBackedXTokens } from "./token_loader.ts";
+import type { AiLabVaultTokenReference } from "./ai_lab_token_refresh.ts";
 
 type SocialAccountVaultRow = {
   id?: unknown;
@@ -11,6 +12,11 @@ type SocialAccountVaultRow = {
   connection_status?: unknown;
   vault_access_token_secret_id?: unknown;
   vault_refresh_token_secret_id?: unknown;
+};
+
+export type AiLabVaultTokenBundle = {
+  tokens: { accessToken: string; refreshToken: string };
+  tokenReference: AiLabVaultTokenReference;
 };
 
 function serviceHeaders(serviceRoleKey: string): Record<string, string> {
@@ -37,7 +43,7 @@ function assertAiLabAccountContext(context: BrandContext): void {
 }
 
 /** Loads AI Lab credentials only from the two Vault refs on its identity-verified social account. */
-export async function loadAiLabVaultBackedXTokens({
+export async function loadAiLabVaultBackedXTokenBundle({
   context,
   supabaseUrl,
   serviceRoleKey,
@@ -47,7 +53,7 @@ export async function loadAiLabVaultBackedXTokens({
   supabaseUrl: string;
   serviceRoleKey: string;
   fetchImpl?: typeof fetch;
-}): Promise<{ accessToken: string; refreshToken: string }> {
+}): Promise<AiLabVaultTokenBundle> {
   assertAiLabAccountContext(context);
 
   const params = new URLSearchParams({
@@ -101,13 +107,14 @@ export async function loadAiLabVaultBackedXTokens({
     throw new BrandContextError("BRAND_VAULT_TOKEN_NOT_CONFIGURED");
   }
 
-  return await loadVaultBackedXTokens({
+  const tokenReference: AiLabVaultTokenReference = {
+    socialAccountId: row.id as string,
+    accessTokenSecretRef,
+    refreshTokenSecretRef,
+  };
+  const tokens = await loadVaultBackedXTokens({
     context,
-    tokenReference: {
-      socialAccountId: row.id,
-      accessTokenSecretRef,
-      refreshTokenSecretRef,
-    },
+    tokenReference,
     vault: {
       async readSecret(reference) {
         let secretResponse: Response;
@@ -139,4 +146,15 @@ export async function loadAiLabVaultBackedXTokens({
       },
     },
   });
+  return { tokens, tokenReference };
+}
+
+export async function loadAiLabVaultBackedXTokens(args: {
+  context: BrandContext;
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  fetchImpl?: typeof fetch;
+}): Promise<{ accessToken: string; refreshToken: string }> {
+  const bundle = await loadAiLabVaultBackedXTokenBundle(args);
+  return bundle.tokens;
 }

@@ -203,7 +203,7 @@ test("exact cross-brand duplicate is blocked before X", async () => {
   assert.equal(published, 0);
 });
 
-test("x-test-post routes only AI Lab to Vault tokens and disables refresh before the X call", async () => {
+test("x-test-post routes only AI Lab to Vault tokens and uses the AI Lab refresh boundary", async () => {
   const source = await Deno.readTextFile(
     new URL("../../x-test-post/index.ts", import.meta.url),
   );
@@ -219,8 +219,11 @@ test("x-test-post routes only AI Lab to Vault tokens and disables refresh before
     /\/\/.*$/gmu,
     "",
   );
-  assert.match(aiLabBranch, /loadAiLabVaultBackedXTokens/u);
-  assert.match(aiLabBranch, /allowRefresh:\s*false/u);
+  assert.match(aiLabBranch, /loadAiLabVaultBackedXTokenBundle/u);
+  assert.match(aiLabBranch, /createAiLabVaultTokenPersistence/u);
+  assert.match(aiLabBranch, /aiLabRefresh/u);
+  assert.match(aiLabBranch, /SUPABASE_DB_URL/u);
+  assert.doesNotMatch(aiLabBranch, /allowRefresh:\s*false/u);
   assert.doesNotMatch(
     aiLabBranch,
     /loadBrandXTokens|oauth_token_store|X_OAUTH2_ACCESS_TOKEN/u,
@@ -229,6 +232,8 @@ test("x-test-post routes only AI Lab to Vault tokens and disables refresh before
   const postStart = source.indexOf("async function postToX(");
   const postEnd = source.indexOf("async function postThreadToX(", postStart);
   const postImplementation = source.slice(postStart, postEnd);
+  assert.match(postImplementation, /if \(auth\.aiLabRefresh\)/u);
+  assert.match(postImplementation, /publishAiLabWithRefresh/u);
   assert.match(postImplementation, /auth\.allowRefresh === false/u);
   assert.match(
     postImplementation,
