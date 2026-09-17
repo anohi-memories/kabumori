@@ -70,7 +70,8 @@ function costUsd(input: number, output: number): number {
   return Number(((input * 0.2 + output * 1.2) / 1_000_000).toFixed(6));
 }
 
-const DEFAULT_TOPIC_SEED = "AIツールを使った日々のちょっとした工夫";
+const DEFAULT_TOPIC_SEED =
+  "個人開発や副業に取り組む会社員が、AIとの試行錯誤を一歩だけ記録する日記";
 
 export async function generateBrandPost({
   openAiApiKey,
@@ -105,6 +106,14 @@ export async function generateBrandPost({
       }`
       : "ハッシュタグは付けないでください。";
   const lengthPolicy = context.codeProfile.postLengthPolicy;
+  const fallbackInstruction =
+    !contentPlan && context.brand.id === "ai_salaryman_lab"
+      ? [
+        "具体的な編集計画がないfallbackです。会社員AIラボの主題である個人開発・副業・AIとの試行錯誤の日記に寄せてください。",
+        "一般的なAI便利Tips、仕事術の紹介、教科書的なノウハウ記事へ変換しないでください。",
+        "架空の進捗、成果、感情、勤務先、個人体験は追加しないでください。",
+      ]
+      : null;
   const contentPlanInstruction = contentPlan
     ? [
       "以下の編集計画を、この投稿の唯一のテーマと事実上の範囲として扱ってください。",
@@ -128,6 +137,7 @@ export async function generateBrandPost({
       ? "日本語で、自然な一つの投稿本文だけを書いてください。見出し・箇条書き記号・前置きは不要です。"
       : "日本語で、200〜400文字程度の自然な一つの投稿本文だけを書いてください。見出し・箇条書き記号・前置きは不要です。",
     ...(lengthPolicy ? [postLengthInstruction(lengthPolicy)] : []),
+    ...(fallbackInstruction ?? []),
     ...(contentPlanInstruction ? [contentPlanInstruction] : []),
     hashtagInstruction,
   ].join("\n");

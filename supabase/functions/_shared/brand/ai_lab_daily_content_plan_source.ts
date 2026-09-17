@@ -47,7 +47,8 @@ export async function loadAiLabDailyContentPlan({
   const row = rows[0];
   if (!row) return null;
   const plan = parseDailyContentPlan(row.plan);
-  const item = selectDailyContentPlanItem(plan, slotNo);
-  if (!item) throw new BrandContextError("AI_LAB_CONTENT_PLAN_SLOT_MISSING");
-  return item;
+  // An active plan without a concrete item for this slot is a normal,
+  // deterministic signal to use the hardened persona fallback. Never invent a
+  // new topic from a daily theme alone.
+  return selectDailyContentPlanItem(plan, slotNo);
 }

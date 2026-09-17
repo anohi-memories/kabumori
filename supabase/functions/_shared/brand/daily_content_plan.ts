@@ -2,7 +2,7 @@ import { BrandContextError } from "./brand_context.ts";
 
 export type DailyContentPlanItem = {
   id: string;
-  slotNo: number;
+  slotNo?: number;
   priority: number;
   dayTheme?: string;
   narrativeArc?: string;
@@ -42,11 +42,13 @@ function parseItem(value: unknown): DailyContentPlanItem {
   const raw = value as Record<string, unknown>;
   const id = typeof raw.id === "string" ? raw.id.trim() : "";
   const topic = typeof raw.topic === "string" ? raw.topic.trim() : "";
-  const slotNo = raw.slot_no;
+  const slotNo = raw.slot_no === null ? undefined : raw.slot_no;
   const priority = raw.priority;
   if (
-    !id || !topic || typeof slotNo !== "number" || !Number.isInteger(slotNo) ||
-    slotNo < 1 ||
+    !id || !topic ||
+    (slotNo !== undefined &&
+      (typeof slotNo !== "number" || !Number.isInteger(slotNo) ||
+        slotNo < 1)) ||
     (priority !== undefined &&
       (typeof priority !== "number" || !Number.isFinite(priority)))
   ) {
@@ -54,7 +56,7 @@ function parseItem(value: unknown): DailyContentPlanItem {
   }
   return {
     id,
-    slotNo,
+    ...(slotNo === undefined ? {} : { slotNo }),
     priority: typeof priority === "number" ? priority : 0,
     topic,
     context: typeof raw.context === "string" ? raw.context.trim() : "",
@@ -88,14 +90,36 @@ export function parseDailyContentPlan(value: unknown): DailyContentPlan {
   };
 }
 
-/** Selects by exact scheduled slot, then stable priority/id ordering. */
+/**
+ * Selects by exact scheduled slot first. Slot-less items are then assigned to
+ * the remaining slots in stable priority/id order, without any DB consumption
+ * state, so retries resolve to the same item.
+ */
 export function selectDailyContentPlanItem(
   plan: DailyContentPlan,
   slotNo: number,
 ): DailyContentPlanItem | null {
-  const item = [...plan.items]
+  const exactItems = [...plan.items]
     .filter((item) => item.slotNo === slotNo)
-    .sort((a, b) => a.priority - b.priority || a.id.localeCompare(b.id))[0] ??
+    .sort((a, b) => a.priority - b.priority || a.id.localeCompare(b.id));
+  const explicitSlotNumbers = new Set(
+    plan.items.flatMap((item) =>
+      item.slotNo === undefined ? [] : [item.slotNo]
+    ),
+  );
+  const unassignedItems = [...plan.items]
+    .filter((item) => item.slotNo === undefined)
+    .sort((a, b) => a.priority - b.priority || a.id.localeCompare(b.id));
+  const remainingSlotIndex = Array.from(
+    { length: slotNo },
+    (_, index) => index + 1,
+  )
+    .filter((candidateSlot) => !explicitSlotNumbers.has(candidateSlot))
+    .indexOf(slotNo);
+  const item = exactItems[0] ??
+    (remainingSlotIndex >= 0
+      ? unassignedItems[remainingSlotIndex]
+      : undefined) ??
     null;
   return item
     ? { ...item, dayTheme: plan.dayTheme, narrativeArc: plan.narrativeArc }

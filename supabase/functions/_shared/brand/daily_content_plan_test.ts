@@ -32,6 +32,16 @@ const rawPlan = {
   ],
 };
 
+const unassignedPlan = {
+  day_theme: "小さく作って記録する",
+  narrative_arc: "試す順番を残す",
+  items: [
+    { id: "slotless-z", slot_no: null, priority: 20, topic: "二番目の題材" },
+    { id: "slotless-a", priority: 10, topic: "最初の題材" },
+    { id: "explicit-2", slot_no: 2, priority: 99, topic: "明示題材" },
+  ],
+};
+
 test("selects the same exact-slot item deterministically by priority then id", () => {
   const plan = parseDailyContentPlan(rawPlan);
   const first = selectDailyContentPlanItem(plan, 2);
@@ -41,6 +51,18 @@ test("selects the same exact-slot item deterministically by priority then id", (
   assert.equal(first?.dayTheme, "小さく試して詰まりを残す");
   assert.deepEqual(first, second);
   assert.equal(selectDailyContentPlanItem(plan, 3), null);
+});
+
+test("assigns slot-less items to remaining slots by priority then id, stably across retries", () => {
+  const plan = parseDailyContentPlan(unassignedPlan);
+  const slot1First = selectDailyContentPlanItem(plan, 1);
+  const slot1Retry = selectDailyContentPlanItem(plan, 1);
+  const slot2 = selectDailyContentPlanItem(plan, 2);
+  const slot3 = selectDailyContentPlanItem(plan, 3);
+  assert.equal(slot1First?.id, "slotless-a");
+  assert.deepEqual(slot1First, slot1Retry);
+  assert.equal(slot2?.id, "explicit-2");
+  assert.equal(slot3?.id, "slotless-z");
 });
 
 test("JST date conversion uses the scheduled row's calendar day at the UTC boundary", () => {
@@ -79,17 +101,14 @@ test("an absent active plan is a normal fallback signal", async () => {
   assert.equal(result, null);
 });
 
-test("an active plan without the claimed slot fails closed instead of inventing a theme", async () => {
-  await assert.rejects(
-    () =>
-      loadAiLabDailyContentPlan({
-        supabaseUrl: "https://example.supabase.co",
-        serviceRoleKey: "service-role-fixture",
-        scheduledFor: "2026-09-17T00:00:00.000Z",
-        scheduleDate: "2026-09-17",
-        slotNo: 9,
-        fetchImpl: async () => Response.json([{ plan: rawPlan }]),
-      }),
-    { message: "AI_LAB_CONTENT_PLAN_SLOT_MISSING" },
-  );
+test("an active plan without a safe item returns the normal fallback signal", async () => {
+  const result = await loadAiLabDailyContentPlan({
+    supabaseUrl: "https://example.supabase.co",
+    serviceRoleKey: "service-role-fixture",
+    scheduledFor: "2026-09-17T00:00:00.000Z",
+    scheduleDate: "2026-09-17",
+    slotNo: 9,
+    fetchImpl: async () => Response.json([{ plan: rawPlan }]),
+  });
+  assert.equal(result, null);
 });

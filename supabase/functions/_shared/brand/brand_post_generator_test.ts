@@ -293,6 +293,28 @@ test("content plans cannot be supplied to a non-AI-Lab context", async () => {
   );
 });
 
+test("AI Lab persona fallback is hardened toward an experiment diary, not generic AI tips", async () => {
+  let capturedInstructions = "";
+  let capturedInput = "";
+  await generateBrandPost({
+    openAiApiKey: "fixture-only",
+    context: aiLabContext(),
+    postType: "brand_post",
+    fetchImpl: async (_input, init) => {
+      const body = JSON.parse(String(init?.body));
+      capturedInstructions = body.instructions;
+      capturedInput = body.input;
+      return fixtureOpenAiResponse("個人開発の試行錯誤を一歩だけ記録します。")(
+        new Request("https://example.test"),
+      );
+    },
+  });
+  assert.match(capturedInstructions, /個人開発・副業・AIとの試行錯誤の日記/u);
+  assert.match(capturedInstructions, /一般的なAI便利Tips/u);
+  assert.match(capturedInput, /個人開発や副業に取り組む会社員/u);
+  assert.doesNotMatch(capturedInput, /AIツールを使った日々のちょっとした工夫/u);
+});
+
 test("the generic unlimited mode is explicit and preserves generation for longer content", async () => {
   const context = aiLabContext();
   context.codeProfile = {

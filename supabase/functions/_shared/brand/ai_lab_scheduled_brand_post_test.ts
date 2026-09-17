@@ -224,6 +224,20 @@ test("without a plan loader, dispatch preserves the legacy persona fallback", as
   assert.equal(receivedPlan, undefined);
 });
 
+test("an active plan with no safe item returns to persona fallback instead of stopping the slot", async () => {
+  let receivedPlan: unknown = "sentinel";
+  await dispatchAiLabScheduledBrandPost(baseArgs({
+    scheduleDate: "2026-09-17",
+    slotNo: 9,
+    loadContentPlan: async () => null,
+    generate: async ({ contentPlan }) => {
+      receivedPlan = contentPlan;
+      return draft("計画に安全な題材がない場合のfallback本文です。");
+    },
+  }));
+  assert.equal(receivedPlan, undefined);
+});
+
 test("exact cross-brand duplicate is blocked before X", async () => {
   const text = "日本語の短いテスト投稿です。";
   let published = 0;
