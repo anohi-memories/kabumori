@@ -1,5 +1,25 @@
 # Codex Report
 
+## Latest H1 result — AI Lab refresh candidate focused fail-closed fix (2026-09-17)
+
+- task_id: `x-ai-lab-vault-token-refresh-candidate-20260917`
+- result: `review_required` — addressed the C1 blocker in the candidate branch only. Initial publish now succeeds only for 2xx, refreshes only for 401, and fails immediately for every other non-2xx status. No production deploy or token/Vault mutation was performed.
+- focused_fix_commit: `642bc79` (`Fail closed on initial AI Lab publish errors`)
+
+### Fix and tests
+
+- `publishAiLabWithRefresh()` now classifies the first result in this order: 2xx → success; 401 → one refresh/persist and one retry; any other non-2xx → `AI_LAB_PUBLISH_FAILED:<status>` with no refresh and no retry; thrown publish → `AI_LAB_PUBLISH_UNCERTAIN`.
+- Added mocked regression coverage for initial 400, 403, 429, and 500 responses, asserting exactly one publish and zero refresh requests for each.
+- Focused candidate suite: **13 passed / 0 failed**.
+- Existing `x-test-post` + `_shared/brand` regression suite: **469 passed / 0 failed**.
+- `deno check --no-config`, `deno fmt --check`, and `git diff --check`: pass.
+
+### Safety boundary
+
+- Only `supabase/functions/_shared/brand/ai_lab_token_refresh.ts` and its test changed in this focused fix. The live AI Lab branch remains `allowRefresh=false`; no source wiring, deploy, Vault write, OAuth reauthorization, DB/RPC/schema/migration, Cron, post, retry/backfill, or secret read occurred.
+- The full candidate remains on `codex/x-ai-lab-vault-token-refresh-candidate-20260917` for C1 review. Production integration still requires separate review of the Vault writer, rotation concurrency, and outer completion/idempotency guard.
+
+
 ## Latest H1 result — AI Lab Vault refresh/rotation candidate (2026-09-17)
 
 - task_id: `x-ai-lab-vault-token-refresh-candidate-20260917`

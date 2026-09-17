@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-17 JST (H1 C1 focused fix)
+- checked_at: 2026-09-17 JST (H1 focused fix complete)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,11 +14,11 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `x-ai-lab-vault-token-refresh-candidate-20260917`
+- Codex slot 1: `review_required` — `x-ai-lab-vault-token-refresh-candidate-20260917`
   - AI Lab refresh/rotation candidate `ed796ba` はcode-onlyで作成済み。production変更0。
   - C1で、初回publishが401以外の非2xx（例400/403/429/500）の場合にhelperが正常returnし得るfail-open余地を確認。
-  - 次のH1は、2xxのみsuccess、401のみrefresh、その他非2xxはrefresh/retryなし即failに修正し、回帰testsを追加する。
-  - production deploy/token mutation/OAuth再認可は禁止。修正後は再度C1へ戻す。
+  - C1指摘の初回非2xx fail-openを `642bc79` で修正。13/13 focused、469/469 regression。
+  - production deploy/token mutation/OAuth再認可は未実施。C1 review_required。
 
 - Codex slot 2: `done` — `kabumori-news-url-removal-production-deploy-20260917`
   - `important-news-monitor` v55へ通常重要ニュースX本文の外部URL除去を本番反映済み。
@@ -34,7 +34,7 @@
 
 ## Parallel safety
 
-- H1は `_shared/brand` のAI Lab refresh candidate focused修正。production `x-test-post` wiring/deployやVault mutationはまだ行わない。
+- H1は `_shared/brand` のAI Lab refresh candidate focused修正済み。production `x-test-post` wiring/deployやVault mutationはまだ行わない。
 - G1はmarket report packet / x-test-post morning-close / personalized-reports領域。OAuth/Vault/social account stateへ触れない。
 - H2/G2はdone。
 - 同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数slotで同時変更しない。

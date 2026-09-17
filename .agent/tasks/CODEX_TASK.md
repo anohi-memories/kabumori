@@ -3,8 +3,8 @@
 - task_id: x-ai-lab-vault-token-refresh-candidate-20260917
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: AI Lab専用Vault-backed refresh/rotation candidate `ed796ba` のC1指摘を修正し、production統合前にfail-closed semanticsを完成させる。今回もsource/testsのみ。production deploy・token/Vault mutation・OAuth再認可は禁止。
