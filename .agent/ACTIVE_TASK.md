@@ -15,11 +15,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: ai-lab-daily-content-plan-writer-phase2-20260918
+- task_id: ai-lab-daily-content-plan-writer-postgres-proof-20260918
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: Phase2 writer candidateを実装・検証済み。service-role専用RPC、validation、version/activation/idempotencyをdisposable DBで証明。production mutation 0、`x-test-post`変更なし。C1確認待ち。
+- note: C1 blockerだった実PostgreSQL disposable proofを完了。Phase1+Phase2 migration apply、RPC/grant/security、state/idempotency、並列activation、consumer query、rollback dry-runを確認。production mutation 0。C1確認待ち。
 
 ### Codex slot 2
 - owner: codex

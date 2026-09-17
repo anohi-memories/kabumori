@@ -1,5 +1,40 @@
 # Codex Report
 
+## Latest H1 result — AI Lab daily content plan writer real PostgreSQL proof (2026-09-18)
+
+- task_id: `ai-lab-daily-content-plan-writer-postgres-proof-20260918`
+- result: `review_required` — the C1 blocker was closed with a real disposable PostgreSQL proof. Production migration/RPC/deploy/configuration changes: **0**.
+- source candidate under proof: `3ce866e7e424c4e4b675269122285dab7ca39a6b` on `codex/ai-lab-daily-content-plan-writer-phase2-20260918`; no source code or migration candidate was changed in this focused proof.
+- proof environment: disposable local Podman container `public.ecr.aws/supabase/postgres:17.6.1.165` (PostgreSQL 17.6), container-only database `proof`. A minimal disposable `public.brands` stub and `ai_salaryman_lab` row were created solely to satisfy the Phase 1 foreign key.
+
+### Applied candidates (disposable only)
+
+- `supabase/migrations/20260917143302_ai_lab_daily_content_plans_phase1.sql`
+- `supabase/migrations/20260917211919_ai_lab_daily_content_plan_writer_phase2.sql`
+
+Both migrations applied successfully as the disposable `supabase_admin` role. No Supabase production project, migration history, or `supabase db push` was used.
+
+### Real PostgreSQL results
+
+- RPC exists with exact signature `write_daily_content_plan(text,date,text,jsonb,boolean,text)`, owner `supabase_admin`, `SECURITY DEFINER=true`, `search_path=""`, and return shape `TABLE(id uuid, version integer, status text, target_date date, brand_id text)`.
+- `has_function_privilege`: `anon=false`, `authenticated=false`, `service_role=true`. Direct TCP psql sessions as `anon` and `authenticated` received `permission denied for function` and left row count at **0**. A direct `service_role` session successfully created the first active row and received only the five declared output columns. This proves the database role/grant boundary; a PostgREST JWT claim was not simulated, so that transport-specific mapping remains a deployment preflight item.
+- First active create: version `1`, status `active`. Second active create: version `2`, prior row `archived`, active count exactly `1`.
+- Draft create with an omitted slot preserved the active row; explicit `slot_no=2` and `slot_no=null` were accepted.
+- Identical `request_key` retry returned the same id/version with no new row. A changed plan under the same key raised `DAILY_CONTENT_PLAN_REQUEST_KEY_CONFLICT`; total row count remained unchanged.
+- Duplicate item id raised `DAILY_CONTENT_PLAN_DUPLICATE_ITEM_ID`; a 70,000-character payload raised `DAILY_CONTENT_PLAN_PAYLOAD_TOO_LARGE`; neither added a row.
+- Consumer-shaped query (`brand_id`, exact `target_date`, `status='active'`, `version desc`) returned the newest active plan and item id. `anon` read returned zero rows under the existing no-policy/RLS boundary.
+
+### Concurrent activation proof
+
+Two independent `service_role` PostgreSQL transactions wrote `ai_salaryman_lab` / `2026-09-20` with different request keys. Transaction A held the transaction open for three seconds after the writer call; transaction B started while A held the `pg_advisory_xact_lock` and completed after roughly three seconds. Final state was version `1 archived` + version `2 active`, with active count exactly `1`; no unique-violation or partial state occurred.
+
+### Preflight / rollback proof and safety
+
+- Preflight read-only checks found the table, request-key index, and RPC signature.
+- A transaction-only rollback dry-run successfully executed `DROP FUNCTION`, `DROP INDEX`, and the three metadata-column drops, then `ROLLBACK`; postflight confirmed the RPC/index/columns remained present.
+- No production migration apply, RPC/grant/RLS change, Edge Function deploy, Cron/window change, X post, retry/backfill, OAuth/Vault/token/secret operation, or other external mutation occurred. Production mutation: **0**.
+- No new source commit was required for this proof. C1 should now review the real PostgreSQL evidence before any separate production migration/RPC approval.
+
 ## Latest H1 result — AI Lab daily content plan writer Phase 2 (2026-09-18)
 
 - task_id: `ai-lab-daily-content-plan-writer-phase2-20260918`

@@ -3,8 +3,8 @@
 - task_id: ai-lab-daily-content-plan-writer-postgres-proof-20260918
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol Medium/High
 - purpose: Phase 2 writer candidate `3ce866e7e424c4e4b675269122285dab7ca39a6b` の設計自体は概ね承認可能だが、C1必須条件だった disposable PostgreSQL/Supabase 上での migration/RPC/grant/concurrency proof が未実施で、SQLite model + SQL文字列検査に留まっている。production適用前に実Postgres semanticsを証明する focused proof を行う。
