@@ -1,90 +1,108 @@
 # Codex Task
 
-- task_id: x-ai-lab-vault-token-refresh-candidate-20260917
+- task_id: x-ai-lab-vault-token-refresh-integration-candidate-20260917
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: urgent
 - recommended_model: Sol High
-- purpose: AI Lab専用Vault-backed refresh/rotation candidate `ed796ba` のC1指摘を修正し、production統合前にfail-closed semanticsを完成させる。今回もsource/testsのみ。production deploy・token/Vault mutation・OAuth再認可は禁止。
+- purpose: C1 PASS済みのAI Lab専用Vault-backed refresh/rotation helperを、production deployせずに現行`x-test-post`へ安全に統合するcandidateを作る。実Vault writer/persistence adapter、同時refresh競合、completion/idempotency境界を実装・検証し、production反映前に再度C1へ戻す。
 
 ## C1 review — 2026-09-17
 
-**NOT PASS / focused fix required.**
+**PASS — source candidate / focused fail-closed fix approved.**
 
-良い点:
-- AI Lab固定scope/account/Vault ref境界が入っている。
-- 初回401時だけrefresh 1回、再publish最大1回という上限がある。
-- refresh token rotation時のみrefresh token置換、非rotation時は既存refresh tokenを保持する設計。
-- persistence失敗・refresh失敗・2回目401・completion uncertainはfail-closed。
-- secret/provider body/Vault IDをerrorへ露出しない。
-- focused 9/9、既存x-test-post + `_shared/brand` 465/465、deno check/fmt/diff-check PASS。
-- production変更0件。
+承認対象:
+- base candidate: `f22e2ca` (`Add AI Lab Vault token refresh candidate`, rebased branch)
+- focused fix: `09a199af492510d091d4697cfc10ce13fbf52c97` (`Fail closed on initial AI Lab publish errors`)
 
-C1 blocker:
-- `publishAiLabWithRefresh()` は初回publish結果が401以外なら、そのstatusが2xxでなくてもそのまま成功戻り値として返す。
-- 例: 初回publishが400/403/429/500でも `refreshExecuted:false` の正常returnになり得る。
-- helper単体としてはfail-closed契約が不完全で、将来の統合callerが非2xxを成功扱いする余地を残す。
+確認済み:
+- 初回publish 2xxのみsuccess。
+- 初回401のみrefreshを1回実行し、persist後に同一publishを最大1回retry。
+- 初回400/403/429/500等の401以外non-2xxは`AI_LAB_PUBLISH_FAILED:<status>`で即fail-closed。refresh 0 / retry 0。
+- publish throw/結果不明は`AI_LAB_PUBLISH_UNCERTAIN`でfail-closedし、refreshしない。
+- retry後も2xxのみsuccess。2回目refresh / 3回目publishなし。
+- refresh token rotation時だけ新refresh tokenを保存し、非rotation時は既存refresh tokenを保持。
+- persistence失敗・refresh失敗・2回目401もfail-closed。
+- fixed AI Lab brand/account/handle境界を維持し、Kabumori/Mio/legacy token storeへfallbackしない。
+- focused 13/13、x-test-post + `_shared/brand` regression 469/469、deno check/fmt/diff-check PASS。
+- production deploy/token/Vault/OAuth/DB/Cron/post変更0件。
 
-## Required fix
+## Goal
 
-`publishAiLabWithRefresh()` の初回publish判定を次の順序にする:
-1. 2xx -> success return
-2. 401 -> refresh 1回 -> persist -> 同じpublishを最大1回retry
-3. それ以外の非2xx -> `AI_LAB_PUBLISH_FAILED:<status>` で即fail-closed。refreshしない、retryしない
-4. publish call自体がthrow/結果不明 -> `AI_LAB_PUBLISH_UNCERTAIN`。refreshしない、retryしない
+production deploy前に、承認済みhelperを現行AI Lab live routeへ統合できるcandidateを完成させる。
 
-retry後は現行どおり2xxのみsuccess、それ以外はfail-closed。2回目refresh/3回目publishは禁止。
+必須:
+1. 現行`x-test-post` AI Lab branchのcompletion/idempotency guardを最外周に維持したまま、publish内部だけrefresh helperを使用する。
+2. AI Lab専用Vault access/refresh refsだけを読み書きするpersistence adapterを実装する。
+3. access token更新と、Xがrotationした場合のrefresh token更新を同じ固定AI Lab refsへ安全に保存する。
+4. Kabumori/Mio/legacy `oauth_token_store`へ一切fallbackしない。
+5. 同一slot/並行実行で複数refreshが競合して古いrefresh tokenを上書きしない設計にする。必要ならcompare-and-set/guarded write candidateを設計するが、production schema/RPC変更はまだ行わない。
+6. refresh後のpublish retryでも既存fingerprint/terminal completion/no-duplicate保証を壊さない。
+7. token/secret/Vault ID/provider bodyをlogs/errors/reportへ出さない。
+8. refresh client authentication方式を現行X OAuth実装と整合させる。
 
-## Required tests
+## Mandatory startup / safety
 
-既存testsに加えて最低限:
-- first publish 400 -> refresh 0 / publish 1 / fail
-- first publish 403 -> refresh 0 / publish 1 / fail
-- first publish 429 -> refresh 0 / publish 1 / fail
-- first publish 500 -> refresh 0 / publish 1 / fail
-- error messageにresponse body/provider text/token/secretが含まれない
-- existing focused + full x-test-post/_shared regression pass
-- deno check / deno fmt --check / git diff --check pass
+開始前に:
+1. `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, this TASK, `.agent/CODEX_REPORT.md` を読む。
+2. fresh `origin/main` を確認。
+3. H2/G1/G2に`x-test-post` / `_shared/brand` / OAuth/Vault overlapがあればSTOP。
+4. deployed runtimeとVault/RPCはread-only確認のみ。
+5. secret/token/Vault値は読まない・表示しない。
 
-## Production integration review points
+## Authorized work
 
-今回のfix後もproductionへはまだ入れない。次C1で以下を別途確認する:
-- 実Vault writer/persistence adapter
-- rotated tokenの同時refresh競合対策
-- completion/idempotency guardがrefresh helperより外側で維持されること
-- current X OAuth client authentication方式との整合
-- Kabumori/Mio/legacy `oauth_token_store` 非影響
+- source audit
+- approved refresh helperの`x-test-post`統合candidate
+- AI Lab専用Vault persistence adapter candidate
+- concurrency/rotation guard candidate
+- local/mock tests
+- existing regression tests
+- implementation branch commit
+- `.agent/CODEX_REPORT.md` / this TASK metadata更新
 
-## Mandatory safety
+## Prohibited
 
-開始前に `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, this TASK, `.agent/CODEX_REPORT.md`, fresh `origin/main` とH2/G1/G2競合を確認。
-
-許可:
-- `ed796ba` candidateの上記focused修正
-- tests追加/修正
-- local verification
-- implementation commit/report metadata更新
-
-禁止:
 - production Edge Function deploy
-- production Vault/token ref更新
+- production Vault/token ref mutation
 - 実refresh token call
 - OAuth再認可
 - manual/synthetic X post
 - failed row retry/backfill
 - Kabumori/Mio変更
-- scope変更
-- DB schema/migration/RPC/RLS変更
-- Cron/window変更
+- OAuth scope変更
+- legacy `oauth_token_store` fallback追加
+- production DB schema/migration/RPC/RLS変更
+- Cron/posting window変更
 - `supabase db push`
-- secret/token/Vault値の出力
+- secrets/token/Vault値出力
+
+## Required tests
+
+最低限:
+- valid token -> publish 1 / refresh 0
+- 401 -> refresh 1 / guarded persist / publish retry 1 / success
+- rotated refresh token -> fixed AI Lab refsだけ更新
+- no rotation -> existing refresh ref preserved
+- persistence failure -> no retry publish
+- concurrent/stale refresh write -> unsafe overwriteを防止
+- second publish non-2xx -> stop、no second refresh/no third publish
+- uncertain publish completion -> no refresh/no resend
+- completion/fingerprint exactly-once behavior remains intact
+- wrong brand/account -> refresh/persist前にreject
+- Kabumori/Mio/legacy token store untouched
+- secret-safe errors/logs
+- full `x-test-post` + `_shared/brand` regression
+- deno check / fmt / `git diff --check`
 
 ## Completion
 
-修正とtests完了後:
-- `.agent/CODEX_REPORT.md` 先頭にC1 follow-up reportを追加
-- exact commit / changed files / first-non401-non2xx behavior / retry upper bound / tests / production changes=0を記録
-- this TASKを `status: review_required`, `next_owner: chatgpt` にする
-- fresh origin/main確認後にmetadata同期し、read-backしてC1待ちでSTOP。
+candidate完成後:
+- `.agent/CODEX_REPORT.md` 先頭にintegration candidate reportを追加
+- exact commit / changed files / call graph / Vault writer / concurrency strategy / retry upper bound / idempotency evidence / tests / remaining production risks / production changes=0を記録
+- this TASKを `status: review_required`, `next_owner: chatgpt`
+- fresh origin/main確認後にmetadata同期、origin/main read-backしてC1待ちでSTOP
+
+**C1前にproduction deploy/token mutationを行ってはいけない。**
