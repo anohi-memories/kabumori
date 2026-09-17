@@ -14,12 +14,12 @@
 ### Codex slot 1
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: ready
 - task_id: x-ai-lab-vault-token-refresh-candidate-20260917
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: AI Lab専用refresh/rotation candidate `ed796ba` とmock testsを作成。production deploy/token mutation/OAuth再認可は未実施。C1 review_required。
+- note: C1でcandidate `ed796ba` の初回非401・非2xxが正常returnになり得るfail-open余地を確認。400/403/429/500をrefreshなし即failにするfocused修正とtestsを行う。production deploy/token mutation/OAuth再認可は禁止。
 
 ### Codex slot 2
 - owner: codex
