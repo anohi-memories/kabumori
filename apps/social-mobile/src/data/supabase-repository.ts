@@ -21,11 +21,20 @@ export class SupabaseSocialRepository {
     const { data: userData, error: userError } = await this.client.auth.getUser();
     if (userError || !userData.user) return { state: 'blocked', data: emptySnapshot, reason: 'ログインが必要です。' };
 
-    // These are intentionally narrow read candidates. Production metadata confirms the
-    // columns, but RLS/grants still need to prove that an authenticated mobile user may read them.
-    const { data: brandRows, error: brandError } = await this.client.from('brands').select('id,display_name,is_active,publish_mode').eq('id', KABUMORI_BRAND_ID).limit(1);
-    const { data: accountRows, error: accountError } = await this.client.from('social_accounts').select('id,brand_id,platform,handle,connection_status,publish_enabled').eq('brand_id', KABUMORI_BRAND_ID).limit(20);
-    const { data: scheduleRows, error: scheduleError } = await this.client.from('scheduled_posts').select('id,brand_id,post_type,scheduled_for,status').eq('brand_id', KABUMORI_BRAND_ID).order('scheduled_for', { ascending: false }).limit(30);
+    // Membership is the tenant boundary. Never use a client-supplied brand id as
+    // authorization; only ids returned by the RLS-protected self-membership query
+    // are passed to the operational reads.
+    const { data: membershipRows, error: membershipError } = await this.client.from('brand_memberships').select('brand_id,role').eq('user_id', userData.user.id);
+    if (membershipError) {
+      const failure = classifyReadError(membershipError.code);
+      return { state: failure.state, data: emptySnapshot, reason: failure.reason };
+    }
+    const brandIds = [...new Set((membershipRows ?? []).flatMap((row) => typeof row.brand_id === 'string' && row.brand_id.trim() ? [row.brand_id] : []))];
+    if (!brandIds.length) return { state: 'blocked', data: emptySnapshot, reason: '所属している運用ワークスペースがありません。' };
+
+    const { data: brandRows, error: brandError } = await this.client.from('brands').select('id,display_name,is_active,publish_mode').in('id', brandIds).limit(50);
+    const { data: accountRows, error: accountError } = await this.client.from('social_accounts').select('id,brand_id,platform,handle,connection_status,publish_enabled').in('brand_id', brandIds).limit(100);
+    const { data: scheduleRows, error: scheduleError } = await this.client.from('scheduled_posts').select('id,brand_id,post_type,scheduled_for,status').in('brand_id', brandIds).order('scheduled_for', { ascending: false }).limit(100);
     if (brandError || accountError || scheduleError) {
       const code = brandError?.code ?? accountError?.code ?? scheduleError?.code;
       const failure = classifyReadError(code);
@@ -33,17 +42,19 @@ export class SupabaseSocialRepository {
     }
 
     const accounts: SocialAccount[] = (accountRows ?? []).flatMap((row) => {
-      if (row.brand_id !== KABUMORI_BRAND_ID || typeof row.id !== 'string' || typeof row.handle !== 'string') return [];
+      if (typeof row.brand_id !== 'string' || !brandIds.includes(row.brand_id) || typeof row.id !== 'string' || typeof row.handle !== 'string') return [];
       const platform = row.platform === 'instagram' || row.platform === 'threads' ? row.platform : row.platform === 'x' ? 'x' : null;
       if (!platform) return [];
       return [{ id: row.id, platform, profile: { displayName: row.handle, handle: `@${row.handle.replace(/^@/u, '')}`, avatarColor: '#475569', voice: { tone: '設定未取得', language: '日本語', avoid: [] } }, connectionStatus: row.connection_status === 'connected' ? 'connected' : 'needs_attention', postingState: row.publish_enabled === false ? 'paused' : 'active' }];
     });
     const posts: PlannedPost[] = (scheduleRows ?? []).flatMap((row) => {
-      if (row.brand_id !== KABUMORI_BRAND_ID || typeof row.id !== 'string' || typeof row.scheduled_for !== 'string' || typeof row.post_type !== 'string') return [];
+      if (typeof row.brand_id !== 'string' || !brandIds.includes(row.brand_id) || typeof row.id !== 'string' || typeof row.scheduled_for !== 'string' || typeof row.post_type !== 'string') return [];
       const status = row.status === 'published' ? 'published' : row.status === 'failed' ? 'failed' : row.status === 'publishing' ? 'publishing' : row.status === 'draft' ? 'draft' : 'scheduled';
-      return [{ id: row.id, accountId: accounts[0]?.id ?? 'unknown', scheduledAt: row.scheduled_for, origin: 'ai_generated', status, text: '' }];
+      // Production scheduled_posts has no social_account_id relation. Do not
+      // attribute a post to the first account merely because it is available.
+      return [{ id: row.id, accountId: 'unknown', scheduledAt: row.scheduled_for, origin: 'ai_generated', status, text: '' }];
     });
-    const brand = brandRows?.[0];
-    return { state: 'ready', data: { workspace: brand ? { id: String(brand.id), name: typeof brand.display_name === 'string' ? brand.display_name : KABUMORI_BRAND_ID, plan: 'standard' } : null, accounts, plannedPosts: posts.filter((post) => post.status !== 'published'), history: posts } };
+    const brand = brandRows?.find((row) => typeof row.id === 'string' && brandIds.includes(row.id)) ?? brandRows?.[0];
+    return { state: 'ready', data: { workspace: brand ? { id: String(brand.id), name: typeof brand.display_name === 'string' ? brand.display_name : String(brand.id), plan: 'standard' } : null, accounts, plannedPosts: posts.filter((post) => post.status !== 'published'), history: posts } };
   }
 }
