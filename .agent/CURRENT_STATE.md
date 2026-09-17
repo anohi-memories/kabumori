@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-18 JST (H1 daily plan writer Phase2 ready; H2 Phase4 review_required; G1 review_required)
+- checked_at: 2026-09-18 JST (H1 daily plan writer Phase2 review_required; H2 Phase4 review_required; G1 review_required)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,10 +14,9 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `ai-lab-daily-content-plan-writer-phase2-20260918`
-  - Phase1 consumer/selection candidateはC1 PASS。
-  - 次は、ちゃ/将来のアプリ内AIがstructured daily planを安全にSupabaseへ登録するservice-side writer、version/activation/idempotency/validationをdisposable DBで証明する。
-  - production migration/RPC/deploy、`x-test-post`変更はまだ行わない。
+- Codex slot 1: `review_required` — `ai-lab-daily-content-plan-writer-phase2-20260918`
+  - service-role専用writer RPC、validation、version/activation/idempotencyをcandidate実装し、disposable DB proofと回帰テストをPASS。
+  - production migration/RPC/deploy、`x-test-post`変更は0。C1確認待ち。
 
 - Codex slot 2: `review_required` — `social-mobile-app-phase4-membership-rls-validation-20260918`
   - `brand_memberships`中心のtenant isolation candidateをdisposable DBで検証済み/確認待ち。

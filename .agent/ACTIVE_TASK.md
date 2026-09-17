@@ -14,12 +14,12 @@
 ### Codex slot 1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: ai-lab-daily-content-plan-writer-phase2-20260918
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: Phase1 consumer/selectionはC1 PASS。次は、ちゃ/将来のアプリ内AIが翌日structured planをSupabaseへ安全に登録するservice-side writer、version/activation/idempotency/validationをdisposable DBで証明する。production mutation 0、`x-test-post`変更なし。
+- note: Phase2 writer candidateを実装・検証済み。service-role専用RPC、validation、version/activation/idempotencyをdisposable DBで証明。production mutation 0、`x-test-post`変更なし。C1確認待ち。
 
 ### Codex slot 2
 - owner: codex

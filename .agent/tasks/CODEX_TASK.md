@@ -3,8 +3,8 @@
 - task_id: ai-lab-daily-content-plan-writer-phase2-20260918
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol Medium/High
 - purpose: C1 PASS済みの `daily_content_plans` consumer candidateを前提に、ユーザーが「明日はこんな流れ」とちゃへ伝えた内容を、ちゃ/将来のアプリ内AIが安全にSupabaseへ登録できる writer path をPhase 2 candidateとして実装・検証する。今回はwriter/schema/validation/activationを完成させるが、production DB適用や`x-test-post` deployはまだ行わない。

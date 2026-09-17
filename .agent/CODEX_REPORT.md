@@ -1,5 +1,71 @@
 # Codex Report
 
+## Latest H1 result — AI Lab daily content plan writer Phase 2 (2026-09-18)
+
+- task_id: `ai-lab-daily-content-plan-writer-phase2-20260918`
+- result: `review_required` — service-side writer candidate completed; stop for C1 review. Production mutation/deploy/configuration changes: **0**.
+- candidate branch: `codex/ai-lab-daily-content-plan-writer-phase2-20260918`
+- candidate commit: `3ce866e` (`feat(ai-lab): add daily content plan writer phase2`, rebased onto latest GitHub `main` `db5823a1d4d531108df58a55ae2ce3ede1f2042b`)
+- Phase 1 C1-approved source is included as the candidate dependency; this Phase 2 diff itself does not modify `supabase/functions/x-test-post/index.ts`.
+
+### Writer contract
+
+- New migration candidate: `supabase/migrations/20260917211919_ai_lab_daily_content_plan_writer_phase2.sql` (created, **not applied**).
+- Adds `request_key`, `activation_requested`, and `activated_at` metadata to `public.daily_content_plans`, plus a partial unique request-key index for `(brand_id, target_date, request_key)`.
+- Defines `public.write_daily_content_plan(text, date, text, jsonb, boolean, text)` as `SECURITY DEFINER`, `set search_path = ''`. It returns only `id`, `version`, `status`, `target_date`, and `brand_id`.
+- Execution is denied unless the JWT role is `service_role` or the controlled `postgres`/`supabase_admin`/`service_role` maintenance session. `EXECUTE` is revoked from `public`, `anon`, and `authenticated`, and granted only to `service_role`. No client-facing policy or service key is added.
+- The writer does not read OAuth/Vault/token data and does not invoke X, Cron, posting-window, retry, or completion paths.
+
+### Validation and state semantics
+
+- Validates non-empty brand/date/source/request key, object plan, 1–32 items, 65,536-byte JSON payload ceiling, item object/id/topic, duplicate ids, optional/null positive-integer `slot_no`, finite numeric `priority`, string `context`/`tone_override`, and string arrays for `key_points`/`must_include`/`must_avoid`.
+- Explicit slot validation is intentionally brand-neutral (positive integer only); the existing scheduled-slot consumer remains responsible for the active AI Lab posting-window range rather than hardcoding a brand-specific maximum in shared storage.
+- Per brand/date writes take a transaction advisory lock. A new version increments from the maximum existing version. `activate=true` archives the previous active row and inserts exactly one active row in the same transaction; `activate=false` inserts a draft.
+- A repeated `(brand_id, target_date, request_key)` with identical source/plan/activation returns the original row without creating a new version. A changed payload under the same key raises `DAILY_CONTENT_PLAN_REQUEST_KEY_CONFLICT`.
+
+### Canonical ChatGPT payload (example only)
+
+```json
+{
+  "brand_id": "ai_salaryman_lab",
+  "target_date": "YYYY-MM-DD",
+  "source": "chatgpt",
+  "request_key": "chatgpt-YYYY-MM-DD-v1",
+  "activate": true,
+  "plan": {
+    "day_theme": "小さく作って記録する",
+    "narrative_arc": "試す→詰まる→次の一手を残す",
+    "items": [{
+      "id": "slot-1",
+      "slot_no": null,
+      "priority": 10,
+      "topic": "個人開発で詰まった点",
+      "context": "会社員の平日夜",
+      "key_points": ["詰まりを一つ記録"],
+      "must_include": ["次の一手"],
+      "must_avoid": ["万能論"]
+    }]
+  }
+}
+```
+
+会話本文や秘密値をそのまま保存せず、ちゃがstructured planへ変換してwriterを呼ぶ運用を想定する。RPC引数へ渡す際は上記の各値を `p_brand_id` / `p_target_date` / `p_source` / `p_plan` / `p_activate` / `p_request_key` に対応させる。
+
+### Disposable proof / verification
+
+- `supabase/functions/_shared/brand/daily_content_plan_writer.ts` provides the backend-side validation contract without exposing a client API.
+- `supabase/functions/_shared/brand/daily_content_plan_writer_test.ts` uses an in-memory disposable SQLite model for first active creation, second active version/archive, exactly-one-active invariant, draft preservation, and request-key idempotency; it also statically verifies the migration's security boundary and advisory lock.
+- Focused writer + Phase 1 plan suites: **10 passed / 0 failed**.
+- Full `supabase/functions/x-test-post` + `_shared/brand` regression: **473 passed / 0 failed**.
+- Candidate `deno check --no-config`, `deno fmt --check`, and `git diff --check`: passed.
+- No production Supabase SQL, migration apply, RPC/grant/RLS change, Edge Function deploy, Cron change, manual/synthetic X post, retry/backfill, refresh, OAuth, Vault, or secret/token read/write was performed. Production mutation: **0**.
+
+### Rollout / rollback boundary
+
+- Future rollout order: base `daily_content_plans` migration → writer migration/RPC → read-back and security preflight → consumer deploy. Consumer deploy remains a separate approval after the G1 conflict is resolved.
+- This candidate is not applied. If separately approved later, rollback is to stop calling the RPC/revoke its `EXECUTE` grant and revert the writer migration/metadata; no consumer or posting rollback is implied by this Phase 2 candidate.
+- C1 review is required before any production migration/RPC apply or consumer deploy.
+
 ## Latest H1 result — AI Lab daily content plan selection focused fix (2026-09-18)
 
 - task_id: `ai-lab-daily-content-plan-selection-fix-20260918`
