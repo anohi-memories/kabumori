@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase2-auth-data-20260917
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna (use higher reasoning only if schema/Expo auth integration becomes ambiguous)
 - purpose: `apps/social-mobile` のPhase 2として、Supabase Auth/session境界とSupabase data adapterの実装候補を作り、Phase 1のmock専用アプリを「実バックエンドへ安全に接続できるアプリ」へ進める。今回はproduction schema/OAuth/SNS投稿を変更せず、既存schemaのread-only調査とclient-side integrationを中心に進める。

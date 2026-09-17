@@ -1,5 +1,23 @@
 # Codex Slot 2 Report
 
+## H2 — Social mobile app Phase 2: Auth/data boundary (2026-09-17)
+
+- task_id: `social-mobile-app-phase2-auth-data-20260917`
+- result: Phase 2のSupabase Auth/session境界、active account context、mock/Supabase repository選択、明示的なblocked/unavailable状態を`apps/social-mobile`内に実装。C2レビュー待ち。
+- changed_files: `apps/social-mobile/**`（AuthProvider、SignIn/SignOut、Supabase client、read-only repository candidate、repository selection、DataProvider、active-account context、既存画面のdata source切替、`.env.example`、package依存、README）。root Expo、`apps/admin`、`supabase/**`、他workstreamは変更していない。
+- auth: `EXPO_PUBLIC_SUPABASE_URL` と `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` のみを使用し、AsyncStorage（native）付きsession persistence、`getSession()`、`onAuthStateChange`、sign-in/sign-out、loading/signed-out/signed-in分岐を実装。service-role/secret文字列は設定時に拒否し、OAuth/signup/投稿は未実装・未実行。
+- data_boundary: `EXPO_PUBLIC_DATA_SOURCE=mock`（既定）は既存mockを維持。`supabase`指定時だけSupabase adapterを選択し、UIはdomain modelを介してsnapshotを参照。env不足、認証なし、RLS 42501、その他取得失敗をそれぞれblocked/unavailableとして表示し、mockへ黙ってフォールバックしない。
+- active_account: Accounts画面の選択状態をcontext化し、Supabase read snapshotがreadyならそのaccountsを使い、Home/投稿予定/履歴も同じsnapshotとactive accountで絞り込む。logout時はprovider再マウントでlocal stateがリセットされる。
+- schema_inventory: checked-in migrationで確認できた`scheduled_posts`は`id/schedule_date/post_type/slot_no/scheduled_for/status/...`で、brand tenant keyやgenerated textは確認できない。`brands`/`social_accounts`の完全なproduction定義・RLSはこのcloneのmigrationから確認できず、Supabase CLI read-only inspectionはsandboxのtelemetry書込みEPERMで実施不能だった。adapterは`brand_id`を推測して既存scheduler行を表示せず、所有境界を証明できない行がある場合はblockedにする。production query/writeは0。
+- read_path_candidate: `auth.getUser()`後、`brands`/`social_accounts`/`scheduled_posts`をread-onlyで狭く読む候補を実装。tenant/RLSが証明できない場合は表示保留。migration/RPC/RLS追加はしていない。
+- dependencies: `@supabase/supabase-js`、`@react-native-async-storage/async-storage`、`react-native-url-polyfill`を`apps/social-mobile/package.json`だけへ追加。root package filesは変更していない。
+- tests: `npm run typecheck` PASS; `npm run lint` PASS (0 errors/warnings); `npx expo export --platform web --output-dir /private/tmp/social-mobile-phase2-dist` PASS (Expo Web bundle/routes); `git diff --check` PASS. Packageにunit-test runnerは未設定のため、production Auth/sign-in、DB read、OAuth、投稿は実行していない。env missing/permission/error branchesは型・静的実装で確認し、live production verificationは未実施。
+- production: DB/schema/migration/RLS/RPC/Cron/settings/OAuth/Vault/Storage/AI/SNS API/Push changes 0; deploy 0; manual production invoke/API/X post 0; secrets/log exposure 0.
+- blockers: `brands`/`social_accounts`の実production schemaとtenant RLS、`scheduled_posts`との安全なbrand relationは未確認。Phase 3前にread-only schema/RLS確認を行い、必要なら別C2承認でmigration/RPCを検討する。現段階でSupabase sourceを本番有効化しないこと。
+- implementation_commit: local commit pending after fresh origin check; push has not been attempted.
+- remaining_issues: device/simulator visual QA、実管理者Authでのログイン、production read-path/RLS証明は未実施。
+- safety_checks: `/Users/yuya/Developer/kabumori`正式repoには触れず、clean clone内のみ変更。H1/G1/G2、`apps/admin/**`、`HANDOFF.md`、root package、`supabase/**`は変更していない。TASKは`review_required`、`next_owner: chatgpt`。
+
 ## H2 — Social mobile app Phase 1 shell (2026-09-17)
 
 - task_id: `social-mobile-app-phase1-shell-20260917`
