@@ -1,5 +1,23 @@
 # Codex Slot 2 Report
 
+## H2 — Social mobile Phase 5 production membership/RLS rollout (2026-09-18)
+
+- task_id: `social-mobile-app-phase5-production-membership-rls-rollout-20260918`
+- result: production preflight completed; approved candidate migration was **not applied** because the Supabase migration tool rejected the production DDL/RLS/privilege operation as high-risk without tool-recognized explicit approval. No workaround was attempted.
+- source_base: fresh `origin/main` `0ddbcee7d8c35eeb01ca477fb6b8b6b78f93979f`; clean detached worktree `/private/tmp/kabumori-h2-phase5-3xUzhh`.
+- candidate: `supabase/migrations/20260918120000_social_mobile_brand_memberships.sql`; source SHA-256 `a74e70c42d0b10bd773dd614c70f59e807e6b08a8da90afaa05dee2fd09321fd`; implementation commit `c40c96cb66c72c671a145ebdbee2a941c648b6bb`.
+- preflight: PASS. Production confirmed `brands.id` and all four operational `brand_id` columns are `text`, matching brand FKs; all five operational tables have RLS enabled; `brand_memberships` absent; candidate policy names had no collision; existing admin policies were present and unchanged; `private.is_admin()` is SECURITY DEFINER with empty search_path; migration history does not contain the candidate version and no blind `supabase db push` was used.
+- preflight_counts: `brands=3`, `social_accounts=2`, `scheduled_posts=187`, `post_execution_logs=431`, `posting_windows=19` (read-only metadata; no row mutation).
+- apply: **BLOCKED by safety review** from `supabase_apply_migration`; reported reason was that production table creation/RLS/grant changes are high-risk and explicit approval was not recognized by the tool. `supabase_execute_sql` workaround was not attempted. Production schema/RLS/grant/migration mutation remains **0**.
+- postflight: not applicable because apply did not run. No canary membership inserted (user/brand relation was not unambiguous).
+- admin_compatibility: preflight metadata confirms existing admin policies (`admin_select_post_execution_logs`, `admin_select_posting_windows`, `admin_update_posting_windows`, `admin_select_scheduled_posts`) and `private.is_admin()` path; no policy was changed. Runtime post-apply compatibility check remains pending C2 approval/tool authorization.
+- rollback_readiness: exact candidate rollback is prepared conceptually (drop only six candidate policies, then `brand_memberships`; never drop existing admin policies); rollback was not executed because apply was blocked.
+- mobile_state: `EXPO_PUBLIC_DATA_SOURCE=mock` default remains unchanged; no mobile deployment or production data-source switch.
+- tests: no source changes; no additional test run required. Prior disposable proof and regression results remain the basis (static policy contract 5/5, typecheck/lint/export/diff-check PASS).
+- production_mutation: production DB/schema/RLS/grant/RPC/migration/auth/Cron/settings/deploy/Storage/AI/SNS/Push **0**; no canary, no manual API/X/Push.
+- remaining_issues: C2 must decide whether to re-authorize the exact migration through an approved production DDL path recognized by safety review. Do not use an indirect SQL workaround. After authorization, rerun postflight/admin compatibility and rollback-readiness checks. `EXPO_PUBLIC_DATA_SOURCE=supabase` remains OFF.
+- safety_checks: formal repo existing changes untouched; `apps/admin/**`, H1/G1/G2 areas, HANDOFF unchanged; no secrets, tokens, personal data, or raw credentials recorded. TASK set to `review_required`, `next_owner: chatgpt`.
+
 ## H2 — Social mobile Phase 4 disposable DB proof (2026-09-18)
 
 - task_id: `social-mobile-app-phase4-disposable-db-proof-20260918`

@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase5-production-membership-rls-rollout-20260918
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: Phase 4でdisposable DB実証までPASSした `brand_memberships` + tenant RLS candidateを、productionへ最小・可逆・検証可能な形で安全に反映する。blind `supabase db push`は禁止し、preflight → exact candidate apply → postflight → admin互換確認 → rollback readinessまでを実施する。実ユーザーmembership投入とmobile data source ONは、対象が一意に安全確認できる場合のみcanaryとして行い、曖昧なら行わずC2へ返す。
