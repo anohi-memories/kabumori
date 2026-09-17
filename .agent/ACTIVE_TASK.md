@@ -42,12 +42,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: x-multibrand-phase3g-ai-lab-live-readiness-20260913
+- status: in_progress
+- task_id: morning-greeting-image-disable-cost-gate-20260916
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: cross-brand dedupeを実データ（かぶモリ実投稿4件、close/morning report runsテーブル由来）へ接続し実呼び出しで証明。実装過程でpost_execution_logsに存在しないカラムを参照するバグを発見・修正・再検証。Vault token routing(read-only/no-secret)も実呼び出しで確認。published_content_fingerprints migrationを本番適用済み。posting_windows/publish_claimsは判断のみ(DB変更なし)。X write/legacy token読込は実測0。live化・実投稿は未実施。K2待ち。
+- note: 朝の挨拶をAdminでOFFにした際、毎朝05:30 JSTの画像生成workflowもOpenAI呼び出し前にスキップするよう、posting_windows(kabumori/morning_greeting).is_activeを見るenablement gateを実装着手。
 
 ## Control codes
 

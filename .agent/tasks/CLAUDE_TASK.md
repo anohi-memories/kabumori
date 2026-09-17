@@ -3,7 +3,7 @@
 - task_id: morning-greeting-image-disable-cost-gate-20260916
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Sonnet
