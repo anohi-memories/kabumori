@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-17 JST (H1 runtime preflight review_required; H2 social mobile app Phase1 C2 PASS/done)
+- checked_at: 2026-09-17 JST (H1 runtime preflight review_required; H2 social mobile app Phase2 ready)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -22,12 +22,11 @@
   - 本番secret名、`vault.update_secret` のservice_role限定権限、現行OAuth Basic+refresh方式に加え、隔離probeでEdge runtimeのdirect `SUPABASE_DB_URL`接続成功、effective role=`postgres`、Vault writer EXECUTE=`true`をread-only確認済み。probeは検証後削除。
   - production `x-test-post` candidate deploy/token mutation/OAuth再認可は未実施。候補deployはC1の別承認待ち。
 
-- Codex slot 2: `done` — `social-mobile-app-phase1-shell-20260917`
-  - C2 PASS。`apps/social-mobile/` に独立Expo/React NativeアプリPhase1を実装済み。
-  - 主要5タブ（ホーム/投稿予定/AI相談/履歴/設定）+ Accounts + 素材BOX + 投稿詳細、共通theme/UI、domain types、repository interface、mock/local adapterを実装。
-  - typecheck / lint / Expo Web export・route resolution / `git diff --check` PASS。
-  - 既存root株アプリ、`apps/admin/**`、`supabase/**`、本番DB/OAuth/SNS API/X投稿/deployは変更なし。
-  - slot 2は空き。
+- Codex slot 2: `ready` — `social-mobile-app-phase2-auth-data-20260917`
+  - Phase1 shellはC2 PASS・main反映済み。
+  - Phase2は `apps/social-mobile/**` を中心に、Supabase client/Auth session境界、active account context、mock/Supabase repository adapter、既存multibrand schemaのread-only mappingを進める。
+  - production migration/RLS/RPC/db push、SNS OAuth、X/Instagram/Threads実投稿、Storage/AI/Push/課金はまだ行わない。
+  - tenant ownership/RLSが不足する場合はclient filterで誤魔化さず、blocked stateと不足要件をC2へ返す。
 
 - Claude slot 1: `ready` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
   - Phase1 `market_data_packet.v1` shadow rolloutは本番稼働済み。
@@ -40,7 +39,7 @@
 ## Parallel safety
 
 - H1はAI Lab refresh integration/preflight担当。OAuth/Vault/x-test-post認証経路を扱うがproduction mutation/deployは禁止。
-- H2はdone/空き。次タスク割当までは変更しない。
+- H2は `apps/social-mobile/**` とread-only schema inventory中心。production DB/schema/RPC/RLS、OAuth/Vault/x-test-postには触れない。
 - G1はmarket report packet / x-test-post morning-close / personalized-reports領域。OAuth/Vault/social account stateへ触れない。
 - G2はdone。
 - 同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数slotで同時変更しない。
@@ -50,7 +49,7 @@
 
 - AI Lab通常`brand_post`はOAuth再認可後1回成功後、次slotで401再発。恒久復旧は未成立。
 - refresh helperとintegration candidateはC1レビュー待ち。runtime preflightでdirect Edge DB接続ゲートは解消。production `x-test-post` candidate deploy/token mutation/OAuth再認可は未実施。
-- social mobile appはPhase1 shellまで完了。Supabase Auth/data adapter、実OAuth、Storage upload、AI API、push通知、課金、app-store packagingはPhase2以降。
+- social mobile appはPhase1 shell完了。Phase2でAuth/session、active account、Supabase adapter、既存schema mappingへ進む。production schema/RLS不足があれば適用せずC2へ返す。
 - multibrand migrations `20260910170000/180000/190000` objectsはproductionに存在するがmigration history不整合の可能性があるためblind `supabase db push`禁止。
 - 2026-09-09 morning_greeting legacy Storage receipt HTTP400は別件。
 - 重要ニュースX生成にはFact/Voice系generation_failedが残る。
