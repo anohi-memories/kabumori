@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-17 JST (H1 AI Lab daily content plan Phase1 ready; H2 social mobile Phase3 ready)
+- checked_at: 2026-09-17 JST (H1 AI Lab daily content plan Phase1 review_required; H2 social mobile Phase3 ready)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,7 +14,7 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `ai-lab-daily-content-plan-generation-control-phase1-20260917`
+- Codex slot 1: `review_required` — `ai-lab-daily-content-plan-generation-control-phase1-20260917`
   - 会社員AIラボを「APIが題材まで自由生成」から「ちゃ/将来のアプリ内AIが登録した翌日用content planを最優先し、APIは文章化だけ担当」へ切り替えるPhase1 candidate。
   - planあり: topic/context/key_points/must_include/must_avoidを正本として逸脱禁止。AI一般論・便利Tipsへの勝手な転換を防ぐ。
   - planなし: 現行persona範囲の無難なfallbackを維持。

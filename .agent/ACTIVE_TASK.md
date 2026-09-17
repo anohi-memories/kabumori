@@ -14,12 +14,12 @@
 ### Codex slot 1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: ai-lab-daily-content-plan-generation-control-phase1-20260917
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: 会社員AIラボの生成を、翌日用structured content plan最優先・未指定時persona fallbackへ切り替えるPhase1 candidate。production migration/deployはC1前に行わない。
+- note: 会社員AIラボの生成を、翌日用structured content plan最優先・未指定時persona fallbackへ切り替えるPhase1 candidate。source candidateはC1 review待ち。production migration/deployは0。
 
 ### Codex slot 2
 - owner: codex

@@ -1,5 +1,41 @@
 # Codex Report
 
+## Latest H1 result — AI Lab daily content plan generation control Phase 1 (2026-09-17)
+
+- task_id: `ai-lab-daily-content-plan-generation-control-phase1-20260917`
+- result: `review_required` — source-only candidate completed; stop for C1 review. Production migration/deploy/configuration changes: **0**.
+- source candidate: branch `codex/ai-lab-daily-content-plan-phase1-20260917`, commit `0a6f20c86603c5834876208e4c05ef711d036be4` (rebased onto fresh GitHub `main` `dacdb2f303e50eccbaced6273f8ebaa899b6f419`).
+- migration candidate: `supabase/migrations/20260917143302_ai_lab_daily_content_plans_phase1.sql`; created but **not applied**. No `supabase db push`, production RLS/grant/RPC/schema change, Cron change, or `x-test-post` deploy was performed.
+
+### Implemented candidate
+
+- Added brand-neutral `daily_content_plans` schema candidate with `brand_id`, JST `target_date`, version, `source`, draft/active/archived status, JSON plan payload, one-active-per-brand/date partial uniqueness, lookup index, RLS enabled, and service-role read grant only.
+- Added structured plan parsing/selection for `day_theme`, `narrative_arc`, slot item `topic`, `context`, `tone_override`, `key_points`, `must_include`, `must_avoid`, `priority`. Active plans are queried for exact `ai_salaryman_lab` + target date + slot. Selection is deterministic by priority then item id; a missing slot fails closed. Retry does not consume/write plan state, so the same scheduled slot resolves to the same item.
+- Wired only the AI Lab scheduled `brand_post` route to the plan loader. Plan present: generation prompt/input is constrained to the authored plan and explicitly rejects new themes, invented progress/emotion/results, and unrelated AI tips; persona is used only for expression. Plan absent: existing generator fallback remains unchanged. Kabumori, Mio, report consumers, OAuth/Vault/refresh, X publish, dedupe, completion, and retry boundaries were not changed.
+
+### Changed source files
+
+- `supabase/migrations/20260917143302_ai_lab_daily_content_plans_phase1.sql` (candidate only)
+- `supabase/functions/_shared/brand/daily_content_plan.ts`
+- `supabase/functions/_shared/brand/ai_lab_daily_content_plan_source.ts`
+- `supabase/functions/_shared/brand/brand_post_generator.ts`
+- `supabase/functions/_shared/brand/ai_lab_scheduled_brand_post.ts`
+- `supabase/functions/x-test-post/index.ts` (AI Lab-only loader wiring and schedule_date typing)
+- matching plan/generator/dispatcher tests
+
+### Validation
+
+- Focused plan/generator/dispatcher suites: **27 passed / 0 failed**.
+- Full `supabase/functions/x-test-post` + `_shared/brand` regression: **466 passed / 0 failed**.
+- Candidate helper modules `deno check --no-config`: passed.
+- `git diff --check`: passed. `x-test-post/index.ts` retains pre-existing formatter drift; it was not globally reformatted.
+- Full `x-test-post/index.ts` type check still reports the repository's unrelated existing six diagnostics (AES-GCM/Blob `BufferSource` typing, morning greeting result typing, and lane timestamp precision typing); no new candidate helper type error was reported.
+
+### Safety / next step
+
+- Production DB/Vault/X/OAuth/Cron writes by this task: **0**; no secrets or token values were read or recorded; no manual/synthetic X post, retry, backfill, or refresh was run.
+- C1 should review the candidate schema/selection rules and decide separately whether to apply the migration and deploy the AI Lab-only wiring. Phase 2 should add the approved plan-writer/UI path and production migration/rollout gates; no automatic rollout is implied by this candidate.
+
 ## Latest H1 result — AI Lab Vault refresh production deploy (2026-09-17)
 
 - task_id: `x-ai-lab-vault-token-refresh-production-deploy-20260917`

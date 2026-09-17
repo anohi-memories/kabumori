@@ -3,8 +3,8 @@
 - task_id: ai-lab-daily-content-plan-generation-control-phase1-20260917
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol Medium/High
 - purpose: 会社員AIラボの自動投稿を「APIが題材まで勝手に考える」方式から、「ちゃ/将来のアプリ内AIがSupabaseへ登録した翌日用の題材プランを最優先し、API側AIはその題材を文章化する」方式へ切り替えるPhase 1 candidateを実装する。題材プランが無い場合だけ既存キャラ設定の範囲で無難な通常投稿へfallbackする。
