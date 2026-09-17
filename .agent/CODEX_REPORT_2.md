@@ -13,7 +13,7 @@
 - production: Supabase/DB/migration/RPC/RLS/Cron/settings/OAuth/SNS API/Storage/OpenAI/X changes 0; no deploy, no manual production invoke, no post.
 - known_gaps: Supabase Auth/data adapter, real OAuth, Storage upload, AI API, push notifications, billing, and app-store packaging are Phase 2+; simulator/device visual QA remains for the user/developer environment.
 - commit: `986c67e889d8658ad104040f65a00adefd04ece7` (`Add social mobile Phase 1 shell`).
-- push: pending until final fresh origin check.
+- push: successful; `0292a8a212f5f303223c82b508d9b727f4d7f2bc` (merge of authorized `74b20852ff130dc19de4629d28d11be627664140` with fresh `origin/main`) is now on `origin/main`; post-push read-back pending.
 - safety_checks: existing root Expo files, `apps/admin/**`, `supabase/**`, `HANDOFF.md`, and other slot files were not modified.
 - next_recommendation: C2 review the isolated app shell and decide Phase 2 backend/auth contracts before wiring production data.
 
