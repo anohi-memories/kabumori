@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-18 JST (H1 daily plan writer Postgres proof review_required; H2 social mobile Phase5 ready; G1 review_required)
+- checked_at: 2026-09-18 JST (H1 AI Lab daily content plan production rollout ready; H2 social mobile Phase5 ready; G1 review_required)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,9 +14,10 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `ai-lab-daily-content-plan-writer-postgres-proof-20260918`
-  - C1 blockerだった実PostgreSQL disposable proofを完了。Phase1+Phase2 migration、RPC/grant/security、state/idempotency、並列activation、consumer query、rollback dry-runを確認。
-  - production migration/RPC/deploy、`x-test-post`変更は0。C1確認待ち。
+- Codex slot 1: `ready` — `ai-lab-daily-content-plan-production-rollout-20260918`
+  - C1 PASS済みのdaily content plan Phase1/Phase2 schema + writer RPCをproductionへexact applyする。
+  - H2のproduction migration rolloutと同時writeは禁止。H2がwrite中ならH1はproduction write前にSTOP。
+  - このH1では `x-test-post` deploy/consumer cutoverは行わない。writer/schemaを本番で使える状態にするまで。
 
 - Codex slot 2: `ready` — `social-mobile-app-phase5-production-membership-rls-rollout-20260918`
   - Phase4 disposable DB proofはC2 PASS済み。
