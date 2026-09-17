@@ -311,3 +311,103 @@ rollback: `update public.market_report_consumer_settings set x_enabled = false, 
 - アプリは gate ON で packet 未完成の日、その回のレポートを作らない（行も作らないため、履歴は関数ログと `net._http_response`（約6時間保持）にしか残らない）
 - ローカル検証の数値チェックが厳しく、実モデル出力での合格率は shadow 稼働で確認が必要（モデル実呼び出しの本番テストは未実施）
 - 朝刊の方向は米3指数で判定（日本市場の寄り付き前のため）
+
+### Production shadow rollout（2026-09-17 夜、ユーザーのチャット承認後）
+
+- 承認範囲: Phase 2 migration 単体適用 / `market-report-analysis` のみ deploy / 分析 Cron 4本追加。`x_enabled` / `app_enabled` は false 維持、`x-test-post`・`personalized-reports` は deploy しない
+- deploy_source: worktree `/Users/yuya/Developer/kabumori/.claude/worktrees/ios-push-e2e`、HEAD = origin/main = `05a677f`。migration と `market-report-analysis` / `_shared/market_report_packet.ts` / `_shared/kabumori_voice.ts` / `market-report-data-packet/**` は `05a677f` と差分なし
+- migration SHA-256: `7f07457752d39783deb90c6d0c6627f47d33760995503e6ae53e494be4a0ba47`
+- 並行スロット: H1 は AI Lab Vault token refresh candidate（ready）。本反映の migration / Function / Cron とは重複なし
+
+#### 事前状態（read-only）
+
+- `market_report_packets` / `market_report_consumer_settings` absent、`get_shared_market_report` などの RPC なし
+- Cron 28本（`market-report-analysis-*` なし）、data cycle 1 / data packet 1（9/17 大引け）、migration 履歴末尾 `20260915130756`
+- 全 Function の version / updated_at / verify_jwt を記録
+
+#### 本番 rollback-contained proof
+
+`begin;` ＋ Phase 2 本体 ＋ 検証 DO ブロック ＋ `RAISE EXCEPTION` ＋ `rollback;` を `supabase db query --linked -f` で実行。結果:
+
+- `tables=2` / `rls=true` / `policies=0` / `new_cycle_columns=10` / `report_packet_triggers=4` / `rpc_definer_empty_path=4` / `anon_auth_access=false` / `service_role_select_only=true`
+- `gate_rows=1` / **`gate_x_enabled=false` / `gate_app_enabled=false`** / 既存 9/17 cycle の `report_status=pending`
+- スモーク（1999-01-04 の仮 cycle）: `smoke_analysis_claim=claimed` / `smoke_reclaim=already_completed` / `smoke_gate_off=disabled` / gate を仮に ON にすると `smoke_gate_on=completed` かつ `smoke_gate_on_same_packet=true` / `smoke_update_report=MARKET_DATA_PACKET_IMMUTABLE`
+- proof 後の read-back は事前状態と**完全一致**（Phase 1 guard 関数の md5、Cron 28本の md5 を含む）
+
+#### migration 適用 / read-back
+
+- 方法: `supabase db query --linked -f /Users/yuya/Developer/kabumori/.claude/worktrees/ios-push-e2e/supabase/migrations/20260920100000_market_report_packets_phase2.sql`（`supabase db push`・履歴修復なし）
+- read-back:
+  - tables `market_report_packets` / `market_report_consumer_settings`、RLS 両方 true、policies 0
+  - `market_report_packets` 制約15（`cycle_key`=1 cycle 1 packet、`payload_identity`、`fact_status_check`、FK 2 ほか）、トリガ4（`match_cycle` / `no_update` / `no_delete` / `no_truncate`）
+  - `market_report_cycles` に分析状態列と `current_report_packet_fkey` / `report_completed_has_packet` / `report_running_has_token`、guard 関数に report 規則あり
+  - RPC 4本 SECURITY DEFINER・`search_path=""`、execute は service_role のみ
+  - table grants: service_role の SELECT のみ
+  - **gate: `x_enabled=false` / `app_enabled=false`**
+  - report packets 0、既存 9/17 大引け cycle は `report_status=pending`（今日の分析 Cron 時刻は過ぎているため、今日分は生成されない。手動実行もしていない）
+  - Cron 28本のまま、migration 履歴に `20260920100000` は**記録されていない**（既知の履歴乖離、修復していない）
+
+#### Function deploy / byte-compare
+
+- `supabase functions deploy market-report-analysis --no-verify-jwt --project-ref wsmznyzcvmuitkglfeuj`（deploy 直前に `pwd`・HEAD・origin/main・worktree-local `config.toml` の project_id・`.temp/project-ref` を確認）
+- after: **`market-report-analysis` v1 / ACTIVE / verify_jwt=false**（script 32 kB）
+- runtime read-back: 別ディレクトリへ `supabase functions download market-report-analysis --use-api` → **7ファイル全て `cmp` 一致**（`market-report-analysis/{index,handler,analysis_input,analysis_logic}.ts`、`_shared/{market_report_packet,kabumori_voice}.ts`、`market-report-data-packet/session_logic.ts`）。`packet_schema.ts` は型のみの import でバンドル対象外（想定どおり）
+- 他 Function（deploy 直前との比較）: `x-test-post` v112 / `important-news-monitor` v57 / `stocks-master-sync` v18 / `stocks-new-listing-sync` v17 / `send-push-notifications` v17 / `x-oauth-connect` v20 / `personalized-reports` v15 / `market-intelligence-ingest` v15 / `market-intelligence-state-evaluator` v9 / `brand-post-dry-run` v7 / `market-report-data-packet` v1 → **全て version・updated_at・verify_jwt・status 不変**
+- 実行に必要な secret（名前のみ確認、値は非表示）: `OPENAI_API_KEY` / `SUPABASE_SECRET_KEYS` / `SUPABASE_URL` / `SEND_PUSH_NOTIFICATIONS_CRON_SECRET` いずれも設定済み
+
+#### Cron（新規4本のみ）
+
+| jobid | name | schedule（UTC） | JST | body |
+|---|---|---|---|---|
+| 30 | `market-report-analysis-morning` | `55 22 * * 0-4` | 平日 07:55 | `{"mode":"morning"}` |
+| 31 | `market-report-analysis-morning-retry` | `5 23 * * 0-4` | 平日 08:05 | `{"mode":"morning"}` |
+| 32 | `market-report-analysis-close` | `20 7 * * 1-5` | 平日 16:20 | `{"mode":"close"}` |
+| 33 | `market-report-analysis-close-retry` | `35 7 * * 1-5` | 平日 16:35 | `{"mode":"close"}` |
+
+- command（secret-free）: Vault の `send_push_notifications_cron_secret` を名前参照し、`https://wsmznyzcvmuitkglfeuj.supabase.co/functions/v1/market-report-analysis` のみへ `net.http_post`（timeout 150000ms）。4本とも呼び先が analysis Function だけであることを read-back
+- 既存 Cron 28本は `jobname / schedule / active / md5(command)` が反映前と全て同一
+
+#### 手動実行・消費者切替
+
+- `market-report-analysis` の手動 invoke 0、OpenAI 手動呼び出し 0、X 投稿 0、Push 0
+- `x-test-post` / `personalized-reports` は未 deploy（本番は旧コードのまま）、gate も false のため X / アプリは今までどおり
+
+#### 明朝の観測（2026-09-18）
+
+- 07:50 `market-report-data-packet-morning` → morning data packet（Phase 1 初の自然朝刊）
+- 07:55 `market-report-analysis-morning` → data packet が completed なら shared analysis を生成。未完了なら `data_not_ready` で何もしない
+- 08:05 retry → 完了済みなら `already_completed`、07:55 が失敗していれば再試行
+- 08:20 X朝刊 / 08:35 アプリ朝刊は gate OFF のため旧経路（shared packet は参照しない）
+- 観測 SQL（read-only、`supabase db query --linked -f`）:
+
+```sql
+select c.report_type, c.trading_date, c.cycle_status, p.data_quality_status,
+  c.report_status, c.report_attempt_count,
+  to_char(c.report_started_at at time zone 'Asia/Tokyo', 'MM-DD HH24:MI:SS') as report_started_jst,
+  to_char(c.report_completed_at at time zone 'Asia/Tokyo', 'MM-DD HH24:MI:SS') as report_completed_jst,
+  c.report_last_error, c.report_diagnostics,
+  r.id as report_packet_id, r.content_hash as report_hash, r.generation_calls, r.input_tokens, r.output_tokens, r.api_cost_usd,
+  r.payload ->> 'market_direction' as direction,
+  r.payload ->> 'headline_ja' as headline,
+  jsonb_array_length(coalesce(r.payload -> 'claims', '[]'::jsonb)) as claims,
+  (select jsonb_agg(x) from jsonb_array_elements_text(r.payload #> '{x_post,points_ja}') as x) as x_points,
+  (select s.x_enabled::text || '/' || s.app_enabled::text from public.market_report_consumer_settings s) as gate_x_app
+from public.market_report_cycles c
+left join public.market_data_packets p on p.id = c.current_data_packet_id
+left join public.market_report_packets r on r.id = c.current_report_packet_id
+order by c.trading_date desc, c.report_type;
+```
+
+- 失敗時は `report_last_error`（例 `ANALYSIS_LOCAL_CHECK_FAILED` / `ANALYSIS_FACT_FAILED`）と `report_diagnostics.issues` で理由を確認できる。本文全体は `select payload from public.market_report_packets where id = …`
+
+#### production changes（本反映分）
+
+1. migration `20260920100000_market_report_packets_phase2.sql` 適用
+2. Edge Function `market-report-analysis` v1 新規 deploy
+3. Cron 4本新規追加（jobid 30〜33）
+- それ以外（gate、既存 Function・Cron・設定・ユーザー設定・OAuth・Vault・X・Push・アプリ）の変更は 0
+
+#### 状態
+
+- consumer 切替は OFF のまま。明朝 07:50 / 07:55 の自然 packet を観測できる状態で K1 待ち
+- cutover（`x-test-post` / `personalized-reports` deploy と gate ON）は K1 が明朝の shared packet を確認して PASS した後の別承認
