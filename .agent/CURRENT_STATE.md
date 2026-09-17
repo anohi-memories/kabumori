@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-17 JST (H1 production preflight review_required; H2 social mobile app Phase1 C2 PASS/done)
+- checked_at: 2026-09-17 JST (H1 runtime preflight review_required; H2 social mobile app Phase1 C2 PASS/done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,13 +14,13 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `x-ai-lab-vault-token-refresh-production-preflight-20260917`
+- Codex slot 1: `review_required` — `x-ai-lab-vault-token-refresh-runtime-preflight-20260917`
   - refresh helper candidate `f22e2ca` + focused fail-closed fix `09a199a` はC1 PASS。
   - 2xxのみsuccess、401のみrefresh 1回、401以外non-2xxは即fail、uncertainはno-refresh/no-resend。
   - focused 13/13、x-test-post + `_shared/brand` regression 469/469。
   - candidate `a7ffba4` は実Vault writer/persistence adapter、rotation concurrency guard、completion/idempotency外周維持を実装・検証済み。
-  - 本番secret名、`vault.update_secret` のservice_role限定権限、現行OAuth Basic+refresh方式はread-only確認済み。Edge実行主体からのdirect `SUPABASE_DB_URL`接続可否とpooling適合性は未証明のため、deploy前ゲートとしてC1へ返却。
-  - production deploy/token mutation/OAuth再認可は未実施。
+  - 本番secret名、`vault.update_secret` のservice_role限定権限、現行OAuth Basic+refresh方式に加え、隔離probeでEdge runtimeのdirect `SUPABASE_DB_URL`接続成功、effective role=`postgres`、Vault writer EXECUTE=`true`をread-only確認済み。probeは検証後削除。
+  - production `x-test-post` candidate deploy/token mutation/OAuth再認可は未実施。候補deployはC1の別承認待ち。
 
 - Codex slot 2: `done` — `social-mobile-app-phase1-shell-20260917`
   - C2 PASS。`apps/social-mobile/` に独立Expo/React NativeアプリPhase1を実装済み。
@@ -49,7 +49,7 @@
 ## Known issues
 
 - AI Lab通常`brand_post`はOAuth再認可後1回成功後、次slotで401再発。恒久復旧は未成立。
-- refresh helperとintegration candidateはC1レビュー待ち。production preflightはdirect Edge DB接続可否が残ゲート。production deploy/token mutation/OAuth再認可は未実施。
+-- refresh helperとintegration candidateはC1レビュー待ち。runtime preflightでdirect Edge DB接続ゲートは解消。production `x-test-post` candidate deploy/token mutation/OAuth再認可は未実施。
 - social mobile appはPhase1 shellまで完了。Supabase Auth/data adapter、実OAuth、Storage upload、AI API、push通知、課金、app-store packagingはPhase2以降。
 - multibrand migrations `20260910170000/180000/190000` objectsはproductionに存在するがmigration history不整合の可能性があるためblind `supabase db push`禁止。
 - 2026-09-09 morning_greeting legacy Storage receipt HTTP400は別件。

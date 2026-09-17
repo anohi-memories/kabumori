@@ -3,8 +3,8 @@
 - task_id: x-ai-lab-vault-token-refresh-runtime-preflight-20260917
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: C1でread-only production preflightを確認済み。残る唯一の本番gateである「Supabase Edge runtimeから既存`SUPABASE_DB_URL`へ直接接続でき、Vault writerに必要なeffective DB role/EXECUTE権限が成立するか」を、token/Vault/X投稿を一切変更しないisolated no-write runtime probeで実証する。
@@ -88,3 +88,10 @@
 完了後 this TASKを `status: review_required`, `next_owner: chatgpt` に更新し、fresh `origin/main`確認後STOPしてC1待ち。
 
 **このTASKでも`x-test-post`本番deploy・token mutationは行わない。**
+
+## Runtime preflight completion — 2026-09-17
+
+- Temporary `ai-lab-db-preflight` was deployed with JWT verification enabled, executed once via GET, source-read-back verified, and then deleted.
+- The Edge runtime connected through `SUPABASE_DB_URL` successfully as `postgres`; `has_function_privilege(...vault.update_secret..., 'EXECUTE')` returned `true`; only read-only metadata SQL ran.
+- Existing production Functions were unchanged and no secret/token/Vault value was output. The candidate `x-test-post` deployment remains separately unauthorized.
+- See `.agent/CODEX_REPORT.md` for the probe hash, connectivity observations, cleanup, and remaining C1 approval boundary.

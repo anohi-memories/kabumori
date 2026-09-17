@@ -1,5 +1,32 @@
 # Codex Report
 
+## Latest H1 result — AI Lab Vault refresh runtime preflight (2026-09-17)
+
+- task_id: `x-ai-lab-vault-token-refresh-runtime-preflight-20260917`
+- result: `review_required` — the isolated no-write Edge runtime gate passed. The refresh integration candidate remains undeployed; a separate production deployment approval is still required.
+- temporary probe: `ai-lab-db-preflight`, version **1**, `verify_jwt=true`, source read-back hash `061228a5993b3ab180b6a09889883c3ca3b142e1170ad8ba5b33610d1ed30a65`. The source read-back matched the local probe source. It was deleted immediately after the single successful GET probe, so no temporary Function remains in production.
+
+### Runtime result
+
+- Direct connection: **success** from the deployed Edge runtime using the existing `SUPABASE_DB_URL`; the response only reported non-secret metadata.
+- `db_url_present`: `true` (the URL value was never logged, returned, or recorded).
+- Effective `current_user`: `postgres`.
+- `has_function_privilege(current_user, 'vault.update_secret(uuid,text,text,text,uuid)', 'EXECUTE')`: **true**.
+- `server_version`: PostgreSQL **17.6**. The probe used one short-lived client (`max=1`, 5-second connect/idle timeouts, 10-second max lifetime); the connection completed without timeout. The earlier read-only DB metadata showed `max_connections=60`. IPv4/IPv6 was not separately forced, but the production endpoint was reachable through the runtime path.
+
+### Scope and safety verification
+
+- The probe executed only `current_user`, `has_function_privilege`, and `current_setting('server_version')`. It did not call `vault.update_secret`, read `vault.decrypted_secrets`, or read any token/ref/value.
+- Existing production Function versions, hashes, and timestamps were unchanged before/after the probe. After cleanup, `ai-lab-db-preflight` is absent from the Function inventory.
+- Production changes other than the temporary probe deploy/delete: **0**. DB write: 0; Vault write: 0; X write: 0; OAuth action: 0; secret/token/Vault value output: **0**.
+- `x-test-post` candidate commit `a7ffba4930a9eff3885ab29254f9858b80e71170` was not deployed. No source commit or production configuration change was made for the probe.
+
+### Decision / remaining approval
+
+- The direct-DB gate is now evidenced: the existing Edge runtime secret is usable, the effective role is `postgres`, and it can execute the Vault writer function according to metadata without invoking it. No immediate connection/pooling blocker was observed in this bounded probe.
+- This does **not** authorize candidate deployment. C1 should separately review/approve deploying only `x-test-post` from the exact candidate commit; `x-oauth-connect`, DB/schema/RPC/grants, secrets, Cron, Kabumori, Mio, scopes, and posting behavior remain out of scope.
+
+
 ## Latest H1 result — AI Lab Vault refresh production preflight (2026-09-17)
 
 - task_id: `x-ai-lab-vault-token-refresh-production-preflight-20260917`
