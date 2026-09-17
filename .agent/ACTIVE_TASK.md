@@ -25,11 +25,11 @@
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: social-mobile-app-phase1-shell-20260917
+- task_id: social-mobile-app-phase2-auth-data-20260917
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
-- note: マルチアカウントSNS運用の一般ユーザー向けモバイルアプリPhase1。既存かぶモリ株アプリと分離し、`apps/social-mobile/` を原則配置としてExpo app foundation、主要5タブ、Accounts/素材BOX、domain/service境界を実装する。production backend/OAuth/X投稿は変更しない。
+- note: Phase1 C2 PASS後のPhase2。`apps/social-mobile/**` にSupabase client/Auth session、active account context、mock/Supabase repository adapter、既存multibrand schemaのread-only mappingを実装する。production migration/RLS/RPC/db push、SNS OAuth/投稿、Storage/AI/Push/課金は変更しない。
 
 ### Claude slot 1
 - owner: claude
@@ -65,4 +65,4 @@
 - `K`: Claude側の完了対象が1枠だけで明白な場合の簡易コード。
 - `F`: 全4スロットの全体状況・競合・空き状況を確認する統括コード。
 
-4スロットの並行実行は、task_idと変更対象が分離され競合しない場合に限る。Codex/Claudeの別を問わず、同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数スロットで同時変更しない。
+4スロットの並行実行は、task_idと変更対象が分離され競合しない場合に限る。Codex/Claudeの別を問わず、同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数slotで同時変更しない。
