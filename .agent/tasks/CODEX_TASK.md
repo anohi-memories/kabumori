@@ -3,11 +3,11 @@
 - task_id: x-ai-lab-oauth-401-recovery-20260917
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: urgent
 - recommended_model: Sol High
-- purpose: AI Lab通常`brand_post` dispatcher復旧後、自然slotがX API `401`で停止している。AI Labアカウントだけを安全にOAuth再認可し、Vault-backed access/refresh tokenを置き換え、次の自然投稿で成功確認できる状態へ戻す。
+- purpose: AI Lab通常`brand_post` dispatcher復旧後のX API `401`を解消する。OAuth再認可後に自然投稿が1回成功したが、その次の自然slotで再び401になったため、再現条件を安全に特定し、AI Labだけの認証経路を安定化する。
 
 ## User authorization
 
@@ -20,11 +20,54 @@
 - AI Lab brand/account: `ai_salaryman_lab` / `ai_salaryman_lab_x`
 - expected X username: exactly `kaishain_ai_lab`
 - brand is active/live; publishing enabled; enabled post type includes `brand_post`
-- normal scheduled row now reaches canonical AI Lab dispatcher
-- 2026-09-17 09:49 JST natural slot failed once with `X_REQUEST_FAILED:401`
-- x_post_id=0, fingerprint=0, retry=0
-- current path intentionally does not auto-refresh/fallback, so no unapproved credential mutation occurred
-- previous controlled post succeeded after OAuth reauthorization on 2026-09-16, proving the account can publish when token is valid
+- dispatcher自体は正常化済みで、通常scheduled rowはcanonical AI Lab routeへ到達する
+- 2026-09-17 OAuth再認可後、slot 6は16:23 JSTに自然投稿成功、X post id `2100485677238677509`、fingerprint 1件
+- その次のslot 7は17:34 JSTに `X_REQUEST_FAILED:401` で失敗
+- slot 7はx_post_idなし、追加fingerprintなし、retry/backfillなし
+- したがって「再認可で恒久復旧」は未成立。1回成功後に同じ401が再発する条件の特定が必要
+
+## C1 review — 2026-09-17
+
+**NOT PASS / follow-up required.**
+
+確認できた安全上の成果:
+- OAuth再認可はAI Labだけに限定して成功
+- requested scopesは `tweet.read users.read tweet.write offline.access` の4つのみ
+- `/2/users/me` で `kaishain_ai_lab` 本人確認後にcredentialを受理
+- Vault access/refresh refは存在確認のみで、値は未読
+- 再認可後の最初の自然slotは1回だけ成功し、x_post_id 1件 / fingerprint 1件 / duplicate 0 / retry 0
+- Kabumori/Mio、Cron/window、schema/migration/RPC definition、manual X/media writeは変更なし
+
+未完了理由:
+- 次の自然slotで同じ `X_REQUEST_FAILED:401` が再発した
+- よって本タスクの「通常自動投稿が安定して401なしで継続する」完了条件を満たしていない
+
+次のCodex作業は、**credential値を表示せずread-only中心に、1回成功後401になる認証ライフサイクルの原因特定**を優先する。
+
+### Follow-up investigation scope
+
+1. fresh `origin/main` / current production runtimeを確認し、他slot競合を確認
+2. 16:23成功slotと17:34失敗slotの非秘密メタデータを比較
+   - scheduled_posts / post_execution_logs
+   - account/brand non-secret state
+   - token-ref presence/timestamp metadata（値は読まない）
+   - X response status/headersのうち秘密を含まない範囲
+3. `x-test-post` のAI Lab token load pathを追跡し、各slotで同じcredential source/refを使っているか確認
+4. OAuth callback後にaccess/refresh refやaccount stateを上書き/無効化する処理がないか監査
+5. X側のaccess token有効期限・refresh token利用設計・token rotationの実装前提を、現行コードとOAuth仕様に照らして確認
+6. 401が「access token失効」「別ref読込」「account state mutation」「scope/account mismatch」のどれかを証拠ベースで切り分ける
+
+### Stop gate
+
+以下の変更が必要と判明したら、**実装・deploy・token mutationの前にSTOPしてC1へ戻す**:
+- token refresh/rotation実装
+- x-oauth-connect / x-test-post source変更
+- Vault/token ref更新
+- OAuth再々認可
+- DB schema/RPC/migration変更
+- Cron/window変更
+
+read-only調査とローカルtests/候補設計までは進めてよいが、本番credential mutationや新規deployは別承認とする。
 
 ## Goal
 
@@ -38,7 +81,7 @@ Expected end state:
 5. `connection_status=identity_verified`, `publish_enabled=true` preserved/restored for AI Lab
 6. Kabumori OAuth/token/handle/publish state unchanged
 7. no manual resend/backfill of failed scheduled rows
-8. next natural AI Lab slot is used for delivery confirmation
+8. natural AI Lab slots can continue without recurring 401
 
 ## Mandatory startup / safety
 
@@ -50,17 +93,15 @@ Before any mutation:
 5. confirm current runtime still enforces fixed AI Lab routing and exact username verification
 6. do not read or print token/secret/Vault values
 
-If source code or Function deploy is unexpectedly required, STOP and return for C1 unless the required source is already the exact previously reviewed/deployed OAuth implementation and only read-back confirmation is needed.
+If source code or Function deploy is unexpectedly required, STOP and return for C1.
 
 ## Authorized production actions
 
-Allowed only for AI Lab:
-- initiate OAuth authorization flow through existing `x-oauth-connect`
-- accept callback after user authorization
-- store/replace AI Lab access and refresh token references through the existing Vault-backed path
-- verify exact scope set and `/2/users/me` username
-- read back non-secret account metadata and token-ref presence booleans
-- observe next natural scheduled `brand_post`
+At this follow-up stage, production actions are **read-only only** until a new C1 approval:
+- inspect non-secret AI Lab account/brand/scheduled-post/log metadata
+- inspect token-reference presence and non-secret timestamps only
+- inspect deployed source/runtime metadata and code path
+- inspect natural future slot outcome read-only
 
 ## Prohibited
 
@@ -71,41 +112,19 @@ Allowed only for AI Lab:
 - media upload / `media.write`
 - manual X post
 - manual synthetic `brand_post`
-- retry/backfill of failed 401 row
+- retry/backfill of failed rows
 - Cron/posting-window time/probability changes
-- DB schema/migration/RPC/RLS changes unless an existing approved RPC is merely invoked by the normal OAuth path
+- DB schema/migration/RPC/RLS changes
 - `supabase db push`
 - unrelated Function deploy
 - secret/token/Vault value output
-
-## Verification
-
-After callback:
-- username exactly `kaishain_ai_lab`
-- requested/granted scope contains the approved four scopes and no unexpected write scopes
-- AI Lab account remains fixed to `ai_salaryman_lab_x`
-- connection status identity verified
-- access/refresh token references present (presence only; never values)
-- publish enabled remains true
-- Kabumori account metadata/timestamps/settings unchanged except incidental read timestamps if any
-- no manual X/media write occurred during OAuth recovery
-
-Then wait for the next natural AI Lab scheduled slot. Success criteria:
-- row claimed once
-- no `UNSUPPORTED_POST_TYPE`
-- no 401
-- one succeeded terminal log
-- one x_post_id
-- one fingerprint
-- no duplicate/retry/media write
-
-If next natural slot fails for a different reason, record exact evidence and stop; do not widen scope automatically.
+- token refresh/rotation implementation or credential mutation before new C1 review
 
 ## Completion
 
-When complete:
+When the recurring-401 cause is identified:
 - append a new top section to `.agent/CODEX_REPORT.md`
-- include pre/post non-secret account state, exact scopes, verified username, whether user interaction was required, natural-slot result, X text-write count/media-write count, safety checks, and remaining issues
-- set this TASK to `status: review_required`, `next_owner: chatgpt`
+- include evidence comparing the successful and failed natural slots, exact root-cause conclusion or remaining hypotheses, required fix blast radius, and safety checks
+- if a source/credential mutation is required, set this TASK to `status: review_required`, `next_owner: chatgpt` **before** applying it
 - fresh-check origin/main before pushing control/report metadata
 - read back origin/main and STOP for C1
