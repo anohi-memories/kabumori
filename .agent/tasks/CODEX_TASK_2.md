@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase4-membership-rls-validation-20260918
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol Medium/High
 - purpose: `apps/social-mobile` Phase 4として、Phase 3で確定したownership/RLS不足をもとに、`brand_memberships`中心のtenant isolation設計をdisposable DBで検証し、production適用前にpolicy matrixとmobile read contractを成立させる。production DBにはまだ適用しない。

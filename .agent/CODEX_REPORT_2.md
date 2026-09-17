@@ -1,5 +1,29 @@
 # Codex Slot 2 Report
 
+## H2 — Social mobile app Phase 4: membership/RLS validation (2026-09-18)
+
+- task_id: `social-mobile-app-phase4-membership-rls-validation-20260918`
+- result: Phase 3で確定したtenant ownership不足を、`brand_memberships`中心の候補migration・RLS policy・mobile read contractとして具体化した。productionには一切適用していない。C2レビュー待ち。
+- source_base: fresh `origin/main` `e2d369f00fc40e0cd461f0f4f0bd82d923ab76d6`（H1のagent更新を含む最新main、social-mobile/migration競合なし）。
+- implementation_commit: `c40c96cb66c72c671a145ebdbee2a941c648b6bb` (`Add social mobile membership RLS candidate`, rebased onto `e2d369f`).
+- changed_files:
+  - `supabase/migrations/20260918120000_social_mobile_brand_memberships.sql`（review-only candidate; preflight assertion、membership table、tenant SELECT policies、mobile write revoke。production未適用）
+  - `apps/social-mobile/src/data/supabase-repository.ts`（RLS-protected self-membershipを先に読み、返却されたbrand_id集合だけを operational readへ渡す。membership無しはblocked。scheduled_postsにaccount FKが無いため`accountId: "unknown"`として誤帰属を防止）
+  - `apps/social-mobile/docs/phase4-membership-rls-contract.md`（schema compatibility、policy matrix、read contract、gap、rollback/runbook）
+  - `apps/social-mobile/docs/phase4-policy-matrix.sql`（disposable DBのobject/matrix assertionとrollback手順のSQL）
+  - `apps/social-mobile/docs/phase4-policy-matrix.test.mjs`（migration/contract static assertions）
+- production_schema_read_only: Phase 3のmetadataを再利用し、`brands.id`、各`brand_id`（text）とbrands FK、RLS enabled、既存admin policyを確認。`brands`/`social_accounts`は現状authenticated policyなし、scheduled/logs/windowsは`private.is_admin()` admin-only。今回のread-only metadata確認以外のproduction操作は0。
+- membership_model: `brand_memberships(brand_id text FK → brands.id, user_id uuid FK → auth.users.id, role owner/admin/member/viewer, created_at, PK(brand_id,user_id))`。本人のmembership SELECTのみauthenticatedへ許可し、membershipのinsert/update/deleteはmobile roleへ付与しない。service/backend writeと分離。
+- policy_matrix_expected: anon/non-memberはmembership・A/B・operational全て0行、A member/viewer/owner/adminはAのみ、B memberはBのみ、global adminは既存`private.is_admin()` policy、service_roleはbackend責任。cross-tenant漏洩をclient filterで補わずRLSで遮断。
+- migration_safety: migrationは対象table/columnの存在を先にassertし、欠落時`PHASE4_PREFLIGHT_MISSING_*`で全体停止。既存admin policyをdrop/replaceせず、追加policyのOR合成で互換性を維持。新規RPC/SECURITY DEFINER、schema変更のproduction適用はしていない。
+- mobile_contract: 直接SELECT + RLSを採用。membership 0件=blocked/no-workspace、42501=blocked、42P01/42703=schema unavailable、その他=unavailable。`EXPO_PUBLIC_DATA_SOURCE=mock`既定値とservice_role非使用を維持。Vault/OAuth/AI/X secret列は選択しない。
+- operational_gap: `scheduled_posts`にsocial_account_id・本文・origin正本、plan/usage sourceは未確認。今回列追加や推測mappingをせず、accountId/textはgapとして扱う。別Phaseでread view/detail relationを検討。
+- disposable_db_proof: **未実行（環境制約）**。Podman/PostgreSQL runtimeが無く、`supabase db lint --local`はlocalhost:54322接続拒否、`supabase status`もPodman socket接続不可。productionへ代替適用せず、候補SQLとmatrix assertionのみ作成。apply→read-back→rollbackはC2後にdisposable runtimeで実施する必要がある。
+- tests: `node --test apps/social-mobile/docs/phase4-policy-matrix.test.mjs` **5/5 PASS**; `npm run typecheck` **PASS**; `npm run lint` **PASS (0 errors/warnings)**; `npx expo export --platform web --output-dir /private/tmp/social-mobile-phase4-dist-2` **PASS**; `git diff --check` **PASS**。packageにunit runnerは無いため静的contract testで補完。
+- production_mutation: DB/schema/migration/RLS/policy/grant/RPC/Cron/settings/auth/Vault/Storage/AI/SNS/Push/deploy **0**。formal checkout、`apps/admin/**`、HANDOFF、H1/G1/G2領域は未変更。
+- remaining_issues: disposable PostgreSQLでの実apply・policy matrix・rollback実証が未実行（runtime準備が必要）。production適用前にC2承認、preflight、matrix、postflight、rollbackを実施する。`EXPO_PUBLIC_DATA_SOURCE=supabase`はmembership/RLS適用・実ユーザー検証までONにしない。
+- safety_checks: clean isolated worktree `/private/tmp/kabumori-h2-phase4`のみ変更。既存正式repo・既存未コミット変更に触れていない。secret/token/raw production dataの記録なし。TASKは`review_required`、`next_owner: chatgpt`。
+
 ## H2 — Social mobile app Phase 3: production schema/RLS inventory (2026-09-17)
 
 - task_id: `social-mobile-app-phase3-schema-rls-inventory-20260917`
