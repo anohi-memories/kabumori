@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-17 JST (H2 social mobile app phase1 assigned)
+- checked_at: 2026-09-17 JST (H1 production preflight review_required; H2 social mobile app phase1 assigned)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,12 +14,13 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `x-ai-lab-vault-token-refresh-integration-candidate-20260917`
+- Codex slot 1: `review_required` — `x-ai-lab-vault-token-refresh-production-preflight-20260917`
   - refresh helper candidate `f22e2ca` + focused fail-closed fix `09a199a` はC1 PASS。
   - 2xxのみsuccess、401のみrefresh 1回、401以外non-2xxは即fail、uncertainはno-refresh/no-resend。
   - focused 13/13、x-test-post + `_shared/brand` regression 469/469。
-  - candidate `a7ffba4` は実Vault writer/persistence adapter、rotation concurrency guard、completion/idempotency外周維持を実装・検証済み。C1レビュー待ち。
-  - production deploy/token mutation/OAuth再認可はC1前は禁止。
+  - candidate `a7ffba4` は実Vault writer/persistence adapter、rotation concurrency guard、completion/idempotency外周維持を実装・検証済み。
+  - 本番secret名、`vault.update_secret` のservice_role限定権限、現行OAuth Basic+refresh方式はread-only確認済み。Edge実行主体からのdirect `SUPABASE_DB_URL`接続可否とpooling適合性は未証明のため、deploy前ゲートとしてC1へ返却。
+  - production deploy/token mutation/OAuth再認可は未実施。
 
 - Codex slot 2: `ready` — `social-mobile-app-phase1-shell-20260917`
   - マルチアカウントSNS自動運用の一般ユーザー向けモバイルアプリ制作を開始する。
@@ -38,7 +39,7 @@
 
 ## Parallel safety
 
-- H1はAI Lab refresh integration candidate担当。OAuth/Vault/x-test-post認証経路を扱うがproduction mutation/deployは禁止。
+- H1はAI Lab refresh integration/preflight担当。OAuth/Vault/x-test-post認証経路を扱うがproduction mutation/deployは禁止。
 - H2は `apps/social-mobile/` の新規モバイルアプリ領域のみ。既存root株アプリ、`supabase/`、H1/G1領域へ触れない。
 - G1はmarket report packet / x-test-post morning-close / personalized-reports領域。OAuth/Vault/social account stateへ触れない。
 - G2はdone。
@@ -48,7 +49,7 @@
 ## Known issues
 
 - AI Lab通常`brand_post`はOAuth再認可後1回成功後、次slotで401再発。恒久復旧は未成立。
-- refresh helperとintegration candidateはC1レビュー待ち。production deploy/token mutation/OAuth再認可は未実施。
+- refresh helperとintegration candidateはC1レビュー待ち。production preflightはdirect Edge DB接続可否が残ゲート。production deploy/token mutation/OAuth再認可は未実施。
 - consumer向けSNS運用モバイルアプリはPhase1着手前。既存かぶモリ株アプリとは分離して進める。
 - multibrand migrations `20260910170000/180000/190000` objectsはproductionに存在するがmigration history不整合の可能性があるためblind `supabase db push`禁止。
 - 2026-09-09 morning_greeting legacy Storage receipt HTTP400は別件。

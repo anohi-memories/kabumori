@@ -3,8 +3,8 @@
 - task_id: x-ai-lab-vault-token-refresh-production-preflight-20260917
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: C1 PASSしたAI Lab Vault refresh integration candidate `a7ffba4930a9eff3885ab29254f9858b80e71170`について、本番deploy前の環境・権限・接続方式をread-only中心に検証し、実deploy可能な状態かを判定する。まだproduction deploy・token/Vault mutation・実refreshは行わない。
@@ -70,3 +70,10 @@ preflight完了後:
 - fresh origin/main確認後にmetadata同期、read-backしてSTOP
 
 **このTASKではproduction deploy/token mutationを行わない。**
+
+## Preflight completion — 2026-09-17
+
+- Read-only production preflight completed.
+- Existing secret names, Vault writer metadata/privilege, current Edge runtime versions, and Basic-client-auth + `refresh_token` OAuth compatibility were confirmed without reading values.
+- Direct Edge runtime `SUPABASE_DB_URL` usability/effective-role and production direct-connection suitability remain unproven without a separately authorized no-write runtime test; no deploy is recommended until that gate is closed.
+- See `.agent/CODEX_REPORT.md` for evidence, blast radius, and the unexecuted deploy/rollback plan.

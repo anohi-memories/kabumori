@@ -1,5 +1,35 @@
 # Codex Report
 
+## Latest H1 result — AI Lab Vault refresh production preflight (2026-09-17)
+
+- task_id: `x-ai-lab-vault-token-refresh-production-preflight-20260917`
+- result: `review_required` — read-only production preflight completed. The candidate remains source-only; no production deploy, Vault/token mutation, refresh request, OAuth reauthorization, post, schema/RPC/grant, Cron, or secret-value read occurred.
+- candidate: `a7ffba4930a9eff3885ab29254f9858b80e71170` on `codex/x-ai-lab-vault-token-refresh-integration-candidate-20260917`.
+
+### Confirmed production facts (values intentionally omitted)
+
+- Supabase secret metadata lists `SUPABASE_DB_URL`, `X_CLIENT_ID`, and `X_CLIENT_SECRET` as present. No secret value was retrieved, logged, or written to this report. No additional environment name is required by the candidate beyond these existing names.
+- `x-test-post` is still the pre-candidate production runtime: ACTIVE, `verify_jwt=false`, Supabase version **112**, aggregate hash `ba0e7c78bd8cec62b4c8c2fe50bd1de80c7f3ecbaa1a1206c4e668f70012ab60`. A source read-back contains no `ai_lab_token_refresh` / `ai_lab_vault_token_persistence` wiring, proving the candidate was not deployed.
+- `x-oauth-connect` is ACTIVE version **20**. Its deployed token-exchange source uses confidential-client HTTP Basic authentication and `grant_type=refresh_token` (with the client id in the form body), matching the candidate refresh request and the AI Lab OAuth configuration. No scope or OAuth setting was changed.
+- Production DB is ACTIVE in `ap-northeast-1`, PostgreSQL 17.6. The read-only SQL preflight returned `max_connections=60`.
+- `vault.update_secret(secret_id uuid, new_secret text, new_name text, new_description text, new_key_id uuid)` exists as `SECURITY DEFINER`, owner `supabase_admin`, with `search_path=''`. `has_function_privilege('service_role', ..., 'EXECUTE')` is true; `authenticated` and `anon` are false. No writer RPC or grant was added. The query only inspected metadata and did not call the function.
+
+### Remaining gate / decision
+
+- The SQL MCP path proves production DB reachability and the service-role privilege metadata, but it does **not** prove that the deployed Edge runtime can open the direct `SUPABASE_DB_URL` connection with the required effective role, nor does it establish production pooling/IPv4/IPv6/connection-count suitability for `npm:postgres`.
+- Because retrieving or testing the secret value through an ad-hoc client would expose or risk using a production credential, this task did not perform that test. Therefore deployability is **not yet proven**. A safe next gate is a separately authorized, no-write runtime preflight that opens the existing connection without logging the URL/token and executes only metadata checks such as `current_user` and `has_function_privilege`; otherwise the adapter must be redesigned to use an already-approved server-side writer (which would require separate schema/grant review).
+- Blast radius is limited: the candidate branch is unchanged and production remains on the current runtime, so AI Lab behavior is unchanged (including the known refresh gap); Kabumori/Mio and all other Functions are unaffected.
+
+### Deploy / rollback plan (not executed)
+
+- After the direct-connection gate and a separate deployment approval, deploy only `x-test-post` from candidate commit `a7ffba4930a9eff3885ab29254f9858b80e71170`; do not deploy `x-oauth-connect` or change DB/schema/secrets. Read back the Function version/source hash and verify no other Function changed.
+- If rollback is required, restore the previously observed `x-test-post` v112 bundle/hash above (or the exact approved source that produced it), then read back the version/hash. No Vault/token rollback is implied because this preflight performed no mutation.
+
+### Safety checks
+
+- No `supabase functions deploy`, `supabase db push`, migration/RPC/RLS/grant change, Vault read/write, refresh-token call, OAuth authorization, manual/synthetic post, retry/backfill, Cron/window change, or secret-value output was performed.
+
+
 ## Latest H1 result — AI Lab Vault refresh integration candidate (2026-09-17)
 
 - task_id: `x-ai-lab-vault-token-refresh-integration-candidate-20260917`
