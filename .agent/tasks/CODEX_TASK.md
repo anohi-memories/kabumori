@@ -3,11 +3,34 @@
 - task_id: ai-lab-daily-content-plan-writer-postgres-proof-20260918
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Sol Medium/High
 - purpose: Phase 2 writer candidate `3ce866e7e424c4e4b675269122285dab7ca39a6b` の設計自体は概ね承認可能だが、C1必須条件だった disposable PostgreSQL/Supabase 上での migration/RPC/grant/concurrency proof が未実施で、SQLite model + SQL文字列検査に留まっている。production適用前に実Postgres semanticsを証明する focused proof を行う。
+
+## Final C1 review — 2026-09-18
+
+**PASS — real PostgreSQL proof accepted.**
+
+確認済み:
+- disposable PostgreSQL 17.6 (`public.ecr.aws/supabase/postgres:17.6.1.165`) 上で Phase1 + Phase2 migration を実際に適用成功。
+- RPC `write_daily_content_plan(text,date,text,jsonb,boolean,text)` は `SECURITY DEFINER`, `search_path=''`, owner=`supabase_admin`、返却は id/version/status/target_date/brand_id の5列のみ。
+- 実DB権限は `anon=false`, `authenticated=false`, `service_role=true`。anon/authenticated direct sessionはpermission deniedかつrow mutation 0、service_roleは書込成功。
+- first active→v1 active、second active→旧row archived / v2 active、active exactly 1。
+- draft作成は既存activeを維持。
+- same request_key + same payloadは同じid/versionを返しrow増加なし。changed payloadは `DAILY_CONTENT_PLAN_REQUEST_KEY_CONFLICT`。
+- duplicate item id / oversized payloadはrejectかつrow増加なし。null/omitted slot、explicit slotは受理。
+- 2 concurrent service_role transactionsでadvisory lockの直列化を実証。最終状態はv1 archived + v2 active、active exactly 1、unique violation/partial stateなし。
+- Phase1 consumer相当queryで最新active planを取得可能。anon readはRLS下で0 row。
+- rollback dry-runはtransaction内で function/index/columns drop → ROLLBACK を実行し、postflightでobjects維持を確認。
+- production mutation 0。production migration/RPC/grant/RLS/deploy/X/Cron/OAuth/Vault/token変更0。
+
+### C1 decision
+
+Phase 2 writer candidateとPostgreSQL proofを承認する。
+
+ただしこれはproduction rolloutそのものの実施承認ではない。次工程は exact approved migration のproduction preflight/apply、RPC/grant/read-back、その後G1の `x-test-post` 競合解消を確認してconsumer deployを別タスクで扱う。
 
 ## C1 review — 2026-09-18
 
