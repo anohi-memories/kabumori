@@ -4,6 +4,7 @@ import {
   buildFredObservationsUrl,
   FredAdapterError,
   fetchFredMetrics,
+  FRED_SERIES_MAPPINGS,
   latestValidFredObservation,
   normalizeFredObservation,
   parseFredObservations,
@@ -18,6 +19,140 @@ test("buildFredObservationsUrl shapes the documented query params", () => {
   assert.equal(url.searchParams.get("file_type"), "json");
   assert.equal(url.searchParams.get("sort_order"), "desc");
   assert.equal(url.searchParams.get("limit"), "3");
+});
+
+// --- Macro Indicators Phase 1A: units parameter ---
+
+test("buildFredObservationsUrl: units omitted entirely when not requested -- existing mappings' URL shape is byte-for-byte unchanged", () => {
+  const url = new URL(buildFredObservationsUrl("DGS10", "test-key", 5));
+  assert.equal(url.searchParams.has("units"), false);
+  assert.equal(url.toString(), "https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&api_key=test-key&file_type=json&sort_order=desc&limit=5");
+});
+
+test("buildFredObservationsUrl: units=pc1 (year-over-year %) is passed through verbatim", () => {
+  const url = new URL(buildFredObservationsUrl("CPIAUCSL", "test-key", 5, "pc1"));
+  assert.equal(url.searchParams.get("units"), "pc1");
+  assert.equal(url.searchParams.get("series_id"), "CPIAUCSL");
+});
+
+test("buildFredObservationsUrl: units=chg (period change) is passed through verbatim", () => {
+  const url = new URL(buildFredObservationsUrl("PAYEMS", "test-key", 5, "chg"));
+  assert.equal(url.searchParams.get("units"), "chg");
+});
+
+test("buildFredObservationsUrl: units=pch (percent change from prior period) is passed through verbatim", () => {
+  const url = new URL(buildFredObservationsUrl("RSAFS", "test-key", 5, "pch"));
+  assert.equal(url.searchParams.get("units"), "pch");
+});
+
+test("fetchFredMetrics: the same seriesId can be fetched twice under two different metric_keys/units, and each request URL carries the right units param", async () => {
+  const requestedUrls: string[] = [];
+  const fetchImpl = async (url: string | URL) => {
+    requestedUrls.push(String(url));
+    const parsed = new URL(String(url));
+    const units = parsed.searchParams.get("units");
+    const value = units === "pc1" ? "3.10" : "313.53"; // YoY% vs index level
+    return new Response(JSON.stringify({ observations: [{ date: "2026-08-01", value } ] }), { status: 200 });
+  };
+  const metrics = await fetchFredMetrics(
+    {
+      apiKey: "k",
+      fetchedAt: new Date("2026-09-17T00:00:00.000Z"),
+      mappings: [
+        { seriesId: "CPIAUCSL", metricKey: "US_CPI", unit: "cpi_index_1982_84_100" },
+        { seriesId: "CPIAUCSL", metricKey: "US_CPI_YOY", unit: "percent", units: "pc1" },
+      ],
+    },
+    fetchImpl as typeof fetch,
+  );
+  assert.equal(metrics.length, 2);
+  assert.equal(requestedUrls.length, 2);
+  assert.ok(requestedUrls[0].includes("series_id=CPIAUCSL") && !requestedUrls[0].includes("units="));
+  assert.ok(requestedUrls[1].includes("series_id=CPIAUCSL") && requestedUrls[1].includes("units=pc1"));
+  const level = metrics.find((m) => m.metricKey === "US_CPI");
+  const yoy = metrics.find((m) => m.metricKey === "US_CPI_YOY");
+  assert.equal(level?.value, 313.53);
+  assert.equal(yoy?.value, 3.10);
+  assert.equal(level?.metadata?.fredUnits, undefined, "raw mapping must not carry a fredUnits key");
+  assert.equal(yoy?.metadata?.fredUnits, "pc1");
+});
+
+// --- Macro Indicators Phase 1A: provenance ---
+
+test("normalizeFredObservation: a raw macro mapping (no units) keeps metadata shape identical to the existing US2Y/US10Y/equity-index pattern (no fredUnits key)", () => {
+  const metric = normalizeFredObservation(
+    { seriesId: "GDPC1", metricKey: "US_GDP", unit: "billions_of_chained_2017_dollars", underlyingSource: "U.S. Bureau of Economic Analysis" },
+    { date: "2026-04-01", value: "24269.613" },
+    new Date("2026-09-17T00:00:00.000Z"),
+  );
+  assert.deepEqual(metric.metadata, {
+    seriesId: "GDPC1",
+    fredDate: "2026-04-01",
+    underlyingSource: "U.S. Bureau of Economic Analysis",
+  });
+});
+
+test("normalizeFredObservation: a derived macro mapping (units set) carries seriesId + fredUnits + underlyingSource + fredDate in metadata", () => {
+  const metric = normalizeFredObservation(
+    {
+      seriesId: "A191RL1Q225SBEA",
+      metricKey: "US_GDP_GROWTH",
+      unit: "percent_annualized",
+      underlyingSource: "U.S. Bureau of Economic Analysis",
+    },
+    { date: "2026-04-01", value: "1.5" },
+    new Date("2026-09-17T00:00:00.000Z"),
+  );
+  // US_GDP_GROWTH is its own distinct FRED series (not a units= transform
+  // of GDPC1), so it legitimately has no `units` on its mapping -- confirm
+  // that "no units field on the mapping" still produces provenance-correct
+  // metadata (seriesId/fredDate/underlyingSource), distinguishing "this
+  // series IS the growth rate" from "this is a units= transform of a level
+  // series" without conflating the two.
+  assert.deepEqual(metric.metadata, {
+    seriesId: "A191RL1Q225SBEA",
+    fredDate: "2026-04-01",
+    underlyingSource: "U.S. Bureau of Economic Analysis",
+  });
+
+  const derived = normalizeFredObservation(
+    {
+      seriesId: "PAYEMS",
+      metricKey: "US_NFP_CHANGE",
+      unit: "thousands_of_persons",
+      underlyingSource: "U.S. Bureau of Labor Statistics",
+      units: "chg",
+    },
+    { date: "2026-08-01", value: "142" },
+    new Date("2026-09-17T00:00:00.000Z"),
+  );
+  assert.deepEqual(derived.metadata, {
+    seriesId: "PAYEMS",
+    fredDate: "2026-08-01",
+    underlyingSource: "U.S. Bureau of Labor Statistics",
+    fredUnits: "chg",
+  });
+  assert.equal(derived.provider, "FRED", "provider is always FRED regardless of units transform");
+});
+
+// --- Macro Indicators Phase 1A: precision (no fabricated intraday time) ---
+
+test("normalizeFredObservation: every macro mapping produces observedAt=null and time_precision='date', including derived (units=) mappings", () => {
+  const raw = normalizeFredObservation(
+    { seriesId: "UNRATE", metricKey: "US_UNEMPLOYMENT_RATE", unit: "percent" },
+    { date: "2026-08-01", value: "4.1" },
+    new Date("2026-09-17T00:00:00.000Z"),
+  );
+  const derived = normalizeFredObservation(
+    { seriesId: "RSAFS", metricKey: "US_RETAIL_SALES_MOM", unit: "percent", units: "pch" },
+    { date: "2026-08-01", value: "0.6" },
+    new Date("2026-09-17T00:00:00.000Z"),
+  );
+  for (const metric of [raw, derived]) {
+    assert.equal(metric.observedAt, null);
+    assert.equal(metric.timePrecision, "date");
+    assert.equal(metric.observedDate, "2026-08-01");
+  }
 });
 
 test("parseFredObservations extracts only well-shaped entries", () => {
@@ -149,7 +284,7 @@ test("normalizeFredObservation: equity index series still rejects a non-numeric 
   );
 });
 
-test("fetchFredMetrics: all 7 mappings (US2Y/US10Y + 5 equity index) return one metric each", async () => {
+test("fetchFredMetrics: 7 non-macro mappings (US2Y/US10Y + 5 equity index) return one metric each", async () => {
   const fetchImpl = async (url: string | URL) => {
     const seriesId = new URL(String(url)).searchParams.get("series_id");
     const values: Record<string, string> = {
@@ -164,7 +299,19 @@ test("fetchFredMetrics: all 7 mappings (US2Y/US10Y + 5 equity index) return one 
     return new Response(JSON.stringify({ observations: [{ date: "2026-09-16", value: values[seriesId ?? ""] }] }), { status: 200 });
   };
   const metrics = await fetchFredMetrics(
-    { apiKey: "k", fetchedAt: new Date("2026-09-17T00:00:00.000Z") },
+    {
+      apiKey: "k",
+      fetchedAt: new Date("2026-09-17T00:00:00.000Z"),
+      mappings: [
+        { seriesId: "DGS2", metricKey: "US2Y", unit: "percent" },
+        { seriesId: "DGS10", metricKey: "US10Y", unit: "percent" },
+        { seriesId: "NIKKEI225", metricKey: "NIKKEI225", unit: "index_points" },
+        { seriesId: "SP500", metricKey: "SP500", unit: "index_points" },
+        { seriesId: "NASDAQCOM", metricKey: "NASDAQCOMPOSITE", unit: "index_points" },
+        { seriesId: "NASDAQ100", metricKey: "NASDAQ100", unit: "index_points" },
+        { seriesId: "VIXCLS", metricKey: "VIX", unit: "index_points" },
+      ],
+    },
     fetchImpl as typeof fetch,
   );
   assert.equal(metrics.length, 7);
@@ -173,6 +320,34 @@ test("fetchFredMetrics: all 7 mappings (US2Y/US10Y + 5 equity index) return one 
     ["NASDAQ100", "NASDAQCOMPOSITE", "NIKKEI225", "SP500", "US10Y", "US2Y", "VIX"],
   );
   assert.ok(metrics.every((m) => m.observedAt === null && m.timePrecision === "date"));
+});
+
+test("FRED_SERIES_MAPPINGS: default export now has 23 entries (7 pre-macro + 16 Macro Indicators Phase 1A)", () => {
+  assert.equal(FRED_SERIES_MAPPINGS.length, 23);
+  const macroKeys = FRED_SERIES_MAPPINGS.filter((m) =>
+    m.metricKey.startsWith("US_") || m.metricKey === "JP_GDP"
+  ).map((m) => m.metricKey);
+  assert.deepEqual(
+    macroKeys.sort(),
+    [
+      "US_CORE_CPI",
+      "US_CORE_CPI_YOY",
+      "US_CORE_PCE",
+      "US_CORE_PCE_YOY",
+      "US_CPI",
+      "US_CPI_YOY",
+      "US_GDP",
+      "US_GDP_GROWTH",
+      "US_NFP",
+      "US_NFP_CHANGE",
+      "US_PCE",
+      "US_PCE_YOY",
+      "US_RETAIL_SALES",
+      "US_RETAIL_SALES_MOM",
+      "US_UNEMPLOYMENT_RATE",
+      "JP_GDP",
+    ].sort(),
+  );
 });
 
 test("fetchFredMetrics: a missing observation for one equity index series surfaces FRED_NO_VALID_OBSERVATION for that series only", async () => {

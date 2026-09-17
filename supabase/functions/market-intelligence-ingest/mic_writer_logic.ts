@@ -146,3 +146,34 @@ export async function upsertMarketMetric(
   }
   return { outcome: "upserted" };
 }
+
+// Macro Indicators Phase 1A: reads the currently-known value for one
+// (metric_key, source_key, observed_date) triple, BEFORE it gets
+// overwritten by upsertMarketMetric -- this is how the caller determines
+// whether an incoming FRED observation is a brand-new release, a revision
+// of an already-known value, or an unchanged re-fetch (see
+// mic_macro_release_logic.ts). Returns null when no row exists yet for
+// this triple (first-ever observation), never throws for "not found".
+// Deliberately narrow (one row, one column) rather than a generic
+// "read market_metrics" helper -- this module stays a thin, purpose-built
+// writer layer, not a query builder.
+export async function readExistingMarketMetricValue(
+  ctx: RestContext,
+  metricKey: string,
+  sourceKey: string,
+  observedDate: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<number | null> {
+  const url = `${ctx.supabaseUrl}/rest/v1/market_metrics` +
+    `?metric_key=eq.${encodeURIComponent(metricKey)}` +
+    `&source_key=eq.${encodeURIComponent(sourceKey)}` +
+    `&observed_date=eq.${encodeURIComponent(observedDate)}` +
+    `&select=value&limit=1`;
+  const result = await fetchImpl(url, { headers: restHeaders(ctx.secretKey) });
+  if (!result.ok) {
+    throw new Error(`MARKET_METRIC_READ_FAILED:${result.status}:${(await result.text()).slice(0, 500)}`);
+  }
+  const rows = await result.json() as Array<{ value?: unknown }>;
+  const value = rows[0]?.value;
+  return typeof value === "number" ? value : null;
+}

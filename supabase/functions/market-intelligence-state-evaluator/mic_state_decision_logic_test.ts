@@ -505,3 +505,139 @@ test("clampAiConfidence: AI confidence at or below data confidence passes throug
 test("clampAiConfidence: zero data confidence clamps to zero regardless of AI confidence", () => {
   assert.equal(clampAiConfidence(0.99, 0), 0);
 });
+
+// --- macro (FRED: US CPI/Core CPI/PCE/Core PCE/NFP/Unemployment Rate/GDP/
+// Retail Sales, JP GDP -- Macro Indicators Phase 1A) ---
+// Same point as the fx/equity_index sections above: the generic
+// decision-logic functions need zero code change to handle macro's
+// monthly/quarterly cadence and thresholds correctly -- only
+// mic_metric_domain_map's seed data
+// (20260922090000_mic_macro_indicators_phase1a.sql) differs. This section
+// specifically exercises: first observation, unchanged (a plain re-fetch
+// of the same observed_date/value), a new monthly observation (a later
+// observed_date with a new value), a revision (same observed_date, a
+// changed value -- detected as "value_changed", NOT a special case), the
+// all-stale guard, and that macro's data-confidence computation uses the
+// exact same domain-agnostic rollup as every other domain.
+
+function cpiYoyMapRow(overrides: Partial<MetricDomainMapRow> = {}): MetricDomainMapRow {
+  return {
+    metricKey: "US_CPI_YOY",
+    domain: "macro",
+    displayName: "米CPI前年比",
+    pctChangeThreshold: null,
+    absChangeThreshold: null,
+    alwaysMaterial: true,
+    ...overrides,
+  };
+}
+
+function cpiLevelMapRow(overrides: Partial<MetricDomainMapRow> = {}): MetricDomainMapRow {
+  return {
+    metricKey: "US_CPI",
+    domain: "macro",
+    displayName: "米CPI(消費者物価指数)",
+    pctChangeThreshold: 0.3,
+    absChangeThreshold: null,
+    alwaysMaterial: false,
+    ...overrides,
+  };
+}
+
+test("macro/US_CPI_YOY: first observation (no baseline) is material regardless of always_material -- same code path as every other domain's first print", () => {
+  const domainMap = new Map([["US_CPI_YOY", cpiYoyMapRow()]]);
+  const observations = detectNewObservations(
+    [metric({ metricKey: "US_CPI_YOY", domain: "macro", currentValue: 3.1, observedDate: "2026-08-01", unit: "percent" })],
+    {},
+  );
+  assert.deepEqual(observations, [
+    { metricKey: "US_CPI_YOY", currentValue: 3.1, previousBaselineValue: null, reason: "first_observation" },
+  ]);
+  const decision = evaluateMaterialChange(observations, domainMap);
+  assert.equal(decision.isMaterial, true);
+});
+
+test("macro/US_CPI_YOY: unchanged -- a plain re-fetch of the same observed_date/value produces no observation and is not material", () => {
+  const domainMap = new Map([["US_CPI_YOY", cpiYoyMapRow()]]);
+  const observations = detectNewObservations(
+    [metric({ metricKey: "US_CPI_YOY", domain: "macro", currentValue: 3.1, observedDate: "2026-08-01", unit: "percent" })],
+    { US_CPI_YOY: { value: 3.1, observedDate: "2026-08-01", observedAt: null } },
+  );
+  assert.deepEqual(observations, [], "no new observation for an unchanged re-fetch, regardless of always_material");
+  const decision = evaluateMaterialChange(observations, domainMap);
+  assert.equal(decision.isMaterial, false);
+});
+
+test("macro/US_CPI_YOY: new monthly observation (a later observed_date with a new value) is detected as value_changed and is material via always_material", () => {
+  const domainMap = new Map([["US_CPI_YOY", cpiYoyMapRow()]]);
+  const observations = detectNewObservations(
+    [metric({ metricKey: "US_CPI_YOY", domain: "macro", currentValue: 3.2, observedDate: "2026-09-01", unit: "percent" })],
+    { US_CPI_YOY: { value: 3.1, observedDate: "2026-08-01", observedAt: null } },
+  );
+  assert.deepEqual(observations, [
+    { metricKey: "US_CPI_YOY", currentValue: 3.2, previousBaselineValue: 3.1, reason: "value_changed" },
+  ]);
+  const decision = evaluateMaterialChange(observations, domainMap);
+  assert.equal(decision.isMaterial, true);
+  assert.deepEqual(decision.materialMetricKeys, ["US_CPI_YOY"]);
+});
+
+test("macro/US_CPI_YOY: revision -- SAME observed_date, a changed value is detected as value_changed (no special-cased 'revision' reason exists, nor is one needed) and is material via always_material", () => {
+  const domainMap = new Map([["US_CPI_YOY", cpiYoyMapRow()]]);
+  // The August print was originally captured as 3.1; a later FRED refresh
+  // for the SAME 2026-08-01 observed_date now reports 3.2 (a revision).
+  const observations = detectNewObservations(
+    [metric({ metricKey: "US_CPI_YOY", domain: "macro", currentValue: 3.2, observedDate: "2026-08-01", unit: "percent" })],
+    { US_CPI_YOY: { value: 3.1, observedDate: "2026-08-01", observedAt: null } },
+  );
+  assert.deepEqual(observations, [
+    { metricKey: "US_CPI_YOY", currentValue: 3.2, previousBaselineValue: 3.1, reason: "value_changed" },
+  ], "a same-observed_date revision is indistinguishable, at the State layer, from any other value change -- both correctly re-trigger evaluation");
+  const decision = evaluateMaterialChange(observations, domainMap);
+  assert.equal(decision.isMaterial, true);
+});
+
+test("macro/US_CPI (0.3% pct threshold, the level companion of US_CPI_YOY): a >=0.3% move is material, <0.3% is not", () => {
+  const domainMap = new Map([["US_CPI", cpiLevelMapRow()]]);
+  // 313.53 -> 314.53 is +0.319%
+  const materialObservations = detectNewObservations(
+    [metric({ metricKey: "US_CPI", domain: "macro", currentValue: 314.53, observedDate: "2026-09-01", unit: "cpi_index_1982_84_100" })],
+    { US_CPI: { value: 313.53, observedDate: "2026-08-01", observedAt: null } },
+  );
+  assert.equal(evaluateMaterialChange(materialObservations, domainMap).isMaterial, true);
+
+  // 313.53 -> 313.90 is +0.118%
+  const nonMaterialObservations = detectNewObservations(
+    [metric({ metricKey: "US_CPI", domain: "macro", currentValue: 313.90, observedDate: "2026-09-01", unit: "cpi_index_1982_84_100" })],
+    { US_CPI: { value: 313.53, observedDate: "2026-08-01", observedAt: null } },
+  );
+  assert.equal(evaluateMaterialChange(nonMaterialObservations, domainMap).isMaterial, false);
+});
+
+test("macro: a stale-only macro domain correctly triggers the all-stale guard, same as every other domain", () => {
+  const staleCpiYoy = metric({
+    metricKey: "US_CPI_YOY",
+    domain: "macro",
+    observationStatus: "stale",
+  });
+  assert.equal(shouldSkipAiForStaleness([staleCpiYoy], evaluateEventMaterialChange([])), true);
+});
+
+test("macro: a fresh macro metric does NOT trigger the all-stale guard, even ~75 days after its observed_date (normal monthly gap, not staleness)", () => {
+  const freshCpiYoy = metric({
+    metricKey: "US_CPI_YOY",
+    domain: "macro",
+    observationStatus: "fresh",
+    observationAgeMinutes: 75 * 1440,
+  });
+  assert.equal(shouldSkipAiForStaleness([freshCpiYoy], evaluateEventMaterialChange([])), false);
+});
+
+test("macro: computeDataConfidence uses the exact same domain-agnostic rollup as every other domain -- full coverage + fresh fetch/observation is highest confidence", () => {
+  const full = computeDataConfidence("full", "fresh", "fresh");
+  const partial = computeDataConfidence("partial", "fresh", "delayed_expected");
+  const unavailable = computeDataConfidence("unavailable", "unknown", "unknown");
+  assert.ok(full > partial);
+  assert.ok(partial > unavailable);
+  assert.equal(unavailable, 0);
+});

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { upsertMarketMetric, writeMarketEvent } from "./mic_writer_logic.ts";
+import { readExistingMarketMetricValue, upsertMarketMetric, writeMarketEvent } from "./mic_writer_logic.ts";
 import type { FinalizedMarketEvent, NormalizedMarketMetric } from "./mic_normalize_logic.ts";
 import type { RestContext } from "./mic_writer_logic.ts";
 
@@ -108,5 +108,37 @@ test("upsertMarketMetric throws on a non-2xx status", async () => {
   await assert.rejects(
     () => upsertMarketMetric(ctx, sampleMetric(), fetchImpl as typeof fetch),
     /MARKET_METRIC_UPSERT_FAILED:400/,
+  );
+});
+
+// --- Macro Indicators Phase 1A: readExistingMarketMetricValue ---
+
+test("readExistingMarketMetricValue: returns null when no row exists yet (first-ever observation)", async () => {
+  const calls: string[] = [];
+  const fetchImpl = async (url: string | URL) => {
+    calls.push(String(url));
+    return new Response(JSON.stringify([]), { status: 200 });
+  };
+  const value = await readExistingMarketMetricValue(ctx, "US_CPI_YOY", "fred", "2026-08-01", fetchImpl as typeof fetch);
+  assert.equal(value, null);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0], /metric_key=eq\.US_CPI_YOY/);
+  assert.match(calls[0], /source_key=eq\.fred/);
+  assert.match(calls[0], /observed_date=eq\.2026-08-01/);
+  assert.match(calls[0], /select=value/);
+  assert.match(calls[0], /limit=1/);
+});
+
+test("readExistingMarketMetricValue: returns the existing value when a row is found", async () => {
+  const fetchImpl = async () => new Response(JSON.stringify([{ value: 3.1 }]), { status: 200 });
+  const value = await readExistingMarketMetricValue(ctx, "US_CPI_YOY", "fred", "2026-08-01", fetchImpl as typeof fetch);
+  assert.equal(value, 3.1);
+});
+
+test("readExistingMarketMetricValue: throws on a non-2xx status", async () => {
+  const fetchImpl = async () => new Response("server error", { status: 500 });
+  await assert.rejects(
+    () => readExistingMarketMetricValue(ctx, "US_CPI_YOY", "fred", "2026-08-01", fetchImpl as typeof fetch),
+    /MARKET_METRIC_READ_FAILED:500/,
   );
 });

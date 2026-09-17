@@ -33,6 +33,11 @@ import {
   fetchSecEdgarFilings,
   SEC_SOURCE_KEY,
 } from "./mic_sec_edgar_adapter.ts";
+import {
+  buildMacroReleaseEvent,
+  decideMacroReleaseEvent,
+  MACRO_RELEASE_METRIC_KEYS,
+} from "./mic_macro_release_logic.ts";
 import { finalizeMarketEvent, type MarketEventInput, type NormalizedMarketMetric } from "./mic_normalize_logic.ts";
 import {
   claimIngestionRun,
@@ -41,7 +46,13 @@ import {
   failIngestionRun,
   reconcileStaleIngestionRuns,
 } from "./mic_ingestion_run_logic.ts";
-import { restHeaders, safeErrorMessage, upsertMarketMetric, writeMarketEvent } from "./mic_writer_logic.ts";
+import {
+  readExistingMarketMetricValue,
+  restHeaders,
+  safeErrorMessage,
+  upsertMarketMetric,
+  writeMarketEvent,
+} from "./mic_writer_logic.ts";
 import type { RestContext } from "./mic_writer_logic.ts";
 
 const jsonHeaders = { "Content-Type": "application/json; charset=utf-8" };
@@ -139,6 +150,20 @@ type SourceRunResult = {
   fetchedCount?: number;
   newCount?: number;
   duplicateCount?: number;
+  // Macro Indicators Phase 1A: how many market_events rows
+  // (event_type='macro_release') this run actually wrote -- a SEPARATE
+  // counter from fetchedCount/newCount/duplicateCount (which describe the
+  // metrics themselves), since a metric can be "new" in market_metrics
+  // (newCount) while producing zero macro_release events (an unchanged
+  // re-fetch) or vice versa is never possible, but keeping the two counts
+  // distinct avoids conflating "how many metric rows were written" with
+  // "how many release/revision facts were detected". Undefined for every
+  // non-FRED / non-macro source, and stays 0 for FRED runs that fetch only
+  // non-macro FRED series (e.g. a manual invoke scoped to US2Y/US10Y only).
+  // Not persisted to mic_ingestion_runs (no such column exists there, and
+  // this phase does not ALTER that table) -- visible only in this
+  // response payload for observability.
+  macroReleaseEventCount?: number;
   error?: string;
 };
 
@@ -159,12 +184,49 @@ async function runSource(
     let fetchedCount = 0;
     let newCount = 0;
     let duplicateCount = 0;
+    let macroReleaseEventCount: number | undefined;
 
     if (result.kind === "metrics") {
       fetchedCount = result.metrics.length;
       for (const metric of result.metrics) {
+        // Macro Indicators Phase 1A: for exactly the 16 FRED macro
+        // metric_keys, read whatever value is currently stored for this
+        // (metric_key, source_key, observed_date) triple BEFORE it gets
+        // overwritten by the upsert below, so a market_events
+        // (macro_release) row can be written for a genuine new release or
+        // revision -- and, critically, NOT written for a plain re-fetch of
+        // an already-known value. Every other metric_key (US2Y/US10Y/
+        // equity_index/fx/commodities, and every MOF/EIA/Frankfurter
+        // metric) skips this entirely: zero extra reads, zero behavior
+        // change.
+        const isMacroRelease = MACRO_RELEASE_METRIC_KEYS.has(metric.metricKey);
+        const priorValue = isMacroRelease
+          ? await readExistingMarketMetricValue(ctx, metric.metricKey, metric.sourceKey, metric.observedDate)
+          : null;
+
         await upsertMarketMetric(ctx, metric);
         newCount += 1;
+
+        if (isMacroRelease) {
+          macroReleaseEventCount = macroReleaseEventCount ?? 0;
+          const decision = decideMacroReleaseEvent(priorValue, metric.value);
+          const releaseEvent = buildMacroReleaseEvent(decision, {
+            metricKey: metric.metricKey,
+            observedDate: metric.observedDate,
+            newValue: metric.value,
+            unit: metric.unit,
+            seriesId: typeof metric.metadata?.seriesId === "string" ? metric.metadata.seriesId : metric.metricKey,
+            fredUnits: typeof metric.metadata?.fredUnits === "string" ? metric.metadata.fredUnits : null,
+            underlyingSource: typeof metric.metadata?.underlyingSource === "string" ? metric.metadata.underlyingSource : null,
+            sourceUrl: metric.sourceUrl ?? "",
+            fetchedAt: metric.fetchedAt,
+          });
+          if (releaseEvent) {
+            const finalized = await finalizeMarketEvent(releaseEvent);
+            const written = await writeMarketEvent(ctx, finalized);
+            if (written.outcome === "inserted") macroReleaseEventCount += 1;
+          }
+        }
       }
     } else {
       fetchedCount = result.events.length;
@@ -177,7 +239,15 @@ async function runSource(
     }
 
     await completeIngestionRun(ctx, claim.runId, { fetchedCount, newCount, duplicateCount });
-    return { sourceKey, status: "completed", attemptNo: claim.attemptNo ?? undefined, fetchedCount, newCount, duplicateCount };
+    return {
+      sourceKey,
+      status: "completed",
+      attemptNo: claim.attemptNo ?? undefined,
+      fetchedCount,
+      newCount,
+      duplicateCount,
+      macroReleaseEventCount,
+    };
   } catch (error) {
     const reason = safeErrorMessage(error);
     await failIngestionRun(ctx, claim.runId, reason);
