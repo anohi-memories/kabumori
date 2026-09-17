@@ -14,40 +14,42 @@
 ### Codex slot 1
 - owner: codex
 - slot: codex-1
-- status: review_required
-- task_id: x-multibrand-phase3h-ai-lab-prelive-safeguards-20260913
+- status: ready
+- task_id: x-ai-lab-oauth-401-recovery-20260917
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: AI Labの280文字制限とfingerprint完了記録をローカル準備。Vault-backed live dispatch統合は安全審査で停止。本番変更0件、C1レビュー待ち。
+- note: OAuth再認可後、16:23 JSTの自然slotは成功したが17:34 JSTの次slotで401再発。次はcredential値を読まず、成功→401再発の認証ライフサイクルをread-only中心に調査する。source変更・再々認可・token mutationが必要なら実施前にC1へ戻す。
 
 ### Codex slot 2
 - owner: codex
 - slot: codex-2
-- status: ready
-- task_id: x-close-report-topix-source-correction-20260911
+- status: done
+- task_id: kabumori-news-url-removal-production-deploy-20260917
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
+- note: important-news-monitor v55へURL除去変更を本番反映済み。自然投稿のread-only観測のみ別件で残る。
 
 ### Claude slot 1
 - owner: claude
 - slot: claude-1
-- status: review_required
-- task_id: personalized-portfolio-morning-close-reports-phase1-20260911
+- status: ready
+- task_id: market-report-shared-platform-phase2-consumer-cutover-20260917
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
+- note: Phase1 shadow packetは本番稼働済み。Phase2はshared market_report_packetとX/app consumer候補を作る。production consumer switchはK1前に行わない。
 
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: review_required
+- status: done
 - task_id: morning-greeting-image-cost-gate-rollout-20260917
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: K2承認済み`afe5d87`をcherry-pick、途中origin/mainが進んだためrebaseし直し`e8bd8cc`としてmainへpush・read-back確認済み。テスト26/26 pass（前回Reportの「28」は誤記だったため訂正記録）。本番設定変更0件。ユーザーは管理画面でOFF、翌朝05:30 JSTの自然実行を確認予定。K2待ち。
+- note: K2 PASS・main反映済み。翌朝05:30 JSTの自然OFF確認は別read-only観測であり、このslotは空き。
 
 ## Control codes
 
