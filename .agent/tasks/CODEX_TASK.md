@@ -3,13 +3,38 @@
 - task_id: ai-lab-daily-content-plan-selection-fix-20260918
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Sol Medium/High
 - purpose: Phase 1 candidate `0a6f20c86603c5834876208e4c05ef711d036be4` は全体構成は良いが、daily planの選択ルールが承認仕様より狭く、active planに当該slot itemが無いだけで投稿をfail-closedしてしまう。C1でここをblockerとしたため、slot未指定item / daily theme fallbackを決定的に扱えるようfocused fixする。production migration/deployはまだ行わない。
 
-## C1 review — 2026-09-18
+## Final C1 review — 2026-09-18
+
+**PASS — focused blocker resolved.**
+
+確認済み:
+- focused candidate: `cdebdc861d9b6fb38645b640c3d48396ec72aee3`
+- `slot_no` はoptional/nullを許容。
+- 選択順は exact explicit slot item を最優先し、その後 slot未指定itemを `priority`, `id` のstable orderで未割当slotへ決定的に割り当てる。
+- DBにconsumed stateを書かず、同一plan/date/slotのretryは同じitemへ解決する。
+- active planに安全な題材が無いslotは停止せず、daily themeから新題材を捏造せず、hardened persona fallbackへ戻る。
+- fallbackは会社員AIラボの主題を「個人開発・副業・AIとの試行錯誤の日記」へ寄せ、一般AI便利Tips・教科書的ノウハウ・架空進捗/体験の追加を明示的に抑止。
+- planあり時の題材拘束、AI Lab-only wiring、JST target-date、active-only filteringは維持。
+- Kabumori/Mio、market-report、OAuth/Vault/refresh、X publish/dedupe/completion境界は変更なし。
+- focused 30/30、full `x-test-post` + `_shared/brand` regression 469/469 PASS。
+- helper `deno check --no-config`、`deno fmt --check`、`git diff --check` PASS。
+- production migration/deploy/configuration mutation 0。manual/synthetic X post、retry/backfill、OAuth action、Vault/token/secret変更 0。
+
+### C1 decision
+
+Phase 1 source candidate + focused selection fixは承認する。
+
+ただし、これは**production rollout承認ではない**。migration candidate `supabase/migrations/20260917143302_ai_lab_daily_content_plans_phase1.sql` は未適用、`x-test-post`も未deployのまま。production migration適用・writer path・deployは次タスクで個別に安全確認してから行う。
+
+このH1 taskは完了とし、次工程は「ちゃ/将来のアプリ内AIが翌日planを書き込むwriter path」とproduction rollout設計を別タスクで扱う。
+
+## Previous C1 review — 2026-09-18
 
 **NOT PASS — focused fix required before rollout.**
 
