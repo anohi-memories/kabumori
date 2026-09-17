@@ -69,6 +69,7 @@ import {
 import { assertBrandPublishAllowed } from "../_shared/brand/publish_guard.ts";
 import { loadBrandXTokens } from "../_shared/brand/token_loader.ts";
 import { loadAiLabVaultBackedXTokens } from "../_shared/brand/ai_lab_vault_token_source.ts";
+import { loadAiLabDailyContentPlan } from "../_shared/brand/ai_lab_daily_content_plan_source.ts";
 import {
   loadAiLabRecentDedupeFingerprints,
   recordAndCompleteAiLabBrandPost,
@@ -513,6 +514,7 @@ function kabumoriVoice(postType: KabumoriPostType, variationKey: string): string
 type ScheduledPost = {
   id: string;
   brand_id?: string | null;
+  schedule_date?: string | null;
   post_type: string;
   slot_no: number;
   scheduled_for: string;
@@ -3980,7 +3982,17 @@ Deno.serve(async (req) => {
           context: brandContext,
           postType: scheduledPost.post_type,
           scheduledPostId: scheduledPost.id,
+          scheduleDate: scheduledPost.schedule_date ?? undefined,
+          slotNo: scheduledPost.slot_no,
           openAiApiKey,
+          loadContentPlan: ({ scheduleDate, slotNo }) =>
+            loadAiLabDailyContentPlan({
+              supabaseUrl,
+              serviceRoleKey,
+              scheduledFor: scheduledPost.scheduled_for,
+              scheduleDate,
+              slotNo,
+            }),
           loadRecentFingerprints: () => loadAiLabRecentDedupeFingerprints({
             supabaseUrl,
             serviceRoleKey,

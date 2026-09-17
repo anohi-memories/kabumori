@@ -8,6 +8,7 @@
 // BrandContext it is given).
 import { assertBrandDryRunAllowed } from "./publish_guard.ts";
 import { type BrandContext, BrandContextError } from "./brand_context.ts";
+import type { DailyContentPlanItem } from "./daily_content_plan.ts";
 import {
   assertPostWithinLengthPolicy,
   postCharacterCount,
@@ -76,12 +77,14 @@ export async function generateBrandPost({
   context,
   postType,
   topicSeed,
+  contentPlan,
   fetchImpl = fetch,
 }: {
   openAiApiKey: string;
   context: BrandContext;
   postType: string;
   topicSeed?: string;
+  contentPlan?: DailyContentPlanItem;
   fetchImpl?: typeof fetch;
 }): Promise<BrandPostDraft> {
   // Generation is allowed for dry_run and live (same rule as buildBrandDryRunPreview) -- only a
@@ -91,6 +94,9 @@ export async function generateBrandPost({
   if (!context.codeProfile.dryRunPostTypes.includes(postType)) {
     throw new BrandContextError("BRAND_POST_TYPE_UNSUPPORTED");
   }
+  if (contentPlan && context.brand.id !== "ai_salaryman_lab") {
+    throw new BrandContextError("AI_LAB_CONTENT_PLAN_BRAND_MISMATCH");
+  }
 
   const hashtagInstruction =
     context.operationalSettings.fixed_hashtags.length > 0
@@ -99,15 +105,48 @@ export async function generateBrandPost({
       }`
       : "ハッシュタグは付けないでください。";
   const lengthPolicy = context.codeProfile.postLengthPolicy;
+  const contentPlanInstruction = contentPlan
+    ? [
+      "以下の編集計画を、この投稿の唯一のテーマと事実上の範囲として扱ってください。",
+      "計画にないテーマ、一般論、AI活用のコツ、成果、体験談、背景を追加しないでください。",
+      "計画の素材を自然な日本語の一つの投稿本文に編集するだけにしてください。",
+      `テーマ: ${contentPlan.topic}`,
+      `日全体のテーマ: ${contentPlan.dayTheme || "指定なし"}`,
+      `流れ: ${contentPlan.narrativeArc || "指定なし"}`,
+      `背景・文脈: ${contentPlan.context || "指定なし"}`,
+      `表現上のトーン指定（テーマを変更しない）: ${
+        contentPlan.toneOverride || "既存プロフィール"
+      }`,
+      `必ず触れる要点: ${contentPlan.keyPoints.join(" / ") || "指定なし"}`,
+      `必ず含める要素: ${contentPlan.mustInclude.join(" / ") || "指定なし"}`,
+      `避ける要素: ${contentPlan.mustAvoid.join(" / ") || "指定なし"}`,
+    ].join("\n")
+    : null;
   const instructions = [
     ...context.codeProfile.voiceInstructions,
     lengthPolicy
       ? "日本語で、自然な一つの投稿本文だけを書いてください。見出し・箇条書き記号・前置きは不要です。"
       : "日本語で、200〜400文字程度の自然な一つの投稿本文だけを書いてください。見出し・箇条書き記号・前置きは不要です。",
     ...(lengthPolicy ? [postLengthInstruction(lengthPolicy)] : []),
+    ...(contentPlanInstruction ? [contentPlanInstruction] : []),
     hashtagInstruction,
   ].join("\n");
   const topic = topicSeed?.trim() || DEFAULT_TOPIC_SEED;
+  const input = contentPlan
+    ? `今日の編集計画（計画外の内容を補わない）:\n${
+      JSON.stringify({
+        id: contentPlan.id,
+        day_theme: contentPlan.dayTheme,
+        narrative_arc: contentPlan.narrativeArc,
+        topic: contentPlan.topic,
+        context: contentPlan.context,
+        tone_override: contentPlan.toneOverride,
+        key_points: contentPlan.keyPoints,
+        must_include: contentPlan.mustInclude,
+        must_avoid: contentPlan.mustAvoid,
+      })
+    }`
+    : `今日のテーマ: ${topic}`;
 
   const response = await fetchImpl(OPENAI_RESPONSES_URL, {
     method: "POST",
@@ -121,7 +160,7 @@ export async function generateBrandPost({
       reasoning: { effort: "low" },
       max_output_tokens: 600,
       instructions,
-      input: `今日のテーマ: ${topic}`,
+      input,
     }),
   });
   if (!response.ok) {

@@ -181,6 +181,49 @@ test("confirmed X success plus uncertain completion fails closed without a retry
   });
 });
 
+test("scheduled dispatch loads the exact date/slot plan once and passes it to generation", async () => {
+  const calls: Array<{ scheduleDate: string; slotNo: number }> = [];
+  let receivedPlanId: string | undefined;
+  const result = await dispatchAiLabScheduledBrandPost(baseArgs({
+    scheduleDate: "2026-09-17",
+    slotNo: 2,
+    loadContentPlan: async (args) => {
+      calls.push(args);
+      return {
+        id: "slot-2",
+        slotNo: 2,
+        priority: 1,
+        dayTheme: "計画の日テーマ",
+        narrativeArc: "計画の流れ",
+        topic: "計画のテーマ",
+        context: "計画の背景",
+        toneOverride: "計画のトーン",
+        keyPoints: ["要点"],
+        mustInclude: ["必須"],
+        mustAvoid: ["禁止"],
+      };
+    },
+    generate: async ({ contentPlan }) => {
+      receivedPlanId = contentPlan?.id;
+      return draft("計画に沿った本文です。");
+    },
+  }));
+  assert.equal(result.xPostId, "x-post-fixture");
+  assert.deepEqual(calls, [{ scheduleDate: "2026-09-17", slotNo: 2 }]);
+  assert.equal(receivedPlanId, "slot-2");
+});
+
+test("without a plan loader, dispatch preserves the legacy persona fallback", async () => {
+  let receivedPlan: unknown = "sentinel";
+  await dispatchAiLabScheduledBrandPost(baseArgs({
+    generate: async ({ contentPlan }) => {
+      receivedPlan = contentPlan;
+      return draft("従来のフォールバック本文です。");
+    },
+  }));
+  assert.equal(receivedPlan, undefined);
+});
+
 test("exact cross-brand duplicate is blocked before X", async () => {
   const text = "日本語の短いテスト投稿です。";
   let published = 0;
@@ -264,6 +307,25 @@ test("normal and reserved-slot scheduled brand_post rows share the canonical AI 
     canonicalRoute.match(/dispatchAiLabScheduledBrandPost\(\{/gu)?.length,
     1,
     "every claimed AI Lab brand_post row must enter one canonical dispatcher regardless of slot",
+  );
+});
+
+test("x-test-post reads the optional daily plan only inside the AI Lab brand_post route", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../../x-test-post/index.ts", import.meta.url),
+  );
+  const routeStart = source.indexOf(
+    'if (scheduledPost.post_type === "brand_post")',
+  );
+  const nextConsumer = source.indexOf(
+    'if (scheduledPost.post_type === "morning_report")',
+    routeStart,
+  );
+  const route = source.slice(routeStart, nextConsumer);
+  assert.match(route, /loadAiLabDailyContentPlan/u);
+  assert.doesNotMatch(
+    source.slice(nextConsumer),
+    /loadAiLabDailyContentPlan[\s\S]*?morning_report/u,
   );
 });
 

@@ -226,6 +226,73 @@ test("AI Lab generation prompts for 280 code points and fails closed when the mo
   assert.match(capturedInstructions, /280文字以内/u);
 });
 
+test("an active content plan constrains AI Lab generation to its authored fields", async () => {
+  let capturedInstructions = "";
+  let capturedInput = "";
+  const draft = await generateBrandPost({
+    openAiApiKey: "fixture-only",
+    context: aiLabContext(),
+    postType: "brand_post",
+    contentPlan: {
+      id: "slot-1",
+      slotNo: 1,
+      priority: 1,
+      dayTheme: "小さく試す日",
+      narrativeArc: "試す→詰まりを残す",
+      topic: "帰宅後に小さく試す",
+      context: "会社員の平日夜",
+      toneOverride: "淡々とした実験メモ",
+      keyPoints: ["詰まりを記録"],
+      mustInclude: ["10分だけ試す"],
+      mustAvoid: ["万能な一般論"],
+    },
+    fetchImpl: async (_input, init) => {
+      const body = JSON.parse(String(init?.body));
+      capturedInstructions = body.instructions;
+      capturedInput = body.input;
+      return fixtureOpenAiResponse(
+        "帰宅後に10分だけ試し、詰まりを記録しました。",
+      )(
+        new Request("https://example.test"),
+      );
+    },
+  });
+  assert.match(draft.text, /10分/u);
+  assert.match(capturedInstructions, /唯一のテーマと事実上の範囲/u);
+  assert.match(capturedInstructions, /帰宅後に小さく試す/u);
+  assert.match(capturedInstructions, /万能な一般論/u);
+  assert.match(capturedInstructions, /淡々とした実験メモ/u);
+  assert.match(capturedInstructions, /小さく試す日/u);
+  assert.match(capturedInput, /slot-1/u);
+  assert.doesNotMatch(capturedInput, /AIツールを使った日々のちょっとした工夫/u);
+});
+
+test("content plans cannot be supplied to a non-AI-Lab context", async () => {
+  await assert.rejects(
+    () =>
+      generateBrandPost({
+        openAiApiKey: "fixture-only",
+        context: kabumoriContext(),
+        postType: "tip",
+        contentPlan: {
+          id: "slot-1",
+          slotNo: 1,
+          priority: 1,
+          dayTheme: "",
+          narrativeArc: "",
+          topic: "forbidden",
+          context: "",
+          toneOverride: "",
+          keyPoints: [],
+          mustInclude: [],
+          mustAvoid: [],
+        },
+        fetchImpl: fixtureOpenAiResponse("本文"),
+      }),
+    { message: "AI_LAB_CONTENT_PLAN_BRAND_MISMATCH" },
+  );
+});
+
 test("the generic unlimited mode is explicit and preserves generation for longer content", async () => {
   const context = aiLabContext();
   context.codeProfile = {
