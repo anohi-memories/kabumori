@@ -3,8 +3,8 @@
 - task_id: x-ai-lab-vault-token-refresh-production-deploy-20260917
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: C1でsource candidate・integration・read-only preflight・isolated runtime preflightまでPASSしたAI Lab専用Vault-backed refresh実装を、exact candidateから`x-test-post`のみに安全に本番反映し、runtime一致と自然slot結果を確認する。
@@ -122,3 +122,10 @@ Approved candidate:
 - origin/main read-backしてSTOP、C1待ち
 
 **この承認はAI Lab refresh candidateの`x-test-post` production deployだけに限定する。**
+
+## Deployment completion — 2026-09-17
+
+- Exact approved candidate `a7ffba4930a9eff3885ab29254f9858b80e71170` was deployed to `x-test-post` only with `verify_jwt=false` preserved.
+- Post-deploy read-back: ACTIVE v113, source hash `f15bc31519a31181bb739504f9a24be895e7f5a95f01725bca15349db38349c4`; other Functions were unchanged.
+- Focused 30/30 and full 474/474 regression suites passed. No manual post, retry/backfill, refresh request, OAuth action, or token/Vault mutation was performed.
+- No post-deploy natural AI Lab row was available at read time; the next result must come from the existing Cron path. See `.agent/CODEX_REPORT.md`.

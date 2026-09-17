@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-17 JST (H1 runtime preflight review_required; H2 social mobile app Phase2 ready)
+- checked_at: 2026-09-17 JST (H1 production deploy review_required; H2 social mobile app Phase2 ready)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,13 +14,14 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `x-ai-lab-vault-token-refresh-runtime-preflight-20260917`
+- Codex slot 1: `review_required` — `x-ai-lab-vault-token-refresh-production-deploy-20260917`
   - refresh helper candidate `f22e2ca` + focused fail-closed fix `09a199a` はC1 PASS。
   - 2xxのみsuccess、401のみrefresh 1回、401以外non-2xxは即fail、uncertainはno-refresh/no-resend。
   - focused 13/13、x-test-post + `_shared/brand` regression 469/469。
   - candidate `a7ffba4` は実Vault writer/persistence adapter、rotation concurrency guard、completion/idempotency外周維持を実装・検証済み。
   - 本番secret名、`vault.update_secret` のservice_role限定権限、現行OAuth Basic+refresh方式に加え、隔離probeでEdge runtimeのdirect `SUPABASE_DB_URL`接続成功、effective role=`postgres`、Vault writer EXECUTE=`true`をread-only確認済み。probeは検証後削除。
-  - production `x-test-post` candidate deploy/token mutation/OAuth再認可は未実施。候補deployはC1の別承認待ち。
+  - exact candidate `a7ffba4` を`x-test-post`のみへdeploy済み（ACTIVE v113、`verify_jwt=false`）。他Function・DB・Vault・OAuth・Cron変更なし。
+  - deploy直後に利用可能な自然AI Lab slotはなく、既存Cron経路での次回自然観測待ち。手動投稿・retry/backfill・manual refresh・OAuth再認可は未実施。
 
 - Codex slot 2: `ready` — `social-mobile-app-phase2-auth-data-20260917`
   - Phase1 shellはC2 PASS・main反映済み。
@@ -48,7 +49,7 @@
 ## Known issues
 
 - AI Lab通常`brand_post`はOAuth再認可後1回成功後、次slotで401再発。恒久復旧は未成立。
-- refresh helperとintegration candidateはC1レビュー待ち。runtime preflightでdirect Edge DB接続ゲートは解消。production `x-test-post` candidate deploy/token mutation/OAuth再認可は未実施。
+- refresh helperとintegration candidateはC1レビュー待ち。runtime preflight後、承認済みcandidateを`x-test-post`のみへv113 deploy済み。自然slot観測とC1確認待ち。token mutation/OAuth再認可は未実施。
 - social mobile appはPhase1 shell完了。Phase2でAuth/session、active account、Supabase adapter、既存schema mappingへ進む。production schema/RLS不足があれば適用せずC2へ返す。
 - multibrand migrations `20260910170000/180000/190000` objectsはproductionに存在するがmigration history不整合の可能性があるためblind `supabase db push`禁止。
 - 2026-09-09 morning_greeting legacy Storage receipt HTTP400は別件。

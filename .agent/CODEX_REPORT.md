@@ -1,5 +1,36 @@
 # Codex Report
 
+## Latest H1 result — AI Lab Vault refresh production deploy (2026-09-17)
+
+- task_id: `x-ai-lab-vault-token-refresh-production-deploy-20260917`
+- result: `review_required` — the exact C1-approved candidate was deployed to **`x-test-post` only**. No other Function, DB/schema/RPC/grant, secret, OAuth, Cron, posting setting, or manual X action was changed.
+- deploy source: approved candidate commit `a7ffba4930a9eff3885ab29254f9858b80e71170` from `codex/x-ai-lab-vault-token-refresh-integration-candidate-20260917`.
+
+### Deployment read-back
+
+- Pre-deploy `x-test-post`: ACTIVE v112, `verify_jwt=false`, hash `ba0e7c78bd8cec62b4c8c2fe50bd1de80c7f3ecbaa1a1206c4e668f70012ab60`.
+- Post-deploy `x-test-post`: ACTIVE **v113**, `verify_jwt=false`, hash `f15bc31519a31181bb739504f9a24be895e7f5a95f01725bca15349db38349c4`.
+- Runtime source read-back reported 43 files and contained the approved AI Lab markers: `publishAiLabWithRefresh`, `ai_lab_vault_token_persistence`, fixed `ai_salaryman_lab` / `ai_salaryman_lab_x` refs, `expectedRefreshToken`, and `AI_LAB_TOKEN_PERSIST_FAILED`. No candidate secret/token/Vault value was returned or recorded.
+- All other Function versions, hashes, and timestamps matched the pre-deploy inventory (including `x-oauth-connect` v20); only `x-test-post` changed.
+
+### Verification
+
+- Focused AI Lab suites: **30 passed / 0 failed**.
+- Full `x-test-post` + `_shared/brand` regression: **474 passed / 0 failed**.
+- Candidate helper modules type-check. The remaining `x_oauth2_post.ts` AES-GCM `BufferSource` diagnostic is the existing baseline diagnostic; no candidate-specific type error was introduced.
+- `deno fmt --check` passed for the 7 candidate helper/source files and `git diff --check` passed. `x-test-post/index.ts` remains not formatter-clean in both latest main and candidate (pre-existing formatting drift); it was not reformatted to avoid unrelated source changes.
+
+### Natural-slot observation
+
+- The latest AI Lab slot visible immediately after deploy was slot 10, scheduled `2026-09-17 13:22:09+00` and completed before deploy at `13:23:04+00` with the prior runtime's `X_REQUEST_FAILED:401`, `attempt_count=1`, no X post id, and no retry.
+- At post-deploy read time there was no future AI Lab `brand_post` row available. No manual invocation, retry, backfill, synthetic post, manual refresh, or OAuth reauthorization was performed. Therefore a post-deploy natural success/refresh outcome is still pending and must be observed through the existing Cron path.
+- No rollback was performed. If a confirmed runtime regression occurs, rollback is limited to `x-test-post` using the pre-deploy v112/hash above; no token/Vault rollback is authorized.
+
+### Safety boundary
+
+- DB write: 0; Vault write: 0; manual refresh: 0; OAuth action: 0; X post initiated by this task: 0; secret/token/Vault value output: 0. The deployed runtime may refresh only as part of the approved natural AI Lab path.
+
+
 ## Latest H1 result — AI Lab Vault refresh runtime preflight (2026-09-17)
 
 - task_id: `x-ai-lab-vault-token-refresh-runtime-preflight-20260917`
