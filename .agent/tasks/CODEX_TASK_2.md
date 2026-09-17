@@ -1,111 +1,194 @@
 # Codex Task 2
 
-- task_id: kabumori-news-url-removal-production-deploy-20260917
+- task_id: social-mobile-app-phase1-shell-20260917
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: chatgpt
-- priority: urgent
-- recommended_model: Sol Medium
-- purpose: C2 PASS済みの「かぶモリ通常ニュースX本文から外部URLを除去する」変更を、`important-news-monitor` のみに安全に本番反映し、runtime source一致と影響範囲を確認する。
+- status: ready
+- next_owner: codex
+- priority: high
+- recommended_model: Sol High
+- purpose: マルチアカウントSNS自動運用の一般ユーザー向けモバイルアプリ制作を開始する。既存のかぶモリ株アプリとは分離し、まずExpo/React Nativeの独立アプリ土台・主要画面・ナビゲーション・型/データ境界を実装して、次フェーズでSupabase認証/実データへ接続できる状態にする。
 
-## C2 review — 2026-09-17
+## Product direction
 
-PASS.
+このアプリの中心価値は「AI運用担当者がアプリの中にいる」こと。
 
-承認対象:
-- implementation commit: `bd97a56c8f4f9321070bcdef7970062090308a49`
-- metadata/report commit: `8757416`
-- merge/read-back commit: `940cea6518e3b816f3c4f4b9be0e9457eeb203f8`
+ユーザーは巨大な設定フォームを直接編集するのではなく、AIとの対話で運用方針を決め、構造化された提案を確認して適用する。将来的にX / Instagram / Threadsなど複数SNS、複数アカウントへ展開する。
 
-確認済み:
-- 変更対象は `supabase/functions/important-news-monitor/publish_logic.ts` とそのtestのみ。
-- `stripExternalUrlsFromNewsPost()` は important-news のX publisher直前だけで適用される。
-- `http://` / `https://` と末尾の `出典: <URL>` をX送信本文から除去する。
-- candidate側 `generated_text`、`sourceUrl`、Fact/Voice、dedupe/fingerprint、claim/publish stateは変更しない。
-- AI Lab / Mio / `x-test-post` / 朝刊 / 大引け / tips / media / Admin / DB schema / Cronは変更しない。
-- focused 19/19、important-news全体 407/407、`deno check --no-config`、`git diff --check` PASS。
-- C2時点でproduction deploy 0、DB/Cron/settings変更0、OpenAI/X/API/Push手動実行0、X投稿0。
+Phase 1ではバックエンド全面実装より先に、実際に触れるアプリ本体の骨格を作る。
 
-## Mandatory fresh checks
+## Mandatory startup / safety
 
 開始前に:
 1. `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, this TASK, `.agent/CODEX_REPORT_2.md` を読む。
-2. fresh `origin/main` を確認し、上記approved implementationが最新mainに含まれることを確認する。
-3. H1/G1/G2の現行TASKを確認し、`important-news-monitor` を同時変更/deployするworkstreamがあればSTOP。
-4. production `important-news-monitor` の現在version/status/verify_jwt/updated_atを記録する。
-5. deploy sourceに未レビューの `important-news-monitor` runtime差分が混入していないことを確認する。混入があればSTOPしてC2へ戻す。
+2. fresh `origin/main` を確認。
+3. H1/G1/G2の現行TASKを確認し、変更対象が重なる場合はSTOP。
+4. 既存のroot Expoアプリ（かぶモリ株アプリ）と`apps/admin`を調査し、既存アプリを壊さない分離方針を決める。
+5. 既存未コミット変更は他workstream所有として触らない。
 
-## Authorized production action
+## Isolation rule
 
-許可するのは以下のみ:
-- clean checkout/worktreeのfresh `origin/main` をdeploy sourceとして使用
-- `important-news-monitor` Edge Functionのみdeploy
-- 現行 `verify_jwt` 設定を事前確認し、その設定を維持
-- deploy後にversion/status/verify_jwt/updated_atをread-back
-- production function sourceをdownload/read-backし、deploy sourceのruntime filesと一致確認
-- 他Edge Functionのversion/updated_atが意図せず変化していないことを確認
+- 新しい一般ユーザー向けSNS運用アプリは、既存root Expo株アプリとは**別アプリ**として作る。
+- 原則として `apps/social-mobile/` に独立したExpoアプリを置く。
+- 最終プロダクト名はまだ固定しない。内部名は `social-mobile` でよい。
+- 既存root `src/app`, `src/components`, 株アプリ設定/画面を置換・移動しない。
+- `supabase/functions`, DB migration/RPC/RLS, production settingsはこのPhaseでは変更しない。
 
-## Prohibited
+既存repo構造により `apps/social-mobile/` が不適切と判断した場合は、実装前に理由と代替配置をReportへ明記し、既存株アプリとの完全分離を維持する。
 
-- 新しいsource修正（deploy blockerがあれば修正せずSTOP）
-- `x-test-post` / OAuth / Vault / AI Lab / Mio変更
-- DB/schema/migration/RPC/RLS変更
-- Cron / posting_windows / settings変更
-- `supabase db push`
-- migration history repair/reconcile
-- manual/synthetic important-news生成
-- manual OpenAI/X/Push/API invocation
-- manual X投稿
-- source URL metadata削除
-- 他Edge Function deploy
-- secret/token表示
+## Phase 1 scope
 
-自然Cronによる通常処理は止めない。
+### 1. Expo app foundation
 
-## Verification
+独立したExpo/React Nativeアプリを作る。
 
 最低限:
-- deploy前 fresh `origin/main`
-- approved URL-removal sourceがdeploy sourceに存在
-- `important-news-monitor` deploy success
-- post-deploy ACTIVE/status/JWT設定確認
-- runtime source read-back一致
-- 他Function無変更確認
-- production DB/Cron/settings変更0
-- manual OpenAI/X/Push/API/X投稿0
+- TypeScript
+- Expo Router
+- iOS / Android / Webで成立する構成
+- SafeArea対応
+- light/darkを壊さない基本theme
+- 共通spacing / typography / radius等のdesign tokens
+- loading / empty / errorの共通UI部品
+- 開発用READMEまたは起動手順
 
-本番動作確認は次の自然な重要ニュース投稿で行う。人工的に投稿を発生させない。
+既存repoのExpo 57 / React Native 0.86系との整合を優先する。
+
+### 2. Main navigation
+
+Phase 1で以下の主要導線を実装する。
+
+主タブ:
+- ホーム
+- 投稿予定
+- AI運用相談
+- 投稿履歴
+- 設定
+
+ホーム等から遷移:
+- アカウント一覧/詳細
+- 素材BOX
+
+モバイルで自然なbottom-tab + stack構成を基本にする。
+
+### 3. Screens
+
+最低限、以下を「空白画面ではなく実UI」として作る。
+
+#### Home
+- 選択中アカウント
+- 今日の投稿予定数
+- 次回投稿時刻
+- 要確認/失敗件数
+- AI運用担当者からの短い提案カード
+- 他アカウントへの切替導線
+
+#### Accounts
+- 複数SNSアカウント一覧
+- platform / handle / connection status / posting state
+- active account切替
+- 将来の追加接続ボタン（Phase1では実OAuthしない）
+
+#### 投稿予定
+- 日単位timeline/listを主UIにする
+- date jump導線
+- AI生成 / user-authored / fixed/manual のorigin表示
+- draft / scheduled / publishing / published / failed 等のstatus表示
+- 投稿詳細へ遷移
+- Phase1では表示・編集UIの骨格まで。実投稿はしない
+
+#### AI運用相談
+- chat形式UI
+- AI message / user message
+- AIが「運用設定変更案」を提案するカードUI
+- `変更内容を見る` → structured diff/proposal → `適用する` / `キャンセル`
+- Phase1ではローカルmock interactionでよいが、chat text自体をcanonical設定にしない設計にする
+
+#### 投稿履歴
+- published / failed filter
+- platform / account / time / result
+- 本文preview
+- error rowの視認性
+
+#### 素材BOX
+- image/video placeholder grid/list
+- upload CTAのUIのみ
+- 実Storage uploadは次Phase
+
+#### 設定
+- account運用方針への導線
+- 投稿頻度/承認モード/通知などのsetting sections
+- plan/usage表示領域のplaceholder
+
+### 4. Data / type boundary
+
+Phase1から将来の実データ接続を見据えて、画面内へ直接巨大mock objectを埋め込まない。
+
+最低限のdomain typesを定義:
+- Workspace / Account / SocialPlatform
+- AccountProfile / VoiceSettings
+- PlannedPost / PostOrigin / PostStatus
+- ConsultationMessage / SettingsProposal
+- MediaAsset
+- UsageSummary / PlanTier
+
+repository/service interfaceを切り、Phase1はmock/local adapterを使用してよい。
+次PhaseでSupabase adapterへ差し替え可能にする。
+
+### 5. Important product rules to encode in UI/types
+
+- AI相談の会話文そのものを設定正本にしない。
+- AIはstructured proposalを作り、ユーザー確認後に適用する前提。
+- user-edited / fixed / manual postを自動再生成で上書きしない前提をorigin/typeで表現する。
+- approval requiredは任意。標準は「生成後、未操作なら予定時刻に自動投稿」の思想。
+- Free/Standard/Proのplan概念を型だけ持たせる。課金処理はまだしない。
+- URL/link-post quota、通常post quota、AI処理usageを将来別カウントできる形を意識する。
+
+## Explicitly out of scope
+
+Phase 1ではやらない:
+- production Supabase schema/migration/RPC/RLS変更
+- production OAuth/X token/Vault変更
+- H1の`x-test-post` / OAuth / refresh領域
+- G1のmarket report packet / personalized report領域
+- 実X/Instagram/Threads投稿
+- 実SNS OAuth接続
+- App Store / Play Store配布
+- 課金/Stripe/App Store IAP
+- push通知本実装
+- Storage upload本実装
+- AI API本接続
+- 既存かぶモリ株アプリのUI刷新
+
+## Quality / verification
+
+最低限:
+- TypeScript typecheck相当
+- lint
+- Expo Router route解決確認
+- iOS simulatorまたはExpo Webの少なくとも1系統で起動確認
+- main tabsの遷移確認
+- Accounts/素材BOXへのstack遷移確認
+- empty/error/loading stateの最低限確認
+- `git diff --check`
+
+可能なら主要domain/serviceに軽いunit testを追加する。
+
+## Deliverables
+
+- 独立したSNS運用モバイルアプリのPhase1実装
+- 主要5タブ + Accounts + 素材BOX
+- domain types / mock repository/service boundary
+- 起動手順
+- screenshot不要。動作確認結果をReportへ記録
 
 ## Completion
 
 完了時:
-- `.agent/CODEX_REPORT_2.md` 先頭にdeploy reportを追加
-- deploy前後version、deploy source commit、runtime read-back一致、他Function無変更、安全確認、自然投稿観測待ちを記録
-- `.agent/tasks/CODEX_TASK_2.md` を `status: review_required`, `next_owner: chatgpt` に更新
-- push前に再度fresh `origin/main`確認
-- `.agent/` control/report metadataのみ安全にpush
+- `.agent/CODEX_REPORT_2.md` 先頭にPhase1 reportを追加
+- exact commit / changed files / app path / navigation map / implemented screens / data boundary / tests / known gaps / next recommended Phase2を記載
+- this TASKを `status: review_required`, `next_owner: chatgpt` に更新
+- fresh `origin/main` を再確認してからpush
 - origin/main read-back後STOPしてC2待ち
 
-## Deploy report — 2026-09-17
-
-- result: `important-news-monitor` only deployed successfully from clean latest `origin/main`; C2 review required
-- deploy_source: `origin/main` `e8db510458351d919c13eb2ee7e58944ac8aee2f`, containing approved URL-removal implementation `bd97a56c8f4f9321070bcdef7970062090308a49`; no runtime diff after the implementation commit
-- pre_deploy: v54 ACTIVE, `verify_jwt=false`
-- post_deploy: v55 ACTIVE, `verify_jwt=false`, updated_at advanced
-- runtime_readback: downloaded source matched deploy source byte-for-byte for all 23 runtime TypeScript files (21 important-news-monitor files plus 2 `_shared` dependencies)
-- other_functions: stocks-master-sync v16, stocks-new-listing-sync v15, send-push-notifications v15, x-oauth-connect v18, personalized-reports v13, market-intelligence-ingest v11, market-intelligence-state-evaluator v7, and brand-post-dry-run v5 retained their pre-deploy versions/updated_at. `x-test-post` advanced separately from v109 to v110 during the deploy window under the concurrent H1 workstream; this H2 deploy did not target or modify it.
-- safety: no DB/schema/RPC/migration/RLS/Cron/settings/secrets/OAuth changes; no manual OpenAI/X/Push/API invocation or X post; no source URL metadata deletion; no other Function deploy
-- next_step: observe the next natural important-news post only; no manual candidate or publish. Keep `status: review_required` / `next_owner: chatgpt`.
-
-## Final C2 review — 2026-09-17
-
-PASS.
-
-- `important-news-monitor` v54 → v55 ACTIVE、`verify_jwt=false`維持を確認。
-- deploy source `e8db510458351d919c13eb2ee7e58944ac8aee2f` は承認済みURL除去実装 `bd97a56c8f4f9321070bcdef7970062090308a49` を含み、以後の未レビューruntime差分なし。
-- production runtimeはdeploy sourceと23/23 TypeScript filesでbyte一致。
-- 他Functionは不変。`x-test-post` v109→v110は同時進行中のCodex slot 1 hotfix workstreamに帰属し、本H2のdeploy対象外であることをTASK/Reportで確認。
-- DB/schema/RPC/migration/RLS/Cron/settings/OAuth/secrets変更なし。
-- 手動OpenAI/X/Push/API/X投稿なし。source URL metadata削除なし。
-- 本タスクは完了。残るのは次の自然な重要ニュース投稿でURLなし本文を観測するread-only確認のみ。
+このPhaseではproduction backend/OAuth/X自動投稿には触らない。
