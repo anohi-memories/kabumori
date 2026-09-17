@@ -3,8 +3,8 @@
 - task_id: morning-greeting-image-disable-cost-gate-20260916
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet
 - purpose: 管理画面で「朝の挨拶」をOFFにしたとき、投稿予定だけでなく毎朝05:30 JSTのOpenAI画像生成も止め、不要なAPI費を発生させない。ON時の既存生成・投稿経路は維持する。
@@ -147,3 +147,21 @@ Report:
 - production changes (expected 0 before K2)
 - remaining issues
 - next rollout recommendation
+
+## Report
+
+- exact gating logic: 新規`checkMorningGreetingEnabled()`（`scripts/morning-greeting-image.ts`）が、OpenAI呼び出し前に`posting_windows`を`select=is_active&brand_id=eq.kabumori&post_type=eq.morning_greeting`でread-only参照する。行が1件かつ`is_active=true`→既存の生成処理をそのまま実行。1件かつ`is_active=false`→OpenAI/Storageへ一切アクセスせず`exit 0`の正常スキップ（ログ: `morning greeting disabled; image generation skipped`）。行が0件・複数行で値が不一致・非2xx・ネットワーク失敗・JSON不正のいずれか→enablementを「不明」として扱い、生成を行わず`exit 1`で可視化された失敗にする（安全側のデフォルトを発明しない）。この判定と既存の`runMorningGreetingImageWorkflow()`を合成した`runMorningGreetingImageJob()`を新設し、`main()`はこの1関数だけを呼ぶ構成にした（`workflow_dispatch`の`target_date`を指定してもgateは迂回できない）。
+- changed_files:
+  - `scripts/morning-greeting-image.ts`（`checkMorningGreetingEnabled`, `MorningGreetingEnablementCheckError`, `runMorningGreetingImageJob`を追加。既存`runMorningGreetingImageWorkflow`は無変更。`main()`のみ新しいjob関数を呼ぶよう更新）
+  - `scripts/morning-greeting-image.test.ts`（新規15テスト追加。既存13テストは無変更のまま全て通過）
+  - `.github/workflows/morning-greeting-image.yml`は変更なし（既に`SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`をenvで渡していたため、スクリプト側の変更だけで完結）
+- OFF-path OpenAI call count proof = 0: `runMorningGreetingImageJob`の直接呼び出しテストで、`posting_windows`が`is_active=false`を返した場合、それ以外のURLへのfetchが1件でも来たら即座に例外を投げてテスト失敗させる構成にして検証。スケジュール実行相当（`date`未指定）と`workflow_dispatch`の`target_date`指定相当の両方で実行し、いずれもネットワーク呼び出し件数0を確認。
+- ON-path regression result: 既存の生成経路（`runMorningGreetingImageWorkflow`）は一切変更しておらず、既存13テスト（正常生成、同日画像スキップ、canonical取得失敗、OpenAI失敗時の非リトライ、日付境界処理、workflow yml内容確認等）は全て無変更のまま通過。加えて`runMorningGreetingImageJob`経由でも同じON挙動（enablement読み取り1回→通常の生成1回）になることを新規テストで確認。
+- tests: `node --experimental-strip-types --test scripts/morning-greeting-image.test.ts`で28/28 pass（既存13 + 新規15、うち1件はmain()が新job関数のみを呼び生の`runMorningGreetingImageWorkflow`を直接呼ばないことを確認するsource-inspectionテスト）。`git diff --check`で空白エラーなし。必須エッジケース（有効1件/無効1件/行なし/非2xx/ネットワーク失敗/不正レスポンス/無関係ブランド行/無関係post_type行/複数行一致/複数行不一致）を全てカバー。外部OpenAI/Supabase呼び出しは全テストでfetchImplによりモック済みで、課金対象の実生成は一切発生していない。
+- commit/push: `morning-greeting-image-cost-gate-20260916`ブランチへコミット`afe5d87`をpush済み（mainへは未マージ、K2レビュー待ち）。PRは未作成（`.agent/`側の運用に合わせ、ブランチpushのみで報告）。
+- production changes: 0件。管理画面・migration・RPC・Cron・workflow YAML・admin toggle動作のいずれも変更していない。手動でのworkflow_dispatch実行、実OpenAI呼び出し、`posting_windows`本番値の変更、admin設定の代理変更も一切行っていない。
+- remaining issues:
+  1. 今回のenablementクエリは`brand_id=kabumori`固定。将来AI Lab等の別ブランドが独自の朝の挨拶を持つ場合は、このスクリプト自体を呼び出し元でブランドごとに分ける設計が別途必要（本タスクのスコープ外、admin toggle側もpost_type単位でしか区別していない既存の制約と同じ）。
+  2. `apps/admin/src/lib/actions/system-toggle.ts`の`setPostingWindowFlag`は`post_type`のみでフィルタし`brand_id`を見ていない（現状は行が1件のみのため実害なし）。これは既存実装であり本タスクでは変更していない。将来的な整理対象として記録のみ。
+  3. GitHub Actionsでの実ワークフロー動作確認（実際のcron発火・実Supabase接続）はK2承認後、mainマージ後の初回実行で確認することを推奨。
+- next rollout recommendation: レビュー後は`morning-greeting-image-cost-gate-20260916`ブランチをmainへマージし、次回05:30 JSTの定時実行（またはmanual workflow_dispatch検証）で実際に`posting_windows`の現在値（`is_active=true`）に対して従来通り生成されることを一度確認する。その後、実際にAdminで朝の挨拶をOFFにした状態でのworkflow実行ログ（`morning greeting disabled; image generation skipped`）を確認できれば、コスト削減効果が本番で実証されたことになる。
