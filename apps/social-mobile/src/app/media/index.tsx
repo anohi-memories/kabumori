@@ -1,0 +1,5 @@
+import { ScrollView, Text, View } from 'react-native';
+import { mockRepository } from '@/data/mock-repository';
+import { colors } from '@/constants/theme';
+import { ActionButton, Card, Screen, SectionTitle, styles } from '@/components/ui';
+export default function MediaScreen() { const assets = mockRepository.getMediaAssets(); return <Screen><ScrollView contentContainerStyle={{ gap: 16 }}><SectionTitle detail="画像・動画をまとめて管理">素材BOX</SectionTitle><ActionButton label="素材を追加（次フェーズ）" onPress={() => {}} /><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>{assets.map((asset) => <Card key={asset.id} style={{ width: '47%', minHeight: 120, justifyContent: 'space-between' }}><View style={{ backgroundColor: colors.primarySoft, borderRadius: 12, height: 54, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: colors.primary, fontSize: 22 }}>{asset.kind === 'image' ? '▧' : '▶'}</Text></View><Text style={{ color: colors.ink, fontWeight: '700' }}>{asset.name}</Text><Text style={styles.muted}>{asset.sizeLabel}</Text></Card>)}</View></ScrollView></Screen>; }

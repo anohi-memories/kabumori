@@ -1,5 +1,22 @@
 # Codex Slot 2 Report
 
+## H2 — Social mobile app Phase 1 shell (2026-09-17)
+
+- task_id: `social-mobile-app-phase1-shell-20260917`
+- result: Phase 1の独立Expo/React Nativeアプリを`apps/social-mobile`に作成。既存root Expo株アプリ、`apps/admin`、Supabase Functions、DB、OAuth、SNS APIとは分離したまま、C2レビュー待ち。
+- changed_files: `apps/social-mobile/**`（独立package/app config、Expo Router routes、共通UI、design tokens、domain types、repository interface、mock repository、README）
+- app_path: `apps/social-mobile`
+- navigation: bottom tabs（ホーム / 投稿予定 / AI相談 / 履歴 / 設定）、stack（アカウント一覧・詳細、素材BOX、投稿詳細）
+- implemented: Home summary/AI suggestion, account list/detail, planned-post timeline, local consultation proposal apply/cancel mock, published/failed history, media placeholder grid, settings/plan usage placeholder, loading/empty/error UI primitives.
+- data_boundary: `SocialOperationsRepository` interface + local mock adapter。`Workspace`/`SocialAccount`/`PlannedPost`/`ConsultationMessage`/`SettingsProposal`/`MediaAsset`/`UsageSummary`等を定義し、会話文を設定正本にしない structured proposal を表現。
+- tests: `npm run typecheck` PASS; `npm run lint` PASS (0 errors/warnings); `npx expo export --platform web --output-dir /private/tmp/social-mobile-dist` PASS (Metro Web bundle and route resolution); `git diff --check` PASS. `npx expo start --web --port 8089` was attempted but HTTP listener was not reachable under this sandbox's networking restriction; no app/API side effect occurred.
+- production: Supabase/DB/migration/RPC/RLS/Cron/settings/OAuth/SNS API/Storage/OpenAI/X changes 0; no deploy, no manual production invoke, no post.
+- known_gaps: Supabase Auth/data adapter, real OAuth, Storage upload, AI API, push notifications, billing, and app-store packaging are Phase 2+; simulator/device visual QA remains for the user/developer environment.
+- commit: `986c67e889d8658ad104040f65a00adefd04ece7` (`Add social mobile Phase 1 shell`).
+- push: pending until final fresh origin check.
+- safety_checks: existing root Expo files, `apps/admin/**`, `supabase/**`, `HANDOFF.md`, and other slot files were not modified.
+- next_recommendation: C2 review the isolated app shell and decide Phase 2 backend/auth contracts before wiring production data.
+
 ## H2 — Kabumori news URL removal production deploy (2026-09-17)
 
 - task_id: `kabumori-news-url-removal-production-deploy-20260917`

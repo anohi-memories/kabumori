@@ -1,0 +1,6 @@
+import { Link } from 'expo-router';
+import { ScrollView, Text, View } from 'react-native';
+import { mockRepository } from '@/data/mock-repository';
+import { colors } from '@/constants/theme';
+import { ActionButton, Card, Pill, Screen, SectionTitle, styles } from '@/components/ui';
+export default function AccountsScreen() { const accounts = mockRepository.getAccounts(); return <Screen><ScrollView contentContainerStyle={{ gap: 16 }}><SectionTitle detail="複数SNSをひとつの運用画面で管理">アカウント一覧</SectionTitle>{accounts.map((account) => <Link key={account.id} href={{ pathname: '/accounts/[id]', params: { id: account.id } }} asChild><Card><View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}><View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: account.profile.avatarColor }} /><View style={{ flex: 1 }}><Text style={{ color: colors.ink, fontWeight: '800' }}>{account.profile.displayName}</Text><Text style={styles.muted}>{account.profile.handle} ・ {account.platform.toUpperCase()}</Text></View><Pill tone={account.connectionStatus === 'connected' ? 'success' : 'warning'}>{account.connectionStatus === 'connected' ? '接続済み' : '要確認'}</Pill></View><Text style={styles.muted}>投稿状態: {account.postingState === 'active' ? '稼働中' : '停止中'}</Text></Card></Link>)}<ActionButton label="新しいSNSを接続（次フェーズ）" onPress={() => {}} /></ScrollView></Screen>; }

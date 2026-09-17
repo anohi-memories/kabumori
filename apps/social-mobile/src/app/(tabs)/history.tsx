@@ -1,0 +1,8 @@
+import { Link } from 'expo-router';
+import { ScrollView, Text, View } from 'react-native';
+import { mockRepository } from '@/data/mock-repository';
+import { colors } from '@/constants/theme';
+import { Card, EmptyState, Pill, Screen, SectionTitle, styles } from '@/components/ui';
+import type { PostStatus } from '@/domain/types';
+const statusLabels: Record<PostStatus, { label: string; tone: 'neutral' | 'success' | 'warning' | 'danger' }> = { draft: { label: '下書き', tone: 'neutral' }, scheduled: { label: '投稿待ち', tone: 'warning' }, publishing: { label: '投稿中', tone: 'warning' }, published: { label: '投稿成功', tone: 'success' }, failed: { label: '失敗', tone: 'danger' } };
+export default function HistoryScreen() { const posts = mockRepository.getHistory(); return <Screen><ScrollView contentContainerStyle={{ gap: 16 }}><SectionTitle detail="published / failed を確認できます">投稿履歴</SectionTitle><View style={{ flexDirection: 'row', gap: 8 }}><Pill tone="success">投稿済み</Pill><Pill tone="danger">失敗</Pill></View>{posts.length ? posts.map((post) => { const status = statusLabels[post.status]; return <Link key={post.id} href={{ pathname: '/posts/[id]', params: { id: post.id } }} asChild><Card><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}><Text style={{ color: colors.ink, fontWeight: '700' }}>{new Date(post.scheduledAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</Text><Pill tone={status.tone}>{status.label}</Pill></View><Text style={{ color: colors.ink }}>{post.text}</Text>{post.status === 'failed' ? <Text style={styles.muted}>接続を確認して、必要なら内容を見直してください。</Text> : null}</Card></Link>; }) : <EmptyState title="投稿履歴はありません" detail="投稿が完了するとここに表示されます。" />}</ScrollView></Screen>; }

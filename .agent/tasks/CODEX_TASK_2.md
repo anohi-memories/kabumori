@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase1-shell-20260917
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol High
 - purpose: マルチアカウントSNS自動運用の一般ユーザー向けモバイルアプリ制作を開始する。既存のかぶモリ株アプリとは分離し、まずExpo/React Nativeの独立アプリ土台・主要画面・ナビゲーション・型/データ境界を実装して、次フェーズでSupabase認証/実データへ接続できる状態にする。
