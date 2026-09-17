@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase4-disposable-db-proof-20260918
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol Medium/High
 - purpose: 前回Phase 4で作成した `brand_memberships` / tenant RLS candidateを、実際の隔離PostgreSQL環境へ適用してpolicy matrix・cross-tenant isolation・admin compatibility・rollbackを実証する。production DBには一切適用しない。

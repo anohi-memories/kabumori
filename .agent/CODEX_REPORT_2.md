@@ -1,5 +1,23 @@
 # Codex Slot 2 Report
 
+## H2 — Social mobile Phase 4 disposable DB proof (2026-09-18)
+
+- task_id: `social-mobile-app-phase4-disposable-db-proof-20260918`
+- result: Phase4 membership/RLS candidateをproductionと無関係なPodman PostgreSQL 16へapplyし、object read-back、policy matrix、cross-tenant isolation、admin compatibility、mobile write denial、rollbackを実証。C2レビュー待ち。
+- source_base: fresh `origin/main` `e0111a97aa79eca68fa0b676ee524620d53e7baa`。H1以外の差分・social-mobile競合なし。
+- candidate: `supabase/migrations/20260918120000_social_mobile_brand_memberships.sql`; implementation source commit `c40c96cb66c72c671a145ebdbee2a941c648b6bb`（既にorigin/mainへ反映済み）。
+- runtime: Podman VM上の一時 `postgres:16-alpine` container（production URL/credential不使用）。fixtureは`auth.users`、brand A/B、social_accounts、scheduled_posts、post_execution_logs、posting_windows、既存`private.is_admin()`とadmin SELECT policy。
+- apply/read-back: migration apply PASS。`brand_memberships`存在、PK `(brand_id,user_id)`=1、FK=2、RLS=true、candidate policy=6、既存admin policy=5、authenticated SELECT grant=1、authenticated INSERT grant=0を確認。
+- policy_matrix: authenticated non-memberは全resource 0行、A viewerはAのみ（membership/brand/account/schedule/log/window各1）、B memberはBのみ（A 0）、membership無しglobal adminは既存`private.is_admin()`でA/B双方read、service_roleは両brand read。cross-tenant漏洩0。
+- write_safety: anonのbrands readはpermission denied、authenticated mobile roleのmembership INSERTはpermission denied。匿名/非memberの可視化とmembership書込みをfail-closedで確認。
+- admin_compatibility: candidate policy追加後も既存admin SELECT policy 5件が残り、admin userはmembership無しで両brandをread可能。
+- rollback: candidate 5 operational policies + membership policyをdropし、`brand_memberships`をdrop。read-backでmembership=absent、既存admin policy=5を確認。migration前相当へ復帰PASS。containerは検証後削除済み。
+- docs: `apps/social-mobile/docs/phase4-membership-rls-contract.md` のdisposable proof記載を実績へ更新。mobile adapterはmembership self-readをtenant境界とし、`scheduled_posts`のaccount/body gapを推測しない。
+- tests: static policy contract **5/5 PASS**; `npm run typecheck` **PASS**; `npm run lint` **PASS (0 errors/warnings)**; Expo Web export **PASS**; `git diff --check` **PASS**。
+- production_mutation: production DB/schema/RLS/grant/RPC/migration、auth、Cron/settings、deploy、Storage、AI/OpenAI、SNS/API/Push **0**。formal checkout、`apps/admin/**`、HANDOFF、H1/G1/G2領域は未変更。
+- remaining_issues: candidateはまだproduction未適用。C2承認後にのみpreflight→apply→postflight→rollbackを検討し、`EXPO_PUBLIC_DATA_SOURCE=supabase`は実運用membership/RLS確認まで既定OFFを維持。
+- safety_checks: clean isolated worktree `/private/tmp/kabumori-h2-proof-7dAiKL`のみ使用。secret/token/raw production dataなし。TASKは`review_required`、`next_owner: chatgpt`。
+
 ## H2 — Social mobile app Phase 4: membership/RLS validation (2026-09-18)
 
 - task_id: `social-mobile-app-phase4-membership-rls-validation-20260918`

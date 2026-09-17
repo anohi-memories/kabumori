@@ -86,8 +86,10 @@ plan/usage tierの安全なsourceも未確認のため unavailable とする。
 5. `drop policy` と `drop table` を同一の隔離DBで実行し、migration前のobject一覧へ
    戻ったことを確認する。
 
-この環境にはPostgreSQL/Podman runtimeがなく、今回の実行では上記SQLを実行できない
-ため、候補SQLとmatrix assertionを作成し、未実行であることをReportへ明記する。
+disposable proofはPodman上の一時PostgreSQL 16（container `kabumori-h2-pg`、
+production資格情報なし）で実施した。candidate apply、object/FK/PK/check/RLS/grant
+read-back、anon/non-member/A member/B member/admin/service_role matrix、mobile
+membership write拒否、rollbackをすべてPASSし、確認後containerは削除済みである。
 
 ## Rollout guardrails
 
