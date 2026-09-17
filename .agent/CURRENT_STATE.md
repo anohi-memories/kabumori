@@ -49,7 +49,7 @@
 ## Known issues
 
 - AI Lab通常`brand_post`はOAuth再認可後1回成功後、次slotで401再発。恒久復旧は未成立。
--- refresh helperとintegration candidateはC1レビュー待ち。runtime preflightでdirect Edge DB接続ゲートは解消。production `x-test-post` candidate deploy/token mutation/OAuth再認可は未実施。
+- refresh helperとintegration candidateはC1レビュー待ち。runtime preflightでdirect Edge DB接続ゲートは解消。production `x-test-post` candidate deploy/token mutation/OAuth再認可は未実施。
 - social mobile appはPhase1 shellまで完了。Supabase Auth/data adapter、実OAuth、Storage upload、AI API、push通知、課金、app-store packagingはPhase2以降。
 - multibrand migrations `20260910170000/180000/190000` objectsはproductionに存在するがmigration history不整合の可能性があるためblind `supabase db push`禁止。
 - 2026-09-09 morning_greeting legacy Storage receipt HTTP400は別件。
