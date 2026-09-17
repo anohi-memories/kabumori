@@ -14,7 +14,8 @@
 - tests: `npm run typecheck` PASS; `npm run lint` PASS (0 errors/warnings); `npx expo export --platform web --output-dir /private/tmp/social-mobile-phase2-dist` PASS (Expo Web bundle/routes); `git diff --check` PASS. Packageにunit-test runnerは未設定のため、production Auth/sign-in、DB read、OAuth、投稿は実行していない。env missing/permission/error branchesは型・静的実装で確認し、live production verificationは未実施。
 - production: DB/schema/migration/RLS/RPC/Cron/settings/OAuth/Vault/Storage/AI/SNS API/Push changes 0; deploy 0; manual production invoke/API/X post 0; secrets/log exposure 0.
 - blockers: `brands`/`social_accounts`の実production schemaとtenant RLS、`scheduled_posts`との安全なbrand relationは未確認。Phase 3前にread-only schema/RLS確認を行い、必要なら別C2承認でmigration/RPCを検討する。現段階でSupabase sourceを本番有効化しないこと。
-- implementation_commit: local commit pending after fresh origin check; push has not been attempted.
+- implementation_commit: `fb83c1568b3e8060dfc87a6bb01fc51dca455ca0` (`Add social mobile auth and data boundary`).
+- push: successful to `origin/main`; post-push read-back confirmed this commit, the Phase 2 report, and TASK state.
 - remaining_issues: device/simulator visual QA、実管理者Authでのログイン、production read-path/RLS証明は未実施。
 - safety_checks: `/Users/yuya/Developer/kabumori`正式repoには触れず、clean clone内のみ変更。H1/G1/G2、`apps/admin/**`、`HANDOFF.md`、root package、`supabase/**`は変更していない。TASKは`review_required`、`next_owner: chatgpt`。
 
