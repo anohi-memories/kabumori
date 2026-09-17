@@ -1,5 +1,30 @@
 # Codex Report
 
+## Latest H1 result — AI Lab OAuth 401 recovery (2026-09-17)
+
+- task_id: `x-ai-lab-oauth-401-recovery-20260917`
+- result: `review_required` — OAuth reauthorization succeeded for AI Lab only, the first natural post after restoration succeeded once, and the following natural slot returned 401 again. No retry, backfill, manual post, or media operation was performed.
+
+### OAuth and account state
+
+- User completed the X authorization in Safari. The first attempt returned `OAUTH_STATE_UNKNOWN`; a fresh state/PKCE authorization was generated through the existing `x-oauth-connect` start path and the second callback returned `success=true`, `connection_status=identity_verified`.
+- Requested scopes were exactly `tweet.read users.read tweet.write offline.access`; no `media.write`, `like.write`, or `follows.write` was requested.
+- Callback identity verification matched the exact expected username `kaishain_ai_lab` before credentials were accepted. Access/refresh Vault reference presence is true; token values and Vault IDs were never read or recorded.
+- Non-secret post-callback state: `ai_salaryman_lab` is active/live, `ai_salaryman_lab_x` is `identity_verified`, handle `kaishain_ai_lab`, and `publish_enabled=true`. `enabled_post_types` remains `["brand_post"]`; all 10 AI Lab brand-post windows remain active.
+- The OAuth begin/complete RPC temporarily forced AI Lab into dry-run/disabled mode. After explicit user approval, only AI Lab was restored to live/enabled with a guarded data update. Kabumori remains live/enabled with handle `yume_daka`; Mio was not touched.
+
+### Natural-slot observation
+
+- Slot 6, scheduled for 16:22:20 JST, was claimed once at 16:23:00 and completed at 16:23:05 with status `succeeded`. Terminal message: `AI Lab post completed; fingerprint persisted`; X post id `2100485677238677509`.
+- Read-only fingerprint check shows exactly one AI Lab `brand_post` fingerprint and one distinct X post id for 2026-09-17.
+- Slot 7, scheduled for 17:33:31 JST, was claimed once at 17:34:00 and failed at 17:34:05 with `X_REQUEST_FAILED:401`; no X post id and no second fingerprint were created. Future slots 8–10 remain pending.
+- Earlier same-day rows remain historical evidence: slot 1 failed `UNSUPPORTED_POST_TYPE` before the dispatcher hotfix, and slots 2–5 failed 401 before OAuth restoration. No failed row was retried or backfilled.
+
+### Safety and remaining issue
+
+- No source or Edge Function deploy, schema/migration/RPC definition change, Cron/window change, OAuth scope expansion, Kabumori/Mio change, manual X post, candidate injection, OpenAI/X manual invocation, or media upload was performed in this recovery.
+- The OAuth replacement is proven to permit one successful natural text post, but the next natural slot still returned 401. This indicates the 401 issue is not fully resolved; do not widen scope or add token refresh/fallback automatically. C1 should review the one-success/one-401 evidence and decide the next separately authorized investigation.
+
 ## Latest H1 result — AI Lab normal brand_post production hotfix (2026-09-17)
 
 - task_id: `x-ai-lab-brand-post-production-hotfix-20260916`

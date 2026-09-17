@@ -3,8 +3,8 @@
 - task_id: x-ai-lab-oauth-401-recovery-20260917
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: AI Lab通常`brand_post` dispatcher復旧後、自然slotがX API `401`で停止している。AI Labアカウントだけを安全にOAuth再認可し、Vault-backed access/refresh tokenを置き換え、次の自然投稿で成功確認できる状態へ戻す。

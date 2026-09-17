@@ -13,6 +13,7 @@
   - Claude slot2開始=`G2`、完了確認=`K2`
 - active_workstream:
   - Codex slot 1: `review_required` — `x-ai-lab-brand-post-production-hotfix-20260916`。v109で消えていた通常`brand_post` dispatcherを現行mainへ復元し、`x-test-post`のみをv110としてdeploy、39/39 runtime files byte一致。Kabumori Adminのschedule/history/failure/window queryにもserver-side `brand_id='kabumori'`境界を追加。9/17 09:49 JSTの自然slot 2は`UNSUPPORTED_POST_TYPE`を脱してX境界まで到達したが、Vault-backed access tokenが`X_REQUEST_FAILED:401`で拒否され、attempt=1 / x_post_idなし / fingerprintなし / retryなしで安全停止。OAuth/token変更は未実施。C1確認と別承認のAI Lab再認可が必要。
+  - Codex slot 1 follow-up: `review_required` — `x-ai-lab-oauth-401-recovery-20260917`。AI LabのみOAuth再認可・本人確認・Vault参照置換を実施し、live/enabledを明示承認後に復元。16:23 JSTの自然slot 6は1回成功（X post idあり・fingerprint 1件）、17:34 JSTの自然slot 7は再び401で1回失敗。手動投稿・再送・backfill・media操作なし。C1で次の調査方針が必要。
   - Codex slot 2: `ready` — `broad-news-phase5-coverage-expansion-and-all-useful-scope-20260914`。重要ニュース収集・app visibility・通知scope。最新TASKは`x-test-post`、OAuth、Vaultを明示的に除外。
   - Claude slot 1: `review_required` — `broad-news-phase4-natural-push-observation-20260913`。read-only観測のみで本番変更0件。収集→分類→判定→X公開は自然データで確認（ホルムズ海峡付近での商船攻撃 `coverage_severity=high` / `[geopolitics, shipping_logistics]`、TDnetの浜岡原発報告書で企業IRにも複数カテゴリ付与を確認）。統合producerの正のenqueueとPush到達は**未観測**（`all_useful` でも市場ニュースは業種一致必須、企業ニュースは銘柄登録必須で該当なし）。新規に3件の未解決事象を特定: サウジ原油パイプライン復旧見通しの収集取りこぼし（web_searchがrawCandidateCount 0、ゲート除外ではない）/ 2026-09-14 朝刊レポートが `REPORT_FACT_FAILED` で欠落（リトライなし）/ X投稿本文の `generation_failed` 4件。以降の作業はCodexへ引き継ぐ前提でReportに引き継ぎ章を記載。監視タスクと予約タスクは停止・削除済み。
   - Claude slot 2: `done` — Phase 3C OAuth workstream transferred to Codex slot 1; do not modify same OAuth/Vault/x-oauth-connect area in parallel
@@ -48,7 +49,7 @@
 - known_issue:
   - multibrand migrations `20260910170000/180000/190000` objects exist in production but migration history may not record them; do not use blind `supabase db push`
   - 2026-09-09 morning_greeting legacy Storage receipt HTTP400 is a separate unresolved issue
-  - 2026-09-17 AI Lab通常`brand_post`はdispatcher復旧後の自然slotで`X_REQUEST_FAILED:401`。失敗行はattempt=1、X post id/fingerprint/retryなし。AI Lab経路はrefreshを意図的に無効化しているため、次の成功確認には別承認のOAuth再認可が必要。
+  - 2026-09-17 AI Lab通常`brand_post`はOAuth再認可後にslot 6が1回成功したが、slot 7で`X_REQUEST_FAILED:401`が再発。refresh/fallbackは意図的に無効化しており、追加のtoken調査はC1判断待ち。
   - 2026-09-14 morning personalized report failed Fact check (`REPORT_FACT_FAILED`: packetに無い「指数→保有銘柄」の因果表現) and was not saved; 生成は1回のみでリトライなし。`personalized-reports` は現在v13
   - `important_news_app_copy_targets` / `visible_market` はアプリ表示・日本語コピー生成にも業種一致条件を課すため、通知条件の緩和は表示・日本語化と一体で設計する
   - `CLAIM_PENDING_NOTIFICATIONS_FAILED:504` が2026-09-14未明に3回目。monitor/dispatcherのDB読み取り失敗を5経路で観測（実害は未確認、滞留0）
