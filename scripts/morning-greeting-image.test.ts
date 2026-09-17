@@ -3,8 +3,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   buildMorningGreetingGeneratedPath,
+  checkMorningGreetingEnabled,
+  MorningGreetingEnablementCheckError,
   MorningGreetingImageWorkflowError,
   resolveJstDate,
+  runMorningGreetingImageJob,
   runMorningGreetingImageWorkflow,
 } from "./morning-greeting-image.ts";
 import { OPENAI_MORNING_GREETING_IMAGE_ENDPOINT } from
@@ -289,4 +292,196 @@ test("an empty target_date input (as GitHub Actions passes for a schedule-trigge
   });
   assert.equal(result.skipped, true);
   assert.ok(calls[0].includes(`generated/${resolveJstDate()}.png`));
+});
+
+function postingWindowsResponse(rows: Array<{ is_active: unknown }>): Response {
+  return Response.json(rows);
+}
+
+test("checkMorningGreetingEnabled: a single active Kabumori morning_greeting row resolves enabled=true", async () => {
+  let capturedUrl = "";
+  const result = await checkMorningGreetingEnabled({
+    supabaseUrl: SUPABASE_URL,
+    serviceRoleKey: "service-role-test",
+    fetchImpl: async (input) => {
+      capturedUrl = String(input);
+      return postingWindowsResponse([{ is_active: true }]);
+    },
+  });
+  assert.deepEqual(result, { enabled: true });
+  const url = new URL(capturedUrl);
+  assert.equal(url.pathname, "/rest/v1/posting_windows");
+  assert.equal(url.searchParams.get("brand_id"), "eq.kabumori");
+  assert.equal(url.searchParams.get("post_type"), "eq.morning_greeting");
+  assert.equal(url.searchParams.get("select"), "is_active");
+});
+
+test("checkMorningGreetingEnabled: a single disabled Kabumori morning_greeting row resolves enabled=false", async () => {
+  const result = await checkMorningGreetingEnabled({
+    supabaseUrl: SUPABASE_URL,
+    serviceRoleKey: "service-role-test",
+    fetchImpl: async () => postingWindowsResponse([{ is_active: false }]),
+  });
+  assert.deepEqual(result, { enabled: false });
+});
+
+test("checkMorningGreetingEnabled: a missing row (empty result) is unknown enablement, not a safe default -- throws rather than skipping or generating", async () => {
+  await assert.rejects(
+    () => checkMorningGreetingEnabled({
+      supabaseUrl: SUPABASE_URL, serviceRoleKey: "k",
+      fetchImpl: async () => postingWindowsResponse([]),
+    }),
+    (error: unknown) =>
+      error instanceof MorningGreetingEnablementCheckError &&
+      error.message === "MORNING_GREETING_ENABLEMENT_SETTING_NOT_FOUND",
+  );
+});
+
+test("checkMorningGreetingEnabled: a non-2xx Supabase response throws a read-failed error", async () => {
+  await assert.rejects(
+    () => checkMorningGreetingEnabled({
+      supabaseUrl: SUPABASE_URL, serviceRoleKey: "k",
+      fetchImpl: async () => new Response("error", { status: 500 }),
+    }),
+    (error: unknown) =>
+      error instanceof MorningGreetingEnablementCheckError &&
+      error.message === "MORNING_GREETING_ENABLEMENT_READ_FAILED:500",
+  );
+});
+
+test("checkMorningGreetingEnabled: a network failure throws a read-failed error", async () => {
+  await assert.rejects(
+    () => checkMorningGreetingEnabled({
+      supabaseUrl: SUPABASE_URL, serviceRoleKey: "k",
+      fetchImpl: async () => { throw new Error("network down"); },
+    }),
+    (error: unknown) =>
+      error instanceof MorningGreetingEnablementCheckError &&
+      error.message.startsWith("MORNING_GREETING_ENABLEMENT_READ_FAILED:"),
+  );
+});
+
+test("checkMorningGreetingEnabled: a malformed response body (not JSON, or is_active not boolean) throws a malformed error", async () => {
+  await assert.rejects(
+    () => checkMorningGreetingEnabled({
+      supabaseUrl: SUPABASE_URL, serviceRoleKey: "k",
+      fetchImpl: async () => new Response("not json", { status: 200 }),
+    }),
+    (error: unknown) =>
+      error instanceof MorningGreetingEnablementCheckError &&
+      error.message === "MORNING_GREETING_ENABLEMENT_RESPONSE_MALFORMED",
+  );
+  await assert.rejects(
+    () => checkMorningGreetingEnabled({
+      supabaseUrl: SUPABASE_URL, serviceRoleKey: "k",
+      fetchImpl: async () => postingWindowsResponse([{ is_active: "yes" }]),
+    }),
+    (error: unknown) =>
+      error instanceof MorningGreetingEnablementCheckError &&
+      error.message === "MORNING_GREETING_ENABLEMENT_RESPONSE_MALFORMED",
+  );
+});
+
+test("checkMorningGreetingEnabled: an unrelated brand's row being active, while Kabumori's is disabled, must not affect the decision -- the query itself is scoped to brand_id=kabumori", async () => {
+  // A correctly-filtering REST layer would never actually return another brand's row here; this proves
+  // the query params sent are scoped so that could never happen, and that only the Kabumori row's value
+  // (false) drives the result.
+  const result = await checkMorningGreetingEnabled({
+    supabaseUrl: SUPABASE_URL, serviceRoleKey: "k",
+    fetchImpl: async (input) => {
+      const url = new URL(String(input));
+      assert.equal(url.searchParams.get("brand_id"), "eq.kabumori");
+      return postingWindowsResponse([{ is_active: false }]);
+    },
+  });
+  assert.deepEqual(result, { enabled: false });
+});
+
+test("checkMorningGreetingEnabled: an unrelated post_type being active must not affect the decision -- the query itself is scoped to post_type=morning_greeting", async () => {
+  const result = await checkMorningGreetingEnabled({
+    supabaseUrl: SUPABASE_URL, serviceRoleKey: "k",
+    fetchImpl: async (input) => {
+      const url = new URL(String(input));
+      assert.equal(url.searchParams.get("post_type"), "eq.morning_greeting");
+      return postingWindowsResponse([{ is_active: true }]);
+    },
+  });
+  assert.deepEqual(result, { enabled: true });
+});
+
+test("checkMorningGreetingEnabled: multiple rows that agree resolve to that value, without inventing a majority/priority rule", async () => {
+  const result = await checkMorningGreetingEnabled({
+    supabaseUrl: SUPABASE_URL, serviceRoleKey: "k",
+    fetchImpl: async () => postingWindowsResponse([{ is_active: true }, { is_active: true }]),
+  });
+  assert.deepEqual(result, { enabled: true });
+});
+
+test("main() calls the gated job (runMorningGreetingImageJob), never the raw generation workflow directly -- the gate cannot be bypassed by a future edit that skips it", async () => {
+  const source = await readFile(new URL("./morning-greeting-image.ts", import.meta.url), "utf8");
+  const mainBody = source.slice(source.indexOf("async function main("));
+  assert.match(mainBody, /runMorningGreetingImageJob\(/u);
+  assert.doesNotMatch(mainBody, /runMorningGreetingImageWorkflow\(/u);
+});
+
+test("runMorningGreetingImageJob: cost-safety invariant -- when disabled, zero network calls are made at all (OpenAI image call count = 0, Storage write count = 0), for a scheduled run and an explicit target_date alike", async () => {
+  for (const date of [undefined, "2026-09-01"]) {
+    let networkCalls = 0;
+    const result = await runMorningGreetingImageJob({
+      supabaseUrl: SUPABASE_URL,
+      serviceRoleKey: "service-role-test",
+      openAiApiKey: "openai-test",
+      date,
+      fetchImpl: async (input) => {
+        const url = new URL(String(input));
+        if (url.pathname === "/rest/v1/posting_windows") return postingWindowsResponse([{ is_active: false }]);
+        networkCalls += 1;
+        throw new Error(`unexpected network call after a disabled result: ${url}`);
+      },
+    });
+    assert.deepEqual(result, { success: true, skipped: true, reason: "disabled", image_api_called: 0 });
+    assert.equal(networkCalls, 0, `no OpenAI/Storage call may happen when disabled (date=${date})`);
+  }
+});
+
+test("runMorningGreetingImageJob: when enabled, behaves exactly like the existing generation workflow (one enablement read, then unchanged ON-path behavior)", async () => {
+  let enablementReads = 0;
+  const result = await runMorningGreetingImageJob({
+    supabaseUrl: SUPABASE_URL,
+    serviceRoleKey: "service-role-test",
+    openAiApiKey: "openai-test",
+    date: "2026-09-01",
+    fetchImpl: async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/rest/v1/posting_windows") {
+        enablementReads += 1;
+        return postingWindowsResponse([{ is_active: true }]);
+      }
+      if (url.pathname.endsWith("generated/2026-09-01.png") && init?.method !== "POST") {
+        return new Response("missing", { status: 404 });
+      }
+      if (url.pathname.endsWith("canonical/yume-reference.png")) return pngResponse();
+      if (String(input) === OPENAI_MORNING_GREETING_IMAGE_ENDPOINT) {
+        return new Response(JSON.stringify({ data: [{ b64_json: "iVBORw==" }] }), {
+          status: 200, headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response("stored", { status: 200 });
+    },
+  });
+  assert.equal(enablementReads, 1);
+  assert.equal(result.skipped, false);
+  assert.equal(result.image_api_called, 1);
+});
+
+test("checkMorningGreetingEnabled: multiple rows that disagree are ambiguous -- throws rather than guessing", async () => {
+  await assert.rejects(
+    () => checkMorningGreetingEnabled({
+      supabaseUrl: SUPABASE_URL, serviceRoleKey: "k",
+      fetchImpl: async () => postingWindowsResponse([{ is_active: true }, { is_active: false }]),
+    }),
+    (error: unknown) =>
+      error instanceof MorningGreetingEnablementCheckError &&
+      error.message === "MORNING_GREETING_ENABLEMENT_AMBIGUOUS",
+  );
 });

@@ -35,6 +35,78 @@ export class MorningGreetingImageWorkflowError extends Error {
   }
 }
 
+// Admin's morning_greeting toggle (apps/admin/src/lib/actions/system-toggle.ts) writes
+// posting_windows.is_active for post_type='morning_greeting' -- that row is the existing source of
+// truth for whether Kabumori's morning greeting is on at all, including its scheduled X post. This
+// workflow runs on its own daily cron ahead of that post purely to pre-generate the day's image, so it
+// must check the same source of truth before ever calling OpenAI: an admin turning the greeting off
+// today only stopped the post, not this separate cron job, which kept billing OpenAI every morning
+// regardless.
+export type MorningGreetingEnablementResult = { enabled: boolean };
+
+export class MorningGreetingEnablementCheckError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MorningGreetingEnablementCheckError";
+  }
+}
+
+export async function checkMorningGreetingEnabled({
+  supabaseUrl,
+  serviceRoleKey,
+  fetchImpl = fetch,
+}: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  fetchImpl?: typeof fetch;
+}): Promise<MorningGreetingEnablementResult> {
+  const params = new URLSearchParams({
+    select: "is_active",
+    brand_id: "eq.kabumori",
+    post_type: "eq.morning_greeting",
+  });
+  const url = `${supabaseUrl.trim().replace(/\/$/u, "")}/rest/v1/posting_windows?${params}`;
+
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+    });
+  } catch (error) {
+    throw new MorningGreetingEnablementCheckError(
+      `MORNING_GREETING_ENABLEMENT_READ_FAILED:${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (!response.ok) {
+    throw new MorningGreetingEnablementCheckError(`MORNING_GREETING_ENABLEMENT_READ_FAILED:${response.status}`);
+  }
+
+  let rows: unknown;
+  try {
+    rows = await response.json();
+  } catch {
+    throw new MorningGreetingEnablementCheckError("MORNING_GREETING_ENABLEMENT_RESPONSE_MALFORMED");
+  }
+  if (!Array.isArray(rows) || rows.length === 0) {
+    // Enablement is unknown, not "off" -- never treat a missing row as a safe default in either
+    // direction. This must stop the workflow, not silently skip or silently generate.
+    throw new MorningGreetingEnablementCheckError("MORNING_GREETING_ENABLEMENT_SETTING_NOT_FOUND");
+  }
+
+  const values = rows.map((row) => (row as { is_active?: unknown }).is_active);
+  if (values.some((value) => typeof value !== "boolean")) {
+    throw new MorningGreetingEnablementCheckError("MORNING_GREETING_ENABLEMENT_RESPONSE_MALFORMED");
+  }
+  // Today exactly one row exists for (kabumori, morning_greeting). If that were ever to change, do not
+  // invent a resolution rule (e.g. "any true wins") -- only proceed when every matching row agrees.
+  const distinctValues = new Set(values);
+  if (distinctValues.size > 1) {
+    throw new MorningGreetingEnablementCheckError("MORNING_GREETING_ENABLEMENT_AMBIGUOUS");
+  }
+
+  return { enabled: values[0] === true };
+}
+
 function encodeObjectPath(path: string): string {
   return path.split("/").map(encodeURIComponent).join("/");
 }
@@ -182,6 +254,31 @@ export async function runMorningGreetingImageWorkflow(args: {
   }
 }
 
+export type MorningGreetingImageJobResult =
+  | { success: true; skipped: true; reason: "disabled"; image_api_called: 0 }
+  | MorningGreetingImageWorkflowResult;
+
+// The one entry point main() calls: gates on the admin's existing enablement source of truth before
+// ever touching runMorningGreetingImageWorkflow (and therefore before it can call OpenAI or write
+// Storage), so this single function is what "OFF -> zero OpenAI/Storage calls" actually tests against.
+export async function runMorningGreetingImageJob(args: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  openAiApiKey: string;
+  date?: string;
+  fetchImpl?: typeof fetch;
+}): Promise<MorningGreetingImageJobResult> {
+  const enablement = await checkMorningGreetingEnabled({
+    supabaseUrl: args.supabaseUrl,
+    serviceRoleKey: args.serviceRoleKey,
+    fetchImpl: args.fetchImpl,
+  });
+  if (!enablement.enabled) {
+    return { success: true, skipped: true, reason: "disabled", image_api_called: 0 };
+  }
+  return await runMorningGreetingImageWorkflow(args);
+}
+
 function requiredEnvironment(name: string): string {
   const value = process.env[name]?.trim() ?? "";
   if (!value) throw new Error(`MORNING_GREETING_ENV_MISSING:${name}`);
@@ -190,17 +287,24 @@ function requiredEnvironment(name: string): string {
 
 async function main(): Promise<void> {
   try {
-    const result = await runMorningGreetingImageWorkflow({
+    const result = await runMorningGreetingImageJob({
       supabaseUrl: requiredEnvironment("SUPABASE_URL"),
       serviceRoleKey: requiredEnvironment("SUPABASE_SERVICE_ROLE_KEY"),
       openAiApiKey: requiredEnvironment("OPENAI_API_KEY"),
       date: process.env.MORNING_GREETING_DATE,
     });
+    if ("reason" in result && result.reason === "disabled") {
+      console.log("morning greeting disabled; image generation skipped");
+      return;
+    }
     console.log(JSON.stringify(result));
   } catch (error) {
+    // Covers both an unknown enablement result (missing/ambiguous row, non-2xx, malformed response,
+    // network failure -- MorningGreetingEnablementCheckError) and a generation failure
+    // (MorningGreetingImageWorkflowError). Neither ever falls through to a default success.
     const safe = error instanceof MorningGreetingImageWorkflowError
       ? { success: false, error: error.message, image_api_called: error.imageApiCalled }
-      : { success: false, error: error instanceof Error ? error.message : String(error) };
+      : { success: false, error: error instanceof Error ? error.message : String(error), image_api_called: 0 };
     console.error(JSON.stringify(safe));
     process.exitCode = 1;
   }
