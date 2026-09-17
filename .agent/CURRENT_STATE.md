@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-17 JST (H1 integration candidate review_required)
+- checked_at: 2026-09-17 JST (H2 social mobile app phase1 assigned)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -21,9 +21,12 @@
   - candidate `a7ffba4` は実Vault writer/persistence adapter、rotation concurrency guard、completion/idempotency外周維持を実装・検証済み。C1レビュー待ち。
   - production deploy/token mutation/OAuth再認可はC1前は禁止。
 
-- Codex slot 2: `done` — `kabumori-news-url-removal-production-deploy-20260917`
-  - `important-news-monitor` v55へ通常重要ニュースX本文の外部URL除去を本番反映済み。
-  - source URL metadataは保持。自然投稿read-only観測のみ別件。
+- Codex slot 2: `ready` — `social-mobile-app-phase1-shell-20260917`
+  - マルチアカウントSNS自動運用の一般ユーザー向けモバイルアプリ制作を開始する。
+  - 既存root Expoのかぶモリ株アプリとは別アプリとして、原則 `apps/social-mobile/` に独立Expo/React Nativeアプリを作る。
+  - Phase1は主要5タブ（ホーム/投稿予定/AI運用相談/投稿履歴/設定）+ Accounts + 素材BOX、共通theme/UI、domain types、mock/local repository/service境界まで。
+  - production Supabase schema/OAuth/X投稿/AI API/Storage/課金/Pushには触れない。
+  - H1/G1の`x-test-post`/OAuth/market report領域と変更対象を分離する。
 
 - Claude slot 1: `ready` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
   - Phase1 `market_data_packet.v1` shadow rolloutは本番稼働済み。
@@ -36,8 +39,9 @@
 ## Parallel safety
 
 - H1はAI Lab refresh integration candidate担当。OAuth/Vault/x-test-post認証経路を扱うがproduction mutation/deployは禁止。
+- H2は `apps/social-mobile/` の新規モバイルアプリ領域のみ。既存root株アプリ、`supabase/`、H1/G1領域へ触れない。
 - G1はmarket report packet / x-test-post morning-close / personalized-reports領域。OAuth/Vault/social account stateへ触れない。
-- H2/G2はdone。
+- G2はdone。
 - 同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数slotで同時変更しない。
 - push前にfresh `origin/main`確認。既存未コミット変更は他workstream所有として触らない。
 
@@ -45,6 +49,7 @@
 
 - AI Lab通常`brand_post`はOAuth再認可後1回成功後、次slotで401再発。恒久復旧は未成立。
 - refresh helperとintegration candidateはC1レビュー待ち。production deploy/token mutation/OAuth再認可は未実施。
+- consumer向けSNS運用モバイルアプリはPhase1着手前。既存かぶモリ株アプリとは分離して進める。
 - multibrand migrations `20260910170000/180000/190000` objectsはproductionに存在するがmigration history不整合の可能性があるためblind `supabase db push`禁止。
 - 2026-09-09 morning_greeting legacy Storage receipt HTTP400は別件。
 - 重要ニュースX生成にはFact/Voice系generation_failedが残る。
