@@ -767,17 +767,18 @@ test("a non-length failure carries null length diagnostics instead of a misleadi
   );
 });
 
-test("manual mode is service-role protected and branches before dispatcher", async () => {
+test("manual mode is service-role protected and branches before the scheduled dispatcher", async () => {
   const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
   const mode = source.indexOf("isMorningGreetingManualPublish");
   const branch = source.indexOf("if (isMorningGreetingManualPublish)");
   const xAuth = source.indexOf("const xAuth: XAuthContext");
-  const dispatcher = source.indexOf("await claimDuePost(", xAuth);
+  const dispatcher = source.indexOf("await claimDuePost(");
   assert.equal(MORNING_GREETING_MANUAL_PUBLISH_MODE, "publish_morning_greeting_manual");
   assert.ok(mode >= 0);
   assert.ok(branch > mode);
   assert.ok(xAuth > branch);
-  assert.ok(dispatcher > xAuth);
+  assert.ok(dispatcher > branch);
+  assert.ok(xAuth > dispatcher);
   const branchSource = source.slice(branch, source.indexOf("if (isMorningGreetingPayloadTest)", branch));
   assert.match(branchSource, /Authorization/u);
   assert.match(branchSource, /serviceRoleKey/u);

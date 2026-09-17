@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { KABUMORI_BRAND_ID } from "./brand-boundary";
 import { getPostTypeLabel, getStatusLabel, getStatusTone } from "./today-scheduled-posts";
 
 const DEFAULT_HISTORY_LIMIT = 30;
@@ -116,6 +117,7 @@ async function getScheduledPosts(supabase: SupabaseClient, ids: string[]) {
   const { data, error } = await supabase
     .from("scheduled_posts")
     .select("id,scheduled_for,attempt_count")
+    .eq("brand_id", KABUMORI_BRAND_ID)
     .in("id", ids);
   if (error) {
     logQueryError("scheduled_posts", error.code);
@@ -165,6 +167,7 @@ export async function getPostHistory(
     .select(
       "id,scheduled_post_id,post_type,status,tip_id,useful_tip_id,important_news_candidate_id,x_post_id,message,error_code,created_at",
     )
+    .eq("brand_id", KABUMORI_BRAND_ID)
     .in("status", ["succeeded", "failed"])
     .order("created_at", { ascending: false })
     .limit(safeLimit);

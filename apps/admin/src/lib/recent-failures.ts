@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { KABUMORI_BRAND_ID } from "./brand-boundary";
 import { getPostTypeLabel } from "./today-scheduled-posts";
 
 const FETCH_LIMIT_PER_SOURCE = 20;
@@ -160,6 +161,7 @@ export async function getRecentFailures(
       .select(
         "id,scheduled_post_id,important_news_candidate_id,post_type,message,error_code,created_at",
       )
+      .eq("brand_id", KABUMORI_BRAND_ID)
       .eq("status", "failed")
       .order("created_at", { ascending: false })
       .limit(FETCH_LIMIT_PER_SOURCE),
@@ -211,6 +213,7 @@ export async function getRecentFailures(
     const { data, error } = await supabase
       .from("scheduled_posts")
       .select("id,scheduled_for")
+      .eq("brand_id", KABUMORI_BRAND_ID)
       .in("id", scheduledPostIds);
 
     if (error) {

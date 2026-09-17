@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { KABUMORI_BRAND_ID } from "./brand-boundary";
 import type { SystemToggleKey } from "@/lib/actions/system-toggle";
 
 export type SystemStatusState = "active" | "inactive" | "unavailable";
@@ -198,6 +199,7 @@ async function getMorningGreetingStatus(supabase: SupabaseClient): Promise<Syste
   const { data, error } = await supabase
     .from("posting_windows")
     .select("is_active,start_time,end_time,timezone")
+    .eq("brand_id", KABUMORI_BRAND_ID)
     .eq("post_type", "morning_greeting")
     .order("slot_no", { ascending: true })
     .limit(1)
@@ -254,6 +256,7 @@ async function getPostingWindowGroupStatus(
   const { data, error } = await supabase
     .from("posting_windows")
     .select("is_active,start_time,end_time")
+    .eq("brand_id", KABUMORI_BRAND_ID)
     .eq("post_type", postType)
     .order("slot_no", { ascending: true });
 
