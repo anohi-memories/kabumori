@@ -3,7 +3,7 @@
 - task_id: morning-greeting-image-cost-gate-rollout-20260917
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Sonnet

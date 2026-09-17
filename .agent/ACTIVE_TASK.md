@@ -42,12 +42,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: morning-greeting-image-disable-cost-gate-20260916
+- status: in_progress
+- task_id: morning-greeting-image-cost-gate-rollout-20260917
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: `scripts/morning-greeting-image.ts`に`checkMorningGreetingEnabled`+`runMorningGreetingImageJob`を追加し、posting_windows(kabumori/morning_greeting).is_active=falseならOpenAI/Storage呼び出し前に正常スキップ、不明時は生成せずexit 1で可視化。既存生成経路は無変更。ブランチ`morning-greeting-image-cost-gate-20260916`(commit afe5d87)へpush済み、mainへは未マージ。本番変更0件。K2待ち。
+- note: K2承認済み`afe5d87`(scripts/morning-greeting-image.ts/.test.ts)を最新originmainへ安全に統合しpushする作業に着手。
 
 ## Control codes
 
