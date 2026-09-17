@@ -14,12 +14,12 @@
 ### Codex slot 1
 - owner: codex
 - slot: codex-1
-- status: review_required
-- task_id: ai-lab-daily-content-plan-writer-postgres-proof-20260918
+- status: ready
+- task_id: ai-lab-daily-content-plan-production-rollout-20260918
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: C1 blockerだった実PostgreSQL disposable proofを完了。Phase1+Phase2 migration apply、RPC/grant/security、state/idempotency、並列activation、consumer query、rollback dry-runを確認。production mutation 0。C1確認待ち。
+- note: C1 PASS済みのdaily content plan Phase1/Phase2 schema + writer RPCをproductionへexact applyする。H2のproduction migration rolloutと同時writeは禁止。このH1ではx-test-post deploy/consumer cutoverは行わない。
 
 ### Codex slot 2
 - owner: codex
