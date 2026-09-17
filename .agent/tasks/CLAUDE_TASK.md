@@ -3,7 +3,7 @@
 - task_id: morning-greeting-image-cost-gate-rollout-20260917
 - owner: claude
 - slot: claude-2
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet
@@ -126,3 +126,7 @@ main反映まで完了したら:
 - manual OpenAI/workflow dispatch: 0件。`workflow_dispatch`の手動実行、OpenAI API呼び出し、Storage書き込み検証は一切行っていない。
 - user next action: 管理画面で「朝の挨拶」をOFFにする。
 - tomorrow observation requirement: 翌朝05:30 JSTの自然な定時実行後、以下を別確認タスクで検証すること: (1) workflow logに`morning greeting disabled; image generation skipped`が出力される、(2) OpenAI画像生成が実行されていない、(3) 新規Storage画像が作成されていない、(4) workflowがOFFを正常skip（exit 0）として終了している。人工実行では確認しないこと。
+
+## Final K2 review — 2026-09-17
+
+PASS。承認済み変更はmainへ統合・read-back済みで、26/26テストPASS、対象2ファイル以外の混入なし、本番設定変更・手動workflow dispatch・OpenAI実呼び出しは0件。翌朝05:30 JSTの自然観測は別のread-only確認事項であり、本実装タスクの完了をブロックしないため、このスロットは `done` とする。
