@@ -9,6 +9,19 @@
 - recommended_model: Sol High
 - purpose: マルチアカウントSNS自動運用の一般ユーザー向けモバイルアプリ制作を開始する。既存のかぶモリ株アプリとは分離し、まずExpo/React Nativeの独立アプリ土台・主要画面・ナビゲーション・型/データ境界を実装して、次フェーズでSupabase認証/実データへ接続できる状態にする。
 
+## Explicit push authorization — 2026-09-17
+
+ユーザー報告のPhase 1実装commit `74b20852ff130dc19de4629d28d11be627664140` について、以下の条件で `origin/main` へのpushを**明示承認**する。
+
+- push直前にfresh `origin/main`を再確認すること
+- `apps/social-mobile/` と本TASK/Reportの必要なcontrol metadata以外に、未承認の変更を混ぜないこと
+- H1/G1/G2の所有ファイル・DB migration/RPC・Edge Function・workflow・production設定へ触れないこと
+- 既存root Expo株アプリと`apps/admin`を変更しないこと
+- 本番DB・Supabase・OAuth・SNS API・X投稿・deployを行わないこと
+- fresh-checkで競合やmain進行が見つかった場合は、勝手に上書きせずrebase/取り込み後に再検証し、競合が安全に解消できなければSTOPすること
+
+上記条件を満たす限り、commit `74b20852ff130dc19de4629d28d11be627664140` をmainへpushしてよい。push後はorigin/main read-back、TASKを`review_required` / `next_owner: chatgpt`へ更新し、C2待ちでSTOPすること。
+
 ## Product direction
 
 このアプリの中心価値は「AI運用担当者がアプリの中にいる」こと。
