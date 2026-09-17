@@ -12,8 +12,8 @@
 - tests: `npm run typecheck` PASS; `npm run lint` PASS (0 errors/warnings); `npx expo export --platform web --output-dir /private/tmp/social-mobile-dist` PASS (Metro Web bundle and route resolution); `git diff --check` PASS. `npx expo start --web --port 8089` was attempted but HTTP listener was not reachable under this sandbox's networking restriction; no app/API side effect occurred.
 - production: Supabase/DB/migration/RPC/RLS/Cron/settings/OAuth/SNS API/Storage/OpenAI/X changes 0; no deploy, no manual production invoke, no post.
 - known_gaps: Supabase Auth/data adapter, real OAuth, Storage upload, AI API, push notifications, billing, and app-store packaging are Phase 2+; simulator/device visual QA remains for the user/developer environment.
-- commit: `986c67e889d8658ad104040f65a00adefd04ece7` (`Add social mobile Phase 1 shell`).
-- push: successful; `0292a8a212f5f303223c82b508d9b727f4d7f2bc` (merge of authorized `74b20852ff130dc19de4629d28d11be627664140` with fresh `origin/main`) is now on `origin/main`; post-push read-back pending.
+- commit: `74b20852ff130dc19de4629d28d11be627664140` (`Add social mobile Phase 1 shell`).
+- push: successful; merge `0292a8a212f5f303223c82b508d9b727f4d7f2bc` and metadata commit `ed374b9550c73d69995497e2f2536abe85c9d593` are on `origin/main`; post-push read-back confirmed the app files and slot state.
 - safety_checks: existing root Expo files, `apps/admin/**`, `supabase/**`, `HANDOFF.md`, and other slot files were not modified.
 - next_recommendation: C2 review the isolated app shell and decide Phase 2 backend/auth contracts before wiring production data.
 
