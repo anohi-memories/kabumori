@@ -1,129 +1,253 @@
 # Codex Task
 
-- task_id: ai-lab-daily-content-plan-selection-fix-20260918
+- task_id: ai-lab-daily-content-plan-writer-phase2-20260918
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Sol Medium/High
-- purpose: Phase 1 candidate `0a6f20c86603c5834876208e4c05ef711d036be4` は全体構成は良いが、daily planの選択ルールが承認仕様より狭く、active planに当該slot itemが無いだけで投稿をfail-closedしてしまう。C1でここをblockerとしたため、slot未指定item / daily theme fallbackを決定的に扱えるようfocused fixする。production migration/deployはまだ行わない。
+- purpose: C1 PASS済みの `daily_content_plans` consumer candidateを前提に、ユーザーが「明日はこんな流れ」とちゃへ伝えた内容を、ちゃ/将来のアプリ内AIが安全にSupabaseへ登録できる writer path をPhase 2 candidateとして実装・検証する。今回はwriter/schema/validation/activationを完成させるが、production DB適用や`x-test-post` deployはまだ行わない。
 
-## Final C1 review — 2026-09-18
+## Product decision
 
-**PASS — focused blocker resolved.**
+運用の正本:
+1. ユーザーがちゃへ「明日はこんな流れ」と伝える。
+2. ちゃが会話内容をstructured daily content planへ変換する。
+3. writer pathで翌日JSTのplanをSupabaseへ登録・activateする。
+4. 自動投稿側はactive planを最優先して文章化する。
+5. plan/itemが無いslotだけhardened persona fallbackへ戻る。
 
-確認済み:
-- focused candidate: `cdebdc861d9b6fb38645b640c3d48396ec72aee3`
-- `slot_no` はoptional/nullを許容。
-- 選択順は exact explicit slot item を最優先し、その後 slot未指定itemを `priority`, `id` のstable orderで未割当slotへ決定的に割り当てる。
-- DBにconsumed stateを書かず、同一plan/date/slotのretryは同じitemへ解決する。
-- active planに安全な題材が無いslotは停止せず、daily themeから新題材を捏造せず、hardened persona fallbackへ戻る。
-- fallbackは会社員AIラボの主題を「個人開発・副業・AIとの試行錯誤の日記」へ寄せ、一般AI便利Tips・教科書的ノウハウ・架空進捗/体験の追加を明示的に抑止。
-- planあり時の題材拘束、AI Lab-only wiring、JST target-date、active-only filteringは維持。
-- Kabumori/Mio、market-report、OAuth/Vault/refresh、X publish/dedupe/completion境界は変更なし。
-- focused 30/30、full `x-test-post` + `_shared/brand` regression 469/469 PASS。
-- helper `deno check --no-config`、`deno fmt --check`、`git diff --check` PASS。
-- production migration/deploy/configuration mutation 0。manual/synthetic X post、retry/backfill、OAuth action、Vault/token/secret変更 0。
+会社員AIラボの主題は「非エンジニア会社員がAIと一緒に副業・個人開発を進める実験日記」。AI一般Tipsアカウントへ寄せない。
 
-### C1 decision
+将来はみお・social-mobileのアプリ内AIにも同じstorage/writer architectureを使えるようbrand-neutralにする。ただし、このH1でproduction consumer対象にするのは会社員AIラボのみ。
 
-Phase 1 source candidate + focused selection fixは承認する。
+## Approved Phase 1 source
 
-ただし、これは**production rollout承認ではない**。migration candidate `supabase/migrations/20260917143302_ai_lab_daily_content_plans_phase1.sql` は未適用、`x-test-post`も未deployのまま。production migration適用・writer path・deployは次タスクで個別に安全確認してから行う。
+C1 PASS済み:
+- base candidate: `0a6f20c86603c5834876208e4c05ef711d036be4`
+- selection focused fix: `cdebdc861d9b6fb38645b640c3d48396ec72aee3`
 
-このH1 taskは完了とし、次工程は「ちゃ/将来のアプリ内AIが翌日planを書き込むwriter path」とproduction rollout設計を別タスクで扱う。
+承認済み仕様:
+- `slot_no` explicit item最優先
+- slot未指定itemは `priority`,`id` のstable orderで未割当slotへ決定的割当
+- retryで同じitem
+- safe item無しは投稿停止せずhardened persona fallback
+- planあり時はAIは文章化役に限定
 
-## Previous C1 review — 2026-09-18
+migration candidate `supabase/migrations/20260917143302_ai_lab_daily_content_plans_phase1.sql` は未適用。
 
-**NOT PASS — focused fix required before rollout.**
+## Mandatory startup / conflict gate
 
-良かった点:
-- brand-neutral `daily_content_plans` schema candidateを用意し、consumer wiringはAI Labのみに限定。
-- target dateはJST、active planのみ、version/order deterministic。
-- planあり時はAPI側AIを「文章化役」に制限し、計画外テーマ・架空進捗・一般AI Tipsへの逸脱をpromptで抑止。
-- planなしでは既存pathへfallback。
-- OAuth/Vault/refresh/X publish/dedupe/completion、Kabumori/Mio、market-report経路は変更なし。
-- focused 27/27、full regression 466/466、helper `deno check`、`git diff --check` PASS。
-- production変更0。
+開始前に必ず確認:
+1. `.agent/ORCHESTRATION.md`
+2. `.agent/CURRENT_STATE.md`
+3. this TASK
+4. `.agent/CODEX_REPORT.md`
+5. `.agent/tasks/CODEX_TASK_2.md`
+6. `.agent/tasks/CLAUDE_TASK_1.md`
+7. `.agent/tasks/CLAUDE_TASK.md`
+8. fresh `origin/main`
 
-### Blocking issue
+競合ルール:
+- G1は `x-test-post` / market-report consumerを扱うreview_required状態。このH1では **`x-test-post`を変更しない**。consumer wiringの追加修正も行わない。
+- H2は `brand_memberships` / social-mobile RLS candidate。`daily_content_plans`/writer objects以外のH2 objectsを触らない。
+- OAuth/Vault/refresh/X publish pathには触らない。
+- 既存未コミット変更は他workstream所有として触らない。
+- push前にfresh `origin/main`を再確認。
 
-承認仕様ではplan selection priorityを以下としていた:
-1. 当該slot明示item
-2. slot指定なしの未使用/次順位item
-3. daily plan全体のtheme/context
-4. plan自体が無ければpersona fallback
+## Phase 2 goal
 
-しかしcandidateの `DailyContentPlanItem.slotNo` は必須numberで、`selectDailyContentPlanItem()` は `item.slotNo === slotNo` のexact matchだけを返す。active planが存在しても当該slot itemが無ければ `AI_LAB_CONTENT_PLAN_SLOT_MISSING` でfail-closedする。
+**ちゃが日常運用で安全に翌日planを書けるservice-side writer contractを作り、disposable DBでversioning/activation/validationを証明する。**
 
-これは「ちゃが明日の流れ/題材を登録する」運用に対して硬すぎる。例えば1日の大枠themeと3つの題材だけ登録した場合、残りslotが全停止する可能性がある。ユーザー意図は、指示がある日はそれを優先しつつ、細かいslot指定が無い部分も自然に回し、何も指示がない場合だけキャラ設定fallbackに戻ること。
+このPhaseではproduction mutation 0でC1へ返す。
 
-## Required focused fix
+## 1. Writer contract
 
-### 1. Plan item model
+service-role/admin backend専用のwriterを設計する。
 
-- `slot_no` を optional/nullable として扱えるようにする。
-- explicit slot itemは最優先。
-- slot未指定itemsは stable order (`priority`, then `id`) で deterministic にslotへ割り当てられる設計にする。
-- DB writeで「消費済み」を雑に持たない。scheduled row / slot_no / target dateを使い、retry時に同じitemへ解決する。
-- 同一plan・同一target_date・同一slotは常に同じitem。
-- 過去/未来plan混入禁止は維持。
+第一候補:
+- service-role only RPC（SECURITY DEFINER + strict grant）
+- 既存Supabase/plugin経由から呼びやすく、将来アプリbackend/Edge Functionからも再利用できる形
 
-### 2. Daily theme fallback
+Edge Functionが明確に優位なら採用可だが、不要なHTTP層を増やさないこと。
 
-- active planがあり、explicit/unassigned itemが当該slotに割り当てられない場合でも、`day_theme` / `narrative_arc` / 共通contextだけで安全に文章化できる構造なら、そのdaily plan全体を使うfallbackを検討する。
-- daily themeだけでは具体的投稿を安全に作れず、AIに新テーマ発明させることになる場合は、明示的に「このslotは通常persona fallbackへ戻す」方がよい。
-- どちらを採用するかは、**AIに題材を勝手に発明させない**ことを最優先にする。
-- active planの存在だけを理由に、その日の未指定slotを全部停止させない。
+最低入力:
+- `brand_id`
+- `target_date` (JST calendar date)
+- `source` (`chatgpt` / `app_ai` / `manual` 等)
+- structured `plan` JSON
+- activate=true/false
 
-### 3. No-plan / unassigned behavior
+最低出力:
+- plan id
+- version
+- status
+- target_date
+- brand_id
 
-- plan自体なし: existing persona fallback。
-- active planあり・当該slotに安全な題材なし: production運用で停止し続けない明確なfallback ruleを実装。
-- fallback promptは会社員AIラボの主題が「個人開発・副業・AIとの試行錯誤の日記」であることを最低限hardeningし、一般的なAI便利Tipsだけへ寄り続けないようにする。
+secret/token/valueを返さない。
 
-### 4. Tests
+## 2. Activation/versioning semantics
 
-最低限追加/修正:
-- exact slot item優先
-- slot未指定itemのdeterministic割当
-- same slot retryでsame item
-- priority/id tie-break
-- active planだが当該slot explicit item無しでも不要な停止をしない
-- planなしpersona fallback
-- fallback promptが個人開発日記軸を含む
-- draft/inactive無視
-- JST境界
-- AI Lab以外 unchanged
-- existing OAuth/Vault/refresh static regression
-- full x-test-post + `_shared/brand` regression
-- `git diff --check`
+同じ brand + target_date で:
+- new plan作成時にversionを決定的にincrement
+- activate=trueなら既存activeをarchiveし、新planだけactiveにする
+- 同一transaction内で行い、activeが2件になる中間状態を作らない
+- concurrent writerでもunique violationやraceで壊れない設計にする
+- draft作成も可能
+- archive/replaceの監査に最低限必要なmetadataを維持
 
-## Safety boundary
+既存の partial unique active constraint を利用/調整してよい。
 
-このfocused fixでも禁止:
-- production migration適用
+## 3. Plan validation
+
+DB writer境界で最低限validationする。
+
+必須:
+- `plan` object
+- `items` array
+- 各itemの `id`, `topic`
+- `slot_no` は omitted/null または正整数
+- `priority` は有限number相当
+- `key_points`, `must_include`, `must_avoid` はstring array
+- duplicate item id禁止
+- explicit slotの範囲は現行AI Lab運用slotと矛盾しないよう確認。brand-neutral storageのためDB hardcodeが不適切ならwriter helper/app validationとの責務を明記
+- oversized payloadに上限を設ける（合理的なJSON size / item count）。無制限保存にしない
+
+無効planは保存しない。
+
+## 4. Idempotent daily operation
+
+ユーザーが同じ指示を誤って二度送る可能性を考慮する。
+
+候補:
+- optional `request_key` / `client_request_id`
+- same brand/date/request keyなら同じ結果を返す
+
+最低限、二重操作でactive versionが無意味に増殖しない方法を設計・検証する。
+将来app側でも使えるbrand-neutralな名前にする。
+
+## 5. ChatGPT operational shape
+
+C1 reportに、ちゃが実際に登録するときの**canonical payload example**を秘密情報なしで示す。
+
+例の概念:
+```json
+{
+  "brand_id": "ai_salaryman_lab",
+  "target_date": "YYYY-MM-DD",
+  "source": "chatgpt",
+  "request_key": "...",
+  "plan": {
+    "day_theme": "...",
+    "narrative_arc": "...",
+    "items": [
+      {
+        "id": "...",
+        "slot_no": null,
+        "priority": 10,
+        "topic": "...",
+        "context": "...",
+        "key_points": ["..."],
+        "must_include": [],
+        "must_avoid": []
+      }
+    ]
+  }
+}
+```
+
+日常運用では会話本文をそのまま保存せず、ちゃがstructured planへ変換して登録する。
+
+## 6. Security
+
+絶対条件:
+- anon/authenticated一般userからwriter実行不可
+- service_role/backend admin boundaryのみ
+- RLSを無効化しない
+- SECURITY DEFINER採用時 `search_path=''` 等既存安全規約に従う
+- dynamic SQL不要なら使わない
+- brand/account OAuth/Vault secretへアクセスしない
+- writerがX投稿を直接起動しない
+- writerはCron/posting windowを変更しない
+
+将来social-mobile一般ユーザーからの編集は、このadmin writerを直接開放せず、membership/tenant認可済みbackend境界を別Phaseで設計する。
+
+## 7. Disposable DB proof
+
+productionではなくdisposable/local/test DBで、Phase1 migration + writer candidateを適用して自動検証する。
+
+最低限:
+- first active plan create
+- second active version archives prior active
+- active count exactly 1
+- draft create does not replace active
+- invalid payload rejects/no row
+- duplicate item id rejects
+- null/omitted slot accepted
+- explicit slot accepted
+- request_key retry/idempotency
+- concurrent activation safety（可能な範囲で）
+- anon/authenticated execute denied
+- service-role/admin path allowed
+- read consumer expected queryでlatest activeが取れる
+- rollback/preflight/postflight SQLが成立
+
+## 8. Source boundary
+
+このPhaseで触れてよい:
+- `daily_content_plans` migration candidate
+- writer用の新規migration/RPC/helper/tests/docs
+- 必要ならbrand-neutral shared validation helper
+- `.agent/CODEX_REPORT.md` / this TASK
+
+このPhaseで触れない:
+- `supabase/functions/x-test-post/index.ts`
+- market-report files/functions/migrations
+- personalized-reports
+- apps/social-mobile files
+- OAuth/Vault/token refresh
+- Mio/Kabumori generation behavior
+
+## 9. Production boundary
+
+禁止:
+- production migration apply
 - `supabase db push`
-- production `x-test-post` deploy
-- production RLS/grant/RPC変更
-- Cron/posting window変更
+- production RPC/RLS/grant change
+- Edge Function deploy
+- `x-test-post` deploy
+- Cron/window変更
 - manual/synthetic X post
 - retry/backfill
-- OAuth再認可
-- Vault/token/secret変更
-- Mio/Kabumori behavior変更
-- G1 market-report consumer変更
+- OAuth/Vault/token/secret mutation
 
-## Completion
+**production mutation = 0でC1へ返すこと。**
+
+## Verification / completion
+
+最低限:
+- disposable DB proof PASS
+- writer unit/integration tests PASS
+- relevant existing daily plan tests PASS
+- `git diff --check` PASS
+- secrets 0
+- production mutation 0
+
+C1 reportに明記:
+- exact schema/RPC contract
+- validation rules
+- version/activation/idempotency algorithm
+- canonical ChatGPT payload
+- disposable DB proof
+- changed files
+- exact commit/hash
+- rollout order: base table migration → writer migration/RPC → read-back/preflight → consumer deploy（consumer deployはG1 conflict解消後の別承認）
+- rollback plan
 
 完了時:
-- `.agent/CODEX_REPORT.md` 先頭にfocused fix report追加
-- exact candidate commit/hash
-- selection algorithm
-- fallback rule
-- tests
-- production changes=0
+- `.agent/CODEX_REPORT.md`先頭にPhase2 report
 - this TASKを `status: review_required`, `next_owner: chatgpt`
-- fresh `origin/main`確認後に安全にpush/read-back
+- safe candidateをpush/read-back
 - C1待ちでSTOP
