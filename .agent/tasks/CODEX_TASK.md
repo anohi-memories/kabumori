@@ -1,166 +1,186 @@
 # Codex Task
 
-- task_id: ai-lab-daily-content-plan-writer-postgres-proof-20260918
+- task_id: ai-lab-daily-content-plan-production-rollout-20260918
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Sol Medium/High
-- purpose: Phase 2 writer candidate `3ce866e7e424c4e4b675269122285dab7ca39a6b` の設計自体は概ね承認可能だが、C1必須条件だった disposable PostgreSQL/Supabase 上での migration/RPC/grant/concurrency proof が未実施で、SQLite model + SQL文字列検査に留まっている。production適用前に実Postgres semanticsを証明する focused proof を行う。
+- purpose: C1 PASS済みの AI Lab daily content plan Phase1 consumer/schema candidate + Phase2 writer RPC を、production Supabaseへ最小・可逆に反映する。まず exact migration preflight/apply/read-back を行い、writerを本番で使える状態にする。G1の `x-test-post` consumer cutoverとは分離し、このH1では consumer deploy は行わない。
 
-## Final C1 review — 2026-09-18
+## Approved inputs
 
-**PASS — real PostgreSQL proof accepted.**
+C1承認済み:
+- Phase1 base migration: `supabase/migrations/20260917143302_ai_lab_daily_content_plans_phase1.sql`
+- Phase2 writer migration: `supabase/migrations/20260917211919_ai_lab_daily_content_plan_writer_phase2.sql`
+- consumer/source candidate:
+  - `0a6f20c86603c5834876208e4c05ef711d036be4`
+  - focused selection fix `cdebdc861d9b6fb38645b640c3d48396ec72aee3`
+- writer candidate: `3ce866e7e424c4e4b675269122285dab7ca39a6b`
+- real PostgreSQL 17.6 proof PASS:
+  - migrations apply
+  - service_role allowed / anon+authenticated denied
+  - activation/version/idempotency
+  - concurrent activation serialization
+  - consumer-shaped read
+  - rollback dry-run
 
-確認済み:
-- disposable PostgreSQL 17.6 (`public.ecr.aws/supabase/postgres:17.6.1.165`) 上で Phase1 + Phase2 migration を実際に適用成功。
-- RPC `write_daily_content_plan(text,date,text,jsonb,boolean,text)` は `SECURITY DEFINER`, `search_path=''`, owner=`supabase_admin`、返却は id/version/status/target_date/brand_id の5列のみ。
-- 実DB権限は `anon=false`, `authenticated=false`, `service_role=true`。anon/authenticated direct sessionはpermission deniedかつrow mutation 0、service_roleは書込成功。
-- first active→v1 active、second active→旧row archived / v2 active、active exactly 1。
-- draft作成は既存activeを維持。
-- same request_key + same payloadは同じid/versionを返しrow増加なし。changed payloadは `DAILY_CONTENT_PLAN_REQUEST_KEY_CONFLICT`。
-- duplicate item id / oversized payloadはrejectかつrow増加なし。null/omitted slot、explicit slotは受理。
-- 2 concurrent service_role transactionsでadvisory lockの直列化を実証。最終状態はv1 archived + v2 active、active exactly 1、unique violation/partial stateなし。
-- Phase1 consumer相当queryで最新active planを取得可能。anon readはRLS下で0 row。
-- rollback dry-runはtransaction内で function/index/columns drop → ROLLBACK を実行し、postflightでobjects維持を確認。
-- production mutation 0。production migration/RPC/grant/RLS/deploy/X/Cron/OAuth/Vault/token変更0。
+## Mandatory startup / conflict gate
 
-### C1 decision
+開始前に必ず確認:
+1. `.agent/ORCHESTRATION.md`
+2. `.agent/CURRENT_STATE.md`
+3. this TASK
+4. `.agent/CODEX_REPORT.md`
+5. `.agent/tasks/CODEX_TASK_2.md`
+6. `.agent/tasks/CLAUDE_TASK_1.md`
+7. fresh `origin/main`
+8. production Supabase current schema/migration/object state read-only
 
-Phase 2 writer candidateとPostgreSQL proofを承認する。
+### Hard conflict rule
 
-ただしこれはproduction rolloutそのものの実施承認ではない。次工程は exact approved migration のproduction preflight/apply、RPC/grant/read-back、その後G1の `x-test-post` 競合解消を確認してconsumer deployを別タスクで扱う。
+H2は `brand_memberships` / tenant RLS のproduction rolloutを予定している。**H1とH2でproduction migration applyを同時に行わない。**
 
-## C1 review — 2026-09-18
+- H2が `in_progress` でproduction DB write/apply中、または直近writeの安全確認が未完了なら、H1はproduction write前にSTOPして具体的競合を報告する。
+- H2がreview_required/doneでwrite完了・postflight済みなら、fresh production read-back後にH1を進めてよい。
+- G1はmarket-report / `x-test-post` 領域。H1は今回 `x-test-post` をdeploy/modifyしないのでDB objectが分離していれば競合しない。
 
-**NOT PASS — real PostgreSQL disposable proof required before rollout.**
+## Goal
 
-良かった点:
-- service-side writer contract、versioning、activation、request_key idempotency、validation、payload上限の設計は目的に合っている。
-- `SECURITY DEFINER` + `search_path=''`、anon/authenticated EXECUTE revoke、service_role grantというsecurity boundaryをcandidate化している。
-- brand/date単位のadvisory transaction lockとactive一意constraintを使う設計。
-- 同一request_key + 同一payloadは同じrowを返し、異なるpayloadならconflict。
-- Phase 2で `x-test-post` / OAuth / Vault / market-report / Mio / Kabumori を変更していない。
-- focused 10/10、full regression 473/473、deno check/fmt、git diff --check PASS。
-- production mutation 0。
+productionに以下だけを安全に作る:
+1. `public.daily_content_plans` とPhase1 constraints/index/RLS/grants
+2. Phase2 metadata columns/index
+3. `public.write_daily_content_plan(text,date,text,jsonb,boolean,text)`
+4. writer ACL: anon/authenticated/public deny、service_role allow
 
-### Blocking issue
+**このH1ではAI Lab consumerを本番有効化しない。**
+つまり `x-test-post` deploy、Cron/window変更、投稿生成切替は別承認。
 
-TASKは disposable/local/test DB で少なくとも以下を**実DBで**証明することを要求していた:
-- Phase1 + writer migration apply
-- service_role writer allowed
-- anon/authenticated EXECUTE denied
-- first active / second active archive / exactly-one-active
-- draft preservation
-- request_key retry/idempotency/conflict
-- invalid payload reject/no row
-- concurrent activation safety
-- consumer query compatibility
-- rollback/preflight/postflight SQL
+## 1. Production preflight — read-only
 
-しかしReportのproofは `node:sqlite` のin-memory modelと、migration SQLに文字列が存在することのstatic assertionのみ。これはPostgreSQL固有の以下を検証できない:
-- `SECURITY DEFINER` / grants / JWT claim / session_user挙動
-- `pg_advisory_xact_lock`
-- partial unique index
-- jsonb validation/casting semantics
-- concurrent transaction behavior
-- PL/pgSQL `return query` / exceptions
+適用前に最低限確認:
+- `daily_content_plans` table absent/present
+- writer RPC absent/present
+- 同名index/constraint/policy/grantの衝突
+- `brands.id='ai_salaryman_lab'` が存在
+- Phase1/Phase2 migrationが既に別timestampで実適用されていないか object-levelで確認
+- migration historyは参考にするが、既知driftがあるためhistoryだけで判断しない
+- production PostgreSQL version
+- H2/G1が同じobjectsを触っていないこと
 
-したがって production migration/RPC applyの承認にはまだ足りない。
+既にobjectsが部分存在する場合は、blind applyせず差分を特定してSTOPまたは安全なexact apply案をReportする。
 
-## Required focused proof
-
-### 1. Real disposable PostgreSQL/Supabase apply
-
-productionではない disposable DB / local Supabase / ephemeral Postgres に、C1承認済みPhase1 migrationとwriter Phase2 migrationを実際に適用する。
-
-- production DBへは一切applyしない
-- production migration history repair/reconcile禁止
-- disposable DBが用意できない場合はSTOPして具体的理由をReport
-
-### 2. RPC/security proof
-
-実Postgres上で最低限確認:
-- function作成成功
-- signature / SECURITY DEFINER / search_path
-- anon EXECUTE denied
-- authenticated EXECUTE denied
-- service_role相当 allowed
-- unauthorized callでrow mutation 0
-- service-role callの戻り値が id/version/status/target_date/brand_id のみ
-
-JWT claimをPostgRESTなしで直接再現する場合は、テスト方法と限界を明記する。可能ならSupabase local/test経由で実PostgREST role behaviorも確認する。
-
-### 3. State/idempotency proof
-
-実DBで:
-- first active create => version 1 / active 1件
-- second active create => prior archived / new version 2 / active exactly 1
-- draft create => activeを維持
-- identical request_key retry => same id/version、row増加なし
-- same request_key changed source/plan/activation => `DAILY_CONTENT_PLAN_REQUEST_KEY_CONFLICT`
-- invalid payload => reject、row増加なし
-- null/omitted slot accepted
-- explicit slot accepted
-- duplicate item id rejected
-- oversized payload rejected
-
-### 4. Concurrency proof
-
-可能な範囲で2 concurrent transactions/callsを同じ brand + target_date に対して実行し、
-- version衝突なし
-- active exactly 1
-- unique violationで中途半端な状態にならない
-- retry後も整合
-を確認。
-
-最低でもPostgreSQL上でadvisory lockが直列化する実証を残す。SQLite modelでは代替不可。
-
-### 5. Consumer compatibility
-
-Phase1 consumer相当query:
-- brand_id
-- target_date
-- status='active'
-- version desc
-で最新active planが取得でき、structured payloadが既存parser/selectorに通ることを確認。
-
-### 6. Rollback/preflight/postflight
-
-production適用前に使えるread-only preflight / postflightと、rollback方針を具体化する。
-
-重要:
-- migration history driftが既知なのでblind `supabase db push`前提にしない
-- production rolloutはまだ行わない
-
-## Safety boundary
+## 2. Exact migration apply
 
 禁止:
-- production migration apply
-- production RPC/grant/RLS変更
-- production `x-test-post` deploy
-- Cron/window変更
+- `supabase db push`
+- `--include-all`
+- migration history repair/reconcile
+- unrelated migrations apply
+
+許可:
+- C1承認済みの上記2 migrationだけをexact SQLとして順番に適用
+- 必要ならBEGIN/ROLLBACKの事前proofをproduction上でno-persistで行う
+
+順序:
+1. Phase1 base migration
+2. read-back
+3. Phase2 writer migration
+4. read-back
+
+各段階で失敗したら次へ進まずSTOP。
+
+## 3. Production postflight
+
+必須確認:
+- `daily_content_plans` columns / constraints / partial active uniqueness / indexes
+- RLS enabled
+- table grantsが想定どおり
+- writer RPC signature
+- `prosecdef=true`
+- `search_path=''`
+- function owner
+- function EXECUTE:
+  - public=false
+  - anon=false
+  - authenticated=false
+  - service_role=true
+- request-key unique partial index
+- no unexpected policy/client write path
+- unrelated tables/functions/grants unchanged in relevant inventory
+
+## 4. Bounded writer smoke
+
+本番に不要な恒久テストデータを残さないこと。
+
+第一候補:
+- transaction内で、未来の安全なテスト日付 + `ai_salaryman_lab` に対しwriterを呼び、
+  - active create
+  - idempotent retry
+  - conflict reject
+  - then ROLLBACK
+- postflightでテストrow 0件を確認
+
+service_role transport mappingを確認できる安全な方法があれば、実PostgREST/RPC経由で1回だけ no-secret/no-X のbounded smokeを行ってよい。ただし恒久rowを残さない方法を優先。
+manual X post / scheduler invokeは禁止。
+
+## 5. ChatGPT operational readiness
+
+本番反映後、ちゃが次工程で実際にplan登録できるよう、Reportに以下を明記:
+- exact RPC name/signature
+- canonical JSON payload
+- target_dateはJST calendar date
+- request_key命名例
+- activate=true semantics
+- plan registrationだけではX投稿を即時起動しないこと
+- consumer deploy前はplanを登録しても現行投稿生成にはまだ使われないこと
+
+## 6. Rollback readiness
+
+rollback案を具体化:
+- writer利用停止
+- EXECUTE revoke
+- writer function drop
+- Phase2 metadata/index rollback
+- Phase1 table rollbackはデータ有無を確認したうえで別承認（安易にdropしない）
+
+本タスクでは問題が無ければrollbackを実行しない。
+
+## Production safety boundary
+
+このH1で許可:
+- exact approved Phase1/Phase2 migration production apply
+- read-only pre/postflight
+- transaction rollback smoke
+- .agent metadata/report update
+
+このH1で禁止:
+- `x-test-post` deploy/modify
+- AI Lab consumer enable/cutover
 - manual/synthetic X post
-- retry/backfill
-- OAuth/Vault/token/secret mutation
-- Mio/Kabumori behavior変更
-- G1 market-report変更
+- scheduled_posts retry/backfill
+- Cron/posting-window変更
+- OAuth再認可
+- Vault/token/secret変更
+- Kabumori/Mio behavior変更
+- market-report objects変更
+- social-mobile membership/RLS objects変更
 
-production mutation = 0でC1へ返す。
-
-## Completion
+## Completion / C1 return
 
 完了時:
-- `.agent/CODEX_REPORT.md` 先頭にPostgres proof report
-- disposable DB種別/バージョン
-- applied migrations
-- exact tests/SQL result
-- role/grant proof
-- concurrency proof
-- consumer compatibility
-- production mutation 0
-- candidate code変更が必要ならexact commit/hash
-- this TASKを `status: review_required`, `next_owner: chatgpt`
-- fresh origin/main確認後、安全にpush/read-back
+- `.agent/CODEX_REPORT.md` 先頭にproduction rollout report
+- exact applied SQL/migrations
+- preflight
+- postflight
+- RPC/grant proof
+- smoke/rollback result
+- production changed objects
+- unrelated objects unchanged
+- secrets/X/Cron/OAuth/Vault changes=0
+- this TASK `status: review_required`, `next_owner: chatgpt`
+- fresh origin/main確認後にcontrol metadata同期
 - C1待ちでSTOP
+
+成功してもconsumer deployはしない。次工程はG1の `x-test-post` 競合解消後、AI Lab consumer sourceをproductionへdeployし、ちゃが翌日planを登録する実運用テストを別タスクで行う。
