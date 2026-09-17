@@ -3,8 +3,8 @@
 - task_id: x-ai-lab-vault-token-refresh-candidate-20260917
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: AI Lab通常`brand_post`で、OAuth再認可後に1回成功した後の次slotで`X_REQUEST_FAILED:401`が再発する問題に対し、Vault-backed refresh tokenを安全に使うrefresh/rotation実装candidateを作る。今回のH1ではsource実装とローカル検証まで。production deploy・token mutation・OAuth再認可は行わない。

@@ -15,11 +15,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: x-ai-lab-oauth-401-recovery-20260917
+- task_id: x-ai-lab-vault-token-refresh-candidate-20260917
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: read-only調査で、固定Vault-backed AI Lab tokenがslot6成功後slot7で401。AI Lab runtimeはrefresh無効・legacy store fallbackなし。source/token lifecycle変更が必要なためC1 review_required。
+- note: AI Lab専用refresh/rotation candidate `ed796ba` とmock testsを作成。production deploy/token mutation/OAuth再認可は未実施。C1 review_required。
 
 ### Codex slot 2
 - owner: codex

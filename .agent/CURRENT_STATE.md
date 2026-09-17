@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-17 JST (H1 read-only follow-up)
+- checked_at: 2026-09-17 JST (H1 refresh candidate)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,13 +14,13 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `x-ai-lab-oauth-401-recovery-20260917`
+- Codex slot 1: `review_required` — `x-ai-lab-vault-token-refresh-candidate-20260917`
   - dispatcher復旧済み。
   - AI LabのみOAuth再認可済み。
   - 2026-09-17 16:23 JSTの自然slot 6は1回成功し、X post id 1件 / fingerprint 1件。
   - その次の17:34 JST自然slot 7で `X_REQUEST_FAILED:401` が再発。x_post_id追加なし / fingerprint追加なし / retry/backfillなし。
   - H1 read-only調査で、slot6成功→slot7 401は同じ固定Vault-backed経路で再現。AI Lab runtimeはrefresh無効・legacy fallbackなし。
-  - token refresh/rotation実装、Vault/token mutation、OAuth再々認可、DB/Cron変更が必要なため、実施前にC1へ戻す。
+  - AI Lab専用refresh/rotation candidate `ed796ba` とmock testsを作成。production deploy/token mutation/OAuth再々認可は未実施。C1 review_required。
 
 - Codex slot 2: `done` — `kabumori-news-url-removal-production-deploy-20260917`
   - `important-news-monitor` v55へ、通常重要ニュースX本文の外部URL除去を本番反映済み。
@@ -38,7 +38,7 @@
 
 ## Parallel safety
 
-- H1はAI Lab OAuth/Vault/x-test-post認証経路のread-only調査を担当。
+- H1はAI Lab OAuth/Vault/x-test-post認証経路のrefresh candidateを担当。production deploy/token mutationはC1後のみ。
 - G1はmarket report packet / x-test-post morning-close / personalized-reports領域。OAuth/Vault/social account stateへ触れない。
 - H2/G2はdone。新タスクを割り当てる場合も、同じファイル・DB migration/RPC・Edge Function・workflow・production設定を他slotと同時変更しない。
 - push前にfresh `origin/main`を確認する。

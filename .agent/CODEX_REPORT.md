@@ -1,5 +1,37 @@
 # Codex Report
 
+## Latest H1 result — AI Lab Vault refresh/rotation candidate (2026-09-17)
+
+- task_id: `x-ai-lab-vault-token-refresh-candidate-20260917`
+- result: `review_required` — an AI Lab-only refresh/retry candidate and mocked tests were implemented and committed. Production `x-test-post` was not changed or deployed; no production token/Vault/OAuth/DB/Cron action was performed.
+- implementation_commit: `ed796ba` (`Add AI Lab Vault token refresh candidate`)
+
+### Changed files and call graph
+
+- `supabase/functions/_shared/brand/ai_lab_token_refresh.ts`
+  - `publishAiLabWithRefresh()` is the decision boundary: one initial publish, refresh only on the first HTTP 401, then one retry of the same publish. It throws on an uncertain publish, persistence failure, or a second non-2xx response; no third publish or second refresh is possible.
+  - `refreshAiLabTokens()` is scoped to the fixed `ai_salaryman_lab` / `ai_salaryman_lab_x` / `kaishain_ai_lab` context and validates both opaque Vault reference shapes before calling `POST /2/oauth2/token`.
+  - The refresh request uses the confidential-client Basic header and `grant_type=refresh_token`. A rotated refresh token replaces the old one; if X omits a new refresh token, the existing refresh token is preserved.
+  - Persistence is an injected `PersistAiLabTokens` callback receiving the same AI Lab Vault reference pair. It runs before the X retry; any writer error is sanitized to `AI_LAB_TOKEN_PERSIST_FAILED` and blocks retry.
+  - Errors contain only stable codes/statuses; token values, client secrets, Vault IDs, response bodies, and provider error text are never copied into thrown errors.
+- `supabase/functions/_shared/brand/ai_lab_token_refresh_test.ts`
+  - 9 mocked tests cover valid-token/no-refresh, 401→one-refresh→one-retry, rotated refresh persistence, non-rotated refresh preservation, refresh failure, Vault persistence failure, second 401/no third publish, uncertain completion/no refresh, wrong brand/account rejection, and secret-safe errors.
+
+### Verification
+
+- Focused candidate suite: **9 passed / 0 failed**.
+- Existing `x-test-post` + `_shared/brand` regression suite after the candidate: **465 passed / 0 failed**.
+- `deno check --no-config supabase/functions/_shared/brand/ai_lab_token_refresh.ts`: pass.
+- `deno fmt --check` on both changed files: pass.
+- `git diff --check`: pass.
+
+### Production boundary and remaining risks
+
+- The live AI Lab branch remains unchanged with `allowRefresh=false`; this candidate is not wired into the deployed runtime yet. That is intentional: production currently has no approved Vault write adapter for updating the two existing secret destinations, and this task prohibits production token mutation.
+- No Edge Function deploy, OAuth reauthorization, refresh-token call, Vault read/write, DB/RPC/schema/migration, Cron/window, manual post, failed-row retry, or backfill was performed.
+- Before any production use, C1 must review the persistence adapter, Vault update mechanism, concurrency/rotation behavior, and whether the existing completion/idempotency guard remains the outermost boundary. A subsequent deploy/token mutation requires separate authorization.
+
+
 ## Latest H1 result — AI Lab recurring 401 read-only investigation (2026-09-17)
 
 - task_id: `x-ai-lab-oauth-401-recovery-20260917`
