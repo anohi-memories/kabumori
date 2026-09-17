@@ -3,8 +3,8 @@
 - task_id: market-report-shared-platform-design-audit-20260916
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: user
 - priority: high
 - recommended_model: Opus 5
 - purpose: X朝刊/X大引けとアプリ朝刊/アプリ大引けを、共通の市場データ・Fact済み市場分析packetから派生させる次世代共通基盤を、実装前に監査・設計する。
