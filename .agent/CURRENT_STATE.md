@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-17 JST (H1 integration candidate ready)
+- checked_at: 2026-09-17 JST (H1 integration candidate review_required)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,11 +14,11 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `x-ai-lab-vault-token-refresh-integration-candidate-20260917`
+- Codex slot 1: `review_required` — `x-ai-lab-vault-token-refresh-integration-candidate-20260917`
   - refresh helper candidate `f22e2ca` + focused fail-closed fix `09a199a` はC1 PASS。
   - 2xxのみsuccess、401のみrefresh 1回、401以外non-2xxは即fail、uncertainはno-refresh/no-resend。
   - focused 13/13、x-test-post + `_shared/brand` regression 469/469。
-  - 次のH1はproduction deploy前のintegration candidate: 実Vault writer/persistence adapter、rotation concurrency、completion/idempotency外周維持を実装・検証する。
+  - candidate `a7ffba4` は実Vault writer/persistence adapter、rotation concurrency guard、completion/idempotency外周維持を実装・検証済み。C1レビュー待ち。
   - production deploy/token mutation/OAuth再認可はC1前は禁止。
 
 - Codex slot 2: `done` — `kabumori-news-url-removal-production-deploy-20260917`
@@ -44,7 +44,7 @@
 ## Known issues
 
 - AI Lab通常`brand_post`はOAuth再認可後1回成功後、次slotで401再発。恒久復旧は未成立。
-- refresh helper自体はC1 PASSしたがproduction未統合。次はVault writer/concurrency/current OAuth client auth方式/completion-idempotency境界をintegration candidateで審査する。
+- refresh helperとintegration candidateはC1レビュー待ち。production deploy/token mutation/OAuth再認可は未実施。
 - multibrand migrations `20260910170000/180000/190000` objectsはproductionに存在するがmigration history不整合の可能性があるためblind `supabase db push`禁止。
 - 2026-09-09 morning_greeting legacy Storage receipt HTTP400は別件。
 - 重要ニュースX生成にはFact/Voice系generation_failedが残る。
