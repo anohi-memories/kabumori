@@ -10,6 +10,8 @@
 --     "key_points": ["..."], "must_include": ["..."], "must_avoid": ["..."]
 --   }]
 -- }
+-- slot_no may be omitted/null; such items are deterministically assigned to
+-- otherwise-unassigned scheduled slots by priority then id.
 create table if not exists public.daily_content_plans (
   id uuid primary key default gen_random_uuid(),
   brand_id text not null references public.brands(id) on delete cascade,
