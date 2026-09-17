@@ -1,5 +1,25 @@
 # Codex Slot 2 Report
 
+## H2 — Social mobile app Phase 3: production schema/RLS inventory (2026-09-17)
+
+- task_id: `social-mobile-app-phase3-schema-rls-inventory-20260917`
+- result: Supabase production metadataをread-only監査し、mobileの直接read可否を確定。`brands`/`social_accounts`/`scheduled_posts`のrelationは存在するが、user→brand membershipとauthenticated向けtenant RLSがなく、mobile data sourceは安全側でblockedとした。C2レビュー待ち。
+- source_base: fresh `origin/main` `1a67ea45ad058813f23b7b765453457fa4193d91`（作業開始時）。
+- production_read_only: `supabase_list_tables`、`pg_policies`、grants、routine metadata、migration listのみ実行。production DB write、migration、RLS/grant/RPC変更、auth mutation、deploy、SNS/API実行は0。
+- confirmed_schema: `public.brands(id, display_name, is_active, publish_mode, code_profile_key)`、`public.social_accounts(id, brand_id, platform, handle, platform_user_id, publish_enabled, connection_status, Vault secret id列)`、`public.scheduled_posts(id, schedule_date, post_type, slot_no, scheduled_for, status, attempt_count, brand_id)`、`public.post_execution_logs(..., brand_id, x_post_id, message, error_code)`を確認。brand/account/schedule/logsのbrand FKを確認。`scheduled_posts`にgenerated_textやsocial_account_idはなく、本文とaccount直結は未確認。
+- rls_and_grants: 全対象resourceはRLS enabled。`brands`/`social_accounts`はauthenticated grant/policyがなくservice_roleのみ。`scheduled_posts`、`post_execution_logs`、`posting_windows`、`posting_blackouts`はauthenticated grantがあるがpolicyは`private.is_admin()`のみ。`private.is_admin()`はSECURITY DEFINER、empty search_path、authenticated EXECUTE。一般Auth user向けのbrand membership policyは存在しない。
+- ownership: **D（relation無し/不十分）**。`profiles.id → auth.users.id`と個人テーブルの`auth.uid()` own-row policiesは存在するが、brands/social_accountsへ接続するmembership/owner table・FKはproduction metadataで確認できない。`admin_users`はadmin dashboard境界であり、social mobile tenant membershipではない。
+- rpc: `get_my_important_stock_news(integer)`はSECURITY DEFINER / empty search_path / authenticated EXECUTEだが、個人向け重要ニュースRPCでありbrand/account readには使わない。mobile向けRPCは存在せず、追加していない。
+- changed_files: `apps/social-mobile/src/data/supabase-repository.ts`（productionで確認した`brand_id`列を使うread candidate、schema mismatch/permission error分類、所有境界を満たさない場合のfail-closed）; `apps/social-mobile/docs/phase3-schema-rls-inventory.md`（schema/RLS/FK/mapping/Phase4 proposal）。他ファイル・他workstreamは変更していない。
+- adapter_decision: `EXPO_PUBLIC_DATA_SOURCE=mock` defaultを維持。Supabase source指定時のみread-only query候補を実行し、42501はblocked、42P01/42703はschema unavailable、その他はunavailable。client-side `brand_id` filterだけで権限を補わず、RLS/ownershipが証明できないrowは表示しない。
+- domain_mapping: Workspace→brands、SocialAccount→social_accounts、PlannedPost→scheduled_postsの候補を文書化。plan/usage、post origin、本文、social account relationはDB上の安全な正本が不足。Vault secret列は選択・表示しない。
+- phase4_proposal: `brand_memberships(user_id,brand_id,role)`とFK/unique、brand-scoped SELECT/WRITE policies、必要ならtenant-checked private RPC、scheduled_postsのsocial_account/body relationをdisposable DBでpolicy matrix検証してから別C2承認で適用する。SECURITY DEFINERをRLS回避目的に追加しない。
+- tests: `npm run typecheck` PASS; `npm run lint` PASS (0 errors/warnings); Expo Web export/route resolution PASS (`/private/tmp/social-mobile-phase3-dist`); `git diff --check` PASS。packageにunit-test runnerがないためproduction sign-in/read、OAuth、SNS/API実行はしていない。
+- production_decision: **Supabase data sourceをONにしてはならない**。現状はblocked/unavailable表示が正しい。production変更0、deploy0、manual API/X/Push0、secret/token露出0。
+- implementation_commit: pending after fresh origin check; push not attempted.
+- remaining_issues: Phase4でmembership/RLS設計をC2承認後にdisposable DB検証する必要がある。device visual QAと実ユーザーAuth確認も未実施。
+- safety_checks: `/Users/yuya/Developer/kabumori`正式repo、root Expo、`apps/admin/**`、`supabase/**`、H1/G1/G2、HANDOFF.mdは変更していない。TASKは`review_required`、`next_owner: chatgpt`。
+
 ## H2 — Social mobile app Phase 2: Auth/data boundary (2026-09-17)
 
 - task_id: `social-mobile-app-phase2-auth-data-20260917`

@@ -8,6 +8,12 @@ export type SocialDataSnapshot = { workspace: Workspace | null; accounts: Social
 
 const emptySnapshot: SocialDataSnapshot = { workspace: null, accounts: [], plannedPosts: [], history: [] };
 
+function classifyReadError(code: string | undefined): { state: ReadState; reason: string } {
+  if (code === '42501') return { state: 'blocked', reason: 'このアカウントの運用データを読む権限が確認できません。' };
+  if (code === '42P01' || code === '42703') return { state: 'unavailable', reason: '必要な運用テーブルまたは列が確認できません。' };
+  return { state: 'unavailable', reason: '運用データを取得できません。' };
+}
+
 export class SupabaseSocialRepository {
   constructor(private readonly client: SupabaseClient) {}
 
@@ -15,16 +21,15 @@ export class SupabaseSocialRepository {
     const { data: userData, error: userError } = await this.client.auth.getUser();
     if (userError || !userData.user) return { state: 'blocked', data: emptySnapshot, reason: 'ログインが必要です。' };
 
-    // These are intentionally narrow read candidates. RLS/tenant ownership must be proven by production policy before enabling this source.
+    // These are intentionally narrow read candidates. Production metadata confirms the
+    // columns, but RLS/grants still need to prove that an authenticated mobile user may read them.
     const { data: brandRows, error: brandError } = await this.client.from('brands').select('id,display_name,is_active,publish_mode').eq('id', KABUMORI_BRAND_ID).limit(1);
     const { data: accountRows, error: accountError } = await this.client.from('social_accounts').select('id,brand_id,platform,handle,connection_status,publish_enabled').eq('brand_id', KABUMORI_BRAND_ID).limit(20);
-    // The checked-in scheduler schema has no tenant key or generated-text column. Do not
-    // guess either field or client-filter rows into a brand; keep this adapter blocked until
-    // production exposes a proven ownership relation (for example, a brand_id + RLS policy).
-    const { data: scheduleRows, error: scheduleError } = await this.client.from('scheduled_posts').select('id,post_type,scheduled_for,status').order('scheduled_for', { ascending: false }).limit(30);
+    const { data: scheduleRows, error: scheduleError } = await this.client.from('scheduled_posts').select('id,brand_id,post_type,scheduled_for,status').eq('brand_id', KABUMORI_BRAND_ID).order('scheduled_for', { ascending: false }).limit(30);
     if (brandError || accountError || scheduleError) {
       const code = brandError?.code ?? accountError?.code ?? scheduleError?.code;
-      return { state: code === '42501' ? 'blocked' : 'unavailable', data: emptySnapshot, reason: code === '42501' ? 'このアカウントの運用データを読む権限が確認できません。' : '運用データを取得できません。' };
+      const failure = classifyReadError(code);
+      return { state: failure.state, data: emptySnapshot, reason: failure.reason };
     }
 
     const accounts: SocialAccount[] = (accountRows ?? []).flatMap((row) => {
@@ -33,9 +38,8 @@ export class SupabaseSocialRepository {
       if (!platform) return [];
       return [{ id: row.id, platform, profile: { displayName: row.handle, handle: `@${row.handle.replace(/^@/u, '')}`, avatarColor: '#475569', voice: { tone: '設定未取得', language: '日本語', avoid: [] } }, connectionStatus: row.connection_status === 'connected' ? 'connected' : 'needs_attention', postingState: row.publish_enabled === false ? 'paused' : 'active' }];
     });
-    if ((scheduleRows ?? []).length > 0) return { state: 'blocked', data: emptySnapshot, reason: '投稿予定とブランドの所有境界を確認できないため、表示を保留しています。' };
     const posts: PlannedPost[] = (scheduleRows ?? []).flatMap((row) => {
-      if (typeof row.id !== 'string' || typeof row.scheduled_for !== 'string' || typeof row.post_type !== 'string') return [];
+      if (row.brand_id !== KABUMORI_BRAND_ID || typeof row.id !== 'string' || typeof row.scheduled_for !== 'string' || typeof row.post_type !== 'string') return [];
       const status = row.status === 'published' ? 'published' : row.status === 'failed' ? 'failed' : row.status === 'publishing' ? 'publishing' : row.status === 'draft' ? 'draft' : 'scheduled';
       return [{ id: row.id, accountId: accounts[0]?.id ?? 'unknown', scheduledAt: row.scheduled_for, origin: 'ai_generated', status, text: '' }];
     });

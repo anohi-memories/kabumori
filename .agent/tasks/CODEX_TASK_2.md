@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase3-schema-rls-inventory-20260917
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol Medium/High
 - purpose: `apps/social-mobile` Phase 3として、production multibrand/SNS関連schema・ownership・RLSをread-onlyで精査し、mobile appが安全に実データへ接続するためのtenant境界を確定する。必要な不足schema/RLS/membership設計は提案まで行うが、このPhaseではproduction変更を行わない。
