@@ -1,247 +1,218 @@
 # Codex Task 2
 
-- task_id: social-mobile-app-phase4-membership-rls-validation-20260918
+- task_id: social-mobile-app-phase4-disposable-db-proof-20260918
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Sol Medium/High
-- purpose: `apps/social-mobile` Phase 4として、Phase 3で確定したownership/RLS不足をもとに、`brand_memberships`中心のtenant isolation設計をdisposable DBで検証し、production適用前にpolicy matrixとmobile read contractを成立させる。production DBにはまだ適用しない。
+- purpose: 前回Phase 4で作成した `brand_memberships` / tenant RLS candidateを、実際の隔離PostgreSQL環境へ適用してpolicy matrix・cross-tenant isolation・admin compatibility・rollbackを実証する。production DBには一切適用しない。
 
-## Context
+## Context / previous C2 decision
 
-Phase 3 C2 PASS:
-- production `brands` / `social_accounts` / `scheduled_posts` / `post_execution_logs` の実schema・brand relationを確認済み
-- 一般ユーザーの `auth.users` → brand/workspace/account membership relationは未成立
-- `brands` / `social_accounts` は一般authenticated向けの安全なread pathなし
-- `scheduled_posts` 等もadmin-only policy中心
-- `EXPO_PUBLIC_DATA_SOURCE=supabase` のproduction有効化は禁止中
-- Phase 3 implementation: `c0de2dea8310cafbb2ec0824ebeef242d5c43d3f`
+前回Phase 4で以下までは成立済み:
+- membership/RLS設計候補
+- migration candidate: `supabase/migrations/20260918120000_social_mobile_brand_memberships.sql`
+- mobile contract: direct SELECT + RLS
+- static contract tests 5/5 PASS
+- typecheck / lint / Expo Web export / diff-check PASS
+- production mutation 0
+
+ただし必須条件だった **disposable DBへの実migration apply → policy matrix → rollback実証** が、PostgreSQL/Podman runtime不在で未実行だったためC2は全体PASSにしていない。
+
+このTASKはその未完了部分だけを完遂する。
 
 ## Mandatory startup / safety
 
-開始前に必ず読む:
+開始前に必ず確認:
 1. `.agent/ORCHESTRATION.md`
 2. `.agent/CURRENT_STATE.md`
 3. this TASK
 4. `.agent/CODEX_REPORT_2.md`
-5. H1/G1/G2の現行TASK
-6. fresh `origin/main`
+5. fresh `origin/main`
+6. H1/G1/G2の現行TASK
 
-競合ルール:
-- H1のAI Lab generation/OAuth/Vault/x-test-post領域を変更しない
-- G1のmarket-report schema/functions/x-test-post/personalized-reports領域を変更しない
-- G2領域を変更しない
+並行安全:
+- H1のAI Lab領域、G1のmarket-report/x-test-post/personalized-reports領域、G2領域を変更しない
 - 既存未コミット変更は他workstream所有として触らない
+- production projectへのwrite系commandは禁止
 - push前にfresh `origin/main`再確認
 
 ## Absolute production boundary
 
-このPhaseで許可:
-- disposable/local/test DBでのmigration/policy検証
-- migration candidate / SQL proposalの作成
-- `apps/social-mobile/**` のadapter/type/test hardening
-- docs/TASK/Report更新
-- production DB/schema/RLS/grant/RPCのread-only再確認（必要最小限）
+許可:
+- `/private/tmp` 等の使い捨て環境
+- isolated PostgreSQL / Supabase local stack / disposable container
+- fixture作成
+- candidate migration apply / rollback
+- local/disposable policy matrix実行
+- read-only production metadata再確認（必要最小限）
+- docs/test harness/TASK/Report更新
 
-このPhaseで禁止:
+禁止:
 - production DB write
-- production migration適用
-- production RLS policy追加/変更/削除
-- production grant/revoke
-- production RPC/Function deploy
+- production migration/RLS/grant/RPC適用
 - `supabase db push`
 - migration history repair/reconcile
-- auth production user作成/削除/更新
-- SNS OAuth接続
-- X/Instagram/Threads実投稿
-- Vault/token/secret変更
-- Storage write
-- AI API本接続
-- Push通知
-- 課金/IAP/Stripe
-- Cron/settings変更
+- production auth user作成/削除/更新
+- production Edge Function deploy
+- OAuth/Vault/token/secret変更
+- X/Instagram/Threads投稿
+- Storage/AI/Push/課金/Cron/settings変更
 
-**production mutationは0件でC2へ返すこと。**
+**production mutationは0件で完了すること。**
 
-## Phase 4 goals
+## Goal 1 — disposable PostgreSQL runtimeを用意
 
-### 1. Membership schema candidate
+環境に既存runtimeが無ければ、productionとは切り離された方法で一時環境を用意する。
 
-Phase 3提案を具体化し、少なくとも以下を設計する:
+優先順:
+1. 既存利用可能なlocal PostgreSQL/Supabase runtime
+2. Docker/Podman等のisolated container
+3. その他の使い捨てPostgreSQL runtime
 
-`brand_memberships`
-- `brand_id` → `brands.id` FK
-- `user_id` → `auth.users.id` FK
-- `role`（最低 owner/admin/member/viewer 等、必要最小）
-- `created_at`
-- unique `(brand_id, user_id)`
-- role check/enum
-- delete/update時の安全境界
+条件:
+- production URL/DB credentialを絶対に流用しない
+- runtime準備のためにhostの恒久設定を壊さない
+- runtime用ファイルはrepo本体へ不要に混ぜない
+- runtime準備自体が安全にできない場合は、具体的な環境blockerをReportしてSTOP
 
-必要なら `created_by` / `updated_at` 等を検討してよいが、過剰設計しない。
+## Goal 2 — production-compatible fixture schema
 
-### 2. RLS policy candidate
+candidate migration適用前に、Phase 3で確認したproduction互換の最小fixtureを作る。
 
-少なくとも以下をdisposable DBで実装・検証する:
+最低限:
+- `auth.users`
+- `public.brands`
+- `public.social_accounts`
+- `public.scheduled_posts`
+- `public.post_execution_logs`
+- `public.posting_windows`
+- `private.is_admin()` 相当の既存admin path
+- RLS enabled状態
 
-- `brands` SELECT: membership userのみ対象brand
-- `social_accounts` SELECT: membership経由のbrand scoped
-- `scheduled_posts` SELECT: membership経由のbrand scoped
-- `post_execution_logs` SELECT: membership経由のbrand scoped
-- `posting_windows` / brand settings read: membership roleで限定
-- anon: 0 row
-- non-member: 0 row
-- brand A memberがbrand B rowを見られない
-- admin dashboard既存 `private.is_admin()` を壊さない
+型/FKはproductionで確認済みの型に合わせる。
+存在しないproduction列を都合よく追加してmigrationを通さない。
 
-write policyは今回production用に確定する必要がある範囲だけcandidate化。
-原則:
-- viewer/memberはread中心
-- owner/adminだけ設定変更可能候補
-- `WITH CHECK`でbrand reassignment不可
-- service/backend writeとの責任分離
+## Goal 3 — candidate migration実apply
 
-### 3. Policy matrix test
+対象:
+`supabase/migrations/20260918120000_social_mobile_brand_memberships.sql`
 
-最低限、disposable DBで以下を自動検証する:
+検証:
+- apply成功
+- `brand_memberships` table存在
+- `(brand_id,user_id)` PK/unique
+- `brand_id → brands.id` FK
+- `user_id → auth.users.id` FK
+- role check
+- RLS enabled
+- authenticated own-membership SELECT policy
+- operational tableのtenant SELECT policy
+- authenticated mobile roleへのmembership write grant無し
+- 既存admin policyが削除/置換されていない
 
-actor:
-- anon
+apply失敗時はcandidate SQLをproduction都合で弱めない。原因を修正可能ならcandidate側だけ直し、再applyして検証する。
+
+## Goal 4 — policy matrixを実行
+
+fixture:
+- user A member/viewer
+- user A owner/admin相当
+- user B member
 - authenticated non-member
-- brand A viewer/member
-- brand A owner/admin
-- brand B member
-- existing global admin相当
-- service role相当（必要な場合）
+- global admin相当
+- anon
+- service/backend相当
+- brand A / brand B
+- 各brand配下のsocial_accounts / scheduled_posts / logs / posting_windows
 
-resource:
-- brands
-- social_accounts
-- scheduled_posts
-- post_execution_logs
-- posting_windows / relevant settings
+最低限期待値:
+- anon → 0 row
+- authenticated non-member → 0 row
+- A member/viewer → Aだけread可、Bは0
+- A owner/admin membership → Aだけread可
+- B member → Bだけread可、Aは0
+- existing global admin → 従来admin pathでA/B双方必要範囲をread可
+- membership INSERT/UPDATE/DELETE → mobile authenticated roleでは不可
+- client側の `.eq('brand_id', ...)` が無くてもRLSだけでcross-tenant漏洩0
+- service/backend pathはfixture作成・backend責任範囲として成立
 
-operation:
-- SELECT
-- 必要なUPDATE/INSERT候補
+`auth.uid()`相当のclaim/session contextを各actorごとに正しく再現してテストすること。
 
-期待値をmatrixとしてdocs/reportに残す。
+## Goal 5 — admin compatibility
 
-### 4. Mobile read contract
+必ず確認:
+- 既存 `private.is_admin()` pathをcandidateが壊していない
+- admin policyとmembership policyのOR合成が期待どおり
+- adminにmembership行が無くても既存admin経路が成立
 
-Phase 4でmobile appが安全に読む契約を確定する。
+admin compatibilityが崩れるならPhase 4はFAILとしてC2へ返す。
 
-決めること:
-- direct RLS SELECTを採用するか
-- tenant-checked RPC/viewを採用するか
-- active account切替時のsource of truth
-- no membership時のUI state
-- membership role変更時のsession反映
-- appが絶対に読まない列（Vault secret refs等）
+## Goal 6 — rollback proof
 
-`service_role`をmobileへ入れない。
-SECURITY DEFINERは単なるRLS回避目的で使わない。
+同じdisposable DBでcandidate追加object/policyをrollback/cleanupし、少なくとも:
+- `brand_memberships`削除
+- candidate policy削除
+- fixture baselineの既存admin policyが残る
+- candidate適用前と同等のobject/policy状態へ戻る
 
-### 5. `scheduled_posts` / body / social account gap
+をread-backで確認する。
 
-Phase 3で未解決:
-- `scheduled_posts`に本文正本なし
-- `social_account_id`なし
-- PostOrigin正本なし
+## Goal 7 — mobile read contract再確認
 
-今回、既存posting runtime/sourceをread-onlyで調査し、最小案を決める:
-- 安全なread view
-- detail table relation
-- `social_account_id` FK追加
-- content/body source relation
-
-ただし既存投稿経路と競合する変更をproductionには適用しない。
-
-### 6. Migration candidate
-
-本番適用用ではなく、reviewable candidateとして作成してよい。
-
-要件:
-- idempotency/既存objectとの衝突を考慮
-- Phase 3で確認した実schema前提
-- migration history不整合があるためblind push前提にしない
-- rollback / preflight / postflight SQLもdocsへ記載
-- actual production applyは禁止
-
-migration candidateを作る場合は、G1のmarket-report migrationと同じファイル/objectsを触らない。
-
-### 7. Mobile adapter/tests
-
-安全な契約が固まった範囲で `apps/social-mobile` を更新してよい。
-
-最低限:
-- membership absent → blocked/no-workspace
-- membership present → tenant-scoped read contract
-- permission denied / schema mismatch / unavailableの区別
-- cross-tenant rowをclient filterで隠す設計は禁止
+実policy matrixが通った結果をもとに、以下を最終確認:
+- direct SELECT + RLSを採用継続してよいか
+- membership 0件 → blocked/no-workspace
+- active accountはmembershipで許可されたbrand配下accountのみ
+- Vault/OAuth/token/secret列はselectしない
+- `scheduled_posts`のaccount/body/origin gapは未解決のまま誤帰属しない
 - `EXPO_PUBLIC_DATA_SOURCE=mock` default維持
-- production Supabase sourceはまだ既定ONにしない
+- production Supabase sourceはまだONにしない
 
-## Verification
+必要なら `apps/social-mobile` のtest/docsだけ修正可。production接続をONにはしない。
+
+## Required verification
 
 最低限:
-- disposable DB migration apply PASS
-- policy matrix tests PASS
+- disposable migration apply PASS
+- policy matrix PASS
 - cross-tenant isolation PASS
 - admin compatibility PASS
-- `npm run typecheck`
-- `npm run lint`
-- Expo Web export / route resolution
-- adapter tests可能な範囲
-- `git diff --check`
-
-production側:
-- write 0
-- migration/RLS/grant/RPC deploy 0
-- auth mutation 0
-- SNS/API/X/Push 0
-- secret/token exposure 0
-
-## Deliverables
-
-- membership schema candidate
-- RLS/policy candidate
-- automated policy matrix proof
-- mobile read contract
-- scheduled_posts/body/account gapの最小案
-- production rollout checklist（未実施）
-- rollback/preflight/postflight案
-- app adapter hardening（必要範囲）
+- mobile membership write denial PASS
+- rollback/read-back PASS
+- existing static contract test PASS
+- `npm run typecheck` PASS
+- `npm run lint` PASS
+- Expo Web export/route resolution PASS
+- `git diff --check` PASS
 
 ## Completion criteria
 
 C2へ返す時点で明確にする:
-1. membership modelは何か
-2. member/non-member/anon/adminのpolicy matrixが通るか
-3. brand A/B横断漏洩が0か
-4. admin既存経路を壊さないか
-5. direct SELECT vs RPC/viewのどれを採用するか
-6. production migration candidateは安全にreview可能か
-7. `EXPO_PUBLIC_DATA_SOURCE=supabase`を次PhaseでONにできる条件
-8. production mutationが0であること
+1. 何のruntimeでdisposable proofを行ったか
+2. exact migration/candidate commit
+3. apply結果
+4. actor × resource matrix結果
+5. brand A/B横断漏洩が0か
+6. admin compatibilityが成立するか
+7. rollbackが実証できたか
+8. production適用に残るblocker
+9. production mutation 0
+
+## Completion procedure
 
 完了時:
-- `.agent/CODEX_REPORT_2.md` 先頭にPhase 4 report追加
-- exact source base / implementation commit / changed files
-- disposable DB proof
-- policy matrix
-- security decision
-- production rollout proposal
-- tests
-- production mutation 0
-を記載
+- `.agent/CODEX_REPORT_2.md` 先頭にPhase 4 disposable proof reportを追加
+- exact runtime / commands概略 / source base / implementation commit / tests / matrix / rollback / production mutation 0を記録
 - this TASKを `status: review_required`, `next_owner: chatgpt`
-- push前fresh-check、push後origin/main read-back
-- C2待ちでSTOP
+- push前fresh-check
+- origin/mainへ安全にpush
+- push後read-back
+- STOPしてC2待ち
 
-## Important decision rule
+## Decision rule
 
-Phase 4は**本番適用ではなく証明フェーズ**。
-policy matrix・cross-tenant isolation・admin compatibilityのどれかが不十分なら、本番適用案を進めずblockerとしてC2へ返すこと。
+**実DBでpolicy matrix・cross-tenant isolation・admin compatibility・rollbackの全てが通るまではPhase 4完了扱いにしない。**
+productionへの適用は、このTASKでは絶対に行わない。
