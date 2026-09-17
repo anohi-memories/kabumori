@@ -3,7 +3,7 @@
 - task_id: kabumori-news-url-removal-production-deploy-20260917
 - owner: codex
 - slot: codex-2
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol Medium
@@ -97,3 +97,15 @@ PASS.
 - other_functions: stocks-master-sync v16, stocks-new-listing-sync v15, send-push-notifications v15, x-oauth-connect v18, personalized-reports v13, market-intelligence-ingest v11, market-intelligence-state-evaluator v7, and brand-post-dry-run v5 retained their pre-deploy versions/updated_at. `x-test-post` advanced separately from v109 to v110 during the deploy window under the concurrent H1 workstream; this H2 deploy did not target or modify it.
 - safety: no DB/schema/RPC/migration/RLS/Cron/settings/secrets/OAuth changes; no manual OpenAI/X/Push/API invocation or X post; no source URL metadata deletion; no other Function deploy
 - next_step: observe the next natural important-news post only; no manual candidate or publish. Keep `status: review_required` / `next_owner: chatgpt`.
+
+## Final C2 review — 2026-09-17
+
+PASS.
+
+- `important-news-monitor` v54 → v55 ACTIVE、`verify_jwt=false`維持を確認。
+- deploy source `e8db510458351d919c13eb2ee7e58944ac8aee2f` は承認済みURL除去実装 `bd97a56c8f4f9321070bcdef7970062090308a49` を含み、以後の未レビューruntime差分なし。
+- production runtimeはdeploy sourceと23/23 TypeScript filesでbyte一致。
+- 他Functionは不変。`x-test-post` v109→v110は同時進行中のCodex slot 1 hotfix workstreamに帰属し、本H2のdeploy対象外であることをTASK/Reportで確認。
+- DB/schema/RPC/migration/RLS/Cron/settings/OAuth/secrets変更なし。
+- 手動OpenAI/X/Push/API/X投稿なし。source URL metadata削除なし。
+- 本タスクは完了。残るのは次の自然な重要ニュース投稿でURLなし本文を観測するread-only確認のみ。
