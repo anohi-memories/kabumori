@@ -19,17 +19,17 @@
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: 会社員AIラボの生成を、翌日用structured content plan最優先・未指定時persona fallbackへ切り替えるPhase1 candidate。source candidateはC1 review待ち。production migration/deployは0。
+- note: AI Lab content-plan優先制御candidate。C1 review待ち。production migration/deployは未実施。
 
 ### Codex slot 2
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: social-mobile-app-phase3-schema-rls-inventory-20260917
+- task_id: social-mobile-app-phase4-membership-rls-validation-20260918
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
-- note: social-mobile Phase3。production multibrand/SNS schema・ownership・RLSをread-only auditし、tenant境界とPhase4最小変更案を確定する。production mutation 0。
+- note: Phase3で確認したmembership/RLS不足をもとに、`brand_memberships`中心のtenant policyをdisposable DBで検証する。policy matrix / cross-tenant isolation / admin compatibilityを証明し、production mutation 0のままC2へ返す。
 
 ### Claude slot 1
 - owner: claude
@@ -39,7 +39,7 @@
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- note: shared market_report_packet候補とX/app consumer gate実装のK1 review待ち。`x-test-post`を含むため、再開時はH1と同時編集禁止。
+- note: shared market_report_packet候補とX/app consumer gate実装のK1 review待ち。consumer production switchはまだOFF。
 
 ### Claude slot 2
 - owner: claude
@@ -49,7 +49,7 @@
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: K2 PASS・main反映済み。翌朝05:30 JSTの自然OFF確認は別read-only観測。
+- note: K2 PASS・main反映済み。自然OFF確認は別read-only観測。
 
 ## Control codes
 
