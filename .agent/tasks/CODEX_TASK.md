@@ -1,54 +1,56 @@
 # Codex Task
 
-- task_id: x-ai-lab-vault-token-refresh-production-preflight-20260917
+- task_id: x-ai-lab-vault-token-refresh-runtime-preflight-20260917
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: urgent
 - recommended_model: Sol High
-- purpose: C1 PASSしたAI Lab Vault refresh integration candidate `a7ffba4930a9eff3885ab29254f9858b80e71170`について、本番deploy前の環境・権限・接続方式をread-only中心に検証し、実deploy可能な状態かを判定する。まだproduction deploy・token/Vault mutation・実refreshは行わない。
+- purpose: C1でread-only production preflightを確認済み。残る唯一の本番gateである「Supabase Edge runtimeから既存`SUPABASE_DB_URL`へ直接接続でき、Vault writerに必要なeffective DB role/EXECUTE権限が成立するか」を、token/Vault/X投稿を一切変更しないisolated no-write runtime probeで実証する。
 
 ## C1 review — 2026-09-17
 
-**PASS — integration source candidate approved for preflight.**
+**PASS for read-only preflight / production deploy still NOT approved.**
 
 確認済み:
-- approved refresh helperが現行AI Lab `x-test-post` routeへcandidate統合されている。
-- completion/idempotency guardは外周に維持。
-- AI Lab固定 `ai_salaryman_lab` / `ai_salaryman_lab_x` / `kaishain_ai_lab` 境界を維持。
-- Kabumori/Mio/legacy `oauth_token_store` fallbackなし。
-- Vault persistenceはtransaction + advisory lock + expected refresh token比較でstale writerを拒否。
-- access tokenは固定refへ更新、refresh tokenはrotation時のみ固定refへ更新。
-- refresh/publish upper boundはrefresh最大1回、publish最大2回。uncertain completionはfail-closed。
-- focused 30/30、full regression 474/474、candidate由来の新しいdeno check diagnosticなし、fmt/diff-check PASS。
-- production deploy / Vault mutation / OAuth / DB schema / Cron / manual post変更0件。
+- approved integration candidate: `a7ffba4930a9eff3885ab29254f9858b80e71170`
+- production secrets metadata上、`SUPABASE_DB_URL` / `X_CLIENT_ID` / `X_CLIENT_SECRET` は既存名でpresence確認済み。値は未読。
+- production `x-test-post` はcandidate未deployの現行runtimeのまま。
+- deployed `x-oauth-connect` のrefresh方式は confidential-client HTTP Basic + `grant_type=refresh_token` でcandidateと整合。
+- production DB metadata上、`vault.update_secret(...)` は存在し、`service_role` EXECUTE=true、`authenticated`/`anon`=false。
+- DB/schema/RPC/grant/Vault/token/OAuth/Cron/X投稿の変更は0。
 
-## Remaining production gate
+未証明のためproduction deployをまだ許可しない点:
+- Edge runtime実環境から`SUPABASE_DB_URL`でdirect Postgres接続できるか。
+- 接続時の`current_user`/effective roleがcandidateのVault writer要件を満たすか。
+- connection/pooling/IPv4/IPv6上の即時blockerがないか。
 
-source設計は承認するが、production deploy前に以下を実証する必要がある:
-1. production Edge runtimeで`SUPABASE_DB_URL`相当のdirect Postgres接続設定が利用可能か（値は表示しない。presence/usableだけ確認）。
-2. 実際のEdge実行主体から`vault.update_secret(uuid,text,...)`を呼べる権限/DB roleか。
-3. direct Postgres方式がSupabase Edge Function本番運用として接続制限・pooling・IPv4/IPv6・connection count上問題ないか。
-4. current X OAuth client authentication方式とcandidateのrefresh request（Basic client auth + refresh_token grant）が現行AI Lab OAuth設定と一致するか。
-5. candidate deploy後に必要となるenvironment/secrets追加がある場合、その変更範囲を明示する。
+## Goal
 
-## Authorized work
+本番data/tokenを一切書き換えず、isolated runtime probeだけでdirect-DB gateを閉じる。
 
-- fresh `origin/main` / task/report/current state確認
-- H2/G1/G2との競合確認
-- production Function/runtime/env metadataのread-only確認
-- secret値を取得せず、必要envのpresence確認
-- production DB/Vault function privilege/read-only metadata確認
-- transactionをcommitしない安全な接続性/権限preflightが可能なら実施（secret/token/Vault値を読まない・書かない）
-- current `x-oauth-connect` のOAuth token exchange client-auth方式をsource/runtimeから確認
-- deploy plan / rollback plan / exact environment requirements作成
-- 必要ならcandidate sourceのlocal-only微修正とtests。ただしproduction deployは禁止
+## Authorized approach
+
+原則として既存`x-test-post`や既存Functionを変更しない。
+
+1. fresh `origin/main` とH2/G1/G2を確認。既存Function/file overlapがあればSTOP。
+2. 一時的なisolated Edge Function（例: `ai-lab-db-preflight`）を新規作成してよい。
+3. probeは既存`SUPABASE_DB_URL`の**presenceだけ**を参照し、値をlog/response/reportへ絶対に出さない。
+4. probeが行ってよいSQLはread-only metadataのみ:
+   - `select current_user`
+   - `select has_function_privilege(current_user, 'vault.update_secret(uuid,text,text,text,uuid)', 'EXECUTE')`
+   - 必要最小限のconnection metadata（server version等、秘密でないもの）
+5. `vault.update_secret`自体は**呼ばない**。`vault.decrypted_secrets`も読まない。token/ref/valueを読まない。
+6. response/reportには boolean/role名/接続成功可否など非秘密情報だけを残す。
+7. probe後は結果を記録し、production refresh candidate本体はdeployせずC1へ戻す。
 
 ## Prohibited
 
-- production `x-test-post` deploy
-- production Vault/token ref mutation
+- production `x-test-post` candidate deploy
+- production Vault/token mutation
+- `vault.update_secret`実呼び出し
+- Vault secret/decrypted secret/token/ref/valueの読取・出力
 - 実refresh token request
 - OAuth再認可
 - manual/synthetic X post
@@ -58,22 +60,31 @@ source設計は承認するが、production deploy前に以下を実証する必
 - DB schema/migration/RPC/RLS/grant変更
 - Cron/posting window変更
 - `supabase db push`
-- secret/token/Vault値の表示・report記載
+- 既存Functionのdeploy/上書き
+
+## Required verification
+
+- temporary probeのみが新規deploy対象であること
+- probe runtimeからdirect DB connection成功/失敗を確認
+- `current_user`を確認
+- `has_function_privilege(...vault.update_secret...)` true/false確認
+- secret値/token/Vault値の出力0
+- DB write 0 / Vault write 0 / X write 0 / OAuth action 0
+- 他Function version/updated_at不変
+- probe source hash/read-back可能なら一致確認
 
 ## Completion
 
-preflight完了後:
-- `.agent/CODEX_REPORT.md`先頭に結果を追加
-- direct DB availability / effective DB role / `vault.update_secret` callable可否 / OAuth client-auth整合 / required env changes / deploy・rollback手順 / remaining riskを記載
-- production deploy可能なら、その根拠を明示して`status: review_required`, `next_owner: chatgpt`
-- preflight blockerがあれば、代替案とblast radiusを示して同じくC1へ戻す
-- fresh origin/main確認後にmetadata同期、read-backしてSTOP
+`.agent/CODEX_REPORT.md`先頭に以下を追加:
+- probe function名/version
+- direct connection 成否
+- `current_user`
+- Vault writer EXECUTE privilege boolean
+- pooling/connectivity上の観測事項
+- production changes（temporary probe deploy以外）=0
+- secret/token/Vault値 output=0
+- 次のproduction deploy可否判断に必要な残課題
 
-**このTASKではproduction deploy/token mutationを行わない。**
+完了後 this TASKを `status: review_required`, `next_owner: chatgpt` に更新し、fresh `origin/main`確認後STOPしてC1待ち。
 
-## Preflight completion — 2026-09-17
-
-- Read-only production preflight completed.
-- Existing secret names, Vault writer metadata/privilege, current Edge runtime versions, and Basic-client-auth + `refresh_token` OAuth compatibility were confirmed without reading values.
-- Direct Edge runtime `SUPABASE_DB_URL` usability/effective-role and production direct-connection suitability remain unproven without a separately authorized no-write runtime test; no deploy is recommended until that gate is closed.
-- See `.agent/CODEX_REPORT.md` for evidence, blast radius, and the unexecuted deploy/rollback plan.
+**このTASKでも`x-test-post`本番deploy・token mutationは行わない。**
