@@ -14,32 +14,32 @@
 ### Codex slot 1
 - owner: codex
 - slot: codex-1
-- status: review_required
-- task_id: x-ai-lab-vault-token-refresh-candidate-20260917
+- status: ready
+- task_id: ai-lab-daily-content-plan-generation-control-phase1-20260917
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: C1指摘の初回非2xx fail-openを candidate `09a199a` で修正。13/13 focused、469/469 regression。production deploy/token mutation/OAuth再認可は未実施。C1 review_required。
+- note: 会社員AIラボの生成を、翌日用structured content plan最優先・未指定時persona fallbackへ切り替えるPhase1 candidate。production migration/deployはC1前に行わない。
 
 ### Codex slot 2
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: social-mobile-app-phase2-auth-data-20260917
+- task_id: social-mobile-app-phase3-schema-rls-inventory-20260917
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
-- note: Phase1 C2 PASS後のPhase2。`apps/social-mobile/**` にSupabase client/Auth session、active account context、mock/Supabase repository adapter、既存multibrand schemaのread-only mappingを実装する。production migration/RLS/RPC/db push、SNS OAuth/投稿、Storage/AI/Push/課金は変更しない。
+- note: social-mobile Phase3。production multibrand/SNS schema・ownership・RLSをread-only auditし、tenant境界とPhase4最小変更案を確定する。production mutation 0。
 
 ### Claude slot 1
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: review_required
 - task_id: market-report-shared-platform-phase2-consumer-cutover-20260917
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- note: Phase1 shadow packetは本番稼働済み。Phase2はshared market_report_packetとX/app consumer候補を作る。production consumer switchはK1前に行わない。
+- note: shared market_report_packet候補とX/app consumer gate実装のK1 review待ち。`x-test-post`を含むため、再開時はH1と同時編集禁止。
 
 ### Claude slot 2
 - owner: claude
@@ -49,7 +49,7 @@
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: K2 PASS・main反映済み。翌朝05:30 JSTの自然OFF確認は別read-only観測であり、このslotは空き。
+- note: K2 PASS・main反映済み。翌朝05:30 JSTの自然OFF確認は別read-only観測。
 
 ## Control codes
 
