@@ -125,6 +125,12 @@ export function buildStateEvaluationRequestBody(model: string, input: StateEvalu
           "facts内のdata_confidence/coverage_statusはこのドメイン全体のデータ品質を表す指標です。" +
           "coverage_statusが'partial'または'unavailable'の場合や、data_confidenceが低い場合は、" +
           "narrativeでその不確実性に触れ、confidenceにも反映してください。" +
+          "各metricのobserved_dateはそのまま尊重し、書き換えないでください。" +
+          "domain内のmetricで観測日が異なる場合、'翌日''前日''昨日''今日'のような相対的な日付表現は使わないでください" +
+          "(observed_date同士の前後関係を取り違える誤りを避けるためです)。" +
+          "代わりに'2026年9月15日時点'のような絶対日付で表現してください。" +
+          "facts内に無い時間的な前後関係や、複数metricが同一時点で同期しているという前提を推測しないでください。" +
+          "date-only(time_precision='date')のmetricを、あたかもリアルタイムの値であるかのように扱わないでください。" +
           "根拠が弱い場合はconfidenceを低くし、判断が難しい・情報が矛盾する場合はneeds_sol=trueにしてください。",
       },
       { role: "user", content: JSON.stringify(factsPayload) },

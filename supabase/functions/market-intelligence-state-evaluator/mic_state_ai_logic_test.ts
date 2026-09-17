@@ -106,6 +106,81 @@ test("buildStateEvaluationRequestBody: system prompt tells the model not to trea
   assert.match(systemMessage, /coverage_status/);
 });
 
+// --- observed_date temporal-direction wording (production bug: a
+// same-domain evaluation with NIKKEI225/SP500/NASDAQCOMPOSITE/NASDAQ100
+// at observed_date=2026-09-16 and VIX at observed_date=2026-09-15 produced
+// a narrative reading "VIXは翌9月15日時点" -- "翌" (the FOLLOWING day)
+// applied to a date that is actually earlier than the other metrics'
+// date, i.e. the temporal direction was inverted. These tests confirm the
+// prompt now explicitly forbids the class of relative-date words that
+// caused this, without touching any deterministic decision logic. There
+// is no real OpenAI call anywhere in this test file -- these only inspect
+// the request body buildStateEvaluationRequestBody constructs.) ---
+
+test("buildStateEvaluationRequestBody: system prompt forbids relative-date words (翌日/前日/昨日/今日) that can invert temporal direction across metrics with different observed_date values", () => {
+  const body = buildStateEvaluationRequestBody(STATE_EVAL_LUNA_MODEL, sampleInput()) as Record<string, unknown>;
+  const input = body.input as Array<{ role: string; content: string }>;
+  const systemMessage = input.find((m) => m.role === "system")?.content ?? "";
+  assert.match(systemMessage, /翌日/);
+  assert.match(systemMessage, /前日/);
+  assert.match(systemMessage, /昨日/);
+  assert.match(systemMessage, /今日/);
+  assert.match(systemMessage, /相対的な日付表現は使わないでください/);
+});
+
+test("buildStateEvaluationRequestBody: system prompt directs absolute-date phrasing instead", () => {
+  const body = buildStateEvaluationRequestBody(STATE_EVAL_LUNA_MODEL, sampleInput()) as Record<string, unknown>;
+  const input = body.input as Array<{ role: string; content: string }>;
+  const systemMessage = input.find((m) => m.role === "system")?.content ?? "";
+  assert.match(systemMessage, /絶対日付/);
+});
+
+test("buildStateEvaluationRequestBody: system prompt tells the model not to invent a shared/synchronized observation time across metrics, and not to treat date-only data as real-time", () => {
+  const body = buildStateEvaluationRequestBody(STATE_EVAL_LUNA_MODEL, sampleInput()) as Record<string, unknown>;
+  const input = body.input as Array<{ role: string; content: string }>;
+  const systemMessage = input.find((m) => m.role === "system")?.content ?? "";
+  assert.match(systemMessage, /同期しているという前提を推測しないでください/);
+  assert.match(systemMessage, /リアルタイムの値であるかのように扱わないでください/);
+});
+
+test("buildStateEvaluationRequestBody: reproduces the exact production shape (equity_index, mixed observed_date across metrics) -- payload still carries each metric's own observed_date verbatim, prompt does not alter or omit them", () => {
+  const nikkei = {
+    metricKey: "NIKKEI225",
+    domain: "equity_index" as const,
+    currentValue: 63923,
+    previousValue: null,
+    pctChange: null,
+    absChange: null,
+    unit: "index_points",
+    observedDate: "2026-09-16",
+    observedAt: null,
+    timePrecision: "date" as const,
+    fetchedAt: "2026-09-17T10:00:00.000Z",
+    sourceKey: "fred",
+    provider: "FRED",
+    isOfficial: true,
+    expectedLagMinutes: 4320,
+    observationAgeMinutes: 1200,
+    observationStatus: "fresh" as const,
+  };
+  const vix = {
+    ...nikkei,
+    metricKey: "VIX",
+    currentValue: 17.2,
+    observedDate: "2026-09-15",
+  };
+  const body = buildStateEvaluationRequestBody(
+    STATE_EVAL_LUNA_MODEL,
+    sampleInput({ metrics: [nikkei, vix], materialMetricKeys: ["NIKKEI225", "VIX"] }),
+  ) as Record<string, unknown>;
+  const input = body.input as Array<{ role: string; content: string }>;
+  const userMessage = JSON.parse(input.find((m) => m.role === "user")!.content);
+  assert.equal(userMessage.metrics[0].observed_date, "2026-09-16");
+  assert.equal(userMessage.metrics[1].observed_date, "2026-09-15");
+  const systemMessage = input.find((m) => m.role === "system")?.content ?? "";
+  assert.match(systemMessage, /そのまま尊重し、書き換えないでください/);
+});
+
 test("buildStateEvaluationRequestBody: sol gets higher reasoning effort than luna", () => {
   const lunaBody = buildStateEvaluationRequestBody(STATE_EVAL_LUNA_MODEL, sampleInput()) as { reasoning: { effort: string } };
   const solBody = buildStateEvaluationRequestBody(STATE_EVAL_SOL_MODEL, sampleInput()) as { reasoning: { effort: string } };
