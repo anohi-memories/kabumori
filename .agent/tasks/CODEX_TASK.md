@@ -3,7 +3,7 @@
 - task_id: x-ai-lab-brand-post-production-hotfix-20260916
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
@@ -116,3 +116,18 @@ When complete:
 - fresh-check origin/main before push
 - push safely and read back origin/main
 - STOP for C1
+
+## C1 review result — 2026-09-17
+
+PASS for this hotfix.
+
+Confirmed:
+- implementation commit `bed1cd513940fc7be03dd077d7fc5a9d2b998b34` restored the normal AI Lab `brand_post` dispatcher onto current main without reintroducing a separate slot-0-only engine.
+- `x-test-post` was deployed as v110 with `verify_jwt=false`; 39/39 runtime files byte-matched the reviewed candidate and other observed Functions were unchanged at deploy time.
+- full x-test-post/shared-brand regression passed 450/450; Admin brand-boundary tests passed 5/5; Admin lint/build and `git diff --check` passed.
+- Kabumori Admin schedule/history/failure/window loaders now apply server-side `brand_id='kabumori'` boundaries.
+- the first post-fix natural AI Lab slot no longer failed with `UNSUPPORTED_POST_TYPE:brand_post`; it reached the canonical AI Lab X dispatch boundary, proving the dispatcher regression is fixed.
+- that natural row then failed once with `X_REQUEST_FAILED:401`, produced no X post/fingerprint/retry, and preserved fail-safe behavior.
+- OAuth/token mutation was explicitly outside this hotfix and was not attempted.
+
+Remaining issue is separate from this completed hotfix: the current AI Lab Vault-backed access token is rejected by X with HTTP 401. A new separately scoped OAuth reauthorization/token replacement task is required before successful natural delivery can be confirmed.
