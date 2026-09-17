@@ -165,8 +165,11 @@ export async function publishAiLabWithRefresh({
   } catch {
     throw new Error("AI_LAB_PUBLISH_UNCERTAIN");
   }
-  if (result.status !== 401) {
+  if (result.status >= 200 && result.status < 300) {
     return { publishResult: result, tokens, refreshExecuted: false };
+  }
+  if (result.status !== 401) {
+    throw new Error(`AI_LAB_PUBLISH_FAILED:${result.status}`);
   }
 
   tokens = await refreshAiLabTokens({

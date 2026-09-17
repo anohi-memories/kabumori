@@ -145,6 +145,36 @@ test("refresh failure fails closed without a publish retry", async () => {
   assert.equal(persisted, 0);
 });
 
+for (const status of [400, 403, 429, 500]) {
+  test(`initial non-2xx status ${status} fails without refresh or retry`, async () => {
+    let publishes = 0;
+    let refreshRequests = 0;
+    await assert.rejects(
+      () =>
+        publishAiLabWithRefresh({
+          context,
+          tokenReference: reference,
+          currentTokens,
+          clientId: "client-id",
+          clientSecret: "client-secret",
+          tokenEndpoint: "https://x.test/token",
+          persist: persistSpy([]),
+          publish: async () => {
+            publishes += 1;
+            return { status, body: null };
+          },
+          fetchImpl: async () => {
+            refreshRequests += 1;
+            return Response.json({ access_token: "unexpected" });
+          },
+        }),
+      { message: `AI_LAB_PUBLISH_FAILED:${status}` },
+    );
+    assert.equal(publishes, 1);
+    assert.equal(refreshRequests, 0);
+  });
+}
+
 test("Vault persistence failure prevents the refreshed publish retry", async () => {
   let publishes = 0;
   await assert.rejects(
