@@ -3,8 +3,8 @@
 - task_id: morning-greeting-image-cost-gate-rollout-20260917
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet
 - purpose: K2承認済みの朝の挨拶画像生成コストゲート実装 `afe5d87` を最新 `origin/main` に安全に取り込み、翌朝05:30 JSTの自然実行でOFF時に画像生成コストが発生しないことを確認できる状態へ進める。
@@ -114,3 +114,15 @@ main反映まで完了したら:
 - tomorrow observation requirement
 
 を記録してorigin/mainへ同期し、K2待ちでSTOP。
+
+## Report
+
+- commit/push hash: 承認済み`afe5d87`を`git cherry-pick`し、最新origin/main上でリベース後`e8bd8cc`としてpush済み。
+- source_base / final_head: 作業開始時点の`origin/main`は`1d45b36`だったが、cherry-pick完了後・push直前の再fetchで`ea3cd82`（別スロットによる`.agent/tasks/CODEX_TASK.md`のみの更新）へ進んでいるのを検知。対象2ファイルへの競合はないことを確認した上で`git rebase origin/main`を実行し、そのまま`ea3cd82`の直後としてfast-forward pushした（final_head: `e8bd8cc`）。push直前に再度`origin/main`をfetchし、追加の変更が無いことを確認してから実行。
+- tests: `node --experimental-strip-types --test scripts/morning-greeting-image.test.ts`で26/26 pass（cherry-pick後・rebase後の両方で実行し確認）。`git diff --check`で空白エラーなし。**訂正**: 前タスクのReportで「28/28 PASS」と報告していたが、実際のテスト数は26件（`grep -c "^test("`で確認）。全件PASSという結論自体は変わらないが、件数の記載が誤っていたため本Reportで訂正する。
+- changed files: `scripts/morning-greeting-image.ts`, `scripts/morning-greeting-image.test.ts`の2件のみ（承認済み差分と完全一致、他ファイルは一切混ざっていない）。
+- main read-back: `origin/main`から`scripts/morning-greeting-image.ts`をread-backし、`checkMorningGreetingEnabled`/`runMorningGreetingImageJob`が実装されていることを確認。`scripts/morning-greeting-image.test.ts`のテスト数も26件であることを確認。
+- production setting changes: 0件。`posting_windows`の値、admin toggle、Supabase schema/RPC/migration、Cron/workflow scheduleのいずれも変更していない。
+- manual OpenAI/workflow dispatch: 0件。`workflow_dispatch`の手動実行、OpenAI API呼び出し、Storage書き込み検証は一切行っていない。
+- user next action: 管理画面で「朝の挨拶」をOFFにする。
+- tomorrow observation requirement: 翌朝05:30 JSTの自然な定時実行後、以下を別確認タスクで検証すること: (1) workflow logに`morning greeting disabled; image generation skipped`が出力される、(2) OpenAI画像生成が実行されていない、(3) 新規Storage画像が作成されていない、(4) workflowがOFFを正常skip（exit 0）として終了している。人工実行では確認しないこと。

@@ -42,12 +42,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: in_progress
+- status: review_required
 - task_id: morning-greeting-image-cost-gate-rollout-20260917
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: K2承認済み`afe5d87`(scripts/morning-greeting-image.ts/.test.ts)を最新originmainへ安全に統合しpushする作業に着手。
+- note: K2承認済み`afe5d87`をcherry-pick、途中origin/mainが進んだためrebaseし直し`e8bd8cc`としてmainへpush・read-back確認済み。テスト26/26 pass（前回Reportの「28」は誤記だったため訂正記録）。本番設定変更0件。ユーザーは管理画面でOFF、翌朝05:30 JSTの自然実行を確認予定。K2待ち。
 
 ## Control codes
 
