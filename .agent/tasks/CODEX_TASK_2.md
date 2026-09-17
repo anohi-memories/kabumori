@@ -3,8 +3,8 @@
 - task_id: kabumori-news-url-removal-production-deploy-20260917
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol Medium
 - purpose: C2 PASS済みの「かぶモリ通常ニュースX本文から外部URLを除去する」変更を、`important-news-monitor` のみに安全に本番反映し、runtime source一致と影響範囲を確認する。
@@ -86,3 +86,14 @@ PASS.
 - push前に再度fresh `origin/main`確認
 - `.agent/` control/report metadataのみ安全にpush
 - origin/main read-back後STOPしてC2待ち
+
+## Deploy report — 2026-09-17
+
+- result: `important-news-monitor` only deployed successfully from clean latest `origin/main`; C2 review required
+- deploy_source: `origin/main` `e8db510458351d919c13eb2ee7e58944ac8aee2f`, containing approved URL-removal implementation `bd97a56c8f4f9321070bcdef7970062090308a49`; no runtime diff after the implementation commit
+- pre_deploy: v54 ACTIVE, `verify_jwt=false`
+- post_deploy: v55 ACTIVE, `verify_jwt=false`, updated_at advanced
+- runtime_readback: downloaded source matched deploy source byte-for-byte for all 23 runtime TypeScript files (21 important-news-monitor files plus 2 `_shared` dependencies)
+- other_functions: stocks-master-sync v16, stocks-new-listing-sync v15, send-push-notifications v15, x-oauth-connect v18, personalized-reports v13, market-intelligence-ingest v11, market-intelligence-state-evaluator v7, and brand-post-dry-run v5 retained their pre-deploy versions/updated_at. `x-test-post` advanced separately from v109 to v110 during the deploy window under the concurrent H1 workstream; this H2 deploy did not target or modify it.
+- safety: no DB/schema/RPC/migration/RLS/Cron/settings/secrets/OAuth changes; no manual OpenAI/X/Push/API invocation or X post; no source URL metadata deletion; no other Function deploy
+- next_step: observe the next natural important-news post only; no manual candidate or publish. Keep `status: review_required` / `next_owner: chatgpt`.

@@ -1,5 +1,19 @@
 # Codex Slot 2 Report
 
+## H2 — Kabumori news URL removal production deploy (2026-09-17)
+
+- task_id: `kabumori-news-url-removal-production-deploy-20260917`
+- result: `important-news-monitor` only deployed successfully from a clean latest `origin/main`; C2 review required
+- deploy_source: `origin/main` `e8db510458351d919c13eb2ee7e58944ac8aee2f`, containing approved implementation `bd97a56c8f4f9321070bcdef7970062090308a49`; no `important-news-monitor` runtime diff after that implementation commit
+- pre_deploy: v54 ACTIVE, `verify_jwt=false`
+- post_deploy: v55 ACTIVE, `verify_jwt=false`, updated_at advanced as expected
+- runtime_readback: production download matched deploy source byte-for-byte for all 23 runtime TypeScript files (21 `important-news-monitor` files plus 2 `_shared` dependencies), including `publish_logic.ts`
+- other_functions: stocks-master-sync v16, stocks-new-listing-sync v15, send-push-notifications v15, x-oauth-connect v18, personalized-reports v13, market-intelligence-ingest v11, market-intelligence-state-evaluator v7, and brand-post-dry-run v5 retained their pre-deploy versions/updated_at. `x-test-post` advanced separately from v109 to v110 during the deploy window under concurrent H1 work; H2 did not target or modify it.
+- safety: no DB/schema/RPC/migration/RLS/Cron/settings/secrets/OAuth changes; no manual OpenAI/X/Push/API invocation, synthetic candidate, or X post; no source URL metadata deletion; no other Function deploy
+- natural_observation: no manual run performed; next step is the next natural important-news post only
+- remaining_issues: C2 should review the deployment read-back and concurrent `x-test-post` version change attribution.
+
+
 ## H2 — Kabumori news URL removal cost control (2026-09-16)
 
 - task_id: `kabumori-news-url-removal-cost-control-20260916`
