@@ -19,7 +19,7 @@
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: C1指摘の初回非2xx fail-openを `642bc79` で修正。13/13 focused、469/469 regression。production deploy/token mutation/OAuth再認可は未実施。C1 review_required。
+- note: C1指摘の初回非2xx fail-openを candidate `09a199a` で修正。13/13 focused、469/469 regression。production deploy/token mutation/OAuth再認可は未実施。C1 review_required。
 
 ### Codex slot 2
 - owner: codex

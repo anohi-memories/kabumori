@@ -15,9 +15,9 @@
 ## Active workstreams
 
 - Codex slot 1: `review_required` — `x-ai-lab-vault-token-refresh-candidate-20260917`
-  - AI Lab refresh/rotation candidate `ed796ba` はcode-onlyで作成済み。production変更0。
+  - AI Lab refresh/rotation candidate `f22e2ca` はcode-onlyで作成済み。production変更0。
   - C1で、初回publishが401以外の非2xx（例400/403/429/500）の場合にhelperが正常returnし得るfail-open余地を確認。
-  - C1指摘の初回非2xx fail-openを `642bc79` で修正。13/13 focused、469/469 regression。
+  - C1指摘の初回非2xx fail-openを `09a199a` で修正。13/13 focused、469/469 regression。
   - production deploy/token mutation/OAuth再認可は未実施。C1 review_required。
 
 - Codex slot 2: `done` — `kabumori-news-url-removal-production-deploy-20260917`

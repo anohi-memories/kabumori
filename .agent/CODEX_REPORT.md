@@ -4,7 +4,7 @@
 
 - task_id: `x-ai-lab-vault-token-refresh-candidate-20260917`
 - result: `review_required` — addressed the C1 blocker in the candidate branch only. Initial publish now succeeds only for 2xx, refreshes only for 401, and fails immediately for every other non-2xx status. No production deploy or token/Vault mutation was performed.
-- focused_fix_commit: `642bc79` (`Fail closed on initial AI Lab publish errors`)
+- focused_fix_commit: `09a199a` (`Fail closed on initial AI Lab publish errors`, rebased candidate branch)
 
 ### Fix and tests
 
@@ -24,7 +24,7 @@
 
 - task_id: `x-ai-lab-vault-token-refresh-candidate-20260917`
 - result: `review_required` — an AI Lab-only refresh/retry candidate and mocked tests were implemented and committed. Production `x-test-post` was not changed or deployed; no production token/Vault/OAuth/DB/Cron action was performed.
-- implementation_commit: `ed796ba` (`Add AI Lab Vault token refresh candidate`)
+- implementation_commit: `f22e2ca` (`Add AI Lab Vault token refresh candidate`, rebased candidate branch)
 
 ### Changed files and call graph
 
