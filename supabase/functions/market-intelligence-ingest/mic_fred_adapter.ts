@@ -8,9 +8,21 @@
 // A missing observation is represented as value="." (not omitted), per
 // FRED's documented convention.
 //
-// Phase 1A wires US2Y (DGS2) and US10Y (DGS10) only, per the explicit
-// minimum in this phase's task. Adding CPI/PCE/PAYROLL/GDP later is a
-// one-line addition to FRED_SERIES_MAPPINGS, not a new adapter.
+// Phase 1A wired US2Y (DGS2) and US10Y (DGS10) only. Equity Index Phase 1
+// adds NIKKEI225/SP500/NASDAQCOM/NASDAQ100/VIXCLS the same way the header
+// comment always said this would work: a plain addition to
+// FRED_SERIES_MAPPINGS, no new adapter file.
+//
+// FRED itself is not the original source for any of these -- it
+// republishes each index from its actual provider (Nikkei Industry
+// Research Institute, S&P Dow Jones Indices LLC, Nasdaq Inc., CBOE). The
+// optional `underlyingSource` on each mapping keeps that distinction
+// explicit in metadata (provider="FRED" always; metadata.underlyingSource
+// names whose data it actually is), the same principle already applied to
+// the Frankfurter/ECB fx adapter. US2Y/US10Y's mappings intentionally omit
+// it (unchanged from Phase 1A) since "U.S. Department of the Treasury" was
+// never previously recorded and adding it now is out of scope for this
+// phase.
 import type { NormalizedMarketMetric } from "./mic_normalize_logic.ts";
 
 export const FRED_OBSERVATIONS_URL = "https://api.stlouisfed.org/fred/series/observations";
@@ -25,11 +37,48 @@ export class FredAdapterError extends Error {
   }
 }
 
-export type FredSeriesMapping = { seriesId: string; metricKey: string; unit: string };
+export type FredSeriesMapping = {
+  seriesId: string;
+  metricKey: string;
+  unit: string;
+  // Who the data actually comes from, when that differs from "FRED" (the
+  // provider we call). Omitted for US2Y/US10Y (unchanged from Phase 1A).
+  underlyingSource?: string;
+};
 
 export const FRED_SERIES_MAPPINGS: FredSeriesMapping[] = [
   { seriesId: "DGS2", metricKey: "US2Y", unit: "percent" },
   { seriesId: "DGS10", metricKey: "US10Y", unit: "percent" },
+  {
+    seriesId: "NIKKEI225",
+    metricKey: "NIKKEI225",
+    unit: "index_points",
+    underlyingSource: "Nikkei Industry Research Institute",
+  },
+  {
+    seriesId: "SP500",
+    metricKey: "SP500",
+    unit: "index_points",
+    underlyingSource: "S&P Dow Jones Indices LLC",
+  },
+  {
+    seriesId: "NASDAQCOM",
+    metricKey: "NASDAQCOMPOSITE",
+    unit: "index_points",
+    underlyingSource: "Nasdaq, Inc.",
+  },
+  {
+    seriesId: "NASDAQ100",
+    metricKey: "NASDAQ100",
+    unit: "index_points",
+    underlyingSource: "Nasdaq, Inc.",
+  },
+  {
+    seriesId: "VIXCLS",
+    metricKey: "VIX",
+    unit: "index_points",
+    underlyingSource: "Chicago Board Options Exchange (CBOE)",
+  },
 ];
 
 // FRED's daily constant-maturity treasury series typically finalizes the
@@ -107,7 +156,11 @@ export function normalizeFredObservation(
     delayMinutes: FRED_EXPECTED_DELAY_MINUTES,
     qualityTier: "official",
     isOfficial: true,
-    metadata: { seriesId: mapping.seriesId, fredDate: observation.date },
+    metadata: {
+      seriesId: mapping.seriesId,
+      fredDate: observation.date,
+      ...(mapping.underlyingSource ? { underlyingSource: mapping.underlyingSource } : {}),
+    },
   };
 }
 

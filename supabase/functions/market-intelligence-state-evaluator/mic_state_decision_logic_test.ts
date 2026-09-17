@@ -330,6 +330,117 @@ test("fx/USDJPY: stale metric is correctly classified and the all-stale guard fi
   assert.equal(shouldSkipAiForStaleness([staleUsdjpy], evaluateEventMaterialChange([])), true);
 });
 
+// --- equity_index (FRED: NIKKEI225/SP500/NASDAQCOMPOSITE/NASDAQ100/VIX,
+// Phase 1) ---
+// Same point as the fx section above: the generic decision-logic
+// functions (already proven for rates/commodities/fx) need zero code
+// change to handle equity_index's thresholds correctly -- only
+// mic_metric_domain_map's seed data (20260920090000_mic_equity_index_phase1.sql)
+// differs.
+
+function equityMapRow(overrides: Partial<MetricDomainMapRow> = {}): MetricDomainMapRow {
+  return {
+    metricKey: "NIKKEI225",
+    domain: "equity_index",
+    displayName: "Nikkei 225",
+    pctChangeThreshold: 1.0,
+    absChangeThreshold: null,
+    alwaysMaterial: false,
+    ...overrides,
+  };
+}
+
+test("equity_index: first observation (no baseline) is material regardless of threshold", () => {
+  const domainMap = new Map([["NIKKEI225", equityMapRow()]]);
+  const observations = detectNewObservations(
+    [metric({ metricKey: "NIKKEI225", domain: "equity_index", currentValue: 44800.12, observedDate: "2026-09-16" })],
+    {},
+  );
+  assert.deepEqual(observations, [
+    { metricKey: "NIKKEI225", currentValue: 44800.12, previousBaselineValue: null, reason: "first_observation" },
+  ]);
+  assert.equal(evaluateMaterialChange(observations, domainMap).isMaterial, true);
+});
+
+test("equity_index: identical value and observed_date vs baseline -> no_change", () => {
+  const domainMap = new Map([["NIKKEI225", equityMapRow()]]);
+  const observations = detectNewObservations(
+    [metric({ metricKey: "NIKKEI225", domain: "equity_index", currentValue: 44800.12, observedDate: "2026-09-16" })],
+    { NIKKEI225: { value: 44800.12, observedDate: "2026-09-16", observedAt: null } },
+  );
+  assert.deepEqual(observations, []);
+  assert.equal(evaluateMaterialChange(observations, domainMap).isMaterial, false);
+});
+
+test("NIKKEI225/SP500 (1.0% threshold): a >=1.0% move is material, <1.0% is not", () => {
+  const domainMap = new Map([["NIKKEI225", equityMapRow({ pctChangeThreshold: 1.0 })]]);
+  const above = evaluateMaterialChange(
+    // 44800 -> 45300 is +1.116%
+    [{ metricKey: "NIKKEI225", currentValue: 45300, previousBaselineValue: 44800, reason: "value_changed" }],
+    domainMap,
+  );
+  assert.equal(above.isMaterial, true);
+  const below = evaluateMaterialChange(
+    // 44800 -> 45050 is +0.558%
+    [{ metricKey: "NIKKEI225", currentValue: 45050, previousBaselineValue: 44800, reason: "value_changed" }],
+    domainMap,
+  );
+  assert.equal(below.isMaterial, false);
+});
+
+test("NASDAQCOMPOSITE/NASDAQ100 (1.2% threshold): a >=1.2% move is material, <1.2% is not", () => {
+  const domainMap = new Map([["NASDAQCOMPOSITE", equityMapRow({ metricKey: "NASDAQCOMPOSITE", pctChangeThreshold: 1.2 })]]);
+  const above = evaluateMaterialChange(
+    // 22345.6 -> 22615 is +1.206%
+    [{ metricKey: "NASDAQCOMPOSITE", currentValue: 22615, previousBaselineValue: 22345.6, reason: "value_changed" }],
+    domainMap,
+  );
+  assert.equal(above.isMaterial, true);
+  const below = evaluateMaterialChange(
+    // 22345.6 -> 22500 is +0.691%
+    [{ metricKey: "NASDAQCOMPOSITE", currentValue: 22500, previousBaselineValue: 22345.6, reason: "value_changed" }],
+    domainMap,
+  );
+  assert.equal(below.isMaterial, false);
+});
+
+test("VIX: abs_change_threshold=2.0 alone triggers material even when pct_change is below 10%", () => {
+  const domainMap = new Map([["VIX", equityMapRow({ metricKey: "VIX", pctChangeThreshold: 10.0, absChangeThreshold: 2.0 })]]);
+  // 35 -> 37.5 is +2.5 abs (>=2.0) but only +7.14% (below 10%)
+  const decision = evaluateMaterialChange(
+    [{ metricKey: "VIX", currentValue: 37.5, previousBaselineValue: 35, reason: "value_changed" }],
+    domainMap,
+  );
+  assert.equal(decision.isMaterial, true);
+  assert.match(decision.reason, /abs_change/);
+});
+
+test("VIX: pct_change_threshold=10.0 alone triggers material even when abs_change is below 2.0", () => {
+  const domainMap = new Map([["VIX", equityMapRow({ metricKey: "VIX", pctChangeThreshold: 10.0, absChangeThreshold: 2.0 })]]);
+  // 12 -> 13.3 is +1.3 abs (below 2.0) but +10.83% (>=10%)
+  const decision = evaluateMaterialChange(
+    [{ metricKey: "VIX", currentValue: 13.3, previousBaselineValue: 12, reason: "value_changed" }],
+    domainMap,
+  );
+  assert.equal(decision.isMaterial, true);
+  assert.match(decision.reason, /pct_change/);
+});
+
+test("VIX: below both abs and pct thresholds -> not material", () => {
+  const domainMap = new Map([["VIX", equityMapRow({ metricKey: "VIX", pctChangeThreshold: 10.0, absChangeThreshold: 2.0 })]]);
+  // 17.2 -> 18.0 is +0.8 abs (below 2.0) and +4.65% (below 10%)
+  const decision = evaluateMaterialChange(
+    [{ metricKey: "VIX", currentValue: 18.0, previousBaselineValue: 17.2, reason: "value_changed" }],
+    domainMap,
+  );
+  assert.equal(decision.isMaterial, false);
+});
+
+test("equity_index: stale metric correctly triggers the all-stale guard", () => {
+  const staleNikkei = metric({ metricKey: "NIKKEI225", domain: "equity_index", observationStatus: "stale" });
+  assert.equal(shouldSkipAiForStaleness([staleNikkei], evaluateEventMaterialChange([])), true);
+});
+
 // --- all-stale AI guard ---
 
 function noMaterialEvents(): ReturnType<typeof evaluateEventMaterialChange> {
