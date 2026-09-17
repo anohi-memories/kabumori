@@ -10,6 +10,7 @@ import {
   type BrandPostDraft,
   generateBrandPost,
 } from "./brand_post_generator.ts";
+import type { DailyContentPlanItem } from "./daily_content_plan.ts";
 
 export type AiLabBrandPostCompletion = {
   fingerprintPersisted: boolean;
@@ -35,6 +36,9 @@ export async function dispatchAiLabScheduledBrandPost({
   postType,
   scheduledPostId,
   openAiApiKey,
+  scheduleDate,
+  slotNo,
+  loadContentPlan,
   loadRecentFingerprints,
   publishText,
   completePublishedPost,
@@ -44,6 +48,12 @@ export async function dispatchAiLabScheduledBrandPost({
   postType: string;
   scheduledPostId: string;
   openAiApiKey: string;
+  scheduleDate?: string;
+  slotNo?: number;
+  loadContentPlan?: (args: {
+    scheduleDate: string;
+    slotNo: number;
+  }) => Promise<DailyContentPlanItem | null>;
   loadRecentFingerprints: () => Promise<PublishedFingerprint[]>;
   publishText: (text: string) => Promise<unknown>;
   completePublishedPost: (args: {
@@ -55,6 +65,7 @@ export async function dispatchAiLabScheduledBrandPost({
     openAiApiKey: string;
     context: BrandContext;
     postType: string;
+    contentPlan?: DailyContentPlanItem;
   }) => Promise<BrandPostDraft>;
 }): Promise<{
   brandId: "ai_salaryman_lab";
@@ -72,7 +83,16 @@ export async function dispatchAiLabScheduledBrandPost({
   assertBrandPublishAllowed(context);
 
   const recentFingerprints = await loadRecentFingerprints();
-  const draft = await generate({ openAiApiKey, context, postType });
+  const contentPlan =
+    loadContentPlan && scheduleDate && typeof slotNo === "number"
+      ? await loadContentPlan({ scheduleDate, slotNo })
+      : undefined;
+  const draft = await generate({
+    openAiApiKey,
+    context,
+    postType,
+    contentPlan: contentPlan ?? undefined,
+  });
   if (draft.brandId !== "ai_salaryman_lab" || draft.postType !== "brand_post") {
     throw new BrandContextError("AI_LAB_GENERATION_CONTEXT_MISMATCH");
   }
