@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-17 JST (H1 focused fix complete)
+- checked_at: 2026-09-17 JST (H1 integration candidate ready)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,11 +14,12 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `x-ai-lab-vault-token-refresh-candidate-20260917`
-  - AI Lab refresh/rotation candidate `f22e2ca` はcode-onlyで作成済み。production変更0。
-  - C1で、初回publishが401以外の非2xx（例400/403/429/500）の場合にhelperが正常returnし得るfail-open余地を確認。
-  - C1指摘の初回非2xx fail-openを `09a199a` で修正。13/13 focused、469/469 regression。
-  - production deploy/token mutation/OAuth再認可は未実施。C1 review_required。
+- Codex slot 1: `ready` — `x-ai-lab-vault-token-refresh-integration-candidate-20260917`
+  - refresh helper candidate `f22e2ca` + focused fail-closed fix `09a199a` はC1 PASS。
+  - 2xxのみsuccess、401のみrefresh 1回、401以外non-2xxは即fail、uncertainはno-refresh/no-resend。
+  - focused 13/13、x-test-post + `_shared/brand` regression 469/469。
+  - 次のH1はproduction deploy前のintegration candidate: 実Vault writer/persistence adapter、rotation concurrency、completion/idempotency外周維持を実装・検証する。
+  - production deploy/token mutation/OAuth再認可はC1前は禁止。
 
 - Codex slot 2: `done` — `kabumori-news-url-removal-production-deploy-20260917`
   - `important-news-monitor` v55へ通常重要ニュースX本文の外部URL除去を本番反映済み。
@@ -34,7 +35,7 @@
 
 ## Parallel safety
 
-- H1は `_shared/brand` のAI Lab refresh candidate focused修正済み。production `x-test-post` wiring/deployやVault mutationはまだ行わない。
+- H1はAI Lab refresh integration candidate担当。OAuth/Vault/x-test-post認証経路を扱うがproduction mutation/deployは禁止。
 - G1はmarket report packet / x-test-post morning-close / personalized-reports領域。OAuth/Vault/social account stateへ触れない。
 - H2/G2はdone。
 - 同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数slotで同時変更しない。
@@ -43,7 +44,7 @@
 ## Known issues
 
 - AI Lab通常`brand_post`はOAuth再認可後1回成功後、次slotで401再発。恒久復旧は未成立。
-- refresh candidateはproduction未統合。C1 focused fix後もVault writer/concurrency/current OAuth client auth方式をproduction統合前に別途審査する。
+- refresh helper自体はC1 PASSしたがproduction未統合。次はVault writer/concurrency/current OAuth client auth方式/completion-idempotency境界をintegration candidateで審査する。
 - multibrand migrations `20260910170000/180000/190000` objectsはproductionに存在するがmigration history不整合の可能性があるためblind `supabase db push`禁止。
 - 2026-09-09 morning_greeting legacy Storage receipt HTTP400は別件。
 - 重要ニュースX生成にはFact/Voice系generation_failedが残る。
