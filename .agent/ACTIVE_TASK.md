@@ -24,12 +24,12 @@
 ### Codex slot 2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: kabumori-news-url-removal-production-deploy-20260917
+- status: ready
+- task_id: social-mobile-app-phase1-shell-20260917
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
-- note: important-news-monitor v55へURL除去変更を本番反映済み。自然投稿のread-only観測のみ別件で残る。
+- note: マルチアカウントSNS運用の一般ユーザー向けモバイルアプリPhase1。既存かぶモリ株アプリと分離し、`apps/social-mobile/` を原則配置としてExpo app foundation、主要5タブ、Accounts/素材BOX、domain/service境界を実装する。production backend/OAuth/X投稿は変更しない。
 
 ### Claude slot 1
 - owner: claude
