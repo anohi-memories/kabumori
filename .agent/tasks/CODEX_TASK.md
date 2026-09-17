@@ -3,8 +3,8 @@
 - task_id: x-ai-lab-brand-post-production-hotfix-20260916
 - owner: codex
 - slot: codex-1
-- status: in_progress
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: AI Labのcontrolled test投稿は成功したが、通常10枠のbrand_postが本番dispatcherで `UNSUPPORTED_POST_TYPE:brand_post` により失敗している。通常スケジュール経路を最小修正で復旧し、同時にかぶモリAdminの当日予定一覧へAI Lab予定が混入する表示境界漏れを修正する。

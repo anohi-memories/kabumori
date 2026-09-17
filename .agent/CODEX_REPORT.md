@@ -1,5 +1,55 @@
 # Codex Report
 
+## Latest H1 result — AI Lab normal brand_post production hotfix (2026-09-17)
+
+- task_id: `x-ai-lab-brand-post-production-hotfix-20260916`
+- result: `review_required` — the missing normal `brand_post` route and Kabumori Admin brand-boundary leak are fixed and deployed/synced. The first post-fix natural slot reached the restored AI Lab X dispatch instead of `UNSUPPORTED_POST_TYPE`, but X rejected the current Vault-backed access token with HTTP 401. The row failed once without an X post or retry. OAuth/token changes were outside this task and were not attempted.
+
+### Exact root cause and path difference
+
+- The successful controlled `slot_no=0` post ran on production `x-test-post` v108, whose 39-file runtime included the AI Lab brand context, fixed Vault-token route, generator, dedupe, length guard, completion adapter, and canonical `dispatchAiLabScheduledBrandPost` branch.
+- A later v109 deployment replaced that runtime with the then-current 27-file main source. Its index had no `brand_post` branch and no AI Lab brand modules, so normal slot 8/9/10/1 rows were claimed and fell through to `UNSUPPORTED_POST_TYPE:brand_post` before OpenAI/X.
+- The hotfix reconciled the reviewed AI Lab runtime delta onto current main instead of replacing unrelated current code. All slot numbers, including controlled slot 0 and normal slots 1–10, now enter the same `dispatchAiLabScheduledBrandPost` implementation; there is no slot-0 special posting engine.
+
+### Changed files
+
+- `supabase/functions/x-test-post/index.ts`: restored brand-aware scheduled routing, fixed AI Lab Vault token source, no legacy Kabumori fallback/no refresh, canonical `brand_post` dispatcher, and completion-uncertainty no-retry guard.
+- `supabase/functions/_shared/brand/`: restored 12 runtime helpers and their focused tests for brand/account gates, generation, <=280 code points, dedupe/fingerprints, Vault routing, and terminal completion safety.
+- `supabase/functions/x-test-post/morning_greeting_payload_logic_test.ts` and `morning_greeting_publish_logic_test.ts`: updated assertions for deferred token loading after claim/brand resolution.
+- `apps/admin/src/lib/brand-boundary.ts` plus `today-scheduled-posts.ts`, `post-history.ts`, `recent-failures.ts`, and `system-status.ts`: added server-side `brand_id='kabumori'` predicates to every touched `scheduled_posts`, `post_execution_logs`, and `posting_windows` query.
+- `apps/admin/src/lib/brand-boundary.test.ts`: regression coverage for all touched Admin brand boundaries.
+
+### Tests and source verification
+
+- `deno test --no-check --allow-read=. supabase/functions/x-test-post supabase/functions/_shared/brand`: **450 passed / 0 failed**. Coverage includes normal/reserved slot canonical routing, wrong-brand/account rejection, Kabumori isolation, 281-code-point pre-X rejection, duplicate blocking, confirmed completion once, uncertain completion no resend, unknown post type fail-closed, and the existing full x-test-post regression.
+- `deno test --no-check --allow-read=. apps/admin/src/lib/brand-boundary.test.ts`: **5 passed / 0 failed**.
+- Admin `npm run lint`: pass. Admin `npm run build`: pass, including TypeScript.
+- `deno check --no-config supabase/functions/x-test-post/index.ts`: six diagnostics, exactly the same six as a clean latest-main comparison worktree (AES-GCM BufferSource, image BlobPart/BodyInit, `retry_count`, timestamp precision); no new hotfix diagnostic.
+- `git diff --check`: pass.
+- implementation commit/main source: `bed1cd513940fc7be03dd077d7fc5a9d2b998b34`. Push read-back matched `origin/main` before later non-overlapping slot commits advanced main.
+
+### Production deploy/read-back
+
+- Deployed **only** `x-test-post`; no DB/schema/migration/RPC/RLS, Cron/window, OAuth/token, Kabumori/Mio, media, or other Function change.
+- Immediately after deploy: ACTIVE v110, `verify_jwt=false`, aggregate runtime hash `ba0e7c78bd8cec62b4c8c2fe50bd1de80c7f3ecbaa1a1206c4e668f70012ab60`.
+- Download/read-back contained exactly 39 runtime files. Byte comparison against the fixed candidate passed **39/39**, no mismatch; deterministic per-file aggregate SHA-256 `50f3f60eddf952cf41abe1b86a7e714f944d7a9f23fc9dd3b1607f563d5f5ca2`.
+- Immediate pre/post Function inventory showed only `x-test-post` advancing (v109 -> v110); all other observed Function versions and timestamps were unchanged.
+- At the later natural observation, Supabase's listing reported version counter 112, while `updated_at`, bundle hash, entrypoint path (v110 bundle), 39-file set, and restored dispatcher content remained unchanged. No different runtime source was observed.
+- Admin source was pushed through the existing main-linked path; hosting/project settings were not changed. Local production build passed. A separate hosting deployment read-back was not available in this task.
+
+### Natural Cron observation and safety stop
+
+- No manual Function invocation, candidate injection, backfill, failed-row retry, OpenAI/X/Push call, or manual X post was made.
+- Natural slot 2 (`scheduled_posts.id=45ee2e6f-ae78-4d9e-92dd-5595cb675177`, scheduled 09:48:36 JST) was claimed by the existing Cron at 09:49:00 JST and finished at 09:49:04 JST.
+- Result: `failed`, `attempt_count=1`, terminal message `X_REQUEST_FAILED:401`. Crucially, `UNSUPPORTED_POST_TYPE:brand_post` did **not** recur, proving the normal scheduled row reached the restored AI Lab route and X dispatch boundary.
+- Logs are exactly one `started` plus one `failed` record for the row; succeeded logs=0, logs with `x_post_id`=0, and unsupported-post-type logs=0. Fingerprints created since the attempt=0. The canonical dispatcher made one X API attempt, which received 401; confirmed X posts=0, media writes=0, duplicate sends=0, and automatic retries=0.
+- Read-only account state remains fixed to `ai_salaryman_lab_x` / `kaishain_ai_lab`, `identity_verified`, publish enabled, with both Vault references present; brand remains active/live. No secret, token, or Vault reference value was read.
+
+### Remaining blocker / C1 decision
+
+- The dispatcher regression is repaired, but ordinary publishing remains blocked by the current AI Lab access token returning 401. Refresh is intentionally disabled on the AI Lab path to prevent legacy-token fallback or unapproved token mutation.
+- Do not retry failed rows. A separately authorized AI Lab OAuth reauthorization/token replacement is required before a later natural slot can confirm successful X delivery. This task made no OAuth/token change and stops for C1.
+
 ## Latest H1 result — Phase 3K AI Lab first live rollout (2026-09-16)
 
 - task_id: `x-multibrand-phase3k-ai-lab-first-live-test-20260916`
