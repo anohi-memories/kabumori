@@ -14,22 +14,22 @@
 ### Codex slot 1
 - owner: codex
 - slot: codex-1
-- status: review_required
-- task_id: ai-lab-daily-content-plan-selection-fix-20260918
+- status: ready
+- task_id: ai-lab-daily-content-plan-writer-phase2-20260918
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: C1 blocker修正済み。slot未指定itemの決定的割当と安全なpersona fallbackを追加。production migration/deployは0、C1待ち。
+- note: Phase1 consumer/selectionはC1 PASS。次は、ちゃ/将来のアプリ内AIが翌日structured planをSupabaseへ安全に登録するservice-side writer、version/activation/idempotency/validationをdisposable DBで証明する。production mutation 0、`x-test-post`変更なし。
 
 ### Codex slot 2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: review_required
 - task_id: social-mobile-app-phase4-membership-rls-validation-20260918
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
-- note: Phase3で確認したmembership/RLS不足をもとに、`brand_memberships`中心のtenant policyをdisposable DBで検証する。policy matrix / cross-tenant isolation / admin compatibilityを証明し、production mutation 0のままC2へ返す。
+- note: `brand_memberships`中心のtenant policy/disposable DB proofのC2確認待ち。production mutation 0。
 
 ### Claude slot 1
 - owner: claude
@@ -39,7 +39,7 @@
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- note: shared market_report_packet候補とX/app consumer gate実装のK1 review待ち。consumer production switchはまだOFF。
+- note: shared market_report_packet候補とX/app consumer gate実装のK1 review待ち。`x-test-post`を含むためH1 writer Phase2は同ファイルを変更しない。
 
 ### Claude slot 2
 - owner: claude
