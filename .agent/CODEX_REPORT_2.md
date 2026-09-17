@@ -16,7 +16,8 @@
 - phase4_proposal: `brand_memberships(user_id,brand_id,role)`とFK/unique、brand-scoped SELECT/WRITE policies、必要ならtenant-checked private RPC、scheduled_postsのsocial_account/body relationをdisposable DBでpolicy matrix検証してから別C2承認で適用する。SECURITY DEFINERをRLS回避目的に追加しない。
 - tests: `npm run typecheck` PASS; `npm run lint` PASS (0 errors/warnings); Expo Web export/route resolution PASS (`/private/tmp/social-mobile-phase3-dist`); `git diff --check` PASS。packageにunit-test runnerがないためproduction sign-in/read、OAuth、SNS/API実行はしていない。
 - production_decision: **Supabase data sourceをONにしてはならない**。現状はblocked/unavailable表示が正しい。production変更0、deploy0、manual API/X/Push0、secret/token露出0。
-- implementation_commit: pending after fresh origin check; push not attempted.
+- implementation_commit: `c0de2de` (`Audit social mobile schema and RLS`), rebased onto the latest shared `origin/main` (original local implementation was `fc5edde8e88ec25ccc8f445453e3f568163bc2fb`).
+- push: authorized by the user after the initial main-branch safety review; push/read-back is being performed from the clean isolated worktree.
 - remaining_issues: Phase4でmembership/RLS設計をC2承認後にdisposable DB検証する必要がある。device visual QAと実ユーザーAuth確認も未実施。
 - safety_checks: `/Users/yuya/Developer/kabumori`正式repo、root Expo、`apps/admin/**`、`supabase/**`、H1/G1/G2、HANDOFF.mdは変更していない。TASKは`review_required`、`next_owner: chatgpt`。
 
