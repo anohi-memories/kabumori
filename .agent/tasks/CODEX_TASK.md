@@ -3,8 +3,8 @@
 - task_id: ai-lab-daily-content-plan-selection-fix-20260918
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol Medium/High
 - purpose: Phase 1 candidate `0a6f20c86603c5834876208e4c05ef711d036be4` は全体構成は良いが、daily planの選択ルールが承認仕様より狭く、active planに当該slot itemが無いだけで投稿をfail-closedしてしまう。C1でここをblockerとしたため、slot未指定item / daily theme fallbackを決定的に扱えるようfocused fixする。production migration/deployはまだ行わない。

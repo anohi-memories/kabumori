@@ -15,11 +15,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: ai-lab-daily-content-plan-generation-control-phase1-20260917
+- task_id: ai-lab-daily-content-plan-selection-fix-20260918
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: AI Lab content-plan優先制御candidate。C1 review待ち。production migration/deployは未実施。
+- note: C1 blocker修正済み。slot未指定itemの決定的割当と安全なpersona fallbackを追加。production migration/deployは0、C1待ち。
 
 ### Codex slot 2
 - owner: codex

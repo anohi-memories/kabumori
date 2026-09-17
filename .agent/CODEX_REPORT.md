@@ -1,5 +1,32 @@
 # Codex Report
 
+## Latest H1 result — AI Lab daily content plan selection focused fix (2026-09-18)
+
+- task_id: `ai-lab-daily-content-plan-selection-fix-20260918`
+- result: `review_required` — C1 blocker fixed in a source-only candidate; stop for C1 review. Production migration/deploy/configuration changes: **0**.
+- source candidate: branch `codex/ai-lab-daily-content-plan-selection-fix-20260918`, commit `cdebdc861d9b6fb38645b640c3d48396ec72aee3` (rebased onto fresh GitHub `main` `ac158af65f385448c68e11b8336c51d52c20a7ed`).
+- migration candidate remains `supabase/migrations/20260917143302_ai_lab_daily_content_plans_phase1.sql`; it was not applied. No `supabase db push`, production RLS/grant/RPC/schema change, Cron change, or `x-test-post` deploy was performed.
+
+### Focused fix
+
+- `slot_no` is now optional/null in the structured plan item parser.
+- Selection order is deterministic: exact explicit slot item first (priority, then id), then slot-less items assigned to the remaining scheduled slots in stable priority/id order. No consumed-state write is used; the same plan/date/slot resolves to the same item on retry.
+- If an active plan has no safe item for a slot, the loader returns the normal fallback signal instead of stopping the scheduled post or inventing a topic from `day_theme` alone. The generator fallback is hardened toward a company-worker personal-development/side-business/AI-trial diary and explicitly rejects generic AI convenience tips, textbook how-to content, and fabricated progress/experience.
+- Plan absence keeps the same hardened persona fallback. Explicit item generation, AI Lab-only wiring, target-date filtering, active-only filtering, and all OAuth/Vault/refresh/X publish/dedupe/completion boundaries remain unchanged. Kabumori, Mio, and market-report consumers remain untouched.
+
+### Validation
+
+- Focused plan/dispatcher/generator suites: **30 passed / 0 failed**.
+- Full `supabase/functions/x-test-post` + `_shared/brand` regression: **469 passed / 0 failed**.
+- Candidate helper modules `deno check --no-config`: passed.
+- Candidate helper `deno fmt --check` and `git diff --check`: passed.
+- The known unrelated full Edge `index.ts` type diagnostics remain outside this focused change; no new helper type error was introduced.
+
+### Safety / next step
+
+- Production DB/Vault/X/OAuth/Cron writes: **0**; no secrets/token values, manual/synthetic X post, retry/backfill, refresh, or OAuth action was performed.
+- C1 should review the selection algorithm and the explicit safe fallback rule before any separate migration/deploy approval. No rollout is implied by this candidate.
+
 ## Latest H1 result — AI Lab daily content plan generation control Phase 1 (2026-09-17)
 
 - task_id: `ai-lab-daily-content-plan-generation-control-phase1-20260917`

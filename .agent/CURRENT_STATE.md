@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-18 JST (H2 social mobile Phase4 ready)
+- checked_at: 2026-09-18 JST (H1 AI Lab daily plan selection fix review_required; H2 social mobile Phase4 ready)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,8 +14,8 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `ai-lab-daily-content-plan-generation-control-phase1-20260917`
-  - AI Lab content plan優先制御candidate。production migration/deployは未実施。C1待ち。
+- Codex slot 1: `review_required` — `ai-lab-daily-content-plan-selection-fix-20260918`
+  - C1 blocker修正済み。slot未指定itemを決定的に割り当て、safe itemなしはhardened persona fallback。production migration/deployは未実施。C1待ち。
 
 - Codex slot 2: `ready` — `social-mobile-app-phase4-membership-rls-validation-20260918`
   - Phase1〜3はC2 PASS済み。
