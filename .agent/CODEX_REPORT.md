@@ -1,5 +1,43 @@
 # Codex Report
 
+## Latest H1 result — AI Lab Vault refresh integration candidate (2026-09-17)
+
+- task_id: `x-ai-lab-vault-token-refresh-integration-candidate-20260917`
+- result: `review_required` — integrated the C1-approved AI Lab refresh helper into the candidate `x-test-post` path, added a transaction-guarded Vault persistence adapter, and preserved the existing AI Lab completion/idempotency boundary. This is source-only; production was not deployed or mutated.
+- candidate_branch: `codex/x-ai-lab-vault-token-refresh-integration-candidate-20260917`
+- candidate_head: `a7ffba4930a9eff3885ab29254f9858b80e71170`
+- base_helper_commit: `5d3128d` (rebased equivalent of the approved refresh helper)
+- focused_fix_commit: `b8712a9` (rebased fail-closed non-2xx fix)
+
+### Changed files and call graph
+
+- `supabase/functions/x-test-post/index.ts`
+  - AI Lab `brand_post` loads the fixed `ai_salaryman_lab_x` Vault bundle and X OAuth client credentials, then attaches the AI Lab-only refresh boundary to `postToX`.
+  - `postToX` selects `publishAiLabWithRefresh` before the legacy path only when the fixed AI Lab context is present. Kabumori/Mio and the legacy `oauth_token_store` path are unchanged.
+  - The existing `dispatchAiLabScheduledBrandPost` generation, dedupe, length, X-call, and terminal completion guard remains the outer boundary. A confirmed X write followed by uncertain completion still cannot be resent.
+- `supabase/functions/_shared/brand/ai_lab_vault_token_source.ts`
+  - Returns opaque fixed access/refresh references together with the loaded token pair; the legacy wrapper remains compatible for existing callers.
+- `supabase/functions/_shared/brand/ai_lab_vault_token_persistence.ts`
+  - Uses the Edge runtime `SUPABASE_DB_URL` with a short-lived Postgres client and `vault.update_secret` inside one transaction.
+  - Holds a database advisory transaction lock, re-reads the fixed refresh secret, and rejects a stale expected token before either ref is written. Access is always updated; refresh is updated only when X rotated it.
+  - SQL/provider/secret failures are sanitized to stable error codes; token values, DB URL, Vault IDs, and provider bodies are not logged or returned.
+- `supabase/functions/_shared/brand/ai_lab_token_refresh.ts`
+  - Passes `expectedRefreshToken` to persistence and preserves the stale-write code while keeping the one-refresh/one-retry upper bound.
+- Tests cover the helper, writer, source bundle, and static x-test-post wiring.
+
+### Verification
+
+- Focused AI Lab suites: **30 passed / 0 failed** (13 refresh, 4 persistence/concurrency, 5 Vault source, 8 scheduled-dispatch).
+- Existing `x-test-post` + `_shared/brand` regression: **474 passed / 0 failed**.
+- `deno check --no-config`: candidate modules pass; x-test-post reports the same six pre-existing diagnostics (AES-GCM BufferSource, image Blob/BodyInit, `retry_count`, timestamp precision), with no new candidate diagnostic.
+- Focused `deno fmt` and `git diff --check`: pass.
+
+### Production boundary and remaining review items
+
+- Read-only production SQL confirmed `vault.update_secret(uuid,text,...)` exists and is service-role-only; no secret values were read. No public Vault writer RPC, migration, grant, schema, RLS, or RPC definition was added.
+- No Edge Function deploy, Vault/token mutation, refresh-token call, OAuth reauthorization, manual/synthetic post, failed-row retry/backfill, Cron/window change, or Kabumori/Mio change occurred.
+- C1 should review whether the production Edge runtime exposes `SUPABASE_DB_URL` with the required direct-Postgres connectivity and whether the service-role database role may call `vault.update_secret`; deploy/token mutation remains separately unauthorized.
+
 ## Latest H1 result — AI Lab refresh candidate focused fail-closed fix (2026-09-17)
 
 - task_id: `x-ai-lab-vault-token-refresh-candidate-20260917`

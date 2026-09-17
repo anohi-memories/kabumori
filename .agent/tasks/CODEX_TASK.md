@@ -3,8 +3,8 @@
 - task_id: x-ai-lab-vault-token-refresh-integration-candidate-20260917
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: C1 PASS済みのAI Lab専用Vault-backed refresh/rotation helperを、production deployせずに現行`x-test-post`へ安全に統合するcandidateを作る。実Vault writer/persistence adapter、同時refresh競合、completion/idempotency境界を実装・検証し、production反映前に再度C1へ戻す。
