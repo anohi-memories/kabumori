@@ -70,7 +70,30 @@ export type ReportSnapshot = {
   data_gaps: string[];
 };
 
+// Shared market analysis copied verbatim from market_report_packet.v1 (same text X uses).
+export type MarketSection = {
+  report_packet_id: string;
+  market_direction: 'up' | 'down' | 'mixed' | 'flat' | 'unknown';
+  headline_ja: string;
+  market_summary_ja: string;
+  major_moves: Array<{ metric_key: string; label: string; session_date: string; value_display: string; change_pct_display: string | null; freshness: 'fresh' | 'stale' }>;
+  claims: Array<{ text_ja: string; claim_type: string; scope: string }>;
+  key_news: Array<{ ref_id: string; headline_ja: string; why_it_matters_ja: string }>;
+  next_watch_ja: string[];
+  risks_ja: string[];
+  data_gaps_ja: string[];
+};
+
+export const CLAIM_TYPE_LABEL: Record<string, string> = {
+  causal: '報道で確認',
+  consistent_with: '同日に確認',
+  insufficient_evidence: '理由は未確認',
+  observation: '値動き',
+  watch_point: '注目点',
+};
+
 export type ReportBody = {
+  market_section?: MarketSection;
   tone?: 'positive' | 'neutral' | 'cautious';
   overview_ja?: string;
   stock_notes?: Array<{ ticker_code: string; note_ja: string }>;

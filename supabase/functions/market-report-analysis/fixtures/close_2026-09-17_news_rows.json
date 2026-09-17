@@ -1,0 +1,564 @@
+[
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "29270",
+  "company_name": "ＡＦＣ－ＨＤ",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-09-16 14:40:42.827056+00",
+  "generated_text": "【速報】ＡＦＣ－ＨＤ（2927）は、連結子会社のさいか屋が東京証券取引所から整理銘柄に指定されたことを受け、株式交換で完全子会社化する方針を公表しました。\n\nＡＦＣ－ＨＤが株式交換完全親会社、さいか屋が完全子会社となる予定です。第三者による株式価値の算定などを進め、株式交換比率や効力発生日を決めるとしています。\n\n現時点では交換比率などの具体的な条件は未決定。契約締結は2026年10月中旬、効力発生日は12月頃の予定ですが、変更される可能性があります。📌\n\n出典: https://www.release.tdnet.info/inbs/140120260916537173.pdf",
+  "generation_fact_status": "failed",
+  "id": "2ca5075b-57da-47ac-ba14-53934b1ad4d8",
+  "published_at": "2026-09-16 07:33:00+00",
+  "source_type": "tdnet",
+  "title": "株式会社さいか屋が整理銘柄に指定されたことを踏まえた今後の資本政策及び株式交換方針について"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "625A0",
+  "company_name": "Ｇ－Ｓｋｙｆａｌｌ",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-16 23:20:36.794921+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "c4e05f6e-f0d2-4589-874f-7b53c7283f2f",
+  "published_at": "2026-09-16 23:00:00+00",
+  "source_type": "tdnet",
+  "title": "親会社以外の支配株主及び主要株主の異動に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "36400",
+  "company_name": "電算",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-09-16 12:40:46.064794+00",
+  "generated_text": "【速報】電算、26年9月中間期予想を上方修正📈\n\n営業利益は311百万円から820百万円へ、純利益は222百万円から590百万円へ引き上げ。営業利益は163.7％、純利益は165.8％の上方修正です。\n\n子ども・子育て支援金対応などの法制度改正に伴う新規案件に加え、下期予定案件の一部を前倒しで計上。高採算案件の寄与や一部業務の内製化による外注費削減も利益を押し上げました。\n\nただ、前倒し計上を含む修正で、2027年3月期の通期連結業績予想は据え置きです。銘柄コードは3640。\n\n出典: https://www.release.tdnet.info/inbs/140120260915536407.pdf",
+  "generation_fact_status": "passed",
+  "id": "11a19fc8-c6de-4fae-ab6c-555634a0763f",
+  "published_at": "2026-09-16 06:50:00+00",
+  "source_type": "tdnet",
+  "title": "業績予想の修正（上方修正）に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "70430",
+  "company_name": "Ｇ－アルー",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-16 14:00:45.938887+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "5dccf89d-f8b4-475e-8fc2-511d5038d5e6",
+  "published_at": "2026-09-16 07:00:00+00",
+  "source_type": "tdnet",
+  "title": "2026年８月度 etudes月次KPI（速報）のお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "64190",
+  "company_name": "マースグループＨＤ",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-16 13:00:44.116845+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "c7c2a369-4e98-4b58-8818-c7725cc4cab3",
+  "published_at": "2026-09-16 07:00:00+00",
+  "source_type": "tdnet",
+  "title": "自己株式の取得状況及び取得終了に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "44800",
+  "company_name": "メドレー",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-17 07:00:40.697503+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "ae8dcc78-7513-43e3-b2e8-4169456bf561",
+  "published_at": "2026-09-17 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "株式会社USEN WORKINGのUcare事業の会社分割（簡易吸収分割）による当社への承継に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "625A0",
+  "company_name": "Ｇ－Ｓｋｙｆａｌｌ",
+  "coverage_categories": [
+   "fx",
+   "ai_tech",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-16 23:00:34.112095+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "59a54dc6-fccc-42ca-9612-da81f1da8de1",
+  "published_at": "2026-09-16 23:00:00+00",
+  "source_type": "tdnet",
+  "title": "東京証券取引所グロース市場への上場に伴う決算情報等のお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "18600",
+  "company_name": "戸田建",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-16 13:00:44.364021+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "2905c59a-a3c7-4bb3-9454-ae0a8a339842",
+  "published_at": "2026-09-16 07:00:00+00",
+  "source_type": "tdnet",
+  "title": "一括取得型自己株式取得（ASR）における事後調整完了のお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "54840",
+  "company_name": "東北鋼",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-16 13:00:46.50771+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "67498943-0408-413c-aa2d-b31dbee24ba8",
+  "published_at": "2026-09-16 07:00:00+00",
+  "source_type": "tdnet",
+  "title": "株式併合、単元株式数の定めの廃止及び定款一部変更に係る承認決議に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "63800",
+  "company_name": "オリチエン工業",
+  "coverage_categories": [
+   "ai_tech",
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-16 14:20:38.797863+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "2f96a866-0d7c-436f-a828-f236139eebac",
+  "published_at": "2026-09-16 07:00:00+00",
+  "source_type": "tdnet",
+  "title": "Ｘ―ＡＩプロジェクト始動及び株式会社ＫＵＲＯＪＩＫＡとの業務提携に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "47620",
+  "company_name": "ＸＮＥＴ",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-09-16 13:20:47.169138+00",
+  "generated_text": "【速報】ＸＮＥＴ（4762）が2027年3月期の業績予想を上方修正しました。\n\n中間期は売上高29.5億円、営業利益・経常利益4.5億円、純利益2.9億円の見通し。純利益は前回予想から約29％増えます。通期の純利益予想も5.2億円へ、前回から約16％引き上げました。顧客需要の拡大で受注が想定以上に増え、追加費用も限定的だったとのことです。\n\n第2四半期末のエクストラ配当は、1株10円から15円へ増額。ベース配当と期末エクストラ配当の予想は変更ありません。10月1日付で1株を2株に分割する予定で、分割を考慮しない年間配当は75円としています。\n\n業績予想は今後修正される場合があります。📌\n\n出典: https://www.release.tdnet.info/inbs/140120260915536475.pdf",
+  "generation_fact_status": "failed",
+  "id": "f52cf9b5-9acc-483c-9976-664d3e3e85f9",
+  "published_at": "2026-09-16 07:00:00+00",
+  "source_type": "tdnet",
+  "title": "「2027年３月期第２四半期（中間期）及び通期業績予想の修正」及び「第２四半期末配当（エクストラ配当）予想の修正」に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "87980",
+  "company_name": "アドバンスクリエイト",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-16 12:20:41.286102+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "300a9388-8a03-44da-a9e7-e7314c4ce06a",
+  "published_at": "2026-09-16 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "2026年8月度 当社の業績概要について"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "76020",
+  "company_name": "レダックス",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-09-16 12:20:41.035081+00",
+  "generated_text": "【速報】レダックス（7602）は、株式会社ハリカが設立した事業承継会社の全株式を取得し、連結子会社化する前提でスポンサー契約を締結しました。\n\n取得価額は6億7,000万円。ハリカの2025年12月期は売上高約51億円、営業損失13百万円でしたが、レダックスの事業計画では2027年に営業利益78百万円、経常利益105百万円を見込んでいます。\n\n吸収分割と許認可の取得が前提で、株式取得日は2027年1月5日の予定。承継会社の株式取得価額を上回る純資産の承継が見込まれ、負ののれん発生益を特別利益として計上する可能性がありますが、業績への具体的な影響額はまだ未確定です。\n\n出典: https://www.release.tdnet.info/inbs/140120260916537297.pdf",
+  "generation_fact_status": "passed",
+  "id": "cbf1d33e-8982-487e-a128-bfc313bdfb62",
+  "published_at": "2026-09-16 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "株式会社ハリカの事業を承継する会社の株式取得（連結子会社化）に向けたスポンサー契約締結に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "401A0",
+  "company_name": "Ｒ－霞ヶ関ホテル",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-16 12:40:45.646097+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "e23dff1e-3eb1-42c1-ae88-ea557817ea41",
+  "published_at": "2026-09-16 06:45:00+00",
+  "source_type": "tdnet",
+  "title": "2026年7月期 決算短信（REIT）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "33700",
+  "company_name": "フジタコーポ",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-16 14:40:42.601423+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "003f4de4-df15-446a-a751-cd9317a028d3",
+  "published_at": "2026-09-16 07:30:00+00",
+  "source_type": "tdnet",
+  "title": "農地所有適格法人である株式会社市川牧場の株式取得（連結子会社化）に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "27210",
+  "company_name": "ＪＨＤ",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-09-16 14:40:42.233558+00",
+  "generated_text": "【速報】JHD（2721）は、第10回新株予約権の残存分37,600個をEVO FUNDから取得し、10月6日に全て消却すると発表しました。潜在株式数は376万株で、消却後の残存数は0個です。取得価額は総額676万8,000円の予定ですが、取得日までに行使された分だけ減少します。\n\nこれまでに45,100個が行使され、調達額は546百万円。当初想定の1,769百万円を1,223百万円下回っています。会社は、残存分による将来の希薄化や株式需給への影響を早期に解消することを優先したと説明。2026年12月期の連結業績への影響は軽微としています。\n\n出典: https://www.release.tdnet.info/inbs/140120260916536931.pdf",
+  "generation_fact_status": "failed",
+  "id": "9b18b4bd-1b0b-4b26-a594-d4695a0bde52",
+  "published_at": "2026-09-16 07:30:00+00",
+  "source_type": "tdnet",
+  "title": "第10回新株予約権（行使価額修正条項付）の取得及び消却に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "26120",
+  "company_name": "かどや製油",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-16 12:40:46.270179+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "46469a64-d8bd-4a2d-9d38-1b302ad85911",
+  "published_at": "2026-09-16 06:50:00+00",
+  "source_type": "tdnet",
+  "title": "(訂正）「株式会社ITG-Gホールディングスによる当社株式に対する公開買付けに関する賛同の意見表明及び応募推奨のお知らせ」の一部訂正に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "443A0",
+  "company_name": "ｉＦＪリート２",
+  "coverage_categories": [
+   "japan_market",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-17 03:20:27.546729+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "7cb246b0-4876-442b-9b04-bc68a1857ca4",
+  "published_at": "2026-09-17 02:00:00+00",
+  "source_type": "tdnet",
+  "title": "2026年8月期（2026年2月5日～2026年8月4日）決算短信"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "516A0",
+  "company_name": "ｉＦ米ドルブル１倍",
+  "coverage_categories": [
+   "fx",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-17 03:20:27.917312+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "e5f643e0-87a2-419a-b978-3d9499edaa77",
+  "published_at": "2026-09-17 02:00:00+00",
+  "source_type": "tdnet",
+  "title": "2026年8月期（2026年3月2日～2026年8月4日）決算短信"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "517A0",
+  "company_name": "ｉＦ米ドルベア１倍",
+  "coverage_categories": [
+   "fx",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-17 03:40:33.607764+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "bbbaf77b-1cf5-4ff0-97d4-65f3b797b664",
+  "published_at": "2026-09-17 02:00:00+00",
+  "source_type": "tdnet",
+  "title": "2026年8月期（2026年3月2日～2026年8月4日）決算短信"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": null,
+  "company_name": null,
+  "coverage_categories": [
+   "geopolitics",
+   "shipping_logistics"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-09-16 22:20:03.499446+00",
+  "generated_text": "【速報】中東の主要航路で船舶への攻撃が増えているとして、国連の海事機関トップが警告しました。米・イラン戦争に関連した動きで、船員を標的にする口実にはならないと強調しています。🚢\n\n海運・物流への波及が懸念される一方、被害規模や日本企業への具体的な影響は確認されていません。\n\n出典: https://news.un.org/feed/view/en/story/2026/09/1168352",
+  "generation_fact_status": "passed",
+  "id": "f585e74d-ff4a-418a-8b14-a23a6090a2c2",
+  "published_at": "2026-09-16 12:00:00+00",
+  "source_type": "market_macro",
+  "title": "World News in Brief: Shipping alert from IMO, democracy vanishing in Nicaragua, alert over political ‘denialism’"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "92730",
+  "company_name": "コーア商事ＨＤ",
+  "coverage_categories": [
+   "japan_market",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-17 05:00:29.647733+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "5249b93f-e98b-4b3c-8ad7-08cf027bdb2a",
+  "published_at": "2026-09-17 04:00:00+00",
+  "source_type": "tdnet",
+  "title": "資本コストや株価を意識した経営の実現に向けた対応について（アップデート）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "38560",
+  "company_name": "Ａｂａｌａｎｃｅ",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-17 02:20:30.846225+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "c261630c-e633-4e6a-9a88-20a7f9d9a705",
+  "published_at": "2026-09-17 01:10:00+00",
+  "source_type": "tdnet",
+  "title": "自己株式立会外買付取引（ToSTNeT-3）による自己株式の取得結果に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "75230",
+  "company_name": "アールビバン",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-09-17 02:40:30.814821+00",
+  "generated_text": "【速報】アールビバンは、MBO後の非公開化に向けて株式併合などを付議する臨時株主総会を2026年10月20日に開催します。\n\n公開買付者のOrsayは2026年9月1日時点で5,466,270株、所有割合59.73％を保有。株式併合と単元株式数の定めの廃止、定款変更を議案としています。\n\n可決された場合、同社株式は2026年10月20日から11月10日まで整理銘柄に指定され、2026年11月11日に東証スタンダード市場から上場廃止となる予定です。総会での決議が前提です。\n\n出典: https://www.release.tdnet.info/inbs/140120260917537621.pdf",
+  "generation_fact_status": "failed",
+  "id": "9959067f-5edd-4712-8266-e9109363679b",
+  "published_at": "2026-09-17 01:15:00+00",
+  "source_type": "tdnet",
+  "title": "株式併合並びに単元株式数の定めの廃止及び定款の一部変更に関する 臨時株主総会開催のお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "93320",
+  "company_name": "ＮＩＳＳＯＨＤ",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-17 06:40:36.535064+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "c5e854d8-76d4-4010-a3a3-d57e6a3217b1",
+  "published_at": "2026-09-17 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "当社連結子会社における株式会社Urthの株式取得に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "229A0",
+  "company_name": "Ｐ－アスミＨＤ",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-17 06:00:36.775882+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "6814d737-b672-4e2c-9005-153ab08fa027",
+  "published_at": "2026-09-17 06:00:00+00",
+  "source_type": "tdnet",
+  "title": "（開示事項の中止）「株式会社カーサ・プランニングの株式の取得（子会社化）」の中止に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "76020",
+  "company_name": "レダックス",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-09-17 06:20:31.567989+00",
+  "generated_text": "【速報】2026年9月17日、レダックスはハリカ事業承継の補足を公表\n\n取得価額は6.7億円。承継予定純資産は約9.36億円で、差額約2.66億円は負ののれん発生益の参考値としています。実際の金額は、取得時点の時価評価や取得原価配分を経て確定します。\n\n株式取得日は2027年1月5日を予定。予定どおり完了すれば、負ののれん発生益を2027年3月期の特別利益として計上する見込みですが、通期連結業績予想への具体的な影響は精査中です。\n\nハリカ単体では、買収初年度からの黒字化を計画。2029年には売上高71.3億円、営業利益3.47億円を見込んでいます。これらは承継会社単体の事業計画で、レダックスの連結業績予想ではありません。\n\n追加M&Aなどを含め、ギフト事業全体で3か年後に売上高100億円規模を目指す方針も示していますが、相手先や実行時期などは未定です。\n\n出典: https://www.release.tdnet.info/inbs/140120260917537947.pdf",
+  "generation_fact_status": "failed",
+  "id": "35deeb29-33c9-424a-9c81-dcd3916bedde",
+  "published_at": "2026-09-17 06:00:00+00",
+  "source_type": "tdnet",
+  "title": "株式会社ハリカの事業承継に関する補足説明"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "34710",
+  "company_name": "Ｒ－三井不ロジパーク",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-17 07:00:40.446762+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "08ddc460-c85b-4f5b-a981-89cb3211e386",
+  "published_at": "2026-09-17 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "2026年7月期 決算短信（REIT）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "23710",
+  "company_name": "カカクコム",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "critical",
+  "created_at": "2026-09-17 06:20:31.256697+00",
+  "generated_text": "【重大速報】カカクコム（2371）をめぐる非公開化提案で、BCPE Blitz CaymanがTOB価格を1株3,597円へ引き上げると連絡しました。KDDIとの不応募契約が成立した場合は3,720円です。\n\nKamgras 1によるTOB価格は3,680円。両提案は両立しないため、カカクコム側は今後、企業価値や株主共同の利益、公開買付けの成立可能性などを踏まえて協議・検討します。\n\nBCPE Blitz側に必要なクリアランスはすべて取得済みで、カカクコムが賛同・応募推奨の取締役会決議を行えば、速やかにTOBを開始する予定としています。なお、今回の開示時点でカカクコムはBCPE Blitzの提案への意見を表明しておらず、Kamgras 1への賛同方針にも変更はありません。\n\n出典: https://www.release.tdnet.info/inbs/140120260917537945.pdf",
+  "generation_fact_status": "passed",
+  "id": "9777ce1d-4e2e-47f9-b8b2-499f62677f37",
+  "published_at": "2026-09-17 06:00:00+00",
+  "source_type": "tdnet",
+  "title": "「BCPE Blitz Cayman, L.P.による当社株券等に対する公開買付けの開始予定に関するお知らせ」の一部変更に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "30750",
+  "company_name": "銚子丸",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "critical",
+  "created_at": "2026-09-17 07:00:39.09239+00",
+  "generated_text": "【重大速報】銚子丸、通期予想を上方修正。期末配当も増額\n\n銚子丸（3075）は、2027年2月期の通期予想を修正しました。売上高は253億円、営業利益は18億8,000万円、純利益は12億2,000万円へ。営業利益は前回予想から56.2％、純利益は55.4％の上方修正です。\n\n既存店売上高が計画を上回って推移し、販促費などの経費も効果的に使用できたことが理由。新店の売上高も上振れる見込みですが、原材料価格の高騰などの影響は織り込んでいます。\n\n期末配当予想は前回から1円増額し、1株16円に修正。第2四半期累計の営業利益予想も12億8,000万円へ、59.6％引き上げられています。日本株では、まずこの大幅な利益予想の修正と増配がどう受け止められるか見られそうです。\n\n出典: https://www.release.tdnet.info/inbs/140120260909533584.pdf",
+  "generation_fact_status": "passed",
+  "id": "e4b78c4d-9ada-4d45-8d44-ca3c74541ad3",
+  "published_at": "2026-09-17 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "2027年２月期第２四半期累計期間並びに通期業績予想の修正及び配当予想の修正に関するお知らせ"
+ }
+]

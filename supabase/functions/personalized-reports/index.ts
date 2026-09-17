@@ -36,7 +36,10 @@ import {
   BENCHMARK_LABEL,
   BENCHMARK_SYMBOL,
   CLOSE_SESSION_END_MINUTES,
+  priceFactFromSharedMetric,
+  type SharedMarketInput,
 } from "./report_logic.ts";
+import { appMarketSection, parseSharedMarketReportResult, type SharedMarketReportResult } from "../_shared/market_report_packet.ts";
 
 const jsonHeaders = { "Content-Type": "application/json; charset=utf-8" };
 const YAHOO_CHART_URL = "https://query2.finance.yahoo.com/v8/finance/chart/";
@@ -206,6 +209,24 @@ async function fetchAllSeries(symbols: string[]): Promise<Map<string, PriceSerie
 
 type RequestBody = { mode?: unknown; dry_run?: unknown; user_id?: unknown };
 
+const INDEX_METRIC_KEYS: Record<string, string> = { "^N225": "nikkei225", [BENCHMARK_SYMBOL]: "topix_proxy_1306" };
+
+// Gate for the shared market report (Phase 2). A missing RPC (migration not yet
+// applied) means the gate cannot be on; other failures are retried once.
+async function loadSharedMarketReport(db: Rest, reportType: ReportType, tradingDate: string): Promise<SharedMarketReportResult> {
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      return parseSharedMarketReportResult(await db.post<unknown>("rpc/get_shared_market_report", {
+        p_consumer: "app", p_report_type: reportType, p_trading_date: tradingDate,
+      }));
+    } catch (error) {
+      if (error instanceof Error && error.message.endsWith(":404")) return { enabled: false, status: "disabled" };
+      if (attempt === 2) throw error;
+    }
+  }
+  throw new Error("SHARED_MARKET_REPORT_GATE_FAILED");
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return response({ error: "METHOD_NOT_ALLOWED" }, 405);
   if (!isAuthorizedCronCaller(req)) return response({ error: "UNAUTHORIZED" }, 401);
@@ -259,10 +280,40 @@ Deno.serve(async (req) => {
     const userIds = [...byUser.keys()].slice(0, MAX_USERS_PER_RUN);
     if (userIds.length === 0) return response({ status: "completed", reportType, tradingDate, users: [] });
 
+    // Gate ON: market values and the market analysis come only from the shared
+    // packets; without a completed shared report nothing is generated (fail closed).
+    const sharedReport = await loadSharedMarketReport(db, reportType, tradingDate);
+    if (sharedReport.enabled && sharedReport.status !== "completed") {
+      console.log(JSON.stringify({ event: "personalized_report_shared_unavailable", reportType, tradingDate, status: sharedReport.status }));
+      return response({ status: "skipped", reason: "SHARED_MARKET_REPORT_UNAVAILABLE", reportType, tradingDate, shared: sharedReport.status });
+    }
+    const shared = sharedReport.enabled && sharedReport.status === "completed" ? sharedReport : null;
+    const sharedInput: SharedMarketInput | null = shared
+      ? {
+        direction: shared.report.market_direction,
+        headlineJa: shared.report.headline_ja,
+        summaryJa: shared.report.market_summary_ja,
+        claims: shared.report.claims,
+        nextWatchJa: shared.report.next_watch_ja,
+        section: appMarketSection(shared.report, shared.report_packet_id, shared.report_content_hash),
+      }
+      : null;
+
     const tickers = [...new Set(userIds.flatMap((id) => byUser.get(id)!.map((stock) => stock.tickerCode)))];
-    const series = await fetchAllSeries([...tickers.map(yahooSymbol), ...INDEX_SYMBOLS.map((index) => index.symbol)]);
+    const series = await fetchAllSeries([
+      ...tickers.map(yahooSymbol),
+      ...(shared ? [] : INDEX_SYMBOLS.map((index) => index.symbol)),
+    ]);
     const prices = new Map(tickers.map((ticker) => [ticker, series.get(yahooSymbol(ticker)) ?? null]));
-    const indices = INDEX_SYMBOLS.map((index) => ({ label: index.label, series: series.get(index.symbol) ?? null }));
+    const indices = INDEX_SYMBOLS.map((index) => shared
+      ? {
+        label: index.label,
+        series: null,
+        price: priceFactFromSharedMetric(
+          (shared.data.metrics ?? []).find((metric) => metric.key === INDEX_METRIC_KEYS[index.symbol]),
+        ),
+      }
+      : { label: index.label, series: series.get(index.symbol) ?? null });
     const since = newsWindowStartIso(tradingDate, holidays);
     const requester = openAiRequester(openAiApiKey);
 
@@ -293,16 +344,25 @@ Deno.serve(async (req) => {
         const snapshot = buildSnapshot({
           reportType, tradingDate, tracked: byUser.get(userId)!, prices, indices, news,
         });
-        const packet = buildPacket(snapshot, news);
+        const packet = buildPacket(snapshot, news, sharedInput);
         const outcome = await generateReport(snapshot, packet, requester);
         const sourceBasis = {
           news_since: since,
           news_ids: snapshot.news.map((item) => item.news_id),
           price_source: "yahoo_chart_1d",
           index_symbols: INDEX_SYMBOLS.map((index) => index.symbol),
-          lane: "app_personalized_v1",
+          lane: shared ? "app_personalized_v2_shared_market" : "app_personalized_v1",
+          ...(shared
+            ? {
+              index_source: "market_data_packet",
+              shared_market_report_packet_id: shared.report_packet_id,
+              shared_market_report_content_hash: shared.report_content_hash,
+              market_data_packet_id: shared.data_packet_id,
+              market_data_content_hash: shared.data_content_hash,
+            }
+            : {}),
         };
-        const update = reportUpdate(outcome, snapshot, sourceBasis);
+        const update = reportUpdate(outcome, snapshot, sourceBasis, new Date(), sharedInput?.section ?? null);
         let notification: string = "not_attempted";
         if (!dryRun && reportId) {
           await db.patch(`personalized_reports?id=eq.${reportId}`, update);

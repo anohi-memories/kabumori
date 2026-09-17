@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 
 import { fetchReport } from '@/lib/personalized-reports';
 import {
+  CLAIM_TYPE_LABEL,
   buildStockRows,
   dataGapNotes,
   direction,
@@ -121,6 +122,26 @@ export default function ReportDetailScreen() {
         )}
       </View>
       {close && !!relative && <Text style={styles.relative}>市場との比較: {relative}</Text>}
+
+      {/* Shared market analysis: identical to the X post's source, shown verbatim. */}
+      {!!report.body?.market_section && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{close ? '今日の市場全体' : 'けさの市場全体'}</Text>
+          <Text style={styles.marketHeadline}>{report.body.market_section.headline_ja}</Text>
+          <Text style={styles.paragraph}>{report.body.market_section.market_summary_ja}</Text>
+          {report.body.market_section.claims.map((claim, index) => (
+            <View key={`claim-${index}`} style={styles.pointRow}>
+              <Text style={styles.pointDot}>・</Text>
+              <Text style={styles.pointText}>
+                {claim.text_ja}
+                {!!CLAIM_TYPE_LABEL[claim.claim_type] && <Text style={styles.claimTag}>（{CLAIM_TYPE_LABEL[claim.claim_type]}）</Text>}
+              </Text>
+            </View>
+          ))}
+          {report.body.market_section.next_watch_ja.map((item, index) => <Bullet key={`watch-${index}`} text={`注目: ${item}`} />)}
+          {report.body.market_section.data_gaps_ja.map((note) => <Text key={note} style={styles.footnote}>{note}</Text>)}
+        </View>
+      )}
 
       {!!report.body?.overview_ja && (
         <View style={styles.section}>
@@ -282,6 +303,8 @@ const styles = StyleSheet.create({
   section: { marginTop: 24 },
   sectionTitle: { color: '#548161', fontWeight: '900', fontSize: 13, letterSpacing: 1, marginBottom: 10 },
   paragraph: { color: '#2f3a33', fontSize: 15, lineHeight: 25 },
+  marketHeadline: { color: '#17211a', fontWeight: '900', fontSize: 16, lineHeight: 24, marginBottom: 6 },
+  claimTag: { color: '#89918c', fontSize: 12, fontWeight: '700' },
   moverLine: { color: '#2f3a33', fontSize: 15, lineHeight: 26, fontWeight: '700' },
   stockCard: { backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#e1e5e2', padding: 14, marginBottom: 10 },
   stockHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },

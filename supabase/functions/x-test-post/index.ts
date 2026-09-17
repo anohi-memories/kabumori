@@ -58,6 +58,11 @@ import {
 } from "./tip_voice_logic.ts";
 import { KABUMORI_VOICE as SHARED_KABUMORI_VOICE } from "../_shared/kabumori_voice.ts";
 import {
+  loadSharedMarketReport,
+  publishSharedMarketReport,
+  type SharedPublishDeps,
+} from "./shared_market_report_consumer.ts";
+import {
   brandIdFromScheduledRow,
   loadBrandContext,
 } from "../_shared/brand/brand_context.ts";
@@ -4013,6 +4018,51 @@ Deno.serve(async (req) => {
           });
         }
         throw error;
+      }
+    }
+
+    // Shared market report consumer (Phase 2). Gate OFF keeps the legacy branches below unchanged.
+    const sharedReportDeps = (reportType: "morning" | "close"): SharedPublishDeps => ({
+      createRun: () => reportType === "morning"
+        ? createMorningReportRun(supabaseUrl, serviceRoleKey, scheduledPost.scheduled_for, scheduledPost.id)
+        : createCloseReportRun(supabaseUrl, serviceRoleKey, scheduledPost.scheduled_for, scheduledPost.id),
+      updateRun: (runId, values) => reportType === "morning"
+        ? updateMorningReportRun(supabaseUrl, serviceRoleKey, runId, values)
+        : updateCloseReportRun(supabaseUrl, serviceRoleKey, runId, values),
+      postToX: async (text) => {
+        const xPostId = getXPostId(await postToX(xAuth, text));
+        if (!xPostId) throw new Error("X_RESPONSE_MISSING_POST_ID");
+        return xPostId;
+      },
+      completePost: async (runId, xPostId) => {
+        await callRpc(
+          supabaseUrl,
+          serviceRoleKey,
+          reportType === "morning" ? "complete_morning_report_post" : "complete_close_report_post",
+          reportType === "morning"
+            ? { p_scheduled_post_id: scheduledPost.id, p_morning_report_run_id: runId, p_x_post_id: xPostId }
+            : { p_scheduled_post_id: scheduledPost.id, p_close_report_run_id: runId, p_x_post_id: xPostId },
+        );
+      },
+      now: () => new Date(),
+    });
+    if (scheduledPost.post_type === "morning_report" || scheduledPost.post_type === "close_report") {
+      const reportType = scheduledPost.post_type === "morning_report" ? "morning" : "close";
+      const sharedReport = await loadSharedMarketReport({
+        supabaseUrl, serviceRoleKey, reportType, scheduledFor: scheduledPost.scheduled_for,
+      });
+      if (sharedReport.enabled) {
+        const published = await publishSharedMarketReport(reportType, sharedReport, sharedReportDeps(reportType));
+        return jsonResponse({
+          schedule: { id: scheduledPost.id, postType: scheduledPost.post_type, scheduledFor: scheduledPost.scheduled_for },
+          runId: published.runId,
+          generatedText: published.text,
+          model: "shared_market_report",
+          sharedReportPacketId: published.reportPacketId,
+          sharedReportContentHash: published.reportContentHash,
+          xPostId: published.xPostId,
+          refreshExecuted: xAuth.refreshExecuted,
+        }, 201);
       }
     }
 

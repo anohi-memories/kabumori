@@ -10,6 +10,8 @@
 //   * Local checks reject unknown tickers, numbers absent from the packet,
 //     investment advice, URLs, emoji and markup before the Fact call.
 
+import type { AppMarketSection, MarketDirection } from "../_shared/market_report_packet.ts";
+
 export type ReportType = "morning" | "close";
 export type TrackingType = "holding" | "watch";
 
@@ -174,6 +176,45 @@ export function priceFactFor(series: PriceSeries | null, reportType: ReportType,
 }
 
 // ---------------------------------------------------------------------------
+// Shared market report (Phase 2 consumer)
+// ---------------------------------------------------------------------------
+
+export type SharedMarketInput = {
+  direction: MarketDirection;
+  headlineJa: string;
+  summaryJa: string;
+  claims: Array<{ text_ja: string; claim_type: string }>;
+  nextWatchJa: string[];
+  section: AppMarketSection;
+};
+
+type SharedMetric = { key?: unknown; value?: unknown; previous_close?: unknown; change?: unknown; change_pct?: unknown; session_date?: unknown; freshness?: unknown };
+
+/** A market_data_packet metric as a PriceFact; anything not fresh is unavailable. */
+export function priceFactFromSharedMetric(metric: SharedMetric | undefined): PriceFact {
+  if (
+    !metric || metric.freshness !== "fresh" || typeof metric.value !== "number" ||
+    typeof metric.previous_close !== "number" || typeof metric.session_date !== "string"
+  ) {
+    return UNAVAILABLE;
+  }
+  return {
+    status: "ok",
+    sessionDate: metric.session_date,
+    close: metric.value,
+    previousClose: metric.previous_close,
+    change: typeof metric.change === "number" ? round(metric.change, 2) : round(metric.value - metric.previous_close, 2),
+    changePercent: typeof metric.change_pct === "number"
+      ? metric.change_pct
+      : round(((metric.value - metric.previous_close) / metric.previous_close) * 100, 2),
+  };
+}
+
+const DIRECTION_JA: Record<MarketDirection, string> = {
+  up: "上昇", down: "下落", mixed: "まちまち", flat: "ほぼ横ばい", unknown: "判断できず",
+};
+
+// ---------------------------------------------------------------------------
 // Deterministic snapshot
 // ---------------------------------------------------------------------------
 
@@ -243,7 +284,8 @@ export function buildSnapshot(input: {
   tradingDate: string;
   tracked: TrackedInput[];
   prices: Map<string, PriceSeries | null>;
-  indices: Array<{ label: string; series: PriceSeries | null }>;
+  // price, when given, is the shared market_data_packet value and replaces the Yahoo series.
+  indices: Array<{ label: string; series: PriceSeries | null; price?: PriceFact }>;
   news: NewsInput[];
 }): PortfolioSnapshot {
   const { reportType, tradingDate } = input;
@@ -309,7 +351,7 @@ export function buildSnapshot(input: {
   );
 
   const indices = input.indices.map((index) => {
-    const price = priceFactFor(index.series, reportType, tradingDate);
+    const price = index.price ?? priceFactFor(index.series, reportType, tradingDate);
     if (price.status !== "ok") gaps.push(`INDEX_UNAVAILABLE:${index.label}`);
     return { label: index.label, price };
   });
@@ -501,7 +543,7 @@ function stockPacket(stock: StockSnapshot, reportType: ReportType, newsById: Map
   };
 }
 
-export function buildPacket(snapshot: PortfolioSnapshot, news: NewsInput[]) {
+export function buildPacket(snapshot: PortfolioSnapshot, news: NewsInput[], shared: SharedMarketInput | null = null) {
   const newsById = new Map(news.map((item) => [item.newsId, item]));
   const close = snapshot.report_type === "close";
   const marketNewsIds = new Set(snapshot.news.filter((item) => !item.ticker_code).map((item) => item.news_id));
@@ -542,6 +584,17 @@ export function buildPacket(snapshot: PortfolioSnapshot, news: NewsInput[]) {
       related_sectors: item.matchedSectors,
     })),
     missing_data: snapshot.data_gaps,
+    ...(shared
+      ? {
+        shared_market: {
+          direction: DIRECTION_JA[shared.direction],
+          headline: shared.headlineJa,
+          summary: shared.summaryJa,
+          points: shared.claims.map((claim) => claim.text_ja),
+          next_watch: shared.nextWatchJa,
+        },
+      }
+      : {}),
   };
 }
 
@@ -592,6 +645,12 @@ const CLOSE_INSTRUCTIONS = [
   "watch_notes は値動きや材料が目立つ監視銘柄だけ（最大5件）。checkpoints_ja は明日見るポイントを1〜4個、短く書きます。",
 ].join("\n");
 
+const SHARED_MARKET_INSTRUCTIONS = [
+  "入力の shared_market は、X投稿とアプリで共通に使う市場全体の分析です（Factチェック済み）。アプリでは別枠でそのまま表示されます。",
+  "市場全体の方向・理由・注目点を新しく作ったり言い換えて広げたりしません。shared_market と矛盾する方向（上昇/下落）や理由を書きません。",
+  "overview_ja では市場全体の説明を繰り返さず、このポートフォリオと市場の関係（portfolio.relative_to_topix など）と保有銘柄の動きに集中します。市場の話に触れる場合は shared_market の範囲に限ります。",
+].join("\n");
+
 const DRAFT_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -634,8 +693,13 @@ const CHECK_SCHEMA = {
 export const REPORT_FACT_INSTRUCTIONS = [
   "あなたは個人向けポートフォリオレポートの厳格なFactチェッカーです。入力の packet（根拠データ）と report（生成文）だけを照合します。Web検索や外部知識は使いません。",
   "次を検出したら passed を false にします: packetに無い数字・日付・固有名詞・事実、数字の書き換えや独自計算、銘柄と材料の取り違え、当日損益と含み損益の混同、ニュースと値動きの因果の断定、将来の値動きの断定、売買推奨、価格未取得・未登録の項目を推測で埋めた記述、packetに無い市場比較。",
+  "packet に shared_market がある場合、それは確定済みの市場分析です。report が shared_market と矛盾する市場の方向や理由を書いていたら passed を false にします。",
   "自然な言い換えや要約は許容します。issues は短い日本語で返します。",
 ].join("\n");
+
+function hasSharedMarket(packet: unknown): boolean {
+  return typeof packet === "object" && packet !== null && "shared_market" in packet;
+}
 
 export function reportDraftRequestBody(reportType: ReportType, packet: unknown): Record<string, unknown> {
   return {
@@ -646,6 +710,7 @@ export function reportDraftRequestBody(reportType: ReportType, packet: unknown):
     instructions: [
       COMMON_INSTRUCTIONS,
       reportType === "close" ? CLOSE_INSTRUCTIONS : MORNING_INSTRUCTIONS,
+      ...(hasSharedMarket(packet) ? [SHARED_MARKET_INSTRUCTIONS] : []),
       `title_ja: ${REPORT_LIMITS.title}字以内。summary_ja: 2文以内・${REPORT_LIMITS.summary}字以内。overview_ja: ${REPORT_LIMITS.overview}字以内。stock_notes の各 note_ja: ${REPORT_LIMITS.stockNote}字以内。watch_notes の各 note_ja: ${REPORT_LIMITS.watchNote}字以内。risk_notes_ja: 最大${REPORT_LIMITS.maxRisks}個・各${REPORT_LIMITS.riskNote}字以内。checkpoints_ja: 各${REPORT_LIMITS.checkpoint}字以内。`,
       "ticker_code は入力の holdings / watch にある値だけを使います。stock_notes は holdings、watch_notes は watch の銘柄だけです。",
       "入力だけでは正確に書けない場合は sufficient_information を false にし、文字列を空、配列を空にします。",
@@ -833,7 +898,23 @@ export function localReportIssues(
   if (multiDay.length > 0) issues.push(`UNSUPPORTED_MULTI_DAY_WORD:${multiDay.slice(0, 3).join("/")}`);
   const latin = texts.flatMap(latinWords);
   if (latin.length > 0) issues.push(`CONTAINS_LATIN_WORD:${[...new Set(latin)].slice(0, 3).join("/")}`);
+  const contradiction = sharedDirectionContradiction(texts, packet);
+  if (contradiction) issues.push(`CONTRADICTS_SHARED_MARKET:${contradiction}`);
   return issues;
+}
+
+const MARKET_SUBJECT = "(?:市場全体|相場全体|日本株全体|東京市場|日経平均|TOPIX連動ETF（1306）|米国株|米国市場|NYダウ|S&P500|ナスダック)";
+const RISE = new RegExp(`${MARKET_SUBJECT}[はがも]?(?:大きく|小幅に|小幅)?(?:上昇|値上がり|上げ|反発|堅調|高く)`, "u");
+const FALL = new RegExp(`${MARKET_SUBJECT}[はがも]?(?:大きく|小幅に|小幅)?(?:下落|値下がり|下げ|反落|軟調|安く)`, "u");
+
+/** A market-direction sentence opposite to the shared analysis, or null. */
+export function sharedDirectionContradiction(texts: string[], packet: unknown): string | null {
+  const shared = (packet as { shared_market?: { direction?: unknown } } | null)?.shared_market;
+  if (!shared || typeof shared.direction !== "string") return null;
+  const joined = texts.join("\n");
+  if (shared.direction === DIRECTION_JA.up && FALL.test(joined)) return "SAID_DOWN";
+  if (shared.direction === DIRECTION_JA.down && RISE.test(joined)) return "SAID_UP";
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -921,6 +1002,7 @@ export function reportUpdate(
   snapshot: PortfolioSnapshot,
   sourceBasis: Record<string, unknown>,
   now = new Date(),
+  marketSection: AppMarketSection | null = null,
 ): Record<string, unknown> {
   const passed = outcome.status === "passed" && outcome.body !== null;
   return {
@@ -936,6 +1018,8 @@ export function reportUpdate(
         watch_notes: outcome.body!.watch_notes,
         risk_notes_ja: outcome.body!.risk_notes_ja,
         checkpoints_ja: outcome.body!.checkpoints_ja,
+        // Verbatim shared market analysis (never AI-rewritten per user).
+        ...(marketSection ? { market_section: marketSection } : {}),
       }
       : {},
     portfolio_snapshot: snapshot,
