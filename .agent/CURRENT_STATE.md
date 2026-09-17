@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-18 JST (H1 daily plan writer Phase2 review_required; H2 Phase4 review_required; G1 review_required)
+- checked_at: 2026-09-18 JST (H1 daily plan writer Phase2 review_required; H2 social mobile Phase5 ready; G1 review_required)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -18,9 +18,12 @@
   - service-role専用writer RPC、validation、version/activation/idempotencyをcandidate実装し、disposable DB proofと回帰テストをPASS。
   - production migration/RPC/deploy、`x-test-post`変更は0。C1確認待ち。
 
-- Codex slot 2: `review_required` — `social-mobile-app-phase4-membership-rls-validation-20260918`
-  - `brand_memberships`中心のtenant isolation candidateをdisposable DBで検証済み/確認待ち。
-  - production DB/RLS/grant/RPC/migration/deploy変更0の境界。
+- Codex slot 2: `ready` — `social-mobile-app-phase5-production-membership-rls-rollout-20260918`
+  - Phase4 disposable DB proofはC2 PASS済み。
+  - exact approved `brand_memberships` + tenant RLS candidateだけをproductionへ最小・可逆に反映するPhase5。
+  - blind `supabase db push`は禁止。preflight → exact apply → postflight → admin compatibility → rollback readinessの順。
+  - canary membershipはuser/brandがproduction既存relationから一意・明示的に特定できる場合のみ1件まで。曖昧なら0件でC2へ返す。
+  - `EXPO_PUBLIC_DATA_SOURCE=supabase` はまだ既定ONにしない。
 
 - Claude slot 1: `review_required` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
   - shared market_report_packet候補とX/app consumer gate実装のK1 review待ち。
@@ -32,16 +35,17 @@
 ## Parallel safety
 
 - H1は `daily_content_plans` writer/schema/validation candidateのみ。`x-test-post`、market-report、social-mobile、OAuth/Vaultには触れない。
-- H2はsocial-mobile membership/RLS candidate。H1の`daily_content_plans` objectsを触れない。
+- H2はsocial-mobile `brand_memberships` / tenant RLS production rolloutのみ。H1の`daily_content_plans` objects、G1のmarket-report objectsを触れない。
 - G1はmarket-report schema/functions/`x-test-post`/personalized-reports領域。
 - 同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数slotで同時変更しない。
+- H2は他slotのproduction migration適用と同時実行しない。競合時はwrite前にSTOP。
 - push前にfresh `origin/main`確認。既存未コミット変更は他workstream所有として触らない。
 
 ## Known issues / observations
 
 - AI Lab daily content plan consumer/selection source candidateはC1 PASSだが、base migrationとconsumer deployは未本番反映。
-- daily plan writerはまだ未実装。本Phaseでservice-side writer contractとdisposable DB proofを作る。
-- social mobile production schemaには一般user→brand membership/RLS不足があり、production Supabase data sourceはまだON禁止。
+- social mobile Phase4では `brand_memberships` + direct SELECT + RLSをdisposable PostgreSQLで実証済み。Phase5でproduction rolloutへ進む。
+- social mobile production data sourceはPhase5完了後も実Auth/mobile read QAまでは既定ONにしない。
 - AI Lab Vault-backed refreshは本番反映済み。自然slot結果はread-only観測事項。
 - multibrand migration history不整合の可能性があるためblind `supabase db push`禁止。
 
