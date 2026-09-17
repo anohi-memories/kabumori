@@ -18,6 +18,10 @@ import {
   fetchEiaMetrics,
 } from "./mic_eia_adapter.ts";
 import {
+  fetchFrankfurterFxMetrics,
+  FRANKFURTER_SOURCE_KEY,
+} from "./mic_frankfurter_fx_adapter.ts";
+import {
   FRED_SOURCE_KEY,
   fetchFredMetrics,
 } from "./mic_fred_adapter.ts";
@@ -65,9 +69,20 @@ function getSecretKey(): string | null {
   }
 }
 
-type SourceKey = typeof FRED_SOURCE_KEY | typeof MOF_SOURCE_KEY | typeof EIA_SOURCE_KEY | typeof SEC_SOURCE_KEY;
+type SourceKey =
+  | typeof FRED_SOURCE_KEY
+  | typeof MOF_SOURCE_KEY
+  | typeof EIA_SOURCE_KEY
+  | typeof SEC_SOURCE_KEY
+  | typeof FRANKFURTER_SOURCE_KEY;
 
-const ALL_SOURCE_KEYS: SourceKey[] = [FRED_SOURCE_KEY, MOF_SOURCE_KEY, EIA_SOURCE_KEY, SEC_SOURCE_KEY];
+const ALL_SOURCE_KEYS: SourceKey[] = [
+  FRED_SOURCE_KEY,
+  MOF_SOURCE_KEY,
+  EIA_SOURCE_KEY,
+  SEC_SOURCE_KEY,
+  FRANKFURTER_SOURCE_KEY,
+];
 
 type FetchResult =
   | { kind: "metrics"; metrics: NormalizedMarketMetric[] }
@@ -96,6 +111,11 @@ async function runAdapter(sourceKey: SourceKey, now: Date): Promise<FetchResult>
       const userAgent = Deno.env.get("SEC_EDGAR_USER_AGENT");
       if (!userAgent) throw new Error("SECRET_MISSING:SEC_EDGAR_USER_AGENT");
       return { kind: "events", events: await fetchSecEdgarFilings({ userAgent, now }) };
+    }
+    case FRANKFURTER_SOURCE_KEY: {
+      // No API key: Frankfurter is a free, unauthenticated, unlimited-quota
+      // endpoint, same as MOF's public CSV.
+      return { kind: "metrics", metrics: await fetchFrankfurterFxMetrics({ fetchedAt: now }) };
     }
   }
 }

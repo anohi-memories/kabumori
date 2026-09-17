@@ -255,6 +255,81 @@ test("computeDataConfidence: stays within [0, 1]", () => {
   assert.ok(value >= 0 && value <= 1);
 });
 
+// --- fx / USDJPY (Frankfurter, Phase 1) ---
+// The evaluator's decision logic is domain-agnostic -- these confirm the
+// exact same generic functions (already proven for rates/commodities)
+// produce the intended result for fx's 0.5% pct_change_threshold, without
+// any evaluator code change. Only mic_metric_domain_map's seed data
+// (20260918090000_mic_fx_phase1_usdjpy.sql) differs.
+
+function usdjpyMapRow(overrides: Partial<MetricDomainMapRow> = {}): MetricDomainMapRow {
+  return {
+    metricKey: "USDJPY",
+    domain: "fx",
+    displayName: "USD/JPY",
+    pctChangeThreshold: 0.5,
+    absChangeThreshold: null,
+    alwaysMaterial: false,
+    ...overrides,
+  };
+}
+
+test("fx/USDJPY: first observation (no baseline) is material regardless of the 0.5% threshold", () => {
+  const domainMap = new Map([["USDJPY", usdjpyMapRow()]]);
+  const observations = detectNewObservations(
+    [metric({ metricKey: "USDJPY", domain: "fx", currentValue: 155.05, observedDate: "2026-09-16" })],
+    {},
+  );
+  assert.deepEqual(observations, [
+    { metricKey: "USDJPY", currentValue: 155.05, previousBaselineValue: null, reason: "first_observation" },
+  ]);
+  const decision = evaluateMaterialChange(observations, domainMap);
+  assert.equal(decision.isMaterial, true);
+});
+
+test("fx/USDJPY: identical value and observed_date vs baseline -> no_change", () => {
+  const domainMap = new Map([["USDJPY", usdjpyMapRow()]]);
+  const observations = detectNewObservations(
+    [metric({ metricKey: "USDJPY", domain: "fx", currentValue: 155.05, observedDate: "2026-09-16" })],
+    { USDJPY: { value: 155.05, observedDate: "2026-09-16", observedAt: null } },
+  );
+  assert.deepEqual(observations, []);
+  const decision = evaluateMaterialChange(observations, domainMap);
+  assert.equal(decision.isMaterial, false);
+});
+
+test("fx/USDJPY: a >=0.5% move vs baseline is material", () => {
+  const domainMap = new Map([["USDJPY", usdjpyMapRow()]]);
+  // 155.05 -> 155.85 is +0.516%
+  const observations = detectNewObservations(
+    [metric({ metricKey: "USDJPY", domain: "fx", currentValue: 155.85, observedDate: "2026-09-17" })],
+    { USDJPY: { value: 155.05, observedDate: "2026-09-16", observedAt: null } },
+  );
+  const decision = evaluateMaterialChange(observations, domainMap);
+  assert.equal(decision.isMaterial, true);
+  assert.deepEqual(decision.materialMetricKeys, ["USDJPY"]);
+});
+
+test("fx/USDJPY: a <0.5% move vs baseline is NOT material", () => {
+  const domainMap = new Map([["USDJPY", usdjpyMapRow()]]);
+  // 155.05 -> 155.30 is +0.161%
+  const observations = detectNewObservations(
+    [metric({ metricKey: "USDJPY", domain: "fx", currentValue: 155.30, observedDate: "2026-09-17" })],
+    { USDJPY: { value: 155.05, observedDate: "2026-09-16", observedAt: null } },
+  );
+  const decision = evaluateMaterialChange(observations, domainMap);
+  assert.equal(decision.isMaterial, false);
+});
+
+test("fx/USDJPY: stale metric is correctly classified and the all-stale guard fires for a stale-only fx domain", () => {
+  const staleUsdjpy = metric({
+    metricKey: "USDJPY",
+    domain: "fx",
+    observationStatus: "stale",
+  });
+  assert.equal(shouldSkipAiForStaleness([staleUsdjpy], evaluateEventMaterialChange([])), true);
+});
+
 // --- all-stale AI guard ---
 
 function noMaterialEvents(): ReturnType<typeof evaluateEventMaterialChange> {
