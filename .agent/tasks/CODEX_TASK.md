@@ -3,7 +3,7 @@
 - task_id: important-news-web-search-cost-throttle-20260919
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol Medium
@@ -151,3 +151,23 @@ Read-onlyで:
 - this TASK `status: review_required`, `next_owner: chatgpt`
 - control metadata同期
 - C1待ちでSTOP
+
+
+## Final C1 review — 2026-09-19
+
+**PASS — production cadence throttle verified.**
+
+確認済み:
+- production `important-news-fetch` は schedule `0,20,40 * * * *` のまま、command gateだけ更新されている。
+- 2026-09-19〜09-23はJST偶数時の00分だけ実HTTP実行され、12回/日上限。
+- 2026-09-24以降は毎時00分＋07:00〜09:00/16:00〜18:00の20分・40分で、36回/日上限。
+- gateは `timezone('Asia/Tokyo', clock_timestamp())` を使用し、UTC日付ずれを避けている。
+- Reportの代表時刻proofは12/12 PASS。
+- read-backで `important-news-judgement` / generation / publish-ready、market-report、MIC関連Cronは変更されていない。
+- Edge Function、schema/migration、OAuth/Vault、X、Push、manual OpenAI callの変更は0。
+- rollback元command hash `be610dd0acc29a5582bfb699ac857d22` がReportに保存されている。
+
+### C1 decision
+
+本番の重要ニュースWeb Searchコスト抑制として承認。このH1は完了。
+次の自然実行で、連休中は実際に2時間おきへ抑制されていることをread-only観測する。9/24以降は通常毎時＋朝刊/大引け前後の厚い検索へ自動遷移する。
