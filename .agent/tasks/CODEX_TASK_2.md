@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase5-production-membership-rls-rollout-20260918
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: urgent
 - recommended_model: Sol High
 - c2_result: BLOCKED
@@ -36,7 +36,7 @@ Phase 5の設計・preflightには新たな技術blockerは見つからないが
 4. canary membershipは対象user/brandが一意・明示的に確認できる場合のみ1件まで。曖昧なら0件のまま。
 5. `EXPO_PUBLIC_DATA_SOURCE=supabase` は実Auth/mobile read QAまでOFF維持。
 
-このslotはreview_requiredのまま維持する。承認経路が確保されたら同じH2 Phase 5を再開してよい。
+ユーザーがPhase 5再開を明示承認したため、このslotをreadyへ戻す。H2開始時はまずツール側が認識可能な承認済みproduction DDL経路が利用できるか確認し、認識されない場合はproduction write 0のまま再停止する。
 
 ## Approved basis
 
