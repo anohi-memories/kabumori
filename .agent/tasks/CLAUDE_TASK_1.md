@@ -3,8 +3,8 @@
 - task_id: market-report-shared-platform-phase2-consumer-cutover-20260917
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Opus 5
 - deadline: 2026-09-18 17:15 JST natural close cycle
@@ -602,3 +602,88 @@ Observe the natural production runs read-only:
 - Any unrelated deploy or configuration change
 
 `x-test-post` and `personalized-reports` remain deploy-prohibited until the post-close K1 approval described above. Existing work from other slots, OAuth, and Vault are out of scope and must not be touched.
+
+### 2026-09-18 大引けの自然観測（read-only、K1 FINAL OVERRIDE 対応）
+
+**結論: data packet と shared analysis は「completed / Fact passed」まで到達したが、生成本文に `change_pct` というフィールド名がそのまま出ており、このままX投稿・アプリ表示に使える品質ではない。よって cutover 可否は K1 判断を仰ぐ（gate は OFF のまま、consumer は未 deploy）。**
+
+#### Cron 事前確認（read-only、変更なし）
+
+| ジョブ | schedule | JST | active | 実体数 | endpoint / body |
+|---|---|---|---|---|---|
+| `market-report-data-packet-close` (29) | `15 7 * * 1-5` | 16:15 | true | 1 | `market-report-data-packet` / `{"mode":"close"}` |
+| `market-report-analysis-close` (32) | `20 7 * * 1-5` | 16:20 | true | 1 | `market-report-analysis` / `{"mode":"close"}` |
+| `market-report-analysis-close-retry` (33) | `35 7 * * 1-5` | 16:35 | true | 1 | 同上 |
+| X大引け: `dispatch-scheduled-posts` (1) ＋ `close_report_settings` | `* * * * *` / window 16:58–17:02 (center 17:00) | 17:00 | true | 1 | `x-test-post` |
+| `personalized-reports-close` (11) | `15 8 * * 1-5` | 17:15 | true | 1 | `personalized-reports` / `{"mode":"close"}` |
+
+- 4本とも Vault の `send_push_notifications_cron_secret` を名前参照。削除・停止・時刻変更・重複はなく、本セッションでの復旧作業も不要だった
+- consumer gate: `x_enabled=false` / `app_enabled=false`（`updated_at` 2026-09-17 10:47 UTC のまま）
+
+#### 16:15 close data packet — 成功
+
+- `market_report_cycles(close, 2026-09-18)`: `cycle_status=completed`、attempt 1、completed 16:15:02 JST
+- data packet id `c64fa70b-7bd8-495c-b427-f3e9e4ae2523` / content_hash `a5f52800d1d1340d…` / `data_quality_status=partial`
+- `required_missing=[]` / `stale=[jgb2y, jgb10y]` / `unavailable=[]` / `proxies=[topix_proxy_1306]`
+- session: `jpx_session_date=2026-09-18` / `us_session_date=2026-09-17`、news_refs 30件
+- 主な値: 日経平均 65,018.95（+1.38%、9/18、yahoo_chart）、TOPIX連動ETF（1306）426.3円（−0.26%、9/18）、NYダウ 51,778.04（+0.61%、9/17）、S&P500 7,637.76（+1.14%）、ナスダック総合 26,418.30（+1.69%）、SOX 11,599.49（+3.14%）、ドル円 155.69（9/17、Frankfurter）、US2Y 4.74 / US10Y 5.01（9/16、FRED）、WTI 107.02 / Brent 130.8（9/15、EIA）、JGB 2本は 8/31 で stale
+- 再利用（`aecfa60`）は本番未 deploy のため未使用。今回の Yahoo 値は生値で取得できている
+
+#### 16:20 shared analysis — 失敗（Fact 不合格）
+
+- `report_status=failed`、attempt 1、16:20:01 開始、`report_last_error=ANALYSIS_FACT_FAILED`
+- diagnostics: calls 4（生成2＋Fact2）、input 20,487 / output 3,851 tokens、cost $0.008719、direction `mixed`、metrics 13、news_items 15
+- Fact の指摘: **「米国市場は9月17日、日経平均は9月18日であり、『同じ日に確認できます』は日付と不整合です。」**
+- 原因: 生成プロンプトが `consistent_with` を「『〜と同じ日に〜』のように書く」と指示しているため、日本市場（9/18）と米国市場（9/17）でセッション日が異なる大引けでは、その言い回し自体が事実と食い違う。Fact チェックが正しく検出した
+
+#### 16:35 retry — 成功（completed / Fact passed）
+
+- `report_status=completed`、attempt 2、16:35:01 開始 → 16:35:34 完了、`report_last_error=null`
+- report packet id `97e714c8-afa4-4af9-92d4-107fef897912` / content_hash `4deb4f9965738c96…` / source data packet `c64fa70b-…`（hash `a5f52800…`）
+- calls 4（生成2＋Fact2）、input 20,327 / output 3,532 tokens、cost **$0.008304**、model `gpt-5.6-luna`
+- `market_direction=mixed`（`direction_basis=[nikkei225, topix_proxy_1306]`）、claims 7、key_news 4、themes 強2/弱2、next_watch 3、risks 3、data_gaps 6
+
+#### 内容レビュー（K1 指示4: 行ができただけでは不十分）
+
+事実整合性（問題なし）:
+
+- claims の数値は data packet と一致。evidence_refs はすべて実在の `metric:` / `news:`
+- `causal` は0件、`consistent_with` 2件は日付を明記、`insufficient_evidence` 2件で理由不明を明示
+- TOPIX連動ETF（1306）の表記は全箇所で正しい。1日分の値動きのみで複数日語なし
+
+**投稿品質の問題（cutover の阻害要因）**:
+
+1. **フィールド名 `change_pct` が本文に露出**。headline/summary/claims/X本文の計6か所で「change_pctは+1.38%」のように出ている。X投稿・アプリ表示としては不可
+   - 例（X本文）: 「・日経平均は65,018.95、change_pctは+1.38%。」
+   - ローカル検証に英字フィールド名の検出が無く（`personalized-reports` 側にはある `latinWords` 相当が analysis に未実装）、Fact も事実面のみ見るため通過した
+2. **文体が注意書きの羅列**。「確認できません」「断定できません」が本文中4回。KABUMORI_VOICE を与えているが、証拠優先の指示が強すぎて読み物になっていない
+3. **`weak_themes` の誤用**。「日経平均とTOPIX連動ETF（1306）の方向差」「日銀決定発表後の上昇報道」は弱かったテーマではない
+4. **当日の最重要材料の扱いが弱い**。key_news には日銀の政策金利 1.00%→1.25% 引き上げが入っているのに、X本文では「因果は断定できません」という留保だけで、利上げそのものを伝えていない
+
+実際に投稿されるX本文（gate ON の場合、コードで整形される内容）:
+
+```text
+【大引け】きょうの日本株まとめ🌙
+日経平均は上がりましたが、TOPIX連動ETF（1306）は下落でした。📊
+
+📌 今日の3ポイント
+・日経平均は65,018.95、change_pctは+1.38%。
+・TOPIX連動ETF（1306）は426.3円、change_pctは−0.26%。
+・日銀決定発表後の上昇は報じられていますが、因果は断定できません。
+
+💬 9月17日の米国株高もありましたが、9月18日の日本市場との関係は確認できません。
+```
+
+#### 判断と K1 への確認事項
+
+- 技術経路（data packet → shared analysis → 1 cycle 1 packet、Fact、費用記録、lineage）は**本番で初めて通し確認できた**
+- 一方で、本文品質は上記1〜4のため、**本日17:00のX大引けに使うことは推奨しない**（特にフィールド名の露出）
+- 私の判断で修正・再生成・deploy・gate ON は行っていない。`x-test-post` / `personalized-reports` 未 deploy、gate は OFF のまま
+- K1 判断を仰ぐ選択肢:
+  1. 本日は cutover せず（gate OFF のまま）、X・アプリは従来経路で 17:00 / 17:15 を実行。連休明けまでに (a) ローカル検証へ英字フィールド名・記号の禁止を追加、(b) `consistent_with` の言い回し指示を日付差に対応、(c) 文体と `weak_themes` の指示見直し、(d) 重要材料（金融政策など）の優先表示、を実装して再検証
+  2. 品質問題を許容して本日だけ cutover（非推奨。X は公開投稿で、フィールド名露出がそのまま出る）
+- 今日の16:20失敗分（$0.0087）と16:35成功分（$0.0083）を合わせた本日の analysis 費用は **$0.0170**
+
+#### production changes（本観測分）
+
+- **0**。read-only SQL のみ。deploy・migration・Cron 変更・gate 変更・手動 invoke・X 投稿・Push いずれも行っていない
