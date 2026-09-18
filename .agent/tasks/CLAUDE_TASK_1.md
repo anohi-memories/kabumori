@@ -542,3 +542,63 @@ If any of the three market-report close Cron jobs above were canceled/disabled/r
 5. Complete restoration as soon as safely possible and before 16:15 JST, then stop active changes and wait for the natural close cycle.
 
 Today's priority is natural close observation, not redesign.
+
+## FINAL K1 OVERRIDE — 2026-09-18 close validation takes absolute priority
+
+This section is the latest controlling instruction for G1 and **supersedes every earlier instruction in this TASK or another K1 room that says to implement/deploy the morning Yahoo fallback first or to block today's consumer cutover because of that fallback**.
+
+The user's explicit priority is to validate the natural close path on **2026-09-18 before the 5-day holiday**, and, only if the evidence passes K1 review, leave enough time to decide a temporary same-day consumer cutover for the existing 17:00 X close and 17:15 app close runs.
+
+### Preserve the current implementation
+
+- Keep the current G1 implementation results, including commit `aecfa60`, intact. Do not revert, rewrite, or discard the same-session confirmed-value reuse code or its tests.
+- The morning Yahoo fallback code may remain in source. **Do not do additional fallback design, implementation, production deploy, or validation before today's close unless K1 gives a new explicit instruction after the close evidence is collected.**
+- The existence of the fallback source code is not a reason to delay or cancel today's close validation, provided it is not deployed in a way that changes today's approved production close path.
+- Do not introduce any new pre-close feature or broad redesign.
+
+### Required Cron state — preserve or narrowly restore only
+
+Before the natural cycle, perform a read-only check that the following existing jobs are present, active, and scheduled as already approved:
+
+1. `market-report-data-packet-close` — **16:15 JST**
+2. `market-report-analysis-close` — **16:20 JST**
+3. `market-report-analysis-close-retry` — **16:35 JST**
+4. Existing X close job — **17:00 JST**
+5. Existing app close job — **17:15 JST**
+
+For all five jobs:
+
+- deletion, disabling, time change, endpoint/body change, and duplicate creation are prohibited;
+- if this G1 session already deleted or disabled a job, restore **only that affected job** to the exact previously approved schedule/body/endpoint and existing Vault secret-name reference pattern;
+- after any required restoration, read back job name, schedule, active state, and a secret-free command summary, and confirm there is **exactly one active instance** of each job;
+- once confirmed/restored, make no further Cron changes and wait for natural execution;
+- do not touch any other Cron, Function, production setting, OAuth value, Vault value, posting window, or another slot's files/workstream.
+
+### Natural close observation and K1 hand-back
+
+Keep `x_enabled=false` and `app_enabled=false` while collecting evidence.
+
+Observe the natural production runs read-only:
+
+1. At 16:15, verify the close data packet is `completed`, has `required_missing=[]`, and record its packet id, content hash, session/trading date, and data quality.
+2. At 16:20, verify the shared close analysis is `completed`, its local checks and Fact check passed, and record its report packet id, content hash, content summary, evidence consistency, generation calls/tokens/cost, and source data packet id/hash.
+3. If 16:20 does not complete, observe the existing 16:35 retry without changing its schedule.
+4. Review the shared packet for factual consistency and practical usability. Do not treat mere row creation as sufficient.
+5. On success, immediately set this TASK to `review_required`, set `next_owner: chatgpt`, update the inline Report with exact evidence, commit/push the control-file update, and return to **K1 immediately**. The objective is to let K1 decide the temporary cutover before 17:00/17:15.
+6. On failure, return to K1 immediately with the exact blocker and evidence. Do not begin a fallback redesign or production change on your own.
+
+### Cutover boundary for today only
+
+- Until K1 explicitly approves after reviewing the natural shared close packet, consumer gates must remain OFF and `x-test-post` / `personalized-reports` must not be deployed.
+- After K1 approval only, deploy the already-reviewed consumer candidates as specifically authorized and enable the approved consumer gate(s) for today's 17:00 X close / 17:15 app close validation.
+- Confirm X and app use the same approved shared report packet id/hash and verify their production results, Fact status, and content consistency.
+- After the 17:00/17:15 production verification is complete—or immediately if the temporary cutover shows a problem—set both consumer gates back to **OFF** and read back the OFF state.
+- Do not leave the temporary cutover enabled beyond today's verification.
+
+### Explicitly deferred until after today's close verification
+
+- Additional morning Yahoo fallback design or production deploy
+- Any change that makes the fallback a prerequisite for today's close/cutover decision
+- Any unrelated deploy or configuration change
+
+`x-test-post` and `personalized-reports` remain deploy-prohibited until the post-close K1 approval described above. Existing work from other slots, OAuth, and Vault are out of scope and must not be touched.
