@@ -1,5 +1,40 @@
 # Codex Report
 
+## Latest H1 result — important-news Web Search cost throttle (2026-09-19)
+
+- task_id: `important-news-web-search-cost-throttle-20260919`
+- result: `review_required` — production cadence gate applied to **only** `important-news-fetch`; stop for C1 review.
+- production project: `wsmznyzcvmuitkglfeuj`
+- exact production mutation: **one pg_cron job command change** (`jobid=2`, `jobname=important-news-fetch`). No schedule row, Edge Function, DB schema, other Cron, secret, OAuth, Vault, X, push, or manual OpenAI action changed.
+
+### Before / after
+
+- Before: schedule `0,20,40 * * * *`, active `true`, command length `370`, command MD5 `be610dd0acc29a5582bfb699ac857d22`.
+- After: schedule remains `0,20,40 * * * *`, active `true`, command length `1185`, command MD5 `c85fd56fe33bcea58d7414768cf5c9f5`. The command still posts only the existing `{"trigger":"scheduled","fetchSources":true}` body to the existing function URL; the new gate suppresses the HTTP call by making the settings SELECT return no rows outside the allowed JST times.
+- Change method: `cron.alter_job(job_id := 2, command := ...)`, guarded by the before schedule/job name/hash. Direct `cron.job` UPDATE was not used (permission denied); no unrelated job could match the guard.
+
+### JST gate semantics
+
+- 2026-09-19 through 2026-09-23 inclusive: run only at JST minute `00` on even hours (12 potential HTTP calls/day); all `:20`/`:40` and odd hours are skipped.
+- 2026-09-24 onward: run at every JST `:00`, plus `:20`/`:40` only in 07:00–09:00 and 16:00–18:00 JST. The gate uses `timezone('Asia/Tokyo', clock_timestamp())`, not UTC hour literals.
+
+### Proof / unchanged scope
+
+- SQL representative-time proof: **12/12 PASS, 0 failures** — included 9/19 08:00 run, 08:20 skip, 09:00 skip; 9/24 06:20 skip, 07:00/07:20/08:40/10:00/16:40/18:40 run, 10:20/19:20 skip.
+- Read-back confirmed `important-news-judgement`, `important-news-generation`, `important-news-publish-ready`, all market-report jobs, and all MIC jobs unchanged: **25 checked / 0 mismatches** for schedule, active flag, and command MD5.
+- The command was read back with URL/key material redacted; no secret or API key was returned or recorded.
+
+### Expected cost effect / rollback
+
+- 9/19–9/23: 72 trigger opportunities/day remain, but only 12 can issue the OpenAI-fetch HTTP request — **83.3% fewer fetch calls** before query-count differences.
+- 9/24 onward: 24 baseline `:00` calls + 12 dense-window additions = 36/day — **50% fewer fetch calls** than the former 72/day.
+- Rollback is ready: restore schedule `0,20,40 * * * *` and the exact pre-change command (MD5 `be610dd0acc29a5582bfb699ac857d22`) via `cron.alter_job`; rollback was not executed.
+- No manual OpenAI request, X post, push, retry/backfill, judgement/generation/publish change, market-report/MIC change, or other production mutation occurred.
+
+### Next step
+
+C1 should review the gate timing and cost calculation. This H1 stops here; no Edge Function or consumer behavior was changed.
+
 ## Latest H1 result — AI Lab daily content plan production rollout (2026-09-18)
 
 - task_id: `ai-lab-daily-content-plan-production-rollout-20260918`

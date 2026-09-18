@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-19 JST (H1 important-news Web Search cost throttle ready; H2 social mobile Phase6 ready; G1 idle until 2026-09-24 natural shadow)
+- checked_at: 2026-09-19 JST (H1 important-news Web Search cost throttle review_required; H2 social mobile Phase6 ready; G1 idle until 2026-09-24 natural shadow)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,9 +14,9 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `important-news-web-search-cost-throttle-20260919`
-  - 9/19〜9/23は重要ニュースfetchを2時間おき、9/24以降は毎時＋朝7〜9時/大引け16〜18時だけ20分刻みへ最適化するproduction Cron調整。
-  - 変更対象は `important-news-fetch` 1本のみ。Edge Function、judgement/generation/publish Cron、market-report/MIC Cronは触れない。
+- Codex slot 1: `review_required` — `important-news-web-search-cost-throttle-20260919`
+  - `important-news-fetch` Cron 1本のcommand gateをJST基準へ更新。代表時刻12/12 PASS、関連Cron 25件のschedule/active/command hash不変。
+  - Edge Function、judgement/generation/publish Cron、market-report/MIC Cron、OAuth/Vault/Xは変更0。C1確認待ち。
 
 - Codex slot 2: `ready` — `social-mobile-app-phase6-auth-mobile-read-qa-20260918`
   - Phase5 production membership/RLS rolloutはC2 PASS済み。

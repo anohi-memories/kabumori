@@ -3,8 +3,8 @@
 - task_id: important-news-web-search-cost-throttle-20260919
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol Medium
 - purpose: OpenAI Web Search費用を抑えるため、productionの重要ニュースfetch cadenceだけを安全に最適化する。2026-09-19〜09-23の5連休は2時間おき、2026-09-24以降は通常1時間おき＋朝刊/大引け前後だけ20分刻みで厚く検索する。重要ニュース判定/生成ロジックや他Cronは変更しない。
