@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase6-auth-mobile-read-qa-20260918
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Sol High
 - purpose: Phase 5でproductionへ反映済みの `brand_memberships` + tenant RLSを使い、実Auth user / canary membership / mobile read contractを本番で最小・可逆に検証する。`EXPO_PUBLIC_DATA_SOURCE=supabase` の既定ONはまだ行わず、実ユーザー境界・cross-tenant isolation・no-membership stateを証明してから次段階へ進む。
@@ -207,3 +207,23 @@ RLS/ACLが想定外なら権限を緩めず、production mutationを最小化し
 - production default `EXPO_PUBLIC_DATA_SOURCE=supabase` は引き続きOFF。
 
 このslotは `review_required` のまま維持する。
+
+
+## User-approved canary mapping — 2026-09-18
+
+ユーザー承認により、Phase 6のcanary対象を以下で明示確定する。
+
+- auth user: productionで確認済みの唯一のAuth user（Reportへ個人識別子は記録しない）
+- brand: `ai_salaryman_lab`
+- role: `viewer`
+- purpose: 実Auth/RLS/mobile read QA専用のcanary
+- scope: `brand_memberships` 1件のみ
+- expectation:
+  - canary userは `ai_salaryman_lab` のtenant dataのみread可
+  - `kabumori` / `mio` は0件
+  - membership writeはmobile authenticatedでは不可
+  - service_roleをmobileへ渡さない
+  - production default `EXPO_PUBLIC_DATA_SOURCE=supabase` はまだONにしない
+
+このcanaryはテスト用。QA完了後、継続利用の正当性が未確定なら1件だけrollbackし、row count 0へ戻す。
+H2は再applyやschema変更をせず、このcanary 1件のinsert → 実Auth/RLS QA → mobile adapter QA → rollback判断だけを行う。
