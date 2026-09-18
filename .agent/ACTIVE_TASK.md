@@ -25,11 +25,11 @@
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: social-mobile-app-phase5-production-membership-rls-rollout-20260918
+- task_id: social-mobile-app-phase6-auth-mobile-read-qa-20260918
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
-- note: Phase4 disposable proof C2 PASS後のproduction rollout。exact `brand_memberships` + tenant RLS candidateのみをpreflight→apply→postflight→admin compatibility→rollback readinessで反映する。blind db push禁止。canary membershipはuser/brandを一意確認できる場合のみ1件まで。data sourceはまだONにしない。
+- note: Phase5 production membership/RLS C2 PASS後の実Auth/mobile read QA。no-membership stateとtenant RLSを確認し、user↔brandが一意・明示的ならcanary membershipは1件まで。production default data sourceはまだOFF。migration history未記録はrepairしない。
 
 ### Claude slot 1
 - owner: claude
