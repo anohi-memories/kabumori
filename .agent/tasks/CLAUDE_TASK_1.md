@@ -3,8 +3,8 @@
 - task_id: market-report-shared-platform-phase2-consumer-cutover-20260917
 - owner: claude
 - slot: claude-1
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Opus 5
 - deadline: 2026-09-18 17:15 JST natural close cycle
@@ -935,3 +935,45 @@ Proceed with **only** the following:
 ### Natural observation after deploy
 
 The intended next evidence point is the first natural market-report-analysis cycle on **2026-09-24 JST**. Do not enable consumers before that natural shadow output has been reviewed and K1 explicitly approves consumer cutover.
+
+### Shadow analysis redeploy（K1 PASS 2026-09-18、`market-report-analysis` のみ）
+
+- deploy_source: worktree `/Users/yuya/Developer/kabumori/.claude/worktrees/ios-push-e2e`、`origin/main` `454d111` に rebase 済み（着手マーク commit `3a5b504` のみ上乗せ、関数ソースの差分なし）。deploy 直前に `pwd`・HEAD・worktree-local `config.toml` の `project_id=wsmznyzcvmuitkglfeuj`・`.temp/project-ref` を確認
+- 並行スロット: H1 `ai-lab-daily-content-plan-production-rollout-20260918`（done）、H2 `social-mobile-app-phase8-…`（ready）、G2（done）。`market-report-analysis` を扱う作業なし
+- 方法: `supabase functions deploy market-report-analysis --no-verify-jwt --project-ref wsmznyzcvmuitkglfeuj`（script 35 kB）
+
+#### Function version（deploy 直前 → 直後）
+
+- **`market-report-analysis` v1 → v2**、ACTIVE、`verify_jwt=false`（updated_at 変更は本 Function のみ）
+- 変化なし（version・updated_at・verify_jwt・status すべて同一）: `x-test-post` v113 / `important-news-monitor` v57 / `stocks-master-sync` v18 / `stocks-new-listing-sync` v17 / `send-push-notifications` v17 / `x-oauth-connect` v20 / `personalized-reports` v15 / `market-intelligence-ingest` v16 / `market-intelligence-state-evaluator` v10 / `brand-post-dry-run` v7 / `market-report-data-packet` v1
+
+#### runtime read-back（別ディレクトリへ `supabase functions download --use-api`、全ファイル `cmp` 一致）
+
+| file | sha256（先頭16桁） |
+|---|---|
+| `market-report-analysis/index.ts` | `76c03f93e2e6fa57` |
+| `market-report-analysis/handler.ts` | `3ff64c539a639338` |
+| `market-report-analysis/analysis_input.ts` | `161bf27a17180bfd` |
+| `market-report-analysis/analysis_logic.ts` | `e0e9f53d0cbcb95d` |
+| `_shared/market_report_packet.ts` | `90667191099a9045` |
+| `_shared/kabumori_voice.ts` | `9b1150a8a4f2560c` |
+| `market-report-data-packet/session_logic.ts` | `7403e7c62f5abb67` |
+
+- `market-report-data-packet/packet_schema.ts` は型のみの import でバンドル対象外
+- **`aecfa60`（朝刊 fallback）の data-packet 側コード（`session_reuse.ts` / data-packet `handler.ts` / `packet_builder.ts`）はバンドルに含まれず未 deploy**。`market-report-data-packet` は v1 のまま。なお `aecfa60` に含まれる analysis 側の1行（前日比表示の判定を provider から `basis === "daily_close"` に変更）は `analysis_input.ts` の一部として今回の reviewed source に含まれ、deploy 済み（Yahoo 値の表示結果は従来と同じ）
+
+#### gate / Cron（read-only）
+
+- consumer gate: **`x_enabled=false` / `app_enabled=false`**（`updated_at` 2026-09-17 10:47 UTC のまま）
+- `market-report-*` Cron 6本は schedule・active・command md5 が反映時の記録と同一（analysis 4本: `216cf5da…` / `82f3090e…`、data packet 2本: `fb80310f…` / `69b29f53…`）
+
+#### production changes（本ステップ）
+
+1. `market-report-analysis` v2 deploy のみ
+- `x-test-post` / `personalized-reports` / `market-report-data-packet` の deploy、migration・schema、Cron、OAuth・Vault、posting window、Push、X 投稿、gate 変更、migration 履歴の操作はいずれも 0
+
+#### 次の観測点
+
+- 連休明け最初の自然サイクル **2026-09-24 JST**: 07:50 data packet → 07:55 / 08:05 analysis（朝刊）、16:15 data packet → 16:20 / 16:35 analysis（大引け）
+- 新しいローカル検証（内部項目名・日付・テーマ・重要材料・注記重複）での合格率と本文品質を read-only で確認し、K1 レビューへ。consumer cutover はその後の明示承認まで行わない
+- 2026-09-24 朝刊の data packet は、Yahoo が前営業日（9/18）の終値を返さない場合、`aecfa60` 未 deploy のため今朝と同様に blocked になり得る
