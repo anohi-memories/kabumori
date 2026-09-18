@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-18 JST (H1 AI Lab daily content plan production rollout done; H2 social mobile Phase5 ready; G1 review_required)
+- checked_at: 2026-09-18 JST (H1 AI Lab daily content plan production rollout done; H2 social mobile Phase6 ready; G1 review_required)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -18,12 +18,12 @@
   - Phase1/Phase2 daily content plan schema + writer RPCをproductionへexact apply済み。RPC/ACL/RLS/postflight、ROLLBACK付きbounded smokeも確認済み。
   - `x-test-post` consumer deploy、Cron、X/OAuth/Vault変更は0。次工程はG1競合解消後のconsumer deployと実plan登録。
 
-- Codex slot 2: `ready` — `social-mobile-app-phase5-production-membership-rls-rollout-20260918`
-  - Phase4 disposable DB proofはC2 PASS済み。
-  - exact approved `brand_memberships` + tenant RLS candidateだけをproductionへ最小・可逆に反映するPhase5。
-  - blind `supabase db push`は禁止。preflight → exact apply → postflight → admin compatibility → rollback readinessの順。
-  - canary membershipはuser/brandがproduction既存relationから一意・明示的に特定できる場合のみ1件まで。曖昧なら0件でC2へ返す。
-  - `EXPO_PUBLIC_DATA_SOURCE=supabase` はまだ既定ONにしない。
+- Codex slot 2: `ready` — `social-mobile-app-phase6-auth-mobile-read-qa-20260918`
+  - Phase5 production membership/RLS rolloutはC2 PASS済み。
+  - 次は実Auth/no-membership/canary membership/mobile adapter read QA。
+  - canaryはuser↔brand mappingを一意・明示的に確認できる場合だけ1件。曖昧なら0件。
+  - production default `EXPO_PUBLIC_DATA_SOURCE=supabase` はまだONにしない。
+  - Dashboard手動applyのmigration history未記録はrepair/reconcileせず既知事項として維持。
 
 - Claude slot 1: `review_required` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
   - shared market_report_packet候補とX/app consumer gate実装のK1 review待ち。
@@ -44,7 +44,7 @@
 ## Known issues / observations
 
 - AI Lab daily content plan schema + writer RPCはproduction反映済み。consumer/selection source candidateはC1 PASSだが、`x-test-post` consumer deployは未本番反映。
-- social mobile Phase4では `brand_memberships` + direct SELECT + RLSをdisposable PostgreSQLで実証済み。Phase5でproduction rolloutへ進む。
+- social mobile Phase5で `brand_memberships` + tenant RLSをproductionへ手動適用しpostflight C2 PASS済み。Phase6で実Auth/mobile read QAへ進む。
 - social mobile production data sourceはPhase5完了後も実Auth/mobile read QAまでは既定ONにしない。
 - AI Lab Vault-backed refreshは本番反映済み。自然slot結果はread-only観測事項。
 - multibrand migration history不整合の可能性があるためblind `supabase db push`禁止。
