@@ -1,5 +1,20 @@
 # Codex Slot 2 Report
 
+## H2 — Social mobile Phase 8 non-admin Auth test-user setup and tenant proof (2026-09-18, follow-up)
+
+- task_id: `social-mobile-app-phase8-nonadmin-test-user-setup-and-tenant-proof-20260918`
+- result: Completed the available Phase 8 QA gates without changing source or production schema. A non-admin Auth user and one `ai_salaryman_lab/viewer` membership are now present through the user's normal setup. The user-provided Dashboard read-only session proof demonstrates tenant isolation; mobile dependency checks also pass in an isolated worktree. No manual credentials, tokens, or personal identifiers were collected.
+- source_base: fresh `origin/main` `64bb02d64bc3c4abdf9c9027ecf99b88ca90f622`; isolated clean worktree `/private/tmp/kabumori-h2-phase8b-o1h67m`.
+- auth_and_membership_readback: production read-only counts are `auth.users=2`, `admin_users=1`, `profiles=1`, `brand_memberships=2`. Memberships are exactly two `ai_salaryman_lab/viewer` rows: one for the preserved global-admin canary and one for the non-admin QA user. `kabumori`/`mio` membership rows are 0. The non-admin user is absent from `admin_users`; one Auth user still lacks a profile row, so profile lifecycle remains an explicit follow-up observation.
+- tenant_runtime_proof: the user-recorded read-only SQL session in Supabase Dashboard (authenticated non-admin role, RLS enabled, transaction rolled back) observed only `ai_salaryman_lab`: `brand_memberships=1`, `brands=1`, `social_accounts=1`, `scheduled_posts=24`, `post_execution_logs=46`, `posting_windows=10`; `kabumori=0`, `mio=0`. No client-side brand filter was relied on. Existing global-admin policy path was not modified.
+- membership_write_denial: production metadata confirms `authenticated` has no INSERT/UPDATE/DELETE grant on `public.brand_memberships`; only the self-membership SELECT policy exists. No write mutation was attempted.
+- adapter_qa: static inspection confirms mobile uses `auth.getUser()` plus self-scoped `brand_memberships`, fail-closed blocked/no-workspace behavior, no `admin_users`/`private.is_admin()` dependency, no silent mock fallback, and no service-role/secret selection. Production default `EXPO_PUBLIC_DATA_SOURCE=mock` remains unchanged.
+- tests: in the isolated worktree after `npm ci --ignore-scripts` (package/lock unchanged): `npm run typecheck` **PASS**; `npm run lint` **PASS**; `npx expo export --platform web --output-dir /private/tmp/social-mobile-phase8b-web` **PASS**; static policy contract **5/5 PASS**; `git diff --check` **PASS**. `git status` shows no tracked changes; only ignored temporary `node_modules`/`.expo` were created.
+- cleanup: no approved Auth-user or membership deletion tool is available. The non-admin QA user/membership and the older global-admin canary remain as explicit test fixtures; no deletion workaround was attempted. Cleanup should be done later through the Dashboard's normal approved lifecycle, preserving all real users and admin policy rows.
+- production_mutation: this follow-up performed read-only SQL/metadata checks only. No Auth, membership, profile, schema, RLS, grant, migration history, Cron/settings, deploy, OAuth/Vault, Storage, AI, SNS, Push, or app-default mutation was performed.
+- remaining_issues: mobile runtime sign-in with the non-admin user's credential was not executed in this environment because no credential/session was provided and no Auth-login connector exists. The Dashboard proof covers the RLS boundary; an optional local device sign-in can be performed later without changing production defaults. Cleanup of the two test fixtures still needs an approved Dashboard path.
+- safety_checks: formal repo and existing uncommitted changes, `apps/admin/**`, H1/G1/G2 workstreams, and `HANDOFF.md` were untouched. No secrets, passwords, tokens, emails, user IDs, or personal data were recorded. TASK is set to `review_required`, `next_owner: chatgpt`.
+
 ## H2 — Social mobile Phase 8 non-admin Auth test-user setup and tenant proof (2026-09-18)
 
 - task_id: `social-mobile-app-phase8-nonadmin-test-user-setup-and-tenant-proof-20260918`
