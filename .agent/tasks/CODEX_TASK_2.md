@@ -1,78 +1,180 @@
 # Codex Task 2
 
-- task_id: social-mobile-app-phase5-production-membership-rls-rollout-20260918
+- task_id: social-mobile-app-phase6-auth-mobile-read-qa-20260918
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: none
-- priority: urgent
+- status: ready
+- next_owner: codex
+- priority: high
 - recommended_model: Sol High
-- c2_result: PASS
-- c2_reviewed_at: 2026-09-18 JST
-- completed_at: 2026-09-18 JST
-- purpose: Phase 4でdisposable DB実証までPASSした `brand_memberships` + tenant RLS candidateを、productionへ最小・可逆・検証可能な形で安全に反映する。blind `supabase db push`は禁止し、preflight → exact candidate apply → postflight → admin互換確認 → rollback readinessまでを実施する。実ユーザーmembership投入とmobile data source ONは、対象が一意に安全確認できる場合のみcanaryとして行い、曖昧なら行わずC2へ返す。
-
-## C2 review — 2026-09-18
-
-**BLOCKED — production apply未実施のためPhase 5は未完了。**
-
-確認済み:
-- exact production preflightはPASS。
-- approved candidateは `supabase/migrations/20260918120000_social_mobile_brand_memberships.sql`、SHA-256 `a74e70c42d0b10bd773dd614c70f59e807e6b08a8da90afaa05dee2fd09321fd`。
-- `public.brands.id` / operational `brand_id`型・FK、対象tableのRLS、既存admin policies、`private.is_admin()`、candidate policy衝突なし、`brand_memberships`未存在をread-onlyで確認。
-- `supabase_apply_migration` は本番DDL/RLS/grant操作を高リスクとして拒否。tool-recognized explicit approvalが不足していると判断された。
-- `supabase_execute_sql` 等の迂回経路は使っていない。これは正しい安全停止。
-- production DB/schema/RLS/grant/migration/auth/Cron/settings/deploy/Storage/AI/SNS/Push変更0。
-- canary membership 0件、mobile data sourceはmockのまま。
-- commit `227af897a5bd80eeca7f988341d12281af0feda9` を確認し、TASK/REPORT更新内容と整合。
-
-### C2 decision
-
-Phase 5の設計・preflightには新たな技術blockerは見つからないが、**本番apply・postflight・admin runtime compatibility・rollback readinessの本番確認が未実施**なのでPASSにはしない。
-
-次に進める条件:
-1. exact candidate migrationだけを適用できる、ツール側で認識可能な明示承認済みproduction DDL経路を確保する。
-2. indirect SQL workaround / blind `db push` / migration history repairは使わない。
-3. apply後にpostflight、既存admin経路確認、rollback readinessを実施する。
-4. canary membershipは対象user/brandが一意・明示的に確認できる場合のみ1件まで。曖昧なら0件のまま。
-5. `EXPO_PUBLIC_DATA_SOURCE=supabase` は実Auth/mobile read QAまでOFF維持。
-
-ユーザーがSupabase Dashboardの stock-x-autopost / main / PRODUCTION で、approved candidate SQL全文を手動実行し、Dashboard上で "Success. No rows returned" を確認した。これをproduction apply完了のユーザー確認として扱い、slotをreadyへ戻す。次のH2では再applyせず、read-only postflight / admin compatibility / rollback readiness確認から再開する。migration historyへの記録有無もread-onlyで確認し、手動SQL実行だった場合は履歴を捏造・repairしない。canary membershipは引き続き対象が一意でなければ0件。
+- purpose: Phase 5でproductionへ反映済みの `brand_memberships` + tenant RLSを使い、実Auth user / canary membership / mobile read contractを本番で最小・可逆に検証する。`EXPO_PUBLIC_DATA_SOURCE=supabase` の既定ONはまだ行わず、実ユーザー境界・cross-tenant isolation・no-membership stateを証明してから次段階へ進む。
 
 ## Approved basis
 
-Phase 4 C2 PASS済み:
-- candidate migration: `supabase/migrations/20260918120000_social_mobile_brand_memberships.sql`
-- implementation source commit: `c40c96cb66c72c671a145ebdbee2a941c648b6bb`
-- disposable PostgreSQL 16でmigration apply PASS
-- policy matrix PASS
-- anon/non-member 0 row
-- brand A/B cross-tenant leakage 0
-- existing global admin compatibility PASS
-- authenticated mobile membership write denial PASS
-- rollback/read-back PASS
-- production mutationはこれまで0
+Phase 5 C2 PASS:
+- production `brand_memberships` table / PK / FK / role CHECK / RLS確認済み
+- social mobile candidate policy 6件確認済み
+- authenticated membership SELECT可、INSERT/UPDATE/DELETE不可
+- existing admin policies / `private.is_admin()` preserved
+- rollback readiness確認済み
+- canary membershipは0件
+- `EXPO_PUBLIC_DATA_SOURCE=supabase` はOFF
+- migrationはDashboard手動適用のためmigration history未記録。repair/reconcileは禁止
+
+## Mandatory startup / safety
+
+開始前:
+1. `.agent/ORCHESTRATION.md`
+2. `.agent/CURRENT_STATE.md`
+3. this TASK
+4. `.agent/CODEX_REPORT_2.md`
+5. H1/G1/G2の現行TASK
+6. fresh `origin/main`
+
+競合:
+- H1/G1/G2のschema/RPC/Function/workflowを変更しない
+- `x-test-post` / market-report / daily_content_plansを変更しない
+- push前fresh `origin/main`
+- 既存未コミット変更は他workstream所有
+
+## Production boundary
+
+許可:
+- production auth/user/brand/account relationのread-only確認
+- `brand_memberships` への **1 user × 1 brand のcanary INSERTのみ**（下記条件を全て満たす場合）
+- canary INSERT後のread-only QA
+- 必要ならそのcanary membership 1件だけ削除してrollback
+- `apps/social-mobile/**` のQA用最小修正・test/docs更新
+- local/dev環境でSupabase sourceを明示ONにして実Auth read確認
+
+禁止:
+- auth user作成/削除/更新
+- 複数membership投入
+- user/brandの推測対応付け
+- candidate外schema/RLS/grant/RPC変更
+- migration history repair/reconcile
+- blind `supabase db push`
+- OAuth/Vault/token/secret変更
+- X/Instagram/Threads投稿
+- Cron/settings/Push/課金/Storage/AI本接続
+- production app configで `EXPO_PUBLIC_DATA_SOURCE=supabase` を既定ON
+- service_roleをmobileへ入れる
+
+## Gate 1 — canary対象の一意性確認
+
+read-onlyで以下を確認:
+- production auth user候補
+- brand候補
+- social_accountsとの既存relation
+- admin/profile/運用metadata等、正当なowner/admin関係を示す既存の明示的根拠
+
+canary INSERT条件:
+- userが一意
+- brandが一意
+- user↔brandの正当な対応が既存relationから明示的
+- roleを最小権限で説明できる
+- 個人情報やtokenをReportへ記録しない
+
+1つでも曖昧なら:
+- membership INSERT 0
+- no-membership stateのread-only QAだけ行う
+- blockerとしてC2へ返す
+- 推測投入禁止
+
+## Gate 2 — optional single canary membership
+
+Gate 1全条件PASS時のみ:
+- `brand_memberships` に1件だけinsert
+- roleは検証目的に必要な最小権限。原則 viewer/member を優先し、owner/adminは明確な理由がない限り使わない
+- insert前後のrow count / exact brand_id / user_id対応は内部確認し、Reportにはsecret/個人情報を残さない
+- insert失敗時にgrant/RLSを緩めない
+
+## Gate 3 — Auth / RLS read QA
+
+最低限確認:
+- no-membership authenticated user → membership 0 / workspace blocked
+- canary user → 自分のmembershipだけread
+- canary user → 自分のbrandだけread
+- 他brandのbrands/social_accounts/scheduled_posts/post_execution_logs/posting_windowsは0
+- client-side brand filter無しでもRLSでcross-tenant leakage 0
+- membership INSERT/UPDATE/DELETEはmobile authenticated権限では不可
+- Vault/OAuth/token/secret列はselectしない
+- service_role非使用
+
+可能なら実Supabase Auth session / access tokenを正規のclient pathで使う。
+token値はログ/Reportへ残さない。
+
+## Gate 4 — mobile adapter QA
+
+`apps/social-mobile` のSupabase adapterで:
+- `EXPO_PUBLIC_DATA_SOURCE=supabase` を **local/dev sessionだけ** 明示して動作確認
+- signed-out → auth required
+- signed-in no membership → blocked/no-workspace
+- signed-in canary → tenant-scoped workspace/accounts/posts read
+- permission denied / schema mismatch / unavailableの分類維持
+- mockへsilent fallbackしない
+- active accountはmembership許可brand配下のみ
+- `scheduled_posts` の account/body/origin gapは推測表示しない
+
+production default/envはmockのまま。
+
+## Gate 5 — canary rollback decision
+
+QA後:
+- 次Phaseで継続利用する正当なmembershipなら保持してよいが、保持理由を明記
+- 単なる試験fixtureならその1件だけ削除してread-back
+- 削除後 no-membership stateへ戻ることを確認
+- 他rowは触らない
+
+## Known migration-history issue
+
+Dashboard手動適用により `20260918120000_social_mobile_brand_memberships.sql` はmigration history未記録。
+このPhaseでは:
+- history repair/reconcile禁止
+- `db push`禁止
+- 既知事項としてReportするだけ
+
+## Verification
+
+最低限:
+- Gate 1 identity/mapping decision
+- no-membership QA PASS
+- canary実施時: membership self-read PASS
+- canary実施時: own brand read PASS
+- cross-tenant leakage 0
+- mobile authenticated write denial PASS
+- adapter state QA PASS
+- `npm run typecheck`
+- `npm run lint`
+- Expo Web export / route resolution
+- `git diff --check`
+- production mutationは最大canary membership 1件のみ（保持またはrollbackを明記）
+- auth/OAuth/Vault/X/Push/Cron/AI/Storage/課金変更0
+
+## Completion criteria
+
+C2へ返す時:
+1. canary user/brandを一意特定できたか
+2. canaryを入れたか、0件なら理由
+3. no-membership state
+4. authenticated tenant read結果
+5. cross-tenant leakage 0か
+6. mobile write denial
+7. adapter QA結果
+8. canaryを保持/rollbackしたか
+9. production default data sourceはOFFか
+10. migration history未記録をrepairしていないか
+11. 次Phaseでdata source切替に進める条件
+
+完了時:
+- `.agent/CODEX_REPORT_2.md` 先頭にPhase 6 report
+- this TASK → `review_required`, `next_owner: chatgpt`
+- push前fresh-check
+- origin/mainへ安全にpush
+- push後read-back
+- STOPしてC2待ち
 
 ## Important stop rule
 
-preflightでschema/policy/parallel conflictが1つでも想定外なら、production writeは0のままSTOPする。
-canary対象が曖昧ならmembershipを推測投入しない。
-
-
-## Final C2 decision — 2026-09-18
-
-PASS.
-
-確認済み:
-- ユーザーが Supabase Dashboard の stock-x-autopost / main / PRODUCTION で approved candidate SQL を手動実行し、成功を確認。
-- H2 postflightで `brand_memberships` の列・PK・FK・role CHECK・RLS・row count 0をread-back。
-- social mobile candidate policy 6件が存在。
-- authenticated は membership SELECT可、INSERT/UPDATE/DELETE不可。
-- 既存 admin_* policy は保持され、`private.is_admin()` も SECURITY DEFINER / empty search_path のまま。
-- 既存 operational data の意図しない変更なし。post_execution_logs増加は自然runtime活動。
-- rollback readiness確認済み。正常なためrollbackは未実行。
-- canary membershipは0件。user/brand mappingが一意になるまで推測投入しない。
-- `EXPO_PUBLIC_DATA_SOURCE=supabase` はOFFのまま。実Auth/mobile read QAは次Phase。
-- manual Dashboard applyのため migration historyには今回versionが記録されていない。今回TASKではrepair/reconcileしない。この差異は今後のmigration運用上の既知事項として扱う。
-
-Codex slot 2は完了。次Phaseは実Auth/mobile read QAと、必要なら一意に確認できるcanary membership設定を行う。
+user↔brand mappingが一意・明示的でなければcanaryを推測投入しない。
+RLS/ACLが想定外なら権限を緩めず、production mutationを最小化したままC2へ返す。
