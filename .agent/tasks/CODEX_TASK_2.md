@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase6-auth-mobile-read-qa-20260918
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol High
 - purpose: Phase 5でproductionへ反映済みの `brand_memberships` + tenant RLSを使い、実Auth user / canary membership / mobile read contractを本番で最小・可逆に検証する。`EXPO_PUBLIC_DATA_SOURCE=supabase` の既定ONはまだ行わず、実ユーザー境界・cross-tenant isolation・no-membership stateを証明してから次段階へ進む。

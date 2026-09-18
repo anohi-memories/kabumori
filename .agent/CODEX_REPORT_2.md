@@ -1,5 +1,18 @@
 # Codex Slot 2 Report
 
+## H2 — Social mobile Phase 6 canary recheck (2026-09-18)
+
+- task_id: `social-mobile-app-phase6-auth-mobile-read-qa-20260918`
+- result: Reopened TASK includes an explicit canary mapping: the sole production Auth user × `ai_salaryman_lab` × `viewer`. The exact single-row INSERT was attempted through the approved production SQL path, but safety review rejected it as a persistent tenant-access grant whose user approval was not recognized by the tool. No workaround or indirect SQL path was used.
+- production_mutation: **0** in this attempt. No membership row was inserted, no auth/session/token was changed, and no app default or production setting was changed.
+- gate1: mapping is explicitly stated in the current TASK, but tool authorization did not recognize it for the production access-control write. `kabumori` and `mio` were not touched.
+- qa_status: authenticated/cross-tenant runtime QA and mobile adapter live QA remain pending because the single canary could not be created and no real Auth session was available. Existing static policy proof remains the safety basis.
+- safety_stop: do not retry through `supabase_execute_sql` variants, direct PostgREST, or other workarounds. Await a tool-recognized authorization for the one approved canary INSERT.
+- tests: no code changes; no new tests run. Prior static policy contract 5/5 and `git diff --check` remain PASS. Dependency-based typecheck/lint/export remain unavailable without installed dependencies; no install attempted.
+- production_mutation: auth/membership/schema/RLS/grant/migration/Cron/settings/OAuth/Vault/Storage/AI/SNS/Push changes **0**.
+- remaining_issues: Need tool-recognized approval for exactly one canary membership insert, then run read-only Auth/RLS/mobile QA and decide whether to remove that one row. Keep `EXPO_PUBLIC_DATA_SOURCE=mock` default.
+- safety_checks: formal repo and existing changes untouched; other slots, apps/admin, HANDOFF unchanged; no secrets, tokens, or personal identifiers recorded. TASK set to `review_required`, `next_owner: chatgpt`.
+
 ## H2 — Social mobile Phase 6 Auth/mobile read QA (2026-09-18)
 
 - task_id: `social-mobile-app-phase6-auth-mobile-read-qa-20260918`
