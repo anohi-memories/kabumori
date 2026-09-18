@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase6-auth-mobile-read-qa-20260918
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Sol High
 - purpose: Phase 5でproductionへ反映済みの `brand_memberships` + tenant RLSを使い、実Auth user / canary membership / mobile read contractを本番で最小・可逆に検証する。`EXPO_PUBLIC_DATA_SOURCE=supabase` の既定ONはまだ行わず、実ユーザー境界・cross-tenant isolation・no-membership stateを証明してから次段階へ進む。
@@ -227,3 +227,26 @@ RLS/ACLが想定外なら権限を緩めず、production mutationを最小化し
 
 このcanaryはテスト用。QA完了後、継続利用の正当性が未確定なら1件だけrollbackし、row count 0へ戻す。
 H2は再applyやschema変更をせず、このcanary 1件のinsert → 実Auth/RLS QA → mobile adapter QA → rollback判断だけを行う。
+
+
+## Canary inserted — 2026-09-18
+
+User explicitly approved proceeding with the Phase 6 test.
+
+Production target:
+- Supabase project: stock-x-autopost
+- auth user: the only current Auth user (identifier not recorded here)
+- brand: `ai_salaryman_lab`
+- role: `viewer`
+
+Execution:
+- first guarded SQL attempt failed before mutation because `min(uuid)` is unsupported; production mutation from that attempt = 0.
+- corrected guarded SQL rechecked exactly one Auth user, active `ai_salaryman_lab`, and empty `brand_memberships` before insert.
+- inserted exactly one canary membership.
+- read-back: `ai_salaryman_lab / viewer / membership_count=1`.
+
+Next H2:
+- DO NOT insert another membership.
+- perform actual Auth/RLS/mobile runtime QA using the existing single canary.
+- verify canary sees only ai_salaryman_lab, kabumori/mio are 0, authenticated membership writes remain denied, adapter states are correct, and production default data source stays mock.
+- after QA, because this row is test-only, rollback only this canary unless C2 explicitly decides to preserve it.
