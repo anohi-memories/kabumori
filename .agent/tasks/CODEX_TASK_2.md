@@ -178,3 +178,32 @@ C2へ返す時:
 
 user↔brand mappingが一意・明示的でなければcanaryを推測投入しない。
 RLS/ACLが想定外なら権限を緩めず、production mutationを最小化したままC2へ返す。
+
+
+## C2 review — 2026-09-18
+
+**BLOCKED / INCOMPLETE — Phase 6はまだPASSにしない。**
+
+確認できたこと:
+- productionでauth user=1、admin_users=1、profile=1、brands=3、social_accounts=2、brand_memberships=0をread-only確認。
+- user↔brandの明示的ownership relationが無く、canary membershipを推測投入しなかった判断は正しい。
+- no-membership stateは設計上 fail-closed で、adapterもmembership 0件時に blocked/no-workspace を返す。
+- production mutation 0。auth/OAuth/Vault/X/Push/Cron/AI/Storage/課金変更0。
+- static policy contract 5/5 PASS、git diff --check PASS。
+
+未完了:
+1. 実authenticated sessionでのtenant read QA未実施。
+2. cross-tenant leakage 0をproduction Auth sessionで未実証。
+3. mobile authenticated write denialを実sessionで未実証。
+4. local/devのSupabase data source実動作QA未実施。
+5. typecheck / lint / Expo export未実行（isolated worktreeに依存関係なし）。
+6. canary membershipは0件で、正当なuser↔brand mappingがまだ確定していない。
+
+次に進める条件:
+- 正当なuser↔brand mappingをユーザーまたは既存運用情報から明示的に確定する。
+- そのuserで正規Auth sessionを用意し、実RLS read QAを行う。
+- 依存関係が入ったlocal/dev環境でadapter QA、typecheck、lint、Expo exportを完走する。
+- canaryは一意性が確定した場合のみ1件。推測投入禁止。
+- production default `EXPO_PUBLIC_DATA_SOURCE=supabase` は引き続きOFF。
+
+このslotは `review_required` のまま維持する。
