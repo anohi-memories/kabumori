@@ -198,3 +198,38 @@ Next H2:
 - run typecheck/lint/Expo with dependency install only if package/lock remain unchanged.
 - decide cleanup of test non-admin membership/user and old global-admin canary using only approved deletion paths.
 - production default EXPO_PUBLIC_DATA_SOURCE remains mock.
+
+
+## C2 review — 2026-09-18
+
+**PARTIAL PASS / NOT COMPLETE — tenant isolation proofはPASS、Phase 8全体は未完了。**
+
+PASS確認:
+- 正規Dashboard経路でnon-admin Auth userを1件作成。
+- non-admin userは `admin_users` 非所属。
+- non-admin userに `ai_salaryman_lab / viewer` membership 1件。
+- authenticated + RLS enabledのread-only SQL proofで、6 resourceすべて `ai_salaryman_lab` のみ可視。
+- `kabumori=0`、`mio=0`、cross-tenant leakage 0。
+- client-side brand filterに依存せずtenant isolationを実証。
+- authenticatedの `brand_memberships` INSERT/UPDATE/DELETE grantは無いことを確認。
+- existing global-admin policy pathは未変更。
+- mobile adapterは `auth.getUser()` + self-scoped membership、fail-closed、silent mock fallbackなし、service-role/secret依存なし。
+- production default `EXPO_PUBLIC_DATA_SOURCE=mock` 維持。
+- isolated worktreeで `npm run typecheck` PASS、`npm run lint` PASS、Expo Web export PASS、static policy 5/5 PASS、`git diff --check` PASS。
+- package/lock変更なし。
+
+未完了:
+1. 実mobile/local clientでnon-admin credentialを使ったサインインruntime QA未実施。
+2. non-admin Auth userにprofile rowが未作成。profile lifecycleの正本確認が必要。
+3. test fixtures cleanup未完了:
+   - non-admin QA user + membership
+   - old global-admin canary membership
+4. membership write denialはACL/policy metadataで確認済みだが、実authenticated sessionからの拒否runtime proofは未実施。
+
+C2 decision:
+- **tenant RLS isolationそのものは本番proof済みとして承認。**
+- ただしPhase 8のcompletion criteriaを満たし切っていないため `done` にはしない。
+- TASKは `review_required` のまま。
+- 次は実mobile sign-in QA + profile lifecycle確認 + test fixture cleanupだけに限定してよい。
+- RLS/admin policy/schema/grantを変更する必要はない。
+- production default data sourceは引き続きmock。
