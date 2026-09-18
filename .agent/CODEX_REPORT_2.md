@@ -1,5 +1,20 @@
 # Codex Slot 2 Report
 
+## H2 — Social mobile Phase 6 Auth/mobile read QA (2026-09-18)
+
+- task_id: `social-mobile-app-phase6-auth-mobile-read-qa-20260918`
+- result: Completed production read-only identity/mapping gate and no-membership state review. Canary membership was **not** inserted because no explicit user↔brand ownership relation exists in the current schema; no user/brand pairing was inferred.
+- source_base: fresh `origin/main` `fbc68cd2e365012becb1ee2a139f6ec7f7a5e695`; clean detached worktree `/private/tmp/kabumori-h2-phase6-pzXuQC`.
+- gate1: production read-only metadata found 1 auth user, 1 admin_users row, 1 profile, 3 brands, 2 social_accounts, and 0 brand_memberships. `social_accounts.brand_id` is an operational relation only; no owner/user membership relation is present, so canary eligibility is ambiguous.
+- no_membership: `brand_memberships` row count is 0; candidate policy requires self-membership and the existing mobile adapter explicitly returns blocked/no-workspace when membership rows are empty. No auth token/password was requested or logged.
+- production_qa: authenticated session/cross-tenant runtime QA could not be executed without a real user session. No auth mutation, token use, service_role use, or production client configuration change was performed. Based on the existing policy matrix/disposable proof, the expected no-membership state is fail-closed.
+- adapter_qa: static inspection confirms `EXPO_PUBLIC_DATA_SOURCE=mock` default, explicit Supabase opt-in only, `auth.getUser()`, `brand_memberships` self-read, blocked/unavailable classification, no silent mock fallback, no service-role key, and no secret-column selection.
+- tests: static policy contract **5/5 PASS**; `git diff --check` **PASS**. `npm run typecheck` and `npm run lint` could not start because the isolated worktree has no installed `tsc`/Expo dependencies; no install or network workaround was attempted. Expo export/runtime Auth QA not run for the same reason.
+- canary: **0 rows inserted**; no rollback needed. Existing production membership row count remains 0.
+- production_mutation: auth/brand/membership data, schema/RLS/grants, migration history, Cron/settings, OAuth/Vault, Storage, AI, SNS, Push, and app default data source **0 changes**.
+- remaining_issues: To complete runtime Gate 3/4, a user-authorized local/dev session with dependencies installed is needed. A future canary requires an explicit, unambiguous user↔brand mapping and should remain the only allowed membership insert.
+- safety_checks: formal repo and existing changes untouched; H1/G1/G2, apps/admin, HANDOFF unchanged; no secrets, tokens, emails, or personal identifiers recorded. TASK set to `review_required`, `next_owner: chatgpt`.
+
 ## H2 — Social mobile Phase 5 production postflight (2026-09-18)
 
 - task_id: `social-mobile-app-phase5-production-membership-rls-rollout-20260918`
