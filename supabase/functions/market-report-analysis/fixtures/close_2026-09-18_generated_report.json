@@ -1,0 +1,279 @@
+{
+ "id": "97e714c8-afa4-4af9-92d4-107fef897912",
+ "content_hash": "4deb4f9965738c96b136fa7f3dbe02b563be099c3a5aa26996b3a7075451b2e4",
+ "payload": {
+  "claims": [
+   {
+    "claim_id": "c1",
+    "claim_type": "observation",
+    "evidence_refs": [
+     "metric:nikkei225"
+    ],
+    "scope": "today",
+    "text_ja": "9月18日の日経平均は65,018.95、change_pctは+1.38%でした。"
+   },
+   {
+    "claim_id": "c2",
+    "claim_type": "observation",
+    "evidence_refs": [
+     "metric:topix_proxy_1306"
+    ],
+    "scope": "today",
+    "text_ja": "9月18日のTOPIX連動ETF（1306）は426.3円、change_pctは−0.26%でした。"
+   },
+   {
+    "claim_id": "c3",
+    "claim_type": "insufficient_evidence",
+    "evidence_refs": [
+     "metric:nikkei225"
+    ],
+    "scope": "today",
+    "text_ja": "日経平均の上昇理由は、確認できる情報だけでは断定できません。"
+   },
+   {
+    "claim_id": "c4",
+    "claim_type": "consistent_with",
+    "evidence_refs": [
+     "news:cafc0f82-aae4-43ae-ad9f-b814564079ab",
+     "metric:nikkei225"
+    ],
+    "scope": "today",
+    "text_ja": "日銀の決定発表後に日経225が上昇したことは報じられていますが、9月18日の日経平均上昇との因果関係までは確認できません。"
+   },
+   {
+    "claim_id": "c5",
+    "claim_type": "consistent_with",
+    "evidence_refs": [
+     "metric:dow",
+     "metric:sp500",
+     "metric:nasdaq_composite",
+     "metric:sox"
+    ],
+    "scope": "overnight",
+    "text_ja": "9月17日の米国市場では、NYダウ、S&P500、ナスダック総合、SOXがいずれも上昇しました。9月18日の日本市場との因果関係は確認できません。"
+   },
+   {
+    "claim_id": "c6",
+    "claim_type": "insufficient_evidence",
+    "evidence_refs": [
+     "metric:topix_proxy_1306"
+    ],
+    "scope": "today",
+    "text_ja": "TOPIX連動ETF（1306）が下落した理由は、確認できる情報だけでは断定できません。"
+   },
+   {
+    "claim_id": "c7",
+    "claim_type": "watch_point",
+    "evidence_refs": [
+     "metric:nikkei225",
+     "metric:topix_proxy_1306"
+    ],
+    "scope": "next",
+    "text_ja": "次回は、日経平均とTOPIX連動ETF（1306）の方向差が続くかを確認します。"
+   }
+  ],
+  "data_content_hash": "a5f52800d1d1340d359824fff1dcfea531000d08b39e3bb02c08153cea043a3e",
+  "data_gaps_ja": [
+   "日本国債2年利回りは8月31日時点の値です",
+   "日本国債10年利回りは8月31日時点の値です",
+   "日経平均先物は確認できる取得元がないため載せていません",
+   "東証グロース市場250指数は確認できる取得元がないため載せていません",
+   "業種別の騰落は取得元がないため載せていません",
+   "経済指標の予定は取得元がないため載せていません"
+  ],
+  "data_packet_id": "c64fa70b-7bd8-495c-b427-f3e9e4ae2523",
+  "direction_basis": [
+   "nikkei225",
+   "topix_proxy_1306"
+  ],
+  "fact": {
+   "ai_status": "passed",
+   "generation_attempts": 2,
+   "local_issues": []
+  },
+  "generated_at": "2026-09-18T07:35:34.578Z",
+  "headline_ja": "日経平均高、TOPIX連動ETF（1306）は下落",
+  "key_news": [
+   {
+    "headline_ja": "日本株では、日銀の決定発表後に日経225が上昇しました",
+    "ref_id": "news:cafc0f82-aae4-43ae-ad9f-b814564079ab",
+    "why_it_matters_ja": "日銀の政策金利を1.00％から1.25％へ引き上げた決定と、日経225上昇が報じられています。"
+   },
+   {
+    "headline_ja": "和田興産（8931）が2027年2月期第2四半期累計の業績予想を上方修正しました",
+    "ref_id": "news:af53435b-32ee-42dd-be33-df2c2c16906e",
+    "why_it_matters_ja": "和田興産（8931）が中間・年間配当予想を増額しましたが、通期予想は据え置きです。"
+   },
+   {
+    "headline_ja": "日本精機が自己株式の取得を完了しました",
+    "ref_id": "news:c0caa819-3a88-4d69-8d27-dca4aa79f4a4",
+    "why_it_matters_ja": "日本精機（7287）が自己株式の取得を完了したと発表しました。"
+   },
+   {
+    "headline_ja": "フリービット、特別調査委員会の調査継続 1Q決算の開示も延期 CountUpの株式取得に関する妥当性や意思決定プロセスを調べている特別調査委員会は、2026年9月17日時点でも調査を継続中です",
+    "ref_id": "news:a925e361-ab20-427f-8f7e-fa9de08e07ee",
+    "why_it_matters_ja": "フリービット（3843）は特別調査委員会の調査継続に伴い、1Q決算の開示を延期しました。"
+   }
+  ],
+  "major_moves": [
+   {
+    "change_pct_display": "+1.38%",
+    "freshness": "fresh",
+    "label": "日経平均",
+    "metric_key": "nikkei225",
+    "session_date": "2026-09-18",
+    "value_display": "65,018.95"
+   },
+   {
+    "change_pct_display": "−0.26%",
+    "freshness": "fresh",
+    "label": "TOPIX連動ETF（1306）",
+    "metric_key": "topix_proxy_1306",
+    "session_date": "2026-09-18",
+    "value_display": "426.3円"
+   },
+   {
+    "change_pct_display": "+0.61%",
+    "freshness": "fresh",
+    "label": "NYダウ",
+    "metric_key": "dow",
+    "session_date": "2026-09-17",
+    "value_display": "51,778.04"
+   },
+   {
+    "change_pct_display": "+1.14%",
+    "freshness": "fresh",
+    "label": "S&P500",
+    "metric_key": "sp500",
+    "session_date": "2026-09-17",
+    "value_display": "7,637.76"
+   },
+   {
+    "change_pct_display": "+1.69%",
+    "freshness": "fresh",
+    "label": "ナスダック総合",
+    "metric_key": "nasdaq_composite",
+    "session_date": "2026-09-17",
+    "value_display": "26,418.30"
+   },
+   {
+    "change_pct_display": "+3.14%",
+    "freshness": "fresh",
+    "label": "フィラデルフィア半導体株指数（SOX）",
+    "metric_key": "sox",
+    "session_date": "2026-09-17",
+    "value_display": "11,599.49"
+   },
+   {
+    "change_pct_display": null,
+    "freshness": "fresh",
+    "label": "ドル円",
+    "metric_key": "usdjpy",
+    "session_date": "2026-09-17",
+    "value_display": "155.69円"
+   },
+   {
+    "change_pct_display": null,
+    "freshness": "fresh",
+    "label": "米国2年債利回り",
+    "metric_key": "us2y",
+    "session_date": "2026-09-16",
+    "value_display": "4.74%"
+   },
+   {
+    "change_pct_display": null,
+    "freshness": "fresh",
+    "label": "米国10年債利回り",
+    "metric_key": "us10y",
+    "session_date": "2026-09-16",
+    "value_display": "5.01%"
+   },
+   {
+    "change_pct_display": null,
+    "freshness": "stale",
+    "label": "日本国債2年利回り",
+    "metric_key": "jgb2y",
+    "session_date": "2026-08-31",
+    "value_display": "1.743%"
+   },
+   {
+    "change_pct_display": null,
+    "freshness": "stale",
+    "label": "日本国債10年利回り",
+    "metric_key": "jgb10y",
+    "session_date": "2026-08-31",
+    "value_display": "2.943%"
+   },
+   {
+    "change_pct_display": null,
+    "freshness": "fresh",
+    "label": "WTI原油",
+    "metric_key": "wti",
+    "session_date": "2026-09-15",
+    "value_display": "107.02ドル"
+   },
+   {
+    "change_pct_display": null,
+    "freshness": "fresh",
+    "label": "ブレント原油",
+    "metric_key": "brent",
+    "session_date": "2026-09-15",
+    "value_display": "130.80ドル"
+   }
+  ],
+  "market_direction": "mixed",
+  "market_summary_ja": "9月18日の東京市場は、日経平均が65,018.95、change_pctは+1.38%となった一方、TOPIX連動ETF（1306）は426.3円、change_pctは−0.26%でした。日経平均の上昇理由は、この情報だけでは断定できません。9月17日の米国市場では主要3指数とSOXが上昇していました。",
+  "model": "gpt-5.6-luna",
+  "next_watch_ja": [
+   "日経平均とTOPIX連動ETF（1306）の方向差が続くか",
+   "日銀の政策金利引き上げ後の日本株の反応",
+   "9月17日の米国株高が日本市場でどう受け止められるか"
+  ],
+  "report_type": "close",
+  "risks_ja": [
+   "日経平均上昇の具体的な理由は確認できません",
+   "TOPIX連動ETF（1306）の下落理由は確認できません",
+   "日本国債2年・10年利回りは8月31日時点の古い値です"
+  ],
+  "schema_version": "market_report_packet.v1",
+  "strong_themes": [
+   {
+    "claim_ids": [
+     "c1"
+    ],
+    "name_ja": "日経平均の上昇"
+   },
+   {
+    "claim_ids": [
+     "c5"
+    ],
+    "name_ja": "9月17日の米国株・半導体株高"
+   }
+  ],
+  "trading_date": "2026-09-18",
+  "weak_themes": [
+   {
+    "claim_ids": [
+     "c2",
+     "c6"
+    ],
+    "name_ja": "日経平均とTOPIX連動ETF（1306）の方向差"
+   },
+   {
+    "claim_ids": [
+     "c4"
+    ],
+    "name_ja": "日銀決定発表後の上昇報道"
+   }
+  ],
+  "x_post": {
+   "closing_ja": "9月17日の米国株高もありましたが、9月18日の日本市場との関係は確認できません。",
+   "lead_ja": "日経平均は上がりましたが、TOPIX連動ETF（1306）は下落でした。📊",
+   "points_ja": [
+    "日経平均は65,018.95、change_pctは+1.38%。",
+    "TOPIX連動ETF（1306）は426.3円、change_pctは−0.26%。",
+    "日銀決定発表後の上昇は報じられていますが、因果は断定できません。"
+   ]
+  }
+ }
+}

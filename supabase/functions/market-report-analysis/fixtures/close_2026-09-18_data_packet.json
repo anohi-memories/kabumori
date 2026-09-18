@@ -1,0 +1,925 @@
+{
+ "content_hash": "a5f52800d1d1340d359824fff1dcfea531000d08b39e3bb02c08153cea043a3e",
+ "id": "c64fa70b-7bd8-495c-b427-f3e9e4ae2523",
+ "payload": {
+  "as_of": "2026-09-18T07:15:01.031Z",
+  "calendar_refs": {
+   "gap_reason": "no_verified_source",
+   "items": [],
+   "status": "unavailable"
+  },
+  "data_quality": {
+   "intentional_gaps": [
+    "nikkei225_futures",
+    "growth250",
+    "sector_performance",
+    "event_calendar"
+   ],
+   "notes": [],
+   "proxies": [
+    "topix_proxy_1306"
+   ],
+   "required_missing": [],
+   "stale": [
+    "jgb2y",
+    "jgb10y"
+   ],
+   "status": "partial",
+   "unavailable": []
+  },
+  "generated_at": "2026-09-18T07:15:02.169Z",
+  "metrics": [
+   {
+    "basis": "daily_close",
+    "change": 882.6992,
+    "change_pct": 1.38,
+    "currency": "JPY",
+    "expected_session_date": "2026-09-18",
+    "fetched_at": "2026-09-18T07:15:02.154Z",
+    "freshness": "fresh",
+    "gap_reason": null,
+    "is_proxy": false,
+    "key": "nikkei225",
+    "kind": "index",
+    "label": "日経平均",
+    "observed_at": "2026-09-18T06:45:03.000Z",
+    "previous_close": 64136.25,
+    "provider": "yahoo_chart",
+    "proxy_for": null,
+    "quality": "unofficial_delayed",
+    "required": true,
+    "session_date": "2026-09-18",
+    "source_url": "https://query2.finance.yahoo.com/v8/finance/chart/%5EN225?range=1mo&interval=1d&events=history",
+    "unit": "index_points",
+    "value": 65018.9492
+   },
+   {
+    "basis": "daily_close",
+    "change": -1.1,
+    "change_pct": -0.26,
+    "currency": "JPY",
+    "expected_session_date": "2026-09-18",
+    "fetched_at": "2026-09-18T07:15:02.152Z",
+    "freshness": "fresh",
+    "gap_reason": null,
+    "is_proxy": true,
+    "key": "topix_proxy_1306",
+    "kind": "proxy_etf",
+    "label": "TOPIX連動ETF（1306）",
+    "observed_at": "2026-09-18T06:30:00.000Z",
+    "previous_close": 427.4,
+    "provider": "yahoo_chart",
+    "proxy_for": "TOPIX",
+    "quality": "unofficial_delayed",
+    "required": true,
+    "session_date": "2026-09-18",
+    "source_url": "https://query2.finance.yahoo.com/v8/finance/chart/1306.T?range=1mo&interval=1d&events=history",
+    "unit": "jpy_per_unit",
+    "value": 426.3
+   },
+   {
+    "basis": "daily_close",
+    "change": 316.1407,
+    "change_pct": 0.61,
+    "currency": "USD",
+    "expected_session_date": "2026-09-17",
+    "fetched_at": "2026-09-18T07:15:02.137Z",
+    "freshness": "fresh",
+    "gap_reason": null,
+    "is_proxy": false,
+    "key": "dow",
+    "kind": "index",
+    "label": "NYダウ",
+    "observed_at": "2026-09-17T20:00:00.000Z",
+    "previous_close": 51461.8984,
+    "provider": "yahoo_chart",
+    "proxy_for": null,
+    "quality": "unofficial_delayed",
+    "required": false,
+    "session_date": "2026-09-17",
+    "source_url": "https://query2.finance.yahoo.com/v8/finance/chart/%5EDJI?range=1mo&interval=1d&events=history",
+    "unit": "index_points",
+    "value": 51778.0391
+   },
+   {
+    "basis": "daily_close",
+    "change": 85.9497,
+    "change_pct": 1.14,
+    "currency": "USD",
+    "expected_session_date": "2026-09-17",
+    "fetched_at": "2026-09-18T07:15:02.137Z",
+    "freshness": "fresh",
+    "gap_reason": null,
+    "is_proxy": false,
+    "key": "sp500",
+    "kind": "index",
+    "label": "S&P500",
+    "observed_at": "2026-09-17T20:00:00.000Z",
+    "previous_close": 7551.8101,
+    "provider": "yahoo_chart",
+    "proxy_for": null,
+    "quality": "unofficial_delayed",
+    "required": false,
+    "session_date": "2026-09-17",
+    "source_url": "https://query2.finance.yahoo.com/v8/finance/chart/%5EGSPC?range=1mo&interval=1d&events=history",
+    "unit": "index_points",
+    "value": 7637.7598
+   },
+   {
+    "basis": "daily_close",
+    "change": 439.8711,
+    "change_pct": 1.69,
+    "currency": "USD",
+    "expected_session_date": "2026-09-17",
+    "fetched_at": "2026-09-18T07:15:02.137Z",
+    "freshness": "fresh",
+    "gap_reason": null,
+    "is_proxy": false,
+    "key": "nasdaq_composite",
+    "kind": "index",
+    "label": "ナスダック総合",
+    "observed_at": "2026-09-17T21:15:59.000Z",
+    "previous_close": 25978.4297,
+    "provider": "yahoo_chart",
+    "proxy_for": null,
+    "quality": "unofficial_delayed",
+    "required": false,
+    "session_date": "2026-09-17",
+    "source_url": "https://query2.finance.yahoo.com/v8/finance/chart/%5EIXIC?range=1mo&interval=1d&events=history",
+    "unit": "index_points",
+    "value": 26418.3008
+   },
+   {
+    "basis": "daily_close",
+    "change": 353.3798,
+    "change_pct": 3.14,
+    "currency": "USD",
+    "expected_session_date": "2026-09-17",
+    "fetched_at": "2026-09-18T07:15:02.137Z",
+    "freshness": "fresh",
+    "gap_reason": null,
+    "is_proxy": false,
+    "key": "sox",
+    "kind": "index",
+    "label": "フィラデルフィア半導体株指数（SOX）",
+    "observed_at": "2026-09-17T21:15:59.000Z",
+    "previous_close": 11246.1104,
+    "provider": "yahoo_chart",
+    "proxy_for": null,
+    "quality": "unofficial_delayed",
+    "required": false,
+    "session_date": "2026-09-17",
+    "source_url": "https://query2.finance.yahoo.com/v8/finance/chart/%5ESOX?range=1mo&interval=1d&events=history",
+    "unit": "index_points",
+    "value": 11599.4902
+   },
+   {
+    "basis": "ecb_daily_reference_rate",
+    "change": 0.64,
+    "change_pct": 0.41,
+    "currency": "JPY",
+    "expected_session_date": null,
+    "fetched_at": "2026-09-18T01:30:00.821+00:00",
+    "freshness": "fresh",
+    "gap_reason": null,
+    "is_proxy": false,
+    "key": "usdjpy",
+    "kind": "fx",
+    "label": "ドル円",
+    "observed_at": null,
+    "previous_close": 155.05,
+    "provider": "Frankfurter",
+    "proxy_for": null,
+    "quality": "trusted_free",
+    "required": true,
+    "session_date": "2026-09-17",
+    "source_url": "https://api.frankfurter.dev/v1/latest?base=USD&symbols=JPY",
+    "unit": "jpy_per_usd",
+    "value": 155.69
+   },
+   {
+    "basis": "daily_constant_maturity",
+    "change": 0.07,
+    "change_pct": 1.5,
+    "currency": null,
+    "expected_session_date": null,
+    "fetched_at": "2026-09-18T01:00:00.668+00:00",
+    "freshness": "fresh",
+    "gap_reason": null,
+    "is_proxy": false,
+    "key": "us2y",
+    "kind": "rate",
+    "label": "米国2年債利回り",
+    "observed_at": null,
+    "previous_close": 4.67,
+    "provider": "FRED",
+    "proxy_for": null,
+    "quality": "official",
+    "required": false,
+    "session_date": "2026-09-16",
+    "source_url": "https://fred.stlouisfed.org/series/DGS2",
+    "unit": "percent",
+    "value": 4.74
+   },
+   {
+    "basis": "daily_constant_maturity",
+    "change": 0.01,
+    "change_pct": 0.2,
+    "currency": null,
+    "expected_session_date": null,
+    "fetched_at": "2026-09-18T01:00:00.668+00:00",
+    "freshness": "fresh",
+    "gap_reason": null,
+    "is_proxy": false,
+    "key": "us10y",
+    "kind": "rate",
+    "label": "米国10年債利回り",
+    "observed_at": null,
+    "previous_close": 5,
+    "provider": "FRED",
+    "proxy_for": null,
+    "quality": "official",
+    "required": false,
+    "session_date": "2026-09-16",
+    "source_url": "https://fred.stlouisfed.org/series/DGS10",
+    "unit": "percent",
+    "value": 5.01
+   },
+   {
+    "basis": "daily_reference_yield",
+    "change": null,
+    "change_pct": null,
+    "currency": null,
+    "expected_session_date": null,
+    "fetched_at": "2026-09-18T06:00:01.226+00:00",
+    "freshness": "stale",
+    "gap_reason": "stale_observation",
+    "is_proxy": false,
+    "key": "jgb2y",
+    "kind": "rate",
+    "label": "日本国債2年利回り",
+    "observed_at": null,
+    "previous_close": null,
+    "provider": "MOF",
+    "proxy_for": null,
+    "quality": "official",
+    "required": false,
+    "session_date": "2026-08-31",
+    "source_url": "https://www.mof.go.jp/jgbs/reference/interest_rate/data/jgbcm_all.csv",
+    "unit": "percent",
+    "value": 1.743
+   },
+   {
+    "basis": "daily_reference_yield",
+    "change": null,
+    "change_pct": null,
+    "currency": null,
+    "expected_session_date": null,
+    "fetched_at": "2026-09-18T06:00:01.226+00:00",
+    "freshness": "stale",
+    "gap_reason": "stale_observation",
+    "is_proxy": false,
+    "key": "jgb10y",
+    "kind": "rate",
+    "label": "日本国債10年利回り",
+    "observed_at": null,
+    "previous_close": null,
+    "provider": "MOF",
+    "proxy_for": null,
+    "quality": "official",
+    "required": false,
+    "session_date": "2026-08-31",
+    "source_url": "https://www.mof.go.jp/jgbs/reference/interest_rate/data/jgbcm_all.csv",
+    "unit": "percent",
+    "value": 2.943
+   },
+   {
+    "basis": "daily_spot_price",
+    "change": 9.76,
+    "change_pct": 10.03,
+    "currency": "USD",
+    "expected_session_date": null,
+    "fetched_at": "2026-09-17T19:00:01.446+00:00",
+    "freshness": "fresh",
+    "gap_reason": null,
+    "is_proxy": false,
+    "key": "wti",
+    "kind": "commodity",
+    "label": "WTI原油",
+    "observed_at": null,
+    "previous_close": 97.26,
+    "provider": "EIA",
+    "proxy_for": null,
+    "quality": "official",
+    "required": false,
+    "session_date": "2026-09-15",
+    "source_url": "https://www.eia.gov/dnav/pet/hist/RWTCD.htm",
+    "unit": "usd_per_barrel",
+    "value": 107.02
+   },
+   {
+    "basis": "daily_spot_price",
+    "change": 21.29,
+    "change_pct": 19.44,
+    "currency": "USD",
+    "expected_session_date": null,
+    "fetched_at": "2026-09-17T19:00:01.446+00:00",
+    "freshness": "fresh",
+    "gap_reason": null,
+    "is_proxy": false,
+    "key": "brent",
+    "kind": "commodity",
+    "label": "ブレント原油",
+    "observed_at": null,
+    "previous_close": 109.51,
+    "provider": "EIA",
+    "proxy_for": null,
+    "quality": "official",
+    "required": false,
+    "session_date": "2026-09-15",
+    "source_url": "https://www.eia.gov/dnav/pet/hist/RBRTED.htm",
+    "unit": "usd_per_barrel",
+    "value": 130.8
+   },
+   {
+    "basis": null,
+    "change": null,
+    "change_pct": null,
+    "currency": "JPY",
+    "expected_session_date": null,
+    "fetched_at": null,
+    "freshness": "unavailable",
+    "gap_reason": "no_verified_source",
+    "is_proxy": false,
+    "key": "nikkei225_futures",
+    "kind": "futures",
+    "label": "日経平均先物",
+    "observed_at": null,
+    "previous_close": null,
+    "provider": null,
+    "proxy_for": null,
+    "quality": null,
+    "required": false,
+    "session_date": null,
+    "source_url": null,
+    "unit": "index_points",
+    "value": null
+   },
+   {
+    "basis": null,
+    "change": null,
+    "change_pct": null,
+    "currency": "JPY",
+    "expected_session_date": null,
+    "fetched_at": null,
+    "freshness": "unavailable",
+    "gap_reason": "no_verified_source",
+    "is_proxy": false,
+    "key": "growth250",
+    "kind": "index",
+    "label": "東証グロース市場250指数",
+    "observed_at": null,
+    "previous_close": null,
+    "provider": null,
+    "proxy_for": null,
+    "quality": null,
+    "required": false,
+    "session_date": null,
+    "source_url": null,
+    "unit": "index_points",
+    "value": null
+   }
+  ],
+  "news_refs": {
+   "items": [
+    {
+     "company_code": "71260",
+     "coverage_categories": [
+      "corporate"
+     ],
+     "coverage_severity": "medium",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-18T06:30:00+00:00",
+     "recorded_at": "2026-09-18T07:00:46.351246+00:00",
+     "ref_id": "e05aee69-dda3-46c5-8bd0-6786eeea6fc3",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260914536188.pdf"
+    },
+    {
+     "company_code": "89310",
+     "coverage_categories": [
+      "corporate",
+      "earnings"
+     ],
+     "coverage_severity": "high",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-18T06:30:00+00:00",
+     "recorded_at": "2026-09-18T07:00:45.714072+00:00",
+     "ref_id": "af53435b-32ee-42dd-be33-df2c2c16906e",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260827526904.pdf"
+    },
+    {
+     "company_code": "22500",
+     "coverage_categories": [
+      "corporate",
+      "earnings"
+     ],
+     "coverage_severity": "medium",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-18T02:00:00+00:00",
+     "recorded_at": "2026-09-18T06:20:36.98831+00:00",
+     "ref_id": "aa7b3324-bff6-41af-b720-4a93d04afe86",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260918538431.pdf"
+    },
+    {
+     "company_code": "28510",
+     "coverage_categories": [
+      "corporate",
+      "earnings"
+     ],
+     "coverage_severity": "medium",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-18T02:00:00+00:00",
+     "recorded_at": "2026-09-18T06:20:36.790353+00:00",
+     "ref_id": "f8e0e86f-09b7-461e-8730-c2e489c7448f",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260918538428.pdf"
+    },
+    {
+     "company_code": "14780",
+     "coverage_categories": [
+      "rates",
+      "japan_market",
+      "corporate",
+      "earnings"
+     ],
+     "coverage_severity": "medium",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-18T02:00:00+00:00",
+     "recorded_at": "2026-09-18T06:00:42.135855+00:00",
+     "ref_id": "78efc9ff-dbb2-4f46-bdcc-d64f6621b19c",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260918538421.pdf"
+    },
+    {
+     "company_code": "14770",
+     "coverage_categories": [
+      "japan_market",
+      "corporate",
+      "earnings"
+     ],
+     "coverage_severity": "medium",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-18T02:00:00+00:00",
+     "recorded_at": "2026-09-18T05:40:36.922108+00:00",
+     "ref_id": "d58c5a1d-bcd5-4f62-9b74-3ea99db5fb26",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260918538419.pdf"
+    },
+    {
+     "company_code": "13290",
+     "coverage_categories": [
+      "japan_market",
+      "corporate",
+      "earnings"
+     ],
+     "coverage_severity": "medium",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-18T02:00:00+00:00",
+     "recorded_at": "2026-09-18T05:20:38.470846+00:00",
+     "ref_id": "2c82f225-5957-4e86-bb3c-68cc4d495366",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260918538414.pdf"
+    },
+    {
+     "company_code": null,
+     "coverage_categories": [
+      "monetary_policy",
+      "japan_market"
+     ],
+     "coverage_severity": "high",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-18T03:20:26+00:00",
+     "recorded_at": "2026-09-18T05:20:31.612953+00:00",
+     "ref_id": "cafc0f82-aae4-43ae-ad9f-b814564079ab",
+     "source_type": "breaking_market",
+     "source_url": "https://apnews.com/article/67e71246d3af41bcfc61aa788f9959c7"
+    },
+    {
+     "company_code": "491A0",
+     "coverage_categories": [
+      "fx",
+      "us_market",
+      "corporate",
+      "earnings"
+     ],
+     "coverage_severity": "medium",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-18T02:00:00+00:00",
+     "recorded_at": "2026-09-18T05:00:40.012324+00:00",
+     "ref_id": "d4e2f37e-426f-4104-8cbc-84a599d49f78",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260918538407.pdf"
+    },
+    {
+     "company_code": "408A0",
+     "coverage_categories": [
+      "fx",
+      "ai_tech",
+      "corporate",
+      "earnings"
+     ],
+     "coverage_severity": "medium",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-18T02:00:00+00:00",
+     "recorded_at": "2026-09-18T05:00:39.770052+00:00",
+     "ref_id": "28523928-25a8-40f0-870e-4b41353e8bd7",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260918538404.pdf"
+    },
+    {
+     "company_code": "392A0",
+     "coverage_categories": [
+      "fx",
+      "us_market",
+      "corporate",
+      "earnings"
+     ],
+     "coverage_severity": "medium",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-18T02:00:00+00:00",
+     "recorded_at": "2026-09-18T04:40:32.510842+00:00",
+     "ref_id": "1b826a2d-a10b-49e7-9913-98f1d7a164b5",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260918538400.pdf"
+    },
+    {
+     "company_code": "16590",
+     "coverage_categories": [
+      "fx",
+      "japan_market",
+      "corporate",
+      "earnings"
+     ],
+     "coverage_severity": "medium",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-18T02:00:00+00:00",
+     "recorded_at": "2026-09-18T04:00:34.27315+00:00",
+     "ref_id": "aa07e831-f1e3-40d3-bc53-395fd34b07a5",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260918538386.pdf"
+    },
+    {
+     "company_code": "16570",
+     "coverage_categories": [
+      "fx",
+      "corporate",
+      "earnings"
+     ],
+     "coverage_severity": "medium",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-18T02:00:00+00:00",
+     "recorded_at": "2026-09-18T03:40:35.452167+00:00",
+     "ref_id": "f56e1a5f-1ee4-4f00-aa6c-bcc861cfdb80",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260918538381.pdf"
+    },
+    {
+     "company_code": "14760",
+     "coverage_categories": [
+      "japan_market",
+      "corporate",
+      "earnings"
+     ],
+     "coverage_severity": "medium",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-18T02:00:00+00:00",
+     "recorded_at": "2026-09-18T03:40:35.095577+00:00",
+     "ref_id": "0eb9a9e0-e654-4f5c-9da0-b433ab0b9dd7",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260918538358.pdf"
+    },
+    {
+     "company_code": "72870",
+     "coverage_categories": [
+      "corporate"
+     ],
+     "coverage_severity": "high",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-18T02:00:00+00:00",
+     "recorded_at": "2026-09-18T03:00:36.692167+00:00",
+     "ref_id": "c0caa819-3a88-4d69-8d27-dca4aa79f4a4",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260917538093.pdf"
+    },
+    {
+     "company_code": "42200",
+     "coverage_categories": [
+      "corporate"
+     ],
+     "coverage_severity": "medium",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-18T01:30:00+00:00",
+     "recorded_at": "2026-09-18T02:40:34.438555+00:00",
+     "ref_id": "4bdc398a-00d1-4907-a3ab-d332632da323",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260917538071.pdf"
+    },
+    {
+     "company_code": "25250",
+     "coverage_categories": [
+      "fx",
+      "japan_market",
+      "corporate",
+      "earnings"
+     ],
+     "coverage_severity": "medium",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-18T01:20:00+00:00",
+     "recorded_at": "2026-09-18T02:40:34.248267+00:00",
+     "ref_id": "51972b29-b9af-4ada-b4eb-f6b871dedfdf",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260918538481.pdf"
+    },
+    {
+     "company_code": "25240",
+     "coverage_categories": [
+      "japan_market",
+      "corporate",
+      "earnings"
+     ],
+     "coverage_severity": "medium",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-18T01:20:00+00:00",
+     "recorded_at": "2026-09-18T02:20:35.566175+00:00",
+     "ref_id": "a4e0716c-1a63-49b3-be32-3bd6ec0d0f80",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260918538458.pdf"
+    },
+    {
+     "company_code": "530A0",
+     "coverage_categories": [
+      "fx",
+      "japan_market",
+      "corporate",
+      "earnings"
+     ],
+     "coverage_severity": "medium",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-18T01:20:00+00:00",
+     "recorded_at": "2026-09-18T02:00:32.587058+00:00",
+     "ref_id": "b80257f2-acd3-490a-abf6-3e89fab54098",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260918538450.pdf"
+    },
+    {
+     "company_code": "77930",
+     "coverage_categories": [
+      "corporate",
+      "earnings"
+     ],
+     "coverage_severity": "high",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-18T00:00:00+00:00",
+     "recorded_at": "2026-09-18T01:00:34.780689+00:00",
+     "ref_id": "5a111216-2ae3-4914-8214-0d5bac36892a",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260917538133.pdf"
+    },
+    {
+     "company_code": "81050",
+     "coverage_categories": [
+      "fx",
+      "ai_tech",
+      "regulation_policy",
+      "corporate"
+     ],
+     "coverage_severity": "high",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-17T23:45:00+00:00",
+     "recorded_at": "2026-09-18T01:00:34.496013+00:00",
+     "ref_id": "9dd0e449-61ee-425b-86fc-511b85968a03",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260917538188.pdf"
+    },
+    {
+     "company_code": "624A0",
+     "coverage_categories": [
+      "corporate"
+     ],
+     "coverage_severity": "medium",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-17T23:00:00+00:00",
+     "recorded_at": "2026-09-18T00:20:29.938834+00:00",
+     "ref_id": "1de73a20-56f4-4af9-8822-edc294b41692",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260917538213.pdf"
+    },
+    {
+     "company_code": "620A0",
+     "coverage_categories": [
+      "corporate",
+      "earnings"
+     ],
+     "coverage_severity": "medium",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-17T23:00:00+00:00",
+     "recorded_at": "2026-09-17T23:40:27.251512+00:00",
+     "ref_id": "c25da2dc-f545-472c-9d81-e690ab6c4ae7",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260917537694.pdf"
+    },
+    {
+     "company_code": "622A0",
+     "coverage_categories": [
+      "corporate"
+     ],
+     "coverage_severity": "medium",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-17T23:00:00+00:00",
+     "recorded_at": "2026-09-17T23:20:26.744668+00:00",
+     "ref_id": "b9c869f6-72de-4637-bf9d-1b76458ec579",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260916536998.pdf"
+    },
+    {
+     "company_code": "622A0",
+     "coverage_categories": [
+      "fx",
+      "corporate",
+      "earnings"
+     ],
+     "coverage_severity": "medium",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-17T23:00:00+00:00",
+     "recorded_at": "2026-09-17T23:20:26.563135+00:00",
+     "ref_id": "eb4faa65-91ef-42e6-b1c7-cee75f8959f5",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260916536984.pdf"
+    },
+    {
+     "company_code": "627A0",
+     "coverage_categories": [
+      "corporate"
+     ],
+     "coverage_severity": "medium",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-17T23:00:00+00:00",
+     "recorded_at": "2026-09-17T23:00:30.734634+00:00",
+     "ref_id": "d8672e34-ecc2-48fa-a12c-1e15dd560b68",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260915536689.pdf"
+    },
+    {
+     "company_code": null,
+     "coverage_categories": [
+      "geopolitics"
+     ],
+     "coverage_severity": "high",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-17T12:00:00+00:00",
+     "recorded_at": "2026-09-17T20:00:05.455958+00:00",
+     "ref_id": "c2859db6-8dc9-49ee-b209-88e9be94d3bd",
+     "source_type": "market_macro",
+     "source_url": "https://news.un.org/feed/view/en/story/2026/09/1168358"
+    },
+    {
+     "company_code": "32690",
+     "coverage_categories": [
+      "corporate",
+      "earnings"
+     ],
+     "coverage_severity": "medium",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-17T07:30:00+00:00",
+     "recorded_at": "2026-09-17T14:40:40.048987+00:00",
+     "ref_id": "ff282877-82f2-43ca-b7c6-b09991c0793e",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260917537732.pdf"
+    },
+    {
+     "company_code": "38430",
+     "coverage_categories": [
+      "corporate",
+      "earnings"
+     ],
+     "coverage_severity": "high",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-17T07:30:00+00:00",
+     "recorded_at": "2026-09-17T14:40:38.496981+00:00",
+     "ref_id": "a925e361-ab20-427f-8f7e-fa9de08e07ee",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260916537347.pdf"
+    },
+    {
+     "company_code": "29890",
+     "coverage_categories": [
+      "corporate",
+      "earnings"
+     ],
+     "coverage_severity": "high",
+     "emergency_class": null,
+     "fact_check_status": "passed",
+     "published_at": "2026-09-17T07:10:00+00:00",
+     "recorded_at": "2026-09-17T14:00:39.63579+00:00",
+     "ref_id": "e8b23113-e65e-4432-b61b-ed880a0d4133",
+     "source_type": "tdnet",
+     "source_url": "https://www.release.tdnet.info/inbs/140120260916537470.pdf"
+    }
+   ],
+   "status": "ok",
+   "window_start": "2026-09-17T06:30:00.000Z"
+  },
+  "report_type": "close",
+  "schema_version": "market_data_packet.v1",
+  "session": {
+   "jpx_session_date": "2026-09-18",
+   "jpx_trading_day": true,
+   "nyse_calendar_covered": true,
+   "timezone": "Asia/Tokyo",
+   "us_session_date": "2026-09-17"
+  },
+  "source_summary": [
+   {
+    "fetch_status": "ok",
+    "metric_keys": [
+     "nikkei225",
+     "topix_proxy_1306",
+     "dow",
+     "sp500",
+     "nasdaq_composite",
+     "sox"
+    ],
+    "provider": "yahoo_chart",
+    "quality": "unofficial_delayed"
+   },
+   {
+    "fetch_status": "ok",
+    "metric_keys": [
+     "usdjpy"
+    ],
+    "provider": "Frankfurter",
+    "quality": "trusted_free"
+   },
+   {
+    "fetch_status": "ok",
+    "metric_keys": [
+     "us2y",
+     "us10y"
+    ],
+    "provider": "FRED",
+    "quality": "official"
+   },
+   {
+    "fetch_status": "ok",
+    "metric_keys": [
+     "jgb2y",
+     "jgb10y"
+    ],
+    "provider": "MOF",
+    "quality": "official"
+   },
+   {
+    "fetch_status": "ok",
+    "metric_keys": [
+     "wti",
+     "brent"
+    ],
+    "provider": "EIA",
+    "quality": "official"
+   }
+  ],
+  "trading_date": "2026-09-18"
+ }
+}

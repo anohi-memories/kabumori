@@ -1,0 +1,587 @@
+[
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "16570",
+  "company_name": "ｉＳＭＳＣＩ先進国株",
+  "coverage_categories": [
+   "fx",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-18 03:40:35.452167+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "f56e1a5f-1ee4-4f00-aa6c-bcc861cfdb80",
+  "published_at": "2026-09-18 02:00:00+00",
+  "source_type": "tdnet",
+  "title": "2026年８月期 決算短信（2026年２月10日～2026年８月９日）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "14760",
+  "company_name": "ｉＳＪリート",
+  "coverage_categories": [
+   "japan_market",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-18 03:40:35.095577+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "0eb9a9e0-e654-4f5c-9da0-b433ab0b9dd7",
+  "published_at": "2026-09-18 02:00:00+00",
+  "source_type": "tdnet",
+  "title": "2026年８月期 決算短信（2026年２月10日～2026年８月９日）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "16590",
+  "company_name": "ｉＳ米国リート",
+  "coverage_categories": [
+   "fx",
+   "japan_market",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-18 04:00:34.27315+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "aa07e831-f1e3-40d3-bc53-395fd34b07a5",
+  "published_at": "2026-09-18 02:00:00+00",
+  "source_type": "tdnet",
+  "title": "2026年８月期 決算短信（2026年２月10日～2026年８月９日）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "29890",
+  "company_name": "Ｒ－東海道リート",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-09-17 14:00:39.63579+00",
+  "generated_text": "【速報】東海道リート、2027年1月期の予想分配金を7.7％減額📉\n\n1口当たり予想分配金は、前回予想の3,280円から3,027円へ修正されました。金利コストの上昇に加え、セントレアロジスティクスセンターの稼働率低下が主な要因です。\n\n営業利益は前回予想比3.2％増、経常利益は1.0％増ですが、当期純利益は7.7％減。物件の譲渡を想定した不動産等売却益も織り込んでいますが、投資口価格への影響が見込まれる内容です。予想数値は今後変動する可能性があります。\n\n出典: https://www.release.tdnet.info/inbs/140120260916537470.pdf",
+  "generation_fact_status": "failed",
+  "id": "e8b23113-e65e-4432-b61b-ed880a0d4133",
+  "published_at": "2026-09-17 07:10:00+00",
+  "source_type": "tdnet",
+  "title": "2027年１月期の運用状況及び分配金の予想の修正に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "622A0",
+  "company_name": "テクノクラフト",
+  "coverage_categories": [
+   "fx",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-17 23:20:26.563135+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "eb4faa65-91ef-42e6-b1c7-cee75f8959f5",
+  "published_at": "2026-09-17 23:00:00+00",
+  "source_type": "tdnet",
+  "title": "東京証券取引所スタンダード市場への上場に伴う当社決算情報等のお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "392A0",
+  "company_name": "ｉＳＱトップ",
+  "coverage_categories": [
+   "fx",
+   "us_market",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-18 04:40:32.510842+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "1b826a2d-a10b-49e7-9913-98f1d7a164b5",
+  "published_at": "2026-09-18 02:00:00+00",
+  "source_type": "tdnet",
+  "title": "2026年８月期 決算短信（2026年２月10日～2026年８月９日）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "620A0",
+  "company_name": "Ｐ－応研",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-17 23:40:27.251512+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "c25da2dc-f545-472c-9d81-e690ab6c4ae7",
+  "published_at": "2026-09-17 23:00:00+00",
+  "source_type": "tdnet",
+  "title": "東京証券取引所 TOKYO PRO Market 上場に伴う当社決算情報等のお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "408A0",
+  "company_name": "ｉＳベストＡＩ",
+  "coverage_categories": [
+   "fx",
+   "ai_tech",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-18 05:00:39.770052+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "28523928-25a8-40f0-870e-4b41353e8bd7",
+  "published_at": "2026-09-18 02:00:00+00",
+  "source_type": "tdnet",
+  "title": "2026年８月期 決算短信（2026年２月10日～2026年８月９日）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "32690",
+  "company_name": "Ｒ－ＡＤＲ",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-17 14:40:40.048987+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "ff282877-82f2-43ca-b7c6-b09991c0793e",
+  "published_at": "2026-09-17 07:30:00+00",
+  "source_type": "tdnet",
+  "title": "2026年07月期決算短信（REIT）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "491A0",
+  "company_name": "ｉＳＳ＆Ｐ除く金融",
+  "coverage_categories": [
+   "fx",
+   "us_market",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-18 05:00:40.012324+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "d4e2f37e-426f-4104-8cbc-84a599d49f78",
+  "published_at": "2026-09-18 02:00:00+00",
+  "source_type": "tdnet",
+  "title": "2026年８月期 決算短信（2026年１月26日～2026年８月９日）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "530A0",
+  "company_name": "ＮＺＡＭ Ｊリート２",
+  "coverage_categories": [
+   "fx",
+   "japan_market",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-18 02:00:32.587058+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "b80257f2-acd3-490a-abf6-3e89fab54098",
+  "published_at": "2026-09-18 01:20:00+00",
+  "source_type": "tdnet",
+  "title": "2026年８月期 決算短信（2026年３月18日～2026年８月15日）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "38430",
+  "company_name": "フリービット",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-09-17 14:40:38.496981+00",
+  "generated_text": "【速報】フリービット、特別調査委員会の調査継続　1Q決算の開示も延期\n\nCountUpの株式取得に関する妥当性や意思決定プロセスを調べている特別調査委員会は、2026年9月17日時点でも調査を継続中です。調査報告書は10月上旬に提出予定とされていますが、変更の可能性もあります。\n\n調査や会計監査人の監査手続きに時間を要する見込みのため、2027年4月期第1四半期決算短信の開示も延期。調査結果と業績への影響額は、まだ確定していません。\n\n出典: https://www.release.tdnet.info/inbs/140120260916537347.pdf",
+  "generation_fact_status": "passed",
+  "id": "a925e361-ab20-427f-8f7e-fa9de08e07ee",
+  "published_at": "2026-09-17 07:30:00+00",
+  "source_type": "tdnet",
+  "title": "特別調査委員会の調査状況及び今後の見通しに関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "25240",
+  "company_name": "ＮＺＡＭ ＴＰＸ",
+  "coverage_categories": [
+   "japan_market",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-18 02:20:35.566175+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "a4e0716c-1a63-49b3-be32-3bd6ec0d0f80",
+  "published_at": "2026-09-18 01:20:00+00",
+  "source_type": "tdnet",
+  "title": "2026年８月期 決算短信（2026年２月16日～2026年８月15日）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "13290",
+  "company_name": "ｉＳ２２５",
+  "coverage_categories": [
+   "japan_market",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-18 05:20:38.470846+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "2c82f225-5957-4e86-bb3c-68cc4d495366",
+  "published_at": "2026-09-18 02:00:00+00",
+  "source_type": "tdnet",
+  "title": "2026年８月期 決算短信（2026年２月10日～2026年８月９日）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": null,
+  "company_name": null,
+  "coverage_categories": [
+   "geopolitics"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-09-17 20:00:05.455958+00",
+  "generated_text": "【速報】国連の独立調査官、米国の対イラン攻撃に「戦争犯罪の合理的な根拠」\n\n国連人権理事会が任命した独立調査官は、米国がイランの学校と住宅地に対して行った「無差別攻撃」について、戦争犯罪を行ったと信じる合理的な根拠があるとしました。\n\n追加の軍事行動や制裁、具体的な市場への影響は、この情報では確認されていません。関係するのは米国、イラン、中東情勢、地政学です。\n\n出典: https://news.un.org/feed/view/en/story/2026/09/1168358",
+  "generation_fact_status": "passed",
+  "id": "c2859db6-8dc9-49ee-b209-88e9be94d3bd",
+  "published_at": "2026-09-17 12:00:00+00",
+  "source_type": "market_macro",
+  "title": "US likely committed war crimes against Iranian civilians: Independent experts"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "627A0",
+  "company_name": "アキッパ",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-17 23:00:30.734634+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "d8672e34-ecc2-48fa-a12c-1e15dd560b68",
+  "published_at": "2026-09-17 23:00:00+00",
+  "source_type": "tdnet",
+  "title": "主要株主の異動に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "622A0",
+  "company_name": "テクノクラフト",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-17 23:20:26.744668+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "b9c869f6-72de-4637-bf9d-1b76458ec579",
+  "published_at": "2026-09-17 23:00:00+00",
+  "source_type": "tdnet",
+  "title": "主要株主の異動に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "81050",
+  "company_name": "ＢｉｔｃｏｉｎＪＰＮ",
+  "coverage_categories": [
+   "fx",
+   "ai_tech",
+   "regulation_policy",
+   "corporate"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-09-18 01:00:34.496013+00",
+  "generated_text": "【速報】Bitcoin Japan（8105）が、子会社でビットコインの取得・保有・運用事業を始めると開示しました。投資資金の上限は6億6,200万円で、初回は100万米ドル（約1億5,500万円）を送金します。ただし、上限額を全額すぐに投資するわけではなく、購入条件を満たさない場合は他の公表済み使途へ振り替えることもあるとしています。\n\nビットコイン価格や為替、流動性、カストディなどのリスクがあり、2027年3月期の連結業績への影響は精査中。保有残高は四半期ごとに時価評価し、評価損益を損益計算書の特別項目に計上する予定です。暗号資産関連として、日本株では同社の開示内容と実際の投資進捗が見られそうです。\n\n出典: https://www.release.tdnet.info/inbs/140120260917538188.pdf",
+  "generation_fact_status": "failed",
+  "id": "9dd0e449-61ee-425b-86fc-511b85968a03",
+  "published_at": "2026-09-17 23:45:00+00",
+  "source_type": "tdnet",
+  "title": "（開示事項の経過）子会社等における新規事業(ビットコイントレジャリー及びビットコイン関連資産運用事業)の開始およびビットコイン購入に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "624A0",
+  "company_name": "かがやきＨＤ",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-18 00:20:29.938834+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "1de73a20-56f4-4af9-8822-edc294b41692",
+  "published_at": "2026-09-17 23:00:00+00",
+  "source_type": "tdnet",
+  "title": "主要株主である筆頭株主の異動に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "25250",
+  "company_name": "ＮＺＡＭ ２２５",
+  "coverage_categories": [
+   "fx",
+   "japan_market",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-18 02:40:34.248267+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "51972b29-b9af-4ada-b4eb-f6b871dedfdf",
+  "published_at": "2026-09-18 01:20:00+00",
+  "source_type": "tdnet",
+  "title": "2026年８月期 決算短信（2026年２月16日～2026年８月15日）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "77930",
+  "company_name": "Ｇ－イメージマジック",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-09-18 01:00:34.780689+00",
+  "generated_text": "【速報】イメージ・マジック、長谷川美芸を完全子会社化へ\n\nイメージ・マジック（7793）は、衣類プリントなどを手がける長谷川美芸について、株式取得と株式交換を組み合わせて完全子会社化すると発表しました。\n\nまず220株を取得し、残る280株は株式交換で取得。株式交換では普通株式252,000株を交付し、このうち120,000株は自己株式を充当、132,000株を新たに発行する予定です。取得価額は非開示とされています。\n\n効力発生日は10月26日予定。長谷川美芸の子会社化に伴う2026年12月期業績への影響は軽微と見込まれています。\n\n出典: https://www.release.tdnet.info/inbs/140120260917538133.pdf",
+  "generation_fact_status": "passed",
+  "id": "5a111216-2ae3-4914-8214-0d5bac36892a",
+  "published_at": "2026-09-18 00:00:00+00",
+  "source_type": "tdnet",
+  "title": "株式取得及び簡易株式交換による株式会社長谷川美芸の完全子会社化に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "14770",
+  "company_name": "ｉＳＭＳＣＩ最小分散",
+  "coverage_categories": [
+   "japan_market",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-18 05:40:36.922108+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "d58c5a1d-bcd5-4f62-9b74-3ea99db5fb26",
+  "published_at": "2026-09-18 02:00:00+00",
+  "source_type": "tdnet",
+  "title": "2026年８月期 決算短信（2026年２月10日～2026年８月９日）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "42200",
+  "company_name": "リケンテクノス",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-18 02:40:34.438555+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "4bdc398a-00d1-4907-a3ab-d332632da323",
+  "published_at": "2026-09-18 01:30:00+00",
+  "source_type": "tdnet",
+  "title": "自己株式立会外買付取引（ＴｏＳＴＮｅＴ－３）による自己株式の取得結果に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "14780",
+  "company_name": "ｉＳＭＳＣＩ高配当",
+  "coverage_categories": [
+   "rates",
+   "japan_market",
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-18 06:00:42.135855+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "78efc9ff-dbb2-4f46-bdcc-d64f6621b19c",
+  "published_at": "2026-09-18 02:00:00+00",
+  "source_type": "tdnet",
+  "title": "2026年８月期 決算短信（2026年２月10日～2026年８月９日"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "72870",
+  "company_name": "日本精機",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-09-18 03:00:36.692167+00",
+  "generated_text": "【速報】日本精機が自己株式の取得を完了しました。ToSTNeT-3で3,610,000株を取得し、取得価額の総額は99億7,804万円。発行済み株式総数（自己株式を除く）に対する割合は6.27％です。\n\n2026年9月17日の取締役会決議に基づく自己株式取得は、上限まで買い付けて終了しています。\n\n出典: https://www.release.tdnet.info/inbs/140120260917538093.pdf",
+  "generation_fact_status": "passed",
+  "id": "c0caa819-3a88-4d69-8d27-dca4aa79f4a4",
+  "published_at": "2026-09-18 02:00:00+00",
+  "source_type": "tdnet",
+  "title": "自己株式立会外買付取引（ToSTNeT-3）による自己株式の取得結果および取得終了に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "28510",
+  "company_name": "ｉＳＭＳＣＩＪＳＲＩ",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-18 06:20:36.790353+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "f8e0e86f-09b7-461e-8730-c2e489c7448f",
+  "published_at": "2026-09-18 02:00:00+00",
+  "source_type": "tdnet",
+  "title": "2026年８月期 決算短信（2026年２月10日～2026年８月９日）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "22500",
+  "company_name": "ｉＳＭＳＣＩ日株気候",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-18 06:20:36.98831+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "aa7b3324-bff6-41af-b720-4a93d04afe86",
+  "published_at": "2026-09-18 02:00:00+00",
+  "source_type": "tdnet",
+  "title": "2026年８月期 決算短信（2026年２月10日～2026年８月９日）"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": null,
+  "company_name": null,
+  "coverage_categories": [
+   "monetary_policy",
+   "japan_market"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-09-18 05:20:31.612953+00",
+  "generated_text": "【速報】日本株では、日銀の決定発表後に日経225が上昇しました。日銀は政策金利を1.00％から1.25％へ引き上げ。日本の金利市場にも直接関わる決定です。📈\n\n出典: https://apnews.com/article/67e71246d3af41bcfc61aa788f9959c7",
+  "generation_fact_status": "passed",
+  "id": "cafc0f82-aae4-43ae-ad9f-b814564079ab",
+  "published_at": "2026-09-18 03:20:26+00",
+  "source_type": "breaking_market",
+  "title": "Bank of Japan raises benchmark interest rate to 1.25%"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "89310",
+  "company_name": "和田興産",
+  "coverage_categories": [
+   "corporate",
+   "earnings"
+  ],
+  "coverage_severity": "high",
+  "created_at": "2026-09-18 07:00:45.714072+00",
+  "generated_text": "【速報】和田興産（8931）が2027年2月期第2四半期累計の業績予想を上方修正しました。\n\n売上高は2.2百億円、営業利益は20億円、経常利益は13.5億円、中間純利益は9.5億円の見通し。従来予想から営業利益25.0％、経常利益50.0％、中間純利益35.7％の増額です。物件売却時期の前倒しや、分譲マンション販売などの採算性向上が理由とされています。\n\n中間配当は25円から32円へ、年間配当予想は60円から67円へ増額。一方、通期の業績予想は据え置きです。第3四半期以降を慎重に検討しているとのことです📌\n\n出典: https://www.release.tdnet.info/inbs/140120260827526904.pdf",
+  "generation_fact_status": "passed",
+  "id": "af53435b-32ee-42dd-be33-df2c2c16906e",
+  "published_at": "2026-09-18 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "業績予想及び配当予想の修正に関するお知らせ"
+ },
+ {
+  "app_copy_fact_status": null,
+  "app_summary_ja": null,
+  "app_title_ja": null,
+  "company_code": "71260",
+  "company_name": "グローバルスタイル",
+  "coverage_categories": [
+   "corporate"
+  ],
+  "coverage_severity": "medium",
+  "created_at": "2026-09-18 07:00:46.351246+00",
+  "generated_text": null,
+  "generation_fact_status": null,
+  "id": "e05aee69-dda3-46c5-8bd0-6786eeea6fc3",
+  "published_at": "2026-09-18 06:30:00+00",
+  "source_type": "tdnet",
+  "title": "剰余金の配当に関するお知らせ"
+ }
+]

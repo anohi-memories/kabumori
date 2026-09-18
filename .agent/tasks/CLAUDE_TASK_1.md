@@ -3,8 +3,8 @@
 - task_id: market-report-shared-platform-phase2-consumer-cutover-20260917
 - owner: claude
 - slot: claude-1
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Opus 5
 - deadline: 2026-09-18 17:15 JST natural close cycle
@@ -743,3 +743,95 @@ Implement and test only the following before another cutover review:
 - `x-test-post` / `personalized-reports` remain production-deploy prohibited until the next K1 PASS.
 - The morning Yahoo fallback source (`aecfa60`) may remain in source but is not part of this review and must not be deployed as part of this follow-up.
 - After fixes/tests, set status to `review_required`, next_owner to `chatgpt`, append exact test evidence and sample generated X/app text, then stop for K1.
+
+### Content quality follow-up（K1 review 2026-09-18 close 対応、source のみ）
+
+- 本番変更 **0**（deploy・migration・Cron・gate・手動 X 投稿・Push・OAuth/Vault・履歴修復なし）。gate は `x_enabled=false` / `app_enabled=false` のまま。`x-test-post` / `personalized-reports` は未 deploy。`aecfa60`（朝刊 fallback）は source に残し deploy していない
+- 変更は `supabase/functions/market-report-analysis/` のみ（`analysis_input.ts` / `analysis_logic.ts` / 新規 `quality_test.ts` / 9/18 fixture 3件）
+
+#### 1. 内部項目名の混入防止
+
+- 根本原因: モデル入力のキーが英語（`change_pct` / `session_date` 等）で、モデルがそれを本文に写した
+- 対策A（入力）: モデル入力のキーを日本語に変更（`指標[].名称/日付/値/前日比/鮮度`、`ニュース[].見出し/要約/重要材料/企業` など）。英字キーは `ref` のみ。方向も `上昇/下落/まちまち/ほぼ横ばい/判断できず` の日本語で渡す
+- 対策B（検証）: 共有分析のローカル検証に `INTERNAL_FIELD` を追加。snake_case 識別子、`metric:` / `news:` の ref 文字列、`freshness` / `claim_type` / `market_direction` などの実装語が本文（見出し・要約・claims・key_news・テーマ・注目点・リスク・X本文）にあれば不合格
+- プロンプトにも「キー名・ref・英字の項目名を本文に書かない。前日比は『（前日比+1.38%）』のように書く」を明記
+
+#### 2. 日付の異なる市場の言い回し
+
+- `consistent_with` の説明から「『〜と同じ日に〜』のように書く」を削除
+- 日付の違う市場を並べるときは各日付を明記し「同じ日」「同日」と書かない指示を追加。モデル入力に `日付の注意`（例: 東京 9月18日 / 米国 9月17日）を渡す
+- ローカル検証: 東京と米国のセッション日付が異なる packet で本文に「同じ日」「同日」があれば不合格（同じ日付の場合は許可）
+
+#### 3. テーマの意味
+
+- 指示: `strong_themes` / `weak_themes` は根拠のある業種・テーマのみ。指数名・指数の方向差・ニュース見出し・一般的観察は不可、根拠不足なら空配列
+- ローカル検証: テーマ名に指数名・「指数」「方向差」「乖離」「報道」「発表後」を含むと不合格。テーマが参照する claim の根拠にニュースまたは SOX が無いと不合格
+
+#### 4. 重要材料の優先
+
+- 検証済みニュースのうち `coverage_categories` に `monetary_policy` を含むもの、または severity が emergency / critical のものを「重要材料」とし、モデル入力で先頭に並べ `重要材料: true` を付与
+- 指示: 重要材料がある場合、その出来事自体を要約と X 本文に入れる。因果は、ニュースが理由として書いていない限り断定せず、出来事と確度を分けて書く
+- ローカル検証: 重要材料が `key_news` に無い、または重要材料のキーワード（日銀・FRB・FOMC・ECB・政策金利・利上げ・利下げ・為替介入・金融政策のうち該当するもの）が X 本文・要約に無いと不合格
+- 9/18 の実データでは BOJ 利上げ（`news:cafc0f82-…`、severity high / `monetary_policy`）が重要材料として検出され、キーワードは `日銀`・`政策金利`
+
+#### 5. 文章の質
+
+- 指示: 不確実性の注記は要約・X本文それぞれ1回まで、`insufficient_evidence` は1件にまとめる
+- ローカル検証: X本文・要約で「確認できません/断定できません」などが2回以上、または `insufficient_evidence` が2件以上で不合格
+
+#### 回帰テスト（本番の実データで再現）
+
+- `quality_test.ts` **8/8 PASS**:
+  - モデル入力の英字キーが `ref` のみで、`change_pct` / `session_date` が入力に存在しない
+  - 9/18: セッション日付の違いを検出、BOJ が重要材料として先頭、`日付の注意` を付与
+  - プロンプトから旧「同じ日に」パターンが消え、日付明記・重要材料・空テーマの指示がある
+  - **16:20 の Fact 不合格の再現**: 9/17 米国と 9/18 東京を「同じ日に」と書いた claim がローカル検証で不合格になる
+  - **16:35 に Fact を通過した実際の packet を再検証すると、K1 指摘すべてで不合格になる**: `change_pct` 混入、X本文の注記重複、`insufficient_evidence` 複数、非テーマ3件（「日経平均の上昇」「日経平均とTOPIX連動ETF（1306）の方向差」「日銀決定発表後の上昇報道」）、要約に重要材料（日銀・政策金利）が無い
+  - 日付を明記し BOJ を前面に出した分析は合格し、X 本文も形式チェックを通る
+  - 各ルールの単独検出（`session_date`、`metric:`、注記重複（X・要約）、重要材料の key_news 欠落・X 欠落、根拠の無いテーマ）
+  - 日付が同じ朝刊セッションでは「同じ日」判定が働かない
+- 既存を含む全体: `market-report-analysis` **21/21**、`market-report-data-packet` **42/42**、`personalized-reports` **28/28**、`x-test-post` **394/394**、`deno check`（analysis）PASS、`git diff --check` PASS
+
+#### 見本（手書きの適合 fixture から既存フォーマッタで整形。モデル出力ではない）
+
+X本文（gate ON 時に投稿される形）:
+
+```text
+【大引け】きょうの日本株まとめ🌙
+日銀が政策金利を1.25%へ引き上げた日、日経平均は+1.38%でした📈
+
+📌 今日の3ポイント
+・日銀が政策金利を1.00%→1.25%に
+・日経平均65,018.95、前日比+1.38%
+・TOPIX連動ETF（1306）は−0.26%で逆方向
+
+💬 利上げと値動きの因果ははっきりしないので、次の取引日の銀行株の反応も見たいです
+
+#日本株 #日経平均 #株式投資 #かぶモリ
+```
+
+アプリ「今日の市場全体」:
+
+```text
+日銀が政策金利を1.25%へ、日経平均は+1.38%
+9月18日は日銀が政策金利を1.00%から1.25%へ引き上げました。東京市場では日経平均が65,018.95（前日比+1.38%）と上げた一方、TOPIX連動ETF（1306）は426.3円（前日比−0.26%）で、指数によって方向が分かれました。利上げと値動きの因果はニュースでは明記されていません。
+・日銀が政策金利を1.00%から1.25%へ引き上げました。
+・日経平均は65,018.95（前日比+1.38%）、TOPIX連動ETF（1306）は426.3円（前日比−0.26%）でした。
+・日銀の決定発表後に日経225が上昇したと報じられていますが、利上げとの因果関係はニュースでは明記されていません。（同日に確認）
+・9月17日の米国市場ではSOXが前日比+3.14%でした。9月18日の東京市場への影響は、それぞれ日付が異なるため参考情報です。（同日に確認）
+・利上げ後の銀行株や不動産株の反応は、次の取引日も確認したい点です。（注目点）
+注目: 利上げ後の銀行株・不動産株の反応
+```
+
+（アプリでは claim_type を「報道で確認 / 同日に確認 / 理由は未確認 / 値動き / 注目点」の日本語ラベルで表示）
+
+#### 残るリスク
+
+- 実モデルがこの新しい指示・検証で合格する率は、本番の shadow 実行でしか確認できない。検証を厳しくしたため、初回は不合格→再生成が増える可能性がある（上限は生成2回×試行3回）
+- 重要材料の判定は `monetary_policy` カテゴリと emergency/critical に限定。為替介入などが別カテゴリで入った場合はキーワードだけでは拾えない
+- アプリの claim ラベル「同日に確認」は `consistent_with` の既存表示名。日付が異なる claim にも付くため、UI 側で「同時期に確認」へ変える案は別判断（今回は source 変更対象外）
+
+#### 次の推奨
+
+- K1 PASS 後、`market-report-analysis` のみ再 deploy（byte 比較・他 Function 不変確認）し、連休明け最初の自然サイクル（2026-09-24 07:55 / 16:20）で shared packet の品質を観測
+- 品質を確認できた後に、consumer cutover（`x-test-post` / `personalized-reports` deploy と gate ON）を改めて判断

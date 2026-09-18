@@ -52,7 +52,27 @@ export type AnalysisInput = {
   allowedRefs: Set<string>;
   newsRefs: Set<string>;
   headlineByRef: Map<string, string>;
+  /** Verified policy/macro news that must be surfaced (BOJ/FOMC/FX intervention, emergency/critical). */
+  majorNewsRefs: Set<string>;
+  /** Terms from those items; the X post must mention at least one of them. */
+  majorKeywords: string[];
+  /** Japanese and US sessions are different calendar dates (e.g. close on 9/18 vs US 9/17). */
+  sessionsDiffer: boolean;
 };
+
+const MAJOR_CATEGORIES = new Set(["monetary_policy"]);
+const MAJOR_SEVERITIES = new Set(["emergency", "critical"]);
+export const MAJOR_KEYWORDS = [
+  "日銀", "日本銀行", "FRB", "FOMC", "ECB", "政策金利", "利上げ", "利下げ", "為替介入", "金融政策",
+] as const;
+
+const DIRECTION_JA: Record<MarketDirection, string> = {
+  up: "上昇", down: "下落", mixed: "まちまち", flat: "ほぼ横ばい", unknown: "判断できず",
+};
+
+export function isMajorNews(item: NewsInputItem): boolean {
+  return MAJOR_SEVERITIES.has(item.severity) || item.categories.some((category) => MAJOR_CATEGORIES.has(category));
+}
 
 const JAPANESE = /[ぁ-んァ-ヶ一-龠]/u;
 const SEVERITY_RANK: Record<string, number> = { emergency: 4, critical: 3, high: 2, medium: 1 };
@@ -206,30 +226,39 @@ export function buildAnalysisInput(args: {
   const metricRefs = moves.map((move) => `metric:${move.metric_key}`);
   const newsRefs = news.map((item) => item.ref);
 
+  const major = news.filter(isMajorNews);
+  const majorText = major.map((item) => `${item.headline_ja} ${item.summary_ja ?? ""}`).join(" ");
+  const sessionsDiffer = dataPacket.session.jpx_session_date !== dataPacket.session.us_session_date;
+
+  // Japanese keys only: English field names in the input leaked into the text on
+  // 2026-09-18 ("change_pctは+1.38%"). Only the ref identifiers stay ASCII.
   const modelInput = {
-    report_type: dataPacket.report_type === "close" ? "大引け" : "朝刊",
-    trading_date: formatDateJa(dataPacket.trading_date),
-    japan_session_date: formatDateJa(dataPacket.session.jpx_session_date),
-    us_session_date: formatDateJa(dataPacket.session.us_session_date),
-    market_direction: direction,
-    direction_basis: basis.map((key) => `metric:${key}`),
-    metrics: moves.map((move) => ({
+    種類: dataPacket.report_type === "close" ? "大引け" : "朝刊",
+    取引日: formatDateJa(dataPacket.trading_date),
+    東京市場の日付: formatDateJa(dataPacket.session.jpx_session_date),
+    米国市場の日付: formatDateJa(dataPacket.session.us_session_date),
+    日付の注意: sessionsDiffer
+      ? `東京市場（${formatDateJa(dataPacket.session.jpx_session_date)}）と米国市場（${formatDateJa(dataPacket.session.us_session_date)}）は日付が違います。並べるときはそれぞれの日付を書き、「同じ日」とは書きません。`
+      : "東京市場と米国市場は同じ日付です。",
+    市場の方向: DIRECTION_JA[direction],
+    方向の根拠: basis.map((key) => `metric:${key}`),
+    指標: moves.map((move) => ({
       ref: `metric:${move.metric_key}`,
-      label: move.label,
-      session_date: formatDateJa(move.session_date),
-      value: move.value_display,
-      change_pct: move.change_pct_display,
-      freshness: move.freshness === "fresh" ? "最新" : "古い値",
+      名称: move.label,
+      日付: formatDateJa(move.session_date),
+      値: move.value_display,
+      前日比: move.change_pct_display,
+      鮮度: move.freshness === "fresh" ? "最新" : "古い値",
     })),
-    news: news.map((item) => ({
+    // Major policy/macro items first so they are not buried under company IR.
+    ニュース: [...news].sort((a, b) => Number(isMajorNews(b)) - Number(isMajorNews(a))).map((item) => ({
       ref: item.ref,
-      headline: item.headline_ja,
-      summary: item.summary_ja,
-      severity: item.severity,
-      categories: item.categories,
-      company: item.company,
+      見出し: item.headline_ja,
+      要約: item.summary_ja,
+      重要材料: isMajorNews(item),
+      企業: item.company,
     })),
-    data_gaps: gaps,
+    取得できなかったデータ: gaps,
   };
 
   return {
@@ -246,5 +275,8 @@ export function buildAnalysisInput(args: {
     allowedRefs: new Set([...metricRefs, ...newsRefs]),
     newsRefs: new Set(newsRefs),
     headlineByRef: new Map(news.map((item) => [item.ref, item.headline_ja])),
+    majorNewsRefs: new Set(major.map((item) => item.ref)),
+    majorKeywords: MAJOR_KEYWORDS.filter((keyword) => majorText.includes(keyword)),
+    sessionsDiffer,
   };
 }
