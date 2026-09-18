@@ -411,3 +411,53 @@ order by c.trading_date desc, c.report_type;
 
 - consumer 切替は OFF のまま。明朝 07:50 / 07:55 の自然 packet を観測できる状態で K1 待ち
 - cutover（`x-test-post` / `personalized-reports` deploy と gate ON）は K1 が明朝の shared packet を確認して PASS した後の別承認
+
+### 自然実行の観測（2026-09-18 朝、read-only）
+
+結論: **朝刊の data packet が blocked になり、共通分析は生成されなかった**。原因は Yahoo 側のデータ欠損で、実装の fail-closed は設計どおりに働いた。gate は OFF のままで、X朝刊・アプリ朝刊は従来経路で正常に完了している。本番変更・deploy・gate 変更・手動 invoke・X 投稿・Push はいずれも行っていない。
+
+#### タイムライン（JST）
+
+| 時刻 | 処理 | 結果 |
+|---|---|---|
+| 07:50:00 | `market-report-data-packet-morning` | `blocked` / `requiredMissing=["nikkei225"]` / packet `002fdf41-be5b-4a61-9ba8-53e8a97fdbb9` を保存（attempt 1） |
+| 07:55:00 | `market-report-analysis-morning` | `skipped` / `data_not_ready`（OpenAI 呼び出し 0、cycle への書き込み 0） |
+| 08:05:00 | `market-report-analysis-morning-retry` | `skipped` / `data_not_ready`（同上） |
+| 08:20:32 | X朝刊（従来経路、gate OFF） | `succeeded` / Fact passed / 投稿済み / model `gpt-5.6-luna` |
+| 08:35:00 | アプリ朝刊（従来経路、gate OFF） | `completed`（ユーザー1件、生成2 call） |
+
+#### market_report_cycles / market_report_packets
+
+- `morning 2026-09-18`: `cycle_status=blocked`、`last_error=DATA_QUALITY_BLOCKED`、`attempt_count=1`、`started_at=failed_at=07:50:01`
+  - `report_status=pending` / `report_attempt_count=0` / `report_last_error=null` / `report_diagnostics={}`（分析は claim すらしていない＝正しい挙動）
+- `close 2026-09-17`: `cycle_status=completed` / data `partial` / `report_status=pending`（16:20 の Cron 追加前に大引けを過ぎていたため、昨日分の分析は対象外）
+- `market_report_packets`: **0件**（Fact status・generation_calls・token・cost・market_direction・headline・claims・x_post いずれも該当なし）
+- gate: **`x_enabled=false` / `app_enabled=false`**（`updated_at` は 2026-09-17 10:47 UTC、反映時のまま）
+- 今朝の分析にかかった OpenAI 費用: **$0**
+
+#### blocked の原因（Yahoo のデータ欠損）
+
+- 07:50 の data packet の metrics:
+  - `nikkei225`: `unavailable` / `gap_reason=expected_session_not_available`（期待セッション 2026-09-17）
+  - `topix_proxy_1306`: 427.4（2026-09-17）fresh、`dow` 51,778.04 / `sp500` 7,637.76 / `nasdaq_composite` 26,418.30 / `sox` 11,599.49（いずれも 2026-09-17 の米国セッション）fresh、`usdjpy` 155.69 fresh、JGB 2本は 08-31 で stale、`wti` / `brent` は 09-15 fresh
+  - 取得診断は Yahoo 6銘柄・MIC・ニュース参照すべて `ok`（通信は成功）。news_refs 30件
+- 10:01 JST に Yahoo を read-only 確認したところ、**`^N225` の 2026-09-17 の日足は存在するが終値が `null`**（1306.T は 427.4 を返す）。実装は null の足を採用しない（推測値を入れない）ため `expected_session_not_available` になった
+- 昨日 16:15 の大引け packet では同じ `^N225` 2026-09-17 が 64,136.25 で取得できていた。**Yahoo 側で後から終値が欠落した**形で、こちらの実装やロジックの変更が原因ではない
+
+#### 影響と安全性の確認
+
+- 必須 metric 欠落 → data packet は blocked で保存（診断用に履歴は残る）→ 分析は `data_not_ready` で何もしない、という fail-closed の連鎖が設計どおり動作
+- gate OFF のため X朝刊・アプリ朝刊は従来どおり成功。ユーザー影響 0
+- Cron は私の4本を含め変更なし（本反映後に増えた2本は他スロットの MIC equity-index evaluator。既存 Cron の md5 は全て同一）
+
+#### 次タスク候補（本タスクでは実装しない）
+
+1. **同一セッションの確定値の再利用**: 既に自前の `market_data_packets` に保存済みの同一 `session_date` の値（今回なら 9/17 大引け packet の日経平均 64,136.25、content_hash 付き）を、Yahoo が欠損した場合の代替として使う。出所を `provider=market_data_packet` などで明示し、推測値は入れないまま可用性を上げられる
+2. **朝刊の必須項目の見直し**: 朝刊の方向判定は米指数で行っており、日本株の前営業日終値は文脈情報。朝刊では `nikkei225` を必須から外し（gap として明示）、大引けのみ必須にする案
+3. **Yahoo 依存のリスク**: 同じ銘柄の同じ日の値が後から消えることが実データで確認された。DESIGN.md §14 の「取得元の見直し」の優先度を上げる材料
+4. 16:20 の close 分析は本日が初回（本 Report 提出時点では未到達）
+
+#### 状態
+
+- consumer 切替は OFF のまま。本日 16:15 → 16:20 の大引けサイクルが、共通分析の初回生成の機会になる
+- cutover（`x-test-post` / `personalized-reports` の deploy と gate ON）は、K1 が実際の shared packet を確認してからの別承認
