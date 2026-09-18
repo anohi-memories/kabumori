@@ -79,8 +79,10 @@ export function valueDisplay(metric: Metric): string {
 
 export function changePctDisplay(metric: Metric): string | null {
   // MIC series compare with the previous stored observation, which can be days
-  // apart (e.g. WTI +10.03% on 2026-09-17), so only session-based Yahoo changes are shown.
-  if (metric.change_pct === null || metric.provider !== "yahoo_chart") return null;
+  // apart (e.g. WTI +10.03% on 2026-09-17), so only session closes show a change.
+  // basis, not provider: a value reused from an earlier packet of the same
+  // session keeps its daily-close basis but is provided by market_data_packet.
+  if (metric.change_pct === null || metric.basis !== "daily_close") return null;
   const sign = metric.change_pct > 0 ? "+" : metric.change_pct < 0 ? "−" : "±";
   return `${sign}${Math.abs(metric.change_pct).toFixed(2)}%`;
 }

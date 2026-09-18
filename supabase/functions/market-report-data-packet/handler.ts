@@ -11,6 +11,7 @@
 // no new secret). Diagnostics hold only codes and HTTP statuses.
 
 import { buildMarketDataPacket, type NewsCandidateRow, packetContentHash, type YahooFetchResult } from "./packet_builder.ts";
+import type { StoredPacketRow } from "./session_reuse.ts";
 import type { MicMetricRow, MicThresholdRow } from "./mic_metrics.ts";
 import { METRIC_SPECS, type MicSpec, validateMarketDataPacket, type YahooSpec } from "./packet_schema.ts";
 import { addDays, decideRunWindow, newsWindowStart, type ReportType } from "./session_logic.ts";
@@ -25,6 +26,9 @@ export type Deps = {
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 const YAHOO_TIMEOUT_MS = 15_000;
 const MIC_LOOKBACK_DAYS = 45;
+// Enough to cover the sessions a packet may need an already-stored value from.
+const STORED_PACKET_LOOKBACK_DAYS = 7;
+const STORED_PACKET_LIMIT = 8;
 
 function respond(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
@@ -169,7 +173,7 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
     const windowStart = newsWindowStart(tradingDate, jpxHolidays);
     const micSince = addDays(tradingDate, -MIC_LOOKBACK_DAYS);
 
-    const [yahooResults, micRows, micThresholds, newsRows] = await Promise.all([
+    const [yahooResults, micRows, micThresholds, newsRows, storedPackets] = await Promise.all([
       Promise.all(yahooSpecs.map(async (spec) => [spec.symbol, await fetchYahoo(deps, spec.symbol)] as const)),
       attempt("mic_metrics", diagnostics, () =>
         db.get<MicMetricRow[]>(
@@ -190,6 +194,12 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
             `&created_at=lte.${encodeURIComponent(asOf.toISOString())}` +
             "&order=created_at.desc&limit=30",
         )),
+      attempt("stored_packets", diagnostics, () =>
+        db.get<StoredPacketRow[]>(
+          "market_data_packets?select=id,content_hash,data_quality_status,payload" +
+            `&trading_date=gte.${addDays(tradingDate, -STORED_PACKET_LOOKBACK_DAYS)}` +
+            `&data_quality_status=in.(ok,partial)&order=created_at.desc&limit=${STORED_PACKET_LIMIT}`,
+        )),
     ]);
     for (const [symbol, fetched] of yahooResults) diagnostics[`yahoo:${symbol}`] = fetched.diagnostic;
 
@@ -206,6 +216,7 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
       micThresholds: micThresholds ?? [],
       newsRows,
       newsWindowStart: windowStart,
+      storedPackets: storedPackets ?? [],
     });
     const issues = validateMarketDataPacket(packet);
     const contentHash = await packetContentHash(packet);

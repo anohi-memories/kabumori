@@ -14,6 +14,7 @@ import {
 import { micMetric, type MicMetricRow, type MicThresholdRow } from "./mic_metrics.ts";
 import { expectedJpxSessionDate, expectedUsSessionDate, type ReportType } from "./session_logic.ts";
 import { YAHOO_PROVIDER, yahooMetric } from "./yahoo_daily.ts";
+import { applySessionReuse, buildReuseIndex, type StoredPacketRow } from "./session_reuse.ts";
 
 export const MAX_NEWS_REFS = 30;
 const NEWS_SEVERITIES = new Set(["emergency", "critical", "high", "medium"]);
@@ -47,6 +48,8 @@ export type PacketInputs = {
   micThresholds: readonly MicThresholdRow[];
   newsRows: readonly NewsCandidateRow[] | null;
   newsWindowStart: Date;
+  /** Recent packets, newest first, used only to reuse identical-session values. */
+  storedPackets?: readonly StoredPacketRow[];
 };
 
 export function toNewsRefs(rows: readonly NewsCandidateRow[], asOf: Date, windowStart: Date): NewsRef[] {
@@ -100,6 +103,7 @@ function summarize(provider: string, metrics: Metric[], attempted: boolean): Sou
 export function buildMarketDataPacket(inputs: PacketInputs): MarketDataPacket {
   const jpxSessionDate = expectedJpxSessionDate(inputs.reportType, inputs.tradingDate, inputs.jpxHolidays);
   const usSessionDate = expectedUsSessionDate(inputs.asOf, inputs.nyseHolidays);
+  const reuseIndex = buildReuseIndex(inputs.storedPackets ?? []);
   const yahooMetrics: Metric[] = [];
   const micMetrics: Metric[] = [];
   const metrics: Metric[] = [];
@@ -109,12 +113,15 @@ export function buildMarketDataPacket(inputs: PacketInputs): MarketDataPacket {
     if (spec.source === "yahoo_daily") {
       const fetched = inputs.yahoo.get(spec.symbol);
       const expected = spec.session === "jpx" ? jpxSessionDate : usSessionDate;
-      const metric = yahooMetric(
-        spec,
-        fetched?.result ?? { ok: false },
-        expected,
-        required,
-        fetched?.fetchedAt ?? inputs.generatedAt.toISOString(),
+      const metric = applySessionReuse(
+        yahooMetric(
+          spec,
+          fetched?.result ?? { ok: false },
+          expected,
+          required,
+          fetched?.fetchedAt ?? inputs.generatedAt.toISOString(),
+        ),
+        reuseIndex,
       );
       yahooMetrics.push(metric);
       metrics.push(metric);

@@ -23,6 +23,15 @@ export type GapReason =
   | "stale_observation"
   | "no_verified_source";
 
+/** Where a value came from when Yahoo lost a session it had already published. */
+export type ReusedFrom = {
+  data_packet_id: string;
+  content_hash: string;
+  session_date: string;
+  provider: string;
+  observed_at: string | null;
+};
+
 export type Metric = {
   key: string;
   label: string;
@@ -46,6 +55,8 @@ export type Metric = {
   proxy_for: string | null;
   required: boolean;
   gap_reason: GapReason | null;
+  /** Set only when this value was reused from an earlier packet's same session. */
+  reused_from?: ReusedFrom;
 };
 
 export type NewsRef = {
@@ -74,6 +85,8 @@ export type DataQuality = {
   stale: string[];
   unavailable: string[];
   proxies: string[];
+  /** Values taken from an earlier packet's identical session (never a guess). */
+  reused: string[];
   intentional_gaps: string[];
   notes: string[];
 };
@@ -215,6 +228,9 @@ export const METRIC_SPECS: readonly MetricSpec[] = [
   },
 ];
 
+/** Provider recorded on a value taken from an earlier packet of the same session. */
+export const REUSE_PROVIDER = "market_data_packet";
+
 /** Non-scalar coverage that has no verified source yet (DESIGN.md §4.1). */
 export const INTENTIONAL_SECTION_GAPS = ["sector_performance", "event_calendar"] as const;
 
@@ -243,6 +259,7 @@ export function deriveDataQuality(metrics: Metric[], newsStatus: "ok" | "unavail
     stale,
     unavailable,
     proxies: metrics.filter((metric) => metric.is_proxy).map((m) => m.key),
+    reused: metrics.filter((metric) => metric.reused_from).map((m) => m.key),
     intentional_gaps: [...intentional, ...INTENTIONAL_SECTION_GAPS],
     notes,
   };
@@ -325,6 +342,16 @@ export function validateMarketDataPacket(packet: MarketDataPacket): string[] {
     ) {
       issues.push(`${at}.fresh_wrong_session`);
     }
+    if (metric.reused_from) {
+      const source = metric.reused_from;
+      if (metric.freshness !== "fresh" || metric.value === null) issues.push(`${at}.reuse_not_usable`);
+      if (!source.data_packet_id || !/^[0-9a-f]{64}$/.test(source.content_hash ?? "")) issues.push(`${at}.reuse_lineage`);
+      if (source.session_date !== metric.session_date) issues.push(`${at}.reuse_session_mismatch`);
+      if (metric.expected_session_date !== null && source.session_date !== metric.expected_session_date) {
+        issues.push(`${at}.reuse_session_mismatch`);
+      }
+      if (metric.provider !== REUSE_PROVIDER || !source.provider) issues.push(`${at}.reuse_provider`);
+    }
   }
   if (!keys.has("nikkei225") || !keys.has("topix_proxy_1306")) issues.push("metrics.core_keys_missing");
 
@@ -344,7 +371,8 @@ export function validateMarketDataPacket(packet: MarketDataPacket): string[] {
     !sameList(actual.required_missing, expected.required_missing) ||
     !sameList(actual.stale, expected.stale) ||
     !sameList(actual.unavailable, expected.unavailable) ||
-    !sameList(actual.proxies, expected.proxies)
+    !sameList(actual.proxies, expected.proxies) ||
+    !sameList(actual.reused ?? [], expected.reused)
   ) {
     issues.push("data_quality.inconsistent");
   }
