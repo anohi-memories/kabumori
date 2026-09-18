@@ -61,12 +61,6 @@ export const CLOSE_0916 = {
     ]),
 };
 
-/** Morning of 2026-09-17: the US session of 09-16 is complete. */
-export const MORNING_0917_US = (symbol: string) =>
-  usIndexChart(symbol, "2026-09-16T20:44:00Z", [
-    usBar("2026-09-14", 100), usBar("2026-09-15", 101), usBar("2026-09-16", 103),
-  ]);
-
 export const MIC_ROWS = [
   { metric_key: "USDJPY", value: "155.05", observed_date: "2026-09-16", observed_at: null, fetched_at: "2026-09-17T00:42:25.339+00:00", provider: "Frankfurter", source_url: "https://api.frankfurter.dev/v1/latest?base=USD&symbols=JPY", quality_tier: "trusted_free" },
   { metric_key: "USDJPY", value: "154.38", observed_date: "2026-09-15", observed_at: null, fetched_at: "2026-09-16T00:42:25.339+00:00", provider: "Frankfurter", source_url: "https://api.frankfurter.dev/v1/latest?base=USD&symbols=JPY", quality_tier: "trusted_free" },

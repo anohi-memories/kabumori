@@ -128,7 +128,7 @@ export function buildMarketDataPacket(inputs: PacketInputs): MarketDataPacket {
   }
 
   const newsStatus = inputs.newsRows === null ? "unavailable" : "ok";
-  const dataQuality = deriveDataQuality(metrics, newsStatus, inputs.reportType);
+  const dataQuality = deriveDataQuality(metrics, newsStatus);
   const nyseCovered = inputs.nyseCalendarLastDate !== null && usSessionDate <= inputs.nyseCalendarLastDate;
   if (!nyseCovered) dataQuality.notes.push("nyse_calendar_not_covered");
 

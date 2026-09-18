@@ -2,16 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildMarketDataPacket, type NewsCandidateRow, type PacketInputs, packetContentHash, toNewsRefs } from "./packet_builder.ts";
 import { type MarketDataPacket, TOPIX_PROXY_LABEL, validateMarketDataPacket } from "./packet_schema.ts";
-import {
-  CLOSE_0916,
-  JPX_HOLIDAYS,
-  jpBar,
-  MIC_ROWS,
-  MIC_THRESHOLDS,
-  MORNING_0917_US,
-  nikkeiChart,
-  NYSE_HOLIDAYS,
-} from "./test_fixtures.ts";
+import { CLOSE_0916, JPX_HOLIDAYS, MIC_ROWS, MIC_THRESHOLDS, NYSE_HOLIDAYS, nikkeiChart, jpBar } from "./test_fixtures.ts";
 
 const AS_OF = new Date("2026-09-16T07:15:00Z"); // 16:15 JST close cycle
 const NEWS_WINDOW = new Date("2026-09-15T06:30:00Z");
@@ -110,74 +101,25 @@ test("missing MIC data blocks on the required USDJPY and marks the source failed
   assert.equal(packet.source_summary.find((item) => item.provider === "market_metrics")?.fetch_status, "failed");
 });
 
-function morningInputs(overrides: Partial<PacketInputs> = {}) {
-  return inputs({
+test("morning packet uses the previous JPX session and has no growth250 slot", () => {
+  const morningAsOf = new Date("2026-09-16T22:50:00Z"); // 07:50 JST 9/17
+  const packet = buildMarketDataPacket(inputs({
     reportType: "morning",
     tradingDate: "2026-09-17",
-    asOf: new Date("2026-09-16T22:50:00Z"), // 07:50 JST 9/17
+    asOf: morningAsOf,
     generatedAt: new Date("2026-09-16T22:50:05Z"),
-    newsWindowStart: new Date("2026-09-16T06:30:00Z"),
     yahoo: yahooMap({
-      "^DJI": { ok: true, payload: MORNING_0917_US("^DJI") },
-      "^GSPC": { ok: true, payload: MORNING_0917_US("^GSPC") },
-      "^IXIC": { ok: true, payload: MORNING_0917_US("^IXIC") },
-      "^SOX": { ok: true, payload: MORNING_0917_US("^SOX") },
+      "^DJI": { ok: false }, "^GSPC": { ok: false }, "^IXIC": { ok: false }, "^SOX": { ok: false },
     }),
-    ...overrides,
-  });
-}
-
-/** The morning Yahoo map with the US session of 09-16 present. */
-function morningYahoo(overrides: Record<string, { ok: true; payload: unknown } | { ok: false }> = {}) {
-  return yahooMap({
-    "^DJI": { ok: true, payload: MORNING_0917_US("^DJI") },
-    "^GSPC": { ok: true, payload: MORNING_0917_US("^GSPC") },
-    "^IXIC": { ok: true, payload: MORNING_0917_US("^IXIC") },
-    "^SOX": { ok: true, payload: MORNING_0917_US("^SOX") },
-    ...overrides,
-  });
-}
-
-test("morning packet uses the previous JPX session and has no growth250 slot", () => {
-  const packet = buildMarketDataPacket(morningInputs());
+    newsWindowStart: new Date("2026-09-16T06:30:00Z"),
+  }));
   assert.equal(packet.session.jpx_session_date, "2026-09-16");
   assert.equal(packet.session.us_session_date, "2026-09-16");
   assert.equal(metric(packet, "nikkei225").freshness, "fresh");
   assert.equal(metric(packet, "nikkei225").value, 63923);
   assert.ok(!packet.metrics.some((item) => item.key === "growth250"));
-  assert.equal(packet.data_quality.status, "ok");
-  assert.deepEqual(validateMarketDataPacket(packet), []);
-});
-
-test("morning: a missing Japanese close is a gap, not a blocker (Yahoo dropped ^N225 on 2026-09-18)", () => {
-  const packet = buildMarketDataPacket(morningInputs({ yahoo: morningYahoo({ "^N225": { ok: false } }) }));
-  assert.equal(metric(packet, "nikkei225").required, false);
-  assert.equal(metric(packet, "nikkei225").value, null);
-  assert.deepEqual(packet.data_quality.required_missing, []);
-  assert.deepEqual(packet.data_quality.unavailable, ["nikkei225"]);
   assert.equal(packet.data_quality.status, "partial");
   assert.deepEqual(validateMarketDataPacket(packet), []);
-});
-
-test("morning needs at least two US session indices; the close still needs both Japanese values", () => {
-  const twoUs = buildMarketDataPacket(morningInputs({ yahoo: morningYahoo({ "^DJI": { ok: false }, "^GSPC": { ok: false } }) }));
-  assert.deepEqual(twoUs.data_quality.required_missing, []);
-  assert.equal(twoUs.data_quality.status, "partial");
-
-  const oneUs = buildMarketDataPacket(morningInputs({
-    yahoo: morningYahoo({ "^DJI": { ok: false }, "^GSPC": { ok: false }, "^IXIC": { ok: false } }),
-  }));
-  assert.deepEqual(oneUs.data_quality.required_missing, ["us_session_indices"]);
-  assert.equal(oneUs.data_quality.status, "blocked");
-  assert.deepEqual(validateMarketDataPacket(oneUs), []);
-
-  // Close: US indices are optional, Japanese values are required.
-  const close = buildMarketDataPacket(inputs({
-    yahoo: yahooMap({ "^DJI": { ok: false }, "^GSPC": { ok: false }, "^IXIC": { ok: false }, "^SOX": { ok: false } }),
-  }));
-  assert.deepEqual(close.data_quality.required_missing, []);
-  assert.equal(close.data_quality.status, "partial");
-  assert.equal(metric(close, "nikkei225").required, true);
 });
 
 test("NYSE calendar beyond coverage is noted", () => {
