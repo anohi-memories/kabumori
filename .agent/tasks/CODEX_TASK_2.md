@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase8-nonadmin-test-user-setup-and-tenant-proof-20260918
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Sol High
 - purpose: Phase 7で確認したadmin/user分離設計を、productionのnon-admin test userで実証する。正規のSupabase Auth lifecycleでtest userを用意し、ai_salaryman_labだけ見えるtenant isolationを実Auth sessionで確認する。global admin既存経路は触らない。
@@ -233,3 +233,66 @@ C2 decision:
 - 次は実mobile sign-in QA + profile lifecycle確認 + test fixture cleanupだけに限定してよい。
 - RLS/admin policy/schema/grantを変更する必要はない。
 - production default data sourceは引き続きmock。
+
+
+## Phase 8 completion follow-up authorized — 2026-09-18
+
+ユーザーがPhase 8残作業の続行を明示承認。
+
+このH2では、既にPASS済みのtenant RLS proofを再実施・再変更せず、残り3点だけを処理する。
+
+### Remaining scope only
+
+1. **実mobile/local client sign-in QA**
+   - 新しく作成済みのnon-admin QA userを使用。
+   - local/devのみで `EXPO_PUBLIC_DATA_SOURCE=supabase` を明示。
+   - production default envはmockのまま。
+   - credential/tokenをReportへ記録しない。
+   - signed-in後、`ai_salaryman_lab` tenantだけが読めることをアプリ経路で確認。
+   - signed-out / no-membership / unavailable分類も既存contractどおりか確認。
+   - service_role禁止。
+
+2. **profile lifecycle確認**
+   - なぜDashboard作成のnon-admin QA userに `profiles` rowが無いか、read-onlyで正本を確認。
+   - trigger/RPC/app signup flowのどれがprofile作成主体か特定。
+   - 一般ユーザー本番onboardingでprofileが必要なら、その正規作成経路を設計。
+   - このfollow-upでは推測INSERTしない。
+   - profileがsocial-mobileに不要なら、その理由を明記。
+
+3. **test fixture cleanup**
+   - current fixtures:
+     - non-admin QA user + ai_salaryman_lab/viewer membership
+     - old global-admin canary membership
+   - 正規/承認済み削除経路がある場合のみcleanup。
+   - Auth userはDashboard/Auth正常経路以外で削除しない。
+   - membershipはexact test rowsだけ。
+   - safety reviewで拒否されたら迂回しない。
+   - cleanup不可なら、ユーザー向け手動Dashboard手順を具体的にReportしてSTOP。
+
+### Do not change
+
+- RLS / admin policies / grants / schema
+- migration history
+- x-test-post / market-report / daily_content_plans
+- OAuth/Vault
+- Cron/settings
+- AI/X/Push/Storage/課金
+- production default data source
+
+### Verification required
+
+- mobile/local non-admin sign-in QA result
+- profile lifecycle source-of-truth
+- cleanup result or exact manual cleanup steps
+- npm run typecheck
+- npm run lint
+- Expo Web export / route resolution
+- git diff --check
+- production mutation list
+- secrets/personal data excluded from report
+
+完了時:
+- CODEX_REPORT_2.md先頭へPhase 8 completion follow-up report
+- TASK -> review_required / next_owner: chatgpt
+- origin/main fresh-check + push + read-back
+- STOPしてC2待ち
