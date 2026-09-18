@@ -3,7 +3,7 @@
 - task_id: market-report-shared-platform-phase2-consumer-cutover-20260917
 - owner: claude
 - slot: claude-1
-- status: review_required
+- status: idle
 - next_owner: chatgpt
 - priority: urgent
 - recommended_model: Opus 5
@@ -977,3 +977,33 @@ The intended next evidence point is the first natural market-report-analysis cyc
 - 連休明け最初の自然サイクル **2026-09-24 JST**: 07:50 data packet → 07:55 / 08:05 analysis（朝刊）、16:15 data packet → 16:20 / 16:35 analysis（大引け）
 - 新しいローカル検証（内部項目名・日付・テーマ・重要材料・注記重複）での合格率と本文品質を read-only で確認し、K1 レビューへ。consumer cutover はその後の明示承認まで行わない
 - 2026-09-24 朝刊の data packet は、Yahoo が前営業日（9/18）の終値を返さない場合、`aecfa60` 未 deploy のため今朝と同様に blocked になり得る
+
+
+## K1 review — 2026-09-18 shadow analysis redeploy
+
+**Result: PASS for the shadow redeploy step. Consumer cutover remains pending and not approved.**
+
+Accepted evidence:
+- only `market-report-analysis` changed in production (v1 → v2, ACTIVE, `verify_jwt=false`)
+- downloaded runtime files byte-match the reviewed source
+- `x-test-post`, `personalized-reports`, `market-report-data-packet`, and all other listed Functions were unchanged
+- `aecfa60` data-packet fallback code was not deployed
+- consumer gates remain `x_enabled=false` / `app_enabled=false`
+- Cron schedules/active state/command hashes were unchanged
+- no migration/schema, OAuth, Vault, posting-window, Push, X-post, gate, or migration-history changes occurred
+
+### State until the next natural cycle
+
+This slot is intentionally **idle** until the first post-deploy natural shadow cycle on **2026-09-24 JST**.
+
+Do not run new G1 work before then unless ChatGPT explicitly re-arms this task.
+
+At the next observation:
+- verify 07:50 data packet and 07:55/08:05 morning analysis
+- verify 16:15 data packet and 16:20/16:35 close analysis
+- review actual generated content for the K1 quality requirements
+- keep both consumer gates OFF
+- do not deploy `x-test-post` / `personalized-reports`
+- do not change Cron/OAuth/Vault/migrations
+
+Consumer cutover may be considered only after a successful natural shadow output is reviewed by K1.
