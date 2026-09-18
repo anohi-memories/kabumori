@@ -3,12 +3,13 @@
 - task_id: social-mobile-app-phase5-production-membership-rls-rollout-20260918
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: urgent
 - recommended_model: Sol High
-- c2_result: BLOCKED
+- c2_result: PASS
 - c2_reviewed_at: 2026-09-18 JST
+- completed_at: 2026-09-18 JST
 - purpose: Phase 4でdisposable DB実証までPASSした `brand_memberships` + tenant RLS candidateを、productionへ最小・可逆・検証可能な形で安全に反映する。blind `supabase db push`は禁止し、preflight → exact candidate apply → postflight → admin互換確認 → rollback readinessまでを実施する。実ユーザーmembership投入とmobile data source ONは、対象が一意に安全確認できる場合のみcanaryとして行い、曖昧なら行わずC2へ返す。
 
 ## C2 review — 2026-09-18
@@ -56,3 +57,22 @@ Phase 4 C2 PASS済み:
 
 preflightでschema/policy/parallel conflictが1つでも想定外なら、production writeは0のままSTOPする。
 canary対象が曖昧ならmembershipを推測投入しない。
+
+
+## Final C2 decision — 2026-09-18
+
+PASS.
+
+確認済み:
+- ユーザーが Supabase Dashboard の stock-x-autopost / main / PRODUCTION で approved candidate SQL を手動実行し、成功を確認。
+- H2 postflightで `brand_memberships` の列・PK・FK・role CHECK・RLS・row count 0をread-back。
+- social mobile candidate policy 6件が存在。
+- authenticated は membership SELECT可、INSERT/UPDATE/DELETE不可。
+- 既存 admin_* policy は保持され、`private.is_admin()` も SECURITY DEFINER / empty search_path のまま。
+- 既存 operational data の意図しない変更なし。post_execution_logs増加は自然runtime活動。
+- rollback readiness確認済み。正常なためrollbackは未実行。
+- canary membershipは0件。user/brand mappingが一意になるまで推測投入しない。
+- `EXPO_PUBLIC_DATA_SOURCE=supabase` はOFFのまま。実Auth/mobile read QAは次Phase。
+- manual Dashboard applyのため migration historyには今回versionが記録されていない。今回TASKではrepair/reconcileしない。この差異は今後のmigration運用上の既知事項として扱う。
+
+Codex slot 2は完了。次Phaseは実Auth/mobile read QAと、必要なら一意に確認できるcanary membership設定を行う。
