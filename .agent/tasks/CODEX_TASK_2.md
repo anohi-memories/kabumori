@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase7-auth-role-separation-and-tenant-isolation-20260918
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol High
 - purpose: social-mobileの一般利用者Authとglobal admin権限を分離し、一般利用者が自分のtenant/brandだけ読めることをproduction相当で実証する。既存admin経路は管理用途に限定し、通常モバイル利用ではglobal admin権限を使わない。

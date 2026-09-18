@@ -1,5 +1,20 @@
 # Codex Slot 2 Report
 
+## H2 — Social mobile Phase 7 auth-role separation audit (2026-09-18)
+
+- task_id: `social-mobile-app-phase7-auth-role-separation-and-tenant-isolation-20260918`
+- result: Completed read-only role-boundary audit. The only production Auth user is also in `admin_users`; the existing canary remains `ai_salaryman_lab/viewer`. A non-admin user is not present, so tenant-only runtime proof cannot safely proceed without creating a new Auth user through a normal approved lifecycle.
+- gate1: production metadata confirms auth_users=1, admin_users=1, profiles=1, brands=3, and brand_memberships=1 (`ai_salaryman_lab`, viewer). No user creation or membership change was made in this turn.
+- role_separation_design: mobile does not call `private.is_admin()` or `admin_users`; it uses `auth.getUser()` then self-scoped `brand_memberships` and fail-closed blocked/no-workspace states. `apps/admin` separately performs admin_users checks. This keeps admin and mobile code paths separated.
+- non_admin_path: no existing non-admin Auth user. Creating one via SQL or an unapproved shortcut is prohibited; manual Supabase Auth signup/invite with a user-controlled credential and profile lifecycle is required before Gate 3.
+- tenant_qa: global-admin canary is explicitly excluded from tenant-only proof. Existing QA showed `kabumori` operational rows visible through the preserved admin-policy OR path; no admin policy was altered. `mio` remained not visible. Do not claim tenant isolation from this account.
+- canary_cleanup: current canary is test-only. No tool-recognized approved delete path was available, so it remains one row; no workaround was attempted. It must not be used as a general-user QA account.
+- app_state: `EXPO_PUBLIC_DATA_SOURCE=mock` remains default; no production app config or deployment changed. No service_role/secret/token columns are used by mobile.
+- tests: static policy contract **5/5 PASS**; `git diff --check` **PASS**. `npm run typecheck` failed because `tsc` is not installed; `npm run lint` failed because `expo` is not installed. No dependency installation or network workaround was attempted.
+- production_mutation: schema/RLS/grant/migration-history/auth/membership/Cron/settings/OAuth/Vault/Storage/AI/SNS/Push changes **0** in this turn.
+- remaining_issues: Provide a normal non-admin Auth user through an approved manual Auth lifecycle, then run real authenticated tenant QA; separately obtain a recognized rollback path for the single test canary. Keep admin policies intact and mobile default mock.
+- safety_checks: formal repo and existing changes untouched; H1/G1/G2, apps/admin, HANDOFF unchanged; no personal identifiers, passwords, tokens, or secrets recorded. TASK set to `review_required`, `next_owner: chatgpt`.
+
 ## H2 — Social mobile Phase 6 canary RLS QA (2026-09-18)
 
 - task_id: `social-mobile-app-phase6-auth-mobile-read-qa-20260918`
