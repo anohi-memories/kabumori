@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase5-production-membership-rls-rollout-20260918
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - c2_result: BLOCKED

@@ -1,5 +1,24 @@
 # Codex Slot 2 Report
 
+## H2 — Social mobile Phase 5 production postflight (2026-09-18)
+
+- task_id: `social-mobile-app-phase5-production-membership-rls-rollout-20260918`
+- result: User-confirmed Dashboard execution of the exact approved candidate SQL succeeded. This follow-up performed read-only postflight, admin compatibility metadata checks, migration-history read-back, and rollback-readiness review. No re-apply was attempted.
+- source_base: fresh `origin/main` `1126e51a2c308e1cd4173ec28ae2e14d905e1ed7`; clean detached worktree `/private/tmp/kabumori-h2-phase5-postflight-8EWBYL`.
+- candidate: `supabase/migrations/20260918120000_social_mobile_brand_memberships.sql`; SHA-256 `a74e70c42d0b10bd773dd614c70f59e807e6b08a8da90afaa05dee2fd09321fd`.
+- apply_record: applied manually by the user in Supabase Dashboard with the approved SQL; no CLI `supabase db push`, no tool re-apply, and no migration-history repair/reconcile. The migration version is not present in the migration-history read-back, which is recorded as manual-apply state rather than repaired.
+- postflight: `public.brand_memberships` exists with columns `brand_id text`, `user_id uuid`, `role text`, `created_at timestamptz`; PK `(brand_id,user_id)`; FKs to `public.brands(id)` and `auth.users(id)`; role CHECK owner/admin/member/viewer; RLS enabled; row count 0.
+- policies: all 6 `social_mobile_*` policies exist (self-membership plus brands/social_accounts/scheduled_posts/post_execution_logs/posting_windows tenant SELECT). Existing `admin_*` policy count is 30 and definitions remain present; no admin policy was dropped or replaced.
+- grants: authenticated has SELECT on membership and operational tables; authenticated INSERT/UPDATE/DELETE on `brand_memberships` are all false. Existing `posting_windows` authenticated UPDATE grant remains unchanged for the existing admin path. `private.is_admin()` remains SECURITY DEFINER with empty search_path.
+- data_readback: brands=3, social_accounts=2, scheduled_posts=187, posting_windows=19. `post_execution_logs` read-back was 437 versus preflight 431; this reflects intervening natural runtime activity, not a write performed by this task. No candidate membership was inserted.
+- admin_compatibility: policy OR-composition and preserved `private.is_admin()` metadata confirm the existing global-admin route remains structurally available. No auth user was impersonated or modified; runtime session verification was not performed.
+- rollback_readiness: ready only if needed; exact rollback is limited to the six candidate policies and `brand_memberships` table/index, preserving all existing admin policies. Rollback was not executed because postflight is healthy.
+- mobile_state: `EXPO_PUBLIC_DATA_SOURCE=mock` remains the default; no app deploy or source switch.
+- production_mutation: only the user-confirmed approved candidate schema/RLS/grant SQL was applied outside this follow-up. No canary membership, additional DB write, RPC, Cron/settings, deploy, Storage, AI/OpenAI, SNS, Push, OAuth, or secret change.
+- remaining_issues: migration history does not record the manual Dashboard apply; do not repair history in this task. Next phase should perform authenticated/mobile read QA before enabling Supabase data source. Canary membership remains 0 pending an unambiguous user/brand mapping.
+- tests: read-only postflight completed; prior disposable proof and regression basis remain PASS. No code changes; `git diff --check` remains clean in the isolated worktree.
+- safety_checks: formal repo and existing changes untouched; apps/admin, H1/G1/G2, HANDOFF unchanged; no secrets, tokens, or personal data recorded. TASK set to `review_required`, `next_owner: chatgpt`.
+
 ## H2 — Social mobile Phase 5 production rollout recheck (2026-09-18)
 
 - task_id: `social-mobile-app-phase5-production-membership-rls-rollout-20260918`
