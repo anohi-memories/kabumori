@@ -1,5 +1,13 @@
 # Codex Slot 2 Report
 
+## H2 — Social mobile Phase 5 production rollout recheck (2026-09-18)
+
+- task_id: `social-mobile-app-phase5-production-membership-rls-rollout-20260918`
+- result: Rechecked the reopened TASK from fresh `origin/main` `3e8c69137cc17639371eb609fa4316b0dee81ae9`. The only approved production DDL route available is `supabase_apply_migration`, which previously rejected this high-risk migration because tool-recognized explicit approval was unavailable. No alternate SQL path or blind `supabase db push` was attempted.
+- production_mutation: **0**. No migration, schema/RLS/grant, canary membership, deploy, DB write, Cron/settings, API, Push, or mobile data-source change was performed.
+- status: This task is returned to C2 as `review_required`; `next_owner: chatgpt`. A tool-recognized approved production DDL route is still required before retrying the exact candidate apply.
+- safety_checks: clean isolated worktree only; formal checkout and existing changes untouched; candidate remains `supabase/migrations/20260918120000_social_mobile_brand_memberships.sql`; `EXPO_PUBLIC_DATA_SOURCE=mock` remains unchanged; no secrets or personal data recorded.
+
 ## H2 — Social mobile Phase 5 production membership/RLS rollout (2026-09-18)
 
 - task_id: `social-mobile-app-phase5-production-membership-rls-rollout-20260918`
