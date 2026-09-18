@@ -3,8 +3,8 @@
 - task_id: market-report-shared-platform-phase2-consumer-cutover-20260917
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: urgent
 - recommended_model: Opus 5
 - deadline: 2026-09-18 17:15 JST natural close cycle
@@ -906,3 +906,32 @@ Do not broaden this follow-up. The analysis-quality work in commit `8dbdfbe` is 
 
 - `8dbdfbe` の分析品質修正と本ラベル修正で、K1 の 2026-09-18 指摘はすべて source に反映済み
 - 次は K1 判断: `market-report-analysis` の再 deploy（shadow のまま）と、連休明け 2026-09-24 の自然サイクルでの品質観測。consumer cutover はその後の別判断
+
+
+## K1 review — 2026-09-18 consistent_with label follow-up
+
+**Result: PASS for the source-quality follow-up. Consumer cutover is still NOT approved.**
+
+Accepted evidence:
+- `consistent_with` user-facing label is now date-neutral: **「同時期に確認」**
+- the mapping is centralized in `src/lib/report-presentation.ts`
+- cross-date 2026-09-17 US vs 2026-09-18 JP regression is covered
+- affected app tests, shared-analysis tests, X shared-consumer tests, personalized-reports tests, TypeScript check, and `git diff --check` pass
+- production changes remain 0 and both consumer gates remain OFF
+
+### Next approved step: shadow analysis redeploy only
+
+Proceed with **only** the following:
+
+1. Fresh-check `origin/main` and confirm no conflicting work owns `market-report-analysis`.
+2. Deploy **only** `market-report-analysis` with the reviewed source from main.
+3. Verify deployed runtime/source byte-equivalence for the Function files and verify no other Edge Function changed.
+4. Keep `x_enabled=false` and `app_enabled=false`.
+5. Do **not** deploy `x-test-post` or `personalized-reports`.
+6. Do **not** change Cron, migration/schema, OAuth, Vault, posting windows, Push, or migration history.
+7. Do **not** deploy the morning Yahoo fallback `aecfa60` as part of this step unless it is already inseparable in the exact deployed `market-report-analysis` source; note that `aecfa60` belongs to the data-packet Function path and must remain undeployed there.
+8. After deploy verification, update the Report with exact deployed Function version/hash/byte-match evidence and gate state, set `status: review_required`, `next_owner: chatgpt`, and stop for K1.
+
+### Natural observation after deploy
+
+The intended next evidence point is the first natural market-report-analysis cycle on **2026-09-24 JST**. Do not enable consumers before that natural shadow output has been reviewed and K1 explicitly approves consumer cutover.
