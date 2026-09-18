@@ -3,8 +3,8 @@
 - task_id: market-report-shared-platform-phase2-consumer-cutover-20260917
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: urgent
 - recommended_model: Opus 5
 - deadline: 2026-09-18 17:15 JST natural close cycle
@@ -461,3 +461,53 @@ order by c.trading_date desc, c.report_type;
 
 - consumer 切替は OFF のまま。本日 16:15 → 16:20 の大引けサイクルが、共通分析の初回生成の機会になる
 - cutover（`x-test-post` / `personalized-reports` の deploy と gate ON）は、K1 が実際の shared packet を確認してからの別承認
+
+
+## K1 review — 2026-09-18
+
+**NOT PASS / follow-up required before consumer cutover.**
+
+確認できたこと:
+- Phase 2 implementation candidate / tests / disposable PostgreSQL proofは十分。
+- production shadow rolloutも安全に完了しており、`market-report-analysis`、4本のanalysis Cron、schema/RPC/RLS/ACL、runtime byte一致を確認済み。
+- consumer gateは `x_enabled=false` / `app_enabled=false` のまま。既存X/アプリへの影響は0。
+- 2026-09-18朝の自然実行では、Yahoo `^N225` の前営業日終値が後から `null` になり、`market_data_packet.v1` が `blocked`。その結果 analysis は `data_not_ready` で安全にskipし、OpenAI 0、consumer切替0、既存X朝刊/アプリ朝刊は旧経路で正常完了。fail-closedは設計どおり。
+
+K1をPASSにしない理由:
+- 本タスクのcutover前提は「自然shared packetを実際に確認してからconsumerをON」。
+- 今朝は `market_report_packets=0` で、shared analysisの自然生成品質をまだ1回も確認できていない。
+- Yahoo依存により、同一session_dateの確定値が翌朝欠損してdata packet全体がblockedになる可用性問題が実観測された。
+- この状態でgate ONすると、同様の営業日にX/アプリ両方が出ないため、consumer cutoverはまだ承認しない。
+
+### Follow-up scope for G1
+
+consumer cutoverより先に、朝刊data packetの可用性対策を最小実装する。
+
+第一候補:
+1. **同一 session_date の既保存確定値再利用**
+   - Yahooのexpected sessionが欠損/nullのときだけ、自前の過去 `market_data_packets` に保存済みの同じmetric・同じsession_date・usableな確定値を再利用する。
+   - 推測値・別日値・未来値は禁止。
+   - lineageを明示し、provider/sourceを `market_data_packet` 等として元packet id/content_hashを保持する。
+   - 今回なら9/17 close packetで保存済みの `nikkei225=64136.25` を、9/18 morning packetの9/17 expected session欠損時だけ候補にできる設計。
+2. morning/closeのrequired metric定義は勝手に緩めない。朝刊でNikkeiを必須から外す案は、再利用案が不成立または不十分な場合の別判断とする。
+3. fallback/reuse後もfreshness・session_date・lineage・data_qualityを明示し、通常Yahoo値と区別可能にする。
+4. source変更は `market-report-data-packet` 周辺に限定。consumer gateはOFFのまま。
+5. 本番適用前にlocal tests + disposable DB/fixture proof。必要ならshadow deployまで行ってよいが、`x-test-post` / `personalized-reports` deploy、gate ON、manual X/Pushは禁止。
+6. 本日16:15→16:20の自然close analysisが先に成功した場合はread-onlyで観測し、shared report packet品質もReportへ追記する。ただし朝刊可用性問題は別途解消する。
+
+### Required tests
+- Yahoo正常値がある場合は既存Yahoo値を優先し、reuseしない。
+- Yahoo expected-session値がnull/欠損、かつ同一session_dateの既保存確定値あり → reuseしてcompleted可能。
+- 同一metricでもsession_date不一致 → reuse禁止。
+- blocked/invalid/stale-only source packetからのreuse禁止。
+- lineageにsource packet id/content_hash/session_date/providerを保持。
+- 未来値・別日値・値の推測0。
+- close path regression。
+- Phase1/Phase2既存tests回帰。
+- `git diff --check`。
+
+### Completion gate
+- morning data packetが同一session確定値reuseで安全に可用性改善できることを証明。
+- consumer gateはOFFのまま。
+- naturalまたは安全なshadow経路でshared report packetを少なくとも1件確認できる状態を作る。
+- その後 `status: review_required` / `next_owner: chatgpt` に戻してK1再確認。
