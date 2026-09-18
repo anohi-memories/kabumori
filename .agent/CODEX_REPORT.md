@@ -1,5 +1,49 @@
 # Codex Report
 
+## Latest H1 result — AI Lab daily content plan production rollout (2026-09-18)
+
+- task_id: `ai-lab-daily-content-plan-production-rollout-20260918`
+- result: `review_required` — the C1-approved Phase1/Phase2 schema and writer RPC were applied to production and read back successfully. Consumer deploy remains intentionally out of scope.
+- production project: `wsmznyzcvmuitkglfeuj`
+- production database: PostgreSQL **17.6**
+- production migration/RPC change: **exactly the two approved migrations below; no other migration was applied**.
+
+### Exact production apply
+
+1. `supabase/migrations/20260917143302_ai_lab_daily_content_plans_phase1.sql`
+2. `supabase/migrations/20260917211919_ai_lab_daily_content_plan_writer_phase2.sql`
+
+The Supabase migration tool returned success for each exact SQL payload. No `supabase db push`, `--include-all`, history repair/reconcile, unrelated migration, Edge Function deploy, Cron change, or consumer source change was used. The production migration-history table did not contain these timestamps before or after the direct exact apply; object-level preflight/postflight is the authoritative verification for this known-drift project.
+
+### Preflight
+
+- `public.daily_content_plans` and `public.write_daily_content_plan(text,date,text,jsonb,boolean,text)` were absent.
+- No same-name indexes were present; `ai_salaryman_lab` existed in `public.brands`.
+- Production had no object-level Phase1/Phase2 migration entries, and H2 was not in a production-write state. G1 objects are separate.
+
+### Postflight
+
+- `daily_content_plans` exists with the approved Phase1 columns, FK to `brands`, version/source/status/plan checks, primary key, lookup index, and one-active-per-brand/date partial unique index.
+- RLS is enabled. `service_role` has SELECT; `anon`/`authenticated` have no SELECT/INSERT/UPDATE/DELETE privileges and there are no client policies.
+- Phase2 columns `request_key`, `activation_requested default false`, and `activated_at` exist; `daily_content_plans_request_key_idx` is a unique partial index on `(brand_id,target_date,request_key)`.
+- RPC signature is exactly `public.write_daily_content_plan(text,date,text,jsonb,boolean,text)`, owner `postgres`, `SECURITY DEFINER=true`, `search_path=""`, return shape `TABLE(id uuid, version integer, status text, target_date date, brand_id text)`.
+- Function EXECUTE is `public=false`, `anon=false`, `authenticated=false`, `service_role=true`.
+- Post-apply table row count is **0**; no permanent smoke data remains.
+
+### Bounded writer smoke (rolled back)
+
+Inside one transaction, the production RPC created a future-date active plan, repeated the same request key (same result/idempotency), rejected a changed payload with `DAILY_CONTENT_PLAN_REQUEST_KEY_CONFLICT`, and then rolled back. Postflight reports `h1-prod-smoke-20260918` rows **0** and total `daily_content_plans` rows **0**. The smoke used the controlled SQL admin session (`current_user=session_user=postgres`) and no secret/token; PostgREST JWT transport was not invoked.
+
+### Advisors / safety
+
+- Supabase security/performance advisors returned existing project-wide findings plus the expected `daily_content_plans` “RLS enabled, no policy” informational finding and its unused lookup-index informational finding. The new writer RPC was not flagged because its public/anon/authenticated EXECUTE grants are revoked.
+- No `x-test-post` deploy or modification, AI Lab consumer cutover, manual/synthetic X post, scheduled retry/backfill, Cron/window change, OAuth reauthorization, Vault/token/secret change, Kabumori/Mio change, market-report change, or social-mobile membership/RLS change occurred.
+- Rollback is prepared but not executed: stop writer use, revoke `service_role` EXECUTE, drop the writer function, then remove Phase2 metadata/index in a separately reviewed migration. Phase1 table rollback requires a separate data-presence review; do not drop it blindly.
+
+### Next step
+
+C1 should review the production object/grant evidence. A separate approval/task is required before any `x-test-post` consumer deploy or plan-driven posting. This H1 stops here.
+
 ## Latest H1 result — AI Lab daily content plan writer real PostgreSQL proof (2026-09-18)
 
 - task_id: `ai-lab-daily-content-plan-writer-postgres-proof-20260918`

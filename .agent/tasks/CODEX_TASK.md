@@ -3,8 +3,8 @@
 - task_id: ai-lab-daily-content-plan-production-rollout-20260918
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol Medium/High
 - purpose: C1 PASS済みの AI Lab daily content plan Phase1 consumer/schema candidate + Phase2 writer RPC を、production Supabaseへ最小・可逆に反映する。まず exact migration preflight/apply/read-back を行い、writerを本番で使える状態にする。G1の `x-test-post` consumer cutoverとは分離し、このH1では consumer deploy は行わない。
