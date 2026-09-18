@@ -14,12 +14,12 @@
 ### Codex slot 1
 - owner: codex
 - slot: codex-1
-- status: review_required
-- task_id: ai-lab-daily-content-plan-production-rollout-20260918
+- status: ready
+- task_id: important-news-web-search-cost-throttle-20260919
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: C1承認済みPhase1/Phase2 migrationをproductionへexact apply完了。RPC/ACL/RLS/postflightとROLLBACK付きbounded smokeを確認。consumer deploy・X/Cron変更0。C1確認待ち。
+- note: 重要ニュースfetchだけをコスト最適化。9/19〜9/23は2時間おき、9/24以降は毎時＋07:00〜09:00/16:00〜18:00だけ20分刻み。変更対象は `important-news-fetch` Cron 1本のみ。
 
 ### Codex slot 2
 - owner: codex
@@ -34,12 +34,12 @@
 ### Claude slot 1
 - owner: claude
 - slot: claude-1
-- status: review_required
+- status: idle
 - task_id: market-report-shared-platform-phase2-consumer-cutover-20260917
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- note: shared market_report_packet候補とX/app consumer gate実装のK1 review待ち。`x-test-post`を含むためH1 writer Phase2は同ファイルを変更しない。
+- note: shadow analysis redeployはK1 PASS済み。consumer gate OFFのまま、2026-09-24自然shadow観測まで待機。
 
 ### Claude slot 2
 - owner: claude
