@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-18 JST (H1 AI Lab daily content plan production rollout done; H2 social mobile Phase6 ready; G1 review_required)
+- checked_at: 2026-09-19 JST (H1 important-news Web Search cost throttle ready; H2 social mobile Phase6 ready; G1 idle until 2026-09-24 natural shadow)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,9 +14,9 @@
 
 ## Active workstreams
 
-- Codex slot 1: `done` — `ai-lab-daily-content-plan-production-rollout-20260918`
-  - Phase1/Phase2 daily content plan schema + writer RPCをproductionへexact apply済み。RPC/ACL/RLS/postflight、ROLLBACK付きbounded smokeも確認済み。
-  - `x-test-post` consumer deploy、Cron、X/OAuth/Vault変更は0。次工程はG1競合解消後のconsumer deployと実plan登録。
+- Codex slot 1: `ready` — `important-news-web-search-cost-throttle-20260919`
+  - 9/19〜9/23は重要ニュースfetchを2時間おき、9/24以降は毎時＋朝7〜9時/大引け16〜18時だけ20分刻みへ最適化するproduction Cron調整。
+  - 変更対象は `important-news-fetch` 1本のみ。Edge Function、judgement/generation/publish Cron、market-report/MIC Cronは触れない。
 
 - Codex slot 2: `ready` — `social-mobile-app-phase6-auth-mobile-read-qa-20260918`
   - Phase5 production membership/RLS rolloutはC2 PASS済み。
@@ -25,9 +25,9 @@
   - production default `EXPO_PUBLIC_DATA_SOURCE=supabase` はまだONにしない。
   - Dashboard手動applyのmigration history未記録はrepair/reconcileせず既知事項として維持。
 
-- Claude slot 1: `review_required` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
-  - shared market_report_packet候補とX/app consumer gate実装のK1 review待ち。
-  - `x-test-post`を含むため、H1 writer Phase2は`x-test-post`を変更せず競合回避する。
+- Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
+  - market-report-analysis v2 shadow deployはK1 PASS済み。consumer gateはOFF。
+  - 2026-09-24の自然shadow出力まで待機。x-test-post/personalized-reports consumer cutoverは未承認。
 
 - Claude slot 2: `done` — `morning-greeting-image-cost-gate-rollout-20260917`
   - K2 PASS・main反映済み。自然OFF確認は別read-only観測。
