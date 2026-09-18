@@ -3,8 +3,8 @@
 - task_id: market-report-shared-platform-phase2-consumer-cutover-20260917
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: urgent
 - recommended_model: Opus 5
 - deadline: 2026-09-18 17:15 JST natural close cycle
@@ -835,3 +835,30 @@ X本文（gate ON 時に投稿される形）:
 
 - K1 PASS 後、`market-report-analysis` のみ再 deploy（byte 比較・他 Function 不変確認）し、連休明け最初の自然サイクル（2026-09-24 07:55 / 16:20）で shared packet の品質を観測
 - 品質を確認できた後に、consumer cutover（`x-test-post` / `personalized-reports` deploy と gate ON）を改めて判断
+
+
+## K1 review — 2026-09-18 content-quality follow-up
+
+**Result: NOT PASS / one narrow consumer-label blocker remains.**
+
+The source-only analysis fixes are accepted:
+- internal-field leakage guard is implemented;
+- cross-session "同じ日/同日" generation is locally rejected when Tokyo/US session dates differ;
+- theme semantics and major-material prioritization were tightened;
+- disclaimer repetition is constrained;
+- regression evidence is sufficient (analysis 21/21, Phase1 42/42, personalized 28/28, X 394/394, deno check and diff check pass);
+- no production changes were made.
+
+However, the supplied app sample still renders the existing `consistent_with` UI label **「同日に確認」** on a claim that explicitly compares **9月17日の米国市場** with **9月18日の東京市場**. That is user-facing and semantically contradicts the date-safe requirement even though the generated prose itself is now correct.
+
+### Required narrow follow-up only
+
+1. Change the consumer-facing Japanese label for `consistent_with` from **「同日に確認」** to a date-neutral label that remains truthful across different sessions, preferably **「同時期に確認」**.
+2. Apply the mapping consistently anywhere the app/shared report UI renders that claim type. Do not alter causal logic or evidence semantics.
+3. Add/adjust a regression test proving a 9/17 US vs 9/18 JP claim does not render 「同日に確認」.
+4. Re-run only the affected consumer tests plus the existing shared-analysis regression needed to prove compatibility, and `git diff --check`.
+5. Source only. No deploy, migration, Cron, gate, X post, Push, OAuth/Vault, or migration-history change.
+6. Keep `x_enabled=false` / `app_enabled=false`; consumers remain deploy-prohibited.
+7. Then set status `review_required`, next_owner `chatgpt`, append exact changed files/tests/sample app line, and stop for K1.
+
+Do not broaden this follow-up. The analysis-quality work in commit `8dbdfbe` is otherwise accepted.
