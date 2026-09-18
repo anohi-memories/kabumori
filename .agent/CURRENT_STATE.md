@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-18 JST (H1 AI Lab daily content plan production rollout review_required; H2 social mobile Phase5 ready; G1 review_required)
+- checked_at: 2026-09-18 JST (H1 AI Lab daily content plan production rollout done; H2 social mobile Phase5 ready; G1 review_required)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,9 +14,9 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `ai-lab-daily-content-plan-production-rollout-20260918`
-  - C1承認済みPhase1/Phase2 migrationをproductionへexact applyし、RPC/ACL/RLS/postflightとROLLBACK付きbounded smokeを確認。
-  - consumer deploy、`x-test-post`、Cron、X/OAuth/Vault変更は0。C1確認待ち。
+- Codex slot 1: `done` — `ai-lab-daily-content-plan-production-rollout-20260918`
+  - Phase1/Phase2 daily content plan schema + writer RPCをproductionへexact apply済み。RPC/ACL/RLS/postflight、ROLLBACK付きbounded smokeも確認済み。
+  - `x-test-post` consumer deploy、Cron、X/OAuth/Vault変更は0。次工程はG1競合解消後のconsumer deployと実plan登録。
 
 - Codex slot 2: `ready` — `social-mobile-app-phase5-production-membership-rls-rollout-20260918`
   - Phase4 disposable DB proofはC2 PASS済み。
@@ -43,7 +43,7 @@
 
 ## Known issues / observations
 
-- AI Lab daily content plan consumer/selection source candidateはC1 PASSだが、base migrationとconsumer deployは未本番反映。
+- AI Lab daily content plan schema + writer RPCはproduction反映済み。consumer/selection source candidateはC1 PASSだが、`x-test-post` consumer deployは未本番反映。
 - social mobile Phase4では `brand_memberships` + direct SELECT + RLSをdisposable PostgreSQLで実証済み。Phase5でproduction rolloutへ進む。
 - social mobile production data sourceはPhase5完了後も実Auth/mobile read QAまでは既定ONにしない。
 - AI Lab Vault-backed refreshは本番反映済み。自然slot結果はread-only観測事項。
