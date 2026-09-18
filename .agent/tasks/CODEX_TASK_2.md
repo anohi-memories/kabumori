@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase8-nonadmin-test-user-setup-and-tenant-proof-20260918
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Sol High
 - purpose: Phase 7で確認したadmin/user分離設計を、productionのnon-admin test userで実証する。正規のSupabase Auth lifecycleでtest userを用意し、ai_salaryman_labだけ見えるtenant isolationを実Auth sessionで確認する。global admin既存経路は触らない。
@@ -170,3 +170,31 @@ C2へ返す時に必ず:
 
 non-admin user作成またはmembership作成に正規/承認済み経路が無ければ、迂回せずproduction mutation 0または最小状態でSTOPする。
 tenant isolation proofにglobal admin accountを使わない。
+
+
+## Manual non-admin tenant isolation proof — 2026-09-18
+
+User executed a read-only SQL session in Supabase Dashboard against stock-x-autopost / main / PRODUCTION, simulating the newly created non-admin Auth user with authenticated role and RLS enabled, wrapped in BEGIN/ROLLBACK.
+
+Observed visible rows:
+- brand_memberships: ai_salaryman_lab = 1
+- brands: ai_salaryman_lab = 1
+- social_accounts: ai_salaryman_lab = 1
+- scheduled_posts: ai_salaryman_lab = 24
+- post_execution_logs: ai_salaryman_lab = 46
+- posting_windows: ai_salaryman_lab = 10
+- kabumori rows: 0
+- mio rows: 0
+
+Conclusion:
+- non-admin tenant isolation is now manually demonstrated across all six target resources without client-side brand filtering.
+- existing global-admin path remains separate and was not modified.
+- SQL was read-only with transaction rollback; no production data mutation from this proof.
+
+Next H2:
+- do not recreate users or memberships.
+- verify mobile authenticated membership INSERT/UPDATE/DELETE denial if safe.
+- perform local/dev adapter QA with non-admin credentials/session if available, keeping secrets out of reports.
+- run typecheck/lint/Expo with dependency install only if package/lock remain unchanged.
+- decide cleanup of test non-admin membership/user and old global-admin canary using only approved deletion paths.
+- production default EXPO_PUBLIC_DATA_SOURCE remains mock.
