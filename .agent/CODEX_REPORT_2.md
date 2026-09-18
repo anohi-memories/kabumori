@@ -1,5 +1,19 @@
 # Codex Slot 2 Report
 
+## H2 — Social mobile Phase 6 canary RLS QA (2026-09-18)
+
+- task_id: `social-mobile-app-phase6-auth-mobile-read-qa-20260918`
+- result: Used the single TASK-approved canary already inserted (`ai_salaryman_lab`, role `viewer`) and performed read-only RLS checks with the sole Auth user claim. Because that user is also covered by the existing global-admin path, this canary does not prove tenant-only isolation for operational tables.
+- auth_qa: SQL-level authenticated claim simulation confirmed `auth.uid()` and membership count 1. The canary can read `ai_salaryman_lab`, while existing `private.is_admin()` policies also expose `kabumori` operational rows. No admin policy was changed.
+- cross_tenant_result: **tenant-only isolation proof not achieved** with the available user. `mio` rows were not visible, but `kabumori` operational rows were visible through the pre-existing admin-policy OR path. This is not a membership-policy bypass and must not be fixed by changing admin policies here.
+- write_safety: authenticated membership INSERT/UPDATE/DELETE grants remain denied by metadata; no write-test mutation was attempted. Vault/OAuth/token/secret columns were not selected.
+- rollback: The canary is test-only and should be removed, but the exact single-row DELETE was rejected by safety review because the tool did not recognize sufficient approval for access-control deletion. No alternate delete path was attempted; the canary remains one row pending C2/user-authorized rollback.
+- adapter_qa: production default remains `EXPO_PUBLIC_DATA_SOURCE=mock`; adapter reads membership first, blocks with no membership, and never silently falls back. Live app session QA was not run because no real client session/dependencies were available.
+- tests: static policy contract **5/5 PASS**; `git diff --check` **PASS**. `npm run typecheck`/`lint`/Expo export remain unavailable without installed dependencies; no install attempted.
+- production_mutation: no additional membership, schema/RLS/grant, auth, migration-history, Cron/settings, OAuth/Vault, Storage, AI, SNS, Push, or app-default change was performed in this QA turn.
+- remaining_issues: Remove the single test canary via a tool-recognized approved rollback, then obtain a non-global-admin Auth user or explicit admin-policy test plan before claiming tenant-only production isolation. Keep `EXPO_PUBLIC_DATA_SOURCE=mock`.
+- safety_checks: formal repo and existing changes untouched; H1/G1/G2, apps/admin, HANDOFF unchanged; no secrets, tokens, emails, or personal identifiers recorded. TASK set to `review_required`, `next_owner: chatgpt`.
+
 ## H2 — Social mobile Phase 6 canary recheck (2026-09-18)
 
 - task_id: `social-mobile-app-phase6-auth-mobile-read-qa-20260918`
