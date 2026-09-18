@@ -1,5 +1,20 @@
 # Codex Slot 2 Report
 
+## H2 — Social mobile Phase 8 non-admin Auth test-user setup and tenant proof (2026-09-18)
+
+- task_id: `social-mobile-app-phase8-nonadmin-test-user-setup-and-tenant-proof-20260918`
+- result: **Stopped safely at Gate 1.** A non-admin Auth test user cannot be created through an available approved tool in this environment, so no production mutation was attempted. Gate 3 membership setup and Gate 4 real authenticated tenant-isolation proof were not run.
+- source_base: fresh `origin/main` `04b4d13f2f579b3fb5ae1156bae6aa7b9ece990c`; isolated clean worktree `/private/tmp/kabumori-h2-phase8-8wBuO9`.
+- production_read_only: project `stock-x-autopost` is ACTIVE_HEALTHY (Supabase ref `wsmznyzcvmuitkglfeuj`, ap-northeast-1, PostgreSQL 17). Counts read without mutation: `auth.users=1`, `admin_users=1`, `profiles=1`, `brand_memberships=1`. The existing membership summary is one `ai_salaryman_lab/viewer` row. The only Auth user is also the existing admin user, so there is no non-admin session suitable for this proof.
+- auth_lifecycle: no Supabase MCP/connector operation for creating an Auth user via email/password signup, invite, or another normal lifecycle is available. Direct SQL `auth.users` INSERT/DELETE is prohibited by the task and was not attempted. No password, token, email, user id, or other personal identifier is recorded.
+- manual_next_step: in Supabase Dashboard, use Authentication → Users → Add user (or Invite user) to create exactly one QA account with a user-controlled credential. Confirm it is absent from `public.admin_users`; allow the existing application/profile lifecycle to create its profile if applicable. Then resume H2 for the single `ai_salaryman_lab/viewer` membership and real-session tenant proof. Do not use the global-admin account or the existing canary for non-admin proof.
+- membership_and_qa: no new membership was inserted, no `kabumori`/`mio` membership was added, and no authenticated mobile read/write or tenant-isolation runtime proof was claimed. The existing global-admin canary remains unchanged and is excluded from this QA.
+- app_state: `apps/social-mobile` remains read-only in this turn; production default `EXPO_PUBLIC_DATA_SOURCE=mock` is unchanged. No migration, RLS/policy, admin user, app setting, deploy, OAuth/Vault, X/Push/AI/Storage, Cron, or scheduler change was made.
+- tests: no source changes. Prior Phase 7 static policy contract **5/5 PASS** and `git diff --check` **PASS** remain valid. Isolated `npm run typecheck` / `npm run lint` were unavailable because dependencies (`tsc`/`expo`) are not installed; no dependency installation or network workaround was attempted.
+- production_mutation: **0**. No Auth user, membership, profile, schema, policy, settings, or production API mutation occurred.
+- remaining_issues: the user must create one non-admin QA Auth user through the Dashboard's normal Auth lifecycle. After that, rerun H2 Gate 2 onward; only then can membership setup, tenant isolation, mobile adapter QA, and cleanup be proven. Production default mock must remain unchanged.
+- safety_checks: formal repo existing changes, `apps/admin/**`, H1/G1/G2 workstreams, and `HANDOFF.md` were untouched. No secret, password, token, or personal data was exposed. TASK is set to `review_required`, `next_owner: chatgpt`.
+
 ## H2 — Social mobile Phase 7 auth-role separation audit (2026-09-18)
 
 - task_id: `social-mobile-app-phase7-auth-role-separation-and-tenant-isolation-20260918`
