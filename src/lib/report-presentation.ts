@@ -86,7 +86,8 @@ export type MarketSection = {
 
 export const CLAIM_TYPE_LABEL: Record<string, string> = {
   causal: '報道で確認',
-  consistent_with: '同日に確認',
+  // Date-neutral: a consistent_with claim may pair different sessions (US 9/17 vs Tokyo 9/18).
+  consistent_with: '同時期に確認',
   insufficient_evidence: '理由は未確認',
   observation: '値動き',
   watch_point: '注目点',

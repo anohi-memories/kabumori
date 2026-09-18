@@ -482,7 +482,7 @@ Yahoo チャートAPIは公式の提供契約がない非公式エンドポイ�
 }
 ```
 
-- `status`: `reported`（出典が明記） / `consistent_with`（同方向・同日に確認できるだけ） / `insufficient_evidence` / `not_applicable`。
+- `status`: `reported`（出典が明記） / `consistent_with`（同方向・同時期に確認できるだけ） / `insufficient_evidence` / `not_applicable`。
 - **`causal` は使わない。** 出典が「A が理由で B が動いた」と書いていても、ポートフォリオ単位では `reported` とし、本文も「〜と報じられています」に留める。
 
 ### 7.3 出力
@@ -528,7 +528,7 @@ Yahoo チャートAPIは公式の提供契約がない非公式エンドポイ�
 |---|---|---|
 | 見出し・要約 | `headline_ja` / `market_summary_ja` | なし |
 | 指標カード（指数・為替・金利・商品） | data packet `metrics`（代替ラベル・鮮度を表示） | なし |
-| 主な値動きと理由 | `major_moves` ＋ `claims`（`claim_type` に応じた言い回しバッジ: 「報道」「同日に確認」） | なし |
+| 主な値動きと理由 | `major_moves` ＋ `claims`（`claim_type` に応じた言い回しバッジ: 「報道」「同時期に確認」） | なし |
 | 強かった/弱かった業種・テーマ | `strong_*` / `weak_*` | なし |
 | 重要ニュース・開示 | `key_news` → 既存ニュース詳細画面へ遷移 | なし |
 | リスク・次に見る点 | `risks` / `next_session_watch` | なし |

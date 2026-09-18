@@ -3,8 +3,8 @@
 - task_id: market-report-shared-platform-phase2-consumer-cutover-20260917
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Opus 5
 - deadline: 2026-09-18 17:15 JST natural close cycle
@@ -862,3 +862,47 @@ However, the supplied app sample still renders the existing `consistent_with` UI
 7. Then set status `review_required`, next_owner `chatgpt`, append exact changed files/tests/sample app line, and stop for K1.
 
 Do not broaden this follow-up. The analysis-quality work in commit `8dbdfbe` is otherwise accepted.
+
+### consistent_with 表示ラベルの修正（K1 review 2026-09-18 content-quality follow-up 対応、source のみ）
+
+- 本番変更 **0**（deploy・migration・Cron・gate・X 投稿・Push・OAuth/Vault・履歴修復なし）。gate は `x_enabled=false` / `app_enabled=false` のまま、consumer は未 deploy
+- 変更範囲は K1 指定の1点のみ。因果ロジック・根拠の意味・分析の生成/検証は変更していない
+
+#### changed files
+
+- `src/lib/report-presentation.ts`: `CLAIM_TYPE_LABEL.consistent_with` を **「同日に確認」→「同時期に確認」**（日付の異なるセッションを並べる claim でも真になる表記）
+  - 表示箇所は `src/app/reports/[id].tsx` の市場全体セクション1か所のみで、同じ対応表を参照しているため画面側の変更は不要
+  - repo 内の「同日に確認」は fixture 以外に残っていないことを grep で確認
+- `docs/market-report-shared-platform/DESIGN.md`: 同ラベルの記述2か所を「同時期に確認」に揃えた
+- `tests/app/report-claim-label_test.ts`（新規、3件）
+
+#### tests
+
+- `tests/app/report-claim-label_test.ts` **3/3 PASS**
+  - `consistent_with` のラベルが「同時期に確認」で、全ラベルに「同日」「同じ日」を含まない
+  - 9/17 の米国市場と 9/18 の東京市場を並べた claim の表示行が「（同時期に確認）」で終わり、「同日に確認」を含まない
+  - 2026-09-18 16:35 に本番で生成された packet の日付をまたぐ claim（`c5`: 9月17日の米国市場 …）を画面と同じ規則で表示しても「同日に確認」が出ない
+- `tests/app/` 全体 **31/31 PASS**（`deno test --no-check --allow-read`）
+- `market-report-analysis` **21/21 PASS**（分析側との互換確認）
+- `x-test-post/shared_market_report_consumer_test.ts` **6/6 PASS**
+- `personalized-reports` **28/28 PASS**
+- アプリ `src/` の `tsc --noEmit` エラー 0、`git diff --check` PASS
+
+#### 表示見本（アプリ「今日の市場全体」の該当行）
+
+変更前:
+
+```text
+・9月17日の米国市場ではSOXが前日比+3.14%でした。9月18日の東京市場への影響は、それぞれ日付が異なるため参考情報です。（同日に確認）
+```
+
+変更後:
+
+```text
+・9月17日の米国市場ではSOXが前日比+3.14%でした。9月18日の東京市場への影響は、それぞれ日付が異なるため参考情報です。（同時期に確認）
+```
+
+#### 状態
+
+- `8dbdfbe` の分析品質修正と本ラベル修正で、K1 の 2026-09-18 指摘はすべて source に反映済み
+- 次は K1 判断: `market-report-analysis` の再 deploy（shadow のまま）と、連休明け 2026-09-24 の自然サイクルでの品質観測。consumer cutover はその後の別判断
