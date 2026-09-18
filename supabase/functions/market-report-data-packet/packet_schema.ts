@@ -138,17 +138,39 @@ export type GapSpec = BaseSpec & {
 export type MetricSpec = YahooSpec | MicSpec | GapSpec;
 
 const BOTH: ReportType[] = ["morning", "close"];
+const CLOSE_ONLY: ReportType[] = ["close"];
+
+/**
+ * Metrics required as a group rather than individually. A morning packet's
+ * direction comes from the overnight US session, so it needs enough of those
+ * indices; the Japanese close is context there and is reported as a gap when
+ * Yahoo has no value (on 2026-09-18 Yahoo returned a null ^N225 close for
+ * 2026-09-17 and that blocked the whole morning cycle).
+ */
+export const REQUIRED_METRIC_GROUPS: ReadonlyArray<{
+  key: string;
+  reportTypes: ReportType[];
+  members: string[];
+  minimumFresh: number;
+}> = [
+  {
+    key: "us_session_indices",
+    reportTypes: ["morning"],
+    members: ["dow", "sp500", "nasdaq_composite", "sox"],
+    minimumFresh: 2,
+  },
+];
 
 export const METRIC_SPECS: readonly MetricSpec[] = [
   {
     source: "yahoo_daily", key: "nikkei225", label: "日経平均", kind: "index", unit: "index_points",
-    currency: "JPY", isProxy: false, proxyFor: null, requiredFor: BOTH, reportTypes: BOTH,
+    currency: "JPY", isProxy: false, proxyFor: null, requiredFor: CLOSE_ONLY, reportTypes: BOTH,
     symbol: "^N225", session: "jpx",
     expect: { symbol: "^N225", currency: "JPY", timezone: "Asia/Tokyo", instrumentType: "INDEX" },
   },
   {
     source: "yahoo_daily", key: "topix_proxy_1306", label: TOPIX_PROXY_LABEL, kind: "proxy_etf",
-    unit: "jpy_per_unit", currency: "JPY", isProxy: true, proxyFor: "TOPIX", requiredFor: BOTH, reportTypes: BOTH,
+    unit: "jpy_per_unit", currency: "JPY", isProxy: true, proxyFor: "TOPIX", requiredFor: CLOSE_ONLY, reportTypes: BOTH,
     symbol: "1306.T", session: "jpx",
     expect: { symbol: "1306.T", currency: "JPY", timezone: "Asia/Tokyo", instrumentType: "ETF" },
   },
@@ -226,10 +248,19 @@ export function specsFor(reportType: ReportType): MetricSpec[] {
 // Data quality (derived only from metrics, so it can be recomputed to verify)
 // ---------------------------------------------------------------------------
 
-export function deriveDataQuality(metrics: Metric[], newsStatus: "ok" | "unavailable"): DataQuality {
+export function deriveDataQuality(
+  metrics: Metric[],
+  newsStatus: "ok" | "unavailable",
+  reportType: ReportType,
+): DataQuality {
   const intentional = metrics.filter((metric) => metric.gap_reason === "no_verified_source").map((m) => m.key);
   const attempted = metrics.filter((metric) => metric.gap_reason !== "no_verified_source");
   const requiredMissing = attempted.filter((metric) => metric.required && metric.freshness !== "fresh").map((m) => m.key);
+  for (const group of REQUIRED_METRIC_GROUPS) {
+    if (!group.reportTypes.includes(reportType)) continue;
+    const fresh = metrics.filter((metric) => group.members.includes(metric.key) && metric.freshness === "fresh").length;
+    if (fresh < group.minimumFresh) requiredMissing.push(group.key);
+  }
   const stale = attempted.filter((metric) => metric.freshness === "stale").map((m) => m.key);
   const unavailable = attempted.filter((metric) => metric.freshness === "unavailable").map((m) => m.key);
   const notes: string[] = [];
@@ -337,7 +368,7 @@ export function validateMarketDataPacket(packet: MarketDataPacket): string[] {
     issues.push("calendar_refs");
   }
 
-  const expected = deriveDataQuality(packet.metrics ?? [], packet.news_refs?.status ?? "unavailable");
+  const expected = deriveDataQuality(packet.metrics ?? [], packet.news_refs?.status ?? "unavailable", packet.report_type);
   const actual = packet.data_quality;
   if (
     !actual || actual.status !== expected.status ||
