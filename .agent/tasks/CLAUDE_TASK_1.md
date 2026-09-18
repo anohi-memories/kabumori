@@ -520,3 +520,25 @@ Return immediately with the exact blocker. Do not start a broad fallback redesig
 ### Morning Yahoo null follow-up
 
 Treat the 2026-09-18 morning Yahoo `^N225` null issue as a **separate follow-up after today's close validation**. It remains important, but it must not displace the user's stated pre-holiday deadline.
+
+## URGENT correction — preserve today's close schedules
+
+This overrides any ambiguous interpretation of the previous K1 note.
+
+**Do NOT cancel, unschedule, delete, disable, or alter today's existing Phase 1 / Phase 2 close schedules.**
+
+Required production state before today's close:
+- `market-report-data-packet-close` remains scheduled at **16:15 JST**.
+- `market-report-analysis-close` remains scheduled at **16:20 JST**.
+- `market-report-analysis-close-retry` remains scheduled at **16:35 JST**.
+- Existing 17:00 X close and 17:15 app close schedules remain unchanged.
+- Consumer gates remain OFF until K1 approval.
+
+If any of the three market-report close Cron jobs above were canceled/disabled/removed during this G1 session:
+1. Restore **only** the affected job(s) to the exact previously approved schedule/body/endpoint, using the same existing Vault secret-name reference pattern.
+2. Do not create duplicate jobs.
+3. Read back job name / schedule / active state / secret-free command and confirm exactly one active instance of each.
+4. Do not change any other Cron, Function, gate, OAuth/Vault value, posting window, or consumer.
+5. Complete restoration as soon as safely possible and before 16:15 JST, then stop active changes and wait for the natural close cycle.
+
+Today's priority is natural close observation, not redesign.
