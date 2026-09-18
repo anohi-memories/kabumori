@@ -3,8 +3,8 @@
 - task_id: market-report-shared-platform-phase2-consumer-cutover-20260917
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: urgent
 - recommended_model: Opus 5
 - deadline: 2026-09-18 17:15 JST natural close cycle
@@ -687,3 +687,59 @@ Observe the natural production runs read-only:
 #### production changes（本観測分）
 
 - **0**。read-only SQL のみ。deploy・migration・Cron 変更・gate 変更・手動 invoke・X 投稿・Push いずれも行っていない
+
+
+## K1 review — 2026-09-18 close natural evidence
+
+**Result: NOT PASS / follow-up required before consumer cutover.**
+
+The production shadow path itself is proven:
+- 16:15 close data packet completed with required_missing=[]
+- 16:20 analysis failed Fact on cross-session-date wording
+- 16:35 retry completed and Fact passed
+- immutable lineage / packet ids / hashes / token+cost recording all worked
+- existing consumers stayed untouched and gate remained OFF
+
+However, the generated consumer-facing content is not acceptable yet:
+1. internal field name `change_pct` leaked into headline/summary/claims/X text
+2. prose is overly defensive/repetitive ("確認できません" / "断定できません")
+3. `weak_themes` is semantically misused
+4. the day's major policy event (BOJ rate hike) is under-prioritized in the X summary
+5. the 16:20 first attempt exposed a prompt bug around `consistent_with` wording across JP/US session dates
+
+### Required follow-up
+
+Implement and test only the following before another cutover review:
+
+1. **Internal-field leakage guard**
+   - Reject consumer-facing output containing internal schema/field identifiers such as `change_pct`, `session_date`, snake_case field names, or similar implementation vocabulary.
+   - Apply in shared analysis local validation, not only downstream UI/X.
+
+2. **Cross-session date-safe wording**
+   - Remove the prompt pattern that suggests "同じ日に" for `consistent_with`.
+   - Require explicit dates/session labels when comparing JP and US markets from different trading dates.
+   - Add a regression test reproducing the 2026-09-18 Fact failure.
+
+3. **Theme semantics**
+   - `strong_themes` / `weak_themes` must be actual market themes/sectors supported by evidence, not index divergence, article headlines, or generic observations.
+   - If evidence is insufficient, return empty arrays rather than fabricate a theme.
+
+4. **Major-material prioritization**
+   - High-importance policy/macro events present in verified `key_news` (e.g. BOJ/FOMC/FX intervention) must be surfaced in the X/app market summary when relevant.
+   - This must not convert correlation into unsupported causality; it may say the event occurred and separately qualify causal certainty.
+
+5. **Prose quality**
+   - Reduce repetitive disclaimers while preserving epistemic safety.
+   - Prefer one concise uncertainty qualifier over repeated "確認できません/断定できません".
+   - Keep X output readable Japanese with no internal implementation vocabulary.
+
+6. **Regression**
+   - Re-run market-report-analysis, x-test-post, personalized-reports, Phase 1 suites and `git diff --check`.
+   - No production deploy, gate change, manual X post, manual Push, Cron change, OAuth/Vault change, or migration-history repair in this follow-up.
+
+### Cutover boundary
+
+- `x_enabled=false` / `app_enabled=false` must remain OFF.
+- `x-test-post` / `personalized-reports` remain production-deploy prohibited until the next K1 PASS.
+- The morning Yahoo fallback source (`aecfa60`) may remain in source but is not part of this review and must not be deployed as part of this follow-up.
+- After fixes/tests, set status to `review_required`, next_owner to `chatgpt`, append exact test evidence and sample generated X/app text, then stop for K1.
