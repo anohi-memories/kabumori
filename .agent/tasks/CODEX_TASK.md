@@ -3,11 +3,30 @@
 - task_id: ai-lab-daily-content-plan-production-rollout-20260918
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Sol Medium/High
 - purpose: C1 PASS済みの AI Lab daily content plan Phase1 consumer/schema candidate + Phase2 writer RPC を、production Supabaseへ最小・可逆に反映する。まず exact migration preflight/apply/read-back を行い、writerを本番で使える状態にする。G1の `x-test-post` consumer cutoverとは分離し、このH1では consumer deploy は行わない。
+
+## Final C1 review — 2026-09-18
+
+**PASS — production rollout verified.**
+
+確認済み:
+- production `daily_content_plans` table exists, RLS enabled, row count 0 after rolled-back smoke.
+- production writer RPC exists as `write_daily_content_plan(text,date,text,jsonb,boolean,text)`.
+- RPC is `SECURITY DEFINER`, owner=`postgres`, `search_path=''`.
+- EXECUTE privilege: anon=false / authenticated=false / service_role=true.
+- Phase1/Phase2 exact migrations applied; no `supabase db push`, unrelated migration, Edge Function deploy, Cron, X, OAuth, Vault/token change.
+- bounded writer smoke was rolled back and left permanent test rows 0.
+- consumer deploy remains intentionally not performed.
+
+### C1 decision
+
+Production schema + writer rolloutを承認する。このH1は完了。
+
+次工程は、G1の `x-test-post` 競合解消後にAI Lab consumer sourceをproductionへdeployし、ちゃが翌日planを実登録して自然投稿で確認する別タスク。
 
 ## Approved inputs
 
