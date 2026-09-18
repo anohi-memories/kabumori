@@ -3,7 +3,7 @@
 - task_id: market-report-shared-platform-phase2-consumer-cutover-20260917
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: urgent
 - recommended_model: Opus 5
