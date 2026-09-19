@@ -14,10 +14,11 @@
 
 ## Active workstreams
 
-- Codex slot 1: `done` — `important-news-hourly-cadence-simplify-20260919`
-  - C1 PASS。production `important-news-fetch` command gateのみ更新済み。
-  - 9/19〜9/23はJST偶数時00分のみ（12回/日）、9/24以降はJST毎時00分のみ（24回/日）。
-  - 朝刊/大引け前後の20分刻み増強は撤回済み。judgement/generation/publish、market-report/MIC Cron、Edge Function、OAuth/Vault/X/Push変更0。
+- Codex slot 1: `ready` — `important-news-cost-phase1-recall-safe-shadow-handoff-20260919`
+  - Phase 0 usage metering is production and naturally verified.
+  - Next: correct 48/96-search baseline, replay 5 unverified + 2 delayed cases, design official-title/body-missing enrichment, refine shadow architecture.
+  - Recall is the primary KPI; no Phase 1 production deploy/migration/Cron change is approved in this H1.
+  - MIC is read-only/additional-trigger only; do not modify G1 market-report or H2/G2 social-mobile workstreams.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase9-codex-handoff-integration-20260919`
   - G2/K2で承認済みのPhase9 OAuth candidateを引き継ぐ。
