@@ -14,12 +14,11 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `important-news-cost-phase1-recall-safe-shadow-handoff-20260919`
-  - Correct 48/96 nominal search-slot economics and four natural Phase 0 metered runs recorded in `.agent/CODEX_REPORT.md`.
-  - Official-title/body-missing candidate and shadow redesign are on branch `codex/important-news-phase1-recall-safe-20260919`; code is unintegrated and unit-tested.
-  - Sep 4–15のimportant/most_important 19件を明示的な同等集合として再構築し、ID/topic/importance/source URL/published_at/fetched_at/旧fetch lagを記録。Sep 18 BOJは補足。source_typeから旧19件のWeb Search由来を識別できない点は明記。
-  - 置換経路のhistorical first_seenは19/19未証明。+45m / +7hは独立再計算できず、全対象レーンでlegacy paid fallback維持。
-  - Replay artifact: `codex/important-news-phase1-replay-followup-20260919` @ `b7f14ef3455339b7857aa7f155aa591c494ad903`. Phase 1 production mutation 0; C1 review required.
+- Codex slot 1: `done` — `important-news-cost-phase1-recall-safe-shadow-handoff-20260919`
+  - C1 PASS for investigation/design only.
+  - Durable equivalent 19-case replay artifact exists on `codex/important-news-phase1-replay-followup-20260919` @ `b7f14ef3455339b7857aa7f155aa591c494ad903`.
+  - Replacement-route historical first_seen remains unproven; all affected lanes keep legacy paid fallback.
+  - Phase 1 shadow production rollout/cutover is NOT approved. Next step requires explicit user approval for a live shadow comparison.
   - MIC remains read-only/additional-trigger only; G1 market-report and H2/G2 social-mobile workstreams untouched.
 
 - Codex slot 2: `done` — `social-mobile-app-phase9-codex-handoff-integration-20260919`
