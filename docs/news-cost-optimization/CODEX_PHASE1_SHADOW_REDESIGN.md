@@ -43,6 +43,22 @@ The two named delayed cases were independently cross-checked against production 
 - Houthi capture of Mayun (Perim) island: AP published 2026-09-11 11:29:23 UTC; old pipeline fetched 14:20:20 UTC. The task's inherited replay says the proposed free-source path was about 7 hours slower. AP article: https://apnews.com/article/476237dd3bf568d946d2b16c7b45a687.
 These inherited relative delays could not be independently recomputed without Claude's replay file. They remain known cutover blockers until the manifest is recovered or rebuilt and the full 19-row matrix is rerun.
 
+### Query wording and alias plan (proposed; not replayed against paid search)
+
+Because the exact historical five-case manifest is absent, these are reproducible query families to use once each original event and UTC window is recovered; they are not represented as five completed replays. Keep the event/place plus spelling variants together and require a source timestamp.
+
+| Topic | Query wording to test | Alias and primary-source lanes |
+| --- | --- | --- |
+| War case A | “new Iran US Kuwait Israel military attack airstrike missile drone strike escalation ceasefire September 2026 official update” | Iran / Islamic Republic / IRGC; United States / US; CENTCOM, White House, UN News, AP/BBC/Al Jazeera |
+| War case B | “new Russia Ukraine Kyiv strike pause attack ceasefire missile drone September 2026 official update” | Kyiv / Kyiv City Military Administration; Russian Federation / Kremlin; Ukraine Air Force, UN, AP/BBC/Al Jazeera. Replace entities with the exact recovered historical event before replay. |
+| Tariff | “Canada US counter tariff surtax Section 338 Section 232 effective September 8 2026 Canada Gazette CBSA” | counter-tariff / retaliatory tariff / surtax / customs duty; Canada.ca Finance, CBSA, Canada Gazette, USTR, Federal Register |
+| Shipping | “new tanker merchant vessel attack seizure Strait of Hormuz Bab el-Mandeb Red Sea shipping disruption September 2026” | Hormuz; Bab al-Mandab / Bab el-Mandeb; Mayun / Mayyun / Perim; Mokha / Mocha; UKMTO, CENTCOM, IMO, AP/BBC/Al Jazeera |
+| Geopolitics | “new Houthi Ansar Allah Saudi pipeline island capture Red Sea Bab el-Mandeb September 2026” | Houthi / Ansar Allah / Yemen; Saudi Aramco / East-West pipeline; Mayun / Mayyun / Perim / Hanish; UN News, UKMTO, AP/BBC/Al Jazeera |
+| Delayed Israel–Hezbollah | “Israel Hezbollah Ali Taher hill southern Lebanon ceasefire clashes shelling airstrike drone September 5 2026” | Ali Taher / Ali al-Taher; IDF / Israeli forces; Hezbollah / Hizbullah; UNIFIL, UN News, AP/BBC/Al Jazeera |
+| Delayed Houthi island | “Houthis seize capture Mayun Mayyun Perim island Bab el-Mandeb Red Sea September 11 2026” | Ansar Allah; Mokha/Mocha; UKMTO, UN News, AP/BBC/Al Jazeera |
+
+For each archived window, test at least one broad query and one precise alias query, compare official/primary and reputable wire results, and log first-published and first-seen UTC separately. Keep the topic's existing legacy query enabled unless every relevant archived case is proven recovered. The current paid query implementation makes one Responses request with max_tool_calls=1 and records HTTP 429 as failure; it does not retry that failed call. Proposed recovery is capped exponential backoff with jitter outside the same Cron invocation, plus a visible failed-source health flag and legacy topic fallback; retries must not multiply a single-run budget silently.
+
 Representative official/alternate-source checks:
 - Canada counter-tariff case: official Canada lists new U.S.-goods counter-tariffs effective 2026-09-08 and links applicable product details: https://www.canada.ca/en/department-finance/programs/international-trade-finance-policy/canadas-response-us-tariffs/complete-list-us-products-subject-to-counter-tariffs.html.
 - BOJ 2026-09-18 publication index and decision PDFs are available from the official Bank of Japan page: https://www.boj.or.jp/mopo/mpmdeci/mpr_2026/index.htm.
