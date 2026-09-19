@@ -1,5 +1,38 @@
 # Codex Report
 
+## Latest H1 result — important-news hourly cadence simplification (2026-09-19)
+
+- task_id: `important-news-hourly-cadence-simplify-20260919`
+- result: `review_required` — production cadence gate simplified on exactly one existing Cron job; stop for C1 review.
+- production project: `wsmznyzcvmuitkglfeuj`
+- exact production mutation: **one command-only change** to pg_cron job `jobid=2`, `important-news-fetch`. No schedule, Edge Function, schema, other Cron, secret, OAuth, Vault, X, Push, or manual OpenAI action was changed.
+
+### Before / after
+
+- Before: schedule `0,20,40 * * * *`, active `true`, command length `1185`, MD5 `c85fd56fe33bcea58d7414768cf5c9f5`.
+- After: same schedule and active flag, command length `845`, MD5 `b9a98c88ada68d0552ac66c9e8e19983`.
+- Change used `cron.alter_job` only, guarded by exact job id/name, schedule, active state, and before-command MD5. No direct `cron.job` UPDATE was used.
+- All **33 other Cron jobs** were inventoried before and after; every job’s name, schedule, active flag, command length, and MD5 remained unchanged.
+- Command output was not exposed; endpoint/key material was not read into the report.
+
+### JST gate proof
+
+- 2026-09-19 through 2026-09-23 inclusive: only even JST hours at minute `00` pass (12/day).
+- 2026-09-24 onward: only minute `00` each JST hour passes (24/day); the former `:20`/`:40` dense-window calls are removed.
+- Representative SQL proof: **14/14 PASS, 0 mismatches**, including each required 9/19 and 9/24 run/skip boundary sample.
+- No manual function invocation, OpenAI request, retry, or backfill was performed. This verifies the gate expression; it is not a claim of an observed natural run after the change.
+
+### Cost effect and rollback
+
+- 9/24 onward: maximum 24 fetch HTTP calls/day versus the former 72/day, a **66.7% reduction**.
+- Holiday cadence remains 12/day.
+- Exact rollback was reconstructed read-only from the unchanged command prefix plus the previous 36/day gate and verified to match the pre-change command exactly: length `1185`, MD5 `c85fd56fe33bcea58d7414768cf5c9f5`. Rollback is available through `cron.alter_job`; it was not executed.
+
+### Next step
+
+C1 should review the production read-back and 14-case JST proof. H1 stops here; no other production work is authorized by this task.
+
+
 ## Latest H1 result — important-news Web Search cost throttle (2026-09-19)
 
 - task_id: `important-news-web-search-cost-throttle-20260919`
