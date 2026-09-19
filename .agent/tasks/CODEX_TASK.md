@@ -1,463 +1,394 @@
 # Codex Task
 
-- task_id: important-news-cost-phase1-recall-safe-shadow-handoff-20260919
+- task_id: important-news-phase1-live-shadow-rollout-20260920
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: urgent
 - recommended_model: Sol High
-- purpose: Claudeのread-only調査とPhase 0本番計測を引き継ぎ、重要ニュース監視のPhase 1をrecall最優先で再設計・追加検証する。現行productionの検索頻度を正しいbaselineとして再計算し、重大公式ソースの本文不足補完と、未確認/遅延事例を潰す。Phase 1のshadow本番導入はまだ未承認。
+- purpose: C1 PASS済みのPhase 1調査結果を受け、旧重要ニュース監視を一切止めずにlive shadowをproductionへ安全導入し、replacement経路の実first_seen/recall/latency/costを測定できる状態を作る。
 
-## User decisions / non-negotiable goals
+## User approval
 
-- コスト削減より重要ニュースrecallを優先。
-- ニュース監視は最終的に10分程度の高頻度を目指すが、10分ごとに高コストWeb Searchを固定4本叩く設計にはしない。
-- 無料/公式ソースは高頻度、Web Searchは条件発火・fallback・補完用途へ寄せる。
-- MICは速報監視の前提にしない。MICは追加トリガーとしてのみ利用し、MIC停止/遅延でも速報監視が成立すること。
-- 重要ニュースのcoverageは狭めない。むしろ弱い分野を広げる。
-- Phase 1 production cutoverは、recall/遅延の安全条件を満たすまで承認しない。
+2026-09-20、前C1で「次は旧方式を残したままlive shadowを動かし、実際のfirst_seen時刻を集める。これは本番にshadow用Function/Cron/テーブルを追加するため明示承認が必要」と説明した上で、ユーザーが「すすめて」と明示。
 
-## Proven production state — Phase 0
+よって本H1では **shadow専用production resourceの最小導入を承認済み** と扱う。
 
-ClaudeがG1/G2とは別枠で実施したPhase 0はproduction反映済み。
+ただし承認範囲はshadowのみ。
+旧production pipelineの削減/cutoverは未承認。
 
-- important-news-monitor v58のみdeploy。
-- Phase 0 commit/main: 9257c35（Claude報告）。
-- ai_usage_events と important_news_monitor_runs.diagnostics.cost にニュースAI/Web Searchのusageを記録する。
-- migrationなし。既存 ai_usage_events を利用。
-- 他11 Functions、34 Cron、schema/migration、OAuth/Vault、Push/X設定は変更なしとClaudeが確認。
-- 16:00自然実行で news_breaking_search 4行を確認:
-  - web_search 4回
-  - input 49,768 tokens
-  - output 1,297 tokens
-  - estimated cost = $0.0515 / 1 fetch cycle
-- 手動OpenAI callなしで自然実行確認。
-- judgement Luna/Sol、generation、app-copyのusage rowは自然候補待ち。
+## Proven basis
 
-### Cost implication
+前H1 C1 PASS:
+- durable equivalent replay artifact:
+  - branch: codex/important-news-phase1-replay-followup-20260919
+  - commit: b7f14ef3455339b7857aa7f155aa591c494ad903
+- 19件のequivalent cohortを再構築済み。
+- historical replacement first_seenは19/19未証明。
+- 全対象laneでlegacy paid fallback維持。
+- Phase 0 usage meteringはproduction v58で自然実行確認済み。
+- current important-news-fetch:
+  - 9/19〜9/23: 12 fetch cycles/day = nominal 48 fixed searches/day
+  - 9/24以降: 24 cycles/day = nominal 96 fixed searches/day
+- natural cost sample:
+  - 4 runs / 18 actual web_search calls
+  - total $0.226884
+  - mean $0.056721/fetch cycle
+- MICはadditional trigger only。速報の必須dependencyにはしない。
+- official-title/body-missing candidateは別branchにisolated/unintegrated:
+  - codex/important-news-phase1-recall-safe-20260919 @ 8fd612471b04d09bd379a7ed74ed99e84647a72b
 
-1 fetch cycleの固定4検索が約$0.0515。
+## Primary goal
 
-現行production baselineを必ず使うこと:
-- 2026-09-19〜09-23: 2時間ごと = 12 fetch/day = 48 searches/day
-- 2026-09-24以降: 1時間ごと = 24 fetch/day = 96 searches/day
+live shadowで次を初めて実測可能にする:
 
-ClaudeのPhase 1メモには旧20分運用由来の288 searches/day、約$111/月等が含まれているため、そのまま採用禁止。
-現行48/96 searches/dayを基準にすべて再計算する。
+1. free/official source側の実first_seen_at
+2. old pipeline detected_atとの実時間差
+3. important/most_important eventの取り逃し有無
+4. source health / rate limit / stale状態
+5. conditional Web Searchの発火回数と費用
+6. lane別にlegacy paid fallbackを安全に外せるか
 
-## Claude Phase 1 read-only findings to inherit
+**旧pipelineは完全維持。投稿/X/Push/Appは旧pipelineだけ。**
 
-本番変更なしで過去データ/無料ソース/GDELT等を調査。
+## Non-negotiable safety
 
-### Historical replay summary
-
-- production重要ニュースデータは概ね9/4以降。
-- 変更しない公式RSS由来10件は10/10再現可能。
-- TDnet重大IRは現行取得を維持。
-- 旧Web Search由来の重要ニュース19件について:
-  - 新方式でも同等か早い: 12件
-  - 無料ソースの方が遅い: 2件
-  - 未確認: 5件
-- よって現時点で19件中12件しか安全に置換できる証拠がない。
-- 70% Web Search削減と取り逃し0を同時に満たす証拠はまだない。
-
-### Known delayed cases
-
-- イスラエル/ヒズボラ戦闘: 新方式候補が旧方式より約+45分
-- フーシ派の島占拠: 新方式候補が約+7時間
-
-### Not-yet-proven cases
-
-5件:
-- 戦争 2
-- 関税 1
-- 海運 1
-- 地政学 1
-
-必ず再検証し、検索語不一致/GDELT rate limitを理由に未確認のままcutoverしない。
-
-### Cases where new architecture could improve recall/latency
-
-- 9/12 北朝鮮ミサイル:
-  - 旧方式では拾えていない
-  - GDELTに07:45記事あり
-- 9/12 サウジ東西パイプライン攻撃:
-  - 旧方式は13時間後の続報のみ
-  - GDELTは04:00に初報
-- ホルムズのイラン船被弾:
-  - GDELTが旧方式より約5.5時間早い
-- イランのタンカー攻撃:
-  - 無料ソース候補が旧方式より約7時間45分早い
-- 9/18 日銀利上げ:
-  - 公式RSSは12:00取得済み
-  - タイトルのみ/本文要約空
-  - Luna→Sol判定でno_post
-  - Web Searchで14:20に拾い直し
-  - 既に無料公式ソースで取得できていたのに本文不足で約2時間20分遅延
-
-### Source observations
-
-- GDELT: 有望だがrate limit/取得失敗がある。単独依存禁止。
-- BBC World / Al Jazeera / White House / ECB / SEC: 取得候補。
-- NHK RSS: Claude調査時点では8/8以降更新停止で利用不可と判断。
-- MIC:
-  - production ingestは1日2回、日次データ中心。
-  - market_events直近7日16件はFRED系、同じ10:00 batch、公表から数日遅れの例あり。
-  - geopolitical / corporate_eventsは現状unavailable。
-  - 速報起点には不十分。
-  - ただし market_events / market_state_current のmaterial changeは追加Web Search triggerとして利用候補。
-- 朝刊でのMIC利用はG1領域。H1ではmarket-report系を変更しない。
-
-## Known current coverage gaps
-
-少なくとも以下をPhase 1 coverage audit対象にする:
-
-- 戦争 / 地政学
-- 北朝鮮 / Jアラート
-- 関税 / 通商 / 制裁
-- 為替介入
-- 中央銀行重要発言/政策変更
-- 災害 / 特別警報 / インフラ障害
-- エネルギー施設 / 原油
-- 海運 / 海峡
-- 金融システム / 銀行破綻
-- 中国
-- 半導体 / AI / 輸出規制
-- 海外企業の重大決算/ガイダンス
-- 日本企業重大IR
-- 日本/米国市場急変
-
-## Phase 1 target architecture
-
-高頻度news polling
-- free/official sources
-- deterministic dedup/prefilter
-- scheduled event windows
-- source-health fallback
-- low-frequency topic sweep
-- conditional Web Search
-
-MIC
-- material change / market event
-- additional trigger only
-- conditional Web Search
-
-原則:
-- 何も起きていないcycleではWeb Search 0回を許容。
-- ただしfree source停止/coverage gap時はfallbackでrecallを守る。
-- 旧方式だけが拾う重要ニュースがある分野は固定検索を残す。
-- MICを必須dependencyにしない。
-- 同一eventはevent_key/source canonicalization/content hash等で重複排除候補。
-
-## Immediate H1 goals — first, no production mutation
-
-### A. Recalculate Phase 1 economics using correct production cadence
-
-Claudeメモの288 searches/day前提を全て破棄し、以下で再計算:
-- holiday/current: 48 searches/day
-- from 9/24: 96 searches/day
-- measured $0.0515 / 4 searches / fetch cycle
-
-出すもの:
-- current/day/month estimate
-- shadow追加費用
-- candidate designごとのsearch/day
-- reduction % versus 96/day baseline
-- eventual 10-min polling時のfree pollingとpaid searchの分離モデル
-
-### B. Close the recall evidence gaps
-
-未確認5件 + 遅延2件を最優先で再検証。
-
-要件:
-- GDELTだけに依存しない。
-- query wording / synonyms / location/entity aliasesを再設計。
-- official/BBC/Al Jazeera/White House/ECB/SEC/JMA等、利用可能なソースを組み合わせる。
-- rate limit時のretry/backoffを評価。
-- 無料ソースで拾えないことも結果として明示し、その分野はfallback維持。
-- historical timestampの根拠/source URLを保存。
-- production important/most_important判定実績をground truthの一つとして扱う。
-
-### C. Investigate and design the official-title/body-missing fix
-
-9/18 BOJ caseを一般化して設計。
-
-目標:
-- 公式/高信頼sourceで重大そうなタイトルを取得
-- summary/bodyが空または不足
-- そのままAI no_postにしない
-- 公式本文取得を先に試す
-- 公式本文が取得不能/不十分なら、必要時だけWeb Search補完
-- 取得本文に対して既存judgement pipelineを通す
-
-注意:
-- BOJ専用hardcodeにしない。
-- 信頼できるsource allowlist / title trigger / minimum content thresholdを明示。
-- SSRF/open redirect/untrusted URL fetchを防ぐ。
-- PDFの場合の既存enrichmentとの重複を確認。
-- duplicate/claim/idempotencyを壊さない。
-- no_post基準を無闇に緩めない。
-- この段階では設計・source candidate・testsまで。production deployはC1承認前にしない。
-
-### D. Refine shadow design without deploying
-
-Claude案:
-- separate important-news-shadow
-- dedicated shadow tables
-- separate Cron
-- old pipeline continues publication
-- shadow has no X/Push/App writes
-
-これはまだproduction承認されていない。
-
-H1では:
-1. 必要な最小schema/Function/Cronを再評価。
-2. 既存run/candidate tableをshadow flag/run_typeで安全に流用できるかも比較。
-3. 二重paid searchを避ける設計を優先。
-4. old pipelineのsearch resultをshadowが再利用できるか検討。
-5. shadowの追加費用を正しい96/day baselineから再計算。
-6. production mutationはしない。
-
-## Required comparison / acceptance metrics
-
-Phase 1の最優先KPIはrecall。
-
-### Required acceptance before production cutover
-
-- 過去 important / most_important 再現率: 100%目標
-- shadow期間中の important / most_important 取り逃し: 0件
-- 旧方式だけが拾った重要ニュースがある分野はfallback維持
-- detection delay:
-  - 個別差分を全件記録
-  - 遅延が発生した重要事例は原因を説明
-  - cutover候補は原則+20分以内
-  - median/p95が旧方式以下を目標
-- Web Search削減:
-  - recall条件を満たした後に評価
-  - 70%は目標であって必須ではない
-  - recallを犠牲にして70%を達成するのは禁止
-
-### Shadow comparison fields
-
-最低限:
-- event_key
-- source
-- category/topic
-- first_seen_at
-- old_pipeline_detected_at
-- new_pipeline_detected_at
-- old_detected
-- new_detected
-- importance
-- detection_delay_sec
-- trigger_reason
-- web_search_used
-- web_search_topic/query
-- estimated_cost
-- evidence/source URL
-- free source health/status
-
-## Source health / fail-safe requirements
-
-- GDELT等がrate limit/downの場合、silent failure禁止。
-- per-source healthを記録。
-- 主要free sourceがunhealthyな分野は自動でfallback search cadenceを戻す候補を設計。
-- fallback復帰はdeploy不要/設定で戻せる形を優先。
-- source停止時に検索削減を維持するためニュースを捨てる設計は禁止。
-
-## MIC integration rule
-
-今回はMIC側を変更しない。
-
-許可:
-- production market_events / market_state_current のread-only調査
-- material changeをnews-side triggerとして読む設計
-- duplication/latency評価
-
-禁止:
-- MIC ingest/state evaluator source変更
-- MIC Cron変更
-- intraday price data追加
-- market-report/G1 objects変更
-
-将来:
-- MICにintraday USDJPY / futures / oil / rates等が入れば追加triggerとして強化可能。
-- それまでは速報の主監視はnews側。
-
-## Claude artifacts / handoff caveat
-
-Claudeが以下をローカルで作成したと報告:
-- docs/news-cost-optimization/PHASE1_SHADOW_DESIGN.md
-- docs/news-cost-optimization/replay/
-- docs/news-cost-optimization/AUDIT_AND_PLAN.md のMIC追記
-
-Claude報告時点では一部/全部未commitの可能性あり。
-
-H1開始時:
-1. fresh origin/mainで実在を確認。
-2. 無ければ無いと記録し、このTASKに記載した検証結果を引き継ぎ正本として進める。
-3. 他workstreamの未commit変更を探して持ち込まない。
-4. Claudeローカル成果物を勝手に推測/再現したことにしない。
+- old important-news-fetch/judgement/generation/publish-readyの挙動を変更しない。
+- old fixed breaking searchesを減らさない。
+- existing important_news_candidates / important_news_monitor_runs にshadow candidateを書かない。
+- shadow dataは専用tableのみ。
+- shadowからX/Push/App/publish RPCを呼ばない。
+- shadow candidateをlive judgement/generation selectorがconsumeできない構造にする。
+- OAuth/Vault/secrets/social-mobile/market-report/G1/G2/H2へ触れない。
+- MICはread-only trigger参照のみ。MIC側変更禁止。
+- blind supabase db push禁止。
+- migration history repair/reconcile禁止。
+- exact migrationのみ。
+- 既存未commit変更は触らない。
+- production write前にfresh origin/main + 他slot再確認。
 
 ## Mandatory startup
 
-開始前に必ず確認:
+開始前に必ず:
 1. .agent/ORCHESTRATION.md
 2. .agent/CURRENT_STATE.md
 3. this TASK
 4. .agent/CODEX_REPORT.md
-5. 他3slot TASK
+5. other 3 slot TASKs
 6. fresh origin/main
-7. production important-news Cron read-only
-8. production important-news-monitor deployed version/source metadata read-only
-9. Phase 0 ai_usage_events recent rows read-only
-10. Claude artifactsのmain存在有無
+7. production Cron inventory read-only
+8. production important-news schema/function inventory read-only
+9. current important-news-monitor version/source hash read-only
+10. current Phase 0 ai_usage_events/news usage read-only
+11. existing candidate branches/artifacts確認
 
-競合時STOP:
-- 他slotが important-news-monitor/**
-- important-news schema/migration
-- important-news Cron
-を変更中なら開始しない。
+同じDB migration / same Function / same Cron / important-news shadow objectsを他slotが変更中ならSTOP。
 
-H2/G2 social-mobile、G1 market-reportへは触れない。
+## Approved architecture
 
-## Allowed work in this H1
+### A. Isolated tables
 
-- read-only production audit
-- local/source candidate implementation
-- tests
-- docs
-- historical replay
-- shadow design
-- BOJ/general official-body enrichment candidate
-- cost model correction
-- branch/main source commit if conflict-free and production behavior remains unchanged
+専用table候補:
+- public.important_news_shadow_runs
+- public.important_news_shadow_candidates
 
-## Production mutation policy
+必要最小限のみ。
+live tablesは流用しない。
 
-このH1ではPhase 1 production mutationは原則0。
+最低記録項目:
+
+shadow_runs:
+- id
+- started_at
+- completed_at
+- trigger
+- source_health jsonb
+- free_fetch_count
+- conditional_search_count
+- input_tokens/output_tokens/web_search_calls/cost_usd
+- status/error_summary
+- created_at
+
+shadow_candidates:
+- id
+- shadow_run_id
+- event_key
+- dedupe_key
+- source_name
+- source_url
+- topic/category
+- headline
+- published_at
+- first_seen_at
+- trigger_reason
+- free_source_health
+- conditional_search_used
+- query/topic if used
+- estimated_cost
+- matched_live_candidate_id nullable
+- old_detected_at nullable
+- old_importance nullable
+- detection_delay_sec nullable
+- evidence metadata
+- created_at
+
+必要なら命名/列はcurrent repo conventionに合わせて調整可。
+RLS/grantsはshadow Functionのservice roleだけを第一候補。
+anon/authenticatedから直接読書きできないこと。
+
+### B. Shadow Function
+
+新規 isolated Edge Function:
+- important-news-shadow
+
+役割:
+- free/official source取得
+- deterministic normalize/dedupe
+- source health記録
+- event/schedule/MIC/source-health trigger判断
+- 条件を満たす場合だけ targeted Web Search
+- live candidatesとのread-only比較
+- shadow tablesへ記録
+- X/Push/App/publish 0
+
+既存 important-news-monitor を改造してshadow modeを混ぜるより、isolated Functionを優先。
+
+### C. Sources
+
+最低候補:
+- GDELT
+- BBC World
+- Al Jazeera
+- White House
+- ECB
+- SEC
+- JMA/日本の公式防災ソース
+- BOJ / Fed等current official feedで利用可能なもの
+
+ただし:
+- sourceが実際にfreshであることをpreflight確認。
+- NHK RSSは前調査で停止疑い。freshness確認できない限り主要source扱いしない。
+- 1 sourceに依存しない。
+- source-specific rate limit遵守。
+- GDELTはbounded backoff/cooldown。
+- 取得0件とsource healthyを混同しない。
+
+### D. MIC
+
+read-onlyで:
+- market_events
+- market_state_current
+
+material change/new eventがある場合に追加trigger候補。
+MICが遅い/空/失敗でもshadowは続行。
+
+### E. Conditional Web Search
+
+固定4検索をshadowでも毎回再実行するのは禁止。
+
+発火候補:
+- 新規free/official event
+- high-signal title/body不足
+- scheduled event window
+- MIC material change
+- source lane unhealthy/stale時のfallback
+- low-frequency rare-event sweep
+
+静かなcycleは0 paid searchesを許容。
+
+ただしsource failure時にrecallを守るfallbackを禁止しない。
+費用だけを守るhard capで緊急fallbackを止めない。
+
+### F. Matching old pipeline
+
+event_key + normalized entities/topic + canonical URL/content hash等でlive candidateへmatch。
+
+matchできた場合:
+- matched_live_candidate_id
+- old_detected_at
+- old_importance
+- delay sec
+を記録。
+
+match未成立はunknownとして残し、無理にsame event扱いしない。
+
+## Rollout sequence — approved
+
+以下の順序でのみproductionへ進める。
+
+### Gate 1 — source/local implementation
+
+- fresh mainからclean branch/worktree。
+- shadow migration + Function + tests + docs。
+- source health parser tests。
+- dedupe/matching tests。
+- conditional trigger tests。
+- no-publish boundary tests。
+- cost metering tests。
+- git diff --check。
+- Deno/type checks where applicable。
+
+失敗時STOP。
+
+### Gate 2 — exact migration apply
+
+C1前でも、このH1ではユーザー承認済み範囲として **shadow専用migration 1本だけproduction apply可**。
+
+条件:
+- preflightでobject absent/compatible確認。
+- exact SQLのみ。
+- no db push / include-all。
+- grants/RLS/indices read-back。
+-既存important-news tables/functionsのhash/schema不変確認。
+- migration apply後にFunction deploy前でもlive pipelineへ影響0であること。
+
+### Gate 3 — shadow Function deploy
+
+- important-news-shadowのみdeploy。
+- existing important-news-monitor redeploy禁止。
+- deploy後source hash/read-back。
+- manual invokeは **dry_run/read-only source checkまたはshadow write smokeのみ** に限定。
+- manual OpenAI Web Searchは原則避ける。trigger logicの人工paid callは禁止。
+- smoke rowsを作る場合は明確にsynthetic=true相当識別、またはrollback/delete可能な専用test row。自然データと混ぜない。
+
+### Gate 4 — Cron
+
+新規shadow Cron 1本。
+最終target cadence:
+- every 10 minutes
+
+ただし最初は safety canary:
+- 30分間隔で最低2回自然実行確認
+- source health / 0 publish / cost / errorを確認
+- 問題なければ10分へ変更可
+
+Cron変更はshadow Cronのみ。
+old Cronは一切変更しない。
+
+### Gate 5 — natural observation
+
+最低限C1までに:
+- 2回以上 natural shadow runs
+- X/Push/App writes 0
+- legacy Cron/hash unchanged
+- source health rows
+- first_seen_at rows or no-event healthy proof
+- conditional Web Search count/cost
+- error/backoff挙動
+を確認。
+
+自然eventが無ければ「recall proven」とはしない。
+
+## Cost guard
+
+Shadow期間は追加費用が発生する。
+
+必須:
+- Phase 0 ai_usage_events互換またはshadow専用usage記録。
+- feature名はnews_shadow_*などliveと区別。
+- actual web_search_calls / tokens / costをrun単位で記録。
+- daily projected costをReport。
+
+異常ループ防止:
+- same event/topicのcooldown
+- per-source retry backoff
+- run idempotency/claim
+- duplicate trigger suppression
+
+ただしemergency fallbackを単純な日額hard capで無効化しない。
+
+## Recall acceptance remains unchanged
+
+今回shadowを入れた時点ではcutoverしない。
+
+将来cutover検討条件:
+- shadow最低14日推奨
+- important / most_important missed = 0
+- match可能eventのreplacement first_seenを実測
+- positive delayは原則<=20分
+- median/p95 old以下目標
+- source-health degradation時のfallback動作確認
+- lane単位で証拠が揃ったものだけlegacy search削減
+- unproven laneはlegacy fallback維持
+- 70% cost reductionはrecallより下位
+
+## Official-body enrichment
+
+前branch候補を参考にしてよいが、今回の主目的はshadow計測。
+
+許可:
+- shadow側で official title/body不足を検出し、official body取得/conditional search triggerとして記録。
+- fixture/test追加。
 
 禁止:
-- new shadow migration apply
-- shadow Function deploy
-- shadow Cron create/enable
-- existing breaking search cadence変更
-- existing important-news judgement behavior production deploy
-- MIC changes
-- market-report changes
-- X/Push/App publication behavior changes
+- live important-news-monitorへ統合/deploy。
+- live judgement/no_post挙動変更。
+
+## Production mutations allowed in this H1
+
+承認済み:
+1. shadow専用migration 1本
+2. important-news-shadow Function deploy 1本
+3. shadow専用Cron 1本のcreate/enable/cadence変更（canary→10min）
+
+それ以外は禁止。
+
+特に禁止:
+- old important-news-fetch Cron変更
+- old breaking_market query変更/削減
+- important-news-monitor deploy
+- judgement/generation/publish-ready変更
+- live schema/RPC改変
+- market-report/MIC source変更
+- X/Push/App publication変更
 - OAuth/Vault/secrets
-- blind supabase db push
-- migration repair/reconcile
-- manual OpenAI replay/backfill without explicit approval
+- migration history repair
 
-もしproduction mutationが必要と判断したら:
-- exact object
-- exact purpose
-- expected cost
-- rollback
-- recall safety evidence
-をReportしてSTOP。C1/ユーザー承認を待つ。
+## Rollback
 
-## Deliverables for C1
+最優先rollback:
+1. shadow Cron disable
+2. shadow Functionを呼ばない状態へ
+3. shadow dataは監査用に保持
+4. old pipelineは最初から無変更なのでそのまま継続
+
+schema dropは緊急rollbackに含めない。
+削除が必要なら別migration/review。
+
+## Deliverables / C1
 
 .agent/CODEX_REPORT.md に最低限:
 
-1. correct baseline economics (48/96 searches/day)
-2. Phase 0 natural usage evidence update
-3. Claude artifacts presence/absence
-4. 5 unverified + 2 delayed historical cases replay result
-5. current coverage gaps
-6. source-health findings
-7. official-title/body-missing root cause and general fix candidate
-8. tests for that candidate
-9. refined shadow architecture
-10. old-vs-new comparison schema
-11. projected search reduction vs correct baseline
-12. projected shadow cost
-13. recall/latency risks
-14. fields/domains where fallback must remain
-15. exact production changes proposed next, if any
-16. rollback plan
-17. explicit production mutation = 0 for this H1 unless separately approved
-
-## Completion / C1
+- task_id/result
+- fresh main base
+- changed files/commit/branch
+- exact migration name/hash
+- exact Function version/source hash
+- shadow Cron jobid/name/schedule/active/command hash
+- canary→10min変更の有無
+- old important-news Cron/hash unchanged proof
+- old important-news-monitor version/hash unchanged proof
+- RLS/grants proof
+- source list + health
+- natural run count
+- free candidates count
+- matched live candidates count
+- first_seen/delay evidence
+- conditional paid search count/tokens/cost
+- projected daily/monthly shadow cost
+- X/Push/App writes = 0 proof
+- MIC modifications = 0
+- other slot objects untouched
+- rollback proof
+- remaining recall gaps
+- exact next recommendation
 
 完了時:
-- .agent/CODEX_REPORT.md 更新
 - this TASK -> review_required
-- next_owner: chatgpt
-- source/docsをpushする場合はfresh origin/main確認
-- 他workstream変更を含めない
-- .agent control metadataをmainへ同期
+- next_owner -> chatgpt
+- .agent/CODEX_REPORT.md更新
+- control metadataをmainへ同期
 - C1待ちでSTOP
 
-
-## C1 review — 2026-09-19
-
-**NOT PASS — design/cost work is useful, but the task's recall-proof gate is not complete.**
-
-Accepted:
-- Corrected production baseline is now 48 searches/day through 9/23 and 96/day from 9/24; old 288/day economics are superseded.
-- Phase 0 natural usage evidence is credible and appropriately labeled as a small sample (4 runs / 18 actual web_search calls).
-- No Phase 1 production mutation occurred.
-- Official-title/body-missing root cause is well identified; the isolated candidate is unit-tested and not wired into production.
-- Shadow architecture keeps old publication path isolated and does not reuse live candidate/run tables.
-- MIC remains read-only/additional-trigger only.
-- Candidate branch is cleanly separated: codex/important-news-phase1-recall-safe-20260919 @ 8fd612471b04d09bd379a7ed74ed99e84647a72b.
-
-Blocker:
-- The required historical recall proof is still missing.
-- The exact 5 unverified events were not reconstructed.
-- The 2 delayed cases were timestamp-cross-checked, but the +45m / +7h relative delay was inherited rather than independently recomputed.
-- Therefore 19/19 important/most_important replay is not proven, and Phase 1 shadow production work remains unapproved.
-
-### Required continuation for next H1
-
-Do not depend on Claude-local artifacts. Rebuild the replay manifest from durable sources:
-
-1. Query production important_news_candidates/read-only history for the full 19 Web-Search-derived important/most_important cases used by the earlier audit, or reconstruct an explicit equivalent set from Sep 4–18 with stable candidate ids/event keys/source URLs.
-2. For every row, record old detected_at/fetched_at, source/topic, final importance, and evidence URL.
-3. Re-run the proposed free/official-source route for each case using available historical source timestamps. If a source cannot be historically replayed, mark that row unproven and retain legacy paid fallback for that lane.
-4. Independently recompute the 2 delayed cases; do not reuse inherited +45m / +7h numbers without source evidence.
-5. Produce one durable replay artifact under docs/news-cost-optimization/replay/ and commit it.
-6. Summarize per-lane recall, delay, and fallback requirement. 100% proven replay is the target; any unproven lane keeps legacy search.
-7. Do not deploy shadow tables/function/Cron yet.
-8. Keep the official-body candidate unintegrated until replay evidence is complete; additional fixtures/integration tests may be added locally.
-
-Production mutation remains 0. Stop again for C1 after the durable replay artifact and independently computed results exist.
-
-
-## H1 continuation result — 2026-09-19
-
-- result: review_required. Durable equivalent replay manifest committed on `codex/important-news-phase1-replay-followup-20260919` (latest commit `b7f14ef3455339b7857aa7f155aa591c494ad903`).
-- Production read-only history yielded 19 important/most_important `breaking_market` candidates fetched Sep 4–15; exact source-provider provenance cannot be distinguished in this schema, so this is explicitly an equivalent cohort rather than a claim to have recovered the missing original 19 Web-Search rows. The Sep 18 BOJ row is supplemental.
-- All 19 legacy `published_at` → `fetched_at` lags were recalculated from the durable rows. Replacement route `first_seen_at` is absent for 19/19; recall/delay remains unproven and legacy paid fallback remains required for every represented topic lane.
-- Original 5-unverified identities remain unavailable; the prior aggregate 12/2/5 split is not independently revalidated.
-- Israel/Hezbollah: legacy fetch lag 24m57s. Al Jazeera source is date-only; replacement first-seen unavailable, so inherited +45m is not recomputable.
-- Mayun/Perim: legacy fetch lag 2h50m57s. Guardian's 12:00 UTC publication preceded legacy fetch by 2h20m20s but is not collector first-seen evidence; inherited +7h is not recomputable.
-- No shadow migration/function/Cron, official-body candidate integration, or production mutation. Stop for C1.
-
-
-## Final C1 review — 2026-09-20
-
-**PASS for this H1 investigation/design phase. Phase 1 production rollout remains NOT APPROVED.**
-
-Why this H1 passes:
-- The required durable replay artifact now exists and is committed on branch `codex/important-news-phase1-replay-followup-20260919` @ `b7f14ef3455339b7857aa7f155aa591c494ad903`.
-- An explicit equivalent cohort of 19 production high-importance breaking_market candidates was reconstructed with stable IDs, URLs, published_at/fetched_at and independently calculated legacy fetch lags.
-- The missing historical replacement `first_seen_at` evidence was not invented. The report correctly concludes replacement-route parity is still unproven.
-- The two inherited delay claims (+45m / +7h) were not falsely reasserted as verified; they remain unproven because collector-ingestion timestamps are unavailable.
-- All affected lanes therefore retain legacy paid fallback.
-- No Phase 1 production migration, Function deploy, Cron change, candidate injection, manual OpenAI replay, MIC change, X/Push/App behavior change, OAuth/Vault/secret change occurred.
-- The official-body enrichment candidate remains isolated/unintegrated.
-- Correct 48/96 nominal baseline and Phase 0 usage accounting are retained.
-
-Important distinction:
-- This PASS means the investigation/reconstruction task is complete.
-- It does **not** mean recall parity is proven.
-- It does **not** approve the shadow tables/function/Cron or any production cutover.
-- The next evidence step, if approved by the user, is a live shadow comparison with the legacy fallback kept fully active so real replacement-path first_seen timestamps can be measured.
-
-C1 decision: approve completion of this H1 and stop. Do not start production shadow rollout automatically.
+**このH1完了だけでlegacy search削減/cutoverへ進んではならない。**
