@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase10-production-oauth-rollout-20260920
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
 - purpose: C2 PASS済みのgeneral-user X OAuth onboardingをproductionへ安全に導入する。対象は承認済みmigrationの本番適用と新規Edge Function x-oauth-connect-user のdeploy/postflightまで。X Developer Portalの手動設定と実X OAuth round-tripは別ゲートとして扱う。
@@ -224,3 +224,35 @@ Portal設定後、ユーザーが明示的に許可した別H2で:
   10. rollback/recovery notes
 - push前fresh origin/main
 - C2待ちでSTOP
+
+
+## C2 review — 2026-09-20
+
+**NOT PASS / blocked by authorization gate — implementation is not the blocker.**
+
+Gate A read-only preflight passed and no production mutation occurred. The production migration and Edge Function deploy were not executed because the production mutation safety gate did not recognize a sufficiently explicit user authorization for the exact schema/security rollout.
+
+Accepted from this H2 attempt:
+- fresh main / production identity / drift preflight completed.
+- target unique index, nullable Auth FK column, and three new OAuth RPCs are still absent; production is not partially applied.
+- duplicate live platform identity groups = 0.
+- required Vault functions/schema compatibility confirmed.
+- existing admin OAuth flow was snapshotted and remains unchanged.
+- production row counts / identity hashes remained unchanged.
+- production mutation = 0.
+
+Required before rerun:
+- obtain an explicit user authorization that clearly approves the exact production action:
+  1. apply \`supabase/migrations/20260919120000_social_mobile_x_oauth_onboarding.sql\` to the production \`stock-x-autopost\` project; and
+  2. deploy only the \`x-oauth-connect-user\` Edge Function.
+- X Developer Portal changes, real OAuth authorization/token exchange, Vault token writes, and real X posting remain excluded.
+
+After explicit approval:
+- rerun fresh Gate A preflight;
+- apply the approved migration exactly once;
+- perform postflight ACL/RPC/index/FK/admin-OAuth invariants;
+- deploy only \`x-oauth-connect-user\`;
+- run unauthenticated/malformed fail-closed smoke;
+- return \`review_required / next_owner: chatgpt\`.
+
+No source changes are required by this C2.
