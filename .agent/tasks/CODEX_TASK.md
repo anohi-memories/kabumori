@@ -3,8 +3,8 @@
 - task_id: important-news-hourly-cadence-simplify-20260919
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: 重要ニュース監視のコスト最適化方針を簡素化する。2026-09-19〜09-23の連休中は現行どおり2時間おき、2026-09-24以降は朝刊・大引け前後の20分刻み増強を撤回し、終日1時間おき（毎時00分）へ変更する。
