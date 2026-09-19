@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase8-nonadmin-test-user-setup-and-tenant-proof-20260918
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: idle
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol High
 - purpose: Phase 7で確認したadmin/user分離設計を、productionのnon-admin test userで実証する。正規のSupabase Auth lifecycleでtest userを用意し、ai_salaryman_labだけ見えるtenant isolationを実Auth sessionで確認する。global admin既存経路は触らない。
@@ -296,3 +296,13 @@ C2 decision:
 - TASK -> review_required / next_owner: chatgpt
 - origin/main fresh-check + push + read-back
 - STOPしてC2待ち
+
+
+## Temporary handoff — 2026-09-19
+
+ユーザー指示により、Codex（こでさん）は本日夜まで休止。Phase 8 completion follow-upの残作業は一時的にClaude slot 2へ引き継ぐ。
+
+- H2はここでidle。
+- Claude slot 2が同workstreamを担当する間、Codex slot 2はsocial-mobile Phase 8関連の実装・DB・Auth・cleanupに触れない。
+- Claude側の完了確認はK2。
+- 夜以降にCodexへ戻す場合は、K2結果と最新mainを確認してから再armする。
