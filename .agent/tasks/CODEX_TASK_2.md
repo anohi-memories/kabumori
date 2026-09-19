@@ -3,7 +3,7 @@
 - task_id: social-mobile-app-phase9-codex-handoff-integration-20260919
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: in_progress
 - next_owner: codex
 - priority: high
 - recommended_model: Sol High
