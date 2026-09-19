@@ -3,7 +3,7 @@
 - task_id: social-mobile-app-phase9-x-oauth-onboarding-20260919
 - owner: claude
 - slot: claude-2
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Opus 5
@@ -422,3 +422,26 @@ The mobile UI may remain intentionally deferred; that is not the blocker for thi
 0件。migrationは未適用のまま、Edge Functionは未デプロイのまま。既存`x-oauth-connect`・既存brand/social_accounts/membership行への変更もなし。
 
 前回Reportの1〜11節（architecture/design/security model等）は変更なし。今回はK2指摘の2blockerの修正のみ。
+
+
+## Final K2 review — 2026-09-19
+
+**PASS — Phase 9 OAuth candidate approved for handoff.**
+
+Accepted:
+- K2 blocker 1 fixed: raw OAuth state is now passed to X; only the server-side DB lookup value is SHA-256 hashed once. End-to-end regression proves start -> authorization URL -> callback -> consume consistency.
+- K2 blocker 2 fixed: consume lookup is read-only; irreversible consumption occurs only inside `complete_social_mobile_x_oauth_connection`.
+- Because PostgreSQL function execution is transactional, failures raised after the state claim roll back the claim and Vault/account writes together, preserving safe retry behavior.
+- completion derives the target account from `oauth_state_id` + `auth.uid()` ownership, rather than trusting a caller-supplied social_account_id.
+- successful replay is rejected and concurrent duplicate completion is constrained to one success.
+- 18/18 new OAuth tests PASS; full suite 1240/1240 PASS; deno check and git diff --check PASS.
+- production mutation/deploy remains 0.
+- existing production admin X OAuth flow remains untouched.
+
+Review note:
+- feature branch is currently 2 commits ahead and 10 commits behind main, so it must not be merged blindly. The next owner must fresh-check origin/main and integrate only the reviewed Phase 9 changes, resolving drift explicitly.
+
+Decision:
+- Claude slot 2 Phase 9 candidate work is complete.
+- status = done.
+- Per user instruction, all subsequent Phase 9 work moves to Codex slot 2.
