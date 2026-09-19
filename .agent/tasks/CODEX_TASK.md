@@ -3,7 +3,7 @@
 - task_id: important-news-cost-phase1-recall-safe-shadow-handoff-20260919
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
@@ -438,3 +438,26 @@ Production mutation remains 0. Stop again for C1 after the durable replay artifa
 - Israel/Hezbollah: legacy fetch lag 24m57s. Al Jazeera source is date-only; replacement first-seen unavailable, so inherited +45m is not recomputable.
 - Mayun/Perim: legacy fetch lag 2h50m57s. Guardian's 12:00 UTC publication preceded legacy fetch by 2h20m20s but is not collector first-seen evidence; inherited +7h is not recomputable.
 - No shadow migration/function/Cron, official-body candidate integration, or production mutation. Stop for C1.
+
+
+## Final C1 review — 2026-09-20
+
+**PASS for this H1 investigation/design phase. Phase 1 production rollout remains NOT APPROVED.**
+
+Why this H1 passes:
+- The required durable replay artifact now exists and is committed on branch `codex/important-news-phase1-replay-followup-20260919` @ `b7f14ef3455339b7857aa7f155aa591c494ad903`.
+- An explicit equivalent cohort of 19 production high-importance breaking_market candidates was reconstructed with stable IDs, URLs, published_at/fetched_at and independently calculated legacy fetch lags.
+- The missing historical replacement `first_seen_at` evidence was not invented. The report correctly concludes replacement-route parity is still unproven.
+- The two inherited delay claims (+45m / +7h) were not falsely reasserted as verified; they remain unproven because collector-ingestion timestamps are unavailable.
+- All affected lanes therefore retain legacy paid fallback.
+- No Phase 1 production migration, Function deploy, Cron change, candidate injection, manual OpenAI replay, MIC change, X/Push/App behavior change, OAuth/Vault/secret change occurred.
+- The official-body enrichment candidate remains isolated/unintegrated.
+- Correct 48/96 nominal baseline and Phase 0 usage accounting are retained.
+
+Important distinction:
+- This PASS means the investigation/reconstruction task is complete.
+- It does **not** mean recall parity is proven.
+- It does **not** approve the shadow tables/function/Cron or any production cutover.
+- The next evidence step, if approved by the user, is a live shadow comparison with the legacy fallback kept fully active so real replacement-path first_seen timestamps can be measured.
+
+C1 decision: approve completion of this H1 and stop. Do not start production shadow rollout automatically.
