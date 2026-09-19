@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-19 JST (H1 important-news hourly cadence simplify ready; H2 social mobile Phase6 ready; G1 idle until 2026-09-24 natural shadow)
+- checked_at: 2026-09-19 JST (H1 important-news hourly cadence simplify review_required; H2 social mobile Phase6 ready; G1 idle until 2026-09-24 natural shadow)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,9 +14,9 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `important-news-hourly-cadence-simplify-20260919`
+- Codex slot 1: `review_required` — `important-news-hourly-cadence-simplify-20260919`
   - 9/19〜9/23の2時間おきは維持。
-  - 9/24以降は朝刊/大引け前後の20分刻み増強を撤回し、終日毎時00分のみ（24回/日）へ簡素化する。
+  - production `important-news-fetch` command gateのみ変更済み。9/19〜9/23は偶数時00分のみ（12回/日）、9/24以降は毎時00分のみ（24回/日）。C1確認待ち。
   - 変更対象は production `important-news-fetch` Cron 1本のcommand gateだけ。
 
 - Codex slot 2: `ready` — `social-mobile-app-phase6-auth-mobile-read-qa-20260918`
@@ -35,7 +35,7 @@
 
 ## Parallel safety
 
-- H1は `daily_content_plans` writer/schema/validation candidateのみ。`x-test-post`、market-report、social-mobile、OAuth/Vaultには触れない。
+- H1はproduction `important-news-fetch` Cronのcommand gateのみ。schedule、他Cron、Edge Function、schema、OAuth/Vaultには触れない。
 - H2はsocial-mobile `brand_memberships` / tenant RLS production rolloutのみ。H1の`daily_content_plans` objects、G1のmarket-report objectsを触れない。
 - G1はmarket-report schema/functions/`x-test-post`/personalized-reports領域。
 - 同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数slotで同時変更しない。
