@@ -44,12 +44,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: review_required
+- status: in_progress
 - task_id: social-mobile-app-phase8-completion-followup-claude-20260919
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: profile lifecycle確定（social-mobileにprofile不要、根拠あり）。mobile sign-in QAは実本番Supabaseに対しsigned-out/無効credential拒否まで実機確認、実credentialでのtenant別表示確認はユーザー手動待ち。test fixture cleanupはold canary membership 1件のDELETEをsafety reviewがブロック、ユーザー許可またはDashboard手動削除待ち。production mutation 0件。K2待ち。
+- note: K2 PARTIAL PASS後、ユーザー「次進めて」を受けてfinalization follow-upに着手。local social-mobile clientを起動済み状態まで準備し、ユーザーが実credentialでsign-inするだけの最短手順を提供する。QA成功後にfixture cleanupへ進む。
 
 ## Control codes
 
