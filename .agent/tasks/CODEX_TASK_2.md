@@ -159,7 +159,7 @@ read-only production preflight metadata only allowed.
 ## H2 C2 follow-up result — OAuth scopes (2026-09-19)
 
 - C2 blocker addressed: authorization now requests exactly `tweet.read users.read tweet.write media.write offline.access`.
-- Scope implementation commit: `502f324` (only OAuth scope logic, its exact-scope regression, and the scope rationale in the Phase 9 doc).
+- Scope implementation commit after latest-main rebase: `ac08cf7` (only OAuth scope logic, its exact-scope regression, and the scope rationale in the Phase 9 doc).
 - `tweet.write` enables the existing post endpoint. `media.write` is required by the repo's `/2/media/upload` path and its regression case for X's explicit missing-scope response. No further scopes were added.
 - Regression: OAuth 19/19, onboarding 8/8, full Deno 1259/1259; mobile lint/typecheck/Expo web export and diff-check passed.
 - No production migration/deploy/portal/API/Post/Cron/settings changes. X Developer Portal permission/redirect setup remains a later, separately approved manual step.
