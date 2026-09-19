@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase9-x-oauth-onboarding-20260919
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Opus 5
 - purpose: Phase 8で確立した一般ユーザーAuth + tenant RLS境界を壊さず、social-mobileのX OAuth onboardingを設計・実装候補まで進める。既存のproduction X投稿基盤・Vault・multi-brand運用を再利用できる部分は再利用し、ユーザーごとのworkspace/account ownershipを安全に確立する。
@@ -377,3 +377,48 @@ Add tests for:
 6. Update this Report with exact changed files/commit and return `review_required / next_owner: chatgpt`.
 
 The mobile UI may remain intentionally deferred; that is not the blocker for this K2.
+
+## Report (K2 follow-up — blocker fixes)
+
+- result: K2で指摘された2つのblockerを両方修正した。migration・Edge Functionともに**同じ未適用・未デプロイのcandidate**の上での修正であり、いずれのバグも本番へは一切到達していない。
+
+### Blocker 1（state二重ハッシュ）の修正
+
+原因: `startConnection()`がクライアントから受け取った`state_hash`（ハッシュ済み値）をそのままXの`state`パラメータとして送信していた。Xはこの値を無変更でcallbackへ返すため、`completeConnection()`側の`hashState(request.state)`が「ハッシュのハッシュ」を計算してしまい、`begin`が保存した値と一致せずhappy pathが原理的に成立しなかった。
+
+修正: クライアントは**生のstate値**を送るよう変更し、`startConnection()`内でDB保存用に一度だけハッシュ計算（`p_state_hash`）し、Xには生のstateをそのまま渡す。`completeConnection()`側の既存の1回のハッシュ計算は変更不要（入力が正しい生の値になったことで整合する）。
+
+回帰テスト: `startConnection`が生成する`p_state_hash`（RPCへ送る値）とXへ送る`state`パラメータが別物であることを検証するテスト、および「start→authorization URLのstate→callback→consume」を1本のテストで繋いで、保存されたhashと問い合わせ時のhashが完全一致することを直接証明するend-to-endテストを追加。
+
+### Blocker 2（consume早すぎ問題）の修正
+
+原因: `consume_social_mobile_x_oauth_state`がlookup時点で`consumed_at`を確定させていたため、その後のトークン交換・identity取得・Vault書き込みのいずれかで失敗すると、そのstateは永久に再利用不能になりretryができなかった。
+
+修正: `consume_social_mobile_x_oauth_state`を**read-only**（`consumed_at`を一切変更しない、何度呼んでも安全）に変更。唯一の不可逆な「消費」ポイントを`complete_social_mobile_x_oauth_connection`内の1つのatomicな`UPDATE ... WHERE consumed_at IS NULL`に移動し、成功時にのみ`consumed_at`が確定するようにした。`complete_*`のパラメータも、クライアントが独立して指定できてしまう`p_social_account_id`ではなく、`consume_*`が返す`oauth_state_id`（state行自身の主キー）を受け取る形に変更し、なりすまし可能なパラメータを削減。
+
+回帰テスト: トークン交換失敗後のretry成功、identity取得失敗後のretry成功、completion RPC失敗後のretry成功、成功済みcallbackのreplayが拒否されること、同一stateへの2つの同時callbackのうち1つだけが成功すること、の計5テストを新規追加（+ end-to-endテスト1件、合計6件純増）。
+
+### tests
+
+- `deno test --no-check --allow-env --allow-read --allow-net=127.0.0.1 supabase/functions/x-oauth-connect-user`: **18/18 pass**（既存12 + 新規6）。
+- `deno test`全体: **1240/1240 pass**（既存1234 + 新規6）、リグレッションなし。
+- `deno check supabase/functions/x-oauth-connect-user/oauth_logic.ts`: エラーなし。
+- `git diff --check`: 問題なし。
+
+### changed files
+
+- `supabase/migrations/20260919120000_social_mobile_x_oauth_onboarding.sql`（同ファイルを修正。まだ本番未適用のcandidateなので新規migrationファイルは作成せず、この場で修正）
+- `supabase/functions/x-oauth-connect-user/index.ts`（body fieldを`state_hash`→`state`(raw)に変更）
+- `supabase/functions/x-oauth-connect-user/oauth_logic.ts`（`StartRequest.stateHash`→`rawState`、`startConnection`内でハッシュ計算、`consume`/`complete`のRPC呼び出し形状変更）
+- `supabase/functions/x-oauth-connect-user/oauth_logic_test.ts`（既存テストのフィールド名修正+新規6テスト）
+- `apps/social-mobile/docs/phase9-x-oauth-onboarding.md`（K2フォローアップの修正内容を追記）
+
+### commit/push
+
+- ブランチ`social-mobile-x-oauth-onboarding-phase9-20260919`、コミット`a58c01d`をpush済み（前回commit `db79f02`の後続。mainへは未マージ）。
+
+### production mutation = 0 confirmation
+
+0件。migrationは未適用のまま、Edge Functionは未デプロイのまま。既存`x-oauth-connect`・既存brand/social_accounts/membership行への変更もなし。
+
+前回Reportの1〜11節（architecture/design/security model等）は変更なし。今回はK2指摘の2blockerの修正のみ。

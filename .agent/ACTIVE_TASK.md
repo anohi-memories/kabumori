@@ -44,12 +44,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: in_progress
+- status: review_required
 - task_id: social-mobile-app-phase9-x-oauth-onboarding-20260919
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: K2 NOT PASS（state二重ハッシュバグ、consume早すぎによるretry不能問題）を受けて修正に着手。ブランチ`social-mobile-x-oauth-onboarding-phase9-20260919`上で修正。
+- note: K2指摘の2blocker（state二重ハッシュ、consume早すぎによるretry不能）を修正。end-to-end整合テスト+retry/replay/concurrency 6テスト新規追加、計18/18 pass、既存含め1240/1240 pass。ブランチ`social-mobile-x-oauth-onboarding-phase9-20260919`(commit a58c01d)へpush。production適用・デプロイ引き続き0件。K2待ち。
 
 ## Control codes
 
