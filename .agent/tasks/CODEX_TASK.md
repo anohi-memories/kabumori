@@ -392,3 +392,140 @@ schema dropは緊急rollbackに含めない。
 - C1待ちでSTOP
 
 **このH1完了だけでlegacy search削減/cutoverへ進んではならない。**
+
+
+## User-approved continuation — 2026-09-20
+
+The H1 implementation reached a safe stop before creating the authenticated shadow Cron.
+
+User-reported completed state before this approval:
+- one shadow-only migration applied to production
+- `important-news-shadow` v1 deployed
+- RLS enabled; anon/authenticated access denied
+- unauthenticated POST returns 401
+- 12 tests + typecheck passed
+- legacy important-news Function/Cron hashes unchanged
+- X / Push / App writes = 0
+- branch commit `69b66b8` pushed
+- authenticated 30-minute Cron, natural 2-run observation, 10-minute cutover, and main synchronization were not completed
+- direct push to origin/main was rejected by the safety review
+
+### Explicitly approved exception
+
+For this continuation only, the user explicitly approves the following additional production mutations:
+
+1. Create a new dedicated secret named `important_news_shadow_cron_secret`.
+2. Store the same new dedicated secret in:
+   - the `important-news-shadow` Edge Function environment
+   - Supabase Vault for Cron use
+3. Modify/redeploy **only** `important-news-shadow` so authenticated Cron calls can be validated using this dedicated secret.
+4. Create exactly one authenticated shadow-only Cron at 30-minute cadence.
+5. After at least 2 successful natural 30-minute executions and safety verification, change **only that shadow Cron** to 10-minute cadence.
+6. Create a PR from the H1 branch to main.
+7. **Do not auto-merge the PR.** C1/explicit review is required before merge.
+
+### Secret handling constraints
+
+- Generate a new high-entropy random value; never reuse service-role keys, anon keys, existing webhook secrets, OAuth secrets, or existing application secrets.
+- Do not place the secret in URL/query parameters.
+- Send it only in a request header or equivalent secret header mechanism.
+- Do not expose the secret value in Git, logs, Function responses, Cron command read-backs, Reports, screenshots, or assistant output.
+- Cron command/hash evidence must redact the secret.
+- Vault row/content may be checked structurally, but never print plaintext secret.
+- Existing secrets must remain untouched.
+- No service-role credential may be embedded in Cron.
+
+### Auth design requirements
+
+- Authentication applies only to `important-news-shadow`.
+- Fail closed on missing/invalid secret.
+- Use constant-time comparison where practical.
+- No fallback to unauthenticated execution.
+- Do not weaken `verify_jwt` / auth behavior of unrelated Functions.
+- Keep all X/Push/App/publish surfaces absent from shadow.
+- Preserve old important-news-monitor and old Cron byte-for-byte/hash-identical where practical.
+
+### 30-minute canary acceptance
+
+Before 10-minute cutover, verify at least 2 natural Cron executions:
+- HTTP success / completed shadow run
+- source health recorded
+- no X/Push/App writes
+- no legacy candidate mutation
+- old important-news Cron/hash unchanged
+- old important-news-monitor version/hash unchanged
+- conditional Web Search count/cost recorded
+- no retry storm / duplicate run
+- secret not logged
+- no unexpected 401/403/5xx loop
+
+If any safety check fails:
+- disable the shadow Cron immediately
+- keep legacy pipeline untouched
+- stop for C1 with evidence
+
+### 10-minute cutover
+
+Only after the 2-run canary passes:
+- change the shadow Cron only to every 10 minutes
+- verify active/schedule/command hash
+- confirm legacy jobs unchanged again
+- observe at least one natural 10-minute run if timing permits before C1
+- do not interpret this as recall parity or cutover approval
+
+### PR / main synchronization
+
+Because direct main push was rejected:
+- create a PR from the H1 branch to main
+- include only H1-owned source/docs/migration/control-file changes
+- no unrelated H2/G1/G2 changes
+- no auto-merge
+- record PR number/URL in CODEX_REPORT
+- if branch is behind main, fresh-check and rebase/cherry-pick only H1-owned changes safely; do not overwrite concurrent work
+
+### Updated production mutation scope
+
+Allowed in this continuation:
+- the already-applied shadow migration
+- `important-news-shadow` redeploy only
+- one new dedicated Vault secret entry
+- one matching Function environment secret
+- one shadow Cron create + its 30m -> 10m cadence update
+- PR creation
+
+Still prohibited:
+- service-role Cron auth
+- any existing secret mutation
+- old important-news-fetch/judgement/generation/publish-ready changes
+- `important-news-monitor` deploy
+- fixed breaking search reduction
+- live candidate/judgement behavior changes
+- X/Push/App publication changes
+- MIC source/Cron changes
+- market-report changes
+- OAuth/social-mobile changes
+- migration history repair/reconcile
+- blind db push
+- auto-merge
+
+### Completion / C1
+
+Update CODEX_REPORT with:
+- exact new Function version/source hash
+- secret presence proof without value
+- Vault presence proof without value
+- Cron jobid/name/schedule/active/redacted command hash
+- two 30-minute natural run timestamps/results
+- 10-minute cutover proof if performed
+- at least one 10-minute natural run if available
+- source health/candidate/match/search/cost metrics
+- old Function/Cron unchanged proof
+- X/Push/App writes = 0
+- rollback path
+- PR number/URL
+- production mutation inventory
+- remaining recall gaps
+
+Then set status=review_required, next_owner=chatgpt, sync control metadata through the PR/allowed safe route, and STOP for C1.
+
+**Recommended model: Sol.**
