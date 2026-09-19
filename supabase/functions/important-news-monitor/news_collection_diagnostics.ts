@@ -12,7 +12,13 @@ export type BreakingMarketQueryRunDiagnostic = {
   validatedCandidateCount: number;
   rejectionCounts: Record<string, number>;
   failureCode: string | null;
+  webSearchCallCount?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  estimatedCostUsd?: number;
 };
+
+const n = (value: number | undefined) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
 
 /** Bounded, secret-free per-run diagnostics; zeroes remain queryable across runs to derive consecutive streaks. */
 export function buildCollectionRunDiagnostics(input: {
@@ -24,8 +30,21 @@ export function buildCollectionRunDiagnostics(input: {
     ...item,
     rejectionCounts: { ...item.rejectionCounts },
   }));
+  const cost = {
+    breakingMarket: {
+      queries: breakingMarketQueries.length,
+      webSearchCalls: breakingMarketQueries.reduce((sum, item) => sum + n(item.webSearchCallCount), 0),
+      inputTokens: breakingMarketQueries.reduce((sum, item) => sum + n(item.inputTokens), 0),
+      outputTokens: breakingMarketQueries.reduce((sum, item) => sum + n(item.outputTokens), 0),
+      estimatedCostUsd: Number(
+        breakingMarketQueries.reduce((sum, item) => sum + n(item.estimatedCostUsd), 0).toFixed(6),
+      ),
+    },
+  };
   return {
     version: 1,
+    // Additive (cost optimisation Phase 0); readers of version 1 keep working.
+    cost,
     marketMacro: {
       providers: marketMacroProviders,
       zeroResultCount: marketMacroProviders.filter((item) =>
