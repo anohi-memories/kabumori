@@ -27,6 +27,29 @@
 -- OAuth client does PKCE -- so, unlike the existing admin flows, it is never sent to or stored by this
 -- database at all. Only the resulting state_hash is recorded here, to bind one begin() call to one
 -- consume() call.
+--
+-- K2 2026-09-19 follow-up fix, both in this same not-yet-applied candidate file (no production schema
+-- ever ran the earlier version of this migration, so there is nothing to migrate away from -- this is
+-- simply the corrected candidate, not a second migration layered on top of a broken one):
+--
+-- 1. State is now hashed exactly once, by the Edge Function, from the raw client-generated state value.
+--    The earlier candidate had the Edge Function send the already-hashed value to X as the OAuth `state`
+--    parameter, then hash *that* again on the way back in -- so the value looked up at consume time never
+--    matched what begin() had stored. The fix is entirely in x-oauth-connect-user/oauth_logic.ts (X now
+--    receives and returns the raw state unchanged, and it is hashed exactly once, at consume time); this
+--    migration's own `p_state_hash` parameters were already correct (they always expected/stored a hash)
+--    and are unchanged.
+-- 2. consume_social_mobile_x_oauth_state() no longer marks the state consumed. It is now a read-only
+--    lookup (ownership + expiry + not-yet-consumed checks only) safe to call repeatedly, so a transient
+--    failure anywhere between it and completion (redirect mismatch, X token endpoint error, identity read
+--    failure, Vault/RPC failure) leaves the state fully retryable. The one atomic, irreversible "consume"
+--    moment is now inside complete_social_mobile_x_oauth_connection() itself: it claims the state (sets
+--    consumed_at, but only if it is still null and unexpired) in the same statement that identifies which
+--    row is being finalized, so two concurrent completion attempts for the same state can never both
+--    succeed, and a state that already completed successfully can never be replayed into a second
+--    completion. complete_* now takes the oauth_state row's own id (returned by consume_*) instead of a
+--    separately-supplied social_account_id, so there is no way to point a completion at a state row it
+--    was not actually issued for.
 
 -- 1. Close a real gap found during Phase A inventory: no constraint today prevents the same X account
 --    (platform_user_id) from being linked to two different social_accounts rows (two different brands /
@@ -130,16 +153,16 @@ begin
 end;
 $$;
 
--- 4. consume_social_mobile_x_oauth_state: the ownership checkpoint. A state hash matching the row is not
---    enough -- the row's initiated_by_user_id must equal the CURRENT caller's auth.uid(). This is what
---    makes "cross-user connect denied" and "state replay denied" true even if a state value ever leaked
---    to a different authenticated session. The code_verifier itself is not read from here (see the
---    architecture note above) -- the caller (the Edge Function, forwarding what the mobile app already
---    holds) supplies it directly to X's token endpoint; this function only returns what it is safe to
---    look up server-side (the redirect_uri this state was opened with, and which brand/account it maps
---    to for this user).
+-- 4. consume_social_mobile_x_oauth_state: the ownership + validity checkpoint. READ-ONLY -- it does not
+--    mark anything consumed, so it is safe to call more than once (e.g. after a transient failure later
+--    in the flow forces the Edge Function to re-derive the same brand/account/redirect_uri for a retry).
+--    A state hash matching the row is not enough -- the row's initiated_by_user_id must equal the CURRENT
+--    caller's auth.uid(). This is what makes "cross-user connect denied" true even if a state value ever
+--    leaked to a different authenticated session. It returns the row's own id (oauth_state_id) so the
+--    caller can pass that -- not a client-suppliable social_account_id -- into complete_*() below, which
+--    is what actually performs the one irreversible consumption.
 create or replace function public.consume_social_mobile_x_oauth_state(p_state_hash text)
-returns table (redirect_uri text, brand_id text, social_account_id text)
+returns table (oauth_state_id uuid, redirect_uri text, brand_id text, social_account_id text)
 language plpgsql
 security definer
 set search_path = 'public'
@@ -152,8 +175,7 @@ begin
     raise exception 'SOCIAL_MOBILE_OAUTH_AUTH_REQUIRED';
   end if;
   select * into v_state from public.social_account_oauth_states
-  where state_hash = p_state_hash
-  for update;
+  where state_hash = p_state_hash;
   if not found or v_state.initiated_by_user_id is distinct from v_user_id then
     -- Deliberately the same error for "no such state" and "belongs to someone else": do not let the
     -- error message itself reveal whether a given state hash exists for another user.
@@ -162,17 +184,21 @@ begin
   if v_state.consumed_at is not null or v_state.expires_at <= now() then
     raise exception 'OAUTH_STATE_NOT_CONSUMABLE';
   end if;
-  update public.social_account_oauth_states set consumed_at = now() where id = v_state.id;
-  return query select v_state.redirect_uri, v_state.brand_id, v_state.social_account_id;
+  return query select v_state.id, v_state.redirect_uri, v_state.brand_id, v_state.social_account_id;
 end;
 $$;
 
--- 5. complete_social_mobile_x_oauth_connection: writes the verified identity + tokens. Ownership is
---    re-checked here too (defense in depth, not just at consume time) via brand_memberships, and the new
---    partial unique index (added in step 1) is what turns "this X account is already connected
---    elsewhere" into a real, atomic failure rather than a check-then-act race.
+-- 5. complete_social_mobile_x_oauth_connection: the one irreversible step. It both claims the oauth state
+--    (atomically: consumed_at is set only if it was still null and unexpired, in the same UPDATE that
+--    identifies the row -- so two concurrent completions for the same state, or a replay after a prior
+--    success, can never both/again succeed) and writes the verified identity + tokens. p_oauth_state_id
+--    is the id consume_*() returned, not a client-suppliable social_account_id -- the account being
+--    completed is derived from the state row itself, and ownership is re-checked via brand_memberships
+--    (defense in depth, not just relying on consume-time checks). The new partial unique index on
+--    social_accounts(platform, platform_user_id) (added in step 1) is what turns "this X account is
+--    already connected elsewhere" into a real, atomic failure rather than a check-then-act race.
 create or replace function public.complete_social_mobile_x_oauth_connection(
-  p_social_account_id text,
+  p_oauth_state_id uuid,
   p_platform_user_id text,
   p_handle text,
   p_access_token text,
@@ -185,6 +211,7 @@ set search_path = 'public', 'vault'
 as $$
 declare
   v_user_id uuid := auth.uid();
+  v_social_account_id text;
   v_account public.social_accounts%rowtype;
   v_handle text := lower(regexp_replace(trim(p_handle), '^@', ''));
 begin
@@ -195,10 +222,24 @@ begin
     raise exception 'OAUTH_TOKEN_OR_IDENTITY_INVALID';
   end if;
 
+  -- The one atomic, irreversible claim: only succeeds if this exact state row belongs to the caller,
+  -- was not already claimed by an earlier (successful or concurrently in-flight) completion, and has not
+  -- expired. This single UPDATE is what makes replay and concurrent-duplicate-completion both fail.
+  update public.social_account_oauth_states
+  set consumed_at = now()
+  where id = p_oauth_state_id
+    and initiated_by_user_id = v_user_id
+    and consumed_at is null
+    and expires_at > now()
+  returning social_account_id into v_social_account_id;
+  if v_social_account_id is null then
+    raise exception 'OAUTH_STATE_NOT_CONSUMABLE';
+  end if;
+
   select sa.* into v_account
   from public.social_accounts sa
   join public.brand_memberships bm on bm.brand_id = sa.brand_id
-  where sa.id = p_social_account_id and bm.user_id = v_user_id and bm.role = 'owner'
+  where sa.id = v_social_account_id and bm.user_id = v_user_id and bm.role = 'owner'
   for update of sa;
   if not found then
     raise exception 'SOCIAL_MOBILE_ACCOUNT_NOT_OWNED';
@@ -208,12 +249,12 @@ begin
   end if;
 
   if v_account.vault_access_token_secret_id is null then
-    v_account.vault_access_token_secret_id := vault.create_secret(p_access_token, p_social_account_id || '_access_token', 'OAuth access token.');
+    v_account.vault_access_token_secret_id := vault.create_secret(p_access_token, v_social_account_id || '_access_token', 'OAuth access token.');
   else
     perform vault.update_secret(v_account.vault_access_token_secret_id, p_access_token);
   end if;
   if v_account.vault_refresh_token_secret_id is null then
-    v_account.vault_refresh_token_secret_id := vault.create_secret(p_refresh_token, p_social_account_id || '_refresh_token', 'OAuth refresh token.');
+    v_account.vault_refresh_token_secret_id := vault.create_secret(p_refresh_token, v_social_account_id || '_refresh_token', 'OAuth refresh token.');
   else
     perform vault.update_secret(v_account.vault_refresh_token_secret_id, p_refresh_token);
   end if;
@@ -233,12 +274,12 @@ begin
     verified_at = now(),
     last_connection_error_code = null,
     updated_at = now()
-  where id = p_social_account_id;
+  where id = v_social_account_id;
 exception
   when unique_violation then
     update public.social_accounts
     set connection_status = 'failed', last_connection_error_code = 'X_ACCOUNT_ALREADY_CONNECTED', updated_at = now()
-    where id = p_social_account_id;
+    where id = v_social_account_id;
     raise exception 'X_ACCOUNT_ALREADY_CONNECTED';
 end;
 $$;
@@ -247,7 +288,7 @@ $$;
 -- see the architecture note at the top of this file for why that is load-bearing, not incidental.
 revoke all on function public.begin_social_mobile_x_oauth_connection(text, text, timestamptz) from public, anon;
 revoke all on function public.consume_social_mobile_x_oauth_state(text) from public, anon;
-revoke all on function public.complete_social_mobile_x_oauth_connection(text, text, text, text, text) from public, anon;
+revoke all on function public.complete_social_mobile_x_oauth_connection(uuid, text, text, text, text) from public, anon;
 grant execute on function public.begin_social_mobile_x_oauth_connection(text, text, timestamptz) to authenticated;
 grant execute on function public.consume_social_mobile_x_oauth_state(text) to authenticated;
-grant execute on function public.complete_social_mobile_x_oauth_connection(text, text, text, text, text) to authenticated;
+grant execute on function public.complete_social_mobile_x_oauth_connection(uuid, text, text, text, text) to authenticated;

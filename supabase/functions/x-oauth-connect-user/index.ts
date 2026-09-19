@@ -66,7 +66,9 @@ Deno.serve(async (req) => {
     }
 
     const request: StartRequest = {
-      stateHash: typeof bodyRecord.state_hash === "string" ? bodyRecord.state_hash : "",
+      // Raw, not pre-hashed -- see oauth_logic.ts's K2 fix note. The client sends the same raw state
+      // value it will independently compare its deep-link callback against.
+      rawState: typeof bodyRecord.state === "string" ? bodyRecord.state : "",
       codeChallenge: typeof bodyRecord.code_challenge === "string" ? bodyRecord.code_challenge : "",
       redirectUri: typeof bodyRecord.redirect_uri === "string" ? bodyRecord.redirect_uri : "",
     };
@@ -90,7 +92,7 @@ Deno.serve(async (req) => {
   curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/x-oauth-connect-user' \
     --header 'Authorization: Bearer <user JWT>' \
     --header 'Content-Type: application/json' \
-    --data '{"state_hash":"<sha256 hex of a locally-generated random state>","code_challenge":"<S256 PKCE challenge>","redirect_uri":"kabumori-social-mobile://oauth-callback"}'
+    --data '{"state":"<a locally-generated random raw state value, NOT pre-hashed>","code_challenge":"<S256 PKCE challenge>","redirect_uri":"kabumori-social-mobile://oauth-callback"}'
 
   3. Callback (mobile app calls this after the X browser round-trip returns via deep link):
 

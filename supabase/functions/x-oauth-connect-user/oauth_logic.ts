@@ -108,7 +108,14 @@ export async function rpcAsUser({
   return text.trim() === "" ? null : JSON.parse(text);
 }
 
-export type StartRequest = { stateHash: string; codeChallenge: string; redirectUri: string };
+// K2 2026-09-19 fix: this request now carries the RAW client-generated state, not a pre-hashed value.
+// The earlier candidate had the mobile client pre-hash state before sending it here, and this function
+// then sent that *hash* to X as the OAuth `state` parameter -- X returns whatever it was given completely
+// unchanged, so the callback's hashState(request.state) in completeConnection() was hashing the hash a
+// second time, and could never match what begin() had stored. The fix: exactly one hash computation
+// happens anywhere in this whole flow, right here, from the one raw value the client generates and X
+// round-trips unchanged -- X only ever sees and returns the RAW state.
+export type StartRequest = { rawState: string; codeChallenge: string; redirectUri: string };
 export type StartResult = { authorizationUrl: string; brandId: string; socialAccountId: string };
 
 const X_AUTHORIZE_URL = "https://x.com/i/oauth2/authorize";
@@ -131,14 +138,17 @@ export async function startConnection({
   fetchImpl?: FetchLike;
   now?: Date;
 }): Promise<StartResult> {
-  if (!/^[0-9a-f]{64}$/u.test(request.stateHash)) fail("OAUTH_STATE_INPUT_INVALID", 400);
+  // 16 bytes of randomness base64url-encoded is at least 22 chars; require a bit more headroom than that
+  // as a sanity floor without hardcoding the client's exact encoding.
+  if (!request.rawState || request.rawState.length < 16) fail("OAUTH_STATE_INPUT_INVALID", 400);
   if (!request.codeChallenge || !request.redirectUri) fail("OAUTH_STATE_INPUT_INVALID", 400);
 
+  const stateHash = await hashState(request.rawState);
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
   const rows = await rpcAsUser({
     supabaseUrl, anonKey, userAccessToken, fetchImpl,
     name: "begin_social_mobile_x_oauth_connection",
-    body: { p_state_hash: request.stateHash, p_redirect_uri: request.redirectUri, p_expires_at: expiresAt },
+    body: { p_state_hash: stateHash, p_redirect_uri: request.redirectUri, p_expires_at: expiresAt },
   }) as Array<{ brand_id: string; social_account_id: string }> | { brand_id: string; social_account_id: string } | null;
   const row = Array.isArray(rows) ? rows[0] : rows;
   if (!row?.brand_id || !row.social_account_id) fail("SOCIAL_MOBILE_OAUTH_DB_CALL_FAILED", 502);
@@ -149,8 +159,8 @@ export async function startConnection({
     client_id: clientId,
     redirect_uri: request.redirectUri,
     scope: X_SCOPES,
-    state: request.stateHash, // the client compares the returned `state` against its own locally-held raw
-                              // state value; the server never sees or needs the raw state, only its hash.
+    state: request.rawState, // X returns this exact value unchanged; the client also independently
+                             // compares it against its own locally-held copy before ever calling back here.
     code_challenge: request.codeChallenge,
     code_challenge_method: "S256",
   }).toString();
@@ -218,6 +228,14 @@ async function readXIdentity({ accessToken, fetchImpl }: { accessToken: string; 
   return { platformUserId, handle: username };
 }
 
+// K2 2026-09-19 fix: consume_social_mobile_x_oauth_state() is now read-only (see the migration's own
+// comment) -- it no longer marks the state consumed, so calling it here is safe to repeat on retry. The
+// actual, one-time irreversible consumption now happens atomically inside
+// complete_social_mobile_x_oauth_connection() itself (keyed by the state row's own id, not a
+// client-suppliable social_account_id), at the exact point the flow commits to writing tokens. This means
+// a failure at any step BEFORE that RPC call -- redirect mismatch, X token endpoint error, X identity read
+// error -- leaves the state fully retryable; only a call that reaches and passes that RPC (success, or a
+// concurrent/replayed duplicate racing against it) can ever change its consumed state.
 export async function completeConnection({
   request,
   userAccessToken,
@@ -244,9 +262,10 @@ export async function completeConnection({
     supabaseUrl, anonKey, userAccessToken, fetchImpl,
     name: "consume_social_mobile_x_oauth_state",
     body: { p_state_hash: stateHash },
-  }) as Array<{ redirect_uri: string; brand_id: string; social_account_id: string }> | { redirect_uri: string; brand_id: string; social_account_id: string } | null;
+  }) as Array<{ oauth_state_id: string; redirect_uri: string; brand_id: string; social_account_id: string }>
+    | { oauth_state_id: string; redirect_uri: string; brand_id: string; social_account_id: string } | null;
   const state = Array.isArray(consumed) ? consumed[0] : consumed;
-  if (!state?.social_account_id) fail("OAUTH_STATE_NOT_CONSUMABLE", 400);
+  if (!state?.oauth_state_id || !state.social_account_id) fail("OAUTH_STATE_NOT_CONSUMABLE", 400);
   if (state.redirect_uri !== request.redirectUri) fail("OAUTH_STATE_REDIRECT_MISMATCH", 400);
 
   const tokens = await exchangeCodeForTokens({
@@ -255,11 +274,13 @@ export async function completeConnection({
   });
   const identity = await readXIdentity({ accessToken: tokens.accessToken, fetchImpl });
 
+  // The single irreversible step: fails closed (OAUTH_STATE_NOT_CONSUMABLE) if this exact state was
+  // already consumed by an earlier successful completion, or by a concurrently-racing duplicate.
   await rpcAsUser({
     supabaseUrl, anonKey, userAccessToken, fetchImpl,
     name: "complete_social_mobile_x_oauth_connection",
     body: {
-      p_social_account_id: state.social_account_id,
+      p_oauth_state_id: state.oauth_state_id,
       p_platform_user_id: identity.platformUserId,
       p_handle: identity.handle,
       p_access_token: tokens.accessToken,
