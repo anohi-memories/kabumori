@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-19 JST (H1 important-news hourly cadence simplify C1 PASS/done; H2 social mobile Phase6 ready; G1 idle until 2026-09-24 natural shadow)
+- checked_at: 2026-09-19 JST (H1 done; H2 idle; G1 natural shadow wait; G2 social-mobile Phase9 X OAuth onboarding ready)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -19,19 +19,18 @@
   - 9/19〜9/23はJST偶数時00分のみ（12回/日）、9/24以降はJST毎時00分のみ（24回/日）。
   - 朝刊/大引け前後の20分刻み増強は撤回済み。judgement/generation/publish、market-report/MIC Cron、Edge Function、OAuth/Vault/X/Push変更0。
 
-- Codex slot 2: `ready` — `social-mobile-app-phase6-auth-mobile-read-qa-20260918`
-  - Phase5 production membership/RLS rolloutはC2 PASS済み。
-  - 次は実Auth/no-membership/canary membership/mobile adapter read QA。
-  - canaryはuser↔brand mappingを一意・明示的に確認できる場合だけ1件。曖昧なら0件。
-  - production default `EXPO_PUBLIC_DATA_SOURCE=supabase` はまだONにしない。
-  - Dashboard手動applyのmigration history未記録はrepair/reconcileせず既知事項として維持。
+- Codex slot 2: `idle` — social-mobile Phase8 handoff complete
+  - Phase8はG2/K2でPASS・cleanup完了。Codexは本日夜まで休止。
+
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
   - market-report-analysis v2 shadow deployはK1 PASS済み。consumer gateはOFF。
   - 2026-09-24の自然shadow出力まで待機。x-test-post/personalized-reports consumer cutoverは未承認。
 
-- Claude slot 2: `done` — `morning-greeting-image-cost-gate-rollout-20260917`
-  - K2 PASS・main反映済み。自然OFF確認は別read-only観測。
+- Claude slot 2: `ready` — `social-mobile-app-phase9-x-oauth-onboarding-20260919`
+  - Phase8 tenant/Auth/profile/cleanupはK2 PASS済み。
+  - 次はX OAuth account onboardingのread-only audit → safe candidate実装。
+  - K2前のproduction OAuth/Vault/deploy/schema applyは禁止。
 
 ## Parallel safety
 
