@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase8-completion-followup-claude-20260919
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: high
 - recommended_model: Opus 5
 - purpose: Codex slot 2から一時引き継ぎ。Phase 8で既にPASS済みのtenant RLS isolation proofを前提に、残っている mobile/local sign-in QA、profile lifecycle正本確認、test fixture cleanupだけを安全に完了させる。
@@ -268,3 +268,53 @@ K2 decision:
 - No further schema/RLS/grant/profile code changes are warranted from current evidence.
 - Next action is user-mediated real credential sign-in QA, followed by fixture cleanup.
 - Do not begin X OAuth onboarding until those two items are complete.
+
+
+## Phase 8 finalization follow-up authorized — 2026-09-19
+
+ユーザーが「次進めて」と明示。K2で残った2点だけをClaude slot 2で続行する。
+
+### Scope A — real non-admin client sign-in QA
+
+- 既存non-admin QA userを使用。
+- credential/password/tokenを取得・推測・記録しない。
+- Claude実行環境でcredential入力ができない場合、local social-mobile clientを起動した状態まで準備し、ユーザーが自分でcredentialを入力して確認できる最短手順を提示する。
+- production default `EXPO_PUBLIC_DATA_SOURCE=mock` は変更しない。
+- local/devのみ `EXPO_PUBLIC_DATA_SOURCE=supabase`。
+- sign-in成功後に確認すること:
+  - visible workspace/brand = `ai_salaryman_lab` only
+  - `kabumori` visible rows = 0
+  - `mio` visible rows = 0
+  - no silent mock fallback
+  - permission/unavailable errors remain fail-closed
+- client-side filteringだけでなく、既にPASS済みRLSと整合すること。
+- RLS/schema/grant/admin policyは触らない。
+
+### Scope B — fixture cleanup after successful QA
+
+QA成功後のみ:
+1. old global-admin canary membership 1 rowをexact targetで削除。
+2. non-admin QA userのmembershipを削除。
+3. non-admin QA Auth user本体はSupabase Dashboard/Authの正規削除経路のみ。
+4. profile rowは存在しないため作成・削除不要。
+5. admin_users / production brands / social_accounts / policies は絶対に触らない。
+
+安全上ツールで削除不可なら:
+- 迂回しない。
+- Dashboardでの手動削除手順を正確に提示。
+- 削除前後のexpected countsをReportへ記録。
+
+### Completion target
+
+完了時にReportへ:
+- real non-admin client sign-in QA result
+- ai_salaryman_lab only / kabumori 0 / mio 0
+- cleanup result
+- remaining fixture counts
+- production mutation list
+- production default mock confirmation
+- next phase readiness: X OAuth login onboarding
+
+status -> `review_required`
+next_owner -> `chatgpt`
+STOPしてK2待ち。
