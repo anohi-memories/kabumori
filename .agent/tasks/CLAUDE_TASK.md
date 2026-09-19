@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase9-x-oauth-onboarding-20260919
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: high
 - recommended_model: Opus 5
 - purpose: Phase 8で確立した一般ユーザーAuth + tenant RLS境界を壊さず、social-mobileのX OAuth onboardingを設計・実装候補まで進める。既存のproduction X投稿基盤・Vault・multi-brand運用を再利用できる部分は再利用し、ユーザーごとのworkspace/account ownershipを安全に確立する。
@@ -299,3 +299,81 @@ reconnect: `begin_*`の再呼び出しで同じ行を再利用し安全にやり
 2. revoke/disconnect flow未設計
 3. 一般ユーザーのposting_windows/publish有効化設計は完全にスコープ外（OAuth/所有権確立のみ）
 4. X Developer Portalでのdeep-link redirect URI登録が本番投入前に必要
+
+
+## K2 review — 2026-09-19
+
+**NOT PASS — candidate architecture is directionally good, but the current implementation has a blocking OAuth state bug and retry/idempotency gap. Production rollout is not approved.**
+
+### Accepted
+
+- Keeping Supabase Auth as the app login boundary and treating X OAuth as an attached publishing account is the correct direction for this Phase.
+- Splitting general-user OAuth into a new `x-oauth-connect-user` flow instead of mutating the existing hardcoded admin `x-oauth-connect` significantly reduces regression risk.
+- DB ownership checks derive from `auth.uid()`; caller-supplied user_id/brand_id are not trusted.
+- Existing production X accounts / Vault / RLS / policies were not mutated.
+- Token values are not returned to the mobile client response.
+- `publish_enabled` remains false after identity verification.
+- duplicate `platform_user_id` protection at DB level is a good requirement.
+- production mutation/deploy = 0.
+
+### Blocker 1 — OAuth state is double-hashed and happy-path cannot work as written
+
+Current candidate behavior:
+1. mobile sends `state_hash = SHA256(raw_state)` to the start endpoint.
+2. `begin_social_mobile_x_oauth_connection` stores that hash.
+3. `startConnection()` sends **that hash itself** to X as the OAuth `state` parameter.
+4. X returns the same hash to the app.
+5. callback calls `hashState(request.state)`, producing `SHA256(SHA256(raw_state))`.
+6. consume RPC looks for the originally stored single hash and therefore cannot match.
+
+This contradicts the source comment saying the returned X state is compared with the locally held raw state.
+
+**Required fix:** make one coherent state contract and test it end-to-end. Preferred:
+- client generates raw random state;
+- client sends raw state to the start Function over authenticated TLS;
+- server hashes raw state before storing it;
+- X receives raw state as `state`;
+- callback receives raw state from X;
+- server hashes callback raw state once and consumes the stored hash.
+
+Alternative designs are acceptable only if they preserve equivalent CSRF binding and do not expose a reusable DB state identifier as the OAuth state without a clear threat model.
+
+Add a regression proving:
+`raw state -> start -> authorization URL state -> callback -> consume`
+matches exactly once.
+
+### Blocker 2 — state is consumed before redirect/token/identity/DB completion, so transient failure destroys retryability
+
+`completeConnection()` currently calls `consume_social_mobile_x_oauth_state` first, which sets `consumed_at = now()`, then:
+- validates redirect URI in application code,
+- exchanges the authorization code,
+- reads X identity,
+- writes Vault/account state.
+
+Any failure after consume (redirect mismatch, X token endpoint transient error, identity fetch failure, Vault/RPC failure) leaves the state permanently consumed. That violates this TASK's required **callback retry idempotency / safe partial OAuth retry** behavior.
+
+**Required fix:** redesign state lifecycle so a callback is not irreversibly consumed until the connection is successfully finalized, or add an explicit bounded claim/finalize model:
+- validate owner + expiry + redirect without final consume;
+- claim atomically with a short-lived attempt token / in-progress state;
+- finalize consumed only after token + identity + Vault/account completion succeeds;
+- failed/transient attempt can safely retry while preventing concurrent/replayed success.
+
+A simpler transactional DB design is also acceptable if it gives the same guarantees. Do not weaken replay protection.
+
+Add tests for:
+- token exchange failure then retry with same callback succeeds when safe;
+- identity read failure then retry succeeds;
+- completion/Vault failure then retry succeeds;
+- successful completion then replay is denied;
+- concurrent duplicate callback cannot create two successful bindings.
+
+### Required follow-up
+
+1. Fix the two blockers above on the Phase 9 branch only.
+2. Re-run the 12 new tests and add the missing end-to-end state + retry tests.
+3. Re-run existing regression suite.
+4. Run `git diff --check`.
+5. No production migration/deploy/OAuth Portal/Vault mutation.
+6. Update this Report with exact changed files/commit and return `review_required / next_owner: chatgpt`.
+
+The mobile UI may remain intentionally deferred; that is not the blocker for this K2.
