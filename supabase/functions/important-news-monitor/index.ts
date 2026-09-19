@@ -1,3 +1,10 @@
+import { supabaseUsageWriter, type UsageWriter } from "./usage_ledger.ts";
+import {
+  breakingSearchUsageEvents,
+  judgementUsageEvents,
+  meteredAppCopyRequester,
+  meteredGenerationRunner,
+} from "./usage_metering.ts";
 import {
   candidateStatusForDuplicate,
   findNewsDuplicate,
@@ -919,9 +926,11 @@ function createGenerationRepository(
   };
 }
 
-function generationRunner(openAiApiKey: string): GenerationRunner {
-  return (step, item, text, voiceIssues) =>
-    requestGenerationStep(openAiApiKey, step, item, text, undefined, voiceIssues);
+function generationRunner(openAiApiKey: string, recordUsage: UsageWriter): GenerationRunner {
+  return meteredGenerationRunner(
+    (step, item, text, voiceIssues) => requestGenerationStep(openAiApiKey, step, item, text, undefined, voiceIssues),
+    recordUsage,
+  );
 }
 
 function generationResponse(
@@ -1430,7 +1439,8 @@ async function runAppCopyGeneration(
   try {
     const ids = await selectAppCopyTargetIds(supabaseUrl, serviceRoleKey, limit);
     const rows = await selectAppCopyRows(supabaseUrl, serviceRoleKey, ids);
-    const requester = openAiAppCopyRequester(openAiApiKey);
+    const baseRequester = openAiAppCopyRequester(openAiApiKey);
+    const recordUsage = supabaseUsageWriter(supabaseUrl, serviceRoleKey);
     for (const row of rows) {
       if (!needsAppCopy({
         ...row,
@@ -1444,7 +1454,10 @@ async function runAppCopyGeneration(
           results.push({ candidateId: row.id, claimed: false });
           continue;
         }
-        const outcome = await generateAppCopy(toAppCopySource(row), requester);
+        const outcome = await generateAppCopy(
+          toAppCopySource(row),
+          meteredAppCopyRequester(baseRequester, recordUsage, row.id),
+        );
         await storeAppCopy(supabaseUrl, serviceRoleKey, row.id, appCopyUpdate(outcome));
         results.push({
           candidateId: row.id,
@@ -1523,7 +1536,10 @@ Deno.serve(async (req) => {
       }
       const [row] = await selectAppCopyRows(supabaseUrl, serviceRoleKey, [body.candidateId]);
       if (!row) return response({ mode: body.mode, candidateId: body.candidateId, error: "NOT_FOUND" }, 404);
-      const outcome = await generateAppCopy(toAppCopySource(row), openAiAppCopyRequester(openAiApiKey));
+      const outcome = await generateAppCopy(
+        toAppCopySource(row),
+        meteredAppCopyRequester(openAiAppCopyRequester(openAiApiKey), supabaseUsageWriter(supabaseUrl, serviceRoleKey), row.id),
+      );
       return response({
         mode: body.mode,
         candidateId: row.id,
@@ -1704,7 +1720,10 @@ Deno.serve(async (req) => {
           try {
             const generated = await generateImportantNewsPost(
               candidate,
-              (step, item, text) => requestGenerationStep(openAiApiKey, step, item, text),
+              meteredGenerationRunner(
+                (step, item, text) => requestGenerationStep(openAiApiKey, step, item, text),
+                supabaseUsageWriter(supabaseUrl, serviceRoleKey),
+              ),
             );
             generationResults.push(generationResponse(candidate, generated, dryRun));
           } catch (error) {
@@ -1715,7 +1734,7 @@ Deno.serve(async (req) => {
         try {
           if (!candidate.id) throw new Error("NEWS_GENERATION_CANDIDATE_ID_MISSING");
           const outcome = await dispatchGeneration(
-            candidate.id, generationRepository, generationRunner(openAiApiKey),
+            candidate.id, generationRepository, generationRunner(openAiApiKey, supabaseUsageWriter(supabaseUrl, serviceRoleKey)),
           );
           if (!outcome.claimed) {
             generationResults.push({ candidateId: candidate.id, claimed: false, databaseUpdated: false });
@@ -1783,6 +1802,7 @@ Deno.serve(async (req) => {
             (item, model, priorLuna) =>
               requestImportantNewsJudgement(openAiApiKey, item, model, priorLuna),
           );
+          await supabaseUsageWriter(supabaseUrl, serviceRoleKey)(judgementUsageEvents(judgement, candidate.id ?? null));
           if (!dryRun) {
             if (!candidate.id) throw new Error("NEWS_JUDGEMENT_CANDIDATE_ID_MISSING");
             await saveCandidateJudgement(supabaseUrl, serviceRoleKey, candidate.id, judgement, candidate);
@@ -1800,7 +1820,7 @@ Deno.serve(async (req) => {
               const outcome = await dispatchGeneration(
                 candidate.id,
                 createGenerationRepository(supabaseUrl, serviceRoleKey),
-                generationRunner(openAiApiKey),
+                generationRunner(openAiApiKey, supabaseUsageWriter(supabaseUrl, serviceRoleKey)),
               );
               immediateGeneration = outcome.claimed
                 ? ("result" in outcome
@@ -2023,6 +2043,7 @@ Deno.serve(async (req) => {
           code: "NEWS_MONITOR_DIAGNOSTICS_WRITE_FAILED",
         });
       }
+      await supabaseUsageWriter(supabaseUrl, serviceRoleKey)(breakingSearchUsageEvents(breakingMarketDiagnostics, runId));
     }
 
     const allCandidates: unknown[] = [...suppliedCandidates, ...acquiredCandidates];

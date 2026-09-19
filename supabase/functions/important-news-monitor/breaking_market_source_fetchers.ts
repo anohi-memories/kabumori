@@ -1,3 +1,4 @@
+import { estimateCostUsd, usageFromResponse } from "./usage_ledger.ts";
 import {
   IMPORTANT_NEWS_CATEGORIES,
   isImportantNewsCategory,
@@ -317,6 +318,12 @@ export type BreakingMarketQueryDiagnostics = BreakingMarketValidationDiagnostics
   responseStatus: string | null;
   incompleteReason: string | null;
   webSearchCallCount: number;
+  /** Billed tokens of the Responses API call (0 when no response body was received). */
+  inputTokens: number;
+  outputTokens: number;
+  /** Tokens plus web_search tool calls at usage_ledger rates. */
+  estimatedCostUsd: number;
+  model: string;
   failureCode: string | null;
 };
 
@@ -517,6 +524,10 @@ function diagnosticBase(query: BreakingMarketQuery): BreakingMarketQueryDiagnost
     responseStatus: null,
     incompleteReason: null,
     webSearchCallCount: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    estimatedCostUsd: 0,
+    model: MODEL,
     rawCandidateCount: 0,
     validatedCandidateCount: 0,
     rejectionCounts: emptyRejectionCounts(),
@@ -619,6 +630,11 @@ export async function fetchBreakingMarketQueryWithDiagnostics(
       ? record.incomplete_details.reason : null;
   }
   diagnostics.webSearchCallCount = countBreakingMarketWebSearchCalls(raw);
+  // Recorded before any later failure: an incomplete or unparsable response is still billed.
+  const usage = usageFromResponse(raw);
+  diagnostics.inputTokens = usage.inputTokens;
+  diagnostics.outputTokens = usage.outputTokens;
+  diagnostics.estimatedCostUsd = estimateCostUsd(MODEL, usage.inputTokens, usage.outputTokens, diagnostics.webSearchCallCount);
   if (diagnostics.responseStatus === "incomplete") {
     const code = `BREAKING_MARKET_INCOMPLETE:${query.key}:${diagnostics.incompleteReason ?? "unknown"}`;
     diagnostics.failureCode = code;
