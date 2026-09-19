@@ -3,6 +3,19 @@
 Status: design + implementation candidate. Nothing in this document has been applied or deployed to
 production. See the task Report for exact commit/push/read-back state.
 
+**2026-09-19 K2 follow-up**: the first candidate had two real bugs, both now fixed on this same branch
+(see the migration file's own header note and `oauth_logic.ts` for the exact fix commentary):
+1. State was hashed twice on the round trip (the start step sent the already-hashed value to X as
+   `state`, so hashing whatever X returned a second time at callback time never matched what was stored).
+   Fixed: exactly one hash computation now happens, at callback time, over the one raw state value the
+   client generates and X returns unchanged.
+2. The state was marked "consumed" at lookup time, before the token exchange / identity read / Vault
+   write — so any transient failure after that point permanently burned the state and made the attempt
+   unretryable. Fixed: the lookup RPC is now read-only and repeatable; the one atomic, irreversible
+   "consume" moment moved into the completion RPC itself (the same UPDATE that finalizes the connection),
+   so retries are safe up until success, while replay after a real success and concurrent duplicate
+   completions are both still denied.
+
 ## 1. Existing architecture (Phase A inventory)
 
 Read-only inventory performed against both the current `main` branch and the actually-deployed production
