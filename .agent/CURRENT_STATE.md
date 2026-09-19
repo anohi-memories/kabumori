@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-19 JST (H1 important-news hourly cadence simplify review_required; H2 social mobile Phase6 ready; G1 idle until 2026-09-24 natural shadow)
+- checked_at: 2026-09-19 JST (H1 important-news hourly cadence simplify C1 PASS/done; H2 social mobile Phase6 ready; G1 idle until 2026-09-24 natural shadow)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,10 +14,10 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `important-news-hourly-cadence-simplify-20260919`
-  - 9/19〜9/23の2時間おきは維持。
-  - production `important-news-fetch` command gateのみ変更済み。9/19〜9/23は偶数時00分のみ（12回/日）、9/24以降は毎時00分のみ（24回/日）。C1確認待ち。
-  - 変更対象は production `important-news-fetch` Cron 1本のcommand gateだけ。
+- Codex slot 1: `done` — `important-news-hourly-cadence-simplify-20260919`
+  - C1 PASS。production `important-news-fetch` command gateのみ更新済み。
+  - 9/19〜9/23はJST偶数時00分のみ（12回/日）、9/24以降はJST毎時00分のみ（24回/日）。
+  - 朝刊/大引け前後の20分刻み増強は撤回済み。judgement/generation/publish、market-report/MIC Cron、Edge Function、OAuth/Vault/X/Push変更0。
 
 - Codex slot 2: `ready` — `social-mobile-app-phase6-auth-mobile-read-qa-20260918`
   - Phase5 production membership/RLS rolloutはC2 PASS済み。
