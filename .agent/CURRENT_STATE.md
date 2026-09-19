@@ -19,8 +19,8 @@
   - 9/19〜9/23はJST偶数時00分のみ（12回/日）、9/24以降はJST毎時00分のみ（24回/日）。
   - 朝刊/大引け前後の20分刻み増強は撤回済み。judgement/generation/publish、market-report/MIC Cron、Edge Function、OAuth/Vault/X/Push変更0。
 
-- Codex slot 2: `idle` — social-mobile Phase8 handoff complete
-  - Phase8はG2/K2でPASS・cleanup完了。Codexは本日夜まで休止。
+- Codex slot 2: `idle` — no active task
+  - 前Phase 8はG2/K2で完了済み。このslotは空き。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
