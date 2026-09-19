@@ -8,7 +8,7 @@
 - scopes: exact authorization scope is now `tweet.read users.read tweet.write media.write offline.access`. `tweet.write` covers the existing `/2/tweets` flow. `media.write` is included because the repo's existing `morning_greeting_publish_logic.ts` calls `/2/media/upload`, and its regression test captures X's explicit `Missing required scope: media.write` failure. No other scopes were added. This is repository-flow evidence; no external portal configuration was inspected or changed.
 - tests: OAuth function tests **19/19 PASS** (including exact-scope regression); onboarding/deep-link tests **8/8 PASS**; full Deno regression **1259/1259 PASS**; social-mobile lint/typecheck/Expo web export and `git diff --check` **PASS**.
 - production: migration/schema/RPC/RLS/ACL/deploy/X Developer Portal/Vault/OAuth settings/Cron/settings/manual API/X post/Push changes **0**. Manual portal configuration remains pending separate approval; verify callback URI `kabumori-social://oauth-callback` and that app permission settings permit the requested posting/media scopes.
-- commit/push: after rebase onto fresh origin, source commit `ac08cf7` contains only the three C2-approved scope/doc/test files. H2 Report/TASK changes remain to be pushed after the final fresh-origin gate. No production rollout is approved.
+- commit/push: source commit `ac08cf7` contains only the three C2-approved scope/doc/test files. Source plus Report/TASK commits were pushed successfully to `origin/main` through `f3e8292250dbe97a62ea84c43e39773e3c5b6658`, after fresh-checking `d19594abff1eb968ed21dddd8c88f26fb5b46bdd`; push was fast-forward with no H1 file overlap. No production rollout is approved.
 
 ## H2 — Social mobile Phase 9 OAuth onboarding integration (2026-09-19)
 
