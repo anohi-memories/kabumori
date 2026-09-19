@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-20 JST (H1 important-news live shadow ready; H2 done; G1 natural shadow wait; G2 done)
+- checked_at: 2026-09-20 JST (H1 shadow cron auth continuation approved; H2 done; G1 natural shadow wait; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -15,11 +15,12 @@
 ## Active workstreams
 
 - Codex slot 1: `ready` — `important-news-phase1-live-shadow-rollout-20260920`
-  - User explicitly approved proceeding to a live shadow comparison.
-  - Allowed production scope is shadow-only: one exact migration, one `important-news-shadow` Function deploy, one shadow Cron (30m canary -> 10m after natural proof).
-  - Legacy important-news fetch/judgement/generation/publish, fixed searches, X/Push/App remain unchanged.
-  - Goal is real replacement `first_seen` / recall / latency / source-health / cost measurement. Cutover and legacy search reduction remain unapproved.
-  - MIC is read-only/additional-trigger only.
+  - Shadow migration + `important-news-shadow` v1 are user-reported applied/deployed; legacy pipeline unchanged.
+  - User explicitly approved one new dedicated `important_news_shadow_cron_secret` in Function env + Vault, shadow-only auth redeploy, one 30m authenticated shadow Cron, then 10m after 2 natural safe runs.
+  - Service-role Cron auth and existing-secret reuse are forbidden. Secret must never appear in Git/logs/URLs/Reports.
+  - PR from H1 branch to main is approved; auto-merge is forbidden. C1 review required.
+  - Legacy search reduction/cutover remains unapproved. MIC remains read-only/additional-trigger only.
+  - Recommended model: Sol.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase10-production-oauth-rollout-20260920`
   - C2 PASS済みPhase9をproductionへ段階導入する。
