@@ -44,12 +44,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: in_progress
+- status: review_required
 - task_id: social-mobile-app-phase8-completion-followup-claude-20260919
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: Codex一時休止に伴い、social-mobile Phase 8残作業（mobile sign-in QA/profile lifecycle確認/test fixture cleanup）をCodex slot2から引き継ぎ着手。RLS isolation proof自体は再実施しない。
+- note: profile lifecycle確定（social-mobileにprofile不要、根拠あり）。mobile sign-in QAは実本番Supabaseに対しsigned-out/無効credential拒否まで実機確認、実credentialでのtenant別表示確認はユーザー手動待ち。test fixture cleanupはold canary membership 1件のDELETEをsafety reviewがブロック、ユーザー許可またはDashboard手動削除待ち。production mutation 0件。K2待ち。
 
 ## Control codes
 
