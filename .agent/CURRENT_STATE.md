@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-19 JST (H1 done; H2 idle; G1 natural shadow wait; G2 social-mobile Phase9 X OAuth onboarding ready)
+- checked_at: 2026-09-19 JST (H1 done; H2 social-mobile X connect UI shell ready; G1 natural shadow wait; G2 Phase9 OAuth blocker fix pending)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -19,9 +19,10 @@
   - 9/19〜9/23はJST偶数時00分のみ（12回/日）、9/24以降はJST毎時00分のみ（24回/日）。
   - 朝刊/大引け前後の20分刻み増強は撤回済み。judgement/generation/publish、market-report/MIC Cron、Edge Function、OAuth/Vault/X/Push変更0。
 
-- Codex slot 2: `idle` — no active task
-  - 前Phase 8はG2/K2で完了済み。このslotは空き。
-
+- Codex slot 2: `ready` — `social-mobile-app-phase10-x-connect-ui-shell-20260919`
+  - 自動投稿アプリ側を優先。Accounts画面のX接続CTA、接続状態、deep-link受け口、client adapter境界を実装する。
+  - G2のPhase9 server candidateはK2 blocker修正待ちのため、H2は `apps/social-mobile/**` のみ。RPC/migration/Edge Functionへは触れない。
+  - production default data sourceはmock維持。本番変更0。
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
   - market-report-analysis v2 shadow deployはK1 PASS済み。consumer gateはOFF。
