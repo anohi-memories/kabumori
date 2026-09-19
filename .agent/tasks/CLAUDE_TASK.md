@@ -1,132 +1,165 @@
 # Claude Task 2
 
-- task_id: morning-greeting-image-cost-gate-rollout-20260917
+- task_id: social-mobile-app-phase8-completion-followup-claude-20260919
 - owner: claude
 - slot: claude-2
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: high
-- recommended_model: Sonnet
-- purpose: K2承認済みの朝の挨拶画像生成コストゲート実装 `afe5d87` を最新 `origin/main` に安全に取り込み、翌朝05:30 JSTの自然実行でOFF時に画像生成コストが発生しないことを確認できる状態へ進める。
+- recommended_model: Opus 5
+- purpose: Codex slot 2から一時引き継ぎ。Phase 8で既にPASS済みのtenant RLS isolation proofを前提に、残っている mobile/local sign-in QA、profile lifecycle正本確認、test fixture cleanupだけを安全に完了させる。
 
-## K2 approval / source of truth
+## User instruction
 
-前タスク `morning-greeting-image-disable-cost-gate-20260916` はK2 PASS済み。
+2026-09-19、ユーザーは「今日の夜までこでさんを休ませたい。いったんくろちゃんにこの先を振って」と指示。
 
-承認済み実装:
-- branch: `morning-greeting-image-cost-gate-20260916`
-- commit: `afe5d87`
-- changed files:
-  - `scripts/morning-greeting-image.ts`
-  - `scripts/morning-greeting-image.test.ts`
-- tests: 28/28 PASS
-- OFF path: OpenAI image call 0 / Storage image write 0
-- ON path: existing behavior preserved
-- production changes before K2: 0
+したがって:
+- このsocial-mobile workstreamはClaude slot 2が一時担当。
+- Codex slot 2はidle。
+- 同じsocial-mobile Phase 8対象をCodexと並行変更しない。
+- 完了確認はK2。
 
-K2時点でbranchはmainに対して1 behind / 1 aheadだったため、古いmainへ直接pushしないこと。
+## Proven state / do not redo
 
-## Parallel safety
+既に本番で以下は確認済み:
+- non-admin Auth userをDashboard正規経路で1件作成済み。
+- non-admin userは `admin_users` 非所属。
+- non-admin userに `ai_salaryman_lab / viewer` membership 1件。
+- authenticated + RLS enabledのread-only proofで:
+  - brand_memberships: ai_salaryman_lab = 1
+  - brands: ai_salaryman_lab = 1
+  - social_accounts: ai_salaryman_lab = 1
+  - scheduled_posts: ai_salaryman_lab = 24
+  - post_execution_logs: ai_salaryman_lab = 46
+  - posting_windows: ai_salaryman_lab = 10
+  - kabumori = 0
+  - mio = 0
+- cross-tenant leakage = 0
+- client-side brand filterに依存せずtenant isolationを実証済み。
+- existing global-admin policy pathは未変更。
+- authenticatedのbrand_memberships INSERT/UPDATE/DELETE grantは無し。
+- mobileは `auth.getUser()` + self-scoped `brand_memberships`、fail-closed。
+- production default `EXPO_PUBLIC_DATA_SOURCE=mock` 維持。
+- isolated worktreeで typecheck/lint/Expo export/static policy 5/5/git diff --check PASS。
 
-開始前に必ず読む:
-1. `.agent/ORCHESTRATION.md`
-2. `.agent/CURRENT_STATE.md`
-3. this TASK
-4. `.agent/tasks/CODEX_TASK.md`
-5. `.agent/tasks/CODEX_TASK_2.md`
-6. `.agent/tasks/CLAUDE_TASK_1.md`
-7. fresh `origin/main`
+**上記RLS proofを再実施・再変更しない。**
+
+## Remaining scope only
+
+### 1. mobile/local client sign-in QA
+
+目的:
+- 新しいnon-admin QA userを、実際のsocial-mobile client pathでsign-inして動作確認する。
+
+要件:
+- local/dev環境だけで `EXPO_PUBLIC_DATA_SOURCE=supabase` を明示。
+- production default envは変更しない。
+- credential/token/passwordをTASK/Report/commit/logへ残さない。
+- service_role禁止。
+- signed-out -> auth required
+- signed-in non-admin + membership -> ai_salaryman_lab tenantだけread
+- kabumori / mioの表示・取得 0
+- no-membership -> blocked/no-workspace contract維持
+- unavailable / permission denied / schema mismatch分類維持
+- silent mock fallback禁止
+- scheduled_postsのaccount/body/origin gapは推測で埋めない
+
+実credentialがClaude実行環境から使えない場合:
+- 勝手に取得/推測しない。
+- local clientで必要な正確なユーザー操作手順まで作成。
+- その部分だけユーザー手動QA待ちとして明記してよい。
+
+### 2. profile lifecycle source-of-truth
 
 現状:
-- Codex slot1 hotfixはdone。`x-test-post`/Admin側を触らない。
-- Codex slot2 URL除去はdone。`important-news-monitor`を触らない。
-- Claude slot1はmarket report Phase1を進行中で、`scripts/morning-greeting-image*`を触らない指示済み。
+- auth.users=2
+- admin_users=1
+- profiles=1
+- 新しいnon-admin QA userにはprofile rowが無い。
 
-このG2が触れてよい実装対象は承認済みの以下のみ:
-- `scripts/morning-greeting-image.ts`
-- `scripts/morning-greeting-image.test.ts`
-- 自分の `.agent/tasks/CLAUDE_TASK.md`
+調査:
+- `profiles` のschema/FK/RLS/trigger
+- auth.users作成triggerの有無
+- signup/login時にprofileを作るRPC/Edge Function/app codeの有無
+- apps/social-mobileがprofile rowを必要としているか
+- apps/admin/既存株アプリ側のprofile lifecycleと混同しない
 
-`.github/workflows/morning-greeting-image.yml` は承認済み実装で変更不要。新規変更しない。
+判断:
+- social-mobileにprofile不要なら「不要」を根拠付きで確定。
+- 必要なら正規onboarding経路を設計する。
+- このtaskでは推測INSERTやproduction profile補完を勝手にしない。
+- schema変更が必要ならcandidateだけ作り、production applyはK2後。
 
-## Goal
+### 3. test fixture cleanup
 
-最新 `origin/main` を基点に、`afe5d87` の承認済み変更だけを安全に統合し、mainへpushする。
+現在のtest fixtures:
+- non-admin QA user × ai_salaryman_lab/viewer membership
+- old global-admin user × ai_salaryman_lab/viewer canary membership
 
-## Required procedure
+cleanup原則:
+- QAが済んだfixtureは削除を優先。
+- membershipはexact test rowだけ。
+- Auth user削除はSupabase Dashboard/Authの正規経路のみ。
+- direct `auth.users` DELETE/INSERTは禁止。
+- admin_users、本番brand/social_accounts/admin policyを絶対に触らない。
+- safety reviewやtool承認で拒否されたら迂回しない。
 
-1. isolated clean worktree/cloneで最新 `origin/main` を取得。
-2. `afe5d87` の2ファイル差分を最新mainへ適用する。
-   - cherry-pickでもよいが、競合が出た場合は内容を勝手に解決せずSTOPして報告。
-   - 承認済み差分以外を混ぜない。
-3. main側で承認後に入った関連差分があるか確認。`scripts/morning-greeting-image*` に新しい競合/仕様変更があればSTOP。
-4. テスト:
-   - `node --experimental-strip-types --test scripts/morning-greeting-image.test.ts`
-   - expected 28/28以上（main側追加テストがあれば全件PASS）
-   - `git diff --check`
-5. 承認済み差分だけであることを確認。
-6. push直前に再度 `origin/main` fresh-check。
-7. fast-forward可能な安全な形でmainへpush。
-8. origin/main read-backで2ファイルにゲート実装が入ったことを確認。
+Claudeから正規削除経路を実行できない場合:
+- ユーザー向けにDashboardでのexact cleanup手順を作る。
+- 何を消し、何を残すか明確にする。
+- 削除前後のexpected row countを明記する。
+
+## Verification
+
+最低限:
+- fresh origin/main
+- `.agent/ORCHESTRATION.md`
+- `.agent/CURRENT_STATE.md`
+- this TASK
+- `.agent/tasks/CODEX_TASK_2.md`
+- G1/H1 current tasks
+- production read-only metadata where needed
+
+実装/QA後:
+- npm ci --ignore-scripts など lockfile準拠のinstall only
+- package/lock変更なし
+- npm run typecheck PASS
+- npm run lint PASS
+- Expo Web export / route resolution PASS
+- static policy contract PASS
+- git diff --check PASS
 
 ## Production boundary
 
-このタスクで許可:
-- GitHub mainへの承認済みコード統合
-- read-onlyなGitHub確認
+変更禁止:
+- RLS / admin policies / grants / schemaの既存本番変更
+- migration history repair/reconcile
+- blind db push
+- OAuth/Vault
+- x-test-post / market-report / daily_content_plans
+- Cron/settings
+- AI/X/Push/Storage/課金
+- production default `EXPO_PUBLIC_DATA_SOURCE=supabase`
+- service_roleをmobile bundleへ含める
 
-このタスクではまだ行わない:
-- `posting_windows` の本番値変更
-- 管理画面toggleの代理操作
-- manual `workflow_dispatch`
-- OpenAI API呼び出し
-- Storage書き込み検証
-- X投稿/Push/API手動実行
-- Cron/workflow schedule変更
-- Supabase schema/RPC/migration変更
+cleanup以外のproduction writeは原則0。
 
-main反映後、ユーザーが管理画面で「朝の挨拶」をOFFにする。その状態で翌朝05:30 JSTの**自然な定時実行**を待つ。
+## Completion / K2
 
-## Tomorrow verification target
+完了時:
+- this TASK -> `review_required`
+- next_owner -> `chatgpt`
+- `## Report` に以下:
+  1. mobile/local sign-in QA結果
+  2. profile lifecycle正本
+  3. cleanup結果 or exact manual cleanup手順
+  4. tests
+  5. changed files
+  6. production mutation一覧
+  7. production default mock維持確認
+  8. 次Phase（X OAuth login onboarding）へ進める条件
+  9. exact commit/push/read-back
 
-翌朝の自然実行後に別確認タスクで最低限確認する:
-- workflow log: `morning greeting disabled; image generation skipped`
-- OpenAI画像生成が実行されていない
-- 新規Storage画像が作成されていない
-- workflowはOFFを正常skipとして終了
-
-人工実行で確認しない。
-
-## Completion
-
-main反映まで完了したら:
-- this TASKを `status: review_required`
-- `next_owner: chatgpt`
-- `## Report` を追記
-- commit/push hash
-- source_base / final_head
-- tests
-- changed files
-- main read-back
-- production setting changes = 0
-- manual OpenAI/workflow dispatch = 0
-- user next action = 管理画面で朝の挨拶をOFF
-- tomorrow observation requirement
-
-を記録してorigin/mainへ同期し、K2待ちでSTOP。
-
-## Report
-
-- commit/push hash: 承認済み`afe5d87`を`git cherry-pick`し、最新origin/main上でリベース後`e8bd8cc`としてpush済み。
-- source_base / final_head: 作業開始時点の`origin/main`は`1d45b36`だったが、cherry-pick完了後・push直前の再fetchで`ea3cd82`（別スロットによる`.agent/tasks/CODEX_TASK.md`のみの更新）へ進んでいるのを検知。対象2ファイルへの競合はないことを確認した上で`git rebase origin/main`を実行し、そのまま`ea3cd82`の直後としてfast-forward pushした（final_head: `e8bd8cc`）。push直前に再度`origin/main`をfetchし、追加の変更が無いことを確認してから実行。
-- tests: `node --experimental-strip-types --test scripts/morning-greeting-image.test.ts`で26/26 pass（cherry-pick後・rebase後の両方で実行し確認）。`git diff --check`で空白エラーなし。**訂正**: 前タスクのReportで「28/28 PASS」と報告していたが、実際のテスト数は26件（`grep -c "^test("`で確認）。全件PASSという結論自体は変わらないが、件数の記載が誤っていたため本Reportで訂正する。
-- changed files: `scripts/morning-greeting-image.ts`, `scripts/morning-greeting-image.test.ts`の2件のみ（承認済み差分と完全一致、他ファイルは一切混ざっていない）。
-- main read-back: `origin/main`から`scripts/morning-greeting-image.ts`をread-backし、`checkMorningGreetingEnabled`/`runMorningGreetingImageJob`が実装されていることを確認。`scripts/morning-greeting-image.test.ts`のテスト数も26件であることを確認。
-- production setting changes: 0件。`posting_windows`の値、admin toggle、Supabase schema/RPC/migration、Cron/workflow scheduleのいずれも変更していない。
-- manual OpenAI/workflow dispatch: 0件。`workflow_dispatch`の手動実行、OpenAI API呼び出し、Storage書き込み検証は一切行っていない。
-- user next action: 管理画面で「朝の挨拶」をOFFにする。
-- tomorrow observation requirement: 翌朝05:30 JSTの自然な定時実行後、以下を別確認タスクで検証すること: (1) workflow logに`morning greeting disabled; image generation skipped`が出力される、(2) OpenAI画像生成が実行されていない、(3) 新規Storage画像が作成されていない、(4) workflowがOFFを正常skip（exit 0）として終了している。人工実行では確認しないこと。
-
-## Final K2 review — 2026-09-17
-
-PASS。承認済み変更はmainへ統合・read-back済みで、26/26テストPASS、対象2ファイル以外の混入なし、本番設定変更・手動workflow dispatch・OpenAI実呼び出しは0件。翌朝05:30 JSTの自然観測は別のread-only確認事項であり、本実装タスクの完了をブロックしないため、このスロットは `done` とする。
+push前にfresh `origin/main` を確認。
+他workstreamの未コミット変更には触れない。
+完了後STOPしてK2待ち。
