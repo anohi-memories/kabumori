@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase10-production-oauth-rollout-20260920
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: C2 PASS済みのgeneral-user X OAuth onboardingをproductionへ安全に導入する。対象は承認済みmigrationの本番適用と新規Edge Function x-oauth-connect-user のdeploy/postflightまで。X Developer Portalの手動設定と実X OAuth round-tripは別ゲートとして扱う。

@@ -1,5 +1,24 @@
 # Codex Slot 2 Report
 
+## H2 — Phase 10 production OAuth rollout preflight / blocked before mutation (2026-09-20)
+
+- task_id: `social-mobile-app-phase10-production-oauth-rollout-20260920`
+- result: Production Gate A read-only preflight passed, but the exact migration apply was rejected by the automated safety reviewer before execution because this conversation did not contain a trusted, explicit user message authorizing the production schema/security mutation. The rejection specifically covered the unique index, nullable Auth FK column, three `SECURITY DEFINER` OAuth RPCs, and Vault-backed token-write path. No workaround or alternate execution path was attempted. Status is `review_required`; next_owner is `chatgpt`.
+- source: fresh `origin/main` and the dedicated preflight ref both resolved to `fc7b5b8168d1d2e8da4f2caea73db39ef2938bc8`. The isolated worktree was detached at that SHA. Approved migration SHA-256: `b778e142d6efb07a6239958a3edf38d08a2e1a07f0c58beab8298a2bd204bcab` for `supabase/migrations/20260919120000_social_mobile_x_oauth_onboarding.sql`.
+- slot_conflict_check: H1 remained `ready` on an unrelated important-news shadow rollout; G1 was `idle`; G2 was `done`. No other slot targeted this migration, these RPCs, `x-oauth-connect-user`, or OAuth/Vault settings. The formal repository's extensive pre-existing uncommitted changes were not touched.
+- production_identity: project `stock-x-autopost`, ref `wsmznyzcvmuitkglfeuj`, region `ap-northeast-1`, status `ACTIVE_HEALTHY`, Postgres 17.6.
+- gate_a_preflight: target partial unique index absent; `social_account_oauth_states.initiated_by_user_id` absent; all three target RPCs absent; migration history had no Phase 10 entry; duplicate non-null `(platform, platform_user_id)` groups = 0. Required tables/columns/check constraints, `brand_memberships_pkey`, nullable-compatible OAuth-state shape, Vault schema, `vault.create_secret` defaults, and `vault.update_secret` defaults were compatible. RLS was enabled on all four target tables. Existing admin OAuth RPC definitions/ACL/search paths were snapshotted read-only.
+- production_baseline: brands=3, social_accounts=2, brand_memberships=0, social_account_oauth_states=10. Identity hashes were recorded for brands/social_accounts/memberships. Existing admin `x-oauth-connect` remained ACTIVE v20, `verify_jwt=false`, source hash `96a5d3ea5a938a1f972e1a74aa6013f6a18934926ffcd30c2b4fb0f1746b7f98`.
+- migration_apply: **not executed**. The migration tool call returned an automated risk rejection before database execution. Immediate read-back confirmed the target index/column/RPCs remain absent, migration history is unchanged, row counts and identity hashes match the baseline, and no partial state exists.
+- edge_deploy: **not executed** because Gate B did not complete. `x-oauth-connect-user` is not deployed. Function smoke tests were therefore not run. Existing `x-oauth-connect` and all unrelated Function versions/updated_at remain unchanged from the baseline inventory.
+- production_mutation: schema/RPC/index/FK/grants/RLS/migration history/rows/Edge Functions/X Developer Portal/Vault token values/OAuth settings/Cron/settings/X/Push/Storage = **0 changes**.
+- manual_portal_gate: still pending a later explicit gate. Required callback is `kabumori-social://oauth-callback`; portal permission/scopes must support `tweet.read users.read tweet.write media.write offline.access`. No portal setting was inspected or changed.
+- real_oauth_round_trip: still pending and was not attempted. No real authorization URL completion, X token exchange, Vault token write, user workspace/account fixture, media upload, or X post occurred.
+- rollback_recovery: no rollback was necessary because production was not mutated. If the owner explicitly authorizes the exact production migration in a trusted user message, rerun Gate A from fresh `origin/main`; only then apply the same SHA-256 source once, read back all ACL/RPC/index/FK invariants, and deploy only `x-oauth-connect-user` with custom internal JWT validation preserved.
+- tests: no source change was made. `git diff --check` passed before the attempted rollout. Phase 9 approved tests remain the prior 19/19 OAuth, 8/8 onboarding, 1259/1259 full Deno, lint/typecheck/Expo export PASS baseline; they were not rerun because this H2 was a production rollout task and no source changed.
+- changed_files: `.agent/tasks/CODEX_TASK_2.md`, `.agent/CODEX_REPORT_2.md` only (control/reporting updates).
+- safety_checks: `db push` 0; migration history repair/reconcile 0; code changes 0; deploy 0; production manual invoke 0; OpenAI/X/Push calls 0; X posts 0; secret exposure 0; H1/G1/G2 files 0; formal repo existing changes untouched.
+
 ## H2 Follow-up — X OAuth posting scope hardening (2026-09-19)
 
 - task_id: `social-mobile-app-phase9-codex-handoff-integration-20260919`
