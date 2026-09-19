@@ -1,229 +1,226 @@
 # Codex Task 2
 
-- task_id: social-mobile-app-phase9-codex-handoff-integration-20260919
+- task_id: social-mobile-app-phase10-production-oauth-rollout-20260920
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
-- recommended_model: Sol High
-- purpose: K2 PASS済みのgeneral-user X OAuth candidateをClaude slot 2から引き継ぎ、fresh mainへ安全に統合し、production rollout前の実行可能性証明とmobile onboarding UI実装まで進める。production apply/deployはC2承認前に行わない。
+- recommended_model: Luna
+- purpose: C2 PASS済みのgeneral-user X OAuth onboardingをproductionへ安全に導入する。対象は承認済みmigrationの本番適用と新規Edge Function x-oauth-connect-user のdeploy/postflightまで。X Developer Portalの手動設定と実X OAuth round-tripは別ゲートとして扱う。
 
-## Handoff basis
+## Approved basis
 
-Claude Phase 9 reviewed branch:
-- branch: `social-mobile-x-oauth-onboarding-phase9-20260919`
-- reviewed commits: `db79f02` + blocker fix `a58c01d`
-- final K2: PASS
-- production mutation/deploy: 0
+前H2 `social-mobile-app-phase9-codex-handoff-integration-20260919` はFinal C2 PASS済み。
+
+承認済み要点:
+- App login = Supabase Auth
+- X OAuth = connected publishing account
+- general-user flow = `x-oauth-connect-user` + authenticated-only RPCs
+- state/PKCE/retry/idempotency/replay/concurrency security proof PASS
+- mobile Accounts/deep-link UI candidate integrated
+- exact X OAuth scope:
+  - `tweet.read`
+  - `users.read`
+  - `tweet.write`
+  - `media.write`
+  - `offline.access`
+- OAuth 19/19 PASS
+- onboarding 8/8 PASS
+- full Deno 1259/1259 PASS
+- lint/typecheck/Expo export/diff-check PASS
+- production mutation before this task = 0
+
+## Mandatory startup
+
+開始前に必ず確認:
+1. `.agent/ORCHESTRATION.md`
+2. `.agent/CURRENT_STATE.md`
+3. this TASK
+4. `.agent/CODEX_REPORT_2.md`
+5. H1/G1/G2 TASK
+6. fresh `origin/main`
+7. production project identity read-only
+8. approved migration source/hash read-only
+9. production current schema/RPC/index/function metadata read-only
+10. current deployed `x-oauth-connect` / related production OAuth metadata read-only
+
+競合時STOP:
+- 他slotが同じ migration/RPC/Edge Function/OAuth/Vault production設定を変更中
+- fresh mainに承認済みcandidateと競合する変更がある
+- production schemaがpreflight前提からdriftしている
+
+## Production target
+
+production Supabase project:
+- project: `stock-x-autopost`
+- ref: `wsmznyzcvmuitkglfeuj`
+- main / PRODUCTION
+
+対象:
+1. `supabase/migrations/20260919120000_social_mobile_x_oauth_onboarding.sql`
+2. `supabase/functions/x-oauth-connect-user/**`
+
+既存admin `x-oauth-connect` は変更禁止。
+
+## Gate A — fresh production preflight
+
+read-onlyで確認:
+- approved migration fileがmain上でC2 PASS時と同一意味
+- `social_accounts(platform, platform_user_id)` unique indexがまだ無い/互換
+- `social_account_oauth_states.initiated_by_user_id`の存在有無
+- 新RPC3本の存在有無/シグネチャ
+- current grants/RLS/admin policies
+- Vault functions availability
+- existing production brands/social_accounts/memberships rowsは変更対象でない
+- migration history gapを再確認
 
 重要:
-- branchはK2時点で main より **2 commits ahead / 10 commits behind**。
-- blind merge/rebaseは禁止。
-- fresh `origin/main` からisolated worktree/branchを作り、Phase 9の5ファイル差分だけを明示的に統合する。
-- 他workstreamの変更を巻き戻さない。
+- **blind `supabase db push`禁止**
+- migration history repair/reconcile禁止
+- repo filename timestampをproduction履歴へ無理に合わせない
+- productionが既に一部適用済みならSTOPしてC2へ戻す
 
-## Reviewed architecture — do not regress
+## Gate B — production migration apply
 
-- App login boundary = Supabase Auth。
-- X OAuth = signed-in userが自分の投稿用Xアカウントを接続する機能。Supabase Auth provider化しない。
-- existing admin `x-oauth-connect` は触らない。
-- general-user flow = new `x-oauth-connect-user` + new RPCs。
-- DB ownershipは `auth.uid()` 正本。user_id/brand_idをclient値で信用しない。
-- service_roleをExpo/mobileへ含めない。
-- OAuth state contract:
-  - client raw random state
-  - start Function hashes once for DB storage
-  - X receives raw state
-  - callback receives raw state
-  - server hashes once for lookup
-- consume RPCはread-only。
-- final complete RPCのみがstateをatomic consumeし、Vault/account writeと同じDB transaction内で確定。
-- successful replay denied / concurrent duplicate completion one success。
-- publish_enabled remains false after OAuth。
-- duplicate X platform_user_id is DB-unique。
-- token is never returned to mobile response。
+Gate A PASS時のみ。
 
-## Scope A — safe integration to current main
+適用:
+- 承認済みmigration SQLを**そのまま1回だけ**安全なmigration/query経路で適用
+- exact source/hashをReportへ記録
+- schema/RPC/grant以外のproduction mutation禁止
 
-Reviewed candidate files only:
-- `supabase/migrations/20260919120000_social_mobile_x_oauth_onboarding.sql`
-- `supabase/functions/x-oauth-connect-user/index.ts`
-- `supabase/functions/x-oauth-connect-user/oauth_logic.ts`
-- `supabase/functions/x-oauth-connect-user/oauth_logic_test.ts`
-- `apps/social-mobile/docs/phase9-x-oauth-onboarding.md`
+post-apply read-back:
+- partial UNIQUE index
+- `initiated_by_user_id` FK/nullable
+- new RPC signatures
+- SECURITY DEFINER
+- search_path
+- EXECUTE:
+  - authenticated = yes
+  - public = no
+  - anon = no
+  - service_role = no
+- existing admin policies/RLS unchanged
+- existing admin x-oauth-connect RPC/functions unchanged
+- existing brand/social_account rows unchanged
 
-Requirements:
-1. fresh origin/main
-2. inspect drift since feature branch merge-base
-3. integrate reviewed semantics without overwriting newer main changes
-4. preserve migration-history warning: no blind db push / no repair/reconcile
-5. commit/push to main only after tests pass
+migration apply失敗時:
+- workaroundや手修正をせずSTOP
+- partial stateをread-only確認してReport
 
-## Scope B — executable migration proof
+## Gate C — Edge Function deploy
 
-Before any production apply:
-- run migration against disposable/local PostgreSQL/Supabase only
-- verify current main migration chain compatibility
-- verify create/update/rollback behavior
-- verify grants: anon/public denied, authenticated allowed only for new user RPCs
-- verify auth.uid() ownership isolation with at least two test users/brands
-- verify cross-user state consume/complete denied
-- verify duplicate platform_user_id collision
-- verify state retry after simulated completion failure via transaction rollback
-- verify successful replay denied
-- verify concurrent completion single-success semantics
-- cleanup all local fixtures
+Gate B PASS後のみ。
 
-No production DB mutation.
+deploy対象:
+- **`x-oauth-connect-user` only**
 
-## Scope C — social-mobile UI / deep-link candidate
+要件:
+- approved main source only
+- secretsは既存server-side environmentを参照
+- service_roleをclientへ露出しない
+- `verify_jwt`方針はcurrent Supabase/Auth architectureと整合させる。Function内部でuser JWTを検証する既存設計を維持し、設定変更理由をReport。
+- existing `x-oauth-connect` version/source/configを変更しない
 
-Implement the minimum app flow:
-- Accounts screen: 「Xアカウントを接続」
-- generate cryptographically random raw state + PKCE verifier/challenge locally
-- call new start Function with user JWT
-- open X authorization browser
-- deep-link return handler
-- verify returned state matches locally-held raw state before callback call
-- send code/state/verifier/redirect_uri to callback endpoint
-- connecting / connected / cancelled / retryable error / terminal error states
-- show verified handle after success
-- no token display/log/storage in app
-- no service_role/client_secret in bundle
-- preserve fail-closed data-source behavior
-- reconnect may reuse begin flow
-- revoke/disconnect remains out of scope unless required by existing UX
+post-deploy:
+- ACTIVE version/read-back
+- deployed source/hashがapproved sourceと一致
+- unrelated Functions version不変
+- no test/manual real X authorization yet
 
-If deep-link scheme/app config requires a concrete value, use one consistent candidate and document exact X Developer Portal redirect URI needed. Do not change X Developer Portal yet.
+## Gate D — safe production smoke without real X OAuth
 
-## Tests
+実ユーザーXアカウントを接続しない範囲のみ。
 
-At minimum:
-- OAuth function 18/18 or more
-- full Deno regression
-- migration disposable DB proof
-- social-mobile typecheck
-- lint
-- Expo Web export / route resolution
-- deep-link/state matching tests
-- cancel/error/retry UI path tests where practical
-- secret grep/static check: no X client secret/service_role/token persistence in app
-- git diff --check
+許可:
+- unauthenticated requestが401/fail-closedすること
+- malformed requestが安全にrejectされること
+- production metadata/read-only checks
 
-## Production boundary
+禁止:
+- real OAuth authorization URLをユーザーのXアカウントで完遂
+- X token exchange
+- Vault token write
+- social_accounts/brands/membership test fixture作成
+- X API post/media upload
+- synthetic production OAuth fixture
+- admin production account再接続
 
-C2前は禁止:
-- migration production apply
-- Edge Function production deploy
-- X Developer Portal redirect URI mutation
-- Vault production write/delete/rotate
-- existing social_accounts/brands/memberships mutation
-- existing admin x-oauth-connect mutation
-- RLS/admin policy/grant変更 beyond reviewed candidate in source
+## Manual X Developer Portal gate
+
+本タスクではPortalを勝手に変更しない。
+
+必要な手動設定としてReportに正確に出す:
+- callback/deep-link URI: `kabumori-social://oauth-callback`
+- app permission/scopesが posting/media/refresh に対応する設定
+- current X app/clientとの整合
+
+Portal設定が済んでいない場合:
+- production backend rolloutまでは完了可能
+- real OAuth round-tripは未実施としてSTOP
+
+## Real OAuth round-trip gate
+
+**このTASKでは自動実行しない。**
+
+理由:
+- 実ユーザーのX認可
+- production Vault token write
+- production brand/social_account ownership row作成
+を伴うため。
+
+Portal設定後、ユーザーが明示的に許可した別H2で:
+- non-admin QA Auth user
+- dedicated test X account
+- one real OAuth round-trip
+- tenant isolation/read-back
+- cleanup/retain decision
+を行う。
+
+## Production forbidden
+
+- existing `x-oauth-connect` mutation
+- existing AI Lab/kabumori/mio social account mutation
+- existing Vault token rotate/delete
 - Cron
-- X API real post
+- X real post/media upload
 - Push/AI/Storage/billing
 - production default data source switch
-- blind db push / migration history repair
+- brand profile generation enablement
+- publish_enabled=true
+- manual fixture insertion
+- db push / migration history repair
 
-read-only production preflight metadata only allowed.
+## Verification
+
+最低限:
+- fresh main / production preflight
+- migration exact apply + read-back
+- ACL/RPC/index/FK proof
+- existing admin policy/RLS unchanged proof
+- Edge Function deploy/read-back/source equivalence
+- unrelated Function versions unchanged
+- unauth fail-closed smoke
+- malformed request fail-closed smoke
+- production data rows untouched proof
+- `git diff --check`
 
 ## Completion / C2
 
 完了時:
 - status -> `review_required`
 - next_owner -> `chatgpt`
-- `.agent/CODEX_REPORT_2.md` に:
-  1. fresh-main integration result
-  2. exact files/commit
-  3. disposable migration proof
-  4. mobile UI/deep-link implementation
-  5. tests
-  6. security checks
-  7. production mutation = 0
-  8. exact manual X Developer Portal step still pending
-  9. recommended production rollout sequence after C2
-- push前fresh origin/main確認
-- STOPしてC2待ち
-
-## H2 execution result (2026-09-19)
-
-- Integrated and implemented in isolated worktree `/private/tmp/kabumori-h2-phase9-q9g4i8`, rebased onto fresh `origin/main` `b562e6c2b10bd100e56c1b20cbfd2dd7cb9b3f6c`.
-- H2 implementation commit after rebase: `8ae688d`.
-- OAuth regression 18/18, mobile onboarding tests 8/8, full Deno suite 1258/1258, social-mobile lint/typecheck/Expo web export, and `git diff --check` passed.
-- Disposable DB apply and RPC/ACL/ownership/replay/duplicate/concurrency/transaction-rollback proofs passed. Exact disposable project was stopped with `--no-backup`. A separate restart for reverse-DDL object-absence read-back was blocked by Podman SSH handshake failure; see `.agent/CODEX_REPORT_2.md` and retain this limitation for C2 review.
-- Production migration/deploy/X Portal/API/Post/Cron/settings changes: 0. Exact pending X Developer Portal callback URI: `kabumori-social://oauth-callback`.
-- C2 review requested. Do not production-apply or deploy until separately approved.
-
-## H2 C2 follow-up result — OAuth scopes (2026-09-19)
-
-- C2 blocker addressed: authorization now requests exactly `tweet.read users.read tweet.write media.write offline.access`.
-- Scope implementation commit after latest-main rebase: `ac08cf7` (only OAuth scope logic, its exact-scope regression, and the scope rationale in the Phase 9 doc).
-- `tweet.write` enables the existing post endpoint. `media.write` is required by the repo's `/2/media/upload` path and its regression case for X's explicit missing-scope response. No further scopes were added.
-- Regression: OAuth 19/19, onboarding 8/8, full Deno 1259/1259; mobile lint/typecheck/Expo web export and diff-check passed.
-- No production migration/deploy/portal/API/Post/Cron/settings changes. X Developer Portal permission/redirect setup remains a later, separately approved manual step.
-- Updated `.agent/CODEX_REPORT_2.md`; C2 review requested. No production rollout is authorized.
-
-
-## C2 review — 2026-09-19
-
-**NOT PASS — implementation quality and safety proofs are strong, but the OAuth authorization scope is missing the permission required for this app's core posting use case. Production rollout is not approved.**
-
-### Accepted
-
-- K2-reviewed Phase 9 OAuth semantics were integrated onto fresh main without blind-merging the stale Claude branch.
-- Raw state / one-hash contract is preserved.
-- consume remains read-only; complete performs the atomic irreversible state claim inside the DB transaction.
-- Two-user ownership isolation, cross-user denial, replay denial, duplicate X identity rejection, retry rollback, and concurrent single-success were demonstrated in a disposable DB.
-- mobile UI generates state/PKCE locally, validates callback URI/state before server callback, and does not persist/log tokens or verifier.
-- \`publish_enabled\` remains false after OAuth.
-- new RPC EXECUTE is authenticated-only; anon/public/service_role are explicitly revoked.
-- tests reported PASS: OAuth 18/18, onboarding 8/8, full Deno 1258/1258, typecheck/lint/Expo web export/diff-check.
-- production mutation/deploy/X Developer Portal/Vault = 0.
-- the Podman reverse-DDL read-back limitation is non-blocking because apply/behavior/transaction rollback proof passed and no production apply occurred.
-
-### Blocker — X OAuth scope cannot post
-
-Current source:
-\`const X_SCOPES = "tweet.read users.read offline.access";\`
-
-This obtains read/user/refresh-token permissions but **does not request \`tweet.write\`**. The social-mobile product's connected X account is intended to publish posts; a token authorized without \`tweet.write\` cannot be used for Tweet/Post creation.
-
-Required fix:
-1. add \`tweet.write\` to the general-user X OAuth scope.
-2. retain \`tweet.read users.read offline.access\`.
-3. add a regression test that the authorization URL requests exactly the required minimum posting scopes and does not silently regress to read-only.
-4. check whether current planned Phase 9/next-phase media posting requires \`media.write\`; do not add it automatically unless an actual endpoint requirement in this repo/current X API flow requires it. Document the decision.
-5. rerun OAuth/onboarding/full Deno + app checks and \`git diff --check\`.
-6. production mutation/deploy/Developer Portal changes remain 0.
-7. return \`review_required / next_owner: chatgpt\`.
-
-No other blocker is raised by this C2 review.
-
-
-## Final C2 review — 2026-09-20
-
-**PASS — Phase 9 Codex handoff/integration is approved as complete.**
-
-Verified:
-- Required posting scope blocker fixed.
-- Current exact X OAuth scope is \`tweet.read users.read tweet.write media.write offline.access\`.
-- Exact-scope regression test exists and asserts the full required scope string.
-- \`tweet.write\` covers the app's post-creation use case.
-- \`media.write\` is justified by the repo's media-upload path and missing-scope regression evidence documented in the H2 report; no extra scopes beyond the documented minimum were added.
-- Prior K2 OAuth state/retry/idempotency guarantees remain intact.
-- Reported verification passes: OAuth 19/19, onboarding 8/8, full Deno 1259/1259, social-mobile lint/typecheck/Expo web export, and git diff --check.
-- source commit \`ac08cf75ef128e704181eec7c6b2fa9e1c59f97c\` is present on main.
-- production mutation/deploy/X Developer Portal/Vault/Cron/API/Post/Push = 0.
-
-Remaining rollout items are intentionally outside this C2:
-- production migration apply
-- Edge Function deploy
-- X Developer Portal callback/permission configuration
-- real X OAuth round-trip
-- any production posting enablement
-
-Decision:
-- this H2 task is done.
-- production rollout remains a separate explicitly authorized task.
+- `.agent/CODEX_REPORT_2.md`に:
+  1. preflight
+  2. exact migration apply result
+  3. postflight ACL/RPC/index/FK
+  4. exact Edge deploy version/source
+  5. smoke results
+  6. existing admin OAuth unchanged
+  7. production row mutation summary
+  8. X Developer Portal manual step
+  9. real OAuth round-trip still pending
+  10. rollback/recovery notes
+- push前fresh origin/main
+- C2待ちでSTOP
