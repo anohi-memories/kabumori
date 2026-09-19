@@ -641,3 +641,102 @@ test("macro: computeDataConfidence uses the exact same domain-agnostic rollup as
   assert.ok(partial > unavailable);
   assert.equal(unavailable, 0);
 });
+
+// --- macro (e-Stat: Japan CPI / Core CPI -- Macro Indicators Phase 1B) ---
+// Same point as every prior macro/fx/equity_index section: the generic
+// decision-logic functions need zero code change for a brand-new source
+// (e-Stat, not FRED) as long as mic_metric_domain_map has the right seed
+// data -- confirming the domain-agnostic design holds even across sources,
+// not just across metrics within one source.
+
+function jpCpiYoyMapRow(overrides: Partial<MetricDomainMapRow> = {}): MetricDomainMapRow {
+  return {
+    metricKey: "JP_CPI_YOY",
+    domain: "macro",
+    displayName: "日本CPI前年比(全国・総合)",
+    pctChangeThreshold: null,
+    absChangeThreshold: null,
+    alwaysMaterial: true,
+    ...overrides,
+  };
+}
+
+function jpCpiLevelMapRow(overrides: Partial<MetricDomainMapRow> = {}): MetricDomainMapRow {
+  return {
+    metricKey: "JP_CPI",
+    domain: "macro",
+    displayName: "日本CPI(全国・総合)",
+    pctChangeThreshold: 0.3,
+    absChangeThreshold: null,
+    alwaysMaterial: false,
+    ...overrides,
+  };
+}
+
+test("macro/JP_CPI_YOY (e-Stat): first observation (no baseline) is material via always_material, same code path as every FRED macro metric", () => {
+  const domainMap = new Map([["JP_CPI_YOY", jpCpiYoyMapRow()]]);
+  const observations = detectNewObservations(
+    [metric({ metricKey: "JP_CPI_YOY", domain: "macro", currentValue: 1.9, observedDate: "2026-08-01", unit: "percent", sourceKey: "estat", provider: "e-Stat" })],
+    {},
+  );
+  assert.deepEqual(observations, [
+    { metricKey: "JP_CPI_YOY", currentValue: 1.9, previousBaselineValue: null, reason: "first_observation" },
+  ]);
+  assert.equal(evaluateMaterialChange(observations, domainMap).isMaterial, true);
+});
+
+test("macro/JP_CPI_YOY (e-Stat): unchanged re-fetch of the same observed_date/value produces no observation, not material", () => {
+  const domainMap = new Map([["JP_CPI_YOY", jpCpiYoyMapRow()]]);
+  const observations = detectNewObservations(
+    [metric({ metricKey: "JP_CPI_YOY", domain: "macro", currentValue: 1.9, observedDate: "2026-08-01", unit: "percent", sourceKey: "estat", provider: "e-Stat" })],
+    { JP_CPI_YOY: { value: 1.9, observedDate: "2026-08-01", observedAt: null } },
+  );
+  assert.deepEqual(observations, []);
+  assert.equal(evaluateMaterialChange(observations, domainMap).isMaterial, false);
+});
+
+test("macro/JP_CPI_YOY (e-Stat): a new month (later observed_date, changed value) is value_changed and material via always_material", () => {
+  const domainMap = new Map([["JP_CPI_YOY", jpCpiYoyMapRow()]]);
+  const observations = detectNewObservations(
+    [metric({ metricKey: "JP_CPI_YOY", domain: "macro", currentValue: 2.0, observedDate: "2026-09-01", unit: "percent", sourceKey: "estat", provider: "e-Stat" })],
+    { JP_CPI_YOY: { value: 1.9, observedDate: "2026-08-01", observedAt: null } },
+  );
+  assert.deepEqual(observations, [
+    { metricKey: "JP_CPI_YOY", currentValue: 2.0, previousBaselineValue: 1.9, reason: "value_changed" },
+  ]);
+  assert.equal(evaluateMaterialChange(observations, domainMap).isMaterial, true);
+});
+
+test("macro/JP_CPI (0.3% pct threshold, the level companion of JP_CPI_YOY, e-Stat): a >=0.3% move is material, <0.3% is not", () => {
+  const domainMap = new Map([["JP_CPI", jpCpiLevelMapRow()]]);
+  // 102.2 -> 102.6 is +0.391%
+  const materialObservations = detectNewObservations(
+    [metric({ metricKey: "JP_CPI", domain: "macro", currentValue: 102.6, observedDate: "2026-09-01", unit: "cpi_index_2025_100", sourceKey: "estat", provider: "e-Stat" })],
+    { JP_CPI: { value: 102.2, observedDate: "2026-08-01", observedAt: null } },
+  );
+  assert.equal(evaluateMaterialChange(materialObservations, domainMap).isMaterial, true);
+
+  // 102.2 -> 102.4 is +0.196%
+  const nonMaterialObservations = detectNewObservations(
+    [metric({ metricKey: "JP_CPI", domain: "macro", currentValue: 102.4, observedDate: "2026-09-01", unit: "cpi_index_2025_100", sourceKey: "estat", provider: "e-Stat" })],
+    { JP_CPI: { value: 102.2, observedDate: "2026-08-01", observedAt: null } },
+  );
+  assert.equal(evaluateMaterialChange(nonMaterialObservations, domainMap).isMaterial, false);
+});
+
+test("macro (e-Stat): a domain mixing FRED metrics (US_CPI_YOY) and e-Stat metrics (JP_CPI_YOY) in the same evaluation both surface as material observations -- confirms the 20-metric combined macro domain works with zero special-casing per source", () => {
+  const domainMap = new Map([
+    ["US_CPI_YOY", cpiYoyMapRow()],
+    ["JP_CPI_YOY", jpCpiYoyMapRow()],
+  ]);
+  const observations = detectNewObservations(
+    [
+      metric({ metricKey: "US_CPI_YOY", domain: "macro", currentValue: 3.1, observedDate: "2026-08-01", unit: "percent", sourceKey: "fred", provider: "FRED" }),
+      metric({ metricKey: "JP_CPI_YOY", domain: "macro", currentValue: 1.9, observedDate: "2026-08-01", unit: "percent", sourceKey: "estat", provider: "e-Stat" }),
+    ],
+    {},
+  );
+  const decision = evaluateMaterialChange(observations, domainMap);
+  assert.equal(decision.isMaterial, true);
+  assert.deepEqual(decision.materialMetricKeys.sort(), ["JP_CPI_YOY", "US_CPI_YOY"]);
+});

@@ -135,4 +135,12 @@ export const MACRO_RELEASE_METRIC_KEYS: ReadonlySet<string> = new Set([
   "US_RETAIL_SALES",
   "US_RETAIL_SALES_MOM",
   "JP_GDP",
+  // Macro Indicators Phase 1B (e-Stat): the same decision/event logic
+  // above never referenced anything FRED-specific (it only ever looked at
+  // metricKey/observedDate/value), so adding these 4 e-Stat-sourced
+  // metric_keys needs no code change beyond this scope list.
+  "JP_CPI",
+  "JP_CPI_YOY",
+  "JP_CORE_CPI",
+  "JP_CORE_CPI_YOY",
 ]);

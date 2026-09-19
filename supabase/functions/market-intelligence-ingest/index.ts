@@ -34,6 +34,10 @@ import {
   SEC_SOURCE_KEY,
 } from "./mic_sec_edgar_adapter.ts";
 import {
+  ESTAT_SOURCE_KEY,
+  fetchEstatCpiMetrics,
+} from "./mic_estat_adapter.ts";
+import {
   buildMacroReleaseEvent,
   decideMacroReleaseEvent,
   MACRO_RELEASE_METRIC_KEYS,
@@ -85,7 +89,8 @@ type SourceKey =
   | typeof MOF_SOURCE_KEY
   | typeof EIA_SOURCE_KEY
   | typeof SEC_SOURCE_KEY
-  | typeof FRANKFURTER_SOURCE_KEY;
+  | typeof FRANKFURTER_SOURCE_KEY
+  | typeof ESTAT_SOURCE_KEY;
 
 const ALL_SOURCE_KEYS: SourceKey[] = [
   FRED_SOURCE_KEY,
@@ -93,6 +98,7 @@ const ALL_SOURCE_KEYS: SourceKey[] = [
   EIA_SOURCE_KEY,
   SEC_SOURCE_KEY,
   FRANKFURTER_SOURCE_KEY,
+  ESTAT_SOURCE_KEY,
 ];
 
 type FetchResult =
@@ -127,6 +133,11 @@ async function runAdapter(sourceKey: SourceKey, now: Date): Promise<FetchResult>
       // No API key: Frankfurter is a free, unauthenticated, unlimited-quota
       // endpoint, same as MOF's public CSV.
       return { kind: "metrics", metrics: await fetchFrankfurterFxMetrics({ fetchedAt: now }) };
+    }
+    case ESTAT_SOURCE_KEY: {
+      const appId = Deno.env.get("ESTAT_APP_ID");
+      if (!appId) throw new Error("SECRET_MISSING:ESTAT_APP_ID");
+      return { kind: "metrics", metrics: await fetchEstatCpiMetrics({ appId, fetchedAt: now }) };
     }
   }
 }

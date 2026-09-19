@@ -122,12 +122,41 @@ test("buildMacroReleaseEvent: a genuinely new observed_date (even with the same 
 
 // --- MACRO_RELEASE_METRIC_KEYS scope ---
 
-test("MACRO_RELEASE_METRIC_KEYS: exactly the 16 Phase 1A FRED macro metrics, nothing from existing domains", () => {
-  assert.equal(MACRO_RELEASE_METRIC_KEYS.size, 16);
+test("MACRO_RELEASE_METRIC_KEYS: exactly the 16 Phase 1A FRED macro metrics + 4 Phase 1B e-Stat macro metrics (20 total), nothing from existing domains", () => {
+  assert.equal(MACRO_RELEASE_METRIC_KEYS.size, 20);
   for (const key of ["US2Y", "US10Y", "NIKKEI225", "SP500", "NASDAQCOMPOSITE", "NASDAQ100", "VIX", "USDJPY", "WTI", "BRENT"]) {
     assert.equal(MACRO_RELEASE_METRIC_KEYS.has(key), false, `${key} must not be in the macro_release scope`);
   }
   for (const key of ["US_CPI", "US_CPI_YOY", "US_CORE_PCE_YOY", "US_UNEMPLOYMENT_RATE", "US_GDP_GROWTH", "JP_GDP"]) {
     assert.equal(MACRO_RELEASE_METRIC_KEYS.has(key), true, `${key} must be in the macro_release scope`);
   }
+  for (const key of ["JP_CPI", "JP_CPI_YOY", "JP_CORE_CPI", "JP_CORE_CPI_YOY"]) {
+    assert.equal(MACRO_RELEASE_METRIC_KEYS.has(key), true, `${key} (Phase 1B e-Stat) must be in the macro_release scope`);
+  }
+});
+
+// --- Phase 1B: buildMacroReleaseEvent must not assume FRED-only metadata
+// (e-Stat metrics have no seriesId/fredUnits keys at all) ---
+
+test("buildMacroReleaseEvent: works safely for an e-Stat-style context with no seriesId/fredUnits (null fredUnits, generic seriesId fallback), still producing a correct release event", () => {
+  const event = buildMacroReleaseEvent(
+    { kind: "new_release" },
+    {
+      metricKey: "JP_CPI_YOY",
+      observedDate: "2026-08-01",
+      newValue: 1.9,
+      unit: "percent",
+      seriesId: "JP_CPI_YOY", // no FRED seriesId concept -- caller falls back to metricKey
+      fredUnits: null, // e-Stat has no FRED-style units= transform concept
+      underlyingSource: "Statistics Bureau of Japan",
+      sourceUrl: "https://www.e-stat.go.jp/dbview?sid=0004052037",
+      fetchedAt: "2026-09-20T00:00:00.000Z",
+    },
+  );
+  assert.ok(event);
+  assert.equal(event!.eventType, "macro_release");
+  assert.equal(event!.entityId, "JP_CPI_YOY");
+  assert.match(event!.title, /released for 2026-08-01/);
+  assert.equal(event!.rawPayload?.fred_units, null);
+  assert.equal(event!.rawPayload?.underlying_source, "Statistics Bureau of Japan");
 });
