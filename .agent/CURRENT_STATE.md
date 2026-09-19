@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-20 JST (H1 done; H2 Phase10 OAuth production rollout ready; G1 natural shadow wait; G2 done)
+- checked_at: 2026-09-20 JST (H1 important-news live shadow ready; H2 done; G1 natural shadow wait; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,12 +14,12 @@
 
 ## Active workstreams
 
-- Codex slot 1: `done` — `important-news-cost-phase1-recall-safe-shadow-handoff-20260919`
-  - C1 PASS for investigation/design only.
-  - Durable equivalent 19-case replay artifact exists on `codex/important-news-phase1-replay-followup-20260919` @ `b7f14ef3455339b7857aa7f155aa591c494ad903`.
-  - Replacement-route historical first_seen remains unproven; all affected lanes keep legacy paid fallback.
-  - Phase 1 shadow production rollout/cutover is NOT approved. Next step requires explicit user approval for a live shadow comparison.
-  - MIC remains read-only/additional-trigger only; G1 market-report and H2/G2 social-mobile workstreams untouched.
+- Codex slot 1: `ready` — `important-news-phase1-live-shadow-rollout-20260920`
+  - User explicitly approved proceeding to a live shadow comparison.
+  - Allowed production scope is shadow-only: one exact migration, one `important-news-shadow` Function deploy, one shadow Cron (30m canary -> 10m after natural proof).
+  - Legacy important-news fetch/judgement/generation/publish, fixed searches, X/Push/App remain unchanged.
+  - Goal is real replacement `first_seen` / recall / latency / source-health / cost measurement. Cutover and legacy search reduction remain unapproved.
+  - MIC is read-only/additional-trigger only.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase10-production-oauth-rollout-20260920`
   - C2 PASS済みPhase9をproductionへ段階導入する。
