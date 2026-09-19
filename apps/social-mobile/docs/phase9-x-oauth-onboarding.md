@@ -200,6 +200,13 @@ X Developer Portal must be configured separately with this exact redirect URI:
 `kabumori-social://oauth-callback` (the app scheme in `apps/social-mobile/app.json`). This task does not
 change the X Developer Portal.
 
+The authorization request asks for the exact scopes `tweet.read users.read tweet.write media.write
+offline.access`: `tweet.write` is required for the app's existing `/2/tweets` posting flow, and
+`media.write` is required by the repository's `/2/media/upload` path (its existing failure regression
+expects X's `Missing required scope: media.write` response). `users.read` supports verified-handle
+lookup, `tweet.read` is retained for the established account/read contract, and `offline.access` enables
+refresh-token operation. No additional scopes are requested.
+
 ## 3. Migration/RPC/function candidate (this commit)
 
 - `supabase/migrations/20260919120000_social_mobile_x_oauth_onboarding.sql` — additive only; see the

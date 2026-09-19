@@ -119,7 +119,7 @@ export type StartRequest = { rawState: string; codeChallenge: string; redirectUr
 export type StartResult = { authorizationUrl: string; brandId: string; socialAccountId: string };
 
 const X_AUTHORIZE_URL = "https://x.com/i/oauth2/authorize";
-const X_SCOPES = "tweet.read users.read offline.access";
+const X_SCOPES = "tweet.read users.read tweet.write media.write offline.access";
 
 export async function startConnection({
   request,

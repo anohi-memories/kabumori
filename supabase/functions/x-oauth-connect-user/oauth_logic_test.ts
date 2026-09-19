@@ -100,6 +100,21 @@ test("startConnection: hashes the raw state exactly once for DB storage, but sen
   assert.doesNotMatch(result.authorizationUrl, /client_secret/u);
 });
 
+test("startConnection: requests only the minimum read, posting, media-upload, and refresh scopes", async () => {
+  const result = await startConnection({
+    request: {
+      rawState: "minimum-scope-test-raw-state-value",
+      codeChallenge: "challenge-value",
+      redirectUri: "kabumori-social://oauth-callback",
+    },
+    userAccessToken: "user-jwt", supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY, clientId: CLIENT_ID,
+    fetchImpl: async () => Response.json([{ brand_id: "u_scope", social_account_id: "sa_scope" }]),
+  });
+
+  const url = new URL(result.authorizationUrl);
+  assert.equal(url.searchParams.get("scope"), "tweet.read users.read tweet.write media.write offline.access");
+});
+
 test("startConnection: a cross-user or no-membership rejection from the RPC (e.g. ownership DB error) propagates as a real failure, not a fabricated success", async () => {
   await assert.rejects(
     () => startConnection({
