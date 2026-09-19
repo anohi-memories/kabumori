@@ -49,7 +49,7 @@
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: real non-admin sign-in QAはユーザー自身が実行し成功確認済み（ai_salaryman_lab only / kabumori=0 / mio=0）。fixture cleanupのDELETEはsafety reviewが再度ブロックしたため、Dashboard手動削除手順（Auth user削除→cascade→残り1件Table Editor削除）を提示してSTOP。production mutation 0件。K2待ち。
+- note: real non-admin sign-in QA・fixture cleanup（ユーザーがDashboardで実行、read-onlyで結果確認: brand_memberships 2→0, auth.users 2→1）・profile lifecycle確定、Phase 8残作業を全て完了。production mutationはClaude側0件（削除はユーザー自身がDashboard UIで実施）。X OAuth login onboarding着手可能な状態。K2待ち。
 
 ## Control codes
 

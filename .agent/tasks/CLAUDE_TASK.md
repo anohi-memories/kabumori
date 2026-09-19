@@ -373,3 +373,33 @@ STOPしてK2待ち。
 
 - アプリケーションコードの変更は0件のため、application repositoryへのcommit/pushは無し。
 - `.agent/tasks/CLAUDE_TASK.md`本Reportをorigin/mainへpushする。
+
+## Report (cleanup verified — Phase 8 complete)
+
+- result: ユーザーがSupabase Dashboardの正規経路（Authentication → Users → 非adminQAユーザーのDelete → cascadeでmembership自動削除、Table Editorで残るcanary行を手動削除）でfixture cleanupを実行完了。read-onlyで最終状態を確認し、想定通りであることを検証した。**Phase 8のremaining scope（mobile sign-in QA / profile lifecycle / test fixture cleanup）はこれで全て完了。**
+
+### cleanup読み取り確認（削除後）
+
+- `auth.users` = 1（非adminQAユーザーが削除され、adminユーザーのみ残存）
+- `admin_users` = 1（変更なし、想定通り）
+- `profiles` = 1（変更なし、adminユーザー自身の分。social-mobileには元々不要と確定済み）
+- `brand_memberships` = 0（cascade削除＋手動削除により、canary・non-admin QA双方の行が消滅）
+
+削除前後の差分は事前に提示した想定と完全に一致（`brand_memberships`: 2→0、`auth.users`: 2→1、他は不変）。`brands`/`social_accounts`/`scheduled_posts`等の運用テーブルや`admin_users`/`private.is_admin()`ポリシーには一切触れていない。
+
+### production mutation一覧（本Report分）
+
+- 0件。read-onlyのSQL確認のみ実施。DB削除自体はユーザーがDashboard UIから直接実行し、Claudeからの書き込みは行っていない。
+
+### 完了条件（更新・全て充足）
+
+1. ✅ real non-admin sign-in QA（ai_salaryman_lab only / kabumori=0 / mio=0、ユーザー確認済み）
+2. ✅ fixture cleanup（ユーザーがDashboardで実行、read-onlyで結果確認済み）
+3. ✅ profile lifecycle（social-mobileには不要と根拠付きで確定済み、Phase 8前回Report参照）
+
+**X OAuth login onboardingへ着手可能な状態。**
+
+### exact commit/push/read-back
+
+- アプリケーションコード変更は0件のためcommit/pushなし。
+- `.agent/tasks/CLAUDE_TASK.md`本Reportをorigin/mainへpushする。
