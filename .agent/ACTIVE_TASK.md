@@ -44,12 +44,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: in_progress
+- status: review_required
 - task_id: social-mobile-app-phase9-x-oauth-onboarding-20260919
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: Phase 8完了を土台に、social-mobileのX OAuth onboarding設計・実装候補に着手。まずPhase A（既存x-oauth-connect/Vault/social_accounts構成のread-only inventory）から開始。production apply/deployは行わない。
+- note: Phase A/B/C完了。既存x-oauth-connect(2アカウント固定allowlist、auth.uid()非依存)は無変更のまま、新規Edge Function `x-oauth-connect-user` + 新規RPC3本(全てユーザー自身のJWT転送、service_role不使用)の設計・実装候補をブランチ`social-mobile-x-oauth-onboarding-phase9-20260919`(commit db79f02)へpush。12/12新規テスト+既存1234/1234 pass。production適用・デプロイ0件。mobile UIは次フェーズへ意図的に持ち越し。K2待ち。
 
 ## Control codes
 

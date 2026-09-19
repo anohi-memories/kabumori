@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase9-x-oauth-onboarding-20260919
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Opus 5
 - purpose: Phase 8で確立した一般ユーザーAuth + tenant RLS境界を壊さず、social-mobileのX OAuth onboardingを設計・実装候補まで進める。既存のproduction X投稿基盤・Vault・multi-brand運用を再利用できる部分は再利用し、ユーザーごとのworkspace/account ownershipを安全に確立する。
@@ -220,3 +220,82 @@ read-only production inventoryは可。
 
 push前fresh origin/main。
 完了後STOPしてK2待ち。
+
+## Report
+
+- result: Phase A（read-only inventory）・Phase B（設計）・Phase C（実装候補、範囲を限定）を完了。実装候補はレビュー用ブランチへpush済みで、production適用・デプロイは一切していない。mobile UI（Accounts画面・接続ボタン・deep-link処理）は意図的に次フェーズへ持ち越し（理由はdocs参照）。
+
+### 1. current OAuth architecture
+
+`x-oauth-connect`（本番デプロイ済み、実体はfeature branchのみに存在しmainには無い。ダウンロードで実体を確認）は、`AI_LAB`/`KABUMORI`の**2アカウント固定のハードコードallowlist**。POST(start)経路は`resolveAdminAuthorization`でadmin_users所属者のみ許可。PKCE state/verifierはサーバー側生成でVaultに保存。callbackは`GET .../callback`でXブラウザから直接叩かれるweb/admin向けフロー。全RPC（`begin/consume/complete_*`）はSQL内に`brand_id`/`social_account_id`をリテラル文字列でハードコードしており、**`auth.uid()`への参照が一切ない**（service_roleでのみ呼ばれる前提のため）。`verifyReadOnlyXIdentity`は事前登録済みhandleとの一致を必須とする設計で、初回接続時に「まだ何も登録されていない一般ユーザー」には使えない。
+
+### 2. chosen onboarding architecture and why
+
+既存`x-oauth-connect`を拡張せず、**新規・独立したEdge Function（`x-oauth-connect-user`）+ 新規RPC 3本**を追加する方式を選択。理由: (1) 既存2アカウントはproduction稼働中で、共有コードへの変更はリグレッションリスクが高い、(2) 既存の account model（固定allowlist・auth.uid()非依存）は一般ユーザー向けに根本的に作り替えが必要で、1ファイルに両方の信頼境界を混在させるとレビューが困難になる、(3) このプロジェクトで既に確立されている「信頼境界が異なる新機能は既存を拡張せず新規に切り出す」パターン（`brand-post-dry-run`等）を踏襲。
+
+設計の核: 新Function/新RPCへのPostgREST呼び出しは**すべて接続しようとしているユーザー自身のJWTを転送**し、service_roleキーは一切使わない。これにより各`SECURITY DEFINER` RPC内の`auth.uid()`が本物の呼び出し元を指すことがDB側で保証される。PKCEのcode_verifier/stateは**モバイルクライアント自身が生成・保持**し、DBには一切送らない・保存しない（既存admin flowはブラウザ⇔サーバーが別プロセスのためVault保存が必要だったが、モバイルアプリは同一プロセス内でdeep-link往復するため不要）。初回接続時はhandle事前照合を行わず、検証できたX identityをそのまま紐付ける（bindモード）。
+
+### 3. changed files
+
+- `supabase/migrations/20260919120000_social_mobile_x_oauth_onboarding.sql`（新規、未適用）
+- `supabase/functions/x-oauth-connect-user/index.ts`（新規、未デプロイ）
+- `supabase/functions/x-oauth-connect-user/oauth_logic.ts`（新規、未デプロイ）
+- `supabase/functions/x-oauth-connect-user/oauth_logic_test.ts`（新規、12テスト）
+- `apps/social-mobile/docs/phase9-x-oauth-onboarding.md`（新規、設計文書）
+
+`apps/social-mobile`のソースコード（UI/route）は今回変更していない（意図的にPhase 3へ持ち越し）。`x-oauth-connect`・既存RPC・既存`social_accounts`/`brands`/`brand_memberships`行はいずれも一切変更していない。
+
+### 4. migration/RPC/function candidate
+
+- migration: `social_accounts(platform, platform_user_id)`への部分UNIQUE index追加（platform_user_idが非nullの場合のみ）+ `social_account_oauth_states.initiated_by_user_id`列追加（nullable、既存フローは無変更）+ 新規RPC3本（`begin_social_mobile_x_oauth_connection`, `consume_social_mobile_x_oauth_state`, `complete_social_mobile_x_oauth_connection`）。全てSECURITY DEFINERだが`authenticated`ロールへEXECUTE付与（既存admin flowのRPCとは異なりservice_roleには一切付与していない）。
+- read-onlyでcurrent production schemaに対しpreflight済み（`brands`/`social_accounts`/`brand_memberships`/`social_account_oauth_states`の実カラム・制約・既存RPCシグネチャを確認した上で設計）。**未適用**。
+- function: `x-oauth-connect-user`。**未デプロイ**。
+
+### 5. security model
+
+- 認証: `Authorization: Bearer <user JWT>`を`GET {SUPABASE_URL}/auth/v1/user`で検証（admin_usersチェックなし、実在の非匿名ユーザーなら誰でも可）。
+- 全DB呼び出しは呼び出し元ユーザー自身のJWTを転送。service_roleは一切使用しない設計（誤ってservice_roleに切り替えると`auth.uid()`がnullになり全RPCが`SOCIAL_MOBILE_OAUTH_AUTH_REQUIRED`でfail-closedする、fail-openではなくfail-closedな壊れ方になる設計）。
+- callbackの`code`/`state`はクライアント値をそのまま信用せず、`auth.uid()`に紐づく`social_account_oauth_states`行の照合を経て初めて`brand_id`/`social_account_id`が確定する。
+- 同一X `platform_user_id`の重複接続は部分UNIQUE indexによりDB層でatomicにブロック（check-then-actレースに強い）。
+- token値はEdge Functionのレスポンスに一切含まれない（テストで実際のシリアライズ結果を検証済み）。
+
+### 6. workspace ownership lifecycle
+
+初回: `begin_social_mobile_x_oauth_connection`が対象ユーザーのbrand（`u_<uid先頭24桁>`形式、決定的なので冪等）+ owner membership + `social_accounts`行（`connection_status=authorization_pending`, handle='pending'仮値）を作成。再試行: 既存ownerの1件を再利用（`connection_status`をリセット）。想定外に複数brandをownerとして持つ場合は推測せずfail-closed。`code_profile_key`は未登録のplaceholder値とし、コンテンツ生成パイプラインからは`BRAND_CODE_PROFILE_NOT_FOUND`で意図的に到達不能（所有権確立と生成配線を明確に別フェーズとして分離）。
+
+### 7. reconnect/revoke behavior
+
+reconnect: `begin_*`の再呼び出しで同じ行を再利用し安全にやり直し可能（重複行は作られない）。revoke（接続解除）: **本フェーズのスコープ外**。remaining_issuesに明記。
+
+### 8. tests/results
+
+- `deno test --no-check --allow-env --allow-read --allow-net=127.0.0.1 supabase/functions/x-oauth-connect-user`: 12/12 pass（未認証拒否、cross-user/no-membership相当のRPCエラー伝播、redirect_uri不一致・使用済/不整合stateがトークン交換前に拒否、happy pathでtoken非返却、重複アカウント衝突エラー伝播、非2xxトークン交換のfail-closed）。
+- `deno test`全体（既存供給分含む）: **1234/1234 pass**、リグレッションなし。
+- `deno check supabase/functions/x-oauth-connect-user/oauth_logic.ts`: エラーなし。
+- `git diff --check`: 問題なし。
+- `apps/social-mobile`側のtypecheck/lint/Expo export/route resolutionは、このタスクで同アプリのソースを一切変更していないため再実行不要（前回Phase 8完了時点のPASS状態から不変）。
+
+### 9. production mutation = 0 confirmation
+
+0件。read-onlyのSQL/Edge Functionダウンロードのみ実施。migrationは未適用、Edge Functionは未デプロイ、既存`x-oauth-connect`・既存brand/social_accounts/membership行は一切変更していない。
+
+### 10. exact commit/push/read-back
+
+- ブランチ`social-mobile-x-oauth-onboarding-phase9-20260919`、コミット`db79f02`をpush済み（mainへは未マージ、レビュー待ち）。
+- `.agent/tasks/CLAUDE_TASK.md`の本Reportをorigin/mainへpushする。
+
+### 11. K2後に必要なproduction rollout/manual step
+
+1. 本Reportのmigration/Edge Functionをコードレビュー（K2）
+2. K2承認後、migrationをread-onlyでの再preflight → `supabase db query --linked`での適用 → read-back検証（既存の安全手順を踏襲）
+3. Edge Function `x-oauth-connect-user`をデプロイ（`--no-verify-jwt`、既存関数群と同様の運用に合わせるか要判断）
+4. **X Developer Portalでの手動作業**: 新しいredirect URI（`{SUPABASE_URL}/functions/v1/x-oauth-connect-user/callback`は使わない設計だが、モバイルのdeep-link redirect_uri自体はアプリ側の任意のURIになるため、Xアプリの設定でredirect URI allowlistにモバイルのdeep-linkスキーム（例: `kabumori-social-mobile://oauth-callback`）を追加登録する必要がある）
+5. `apps/social-mobile`側のAccounts画面・接続ボタン・deep-link route・connecting/connected/error状態のUI実装（次フェーズ、本Reportで意図的に未着手と明記）
+6. `_shared/brand/brand_profiles.ts`への`social_mobile_user_v1`プロファイル追加（一般ユーザーのコンテンツ生成を有効化する場合のみ、さらに別フェーズ）
+
+### remaining_issues
+
+1. mobile UI未実装（次フェーズ）
+2. revoke/disconnect flow未設計
+3. 一般ユーザーのposting_windows/publish有効化設計は完全にスコープ外（OAuth/所有権確立のみ）
+4. X Developer Portalでのdeep-link redirect URI登録が本番投入前に必要
