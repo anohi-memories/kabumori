@@ -3,7 +3,7 @@
 - task_id: important-news-hourly-cadence-simplify-20260919
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
@@ -122,3 +122,25 @@ JST条件:
 - `next_owner: chatgpt`
 - control metadataをGitHub mainへ同期
 - C1待ちでSTOP
+
+
+## Final C1 review — 2026-09-19
+
+**PASS — hourly cadence simplification verified in production.**
+
+確認済み:
+- production `important-news-fetch` は schedule `0,20,40 * * * *` / active=true のまま、command gateのみ更新。
+- 2026-09-19〜09-23はJST偶数時の00分のみ（12回/日）。
+- 2026-09-24以降はJST毎時00分のみ（24回/日）。
+- 朝刊/大引け前後の `:20` / `:40` dense-window追加実行は削除済み。
+- gateは `timezone('Asia/Tokyo', clock_timestamp())` を使い、JST基準。
+- Reportの代表時刻proofは14/14 PASS。
+- production read-backで command MD5 `b9a98c88ada68d0552ac66c9e8e19983` を確認。
+- `important-news-judgement` / generation / publish-ready、market-report、MIC関連Cronは変更されていない。
+- Edge Function、schema/migration、OAuth/Vault、X、Push、manual OpenAI callの変更は0。
+- 直前C1 PASS状態へのrollback commandはMD5 `c85fd56fe33bcea58d7414768cf5c9f5` としてReportに保存済み。
+
+### C1 decision
+
+承認。このH1は完了。
+9/24以降の重要ニュースfetchは最大24回/日となり、旧72回/日比で約66.7%削減。
