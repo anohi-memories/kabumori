@@ -1,131 +1,148 @@
 # Codex Task 2
 
-- task_id: social-mobile-app-phase10-x-connect-ui-shell-20260919
+- task_id: social-mobile-app-phase9-codex-handoff-integration-20260919
 - owner: codex
 - slot: codex-2
 - status: ready
 - next_owner: codex
 - priority: high
-- recommended_model: Luna
-- purpose: 自動投稿アプリ側を前進させる。一般ユーザー向けX接続のAccounts UI / 状態表示 / deep-link受け口 / adapter境界を実装する。ただしClaude slot2のPhase9 OAuth server candidateはK2 NOT PASSで修正中のため、H2はserver migration/RPC/Edge Functionに触れず、UIとclient abstractionだけを安全に進める。
+- recommended_model: Sol High
+- purpose: K2 PASS済みのgeneral-user X OAuth candidateをClaude slot 2から引き継ぎ、fresh mainへ安全に統合し、production rollout前の実行可能性証明とmobile onboarding UI実装まで進める。production apply/deployはC2承認前に行わない。
 
-## Background
+## Handoff basis
 
-- social-mobileのtenant/Auth/RLS基盤はPhase8までK2 PASS。
-- Claude slot2 Phase9は一般ユーザー向けX OAuth server candidateを実装済みだが、K2で以下2 blockerが見つかり修正待ち:
-  1. OAuth state double-hash
-  2. callback retry/idempotency lifecycle
-- そのためH2はserver contractを固定値として埋め込まず、UI/client adapterを分離して実装する。
-- production default data sourceは引き続き mock。
+Claude Phase 9 reviewed branch:
+- branch: `social-mobile-x-oauth-onboarding-phase9-20260919`
+- reviewed commits: `db79f02` + blocker fix `a58c01d`
+- final K2: PASS
+- production mutation/deploy: 0
 
-## Mandatory startup
+重要:
+- branchはK2時点で main より **2 commits ahead / 10 commits behind**。
+- blind merge/rebaseは禁止。
+- fresh `origin/main` からisolated worktree/branchを作り、Phase 9の5ファイル差分だけを明示的に統合する。
+- 他workstreamの変更を巻き戻さない。
 
-開始前に必ず確認:
-1. `.agent/ORCHESTRATION.md`
-2. `.agent/CURRENT_STATE.md`
-3. this TASK
-4. `.agent/tasks/CLAUDE_TASK.md` の最新K2 blocker
-5. fresh `origin/main`
+## Reviewed architecture — do not regress
 
-競合ルール:
-- H2は `apps/social-mobile/**` のみ。
-- G2が触る `supabase/functions/x-oauth-connect-user/**`、Phase9 migration/RPC、既存 `x-oauth-connect` には触れない。
-- 同一ファイル競合が見つかったらSTOP。
+- App login boundary = Supabase Auth。
+- X OAuth = signed-in userが自分の投稿用Xアカウントを接続する機能。Supabase Auth provider化しない。
+- existing admin `x-oauth-connect` は触らない。
+- general-user flow = new `x-oauth-connect-user` + new RPCs。
+- DB ownershipは `auth.uid()` 正本。user_id/brand_idをclient値で信用しない。
+- service_roleをExpo/mobileへ含めない。
+- OAuth state contract:
+  - client raw random state
+  - start Function hashes once for DB storage
+  - X receives raw state
+  - callback receives raw state
+  - server hashes once for lookup
+- consume RPCはread-only。
+- final complete RPCのみがstateをatomic consumeし、Vault/account writeと同じDB transaction内で確定。
+- successful replay denied / concurrent duplicate completion one success。
+- publish_enabled remains false after OAuth。
+- duplicate X platform_user_id is DB-unique。
+- token is never returned to mobile response。
 
-## Goal
+## Scope A — safe integration to current main
 
-アプリ上で以下の導線をsource candidateとして完成させる:
+Reviewed candidate files only:
+- `supabase/migrations/20260919120000_social_mobile_x_oauth_onboarding.sql`
+- `supabase/functions/x-oauth-connect-user/index.ts`
+- `supabase/functions/x-oauth-connect-user/oauth_logic.ts`
+- `supabase/functions/x-oauth-connect-user/oauth_logic_test.ts`
+- `apps/social-mobile/docs/phase9-x-oauth-onboarding.md`
 
-1. Accounts画面に「Xアカウントを接続」CTA
-2. 未接続 / 接続中 / 接続済み / エラー / 再接続 の状態表示
-3. 接続済みならX handle表示
-4. OAuth開始処理をUIから直接HTTP実装せず、専用client adapter/interface越しに呼ぶ
-5. deep-link callbackの受け口を用意
-6. callback payloadをadapterへ渡し、UI状態へ反映
-7. cancel時に安全にAccountsへ戻る
-8. signed-out時は接続開始不可
-9. no-workspace / no-membership時もクラッシュせずonboarding導線を表示
-10. mock modeで全状態をローカル確認可能
+Requirements:
+1. fresh origin/main
+2. inspect drift since feature branch merge-base
+3. integrate reviewed semantics without overwriting newer main changes
+4. preserve migration-history warning: no blind db push / no repair/reconcile
+5. commit/push to main only after tests pass
 
-## Critical constraint
+## Scope B — executable migration proof
 
-**Phase9 server contractはまだ確定していない。**
+Before any production apply:
+- run migration against disposable/local PostgreSQL/Supabase only
+- verify current main migration chain compatibility
+- verify create/update/rollback behavior
+- verify grants: anon/public denied, authenticated allowed only for new user RPCs
+- verify auth.uid() ownership isolation with at least two test users/brands
+- verify cross-user state consume/complete denied
+- verify duplicate platform_user_id collision
+- verify state retry after simulated completion failure via transaction rollback
+- verify successful replay denied
+- verify concurrent completion single-success semantics
+- cleanup all local fixtures
 
-そのため:
-- endpoint path / request body / state hashing / PKCE詳細 / final RPC signatureをUIへハードコードしない。
-- `XConnectionClient` 等のadapter境界を作り、実server transportはstub/mockまたはfeature-gatedにする。
-- G2 K2 PASS後にtransport実装だけ差し替えられる構造にする。
-- UI側でraw state/hashなどOAuth securityロジックを独自判断しない。
+No production DB mutation.
 
-## Suggested structure
+## Scope C — social-mobile UI / deep-link candidate
 
-必要に応じて既存構成に合わせるが、例:
-- `apps/social-mobile/src/lib/x-connection.ts`
-- `apps/social-mobile/src/lib/x-connection-client.ts`
-- `apps/social-mobile/src/app/...accounts...`
-- deep-link route / callback handler
-- tests
+Implement the minimum app flow:
+- Accounts screen: 「Xアカウントを接続」
+- generate cryptographically random raw state + PKCE verifier/challenge locally
+- call new start Function with user JWT
+- open X authorization browser
+- deep-link return handler
+- verify returned state matches locally-held raw state before callback call
+- send code/state/verifier/redirect_uri to callback endpoint
+- connecting / connected / cancelled / retryable error / terminal error states
+- show verified handle after success
+- no token display/log/storage in app
+- no service_role/client_secret in bundle
+- preserve fail-closed data-source behavior
+- reconnect may reuse begin flow
+- revoke/disconnect remains out of scope unless required by existing UX
 
-既存命名・route構造を優先し、勝手な大規模refactorはしない。
-
-## UX requirements
-
-最低限:
-- 未接続: 「Xアカウントを接続」
-- 接続中: progress表示、二重タップ防止
-- 接続済み: @handle / 接続済み表示
-- エラー: 再試行可能、秘密値や生レスポンスを表示しない
-- 再接続: UIのみ用意。実server reconnect contractはadapter越し
-- callback成功: Accountsへ復帰し状態更新
-- callback失敗/cancel: 安全にAccountsへ戻る
-- accessibility label / testID等、既存テスト方針に合わせる
+If deep-link scheme/app config requires a concrete value, use one consistent candidate and document exact X Developer Portal redirect URI needed. Do not change X Developer Portal yet.
 
 ## Tests
 
-最低限:
-- signed-out connect blocked
-- disconnected CTA
-- connecting double-submit prevention
-- connected handle display
-- callback success -> connected
-- callback error -> error state
-- cancel -> safe return
-- reconnect path
-- no membership/workspace state
-- mock mode deterministic
-- no token/code_verifier/access_token/refresh_token rendered or logged
-- production default `EXPO_PUBLIC_DATA_SOURCE=mock` unchanged
-- typecheck
+At minimum:
+- OAuth function 18/18 or more
+- full Deno regression
+- migration disposable DB proof
+- social-mobile typecheck
 - lint
-- Expo web export / route resolution
+- Expo Web export / route resolution
+- deep-link/state matching tests
+- cancel/error/retry UI path tests where practical
+- secret grep/static check: no X client secret/service_role/token persistence in app
 - git diff --check
 
-## Production safety
+## Production boundary
 
-禁止:
-- production migration apply
-- Edge Function deploy
-- Phase9 RPC/Function変更
-- X Developer Portal変更
-- OAuth/Vault/token操作
-- production social_accounts/brands/memberships write
-- publish_enabled変更
-- Cron/X/Push/AI
-- service_roleをmobileへ入れる
-- production defaultをsupabaseへ切替
+C2前は禁止:
+- migration production apply
+- Edge Function production deploy
+- X Developer Portal redirect URI mutation
+- Vault production write/delete/rotate
+- existing social_accounts/brands/memberships mutation
+- existing admin x-oauth-connect mutation
+- RLS/admin policy/grant変更 beyond reviewed candidate in source
+- Cron
+- X API real post
+- Push/AI/Storage/billing
+- production default data source switch
+- blind db push / migration history repair
+
+read-only production preflight metadata only allowed.
 
 ## Completion / C2
 
 完了時:
-- `.agent/CODEX_REPORT_2.md` 先頭へ結果
-- changed files
-- UI flow
-- adapter contract
-- tests
-- production mutation=0
-- G2 Phase9 K2 PASS後に必要なtransport接続点
-- TASK -> `review_required`
+- status -> `review_required`
 - next_owner -> `chatgpt`
-- push前fresh origin/main
-- push/read-back
-- C2待ちでSTOP
+- `.agent/CODEX_REPORT_2.md` に:
+  1. fresh-main integration result
+  2. exact files/commit
+  3. disposable migration proof
+  4. mobile UI/deep-link implementation
+  5. tests
+  6. security checks
+  7. production mutation = 0
+  8. exact manual X Developer Portal step still pending
+  9. recommended production rollout sequence after C2
+- push前fresh origin/main確認
+- STOPしてC2待ち
