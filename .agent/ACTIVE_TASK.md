@@ -14,22 +14,22 @@
 ### Codex slot 1
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - task_id: important-news-hourly-cadence-simplify-20260919
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: `important-news-fetch` Cron 1本のcommand gateをJST基準で簡素化済み。9/19〜9/23は偶数時00分のみ、9/24以降は毎時00分のみ。関連Cron不変。C1確認待ち。
+- note: C1 PASS済み。重要ニュース監視の頻度整理は完了。
 
 ### Codex slot 2
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: social-mobile-app-phase6-auth-mobile-read-qa-20260918
+- task_id: social-mobile-app-phase9-codex-handoff-integration-20260919
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
-- note: Phase5 production membership/RLS C2 PASS後の実Auth/mobile read QA。no-membership stateとtenant RLSを確認し、user↔brandが一意・明示的ならcanary membershipは1件まで。production default data sourceはまだOFF。migration history未記録はrepairしない。
+- note: G2/K2 PASS済みOAuth candidateを引き継ぎ。fresh-main integration、disposable migration proof、mobile Accounts/deep-link UI candidate。C2前のproduction apply/deployは禁止。
 
 ### Claude slot 1
 - owner: claude
@@ -44,12 +44,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: review_required
+- status: done
 - task_id: social-mobile-app-phase9-x-oauth-onboarding-20260919
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: K2指摘の2blocker（state二重ハッシュ、consume早すぎによるretry不能）を修正。end-to-end整合テスト+retry/replay/concurrency 6テスト新規追加、計18/18 pass、既存含め1240/1240 pass。ブランチ`social-mobile-x-oauth-onboarding-phase9-20260919`(commit a58c01d)へpush。production適用・デプロイ引き続き0件。K2待ち。
+- note: K2 PASS。Phase9 candidate設計・blocker修正完了。後続はH2へ引き継ぎ済み。
 
 ## Control codes
 
