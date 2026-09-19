@@ -44,12 +44,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: social-mobile-app-phase8-completion-followup-claude-20260919
+- status: in_progress
+- task_id: social-mobile-app-phase9-x-oauth-onboarding-20260919
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: real non-admin sign-in QA・fixture cleanup（ユーザーがDashboardで実行、read-onlyで結果確認: brand_memberships 2→0, auth.users 2→1）・profile lifecycle確定、Phase 8残作業を全て完了。production mutationはClaude側0件（削除はユーザー自身がDashboard UIで実施）。X OAuth login onboarding着手可能な状態。K2待ち。
+- note: Phase 8完了を土台に、social-mobileのX OAuth onboarding設計・実装候補に着手。まずPhase A（既存x-oauth-connect/Vault/social_accounts構成のread-only inventory）から開始。production apply/deployは行わない。
 
 ## Control codes
 

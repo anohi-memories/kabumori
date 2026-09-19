@@ -3,7 +3,7 @@
 - task_id: social-mobile-app-phase9-x-oauth-onboarding-20260919
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Opus 5
