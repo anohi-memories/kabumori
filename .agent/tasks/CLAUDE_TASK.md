@@ -242,3 +242,29 @@ isolated worktreeで実施（package/lock変更なし、`git status`は`.claude/
 
 - コード変更なしのため、application repositoryへのcommit/pushは無し。
 - `.agent/tasks/CLAUDE_TASK.md`本Reportをこのタスク完了報告としてorigin/mainへpushする。
+
+
+## K2 review — 2026-09-19
+
+**PARTIAL PASS / Phase 8 completion pending user-mediated runtime QA and cleanup.**
+
+Accepted:
+- profile lifecycle investigation is complete and sufficiently grounded: `apps/social-mobile` does not depend on `public.profiles`; profile creation belongs to the main kabumori client path via `ensureProfile()`, with no auth.users trigger.
+- local/dev Supabase runtime path was exercised safely: signed-out -> auth required, invalid credential -> real Supabase Auth rejection, no silent mock fallback, no service_role/secret exposure.
+- production default remains `EXPO_PUBLIC_DATA_SOURCE=mock`.
+- package/lock unchanged; typecheck, lint, static policy 5/5, Expo web export, and git diff --check all PASS.
+- production mutation remains 0.
+- old global-admin canary delete was correctly stopped when safety review blocked it; no workaround was attempted.
+
+Not yet accepted as complete:
+1. real non-admin QA credential sign-in through the social-mobile client has not been performed, so client-path confirmation of `ai_salaryman_lab` only / `kabumori=0` / `mio=0` remains pending.
+2. old global-admin canary membership remains.
+3. non-admin QA user + membership must remain until real sign-in QA completes, then be cleaned up through the approved Dashboard/Auth lifecycle.
+
+K2 decision:
+- source/runtime setup, profile conclusion, and safety handling: **PASS**.
+- Phase 8 overall: **NOT DONE YET**.
+- Keep this task `review_required` / `next_owner: chatgpt`.
+- No further schema/RLS/grant/profile code changes are warranted from current evidence.
+- Next action is user-mediated real credential sign-in QA, followed by fixture cleanup.
+- Do not begin X OAuth onboarding until those two items are complete.
