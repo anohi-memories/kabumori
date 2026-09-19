@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-19 JST (H1 Phase1 recall-safe design review_required; H2 Phase9 continuation in_progress; G1 natural shadow wait; G2 Phase9 candidate K2 PASS/done)
+- checked_at: 2026-09-19 JST (H1 Phase1 recall-safe design review_required; H2 Phase9 continuation done; G1 natural shadow wait; G2 Phase9 candidate K2 PASS/done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -22,7 +22,7 @@
   - Replay artifact: `codex/important-news-phase1-replay-followup-20260919` @ `b7f14ef3455339b7857aa7f155aa591c494ad903`. Phase 1 production mutation 0; C1 review required.
   - MIC remains read-only/additional-trigger only; G1 market-report and H2/G2 social-mobile workstreams untouched.
 
-- Codex slot 2: `in_progress` — `social-mobile-app-phase9-codex-handoff-integration-20260919`
+- Codex slot 2: `done` — `social-mobile-app-phase9-codex-handoff-integration-20260919`
   - G2/K2で承認済みのPhase9 OAuth candidateを引き継ぐ。
   - fresh mainへの安全統合、disposable migration proof、mobile Accounts/deep-link UI candidateを担当。
   - C2前のproduction migration/deploy/X Developer Portal/Vault変更は禁止。
