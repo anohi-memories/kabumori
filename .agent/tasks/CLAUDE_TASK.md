@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase8-completion-followup-claude-20260919
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Opus 5
 - purpose: Codex slot 2から一時引き継ぎ。Phase 8で既にPASS済みのtenant RLS isolation proofを前提に、残っている mobile/local sign-in QA、profile lifecycle正本確認、test fixture cleanupだけを安全に完了させる。
@@ -318,3 +318,58 @@ QA成功後のみ:
 status -> `review_required`
 next_owner -> `chatgpt`
 STOPしてK2待ち。
+
+## Report (finalization follow-up)
+
+- result: Scope A（real non-admin client sign-in QA）は**ユーザー自身が実credentialで実行し成功を確認**。Scope B（fixture cleanup）はmembership行のDELETE実行がsafety reviewにより再度ブロックされたため、ユーザー向けDashboard手動削除手順を提示してSTOP。
+
+### Scope A — real non-admin client sign-in QA: 完了（ユーザー確認）
+
+- isolated worktreeで`apps/social-mobile`を`npm ci --ignore-scripts`（package/lock無変更）。ローカル限定`.env.local`（gitignore対象、非コミット）に本番Supabase URL + publishable keyを設定し`EXPO_PUBLIC_DATA_SOURCE=supabase`のみローカルで有効化。production既定値（mock）は無変更。
+- `npx expo start --web --port 8090`をこちらで起動した状態のまま`http://localhost:8090`をユーザーへ提示し、ユーザー自身が非adminQAユーザーの実credentialでサインイン。
+- ユーザーが以下を確認し「OK」と回答:
+  - workspace = `ai_salaryman_lab`のみ表示
+  - `kabumori` / `mio` の表示・データ = 0
+  - モックデータへのフォールバックなし
+- 確認後、devサーバーは停止済み（`pkill`でプロセス終了、ポート解放確認済み）。isolated worktreeも削除済み（commit/push無し）。
+- credential/token/passwordは一切取得・記録していない。
+
+### Scope B — fixture cleanup: ブロックされ未完了
+
+- 削除前件数（read-only再確認）: `brand_memberships`合計2件（`ai_salaryman_lab/viewer`のみ、内訳: admin所属canary 1件、non-admin QA user 1件）。
+- `delete from public.brand_memberships where brand_id='ai_salaryman_lab' and role='viewer'`（対象2件のみに厳密スコープ）を実行しようとしたが、前回同様safety reviewにより`[Cloud Storage Mass Delete]`としてブロックされた。迂回は試みていない。**production mutation = 0**（DELETE未実行）。
+- `brand_memberships.user_id`は`auth.users(id) on delete cascade`であることをmigration定義で確認済み（`supabase/migrations/20260918120000_social_mobile_brand_memberships.sql`）。つまりnon-admin QA Auth userをDashboardの正規経路で削除すれば、そのuserのmembership行は自動的にcascade削除される。
+
+**ユーザー向け手動cleanup手順（正確な順序）**:
+1. Supabase Dashboard → Authentication → Users → 今回QAで使った**非adminのテストユーザー**を選択 → Delete user。
+   - これにより`brand_memberships`の当該1行が自動でcascade削除される（`admin_users`・`profiles`・他のbrand/social_accounts等には一切影響しない）。
+2. Supabase Dashboard → Table Editor → `brand_memberships`テーブルを開く。手順1の後、残っているはずの行は`brand_id='ai_salaryman_lab', role='viewer'`の1行（admin所属のold canary）のみ。その1行を選択して削除。
+3. 期待される最終件数: `brand_memberships = 0`、`auth.users = 1`（admin userのみ残る）、`admin_users = 1`（変更なし）、`profiles = 1`（admin自身の分、変更なし）。
+
+上記1と2はどちらもSupabase Dashboardの標準UI操作のみで、SQLもCLIも不要です。
+
+### remaining fixture counts（本Report時点、cleanup前）
+
+- `brand_memberships`: 2（cleanup未実施のため変更なし）
+- `auth.users`: 2（変更なし、Dashboard削除待ち）
+- `admin_users`: 1（変更なし）
+- `profiles`: 1（変更なし、既に「不要」と確定済み、追加作業なし）
+
+### production mutation一覧
+
+- 0件。read-onlyのSQL確認のみ（削除前件数の再確認、FK cascade定義の確認）。DELETE試行はsafety reviewによりブロックされ未実行。
+
+### production default mock確認
+
+- 確認済み。production既定は`EXPO_PUBLIC_DATA_SOURCE=mock`のまま変更なし。ローカルQAで使った`.env.local`はisolated worktree内のみで既に削除済み。
+
+### X OAuth login onboardingへ進める条件（更新）
+
+1. ✅ 完了: real non-admin sign-in QA（ai_salaryman_lab only / kabumori=0 / mio=0）
+2. ⬜ 未完了: 上記Dashboard手順1・2によるfixture cleanup（ユーザー実行待ち）
+3. cleanup完了確認後、X OAuth login onboardingへ着手可能
+
+### exact commit/push/read-back
+
+- アプリケーションコードの変更は0件のため、application repositoryへのcommit/pushは無し。
+- `.agent/tasks/CLAUDE_TASK.md`本Reportをorigin/mainへpushする。

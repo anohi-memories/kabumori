@@ -44,12 +44,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: in_progress
+- status: review_required
 - task_id: social-mobile-app-phase8-completion-followup-claude-20260919
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: K2 PARTIAL PASS後、ユーザー「次進めて」を受けてfinalization follow-upに着手。local social-mobile clientを起動済み状態まで準備し、ユーザーが実credentialでsign-inするだけの最短手順を提供する。QA成功後にfixture cleanupへ進む。
+- note: real non-admin sign-in QAはユーザー自身が実行し成功確認済み（ai_salaryman_lab only / kabumori=0 / mio=0）。fixture cleanupのDELETEはsafety reviewが再度ブロックしたため、Dashboard手動削除手順（Auth user削除→cascade→残り1件Table Editor削除）を提示してSTOP。production mutation 0件。K2待ち。
 
 ## Control codes
 
