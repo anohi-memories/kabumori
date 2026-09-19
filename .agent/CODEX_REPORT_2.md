@@ -13,7 +13,7 @@
 - tests: OAuth function tests **18/18 PASS**; onboarding/deep-link tests **8/8 PASS**; full Deno regression **1258/1258 PASS**; social-mobile `npm run lint` **PASS**, `npm run typecheck` **PASS**, Expo web export **PASS**; `git diff --check` **PASS**. Static scan found only expected secret-name documentation and the publishable-key guard; no secret values or token persistence/logging were introduced.
 - x_portal_step: after separate C2 approval, configure the X Developer Portal callback URI exactly as `kabumori-social://oauth-callback`; no portal setting was changed here. A real X OAuth round-trip remains untested.
 - production_mutation: **0**. No production migration/RPC/schema/RLS/grant, Edge Function deploy, X Developer Portal change, Vault/OAuth change, Cron/settings, manual API invocation, X post, Push, or synthetic candidate was performed.
-- push: pending final origin freshness/conflict gate and H2-only metadata commit. No deploy is authorized by this H2.
+- push: H2 implementation, candidate integration, and Report/TASK commits pushed successfully to `origin/main` through `a7b4ace43051cfdfe5bdec5196fe15a84080eb70` after a fresh check against `b562e6c2b10bd100e56c1b20cbfd2dd7cb9b3f6c` (fast-forward; no H1 overlap). This final push-result Report amendment is being committed separately. No deploy is authorized by this H2.
 - safety_checks: formal repo and its pre-existing changes, slot 1 files, `apps/admin/**`, `HANDOFF.md`, and other workstreams were untouched. No credentials or personal identifiers were recorded.
 
 ## H2 — Social mobile Phase 8 non-admin Auth test-user setup and tenant proof (2026-09-18, follow-up)
