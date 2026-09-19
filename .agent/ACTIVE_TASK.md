@@ -24,7 +24,7 @@
 ### Codex slot 2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: in_progress
 - task_id: social-mobile-app-phase9-codex-handoff-integration-20260919
 - start_code: H2
 - finish_code: C2
