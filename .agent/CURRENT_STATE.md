@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-19 JST (H1 Phase1 recall-safe design review_required; H2 Phase9 continuation done; G1 natural shadow wait; G2 Phase9 candidate K2 PASS/done)
+- checked_at: 2026-09-20 JST (H1 done; H2 Phase10 OAuth production rollout ready; G1 natural shadow wait; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -21,10 +21,10 @@
   - Phase 1 shadow production rollout/cutover is NOT approved. Next step requires explicit user approval for a live shadow comparison.
   - MIC remains read-only/additional-trigger only; G1 market-report and H2/G2 social-mobile workstreams untouched.
 
-- Codex slot 2: `done` — `social-mobile-app-phase9-codex-handoff-integration-20260919`
-  - G2/K2で承認済みのPhase9 OAuth candidateを引き継ぐ。
-  - fresh mainへの安全統合、disposable migration proof、mobile Accounts/deep-link UI candidateを担当。
-  - C2前のproduction migration/deploy/X Developer Portal/Vault変更は禁止。
+- Codex slot 2: `ready` — `social-mobile-app-phase10-production-oauth-rollout-20260920`
+  - C2 PASS済みPhase9をproductionへ段階導入する。
+  - 対象はapproved migration apply + x-oauth-connect-user deploy/postflightまで。
+  - X Developer Portal変更・real OAuth round-trip・real X postは別ゲート。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
@@ -38,7 +38,7 @@
 ## Parallel safety
 
 - H1はproduction `important-news-fetch` Cronのcommand gateのみ。schedule、他Cron、Edge Function、schema、OAuth/Vaultには触れない。
-- H2はsocial-mobile Phase9のfresh-main integration / disposable migration proof / mobile deep-link UI candidateのみ。G1のmarket-report objectsを触れない。
+- H2はsocial-mobile Phase10 production migration / x-oauth-connect-user deployのみ。Portal/real OAuth/X postは別ゲート。G1のmarket-report objectsを触れない。
 
 - G1はmarket-report schema/functions/`x-test-post`/personalized-reports領域。
 - 同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数slotで同時変更しない。
