@@ -19,7 +19,7 @@
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: H1候補・設計・read-only調査を提出済み。5件の正確なreplay manifest不足のためC1レビュー待ち。Phase 1 production mutationなし。
+- note: 19件の同等replay manifestをartifact branchへ保存。置換経路first_seenは19/19未証明でlegacy fallback維持。Phase 1 production mutationなし。C1 review待ち。
 
 ### Codex slot 2
 - owner: codex
