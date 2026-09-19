@@ -3,8 +3,8 @@
 - task_id: important-news-cost-phase1-recall-safe-shadow-handoff-20260919
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: Claudeのread-only調査とPhase 0本番計測を引き継ぎ、重要ニュース監視のPhase 1をrecall最優先で再設計・追加検証する。現行productionの検索頻度を正しいbaselineとして再計算し、重大公式ソースの本文不足補完と、未確認/遅延事例を潰す。Phase 1のshadow本番導入はまだ未承認。
@@ -427,3 +427,14 @@ Do not depend on Claude-local artifacts. Rebuild the replay manifest from durabl
 8. Keep the official-body candidate unintegrated until replay evidence is complete; additional fixtures/integration tests may be added locally.
 
 Production mutation remains 0. Stop again for C1 after the durable replay artifact and independently computed results exist.
+
+
+## H1 continuation result — 2026-09-19
+
+- result: review_required. Durable equivalent replay manifest committed on `codex/important-news-phase1-replay-followup-20260919` (latest commit `b7f14ef3455339b7857aa7f155aa591c494ad903`).
+- Production read-only history yielded 19 important/most_important `breaking_market` candidates fetched Sep 4–15; exact source-provider provenance cannot be distinguished in this schema, so this is explicitly an equivalent cohort rather than a claim to have recovered the missing original 19 Web-Search rows. The Sep 18 BOJ row is supplemental.
+- All 19 legacy `published_at` → `fetched_at` lags were recalculated from the durable rows. Replacement route `first_seen_at` is absent for 19/19; recall/delay remains unproven and legacy paid fallback remains required for every represented topic lane.
+- Original 5-unverified identities remain unavailable; the prior aggregate 12/2/5 split is not independently revalidated.
+- Israel/Hezbollah: legacy fetch lag 24m57s. Al Jazeera source is date-only; replacement first-seen unavailable, so inherited +45m is not recomputable.
+- Mayun/Perim: legacy fetch lag 2h50m57s. Guardian's 12:00 UTC publication preceded legacy fetch by 2h20m20s but is not collector first-seen evidence; inherited +7h is not recomputable.
+- No shadow migration/function/Cron, official-body candidate integration, or production mutation. Stop for C1.
