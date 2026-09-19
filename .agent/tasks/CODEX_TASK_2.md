@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase9-codex-handoff-integration-20260919
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Sol High
 - purpose: K2 PASS済みのgeneral-user X OAuth candidateをClaude slot 2から引き継ぎ、fresh mainへ安全に統合し、production rollout前の実行可能性証明とmobile onboarding UI実装まで進める。production apply/deployはC2承認前に行わない。
@@ -155,3 +155,39 @@ read-only production preflight metadata only allowed.
 - Disposable DB apply and RPC/ACL/ownership/replay/duplicate/concurrency/transaction-rollback proofs passed. Exact disposable project was stopped with `--no-backup`. A separate restart for reverse-DDL object-absence read-back was blocked by Podman SSH handshake failure; see `.agent/CODEX_REPORT_2.md` and retain this limitation for C2 review.
 - Production migration/deploy/X Portal/API/Post/Cron/settings changes: 0. Exact pending X Developer Portal callback URI: `kabumori-social://oauth-callback`.
 - C2 review requested. Do not production-apply or deploy until separately approved.
+
+
+## C2 review — 2026-09-19
+
+**NOT PASS — implementation quality and safety proofs are strong, but the OAuth authorization scope is missing the permission required for this app's core posting use case. Production rollout is not approved.**
+
+### Accepted
+
+- K2-reviewed Phase 9 OAuth semantics were integrated onto fresh main without blind-merging the stale Claude branch.
+- Raw state / one-hash contract is preserved.
+- consume remains read-only; complete performs the atomic irreversible state claim inside the DB transaction.
+- Two-user ownership isolation, cross-user denial, replay denial, duplicate X identity rejection, retry rollback, and concurrent single-success were demonstrated in a disposable DB.
+- mobile UI generates state/PKCE locally, validates callback URI/state before server callback, and does not persist/log tokens or verifier.
+- \`publish_enabled\` remains false after OAuth.
+- new RPC EXECUTE is authenticated-only; anon/public/service_role are explicitly revoked.
+- tests reported PASS: OAuth 18/18, onboarding 8/8, full Deno 1258/1258, typecheck/lint/Expo web export/diff-check.
+- production mutation/deploy/X Developer Portal/Vault = 0.
+- the Podman reverse-DDL read-back limitation is non-blocking because apply/behavior/transaction rollback proof passed and no production apply occurred.
+
+### Blocker — X OAuth scope cannot post
+
+Current source:
+\`const X_SCOPES = "tweet.read users.read offline.access";\`
+
+This obtains read/user/refresh-token permissions but **does not request \`tweet.write\`**. The social-mobile product's connected X account is intended to publish posts; a token authorized without \`tweet.write\` cannot be used for Tweet/Post creation.
+
+Required fix:
+1. add \`tweet.write\` to the general-user X OAuth scope.
+2. retain \`tweet.read users.read offline.access\`.
+3. add a regression test that the authorization URL requests exactly the required minimum posting scopes and does not silently regress to read-only.
+4. check whether current planned Phase 9/next-phase media posting requires \`media.write\`; do not add it automatically unless an actual endpoint requirement in this repo/current X API flow requires it. Document the decision.
+5. rerun OAuth/onboarding/full Deno + app checks and \`git diff --check\`.
+6. production mutation/deploy/Developer Portal changes remain 0.
+7. return \`review_required / next_owner: chatgpt\`.
+
+No other blocker is raised by this C2 review.
