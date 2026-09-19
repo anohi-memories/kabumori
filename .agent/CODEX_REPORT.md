@@ -1,5 +1,80 @@
 # Codex Report
 
+## Latest H1 result — important-news Phase 1 recall-safe shadow handoff (2026-09-19)
+
+- task_id: important-news-cost-phase1-recall-safe-shadow-handoff-20260919
+- result: review_required; next_owner: chatgpt. Stop for C1.
+- fresh origin/main base: c3bc1bb064a2927dee93d1a6a9ea3e10d530c0f7.
+- candidate branch: codex/important-news-phase1-recall-safe-20260919, based on that exact main. Latest branch commit: 8fd612471b04d09bd379a7ed74ed99e84647a72b. No PR or merge created.
+
+### 1–2. Correct baseline and natural Phase 0 usage evidence
+
+The source-of-truth baseline is 12 fetch cycles/day through Sep 23 (4 nominal query slots = 48/day), then 24 cycles/day from Sep 24 (96/day); old 288/day economics are superseded. Four natural production runs recorded:
+- $0.051510 / 4 actual web_search calls
+- $0.062484 / 5 calls
+- $0.060745 / 5 calls
+- $0.052145 / 4 calls
+Total $0.226884; 18 actual calls; sample mean $0.056721/cycle or 4.5 calls/cycle. This is only n=4.
+
+| Cadence | Nominal slots/day | At $0.051510/cycle | At observed $0.056721/cycle |
+| --- | ---: | ---: | ---: |
+| 12 cycles/day | 48 | $0.61812/day; $18.54/30d | $0.68065/day; $20.42/30d |
+| 24 cycles/day | 96 | $1.23624/day; $37.09/30d | $1.36130/day; $40.84/30d |
+
+Illustrative conditional-search scenarios, using observed $0.0126047 per actual call: 1 rotating query per cycle = 12/24 nominal calls/day (75% fewer vs 48/96; about $4.54/$9.08 per 30d); 1 query on 25% of cycles = 3/6 calls/day (93.75% fewer; about $1.13/$2.27 per 30d). These are cost scenarios, not recall evidence. A 10-minute free-polling design is 144 free checks/day; paid search must be trigger/fallback only. Never let budget caps suppress emergency fallback.
+
+### 3. Claude artifact presence
+
+Checked fresh main. docs/news-cost-optimization/AUDIT_AND_PLAN.md exists, but includes older cadence economics. docs/news-cost-optimization/PHASE1_SHADOW_DESIGN.md and docs/news-cost-optimization/replay/ are absent. No Claude artifact was claimed recovered.
+
+### 4. Replay of 5 unverified + 2 delayed cases
+
+The task carries prior aggregate counts (12/19 timely-or-better, 2 delayed, 5 unverified), but the exact five-event manifest, per-source timestamp matrix, and query strings are absent from main. Therefore the exact five could not be honestly replayed or mapped to production rows, and 19/19 recall is not proven.
+
+Both named delayed records were checked read-only against production data and AP article timestamps:
+- Israel–Hezbollah / Ali Taher hill: AP publish 2026-09-05 06:35:26 UTC; existing candidate fetched 07:00:23 UTC. The proposed free path's +45m regression is inherited from the task; it could not be independently recomputed without the absent replay artifact. [AP report](https://apnews.com/article/6a083aa8bd1372c2ad25571e58d82a25)
+- Houthi capture of Mayun/Perim: AP publish 2026-09-11 11:29:23 UTC; existing candidate fetched 14:20:20 UTC. The +7h new-path delay is likewise inherited, not independently recomputed. [AP report](https://apnews.com/article/476237dd3bf568d946d2b16c7b45a687)
+
+Production important/most_important ground-truth records (Sep 4–18) span US–Iran war, Hormuz shipping/tankers, Israel–Hezbollah, Kyiv strike pause, Canada tariffs, Houthi/Red Sea, Saudi pipeline, FX, US payrolls, and BOJ. The replacement mapping is unknown. Proposed query/alias matrix for war, tariff, shipping, geopolitics, plus both delays is documented in the branch design, explicitly labelled proposed and not replayed. Representative official references checked: [Canada counter-tariff list](https://www.canada.ca/en/department-finance/programs/international-trade-finance-policy/canadas-response-us-tariffs/complete-list-us-products-subject-to-counter-tariffs.html) and [BOJ 2026 decision index](https://www.boj.or.jp/mopo/mpmdeci/mpr_2026/index.htm). These confirm source availability, not historical detection time.
+
+### 5–6. Coverage and source health
+
+Keep paid fallback for war/geopolitics, Japan security/J-Alert/North Korea, tariffs/trade/sanctions, shipping chokepoints/oil, bank/financial system, central-bank/FX, disaster/infrastructure, semiconductor/AI/export controls, and any unhealthy or unproven source lane. MIC stays optional and read-only; GDELT is not a hard dependency.
+
+Read-only diagnostics over the prior seven-day window showed repeated HTTP 429 for paid query calls: critical_market_events, disaster_infrastructure, and japan_security_emergency each 57/255 entries (22.4%); shipping_chokepoints 8/30 (26.7%); bank_china_stimulus 7/27 (25.9%). These are diagnostic entries, not unique incidents. Source code makes one Responses request with max_tool_calls=1 and does not retry a failed 429. Market-macro provider diagnostics show Federal Reserve feed 4/255 HTTP 404s; successful RSS fetch with zero fresh items is not proof of coverage. Shadow should persist per-source last success, newest published time, staleness, HTTP status, and candidate counts; retries need bounded backoff and visible degraded state.
+
+### 7–8. BOJ root cause, general fix candidate, tests
+
+Read-only rows for Sep 18 show BOJ RSS candidates fetched at 03:00 UTC with null body_summary, including “金融市場調節方針の変更について” at https://www.boj.or.jp/mopo/mpmdeci/mpr_2026/k260918a.pdf. Current normalizer maps empty RSS summary to null but still inserts title/URL as pending_judgement; judgment can therefore return no_post on insufficient evidence. The AP follow-up candidate was fetched 05:20 UTC (14:20 JST), consistent with the task's ~2h20 recovery observation.
+
+Candidate approach: official market_macro/company_ir only; high-signal NFKC title + body under 160 chars; exact HTTPS host allowlist; no credentials/custom port; no redirects; HTML/XHTML only; bounded 15s/512 KiB/6k extracted chars; preserve TDNet's existing PDF path. Fetch success attaches body to the same row before judgment. Unsafe/failing/empty fetch returns conditional_search_fallback; never judge a high-signal title alone. If targeted evidence is unavailable, do not insert as pending_judgement; record review diagnostics and retry on later RSS poll. Preserve source URL, dedupe, idempotency, and no_post thresholds. Candidate is not imported into index.ts.
+
+Branch files:
+- supabase/functions/important-news-monitor/official_body_enrichment_candidate.ts
+- supabase/functions/important-news-monitor/official_body_enrichment_candidate_test.ts
+- docs/news-cost-optimization/CODEX_PHASE1_SHADOW_REDESIGN.md
+
+Verification: deno check passed; deno test passed 14/14. Tests cover gating, TDNet separation, URL allowlist/hardening, timeout, redirect rejection, content type/size limits, extraction failure, enrichment success, and fail-closed fallback disposition. It is a unit-tested candidate only, not integrated Edge Function behavior.
+
+### 9–12. Shadow architecture, comparison fields, search/cost and risk
+
+Do not reuse important_news_candidates or the live monitor run table for shadow records: the existing judgement/generation/publish selectors could consume shadow candidates and mixed telemetry impairs rollback. After separate approval, use isolated important_news_shadow_runs/candidates, one isolated shadow function with no X/Push/App/publish/OAuth/Vault surfaces, and a disabled-by-default 10-minute schedule. Shadow reads current old-pipeline candidates for comparison, collects free/official sources, and must not duplicate the old four paid searches. Conditional paid searches require source-change, event, or unhealthy-source triggers. Table fields include event_key, source/topic/category, first_seen_at, old/new detection timestamps, old/new detected, importance, detection delay, trigger reason, query/call/cost, evidence URL, source-health state, published_at, ingested_at, retries, and dedupe key.
+
+Costs/reductions are in section 1 and the branch design. No cutover until exact historical 19/19 evidence, 14 consecutive shadow days with zero missed important events, per-source health alerts, and all positive delays explained (target <=20m; median/p95 no worse than old path); measure spend for 30 days. No 70% saving target may override recall.
+
+### 13–16. Risks, exact future production proposal, rollback, safety
+
+Risks: missing replay manifest, inherited relative delay not recomputed, repeated 429s with no retry, 4-run cost sample, current HTML extraction/test fixtures are narrow, no integration regression evidence. On any affected source failure, retain/restore that topic's legacy paid search; no silent failure.
+
+Exact future proposal only after review: (1) one shadow-only migration for isolated tables/policies, (2) one isolated shadow function, (3) one separate disabled schedule, then separately approved enablement. Current important-news-monitor/paid cadence/publication remain untouched. Rollback: disable shadow Cron first, disable shadow Function, preserve shadow data for audit; no deletion or mutation of old pipeline or OAuth/Vault/X/Push/App.
+
+Production mutation for this H1: 0. No migration, function deploy, Cron change, manual OpenAI replay, external post, MIC/G1, H2/G2, OAuth, Vault, or X/Push/App change.
+
+### 17. Remaining issues / next owner
+
+C1 should review the branch candidate and design. Exact 5-case manifest or a deliberate rebuild of the full 19-row replay is still required before any Phase 1 production migration/deploy/Cron request. The official-body candidate needs representative BOJ/Fed/JMA HTML fixtures, integration into a disposable/local test pipeline, and review of egress/DNS restrictions before production consideration. No production cutover is authorized.
+
+
 ## Latest H1 result — important-news hourly cadence simplification (2026-09-19)
 
 - task_id: `important-news-hourly-cadence-simplify-20260919`

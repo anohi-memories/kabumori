@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-19 JST (H1 done; H2 Phase9 continuation in_progress; G1 natural shadow wait; G2 Phase9 candidate K2 PASS/done)
+- checked_at: 2026-09-19 JST (H1 Phase1 recall-safe design review_required; H2 Phase9 continuation in_progress; G1 natural shadow wait; G2 Phase9 candidate K2 PASS/done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,11 +14,12 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `important-news-cost-phase1-recall-safe-shadow-handoff-20260919`
-  - Phase 0 usage metering is production and naturally verified.
-  - Next: correct 48/96-search baseline, replay 5 unverified + 2 delayed cases, design official-title/body-missing enrichment, refine shadow architecture.
-  - Recall is the primary KPI; no Phase 1 production deploy/migration/Cron change is approved in this H1.
-  - MIC is read-only/additional-trigger only; do not modify G1 market-report or H2/G2 social-mobile workstreams.
+- Codex slot 1: `review_required` — `important-news-cost-phase1-recall-safe-shadow-handoff-20260919`
+  - Correct 48/96 nominal search-slot economics and four natural Phase 0 metered runs recorded in `.agent/CODEX_REPORT.md`.
+  - Official-title/body-missing candidate and shadow redesign are on branch `codex/important-news-phase1-recall-safe-20260919`; code is unintegrated and unit-tested.
+  - Exact 5-case replay manifest was absent on fresh main; the 2 inherited delayed cases were timestamp-cross-checked but relative delays remain inherited, not independently replayed.
+  - No Phase 1 production deploy/migration/Cron change was made. H1 stops for C1 review.
+  - MIC remains read-only/additional-trigger only; G1 market-report and H2/G2 social-mobile workstreams untouched.
 
 - Codex slot 2: `in_progress` — `social-mobile-app-phase9-codex-handoff-integration-20260919`
   - G2/K2で承認済みのPhase9 OAuth candidateを引き継ぐ。

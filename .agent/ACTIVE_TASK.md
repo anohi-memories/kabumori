@@ -14,12 +14,12 @@
 ### Codex slot 1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: important-news-hourly-cadence-simplify-20260919
+- status: review_required
+- task_id: important-news-cost-phase1-recall-safe-shadow-handoff-20260919
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: C1 PASS済み。重要ニュース監視の頻度整理は完了。
+- note: H1候補・設計・read-only調査を提出済み。5件の正確なreplay manifest不足のためC1レビュー待ち。Phase 1 production mutationなし。
 
 ### Codex slot 2
 - owner: codex

@@ -3,8 +3,8 @@
 - task_id: important-news-cost-phase1-recall-safe-shadow-handoff-20260919
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: Claudeのread-only調査とPhase 0本番計測を引き継ぎ、重要ニュース監視のPhase 1をrecall最優先で再設計・追加検証する。現行productionの検索頻度を正しいbaselineとして再計算し、重大公式ソースの本文不足補完と、未確認/遅延事例を潰す。Phase 1のshadow本番導入はまだ未承認。
