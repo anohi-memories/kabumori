@@ -3,7 +3,7 @@
 - task_id: social-mobile-app-phase9-codex-handoff-integration-20260919
 - owner: codex
 - slot: codex-2
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Sol High
@@ -200,3 +200,30 @@ Required fix:
 7. return \`review_required / next_owner: chatgpt\`.
 
 No other blocker is raised by this C2 review.
+
+
+## Final C2 review — 2026-09-20
+
+**PASS — Phase 9 Codex handoff/integration is approved as complete.**
+
+Verified:
+- Required posting scope blocker fixed.
+- Current exact X OAuth scope is \`tweet.read users.read tweet.write media.write offline.access\`.
+- Exact-scope regression test exists and asserts the full required scope string.
+- \`tweet.write\` covers the app's post-creation use case.
+- \`media.write\` is justified by the repo's media-upload path and missing-scope regression evidence documented in the H2 report; no extra scopes beyond the documented minimum were added.
+- Prior K2 OAuth state/retry/idempotency guarantees remain intact.
+- Reported verification passes: OAuth 19/19, onboarding 8/8, full Deno 1259/1259, social-mobile lint/typecheck/Expo web export, and git diff --check.
+- source commit \`ac08cf75ef128e704181eec7c6b2fa9e1c59f97c\` is present on main.
+- production mutation/deploy/X Developer Portal/Vault/Cron/API/Post/Push = 0.
+
+Remaining rollout items are intentionally outside this C2:
+- production migration apply
+- Edge Function deploy
+- X Developer Portal callback/permission configuration
+- real X OAuth round-trip
+- any production posting enablement
+
+Decision:
+- this H2 task is done.
+- production rollout remains a separate explicitly authorized task.
