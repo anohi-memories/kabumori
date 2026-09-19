@@ -3,8 +3,8 @@
 - task_id: important-news-cost-phase1-recall-safe-shadow-handoff-20260919
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: urgent
 - recommended_model: Sol High
 - purpose: Claudeのread-only調査とPhase 0本番計測を引き継ぎ、重要ニュース監視のPhase 1をrecall最優先で再設計・追加検証する。現行productionの検索頻度を正しいbaselineとして再計算し、重大公式ソースの本文不足補完と、未確認/遅延事例を潰す。Phase 1のshadow本番導入はまだ未承認。
@@ -392,3 +392,38 @@ H2/G2 social-mobile、G1 market-reportへは触れない。
 - 他workstream変更を含めない
 - .agent control metadataをmainへ同期
 - C1待ちでSTOP
+
+
+## C1 review — 2026-09-19
+
+**NOT PASS — design/cost work is useful, but the task's recall-proof gate is not complete.**
+
+Accepted:
+- Corrected production baseline is now 48 searches/day through 9/23 and 96/day from 9/24; old 288/day economics are superseded.
+- Phase 0 natural usage evidence is credible and appropriately labeled as a small sample (4 runs / 18 actual web_search calls).
+- No Phase 1 production mutation occurred.
+- Official-title/body-missing root cause is well identified; the isolated candidate is unit-tested and not wired into production.
+- Shadow architecture keeps old publication path isolated and does not reuse live candidate/run tables.
+- MIC remains read-only/additional-trigger only.
+- Candidate branch is cleanly separated: codex/important-news-phase1-recall-safe-20260919 @ 8fd612471b04d09bd379a7ed74ed99e84647a72b.
+
+Blocker:
+- The required historical recall proof is still missing.
+- The exact 5 unverified events were not reconstructed.
+- The 2 delayed cases were timestamp-cross-checked, but the +45m / +7h relative delay was inherited rather than independently recomputed.
+- Therefore 19/19 important/most_important replay is not proven, and Phase 1 shadow production work remains unapproved.
+
+### Required continuation for next H1
+
+Do not depend on Claude-local artifacts. Rebuild the replay manifest from durable sources:
+
+1. Query production important_news_candidates/read-only history for the full 19 Web-Search-derived important/most_important cases used by the earlier audit, or reconstruct an explicit equivalent set from Sep 4–18 with stable candidate ids/event keys/source URLs.
+2. For every row, record old detected_at/fetched_at, source/topic, final importance, and evidence URL.
+3. Re-run the proposed free/official-source route for each case using available historical source timestamps. If a source cannot be historically replayed, mark that row unproven and retain legacy paid fallback for that lane.
+4. Independently recompute the 2 delayed cases; do not reuse inherited +45m / +7h numbers without source evidence.
+5. Produce one durable replay artifact under docs/news-cost-optimization/replay/ and commit it.
+6. Summarize per-lane recall, delay, and fallback requirement. 100% proven replay is the target; any unproven lane keeps legacy search.
+7. Do not deploy shadow tables/function/Cron yet.
+8. Keep the official-body candidate unintegrated until replay evidence is complete; additional fixtures/integration tests may be added locally.
+
+Production mutation remains 0. Stop again for C1 after the durable replay artifact and independently computed results exist.
