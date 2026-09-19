@@ -1,5 +1,15 @@
 # Codex Slot 2 Report
 
+## H2 Follow-up — X OAuth posting scope hardening (2026-09-19)
+
+- task_id: `social-mobile-app-phase9-codex-handoff-integration-20260919`
+- result: Implemented the single C2 blocker fix in a clean isolated worktree from fresh `origin/main` `aa2694c43f28612548ebbce3e10bc6c043b43c02`; status `review_required`, next_owner `chatgpt`.
+- changed_files: `supabase/functions/x-oauth-connect-user/oauth_logic.ts`, `supabase/functions/x-oauth-connect-user/oauth_logic_test.ts`, `apps/social-mobile/docs/phase9-x-oauth-onboarding.md`.
+- scopes: exact authorization scope is now `tweet.read users.read tweet.write media.write offline.access`. `tweet.write` covers the existing `/2/tweets` flow. `media.write` is included because the repo's existing `morning_greeting_publish_logic.ts` calls `/2/media/upload`, and its regression test captures X's explicit `Missing required scope: media.write` failure. No other scopes were added. This is repository-flow evidence; no external portal configuration was inspected or changed.
+- tests: OAuth function tests **19/19 PASS** (including exact-scope regression); onboarding/deep-link tests **8/8 PASS**; full Deno regression **1259/1259 PASS**; social-mobile lint/typecheck/Expo web export and `git diff --check` **PASS**.
+- production: migration/schema/RPC/RLS/ACL/deploy/X Developer Portal/Vault/OAuth settings/Cron/settings/manual API/X post/Push changes **0**. Manual portal configuration remains pending separate approval; verify callback URI `kabumori-social://oauth-callback` and that app permission settings permit the requested posting/media scopes.
+- commit/push: source commit `502f324` contains only the three C2-approved scope/doc/test files. The follow-up Report/TASK commit remains to be created and pushed after a fresh-origin check. No production rollout is approved.
+
 ## H2 — Social mobile Phase 9 OAuth onboarding integration (2026-09-19)
 
 - task_id: `social-mobile-app-phase9-codex-handoff-integration-20260919`

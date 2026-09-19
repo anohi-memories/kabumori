@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase9-codex-handoff-integration-20260919
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol High
 - purpose: K2 PASS済みのgeneral-user X OAuth candidateをClaude slot 2から引き継ぎ、fresh mainへ安全に統合し、production rollout前の実行可能性証明とmobile onboarding UI実装まで進める。production apply/deployはC2承認前に行わない。
@@ -155,6 +155,15 @@ read-only production preflight metadata only allowed.
 - Disposable DB apply and RPC/ACL/ownership/replay/duplicate/concurrency/transaction-rollback proofs passed. Exact disposable project was stopped with `--no-backup`. A separate restart for reverse-DDL object-absence read-back was blocked by Podman SSH handshake failure; see `.agent/CODEX_REPORT_2.md` and retain this limitation for C2 review.
 - Production migration/deploy/X Portal/API/Post/Cron/settings changes: 0. Exact pending X Developer Portal callback URI: `kabumori-social://oauth-callback`.
 - C2 review requested. Do not production-apply or deploy until separately approved.
+
+## H2 C2 follow-up result — OAuth scopes (2026-09-19)
+
+- C2 blocker addressed: authorization now requests exactly `tweet.read users.read tweet.write media.write offline.access`.
+- Scope implementation commit: `502f324` (only OAuth scope logic, its exact-scope regression, and the scope rationale in the Phase 9 doc).
+- `tweet.write` enables the existing post endpoint. `media.write` is required by the repo's `/2/media/upload` path and its regression case for X's explicit missing-scope response. No further scopes were added.
+- Regression: OAuth 19/19, onboarding 8/8, full Deno 1259/1259; mobile lint/typecheck/Expo web export and diff-check passed.
+- No production migration/deploy/portal/API/Post/Cron/settings changes. X Developer Portal permission/redirect setup remains a later, separately approved manual step.
+- Updated `.agent/CODEX_REPORT_2.md`; C2 review requested. No production rollout is authorized.
 
 
 ## C2 review — 2026-09-19
