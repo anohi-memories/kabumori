@@ -186,16 +186,19 @@ by an application-layer "trust me, I checked" assertion.
 - `service_role` is never used by this new function at all — every DB call it makes uses the anon key +
   the forwarded user JWT.
 
-### Mobile UX (specified, not implemented this phase — see §4)
+### Mobile UX
 
-Minimum flow: Accounts screen → "Xアカウントを接続" button → app generates state/verifier locally →
-`POST x-oauth-connect-user` (start) → `expo-web-browser` opens the returned `authorization_url` → X
-redirects to the app's own deep link (`kabumori-social-mobile://oauth-callback?code=...&state=...`) → app
-extracts `code`/`state`, compares `state` against what it generated → `POST
-x-oauth-connect-user/callback` with `code`/`state`/`code_verifier`/`redirect_uri` → on success, show
-`connected` + the returned `handle`; on failure, show a specific, non-secret-leaking error and allow
-retry; a cancel from the X consent screen returns the user to the Accounts screen unchanged
-(`authorization_pending` row simply expires and is safely reusable on the next attempt).
+Implemented in the H2 follow-up: Accounts screen → "Xアカウントを接続" → `expo-crypto` creates a
+random raw state and PKCE verifier in memory → the app calls `POST x-oauth-connect-user` with the
+signed-in user's JWT → `expo-web-browser` opens the returned `authorization_url` → the app receives
+`kabumori-social://oauth-callback?code=...&state=...` → it validates the exact redirect and raw state
+before calling `POST x-oauth-connect-user/callback` with `code`/`state`/`code_verifier`/`redirect_uri`.
+Success shows the verified X handle; cancellation and retryable/terminal errors are shown without
+exposing callback secrets. The app never persists the raw state, verifier, access token, or refresh token.
+
+X Developer Portal must be configured separately with this exact redirect URI:
+`kabumori-social://oauth-callback` (the app scheme in `apps/social-mobile/app.json`). This task does not
+change the X Developer Portal.
 
 ## 3. Migration/RPC/function candidate (this commit)
 
@@ -206,13 +209,9 @@ retry; a cancel from the X consent screen returns the user to the Accounts scree
 - `supabase/functions/x-oauth-connect-user/{index.ts,oauth_logic.ts,oauth_logic_test.ts}` — **not
   deployed.**
 
-## 4. Explicitly deferred to a follow-up (not built this phase)
+## 4. Explicitly deferred
 
-- The actual `apps/social-mobile` UI (Accounts screen, connect button, deep-link route handler,
-  connecting/connected/error/reconnect states). This phase focused on getting the security-critical
-  backend design and candidate right first; the mobile UI is additive on top of it and carries
-  comparatively little risk once the backend contract above is reviewed. Flagged as the immediate next
-  step in the Report.
+- X Developer Portal redirect URI configuration and a real OAuth round-trip are not performed before C2.
 - Wiring a `social_mobile_user_v1` code profile into `_shared/brand/brand_profiles.ts` (required before
   any general-user brand could ever be used for content generation — deliberately not done yet).
 - Revoke/disconnect flow.

@@ -6,7 +6,12 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "scheme": "kabumori-social",
-    "plugins": ["expo-router"],
-    "experiments": { "typedRoutes": true }
+    "plugins": [
+      "expo-router",
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
   }
 }

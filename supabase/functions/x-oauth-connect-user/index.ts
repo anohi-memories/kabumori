@@ -92,13 +92,13 @@ Deno.serve(async (req) => {
   curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/x-oauth-connect-user' \
     --header 'Authorization: Bearer <user JWT>' \
     --header 'Content-Type: application/json' \
-    --data '{"state":"<a locally-generated random raw state value, NOT pre-hashed>","code_challenge":"<S256 PKCE challenge>","redirect_uri":"kabumori-social-mobile://oauth-callback"}'
+    --data '{"state":"<a locally-generated random raw state value, NOT pre-hashed>","code_challenge":"<S256 PKCE challenge>","redirect_uri":"kabumori-social://oauth-callback"}'
 
   3. Callback (mobile app calls this after the X browser round-trip returns via deep link):
 
   curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/x-oauth-connect-user/callback' \
     --header 'Authorization: Bearer <user JWT>' \
     --header 'Content-Type: application/json' \
-    --data '{"code":"<from deep link>","state":"<the raw state value the client generated>","code_verifier":"<the locally-held verifier>","redirect_uri":"kabumori-social-mobile://oauth-callback"}'
+    --data '{"code":"<from deep link>","state":"<the raw state value the client generated>","code_verifier":"<the locally-held verifier>","redirect_uri":"kabumori-social://oauth-callback"}'
 
 */

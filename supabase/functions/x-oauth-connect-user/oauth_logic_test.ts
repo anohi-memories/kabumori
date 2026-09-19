@@ -72,7 +72,7 @@ test("startConnection: hashes the raw state exactly once for DB storage, but sen
   let capturedAuth = "";
   let capturedBody: Record<string, unknown> = {};
   const result = await startConnection({
-    request: { rawState, codeChallenge: "challenge-value", redirectUri: "kabumori-social-mobile://oauth-callback" },
+    request: { rawState, codeChallenge: "challenge-value", redirectUri: "kabumori-social://oauth-callback" },
     userAccessToken: "real-user-jwt", supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY, clientId: CLIENT_ID,
     fetchImpl: async (input, init) => {
       assert.equal(String(input), `${SUPABASE_URL}/rest/v1/rpc/begin_social_mobile_x_oauth_connection`);
@@ -84,7 +84,7 @@ test("startConnection: hashes the raw state exactly once for DB storage, but sen
   assert.equal(capturedAuth, "Bearer real-user-jwt");
   // The DB only ever sees the hash -- never the raw state.
   assert.equal(capturedBody.p_state_hash, expectedHash);
-  assert.equal(capturedBody.p_redirect_uri, "kabumori-social-mobile://oauth-callback");
+  assert.equal(capturedBody.p_redirect_uri, "kabumori-social://oauth-callback");
   assert.equal(result.brandId, "u_abcdef");
   assert.equal(result.socialAccountId, "sa_abcdef");
   const url = new URL(result.authorizationUrl);
@@ -120,7 +120,7 @@ test("end-to-end: a raw state generated once flows through start -> authorizatio
   const rawState = "one-raw-state-used-across-the-whole-flow";
   let storedHash = "";
   const startResult = await startConnection({
-    request: { rawState, codeChallenge: "c", redirectUri: "kabumori-social-mobile://oauth-callback" },
+    request: { rawState, codeChallenge: "c", redirectUri: "kabumori-social://oauth-callback" },
     userAccessToken: "user-jwt", supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY, clientId: CLIENT_ID,
     fetchImpl: async (_input, init) => {
       storedHash = JSON.parse(String(init?.body)).p_state_hash;
@@ -134,14 +134,14 @@ test("end-to-end: a raw state generated once flows through start -> authorizatio
 
   let consumeQueriedHash = "";
   const result = await completeConnection({
-    request: { code: "auth-code", state: stateReturnedByX, codeVerifier: "verifier", redirectUri: "kabumori-social-mobile://oauth-callback" },
+    request: { code: "auth-code", state: stateReturnedByX, codeVerifier: "verifier", redirectUri: "kabumori-social://oauth-callback" },
     userAccessToken: "user-jwt", supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY, clientId: CLIENT_ID, clientSecret: CLIENT_SECRET,
     fetchImpl: async (input, init) => {
       const url = String(input);
       if (url.includes("consume_social_mobile_x_oauth_state")) {
         consumeQueriedHash = JSON.parse(String(init?.body)).p_state_hash;
         if (consumeQueriedHash !== storedHash) return Response.json({ message: "OAUTH_STATE_NOT_CONSUMABLE" }, { status: 400 });
-        return Response.json([{ oauth_state_id: "state-1", redirect_uri: "kabumori-social-mobile://oauth-callback", brand_id: "u_x", social_account_id: "sa_x" }]);
+        return Response.json([{ oauth_state_id: "state-1", redirect_uri: "kabumori-social://oauth-callback", brand_id: "u_x", social_account_id: "sa_x" }]);
       }
       if (url === "https://api.x.com/2/oauth2/token") return Response.json({ access_token: "a", refresh_token: "r" });
       if (url === "https://api.x.com/2/users/me") return Response.json({ data: { id: "1", username: "user1" } });
@@ -196,14 +196,14 @@ test("completeConnection: an unknown/foreign/expired state (consume() rejects) i
 test("completeConnection: happy path exchanges the code, reads identity, completes via the RPC (passing oauth_state_id, forwarding the user JWT), and never returns a token in its result", async () => {
   const calls: string[] = [];
   const result = await completeConnection({
-    request: { code: "auth-code", state: "raw-state", codeVerifier: "verifier-value", redirectUri: "kabumori-social-mobile://oauth-callback" },
+    request: { code: "auth-code", state: "raw-state", codeVerifier: "verifier-value", redirectUri: "kabumori-social://oauth-callback" },
     userAccessToken: "real-user-jwt", supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY, clientId: CLIENT_ID, clientSecret: CLIENT_SECRET,
     fetchImpl: async (input, init) => {
       const url = String(input);
       calls.push(url);
       if (url.includes("consume_social_mobile_x_oauth_state")) {
         assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer real-user-jwt");
-        return Response.json([{ oauth_state_id: "state-abcdef", redirect_uri: "kabumori-social-mobile://oauth-callback", brand_id: "u_abcdef", social_account_id: "sa_abcdef" }]);
+        return Response.json([{ oauth_state_id: "state-abcdef", redirect_uri: "kabumori-social://oauth-callback", brand_id: "u_abcdef", social_account_id: "sa_abcdef" }]);
       }
       if (url === "https://api.x.com/2/oauth2/token") {
         const params = new URLSearchParams(String(init?.body));

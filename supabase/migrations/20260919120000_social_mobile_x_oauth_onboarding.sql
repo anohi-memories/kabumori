@@ -126,7 +126,10 @@ begin
     on conflict (id) do nothing;
     insert into public.brand_memberships (brand_id, user_id, role)
     values (v_brand_id, v_user_id, 'owner')
-    on conflict (brand_id, user_id) do nothing;
+    -- The function's RETURNS TABLE output names include brand_id, so an
+    -- inference target with bare column identifiers is ambiguous in PL/pgSQL.
+    -- The Phase 4 membership migration defines this exact primary key.
+    on conflict on constraint brand_memberships_pkey do nothing;
   end if;
 
   select sa.id into v_social_account_id
@@ -286,9 +289,9 @@ $$;
 
 -- Called with the connecting user's own forwarded JWT (role `authenticated`), never with service_role --
 -- see the architecture note at the top of this file for why that is load-bearing, not incidental.
-revoke all on function public.begin_social_mobile_x_oauth_connection(text, text, timestamptz) from public, anon;
-revoke all on function public.consume_social_mobile_x_oauth_state(text) from public, anon;
-revoke all on function public.complete_social_mobile_x_oauth_connection(uuid, text, text, text, text) from public, anon;
+revoke all on function public.begin_social_mobile_x_oauth_connection(text, text, timestamptz) from public, anon, service_role;
+revoke all on function public.consume_social_mobile_x_oauth_state(text) from public, anon, service_role;
+revoke all on function public.complete_social_mobile_x_oauth_connection(uuid, text, text, text, text) from public, anon, service_role;
 grant execute on function public.begin_social_mobile_x_oauth_connection(text, text, timestamptz) to authenticated;
 grant execute on function public.consume_social_mobile_x_oauth_state(text) to authenticated;
 grant execute on function public.complete_social_mobile_x_oauth_connection(uuid, text, text, text, text) to authenticated;
