@@ -1,173 +1,124 @@
 # Codex Task
 
-- task_id: important-news-web-search-cost-throttle-20260919
+- task_id: important-news-hourly-cadence-simplify-20260919
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: chatgpt
-- priority: urgent
-- recommended_model: Sol Medium
-- purpose: OpenAI Web Search費用を抑えるため、productionの重要ニュースfetch cadenceだけを安全に最適化する。2026-09-19〜09-23の5連休は2時間おき、2026-09-24以降は通常1時間おき＋朝刊/大引け前後だけ20分刻みで厚く検索する。重要ニュース判定/生成ロジックや他Cronは変更しない。
+- status: ready
+- next_owner: codex
+- priority: high
+- recommended_model: Luna
+- purpose: 重要ニュース監視のコスト最適化方針を簡素化する。2026-09-19〜09-23の連休中は現行どおり2時間おき、2026-09-24以降は朝刊・大引け前後の20分刻み増強を撤回し、終日1時間おき（毎時00分）へ変更する。
 
-## Background / confirmed facts
+## Background
 
-2026-09-19 read-only production audit:
-- `important-news-fetch` は現在 `0,20,40 * * * *` で1日72回。
-- breaking market Web Search実績:
-  - 2026-09-17: 328 calls
-  - 2026-09-18: 233 calls
-- OpenAI 429は 2026-09-18 18:00 JSTから発生。17:40までは200。
-- 重要ニュース監視が直近コストの最大要因。
-- ユーザー決定:
-  - 9/19〜9/23: 2時間おきで十分
-  - 9/24以降: 1時間おき
-  - 朝刊・大引けレポートの前後だけ厚く検索
+C1 PASS済みの現行production設定:
+- `important-news-fetch` schedule: `0,20,40 * * * *`
+- command gate:
+  - 2026-09-19〜09-23: JST偶数時の00分のみ（12回/日）
+  - 2026-09-24以降: 毎時00分＋07:00〜09:00 / 16:00〜18:00だけ20分・40分も実行（36回/日）
+
+ユーザー判断:
+- 朝刊・大引けレポート側は通常の重要ニュース監視とは別に独自Web Search経路を持つ。
+- そのため重要ニュース監視まで朝刊/大引け前後だけ高頻度化する意味は薄い。
+- 9/24以降は終日1時間おきで十分。
 
 ## Mandatory startup
 
-開始前に:
+開始前に必ず確認:
 1. `.agent/ORCHESTRATION.md`
 2. `.agent/CURRENT_STATE.md`
 3. this TASK
 4. `.agent/CODEX_REPORT.md`
-5. all other TASKs
+5. 他3slot TASK
 6. fresh `origin/main`
-7. production `cron.job` read-only inventory
+7. production `cron.job` read-only
 
-Conflict:
-- このH1は **jobid/name = important-news-fetch のschedule/commandだけ** を扱う。
-- `x-test-post`, market-report Cron, MIC Cron, important-news judgement/generation/publish Cron, OAuth/Vault, Edge Function sourceは変更禁止。
-- 他slotが同じ `important-news-fetch` Cronを変更中ならSTOP。
+他slotが `important-news-fetch` を変更中ならSTOP。
 
 ## Desired schedule semantics (JST)
 
-### A. 5連休: 2026-09-19〜2026-09-23 inclusive
+### 2026-09-19〜2026-09-23 inclusive
+現行維持:
+- 2時間おき
+- JST偶数時の00分のみ
+- 12回/日
 
-OpenAI breaking Web Searchを伴う `important-news-fetch` 実行は **2時間おき**。
-推奨: JST 偶数時の 00分（00:00, 02:00, ... 22:00）。
+### 2026-09-24以降
+変更:
+- **終日1時間おき**
+- JST毎時00分のみ
+- 24回/日
+- 朝刊前後 / 大引け前後の `:20` / `:40` 追加実行は撤回
 
-### B. 2026-09-24以降
+## Preferred implementation
 
-通常は **1時間おき**（毎時00分）。
+現行 `0,20,40 * * * *` triggerを維持し、command gateだけ最小変更してよい。
 
-加えて朝刊・大引けの前後だけ **20分刻み**にする。
-
-厚くするJST window:
-- 朝刊前後: **07:00〜09:00**
-- 大引け前後: **16:00〜18:00**
-
-このwindowでは00/20/40分に検索。
-それ以外は毎時00分だけ。
-
-意図:
-- 朝刊8:20前後に直近材料を拾う
-- 大引け17:00前後に直近材料を拾う
-- それ以外は毎時でコスト抑制
-
-## Implementation preference
-
-現在のCron trigger `0,20,40 * * * *` を維持してもよいが、**command側でJST date/time gateを入れてHTTP call自体を抑制**する方式を第一候補とする。
-理由:
-- 9/23→9/24を手動変更なしで自動切替できる
-- 1本のjobで管理できる
-- pg_cron起動自体のコストは無視でき、OpenAIを呼ぶHTTPだけ抑止できる
-
-条件イメージ:
-- JST date <= 2026-09-23:
+JST条件:
+- date <= 2026-09-23:
   - minute=0 AND hour even
-- JST date >= 2026-09-24:
-  - minute=0
-  - OR hour in 07..09 / 16..18 AND minute in (20,40)
+- date >= 2026-09-24:
+  - minute=0 only
 
-境界は必ず `timezone('Asia/Tokyo', now())` 等でJSTを明示し、UTC hour直書きによる日付ズレを避ける。
+必ず `timezone('Asia/Tokyo', clock_timestamp())` 等でJSTを明示。
 
-## Production preflight
+## Allowed production mutation
 
-Read-onlyで:
-- `important-news-fetch` jobid/name/schedule/command hash
+**`important-news-fetch` Cron 1本のcommand gateだけ。**
+
+禁止:
+- schedule変更（必要性がない限り）
+- Edge Function deploy/source変更
 - `important-news-judgement`
 - `important-news-generation`
 - `important-news-publish-ready`
 - market-report Cron
 - MIC Cron
-を記録。
-
-## Allowed production mutation
-
-**`important-news-fetch` Cron 1本のschedule/commandだけ。**
-
-禁止:
-- Edge Function deploy/source modification
-- `important-news-judgement` / generation / publish_ready変更
-- market-report Cron変更
-- MIC Cron変更
 - DB schema/migration
-- secrets/Vault
-- OAuth/X
-- manual OpenAI call
-- manual X/Push
-- scheduled post retry/backfill
+- OAuth/Vault/secrets
+- X/Push
+- manual OpenAI request
+- manual retry/backfill
 
-## Verification
+## Required verification
 
-変更後:
-1. `important-news-fetch` schedule/command read-back
-2. 他Cronの schedule/active/command hash が不変
-3. JST gateをSQL上で代表時刻に対してproof:
+変更前後で:
+1. `important-news-fetch` jobid/name/schedule/active/command hash
+2. 他関連Cronのschedule/active/command hash不変
+3. JST gate proof:
    - 2026-09-19 08:00 => run
    - 2026-09-19 08:20 => skip
-   - 2026-09-19 09:00 => skip（奇数時）
+   - 2026-09-19 09:00 => skip
+   - 2026-09-24 06:00 => run
    - 2026-09-24 06:20 => skip
    - 2026-09-24 07:00 => run
-   - 2026-09-24 07:20 => run
-   - 2026-09-24 08:40 => run
+   - 2026-09-24 07:20 => skip
+   - 2026-09-24 08:40 => skip
    - 2026-09-24 10:00 => run
    - 2026-09-24 10:20 => skip
-   - 2026-09-24 16:40 => run
-   - 2026-09-24 18:40 => run
-   - 2026-09-24 19:20 => skip
-4. Web Search expected daily upper boundを算出:
-   - 連休中: fetch 12回/日 × 最大query数
-   - 9/24以降: baseline24回 + dense追加分
-5. 429中でも無駄な高頻度OpenAI requestが減ることを確認。
+   - 2026-09-24 16:00 => run
+   - 2026-09-24 16:40 => skip
+   - 2026-09-24 18:00 => run
+   - 2026-09-24 18:40 => skip
+4. 9/24以降の実HTTP上限 = 24回/日
+5. 旧72回/日比で約66.7%削減
+6. 連休中12回/日は維持
 
 ## Rollback
 
-即時rollback:
-- `important-news-fetch` を元の `0,20,40 * * * *` + 元commandへ戻せるよう、変更前commandをReportにhash付きで保存。
-- 問題が無ければrollbackは実行しない。
+変更前commandをhash付きでReportへ保存し、必要なら直前C1 PASS状態（9/24以降36回/日）へ戻せること。
 
 ## Completion / C1 return
 
 完了時:
-- `.agent/CODEX_REPORT.md` 先頭に結果
-- before/after Cron
-- exact SQL/change method
-- JST gate proof
-- expected cost-call reduction
+- `.agent/CODEX_REPORT.md` を最新結果で更新
+- before/after
+- exact production mutation count
+- JST proof
+- cost-call reduction
 - unrelated Cron unchanged proof
-- production mutations exact count
-- remaining issues
-- this TASK `status: review_required`, `next_owner: chatgpt`
-- control metadata同期
+- rollback情報
+- this TASKを `review_required`
+- `next_owner: chatgpt`
+- control metadataをGitHub mainへ同期
 - C1待ちでSTOP
-
-
-## Final C1 review — 2026-09-19
-
-**PASS — production cadence throttle verified.**
-
-確認済み:
-- production `important-news-fetch` は schedule `0,20,40 * * * *` のまま、command gateだけ更新されている。
-- 2026-09-19〜09-23はJST偶数時の00分だけ実HTTP実行され、12回/日上限。
-- 2026-09-24以降は毎時00分＋07:00〜09:00/16:00〜18:00の20分・40分で、36回/日上限。
-- gateは `timezone('Asia/Tokyo', clock_timestamp())` を使用し、UTC日付ずれを避けている。
-- Reportの代表時刻proofは12/12 PASS。
-- read-backで `important-news-judgement` / generation / publish-ready、market-report、MIC関連Cronは変更されていない。
-- Edge Function、schema/migration、OAuth/Vault、X、Push、manual OpenAI callの変更は0。
-- rollback元command hash `be610dd0acc29a5582bfb699ac857d22` がReportに保存されている。
-
-### C1 decision
-
-本番の重要ニュースWeb Searchコスト抑制として承認。このH1は完了。
-次の自然実行で、連休中は実際に2時間おきへ抑制されていることをread-only観測する。9/24以降は通常毎時＋朝刊/大引け前後の厚い検索へ自動遷移する。
