@@ -3,7 +3,7 @@
 - task_id: social-mobile-app-phase8-completion-followup-claude-20260919
 - owner: claude
 - slot: claude-2
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Opus 5
@@ -403,3 +403,24 @@ STOPしてK2待ち。
 
 - アプリケーションコード変更は0件のためcommit/pushなし。
 - `.agent/tasks/CLAUDE_TASK.md`本Reportをorigin/mainへpushする。
+
+
+## Final K2 review — 2026-09-19
+
+**PASS — Phase 8 complete.**
+
+Accepted evidence:
+- real non-admin social-mobile sign-in QA completed successfully.
+- visible tenant/workspace was `ai_salaryman_lab` only; `kabumori=0`, `mio=0`.
+- no silent mock fallback; fail-closed Auth path preserved.
+- profile lifecycle is resolved: `apps/social-mobile` does not require `public.profiles`.
+- production default remains `EXPO_PUBLIC_DATA_SOURCE=mock`.
+- typecheck, lint, static policy contract 5/5, Expo web export, and `git diff --check` all PASS.
+- user completed cleanup through Supabase Dashboard standard UI.
+- final read-back recorded in the Report: `auth.users=1`, `admin_users=1`, `profiles=1`, `brand_memberships=0`.
+- no application code, RLS, schema, grants, admin policy, OAuth, Vault, Cron, X, Push, or billing changes were introduced by this Phase 8 finalization.
+
+Decision:
+- Phase 8 is approved and complete.
+- Claude slot 2 is set to `done`.
+- social-mobile may proceed to the next phase: X OAuth login onboarding, subject to a new explicit task.
