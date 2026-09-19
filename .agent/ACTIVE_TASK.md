@@ -14,22 +14,22 @@
 ### Codex slot 1
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - task_id: important-news-cost-phase1-recall-safe-shadow-handoff-20260919
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: 19件の同等replay manifestをartifact branchへ保存。置換経路first_seenは19/19未証明でlegacy fallback維持。Phase 1 production mutationなし。C1 review待ち。
+- note: C1 PASS済み。次のlive shadowは別承認待ち。
 
 ### Codex slot 2
 - owner: codex
 - slot: codex-2
-- status: in_progress
-- task_id: social-mobile-app-phase9-codex-handoff-integration-20260919
+- status: ready
+- task_id: social-mobile-app-phase10-production-oauth-rollout-20260920
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
-- note: G2/K2 PASS済みOAuth candidateを引き継ぎ。fresh-main integration、disposable migration proof、mobile Accounts/deep-link UI candidate。C2前のproduction apply/deployは禁止。
+- note: approved migrationのproduction applyとx-oauth-connect-user deploy/postflight。Portal変更・real OAuth・X postは禁止。
 
 ### Claude slot 1
 - owner: claude
