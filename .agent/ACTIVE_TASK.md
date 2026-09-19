@@ -44,12 +44,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: done
-- task_id: morning-greeting-image-cost-gate-rollout-20260917
+- status: in_progress
+- task_id: social-mobile-app-phase8-completion-followup-claude-20260919
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: K2 PASS・main反映済み。自然OFF確認は別read-only観測。
+- note: Codex一時休止に伴い、social-mobile Phase 8残作業（mobile sign-in QA/profile lifecycle確認/test fixture cleanup）をCodex slot2から引き継ぎ着手。RLS isolation proof自体は再実施しない。
 
 ## Control codes
 
