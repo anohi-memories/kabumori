@@ -15,11 +15,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: important-news-web-search-cost-throttle-20260919
+- task_id: important-news-hourly-cadence-simplify-20260919
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: `important-news-fetch` Cron 1本のcommand gateをJST基準へ更新済み。9/19〜9/23は2時間おき、9/24以降は毎時＋07:00〜09:00/16:00〜18:00のみ20分刻み。関連Cron不変。C1確認待ち。
+- note: `important-news-fetch` Cron 1本のcommand gateをJST基準で簡素化済み。9/19〜9/23は偶数時00分のみ、9/24以降は毎時00分のみ。関連Cron不変。C1確認待ち。
 
 ### Codex slot 2
 - owner: codex
