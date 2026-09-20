@@ -4,10 +4,10 @@
 
 - task_id: important-news-phase1-shadow-observation-plus-source-rights-research-20260920
 - result: review_required — read-only observation and source-rights/provider research completed to the extent supported by the current sample; C1 review requested.
-- source_base: fresh origin/main 06c15cfa7486e15175bb7490cdb436770288e88a immediately before documentation branch commit. The artifact branch was fast-forwarded to this main and contains no runtime code changes.
-- candidate_branch: [codex/important-news-source-rights-research-20260920](https://github.com/anohi-memories/kabumori/tree/codex/important-news-source-rights-research-20260920)
-- candidate_commit: 5d726f5375beb717ff473c8ae8867b91e0c18210 (documentation-only; not merged).
-- research_document: [SHADOW_RIGHTS_AND_LICENSED_OPTIONS_2026-09-20.md](https://github.com/anohi-memories/kabumori/blob/codex/important-news-source-rights-research-20260920/docs/news-coverage/SHADOW_RIGHTS_AND_LICENSED_OPTIONS_2026-09-20.md)
+- source_base: fresh origin/main 2fbb0a11480a79718d8cadfa5e6c65693cf0de33 immediately before the refreshed documentation branch commit. The artifact branch was fast-forwarded to this main and contains no runtime code changes.
+- candidate_branch: [codex/important-news-source-rights-research-20260920-c1fix](https://github.com/anohi-memories/kabumori/tree/codex/important-news-source-rights-research-20260920-c1fix)
+- candidate_commit: ffb21da81a082288dacb652f82640f5165b965a5 (documentation-only; not merged; refreshed from current main).
+- research_document: [SHADOW_RIGHTS_AND_LICENSED_OPTIONS_2026-09-20.md](https://github.com/anohi-memories/kabumori/blob/codex/important-news-source-rights-research-20260920-c1fix/docs/news-coverage/SHADOW_RIGHTS_AND_LICENSED_OPTIONS_2026-09-20.md)
 - changed implementation files: none. Artifact branch changes only the research document; main receives H1 control/report/index updates only.
 
 ### Natural shadow readback
@@ -21,10 +21,12 @@
 
 ### Rights, provider options, and economics
 
+C1 follow-up: corrected the prior ~4x overstatement by keeping per-fetch-cycle cost separate from nominal search-slot counts. The underlying observation sample and all source-rights findings are unchanged.
+
 - JPX TDnet API Index is the most concrete lane-specific route found: official materials say third-party redistribution is allowed, the index API has no API information fee, fixed basic fee is ¥70,000/month before tax, index content is real-time, and the API provides five-year history. Corporate contract, permitted polling, retention/cache, attribution, and exact end-user use still need written confirmation. The test server returns dummy data. The individual J-Quants TDnet add-on at ¥11,000/month is prohibited for corporate/academic use; TDnet on Snowflake Index is ¥100,000/month and disallows external-user distribution.
 - Other candidates: AP Media API supports continuous feeds with contract-based item pricing; Lloyd’s List has vessel/risk APIs but no verified incident-alert coverage and quote-only pricing; NewsAPI Business is $449/month (developer tier cannot be production); NewsData.io Basic is $199.99/month but its free tier is delayed 12 hours and paid display rights/coverage are not independently verified; Twelve Data plan details conflict ($499 Venture card / $414 annual, footer “from $149”), and exchange-specific rights require confirmation.
 - Official-source terms are mixed: MOD PDL1.0 allows commercial reuse with attribution except excluded/third-party items; NHK general news RSS business rights remain unconfirmed; UKMTO site content references OGL but no authless API was validated and terms are old; PBOC/MOFCOM/State Council terms vary by subsite and are not treated as blanket permission.
-- Illustrative legacy cost comparison only: multiplying prior small-sample $0.056721/fetch-cycle mean by nominal 48 searches/day through Sep 23 gives about $81.68/30 days; 96/day from Sep 24 gives about $163.36/30 days. These are not invoices or a spend forecast.
+- Illustrative legacy cost comparison only: prior observed small-sample mean = $0.056721/fetch cycle. Through Sep 23, 12 fetch cycles/day (48 nominal search slots/day at 4 slots/cycle) equals $0.680652/day, about $20.42/30d. From Sep 24, 24 cycles/day (96 nominal search slots/day) equals $1.361304/day, about $40.84/30d. Search-slot counts are not multiplied by per-cycle cost. These are illustrative calculations from a small sample, not invoices or a spend forecast.
 - A/B/C architecture comparison and per-lane fallback status are documented in the research artifact. No architecture is ranked, no source is adopted, and no legacy search is reduced.
 
 ### Exact next proposal
