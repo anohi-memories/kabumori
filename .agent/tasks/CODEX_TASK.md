@@ -3,8 +3,8 @@
 - task_id: important-news-phase1-live-shadow-rollout-20260920
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
 - purpose: C1 PASS済みのPhase 1調査結果を受け、旧重要ニュース監視を一切止めずにlive shadowをproductionへ安全導入し、replacement経路の実first_seen/recall/latency/costを測定できる状態を作る。
