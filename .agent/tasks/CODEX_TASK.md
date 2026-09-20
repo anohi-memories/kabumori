@@ -1,312 +1,224 @@
 # Codex Task
 
-- task_id: important-news-phase1-shadow-observation-plus-source-rights-research-20260920
+- task_id: important-news-phase1-gdelt-timeout-diagnosis-and-fallback-candidate-20260920
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
-- purpose: 10分shadowの自然観測を継続しつつ、無料sourceで埋まらなかったlaneについて利用条件・公式API・低コストのlicensed data候補を調査し、将来の安全なcoverage拡張案を作る。production挙動は変更しない。
+- purpose: 10分shadowで継続的に15秒timeoutしているGDELT経路を切り分け、GDELTを安定化できるか、または安全にsecondary扱いへ下げるべきかをproduction未変更で判断する。必要ならlocal-onlyのtimeout/query/fallback candidateとtestsを作る。
 
 ## Approved basis
 
-前H1 C1 PASS:
-- coverage-gap researchは完了。
-- 新規sourceはproduction採用なし。
-- TDnet/Japan IR、North Korea/J-Alert、shipping/chokepoints、China/systemic、abrupt market movesは独立測定route未確立。
-- 全laneでlegacy paid/live fallback維持。
-- 10分shadowは継続稼働。
-- recall parityは未証明。
-- production mutationは0。
+前H1 final C1 PASS:
+- shadow自然観測は17/17 completed、観測約3時間。
+- GDELTは3回の実pollすべて約15秒timeout、14回は設計どおりcooldown skip。
+- 他10 sourceは観測sampleでfetch/parse healthy。
+- same-window important/most_important = 0、recall parity NOT PROVEN。
+- shadow paid Web Search = 0 calls / $0 in quiet sample。
+- 全legacy paid/live fallback維持。
+- production mutation = 0。
+- JPX TDnet Index APIはresearch-only。今回のH1では触れない。
 
-## User decision
+## User intent
 
-2026-09-20、ユーザーは「じゃあそれ」と明示。
-前C1後に提案した
-- 自然shadow観測を継続
-- 別角度でsource rights / licensed data / low-cost providerを調査
-を本H1として進める。
+2026-09-20「おkすすめて」。
+
+待ち観測だけでなく、現在明確に見えているsource-health blockerであるGDELT timeoutを先に詰める。
 
 ## Model policy
 
-- **Lunaで開始・継続。**
-- 観測、調査、比較、費用整理、ドキュメントはLuna。
-- Solへ上げるのはsecurity/auth/production-writeの具体的blockerが出た場合のみ。
-- 本H1はproduction writeを行わない。
+- **Lunaで開始・継続する。**
+- HTTP/query diagnosis、fixture/replay、local code/tests、docsはLuna。
+- Solへ上げるのはproduction security/auth mutationが必要になった場合のみ。
+- このH1ではproduction mutationを行わない。
 
-## Scope A — continued natural shadow observation
+## Mandatory startup
 
-read-onlyで最新shadowデータを再集計。
+1. .agent/ORCHESTRATION.md
+2. .agent/CURRENT_STATE.md
+3. this TASK
+4. .agent/CODEX_REPORT.md
+5. other 3 slot TASKs
+6. fresh origin/main
+7. current important-news-shadow GDELT source implementation
+8. source tests/fixtures
+9. production shadow read-only state
+10. latest natural runs after prior C1
+
+H2/G1/G2 files/settingsには触れない。
+
+## Scope A — natural observation refresh
+
+read-onlyで最新natural runsを確認。
 
 最低:
-- task開始時までの全自然run
-- 直近6h / 12h / 24h
-- completed / partial / failed
-- source health
-- unique candidates
-- first_seen_at
-- live matches
-- important / most_importantとのsame-window比較
-- conditional Web Search calls / tokens / cost
-- duplicate/retry/auth failure兆候
-- GDELT timeout/cooldown状況
+- total natural runs since activation
+- observation span
+- completed/partial/failed
+- GDELT actual poll count / timeout count / cooldown skips
+- other source failures
+- same-window important/most_important
+- stored matches
+- conditional Web Search calls/cost
 
-人工invokeは禁止。
+6h windowが成立していれば6h集計を明記。
+成立していなければleft-censoredと明記。
 
-重要:
-- 観測時間が短く、重要eventが無い場合は無理に結論を出さない。
-- 0 matchを失敗扱いしない。
-- recall parityはevent証拠が揃うまで未証明のまま。
+## Scope B — GDELT current request diagnosis
 
-## Scope B — source rights / machine-use terms
+current codeを正確に追う:
+- endpoint
+- query parameters
+- mode
+- format
+- maxrecords
+- timespan
+- sort
+- timeout
+- headers/user-agent
+- response size assumptions
+- parser behavior
+- cooldown
 
-前H1でtechnical endpointは見つかっても権利・termsが曖昧だったsourceを重点確認。
+次を切り分け:
+1. DNS/TLS/connect latency
+2. GDELT server response latency
+3. query complexity
+4. response size
+5. rate limiting
+6. endpoint instability
+7. malformed/redirect response
+8. parser/JSON time
+9. timeout値が短すぎるだけか
 
-対象:
-- JPX / TDnet
-- NHK RSS
-- MOD
-- UKMTO
-- PBOC / MOFCOM / State Council
-- market-data providers
+boundedな外部probeは可。ただしproduction Function invokeは禁止。
 
-調べる:
-- commercial/business use
-- automated polling
-- storing headline/summary
-- redistribution restrictions
-- attribution requirements
-- polling/rate-limit guidance
-- API availability
-- pricing
-- trial/free tier
-- historical archive access
+## Scope C — query minimization experiments
 
-不明なものは「allowed」と推定しない。
+GDELTへの負荷とlatencyを下げるlocal/read-only candidateを比較。
 
-## Scope C — licensed / low-cost alternatives
+例:
+- narrower timespan
+- lower maxrecords
+- simpler query
+- separate lane queries vs broad OR query
+- alternate supported GDELT endpoint/mode
+- article listではなくlighter metadata path
+- HTTP timeout strategy
 
-無料sourceだけで埋まらないlaneについて候補を比較。
+各experiment:
+- request URL/queryはsecretなし
+- response time
+- HTTP status
+- bytes
+- item count
+- relevant-event yield
+- repeatability
 
-### Japan IR
-- official TDnet API
-- other licensed Japanese disclosure feeds
-- price per month
-- latency
-- machine access
-- historical availability
+過剰probe禁止。短時間に大量リクエストしない。
 
-### Japan security / North Korea
-- official alert-compatible services
-- reputable licensed newswire/API
-- missile/security alert latency
-- Japanese market relevance
+## Scope D — value assessment
 
-### Shipping / chokepoints
-- maritime security/API providers
-- UKMTO official access paths
-- shipping incident services
-- latency / terms / pricing
+GDELTが現在shadowに何を追加しているか評価。
 
-### China policy/systemic
-- official licensed services or reputable APIs
-- English translation latency
-- PBOC/MOFCOM/State Council coverage
+確認:
+- existing BBC/Al Jazeera/official sourcesと重複度
+- replay cohortでGDELTが必要とされたlane
+- GDELTでしか拾えない代表eventが証明できるか
+- historical first_seen proofの有無
+- zero items / timeoutでもfallback triggerへ悪影響がないか
 
-### Abrupt market moves
-- delayed or realtime market data providers
-- Nikkei/futures
-- USDJPY
-- Brent/WTI
-- S&P/Nasdaq futures
-- licensing and per-month/API cost
+結論候補:
+A. keep + local query optimization
+B. keep but secondary/less frequent
+C. disable candidate in future and rely on explicit fallback
+D. replace with another free source candidate
 
-候補は「具体的に使えるもの」だけ記録。
-広告/マーケティングページだけでAPI実体が確認できないものは除外。
+このH1ではどれもproduction適用しない。
 
-## Scope D — economics
+## Scope E — local-only implementation candidate
 
-現行legacy Web Searchコストと比較する。
+明確な改善が見つかった場合のみ、local branchで:
+- shadow_sources.ts
+- source-specific helper
+- tests/fixtures
+- docs
 
-baseline:
-- through Sep23: nominal 48 searches/day
-- from Sep24: nominal 96 searches/day
-- measured prior natural mean: $0.056721/fetch cycle (small sample)
+を変更可。
 
-licensed source候補について:
-- monthly fixed cost
-- usage-based cost
-- minimum contract
-- free tier/trial
-- effective cost per lane
-- legacy Web Search削減可能性
+必須:
+- source-specific timeout
+- bounded response size/item count
+- stale/future timestamp rejection
+- fail-open to other sources (GDELT failure must not fail run)
+- no arbitrary URL fetch / SSRF
+- no secrets
+- no Web Search policy change
+- no matcher threshold change
 
-ただし:
-- cost reductionだけで導入を推奨しない。
-- recall/timelinessが最優先。
+改善証拠が弱ければcode変更しない。
 
-## Scope E — architecture options
+## Scope F — fallback semantics
 
-最低3案を比較:
+GDELT unavailable時に:
+- paid fallbackが消えない
+- source degradation数の扱いが過剰searchを誘発しない
+- 2+ degraded source triggerとの関係
+- one-source timeoutでWeb Search発火しない現行挙動
 
-A. 現状維持
-- free shadow + legacy paid fallback
+を再確認。
 
-B. selective licensed source
-- 重要gap laneだけlicensed feed
-- 他laneは現状維持
+必要ならlocal tests追加可。ただしproduction変更なし。
 
-C. broader licensed news/data
-- 複数laneを1 providerでカバー
+## Scope G — exact next proposal
 
-比較:
-- recall
-- latency
-- independence
-- operational complexity
-- monthly cost
-- vendor lock-in
-- legal/terms clarity
-
-ranking/最終決定はしない。
-事実比較と採用条件を示す。
-
-## Scope F — exact next proposal
-
-C1へ出す提案は以下のどれかに限定:
-1. まだ観測継続のみ
-2. 特定providerのtrial/read-only評価
-3. 特定official APIの契約費用確認
-4. local-only adapter candidate
-5. no-go / fallback継続
-
-production契約・課金・secret追加・deployは本H1で行わない。
+C1へ以下のどれか1つを出す:
+1. local query optimizationをshadowへ次Phaseでdeploy候補
+2. GDELT cadenceをさらに下げる次Phase候補
+3. GDELTをsecondary/no-proof sourceとして現状維持
+4. GDELT removal候補 + paid fallback維持
+5. evidence不足で観測継続
 
 ## Production mutation policy
 
 **0。**
 
 禁止:
-- Function deploy
+- important-news-shadow deploy
 - Cron変更
 - migration/schema/RPC
-- secret/Vault
-- API契約/購入
-- paid trial activation requiring billing
-- legacy search削減
+- Vault/secret
+- legacy important-news変更
+- Web Search削減
 - X/Push/App
-- MIC変更
+- MIC
 - OAuth/social-mobile
+- JPX問い合わせ/契約
 - manual OpenAI replay
-
-もしprovider trialが完全無料でも、account creationやexternal signupは行わず調査だけ。
 
 ## Deliverables / C1
 
-.agent/CODEX_REPORT.mdへ:
-1. observation window / natural run count
-2. source health update
-3. new live important/most_important events and matches
-4. shadow paid-search cost
-5. rights/terms matrix
-6. licensed provider candidate matrix
-7. price/latency/API/access evidence
-8. architecture A/B/C comparison
-9. lane-by-lane fallback status
+.agent/CODEX_REPORT.md:
+1. refreshed observation window
+2. GDELT poll/timeout/cooldown counts
+3. current request anatomy
+4. bounded probe results
+5. root-cause confidence
+6. overlap/value assessment
+7. fallback semantics proof
+8. local code/tests if any
+9. production mutation = 0
 10. exact next proposal
-11. production mutation = 0
-12. sources/URLs referenced in durable research doc if created
 
-必要ならdocs/news-coverage/へdocumentation-only artifactを作成可。
-branch/push可、merge不可。C1待ち。
-
-完了時:
-- status -> review_required
-- next_owner -> chatgpt
+local branchを作る場合:
+- fresh main
+- H1-owned files only
+- push可
+- merge不可
+- status review_required
+- next_owner chatgpt
 - STOP for C1
 
 **推奨モデル：Luna。**
-
-
-## C1 review — 2026-09-20
-
-**NOT PASS — one material economics error must be corrected before this research task can close.**
-
-The observation/source-rights work is otherwise acceptable:
-- 17/17 natural shadow runs completed in the available ~3h sample.
-- 6h/12h/24h windows were correctly identified as incomplete/left-censored.
-- Same-window important/most_important = 0, so recall parity was correctly left unproven.
-- GDELT degradation was reported honestly.
-- Shadow paid-search usage remained 0 calls / $0 in the observed sample.
-- Production mutation = 0.
-- JPX TDnet Index API is a concrete research candidate, but no contract/contact/signup was performed.
-
-### C1 blocker — baseline cost arithmetic
-
-The Report and research document incorrectly multiply the prior mean **cost per fetch cycle** (`$0.056721/cycle`) by **nominal search slots/day** (`48` / `96`).
-
-Those units are incompatible.
-
-Correct baseline cadence already established in prior C1:
-- through 2026-09-23: **12 fetch cycles/day**, nominally 4 search slots each = 48 search slots/day
-- from 2026-09-24: **24 fetch cycles/day**, nominally 4 search slots each = 96 search slots/day
-
-Therefore using the observed small-sample mean `$0.056721/fetch cycle`:
-- 12 cycles/day = about **$0.680652/day = $20.42 / 30d**
-- 24 cycles/day = about **$1.361304/day = $40.84 / 30d**
-
-The current `$81.68 / $163.36 per 30d` figures are ~4x too high because they multiply a per-cycle cost by per-search-slot counts.
-
-### Required continuation
-
-1. Correct this arithmetic in:
-   - `.agent/CODEX_REPORT.md`
-   - `docs/news-coverage/SHADOW_RIGHTS_AND_LICENSED_OPTIONS_2026-09-20.md`
-2. Preserve the distinction:
-   - fetch cycles/day = 12 / 24
-   - nominal search slots/day = 48 / 96
-3. Keep the prior small-sample caveat.
-4. Do not change the JPX facts or any production state unless another evidence issue is found.
-5. Rebase/refresh the documentation branch onto current main if needed; H1-owned doc only.
-6. Production mutation remains **0**.
-7. Return to `review_required` and stop for C1 again.
-
-**Recommended model: Luna.**
-
-
-## C1 continuation completed — 2026-09-20
-
-- Corrected the baseline arithmetic in the H1 report and research document using the prior small-sample mean of $0.056721 per fetch cycle.
-- 12 cycles/day = 48 nominal search slots/day (4 per cycle) = $0.680652/day, about $20.42/30d. 24 cycles/day = 96 nominal search slots/day = $1.361304/day, about $40.84/30d. Search-slot counts are not multiplied by the per-cycle mean.
-- Refreshed documentation-only artifact is on [codex/important-news-source-rights-research-20260920-c1fix](https://github.com/anohi-memories/kabumori/tree/codex/important-news-source-rights-research-20260920-c1fix) at ffb21da81a082288dacb652f82640f5165b965a5; it is based on the fresh main head 2fbb0a11480a79718d8cadfa5e6c65693cf0de33. No merge requested.
-- Existing observations and source-rights findings are unchanged. Production mutation remains 0.
-- status: review_required; next_owner: chatgpt. Stop for C1.
-
-
-## Final C1 review — 2026-09-20
-
-**PASS — the sole arithmetic blocker is corrected.**
-
-Verified:
-- Prior mean cost is correctly treated as **$0.056721 per fetch cycle**, not per search slot.
-- Through 2026-09-23: 12 fetch cycles/day = 48 nominal search slots/day = about **$0.680652/day / $20.42 per 30d**.
-- From 2026-09-24: 24 fetch cycles/day = 96 nominal search slots/day = about **$1.361304/day / $40.84 per 30d**.
-- The corrected figures appear in both the H1 report and the refreshed documentation artifact.
-- The small-sample caveat is preserved; these are illustrative calculations, not invoices or spend forecasts.
-- Observation/source-rights findings are unchanged and remain appropriately cautious.
-- 17/17 natural runs completed in the available ~3h sample; 6h/12h/24h windows remain incomplete.
-- Same-window important/most_important = 0; recall parity remains NOT PROVEN.
-- GDELT remains degraded in the observed sample.
-- Shadow paid-search usage remained 0 calls / $0 in the observed quiet window.
-- JPX TDnet Index API remains a research candidate only; no inquiry, account, trial, contract, billing, or adapter was created.
-- All legacy paid/live fallbacks remain enabled.
-- Production mutation = 0.
-
-C1 judgment:
-- This H1 is complete and passes.
-- Documentation branch may remain unmerged; no merge is required for task completion.
-- Do not reduce legacy Web Search or replace any fallback based on this research.
-- Next useful action is either continued natural shadow observation or a separately scoped JPX contract/terms confirmation step.
-
-Recommended model for the next observation/research task: **Luna**.
