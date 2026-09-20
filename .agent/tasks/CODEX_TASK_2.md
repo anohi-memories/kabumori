@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase11-x-portal-and-real-oauth-qa-20260920
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
 - purpose: Phase 10でproduction backend rollout済みのgeneral-user X OAuthを、X Developer Portal設定の確認・手動反映準備から、専用non-admin QA Auth user + dedicated test X accountによる1回のreal OAuth round-trip QAまで安全に進める。real X postはまだ行わない。
@@ -180,3 +180,40 @@ When complete:
   10. retain-vs-cleanup recommendation
 - push control/report changes only if needed
 - STOP for C2
+
+
+## C2 review — 2026-09-20 (mobile Supabase env inlining fix)
+
+**PASS for the one-file client fix; Phase 11 overall remains incomplete and must resume.**
+
+Accepted:
+- Root cause is credible and matches Expo's static \`EXPO_PUBLIC_*\` inlining requirement: dynamic/default \`process.env\` object access was not preserved into the native bundle, while direct property references are.
+- Change is limited to \`apps/social-mobile/src/lib/supabase.ts\`.
+- The default runtime path now reads:
+  - \`process.env.EXPO_PUBLIC_SUPABASE_URL\`
+  - \`process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY\`
+  through direct static references.
+- Injected test environments remain supported because \`getSupabaseConfig(env)\` and \`createSupabaseClient(env)\` still accept explicit env objects.
+- No service-role/client secret path was introduced; existing publishable-key guard remains.
+- Auth/RLS/OAuth semantics are unchanged by this fix.
+- Verification accepted:
+  - typecheck PASS
+  - lint PASS
+  - OAuth/onboarding focused tests 27/27 PASS
+  - iOS export PASS
+  - bundle verification confirmed configured public values were embedded
+  - Release iOS build/install PASS
+  - login screen rendered without the missing-config banner
+  - git diff --check PASS
+- Commit \`56506847613b47ea882ad48211649b587a016fbd\` contains only the expected source + H2 control/report changes.
+- No production DB/Vault/X/API/deploy mutation occurred during this fix.
+
+Decision:
+- source fix is approved.
+- Resume the same Phase 11 H2 from the QA login / real OAuth gate.
+- Keep using **Luna**.
+- User must enter QA credentials directly; do not request/store passwords in chat/report.
+- Immediately before X consent, confirm the dedicated test X account is the intended account.
+- Run exactly one real OAuth round-trip, then perform the required read-only DB/Vault/tenant-isolation postflight.
+- Still forbidden: real X post, media upload, \`publish_enabled=true\`, changes to existing production X accounts/admin OAuth, Cron, or app-wide data-source switch.
+- On completion return \`review_required / next_owner: chatgpt\` for final C2.
