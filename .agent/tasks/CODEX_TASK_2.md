@@ -3,7 +3,7 @@
 - task_id: social-mobile-app-phase10-production-oauth-rollout-20260920
 - owner: codex
 - slot: codex-2
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
@@ -256,3 +256,25 @@ After explicit approval:
 - return \`review_required / next_owner: chatgpt\`.
 
 No source changes are required by this C2.
+
+
+## Final C2 review — 2026-09-20
+
+**PASS — Phase 10 production OAuth backend rollout is complete.**
+
+Verified from Report and independent production read-back:
+- migration \`social_mobile_x_oauth_onboarding\` exists in production migration history.
+- partial unique index exists.
+- \`social_account_oauth_states.initiated_by_user_id\` exists.
+- exactly three target OAuth RPCs exist.
+- production counts remain brands=3 / social_accounts=2 / brand_memberships=0.
+- general-user OAuth state rows with \`initiated_by_user_id IS NOT NULL\` remain 0.
+- \`x-oauth-connect-user\` is ACTIVE v1 with \`verify_jwt=false\`, matching the custom in-function bearer validation design.
+- existing admin \`x-oauth-connect\` remains ACTIVE v20 and unchanged.
+- reported source equivalence, ACL/search_path/RLS invariants, and 401/405 fail-closed smoke are accepted.
+- no real OAuth round-trip, Vault token write, real X post, Portal mutation, or production fixture creation occurred.
+
+Decision:
+- Phase 10 backend rollout is approved complete.
+- H2 status = done.
+- Remaining work must be a separate task: X Developer Portal configuration and then an explicitly authorized real non-admin QA OAuth round-trip.
