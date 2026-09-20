@@ -3,7 +3,7 @@
 - task_id: social-mobile-app-phase12-general-user-content-profile-and-dry-run-20260920
 - owner: codex
 - slot: codex-2
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
@@ -241,3 +241,44 @@ When complete:
   10. exact next production rollout recommendation
 - fresh-check `origin/main` before push
 - STOP for C2
+
+
+## Final C2 review — 2026-09-20
+
+**PASS — Phase 12 general-user content profile + dry-run candidate is approved.**
+
+Accepted:
+- \`social_mobile_user_v1\` is registered as a neutral, non-brand-specific profile with no secrets, no fixed hashtags, and no publish permission.
+- existing Kabumori / AI Salaryman Lab profile behavior is preserved; the generic default topic only applies when a profile explicitly defines one.
+- user settings are intentionally code-owned first-run defaults only; no premature persistence or cross-tenant writable settings store was introduced.
+- existing \`posting_windows\` is not reused as a general-user write target because its current admin-operated model is not the right tenant boundary.
+- a separate \`social-mobile-brand-dry-run\` Function was chosen rather than widening the existing admin/service-role dry-run path.
+- the new dry-run path authenticates the real Supabase bearer, forwards the same user JWT for tenant reads, requires owner membership, requires the exact \`social_mobile_user_v1\` profile, and requires exactly one identity-verified X account for that owned workspace.
+- client-supplied \`brand_id\` is only a selector after membership proof and is never treated as authorization.
+- the preview path has no Vault read, token adapter, scheduled-post write, X API adapter, or publish action.
+- mobile UI exposes preview-only states and has no publish button/toggle.
+- \`publish_enabled\` is never changed.
+- no production migration/deploy/Cron/AI/X/Vault/Storage mutation occurred.
+
+Verification accepted:
+- shared-brand + dry-run Deno tests 75/75 PASS.
+- social-mobile typecheck PASS.
+- lint PASS.
+- iOS Expo export PASS.
+- Edge Function deno check PASS.
+- git diff --check PASS.
+- static secret/service-role scan PASS.
+- implementation commit \`60b610292398053494d9ed73b80617d2dd2eefe6\` is the reviewed source candidate.
+
+Non-blocking deferred items:
+- persisted editable user settings.
+- tenant-safe persistent posting-window/settings schema/RPC.
+- production deploy of \`social-mobile-brand-dry-run\`.
+- real production AI preview invocation.
+- live publishing, scheduling, Cron, and \`publish_enabled=true\`.
+- revoke/disconnect.
+
+Decision:
+- Phase 12 source candidate is complete.
+- status = done.
+- next step should be a separate H2 rollout task for production deployment of the preview Function and one bounded QA preview, still with X posting disabled.
