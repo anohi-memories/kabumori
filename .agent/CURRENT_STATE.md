@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-20 JST (H1 shadow observation + source-rights research report ready for C1)
+- checked_at: 2026-09-20 JST (H1 review_required; H2 Phase12 general-user content profile/dry-run ready; G1 natural shadow wait; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -19,10 +19,11 @@
   - Rights/provider research is documented on the non-merged H1 candidate branch. No source adopted; all paid/live fallbacks remain enabled.
   - Production mutation is 0. Exact next proposal: JPX TDnet Index API terms/cost confirmation only. Stop for C1.
 
-- Codex slot 2: `ready` — `social-mobile-app-phase11-x-portal-and-real-oauth-qa-20260920`
-  - Phase10 C2 PASS済みbackendを使い、X Developer Portal設定確認と専用non-admin QA user + dedicated test X accountで1回のreal OAuth round-tripを行う。
-  - real X post/media upload/publish_enabled=trueは禁止。成功後のQA fixture cleanupは別承認。
-  - Recommended model: Luna。具体的なOAuth/DB/Vault blockerが出た時だけSol検討。
+- Codex slot 2: `ready` — `social-mobile-app-phase12-general-user-content-profile-and-dry-run-20260920`
+  - Phase11 real OAuth QA C2 PASS済み。
+  - 次は `social_mobile_user_v1` profile、tenant-safe settings/posting defaults、general-user dry-run generation、最小mobile preview。
+  - real X post / media upload / publish_enabled=true / Cron / production deploy はまだ禁止。
+  - Recommended model: Luna。shared pipelineの具体的な設計矛盾が出た時だけSol検討。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
