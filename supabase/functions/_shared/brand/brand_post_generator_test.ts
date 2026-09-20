@@ -273,3 +273,91 @@ test("a non-2xx OpenAI response or empty output text fails closed with a distinc
     { message: "BRAND_POST_EMPTY_OUTPUT" },
   );
 });
+
+test("social-mobile preview can generate only with its generic profile while leaving the workspace disabled", async () => {
+  const context = resolveBrandContext(
+    {
+      id: "user_workspace",
+      display_name: "My Workspace",
+      is_active: false,
+      publish_mode: "disabled",
+      code_profile_key: "social_mobile_user_v1",
+    },
+    null,
+    {
+      brand_id: "user_workspace",
+      fixed_hashtags: [],
+      note_url: null,
+      image_policy: { mode: "none" },
+      enabled_post_types: ["brand_post"],
+    },
+  );
+  let capturedBody: Record<string, unknown> | null = null;
+  const draft = await generateBrandPost({
+    openAiApiKey: "fixture-only",
+    context,
+    postType: "brand_post",
+    generationPurpose: "social_mobile_preview",
+    contentSettings: {
+      preferredTone: "親しみやすい",
+      locale: "ja-JP",
+      themes: ["仕事の小さな工夫"],
+      objective: "役立つ気づき",
+      frequencyTargetPerWeek: 3,
+      approvalMode: "manual_review",
+      generationWindow: {
+        timezone: "Asia/Tokyo",
+        startLocal: "09:00",
+        endLocal: "24:00",
+        defaultGenerationLocal: "17:00",
+        generationDayOffset: -1,
+      },
+      optionalNgWords: ["絶対儲かる"],
+      notes: "",
+      livePublishingEnabled: false,
+    },
+    fetchImpl: async (_input, init) => {
+      capturedBody = JSON.parse(String(init?.body));
+      return fixtureOpenAiResponse("小さな工夫を試してみませんか。")(
+        new Request("https://example.test"),
+      );
+    },
+  });
+  assert.equal(draft.brandId, "user_workspace");
+  assert.match(
+    String(capturedBody?.input),
+    /日々の生活や仕事に役立つ小さな工夫/u,
+  );
+  assert.match(
+    String(capturedBody?.instructions),
+    /希望するトーン: 親しみやすい/u,
+  );
+  assert.match(String(capturedBody?.instructions), /避ける語句: 絶対儲かる/u);
+  assert.equal(context.brand.is_active, false);
+  assert.equal(context.brand.publish_mode, "disabled");
+  await assert.rejects(() =>
+    generateBrandPost({
+      openAiApiKey: "fixture-only",
+      context,
+      postType: "brand_post",
+      fetchImpl: fixtureOpenAiResponse("not allowed"),
+    }), { message: "BRAND_DISABLED" });
+});
+
+test("social-mobile preview purpose rejects other brands instead of falling back to another profile", async () => {
+  let calls = 0;
+  await assert.rejects(() =>
+    generateBrandPost({
+      openAiApiKey: "fixture-only",
+      context: aiLabContext(),
+      postType: "brand_post",
+      generationPurpose: "social_mobile_preview",
+      fetchImpl: async () => {
+        calls += 1;
+        return fixtureOpenAiResponse("not allowed")(
+          new Request("https://example.test"),
+        );
+      },
+    }), { message: "SOCIAL_MOBILE_PREVIEW_PROFILE_REQUIRED" });
+  assert.equal(calls, 0);
+});

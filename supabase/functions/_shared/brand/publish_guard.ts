@@ -28,3 +28,14 @@ export function assertBrandDryRunAllowed(context: BrandContext): void {
     throw new BrandContextError("BRAND_PUBLISH_MODE_DISABLED");
   }
 }
+
+/**
+ * Allows text generation for the authenticated user's isolated mobile preview even when the workspace
+ * remains inactive/disabled. This is not a publishing permission; the dedicated preview handler has no
+ * scheduled-post, X, or token-loading dependency and must prove owner membership before calling it.
+ */
+export function assertSocialMobilePreviewGenerationAllowed(context: BrandContext): void {
+  if (context.brand.code_profile_key !== "social_mobile_user_v1" || context.codeProfile.key !== "social_mobile_user_v1") {
+    throw new BrandContextError("SOCIAL_MOBILE_PREVIEW_PROFILE_REQUIRED");
+  }
+}

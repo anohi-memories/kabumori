@@ -8,6 +8,8 @@ export type BrandCodeProfile = {
   reportFixedHashtags: readonly string[];
   dryRunPostTypes: readonly string[];
   dryRunPromptPreamble: string;
+  /** Optional generic topic used only when a preview caller has no explicit topic. */
+  defaultTopicSeed?: string;
   /** Omit to preserve existing behavior; future user settings can provide either generic mode. */
   postLengthPolicy?: PostLengthPolicy;
 };
@@ -55,9 +57,29 @@ export const AI_SALARYMAN_LAB_CODE_PROFILE: BrandCodeProfile = {
   postLengthPolicy: { mode: "limited", maxChars: 280 },
 };
 
+/**
+ * Neutral profile for user-owned social-mobile workspaces. It is intentionally separate from every
+ * existing brand and carries no brand-specific tags, credentials, or publishing permission.
+ */
+export const SOCIAL_MOBILE_USER_CODE_PROFILE: BrandCodeProfile = {
+  key: "social_mobile_user_v1",
+  voiceInstructions: [
+    "一般ユーザーの独立した投稿プロファイルです。特定企業・既存ブランドの人格や固定タグを引き継がないでください。",
+    "自然で親しみやすく、読者に役立つ具体的な内容を優先してください。過度な煽りや断定は避けてください。",
+    "確認できない事実、個人の経験・実績、専門資格、成果、数値を捏造しないでください。提供されていない一人称体験談を書かないでください。",
+    "危険な助言、保証、誤解を招く主張を避け、必要な前提や不確実性を明確にしてください。",
+  ],
+  reportFixedHashtags: [],
+  dryRunPostTypes: ["brand_post"],
+  dryRunPromptPreamble:
+    "一般ユーザー向けの安全なプレビュー生成。特定ブランドの人格・タグを推測しない。",
+  defaultTopicSeed: "日々の生活や仕事に役立つ小さな工夫",
+};
+
 const CODE_PROFILES: ReadonlyMap<string, BrandCodeProfile> = new Map([
   [KABUMORI_CODE_PROFILE.key, KABUMORI_CODE_PROFILE],
   [AI_SALARYMAN_LAB_CODE_PROFILE.key, AI_SALARYMAN_LAB_CODE_PROFILE],
+  [SOCIAL_MOBILE_USER_CODE_PROFILE.key, SOCIAL_MOBILE_USER_CODE_PROFILE],
 ]);
 
 /**

@@ -45,7 +45,7 @@ export class SupabaseSocialRepository {
       if (typeof row.brand_id !== 'string' || !brandIds.includes(row.brand_id) || typeof row.id !== 'string' || typeof row.handle !== 'string') return [];
       const platform = row.platform === 'instagram' || row.platform === 'threads' ? row.platform : row.platform === 'x' ? 'x' : null;
       if (!platform) return [];
-      return [{ id: row.id, platform, profile: { displayName: row.handle, handle: `@${row.handle.replace(/^@/u, '')}`, avatarColor: '#475569', voice: { tone: '設定未取得', language: '日本語', avoid: [] } }, connectionStatus: row.connection_status === 'connected' ? 'connected' : 'needs_attention', postingState: row.publish_enabled === false ? 'paused' : 'active' }];
+      return [{ id: row.id, brandId: row.brand_id, platform, profile: { displayName: row.handle, handle: `@${row.handle.replace(/^@/u, '')}`, avatarColor: '#475569', voice: { tone: '設定未取得', language: '日本語', avoid: [] } }, connectionStatus: row.connection_status === 'connected' || row.connection_status === 'identity_verified' ? 'connected' : 'needs_attention', postingState: row.publish_enabled === false ? 'paused' : 'active' }];
     });
     const posts: PlannedPost[] = (scheduleRows ?? []).flatMap((row) => {
       if (typeof row.brand_id !== 'string' || !brandIds.includes(row.brand_id) || typeof row.id !== 'string' || typeof row.scheduled_for !== 'string' || typeof row.post_type !== 'string') return [];

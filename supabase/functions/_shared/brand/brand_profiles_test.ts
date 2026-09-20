@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AI_SALARYMAN_LAB_CODE_PROFILE, KABUMORI_CODE_PROFILE } from "./brand_profiles.ts";
+import { SOCIAL_MOBILE_USER_CODE_PROFILE, resolveBrandCodeProfile } from "./brand_profiles.ts";
 
 const aiLabInstructions = AI_SALARYMAN_LAB_CODE_PROFILE.voiceInstructions.join("\n");
 
@@ -44,4 +45,16 @@ test("AI Lab code profile never imports or reuses Kabumori's voice module", asyn
   const source = await readFile(new URL("./brand_profiles.ts", import.meta.url), "utf8");
   const aiLabSection = source.slice(source.indexOf("AI_SALARYMAN_LAB_CODE_PROFILE"));
   assert.doesNotMatch(aiLabSection, /KABUMORI_VOICE/u);
+});
+
+test("general-user profile is neutral, isolated, and has no fixed hashtags or publishing switch", () => {
+  assert.equal(resolveBrandCodeProfile("social_mobile_user_v1"), SOCIAL_MOBILE_USER_CODE_PROFILE);
+  assert.deepEqual(SOCIAL_MOBILE_USER_CODE_PROFILE.dryRunPostTypes, ["brand_post"]);
+  assert.deepEqual(SOCIAL_MOBILE_USER_CODE_PROFILE.reportFixedHashtags, []);
+  assert.equal(SOCIAL_MOBILE_USER_CODE_PROFILE.defaultTopicSeed, "日々の生活や仕事に役立つ小さな工夫");
+  const instructions = SOCIAL_MOBILE_USER_CODE_PROFILE.voiceInstructions.join("\n");
+  assert.match(instructions, /一人称体験談を書かない/u);
+  assert.match(instructions, /特定企業・既存ブランドの人格や固定タグを引き継がない/u);
+  assert.doesNotMatch(instructions, /#日本株|#日経平均|#かぶモリ/u);
+  assert.equal(resolveBrandCodeProfile("missing_profile"), null);
 });

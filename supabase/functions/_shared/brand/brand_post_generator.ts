@@ -6,8 +6,15 @@
 // itself does not use this module -- its six existing post_type generators in index.ts are untouched, and
 // this module never reaches "kabumori" through any of its own logic (it works from whatever
 // BrandContext it is given).
-import { assertBrandDryRunAllowed } from "./publish_guard.ts";
+import {
+  assertBrandDryRunAllowed,
+  assertSocialMobilePreviewGenerationAllowed,
+} from "./publish_guard.ts";
 import { type BrandContext, BrandContextError } from "./brand_context.ts";
+import {
+  type SocialMobileContentSettings,
+  socialMobileGenerationGuidance,
+} from "./social_mobile_content_settings.ts";
 import {
   assertPostWithinLengthPolicy,
   postCharacterCount,
@@ -76,18 +83,26 @@ export async function generateBrandPost({
   context,
   postType,
   topicSeed,
+  generationPurpose = "scheduled",
+  contentSettings,
   fetchImpl = fetch,
 }: {
   openAiApiKey: string;
   context: BrandContext;
   postType: string;
   topicSeed?: string;
+  generationPurpose?: "scheduled" | "social_mobile_preview";
+  contentSettings?: SocialMobileContentSettings;
   fetchImpl?: typeof fetch;
 }): Promise<BrandPostDraft> {
   // Generation is allowed for dry_run and live (same rule as buildBrandDryRunPreview) -- only a
   // disabled/unknown brand is refused here. Whether the *result* may reach X is a separate question,
   // decided later by assertBrandPublishAllowed, never by this function.
-  assertBrandDryRunAllowed(context);
+  if (generationPurpose === "social_mobile_preview") {
+    assertSocialMobilePreviewGenerationAllowed(context);
+  } else {
+    assertBrandDryRunAllowed(context);
+  }
   if (!context.codeProfile.dryRunPostTypes.includes(postType)) {
     throw new BrandContextError("BRAND_POST_TYPE_UNSUPPORTED");
   }
@@ -101,13 +116,18 @@ export async function generateBrandPost({
   const lengthPolicy = context.codeProfile.postLengthPolicy;
   const instructions = [
     ...context.codeProfile.voiceInstructions,
+    ...(generationPurpose === "social_mobile_preview"
+      ? [context.codeProfile.dryRunPromptPreamble]
+      : []),
+    ...(contentSettings ? socialMobileGenerationGuidance(contentSettings) : []),
     lengthPolicy
       ? "日本語で、自然な一つの投稿本文だけを書いてください。見出し・箇条書き記号・前置きは不要です。"
       : "日本語で、200〜400文字程度の自然な一つの投稿本文だけを書いてください。見出し・箇条書き記号・前置きは不要です。",
     ...(lengthPolicy ? [postLengthInstruction(lengthPolicy)] : []),
     hashtagInstruction,
   ].join("\n");
-  const topic = topicSeed?.trim() || DEFAULT_TOPIC_SEED;
+  const topic = topicSeed?.trim() || context.codeProfile.defaultTopicSeed ||
+    DEFAULT_TOPIC_SEED;
 
   const response = await fetchImpl(OPENAI_RESPONSES_URL, {
     method: "POST",
