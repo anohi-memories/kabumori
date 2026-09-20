@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase12-general-user-content-profile-and-dry-run-20260920
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: Phase 11でgeneral-user X OAuthがproduction実証済みになったため、一般ユーザーbrandをcontent-generation pipelineへ安全に接続する最小基盤を作る。まず `social_mobile_user_v1` code profile、general-user posting defaults、dry-run generation/read pathまで。real X post・publish_enabled=true・自動投稿はまだ行わない。
