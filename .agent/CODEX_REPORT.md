@@ -1,5 +1,32 @@
 # Codex Report
 
+## Latest H1 result — important-news shadow coverage-gap source research (2026-09-20)
+
+- task_id: `important-news-phase1-shadow-coverage-gap-expansion-candidate-20260920`
+- result: `review_required` — source/lane research completed; no source met the acceptance bar for a local parser/runtime candidate. C1 review requested.
+- source_base: fresh GitHub `main` at `827a0afc0ef625708aae8509a07a7f9ce79d91ce`. Candidate branch was rebased onto this exact main; the intervening commits touched only H2's app/config and control files.
+- candidate_branch: [codex/important-news-phase1-shadow-coverage-gap-expansion-20260920](https://github.com/anohi-memories/kabumori/tree/codex/important-news-phase1-shadow-coverage-gap-expansion-20260920)
+- candidate_commit: `451d1812aa443522307401e163fb34296e4de772` (documentation-only).
+- research_document: [SHADOW_COVERAGE_GAP_RESEARCH_2026-09-20.md](https://github.com/anohi-memories/kabumori/blob/codex/important-news-phase1-shadow-coverage-gap-expansion-20260920/docs/news-coverage/SHADOW_COVERAGE_GAP_RESEARCH_2026-09-20.md)
+- changed_files_on_candidate_branch: only `docs/news-coverage/SHADOW_COVERAGE_GAP_RESEARCH_2026-09-20.md`. No source, parser, tests, migration, Function, or production code changed.
+
+### Findings
+
+- TDnet: current live monitor uses the public listing HTML, but its `robots.txt` disallows all crawling; JPX's independent structured TDnet API is paid. Do not copy live rows into shadow and call that independent measurement.
+- North Korea/J-Alert: MOD archive direct fetch returned 403; MOD RSS is low cadence and is not a launch-alert feed. NHK international RSS is reachable and has explicit timezone offsets, including a later North Korea missile-related item, but it does not prove the Sep 12 event, the current parser's 8-item cap can omit fresh entries, and business reuse terms are unclear. Research-only; do not poll/deploy pending written permission and event-window validation.
+- Shipping: UKMTO's relevant public incident page is not machine-retrievable in the probe (403); no authless public feed/API was validated. China: no current structured official feed with proven cadence/timestamp lineage. Abrupt market moves: current MIC metrics are date-only/daily, insufficient for intraday triggers; realtime market data carries access/licensing constraints.
+- Backtest: the 19-row Sep 4–15 replay cohort has no replacement-route `first_seen_at` for any row. Specific source publication times (e.g. AP/Guardian shipping cases) are not collector ingestion evidence. Sep 18 BOJ predates the observed shadow window. No TP/FP/FN or detection-delay score is claimed.
+- Shadow readback: 12/12 natural run rows completed through 2026-09-20 04:40 UTC; 0 stored live matches and 0 conditional-search calls in the sampled window. The preceding 48h live high-importance set had 14 rows (13 TDnet, 1 BOJ). Recall parity remains unproven; every paid/live fallback remains enabled.
+- Exact production proposal: none. No Web Search reduction, threshold change, fallback substitution, or source polling is recommended.
+
+### Tests and safety
+
+- Existing shadow Deno suite: 14 passed / 0 failed with `--no-check` and read access scoped to the shadow source/migrations. The default checked run is blocked by absent `npm:@types/node` in the clean worktree; dependencies were not installed because runtime code was unchanged.
+- `git diff --cached --check`: passed for the documentation commit.
+- Production mutation: **0**. SQL was SELECT-only. No manual Function invoke, replay, deployment, Cron/schema/RPC/secret/Vault/MIC/legacy-pipeline change, X/Push/App/OAuth action, or candidate injection occurred.
+- remaining_issues: source rights/access and historical ingestion proof are unresolved for every uncovered lane; full reasoning and per-lane matrix are in the research document. Keep fallbacks and request a separately scoped review before any production change.
+- next_owner: `chatgpt`; stop for C1.
+
 ## Latest H1 result — important-news shadow observation and match audit (2026-09-20)
 
 - task_id: `important-news-phase1-shadow-observation-and-match-audit-20260920`

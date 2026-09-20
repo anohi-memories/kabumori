@@ -3,8 +3,8 @@
 - task_id: important-news-phase1-shadow-coverage-gap-expansion-candidate-20260920
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: live shadow監査で判明したcoverage gapを埋めるため、TDNET/Japan IR・North Korea/J-Alert・shipping/chokepoints・China・abrupt market moves等の追加source候補をread-only調査し、production未変更のsource-expansion candidateとtestsまで作る。

@@ -15,11 +15,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: important-news-phase1-shadow-observation-and-match-audit-20260920
+- task_id: important-news-phase1-shadow-coverage-gap-expansion-candidate-20260920
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: read-only observation/match audit完了。0 matchのためrecall parity未証明。14日自然観測継続、legacy fallback維持。C1 review required.
+- note: source discovery完了。採用可能な独立sourceはなく、全lane paid/live fallback維持。production mutation 0。調査文書はcandidate branchにpush済み、C1 review required.
 
 ### Codex slot 2
 - owner: codex

@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-20 JST (H1 shadow coverage-gap expansion candidate ready; H2 Phase11 review_required; G1 natural shadow wait; G2 done)
+- checked_at: 2026-09-20 JST (H1 coverage-gap source research review_required; per-slot details below)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,10 +14,10 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `important-news-phase1-shadow-coverage-gap-expansion-candidate-20260920`
-  - Previous read-only shadow audit is C1 PASS.
-  - Next H1 investigates missing lanes (TDNET/Japan IR, North Korea/J-Alert, shipping/chokepoints, China/systemic, abrupt market moves) and may build local-only source/parser/test candidates.
-  - Production mutation is 0; no deploy/Cron/schema/secret/live fallback change.
+- Codex slot 1: `review_required` — `important-news-phase1-shadow-coverage-gap-expansion-candidate-20260920`
+  - Lane/source review completed; no new source passed acceptance, so no parser/runtime candidate was added.
+  - Candidate research document: `docs/news-coverage/SHADOW_COVERAGE_GAP_RESEARCH_2026-09-20.md` on `codex/important-news-phase1-shadow-coverage-gap-expansion-20260920`.
+  - All lane fallbacks remain. Production mutation is 0; C1 review requested.
   - Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase11-x-portal-and-real-oauth-qa-20260920`
@@ -36,7 +36,7 @@
 
 ## Parallel safety
 
-- H1はread-only shadow observation/match auditで完了。production mutation 0; shadow/legacy Cron、Function、schema、OAuth/Vaultは変更なし。
+- H1はcoverage-gap source researchを完了。production mutation 0; shadow/legacy Cron、Function、schema、OAuth/Vaultは変更なし。採用sourceなし、paid/live fallbackを維持。
 - H2はsocial-mobile Phase10 production migration / x-oauth-connect-user deployのみ。Portal/real OAuth/X postは別ゲート。G1のmarket-report objectsを触れない。
 
 - G1はmarket-report schema/functions/`x-test-post`/personalized-reports領域。
