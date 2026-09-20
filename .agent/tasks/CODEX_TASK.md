@@ -3,8 +3,8 @@
 - task_id: important-news-phase1-shadow-observation-plus-source-rights-research-20260920
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: 10分shadowの自然観測を継続しつつ、無料sourceで埋まらなかったlaneについて利用条件・公式API・低コストのlicensed data候補を調査し、将来の安全なcoverage拡張案を作る。production挙動は変更しない。
@@ -273,3 +273,12 @@ The current `$81.68 / $163.36 per 30d` figures are ~4x too high because they mul
 7. Return to `review_required` and stop for C1 again.
 
 **Recommended model: Luna.**
+
+
+## C1 continuation completed — 2026-09-20
+
+- Corrected the baseline arithmetic in the H1 report and research document using the prior small-sample mean of $0.056721 per fetch cycle.
+- 12 cycles/day = 48 nominal search slots/day (4 per cycle) = $0.680652/day, about $20.42/30d. 24 cycles/day = 96 nominal search slots/day = $1.361304/day, about $40.84/30d. Search-slot counts are not multiplied by the per-cycle mean.
+- Refreshed documentation-only artifact is on [codex/important-news-source-rights-research-20260920-c1fix](https://github.com/anohi-memories/kabumori/tree/codex/important-news-source-rights-research-20260920-c1fix) at ffb21da81a082288dacb652f82640f5165b965a5; it is based on the fresh main head 2fbb0a11480a79718d8cadfa5e6c65693cf0de33. No merge requested.
+- Existing observations and source-rights findings are unchanged. Production mutation remains 0.
+- status: review_required; next_owner: chatgpt. Stop for C1.
