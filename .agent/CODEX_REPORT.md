@@ -1,3 +1,5 @@
+# Codex Report
+
 ## Latest H1 result — important-news GDELT timeout diagnosis (2026-09-20)
 
 - task_id: important-news-phase1-gdelt-timeout-diagnosis-and-fallback-candidate-20260920
