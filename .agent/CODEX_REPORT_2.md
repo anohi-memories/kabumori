@@ -1,5 +1,17 @@
 # Codex Slot 2 Report
 
+## H2 — Phase 11 QA stopped for mobile public-env bundle defect (2026-09-20)
+
+- task_id: `social-mobile-app-phase11-x-portal-and-real-oauth-qa-20260920`
+- result: User confirmed the X Portal setup, dedicated non-admin QA Auth user, and dedicated test X account. During installation/startup on the paired iPhone, the app showed `Supabase接続設定がありません` and could not sign in. This is a real client configuration defect, so the OAuth round-trip was stopped before login/authorization and returned to C2 for review.
+- source_base: fresh isolated clone initially at `origin/main` `739b3caab30c33b138a45cc06bb7444a00ca8a81`; before preparing the C2 review change, fetched and fast-forwarded to fresh `origin/main` `d3070e3451d8413fe1e10057410a38b3d385dd8b`. The four intervening commits changed only `.agent/CURRENT_STATE.md` and slot-1 `.agent/tasks/CODEX_TASK.md`, so there was no overlap with this H2 source/TASK/REPORT. Other slots remained H1 `review_required`, G1 `idle`, G2 `done`. Formal repo and its existing uncommitted changes were untouched.
+- root_cause: `apps/social-mobile/src/lib/supabase.ts` read `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` indirectly through a generic `process.env` object. Expo's native bundle did not inline those dynamic lookups; the first installed build's JS bundle contained neither configured value and the app correctly failed closed with the missing-config banner.
+- local_source_fix: In the isolated fresh clone only, define a small `expoPublicEnv` object using direct static `process.env.EXPO_PUBLIC_*` property references and use it as the default for both `getSupabaseConfig()` and `createSupabaseClient()`. This keeps injected test environments supported, uses only the publishable client key, and does not add secrets or change auth/RLS behavior. Source change is limited to `apps/social-mobile/src/lib/supabase.ts`; it is not deployed. Temporary Expo prebuild outputs remain local/untracked and are not part of the source patch.
+- verification: `npm run typecheck` PASS; `npm run lint` PASS; `deno test --no-check --allow-read supabase/functions/x-oauth-connect-user/oauth_logic_test.ts supabase/functions/x-oauth-connect-user/mobile_oauth_onboarding_test.ts` **27/27 PASS**; `npx expo export --platform ios` PASS and a non-printing bundle check confirmed both configured values were embedded; Release iOS build/install PASS and the login screen appeared without the missing-config banner; `git diff --check` PASS.
+- oauth_round_trip: **not attempted**. QA login credentials were not requested or entered; X consent was not opened; no OAuth state, workspace, membership, social account, or Vault token was created by this attempt. No X API, media upload, or post was made; `publish_enabled` was not changed.
+- next_gate: C2 should review the one-file mobile environment-inlining fix before any production-facing QA continues. After approval, use the dedicated QA Auth user on the installed app; the user must enter credentials directly, and confirmation is still required immediately before granting X account access on the consent screen.
+- safety_checks: production DB/Vault writes 0; OAuth state/account/workspace writes 0; X Developer Portal changes 0; X consent 0; X API/media/post 0; deploy 0; DB/Cron/settings/secrets/OAuth configuration changes 0; formal repo changes 0; secrets/passwords/token values exposed 0.
+
 ## H2 — Phase 11 X Portal / real OAuth QA manual gate (2026-09-20)
 
 - task_id: `social-mobile-app-phase11-x-portal-and-real-oauth-qa-20260920`

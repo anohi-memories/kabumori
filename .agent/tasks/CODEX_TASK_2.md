@@ -160,6 +160,8 @@ If a real defect is discovered:
 - do not patch production ad hoc
 - stop, create a source fix on fresh main, test it, and return for C2 before redeploying.
 
+Latest continuation update (2026-09-20): the iOS app failed closed because Expo did not inline Supabase public configuration read through generic `process.env` indexing. A one-file source fix is on an isolated fresh-main clone and passed typecheck, lint, focused OAuth tests, iOS export/bundle verification, Release build/install, and `git diff --check`. The real OAuth round-trip stopped before QA login, consent, OAuth-state creation, or production writes. C2 must review this source fix before QA resumes. Keep `status: review_required`, `next_owner: chatgpt`.
+
 ## Completion / C2
 
 When complete:

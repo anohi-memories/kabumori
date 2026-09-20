@@ -6,7 +6,15 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 export type SupabaseConfig = { url: string; publishableKey: string };
 export type SupabaseConfigResult = { ok: true; config: SupabaseConfig } | { ok: false; reason: string };
 
-export function getSupabaseConfig(env: Record<string, string | undefined> = process.env): SupabaseConfigResult {
+// Expo only inlines EXPO_PUBLIC_* values when they are referenced statically.
+// Reading the keys through a generic `process.env` object leaves them absent
+// from a native bundle, so keep these direct property accesses at module scope.
+const expoPublicEnv = {
+  EXPO_PUBLIC_SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
+  EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+};
+
+export function getSupabaseConfig(env: Record<string, string | undefined> = expoPublicEnv): SupabaseConfigResult {
   const url = env.EXPO_PUBLIC_SUPABASE_URL?.trim();
   const publishableKey = env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim();
   if (!url || !publishableKey) return { ok: false, reason: 'Supabase接続設定がありません。apps/social-mobile/.env.exampleを参照してください。' };
@@ -15,7 +23,7 @@ export function getSupabaseConfig(env: Record<string, string | undefined> = proc
   return { ok: true, config: { url, publishableKey } };
 }
 
-export function createSupabaseClient(env: Record<string, string | undefined> = process.env): SupabaseClient | null {
+export function createSupabaseClient(env: Record<string, string | undefined> = expoPublicEnv): SupabaseClient | null {
   const result = getSupabaseConfig(env);
   if (!result.ok) return null;
   return createClient(result.config.url, result.config.publishableKey, {
