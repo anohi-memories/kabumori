@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-20 JST (H1 shadow continuation ready; H2 Phase10 OAuth backend rollout C2 PASS/done; G1 natural shadow wait; G2 done)
+- checked_at: 2026-09-20 JST (H1 shadow continuation ready; H2 Phase11 X Portal + real OAuth QA ready; G1 natural shadow wait; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -22,9 +22,10 @@
   - Legacy search reduction/cutover remains unapproved. MIC remains read-only/additional-trigger only.
   - Recommended model: Sol.
 
-- Codex slot 2: `done` — `social-mobile-app-phase10-production-oauth-rollout-20260920`
-  - C2 PASS。production migration適用と `x-oauth-connect-user` v1 deploy/postflight完了。
-  - X Developer Portal設定・real OAuth round-trip・Vault実token write・real X postは未実施で別ゲート。
+- Codex slot 2: `ready` — `social-mobile-app-phase11-x-portal-and-real-oauth-qa-20260920`
+  - Phase10 C2 PASS済みbackendを使い、X Developer Portal設定確認と専用non-admin QA user + dedicated test X accountで1回のreal OAuth round-tripを行う。
+  - real X post/media upload/publish_enabled=trueは禁止。成功後のQA fixture cleanupは別承認。
+  - Recommended model: Luna。具体的なOAuth/DB/Vault blockerが出た時だけSol検討。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
