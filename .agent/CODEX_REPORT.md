@@ -1,5 +1,44 @@
 # Codex Report
 
+## Latest H1 result — important-news shadow observation + source-rights research (2026-09-20)
+
+- task_id: important-news-phase1-shadow-observation-plus-source-rights-research-20260920
+- result: review_required — read-only observation and source-rights/provider research completed to the extent supported by the current sample; C1 review requested.
+- source_base: fresh origin/main 06c15cfa7486e15175bb7490cdb436770288e88a immediately before documentation branch commit. The artifact branch was fast-forwarded to this main and contains no runtime code changes.
+- candidate_branch: [codex/important-news-source-rights-research-20260920](https://github.com/anohi-memories/kabumori/tree/codex/important-news-source-rights-research-20260920)
+- candidate_commit: 5d726f5375beb717ff473c8ae8867b91e0c18210 (documentation-only; not merged).
+- research_document: [SHADOW_RIGHTS_AND_LICENSED_OPTIONS_2026-09-20.md](https://github.com/anohi-memories/kabumori/blob/codex/important-news-source-rights-research-20260920/docs/news-coverage/SHADOW_RIGHTS_AND_LICENSED_OPTIONS_2026-09-20.md)
+- changed implementation files: none. Artifact branch changes only the research document; main receives H1 control/report/index updates only.
+
+### Natural shadow readback
+
+- Observation rows: 17 natural scheduled runs, 2026-09-20 02:30–05:30 UTC (11:30–14:30 JST); 17/17 completed, 0 partial, 0 failed.
+- The 6h, 12h, and 24h queries each returned the same 17 rows because the shadow had activated at 02:30 UTC. This is only about 3 hours of observed history, not complete windows; no 6/12/24-hour trend conclusion is claimed.
+- 11 source checks/run (187 checks) and 24 per-run candidate observations/run (408 observations). Deduped table has 41 event keys: Al Jazeera 16, BBC World 9, JMA 16. Latest sighting was at 05:30 UTC.
+- Ten non-GDELT sources were healthy in all 17 runs. GDELT: 3 failed attempts at the 15-second timeout, 14 cooldown skips, 0 items. All run-level error_summary arrays were empty; 17 distinct scheduled slots, no duplicate slot rows. Platform logs were not inspected, so this does not rule out non-persisted transient/auth attempts.
+- Same-window live important/most_important candidates: 0. Stored live matches: 0. No positive high-importance event occurred in the observation window; 0 matches is not evidence of false negatives or parity.
+- Shadow costs: 0 conditional searches, 0 Web Search calls, 0 tokens, $0 estimated cost in this quiet sample. All paid/live fallbacks stay enabled.
+
+### Rights, provider options, and economics
+
+- JPX TDnet API Index is the most concrete lane-specific route found: official materials say third-party redistribution is allowed, the index API has no API information fee, fixed basic fee is ¥70,000/month before tax, index content is real-time, and the API provides five-year history. Corporate contract, permitted polling, retention/cache, attribution, and exact end-user use still need written confirmation. The test server returns dummy data. The individual J-Quants TDnet add-on at ¥11,000/month is prohibited for corporate/academic use; TDnet on Snowflake Index is ¥100,000/month and disallows external-user distribution.
+- Other candidates: AP Media API supports continuous feeds with contract-based item pricing; Lloyd’s List has vessel/risk APIs but no verified incident-alert coverage and quote-only pricing; NewsAPI Business is $449/month (developer tier cannot be production); NewsData.io Basic is $199.99/month but its free tier is delayed 12 hours and paid display rights/coverage are not independently verified; Twelve Data plan details conflict ($499 Venture card / $414 annual, footer “from $149”), and exchange-specific rights require confirmation.
+- Official-source terms are mixed: MOD PDL1.0 allows commercial reuse with attribution except excluded/third-party items; NHK general news RSS business rights remain unconfirmed; UKMTO site content references OGL but no authless API was validated and terms are old; PBOC/MOFCOM/State Council terms vary by subsite and are not treated as blanket permission.
+- Illustrative legacy cost comparison only: multiplying prior small-sample $0.056721/fetch-cycle mean by nominal 48 searches/day through Sep 23 gives about $81.68/30 days; 96/day from Sep 24 gives about $163.36/30 days. These are not invoices or a spend forecast.
+- A/B/C architecture comparison and per-lane fallback status are documented in the research artifact. No architecture is ranked, no source is adopted, and no legacy search is reduced.
+
+### Exact next proposal
+
+Proposal category 3 only: obtain written JPX confirmation for TDnet API Index-only corporate terms and final cost, including eligibility, end-user title/index display, poll/rate guidance, caching/retention, attribution, history, latency/support. No inquiry was sent in this task. No account, key, trial, contract, billing, or adapter was created.
+
+### Tests, safety, and remaining issues
+
+- Supabase validation was SELECT-only. No runtime code changed, so no code test suite was run.
+- Production mutation: 0. No Function invoke/deploy, Cron, schema/migration/RPC, secret/Vault, source-polling setting, API account/contract/purchase/trial, fallback reduction, X/Push/App/OAuth, or manual OpenAI replay. Candidate injection: 0.
+- Remaining: 6h/12h/24h windows are incomplete; recall parity and lane coverage remain unproven; GDELT remains degraded; source-specific contract, polling, retention and display terms require confirmation before any integration.
+- next_owner: chatgpt; stop for C1. No merge requested or authorized.
+
+---
 ## Latest H1 result — important-news shadow coverage-gap source research (2026-09-20)
 
 - task_id: `important-news-phase1-shadow-coverage-gap-expansion-candidate-20260920`

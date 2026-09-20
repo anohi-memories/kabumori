@@ -15,11 +15,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: important-news-phase1-shadow-coverage-gap-expansion-candidate-20260920
+- task_id: important-news-phase1-shadow-observation-plus-source-rights-research-20260920
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: source discovery完了。採用可能な独立sourceはなく、全lane paid/live fallback維持。production mutation 0。調査文書はcandidate branchにpush済み、C1 review required.
+- note: 自然shadowを17回read-only確認（約3時間、6/12/24hは未充足）。利用条件・licensed候補調査は完了。TDnet Index APIの契約条件確認を次提案とし、production mutation 0。C1 review required.
 
 ### Codex slot 2
 - owner: codex

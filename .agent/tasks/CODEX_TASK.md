@@ -3,8 +3,8 @@
 - task_id: important-news-phase1-shadow-observation-plus-source-rights-research-20260920
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: 10分shadowの自然観測を継続しつつ、無料sourceで埋まらなかったlaneについて利用条件・公式API・低コストのlicensed data候補を調査し、将来の安全なcoverage拡張案を作る。production挙動は変更しない。

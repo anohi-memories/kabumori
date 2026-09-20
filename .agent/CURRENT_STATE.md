@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-20 JST (H1 shadow observation + source-rights research ready; per-slot details below)
+- checked_at: 2026-09-20 JST (H1 shadow observation + source-rights research report ready for C1)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,10 +14,10 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `important-news-phase1-shadow-observation-plus-source-rights-research-20260920`
-  - Continue natural 10-minute shadow observation while researching source rights, official APIs, and low-cost/licensed provider options for unresolved lanes.
-  - Production mutation is 0; no deploy/Cron/schema/secret/API purchase/legacy-search reduction.
-  - Recommended model: Luna.
+- Codex slot 1: `review_required` — `important-news-phase1-shadow-observation-plus-source-rights-research-20260920`
+  - 17 natural shadow runs read-only audited; available sample spans about 3 hours, so requested 6/12/24h windows remain incomplete.
+  - Rights/provider research is documented on the non-merged H1 candidate branch. No source adopted; all paid/live fallbacks remain enabled.
+  - Production mutation is 0. Exact next proposal: JPX TDnet Index API terms/cost confirmation only. Stop for C1.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase11-x-portal-and-real-oauth-qa-20260920`
   - Phase10 C2 PASS済みbackendを使い、X Developer Portal設定確認と専用non-admin QA user + dedicated test X accountで1回のreal OAuth round-tripを行う。
