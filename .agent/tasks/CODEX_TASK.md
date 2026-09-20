@@ -1,562 +1,298 @@
 # Codex Task
 
-- task_id: important-news-phase1-live-shadow-rollout-20260920
+- task_id: important-news-phase1-shadow-observation-and-match-audit-20260920
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: chatgpt
-- priority: urgent
-- recommended_model: Sol High
-- purpose: C1 PASS済みのPhase 1調査結果を受け、旧重要ニュース監視を一切止めずにlive shadowをproductionへ安全導入し、replacement経路の実first_seen/recall/latency/costを測定できる状態を作る。
+- status: ready
+- next_owner: codex
+- priority: high
+- recommended_model: Luna
+- purpose: 10分live shadow稼働後の実データをread-onlyで監査し、source health / first_seen / live match / conditional search / costを評価する。0 live matchの原因を切り分け、必要ならmatching改善案とローカルテストcandidateまで作る。production挙動は変更しない。
 
-## User approval
-
-2026-09-20、前C1で「次は旧方式を残したままlive shadowを動かし、実際のfirst_seen時刻を集める。これは本番にshadow用Function/Cron/テーブルを追加するため明示承認が必要」と説明した上で、ユーザーが「すすめて」と明示。
-
-よって本H1では **shadow専用production resourceの最小導入を承認済み** と扱う。
-
-ただし承認範囲はshadowのみ。
-旧production pipelineの削減/cutoverは未承認。
-
-## Proven basis
+## Approved basis
 
 前H1 C1 PASS:
-- durable equivalent replay artifact:
-  - branch: codex/important-news-phase1-replay-followup-20260919
-  - commit: b7f14ef3455339b7857aa7f155aa591c494ad903
-- 19件のequivalent cohortを再構築済み。
-- historical replacement first_seenは19/19未証明。
-- 全対象laneでlegacy paid fallback維持。
-- Phase 0 usage meteringはproduction v58で自然実行確認済み。
-- current important-news-fetch:
-  - 9/19〜9/23: 12 fetch cycles/day = nominal 48 fixed searches/day
-  - 9/24以降: 24 cycles/day = nominal 96 fixed searches/day
-- natural cost sample:
-  - 4 runs / 18 actual web_search calls
-  - total $0.226884
-  - mean $0.056721/fetch cycle
-- MICはadditional trigger only。速報の必須dependencyにはしない。
-- official-title/body-missing candidateは別branchにisolated/unintegrated:
-  - codex/important-news-phase1-recall-safe-20260919 @ 8fd612471b04d09bd379a7ed74ed99e84647a72b
+- PR #1 merged manually
+- merge commit: 4a28c168f4c7a3acfb31172a685e2a1de6b0542f
+- important-news-shadow v6 ACTIVE
+- shadow Cron job 38 = */10 * * * *
+- dedicated X-Cron-Secret path active
+- shadow tables isolated / RLS enabled
+- two natural 30m canaries + one natural 10m run completed
+- observed 24 free-source candidates, all with first_seen_at
+- observed paid Web Search in reviewed runs = 0
+- legacy important-news Cron jobs 2/3/4/8 unchanged
+- important-news-monitor source hash unchanged
+- X / Push / App writes = 0
+- recall parity NOT proven because reviewed runs had 0 live matches
 
-## Primary goal
+## User goal
 
-live shadowで次を初めて実測可能にする:
+次は待つだけではなく、shadow実データを使って以下を前に進める:
 
-1. free/official source側の実first_seen_at
-2. old pipeline detected_atとの実時間差
-3. important/most_important eventの取り逃し有無
-4. source health / rate limit / stale状態
-5. conditional Web Searchの発火回数と費用
-6. lane別にlegacy paid fallbackを安全に外せるか
+1. sourceごとの稼働安定性を把握
+2. first_seenが正しく蓄積されているか確認
+3. live側important/most_importantとのmatchが0件だった原因を切り分け
+4. matcherが厳しすぎる/弱すぎる可能性をofflineで検証
+5. conditional Web Searchが必要な時だけ発火する設計か監査
+6. shadow追加コストを実測
+7. legacy paid fallbackを将来lane単位で外せる証拠の作り方を固める
 
-**旧pipelineは完全維持。投稿/X/Push/Appは旧pipelineだけ。**
+## Model policy
 
-## Non-negotiable safety
-
-- old important-news-fetch/judgement/generation/publish-readyの挙動を変更しない。
-- old fixed breaking searchesを減らさない。
-- existing important_news_candidates / important_news_monitor_runs にshadow candidateを書かない。
-- shadow dataは専用tableのみ。
-- shadowからX/Push/App/publish RPCを呼ばない。
-- shadow candidateをlive judgement/generation selectorがconsumeできない構造にする。
-- OAuth/Vault/secrets/social-mobile/market-report/G1/G2/H2へ触れない。
-- MICはread-only trigger参照のみ。MIC側変更禁止。
-- blind supabase db push禁止。
-- migration history repair/reconcile禁止。
-- exact migrationのみ。
-- 既存未commit変更は触らない。
-- production write前にfresh origin/main + 他slot再確認。
+- **Lunaで開始・継続する。**
+- このH1はread-only監査とローカル検証が中心なのでSol不要。
+- production security discrepancy、unexpected DB mutation、secret/auth異常など明確な高リスクblockerが出た場合のみSTOPしてSol検討。
+- 単に分析が複雑という理由ではSolへ上げない。
 
 ## Mandatory startup
 
-開始前に必ず:
+開始前:
 1. .agent/ORCHESTRATION.md
 2. .agent/CURRENT_STATE.md
 3. this TASK
 4. .agent/CODEX_REPORT.md
 5. other 3 slot TASKs
 6. fresh origin/main
-7. production Cron inventory read-only
-8. production important-news schema/function inventory read-only
-9. current important-news-monitor version/source hash read-only
-10. current Phase 0 ai_usage_events/news usage read-only
-11. existing candidate branches/artifacts確認
+7. production shadow Cron/read-only
+8. production important-news-shadow version/source hash/read-only
+9. production legacy important-news Cron/function hashes/read-only
+10. shadow tables read-only
+11. live important_news_candidates read-only
 
-同じDB migration / same Function / same Cron / important-news shadow objectsを他slotが変更中ならSTOP。
+競合時STOP:
+- 他slotが important-news-shadow/**
+- shadow schema/migration
+- shadow Cron
+を変更中なら、writeは行わずread-only auditだけに限定。
 
-## Approved architecture
+## Scope A — accumulated shadow audit
 
-### A. Isolated tables
+最新の十分なwindowをread-only集計する。
+最低:
+- since shadow 10m activation
+- plus直近6h/12h/24h view where available
 
-専用table候補:
-- public.important_news_shadow_runs
-- public.important_news_shadow_candidates
-
-必要最小限のみ。
-live tablesは流用しない。
-
-最低記録項目:
-
-shadow_runs:
-- id
-- started_at
-- completed_at
-- trigger
-- source_health jsonb
-- free_fetch_count
+集計:
+- natural shadow run count
+- completed/partial/failed
+- source別 healthy / failed / cooldown
+- source別 candidate counts
+- unique shadow candidates
+- first_seen_at / last_seen_at
+- GDELT timeout/rate-limit behavior
 - conditional_search_count
-- input_tokens/output_tokens/web_search_calls/cost_usd
-- status/error_summary
-- created_at
+- web_search_calls
+- input/output tokens
+- cost_usd
+- ai_usage_events news_shadow_search rows
+- duplicate_run_slot / retry storm有無
+- secret/auth related 401/403/5xx loop有無
 
-shadow_candidates:
-- id
-- shadow_run_id
-- event_key
-- dedupe_key
-- source_name
+人工invokeは禁止。
+自然データのみ。
+
+## Scope B — live comparison
+
+同じ観測windowでlive important_news_candidatesをread-only確認。
+
+特に:
+- important
+- most_important
+- breaking_market
+- market_macro
+- official/RSS由来でshadow sourceと重なるもの
+
+各live eventについて:
+- live id
+- title
 - source_url
-- topic/category
-- headline
+- category/entity/topic
 - published_at
-- first_seen_at
-- trigger_reason
-- free_source_health
-- conditional_search_used
-- query/topic if used
-- estimated_cost
-- matched_live_candidate_id nullable
-- old_detected_at nullable
-- old_importance nullable
-- detection_delay_sec nullable
-- evidence metadata
-- created_at
+- fetched_at
+- importance
+- shadow candidate match有無
+- shadow first_seen_at
+- detection delta
 
-必要なら命名/列はcurrent repo conventionに合わせて調整可。
-RLS/grantsはshadow Functionのservice roleだけを第一候補。
-anon/authenticatedから直接読書きできないこと。
+### 0-match investigation
 
-### B. Shadow Function
+0件が続く場合、最低限以下を分類:
+1. そもそも同期間にlive重要ニュースが無い
+2. source coverageが異なり同一eventを見ていない
+3. canonical URL違い
+4. title normalization/entity key差
+5. category/topic差
+6. matcher thresholdが厳しすぎる
+7. dedupe key/event keyの設計問題
+8. shadow candidate stale/non-material noise中心
 
-新規 isolated Edge Function:
-- important-news-shadow
+「0 match = shadow失敗」と即断しない。
 
-役割:
-- free/official source取得
-- deterministic normalize/dedupe
-- source health記録
-- event/schedule/MIC/source-health trigger判断
-- 条件を満たす場合だけ targeted Web Search
-- live candidatesとのread-only比較
-- shadow tablesへ記録
-- X/Push/App/publish 0
+## Scope C — offline matcher evaluation
 
-既存 important-news-monitor を改造してshadow modeを混ぜるより、isolated Functionを優先。
+production write/deployなし。
 
-### C. Sources
+current matcherを:
+- recent live rows
+- recent shadow rows
+- replay artifact 19件
+に対してofflineで評価。
 
-最低候補:
-- GDELT
-- BBC World
-- Al Jazeera
-- White House
-- ECB
-- SEC
-- JMA/日本の公式防災ソース
-- BOJ / Fed等current official feedで利用可能なもの
+出すもの:
+- true-positive候補
+- false-positive候補
+- false-negative候補
+- match理由
+- threshold/normalization問題
+
+必要なら:
+- local matcher candidate修正
+- unit tests
+- fixture追加
+
+まで可。
 
 ただし:
-- sourceが実際にfreshであることをpreflight確認。
-- NHK RSSは前調査で停止疑い。freshness確認できない限り主要source扱いしない。
-- 1 sourceに依存しない。
-- source-specific rate limit遵守。
-- GDELTはbounded backoff/cooldown。
-- 取得0件とsource healthyを混同しない。
+- important-news-shadow production redeploy禁止
+- Cron変更禁止
+- schema変更禁止
 
-### D. MIC
+matchingを緩める場合も、誤matchを増やさない証拠が必要。
+URL exact/canonical matchを最優先にし、曖昧title similarityだけで強制matchしない。
 
-read-onlyで:
-- market_events
-- market_state_current
+## Scope D — source quality audit
 
-material change/new eventがある場合に追加trigger候補。
-MICが遅い/空/失敗でもshadowは続行。
+各sourceについて:
+- freshness
+- item cadence
+- timestamp quality
+- body/summary availability
+- duplicate noise
+- stale feed risk
+- HTTP/rate-limit behavior
+- market relevance
 
-### E. Conditional Web Search
+source set:
+- BOJ
+- Fed
+- JMA
+- USTR
+- UN peace/security
+- EIA
+- BBC World
+- Al Jazeera
+- ECB
+- SEC
+- GDELT
 
-固定4検索をshadowでも毎回再実行するのは禁止。
+White Houseは現在excluded。再追加はこのH1ではしない。
 
-発火候補:
-- 新規free/official event
-- high-signal title/body不足
-- scheduled event window
-- MIC material change
-- source lane unhealthy/stale時のfallback
-- low-frequency rare-event sweep
+評価区分:
+- primary reliable
+- useful secondary
+- noisy/limited
+- unhealthy
+- insufficient evidence
 
-静かなcycleは0 paid searchesを許容。
+## Scope E — cost / trigger audit
 
-ただしsource failure時にrecallを守るfallbackを禁止しない。
-費用だけを守るhard capで緊急fallbackを止めない。
-
-### F. Matching old pipeline
-
-event_key + normalized entities/topic + canonical URL/content hash等でlive candidateへmatch。
-
-matchできた場合:
-- matched_live_candidate_id
-- old_detected_at
-- old_importance
-- delay sec
-を記録。
-
-match未成立はunknownとして残し、無理にsame event扱いしない。
-
-## Rollout sequence — approved
-
-以下の順序でのみproductionへ進める。
-
-### Gate 1 — source/local implementation
-
-- fresh mainからclean branch/worktree。
-- shadow migration + Function + tests + docs。
-- source health parser tests。
-- dedupe/matching tests。
-- conditional trigger tests。
-- no-publish boundary tests。
-- cost metering tests。
-- git diff --check。
-- Deno/type checks where applicable。
-
-失敗時STOP。
-
-### Gate 2 — exact migration apply
-
-C1前でも、このH1ではユーザー承認済み範囲として **shadow専用migration 1本だけproduction apply可**。
-
-条件:
-- preflightでobject absent/compatible確認。
-- exact SQLのみ。
-- no db push / include-all。
-- grants/RLS/indices read-back。
--既存important-news tables/functionsのhash/schema不変確認。
-- migration apply後にFunction deploy前でもlive pipelineへ影響0であること。
-
-### Gate 3 — shadow Function deploy
-
-- important-news-shadowのみdeploy。
-- existing important-news-monitor redeploy禁止。
-- deploy後source hash/read-back。
-- manual invokeは **dry_run/read-only source checkまたはshadow write smokeのみ** に限定。
-- manual OpenAI Web Searchは原則避ける。trigger logicの人工paid callは禁止。
-- smoke rowsを作る場合は明確にsynthetic=true相当識別、またはrollback/delete可能な専用test row。自然データと混ぜない。
-
-### Gate 4 — Cron
-
-新規shadow Cron 1本。
-最終target cadence:
-- every 10 minutes
-
-ただし最初は safety canary:
-- 30分間隔で最低2回自然実行確認
-- source health / 0 publish / cost / errorを確認
-- 問題なければ10分へ変更可
-
-Cron変更はshadow Cronのみ。
-old Cronは一切変更しない。
-
-### Gate 5 — natural observation
-
-最低限C1までに:
-- 2回以上 natural shadow runs
-- X/Push/App writes 0
-- legacy Cron/hash unchanged
-- source health rows
-- first_seen_at rows or no-event healthy proof
-- conditional Web Search count/cost
-- error/backoff挙動
-を確認。
-
-自然eventが無ければ「recall proven」とはしない。
-
-## Cost guard
-
-Shadow期間は追加費用が発生する。
+shadowのconditional search policyを実データで確認。
 
 必須:
-- Phase 0 ai_usage_events互換またはshadow専用usage記録。
-- feature名はnews_shadow_*などliveと区別。
-- actual web_search_calls / tokens / costをrun単位で記録。
-- daily projected costをReport。
+- quiet cycleで0 paid searchが維持されているか
+- same topic cooldownが効いているか
+- source degradationだけで過剰発火しないか
+- 1 run最大1 search境界
+- observed cost/day extrapolation
+- worst-case設計上限（ただしemergency fallbackを止めるhard cap提案は禁止）
 
-異常ループ防止:
-- same event/topicのcooldown
-- per-source retry backoff
-- run idempotency/claim
-- duplicate trigger suppression
+legacy baseline:
+- through 9/23: 48 nominal searches/day
+- from 9/24: 96 nominal searches/day
 
-ただしemergency fallbackを単純な日額hard capで無効化しない。
+shadow costはlegacy削減効果と混同せず、追加費用として別表示。
 
-## Recall acceptance remains unchanged
+## Scope F — recall evidence plan
 
-今回shadowを入れた時点ではcutoverしない。
+14日観測を最終推奨のまま維持。
 
-将来cutover検討条件:
-- shadow最低14日推奨
-- important / most_important missed = 0
-- match可能eventのreplacement first_seenを実測
-- positive delayは原則<=20分
-- median/p95 old以下目標
-- source-health degradation時のfallback動作確認
-- lane単位で証拠が揃ったものだけlegacy search削減
-- unproven laneはlegacy fallback維持
-- 70% cost reductionはrecallより下位
+ただし今回のH1では、
+- 何をもってlane-safeとするか
+- minimum matched-event count
+- important/most_important zero-miss判定
+- delay <= +20m
+- median/p95
+- source unhealthy fallback
+を具体化。
 
-## Official-body enrichment
+laneごと:
+- war/geopolitics
+- North Korea/J-Alert
+- tariffs/trade/sanctions
+- FX/central-bank
+- disaster/infrastructure
+- energy/oil
+- shipping/chokepoints
+- financial-system
+- China
+- semiconductor/AI/export controls
+- overseas major earnings
+- Japan corporate IR
+- Japan/US market abrupt moves
 
-前branch候補を参考にしてよいが、今回の主目的はshadow計測。
+証拠不足laneはlegacy fallback維持。
 
-許可:
-- shadow側で official title/body不足を検出し、official body取得/conditional search triggerとして記録。
-- fixture/test追加。
+## Production mutation policy
+
+このH1は原則 **production mutation 0**。
 
 禁止:
-- live important-news-monitorへ統合/deploy。
-- live judgement/no_post挙動変更。
+- shadow Function deploy
+- shadow Cron変更
+- migration/schema/RPC変更
+- secret/Vault変更
+- old important-news pipeline変更
+- legacy Web Search削減
+- X/Push/App変更
+- MIC変更
+- market-report変更
+- OAuth/social-mobile変更
+- manual OpenAI replay
 
-## Production mutations allowed in this H1
-
-承認済み:
-1. shadow専用migration 1本
-2. important-news-shadow Function deploy 1本
-3. shadow専用Cron 1本のcreate/enable/cadence変更（canary→10min）
-
-それ以外は禁止。
-
-特に禁止:
-- old important-news-fetch Cron変更
-- old breaking_market query変更/削減
-- important-news-monitor deploy
-- judgement/generation/publish-ready変更
-- live schema/RPC改変
-- market-report/MIC source変更
-- X/Push/App publication変更
-- OAuth/Vault/secrets
-- migration history repair
-
-## Rollback
-
-最優先rollback:
-1. shadow Cron disable
-2. shadow Functionを呼ばない状態へ
-3. shadow dataは監査用に保持
-4. old pipelineは最初から無変更なのでそのまま継続
-
-schema dropは緊急rollbackに含めない。
-削除が必要なら別migration/review。
+もしproduction bugを見つけても:
+- exact bug
+- impact
+- local fix candidate
+- tests
+- rollout proposal
+をReportしてSTOP。
+別承認なしに本番へ出さない。
 
 ## Deliverables / C1
 
 .agent/CODEX_REPORT.md に最低限:
-
-- task_id/result
-- fresh main base
-- changed files/commit/branch
-- exact migration name/hash
-- exact Function version/source hash
-- shadow Cron jobid/name/schedule/active/command hash
-- canary→10min変更の有無
-- old important-news Cron/hash unchanged proof
-- old important-news-monitor version/hash unchanged proof
-- RLS/grants proof
-- source list + health
-- natural run count
-- free candidates count
-- matched live candidates count
-- first_seen/delay evidence
-- conditional paid search count/tokens/cost
-- projected daily/monthly shadow cost
-- X/Push/App writes = 0 proof
-- MIC modifications = 0
-- other slot objects untouched
-- rollback proof
-- remaining recall gaps
-- exact next recommendation
+1. observation window
+2. natural run count/status
+3. source health summary
+4. unique candidates / first_seen proof
+5. live important/most_important event count
+6. match count + per-match delay
+7. 0-match root-cause classification if applicable
+8. matcher offline evaluation
+9. source quality classification
+10. conditional search count/cost
+11. observed + projected shadow daily/monthly cost
+12. legacy baselineとの比較（削減ではなく現時点は追加費用）
+13. lane-by-lane evidence/fallback matrix
+14. recall parity status
+15. local code/test changes if any
+16. explicit production mutation = 0
+17. next recommendation
 
 完了時:
-- this TASK -> review_required
+- status -> review_required
 - next_owner -> chatgpt
-- .agent/CODEX_REPORT.md更新
-- control metadataをmainへ同期
 - C1待ちでSTOP
 
-**このH1完了だけでlegacy search削減/cutoverへ進んではならない。**
-
-
-## User-approved continuation — 2026-09-20
-
-The H1 implementation reached a safe stop before creating the authenticated shadow Cron.
-
-User-reported completed state before this approval:
-- one shadow-only migration applied to production
-- `important-news-shadow` v1 deployed
-- RLS enabled; anon/authenticated access denied
-- unauthenticated POST returns 401
-- 12 tests + typecheck passed
-- legacy important-news Function/Cron hashes unchanged
-- X / Push / App writes = 0
-- branch commit `69b66b8` pushed
-- authenticated 30-minute Cron, natural 2-run observation, 10-minute cutover, and main synchronization were not completed
-- direct push to origin/main was rejected by the safety review
-
-### Explicitly approved exception
-
-For this continuation only, the user explicitly approves the following additional production mutations:
-
-1. Create a new dedicated secret named `important_news_shadow_cron_secret`.
-2. Store the same new dedicated secret in:
-   - the `important-news-shadow` Edge Function environment
-   - Supabase Vault for Cron use
-3. Modify/redeploy **only** `important-news-shadow` so authenticated Cron calls can be validated using this dedicated secret.
-4. Create exactly one authenticated shadow-only Cron at 30-minute cadence.
-5. After at least 2 successful natural 30-minute executions and safety verification, change **only that shadow Cron** to 10-minute cadence.
-6. Create a PR from the H1 branch to main.
-7. **Do not auto-merge the PR.** C1/explicit review is required before merge.
-
-### Secret handling constraints
-
-- Generate a new high-entropy random value; never reuse service-role keys, anon keys, existing webhook secrets, OAuth secrets, or existing application secrets.
-- Do not place the secret in URL/query parameters.
-- Send it only in a request header or equivalent secret header mechanism.
-- Do not expose the secret value in Git, logs, Function responses, Cron command read-backs, Reports, screenshots, or assistant output.
-- Cron command/hash evidence must redact the secret.
-- Vault row/content may be checked structurally, but never print plaintext secret.
-- Existing secrets must remain untouched.
-- No service-role credential may be embedded in Cron.
-
-### Auth design requirements
-
-- Authentication applies only to `important-news-shadow`.
-- Fail closed on missing/invalid secret.
-- Use constant-time comparison where practical.
-- No fallback to unauthenticated execution.
-- Do not weaken `verify_jwt` / auth behavior of unrelated Functions.
-- Keep all X/Push/App/publish surfaces absent from shadow.
-- Preserve old important-news-monitor and old Cron byte-for-byte/hash-identical where practical.
-
-### 30-minute canary acceptance
-
-Before 10-minute cutover, verify at least 2 natural Cron executions:
-- HTTP success / completed shadow run
-- source health recorded
-- no X/Push/App writes
-- no legacy candidate mutation
-- old important-news Cron/hash unchanged
-- old important-news-monitor version/hash unchanged
-- conditional Web Search count/cost recorded
-- no retry storm / duplicate run
-- secret not logged
-- no unexpected 401/403/5xx loop
-
-If any safety check fails:
-- disable the shadow Cron immediately
-- keep legacy pipeline untouched
-- stop for C1 with evidence
-
-### 10-minute cutover
-
-Only after the 2-run canary passes:
-- change the shadow Cron only to every 10 minutes
-- verify active/schedule/command hash
-- confirm legacy jobs unchanged again
-- observe at least one natural 10-minute run if timing permits before C1
-- do not interpret this as recall parity or cutover approval
-
-### PR / main synchronization
-
-Because direct main push was rejected:
-- create a PR from the H1 branch to main
-- include only H1-owned source/docs/migration/control-file changes
-- no unrelated H2/G1/G2 changes
-- no auto-merge
-- record PR number/URL in CODEX_REPORT
-- if branch is behind main, fresh-check and rebase/cherry-pick only H1-owned changes safely; do not overwrite concurrent work
-
-### Updated production mutation scope
-
-Allowed in this continuation:
-- the already-applied shadow migration
-- `important-news-shadow` redeploy only
-- one new dedicated Vault secret entry
-- one matching Function environment secret
-- one shadow Cron create + its 30m -> 10m cadence update
-- PR creation
-
-Still prohibited:
-- service-role Cron auth
-- any existing secret mutation
-- old important-news-fetch/judgement/generation/publish-ready changes
-- `important-news-monitor` deploy
-- fixed breaking search reduction
-- live candidate/judgement behavior changes
-- X/Push/App publication changes
-- MIC source/Cron changes
-- market-report changes
-- OAuth/social-mobile changes
-- migration history repair/reconcile
-- blind db push
-- auto-merge
-
-### Completion / C1
-
-Update CODEX_REPORT with:
-- exact new Function version/source hash
-- secret presence proof without value
-- Vault presence proof without value
-- Cron jobid/name/schedule/active/redacted command hash
-- two 30-minute natural run timestamps/results
-- 10-minute cutover proof if performed
-- at least one 10-minute natural run if available
-- source health/candidate/match/search/cost metrics
-- old Function/Cron unchanged proof
-- X/Push/App writes = 0
-- rollback path
-- PR number/URL
-- production mutation inventory
-- remaining recall gaps
-
-Then set status=review_required, next_owner=chatgpt, sync control metadata through the PR/allowed safe route, and STOP for C1.
-
-**Recommended model: Sol.**
-
-
-## C1 review — 2026-09-20
-
-**PASS — live shadow rollout completed safely.**
-
-Verified:
-- PR #1 was reviewed in C1 and merged manually (auto-merge was not enabled).
-- Merge commit: `4a28c168f4c7a3acfb31172a685e2a1de6b0542f`.
-- Shadow migration is isolated to `important_news_shadow_*`.
-- `important-news-shadow` uses a dedicated `X-Cron-Secret` / `IMPORTANT_NEWS_SHADOW_CRON_SECRET` path; service-role is not accepted as the request credential.
-- Dedicated secret exists in Function environment + Vault without plaintext exposure in report/Git.
-- Two natural 30-minute canary runs completed.
-- Shadow Cron then moved to `*/10 * * * *`, and one natural 10-minute run completed.
-- Shadow observed 24 free-source candidates; all have collector `first_seen_at`.
-- Observed paid Web Search during the three reviewed runs: 0 calls / $0.
-- GDELT timeout was isolated; v6 limits GDELT polling to UTC minute `:00`, and the following natural run confirmed cooldown behavior.
-- Legacy news Cron jobs 2/3/4/8 retained their schedules and command hashes.
-- `important-news-monitor` source hash remained unchanged.
-- X / Push / App publication writes remained 0.
-- RLS/client privilege isolation and no-publish boundary tests passed.
-- Deno tests 14/14, deno check, and git diff check passed.
-
-Important limits:
-- This PASS approves the shadow infrastructure and 10-minute observation cadence only.
-- Recall parity is **not** proven: the reviewed runs had 0 live matches.
-- Do not reduce or remove legacy paid fallback/search lanes.
-- Do not cut over the live pipeline.
-- Continue live shadow observation, recommended 14 days, and evaluate lane-by-lane recall/latency only after matched important/most_important events exist.
-
-C1 completion: task done. Next work should be observation/read-only analysis unless a new explicit production-change task is created.
+**推奨モデル：Luna。**
