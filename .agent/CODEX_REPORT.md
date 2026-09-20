@@ -1,4 +1,55 @@
-# Codex Report
+## Latest H1 result — important-news GDELT timeout diagnosis (2026-09-20)
+
+- task_id: important-news-phase1-gdelt-timeout-diagnosis-and-fallback-candidate-20260920
+- result: review_required — read-only observation and bounded endpoint diagnosis completed; production remains unchanged; stop for C1.
+- model_used: Luna.
+- source_base: fresh `origin/main` 8fff49fbf80c29b700649891680d5a1213e788f9; production `important-news-shadow` ACTIVE v7, `verify_jwt=false`, source SHA-256 `c264fcd7da43b25a1a4b827bb72c77ec02063d06775aa4dff32f20645a284dcf`. Deployed `index.ts`, `shadow_sources.ts`, and `shadow_logic.ts` matched the source files at this base byte-for-byte.
+- Cron read-back: job 38 active, `*/10 * * * *`. No Cron/function/config change.
+- implementation_code_changes: none. No local candidate or tests were added because external query comparisons were rate-limited and yielded no usable response.
+- production_mutation: 0. All database reads were SELECT-only; no manual Function invoke, candidate injection, replay, deploy, migration/schema/RPC, setting, secret/Vault, X, Push, or fallback change.
+
+### A. Natural shadow observation
+
+- Read-only window: 2026-09-20 02:30–07:10 UTC (11:30–16:10 JST), 4h40m. 27 natural scheduled rows: 27 completed, 0 partial, 0 failed. The requested 6h window was not yet available; 6/12/24h remain left-censored.
+- GDELT: 5 actual polls failed at 03:00, 04:00, 05:00, 06:00, and 07:00 UTC. Every error was `Signal timed out.` after 15,001–15,002 ms. The other 22 scheduled rows were `skipped_cooldown`; there were 0 successful GDELT polls and 0 stored GDELT candidate rows.
+- Other ten sources were healthy in all 27 runs; no other source failure was persisted.
+- All 27 shadow runs completed. Stored shadow matches = 0. Across the window there was 1 conditional-search event, 2 Web Search calls, and estimated cost $0.02112360. This natural cost was generated at 07:10 UTC; it was not a manual replay.
+- Same-window live high-importance readback: one `important` live row (“North Korea launches unidentified projectile toward the sea”), published 06:31:04 UTC and fetched 07:00:32 UTC; no stored shadow match was recorded through 07:10. The row was fetched after the 07:00 shadow cycle. The shadow store contained an older BBC headline about Houthi missile activity (published 23:49 UTC on Sep 19), not this North Korea event. This is a single observed non-match, not a recall/false-negative rate; source availability and full-window parity are unproven. The current GDELT query does not include North Korea, missile, or projectile terms, so fixing its timeout alone would not make it a targeted route for this event.
+- Per-run volume: 11 source checks and 24 candidate observations; 297 source checks and 648 observations total.
+
+### B. Current GDELT request anatomy
+
+- Fixed endpoint: `https://api.gdeltproject.org/api/v2/doc/doc`.
+- Query: `(earthquake OR tsunami OR ceasefire OR sanctions OR tariff)`; `mode=artlist`; `maxrecords=25`; `format=json`; `sort=datedesc`; no explicit `timespan`, language, or source restriction.
+- GDELT's official DOC API material says the default search period is the latest three months; `timespan` can narrow this to minute/hour/day/week values, and `maxrecords` controls returned article-list rows. [GDELT DOC 2.0 API documentation](https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/)
+- Headers: `Accept: application/json`; `User-Agent: Kabumori-important-news-shadow/1.0 contact@kabumori.app`.
+- Client timeout: `AbortSignal.timeout(15_000)`. Non-2xx responses become `SOURCE_HTTP_<status>`; JSON parsing follows the fetch. There is no explicit streaming/content-length byte cap. The GDELT parser then requires an articles array, HTTPS URL and valid/recent `seendate`, and retains at most 8 candidates. Thus the returned-row cap/parser cap does not bound response bytes before `response.json()`.
+- Cooldown: GDELT is polled only when UTC minute is `:00`; the shadow Cron itself runs every ten minutes.
+
+### C. Bounded external probes and diagnosis
+
+- One GET of the current broad query and one GET of the same terms with `timespan=1h&maxrecords=8` were made to the public endpoint; no production Function was invoked.
+- Both returned HTTP 429, 444 bytes, after 11.644s and 12.009s. The response said to limit requests to one per five seconds. Neither returned JSON/articles, so item count, relevance yield, payload size under a successful response, or latency improvement from the bounded variant could not be assessed. Further probes were stopped to respect the endpoint response.
+- Production persisted errors expose only the timeout and total elapsed latency, not DNS/TLS/connect, time-to-first-byte, HTTP headers/status, body-transfer, response-size, or JSON-parse timings. No platform logs were accessed. The production poll cadence is hourly, far below the endpoint's stated five-second limit; the probe's 429 therefore does not prove the production timeout is rate-limit caused.
+- Root-cause confidence: **low**. Evidence is consistent with server/query latency or the broad default three-month search window, while external test egress was independently rate-limited. It does not distinguish query complexity, endpoint instability, production network path, slow body delivery, or whether 15 seconds is simply too short. No timeout increase or query rewrite is justified from these measurements.
+
+### D. Value and fallback semantics
+
+- GDELT added no stored items in five actual polls; its unique-event contribution is unobserved. The prior 19-row replay cohort has no replacement-route `first_seen_at` evidence, so historical GDELT recall or a unique GDELT-only event is not proven.
+- The 07:00 row had exactly one degraded source (GDELT), zero conditional searches, zero Web Search calls, and $0. At 07:10, GDELT was `skipped_cooldown` and failed-source count was zero; the JMA candidate independently used `new_high_signal_sparse`, yielding one conditional-search event, two Web Search calls, and $0.02112360 estimated cost.
+- Code review confirms `failedSources` counts only `status=failed`. The source-degradation branch requires at least two degraded sources plus a high-signal headline. A single GDELT timeout alone therefore does not trigger that branch. However, the separate “new high-signal + summary shorter than 80 characters” branch can search regardless of degraded-source count. Do not summarize behavior as “one source timeout always means no search.”
+- A single source timeout is caught per-source; the other ten sources complete and the shadow run remains completed. The shadow work does not modify or disable the separate legacy paid/live fallback path; all such fallbacks remain enabled.
+
+### E. Code/tests, safety, and exact next proposal
+
+- No code, fixture, or test change was made. Existing implementation/test files were reviewed; no test suite was run because there was no code change and the available environment is a read-only repository mirror.
+- No further external requests are proposed now. Exact next proposal: **option 5 — evidence insufficient; continue natural observation only**, preserve the existing hourly cooldown and every paid/live fallback. Reconsider a local-only `timespan=1h/maxrecords=8` optimization only after a permitted successful and repeatable response demonstrates under-15s completion and target-lane utility; no production application is part of this proposal.
+- Safety: production mutation 0; no Function invoke/deploy, Cron/config, schema/migration/RPC, secret/Vault, manual OpenAI replay, candidate injection, X/Push/App, or legacy fallback change.
+- next_owner: chatgpt; stop for C1.
+
+---
+
+
 
 ## Latest H1 result — important-news shadow observation + source-rights research (2026-09-20)
 
