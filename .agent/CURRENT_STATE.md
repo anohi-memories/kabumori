@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-20 JST (H1 shadow continuation ready; H2 Phase11 X Portal + real OAuth QA ready; G1 natural shadow wait; G2 done)
+- checked_at: 2026-09-20 JST (H1 shadow observation/match audit ready; H2 Phase11 review_required; G1 natural shadow wait; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,13 +14,11 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `important-news-phase1-live-shadow-rollout-20260920`
-  - Shadow migration + `important-news-shadow` v1 are user-reported applied/deployed; legacy pipeline unchanged.
-  - User explicitly approved one new dedicated `important_news_shadow_cron_secret` in Function env + Vault, shadow-only auth redeploy, one 30m authenticated shadow Cron, then 10m after 2 natural safe runs.
-  - Service-role Cron auth and existing-secret reuse are forbidden. Secret must never appear in Git/logs/URLs/Reports.
-  - PR from H1 branch to main is approved; auto-merge is forbidden. C1 review required.
-  - Legacy search reduction/cutover remains unapproved. MIC remains read-only/additional-trigger only.
-  - Recommended model: Sol.
+- Codex slot 1: `ready` — `important-news-phase1-shadow-observation-and-match-audit-20260920`
+  - 10-minute live shadow rollout is C1 PASS and merged.
+  - Next H1 is read-only observation/matching audit: source health, first_seen, live-match root cause, conditional-search cost, and lane-by-lane fallback evidence.
+  - Production mutation is 0 for this task; any bug fix remains local/test-only until separate approval.
+  - Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase11-x-portal-and-real-oauth-qa-20260920`
   - Phase10 C2 PASS済みbackendを使い、X Developer Portal設定確認と専用non-admin QA user + dedicated test X accountで1回のreal OAuth round-tripを行う。
