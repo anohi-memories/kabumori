@@ -3,7 +3,7 @@
 - task_id: social-mobile-app-phase11-x-portal-and-real-oauth-qa-20260920
 - owner: codex
 - slot: codex-2
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
@@ -217,3 +217,37 @@ Decision:
 - Run exactly one real OAuth round-trip, then perform the required read-only DB/Vault/tenant-isolation postflight.
 - Still forbidden: real X post, media upload, \`publish_enabled=true\`, changes to existing production X accounts/admin OAuth, Cron, or app-wide data-source switch.
 - On completion return \`review_required / next_owner: chatgpt\` for final C2.
+
+
+## Final C2 review — 2026-09-20
+
+**PASS — Phase 11 real X OAuth QA is complete.**
+
+Accepted from H2 report:
+- exactly one real OAuth authorization callback completed successfully.
+- the mobile Accounts UI reported the linked account as connected.
+- the QA Auth identity is non-admin.
+- the linked X account is a dedicated test account distinct from the two pre-existing production X accounts.
+- connection status is \`identity_verified\`.
+- \`publish_enabled=false\`.
+- exactly one OAuth state was consumed successfully; four earlier expired/unconsumed rows remain as non-blocking cleanup observations.
+- Vault access-token and refresh-token secret references exist; no token/secret values were exposed.
+- existing production X accounts and admin OAuth were not changed.
+- X post/media upload = 0; OpenAI calls = 0.
+- no deploy/schema/RLS/RPC/Cron/settings/Portal change occurred in this continuation.
+
+Independent C2 runtime isolation proof:
+- simulated the latest successful QA user's authenticated RLS context in a rollback-only transaction.
+- visible memberships = 1.
+- visible brands = 1.
+- visible social_accounts = 1.
+- visible pre-existing production accounts = 0.
+- visible QA account = 1.
+- transaction rolled back; no persistent production write occurred.
+
+Decision:
+- Phase 11 is approved complete.
+- keep the dedicated QA fixture for future OAuth regression testing for now.
+- do not clean it up automatically.
+- the four expired/unconsumed OAuth state rows are not a blocker; cleanup, if desired, should be handled in a separately authorized maintenance task.
+- status = done.
