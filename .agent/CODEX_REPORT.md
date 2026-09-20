@@ -33,6 +33,7 @@
 - Shadow tables have RLS enabled, zero client policies, no `anon`/`authenticated` SELECT privileges, and `service_role` SELECT. Shadow code has no X/Push/App/publish write surface; static boundary test passes. No manual Function invocation, candidate injection, X post, Push, or App write was performed.
 - Tests: Deno suite `14 passed / 0 failed`; `deno check` on `important-news-shadow/index.ts` passed; `git diff --check` passed.
 - Rollback remains disabling only Cron job 38; keep shadow audit rows. No live legacy rollback is needed.
+- Candidate rows are deduped to one row per event key; later sightings update the latest `shadow_run_id`/`last_seen_at` while preserving `first_seen_at`. Historical run-to-candidate links are not retained; per-run aggregate counts and source health remain in `important_news_shadow_runs`.
 - Remaining: only two 30m runs plus one 10m run are observed; 0 live matches means no recall/delay conclusion. Continue shadow observation (recommended 14 days); do not reduce legacy paid fallback or cut over. Review this H1 in C1 before merge; PR must remain unmerged.
 
 ## Latest H1 result — Phase 1 recall replay continuation (2026-09-19)
