@@ -1,5 +1,38 @@
 # Codex Report
 
+## Latest H1 result — important-news live shadow rollout (2026-09-20)
+
+- task_id: `important-news-phase1-live-shadow-rollout-20260920`
+- result: `review_required`; two natural 30-minute canaries completed, the shadow Cron moved to 10 minutes, and one natural 10-minute run completed. C1 review is required; no auto-merge.
+- fresh origin/main before final control sync: `ea94305d4a16308fe5f8ea7291484c36107b35c0` (`Record Phase 11 OAuth manual QA gate`).
+- implementation branch: `codex/important-news-live-shadow-20260920`; final commit and PR URL will be added after branch push/PR creation.
+- exact migration: `supabase/migrations/20260919195155_important_news_shadow_phase1.sql`; SHA-256 `e600f2cf5f16eb29d4297cef9d7c110a422806436000e1ae2f39c01550ddf8b2`.
+- production Function: `important-news-shadow` v6 ACTIVE, `verify_jwt=false` with fail-closed in-code `X-Cron-Secret` auth; source SHA-256 `c264fcd7da43b25a1a4b827bb72c77ec02063d06775aa4dff32f20645a284dcf`. v6 retains a GDELT poll only at UTC minute `:00`, independent of the 10-minute Cron cadence.
+- secret proof: new dedicated `important_news_shadow_cron_secret` is configured in the Function environment and Vault; no value was read back or emitted. Natural Cron runs reached completed shadow records, confirming the Vault-backed header path. Cron/readback evidence contains only the secret reference/header name and command hash, never plaintext.
+- shadow Cron: jobid `38`, name `important-news-shadow`, active `true`, schedule `*/10 * * * *`, command MD5 `c0a89803846abb2464a1af02934266e1` (unchanged from 30m canary). Only this job's schedule changed from `*/30` to `*/10`.
+
+### Natural execution evidence
+
+| UTC | Cron run | Shadow run | Result |
+| --- | --- | --- | --- |
+| 2026-09-20 02:30 | `54292` succeeded | completed 02:30:02.882–02:30:05.033 | 11 sources, 24 free candidates, 0 live matches, 0 paid searches, $0; GDELT skipped by cooldown |
+| 2026-09-20 03:00 | `54364` succeeded | completed 03:00:17.298–03:00:19.299 | 11 sources, 24 free candidates, 0 live matches, 0 paid searches, $0; GDELT timed out at 15s, other 10 sources healthy |
+| 2026-09-20 03:10 | `54388` succeeded | completed 03:10:02.834–03:10:05.607 | 11 sources, 24 free candidates, 0 live matches, 0 paid searches, $0; 10 sources healthy, GDELT skipped by cooldown |
+
+- 24 candidate observations were recorded from BBC World, Al Jazeera, and JMA earthquake/volcano sources; all 24 had `first_seen_at` values when read back. These are collector-observation times, not proof of historical source availability. No shadow candidate matched a live candidate in these runs, so recall parity and detection delay remain unproven.
+- GDELT's 03:00 timeout was isolated; the other sources remained healthy. The pre-cutover cadence audit found the old half-hour cooldown would otherwise allow three GDELT calls/hour under a 10m Cron. The same shadow Function was therefore updated/tested to poll only at UTC `:00`, redeployed as v6, and the 03:10 natural run confirmed `skipped_cooldown`.
+- Source set: BOJ, Fed, JMA, USTR, UN peace/security, EIA, BBC World, Al Jazeera, ECB, SEC, GDELT. White House feed remains excluded after preflight HTTP 404. GDELT had a prior preflight timeout and is rate-limited to hourly polling.
+- Conditional search/tokens/web search/cost: `0 / 0 / 0 / $0` across the three observed runs. This is the observed quiet-window cost only; future conditional-trigger cost is variable and not proven zero.
+
+### Safety, validation, and remaining work
+
+- Legacy Cron job ids `2/3/4/8` retain schedules and command MD5s: fetch `0,20,40` / `b9a98c88ada68d0552ac66c9e8e19983`; judgement `7,27,47` / `438fb5cb0d1206bdfc6af7b379c06788`; generation `14,34,54` / `951233b2a4fe7ae2b82ef83292276565`; publish-ready `*/5` / `bc7fddb4557c9babecec6af57fede247`.
+- `important-news-monitor` remains v60, source hash `ce7b4bf79da6fb35f8593c4a692ef125acdbdb0ed26c189a761f15eeb5a4070f`.
+- Shadow tables have RLS enabled, zero client policies, no `anon`/`authenticated` SELECT privileges, and `service_role` SELECT. Shadow code has no X/Push/App/publish write surface; static boundary test passes. No manual Function invocation, candidate injection, X post, Push, or App write was performed.
+- Tests: Deno suite `14 passed / 0 failed`; `deno check` on `important-news-shadow/index.ts` passed; `git diff --check` passed.
+- Rollback remains disabling only Cron job 38; keep shadow audit rows. No live legacy rollback is needed.
+- Remaining: only two 30m runs plus one 10m run are observed; 0 live matches means no recall/delay conclusion. Continue shadow observation (recommended 14 days); do not reduce legacy paid fallback or cut over. Review this H1 in C1 before merge; PR must remain unmerged.
+
 ## Latest H1 result — Phase 1 recall replay continuation (2026-09-19)
 
 - task_id: `important-news-cost-phase1-recall-safe-shadow-handoff-20260919`
