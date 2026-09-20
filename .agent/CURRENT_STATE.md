@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-20 JST (H1 review_required; H2 Phase12 general-user content profile/dry-run ready; G1 natural shadow wait; G2 done)
+- checked_at: 2026-09-20 JST (H1 source-rights research C1 blocked on cost arithmetic; H2 Phase12 ready; G1 natural shadow wait; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,10 +14,11 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `important-news-phase1-shadow-observation-plus-source-rights-research-20260920`
-  - 17 natural shadow runs read-only audited; available sample spans about 3 hours, so requested 6/12/24h windows remain incomplete.
-  - Rights/provider research is documented on the non-merged H1 candidate branch. No source adopted; all paid/live fallbacks remain enabled.
-  - Production mutation is 0. Exact next proposal: JPX TDnet Index API terms/cost confirmation only. Stop for C1.
+- Codex slot 1: `ready` — `important-news-phase1-shadow-observation-plus-source-rights-research-20260920`
+  - C1 found one blocker only: economics arithmetic mixed per-fetch-cycle cost with nominal search-slot counts, overstating baseline monthly cost by ~4x.
+  - Correct figures using prior mean $0.056721/fetch cycle are ~ $20.42/30d at 12 cycles/day and ~ $40.84/30d at 24 cycles/day.
+  - Observation/source-rights findings otherwise accepted; production mutation remains 0.
+  - Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase12-general-user-content-profile-and-dry-run-20260920`
   - Phase11 real OAuth QA C2 PASS済み。
