@@ -5,7 +5,8 @@
 - task_id: `important-news-phase1-live-shadow-rollout-20260920`
 - result: `review_required`; two natural 30-minute canaries completed, the shadow Cron moved to 10 minutes, and one natural 10-minute run completed. C1 review is required; no auto-merge.
 - fresh origin/main before final control sync: `ea94305d4a16308fe5f8ea7291484c36107b35c0` (`Record Phase 11 OAuth manual QA gate`).
-- implementation branch: `codex/important-news-live-shadow-20260920`; final commit and PR URL will be added after branch push/PR creation.
+- implementation branch: `codex/important-news-live-shadow-20260920`; PR head at creation `e4edb6f66f40ec06bab9196dbcfe9aabd4a16159`.
+- PR: [#1 — Add isolated important-news live shadow](https://github.com/anohi-memories/kabumori/pull/1), open, not merged, auto-merge not enabled. This follow-up Report metadata commit updates the PR branch with the final PR URL.
 - exact migration: `supabase/migrations/20260919195155_important_news_shadow_phase1.sql`; SHA-256 `e600f2cf5f16eb29d4297cef9d7c110a422806436000e1ae2f39c01550ddf8b2`.
 - production Function: `important-news-shadow` v6 ACTIVE, `verify_jwt=false` with fail-closed in-code `X-Cron-Secret` auth; source SHA-256 `c264fcd7da43b25a1a4b827bb72c77ec02063d06775aa4dff32f20645a284dcf`. v6 retains a GDELT poll only at UTC minute `:00`, independent of the 10-minute Cron cadence.
 - secret proof: new dedicated `important_news_shadow_cron_secret` is configured in the Function environment and Vault; no value was read back or emitted. Natural Cron runs reached completed shadow records, confirming the Vault-backed header path. Cron/readback evidence contains only the secret reference/header name and command hash, never plaintext.
