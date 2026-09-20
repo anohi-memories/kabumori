@@ -6,10 +6,11 @@ and official sources, records source health and first-seen observations in
 candidates. It never feeds the live judgement/generation/publication selectors
 and has no X, Push, notification, or app-copy write surface.
 
-The first rollout uses a 30-minute Cron canary. At least two natural runs must
-be observed before the job may move to the 10-minute target cadence. The old
-fetch, judgement, generation, and publish-ready jobs remain unchanged throughout
-the shadow period.
+The production rollout completed two natural 30-minute Cron canary runs and
+then moved the shadow job to its 10-minute target cadence. Both runs completed;
+one reported a GDELT timeout while the other ten sources remained healthy. The
+old fetch, judgement, generation, and publish-ready jobs remain unchanged
+throughout the shadow period.
 
 Conditional paid search is limited to one search per run, only for a new
 high-signal sparse event or a high-signal event during multi-source degradation.
@@ -18,10 +19,11 @@ zero. Tokens, actual web-search calls, and estimated cost are stored on the run
 and in `ai_usage_events` under `news_shadow_search`.
 
 The source set is BOJ, Fed, JMA earthquake/volcano, USTR, UN peace/security,
-EIA, BBC World, Al Jazeera, ECB, SEC, and GDELT. GDELT is polled hourly with a
-deterministic cooldown because its preflight was materially slower. The White
-House candidate feed was excluded after returning HTTP 404 during production
-preflight; it is not reported as a healthy source.
+EIA, BBC World, Al Jazeera, ECB, SEC, and GDELT. GDELT is polled only at minute
+`:00` UTC, independent of shadow Cron cadence, because its preflight and natural
+run were materially slower. The White House candidate feed was excluded after
+returning HTTP 404 during production preflight; it is not reported as a healthy
+source.
 
 Authentication is fail-closed: the Function compares `X-Cron-Secret` to the
 dedicated `IMPORTANT_NEWS_SHADOW_CRON_SECRET` environment value. The same new

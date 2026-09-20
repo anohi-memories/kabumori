@@ -75,7 +75,7 @@ test("fetcher reports non-2xx separately from a healthy zero-result source", asy
   );
 });
 
-test("GDELT has a deterministic one-hour polling cooldown", () => {
+test("GDELT polls once per hour even when the shadow Cron runs every 10m", () => {
   const source: ShadowSource = {
     key: "gdelt",
     url: "https://api.gdeltproject.org",
@@ -83,8 +83,22 @@ test("GDELT has a deterministic one-hour polling cooldown", () => {
     category: "other_market_moving",
     kind: "gdelt",
   };
-  const first = isSourceCooldown(source, new Date("2026-09-20T12:00:00Z"));
-  const second = isSourceCooldown(source, new Date("2026-09-20T12:30:00Z"));
-  assert.notEqual(first, second);
+  assert.equal(
+    isSourceCooldown(source, new Date("2026-09-20T12:00:00Z")),
+    false,
+  );
+  for (const minute of [10, 20, 30, 40, 50]) {
+    assert.equal(
+      isSourceCooldown(
+        source,
+        new Date(`2026-09-20T12:${minute.toString().padStart(2, "0")}:00Z`),
+      ),
+      true,
+    );
+  }
+  assert.equal(
+    isSourceCooldown(source, new Date("2026-09-20T13:00:00Z")),
+    false,
+  );
   assert.equal(isSourceCooldown(rssSource, now), false);
 });

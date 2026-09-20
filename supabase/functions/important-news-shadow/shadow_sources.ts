@@ -90,13 +90,12 @@ export const SHADOW_SOURCES: readonly ShadowSource[] = [
   },
 ] as const;
 
-/** GDELT has materially higher latency/rate-limit risk, so poll it hourly. */
+/** GDELT has materially higher latency/rate-limit risk, so poll only at :00 UTC. */
 export function isSourceCooldown(
   source: ShadowSource,
   now = new Date(),
 ): boolean {
-  return source.key === "gdelt" &&
-    Math.floor(now.getTime() / (30 * 60 * 1000)) % 2 === 1;
+  return source.key === "gdelt" && now.getUTCMinutes() !== 0;
 }
 
 function decodeXml(value: string): string {
