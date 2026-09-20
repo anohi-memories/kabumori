@@ -35,7 +35,7 @@
 
 ## Parallel safety
 
-- H1はcoverage-gap source researchを完了。production mutation 0; shadow/legacy Cron、Function、schema、OAuth/Vaultは変更なし。採用sourceなし、paid/live fallbackを維持。
+- H1 shadow observation + source-rights researchはreview_required。production mutation 0; requested 6/12/24h windows未充足、recall parity未証明。新sourceなし、paid/live fallbackを維持。
 - H2はsocial-mobile Phase10 production migration / x-oauth-connect-user deployのみ。Portal/real OAuth/X postは別ゲート。G1のmarket-report objectsを触れない。
 
 - G1はmarket-report schema/functions/`x-test-post`/personalized-reports領域。
