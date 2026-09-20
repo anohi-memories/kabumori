@@ -27,6 +27,7 @@ test("shadow source has no publication, notification, app-copy, or social write 
     source.includes('const LIVE_TABLE = "important_news_candidates"'),
     true,
   );
+  assert.match(source, /Deno\.env\.get\("IMPORTANT_NEWS_SHADOW_CRON_SECRET"\)/);
   assert.equal(
     source.includes(`rest(base, key, LIVE_TABLE, { method: "POST"`),
     false,

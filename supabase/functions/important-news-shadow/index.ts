@@ -3,8 +3,10 @@ import {
   dedupeKey,
   estimateCostUsd,
   eventKey,
+  hasValidCronSecret,
   type LiveCandidate,
   matchLiveCandidate,
+  runSlot,
   type ShadowCandidate,
 } from "./shadow_logic.ts";
 import {
@@ -29,33 +31,6 @@ type Usage = {
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
-}
-
-function safeEqual(a: string, b: string): boolean {
-  const left = new TextEncoder().encode(a);
-  const right = new TextEncoder().encode(b);
-  if (left.length !== right.length) return false;
-  let difference = 0;
-  for (let index = 0; index < left.length; index += 1) {
-    difference |= left[index] ^ right[index];
-  }
-  return difference === 0;
-}
-
-function isAuthorized(request: Request, serviceRoleKey: string): boolean {
-  const header = request.headers.get("authorization") ?? "";
-  return header.startsWith("Bearer ") &&
-    safeEqual(header.slice(7), serviceRoleKey);
-}
-
-function slot(now: Date, minutes = 30): string {
-  const value = new Date(now);
-  value.setUTCMinutes(
-    Math.floor(value.getUTCMinutes() / minutes) * minutes,
-    0,
-    0,
-  );
-  return value.toISOString();
 }
 
 function countWebSearchCalls(raw: unknown): number {
@@ -156,7 +131,7 @@ async function insertRun(
       "return=representation,resolution=ignore-duplicates",
     ),
     body: JSON.stringify({
-      run_slot: slot(now),
+      run_slot: runSlot(now),
       trigger_type: triggerType,
       synthetic,
     }),
@@ -208,10 +183,14 @@ async function runShadow(request: Request): Promise<Response> {
   }
   const base = Deno.env.get("SUPABASE_URL") ?? "";
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const cronSecret = Deno.env.get("IMPORTANT_NEWS_SHADOW_CRON_SECRET") ?? "";
   if (!base.includes(PROJECT_REF) || !key) {
     return json({ error: "SERVER_CONFIGURATION_ERROR" }, 500);
   }
-  if (!isAuthorized(request, key)) return json({ error: "UNAUTHORIZED" }, 401);
+  if (!cronSecret) return json({ error: "AUTH_NOT_CONFIGURED" }, 503);
+  if (!hasValidCronSecret(request, cronSecret)) {
+    return json({ error: "UNAUTHORIZED" }, 401);
+  }
 
   let payload: { trigger?: unknown; dry_run?: unknown; synthetic?: unknown } =
     {};
@@ -284,7 +263,9 @@ async function runShadow(request: Request): Promise<Response> {
   }
 
   const run = await insertRun(base, key, now, triggerType, synthetic);
-  if (!run) return json({ status: "duplicate_run_slot", run_slot: slot(now) });
+  if (!run) {
+    return json({ status: "duplicate_run_slot", run_slot: runSlot(now) });
+  }
   const earlierRuns = await rest<Array<{ id: string }>>(
     base,
     key,
@@ -431,7 +412,8 @@ async function runShadow(request: Request): Promise<Response> {
       free_fetch_count: SHADOW_SOURCES.length,
       free_candidate_count: candidates.length,
       matched_live_count: matched,
-      conditional_search_count: usage.webSearchCalls > 0 ? 1 : 0,
+      conditional_search_count:
+        usage.inputTokens > 0 || usage.webSearchCalls > 0 ? 1 : 0,
       input_tokens: usage.inputTokens,
       output_tokens: usage.outputTokens,
       web_search_calls: usage.webSearchCalls,

@@ -5,9 +5,11 @@ import {
   decideConditionalSearch,
   dedupeKey,
   estimateCostUsd,
+  hasValidCronSecret,
   type LiveCandidate,
   matchLiveCandidate,
   normalizeText,
+  runSlot,
   type ShadowCandidate,
 } from "./shadow_logic.ts";
 
@@ -113,6 +115,52 @@ test("a bootstrap caller can suppress paid search by treating backlog as not new
       degradedSourceCount: 4,
     }),
     { shouldSearch: false, reason: "duplicate" },
+  );
+});
+
+test("cron authentication accepts only the dedicated header and fails closed", () => {
+  const expected = "dedicated-random-secret";
+  assert.equal(
+    hasValidCronSecret(
+      new Request("https://example.test", {
+        headers: { "X-Cron-Secret": expected },
+      }),
+      expected,
+    ),
+    true,
+  );
+  assert.equal(
+    hasValidCronSecret(
+      new Request("https://example.test", {
+        headers: { "X-Cron-Secret": "wrong" },
+      }),
+      expected,
+    ),
+    false,
+  );
+  assert.equal(
+    hasValidCronSecret(
+      new Request("https://example.test", {
+        headers: { Authorization: `Bearer ${expected}` },
+      }),
+      expected,
+    ),
+    false,
+  );
+  assert.equal(
+    hasValidCronSecret(new Request("https://example.test"), ""),
+    false,
+  );
+});
+
+test("run idempotency slots retain distinct 10-minute cadence slots", () => {
+  assert.equal(
+    runSlot(new Date("2026-09-20T02:39:59.000Z")),
+    "2026-09-20T02:30:00.000Z",
+  );
+  assert.equal(
+    runSlot(new Date("2026-09-20T02:40:00.000Z")),
+    "2026-09-20T02:40:00.000Z",
   );
 });
 

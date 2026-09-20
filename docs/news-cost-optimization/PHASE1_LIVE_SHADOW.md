@@ -23,11 +23,11 @@ deterministic cooldown because its preflight was materially slower. The White
 House candidate feed was excluded after returning HTTP 404 during production
 preflight; it is not reported as a healthy source.
 
-Authentication is fail-closed: the Function compares its bearer token to its
-platform-provided service role key. The Cron must provide that credential
-through an already-managed server-side setting; no key is committed or returned.
-If that server-side credential is unavailable, Cron creation stops rather than
-falling back to an unauthenticated endpoint.
+Authentication is fail-closed: the Function compares `X-Cron-Secret` to the
+dedicated `IMPORTANT_NEWS_SHADOW_CRON_SECRET` environment value. The same new
+random value is stored in Vault for the Cron request header. The service-role
+key remains internal to normal Function database access and is never accepted as
+the request credential. Neither secret value is committed or returned.
 
 Rollback is to disable the single `important-news-shadow` Cron. Shadow data
 remains for audit. No live pipeline rollback is required because the live

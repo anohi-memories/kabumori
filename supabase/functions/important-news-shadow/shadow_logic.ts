@@ -116,6 +116,31 @@ export function matchLiveCandidate(
 
 export type SearchTrigger = { shouldSearch: boolean; reason: string };
 
+export function hasValidCronSecret(
+  request: Request,
+  expectedSecret: string,
+): boolean {
+  const provided = request.headers.get("x-cron-secret") ?? "";
+  if (!expectedSecret || provided.length !== expectedSecret.length) {
+    return false;
+  }
+  let mismatch = 0;
+  for (let index = 0; index < expectedSecret.length; index += 1) {
+    mismatch |= expectedSecret.charCodeAt(index) ^ provided.charCodeAt(index);
+  }
+  return mismatch === 0;
+}
+
+export function runSlot(now: Date, minutes = 10): string {
+  const value = new Date(now);
+  value.setUTCMinutes(
+    Math.floor(value.getUTCMinutes() / minutes) * minutes,
+    0,
+    0,
+  );
+  return value.toISOString();
+}
+
 export function decideConditionalSearch(
   candidate: ShadowCandidate,
   options: {
