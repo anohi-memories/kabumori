@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase11-x-portal-and-real-oauth-qa-20260920
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: Phase 10でproduction backend rollout済みのgeneral-user X OAuthを、X Developer Portal設定の確認・手動反映準備から、専用non-admin QA Auth user + dedicated test X accountによる1回のreal OAuth round-trip QAまで安全に進める。real X postはまだ行わない。
