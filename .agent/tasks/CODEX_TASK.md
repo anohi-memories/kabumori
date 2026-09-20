@@ -1,294 +1,297 @@
 # Codex Task
 
-- task_id: important-news-phase1-shadow-observation-and-match-audit-20260920
+- task_id: important-news-phase1-shadow-coverage-gap-expansion-candidate-20260920
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
-- purpose: 10分live shadow稼働後の実データをread-onlyで監査し、source health / first_seen / live match / conditional search / costを評価する。0 live matchの原因を切り分け、必要ならmatching改善案とローカルテストcandidateまで作る。production挙動は変更しない。
+- purpose: live shadow監査で判明したcoverage gapを埋めるため、TDNET/Japan IR・North Korea/J-Alert・shipping/chokepoints・China・abrupt market moves等の追加source候補をread-only調査し、production未変更のsource-expansion candidateとtestsまで作る。
 
 ## Approved basis
 
 前H1 C1 PASS:
-- PR #1 merged manually
-- merge commit: 4a28c168f4c7a3acfb31172a685e2a1de6b0542f
-- important-news-shadow v6 ACTIVE
-- shadow Cron job 38 = */10 * * * *
-- dedicated X-Cron-Secret path active
-- shadow tables isolated / RLS enabled
-- two natural 30m canaries + one natural 10m run completed
-- observed 24 free-source candidates, all with first_seen_at
-- observed paid Web Search in reviewed runs = 0
-- legacy important-news Cron jobs 2/3/4/8 unchanged
-- important-news-monitor source hash unchanged
-- X / Push / App writes = 0
-- recall parity NOT proven because reviewed runs had 0 live matches
+- 10-minute shadow稼働は安定。
+- 9 natural runs / 31 unique candidates / 31 first_seen。
+- same-window live important/most_important = 0。
+- prior 48h high-importance 14件のうち13件がTDNET、1件がBOJ。
+- shadowにはTDNET collectorが無く、現状はJapan corporate IR laneを比較できない。
+- BBC / Al Jazeeraはuseful secondaryだがnoiseあり。
+- JMAは取得できているがroutine ashfall forecast等のnoiseあり。
+- GDELTは観測した実poll 2回とも15秒timeout。
+- BOJ/Fed/USTR/UN/EIA/ECB/SECはfetch healthyだが観測windowでは0 items。
+- recall parity NOT PROVEN。
+- 全lane legacy paid fallback維持。
+- matcher thresholdは今の証拠では緩めない。
 
 ## User goal
 
-次は待つだけではなく、shadow実データを使って以下を前に進める:
+待ち時間を使って、shadowが重要ニュース比較に使えるcoverageへ近づける。
 
-1. sourceごとの稼働安定性を把握
-2. first_seenが正しく蓄積されているか確認
-3. live側important/most_importantとのmatchが0件だった原因を切り分け
-4. matcherが厳しすぎる/弱すぎる可能性をofflineで検証
-5. conditional Web Searchが必要な時だけ発火する設計か監査
-6. shadow追加コストを実測
-7. legacy paid fallbackを将来lane単位で外せる証拠の作り方を固める
+今回のゴール:
+1. 現行shadowで欠けている重要laneをsource単位で明示。
+2. 無料/公式/低コストで追加できる候補を実地確認。
+3. historical/recent live important eventsへ届くsourceかをread-only評価。
+4. source追加candidateをlocal-onlyで実装・test。
+5. production導入する価値のあるsourceだけをC1へ提案。
 
 ## Model policy
 
-- **Lunaで開始・継続する。**
-- このH1はread-only監査とローカル検証が中心なのでSol不要。
-- production security discrepancy、unexpected DB mutation、secret/auth異常など明確な高リスクblockerが出た場合のみSTOPしてSol検討。
-- 単に分析が複雑という理由ではSolへ上げない。
+- **Lunaで開始・継続。**
+- 調査、source比較、parser実装、tests、docsはLuna。
+- Solへ上げるのは、具体的なsecurity/auth/production-write blockerが出た場合のみ。
+- 複雑という理由だけでSolに切り替えない。
 
 ## Mandatory startup
 
-開始前:
 1. .agent/ORCHESTRATION.md
 2. .agent/CURRENT_STATE.md
 3. this TASK
 4. .agent/CODEX_REPORT.md
 5. other 3 slot TASKs
 6. fresh origin/main
-7. production shadow Cron/read-only
-8. production important-news-shadow version/source hash/read-only
-9. production legacy important-news Cron/function hashes/read-only
-10. shadow tables read-only
-11. live important_news_candidates read-only
+7. production shadow state read-only
+8. production recent important/most_important rows read-only
+9. current source list/parser/tests
+10. replay artifact 19件
 
-競合時STOP:
-- 他slotが important-news-shadow/**
-- shadow schema/migration
-- shadow Cron
-を変更中なら、writeは行わずread-only auditだけに限定。
+H2/G1/G2 objectsには触れない。
 
-## Scope A — accumulated shadow audit
+## Priority coverage gaps
 
-最新の十分なwindowをread-only集計する。
+優先順位:
+
+### P0
+- Japan corporate IR / TDNET
+- North Korea / J-Alert / Japan security
+- shipping / Hormuz / Red Sea / chokepoints
+- China major policy / stimulus / financial-system
+
+### P1
+- Japan/US abrupt market moves
+- overseas major earnings/guidance
+- semiconductor / AI / export controls
+- FX intervention / emergency central-bank action
+- energy infrastructure / oil disruption
+
+### P2
+- broad war/geopolitics source quality改善
+- disaster/infrastructure noise reduction
+
+## Scope A — source discovery and validation
+
+各laneで候補sourceを探す。
+
+優先:
+- official RSS/Atom/XML/JSON
+- official press release/index endpoint
+- reputable free news RSS
+- static HTML page that can be safely polled
+- low-rate public API where terms/limits are acceptable
+
+評価:
+- HTTPS
+- no auth / no paid key preferred
+- update cadence
+- stable timestamp
+- body/summary presence
+- historical archive availability
+- rate limit
+- robots/terms constraints where obvious
+- parser complexity
+- expected relevance/noise
+- duplicate risk
+
+GDELT単独依存は禁止。
+
+## Scope B — TDNET/Japan IR
+
+最重要。
+
+調べる:
+- existing live pipelineがTDNETをどう取得しているか
+- shadowへ同じlive candidateを単純コピーするのではなく、independent measurement sourceとして何が使えるか
+- JPX/TDNET official disclosure feed/index/API/HTML等の独立取得可否
+- source timestampとcollector first_seenを記録できるか
+- current live TDNET important events 13件に対してhistorical source URL/timestampを紐づけ可能か
+
+もし独立sourceが無理なら:
+- 「Japan IR laneはshadow replacement測定不能」
+を明記し、legacy fallback維持。
+
+live tableのコピーをshadowのrecall proofとして数えるのは禁止。
+
+## Scope C — North Korea / Japan security
+
+候補:
+- J-Alert/消防庁/内閣官房/防衛省/海保等のofficial feed/index
+- 防衛省 missile-related press release/update
+- credible regional secondary sources
+
+要件:
+- missile/launch/airspace/maritime warningの速報timestampが取れること。
+- routine PR noiseを分離できること。
+
+## Scope D — shipping / chokepoints
+
+候補:
+- maritime authority / UKMTO / IMO / official advisories
+- reputable shipping/security feeds
+- energy/shipping secondary sources
+
+対象:
+- Hormuz
+- Red Sea / Bab el-Mandeb
+- Suez
+- tanker attacks
+- port closure
+- major shipping disruption
+
+sourceが商用/認証必須なら「無料shadow sourceとして不採用」。
+
+## Scope E — China / financial-system / trade
+
+候補:
+- PBOC / State Council / MOFCOM / customs / CSRC等official
+- English official releases preferred where parser安定
+- trusted secondary source
+
+対象:
+- stimulus
+- reserve requirement/rate
+- capital controls
+- sanctions/trade controls
+- bank/systemic actions
+
+## Scope F — abrupt market moves
+
+今回production変更なし。
+
+read-only設計:
+- live market price/time-seriesをnews shadowへどう追加triggerとして読むか
+- MICを必須dependencyにしない
+- price triggerが無い場合のlegacy fallback
+- Nikkei futures / USDJPY / oil / US index急変 laneのminimum source
+
+MIC ingest/Cronは変更禁止。
+
+## Scope G — recent-event backtest
+
+最近の重要事例に対して候補sourceをread-onlyでbacktest。
+
 最低:
-- since shadow 10m activation
-- plus直近6h/12h/24h view where available
+- Sep18 BOJ
+- recent TDNET important examples
+- Sep12 North Korea missile
+- Sep12 Saudi pipeline attack
+- Hormuz / tanker-related examples
+- replay cohortのwar/tariff/shipping/geopolitics representative cases
 
-集計:
-- natural shadow run count
-- completed/partial/failed
-- source別 healthy / failed / cooldown
-- source別 candidate counts
-- unique shadow candidates
-- first_seen_at / last_seen_at
-- GDELT timeout/rate-limit behavior
-- conditional_search_count
-- web_search_calls
-- input/output tokens
-- cost_usd
-- ai_usage_events news_shadow_search rows
-- duplicate_run_slot / retry storm有無
-- secret/auth related 401/403/5xx loop有無
+各case:
+- old detected/fetched
+- candidate source published timestamp
+- candidate URL
+- historical availability confidence
+- proposed collector could have seen it? yes/no/unproven
+- expected lane fallback
 
-人工invokeは禁止。
-自然データのみ。
+「published earlier = collector would definitely detect earlier」とはしない。
 
-## Scope B — live comparison
+## Scope H — local-only implementation candidate
 
-同じ観測windowでlive important_news_candidatesをread-only確認。
+source validationで有望なものだけ:
+- `supabase/functions/important-news-shadow/shadow_sources.ts`
+- parser/helper
+- tests
+- docs
+
+へlocal candidateとして追加可。
+
+条件:
+- production deploy 0
+- Cron change 0
+- schema 0
+- secret/Vault 0
+- no manual OpenAI
+- source fetch testsはbounded
+- fixture-based parser testsを優先
+- source-specific timeout/cooldown明示
+- malformed/stale/future timestamp fail-closed
+- no arbitrary URL fetch/SSRF
+
+candidate branchを作る場合:
+- fresh main
+- H1-owned files only
+- push可
+- merge不可
+- C1待ち
+
+## Noise controls
 
 特に:
-- important
-- most_important
-- breaking_market
-- market_macro
-- official/RSS由来でshadow sourceと重なるもの
+- JMA routine notices
+- broad BBC/Al Jazeera sports/entertainment
+- repeated geopolitical articles
 
-各live eventについて:
-- live id
-- title
-- source_url
-- category/entity/topic
-- published_at
-- fetched_at
-- importance
-- shadow candidate match有無
-- shadow first_seen_at
-- detection delta
-
-### 0-match investigation
-
-0件が続く場合、最低限以下を分類:
-1. そもそも同期間にlive重要ニュースが無い
-2. source coverageが異なり同一eventを見ていない
-3. canonical URL違い
-4. title normalization/entity key差
-5. category/topic差
-6. matcher thresholdが厳しすぎる
-7. dedupe key/event keyの設計問題
-8. shadow candidate stale/non-material noise中心
-
-「0 match = shadow失敗」と即断しない。
-
-## Scope C — offline matcher evaluation
-
-production write/deployなし。
-
-current matcherを:
-- recent live rows
-- recent shadow rows
-- replay artifact 19件
-に対してofflineで評価。
-
-出すもの:
-- true-positive候補
-- false-positive候補
-- false-negative候補
-- match理由
-- threshold/normalization問題
-
-必要なら:
-- local matcher candidate修正
-- unit tests
-- fixture追加
-
-まで可。
+について、source追加と同時にmateriality prefilter候補を設計してよい。
 
 ただし:
-- important-news-shadow production redeploy禁止
-- Cron変更禁止
-- schema変更禁止
+- materiality filterで重要ニュースを落とす恐れがあるため、本番適用禁止。
+- positive/negative fixturesを作る。
+- hard keyword blacklistだけに依存しない。
 
-matchingを緩める場合も、誤matchを増やさない証拠が必要。
-URL exact/canonical matchを最優先にし、曖昧title similarityだけで強制matchしない。
+## Acceptance for source candidate
 
-## Scope D — source quality audit
+C1へ「追加候補」として出せるsourceは:
+- endpoint stable
+- timestamp usable
+- parser testable
+- recent relevant exampleあり、またはofficial sourceとしてevent windowで有用
+- rate/timeout strategyあり
+- duplicate/noise behavior説明可能
+- existing sourceと独立したcoverageを増やす
 
-各sourceについて:
-- freshness
-- item cadence
-- timestamp quality
-- body/summary availability
-- duplicate noise
-- stale feed risk
-- HTTP/rate-limit behavior
-- market relevance
-
-source set:
-- BOJ
-- Fed
-- JMA
-- USTR
-- UN peace/security
-- EIA
-- BBC World
-- Al Jazeera
-- ECB
-- SEC
-- GDELT
-
-White Houseは現在excluded。再追加はこのH1ではしない。
-
-評価区分:
-- primary reliable
-- useful secondary
-- noisy/limited
-- unhealthy
-- insufficient evidence
-
-## Scope E — cost / trigger audit
-
-shadowのconditional search policyを実データで確認。
-
-必須:
-- quiet cycleで0 paid searchが維持されているか
-- same topic cooldownが効いているか
-- source degradationだけで過剰発火しないか
-- 1 run最大1 search境界
-- observed cost/day extrapolation
-- worst-case設計上限（ただしemergency fallbackを止めるhard cap提案は禁止）
-
-legacy baseline:
-- through 9/23: 48 nominal searches/day
-- from 9/24: 96 nominal searches/day
-
-shadow costはlegacy削減効果と混同せず、追加費用として別表示。
-
-## Scope F — recall evidence plan
-
-14日観測を最終推奨のまま維持。
-
-ただし今回のH1では、
-- 何をもってlane-safeとするか
-- minimum matched-event count
-- important/most_important zero-miss判定
-- delay <= +20m
-- median/p95
-- source unhealthy fallback
-を具体化。
-
-laneごと:
-- war/geopolitics
-- North Korea/J-Alert
-- tariffs/trade/sanctions
-- FX/central-bank
-- disaster/infrastructure
-- energy/oil
-- shipping/chokepoints
-- financial-system
-- China
-- semiconductor/AI/export controls
-- overseas major earnings
-- Japan corporate IR
-- Japan/US market abrupt moves
-
-証拠不足laneはlegacy fallback維持。
+これを満たさないものはresearch-only。
 
 ## Production mutation policy
 
-このH1は原則 **production mutation 0**。
+**0。**
 
 禁止:
-- shadow Function deploy
-- shadow Cron変更
-- migration/schema/RPC変更
-- secret/Vault変更
-- old important-news pipeline変更
-- legacy Web Search削減
-- X/Push/App変更
-- MIC変更
-- market-report変更
-- OAuth/social-mobile変更
+- important-news-shadow deploy
+- Cron変更
+- migration/schema/RPC
+- Vault/secret
+- legacy important-news pipeline
+- Web Search削減
+- X/Push/App
+- MIC
+- market-report
+- OAuth/social-mobile
 - manual OpenAI replay
 
-もしproduction bugを見つけても:
-- exact bug
-- impact
-- local fix candidate
-- tests
-- rollout proposal
-をReportしてSTOP。
-別承認なしに本番へ出さない。
+productionで見つけたbugはReportしてSTOP。直さない。
 
 ## Deliverables / C1
 
-.agent/CODEX_REPORT.md に最低限:
-1. observation window
-2. natural run count/status
-3. source health summary
-4. unique candidates / first_seen proof
-5. live important/most_important event count
-6. match count + per-match delay
-7. 0-match root-cause classification if applicable
-8. matcher offline evaluation
-9. source quality classification
-10. conditional search count/cost
-11. observed + projected shadow daily/monthly cost
-12. legacy baselineとの比較（削減ではなく現時点は追加費用）
-13. lane-by-lane evidence/fallback matrix
-14. recall parity status
-15. local code/test changes if any
-16. explicit production mutation = 0
-17. next recommendation
+最低限:
+1. lane coverage gap matrix
+2. candidate source inventory
+3. accepted/rejected reasons
+4. TDNET independent measurement conclusion
+5. North Korea/J-Alert coverage conclusion
+6. shipping/chokepoint coverage conclusion
+7. China/systemic coverage conclusion
+8. abrupt market move design
+9. recent-event backtest table
+10. source timestamp confidence
+11. local candidate files/branch/commit if any
+12. parser/tests results
+13. noise/materiality risks
+14. per-lane fallback requirement
+15. explicit production mutation = 0
+16. exact next production proposal, if any
 
 完了時:
 - status -> review_required
@@ -296,31 +299,3 @@ laneごと:
 - C1待ちでSTOP
 
 **推奨モデル：Luna。**
-
-
-## C1 review — 2026-09-20
-
-**PASS — read-only shadow observation/match audit completed as scoped.**
-
-Accepted evidence:
-- Production mutation = 0.
-- 9/9 natural shadow runs completed in the reviewed window; no duplicate/retry storm observed.
-- 31 unique shadow candidates were present and all 31/31 had collector `first_seen_at`.
-- 10 non-GDELT sources were fetch/parse healthy in the reviewed sample; GDELT was correctly identified as insufficient/unhealthy evidence because both observed actual polls timed out.
-- Legacy important-news Cron jobs 2/3/4/8 and `important-news-monitor` source hash remained unchanged.
-- No X / Push / App action, manual Function invoke, OpenAI replay, secret/Vault mutation, Cron change, schema write, or live pipeline change occurred.
-- Live comparison was appropriately interpreted: there were 0 important/most_important live events in the same 24h observation window, while the prior 48h high-importance set was dominated by TDNET and one BOJ item outside the shadow window.
-- Current matcher reproduced 0 offline matches, but the report did not incorrectly label this as matcher failure; the primary explanation is temporal/source coverage mismatch.
-- The 19-row replay remains explicitly unscorable for TP/FP/FN because replacement first_seen ground truth does not exist.
-- Conditional paid search remained 0 calls / $0 in the reviewed quiet window, with the limitation clearly stated.
-- All lanes remain NOT lane-safe; legacy paid fallback stays enabled everywhere.
-- Recall parity remains NOT PROVEN.
-
-C1 judgment:
-- This audit task is complete and passes.
-- Do **not** loosen matcher thresholds based on this sample.
-- Do **not** reduce legacy Web Search or cut over the live pipeline.
-- Continue natural 10-minute shadow observation until matched important/most_important events exist and the observation window is materially larger.
-- Any future production change requires a new explicit task/approval.
-
-Recommended model for the next observation/audit task: **Luna**.
