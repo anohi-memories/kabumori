@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-20 JST (H1 source-rights research final C1 PASS/done; H2 Phase12 ready; G1 natural shadow wait; G2 done)
+- checked_at: 2026-09-20 JST (H1 GDELT timeout diagnosis ready; H2 Phase12 done; G1 natural shadow wait; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,15 +14,13 @@
 
 ## Active workstreams
 
-- Codex slot 1: `done` — `important-news-phase1-shadow-observation-plus-source-rights-research-20260920`
-  - Final C1 PASS after correcting baseline cost arithmetic.
-  - Correct illustrative legacy cost: ~$20.42/30d at 12 fetch cycles/day through Sep23; ~$40.84/30d at 24 fetch cycles/day from Sep24.
-  - 17 natural runs observed over ~3h; 6/12/24h windows remain incomplete; recall parity NOT PROVEN.
-  - JPX TDnet Index API remains research-only pending written contract/usage confirmation. No inquiry/contract/account/billing.
-  - Production mutation 0; all legacy fallbacks remain enabled.
-  - Recommended model for next observation/research: Luna.
+- Codex slot 1: `ready` — `important-news-phase1-gdelt-timeout-diagnosis-and-fallback-candidate-20260920`
+  - Next H1 focuses on the recurring GDELT 15s timeouts observed in every actual poll so far.
+  - Scope is read-only diagnosis plus optional local-only query/timeout/fallback candidate and tests.
+  - Production mutation is 0; no deploy/Cron/schema/secret/Web Search reduction.
+  - Recommended model: Luna.
 
-- Codex slot 2: `ready` — `social-mobile-app-phase12-general-user-content-profile-and-dry-run-20260920`
+- Codex slot 2: `done` — `social-mobile-app-phase12-general-user-content-profile-and-dry-run-20260920`
   - Phase11 real OAuth QA C2 PASS済み。
   - 次は `social_mobile_user_v1` profile、tenant-safe settings/posting defaults、general-user dry-run generation、最小mobile preview。
   - real X post / media upload / publish_enabled=true / Cron / production deploy はまだ禁止。
