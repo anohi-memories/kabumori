@@ -3,7 +3,7 @@
 - task_id: important-news-phase1-gdelt-timeout-diagnosis-and-fallback-candidate-20260920
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
@@ -231,3 +231,35 @@ local branchを作る場合:
 - Read-only run comparison confirmed the 07:00 single-source GDELT failure produced 0 conditional searches; the 07:10 JMA high-signal/sparse trigger independently produced 1 conditional search, 2 Web Search calls, estimated $0.02112360, while GDELT was skipped and no source was degraded.
 - No code change, deploy, Cron/configuration change, or other production mutation. Keep the existing hourly GDELT cooldown and all legacy fallbacks; exact next proposal is evidence-limited natural observation only.
 - status: review_required; next_owner: chatgpt. Stop for C1.
+
+
+## C1 review — 2026-09-21
+
+**PASS — GDELT timeout diagnosis completed safely as scoped.**
+
+Accepted evidence:
+- 27/27 natural shadow runs completed over 4h40m; requested 6h/12h/24h windows are still incomplete and were correctly treated as left-censored.
+- GDELT failed on all 5 actual hourly polls at ~15s and was cooldown-skipped 22 times; other ten sources remained healthy in the persisted sample.
+- Bounded external probes were stopped after HTTP 429 responses; no unsupported root-cause claim was made.
+- Root-cause confidence is correctly recorded as low; no timeout increase/query rewrite was promoted without repeatable successful evidence.
+- A single degraded GDELT source did not itself trigger paid fallback in the observed 07:00 run.
+- The 07:10 JMA high-signal/sparse event independently triggered the conditional-search path while GDELT was skipped.
+- Same-window one live `important` North Korea event did not match the current shadow set; this is one observed non-match, not a recall-rate conclusion.
+- GDELT's current query does not target North Korea/missile/projectile terms, so timeout remediation alone would not close that coverage gap.
+- No code/runtime candidate was adopted.
+- Production mutation = 0; all legacy paid/live fallbacks remain enabled.
+
+### Follow-up observation
+
+The 07:10 natural run recorded **1 conditional-search event but 2 `web_search_call` output items**, despite the current Responses request specifying `max_tool_calls: 1`. The code records actual response output items, so the persisted cost is not being hidden; however, this contradicts the earlier assumption that one targeted Responses request necessarily implies one billable/search-call item.
+
+This is **not a blocker for the GDELT diagnosis task**, but future cost-cap reasoning must use observed `web_search_calls`, not infer a one-call ceiling solely from `max_tool_calls: 1`. A separate focused audit is appropriate before relying on that cap in economics or safety calculations.
+
+C1 judgment:
+- Task complete.
+- Keep GDELT at its existing hourly secondary cadence for now.
+- Do not deploy a query rewrite, increase timeout, remove GDELT, or reduce any fallback based on current evidence.
+- Continue natural observation.
+- Separately audit the 1 conditional-search / 2 web_search_call behavior before using a hard one-search-per-run assumption.
+
+Recommended model for the next audit: **Luna**.
