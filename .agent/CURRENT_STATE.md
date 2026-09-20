@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-20 JST (H1 cost arithmetic corrected and documentation branch refreshed; awaiting C1; H2 Phase12 ready; G1 natural shadow wait; G2 done)
+- checked_at: 2026-09-20 JST (H1 source-rights research final C1 PASS/done; H2 Phase12 ready; G1 natural shadow wait; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,10 +14,14 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `important-news-phase1-shadow-observation-plus-source-rights-research-20260920`
-  - C1's sole blocker is corrected in the report and documentation artifact: $0.056721 per fetch cycle (small sample) gives about $20.42/30d at 12 cycles/day and $40.84/30d at 24 cycles/day.
-  - Nominal search slots remain 48/96 per day (4 per cycle), not the cost multiplier. Observation/source-rights findings are otherwise unchanged.
-  - Refreshed documentation-only branch: [codex/important-news-source-rights-research-20260920-c1fix](https://github.com/anohi-memories/kabumori/tree/codex/important-news-source-rights-research-20260920-c1fix); production mutation remains 0. Stop for C1.
+- Codex slot 1: `done` — `important-news-phase1-shadow-observation-plus-source-rights-research-20260920`
+  - Final C1 PASS after correcting baseline cost arithmetic.
+  - Correct illustrative legacy cost: ~$20.42/30d at 12 fetch cycles/day through Sep23; ~$40.84/30d at 24 fetch cycles/day from Sep24.
+  - 17 natural runs observed over ~3h; 6/12/24h windows remain incomplete; recall parity NOT PROVEN.
+  - JPX TDnet Index API remains research-only pending written contract/usage confirmation. No inquiry/contract/account/billing.
+  - Production mutation 0; all legacy fallbacks remain enabled.
+  - Recommended model for next observation/research: Luna.
+
 - Codex slot 2: `ready` — `social-mobile-app-phase12-general-user-content-profile-and-dry-run-20260920`
   - Phase11 real OAuth QA C2 PASS済み。
   - 次は `social_mobile_user_v1` profile、tenant-safe settings/posting defaults、general-user dry-run generation、最小mobile preview。
