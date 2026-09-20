@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-20 JST (H1 GDELT diagnosis complete, awaiting C1; H2 Phase12 done; G1 natural shadow wait; G2 done)
+- checked_at: 2026-09-21 JST (H1 GDELT diagnosis C1 PASS/done; H2 Phase12 done; G1 natural shadow wait; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,11 +14,13 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `important-news-phase1-gdelt-timeout-diagnosis-and-fallback-candidate-20260920`
-  - 27/27 natural shadow runs completed over 4h40m; 6h window is still left-censored. GDELT timed out on all 5 hourly polls (~15s) and was cooldown-skipped 22 times; other ten sources remained healthy.
-  - External current/bounded queries both received HTTP 429; root cause is low-confidence and no code/runtime candidate was adopted.
-  - 07:00 single GDELT failure produced no search; 07:10 JMA sparse/high-signal condition independently caused 1 search event / 2 calls / estimated $0.02112360.
-  - Production mutation 0; preserve hourly cooldown and all fallbacks. Exact proposal: evidence-limited natural observation only. Stop for C1.
+- Codex slot 1: `done` — `important-news-phase1-gdelt-timeout-diagnosis-and-fallback-candidate-20260920`
+  - C1 PASS. GDELT failed on all 5 actual hourly polls (~15s); root cause remains low-confidence and no runtime/query change was justified.
+  - Other ten sources remained healthy in the persisted sample; production mutation 0; all legacy fallbacks remain enabled.
+  - Keep GDELT at current hourly secondary cadence and continue natural observation.
+  - Follow-up audit needed: one natural conditional-search event recorded 2 web_search_call output items despite max_tool_calls=1; future cost assumptions must use observed calls.
+  - Recommended model for follow-up audit: Luna.
+
 - Codex slot 2: `done` — `social-mobile-app-phase12-general-user-content-profile-and-dry-run-20260920`
   - Phase11 real OAuth QA C2 PASS済み。
   - 次は `social_mobile_user_v1` profile、tenant-safe settings/posting defaults、general-user dry-run generation、最小mobile preview。
