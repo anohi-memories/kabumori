@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-20 JST (H1 shadow observation/match audit review_required; H2 Phase11 review_required; G1 natural shadow wait; G2 done)
+- checked_at: 2026-09-20 JST (H1 shadow observation/match audit C1 PASS/done; H2 Phase11 review_required; G1 natural shadow wait; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,11 +14,12 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `important-news-phase1-shadow-observation-and-match-audit-20260920`
-  - 10-minute live shadow rollout is C1 PASS and merged.
-  - H1 read-only audit completed: 9 natural runs through 2026-09-20 04:10 UTC, 31 unique candidates / 31 first_seen, 0 live matches and $0 observed shadow search cost.
-  - Recall parity is NOT PROVEN; keep legacy fallback. C1 review required; production mutation is 0.
-  - Recommended model: Luna.
+- Codex slot 1: `done` — `important-news-phase1-shadow-observation-and-match-audit-20260920`
+  - C1 PASS. Read-only audit completed with production mutation 0.
+  - Reviewed window: 9 natural runs, 31 unique candidates / 31 first_seen, 0 paid shadow searches / $0.
+  - 0 live matches is not matcher failure evidence; same-window important/most_important live events were 0 and prior high-importance rows were mostly TDNET outside the shadow window.
+  - Recall parity remains NOT PROVEN. Keep all legacy paid fallback; no matcher loosening or live cutover.
+  - Continue natural 10-minute shadow observation. Recommended model for future observation/audit: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase11-x-portal-and-real-oauth-qa-20260920`
   - Phase10 C2 PASS済みbackendを使い、X Developer Portal設定確認と専用non-admin QA user + dedicated test X accountで1回のreal OAuth round-tripを行う。
