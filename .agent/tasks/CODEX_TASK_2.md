@@ -1,166 +1,227 @@
 # Codex Task 2
 
-- task_id: social-mobile-app-phase11-x-portal-and-real-oauth-qa-20260920
+- task_id: social-mobile-app-phase12-general-user-content-profile-and-dry-run-20260920
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
-- purpose: Phase 10でproduction backend rollout済みのgeneral-user X OAuthを、X Developer Portal設定の確認・手動反映準備から、専用non-admin QA Auth user + dedicated test X accountによる1回のreal OAuth round-trip QAまで安全に進める。real X postはまだ行わない。
+- purpose: Phase 11でgeneral-user X OAuthがproduction実証済みになったため、一般ユーザーbrandをcontent-generation pipelineへ安全に接続する最小基盤を作る。まず `social_mobile_user_v1` code profile、general-user posting defaults、dry-run generation/read pathまで。real X post・publish_enabled=true・自動投稿はまだ行わない。
 
 ## Approved basis
 
-Phase 10 Final C2: PASS。
+Phase 11 Final C2: PASS。
 
-production確認済み:
-- migration `social_mobile_x_oauth_onboarding` applied
-- production history version `20260919222101`
-- `x-oauth-connect-user` v1 ACTIVE
-- `verify_jwt=false` with custom in-function Supabase Auth validation
-- runtime source byte-equal to `origin/main`
-- unauthenticated POST -> 401
-- invalid method -> 405
-- existing admin `x-oauth-connect` v20 unchanged
-- existing production data rows unchanged
-- general-user OAuth state rows = 0
-- X Developer Portal unchanged
-- real X OAuth / Vault token write / X API post = 0
+productionで実証済み:
+- dedicated non-admin QA Auth user
+- dedicated test X account
+- real OAuth round-trip成功
+- QA X account = identity_verified
+- publish_enabled=false
+- Vault token refs存在、secret values未露出
+- tenant isolation runtime proof PASS
+- existing production X accounts/admin OAuth unchanged
+- real X post/media upload = 0
+- dedicated QA fixtureは当面保持
+
+既知の意図的gap:
+- general-user brandの `code_profile_key='social_mobile_user_v1'` はまだregistry未登録
+- そのため content-generation/dispatch は fail-closed
+- general-user posting_windows / publish enablement は未設計
+- revoke/disconnectは未実装
 
 ## Model policy
 
-- Start and proceed with **Luna**.
-- Do not escalate to Sol merely because this is production.
-- Escalate only if a concrete blocker appears involving OAuth protocol semantics, X permission mismatch, unexpected production DB/Vault behavior, or a security-sensitive discrepancy that Luna cannot resolve confidently.
-- If escalation is needed, stop and report the exact blocker first.
+- **Lunaで開始・継続する。**
+- Solへ上げるのは、shared generation pipelineの権限境界・multi-tenant isolation・既存brand回帰で具体的な設計矛盾が出た時だけ。
+- 単にproduction関連だからという理由でSolへ上げない。
 
-## Scope A — fresh preflight
+## Goal
 
-Before any user-impacting action:
-1. read `.agent/ORCHESTRATION.md`
-2. read `.agent/CURRENT_STATE.md`
-3. read this TASK and `.agent/CODEX_REPORT_2.md`
-4. inspect other 3 slots for conflicts
-5. fresh `origin/main`
-6. production read-only:
-   - `x-oauth-connect-user` v1 ACTIVE
-   - 3 general-user OAuth RPCs present
-   - brand_memberships current count
-   - user OAuth states current count
-   - existing admin X accounts unchanged
-7. verify mobile deep-link candidate remains exactly `kabumori-social://oauth-callback`
-8. verify requested scopes remain exactly:
-   - `tweet.read`
-   - `users.read`
-   - `tweet.write`
-   - `media.write`
-   - `offline.access`
+Phase 12では「一般ユーザーのbrandが安全にAI生成をdry-runできる」状態まで作る。
 
-STOP if source or production drift is found.
+このPhaseで目指すもの:
+1. `social_mobile_user_v1` code profileをregistryへ追加
+2. user-owned brand contextを既存brand pipelineから安全に解決
+3. general-user default posting settings / windowsの最小モデルを決める
+4. mobileからdry-run生成結果を確認できる候補を作る
+5. existing AI Lab / kabumori / mio behaviorを変えない
+6. real publishは一切しない
 
-## Scope B — X Developer Portal manual gate
+## Mandatory startup
 
-Do not claim browser automation.
+開始前に:
+1. `.agent/ORCHESTRATION.md`
+2. `.agent/CURRENT_STATE.md`
+3. this TASK
+4. `.agent/CODEX_REPORT_2.md`
+5. other 3 slot TASK
+6. fresh `origin/main`
+7. inspect:
+   - `_shared/brand/brand_profiles.ts`
+   - brand context loader
+   - existing dry-run Function(s)
+   - social-mobile repository/adapters
+   - posting_windows schema/RPCs
+   - existing general-user QA fixture read-only
+8. fresh overlap check with H1/G1/G2
 
-Determine and document the exact manual settings required in the X Developer Portal for the current client:
-- OAuth 2.0 enabled
-- callback / redirect URI exactly:
-  `kabumori-social://oauth-callback`
-- app type / OAuth mode compatible with Authorization Code + PKCE
-- app permissions sufficient for read + write + media upload + offline refresh
-- website/app metadata only if X requires it to save settings
+STOP if another slot touches the same shared brand profile files, same posting RPC/table migration, or same dry-run Function.
 
-Do not expose or request client secret in chat/report.
+## Scope A — general-user profile
 
-If Portal cannot be changed by an approved connected tool:
-- STOP at a concise user action checklist.
-- Do not invent that it was changed.
-- After the user confirms the exact Portal settings, resume this same H2.
+Add `social_mobile_user_v1` to the shared brand profile registry.
 
-## Scope C — dedicated QA identity setup
+Requirements:
+- no hardcoded QA handle/user ID
+- generic default profile for any general-user workspace
+- profile must not impersonate existing brands
+- neutral safe defaults
+- no brand-specific secrets
+- no automatic X identity assumptions beyond connected account metadata
+- unknown/missing user settings remain fail-closed or conservative
 
-Real OAuth QA must NOT use the existing admin Auth identity or the production AI Lab/kabumori X accounts.
+Profile should support at minimum:
+- display name / brand name fallback
+- tone/voice defaults
+- language/locale default
+- posting objective defaults
+- prohibited claims / unsafe generation guardrails
+- no auto-post flag embedded in profile
 
-Required:
-- one dedicated non-admin Supabase Auth QA user through normal Auth lifecycle
-- confirm absent from `public.admin_users`
-- no pre-existing owner membership required; begin RPC should create the user workspace/owner membership
-- one dedicated test X account that is safe to bind for QA
+Do not change existing AI Lab/kabumori/mio profile behavior.
 
-Do not create Auth users by direct SQL.
-Do not reuse the existing admin X accounts.
+## Scope B — user settings contract
 
-If a dedicated test X account is not available, STOP and tell the user exactly what is needed.
+Define the minimal per-user/brand content settings needed before generation.
 
-## Scope D — one real OAuth round-trip
+Prefer reusing existing settings tables/RPCs if they are tenant-safe. Add new schema only if existing model cannot represent the needed fields safely.
 
-Only after B and C are satisfied.
+Minimum candidate:
+- preferred tone
+- content themes/topics
+- posting objective
+- posting frequency target
+- approval mode preference
+- generation timing preference
+- optional NG words / notes
 
-Run exactly one real general-user OAuth connection through the production mobile flow or equivalent approved client path:
-1. sign in as the dedicated non-admin QA Auth user
-2. tap/start X account connection
-3. confirm X consent shows the expected permissions
-4. complete redirect back to `kabumori-social://oauth-callback`
-5. callback completes successfully
-6. verify UI reports connected/verified handle
+Requirements:
+- ownership bound to `auth.uid()` / membership
+- no client-trusted brand_id for write authorization
+- tenant isolation
+- defaults exist for first-time QA user
+- no direct client write to protected cross-tenant rows unless already-established safe RLS pattern exists
 
-Expected production writes for this one QA only:
-- one deterministic general-user brand/workspace if first connection
-- one owner brand_membership for QA user
-- one X social_account
-- one consumed OAuth state
-- Vault access/refresh token secret(s)
-- `publish_enabled=false`
+If migration/RPC candidate is needed:
+- source only before C2
+- disposable proof required
+- no production apply
 
-Forbidden:
-- real X post
-- media upload
-- setting `publish_enabled=true`
-- touching existing AI Lab/kabumori/mio accounts
-- altering existing admin OAuth
-- Cron
-- app-wide production data source switch
-- content-generation enablement
+## Scope C — posting defaults / windows
 
-## Scope E — postflight read-only proof
+Design the minimum general-user posting schedule model.
 
-Verify:
-- QA user is non-admin
-- QA user owns only its deterministic workspace
-- bound X handle/platform_user_id match the dedicated test X account
-- connection_status = identity_verified
-- publish_enabled = false
-- OAuth state consumed exactly once
-- token values are never selected/logged/reported
-- Vault secret IDs may be counted/presence-checked only; never reveal secret contents
-- existing brands/social_accounts/admin OAuth rows unchanged
-- cross-tenant visibility remains denied for the QA user
-- replay attempt is not performed unless a safe non-token-changing method exists; rely on prior tested replay proof otherwise
+Target default:
+- user can have safe initial posting windows/settings
+- preserve project concept:
+  - default next-day AI planning
+  - default auto-post may exist as product preference, but **Phase 12 must not enable live publishing**
+  - optional approval mode supported
+  - generation window previous-day 09:00–24:00, default around 17:00 candidate
+- limits/entitlements remain separate from profile
 
-## Cleanup decision
+Prefer:
+- reuse `posting_windows` if tenant-safe and semantically compatible
+- otherwise propose additive tenant-safe table/RPC candidate
 
-Do NOT automatically delete the QA Auth user/workspace/X binding/Vault secrets after a successful real round-trip.
+No Cron or production scheduler changes in this Phase.
 
-At completion, report two choices:
-- retain as dedicated QA fixture for future regression testing
-- clean up in a separately authorized rollback task
+## Scope D — dry-run generation path
 
-No automatic cleanup in this Phase.
+Implement a safe dry-run for the dedicated QA fixture and generic general-user path.
 
-## Tests/checks
+Requirements:
+- signed-in user can invoke dry-run only for owned workspace
+- resolve `social_mobile_user_v1`
+- use current brand context / AI generation stack where safe
+- no scheduled_posts write unless explicitly required for a local/disposable candidate
+- no X API call
+- no Vault token read required for generation
+- no publish attempt
+- result clearly marked preview/dry-run
+- generation must not silently fall back to another brand/profile
 
-Before/after QA:
-- relevant OAuth unit tests
-- onboarding/deep-link tests
-- typecheck/lint
-- git diff --check
-- no source changes unless a real defect is discovered
+If an existing `brand-post-dry-run` can be safely extended, preserve existing admin/general boundaries and do not regress current brands. If trust boundary differs materially, prefer a separate narrowly-scoped Function.
 
-If a real defect is discovered:
-- do not patch production ad hoc
-- stop, create a source fix on fresh main, test it, and return for C2 before redeploying.
+## Scope E — mobile candidate
 
-Latest continuation update (2026-09-20): the iOS app failed closed because Expo did not inline Supabase public configuration read through generic `process.env` indexing. The one-file fix passed typecheck, lint, focused OAuth tests, iOS export/bundle verification, Release build/install, and `git diff --check`. Source plus H2 TASK/REPORT were pushed to `origin/main` in commit `56506847613b47ea882ad48211649b587a016fbd`; no deployment followed. The real OAuth round-trip stopped before QA login, consent, OAuth-state creation, or production writes. C2 must review this source fix before QA resumes. Keep `status: review_required`, `next_owner: chatgpt`.
+Add the minimum social-mobile UX needed to exercise the dry-run:
+
+- from Home or Accounts/Settings, user can trigger or view one preview generation
+- clear states:
+  - not configured
+  - generating
+  - preview ready
+  - generation error
+- no "投稿する" action yet
+- no publish toggle that can set live state
+- preview must show which connected X account/workspace it belongs to
+- no token/secret display
+
+Keep UX minimal; Phase 12 is foundation, not final polish.
+
+## Scope F — dedicated QA proof
+
+Use the retained Phase 11 QA fixture only for read-only/runtime proof where safe.
+
+Allowed before C2:
+- real signed-in read/dry-run generation if it creates no live scheduled/published content
+- read-only tenant checks
+- local/disposable DB candidate proof
+- mocked AI if paid/live model use is unnecessary
+
+Do not make a real X post.
+Do not flip `publish_enabled`.
+Do not mutate existing production brands.
+
+If real AI generation would incur paid usage, prefer mock/local proof first. Any production AI call must be explicitly documented and bounded; if avoidable, do not make it.
+
+## Tests
+
+At minimum:
+- profile registry regression
+- general-user profile resolution
+- existing AI Lab/kabumori/mio profile regression
+- tenant ownership tests
+- settings defaults tests
+- dry-run auth/ownership tests
+- no cross-tenant access
+- no X publish path
+- social-mobile typecheck
+- lint
+- relevant Deno tests
+- Expo export/route resolution if UI changed
+- `git diff --check`
+- secret/static scan
+
+## Production boundary
+
+Before C2:
+- no production migration apply
+- no production Edge Function deploy
+- no Cron/scheduler change
+- no `publish_enabled=true`
+- no real X post/media upload
+- no existing production account mutation
+- no Vault rotate/delete
+- no app-wide data-source switch
+- no billing/Push changes
+- no cleanup of QA fixture
+- no blind `db push` / migration-history repair
+
+Read-only production checks and one bounded no-publish dry-run are allowed only if the path is proven not to publish/write protected production content.
 
 ## Completion / C2
 
@@ -168,86 +229,15 @@ When complete:
 - status -> `review_required`
 - next_owner -> `chatgpt`
 - update `.agent/CODEX_REPORT_2.md` with:
-  1. Portal configuration status
-  2. QA Auth setup status
-  3. dedicated test X account readiness
-  4. real OAuth round-trip result
-  5. exact expected production writes observed
-  6. Vault/token handling proof without secret values
-  7. tenant isolation postflight
-  8. existing admin OAuth/accounts unchanged
-  9. no X post/media upload
-  10. retain-vs-cleanup recommendation
-- push control/report changes only if needed
+  1. exact architecture chosen
+  2. files/commits
+  3. profile registry change
+  4. settings/posting-window contract
+  5. dry-run path
+  6. mobile UX
+  7. tenant/security proof
+  8. tests
+  9. production mutation = 0
+  10. exact next production rollout recommendation
+- fresh-check `origin/main` before push
 - STOP for C2
-
-
-## C2 review — 2026-09-20 (mobile Supabase env inlining fix)
-
-**PASS for the one-file client fix; Phase 11 overall remains incomplete and must resume.**
-
-Accepted:
-- Root cause is credible and matches Expo's static \`EXPO_PUBLIC_*\` inlining requirement: dynamic/default \`process.env\` object access was not preserved into the native bundle, while direct property references are.
-- Change is limited to \`apps/social-mobile/src/lib/supabase.ts\`.
-- The default runtime path now reads:
-  - \`process.env.EXPO_PUBLIC_SUPABASE_URL\`
-  - \`process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY\`
-  through direct static references.
-- Injected test environments remain supported because \`getSupabaseConfig(env)\` and \`createSupabaseClient(env)\` still accept explicit env objects.
-- No service-role/client secret path was introduced; existing publishable-key guard remains.
-- Auth/RLS/OAuth semantics are unchanged by this fix.
-- Verification accepted:
-  - typecheck PASS
-  - lint PASS
-  - OAuth/onboarding focused tests 27/27 PASS
-  - iOS export PASS
-  - bundle verification confirmed configured public values were embedded
-  - Release iOS build/install PASS
-  - login screen rendered without the missing-config banner
-  - git diff --check PASS
-- Commit \`56506847613b47ea882ad48211649b587a016fbd\` contains only the expected source + H2 control/report changes.
-- No production DB/Vault/X/API/deploy mutation occurred during this fix.
-
-Decision:
-- source fix is approved.
-- Resume the same Phase 11 H2 from the QA login / real OAuth gate.
-- Keep using **Luna**.
-- User must enter QA credentials directly; do not request/store passwords in chat/report.
-- Immediately before X consent, confirm the dedicated test X account is the intended account.
-- Run exactly one real OAuth round-trip, then perform the required read-only DB/Vault/tenant-isolation postflight.
-- Still forbidden: real X post, media upload, \`publish_enabled=true\`, changes to existing production X accounts/admin OAuth, Cron, or app-wide data-source switch.
-- On completion return \`review_required / next_owner: chatgpt\` for final C2.
-
-
-## Final C2 review — 2026-09-20
-
-**PASS — Phase 11 real X OAuth QA is complete.**
-
-Accepted from H2 report:
-- exactly one real OAuth authorization callback completed successfully.
-- the mobile Accounts UI reported the linked account as connected.
-- the QA Auth identity is non-admin.
-- the linked X account is a dedicated test account distinct from the two pre-existing production X accounts.
-- connection status is \`identity_verified\`.
-- \`publish_enabled=false\`.
-- exactly one OAuth state was consumed successfully; four earlier expired/unconsumed rows remain as non-blocking cleanup observations.
-- Vault access-token and refresh-token secret references exist; no token/secret values were exposed.
-- existing production X accounts and admin OAuth were not changed.
-- X post/media upload = 0; OpenAI calls = 0.
-- no deploy/schema/RLS/RPC/Cron/settings/Portal change occurred in this continuation.
-
-Independent C2 runtime isolation proof:
-- simulated the latest successful QA user's authenticated RLS context in a rollback-only transaction.
-- visible memberships = 1.
-- visible brands = 1.
-- visible social_accounts = 1.
-- visible pre-existing production accounts = 0.
-- visible QA account = 1.
-- transaction rolled back; no persistent production write occurred.
-
-Decision:
-- Phase 11 is approved complete.
-- keep the dedicated QA fixture for future OAuth regression testing for now.
-- do not clean it up automatically.
-- the four expired/unconsumed OAuth state rows are not a blocker; cleanup, if desired, should be handled in a separately authorized maintenance task.
-- status = done.
