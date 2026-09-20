@@ -1,3 +1,23 @@
+# H2 — Phase 11 dedicated QA real X OAuth round-trip (2026-09-20)
+
+- task_id: `social-mobile-app-phase11-x-portal-and-real-oauth-qa-20260920`
+- status: `review_required`
+- next_owner: `chatgpt`
+- result: Exactly one OAuth authorization callback was successfully consumed. The mobile Accounts screen displayed the linked account as connected. Production publishing remains disabled for this QA account.
+- QA identity: Latest consumed OAuth state was initiated by a user absent from `public.admin_users` (`initiator_is_admin=false`). The user confirmed this is the dedicated QA Auth login.
+- X identity: The newly verified X account is `@yumeyoasobi`, distinct from the two pre-existing X accounts `@yume_daka` and `@kaishain_ai_lab`. The account is `identity_verified`, has `verified_at`, and `publish_enabled=false`.
+- OAuth state accounting: Five state rows are associated with this QA user; one was consumed successfully at `2026-09-20 05:26:56 UTC`. Four earlier rows are expired and unconsumed. Their cause was not established; they were left untouched. No replay was attempted.
+- Vault: The linked account has access-token and refresh-token secret references, and both referenced `vault.secrets` rows exist. No secret values, token ciphertexts, OAuth codes, PKCE verifiers, or state hashes were selected or logged.
+- Tenant isolation: The QA user has exactly one `brand_memberships` row, with owner role for the same brand as the linked account, and zero memberships for other brands. Read-back of RLS policies showed `brand_memberships` self-select scoped to `auth.uid()` and `brands`/`social_accounts` selects scoped to membership. This is policy-level proof; no separate authenticated cross-tenant probe was run.
+- Existing accounts: Read-back still showed the pre-existing `@yume_daka` and `@kaishain_ai_lab` accounts, both with their prior earlier creation times. The new QA account is a separate row. No admin OAuth record was changed by this task.
+- X/OpenAI actions: OAuth authorization/token exchange and identity verification were part of the approved round-trip. No X media upload or post/repost endpoint was called; X posts = 0. OpenAI calls = 0. `publish_enabled` was not changed.
+- Deployment/configuration: No deployment, migration, schema/RLS/RPC, Cron, scheduler, settings, secrets, or OAuth Portal change was made during this continuation.
+- Cleanup: No QA user/workspace/account/Vault cleanup was performed. C2 should choose whether to retain this as a regression fixture or authorize a separate cleanup task.
+- Source/tests: No source changes in this continuation. Previously approved source commit `56506847613b47ea882ad48211649b587a016fbd` remains the mobile env-inlining fix; previously recorded verification remains typecheck PASS, lint PASS, OAuth/onboarding 27/27 PASS, iOS export/bundle verification PASS, Release build/install PASS, and `git diff --check` PASS.
+- GitHub sync: Cached local `origin/main` is `4addaac9152ce8a9d58cfabed7f8ce7f1336435f`. A fresh fetch was attempted but could not resolve `github.com`; therefore this completion report/TASK update cannot yet be pushed. No push was attempted. Formal checkout and its existing uncommitted changes remain untouched.
+- remaining_issues: Four expired, unconsumed OAuth state rows remain; their origin is unknown and they were not cleaned up. The completion report and slot status need GitHub synchronization after network access returns. Cross-tenant isolation was confirmed from the live RLS policy definitions and single-brand membership, not via a separately impersonated session probe.
+- safety_checks: X post 0; media upload 0; `publish_enabled=true` change 0; OpenAI calls 0; deploy 0; schema/RLS/RPC/migration change 0; Cron/scheduler/settings change 0; OAuth Portal change 0; token/secret values exposed 0; existing production X accounts untouched; formal repo and unrelated workstreams untouched.
+
 # Codex Slot 2 Report
 
 ## H2 — Phase 11 QA stopped for mobile public-env bundle defect (2026-09-20)
