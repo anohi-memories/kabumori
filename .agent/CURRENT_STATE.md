@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-20 JST (H1 GDELT timeout diagnosis ready; H2 Phase12 done; G1 natural shadow wait; G2 done)
+- checked_at: 2026-09-20 JST (H1 GDELT diagnosis complete, awaiting C1; H2 Phase12 done; G1 natural shadow wait; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,12 +14,11 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `important-news-phase1-gdelt-timeout-diagnosis-and-fallback-candidate-20260920`
-  - Next H1 focuses on the recurring GDELT 15s timeouts observed in every actual poll so far.
-  - Scope is read-only diagnosis plus optional local-only query/timeout/fallback candidate and tests.
-  - Production mutation is 0; no deploy/Cron/schema/secret/Web Search reduction.
-  - Recommended model: Luna.
-
+- Codex slot 1: `review_required` — `important-news-phase1-gdelt-timeout-diagnosis-and-fallback-candidate-20260920`
+  - 27/27 natural shadow runs completed over 4h40m; 6h window is still left-censored. GDELT timed out on all 5 hourly polls (~15s) and was cooldown-skipped 22 times; other ten sources remained healthy.
+  - External current/bounded queries both received HTTP 429; root cause is low-confidence and no code/runtime candidate was adopted.
+  - 07:00 single GDELT failure produced no search; 07:10 JMA sparse/high-signal condition independently caused 1 search event / 2 calls / estimated $0.02112360.
+  - Production mutation 0; preserve hourly cooldown and all fallbacks. Exact proposal: evidence-limited natural observation only. Stop for C1.
 - Codex slot 2: `done` — `social-mobile-app-phase12-general-user-content-profile-and-dry-run-20260920`
   - Phase11 real OAuth QA C2 PASS済み。
   - 次は `social_mobile_user_v1` profile、tenant-safe settings/posting defaults、general-user dry-run generation、最小mobile preview。
