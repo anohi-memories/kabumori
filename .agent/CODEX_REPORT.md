@@ -29,6 +29,7 @@
 
 - Legacy Cron job ids `2/3/4/8` retain schedules and command MD5s: fetch `0,20,40` / `b9a98c88ada68d0552ac66c9e8e19983`; judgement `7,27,47` / `438fb5cb0d1206bdfc6af7b379c06788`; generation `14,34,54` / `951233b2a4fe7ae2b82ef83292276565`; publish-ready `*/5` / `bc7fddb4557c9babecec6af57fede247`.
 - `important-news-monitor` remains v60, source hash `ce7b4bf79da6fb35f8593c4a692ef125acdbdb0ed26c189a761f15eeb5a4070f`.
+- The project-level addition of the dedicated secret incremented platform Function version counters for unrelated Functions; read-only comparison showed their source hashes and `updated_at` values unchanged. No unrelated Function source was deployed and no existing secret was modified.
 - Shadow tables have RLS enabled, zero client policies, no `anon`/`authenticated` SELECT privileges, and `service_role` SELECT. Shadow code has no X/Push/App/publish write surface; static boundary test passes. No manual Function invocation, candidate injection, X post, Push, or App write was performed.
 - Tests: Deno suite `14 passed / 0 failed`; `deno check` on `important-news-shadow/index.ts` passed; `git diff --check` passed.
 - Rollback remains disabling only Cron job 38; keep shadow audit rows. No live legacy rollback is needed.
