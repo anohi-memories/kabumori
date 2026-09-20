@@ -19,7 +19,7 @@
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: 自然shadowを17回read-only確認（約3時間、6/12/24hは未充足）。利用条件・licensed候補調査は完了。TDnet Index APIの契約条件確認を次提案とし、production mutation 0。C1 review required.
+- note: 17 natural shadow runs and source-rights research remain as reviewed; C1 cost arithmetic corrected ($20.42/$40.84 per 30d at 12/24 fetch cycles per day). Artifact branch codex/important-news-source-rights-research-20260920-c1fix; production mutation 0. C1 review required.
 
 ### Codex slot 2
 - owner: codex
