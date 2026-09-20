@@ -1,331 +1,229 @@
 # Codex Task
 
-- task_id: important-news-phase1-shadow-coverage-gap-expansion-candidate-20260920
+- task_id: important-news-phase1-shadow-observation-plus-source-rights-research-20260920
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
-- purpose: live shadow監査で判明したcoverage gapを埋めるため、TDNET/Japan IR・North Korea/J-Alert・shipping/chokepoints・China・abrupt market moves等の追加source候補をread-only調査し、production未変更のsource-expansion candidateとtestsまで作る。
+- purpose: 10分shadowの自然観測を継続しつつ、無料sourceで埋まらなかったlaneについて利用条件・公式API・低コストのlicensed data候補を調査し、将来の安全なcoverage拡張案を作る。production挙動は変更しない。
 
 ## Approved basis
 
 前H1 C1 PASS:
-- 10-minute shadow稼働は安定。
-- 9 natural runs / 31 unique candidates / 31 first_seen。
-- same-window live important/most_important = 0。
-- prior 48h high-importance 14件のうち13件がTDNET、1件がBOJ。
-- shadowにはTDNET collectorが無く、現状はJapan corporate IR laneを比較できない。
-- BBC / Al Jazeeraはuseful secondaryだがnoiseあり。
-- JMAは取得できているがroutine ashfall forecast等のnoiseあり。
-- GDELTは観測した実poll 2回とも15秒timeout。
-- BOJ/Fed/USTR/UN/EIA/ECB/SECはfetch healthyだが観測windowでは0 items。
-- recall parity NOT PROVEN。
-- 全lane legacy paid fallback維持。
-- matcher thresholdは今の証拠では緩めない。
+- coverage-gap researchは完了。
+- 新規sourceはproduction採用なし。
+- TDnet/Japan IR、North Korea/J-Alert、shipping/chokepoints、China/systemic、abrupt market movesは独立測定route未確立。
+- 全laneでlegacy paid/live fallback維持。
+- 10分shadowは継続稼働。
+- recall parityは未証明。
+- production mutationは0。
 
-## User goal
+## User decision
 
-待ち時間を使って、shadowが重要ニュース比較に使えるcoverageへ近づける。
-
-今回のゴール:
-1. 現行shadowで欠けている重要laneをsource単位で明示。
-2. 無料/公式/低コストで追加できる候補を実地確認。
-3. historical/recent live important eventsへ届くsourceかをread-only評価。
-4. source追加candidateをlocal-onlyで実装・test。
-5. production導入する価値のあるsourceだけをC1へ提案。
+2026-09-20、ユーザーは「じゃあそれ」と明示。
+前C1後に提案した
+- 自然shadow観測を継続
+- 別角度でsource rights / licensed data / low-cost providerを調査
+を本H1として進める。
 
 ## Model policy
 
 - **Lunaで開始・継続。**
-- 調査、source比較、parser実装、tests、docsはLuna。
-- Solへ上げるのは、具体的なsecurity/auth/production-write blockerが出た場合のみ。
-- 複雑という理由だけでSolに切り替えない。
+- 観測、調査、比較、費用整理、ドキュメントはLuna。
+- Solへ上げるのはsecurity/auth/production-writeの具体的blockerが出た場合のみ。
+- 本H1はproduction writeを行わない。
 
-## Mandatory startup
+## Scope A — continued natural shadow observation
 
-1. .agent/ORCHESTRATION.md
-2. .agent/CURRENT_STATE.md
-3. this TASK
-4. .agent/CODEX_REPORT.md
-5. other 3 slot TASKs
-6. fresh origin/main
-7. production shadow state read-only
-8. production recent important/most_important rows read-only
-9. current source list/parser/tests
-10. replay artifact 19件
-
-H2/G1/G2 objectsには触れない。
-
-## Priority coverage gaps
-
-優先順位:
-
-### P0
-- Japan corporate IR / TDNET
-- North Korea / J-Alert / Japan security
-- shipping / Hormuz / Red Sea / chokepoints
-- China major policy / stimulus / financial-system
-
-### P1
-- Japan/US abrupt market moves
-- overseas major earnings/guidance
-- semiconductor / AI / export controls
-- FX intervention / emergency central-bank action
-- energy infrastructure / oil disruption
-
-### P2
-- broad war/geopolitics source quality改善
-- disaster/infrastructure noise reduction
-
-## Scope A — source discovery and validation
-
-各laneで候補sourceを探す。
-
-優先:
-- official RSS/Atom/XML/JSON
-- official press release/index endpoint
-- reputable free news RSS
-- static HTML page that can be safely polled
-- low-rate public API where terms/limits are acceptable
-
-評価:
-- HTTPS
-- no auth / no paid key preferred
-- update cadence
-- stable timestamp
-- body/summary presence
-- historical archive availability
-- rate limit
-- robots/terms constraints where obvious
-- parser complexity
-- expected relevance/noise
-- duplicate risk
-
-GDELT単独依存は禁止。
-
-## Scope B — TDNET/Japan IR
-
-最重要。
-
-調べる:
-- existing live pipelineがTDNETをどう取得しているか
-- shadowへ同じlive candidateを単純コピーするのではなく、independent measurement sourceとして何が使えるか
-- JPX/TDNET official disclosure feed/index/API/HTML等の独立取得可否
-- source timestampとcollector first_seenを記録できるか
-- current live TDNET important events 13件に対してhistorical source URL/timestampを紐づけ可能か
-
-もし独立sourceが無理なら:
-- 「Japan IR laneはshadow replacement測定不能」
-を明記し、legacy fallback維持。
-
-live tableのコピーをshadowのrecall proofとして数えるのは禁止。
-
-## Scope C — North Korea / Japan security
-
-候補:
-- J-Alert/消防庁/内閣官房/防衛省/海保等のofficial feed/index
-- 防衛省 missile-related press release/update
-- credible regional secondary sources
-
-要件:
-- missile/launch/airspace/maritime warningの速報timestampが取れること。
-- routine PR noiseを分離できること。
-
-## Scope D — shipping / chokepoints
-
-候補:
-- maritime authority / UKMTO / IMO / official advisories
-- reputable shipping/security feeds
-- energy/shipping secondary sources
-
-対象:
-- Hormuz
-- Red Sea / Bab el-Mandeb
-- Suez
-- tanker attacks
-- port closure
-- major shipping disruption
-
-sourceが商用/認証必須なら「無料shadow sourceとして不採用」。
-
-## Scope E — China / financial-system / trade
-
-候補:
-- PBOC / State Council / MOFCOM / customs / CSRC等official
-- English official releases preferred where parser安定
-- trusted secondary source
-
-対象:
-- stimulus
-- reserve requirement/rate
-- capital controls
-- sanctions/trade controls
-- bank/systemic actions
-
-## Scope F — abrupt market moves
-
-今回production変更なし。
-
-read-only設計:
-- live market price/time-seriesをnews shadowへどう追加triggerとして読むか
-- MICを必須dependencyにしない
-- price triggerが無い場合のlegacy fallback
-- Nikkei futures / USDJPY / oil / US index急変 laneのminimum source
-
-MIC ingest/Cronは変更禁止。
-
-## Scope G — recent-event backtest
-
-最近の重要事例に対して候補sourceをread-onlyでbacktest。
+read-onlyで最新shadowデータを再集計。
 
 最低:
-- Sep18 BOJ
-- recent TDNET important examples
-- Sep12 North Korea missile
-- Sep12 Saudi pipeline attack
-- Hormuz / tanker-related examples
-- replay cohortのwar/tariff/shipping/geopolitics representative cases
+- task開始時までの全自然run
+- 直近6h / 12h / 24h
+- completed / partial / failed
+- source health
+- unique candidates
+- first_seen_at
+- live matches
+- important / most_importantとのsame-window比較
+- conditional Web Search calls / tokens / cost
+- duplicate/retry/auth failure兆候
+- GDELT timeout/cooldown状況
 
-各case:
-- old detected/fetched
-- candidate source published timestamp
-- candidate URL
-- historical availability confidence
-- proposed collector could have seen it? yes/no/unproven
-- expected lane fallback
+人工invokeは禁止。
 
-「published earlier = collector would definitely detect earlier」とはしない。
+重要:
+- 観測時間が短く、重要eventが無い場合は無理に結論を出さない。
+- 0 matchを失敗扱いしない。
+- recall parityはevent証拠が揃うまで未証明のまま。
 
-## Scope H — local-only implementation candidate
+## Scope B — source rights / machine-use terms
 
-source validationで有望なものだけ:
-- `supabase/functions/important-news-shadow/shadow_sources.ts`
-- parser/helper
-- tests
-- docs
+前H1でtechnical endpointは見つかっても権利・termsが曖昧だったsourceを重点確認。
 
-へlocal candidateとして追加可。
+対象:
+- JPX / TDnet
+- NHK RSS
+- MOD
+- UKMTO
+- PBOC / MOFCOM / State Council
+- market-data providers
 
-条件:
-- production deploy 0
-- Cron change 0
-- schema 0
-- secret/Vault 0
-- no manual OpenAI
-- source fetch testsはbounded
-- fixture-based parser testsを優先
-- source-specific timeout/cooldown明示
-- malformed/stale/future timestamp fail-closed
-- no arbitrary URL fetch/SSRF
+調べる:
+- commercial/business use
+- automated polling
+- storing headline/summary
+- redistribution restrictions
+- attribution requirements
+- polling/rate-limit guidance
+- API availability
+- pricing
+- trial/free tier
+- historical archive access
 
-candidate branchを作る場合:
-- fresh main
-- H1-owned files only
-- push可
-- merge不可
-- C1待ち
+不明なものは「allowed」と推定しない。
 
-## Noise controls
+## Scope C — licensed / low-cost alternatives
 
-特に:
-- JMA routine notices
-- broad BBC/Al Jazeera sports/entertainment
-- repeated geopolitical articles
+無料sourceだけで埋まらないlaneについて候補を比較。
 
-について、source追加と同時にmateriality prefilter候補を設計してよい。
+### Japan IR
+- official TDnet API
+- other licensed Japanese disclosure feeds
+- price per month
+- latency
+- machine access
+- historical availability
+
+### Japan security / North Korea
+- official alert-compatible services
+- reputable licensed newswire/API
+- missile/security alert latency
+- Japanese market relevance
+
+### Shipping / chokepoints
+- maritime security/API providers
+- UKMTO official access paths
+- shipping incident services
+- latency / terms / pricing
+
+### China policy/systemic
+- official licensed services or reputable APIs
+- English translation latency
+- PBOC/MOFCOM/State Council coverage
+
+### Abrupt market moves
+- delayed or realtime market data providers
+- Nikkei/futures
+- USDJPY
+- Brent/WTI
+- S&P/Nasdaq futures
+- licensing and per-month/API cost
+
+候補は「具体的に使えるもの」だけ記録。
+広告/マーケティングページだけでAPI実体が確認できないものは除外。
+
+## Scope D — economics
+
+現行legacy Web Searchコストと比較する。
+
+baseline:
+- through Sep23: nominal 48 searches/day
+- from Sep24: nominal 96 searches/day
+- measured prior natural mean: $0.056721/fetch cycle (small sample)
+
+licensed source候補について:
+- monthly fixed cost
+- usage-based cost
+- minimum contract
+- free tier/trial
+- effective cost per lane
+- legacy Web Search削減可能性
 
 ただし:
-- materiality filterで重要ニュースを落とす恐れがあるため、本番適用禁止。
-- positive/negative fixturesを作る。
-- hard keyword blacklistだけに依存しない。
+- cost reductionだけで導入を推奨しない。
+- recall/timelinessが最優先。
 
-## Acceptance for source candidate
+## Scope E — architecture options
 
-C1へ「追加候補」として出せるsourceは:
-- endpoint stable
-- timestamp usable
-- parser testable
-- recent relevant exampleあり、またはofficial sourceとしてevent windowで有用
-- rate/timeout strategyあり
-- duplicate/noise behavior説明可能
-- existing sourceと独立したcoverageを増やす
+最低3案を比較:
 
-これを満たさないものはresearch-only。
+A. 現状維持
+- free shadow + legacy paid fallback
+
+B. selective licensed source
+- 重要gap laneだけlicensed feed
+- 他laneは現状維持
+
+C. broader licensed news/data
+- 複数laneを1 providerでカバー
+
+比較:
+- recall
+- latency
+- independence
+- operational complexity
+- monthly cost
+- vendor lock-in
+- legal/terms clarity
+
+ranking/最終決定はしない。
+事実比較と採用条件を示す。
+
+## Scope F — exact next proposal
+
+C1へ出す提案は以下のどれかに限定:
+1. まだ観測継続のみ
+2. 特定providerのtrial/read-only評価
+3. 特定official APIの契約費用確認
+4. local-only adapter candidate
+5. no-go / fallback継続
+
+production契約・課金・secret追加・deployは本H1で行わない。
 
 ## Production mutation policy
 
 **0。**
 
 禁止:
-- important-news-shadow deploy
+- Function deploy
 - Cron変更
 - migration/schema/RPC
-- Vault/secret
-- legacy important-news pipeline
-- Web Search削減
+- secret/Vault
+- API契約/購入
+- paid trial activation requiring billing
+- legacy search削減
 - X/Push/App
-- MIC
-- market-report
+- MIC変更
 - OAuth/social-mobile
 - manual OpenAI replay
 
-productionで見つけたbugはReportしてSTOP。直さない。
+もしprovider trialが完全無料でも、account creationやexternal signupは行わず調査だけ。
 
 ## Deliverables / C1
 
-最低限:
-1. lane coverage gap matrix
-2. candidate source inventory
-3. accepted/rejected reasons
-4. TDNET independent measurement conclusion
-5. North Korea/J-Alert coverage conclusion
-6. shipping/chokepoint coverage conclusion
-7. China/systemic coverage conclusion
-8. abrupt market move design
-9. recent-event backtest table
-10. source timestamp confidence
-11. local candidate files/branch/commit if any
-12. parser/tests results
-13. noise/materiality risks
-14. per-lane fallback requirement
-15. explicit production mutation = 0
-16. exact next production proposal, if any
+.agent/CODEX_REPORT.mdへ:
+1. observation window / natural run count
+2. source health update
+3. new live important/most_important events and matches
+4. shadow paid-search cost
+5. rights/terms matrix
+6. licensed provider candidate matrix
+7. price/latency/API/access evidence
+8. architecture A/B/C comparison
+9. lane-by-lane fallback status
+10. exact next proposal
+11. production mutation = 0
+12. sources/URLs referenced in durable research doc if created
+
+必要ならdocs/news-coverage/へdocumentation-only artifactを作成可。
+branch/push可、merge不可。C1待ち。
 
 完了時:
 - status -> review_required
 - next_owner -> chatgpt
-- C1待ちでSTOP
+- STOP for C1
 
 **推奨モデル：Luna。**
-
-
-## C1 review — 2026-09-20
-
-**PASS — coverage-gap research completed safely.**
-
-Accepted:
-- Production mutation = 0.
-- No source/parser/runtime candidate was promoted because no investigated source met the stated acceptance bar.
-- TDnet/JPX independent free measurement remains unresolved; public listing visibility is not treated as crawler permission, and the paid JPX API requires separate economics/approval.
-- North Korea/J-Alert coverage remains unresolved; MOD archive/RSS and NHK RSS evidence are insufficient for low-latency replacement and/or reuse terms remain unclear.
-- Shipping/chokepoint coverage remains unresolved; no validated authless UKMTO/public machine feed was established.
-- China/systemic coverage remains unresolved; no stable timely structured official feed with proven timestamp lineage was validated.
-- Abrupt market-move coverage remains unresolved because current production market metrics are daily/date-precision and insufficient for intraday triggering.
-- Historical replay still lacks replacement-route first_seen ground truth, so no TP/FP/FN or detection-delay claim is accepted.
-- Existing shadow natural runs continued to complete and all legacy paid/live fallbacks remain enabled.
-- Existing 14-test shadow suite passed in the documented no-check baseline mode; runtime code did not change.
-
-Durable artifact:
-- Research document was C1-reviewed and merged through PR #2.
-- Merge commit: `f0eb3e9ef2ff23cff6ffcec85191949e40d8cf3a`.
-- Merged file: `docs/news-coverage/SHADOW_COVERAGE_GAP_RESEARCH_2026-09-20.md`.
-
-C1 judgment:
-- Task complete.
-- Do not add/poll NHK, TDnet, MOD, UKMTO, PBOC, or market-price candidates in production on current evidence.
-- Do not reduce legacy Web Search or fallback coverage.
-- Next useful work is continued natural shadow observation and/or a separately scoped source-rights/licensed-data investigation.
-
-Recommended model for next observation/research task: **Luna**.
