@@ -3,8 +3,8 @@
 - task_id: important-news-phase1-shadow-observation-plus-source-rights-research-20260920
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
 - purpose: 10分shadowの自然観測を継続しつつ、無料sourceで埋まらなかったlaneについて利用条件・公式API・低コストのlicensed data候補を調査し、将来の安全なcoverage拡張案を作る。production挙動は変更しない。
@@ -227,3 +227,49 @@ branch/push可、merge不可。C1待ち。
 - STOP for C1
 
 **推奨モデル：Luna。**
+
+
+## C1 review — 2026-09-20
+
+**NOT PASS — one material economics error must be corrected before this research task can close.**
+
+The observation/source-rights work is otherwise acceptable:
+- 17/17 natural shadow runs completed in the available ~3h sample.
+- 6h/12h/24h windows were correctly identified as incomplete/left-censored.
+- Same-window important/most_important = 0, so recall parity was correctly left unproven.
+- GDELT degradation was reported honestly.
+- Shadow paid-search usage remained 0 calls / $0 in the observed sample.
+- Production mutation = 0.
+- JPX TDnet Index API is a concrete research candidate, but no contract/contact/signup was performed.
+
+### C1 blocker — baseline cost arithmetic
+
+The Report and research document incorrectly multiply the prior mean **cost per fetch cycle** (`$0.056721/cycle`) by **nominal search slots/day** (`48` / `96`).
+
+Those units are incompatible.
+
+Correct baseline cadence already established in prior C1:
+- through 2026-09-23: **12 fetch cycles/day**, nominally 4 search slots each = 48 search slots/day
+- from 2026-09-24: **24 fetch cycles/day**, nominally 4 search slots each = 96 search slots/day
+
+Therefore using the observed small-sample mean `$0.056721/fetch cycle`:
+- 12 cycles/day = about **$0.680652/day = $20.42 / 30d**
+- 24 cycles/day = about **$1.361304/day = $40.84 / 30d**
+
+The current `$81.68 / $163.36 per 30d` figures are ~4x too high because they multiply a per-cycle cost by per-search-slot counts.
+
+### Required continuation
+
+1. Correct this arithmetic in:
+   - `.agent/CODEX_REPORT.md`
+   - `docs/news-coverage/SHADOW_RIGHTS_AND_LICENSED_OPTIONS_2026-09-20.md`
+2. Preserve the distinction:
+   - fetch cycles/day = 12 / 24
+   - nominal search slots/day = 48 / 96
+3. Keep the prior small-sample caveat.
+4. Do not change the JPX facts or any production state unless another evidence issue is found.
+5. Rebase/refresh the documentation branch onto current main if needed; H1-owned doc only.
+6. Production mutation remains **0**.
+7. Return to `review_required` and stop for C1 again.
+
+**Recommended model: Luna.**
