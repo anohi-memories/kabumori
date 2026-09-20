@@ -3,7 +3,7 @@
 - task_id: important-news-phase1-live-shadow-rollout-20260920
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: urgent
 - recommended_model: Sol High
@@ -529,3 +529,34 @@ Update CODEX_REPORT with:
 Then set status=review_required, next_owner=chatgpt, sync control metadata through the PR/allowed safe route, and STOP for C1.
 
 **Recommended model: Sol.**
+
+
+## C1 review — 2026-09-20
+
+**PASS — live shadow rollout completed safely.**
+
+Verified:
+- PR #1 was reviewed in C1 and merged manually (auto-merge was not enabled).
+- Merge commit: `4a28c168f4c7a3acfb31172a685e2a1de6b0542f`.
+- Shadow migration is isolated to `important_news_shadow_*`.
+- `important-news-shadow` uses a dedicated `X-Cron-Secret` / `IMPORTANT_NEWS_SHADOW_CRON_SECRET` path; service-role is not accepted as the request credential.
+- Dedicated secret exists in Function environment + Vault without plaintext exposure in report/Git.
+- Two natural 30-minute canary runs completed.
+- Shadow Cron then moved to `*/10 * * * *`, and one natural 10-minute run completed.
+- Shadow observed 24 free-source candidates; all have collector `first_seen_at`.
+- Observed paid Web Search during the three reviewed runs: 0 calls / $0.
+- GDELT timeout was isolated; v6 limits GDELT polling to UTC minute `:00`, and the following natural run confirmed cooldown behavior.
+- Legacy news Cron jobs 2/3/4/8 retained their schedules and command hashes.
+- `important-news-monitor` source hash remained unchanged.
+- X / Push / App publication writes remained 0.
+- RLS/client privilege isolation and no-publish boundary tests passed.
+- Deno tests 14/14, deno check, and git diff check passed.
+
+Important limits:
+- This PASS approves the shadow infrastructure and 10-minute observation cadence only.
+- Recall parity is **not** proven: the reviewed runs had 0 live matches.
+- Do not reduce or remove legacy paid fallback/search lanes.
+- Do not cut over the live pipeline.
+- Continue live shadow observation, recommended 14 days, and evaluate lane-by-lane recall/latency only after matched important/most_important events exist.
+
+C1 completion: task done. Next work should be observation/read-only analysis unless a new explicit production-change task is created.
