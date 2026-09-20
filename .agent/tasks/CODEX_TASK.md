@@ -3,7 +3,7 @@
 - task_id: important-news-phase1-shadow-coverage-gap-expansion-candidate-20260920
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
@@ -299,3 +299,33 @@ productionで見つけたbugはReportしてSTOP。直さない。
 - C1待ちでSTOP
 
 **推奨モデル：Luna。**
+
+
+## C1 review — 2026-09-20
+
+**PASS — coverage-gap research completed safely.**
+
+Accepted:
+- Production mutation = 0.
+- No source/parser/runtime candidate was promoted because no investigated source met the stated acceptance bar.
+- TDnet/JPX independent free measurement remains unresolved; public listing visibility is not treated as crawler permission, and the paid JPX API requires separate economics/approval.
+- North Korea/J-Alert coverage remains unresolved; MOD archive/RSS and NHK RSS evidence are insufficient for low-latency replacement and/or reuse terms remain unclear.
+- Shipping/chokepoint coverage remains unresolved; no validated authless UKMTO/public machine feed was established.
+- China/systemic coverage remains unresolved; no stable timely structured official feed with proven timestamp lineage was validated.
+- Abrupt market-move coverage remains unresolved because current production market metrics are daily/date-precision and insufficient for intraday triggering.
+- Historical replay still lacks replacement-route first_seen ground truth, so no TP/FP/FN or detection-delay claim is accepted.
+- Existing shadow natural runs continued to complete and all legacy paid/live fallbacks remain enabled.
+- Existing 14-test shadow suite passed in the documented no-check baseline mode; runtime code did not change.
+
+Durable artifact:
+- Research document was C1-reviewed and merged through PR #2.
+- Merge commit: `f0eb3e9ef2ff23cff6ffcec85191949e40d8cf3a`.
+- Merged file: `docs/news-coverage/SHADOW_COVERAGE_GAP_RESEARCH_2026-09-20.md`.
+
+C1 judgment:
+- Task complete.
+- Do not add/poll NHK, TDnet, MOD, UKMTO, PBOC, or market-price candidates in production on current evidence.
+- Do not reduce legacy Web Search or fallback coverage.
+- Next useful work is continued natural shadow observation and/or a separately scoped source-rights/licensed-data investigation.
+
+Recommended model for next observation/research task: **Luna**.
