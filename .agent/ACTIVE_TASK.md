@@ -25,11 +25,11 @@
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: social-mobile-app-phase10-production-oauth-rollout-20260920
+- task_id: social-mobile-app-phase11-x-portal-and-real-oauth-qa-20260920
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
-- note: approved migrationのproduction applyとx-oauth-connect-user deploy/postflight。Portal変更・real OAuth・X postは禁止。
+- note: Phase10 C2 PASS済み。Portal設定確認→専用non-admin QA Auth user + dedicated test X accountで1回のreal OAuth QA。X投稿は禁止。Luna推奨。
 
 ### Claude slot 1
 - owner: claude
