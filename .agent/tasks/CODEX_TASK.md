@@ -3,8 +3,8 @@
 - task_id: important-news-phase1-gdelt-timeout-diagnosis-and-fallback-candidate-20260920
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: 10分shadowで継続的に15秒timeoutしているGDELT経路を切り分け、GDELTを安定化できるか、または安全にsecondary扱いへ下げるべきかをproduction未変更で判断する。必要ならlocal-onlyのtimeout/query/fallback candidateとtestsを作る。
@@ -222,3 +222,12 @@ local branchを作る場合:
 - STOP for C1
 
 **推奨モデル：Luna。**
+
+
+## H1 diagnosis completed — 2026-09-20
+
+- Refreshed natural observation: 27/27 scheduled runs completed from 02:30–07:10 UTC (4h40m; requested 6h window remains left-censored). GDELT failed at five hourly polls (03:00–07:00 UTC) at the 15s timeout and was cooldown-skipped 22 times; other 10 sources were healthy across all 27 runs.
+- GDELT's live source set returned no candidate. Current request omits `timespan`; external baseline and 1h/maxrecords=8 probes both received HTTP 429, so query optimization was not validated. Exact production root cause remains low confidence.
+- Read-only run comparison confirmed the 07:00 single-source GDELT failure produced 0 conditional searches; the 07:10 JMA high-signal/sparse trigger independently produced 1 conditional search, 2 Web Search calls, estimated $0.02112360, while GDELT was skipped and no source was degraded.
+- No code change, deploy, Cron/configuration change, or other production mutation. Keep the existing hourly GDELT cooldown and all legacy fallbacks; exact next proposal is evidence-limited natural observation only.
+- status: review_required; next_owner: chatgpt. Stop for C1.
