@@ -3,7 +3,7 @@
 - task_id: important-news-phase1-shadow-observation-and-match-audit-20260920
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
@@ -296,3 +296,31 @@ laneごと:
 - C1待ちでSTOP
 
 **推奨モデル：Luna。**
+
+
+## C1 review — 2026-09-20
+
+**PASS — read-only shadow observation/match audit completed as scoped.**
+
+Accepted evidence:
+- Production mutation = 0.
+- 9/9 natural shadow runs completed in the reviewed window; no duplicate/retry storm observed.
+- 31 unique shadow candidates were present and all 31/31 had collector `first_seen_at`.
+- 10 non-GDELT sources were fetch/parse healthy in the reviewed sample; GDELT was correctly identified as insufficient/unhealthy evidence because both observed actual polls timed out.
+- Legacy important-news Cron jobs 2/3/4/8 and `important-news-monitor` source hash remained unchanged.
+- No X / Push / App action, manual Function invoke, OpenAI replay, secret/Vault mutation, Cron change, schema write, or live pipeline change occurred.
+- Live comparison was appropriately interpreted: there were 0 important/most_important live events in the same 24h observation window, while the prior 48h high-importance set was dominated by TDNET and one BOJ item outside the shadow window.
+- Current matcher reproduced 0 offline matches, but the report did not incorrectly label this as matcher failure; the primary explanation is temporal/source coverage mismatch.
+- The 19-row replay remains explicitly unscorable for TP/FP/FN because replacement first_seen ground truth does not exist.
+- Conditional paid search remained 0 calls / $0 in the reviewed quiet window, with the limitation clearly stated.
+- All lanes remain NOT lane-safe; legacy paid fallback stays enabled everywhere.
+- Recall parity remains NOT PROVEN.
+
+C1 judgment:
+- This audit task is complete and passes.
+- Do **not** loosen matcher thresholds based on this sample.
+- Do **not** reduce legacy Web Search or cut over the live pipeline.
+- Continue natural 10-minute shadow observation until matched important/most_important events exist and the observation window is materially larger.
+- Any future production change requires a new explicit task/approval.
+
+Recommended model for the next observation/audit task: **Luna**.
