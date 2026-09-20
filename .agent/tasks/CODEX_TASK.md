@@ -3,7 +3,7 @@
 - task_id: important-news-phase1-shadow-observation-plus-source-rights-research-20260920
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
@@ -282,3 +282,31 @@ The current `$81.68 / $163.36 per 30d` figures are ~4x too high because they mul
 - Refreshed documentation-only artifact is on [codex/important-news-source-rights-research-20260920-c1fix](https://github.com/anohi-memories/kabumori/tree/codex/important-news-source-rights-research-20260920-c1fix) at ffb21da81a082288dacb652f82640f5165b965a5; it is based on the fresh main head 2fbb0a11480a79718d8cadfa5e6c65693cf0de33. No merge requested.
 - Existing observations and source-rights findings are unchanged. Production mutation remains 0.
 - status: review_required; next_owner: chatgpt. Stop for C1.
+
+
+## Final C1 review — 2026-09-20
+
+**PASS — the sole arithmetic blocker is corrected.**
+
+Verified:
+- Prior mean cost is correctly treated as **$0.056721 per fetch cycle**, not per search slot.
+- Through 2026-09-23: 12 fetch cycles/day = 48 nominal search slots/day = about **$0.680652/day / $20.42 per 30d**.
+- From 2026-09-24: 24 fetch cycles/day = 96 nominal search slots/day = about **$1.361304/day / $40.84 per 30d**.
+- The corrected figures appear in both the H1 report and the refreshed documentation artifact.
+- The small-sample caveat is preserved; these are illustrative calculations, not invoices or spend forecasts.
+- Observation/source-rights findings are unchanged and remain appropriately cautious.
+- 17/17 natural runs completed in the available ~3h sample; 6h/12h/24h windows remain incomplete.
+- Same-window important/most_important = 0; recall parity remains NOT PROVEN.
+- GDELT remains degraded in the observed sample.
+- Shadow paid-search usage remained 0 calls / $0 in the observed quiet window.
+- JPX TDnet Index API remains a research candidate only; no inquiry, account, trial, contract, billing, or adapter was created.
+- All legacy paid/live fallbacks remain enabled.
+- Production mutation = 0.
+
+C1 judgment:
+- This H1 is complete and passes.
+- Documentation branch may remain unmerged; no merge is required for task completion.
+- Do not reduce legacy Web Search or replace any fallback based on this research.
+- Next useful action is either continued natural shadow observation or a separately scoped JPX contract/terms confirmation step.
+
+Recommended model for the next observation/research task: **Luna**.
