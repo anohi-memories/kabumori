@@ -1,5 +1,102 @@
 # Codex Report
 
+## Latest H1 result — important-news shadow observation and match audit (2026-09-20)
+
+- task_id: `important-news-phase1-shadow-observation-and-match-audit-20260920`
+- result: `review_required` — read-only production audit completed; C1 review requested. No shadow/live recall parity conclusion and no legacy fallback reduction is supported.
+- source_base: fresh GitHub `main` at `96d8c3e831de99e53a96a36ee68228033e9716c0` (confirmed by the GitHub branch read immediately before this report sync). Local linked-worktree `git fetch` could not write its shared `FETCH_HEAD`; the remote default branch and files were read directly through GitHub.
+- observation_window: 2026-09-20 02:30–04:10 UTC (11:30–13:10 JST); production readback completed at approximately 04:12 UTC.
+- production_mutation: 0. SQL access was SELECT-only; no manual Function invoke, OpenAI replay, secret read, deploy, Cron change, schema/data write, X/Push/App action, or legacy fallback change.
+- implementation_code_changes: none. Offline evaluation was an ephemeral read-only replay; no repository test or matcher code was changed.
+- files_changed_for_handoff: `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md`, `.agent/CURRENT_STATE.md`, `.agent/ACTIVE_TASK.md` (control-only). No implementation commit.
+- push: control-only commit to `main`; no application/runtime code is included. Commit SHA is the main head produced by this report sync.
+
+### Production read-back / safety
+
+- `important-news-shadow`: ACTIVE v6, `verify_jwt=false`, deployed source SHA-256 `c264fcd7da43b25a1a4b827bb72c77ec02063d06775aa4dff32f20645a284dcf`. Read-back files `index.ts`, `shadow_logic.ts`, and `shadow_sources.ts` match the fresh `main` source byte-for-byte.
+- Shadow Cron job 38: active, `*/10 * * * *`, command MD5 `c0a89803846abb2464a1af02934266e1` (unchanged). Dedicated custom `X-Cron-Secret` authentication remains as previously approved; secret value was not read or emitted.
+- Legacy Cron jobs 2/3/4/8 are unchanged: job 2 `0,20,40 * * * *` / `b9a98c88ada68d0552ac66c9e8e19983`; job 3 `7,27,47 * * * *` / `438fb5cb0d1206bdfc6af7b379c06788`; job 4 `14,34,54 * * * *` / `951233b2a4fe7ae2b82ef83292276565`; job 8 `*/5 * * * *` / `bc7fddb4557c9babecec6af57fede247`.
+- `important-news-monitor` remains ACTIVE v60 with source SHA-256 `ce7b4bf79da6fb35f8593c4a692ef125acdbdb0ed26c189a761f15eeb5a4070f`.
+- No auth/server failure loop was observed in the persisted sample: 9/9 natural Cron records succeeded, 9/9 shadow records completed, and all run `error_summary` values were empty. GDELT source timeouts are recorded separately below. Function/platform logs were not available through this read-only path, so this does not rule out non-persisted transient attempts between these cycles.
+
+### Natural shadow window / first-seen
+
+- 9 distinct natural slots were present: two prior 30-minute canaries (02:30, 03:00 UTC) plus seven 10-minute runs (03:10–04:10 UTC). All 9/9 run rows are `completed`; all are non-synthetic; no duplicate slot or retry storm was observed.
+- Each run reported 11 source checks and 24 free-source item observations (216 observations total). The deduped candidate table held 31 unique events at the latest read: `al_jazeera` 15, `bbc_world` 8, `jma_eqvol` 8. All 31/31 had `first_seen_at`; none was synthetic. `published_at` was present for all, with no future timestamp or item older than 48 hours at first observation.
+- `first_seen_at` is collector observation time, not proof of historical source availability. The mean published-to-first-seen intervals were Al Jazeera 129.2m, BBC World 291.4m, and JMA 30.1m; the first two are left-censored by shadow activation at 02:30 UTC and must not be interpreted as steady-state ingestion delay.
+- The candidate table upserts repeat observations while retaining `first_seen_at`; per-run candidate membership is not retained. Accordingly, 31 is a unique-event count, not a per-cycle count.
+
+### Source health and quality
+
+| Source | Observed health/items | Assessment |
+| --- | --- | --- |
+| BOJ | healthy 9/9; 0 items | Primary source; insufficient evidence of freshness/cadence in this window. |
+| Fed | healthy 9/9; 0 items | Primary source; insufficient evidence of freshness/cadence in this window. |
+| JMA | healthy 9/9; 8 unique events; summaries 88–108 chars | Primary feed with valid recent timestamps; the 8 titles are routine ashfall forecasts, so relevance/noise is limited and needs lane adjudication. |
+| USTR | healthy 9/9; 0 items | Primary source; insufficient evidence of freshness/cadence in this window. |
+| UN peace/security | healthy 9/9; 0 items | Primary source; insufficient evidence of freshness/cadence in this window. |
+| EIA | healthy 9/9; 0 items | Primary source; insufficient evidence of freshness/cadence in this window. |
+| BBC World | healthy 9/9; 8 unique events; mean summary 118 chars | Useful secondary source but noisy/limited for market relevance; broad feed includes non-market entertainment/culture and headlines were already published several hours before collector activation. |
+| Al Jazeera | healthy 9/9; 15 unique events; mean summary 113 chars | Useful secondary source but noisy/limited for market relevance; broad feed includes sports/music and semantically similar multi-article coverage. |
+| ECB | healthy 9/9; 0 items | Primary source; insufficient evidence of freshness/cadence in this window. |
+| SEC | healthy 9/9; 0 items | Primary source; insufficient evidence of freshness/cadence in this window. |
+| GDELT | 7 `skipped_cooldown`; 2 actual polls failed at the 15s timeout; 0 items | Unhealthy/insufficient evidence. The hourly `:00` poll policy worked as designed, but both observed attempts timed out. |
+
+- The ten non-GDELT sources returned healthy status in all nine cycles. “Healthy” means fetch/parse completed; it does not establish materiality or recall for zero-item feeds. White House remains excluded and was not changed.
+
+### Live comparison / 0-match root cause
+
+- In the 24 hours ending 2026-09-20 04:12 UTC there were 0 live `important` / `most_important` candidates. In the 48-hour live matcher window there were 14: 10 `important` and 4 `most_important`; 13 were TDNET and 1 was a BOJ `breaking_market` item. They were all fetched on Sep 18 between 05:20 and 12:40 UTC, well before the Sep 20 shadow observation window. The full 48-hour pool contained 99 live candidates (85 `no_post`, 14 important/high).
+- Stored shadow/live matches: 0/9 runs; no detection-delay value is available.
+- Offline current-matcher evaluation on 31 unique shadow rows against the 99 live rows reproduced 0 matches: canonical URL matches 0; 92 pairs passed the category-or-entity/topic prefilter, but none reached the 0.66 token-overlap threshold; predicted matches 0. None of the 14 important/most-important live rows passed the category/entity prefilter.
+- Root-cause classification: primarily (1) no live high-importance event in the same observation window and (2) source/category coverage mismatch. The live high-importance set was dominated by Japanese corporate IR, for which shadow has no TDNET source; the shadow set was JMA routine notices and broad BBC/Al Jazeera world items. Exact/canonical URL failure, title normalization, event-key failure, and threshold-caused false negatives are not established by this sample. The current threshold should not be loosened without adjudicated same-event pairs.
+
+### Historical 19-row replay / matcher limits
+
+- The replay CSV contains the 19 historical cohort rows marked `unproven` plus one supplemental row that is outside the denominator. `new_route_first_seen_at_utc` is absent for all 19. The replay dates precede the Sep 20 shadow activation, so no historical replacement-route candidate/first-seen ground truth exists for TP/FP/FN or detection-delay scoring.
+- Current matcher contract remains: canonical URL match first; otherwise candidate category equality or `live.entity_key == shadow.topic`, title token overlap >= 0.66, and publication times within 12 hours. No source change was made.
+- TP/FP/FN are therefore unscorable for the 19-row historical cohort and the current 31 shadow items; unmatched rows are not labelled false positives or false negatives. The previous Deno suite result (14 passed) belongs to the rollout task; no Deno suite was rerun because this audit changed no code. This turn’s one-shot offline evaluation is not a committed regression test.
+- Recall parity: NOT PROVEN. Keep all legacy paid-search fallback lanes enabled.
+
+### Conditional search / cost
+
+- Across 9 natural runs: `conditional_search_count=0`, `web_search_calls=0`, input/output tokens `0/0`, run-estimated cost `$0`. `ai_usage_events` had 0 `news_shadow_search` rows in the same window.
+- The seven 10-minute runs alone also had 0 paid searches and `$0`. Under this observed quiet-window condition only, projected shadow cost is `$0/day` / `$0 per 30 days`; this is not a forecast for future trigger events.
+- Trigger audit: every observed candidate summary was at least 85 characters (the sparse rule is `<80`); at most one source was degraded per run, below the fallback trigger’s `>=2`; bootstrap baseline suppresses backlog search; and duplicate/topic cooldown suppresses repeats. These explain why a degraded GDELT poll did not cause a search.
+- The code enforces at most one Web Search call per run. At `*/10`, the schedule permits at most 144 runs/searches per day if every run has a new eligible event. The code’s estimator is `$0.01/search + $0.20 per 1M input tokens + $1.20 per 1M output tokens`; output is capped at 300 tokens and tool calls at 1, so the estimated maximum excluding input is `$1.49184/day` (`$44.7552/30 days`) if every slot triggers. Input length has no explicit token cap, so this is not a finite total-cost ceiling or an actual bill. No hard cap that could suppress an emergency fallback is proposed.
+- Legacy baseline remains 48 nominal searches/day through Sep 23 and 96/day from Sep 24. Shadow cost is additional; this audit made no legacy reduction.
+
+### Lane evidence / fallback matrix
+
+| Lane | Evidence in this window | Lane-safe? / fallback |
+| --- | --- | --- |
+| War / geopolitics | BBC/Al Jazeera items; no same-window live high-importance pair; broad-feed noise | No; keep paid fallback. |
+| North Korea / J-Alert | No dedicated source or representative event | No; keep paid fallback. |
+| Tariffs / trade / sanctions | USTR healthy but empty; broad secondary coverage only | No; keep paid fallback. |
+| FX / central bank | BOJ/Fed/ECB healthy but empty; old BOJ live event outside the comparison window | No; keep paid fallback. |
+| Disaster / infrastructure | JMA fresh routine notices; no live important match | No; keep paid fallback. |
+| Energy / oil | EIA healthy but empty | No; keep paid fallback. |
+| Shipping / chokepoints | No dedicated feed and no adjudicated match | No; keep paid fallback. |
+| Financial system | SEC healthy but empty; no representative event | No; keep paid fallback. |
+| China | No China-specific source/event pair in sample | No; keep paid fallback. |
+| Semiconductor / AI / export controls | USTR healthy but empty; no representative lane event | No; keep paid fallback. |
+| Overseas major earnings | SEC healthy but empty; no demonstrated earnings coverage | No; keep paid fallback. |
+| Japan corporate IR | No TDNET shadow collector; 13 of 14 prior-window important live rows were TDNET | No; keep paid fallback. |
+| Japan/US abrupt market moves | No market price/time-series or adjudicated abrupt-move pair in shadow set | No; keep paid fallback. |
+
+### Recall gate / next recommendation
+
+- Preserve the existing 14-calendar-day natural observation recommendation. A conservative lane-safe gate is at least 59 independently adjudicated positive events for each severity (`important` and `most_important`) per lane with zero misses; 59/59 gives a one-sided 95% exact lower recall bound just above 95%. Any missing severity sample remains insufficient, particularly if no `most_important` examples occur.
+- For observed positives, require median detection delay <=10m and p95 <=20m; every `most_important` must be matched with delay <=20m. Use independently evidenced event/source timestamps, not legacy `fetched_at` alone. Any source unhealthy, stale, timestamp-invalid, or absent for that lane keeps legacy fallback enabled.
+- Continue natural shadow only. C1 should review the data window, matcher classification, 19-row evidence limit, cost formula, and lane gate. Do not deploy, change Cron/schema, loosen the matcher, or reduce legacy paid search under this task.
+
+### Safety / verification
+
+- Production state mutations: 0. No Function invocation, manual candidate, OpenAI replay, source setting, secret/Vault, Cron, migration/schema/RPC, live pipeline, X/Push/App, OAuth/social-mobile, market-report, or other slot changes.
+- Supabase procedure skill file was not present at its configured filesystem path in this runtime; production work was kept to read-only SELECT and read-back operations.
+- Preflight found the shared H2 index displayed `ready` while `.agent/tasks/CODEX_TASK_2.md` was `review_required`. H1 updated only its own control/index entries and did not change slot 2.
+
+---
 ## Latest H1 result — important-news live shadow rollout (2026-09-20)
 
 - task_id: `important-news-phase1-live-shadow-rollout-20260920`

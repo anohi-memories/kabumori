@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-20 JST (H1 shadow observation/match audit ready; H2 Phase11 review_required; G1 natural shadow wait; G2 done)
+- checked_at: 2026-09-20 JST (H1 shadow observation/match audit review_required; H2 Phase11 review_required; G1 natural shadow wait; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,10 +14,10 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `important-news-phase1-shadow-observation-and-match-audit-20260920`
+- Codex slot 1: `review_required` — `important-news-phase1-shadow-observation-and-match-audit-20260920`
   - 10-minute live shadow rollout is C1 PASS and merged.
-  - Next H1 is read-only observation/matching audit: source health, first_seen, live-match root cause, conditional-search cost, and lane-by-lane fallback evidence.
-  - Production mutation is 0 for this task; any bug fix remains local/test-only until separate approval.
+  - H1 read-only audit completed: 9 natural runs through 2026-09-20 04:10 UTC, 31 unique candidates / 31 first_seen, 0 live matches and $0 observed shadow search cost.
+  - Recall parity is NOT PROVEN; keep legacy fallback. C1 review required; production mutation is 0.
   - Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase11-x-portal-and-real-oauth-qa-20260920`
@@ -36,7 +36,7 @@
 
 ## Parallel safety
 
-- H1はproduction `important-news-fetch` Cronのcommand gateのみ。schedule、他Cron、Edge Function、schema、OAuth/Vaultには触れない。
+- H1はread-only shadow observation/match auditで完了。production mutation 0; shadow/legacy Cron、Function、schema、OAuth/Vaultは変更なし。
 - H2はsocial-mobile Phase10 production migration / x-oauth-connect-user deployのみ。Portal/real OAuth/X postは別ゲート。G1のmarket-report objectsを触れない。
 
 - G1はmarket-report schema/functions/`x-test-post`/personalized-reports領域。

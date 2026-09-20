@@ -3,8 +3,8 @@
 - task_id: important-news-phase1-shadow-observation-and-match-audit-20260920
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: 10分live shadow稼働後の実データをread-onlyで監査し、source health / first_seen / live match / conditional search / costを評価する。0 live matchの原因を切り分け、必要ならmatching改善案とローカルテストcandidateまで作る。production挙動は変更しない。

@@ -14,12 +14,12 @@
 ### Codex slot 1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: important-news-cost-phase1-recall-safe-shadow-handoff-20260919
+- status: review_required
+- task_id: important-news-phase1-shadow-observation-and-match-audit-20260920
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: C1 PASS済み。次のlive shadowは別承認待ち。
+- note: read-only observation/match audit完了。0 matchのためrecall parity未証明。14日自然観測継続、legacy fallback維持。C1 review required.
 
 ### Codex slot 2
 - owner: codex
