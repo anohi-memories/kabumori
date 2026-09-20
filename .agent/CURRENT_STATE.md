@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-20 JST (H1 coverage-gap source research review_required; per-slot details below)
+- checked_at: 2026-09-20 JST (H1 coverage-gap source research C1 PASS/done; per-slot details below)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,11 +14,12 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `important-news-phase1-shadow-coverage-gap-expansion-candidate-20260920`
-  - Lane/source review completed; no new source passed acceptance, so no parser/runtime candidate was added.
-  - Candidate research document: `docs/news-coverage/SHADOW_COVERAGE_GAP_RESEARCH_2026-09-20.md` on `codex/important-news-phase1-shadow-coverage-gap-expansion-20260920`.
-  - All lane fallbacks remain. Production mutation is 0; C1 review requested.
-  - Recommended model: Luna.
+- Codex slot 1: `done` — `important-news-phase1-shadow-coverage-gap-expansion-candidate-20260920`
+  - C1 PASS. Coverage-gap source research completed with production mutation 0.
+  - No new source passed acceptance; all legacy paid/live fallbacks remain enabled.
+  - Durable research artifact merged via PR #2, merge commit `f0eb3e9ef2ff23cff6ffcec85191949e40d8cf3a`.
+  - TDnet/Japan IR, North Korea/J-Alert, shipping/chokepoints, China/systemic, and abrupt-market lanes remain unresolved for independent replacement measurement.
+  - Recommended model for next observation/research: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase11-x-portal-and-real-oauth-qa-20260920`
   - Phase10 C2 PASS済みbackendを使い、X Developer Portal設定確認と専用non-admin QA user + dedicated test X accountで1回のreal OAuth round-tripを行う。
