@@ -42,13 +42,11 @@ export function decideMacroReleaseEvent(priorValue: number | null, newValue: num
   return { kind: "revision", oldValue: priorValue };
 }
 
-export type MacroReleaseEventContext = {
+type MacroReleaseEventCommonContext = {
   metricKey: string;
   observedDate: string;
   newValue: number;
   unit: string;
-  seriesId: string;
-  fredUnits: string | null;
   underlyingSource: string | null;
   sourceUrl: string;
   // When our system learned of this fact (i.e. this ingest run's
@@ -58,6 +56,25 @@ export type MacroReleaseEventContext = {
   // intraday time is fabricated anywhere in this pipeline for FRED data.
   fetchedAt: string;
 };
+
+export type MacroReleaseEventContext = MacroReleaseEventCommonContext & (
+  | {
+    sourceKey: "fred";
+    sourceName: "FRED";
+    seriesId: string;
+    fredUnits: string | null;
+  }
+  | {
+    sourceKey: "estat";
+    sourceName: "e-Stat";
+    statsDataId: string;
+    cdArea: string;
+    cdCat01: string;
+    tabCode: string;
+    cdTime: string;
+    baseYear: number;
+  }
+);
 
 // Returns null for "unchanged" (caller must not write anything -- this is
 // the case that keeps a plain re-fetch of an already-known value from
@@ -82,6 +99,29 @@ export function buildMacroReleaseEvent(
     ? `${ctx.metricKey} for ${ctx.observedDate} revised to ${ctx.newValue} ${ctx.unit} (was ${oldValue} ${ctx.unit}).`
     : `${ctx.metricKey} for ${ctx.observedDate}: ${ctx.newValue} ${ctx.unit} (first release).`;
 
+  const commonRawPayload = {
+    metric_key: ctx.metricKey,
+    observed_date: ctx.observedDate,
+    value: ctx.newValue,
+    // Keep new_value for compatibility with existing FRED event consumers.
+    new_value: ctx.newValue,
+    old_value: oldValue,
+    is_revision: isRevision,
+    source_key: ctx.sourceKey,
+    source_name: ctx.sourceName,
+    underlying_source: ctx.underlyingSource,
+  };
+  const sourceRawPayload = ctx.sourceKey === "fred"
+    ? { series_id: ctx.seriesId, fred_units: ctx.fredUnits }
+    : {
+      stats_data_id: ctx.statsDataId,
+      cd_area: ctx.cdArea,
+      cd_cat01: ctx.cdCat01,
+      tab_code: ctx.tabCode,
+      cd_time: ctx.cdTime,
+      base_year: ctx.baseYear,
+    };
+
   return {
     // Unknown real-world publication instant for a date-only source --
     // left null rather than fabricated, same principle as
@@ -94,28 +134,19 @@ export function buildMacroReleaseEvent(
     entityId: ctx.metricKey,
     title,
     summary,
-    sourceName: "FRED",
+    sourceName: ctx.sourceName,
     sourceUrl: ctx.sourceUrl,
-    sourceKey: "fred",
+    sourceKey: ctx.sourceKey,
     sourceTimestamp: null,
     importance: "medium",
-    rawPayload: {
-      metric_key: ctx.metricKey,
-      observed_date: ctx.observedDate,
-      new_value: ctx.newValue,
-      old_value: oldValue,
-      is_revision: isRevision,
-      series_id: ctx.seriesId,
-      fred_units: ctx.fredUnits,
-      underlying_source: ctx.underlyingSource,
-    },
+    rawPayload: { ...commonRawPayload, ...sourceRawPayload },
   };
 }
 
-// The metric_keys this phase wires macro_release event generation onto.
+// The metric_keys these phases wire macro_release event generation onto.
 // Deliberately explicit (not derived from domain, which the ingest
-// function has no notion of) and deliberately scoped to exactly the 16
-// FRED-sourced macro metrics this phase adds -- every other metric_key
+// function has no notion of) and deliberately scoped to the 16
+// FRED-sourced and 4 e-Stat-sourced macro metrics -- every other metric_key
 // (US2Y/US10Y/equity_index/fx/commodities) is completely untouched by
 // this new code path.
 export const MACRO_RELEASE_METRIC_KEYS: ReadonlySet<string> = new Set([
@@ -135,10 +166,7 @@ export const MACRO_RELEASE_METRIC_KEYS: ReadonlySet<string> = new Set([
   "US_RETAIL_SALES",
   "US_RETAIL_SALES_MOM",
   "JP_GDP",
-  // Macro Indicators Phase 1B (e-Stat): the same decision/event logic
-  // above never referenced anything FRED-specific (it only ever looked at
-  // metricKey/observedDate/value), so adding these 4 e-Stat-sourced
-  // metric_keys needs no code change beyond this scope list.
+  // Macro Indicators Phase 1B (e-Stat).
   "JP_CPI",
   "JP_CPI_YOY",
   "JP_CORE_CPI",

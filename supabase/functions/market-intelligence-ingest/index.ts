@@ -41,6 +41,7 @@ import {
   buildMacroReleaseEvent,
   decideMacroReleaseEvent,
   MACRO_RELEASE_METRIC_KEYS,
+  type MacroReleaseEventContext,
 } from "./mic_macro_release_logic.ts";
 import { finalizeMarketEvent, type MarketEventInput, type NormalizedMarketMetric } from "./mic_normalize_logic.ts";
 import {
@@ -63,6 +64,53 @@ const jsonHeaders = { "Content-Type": "application/json; charset=utf-8" };
 
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: jsonHeaders });
+}
+
+function requireMetricMetadataString(metric: NormalizedMarketMetric, key: string): string {
+  const value = metric.metadata?.[key];
+  if (typeof value !== "string" || value.length === 0) throw new Error(`MACRO_RELEASE_METADATA_MISSING:${key}`);
+  return value;
+}
+
+function requireMetricMetadataNumber(metric: NormalizedMarketMetric, key: string): number {
+  const value = metric.metadata?.[key];
+  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`MACRO_RELEASE_METADATA_MISSING:${key}`);
+  return value;
+}
+
+function buildMacroReleaseContext(metric: NormalizedMarketMetric): MacroReleaseEventContext {
+  const common = {
+    metricKey: metric.metricKey,
+    observedDate: metric.observedDate,
+    newValue: metric.value,
+    unit: metric.unit,
+    underlyingSource: typeof metric.metadata?.underlyingSource === "string" ? metric.metadata.underlyingSource : null,
+    sourceUrl: metric.sourceUrl ?? "",
+    fetchedAt: metric.fetchedAt,
+  };
+  if (metric.sourceKey === FRED_SOURCE_KEY) {
+    return {
+      ...common,
+      sourceKey: FRED_SOURCE_KEY,
+      sourceName: "FRED",
+      seriesId: typeof metric.metadata?.seriesId === "string" ? metric.metadata.seriesId : metric.metricKey,
+      fredUnits: typeof metric.metadata?.fredUnits === "string" ? metric.metadata.fredUnits : null,
+    };
+  }
+  if (metric.sourceKey === ESTAT_SOURCE_KEY) {
+    return {
+      ...common,
+      sourceKey: ESTAT_SOURCE_KEY,
+      sourceName: "e-Stat",
+      statsDataId: requireMetricMetadataString(metric, "statsDataId"),
+      cdArea: requireMetricMetadataString(metric, "cdArea"),
+      cdCat01: requireMetricMetadataString(metric, "cdCat01"),
+      tabCode: requireMetricMetadataString(metric, "tabCode"),
+      cdTime: requireMetricMetadataString(metric, "cdTime"),
+      baseYear: requireMetricMetadataNumber(metric, "baseYear"),
+    };
+  }
+  throw new Error(`MACRO_RELEASE_SOURCE_UNSUPPORTED:${metric.sourceKey}`);
 }
 
 function isAuthorizedCronCaller(req: Request): boolean {
@@ -200,7 +248,7 @@ async function runSource(
     if (result.kind === "metrics") {
       fetchedCount = result.metrics.length;
       for (const metric of result.metrics) {
-        // Macro Indicators Phase 1A: for exactly the 16 FRED macro
+        // Macro Indicators Phase 1A/1B: for the explicit FRED/e-Stat macro
         // metric_keys, read whatever value is currently stored for this
         // (metric_key, source_key, observed_date) triple BEFORE it gets
         // overwritten by the upsert below, so a market_events
@@ -221,17 +269,7 @@ async function runSource(
         if (isMacroRelease) {
           macroReleaseEventCount = macroReleaseEventCount ?? 0;
           const decision = decideMacroReleaseEvent(priorValue, metric.value);
-          const releaseEvent = buildMacroReleaseEvent(decision, {
-            metricKey: metric.metricKey,
-            observedDate: metric.observedDate,
-            newValue: metric.value,
-            unit: metric.unit,
-            seriesId: typeof metric.metadata?.seriesId === "string" ? metric.metadata.seriesId : metric.metricKey,
-            fredUnits: typeof metric.metadata?.fredUnits === "string" ? metric.metadata.fredUnits : null,
-            underlyingSource: typeof metric.metadata?.underlyingSource === "string" ? metric.metadata.underlyingSource : null,
-            sourceUrl: metric.sourceUrl ?? "",
-            fetchedAt: metric.fetchedAt,
-          });
+          const releaseEvent = buildMacroReleaseEvent(decision, buildMacroReleaseContext(metric));
           if (releaseEvent) {
             const finalized = await finalizeMarketEvent(releaseEvent);
             const written = await writeMarketEvent(ctx, finalized);

@@ -6,12 +6,16 @@ import {
   MACRO_RELEASE_METRIC_KEYS,
 } from "./mic_macro_release_logic.ts";
 
-function ctx(overrides: Partial<Parameters<typeof buildMacroReleaseEvent>[1]> = {}) {
+type FredMacroReleaseContext = Extract<Parameters<typeof buildMacroReleaseEvent>[1], { sourceKey: "fred" }>;
+
+function ctx(overrides: Partial<FredMacroReleaseContext> = {}): FredMacroReleaseContext {
   return {
     metricKey: "US_CPI_YOY",
     observedDate: "2026-08-01",
     newValue: 3.1,
     unit: "percent",
+    sourceKey: "fred",
+    sourceName: "FRED",
     seriesId: "CPIAUCSL",
     fredUnits: "pc1",
     underlyingSource: "U.S. Bureau of Labor Statistics",
@@ -48,6 +52,7 @@ test("buildMacroReleaseEvent: new_release -> event_type=macro_release, is_revisi
   assert.equal(event!.category, "macro");
   assert.equal(event!.entityId, "US_CPI_YOY");
   assert.equal(event!.sourceKey, "fred");
+  assert.equal(event!.sourceName, "FRED");
   assert.equal(event!.occurredAt, null, "no fabricated intraday time for a date-only source");
   assert.equal(event!.publishedAt, "2026-09-17T00:00:00.000Z");
   assert.match(event!.title, /released for 2026-08-01/);
@@ -55,12 +60,15 @@ test("buildMacroReleaseEvent: new_release -> event_type=macro_release, is_revisi
   assert.deepEqual(event!.rawPayload, {
     metric_key: "US_CPI_YOY",
     observed_date: "2026-08-01",
+    value: 3.1,
     new_value: 3.1,
     old_value: null,
     is_revision: false,
+    source_key: "fred",
+    source_name: "FRED",
+    underlying_source: "U.S. Bureau of Labor Statistics",
     series_id: "CPIAUCSL",
     fred_units: "pc1",
-    underlying_source: "U.S. Bureau of Labor Statistics",
   });
 });
 
@@ -138,16 +146,22 @@ test("MACRO_RELEASE_METRIC_KEYS: exactly the 16 Phase 1A FRED macro metrics + 4 
 // --- Phase 1B: buildMacroReleaseEvent must not assume FRED-only metadata
 // (e-Stat metrics have no seriesId/fredUnits keys at all) ---
 
-test("buildMacroReleaseEvent: works safely for an e-Stat-style context with no seriesId/fredUnits (null fredUnits, generic seriesId fallback), still producing a correct release event", () => {
+test("buildMacroReleaseEvent: e-Stat provenance and payload are source-specific, with no FRED-only fields", () => {
   const event = buildMacroReleaseEvent(
     { kind: "new_release" },
     {
-      metricKey: "JP_CPI_YOY",
+      metricKey: "JP_CPI",
       observedDate: "2026-08-01",
-      newValue: 1.9,
-      unit: "percent",
-      seriesId: "JP_CPI_YOY", // no FRED seriesId concept -- caller falls back to metricKey
-      fredUnits: null, // e-Stat has no FRED-style units= transform concept
+      newValue: 102.2,
+      unit: "cpi_index_2025_100",
+      sourceKey: "estat",
+      sourceName: "e-Stat",
+      statsDataId: "0004052037",
+      cdArea: "00000",
+      cdCat01: "0001",
+      tabCode: "1",
+      cdTime: "2026000808",
+      baseYear: 2025,
       underlyingSource: "Statistics Bureau of Japan",
       sourceUrl: "https://www.e-stat.go.jp/dbview?sid=0004052037",
       fetchedAt: "2026-09-20T00:00:00.000Z",
@@ -155,8 +169,19 @@ test("buildMacroReleaseEvent: works safely for an e-Stat-style context with no s
   );
   assert.ok(event);
   assert.equal(event!.eventType, "macro_release");
-  assert.equal(event!.entityId, "JP_CPI_YOY");
+  assert.equal(event!.entityId, "JP_CPI");
+  assert.equal(event!.sourceKey, "estat");
+  assert.equal(event!.sourceName, "e-Stat");
   assert.match(event!.title, /released for 2026-08-01/);
-  assert.equal(event!.rawPayload?.fred_units, null);
+  assert.equal("series_id" in event!.rawPayload!, false);
+  assert.equal("fred_units" in event!.rawPayload!, false);
+  assert.equal(event!.rawPayload?.stats_data_id, "0004052037");
+  assert.equal(event!.rawPayload?.cd_area, "00000");
+  assert.equal(event!.rawPayload?.cd_cat01, "0001");
+  assert.equal(event!.rawPayload?.tab_code, "1");
+  assert.equal(event!.rawPayload?.cd_time, "2026000808");
+  assert.equal(event!.rawPayload?.base_year, 2025);
+  assert.equal(event!.rawPayload?.source_key, "estat");
+  assert.equal(event!.rawPayload?.source_name, "e-Stat");
   assert.equal(event!.rawPayload?.underlying_source, "Statistics Bureau of Japan");
 });

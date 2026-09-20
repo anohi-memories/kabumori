@@ -15,6 +15,7 @@ import {
   parseEstatTimeCode,
   selectLatestEstatObservations,
 } from "./mic_estat_adapter.ts";
+import { safeErrorMessage } from "./mic_writer_logic.ts";
 
 // A realistic fixture mirroring the confirmed live response shape for
 // statsDataId=0004052037: 全国 (00000) + 東京都区部 (13100, a decoy region
@@ -54,6 +55,16 @@ function fixtureResponse(overrides: Partial<{ status: number; errorMsg: string; 
       },
     },
   };
+}
+
+async function captureRejectedError(promise: Promise<unknown>): Promise<Error> {
+  try {
+    await promise;
+  } catch (error) {
+    assert.ok(error instanceof Error);
+    return error;
+  }
+  assert.fail("expected promise to reject");
 }
 
 // --- buildEstatStatsDataUrl ---
@@ -108,7 +119,7 @@ test("parseEstatGetStatsDataResponse: surfaces annotation when present", () => {
   assert.equal(annotated?.annotation, "J1");
 });
 
-test("parseEstatGetStatsDataResponse: STATUS!=0 throws ESTAT_API_ERROR with the ERROR_MSG (appId missing/invalid case, confirmed live)", () => {
+test("parseEstatGetStatsDataResponse: STATUS!=0 throws ESTAT_API_ERROR without persisting remote ERROR_MSG", () => {
   assert.throws(
     () => parseEstatGetStatsDataResponse(fixtureResponse({ status: 100, errorMsg: "認証に失敗しました。アプリケーションIDを確認してください。" })),
     /ESTAT_API_ERROR/,
@@ -244,9 +255,9 @@ test("normalizeEstatObservation: JP_CPI_YOY uses percent unit and the same prove
 
 test("fetchEstatCpiMetrics: appId missing throws ESTAT_APP_ID_MISSING before any network call", async () => {
   let called = false;
-  const fetchImpl = async () => {
+  const fetchImpl = () => {
     called = true;
-    return new Response("{}", { status: 200 });
+    return Promise.resolve(new Response("{}", { status: 200 }));
   };
   await assert.rejects(
     () => fetchEstatCpiMetrics({ appId: "" }, fetchImpl as typeof fetch),
@@ -256,7 +267,7 @@ test("fetchEstatCpiMetrics: appId missing throws ESTAT_APP_ID_MISSING before any
 });
 
 test("fetchEstatCpiMetrics: happy path returns all 4 metrics with correct values", async () => {
-  const fetchImpl = async () => new Response(JSON.stringify(fixtureResponse()), { status: 200 });
+  const fetchImpl = () => Promise.resolve(new Response(JSON.stringify(fixtureResponse()), { status: 200 }));
   const metrics = await fetchEstatCpiMetrics({ appId: "test-app-id", fetchedAt: new Date("2026-09-20T00:00:00.000Z") }, fetchImpl as typeof fetch);
   assert.equal(metrics.length, 4);
   assert.deepEqual(metrics.map((m) => m.metricKey).sort(), ["JP_CORE_CPI", "JP_CORE_CPI_YOY", "JP_CPI", "JP_CPI_YOY"]);
@@ -264,36 +275,69 @@ test("fetchEstatCpiMetrics: happy path returns all 4 metrics with correct values
 });
 
 test("fetchEstatCpiMetrics: appId is never embedded in the returned metrics/metadata", async () => {
-  const fetchImpl = async () => new Response(JSON.stringify(fixtureResponse()), { status: 200 });
+  const fetchImpl = () => Promise.resolve(new Response(JSON.stringify(fixtureResponse()), { status: 200 }));
   const metrics = await fetchEstatCpiMetrics({ appId: "super-secret-app-id-value", fetchedAt: new Date() }, fetchImpl as typeof fetch);
   const serialized = JSON.stringify(metrics);
   assert.ok(!serialized.includes("super-secret-app-id-value"));
 });
 
 test("fetchEstatCpiMetrics: STATUS=100 (bad/missing appId, confirmed live shape) surfaces ESTAT_API_ERROR", async () => {
-  const fetchImpl = async () =>
-    new Response(JSON.stringify(fixtureResponse({ status: 100, errorMsg: "認証に失敗しました。アプリケーションIDを確認してください。" })), { status: 200 });
-  await assert.rejects(
-    () => fetchEstatCpiMetrics({ appId: "bad-app-id" }, fetchImpl as typeof fetch),
-    /ESTAT_API_ERROR/,
+  const secret = "bad-app-id";
+  const fetchImpl = () => Promise.resolve(
+    new Response(JSON.stringify(fixtureResponse({ status: 100, errorMsg: `認証失敗 appId=${secret}` })), { status: 200 }),
   );
+  const error = await captureRejectedError(fetchEstatCpiMetrics({ appId: secret }, fetchImpl as typeof fetch));
+  assert.match(error.message, /ESTAT_API_ERROR: STATUS=100/);
+  assert.equal(error.message.includes(secret), false);
+  assert.equal(safeErrorMessage(error).includes(secret), false);
 });
 
 test("fetchEstatCpiMetrics: malformed JSON surfaces ESTAT_MALFORMED_RESPONSE", async () => {
-  const fetchImpl = async () => new Response("not json{", { status: 200 });
+  const fetchImpl = () => Promise.resolve(new Response("not json{", { status: 200 }));
   await assert.rejects(() => fetchEstatCpiMetrics({ appId: "k" }, fetchImpl as typeof fetch), EstatAdapterError);
 });
 
 test("fetchEstatCpiMetrics: non-200 surfaces ESTAT_HTTP_ERROR", async () => {
-  const fetchImpl = async () => new Response("nope", { status: 503 });
+  const fetchImpl = () => Promise.resolve(new Response("nope", { status: 503 }));
   await assert.rejects(() => fetchEstatCpiMetrics({ appId: "k" }, fetchImpl as typeof fetch), /ESTAT_HTTP_ERROR/);
 });
 
 test("fetchEstatCpiMetrics: a fetch-level failure (e.g. timeout) surfaces ESTAT_FETCH_FAILED", async () => {
-  const fetchImpl = async () => {
+  const fetchImpl = () => {
     throw new DOMException("signal timed out", "TimeoutError");
   };
   await assert.rejects(() => fetchEstatCpiMetrics({ appId: "k" }, fetchImpl as typeof fetch), /ESTAT_FETCH_FAILED/);
+});
+
+test("fetchEstatCpiMetrics: raw appId in a fetch exception is absent from thrown, DB failure, and returned error candidates", async () => {
+  const secret = "SECRET123";
+  const fetchImpl = (input: RequestInfo | URL) => {
+    throw new Error(`request failed: ${String(input)}`);
+  };
+  const error = await captureRejectedError(fetchEstatCpiMetrics({ appId: secret }, fetchImpl as typeof fetch));
+  const dbFailureReason = safeErrorMessage(error);
+  const returnedErrorCandidate = JSON.stringify({ error: dbFailureReason });
+  assert.match(error.message, /ESTAT_FETCH_FAILED: e-Stat fetch failed/);
+  for (const candidate of [error.message, dbFailureReason, returnedErrorCandidate]) {
+    assert.equal(candidate.includes(secret), false);
+    assert.equal(candidate.includes("appId="), false);
+  }
+});
+
+test("fetchEstatCpiMetrics: encoded appId URL exception is replaced by a diagnostic-only generic error", async () => {
+  const secret = "encoded secret+/=";
+  const encodedSecret = encodeURIComponent(secret);
+  const fetchImpl = () => {
+    throw new Error(`https://api.e-stat.go.jp/rest/3.0/app/json/getStatsData?appId%3D${encodedSecret}%26lang%3DJ`);
+  };
+  const error = await captureRejectedError(fetchEstatCpiMetrics({ appId: secret }, fetchImpl as typeof fetch));
+  const candidates = [error.message, safeErrorMessage(error), JSON.stringify({ error: safeErrorMessage(error) })];
+  for (const candidate of candidates) {
+    assert.equal(candidate.includes(secret), false);
+    assert.equal(candidate.includes(encodedSecret), false);
+    assert.equal(candidate.includes("appId%3D"), false);
+  }
+  assert.match(error.message, /ESTAT_FETCH_FAILED: e-Stat fetch failed/);
 });
 
 test("ESTAT_CPI_CATEGORY_MAPPINGS: exactly the 2 target categories (0001/0161), nothing else", () => {

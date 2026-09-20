@@ -139,8 +139,9 @@ export function parseEstatGetStatsDataResponse(payload: unknown): EstatValueRow[
   const result = asRecord(rootObj["RESULT"]);
   const status = result?.["STATUS"];
   if (status !== 0) {
-    const errorMsg = typeof result?.["ERROR_MSG"] === "string" ? result["ERROR_MSG"] : "unknown error";
-    throw new EstatAdapterError("ESTAT_API_ERROR", `STATUS=${String(status)}: ${errorMsg}`);
+    // ERROR_MSG is remote-controlled and could echo request parameters.
+    // Preserve the status for diagnosis without persisting response text.
+    throw new EstatAdapterError("ESTAT_API_ERROR", `STATUS=${String(status)}`);
   }
 
   const statisticalData = asRecord(rootObj["STATISTICAL_DATA"]);
@@ -301,8 +302,10 @@ export async function fetchEstatCpiMetrics(
   let response: Response;
   try {
     response = await fetchImpl(url, { signal: AbortSignal.timeout(params.timeoutMs ?? 20_000) });
-  } catch (error) {
-    throw new EstatAdapterError("ESTAT_FETCH_FAILED", String(error));
+  } catch {
+    // Fetch errors can contain the full URL (including appId). Never let
+    // that exception text reach logs, DB failure reasons, or API output.
+    throw new EstatAdapterError("ESTAT_FETCH_FAILED", "e-Stat fetch failed");
   }
   if (!response.ok) {
     throw new EstatAdapterError("ESTAT_HTTP_ERROR", `status=${response.status}`);
