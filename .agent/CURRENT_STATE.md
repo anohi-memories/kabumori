@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-21 JST (H1 GDELT diagnosis C1 PASS/done; H2 Phase12 done; G1 natural shadow wait; G2 done)
+- checked_at: 2026-09-21 JST (H1 done; H2 Phase13 production preview rollout ready; G1 natural shadow wait; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -21,11 +21,11 @@
   - Follow-up audit needed: one natural conditional-search event recorded 2 web_search_call output items despite max_tool_calls=1; future cost assumptions must use observed calls.
   - Recommended model for follow-up audit: Luna.
 
-- Codex slot 2: `done` — `social-mobile-app-phase12-general-user-content-profile-and-dry-run-20260920`
-  - Phase11 real OAuth QA C2 PASS済み。
-  - 次は `social_mobile_user_v1` profile、tenant-safe settings/posting defaults、general-user dry-run generation、最小mobile preview。
-  - real X post / media upload / publish_enabled=true / Cron / production deploy はまだ禁止。
-  - Recommended model: Luna。shared pipelineの具体的な設計矛盾が出た時だけSol検討。
+- Codex slot 2: `ready` — `social-mobile-app-phase13-production-preview-rollout-and-qa-20260921`
+  - Phase12 source candidate C2 PASS済み。
+  - 次は `social-mobile-brand-dry-run` だけをproduction deployし、専用QA fixtureでexactly one real AI previewを実行する。
+  - real X post / media upload / scheduled_posts write / publish_enabled=true / Cron / schema変更は禁止。
+  - Recommended model: Luna。Auth/RLS/runtime安全性の具体的blocker時のみSol検討。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
