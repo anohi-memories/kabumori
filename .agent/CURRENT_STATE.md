@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-21 JST (H1 done; H2 Phase13 production preview rollout ready; G1 natural shadow wait; G2 done)
+- checked_at: 2026-09-21 JST (H1 conditional-search call accounting audit ready; H2 Phase12 done; G1 natural shadow wait; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,12 +14,11 @@
 
 ## Active workstreams
 
-- Codex slot 1: `done` — `important-news-phase1-gdelt-timeout-diagnosis-and-fallback-candidate-20260920`
-  - C1 PASS. GDELT failed on all 5 actual hourly polls (~15s); root cause remains low-confidence and no runtime/query change was justified.
-  - Other ten sources remained healthy in the persisted sample; production mutation 0; all legacy fallbacks remain enabled.
-  - Keep GDELT at current hourly secondary cadence and continue natural observation.
-  - Follow-up audit needed: one natural conditional-search event recorded 2 web_search_call output items despite max_tool_calls=1; future cost assumptions must use observed calls.
-  - Recommended model for follow-up audit: Luna.
+- Codex slot 1: `ready` — `important-news-phase1-conditional-search-call-accounting-audit-20260921`
+  - Audit the observed 07:10 natural run where one conditional-search event recorded 2 web_search_call output items despite max_tool_calls=1.
+  - Scope is read-only reconstruction/API semantics/cost accounting plus optional local-only tests/docs.
+  - Production mutation is 0; no deploy/Cron/schema/secret/manual OpenAI/fallback reduction.
+  - Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase13-production-preview-rollout-and-qa-20260921`
   - Phase12 source candidate C2 PASS済み。
