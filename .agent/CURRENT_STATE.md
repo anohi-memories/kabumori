@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-21 JST (H1 conditional-search accounting audit C1 PASS/done; H2 Phase13 ready; G1 idle; G2 done)
+- checked_at: 2026-09-21 JST (H1 search diagnostics instrumentation candidate ready; H2 Phase13 ready; G1 idle; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,13 +14,11 @@
 
 ## Active workstreams
 
-- Codex slot 1: `done` — `important-news-phase1-conditional-search-call-accounting-audit-20260921`
-  - C1 PASS. Aggregate accounting reconciles, but one conditional event can correspond to multiple persisted web_search_call output items.
-  - 149 natural runs: 19 conditional-search events, 35 counted output items; 16 events had 2 items and 3 had 1.
-  - Raw action types/provider billing are not persisted, so counted output items are not proven billable-search units.
-  - Previous $44.7552/30d scenario is not a hard ceiling; runtime also permits another request after a failed attempt because paidSearchUsed remains false.
-  - Production mutation 0; current fallback/search behavior unchanged.
-  - Recommended next model: Luna.
+- Codex slot 1: `ready` — `important-news-phase1-search-diagnostics-instrumentation-candidate-20260921`
+  - Build local-only privacy-minimal telemetry for targeted-search attempts/success/failure, web_search output-item action types, tokens and cost.
+  - Preserve current search triggers/fallback/model/timeout semantics; production mutation remains 0.
+  - No raw prompt/headline/query/response persistence.
+  - Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase13-production-preview-rollout-and-qa-20260921`
   - Phase12 source candidate C2 PASS済み。
