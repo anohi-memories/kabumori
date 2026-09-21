@@ -1,3 +1,82 @@
+# H1 Search Diagnostics Instrumentation Candidate — 2026-09-21
+
+対象: `important-news-phase1-search-diagnostics-instrumentation-candidate-20260921`  
+Base: `origin/main` `309acd61e6611cdcb8916cdf60f067790814ed60`  
+Branch: `codex/h1-search-diagnostics-instrumentation-20260921`  
+Code candidate commit: `9394c27a90b590f95ff8253212cc72843212a90b`
+
+## 1. Telemetry schema candidate
+
+Local-only migration candidate: `supabase/migrations/20260921115317_important_news_search_diagnostics.sql`.
+
+Both `important_news_shadow_runs` and `ai_usage_events` add nullable, non-negative integer columns for:
+
+- targeted search attempts, successful parsed responses, and failures
+- total `web_search_call` output items
+- action counts: `search`, `open_page`, `find_in_page`, and `unknown`
+
+Old rows remain NULL to mean “not instrumented,” rather than falsely representing an observed zero. No identifier hash was added. The migration contains only additive columns and comments; it does not alter RLS, policies, grants, functions, or other schema objects. Production schema remains unchanged.
+
+## 2. Runtime instrumentation and mapping
+
+`important-news-shadow/index.ts` records one attempt immediately before each targeted Responses POST; a non-2xx response, thrown transport/timeout error, or JSON parse failure increments failure; a 2xx response with parseable JSON increments success. A completed run writes the counters to its run row.
+
+`ai_usage_events` remains one aggregate row per run, not one row per attempt. It is now inserted for an attempted-but-failed-only run as well, with zero cost/tokens and the attempt counters. Existing token, cost, model and `web_search_calls` fields retain their current meaning. The old `web_search_calls` calculation still counts output items whose type is `web_search_call`; it is not a request count or proof of provider-billable units. The new output/action counters aggregate across successful responses.
+
+The current estimated-cost formula and its rates are unchanged. For aggregates, use one source for cost (normally `ai_usage_events`) and do not add its cost to `important_news_shadow_runs.cost_usd`; both tables already describe the same run cost. Use the run table as the per-run diagnostics summary.
+
+## 3. Action classification
+
+Only output objects with `type === "web_search_call"` are counted. Their `action.type` is bucketed to the three known action values; absent or unrecognized values go to `unknown`. No query, URL, raw action object, response body, or provider ID is returned by the summarizer or added to the persisted telemetry.
+
+## 4. Failed-attempt and retry behavior
+
+Tests lock the existing `paidSearchUsed` latch: meaningful usage remains “web-search output items OR input tokens”; a successful eligible request with that usage prevents a later candidate request; a failed request leaves the latch open so a later eligible candidate may retry. Attempt/success/failure telemetry counts the retry. Trigger, matcher, fallback, model, request options, timeout, and retry policy were not changed.
+
+## 5. Privacy review
+
+The added telemetry consists only of counters. It does not add prompt/headline/body/query/source URL, raw response or tool output, user/account identifiers, secrets, or stable response/request ID hashes. Existing candidate storage and error handling were not expanded with raw search content. The endpoint response shape was not expanded with telemetry.
+
+## 6. Local verification
+
+- Deno tests: 17 passed, 0 failed (5 new diagnostics tests plus existing shadow logic/source tests).
+- `deno check`: updated Function and all relevant test modules passed.
+- `git diff --cached --check`: passed on the isolated scratch copy.
+- Migration static review: additive nullable counters/comments only; no grants/RLS changes.
+- No real API request, OpenAI replay, candidate injection, publication, or Cron execution was performed.
+
+The Supabase schema check used read-only queries only. The Supabase CLI created the local migration candidate with telemetry disabled; no migration was applied.
+
+## 7. Branch and files
+
+Branch: `codex/h1-search-diagnostics-instrumentation-20260921`  
+Code candidate commit: `9394c27a90b590f95ff8253212cc72843212a90b`
+
+Changed files:
+
+- `supabase/functions/important-news-shadow/index.ts`
+- `supabase/functions/important-news-shadow/search_telemetry.ts`
+- `supabase/functions/important-news-shadow/search_telemetry_test.ts`
+- `supabase/migrations/20260921115317_important_news_search_diagnostics.sql`
+- `.agent/tasks/CODEX_TASK.md`
+- `.agent/CURRENT_STATE.md`
+- `.agent/ACTIVE_TASK.md`
+- `.agent/CODEX_REPORT.md`
+
+No other slot’s task, report, or implementation files were changed. The candidate is not merged.
+
+## 8. Production mutation
+
+**0.** No migration apply, Edge Function deploy, Cron change, Vault/secret/provider setting change, OAuth change, or X/Push/App action. No manual search replay or candidate insertion.
+
+## 9. Read-only provider reconciliation plan and next step
+
+No provider billing/usage connector was available or queried. After a separate approval for a future observation phase, compare UTC `run_slot`/run time buckets and model (`gpt-5.6-luna)) against provider usage buckets: request counts against attempted/success/failure counters, provider search usage units against output-item/action counts (without assuming equivalence), tokens against the existing token fields, and provider cost against the current local estimate. Transport failures can explain request-count differences. Use only aggregated buckets/model for correlation; this candidate intentionally has no request/response ID linkage. Provider UI/export access should be read-only.
+
+**Immediate next step: C1 review only.** Any production migration apply and matching `important-news-shadow` deploy require their own explicit approval; if later approved, apply the exact migration before deploying the matching Function, then observe natural scheduled runs only—no manual candidate injection or provider replay. Reconcile provider usage read-only after natural observations.
+
+---
+
 # Codex Report
 
 ## Latest H1 result — conditional-search call accounting audit (2026-09-21)
