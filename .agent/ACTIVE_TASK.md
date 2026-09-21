@@ -15,11 +15,12 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: important-news-phase1-conditional-search-call-accounting-audit-20260921
+- task_id: important-news-phase1-search-diagnostics-instrumentation-candidate-20260921
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: Read-only audit: 16/149 natural runs had 2 `web_search_call` output items; 07:10 usage row reconciles to $0.02112360, but historical headline/action-level billing is unavailable. No code/prod changes; C1 review required.
+- note: C1 aggregate-usage blocker fixed on fresh-base branch `codex/h1-search-diagnostics-aggregate-20260921` (code commit `7c7a8748b38b3d4b1872e74d009b32af0d32fa14`). Per-run tokens/calls/cost sum successful responses; 18 Deno tests and type checks passed; production mutation 0; awaiting C1.
+
 ### Codex slot 2
 - owner: codex
 - slot: codex-2
