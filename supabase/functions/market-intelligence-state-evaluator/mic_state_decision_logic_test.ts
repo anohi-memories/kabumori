@@ -102,6 +102,54 @@ test("detectNewObservations: timestamp precision compares observed_at, not obser
   assert.equal(result[0]?.reason, "observation_time_changed");
 });
 
+// Fed target range is daily in FRED but only changes at policy decisions.
+// A repeated value on a new effective date must not make rates material.
+test("Fed target-range rates: first observation is material, unchanged daily repeats are not", () => {
+  const metrics = [
+    metric({ metricKey: "FED_FUNDS_TARGET_LOWER", currentValue: 3.5, observedDate: "2026-09-16" }),
+    metric({ metricKey: "FED_FUNDS_TARGET_UPPER", currentValue: 3.75, observedDate: "2026-09-16" }),
+  ];
+  const mappings = new Map([
+    ["FED_FUNDS_TARGET_LOWER", mapRow({ metricKey: "FED_FUNDS_TARGET_LOWER", absChangeThreshold: 0.01 })],
+    ["FED_FUNDS_TARGET_UPPER", mapRow({ metricKey: "FED_FUNDS_TARGET_UPPER", absChangeThreshold: 0.01 })],
+  ]);
+  const first = detectNewObservations(metrics, {});
+  assert.deepEqual(first.map((item) => item.reason), ["first_observation", "first_observation"]);
+  assert.deepEqual(evaluateMaterialChange(first, mappings).materialMetricKeys, [
+    "FED_FUNDS_TARGET_LOWER",
+    "FED_FUNDS_TARGET_UPPER",
+  ]);
+
+  const baseline = {
+    FED_FUNDS_TARGET_LOWER: { value: 3.5, observedDate: "2026-09-16", observedAt: null },
+    FED_FUNDS_TARGET_UPPER: { value: 3.75, observedDate: "2026-09-16", observedAt: null },
+  };
+  const nextDay = metrics.map((item) => ({ ...item, observedDate: "2026-09-17" }));
+  const repeated = detectNewObservations(nextDay, baseline);
+  assert.deepEqual(repeated.map((item) => item.reason), ["observation_time_changed", "observation_time_changed"]);
+  assert.equal(evaluateMaterialChange(repeated, mappings).isMaterial, false);
+});
+
+test("Fed target-range rates: lower-only, upper-only, and simultaneous changes are material", () => {
+  const baseline = {
+    FED_FUNDS_TARGET_LOWER: { value: 3.5, observedDate: "2026-09-16", observedAt: null },
+    FED_FUNDS_TARGET_UPPER: { value: 3.75, observedDate: "2026-09-16", observedAt: null },
+  };
+  const mappings = new Map([
+    ["FED_FUNDS_TARGET_LOWER", mapRow({ metricKey: "FED_FUNDS_TARGET_LOWER", absChangeThreshold: 0.01 })],
+    ["FED_FUNDS_TARGET_UPPER", mapRow({ metricKey: "FED_FUNDS_TARGET_UPPER", absChangeThreshold: 0.01 })],
+  ]);
+  const lower = metric({ metricKey: "FED_FUNDS_TARGET_LOWER", currentValue: 3.75, observedDate: "2026-10-28" });
+  const upper = metric({ metricKey: "FED_FUNDS_TARGET_UPPER", currentValue: 4.0, observedDate: "2026-10-28" });
+
+  const lowerOnly = evaluateMaterialChange(detectNewObservations([lower], baseline), mappings);
+  assert.deepEqual(lowerOnly.materialMetricKeys, ["FED_FUNDS_TARGET_LOWER"]);
+  const upperOnly = evaluateMaterialChange(detectNewObservations([upper], baseline), mappings);
+  assert.deepEqual(upperOnly.materialMetricKeys, ["FED_FUNDS_TARGET_UPPER"]);
+  const both = evaluateMaterialChange(detectNewObservations([lower, upper], baseline), mappings);
+  assert.deepEqual(both.materialMetricKeys, ["FED_FUNDS_TARGET_LOWER", "FED_FUNDS_TARGET_UPPER"]);
+});
+
 // --- evaluateMaterialChange ---
 
 test("evaluateMaterialChange: always_material flags any new observation as material", () => {

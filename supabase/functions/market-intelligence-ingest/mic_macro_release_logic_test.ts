@@ -130,9 +130,12 @@ test("buildMacroReleaseEvent: a genuinely new observed_date (even with the same 
 
 // --- MACRO_RELEASE_METRIC_KEYS scope ---
 
-test("MACRO_RELEASE_METRIC_KEYS: exactly the 16 Phase 1A FRED macro metrics + 4 Phase 1B e-Stat macro metrics (20 total), nothing from existing domains", () => {
+test("MACRO_RELEASE_METRIC_KEYS: macro-only metrics are included; rates-domain Facts stay excluded", () => {
   assert.equal(MACRO_RELEASE_METRIC_KEYS.size, 20);
-  for (const key of ["US2Y", "US10Y", "NIKKEI225", "SP500", "NASDAQCOMPOSITE", "NASDAQ100", "VIX", "USDJPY", "WTI", "BRENT"]) {
+  for (const key of [
+    "US2Y", "US10Y", "NIKKEI225", "SP500", "NASDAQCOMPOSITE", "NASDAQ100", "VIX", "USDJPY", "WTI", "BRENT",
+    "FED_FUNDS_TARGET_LOWER", "FED_FUNDS_TARGET_UPPER",
+  ]) {
     assert.equal(MACRO_RELEASE_METRIC_KEYS.has(key), false, `${key} must not be in the macro_release scope`);
   }
   for (const key of ["US_CPI", "US_CPI_YOY", "US_CORE_PCE_YOY", "US_UNEMPLOYMENT_RATE", "US_GDP_GROWTH", "JP_GDP"]) {

@@ -72,6 +72,20 @@ export type FredSeriesMapping = {
 export const FRED_SERIES_MAPPINGS: FredSeriesMapping[] = [
   { seriesId: "DGS2", metricKey: "US2Y", unit: "percent" },
   { seriesId: "DGS10", metricKey: "US10Y", unit: "percent" },
+  // Fed policy target range (official series source: Board of Governors).
+  // These are effective-date daily observations, not statement timestamps.
+  {
+    seriesId: "DFEDTARL",
+    metricKey: "FED_FUNDS_TARGET_LOWER",
+    unit: "percent",
+    underlyingSource: "Board of Governors of the Federal Reserve System (US)",
+  },
+  {
+    seriesId: "DFEDTARU",
+    metricKey: "FED_FUNDS_TARGET_UPPER",
+    unit: "percent",
+    underlyingSource: "Board of Governors of the Federal Reserve System (US)",
+  },
   {
     seriesId: "NIKKEI225",
     metricKey: "NIKKEI225",

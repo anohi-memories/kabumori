@@ -47,12 +47,12 @@ test("buildFredObservationsUrl: units=pch (percent change from prior period) is 
 
 test("fetchFredMetrics: the same seriesId can be fetched twice under two different metric_keys/units, and each request URL carries the right units param", async () => {
   const requestedUrls: string[] = [];
-  const fetchImpl = async (url: string | URL) => {
+  const fetchImpl = (url: string | URL) => {
     requestedUrls.push(String(url));
     const parsed = new URL(String(url));
     const units = parsed.searchParams.get("units");
     const value = units === "pc1" ? "3.10" : "313.53"; // YoY% vs index level
-    return new Response(JSON.stringify({ observations: [{ date: "2026-08-01", value } ] }), { status: 200 });
+    return Promise.resolve(new Response(JSON.stringify({ observations: [{ date: "2026-08-01", value } ] }), { status: 200 }));
   };
   const metrics = await fetchFredMetrics(
     {
@@ -285,7 +285,7 @@ test("normalizeFredObservation: equity index series still rejects a non-numeric 
 });
 
 test("fetchFredMetrics: 7 non-macro mappings (US2Y/US10Y + 5 equity index) return one metric each", async () => {
-  const fetchImpl = async (url: string | URL) => {
+  const fetchImpl = (url: string | URL) => {
     const seriesId = new URL(String(url)).searchParams.get("series_id");
     const values: Record<string, string> = {
       DGS2: "3.60",
@@ -296,7 +296,7 @@ test("fetchFredMetrics: 7 non-macro mappings (US2Y/US10Y + 5 equity index) retur
       NASDAQ100: "24567.8",
       VIXCLS: "17.20",
     };
-    return new Response(JSON.stringify({ observations: [{ date: "2026-09-16", value: values[seriesId ?? ""] }] }), { status: 200 });
+    return Promise.resolve(new Response(JSON.stringify({ observations: [{ date: "2026-09-16", value: values[seriesId ?? ""] }] }), { status: 200 }));
   };
   const metrics = await fetchFredMetrics(
     {
@@ -322,8 +322,25 @@ test("fetchFredMetrics: 7 non-macro mappings (US2Y/US10Y + 5 equity index) retur
   assert.ok(metrics.every((m) => m.observedAt === null && m.timePrecision === "date"));
 });
 
-test("FRED_SERIES_MAPPINGS: default export now has 23 entries (7 pre-macro + 16 Macro Indicators Phase 1A)", () => {
-  assert.equal(FRED_SERIES_MAPPINGS.length, 23);
+test("FRED_SERIES_MAPPINGS: 23 existing entries are retained, with 2 Fed target-range series added", () => {
+  assert.equal(FRED_SERIES_MAPPINGS.length, 25);
+  assert.deepEqual(
+    FRED_SERIES_MAPPINGS.filter((m) => m.metricKey.startsWith("FED_FUNDS_TARGET_")),
+    [
+      {
+        seriesId: "DFEDTARL",
+        metricKey: "FED_FUNDS_TARGET_LOWER",
+        unit: "percent",
+        underlyingSource: "Board of Governors of the Federal Reserve System (US)",
+      },
+      {
+        seriesId: "DFEDTARU",
+        metricKey: "FED_FUNDS_TARGET_UPPER",
+        unit: "percent",
+        underlyingSource: "Board of Governors of the Federal Reserve System (US)",
+      },
+    ],
+  );
   const macroKeys = FRED_SERIES_MAPPINGS.filter((m) =>
     m.metricKey.startsWith("US_") || m.metricKey === "JP_GDP"
   ).map((m) => m.metricKey);
@@ -350,13 +367,40 @@ test("FRED_SERIES_MAPPINGS: default export now has 23 entries (7 pre-macro + 16 
   );
 });
 
+test("Fed target-range facts preserve FRED effective date, date-only precision, and Board provenance", () => {
+  const mappings = FRED_SERIES_MAPPINGS.filter((m) => m.metricKey.startsWith("FED_FUNDS_TARGET_"));
+  const metrics = mappings.map((mapping, index) =>
+    normalizeFredObservation(
+      mapping,
+      { date: "2026-09-16", value: index === 0 ? "3.50" : "3.75" },
+      new Date("2026-09-17T00:00:00.000Z"),
+    )
+  );
+
+  assert.deepEqual(metrics.map((m) => m.metricKey), ["FED_FUNDS_TARGET_LOWER", "FED_FUNDS_TARGET_UPPER"]);
+  assert.deepEqual(metrics.map((m) => m.value), [3.5, 3.75]);
+  for (const metric of metrics) {
+    assert.equal(metric.unit, "percent");
+    assert.equal(metric.observedDate, "2026-09-16");
+    assert.equal(metric.observedAt, null);
+    assert.equal(metric.timePrecision, "date");
+    assert.equal(metric.sourceKey, "fred");
+    assert.equal(metric.provider, "FRED");
+    assert.deepEqual(metric.metadata, {
+      seriesId: metric.metricKey.endsWith("LOWER") ? "DFEDTARL" : "DFEDTARU",
+      fredDate: "2026-09-16",
+      underlyingSource: "Board of Governors of the Federal Reserve System (US)",
+    });
+  }
+});
+
 test("fetchFredMetrics: a missing observation for one equity index series surfaces FRED_NO_VALID_OBSERVATION for that series only", async () => {
-  const fetchImpl = async (url: string | URL) => {
+  const fetchImpl = (url: string | URL) => {
     const seriesId = new URL(String(url)).searchParams.get("series_id");
     if (seriesId === "VIXCLS") {
-      return new Response(JSON.stringify({ observations: [{ date: "2026-09-16", value: "." }] }), { status: 200 });
+      return Promise.resolve(new Response(JSON.stringify({ observations: [{ date: "2026-09-16", value: "." }] }), { status: 200 }));
     }
-    return new Response(JSON.stringify({ observations: [{ date: "2026-09-16", value: "1.0" }] }), { status: 200 });
+    return Promise.resolve(new Response(JSON.stringify({ observations: [{ date: "2026-09-16", value: "1.0" }] }), { status: 200 }));
   };
   await assert.rejects(
     () => fetchFredMetrics({ apiKey: "k", mappings: [{ seriesId: "VIXCLS", metricKey: "VIX", unit: "index_points" }] }, fetchImpl as typeof fetch),
@@ -377,10 +421,10 @@ test("normalizeFredObservation rejects a non-numeric value", () => {
 });
 
 test("fetchFredMetrics: normal path returns one metric per mapping", async () => {
-  const fetchImpl = async (url: string | URL) => {
+  const fetchImpl = (url: string | URL) => {
     const seriesId = new URL(String(url)).searchParams.get("series_id");
     const value = seriesId === "DGS2" ? "3.60" : "4.05";
-    return new Response(JSON.stringify({ observations: [{ date: "2026-09-10", value }] }), { status: 200 });
+    return Promise.resolve(new Response(JSON.stringify({ observations: [{ date: "2026-09-10", value }] }), { status: 200 }));
   };
   const metrics = await fetchFredMetrics(
     {
@@ -399,12 +443,12 @@ test("fetchFredMetrics: normal path returns one metric per mapping", async () =>
 });
 
 test("fetchFredMetrics: malformed response surfaces FRED_MALFORMED_RESPONSE", async () => {
-  const fetchImpl = async () => new Response(JSON.stringify({ nope: true }), { status: 200 });
+  const fetchImpl = () => Promise.resolve(new Response(JSON.stringify({ nope: true }), { status: 200 }));
   await assert.rejects(() => fetchFredMetrics({ apiKey: "k" }, fetchImpl as typeof fetch), FredAdapterError);
 });
 
 test("fetchFredMetrics: non-200 surfaces FRED_HTTP_ERROR", async () => {
-  const fetchImpl = async () => new Response("nope", { status: 503 });
+  const fetchImpl = () => Promise.resolve(new Response("nope", { status: 503 }));
   await assert.rejects(
     () => fetchFredMetrics({ apiKey: "k" }, fetchImpl as typeof fetch),
     /FRED_HTTP_ERROR/,
@@ -412,9 +456,7 @@ test("fetchFredMetrics: non-200 surfaces FRED_HTTP_ERROR", async () => {
 });
 
 test("fetchFredMetrics: a fetch-level failure (e.g. timeout) surfaces FRED_FETCH_FAILED", async () => {
-  const fetchImpl = async () => {
-    throw new DOMException("signal timed out", "TimeoutError");
-  };
+  const fetchImpl = () => Promise.reject(new DOMException("signal timed out", "TimeoutError"));
   await assert.rejects(
     () => fetchFredMetrics({ apiKey: "k" }, fetchImpl as typeof fetch),
     /FRED_FETCH_FAILED/,
@@ -422,7 +464,7 @@ test("fetchFredMetrics: a fetch-level failure (e.g. timeout) surfaces FRED_FETCH
 });
 
 test("fetchFredMetrics: every observation missing for a series surfaces FRED_NO_VALID_OBSERVATION", async () => {
-  const fetchImpl = async () => new Response(JSON.stringify({ observations: [{ date: "2026-09-10", value: "." }] }), { status: 200 });
+  const fetchImpl = () => Promise.resolve(new Response(JSON.stringify({ observations: [{ date: "2026-09-10", value: "." }] }), { status: 200 }));
   await assert.rejects(
     () => fetchFredMetrics({ apiKey: "k" }, fetchImpl as typeof fetch),
     /FRED_NO_VALID_OBSERVATION/,
