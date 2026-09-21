@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-21 JST (H1 search diagnostics C1 blocked on per-run aggregate usage consistency; H2 Phase13 ready; G1 idle; G2 done)
+- checked_at: 2026-09-21 JST (H1 ready; H2 Phase13 rearmed for isolated QA live-data runtime; G1 idle; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -22,10 +22,10 @@
   - Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase13-production-preview-rollout-and-qa-20260921`
-  - Phase12 source candidate C2 PASS済み。
-  - 次は `social-mobile-brand-dry-run` だけをproduction deployし、専用QA fixtureでexactly one real AI previewを実行する。
-  - real X post / media upload / scheduled_posts write / publish_enabled=true / Cron / schema変更は禁止。
-  - Recommended model: Luna。Auth/RLS/runtime安全性の具体的blocker時のみSol検討。
+  - Preview Function production deploy + rejected-request smokeはC2で受理。
+  - iPhone側がmock repositoryのためreal AI previewは未実行。QA-only local runtimeで `EXPO_PUBLIC_DATA_SOURCE=supabase` を使い、実tenant読取を確認してからexactly one previewへ進む。
+  - repo default / production app-wide setting / X OAuth / publish_enabled / Cron / schema は変更禁止。
+  - Recommended model: Luna。Auth/RLS/runtimeの具体的blocker時のみSol検討。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
