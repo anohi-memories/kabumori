@@ -3,8 +3,8 @@
 - task_id: important-news-phase1-search-diagnostics-instrumentation-candidate-20260921
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: conditional-searchの実request数・web_search action内訳・失敗attemptをprivacy-minimalに記録できるlocal-only instrumentation candidateを作り、現在のコスト不確実性を解消できる状態にする。production deployはまだ行わない。
@@ -271,3 +271,12 @@ Today a second attempt normally follows a failure, but the existing latch is `ha
 8. Return to `review_required`, next_owner=chatgpt, and stop for C1.
 
 **Recommended model: Luna.**
+
+
+## Codex H1 continuation handoff — 2026-09-21
+
+- C1 aggregate-usage blocker fixed on a fresh branch from `origin/main` `fc33d90fa577c336c27ed31c34efc79e160e14db`.
+- Branch: `codex/h1-search-diagnostics-aggregate-20260921`; code candidate commit: `7c7a8748b38b3d4b1872e74d009b32af0d32fa14`.
+- Per-run successful-response tokens, legacy `web_search_calls`, and per-response estimated costs are summed; `paidSearchUsed` still checks the current response using the prior rule.
+- Two-success edge-case added. Deno: 18 tests passed; type checks passed; `git diff --cached --check` passed.
+- Production mutation: 0. Stop for C1.
