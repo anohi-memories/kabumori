@@ -223,3 +223,51 @@ merge不可。
 - STOP for C1
 
 **推奨モデル：Luna。**
+
+
+## C1 review — 2026-09-21
+
+**NOT PASS — instrumentation design is close, but one accounting consistency bug must be fixed before merge/deploy approval.**
+
+Accepted:
+- Candidate branch is isolated and production mutation is 0.
+- Migration is additive, nullable, backward-compatible, and does not change RLS/grants.
+- Privacy boundary is appropriate: no raw prompt/headline/query/URL/tool output/provider id is added.
+- Attempt/success/failure counters and action-type buckets are well separated from legacy `web_search_calls`.
+- Tests cover 0/1/2 output items, action classification, privacy serialization, success latch, and retry-after-failure semantics.
+- Deno tests/typecheck/git diff checks reported PASS.
+- Search trigger, model, timeout, fallback, matcher, and retry policy are intentionally unchanged.
+
+### C1 blocker — per-run usage/cost can diverge from diagnostics on multiple successful responses
+
+The new diagnostics object aggregates **all successful Responses results**, but `usage` remains a single mutable object overwritten by the most recent successful `targetedSearch()`.
+
+This means a run with more than one successful Responses POST can persist:
+- `targeted_search_success_count > 1`
+- aggregated web-search action counters across all successes
+- but tokens / `web_search_calls` / `cost_usd` from only the last successful response
+
+That makes the new per-run diagnostics internally inconsistent and can undercount cost/tokens.
+
+Today a second attempt normally follows a failure, but the existing latch is `hasMeaningfulSearchUsage(webSearchCalls || inputTokens)`; a successful response with zero counted web-search items and zero input tokens leaves the latch open. Instrumentation should remain correct even in that edge case, especially because the task goal is accurate request/cost accounting.
+
+### Required continuation
+
+1. Replace single-response overwrite semantics with an explicit **per-run aggregate usage**:
+   - sum input tokens
+   - sum output tokens
+   - sum legacy `web_search_calls` output-item count
+   - sum estimated cost using the unchanged estimator per successful response or an equivalent mathematically correct aggregate
+2. Preserve `paidSearchUsed` decision semantics exactly as today; do **not** alter retry/search policy in this task.
+3. Ensure `ai_usage_events` and `important_news_shadow_runs` receive the same aggregate usage totals.
+4. Add a test for:
+   - first successful response with no meaningful latch usage, followed by a second successful response
+   - diagnostics success_count=2
+   - action counters aggregate both responses
+   - tokens/calls/cost aggregate both responses
+5. Keep all privacy constraints and nullable migration semantics unchanged.
+6. Fresh-check/rebase against current `origin/main` before final push because the candidate branch is currently behind main by 1 commit.
+7. Production mutation remains **0**.
+8. Return to `review_required`, next_owner=chatgpt, and stop for C1.
+
+**Recommended model: Luna.**
