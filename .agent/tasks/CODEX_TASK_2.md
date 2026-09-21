@@ -1,227 +1,185 @@
 # Codex Task 2
 
-- task_id: social-mobile-app-phase12-general-user-content-profile-and-dry-run-20260920
+- task_id: social-mobile-app-phase13-production-preview-rollout-and-qa-20260921
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
-- purpose: Phase 11でgeneral-user X OAuthがproduction実証済みになったため、一般ユーザーbrandをcontent-generation pipelineへ安全に接続する最小基盤を作る。まず `social_mobile_user_v1` code profile、general-user posting defaults、dry-run generation/read pathまで。real X post・publish_enabled=true・自動投稿はまだ行わない。
+- purpose: Phase 12 C2 PASS済みの general-user preview candidate を production に安全に反映し、dedicated QA user + test X account で exactly one bounded real AI preview を実行して、tenant isolation・no-publish boundary・既存brand非回帰を確認する。real X post / media upload / publish_enabled=true / Cron はまだ禁止。
 
 ## Approved basis
 
-Phase 11 Final C2: PASS。
+Phase 12 Final C2: PASS。
 
-productionで実証済み:
-- dedicated non-admin QA Auth user
+Approved candidate:
+- `social_mobile_user_v1` profile registered
+- dedicated `social-mobile-brand-dry-run` Edge Function
+- user-JWT-only tenant reads
+- owner membership required
+- exact social-mobile profile required
+- exactly one identity-verified X account required
+- no Vault/token read
+- no scheduled_posts write
+- no X adapter/publish path
+- mobile preview-only UI
+- tests 75/75 + typecheck/lint/iOS export/deno check/diff/static scan PASS
+- implementation commit `60b610292398053494d9ed73b80617d2dd2eefe6`
+
+Existing retained QA fixture:
+- dedicated non-admin Auth QA user
 - dedicated test X account
-- real OAuth round-trip成功
-- QA X account = identity_verified
-- publish_enabled=false
-- Vault token refs存在、secret values未露出
-- tenant isolation runtime proof PASS
-- existing production X accounts/admin OAuth unchanged
-- real X post/media upload = 0
-- dedicated QA fixtureは当面保持
-
-既知の意図的gap:
-- general-user brandの `code_profile_key='social_mobile_user_v1'` はまだregistry未登録
-- そのため content-generation/dispatch は fail-closed
-- general-user posting_windows / publish enablement は未設計
-- revoke/disconnectは未実装
+- OAuth verified
+- `publish_enabled=false`
+- tenant isolation previously proven
+- do not clean up automatically
 
 ## Model policy
 
-- **Lunaで開始・継続する。**
-- Solへ上げるのは、shared generation pipelineの権限境界・multi-tenant isolation・既存brand回帰で具体的な設計矛盾が出た時だけ。
-- 単にproduction関連だからという理由でSolへ上げない。
+- Start and continue with **Luna**.
+- Do not escalate just because production is involved.
+- Escalate to Sol only if a concrete blocker appears involving Auth/RLS isolation, Edge Function deployment/runtime mismatch, OpenAI invocation safety, or unexpected production data mutation that Luna cannot resolve confidently.
+- If escalation is needed, stop and report the exact blocker first.
 
-## Goal
+## Scope A — fresh preflight
 
-Phase 12では「一般ユーザーのbrandが安全にAI生成をdry-runできる」状態まで作る。
+Before any production mutation:
+1. read `.agent/ORCHESTRATION.md`
+2. read `.agent/CURRENT_STATE.md`
+3. read this TASK and `.agent/CODEX_REPORT_2.md`
+4. inspect other 3 slots for overlap
+5. fresh `origin/main`
+6. verify approved candidate source is still byte-equivalent to reviewed commit where relevant
+7. production read-only snapshot:
+   - target Function `social-mobile-brand-dry-run` absent or current version/hash if already present
+   - retained QA user still non-admin
+   - QA membership count/owned brand
+   - QA X account still identity_verified
+   - QA `publish_enabled=false`
+   - existing production X accounts unchanged
+   - relevant brands/accounts/scheduled_posts counts and safe identity hashes
+8. verify no other slot is deploying/changing the same shared brand files, same Edge Function, or same production settings
 
-このPhaseで目指すもの:
-1. `social_mobile_user_v1` code profileをregistryへ追加
-2. user-owned brand contextを既存brand pipelineから安全に解決
-3. general-user default posting settings / windowsの最小モデルを決める
-4. mobileからdry-run生成結果を確認できる候補を作る
-5. existing AI Lab / kabumori / mio behaviorを変えない
-6. real publishは一切しない
+STOP if source drift, unexpected prior deployment, account mutation, or slot conflict is found.
 
-## Mandatory startup
+## Scope B — deploy only the preview Function
 
-開始前に:
-1. `.agent/ORCHESTRATION.md`
-2. `.agent/CURRENT_STATE.md`
-3. this TASK
-4. `.agent/CODEX_REPORT_2.md`
-5. other 3 slot TASK
-6. fresh `origin/main`
-7. inspect:
-   - `_shared/brand/brand_profiles.ts`
-   - brand context loader
-   - existing dry-run Function(s)
-   - social-mobile repository/adapters
-   - posting_windows schema/RPCs
-   - existing general-user QA fixture read-only
-8. fresh overlap check with H1/G1/G2
-
-STOP if another slot touches the same shared brand profile files, same posting RPC/table migration, or same dry-run Function.
-
-## Scope A — general-user profile
-
-Add `social_mobile_user_v1` to the shared brand profile registry.
+Deploy exactly:
+- `social-mobile-brand-dry-run`
 
 Requirements:
-- no hardcoded QA handle/user ID
-- generic default profile for any general-user workspace
-- profile must not impersonate existing brands
-- neutral safe defaults
-- no brand-specific secrets
-- no automatic X identity assumptions beyond connected account metadata
-- unknown/missing user settings remain fail-closed or conservative
+- source must match reviewed `origin/main`
+- custom user-JWT flow preserved
+- no service_role use added
+- no migration/schema/RPC/RLS changes
+- no Cron/scheduler/settings changes
+- no existing Function redeploy
+- no X Developer Portal change
+- no secret rotation
 
-Profile should support at minimum:
-- display name / brand name fallback
-- tone/voice defaults
-- language/locale default
-- posting objective defaults
-- prohibited claims / unsafe generation guardrails
-- no auto-post flag embedded in profile
+Post-deploy read-back:
+- Function ACTIVE
+- verify_jwt policy documented exactly as deployed
+- runtime source/hash equivalent to approved source
+- unrelated Function versions/updated_at unchanged
 
-Do not change existing AI Lab/kabumori/mio profile behavior.
+## Scope C — safe smoke before real AI
 
-## Scope B — user settings contract
+Run no-publish smoke checks first:
+- unauthenticated request fails closed
+- invalid/unsupported method fails closed
+- no DB mutation from smoke
+- no OpenAI call for rejected requests
+- no X/Vault access
 
-Define the minimal per-user/brand content settings needed before generation.
+If possible, use a valid QA session for a pre-generation ownership read path without generation side effects. Do not expose credentials/session token in report.
 
-Prefer reusing existing settings tables/RPCs if they are tenant-safe. Add new schema only if existing model cannot represent the needed fields safely.
+## Scope D — exactly one real production AI preview
 
-Minimum candidate:
-- preferred tone
-- content themes/topics
-- posting objective
-- posting frequency target
-- approval mode preference
-- generation timing preference
-- optional NG words / notes
+After B/C pass, execute exactly one real AI preview with the retained dedicated QA user and QA X account.
 
-Requirements:
-- ownership bound to `auth.uid()` / membership
-- no client-trusted brand_id for write authorization
-- tenant isolation
-- defaults exist for first-time QA user
-- no direct client write to protected cross-tenant rows unless already-established safe RLS pattern exists
+Required path:
+1. sign in/use existing QA session
+2. invoke `social-mobile-brand-dry-run` for the owned QA brand
+3. exactly one OpenAI generation request
+4. preview returns successfully to mobile/equivalent approved client
+5. record only safe metadata:
+   - success/status
+   - workspace identity in non-sensitive form
+   - connected QA handle if already public test handle
+   - model name if returned
+   - character count
+   - preview-only/no-publish flags
 
-If migration/RPC candidate is needed:
-- source only before C2
-- disposable proof required
-- no production apply
+Do NOT copy the full generated text into the report unless needed for a defect; if inspected, keep it minimal.
 
-## Scope C — posting defaults / windows
+Forbidden:
+- any X API call
+- media upload
+- scheduled_posts insert
+- publish/repost
+- `publish_enabled=true`
+- Vault token read
+- existing production account mutation
+- Cron/scheduler change
+- app-wide data-source switch
 
-Design the minimum general-user posting schedule model.
+If the real AI call fails:
+- do not retry repeatedly
+- one controlled retry maximum only if failure is clearly transient and creates no write/publish risk
+- otherwise stop for C2 with exact failure class
 
-Target default:
-- user can have safe initial posting windows/settings
-- preserve project concept:
-  - default next-day AI planning
-  - default auto-post may exist as product preference, but **Phase 12 must not enable live publishing**
-  - optional approval mode supported
-  - generation window previous-day 09:00–24:00, default around 17:00 candidate
-- limits/entitlements remain separate from profile
+## Scope E — postflight proof
 
-Prefer:
-- reuse `posting_windows` if tenant-safe and semantically compatible
-- otherwise propose additive tenant-safe table/RPC candidate
+After the preview:
+- verify QA user remains non-admin
+- QA has only expected owned workspace
+- QA X account remains identity_verified
+- QA `publish_enabled=false`
+- scheduled_posts count/identity for QA workspace unchanged
+- no X/media post side effect
+- no Vault token access/change attributable to preview
+- existing AI Lab/kabumori/mio accounts unchanged
+- existing admin OAuth unchanged
+- no new OAuth state or account binding from preview
+- no cross-tenant visibility regression
 
-No Cron or production scheduler changes in this Phase.
+Run a rollback-only authenticated RLS read proof if needed, but no persistent mutation.
 
-## Scope D — dry-run generation path
+## Scope F — source/mobile sanity
 
-Implement a safe dry-run for the dedicated QA fixture and generic general-user path.
+Because mobile preview UI already exists:
+- confirm current mobile code points to `social-mobile-brand-dry-run`
+- no publish button/toggle exists on preview card
+- typecheck/lint only if source changed since approved candidate or if environment requires fresh verification
+- no source changes should be needed for a clean rollout
 
-Requirements:
-- signed-in user can invoke dry-run only for owned workspace
-- resolve `social_mobile_user_v1`
-- use current brand context / AI generation stack where safe
-- no scheduled_posts write unless explicitly required for a local/disposable candidate
-- no X API call
-- no Vault token read required for generation
-- no publish attempt
-- result clearly marked preview/dry-run
-- generation must not silently fall back to another brand/profile
-
-If an existing `brand-post-dry-run` can be safely extended, preserve existing admin/general boundaries and do not regress current brands. If trust boundary differs materially, prefer a separate narrowly-scoped Function.
-
-## Scope E — mobile candidate
-
-Add the minimum social-mobile UX needed to exercise the dry-run:
-
-- from Home or Accounts/Settings, user can trigger or view one preview generation
-- clear states:
-  - not configured
-  - generating
-  - preview ready
-  - generation error
-- no "投稿する" action yet
-- no publish toggle that can set live state
-- preview must show which connected X account/workspace it belongs to
-- no token/secret display
-
-Keep UX minimal; Phase 12 is foundation, not final polish.
-
-## Scope F — dedicated QA proof
-
-Use the retained Phase 11 QA fixture only for read-only/runtime proof where safe.
-
-Allowed before C2:
-- real signed-in read/dry-run generation if it creates no live scheduled/published content
-- read-only tenant checks
-- local/disposable DB candidate proof
-- mocked AI if paid/live model use is unnecessary
-
-Do not make a real X post.
-Do not flip `publish_enabled`.
-Do not mutate existing production brands.
-
-If real AI generation would incur paid usage, prefer mock/local proof first. Any production AI call must be explicitly documented and bounded; if avoidable, do not make it.
-
-## Tests
-
-At minimum:
-- profile registry regression
-- general-user profile resolution
-- existing AI Lab/kabumori/mio profile regression
-- tenant ownership tests
-- settings defaults tests
-- dry-run auth/ownership tests
-- no cross-tenant access
-- no X publish path
-- social-mobile typecheck
-- lint
-- relevant Deno tests
-- Expo export/route resolution if UI changed
-- `git diff --check`
-- secret/static scan
+If a real defect is discovered:
+- do not hot-patch production
+- stop
+- make source fix on fresh main
+- test it
+- return for C2 before redeploying
 
 ## Production boundary
 
-Before C2:
-- no production migration apply
-- no production Edge Function deploy
-- no Cron/scheduler change
-- no `publish_enabled=true`
-- no real X post/media upload
-- no existing production account mutation
-- no Vault rotate/delete
-- no app-wide data-source switch
-- no billing/Push changes
-- no cleanup of QA fixture
-- no blind `db push` / migration-history repair
+Approved:
+- deploy only `social-mobile-brand-dry-run`
+- exactly one bounded real OpenAI preview call using dedicated QA fixture
+- read-only/postflight checks
 
-Read-only production checks and one bounded no-publish dry-run are allowed only if the path is proven not to publish/write protected production content.
+Not approved:
+- migration/schema/RPC/RLS
+- Cron/scheduler
+- any X post/media/repost
+- `publish_enabled=true`
+- production settings changes
+- Vault rotate/delete
+- app-wide data-source switch
+- billing/Push changes
+- cleanup of QA fixture
+- blind `db push` / migration-history repair
 
 ## Completion / C2
 
@@ -229,56 +187,15 @@ When complete:
 - status -> `review_required`
 - next_owner -> `chatgpt`
 - update `.agent/CODEX_REPORT_2.md` with:
-  1. exact architecture chosen
-  2. files/commits
-  3. profile registry change
-  4. settings/posting-window contract
-  5. dry-run path
-  6. mobile UX
-  7. tenant/security proof
-  8. tests
-  9. production mutation = 0
-  10. exact next production rollout recommendation
-- fresh-check `origin/main` before push
+  1. fresh preflight
+  2. exact Function deploy/version/hash/source-equivalence
+  3. safe smoke results
+  4. real AI preview result
+  5. OpenAI call count
+  6. proof of zero X/media/scheduled-post/publish side effects
+  7. tenant isolation postflight
+  8. existing production accounts/admin OAuth unchanged
+  9. production mutation summary
+  10. rollback path / next recommendation
+- fresh-check `origin/main` before any control/report push
 - STOP for C2
-
-
-## Final C2 review — 2026-09-20
-
-**PASS — Phase 12 general-user content profile + dry-run candidate is approved.**
-
-Accepted:
-- \`social_mobile_user_v1\` is registered as a neutral, non-brand-specific profile with no secrets, no fixed hashtags, and no publish permission.
-- existing Kabumori / AI Salaryman Lab profile behavior is preserved; the generic default topic only applies when a profile explicitly defines one.
-- user settings are intentionally code-owned first-run defaults only; no premature persistence or cross-tenant writable settings store was introduced.
-- existing \`posting_windows\` is not reused as a general-user write target because its current admin-operated model is not the right tenant boundary.
-- a separate \`social-mobile-brand-dry-run\` Function was chosen rather than widening the existing admin/service-role dry-run path.
-- the new dry-run path authenticates the real Supabase bearer, forwards the same user JWT for tenant reads, requires owner membership, requires the exact \`social_mobile_user_v1\` profile, and requires exactly one identity-verified X account for that owned workspace.
-- client-supplied \`brand_id\` is only a selector after membership proof and is never treated as authorization.
-- the preview path has no Vault read, token adapter, scheduled-post write, X API adapter, or publish action.
-- mobile UI exposes preview-only states and has no publish button/toggle.
-- \`publish_enabled\` is never changed.
-- no production migration/deploy/Cron/AI/X/Vault/Storage mutation occurred.
-
-Verification accepted:
-- shared-brand + dry-run Deno tests 75/75 PASS.
-- social-mobile typecheck PASS.
-- lint PASS.
-- iOS Expo export PASS.
-- Edge Function deno check PASS.
-- git diff --check PASS.
-- static secret/service-role scan PASS.
-- implementation commit \`60b610292398053494d9ed73b80617d2dd2eefe6\` is the reviewed source candidate.
-
-Non-blocking deferred items:
-- persisted editable user settings.
-- tenant-safe persistent posting-window/settings schema/RPC.
-- production deploy of \`social-mobile-brand-dry-run\`.
-- real production AI preview invocation.
-- live publishing, scheduling, Cron, and \`publish_enabled=true\`.
-- revoke/disconnect.
-
-Decision:
-- Phase 12 source candidate is complete.
-- status = done.
-- next step should be a separate H2 rollout task for production deployment of the preview Function and one bounded QA preview, still with X posting disabled.
