@@ -22,9 +22,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function nonNegativeInteger(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.max(0, Math.floor(value))
-    : 0;
+  return typeof value === "number" ? Math.max(0, Math.floor(value)) : 0;
 }
 
 export function createTargetedSearchDiagnostics(): TargetedSearchDiagnostics {
