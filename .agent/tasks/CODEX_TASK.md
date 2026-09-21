@@ -3,7 +3,7 @@
 - task_id: important-news-phase1-conditional-search-call-accounting-audit-20260921
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
@@ -181,3 +181,30 @@ local branchを作る場合:
 - STOP for C1
 
 **推奨モデル：Luna。**
+
+
+## C1 review — 2026-09-21
+
+**PASS — conditional-search call accounting audit completed safely.**
+
+Accepted findings:
+- The 07:10 natural run is reconciled exactly at the aggregate level: `conditional_search_count=1`, input/output `4844/129`, `web_search_calls=2`, estimated cost `$0.02112360`; the matching `ai_usage_events` row agrees.
+- The application currently counts every response output item with `type=web_search_call`; `conditional_search_count` is only a per-run usage/event flag and is not a billable-search count.
+- The raw Responses payload/action types are not retained, so the audit correctly does **not** claim that both output items were independently billable search actions.
+- OpenAI documentation evidence reviewed in the H1 supports `max_tool_calls=1` as a built-in tool-call cap, but does not resolve why two `web_search_call` output items were observed in persisted aggregates.
+- Historical production scan is material: 149 natural runs, 19 conditional-search events, 35 counted output items; 16/19 events had 2 output items and 3/19 had 1.
+- Current estimator exactly reproduces persisted estimated costs, but its web-search component is an application-side estimate based on counted output items, not a verified provider invoice.
+- Previous `$44.7552/30d` scenario must not be described as a hard ceiling. A two-item stress scenario would be `$87.9552/30d` excluding input, but neither figure is a proven upper bound.
+- Code review correctly identified another important limitation: after a failed targeted Responses request, `paidSearchUsed` remains false, so a later eligible candidate in the same run can attempt another request. The current runtime therefore does not establish a strict one-request-per-run hard cap under failures.
+- Exact 07:10 headline/action anatomy is unrecoverable because the candidate table is mutable/upserted and raw Responses payloads are not persisted; no guessing was used.
+- Production mutation = 0; no deploy/Cron/schema/secret/manual replay/fallback reduction occurred.
+
+### C1 judgment
+
+- This audit task is complete.
+- Do not rely on `max_tool_calls=1` or `conditional_search_count=1` as proof of one billable web-search unit.
+- Do not present `$44.7552/30d` as a hard maximum.
+- Keep existing search/fallback behavior unchanged for now.
+- A separate next task may add privacy-minimal diagnostics (request-attempt count and counts by web-search action type, without prompt/headline/raw response) and compare them with read-only provider usage/billing data before changing cost logic or caps.
+
+Recommended model for the next audit/instrumentation task: **Luna**.
