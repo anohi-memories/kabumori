@@ -3,8 +3,8 @@
 - task_id: important-news-phase1-search-diagnostics-instrumentation-candidate-20260921
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: done
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: conditional-searchの実request数・web_search action内訳・失敗attemptをprivacy-minimalに記録できるlocal-only instrumentation candidateを作り、現在のコスト不確実性を解消できる状態にする。production deployはまだ行わない。
@@ -271,3 +271,35 @@ Today a second attempt normally follows a failure, but the existing latch is `ha
 8. Return to `review_required`, next_owner=chatgpt, and stop for C1.
 
 **Recommended model: Luna.**
+
+
+## Final C1 review — 2026-09-22
+
+**PASS — aggregate-usage blocker resolved on fresh-main candidate branch.**
+
+Reviewed branch:
+- `codex/h1-search-diagnostics-aggregate-r2-20260921`
+- fresh base: `4a73c18b8e85856ec37eb029fdc5da04af9cbfa5`
+- code candidate commit: `3dc14f454d4298cafed9ec7ad62a171868afd883`
+- branch relation at C1: ahead of main, behind 0.
+
+Accepted:
+- Per-run usage now explicitly aggregates successful response input/output tokens, legacy `web_search_calls`, and estimated cost.
+- The unchanged latch decision is still based on the **current** successful response, preserving the existing retry/search policy.
+- `ai_usage_events` and `important_news_shadow_runs` use the same aggregate run usage totals.
+- Two-success edge-case test now covers the prior blocker: first parsed success leaves latch open, second success occurs, and usage/diagnostics aggregate both responses.
+- Diagnostics still separate attempts/successes/failures from web-search output-item/action counts.
+- Migration remains additive/nullable and does not change RLS, policies, or grants.
+- Privacy boundary remains intact: no raw prompt/headline/body/query/URL/tool output/user identifier/secret/provider request or response id is added.
+- Reported validation: 18 Deno tests passed, type checks passed, `git diff --cached --check` passed.
+- Production mutation = 0. No migration apply, Function deploy/invoke, Cron, provider replay, candidate injection, credentials/settings, X/Push/App.
+
+Non-blocking note:
+- Candidate-level `estimated_cost_usd` continues to be an attribution field, while the authoritative new diagnostics/cost accounting for this task is per-run in `important_news_shadow_runs` and `ai_usage_events`. Do not sum candidate cost rows to infer provider spend.
+
+C1 judgment:
+- H1 candidate is approved.
+- Do not deploy from this task.
+- A separate production rollout task should merge/apply the exact migration and matching Function together, then use natural scheduled observations only and reconcile provider usage read-only.
+
+**Recommended model for the next rollout: Luna; use Sol only if a concrete migration/security conflict appears.**
