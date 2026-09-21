@@ -25,11 +25,11 @@
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: social-mobile-app-phase12-general-user-content-profile-and-dry-run-20260920
+- task_id: social-mobile-app-phase13-production-preview-rollout-and-qa-20260921
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
-- note: Phase11 C2 PASS済み。一般ユーザーprofile/settings/posting defaults/dry-run preview基盤。real publish禁止。Luna推奨。
+- note: Phase12 C2 PASS済み。preview Functionのみ本番deploy + QAでexactly one real AI preview。X投稿/公開化/Cron/schema変更は禁止。Luna推奨。
 
 ### Claude slot 1
 - owner: claude
