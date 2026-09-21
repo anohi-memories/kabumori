@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-21 JST (H1 search diagnostics instrumentation candidate ready; H2 Phase13 ready; G1 idle; G2 done)
+- checked_at: 2026-09-21 JST (H1 search diagnostics candidate review_required; H2 Phase13 ready; G1 idle; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,11 +14,10 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `important-news-phase1-search-diagnostics-instrumentation-candidate-20260921`
-  - Build local-only privacy-minimal telemetry for targeted-search attempts/success/failure, web_search output-item action types, tokens and cost.
-  - Preserve current search triggers/fallback/model/timeout semantics; production mutation remains 0.
-  - No raw prompt/headline/query/response persistence.
-  - Recommended model: Luna.
+- Codex slot 1: `review_required` — `important-news-phase1-search-diagnostics-instrumentation-candidate-20260921`
+  - Local-only privacy-minimal telemetry candidate is implemented on `codex/h1-search-diagnostics-instrumentation-20260921` (code commit `9394c27a90b590f95ff8253212cc72843212a90b`).
+  - Deno: 17 tests passed; type checks passed; production mutation 0.
+  - Awaiting C1; raw prompt/headline/query/response are not added to telemetry storage.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase13-production-preview-rollout-and-qa-20260921`
   - Phase12 source candidate C2 PASS済み。
