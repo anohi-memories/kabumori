@@ -1,38 +1,35 @@
 # Codex Task
 
-- task_id: important-news-phase1-gdelt-timeout-diagnosis-and-fallback-candidate-20260920
+- task_id: important-news-phase1-conditional-search-call-accounting-audit-20260921
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
-- purpose: 10分shadowで継続的に15秒timeoutしているGDELT経路を切り分け、GDELTを安定化できるか、または安全にsecondary扱いへ下げるべきかをproduction未変更で判断する。必要ならlocal-onlyのtimeout/query/fallback candidateとtestsを作る。
+- purpose: natural shadow runで1 conditional-search eventに対し2 web_search_call出力が記録された事象を監査し、Responses APIの実挙動・usage/cost accounting・max_tool_calls解釈を確認する。production挙動は変更しない。
 
 ## Approved basis
 
-前H1 final C1 PASS:
-- shadow自然観測は17/17 completed、観測約3時間。
-- GDELTは3回の実pollすべて約15秒timeout、14回は設計どおりcooldown skip。
-- 他10 sourceは観測sampleでfetch/parse healthy。
-- same-window important/most_important = 0、recall parity NOT PROVEN。
-- shadow paid Web Search = 0 calls / $0 in quiet sample。
-- 全legacy paid/live fallback維持。
-- production mutation = 0。
-- JPX TDnet Index APIはresearch-only。今回のH1では触れない。
+前H1 C1 PASS:
+- 27/27 natural shadow runs completed over 4h40m.
+- GDELTは5/5 actual pollsで約15秒timeout。
+- 07:10 natural runでJMA high-signal/sparse triggerが発火。
+- そのrunは conditional_search_count=1 だが web_search_calls=2、estimated cost=$0.02112360。
+- request側は max_tool_calls=1。
+- Production mutation = 0。
+- legacy paid/live fallbacks remain enabled。
 
-## User intent
+## User decision
 
-2026-09-20「おkすすめて」。
-
-待ち観測だけでなく、現在明確に見えているsource-health blockerであるGDELT timeoutを先に詰める。
+2026-09-21「すすめて」。
 
 ## Model policy
 
 - **Lunaで開始・継続する。**
-- HTTP/query diagnosis、fixture/replay、local code/tests、docsはLuna。
-- Solへ上げるのはproduction security/auth mutationが必要になった場合のみ。
-- このH1ではproduction mutationを行わない。
+- API response anatomy、usage accounting、logs/read-only evidence、local testsはLuna。
+- Solへ上げるのはsecurity/auth/production-writeの具体的blockerが出た場合のみ。
+- 本H1はproduction mutationを行わない。
 
 ## Mandatory startup
 
@@ -42,224 +39,145 @@
 4. .agent/CODEX_REPORT.md
 5. other 3 slot TASKs
 6. fresh origin/main
-7. current important-news-shadow GDELT source implementation
-8. source tests/fixtures
-9. production shadow read-only state
-10. latest natural runs after prior C1
+7. important-news-shadow/index.ts targetedSearch
+8. countWebSearchCalls
+9. estimateCostUsd
+10. ai_usage_events schema/read-only
+11. shadow run 07:10 UTC read-only
+12. Responses API docs / SDK semantics as available
 
-H2/G1/G2 files/settingsには触れない。
+H2/G1/G2 objectsには触れない。
 
-## Scope A — natural observation refresh
+## Scope A — exact natural-run reconstruction
 
-read-onlyで最新natural runsを確認。
+07:10 UTC natural runについて、read-onlyで以下を再構成:
+- run id
+- trigger_reason
+- triggering candidate
+- candidate headline/topic/category
+- input_tokens
+- output_tokens
+- web_search_calls
+- estimated cost
+- ai_usage_events row
+- conditional_search_count
+- any TARGETED_SEARCH_FAILED errors
+- surrounding 07:00 / 07:20 runs
 
-最低:
-- total natural runs since activation
-- observation span
-- completed/partial/failed
-- GDELT actual poll count / timeout count / cooldown skips
-- other source failures
-- same-window important/most_important
-- stored matches
-- conditional Web Search calls/cost
+manual replay禁止。
 
-6h windowが成立していれば6h集計を明記。
-成立していなければleft-censoredと明記。
+## Scope B — response anatomy
 
-## Scope B — GDELT current request diagnosis
-
-current codeを正確に追う:
-- endpoint
-- query parameters
-- mode
-- format
-- maxrecords
-- timespan
-- sort
-- timeout
-- headers/user-agent
-- response size assumptions
-- parser behavior
-- cooldown
-
-次を切り分け:
-1. DNS/TLS/connect latency
-2. GDELT server response latency
-3. query complexity
-4. response size
-5. rate limiting
-6. endpoint instability
-7. malformed/redirect response
-8. parser/JSON time
-9. timeout値が短すぎるだけか
-
-boundedな外部probeは可。ただしproduction Function invokeは禁止。
-
-## Scope C — query minimization experiments
-
-GDELTへの負荷とlatencyを下げるlocal/read-only candidateを比較。
-
-例:
-- narrower timespan
-- lower maxrecords
-- simpler query
-- separate lane queries vs broad OR query
-- alternate supported GDELT endpoint/mode
-- article listではなくlighter metadata path
-- HTTP timeout strategy
-
-各experiment:
-- request URL/queryはsecretなし
-- response time
-- HTTP status
-- bytes
-- item count
-- relevant-event yield
-- repeatability
-
-過剰probe禁止。短時間に大量リクエストしない。
-
-## Scope D — value assessment
-
-GDELTが現在shadowに何を追加しているか評価。
+コード上の countWebSearchCalls は output array 内の type=web_search_call を数える。
 
 確認:
-- existing BBC/Al Jazeera/official sourcesと重複度
-- replay cohortでGDELTが必要とされたlane
-- GDELTでしか拾えない代表eventが証明できるか
-- historical first_seen proofの有無
-- zero items / timeoutでもfallback triggerへ悪影響がないか
+- Responses APIで1 tool invocationが複数 web_search_call output itemsになる可能性
+- max_tool_calls=1 の意味
+- 1 Responses requestあたり何が「tool call」として制限されるのか
+- search query / open page / follow-up fetch等が別output itemとして数えられる可能性
+- usage/web_search billing unitsとの対応
+- response outputとusageが一致するか
 
-結論候補:
-A. keep + local query optimization
-B. keep but secondary/less frequent
-C. disable candidate in future and rely on explicit fallback
-D. replace with another free source candidate
+推測せず、可能なら公式OpenAI docsを確認。
 
-このH1ではどれもproduction適用しない。
+## Scope C — cost accounting audit
 
-## Scope E — local-only implementation candidate
+current estimator:
+- input $0.20 / 1M
+- output $1.20 / 1M
+- web search $0.01 / call
 
-明確な改善が見つかった場合のみ、local branchで:
-- shadow_sources.ts
-- source-specific helper
-- tests/fixtures
-- docs
+確認:
+- persisted 07:10 costがこの式と一致するか
+- web_search_calls=2なら$0.02が含まれているか
+- conditional_search_count=1 と web_search_calls=2 を混同していないか
+- historical shadow cost rowsに同様のmulti-call例があるか
+- ai_usage_events aggregationが実call数を保持しているか
+- previous worst-case $44.7552/30d calculationが1 call/run前提なら再計算が必要か
 
-を変更可。
+新しい外部課金単価が現行コード前提と違う可能性があれば明記。ただし本H1で単価変更しない。
 
-必須:
-- source-specific timeout
-- bounded response size/item count
-- stale/future timestamp rejection
-- fail-open to other sources (GDELT failure must not fail run)
-- no arbitrary URL fetch / SSRF
-- no secrets
-- no Web Search policy change
-- no matcher threshold change
+## Scope D — bounded non-production reproduction
 
-改善証拠が弱ければcode変更しない。
+必要ならlocal/mock fixtureで:
+- outputにweb_search_call 0/1/2件
+- countWebSearchCallsが正しく数える
+- cost estimatorが実call数を使う
+- conditional event 1件でもweb_search_calls複数を保存できる
 
-## Scope F — fallback semantics
+tests追加可。
 
-GDELT unavailable時に:
-- paid fallbackが消えない
-- source degradation数の扱いが過剰searchを誘発しない
-- 2+ degraded source triggerとの関係
-- one-source timeoutでWeb Search発火しない現行挙動
+実OpenAI APIをmanual invokeするのは禁止。
+既存natural response/raw payloadが保存されていない場合は無理に再現しない。
 
-を再確認。
+## Scope E — semantic correction candidate
 
-必要ならlocal tests追加可。ただしproduction変更なし。
+監査結果に応じてlocal-onlyで以下を提案/実装可:
+- variable naming改善
+- docsコメント
+- tests
+- worst-case cost formula修正
+- conditional_search_countの意味を「Responses request count」と明示
+- web_search_callsをactual output/tool call countとして別扱い
 
-## Scope G — exact next proposal
+ただしproduction deploy禁止。
 
-C1へ以下のどれか1つを出す:
-1. local query optimizationをshadowへ次Phaseでdeploy候補
-2. GDELT cadenceをさらに下げる次Phase候補
-3. GDELTをsecondary/no-proof sourceとして現状維持
-4. GDELT removal候補 + paid fallback維持
-5. evidence不足で観測継続
+もし current code がactual callsを正しく数えており誤りがdocs/assumptionだけなら、runtime codeは変えない。
+
+## Scope F — worst-case economics
+
+現在:
+- 10分Cron = 144 runs/day
+- at most 1 targeted Responses request/run by paidSearchUsed gate
+
+重要:
+- 1 Responses request/run と 1 web_search_call/run は同義と仮定しない。
+
+観測と公式仕様から:
+- hard upper boundが証明できるか
+- 証明できないなら「finite cap unknown」とする
+- observed max calls/request
+- safe cost-envelopeの表現
+を整理。
+
+緊急fallbackを止めるhard cap提案は禁止。
 
 ## Production mutation policy
 
 **0。**
 
 禁止:
-- important-news-shadow deploy
+- Function deploy
 - Cron変更
 - migration/schema/RPC
-- Vault/secret
-- legacy important-news変更
-- Web Search削減
+- secret/Vault
+- OpenAI manual replay
+- Web Search policy reduction
+- legacy pipeline変更
 - X/Push/App
 - MIC
 - OAuth/social-mobile
-- JPX問い合わせ/契約
-- manual OpenAI replay
 
 ## Deliverables / C1
 
 .agent/CODEX_REPORT.md:
-1. refreshed observation window
-2. GDELT poll/timeout/cooldown counts
-3. current request anatomy
-4. bounded probe results
-5. root-cause confidence
-6. overlap/value assessment
-7. fallback semantics proof
-8. local code/tests if any
-9. production mutation = 0
-10. exact next proposal
+1. 07:10 exact reconstruction
+2. conditional_search_count vs web_search_calls semantics
+3. official API semantics evidence
+4. cost formula check
+5. historical multi-call scan
+6. worst-case cost correction if needed
+7. local tests/code/docs changes if any
+8. production mutation = 0
+9. exact next proposal
 
 local branchを作る場合:
 - fresh main
 - H1-owned files only
 - push可
 - merge不可
-- status review_required
-- next_owner chatgpt
+- status -> review_required
+- next_owner -> chatgpt
 - STOP for C1
 
 **推奨モデル：Luna。**
-
-
-## H1 diagnosis completed — 2026-09-20
-
-- Refreshed natural observation: 27/27 scheduled runs completed from 02:30–07:10 UTC (4h40m; requested 6h window remains left-censored). GDELT failed at five hourly polls (03:00–07:00 UTC) at the 15s timeout and was cooldown-skipped 22 times; other 10 sources were healthy across all 27 runs.
-- GDELT's live source set returned no candidate. Current request omits `timespan`; external baseline and 1h/maxrecords=8 probes both received HTTP 429, so query optimization was not validated. Exact production root cause remains low confidence.
-- Read-only run comparison confirmed the 07:00 single-source GDELT failure produced 0 conditional searches; the 07:10 JMA high-signal/sparse trigger independently produced 1 conditional search, 2 Web Search calls, estimated $0.02112360, while GDELT was skipped and no source was degraded.
-- No code change, deploy, Cron/configuration change, or other production mutation. Keep the existing hourly GDELT cooldown and all legacy fallbacks; exact next proposal is evidence-limited natural observation only.
-- status: review_required; next_owner: chatgpt. Stop for C1.
-
-
-## C1 review — 2026-09-21
-
-**PASS — GDELT timeout diagnosis completed safely as scoped.**
-
-Accepted evidence:
-- 27/27 natural shadow runs completed over 4h40m; requested 6h/12h/24h windows are still incomplete and were correctly treated as left-censored.
-- GDELT failed on all 5 actual hourly polls at ~15s and was cooldown-skipped 22 times; other ten sources remained healthy in the persisted sample.
-- Bounded external probes were stopped after HTTP 429 responses; no unsupported root-cause claim was made.
-- Root-cause confidence is correctly recorded as low; no timeout increase/query rewrite was promoted without repeatable successful evidence.
-- A single degraded GDELT source did not itself trigger paid fallback in the observed 07:00 run.
-- The 07:10 JMA high-signal/sparse event independently triggered the conditional-search path while GDELT was skipped.
-- Same-window one live `important` North Korea event did not match the current shadow set; this is one observed non-match, not a recall-rate conclusion.
-- GDELT's current query does not target North Korea/missile/projectile terms, so timeout remediation alone would not close that coverage gap.
-- No code/runtime candidate was adopted.
-- Production mutation = 0; all legacy paid/live fallbacks remain enabled.
-
-### Follow-up observation
-
-The 07:10 natural run recorded **1 conditional-search event but 2 `web_search_call` output items**, despite the current Responses request specifying `max_tool_calls: 1`. The code records actual response output items, so the persisted cost is not being hidden; however, this contradicts the earlier assumption that one targeted Responses request necessarily implies one billable/search-call item.
-
-This is **not a blocker for the GDELT diagnosis task**, but future cost-cap reasoning must use observed `web_search_calls`, not infer a one-call ceiling solely from `max_tool_calls: 1`. A separate focused audit is appropriate before relying on that cap in economics or safety calculations.
-
-C1 judgment:
-- Task complete.
-- Keep GDELT at its existing hourly secondary cadence for now.
-- Do not deploy a query rewrite, increase timeout, remove GDELT, or reduce any fallback based on current evidence.
-- Continue natural observation.
-- Separately audit the 1 conditional-search / 2 web_search_call behavior before using a hard one-search-per-run assumption.
-
-Recommended model for the next audit: **Luna**.
