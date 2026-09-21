@@ -3,8 +3,8 @@
 - task_id: important-news-phase1-conditional-search-call-accounting-audit-20260921
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: natural shadow runで1 conditional-search eventに対し2 web_search_call出力が記録された事象を監査し、Responses APIの実挙動・usage/cost accounting・max_tool_calls解釈を確認する。production挙動は変更しない。
