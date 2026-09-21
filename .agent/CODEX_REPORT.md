@@ -1,3 +1,67 @@
+# H1 Search Diagnostics Aggregate Usage Fix — 2026-09-21
+
+対象: `important-news-phase1-search-diagnostics-instrumentation-candidate-20260921`  
+Fresh base: `origin/main` `4a73c18b8e85856ec37eb029fdc5da04af9cbfa5`  
+Branch: `codex/h1-search-diagnostics-aggregate-r2-20260921`  
+Code candidate commit: `3dc14f454d4298cafed9ec7ad62a171868afd883`
+
+## C1 blocker resolution
+
+The previous aggregate candidate branch became one commit behind after an unrelated FRED target-range update. This continuation starts from the latest main and replays only the H1 candidate changes; the FRED files and all other slots remain untouched.
+
+Successful-response usage is accumulated per run:
+
+- `input_tokens`, `output_tokens`, and legacy `web_search_calls` are summed.
+- Each successful response's existing estimated cost is summed and rounded to the existing 8-decimal precision; the estimator/rates are unchanged.
+- The same aggregate `usage` object feeds both the `ai_usage_events` insert and `important_news_shadow_runs` update.
+- `paidSearchUsed` is still set from the current successful response's `web_search_calls > 0 || input_tokens > 0` rule. Retry/search policy is unchanged.
+
+The two-success test covers the edge case: the first parsed response has zero input tokens and zero web-search output items, leaving the latch open; the second response includes tokens and two web-search items. It asserts two successes/attempts, summed tokens/calls/cost, and action counts.
+
+## Telemetry/schema and privacy
+
+The existing CLI-generated, local-only migration candidate remains `supabase/migrations/20260921115317_important_news_search_diagnostics.sql`. It adds the same nullable, non-negative diagnostic counters to `important_news_shadow_runs` and `ai_usage_events`; old rows remain NULL. No new identifiers or raw content are persisted. No RLS, policy, grant, or other schema changes are included.
+
+A read-only production schema/policy check confirmed the existing run table remains RLS-enabled and service-role-only, while `ai_usage_events` retains its existing admin-only authenticated SELECT policy and service-role writer. No production SQL was executed beyond read-only inspection.
+
+The run table holds the per-run diagnostics summary. `ai_usage_events` remains one run aggregate, not one row per attempt. For cost reporting, choose one table (normally `ai_usage_events`) and do not add the same run's cost from both tables. Provider billable search units are still unknown; output-item counts are not labeled billable.
+
+No prompt, headline/body, query, URL, raw tool output, user/account identifier, secret, provider response/request ID hash, or telemetry was added to endpoint response output.
+
+## Verification
+
+- Deno tests: 18 passed, 0 failed (including the two-success aggregate edge case).
+- `deno check`: Function and relevant test modules passed.
+- `git diff --cached --check`: passed on the isolated scratch copy.
+- Migration static review: additive nullable fields/comments only; RLS/grants unchanged.
+- Production mutation: **0**. No migration apply, Function deploy/invoke, Cron change, provider replay, candidate injection, credential/settings change, or X/Push/App action.
+
+## Branch/files
+
+Branch: `codex/h1-search-diagnostics-aggregate-r2-20260921`  
+Code candidate commit: `3dc14f454d4298cafed9ec7ad62a171868afd883`
+
+Changed files:
+
+- `supabase/functions/important-news-shadow/index.ts`
+- `supabase/functions/important-news-shadow/search_telemetry.ts`
+- `supabase/functions/important-news-shadow/search_telemetry_test.ts`
+- `supabase/migrations/20260921115317_important_news_search_diagnostics.sql`
+- `.agent/tasks/CODEX_TASK.md`
+- `.agent/CURRENT_STATE.md`
+- `.agent/ACTIVE_TASK.md`
+- `.agent/CODEX_REPORT.md`
+
+No H2/G1/G2 task/report or implementation files were changed. Candidate is not merged.
+
+## Read-only provider reconciliation / next step
+
+No provider usage connector was available or queried. In a separately authorized future observation, compare UTC run time/`run_slot` buckets and model (`gpt-5.6-luna`) against provider usage buckets: request counts against attempt/success/failure counters; provider search units against output-item/action counts without assuming they are equivalent; tokens and cost against the aggregate fields. Transport failures may explain request-count differences. There is no stable request/response ID linkage in this candidate; use only aggregate time/model buckets in a future read-only UI/export check.
+
+**Next step: C1 review only.** Production migration apply and matching `important-news-shadow` deploy are not approved by this task and require explicit authorization. If later approved, apply the exact migration before deploying the matching Function, then observe natural scheduled runs only—no manual replay or candidate injection.
+
+---
+
 # Codex Report
 
 ## Latest H1 result — conditional-search call accounting audit (2026-09-21)
