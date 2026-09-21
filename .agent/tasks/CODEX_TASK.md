@@ -3,8 +3,8 @@
 - task_id: important-news-phase1-search-diagnostics-instrumentation-candidate-20260921
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: conditional-searchの実request数・web_search action内訳・失敗attemptをprivacy-minimalに記録できるlocal-only instrumentation candidateを作り、現在のコスト不確実性を解消できる状態にする。production deployはまだ行わない。
@@ -223,3 +223,12 @@ merge不可。
 - STOP for C1
 
 **推奨モデル：Luna。**
+
+
+## Codex H1 handoff — 2026-09-21
+
+- Candidate branch: `codex/h1-search-diagnostics-instrumentation-20260921`
+- Code candidate commit: `9394c27a90b590f95ff8253212cc72843212a90b`
+- Local verification: Deno tests 17 passed; Deno type checks passed; `git diff --cached --check` passed.
+- Production mutation: 0. No migration apply, Function deploy, Cron change, provider replay, or credential/settings change.
+- Next step: C1 review. Any later migration apply and matching Function deploy require their own explicit production approval; then observe natural runs only.
