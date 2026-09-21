@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase13-production-preview-rollout-and-qa-20260921
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
 - purpose: Phase 12 C2 PASS済みの general-user preview candidate を production に安全に反映し、dedicated QA user + test X account で exactly one bounded real AI preview を実行して、tenant isolation・no-publish boundary・既存brand非回帰を確認する。real X post / media upload / publish_enabled=true / Cron はまだ禁止。
@@ -212,3 +212,48 @@ When complete:
   10. rollback path / next recommendation
 - fresh-check `origin/main` before any control/report push
 - STOP for C2
+
+
+## C2 review — 2026-09-21 (mobile QA source mismatch)
+
+**BLOCKED for Phase 13 completion, but deployment/smoke portion is accepted. Resume the same H2 with a narrowly isolated QA runtime.**
+
+Accepted:
+- production preflight passed.
+- only \`social-mobile-brand-dry-run\` was deployed.
+- deployed Function is ACTIVE v1 with runtime files byte-equal to the reviewed Phase 12 source.
+- unrelated Functions remained unchanged.
+- unauthenticated POST failed closed with 401.
+- unsupported GET failed closed with 405.
+- rejected-request smoke did not reach OpenAI/X/Vault/scheduled-post paths.
+- QA fixture remained intact: non-admin owner, one \`social_mobile_user_v1\` workspace, identity-verified test X account, \`publish_enabled=false\`, zero QA scheduled posts.
+- no schema/RPC/RLS/Cron/settings/Portal/Vault/X mutation occurred.
+- real OpenAI preview was correctly **not** attempted while the mobile client was showing mock data.
+
+Blocker:
+- the installed/mirrored mobile runtime is still using the static mock repository because its runtime data-source environment is not resolving to \`supabase\`.
+- therefore the visible \`@kabumori\` / \`@brand_studio\` rows are mock fixtures, not a tenant-isolation leak.
+- generation must not be attempted from that state.
+
+Authorized continuation:
+1. create/use a **QA-only local iOS runtime/build** from fresh \`origin/main\` with \`EXPO_PUBLIC_DATA_SOURCE=supabase\`.
+2. this is a local QA runtime configuration only:
+   - do not change the repository default.
+   - do not change production app-wide settings.
+   - do not commit secrets or environment values.
+   - do not alter publish settings.
+3. confirm in the QA runtime that the signed-in QA session resolves:
+   - exactly the expected owned \`social_mobile_user_v1\` workspace,
+   - exactly the identity-verified dedicated test X account,
+   - no visibility of production brands/accounts.
+4. if that read proof passes, execute exactly one real AI preview.
+5. then perform the original Phase 13 postflight.
+6. if the QA live source does not resolve the expected workspace/account, STOP for C2 with a read-only/RLS diagnosis; do not repeat OAuth and do not invoke OpenAI.
+7. do not select/use \`@kabumori\`, do not relink X, and do not change \`publish_enabled\`.
+
+Model:
+- continue with **Luna**.
+- Sol only if an actual Auth/RLS/runtime configuration discrepancy remains after the isolated QA runtime is proven to load the Supabase source.
+
+Completion remains:
+- return \`review_required / next_owner: chatgpt\` after the one real preview + postflight, or after a concrete blocker.
