@@ -14,12 +14,11 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `important-news-phase1-search-diagnostics-instrumentation-candidate-20260921`
-  - C1 found one blocker: diagnostics counters aggregate across successful Responses calls, but tokens/web_search_calls/cost currently keep only the most recent successful response.
-  - Fix by aggregating per-run usage totals while preserving current retry/search policy.
-  - Add a two-success edge-case test and fresh-check/rebase because candidate branch is 1 commit behind current main.
-  - Production mutation remains 0.
-  - Recommended model: Luna.
+- Codex slot 1: `review_required` — `important-news-phase1-search-diagnostics-instrumentation-candidate-20260921`
+  - C1 per-run aggregate-usage blocker fixed on fresh-base branch `codex/h1-search-diagnostics-aggregate-r2-20260921` (base `4a73c18b8e85856ec37eb029fdc5da04af9cbfa5`).
+  - Successful-response tokens, `web_search_calls`, and estimated costs now aggregate per run; retry/search policy is unchanged.
+  - Two-success edge case covered; Deno 18 tests and type checks passed; production mutation 0.
+  - Awaiting C1. Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase13-production-preview-rollout-and-qa-20260921`
   - Preview Function production deploy + rejected-request smokeはC2で受理。
@@ -38,7 +37,7 @@
 
 ## Parallel safety
 
-- H1 shadow observation + source-rights researchはreview_required。production mutation 0; requested 6/12/24h windows未充足、recall parity未証明。新sourceなし、paid/live fallbackを維持。
+- H1 search diagnostics aggregate-usage candidate is review_required; production mutation 0; C1 review pending.
 - H2はsocial-mobile Phase10 production migration / x-oauth-connect-user deployのみ。Portal/real OAuth/X postは別ゲート。G1のmarket-report objectsを触れない。
 
 - G1はmarket-report schema/functions/`x-test-post`/personalized-reports領域。
