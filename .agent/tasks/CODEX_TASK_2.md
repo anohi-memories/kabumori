@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase13-production-preview-rollout-and-qa-20260921
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: Phase 12 C2 PASS済みの general-user preview candidate を production に安全に反映し、dedicated QA user + test X account で exactly one bounded real AI preview を実行して、tenant isolation・no-publish boundary・既存brand非回帰を確認する。real X post / media upload / publish_enabled=true / Cron はまだ禁止。
@@ -180,6 +180,19 @@ Not approved:
 - billing/Push changes
 - cleanup of QA fixture
 - blind `db push` / migration-history repair
+
+## C2 review handoff — QA mobile source mismatch
+
+The Phase 13 deployment and rejected-request smoke checks are complete, but the exactly-one real AI preview was **not** run. The mirrored app is displaying its local mock repository rather than the QA user's RLS-scoped Supabase data. This task is now `review_required` for C2 to decide the next safe QA setup; do not bypass the prohibition on app-wide data-source changes.
+
+Evidence from the current mobile source and screen:
+- `apps/social-mobile/src/data/repository-selection.ts` selects `mockRepository` unless `EXPO_PUBLIC_DATA_SOURCE === 'supabase'`.
+- `apps/social-mobile/src/providers/active-account-provider.tsx` uses the static mock accounts unless the Supabase snapshot is `ready`.
+- `apps/social-mobile/src/data/mock-repository.ts` contains the fixed `@kabumori` and `@brand_studio` rows and demo counts. The mock account has no `brandId`, while `BrandPostPreview` requires a `brandId`, handle, and authenticated session before enabling generation.
+- The screenshot after QA sign-in still showed those static accounts. The absence of a live-source status card is consistent with `mock_preview` (the home UI intentionally hides that card in mock mode).
+- `apps/social-mobile/src/app/accounts/index.tsx` initializes OAuth display state with local `useState('idle')`; it does not read back a durable per-user connection status. The earlier `@YumeYoasobi` “connected” display followed an OAuth callback, but after QA sign-in the UI showed the connect button again. This UI transition alone does **not** prove server-side unlink/revocation; no Vault/token read was performed.
+
+Next safe step for C2 decision: authorize a narrowly isolated QA client/runtime configured to read the existing Supabase tenant data (without changing the app-wide source or any publish setting), or nominate another approved client path using the existing QA user's bearer session. Proceed only when the actual QA membership resolves to the expected `social_mobile_user_v1` brand and its verified test X account; do not select/use `@kabumori`, repeat OAuth, or call OpenAI until that context is proven. If the QA membership/account is not visible in the live source, investigate that read-only/RLS mismatch as a separate blocker.
 
 ## Completion / C2
 
