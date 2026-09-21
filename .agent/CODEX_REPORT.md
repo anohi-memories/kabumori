@@ -1,4 +1,5 @@
 # Codex Report
+
 ## Latest H1 result — conditional-search call accounting audit (2026-09-21)
 
 - task_id: important-news-phase1-conditional-search-call-accounting-audit-20260921
@@ -9,7 +10,8 @@
 - implementation_code_changes: none. No test fixture was added because the Responses payload/action fields required to model the observed distinction are not persisted.
 - tests: SELECT-only schema and production-row queries; current source review; official OpenAI docs/pricing review. No Deno test rerun because no runtime code changed.
 - production_mutation: 0. No Function invoke/deploy, Cron, DB schema/RPC, secret/Vault, OpenAI replay, fallback policy, X, Push, or app change. Supabase access was read-only.
-- push: control/report synchronization only; see resulting main commit in this report after sync.
+- commit_hash: none for application/source code; only control/report files were committed.
+- push: yes — control/report synchronization only; H1 status-control commit was `9f2b30b1bd53699a5c3ff455c5f9d8465bea36ab` (this report formatting/readback refresh is a separate commit).
 - deploy: none.
 
 ### A. 07:10 UTC natural run reconstruction
