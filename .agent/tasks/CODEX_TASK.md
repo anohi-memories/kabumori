@@ -1,35 +1,53 @@
 # Codex Task
 
-- task_id: important-news-phase1-conditional-search-call-accounting-audit-20260921
+- task_id: important-news-phase1-search-diagnostics-instrumentation-candidate-20260921
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
-- purpose: natural shadow runで1 conditional-search eventに対し2 web_search_call出力が記録された事象を監査し、Responses APIの実挙動・usage/cost accounting・max_tool_calls解釈を確認する。production挙動は変更しない。
+- purpose: conditional-searchの実request数・web_search action内訳・失敗attemptをprivacy-minimalに記録できるlocal-only instrumentation candidateを作り、現在のコスト不確実性を解消できる状態にする。production deployはまだ行わない。
 
 ## Approved basis
 
 前H1 C1 PASS:
-- 27/27 natural shadow runs completed over 4h40m.
-- GDELTは5/5 actual pollsで約15秒timeout。
-- 07:10 natural runでJMA high-signal/sparse triggerが発火。
-- そのrunは conditional_search_count=1 だが web_search_calls=2、estimated cost=$0.02112360。
-- request側は max_tool_calls=1。
+- 149 natural runs中19 conditional-search events。
+- 35 `web_search_call` output items。
+- 16 eventsで2 items、3 eventsで1 item。
+- raw action types/provider billingは未保存。
+- `conditional_search_count=1` はbillable search countではない。
+- `max_tool_calls=1` だけでは1 billable search/runを証明できない。
+- failed targeted request後は `paidSearchUsed=false` のままで、同run中の後続candidateが再attempt可能。
 - Production mutation = 0。
-- legacy paid/live fallbacks remain enabled。
 
-## User decision
+## User intent
 
-2026-09-21「すすめて」。
+2026-09-21「じゃあどうする？」に対し、次はprivacy-minimal diagnosticsを先に整える方針。
 
 ## Model policy
 
-- **Lunaで開始・継続する。**
-- API response anatomy、usage accounting、logs/read-only evidence、local testsはLuna。
-- Solへ上げるのはsecurity/auth/production-writeの具体的blockerが出た場合のみ。
-- 本H1はproduction mutationを行わない。
+- **Lunaで開始・継続。**
+- instrumentation design、local code、migration candidate、tests、docsはLuna。
+- Solへ上げるのはproduction apply/security/privacy blockerが出た場合のみ。
+- このH1ではproduction deploy/applyしない。
+
+## Goal
+
+次のproduction observation phaseで、以下を区別できるようにする:
+1. targeted Responses POST attempt count
+2. successful response count
+3. failed response count
+4. output `web_search_call` item count
+5. action.type別 count
+   - search
+   - open_page
+   - find_in_page
+   - unknown
+6. input/output tokens
+7. estimated cost
+8. provider response id / request id がprivacy-safeに保存可能ならhashまたはopaque id
+9. raw prompt/headline/search query/raw responseは保存しない
 
 ## Mandatory startup
 
@@ -39,121 +57,149 @@
 4. .agent/CODEX_REPORT.md
 5. other 3 slot TASKs
 6. fresh origin/main
-7. important-news-shadow/index.ts targetedSearch
-8. countWebSearchCalls
-9. estimateCostUsd
-10. ai_usage_events schema/read-only
-11. shadow run 07:10 UTC read-only
-12. Responses API docs / SDK semantics as available
+7. important-news-shadow/index.ts
+8. shadow tables migration
+9. ai_usage_events schema
+10. current shadow tests
 
 H2/G1/G2 objectsには触れない。
 
-## Scope A — exact natural-run reconstruction
+## Scope A — telemetry schema candidate
 
-07:10 UTC natural runについて、read-onlyで以下を再構成:
-- run id
-- trigger_reason
-- triggering candidate
-- candidate headline/topic/category
-- input_tokens
-- output_tokens
-- web_search_calls
-- estimated cost
-- ai_usage_events row
-- conditional_search_count
-- any TARGETED_SEARCH_FAILED errors
-- surrounding 07:00 / 07:20 runs
+local migration candidateとして、既存run/usage schemaを最小拡張。
 
-manual replay禁止。
+候補 fields:
+- targeted_search_attempt_count
+- targeted_search_success_count
+- targeted_search_failure_count
+- web_search_output_item_count
+- web_search_action_search_count
+- web_search_action_open_page_count
+- web_search_action_find_in_page_count
+- web_search_action_unknown_count
+- optional provider_response_id_hash
 
-## Scope B — response anatomy
+要件:
+- raw prompt/headline/query/raw response禁止
+- secret/API key禁止
+- tenant/user PII禁止
+- existing rows backward-compatible
+- nullable/default 0 preferred
+- no client exposure
+- RLS/grants unchanged
+- service-role/internal only
 
-コード上の countWebSearchCalls は output array 内の type=web_search_call を数える。
+既存 `web_search_calls` は互換維持。
+意味変更ではなく、新しい明示的fieldを追加。
 
-確認:
-- Responses APIで1 tool invocationが複数 web_search_call output itemsになる可能性
-- max_tool_calls=1 の意味
-- 1 Responses requestあたり何が「tool call」として制限されるのか
-- search query / open page / follow-up fetch等が別output itemとして数えられる可能性
-- usage/web_search billing unitsとの対応
-- response outputとusageが一致するか
+## Scope B — runtime instrumentation candidate
 
-推測せず、可能なら公式OpenAI docsを確認。
+local-onlyで `important-news-shadow` を修正可。
 
-## Scope C — cost accounting audit
-
-current estimator:
-- input $0.20 / 1M
-- output $1.20 / 1M
-- web search $0.01 / call
-
-確認:
-- persisted 07:10 costがこの式と一致するか
-- web_search_calls=2なら$0.02が含まれているか
-- conditional_search_count=1 と web_search_calls=2 を混同していないか
-- historical shadow cost rowsに同様のmulti-call例があるか
-- ai_usage_events aggregationが実call数を保持しているか
-- previous worst-case $44.7552/30d calculationが1 call/run前提なら再計算が必要か
-
-新しい外部課金単価が現行コード前提と違う可能性があれば明記。ただし本H1で単価変更しない。
-
-## Scope D — bounded non-production reproduction
-
-必要ならlocal/mock fixtureで:
-- outputにweb_search_call 0/1/2件
-- countWebSearchCallsが正しく数える
-- cost estimatorが実call数を使う
-- conditional event 1件でもweb_search_calls複数を保存できる
-
-tests追加可。
-
-実OpenAI APIをmanual invokeするのは禁止。
-既存natural response/raw payloadが保存されていない場合は無理に再現しない。
-
-## Scope E — semantic correction candidate
-
-監査結果に応じてlocal-onlyで以下を提案/実装可:
-- variable naming改善
-- docsコメント
-- tests
-- worst-case cost formula修正
-- conditional_search_countの意味を「Responses request count」と明示
-- web_search_callsをactual output/tool call countとして別扱い
-
-ただしproduction deploy禁止。
-
-もし current code がactual callsを正しく数えており誤りがdocs/assumptionだけなら、runtime codeは変えない。
-
-## Scope F — worst-case economics
-
-現在:
-- 10分Cron = 144 runs/day
-- at most 1 targeted Responses request/run by paidSearchUsed gate
+必要:
+- Responses POST attempt開始時にattempt count
+- HTTP failure / thrown errorでfailure count
+- successでsuccess count
+- output arrayの `web_search_call` itemsをaction.typeまで分類
+- unknown actionはunknownへ
+- current `countWebSearchCalls` semanticsを明示
+- current estimated cost logicは勝手に変更しない
+- provider billing不明なのでbillable count fieldを新設しない
+- no raw content logging
 
 重要:
-- 1 Responses request/run と 1 web_search_call/run は同義と仮定しない。
+- instrumentation追加だけ。
+- trigger条件、matcher、source、fallback、model、max_tool_calls、timeout、Cronは変更禁止。
 
-観測と公式仕様から:
-- hard upper boundが証明できるか
-- 証明できないなら「finite cap unknown」とする
-- observed max calls/request
-- safe cost-envelopeの表現
-を整理。
+## Scope C — failed-attempt semantics
 
-緊急fallbackを止めるhard cap提案は禁止。
+現在の `paidSearchUsed` 挙動をtestで固定。
+
+minimum tests:
+- first eligible candidate success -> later candidates no second request
+- first request fails -> current behavior allows later eligible candidate retry
+- retry count is telemetryに反映
+- output items 0/1/2
+- action types search/open_page/find_in_page/unknown
+- no raw content persisted
+
+このH1ではretry policy自体は変更しない。
+まず観測可能にする。
+
+## Scope D — persistence mapping
+
+確認:
+- important_news_shadow_runs
+- ai_usage_events
+のどちらに何を保存するか。
+
+推奨:
+- run table: per-run summary
+- ai_usage_events: per successful/attempt aggregate
+
+二重計上を避ける。
+既存cost aggregationとの互換性維持。
+
+## Scope E — provider usage reconciliation plan
+
+OpenAI organization usage/billing側と照合するためのread-only planを作る。
+
+必要:
+- date/time bucket
+- model
+- request count
+- web-search usage unit
+- tokens
+- cost
+- possible request/response id linkage
+
+ただし:
+- external provider settings変更なし
+- API key追加なし
+- billing mutationなし
+- account permission変更なし
+
+connector/toolでprovider usageが読めない場合は「future manual/read-only step」と記載。
+
+## Scope F — privacy review
+
+明示的に禁止:
+- candidate headline
+- candidate body
+- search query
+- raw tool output
+- URL全文（source URLも不要なら保存しない）
+- user/account identifiers
+- secrets
+
+保存するのはcount/status/action type/tokens/cost/time/id hashだけ。
+
+## Scope G — local verification
+
+最低:
+- Deno/unit tests
+- migration static review
+- no-publish boundary
+- grep/static check for raw prompt/response persistence
+- git diff --check
+- no unrelated files
+
+branch/push可。
+merge不可。
 
 ## Production mutation policy
 
 **0。**
 
 禁止:
+- migration apply
 - Function deploy
-- Cron変更
-- migration/schema/RPC
-- secret/Vault
+- Cron
+- Vault/secret
 - OpenAI manual replay
-- Web Search policy reduction
-- legacy pipeline変更
+- search trigger変更
+- fallback変更
+- legacy pipeline
 - X/Push/App
 - MIC
 - OAuth/social-mobile
@@ -161,50 +207,19 @@ tests追加可。
 ## Deliverables / C1
 
 .agent/CODEX_REPORT.md:
-1. 07:10 exact reconstruction
-2. conditional_search_count vs web_search_calls semantics
-3. official API semantics evidence
-4. cost formula check
-5. historical multi-call scan
-6. worst-case cost correction if needed
-7. local tests/code/docs changes if any
-8. production mutation = 0
-9. exact next proposal
+1. telemetry schema candidate
+2. runtime instrumentation candidate
+3. action-type classification
+4. failed-attempt behavior test
+5. privacy review
+6. local tests
+7. branch/commit/files
+8. production mutation=0
+9. exact proposed next production step
 
-local branchを作る場合:
-- fresh main
-- H1-owned files only
-- push可
-- merge不可
+完了時:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for C1
 
 **推奨モデル：Luna。**
-
-
-## C1 review — 2026-09-21
-
-**PASS — conditional-search call accounting audit completed safely.**
-
-Accepted findings:
-- The 07:10 natural run is reconciled exactly at the aggregate level: `conditional_search_count=1`, input/output `4844/129`, `web_search_calls=2`, estimated cost `$0.02112360`; the matching `ai_usage_events` row agrees.
-- The application currently counts every response output item with `type=web_search_call`; `conditional_search_count` is only a per-run usage/event flag and is not a billable-search count.
-- The raw Responses payload/action types are not retained, so the audit correctly does **not** claim that both output items were independently billable search actions.
-- OpenAI documentation evidence reviewed in the H1 supports `max_tool_calls=1` as a built-in tool-call cap, but does not resolve why two `web_search_call` output items were observed in persisted aggregates.
-- Historical production scan is material: 149 natural runs, 19 conditional-search events, 35 counted output items; 16/19 events had 2 output items and 3/19 had 1.
-- Current estimator exactly reproduces persisted estimated costs, but its web-search component is an application-side estimate based on counted output items, not a verified provider invoice.
-- Previous `$44.7552/30d` scenario must not be described as a hard ceiling. A two-item stress scenario would be `$87.9552/30d` excluding input, but neither figure is a proven upper bound.
-- Code review correctly identified another important limitation: after a failed targeted Responses request, `paidSearchUsed` remains false, so a later eligible candidate in the same run can attempt another request. The current runtime therefore does not establish a strict one-request-per-run hard cap under failures.
-- Exact 07:10 headline/action anatomy is unrecoverable because the candidate table is mutable/upserted and raw Responses payloads are not persisted; no guessing was used.
-- Production mutation = 0; no deploy/Cron/schema/secret/manual replay/fallback reduction occurred.
-
-### C1 judgment
-
-- This audit task is complete.
-- Do not rely on `max_tool_calls=1` or `conditional_search_count=1` as proof of one billable web-search unit.
-- Do not present `$44.7552/30d` as a hard maximum.
-- Keep existing search/fallback behavior unchanged for now.
-- A separate next task may add privacy-minimal diagnostics (request-attempt count and counts by web-search action type, without prompt/headline/raw response) and compare them with read-only provider usage/billing data before changing cost logic or caps.
-
-Recommended model for the next audit/instrumentation task: **Luna**.
