@@ -15,12 +15,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: important-news-phase1-gdelt-timeout-diagnosis-and-fallback-candidate-20260920
+- task_id: important-news-phase1-conditional-search-call-accounting-audit-20260921
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: 27/27 natural runs completed (4h40m); GDELT timed out 5/5 actual polls, 22 cooldown skips; 429 prevented usable external comparison. No code/prod changes; preserve current cooldown/fallbacks. C1 review required.
-
+- note: Read-only audit: 16/149 natural runs had 2 `web_search_call` output items; 07:10 usage row reconciles to $0.02112360, but historical headline/action-level billing is unavailable. No code/prod changes; C1 review required.
 ### Codex slot 2
 - owner: codex
 - slot: codex-2
