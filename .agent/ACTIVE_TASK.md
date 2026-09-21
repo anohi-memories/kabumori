@@ -15,11 +15,12 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: important-news-phase1-conditional-search-call-accounting-audit-20260921
+- task_id: important-news-phase1-search-diagnostics-instrumentation-candidate-20260921
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: Read-only audit: 16/149 natural runs had 2 `web_search_call` output items; 07:10 usage row reconciles to $0.02112360, but historical headline/action-level billing is unavailable. No code/prod changes; C1 review required.
+- note: Local-only privacy-minimal targeted-search diagnostics candidate is ready on `codex/h1-search-diagnostics-instrumentation-20260921` (code commit `9394c27a90b590f95ff8253212cc72843212a90b`). Deno 17 tests/type checks passed; production mutation 0; awaiting C1.
+
 ### Codex slot 2
 - owner: codex
 - slot: codex-2
