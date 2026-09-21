@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-21 JST (H1 conditional-search call accounting audit ready; H2 Phase12 done; G1 natural shadow wait; G2 done)
+- checked_at: 2026-09-21 JST (H1 conditional-search call accounting audit review_required; H2 Phase13 ready; G1 idle; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,9 +14,9 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `important-news-phase1-conditional-search-call-accounting-audit-20260921`
+- Codex slot 1: `review_required` — `important-news-phase1-conditional-search-call-accounting-audit-20260921`
   - Audit the observed 07:10 natural run where one conditional-search event recorded 2 web_search_call output items despite max_tool_calls=1.
-  - Scope is read-only reconstruction/API semantics/cost accounting plus optional local-only tests/docs.
+  - Read-only audit found 16/149 natural runs with 2 web_search_call output items; actual billable actions and the historical headline are not retained. No code/prod change; C1 pending.
   - Production mutation is 0; no deploy/Cron/schema/secret/manual OpenAI/fallback reduction.
   - Recommended model: Luna.
 
