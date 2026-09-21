@@ -1,4 +1,45 @@
 # Codex Report
+## Latest H1 result — conditional-search call accounting audit (2026-09-21)
+
+- task_id: important-news-phase1-conditional-search-call-accounting-audit-20260921
+- result: review_required — read-only audit completed; the stored event counts reconcile, but the exact 07:10 candidate headline and raw Responses action anatomy are no longer recoverable. Stop for C1.
+- model_used: Luna.
+- source_base: fresh `origin/main` `e38e2169d0fa6b7f16bdb4d124920140b1db5498`. The audited `important-news-shadow` source files were unchanged from the initial fresh base `c61e4f441e82eb8beb1647492f8c4d273d0c5158`; SHA-1s: `index.ts` `9e6f006d4fd27adb2d04f57a8185f382a3c2f05f`, `shadow_sources.ts` `39f4b92eaf995451e839b4c003a142d9c3d123b2`, `shadow_logic.ts` `34747f33ed6aed324ed851649365b735c9736ad2`.
+- changed_files: control files only — `.agent/CODEX_REPORT.md`, `.agent/tasks/CODEX_TASK.md`, `.agent/CURRENT_STATE.md`, `.agent/ACTIVE_TASK.md`.
+- implementation_code_changes: none. No test fixture was added because the Responses payload/action fields required to model the observed distinction are not persisted.
+- tests: SELECT-only schema and production-row queries; current source review; official OpenAI docs/pricing review. No Deno test rerun because no runtime code changed.
+- production_mutation: 0. No Function invoke/deploy, Cron, DB schema/RPC, secret/Vault, OpenAI replay, fallback policy, X, Push, or app change. Supabase access was read-only.
+- push: control/report synchronization only; see resulting main commit in this report after sync.
+- deploy: none.
+
+### A. 07:10 UTC natural run reconstruction
+
+- Run: `fe5624a2-90b2-489b-a289-d9fe3e961742`, scheduled, completed at the 2026-09-20 07:10 UTC slot; 24 free candidates, 0 live matches, `conditional_search_count=1`, input/output tokens `4844/129`, `web_search_calls=2`, `cost_usd=$0.02112360`, `error_summary=[]`.
+- `ai_usage_events` row id `71`: feature `news_shadow_search`, model `gpt-5.6-luna`, the same token/call/cost values, and `related_id` equal to the run id. Its read-only schema has separate `input_tokens`, `output_tokens`, `web_search_calls`, and `cost_usd` fields; it does not store the raw response, response id, or per-action types.
+- Candidate metadata previously read for this natural trigger was source `jma_eqvol`, topic `disaster:jma`, category `disaster`, reason `new_high_signal_sparse`. The headline could not be revalidated: the current candidate table has zero rows for this run id and zero rows with `conditional_search_used=true`. Source code patches matching candidate rows on later observations, replacing their run id/reason/flag; it is not an immutable per-run history. Therefore the exact headline and response content are explicitly **not recoverable from the current production records**; none is guessed here.
+- Surrounding runs: 07:00 UTC id `1a161da8-f187-4dff-8c90-362e6f94ef7d`, completed, 24 free candidates, 0 conditional events/calls/tokens/cost, GDELT source timeout in `source_health`; 07:20 UTC id `fb09d017-9a3b-48ef-b9f8-4ada0be77443`, completed, 24 free candidates, 0 conditional events/calls/tokens/cost. Both had empty run-level `error_summary`; the 07:10 run also had no `TARGETED_SEARCH_FAILED`.
+
+### B. Counter semantics and official Responses API evidence
+
+- In `index.ts`, `countWebSearchCalls` counts every response `output` item whose `type === "web_search_call"`; it does not inspect `item.action.type`. `conditional_search_count` is set to 1 when the run accumulated any positive input-token count or web-search-item count. It is therefore a per-run conditional-search/usage-event flag, **not a count of billable searches**.
+- The request sends `max_tool_calls: 1`. OpenAI's current Responses API reference defines this as the maximum total built-in tool calls processed in one response, across built-in tools, with further attempts ignored: [Responses API create reference](https://developers.openai.com/api/reference/cli/resources/responses/methods/create).
+- OpenAI's Web Search guide describes `web_search_call` output items and the action types `search`, `open_page`, and `find_in_page`; it specifically says search actions incur a tool-call cost: [Web Search guide](https://developers.openai.com/api/docs/guides/tools-web-search). The documentation reviewed does not establish that every counted output item is an independently billable search action, nor explain why this stored output-item count reached 2 with `max_tool_calls=1`.
+- The raw response is not persisted (`store:false` and the application stores only aggregated usage). Thus this audit cannot determine the two items' action types, whether both were billable `search` actions, or whether provider-side usage agrees with the application's item count. The apparent 1-vs-2 discrepancy is real in the aggregate rows but is not enough to conclude that the API charged two searches or ignored its documented cap.
+
+### C. Cost accounting and historical scan
+
+- The code estimator is `input_tokens × $0.20/1M + output_tokens × $1.20/1M + counted_items × $0.01`. At 07:10 this is `4844×0.20/1M + 129×1.20/1M + 2×0.01 = $0.02112360`; the persisted run and usage-event estimates match exactly. The current OpenAI pricing page lists standard `gpt-5.6-luna` input/output at $0.20/$1.20 per 1M tokens, and Web Search at $10/1,000 calls plus model-rate search-content tokens: [OpenAI API pricing](https://developers.openai.com/api/docs/pricing). The formula's token rates match the standard schedule; the uncertain part is multiplying every `web_search_call` output item by the per-search fee.
+- Across all 149 natural shadow runs from 2026-09-20 02:30 UTC through 2026-09-21 03:30 UTC: 19 had a conditional event and recorded output items; 16 had 2 items, 3 had 1, total 35, maximum observed 2. The 16 multi-item rows are exactly the 16 cases where `conditional_search_count` differs from `web_search_calls`. `ai_usage_events` has 19 corresponding `news_shadow_search` rows, and its aggregate 35 items / $0.37334580 matches the run-table aggregate. No natural run in this cohort recorded `TARGETED_SEARCH_FAILED`.
+- Previous `$44.7552/30d` is the scenario `144 runs/day × 30 × ($0.01 + 300 output tokens × $1.20/1M)`, excluding input tokens and assuming exactly one billable search per run. If every one of two observed output items were instead treated as a separately billed search in every slot, the same output-only stress scenario would be `4320 × ($0.02 + $0.00036) = $87.9552/30d`. The latter is a scenario, not an established bound: the action types are missing, and the API docs define a per-response cap of one built-in tool call.
+- Also, the source code does **not** implement a strict one-POST-attempt-per-run latch: `paidSearchUsed` is set only after a successful response reports positive input tokens or counted web-search items; a caught `TARGETED_SEARCH_FAILED` leaves it false, so a later eligible candidate can attempt another Responses POST. There were no such failures in the 149-run cohort. Each of 11 configured sources is parsed to at most 8 candidates (88 candidate rows/run at the parser ceiling), but request input length is not explicitly capped. Accordingly, `$44.7552` is not a hard worst-case ceiling; finite total cost cannot be established from current runtime/telemetry. No search-disable or fallback-suppressing cap is proposed.
+
+### D. Next step / stop
+
+- No runtime change or test was justified in this read-only pass. Next: C1 review, then, if authorized as a separate task, add privacy-minimal per-response diagnostics (attempt count, counts by `action.type`, and status category; no prompt/headline/raw response) and compare natural records with the read-only OpenAI organization usage ledger. Preserve the existing search trigger and emergency fallbacks; no hard suppression cap is included.
+- remaining_issues: exact 07:10 headline and raw action/billing classification unavailable; request-attempt retries after a failed request are possible; true provider-invoiced cost is not present in Supabase telemetry.
+- safety_checks: no secrets or raw model payloads recorded; no production mutation; no other slot's files or production objects changed.
+- next_recommendation: STOP for C1.
+
 
 ## Latest H1 result — important-news GDELT timeout diagnosis (2026-09-20)
 
