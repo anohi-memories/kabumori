@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase17-disposable-vault-token-boundary-proof-20260922
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
 - purpose: Phase16 C2 PASS済みのserver-side X history-learning adapterについて、本番Vault/Xを触らずに、access-token取得境界・tenant ownership・account binding・fail-closed挙動をdisposable Supabase/PostgreSQL環境で実証する。production deploy / production Vault read / real X history call / live publishはまだ禁止。
@@ -225,3 +225,53 @@ When complete:
 - commit/push
 - fresh origin/main check
 - STOP for C2
+
+
+## C2 review — 2026-09-22 (Phase17 disposable Vault proof)
+
+**NOT PASS YET — implementation/safety audit is acceptable, but the required disposable Vault/RLS proof was not completed.**
+
+Accepted:
+- production was correctly not used as a substitute.
+- no production mutation/Vault/X/deploy occurred.
+- current token architecture audit is useful and consistent with the approved Phase16 boundary.
+- the existing AI-Lab-specific token reader and generic access+refresh loader are correctly rejected as unsuitable for this general-user access-only history path.
+- keeping the Phase16 default history-learning entrypoint disabled is correct.
+- source/regression tests remain green.
+
+Blocking gap:
+- no disposable DB stayed running long enough to prove the required owner/account/Vault token boundary.
+- therefore positive/negative tenant isolation, forged-ref rejection, access-only secret read, ACL/search_path read-back, and rollback/cleanup are still unproven.
+- Phase16 injected-reader unit tests are not a substitute for this DB/Vault proof.
+
+### Required follow-up
+
+Continue with **Luna**.
+
+Use a genuinely isolated disposable environment with fake-only data. Preferred order:
+
+1. Retry a local disposable Supabase/PostgreSQL environment only if it can remain healthy.
+2. If the local 2 GiB Podman host remains insufficient, use an isolated disposable Supabase preview/branch/project **only if available through the authorized tooling**, with:
+   - no production data copied,
+   - fake Auth/users/brands/accounts/tokens only,
+   - no production secret references,
+   - no production X call,
+   - cleanup at the end.
+3. Do not use the production project as a proof environment.
+4. Do not create or use a paid/external resource if the available tooling requires a new billing commitment or user-side purchase; STOP and report that gate instead.
+
+Required proof remains:
+- owner A can reach only access token A through the narrow server-side binding
+- cross-tenant A->B and B->A denied
+- viewer/non-owner denied
+- unverified/missing platform id/missing access ref denied
+- forged account/secret refs ineffective
+- refresh token and arbitrary Vault secret cannot be selected
+- multiple-account ambiguity fails closed
+- missing/deleted secret fails closed
+- Vault read happens only after Auth -> owner membership -> workspace -> verified account
+- no token in client response/log/report
+- fixed search_path / minimal ACL read-back for any helper/RPC candidate
+- cleanup/object absence after proof
+
+Return \`review_required / next_owner: chatgpt\` for C2.
