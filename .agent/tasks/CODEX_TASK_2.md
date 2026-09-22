@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase13-production-preview-rollout-and-qa-20260921
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
 - purpose: Phase 12 C2 PASS済みの general-user preview candidate を production に安全に反映し、dedicated QA user + test X account で exactly one bounded real AI preview を実行して、tenant isolation・no-publish boundary・既存brand非回帰を確認する。real X post / media upload / publish_enabled=true / Cron はまだ禁止。
@@ -257,3 +257,57 @@ Model:
 
 Completion remains:
 - return \`review_required / next_owner: chatgpt\` after the one real preview + postflight, or after a concrete blocker.
+
+
+## C2 diagnosis — 2026-09-22 (verified account demoted by a later OAuth begin)
+
+Read-only production diagnosis found the concrete blocker.
+
+Facts:
+- QA account \`@yumeyoasobi\` currently has:
+  - \`connection_status='authorization_pending'\`
+  - \`publish_enabled=false\`
+  - non-null \`verified_at\`
+  - \`code_profile_key='social_mobile_user_v1'\`
+- OAuth history shows a successful consumed state at \`2026-09-21 11:36:17 UTC\`, matching \`verified_at\`.
+- A later state was created at \`2026-09-21 13:48:17 UTC\` and remained unconsumed.
+- Production definition of \`begin_social_mobile_x_oauth_connection\` unconditionally executes:
+  \`set connection_status = 'authorization_pending'\`
+  whenever an X social_account already exists.
+- Therefore a later OAuth **start** demoted an already verified account before any successful callback. This explains the current "要確認" state. It is not an RLS leak and not evidence that the token/account binding was lost.
+
+### Required fix candidate
+
+Use Luna.
+
+1. Fresh \`origin/main\`; inspect the Phase 9 migration/RPC source and tests.
+2. Change the source candidate so starting/restarting OAuth does **not** destroy a previously verified binding:
+   - for a new/unverified account, \`authorization_pending\` remains valid.
+   - for an existing \`identity_verified\` account, preserve \`identity_verified\` during a new OAuth attempt.
+   - clear/update only fields that are safe for an in-progress attempt; do not clear verified identity or publish flags.
+   - callback success may continue to atomically refresh/bind tokens and end in \`identity_verified\`.
+   - a failed/abandoned reconnect must leave the previously verified account usable as verified.
+3. Add focused regression tests:
+   - verified account + begin => still \`identity_verified\`.
+   - pending/new account + begin => \`authorization_pending\`.
+   - abandoned/expired state after verified begin does not demote the account.
+   - successful callback after preserved verified state still completes normally.
+4. Inspect mobile Accounts/OAuth UI:
+   - starting reconnect must not cause durable server status regression.
+   - do not add automatic reconnect behavior.
+5. Do not hot-edit the production row and do not redeploy yet.
+6. No real OAuth, OpenAI preview, X API, Vault mutation, publish change, schema apply, Cron, or app-wide data-source change in this fix step.
+7. Return \`review_required / next_owner: chatgpt\` with exact changed files/tests and a safe rollout+repair proposal.
+
+### Repair proposal to prepare, not execute before C2
+
+After source fix approval, propose one bounded production follow-up:
+- deploy only the corrected OAuth Function/RPC path as required by the implementation,
+- restore the QA account from \`authorization_pending\` to \`identity_verified\` only if read-only preconditions still prove:
+  - \`verified_at\` non-null,
+  - same dedicated QA identity,
+  - Vault access+refresh secret references still present,
+  - no newer successful binding to another identity,
+  - \`publish_enabled=false\`.
+- then resume the Phase 13 live-data QA and exactly one AI preview.
+- no X post/media/publish enablement.
