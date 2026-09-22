@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 PR7 freshened onto latest main and merged; C1 review required; production mutation 0)
+- checked_at: 2026-09-22 JST (H1 PR7 merge C1 PASS/done; holdings/watch split + Important News detail partition on main; visual polish deferred)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,12 +14,14 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `kabumori-mobile-holdings-watch-news-detail-merge-retry-20260922`
-  - PR #7 was freshened onto latest main and merged as `b2fb3971`.
-  - 保有/監視の分離、検索、Important News詳細の事実分割を維持。5 approved filesの最終main read-back一致。
-  - 50 app tests、app-scope TypeScript、Expo web export、diff-check PASS。
-  - Production mutation 0; H2/G1/G2 untouched. Manual iOS/native QA and visual polish remain deferred.
-  - C1 review required. Recommended model: Luna.
+- Codex slot 1: `done` — `kabumori-mobile-holdings-watch-news-detail-merge-retry-20260922`
+  - C1 PASS. PR #7 merged/closed at `b2fb3971`; merged main state verified.
+  - 銘柄 empty-query view is split into `保有 | 監視` with counts/default/empty states while integrated search remains intact.
+  - Important News keeps distinct event/status facts in 詳しい内容 and suppresses generic market filler; no display-time AI.
+  - Known limitation: richer facts absent from Fact-passed Japanese verified_text still require a future producer/app-copy improvement if needed.
+  - Production/backend/EAS/App Store mutation 0. H2/G1/G2 implementation untouched.
+  - Colors/icons visual polish remains deferred.
+  - Recommended next model: Luna.
 
 - Codex slot 2: `done` — `social-mobile-app-phase16-server-side-x-history-learning-adapter-candidate-20260922`
   - C2 PASS。server-side trusted Auth/workspace/X identity/token-ref resolution、明示同意、bounded read-only X history adapter source candidateまで完了。
