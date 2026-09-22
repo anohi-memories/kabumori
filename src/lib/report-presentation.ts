@@ -118,6 +118,24 @@ export function reportTypeLabel(type: ReportType): string {
   return type === 'morning' ? '朝刊' : '大引けレポート';
 }
 
+/** Selects the newest stored close snapshot; it never treats a morning report as a portfolio basis. */
+export function latestCloseReport(reports: readonly PersonalizedReport[]): PersonalizedReport | null {
+  return reports
+    .filter((report) => report.report_type === 'close' && report.portfolio_snapshot !== null)
+    .slice()
+    .sort((left, right) => {
+      const dateOrder = right.trading_date.localeCompare(left.trading_date);
+      if (dateOrder !== 0) return dateOrder;
+      return (right.generated_at ?? '').localeCompare(left.generated_at ?? '');
+    })[0] ?? null;
+}
+
+export function portfolioBasisLabel(report: PersonalizedReport): string {
+  const date = report.portfolio_snapshot?.price_basis_date ?? report.trading_date;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  return match ? `${Number(match[2])}/${Number(match[3])} 終値ベース` : '保存済み終値ベース';
+}
+
 export function toneLabel(body: ReportBody | null | undefined, type: ReportType): { text: string; tone: 'positive' | 'neutral' | 'cautious' } | null {
   const tone = body?.tone;
   if (tone !== 'positive' && tone !== 'neutral' && tone !== 'cautious') return null;

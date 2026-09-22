@@ -5,6 +5,7 @@ import { ActivityIndicator, StyleSheet, useColorScheme, View } from 'react-nativ
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
 import { AuthScreen } from '@/components/auth-screen';
+import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
 import { useRegisterPushToken } from '@/hooks/use-register-push-token';
 import { usePushNotificationNavigation } from '@/hooks/use-push-notification-navigation';
 import { AuthProvider, useAuth } from '@/providers/auth-provider';
@@ -20,7 +21,7 @@ function AuthGate() {
   if (loading) {
     return (
       <View style={styles.loading}>
-        <ActivityIndicator color="#397449" size="large" />
+        <ActivityIndicator color={KABUMORI_COLORS.light.accent} size="large" />
       </View>
     );
   }
@@ -42,5 +43,5 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#eef3ed' },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: KABUMORI_COLORS.light.background },
 });

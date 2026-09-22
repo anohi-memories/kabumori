@@ -114,6 +114,36 @@ function removePdfSpacing(value: string): string {
   return collapse(value).replace(SPACE_TOUCHING_CJK, '');
 }
 
+/** Comparison key used only to suppress repeated stored copy on the detail screen. */
+export function normalizeNewsText(value: string): string {
+  return collapse(removeUrls(stripMarkup(value)))
+    .normalize('NFKC')
+    .toLocaleLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[。、．.!！?？,:：;；「」『』（）()［］[\]【】・…\-—–_]/g, '');
+}
+
+function nearDuplicate(left: string, right: string): boolean {
+  const a = normalizeNewsText(left);
+  const b = normalizeNewsText(right);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const shorter = a.length <= b.length ? a : b;
+  const longer = a.length <= b.length ? b : a;
+  return shorter.length >= 12 && longer.includes(shorter) && shorter.length / longer.length >= 0.82;
+}
+
+/** Keeps the first meaningful paragraph/sentence and drops exact or near duplicates. */
+export function distinctNewsTexts(values: readonly string[], against: readonly string[] = []): string[] {
+  const kept: string[] = [];
+  for (const value of values) {
+    const cleaned = collapse(removeUrls(stripMarkup(value)));
+    if (!cleaned || [...against, ...kept].some((previous) => nearDuplicate(cleaned, previous))) continue;
+    kept.push(cleaned);
+  }
+  return kept;
+}
+
 /** Splits on 。！？ outside brackets. */
 export function splitSentences(text: string): string[] {
   const sentences: string[] = [];
@@ -289,15 +319,17 @@ export function buildNewsPresentation(item: NewsPresentationInput): NewsPresenta
     const sentences = splitSentences(verified.join(''));
     // When the title was taken from the first sentence, the list summary starts after it.
     const summarySentences = verifiedHeadline && sentences.length > 1 ? sentences.slice(1) : sentences;
+    const keyPoints = sentences.length >= 4
+      ? distinctNewsTexts(sentences.slice(0, 3).map((sentence) => fitText(sentence, 120)))
+      : [];
+    const detailSource = keyPoints.length > 0 ? sentences.slice(keyPoints.length) : sentences;
     return {
       ...base,
       title,
       titleIsJapanese: true,
       listSummary: fitText(summarySentences.join(''), LIST_SUMMARY_MAX),
-      // A short post would repeat the title and the detail almost verbatim, so key
-      // points are only drawn when there is enough text to summarise.
-      keyPoints: sentences.length >= 4 ? sentences.slice(0, 3).map((s) => fitText(s, 120)) : [],
-      detailParagraphs: verified,
+      keyPoints,
+      detailParagraphs: distinctNewsTexts(detailSource, keyPoints),
       originalExcerpt: null,
       origin: 'verified_post',
     };
@@ -311,17 +343,18 @@ export function buildNewsPresentation(item: NewsPresentationInput): NewsPresenta
   if (appTitle && isJapanese(appTitle) && appDetail.length > 0) {
     const points = Array.isArray(item.app_key_points_ja) ? item.app_key_points_ja : [];
     const appSummary = collapse(removeUrls(stripMarkup(item.app_summary_ja)));
+    const rawPoints = points
+      .filter((point): point is string => typeof point === 'string')
+      .map((point) => fitText(collapse(removeUrls(stripMarkup(point))), 120))
+      .filter(Boolean);
+    const keyPoints = distinctNewsTexts(rawPoints, appSummary ? [appSummary] : []);
     return {
       ...base,
       title: fitText(appTitle, TITLE_MAX),
       titleIsJapanese: true,
       listSummary: fitText(appSummary || appDetail.join(''), LIST_SUMMARY_MAX),
-      keyPoints: points
-        .filter((point): point is string => typeof point === 'string')
-        .map((point) => fitText(collapse(removeUrls(stripMarkup(point))), 120))
-        .filter(Boolean)
-        .slice(0, 4),
-      detailParagraphs: appDetail,
+      keyPoints: keyPoints.slice(0, 4),
+      detailParagraphs: distinctNewsTexts(appDetail, [appSummary, ...keyPoints]),
       originalExcerpt: null,
       origin: 'app_copy',
     };
@@ -331,13 +364,14 @@ export function buildNewsPresentation(item: NewsPresentationInput): NewsPresenta
   if (prose) {
     const detail = fitText(prose, DETAIL_MAX);
     const sentences = splitSentences(detail);
+    const keyPoints = sentences.length >= 3 ? distinctNewsTexts(sentences.slice(0, 2).map((sentence) => fitText(sentence, 120))) : [];
     return {
       ...base,
       title,
       titleIsJapanese,
       listSummary: fitText(prose, LIST_SUMMARY_MAX),
-      keyPoints: sentences.length >= 3 ? sentences.slice(0, 2).map((s) => fitText(s, 120)) : [],
-      detailParagraphs: chunkParagraphs(detail),
+      keyPoints,
+      detailParagraphs: distinctNewsTexts(splitSentences(detail), [fitText(prose, LIST_SUMMARY_MAX), ...keyPoints]),
       originalExcerpt: null,
       origin: 'disclosure',
     };
@@ -353,7 +387,7 @@ export function buildNewsPresentation(item: NewsPresentationInput): NewsPresenta
       titleIsJapanese,
       listSummary: fitText(japanese, LIST_SUMMARY_MAX),
       keyPoints: [],
-      detailParagraphs: chunkParagraphs(detail),
+      detailParagraphs: distinctNewsTexts(splitSentences(detail), [fitText(japanese, LIST_SUMMARY_MAX)]),
       originalExcerpt: null,
       origin: 'japanese_body',
     };

@@ -18,9 +18,9 @@ export default function ImportantNewsDetailScreen() {
     setError('');
     try {
       setItem(await fetchMyImportantNewsItem(String(id)));
-    } catch (loadError) {
+    } catch {
       setItem(null);
-      setError(loadError instanceof Error ? loadError.message : 'ニュースを取得できませんでした。');
+      setError('ニュースを読み込めませんでした。');
     } finally {
       setLoading(false);
     }
@@ -114,6 +114,11 @@ export default function ImportantNewsDetailScreen() {
           {view.origin === 'app_copy' && (
             <Text style={styles.aiNote}>この日本語要約は、元記事をもとにAIが作成し、内容を元記事と照合しています。</Text>
           )}
+        </View>
+      ) : view.keyPoints.length > 0 ? (
+        <View style={[styles.section, styles.noticeCard]}>
+          <Text style={styles.noticeTitle}>追加の詳しい内容はありません</Text>
+          <Text style={styles.noticeText}>要点と重複する文章は省略しています。元記事で追加情報を確認できます。</Text>
         </View>
       ) : (
         <View style={[styles.section, styles.noticeCard]}>

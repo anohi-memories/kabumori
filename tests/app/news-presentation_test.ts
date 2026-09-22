@@ -10,6 +10,7 @@ import {
   type NewsPresentationInput,
   ORIGINAL_EXCERPT_MAX,
   sourceLabelFor,
+  normalizeNewsText,
   stripMarkup,
   TITLE_MAX,
   verifiedPostParagraphs,
@@ -127,13 +128,13 @@ test("a Japanese TDnet disclosure drops the letterhead and PDF spacing", () => {
   assert.ok(allText(p).includes("12,345,600株"));
 });
 
-test("list summary stays short and detail is never empty when Japanese exists", () => {
+test("list summary stays short and duplicate detail may be omitted", () => {
   const longVerified = { ...YEN, verified_text: `【速報】${"円相場が大きく動きました。".repeat(60)}` };
   const p = buildNewsPresentation(longVerified);
   assert.ok(Array.from(p.listSummary).length <= LIST_SUMMARY_MAX);
-  assert.ok(p.detailParagraphs.length > 0);
+  assert.deepEqual(p.detailParagraphs, []);
   const tdnet = buildNewsPresentation({ ...KDDI_BUYBACK, summary: `当社は${"本日決議しました。".repeat(200)}` });
-  assert.ok(tdnet.detailParagraphs.join("").length > 0);
+  assert.deepEqual(tdnet.detailParagraphs, []);
   assert.ok(Array.from(tdnet.detailParagraphs.join("")).length <= DETAIL_MAX);
 });
 
@@ -142,7 +143,7 @@ test("a thin source is not padded into a long article", () => {
     ...KDDI_BUYBACK,
     summary: "自己株式の取得状況に関するお知らせ 当社は取得状況をお知らせします。",
   });
-  assert.equal(p.detailParagraphs.join(""), "当社は取得状況をお知らせします。");
+  assert.deepEqual(p.detailParagraphs, []);
   assert.deepEqual(p.keyPoints, []);
 });
 
@@ -232,4 +233,39 @@ test("market relation names the ranked matched sectors, still without direction"
 test("a forced cut never lands inside a number", () => {
   const text = fitText(`${"あ".repeat(190)}1,234,567億円`, LIST_SUMMARY_MAX);
   assert.ok(!/[0-9,]…$/.test(text) || text.includes("1,234,567"), text);
+});
+
+test("comparison normalization ignores whitespace and punctuation variants", () => {
+  assert.equal(normalizeNewsText("円相場が上昇しました。"), normalizeNewsText("円相場が 上昇しました！"));
+});
+
+test("identical app summary/detail is not repeated under 詳細", () => {
+  const p = buildNewsPresentation({
+    ...GREER,
+    app_title_ja: "米国が声明",
+    app_summary_ja: "米国が声明を出しました。",
+    app_key_points_ja: ["米国が声明を出しました。"],
+    app_detail_ja: "米国が声明を出しました。",
+  });
+  assert.deepEqual(p.keyPoints, []);
+  assert.deepEqual(p.detailParagraphs, []);
+});
+
+test("verified post partitions distinct sentences between 要点 and 詳細", () => {
+  const p = buildNewsPresentation({
+    ...YEN,
+    verified_text: "一つ目の事実です。二つ目の事実です。三つ目の事実です。四つ目の追加情報です。",
+  });
+  assert.equal(p.keyPoints.length, 3);
+  assert.deepEqual(p.detailParagraphs, ["四つ目の追加情報です。"]);
+  assert.equal(new Set([...p.keyPoints, ...p.detailParagraphs].map(normalizeNewsText)).size, 4);
+});
+
+test("a short verified post keeps content once without manufacturing detail", () => {
+  const p = buildNewsPresentation({
+    ...YEN,
+    verified_text: "短い一文です。補足はありません。",
+  });
+  assert.deepEqual(p.keyPoints, []);
+  assert.equal(p.detailParagraphs.length, 2);
 });
