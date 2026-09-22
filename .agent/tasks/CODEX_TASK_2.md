@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase14-persistent-content-settings-candidate-20260922
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: Phase13 C2 PASS後の次段階として、general-user向け投稿設定をtenant-safeに永続化できるsource candidateを作る。まだCron・scheduled_posts自動生成・X実投稿・publish_enabled=trueは行わない。
@@ -363,3 +363,9 @@ Continue with **Luna**.
 ### Non-blocking follow-up to clarify in report
 
 The migration stores \`persona_provenance\` / \`persona_confirmed\` as dedicated columns while the current repository/generator validation expects \`source\` / \`confirmed\` inside \`persona_profile\`. Clarify the canonical representation before the future persona write path is implemented. Do not broaden this fix into production rollout.
+
+### Follow-up result — 2026-09-22
+
+- Fixed the migration CHECK contract so only \`generationWindow.endLocal\` accepts \`24:00\`; \`startLocal\` and \`defaultGenerationLocal\` remain limited to \`00:00\`–\`23:59\`.
+- Added regression coverage for the SQL defaults (\`09:00 / 24:00 / 17:00\`) and negative \`24:00\` coverage for the regular time fields.
+- Source remains a candidate only. Production migration/deploy/settings/API/X/Vault/OAuth/Cron mutations remain prohibited and were not performed.

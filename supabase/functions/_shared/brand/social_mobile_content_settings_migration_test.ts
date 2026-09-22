@@ -23,3 +23,23 @@ test("Phase 14 migration bounds settings and blocks secrets/raw post history", a
   assert.match(sql, /livePublishingEnabled.*publish_enabled.*publishEnabled/iu);
   assert.match(sql, /access_token.*refresh_token.*publish_enabled.*posts/iu);
 });
+
+test("Phase 14 SQL defaults accept an end-of-day 24:00 only for endLocal", async () => {
+  const sql = await readFile(migrationPath, "utf8");
+  assert.match(sql, /'startLocal', '09:00'/u);
+  assert.match(sql, /'endLocal', '24:00'/u);
+  assert.match(sql, /'defaultGenerationLocal', '17:00'/u);
+  assert.match(
+    sql,
+    /settings->'generationWindow'->>'endLocal'\)\s*~\s*'\^\(\(\[01\]\[0-9\]\|2\[0-3\]\):\[0-5\]\[0-9\]\|24:00\)\$'/u,
+  );
+
+  const endTime = /^(?:(?:[01][0-9]|2[0-3]):[0-5][0-9]|24:00)$/u;
+  const regularTime = /^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/u;
+  assert.equal(endTime.test("09:00"), true);
+  assert.equal(endTime.test("24:00"), true);
+  assert.equal(regularTime.test("24:00"), false);
+  assert.equal(regularTime.test("23:59"), true);
+  assert.match(sql, /startLocal'\)\s*~\s*'\^\(\[01\]\[0-9\]\|2\[0-3\]\):\[0-5\]\[0-9\]\$'/u);
+  assert.match(sql, /defaultGenerationLocal'\)\s*~\s*'\^\(\[01\]\[0-9\]\|2\[0-3\]\):\[0-5\]\[0-9\]\$'/u);
+});

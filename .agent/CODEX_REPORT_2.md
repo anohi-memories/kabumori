@@ -1,3 +1,17 @@
+# H2 — Social mobile Phase 14 C2 follow-up: end-time DB contract fix (review required, 2026-09-22)
+
+- task_id: `social-mobile-app-phase14-persistent-content-settings-candidate-20260922`
+- status: `review_required`; next_owner: `chatgpt`
+- c2_blocker_fixed: The candidate migration's `endLocal` CHECK now accepts `24:00` only for the end-of-day boundary. `startLocal` and `defaultGenerationLocal` remain restricted to `00:00`–`23:59`. The SQL default (`09:00 / 24:00 / 17:00`) therefore matches the application contract without widening the other time fields.
+- changed_files: `supabase/migrations/20260922045046_social_mobile_content_settings_candidate.sql`; `supabase/functions/_shared/brand/social_mobile_content_settings_migration_test.ts`; `.agent/tasks/CODEX_TASK_2.md`; `.agent/CODEX_REPORT_2.md`.
+- regression: Added a migration-contract test for the default values, the `24:00` end-time boundary, and negative coverage proving `24:00` is not accepted by the regular start/default time pattern.
+- tests: shared-brand Deno suite **73/73 PASS** (including Phase14 migration/static/settings coverage, run with `--no-check` because this isolated checkout has no Deno npm type-reference cache); `apps/social-mobile` `npm run typecheck` **PASS**; `npm run lint` **PASS**; Expo web export **PASS**; `git diff --check` **PASS**.
+- disposable_postgres_proof: Re-attempted environment discovery. No local PostgreSQL client/server binaries are installed, and the available Podman VM cannot create its lockfile under the managed filesystem permissions. Therefore apply → object/read-back → rollback could not be executed in this environment. No production or shared database was used as a substitute. This remains an explicit C2 follow-up limitation.
+- persona_representation: The DB columns `persona_provenance` / `persona_confirmed` are the canonical persisted metadata for this candidate; `persona_profile` remains the bounded derived-signal payload. The app/generator's `source` / `confirmed` shape is an application contract that must be mapped explicitly in a future persona write path; no such write path was broadened here.
+- production_mutation: **0** — no production migration/schema/RLS/grant/RPC, settings row, deploy, Cron/scheduler, scheduled post, X/OpenAI/Vault/OAuth/Storage operation was performed.
+- source_commit: `fe7323a` (local follow-up commit; formal checkout and its existing uncommitted changes remain untouched).
+- safety_checks: no `apps/admin/**`, `HANDOFF.md`, H1 files, other workstreams, or production settings were changed. No secret/token/personal identifier was recorded.
+
 # H2 — Social mobile Phase 14 persistent content settings source candidate (C2 review required, 2026-09-22)
 
 - task_id: `social-mobile-app-phase14-persistent-content-settings-candidate-20260922`

@@ -57,7 +57,7 @@ create table if not exists public.social_mobile_content_settings (
     and (settings->>'approvalMode') in ('manual_review', 'auto_post_preference')
     and (settings->'generationWindow'->>'timezone') ~ '^[A-Za-z_]+/[A-Za-z_]+$'
     and (settings->'generationWindow'->>'startLocal') ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'
-    and (settings->'generationWindow'->>'endLocal') ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+    and (settings->'generationWindow'->>'endLocal') ~ '^(([01][0-9]|2[0-3]):[0-5][0-9]|24:00)$'
     and (settings->'generationWindow'->>'defaultGenerationLocal') ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'
     and (settings->'generationWindow'->>'generationDayOffset') in ('-1', '0')
     and length(coalesce(settings->>'notes', '')) <= 1000
