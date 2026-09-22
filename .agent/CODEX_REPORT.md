@@ -1,3 +1,17 @@
+## Latest H1 result — PR #7 freshen blocked by semantic main drift (2026-09-22)
+
+- task_id: `kabumori-mobile-holdings-watch-news-detail-merge-20260922`
+- result: `review_required` — PR #7 was not merged.
+- pre_freshen_main: `cb7232204ccff1c61f8b7104edef02fff75e18c9`
+- approved_candidate: `0225efc66501502b32336998d4b48a71bdfece29`
+- pull_request: https://github.com/anohi-memories/kabumori/pull/7 (still open; not merged)
+- freshen check: latest main now has semantic changes to the same approved app/test area. `src/lib/stock-sections.ts` and `tests/app/stock-sections_test.ts` are absent on main, while `src/app/explore.tsx`, `src/lib/news-presentation.ts`, and `tests/app/news-presentation_test.ts` no longer contain the PR's holdings/watch segmentation and verified-news partition behavior.
+- This violates the TASK's rule to stop when any approved implementation/test file has semantic main drift. Auto-resolving would silently choose behavior, so no rebase/merge was performed.
+- H2/G1/G2 implementation files were not changed. The unrelated latest-main FRED history rollout was not touched.
+- verification after freshen: not rerun because the freshen blocker occurred first.
+- production_mutation: 0. No migration, RPC, Edge Function deploy, Cron, secret/Vault, OAuth, X/Push, EAS, or App Store operation.
+- next_recommendation: ChatGPT/C1 must decide whether to rebase/reapply PR #7 behavior onto current main or close/re-scope the candidate. Do not merge automatically.
+
 ## Latest H1 result — holdings/watch split and Important News detail quality (2026-09-22)
 
 - task_id: `kabumori-mobile-holdings-watch-split-and-news-detail-quality-20260922`
