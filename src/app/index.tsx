@@ -17,7 +17,7 @@ import { categoryLabels, formatNewsTime, importanceLabel, targetLabel } from '@/
 import { buildNewsPresentation } from '@/lib/news-presentation';
 import { fetchRecentReports } from '@/lib/personalized-reports';
 import { formatTimeJa, reportTypeLabel, type PersonalizedReport, type ReportType } from '@/lib/report-presentation';
-import { dashboardGreeting, summarizeTrackedStocks, todayJst, todaysReports } from '@/lib/dashboard';
+import { dashboardGreeting, dashboardSectionError, summarizeTrackedStocks, todayJst, todaysReports } from '@/lib/dashboard';
 import type { TrackedStock } from '@/lib/stocks';
 import { supabase } from '@/lib/supabase';
 
@@ -80,9 +80,9 @@ export default function HomeScreen() {
       fetchRecentReports(),
     ]);
     setErrors({
-      stocks: stocksResult.status === 'rejected' ? (stocksResult.reason instanceof Error ? stocksResult.reason.message : '登録銘柄を取得できませんでした。') : '',
-      news: newsResult.status === 'rejected' ? (newsResult.reason instanceof Error ? newsResult.reason.message : '重要ニュースを取得できませんでした。') : '',
-      reports: reportsResult.status === 'rejected' ? (reportsResult.reason instanceof Error ? reportsResult.reason.message : 'レポートを取得できませんでした。') : '',
+      stocks: stocksResult.status === 'rejected' ? dashboardSectionError('stocks') : '',
+      news: newsResult.status === 'rejected' ? dashboardSectionError('news') : '',
+      reports: reportsResult.status === 'rejected' ? dashboardSectionError('reports') : '',
     });
     if (stocksResult.status === 'fulfilled') setStocks(stocksResult.value);
     if (newsResult.status === 'fulfilled') setNews(newsResult.value.items);

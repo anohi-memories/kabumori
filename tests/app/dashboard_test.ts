@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   dashboardGreeting,
+  dashboardSectionError,
   summarizeTrackedStocks,
   todayJst,
   todaysReports,
@@ -64,4 +65,17 @@ test('today and report selection use JST and keep report types separate', () => 
   ], '2026-09-22');
   assert.equal(selected.morning?.id, 'morning-2026-09-22');
   assert.equal(selected.close?.id, 'close-2026-09-22');
+});
+
+test('dashboard section errors use fixed copy instead of backend details', () => {
+  const backendError = 'PostgREST: internal database detail';
+
+  assert.equal(dashboardSectionError('stocks'), '登録銘柄を読み込めませんでした。');
+  assert.equal(dashboardSectionError('news'), '重要ニュースを読み込めませんでした。');
+  assert.equal(dashboardSectionError('reports'), 'レポートを読み込めませんでした。');
+
+  for (const section of ['stocks', 'news', 'reports'] as const) {
+    assert.notEqual(dashboardSectionError(section), backendError);
+    assert.equal(dashboardSectionError(section).includes(backendError), false);
+  }
 });

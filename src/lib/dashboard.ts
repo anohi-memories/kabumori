@@ -12,6 +12,18 @@ export type TrackedStockSummary = {
   totalCount: number;
 };
 
+export type DashboardSection = 'stocks' | 'news' | 'reports';
+
+export const DASHBOARD_ERROR_MESSAGES: Record<DashboardSection, string> = {
+  stocks: '登録銘柄を読み込めませんでした。',
+  news: '重要ニュースを読み込めませんでした。',
+  reports: 'レポートを読み込めませんでした。',
+};
+
+export function dashboardSectionError(section: DashboardSection): string {
+  return DASHBOARD_ERROR_MESSAGES[section];
+}
+
 /** Returns a stable greeting for the user's local (JST) time of day. */
 export function dashboardGreeting(date = new Date()): DashboardGreeting {
   const jstHour = new Date(date.getTime() + 9 * 60 * 60 * 1000).getUTCHours();
