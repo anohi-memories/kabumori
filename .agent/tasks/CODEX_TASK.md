@@ -1,145 +1,108 @@
 # Codex Task
 
-- task_id: kabumori-important-news-producer-detail-and-portfolio-freshness-diagnosis-20260922
+- task_id: kabumori-news-producer-portfolio-freshness-source-merge-20260922
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
-- purpose: 実機QAで残った2件を正しい層で解消するため、Important Newsの詳細生成をproducer側まで改善し、Portfolioが9/17終値を表示する原因をproduction read-onlyで特定・修正候補化する。production mutationは禁止。
+- purpose: C1 PASS済みの Important News producer V2 + Portfolio validator source candidate をlatest mainへfreshenし、再検証後mainへmergeする。production deploy/migration/backfillは行わない。
 
-## Confirmed production facts — 2026-09-22
+## Approved candidate
 
-### Portfolio / personalized report
-Read-only production data already proved:
-- 2026-09-18 close report row exists.
-- Its `portfolio_snapshot.price_basis_date = 2026-09-18`.
-- 9/18 holdings prices are present and valid in the snapshot.
-- However the report row is:
-  - `status = failed`
-  - `fact_status = pending`
-  - `error = REPORT_LOCAL_CHECK_FAILED`
-  - `fact_issues = ["CONTAINS_LATIN_WORD:ＵＦＪ"]`
-- 2026-09-17 close report is completed + fact-passed.
-- Therefore the app currently shows 9/17 because it only sees/uses completed Fact-passed report rows.
-- JPX cash market is closed 2026-09-21, 09-22, 09-23; 9/18 is the latest cash-market trading day for this point in time.
+Branch:
+- `codex/kabumori-important-news-producer-detail-portfolio-20260922`
+- candidate commit: `bc5082c`
+
+Approved changed files:
+- `supabase/functions/important-news-monitor/app_copy_logic.ts`
+- `supabase/functions/important-news-monitor/app_copy_logic_test.ts`
+- `supabase/functions/important-news-monitor/app_copy_v2_migration_static_test.ts`
+- `supabase/functions/important-news-monitor/index.ts`
+- `supabase/functions/personalized-reports/report_logic.ts`
+- `supabase/functions/personalized-reports/report_logic_test.ts`
+- `supabase/migrations/20260922110000_important_news_app_copy_v2_source_backed_candidates.sql`
+
+## Accepted behavior
 
 ### Important News
-Previous read-only diagnosis proved the reported AP / UN / North Korea rows:
-- have Fact-passed Japanese `generated_text` exposed as `verified_text`
-- have `app_title_ja/app_summary_ja/app_detail_ja/app_key_points_ja = NULL`
-- richer source-backed facts may exist in English `body_summary`
-- app-only partitioning cannot surface facts absent from Japanese `verified_text`
+- Rich source-backed English-title rows may receive independent Fact-checked app copy even when a short Fact-passed generated post exists.
+- Thin source rows remain on the existing path and are not padded.
+- app copy semantic roles:
+  - title = concise headline
+  - summary = short lead
+  - key points = 2–4 distinct facts when supported
+  - detail = additional source-backed event facts/context
+  - generic market-impact filler excluded from detail
+- No display-time AI.
+- No X/push publish behavior change in this source merge.
 
-## Goal A — Important News producer/app-copy V2 candidate
+### Portfolio report validator
+- Full-width Latin runs embedded in Japanese company/proper-name context are not treated as untranslated English.
+- `三菱ＵＦＪフィナンシャル・グループ` passes.
+- ASCII `UFJ銀行` remains blocked.
+- ordinary English prose remains blocked.
+- Existing explicit allowed Latin terms remain unchanged.
 
-Fix the actual detail-generation layer so future news can contain meaningful Japanese detail.
+## Mandatory startup
 
-Requirements:
-1. Trace current important-news producer path that creates:
-   - `generated_text`
-   - app-title/summary/key-points/detail fields if implemented
-   - fact-check gate
-2. Create source candidate so generated app copy has strict semantic roles:
-   - title: concise headline
-   - summary: 1–2 sentence lead
-   - key_points: 2–4 distinct key facts
-   - detail: 2–4 short paragraphs of additional source-backed event facts/context, only when source supports them
-   - market relevance: separate from event detail
-3. Detail must prioritize:
-   - who / what / where / when
-   - sequence/timeline
-   - official attribution
-   - figures/distances/injuries/affected assets
-   - confirmed vs unconfirmed status
-   - operational status after event
-4. Do not pad thin sources.
-5. Do not add unsupported facts.
-6. Preserve grounding/fact-check boundaries.
-7. No display-time AI.
-8. No production deploy in this H1.
+1. Read `.agent/ORCHESTRATION.md`
+2. Read `.agent/CURRENT_STATE.md`
+3. Read this TASK
+4. Read `.agent/CODEX_REPORT.md`
+5. Fresh fetch `origin/main`
+6. Compare candidate base/current main for overlap in the seven approved files.
+7. Confirm no active H2/G1/G2 ownership conflict.
 
-Regression fixtures must include:
-- Hormuz tanker / 2 crew injured / vessel continued / no closure confirmed
-- North Korea missile / 450–600km / EEZ assessment
-- UN/Houthi attempted Riyadh strike / displacement >130k
-- genuinely thin source.
+## Freshen rules
 
-## Goal B — Portfolio freshness root cause and candidate
-
-Investigate the exact `CONTAINS_LATIN_WORD:ＵＦＪ` failure.
-
-Required:
-1. Locate the report local-check/validator source that emits `CONTAINS_LATIN_WORD`.
-2. Prove why full-width company-name text `ＵＦＪ` is classified as a forbidden Latin word.
-3. Determine whether the rule is intended to block untranslated English prose versus legitimate Japanese company/proper-name text.
-4. Build a narrowly scoped source candidate/test fix so legitimate Japanese proper names/full-width Latin company tokens do not fail the report while real untranslated Latin prose still does.
-5. Add regression tests:
-   - `三菱ＵＦＪフィナンシャル・グループ` should pass
-   - ordinary English prose should still fail
-   - ticker/company acronyms that are expected in Japanese financial copy should be handled according to the existing product rule, not broadly whitelisted without justification.
-
-## Goal C — do NOT silently expose failed report narrative
-
-Do not solve Portfolio freshness by simply exposing failed AI report text.
-
-Preferred architecture:
-- fix the validator so future valid reports complete normally.
-- separately determine whether price snapshot data can/should be safely decoupled from narrative Fact-pass status.
-- if a safe decoupling requires schema/RPC/RLS or overlaps G1 market-report work, **do not mutate**. Document the exact proposal/blocker for C1.
-
-For the existing 9/18 failed row:
-- no manual production rewrite/backfill in this H1.
-- report whether a safe one-time regeneration/backfill would be required after the validator fix.
-
-## Parallel safety / G1 boundary
-
-G1 owns market-report consumer-cutover related work and may touch personalized-report surfaces.
-Before editing any personalized-report Function/shared validator:
-1. read `.agent/tasks/CLAUDE_TASK_1.md`
-2. identify exact G1 file/object ownership
-3. if the same file/Function/RPC is active/in-progress there, STOP that sub-part and report conflict
-4. do not modify a file owned by another active workstream.
-
-Important-news producer files are independent unless evidence says otherwise.
-
-## Production restrictions
-
-Forbidden:
-- production DB write
-- migration apply
-- RPC/RLS change
-- Edge Function deploy
-- Cron change
-- manual report regeneration
-- secret/Vault/provider changes
-- X/Push behavior change
-- EAS/App Store action
-
-Read-only production SQL is allowed for diagnosis.
+- Rebase/freshen the approved branch onto latest `origin/main`.
+- Do not drag stale `.agent` history.
+- At C1, candidate base -> current main had no overlap in the seven approved files.
+- If a genuinely new semantic edit appears in any approved file after this task was written, STOP for C1.
 
 ## Verification
 
-- relevant Deno/unit tests PASS
-- app/news tests PASS if app presentation touched
-- app-scope TypeScript PASS if app touched
+Minimum:
+- targeted app-copy/report tests PASS
+- important-news static tests PASS
+- full important-news suite; unrelated existing fixed-expectation failure may remain only if unchanged and proven unrelated
+- changed-file Deno checks PASS
 - `git diff --check` PASS
-- no unrelated H2/G1/G2 changes
+- verify migration is still not applied
+- verify no Edge Function deploy
+- verify no report regeneration/backfill
 - production mutation = 0
+- H2/G1/G2 untouched
 
-## Deliverables / C1
+## Merge
+
+If checks pass:
+- create/update PR if needed
+- merge source candidate to `main`
+- read back resulting main SHA
+- verify merged/closed state
+- verify the seven approved files on main match the freshened candidate
+- do NOT apply migration or deploy either Function
+- do NOT regenerate 9/18 report
+
+## Handoff
 
 Update `.agent/CODEX_REPORT.md` with:
-1. exact news producer data path and root cause of shallow detail
-2. source candidate changed files
-3. fixture results proving additional event facts reach app-copy detail
-4. exact report validator root cause for `ＵＦＪ`
-5. candidate validator behavior/tests or explicit G1 conflict if blocked
-6. whether 9/18 requires one-time regeneration after fix
-7. whether snapshot/narrative decoupling is recommended
-8. all verification results
-9. production mutation = 0
+1. pre-freshen main SHA
+2. final feature head
+3. verification results
+4. PR + merge/resulting main SHA
+5. Important News producer V2 preserved
+6. Portfolio validator fix preserved
+7. production mutation 0
+8. explicit next production requirements:
+   - exact migration apply
+   - `important-news-monitor` deploy
+   - `personalized-reports` deploy
+   - safe one-time 9/18 close regeneration/backfill decision
+9. note that production rollout is a later Sol checkpoint
 
 On completion:
 - status -> `review_required`
@@ -147,36 +110,3 @@ On completion:
 - STOP for C1
 
 **推奨モデル：Luna。**
-
-
-## Final C1 review — 2026-09-22
-
-**PASS — source candidate accepted.**
-
-Verified:
-- Important News root cause is correctly identified at the producer-selection layer: Fact-passed `generated_text` caused richer source-backed rows to skip app-copy generation.
-- The candidate adds a source-backed V2 exception only for sufficiently rich stored source text, keeps thin sources fail-closed, preserves Fact checking, and adds no display-time AI.
-- App-copy roles are materially improved: summary/key points/detail are separated, detail is instructed to contain additional source-backed event facts and exclude generic market-impact filler.
-- Regression fixtures cover Hormuz tanker, North Korea missile, UN/Houthi, and thin-source failure.
-- Portfolio freshness root cause is correctly identified: `latinWords()` treated full-width `ＵＦＪ` as forbidden Latin.
-- The validator fix is narrow enough for this candidate: full-width Latin runs embedded in nearby Japanese script are allowed; ASCII `UFJ` remains blocked, ordinary English remains blocked, and existing explicit allowed terms remain unchanged.
-- Existing 9/18 snapshot remains valid but the failed narrative row will still require a later safe regeneration/backfill after production rollout.
-- Snapshot/narrative decoupling is not accepted in this task; no failed narrative is exposed.
-- No active G1 file conflict was present during implementation.
-- Targeted tests: 37/37 PASS.
-- Important News static tests: 19/19 PASS.
-- Full Important News suite: 420 PASS / 1 pre-existing cost-audit expectation failure unrelated to this candidate.
-- Changed-file Deno checks and `git diff --check` passed.
-- Production mutation = 0.
-
-Main drift review:
-- Candidate base `cb253684` -> current main has no overlap in the seven candidate implementation/migration/test files.
-- Main-side changes are control files plus unrelated market-intelligence FRED work.
-
-C1 judgment:
-- Candidate is approved for integration.
-- Do not deploy/apply/regenerate from this review.
-- Next H1 should freshen the candidate onto latest main, rerun verification, and merge the source candidate only.
-- Production rollout (exact migration + Function deploys + safe 9/18 regeneration) remains a separate high-risk checkpoint after merged-source C1.
-
-**Recommended next model: Luna. Production rollout checkpoint later: Sol.**
