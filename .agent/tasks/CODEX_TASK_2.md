@@ -213,6 +213,19 @@ When complete:
 - fresh-check `origin/main` before any control/report push
 - STOP for C2
 
+## H2 production rollout and bounded QA preview — 2026-09-22
+
+- status: `review_required`
+- next_owner: `chatgpt`
+- production_migration: after direct user authorization, applied exactly `supabase/migrations/20260922003101_social_mobile_x_oauth_reconnect_preserve_verified.sql`; Supabase recorded server migration version `20260922024844`.
+- rpc_readback: `begin_social_mobile_x_oauth_connection` is `SECURITY DEFINER`, has `search_path=public`, grants EXECUTE to `authenticated` only, and denies `public`, `anon`, and `service_role`. The deployed definition contains the verified-preserving transition.
+- qa_repair: after rechecking all preconditions, changed only the dedicated `@yumeyoasobi` row `connection_status` from `authorization_pending` to `identity_verified`. `publish_enabled`, handle, platform user id, verified_at, Vault references, all other accounts, and admin OAuth were not changed.
+- live_runtime: isolated QA Expo runtime showed exactly one `My Workspace` and exactly one `@yumeyoasobi` account with `接続済み`; unrelated production accounts were not visible.
+- preview: exactly one real AI preview was triggered from the no-publish UI and succeeded with `プレビュー準備完了・投稿なし`. No retry was used.
+- postflight: QA account remains `identity_verified` and `publish_enabled=false`; QA scheduled_posts count remains 0; OAuth state count remains 9 with no new binding; all production X account count/hash remains unchanged.
+- safety: X API/media/post 0; scheduled_posts writes 0; publish enablement 0; Vault token reads/changes 0; Storage writes 0; Cron/settings/schema changes outside the approved migration 0; no OAuth relink/retry, synthetic data, or manual X/OpenAI call.
+- next_recommendation: C2 review the migration read-back, bounded QA repair, and single preview postflight. Do not enable publishing or perform any X post.
+
 ## H2 production migration gate result — 2026-09-22
 
 - status: `review_required`
