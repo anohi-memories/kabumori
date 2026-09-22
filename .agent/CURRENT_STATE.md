@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 Kabumori mobile Home dashboard V1 review_required; H2 handled in separate chat; G1 idle; G2 done)
+- checked_at: 2026-09-22 JST (H1 Home dashboard V1 C1 blocked on raw backend error exposure; H2 handled separately; G1 idle; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,10 +14,11 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `kabumori-mobile-home-dashboard-v1-20260922`
-  - PR #5 implements Home/Dashboard V1; Search is preserved at `/search` and the bottom-tab label is ホーム.
-  - Existing tracked_stocks, important-news, and report reads are reused; no realtime price/P&L fabrication.
-  - Backend production mutation 0; H2/social-mobile remains out of scope. Stop for C1.
+- Codex slot 1: `ready` — `kabumori-mobile-home-dashboard-v1-20260922`
+  - C1 accepted navigation/data/layout direction but found one blocker: Home renders raw backend Error.message text from stocks/news/reports failures.
+  - Replace Home-visible errors with fixed short Japanese copy; keep detailed backend text out of visible UI.
+  - Preserve section isolation, retry UI, no-fabrication rule, Search route, and backend mutation=0.
+  - Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase13-production-preview-rollout-and-qa-20260921`
   - User explicitly authorized the bounded production repair.
