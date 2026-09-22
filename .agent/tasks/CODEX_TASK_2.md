@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase14-persistent-content-settings-candidate-20260922
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
 - purpose: Phase13 C2 PASS後の次段階として、general-user向け投稿設定をtenant-safeに永続化できるsource candidateを作る。まだCron・scheduled_posts自動生成・X実投稿・publish_enabled=trueは行わない。
@@ -369,3 +369,69 @@ The migration stores \`persona_provenance\` / \`persona_confirmed\` as dedicated
 - Fixed the migration CHECK contract so only \`generationWindow.endLocal\` accepts \`24:00\`; \`startLocal\` and \`defaultGenerationLocal\` remain limited to \`00:00\`–\`23:59\`.
 - Added regression coverage for the SQL defaults (\`09:00 / 24:00 / 17:00\`) and negative \`24:00\` coverage for the regular time fields.
 - Source remains a candidate only. Production migration/deploy/settings/API/X/Vault/OAuth/Cron mutations remain prohibited and were not performed.
+
+
+## Final C2 — 2026-09-22 (Phase14 source candidate)
+
+**PASS for the source candidate. Phase14 production rollout is not approved yet.**
+
+Accepted:
+- the end-time DB contract blocker is fixed.
+- \`endLocal\` accepts \`24:00\`; \`startLocal\` and \`defaultGenerationLocal\` remain limited to \`00:00\`–\`23:59\`.
+- regression coverage for the SQL defaults and negative \`24:00\` cases is present.
+- the dedicated \`social_mobile_content_settings\` table remains the correct responsibility boundary.
+- owner-scoped direct user-JWT RLS remains the preferred CRUD boundary.
+- mobile settings UX and conversational "代打AI" concept remain separated from publish permission.
+- past-post learning remains explicit-consent/design-only.
+- preview integration preserves the existing no-publish boundary.
+- production mutation remained 0.
+- reported tests/typecheck/lint/export/diff all pass.
+
+Persona representation decision:
+- persist canonical metadata in dedicated DB columns:
+  - \`persona_provenance\`
+  - \`persona_confirmed\`
+  - \`persona_last_analyzed_at\`
+  - \`persona_last_analyzed_count\`
+- keep \`persona_profile\` as bounded derived style signals only.
+- future repository/generator mapping must construct the application \`source\` / \`confirmed\` view from those canonical columns instead of duplicating contradictory metadata inside \`persona_profile\`.
+
+### Next H2 gate
+
+Continue with **Luna**.
+
+Goal: prove the candidate migration in an isolated/disposable PostgreSQL/Supabase environment before any production rollout.
+
+Required:
+1. fresh \`origin/main\`
+2. apply exactly \`20260922045046_social_mobile_content_settings_candidate.sql\` to a disposable DB
+3. read back:
+   - table columns/defaults/check constraints
+   - RLS enabled
+   - policies
+   - grants/ACL
+   - trigger/function search_path
+4. create two isolated test users/brands/memberships and prove:
+   - owner read/write success
+   - non-owner read/write denied
+   - cross-tenant isolation
+   - delete denied
+   - invalid settings rejected
+   - default row succeeds with \`09:00 / 24:00 / 17:00\`
+   - publish-related keys rejected
+5. prove rollback/cleanup leaves no residual objects in the disposable environment.
+6. do not touch production.
+7. if disposable DB cannot be created, STOP and report the exact environment blocker; do not substitute production.
+8. return \`review_required / next_owner: chatgpt\` for C2.
+
+Still forbidden:
+- production migration apply
+- production RLS/ACL mutation
+- production settings rows
+- X history API call
+- OpenAI live call
+- Cron/scheduler
+- scheduled_posts
+- publish enablement
+- X post/media
+- Vault/OAuth mutation
