@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase13-production-preview-rollout-and-qa-20260921
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Luna
 - purpose: Phase 12 C2 PASS済みの general-user preview candidate を production に安全に反映し、dedicated QA user + test X account で exactly one bounded real AI preview を実行して、tenant isolation・no-publish boundary・既存brand非回帰を確認する。real X post / media upload / publish_enabled=true / Cron はまだ禁止。
@@ -498,3 +498,35 @@ On completion:
 - set \`next_owner: chatgpt\`
 - update \`.agent/CODEX_REPORT_2.md\`
 - STOP for C2
+
+
+## Final C2 — 2026-09-22
+
+**PASS. Phase 13 is complete.**
+
+Verified:
+- exact approved migration was applied and recorded as server migration version \`20260922024844\` / \`social_mobile_x_oauth_reconnect_preserve_verified\`.
+- begin OAuth RPC read-back preserved the approved verified-status behavior and authenticated-only execution boundary.
+- only the dedicated QA account status was repaired to \`identity_verified\`.
+- independent production read-back confirms:
+  - QA handle remains \`@yumeyoasobi\`
+  - \`connection_status='identity_verified'\`
+  - \`publish_enabled=false\`
+  - \`verified_at\` preserved
+  - \`code_profile_key='social_mobile_user_v1'\`
+  - workspace remains inactive / publish disabled
+  - QA \`scheduled_posts=0\`
+- QA-only live runtime showed only the expected \`My Workspace\` and \`@yumeyoasobi\`.
+- exactly one real AI preview succeeded.
+- X API/media/post = 0.
+- scheduled_posts writes = 0.
+- publish enablement = 0.
+- Vault token reads/changes = 0.
+- Storage writes = 0.
+- no OAuth relink/retry occurred.
+- existing production accounts/admin OAuth were unchanged.
+- no cross-tenant visibility regression was observed.
+
+No rollback is indicated.
+
+Phase 13 is closed. Any future step that enables scheduling, persistent user settings, Cron, or live X publishing requires a new separately scoped task.
