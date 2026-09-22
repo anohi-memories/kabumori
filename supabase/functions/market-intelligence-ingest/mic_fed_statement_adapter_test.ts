@@ -41,7 +41,7 @@ test("calendar selector prefers the exact a.htm statement and excludes implement
     <a href="https://example.com/monetary20260916a.htm">Statement</a>`;
   const selected = extractOfficialFedStatementUrls(calendar);
   assert.equal(selected[0], URL);
-  assert.equal(selected.length, 2, "older official statement remains a candidate but ranks after the latest one");
+  assert.equal(selected.length, 1, "non-policy statement is excluded from the candidate set");
   assert.ok(!selected.some((url) => url.endsWith("monetary20260916a1.htm")));
 });
 

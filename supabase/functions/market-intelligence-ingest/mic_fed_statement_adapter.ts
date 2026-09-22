@@ -71,7 +71,7 @@ export function extractOfficialFedStatementUrls(calendarHtml: string): string[] 
       const label = normalizeFedStatementHtml(match[2]).toLowerCase();
       const exactStatement = /\/monetary\d{8}a\.htm$/i.test(path);
       const implementationNote = /\/monetary\d{8}a\d+\.htm$/i.test(path) || /implementation|technical note|press conference|minutes|projection|dot plot|sep|longer-run goals|monetary policy strategy|notation vote/.test(label);
-      if (!exactStatement && implementationNote) continue;
+      if (implementationNote) continue;
       ranked.push({
         url: officialUrl,
         score: (exactStatement ? 1000 : 0) + (label.includes("statement") ? 100 : 0),
