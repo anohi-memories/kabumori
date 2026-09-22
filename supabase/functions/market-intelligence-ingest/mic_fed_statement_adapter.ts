@@ -62,16 +62,27 @@ export function assertOfficialFedStatementUrl(rawUrl: string): string {
 }
 
 export function extractOfficialFedStatementUrls(calendarHtml: string): string[] {
-  const urls = new Set<string>();
-  for (const match of calendarHtml.matchAll(/href=["']([^"']*monetary\d{8}[a-z0-9]+\.htm)["']/gi)) {
+  const ranked: Array<{ url: string; score: number }> = [];
+  for (const match of calendarHtml.matchAll(/<a\b[^>]*href=["']([^"']*monetary\d{8}[a-z0-9]+\.htm)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
     const candidate = new URL(match[1], FED_FOMC_CALENDAR_URL).toString();
     try {
-      urls.add(assertOfficialFedStatementUrl(candidate));
+      const officialUrl = assertOfficialFedStatementUrl(candidate);
+      const path = new URL(officialUrl).pathname;
+      const label = normalizeFedStatementHtml(match[2]).toLowerCase();
+      const exactStatement = /\/monetary\d{8}a\.htm$/i.test(path);
+      const implementationNote = /\/monetary\d{8}a\d+\.htm$/i.test(path) || /implementation|technical note|press conference|minutes|projection|dot plot|sep/.test(label);
+      if (!exactStatement && implementationNote) continue;
+      ranked.push({
+        url: officialUrl,
+        score: (exactStatement ? 1000 : 0) + (label.includes("statement") ? 100 : 0),
+      });
     } catch {
       // Ignore malformed/non-official links from the page.
     }
   }
-  return [...urls].sort((a, b) => b.localeCompare(a));
+  return [...new Map(ranked.map((entry) => [entry.url, entry])).values()]
+    .sort((a, b) => b.score - a.score || b.url.localeCompare(a.url))
+    .map((entry) => entry.url);
 }
 
 function decodeHtml(input: string): string {
@@ -108,15 +119,29 @@ export function parseFedPublishedAt(text: string, fallbackDate?: string): string
   if (!dateMatch && !fallbackDate) throw new FedStatementAdapterError("FED_PUBLISHED_AT_MISSING", "publication date is missing");
   const date = dateMatch ? parseMonthDate(dateMatch[1], dateMatch[2], dateMatch[3]) : fallbackDate!;
   const timeMatch = text.match(/For release at\s+(\d{1,2}):(\d{2})\s*(a\.m\.|p\.m\.)\s*(ET|EDT|EST)?/i);
-  if (!timeMatch) return `${date}T00:00:00.000Z`;
+  if (!timeMatch || !timeMatch[4]) throw new FedStatementAdapterError("FED_PUBLISHED_AT_MISSING", "publication time and timezone are missing");
   let hour = Number(timeMatch[1]);
   if (timeMatch[3].toLowerCase().startsWith("p") && hour !== 12) hour += 12;
   if (timeMatch[3].toLowerCase().startsWith("a") && hour === 12) hour = 0;
-  // The Fed publishes in Eastern Time. EDT is UTC-4; EST is UTC-5.
-  const offset = (timeMatch[4] ?? "EDT").toUpperCase() === "EST" ? 5 : 4;
-  const instant = new Date(`${date}T${String(hour).padStart(2, "0")}:${timeMatch[2]}:00.000-0${offset}:00`);
-  if (Number.isNaN(instant.getTime())) throw new FedStatementAdapterError("FED_PUBLISHED_AT_INVALID", "publication timestamp is invalid");
-  return instant.toISOString();
+  try {
+    // Resolve America/New_York with the runtime timezone database instead of
+    // hardcoding an EDT/EST offset. The abbreviation is validated against the
+    // official text but DST conversion is delegated to Temporal.
+    const [year, month, day] = date.split("-").map(Number);
+    const zoned = Temporal.ZonedDateTime.from({
+      timeZone: "America/New_York",
+      year,
+      month,
+      day,
+      hour,
+      minute: Number(timeMatch[2]),
+      second: 0,
+      millisecond: 0,
+    });
+    return zoned.toInstant().toString({ fractionalSecondDigits: 3 });
+  } catch {
+    throw new FedStatementAdapterError("FED_PUBLISHED_AT_INVALID", "publication timestamp is invalid");
+  }
 }
 
 function parseFraction(value: string): number {

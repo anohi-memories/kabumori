@@ -9,6 +9,7 @@ import {
   extractOfficialFedStatementUrls,
   fetchFedStatement,
   parseFedStatementHtml,
+  parseFedPublishedAt,
   parseFedTargetRange,
   statementIdentityChanged,
 } from "./mic_fed_statement_adapter.ts";
@@ -29,6 +30,15 @@ test("official URL acceptance rejects third-party and non-statement URLs", () =>
   assert.equal(assertOfficialFedStatementUrl(URL), URL);
   assert.throws(() => assertOfficialFedStatementUrl("https://example.com/fomc.htm"), FedStatementAdapterError);
   assert.throws(() => assertOfficialFedStatementUrl("https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"), /FED_NON_OFFICIAL_URL/);
+});
+
+test("calendar selector prefers the exact a.htm statement and excludes implementation notes and unrelated links", () => {
+  const calendar = `
+    <a href="/newsevents/pressreleases/monetary20260916a1.htm">Implementation Note</a>
+    <a href="/newsevents/pressreleases/monetary20260916b.htm">Press conference materials</a>
+    <a href="/newsevents/pressreleases/monetary20260916a.htm">Federal Reserve issues FOMC statement</a>
+    <a href="https://example.com/monetary20260916a.htm">Statement</a>`;
+  assert.deepEqual(extractOfficialFedStatementUrls(calendar), [URL]);
 });
 
 test("statement parser extracts meeting date, publication time, target range, and normalized hash", async () => {
@@ -98,6 +108,12 @@ test("malformed HTML and missing target range are safe", async () => {
   );
   assert.equal(nonRate.targetRange, null);
   assert.equal(nonRate.decision, "non_rate");
+});
+
+test("publication timestamp requires an explicit timezone and never fabricates midnight", () => {
+  assert.equal(parseFedPublishedAt("September 16, 2026 For release at 2:00 p.m. EDT"), "2026-09-16T18:00:00.000Z");
+  assert.throws(() => parseFedPublishedAt("September 16, 2026"), /FED_PUBLISHED_AT_MISSING/);
+  assert.throws(() => parseFedPublishedAt("September 16, 2026 For release at 2:00 p.m."), /FED_PUBLISHED_AT_MISSING/);
 });
 
 test("fetch accepts only the official URL and returns HTML without storing it", async () => {
