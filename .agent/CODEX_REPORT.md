@@ -1,3 +1,51 @@
+## Latest H1 result — Kabumori Home Dashboard V1 (2026-09-22)
+
+- task_id: `kabumori-mobile-home-dashboard-v1-20260922`
+- result: `review_required` — Home/Dashboard V1 implemented on a fresh main branch and pushed for C1 review. Production backend remains unchanged.
+- source_base: `f8e35a2116f22f4c19885d50be99bfbac033d67e`
+- branch/commit: `codex/kabumori-mobile-home-dashboard-v1-20260922` / `8225d47319eda388a82e85a3d3fbe20acf03a004`
+- pull_request: https://github.com/anohi-memories/kabumori/pull/5
+
+### Navigation and screens
+
+- Root `/` is now Home/Dashboard V1.
+- The existing stock search was preserved at `/search`; it still uses debounce, partial ticker/company search, registration status, and the existing tracked-stock editor.
+- Native and web tab labels now show `ホーム`; Search is reached from Home quick actions and is not an additional bottom tab.
+- Home includes quick actions, tracked-stock summary, important-news preview, and today's morning/close report preview.
+
+### Data and safety
+
+- Reused only existing client-side reads: `tracked_stocks`, `fetchMyImportantStockNews()`, and `fetchRecentReports()`.
+- Each section loads independently via `Promise.allSettled`; a news/report/stocks failure leaves the other sections usable and shows a Japanese retry action.
+- Pull-to-refresh is available. Empty tracked-stocks state links directly to Search.
+- No current price, valuation, P/L, market index, or other unavailable realtime metric is fabricated.
+- No Supabase migration/schema/RPC, Edge Function, Cron, secret/Vault, OAuth, X, Push, or production data change was made.
+
+### Tests and verification
+
+- Dashboard pure helper tests: 3 passed / 0 failed.
+- Expo-scope TypeScript check: passed using the clean checkout's app-only verification config; the repository-wide check still contains unrelated admin/social-mobile/Edge Function known errors.
+- Expo web export: passed; static routes include `/`, `/search`, `/explore`, `/news`, and `/reports`.
+- `git diff --check`: passed.
+- iOS simulator/manual QA was not run in this turn; no development build was changed.
+
+### Changed files
+
+- `src/app/index.tsx`
+- `src/app/search.tsx`
+- `src/components/app-tabs.tsx`
+- `src/components/app-tabs.web.tsx`
+- `src/lib/dashboard.ts`
+- `tests/app/dashboard_test.ts`
+
+### Remaining issues / next recommendation
+
+- The PR is not merged. Review the Home visual hierarchy and native tab behavior in C1, then merge if accepted.
+- The current app still has no realtime quote/P&L data source; those metrics remain intentionally absent.
+- Exact next recommendation: stop for C1 review.
+
+---
+
 ## Latest H1 result — search diagnostics production rollout (2026-09-22)
 
 - task_id: `important-news-phase1-search-diagnostics-production-rollout-20260922`
