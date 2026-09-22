@@ -3,7 +3,7 @@
 - task_id: kabumori-important-news-producer-detail-and-portfolio-freshness-diagnosis-20260922
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
@@ -147,3 +147,36 @@ On completion:
 - STOP for C1
 
 **推奨モデル：Luna。**
+
+
+## Final C1 review — 2026-09-22
+
+**PASS — source candidate accepted.**
+
+Verified:
+- Important News root cause is correctly identified at the producer-selection layer: Fact-passed `generated_text` caused richer source-backed rows to skip app-copy generation.
+- The candidate adds a source-backed V2 exception only for sufficiently rich stored source text, keeps thin sources fail-closed, preserves Fact checking, and adds no display-time AI.
+- App-copy roles are materially improved: summary/key points/detail are separated, detail is instructed to contain additional source-backed event facts and exclude generic market-impact filler.
+- Regression fixtures cover Hormuz tanker, North Korea missile, UN/Houthi, and thin-source failure.
+- Portfolio freshness root cause is correctly identified: `latinWords()` treated full-width `ＵＦＪ` as forbidden Latin.
+- The validator fix is narrow enough for this candidate: full-width Latin runs embedded in nearby Japanese script are allowed; ASCII `UFJ` remains blocked, ordinary English remains blocked, and existing explicit allowed terms remain unchanged.
+- Existing 9/18 snapshot remains valid but the failed narrative row will still require a later safe regeneration/backfill after production rollout.
+- Snapshot/narrative decoupling is not accepted in this task; no failed narrative is exposed.
+- No active G1 file conflict was present during implementation.
+- Targeted tests: 37/37 PASS.
+- Important News static tests: 19/19 PASS.
+- Full Important News suite: 420 PASS / 1 pre-existing cost-audit expectation failure unrelated to this candidate.
+- Changed-file Deno checks and `git diff --check` passed.
+- Production mutation = 0.
+
+Main drift review:
+- Candidate base `cb253684` -> current main has no overlap in the seven candidate implementation/migration/test files.
+- Main-side changes are control files plus unrelated market-intelligence FRED work.
+
+C1 judgment:
+- Candidate is approved for integration.
+- Do not deploy/apply/regenerate from this review.
+- Next H1 should freshen the candidate onto latest main, rerun verification, and merge the source candidate only.
+- Production rollout (exact migration + Function deploys + safe 9/18 regeneration) remains a separate high-risk checkpoint after merged-source C1.
+
+**Recommended next model: Luna. Production rollout checkpoint later: Sol.**
