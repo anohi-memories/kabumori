@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase18-production-shaped-access-token-reader-preflight-20260922
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: Phase17 C2 PASS済みのdisposable access-token boundary proofを、本番Supabase Vaultの実構造に合わせたproduction-shaped internal reader candidateへ落とし込み、productionはread-only preflightだけでexact schema/ACL/RPC compatibilityを確認する。まだproduction migration/RPC deploy/Vault read/X history callは行わない。

@@ -72,6 +72,15 @@ test("client identity fields are ignored; trusted DB id is used and call order i
   assert.deepEqual(calls, ["auth:client-token", "memberships:auth-user", `workspace:${workspaceId}`, `accounts:${workspaceId}`, "vault:vault-access-ref", `x:${trustedPlatformUserId}:opaque-token:first`]);
 });
 
+test("history reader receives only the verified account access reference", async () => {
+  const refs: string[] = [];
+  const result = await runHistoryLearning({ authorization: "Bearer client-token", explicitConsent: true }, deps({
+    readAccessToken: async (ref) => { refs.push(ref); return "opaque-token"; },
+  }));
+  assert.equal(result.success, true);
+  assert.deepEqual(refs, ["vault-access-ref"]);
+});
+
 test("history is bounded to 50 posts and 2 pages, filters replies/retweets, and stays unconfirmed", async () => {
   let pageCount = 0;
   const result = await runHistoryLearning({ authorization: "Bearer client-token", explicitConsent: true }, deps({

@@ -6,6 +6,12 @@
  * X request is resolved from trusted server-side records.
  */
 
+import {
+  HistoryAccessTokenReadError,
+  readVerifiedHistoryAccessToken,
+  type TrustedHistoryAccountBinding,
+} from "../_shared/brand/social_mobile_history_access_reader.ts";
+
 export const MAX_HISTORY_POSTS = 50;
 export const MAX_HISTORY_PAGES = 2;
 
@@ -176,8 +182,25 @@ export async function runHistoryLearning(
     throw new HistoryLearningError("HISTORY_WORKSPACE_FORBIDDEN", 403);
   }
   const account = assertTrustedAccount(await deps.readXAccounts(workspaceId, bearer), workspaceId);
-  const accessToken = await deps.readAccessToken(account.accessTokenSecretRef!);
-  if (!accessToken) throw new HistoryLearningError("HISTORY_ACCESS_TOKEN_UNAVAILABLE", 503);
+  let accessToken: string;
+  try {
+    const binding: TrustedHistoryAccountBinding = {
+      accountId: account.id,
+      workspaceId: workspace.id,
+      platform: "x",
+      connectionStatus: "identity_verified",
+      platformUserId: account.platformUserId!,
+      accessTokenSecretRef: account.accessTokenSecretRef!,
+    };
+    accessToken = await readVerifiedHistoryAccessToken(binding, {
+      readAccessToken: deps.readAccessToken,
+    });
+  } catch (error) {
+    if (error instanceof HistoryAccessTokenReadError) {
+      throw new HistoryLearningError(error.code, error.code === "HISTORY_ACCOUNT_NOT_CONFIGURED" ? 409 : 503);
+    }
+    throw error;
+  }
 
   const posts: XHistoryPost[] = [];
   let nextToken: string | undefined;
