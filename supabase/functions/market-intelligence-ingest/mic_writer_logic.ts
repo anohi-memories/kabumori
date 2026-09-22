@@ -31,17 +31,8 @@ export type WriteMarketEventResult =
   | { outcome: "inserted"; id: string }
   | { outcome: "duplicate"; id: string | null };
 
-// Inserts one market_events row. On a unique-violation (409) against
-// content_hash -- i.e. this exact fact is already known -- this does NOT
-// retry as a second row; it looks the existing row up by content_hash and
-// reports it as a duplicate, mirroring important-news-monitor/index.ts's
-// insertCandidate 409-retry dance.
-export async function writeMarketEvent(
-  ctx: RestContext,
-  event: FinalizedMarketEvent,
-  fetchImpl: typeof fetch = fetch,
-): Promise<WriteMarketEventResult> {
-  const body = {
+function marketEventBody(event: FinalizedMarketEvent): Record<string, unknown> {
+  return {
     occurred_at: event.occurredAt,
     published_at: event.publishedAt,
     event_type: event.eventType,
@@ -66,6 +57,19 @@ export async function writeMarketEvent(
     content_hash: event.contentHash,
     dedupe_key: event.dedupeKey,
   };
+}
+
+// Inserts one market_events row. On a unique-violation (409) against
+// content_hash -- i.e. this exact fact is already known -- this does NOT
+// retry as a second row; it looks the existing row up by content_hash and
+// reports it as a duplicate, mirroring important-news-monitor/index.ts's
+// insertCandidate 409-retry dance.
+export async function writeMarketEvent(
+  ctx: RestContext,
+  event: FinalizedMarketEvent,
+  fetchImpl: typeof fetch = fetch,
+): Promise<WriteMarketEventResult> {
+  const body = marketEventBody(event);
 
   const result = await fetchImpl(`${ctx.supabaseUrl}/rest/v1/market_events`, {
     method: "POST",
@@ -97,6 +101,26 @@ export async function writeMarketEvent(
     throw new Error("MARKET_EVENT_INSERT_RESPONSE_MISSING_ID");
   }
   return { outcome: "inserted", id };
+}
+
+export async function updateMarketEvent(
+  ctx: RestContext,
+  eventId: string,
+  event: FinalizedMarketEvent,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ id: string }> {
+  const result = await fetchImpl(
+    `${ctx.supabaseUrl}/rest/v1/market_events?id=eq.${encodeURIComponent(eventId)}`,
+    {
+      method: "PATCH",
+      headers: restHeaders(ctx.secretKey, "return=representation"),
+      body: JSON.stringify(marketEventBody(event)),
+    },
+  );
+  if (!result.ok) throw new Error(`MARKET_EVENT_UPDATE_FAILED:${result.status}:${(await result.text()).slice(0, 500)}`);
+  const rows = await result.json() as Array<{ id?: unknown }>;
+  if (rows.length !== 1 || rows[0]?.id !== eventId) throw new Error("MARKET_EVENT_UPDATE_RESPONSE_INVALID");
+  return { id: eventId };
 }
 
 export type UpsertMarketMetricResult = { outcome: "upserted" };

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readExistingMarketMetricValue, upsertMarketMetric, writeMarketEvent } from "./mic_writer_logic.ts";
+import { readExistingMarketMetricValue, updateMarketEvent, upsertMarketMetric, writeMarketEvent } from "./mic_writer_logic.ts";
 import type { FinalizedMarketEvent, NormalizedMarketMetric } from "./mic_normalize_logic.ts";
 import type { RestContext } from "./mic_writer_logic.ts";
 
@@ -46,7 +46,7 @@ function sampleMetric(): NormalizedMarketMetric {
 
 test("writeMarketEvent inserts and returns the new row's id", async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
-  const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+  const fetchImpl = (url: string | URL, init?: RequestInit) => {
     calls.push({ url: String(url), init });
     return new Response(JSON.stringify([{ id: "new-id" }]), { status: 201 });
   };
@@ -60,9 +60,29 @@ test("writeMarketEvent inserts and returns the new row's id", async () => {
   assert.equal(body.source_key, "sec_edgar");
 });
 
+test("updateMarketEvent patches one exact event id and returns it", async () => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const fetchImpl = (url: string | URL, init?: RequestInit) => {
+    calls.push({ url: String(url), init });
+    return new Response(JSON.stringify([{ id: "target-id" }]), { status: 200 });
+  };
+  const result = await updateMarketEvent(ctx, "target-id", sampleEvent(), fetchImpl as typeof fetch);
+  assert.deepEqual(result, { id: "target-id" });
+  assert.match(calls[0].url, /market_events\?id=eq\.target-id$/);
+  assert.equal(calls[0].init?.method, "PATCH");
+});
+
+test("updateMarketEvent fails if the exact id was not updated", async () => {
+  const fetchImpl = () => new Response(JSON.stringify([]), { status: 200 });
+  await assert.rejects(
+    () => updateMarketEvent(ctx, "target-id", sampleEvent(), fetchImpl as typeof fetch),
+    /MARKET_EVENT_UPDATE_RESPONSE_INVALID/,
+  );
+});
+
 test("writeMarketEvent reports a 409 content_hash conflict as a duplicate, not a new row", async () => {
   const calls: string[] = [];
-  const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+  const fetchImpl = (url: string | URL, init?: RequestInit) => {
     calls.push(String(url));
     if ((init?.method ?? "GET") === "POST") {
       return new Response("conflict", { status: 409 });
@@ -76,7 +96,7 @@ test("writeMarketEvent reports a 409 content_hash conflict as a duplicate, not a
 });
 
 test("writeMarketEvent throws on an unexpected non-2xx, non-409 status", async () => {
-  const fetchImpl = async () => new Response("server error", { status: 500 });
+  const fetchImpl = () => new Response("server error", { status: 500 });
   await assert.rejects(
     () => writeMarketEvent(ctx, sampleEvent(), fetchImpl as typeof fetch),
     /MARKET_EVENT_INSERT_FAILED:500/,
@@ -85,7 +105,7 @@ test("writeMarketEvent throws on an unexpected non-2xx, non-409 status", async (
 
 test("upsertMarketMetric posts with on_conflict + merge-duplicates", async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
-  const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+  const fetchImpl = (url: string | URL, init?: RequestInit) => {
     calls.push({ url: String(url), init });
     return new Response(null, { status: 201 });
   };
@@ -104,7 +124,7 @@ test("upsertMarketMetric posts with on_conflict + merge-duplicates", async () =>
 });
 
 test("upsertMarketMetric throws on a non-2xx status", async () => {
-  const fetchImpl = async () => new Response("bad request", { status: 400 });
+  const fetchImpl = () => new Response("bad request", { status: 400 });
   await assert.rejects(
     () => upsertMarketMetric(ctx, sampleMetric(), fetchImpl as typeof fetch),
     /MARKET_METRIC_UPSERT_FAILED:400/,
@@ -115,7 +135,7 @@ test("upsertMarketMetric throws on a non-2xx status", async () => {
 
 test("readExistingMarketMetricValue: returns null when no row exists yet (first-ever observation)", async () => {
   const calls: string[] = [];
-  const fetchImpl = async (url: string | URL) => {
+  const fetchImpl = (url: string | URL) => {
     calls.push(String(url));
     return new Response(JSON.stringify([]), { status: 200 });
   };
@@ -130,13 +150,13 @@ test("readExistingMarketMetricValue: returns null when no row exists yet (first-
 });
 
 test("readExistingMarketMetricValue: returns the existing value when a row is found", async () => {
-  const fetchImpl = async () => new Response(JSON.stringify([{ value: 3.1 }]), { status: 200 });
+  const fetchImpl = () => new Response(JSON.stringify([{ value: 3.1 }]), { status: 200 });
   const value = await readExistingMarketMetricValue(ctx, "US_CPI_YOY", "fred", "2026-08-01", fetchImpl as typeof fetch);
   assert.equal(value, 3.1);
 });
 
 test("readExistingMarketMetricValue: throws on a non-2xx status", async () => {
-  const fetchImpl = async () => new Response("server error", { status: 500 });
+  const fetchImpl = () => new Response("server error", { status: 500 });
   await assert.rejects(
     () => readExistingMarketMetricValue(ctx, "US_CPI_YOY", "fred", "2026-08-01", fetchImpl as typeof fetch),
     /MARKET_METRIC_READ_FAILED:500/,

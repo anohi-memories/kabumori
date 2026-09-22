@@ -70,6 +70,7 @@ import {
   restHeaders,
   safeErrorMessage,
   upsertMarketMetric,
+  updateMarketEvent,
   writeMarketEvent,
 } from "./mic_writer_logic.ts";
 import type { RestContext } from "./mic_writer_logic.ts";
@@ -168,7 +169,7 @@ const ALL_SOURCE_KEYS: SourceKeyWithFed[] = [
 
 type FetchResult =
   | { kind: "metrics"; metrics: NormalizedMarketMetric[] }
-  | { kind: "events"; events: MarketEventInput[]; fedStatement?: FedStatement & { decision: import("./mic_fed_statement_adapter.ts").FedDecision }; previousFedStatement?: FedStatementRecord };
+  | { kind: "events"; events: MarketEventInput[]; fedStatement?: FedStatement & { decision: import("./mic_fed_statement_adapter.ts").FedDecision }; previousFedStatement?: FedStatementRecord; fedExistingEventIds?: Record<string, string> };
 
 async function readFedTargetRangeBefore(ctx: RestContext, meetingDate: string): Promise<FedTargetRange | null> {
   const url = `${ctx.supabaseUrl}/rest/v1/market_metrics?metric_key=in.(FED_FUNDS_TARGET_LOWER,FED_FUNDS_TARGET_UPPER)&source_key=eq.fred&observed_date=lt.${encodeURIComponent(meetingDate)}&select=metric_key,value,observed_date&order=observed_date.desc&limit=20`;
@@ -209,7 +210,9 @@ async function readPreviousFedStatementIdentities(ctx: RestContext): Promise<Fed
 // secret lookup so a missing secret produces a per-source SECRET_MISSING
 // result (failure isolation) instead of crashing the whole invocation --
 // same principle as official_source_fetchers.ts's runNewsSourceProviders.
-async function runAdapter(ctx: RestContext, sourceKey: SourceKeyWithFed, now: Date): Promise<FetchResult> {
+type AdapterOptions = { historicalFedStatementUrls?: string[] };
+
+async function runAdapter(ctx: RestContext, sourceKey: SourceKeyWithFed, now: Date, options: AdapterOptions = {}): Promise<FetchResult> {
   switch (sourceKey) {
     case FRED_SOURCE_KEY: {
       const apiKey = Deno.env.get("FRED_API_KEY");
@@ -244,6 +247,23 @@ async function runAdapter(ctx: RestContext, sourceKey: SourceKeyWithFed, now: Da
       // read here so the writer can label same-meeting document revisions.
       // A missing prior event is the normal new-meeting path.
       const previousIdentities = await readPreviousFedStatementIdentities(ctx);
+      if (options.historicalFedStatementUrls && options.historicalFedStatementUrls.length > 0) {
+        const historicalEvents: MarketEventInput[] = [];
+        const existingEventIds: Record<string, string> = {};
+        for (const statementUrl of options.historicalFedStatementUrls) {
+          const statementHtml = await fetchFedStatement(statementUrl, fetch);
+          const parsed = await parseFedStatementHtml(statementUrl, statementHtml, null);
+          const previousRange = await readFedTargetRangeBefore(ctx, parsed.meetingDate);
+          const statement = { ...parsed, decision: classifyFedDecision(previousRange, parsed.targetRange) };
+          if (!previousRange) throw new Error(`FED_HISTORICAL_RANGE_MISSING:${statement.meetingDate}`);
+          const existingIdentity = previousIdentities.find((identity) => identity.meetingDate === statement.meetingDate) ?? null;
+          const identityOutcome = statementIdentityChanged(existingIdentity, statement);
+          if (identityOutcome === "duplicate") continue;
+          historicalEvents.push(buildFedDecisionEvent(statement, previousRange, identityOutcome === "revision"));
+          if (existingIdentity) existingEventIds[statement.meetingDate] = existingIdentity.eventId;
+        }
+        return { kind: "events", events: historicalEvents, fedExistingEventIds: existingEventIds };
+      }
       const bundle = await fetchFedStatementEventBundle(fetch, null, previousIdentities);
       const previousRange = await readFedTargetRangeBefore(ctx, bundle.statement.meetingDate);
       const statement = {
@@ -271,7 +291,10 @@ async function runAdapter(ctx: RestContext, sourceKey: SourceKeyWithFed, now: Da
           targetRange: parsed.targetRange,
         };
       }
-      return { kind: "events", events, fedStatement: statement, previousFedStatement };
+      const fedExistingEventIds = identityOutcome === "revision" && sameMeetingIdentity
+        ? { [statement.meetingDate]: sameMeetingIdentity.eventId }
+        : undefined;
+      return { kind: "events", events, fedStatement: statement, previousFedStatement, fedExistingEventIds };
     }
   }
 }
@@ -317,6 +340,7 @@ async function runSource(
   sourceKey: SourceKeyWithFed,
   triggerType: "manual" | "scheduled",
   now: Date,
+  options: AdapterOptions = {},
 ): Promise<SourceRunResult> {
   const runWindow = computeRunWindow(sourceKey, now);
   const claim = await claimIngestionRun(ctx, { sourceKey, runWindow, triggerType });
@@ -325,7 +349,7 @@ async function runSource(
   }
 
   try {
-    const result = await runAdapter(ctx, sourceKey, now);
+    const result = await runAdapter(ctx, sourceKey, now, options);
     let fetchedCount = 0;
     let newCount = 0;
     let duplicateCount = 0;
@@ -367,26 +391,32 @@ async function runSource(
       fetchedCount = result.events.length;
       for (const event of result.events) {
         const finalized = await finalizeMarketEvent(event);
-        const written = await writeMarketEvent(ctx, finalized);
-        if (written.outcome === "duplicate") duplicateCount += 1;
-        else newCount += 1;
+        const meetingDate = typeof event.rawPayload?.meeting_date === "string" ? event.rawPayload.meeting_date : null;
+        const existingEventId = sourceKey === FED_STATEMENT_SOURCE_KEY && meetingDate
+          ? result.fedExistingEventIds?.[meetingDate]
+          : undefined;
+        if (existingEventId) {
+          await updateMarketEvent(ctx, existingEventId, finalized);
+          newCount += 1;
+        } else {
+          const written = await writeMarketEvent(ctx, finalized);
+          if (written.outcome === "duplicate") duplicateCount += 1;
+          else newCount += 1;
 
-        // Phase 2B5: persist the deterministic statement diff only after the
-        // immutable Fed decision Fact exists. No statement body is stored;
-        // only changed paragraphs and hashes are retained in the diff table.
-        if (sourceKey === FED_STATEMENT_SOURCE_KEY && result.fedStatement && written.id) {
-          const currentStatement: FedStatementRecord = {
-            eventId: written.id,
-            centralBank: "Fed",
-            meetingDate: result.fedStatement.meetingDate,
-            documentHash: result.fedStatement.documentHash,
-            normalizedText: result.fedStatement.normalizedText,
-            statementUrl: result.fedStatement.statementUrl,
-            decision: result.fedStatement.decision,
-            targetRange: result.fedStatement.targetRange,
-          };
-          const pipeline = await buildFedStatementDiffPipeline(currentStatement, result.previousFedStatement ?? null);
-          await persistFedStatementDiff(ctx, pipeline.row);
+          if (sourceKey === FED_STATEMENT_SOURCE_KEY && result.fedStatement && written.id) {
+            const currentStatement: FedStatementRecord = {
+              eventId: written.id,
+              centralBank: "Fed",
+              meetingDate: result.fedStatement.meetingDate,
+              documentHash: result.fedStatement.documentHash,
+              normalizedText: result.fedStatement.normalizedText,
+              statementUrl: result.fedStatement.statementUrl,
+              decision: result.fedStatement.decision,
+              targetRange: result.fedStatement.targetRange,
+            };
+            const pipeline = await buildFedStatementDiffPipeline(currentStatement, result.previousFedStatement ?? null);
+            await persistFedStatementDiff(ctx, pipeline.row);
+          }
         }
       }
     }
@@ -417,13 +447,16 @@ Deno.serve(async (req) => {
   if (!supabaseUrl || !secretKey) return response({ error: "SERVER_CONFIGURATION_MISSING" }, 500);
   const ctx: RestContext = { supabaseUrl, secretKey };
 
-  const requestBody = await req.json().catch(() => ({})) as { trigger?: unknown; sources?: unknown };
+  const requestBody = await req.json().catch(() => ({})) as { trigger?: unknown; sources?: unknown; historicalFedStatementUrls?: unknown };
   const triggerType: "manual" | "scheduled" = requestBody.trigger === "scheduled" ? "scheduled" : "manual";
   const requestedSources = Array.isArray(requestBody.sources)
     ? requestBody.sources.filter((s): s is SourceKeyWithFed =>
       typeof s === "string" && (ALL_SOURCE_KEYS as string[]).includes(s)
     )
     : null;
+  const historicalFedStatementUrls = Array.isArray(requestBody.historicalFedStatementUrls)
+    ? requestBody.historicalFedStatementUrls.filter((url): url is string => typeof url === "string")
+    : undefined;
 
   // Best-effort; must never block the run below even if it fails.
   await reconcileStaleIngestionRuns(ctx);
@@ -448,7 +481,9 @@ Deno.serve(async (req) => {
   const now = new Date();
   const results: SourceRunResult[] = [];
   for (const sourceKey of sourceKeys) {
-    results.push(await runSource(ctx, sourceKey, triggerType, now));
+    results.push(await runSource(ctx, sourceKey, triggerType, now, {
+      historicalFedStatementUrls: sourceKey === FED_STATEMENT_SOURCE_KEY ? historicalFedStatementUrls : undefined,
+    }));
   }
 
   return response({ status: "completed", results });
