@@ -1,129 +1,145 @@
-## H1 merge result — PR #7 freshened and merged (2026-09-22)
-
-- result: `review_required` — PR #7 is merged; stop for C1.
-- pre_freshen_main: `c2f18de8c609693b4255b710e3798c2df72dda95`
-- final_feature_head: `c50dd6ad238cda2750ba2222c7a1546e433c5562`
-- merge_commit / resulting_main: `b2fb397173c042d328ef87d02a0d8d993bef9fbb`
-- pull_request: https://github.com/anohi-memories/kabumori/pull/7 (merged and closed)
-- freshen: compared PR base to current main; the five approved implementation/test files had no competing main-side changes. Only the PR commit was rebased onto latest main, then verified and merged.
-- changed files remain exactly the five approved paths:
-  - `src/app/explore.tsx`
-  - `src/lib/stock-sections.ts`
-  - `src/lib/news-presentation.ts`
-  - `tests/app/stock-sections_test.ts`
-  - `tests/app/news-presentation_test.ts`
-- verification: 50 app tests passed; app-scope TypeScript passed; Expo web export passed with the Kabumori routes; `git diff --check` passed; approved files on final main match the freshened feature head.
-- H2/G1/G2 files untouched. Production mutation, migration, RPC, Edge Function deploy, Cron, secret/Vault, OAuth, X/Push, EAS, and App Store operation: 0.
-- known limitation: manual iOS/native QA remains outstanding; colors/icons visual polish remains deferred.
-- next_owner: `chatgpt`; perform C1 review only.
-
 # Codex Task
 
-- task_id: kabumori-mobile-holdings-watch-news-detail-merge-retry-20260922
+- task_id: kabumori-important-news-producer-detail-and-portfolio-freshness-diagnosis-20260922
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
-- purpose: PR #7 merge blockerを再判定した結果、最新mainのKabumori実装ファイルにはsemantic driftが無いことを確認したため、PR #7をlatest mainへfreshenして再検証し、mainへmergeする。
+- purpose: 実機QAで残った2件を正しい層で解消するため、Important Newsの詳細生成をproducer側まで改善し、Portfolioが9/17終値を表示する原因をproduction read-onlyで特定・修正候補化する。production mutationは禁止。
 
-## C1 re-evaluation — false-positive blocker corrected
+## Confirmed production facts — 2026-09-22
 
-Previous H1 stopped because it interpreted:
-- `src/lib/stock-sections.ts` / test not existing on main,
-- `explore.tsx` and `news-presentation.ts` not containing PR7 behavior,
+### Portfolio / personalized report
+Read-only production data already proved:
+- 2026-09-18 close report row exists.
+- Its `portfolio_snapshot.price_basis_date = 2026-09-18`.
+- 9/18 holdings prices are present and valid in the snapshot.
+- However the report row is:
+  - `status = failed`
+  - `fact_status = pending`
+  - `error = REPORT_LOCAL_CHECK_FAILED`
+  - `fact_issues = ["CONTAINS_LATIN_WORD:ＵＦＪ"]`
+- 2026-09-17 close report is completed + fact-passed.
+- Therefore the app currently shows 9/17 because it only sees/uses completed Fact-passed report rows.
+- JPX cash market is closed 2026-09-21, 09-22, 09-23; 9/18 is the latest cash-market trading day for this point in time.
 
-as semantic main drift.
+### Important News
+Previous read-only diagnosis proved the reported AP / UN / North Korea rows:
+- have Fact-passed Japanese `generated_text` exposed as `verified_text`
+- have `app_title_ja/app_summary_ja/app_detail_ja/app_key_points_ja = NULL`
+- richer source-backed facts may exist in English `body_summary`
+- app-only partitioning cannot surface facts absent from Japanese `verified_text`
 
-That interpretation was incorrect.
+## Goal A — Important News producer/app-copy V2 candidate
 
-Evidence:
-- PR #7 base is `e2e5a8afeb8fe0e3513c0a137d75ca7d95bcd076`.
-- Comparing PR #7 base -> current `main` shows **no changes at all** in the five PR #7 implementation/test files.
-- Main changes since the PR base are limited to:
-  - `.agent/**` control/report files
-  - unrelated `supabase/functions/market-intelligence-ingest/**` FRED work.
-- Therefore the absence of `stock-sections.ts` on main and the older behavior in `explore.tsx` / `news-presentation.ts` are simply the expected pre-PR state, not a competing semantic edit.
+Fix the actual detail-generation layer so future news can contain meaningful Japanese detail.
 
-## Approved candidate
+Requirements:
+1. Trace current important-news producer path that creates:
+   - `generated_text`
+   - app-title/summary/key-points/detail fields if implemented
+   - fact-check gate
+2. Create source candidate so generated app copy has strict semantic roles:
+   - title: concise headline
+   - summary: 1–2 sentence lead
+   - key_points: 2–4 distinct key facts
+   - detail: 2–4 short paragraphs of additional source-backed event facts/context, only when source supports them
+   - market relevance: separate from event detail
+3. Detail must prioritize:
+   - who / what / where / when
+   - sequence/timeline
+   - official attribution
+   - figures/distances/injuries/affected assets
+   - confirmed vs unconfirmed status
+   - operational status after event
+4. Do not pad thin sources.
+5. Do not add unsupported facts.
+6. Preserve grounding/fact-check boundaries.
+7. No display-time AI.
+8. No production deploy in this H1.
 
-PR #7:
-- head: `0225efc66501502b32336998d4b48a71bdfece29`
-- state: open / mergeable
-- changed files:
-  - `src/app/explore.tsx`
-  - `src/lib/stock-sections.ts`
-  - `src/lib/news-presentation.ts`
-  - `tests/app/stock-sections_test.ts`
-  - `tests/app/news-presentation_test.ts`
+Regression fixtures must include:
+- Hormuz tanker / 2 crew injured / vessel continued / no closure confirmed
+- North Korea missile / 450–600km / EEZ assessment
+- UN/Houthi attempted Riyadh strike / displacement >130k
+- genuinely thin source.
 
-Approved behavior:
-- `保有 | 監視` segmented registered-stock view with counts and section-specific empty states.
-- Integrated stock search preserved.
-- Important News:
-  - 要点 = concise leading event facts
-  - 詳しい内容 = remaining distinct event/status facts
-  - generic market-impact filler removed from 詳細
-  - thin sources not padded
-  - no display-time AI
-- App-only change. Producer/backend unchanged.
-- Colors/icons visual polish remains deferred.
+## Goal B — Portfolio freshness root cause and candidate
 
-## Mandatory startup
+Investigate the exact `CONTAINS_LATIN_WORD:ＵＦＪ` failure.
 
-1. Read `.agent/ORCHESTRATION.md`
-2. Read `.agent/CURRENT_STATE.md`
-3. Read this TASK
-4. Read `.agent/CODEX_REPORT.md`
-5. Fresh fetch `origin/main`
-6. Reconfirm PR base -> current main has no overlap in the five PR7 files.
-7. Confirm H2/G1/G2 are not editing those five files.
+Required:
+1. Locate the report local-check/validator source that emits `CONTAINS_LATIN_WORD`.
+2. Prove why full-width company-name text `ＵＦＪ` is classified as a forbidden Latin word.
+3. Determine whether the rule is intended to block untranslated English prose versus legitimate Japanese company/proper-name text.
+4. Build a narrowly scoped source candidate/test fix so legitimate Japanese proper names/full-width Latin company tokens do not fail the report while real untranslated Latin prose still does.
+5. Add regression tests:
+   - `三菱ＵＦＪフィナンシャル・グループ` should pass
+   - ordinary English prose should still fail
+   - ticker/company acronyms that are expected in Japanese financial copy should be handled according to the existing product rule, not broadly whitelisted without justification.
 
-## Freshen / merge
+## Goal C — do NOT silently expose failed report narrative
 
-- Freshen/rebase PR #7 onto latest `origin/main`.
-- Do not drag stale `.agent` history.
-- Because current main has no implementation overlap in PR7 files, the PR7 behavior should be reapplied exactly.
-- If a genuinely new change to any of the five files appears after this task was written, STOP and report the exact conflicting commit/file.
+Do not solve Portfolio freshness by simply exposing failed AI report text.
+
+Preferred architecture:
+- fix the validator so future valid reports complete normally.
+- separately determine whether price snapshot data can/should be safely decoupled from narrative Fact-pass status.
+- if a safe decoupling requires schema/RPC/RLS or overlaps G1 market-report work, **do not mutate**. Document the exact proposal/blocker for C1.
+
+For the existing 9/18 failed row:
+- no manual production rewrite/backfill in this H1.
+- report whether a safe one-time regeneration/backfill would be required after the validator fix.
+
+## Parallel safety / G1 boundary
+
+G1 owns market-report consumer-cutover related work and may touch personalized-report surfaces.
+Before editing any personalized-report Function/shared validator:
+1. read `.agent/tasks/CLAUDE_TASK_1.md`
+2. identify exact G1 file/object ownership
+3. if the same file/Function/RPC is active/in-progress there, STOP that sub-part and report conflict
+4. do not modify a file owned by another active workstream.
+
+Important-news producer files are independent unless evidence says otherwise.
+
+## Production restrictions
+
+Forbidden:
+- production DB write
+- migration apply
+- RPC/RLS change
+- Edge Function deploy
+- Cron change
+- manual report regeneration
+- secret/Vault/provider changes
+- X/Push behavior change
+- EAS/App Store action
+
+Read-only production SQL is allowed for diagnosis.
 
 ## Verification
 
-After freshen:
-- relevant app/news tests PASS
-- app-scope TypeScript PASS
-- Expo web export PASS
+- relevant Deno/unit tests PASS
+- app/news tests PASS if app presentation touched
+- app-scope TypeScript PASS if app touched
 - `git diff --check` PASS
-- verify `/explore` search still works
-- verify `保有 | 監視` segmentation and counts
-- verify default/empty-state behavior
-- verify Important News detail partition and generic-filler suppression
-- verify no display-time AI
+- no unrelated H2/G1/G2 changes
 - production mutation = 0
-- H2/G1/G2 untouched
 
-## Merge
-
-If checks pass:
-- merge PR #7 to main
-- read back final main SHA
-- verify PR #7 merged/closed
-- verify the five approved files on main match freshened candidate
-- no backend deploy/migration/RPC/Cron/secret/EAS/App Store action
-
-## Handoff
+## Deliverables / C1
 
 Update `.agent/CODEX_REPORT.md` with:
-1. proof that prior blocker was false-positive and why
-2. pre-freshen main SHA
-3. final feature head
-4. verification results
-5. merge commit/resulting main SHA
-6. PR #7 merged state
-7. holdings/watch behavior preserved
-8. news detail behavior preserved
-9. production mutation 0
-10. visual polish deferred
+1. exact news producer data path and root cause of shallow detail
+2. source candidate changed files
+3. fixture results proving additional event facts reach app-copy detail
+4. exact report validator root cause for `ＵＦＪ`
+5. candidate validator behavior/tests or explicit G1 conflict if blocked
+6. whether 9/18 requires one-time regeneration after fix
+7. whether snapshot/narrative decoupling is recommended
+8. all verification results
+9. production mutation = 0
 
 On completion:
 - status -> `review_required`
@@ -131,29 +147,3 @@ On completion:
 - STOP for C1
 
 **推奨モデル：Luna。**
-
-
-## Final C1 review — 2026-09-22
-
-**PASS — merged main state verified.**
-
-Verified:
-- PR #7 is merged and closed.
-- Merge commit / resulting main baseline: `b2fb397173c042d328ef87d02a0d8d993bef9fbb`.
-- Main contains the approved `保有 | 監視` segmentation in `/explore` with counts, default selection logic, section-specific empty states, and integrated search preserved.
-- Main contains `stock-sections.ts` helper and matching regression tests.
-- Important News verified-post presentation keeps distinct event/status facts in `詳しい内容` and suppresses generic market-impact filler.
-- Thin-source items remain fail-closed; no display-time AI call was added.
-- 50 relevant app tests passed; app-scope TypeScript, Expo web export, and diff-check passed.
-- Final main read-back matches the freshened candidate across all five approved files.
-- Production/backend/EAS/App Store mutation = 0.
-- H2/G1/G2 implementation files untouched.
-
-Known limitation:
-- Japanese detail is limited to facts present in Fact-passed Japanese `verified_text`. Richer facts that exist only in English `body_summary` still require a future producer/app-copy improvement if real-device QA remains too shallow.
-- Colors/icons/visual polish remains deferred.
-
-C1 judgment:
-- PR #7 merge is accepted and this task is complete.
-
-**Recommended model for follow-up UI/news-generation work: Luna.**
