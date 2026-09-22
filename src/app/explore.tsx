@@ -18,6 +18,13 @@ import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
 import { authErrorMessage, signOut } from '@/lib/auth';
 import { StockMaster, TrackedStock } from '@/lib/stocks';
 import { stockScreenMode } from '@/lib/stock-search';
+import {
+  defaultStockSection,
+  partitionTrackedStocks,
+  stockSectionEmptyMessage,
+  stockSectionLabel,
+  type StockSection,
+} from '@/lib/stock-sections';
 import { supabase } from '@/lib/supabase';
 
 const colors = KABUMORI_COLORS.light;
@@ -30,6 +37,7 @@ export default function TrackedStocksScreen() {
   const [items, setItems] = useState<TrackedStock[]>([]);
   const [selectedStock, setSelectedStock] = useState<StockMaster | null>(null);
   const [selectedTracked, setSelectedTracked] = useState<TrackedStock | null>(null);
+  const [section, setSection] = useState<StockSection>('holding');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<StockMaster[]>([]);
   const [registeredIds, setRegisteredIds] = useState<Set<string>>(new Set());
@@ -58,8 +66,14 @@ export default function TrackedStocksScreen() {
       setItems([]);
       setMessage('一覧を読み込めませんでした。');
     } else {
-      setItems((data ?? []) as unknown as TrackedStock[]);
-      setMessage(data?.length ? '' : 'まだ登録銘柄がありません。上の検索から追加してみましょう。');
+      const nextItems = (data ?? []) as unknown as TrackedStock[];
+      setItems(nextItems);
+      setSection((current) => nextItems.length === 0 ? 'holding' : current === 'holding' && nextItems.some((item) => item.tracking_type === 'holding')
+        ? current
+        : current === 'watch' && nextItems.some((item) => item.tracking_type === 'watch')
+        ? current
+        : defaultStockSection(nextItems));
+      setMessage('');
     }
     setLoading(false);
   }, []);
@@ -143,6 +157,8 @@ export default function TrackedStocksScreen() {
 
   const searchMode = stockScreenMode(query) === 'search';
   const selected = selectedTracked ?? selectedStock;
+  const sections = partitionTrackedStocks(items);
+  const sectionItems = sections[section];
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -205,11 +221,28 @@ export default function TrackedStocksScreen() {
           <View style={styles.listArea}>
             {loading && !items.length ? <ActivityIndicator color={colors.accent} style={styles.status} /> : null}
             {!loading && !!message ? <Text style={styles.message}>{message}</Text> : null}
+            {!loading && !message ? (
+              <View style={styles.sectionSwitch} accessibilityRole="tablist">
+                {(['holding', 'watch'] as const).map((candidate) => (
+                  <Pressable
+                    key={candidate}
+                    onPress={() => setSection(candidate)}
+                    style={[styles.sectionButton, section === candidate && styles.sectionButtonActive]}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: section === candidate }}>
+                    <Text style={[styles.sectionButtonText, section === candidate && styles.sectionButtonTextActive]}>
+                      {stockSectionLabel(candidate)} {sections[candidate].length}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
             <FlatList
-              data={items}
+              data={sectionItems}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.list}
               refreshControl={<RefreshControl refreshing={loading && !!items.length} onRefresh={load} tintColor={colors.accent} />}
+              ListEmptyComponent={!loading && !message ? <Text style={styles.message}>{stockSectionEmptyMessage(section)}</Text> : null}
               renderItem={({ item }) => {
                 const holding = item.tracking_type === 'holding';
                 return (
@@ -268,6 +301,11 @@ const styles = StyleSheet.create({
   listArea: { flex: 1 },
   status: { marginTop: 28 },
   message: { color: colors.muted, textAlign: 'center', marginTop: 22, lineHeight: 22 },
+  sectionSwitch: { flexDirection: 'row', backgroundColor: colors.soft, borderRadius: 12, padding: 4, marginTop: 14 },
+  sectionButton: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 9 },
+  sectionButtonActive: { backgroundColor: colors.card, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+  sectionButtonText: { color: colors.muted, fontWeight: '800', fontSize: 13 },
+  sectionButtonTextActive: { color: colors.accent },
   list: { paddingTop: 14, paddingBottom: 100, gap: 12 },
   card: { backgroundColor: colors.card, borderRadius: 18, borderWidth: 1, borderColor: colors.border, padding: 17 },
   pressed: { opacity: 0.65 },
