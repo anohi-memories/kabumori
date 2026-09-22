@@ -26,6 +26,15 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
+      <NativeTabs.Trigger name="portfolio">
+        <NativeTabs.Trigger.Label>ポート</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          sf={{ default: 'chart.pie', selected: 'chart.pie.fill' }}
+          src={require('@/assets/images/tabIcons/explore.png')}
+          renderingMode="template"
+        />
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="reports">
         <NativeTabs.Trigger.Label>レポート</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon

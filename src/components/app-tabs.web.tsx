@@ -25,6 +25,9 @@ export default function AppTabs() {
           <TabTrigger name="explore" href="/explore" asChild>
             <TabButton>銘柄</TabButton>
           </TabTrigger>
+          <TabTrigger name="portfolio" href="/portfolio" asChild>
+            <TabButton>ポート</TabButton>
+          </TabTrigger>
           <TabTrigger name="reports" href="/reports" asChild>
             <TabButton>レポート</TabButton>
           </TabTrigger>

@@ -8,12 +8,12 @@ const COLUMNS = 'id,report_type,trading_date,title_ja,summary_ja,body,portfolio_
 export async function fetchRecentReports(limit = 14): Promise<PersonalizedReport[]> {
   const { data, error } = await supabase
     .from('personalized_reports')
-    .select('id,report_type,trading_date,title_ja,summary_ja,generated_at')
+    .select(COLUMNS)
     .order('trading_date', { ascending: false })
     .order('report_type', { ascending: true })
     .limit(limit);
   if (error) throw new Error(`レポートを取得できませんでした。${error.message}`);
-  return (data ?? []).map((row) => ({ ...row, body: null, portfolio_snapshot: null })) as PersonalizedReport[];
+  return (data ?? []) as PersonalizedReport[];
 }
 
 export async function fetchReport(id: string): Promise<PersonalizedReport | null> {

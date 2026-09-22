@@ -94,6 +94,7 @@ export default function HomeScreen() {
         <View style={styles.actionGrid}>
           {[
             { label: '銘柄を見る・追加', icon: '⌕', onPress: () => router.push({ pathname: '/explore', params: { focus: 'search' } }) },
+            { label: 'ポートフォリオ', icon: '◈', onPress: () => router.push('/portfolio') },
             { label: 'レポート', icon: '▤', onPress: () => router.push('/reports') },
             { label: '重要ニュース', icon: '✦', onPress: () => router.push('/news') },
           ].map((action) => (
@@ -142,7 +143,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 32, fontWeight: '900', marginTop: 5 },
   description: { fontSize: 15, lineHeight: 22, marginTop: 7, marginBottom: 4 },
   actionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
-  action: { width: '31.8%', minHeight: 66, borderRadius: 15, borderWidth: 1, padding: 12, justifyContent: 'center' },
+  action: { width: '48%', minHeight: 66, borderRadius: 15, borderWidth: 1, padding: 12, justifyContent: 'center' },
   actionIcon: { fontSize: 20, fontWeight: '800' },
   actionLabel: { fontSize: 13, fontWeight: '800', marginTop: 4 },
   card: { borderRadius: 18, borderWidth: 1, padding: 16 },
