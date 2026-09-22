@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 PR7 freshen blocked by semantic drift on latest main; no merge; production mutation 0)
+- checked_at: 2026-09-22 JST (H1 PR7 merge retry ready after C1 corrected false-positive drift blocker; H2 handled separately)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,11 +14,12 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `kabumori-mobile-holdings-watch-news-detail-merge-20260922`
-  - PR #7 candidate head `0225efc6` was not merged because latest `origin/main` semantically changed the same approved app/test files.
-  - Main lacks `src/lib/stock-sections.ts` and `tests/app/stock-sections_test.ts`, and reverted the PR7 holdings/watch and Important News partition behavior in the overlapping files.
-  - Auto-resolution is prohibited by the TASK; ChatGPT/C1 must choose reapply/re-scope.
-  - Production mutation 0; H2/G1/G2 untouched.
+- Codex slot 1: `ready` — `kabumori-mobile-holdings-watch-news-detail-merge-retry-20260922`
+  - C1 re-evaluation found the prior freshen blocker was a false positive.
+  - PR #7 base -> current main has no changes in the five PR7 implementation/test files; main drift is only .agent plus unrelated market-intelligence FRED files.
+  - The absence of stock-sections.ts on main is expected because it is newly added by PR #7, not evidence of a conflicting deletion.
+  - Next H1 should freshen/rebase PR #7, rerun checks, and merge if no genuinely new overlap appears.
+  - Production mutation 0; visual polish deferred.
   - Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase16-server-side-x-history-learning-adapter-candidate-20260922`
