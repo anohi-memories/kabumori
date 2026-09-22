@@ -1,10 +1,20 @@
+## H1 freshen result — semantic overlap blocker (2026-09-22)
+
+- result: `review_required` — PR #7 was not merged.
+- fresh_main: `cb7232204ccff1c61f8b7104edef02fff75e18c9`
+- PR #7 candidate head: `0225efc66501502b32336998d4b48a71bdfece29`
+- blocker: latest `origin/main` changed the same approved app/test surface, including removing `src/lib/stock-sections.ts` and `tests/app/stock-sections_test.ts`, and reverting the segmentation/verified-news partition behavior in `src/app/explore.tsx`, `src/lib/news-presentation.ts`, and `tests/app/news-presentation_test.ts`.
+- This is semantic implementation drift, not control/report-only drift. The TASK requires stopping instead of auto-resolving behavior.
+- No merge, test rerun after freshen, production mutation, backend deploy, migration, RPC, Cron, secret, EAS, or App Store operation was performed.
+- next_owner: `chatgpt`; a fresh C1 decision is required before any conflict resolution or merge.
+
 # Codex Task
 
 - task_id: kabumori-mobile-holdings-watch-news-detail-merge-20260922
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: C1 PASS済みPR #7（保有/監視分離 + Important News 詳細品質改善）をlatest mainへ安全にfreshenし、再検証後mainへmergeする。
