@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 source-backed news producer + Portfolio freshness candidate review_required; production mutation 0)
+- checked_at: 2026-09-22 JST (H1 source merge ready after C1 PASS on news producer V2 + Portfolio validator candidate; production mutation 0)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,13 +14,13 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `kabumori-important-news-producer-detail-and-portfolio-freshness-diagnosis-20260922`
-  - Real-device QA still finds Important News 詳しい内容 too shallow; app-only partitioning is insufficient when richer source facts exist only outside verified Japanese text.
-  - H1 pushed an Important News producer/app-copy V2 candidate with source-backed additional event facts and no display-time AI; C1 review is required.
-  - Portfolio freshness root cause is confirmed in production: 9/18 close snapshot exists with 9/18 prices, but the report failed local validation on `CONTAINS_LATIN_WORD:ＵＦＪ`; 9/17 is the latest completed Fact-passed close report.
-  - Validator candidate is narrowly scoped and has no active G1 file conflict; no production backfill/deploy/mutation occurred.
-  - 9/18 is the latest cash-market trading day at this time; 9/21–23 are JPX cash-market holidays.
-  - Production mutation 0. Visual colors/icons remain deferred.
+- Codex slot 1: `ready` — `kabumori-news-producer-portfolio-freshness-source-merge-20260922`
+  - C1 PASS on source candidate.
+  - Important News producer V2 approved: rich source-backed rows can receive independent Fact-checked app copy; thin sources fail closed; no display-time AI.
+  - Portfolio validator fix approved: full-width Latin embedded in Japanese proper-name context passes while ASCII acronyms/untranslated English remain blocked.
+  - Existing 9/18 snapshot is valid, but its failed narrative row still requires a later safe regeneration/backfill after production rollout.
+  - Next H1 is source freshen/merge only; no migration apply, Function deploy, or report regeneration.
+  - Production rollout remains a later Sol checkpoint.
   - Recommended model: Luna.
 
 - Codex slot 2: `done` — `social-mobile-app-phase17-disposable-vault-token-boundary-proof-20260922`
