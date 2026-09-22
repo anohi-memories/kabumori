@@ -39,10 +39,15 @@ import {
 } from "./mic_estat_adapter.ts";
 import {
   FED_STATEMENT_SOURCE_KEY,
-  fetchFedStatementEvents,
+  fetchFedStatement,
+  fetchFedStatementEventBundle,
+  parseFedStatementHtml,
   type FedTargetRange,
+  type FedStatement,
   type FedStatementIdentity,
 } from "./mic_fed_statement_adapter.ts";
+import { buildFedStatementDiffPipeline, persistFedStatementDiff } from "./mic_fed_statement_diff_persistence.ts";
+import type { FedStatementRecord } from "./mic_fed_statement_diff.ts";
 import {
   buildMacroReleaseEvent,
   decideMacroReleaseEvent,
@@ -160,7 +165,7 @@ const ALL_SOURCE_KEYS: SourceKeyWithFed[] = [
 
 type FetchResult =
   | { kind: "metrics"; metrics: NormalizedMarketMetric[] }
-  | { kind: "events"; events: MarketEventInput[] };
+  | { kind: "events"; events: MarketEventInput[]; fedStatement?: FedStatement & { decision: import("./mic_fed_statement_adapter.ts").FedDecision }; previousFedStatement?: FedStatementRecord };
 
 async function readCurrentFedTargetRange(ctx: RestContext): Promise<FedTargetRange | null> {
   const url = `${ctx.supabaseUrl}/rest/v1/market_metrics?metric_key=in.(FED_FUNDS_TARGET_LOWER,FED_FUNDS_TARGET_UPPER)&source_key=eq.fred&select=metric_key,value,observed_date&order=observed_date.desc&limit=20`;
@@ -177,17 +182,21 @@ async function readCurrentFedTargetRange(ctx: RestContext): Promise<FedTargetRan
   return lower === undefined || upper === undefined ? null : { lower, upper };
 }
 
-async function readPreviousFedStatementIdentities(ctx: RestContext): Promise<FedStatementIdentity[]> {
-  const url = `${ctx.supabaseUrl}/rest/v1/market_events?source_key=eq.fed&event_type=eq.central_bank_decision&select=raw_payload&order=published_at.desc&limit=50`;
+type FedStatementReference = FedStatementIdentity & { eventId: string; statementUrl: string };
+
+async function readPreviousFedStatementIdentities(ctx: RestContext): Promise<FedStatementReference[]> {
+  const url = `${ctx.supabaseUrl}/rest/v1/market_events?source_key=eq.fed&event_type=eq.central_bank_decision&select=id,raw_payload&order=published_at.desc&limit=50`;
   const result = await fetch(url, { headers: restHeaders(ctx.secretKey) });
   if (!result.ok) throw new Error(`FED_EVENT_LOOKUP_FAILED:${result.status}`);
-  const rows = await result.json() as Array<{ raw_payload?: { meeting_date?: unknown; document_hash?: unknown } | null }>;
-  const identities: FedStatementIdentity[] = [];
+  const rows = await result.json() as Array<{ id?: unknown; raw_payload?: { meeting_date?: unknown; document_hash?: unknown; statement_url?: unknown } | null }>;
+  const identities: FedStatementReference[] = [];
   for (const row of rows) {
+    const eventId = row.id;
     const meetingDate = row.raw_payload?.meeting_date;
     const documentHash = row.raw_payload?.document_hash;
-    if (typeof meetingDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(meetingDate) && typeof documentHash === "string" && /^[0-9a-f]{64}$/.test(documentHash)) {
-      identities.push({ meetingDate, documentHash });
+    const statementUrl = row.raw_payload?.statement_url;
+    if (typeof eventId === "string" && typeof statementUrl === "string" && typeof meetingDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(meetingDate) && typeof documentHash === "string" && /^[0-9a-f]{64}$/.test(documentHash)) {
+      identities.push({ eventId, statementUrl, meetingDate, documentHash });
     }
   }
   return identities;
@@ -233,7 +242,26 @@ async function runAdapter(ctx: RestContext, sourceKey: SourceKeyWithFed, now: Da
       // read here so the writer can label same-meeting document revisions.
       // A missing prior event is the normal new-meeting path.
       const previousIdentities = await readPreviousFedStatementIdentities(ctx);
-      return { kind: "events", events: await fetchFedStatementEvents(fetch, previousRange, previousIdentities) };
+      const bundle = await fetchFedStatementEventBundle(fetch, previousRange, previousIdentities);
+      const previousRef = previousIdentities
+        .filter((identity) => identity.meetingDate < bundle.statement.meetingDate)
+        .sort((a, b) => b.meetingDate.localeCompare(a.meetingDate))[0];
+      let previousFedStatement: FedStatementRecord | undefined;
+      if (previousRef) {
+        const previousHtml = await fetchFedStatement(previousRef.statementUrl, fetch);
+        const parsed = await parseFedStatementHtml(previousRef.statementUrl, previousHtml, null);
+        previousFedStatement = {
+          eventId: previousRef.eventId,
+          centralBank: "Fed",
+          meetingDate: parsed.meetingDate,
+          documentHash: parsed.documentHash,
+          normalizedText: parsed.normalizedText,
+          statementUrl: parsed.statementUrl,
+          decision: parsed.decision,
+          targetRange: parsed.targetRange,
+        };
+      }
+      return { kind: "events", events: bundle.events, fedStatement: bundle.statement, previousFedStatement };
     }
   }
 }
@@ -332,6 +360,24 @@ async function runSource(
         const written = await writeMarketEvent(ctx, finalized);
         if (written.outcome === "duplicate") duplicateCount += 1;
         else newCount += 1;
+
+        // Phase 2B5: persist the deterministic statement diff only after the
+        // immutable Fed decision Fact exists. No statement body is stored;
+        // only changed paragraphs and hashes are retained in the diff table.
+        if (sourceKey === FED_STATEMENT_SOURCE_KEY && result.fedStatement && written.id) {
+          const currentStatement: FedStatementRecord = {
+            eventId: written.id,
+            centralBank: "Fed",
+            meetingDate: result.fedStatement.meetingDate,
+            documentHash: result.fedStatement.documentHash,
+            normalizedText: result.fedStatement.normalizedText,
+            statementUrl: result.fedStatement.statementUrl,
+            decision: result.fedStatement.decision,
+            targetRange: result.fedStatement.targetRange,
+          };
+          const pipeline = await buildFedStatementDiffPipeline(currentStatement, result.previousFedStatement ?? null);
+          await persistFedStatementDiff(ctx, pipeline.row);
+        }
       }
     }
 

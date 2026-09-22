@@ -269,6 +269,15 @@ export async function fetchFedStatementEvents(
   previousRange: FedTargetRange | null = null,
   previousIdentities: FedStatementIdentity[] = [],
 ): Promise<MarketEventInput[]> {
+  const bundle = await fetchFedStatementEventBundle(fetchImpl, previousRange, previousIdentities);
+  return bundle.events;
+}
+
+export async function fetchFedStatementEventBundle(
+  fetchImpl: typeof fetch = fetch,
+  previousRange: FedTargetRange | null = null,
+  previousIdentities: FedStatementIdentity[] = [],
+): Promise<{ events: MarketEventInput[]; statement: FedStatement & { decision: FedDecision } }> {
   const calendarResponse = await fetchImpl(FED_FOMC_CALENDAR_URL, { headers: { Accept: "text/html" } });
   if (!calendarResponse.ok) throw new FedStatementAdapterError("FED_CALENDAR_HTTP_ERROR", `status=${calendarResponse.status}`);
   const calendarHtml = await calendarResponse.text();
@@ -278,5 +287,5 @@ export async function fetchFedStatementEvents(
   const statement = await parseFedStatementHtml(statementUrl, statementHtml, previousRange);
   const previousIdentity = previousIdentities.find((identity) => identity.meetingDate === statement.meetingDate) ?? null;
   const identityOutcome = statementIdentityChanged(previousIdentity, statement);
-  return [buildFedDecisionEvent(statement, previousRange, identityOutcome === "revision")];
+  return { events: [buildFedDecisionEvent(statement, previousRange, identityOutcome === "revision")], statement };
 }
