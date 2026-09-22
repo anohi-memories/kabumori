@@ -384,3 +384,33 @@ Continue with **Luna**.
 7. Final postflight and return \`review_required / next_owner: chatgpt\`.
 
 Phase 13 is not done until the bounded repair + one real preview + postflight are complete.
+
+
+## C2 review — 2026-09-22 (production preflight)
+
+**PASS for the read-only production preflight. Production mutation is not yet authorized, so Phase 13 remains incomplete.**
+
+Accepted:
+- fresh \`origin/main\` was used.
+- the reviewed reconnect source-fix is present on main.
+- the live begin RPC still has the known unconditional demotion behavior, so the approved migration is still necessary.
+- the dedicated QA account still has non-null \`verified_at\`.
+- the QA identity/workspace remains the expected dedicated fixture.
+- both access-token and refresh-token Vault secret references are present; secret values were not read.
+- \`publish_enabled=false\`.
+- no newer successful OAuth binding to a different X identity was observed.
+- QA membership/workspace remains unchanged.
+- existing production X accounts/admin OAuth remain unchanged.
+- no migration, row repair, deploy, OAuth retry, OpenAI preview, X/Vault/Storage/scheduled-post write, Cron, or settings mutation occurred.
+
+Decision:
+- read-only preflight is approved.
+- **Do not apply the migration or repair the QA row yet.**
+- the next step requires an explicit trusted user authorization for these exact production mutations:
+  1. apply only \`20260922003101_social_mobile_x_oauth_reconnect_preserve_verified.sql\`;
+  2. read back the begin RPC definition, ACL, and search_path;
+  3. if all preconditions still hold, update only the dedicated QA social_account \`connection_status\` from \`authorization_pending\` to \`identity_verified\`;
+  4. do not modify \`publish_enabled\`, handle, platform_user_id, verified_at, Vault refs, or any other account.
+- after that bounded repair, resume the existing QA-only live runtime and run exactly one real AI preview, with no X post/media/scheduled-post/Vault-token/publish side effects.
+
+Status remains \`review_required\` / \`next_owner: chatgpt\` until the user explicitly authorizes the bounded production mutation.
