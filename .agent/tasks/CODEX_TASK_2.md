@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase18-production-shaped-access-token-reader-preflight-20260922
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Luna
 - purpose: Phase17 C2 PASS済みのdisposable access-token boundary proofを、本番Supabase Vaultの実構造に合わせたproduction-shaped internal reader candidateへ落とし込み、productionはread-only preflightだけでexact schema/ACL/RPC compatibilityを確認する。まだproduction migration/RPC deploy/Vault read/X history callは行わない。
@@ -214,3 +214,30 @@ When complete:
 - commit/push
 - fresh origin/main check
 - STOP for C2
+
+
+## Final C2 — 2026-09-23 (Phase18 production-shaped access-only token reader preflight)
+
+**PASS. Phase18 is complete.**
+
+Accepted:
+- production inspection remained metadata-only; no Vault plaintext, token values, handles, secret ids, or X history were read.
+- production RLS/account-binding shape was confirmed for \`brands\`, \`brand_memberships\`, and \`social_accounts\`.
+- the production Vault catalog exposes \`vault.secrets\` / \`vault.decrypted_secrets\`; plaintext access is not available to public/anon, and no generic client-callable secret reader was found.
+- existing OAuth completion RPCs and the AI-Lab-specific token reader were correctly treated as unsuitable for the general-user history-learning access-only path.
+- the new server-internal \`social_mobile_history_access_reader.ts\` contract is access-only, has no refresh selector, no generic secret-id client surface, no admin fallback, no write capability, and no token-bearing response/logging path.
+- Phase16 history-learning resolves Auth -> owner membership -> workspace -> exactly-one verified X account -> trusted platform id before the access-token reader boundary.
+- default history-learning Edge entrypoint remains disabled.
+- no migration/RPC candidate was introduced, so no SQL rollout was implied by this task.
+- reported Deno tests, Edge \`deno check\`, mobile typecheck/lint/web export, and diff-check pass.
+- implementation commit \`732c630166bf8bc0fcaf7a4b5968d1d24a53c0db\` is present on \`origin/main\`.
+- production mutation = 0.
+
+Important remaining design choice:
+- the source contract is approved, but the live plaintext-token implementation is intentionally still undecided between:
+  1. a service-role-only server adapter reading the account-bound access secret internally, or
+  2. a dedicated narrow SECURITY DEFINER RPC.
+- that choice must be made in the next separately scoped phase with exact tenant binding, ACL, search_path, and disposable proof before production rollout.
+- no live Vault read, Function deploy, or X-history call is authorized by this PASS.
+
+Recommended next model: Luna; use Sol only if the exact live Vault/ACL implementation presents a concrete security ambiguity.
