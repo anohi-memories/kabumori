@@ -198,3 +198,117 @@ push前にfresh `origin/main`確認。
 - source commit/push
 - fresh origin/main check
 - STOP for C2
+
+
+## Product direction addendum — conversational AI persona / "代打AI" — 2026-09-22
+
+Before treating settings as a normal form-driven preference screen, design the general-user experience around a conversational AI counterpart.
+
+### Core product concept
+
+The user should feel that they are talking with **their own posting partner /代打AI**, not merely configuring fields.
+
+The intended mental model is:
+- the user talks naturally with the AI about what they want to post, how they normally write, what they dislike, and what kind of audience they want to reach;
+- the AI learns the user's voice/preferences from that conversation;
+- the same AI then drafts/posts on the user's behalf;
+- the UI should reinforce "このAIが自分の代打として投稿してくれる" rather than "設定画面で項目を入力する".
+
+This conversational layer is the primary UX. Structured settings are the backing model, not necessarily the primary user-facing interaction.
+
+### Required Phase14 design changes
+
+Add a source-candidate design for a conversational onboarding/settings assistant.
+
+The assistant should be able to:
+- ask follow-up questions naturally;
+- translate free-form conversation into structured content settings;
+- show/confirm what it learned before saving;
+- allow the user to correct the AI in natural language;
+- maintain a stable user-specific posting persona/profile;
+- use that persona in preview generation;
+- remain clearly separated from publish permission.
+
+Do not implement live autonomous publishing yet.
+
+### Past-post learning capability
+
+Design the system so a user can say things like:
+- 「過去の自分の投稿を読んで」
+- 「最近の投稿っぽい感じにして」
+- 「この頃の文体を参考にして」
+- 「この投稿の雰囲気は残して」
+
+The AI should be able to analyze the user's own historical X posts and derive style signals such as:
+- sentence length
+- punctuation/emoji tendencies
+- level of formality/casualness
+- recurring vocabulary
+- topic distribution
+- hashtag habits
+- CTA style
+- posting cadence patterns
+- common opening/closing patterns
+
+Important boundaries:
+- only the authenticated user's connected account/history;
+- no reading other users' private data;
+- no silent ingestion without an explicit user action/consent;
+- do not treat historical style as immutable truth;
+- derived style profile must be reviewable/editable by the user;
+- distinguish direct historical facts from AI-inferred style traits;
+- never use past-post learning to change publish permissions.
+
+### Data/architecture expectations
+
+Phase14 should determine a tenant-safe storage model for both:
+1. structured content preferences;
+2. AI-derived persona/style profile.
+
+Consider whether to store:
+- user-editable settings;
+- AI-derived style traits;
+- provenance such as "conversation" vs "past-post analysis";
+- last analyzed post range/count/time;
+- explicit confirmation status.
+
+Do not store full historical X content indefinitely unless there is a clear reason. Prefer derived features/summary plus minimal provenance where possible.
+
+### X-history acquisition design
+
+Phase14 should inspect the existing X OAuth scopes and API capabilities already present in the repo and determine:
+- whether current scopes are sufficient to read the authenticated user's own historical posts;
+- what endpoint/path would be used;
+- pagination/rate-limit considerations;
+- how far back we can safely/realistically analyze;
+- whether additional X permission/scope would be required.
+
+This is **design/audit only** in Phase14:
+- do not call X history APIs in production;
+- do not expand OAuth scopes yet;
+- do not ingest production post history yet.
+
+### UX expectation
+
+Prefer an interaction like:
+- user opens "あなたの投稿AI"
+- AI says what it currently understands about the user's style
+- user chats naturally to refine it
+- user can say "過去の投稿を見て覚えて"
+- AI analyzes only after explicit confirmation
+- AI reports what it learned in plain Japanese
+- user approves/edits
+- that persona becomes the basis for future previews
+
+A conventional settings form may still exist as an advanced/manual editor, but it should not be the main product metaphor.
+
+### Additional tests/design proof
+
+Add coverage/design notes for:
+- conversational text -> structured settings mapping
+- user correction overrides prior AI inference
+- historical-post-derived style is scoped to the correct tenant/account
+- provenance is preserved
+- publish permission cannot be changed through conversation/persona updates
+- no X history API call occurs without explicit user action
+- no production X API call in this Phase
