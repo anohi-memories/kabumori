@@ -1594,7 +1594,7 @@ Then apply the exact migration file via `podman exec -i <container> psql -X -v O
 - disposable_proof: No SQL/RPC candidate was introduced, so there was no migration apply/rollback to run. The exact source contract was proven with fake-only injected readers: positive access-only read, unverified/incomplete binding rejection before reader invocation, unavailable-secret fail-closed, no refresh selector, no response/log capability, and Phase16 call-order/response secrecy tests. No production value was used.
 - production_mutation: **0** — no production DB/schema/RLS/ACL/RPC, migration, Vault plaintext read/write, Edge deploy, OAuth, X history/API/media/post, OpenAI, Cron/scheduler, settings, or publish operation.
 - remaining_issues: The internal reader is a source candidate, not a live Vault adapter. A later rollout must separately decide whether to use a service-role-only server adapter or a dedicated SECURITY DEFINER RPC, then prove its exact production ACL/search_path and tenant binding in a disposable DB before deployment. Default history-learning remains disabled.
-- implementation_commit: pending this isolated H2 commit/push.
-- push: pending this isolated H2 commit/push.
+- implementation_commit: `732c630166bf8bc0fcaf7a4b5968d1d24a53c0db`.
+- push: `origin/main` contains `732c630166bf8bc0fcaf7a4b5968d1d24a53c0db` after fresh fetch/read-back.
 - safety_checks: Formal repo and existing uncommitted changes were untouched; no `apps/admin/**`, `HANDOFF.md`, H1 files, production settings, migrations, secrets, tokens, OAuth, X/OpenAI/Vault/Storage/Cron operations were changed or exposed.
 - next_recommendation: C2 review the production-shaped contract and metadata findings. Do not create/apply a production reader, deploy history-learning, or call X history until the separate rollout gate is approved.
