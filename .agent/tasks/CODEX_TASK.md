@@ -3,7 +3,7 @@
 - task_id: kabumori-mobile-holdings-watch-split-and-news-detail-quality-20260922
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
@@ -235,3 +235,35 @@ On completion:
 - production_mutation: 0
 - visual_polish: deferred
 - next_owner: chatgpt
+
+
+## Final C1 review — 2026-09-22
+
+**PASS — PR #7 candidate accepted.**
+
+Accepted:
+- `/explore` separates registered rows into `保有 | 監視` segments with counts.
+- Default section behavior is correct: holdings preferred when present; watch shown when it is the only populated section; empty registered state is handled explicitly.
+- Integrated stock search remains independent of the segment state.
+- Register/edit/delete refreshes the registered rows so tracking-type changes move to the correct segment without restart.
+- Important News verified-post presentation now partitions two concise event facts into 要点 and keeps remaining distinct event/status facts for 詳しい内容.
+- Generic market-impact filler is excluded from 詳しい内容.
+- Thin-source items remain fail-closed and are not padded with invented prose.
+- No display-time AI call was added.
+- Producer/app-copy generation and production backend were not changed.
+- Relevant tests 50/50, app-scope TypeScript, Expo web export, and diff-check passed.
+- Production mutation = 0.
+- Main-side drift since branch base is control/report only; no Kabumori implementation overlap detected.
+
+Known limitation / follow-up:
+- This candidate improves only facts already present in the Fact-passed Japanese `verified_text`.
+- Production read-only diagnosis showed richer English `body_summary` can exist while `app_*_ja` fields are NULL. Facts that never made it into `verified_text` still cannot appear as Japanese detail without a future producer/app-copy generation improvement.
+- Therefore real-device QA should verify whether the three reported examples are now sufficiently detailed. If still too shallow, the next task should improve the producer/app-copy path rather than adding display-time translation/AI.
+
+Colors/icons/visual polish remains deferred.
+
+C1 judgment:
+- Candidate is approved.
+- Next H1 should freshen PR #7 onto current main, rerun checks, and merge if no conflict appears.
+
+**Recommended model: Luna.**
