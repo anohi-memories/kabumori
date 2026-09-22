@@ -23,10 +23,10 @@
   - Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase14-persistent-content-settings-candidate-20260922`
-  - Phase13 C2 PASS後の次工程。
-  - general-user向けcontent settingsをtenant-safeに永続化するsource candidateを作る。
-  - production migration/RPC/RLS/Cron/scheduled_posts/X投稿/publish enableはまだ禁止。
-  - Recommended model: Luna。RLS/SECURITY DEFINERの具体的blocker時のみSol検討。
+  - C2 PASS for source candidate。
+  - 次は disposable DB でmigration/RLS/ACL/tenant isolationを実apply証明する。
+  - production migration/settings/X/OpenAI/Cron/publishはまだ禁止。
+  - Recommended model: Luna。DB/RLSの具体的blocker時のみSol検討。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
