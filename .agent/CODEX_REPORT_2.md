@@ -9,7 +9,7 @@
 - disposable_postgres_proof: Re-attempted environment discovery. No local PostgreSQL client/server binaries are installed, and the available Podman VM cannot create its lockfile under the managed filesystem permissions. Therefore apply → object/read-back → rollback could not be executed in this environment. No production or shared database was used as a substitute. This remains an explicit C2 follow-up limitation.
 - persona_representation: The DB columns `persona_provenance` / `persona_confirmed` are the canonical persisted metadata for this candidate; `persona_profile` remains the bounded derived-signal payload. The app/generator's `source` / `confirmed` shape is an application contract that must be mapped explicitly in a future persona write path; no such write path was broadened here.
 - production_mutation: **0** — no production migration/schema/RLS/grant/RPC, settings row, deploy, Cron/scheduler, scheduled post, X/OpenAI/Vault/OAuth/Storage operation was performed.
-- source_commit: `fe7323a` (local follow-up commit; formal checkout and its existing uncommitted changes remain untouched).
+- source_commit: `4c6022e` (rebased implementation/control commit on latest origin/main; formal checkout and its existing uncommitted changes remain untouched).
 - safety_checks: no `apps/admin/**`, `HANDOFF.md`, H1 files, other workstreams, or production settings were changed. No secret/token/personal identifier was recorded.
 
 # H2 — Social mobile Phase 14 persistent content settings source candidate (C2 review required, 2026-09-22)
