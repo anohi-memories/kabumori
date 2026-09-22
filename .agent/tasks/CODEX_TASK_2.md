@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase14-persistent-content-settings-candidate-20260922
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
 - purpose: Phase13 C2 PASS後の次段階として、general-user向け投稿設定をtenant-safeに永続化できるsource candidateを作る。まだCron・scheduled_posts自動生成・X実投稿・publish_enabled=trueは行わない。
@@ -312,3 +312,54 @@ Add coverage/design notes for:
 - publish permission cannot be changed through conversation/persona updates
 - no X history API call occurs without explicit user action
 - no production X API call in this Phase
+
+
+## C2 review — 2026-09-22 (Phase14 persistent settings candidate)
+
+**BLOCKED — one DB-contract bug must be fixed before source approval.**
+
+Accepted:
+- new dedicated \`social_mobile_content_settings\` table is the right responsibility boundary; do not reuse admin-owned \`brand_settings\` / \`posting_windows\` for general-user writes.
+- owner-scoped direct user-JWT RLS is an appropriate candidate; no SECURITY DEFINER RPC is required for this settings CRUD boundary.
+- mobile settings UX is separated from publish permission and hides raw backend errors.
+- conversational "代打AI" direction is represented as a reviewable proposal layer, not a publish command.
+- past-post learning remains explicit-consent/design-only; no production X-history call was made.
+- preview reads persisted settings only after existing owner/workspace/account checks and keeps no-publish guard.
+- production mutation = 0.
+- reported tests/typecheck/lint/export/diff pass are accepted as source-candidate evidence.
+
+### Blocking defect
+
+The migration's own default row does not satisfy its CHECK constraint.
+
+The candidate migration sets:
+- \`generationWindow.endLocal = '24:00'\`
+
+but \`social_mobile_content_settings_shape\` validates \`endLocal\` with:
+- \`^([01][0-9]|2[0-3]):[0-5][0-9]$\`
+
+That regex rejects \`24:00\`.
+
+The TypeScript contract already intentionally allows \`24:00\` for end time through \`END_TIME_RE\`, so the DB contract and application contract disagree. A default INSERT that relies on the table default can therefore fail the row CHECK immediately.
+
+### Required fix
+
+Continue with **Luna**.
+
+1. Fix the DB end-time CHECK so \`24:00\` is accepted **only where appropriate for \`endLocal\`**.
+2. Keep \`startLocal\` and \`defaultGenerationLocal\` restricted to \`00:00\`–\`23:59\`.
+3. Add a regression test that proves the SQL default \`09:00 / 24:00 / 17:00\` satisfies the migration contract.
+4. Add negative coverage so \`24:00\` is not accidentally accepted for start/default generation time.
+5. Re-run:
+   - Phase14 Deno/static tests
+   - shared-brand regressions
+   - social-mobile typecheck
+   - lint
+   - Expo export
+   - \`git diff --check\`
+6. Production mutation must remain 0.
+7. Return \`review_required / next_owner: chatgpt\` for C2.
+
+### Non-blocking follow-up to clarify in report
+
+The migration stores \`persona_provenance\` / \`persona_confirmed\` as dedicated columns while the current repository/generator validation expects \`source\` / \`confirmed\` inside \`persona_profile\`. Clarify the canonical representation before the future persona write path is implemented. Do not broaden this fix into production rollout.
