@@ -3,8 +3,8 @@
 - task_id: kabumori-mobile-holdings-watch-split-and-news-detail-quality-20260922
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: 実機QAで判明した「銘柄画面で保有と監視を分けたい」と「重要ニュースの詳しい内容が実質的に詳細ではない」を改善する。色・アイコンの本格調整は今回は行わない。
@@ -224,3 +224,14 @@ On completion:
 - STOP for C1
 
 **推奨モデル：Luna。**
+
+
+## Completion record — 2026-09-22
+
+- final_commit: 0225efc66501502b32336998d4b48a71bdfece29
+- pull_request: https://github.com/anohi-memories/kabumori/pull/7 (open; C1 review required)
+- diagnosis: production read-only fields traced; app-only presentation layer selected. Producer/deploy/migration changes: none.
+- verification: 50 relevant tests passed; app-scope TypeScript, Expo export, and diff check passed.
+- production_mutation: 0
+- visual_polish: deferred
+- next_owner: chatgpt
