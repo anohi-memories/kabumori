@@ -1,3 +1,38 @@
+## H1 merge result — Kabumori UI, stock search, Portfolio V1, and news detail dedup (2026-09-22)
+
+- task_id: `kabumori-mobile-ui-portfolio-news-merge-20260922`
+- result: `review_required` — C1-approved PR #6 was freshened onto the latest main, reverified, merged, and read back. Stop for C1.
+- pre_freshen_main: `c4f2f83f485bda45e308522c7b6d079b4b606e7c`
+- final_feature_head: `38aa1a500f90355e740603464177701b9e0c3bfc`
+- merge_commit / resulting_main: `bc4929165cf74e9044f0267299fce7f1132ac60b`
+- pull_request: https://github.com/anohi-memories/kabumori/pull/6 (merged and closed)
+- production_mutation: 0
+
+### Fresh-main and scope verification
+
+- Rebased PR #6 onto `origin/main` without conflicts. Main-side changes since C1 were limited to control files and H2/social-mobile work; no Kabumori app file overlap or semantic conflict existed.
+- The merged PR contains the approved 22 Kabumori app/test files only. Read-back comparison of all approved paths on `origin/main` versus the freshened feature head was empty.
+- H2/G1/G2 implementation files, migrations, RPCs, Edge Functions, Cron, secrets, OAuth, X, Push, EAS, and App Store areas were not changed by this merge.
+
+### Preserved feature set
+
+- Shared Kabumori light palette aligns Home, 銘柄, ポート, レポート, 重要ニュース, and the editor.
+- Stock search is integrated into `/explore` with empty-query registered list, debounced partial ticker/company search, registered-state display, and existing register/edit/delete flow. Home opens `/explore?focus=search`; `/search` remains a compatibility redirect.
+- Portfolio V1 remains the fifth `ポート` tab and Home shortcut. It reads only the latest completed close report's existing `portfolio_snapshot`, shows an explicit basis date and non-realtime disclaimer, totals/holding rows/sector weights, excludes watchlist rows from totals, and has empty/stale handling.
+- Important News keeps deterministic normalization and exact/near-duplicate suppression across summary/key points/detail. Verified-post and disclosure fallbacks partition distinct content; no display-time AI call was added, and source/relation links remain.
+
+### Verification after freshen
+
+- Relevant app tests: **45 passed / 0 failed**.
+- Kabumori app-scope TypeScript: passed.
+- Expo web export: passed; static routes confirmed: `/`, `/explore`, `/portfolio`, `/search`, `/news`, `/news/[id]`, `/reports`, `/reports/[id]`.
+- Native/web five-tab navigation, Home-to-search route, Portfolio basis-date/no-realtime copy, and News duplicate-suppression paths were confirmed by source/read-back checks.
+- `git diff --check`: passed.
+- Manual iOS simulator/development-build QA (safe area, keyboard, modal, numeric input, tab behavior) remains outstanding.
+- No production DB write or backend deploy was performed.
+
+Next recommendation: `C1` verify resulting main `bc492916`; no further H1 action is required.
+
 ## Latest H1 result — Kabumori UI consistency, integrated stock search, Portfolio V1, and news detail dedup (2026-09-22)
 
 - task_id: `kabumori-mobile-ui-consistency-and-stock-search-integration-20260922`
