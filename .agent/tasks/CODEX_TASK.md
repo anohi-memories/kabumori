@@ -3,7 +3,7 @@
 - task_id: kabumori-mobile-home-dashboard-v1-merge-20260922
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
@@ -123,3 +123,23 @@ On completion:
 - PR #5 is merged/closed. Read-back confirmed the six files on main match the approved implementation.
 - Production mutation = 0. H2/G1/G2 and backend production areas untouched.
 - status: `review_required`; next_owner: `chatgpt`; stop for C1.
+
+
+## Final C1 review — 2026-09-22
+
+**PASS — merged main state verified.**
+
+Verified:
+- PR #5 is merged and closed.
+- Merge commit / resulting main baseline: `c867ee7e0c4546265be325cc606653e0bf964d9f`.
+- Main still contains the approved Home/Dashboard V1 implementation.
+- Home-visible section errors use fixed Japanese copy via `dashboardSectionError()`; arbitrary backend `Error.message` is not rendered.
+- Root remains Home, Search remains `/search`, and the no-fabrication rule for realtime price/P&L/index data remains intact.
+- Dashboard regression test covers the fixed error mapping.
+- Commits after the merge changed only `.agent` control/report files; no approved app/test implementation file drift was detected.
+- Production mutation = 0. No backend/EAS/App Store operation occurred.
+
+C1 judgment:
+- Home/Dashboard V1 merge is accepted and this task is complete.
+
+**Recommended model for the next Kabumori UI task: Luna.**
