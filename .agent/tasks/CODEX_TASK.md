@@ -22,7 +22,7 @@
 - task_id: kabumori-mobile-holdings-watch-news-detail-merge-retry-20260922
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
@@ -131,3 +131,29 @@ On completion:
 - STOP for C1
 
 **推奨モデル：Luna。**
+
+
+## Final C1 review — 2026-09-22
+
+**PASS — merged main state verified.**
+
+Verified:
+- PR #7 is merged and closed.
+- Merge commit / resulting main baseline: `b2fb397173c042d328ef87d02a0d8d993bef9fbb`.
+- Main contains the approved `保有 | 監視` segmentation in `/explore` with counts, default selection logic, section-specific empty states, and integrated search preserved.
+- Main contains `stock-sections.ts` helper and matching regression tests.
+- Important News verified-post presentation keeps distinct event/status facts in `詳しい内容` and suppresses generic market-impact filler.
+- Thin-source items remain fail-closed; no display-time AI call was added.
+- 50 relevant app tests passed; app-scope TypeScript, Expo web export, and diff-check passed.
+- Final main read-back matches the freshened candidate across all five approved files.
+- Production/backend/EAS/App Store mutation = 0.
+- H2/G1/G2 implementation files untouched.
+
+Known limitation:
+- Japanese detail is limited to facts present in Fact-passed Japanese `verified_text`. Richer facts that exist only in English `body_summary` still require a future producer/app-copy improvement if real-device QA remains too shallow.
+- Colors/icons/visual polish remains deferred.
+
+C1 judgment:
+- PR #7 merge is accepted and this task is complete.
+
+**Recommended model for follow-up UI/news-generation work: Luna.**
