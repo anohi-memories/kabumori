@@ -11,6 +11,8 @@ import {
 import { resolveBrandCodeProfile } from "../_shared/brand/brand_profiles.ts";
 import {
   SOCIAL_MOBILE_USER_DEFAULTS,
+  isSocialMobilePersonaProfile,
+  normalizeSocialMobileContentSettings,
   type SocialMobileContentSettings,
 } from "../_shared/brand/social_mobile_content_settings.ts";
 
@@ -42,6 +44,11 @@ type PreviewGenerator = (input: {
   settings: SocialMobileContentSettings;
   openAiApiKey: string;
 }) => Promise<PreviewDraft>;
+
+type PersistedSettingsRow = {
+  settings?: unknown;
+  persona_profile?: unknown;
+};
 
 export class SocialMobilePreviewError extends Error {
   constructor(readonly code: string, readonly status: number) {
@@ -151,6 +158,49 @@ async function readRows<T>(
     throw new SocialMobilePreviewError("WORKSPACE_READ_UNAVAILABLE", 503);
   }
   return body as T[];
+}
+
+async function readOptionalPersistedSettings(
+  brandId: string,
+  token: string,
+  deps: SocialMobilePreviewDependencies,
+  fetchImpl: typeof fetch,
+): Promise<SocialMobileContentSettings> {
+  let response: Response;
+  try {
+    response = await fetchImpl(restUrl(deps.supabaseUrl, "social_mobile_content_settings", {
+      select: "settings,persona_profile",
+      brand_id: `eq.${brandId}`,
+      limit: "1",
+    }), {
+      method: "GET",
+      headers: {
+        apikey: deps.publishableKey,
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    });
+  } catch {
+    // Phase 12 default behavior remains safe if the candidate table is not yet deployed.
+    return SOCIAL_MOBILE_USER_DEFAULTS;
+  }
+  if (response.status === 404 || response.status === 406) return SOCIAL_MOBILE_USER_DEFAULTS;
+  const body = await readJson(response);
+  if (!response.ok) {
+    // A missing table/column is an expected pre-rollout state; other failures fail closed.
+    if (response.status === 400 && typeof body === "object" && body !== null) {
+      const message = String((body as { message?: unknown }).message ?? "");
+      if (/relation|column|does not exist/iu.test(message)) return SOCIAL_MOBILE_USER_DEFAULTS;
+    }
+    throw new SocialMobilePreviewError("CONTENT_SETTINGS_READ_UNAVAILABLE", 503);
+  }
+  const row = Array.isArray(body) ? body[0] as PersistedSettingsRow | undefined : undefined;
+  if (!row) return SOCIAL_MOBILE_USER_DEFAULTS;
+  const settings = normalizeSocialMobileContentSettings(row.settings);
+  const persona = isSocialMobilePersonaProfile(row.persona_profile)
+    ? row.persona_profile
+    : undefined;
+  return persona ? { ...settings, personaProfile: persona } : settings;
 }
 
 function parseRequestedBrandId(body: unknown): string | null {
@@ -323,7 +373,7 @@ export async function handleSocialMobileBrandDryRun(
       enabled_post_types: ["brand_post"],
     };
     const context = resolveBrandContext(brand, null, operationalSettings);
-    const settings = deps.settings ?? SOCIAL_MOBILE_USER_DEFAULTS;
+    const settings = deps.settings ?? await readOptionalPersistedSettings(brandId, token, deps, fetchImpl);
     const generate = deps.generate ?? defaultGenerate;
     let draft: PreviewDraft;
     try {
