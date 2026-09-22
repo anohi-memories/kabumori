@@ -23,11 +23,11 @@
   - Production mutation 0. Visual colors/icons remain deferred.
   - Recommended model: Luna.
 
-- Codex slot 2: `ready` — `social-mobile-app-phase17-disposable-vault-token-boundary-proof-20260922`
-  - C2未PASS。source audit/testは問題ないが、local Supabase DBが2 GiB Podman環境で停止し、必須のdisposable Vault/RLS実証が未完了。
-  - 次H2はisolated disposable環境を再試行。authorized toolingでpreview/branch/projectが使える場合はfake-only dataで可。production代用は禁止。
-  - production mutation 0。default history-learning entrypointはdisabled維持。
-  - Recommended model: Luna。
+- Codex slot 2: `done` — `social-mobile-app-phase17-disposable-vault-token-boundary-proof-20260922`
+  - C2 PASS。fake-only disposable PostgreSQLでowner/account/access-token binding、cross-tenant/forged-ref fail-closed、ACL/search_path、cleanupを実証。
+  - production mutation 0。実Supabase Vault拡張そのものは未使用なので、次はproduction-shaped access-only internal reader設計/読取preflightが必要。
+  - production deploy / real X history / persona persistence / live publish は別TASK。
+  - Recommended next model: Luna。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
