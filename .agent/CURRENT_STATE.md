@@ -23,12 +23,11 @@
   - Colors/icons visual polish remains deferred.
   - Recommended next model: Luna.
 
-- Codex slot 2: `done` — `social-mobile-app-phase16-server-side-x-history-learning-adapter-candidate-20260922`
-  - C2 PASS。server-side trusted Auth/workspace/X identity/token-ref resolution、明示同意、bounded read-only X history adapter source candidateまで完了。
-  - raw投稿恒久保存なし、unconfirmed persona proposalのみ、default Edge entrypointはdisabled。
-  - production mutation 0。次はdisposable Vault/RLS/token-boundary proofが必須。
-  - production deploy / real X history / persona persistence / live publish は別TASK。
-  - Recommended next model: Luna。
+- Codex slot 2: `ready` — `social-mobile-app-phase17-disposable-vault-token-boundary-proof-20260922`
+  - Phase16 C2 PASS後の次工程。
+  - disposable Supabase/Vaultでowner/account/token bindingを実証し、他tenant/forged secret refをfail-closedにする。
+  - production Vault read / deploy / real X history API / publishは禁止。
+  - Recommended model: Luna。Vault ACL/SECURITY DEFINER/RLSの具体的blocker時のみSol検討。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
