@@ -1407,3 +1407,15 @@ Then apply the exact migration file via `podman exec -i <container> psql -X -v O
 - Production DB/schema/migration/RPC: **0**; deploy: **0**; Cron/settings: **0**; manual candidate or X/OpenAI invocation: **0**; X posts: **0**.
 - Formal checkout and its existing uncommitted changes, H1/Claude workstreams, `apps/admin/**`, and `HANDOFF.md` were untouched.
 - Remaining item for C2: review the bounded input-packet change and fixture measurement before any separately authorized production deploy. Status is `review_required`; next owner is `chatgpt`.
+# H2 — Social mobile Phase 13 QA live-source follow-up — 2026-09-22
+
+- task_id: `social-mobile-app-phase13-production-preview-rollout-and-qa-20260921`
+- status: `review_required`; next_owner: `chatgpt`
+- fresh_preflight: fetched `origin/main` and fast-forwarded the clean QA worktree to `fc33d90fa577c336c27ed31c34efc79e160e14db`. No local source changes or other-workstream files were present.
+- qa_runtime: created a temporary QA-only Expo Go runtime from this fresh tree with process-only `EXPO_PUBLIC_DATA_SOURCE=supabase`, the public Supabase URL and publishable/anon key. No repository env/default, production setting, secret, or committed file was changed. Temporary dependencies were installed only under the disposable worktree and `.gitignore` was restored to its original content.
+- live_read_proof: after the user signed into the existing dedicated QA Auth account, the mobile app showed the live-source status and exactly one owned workspace (`My Workspace`) and exactly one X account (`@yumeyoasobi`). No production `@kabumori`/`@yume_daka` account or additional workspace was visible. Tenant membership isolation therefore passed at the UI/read path.
+- blocker: the live account card displayed `要確認` rather than `接続済み`. The client maps only `connection_status = 'connected'` or `'identity_verified'` to connected; the required identity-verified condition was therefore not proven by this runtime. This is a concrete live-source/account-status mismatch. No OAuth relink/retry was attempted and no token/Vault read was performed.
+- preview: **not executed**. OpenAI calls 0; X API/media/posts 0; scheduled_posts writes 0; publish_enabled changes 0; Vault/Storage writes 0. Because the required identity-verified QA account proof failed, the approved one-shot AI preview was not invoked.
+- verification: `npm run typecheck` PASS; `npm run lint` PASS; `git diff --check` PASS. These ran in the disposable worktree after dependency installation; package manifests and lockfiles are unchanged.
+- next_recommendation: C2 should perform a read-only diagnosis of why the QA account is returned with a non-connected status (without OAuth relink or mutation), then re-authorize the one preview only after `identity_verified` is proven. Do not select production accounts or invoke OpenAI from the current state.
+- safety_checks: no production DB/schema/RLS/RPC/Cron/settings mutation; no Edge deploy; no OAuth mutation; no X/OpenAI production call; no publish or scheduled-post side effect; no source code change; no secrets or credentials reported.
