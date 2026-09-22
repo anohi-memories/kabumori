@@ -1,10 +1,29 @@
+## H1 merge result — PR #7 freshened and merged (2026-09-22)
+
+- result: `review_required` — PR #7 is merged; stop for C1.
+- pre_freshen_main: `c2f18de8c609693b4255b710e3798c2df72dda95`
+- final_feature_head: `c50dd6ad238cda2750ba2222c7a1546e433c5562`
+- merge_commit / resulting_main: `b2fb397173c042d328ef87d02a0d8d993bef9fbb`
+- pull_request: https://github.com/anohi-memories/kabumori/pull/7 (merged and closed)
+- freshen: compared PR base to current main; the five approved implementation/test files had no competing main-side changes. Only the PR commit was rebased onto latest main, then verified and merged.
+- changed files remain exactly the five approved paths:
+  - `src/app/explore.tsx`
+  - `src/lib/stock-sections.ts`
+  - `src/lib/news-presentation.ts`
+  - `tests/app/stock-sections_test.ts`
+  - `tests/app/news-presentation_test.ts`
+- verification: 50 app tests passed; app-scope TypeScript passed; Expo web export passed with the Kabumori routes; `git diff --check` passed; approved files on final main match the freshened feature head.
+- H2/G1/G2 files untouched. Production mutation, migration, RPC, Edge Function deploy, Cron, secret/Vault, OAuth, X/Push, EAS, and App Store operation: 0.
+- known limitation: manual iOS/native QA remains outstanding; colors/icons visual polish remains deferred.
+- next_owner: `chatgpt`; perform C1 review only.
+
 # Codex Task
 
 - task_id: kabumori-mobile-holdings-watch-news-detail-merge-retry-20260922
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: PR #7 merge blockerを再判定した結果、最新mainのKabumori実装ファイルにはsemantic driftが無いことを確認したため、PR #7をlatest mainへfreshenして再検証し、mainへmergeする。
