@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 search diagnostics production rollout C1 PASS/done; H2 Phase13 ready; G1 idle; G2 done)
+- checked_at: 2026-09-22 JST (H1 done; H2 Phase13 bounded production repair explicitly authorized; G1 idle; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -23,10 +23,10 @@
   - Recommended next model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase13-production-preview-rollout-and-qa-20260921`
-  - OAuth reconnect status source fix C2 PASS。
-  - 次はproduction read-only preflight。migration apply / QA row repairは明示的なproduction mutation承認があるまで禁止。
-  - 承認後はbounded RPC migration + QA status repair → QA live runtimeでexactly one AI previewへ戻る。
-  - Recommended model: Luna。具体的なOAuth/DB/Vault矛盾時のみSol検討。
+  - User explicitly authorized the bounded production repair.
+  - Apply only reconnect-preserve migration + repair only QA connection_status if preconditions still pass.
+  - Then QA-only live runtimeで exactly one real AI preview。X投稿/media/publish enable/Cronは禁止。
+  - Recommended model: Luna。具体的なOAuth/DB/Vault/security blocker時のみSol検討。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
