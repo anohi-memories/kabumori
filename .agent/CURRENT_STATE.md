@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 PR6 merge C1 PASS/done; UI consistency, stock search, Portfolio V1, news dedup on main; H2 handled separately)
+- checked_at: 2026-09-22 JST (H1 holdings/watch split + important-news detail quality ready; visual color/icon polish deferred; H2 handled separately)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,13 +14,14 @@
 
 ## Active workstreams
 
-- Codex slot 1: `done` — `kabumori-mobile-ui-portfolio-news-merge-20260922`
-  - C1 PASS. PR #6 merged/closed at `bc492916`; merged main state verified.
-  - Main now includes shared core UI palette, integrated stock search, fifth `ポート` tab using stored close-report snapshot, and Important News duplicate suppression.
-  - Post-merge main drift is .agent control/report only; no Kabumori app implementation drift detected.
-  - Production/backend/EAS/App Store mutation 0.
-  - Remaining follow-up is real-device visual QA only.
-  - Recommended next model: Luna.
+- Codex slot 1: `ready` — `kabumori-mobile-holdings-watch-split-and-news-detail-quality-20260922`
+  - Real-device QA: 銘柄検索/Portfolio/UI統一は概ね改善。
+  - Next H1 separates registered holdings and watch items in the 銘柄 screen while preserving integrated search.
+  - Important News still has semantically shallow detail; next H1 first traces raw/stored/app-copy/verified presentation fields, then fixes the correct layer.
+  - Detail must add source-backed event context beyond 要点; generic market-impact filler and bare warning-only detail are not acceptable.
+  - Important-news producer changes, if needed, are source candidate only; no production deploy/mutation.
+  - Colors/icons/visual polish explicitly deferred to a later task.
+  - Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase15-conversational-proxy-ai-and-history-learning-candidate-20260922`
   - Phase14 C2 PASS後の次工程。
