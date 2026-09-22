@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 ready; H2 Phase13 blocked by OAuth begin status regression and rearmed for source fix; G1 idle; G2 done)
+- checked_at: 2026-09-22 JST (H1 review_required; H2 Phase13 blocked by OAuth begin status regression and rearmed for source fix; G1 idle; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,11 +14,10 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `important-news-phase1-search-diagnostics-production-rollout-20260922`
-  - Final C1 PASS candidate will be integrated onto fresh main, then exact telemetry migration + matching important-news-shadow Function deployed.
-  - No db push/history repair; no Cron/secret/search-policy/retry/fallback changes.
-  - After deploy, observe at least 3 natural scheduled shadow runs only; no manual replay/candidate injection.
-  - Recommended model: Luna; Sol only for a concrete migration/security conflict.
+- Codex slot 1: `review_required` — `important-news-phase1-search-diagnostics-production-rollout-20260922`
+  - Integrated at `f501fbb02714bd6d08bea2c321e406ed4b4d5e05`; exact diagnostics migration applied and matching `important-news-shadow` deployed v8.
+  - Three natural scheduled runs completed with non-NULL zero telemetry; no manual replay/candidate injection.
+  - Cron 38 and unrelated production objects unchanged. Stop for C1.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase13-production-preview-rollout-and-qa-20260921`
   - read-only diagnosisで、verified済みQA X accountが後続のOAuth beginにより `authorization_pending` へ降格するRPC bugを特定。
