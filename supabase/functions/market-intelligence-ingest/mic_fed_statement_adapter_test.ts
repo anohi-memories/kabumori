@@ -58,7 +58,18 @@ test("statement parser extracts meeting date, publication time, target range, an
 test("target-range parser handles decimal and unicode fraction forms", () => {
   assert.deepEqual(parseFedTargetRange("The target range for the federal funds rate is 3.75 to 4 percent."), { lower: 3.75, upper: 4 });
   assert.deepEqual(parseFedTargetRange("The target range for the federal funds rate is 3¾ to 4 percent."), { lower: 3.75, upper: 4 });
+  for (const dash of ["-", "‐", "‑", "‒", "–", "—", "−"]) {
+    assert.deepEqual(
+      parseFedTargetRange(`The target range for the federal funds rate is 3${dash}1/2 to 3${dash}3/4 percent.`),
+      { lower: 3.5, upper: 3.75 },
+    );
+  }
   assert.equal(parseFedTargetRange("The Committee maintained its balance sheet policy."), null);
+});
+
+test("March and April official-style mixed-fraction statements parse their target ranges", () => {
+  assert.deepEqual(parseFedTargetRange("The Committee decided to maintain the target range for the federal funds rate at 3‑1/2 to 3‑3/4 percent."), { lower: 3.5, upper: 3.75 });
+  assert.deepEqual(parseFedTargetRange("The Committee decided to maintain the target range for the federal funds rate at 3–1/2 to 3–3/4 percent."), { lower: 3.5, upper: 3.75 });
 });
 
 test("decision classification is deterministic for hike, cut, hold, mixed, and non-rate", () => {

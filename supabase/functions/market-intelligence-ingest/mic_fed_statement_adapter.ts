@@ -102,6 +102,10 @@ export function normalizeFedStatementHtml(html: string): string {
   return decodeHtml(text).replace(/\s+/g, " ").trim();
 }
 
+function normalizeFedDashFamily(value: string): string {
+  return value.replace(/[\u2010\u2011\u2012\u2013\u2014\u2212]/g, "-");
+}
+
 function parseMonthDate(month: string, day: string, year: string): string {
   const monthNumber = MONTHS[month.toLowerCase()];
   if (!monthNumber) throw new FedStatementAdapterError("FED_DATE_MISSING", `unknown month ${month}`);
@@ -145,7 +149,7 @@ export function parseFedPublishedAt(text: string, fallbackDate?: string): string
 }
 
 function parseFraction(value: string): number {
-  const normalized = value.trim().replace(/¾/g, "-3/4").replace(/½/g, "-1/2").replace(/¼/g, "-1/4");
+  const normalized = normalizeFedDashFamily(value.trim()).replace(/¾/g, "-3/4").replace(/½/g, "-1/2").replace(/¼/g, "-1/4");
   const mixed = normalized.match(/^(\d+(?:\.\d+)?)\s*(?:-|\s)\s*(\d+)\s*\/\s*(\d+)$/);
   if (mixed) return Number(mixed[1]) + Number(mixed[2]) / Number(mixed[3]);
   const number = Number(normalized.replace(/%$/, ""));
@@ -154,7 +158,8 @@ function parseFraction(value: string): number {
 }
 
 export function parseFedTargetRange(text: string): FedTargetRange | null {
-  const match = text.match(/target range for the federal funds rate[^.]{0,180}?\b(\d+(?:\.\d+)?(?:\s*[-–]\s*\d+\/\d+)?|\d+[¾½¼])\s*(?:to|–|-)\s*(\d+(?:\.\d+)?(?:\s*[-–]\s*\d+\/\d+)?|\d+[¾½¼])\s*percent/i);
+  const normalizedText = normalizeFedDashFamily(text);
+  const match = normalizedText.match(/target range for the federal funds rate[^.]{0,180}?\b(\d+(?:\.\d+)?(?:\s*-\s*\d+\/\d+)?|\d+[¾½¼])\s*(?:to|-)\s*(\d+(?:\.\d+)?(?:\s*-\s*\d+\/\d+)?|\d+[¾½¼])\s*percent/i);
   if (!match) return null;
   const lower = parseFraction(match[1]);
   const upper = parseFraction(match[2]);

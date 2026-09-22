@@ -190,7 +190,7 @@ async function readFedTargetRangeBefore(ctx: RestContext, meetingDate: string): 
 
 type FedStatementReference = FedStatementIdentity & { eventId: string; statementUrl: string };
 
-async function readPreviousFedStatementIdentities(ctx: RestContext): Promise<FedStatementReference[]> {
+async function readPreviousFedStatementIdentities(ctx: RestContext, allowedDuplicateEventIds: Set<string> = new Set()): Promise<FedStatementReference[]> {
   const url = `${ctx.supabaseUrl}/rest/v1/market_events?source_key=eq.fed&event_type=eq.central_bank_decision&select=id,raw_payload&order=published_at.desc&limit=50`;
   const result = await fetch(url, { headers: restHeaders(ctx.secretKey) });
   if (!result.ok) throw new Error(`FED_EVENT_LOOKUP_FAILED:${result.status}`);
@@ -205,7 +205,19 @@ async function readPreviousFedStatementIdentities(ctx: RestContext): Promise<Fed
       identities.push({ eventId, statementUrl, meetingDate, documentHash });
     }
   }
-  return identities;
+  const byMeeting = new Map<string, FedStatementReference[]>();
+  for (const identity of identities) byMeeting.set(identity.meetingDate, [...(byMeeting.get(identity.meetingDate) ?? []), identity]);
+  const resolved: FedStatementReference[] = [];
+  for (const [meetingDate, meetingIdentities] of byMeeting) {
+    if (meetingIdentities.length === 1) {
+      resolved.push(meetingIdentities[0]);
+      continue;
+    }
+    const remaining = meetingIdentities.filter((identity) => !allowedDuplicateEventIds.has(identity.eventId));
+    if (remaining.length !== 1) throw new Error(`FED_DUPLICATE_MEETING_EVENTS:${meetingDate}`);
+    resolved.push(remaining[0]);
+  }
+  return resolved;
 }
 
 // Per-source adapter dispatch. Each entry is responsible for its own
@@ -215,6 +227,7 @@ async function readPreviousFedStatementIdentities(ctx: RestContext): Promise<Fed
 type AdapterOptions = {
   historicalFedStatementUrls?: string[];
   historicalFredRange?: { observationStart: string; observationEnd: string };
+  allowedFedDuplicateEventIds?: Set<string>;
 };
 
 async function runAdapter(ctx: RestContext, sourceKey: SourceKeyWithFed, now: Date, options: AdapterOptions = {}): Promise<FetchResult> {
@@ -265,7 +278,7 @@ async function runAdapter(ctx: RestContext, sourceKey: SourceKeyWithFed, now: Da
       // The statement parser remains source-pure; prior event identity is
       // read here so the writer can label same-meeting document revisions.
       // A missing prior event is the normal new-meeting path.
-      const previousIdentities = await readPreviousFedStatementIdentities(ctx);
+      const previousIdentities = await readPreviousFedStatementIdentities(ctx, options.allowedFedDuplicateEventIds);
       if (options.historicalFedStatementUrls && options.historicalFedStatementUrls.length > 0) {
         const historicalEvents: MarketEventInput[] = [];
         const existingEventIds: Record<string, string> = {};
@@ -277,7 +290,6 @@ async function runAdapter(ctx: RestContext, sourceKey: SourceKeyWithFed, now: Da
           if (!previousRange) throw new Error(`FED_HISTORICAL_RANGE_MISSING:${statement.meetingDate}`);
           const existingIdentity = previousIdentities.find((identity) => identity.meetingDate === statement.meetingDate) ?? null;
           const identityOutcome = statementIdentityChanged(existingIdentity, statement);
-          if (identityOutcome === "duplicate") continue;
           historicalEvents.push(buildFedDecisionEvent(statement, previousRange, identityOutcome === "revision"));
           if (existingIdentity) existingEventIds[statement.meetingDate] = existingIdentity.eventId;
         }
@@ -310,7 +322,7 @@ async function runAdapter(ctx: RestContext, sourceKey: SourceKeyWithFed, now: Da
           targetRange: parsed.targetRange,
         };
       }
-      const fedExistingEventIds = identityOutcome === "revision" && sameMeetingIdentity
+      const fedExistingEventIds = sameMeetingIdentity
         ? { [statement.meetingDate]: sameMeetingIdentity.eventId }
         : undefined;
       return { kind: "events", events, fedStatement: statement, previousFedStatement, fedExistingEventIds };
@@ -471,6 +483,7 @@ Deno.serve(async (req) => {
     sources?: unknown;
     historicalFedStatementUrls?: unknown;
     historicalFredRange?: unknown;
+    allowedFedDuplicateEventIds?: unknown;
   };
   const triggerType: "manual" | "scheduled" = requestBody.trigger === "scheduled" ? "scheduled" : "manual";
   const requestedSources = Array.isArray(requestBody.sources)
@@ -490,6 +503,9 @@ Deno.serve(async (req) => {
       /^\d{4}-\d{2}-\d{2}$/.test(historicalFredRange.observationStart) &&
       /^\d{4}-\d{2}-\d{2}$/.test(historicalFredRange.observationEnd)
     ? { observationStart: historicalFredRange.observationStart, observationEnd: historicalFredRange.observationEnd }
+    : undefined;
+  const allowedFedDuplicateEventIds = Array.isArray(requestBody.allowedFedDuplicateEventIds)
+    ? new Set(requestBody.allowedFedDuplicateEventIds.filter((id): id is string => typeof id === "string"))
     : undefined;
 
   // Best-effort; must never block the run below even if it fails.
@@ -518,6 +534,7 @@ Deno.serve(async (req) => {
     results.push(await runSource(ctx, sourceKey, triggerType, now, {
       historicalFedStatementUrls: sourceKey === FED_STATEMENT_SOURCE_KEY ? historicalFedStatementUrls : undefined,
       historicalFredRange: sourceKey === FRED_SOURCE_KEY ? parsedHistoricalFredRange : undefined,
+      allowedFedDuplicateEventIds: sourceKey === FED_STATEMENT_SOURCE_KEY ? allowedFedDuplicateEventIds : undefined,
     }));
   }
 
