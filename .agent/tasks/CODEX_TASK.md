@@ -3,7 +3,7 @@
 - task_id: kabumori-mobile-home-dashboard-v1-20260922
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
@@ -341,3 +341,34 @@ This means the new Home can show implementation-level backend text directly to e
 - Tests: dashboard 4/4, app-scope TypeScript, Expo web export, and diff-check passed.
 - Production mutation = 0; no backend, social-mobile, H2, G1, or G2 changes.
 - status: `review_required`; next_owner: `chatgpt`; stop for C1.
+
+
+## Final C1 review — 2026-09-22
+
+**PASS — prior Home error-copy blocker is resolved.**
+
+Reviewed PR #5 head:
+- branch: `codex/kabumori-mobile-home-dashboard-v1-20260922`
+- head: `7ff16dcb16117cd2c530fbfdf0e7da8c4788b5e8`
+
+Accepted:
+- Home no longer renders arbitrary backend `Error.message` values.
+- Stocks/news/reports failures map to fixed Japanese user-facing copy via `dashboardSectionError()`.
+- Retry UI and section-level `Promise.allSettled` isolation are preserved.
+- Search remains at `/search`; root remains Home; native/web tab label remains `ホーム`.
+- No realtime price/valuation/P&L/index data is fabricated.
+- PR scope remains limited to the 6 expected app/test files.
+- Dashboard tests now 4/4 and include an assertion that arbitrary backend detail is not used as visible copy.
+- App-scope TypeScript, Expo web export, and diff-check are reported PASS.
+- Production/backend mutation = 0; H2/G1/G2 implementation files untouched.
+
+Freshness check:
+- The branch is currently behind main by 9 commits, but the intervening main-side diff is limited to `.agent` control/report files only; none of the six implementation/test files overlap.
+- Therefore no implementation conflict is present. Rebase/freshen before merge is still required so control-history is not dragged in or lost.
+
+C1 judgment:
+- Home/Dashboard V1 candidate is approved.
+- PR #5 may proceed to a clean fresh-main merge after a final no-conflict check.
+- No backend deploy/migration is part of this task.
+
+**Recommended model for merge/freshen: Luna.**
