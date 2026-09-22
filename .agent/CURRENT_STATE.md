@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 done; H2 Phase13 bounded production repair explicitly authorized; G1 idle; G2 done)
+- checked_at: 2026-09-22 JST (H1 Kabumori mobile Home dashboard V1 ready; H2 handled in separate chat; G1 idle; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,13 +14,13 @@
 
 ## Active workstreams
 
-- Codex slot 1: `done` — `important-news-phase1-search-diagnostics-production-rollout-20260922`
-  - C1 PASS. Approved diagnostics implementation is on main at integration merge `f501fbb02714bd6d08bea2c321e406ed4b4d5e05`.
-  - Exact diagnostics migration applied; matching `important-news-shadow` deployed v8 with `verify_jwt=false` preserved.
-  - Three natural scheduled runs completed with non-NULL zero diagnostics; no manual invoke/replay/candidate injection.
-  - Cron 38 and unrelated production objects unchanged; no rollback required.
-  - PR #3 is superseded by the actual merged integration and must not be merged again.
-  - Recommended next model: Luna.
+- Codex slot 1: `ready` — `kabumori-mobile-home-dashboard-v1-20260922`
+  - API-cost workstream is now passive natural observation only.
+  - New focus is Kabumori app UI/UX: replace current Search-first index with Home/Dashboard V1.
+  - Reuse existing tracked_stocks, important-news feed, and personalized reports; no realtime price/P&L fabrication.
+  - Preserve Search as a separate route and change the bottom-tab label to Home.
+  - Backend production mutation 0; social-mobile/H2 is out of scope because another chat owns it.
+  - Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase13-production-preview-rollout-and-qa-20260921`
   - User explicitly authorized the bounded production repair.
