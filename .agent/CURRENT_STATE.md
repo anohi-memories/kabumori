@@ -23,11 +23,11 @@
   - Production rollout remains a later Sol checkpoint.
   - Recommended model: Luna.
 
-- Codex slot 2: `done` — `social-mobile-app-phase17-disposable-vault-token-boundary-proof-20260922`
-  - C2 PASS。fake-only disposable PostgreSQLでowner/account/access-token binding、cross-tenant/forged-ref fail-closed、ACL/search_path、cleanupを実証。
-  - production mutation 0。実Supabase Vault拡張そのものは未使用なので、次はproduction-shaped access-only internal reader設計/読取preflightが必要。
-  - production deploy / real X history / persona persistence / live publish は別TASK。
-  - Recommended next model: Luna。
+- Codex slot 2: `ready` — `social-mobile-app-phase18-production-shaped-access-token-reader-preflight-20260922`
+  - Phase17 C2 PASS後の次工程。
+  - production-shaped access-only token reader source candidate + production read-only metadata preflightを行う。
+  - secret plaintext読取 / production migration・RPC・deploy / real X history はまだ禁止。
+  - Recommended model: Luna。実Vault ACL/SECURITY DEFINER semanticsの具体的blocker時のみSol検討。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
