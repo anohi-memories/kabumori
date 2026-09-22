@@ -22,11 +22,11 @@
   - Remaining follow-up is real-device visual QA only.
   - Recommended next model: Luna.
 
-- Codex slot 2: `ready` — `social-mobile-app-phase14-persistent-content-settings-candidate-20260922`
-  - C2 PASS for source candidate。
-  - 次は disposable DB でmigration/RLS/ACL/tenant isolationを実apply証明する。
-  - production migration/settings/X/OpenAI/Cron/publishはまだ禁止。
-  - Recommended model: Luna。DB/RLSの具体的blocker時のみSol検討。
+- Codex slot 2: `done` — `social-mobile-app-phase14-persistent-content-settings-candidate-20260922`
+  - C2 PASS。source candidate + disposable DB proofまで完了。
+  - migration/RLS/ACL/tenant isolation/default validation/cleanup proof PASS。
+  - production mutation 0。production rollout・会話永続化・X過去投稿分析・live publishは次の新TASK。
+  - Recommended next model: Luna。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
