@@ -23,6 +23,8 @@ import {
 } from "./mic_frankfurter_fx_adapter.ts";
 import {
   FRED_SOURCE_KEY,
+  FRED_SERIES_MAPPINGS,
+  fetchFredHistoricalMetrics,
   fetchFredMetrics,
 } from "./mic_fred_adapter.ts";
 import {
@@ -210,13 +212,30 @@ async function readPreviousFedStatementIdentities(ctx: RestContext): Promise<Fed
 // secret lookup so a missing secret produces a per-source SECRET_MISSING
 // result (failure isolation) instead of crashing the whole invocation --
 // same principle as official_source_fetchers.ts's runNewsSourceProviders.
-type AdapterOptions = { historicalFedStatementUrls?: string[] };
+type AdapterOptions = {
+  historicalFedStatementUrls?: string[];
+  historicalFredRange?: { observationStart: string; observationEnd: string };
+};
 
 async function runAdapter(ctx: RestContext, sourceKey: SourceKeyWithFed, now: Date, options: AdapterOptions = {}): Promise<FetchResult> {
   switch (sourceKey) {
     case FRED_SOURCE_KEY: {
       const apiKey = Deno.env.get("FRED_API_KEY");
       if (!apiKey) throw new Error("SECRET_MISSING:FRED_API_KEY");
+      if (options.historicalFredRange) {
+        return {
+          kind: "metrics",
+          metrics: await fetchFredHistoricalMetrics({
+            apiKey,
+            observationStart: options.historicalFredRange.observationStart,
+            observationEnd: options.historicalFredRange.observationEnd,
+            mappings: FRED_SERIES_MAPPINGS.filter((mapping) =>
+              mapping.metricKey === "FED_FUNDS_TARGET_LOWER" || mapping.metricKey === "FED_FUNDS_TARGET_UPPER"
+            ),
+            fetchedAt: now,
+          }),
+        };
+      }
       return { kind: "metrics", metrics: await fetchFredMetrics({ apiKey, fetchedAt: now }) };
     }
     case MOF_SOURCE_KEY: {
@@ -447,7 +466,12 @@ Deno.serve(async (req) => {
   if (!supabaseUrl || !secretKey) return response({ error: "SERVER_CONFIGURATION_MISSING" }, 500);
   const ctx: RestContext = { supabaseUrl, secretKey };
 
-  const requestBody = await req.json().catch(() => ({})) as { trigger?: unknown; sources?: unknown; historicalFedStatementUrls?: unknown };
+  const requestBody = await req.json().catch(() => ({})) as {
+    trigger?: unknown;
+    sources?: unknown;
+    historicalFedStatementUrls?: unknown;
+    historicalFredRange?: unknown;
+  };
   const triggerType: "manual" | "scheduled" = requestBody.trigger === "scheduled" ? "scheduled" : "manual";
   const requestedSources = Array.isArray(requestBody.sources)
     ? requestBody.sources.filter((s): s is SourceKeyWithFed =>
@@ -456,6 +480,16 @@ Deno.serve(async (req) => {
     : null;
   const historicalFedStatementUrls = Array.isArray(requestBody.historicalFedStatementUrls)
     ? requestBody.historicalFedStatementUrls.filter((url): url is string => typeof url === "string")
+    : undefined;
+  const historicalFredRange = typeof requestBody.historicalFredRange === "object" && requestBody.historicalFredRange !== null
+    ? requestBody.historicalFredRange as Record<string, unknown>
+    : undefined;
+  const parsedHistoricalFredRange = historicalFredRange &&
+      typeof historicalFredRange.observationStart === "string" &&
+      typeof historicalFredRange.observationEnd === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(historicalFredRange.observationStart) &&
+      /^\d{4}-\d{2}-\d{2}$/.test(historicalFredRange.observationEnd)
+    ? { observationStart: historicalFredRange.observationStart, observationEnd: historicalFredRange.observationEnd }
     : undefined;
 
   // Best-effort; must never block the run below even if it fails.
@@ -483,6 +517,7 @@ Deno.serve(async (req) => {
   for (const sourceKey of sourceKeys) {
     results.push(await runSource(ctx, sourceKey, triggerType, now, {
       historicalFedStatementUrls: sourceKey === FED_STATEMENT_SOURCE_KEY ? historicalFedStatementUrls : undefined,
+      historicalFredRange: sourceKey === FRED_SOURCE_KEY ? parsedHistoricalFredRange : undefined,
     }));
   }
 

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildFredObservationsUrl,
+  buildFredHistoricalObservationsUrl,
   FredAdapterError,
+  fetchFredHistoricalMetrics,
   fetchFredMetrics,
   FRED_SERIES_MAPPINGS,
   latestValidFredObservation,
@@ -10,6 +12,46 @@ import {
   parseFredObservations,
   validateFredObservationDate,
 } from "./mic_fred_adapter.ts";
+
+test("buildFredHistoricalObservationsUrl requests a bounded ascending history", () => {
+  const url = new URL(buildFredHistoricalObservationsUrl("DFEDTARL", "test-key", "2026-01-01", "2026-09-16"));
+  assert.equal(url.searchParams.get("observation_start"), "2026-01-01");
+  assert.equal(url.searchParams.get("observation_end"), "2026-09-16");
+  assert.equal(url.searchParams.get("sort_order"), "asc");
+  assert.equal(url.searchParams.get("limit"), "100000");
+});
+
+test("fetchFredHistoricalMetrics stores both target bounds for every valid historical date and skips missing markers", async () => {
+  const fetchImpl = (url: string | URL) => {
+    const seriesId = new URL(String(url)).searchParams.get("series_id");
+    const observations = seriesId === "DFEDTARL"
+      ? [{ date: "2026-03-17", value: "3.50" }, { date: "2026-03-18", value: "3.75" }, { date: "2026-03-19", value: "3.75" }]
+      : [{ date: "2026-03-17", value: "3.75" }, { date: "2026-03-18", value: "." }, { date: "2026-03-19", value: "4.00" }];
+    return Promise.resolve(new Response(JSON.stringify({ observations }), { status: 200 }));
+  };
+  const metrics = await fetchFredHistoricalMetrics({
+    apiKey: "k",
+    observationStart: "2026-01-01",
+    observationEnd: "2026-09-16",
+    fetchedAt: new Date("2026-09-22T00:00:00.000Z"),
+  }, fetchImpl as typeof fetch);
+  assert.equal(metrics.length, 5);
+  assert.deepEqual(metrics.filter((m) => m.metricKey === "FED_FUNDS_TARGET_LOWER").map((m) => [m.observedDate, m.value]), [["2026-03-17", 3.5], ["2026-03-18", 3.75], ["2026-03-19", 3.75]]);
+  assert.deepEqual(metrics.filter((m) => m.metricKey === "FED_FUNDS_TARGET_UPPER").map((m) => [m.observedDate, m.value]), [["2026-03-17", 3.75], ["2026-03-19", 4]]);
+  assert.ok(metrics.every((m) => m.observedAt === null && m.timePrecision === "date"));
+});
+
+test("fetchFredHistoricalMetrics fails closed when one bound has no history", async () => {
+  const fetchImpl = (url: string | URL) => {
+    const seriesId = new URL(String(url)).searchParams.get("series_id");
+    const observations = seriesId === "DFEDTARL" ? [{ date: "2026-07-29", value: "3.50" }] : [{ date: "2026-07-29", value: "." }];
+    return Promise.resolve(new Response(JSON.stringify({ observations }), { status: 200 }));
+  };
+  await assert.rejects(
+    () => fetchFredHistoricalMetrics({ apiKey: "k", observationStart: "2026-01-01", observationEnd: "2026-09-16" }, fetchImpl as typeof fetch),
+    /FRED_NO_VALID_OBSERVATION/,
+  );
+});
 
 test("buildFredObservationsUrl shapes the documented query params", () => {
   const url = new URL(buildFredObservationsUrl("DGS10", "test-key", 3));

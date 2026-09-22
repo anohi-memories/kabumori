@@ -244,6 +244,20 @@ export function buildFredObservationsUrl(seriesId: string, apiKey: string, limit
   return url.toString();
 }
 
+export function buildFredHistoricalObservationsUrl(
+  seriesId: string,
+  apiKey: string,
+  observationStart: string,
+  observationEnd: string,
+  units?: string,
+): string {
+  const url = new URL(buildFredObservationsUrl(seriesId, apiKey, 100_000, units));
+  url.searchParams.set("sort_order", "asc");
+  url.searchParams.set("observation_start", observationStart);
+  url.searchParams.set("observation_end", observationEnd);
+  return url.toString();
+}
+
 type FredObservation = { date: string; value: string };
 
 export function parseFredObservations(payload: unknown): FredObservation[] {
@@ -359,5 +373,47 @@ export async function fetchFredMetrics(
     results.push(normalizeFredObservation(mapping, latest, fetchedAt));
   }
 
+  return results;
+}
+
+export type FetchFredHistoricalMetricsParams = {
+  apiKey: string;
+  observationStart: string;
+  observationEnd: string;
+  mappings?: FredSeriesMapping[];
+  fetchedAt?: Date;
+  timeoutMs?: number;
+};
+
+export async function fetchFredHistoricalMetrics(
+  params: FetchFredHistoricalMetricsParams,
+  fetchImpl: typeof fetch = fetch,
+): Promise<NormalizedMarketMetric[]> {
+  const mappings = params.mappings ?? FRED_SERIES_MAPPINGS.filter((mapping) =>
+    mapping.metricKey === "FED_FUNDS_TARGET_LOWER" || mapping.metricKey === "FED_FUNDS_TARGET_UPPER"
+  );
+  const fetchedAt = params.fetchedAt ?? new Date();
+  const results: NormalizedMarketMetric[] = [];
+  for (const mapping of mappings) {
+    const url = buildFredHistoricalObservationsUrl(mapping.seriesId, params.apiKey, params.observationStart, params.observationEnd, mapping.units);
+    let response: Response;
+    try {
+      response = await fetchImpl(url, { signal: AbortSignal.timeout(params.timeoutMs ?? 15_000) });
+    } catch (error) {
+      throw new FredAdapterError("FRED_FETCH_FAILED", `${mapping.seriesId}: ${String(error)}`);
+    }
+    if (!response.ok) throw new FredAdapterError("FRED_HTTP_ERROR", `${mapping.seriesId}: status=${response.status}`);
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      throw new FredAdapterError("FRED_MALFORMED_RESPONSE", `${mapping.seriesId}: invalid JSON`);
+    }
+    const observations = parseFredObservations(payload).filter((observation) => observation.value !== ".");
+    if (observations.length === 0) {
+      throw new FredAdapterError("FRED_NO_VALID_OBSERVATION", `${mapping.seriesId}: no non-missing observations in requested range`);
+    }
+    for (const observation of observations) results.push(normalizeFredObservation(mapping, observation, fetchedAt));
+  }
   return results;
 }
