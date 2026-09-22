@@ -15,11 +15,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: kabumori-mobile-ui-portfolio-news-merge-20260922
+- task_id: kabumori-mobile-holdings-watch-split-and-news-detail-quality-20260922
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: PR #6 was freshened onto latest main and merged as `bc492916`; approved 22-file Kabumori app change, 45 tests/typecheck/export passed, backend production mutation 0. C1 verification required.
+- note: PR #7 implements separate 保有/監視 sections and evidence-based Important News detail partitioning. Final commit `0225efc6`; 50 tests/typecheck/export passed; production mutation 0. Colors/icons deferred. C1 review required.
 
 ### Codex slot 2
 - owner: codex
