@@ -1681,3 +1681,41 @@ Candidate awaits C1 review. Stop before any Edge Function deploy; a separate exp
 ## Next recommendation
 
 `C1` で本報告と実装branchをレビューする。次回の自然投稿でpublish到達を確認し、旧9/13 failed rowは人工再実行しない。
+## Latest H1 result — Important News producer V2 + Portfolio freshness candidate (2026-09-22)
+
+- task_id: `kabumori-important-news-producer-detail-and-portfolio-freshness-diagnosis-20260922`
+- result: `review_required` — implementation candidate pushed; stop for C1. Production mutation = 0.
+- source base: fresh `origin/main` `cb2536840105f1dc44bbb2e3f7757aa26b7fb8a6` (controls were synced from fresh `origin/main` `420dcb5` after the concurrent main update).
+- branch/commit: `codex/kabumori-important-news-producer-detail-portfolio-20260922` / `bc5082c`; review branch: https://github.com/anohi-memories/kabumori/tree/codex/kabumori-important-news-producer-detail-portfolio-20260922
+
+### Important News producer path and root cause
+
+- Current path is `generate_ready` in `supabase/functions/important-news-monitor/index.ts` → service-role `important_news_app_copy_targets` → candidate row select/claim → `needsAppCopy` → one `generateAppCopy` draft call → local checks → one Fact call → `appCopyUpdate` (app_* columns only). No display-time AI, X text, publish, or push fields are written by this path.
+- Read-only production evidence: North Korea `09f609d1-f0f0-48e1-9873-eadcb6d3e5e3` and UN/Houthi `e5469402-ea43-4bae-b803-1df328dcfc4c` are published with `generation_fact_status=passed`, body summaries of 283/234 characters, and all app_* fields NULL. Hormuz tanker `1cbcb1ce-0dd8-43a8-a537-3c3fc5e22887` has a 244-character source, `generation_fact_status=passed`, `status=generation_failed`, and app_* NULL.
+- Shallow detail root cause is producer selection, not missing UI AI: the original selector excluded rows with Fact-passed `generated_text`, and `needsAppCopy` skipped them again. Consequently richer English `body_summary` facts never reached the app-copy producer.
+
+### Candidate changes
+
+- `app_copy_logic.ts`: explicit `sourceBackedCopy` exception for English-title rows, 1–2 sentence lead, 2–4 distinct key points when supported, additional source-backed detail paragraphs, and a separate market-relevance boundary. A one-item key-point payload now fails closed.
+- `index.ts`: only opts into the exception when cleaned stored source text is at least 160 characters; thin sources stay on the verified-post path and are not padded.
+- `20260922110000_important_news_app_copy_v2_source_backed_candidates.sql`: review-only `important_news_app_copy_targets` replacement after the Phase 5 wrapper. It adds company/market/all_useful source candidates without removing feed Fact guards and keeps service-role execution only. It is not applied.
+- Fixtures cover Hormuz (two injuries, vessel continued, no closure), North Korea (450–600km and EEZ assessment), UN/Houthi (Riyadh attempt and displacement over 130,000), and a genuinely thin source. All source-backed fixtures passed and retained the additional facts in `detail_ja`; thin source failed closed with `APP_COPY_INSUFFICIENT_INFORMATION`.
+
+### Portfolio freshness validator
+
+- The validator is `supabase/functions/personalized-reports/report_logic.ts::latinWords`. Its original `/[A-Za-zＡ-Ｚａ-ｚ]{3,}/g` intentionally includes full-width Latin, so `ＵＦＪ` became `CONTAINS_LATIN_WORD:ＵＦＪ`.
+- Production read-only row `b23f00d1-b735-4077-b1df-ee975d2fa470` (2026-09-18 close) has valid `price_basis_date=2026-09-18` but `status=failed`, `fact_status=pending`, and that local-check issue. The 2026-09-17 close is completed and Fact-passed, explaining the stale app display.
+- Candidate fix allows only full-width Latin runs adjacent to Japanese script (e.g. `三菱ＵＦＪフィナンシャル・グループ`); ASCII acronyms are not added to the whitelist. Tests prove the Japanese proper name passes, ordinary English prose fails, and `UFJ銀行` remains blocked.
+
+### 9/18 handling and architecture
+
+- No manual regeneration/backfill was performed. After the validator fix is approved/deployed, the 9/18 close would require a one-time safe regeneration to produce a completed narrative; the valid snapshot itself is already present.
+- Snapshot/narrative decoupling is not recommended in this H1. A separate freshness presentation would require product/RPC/schema semantics and may overlap G1 market-report ownership; it is documented for C1 rather than changed.
+
+### Verification
+
+- Targeted app-copy/report tests: **37 passed / 0 failed**.
+- Important-news static suite: **19 passed / 0 failed**; full `important-news-monitor/*_test.ts`: **420 passed / 1 failed**. The sole failure is the existing cost audit fixed expectation (`expected 27377`, observed `27600`), unrelated to changed files.
+- `deno check` passed for `app_copy_logic.ts` and `personalized-reports/report_logic.ts`. Full `index.ts` check is blocked by the pre-existing `_shared/x_oauth2_post.ts` `Uint8Array<ArrayBufferLike>` vs `BufferSource` error; no new changed-file error was observed.
+- `git diff --check` passed. No Expo/app presentation files were touched, so no app TypeScript test was required.
+- No migration apply, production DB write, RPC/RLS change, Edge deploy, Cron, secret/Vault/provider change, X/Push action, or report regeneration occurred.

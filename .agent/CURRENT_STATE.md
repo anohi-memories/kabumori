@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 news producer detail + Portfolio freshness diagnosis ready; production mutation 0; visual polish deferred)
+- checked_at: 2026-09-22 JST (H1 source-backed news producer + Portfolio freshness candidate review_required; production mutation 0)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,11 +14,11 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `kabumori-important-news-producer-detail-and-portfolio-freshness-diagnosis-20260922`
+- Codex slot 1: `review_required` — `kabumori-important-news-producer-detail-and-portfolio-freshness-diagnosis-20260922`
   - Real-device QA still finds Important News 詳しい内容 too shallow; app-only partitioning is insufficient when richer source facts exist only outside verified Japanese text.
-  - Next H1 builds an Important News producer/app-copy detail candidate with source-backed additional event facts and no display-time AI.
+  - H1 pushed an Important News producer/app-copy V2 candidate with source-backed additional event facts and no display-time AI; C1 review is required.
   - Portfolio freshness root cause is confirmed in production: 9/18 close snapshot exists with 9/18 prices, but the report failed local validation on `CONTAINS_LATIN_WORD:ＵＦＪ`; 9/17 is the latest completed Fact-passed close report.
-  - H1 must diagnose/fix the validator narrowly in source/tests if no G1 ownership conflict exists; no production backfill/deploy/mutation.
+  - Validator candidate is narrowly scoped and has no active G1 file conflict; no production backfill/deploy/mutation occurred.
   - 9/18 is the latest cash-market trading day at this time; 9/21–23 are JPX cash-market holidays.
   - Production mutation 0. Visual colors/icons remain deferred.
   - Recommended model: Luna.
@@ -40,7 +40,7 @@
 
 ## Parallel safety
 
-- H1 holdings/watch + news detail candidate is review_required; production mutation 0; no producer deploy/migration/RPC.
+- H1 source-backed news producer + Portfolio validator candidate is review_required; production mutation 0; no producer deploy/migration/RPC.
 - H2/G1/G2 implementation files are untouched by this H1.
 - 同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数slotで同時変更しない。
 - push前にfresh `origin/main`確認。既存未コミット変更は他workstream所有として触らない。

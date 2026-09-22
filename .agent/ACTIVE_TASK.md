@@ -6,11 +6,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: kabumori-mobile-holdings-watch-news-detail-merge-retry-20260922
+- task_id: kabumori-important-news-producer-detail-and-portfolio-freshness-diagnosis-20260922
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: PR #7 was freshened onto latest main and merged as `b2fb3971`; 50 tests/typecheck/export passed; production mutation 0. C1 review required.
+- note: Source-backed Important News app-copy V2 and narrow Portfolio full-width-name validator candidate are pushed for C1; production mutation 0; no deploy or migration apply.
 
 
 ### Codex slot 2

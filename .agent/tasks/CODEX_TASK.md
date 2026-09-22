@@ -3,8 +3,8 @@
 - task_id: kabumori-important-news-producer-detail-and-portfolio-freshness-diagnosis-20260922
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: 実機QAで残った2件を正しい層で解消するため、Important Newsの詳細生成をproducer側まで改善し、Portfolioが9/17終値を表示する原因をproduction read-onlyで特定・修正候補化する。production mutationは禁止。
