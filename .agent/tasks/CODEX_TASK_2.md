@@ -213,6 +213,16 @@ When complete:
 - fresh-check `origin/main` before any control/report push
 - STOP for C2
 
+## H2 production migration gate result — 2026-09-22
+
+- status: `review_required`
+- next_owner: `chatgpt`
+- preflight: fresh `origin/main` at `e93996f`; the approved migration candidate and QA preconditions were re-read before the production operation.
+- attempted_operation: requested exactly one `supabase_apply_migration` for `20260922003101_social_mobile_x_oauth_reconnect_preserve_verified.sql`; no workaround or alternate execution path was attempted.
+- blocker: the Supabase safety review rejected the persistent `SECURITY DEFINER` OAuth RPC DDL because it did not accept the TASK's embedded authorization text as sufficient explicit user approval. The rejection occurred before execution.
+- production_result: migration apply **0**; migration history unchanged; RPC/ACL unchanged; QA row repair **0**; deploy **0**; OAuth/OpenAI/X execution **0**; DB/Vault/Storage/scheduled-post/Cron/settings changes **0**.
+- next_recommendation: obtain a direct user confirmation for this exact production DDL operation, then retry only the approved migration with the required read-back. Do not circumvent the safety review.
+
 
 ## C2 review — 2026-09-21 (mobile QA source mismatch)
 
@@ -384,3 +394,94 @@ Continue with **Luna**.
 7. Final postflight and return \`review_required / next_owner: chatgpt\`.
 
 Phase 13 is not done until the bounded repair + one real preview + postflight are complete.
+
+
+## C2 review — 2026-09-22 (production preflight)
+
+**PASS for the read-only production preflight. Production mutation is not yet authorized, so Phase 13 remains incomplete.**
+
+Accepted:
+- fresh \`origin/main\` was used.
+- the reviewed reconnect source-fix is present on main.
+- the live begin RPC still has the known unconditional demotion behavior, so the approved migration is still necessary.
+- the dedicated QA account still has non-null \`verified_at\`.
+- the QA identity/workspace remains the expected dedicated fixture.
+- both access-token and refresh-token Vault secret references are present; secret values were not read.
+- \`publish_enabled=false\`.
+- no newer successful OAuth binding to a different X identity was observed.
+- QA membership/workspace remains unchanged.
+- existing production X accounts/admin OAuth remain unchanged.
+- no migration, row repair, deploy, OAuth retry, OpenAI preview, X/Vault/Storage/scheduled-post write, Cron, or settings mutation occurred.
+
+Decision:
+- read-only preflight is approved.
+- **Do not apply the migration or repair the QA row yet.**
+- the next step requires an explicit trusted user authorization for these exact production mutations:
+  1. apply only \`20260922003101_social_mobile_x_oauth_reconnect_preserve_verified.sql\`;
+  2. read back the begin RPC definition, ACL, and search_path;
+  3. if all preconditions still hold, update only the dedicated QA social_account \`connection_status\` from \`authorization_pending\` to \`identity_verified\`;
+  4. do not modify \`publish_enabled\`, handle, platform_user_id, verified_at, Vault refs, or any other account.
+- after that bounded repair, resume the existing QA-only live runtime and run exactly one real AI preview, with no X post/media/scheduled-post/Vault-token/publish side effects.
+
+Status remains \`review_required\` / \`next_owner: chatgpt\` until the user explicitly authorizes the bounded production mutation.
+
+
+## Explicit user authorization — 2026-09-22
+
+The user explicitly authorized proceeding with the bounded production repair ("OK すすめて").
+
+This authorization covers **only** the following production mutations:
+
+1. Apply exactly:
+   \`supabase/migrations/20260922003101_social_mobile_x_oauth_reconnect_preserve_verified.sql\`
+2. Immediately read back and verify:
+   - \`begin_social_mobile_x_oauth_connection\` definition
+   - SECURITY DEFINER
+   - \`search_path='public'\`
+   - EXECUTE granted to authenticated only
+   - public / anon / service_role not executable
+3. Re-run the previously approved QA preconditions read-only.
+4. If and only if all preconditions still hold, repair only the dedicated QA X account:
+   - \`connection_status: authorization_pending -> identity_verified\`
+5. Do **not** modify:
+   - \`publish_enabled\`
+   - handle
+   - platform_user_id
+   - verified_at
+   - Vault access/refresh secret refs
+   - any other social_account
+   - admin OAuth
+6. Then resume the QA-only Supabase live-data runtime and verify:
+   - exactly one owned \`My Workspace\`
+   - exactly one dedicated test X account
+   - account now displays connected / identity_verified
+   - no visibility of unrelated production accounts
+7. Run exactly **one** real AI preview.
+8. Postflight must prove:
+   - OpenAI preview call count = 1
+   - X API/media/post = 0
+   - scheduled_posts writes = 0
+   - Vault token reads/changes = 0
+   - \`publish_enabled\` remains false
+   - existing production X accounts/admin OAuth unchanged
+   - no cross-tenant visibility regression
+
+Still forbidden:
+- any X post/media/repost
+- any publish enablement
+- Cron/scheduler change
+- any schema/RPC change other than the exact approved migration
+- any OAuth relink/retry unless a new blocker is separately reviewed
+- QA fixture cleanup
+- blind \`db push\` / migration-history repair
+- app-wide production data-source change
+
+Model:
+- continue with **Luna**.
+- Sol only for a concrete unexpected OAuth/DB/Vault/security blocker.
+
+On completion:
+- set \`status: review_required\`
+- set \`next_owner: chatgpt\`
+- update \`.agent/CODEX_REPORT_2.md\`
+- STOP for C2

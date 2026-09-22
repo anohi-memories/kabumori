@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 search diagnostics production rollout C1 PASS/done; H2 Phase13 ready; G1 idle; G2 done)
+- checked_at: 2026-09-22 JST (H1 Kabumori mobile Home dashboard V1 review_required; H2 handled in separate chat; G1 idle; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,19 +14,16 @@
 
 ## Active workstreams
 
-- Codex slot 1: `done` — `important-news-phase1-search-diagnostics-production-rollout-20260922`
-  - C1 PASS. Approved diagnostics implementation is on main at integration merge `f501fbb02714bd6d08bea2c321e406ed4b4d5e05`.
-  - Exact diagnostics migration applied; matching `important-news-shadow` deployed v8 with `verify_jwt=false` preserved.
-  - Three natural scheduled runs completed with non-NULL zero diagnostics; no manual invoke/replay/candidate injection.
-  - Cron 38 and unrelated production objects unchanged; no rollback required.
-  - PR #3 is superseded by the actual merged integration and must not be merged again.
-  - Recommended next model: Luna.
+- Codex slot 1: `review_required` — `kabumori-mobile-home-dashboard-v1-20260922`
+  - PR #5 implements Home/Dashboard V1; Search is preserved at `/search` and the bottom-tab label is ホーム.
+  - Existing tracked_stocks, important-news, and report reads are reused; no realtime price/P&L fabrication.
+  - Backend production mutation 0; H2/social-mobile remains out of scope. Stop for C1.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase13-production-preview-rollout-and-qa-20260921`
-  - OAuth reconnect status source fix C2 PASS。
-  - 次はproduction read-only preflight。migration apply / QA row repairは明示的なproduction mutation承認があるまで禁止。
-  - 承認後はbounded RPC migration + QA status repair → QA live runtimeでexactly one AI previewへ戻る。
-  - Recommended model: Luna。具体的なOAuth/DB/Vault矛盾時のみSol検討。
+  - User explicitly authorized the bounded production repair.
+  - Apply only reconnect-preserve migration + repair only QA connection_status if preconditions still pass.
+  - Then QA-only live runtimeで exactly one real AI preview。X投稿/media/publish enable/Cronは禁止。
+  - Recommended model: Luna。具体的なOAuth/DB/Vault/security blocker時のみSol検討。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
