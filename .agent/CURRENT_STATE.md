@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 UI consistency + stock search integration ready; H2 handled separately; G1 idle; G2 done)
+- checked_at: 2026-09-22 JST (H1 UI consistency + integrated stock search + Portfolio V1 + news detail dedup ready; H2 handled separately; G1 idle; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -15,10 +15,10 @@
 ## Active workstreams
 
 - Codex slot 1: `ready` — `kabumori-mobile-ui-consistency-and-stock-search-integration-20260922`
-  - Real-device QA found Home styling inconsistent with the older core screens and Home stock-search navigation not working.
-  - Next H1 unifies the Kabumori core visual palette and integrates stock search into the stocks/registered-stocks page.
-  - Home quick action must lead to the integrated stock-search flow; avoid a second drifting search implementation.
-  - Preserve fixed Home error copy and no-fabricated realtime metrics.
+  - Real-device QA: Home styling inconsistent with other core screens; stock-search Home link not working.
+  - Same H1 now also includes Portfolio V1 using existing latest close-report snapshot data (no realtime API) and deterministic Important News 要点/詳細 de-duplication.
+  - Portfolio may show stored close, previous-close change, market value, day P/L, unrealized P/L, totals, and sector weights with clear basis date.
+  - News UI must suppress duplicate summary/key-point/detail text without display-time AI calls.
   - Backend production mutation 0; H2/social-mobile out of scope.
   - Recommended model: Luna.
 
