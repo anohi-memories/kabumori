@@ -1419,3 +1419,21 @@ Then apply the exact migration file via `podman exec -i <container> psql -X -v O
 - verification: `npm run typecheck` PASS; `npm run lint` PASS; `git diff --check` PASS. These ran in the disposable worktree after dependency installation; package manifests and lockfiles are unchanged.
 - next_recommendation: C2 should perform a read-only diagnosis of why the QA account is returned with a non-connected status (without OAuth relink or mutation), then re-authorize the one preview only after `identity_verified` is proven. Do not select production accounts or invoke OpenAI from the current state.
 - safety_checks: no production DB/schema/RLS/RPC/Cron/settings mutation; no Edge deploy; no OAuth mutation; no X/OpenAI production call; no publish or scheduled-post side effect; no source code change; no secrets or credentials reported.
+
+## H2 Social mobile OAuth reconnect status hardening — 2026-09-22
+
+- task_id: `social-mobile-app-phase13-production-preview-rollout-and-qa-20260921`
+- status: `review_required`; next_owner: `chatgpt`
+- fresh_preflight: fetched `origin/main` at `f501fbb` and created isolated clean worktree `/private/tmp/kabumori-h2-oauth-fix-t7jxdS`; H1 is isolated to important-news search diagnostics and other slots have no overlap with the OAuth migration/RPC files.
+- root_cause: the existing `begin_social_mobile_x_oauth_connection` RPC unconditionally changed any existing X account to `authorization_pending`, so a later/abandoned reconnect demoted a previously verified account. This matches the live QA symptom (`@yumeyoasobi` showing `要確認`) while `verified_at` remained present.
+- implementation: added `supabase/migrations/20260922003101_social_mobile_x_oauth_reconnect_preserve_verified.sql`, a `create or replace` of only the mobile begin RPC. Existing `identity_verified` remains `identity_verified` during reconnect; new/unverified rows remain `authorization_pending`. The RPC still uses `SECURITY DEFINER`, `search_path = 'public'`, authenticated-only execute grants, and does not modify `publish_enabled` or callback completion semantics.
+- changed_files:
+  - `supabase/migrations/20260922003101_social_mobile_x_oauth_reconnect_preserve_verified.sql`
+  - `supabase/functions/x-oauth-connect-user/mobile_oauth_reconnect_test.ts`
+- mobile_ui_review: reviewed `apps/social-mobile/src/app/accounts/index.tsx`; reconnect is explicitly user-triggered/local UI state and no automatic reconnect behavior was added. No app source change was needed.
+- regression_tests: focused reconnect/RPC-boundary tests **2 passed / 0 failed**; x-oauth-connect-user suite **29 passed / 0 failed**; combined social-mobile preview + OAuth suite **37 passed / 0 failed**; `git diff --check` **PASS**.
+- test_coverage: static regression asserts verified reconnect preservation, pending/new-account behavior, no unconditional demotion, no `publish_enabled` mutation, and authenticated-only RPC boundary. A disposable PostgreSQL server was not available in this environment, so no live SQL apply/rollback proof was claimed.
+- production_safety: production migration apply **0**; production row repair **0**; Edge deploy **0**; real OAuth **0**; OpenAI preview **0**; X API/media/post **0**; Vault/Storage/scheduled-post writes **0**; publish_enabled changes **0**; Cron/settings/schema outside the candidate migration **0**; secrets/tokens not read or reported.
+- remaining_issues: the candidate migration is not yet applied, the live QA row remains `authorization_pending` until a separately approved read-only precondition and repair, and the one-shot AI preview remains unexecuted. C2 must review before any rollout.
+- safety_checks: formal checkout, `apps/admin/**`, `HANDOFF.md`, H1, and Claude workstreams untouched; no production mutation or manual API execution.
+- next_recommendation: C2 review the migration candidate. If approved, separately authorize production apply/deploy, then verify `verified_at`, dedicated identity, Vault reference presence (without reading secret values), no newer successful binding, and `publish_enabled=false` before a bounded QA-row repair and the single preview.

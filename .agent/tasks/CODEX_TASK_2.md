@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase13-production-preview-rollout-and-qa-20260921
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: Phase 12 C2 PASS済みの general-user preview candidate を production に安全に反映し、dedicated QA user + test X account で exactly one bounded real AI preview を実行して、tenant isolation・no-publish boundary・既存brand非回帰を確認する。real X post / media upload / publish_enabled=true / Cron はまだ禁止。
@@ -311,3 +311,15 @@ After source fix approval, propose one bounded production follow-up:
   - \`publish_enabled=false\`.
 - then resume the Phase 13 live-data QA and exactly one AI preview.
 - no X post/media/publish enablement.
+
+## H2 source-fix follow-up — 2026-09-22
+
+- status: `review_required`
+- next_owner: `chatgpt`
+- result: Added a production-application candidate migration that preserves an existing `identity_verified` status when `begin_social_mobile_x_oauth_connection` starts a reconnect. New or otherwise unverified accounts still transition to `authorization_pending`; `publish_enabled`, verified identity fields, and callback behavior are not changed.
+- changed_files:
+  - `supabase/migrations/20260922003101_social_mobile_x_oauth_reconnect_preserve_verified.sql`
+  - `supabase/functions/x-oauth-connect-user/mobile_oauth_reconnect_test.ts`
+- mobile_ui_review: `apps/social-mobile/src/app/accounts/index.tsx` keeps reconnect state local and does not add automatic reconnect behavior; no UI/source change was needed. The server-side status transition is the durable regression point.
+- production: no migration apply, no production row repair, no deploy, no OAuth retry, no OpenAI preview, no X/Vault/Storage/scheduled-post mutation, and no Cron/settings change.
+- next_recommendation: C2 review the additive replacement-RPC migration, then separately authorize production apply/deploy and read-only QA-row preconditions before restoring the QA status and resuming the one-shot preview.
