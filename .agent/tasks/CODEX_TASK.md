@@ -110,3 +110,27 @@ On completion:
 - STOP for C1
 
 **推奨モデル：Luna。**
+
+
+## C1 review — 2026-09-22
+
+**BLOCKED — source candidate is technically acceptable, but PR #8 is not mergeable under the required check policy yet.**
+
+Verified:
+- PR #8 is open, not merged, and GitHub reports it mergeable at the git level.
+- Required commit status on head `f5978b1f8d101f48206a65bc38772fb65db95de8`:
+  - `Vercel = failure`
+  - target indicates build-rate-limit / upgrade-to-Pro condition.
+- The failure is infrastructure/quota related, not a source/test failure.
+- No branch-protection bypass is authorized.
+- Production mutation remains 0.
+
+C1 judgment:
+- Do not mark the task done.
+- Do not merge while the required Vercel status is failing.
+- Keep PR #8 open.
+- Once the Vercel check can run again and passes, rerun H1 merge completion only; no implementation rework is requested unless main has gained a genuine conflicting edit.
+
+Recommended next action:
+- wait for the Vercel build-rate-limit window to clear, then rerun H1.
+- Recommended model: Luna.
