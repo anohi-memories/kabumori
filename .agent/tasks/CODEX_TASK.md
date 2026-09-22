@@ -3,8 +3,8 @@
 - task_id: important-news-phase1-search-diagnostics-production-rollout-20260922
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: C1 PASS済みのprivacy-minimal search diagnosticsをfresh mainへ統合し、exact migrationとmatching important-news-shadow Functionを本番へ安全に適用する。その後はmanual replayなしで自然scheduled runだけを観測し、telemetryが正しく記録されることを確認する。
@@ -228,3 +228,13 @@ On completion:
 - STOP for C1
 
 **推奨モデル：Luna。Solは具体的なmigration/security conflictが出た時だけ。**
+
+
+## Completion record — 2026-09-22
+
+- Integration merge: `f501fbb02714bd6d08bea2c321e406ed4b4d5e05`.
+- Exact migration applied and read back; production migration row is `20260922003120 / 20260921115317_important_news_search_diagnostics`.
+- `important-news-shadow` deployed v8 with `verify_jwt=false`; source and telemetry helper read back byte-for-byte against main.
+- Three natural scheduled runs completed at 00:40, 00:50, and 01:00 UTC. All wrote non-NULL zero telemetry; no manual invoke, candidate injection, or replay.
+- Cron 38 and unrelated Functions/configuration unchanged.
+- Stop for C1; next_owner is ChatGPT.
