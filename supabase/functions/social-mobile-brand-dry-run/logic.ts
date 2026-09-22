@@ -11,7 +11,7 @@ import {
 import { resolveBrandCodeProfile } from "../_shared/brand/brand_profiles.ts";
 import {
   SOCIAL_MOBILE_USER_DEFAULTS,
-  isSocialMobilePersonaProfile,
+  materializeSocialMobilePersonaProfile,
   normalizeSocialMobileContentSettings,
   type SocialMobileContentSettings,
 } from "../_shared/brand/social_mobile_content_settings.ts";
@@ -48,6 +48,10 @@ type PreviewGenerator = (input: {
 type PersistedSettingsRow = {
   settings?: unknown;
   persona_profile?: unknown;
+  persona_provenance?: unknown;
+  persona_confirmed?: unknown;
+  persona_last_analyzed_at?: unknown;
+  persona_last_analyzed_count?: unknown;
 };
 
 export class SocialMobilePreviewError extends Error {
@@ -169,7 +173,7 @@ async function readOptionalPersistedSettings(
   let response: Response;
   try {
     response = await fetchImpl(restUrl(deps.supabaseUrl, "social_mobile_content_settings", {
-      select: "settings,persona_profile",
+      select: "settings,persona_profile,persona_provenance,persona_confirmed,persona_last_analyzed_at,persona_last_analyzed_count",
       brand_id: `eq.${brandId}`,
       limit: "1",
     }), {
@@ -197,9 +201,12 @@ async function readOptionalPersistedSettings(
   const row = Array.isArray(body) ? body[0] as PersistedSettingsRow | undefined : undefined;
   if (!row) return SOCIAL_MOBILE_USER_DEFAULTS;
   const settings = normalizeSocialMobileContentSettings(row.settings);
-  const persona = isSocialMobilePersonaProfile(row.persona_profile)
-    ? row.persona_profile
-    : undefined;
+  const persona = materializeSocialMobilePersonaProfile(row.persona_profile, {
+    provenance: row.persona_provenance,
+    confirmed: row.persona_confirmed,
+    analyzedAt: row.persona_last_analyzed_at,
+    analyzedCount: row.persona_last_analyzed_count,
+  });
   return persona ? { ...settings, personaProfile: persona } : settings;
 }
 

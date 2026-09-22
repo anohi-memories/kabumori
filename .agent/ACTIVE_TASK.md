@@ -15,21 +15,21 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: kabumori-mobile-ui-portfolio-news-merge-20260922
+- task_id: kabumori-mobile-holdings-watch-split-and-news-detail-quality-20260922
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: PR #6 was freshened onto latest main and merged as `bc492916`; approved 22-file Kabumori app change, 45 tests/typecheck/export passed, backend production mutation 0. C1 verification required.
+- note: PR #7 implements separate 保有/監視 sections and evidence-based Important News detail partitioning. Final commit `0225efc6`; 50 tests/typecheck/export passed; production mutation 0. Colors/icons deferred. C1 review required.
 
 ### Codex slot 2
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: social-mobile-app-phase15-conversational-proxy-ai-and-history-learning-candidate-20260922
+- task_id: social-mobile-app-phase16-server-side-x-history-learning-adapter-candidate-20260922
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
-- note: Phase14 C2 PASS済み。会話型「代打AI」の確認済みpersona/settings永続化と、明示同意ベースの過去X投稿学習source candidate。production X/OpenAI/publish/Cronは禁止。Luna推奨。
+- note: Phase15 C2 PASS済み。server-sideでtrusted Auth/workspace/X identity/Vault tokenを解決する過去X投稿学習adapter source candidate。production Vault/X/deploy/publishは禁止。Luna推奨。
 
 ### Claude slot 1
 - owner: claude

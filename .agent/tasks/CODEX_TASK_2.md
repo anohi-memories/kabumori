@@ -1,28 +1,20 @@
 # Codex Task 2
 
-- task_id: social-mobile-app-phase15-conversational-proxy-ai-and-history-learning-candidate-20260922
+- task_id: social-mobile-app-phase16-server-side-x-history-learning-adapter-candidate-20260922
 - owner: codex
 - slot: codex-2
 - status: ready
 - next_owner: codex
 - priority: high
 - recommended_model: Luna
-- purpose: Phase14 C2 PASS済みのtenant-safe content settings基盤を前提に、一般ユーザーが「自分の代打AI」と会話して投稿スタイルを覚えさせ、その内容を安全に永続化できるsource candidateを作る。過去X投稿学習は明示同意付きの取得・分析設計/候補まで進めるが、production X API call・live publishはまだ行わない。
+- purpose: Phase15 C2 PASS済みの「代打AI」history-learning candidateを、mobile入力を信頼しないserver-side authorization boundaryへ引き上げる。本人のAuth・workspace ownership・接続済みX identity・Vault tokenをtrusted server/DB stateから解決し、明示同意後のみ本人の過去X投稿を取得してpersona候補を生成するsource candidateを作る。production deploy / real X history call / live publishはまだ禁止。
 
 ## Product goal
 
-主役は設定フォームではなく **「あなたの投稿AI / 代打AI」**。
+ユーザーが「過去の自分の投稿を読んで覚えて」と言った時、
+**本人の接続済みX投稿だけを、サーバー側で安全に取得し、代打AIの文体学習に使える仕組み**を作る。
 
-ユーザー体験:
-1. ユーザーがAIと自然に会話する
-2. AIが「どういう投稿をしたいか」「どんな口調か」「何を避けたいか」を理解する
-3. AIが理解内容を分かりやすく提示する
-4. ユーザーが「それでOK」「そこは違う」と会話で修正する
-5. 確認された内容だけpersona/content settingsへ保存する
-6. 以後のpreview生成で同じAIがその学習内容を使う
-
-最終的なニュアンスは「設定したAI」ではなく、
-**自分を理解したAIが、自分の代打としてSNS投稿を考えてくれる**。
+UX上はシンプルでも、authorizationは必ずserver側で確定する。
 
 ## Mandatory fresh start
 
@@ -36,138 +28,103 @@ H2開始時:
 7. 他3slot overlap確認
 
 latest TASK statusだけを開始判断に使う。
-H1/G1/G2と同じfile/migration/RPC/function/workflowを触る可能性があればSTOP。
+H1/G1/G2と同じfile/migration/RPC/Edge Function/workflowを触る可能性があればSTOP。
 
 ## Model policy
 
 - **Lunaで開始・継続**
-- Solは、Auth/RLS/persona persistence/X OAuth token boundaryなどの具体的security blockerが出てLunaで安全に解決できない場合のみ
-- UI/通常実装/テストだけでSolへ上げない
+- Solは Auth/RLS/Vault/X token boundary の具体的security blockerが出て、Lunaで安全に解決できない場合のみ
+- 通常実装・テスト・UI整理でSolへ上げない
 
-## Scope A — Phase14 contract integration
+## Scope A — server-side trusted identity resolution
 
-Phase14で確定したcanonical persistenceを維持:
-- `social_mobile_content_settings.settings`
-- `persona_profile` = bounded derived style signals only
-- `persona_provenance`
-- `persona_confirmed`
-- `persona_last_analyzed_at`
-- `persona_last_analyzed_count`
+新しいserver-side history-learning boundaryをsource candidateとして作る。
 
-Application-side `source` / `confirmed` は dedicated DB columns から明示的にmapする。
-`persona_profile` 内へ contradictory metadata を二重保存しない。
+Mobile/clientから authority として受け取ってよいのは最小限:
+- user Auth bearer
+- optional requested workspace selector
+- explicit consent action / request intent
 
-Phase14 migrationはsource candidateのまま。production applyはこのPhaseでは禁止。
+Clientから受け取って **authorityに使ってはいけない**:
+- workspaceOwnerUserId
+- ownedWorkspaceId
+- verifiedAccounts
+- platformUserId
+- X access token
+- Vault secret id
+- publish permission
 
-## Scope B — conversational AI service candidate
+Server側でtrusted stateから解決:
+1. bearer token -> Supabase Auth user
+2. owner membership -> owned workspace
+3. selected workspace belongs to user
+4. workspace has exactly one X account
+5. account is `identity_verified`
+6. platform_user_id exists
+7. access-token Vault reference exists
+8. account binding is consistent
 
-現在のdeterministic `content-settings-conversation.ts` を、将来LLMで会話できる境界へ整理/実装する。
+Fail closed on ambiguity.
 
-必要なcontract:
-- current persisted settings/personaをinputとして渡せる
-- user utteranceを受ける
-- assistant reply
-- proposed settings delta
-- proposed persona delta
-- follow-up questions
-- provenance
-- confidence/uncertainty where useful
-- requiresConfirmation
-- explicit history-learning intent
-- publish permission change = always false
+## Scope B — Vault/token boundary
 
-AI出力はuntrustedとしてvalidateする。
-AIが勝手に:
-- publish enable
-- account selection変更
-- OAuth
-- scheduler/Cron
-- X post
-を実行できないようにする。
+History fetcher must:
+- read only the access token needed for the verified account
+- never return token/secret id to mobile
+- never log token
+- never persist raw token outside Vault flow
+- never read refresh token unless access-token refresh is explicitly needed by a future separate design
+- never reuse admin/global X tokens
 
-Source candidateでは実OpenAIを使うなら dedicated preview-style no-side-effect pathに限定。
-Production deploy/invokeはまだ禁止。
+Prefer a dedicated server-side helper/function path clearly separated from publish adapters.
 
-## Scope C — conversation persistence model
+If existing RPC/function architecture can safely expose a single token-read operation internally, reuse only if responsibility is clean.
+Do not weaken Vault/RLS/ACL.
 
-ユーザーとの会話をどこまで保存するか決める。
+## Scope C — X history fetch adapter candidate
 
-優先方針:
-- 永続化の正本は confirmed structured settings/persona
-- 生の会話全文を無期限保存する前提にしない
-- 必要なら短期/限定の conversation summary / last-turn context を別責務で持つ
-- sensitive data / tokens / credentialsを保存しない
+Implement a source candidate for authenticated user's own:
+- `GET /2/users/:id/tweets`
 
-実装候補として:
-- confirmed proposalだけ settings/persona へcommit
-- unconfirmed proposalはclient local stateまたはbounded pending state
-- user correctionが最新提案をoverrideできる
-- 「保存する」前にAIが理解内容を日本語で要約する
+Requirements:
+- target `:id` comes from DB-bound `platform_user_id`, not client
+- scopes expected: `tweet.read users.read`
+- pagination token handled server-side
+- bounded max:
+  - max 50 posts total
+  - max 2 pages initially
+- exclude replies/retweets unless later explicitly requested
+- request only fields necessary for style analysis
+- no likes/bookmarks/DMs/follow graph
+- no write endpoint
+- no media upload/post/repost path
 
-tenant ownership/RLSをPhase14より弱めない。
+Handle X errors with safe normalized classes; do not return raw provider bodies to mobile.
 
-## Scope D — mobile UX
+## Scope D — explicit consent runtime contract
 
-`あなたの投稿AI` を主画面として改善。
+History call must require a **fresh explicit consent action**.
 
-最低限:
-- AIの吹き出し
-- ユーザー入力
-- 現在AIが理解している内容の短いsummary
-- 提案内容の確認
-- 「これで覚えて」/確認相当
-- 修正会話
-- 「過去の投稿を見て覚えて」intent
-- history learningは確認画面を挟む
-- 通常settings formは詳細設定/手動編集の補助位置
+Design candidate should distinguish:
+- user conversational intent: 「過去投稿を見て」
+- final consent: 「このアカウントの直近N件を読み取る」
 
-禁止UX:
-- 自動投稿ON
-- 今すぐ投稿
-- publish enable toggle
-- X historyを無断で読む動作
+No background/automatic history fetch.
+No fetch on screen load.
+No fetch merely because historyLearningIntent=true.
 
-raw backend/OpenAI errorを画面へそのまま出さない。
+Consent request should show:
+- target connected handle
+- approximate max posts
+- what will be learned
+- raw post bodies will not be permanently stored
+- no X posting occurs
 
-## Scope E — past X post learning candidate
+## Scope E — analysis output
 
-ユーザーが明示的に:
-- 「過去の投稿を読んで」
-- 「最近の自分っぽくして」
-等と依頼した時だけ開始可能な設計。
+Reuse/improve Phase15 persona derivation.
 
-### Audit
-
-既存OAuth:
-- current scopes
-- token storage path
-- authenticated user's X identity binding
-
-X APIについてsource/docs/official evidenceで確認:
-- authenticated user's own posts endpoint
-- required scope(s)
-- pagination
-- max-results/rate-limit considerations
-- excludes/retweets/repliesの扱い
-- practical analysis count
-
-外部仕様が必要なら最新X公式ドキュメントを参照し、ReportにURL/確認日を残す。
-
-### Candidate architecture
-
-history fetcher / analyzerをpublish pathから完全分離。
-
-必須guard:
-- authenticated owner
-- selected workspace ownership
-- exactly one identity-verified connected X account
-- explicit user confirmation immediately before fetch
-- bound max posts/pages
-- no other account's history
-- no raw token to mobile/client
-- no automatic background fetch
-
-取得した投稿からderive候補:
+Derived candidate can include:
 - tone
 - sentence length
 - punctuation/emoji
@@ -176,47 +133,65 @@ history fetcher / analyzerをpublish pathから完全分離。
 - hashtag habits
 - CTA style
 - opening/closing patterns
+- analyzed count/time
 
-保存:
-- raw post bodyを恒久保存しない
-- confirmed derived persona + count/time/provenanceのみを基本
-- temporary analysis payloadが必要ならprocess lifetime限定/明確なretention boundary
+Output after history fetch:
+- unconfirmed persona proposal
+- provenance `past_post_analysis`
+- `confirmed=false`
 
-### This Phase boundary
+It must NOT write confirmed persona automatically.
 
-Phase15では **production X API history call禁止**。
-テスト fixture/mocked X responseでcandidateを証明する。
-OAuth scope expansion/Portal changeも禁止。
+User must review and confirm in the conversation UI before persistence.
 
-## Scope F — preview integration
+## Scope F — raw content retention
 
-confirmed persona/settingsがpreview generationへ入ることを証明。
+Default:
+- raw X post bodies exist only during request processing / test fixture lifetime
+- do not write full posts to DB
+- do not add history/archive table
+- derived bounded profile + count/time only after later confirmation
 
-- unconfirmed personaはgenerationへ使わない
-- corrected latest confirmed personaが使われる
-- past-post-derived personaは `persona_confirmed=true` の時だけ反映
-- settings/personaからpublish pathへ遷移しない
-- existing `social_mobile_user_v1` guard維持
+If debugging metadata is needed, use non-content safe metadata only.
 
-## Tests
+## Scope G — mobile integration candidate
 
-最低限:
-- conversation -> proposed structured changes
-- proposal is not persisted before confirmation
-- confirmation persists safe settings/persona candidate
-- correction overrides prior proposal
-- canonical DB columns -> application persona mapping
-- persona_profile metadata duplicationなし
-- unconfirmed persona not used in generation
-- confirmed persona used in preview guidance
-- explicit consent required for history-learning
-- mocked history fetch only after consent
-- cross-tenant/account request denied
-- max page/post bound
-- raw historical posts not persisted by candidate
-- publish permission cannot be changed via conversation/history
-- no X publish/media/schedule/Vault mutation path
-- raw errors hidden in mobile UI
+Update `あなたの投稿AI` flow to support the server boundary contract without real production invocation.
+
+Preferred UX:
+1. user asks AI to learn past posts
+2. app shows target account + max range
+3. user gives final consent
+4. future server response returns learned profile proposal
+5. AI summarizes what it learned
+6. user says `これで覚えて`
+7. only then persona persistence candidate is called
+
+Source candidate may use injected/mock server response.
+Do not wire production network call in this phase unless it can remain disabled by construction.
+
+## Scope H — tests
+
+Minimum:
+- missing Auth -> deny before X/Vault
+- non-owner workspace -> deny
+- multiple X accounts -> deny
+- non-identity_verified -> deny
+- missing platform_user_id -> deny
+- missing Vault access-token ref -> deny
+- client-supplied platform user/account identity ignored
+- target X user id comes from trusted DB account
+- explicit final consent required
+- fetcher not called without final consent
+- max 50 posts / 2 pages
+- replies/retweets excluded
+- only read endpoint used
+- token never returned/logged
+- raw posts not persisted
+- X error normalized
+- history result remains unconfirmed
+- no publish/media/schedule path
+- no publish permission mutation
 
 Run:
 - relevant Deno tests
@@ -225,21 +200,22 @@ Run:
 - Expo export
 - `git diff --check`
 
-可能ならPhase14 disposable DB contractを使ってpersona mapping/write candidateもtest。
-productionは使わない。
+Where possible use mocked Supabase/Vault/X calls and assert call ordering:
+Auth -> ownership/account resolution -> token read -> X fetch.
 
-## Production boundary
+## Scope I — production boundary
 
-Phase15は **source candidate only**。
+Phase16 is **source candidate only**.
 
 Forbidden:
-- Phase14 migration production apply
-- production DB/RLS/ACL/settings/persona write
+- production migration apply
+- production RPC/RLS/ACL change
 - production Edge Function deploy
-- production OpenAI invoke
+- production Vault token read
 - production X history API call
 - OAuth scope/Portal change
-- Vault read/write
+- production settings/persona write
+- OpenAI live call
 - X post/media/repost
 - `publish_enabled=true`
 - Cron/scheduler
@@ -250,24 +226,29 @@ Forbidden:
 
 Production mutation = 0.
 
+## Parallel safety
+
+Current H1 is Kabumori app holdings/watch + Important News candidate.
+Do not touch H1 files.
+If H1 unexpectedly changes shared social-mobile/X OAuth/Vault files, STOP and report overlap.
+
 ## Completion / C2
 
-完了時:
+When complete:
 - status -> `review_required`
 - next_owner -> `chatgpt`
-- `.agent/CODEX_REPORT_2.md` に:
-  1. conversational AI architecture
-  2. persistence/confirmation model
-  3. canonical persona mapping
-  4. past-X-history API audit
-  5. changed files
-  6. tenant/account isolation proof
-  7. consent/retention boundaries
-  8. preview integration
-  9. tests
-  10. production mutation=0
-  11. remaining risks
-  12. next rollout proposal
+- `.agent/CODEX_REPORT_2.md` must include:
+  1. server authorization flow
+  2. trusted vs untrusted input boundary
+  3. Vault token handling
+  4. X endpoint/request shape
+  5. consent flow
+  6. raw-content retention behavior
+  7. changed files
+  8. tests/call-order proof
+  9. production mutation=0
+  10. remaining risks
+  11. next rollout proposal
 - commit/push
 - fresh origin/main check
 - STOP for C2
