@@ -834,10 +834,27 @@ export function unsupportedMultiDayWords(texts: string[], packet: unknown): stri
   return MULTI_DAY_WORDS.filter((word) => !source.includes(word) && texts.some((text) => text.includes(word)));
 }
 const ALLOWED_LATIN = new Set(["TOPIX", "ETF", "TDnet"]);
+const FULLWIDTH_LATIN = /[Ａ-Ｚａ-ｚ]/u;
+const JAPANESE_SCRIPT = /[ぁ-んァ-ヶ一-龠]/u;
 
-/** Latin words of 3+ letters other than the few proper names the packet itself uses. */
+/**
+ * Full-width Latin runs embedded in Japanese company/proper-name text are
+ * typography, not untranslated English prose.  Keep the exception local to
+ * that lexical context; ASCII acronyms and standalone full-width runs still
+ * fail unless they are one of the existing packet terms.
+ */
 export function latinWords(value: string): string[] {
-  return (value.match(/[A-Za-zＡ-Ｚａ-ｚ]{3,}/g) ?? []).filter((word) => !ALLOWED_LATIN.has(word));
+  return [...value.matchAll(/[A-Za-zＡ-Ｚａ-ｚ]{3,}/gu)]
+    .filter((match) => {
+      const word = match[0];
+      if (ALLOWED_LATIN.has(word)) return false;
+      if (!FULLWIDTH_LATIN.test(word)) return true;
+      const start = match.index ?? 0;
+      const end = start + word.length;
+      const context = `${value.slice(Math.max(0, start - 12), start)}${value.slice(end, end + 12)}`;
+      return !JAPANESE_SCRIPT.test(context);
+    })
+    .map((match) => match[0]);
 }
 
 function length(value: string): number {

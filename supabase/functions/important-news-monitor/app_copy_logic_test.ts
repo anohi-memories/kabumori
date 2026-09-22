@@ -58,6 +58,10 @@ test("only items without Japanese title and without Fact-passed Japanese text ne
   assert.equal(needsAppCopy({ ...base, app_copy_fact_status: "failed" }), false, "one attempt only");
   assert.equal(needsAppCopy({ ...base, app_copy_fact_status: "generating" }), false, "claimed elsewhere");
   assert.equal(needsAppCopy({ ...base, generation_fact_status: "passed", generated_text: "  " }), true, "empty passed text is unusable");
+  assert.equal(needsAppCopy({ ...base, generation_fact_status: "passed", sourceBackedCopy: true }), true,
+    "source-backed V2 may replace a shallow verified post");
+  assert.equal(needsAppCopy({ ...base, generation_fact_status: "passed", sourceBackedCopy: false }), false,
+    "thin source keeps the verified-post path");
 });
 
 test("the prompt source is plain text: markup, entities and URLs removed, capped", () => {
@@ -80,11 +84,87 @@ test("requests use luna, no storage, strict schemas and only stored source text"
   assert.ok(APP_COPY_DRAFT_INSTRUCTIONS.includes("原文に無い数字"));
   assert.ok(APP_COPY_DRAFT_INSTRUCTIONS.includes("投資判断"));
   assert.ok(APP_COPY_FACT_INSTRUCTIONS.includes("単位換算"));
+  assert.ok(APP_COPY_DRAFT_INSTRUCTIONS.includes("主体・場所・時刻"));
+  assert.ok(APP_COPY_DRAFT_INSTRUCTIONS.includes("市場や株価への影響"));
   const copy = parseAppCopyDraft(GOOD_COPY).copy!;
   const fact = appCopyFactRequestBody(GREER, copy) as Record<string, any>;
   assert.equal(fact.model, "gpt-5.6-luna");
   assert.ok(!("tools" in fact));
   assert.ok(JSON.parse(fact.input).detail_ja.includes("500億ドル"));
+});
+
+const PRODUCER_FIXTURES: Array<{ name: string; source: AppCopySource; copy: Record<string, unknown>; facts: string[] }> = [
+  {
+    name: "Hormuz tanker",
+    source: {
+      ...GREER,
+      id: "hormuz",
+      title: "Tanker hit near Strait of Hormuz, two crew injured",
+      bodySummary: "A tanker was struck near the Strait of Hormuz. Two crew members were injured, but the vessel continued underway. Authorities said no closure of the strait or supply disruption had been confirmed.",
+    },
+    copy: {
+      title_ja: "ホルムズ海峡近くでタンカー被弾、乗組員2人が負傷",
+      summary_ja: "ホルムズ海峡近くでタンカーが被弾し、乗組員2人が負傷しました。船は航行を続け、海峡封鎖や供給障害は確認されていません。",
+      detail_ja: "タンカーはホルムズ海峡の近くで被弾しました。\n\n乗組員2人が負傷した一方、船は航行を続けました。海峡の封鎖や供給障害が確認されたわけではありません。",
+      key_points_ja: ["ホルムズ海峡近くでタンカーが被弾", "乗組員2人が負傷", "船は航行を継続", "海峡封鎖や供給障害は未確認"],
+      sufficient_information: true,
+    },
+    facts: ["2人", "航行を続け", "封鎖"],
+  },
+  {
+    name: "North Korea missile",
+    source: {
+      ...GREER,
+      id: "north-korea",
+      title: "North Korea fires missile 450 to 600 km toward its EEZ",
+      bodySummary: "North Korea launched a missile that flew approximately 450 to 600 kilometers. South Korea assessed that the missile fell within North Korea's exclusive economic zone, while officials reviewed the launch details.",
+    },
+    copy: {
+      title_ja: "北朝鮮がミサイル発射、約450〜600キロ飛翔と韓国軍",
+      summary_ja: "北朝鮮がミサイルを発射し、約450〜600キロ飛翔しました。韓国側は北朝鮮の排他的経済水域内に落下したと評価しています。",
+      detail_ja: "ミサイルは約450〜600キロ飛翔しました。\n\n韓国側は、落下地点が北朝鮮の排他的経済水域内だったと評価し、発射の詳細を分析しています。",
+      key_points_ja: ["北朝鮮がミサイルを発射", "飛翔距離は約450〜600キロ", "北朝鮮のEEZ内への落下と評価"],
+      sufficient_information: true,
+    },
+    facts: ["450〜600", "排他的経済水域", "分析"],
+  },
+  {
+    name: "UN Houthi",
+    source: {
+      ...GREER,
+      id: "un-houthi",
+      title: "UN condemns attempted Houthi strike near Riyadh as displacement tops 130,000",
+      bodySummary: "The United Nations condemned an attempted Houthi strike near Riyadh. The humanitarian update said more than 130,000 people had been displaced, while the attempted strike itself was not reported as a confirmed hit.",
+    },
+    copy: {
+      title_ja: "国連、リヤド近郊のフーシ派攻撃未遂を非難　避難民は13万人超",
+      summary_ja: "国連はリヤド近郊でのフーシ派による攻撃未遂を非難しました。人道状況の報告では、避難民が13万人を超えています。",
+      detail_ja: "攻撃はリヤド近郊での未遂とされ、着弾が確認されたわけではありません。\n\n国連の人道状況報告では、避難民は13万人を超えています。",
+      key_points_ja: ["国連が攻撃未遂を非難", "場所はリヤド近郊", "避難民が13万人超", "着弾は未確認"],
+      sufficient_information: true,
+    },
+    facts: ["未遂", "リヤド近郊", "13万人", "確認されたわけではありません"],
+  },
+];
+
+test("source-backed producer fixtures preserve additional event facts in detail", async () => {
+  for (const fixture of PRODUCER_FIXTURES) {
+    const outcome = await generateAppCopy(fixture.source, fakeRequester(fixture.copy, { passed: true, issues: [] }));
+    assert.equal(outcome.status, "passed", fixture.name);
+    assert.ok(outcome.copy!.detailJa.includes("\n\n"), fixture.name);
+    const factInput = JSON.parse(appCopyFactRequestBody(fixture.source, outcome.copy!).input as string);
+    for (const fact of fixture.facts) assert.ok(String(factInput.detail_ja).includes(fact), `${fixture.name}: ${fact}`);
+  }
+});
+
+test("thin sources fail closed instead of padding detail", async () => {
+  const source = { ...GREER, id: "thin", title: "Small update", bodySummary: "Officials said an update was issued." };
+  const outcome = await generateAppCopy(source, fakeRequester({
+    title_ja: "短い更新", summary_ja: "当局が更新を発表しました。", detail_ja: "", key_points_ja: [], sufficient_information: false,
+  }, { passed: true, issues: [] }));
+  assert.equal(outcome.status, "failed");
+  assert.equal(outcome.error, "APP_COPY_INSUFFICIENT_INFORMATION");
+  assert.equal(outcome.calls, 1);
 });
 
 test("a passed Fact check yields passed copy after exactly one generation and one check", async () => {

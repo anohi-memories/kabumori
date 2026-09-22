@@ -94,8 +94,10 @@ import { orderImportantNewsPublishQueue } from "./rate_control_logic.ts";
 import {
   APP_COPY_BATCH_LIMIT,
   appCopyUpdate,
+  appCopySourceText,
   type AppCopySource,
   generateAppCopy,
+  isJapaneseText,
   needsAppCopy,
   openAiAppCopyRequester,
 } from "./app_copy_logic.ts";
@@ -1374,6 +1376,16 @@ function toAppCopySource(row: AppCopyRow): AppCopySource {
   };
 }
 
+/**
+ * The V2 selector may return an English-title row even when its existing X
+ * post passed Fact.  Only opt into the richer app-copy path when the stored
+ * source has enough text to support additional event facts; thin sources keep
+ * the existing verified-post path and are never padded by a model.
+ */
+function shouldPreferSourceBackedCopy(row: AppCopyRow): boolean {
+  return !isJapaneseText(row.title) && appCopySourceText(row.body_summary).length >= 160;
+}
+
 async function selectAppCopyTargetIds(supabaseUrl: string, serviceRoleKey: string, limit: number): Promise<string[]> {
   // The visibility rule lives in SQL (public.important_news_app_copy_targets) so it is
   // exactly the /news feed rule; only items some user actually sees are translated.
@@ -1445,6 +1457,7 @@ async function runAppCopyGeneration(
       if (!needsAppCopy({
         ...row,
         forceVerifiedCopy: row.company_code === null && row.coverage_severity === "emergency",
+        sourceBackedCopy: shouldPreferSourceBackedCopy(row),
       })) {
         results.push({ candidateId: row.id, skipped: "NOT_NEEDED" });
         continue;
@@ -1546,6 +1559,7 @@ Deno.serve(async (req) => {
         needsAppCopy: needsAppCopy({
           ...row,
           forceVerifiedCopy: row.company_code === null && row.coverage_severity === "emergency",
+          sourceBackedCopy: shouldPreferSourceBackedCopy(row),
         }),
         databaseUpdated: false,
         ...outcome,

@@ -97,9 +97,17 @@ export function needsAppCopy(row: {
   generation_fact_status: string | null;
   app_copy_fact_status: string | null;
   forceVerifiedCopy?: boolean;
+  sourceBackedCopy?: boolean;
 }): boolean {
   if (!row.forceVerifiedCopy && isJapaneseText(row.title)) return false;
-  if (row.generation_fact_status === "passed" && (row.generated_text ?? "").trim().length > 0) return false;
+  // A Fact-passed X post is normally sufficient.  The source-backed V2 path
+  // is an explicit exception: an English-title item may still need a richer,
+  // independently Fact-checked Japanese app copy when its stored source is
+  // more informative than the short post.  The caller must opt into this
+  // after the SQL visibility selector has selected the row.
+  if (!row.sourceBackedCopy && row.generation_fact_status === "passed" && (row.generated_text ?? "").trim().length > 0) {
+    return false;
+  }
   return row.app_copy_fact_status === null;
 }
 
@@ -145,9 +153,10 @@ export const APP_COPY_DRAFT_INSTRUCTIONS = [
   "数字・金額・割合・日付・増減の方向は原文どおり正確に訳します。単位を日本語に換算する場合（例: $79.6 billion → 796億ドル）は値を変えません。",
   "固有名詞は日本語で一般的な表記にします。affected_entities_reference は表記の参考情報であり、事実の根拠にしません。",
   "title_ja: 60字以内。何が起きたかが分かる見出し。煽り、感嘆符、見出しラベル（【速報】等）は使いません。",
-  "summary_ja: 2〜3文、200字以内。一覧で「何が起きたか」「誰・何に関係するか」が分かるようにします。",
-  "detail_ja: 段落を空行（\\n\\n）で区切り、800字以内。原文の情報量が少ない場合は短くて構いません。水増しや繰り返しをしません。",
-  "key_points_ja: 2〜4項目、各80字以内。原文にある事実だけを箇条書きにします。",
+  "summary_ja: 1〜2文、200字以内。一覧で「何が起きたか」「誰・何に関係するか」が分かるようにします。",
+  "detail_ja: 段落を空行（\\n\\n）で区切り、800字以内。原文が支える場合だけ2〜4個の短い段落にし、主体・場所・時刻、出来事の順序、公式発表、距離・人数・被害、発生後の運用状況など、要約や要点と重複しない追加の事実を優先します。原文の情報量が少ない場合は短い1段落で構いません。水増しや繰り返しをしません。",
+  "key_points_ja: 原文が支える場合は2〜4項目、各80字以内。各項目は別の短い事実にし、detail_jaの段落と同じ文を繰り返しません。原文が薄い場合に項目数を埋める必要はありません。",
+  "市場や株価への影響・日本株との関連は別の表示項目で扱うため、detail_jaにはイベントの事実と確認済み状況だけを書き、一般的な市場コメントで水増ししません。",
   "URL、HTML、ハッシュタグ、絵文字、売買推奨、株価の上げ下げの断定は含めません。",
   "原文の情報が不足して正確に書けない場合は sufficient_information を false にし、各文字列を空、key_points_ja を空配列にしてください。",
 ].join("\n");
@@ -208,6 +217,7 @@ export function parseAppCopyDraft(payload: unknown): { copy: AppCopy | null; err
     keyPointsJa: keyPoints,
   };
   if (!copy.titleJa || !copy.summaryJa || !copy.detailJa) return { copy: null, error: "APP_COPY_EMPTY_FIELD" };
+  if (copy.keyPointsJa.length === 1) return { copy: null, error: "APP_COPY_KEY_POINTS_TOO_FEW" };
   return { copy, error: null };
 }
 
