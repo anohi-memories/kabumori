@@ -3,8 +3,8 @@
 - task_id: kabumori-mobile-home-dashboard-v1-20260922
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: かぶモリアプリ本体のトップ画面を「検索」から「今日の自分の株を把握できるホーム」へ作り替え、既存の登録銘柄・重要ニュース・朝刊/大引けレポートを1画面に集約する。APIコスト最適化H1は自然観測待ちのため、このUI/UX workstreamでは触らない。
@@ -330,3 +330,14 @@ This means the new Home can show implementation-level backend text directly to e
 9. Return to `review_required`, next_owner=chatgpt, then stop for C1.
 
 **Recommended model: Luna.**
+
+
+## C1 blocker fix record — 2026-09-22
+
+- C1 blocker resolved in commit `7ff16dcb16117cd2c530fbfdf0e7da8c4788b5e8` on PR #5.
+- Home stocks/news/reports failures now map to fixed Japanese copy: `登録銘柄を読み込めませんでした。` / `重要ニュースを読み込めませんでした。` / `レポートを読み込めませんでした。`
+- Added dashboard helper mapping and a test proving arbitrary backend error text is not used as Home-visible copy.
+- Section retry, navigation, stored-data-only behavior, and no-fabrication constraints are unchanged.
+- Tests: dashboard 4/4, app-scope TypeScript, Expo web export, and diff-check passed.
+- Production mutation = 0; no backend, social-mobile, H2, G1, or G2 changes.
+- status: `review_required`; next_owner: `chatgpt`; stop for C1.
