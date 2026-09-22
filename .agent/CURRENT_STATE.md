@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 holdings/watch split + Important News detail quality review_required; PR #7 open; production mutation 0)
+- checked_at: 2026-09-22 JST (H1 PR7 clean merge ready; holdings/watch split + Important News detail partition C1 PASS; visual polish deferred; H2 handled separately)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,13 +14,13 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `kabumori-mobile-holdings-watch-split-and-news-detail-quality-20260922`
-  - Real-device QA: 銘柄検索/Portfolio/UI統一は概ね改善。
-  - PR #7 implements the holdings/watch split with integrated search preserved; C1 review required.
-  - Important News production fields were traced read-only; PR #7 fixes the verified-post presentation partition using event facts and keeps thin-source fallback.
-  - Detail now keeps source-backed event/status facts beyond 要点 and removes generic market filler; no warning-only detail is generated.
-  - Producer source and production deploy are unchanged; app-only candidate, production mutation 0.
-  - Colors/icons/visual polish explicitly deferred to a later task.
+- Codex slot 1: `ready` — `kabumori-mobile-holdings-watch-news-detail-merge-20260922`
+  - C1 PASS on PR #7 candidate.
+  - 銘柄 empty-query view is separated into `保有 | 監視`; integrated search remains for non-empty query.
+  - Important News verified-post detail now keeps distinct event/status facts beyond 要点 and suppresses generic market filler.
+  - Known limitation: this is app-only; richer facts that exist only in English body_summary and not in verified Japanese text still require a later producer/app-copy improvement.
+  - Next H1 freshens PR #7 onto latest main, reruns checks, and merges if no implementation conflict appears.
+  - Production mutation 0; colors/icons visual polish deferred.
   - Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase16-server-side-x-history-learning-adapter-candidate-20260922`
