@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 PR6 clean merge ready; includes UI consistency, integrated stock search, Portfolio V1, news detail dedup; H2 handled separately)
+- checked_at: 2026-09-22 JST (H1 PR6 merged; UI consistency, integrated stock search, Portfolio V1, news detail dedup; resulting main bc492916; backend mutation 0)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,10 +14,10 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `kabumori-mobile-ui-portfolio-news-merge-20260922`
+- Codex slot 1: `review_required` — `kabumori-mobile-ui-portfolio-news-merge-20260922`
   - C1 PASS on PR #6 candidate.
   - Important: Portfolio V1 and Important News 要点/詳細 dedup are already implemented in PR #6; they are not visible yet only because PR #6 is not merged.
-  - Next H1 freshens PR #6 onto latest main, re-runs app checks, then merges if no Kabumori app conflict appears.
+  - PR #6 was freshened onto main and merged as `bc492916`; 45 tests/typecheck/export passed. C1 verification required.
   - Feature set includes shared core UI palette, integrated stock search, fifth `ポート` tab using stored close-report snapshot, and deterministic news duplicate suppression.
   - Backend production mutation 0; no H2/G1/G2 implementation changes.
   - Recommended model: Luna.
