@@ -13,8 +13,11 @@ import {
   View,
 } from 'react-native';
 
+import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
 import { StockMaster, TrackedStock, TrackedStockInput, TrackingType } from '@/lib/stocks';
 import { supabase } from '@/lib/supabase';
+
+const colors = KABUMORI_COLORS.light;
 
 type Props = {
   stock: StockMaster | null;
@@ -35,6 +38,19 @@ const emptyInput: TrackedStockInput = {
   target_sell_price: null,
   memo: null,
 };
+
+function editorErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof Error)) return fallback;
+  if (
+    error.message === 'ログインが必要です。ログイン後にもう一度お試しください。'
+    || error.message.includes('は0より大きい数値で入力してください。')
+    || error.message.includes('は0以上の数値で入力してください。')
+    || error.message.includes('この銘柄はすでに登録済みです。')
+  ) {
+    return error.message;
+  }
+  return fallback;
+}
 
 function numberValue(value: string, label: string, positive = false) {
   const trimmed = value.trim();
@@ -146,7 +162,7 @@ export function TrackedStockEditor({ stock, existing, visible, onClose, onSaved,
     } catch (error) {
       Alert.alert(
         existing ? '更新失敗' : '登録失敗',
-        error instanceof Error ? error.message : '時間をおいて再度お試しください。',
+        editorErrorMessage(error, '登録内容を保存できませんでした。時間をおいて再度お試しください。'),
       );
     } finally {
       setSaving(false);
@@ -168,7 +184,7 @@ export function TrackedStockEditor({ stock, existing, visible, onClose, onSaved,
     } catch (error) {
       Alert.alert(
         '削除失敗',
-        error instanceof Error ? error.message : '時間をおいて再度お試しください。',
+        editorErrorMessage(error, '登録を解除できませんでした。時間をおいて再度お試しください。'),
       );
     } finally {
       setSaving(false);
@@ -261,31 +277,31 @@ export function TrackedStockEditor({ stock, existing, visible, onClose, onSaved,
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  screen: { flex: 1, backgroundColor: '#f7f8f5' },
+  screen: { flex: 1, backgroundColor: colors.background },
   content: { padding: 24, paddingBottom: 48, gap: 10, maxWidth: 640, width: '100%', alignSelf: 'center' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 },
   headerText: { flex: 1 },
-  ticker: { color: '#54745d', fontWeight: '800', fontSize: 16 },
-  company: { color: '#17211a', fontWeight: '800', fontSize: 25, marginTop: 2 },
-  market: { color: '#738078', marginTop: 4 },
-  close: { color: '#54745d', fontWeight: '700', padding: 8 },
-  sectionTitle: { color: '#17211a', fontWeight: '800', fontSize: 18, marginTop: 18 },
-  label: { color: '#38453d', fontWeight: '700', marginTop: 6 },
-  input: { minHeight: 48, borderWidth: 1, borderColor: '#d7ddd8', borderRadius: 12, backgroundColor: '#fff', paddingHorizontal: 14, fontSize: 16, color: '#17211a' },
+  ticker: { color: colors.accent, fontWeight: '800', fontSize: 16 },
+  company: { color: colors.text, fontWeight: '800', fontSize: 25, marginTop: 2 },
+  market: { color: colors.muted, marginTop: 4 },
+  close: { color: colors.accent, fontWeight: '700', padding: 8 },
+  sectionTitle: { color: colors.text, fontWeight: '800', fontSize: 18, marginTop: 18 },
+  label: { color: colors.text, fontWeight: '700', marginTop: 6 },
+  input: { minHeight: 48, borderWidth: 1, borderColor: colors.inputBorder, borderRadius: 12, backgroundColor: colors.card, paddingHorizontal: 14, fontSize: 16, color: colors.text },
   memo: { minHeight: 96, paddingTop: 14, textAlignVertical: 'top' },
   choiceRow: { flexDirection: 'row', gap: 10 },
-  choice: { flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 12, borderWidth: 1, borderColor: '#d7ddd8', backgroundColor: '#fff' },
-  choiceSelected: { borderColor: '#477554', backgroundColor: '#e7f2e9' },
-  choiceText: { color: '#5e6862', fontWeight: '700' },
-  choiceTextSelected: { color: '#285c37' },
-  primaryButton: { minHeight: 52, marginTop: 22, borderRadius: 14, backgroundColor: '#397449', alignItems: 'center', justifyContent: 'center' },
+  choice: { flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 12, borderWidth: 1, borderColor: colors.inputBorder, backgroundColor: colors.card },
+  choiceSelected: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  choiceText: { color: colors.muted, fontWeight: '700' },
+  choiceTextSelected: { color: colors.accent },
+  primaryButton: { minHeight: 52, marginTop: 22, borderRadius: 14, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
   primaryButtonText: { color: '#fff', fontWeight: '800', fontSize: 16 },
   disabled: { opacity: 0.55 },
   deleteButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center' },
-  deleteText: { color: '#b33c38', fontWeight: '700' },
-  deleteConfirmation: { marginTop: 8, padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#e7b9b6', backgroundColor: '#fff7f6', gap: 8 },
-  deleteQuestion: { color: '#792d2a', fontWeight: '800', fontSize: 16 },
-  deleteDescription: { color: '#8b625f', marginBottom: 4 },
-  deleteConfirmButton: { flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 12, backgroundColor: '#b33c38' },
+  deleteText: { color: colors.errorText, fontWeight: '700' },
+  deleteConfirmation: { marginTop: 8, padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#e7b9b6', backgroundColor: colors.errorSoft, gap: 8 },
+  deleteQuestion: { color: colors.errorText, fontWeight: '800', fontSize: 16 },
+  deleteDescription: { color: colors.muted, marginBottom: 4 },
+  deleteConfirmButton: { flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 12, backgroundColor: colors.errorText },
   deleteConfirmText: { color: '#fff', fontWeight: '800' },
 });
