@@ -3,7 +3,7 @@
 - task_id: kabumori-mobile-ui-consistency-and-stock-search-integration-20260922
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
@@ -287,3 +287,44 @@ In addition to prior deliverables, report:
 - verification: 45 relevant tests passed; app-scope TypeScript passed; Expo web export and diff check passed.
 - production_mutation: 0
 - next_owner: chatgpt (C1 review)
+
+
+## Final C1 review — 2026-09-22
+
+**PASS — PR #6 candidate accepted.**
+
+Important clarification:
+- The later user requests for Portfolio V1 and Important News 要点/詳細 de-duplication are already included in PR #6 head `b27c4362c3e8a4264d64afd71b451f8f06293a62`; they are not missing from the candidate.
+- They are not visible in the user's current app yet because PR #6 is still open and not merged to main.
+
+Reviewed and accepted:
+- shared light Kabumori palette across core screens,
+- stock search integrated into `/explore`, with `/search` reduced to compatibility routing,
+- Home stock-search action targets the integrated stocks flow,
+- Portfolio V1 exists as a fifth `ポート` tab and uses only the latest stored close-report `portfolio_snapshot`,
+- basis date is explicitly shown as stored closing-price data, not realtime,
+- watchlist rows are excluded from portfolio totals,
+- Important News uses deterministic exact/near-duplicate suppression and does not add a display-time AI call,
+- short news no longer needs to repeat the same text under both 要点 and 詳細,
+- user-facing fetch errors are mapped to fixed Japanese copy,
+- production/backend mutation = 0.
+
+Verification evidence:
+- relevant tests: 45 passed / 0 failed,
+- app-scope TypeScript passed,
+- Expo web export passed,
+- static routes include /, /explore, /portfolio, /search, /news, /reports,
+- git diff --check passed.
+
+Freshness:
+- PR #6 branch is behind current main, but the main-side implementation diff is limited to H2 social-mobile migration/test plus .agent control/report files.
+- None of PR #6's Kabumori app implementation files overlap those main-side changes.
+
+Remaining non-blocking QA:
+- native/iOS visual QA was not run by Codex. User should re-open latest main after merge and visually confirm five-tab layout, search keyboard/focus behavior, Portfolio layout, and News detail copy.
+
+C1 judgment:
+- Candidate is approved.
+- Next H1 should freshen/rebase PR #6 onto latest main, rerun checks, merge it, and then allow user real-device verification.
+
+**Recommended model: Luna.**
