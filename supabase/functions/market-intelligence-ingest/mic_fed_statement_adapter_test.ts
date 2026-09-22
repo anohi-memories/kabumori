@@ -37,8 +37,12 @@ test("calendar selector prefers the exact a.htm statement and excludes implement
     <a href="/newsevents/pressreleases/monetary20260916a1.htm">Implementation Note</a>
     <a href="/newsevents/pressreleases/monetary20260916b.htm">Press conference materials</a>
     <a href="/newsevents/pressreleases/monetary20260916a.htm">Federal Reserve issues FOMC statement</a>
+    <a href="/newsevents/pressreleases/monetary20250822a.htm">Statement on Longer-Run Goals and Monetary Policy Strategy</a>
     <a href="https://example.com/monetary20260916a.htm">Statement</a>`;
-  assert.deepEqual(extractOfficialFedStatementUrls(calendar), [URL]);
+  const selected = extractOfficialFedStatementUrls(calendar);
+  assert.equal(selected[0], URL);
+  assert.equal(selected.length, 2, "older official statement remains a candidate but ranks after the latest one");
+  assert.ok(!selected.some((url) => url.endsWith("monetary20260916a1.htm")));
 });
 
 test("statement parser extracts meeting date, publication time, target range, and normalized hash", async () => {

@@ -70,7 +70,7 @@ export function extractOfficialFedStatementUrls(calendarHtml: string): string[] 
       const path = new URL(officialUrl).pathname;
       const label = normalizeFedStatementHtml(match[2]).toLowerCase();
       const exactStatement = /\/monetary\d{8}a\.htm$/i.test(path);
-      const implementationNote = /\/monetary\d{8}a\d+\.htm$/i.test(path) || /implementation|technical note|press conference|minutes|projection|dot plot|sep/.test(label);
+      const implementationNote = /\/monetary\d{8}a\d+\.htm$/i.test(path) || /implementation|technical note|press conference|minutes|projection|dot plot|sep|longer-run goals|monetary policy strategy|notation vote/.test(label);
       if (!exactStatement && implementationNote) continue;
       ranked.push({
         url: officialUrl,
