@@ -21,11 +21,12 @@
   - Production mutation 0; H2/G1/G2 untouched. Manual iOS/native QA and visual polish remain deferred.
   - C1 review required. Recommended model: Luna.
 
-- Codex slot 2: `ready` — `social-mobile-app-phase16-server-side-x-history-learning-adapter-candidate-20260922`
-  - Phase15 C2 PASS後の次工程。
-  - 明示同意後のみ、server側でAuth/owner workspace/verified X account/platform user/Vault access tokenをtrusted stateから解決するhistory-learning source candidateを作る。
-  - production Vault read / X history API / deploy / publish はまだ禁止。
-  - Recommended model: Luna。Auth/RLS/Vault/X token boundaryの具体的blocker時のみSol検討。
+- Codex slot 2: `done` — `social-mobile-app-phase16-server-side-x-history-learning-adapter-candidate-20260922`
+  - C2 PASS。server-side trusted Auth/workspace/X identity/token-ref resolution、明示同意、bounded read-only X history adapter source candidateまで完了。
+  - raw投稿恒久保存なし、unconfirmed persona proposalのみ、default Edge entrypointはdisabled。
+  - production mutation 0。次はdisposable Vault/RLS/token-boundary proofが必須。
+  - production deploy / real X history / persona persistence / live publish は別TASK。
+  - Recommended next model: Luna。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
