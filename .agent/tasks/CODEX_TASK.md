@@ -1,120 +1,222 @@
 # Codex Task
 
-- task_id: kabumori-mobile-ui-portfolio-news-merge-20260922
+- task_id: kabumori-mobile-holdings-watch-split-and-news-detail-quality-20260922
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
-- purpose: C1 PASS済みのPR #6をlatest mainへ安全にfreshenし、UI統一・銘柄検索統合・Portfolio V1・重要ニュース重複抑制をまとめてmainへmergeする。
+- purpose: 実機QAで判明した「銘柄画面で保有と監視を分けたい」と「重要ニュースの詳しい内容が実質的に詳細ではない」を改善する。色・アイコンの本格調整は今回は行わない。
 
-## Approved candidate
+## User feedback — real-device QA 2026-09-22
 
-PR #6:
-- head: `38aa1a500f90355e740603464177701b9e0c3bfc`
-- state at C1: merged / closed
-- changed files: 22 Kabumori app/test files
-- relevant tests: 45 passed
-- app-scope TypeScript: PASS
-- Expo web export: PASS
-- git diff --check: PASS
-- production mutation: 0
+1. 銘柄画面
+- 検索統合は概ねOK。
+- 登録銘柄一覧は、保有と監視を同じ一覧に混ぜず、別で見たい。
 
-## Important clarification
+2. 重要ニュース
+- 要点の重複は改善したが、「詳しい内容」がまだ詳細ではない。
+- 実機例:
+  - 国連/フーシ派記事: 詳細が「中東情勢の緊迫化…日本株への具体的な影響は確認できない」程度。
+  - ホルムズ海峡タンカー記事: 詳細が実質空で警告表示のみ。
+  - 北朝鮮ミサイル記事: 詳細が市場影響の一般論で、出来事自体の追加情報が薄い。
+- ユーザー期待は、要点の繰り返しではなく、出来事について追加で理解できる内容。
 
-The following user requests are ALREADY implemented in PR #6 and must be preserved through merge:
-1. Portfolio V1 using latest stored close-report `portfolio_snapshot`.
-2. Important News 要点/詳細 deterministic de-duplication.
+3. Visual polish
+- 各ページの見た目の統一は概ねOK。
+- 色・アイコン・細かなビジュアルは今後別タスクで詰める。今回の主目的に含めない。
 
-They are not yet visible to the user only because PR #6 has not been merged into main.
+## Model policy
 
-## Included feature set
+- **Lunaで実施。**
+- UI分割、ニュースデータ経路の調査、deterministic presentation改善、source candidate/testsはLuna。
+- Sol不要 unless production mutationやAuth/RLS/security boundaryが必要になる。今回はproduction mutation禁止。
 
-### UI consistency
-- shared Kabumori light palette across core screens
-- Home / 銘柄 / ポート / レポート / 重要ニュース visually aligned
+## Scope / safety
 
-### Stock search integration
-- search integrated into `/explore`
-- Home stock-search action opens integrated flow
-- `/search` compatibility route only
-- preserve edit/delete/register flows
+Allowed:
+- root Kabumori app: `src/app/**`, relevant components/libs/tests.
+- important-news generation/presentation source and tests if required to make detail semantically correct.
+- local/source candidate only for backend producer changes.
 
-### Portfolio V1
-- fifth tab `ポート`
-- uses latest completed close-report snapshot only
-- explicit basis date, never realtime claim
-- totals, holding rows, stored close, daily/unrealized P/L, sector weights
-- watchlist excluded from totals
-- clear empty state
+Forbidden in this H1:
+- production DB mutation
+- migration apply
+- Edge Function production deploy
+- Cron change
+- secret/Vault/provider credential change
+- X/Push behavior changes unrelated to important-news app copy
+- H2/social-mobile files
+- G1/G2 workstream files
+- visual redesign of icons/colors beyond what is needed for the requested behavior
 
-### Important News
-- exact/near-duplicate suppression between summary/key points/detail
-- no display-time AI call
-- if no materially new detail remains, do not repeat it
-- preserve source links and relation text
+## Goal A — split holdings and watch in 銘柄 screen
 
-## Mandatory startup
+Current:
+- `/explore` integrates search and registered stocks.
+- Empty query currently shows all tracked stocks together.
 
-1. Read `.agent/ORCHESTRATION.md`
-2. Read `.agent/CURRENT_STATE.md`
-3. Read this TASK
-4. Read `.agent/CODEX_REPORT.md`
-5. Fresh fetch `origin/main`
-6. Inspect PR #6 head and current main-side changes
-7. Confirm no overlap with active H2/social-mobile files
+Target UX:
+- Search field remains at the top.
+- When query is non-empty: show search results as now.
+- When query is empty: show registered stocks separated clearly into:
+  - `保有`
+  - `監視`
 
-## Freshen / merge rules
+Preferred interaction:
+- segmented control/toggle `保有 | 監視`, with counts if clean.
+- default should be `保有` when holdings exist; if no holdings but watches exist, show `監視`.
+- preserve current edit/delete/register flow.
+- after registering or changing tracking_type, the item appears in the correct section without needing app restart.
+- empty states must be section-specific:
+  - no holdings -> `保有銘柄はまだありません`
+  - no watch -> `監視銘柄はまだありません`
+- search mode should not be broken by the filter state.
 
-- Rebase/freshen PR #6 onto current `origin/main`.
-- Current known main-side implementation changes are H2 social-mobile migration/test only; no Kabumori app overlap was present at C1.
-- Do not drag stale `.agent` history.
-- If any Kabumori app file in PR #6 changed on main after C1 in a conflicting way, STOP for C1 rather than auto-resolving semantics.
+Alternative acceptable:
+- two stacked sections if segmented control creates native-tab/keyboard issues, but holdings and watch must not be mixed.
 
-## Required verification after freshen
+Tests:
+- holding/watch partition
+- default section selection
+- empty states
+- update after tracking type change if helper logic is extracted.
 
-- relevant app tests
-- app-scope TypeScript
-- Expo web export
-- `git diff --check`
-- verify routes:
-  - `/`
-  - `/explore`
-  - `/portfolio`
-  - `/search`
-  - `/news`
-  - `/news/[id]`
-  - `/reports`
-  - `/reports/[id]`
-- verify five-tab native/web navigation
-- verify Home -> integrated stock search
-- verify Portfolio basis-date copy and no realtime claim
-- verify Important News duplicate suppression remains
+## Goal B — redefine what 「詳しい内容」 means
+
+The display must have clear semantic roles:
+
+- `要点`: 2–4 concise facts sufficient for quick scanning.
+- `詳しい内容`: additional event facts/context that were NOT already shown in 要点.
+- `市場との関係` or equivalent: why this matters to the user's stocks/market.
+
+Do NOT use generic market commentary as the main `詳しい内容` if event details are available.
+
+Good detail examples:
+- who/what/where/when
+- sequence of events
+- official/source attribution
+- quantities/distances/casualties/affected assets
+- what is confirmed vs not confirmed
+- prior/related context already present in the source
+- operational status after the event
+
+Bad detail examples:
+- merely repeating headline/key points
+- generic `日本株への影響が注目されます`
+- generic `地政学リスクとして重要です`
+- a warning icon with no explanation when source-backed detail exists
+
+## Goal C — diagnose source of shallow detail before changing behavior
+
+First trace the full data path for the three classes visible in screenshots:
+- AP / breaking-market style item
+- UN News / official source item
+- North Korea / geopolitical item
+
+Determine for each:
+1. raw/stored source text available to the pipeline,
+2. generated/stored `app_summary_ja`,
+3. `app_key_points_ja`,
+4. `app_detail_ja`,
+5. `verified_text`,
+6. which field `buildNewsPresentation()` selects,
+7. whether detail is shallow because:
+   - producer generated shallow `app_detail_ja`,
+   - the RPC omits richer source-backed fields,
+   - presentation de-dup removes too much,
+   - fallback prioritization selects the wrong source.
+
+Do not guess. Document evidence in CODEX_REPORT.
+
+## Goal D — improve detail quality at the correct layer
+
+### If producer/app-copy generation is the problem
+Create a **source candidate only** that changes the prompt/schema/logic so:
+- `app_summary_ja` = short lead summary,
+- `app_key_points_ja` = concise distinct facts,
+- `app_detail_ja` = additional source-backed event detail/context, ideally 2–4 short paragraphs when source material supports it,
+- market impact/relevance is kept separate from event detail,
+- no unsupported facts or predictive claims.
+
+Preserve Fact-check/grounding boundary.
+
+### If presentation is the problem
+Fix `buildNewsPresentation()` so:
+- detail uses source-backed remaining content before generic relevance commentary,
+- de-dup removes only actual duplicates and does not discard materially different facts,
+- no-detail state uses explanatory copy, never a bare warning emoji/icon.
+
+### If both are involved
+Fix both as source candidate, but keep production deployment forbidden.
+
+## Goal E — safe fallback for thin-source news
+
+Some source items genuinely have little source text.
+
+For those:
+- show concise 要点,
+- show `追加の詳細情報は元記事で確認できます` or equivalent,
+- keep source link,
+- do not invent filler,
+- never show a bare `⚠️` as the entire 詳しい内容 section.
+
+## Goal F — test quality with realistic fixtures
+
+Add/adjust regression fixtures representing:
+1. tanker strike / crew injuries / vessel status / no closure confirmed,
+2. North Korea missile test / range / splashdown / official assessment,
+3. UN/Houthi item with attempted strike + displacement context,
+4. truly thin source with no extra details.
+
+Assertions:
+- key points and detail do not duplicate,
+- detail contains additional event facts when fixture contains them,
+- generic market-impact language is not substituted for available event detail,
+- thin-source fallback is readable and non-empty,
+- no unsupported new facts are added.
+
+## Goal G — no visual polish creep
+
+Do not spend this task redesigning:
+- tab icons
+- palette
+- typography system
+- badge colors
+- animation
+
+Record visual polish ideas separately in report only.
+
+## Verification
+
+Minimum:
+- fresh `origin/main`
+- no file overlap with active H2/G1/G2
+- relevant app/news tests PASS
+- app-scope TypeScript PASS
+- Expo web export PASS
+- `git diff --check` PASS
+- source/readback proves holdings/watch separation and search preservation
+- source/readback proves detail semantics above
 - production mutation = 0
-- no H2/G1/G2 implementation changes
 
-## Merge
+If important-news producer source is changed:
+- run its relevant Deno/unit tests/type check,
+- do not deploy it.
 
-If all checks pass:
-- merge PR #6 to `main`
-- read back resulting main SHA
-- verify PR #6 merged/closed
-- verify approved Kabumori app files on main match freshened candidate
-- no backend deploy, migration, Function, Cron, secret, EAS, or App Store action
-
-## Handoff
+## Deliverables / C1
 
 Update `.agent/CODEX_REPORT.md` with:
-1. pre-freshen main SHA
-2. final feature head SHA
-3. verification results
-4. merge commit/resulting main SHA
-5. PR #6 merged state
-6. Portfolio V1 preserved
-7. News de-dup preserved
-8. production mutation 0
-9. native/manual QA still outstanding if not run
+1. changed files
+2. exact holdings/watch UX
+3. evidence-based root cause for shallow news detail
+4. exact data-path fields used before/after
+5. whether fix is app-only or app + producer candidate
+6. realistic fixture results
+7. all verification results
+8. production mutation = 0
+9. explicit note: colors/icons visual polish deferred
 
 On completion:
 - status -> `review_required`
@@ -122,38 +224,3 @@ On completion:
 - STOP for C1
 
 **推奨モデル：Luna。**
-
-
-## Completion record — 2026-09-22
-
-- pre_freshen_main: c4f2f83f485bda45e308522c7b6d079b4b606e7c
-- final_feature_head: 38aa1a500f90355e740603464177701b9e0c3bfc
-- merge_commit: bc4929165cf74e9044f0267299fce7f1132ac60b
-- pull_request: https://github.com/anohi-memories/kabumori/pull/6 (merged and closed)
-- verification: 45 relevant tests passed; app-scope TypeScript, Expo web export, route checks, and diff check passed.
-- production_mutation: 0
-- native/manual QA: outstanding for C1 follow-up.
-- next_owner: chatgpt
-
-
-## Final C1 review — 2026-09-22
-
-**PASS — merged main state verified.**
-
-Verified:
-- PR #6 is merged and closed.
-- Merge commit / resulting main baseline: `bc4929165cf74e9044f0267299fce7f1132ac60b`.
-- Main contains the approved shared Kabumori light palette and five-tab navigation: Home / 銘柄 / ポート / レポート / 重要ニュース.
-- Stock search is integrated into the 銘柄 screen and the Home search route targets that flow.
-- Portfolio V1 is present on main and uses stored close-report `portfolio_snapshot` data with an explicit closing-price basis label and non-realtime disclaimer.
-- Important News deterministic duplicate suppression remains on main; no display-time AI call is introduced.
-- Commits after the merge changed only `.agent` control/report files; no Kabumori app implementation drift was detected.
-- Production/backend/EAS/App Store mutation = 0.
-
-Remaining QA:
-- Manual real-device/native visual QA remains user-side follow-up. Specifically confirm five-tab layout, search focus/keyboard behavior, portfolio card layout, and news detail rendering.
-
-C1 judgment:
-- PR #6 merge is accepted and this task is complete.
-
-**Recommended model for any follow-up UI fixes: Luna.**
