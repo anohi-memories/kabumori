@@ -2,7 +2,7 @@
 
 - task_id: `kabumori-mobile-home-dashboard-v1-20260922`
 - result: `review_required` — C1 blocker fixed; Home now uses fixed Japanese error copy and no longer renders arbitrary backend `Error.message` text. Stop for C1.
-- fresh_main_before_sync: `b218055bfbe671bdd738d6c91a5a73dd5572f08d`
+- fresh_main_before_sync: `b218055bfbe671bdd738d6c91a5c73dd5572f08d`
 - branch/commit: `codex/kabumori-mobile-home-dashboard-v1-20260922` / `7ff16dcb16117cd2c530fbfdf0e7da8c4788b5e8`
 - pull_request: https://github.com/anohi-memories/kabumori/pull/5 (updated; not merged)
 
