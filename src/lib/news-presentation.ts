@@ -144,6 +144,38 @@ export function distinctNewsTexts(values: readonly string[], against: readonly s
   return kept;
 }
 
+// Generated速報本文 often ends with a market-impact sentence. That belongs in
+// 市場との関係, not in 詳しい内容, when the preceding source-backed sentences
+// already contain the event facts. Keep this deliberately narrow so status
+// facts such as「封鎖は確認されていない」remain visible.
+const GENERIC_MARKET_COMMENTARY = [
+  /日本株(?:では|に|の|へ|や)[^。！？\n]*(?:影響|反応|注目|見られ|可能性|焦点)/u,
+  /(?:市場|株価|投資家心理|地政学リスク)[^。！？\n]*(?:影響|反応|注目|可能性|重要|見られ)/u,
+  /(?:関連銘柄|対象銘柄)[^。！？\n]*(?:影響|反応|注目|可能性|見られ)/u,
+];
+const EMPTY_DETAIL_SENTENCE = /^(?:現時点で)?(?:追加の)?(?:補足|詳しい内容|詳細情報)は(?:ありません|不明です|確認できません)。?$/u;
+
+export function isGenericMarketCommentary(value: string): boolean {
+  return GENERIC_MARKET_COMMENTARY.some((pattern) => pattern.test(value));
+}
+
+/**
+ * Partitions verified Japanese copy into quick facts and additional event
+ * facts. Generic market commentary is left to 市場との関係, and an explicit
+ * thin-source sentence is never promoted as if it were new detail.
+ */
+export function partitionVerifiedSentences(sentences: readonly string[]): { keyPoints: string[]; detail: string[] } {
+  const distinct = distinctNewsTexts(sentences).filter((sentence) => !EMPTY_DETAIL_SENTENCE.test(sentence));
+  const eventFacts = distinct.filter((sentence) => !isGenericMarketCommentary(sentence));
+  const source = eventFacts.length > 0 ? eventFacts : distinct;
+  if (source.length <= 2) return { keyPoints: source.map((sentence) => fitText(sentence, 120)), detail: [] };
+  const keyPoints = source.slice(0, 2).map((sentence) => fitText(sentence, 120));
+  return {
+    keyPoints,
+    detail: distinctNewsTexts(source.slice(2), keyPoints),
+  };
+}
+
 /** Splits on 。！？ outside brackets. */
 export function splitSentences(text: string): string[] {
   const sentences: string[] = [];
@@ -319,17 +351,14 @@ export function buildNewsPresentation(item: NewsPresentationInput): NewsPresenta
     const sentences = splitSentences(verified.join(''));
     // When the title was taken from the first sentence, the list summary starts after it.
     const summarySentences = verifiedHeadline && sentences.length > 1 ? sentences.slice(1) : sentences;
-    const keyPoints = sentences.length >= 4
-      ? distinctNewsTexts(sentences.slice(0, 3).map((sentence) => fitText(sentence, 120)))
-      : [];
-    const detailSource = keyPoints.length > 0 ? sentences.slice(keyPoints.length) : sentences;
+    const partition = partitionVerifiedSentences(sentences);
     return {
       ...base,
       title,
       titleIsJapanese: true,
       listSummary: fitText(summarySentences.join(''), LIST_SUMMARY_MAX),
-      keyPoints,
-      detailParagraphs: distinctNewsTexts(detailSource, keyPoints),
+      keyPoints: partition.keyPoints,
+      detailParagraphs: partition.detail,
       originalExcerpt: null,
       origin: 'verified_post',
     };

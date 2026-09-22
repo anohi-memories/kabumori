@@ -11,6 +11,7 @@ import {
   ORIGINAL_EXCERPT_MAX,
   sourceLabelFor,
   normalizeNewsText,
+  partitionVerifiedSentences,
   stripMarkup,
   TITLE_MAX,
   verifiedPostParagraphs,
@@ -256,8 +257,8 @@ test("verified post partitions distinct sentences between 要点 and 詳細", ()
     ...YEN,
     verified_text: "一つ目の事実です。二つ目の事実です。三つ目の事実です。四つ目の追加情報です。",
   });
-  assert.equal(p.keyPoints.length, 3);
-  assert.deepEqual(p.detailParagraphs, ["四つ目の追加情報です。"]);
+  assert.equal(p.keyPoints.length, 2);
+  assert.deepEqual(p.detailParagraphs, ["三つ目の事実です。", "四つ目の追加情報です。"]);
   assert.equal(new Set([...p.keyPoints, ...p.detailParagraphs].map(normalizeNewsText)).size, 4);
 });
 
@@ -266,6 +267,59 @@ test("a short verified post keeps content once without manufacturing detail", ()
     ...YEN,
     verified_text: "短い一文です。補足はありません。",
   });
-  assert.deepEqual(p.keyPoints, []);
-  assert.equal(p.detailParagraphs.length, 2);
+  assert.equal(p.keyPoints.length, 1);
+  assert.deepEqual(p.keyPoints, ["短い一文です。"]);
+  assert.deepEqual(p.detailParagraphs, []);
+});
+
+test("realistic geopolitical posts keep event facts in 詳細 and drop generic market filler", () => {
+  const cases = [
+    {
+      input: {
+        title: "North Korea touts new weapons system described as hypersonic",
+        summary: "North Korea said Tuesday that its latest missile tests involved a new weapons system of major significance. South Korea said the missiles flew approximately 450 and 600 kilometers toward the sea, while Japan’s military assessed that they fell outside Japan’s exclusive economic zone.",
+        verified_text: "【速報】北朝鮮が、新型兵器システムとするミサイル試験を実施しました。韓国側によると、ミサイルは約450〜600km飛行して海上に落下。日本の防衛当局は、日本のEEZ外に落下したと評価しています。現時点で直接の被害は示されていませんが、日本株では安全保障関連を含めた反応が見られるかが注目されそうです。",
+      },
+      detail: "日本の防衛当局は、日本のEEZ外に落下したと評価しています。",
+      omitted: "日本株では",
+    },
+    {
+      input: {
+        title: "UN condemns attempted Houthi strike on Riyadh as Yemen displacement surges past 130,000",
+        summary: "The UN has condemned continued cross-border attacks by Houthi forces against Saudi Arabia, including an attempted strike on the capital Riyadh, as fighting inside Yemen drives one of the country’s fastest displacement surges in years.",
+        verified_text: "【速報】国連が、フーシ派によるサウジアラビアへの越境攻撃を非難しました。首都リヤドへの攻撃未遂も含まれています。イエメン国内の戦闘を受け、国内避難民は13万人を超えました。中東情勢の緊迫化を示す動きですが、日本株への具体的な影響は確認できていません。",
+      },
+      detail: "国内避難民は13万人を超えました。",
+      omitted: "日本株への具体的な影響は確認できていません。",
+    },
+    {
+      input: {
+        title: "Projectile strikes tanker entering Strait of Hormuz, injuring two crew members",
+        summary: "The UK Maritime Trade Operations Center reported that a tanker was struck by an unknown projectile as it entered the Strait of Hormuz. Two crew members sustained minor injuries, and the vessel continued toward its next port under its own power.",
+        verified_text: "【速報】ホルムズ海峡に進入したタンカーが、不明な飛翔体を受けました。乗組員2人が軽傷を負いましたが、船舶は自力で次の港へ向けて航行を続けています。現時点で、海峡の封鎖や供給障害は確認されていません。",
+      },
+      detail: "海峡の封鎖や供給障害は確認されていません。",
+      omitted: "",
+    },
+  ] as const;
+
+  for (const fixture of cases) {
+    const presentation = buildNewsPresentation({
+      ...fixture.input,
+      source_url: "https://apnews.com/example",
+      company_name: "市場全体",
+    });
+    assert.ok(presentation.detailParagraphs.some((paragraph) => paragraph.includes(fixture.detail)), fixture.input.title);
+    if (fixture.omitted) assert.ok(!presentation.detailParagraphs.join("\n").includes(fixture.omitted), fixture.input.title);
+  }
+});
+
+test("partition helper omits generic filler but retains a concrete status fact", () => {
+  const partition = partitionVerifiedSentences([
+    "船舶が自力で次の港へ向けて航行を続けています。",
+    "現時点で海峡の封鎖は確認されていません。",
+    "日本株では反応が見られるかが注目されそうです。",
+  ]);
+  assert.deepEqual(partition.keyPoints, ["船舶が自力で次の港へ向けて航行を続けています。", "現時点で海峡の封鎖は確認されていません。"]);
+  assert.deepEqual(partition.detail, []);
 });
