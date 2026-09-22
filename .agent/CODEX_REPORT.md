@@ -1719,3 +1719,14 @@ Candidate awaits C1 review. Stop before any Edge Function deploy; a separate exp
 - `deno check` passed for `app_copy_logic.ts` and `personalized-reports/report_logic.ts`. Full `index.ts` check is blocked by the pre-existing `_shared/x_oauth2_post.ts` `Uint8Array<ArrayBufferLike>` vs `BufferSource` error; no new changed-file error was observed.
 - `git diff --check` passed. No Expo/app presentation files were touched, so no app TypeScript test was required.
 - No migration apply, production DB write, RPC/RLS change, Edge deploy, Cron, secret/Vault/provider change, X/Push action, or report regeneration occurred.
+## Latest H1 result — source freshen/merge attempt (2026-09-22)
+
+- task_id: `kabumori-news-producer-portfolio-freshness-source-merge-20260922`
+- pre-freshen main: `3de9881` (latest main at startup); main advanced to `3346de4` with an unrelated H2 index update before control synchronization.
+- freshened feature head: `f5978b1` (candidate `bc5082c` cherry-picked onto the latest main used for the merge attempt).
+- approved files: exactly the seven files listed in the TASK; no H2/G1/G2 files changed.
+- verification: targeted app-copy/report/static tests **46 passed / 0 failed**; changed-file Deno checks passed; full Important News suite **420 passed / 1 unrelated fixed-expectation failure** (`cost_path_audit_test.ts`, observed 27600 vs expected 27377); `git diff --check` passed.
+- PR: [#8](https://github.com/anohi-memories/kabumori/pull/8), open and mergeable at creation.
+- merge result: not merged. Required Vercel check failed because the deployment is rate-limited for 24 hours. Admin/branch-protection bypass was not attempted; normal merge was blocked by the failing required check.
+- Important News producer V2 and Portfolio validator candidate remain intact on the freshen branch. No production migration, Function deploy, report regeneration/backfill, or other production mutation occurred.
+- next action: after the required check becomes available, re-run the PR check and merge PR #8, then read back the resulting main SHA and the seven approved files. Production rollout remains a later Sol checkpoint: exact migration apply, `important-news-monitor` deploy, `personalized-reports` deploy, and a safe one-time 9/18 close regeneration/backfill decision are still required and were not performed here.

@@ -3,8 +3,8 @@
 - task_id: kabumori-news-producer-portfolio-freshness-source-merge-20260922
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: C1 PASS済みの Important News producer V2 + Portfolio validator source candidate をlatest mainへfreshenし、再検証後mainへmergeする。production deploy/migration/backfillは行わない。

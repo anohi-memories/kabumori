@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 source merge ready after C1 PASS on news producer V2 + Portfolio validator candidate; production mutation 0)
+- checked_at: 2026-09-22 JST (H1 source merge review_required; PR #8 blocked by required Vercel rate limit; production mutation 0)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,13 +14,13 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `kabumori-news-producer-portfolio-freshness-source-merge-20260922`
+- Codex slot 1: `review_required` — `kabumori-news-producer-portfolio-freshness-source-merge-20260922`
   - C1 PASS on source candidate.
   - Important News producer V2 approved: rich source-backed rows can receive independent Fact-checked app copy; thin sources fail closed; no display-time AI.
   - Portfolio validator fix approved: full-width Latin embedded in Japanese proper-name context passes while ASCII acronyms/untranslated English remain blocked.
   - Existing 9/18 snapshot is valid, but its failed narrative row still requires a later safe regeneration/backfill after production rollout.
-  - Next H1 is source freshen/merge only; no migration apply, Function deploy, or report regeneration.
-  - Production rollout remains a later Sol checkpoint.
+  - Candidate was freshened onto `origin/main` and PR #8 opened; required Vercel check is rate-limited for 24 hours, so merge awaits a passing check. No migration apply, Function deploy, or report regeneration.
+  - Production rollout remains a later Sol checkpoint; no branch-protection bypass was attempted.
   - Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase18-production-shaped-access-token-reader-preflight-20260922`

@@ -6,11 +6,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: kabumori-important-news-producer-detail-and-portfolio-freshness-diagnosis-20260922
+- task_id: kabumori-news-producer-portfolio-freshness-source-merge-20260922
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: Source-backed Important News app-copy V2 and narrow Portfolio full-width-name validator candidate are pushed for C1; production mutation 0; no deploy or migration apply.
+- note: C1-approved candidate was freshened and PR #8 opened, but required Vercel check is rate-limited for 24 hours; merge is pending without bypass. Production mutation 0.
 
 
 ### Codex slot 2
