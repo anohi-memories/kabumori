@@ -1,145 +1,155 @@
 # Codex Task
 
-- task_id: kabumori-mobile-home-dashboard-v1-merge-20260922
+- task_id: kabumori-mobile-ui-consistency-and-stock-search-integration-20260922
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
-- purpose: C1 PASS済みのPR #5（Kabumori Home/Dashboard V1）をcurrent mainへ安全にfreshenし、競合がないことを確認してmainへmergeする。実装内容は変更しない。
+- purpose: 実機確認で判明したHomeと他画面の見た目の不統一、およびHomeから銘柄検索へ遷移できない問題を解消する。銘柄検索は登録銘柄画面へ統合し、アプリ全体の見た目を揃える。
 
-## Approved basis
+## User feedback — 2026-09-22
 
-C1 PASS:
-- PR #5
-- approved head: `7ff16dcb16117cd2c530fbfdf0e7da8c4788b5e8`
-- prior raw-backend-error blocker fixed
-- dashboard tests 4/4 PASS
-- app-scope TypeScript PASS
-- Expo web export PASS
-- diff-check PASS
-- backend production mutation 0
-
-At C1 review, branch was behind main by 9 commits, but the intervening main-side diff was limited to `.agent` control/report files only; none of the six app/test implementation files overlapped.
-
-## User approval
-
-2026-09-22「じゃあすすめて」。
-
-This authorizes the clean fresh-main merge of the already-approved Home/Dashboard V1 only.
+- Homeだけ画面の色・雰囲気が変わっており、他画面が以前のままで違和感がある。
+- Homeの「銘柄を検索」が機能していない。
+- Bottom tabから検索が消えたため、銘柄検索は登録銘柄一覧ページへ入れてよい。
 
 ## Model policy
 
 - **Lunaで実施。**
-- Sol不要 unless an unexpected implementation conflict appears.
+- UI/UX、route整理、component抽出、testsはLuna。
+- Sol不要 unless unexpected Auth/RLS/runtime conflict occurs.
 
-## Mandatory startup
+## Scope boundary
 
-1. Read `.agent/ORCHESTRATION.md`
-2. Read `.agent/CURRENT_STATE.md`
-3. Read this TASK
-4. Read `.agent/CODEX_REPORT.md`
-5. Fresh fetch `origin/main`
-6. Inspect PR #5 head and changed files
-7. Confirm other slots are not editing the same six app/test files
+対象:
+- root Kabumori app only: `src/app/**`, `src/components/**`, `src/constants/**`, `src/lib/**`, relevant app tests
 
-## Scope A — freshen/rebase
+対象外:
+- `apps/social-mobile/**`
+- H2/G1/G2 files
+- Supabase migration/schema/RPC
+- Edge Function
+- Cron/secrets
+- X/Push producer behavior
+- EAS/App Store production operations
 
-Target implementation files only:
-- `src/app/index.tsx`
-- `src/app/search.tsx`
-- `src/components/app-tabs.tsx`
-- `src/components/app-tabs.web.tsx`
-- `src/lib/dashboard.ts`
-- `tests/app/dashboard_test.ts`
+Production backend mutation = 0.
 
-Requirements:
-- Rebase/freshen PR #5 onto latest `origin/main`.
-- Do not drag stale `.agent` control-file history from the feature branch.
-- Do not modify implementation semantics unless required for a concrete fresh-main conflict.
-- If any of the six implementation/test files changed on main since C1 in a conflicting way, STOP for C1; do not auto-resolve semantics.
+## Goal A — visual consistency
 
-## Scope B — verification
+Current issue:
+- Home uses its own light/dark palette and visual hierarchy.
+- Explore/Reports/News/Search still largely use older hard-coded light styling.
+- This creates a visibly inconsistent app.
 
-After freshen:
-- confirm PR diff is limited to the same six implementation/test files
-- dashboard tests 4/4
-- app-scope TypeScript check
-- Expo web export
-- `git diff --check`
-- static route verification for:
-  - `/`
-  - `/search`
-  - `/explore`
-  - `/news`
-  - `/reports`
-- confirm Home still uses fixed Japanese error copy and never renders arbitrary backend `Error.message`
-- confirm no realtime price/P&L/index fabrication
-- confirm H2/social-mobile files untouched
+Required:
+1. Introduce/reuse a small shared app palette/theme for the core Kabumori screens.
+2. Apply the same background/card/text/border/accent semantics to:
+   - Home
+   - 銘柄/登録銘柄
+   - レポート
+   - 重要ニュース
+   - any retained Search wrapper
+3. Keep the current Kabumori green/cream identity.
+4. Avoid a large design-system rewrite.
+5. If dark mode is supported, it must be coherent across all these screens. If coherent dark mode would expand scope too much, prefer one consistent light theme across all core screens rather than Home-only dark mode.
+6. Bottom tab styling should not visually clash with screen backgrounds.
 
-## Scope C — merge
+Acceptance:
+- Switching between Home / 銘柄 / レポート / 重要ニュース no longer feels like different app generations.
 
-If all checks pass:
-- merge PR #5 to `main`
-- no production DB/schema/RPC/Function/Cron/secret changes
-- no app-store/EAS build required in this task
-- no backend deploy
+## Goal B — integrate stock search into the stocks page
 
-After merge:
-- read back latest main SHA
-- verify the six files on main match the approved implementation
-- verify PR #5 is merged/closed
+Current:
+- `src/app/explore.tsx` shows registered stocks only.
+- `src/app/search.tsx` contains the search flow.
+- Home calls `router.push('/search')`, which did not work in the user's real-device check.
 
-## Scope D — handoff
+Target UX:
+- 銘柄画面 itself should support both:
+  1. registered holdings/watch list
+  2. stock master search + add/register
+
+Preferred implementation:
+- Rename page/tab copy from `登録銘柄` to a broader `銘柄` or equivalent if it improves clarity.
+- Add a search field at top of the stocks page.
+- When query is empty: show registered stocks.
+- When query has text: show stock search results.
+- Search behavior should preserve existing debounce, ticker/company partial search, registered-state check, and TrackedStockEditor registration flow.
+- After save, refresh registered list and update search result state.
+
+Alternative acceptable implementation:
+- top CTA/button `銘柄を追加・検索` expands a search panel/sheet on the same page.
+- Do not rely on a separate bottom-tab Search.
+
+## Goal C — Home quick actions
+
+Update Home so:
+- `銘柄を検索` no longer routes to broken `/search`.
+- It should open the stocks page in search-ready state.
+- `登録銘柄` quick action may be renamed/combined to avoid duplicate actions if needed.
+
+Preferred:
+- Home has one clear `銘柄を見る・追加` or `銘柄検索` action leading to the stocks page.
+- Avoid two near-duplicate buttons.
+
+If route params are used to request search focus, verify Expo Router/NativeTabs behavior on native and web.
+
+## Goal D — route cleanup
+
+- Keep `/search` only if needed for compatibility.
+- If retained, it may redirect/wrap the new integrated stocks search experience.
+- Do not leave a second independent search implementation that can drift.
+- Existing deep links for news/reports must remain unchanged.
+
+## Goal E — error and data safety
+
+Preserve prior C1 guarantees:
+- Home never renders raw backend `Error.message`.
+- No fabricated realtime price/P&L/index values.
+- Existing registered-stock edit/delete behavior remains.
+- No backend production mutation.
+
+Also inspect Explore current raw backend error rendering. If changing its error UI within this task, map visible errors to short user-facing Japanese copy rather than exposing PostgREST details.
+
+## Goal F — verification
+
+Minimum:
+1. Fresh `origin/main` check.
+2. No overlap with active H2/social-mobile files.
+3. App-scope TypeScript PASS.
+4. Relevant app/unit tests PASS.
+5. Expo web export PASS.
+6. Static route/navigation verification.
+7. `git diff --check` PASS.
+8. Confirm on code path that:
+   - Home -> stock search path works
+   - stock search is accessible from stocks page
+   - registered list remains accessible
+   - no duplicate independent search logic remains unless intentionally wrapped
+   - visual palette is consistent across Home/Stocks/Reports/News
+9. Production mutation = 0.
+
+If practical, add tests for pure search-mode/navigation helper logic.
+
+## Deliverables / C1
 
 Update `.agent/CODEX_REPORT.md` with:
-1. pre-freshen main SHA
-2. final branch/head SHA
-3. exact changed files
-4. verification results
-5. merge commit / resulting main SHA
-6. PR #5 merged state
+1. changed files
+2. exact UI consistency approach
+3. before/after stock-search navigation
+4. whether `/search` was removed, redirected, or wrapped
+5. tests/typecheck/export results
+6. manual/native visual QA status
 7. production mutation = 0
 8. H2/G1/G2 untouched
-9. recommended next UI phase
+9. remaining UI inconsistencies, if any
 
 On completion:
-- task status -> `review_required`
+- status -> `review_required`
 - next_owner -> `chatgpt`
 - STOP for C1
 
 **推奨モデル：Luna。**
-
-
-## Completion record — 2026-09-22
-
-- Fresh main before rebase: `1b1d53323c9a903954b3852ed168240fdf581303`.
-- Approved PR #5 was rebased without conflict; final feature head: `d03f08ccbf4598ef838be19128b899d309398ac6`.
-- PR diff remained limited to the six approved app/test files.
-- Dashboard tests 4/4, app-scope TypeScript, Expo web export/static routes, and diff-check passed.
-- Home fixed Japanese error-copy mapping and no-fabrication checks remain intact.
-- Merged PR #5 with merge commit `c867ee7e0c4546265be325cc606653e0bf964d9f`; resulting main: `c867ee7e0c4546265be325cc606653e0bf964d9f`.
-- PR #5 is merged/closed. Read-back confirmed the six files on main match the approved implementation.
-- Production mutation = 0. H2/G1/G2 and backend production areas untouched.
-- status: `review_required`; next_owner: `chatgpt`; stop for C1.
-
-
-## Final C1 review — 2026-09-22
-
-**PASS — merged main state verified.**
-
-Verified:
-- PR #5 is merged and closed.
-- Merge commit / resulting main baseline: `c867ee7e0c4546265be325cc606653e0bf964d9f`.
-- Main still contains the approved Home/Dashboard V1 implementation.
-- Home-visible section errors use fixed Japanese copy via `dashboardSectionError()`; arbitrary backend `Error.message` is not rendered.
-- Root remains Home, Search remains `/search`, and the no-fabrication rule for realtime price/P&L/index data remains intact.
-- Dashboard regression test covers the fixed error mapping.
-- Commits after the merge changed only `.agent` control/report files; no approved app/test implementation file drift was detected.
-- Production mutation = 0. No backend/EAS/App Store operation occurred.
-
-C1 judgment:
-- Home/Dashboard V1 merge is accepted and this task is complete.
-
-**Recommended model for the next Kabumori UI task: Luna.**
