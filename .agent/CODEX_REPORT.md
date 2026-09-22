@@ -1,3 +1,52 @@
+## Latest H1 result — Kabumori UI consistency, integrated stock search, Portfolio V1, and news detail dedup (2026-09-22)
+
+- task_id: `kabumori-mobile-ui-consistency-and-stock-search-integration-20260922`
+- result: `review_required` — implementation is pushed in PR #6; stop for C1. No production backend mutation.
+- source_base: fresh `origin/main` was fetched before final control-file synchronization.
+- branch/commits: `codex/kabumori-mobile-home-dashboard-v1-20260922`; `7fc8299` (UI/search) and `b27c436` (Portfolio/news dedup), final head `b27c4362c3e8a4264d64afd71b451f8f06293a62`.
+- pull_request: https://github.com/anohi-memories/kabumori/pull/6 (open, mergeable, not merged).
+
+### Changed files
+
+- `src/app/_layout.tsx`, `src/app/index.tsx`, `src/app/explore.tsx`, `src/app/search.tsx`, `src/app/portfolio.tsx`
+- `src/app/news/_layout.tsx`, `src/app/news/index.tsx`, `src/app/news/[id].tsx`
+- `src/app/reports/_layout.tsx`, `src/app/reports/index.tsx`
+- `src/components/app-tabs.tsx`, `src/components/app-tabs.web.tsx`, `src/components/tracked-stock-editor.tsx`
+- `src/constants/kabumori-theme.ts`, `src/constants/theme.ts`
+- `src/lib/news-presentation.ts`, `src/lib/personalized-reports.ts`, `src/lib/report-presentation.ts`, `src/lib/stock-search.ts`
+- `tests/app/stock-search_test.ts`, `tests/app/news-presentation_test.ts`, `tests/app/portfolio_test.ts`
+
+### UI and search
+
+- Added a shared Kabumori light palette and applied the same background/card/text/border/accent semantics across Home, 銘柄, Reports, Important News, and the editor. Dark mode was not partially extended; the core flow stays consistently light.
+- Integrated stock-master search into `/explore`: empty query shows registered stocks; non-empty query uses a 350ms debounce, partial ticker/company matching, a 30-row limit, and registered-state display before using the existing editor.
+- Home now opens `/explore?focus=search`; `/search` is a compatibility redirect to the same integrated flow. Registered-stock edit/delete behavior remains on the same page.
+- Visible Explore/News/Reports/Portfolio failures use fixed Japanese copy and do not expose raw backend details.
+
+### Portfolio V1
+
+- Added a clear fifth tab `ポート` and a Home shortcut to `/portfolio`.
+- Portfolio reads only the existing `personalized_reports.portfolio_snapshot` from the newest completed `close` report; no realtime quote API, new provider, or AI call was added.
+- The view shows an explicit closing-price basis date, totals when available, holding rows, stored close/previous-close change, market value, day/unrealized P/L, sector weights, and a clear realtime disclaimer.
+- Watchlist rows are excluded from totals. No snapshot shows an empty state with links to 銘柄 registration and reports; older snapshots retain their basis date and are not presented as realtime.
+
+### Important News detail
+
+- Added deterministic normalization (markup/URL removal, NFKC/lowercase, whitespace and punctuation normalization) and exact/near-duplicate suppression.
+- Stored app copy keeps summary/key points/detail in separate partitions; verified posts use distinct leading factual sentences for 要点 and remaining sentences for 詳細; disclosure/japanese-body fallbacks apply the same remaining-content rule.
+- When no material detail remains, the detail page shows a short Japanese notice and source path instead of repeated prose. No display-time AI call was added.
+- Regression coverage includes exact/near duplicate app copy, verified sentence partitioning, short items with no extra detail, and long distinct detail.
+
+### Verification and safety
+
+- Relevant app tests: **45 passed / 0 failed** (including stock search, dashboard, news presentation, report presentation, and Portfolio tests).
+- Kabumori app-scope TypeScript check: passed. Repository-wide `npx tsc --noEmit` still reports unrelated pre-existing admin/social-mobile/Edge Function errors.
+- Expo web export: passed; static routes included `/`, `/search`, `/explore`, `/portfolio`, `/news`, `/news/[id]`, `/reports`, and `/reports/[id]`.
+- `git diff --check`: passed.
+- Manual iOS simulator/development-build visual QA was not run in this environment; native keyboard/modal/safe-area checks remain for C1.
+- Production mutation = 0. No migration/schema/RPC, Edge Function, Cron, secret/Vault, OAuth, X, Push, EAS, App Store, or production data change. H2/G1/G2 files and workstreams were untouched.
+- next_recommendation: C1 review PR #6; do not merge or deploy from this H1 turn.
+
 ## H1 merge result — Kabumori Home Dashboard V1 (2026-09-22)
 
 - task_id: `kabumori-mobile-home-dashboard-v1-merge-20260922`
