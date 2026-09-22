@@ -32,6 +32,11 @@ const current: FedStatementRecord = {
 test("first statement creates a baseline row and skips AI", async () => {
   const pipeline = await buildFedStatementDiffPipeline(current, null);
   assert.equal(pipeline.row.previous_event_id, null);
+  assert.equal(pipeline.row.changed_paragraph_count, 0);
+  assert.equal(pipeline.row.material_change_count, 0);
+  assert.deepEqual(pipeline.row.semantic_buckets, []);
+  assert.equal(pipeline.row.deterministic_diff.comparisonStatus, "baseline_only");
+  assert.equal(pipeline.row.deterministic_diff.skipReason, "first_statement_no_baseline");
   assert.equal(pipeline.aiInput, null);
   assert.equal(pipeline.aiSkippedReason, "first_statement_no_baseline");
 });
@@ -76,12 +81,54 @@ test("diff insert uses idempotent ignore-duplicates semantics", async () => {
   const calls: Request[] = [];
   const fetchImpl = ((input: string | URL | Request, init?: RequestInit) => {
     calls.push(new Request(input, init));
-    return Promise.resolve(new Response("[]", { status: 201 }));
+    if (!init?.method) return Promise.resolve(new Response("[]", { status: 200 }));
+    return Promise.resolve(new Response('[{"id":"00000000-0000-0000-0000-000000000099"}]', { status: 201 }));
   }) as typeof fetch;
   const result = await persistFedStatementDiff({ supabaseUrl: "https://example.supabase.co", secretKey: "test" }, pipeline.row, fetchImpl);
-  assert.equal(result.duplicate, true);
-  assert.match(calls[0].headers.get("Prefer") ?? "", /resolution=ignore-duplicates/);
-  assert.equal(calls[0].url.endsWith("/rest/v1/mic_fed_statement_diffs"), true);
+  assert.equal(result.outcome, "inserted");
+  assert.equal(calls.length, 2);
+  assert.match(calls[1].headers.get("Prefer") ?? "", /resolution=ignore-duplicates/);
+  assert.equal(calls[1].url.endsWith("/rest/v1/mic_fed_statement_diffs"), true);
+});
+
+test("formal comparison replaces the single baseline row in place", async () => {
+  const pipeline = await buildFedStatementDiffPipeline(current, previous);
+  const calls: Request[] = [];
+  const fetchImpl = ((input: string | URL | Request, init?: RequestInit) => {
+    calls.push(new Request(input, init));
+    if (!init?.method) {
+      return Promise.resolve(new Response('[{"id":"00000000-0000-0000-0000-000000000099","previous_event_id":null,"diff_hash":"baseline"}]'));
+    }
+    return Promise.resolve(new Response(null, { status: 204 }));
+  }) as typeof fetch;
+  const result = await persistFedStatementDiff({ supabaseUrl: "https://example.supabase.co", secretKey: "test" }, pipeline.row, fetchImpl);
+  assert.equal(result.outcome, "replaced_baseline");
+  assert.equal(calls[1].method, "PATCH");
+  assert.match(calls[1].url, /id=eq\.00000000-0000-0000-0000-000000000099/);
+  assert.equal((await calls[1].json()).previous_event_id, previous.eventId);
+});
+
+test("same current event never creates a second active diff row", async () => {
+  const pipeline = await buildFedStatementDiffPipeline(current, previous);
+  const fetchImpl = ((_input: string | URL | Request, init?: RequestInit) => {
+    assert.equal(init?.method, undefined);
+    return Promise.resolve(new Response(JSON.stringify([{
+      id: "00000000-0000-0000-0000-000000000099",
+      previous_event_id: previous.eventId,
+      diff_hash: pipeline.row.diff_hash,
+    }])));
+  }) as typeof fetch;
+  const result = await persistFedStatementDiff({ supabaseUrl: "https://example.supabase.co", secretKey: "test" }, pipeline.row, fetchImpl);
+  assert.equal(result.outcome, "duplicate");
+});
+
+test("multiple active rows for one current event fail closed", async () => {
+  const pipeline = await buildFedStatementDiffPipeline(current, previous);
+  const fetchImpl = (() => Promise.resolve(new Response('[{"id":"1"},{"id":"2"}]'))) as typeof fetch;
+  await assert.rejects(
+    () => persistFedStatementDiff({ supabaseUrl: "https://example.supabase.co", secretKey: "test" }, pipeline.row, fetchImpl),
+    /FED_STATEMENT_DIFF_MULTIPLE_ACTIVE_ROWS/,
+  );
 });
 
 test("pure diff used by persistence retains hashes and FK ids", async () => {

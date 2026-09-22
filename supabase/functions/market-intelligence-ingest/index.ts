@@ -38,10 +38,13 @@ import {
   fetchEstatCpiMetrics,
 } from "./mic_estat_adapter.ts";
 import {
+  buildFedDecisionEvent,
+  classifyFedDecision,
   FED_STATEMENT_SOURCE_KEY,
   fetchFedStatement,
   fetchFedStatementEventBundle,
   parseFedStatementHtml,
+  statementIdentityChanged,
   type FedTargetRange,
   type FedStatement,
   type FedStatementIdentity,
@@ -167,8 +170,8 @@ type FetchResult =
   | { kind: "metrics"; metrics: NormalizedMarketMetric[] }
   | { kind: "events"; events: MarketEventInput[]; fedStatement?: FedStatement & { decision: import("./mic_fed_statement_adapter.ts").FedDecision }; previousFedStatement?: FedStatementRecord };
 
-async function readCurrentFedTargetRange(ctx: RestContext): Promise<FedTargetRange | null> {
-  const url = `${ctx.supabaseUrl}/rest/v1/market_metrics?metric_key=in.(FED_FUNDS_TARGET_LOWER,FED_FUNDS_TARGET_UPPER)&source_key=eq.fred&select=metric_key,value,observed_date&order=observed_date.desc&limit=20`;
+async function readFedTargetRangeBefore(ctx: RestContext, meetingDate: string): Promise<FedTargetRange | null> {
+  const url = `${ctx.supabaseUrl}/rest/v1/market_metrics?metric_key=in.(FED_FUNDS_TARGET_LOWER,FED_FUNDS_TARGET_UPPER)&source_key=eq.fred&observed_date=lt.${encodeURIComponent(meetingDate)}&select=metric_key,value,observed_date&order=observed_date.desc&limit=20`;
   const result = await fetch(url, { headers: restHeaders(ctx.secretKey) });
   if (!result.ok) throw new Error(`FRED_TARGET_LOOKUP_FAILED:${result.status}`);
   const rows = await result.json() as Array<{ metric_key?: unknown; value?: unknown }>;
@@ -237,14 +240,21 @@ async function runAdapter(ctx: RestContext, sourceKey: SourceKeyWithFed, now: Da
       return { kind: "metrics", metrics: await fetchEstatCpiMetrics({ appId, fetchedAt: now }) };
     }
     case FED_STATEMENT_SOURCE_KEY: {
-      const previousRange = await readCurrentFedTargetRange(ctx);
       // The statement parser remains source-pure; prior event identity is
       // read here so the writer can label same-meeting document revisions.
       // A missing prior event is the normal new-meeting path.
       const previousIdentities = await readPreviousFedStatementIdentities(ctx);
-      const bundle = await fetchFedStatementEventBundle(fetch, previousRange, previousIdentities);
+      const bundle = await fetchFedStatementEventBundle(fetch, null, previousIdentities);
+      const previousRange = await readFedTargetRangeBefore(ctx, bundle.statement.meetingDate);
+      const statement = {
+        ...bundle.statement,
+        decision: classifyFedDecision(previousRange, bundle.statement.targetRange),
+      };
+      const sameMeetingIdentity = previousIdentities.find((identity) => identity.meetingDate === statement.meetingDate) ?? null;
+      const identityOutcome = statementIdentityChanged(sameMeetingIdentity, statement);
+      const events = [buildFedDecisionEvent(statement, previousRange, identityOutcome === "revision")];
       const previousRef = previousIdentities
-        .filter((identity) => identity.meetingDate < bundle.statement.meetingDate)
+        .filter((identity) => identity.meetingDate < statement.meetingDate)
         .sort((a, b) => b.meetingDate.localeCompare(a.meetingDate))[0];
       let previousFedStatement: FedStatementRecord | undefined;
       if (previousRef) {
@@ -261,7 +271,7 @@ async function runAdapter(ctx: RestContext, sourceKey: SourceKeyWithFed, now: Da
           targetRange: parsed.targetRange,
         };
       }
-      return { kind: "events", events: bundle.events, fedStatement: bundle.statement, previousFedStatement };
+      return { kind: "events", events, fedStatement: statement, previousFedStatement };
     }
   }
 }

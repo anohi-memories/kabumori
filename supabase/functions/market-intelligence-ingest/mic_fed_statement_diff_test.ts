@@ -57,6 +57,15 @@ test("previous statement selects latest earlier Fed meeting by meeting_date", ()
   assert.equal(selectPreviousFedStatement([], current.meetingDate), null);
 });
 
+test("no previous statement is an empty non-material baseline, not an all-added diff", async () => {
+  const result = await buildFedStatementDiff(null, current);
+  assert.equal(result.comparisonStatus, "baseline_only");
+  assert.equal(result.skipReason, "first_statement_no_baseline");
+  assert.equal(result.addedParagraphs.length, 0);
+  assert.equal(result.changes.length, 0);
+  assert.equal(result.material, false);
+});
+
 test("paragraph normalization filters boilerplate but preserves policy paragraphs", () => {
   const paragraphs = splitFedStatementParagraphs("Header\nThe Committee will assess incoming data and risks.\nCopyright 2026\nInflation remains elevated.");
   assert.deepEqual(paragraphs, ["The Committee will assess incoming data and risks.", "Inflation remains elevated."]);

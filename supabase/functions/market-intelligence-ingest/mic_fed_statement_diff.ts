@@ -27,6 +27,8 @@ export type FedStatementParagraphChange = {
 };
 
 export type FedStatementDeterministicDiff = {
+  comparisonStatus: "baseline_only" | "compared";
+  skipReason: "first_statement_no_baseline" | null;
   unchangedParagraphs: string[];
   addedParagraphs: string[];
   removedParagraphs: string[];
@@ -145,7 +147,26 @@ export function selectPreviousFedStatement(events: readonly FedStatementRecord[]
 }
 
 export async function buildFedStatementDiff(previous: FedStatementRecord | null, current: FedStatementRecord): Promise<FedStatementDeterministicDiff> {
-  const previousParagraphs = previous ? splitFedStatementParagraphs(previous.normalizedText) : [];
+  if (!previous) {
+    const diffHash = await hashText(JSON.stringify({
+      comparisonStatus: "baseline_only",
+      skipReason: "first_statement_no_baseline",
+      currentDocumentHash: current.documentHash,
+    }));
+    return {
+      comparisonStatus: "baseline_only",
+      skipReason: "first_statement_no_baseline",
+      unchangedParagraphs: [],
+      addedParagraphs: [],
+      removedParagraphs: [],
+      modifiedParagraphs: [],
+      changes: [],
+      buckets: [],
+      material: false,
+      diffHash,
+    };
+  }
+  const previousParagraphs = splitFedStatementParagraphs(previous.normalizedText);
   const currentParagraphs = splitFedStatementParagraphs(current.normalizedText);
   const previousByCanonical = new Map(previousParagraphs.map((value) => [canonicalParagraph(value), value]));
   const currentByCanonical = new Map(currentParagraphs.map((value) => [canonicalParagraph(value), value]));
@@ -189,8 +210,10 @@ export async function buildFedStatementDiff(previous: FedStatementRecord | null,
   const material = changes.some((change) => change.material);
   const addedParagraphs = remainingCurrent;
   const removedParagraphs = remainingPrevious;
-  const diffHash = await hashText(JSON.stringify({ unchangedParagraphs, addedParagraphs, removedParagraphs, modifiedParagraphs }));
+  const diffHash = await hashText(JSON.stringify({ comparisonStatus: "compared", unchangedParagraphs, addedParagraphs, removedParagraphs, modifiedParagraphs }));
   return {
+    comparisonStatus: "compared",
+    skipReason: null,
     unchangedParagraphs,
     addedParagraphs,
     removedParagraphs,
