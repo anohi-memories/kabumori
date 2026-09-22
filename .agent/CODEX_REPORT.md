@@ -1,3 +1,20 @@
+## Latest H1 result — PR #7 freshened and merged (2026-09-22)
+
+- task_id: `kabumori-mobile-holdings-watch-news-detail-merge-retry-20260922`
+- result: `review_required` — PR #7 merged successfully; stop for C1.
+- pre_freshen_main: `c2f18de8c609693b4255b710e3798c2df72dda95`
+- final_feature_head: `c50dd6ad238cda2750ba2222c7a1546e433c5562`
+- merge_commit / resulting_main: `b2fb397173c042d328ef87d02a0d8d993bef9fbb`
+- pull_request: https://github.com/anohi-memories/kabumori/pull/7 (merged and closed)
+- freshen evidence: PR base → current main had no changes in the five approved implementation/test files. The single PR commit was rebased onto latest main without conflict; no semantic behavior was auto-resolved.
+- changed files: `src/app/explore.tsx`, `src/lib/stock-sections.ts`, `src/lib/news-presentation.ts`, `tests/app/stock-sections_test.ts`, `tests/app/news-presentation_test.ts`.
+- holdings/watch behavior preserved: empty-query list is segmented into 保有/監視 with counts, holdings preferred when present, section-specific empty states, and integrated search/edit/register/delete preserved.
+- Important News behavior preserved: verified Japanese copy keeps distinct event/status facts in 詳しい内容 and excludes generic market filler; thin sources remain fail-closed; no display-time AI.
+- verification: **50 passed / 0 failed** app regression tests; app-scope TypeScript passed; Expo web export passed (10 static routes); `git diff --check` passed; final main read-back matches the freshened feature head across all five approved files.
+- H2/G1/G2 implementation files untouched. Production mutation = 0; no migration, RPC, Edge Function deploy, Cron, secret/Vault, OAuth, X/Push, EAS, or App Store operation.
+- known limitations: manual iOS/native QA remains outstanding; colors/icons visual polish remains deferred.
+- next_recommendation: C1 review resulting main `b2fb3971`; no further H1 action.
+
 ## Latest H1 result — PR #7 freshen blocked by semantic main drift (2026-09-22)
 
 - task_id: `kabumori-mobile-holdings-watch-news-detail-merge-20260922`
