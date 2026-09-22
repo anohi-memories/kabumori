@@ -153,3 +153,127 @@ On completion:
 - STOP for C1
 
 **推奨モデル：Luna。**
+
+
+## Additional user feedback — 2026-09-22
+
+User also wants:
+- a portfolio function,
+- realtime is not required; closing-price-based detail for registered holdings is desirable,
+- important-news detail still feels repetitive because 「要点」 and 「詳細」 are nearly the same.
+
+These additions are approved for the same H1 because implementation has not started yet and existing stored data already supports a no-backend-mutation V1.
+
+## Goal G — Portfolio V1 using existing close-report snapshot
+
+Important discovery:
+- `personalized_reports.portfolio_snapshot` already contains:
+  - latest report price basis date
+  - per-stock close / previous close / change / changePercent
+  - quantity / average_price
+  - market_value
+  - day_pl
+  - unrealized_pl / unrealized_pl_percent
+  - portfolio totals
+  - sector weights
+- Therefore Portfolio V1 must reuse the latest available **close report snapshot** instead of introducing realtime market data or a new quote API.
+
+Target UX:
+1. Add a dedicated portfolio view accessible clearly from the app.
+2. Preferred navigation:
+   - add a bottom tab `ポート` / `ポートフォリオ` if the native tab layout remains readable,
+   - otherwise add a prominent Home/Stocks entry and document why a fifth tab was avoided.
+3. Portfolio header:
+   - basis date: e.g. `9/22 終値ベース`
+   - total market value when available
+   - day P/L and day change %
+   - unrealized P/L when available
+4. Holdings rows/cards:
+   - ticker/company
+   - position label (現物/信用/売り if stored)
+   - quantity
+   - average cost
+   - latest stored close
+   - previous-close change %
+   - market value
+   - unrealized P/L and %
+   - day P/L when available
+5. Show sector allocation when snapshot data exists.
+6. If current-day close report does not exist yet, use the **latest completed close report** and clearly display its date. Never present old closing data as realtime/current.
+7. If no close-report snapshot exists, show a clear empty state and link to registration/reports rather than fabricating values.
+8. Keep watchlist securities out of portfolio totals; they may be shown separately only if clearly labelled.
+9. Reuse existing deterministic formatting helpers from `report-presentation.ts` where practical.
+10. No new price provider, migration, RPC, Function, Cron, or AI call in this H1.
+
+Portfolio tests should cover:
+- latest close report selection,
+- stale/older basis-date label,
+- totals available/unavailable,
+- holding row formatting,
+- watchlist exclusion from portfolio totals.
+
+## Goal H — Important News: make 要点 and 詳細 meaningfully distinct
+
+Observed problem:
+- Current presentation can derive `listSummary`, `keyPoints`, and `detailParagraphs` from the same stored text.
+- When `app_summary_ja` and `app_detail_ja` are similar, or when only `verified_text` exists, the detail page repeats nearly identical content under 「要点」 and 「詳細」.
+
+Required behavior:
+1. Never invent new facts and do not add a display-time AI call.
+2. Prefer stored Fact-checked app copy:
+   - `app_key_points_ja` -> 要点
+   - `app_detail_ja` -> 詳細
+   - `app_summary_ja` -> list/lead summary
+3. Add deterministic de-duplication:
+   - normalize whitespace/punctuation/markup,
+   - detect exact or near-duplicate summary/key-point/detail text,
+   - suppress repeated lines/paragraphs instead of showing the same statement twice.
+4. If detail has no materially new information beyond key points/summary:
+   - hide the duplicate 詳細 section, or
+   - show a short note that additional detail is unavailable and keep the source link.
+   Do not pad it with rewritten duplicate prose.
+5. For `verified_post` fallback:
+   - key points should come from the first distinct factual sentences,
+   - detail should prefer remaining distinct sentences/paragraphs,
+   - do not repeat the same sentences in both sections.
+6. For disclosure/japanese_body fallback:
+   - same principle: summary/key points first, detail only from remaining distinct content.
+7. Preserve original/source link and market-relation section.
+
+Acceptance examples:
+- a short 2-sentence item should not show the same 2 sentences under both 要点 and 詳細.
+- a 5-sentence item may use 2-3 distinct sentences as 要点 and the remaining distinct sentences as 詳細.
+- app_summary identical to the first app_detail paragraph must not be repeated twice.
+
+Add regression tests covering:
+- exact duplicate app summary/detail,
+- near-duplicate whitespace/punctuation variants,
+- verified-post sentence partitioning,
+- short item with no extra detail,
+- long item with distinct detail.
+
+## Scope update
+
+The same H1 may now touch:
+- portfolio route/component(s)
+- app tabs if a portfolio tab is chosen
+- personalized report read helper for latest close snapshot
+- news presentation/detail rendering and tests
+
+Still forbidden:
+- backend production mutations
+- realtime quote API integration
+- social-mobile/H2 files
+- X/Push producer behavior
+- migrations/RPC/Functions/Cron/secrets.
+
+## Updated C1 deliverables
+
+In addition to prior deliverables, report:
+- exact Portfolio V1 navigation choice,
+- exact source of closing-price data and basis-date behavior,
+- portfolio empty/stale-state behavior,
+- news de-duplication algorithm and test cases,
+- confirmation that no display-time AI call was added.
+
+**Recommended model remains Luna.**
