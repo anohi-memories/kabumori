@@ -17,11 +17,11 @@
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: social-mobile-app-phase17-disposable-vault-token-boundary-proof-20260922
+- task_id: social-mobile-app-phase18-production-shaped-access-token-reader-preflight-20260922
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
-- note: Phase16 C2 PASS済み。disposable Supabase/Vaultでtrusted owner/account/access-token boundaryを実証する。production Vault/X/deploy/publishは禁止。Luna推奨。
+- note: Phase17 C2 PASS済み。production-shaped access-only Vault token reader candidateとread-only production metadata preflight。plaintext Vault read/deploy/X historyは禁止。Luna推奨。
 
 ### Claude slot 1
 - owner: claude
