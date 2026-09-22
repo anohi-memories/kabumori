@@ -3,8 +3,8 @@
 - task_id: kabumori-mobile-home-dashboard-v1-20260922
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
 - purpose: かぶモリアプリ本体のトップ画面を「検索」から「今日の自分の株を把握できるホーム」へ作り替え、既存の登録銘柄・重要ニュース・朝刊/大引けレポートを1画面に集約する。APIコスト最適化H1は自然観測待ちのため、このUI/UX workstreamでは触らない。
@@ -282,3 +282,51 @@ On completion:
 - Existing tracked-stocks, important-news, and report reads are reused with section-level retry states and pull-to-refresh.
 - No backend production mutation. Dashboard tests 3/3, app-scope TypeScript, Expo web export, and diff-check passed.
 - Stop for C1; next_owner is ChatGPT.
+
+
+## C1 review — 2026-09-22
+
+**NOT PASS — Home/Dashboard V1 is structurally good, but one user-facing error-handling blocker remains.**
+
+Accepted:
+- Root route is now Home/Dashboard V1.
+- Search is preserved at `/search`.
+- Native/web tab labels are `ホーム`.
+- Existing tracked-stocks, important-news, and report reads are reused.
+- No realtime price / valuation / P&L / market index values are fabricated.
+- Home has quick actions, tracked-stock summary, up to 3 news items, and morning/close report previews.
+- Section failures do not crash the whole Home because loads use `Promise.allSettled`.
+- Pull-to-refresh is present.
+- PR #5 changes only the 6 expected app/test files; social-mobile/H2 files are untouched.
+- Backend production mutation = 0.
+- Reported dashboard tests 3/3, app-scope TypeScript, Expo web export, and diff-check all pass.
+
+### C1 blocker — raw backend error details are exposed on Home
+
+The task explicitly required that user-facing errors **not surface backend raw errors directly**.
+
+Current Home stores and renders the exact `Error.message` for each rejected section:
+- `stocksResult.reason.message`
+- `newsResult.reason.message`
+- `reportsResult.reason.message`
+
+Those messages can contain Supabase/PostgREST/RPC details because the underlying loaders currently append backend `error.message`.
+
+This means the new Home can show implementation-level backend text directly to end users, contrary to Scope G.
+
+### Required continuation
+
+1. On Home, map each section failure to a short fixed Japanese user-facing message, for example:
+   - stocks: `登録銘柄を読み込めませんでした。`
+   - news: `重要ニュースを読み込めませんでした。`
+   - reports: `レポートを読み込めませんでした。`
+2. Keep detailed errors out of visible UI. Do not add secrets/raw backend payloads to logs.
+3. Keep section-level retry UI.
+4. Prefer making retry reload only the failed section if it is a small change; if not, reloading all sections is acceptable for V1 as long as the failure remains visually isolated.
+5. Add/adjust a test or static assertion that Home-visible error copy cannot include arbitrary backend `Error.message`.
+6. Keep all existing navigation/data/no-fabrication behavior unchanged.
+7. Fresh-check `origin/main` before push.
+8. Production mutation remains 0.
+9. Return to `review_required`, next_owner=chatgpt, then stop for C1.
+
+**Recommended model: Luna.**
