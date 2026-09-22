@@ -3,8 +3,8 @@
 - task_id: kabumori-mobile-home-dashboard-v1-merge-20260922
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: C1 PASS済みのPR #5（Kabumori Home/Dashboard V1）をcurrent mainへ安全にfreshenし、競合がないことを確認してmainへmergeする。実装内容は変更しない。
@@ -110,3 +110,16 @@ On completion:
 - STOP for C1
 
 **推奨モデル：Luna。**
+
+
+## Completion record — 2026-09-22
+
+- Fresh main before rebase: `1b1d53323c9a903954b3852ed168240fdf581303`.
+- Approved PR #5 was rebased without conflict; final feature head: `d03f08ccbf4598ef838be19128b899d309398ac6`.
+- PR diff remained limited to the six approved app/test files.
+- Dashboard tests 4/4, app-scope TypeScript, Expo web export/static routes, and diff-check passed.
+- Home fixed Japanese error-copy mapping and no-fabrication checks remain intact.
+- Merged PR #5 with merge commit `c867ee7e0c4546265be325cc606653e0bf964d9f`; resulting main: `c867ee7e0c4546265be325cc606653e0bf964d9f`.
+- PR #5 is merged/closed. Read-back confirmed the six files on main match the approved implementation.
+- Production mutation = 0. H2/G1/G2 and backend production areas untouched.
+- status: `review_required`; next_owner: `chatgpt`; stop for C1.
