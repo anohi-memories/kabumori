@@ -2,34 +2,26 @@
 
 このファイルは共有オーケストレーションの後方互換用インデックスです。実装指示の正本は各専用TASKです。
 
-- Codex slot 1: `.agent/tasks/CODEX_TASK.md`
-- Codex slot 2: `.agent/tasks/CODEX_TASK_2.md`
-- Claude slot 1: `.agent/tasks/CLAUDE_TASK_1.md`
-- Claude slot 2: `.agent/tasks/CLAUDE_TASK.md`
-- 共通ルール: `.agent/ORCHESTRATION.md`
-- 現在地: `.agent/CURRENT_STATE.md`
-
-## Current slots
-
-### Codex slot 1
+- Codex slot 1
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: kabumori-mobile-holdings-watch-split-and-news-detail-quality-20260922
+- task_id: kabumori-mobile-holdings-watch-news-detail-merge-retry-20260922
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: PR #7 implements separate 保有/監視 sections and evidence-based Important News detail partitioning. Final commit `0225efc6`; 50 tests/typecheck/export passed; production mutation 0. Colors/icons deferred. C1 review required.
+- note: PR #7 was freshened onto latest main and merged as `b2fb3971`; 50 tests/typecheck/export passed; production mutation 0. C1 review required.
+
 
 ### Codex slot 2
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: social-mobile-app-phase16-server-side-x-history-learning-adapter-candidate-20260922
+- task_id: social-mobile-app-phase17-disposable-vault-token-boundary-proof-20260922
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
-- note: Phase15 C2 PASS済み。server-sideでtrusted Auth/workspace/X identity/Vault tokenを解決する過去X投稿学習adapter source candidate。production Vault/X/deploy/publishは禁止。Luna推奨。
+- note: Phase16 C2 PASS済み。disposable Supabase/Vaultでtrusted owner/account/access-token boundaryを実証する。production Vault/X/deploy/publishは禁止。Luna推奨。
 
 ### Claude slot 1
 - owner: claude

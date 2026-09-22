@@ -77,7 +77,8 @@ export default function ConsultScreen() {
             {confirmed ? <Pill tone="success">確認済みの設定・文体だけを候補として保持しました。</Pill> : null}
             {proposal.historyLearningIntent.explicitConsent ? (
               <View style={{ gap: 8 }}>
-                <Pill tone="warning">過去投稿の学習は、対象アカウントと取得範囲を確認してから開始します。</Pill>
+                <Pill tone="warning">対象アカウント: 接続済みで本人確認済みのXアカウント / 最大50件・2ページ</Pill>
+                <Text style={styles.muted}>学習するのは文体・語彙・記号の傾向です。投稿本文は保存せず、この操作でX投稿も行いません。</Text>
                 <ActionButton label={historyConfirmation ? "過去投稿の取得同意を確認済み" : "過去の投稿を読み込む前に確認"} onPress={() => setHistoryConfirmation(true)} />
                 {historyConfirmation ? <Text style={styles.muted}>この候補画面では外部取得を実行しません。次の確認画面で明示同意後に、上限付きの取得処理へ進みます。</Text> : null}
               </View>

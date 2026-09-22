@@ -1,20 +1,22 @@
 # Codex Task 2
 
-- task_id: social-mobile-app-phase16-server-side-x-history-learning-adapter-candidate-20260922
+- task_id: social-mobile-app-phase17-disposable-vault-token-boundary-proof-20260922
 - owner: codex
 - slot: codex-2
 - status: ready
 - next_owner: codex
 - priority: high
 - recommended_model: Luna
-- purpose: Phase15 C2 PASS済みの「代打AI」history-learning candidateを、mobile入力を信頼しないserver-side authorization boundaryへ引き上げる。本人のAuth・workspace ownership・接続済みX identity・Vault tokenをtrusted server/DB stateから解決し、明示同意後のみ本人の過去X投稿を取得してpersona候補を生成するsource candidateを作る。production deploy / real X history call / live publishはまだ禁止。
+- purpose: Phase16 C2 PASS済みのserver-side X history-learning adapterについて、本番Vault/Xを触らずに、access-token取得境界・tenant ownership・account binding・fail-closed挙動をdisposable Supabase/PostgreSQL環境で実証する。production deploy / production Vault read / real X history call / live publishはまだ禁止。
 
 ## Product goal
 
-ユーザーが「過去の自分の投稿を読んで覚えて」と言った時、
-**本人の接続済みX投稿だけを、サーバー側で安全に取得し、代打AIの文体学習に使える仕組み**を作る。
+「過去の自分のX投稿を読んで覚えて」を本番へ進める前に、
+**本人の接続済みXアカウントのaccess tokenだけを、server-sideで安全に取得できること**
+を使い捨て環境で証明する。
 
-UX上はシンプルでも、authorizationは必ずserver側で確定する。
+このPhaseでは実X APIは呼ばない。
+目的は Vault/RLS/token境界の安全性証明。
 
 ## Mandatory fresh start
 
@@ -28,190 +30,166 @@ H2開始時:
 7. 他3slot overlap確認
 
 latest TASK statusだけを開始判断に使う。
-H1/G1/G2と同じfile/migration/RPC/Edge Function/workflowを触る可能性があればSTOP。
+他slotが同じmigration/RPC/Vault helper/Edge Functionを触っていればSTOP。
 
 ## Model policy
 
 - **Lunaで開始・継続**
-- Solは Auth/RLS/Vault/X token boundary の具体的security blockerが出て、Lunaで安全に解決できない場合のみ
-- 通常実装・テスト・UI整理でSolへ上げない
+- Solは、Vault ACL / SECURITY DEFINER / RLS / token-read ownership boundaryに具体的矛盾が出てLunaで安全に解けない場合のみ
+- disposable DB setup、read-back、tests、通常source修正はLuna
 
-## Scope A — server-side trusted identity resolution
+## Scope A — current token-storage architecture audit
 
-新しいserver-side history-learning boundaryをsource candidateとして作る。
+Read-only source/metadata audit:
+- `social_accounts` の access-token / refresh-token secret reference columns
+- existing OAuth completion RPC / Vault write path
+- existing Vault schemas/functions/ACL
+- any existing helper that reads Vault token values
+- service_role/admin-only paths
+- general-user Auth/RLS boundary
 
-Mobile/clientから authority として受け取ってよいのは最小限:
-- user Auth bearer
-- optional requested workspace selector
-- explicit consent action / request intent
+Reportに明記:
+1. token refを保持する正本column
+2. Vault secret valueを読める既存path
+3. そのpathを一般ユーザーhistory-learningに再利用可能か
+4. reusableでない場合、最小のdedicated internal contract案
 
-Clientから受け取って **authorityに使ってはいけない**:
-- workspaceOwnerUserId
-- ownedWorkspaceId
-- verifiedAccounts
-- platformUserId
-- X access token
-- Vault secret id
-- publish permission
+**generic client-callable secret readerは禁止。**
 
-Server側でtrusted stateから解決:
-1. bearer token -> Supabase Auth user
-2. owner membership -> owned workspace
-3. selected workspace belongs to user
-4. workspace has exactly one X account
-5. account is `identity_verified`
-6. platform_user_id exists
-7. access-token Vault reference exists
-8. account binding is consistent
+## Scope B — narrow token-read contract candidate
 
-Fail closed on ambiguity.
+必要ならsource candidateを追加してよい。
 
-## Scope B — Vault/token boundary
+要求:
+- input authorityは server-resolved account id / verified account binding のみ
+- clientから secret ref を自由入力させない
+- Auth user / owner membership / account ownership / identity_verified を確認
+- accountに紐づく access-token secret refだけ読む
+- refresh tokenは読まない
+- 他brand/account tokenは読めない
+- admin/global token fallbackなし
+- secret valueをresponse bodyへ返すpublic RPCは禁止
+- token valueはhistory-learning server process内だけで使用する想定
 
-History fetcher must:
-- read only the access token needed for the verified account
-- never return token/secret id to mobile
-- never log token
-- never persist raw token outside Vault flow
-- never read refresh token unless access-token refresh is explicitly needed by a future separate design
-- never reuse admin/global X tokens
+Preferred:
+- dedicated SECURITY DEFINER RPC or internal DB helper if and only if necessary
+- execute ACLを最小化
+- search_path固定
+- caller-supplied UUID/text injectionで他secretを選べない
+- service_role-only helperをmobile userへ直接開放しない
 
-Prefer a dedicated server-side helper/function path clearly separated from publish adapters.
+## Scope C — disposable Supabase proof
 
-If existing RPC/function architecture can safely expose a single token-read operation internally, reuse only if responsibility is clean.
-Do not weaken Vault/RLS/ACL.
+使い捨てSupabase/PostgreSQL環境を用意する。
 
-## Scope C — X history fetch adapter candidate
+必要な最小fixture:
+- Auth user A
+- Auth user B
+- workspace/brand A
+- workspace/brand B
+- owner memberships
+- X account A / B
+- Aは identity_verified + platform_user_id + access-token secret ref
+- Bも別token
+-必要なら pending/unverified account fixture
+- disposable Vault secrets with fake non-production token values only
 
-Implement a source candidate for authenticated user's own:
-- `GET /2/users/:id/tweets`
+**本番tokenや本番secretをコピーしない。**
 
-Requirements:
-- target `:id` comes from DB-bound `platform_user_id`, not client
-- scopes expected: `tweet.read users.read`
-- pagination token handled server-side
-- bounded max:
-  - max 50 posts total
-  - max 2 pages initially
-- exclude replies/retweets unless later explicitly requested
-- request only fields necessary for style analysis
-- no likes/bookmarks/DMs/follow graph
-- no write endpoint
-- no media upload/post/repost path
+## Scope D — proof cases
 
-Handle X errors with safe normalized classes; do not return raw provider bodies to mobile.
+最低限実証:
 
-## Scope D — explicit consent runtime contract
+### Positive
+1. user A -> own workspace A -> verified X account A
+2. server resolves account A
+3. only access-token secret A can be read internally
+4. history adapter receives token A
+5. fake/mocked X fetch can be invoked with token A
+6. token itself is not returned to client result
 
-History call must require a **fresh explicit consent action**.
+### Negative
+- user A cannot read workspace B token
+- user B cannot read A token
+- viewer/non-owner denied
+- unverified/pending X account denied
+- missing platform_user_id denied
+- missing access-token ref denied
+- forged account id ignored/denied
+- forged secret ref ignored/denied
+- refresh-token ref cannot be selected
+- arbitrary Vault secret cannot be selected
+- multiple X accounts ambiguity fails closed
+- deleted/missing Vault secret fails closed
+- token value does not appear in logs/client response/test report
 
-Design candidate should distinguish:
-- user conversational intent: 「過去投稿を見て」
-- final consent: 「このアカウントの直近N件を読み取る」
+## Scope E — call-order proof
 
-No background/automatic history fetch.
-No fetch on screen load.
-No fetch merely because historyLearningIntent=true.
+Prove ordering remains:
 
-Consent request should show:
-- target connected handle
-- approximate max posts
-- what will be learned
-- raw post bodies will not be permanently stored
-- no X posting occurs
+Auth bearer
+-> auth user
+-> owner membership
+-> selected/owned workspace
+-> exactly one verified X account
+-> trusted access-token ref
+-> Vault secret read
+-> mocked X fetch
 
-## Scope E — analysis output
+Vault must not be read before ownership/account checks pass.
 
-Reuse/improve Phase15 persona derivation.
+## Scope F — cleanup / rollback proof
 
-Derived candidate can include:
-- tone
-- sentence length
-- punctuation/emoji
-- recurring vocabulary
-- topic signals
-- hashtag habits
-- CTA style
-- opening/closing patterns
-- analyzed count/time
+After proof:
+- remove candidate proof objects/fixtures
+- confirm no disposable test secret/table/function/fixture remains
+- stop disposable Supabase with no backup
+- record object-absence/read-back evidence
 
-Output after history fetch:
-- unconfirmed persona proposal
-- provenance `past_post_analysis`
-- `confirmed=false`
+Do not touch production as substitute if local disposable environment fails.
+If disposable environment cannot run, STOP and report exact blocker.
 
-It must NOT write confirmed persona automatically.
+## Scope G — source integration
 
-User must review and confirm in the conversation UI before persistence.
+If a safe token-reader candidate is needed:
+- wire Phase16 `social-mobile-history-learning` dependencies to an injectable trusted token reader contract
+- default production entrypoint stays disabled
+- no production env/secret wiring
+- no real X network call
 
-## Scope F — raw content retention
+Do not broaden into:
+- actual production history fetch
+- persona persistence
+- LLM conversation
+- publish scheduling
 
-Default:
-- raw X post bodies exist only during request processing / test fixture lifetime
-- do not write full posts to DB
-- do not add history/archive table
-- derived bounded profile + count/time only after later confirmation
-
-If debugging metadata is needed, use non-content safe metadata only.
-
-## Scope G — mobile integration candidate
-
-Update `あなたの投稿AI` flow to support the server boundary contract without real production invocation.
-
-Preferred UX:
-1. user asks AI to learn past posts
-2. app shows target account + max range
-3. user gives final consent
-4. future server response returns learned profile proposal
-5. AI summarizes what it learned
-6. user says `これで覚えて`
-7. only then persona persistence candidate is called
-
-Source candidate may use injected/mock server response.
-Do not wire production network call in this phase unless it can remain disabled by construction.
-
-## Scope H — tests
+## Tests / verification
 
 Minimum:
-- missing Auth -> deny before X/Vault
-- non-owner workspace -> deny
-- multiple X accounts -> deny
-- non-identity_verified -> deny
-- missing platform_user_id -> deny
-- missing Vault access-token ref -> deny
-- client-supplied platform user/account identity ignored
-- target X user id comes from trusted DB account
-- explicit final consent required
-- fetcher not called without final consent
-- max 50 posts / 2 pages
-- replies/retweets excluded
-- only read endpoint used
-- token never returned/logged
-- raw posts not persisted
-- X error normalized
-- history result remains unconfirmed
-- no publish/media/schedule path
-- no publish permission mutation
-
-Run:
+- disposable SQL/RLS/Vault proof above
 - relevant Deno tests
+- Phase16 history-learning tests
 - social-mobile typecheck
 - lint
-- Expo export
+- Expo export only if mobile source changes
 - `git diff --check`
 
-Where possible use mocked Supabase/Vault/X calls and assert call ordering:
-Auth -> ownership/account resolution -> token read -> X fetch.
+Security assertions:
+- no token in response
+- no token in logs/report
+- no generic Vault reader reachable by authenticated client
+- no refresh token read
+- no other-tenant secret read
+- no production mutation
 
-## Scope I — production boundary
+## Production boundary
 
-Phase16 is **source candidate only**.
+Phase17 is **disposable proof + source candidate only**.
 
 Forbidden:
-- production migration apply
-- production RPC/RLS/ACL change
+- production migration/RPC/RLS/ACL change
+- production Vault read/write
 - production Edge Function deploy
-- production Vault token read
 - production X history API call
 - OAuth scope/Portal change
 - production settings/persona write
@@ -220,17 +198,10 @@ Forbidden:
 - `publish_enabled=true`
 - Cron/scheduler
 - scheduled_posts
-- app-wide data-source switch
 - migration-history repair/reconcile
 - blind db push
 
 Production mutation = 0.
-
-## Parallel safety
-
-Current H1 is Kabumori app holdings/watch + Important News candidate.
-Do not touch H1 files.
-If H1 unexpectedly changes shared social-mobile/X OAuth/Vault files, STOP and report overlap.
 
 ## Completion / C2
 
@@ -238,17 +209,69 @@ When complete:
 - status -> `review_required`
 - next_owner -> `chatgpt`
 - `.agent/CODEX_REPORT_2.md` must include:
-  1. server authorization flow
-  2. trusted vs untrusted input boundary
-  3. Vault token handling
-  4. X endpoint/request shape
-  5. consent flow
-  6. raw-content retention behavior
-  7. changed files
-  8. tests/call-order proof
-  9. production mutation=0
-  10. remaining risks
-  11. next rollout proposal
+  1. current token architecture audit
+  2. chosen narrow token-read design
+  3. disposable fixture design
+  4. positive proof
+  5. negative cross-tenant/forged-ref proof
+  6. call ordering
+  7. ACL/RLS/search_path read-back
+  8. cleanup/rollback proof
+  9. changed files
+  10. tests
+  11. production mutation=0
+  12. remaining risks
+  13. next rollout proposal
 - commit/push
 - fresh origin/main check
 - STOP for C2
+
+
+## C2 review — 2026-09-22 (Phase17 disposable Vault proof)
+
+**NOT PASS YET — implementation/safety audit is acceptable, but the required disposable Vault/RLS proof was not completed.**
+
+Accepted:
+- production was correctly not used as a substitute.
+- no production mutation/Vault/X/deploy occurred.
+- current token architecture audit is useful and consistent with the approved Phase16 boundary.
+- the existing AI-Lab-specific token reader and generic access+refresh loader are correctly rejected as unsuitable for this general-user access-only history path.
+- keeping the Phase16 default history-learning entrypoint disabled is correct.
+- source/regression tests remain green.
+
+Blocking gap:
+- no disposable DB stayed running long enough to prove the required owner/account/Vault token boundary.
+- therefore positive/negative tenant isolation, forged-ref rejection, access-only secret read, ACL/search_path read-back, and rollback/cleanup are still unproven.
+- Phase16 injected-reader unit tests are not a substitute for this DB/Vault proof.
+
+### Required follow-up
+
+Continue with **Luna**.
+
+Use a genuinely isolated disposable environment with fake-only data. Preferred order:
+
+1. Retry a local disposable Supabase/PostgreSQL environment only if it can remain healthy.
+2. If the local 2 GiB Podman host remains insufficient, use an isolated disposable Supabase preview/branch/project **only if available through the authorized tooling**, with:
+   - no production data copied,
+   - fake Auth/users/brands/accounts/tokens only,
+   - no production secret references,
+   - no production X call,
+   - cleanup at the end.
+3. Do not use the production project as a proof environment.
+4. Do not create or use a paid/external resource if the available tooling requires a new billing commitment or user-side purchase; STOP and report that gate instead.
+
+Required proof remains:
+- owner A can reach only access token A through the narrow server-side binding
+- cross-tenant A->B and B->A denied
+- viewer/non-owner denied
+- unverified/missing platform id/missing access ref denied
+- forged account/secret refs ineffective
+- refresh token and arbitrary Vault secret cannot be selected
+- multiple-account ambiguity fails closed
+- missing/deleted secret fails closed
+- Vault read happens only after Auth -> owner membership -> workspace -> verified account
+- no token in client response/log/report
+- fixed search_path / minimal ACL read-back for any helper/RPC candidate
+- cleanup/object absence after proof
+
+Return \`review_required / next_owner: chatgpt\` for C2.

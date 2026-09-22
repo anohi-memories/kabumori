@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 PR7 clean merge ready; holdings/watch split + Important News detail partition C1 PASS; visual polish deferred; H2 handled separately)
+- checked_at: 2026-09-22 JST (H1 news producer detail + Portfolio freshness diagnosis ready; production mutation 0; visual polish deferred)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,20 +14,20 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `kabumori-mobile-holdings-watch-news-detail-merge-20260922`
-  - C1 PASS on PR #7 candidate.
-  - 銘柄 empty-query view is separated into `保有 | 監視`; integrated search remains for non-empty query.
-  - Important News verified-post detail now keeps distinct event/status facts beyond 要点 and suppresses generic market filler.
-  - Known limitation: this is app-only; richer facts that exist only in English body_summary and not in verified Japanese text still require a later producer/app-copy improvement.
-  - Next H1 freshens PR #7 onto latest main, reruns checks, and merges if no implementation conflict appears.
-  - Production mutation 0; colors/icons visual polish deferred.
+- Codex slot 1: `ready` — `kabumori-important-news-producer-detail-and-portfolio-freshness-diagnosis-20260922`
+  - Real-device QA still finds Important News 詳しい内容 too shallow; app-only partitioning is insufficient when richer source facts exist only outside verified Japanese text.
+  - Next H1 builds an Important News producer/app-copy detail candidate with source-backed additional event facts and no display-time AI.
+  - Portfolio freshness root cause is confirmed in production: 9/18 close snapshot exists with 9/18 prices, but the report failed local validation on `CONTAINS_LATIN_WORD:ＵＦＪ`; 9/17 is the latest completed Fact-passed close report.
+  - H1 must diagnose/fix the validator narrowly in source/tests if no G1 ownership conflict exists; no production backfill/deploy/mutation.
+  - 9/18 is the latest cash-market trading day at this time; 9/21–23 are JPX cash-market holidays.
+  - Production mutation 0. Visual colors/icons remain deferred.
   - Recommended model: Luna.
 
-- Codex slot 2: `ready` — `social-mobile-app-phase16-server-side-x-history-learning-adapter-candidate-20260922`
-  - Phase15 C2 PASS後の次工程。
-  - 明示同意後のみ、server側でAuth/owner workspace/verified X account/platform user/Vault access tokenをtrusted stateから解決するhistory-learning source candidateを作る。
-  - production Vault read / X history API / deploy / publish はまだ禁止。
-  - Recommended model: Luna。Auth/RLS/Vault/X token boundaryの具体的blocker時のみSol検討。
+- Codex slot 2: `ready` — `social-mobile-app-phase17-disposable-vault-token-boundary-proof-20260922`
+  - C2未PASS。source audit/testは問題ないが、local Supabase DBが2 GiB Podman環境で停止し、必須のdisposable Vault/RLS実証が未完了。
+  - 次H2はisolated disposable環境を再試行。authorized toolingでpreview/branch/projectが使える場合はfake-only dataで可。production代用は禁止。
+  - production mutation 0。default history-learning entrypointはdisabled維持。
+  - Recommended model: Luna。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
