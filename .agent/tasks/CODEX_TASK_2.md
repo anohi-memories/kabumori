@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase13-production-preview-rollout-and-qa-20260921
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
 - purpose: Phase 12 C2 PASS済みの general-user preview candidate を production に安全に反映し、dedicated QA user + test X account で exactly one bounded real AI preview を実行して、tenant isolation・no-publish boundary・既存brand非回帰を確認する。real X post / media upload / publish_enabled=true / Cron はまだ禁止。
@@ -323,3 +323,55 @@ After source fix approval, propose one bounded production follow-up:
 - mobile_ui_review: `apps/social-mobile/src/app/accounts/index.tsx` keeps reconnect state local and does not add automatic reconnect behavior; no UI/source change was needed. The server-side status transition is the durable regression point.
 - production: no migration apply, no production row repair, no deploy, no OAuth retry, no OpenAI preview, no X/Vault/Storage/scheduled-post mutation, and no Cron/settings change.
 - next_recommendation: C2 review the additive replacement-RPC migration, then separately authorize production apply/deploy and read-only QA-row preconditions before restoring the QA status and resuming the one-shot preview.
+
+
+## C2 review — 2026-09-22 (OAuth reconnect status hardening)
+
+**PASS for the source-fix candidate. Phase 13 overall remains incomplete.**
+
+Accepted:
+- Root cause is confirmed: the existing begin RPC demotes every existing X account to \`authorization_pending\` before callback completion.
+- Candidate migration \`20260922003101_social_mobile_x_oauth_reconnect_preserve_verified.sql\` changes only the begin-RPC reconnect transition.
+- Existing \`identity_verified\` rows remain \`identity_verified\` when a new OAuth attempt begins.
+- New/unverified rows still use \`authorization_pending\`.
+- \`publish_enabled\`, verified identity fields, Vault references, and callback completion behavior are not modified by the candidate.
+- SECURITY DEFINER + explicit \`search_path='public'\` are preserved.
+- EXECUTE remains restricted to \`authenticated\`; public/anon/service_role are revoked.
+- Mobile review found no automatic reconnect trigger; no mobile source change is required.
+- Source commit \`7985c3bd234e8eeee6d9d1855b668471c5475cdb\` is the reviewed fix.
+- Focused tests and full OAuth/preview tests reported PASS.
+- No production mutation occurred in this source-fix step.
+
+Test limitation:
+- reconnect tests are static migration-contract tests rather than disposable PostgreSQL runtime tests.
+- Given the bounded \`create or replace function\` change and direct comparison with the current production definition, this is acceptable for **source approval**, but production rollout must use strict pre/post read-back and must not broaden scope.
+
+### Next H2 gate
+
+Continue with **Luna**.
+
+1. Fresh \`origin/main\`.
+2. Read-only production preflight:
+   - current begin RPC still has the known unconditional demotion behavior,
+   - QA account still has non-null \`verified_at\`,
+   - QA account is still the dedicated test identity,
+   - access-token and refresh-token Vault secret references are present (IDs/presence only; never secret values),
+   - \`publish_enabled=false\`,
+   - no newer successful OAuth binding to a different X identity,
+   - QA membership/workspace unchanged,
+   - existing production X accounts/admin OAuth unchanged.
+3. STOP and report if any precondition differs.
+4. **Do not apply the migration or repair the QA row unless there is an explicit trusted user authorization for those production mutations.**
+5. After explicit authorization, the allowed production mutation is bounded to:
+   - apply exactly migration \`20260922003101_social_mobile_x_oauth_reconnect_preserve_verified.sql\`,
+   - read back the begin RPC definition/ACL/search_path,
+   - restore only the dedicated QA account's \`connection_status\` from \`authorization_pending\` to \`identity_verified\` if all preconditions still hold,
+   - do not change \`publish_enabled\`, handle, platform_user_id, verified_at, Vault references, or other accounts.
+6. Then resume the existing Phase 13 QA:
+   - QA-only live Supabase runtime,
+   - prove the account displays connected/identity_verified,
+   - exactly one real AI preview,
+   - no X API/media/post, no scheduled_posts write, no Vault token read/change, no publish enablement.
+7. Final postflight and return \`review_required / next_owner: chatgpt\`.
+
+Phase 13 is not done until the bounded repair + one real preview + postflight are complete.
