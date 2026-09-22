@@ -9,6 +9,7 @@ import type { MarketEventInput } from "./mic_normalize_logic.ts";
 export const FED_STATEMENT_SOURCE_KEY = "fed" as const;
 export const FED_STATEMENT_SOURCE_NAME = "Federal Reserve" as const;
 export const FED_STATEMENT_SOURCE_URL = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm";
+export const FED_FOMC_CALENDAR_URL = FED_STATEMENT_SOURCE_URL;
 
 export class FedStatementAdapterError extends Error {
   code: string;
@@ -58,6 +59,19 @@ export function assertOfficialFedStatementUrl(rawUrl: string): string {
     throw new FedStatementAdapterError("FED_NON_OFFICIAL_URL", "only official Federal Reserve statement URLs are accepted");
   }
   return url.toString();
+}
+
+export function extractOfficialFedStatementUrls(calendarHtml: string): string[] {
+  const urls = new Set<string>();
+  for (const match of calendarHtml.matchAll(/href=["']([^"']*monetary\d{8}[a-z0-9]+\.htm)["']/gi)) {
+    const candidate = new URL(match[1], FED_FOMC_CALENDAR_URL).toString();
+    try {
+      urls.add(assertOfficialFedStatementUrl(candidate));
+    } catch {
+      // Ignore malformed/non-official links from the page.
+    }
+  }
+  return [...urls].sort((a, b) => b.localeCompare(a));
 }
 
 function decodeHtml(input: string): string {
@@ -166,6 +180,7 @@ export async function parseFedStatementHtml(statementUrl: string, html: string, 
 export function buildFedDecisionEvent(
   statement: FedStatement & { decision: FedDecision },
   previousRange: FedTargetRange | null,
+  isRevision = false,
 ): MarketEventInput {
   const current = statement.targetRange;
   const changeBps = current && previousRange
@@ -208,7 +223,9 @@ export function buildFedDecisionEvent(
       source_key: FED_STATEMENT_SOURCE_KEY,
       rates: ratePayload,
       document_hash: statement.documentHash,
+      content_hash: statement.documentHash,
       normalized_statement_hash: statement.documentHash,
+      is_revision: isRevision,
     },
   };
 }
@@ -220,4 +237,21 @@ export async function fetchFedStatement(statementUrl: string, fetchImpl: typeof 
   const html = await response.text();
   if (!html) throw new FedStatementAdapterError("FED_EMPTY_HTML", "statement response was empty");
   return html;
+}
+
+export async function fetchFedStatementEvents(
+  fetchImpl: typeof fetch = fetch,
+  previousRange: FedTargetRange | null = null,
+  previousIdentities: FedStatementIdentity[] = [],
+): Promise<MarketEventInput[]> {
+  const calendarResponse = await fetchImpl(FED_FOMC_CALENDAR_URL, { headers: { Accept: "text/html" } });
+  if (!calendarResponse.ok) throw new FedStatementAdapterError("FED_CALENDAR_HTTP_ERROR", `status=${calendarResponse.status}`);
+  const calendarHtml = await calendarResponse.text();
+  const statementUrl = extractOfficialFedStatementUrls(calendarHtml)[0];
+  if (!statementUrl) throw new FedStatementAdapterError("FED_STATEMENT_NOT_FOUND", "official calendar contained no statement link");
+  const statementHtml = await fetchFedStatement(statementUrl, fetchImpl);
+  const statement = await parseFedStatementHtml(statementUrl, statementHtml, previousRange);
+  const previousIdentity = previousIdentities.find((identity) => identity.meetingDate === statement.meetingDate) ?? null;
+  const identityOutcome = statementIdentityChanged(previousIdentity, statement);
+  return [buildFedDecisionEvent(statement, previousRange, identityOutcome === "revision")];
 }

@@ -38,6 +38,12 @@ import {
   fetchEstatCpiMetrics,
 } from "./mic_estat_adapter.ts";
 import {
+  FED_STATEMENT_SOURCE_KEY,
+  fetchFedStatementEvents,
+  type FedTargetRange,
+  type FedStatementIdentity,
+} from "./mic_fed_statement_adapter.ts";
+import {
   buildMacroReleaseEvent,
   decideMacroReleaseEvent,
   MACRO_RELEASE_METRIC_KEYS,
@@ -140,24 +146,58 @@ type SourceKey =
   | typeof FRANKFURTER_SOURCE_KEY
   | typeof ESTAT_SOURCE_KEY;
 
-const ALL_SOURCE_KEYS: SourceKey[] = [
+type SourceKeyWithFed = SourceKey | typeof FED_STATEMENT_SOURCE_KEY;
+
+const ALL_SOURCE_KEYS: SourceKeyWithFed[] = [
   FRED_SOURCE_KEY,
   MOF_SOURCE_KEY,
   EIA_SOURCE_KEY,
   SEC_SOURCE_KEY,
   FRANKFURTER_SOURCE_KEY,
   ESTAT_SOURCE_KEY,
+  FED_STATEMENT_SOURCE_KEY,
 ];
 
 type FetchResult =
   | { kind: "metrics"; metrics: NormalizedMarketMetric[] }
   | { kind: "events"; events: MarketEventInput[] };
 
+async function readCurrentFedTargetRange(ctx: RestContext): Promise<FedTargetRange | null> {
+  const url = `${ctx.supabaseUrl}/rest/v1/market_metrics?metric_key=in.(FED_FUNDS_TARGET_LOWER,FED_FUNDS_TARGET_UPPER)&source_key=eq.fred&select=metric_key,value,observed_date&order=observed_date.desc&limit=20`;
+  const result = await fetch(url, { headers: restHeaders(ctx.secretKey) });
+  if (!result.ok) throw new Error(`FRED_TARGET_LOOKUP_FAILED:${result.status}`);
+  const rows = await result.json() as Array<{ metric_key?: unknown; value?: unknown }>;
+  const latest = new Map<string, number>();
+  for (const row of rows) {
+    if (typeof row.metric_key !== "string" || latest.has(row.metric_key)) continue;
+    if (typeof row.value === "number" && Number.isFinite(row.value)) latest.set(row.metric_key, row.value);
+  }
+  const lower = latest.get("FED_FUNDS_TARGET_LOWER");
+  const upper = latest.get("FED_FUNDS_TARGET_UPPER");
+  return lower === undefined || upper === undefined ? null : { lower, upper };
+}
+
+async function readPreviousFedStatementIdentities(ctx: RestContext): Promise<FedStatementIdentity[]> {
+  const url = `${ctx.supabaseUrl}/rest/v1/market_events?source_key=eq.fed&event_type=eq.central_bank_decision&select=raw_payload&order=published_at.desc&limit=50`;
+  const result = await fetch(url, { headers: restHeaders(ctx.secretKey) });
+  if (!result.ok) throw new Error(`FED_EVENT_LOOKUP_FAILED:${result.status}`);
+  const rows = await result.json() as Array<{ raw_payload?: { meeting_date?: unknown; document_hash?: unknown } | null }>;
+  const identities: FedStatementIdentity[] = [];
+  for (const row of rows) {
+    const meetingDate = row.raw_payload?.meeting_date;
+    const documentHash = row.raw_payload?.document_hash;
+    if (typeof meetingDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(meetingDate) && typeof documentHash === "string" && /^[0-9a-f]{64}$/.test(documentHash)) {
+      identities.push({ meetingDate, documentHash });
+    }
+  }
+  return identities;
+}
+
 // Per-source adapter dispatch. Each entry is responsible for its own
 // secret lookup so a missing secret produces a per-source SECRET_MISSING
 // result (failure isolation) instead of crashing the whole invocation --
 // same principle as official_source_fetchers.ts's runNewsSourceProviders.
-async function runAdapter(sourceKey: SourceKey, now: Date): Promise<FetchResult> {
+async function runAdapter(ctx: RestContext, sourceKey: SourceKeyWithFed, now: Date): Promise<FetchResult> {
   switch (sourceKey) {
     case FRED_SOURCE_KEY: {
       const apiKey = Deno.env.get("FRED_API_KEY");
@@ -187,10 +227,18 @@ async function runAdapter(sourceKey: SourceKey, now: Date): Promise<FetchResult>
       if (!appId) throw new Error("SECRET_MISSING:ESTAT_APP_ID");
       return { kind: "metrics", metrics: await fetchEstatCpiMetrics({ appId, fetchedAt: now }) };
     }
+    case FED_STATEMENT_SOURCE_KEY: {
+      const previousRange = await readCurrentFedTargetRange(ctx);
+      // The statement parser remains source-pure; prior event identity is
+      // read here so the writer can label same-meeting document revisions.
+      // A missing prior event is the normal new-meeting path.
+      const previousIdentities = await readPreviousFedStatementIdentities(ctx);
+      return { kind: "events", events: await fetchFedStatementEvents(fetch, previousRange, previousIdentities) };
+    }
   }
 }
 
-async function fetchActiveSourceKeys(ctx: RestContext, fetchImpl: typeof fetch): Promise<SourceKey[]> {
+async function fetchActiveSourceKeys(ctx: RestContext, fetchImpl: typeof fetch): Promise<SourceKeyWithFed[]> {
   const result = await fetchImpl(
     `${ctx.supabaseUrl}/rest/v1/mic_source_registry?is_active=eq.true&select=source_key`,
     { headers: restHeaders(ctx.secretKey) },
@@ -199,11 +247,11 @@ async function fetchActiveSourceKeys(ctx: RestContext, fetchImpl: typeof fetch):
   const rows = await result.json() as Array<{ source_key?: unknown }>;
   return rows
     .map((row) => row.source_key)
-    .filter((key): key is SourceKey => typeof key === "string" && (ALL_SOURCE_KEYS as string[]).includes(key));
+    .filter((key): key is SourceKeyWithFed => typeof key === "string" && (ALL_SOURCE_KEYS as string[]).includes(key));
 }
 
 type SourceRunResult = {
-  sourceKey: SourceKey;
+  sourceKey: SourceKeyWithFed;
   status: "completed" | "failed" | "skipped_duplicate";
   attemptNo?: number;
   fetchedCount?: number;
@@ -228,7 +276,7 @@ type SourceRunResult = {
 
 async function runSource(
   ctx: RestContext,
-  sourceKey: SourceKey,
+  sourceKey: SourceKeyWithFed,
   triggerType: "manual" | "scheduled",
   now: Date,
 ): Promise<SourceRunResult> {
@@ -239,7 +287,7 @@ async function runSource(
   }
 
   try {
-    const result = await runAdapter(sourceKey, now);
+    const result = await runAdapter(ctx, sourceKey, now);
     let fetchedCount = 0;
     let newCount = 0;
     let duplicateCount = 0;
@@ -316,7 +364,7 @@ Deno.serve(async (req) => {
   const requestBody = await req.json().catch(() => ({})) as { trigger?: unknown; sources?: unknown };
   const triggerType: "manual" | "scheduled" = requestBody.trigger === "scheduled" ? "scheduled" : "manual";
   const requestedSources = Array.isArray(requestBody.sources)
-    ? requestBody.sources.filter((s): s is SourceKey =>
+    ? requestBody.sources.filter((s): s is SourceKeyWithFed =>
       typeof s === "string" && (ALL_SOURCE_KEYS as string[]).includes(s)
     )
     : null;
@@ -324,7 +372,7 @@ Deno.serve(async (req) => {
   // Best-effort; must never block the run below even if it fails.
   await reconcileStaleIngestionRuns(ctx);
 
-  let sourceKeys: SourceKey[];
+  let sourceKeys: SourceKeyWithFed[];
   if (requestedSources && requestedSources.length > 0) {
     // Explicit manual override (e.g. ops testing one adapter) -- runs
     // regardless of is_active, since the caller asked for it by name.

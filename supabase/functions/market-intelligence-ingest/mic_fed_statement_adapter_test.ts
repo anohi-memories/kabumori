@@ -5,6 +5,8 @@ import {
   buildFedDecisionEvent,
   classifyFedDecision,
   FedStatementAdapterError,
+  fetchFedStatementEvents,
+  extractOfficialFedStatementUrls,
   fetchFedStatement,
   parseFedStatementHtml,
   parseFedTargetRange,
@@ -107,4 +109,32 @@ test("fetch accepts only the official URL and returns HTML without storing it", 
   assert.deepEqual(calls, [URL]);
   assert.match(html, /target range/);
   await assert.rejects(() => fetchFedStatement("https://example.com/fomc.htm", () => Promise.resolve(new Response(HTML))), /FED_NON_OFFICIAL_URL/);
+});
+
+test("official calendar dispatch fetches the latest statement and cross-checks FRED target range", async () => {
+  const calendar = `<a href="/newsevents/pressreleases/monetary20260916a.htm">Statement</a>`;
+  assert.deepEqual(extractOfficialFedStatementUrls(calendar), [URL]);
+  const calls: string[] = [];
+  const events = await fetchFedStatementEvents((url) => {
+    calls.push(String(url));
+    return Promise.resolve(new Response(String(url) === URL ? HTML : calendar, { status: 200 }));
+  }, { lower: 3.5, upper: 3.75 });
+  assert.deepEqual(calls, ["https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm", URL]);
+  assert.equal(events[0].eventType, "central_bank_decision");
+  assert.equal(events[0].rawPayload?.decision, "hike");
+  assert.equal(events[0].rawPayload?.is_revision, false);
+  assert.equal(events[0].rawPayload?.content_hash, events[0].rawPayload?.document_hash);
+  assert.deepEqual(events[0].rawPayload?.rates, {
+    FED_FUNDS_TARGET_LOWER: { old_rate: 3.5, new_rate: 3.75, change_bps: 25 },
+    FED_FUNDS_TARGET_UPPER: { old_rate: 3.75, new_rate: 4, change_bps: 25 },
+  });
+});
+
+test("same meeting with a changed document hash is marked as a revision", async () => {
+  const revisedHtml = HTML.replace("Inflation remains elevated.", "Inflation remains elevated and persistent.");
+  const events = await fetchFedStatementEvents((url) => {
+    const value = String(url) === URL ? revisedHtml : `<a href="${URL}">Statement</a>`;
+    return Promise.resolve(new Response(value, { status: 200 }));
+  }, { lower: 3.5, upper: 3.75 }, [{ meetingDate: "2026-09-15", documentHash: "a".repeat(64) }]);
+  assert.equal(events[0].rawPayload?.is_revision, true);
 });
