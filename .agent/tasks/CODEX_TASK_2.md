@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase14-persistent-content-settings-candidate-20260922
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: Phase13 C2 PASS後の次段階として、general-user向け投稿設定をtenant-safeに永続化できるsource candidateを作る。まだCron・scheduled_posts自動生成・X実投稿・publish_enabled=trueは行わない。
@@ -435,3 +435,10 @@ Still forbidden:
 - publish enablement
 - X post/media
 - Vault/OAuth mutation
+
+### Disposable DB proof result — 2026-09-22
+
+- Fresh `origin/main` was used. The candidate migration was applied exactly once to an isolated local Supabase/PostgreSQL 17.6 instance, then object/RLS/ACL/policy/trigger read-back was completed.
+- Two isolated brands/users proved owner read/write, non-owner read/write denial, cross-tenant isolation, delete denial, invalid time/publish-key rejection, and the default `09:00 / 24:00 / 17:00` row.
+- The candidate table, trigger function, and baseline fixtures were dropped; post-cleanup `to_regclass`/`to_regprocedure` read-back returned null for all proof objects. The disposable Supabase instance was stopped with `--no-backup`.
+- No production mutation, deploy, settings row, Cron, scheduled post, X/OpenAI/Vault/OAuth operation was performed. Return to C2 with `review_required / next_owner: chatgpt`.

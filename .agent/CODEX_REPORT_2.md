@@ -1,3 +1,18 @@
+# H2 — Social mobile Phase 14 disposable DB proof (review required, 2026-09-22)
+
+- task_id: `social-mobile-app-phase14-persistent-content-settings-candidate-20260922`
+- status: `review_required`; next_owner: `chatgpt`
+- fresh_source: `origin/main` `c4f2f83f485bda45e308522c7b6d079b4b606e7c`; proof ran in an isolated temporary Supabase project/worktree. Formal checkout and existing uncommitted changes were untouched.
+- migration_apply: Applied exactly `supabase/migrations/20260922045046_social_mobile_content_settings_candidate.sql` to disposable local PostgreSQL **17.6**. No production database or migration history was used.
+- schema_readback: Confirmed the `social_mobile_content_settings` columns/defaults, `24:00`-only `endLocal` boundary, start/default time restrictions, persona checks, foreign key, primary key, RLS enabled, three owner policies, authenticated grants, delete denial, and the trigger function with `search_path=public`.
+- tenant_proof: Two isolated brands/users proved owner read/write success; non-owner insert/read/write denial; cross-tenant isolation; delete denied; invalid `startLocal=24:00`, invalid `defaultGenerationLocal=24:00`, and publish-related keys rejected; default insert succeeded with `09:00 / 24:00 / 17:00`.
+- rollback_cleanup: Candidate table and trigger function plus disposable baseline fixtures were dropped. Post-cleanup `to_regclass` / `to_regprocedure` read-back returned null for all proof objects. The local Supabase instance was stopped with `--no-backup`; no residual disposable volume remains.
+- tests: The source fix's shared-brand suite remains **73/73 PASS**; `apps/social-mobile` typecheck, lint, Expo export, and `git diff --check` remain PASS. The proof itself completed with `psql -v ON_ERROR_STOP=1` and zero assertion failures.
+- persona_representation: Canonical persisted metadata remains in dedicated `persona_provenance` / `persona_confirmed` / analysis columns; `persona_profile` remains bounded derived signals. Future application mapping must construct `source` / `confirmed` from those columns.
+- production_mutation: **0** — no production migration/schema/RLS/ACL/RPC, settings row, deploy, Cron/scheduler, scheduled post, X/OpenAI/Vault/OAuth/Storage operation was performed.
+- source_commit: `649111c`; proof/control read-back is now recorded on the follow-up commit pushed after the latest origin refresh.
+- safety_checks: no `apps/admin/**`, `HANDOFF.md`, H1 files, or other workstreams changed. No secrets, tokens, credentials, or personal identifiers were recorded.
+
 # H2 — Social mobile Phase 14 C2 follow-up: end-time DB contract fix (review required, 2026-09-22)
 
 - task_id: `social-mobile-app-phase14-persistent-content-settings-candidate-20260922`
