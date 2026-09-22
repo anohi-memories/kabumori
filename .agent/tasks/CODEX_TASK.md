@@ -1,267 +1,273 @@
 # Codex Task
 
-- task_id: important-news-phase1-search-diagnostics-production-rollout-20260922
+- task_id: kabumori-mobile-home-dashboard-v1-20260922
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
-- purpose: C1 PASS済みのprivacy-minimal search diagnosticsをfresh mainへ統合し、exact migrationとmatching important-news-shadow Functionを本番へ安全に適用する。その後はmanual replayなしで自然scheduled runだけを観測し、telemetryが正しく記録されることを確認する。
+- purpose: かぶモリアプリ本体のトップ画面を「検索」から「今日の自分の株を把握できるホーム」へ作り替え、既存の登録銘柄・重要ニュース・朝刊/大引けレポートを1画面に集約する。APIコスト最適化H1は自然観測待ちのため、このUI/UX workstreamでは触らない。
 
-## Approved basis
+## User intent
 
-Final C1 PASS:
-- approved candidate branch: `codex/h1-search-diagnostics-aggregate-r2-20260921`
-- fresh-base at review: `4a73c18b8e85856ec37eb029fdc5da04af9cbfa5`
-- code candidate commit: `3dc14f454d4298cafed9ec7ad62a171868afd883`
-- candidate was behind main 0 at C1.
-- prior aggregate-usage blocker resolved.
-- 18 Deno tests + type checks passed.
-- migration is additive/nullable; RLS/grants unchanged.
-- privacy boundary accepted.
-- production mutation so far = 0.
-
-## User approval
-
-2026-09-22「おk すすめて」。
-
-This authorizes this scoped production rollout only.
+2026-09-22:
+- H2/social-mobileは別チャットで進行しているため本タスクでは対象外。
+- APIコスト軽減は自然conditional search待ち。
+- その間に、かぶモリアプリ本体のUI/機能を詰めたい。
+- まずHome/Dashboard V1から進める方針で合意。
 
 ## Model policy
 
 - **Lunaで開始・継続。**
-- fresh-main integration、tests、exact migration apply、matching Function deploy、read-back、natural observationはLuna。
-- Solへ上げるのは、migration/schema ownership/security/auth conflict、unexpected production drift、rollback ambiguityが実際に出た場合だけ。
-- 問題が出たら勝手にrepairせずSTOP。
+- UI/UX実装、既存read-only data reuse、local testsはLuna。
+- SolはAuth/RLS/production schemaの具体的blockerが出た時だけ。
+- このH1ではproduction DB migration / Edge Function deploy / Cron / secret変更は行わない。
 
-## Mandatory startup
+## Scope boundary
 
-1. .agent/ORCHESTRATION.md
-2. .agent/CURRENT_STATE.md
-3. this TASK
-4. .agent/CODEX_REPORT.md
-5. other 3 slot TASKs
-6. fresh `origin/main`
-7. approved candidate branch/commit
-8. production schema read-back for:
-   - public.important_news_shadow_runs
-   - public.ai_usage_events
-9. production important-news-shadow Function version/source hash
-10. shadow Cron job 38 schedule/active/command hash
-11. current migration history relevant to exact new migration
+対象:
+- root mobile app under `src/app`, `src/components`, `src/lib`
+- かぶモリ本体のみ
 
-## Parallel safety
+対象外:
+- `apps/social-mobile/**`
+- H2/G1/G2 task/report
+- important-news search diagnostics / API cost architecture
+- Cron
+- Supabase migration/schema/RPC変更
+- Edge Function deploy
+- X/Push producer behavior
+- OAuth
+- admin app
 
-- H2/G1/G2 files/functions/tasks are out of scope.
-- Do not touch social-mobile Function, market-report Function, x-test-post, personalized-reports, OAuth, X/Push/App.
-- If another slot is actively mutating the **same Function/schema/migration/Cron** object, STOP.
-- Existing unrelated uncommitted work must not be touched.
-- Fresh-check `origin/main` immediately before push and immediately before production mutation.
+既存push navigationや通知設定は壊さない。
 
-## Scope A — fresh-main integration
+## Current basis
 
-Create a fresh H1 branch from current `origin/main`.
+Current tabs:
+- `index` = 検索
+- `explore` = 登録銘柄
+- `reports` = レポート
+- `news` = 重要ニュース
 
-Integrate only the approved implementation:
-- `supabase/functions/important-news-shadow/index.ts`
-- `supabase/functions/important-news-shadow/search_telemetry.ts`
-- `supabase/functions/important-news-shadow/search_telemetry_test.ts`
-- `supabase/migrations/20260921115317_important_news_search_diagnostics.sql`
+Existing reusable reads:
+- `tracked_stocks`
+- `fetchMyImportantStockNews()`
+- `fetchRecentReports()`
 
-Do not blindly merge stale control-file history from the candidate branch.
+Important constraint:
+- 現時点のmobile appにはcurrent stock price / market index realtime sourceがない。
+- したがってHome V1では**現在値・評価損益・日経平均/先物などを捏造表示しない**。
+- それらは別Phaseでdata source設計後に追加する。
 
-Preserve exactly:
-- per-run aggregate input/output tokens
-- aggregate legacy `web_search_calls`
-- aggregate estimated cost
-- current-response-based `paidSearchUsed` latch semantics
-- attempt/success/failure telemetry
-- action buckets: search/open_page/find_in_page/unknown
-- no raw prompt/headline/query/URL/tool-output/provider-id telemetry
+## Goal — Home/Dashboard V1
 
-Run:
-- Deno tests
-- deno check
-- git diff --check
-- verify only H1-owned implementation files + required control/report files changed
+App起動直後にユーザーが以下を30秒以内で把握できる画面を作る:
 
-If fresh main has conflicting edits to important-news-shadow or the exact migration name/object, STOP for C1 rather than auto-resolving semantics.
+1. 今日のレポートが出ているか
+2. 重要ニュースがあるか
+3. 自分が何銘柄保有/監視しているか
+4. 重要ニュースの上位数件
+5. すぐ登録銘柄・検索・レポート・ニュースへ移動できる
 
-## Scope B — exact migration apply
+## Scope A — navigation / route
 
-Apply **only**:
-`supabase/migrations/20260921115317_important_news_search_diagnostics.sql`
+1. `src/app/index.tsx` をHome/Dashboardへ変更。
+2. 既存の検索画面は機能を失わず別routeへ移す。
+   - candidate: `src/app/search.tsx`
+3. `AppTabs` のindex labelを `ホーム` に変更。
+4. Searchはbottom tabを増やさず、Homeのquick actionから開く方式を優先。
+5. NativeTabs / Expo Router上でsearch routeが意図せずbottom tabへ露出しないことを確認。
+6. push notification deep-link navigationを壊さない。
 
-Hard rules:
-- **DO NOT use `supabase db push`.**
-- No migration history repair/reconcile.
-- No unrelated pending migration.
-- No schema rewrite.
-- No RLS/policy/grant change.
+## Scope B — Home header
 
-Preflight must prove the new columns do not already exist in an incompatible form.
+Home上部:
+- eyebrow: `KABUMORI`
+- title: 時間帯によって自然な日本語
+  - 朝: `おはようございます`
+  - 昼〜夕: `今日のかぶモリ`
+  - 夜: `今日もお疲れさまでした`
+- subtitle: `あなたの保有・監視銘柄に必要な情報をまとめます。`
 
-After apply, read back:
-- all 8 new columns on both tables
-- integer type
-- nullable
-- non-negative CHECK constraints
-- existing RLS/policies/grants unchanged from preflight
+ユーザー名は現在のprofile sourceが明確でない限り表示しない。
 
-If partially present or incompatible, STOP. Do not repair automatically.
+## Scope C — My Stocks summary
 
-## Scope C — matching Function deploy
+既存 `tracked_stocks` からread-only取得して:
+- 保有銘柄数
+- 監視銘柄数
+- 合計登録数
 
-Only after migration read-back passes:
+をHome summary cardで表示。
 
-Deploy only `important-news-shadow` from the exact integrated source.
+さらに最大3件程度:
+- ticker
+- company name
+- 保有/監視 badge
+- holdingの場合はquantity/average_priceがあれば補足表示
 
-Preserve:
-- existing verify_jwt setting
-- existing X-Cron-Secret auth
-- current Cron schedule
-- source set
-- trigger thresholds
-- matcher
-- MODEL
-- timeout
-- max_tool_calls
-- search/retry behavior
-- legacy fallback
+ただし:
+- current price
+- 評価額
+- 含み損益
+- 前日比
+は現data sourceがないため表示禁止。
 
-No manual Function invoke is required or allowed for this rollout.
+Actions:
+- `登録銘柄を見る` -> explore
+- `銘柄を検索` -> search
 
-Read back:
-- ACTIVE version
-- source hash
-- verify_jwt
-- no unrelated Function source hash/update changed
+Empty state:
+- 未登録なら「まず1銘柄追加」の導線を明確にする。
 
-## Scope D — natural scheduled observation
+## Scope D — Important News preview
 
-Use **natural Cron runs only** after deploy.
+既存 `fetchMyImportantStockNews()` をreuse。
 
-Minimum gate:
-- wait for at least 3 natural scheduled shadow runs after deployment
-- at least one run must prove the new telemetry columns are being written as non-NULL for an instrumented run, even if all counters are zero
-- if a natural conditional search happens, verify attempt/success/failure, action counts, tokens/calls/cost consistency
-- if no conditional search happens in the first 3 runs, do not force one; report zero-trigger observation and keep telemetry validation to schema/non-NULL run values
+Homeには最大3件:
+- target badge / ticker or market
+- importance/severity
+- Japanese title
+- short summary if available
+- time
 
-Do not inject a candidate.
-Do not call OpenAI manually.
-Do not alter Cron to provoke a run.
+Tap:
+- `/news/[id]`
 
-## Scope E — safety read-back
+Section action:
+- `重要ニュースをすべて見る` -> news tab
 
-Confirm after rollout:
-- Cron job 38 unchanged
-- legacy important-news jobs unchanged
-- important-news-monitor unchanged
-- no X/Push/App action
-- no candidate injection
-- no fallback reduction
-- no provider setting/key change
-- no H2/G1/G2 production object changed
+Do not duplicate alert settings on Home.
+Do not mark all important-news notifications read merely by opening Home; current news-screen behaviorを維持。
 
-## Scope F — rollback
+Error:
+- Home全体を落とさずsection単位でretry/soft error。
 
-If Function deploy causes repeated run failure or telemetry persistence failure:
-- rollback Function source to previous known-good version/source
-- do **not** drop the additive nullable columns unless there is a concrete schema safety reason
-- keep audit rows
-- preserve Cron/fallback
-- report exact reason
+## Scope E — Today Reports preview
 
-Do not perform rollback merely because there are no conditional searches.
+既存 `fetchRecentReports()` をreuse。
 
-## Scope G — provider reconciliation
+JST current dateで:
+- 朝刊
+- 大引けレポート
 
-Do not block rollout on provider billing UI access.
+それぞれ:
+- available -> title + summary + generated time + detail link
+- unavailable -> current schedule wordingを短く表示
 
-If a read-only provider usage path is available without new credentials/settings:
-- compare only aggregated time/model buckets
-- do not assume output-item count equals billable units
-- do not mutate billing settings
+Tap:
+- `/reports/[id]`
 
-If unavailable, record as future follow-up.
+Section action:
+- `レポートをすべて見る` -> reports tab
 
-## Production mutation authorization
+Homeでは通知toggleを置かない。
 
-Approved **only**:
-1. exact H1 implementation merge/integration to main
-2. exact migration `20260921115317_important_news_search_diagnostics.sql`
-3. matching `important-news-shadow` deploy
+## Scope F — Quick actions
 
-Not approved:
-- Cron changes
-- secret/Vault changes
-- search trigger/policy changes
-- retry-policy changes
-- fallback reduction
-- legacy pipeline changes
-- other Functions
-- X/Push/App
-- MIC
-- OAuth/social-mobile
-- manual OpenAI replay
+Home上部またはsummary直下に4 actions程度:
+- 銘柄を検索
+- 登録銘柄
+- レポート
+- 重要ニュース
+
+既存themeに合わせ、過度に大きなボタンを乱立させない。
+Accessibility labels/hintsを付ける。
+
+## Scope G — loading / refresh / error UX
+
+- HomeはScrollView + pull-to-refresh candidate。
+- initial loadingは全画面spinnerだけにせず、section skeleton/simple loading stateを検討。
+- one source failureでHome全体を空にしない。
+- news/report/stocksを独立loadできる構造を優先。
+- user-facing errorはbackend raw errorをそのまま大きく出さず、必要なら短い日本語 + retry。
+
+## Scope H — visual design
+
+Current green/cream KABUMORI styleを維持。
+
+V1 design principles:
+- mobile first
+- maxWidth 720 web compatibility
+- section cards hierarchy
+- title/body spacing統一
+- green = primary/action
+- redを損益用途に予約し、Home V1では不用意に使わない
+- dark modeで文字が読めなくなるhard-coded conflictがないか確認
+
+No large design-system rewrite in this task.
+
+## Scope I — code organization
+
+Homeが肥大化しすぎる場合はsmall components/lib extraction可:
+- dashboard data loader/hooks
+- HomeSection
+- quick action card
+等。
+
+ただし過剰抽象化しない。
+
+Prefer reusing:
+- `ImportantStockNews`
+- news presentation helpers
+- report presentation helpers
+- `TrackedStock`
+
+## Scope J — tests / verification
+
+最低:
+1. TypeScript / Expo type check
+2. relevant unit tests
+3. route/static verification
+4. search functionality preserved after route move
+5. logged-in empty tracked stocks state
+6. tracked stocks state
+7. reports present/absent state
+8. news present/empty/error state
+9. pull-to-refresh behavior smoke/static check
+10. git diff --check
+
+If practical, add pure helper tests for:
+- JST greeting/time bucket
+- today report selection
+- tracked summary counts
+
+No production data mutation is required.
+
+## Acceptance criteria
+
+C1で以下を確認できること:
+- app start is Home, not Search
+- bottom tab label is ホーム
+- Search remains accessible and functional
+- Home shows actual stored user data only
+- no fabricated/current-market metrics
+- news preview + reports preview + tracked summary all work
+- section failure isolation
+- no social-mobile/H2 files touched
+- no backend production mutation
+- tests/typecheck pass
+- fresh origin/main checked before push
 
 ## Deliverables / C1
 
 Update `.agent/CODEX_REPORT.md` with:
-1. fresh main SHA and integration commit
-2. exact changed files
-3. tests/typecheck/diff-check
-4. migration preflight/apply/postflight
-5. Function old/new version + source hash
-6. Cron/legacy read-back
-7. 3+ natural scheduled run evidence
-8. telemetry values
-9. production mutations exact list
-10. rollback status
-11. remaining uncertainty on provider billing units
-12. exact next recommendation
+1. before/after navigation
+2. Home layout sections
+3. exact data sources reused
+4. changed files
+5. tests/typecheck
+6. screenshots if available, otherwise exact manual verification notes
+7. production mutation = 0
+8. H2/G1/G2 untouched
+9. known limitations (no realtime prices/P&L yet)
+10. recommended next UI phase
 
 On completion:
-- task status -> `review_required`
+- status -> `review_required`
 - next_owner -> `chatgpt`
 - STOP for C1
 
-**推奨モデル：Luna。Solは具体的なmigration/security conflictが出た時だけ。**
-
-
-## Completion record — 2026-09-22
-
-- Integration merge: `f501fbb02714bd6d08bea2c321e406ed4b4d5e05`.
-- Exact migration applied and read back; production migration row is `20260922003120 / 20260921115317_important_news_search_diagnostics`.
-- `important-news-shadow` deployed v8 with `verify_jwt=false`; source and telemetry helper read back byte-for-byte against main.
-- Three natural scheduled runs completed at 00:40, 00:50, and 01:00 UTC. All wrote non-NULL zero telemetry; no manual invoke, candidate injection, or replay.
-- Cron 38 and unrelated Functions/configuration unchanged.
-- Stop for C1; next_owner is ChatGPT.
-
-
-## C1 review — 2026-09-22
-
-**PASS — production rollout completed within approved scope.**
-
-Accepted evidence:
-- C1-approved implementation is present on main via integration merge `f501fbb02714bd6d08bea2c321e406ed4b4d5e05`.
-- Main contains the diagnostics helper, tests, runtime integration, and exact migration file.
-- Exact migration was applied only; report records production migration row `20260922003120 / 20260921115317_important_news_search_diagnostics`.
-- Postflight confirms all 8 nullable integer diagnostics columns on both target tables and all 16 non-negative CHECK constraints, with RLS/grants/policies unchanged.
-- `important-news-shadow` moved from v7 to ACTIVE v8, `verify_jwt=false` preserved, and deployed source read-back matched main.
-- Cron job 38 remained `*/10 * * * *` with unchanged command hash; unrelated Functions/configuration unchanged.
-- Three natural scheduled runs after deploy (00:40, 00:50, 01:00 UTC) completed and wrote non-NULL zero diagnostics without manual invoke, candidate injection, or OpenAI replay.
-- No conditional search occurred in those first three runs, so action/billing reconciliation is correctly left unclaimed.
-- Tests/typecheck/diff-check reported PASS.
-- No fallback/search/retry/Cron/secret/provider/X/Push/App behavior was changed.
-
-### C1 judgment
-
-- Rollout is accepted.
-- No rollback is required.
-- Keep passive natural observation; do not force a conditional search.
-- Provider-billing-unit reconciliation remains a follow-up because output-item counts are still not proven billable units.
-- PR #3 remains open but is superseded by the actual main integration recorded above; do not merge it again.
-
-**Recommended model for the next H1 observation/reconciliation task: Luna.**
+**推奨モデル：Luna。**
