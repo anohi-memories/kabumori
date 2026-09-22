@@ -6,12 +6,12 @@ import {
   TabTriggerSlotProps,
   TabListProps,
 } from 'expo-router/ui';
-import { Pressable, View, StyleSheet } from 'react-native';
-
-import { ThemedText } from './themed-text';
-import { ThemedView } from './themed-view';
+import { Pressable, View, StyleSheet, Text } from 'react-native';
 
 import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
+
+const colors = KABUMORI_COLORS.light;
 
 export default function AppTabs() {
   return (
@@ -23,7 +23,10 @@ export default function AppTabs() {
             <TabButton>ホーム</TabButton>
           </TabTrigger>
           <TabTrigger name="explore" href="/explore" asChild>
-            <TabButton>登録銘柄</TabButton>
+            <TabButton>銘柄</TabButton>
+          </TabTrigger>
+          <TabTrigger name="portfolio" href="/portfolio" asChild>
+            <TabButton>ポート</TabButton>
           </TabTrigger>
           <TabTrigger name="reports" href="/reports" asChild>
             <TabButton>レポート</TabButton>
@@ -40,13 +43,9 @@ export default function AppTabs() {
 export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
   return (
     <Pressable {...props} style={({ pressed }) => pressed && styles.pressed}>
-      <ThemedView
-        type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
-        style={styles.tabButtonView}>
-        <ThemedText type="small" themeColor={isFocused ? 'text' : 'textSecondary'}>
-          {children}
-        </ThemedText>
-      </ThemedView>
+      <View style={[styles.tabButtonView, { backgroundColor: isFocused ? colors.tabSelected : 'transparent' }]}>
+        <Text style={[styles.tabText, { color: isFocused ? colors.text : colors.muted }]}>{children}</Text>
+      </View>
     </Pressable>
   );
 }
@@ -54,14 +53,14 @@ export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps
 export function CustomTabList(props: TabListProps) {
   return (
     <View {...props} style={styles.tabListContainer}>
-      <ThemedView type="backgroundElement" style={styles.innerContainer}>
-        <ThemedText type="smallBold" style={styles.brandText}>
+      <View style={[styles.innerContainer, { backgroundColor: colors.tabBackground }]}>
+        <Text style={[styles.brandText, { color: colors.text }]}>
           Kabumori
-        </ThemedText>
+        </Text>
 
         {props.children}
 
-      </ThemedView>
+      </View>
     </View>
   );
 }
@@ -95,5 +94,10 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.one,
     paddingHorizontal: Spacing.three,
     borderRadius: Spacing.three,
+  },
+  tabText: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
   },
 });

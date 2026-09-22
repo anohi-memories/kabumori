@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
 import {
   fetchRecentReports,
   fetchReportAlertSettings,
@@ -19,6 +20,8 @@ import {
   type ReportAlertSettings,
 } from '@/lib/personalized-reports';
 import { formatDateJa, formatTimeJa, reportTypeLabel, type PersonalizedReport, type ReportType } from '@/lib/report-presentation';
+
+const colors = KABUMORI_COLORS.light;
 
 function todayJst(): string {
   return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -42,17 +45,17 @@ export default function ReportsScreen() {
     setError('');
     try {
       setReports(await fetchRecentReports());
-    } catch (loadError) {
+    } catch {
       setReports([]);
-      setError(loadError instanceof Error ? loadError.message : 'レポートを取得できませんでした。');
+      setError('レポートを読み込めませんでした。');
     } finally {
       setLoading(false);
     }
     try {
       setSettings(await fetchReportAlertSettings());
       setSettingsError('');
-    } catch (loadError) {
-      setSettingsError(loadError instanceof Error ? loadError.message : '通知設定を取得できませんでした。');
+    } catch {
+      setSettingsError('通知設定を取得できませんでした。');
     }
   }, []);
 
@@ -70,7 +73,7 @@ export default function ReportsScreen() {
       await setReportAlert(column, enabled);
     } catch (saveError) {
       setSettings(previous);
-      setSettingsError(saveError instanceof Error ? saveError.message : '通知設定を保存できませんでした。');
+      setSettingsError('通知設定を保存できませんでした。');
     } finally {
       setSaving(false);
     }
@@ -115,7 +118,7 @@ export default function ReportsScreen() {
           value={settings?.[column] === true}
           onValueChange={(enabled) => void toggle(column, enabled)}
           disabled={!settings || saving}
-          trackColor={{ true: '#397449', false: '#d7dcd8' }}
+          trackColor={{ true: colors.accent, false: colors.border }}
           accessibilityLabel={label}
         />
       </View>
@@ -126,14 +129,14 @@ export default function ReportsScreen() {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView
         contentContainerStyle={styles.container}
-        refreshControl={<RefreshControl refreshing={loading && reports.length > 0} onRefresh={load} tintColor="#397449" />}>
+        refreshControl={<RefreshControl refreshing={loading && reports.length > 0} onRefresh={load} tintColor={colors.accent} />}>
         <Text style={styles.eyebrow}>YOUR PORTFOLIO</Text>
         <Text style={styles.title}>あなたのレポート</Text>
         <Text style={styles.description}>
           登録した保有・監視銘柄に合わせて、朝は「今日どこを見るか」、引け後は「今日どう動いたか」をまとめます。
         </Text>
 
-        {loading && reports.length === 0 ? <ActivityIndicator color="#397449" style={styles.status} /> : null}
+        {loading && reports.length === 0 ? <ActivityIndicator color={colors.accent} style={styles.status} /> : null}
         {!!error && (
           <View style={styles.errorCard}>
             <Text style={styles.errorText}>{error}</Text>
@@ -175,34 +178,34 @@ export default function ReportsScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#f7f8f5' },
+  safeArea: { flex: 1, backgroundColor: colors.background },
   container: { width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 110, gap: 12 },
-  eyebrow: { color: '#548161', fontWeight: '900', letterSpacing: 2, fontSize: 12 },
-  title: { color: '#17211a', fontSize: 30, fontWeight: '900', marginTop: -6 },
-  description: { color: '#667169', fontSize: 15, lineHeight: 22 },
+  eyebrow: { color: colors.accent, fontWeight: '900', letterSpacing: 2, fontSize: 12 },
+  title: { color: colors.text, fontSize: 30, fontWeight: '900', marginTop: -6 },
+  description: { color: colors.muted, fontSize: 15, lineHeight: 22 },
   status: { marginTop: 24 },
-  sectionTitle: { color: '#3d4a42', fontWeight: '900', fontSize: 15, marginTop: 8 },
-  todayCard: { backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: '#e1e5e2', padding: 17 },
-  todayCardEmpty: { backgroundColor: '#f1f3f0', borderStyle: 'dashed' },
+  sectionTitle: { color: colors.text, fontWeight: '900', fontSize: 15, marginTop: 8 },
+  todayCard: { backgroundColor: colors.card, borderRadius: 18, borderWidth: 1, borderColor: colors.border, padding: 17 },
+  todayCardEmpty: { backgroundColor: colors.accentSoft, borderStyle: 'dashed' },
   pressed: { opacity: 0.85 },
   cardHead: { flexDirection: 'row', alignItems: 'center' },
-  typeBadge: { color: '#2c6940', backgroundColor: '#e4f1e7', fontWeight: '900', fontSize: 12, borderRadius: 99, paddingHorizontal: 10, paddingVertical: 5, overflow: 'hidden' },
+  typeBadge: { color: colors.accent, backgroundColor: colors.accentSoft, fontWeight: '900', fontSize: 12, borderRadius: 99, paddingHorizontal: 10, paddingVertical: 5, overflow: 'hidden' },
   closeBadge: { color: '#2f4f86', backgroundColor: '#e6edf8' },
-  time: { color: '#89918c', fontSize: 12, marginLeft: 'auto' },
-  cardTitle: { color: '#17211a', fontWeight: '900', fontSize: 19, lineHeight: 26, marginTop: 10 },
-  cardSummary: { color: '#58645c', fontSize: 14, lineHeight: 21, marginTop: 6 },
-  more: { color: '#397449', fontWeight: '800', fontSize: 13, marginTop: 10, textAlign: 'right' },
-  emptyText: { color: '#7a847d', fontSize: 13, lineHeight: 20, marginTop: 10 },
-  alertCard: { backgroundColor: '#eef3ed', borderRadius: 16, padding: 14, gap: 4, marginTop: 4 },
-  alertTitle: { color: '#17211a', fontWeight: '800', fontSize: 14 },
+  time: { color: colors.muted, fontSize: 12, marginLeft: 'auto' },
+  cardTitle: { color: colors.text, fontWeight: '900', fontSize: 19, lineHeight: 26, marginTop: 10 },
+  cardSummary: { color: colors.muted, fontSize: 14, lineHeight: 21, marginTop: 6 },
+  more: { color: colors.accent, fontWeight: '800', fontSize: 13, marginTop: 10, textAlign: 'right' },
+  emptyText: { color: colors.muted, fontSize: 13, lineHeight: 20, marginTop: 10 },
+  alertCard: { backgroundColor: colors.accentSoft, borderRadius: 16, padding: 14, gap: 4, marginTop: 4 },
+  alertTitle: { color: colors.text, fontWeight: '800', fontSize: 14 },
   toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 2 },
-  toggleLabel: { color: '#3d4a42', fontSize: 14 },
-  alertError: { color: '#9a403b', fontSize: 12 },
-  errorCard: { borderRadius: 18, backgroundColor: '#fff0ef', padding: 18, alignItems: 'center' },
-  errorText: { color: '#9a403b', textAlign: 'center', lineHeight: 21 },
-  retryButton: { marginTop: 12, borderRadius: 10, backgroundColor: '#397449', paddingHorizontal: 16, paddingVertical: 10 },
+  toggleLabel: { color: colors.text, fontSize: 14 },
+  alertError: { color: colors.errorText, fontSize: 12 },
+  errorCard: { borderRadius: 18, backgroundColor: colors.errorSoft, padding: 18, alignItems: 'center' },
+  errorText: { color: colors.errorText, textAlign: 'center', lineHeight: 21 },
+  retryButton: { marginTop: 12, borderRadius: 10, backgroundColor: colors.accent, paddingHorizontal: 16, paddingVertical: 10 },
   retryText: { color: '#fff', fontWeight: '800' },
-  pastRow: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e1e5e2', padding: 14 },
-  pastDate: { color: '#6b766f', fontSize: 12, fontWeight: '700' },
-  pastTitle: { color: '#17211a', fontWeight: '800', fontSize: 15, lineHeight: 21, marginTop: 4 },
+  pastRow: { backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: 14 },
+  pastDate: { color: colors.muted, fontSize: 12, fontWeight: '700' },
+  pastTitle: { color: colors.text, fontWeight: '800', fontSize: 15, lineHeight: 21, marginTop: 4 },
 });

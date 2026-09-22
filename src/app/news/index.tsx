@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ImportantNewsAlertSettings } from '@/components/important-news-alert-settings';
+import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
 import {
   fetchMyImportantStockNews,
   ImportantStockNews,
@@ -19,6 +20,8 @@ import {
 import { categoryLabels, formatNewsTime, importanceLabel, targetLabel } from '@/lib/news-labels';
 import { buildNewsPresentation } from '@/lib/news-presentation';
 import { markImportantNewsNotificationsRead } from '@/lib/notifications';
+
+const colors = KABUMORI_COLORS.light;
 
 export default function ImportantNewsScreen() {
   const [items, setItems] = useState<ImportantStockNews[]>([]);
@@ -32,13 +35,9 @@ export default function ImportantNewsScreen() {
       const feed = await fetchMyImportantStockNews();
       setItems(feed.items);
       setHasTrackedStocks(feed.hasTrackedStocks);
-    } catch (loadError) {
+    } catch {
       setItems([]);
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : '重大ニュースを取得できませんでした。',
-      );
+      setError('重要ニュースを読み込めませんでした。');
     } finally {
       setLoading(false);
     }
@@ -69,11 +68,11 @@ export default function ImportantNewsScreen() {
                 保有・監視銘柄と、市場全体の注目ニュースをまとめます。
               </Text>
               <ImportantNewsAlertSettings />
-              {loading && !items.length ? <ActivityIndicator color="#397449" style={styles.status} /> : null}
+              {loading && !items.length ? <ActivityIndicator color={colors.accent} style={styles.status} /> : null}
             </View>
           )}
           refreshControl={
-            <RefreshControl refreshing={loading && !!items.length} onRefresh={load} tintColor="#397449" />
+            <RefreshControl refreshing={loading && !!items.length} onRefresh={load} tintColor={colors.accent} />
           }
           ListEmptyComponent={
             !loading ? (
@@ -149,44 +148,44 @@ export default function ImportantNewsScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#f7f8f5' },
+  safeArea: { flex: 1, backgroundColor: colors.background },
   container: { flex: 1, width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 20 },
-  eyebrow: { color: '#548161', fontWeight: '900', letterSpacing: 2, fontSize: 12 },
-  title: { color: '#17211a', fontSize: 30, fontWeight: '900', marginTop: 6 },
-  description: { color: '#667169', fontSize: 15, lineHeight: 22, marginTop: 8, marginBottom: 12 },
+  eyebrow: { color: colors.accent, fontWeight: '900', letterSpacing: 2, fontSize: 12 },
+  title: { color: colors.text, fontSize: 30, fontWeight: '900', marginTop: 6 },
+  description: { color: colors.muted, fontSize: 15, lineHeight: 22, marginTop: 8, marginBottom: 12 },
   status: { marginTop: 36 },
   list: { paddingTop: 8, paddingBottom: 110, gap: 12 },
   emptyList: { flexGrow: 1 },
-  emptyCard: { marginTop: 24, borderRadius: 18, backgroundColor: '#eef3ed', padding: 22, alignItems: 'center' },
-  errorCard: { backgroundColor: '#fff0ef' },
-  emptyText: { color: '#5e6d63', textAlign: 'center', lineHeight: 22 },
-  errorText: { color: '#9a403b' },
-  retryButton: { marginTop: 16, borderRadius: 10, backgroundColor: '#397449', paddingHorizontal: 16, paddingVertical: 10 },
+  emptyCard: { marginTop: 24, borderRadius: 18, backgroundColor: colors.accentSoft, padding: 22, alignItems: 'center' },
+  errorCard: { backgroundColor: colors.errorSoft },
+  emptyText: { color: colors.muted, textAlign: 'center', lineHeight: 22 },
+  errorText: { color: colors.errorText },
+  retryButton: { marginTop: 16, borderRadius: 10, backgroundColor: colors.accent, paddingHorizontal: 16, paddingVertical: 10 },
   retryText: { color: '#fff', fontWeight: '800' },
-  card: { backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: '#e1e5e2', padding: 17 },
+  card: { backgroundColor: colors.card, borderRadius: 18, borderWidth: 1, borderColor: colors.border, padding: 17 },
   cardPressed: { opacity: 0.85 },
   badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   typeBadge: { borderRadius: 99, paddingHorizontal: 10, paddingVertical: 5 },
-  holdingBadge: { backgroundColor: '#e4f1e7' },
-  watchBadge: { backgroundColor: '#fff0d7' },
+  holdingBadge: { backgroundColor: colors.accentSoft },
+  watchBadge: { backgroundColor: colors.warningSoft },
   marketBadge: { backgroundColor: '#e8eefb' },
   typeText: { fontSize: 12, fontWeight: '900' },
-  holdingText: { color: '#2c6940' },
-  watchText: { color: '#946222' },
+  holdingText: { color: colors.accent },
+  watchText: { color: colors.warningText },
   marketText: { color: '#3b568c' },
-  ticker: { color: '#4b5b51', fontWeight: '900' },
+  ticker: { color: colors.muted, fontWeight: '900' },
   importanceBadge: { marginLeft: 'auto', borderRadius: 99, backgroundColor: '#fde8e5', paddingHorizontal: 10, paddingVertical: 5 },
   importanceText: { color: '#a23e37', fontSize: 12, fontWeight: '900' },
-  subtleBadge: { backgroundColor: '#eef1ee' },
-  subtleText: { color: '#5e6d63' },
-  company: { color: '#526058', fontWeight: '700', fontSize: 14, marginTop: 11 },
-  newsTitle: { color: '#17211a', fontWeight: '900', fontSize: 18, lineHeight: 25, marginTop: 8 },
+  subtleBadge: { backgroundColor: colors.accentSoft },
+  subtleText: { color: colors.muted },
+  company: { color: colors.muted, fontWeight: '700', fontSize: 14, marginTop: 11 },
+  newsTitle: { color: colors.text, fontWeight: '900', fontSize: 18, lineHeight: 25, marginTop: 8 },
   categoryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 9 },
-  categoryBadge: { backgroundColor: '#edf3ed', borderRadius: 99, paddingHorizontal: 9, paddingVertical: 4 },
-  categoryText: { color: '#477054', fontSize: 11, fontWeight: '800' },
-  summary: { color: '#647068', fontSize: 14, lineHeight: 21, marginTop: 9 },
-  pendingSummary: { color: '#89918c', fontSize: 13, lineHeight: 19, marginTop: 9 },
+  categoryBadge: { backgroundColor: colors.accentSoft, borderRadius: 99, paddingHorizontal: 9, paddingVertical: 4 },
+  categoryText: { color: colors.accent, fontSize: 11, fontWeight: '800' },
+  summary: { color: colors.muted, fontSize: 14, lineHeight: 21, marginTop: 9 },
+  pendingSummary: { color: colors.muted, fontSize: 13, lineHeight: 19, marginTop: 9 },
   footer: { flexDirection: 'row', alignItems: 'center', marginTop: 14 },
-  time: { color: '#89918c', fontSize: 12 },
-  moreLink: { color: '#397449', fontSize: 13, fontWeight: '800', marginLeft: 'auto' },
+  time: { color: colors.muted, fontSize: 12 },
+  moreLink: { color: colors.accent, fontSize: 13, fontWeight: '800', marginLeft: 'auto' },
 });

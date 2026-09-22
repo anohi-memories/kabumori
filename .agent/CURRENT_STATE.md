@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 Home dashboard V1 merge C1 PASS/done; H2 handled separately; G1 idle; G2 done)
+- checked_at: 2026-09-22 JST (H1 holdings/watch split + important-news detail quality ready; visual color/icon polish deferred; H2 handled separately)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,18 +14,20 @@
 
 ## Active workstreams
 
-- Codex slot 1: `done` — `kabumori-mobile-home-dashboard-v1-merge-20260922`
-  - C1 PASS. PR #5 merged/closed at `c867ee7e`; merged main state verified.
-  - Home/Dashboard V1 is on main; fixed Japanese error copy remains, Search stays at /search, and no realtime price/P&L/index values are fabricated.
-  - Post-merge main drift is .agent control/report only; no app/test implementation drift detected.
-  - Production/backend/EAS mutation 0.
-  - Recommended next model: Luna.
+- Codex slot 1: `ready` — `kabumori-mobile-holdings-watch-split-and-news-detail-quality-20260922`
+  - Real-device QA: 銘柄検索/Portfolio/UI統一は概ね改善。
+  - Next H1 separates registered holdings and watch items in the 銘柄 screen while preserving integrated search.
+  - Important News still has semantically shallow detail; next H1 first traces raw/stored/app-copy/verified presentation fields, then fixes the correct layer.
+  - Detail must add source-backed event context beyond 要点; generic market-impact filler and bare warning-only detail are not acceptable.
+  - Important-news producer changes, if needed, are source candidate only; no production deploy/mutation.
+  - Colors/icons/visual polish explicitly deferred to a later task.
+  - Recommended model: Luna.
 
-- Codex slot 2: `ready` — `social-mobile-app-phase14-persistent-content-settings-candidate-20260922`
-  - Phase13 C2 PASS後の次工程。
-  - general-user向けcontent settingsをtenant-safeに永続化するsource candidateを作る。
-  - production migration/RPC/RLS/Cron/scheduled_posts/X投稿/publish enableはまだ禁止。
-  - Recommended model: Luna。RLS/SECURITY DEFINERの具体的blocker時のみSol検討。
+- Codex slot 2: `ready` — `social-mobile-app-phase15-conversational-proxy-ai-and-history-learning-candidate-20260922`
+  - Phase14 C2 PASS後の次工程。
+  - 「あなたの投稿AI / 代打AI」と会話し、確認済みpersona/settingsを安全に永続化するsource candidateを作る。
+  - 過去X投稿学習は明示同意＋mock/source candidateまで。production X history call・publish・Cronは禁止。
+  - Recommended model: Luna。Auth/RLS/X token boundaryの具体的blocker時のみSol検討。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`

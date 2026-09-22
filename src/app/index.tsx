@@ -8,7 +8,6 @@ import {
   StyleSheet,
   Text,
   View,
-  useColorScheme,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -20,21 +19,7 @@ import { formatTimeJa, reportTypeLabel, type PersonalizedReport, type ReportType
 import { dashboardGreeting, dashboardSectionError, summarizeTrackedStocks, todayJst, todaysReports } from '@/lib/dashboard';
 import type { TrackedStock } from '@/lib/stocks';
 import { supabase } from '@/lib/supabase';
-
-type Palette = {
-  background: string;
-  card: string;
-  text: string;
-  muted: string;
-  border: string;
-  accent: string;
-  soft: string;
-  softBlue: string;
-  error: string;
-};
-
-const LIGHT: Palette = { background: '#f7f8f5', card: '#ffffff', text: '#17211a', muted: '#667169', border: '#e1e5e2', accent: '#397449', soft: '#eef3ed', softBlue: '#e8eefb', error: '#fff0ef' };
-const DARK: Palette = { background: '#101511', card: '#1b241d', text: '#f1f6f2', muted: '#b6c2b9', border: '#344238', accent: '#91d2a0', soft: '#253329', softBlue: '#26364a', error: '#412522' };
+import { KABUMORI_COLORS, type KabumoriPalette } from '@/constants/kabumori-theme';
 const REPORT_SCHEDULE: Record<ReportType, string> = { morning: '平日の朝8時半ごろに届きます', close: '平日の17時すぎに届きます' };
 
 async function fetchTrackedStocks(): Promise<TrackedStock[]> {
@@ -50,7 +35,7 @@ async function fetchTrackedStocks(): Promise<TrackedStock[]> {
   return (data ?? []) as unknown as TrackedStock[];
 }
 
-function retryButton(message: string, onRetry: () => void, palette: Palette) {
+function retryButton(message: string, onRetry: () => void, palette: KabumoriPalette) {
   return (
     <View style={[styles.errorCard, { backgroundColor: palette.error }]}>
       <Text style={[styles.errorText, { color: palette.muted }]}>{message}</Text>
@@ -62,7 +47,9 @@ function retryButton(message: string, onRetry: () => void, palette: Palette) {
 }
 
 export default function HomeScreen() {
-  const palette = useColorScheme() === 'dark' ? DARK : LIGHT;
+  // Keep the core Kabumori screens on one light palette until a complete dark
+  // mode pass can cover every screen consistently.
+  const palette = KABUMORI_COLORS.light;
   const greeting = dashboardGreeting();
   const [stocks, setStocks] = useState<TrackedStock[]>([]);
   const [news, setNews] = useState<ImportantStockNews[]>([]);
@@ -106,8 +93,8 @@ export default function HomeScreen() {
 
         <View style={styles.actionGrid}>
           {[
-            { label: '銘柄を検索', icon: '⌕', onPress: () => router.push('/search') },
-            { label: '登録銘柄', icon: '▣', onPress: () => router.push('/explore') },
+            { label: '銘柄を見る・追加', icon: '⌕', onPress: () => router.push({ pathname: '/explore', params: { focus: 'search' } }) },
+            { label: 'ポートフォリオ', icon: '◈', onPress: () => router.push('/portfolio') },
             { label: 'レポート', icon: '▤', onPress: () => router.push('/reports') },
             { label: '重要ニュース', icon: '✦', onPress: () => router.push('/news') },
           ].map((action) => (
@@ -119,13 +106,13 @@ export default function HomeScreen() {
         </View>
 
         <View style={[styles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
-          <View style={styles.sectionHeader}><View><Text style={[styles.sectionEyebrow, { color: palette.accent }]}>MY STOCKS</Text><Text style={[styles.sectionTitle, { color: palette.text }]}>登録銘柄</Text></View><Pressable onPress={() => router.push('/explore')} accessibilityRole="button" accessibilityLabel="登録銘柄一覧を見る"><Text style={[styles.link, { color: palette.accent }]}>一覧を見る ›</Text></Pressable></View>
+          <View style={styles.sectionHeader}><View><Text style={[styles.sectionEyebrow, { color: palette.accent }]}>MY STOCKS</Text><Text style={[styles.sectionTitle, { color: palette.text }]}>銘柄</Text></View><Pressable onPress={() => router.push('/explore')} accessibilityRole="button" accessibilityLabel="銘柄一覧を見る"><Text style={[styles.link, { color: palette.accent }]}>一覧を見る ›</Text></Pressable></View>
           {loading && !stocks.length ? <ActivityIndicator color={palette.accent} style={styles.sectionStatus} /> : null}
           {!!errors.stocks ? retryButton(errors.stocks, () => void load(true), palette) : null}
-          {!loading && !errors.stocks && !stocks.length ? <View style={[styles.emptyInner, { backgroundColor: palette.soft }]}><Text style={[styles.emptyTitle, { color: palette.text }]}>まず1銘柄を登録しましょう</Text><Text style={[styles.emptyText, { color: palette.muted }]}>保有または監視銘柄を追加すると、ここでいつでも確認できます。</Text><Pressable onPress={() => router.push('/search')} style={[styles.primaryButton, { backgroundColor: palette.accent }]} accessibilityRole="button"><Text style={styles.primaryButtonText}>銘柄を検索する</Text></Pressable></View> : null}
+          {!loading && !errors.stocks && !stocks.length ? <View style={[styles.emptyInner, { backgroundColor: palette.soft }]}><Text style={[styles.emptyTitle, { color: palette.text }]}>まず1銘柄を登録しましょう</Text><Text style={[styles.emptyText, { color: palette.muted }]}>保有または監視銘柄を追加すると、ここでいつでも確認できます。</Text><Pressable onPress={() => router.push({ pathname: '/explore', params: { focus: 'search' } })} style={[styles.primaryButton, { backgroundColor: palette.accent }]} accessibilityRole="button"><Text style={styles.primaryButtonText}>銘柄を検索する</Text></Pressable></View> : null}
           {!!stocks.length ? <>
             <View style={styles.metricsRow}><View style={styles.metric}><Text style={[styles.metricValue, { color: palette.text }]}>{summary.holdingCount}</Text><Text style={[styles.metricLabel, { color: palette.muted }]}>保有</Text></View><View style={styles.metric}><Text style={[styles.metricValue, { color: palette.text }]}>{summary.watchCount}</Text><Text style={[styles.metricLabel, { color: palette.muted }]}>監視</Text></View><View style={styles.metric}><Text style={[styles.metricValue, { color: palette.text }]}>{summary.totalCount}</Text><Text style={[styles.metricLabel, { color: palette.muted }]}>合計</Text></View></View>
-            <View style={styles.stockPreviewList}>{stocks.slice(0, 3).map((item) => { const holding = item.tracking_type === 'holding'; return <Pressable key={item.id} onPress={() => router.push('/explore')} style={({ pressed }) => [styles.stockPreview, { borderTopColor: palette.border }, pressed && styles.pressed]} accessibilityRole="button"><View style={styles.stockPreviewMain}><Text style={[styles.stockTicker, { color: palette.accent }]}>{item.stocks_master.ticker_code}</Text><Text style={[styles.stockName, { color: palette.text }]} numberOfLines={1}>{item.stocks_master.company_name}</Text>{holding && item.quantity !== null ? <Text style={[styles.stockMeta, { color: palette.muted }]}>{item.quantity.toLocaleString()}株</Text> : null}</View><View style={[styles.typeBadge, { backgroundColor: holding ? palette.soft : '#fff0d7' }]}><Text style={[styles.typeBadgeText, { color: holding ? palette.accent : '#946222' }]}>{holding ? '保有' : '監視'}</Text></View></Pressable>; })}</View>
+            <View style={styles.stockPreviewList}>{stocks.slice(0, 3).map((item) => { const holding = item.tracking_type === 'holding'; return <Pressable key={item.id} onPress={() => router.push('/explore')} style={({ pressed }) => [styles.stockPreview, { borderTopColor: palette.border }, pressed && styles.pressed]} accessibilityRole="button"><View style={styles.stockPreviewMain}><Text style={[styles.stockTicker, { color: palette.accent }]}>{item.stocks_master.ticker_code}</Text><Text style={[styles.stockName, { color: palette.text }]} numberOfLines={1}>{item.stocks_master.company_name}</Text>{holding && item.quantity !== null ? <Text style={[styles.stockMeta, { color: palette.muted }]}>{item.quantity.toLocaleString()}株</Text> : null}</View><View style={[styles.typeBadge, { backgroundColor: holding ? palette.soft : palette.warningSoft }]}><Text style={[styles.typeBadgeText, { color: holding ? palette.accent : palette.warningText }]}>{holding ? '保有' : '監視'}</Text></View></Pressable>; })}</View>
             {stocks.length > 3 ? <Text style={[styles.moreHint, { color: palette.muted }]}>ほか{stocks.length - 3}銘柄</Text> : null}
           </> : null}
         </View>

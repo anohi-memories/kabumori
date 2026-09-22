@@ -7,13 +7,15 @@ import '@/global.css';
 
 import { Platform } from 'react-native';
 
+import { KABUMORI_COLORS } from './kabumori-theme';
+
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
+    text: KABUMORI_COLORS.light.text,
+    background: KABUMORI_COLORS.light.background,
+    backgroundElement: KABUMORI_COLORS.light.card,
+    backgroundSelected: KABUMORI_COLORS.light.tabSelected,
+    textSecondary: KABUMORI_COLORS.light.muted,
   },
   dark: {
     text: '#ffffff',

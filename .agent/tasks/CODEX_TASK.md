@@ -1,145 +1,226 @@
 # Codex Task
 
-- task_id: kabumori-mobile-home-dashboard-v1-merge-20260922
+- task_id: kabumori-mobile-holdings-watch-split-and-news-detail-quality-20260922
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
-- purpose: C1 PASS済みのPR #5（Kabumori Home/Dashboard V1）をcurrent mainへ安全にfreshenし、競合がないことを確認してmainへmergeする。実装内容は変更しない。
+- purpose: 実機QAで判明した「銘柄画面で保有と監視を分けたい」と「重要ニュースの詳しい内容が実質的に詳細ではない」を改善する。色・アイコンの本格調整は今回は行わない。
 
-## Approved basis
+## User feedback — real-device QA 2026-09-22
 
-C1 PASS:
-- PR #5
-- approved head: `7ff16dcb16117cd2c530fbfdf0e7da8c4788b5e8`
-- prior raw-backend-error blocker fixed
-- dashboard tests 4/4 PASS
-- app-scope TypeScript PASS
-- Expo web export PASS
-- diff-check PASS
-- backend production mutation 0
+1. 銘柄画面
+- 検索統合は概ねOK。
+- 登録銘柄一覧は、保有と監視を同じ一覧に混ぜず、別で見たい。
 
-At C1 review, branch was behind main by 9 commits, but the intervening main-side diff was limited to `.agent` control/report files only; none of the six app/test implementation files overlapped.
+2. 重要ニュース
+- 要点の重複は改善したが、「詳しい内容」がまだ詳細ではない。
+- 実機例:
+  - 国連/フーシ派記事: 詳細が「中東情勢の緊迫化…日本株への具体的な影響は確認できない」程度。
+  - ホルムズ海峡タンカー記事: 詳細が実質空で警告表示のみ。
+  - 北朝鮮ミサイル記事: 詳細が市場影響の一般論で、出来事自体の追加情報が薄い。
+- ユーザー期待は、要点の繰り返しではなく、出来事について追加で理解できる内容。
 
-## User approval
-
-2026-09-22「じゃあすすめて」。
-
-This authorizes the clean fresh-main merge of the already-approved Home/Dashboard V1 only.
+3. Visual polish
+- 各ページの見た目の統一は概ねOK。
+- 色・アイコン・細かなビジュアルは今後別タスクで詰める。今回の主目的に含めない。
 
 ## Model policy
 
 - **Lunaで実施。**
-- Sol不要 unless an unexpected implementation conflict appears.
+- UI分割、ニュースデータ経路の調査、deterministic presentation改善、source candidate/testsはLuna。
+- Sol不要 unless production mutationやAuth/RLS/security boundaryが必要になる。今回はproduction mutation禁止。
 
-## Mandatory startup
+## Scope / safety
 
-1. Read `.agent/ORCHESTRATION.md`
-2. Read `.agent/CURRENT_STATE.md`
-3. Read this TASK
-4. Read `.agent/CODEX_REPORT.md`
-5. Fresh fetch `origin/main`
-6. Inspect PR #5 head and changed files
-7. Confirm other slots are not editing the same six app/test files
+Allowed:
+- root Kabumori app: `src/app/**`, relevant components/libs/tests.
+- important-news generation/presentation source and tests if required to make detail semantically correct.
+- local/source candidate only for backend producer changes.
 
-## Scope A — freshen/rebase
+Forbidden in this H1:
+- production DB mutation
+- migration apply
+- Edge Function production deploy
+- Cron change
+- secret/Vault/provider credential change
+- X/Push behavior changes unrelated to important-news app copy
+- H2/social-mobile files
+- G1/G2 workstream files
+- visual redesign of icons/colors beyond what is needed for the requested behavior
 
-Target implementation files only:
-- `src/app/index.tsx`
-- `src/app/search.tsx`
-- `src/components/app-tabs.tsx`
-- `src/components/app-tabs.web.tsx`
-- `src/lib/dashboard.ts`
-- `tests/app/dashboard_test.ts`
+## Goal A — split holdings and watch in 銘柄 screen
 
-Requirements:
-- Rebase/freshen PR #5 onto latest `origin/main`.
-- Do not drag stale `.agent` control-file history from the feature branch.
-- Do not modify implementation semantics unless required for a concrete fresh-main conflict.
-- If any of the six implementation/test files changed on main since C1 in a conflicting way, STOP for C1; do not auto-resolve semantics.
+Current:
+- `/explore` integrates search and registered stocks.
+- Empty query currently shows all tracked stocks together.
 
-## Scope B — verification
+Target UX:
+- Search field remains at the top.
+- When query is non-empty: show search results as now.
+- When query is empty: show registered stocks separated clearly into:
+  - `保有`
+  - `監視`
 
-After freshen:
-- confirm PR diff is limited to the same six implementation/test files
-- dashboard tests 4/4
-- app-scope TypeScript check
-- Expo web export
-- `git diff --check`
-- static route verification for:
-  - `/`
-  - `/search`
-  - `/explore`
-  - `/news`
-  - `/reports`
-- confirm Home still uses fixed Japanese error copy and never renders arbitrary backend `Error.message`
-- confirm no realtime price/P&L/index fabrication
-- confirm H2/social-mobile files untouched
+Preferred interaction:
+- segmented control/toggle `保有 | 監視`, with counts if clean.
+- default should be `保有` when holdings exist; if no holdings but watches exist, show `監視`.
+- preserve current edit/delete/register flow.
+- after registering or changing tracking_type, the item appears in the correct section without needing app restart.
+- empty states must be section-specific:
+  - no holdings -> `保有銘柄はまだありません`
+  - no watch -> `監視銘柄はまだありません`
+- search mode should not be broken by the filter state.
 
-## Scope C — merge
+Alternative acceptable:
+- two stacked sections if segmented control creates native-tab/keyboard issues, but holdings and watch must not be mixed.
 
-If all checks pass:
-- merge PR #5 to `main`
-- no production DB/schema/RPC/Function/Cron/secret changes
-- no app-store/EAS build required in this task
-- no backend deploy
+Tests:
+- holding/watch partition
+- default section selection
+- empty states
+- update after tracking type change if helper logic is extracted.
 
-After merge:
-- read back latest main SHA
-- verify the six files on main match the approved implementation
-- verify PR #5 is merged/closed
+## Goal B — redefine what 「詳しい内容」 means
 
-## Scope D — handoff
+The display must have clear semantic roles:
+
+- `要点`: 2–4 concise facts sufficient for quick scanning.
+- `詳しい内容`: additional event facts/context that were NOT already shown in 要点.
+- `市場との関係` or equivalent: why this matters to the user's stocks/market.
+
+Do NOT use generic market commentary as the main `詳しい内容` if event details are available.
+
+Good detail examples:
+- who/what/where/when
+- sequence of events
+- official/source attribution
+- quantities/distances/casualties/affected assets
+- what is confirmed vs not confirmed
+- prior/related context already present in the source
+- operational status after the event
+
+Bad detail examples:
+- merely repeating headline/key points
+- generic `日本株への影響が注目されます`
+- generic `地政学リスクとして重要です`
+- a warning icon with no explanation when source-backed detail exists
+
+## Goal C — diagnose source of shallow detail before changing behavior
+
+First trace the full data path for the three classes visible in screenshots:
+- AP / breaking-market style item
+- UN News / official source item
+- North Korea / geopolitical item
+
+Determine for each:
+1. raw/stored source text available to the pipeline,
+2. generated/stored `app_summary_ja`,
+3. `app_key_points_ja`,
+4. `app_detail_ja`,
+5. `verified_text`,
+6. which field `buildNewsPresentation()` selects,
+7. whether detail is shallow because:
+   - producer generated shallow `app_detail_ja`,
+   - the RPC omits richer source-backed fields,
+   - presentation de-dup removes too much,
+   - fallback prioritization selects the wrong source.
+
+Do not guess. Document evidence in CODEX_REPORT.
+
+## Goal D — improve detail quality at the correct layer
+
+### If producer/app-copy generation is the problem
+Create a **source candidate only** that changes the prompt/schema/logic so:
+- `app_summary_ja` = short lead summary,
+- `app_key_points_ja` = concise distinct facts,
+- `app_detail_ja` = additional source-backed event detail/context, ideally 2–4 short paragraphs when source material supports it,
+- market impact/relevance is kept separate from event detail,
+- no unsupported facts or predictive claims.
+
+Preserve Fact-check/grounding boundary.
+
+### If presentation is the problem
+Fix `buildNewsPresentation()` so:
+- detail uses source-backed remaining content before generic relevance commentary,
+- de-dup removes only actual duplicates and does not discard materially different facts,
+- no-detail state uses explanatory copy, never a bare warning emoji/icon.
+
+### If both are involved
+Fix both as source candidate, but keep production deployment forbidden.
+
+## Goal E — safe fallback for thin-source news
+
+Some source items genuinely have little source text.
+
+For those:
+- show concise 要点,
+- show `追加の詳細情報は元記事で確認できます` or equivalent,
+- keep source link,
+- do not invent filler,
+- never show a bare `⚠️` as the entire 詳しい内容 section.
+
+## Goal F — test quality with realistic fixtures
+
+Add/adjust regression fixtures representing:
+1. tanker strike / crew injuries / vessel status / no closure confirmed,
+2. North Korea missile test / range / splashdown / official assessment,
+3. UN/Houthi item with attempted strike + displacement context,
+4. truly thin source with no extra details.
+
+Assertions:
+- key points and detail do not duplicate,
+- detail contains additional event facts when fixture contains them,
+- generic market-impact language is not substituted for available event detail,
+- thin-source fallback is readable and non-empty,
+- no unsupported new facts are added.
+
+## Goal G — no visual polish creep
+
+Do not spend this task redesigning:
+- tab icons
+- palette
+- typography system
+- badge colors
+- animation
+
+Record visual polish ideas separately in report only.
+
+## Verification
+
+Minimum:
+- fresh `origin/main`
+- no file overlap with active H2/G1/G2
+- relevant app/news tests PASS
+- app-scope TypeScript PASS
+- Expo web export PASS
+- `git diff --check` PASS
+- source/readback proves holdings/watch separation and search preservation
+- source/readback proves detail semantics above
+- production mutation = 0
+
+If important-news producer source is changed:
+- run its relevant Deno/unit tests/type check,
+- do not deploy it.
+
+## Deliverables / C1
 
 Update `.agent/CODEX_REPORT.md` with:
-1. pre-freshen main SHA
-2. final branch/head SHA
-3. exact changed files
-4. verification results
-5. merge commit / resulting main SHA
-6. PR #5 merged state
-7. production mutation = 0
-8. H2/G1/G2 untouched
-9. recommended next UI phase
+1. changed files
+2. exact holdings/watch UX
+3. evidence-based root cause for shallow news detail
+4. exact data-path fields used before/after
+5. whether fix is app-only or app + producer candidate
+6. realistic fixture results
+7. all verification results
+8. production mutation = 0
+9. explicit note: colors/icons visual polish deferred
 
 On completion:
-- task status -> `review_required`
+- status -> `review_required`
 - next_owner -> `chatgpt`
 - STOP for C1
 
 **推奨モデル：Luna。**
-
-
-## Completion record — 2026-09-22
-
-- Fresh main before rebase: `1b1d53323c9a903954b3852ed168240fdf581303`.
-- Approved PR #5 was rebased without conflict; final feature head: `d03f08ccbf4598ef838be19128b899d309398ac6`.
-- PR diff remained limited to the six approved app/test files.
-- Dashboard tests 4/4, app-scope TypeScript, Expo web export/static routes, and diff-check passed.
-- Home fixed Japanese error-copy mapping and no-fabrication checks remain intact.
-- Merged PR #5 with merge commit `c867ee7e0c4546265be325cc606653e0bf964d9f`; resulting main: `c867ee7e0c4546265be325cc606653e0bf964d9f`.
-- PR #5 is merged/closed. Read-back confirmed the six files on main match the approved implementation.
-- Production mutation = 0. H2/G1/G2 and backend production areas untouched.
-- status: `review_required`; next_owner: `chatgpt`; stop for C1.
-
-
-## Final C1 review — 2026-09-22
-
-**PASS — merged main state verified.**
-
-Verified:
-- PR #5 is merged and closed.
-- Merge commit / resulting main baseline: `c867ee7e0c4546265be325cc606653e0bf964d9f`.
-- Main still contains the approved Home/Dashboard V1 implementation.
-- Home-visible section errors use fixed Japanese copy via `dashboardSectionError()`; arbitrary backend `Error.message` is not rendered.
-- Root remains Home, Search remains `/search`, and the no-fabrication rule for realtime price/P&L/index data remains intact.
-- Dashboard regression test covers the fixed error mapping.
-- Commits after the merge changed only `.agent` control/report files; no approved app/test implementation file drift was detected.
-- Production mutation = 0. No backend/EAS/App Store operation occurred.
-
-C1 judgment:
-- Home/Dashboard V1 merge is accepted and this task is complete.
-
-**Recommended model for the next Kabumori UI task: Luna.**
