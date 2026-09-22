@@ -8,7 +8,9 @@
 
 import {
   HistoryAccessTokenReadError,
+  createHistoryAccessTokenRpcReader,
   readVerifiedHistoryAccessToken,
+  type HistoryAccessTokenRpcConfig,
   type TrustedHistoryAccountBinding,
 } from "../_shared/brand/social_mobile_history_access_reader.ts";
 
@@ -33,7 +35,6 @@ export type TrustedXAccount = {
   connectionStatus: string;
   platformUserId: string | null;
   handle: string | null;
-  accessTokenSecretRef: string | null;
 };
 
 export type XHistoryPost = {
@@ -54,7 +55,7 @@ export type HistoryLearningDependencies = {
   readOwnerMemberships: (userId: string, bearer: string) => Promise<OwnerMembership[]>;
   readWorkspace: (workspaceId: string, bearer: string) => Promise<TrustedWorkspace | null>;
   readXAccounts: (workspaceId: string, bearer: string) => Promise<TrustedXAccount[]>;
-  readAccessToken: (secretRef: string) => Promise<string | null>;
+  readAccessToken: (binding: TrustedHistoryAccountBinding) => Promise<string | null>;
   fetchXPage: (input: {
     platformUserId: string;
     accessToken: string;
@@ -105,8 +106,7 @@ function assertTrustedAccount(accounts: TrustedXAccount[], workspaceId: string):
     account.workspaceId === workspaceId &&
     account.platform === "x" &&
     account.connectionStatus === "identity_verified" &&
-    typeof account.platformUserId === "string" && account.platformUserId.trim() &&
-    typeof account.accessTokenSecretRef === "string" && account.accessTokenSecretRef.trim()
+    typeof account.platformUserId === "string" && account.platformUserId.trim()
   );
   if (xAccounts.length !== 1 || verified.length !== 1) {
     throw new HistoryLearningError("HISTORY_ACCOUNT_NOT_CONFIGURED", 409);
@@ -185,12 +185,12 @@ export async function runHistoryLearning(
   let accessToken: string;
   try {
     const binding: TrustedHistoryAccountBinding = {
+      authUserId: authUser.id,
       accountId: account.id,
       workspaceId: workspace.id,
       platform: "x",
       connectionStatus: "identity_verified",
       platformUserId: account.platformUserId!,
-      accessTokenSecretRef: account.accessTokenSecretRef!,
     };
     accessToken = await readVerifiedHistoryAccessToken(binding, {
       readAccessToken: deps.readAccessToken,
@@ -309,4 +309,17 @@ export function disabledHistoryLearningDependencies(): HistoryLearningDependenci
     readAccessToken: unavailable,
     fetchXPage: async () => { throw new HistoryLearningError("X_HISTORY_UNAVAILABLE", 502); },
   };
+}
+
+/**
+ * Source-only live-reader factory. The Edge entrypoint intentionally does not
+ * call this factory; the deployed default remains disabled until a separate
+ * rollout gate supplies server-only configuration and enables the path.
+ */
+export function createHistoryLearningCandidateDependencies(
+  base: Omit<HistoryLearningDependencies, "readAccessToken">,
+  rpcConfig: HistoryAccessTokenRpcConfig,
+): HistoryLearningDependencies {
+  const reader = createHistoryAccessTokenRpcReader(rpcConfig);
+  return { ...base, readAccessToken: reader.readAccessToken };
 }
