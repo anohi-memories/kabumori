@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 PR7 merge retry ready after C1 corrected false-positive drift blocker; H2 handled separately)
+- checked_at: 2026-09-22 JST (H1 PR7 freshened onto latest main and merged; C1 review required; production mutation 0)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,13 +14,12 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `kabumori-mobile-holdings-watch-news-detail-merge-retry-20260922`
-  - C1 re-evaluation found the prior freshen blocker was a false positive.
-  - PR #7 base -> current main has no changes in the five PR7 implementation/test files; main drift is only .agent plus unrelated market-intelligence FRED files.
-  - The absence of stock-sections.ts on main is expected because it is newly added by PR #7, not evidence of a conflicting deletion.
-  - Next H1 should freshen/rebase PR #7, rerun checks, and merge if no genuinely new overlap appears.
-  - Production mutation 0; visual polish deferred.
-  - Recommended model: Luna.
+- Codex slot 1: `review_required` — `kabumori-mobile-holdings-watch-news-detail-merge-retry-20260922`
+  - PR #7 was freshened onto latest main and merged as `b2fb3971`.
+  - 保有/監視の分離、検索、Important News詳細の事実分割を維持。5 approved filesの最終main read-back一致。
+  - 50 app tests、app-scope TypeScript、Expo web export、diff-check PASS。
+  - Production mutation 0; H2/G1/G2 untouched. Manual iOS/native QA and visual polish remain deferred.
+  - C1 review required. Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase16-server-side-x-history-learning-adapter-candidate-20260922`
   - Phase15 C2 PASS後の次工程。
