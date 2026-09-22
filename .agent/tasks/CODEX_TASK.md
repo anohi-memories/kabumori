@@ -3,8 +3,8 @@
 - task_id: kabumori-mobile-home-dashboard-v1-20260922
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: かぶモリアプリ本体のトップ画面を「検索」から「今日の自分の株を把握できるホーム」へ作り替え、既存の登録銘柄・重要ニュース・朝刊/大引けレポートを1画面に集約する。APIコスト最適化H1は自然観測待ちのため、このUI/UX workstreamでは触らない。
@@ -271,3 +271,14 @@ On completion:
 - STOP for C1
 
 **推奨モデル：Luna。**
+
+
+## Completion record — 2026-09-22
+
+- Fresh main base: `f8e35a2116f22f4c19885d50be99bfbac033d67e`.
+- PR #5: https://github.com/anohi-memories/kabumori/pull/5
+- Commit: `8225d47319eda388a82e85a3d3fbe20acf03a004`.
+- Root route is Home/Dashboard V1; Search moved to `/search`; native/web tab label is ホーム.
+- Existing tracked-stocks, important-news, and report reads are reused with section-level retry states and pull-to-refresh.
+- No backend production mutation. Dashboard tests 3/3, app-scope TypeScript, Expo web export, and diff-check passed.
+- Stop for C1; next_owner is ChatGPT.
