@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase13-production-preview-rollout-and-qa-20260921
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
 - purpose: Phase 12 C2 PASS済みの general-user preview candidate を production に安全に反映し、dedicated QA user + test X account で exactly one bounded real AI preview を実行して、tenant isolation・no-publish boundary・既存brand非回帰を確認する。real X post / media upload / publish_enabled=true / Cron はまだ禁止。
@@ -414,3 +414,64 @@ Decision:
 - after that bounded repair, resume the existing QA-only live runtime and run exactly one real AI preview, with no X post/media/scheduled-post/Vault-token/publish side effects.
 
 Status remains \`review_required\` / \`next_owner: chatgpt\` until the user explicitly authorizes the bounded production mutation.
+
+
+## Explicit user authorization — 2026-09-22
+
+The user explicitly authorized proceeding with the bounded production repair ("OK すすめて").
+
+This authorization covers **only** the following production mutations:
+
+1. Apply exactly:
+   \`supabase/migrations/20260922003101_social_mobile_x_oauth_reconnect_preserve_verified.sql\`
+2. Immediately read back and verify:
+   - \`begin_social_mobile_x_oauth_connection\` definition
+   - SECURITY DEFINER
+   - \`search_path='public'\`
+   - EXECUTE granted to authenticated only
+   - public / anon / service_role not executable
+3. Re-run the previously approved QA preconditions read-only.
+4. If and only if all preconditions still hold, repair only the dedicated QA X account:
+   - \`connection_status: authorization_pending -> identity_verified\`
+5. Do **not** modify:
+   - \`publish_enabled\`
+   - handle
+   - platform_user_id
+   - verified_at
+   - Vault access/refresh secret refs
+   - any other social_account
+   - admin OAuth
+6. Then resume the QA-only Supabase live-data runtime and verify:
+   - exactly one owned \`My Workspace\`
+   - exactly one dedicated test X account
+   - account now displays connected / identity_verified
+   - no visibility of unrelated production accounts
+7. Run exactly **one** real AI preview.
+8. Postflight must prove:
+   - OpenAI preview call count = 1
+   - X API/media/post = 0
+   - scheduled_posts writes = 0
+   - Vault token reads/changes = 0
+   - \`publish_enabled\` remains false
+   - existing production X accounts/admin OAuth unchanged
+   - no cross-tenant visibility regression
+
+Still forbidden:
+- any X post/media/repost
+- any publish enablement
+- Cron/scheduler change
+- any schema/RPC change other than the exact approved migration
+- any OAuth relink/retry unless a new blocker is separately reviewed
+- QA fixture cleanup
+- blind \`db push\` / migration-history repair
+- app-wide production data-source change
+
+Model:
+- continue with **Luna**.
+- Sol only for a concrete unexpected OAuth/DB/Vault/security blocker.
+
+On completion:
+- set \`status: review_required\`
+- set \`next_owner: chatgpt\`
+- update \`.agent/CODEX_REPORT_2.md\`
+- STOP for C2
