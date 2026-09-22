@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase13-production-preview-rollout-and-qa-20260921
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: Phase 12 C2 PASS済みの general-user preview candidate を production に安全に反映し、dedicated QA user + test X account で exactly one bounded real AI preview を実行して、tenant isolation・no-publish boundary・既存brand非回帰を確認する。real X post / media upload / publish_enabled=true / Cron はまだ禁止。
@@ -311,6 +311,15 @@ After source fix approval, propose one bounded production follow-up:
   - \`publish_enabled=false\`.
 - then resume the Phase 13 live-data QA and exactly one AI preview.
 - no X post/media/publish enablement.
+
+## H2 production preflight follow-up — 2026-09-22
+
+- status: `review_required`
+- next_owner: `chatgpt`
+- fresh_preflight: fetched `origin/main` at `0bf3f1d` and used an isolated clean worktree. The reviewed source-fix commit is already included in origin/main; no other slot conflict was found.
+- read_only_result: the live `begin_social_mobile_x_oauth_connection` definition still has the unconditional existing-account transition to `authorization_pending`, so the approved migration candidate is still required. The dedicated QA account remains `connection_status='authorization_pending'`, has non-null `verified_at`, both Vault secret-reference IDs present (presence only), `publish_enabled=false`, and the expected `social_mobile_user_v1` owned workspace with exactly one owner membership. OAuth history shows the last consumed state is the verified binding and a later unconsumed state exists; no newer successful binding to another identity was observed.
+- safety: no migration apply, QA row repair, deploy, OAuth retry, OpenAI preview, X/Vault/Storage/scheduled-post write, or settings/Cron change was performed.
+- stop_reason: the TASK requires explicit trusted authorization before production mutation. This H2 turn therefore stops at read-only preflight and returns to C2.
 
 ## H2 source-fix follow-up — 2026-09-22
 

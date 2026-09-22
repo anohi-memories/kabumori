@@ -1437,3 +1437,14 @@ Then apply the exact migration file via `podman exec -i <container> psql -X -v O
 - remaining_issues: the candidate migration is not yet applied, the live QA row remains `authorization_pending` until a separately approved read-only precondition and repair, and the one-shot AI preview remains unexecuted. C2 must review before any rollout.
 - safety_checks: formal checkout, `apps/admin/**`, `HANDOFF.md`, H1, and Claude workstreams untouched; no production mutation or manual API execution.
 - next_recommendation: C2 review the migration candidate. If approved, separately authorize production apply/deploy, then verify `verified_at`, dedicated identity, Vault reference presence (without reading secret values), no newer successful binding, and `publish_enabled=false` before a bounded QA-row repair and the single preview.
+
+## H2 Phase 13 production preflight — 2026-09-22
+
+- task_id: `social-mobile-app-phase13-production-preview-rollout-and-qa-20260921`
+- status: `review_required`; next_owner: `chatgpt`
+- fresh_preflight: fetched `origin/main` and used clean worktree `/private/tmp/kabumori-h2-preflight-UZiN4r` at `0bf3f1d`; approved OAuth reconnect source-fix commit is present. H1 is separate and no conflicting slot was found.
+- current_rpc: production `begin_social_mobile_x_oauth_connection` is still the pre-fix `SECURITY DEFINER`, `search_path='public'` function whose existing-account branch unconditionally sets `connection_status='authorization_pending'`; the candidate migration has not been applied.
+- qa_preconditions: dedicated `@yumeyoasobi` row is still `authorization_pending`, with non-null `verified_at`, both access/refresh Vault reference IDs present (presence only; secret values were not read), `publish_enabled=false`, and the expected `social_mobile_user_v1` workspace with exactly one owner membership. OAuth history has the prior consumed verified state and a later unconsumed state; no newer successful binding to another identity was observed. No production account outside this QA scope was changed.
+- mutation_gate: the TASK requires explicit trusted authorization before migration apply or QA-row repair. Therefore this turn performed read-only preflight only and stopped before any production mutation.
+- production_safety: migration apply **0**; QA row repair **0**; Edge deploy **0**; OAuth retry **0**; OpenAI preview **0**; X API/media/post **0**; Vault/Storage/scheduled-post writes **0**; publish/settings/Cron/schema changes **0**.
+- next_recommendation: if separately authorized, apply exactly the reviewed reconnect-preservation migration, read back RPC definition/ACL/search_path, repair only the QA status after rechecking all preconditions, then resume the isolated live runtime and exactly one no-publish AI preview.
