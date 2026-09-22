@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 PR7 clean merge ready; holdings/watch split + Important News detail partition C1 PASS; visual polish deferred; H2 handled separately)
+- checked_at: 2026-09-22 JST (H1 PR7 freshen blocked by semantic drift on latest main; no merge; production mutation 0)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,13 +14,11 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `kabumori-mobile-holdings-watch-news-detail-merge-20260922`
-  - C1 PASS on PR #7 candidate.
-  - 銘柄 empty-query view is separated into `保有 | 監視`; integrated search remains for non-empty query.
-  - Important News verified-post detail now keeps distinct event/status facts beyond 要点 and suppresses generic market filler.
-  - Known limitation: this is app-only; richer facts that exist only in English body_summary and not in verified Japanese text still require a later producer/app-copy improvement.
-  - Next H1 freshens PR #7 onto latest main, reruns checks, and merges if no implementation conflict appears.
-  - Production mutation 0; colors/icons visual polish deferred.
+- Codex slot 1: `review_required` — `kabumori-mobile-holdings-watch-news-detail-merge-20260922`
+  - PR #7 candidate head `0225efc6` was not merged because latest `origin/main` semantically changed the same approved app/test files.
+  - Main lacks `src/lib/stock-sections.ts` and `tests/app/stock-sections_test.ts`, and reverted the PR7 holdings/watch and Important News partition behavior in the overlapping files.
+  - Auto-resolution is prohibited by the TASK; ChatGPT/C1 must choose reapply/re-scope.
+  - Production mutation 0; H2/G1/G2 untouched.
   - Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase16-server-side-x-history-learning-adapter-candidate-20260922`
