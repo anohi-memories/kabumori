@@ -3,7 +3,7 @@
 - task_id: kabumori-mobile-ui-portfolio-news-merge-20260922
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
@@ -134,3 +134,26 @@ On completion:
 - production_mutation: 0
 - native/manual QA: outstanding for C1 follow-up.
 - next_owner: chatgpt
+
+
+## Final C1 review — 2026-09-22
+
+**PASS — merged main state verified.**
+
+Verified:
+- PR #6 is merged and closed.
+- Merge commit / resulting main baseline: `bc4929165cf74e9044f0267299fce7f1132ac60b`.
+- Main contains the approved shared Kabumori light palette and five-tab navigation: Home / 銘柄 / ポート / レポート / 重要ニュース.
+- Stock search is integrated into the 銘柄 screen and the Home search route targets that flow.
+- Portfolio V1 is present on main and uses stored close-report `portfolio_snapshot` data with an explicit closing-price basis label and non-realtime disclaimer.
+- Important News deterministic duplicate suppression remains on main; no display-time AI call is introduced.
+- Commits after the merge changed only `.agent` control/report files; no Kabumori app implementation drift was detected.
+- Production/backend/EAS/App Store mutation = 0.
+
+Remaining QA:
+- Manual real-device/native visual QA remains user-side follow-up. Specifically confirm five-tab layout, search focus/keyboard behavior, portfolio card layout, and news detail rendering.
+
+C1 judgment:
+- PR #6 merge is accepted and this task is complete.
+
+**Recommended model for any follow-up UI fixes: Luna.**
