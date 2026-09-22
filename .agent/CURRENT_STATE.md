@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 holdings/watch split + important-news detail quality ready; visual color/icon polish deferred; H2 handled separately)
+- checked_at: 2026-09-22 JST (H1 holdings/watch split + Important News detail quality review_required; PR #7 open; production mutation 0)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,12 +14,12 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `kabumori-mobile-holdings-watch-split-and-news-detail-quality-20260922`
+- Codex slot 1: `review_required` — `kabumori-mobile-holdings-watch-split-and-news-detail-quality-20260922`
   - Real-device QA: 銘柄検索/Portfolio/UI統一は概ね改善。
-  - Next H1 separates registered holdings and watch items in the 銘柄 screen while preserving integrated search.
-  - Important News still has semantically shallow detail; next H1 first traces raw/stored/app-copy/verified presentation fields, then fixes the correct layer.
-  - Detail must add source-backed event context beyond 要点; generic market-impact filler and bare warning-only detail are not acceptable.
-  - Important-news producer changes, if needed, are source candidate only; no production deploy/mutation.
+  - PR #7 implements the holdings/watch split with integrated search preserved; C1 review required.
+  - Important News production fields were traced read-only; PR #7 fixes the verified-post presentation partition using event facts and keeps thin-source fallback.
+  - Detail now keeps source-backed event/status facts beyond 要点 and removes generic market filler; no warning-only detail is generated.
+  - Producer source and production deploy are unchanged; app-only candidate, production mutation 0.
   - Colors/icons/visual polish explicitly deferred to a later task.
   - Recommended model: Luna.
 
@@ -29,7 +29,6 @@
   - real X-history adapterはserver側でAuth/workspace/account/platform user/Vault tokenをtrusted stateから解決することが次工程の必須条件。
   - production rollout / real X history / LLM conversational invoke / live publish は別TASK。
   - Recommended next model: Luna。
-
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
   - market-report-analysis v2 shadow deployはK1 PASS済み。consumer gateはOFF。
@@ -41,12 +40,9 @@
 
 ## Parallel safety
 
-- H1 shadow observation + source-rights researchはreview_required。production mutation 0; requested 6/12/24h windows未充足、recall parity未証明。新sourceなし、paid/live fallbackを維持。
-- H2はsocial-mobile Phase10 production migration / x-oauth-connect-user deployのみ。Portal/real OAuth/X postは別ゲート。G1のmarket-report objectsを触れない。
-
-- G1はmarket-report schema/functions/`x-test-post`/personalized-reports領域。
+- H1 holdings/watch + news detail candidate is review_required; production mutation 0; no producer deploy/migration/RPC.
+- H2/G1/G2 implementation files are untouched by this H1.
 - 同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数slotで同時変更しない。
-- H2は他slotのproduction migration適用と同時実行しない。競合時はwrite前にSTOP。
 - push前にfresh `origin/main`確認。既存未コミット変更は他workstream所有として触らない。
 
 ## Known issues / observations
@@ -59,6 +55,6 @@
 
 ## 更新ルール
 
-- 各専用TASKが正本。`ACTIVE_TASK.md` / `CURRENT_STATE.md` は索引・短い現在地であり、矛盾時は専用TASKを優先する。
+- 各専用TASKが正本。正本と索引が矛盾する場合はTASKを優先する。
 - 作業完了時に確認できた現在値だけを反映する。
 - 推測は事実として書かず、秘密情報・認証情報・個人情報は書かない。
