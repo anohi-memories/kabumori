@@ -2,24 +2,16 @@
 
 このファイルは共有オーケストレーションの後方互換用インデックスです。実装指示の正本は各専用TASKです。
 
-- Codex slot 1: `.agent/tasks/CODEX_TASK.md`
-- Codex slot 2: `.agent/tasks/CODEX_TASK_2.md`
-- Claude slot 1: `.agent/tasks/CLAUDE_TASK_1.md`
-- Claude slot 2: `.agent/tasks/CLAUDE_TASK.md`
-- 共通ルール: `.agent/ORCHESTRATION.md`
-- 現在地: `.agent/CURRENT_STATE.md`
-
-## Current slots
-
-### Codex slot 1
+- Codex slot 1
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: kabumori-mobile-holdings-watch-split-and-news-detail-quality-20260922
+- task_id: kabumori-mobile-holdings-watch-news-detail-merge-20260922
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: PR #7 implements separate 保有/監視 sections and evidence-based Important News detail partitioning. Final commit `0225efc6`; 50 tests/typecheck/export passed; production mutation 0. Colors/icons deferred. C1 review required.
+- note: PR #7 freshen stopped before merge because latest main has semantic drift in the same approved app/test files; C1 decision required.
+
 
 ### Codex slot 2
 - owner: codex
