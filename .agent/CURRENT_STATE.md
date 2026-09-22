@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 review_required; H2 Phase13 blocked by OAuth begin status regression and rearmed for source fix; G1 idle; G2 done)
+- checked_at: 2026-09-22 JST (H1 review_required; H2 reconnect source fix C2 PASS and rollout preflight ready; G1 idle; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -20,10 +20,10 @@
   - Cron 38 and unrelated production objects unchanged. Stop for C1.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase13-production-preview-rollout-and-qa-20260921`
-  - read-only diagnosisで、verified済みQA X accountが後続のOAuth beginにより `authorization_pending` へ降格するRPC bugを特定。
-  - まずsource/test修正のみ。verified accountはreconnect開始時も `identity_verified` を保持する候補を作る。
-  - production row修復 / redeploy / real OAuth / AI preview / X投稿はC2前は禁止。
-  - Recommended model: Luna。OAuth/DBの具体的矛盾が残る場合のみSol検討。
+  - OAuth reconnect status source fix C2 PASS。
+  - 次はproduction read-only preflight。migration apply / QA row repairは明示的なproduction mutation承認があるまで禁止。
+  - 承認後はbounded RPC migration + QA status repair → QA live runtimeでexactly one AI previewへ戻る。
+  - Recommended model: Luna。具体的なOAuth/DB/Vault矛盾時のみSol検討。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
