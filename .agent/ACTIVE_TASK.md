@@ -25,11 +25,11 @@
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: social-mobile-app-phase13-production-preview-rollout-and-qa-20260921
+- task_id: social-mobile-app-phase15-conversational-proxy-ai-and-history-learning-candidate-20260922
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
-- note: Phase12 C2 PASS済み。preview Functionのみ本番deploy + QAでexactly one real AI preview。X投稿/公開化/Cron/schema変更は禁止。Luna推奨。
+- note: Phase14 C2 PASS済み。会話型「代打AI」の確認済みpersona/settings永続化と、明示同意ベースの過去X投稿学習source candidate。production X/OpenAI/publish/Cronは禁止。Luna推奨。
 
 ### Claude slot 1
 - owner: claude
