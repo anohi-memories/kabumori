@@ -13,15 +13,19 @@ export type ContentSettingsResult =
 type SettingsRow = {
   settings?: unknown;
   persona_profile?: unknown;
+  persona_provenance?: unknown;
+  persona_confirmed?: unknown;
+  persona_last_analyzed_at?: unknown;
+  persona_last_analyzed_count?: unknown;
 };
 
-function safePersona(value: unknown): PersonaProfile | null {
+function safePersona(value: unknown, metadata: Pick<SettingsRow, 'persona_provenance' | 'persona_confirmed' | 'persona_last_analyzed_at' | 'persona_last_analyzed_count'>): PersonaProfile | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
   const input = value as Record<string, unknown>;
-  if (!['conversation', 'past_post_analysis', 'manual'].includes(String(input.source)) || typeof input.confirmed !== 'boolean') return null;
+  if (!['conversation', 'past_post_analysis', 'manual'].includes(String(metadata.persona_provenance)) || typeof metadata.persona_confirmed !== 'boolean') return null;
   return {
-    source: input.source as PersonaProfile['source'],
-    confirmed: input.confirmed,
+    source: metadata.persona_provenance as PersonaProfile['source'],
+    confirmed: metadata.persona_confirmed,
     ...(Array.isArray(input.toneSignals) ? { toneSignals: input.toneSignals.filter((item): item is string => typeof item === 'string').slice(0, 20) } : {}),
     ...(typeof input.sentenceLength === 'string' && ['short', 'mixed', 'long'].includes(input.sentenceLength) ? { sentenceLength: input.sentenceLength as PersonaProfile['sentenceLength'] } : {}),
     ...(typeof input.punctuationEmoji === 'string' ? { punctuationEmoji: input.punctuationEmoji.slice(0, 200) } : {}),
@@ -30,8 +34,8 @@ function safePersona(value: unknown): PersonaProfile | null {
     ...(typeof input.hashtagHabits === 'string' ? { hashtagHabits: input.hashtagHabits.slice(0, 200) } : {}),
     ...(typeof input.ctaStyle === 'string' ? { ctaStyle: input.ctaStyle.slice(0, 200) } : {}),
     ...(Array.isArray(input.openingClosingPatterns) ? { openingClosingPatterns: input.openingClosingPatterns.filter((item): item is string => typeof item === 'string').slice(0, 20) } : {}),
-    ...(typeof input.analyzedPostCount === 'number' && Number.isInteger(input.analyzedPostCount) && input.analyzedPostCount >= 0 && input.analyzedPostCount <= 1000 ? { analyzedPostCount: input.analyzedPostCount } : {}),
-    ...(typeof input.analyzedAt === 'string' ? { analyzedAt: input.analyzedAt } : {}),
+    ...(typeof metadata.persona_last_analyzed_count === 'number' && Number.isInteger(metadata.persona_last_analyzed_count) && metadata.persona_last_analyzed_count >= 0 && metadata.persona_last_analyzed_count <= 1000 ? { analyzedPostCount: metadata.persona_last_analyzed_count } : {}),
+    ...(typeof metadata.persona_last_analyzed_at === 'string' ? { analyzedAt: metadata.persona_last_analyzed_at } : {}),
   };
 }
 
@@ -41,7 +45,7 @@ export class SupabaseContentSettingsRepository {
   async read(brandId: string): Promise<ContentSettingsResult> {
     const { data, error } = await this.client
       .from('social_mobile_content_settings')
-      .select('settings,persona_profile')
+      .select('settings,persona_profile,persona_provenance,persona_confirmed,persona_last_analyzed_at,persona_last_analyzed_count')
       .eq('brand_id', brandId)
       .maybeSingle<SettingsRow>();
     if (error) {
@@ -52,7 +56,7 @@ export class SupabaseContentSettingsRepository {
     if (!data) return { state: 'ready', data: SOCIAL_MOBILE_CONTENT_DEFAULTS, persona: null };
     const parsed = validateSocialMobileContentSettings(data.settings);
     if (!parsed.ok) return { state: 'unavailable', data: SOCIAL_MOBILE_CONTENT_DEFAULTS, persona: null, reason: '保存された設定を確認できません。' };
-    return { state: 'ready', data: parsed.value, persona: safePersona(data.persona_profile) };
+    return { state: 'ready', data: parsed.value, persona: safePersona(data.persona_profile, data) };
   }
 
   async upsert(brandId: string, settings: unknown): Promise<{ ok: true } | { ok: false; reason: string }> {
@@ -67,6 +71,31 @@ export class SupabaseContentSettingsRepository {
     if (!error) return { ok: true };
     if (error.code === '42501') return { ok: false, reason: 'このワークスペースへ保存する権限がありません。' };
     if (error.code === '23514') return { ok: false, reason: '入力内容を確認してください。' };
+    return { ok: false, reason: '設定を保存できません。時間をおいて再度お試しください。' };
+  }
+
+  async saveConfirmedProposal(
+    brandId: string,
+    settings: unknown,
+    persona: PersonaProfile,
+  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const parsed = validateSocialMobileContentSettings(settings);
+    if (!parsed.ok || !persona.confirmed) return { ok: false, reason: '保存前の確認が完了していません。' };
+    const profile = { ...persona };
+    delete (profile as Partial<PersonaProfile> & { source?: unknown }).source;
+    delete (profile as Partial<PersonaProfile> & { confirmed?: unknown }).confirmed;
+    const { error } = await this.client.from('social_mobile_content_settings').upsert({
+      brand_id: brandId,
+      settings: parsed.value,
+      persona_profile: profile,
+      persona_provenance: persona.source,
+      persona_confirmed: true,
+      persona_last_analyzed_at: persona.analyzedAt ?? null,
+      persona_last_analyzed_count: persona.analyzedPostCount ?? null,
+    }, { onConflict: 'brand_id' });
+    if (!error) return { ok: true };
+    if (error.code === '42501') return { ok: false, reason: 'このワークスペースへ保存する権限がありません。' };
+    if (error.code === '23514') return { ok: false, reason: '保存内容を確認してください。' };
     return { ok: false, reason: '設定を保存できません。時間をおいて再度お試しください。' };
   }
 }

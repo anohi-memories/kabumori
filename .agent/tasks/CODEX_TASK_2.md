@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase15-conversational-proxy-ai-and-history-learning-candidate-20260922
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: Phase14 C2 PASS済みのtenant-safe content settings基盤を前提に、一般ユーザーが「自分の代打AI」と会話して投稿スタイルを覚えさせ、その内容を安全に永続化できるsource candidateを作る。過去X投稿学習は明示同意付きの取得・分析設計/候補まで進めるが、production X API call・live publishはまだ行わない。

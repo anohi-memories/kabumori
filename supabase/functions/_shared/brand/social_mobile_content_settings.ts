@@ -109,6 +109,37 @@ export function isSocialMobilePersonaProfile(value: unknown): value is SocialMob
   );
 }
 
+/** Maps Phase 14's dedicated provenance columns into the app contract. */
+export function materializeSocialMobilePersonaProfile(
+  value: unknown,
+  metadata: { provenance?: unknown; confirmed?: unknown; analyzedAt?: unknown; analyzedCount?: unknown } = {},
+): SocialMobilePersonaProfile | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  const source = metadata.provenance ?? input.source;
+  const confirmed = metadata.confirmed ?? input.confirmed;
+  if (!["conversation", "past_post_analysis", "manual"].includes(String(source)) || typeof confirmed !== "boolean") return null;
+  const profile: SocialMobilePersonaProfile = {
+    source: source as SocialMobilePersonaProfile["source"],
+    confirmed,
+    ...(Array.isArray(input.toneSignals) ? { toneSignals: safeStrings(input.toneSignals, 20, 80) } : {}),
+    ...(input.sentenceLength === "short" || input.sentenceLength === "mixed" || input.sentenceLength === "long" ? { sentenceLength: input.sentenceLength } : {}),
+    ...(typeof input.punctuationEmoji === "string" ? { punctuationEmoji: input.punctuationEmoji.slice(0, 200) } : {}),
+    ...(Array.isArray(input.recurringVocabulary) ? { recurringVocabulary: safeStrings(input.recurringVocabulary, 30, 50) } : {}),
+    ...(Array.isArray(input.topicSignals) ? { topicSignals: safeStrings(input.topicSignals, 20, 80) } : {}),
+    ...(typeof input.hashtagHabits === "string" ? { hashtagHabits: input.hashtagHabits.slice(0, 200) } : {}),
+    ...(typeof input.ctaStyle === "string" ? { ctaStyle: input.ctaStyle.slice(0, 200) } : {}),
+    ...(Array.isArray(input.openingClosingPatterns) ? { openingClosingPatterns: safeStrings(input.openingClosingPatterns, 20, 100) } : {}),
+    ...(typeof metadata.analyzedCount === "number" && Number.isInteger(metadata.analyzedCount) && metadata.analyzedCount >= 0 && metadata.analyzedCount <= 1000 ? { analyzedPostCount: metadata.analyzedCount } : {}),
+    ...(typeof metadata.analyzedAt === "string" ? { analyzedAt: metadata.analyzedAt } : {}),
+  };
+  return profile;
+}
+
+function safeStrings(value: unknown[], maxCount: number, maxLength: number): string[] {
+  return value.filter((item): item is string => typeof item === "string").map((item) => item.trim().slice(0, maxLength)).filter(Boolean).slice(0, maxCount);
+}
+
 function bounded(
   values: readonly string[],
   maxCount: number,
