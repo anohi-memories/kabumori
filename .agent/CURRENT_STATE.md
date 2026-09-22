@@ -23,11 +23,12 @@
   - Production rollout remains a later Sol checkpoint; no branch-protection bypass was attempted.
   - Recommended model: Luna.
 
-- Codex slot 2: `ready` — `social-mobile-app-phase18-production-shaped-access-token-reader-preflight-20260922`
-  - Phase17 C2 PASS後の次工程。
-  - production-shaped access-only token reader source candidate + production read-only metadata preflightを行う。
-  - secret plaintext読取 / production migration・RPC・deploy / real X history はまだ禁止。
-  - Recommended model: Luna。実Vault ACL/SECURITY DEFINER semanticsの具体的blocker時のみSol検討。
+- Codex slot 2: `done` — `social-mobile-app-phase18-production-shaped-access-token-reader-preflight-20260922`
+  - C2 PASS。production read-only metadata preflight + access-only internal reader source contractを承認。
+  - Vault plaintext/token値は未読。default history-learning entrypointはdisabled。production mutation 0。
+  - 次はlive plaintext-token実装方式（service-role-only server adapter vs narrow SECURITY DEFINER RPC）を別TASKで決定・disposable proofする。
+  - production deploy / real Vault read / real X history / publish は未承認。
+  - Recommended model: Luna。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
