@@ -1,3 +1,58 @@
+## Latest H1 result — holdings/watch split and Important News detail quality (2026-09-22)
+
+- task_id: `kabumori-mobile-holdings-watch-split-and-news-detail-quality-20260922`
+- result: `review_required` — app-only candidate is pushed in PR #7; stop for C1.
+- source_base: fresh `origin/main` `e2e5a8afeb8fe0e3513c0a137d75ca7d95bcd076`.
+- branch/commit: `codex/kabumori-holdings-watch-news-detail-20260922` / `0225efc66501502b32336998d4b48a71bdfece29`.
+- pull_request: https://github.com/anohi-memories/kabumori/pull/7 (open, mergeable).
+- production_mutation: 0.
+
+### Changed files
+
+- `src/app/explore.tsx`
+- `src/lib/stock-sections.ts`
+- `src/lib/news-presentation.ts`
+- `tests/app/stock-sections_test.ts`
+- `tests/app/news-presentation_test.ts`
+
+### Holdings/watch UX
+
+- Empty-query `/explore` now partitions registered rows into a segmented `保有 | 監視` control with counts; rows are never mixed.
+- Default selection is `保有` when any holding exists, otherwise `監視`; the current section is preserved when possible across refreshes.
+- Empty states are section-specific: `保有銘柄はまだありません。上の検索から登録できます。` and `監視銘柄はまだありません。上の検索から登録できます。`
+- Non-empty stock-master search remains unchanged and independent of the section filter. Existing register/edit/delete flow calls `load()`, so tracking_type changes appear in the correct partition without an app restart.
+- Added pure helpers for partition/default/empty-copy behavior and regression tests.
+
+### Evidence-based news diagnosis
+
+A read-only production SELECT of the three reported classes showed the same path:
+- AP tanker, UN/Houthi, and North Korea rows had `generation_fact_status = 'passed'`.
+- Their Japanese `generated_text` was present and was therefore exposed as `verified_text` by the feed RPC.
+- `app_title_ja`, `app_summary_ja`, `app_detail_ja`, and `app_key_points_ja` were NULL for those rows, so Fact-passed app copy was not the selected path.
+- `body_summary` contained richer source-backed facts in English (tanker injuries/vessel status; UN attempted strike and displacement; North Korea 450/600km flight and EEZ assessment).
+- The shallow detail was therefore a presentation partition problem in the already-available verified Japanese post: event facts were placed in 要点 while the remaining sentence was generic market commentary or a warning-only status. No missing display-time AI call was inferred.
+
+### Detail behavior change
+
+- Added a narrow deterministic classifier for generic market-impact sentences and a verified-sentence partition helper.
+- For verified posts, the first two distinct event facts remain 要点; remaining distinct event/status facts become 詳しい内容. Generic `日本株への影響` / `市場の反応` filler is excluded from 詳しい内容 and is not used as replacement prose.
+- Concrete status facts such as vessel continuation and “封鎖・供給障害は確認されていない” remain visible.
+- Thin sources are not padded. When no additional detail remains, the existing readable notice/source-link path is used; no bare warning-only detail and no display-time AI were added.
+- Producer/app-copy source was not changed or deployed; this is an app-only presentation fix.
+
+### Regression fixtures and verification
+
+- Added realistic verified-post fixtures for North Korea missile range/EEZ, UN/Houthi attempted strike/displacement, and Hormuz tanker injuries/vessel status; assertions prove event facts remain in 詳細 and generic market filler does not.
+- Added thin-source and helper regressions, plus holdings/watch partition/default/empty-state tests.
+- Relevant tests: **50 passed / 0 failed**.
+- Kabumori app-scope TypeScript: passed.
+- Expo web export: passed; routes include `/`, `/search`, `/explore`, `/portfolio`, `/news`, `/news/[id]`, `/reports`, `/reports/[id]`.
+- `git diff --check`: passed.
+- No migration, RPC, Edge Function deploy, Cron, secret/Vault, provider credential, X/Push, H2, G1, or G2 change.
+- Colors/icons/typography visual polish explicitly deferred to a later task.
+- Manual iOS/native QA remains outstanding.
+- next_recommendation: C1 review PR #7; do not merge/deploy from this H1 turn.
+
 ## H1 merge result — Kabumori UI, stock search, Portfolio V1, and news detail dedup (2026-09-22)
 
 - task_id: `kabumori-mobile-ui-portfolio-news-merge-20260922`
