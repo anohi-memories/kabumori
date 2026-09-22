@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 search diagnostics production rollout ready; H2 Phase13 ready; G1 idle; G2 done)
+- checked_at: 2026-09-22 JST (H1 search diagnostics production rollout C1 PASS/done; H2 Phase13 ready; G1 idle; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,17 +14,19 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `important-news-phase1-search-diagnostics-production-rollout-20260922`
-  - Final C1 PASS candidate will be integrated onto fresh main, then exact telemetry migration + matching important-news-shadow Function deployed.
-  - No db push/history repair; no Cron/secret/search-policy/retry/fallback changes.
-  - After deploy, observe at least 3 natural scheduled shadow runs only; no manual replay/candidate injection.
-  - Recommended model: Luna; Sol only for a concrete migration/security conflict.
+- Codex slot 1: `done` — `important-news-phase1-search-diagnostics-production-rollout-20260922`
+  - C1 PASS. Approved diagnostics implementation is on main at integration merge `f501fbb02714bd6d08bea2c321e406ed4b4d5e05`.
+  - Exact diagnostics migration applied; matching `important-news-shadow` deployed v8 with `verify_jwt=false` preserved.
+  - Three natural scheduled runs completed with non-NULL zero diagnostics; no manual invoke/replay/candidate injection.
+  - Cron 38 and unrelated production objects unchanged; no rollback required.
+  - PR #3 is superseded by the actual merged integration and must not be merged again.
+  - Recommended next model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase13-production-preview-rollout-and-qa-20260921`
-  - Preview Function production deploy + rejected-request smokeはC2で受理。
-  - iPhone側がmock repositoryのためreal AI previewは未実行。QA-only local runtimeで `EXPO_PUBLIC_DATA_SOURCE=supabase` を使い、実tenant読取を確認してからexactly one previewへ進む。
-  - repo default / production app-wide setting / X OAuth / publish_enabled / Cron / schema は変更禁止。
-  - Recommended model: Luna。Auth/RLS/runtimeの具体的blocker時のみSol検討。
+  - OAuth reconnect status source fix C2 PASS。
+  - 次はproduction read-only preflight。migration apply / QA row repairは明示的なproduction mutation承認があるまで禁止。
+  - 承認後はbounded RPC migration + QA status repair → QA live runtimeでexactly one AI previewへ戻る。
+  - Recommended model: Luna。具体的なOAuth/DB/Vault矛盾時のみSol検討。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`

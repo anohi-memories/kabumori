@@ -14,6 +14,18 @@ import {
   isSourceCooldown,
   SHADOW_SOURCES,
 } from "./shadow_sources.ts";
+import {
+  aggregateTargetedSearchUsage,
+  createTargetedSearchDiagnostics,
+  hasMeaningfulSearchUsage,
+  recordTargetedSearchAttempt,
+  recordTargetedSearchFailure,
+  recordTargetedSearchSuccess,
+  shouldAttemptTargetedSearch,
+  summarizeTargetedSearchResponse,
+  targetedSearchTelemetryColumns,
+  type TargetedSearchDiagnostics,
+} from "./search_telemetry.ts";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 const PROJECT_REF = "wsmznyzcvmuitkglfeuj";
@@ -33,60 +45,56 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
 }
 
-function countWebSearchCalls(raw: unknown): number {
-  const output = (raw as { output?: unknown } | null)?.output;
-  return Array.isArray(output)
-    ? output.filter((item) =>
-      item && typeof item === "object" &&
-      (item as { type?: unknown }).type === "web_search_call"
-    ).length
-    : 0;
-}
-
 async function targetedSearch(
   apiKey: string,
   candidate: ShadowCandidate,
   reason: string,
+  diagnostics: TargetedSearchDiagnostics,
 ): Promise<Usage> {
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    signal: AbortSignal.timeout(45_000),
-    body: JSON.stringify({
-      model: MODEL,
-      store: false,
-      reasoning: { effort: "low" },
-      max_output_tokens: 300,
-      max_tool_calls: 1,
-      tools: [{ type: "web_search", search_context_size: "low" }],
-      tool_choice: "required",
-      instructions:
-        "Read-only shadow validation. Search once for a primary or reputable confirmation of the supplied event. Return a short factual summary. Do not draft social posts and do not call external publication services.",
-      input:
-        `reason=${reason}\ntopic=${candidate.topic}\nheadline=${candidate.headline}\nsource=${candidate.sourceUrl}`,
-    }),
-  });
-  if (!response.ok) throw new Error(`TARGETED_SEARCH_HTTP_${response.status}`);
-  const raw = await response.json();
-  const usage =
-    (raw as { usage?: { input_tokens?: unknown; output_tokens?: unknown } })
-      .usage;
-  const inputTokens = typeof usage?.input_tokens === "number"
-    ? Math.max(0, Math.floor(usage.input_tokens))
-    : 0;
-  const outputTokens = typeof usage?.output_tokens === "number"
-    ? Math.max(0, Math.floor(usage.output_tokens))
-    : 0;
-  const webSearchCalls = countWebSearchCalls(raw);
-  return {
-    inputTokens,
-    outputTokens,
-    webSearchCalls,
-    costUsd: estimateCostUsd(inputTokens, outputTokens, webSearchCalls),
-  };
+  // Count only after a POST is about to be sent. Failure means HTTP, transport,
+  // timeout, or response parsing failure; neither raw request nor response is retained.
+  recordTargetedSearchAttempt(diagnostics);
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      signal: AbortSignal.timeout(45_000),
+      body: JSON.stringify({
+        model: MODEL,
+        store: false,
+        reasoning: { effort: "low" },
+        max_output_tokens: 300,
+        max_tool_calls: 1,
+        tools: [{ type: "web_search", search_context_size: "low" }],
+        tool_choice: "required",
+        instructions:
+          "Read-only shadow validation. Search once for a primary or reputable confirmation of the supplied event. Return a short factual summary. Do not draft social posts and do not call external publication services.",
+        input:
+          `reason=${reason}\ntopic=${candidate.topic}\nheadline=${candidate.headline}\nsource=${candidate.sourceUrl}`,
+      }),
+    });
+    if (!response.ok) throw new Error(`TARGETED_SEARCH_HTTP_${response.status}`);
+    const raw = await response.json();
+    const summary = summarizeTargetedSearchResponse(raw);
+    recordTargetedSearchSuccess(diagnostics, summary);
+    const webSearchCalls = summary.webSearchOutputItemCount;
+    return {
+      inputTokens: summary.inputTokens,
+      outputTokens: summary.outputTokens,
+      webSearchCalls,
+      costUsd: estimateCostUsd(
+        summary.inputTokens,
+        summary.outputTokens,
+        webSearchCalls,
+      ),
+    };
+  } catch (error) {
+    recordTargetedSearchFailure(diagnostics);
+    throw error;
+  }
 }
 
 function restHeaders(key: string, prefer?: string): HeadersInit {
@@ -282,6 +290,7 @@ async function runShadow(request: Request): Promise<Response> {
     webSearchCalls: 0,
     costUsd: 0,
   };
+  const searchDiagnostics = createTargetedSearchDiagnostics();
   try {
     const live = await recentLive(base, key, now);
     let paidSearchUsed = false;
@@ -308,12 +317,19 @@ async function runShadow(request: Request): Promise<Response> {
         degradedSourceCount: failedSources,
       });
       let usedSearch = false;
-      if (!paidSearchUsed && decision.shouldSearch) {
+      if (shouldAttemptTargetedSearch(paidSearchUsed, decision.shouldSearch)) {
         const openAiKey = Deno.env.get("OPENAI_API_KEY") ?? "";
         if (openAiKey) {
           try {
-            usage = await targetedSearch(openAiKey, candidate, decision.reason);
-            paidSearchUsed = usage.webSearchCalls > 0 || usage.inputTokens > 0;
+            const responseUsage = await targetedSearch(
+              openAiKey,
+              candidate,
+              decision.reason,
+              searchDiagnostics,
+            );
+            usage = aggregateTargetedSearchUsage(usage, responseUsage);
+            // Preserve the existing latch decision based on this successful response.
+            paidSearchUsed = hasMeaningfulSearchUsage(responseUsage);
             usedSearch = paidSearchUsed;
           } catch (error) {
             errors.push({
@@ -378,7 +394,12 @@ async function runShadow(request: Request): Promise<Response> {
         inserted += 1;
       }
     }
-    if (usage.webSearchCalls || usage.inputTokens || usage.outputTokens) {
+    if (
+      searchDiagnostics.targetedSearchAttemptCount > 0 ||
+      usage.webSearchCalls ||
+      usage.inputTokens ||
+      usage.outputTokens
+    ) {
       await rest(base, key, "ai_usage_events", {
         method: "POST",
         headers: { Prefer: "return=minimal" },
@@ -391,6 +412,7 @@ async function runShadow(request: Request): Promise<Response> {
           cost_usd: usage.costUsd,
           related_table: RUNS_TABLE,
           related_id: run.id,
+          ...targetedSearchTelemetryColumns(searchDiagnostics),
         }),
       });
     }
@@ -418,6 +440,7 @@ async function runShadow(request: Request): Promise<Response> {
       output_tokens: usage.outputTokens,
       web_search_calls: usage.webSearchCalls,
       cost_usd: usage.costUsd,
+      ...targetedSearchTelemetryColumns(searchDiagnostics),
       error_summary: errors,
       completed_at: new Date().toISOString(),
     }),

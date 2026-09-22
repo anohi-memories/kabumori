@@ -1407,3 +1407,44 @@ Then apply the exact migration file via `podman exec -i <container> psql -X -v O
 - Production DB/schema/migration/RPC: **0**; deploy: **0**; Cron/settings: **0**; manual candidate or X/OpenAI invocation: **0**; X posts: **0**.
 - Formal checkout and its existing uncommitted changes, H1/Claude workstreams, `apps/admin/**`, and `HANDOFF.md` were untouched.
 - Remaining item for C2: review the bounded input-packet change and fixture measurement before any separately authorized production deploy. Status is `review_required`; next owner is `chatgpt`.
+# H2 — Social mobile Phase 13 QA live-source follow-up — 2026-09-22
+
+- task_id: `social-mobile-app-phase13-production-preview-rollout-and-qa-20260921`
+- status: `review_required`; next_owner: `chatgpt`
+- fresh_preflight: fetched `origin/main` and fast-forwarded the clean QA worktree to `fc33d90fa577c336c27ed31c34efc79e160e14db`. No local source changes or other-workstream files were present.
+- qa_runtime: created a temporary QA-only Expo Go runtime from this fresh tree with process-only `EXPO_PUBLIC_DATA_SOURCE=supabase`, the public Supabase URL and publishable/anon key. No repository env/default, production setting, secret, or committed file was changed. Temporary dependencies were installed only under the disposable worktree and `.gitignore` was restored to its original content.
+- live_read_proof: after the user signed into the existing dedicated QA Auth account, the mobile app showed the live-source status and exactly one owned workspace (`My Workspace`) and exactly one X account (`@yumeyoasobi`). No production `@kabumori`/`@yume_daka` account or additional workspace was visible. Tenant membership isolation therefore passed at the UI/read path.
+- blocker: the live account card displayed `要確認` rather than `接続済み`. The client maps only `connection_status = 'connected'` or `'identity_verified'` to connected; the required identity-verified condition was therefore not proven by this runtime. This is a concrete live-source/account-status mismatch. No OAuth relink/retry was attempted and no token/Vault read was performed.
+- preview: **not executed**. OpenAI calls 0; X API/media/posts 0; scheduled_posts writes 0; publish_enabled changes 0; Vault/Storage writes 0. Because the required identity-verified QA account proof failed, the approved one-shot AI preview was not invoked.
+- verification: `npm run typecheck` PASS; `npm run lint` PASS; `git diff --check` PASS. These ran in the disposable worktree after dependency installation; package manifests and lockfiles are unchanged.
+- next_recommendation: C2 should perform a read-only diagnosis of why the QA account is returned with a non-connected status (without OAuth relink or mutation), then re-authorize the one preview only after `identity_verified` is proven. Do not select production accounts or invoke OpenAI from the current state.
+- safety_checks: no production DB/schema/RLS/RPC/Cron/settings mutation; no Edge deploy; no OAuth mutation; no X/OpenAI production call; no publish or scheduled-post side effect; no source code change; no secrets or credentials reported.
+
+## H2 Social mobile OAuth reconnect status hardening — 2026-09-22
+
+- task_id: `social-mobile-app-phase13-production-preview-rollout-and-qa-20260921`
+- status: `review_required`; next_owner: `chatgpt`
+- fresh_preflight: fetched `origin/main` at `f501fbb` and created isolated clean worktree `/private/tmp/kabumori-h2-oauth-fix-t7jxdS`; H1 is isolated to important-news search diagnostics and other slots have no overlap with the OAuth migration/RPC files.
+- root_cause: the existing `begin_social_mobile_x_oauth_connection` RPC unconditionally changed any existing X account to `authorization_pending`, so a later/abandoned reconnect demoted a previously verified account. This matches the live QA symptom (`@yumeyoasobi` showing `要確認`) while `verified_at` remained present.
+- implementation: added `supabase/migrations/20260922003101_social_mobile_x_oauth_reconnect_preserve_verified.sql`, a `create or replace` of only the mobile begin RPC. Existing `identity_verified` remains `identity_verified` during reconnect; new/unverified rows remain `authorization_pending`. The RPC still uses `SECURITY DEFINER`, `search_path = 'public'`, authenticated-only execute grants, and does not modify `publish_enabled` or callback completion semantics.
+- changed_files:
+  - `supabase/migrations/20260922003101_social_mobile_x_oauth_reconnect_preserve_verified.sql`
+  - `supabase/functions/x-oauth-connect-user/mobile_oauth_reconnect_test.ts`
+- mobile_ui_review: reviewed `apps/social-mobile/src/app/accounts/index.tsx`; reconnect is explicitly user-triggered/local UI state and no automatic reconnect behavior was added. No app source change was needed.
+- regression_tests: focused reconnect/RPC-boundary tests **2 passed / 0 failed**; x-oauth-connect-user suite **29 passed / 0 failed**; combined social-mobile preview + OAuth suite **37 passed / 0 failed**; `git diff --check` **PASS**.
+- test_coverage: static regression asserts verified reconnect preservation, pending/new-account behavior, no unconditional demotion, no `publish_enabled` mutation, and authenticated-only RPC boundary. A disposable PostgreSQL server was not available in this environment, so no live SQL apply/rollback proof was claimed.
+- production_safety: production migration apply **0**; production row repair **0**; Edge deploy **0**; real OAuth **0**; OpenAI preview **0**; X API/media/post **0**; Vault/Storage/scheduled-post writes **0**; publish_enabled changes **0**; Cron/settings/schema outside the candidate migration **0**; secrets/tokens not read or reported.
+- remaining_issues: the candidate migration is not yet applied, the live QA row remains `authorization_pending` until a separately approved read-only precondition and repair, and the one-shot AI preview remains unexecuted. C2 must review before any rollout.
+- safety_checks: formal checkout, `apps/admin/**`, `HANDOFF.md`, H1, and Claude workstreams untouched; no production mutation or manual API execution.
+- next_recommendation: C2 review the migration candidate. If approved, separately authorize production apply/deploy, then verify `verified_at`, dedicated identity, Vault reference presence (without reading secret values), no newer successful binding, and `publish_enabled=false` before a bounded QA-row repair and the single preview.
+
+## H2 Phase 13 production preflight — 2026-09-22
+
+- task_id: `social-mobile-app-phase13-production-preview-rollout-and-qa-20260921`
+- status: `review_required`; next_owner: `chatgpt`
+- fresh_preflight: fetched `origin/main` and used clean worktree `/private/tmp/kabumori-h2-preflight-UZiN4r` at `0bf3f1d`; approved OAuth reconnect source-fix commit is present. H1 is separate and no conflicting slot was found.
+- current_rpc: production `begin_social_mobile_x_oauth_connection` is still the pre-fix `SECURITY DEFINER`, `search_path='public'` function whose existing-account branch unconditionally sets `connection_status='authorization_pending'`; the candidate migration has not been applied.
+- qa_preconditions: dedicated `@yumeyoasobi` row is still `authorization_pending`, with non-null `verified_at`, both access/refresh Vault reference IDs present (presence only; secret values were not read), `publish_enabled=false`, and the expected `social_mobile_user_v1` workspace with exactly one owner membership. OAuth history has the prior consumed verified state and a later unconsumed state; no newer successful binding to another identity was observed. No production account outside this QA scope was changed.
+- mutation_gate: the TASK requires explicit trusted authorization before migration apply or QA-row repair. Therefore this turn performed read-only preflight only and stopped before any production mutation.
+- production_safety: migration apply **0**; QA row repair **0**; Edge deploy **0**; OAuth retry **0**; OpenAI preview **0**; X API/media/post **0**; Vault/Storage/scheduled-post writes **0**; publish/settings/Cron/schema changes **0**.
+- next_recommendation: if separately authorized, apply exactly the reviewed reconnect-preservation migration, read back RPC definition/ACL/search_path, repair only the QA status after rechecking all preconditions, then resume the isolated live runtime and exactly one no-publish AI preview.

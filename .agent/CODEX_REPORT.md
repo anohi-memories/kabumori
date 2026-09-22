@@ -1,3 +1,44 @@
+## Latest H1 result — search diagnostics production rollout (2026-09-22)
+
+- task_id: `important-news-phase1-search-diagnostics-production-rollout-20260922`
+- result: `review_required` — exact C1-approved diagnostics implementation integrated, exact migration applied, matching Function deployed, and three natural scheduled runs observed. Stop for C1.
+- fresh_main_before_integration: `847dae2740a1714437b74c80b0d4c087d0a87b3d`
+- integration_merge_commit: `f501fbb02714bd6d08bea2c321e406ed4b4d5e05` (PR #4: https://github.com/anohi-memories/kabumori/pull/4)
+- integrated_files: `supabase/functions/important-news-shadow/index.ts`, `search_telemetry.ts`, `search_telemetry_test.ts`, `supabase/migrations/20260921115317_important_news_search_diagnostics.sql`
+- validation: 18 Deno tests passed; `deno check` passed for the touched/runtime test files; `git diff --check` passed.
+
+### Production migration
+
+- Preflight proved the exact diagnostics migration was absent and the 16 new columns were absent.
+- Applied only `20260921115317_important_news_search_diagnostics.sql` with the migration tool; no `db push`, `--include-all`, history repair, or unrelated migration.
+- Postflight recorded migration row `version=20260922003120`, `name=20260921115317_important_news_search_diagnostics`.
+- All 8 nullable integer columns exist on both `important_news_shadow_runs` and `ai_usage_events`; all 16 non-negative CHECK constraints exist. Existing RLS/grants/policies were unchanged by read-only comparison.
+
+### Production Function
+
+- Before: `important-news-shadow` ACTIVE v7, `verify_jwt=false`, source hash `c264fcd7da43b25a1a4b827bb72c77ec02063d06775aa4dff32f20645a284dcf`.
+- After: ACTIVE v8, `verify_jwt=false`, source hash `559695babe6ddd925ff99df010a1a4798571d41a677e9270cd8e948af2aebe53`.
+- Read-back of `index.ts`, `shadow_logic.ts`, `shadow_sources.ts`, and `search_telemetry.ts` matched main byte-for-byte. No other Edge Function version/hash changed.
+- Cron job 38 remains active at `*/10 * * * *`; command hash remained `c0a89803846abb2464a1af02934266e1`. No Cron, secret/Vault, provider setting, X, Push, App, or fallback change.
+
+### Natural scheduled observations
+
+No Function was manually invoked; no candidate was injected; no OpenAI replay was performed.
+
+- `2026-09-22 00:40 UTC` — run `b98b6122-12e8-47a2-b751-94178d60dbb0`, completed; conditional search 0; telemetry attempts/success/failure `0/0/0`; output/action buckets all 0; tokens/calls/cost `0/0/$0`.
+- `2026-09-22 00:50 UTC` — run `7a3cd37a-9fa8-4e9f-acc2-57856411ec08`, completed; same zero-trigger/zero-telemetry result.
+- `2026-09-22 01:00 UTC` — run `5aa3ce0e-31aa-4467-89c2-90ee89c84ec2`, completed; same zero-trigger/zero-telemetry result.
+
+The three rows prove the new telemetry columns are written as non-NULL zeros on natural runs. No conditional search occurred, so no attempt/success/failure or action-type reconciliation is claimed. Existing backlog was not forced into the search path.
+
+### Remaining uncertainty / next recommendation
+
+- Provider billing units are not inferred from output-item counters; no provider billing setting or credential was changed.
+- The first three natural runs were quiet and did not exercise a conditional search. Continue passive observation only if needed; do not inject candidates or replay OpenAI.
+- Exact next recommendation: stop for C1 review.
+
+---
+
 # Codex Report
 
 ## Latest H1 result — conditional-search call accounting audit (2026-09-21)
