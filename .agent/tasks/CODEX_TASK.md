@@ -3,7 +3,7 @@
 - task_id: important-news-phase1-search-diagnostics-production-rollout-20260922
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
@@ -238,3 +238,30 @@ On completion:
 - Three natural scheduled runs completed at 00:40, 00:50, and 01:00 UTC. All wrote non-NULL zero telemetry; no manual invoke, candidate injection, or replay.
 - Cron 38 and unrelated Functions/configuration unchanged.
 - Stop for C1; next_owner is ChatGPT.
+
+
+## C1 review — 2026-09-22
+
+**PASS — production rollout completed within approved scope.**
+
+Accepted evidence:
+- C1-approved implementation is present on main via integration merge `f501fbb02714bd6d08bea2c321e406ed4b4d5e05`.
+- Main contains the diagnostics helper, tests, runtime integration, and exact migration file.
+- Exact migration was applied only; report records production migration row `20260922003120 / 20260921115317_important_news_search_diagnostics`.
+- Postflight confirms all 8 nullable integer diagnostics columns on both target tables and all 16 non-negative CHECK constraints, with RLS/grants/policies unchanged.
+- `important-news-shadow` moved from v7 to ACTIVE v8, `verify_jwt=false` preserved, and deployed source read-back matched main.
+- Cron job 38 remained `*/10 * * * *` with unchanged command hash; unrelated Functions/configuration unchanged.
+- Three natural scheduled runs after deploy (00:40, 00:50, 01:00 UTC) completed and wrote non-NULL zero diagnostics without manual invoke, candidate injection, or OpenAI replay.
+- No conditional search occurred in those first three runs, so action/billing reconciliation is correctly left unclaimed.
+- Tests/typecheck/diff-check reported PASS.
+- No fallback/search/retry/Cron/secret/provider/X/Push/App behavior was changed.
+
+### C1 judgment
+
+- Rollout is accepted.
+- No rollback is required.
+- Keep passive natural observation; do not force a conditional search.
+- Provider-billing-unit reconciliation remains a follow-up because output-item counts are still not proven billable units.
+- PR #3 remains open but is superseded by the actual main integration recorded above; do not merge it again.
+
+**Recommended model for the next H1 observation/reconciliation task: Luna.**
