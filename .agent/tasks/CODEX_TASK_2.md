@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase14-persistent-content-settings-candidate-20260922
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Luna
 - purpose: Phase13 C2 PASS後の次段階として、general-user向け投稿設定をtenant-safeに永続化できるsource candidateを作る。まだCron・scheduled_posts自動生成・X実投稿・publish_enabled=trueは行わない。
@@ -442,3 +442,31 @@ Still forbidden:
 - Two isolated brands/users proved owner read/write, non-owner read/write denial, cross-tenant isolation, delete denial, invalid time/publish-key rejection, and the default `09:00 / 24:00 / 17:00` row.
 - The candidate table, trigger function, and baseline fixtures were dropped; post-cleanup `to_regclass`/`to_regprocedure` read-back returned null for all proof objects. The disposable Supabase instance was stopped with `--no-backup`.
 - No production mutation, deploy, settings row, Cron, scheduled post, X/OpenAI/Vault/OAuth operation was performed. Return to C2 with `review_required / next_owner: chatgpt`.
+
+
+## Final C2 — 2026-09-22 (Phase14 disposable DB proof)
+
+**PASS. Phase14 is complete.**
+
+Accepted:
+- the exact Phase14 migration applied successfully in an isolated PostgreSQL/Supabase 17.6 environment.
+- schema/default/check/RLS/policy/grant/trigger/search_path read-back passed.
+- two-user/two-brand tenant proof passed:
+  - owner read/write succeeds
+  - non-owner read/write denied
+  - cross-tenant isolation holds
+  - delete denied
+  - invalid time values rejected
+  - publish-related keys rejected
+  - default \`09:00 / 24:00 / 17:00\` row succeeds
+- cleanup/rollback proof passed; candidate objects were absent after cleanup and the disposable instance was stopped without backup.
+- source regressions remain green.
+- production mutation remained 0.
+- persona persistence representation remains:
+  - canonical metadata in dedicated DB columns
+  - bounded style signals in \`persona_profile\`
+  - application \`source\` / \`confirmed\` must be mapped from canonical columns in the future write path.
+
+No production rollout is implied by this PASS.
+
+Any production migration/app rollout, conversational persistence wiring, X-history analysis, or live publishing must be a new separately scoped H2 task.
