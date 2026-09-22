@@ -1,21 +1,24 @@
 # Codex Task 2
 
-- task_id: social-mobile-app-phase18-production-shaped-access-token-reader-preflight-20260922
+- task_id: social-mobile-app-phase19-live-vault-reader-architecture-and-disposable-proof-20260923
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
-- purpose: Phase17 C2 PASS済みのdisposable access-token boundary proofを、本番Supabase Vaultの実構造に合わせたproduction-shaped internal reader candidateへ落とし込み、productionはread-only preflightだけでexact schema/ACL/RPC compatibilityを確認する。まだproduction migration/RPC deploy/Vault read/X history callは行わない。
+- purpose: Phase18 C2 PASS後、live plaintext access-token readerの実装方式を決定し、productionには触れずsource candidate + disposable proofまで行う。service-role-only server adapterとnarrow SECURITY DEFINER RPCを比較し、最小権限・tenant binding・secret非露出の観点から1方式を選ぶ。production deploy / live Vault read / real X history callはまだ禁止。
 
 ## Goal
 
-本番で「本人の接続済みXのaccess tokenだけをhistory-learning serverが安全に使える」ようにするため、
-**最小・access-only・server-internalなtoken reader contract** を確定する。
+Phase19で決めるのは、
+**history-learning serverが本人の接続済みX access tokenを実際に読む時の唯一のlive実装方式**。
 
-Phase18では source candidate + production read-only preflight まで。
-実token値は読まない。
+候補:
+1. Edge Function内部のservice-role-only Vault adapter
+2. dedicated narrow SECURITY DEFINER RPC
+
+比較だけで終わらず、選択した方式のsource candidateとdisposable proofまで作る。
 
 ## Mandatory fresh start
 
@@ -28,147 +31,138 @@ H2開始時:
 6. `.agent/CODEX_REPORT_2.md`
 7. 他3slot overlap確認
 
-他slotが同じ social-mobile OAuth/Vault migration/RPC/Function を触っていればSTOP。
+他slotがsocial-mobile OAuth/Vault/history-learning migration/RPC/Functionを触っていればSTOP。
 
 ## Model policy
 
-- **Lunaで開始・継続**
-- Solは、実Supabase VaultのACL/SECURITY DEFINER/search_path/ownership semanticsに具体的矛盾が見つかり、Lunaで安全に設計判断できない場合のみ
-- read-only production preflight / source candidate / testsはLuna
+- **Lunaで開始**
+- Solは、2方式のsecurity semanticsに具体的な曖昧さが残り、Vault ACL / service-role blast radius / SECURITY DEFINER ownership checkを安全に裁定できない場合だけ
+- 比較、source candidate、disposable proof、testsはLuna
 
-## Scope A — production read-only preflight
+## Scope A — architecture decision
 
-Production projectは read-only metadata inspection のみ。
+以下を明示比較:
+- attack surface
+- client exposure
+- tenant/account binding
+- Vault plaintext exposure surface
+- service-role blast radius
+- RPC ACL complexity
+- `auth.uid()` reliability
+- search_path / SECURITY DEFINER risk
+- migration requirement
+- rollback simplicity
+- observability / token logging risk
+- compatibility with Phase16/18 call order
+- refresh-token exclusion
+- future token-refresh needs
 
-Confirm without selecting secret values:
-- `public.social_accounts`
-  - `vault_access_token_secret_id`
-  - `vault_refresh_token_secret_id`
-  - `platform_user_id`
-  - `connection_status`
-  - ownership/brand binding columns
-- `brand_memberships` ownership model / RLS
-- Vault schemas/views/functions actually available
-- `vault.decrypted_secrets` exposure/ACL shape
-- existing OAuth completion RPC definition, search_path, ACL
-- any existing token-read RPC/function
-- current `x-oauth-connect-user` deployment/source expectations
-- QA account row has refs present (boolean/count metadata only; no secret values)
+### Decision rule
 
-Do NOT:
-- read `decrypted_secret`
-- read actual access/refresh token
-- change ACL/RLS/schema/RPC
-- call X
+Prefer the design with:
+- fewer client-callable secret surfaces
+- fewer DB privileges exposed to authenticated role
+- simplest proof that account binding happens before secret read
+- no generic secret lookup
+- no refresh-token path
+- smallest production mutation
 
-Report exact object names/signatures/ACLs relevant to the design.
+If service-role-only adapter wins:
+- service role must stay Edge/server only
+- mobile never receives service-role key
+- adapter accepts trusted account binding, not arbitrary secret ref from client
+- Vault query must be single access-secret lookup after account authorization
+- no generic reusable "read any secret" export to public handlers
 
-## Scope B — access-only internal reader design
-
-Create source candidate for the narrowest safe contract.
-
-Required properties:
-- no generic `secret_id -> plaintext` client RPC
-- no client-controlled Vault secret ref
-- caller cannot choose refresh-token ref
-- caller cannot choose another account's token
-- ownership + verified account binding resolved before token read
-- access token only
-- fixed `search_path`
-- least-privilege EXECUTE
-- no public/anon access
-- no token returned to mobile/public response
-- no logs containing token
-- no admin/global fallback
-- no write/update capability
-
-Preferred architecture:
-- Edge Function authenticates user and resolves owned account using user JWT / trusted DB state
-- internal server-side DB call reads only that resolved account's access secret
-- returned plaintext remains inside server process and is passed directly to X read adapter
-- refresh flow is explicitly out of scope unless later needed
-
-If a SECURITY DEFINER RPC is used:
-- name it specifically for history-learning access-token resolution
-- input should be minimal and non-authoritative (prefer account id only after prior trusted resolution, or resolve account inside RPC from `auth.uid()`)
-- verify account belongs to current Auth user and is `identity_verified`
-- read only `vault_access_token_secret_id`
-- query only the single matching Vault secret
-- fixed `search_path = public, vault`
-- revoke from public/anon/service_role unless there is a demonstrated reason otherwise
-- grant only the exact role needed
-
-## Scope C — migration/source candidate
-
-If DB helper/RPC is needed, create a migration candidate only.
-
-Requirements:
-- idempotent/reviewable SQL
-- explicit revoke/grant
+If RPC wins:
 - fixed search_path
-- no migration-history repair
-- no blind db push
-- no production apply
-- no existing admin OAuth behavior change
-- no refresh-token exposure
-- no generic Vault reader
-
-If no DB helper is needed and a server-only service_role query is safer, document why and prove client cannot access it.
-
-## Scope D — history-learning dependency wiring
-
-Update Phase16 history-learning source candidate so the production-shaped dependency can be injected cleanly.
-
-Keep:
-- default entrypoint disabled
-- no production credentials/env wiring
-- no real Vault read
-- no real X call
-
-Tests should prove:
-- token reader is called only after Auth/ownership/account verification
-- only access-token path is referenced
-- refresh token path absent
-- token not exposed in response/errors/logs
-
-## Scope E — static + disposable proof of the exact candidate
-
-Use local/disposable PostgreSQL to apply the exact candidate SQL/contract where practical.
-
-Prove:
-- function/RPC exists with intended signature
-- SECURITY DEFINER status if used
-- fixed search_path
-- ACL minimal
+- exact owner/account checks inside RPC
 - public/anon denied
-- owner/verified account positive
-- cross-tenant negative
-- pending/unverified negative
-- forged account/ref ineffective
-- refresh token cannot be selected
-- arbitrary Vault secret cannot be selected
-- token returned only to internal caller boundary, never public/mobile response
-- rollback/cleanup
+- minimal EXECUTE grant
+- no arbitrary secret input
+- access-only
+- disposable ACL proof mandatory
 
-Fake secrets only.
+Report the rejected option and why.
 
-## Scope F — rollout gate design
+## Scope B — source candidate for chosen design
 
-Prepare a clear next-step rollout plan, but DO NOT execute it.
+Implement the chosen live-reader candidate behind an injectable interface.
 
-Future rollout must be split:
-1. exact migration/RPC apply (if any)
-2. read-back/ACL verification
-3. deploy only `social-mobile-history-learning`
-4. keep live history fetch disabled by default/feature gate if possible
-5. later exactly-one QA fetch with explicit consent
-6. no publish enablement
+Required:
+- Phase16 Auth -> owner membership -> workspace -> exactly-one verified account -> platform id checks remain before plaintext read
+- no client-controlled secret ref
+- no refresh token access
+- no arbitrary Vault secret access
+- no admin/global fallback
+- no token persistence
+- no token logging
+- token never appears in HTTP response
+- provider error paths do not echo token
+- default production history-learning entrypoint remains disabled
+
+If service-role adapter:
+- dedicated module with narrow function, e.g. "read access token for trusted bound account"
+- do not expose raw Supabase admin client or generic Vault read helper to handler callers
+- server environment lookup remains source candidate only; no real production secret wiring
+
+If RPC:
+- create migration candidate only; do not apply production
+
+## Scope C — disposable proof
+
+Use fake-only disposable PostgreSQL/Supabase-like environment.
+
+Prove chosen implementation contract:
+- owner A -> verified account A -> access token A
+- user A cannot reach B token
+- viewer/non-owner denied
+- pending/unverified denied
+- missing platform id/ref denied
+- forged account id/ref ineffective
+- refresh ref cannot be selected
+- arbitrary secret cannot be selected
+- multiple X accounts fail closed
+- missing/deleted secret fails closed
+- plaintext read occurs after ownership/account verification
+- token absent from client response/log capture
+- rollback/cleanup leaves no proof object/fixture
+
+If service-role adapter is chosen, explicitly model that DB privilege is broad but application interface is narrow, and test the narrow adapter cannot be parameterized into arbitrary secret reads.
+
+## Scope D — history-learning integration candidate
+
+Wire chosen live-reader candidate into a **disabled production dependency factory** or equivalent source-only factory.
+
+Important:
+- default deployed behavior remains disabled
+- no real env secret required to run tests
+- no production Vault call
+- no X network call
+- no mobile network activation
+
+Tests:
+- disabled factory cannot read token
+- chosen factory ordering is fixed
+- X fetch receives token only internally
+- response never contains token/ref
+
+## Scope E — exact next rollout gate
+
+Prepare but do not execute.
+
+Next production gate should specify exact allowed mutations:
+- if service-role adapter: deploy only history-learning Function with exact env requirements, but real fetch still gated OFF until C2
+- if RPC: exact migration/RPC apply + ACL read-back first, then Function deploy separately
+- exactly-one QA real Vault read/history fetch must remain later and require explicit user consent
+- no publish enablement
 
 ## Tests
 
 Run:
-- Phase16/17 history-learning relevant Deno tests
-- any new migration/static tests
+- new chosen-adapter tests
+- Phase16/18 history-learning tests
+- relevant static/security tests
 - social-mobile typecheck
 - lint
 - Expo export only if mobile source changes
@@ -176,15 +170,16 @@ Run:
 
 ## Production boundary
 
-Phase18 allows **read-only production metadata preflight only**.
+Phase19 is **source candidate + disposable proof only**.
 
 Forbidden:
 - production migration/RPC/RLS/ACL mutation
 - production Vault plaintext read
-- production Edge Function deploy
-- production X history API call
-- production OAuth change
-- production persona/settings write
+- production service-role secret read
+- production Edge deploy
+- production X history call
+- OAuth change
+- production settings/persona write
 - OpenAI live call
 - X post/media/repost
 - `publish_enabled=true`
@@ -201,43 +196,17 @@ When complete:
 - status -> `review_required`
 - next_owner -> `chatgpt`
 - Report must include:
-  1. production metadata preflight findings
-  2. exact chosen access-only architecture
-  3. changed files/migration candidate
-  4. RPC/helper signature + search_path + ACL
-  5. refresh-token exclusion proof
-  6. tenant/account binding proof
-  7. tests
-  8. production mutation=0
-  9. remaining risks
-  10. exact rollout plan
+  1. side-by-side architecture comparison
+  2. chosen design and rejected design rationale
+  3. exact trusted/untrusted boundary
+  4. changed files
+  5. disposable proof results
+  6. refresh/arbitrary-secret exclusion proof
+  7. token non-exposure proof
+  8. tests
+  9. production mutation=0
+  10. exact next production rollout gate
+  11. remaining risks
 - commit/push
 - fresh origin/main check
 - STOP for C2
-
-
-## Final C2 — 2026-09-23 (Phase18 production-shaped access-only token reader preflight)
-
-**PASS. Phase18 is complete.**
-
-Accepted:
-- production inspection remained metadata-only; no Vault plaintext, token values, handles, secret ids, or X history were read.
-- production RLS/account-binding shape was confirmed for \`brands\`, \`brand_memberships\`, and \`social_accounts\`.
-- the production Vault catalog exposes \`vault.secrets\` / \`vault.decrypted_secrets\`; plaintext access is not available to public/anon, and no generic client-callable secret reader was found.
-- existing OAuth completion RPCs and the AI-Lab-specific token reader were correctly treated as unsuitable for the general-user history-learning access-only path.
-- the new server-internal \`social_mobile_history_access_reader.ts\` contract is access-only, has no refresh selector, no generic secret-id client surface, no admin fallback, no write capability, and no token-bearing response/logging path.
-- Phase16 history-learning resolves Auth -> owner membership -> workspace -> exactly-one verified X account -> trusted platform id before the access-token reader boundary.
-- default history-learning Edge entrypoint remains disabled.
-- no migration/RPC candidate was introduced, so no SQL rollout was implied by this task.
-- reported Deno tests, Edge \`deno check\`, mobile typecheck/lint/web export, and diff-check pass.
-- implementation commit \`732c630166bf8bc0fcaf7a4b5968d1d24a53c0db\` is present on \`origin/main\`.
-- production mutation = 0.
-
-Important remaining design choice:
-- the source contract is approved, but the live plaintext-token implementation is intentionally still undecided between:
-  1. a service-role-only server adapter reading the account-bound access secret internally, or
-  2. a dedicated narrow SECURITY DEFINER RPC.
-- that choice must be made in the next separately scoped phase with exact tenant binding, ACL, search_path, and disposable proof before production rollout.
-- no live Vault read, Function deploy, or X-history call is authorized by this PASS.
-
-Recommended next model: Luna; use Sol only if the exact live Vault/ACL implementation presents a concrete security ambiguity.
