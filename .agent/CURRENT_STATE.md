@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 review_required; H2 reconnect source fix C2 PASS and rollout preflight ready; G1 idle; G2 done)
+- checked_at: 2026-09-22 JST (H1 search diagnostics production rollout C1 PASS/done; H2 Phase13 ready; G1 idle; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,10 +14,13 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `important-news-phase1-search-diagnostics-production-rollout-20260922`
-  - Integrated at `f501fbb02714bd6d08bea2c321e406ed4b4d5e05`; exact diagnostics migration applied and matching `important-news-shadow` deployed v8.
-  - Three natural scheduled runs completed with non-NULL zero telemetry; no manual replay/candidate injection.
-  - Cron 38 and unrelated production objects unchanged. Stop for C1.
+- Codex slot 1: `done` — `important-news-phase1-search-diagnostics-production-rollout-20260922`
+  - C1 PASS. Approved diagnostics implementation is on main at integration merge `f501fbb02714bd6d08bea2c321e406ed4b4d5e05`.
+  - Exact diagnostics migration applied; matching `important-news-shadow` deployed v8 with `verify_jwt=false` preserved.
+  - Three natural scheduled runs completed with non-NULL zero diagnostics; no manual invoke/replay/candidate injection.
+  - Cron 38 and unrelated production objects unchanged; no rollback required.
+  - PR #3 is superseded by the actual merged integration and must not be merged again.
+  - Recommended next model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase13-production-preview-rollout-and-qa-20260921`
   - OAuth reconnect status source fix C2 PASS。
