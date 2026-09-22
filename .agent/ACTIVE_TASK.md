@@ -15,11 +15,12 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: kabumori-mobile-home-dashboard-v1-merge-20260922
+- task_id: kabumori-mobile-ui-consistency-and-stock-search-integration-20260922
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: PR #5 was freshened onto current main and merged as `c867ee7e`; six app/test files only, tests/typecheck/export passed, backend production mutation 0. C1 verification required.
+- note: PR #6 is open and mergeable with UI consistency, integrated stock search, Portfolio V1, and news detail dedup. Final head `b27c4362`; 45 tests/typecheck/export passed; backend production mutation 0. C1 verification required.
+
 ### Codex slot 2
 - owner: codex
 - slot: codex-2
