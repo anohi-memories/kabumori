@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase17-disposable-vault-token-boundary-proof-20260922
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Luna
 - purpose: Phase16 C2 PASS済みのserver-side X history-learning adapterについて、本番Vault/Xを触らずに、access-token取得境界・tenant ownership・account binding・fail-closed挙動をdisposable Supabase/PostgreSQL環境で実証する。production deploy / production Vault read / real X history call / live publishはまだ禁止。
@@ -275,3 +275,34 @@ Required proof remains:
 - cleanup/object absence after proof
 
 Return \`review_required / next_owner: chatgpt\` for C2.
+
+
+## Final C2 — 2026-09-22 (Phase17 disposable Vault/token-boundary proof)
+
+**PASS. Phase17 is complete.**
+
+Accepted:
+- production was not used as a substitute and production mutation remained 0.
+- disposable fake-only PostgreSQL proof passed for the narrow access-token boundary.
+- owner A could resolve only A's access token through trusted account binding.
+- cross-tenant/user, viewer/non-owner, pending/unverified, missing platform id, missing access ref, forged ref, multiple-account ambiguity, and deleted-secret cases failed closed.
+- the helper contract could not select refresh-token or arbitrary Vault secrets.
+- ownership/account validation precedes token read.
+- SECURITY DEFINER and fixed \`search_path = 'public', 'vault'\` were read back.
+- EXECUTE was limited to \`authenticated\` and not \`public\` in the disposable proof.
+- token values were not returned in client-facing results or recorded in the report.
+- rollback/cleanup proof passed and disposable proof objects were absent afterward.
+- Phase16/preview/static regressions, social-mobile typecheck/lint/Expo export, and diff-check remain green.
+- no source/migration was added in this phase.
+
+Accepted limitation:
+- this proof used a disposable PostgreSQL model of the Vault secret boundary rather than the real Supabase Vault extension.
+- therefore the exact production-shaped RPC/ACL against Supabase Vault still requires a separate source/rollout gate before any live token read.
+
+No production deployment or real X-history fetch is authorized by this PASS.
+
+Next work must be a separately scoped H2 task for:
+1. a production-shaped, access-only internal token-reader candidate against the real Supabase Vault API/ACL model,
+2. read-only production preflight of the exact existing account/Vault schema,
+3. only after C2 approval, deploy the history-learning Function while keeping real history fetch gated,
+4. exactly-one dedicated QA history fetch with explicit consent as a later separate gate.
