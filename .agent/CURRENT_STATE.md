@@ -23,12 +23,12 @@
   - Colors/icons/visual polish explicitly deferred to a later task.
   - Recommended model: Luna.
 
-- Codex slot 2: `done` — `social-mobile-app-phase15-conversational-proxy-ai-and-history-learning-candidate-20260922`
-  - C2 PASS。会話型「代打AI」source candidate、確認済みpersona/settings mapping、明示同意付きmock X履歴学習まで完了。
-  - raw投稿恒久保存なし、confirmed personaのみpreview反映、production mutation 0。
-  - real X-history adapterはserver側でAuth/workspace/account/platform user/Vault tokenをtrusted stateから解決することが次工程の必須条件。
-  - production rollout / real X history / LLM conversational invoke / live publish は別TASK。
-  - Recommended next model: Luna。
+- Codex slot 2: `ready` — `social-mobile-app-phase16-server-side-x-history-learning-adapter-candidate-20260922`
+  - Phase15 C2 PASS後の次工程。
+  - 明示同意後のみ、server側でAuth/owner workspace/verified X account/platform user/Vault access tokenをtrusted stateから解決するhistory-learning source candidateを作る。
+  - production Vault read / X history API / deploy / publish はまだ禁止。
+  - Recommended model: Luna。Auth/RLS/Vault/X token boundaryの具体的blocker時のみSol検討。
+
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
   - market-report-analysis v2 shadow deployはK1 PASS済み。consumer gateはOFF。
