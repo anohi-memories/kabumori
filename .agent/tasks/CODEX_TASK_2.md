@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase16-server-side-x-history-learning-adapter-candidate-20260922
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Luna
 - purpose: Phase15 C2 PASS済みの「代打AI」history-learning candidateを、mobile入力を信頼しないserver-side authorization boundaryへ引き上げる。本人のAuth・workspace ownership・接続済みX identity・Vault tokenをtrusted server/DB stateから解決し、明示同意後のみ本人の過去X投稿を取得してpersona候補を生成するsource candidateを作る。production deploy / real X history call / live publishはまだ禁止。
@@ -252,3 +252,37 @@ When complete:
 - commit/push
 - fresh origin/main check
 - STOP for C2
+
+
+## Final C2 — 2026-09-22 (Phase16 server-side X history-learning adapter candidate)
+
+**PASS. Phase16 source candidate is complete.**
+
+Accepted:
+- server-side authority resolution is correctly separated from client input.
+- the client may supply only Auth bearer, optional workspace selector, and explicit consent; owner identity, workspace ownership, X account, platform user id, and token reference are resolved through trusted server-side readers.
+- non-owner, ambiguous/multiple-account, non-verified, missing platform id, and missing token-reference states fail closed.
+- target X user id is taken from the trusted DB-bound account, not mobile input.
+- history fetch is read-only \`GET /2/users/:id/tweets\`, bounded to 50 posts / 2 pages, with replies/retweets excluded.
+- access token is not returned to the client, not persisted, and no refresh/admin/global-token fallback exists in this candidate.
+- provider errors are normalized and raw provider bodies are not returned.
+- raw X post bodies are not returned or persisted by the candidate.
+- output remains an unconfirmed \`past_post_analysis\` persona proposal; no automatic persona persistence occurs.
+- no publish/media/schedule/publish-permission mutation path is introduced.
+- the default Edge entrypoint is deliberately disabled and cannot read Vault or call X accidentally.
+- call-order tests cover Auth -> membership/workspace -> account -> token read -> X fetch.
+- reported Deno tests, regressions, social-mobile typecheck/lint/Expo export, and diff-check pass.
+- production mutation = 0.
+
+Important next gate:
+- before any production deploy or real X-history read, prove the exact token-read mechanism in a disposable environment.
+- the production implementation must preserve the same trusted-state order and must not expose a generic client-callable Vault secret reader.
+- prefer the narrowest possible internal function/RPC contract that resolves the verified account and reads only that account's access token.
+
+No production rollout is implied by this PASS.
+
+Future work must be separately scoped for:
+1. disposable Vault/RLS/token-boundary proof,
+2. production deployment gate for the history-learning Function,
+3. exactly-one real QA history fetch with explicit user consent,
+4. later confirmed persona persistence / LLM conversation wiring.
