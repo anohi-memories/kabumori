@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase15-conversational-proxy-ai-and-history-learning-candidate-20260922
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Luna
 - purpose: Phase14 C2 PASS済みのtenant-safe content settings基盤を前提に、一般ユーザーが「自分の代打AI」と会話して投稿スタイルを覚えさせ、その内容を安全に永続化できるsource candidateを作る。過去X投稿学習は明示同意付きの取得・分析設計/候補まで進めるが、production X API call・live publishはまだ行わない。
@@ -271,3 +271,32 @@ Production mutation = 0.
 - commit/push
 - fresh origin/main check
 - STOP for C2
+
+
+## Final C2 — 2026-09-22 (Phase15 conversational proxy AI/history-learning candidate)
+
+**PASS. Phase15 source candidate is complete.**
+
+Accepted:
+- conversational "あなたの投稿AI / 代打AI" boundary is confirmation-gated and separated from publishing.
+- unconfirmed proposals remain local; confirmed settings/persona go through validation before the repository candidate.
+- canonical persona metadata is mapped from dedicated DB columns, while \`persona_profile\` holds bounded derived style signals only.
+- preview generation uses persona only when confirmed.
+- history-learning candidate requires explicit consent, matching owner/workspace context, exactly one identity-verified X account with platform user id, and bounded fetch limits.
+- raw post bodies are not returned/persisted by the candidate.
+- current OAuth scopes already contain \`tweet.read\` and \`users.read\`; real X-history acquisition remains a later server-side phase.
+- mobile UX includes a separate confirmation step before future history retrieval and does not expose publish controls.
+- tests/typecheck/lint/Expo export/diff all reported PASS.
+- production mutation = 0.
+
+Important next-phase security requirement:
+- the future real server-side history adapter MUST derive Auth user, owned workspace, membership, connected account, platform user id, and Vault token from trusted server/DB state.
+- it must NOT trust mobile-supplied values equivalent to \`workspaceOwnerUserId\`, \`ownedWorkspaceId\`, \`verifiedAccounts\`, or token/account identity.
+- the current injected/mock history function is accepted only as a testable source-domain candidate, not as a production authorization boundary.
+
+No production rollout is implied by this PASS.
+
+Future work must be separately scoped for:
+1. Phase14 settings migration production rollout + authenticated UI persistence, and/or
+2. server-side X-history fetch/analyze adapter with Vault-token boundary and explicit-consent runtime proof, and/or
+3. LLM-backed conversational replies.
