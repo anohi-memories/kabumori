@@ -3,8 +3,8 @@
 - task_id: kabumori-mobile-ui-portfolio-news-merge-20260922
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: C1 PASS済みのPR #6をlatest mainへ安全にfreshenし、UI統一・銘柄検索統合・Portfolio V1・重要ニュース重複抑制をまとめてmainへmergeする。
@@ -12,8 +12,8 @@
 ## Approved candidate
 
 PR #6:
-- head: `b27c4362c3e8a4264d64afd71b451f8f06293a62`
-- state at C1: open / mergeable / not merged
+- head: `38aa1a500f90355e740603464177701b9e0c3bfc`
+- state at C1: merged / closed
 - changed files: 22 Kabumori app/test files
 - relevant tests: 45 passed
 - app-scope TypeScript: PASS
@@ -122,3 +122,15 @@ On completion:
 - STOP for C1
 
 **推奨モデル：Luna。**
+
+
+## Completion record — 2026-09-22
+
+- pre_freshen_main: c4f2f83f485bda45e308522c7b6d079b4b606e7c
+- final_feature_head: 38aa1a500f90355e740603464177701b9e0c3bfc
+- merge_commit: bc4929165cf74e9044f0267299fce7f1132ac60b
+- pull_request: https://github.com/anohi-memories/kabumori/pull/6 (merged and closed)
+- verification: 45 relevant tests passed; app-scope TypeScript, Expo web export, route checks, and diff check passed.
+- production_mutation: 0
+- native/manual QA: outstanding for C1 follow-up.
+- next_owner: chatgpt
