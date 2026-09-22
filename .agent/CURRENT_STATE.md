@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 ready; H2 Phase13 C2 PASS/done; G1 idle; G2 done)
+- checked_at: 2026-09-22 JST (H1 ready; H2 Phase14 persistent settings candidate ready; G1 idle; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -20,11 +20,11 @@
   - Preserve section isolation, retry UI, no-fabrication rule, Search route, and backend mutation=0.
   - Recommended model: Luna.
 
-- Codex slot 2: `done` — `social-mobile-app-phase13-production-preview-rollout-and-qa-20260921`
-  - C2 PASS。reconnect-preserve migration本番適用、QA status修復、QA-only live runtime、exactly one real AI previewまで完了。
-  - QAは `identity_verified` / `publish_enabled=false` / scheduled_posts 0。
-  - X API/media/post 0、Vault token read/change 0、publish enable 0、既存本番accounts/admin OAuth不変。
-  - 次工程は新TASKで扱う。
+- Codex slot 2: `ready` — `social-mobile-app-phase14-persistent-content-settings-candidate-20260922`
+  - Phase13 C2 PASS後の次工程。
+  - general-user向けcontent settingsをtenant-safeに永続化するsource candidateを作る。
+  - production migration/RPC/RLS/Cron/scheduled_posts/X投稿/publish enableはまだ禁止。
+  - Recommended model: Luna。RLS/SECURITY DEFINERの具体的blocker時のみSol検討。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
