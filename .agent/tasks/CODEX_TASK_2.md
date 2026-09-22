@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase13-production-preview-rollout-and-qa-20260921
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: Phase 12 C2 PASS済みの general-user preview candidate を production に安全に反映し、dedicated QA user + test X account で exactly one bounded real AI preview を実行して、tenant isolation・no-publish boundary・既存brand非回帰を確認する。real X post / media upload / publish_enabled=true / Cron はまだ禁止。
@@ -212,6 +212,16 @@ When complete:
   10. rollback path / next recommendation
 - fresh-check `origin/main` before any control/report push
 - STOP for C2
+
+## H2 production migration gate result — 2026-09-22
+
+- status: `review_required`
+- next_owner: `chatgpt`
+- preflight: fresh `origin/main` at `e93996f`; the approved migration candidate and QA preconditions were re-read before the production operation.
+- attempted_operation: requested exactly one `supabase_apply_migration` for `20260922003101_social_mobile_x_oauth_reconnect_preserve_verified.sql`; no workaround or alternate execution path was attempted.
+- blocker: the Supabase safety review rejected the persistent `SECURITY DEFINER` OAuth RPC DDL because it did not accept the TASK's embedded authorization text as sufficient explicit user approval. The rejection occurred before execution.
+- production_result: migration apply **0**; migration history unchanged; RPC/ACL unchanged; QA row repair **0**; deploy **0**; OAuth/OpenAI/X execution **0**; DB/Vault/Storage/scheduled-post/Cron/settings changes **0**.
+- next_recommendation: obtain a direct user confirmation for this exact production DDL operation, then retry only the approved migration with the required read-back. Do not circumvent the safety review.
 
 
 ## C2 review — 2026-09-21 (mobile QA source mismatch)
