@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 Kabumori mobile Home dashboard V1 review_required; H2 handled in separate chat; G1 idle; G2 done)
+- checked_at: 2026-09-22 JST (H1 Home dashboard V1 merge C1 PASS/done; H2 handled separately; G1 idle; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,16 +14,18 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `kabumori-mobile-home-dashboard-v1-20260922`
-  - PR #5 implements Home/Dashboard V1; Search is preserved at `/search` and the bottom-tab label is ホーム.
-  - Existing tracked_stocks, important-news, and report reads are reused; no realtime price/P&L fabrication.
-  - Backend production mutation 0; H2/social-mobile remains out of scope. Stop for C1.
+- Codex slot 1: `done` — `kabumori-mobile-home-dashboard-v1-merge-20260922`
+  - C1 PASS. PR #5 merged/closed at `c867ee7e`; merged main state verified.
+  - Home/Dashboard V1 is on main; fixed Japanese error copy remains, Search stays at /search, and no realtime price/P&L/index values are fabricated.
+  - Post-merge main drift is .agent control/report only; no app/test implementation drift detected.
+  - Production/backend/EAS mutation 0.
+  - Recommended next model: Luna.
 
-- Codex slot 2: `ready` — `social-mobile-app-phase13-production-preview-rollout-and-qa-20260921`
-  - User explicitly authorized the bounded production repair.
-  - Apply only reconnect-preserve migration + repair only QA connection_status if preconditions still pass.
-  - Then QA-only live runtimeで exactly one real AI preview。X投稿/media/publish enable/Cronは禁止。
-  - Recommended model: Luna。具体的なOAuth/DB/Vault/security blocker時のみSol検討。
+- Codex slot 2: `ready` — `social-mobile-app-phase14-persistent-content-settings-candidate-20260922`
+  - Phase13 C2 PASS後の次工程。
+  - general-user向けcontent settingsをtenant-safeに永続化するsource candidateを作る。
+  - production migration/RPC/RLS/Cron/scheduled_posts/X投稿/publish enableはまだ禁止。
+  - Recommended model: Luna。RLS/SECURITY DEFINERの具体的blocker時のみSol検討。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`

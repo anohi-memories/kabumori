@@ -1,3 +1,75 @@
+## H1 merge result — Kabumori Home Dashboard V1 (2026-09-22)
+
+- task_id: `kabumori-mobile-home-dashboard-v1-merge-20260922`
+- result: `review_required` — C1-approved PR #5 was freshened onto current main, reverified, and merged. Stop for C1.
+- pre_freshen_main: `1b1d53323c9a903954b3852ed168240fdf581303`
+- final_feature_head: `d03f08ccbf4598ef838be19128b899d309398ac6`
+- merge_commit / resulting_main: `c867ee7e0c4546265be325cc606653e0bf964d9f`
+- pull_request: https://github.com/anohi-memories/kabumori/pull/5 (merged and closed)
+
+### Fresh-main and scope verification
+
+- Rebased the approved implementation onto `origin/main` without dragging stale `.agent` history; no conflicts occurred.
+- PR diff remained limited to the approved six files:
+  - `src/app/index.tsx`
+  - `src/app/search.tsx`
+  - `src/components/app-tabs.tsx`
+  - `src/components/app-tabs.web.tsx`
+  - `src/lib/dashboard.ts`
+  - `tests/app/dashboard_test.ts`
+- H2/social-mobile, G1, G2, migrations, Functions, Cron, secrets, OAuth, X, and Push areas were untouched.
+
+### Verification
+
+- Dashboard helper tests: 4 passed / 0 failed.
+- Expo-scope TypeScript check: passed.
+- Expo web export: passed.
+- Static routes confirmed: `/`, `/search`, `/explore`, `/news`, `/reports`.
+- `git diff --check`: passed.
+- Home still maps stocks/news/reports failures to fixed Japanese copy and does not render arbitrary backend `Error.message`.
+- No realtime price, P&L, market-index, or other unavailable metric was added.
+- Read-back of `origin/main` after merge showed no difference from the approved feature head across the six implementation/test files.
+- Production mutation: 0. No DB/schema/RPC, Edge Function, Cron, secret/Vault, OAuth, X, Push, or app-store/EAS operation.
+
+Next recommendation: C1 verify the merged main state; follow-up UI work can address native/iOS visual QA and future realtime data separately.
+
+## C1 blocker fix — Kabumori Home Dashboard V1 (2026-09-22)
+
+- task_id: `kabumori-mobile-home-dashboard-v1-20260922`
+- result: `review_required` — C1 blocker fixed; Home now uses fixed Japanese error copy and no longer renders arbitrary backend `Error.message` text. Stop for C1.
+- fresh_main_before_sync: `b218055bfbe671bdd738d6c91a5c73dd5572f08d`
+- branch/commit: `codex/kabumori-mobile-home-dashboard-v1-20260922` / `7ff16dcb16117cd2c530fbfdf0e7da8c4788b5e8`
+- pull_request: https://github.com/anohi-memories/kabumori/pull/5 (updated; not merged)
+
+### Blocker resolution
+
+- Stocks failures show `登録銘柄を読み込めませんでした。`
+- News failures show `重要ニュースを読み込めませんでした。`
+- Report failures show `レポートを読み込めませんでした。`
+- Section-level retry and `Promise.allSettled` isolation remain unchanged.
+- The Home-facing error mapping is centralized in `src/lib/dashboard.ts`; no raw backend detail is put into visible Home error state or logs.
+
+### Verification
+
+- Dashboard helper tests: 4 passed / 0 failed.
+- Expo-scope TypeScript check: passed.
+- Expo web export: passed; routes include `/`, `/search`, `/explore`, `/news`, and `/reports`.
+- `git diff --check`: passed.
+- Production mutation: 0. No DB/schema/RPC, Edge Function, Cron, secret/Vault, OAuth, X, Push, or production data change.
+- H2/G1/G2 files and workstreams were not changed.
+- iOS simulator/manual QA remains not run in this turn.
+
+### Scope of code delta
+
+- `src/app/index.tsx`
+- `src/app/search.tsx`
+- `src/components/app-tabs.tsx`
+- `src/components/app-tabs.web.tsx`
+- `src/lib/dashboard.ts`
+- `tests/app/dashboard_test.ts`
+
+Next recommendation: C1 re-review the updated PR; do not merge or deploy from this H1 turn.
+
 ## Latest H1 result — Kabumori Home Dashboard V1 (2026-09-22)
 
 - task_id: `kabumori-mobile-home-dashboard-v1-20260922`

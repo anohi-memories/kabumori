@@ -241,6 +241,70 @@ test("generates a read-only preview for the disabled QA workspace and never ente
   );
 });
 
+test("uses owner-scoped persisted content settings when the candidate table is available", async () => {
+  const fixture = fixtureFetch();
+  const originalFetch = fixture.fetchImpl;
+  fixture.fetchImpl = async (input, init) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/rest/v1/social_mobile_content_settings") {
+      assert.equal(url.searchParams.get("brand_id"), `eq.${brandId}`);
+      return Response.json([{
+        settings: {
+          locale: "ja-JP",
+          preferredTone: "短く、やわらかく",
+          themes: ["生活の工夫"],
+          objective: "気づきを届ける",
+          frequencyTargetPerWeek: 2,
+          approvalMode: "manual_review",
+          generationWindow: {
+            timezone: "Asia/Tokyo",
+            startLocal: "09:00",
+            endLocal: "24:00",
+            defaultGenerationLocal: "18:00",
+            generationDayOffset: -1,
+          },
+          optionalNgWords: ["断定"],
+          notes: "やさしく",
+        },
+        persona_profile: {
+          source: "conversation",
+          confirmed: true,
+          sentenceLength: "short",
+        },
+      }]);
+    }
+    return originalFetch(input, init);
+  };
+  let receivedSettings: unknown;
+  const response = await handleSocialMobileBrandDryRun(request(), {
+    ...baseDeps,
+    fetchImpl: fixture.fetchImpl,
+    generate: async ({ settings }) => {
+      receivedSettings = settings;
+      return { text: "preview", model: "fixture", characterCount: 7 };
+    },
+  });
+  assert.equal(response.status, 200);
+  assert.equal((receivedSettings as { preferredTone: string }).preferredTone, "短く、やわらかく");
+  assert.equal((receivedSettings as { personaProfile?: { confirmed: boolean } }).personaProfile?.confirmed, true);
+});
+
+test("falls back to Phase 12 defaults when persisted settings are not yet deployed", async () => {
+  const fixture = fixtureFetch();
+  let receivedSettings: unknown;
+  const response = await handleSocialMobileBrandDryRun(request(), {
+    ...baseDeps,
+    fetchImpl: fixture.fetchImpl,
+    generate: async ({ settings }) => {
+      receivedSettings = settings;
+      return { text: "preview", model: "fixture", characterCount: 7 };
+    },
+  });
+  assert.equal(response.status, 200);
+  assert.equal((receivedSettings as { livePublishingEnabled: boolean }).livePublishingEnabled, false);
+  assert.equal((receivedSettings as { preferredTone: string }).preferredTone, "自然で親しみやすく、押しつけない");
+});
+
 test("does not expose generator errors or credentials to the response", async () => {
   const fixture = fixtureFetch();
   const response = await handleSocialMobileBrandDryRun(request(), {

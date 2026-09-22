@@ -15,11 +15,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: important-news-phase1-search-diagnostics-production-rollout-20260922
+- task_id: kabumori-mobile-home-dashboard-v1-merge-20260922
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: Exact diagnostics migration applied, `important-news-shadow` v8 deployed, and 3 natural scheduled runs completed with non-NULL zero telemetry. No manual replay/injection; C1 review required.
+- note: PR #5 was freshened onto current main and merged as `c867ee7e`; six app/test files only, tests/typecheck/export passed, backend production mutation 0. C1 verification required.
 ### Codex slot 2
 - owner: codex
 - slot: codex-2

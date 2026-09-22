@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   SOCIAL_MOBILE_USER_DEFAULTS,
+  isSocialMobileContentSettings,
+  isSocialMobilePersonaProfile,
+  normalizeSocialMobileContentSettings,
   socialMobileGenerationGuidance,
 } from "./social_mobile_content_settings.ts";
 
@@ -57,4 +60,18 @@ test("generation guidance is bounded and includes only content preferences", () 
     guidance.some((item) => /publish|投稿予定を作る|X API/iu.test(item)),
     false,
   );
+});
+
+test("persisted settings are validated conservatively and can never enable publishing", () => {
+  assert.equal(isSocialMobileContentSettings(SOCIAL_MOBILE_USER_DEFAULTS), true);
+  assert.equal(isSocialMobileContentSettings({ ...SOCIAL_MOBILE_USER_DEFAULTS, frequencyTargetPerWeek: 99 }), false);
+  assert.equal(isSocialMobileContentSettings({ ...SOCIAL_MOBILE_USER_DEFAULTS, livePublishingEnabled: true }), false);
+  assert.equal(normalizeSocialMobileContentSettings({ ...SOCIAL_MOBILE_USER_DEFAULTS, notes: "N".repeat(5000) }).notes, SOCIAL_MOBILE_USER_DEFAULTS.notes);
+});
+
+test("persona profile keeps provenance and rejects token/post history payloads", () => {
+  assert.equal(isSocialMobilePersonaProfile({ source: "conversation", confirmed: true }), true);
+  assert.equal(isSocialMobilePersonaProfile({ source: "past_post_analysis", confirmed: true, sentenceLength: "short" }), true);
+  assert.equal(isSocialMobilePersonaProfile({ source: "conversation", confirmed: true, access_token: "secret" }), false);
+  assert.equal(isSocialMobilePersonaProfile({ source: "conversation", confirmed: true, posts: ["raw"] }), false);
 });
