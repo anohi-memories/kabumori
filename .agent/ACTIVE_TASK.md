@@ -15,11 +15,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: kabumori-mobile-home-dashboard-v1-20260922
+- task_id: kabumori-mobile-home-dashboard-v1-merge-20260922
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: PR #5 implements Home/Dashboard V1 with Search preserved at `/search`; C1 blocker fixed in `7ff16dcb` (fixed Japanese error copy, dashboard tests 4/4); backend production mutation 0. C1 re-review required.
+- note: PR #5 was freshened onto current main and merged as `c867ee7e`; six app/test files only, tests/typecheck/export passed, backend production mutation 0. C1 verification required.
 ### Codex slot 2
 - owner: codex
 - slot: codex-2
