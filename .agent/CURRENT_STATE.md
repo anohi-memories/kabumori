@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 Home dashboard V1 C1 PASS/done; H2 handled separately; G1 idle; G2 done)
+- checked_at: 2026-09-22 JST (H1 Home dashboard V1 clean merge ready; H2 handled separately; G1 idle; G2 done)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,11 +14,12 @@
 
 ## Active workstreams
 
-- Codex slot 1: `done` — `kabumori-mobile-home-dashboard-v1-20260922`
-  - C1 PASS. Prior raw-backend-error blocker fixed; Home uses fixed Japanese section error copy.
-  - PR #5 head `7ff16dcb`; dashboard tests 4/4, app-scope TypeScript, Expo web export, and diff-check passed.
-  - Branch is behind main only on .agent control/report history; no overlap with the six app/test implementation files.
-  - Before merge, freshen/rebase onto current main and re-check no-conflict. Backend production mutation remains 0.
+- Codex slot 1: `ready` — `kabumori-mobile-home-dashboard-v1-merge-20260922`
+  - PR #5 Home/Dashboard V1 is C1 PASS and approved for clean fresh-main merge.
+  - Freshen/rebase onto current main without dragging stale .agent history; verify same six app/test files only.
+  - Re-run dashboard tests, app-scope TypeScript, Expo web export, route/static checks, and diff-check.
+  - If implementation conflict appears, STOP; otherwise merge PR #5 to main.
+  - No backend production mutation or EAS/App Store work in this task.
   - Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase14-persistent-content-settings-candidate-20260922`
