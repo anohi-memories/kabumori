@@ -24,10 +24,10 @@
   - Recommended next model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase17-disposable-vault-token-boundary-proof-20260922`
-  - Phase16 C2 PASS後の次工程。
-  - disposable Supabase/Vaultでowner/account/token bindingを実証し、他tenant/forged secret refをfail-closedにする。
-  - production Vault read / deploy / real X history API / publishは禁止。
-  - Recommended model: Luna。Vault ACL/SECURITY DEFINER/RLSの具体的blocker時のみSol検討。
+  - C2未PASS。source audit/testは問題ないが、local Supabase DBが2 GiB Podman環境で停止し、必須のdisposable Vault/RLS実証が未完了。
+  - 次H2はisolated disposable環境を再試行。authorized toolingでpreview/branch/projectが使える場合はfake-only dataで可。production代用は禁止。
+  - production mutation 0。default history-learning entrypointはdisabled維持。
+  - Recommended model: Luna。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
