@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase16-server-side-x-history-learning-adapter-candidate-20260922
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: Phase15 C2 PASS済みの「代打AI」history-learning candidateを、mobile入力を信頼しないserver-side authorization boundaryへ引き上げる。本人のAuth・workspace ownership・接続済みX identity・Vault tokenをtrusted server/DB stateから解決し、明示同意後のみ本人の過去X投稿を取得してpersona候補を生成するsource candidateを作る。production deploy / real X history call / live publishはまだ禁止。
