@@ -3,8 +3,8 @@
 - task_id: kabumori-mobile-ui-consistency-and-stock-search-integration-20260922
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: 実機確認で判明したHomeと他画面の見た目の不統一、およびHomeから銘柄検索へ遷移できない問題を解消する。銘柄検索は登録銘柄画面へ統合し、アプリ全体の見た目を揃える。
@@ -277,3 +277,13 @@ In addition to prior deliverables, report:
 - confirmation that no display-time AI call was added.
 
 **Recommended model remains Luna.**
+
+
+## Completion record — 2026-09-22
+
+- status: review_required
+- final_commit: b27c4362c3e8a4264d64afd71b451f8f06293a62
+- pull_request: https://github.com/anohi-memories/kabumori/pull/6 (open; do not merge in H1)
+- verification: 45 relevant tests passed; app-scope TypeScript passed; Expo web export and diff check passed.
+- production_mutation: 0
+- next_owner: chatgpt (C1 review)
