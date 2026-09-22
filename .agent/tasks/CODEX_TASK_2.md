@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase19-live-vault-reader-architecture-and-disposable-proof-20260923
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: Phase18 C2 PASS後、live plaintext access-token readerの実装方式を決定し、productionには触れずsource candidate + disposable proofまで行う。service-role-only server adapterとnarrow SECURITY DEFINER RPCを比較し、最小権限・tenant binding・secret非露出の観点から1方式を選ぶ。production deploy / live Vault read / real X history callはまだ禁止。
