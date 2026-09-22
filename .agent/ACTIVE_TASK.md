@@ -15,11 +15,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: important-news-phase1-conditional-search-call-accounting-audit-20260921
+- task_id: important-news-phase1-search-diagnostics-production-rollout-20260922
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: Read-only audit: 16/149 natural runs had 2 `web_search_call` output items; 07:10 usage row reconciles to $0.02112360, but historical headline/action-level billing is unavailable. No code/prod changes; C1 review required.
+- note: Exact diagnostics migration applied, `important-news-shadow` v8 deployed, and 3 natural scheduled runs completed with non-NULL zero telemetry. No manual replay/injection; C1 review required.
 ### Codex slot 2
 - owner: codex
 - slot: codex-2
