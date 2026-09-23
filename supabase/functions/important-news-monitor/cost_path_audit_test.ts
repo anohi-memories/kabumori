@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   appCopyDraftRequestBody,
@@ -30,6 +31,19 @@ const mixedCandidates = (bodyLengths: number[]): GenerationCandidate[] => bodyLe
   judgementFactStatus: "passed",
   status: "ready_for_generation",
 }));
+
+test("active Important News runtime entrypoints do not select GPT-5.6 models", () => {
+  const runtimeFiles = [
+    "./importance_judgement_logic.ts",
+    "./breaking_market_source_fetchers.ts",
+    "./post_generation_logic.ts",
+    "./index.ts",
+  ];
+  for (const path of runtimeFiles) {
+    const source = readFileSync(new URL(path, import.meta.url), "utf8");
+    assert.doesNotMatch(source, /gpt-5\.6-(?:luna|sol)/, `${path} must not select a legacy model`);
+  }
+});
 
 test("mixed important-news cost fixture measures stage and whole-path input reduction", () => {
   const candidates = mixedCandidates([900, 1400, 650]);

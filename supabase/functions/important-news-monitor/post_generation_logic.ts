@@ -29,7 +29,7 @@ export type GenerationCheck = {
 export type GenerationStep = "draft" | "fact" | "fact_retry" | "voice" | "voice_retry";
 export type GenerationStepResult = {
   payload: unknown;
-  model: "gpt-5.6-luna";
+  model: "gpt-6-luna";
   inputTokens: number;
   outputTokens: number;
   estimatedCost: number;
@@ -43,7 +43,7 @@ export type GenerationRunner = (
 
 export type FactRetryDiagnostics = {
   attempted: boolean;
-  usedModel: "gpt-5.6-luna" | null;
+  usedModel: "gpt-6-luna" | null;
   initialFactIssues: string[];
   localFactStatus: GenerationCheck["status"] | null;
   localFactIssues: string[];
@@ -68,7 +68,7 @@ export const NO_FACT_RETRY: FactRetryDiagnostics = {
 // never for anything touching facts, numbers, entities, sourcing, or safety.
 export type VoiceRetryDiagnostics = {
   attempted: boolean;
-  usedModel: "gpt-5.6-luna" | null;
+  usedModel: "gpt-6-luna" | null;
   initialVoiceIssues: string[];
   factStatus: GenerationCheck["status"] | null;
   voiceStatus: GenerationCheck["status"] | null;
@@ -98,7 +98,7 @@ export type CompanyIdentityEvidence = {
 export type PostGenerationResult = {
   generatedText: string | null;
   sourceUrl: string;
-  model: "gpt-5.6-luna";
+  model: "gpt-6-luna";
   fact: GenerationCheck;
   voice: GenerationCheck;
   inputTokens: number;
@@ -111,7 +111,7 @@ export type PostGenerationResult = {
 };
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
-const MODEL = "gpt-5.6-luna" as const;
+const MODEL = "gpt-6-luna" as const;
 const OPENAI_REQUEST_TIMEOUT_MS = 60_000;
 
 export function generationEligibility(candidate: GenerationCandidate): string | null {

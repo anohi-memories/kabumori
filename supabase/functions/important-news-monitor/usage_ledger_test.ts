@@ -24,14 +24,17 @@ import type { FinalJudgement, ModelJudgement } from "./importance_judgement_logi
 import type { GenerationCandidate } from "./post_generation_logic.ts";
 
 test("cost estimate: Luna, Sol and web_search tool calls", () => {
+  // Legacy rates remain testable for historical ai_usage_events rows only.
   assert.equal(estimateCostUsd("gpt-5.6-luna", 1_000_000, 1_000_000), 1.4);
   assert.equal(estimateCostUsd("gpt-6-luna", 1_000_000, 1_000_000), 0.6);
   assert.equal(estimateCostUsd("gpt-6-luna", 12_000, 700, 1), 0.01155);
   assert.equal(estimateCostUsd("gpt-5.6-sol", 1_000_000, 1_000_000), 24);
+  assert.equal(estimateCostUsd("gpt-6-sol", 1_000_000, 1_000_000), 12);
   assert.equal(WEB_SEARCH_CALL_USD, 0.01);
   // A typical breaking_market call: ~12k input, ~700 output, 1 search.
-  assert.equal(estimateCostUsd("gpt-5.6-luna", 12_000, 700, 1), 0.01324);
+  assert.equal(estimateCostUsd("gpt-6-luna", 12_000, 700, 1), 0.01155);
   assert.equal(estimateCostUsd("gpt-5.6-luna", -5, Number.NaN, -1), 0);
+  assert.equal(estimateCostUsd("unrecognized-active-model", 1_000_000, 1_000_000), 0.6);
 });
 
 test("usage is read from a raw Responses payload", () => {
@@ -41,6 +44,7 @@ test("usage is read from a raw Responses payload", () => {
 });
 
 test("usage events carry an optional detail and a summary adds them up", () => {
+  // These legacy model labels cover decoding and recomputing already-written ledger rows.
   const a = usageEvent({ feature: "news_judgement_sol", detail: "LOW_CONFIDENCE", model: "gpt-5.6-sol", inputTokens: 5000, outputTokens: 500, relatedTable: "important_news_candidates", relatedId: "c1" });
   const b = usageEvent({ feature: "news_breaking_search", detail: "critical_market_events", model: "gpt-5.6-luna", inputTokens: 12000, outputTokens: 700, webSearchCalls: 1 });
   assert.equal(a.feature, "news_judgement_sol|LOW_CONFIDENCE");
@@ -54,6 +58,7 @@ test("the writer posts one ai_usage_events row per event and never throws", asyn
     calls.push({ url: String(url), body: JSON.parse(String(init?.body)) });
     return new Response(null, { status: 201 });
   };
+  // A historical row can still be forwarded with its original model label/rate.
   const event = usageEvent({ feature: "news_generation_draft", model: "gpt-5.6-luna", inputTokens: 8000, outputTokens: 700, relatedTable: "important_news_candidates", relatedId: "c1" });
   await supabaseUsageWriter("https://p.supabase.co", "service-key", ok)([event]);
   assert.equal(calls.length, 1);
@@ -77,7 +82,7 @@ const candidate = { id: "cand-1" } as GenerationCandidate;
 test("each generation step is recorded against its candidate; the result is unchanged", async () => {
   const written: string[] = [];
   const runner = meteredGenerationRunner(
-    async (step) => ({ payload: { step }, model: "gpt-5.6-luna", inputTokens: 100, outputTokens: 10, estimatedCost: 0 }),
+    async (step) => ({ payload: { step }, model: "gpt-6-luna", inputTokens: 100, outputTokens: 10, estimatedCost: 0 }),
     async (events) => { for (const event of events) written.push(`${event.feature}:${event.relatedId}`); },
   );
   for (const step of ["draft", "fact", "fact_retry", "voice", "voice_retry"] as const) {
@@ -102,7 +107,7 @@ test("app-copy draft and Fact calls are recorded", async () => {
   assert.deepEqual(written, ["news_app_copy_draft:cand-2:0.0005", "news_app_copy_fact:cand-2:0.0005"]);
 });
 
-function modelJudgement(model: "gpt-5.6-luna" | "gpt-5.6-sol", input: number, output: number): ModelJudgement {
+function modelJudgement(model: "gpt-6-luna" | "gpt-6-sol", input: number, output: number): ModelJudgement {
   return {
     importance: "important", category: "earnings_revision_up", affectedEntities: [], japanMarketRelevance: "high",
     reason: "r", confidence: 0.9, needsSol: false, factCheckStatus: "passed", model,
@@ -112,25 +117,25 @@ function modelJudgement(model: "gpt-5.6-luna" | "gpt-5.6-sol", input: number, ou
 
 test("judgement: one Luna row, plus a Sol row carrying the escalation reasons", () => {
   const lunaOnly = judgementUsageEvents({
-    luna: modelJudgement("gpt-5.6-luna", 2300, 180), sol: null, escalationReasons: [],
+    luna: modelJudgement("gpt-6-luna", 2300, 180), sol: null, escalationReasons: [],
   } as unknown as FinalJudgement, "c3");
   assert.deepEqual(lunaOnly.map((event) => event.feature), ["news_judgement_luna"]);
 
   const withSol = judgementUsageEvents({
-    luna: modelJudgement("gpt-5.6-luna", 2300, 180),
-    sol: modelJudgement("gpt-5.6-sol", 3400, 380),
+    luna: modelJudgement("gpt-6-luna", 2300, 180),
+    sol: modelJudgement("gpt-6-sol", 3400, 380),
     escalationReasons: ["LOW_CONFIDENCE", "FACT_NEEDS_REVIEW"],
   } as unknown as FinalJudgement, "c3");
   assert.deepEqual(withSol.map((event) => event.feature), ["news_judgement_luna", "news_judgement_sol|LOW_CONFIDENCE+FACT_NEEDS_REVIEW"]);
-  assert.equal(withSol[1].costUsd, 0.0212);
-  assert.equal(withSol[1].model, "gpt-5.6-sol");
+  assert.equal(withSol[1].costUsd, 0.0106);
+  assert.equal(withSol[1].model, "gpt-6-sol");
 });
 
 function queryDiagnostic(overrides: Partial<BreakingMarketQueryDiagnostics>): BreakingMarketQueryDiagnostics {
   return {
     queryKey: "critical_market_events", query: "q", providerStatus: "succeeded", httpStatus: 200, responseStatus: "completed",
-    incompleteReason: null, webSearchCallCount: 1, inputTokens: 12000, outputTokens: 700, estimatedCostUsd: 0.01324,
-    model: "gpt-5.6-luna", rawCandidateCount: 0, validatedCandidateCount: 0, rejectionCounts: {} as never, failureCode: null,
+    incompleteReason: null, webSearchCallCount: 1, inputTokens: 12000, outputTokens: 700, estimatedCostUsd: 0.01155,
+    model: "gpt-6-luna", rawCandidateCount: 0, validatedCandidateCount: 0, rejectionCounts: {} as never, failureCode: null,
     ...overrides,
   };
 }
@@ -164,8 +169,8 @@ test("the breaking fetcher records billed tokens and cost from the response", as
   assert.equal(result.diagnostics.webSearchCallCount, 1);
   assert.equal(result.diagnostics.inputTokens, 11800);
   assert.equal(result.diagnostics.outputTokens, 640);
-  assert.equal(result.diagnostics.estimatedCostUsd, 0.013128);
-  assert.equal(result.diagnostics.model, "gpt-5.6-luna");
+  assert.equal(result.diagnostics.estimatedCostUsd, 0.0115);
+  assert.equal(result.diagnostics.model, "gpt-6-luna");
 });
 
 test("the run diagnostics carry a per-cycle breaking cost summary", () => {
@@ -173,12 +178,12 @@ test("the run diagnostics carry a per-cycle breaking cost summary", () => {
     marketMacroProviders: [],
     breakingMarketQueries: [
       queryDiagnostic({}),
-      queryDiagnostic({ queryKey: "b", webSearchCallCount: 1, inputTokens: 10000, outputTokens: 500, estimatedCostUsd: 0.0126 }),
+      queryDiagnostic({ queryKey: "b", webSearchCallCount: 1, inputTokens: 10000, outputTokens: 500, estimatedCostUsd: 0.01125 }),
       queryDiagnostic({ queryKey: "c", providerStatus: "failed", webSearchCallCount: 0, inputTokens: 0, outputTokens: 0, estimatedCostUsd: 0 }),
     ],
   });
   assert.equal(diagnostics.version, 1);
   assert.deepEqual(diagnostics.cost.breakingMarket, {
-    queries: 3, webSearchCalls: 2, inputTokens: 22000, outputTokens: 1200, estimatedCostUsd: 0.02584,
+    queries: 3, webSearchCalls: 2, inputTokens: 22000, outputTokens: 1200, estimatedCostUsd: 0.0228,
   });
 });

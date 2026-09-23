@@ -182,7 +182,7 @@ export const BREAKING_MARKET_SOURCE_DOMAINS = [
 export const MAX_BREAKING_MARKET_ITEM_AGE_MS = 3 * 60 * 60 * 1000;
 const MAX_BREAKING_MARKET_FUTURE_SKEW_MS = 60 * 60 * 1000;
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
-const MODEL = "gpt-5.6-luna" as const;
+const MODEL = "gpt-6-luna" as const;
 const BREAKING_MARKET_REQUEST_TIMEOUT_MS = 60_000;
 
 /** The critical topic is always fixed; Phase 2 topics may declare slot: "fixed" too. */

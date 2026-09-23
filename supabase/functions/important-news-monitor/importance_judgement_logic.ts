@@ -8,7 +8,7 @@ import {
 
 export type ImportantNewsFactCheckStatus = "passed" | "needs_review";
 export type JapanMarketRelevance = "none" | "low" | "medium" | "high";
-export type ImportantNewsJudgementModel = "gpt-5.6-luna" | "gpt-5.6-sol";
+export type ImportantNewsJudgementModel = "gpt-6-luna" | "gpt-6-sol";
 
 export type JudgementCandidate = {
   id?: string | null;
@@ -99,9 +99,9 @@ export function importantNewsModelCost(
   inputTokens: number,
   outputTokens: number,
 ): number {
-  const rates = model === "gpt-5.6-sol"
-    ? { input: 4, output: 20 }
-    : { input: 0.2, output: 1.2 };
+  const rates = model === "gpt-6-sol"
+    ? { input: 2, output: 10 }
+    : { input: 0.1, output: 0.5 };
   return Number(((inputTokens * rates.input + outputTokens * rates.output) / 1_000_000).toFixed(8));
 }
 
@@ -163,11 +163,11 @@ export async function judgeCandidateWithEscalation(
   settings: JudgementSettings,
   runner: ModelRunner,
 ): Promise<FinalJudgement> {
-  const luna = await runner(candidate, "gpt-5.6-luna");
+  const luna = await runner(candidate, "gpt-6-luna");
   const escalationReasons = solEscalationReasons(luna, settings.confidenceThreshold);
   let sol: ModelJudgement | null = null;
   if (settings.solEscalationEnabled && escalationReasons.length > 0) {
-    sol = await runner(candidate, "gpt-5.6-sol", luna);
+    sol = await runner(candidate, "gpt-6-sol", luna);
   }
 
   let final = sol ?? luna;
@@ -209,7 +209,7 @@ export async function requestImportantNewsJudgement(
     body: JSON.stringify({
       model,
       store: false,
-      reasoning: { effort: model === "gpt-5.6-sol" ? "medium" : "low" },
+      reasoning: { effort: model === "gpt-6-sol" ? "medium" : "low" },
       max_output_tokens: 1000,
       instructions: [
         "あなたは日本株向け重要ニュース監視の判定担当です。投稿文は作らず、入力候補の重要度だけを判定してください。",
@@ -221,13 +221,13 @@ export async function requestImportantNewsJudgement(
         "most_importantは、入力だけで規模・予想外度・日本株への影響が具体的に確認できる場合に限ります。タイトルだけで『大型』『大幅』と推測しません。",
         "needs_solは、低信頼、重要度境界、複雑な数値・条件、情報差、most_important候補、fact needs_review、誤判定影響が大きい場合だけtrueにします。",
         "affected_entitiesには企業名、証券コード、市場・業種・テーマなど、入力から直接判断できる対象だけを入れます。reasonは短く具体的に日本語で記述します。",
-        model === "gpt-5.6-sol"
+        model === "gpt-6-sol"
           ? "Lunaの暫定判定を参考にしつつ、入力根拠から独立して再判定してください。情報不足は解消したことにせず、安全側へ倒してください。"
           : "通常判定です。Solが必要な場合だけneeds_solをtrueにしてください。",
       ].join("\n"),
       input: JSON.stringify({
         candidate,
-        luna_preliminary: model === "gpt-5.6-sol" && priorLuna ? {
+        luna_preliminary: model === "gpt-6-sol" && priorLuna ? {
           importance: priorLuna.importance,
           category: priorLuna.category,
           affected_entities: priorLuna.affectedEntities,

@@ -915,7 +915,7 @@ function createGenerationRepository(
         method: "PATCH",
         headers: headers(serviceRoleKey, "return=minimal"),
         body: JSON.stringify({
-          generation_model: "gpt-5.6-luna",
+          generation_model: "gpt-6-luna",
           generation_fact_status: "not_run",
           generation_voice_status: "not_run",
           generation_error: code,
