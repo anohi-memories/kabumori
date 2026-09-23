@@ -10,6 +10,11 @@
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
+    // Lets *.test.ts files import their subject with an explicit ".ts" extension, which
+    // `node --experimental-strip-types --test` requires (Node's native TS stripping resolves relative
+    // imports the same way plain ESM does: no extension, no match). Type-checking-only; noEmit is already
+    // true, so this has no effect on what Next.js's own bundler resolves or emits at build/runtime.
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
