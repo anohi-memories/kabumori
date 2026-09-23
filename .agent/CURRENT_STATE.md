@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-23 JST (C1 confirmed PR #9 Vercel success on retry head; final merge H1 ready; production mutation 0)
+- checked_at: 2026-09-23 JST (H1 merged PR #9 after Vercel success; production mutation 0)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -41,7 +41,7 @@
 
 ## Parallel safety
 
-- H1 GPT-6 source PR #9 is freshened but merge is held for the required Vercel rate-limit failure; no production migration/deploy/RPC.
+- H1 GPT-6 source PR #9 is merged; production migration/deploy/RPC remain unperformed.
 - H2/G1/G2 implementation files are untouched by this H1.
 - 同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数slotで同時変更しない。
 - push前にfresh `origin/main`確認。既存未コミット変更は他workstream所有として触らない。
