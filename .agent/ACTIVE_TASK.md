@@ -6,11 +6,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: kabumori-important-news-gpt6-schema-and-source-candidate-20260923
+- task_id: kabumori-important-news-gpt6-schema-source-merge-20260923
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: Source-only migration/runtime candidate is PR #9 (`eefa3ea`), rebased on latest main. C1 review required; no production apply/deploy or DB write.
+- note: PR #9 freshened to `ebe3c58`; merge held because required Vercel check failed with a 24h build rate limit. Do not bypass; no production apply/deploy or DB write.
 
 
 ### Codex slot 2

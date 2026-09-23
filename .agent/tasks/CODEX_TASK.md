@@ -3,8 +3,8 @@
 - task_id: kabumori-important-news-gpt6-schema-source-merge-20260923
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: C1 PASS済みのPR #9（GPT-6 model metadata CHECK migration candidate + Important News runtime GPT-6 unification）をlatest mainへfreshenし、再検証後mainへmergeする。production migration apply / Function deployは禁止。

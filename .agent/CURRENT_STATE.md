@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-23 JST (C1 PASS on PR #9 GPT-6 schema/source candidate; final freshen/merge queued; production mutation 0)
+- checked_at: 2026-09-23 JST (PR #9 freshened; merge held by required Vercel build-rate limit; production mutation 0)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,14 +14,15 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `kabumori-important-news-gpt6-schema-source-merge-20260923`
+- Codex slot 1: `review_required` — `kabumori-important-news-gpt6-schema-source-merge-20260923`
   - C1 PASS on PR #9 source-only candidate.
   - PR #9 adds one narrow forward migration permitting GPT-6 Luna/Sol in `judgement_model` and `generation_model` while preserving GPT-5.6 historical values.
   - Candidate runtime uses GPT-6 Luna for judgement first-pass, breaking-market search, and post generation; GPT-6 Sol for existing escalation only.
   - GPT-6 pricing/accounting and unknown-model fallback are updated; GPT-5.6 rates remain historical-only.
   - Candidate verification: targeted 173/0, full Important News 424/0, changed logic/test checks and diff-check passed.
-  - PR #9 is open/mergeable with Vercel success. Main drift since its merge-base is control files only; no implementation overlap.
-  - Next H1 freshens and merges PR #9 only; no production migration apply or Function deploy.
+  - At C1 the prior head's Vercel check was successful; after freshening, the required Vercel check failed on the new head due to a 24-hour rate limit. Main drift since the merge-base is control files only; no implementation overlap.
+  - PR #9 was freshened to `ebe3c588ec4edb080848d706d8ec5cf8ada42b1d` on main `4d27304d4dce804c2ae5226fa338252e17f4560a`; all 424 tests pass.
+  - Required Vercel check failed with a 24-hour build rate limit. Merge was not attempted/bypassed. Wait for quota reset or C1 direction, then rerun required check and merge only if it passes.
   - Production mutation 0.
   - Recommended model: Luna.
 
@@ -43,7 +44,7 @@
 
 ## Parallel safety
 
-- H1 GPT-6 unification has a source-only PR candidate and is stopped for C1; no production migration/deploy/RPC.
+- H1 GPT-6 source PR #9 is freshened but merge is held for the required Vercel rate-limit failure; no production migration/deploy/RPC.
 - H2/G1/G2 implementation files are untouched by this H1.
 - 同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数slotで同時変更しない。
 - push前にfresh `origin/main`確認。既存未コミット変更は他workstream所有として触らない。

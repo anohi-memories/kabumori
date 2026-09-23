@@ -1,3 +1,28 @@
+## Latest H1 result — PR #9 freshened; merge held for Vercel rate limit (2026-09-23)
+
+- task_id: `kabumori-important-news-gpt6-schema-source-merge-20260923`
+- result: `review_required` — PR #9 was freshened and revalidated, but not merged because the required Vercel check failed due to its 24-hour build rate limit. No branch-protection bypass was used.
+- pre_freshen_main: `4d27304d4dce804c2ae5226fa338252e17f4560a`
+- previous_candidate_head: `eefa3eabf4ddb4b07f6a300f34b0b395a4d7b691`
+- final_pr_head: `ebe3c588ec4edb080848d706d8ec5cf8ada42b1d`
+- pull_request: https://github.com/anohi-memories/kabumori/pull/9 (open, mergeable, not merged)
+- main_drift_since_merge_base: `.agent/ACTIVE_TASK.md`, `.agent/CODEX_REPORT.md`, `.agent/CURRENT_STATE.md`, `.agent/tasks/CODEX_TASK.md`, `.agent/tasks/CODEX_TASK_2.md`; no approved H1 migration/runtime/test files changed. H2 work remains isolated.
+- verification: migration contract and targeted changed-path tests **173 / 0**; full Important News suite **424 / 0** (`deno test --no-lock --no-check`); changed logic/test `deno check --no-config --no-lock` passed; `git diff --check` passed.
+- typecheck_note: `index.ts` still reaches the pre-existing TS2322 in unchanged `supabase/functions/_shared/x_oauth2_post.ts:66` (`Uint8Array<ArrayBufferLike>` vs `BufferSource`). No new error is reported in the changed index code before that dependency error.
+- required_checks: Vercel **FAIL** — `Deployment rate limited — retry in 24 hours` (`https://vercel.com/kabumori?upgradeToPro=build-rate-limit`). No successful required Vercel check exists on the final head. Merge was not attempted.
+- production_mutation: **0**. No migration apply, DB write, Edge Function deploy, Cron/config/secrets change, report backfill, X post, or Push.
+- readback: PR remains OPEN at `ebe3c588ec4edb080848d706d8ec5cf8ada42b1d`; `main` remains `4d27304d4dce804c2ae5226fa338252e17f4560a` before this control-report sync; candidate migration/runtime changes are not on main.
+
+### Resume conditions
+
+1. Wait until the Vercel build quota resets (or receive C1 direction); do not bypass required checks.
+2. Fresh-fetch `origin/main`, verify no new semantic overlap with the 12 approved PR files, then rerun the required Vercel check on the final head.
+3. If and only if all required checks pass, merge PR #9 and read back the resulting main SHA plus exact 12-file candidate contents.
+4. Do not apply `20260923035652_allow_gpt6_important_news_model_metadata.sql` or deploy `important-news-monitor` in this task.
+5. Keep the personalized-reports deployment and 9/18 close report regeneration separate, under their prior explicit authorization only.
+
+`CODEX_TASK.md` is now `review_required` / `next_owner: chatgpt`. Stop for C1.
+
 ## Latest H1 result — GPT-6 schema and runtime source candidate (2026-09-23)
 
 - task_id: `kabumori-important-news-gpt6-schema-and-source-candidate-20260923`
