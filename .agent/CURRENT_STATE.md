@@ -22,12 +22,11 @@
   - Production mutation 0.
   - Recommended model: Luna.
 
-- Codex slot 2: `done` — `social-mobile-app-phase19-live-vault-reader-architecture-and-disposable-proof-20260923`
-  - C2 PASS。dedicated narrow SECURITY DEFINER RPC（service_role-only）方式を採用し、exact migration candidate + fake-only disposable proofまで完了。
-  - public/anon/authenticated EXECUTEなし、refresh/arbitrary secret selectorなし、owner/account checks後にaccess secretのみ読取。
-  - default history-learning entrypointはdisabled。production mutation 0。
-  - 次はこのsingle RPC candidateのproduction rolloutを別TASKで実施。Function deploy / real Vault read / real X history はさらに別ゲート。
-  - Recommended next model: Sol（production SECURITY DEFINER/Vault security-boundary mutationのため）。
+- Codex slot 2: `ready` — `social-mobile-app-phase20-production-history-access-rpc-rollout-20260923`
+  - Phase19 C2 PASS後のproduction security-boundary rollout。
+  - exact `read_social_mobile_history_access_token(uuid,text)` migrationだけを本番適用し、SECURITY DEFINER/search_path/ACLをread-backする。
+  - Vault plaintext読取 / history-learning Function deploy / real X history は禁止。
+  - Recommended model: Sol。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
