@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-23 JST (H1 GPT-6 Important News exact migration and only-function deploy complete; scheduled Cron observed; no candidate)
+- checked_at: 2026-09-23 JST (H1 caller-auth source-only remediation blocked by unauthenticated production Cron contract; mutation 0)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,10 +14,9 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `kabumori-important-news-gpt6-production-rollout-20260923`
-  - Approved exact migration applied; both CHECK constraints read back with GPT-6 IDs.
-  - Only `important-news-monitor` deployed; `verify_jwt=false`; SHA `4450ee09…e4b7`. Latest metadata says v64 but same SHA and source bundle `source/62`; discrepancy disclosed.
-  - Natural Cron runs succeeded through 09:20 UTC; no new candidate/usage row, so GPT-6 persistence remains unverified. Migration history version differs from repo timestamp; no repair.
+- Codex slot 1: `review_required` — `kabumori-important-news-monitor-caller-auth-remediation-candidate-20260923`
+  - Source-only fail-closed gate cannot preserve current production Cron requests: four jobs send no caller credential.
+  - No Function source change; no Cron/secret change or invocation. Stop for C1/re-scope.
 
 - Codex slot 2: `ready` — `x-autopost-phase0-disposable-global-uniqueness-migration-proof-20260923`
   - X自動投稿基盤audit C2 PASS後のPhase0。
