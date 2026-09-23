@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-23 JST (PR #9 freshened; merge held by required Vercel build-rate limit; production mutation 0)
+- checked_at: 2026-09-23 JST (C1 confirmed PR #9 Vercel success on retry head; final merge H1 ready; production mutation 0)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,15 +14,12 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `kabumori-important-news-gpt6-schema-source-merge-20260923`
-  - C1 PASS on PR #9 source-only candidate.
-  - PR #9 adds one narrow forward migration permitting GPT-6 Luna/Sol in `judgement_model` and `generation_model` while preserving GPT-5.6 historical values.
-  - Candidate runtime uses GPT-6 Luna for judgement first-pass, breaking-market search, and post generation; GPT-6 Sol for existing escalation only.
-  - GPT-6 pricing/accounting and unknown-model fallback are updated; GPT-5.6 rates remain historical-only.
-  - Candidate verification: targeted 173/0, full Important News 424/0, changed logic/test checks and diff-check passed.
-  - At C1 the prior head's Vercel check was successful; after freshening, the required Vercel check failed on the new head due to a 24-hour rate limit. Main drift since the merge-base is control files only; no implementation overlap.
-  - PR #9 was freshened to `ebe3c588ec4edb080848d706d8ec5cf8ada42b1d` on main `4d27304d4dce804c2ae5226fa338252e17f4560a`; all 424 tests pass.
-  - Required Vercel check failed with a 24-hour build rate limit. Merge was not attempted/bypassed. Wait for quota reset or C1 direction, then rerun required check and merge only if it passes.
+- Codex slot 1: `ready` — `kabumori-important-news-gpt6-schema-source-final-merge-20260923`
+  - C1 confirmed PR #9 exact head `ae78de17b2eb461b06e1674cdb045a78f7dbf620` has Vercel success.
+  - The retry commit from `ebe3c588` to `ae78de1` changes no files; it only retriggered CI.
+  - Main drift since PR base is control/report files only; no overlap with the 12 approved implementation/migration/test files.
+  - Next H1 may merge PR #9 if the required check remains green and no new semantic overlap appears.
+  - Do not apply the GPT-6 metadata migration or deploy `important-news-monitor` in this H1.
   - Production mutation 0.
   - Recommended model: Luna.
 
