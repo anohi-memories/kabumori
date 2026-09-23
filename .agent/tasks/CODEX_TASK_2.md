@@ -3,8 +3,8 @@
 - task_id: x-autopost-foundation-audit-multibrand-netlify-roadmap-20260923
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: GPT-6 Luna
 - purpose: social-mobile history-learning Phase23完了後、現在のX自動投稿基盤を壊さずに棚卸しし、複数ブランド/複数Xアカウント対応の完成、Supabase中核化、Netlify Free管理画面移行までの安全な実装ロードマップを確定する。今回は原則read-only調査と設計のみ。Production mutation/deploy/migrationはしない。
@@ -216,4 +216,3 @@ When complete:
 - control-file sync only if no source changes were necessary
 - fresh-check `origin/main`
 - STOP for C2
-

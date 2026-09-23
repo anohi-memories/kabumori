@@ -1,4 +1,158 @@
+# H2 — X autopost foundation / multibrand / Netlify readiness audit (review required, 2026-09-23)
 # H2 — Social mobile Phase 23 dedicated QA one-shot history read (review required, 2026-09-23)
+
+- task_id: `x-autopost-foundation-audit-multibrand-netlify-roadmap-20260923`
+- result: **Read-only audit complete; C2 review requested.** No source, production schema, Function, Cron, OAuth, account setting, or Netlify/Vercel configuration was changed.
+- source_base: audit began from clean `origin/main` snapshot `e7f3d1fcd56a7cbdd1f6b6390e441803cc2c62dd` in isolated `/private/tmp/kabumori-x-foundation-audit`; the formal `/Users/yuya/Developer/kabumori` checkout and its unrelated changes were not used or touched. `PROJECT_RULES.md`, `HANDOFF.md`, `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, both Codex task scopes, and both Claude task scopes were read. H1 is a separate release-readiness audit; G1 is idle and G2 is done. The scopes are read-only and have separate Codex control files; no write conflict was found.
+- scope: reviewed X posting source and shared brand modules, related OAuth/token paths, production schema/catalog/policies/indexes, relevant Cron/function metadata and aggregate row counts, plus `apps/admin` and current Netlify documentation. All production queries were read-only and aggregate where data could identify people/accounts. No secret/token/raw command value was requested or recorded.
+
+## Executive summary
+
+The current product is **partially multibrand, not ready for independent multi-brand posting at scale**. Database rows carry `brand_id`, memberships and account-specific OAuth/Vault structures exist, the AI Lab has one dedicated scheduled `brand_post` route, and user workspaces have isolated preview/history-learning paths. But the production scheduler still claims one global oldest due row, three important unique indexes still enforce global rather than brand-scoped keys, and the ordinary token/generator path remains Kabumori-specific. A second account per brand is not supported by safe account selection (`limit=1`, no deterministic/cardinality fail-closed); cross-brand exact-text dedupe and fingerprint completion are wired only into the AI Lab path.
+
+The management UI can move to Netlify without moving the posting core. It is a Next.js 16 App Router app with cookie-backed Supabase SSR, protected Server Components, several force-dynamic data pages, a Server Action for operational toggles, and a Next 16 `proxy.ts`; therefore the existing app would use Netlify's Next adapter-generated serverless/edge functions. A nearly-static UI is possible only after deliberate architecture/security changes (for example, moving writes to narrow user-JWT Supabase RPC/Edge APIs and client-side RLS reads); current RLS/grants do not permit all current admin reads to become browser-side. Keep the existing Vercel Production until a Netlify preview/canary and usage check pass.
+
+## 1. Current platform inventory / completed pieces
+
+### Production baseline (read-only snapshot, 2026-09-23 JST)
+
+- Supabase project ref `wsmznyzcvmuitkglfeuj` (`stock-x-autopost`). Relevant ACTIVE Functions: `x-test-post` v118 (`verify_jwt=false`); `x-oauth-connect` v25 (`false`); `x-oauth-connect-user` v6 (`false`); `social-mobile-brand-dry-run` v3 (`true`); `social-mobile-history-learning` v4 (`true`); `important-news-monitor` v64 (`false`). `send-push-notifications` v22 and `personalized-reports` v20 were also ACTIVE. Versions are metadata only; no Function was invoked or deployed.
+- Active X scheduler Cron: `dispatch-scheduled-posts`, `* * * * *`, calls `x-test-post`. Important News has separate fetch/judgement/generation/publish-ready schedules; those are outside the proposed X-core rewrite and remain unchanged. Cron command bodies were not retrieved into the report.
+- Production counts: 4 brands; 3 X social-account rows, all identity-verified; 2 accounts publish-enabled and 1 disabled. Brand distribution: one brand has no X account, three have exactly one, none has multiple; two brands are active+live, two are not live. Thus live data proves multi-brand configuration exists, but does **not** demonstrate multi-account-per-brand operation.
+- Operational rows: `posting_windows` 19; `scheduled_posts` 267 (199 succeeded / 60 failed / 8 pending); `post_execution_logs` 643 (254 succeeded / 69 failed / 320 started); `publish_claims` 15; `published_content_fingerprints` 51; `daily_content_plans` 0. `started` log rows are historical log events and are not evidence that 320 jobs are currently running. Counts are a snapshot, not a trend or quality judgment.
+- RLS is enabled on the inspected brand/scheduler tables. Authenticated SELECT policies for `brands`, `social_accounts`, `brand_memberships`, `posting_windows`, `scheduled_posts`, and `post_execution_logs` are membership- or admin-scoped. `brand_settings` and `daily_content_plans` do not expose authenticated SELECT in the observed grants/policies; operational secrets stay on server-side service-role paths. The web admin's authenticated `admin_users` check is separate from social-mobile ownership.
+
+### Current source shape
+
+- `supabase/functions/x-test-post/index.ts` remains the production monolith: scheduled claim, account/context resolution, token dispatch, post-type branches, external providers, X publish and completion/error paths share one entrypoint.
+- `claim_due_post()` plans due content and claims at most **one global oldest due pending row** per invocation (`scheduled_for`, `FOR UPDATE SKIP LOCKED`, then running/attempt increment and a started execution log). It has no `brand_id` partition or per-brand fairness. A single every-minute Cron is adequate for the current volume but is not a fair per-brand scheduler contract.
+- Context reads are server-side and keyed from the scheduled row; missing legacy `brand_id` falls back explicitly to `kabumori`. `loadBrandContext()` reads a brand, then X account and settings using `limit=1`; no `ORDER BY` or uniqueness/cardinality assertion guarantees which account is selected if a brand gains multiple X accounts. Brand/account ID mismatches and missing profile/settings fail closed after selection.
+- `assertBrandPublishAllowed()` checks active brand, `publish_mode=live`, and a present `publish_enabled` X account. It is a useful common final gate but does not itself prove `connection_status=identity_verified`; the AI Lab resolver does that separately.
+- Code profiles are allowlisted in `brand_profiles.ts`: Kabumori, AI Lab, and neutral social-mobile user. An unrecognized `code_profile_key` fails closed; adding a brand is therefore not fully DB/config-only and requires a reviewed code profile.
+- `brand_post_generator.ts` is a reusable, profile/settings-driven OpenAI generator for its configured `brand_post`/preview types. Most existing Kabumori generators remain in `index.ts` and are not re-expressed through that generic generator.
+
+### OAuth / token / dedupe status
+
+- `x-oauth-connect` is the existing privileged/admin/legacy OAuth path; `x-oauth-connect-user` is the user/workspace account-onboarding path. Both are distinct from publish dispatch. The social-mobile preview/history Functions do not publish.
+- In the publisher, AI Lab `brand_post` routes through `loadAiLabVaultBackedXTokens()`: exact brand/account/handle binding, `identity_verified`, `publish_enabled`, both Vault references and a service-role-only reader; refresh is explicitly disabled in that route. This is brand-specialized rather than reusable account routing.
+- Other brands enter `loadBrandXTokens()`, which rejects any brand other than `kabumori` and then uses the legacy shared `oauth_token_store` plus environment fallback. The generic Vault loader is a helper, not a general production resolver wired for every social account. Do not infer that user-workspace OAuth completion implies production X publishing is enabled.
+- `published_content_fingerprints` exists, is account/X-post unique, and contains 51 rows. Cross-brand logic normalizes and hashes exact text, with a 30-day window; it is not semantic dedupe. The source comment says actual persistence was intentionally not wired to Kabumori's path. In practice, read/fingerprint/complete wiring is on the dedicated AI Lab scheduled `brand_post` route; it also adds a strict Kabumori report fingerprint reader. It does not yet provide a common all-brand publish-completion contract.
+- AI Lab post completion has a useful duplicate-safety pattern: after confirmed X post, completion uncertainty raises a special error that bypasses ordinary failure/requeue handling. This must become a common invariant before more publishers are enabled.
+
+## 2. Multibrand blockers (severity)
+
+### P0 — production database still has global uniqueness conflicts
+
+Read-back of live `pg_indexes` found brand-scoped indexes **and** legacy global unique indexes/constraints simultaneously:
+
+| Table | Intended brand-scoped unique index present | Still-active global unique index | Impact |
+|---|---|---|---|
+| `posting_windows` | `(brand_id, post_type, slot_no)` | `(post_type, slot_no)` | Two brands cannot define the same post-type slot. |
+| `scheduled_posts` | `(brand_id, schedule_date, post_type, slot_no)` | `(schedule_date, post_type, slot_no)` | Two brands cannot schedule the same type/slot/date. |
+| `publish_claims` | `(brand_id, post_type, date_jst)` | `(post_type, date_jst)` | Same-day claim namespaces collide across brands. |
+
+This is a concrete rollout blocker even though the brand-specific indexes exist. A future migration must preflight conflicting rows, explicitly replace/remove only obsolete global uniqueness, and prove rollback and concurrent insert semantics in disposable PostgreSQL before any production approval. Do not blindly drop constraints or run `supabase db push`.
+
+### P1 — publisher routing and account cardinality are not generalized
+
+- `x-test-post` handles arbitrary brand context only partially: legacy null brand resolves to Kabumori; non-AI-Lab non-Kabumori is rejected at the token resolver. The only generic branded scheduled live path is currently AI Lab `brand_post`.
+- `loadBrandContext()` silently chooses first account/settings row (`limit=1`). A multiple-X-account brand needs an explicit server-owned `social_account_id` binding or fail-closed exact-one rule, uniqueness guarantees, and deterministic credential routing. Never trust a client account/token selector.
+- Publish gate should require the selected account's identity verification and usable token state as appropriate for all brands, not only AI Lab.
+- Profile allowlist and supported post-type routing require code additions today; operational settings do not by themselves safely add a brand.
+
+### P1 — queue, retries and logs are global / ambiguous
+
+- Global oldest-row claiming can let one brand dominate or delay another and does not expose per-brand queue lag/fairness. Claim includes `brand_id` in execution logs, but the slot/idempotency and lock boundary is not globally generalized.
+- `publish_claims` global key (above) is unsafe for same-type/day brands. Retry counters/status live across `scheduled_posts` and append-only `post_execution_logs`; a started log is not a definitive live-run ledger. Future design should distinguish safe pre-X retry, uncertain-X outcome, confirmed-X-but-DB-completion-failed, and terminal failure, with bounded attempts and observable per-brand run keys.
+- AI Lab's completion-after-X special case is not yet shared by normal X publish branches; apply a uniform exactly-once/uncertain-result policy before broadening.
+
+### P1 — cross-brand duplicate guard is narrow and not common
+
+- Exact normalized text only, no semantic similarity (intentional today). Persistence/read is wired to AI Lab branch, not every brand's success path. A read limit of 200 can truncate the 30-day candidate horizon under high volume. Add common bounded/account-aware persistence, monitor coverage/limit, and keep semantic/event dedupe separate from exact-text collision to avoid overblocking legitimate distinct brand commentary.
+
+### P2 — readiness/admin breadth
+
+- Existing admin is a single Kabumori admin console, not a multitenant brand/account console. Some modules explicitly filter `KABUMORI_BRAND_ID`; `system-toggle.ts` is an allowlisted admin control path. Important News list is a system-level view. User-workspace member RLS and admin-user access must not be conflated.
+- Current production has 4 brands and 0 multi-X-account brands; account-level operational tests/load/fairness are not demonstrated by present row distribution.
+
+## 3. Current flow and failure/retry interpretation
+
+`Supabase Cron (every minute) → x-test-post → claim_due_post() planners + single due-row claim → brand_id resolution (legacy null→Kabumori) → brand/settings/account limit-one read → active/live/publish_enabled guard → brand-specific token branch → post_type dispatcher → generator/Fact/Voice as branch requires → duplicate/publish guards as branch requires → X API → branch-specific completion/logging`.
+
+This is not one uniform pipeline yet. AI Lab `brand_post` has a dedicated profile, strict account binding, Vault token reader, final text length/publish guard, exact cross-brand dedupe, and post-confirmed completion behavior. Existing Kabumori types continue through separate generators/branches. Important News also has its own monitor/publish pipeline and is an intersection only; it must not be folded into a generic rewrite without its own approval.
+
+## 4. Admin / Netlify readiness
+
+- `apps/admin` is isolated as an independent `kabumori-admin` package (Next.js 16.3.4, React 19.2.8, `@supabase/ssr` 0.12.5, supabase-js 2.115.0); no root workspace change is needed. `.env.local.example` declares only `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. No service-role/X/OpenAI secret was found or required in this app.
+- Auth flow: browser client + cookie server client, Next 16 `src/proxy.ts` refresh path, protected server layout calling `auth.getUser()` and admin_users check; dashboard and `/posts`, `/important-news` are server-rendered/data-loaded with `force-dynamic`. A server action uses session+admin recheck and `revalidatePath('/')` for allowlisted system toggles.
+- Server dependencies by surface: Server Components perform Supabase reads for schedule, failures, history, candidates and system status; Server Action mutates allowlisted settings under user session/RLS; proxy handles cookie refresh. All are supported by Netlify's current OpenNext adapter but require runtime compute, not static hosting only. Netlify docs state the adapter provisions a serverless function for SSR/ISR/RSC/Route Handlers/Server Actions and an Edge Function for Next middleware/proxy.
+- A static/client-heavy alternative could reduce Netlify runtime calls, but current authenticated admin reads rely on server-side RLS and some tables/settings lack authenticated SELECT. Do not loosen RLS or expose service role to make static export work. First preference: move each mutation to narrow authenticated Supabase RPC/Edge endpoints with admin check; retain either Netlify-supported SSR or deliberately redesign the UI as a static shell with explicit RLS-safe browser reads. `proxy.ts` cookie refresh + `getUser()` SSR guard means the current app cannot simply be exported static unchanged.
+- No repository `netlify.toml`, Netlify project config, or tracked `vercel.json`/Vercel project config was found. `HANDOFF.md` records an existing Vercel Production deployment, so it must remain the rollback target until Netlify preview, auth, RLS, actions, redirects, and logs pass.
+- Netlify current docs: Next App Router, SSR, Server Components/Actions and middleware are supported via OpenNext; dynamic paths provision Netlify functions. Function consumption/billing depends on account plan; do not assume unlimited Free usage or authorize automatic upgrades. Scheduled Functions are UTC-based, only published deploys run, and do not accept caller payloads; keep Supabase Cron as the canonical scheduler. Background Functions can run up to 15 minutes but retry after errors, so they are a poor direct X-post executor unless idempotency makes retries safe. Verify actual current Free quota in the account before rollout; no plan/account data was changed.
+- Sources checked (official docs, current 2026-09-23): [Netlify Next.js support](https://docs.netlify.com/build/frameworks/framework-setup-guides/nextjs/overview/), [Netlify Functions usage/billing](https://docs.netlify.com/build/functions/usage-and-billing/), [Netlify Scheduled Functions](https://docs.netlify.com/build/functions/scheduled-functions/), [Netlify Background Functions](https://docs.netlify.com/build/functions/background-functions/), [Supabase SSR client/auth guidance](https://supabase.com/docs/guides/auth/server-side/creating-a-client?framework=nextjs&package-manager=npm&queryGroups=framework&queryGroups=package-manager).
+
+## 5. What should stay / what may move
+
+- Stay in Supabase: Postgres data, RLS/ACL, authoritative per-brand scheduling/claims, canonical X publisher, account selection, Vault-backed credentials, idempotent completion/failure RPCs, Cron, provider/API secrets and all actual X publish calls. Keep OpenAI content calls server-side in Supabase for current publisher flows unless a separately reviewed need changes that boundary.
+- Netlify/admin: authenticated management UI, presentation, filters and non-privileged navigation. Keep only publish controls that call narrow user-authenticated RPC/Edge endpoints; never send service role, X token, or OpenAI key to browser. Ensure each mutation has server/database role checks, audit event, idempotency key, and explicit confirmation for dangerous actions.
+- Avoid moving scheduler or posting execution into Netlify. Netlify can host the Next app, but Supabase remains the control/data/execution plane.
+
+## 6. Roadmap to stable multibrand operation
+
+### Phase 0 — prove live data and invariants (next task)
+
+In an isolated/disposable DB first, design the minimum migration to remove the three obsolete global uniqueness conflicts while retaining brand-scoped uniqueness. Add fixtures with two brands sharing same post_type/slot/day and same publish claim; prove independent inserts, same-brand duplicate rejection, old-row safety and rollback. Production remains untouched until separately reviewed.
+
+### Phase 1 — common queue and idempotency foundation
+
+Define deterministic queue/claim key including brand and (where needed) social account; select due rows with per-brand fairness and bounded concurrency; make claim/completion/failure/retry transitions atomic and observable. Add a clear `x_request_id`/idempotency/outcome-unknown model. Ensure confirmed X success cannot be retried because post-success DB write failed. Model stale running reconciliation and alertable lag/attempt reasons. Preserve current Cron while replacing only function/RPC behavior behind tests/canary.
+
+### Phase 2 — account/token routing
+
+Replace `limit=1` with explicit trusted account selection or exact-one fail-closed selection; require brand/account consistency, platform X, identity-verified status, publish enabled, allowed brand mode/profile, correct Vault refs and account-bound OAuth client. Generalize token retrieval only through server-side/least-privilege RPC. Keep Kabumori legacy route as an explicit compatibility adapter; prove no cross-brand credential fallback. Do not publish from social-mobile workspaces until product consent/approval gates independently permit it.
+
+### Phase 3 — common publisher + feature adapters
+
+Separate small core (claim, brand/account context, token, common final publish guard, duplicate check, X send, completion) from per-brand/post-type content adapters. Keep Kabumori-specific morning/close/News/etc adapters specialized. Bring AI Lab `brand_post` into the same common completion/log boundary without importing Kabumori voice. Add post-type allowlist from reviewed profiles/settings but fail closed on unknown values. Wire exact-text fingerprints on every approved brand route and account for 30-day read horizon; test cross-brand exact duplicate vs distinct wording. Semantic/event overlap remains a separate policy, not an accidental hash rule.
+
+### Phase 4 — observability and per-brand operations
+
+Expose brand-scoped pending age, queue depth, run attempts, failure class, idempotency conflict, confirmed-X-but-completion-unknown, last success and account connection/publish gates. Provide safe pause/resume/repair controls only via admin-checked RPC, with audit logging and no arbitrary retry of uncertain X outcomes.
+
+### Phase 5 — admin tenancy and Netlify pilot
+
+Add a deliberate active-brand/account selector based on authenticated membership; make every query and mutation brand-scoped and check RLS/ACL. Move writes to secure Supabase RPC/Edge functions before reducing SSR. Deploy a Netlify preview (not production) rooted at `apps/admin`; set only URL/publishable key plus any non-secret public config. Verify sign-in, proxy refresh, admin denial, pages, toggles, logs, rollback, function usage/credits and no upgrade setting. If cost/read pattern is unsuitable, keep Vercel; no pressure to migrate for its own sake. Only after sustained preview/canary use and quota headroom should production DNS/cutover be considered.
+
+### Phase 6 — long-run readiness
+
+Run multiple brands and accounts in dry-run first, then explicit opt-in live canaries per brand/account, with duplicate/uncertain-result drills, token expiry/reconnect tests, Cron backlog/fairness, rollback, alerting, and a multi-week no-duplicate/no-cross-tenant review. Increase rollout only after every brand independently meets reliability and spend budgets.
+
+## 7. Recommended slot decomposition / next implementation task
+
+- H1: retain Important News/GPT-6 ownership only; no x-test-post/scheduler/index changes.
+- H2 (next): Phase 0 disposable migration and proof for the three global uniqueness conflicts; after C2, create a separate implementation TASK with explicit files/rollback and no production apply. Do not combine account/token routing or Netlify work.
+- G1: once idle assignment is agreed, `apps/admin/**` only — multitenant brand/account context and UI/read query design, with RLS audit read-only initially. No publisher/RPC migration edits.
+- G2: social-mobile owner/account onboarding UX and tenant policies only, keeping publish disabled; no scheduled publisher/token loader changes until separately coordinated.
+
+This decomposition avoids simultaneous writes to `x-test-post`, same RPC/migration, `apps/admin`, and social-mobile OAuth paths. Any database migration needs a single slot owner and fresh-origin check before later pushes.
+
+## 8. Remaining issues / decisions
+
+- The old global unique keys are the first hard blocker. Confirm production rows do not collide across brands before planning a replacement migration; current data distribution may hide conflicts because each brand has at most one X account and few brand_post rows.
+- `daily_content_plans` currently has zero rows; AI Lab plan consumer state should be checked separately before assuming it is active in X selection.
+- Existing logs show 320 `started` events, but aggregate-only query cannot distinguish old terminal-history records from genuinely stale in-flight work. This task did not audit or reconcile stale jobs.
+- No account subscription/Netlify usage dashboard was accessed, so current Free-tier quota, compute credits/headroom and auto-upgrade controls remain unverified.
+- No live X/OAuth/Vault action was used to prove a newly configured brand can publish. Production aggregate currently shows zero brands with more than one X account.
+
+## 9. Safety / verification
+
+- changed_files (source): **none**.
+- production schema / RPC / RLS / ACL / migration: **0 writes**; Cron / scheduler / settings / publish flags: **0 writes**; Edge Function deploy/invoke: **0**; OAuth/Vault/token read or write: **0**; X API / post: **0**; Netlify project creation or Vercel changes: **0**; secrets displayed: **0**.
+- Read-only production query surface: function metadata, active Cron names/schedules and sanitized target classification, catalog/index/policy metadata, and aggregate counts only. No account IDs, handles, names, tokens, cron command bodies, or post text stored in this Report.
+- tests: no code changed, so no test suite was run. This audit is source/catalog/documentation analysis only.
+- repository: formal repo untouched. The isolated audit worktree has an untracked `supabase/.temp/` created during Supabase CLI project metadata checks; it was not opened, staged, removed, or included. Report/TASK control-only sync is still pending fresh-origin validation and push.
+- status: `review_required`; next_owner: `chatgpt`.
+- next_recommendation: C2 review this audit. If approved, create a Phase 0 TASK limited to disposable migration/rollback proof for the three scoped uniqueness collisions; no production apply is implied.
 
 - task_id: `social-mobile-app-phase23-dedicated-qa-one-shot-history-learning-20260923`
 - result: **PASS candidate for C2**. After fresh, specific user consent, the dedicated QA account's past posts were read once through the authenticated app. The app displayed an **unconfirmed** persona result based on **9 posts**. No X publish, media upload, persona confirmation, or persistence was performed.
