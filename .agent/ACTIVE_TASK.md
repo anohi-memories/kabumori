@@ -6,11 +6,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: kabumori-important-news-gpt6-production-rollout-20260923
+- task_id: kabumori-important-news-monitor-caller-auth-remediation-candidate-20260923
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: approved exact GPT-6 migration applied/read back; only `important-news-monitor` deployed with `verify_jwt=false`. Natural scheduled runs succeeded through 09:20 UTC, but no new candidate/usage row occurred. Migration history timestamp and Function version-label discrepancies are disclosed; no repair. Stop for C1.
+- note: source-only caller-auth candidate is in PR #12 for exactly four existing monitor Cron jobs; 7 targeted tests and Deno helper check pass. No production migration, Vault write, Function secret/config change, or deploy. Keep `verify_jwt=false`; production rollout requires separate approval. Stop for C1.
 
 
 ### Codex slot 2
