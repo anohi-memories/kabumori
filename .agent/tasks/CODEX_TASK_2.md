@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase0c-production-brand-scope-rollout-20260923
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: GPT-6 Sol Medium
 - purpose: Phase0b C2 PASS後、compatibleなbrand-scoped publish-claim clientを先にproductionへdeployし、そのruntimeを確認したうえで、fresh preflight後にexact forward migrationを適用して3つのlegacy global UNIQUEを除去する。deploy/migration直前にユーザーの明示同意を必須とする。
