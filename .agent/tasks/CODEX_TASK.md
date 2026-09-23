@@ -3,8 +3,8 @@
 - task_id: kabumori-release-readiness-audit-and-roadmap-20260923
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: かぶモリを正式リリース可能な状態へ最短で持っていくため、現状実装をread-onlyで棚卸しし、Expo + Supabase + Netlify Free（Vercel Pro前提なし、追加インフラ月額0円方針）との差分・未完成・release blocker・最短ロードマップを確定する。実装や本番変更はまだ行わない。
