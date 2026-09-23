@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-23 JST (H1 caller-auth candidate freshened and fully verified; awaiting C1; production unchanged)
+- checked_at: 2026-09-24 JST (C1 caller-auth source candidate PASS; PR #12 merge-only queued; Claude G2 mobile release blockers queued)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,41 +14,38 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `kabumori-important-news-monitor-caller-auth-finalize-20260923`
-  - PR #12 is freshened on `118fb488`; final head `9dffce9`, 7 files. Vercel passed.
-  - Targeted auth/wiring/migration tests: 7/7; full Important News suite: 431/431; disposable PostgreSQL migration/rollback proof passed.
-  - Handler-wide Deno check reaches existing TS2322 in unchanged `_shared/x_oauth2_post.ts:66`; changed auth modules/tests check cleanly.
-  - Production migration, Vault write, Function secret/config change, and deploy are all 0; each requires separate approval. Keep `verify_jwt=false`.
+- Codex slot 1: `ready` — `kabumori-important-news-caller-auth-merge-only-20260924`
+  - PR #12 caller-auth source candidate is C1 PASS.
+  - Reviewed head `9dffce9620b8a04706cad314a1e558ea141cb105`.
+  - Targeted 7/7, full Important News 431/431, disposable PostgreSQL proof PASS, Vercel PASS.
+  - Next H1: fresh-check main/drift, merge PR #12 only if still semantically identical and checks green.
+  - Production migration/Vault secret/Function secret/deploy/Cron mutation remain forbidden and require separate explicit approval.
+  - PR #11 is stale partial control-sync; never merge.
 
-- Codex slot 2: `ready` — `x-autopost-phase0c-production-brand-scope-rollout-20260923`
-  - Phase0b C2 PASS後のproduction gate。
-  - rollout順序は compatible x-test-post deploy → runtime確認 → fresh schema/planner preflight → exact migration apply → postflight。
-  - deploy/migration直前にユーザーの明示同意が必須。generic OK/すすめてはproduction mutation同意として扱わない。
-  - Cron/OAuth/Vault/publish_enabled/Netlify/Vercelは変更禁止。X投稿も禁止。
-  - Recommended model: GPT-6 Sol Medium。
+- Codex slot 2: current TASK is authoritative; keep ownership isolated from H1/G2. No overlap with Important News caller-auth or consumer mobile files is permitted.
 
+- Claude slot 1: existing market-report shared-platform task remains its own workstream. Do not repurpose unless separately instructed.
 
-- Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
-  - market-report-analysis v2 shadow deployはK1 PASS済み。consumer gateはOFF。
-  - 2026-09-24の自然shadow出力まで待機。x-test-post/personalized-reports consumer cutoverは未承認。
-
-- Claude slot 2: `done` — `social-mobile-app-phase9-x-oauth-onboarding-20260919`
-  - K2 PASS。OAuth state二重hash・retry/idempotency blocker修正済み。
-  - 以降のPhase9 workstreamはH2へ正式引き継ぎ済み。
+- Claude slot 2: `ready` — `kabumori-release-mobile-blockers-phase1-auth-account-settings-20260924`
+  - Main release-completion workstream for consumer mobile.
+  - Scope: Auth/profile lifecycle, password recovery, account deletion source candidate, Settings/Account/Privacy/Terms/Support/Contact/Logout routes and tests.
+  - Dedicated branch/PR; production mutation 0.
+  - Must not touch Important News caller-auth, x-test-post/social-mobile, market-report, Netlify/Vercel settings, TestFlight/App Store Connect.
+  - Recommended model: Opus 5.5.
 
 ## Parallel safety
 
-- H1 caller-auth source/config candidate is in PR #12; production migration, Vault/secret configuration, and Function deploy are not approved and remain unapplied. PR #11 remains open/draft/unmerged and was not touched.
-- H2/G1/G2 implementation files are untouched by this H1.
-- 同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数slotで同時変更しない。
+- H1 owns only PR #12 merge/read-back and related Important News caller-auth source scope.
+- G2 owns consumer mobile Auth/account/settings/legal source scope.
+- H1 and G2 are intentionally separated and may run in parallel if fresh-origin checks confirm no file/DB-object overlap.
+- G1/H2 remain separate existing workstreams; same file, migration, RPC, Edge Function, workflow, or production setting must never be edited in parallel.
 - push前にfresh `origin/main`確認。既存未コミット変更は他workstream所有として触らない。
 
 ## Known issues / observations
 
-- AI Lab daily content plan schema + writer RPCはproduction反映済み。consumer/selection source candidateはC1 PASSだが、`x-test-post` consumer deployは未本番反映。
-- social mobile Phase5で `brand_memberships` + tenant RLSをproductionへ手動適用しpostflight C2 PASS済み。Phase6で実Auth/mobile read QAへ進む。
-- social mobile production data sourceはPhase5完了後も実Auth/mobile read QAまでは既定ONにしない。
-- AI Lab Vault-backed refreshは本番反映済み。自然slot結果はread-only観測事項。
+- PR #12 production rollout is not yet authorized: migration apply, Vault write, Function secret/config and `important-news-monitor` deploy are still pending a separate approval after merge.
+- Release-readiness audit identified remaining release blockers: Auth/profile lifecycle, in-app account deletion, password recovery, legal/support entry points, iPhone/TestFlight E2E, Netlify admin trial, App Store metadata/privacy, and final security gate.
+- PR #10 release-readiness audit docs remain separate from implementation work and should not be used to bypass required checks.
 - multibrand migration history不整合の可能性があるためblind `supabase db push`禁止。
 
 ## 更新ルール
