@@ -1,3 +1,8 @@
+import {
+  importantNewsCronSecretHeader,
+  isConfiguredImportantNewsCronSecret,
+  isValidImportantNewsCronSecret,
+} from "./caller_auth.ts";
 import { supabaseUsageWriter, type UsageWriter } from "./usage_ledger.ts";
 import {
   breakingSearchUsageEvents,
@@ -1519,6 +1524,15 @@ async function enqueuePresetImportantNewsNotifications(
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return response({ error: "POST_REQUIRED" }, 405);
+
+  const cronSecret = Deno.env.get("IMPORTANT_NEWS_CRON_SECRET");
+  if (!isConfiguredImportantNewsCronSecret(cronSecret)) {
+    return response({ error: "SERVER_CONFIGURATION_MISSING" }, 500);
+  }
+  if (!isValidImportantNewsCronSecret(cronSecret, importantNewsCronSecretHeader(req))) {
+    return response({ error: "UNAUTHORIZED" }, 401);
+  }
+
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceRoleKey) return response({ error: "SERVER_CONFIGURATION_MISSING" }, 500);
