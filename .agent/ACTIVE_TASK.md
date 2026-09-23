@@ -10,7 +10,7 @@
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: PR #9 freshened to `ebe3c58`; merge held because required Vercel check failed with a 24h build rate limit. Do not bypass; no production apply/deploy or DB write.
+- note: PR #9 merged at `83d9946` after required Vercel success on exact head `ae78de1`. No bypass; production migration apply/deploy and DB write remain unperformed.
 
 
 ### Codex slot 2
