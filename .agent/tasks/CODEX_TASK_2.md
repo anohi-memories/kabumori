@@ -1,158 +1,141 @@
 # Codex Task 2
 
-- task_id: x-autopost-phase0-disposable-global-uniqueness-migration-proof-20260923
+- task_id: x-autopost-phase0b-publish-claim-brand-scope-and-migration-reconciliation-20260923
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: critical
-- recommended_model: GPT-6 Luna
-- purpose: C2で確認したX自動投稿複数ブランド化のP0 blockerについて、productionへ一切適用せず、disposable PostgreSQLだけで最小migration候補とrollback proofを作り、安全にbrand-scoped uniquenessへ移行できることを証明する。
+- recommended_model: GPT-6 Sol Medium
+- purpose: Phase0 C2で確認されたblockerを解消するため、productionを一切変更せず、publish_claim clientをtrusted brand_idでbrand-scoped化するsource candidateと、multibrand foundation migration/source-history driftの安全な解消案を作る。完成後にPhase0 migration proofを再実行可能な状態へ戻す。
 
-## Background / confirmed production blocker
+## C2 finding carried forward
 
-Productionには以下が併存している:
-- `posting_windows`
-  - intended: UNIQUE `(brand_id, post_type, slot_no)`
-  - obsolete blocker: UNIQUE `(post_type, slot_no)`
-- `scheduled_posts`
-  - intended: UNIQUE `(brand_id, schedule_date, post_type, slot_no)`
-  - obsolete blocker: UNIQUE `(schedule_date, post_type, slot_no)`
-- `publish_claims`
-  - intended: UNIQUE `(brand_id, post_type, date_jst)`
-  - obsolete blocker: UNIQUE `(post_type, date_jst)`
+Phase0 disposable proof itselfは成立したが、production rollout candidateとしては未完成。
 
-This task does not authorize production apply.
+Confirmed blocker:
+- `publish_claim_logic.ts` uses PostgREST conflict target `post_type,date_jst`
+- insert body has no explicit `brand_id`
+- completion/failure PATCH filters omit `brand_id`
+- removing legacy global publish_claims UNIQUE first would break the claim path and could make updates cross-brand ambiguous
+
+Also confirmed:
+- live multibrand brand columns/scoped indexes are represented in an older feature-branch migration source, but that migration is not in current `origin/main` ancestry / production migration history under the expected version.
+- blind history repair or `supabase db push` is forbidden.
 
 ## Mandatory fresh start
 
-1. `git fetch origin main`
-2. fresh `origin/main`
-3. read `.agent/ORCHESTRATION.md`
-4. read `.agent/CURRENT_STATE.md`
-5. read this TASK
-6. read latest `.agent/CODEX_REPORT_2.md`
-7. inspect H1/G1/G2 for overlap
-8. read-only production metadata refresh for exact current constraint/index names
-9. inspect migration history/source for where brand-scoped indexes and old constraints originated
+1. fetch fresh `origin/main`
+2. read ORCHESTRATION / CURRENT_STATE / this TASK / latest REPORT2
+3. inspect other slots for `x-test-post`, publish_claims, the three scheduler tables, or migration overlap
+4. read-only refresh production definitions for publish_claims and affected planner RPCs
+5. inspect exact call sites for `claimPublishSlot`, `completePublishSlot`, `failPublishSlot`
 
-If another slot touches these three tables/migrations/constraints, STOP.
+If overlap exists, STOP.
 
-## Scope A — production read-only preflight
+## Scope A — trusted brand propagation
 
-Read-only confirm:
-- exact table/constraint/index names
-- whether legacy uniqueness is backed by a named table constraint or standalone unique index
-- brand_id nullability/default/backfill state
-- duplicate-risk rows that would violate intended brand-scoped uniqueness
-- existing rows with null brand_id
-- dependent FKs/RPCs/functions that reference the obsolete constraint/index names directly
-- planner/on-conflict code that depends on the old conflict target
+Design/implement source-only minimal change so publish claim calls use a trusted server-side brand identity.
 
-Do not expose row content or identifiers; aggregate/safe metadata only.
+Requirements:
+- claim function requires `brandId`
+- insert explicitly writes `brand_id`
+- PostgREST conflict target becomes `brand_id,post_type,date_jst`
+- completion PATCH filters by `brand_id + post_type + date_jst + status`
+- failure PATCH filters the same way
+- callers derive brandId from trusted server-side context, not request/client input
+- current Kabumori morning-greeting path must pass explicit trusted `kabumori` brand identity
+- no generic client-selectable brand/account/token authority
+- preserve existing exactly-once / no-auto-retry semantics
 
-## Scope B — minimal migration candidate
+Audit every call site. Do not leave optional/default brand parameters that could silently fall back across brands.
 
-Create one source-only forward migration candidate that:
-- removes only the three obsolete global uniqueness blockers
-- preserves the three brand-scoped unique indexes/constraints
-- does not rename unrelated objects
-- does not modify data unless absolutely required and separately justified
-- fails closed if the expected current objects do not match
-- avoids blind `DROP INDEX IF EXISTS` if a stronger exact-object assertion is possible
-- documents rollback strategy
+## Scope B — tests
 
-Important:
-- determine whether `ON CONFLICT (...)` statements in current RPC/functions depend on the old global key.
-- if they do, the same candidate must include the minimum exact update needed to switch conflict target to brand-scoped keys, or STOP and report that a larger migration is required.
-- do not alter queue fairness, token routing, retry semantics, or publisher code in this phase.
+Add/adjust tests proving:
+- two brands can hold same `post_type/date_jst` claim independently
+- same brand duplicate still blocked
+- complete/fail for brand A cannot mutate brand B row
+- claim request uses exact `on_conflict=brand_id,post_type,date_jst`
+- body always contains trusted brand_id
+- current Kabumori greeting uses `kabumori`
+- confirmed-X completion/failure behavior remains unchanged
+- full relevant x-test-post regression passes
 
-## Scope C — disposable PostgreSQL proof
+No X API call.
 
-Use fake-only/disposable PostgreSQL.
+## Scope C — planner / ON CONFLICT migration candidate completeness
 
-Prove at minimum:
+Re-audit the four planner RPCs that use old scheduled_posts conflict target:
+- `plan_daily_posts(date)`
+- `plan_morning_report(date)`
+- `plan_close_report(date)`
+- `plan_us_premarket_report(date)`
 
-### posting_windows
-- brand A can insert `post_type=X, slot=1`
-- brand B can insert same `post_type=X, slot=1`
-- same brand duplicate still fails
+Prepare exact source-only SQL updates needed to switch each to brand-scoped conflict behavior when the old global scheduled_posts constraint is removed.
 
-### scheduled_posts
-- brand A and B can insert same date/post_type/slot independently
-- same brand duplicate still fails
+Also inspect migration-time posting_windows upserts. If only historical seed-time behavior is affected, document the safe source migration strategy; do not mutate production.
 
-### publish_claims
-- brand A and B can claim same date/post_type independently
-- same brand duplicate still fails
+## Scope D — source/history drift reconciliation
 
-Also prove:
-- current representative legacy rows survive migration
-- any required `ON CONFLICT` function/RPC still behaves correctly
-- migration apply succeeds from a production-shaped baseline
-- rollback/reverse script restores the original uniqueness state in disposable DB
-- cleanup leaves no residual proof objects/container
+Do not repair production history.
 
-## Scope D — source/static tests
+Produce a precise reconciliation recommendation covering:
+- live objects that exist but whose originating multibrand migration is absent from current main ancestry/history under expected version
+- whether the new migration can safely assert the live schema and proceed forward without backfilling/replaying the old migration
+- whether a baseline/marker migration is needed in source only
+- exact reason blind replay is unsafe
 
-Add narrow tests for:
-- exact obsolete object names
-- exact brand-scoped replacement remains present
-- no unrelated table/index/constraint change
-- no `supabase db push`
-- no production apply path
+Prefer an idempotent forward-only reconciliation strategy that validates current live shape instead of replaying old DDL.
 
-Run relevant migration/static tests and `git diff --check`.
+## Scope E — re-run disposable proof
+
+Once source candidate is complete, rerun disposable PostgreSQL with:
+- production-shaped legacy constraints + brand-scoped indexes
+- updated planner routines
+- updated publish_claim behavior contract represented in tests
+- forward migration removing obsolete globals
+- 2-brand coexistence
+- same-brand duplicate rejection
+- rollback proof
+
+The source candidate may be committed/pushed only if complete and self-consistent. Do not push the previously blocked incomplete draft as-is.
 
 ## Forbidden
 
 - production migration apply
 - production DDL/DML
-- changing live Cron
 - x-test-post deploy
 - Function deploy
+- Cron change
 - X API call/post
 - OAuth/Vault/token change
 - publish_enabled change
 - Netlify/Vercel change
-- unrelated publisher refactor
-- queue/retry/token/account-routing changes
+- queue fairness/refactor beyond required ON CONFLICT targets
+- token/account routing refactor
+- migration history repair
 
 ## Production mutation budget
 
-Exactly 0.
+0.
 
-## Completion / C2
+## Completion
 
 When complete:
-- status -> `review_required`
-- next_owner -> `chatgpt`
-- prepend/update `.agent/CODEX_REPORT_2.md`
-
-Report must include:
-1. fresh source commit
-2. exact production preflight findings
-3. exact obsolete object names
-4. exact intended brand-scoped objects
-5. whether any ON CONFLICT / RPC dependency required adjustment
-6. migration candidate path
-7. disposable baseline shape
-8. apply result
-9. two-brand coexistence proof
-10. same-brand duplicate rejection proof
-11. rollback proof
-12. tests
-13. changed files
-14. production mutation = 0 proof
-15. remaining risks
-16. exact recommended production rollout gate
-17. commit/push/fresh-origin verification
+- status -> review_required
+- next_owner -> chatgpt
+- update CODEX_REPORT_2 with:
+  - exact call-site changes
+  - trusted brand derivation proof
+  - publish claim tests
+  - planner SQL changes
+  - drift reconciliation recommendation
+  - disposable apply/behavior/rollback result
+  - full test counts
+  - changed files
+  - commit/push/fresh-origin proof
+  - production mutation=0
+  - exact next production gate
 
 Then STOP for C2.
-
-## Next gate after PASS
-
-Only after C2 PASS:
-- separately authorize production preflight + exact migration apply
-- read back constraints/indexes and conflict behavior
-- do not combine with publisher/account/token refactor in the same production gate
