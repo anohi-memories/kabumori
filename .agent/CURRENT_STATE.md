@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-23 JST (C1 PASS on PR #9 merge; production GPT-6 Important News rollout queued; source merged, deploy/migration still pending)
+- checked_at: 2026-09-23 JST (H1 GPT-6 Important News exact migration and only-function deploy complete; scheduled Cron observed; no candidate)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -15,9 +15,10 @@
 ## Active workstreams
 
 - Codex slot 1: `review_required` — `kabumori-important-news-gpt6-production-rollout-20260923`
-  - Exact approved migration applied; both CHECK constraints read back with GPT-6 values.
-  - Supabase recorded generated version `20260923084819` under the correct name, differing from repo timestamp; no repair attempted.
-  - Function deploy authorization was rejected; `important-news-monitor` remains v61, `verify_jwt=false`, unchanged source hash. Await separate explicit deploy approval/C1 review.
+  - Approved exact migration applied; both CHECK constraints read back with GPT-6 IDs.
+  - Only `important-news-monitor` deployed; `verify_jwt=false`; SHA `4450ee09…e4b7`. Latest metadata says v64 but same SHA and source bundle `source/62`; discrepancy disclosed.
+  - Natural Cron runs succeeded through 09:20 UTC; no new candidate/usage row, so GPT-6 persistence remains unverified. Migration history version differs from repo timestamp; no repair.
+
 - Codex slot 2: `ready` — `social-mobile-app-phase23-dedicated-qa-one-shot-history-learning-20260923`
   - Phase22 C2 PASS済み。次はdedicated QA user/accountでexactly-one live history-learning QA。
   - live実行直前にユーザーの明示同意が必須。genericなOK/すすめてはlive Vault/X read同意として扱わない。
@@ -36,7 +37,7 @@
 
 ## Parallel safety
 
-- H1 GPT-6 source PR #9 is merged; exact approved migration applied/read back. Function deploy awaits separate explicit approval; migration history version discrepancy is disclosed. No other production mutation.
+- H1 GPT-6 source PR #9 is merged; approved exact migration and only `important-news-monitor` deployment are complete. Natural Cron runs were read-only observed; no qualifying candidate. Migration-history timestamp and Function version-label discrepancies are disclosed; neither was repaired.
 - H2/G1/G2 implementation files are untouched by this H1.
 - 同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数slotで同時変更しない。
 - push前にfresh `origin/main`確認。既存未コミット変更は他workstream所有として触らない。
