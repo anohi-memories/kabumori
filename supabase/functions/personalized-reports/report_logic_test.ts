@@ -304,6 +304,14 @@ test("unknown tickers, advice and URLs fail the local checks", () => {
   assert.ok(localReportIssues({ ...base, risk_notes_ja: ["セクターウェightsはサービス業です。"] }, snapshot, packet)
     .some((issue) => issue.startsWith("CONTAINS_LATIN_WORD")));
   assert.deepEqual(latinWords("TOPIX連動ETFとTDnetの開示"), []);
+  assert.deepEqual(latinWords("三菱ＵＦＪフィナンシャル・グループ"), [],
+    "full-width company typography embedded in Japanese is allowed");
+  assert.deepEqual(latinWords("ＵＦＪは保有銘柄です。"), [],
+    "a full-width company token next to Japanese text is allowed");
+  assert.ok(latinWords("This is ordinary English prose.").length > 0,
+    "ordinary untranslated English remains blocked");
+  assert.ok(latinWords("UFJ銀行の開示").includes("UFJ"),
+    "ASCII company acronyms are not broadly whitelisted");
   assert.ok(localReportIssues({ ...base, title_ja: "保有株は続落" }, snapshot, packet)
     .some((issue) => issue.startsWith("UNSUPPORTED_MULTI_DAY_WORD:続落")));
   assert.deepEqual(unsupportedMultiDayWords(["年初来高値を更新したと発表"], { news: "年初来高値を更新したと発表" }), [],
@@ -338,6 +346,7 @@ test("close report positive: one draft + one Fact check, stored as completed", a
   assert.equal(outcome.status, "passed");
   assert.deepEqual(calls, ["draft", "fact"]);
   assert.equal(outcome.model, REPORT_MODEL);
+  assert.equal(outcome.estimatedCost, 0.0007);
   const update = reportUpdate(outcome, snapshot, { lane: "test" });
   assert.equal(update.status, "completed");
   assert.equal(update.fact_status, "passed");

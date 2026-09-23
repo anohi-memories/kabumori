@@ -55,7 +55,7 @@ export type NewsInput = {
   keyPointsJa: string[];
 };
 
-export const REPORT_MODEL = "gpt-5.6-luna" as const;
+export const REPORT_MODEL = "gpt-6-luna" as const;
 export const CLOSE_SESSION_END_MINUTES = 15 * 60 + 30;
 export const RELATIVE_STRENGTH_BAND_PT = 0.3;
 export const MAX_NEWS_PER_STOCK = 3;
@@ -834,10 +834,27 @@ export function unsupportedMultiDayWords(texts: string[], packet: unknown): stri
   return MULTI_DAY_WORDS.filter((word) => !source.includes(word) && texts.some((text) => text.includes(word)));
 }
 const ALLOWED_LATIN = new Set(["TOPIX", "ETF", "TDnet"]);
+const FULLWIDTH_LATIN = /[Ａ-Ｚａ-ｚ]/u;
+const JAPANESE_SCRIPT = /[ぁ-んァ-ヶ一-龠]/u;
 
-/** Latin words of 3+ letters other than the few proper names the packet itself uses. */
+/**
+ * Full-width Latin runs embedded in Japanese company/proper-name text are
+ * typography, not untranslated English prose.  Keep the exception local to
+ * that lexical context; ASCII acronyms and standalone full-width runs still
+ * fail unless they are one of the existing packet terms.
+ */
 export function latinWords(value: string): string[] {
-  return (value.match(/[A-Za-zＡ-Ｚａ-ｚ]{3,}/g) ?? []).filter((word) => !ALLOWED_LATIN.has(word));
+  return [...value.matchAll(/[A-Za-zＡ-Ｚａ-ｚ]{3,}/gu)]
+    .filter((match) => {
+      const word = match[0];
+      if (ALLOWED_LATIN.has(word)) return false;
+      if (!FULLWIDTH_LATIN.test(word)) return true;
+      const start = match.index ?? 0;
+      const end = start + word.length;
+      const context = `${value.slice(Math.max(0, start - 12), start)}${value.slice(end, end + 12)}`;
+      return !JAPANESE_SCRIPT.test(context);
+    })
+    .map((match) => match[0]);
 }
 
 function length(value: string): number {
@@ -937,7 +954,7 @@ export type ReportOutcome = {
 };
 
 function lunaCost(inputTokens: number, outputTokens: number): number {
-  return Number(((inputTokens * 0.2 + outputTokens * 1.2) / 1_000_000).toFixed(8));
+  return Number(((inputTokens * 0.1 + outputTokens * 0.5) / 1_000_000).toFixed(8));
 }
 
 function safeCode(error: unknown): string {

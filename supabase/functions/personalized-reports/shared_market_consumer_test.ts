@@ -108,7 +108,7 @@ test("the stored body carries the shared market section verbatim; legacy body un
       title_ja: "t", summary_ja: "s", tone: "neutral", overview_ja: "o",
       stock_notes: [], watch_notes: [], risk_notes_ja: [], checkpoints_ja: ["c"],
     },
-    issues: [], error: null, model: "gpt-5.6-luna", calls: 2, inputTokens: 1, outputTokens: 1, estimatedCost: 0,
+    issues: [], error: null, model: "gpt-6-luna", calls: 2, inputTokens: 1, outputTokens: 1, estimatedCost: 0,
   };
   const now = new Date("2026-09-17T08:15:30Z");
   const shared = reportUpdate(outcome, snapshot(), {}, now, SECTION);
