@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-23 JST (H1 GPT-6 schema/source candidate completed; awaiting C1; production mutation 0)
+- checked_at: 2026-09-23 JST (C1 PASS on PR #9 GPT-6 schema/source candidate; final freshen/merge queued; production mutation 0)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,12 +14,15 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `kabumori-important-news-gpt6-schema-and-source-candidate-20260923`
-  - H1 source-only candidate is PR #9: https://github.com/anohi-memories/kabumori/pull/9 (commit `eefa3eabf4ddb4b07f6a300f34b0b395a4d7b691`), rebased on latest main `3c37799a1a6ff574ba26b2f9d5830ca364c89217`.
-  - Added one migration candidate for only the `judgement_model` and `generation_model` CHECK constraints; production catalog read confirmed their names and GPT-5.6-only definitions match source.
-  - Important News judgement/search/generation runtime now selects GPT-6 Luna/Sol; unknown-model fallback is GPT-6 Luna; historical GPT-5.6 pricing remains only for ledger recomputation.
-  - Verification: targeted 173/0, full Important News suite 424/0, changed logic/test `deno check --no-config --no-lock` passed, `git diff --check` passed. `index.ts` remains affected by pre-existing TS2322 in unchanged `_shared/x_oauth2_post.ts:66`.
-  - Vercel and Vercel Preview Comments checks passed. Stop for C1; no migration apply or Function deploy is authorized.
+- Codex slot 1: `ready` — `kabumori-important-news-gpt6-schema-source-merge-20260923`
+  - C1 PASS on PR #9 source-only candidate.
+  - PR #9 adds one narrow forward migration permitting GPT-6 Luna/Sol in `judgement_model` and `generation_model` while preserving GPT-5.6 historical values.
+  - Candidate runtime uses GPT-6 Luna for judgement first-pass, breaking-market search, and post generation; GPT-6 Sol for existing escalation only.
+  - GPT-6 pricing/accounting and unknown-model fallback are updated; GPT-5.6 rates remain historical-only.
+  - Candidate verification: targeted 173/0, full Important News 424/0, changed logic/test checks and diff-check passed.
+  - PR #9 is open/mergeable with Vercel success. Main drift since its merge-base is control files only; no implementation overlap.
+  - Next H1 freshens and merges PR #9 only; no production migration apply or Function deploy.
+  - Production mutation 0.
   - Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase23-dedicated-qa-one-shot-history-learning-20260923`
