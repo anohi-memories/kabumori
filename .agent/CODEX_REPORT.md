@@ -1,4 +1,20 @@
-## Latest H1 result — PR #9 freshened; merge held for Vercel rate limit (2026-09-23)
+## Latest H1 result — PR #9 merged after Vercel retry success (2026-09-23)
+
+- task_id: `kabumori-important-news-gpt6-schema-source-final-merge-20260923`
+- result: `review_required` — PR #9 merged by normal squash merge after the required Vercel check succeeded. No branch-protection bypass.
+- pre_merge_main: `c0d135ed52c94757c00f215cf0a1393a9b8b177f`
+- final_pr_head: `ae78de17b2eb461b06e1674cdb045a78f7dbf620`; retry commit changed no files.
+- required_check: Vercel `success` on the exact final PR head.
+- merge_commit / resulting_main: `83d994634f9b4891b8d939723939187b76bedaed`; PR #9 is merged and closed.
+- main_drift_review: since merge base `4d27304d4dce804c2ae5226fa338252e17f4560a`, main-only drift was limited to four `.agent/` control/report files; no semantic overlap with the 12 approved implementation/migration/test files.
+- readback: all 12 approved PR files on resulting main match the final PR head exactly. Runtime route readback confirms judgement first-pass GPT-6 Luna and escalation GPT-6 Sol, breaking-market search GPT-6 Luna, and draft/Fact/Voice/retry generation GPT-6 Luna. Historical GPT-5.6 ledger compatibility remains separate.
+- migration: `20260923035652_allow_gpt6_important_news_model_metadata.sql` is present in main but was **not applied**.
+- production_mutation: **0**. No production DB/schema write, migration apply, Edge Function deployment, Cron/config/secret change, report regeneration, X post, or Push.
+- verification carried forward from the reviewed exact candidate: targeted/migration tests `173 passed / 0 failed`; full Important News suite `424 passed / 0 failed`; changed logic/test checks and `git diff --check` passed. Existing unrelated `index.ts` dependency type error remains documented in the prior report.
+- remaining_production_rollout: separately authorize/apply the exact migration, read back both CHECK constraints, separately authorize/deploy only reviewed `important-news-monitor`, then verify natural runtime. `personalized-reports` deployment and 9/18 close regeneration remain separate work.
+- next_owner: `chatgpt`; stop for C1.
+
+## Previous H1 result — PR #9 freshened; merge held for Vercel rate limit (2026-09-23)
 
 - task_id: `kabumori-important-news-gpt6-schema-source-merge-20260923`
 - result: `review_required` — PR #9 was freshened and revalidated, but not merged because the required Vercel check failed due to its 24-hour build rate limit. No branch-protection bypass was used.
