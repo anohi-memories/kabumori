@@ -22,7 +22,13 @@
   - Production migration/Vault secret/Function secret/deploy/Cron mutation remain forbidden and require separate explicit approval.
   - PR #11 is stale partial control-sync; never merge.
 
-- Codex slot 2: current TASK is authoritative; keep ownership isolated from H1/G2. No overlap with Important News caller-auth or consumer mobile files is permitted.
+- Codex slot 2: `ready` — `x-autopost-phase0c2-production-deploy-retry-20260924`
+  - Phase0c C2: first authorized x-test-post deploy stopped on Supabase Functions API HTTP 500. Migration was not applied.
+  - Independent read-back: x-test-post remains ACTIVE v118 / verify_jwt=false / same runtime SHA; three legacy global UNIQUE constraints remain.
+  - production mutation 0。次はpreflight/diagnostic後、明示同意を取ってx-test-post deployを1回だけretry。成功時のみruntime確認→fresh preflight→exact migration。
+  - repeat failure時は自動再retry/別方式切替禁止。
+  - Recommended model: GPT-6 Sol Medium。
+
 
 - Claude slot 1: `ready` — `kabumori-release-mobile-blockers-phase1-auth-account-settings-20260924`
   - Main release-completion workstream for consumer mobile.
@@ -31,9 +37,12 @@
   - Must not touch Important News caller-auth, x-test-post/social-mobile, market-report, Netlify/Vercel settings, TestFlight/App Store Connect.
   - Recommended model: Opus 5.5.
 
-- Claude slot 2: `idle` — empty
-  - Previous mobile release blocker task moved to G1.
-  - Available for a new non-conflicting workstream.
+- Claude slot 2: `ready` — `x-admin-netlify-thin-control-plane-phase1-20260924`
+  - H2と分離した別系統。apps/admin/**中心でNetlify Free向けthin management UI設計/source candidate。
+  - SupabaseをAuth/RLS/RPC/Edge/Cron/X executionの正本として維持。Netlify/Vercel production mutationは0。
+  - x-test-post、Phase0 migrations、Cron、OAuth/Vault、H1 Important News、G1 consumer mobileへは触れない。
+  - Recommended model: Opus 5.5。
+
 
 ## Parallel safety
 
