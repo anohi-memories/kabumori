@@ -3,8 +3,8 @@
 - task_id: kabumori-pr8-gpt6-news-portfolio-final-merge-20260923
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: C1 PASS済みのPR #8（Important News producer V2 + Portfolio validator fix + GPT-6 Luna upgrade）をlatest mainへfreshenし、必要チェック通過後mainへmergeする。production deploy/migration/backfillは行わない。

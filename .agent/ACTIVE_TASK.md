@@ -6,11 +6,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: kabumori-gpt6-luna-model-upgrade-on-pr8-20260923
+- task_id: kabumori-pr8-gpt6-news-portfolio-final-merge-20260923
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: GPT-6 Luna upgrade pushed to PR #8 (`6f5b184`); required Vercel check passed; stop for C1. Production mutation 0.
+- note: PR #8 freshened and merged as `cd7ad89`; all 11 approved files verified on main. Automatic Vercel Production build succeeded; Supabase Functions/migration/backfill untouched. Stop for C1.
 
 
 ### Codex slot 2

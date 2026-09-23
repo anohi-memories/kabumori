@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-23 JST (C1 PASS on GPT-6 Luna upgrade; PR #8 final freshen/merge queued; production mutation 0)
+- checked_at: 2026-09-23 JST (PR #8 freshened onto latest main and merged as cd7ad89; Supabase production rollout remains unperformed)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,15 +14,12 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `kabumori-pr8-gpt6-news-portfolio-final-merge-20260923`
-  - C1 PASS on GPT-6 Luna upgrade.
-  - Official model id/pricing verified: `gpt-6-luna`, $0.10 input / $0.50 output per 1M tokens for standard short-context pricing.
-  - Important News app-copy draft/Fact and Personalized Reports draft/Fact use GPT-6 Luna on PR #8.
-  - GPT-6 Luna cost estimator entries/tests are included.
-  - PR #8 required Vercel status is success and PR is git-mergeable.
-  - Current main advanced 25 commits from the old merge base, but none touch the 11 approved PR #8 files.
-  - Next H1 freshens PR #8 onto latest main and merges if required checks remain green.
-  - No production deploy/migration/backfill yet. Production mutation 0.
+- Codex slot 1: `review_required` — `kabumori-pr8-gpt6-news-portfolio-final-merge-20260923`
+  - PR #8 merged and closed as `cd7ad8994d6e20c752735a52b0d933e1c2bb0a16`; all 11 approved files on main match freshened candidate `ab593c74fe6825ffbf9ba8ef2bed004a5b92b731`.
+  - GPT-6 Luna, Important News producer V2, and Portfolio validator fix are on main; required Vercel check passed.
+  - Main merge triggered an automatic Vercel Production build (success). No Supabase Edge Function deploy, DB migration, or report backfill was performed.
+  - Remaining production rollout requires the exact migration apply, both Function deploys, and a safe 9/18 close regeneration/backfill decision.
+  - Stop for C1.
   - Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase21-production-history-learning-disabled-deploy-20260923`

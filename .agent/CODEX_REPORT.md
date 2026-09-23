@@ -1,3 +1,35 @@
+## Latest H1 result — PR #8 freshened and merged (2026-09-23)
+
+- task_id: `kabumori-pr8-gpt6-news-portfolio-final-merge-20260923`
+- result: `review_required` — the C1-approved PR was rebased onto latest main, checks rerun, merged, and read back. Stop for C1.
+- pre_freshen_main: `3e0a346bb99f09cf9480021f1e4a4b540ea0929f`
+- final_feature_head: `ab593c74fe6825ffbf9ba8ef2bed004a5b92b731`
+- merge_commit / resulting_main: `cd7ad8994d6e20c752735a52b0d933e1c2bb0a16`
+- pull_request: https://github.com/anohi-memories/kabumori/pull/8 (merged and closed)
+- required_checks: Vercel `pass`; Vercel Preview Comments `pass` on the final PR head.
+- freshen evidence: Main changes since merge-base `3de9881207983460ac5379cc3066398b00ad4bba` were limited to `.agent` controls and social-mobile Phase20/21 files. Overlap against the 11 approved PR files was empty. The two PR commits were rebased without conflict; no `.agent` history was carried into the PR.
+- read-back: `git diff --exit-code ab593c74fe6825ffbf9ba8ef2bed004a5b92b731 cd7ad8994d6e20c752735a52b0d933e1c2bb0a16 -- <11 approved files>` returned no differences.
+
+### Preserved behavior on main
+
+- Important News source-backed app-copy V2 remains intact; draft and Fact use `gpt-6-luna` and GPT-6 Luna cost rates.
+- Portfolio validator retains the full-width Japanese-company-name exception; ASCII `UFJ銀行` and ordinary English remain blocked.
+- Personalized Reports draft and Fact use `gpt-6-luna`; cost estimator uses `$0.10` input / `$0.50` output per 1M tokens.
+- Out-of-scope GPT-5.6 Luna judgement, breaking-market search, and X-post-generation paths remain unchanged.
+
+### Verification and safety
+
+- Freshened targeted Important News tests: **31 passed / 0 failed**.
+- Personalized Reports and shared-market consumer tests: **26 passed / 0 failed**.
+- Full Important News suite: **421 passed / 0 failed** with `--no-check`.
+- `deno check --no-lock` passed for the nine changed/approved logic and test files excluding `index.ts`. Including `index.ts` reaches a pre-existing TS2769 `ArrayBufferLike`/`BufferSource` error in unchanged `supabase/functions/_shared/x_oauth2_post.ts:66`; that helper is outside the approved files and main delta.
+- `git diff --check origin/main...HEAD`: passed.
+- The PR merge triggered an automatic Vercel `Production` deployment for resulting main `cd7ad89`; GitHub reports it completed successfully at https://admin-l8y08p1vr-kabumori.vercel.app. This is the repository’s automatic web build, not a manual Supabase Function deployment.
+- Supabase production mutation = **0**: no migration apply, `important-news-monitor` deploy, `personalized-reports` deploy, Cron change, secret/Vault change, or 9/18 report regeneration/backfill.
+- H2/G1/G2 implementation files untouched. The pre-existing untracked `docs/deployment/` and `netlify.toml` were preserved and not staged.
+- remaining_production_rollout: separately apply the exact approved migration, deploy `important-news-monitor`, deploy `personalized-reports`, and decide whether/how to regenerate/backfill the 9/18 close report.
+- next_recommendation: C1 review main `cd7ad8994d6e20c752735a52b0d933e1c2bb0a16`; do not perform Supabase production rollout from this H1 turn.
+
 ## Latest H1 result — GPT-6 Luna upgrade on PR #8 (2026-09-23)
 
 - task_id: `kabumori-gpt6-luna-model-upgrade-on-pr8-20260923`
