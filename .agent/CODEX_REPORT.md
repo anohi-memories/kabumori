@@ -1,3 +1,17 @@
+## Latest H1 result — production migration stopped by authorization gate (2026-09-23)
+
+- task_id: `kabumori-important-news-gpt6-production-rollout-20260923`
+- result: `review_required` — preflight passed, but the exact production migration apply was rejected by the approval guard because the trusted user message did not explicitly authorize this GPT-6 production schema DDL. No alternate execution path was attempted.
+- source_main_at_preflight: `c59058c3ba41218cf490f16b96bf4cb130e6ef8c`; reviewed migration blob `e297c0a31c255859817d116927de26e45f7c1fbc`, matching the C1-approved exact SQL.
+- production_preflight: project `stock-x-autopost` is ACTIVE_HEALTHY. Production history did not contain version `20260923035652`. Read-only catalog confirmed both reviewed CHECK constraint names existed and each allowed only `gpt-5.6-luna` / `gpt-5.6-sol`.
+- migration_result: not applied. The rejected call did not execute the SQL. Post-rejection read-only catalog still showed both original GPT-5.6-only definitions; the migration version remained absent.
+- deployment: `important-news-monitor` was not deployed. No other production mutation was attempted.
+- conflict_check: H2 is on the isolated social-mobile history-learning Function/RPC/Vault QA task; G1 idle and G2 done per CURRENT_STATE. No overlap with these Important News constraints/Function.
+- verification: pre-existing reviewed candidate tests remain 173 targeted/migration tests and 424 full-suite tests passing. Supabase docs/changelog were checked; no relevant breaking change affects this narrow DDL apply.
+- production_mutations: 0. No DB DDL/data, Function, Cron/config/secrets, report, X, or Push changes.
+- blocked_next_step: obtain explicit user authorization for this exact migration `20260923035652_allow_gpt6_important_news_model_metadata.sql`. Then resume with exact single migration, postflight CHECK read-back, and only then the reviewed `important-news-monitor` deploy.
+- next_owner: `chatgpt`; stop for C1/user authorization.
+
 ## Latest H1 result — PR #9 merged after Vercel retry success (2026-09-23)
 
 - task_id: `kabumori-important-news-gpt6-schema-source-final-merge-20260923`
