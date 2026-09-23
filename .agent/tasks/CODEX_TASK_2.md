@@ -3,8 +3,8 @@
 - task_id: x-autopost-foundation-audit-multibrand-netlify-roadmap-20260923
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: GPT-6 Luna
 - purpose: social-mobile history-learning Phase23完了後、現在のX自動投稿基盤を壊さずに棚卸しし、複数ブランド/複数Xアカウント対応の完成、Supabase中核化、Netlify Free管理画面移行までの安全な実装ロードマップを確定する。今回は原則read-only調査と設計のみ。Production mutation/deploy/migrationはしない。
@@ -216,3 +216,21 @@ When complete:
 - control-file sync only if no source changes were necessary
 - fresh-check `origin/main`
 - STOP for C2
+
+
+## Final C2 — 2026-09-23
+
+PASS. Read-only X autopost foundation / multibrand / Netlify readiness audit accepted.
+
+Independent review confirmed the central P0 finding in production:
+- `posting_windows` has both brand-scoped UNIQUE `(brand_id, post_type, slot_no)` and legacy global UNIQUE `(post_type, slot_no)`.
+- `scheduled_posts` has both brand-scoped UNIQUE `(brand_id, schedule_date, post_type, slot_no)` and legacy global UNIQUE `(schedule_date, post_type, slot_no)`.
+- `publish_claims` has both brand-scoped UNIQUE `(brand_id, post_type, date_jst)` and legacy global UNIQUE `(post_type, date_jst)`.
+- production aggregate baseline independently matched the audit: brands=4, X accounts=3, publish-enabled X accounts=2, posting_windows=19, scheduled_posts=267, execution_logs=643, publish_claims=15, fingerprints=51, daily_content_plans=0.
+- no production mutation was required or performed for C2.
+
+Audit conclusion accepted:
+- current platform is partially multibrand but not yet safe for independent multibrand scheduling/publishing at scale.
+- posting core remains in Supabase; Netlify is a management-UI hosting candidate only.
+- existing Vercel Production must remain until Netlify preview/canary and rollback proof pass.
+- the next implementation gate is a disposable-only migration/rollback proof for removing the three obsolete global uniqueness blockers while retaining brand-scoped uniqueness. No production apply is authorized by this C2.
