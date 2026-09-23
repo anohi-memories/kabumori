@@ -19,13 +19,14 @@
   - Only `important-news-monitor` deployed; `verify_jwt=false`; SHA `4450ee09…e4b7`. Latest metadata says v64 but same SHA and source bundle `source/62`; discrepancy disclosed.
   - Natural Cron runs succeeded through 09:20 UTC; no new candidate/usage row, so GPT-6 persistence remains unverified. Migration history version differs from repo timestamp; no repair.
 
-- Codex slot 2: `ready` — `x-autopost-phase0b-publish-claim-brand-scope-and-migration-reconciliation-20260923`
-  - Phase0 C2はBLOCKED。disposable DBで3 global UNIQUE除去自体は成立したが、current publish_claim clientがlegacy `post_type,date_jst` conflict targetに依存しているため、そのままのmigrationは本番候補にできない。
-  - `claimPublishSlot` はbrand_id未送信、complete/fail PATCHもbrand_id未指定。先にtrusted brand_idでbrand-scoped化が必要。
-  - 4 planner RPCもscheduled_postsのold conflict target依存をsource-onlyで更新候補化する。
-  - multibrand foundation migrationのsource/history driftはblind replay/repairせず、forward-only reconciliation案を作る。
-  - production mutation/deploy/Cron/X投稿は0のまま。
-  - Recommended model: GPT-6 Sol Medium。
+- Codex slot 2: `done` — `x-autopost-phase0b-publish-claim-brand-scope-and-migration-reconciliation-20260923`
+  - C2 PASS。publish_claim clientをtrusted brand_id必須・brand-scoped conflict/updateへ変更するsource candidate完成。
+  - 4 planner RPCのscheduled_posts ON CONFLICTもbrand-scoped化するforward migration candidate完成。
+  - disposable PostgreSQLで2ブランド共存、same-brand duplicate rejection、planner idempotency、rollback、SECURITY DEFINER/search_path/EXECUTE維持を確認。
+  - tests: targeted 35/35 PASS、x-test-post full regression 403/403 PASS、publish_claim module deno check PASS、git diff check PASS。
+  - production mutationは0。source/history driftはblind replay/history repair禁止、forward-only fail-closed reconciliation方針。
+  - 次のproduction gate順序: compatible x-test-postを先にdeploy→runtime確認→fresh preflight→exact migration apply→read-back。deploy/applyはまだ未承認。
+  - Recommended model for production gate: GPT-6 Sol Medium。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
