@@ -1986,3 +1986,5 @@ Candidate awaits C1 review. Stop before any Edge Function deploy; a separate exp
 - local verification limitation: local repository was dirty and 812 commits behind; no local files changed and no local build/test run.
 - production mutation: 0. No DB write/migration, Function invocation/deploy, Cron/settings/secret change, Netlify/Vercel/App Store action, candidate injection, X post, or Push.
 - next_owner: chatgpt; stop for C1.
+
+- PR validation: GitHub/Vercel automatic Preview check failed with `api-deployments-free-per-day` (more than 100 deployments; retry in 24 hours). No manual retry or production deployment was attempted. The documentation-only change was not locally built/tested.
