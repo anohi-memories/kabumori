@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-23 JST (C1 PASS on PR #8 merge; next H1 queued for full Important News GPT-6 model unification; production mutation 0)
+- checked_at: 2026-09-23 JST (H1 stopped for C1 after discovering existing GPT-5.6-only model metadata CHECK constraints; production mutation 0)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,14 +14,10 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `kabumori-important-news-full-gpt6-model-unification-20260923`
-  - C1 PASS on PR #8 final merge.
-  - PR #8 is merged/closed at main `cd7ad8994d6e20c752735a52b0d933e1c2bb0a16`; resulting Vercel status is success.
-  - Important News app-copy V2, Portfolio validator fix, GPT-6 Luna app-copy, and GPT-6 Luna Personalized Reports are on main.
-  - Remaining Important News runtime paths still on GPT-5.6 are importance judgement/escalation, breaking-market AI search, and Important News post-generation.
-  - Next H1 inventories all remaining GPT-5.6 references under `important-news-monitor` and upgrades active paths to GPT-6 Luna / GPT-6 Sol with pricing/tests.
-  - No Supabase production deploy/migration/backfill yet. Production mutation 0.
-  - Recommended model: Luna.
+- Codex slot 1: `review_required` — `kabumori-important-news-full-gpt6-model-unification-20260923`
+  - Local source prototype was tested, but stopped before commit/PR because two schema CHECK constraints accept only GPT-5.6 IDs for `judgement_model` and `generation_model`.
+  - No migration was created. Review `.agent/tasks/CODEX_TASK.md` and `.agent/CODEX_REPORT.md`; C1 must decide on a separate narrowly scoped schema task before source rollout.
+  - Production mutation 0; no Function deploy or database operation.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase22-live-history-dependency-gate-default-off-20260923`
   - Phase21 C2 PASS済み。production history-learning FunctionはACTIVE v1 / verify_jwt=true / disabled dependencyのまま。
@@ -40,7 +36,7 @@
 
 ## Parallel safety
 
-- H1 source-backed news producer + Portfolio validator candidate is review_required; production mutation 0; no producer deploy/migration/RPC.
+- H1 GPT-6 unification is stopped for C1 on model CHECK constraints; local prototype only, no producer deploy/migration/RPC.
 - H2/G1/G2 implementation files are untouched by this H1.
 - 同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数slotで同時変更しない。
 - push前にfresh `origin/main`確認。既存未コミット変更は他workstream所有として触らない。

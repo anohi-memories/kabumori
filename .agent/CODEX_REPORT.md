@@ -1,3 +1,46 @@
+## Latest H1 result — GPT-6 Important News unification stopped for schema review (2026-09-23)
+
+- task_id: `kabumori-important-news-full-gpt6-model-unification-20260923`
+- result: `review_required` — implementation prototype passed its tests but was stopped before source commit/PR when existing persisted-model CHECK constraints showed GPT-6 requires a schema change. The TASK explicitly says to stop for C1 if a migration seems necessary.
+- source_base: fresh `origin/main` `e7a5e3c09e8a51a5e99ecdb902d6a20754f8274d`.
+- local_prototype: isolated worktree `/private/tmp/kabumori-important-news-gpt6-unification`, branch `codex/kabumori-important-news-gpt6-unification-20260923`; changes remain uncommitted and unpushed. No commit or PR was created.
+- production_mutation: **0**. No production DB query/write, migration, Edge Function deploy, Cron/config/secret change, report regeneration/backfill, X post, or Push occurred.
+
+### Blocking schema evidence
+
+- `supabase/migrations/20260830120000_add_important_news_ai_judgement.sql:19-20` constrains `important_news_candidates.judgement_model` to `gpt-5.6-luna` or `gpt-5.6-sol`.
+- `supabase/migrations/20260830130000_add_important_news_post_generation.sql:12-14` constrains `generation_model` to the same two GPT-5.6 IDs.
+- The monitor writes `final.model` to `judgement_model` (`index.ts:710`) and `generated.model` to `generation_model` (`index.ts:892`); its failure-metadata path also writes `generation_model` (`index.ts:918`). GPT-6 IDs would therefore violate the declared constraints. No migration candidate was created, and no assumption was made about the live database's migration state.
+- C1 decision needed: whether to create a separate, narrowly scoped migration candidate extending both CHECK constraints to GPT-6 IDs, before restarting the source unification task. Do not deploy the local prototype as-is.
+
+### Official IDs, pricing, and model-reference inventory
+
+- OpenAI official docs were re-checked: model IDs `gpt-6-luna` / `gpt-6-sol`; standard short-context rates per 1M tokens Luna `$0.10` input / `$0.50` output, Sol `$2` / `$10`. Sources: [OpenAI model catalog](https://developers.openai.com/api/docs/models), [OpenAI API pricing](https://developers.openai.com/api/docs/pricing). Values match the task's expected values.
+- Pre-edit `supabase/functions/important-news-monitor/` inventory:
+  - `importance_judgement_logic.ts`: active Luna first pass, Sol escalation, both model labels in the type, reasoning selection, prompt branch and Luna preliminary-result branch were GPT-5.6.
+  - `breaking_market_source_fetchers.ts`: active search `MODEL` was GPT-5.6 Luna.
+  - `post_generation_logic.ts`: active model constant and result/retry model types were GPT-5.6 Luna.
+  - `index.ts`: generation-failure metadata default was GPT-5.6 Luna; normal save uses the generated result model. Judgment persistence uses the final result model.
+  - `usage_ledger.ts`: rates contained Luna `$0.20/$1.20` and Sol `$4/$20` per 1M, plus existing GPT-6 Luna `$0.10/$0.50`; unknown IDs fell back to GPT-5.6 Luna rates. GPT-6 Sol had no rate entry.
+  - Tests and mock diagnostics in `importance_judgement_logic_test.ts`, `post_generation_logic_test.ts`, `generation_dispatch_logic_test.ts`, and `usage_ledger_test.ts` asserted the GPT-5.6 active models and costs; those fixtures were updated in the local prototype. Existing GPT-5.6 ledger fixtures were retained for legacy-row accounting.
+- Local prototype post-edit inventory: the four active runtime entrypoints use GPT-6 only; no active runtime path selects GPT-5.6. GPT-5.6 string literals remain only in `usage_ledger.ts` as historical cost rates and in `usage_ledger_test.ts` as historical-rate / already-written-row fixtures. These legacy rates are needed for historical ledger cost recomputation and are not used as runtime fallbacks.
+
+### Local prototype changes and preserved behavior
+
+- Changed locally: `supabase/functions/important-news-monitor/importance_judgement_logic.ts`, `importance_judgement_logic_test.ts`, `breaking_market_source_fetchers.ts`, `post_generation_logic.ts`, `post_generation_logic_test.ts`, `generation_dispatch_logic_test.ts`, `usage_ledger.ts`, `usage_ledger_test.ts`, `cost_path_audit_test.ts`, `index.ts`.
+- Proposed routing: judgement GPT-6 Luna first pass; existing escalation reasons/thresholds unchanged and route to GPT-6 Sol; breaking-market search GPT-6 Luna; draft/Fact/Voice and existing retry sequence GPT-6 Luna. Reasoning efforts remain low for Luna and medium for Sol. Search source allowlist/validation/query rotation and publication/retry gates were untouched.
+- Proposed accounting: GPT-6 Luna `$0.10/$0.50`; GPT-6 Sol `$2/$10`; unknown-model fallback GPT-6 Luna. Historical GPT-5.6 rates remain for prior ledger records only.
+- Added a static test that rejects GPT-5.6 model selection in active runtime entrypoints and cost assertions for GPT-6 Luna/Sol.
+
+### Verification and remaining checks
+
+- Targeted model-path tests: **172 passed / 0 failed**.
+- Full `important-news-monitor` suite: **423 passed / 0 failed** with `deno test --no-check`.
+- `deno check --no-config --no-lock` passed for all changed logic/test modules except `index.ts`. Checking `index.ts` reports a pre-existing TS2322 `Uint8Array<ArrayBufferLike>` vs `BufferSource` incompatibility in unchanged `supabase/functions/_shared/x_oauth2_post.ts:66`; the helper is outside the diff.
+- `git diff --check`: passed.
+- Optional `deno fmt --check` did not pass: Deno 2.9's default formatter proposes broad reformatting in all 10 touched files, and also flags untouched neighboring baseline files. No broad formatting churn was applied.
+- No source PR/commit was created due to the schema blocker. Prototype is not production-ready until C1 resolves the schema step.
+
 ## Latest H1 result — PR #8 freshened and merged (2026-09-23)
 
 - task_id: `kabumori-pr8-gpt6-news-portfolio-final-merge-20260923`

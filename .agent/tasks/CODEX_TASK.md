@@ -3,11 +3,27 @@
 - task_id: kabumori-important-news-full-gpt6-model-unification-20260923
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: PR #8 merge後のImportant News monitoring pipelineに残るGPT-5.6 model参照を公式GPT-6系へ統一するsource candidateを作る。production deployは行わない。
+
+## H1 stop report — schema constraint blocker (2026-09-23)
+
+- result: `review_required`; stopped exactly at the task's migration-required checkpoint.
+- blocker: two existing source migrations restrict persisted model metadata to GPT-5.6 IDs. `supabase/migrations/20260830120000_add_important_news_ai_judgement.sql:19-20` limits `judgement_model` to `gpt-5.6-luna` / `gpt-5.6-sol`; `supabase/migrations/20260830130000_add_important_news_post_generation.sql:12-14` applies the same restriction to `generation_model`. The live source writes `final.model` and `generated.model` to these columns (`index.ts:710,892`), so GPT-6 runtime IDs would violate the CHECK constraints. Per this TASK, no migration was created and work stopped for C1.
+- official docs verified: `gpt-6-luna` and `gpt-6-sol`; standard short-context rates are Luna `$0.10` input / `$0.50` output and Sol `$2` / `$10` per 1M tokens. [GPT-6 model catalog](https://developers.openai.com/api/docs/models) and [API pricing](https://developers.openai.com/api/docs/pricing). These match expected values.
+- fresh base: `origin/main` `e7a5e3c09e8a51a5e99ecdb902d6a20754f8274d`.
+- local-only prototype: isolated worktree `/private/tmp/kabumori-important-news-gpt6-unification`, branch `codex/kabumori-important-news-gpt6-unification-20260923`, uncommitted and not pushed; no PR/commit. It is not production-ready until the model CHECK constraints are resolved in an approved separate schema step.
+- changed locally: `supabase/functions/important-news-monitor/importance_judgement_logic.ts`, `importance_judgement_logic_test.ts`, `breaking_market_source_fetchers.ts`, `post_generation_logic.ts`, `post_generation_logic_test.ts`, `generation_dispatch_logic_test.ts`, `usage_ledger.ts`, `usage_ledger_test.ts`, `cost_path_audit_test.ts`, `index.ts`.
+- pre-inventory: active judgement used GPT-5.6 Luna and escalation GPT-5.6 Sol; breaking-market search used GPT-5.6 Luna; post-generation draft/Fact/Voice used GPT-5.6 Luna; `index.ts` failure metadata named GPT-5.6 Luna. Judgement and ledger cost tables were Luna `$0.20/$1.20`, Sol `$4/$20` per 1M; unknown usage models fell back to GPT-5.6 Luna rates.
+- local prototype routing: judgement GPT-6 Luna, unchanged escalation criteria to GPT-6 Sol; breaking search GPT-6 Luna; generation GPT-6 Luna. Reasoning effort, thresholds, search/source validation, query cadence, generation order/retry/publish gates were unchanged. All active monitor runtime entrypoints contain no GPT-5.6 selection.
+- local prototype accounting: GPT-6 Luna `$0.10/$0.50`; GPT-6 Sol `$2/$10`; unknown model fallback GPT-6 Luna. GPT-5.6 rate entries and related old-model test fixtures remain only for recomputing/forwarding historical `ai_usage_events` rows and are not selected by active runtime paths.
+- tests on prototype: targeted changed-path tests **172 passed / 0 failed**; full Important News suite **423 passed / 0 failed** with `--no-check`; `deno check --no-config --no-lock` passed for the changed logic and test modules. Checking `index.ts` reaches a pre-existing TS2322 `ArrayBufferLike`/`BufferSource` error in unchanged `supabase/functions/_shared/x_oauth2_post.ts:66`. `git diff --check` passed.
+- fresh inventory after prototype: `rg` shows GPT-5.6 literals only in `usage_ledger.ts` historical rates and `usage_ledger_test.ts` historical-rate/row fixtures; no active runtime selector remains. Production tree was not changed by the prototype.
+- production mutation: **0**. No DB read/write, migration, Function deploy, Cron/config/secret change, report regeneration, or X/Push action.
+- next decision for C1: determine whether to schedule a narrowly scoped migration to permit GPT-6 metadata IDs in both CHECK constraints, then resume/recreate the source candidate. Do not deploy this prototype as-is.
 
 ## Prior C1 decision
 

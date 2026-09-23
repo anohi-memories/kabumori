@@ -6,11 +6,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: kabumori-pr8-gpt6-news-portfolio-final-merge-20260923
+- task_id: kabumori-important-news-full-gpt6-model-unification-20260923
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: PR #8 freshened and merged as `cd7ad89`; all 11 approved files verified on main. Automatic Vercel Production build succeeded; Supabase Functions/migration/backfill untouched. Stop for C1.
+- note: Local GPT-6 source prototype stopped for C1 because existing `judgement_model` / `generation_model` CHECK constraints permit GPT-5.6 IDs only. No migration, source PR, deploy, or DB mutation.
 
 
 ### Codex slot 2
