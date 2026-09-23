@@ -346,6 +346,7 @@ test("close report positive: one draft + one Fact check, stored as completed", a
   assert.equal(outcome.status, "passed");
   assert.deepEqual(calls, ["draft", "fact"]);
   assert.equal(outcome.model, REPORT_MODEL);
+  assert.equal(outcome.estimatedCost, 0.0007);
   const update = reportUpdate(outcome, snapshot, { lane: "test" });
   assert.equal(update.status, "completed");
   assert.equal(update.fact_status, "passed");

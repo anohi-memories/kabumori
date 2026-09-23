@@ -75,7 +75,7 @@ test("the prompt source is plain text: markup, entities and URLs removed, capped
 test("requests use luna, no storage, strict schemas and only stored source text", () => {
   const draft = appCopyDraftRequestBody(GREER) as Record<string, any>;
   assert.equal(draft.model, APP_COPY_MODEL);
-  assert.equal(draft.model, "gpt-5.6-luna");
+  assert.equal(draft.model, "gpt-6-luna");
   assert.equal(draft.store, false);
   assert.equal(draft.text.format.strict, true);
   assert.ok(!("tools" in draft), "no web search tool");
@@ -88,7 +88,7 @@ test("requests use luna, no storage, strict schemas and only stored source text"
   assert.ok(APP_COPY_DRAFT_INSTRUCTIONS.includes("市場や株価への影響"));
   const copy = parseAppCopyDraft(GOOD_COPY).copy!;
   const fact = appCopyFactRequestBody(GREER, copy) as Record<string, any>;
-  assert.equal(fact.model, "gpt-5.6-luna");
+  assert.equal(fact.model, "gpt-6-luna");
   assert.ok(!("tools" in fact));
   assert.ok(JSON.parse(fact.input).detail_ja.includes("500億ドル"));
 });
@@ -174,6 +174,8 @@ test("a passed Fact check yields passed copy after exactly one generation and on
   assert.equal(outcome.status, "passed");
   assert.equal(outcome.calls, 2);
   assert.equal(outcome.copy!.titleJa, GOOD_COPY.title_ja);
+  assert.equal(outcome.model, "gpt-6-luna");
+  assert.equal(outcome.estimatedCost, 0.0007);
   assert.ok(outcome.estimatedCost > 0 && outcome.estimatedCost < 0.01);
 });
 
@@ -240,7 +242,7 @@ test("a fact-check verdict other than exactly true fails", async () => {
 test("the update writes only app_* columns", () => {
   const copy: AppCopy = parseAppCopyDraft(GOOD_COPY).copy!;
   const update = appCopyUpdate({
-    status: "passed", copy, issues: [], error: null, model: "gpt-5.6-luna",
+    status: "passed", copy, issues: [], error: null, model: "gpt-6-luna",
     calls: 2, inputTokens: 1, outputTokens: 1, estimatedCost: 0,
   }, new Date("2026-09-11T00:00:00Z"));
   for (const key of Object.keys(update)) assert.ok(key.startsWith("app_"), key);

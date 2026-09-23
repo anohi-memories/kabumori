@@ -21,7 +21,7 @@ const mixedCandidates = (bodyLengths: number[]): GenerationCandidate[] => bodyLe
   companyName: index === 2 ? null : "例示株式会社",
   companyCode: index === 2 ? null : "12340",
   entityKey: index === 2 ? "breaking:event:geopolitics:2026-09-16T00:00" : "company:1234",
-  category: index === 0 ? "earnings_revision_up" : index === 1 ? "rates" : "geopolitics",
+  category: index === 0 ? "earnings_revision_up" : index === 1 ? "interest_rates" : "geopolitics",
   publishedAt: "2026-09-16T00:00:00Z",
   importance: "important",
   affectedEntities: index === 2 ? ["市場"] : ["例示株式会社"],
@@ -80,6 +80,6 @@ test("mixed important-news cost fixture measures stage and whole-path input redu
   // This remains below the 30% whole-workload target because judgement, app-copy and web-search
   // inputs are unchanged; report the measured result instead of overstating it.
   assert.ok(wholeReduction < 0.3, `whole-path reduction must not be overstated: ${wholeReduction}`);
-  assert.equal(beforeWholePath, 27377);
-  assert.equal(afterWholePath, 23714);
+  assert.equal(beforeWholePath, 27641);
+  assert.equal(afterWholePath, 23978);
 });

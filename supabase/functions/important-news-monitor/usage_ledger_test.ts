@@ -25,6 +25,8 @@ import type { GenerationCandidate } from "./post_generation_logic.ts";
 
 test("cost estimate: Luna, Sol and web_search tool calls", () => {
   assert.equal(estimateCostUsd("gpt-5.6-luna", 1_000_000, 1_000_000), 1.4);
+  assert.equal(estimateCostUsd("gpt-6-luna", 1_000_000, 1_000_000), 0.6);
+  assert.equal(estimateCostUsd("gpt-6-luna", 12_000, 700, 1), 0.01155);
   assert.equal(estimateCostUsd("gpt-5.6-sol", 1_000_000, 1_000_000), 24);
   assert.equal(WEB_SEARCH_CALL_USD, 0.01);
   // A typical breaking_market call: ~12k input, ~700 output, 1 search.
@@ -97,7 +99,7 @@ test("app-copy draft and Fact calls are recorded", async () => {
   );
   await requester("draft", {});
   await requester("fact", {});
-  assert.deepEqual(written, ["news_app_copy_draft:cand-2:0.00108", "news_app_copy_fact:cand-2:0.00108"]);
+  assert.deepEqual(written, ["news_app_copy_draft:cand-2:0.0005", "news_app_copy_fact:cand-2:0.0005"]);
 });
 
 function modelJudgement(model: "gpt-5.6-luna" | "gpt-5.6-sol", input: number, output: number): ModelJudgement {
@@ -146,7 +148,7 @@ test("breaking search rows: one per billed query, none for a 429 that never reac
 });
 
 test("the breaking fetcher records billed tokens and cost from the response", async () => {
-  const query = { key: "critical_market_events", searchQuery: "q", defaultCategory: "rates", defaultTopicKey: "breaking:x" } as BreakingMarketQuery;
+  const query = { key: "critical_market_events", searchQuery: "q", defaultCategory: "other_market_moving", defaultTopicKey: "breaking:x" } as BreakingMarketQuery;
   const raw = {
     status: "completed",
     usage: { input_tokens: 11800, output_tokens: 640 },

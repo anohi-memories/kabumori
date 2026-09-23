@@ -9,7 +9,7 @@
 // not touched. Phase 3's producer may reuse only Fact-passed app copy for push;
 // this module itself still writes only the app_* columns.
 
-export const APP_COPY_MODEL = "gpt-5.6-luna" as const;
+export const APP_COPY_MODEL = "gpt-6-luna" as const;
 export const APP_COPY_TITLE_MAX = 60;
 export const APP_COPY_SUMMARY_MAX = 200;
 export const APP_COPY_DETAIL_MAX = 800;
@@ -246,7 +246,7 @@ export function localAppCopyIssues(copy: AppCopy): string[] {
 }
 
 function lunaCost(inputTokens: number, outputTokens: number): number {
-  return Number(((inputTokens * 0.2 + outputTokens * 1.2) / 1_000_000).toFixed(8));
+  return Number(((inputTokens * 0.1 + outputTokens * 0.5) / 1_000_000).toFixed(8));
 }
 
 function safeCode(error: unknown): string {

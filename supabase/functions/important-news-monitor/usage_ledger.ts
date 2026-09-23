@@ -11,11 +11,12 @@
 // ignored. Rates live here only, and every row keeps the raw token/call counts
 // so the estimate can be recomputed once billing confirms the real prices.
 
-export type PricedModel = "gpt-5.6-luna" | "gpt-5.6-sol";
+export type PricedModel = "gpt-5.6-luna" | "gpt-6-luna" | "gpt-5.6-sol";
 
 /** USD per 1M tokens. */
 export const MODEL_RATES: Record<PricedModel, { input: number; output: number }> = {
   "gpt-5.6-luna": { input: 0.2, output: 1.2 },
+  "gpt-6-luna": { input: 0.1, output: 0.5 },
   "gpt-5.6-sol": { input: 4, output: 20 },
 };
 

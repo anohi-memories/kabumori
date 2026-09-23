@@ -55,7 +55,7 @@ export type NewsInput = {
   keyPointsJa: string[];
 };
 
-export const REPORT_MODEL = "gpt-5.6-luna" as const;
+export const REPORT_MODEL = "gpt-6-luna" as const;
 export const CLOSE_SESSION_END_MINUTES = 15 * 60 + 30;
 export const RELATIVE_STRENGTH_BAND_PT = 0.3;
 export const MAX_NEWS_PER_STOCK = 3;
@@ -954,7 +954,7 @@ export type ReportOutcome = {
 };
 
 function lunaCost(inputTokens: number, outputTokens: number): number {
-  return Number(((inputTokens * 0.2 + outputTokens * 1.2) / 1_000_000).toFixed(8));
+  return Number(((inputTokens * 0.1 + outputTokens * 0.5) / 1_000_000).toFixed(8));
 }
 
 function safeCode(error: unknown): string {
