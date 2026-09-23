@@ -1,146 +1,107 @@
 # Codex Task
 
-- task_id: kabumori-important-news-monitor-caller-auth-finalize-20260923
+- task_id: kabumori-important-news-caller-auth-merge-only-20260924
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: critical
 - recommended_model: Luna
-- purpose: PR #12のcaller-auth candidateを最新mainへfreshenし、full regressionとdisposable PostgreSQLでmigration実行証明まで行い、merge可能な最終candidateへ仕上げる。本番変更はまだ行わない。
+- purpose: C1 PASS済みのPR #12 caller-auth source candidateを、最新mainとのsemantic driftを再確認して通常手順でmergeする。production auth rolloutはこのTASKでは行わない。
 
 ## C1 decision
 
-Previous task `kabumori-important-news-monitor-caller-auth-remediation-candidate-20260923` is **NOT PASS for merge yet, but design direction is accepted**.
+Previous task `kabumori-important-news-monitor-caller-auth-finalize-20260923` is **PASS for source candidate**.
 
-Accepted findings/design:
-- production has exactly four current pg_cron callers for `important-news-monitor`
-- current callers had no credential
-- Function-only auth would break all four jobs
-- chosen design is coherent:
-  - dedicated high-entropy header
-  - Function-side fail-closed validation before service-role load/body parse/mode dispatch
-  - Cron header value resolved from Vault at runtime
-  - `verify_jwt=false` remains because pg_cron is not using a user JWT
-- PR #12 is focused and production mutation remains 0
-- targeted auth/wiring/migration tests passed 7/7
-- Vercel preview check succeeded
+Approved evidence:
+- PR #12 final reviewed head: `9dffce9620b8a04706cad314a1e558ea141cb105`
+- Freshened base used for final verification: `118fb488064876536e595e8a5e06fbd3c4c11f7e`
+- Exact implementation scope: 7 files only:
+  - `docs/runbooks/important-news-monitor-caller-auth.md`
+  - `supabase/functions/important-news-monitor/caller_auth.ts`
+  - `supabase/functions/important-news-monitor/caller_auth_test.ts`
+  - `supabase/functions/important-news-monitor/caller_auth_wiring_test.ts`
+  - `supabase/functions/important-news-monitor/caller_auth_migration_test.ts`
+  - `supabase/functions/important-news-monitor/index.ts`
+  - `supabase/migrations/20260923110440_important_news_monitor_caller_auth.sql`
+- Targeted tests: 7/7 PASS
+- Full Important News regression: 431/431 PASS
+- changed-module checks and `git diff --check`: PASS
+- handler-wide check reaches only the pre-existing unchanged `_shared/x_oauth2_post.ts:66` type error
+- disposable PostgreSQL 16.15 proof PASS:
+  - exactly four intended Cron jobs patched
+  - schedule/body/URL/active/other metadata preserved
+  - runtime Vault lookup confirmed
+  - no secret literal stored
+  - missing/noncanonical secret, missing job, unexpected command shape, and rerun all fail transactionally with no partial Cron mutation
+- Vercel required status on final head: success
+- production mutation during candidate work: 0
+- PR #11 is stale/partial control-sync only and must never be merged.
 
-Merge blockers:
-1. PR #12 branch is behind/diverged from current main and must be freshened before review.
-2. Full Important News regression suite was not run.
-3. The migration was not executed against disposable PostgreSQL, so exact cron command patching / transactional fail-closed behavior is not yet proven.
-4. PR #11 is a stale partial control-sync draft and must not be merged.
+Current main later received only H1 report/control synchronization after the verified base. Before merge, fresh-check again and verify no semantic overlap.
 
 ## Mandatory startup
 
 1. Read `PROJECT_RULES.md`
 2. Read `.agent/ORCHESTRATION.md`
 3. Read `.agent/CURRENT_STATE.md`
-4. Read this TASK
-5. Read PR #12 and its runbook
-6. Fresh fetch `origin/main`
-7. Confirm H2/G1/G2 do not own `important-news-monitor`, these four Cron jobs, or the auth migration
-8. Do not touch PR #11 except to report that it remains unmerged/stale
+4. Read this TASK and latest `.agent/CODEX_REPORT.md`
+5. Fresh fetch `origin/main`
+6. Inspect PR #12 current head/checks/mergeability
+7. Compare latest main against PR #12 reviewed base/head
+8. Confirm no H2/G1/G2 ownership overlap with the 7 implementation files or the caller-auth migration
 
 ## Work
 
-### 1. Freshen PR #12
+If and only if:
+- PR #12 still contains exactly the reviewed implementation semantics,
+- latest-main drift has no semantic overlap,
+- required checks remain green,
+- branch protection allows normal merge,
 
-- Rebase/cherry-pick the focused PR #12 implementation onto latest `origin/main`
-- Resolve only genuine conflicts
-- Do not carry stale `.agent` history into the implementation PR unless required by repository convention
-- Reconfirm changed implementation scope remains limited to:
-  - `supabase/functions/important-news-monitor/caller_auth.ts`
-  - `supabase/functions/important-news-monitor/index.ts`
-  - targeted tests
-  - one forward migration for the four Cron jobs
-  - operator runbook
+then merge PR #12 by the repository's normal merge strategy.
 
-### 2. Full verification
+After merge:
+- read back resulting main SHA
+- verify the 7 implementation files on main match the reviewed candidate semantically
+- confirm migration is present in source but **not applied**
+- confirm production Function/Cron/Vault/config remain unchanged
 
-Run:
-- targeted auth tests
-- full `important-news-monitor` regression suite using the repository-approved invocation
-- changed-file `deno check` / equivalent
-- `git diff --check`
+PR #11:
+- do not merge it
+- it may be closed as obsolete only after confirming it contains no unique implementation source; otherwise leave it untouched and report.
 
-Document any pre-existing unrelated type issue separately.
+## Forbidden production actions
 
-### 3. Disposable PostgreSQL proof
+Do NOT:
+- apply `20260923110440_important_news_monitor_caller_auth.sql`
+- create/update Vault secret
+- configure `IMPORTANT_NEWS_CRON_SECRET`
+- deploy `important-news-monitor`
+- mutate the four Cron jobs
+- change `verify_jwt`
+- change `auto_publish`
+- manually invoke the Function
+- inject candidate / X post / Push
+- modify unrelated source
 
-Execute the migration candidate against an isolated disposable PostgreSQL/Supabase-compatible environment that contains a representative `cron.job` shape for the four jobs.
-
-Prove:
-- exactly the four intended jobs are patched
-- schedules remain unchanged
-- request bodies remain unchanged
-- URLs remain unchanged
-- active flags/other cron metadata remain unchanged
-- only command header expression gains the dedicated secret header
-- Vault lookup is runtime-only; secret literal is never embedded
-- missing Vault secret fails before any partial update
-- missing/extra job or unexpected command/header shape fails transactionally
-- rerun after patch fails closed rather than silently duplicating the header
-- rollback strategy is understood and documented; do not create a production rollback migration unless explicitly needed
-
-### 4. Security checks
-
-Confirm:
-- missing/malformed/wrong secret rejected before body parse and privileged credential loading
-- valid secret permits normal dispatch
-- secret never appears in source, logs, responses, tests, reports, or migration text
-- dry-run/manual/admin modes are protected by the same gate
-- no mode bypass exists before authentication
-
-## Production restrictions
-
-Forbidden:
-- production migration apply
-- Vault write
-- Function secret/config change
-- Function deploy
-- Cron mutation
-- `verify_jwt` change
-- auto_publish change
-- manual Function invocation
-- candidate injection
-- X post / Push
-- any unrelated schema/config change
-
-## PR handling
-
-- PR #12 may be updated/replaced with a fresh final candidate branch.
-- Do not merge until all checks above pass and C1 approves.
-- PR #11 must remain unmerged; if it is obsolete, report that for later cleanup rather than merging it.
+Production rollout requires a separate explicit approval after merge.
 
 ## Handoff
 
 Update `.agent/CODEX_REPORT.md` with:
-- fresh main SHA
-- final PR/head SHA
-- exact changed files
-- full regression result
-- disposable PostgreSQL proof result
-- Vercel/check status
-- compatibility/rollback notes
+- pre-merge main SHA
+- PR #12 head/check status
+- drift/conflict result
+- merge result/resulting main SHA
+- read-back result
+- PR #11 disposition
 - production mutation = 0
-- C1 recommendation
+- exact next production rollout prerequisites
 
 Then:
 - status -> `review_required`
 - next_owner -> `chatgpt`
 - STOP for C1
 
-**推奨モデル：Luna。問題が出た場合のみGPT-6 Sol Mediumへ上げる。**
-
-## Report
-
-- result: `review_required`; PR #12 refreshed onto `origin/main` `118fb488064876536e595e8a5e06fbd3c4c11f7e`, final candidate head `9dffce9620b8a04706cad314a1e558ea141cb105`.
-- changed scope: the original seven implementation files only; no `.agent` files are in PR #12.
-- tests: targeted auth/wiring/migration `7/7`; full Important News suite `431/431`; candidate modules `deno check` and `git diff --check` pass. Handler-wide check reaches the pre-existing error in unchanged `_shared/x_oauth2_post.ts:66`.
-- PostgreSQL: exact candidate migration passed against disposable PostgreSQL 16.15 with representative Cron/Vault stubs. Four intended jobs alone were patched; runtime Vault resolution, metadata preservation, missing/noncanonical secret, missing job, late command-shape drift rollback, and rerun fail-closed were verified. Temporary container removed.
-- checks: Vercel passed on final head; GitHub Actions reported no workflow runs.
-- PR #11 remains open/draft/unmerged and untouched.
-- production_mutation: `0`; no migration apply, Vault or Function secret/config change, Function deploy, Cron mutation, invocation, candidate injection, X post, or Push.
-- C1 recommendation: review PR #12 and decide merge; no production action is part of this task.
+**推奨モデル：Luna。**
