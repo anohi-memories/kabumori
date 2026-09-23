@@ -1,17 +1,16 @@
-## Latest H1 result — exact migration applied; Function deploy awaits separate approval (2026-09-23)
+## Latest H1 result — GPT-6 Important News production rollout (2026-09-23)
 
 - task_id: `kabumori-important-news-gpt6-production-rollout-20260923`
-- result: `review_required` — after the user explicitly approved the exact GPT-6 migration, its SQL was applied and both CHECK constraints read back correctly. The subsequent production Function deploy was rejected by the approval guard because the user's explicit approval covered the migration only. No alternate deploy path was attempted.
-- source: latest reviewed main includes `20260923035652_allow_gpt6_important_news_model_metadata.sql`; exact SQL was passed to the Supabase migration tool.
-- migration: applied successfully. Postflight definitions for both `important_news_candidates_judgement_model_check` and `important_news_candidates_generation_model_check` allow NULL plus `gpt-5.6-luna`, `gpt-5.6-sol`, `gpt-6-luna`, and `gpt-6-sol`.
-- migration_history_note: Supabase recorded the correct migration name under generated version `20260923084819`, rather than repository file version `20260923035652`. No migration-history repair was performed. This discrepancy is disclosed for C1; do not repair without separate direction.
-- Function preflight: `important-news-monitor` was ACTIVE v61, `verify_jwt=false`, source hash `ce7b4bf79da6fb35f8593c4a692ef125acdbdb0ed26c189a761f15eeb5a4070f`. Latest-main package preflight covered 25 deployed runtime files and verified GPT-6 Luna/Sol routes.
-- Function deploy: authorization guard rejected it because no explicit user approval for production `important-news-monitor` deployment was present. Post-rejection read-back confirms still v61 with the same source hash and `verify_jwt=false`. No Function deploy occurred.
-- natural_runtime: not observed because the reviewed Function has not been deployed. No manual candidate, X post, or Push was created.
-- verification: reviewed candidate results carried forward: 173 targeted/migration tests and 424 full Important News tests passed. No production runtime tests were run.
-- production_mutations: exactly one change — the approved migration/DDL above. No other schema/RLS/grant/index/trigger/RPC changes, no Function/Cron/config/secrets change, no report regeneration, X post, or Push.
-- remaining: obtain separate explicit approval for only the reviewed `important-news-monitor` deployment (preserving `verify_jwt=false`); resolve whether the generated migration-history version needs a separately approved reconciliation. Personalized Reports and 9/18 regeneration remain untouched.
-- next_owner: `chatgpt`; stop for C1.
+- result: `review_required` — only the explicitly approved migration and `important-news-monitor` deployment were applied; stop for C1.
+- production_migration: applied only `20260923035652_allow_gpt6_important_news_model_metadata.sql`. Postflight read-back confirms both named CHECK constraints allow NULL plus `gpt-5.6-luna`, `gpt-5.6-sol`, `gpt-6-luna`, and `gpt-6-sol`.
+- migration_history: Supabase records `allow_gpt6_important_news_model_metadata` as version `20260923084819`, different from the repository filename timestamp `20260923035652`. No migration-history repair was performed.
+- function: only `important-news-monitor` was deployed from the reviewed latest-main 25-file bundle, explicitly preserving `verify_jwt=false`. Deploy response reported ACTIVE v62 and SHA `4450ee09ff03099f044659cb7408ec00736e5ab9e3354d44fb453c8b2660e4b7`; later read-only metadata reports ACTIVE v64 with the same SHA, `verify_jwt=false`, and a bundle path ending in `source/62`. The version-label discrepancy is unexplained; source SHA is unchanged and the immediate deployed-file read-back matched all 25 files exactly.
+- natural_runtime: observed only scheduled execution; no manual Function invocation, candidate injection, X post, or Push. After deploy, observed successful Cron runs: publish-ready 09:05, 09:10, 09:15, 09:20 UTC; judgement 09:07; generation 09:14; fetch 09:20. No failures in these observed rows. Candidate read-only rollup since deploy returned zero rows, so no new GPT-6 judgement/generation metadata or usage/cost row was produced; constraint acceptance under a qualifying real model call remains unverified. Observation window: 09:03:56–09:20:24 UTC on 2026-09-23.
+- tests: reviewed source candidate test results carried forward — 173 targeted/migration tests and 424 full Important News tests passed. No new local source edits or tests were run during production rollout.
+- production_mutations: exactly (1) the approved single migration replacing the two reviewed CHECK constraints; (2) deployment of only `important-news-monitor` v62 source package, with `verify_jwt=false`. No other Function, DB object, Cron, config, secret/Vault, OAuth, report regeneration, X post, or Push change.
+- untouched: `personalized-reports`, `important-news-shadow`, `x-test-post`, Personalized Reports data, and 9/18 regeneration.
+- remaining: natural GPT-6 candidate/usage persistence not observed; investigate the Supabase Function version-label discrepancy read-only if needed. Migration-history timestamp discrepancy remains unrepaired.
+- recommendation: C1 review; no further production action is authorized by this task.
 
 ## Previous H1 result — production migration initially stopped by authorization gate (2026-09-23)
 
