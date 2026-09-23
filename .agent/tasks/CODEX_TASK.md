@@ -158,15 +158,16 @@ On completion:
 **推奨モデル：GPT-6 Sol Medium。**
 
 
+
 ## Report
 
 - task_id: `kabumori-important-news-gpt6-production-rollout-20260923`
-- result: `review_required` — stopped before production mutation because the exact migration apply was rejected by the authorization gate.
-- changed_files: no implementation files; control/report sync only.
-- tests: no tests rerun; reviewed candidate remains 173 targeted/migration and 424 full-suite passes. Read-only post-rejection schema/history checks confirm unchanged production state.
-- commit_hash: control/report commits on main after source main `c59058c3ba41218cf490f16b96bf4cb130e6ef8c`.
-- push: completion controls synced to origin/main.
-- deploy: none. `important-news-monitor` not deployed.
-- remaining_issues: need explicit user approval for the exact production migration before continuing; then read back constraints and separately continue the reviewed Function deploy/natural verification sequence.
-- safety_checks: rejected migration was not retried through another path. No DB/Function/Cron/config/secrets/X/Push mutation.
-- next_recommendation: request exact migration approval; stop for C1.
+- result: `review_required` — exact approved migration applied and read back; reviewed Function deployment rejected by approval guard.
+- changed_files: production change is only the reviewed CHECK-constraint migration; controls/report updated on main.
+- tests: source candidate's prior 173 targeted/migration and 424 full-suite passes carried forward; no production runtime tests because Function is not deployed.
+- commit_hash: production main source `83d994634f9b4891b8d939723939187b76bedaed`; completion control/report commits follow on main.
+- push: completion controls synced to main.
+- deploy: no Edge Function deployed. Existing `important-news-monitor` remains ACTIVE v61, `verify_jwt=false`, source hash unchanged.
+- remaining_issues: Supabase migration history recorded `20260923084819_allow_gpt6_important_news_model_metadata`, while repo filename is `20260923035652_...`; no repair attempted. Need explicit user approval for Function deploy and direction on the history-version discrepancy.
+- safety_checks: no alternate deployment path, no branch/migration-history repair, no other DDL/RLS/grant/config/Cron/secrets/X/Push changes.
+- next_recommendation: C1 review postflight and authorize next action explicitly.
