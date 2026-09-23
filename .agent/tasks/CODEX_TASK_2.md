@@ -1,203 +1,219 @@
 # Codex Task 2
 
-- task_id: social-mobile-app-phase23-dedicated-qa-one-shot-history-learning-20260923
+- task_id: x-autopost-foundation-audit-multibrand-netlify-roadmap-20260923
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: none
-- priority: critical
-- recommended_model: GPT-6 Sol Medium
-- purpose: Phase22 C2 PASS後、dedicated QA Auth userと既存の安全なQA X accountだけを対象に、exactly-oneの実history-learning QAを行う。実行直前にユーザーの明示同意を必須とし、1回だけaccess-token RPC/Vault plaintext readとbounded X history fetchを許可する。publish/persona persistenceは引き続き禁止。
+- status: ready
+- next_owner: codex
+- priority: high
+- recommended_model: GPT-6 Luna
+- purpose: social-mobile history-learning Phase23完了後、現在のX自動投稿基盤を壊さずに棚卸しし、複数ブランド/複数Xアカウント対応の完成、Supabase中核化、Netlify Free管理画面移行までの安全な実装ロードマップを確定する。今回は原則read-only調査と設計のみ。Production mutation/deploy/migrationはしない。
 
-## Goal
+## Product direction
 
-Phase23では初めてlive pathを1回だけ実証する。
+今後の基本構成:
+- 管理画面: Netlify Freeを本番候補
+- DB: Supabase
+- Cron / scheduler: Supabase
+- Edge Functions: Supabase
+- X posting core: Supabase Edge Functions / RPC
+- X API: existing paid contract
+- Vercel Pro移行は前提にしない
 
-Allowed only after explicit user consent immediately before execution:
-- set/enable the history live gate for the QA run
-- one dedicated QA authenticated request
-- one trusted-account access-token RPC invocation
-- one bounded Vault plaintext access through that RPC
-- X history fetch bounded by existing limits (max 50 posts / max 2 pages)
-- return an unconfirmed persona proposal only
+Architecture target:
 
-No publishing and no persona persistence.
+Netlify admin UI
+↓
+Supabase Auth / RLS / RPC / Edge Functions
+↓
+Supabase DB / Cron
+↓
+X API
+
+Netlify should be a thin authenticated control UI, not the home for heavy/background processing.
 
 ## Mandatory fresh start
 
-H2開始時:
 1. `git fetch origin main`
 2. fresh `origin/main`
-3. `.agent/ORCHESTRATION.md`
-4. `.agent/CURRENT_STATE.md`
-5. this TASK
-6. `.agent/CODEX_REPORT_2.md`
-7. Phase22 production Function/runtime read-back
-8. Phase20 RPC production metadata read-back
-9. other-slot overlap check
+3. read `.agent/ORCHESTRATION.md`
+4. read `.agent/CURRENT_STATE.md`
+5. read this TASK
+6. read latest `.agent/CODEX_REPORT_2.md`
+7. inspect other slot scopes for overlap
+8. inspect production metadata read-only where needed
 
-If another slot touches the history-learning Function, live gate/config, access-token RPC, QA account, or related OAuth/Vault resources, STOP.
+If another slot is modifying the same X publisher/Cron/schema/admin files, do not edit them. Continue read-only analysis only, or STOP if safe separation cannot be established.
 
-## Model policy
+## Scope A — current X platform inventory
 
-Use **GPT-6 Sol Medium**.
+Map the live and source architecture for:
+- `x-test-post`
+- X OAuth connect paths
+- token/Vault handling and refresh
+- `brands`
+- `social_accounts`
+- `brand_settings`
+- `brand_memberships`
+- `posting_windows`
+- `scheduled_posts`
+- `post_execution_logs`
+- `publish_claims`
+- `published_content_fingerprints`
+- `daily_content_plans`
+- relevant Cron jobs
+- important-news publish path where it intersects X
+- shared brand generator/context/publish guard/dedupe modules
+- current admin app
 
-## Gate A — preflight only, no live read yet
+Identify:
+- what is already genuinely multibrand
+- what is still Kabumori-specific
+- what is partially generalized
+- what still assumes one brand/account
+- what production objects are active today
 
-Before requesting consent:
-- confirm production Function ACTIVE and source hash/runtime still matches Phase22
-- `verify_jwt=true`
-- gate currently absent/OFF
-- Phase20 RPC still service_role-only, SECURITY DEFINER, fixed search_path
-- dedicated QA Auth user still exists and is non-admin
-- QA user still owns exactly one intended QA brand/workspace
-- exactly one verified X account belongs to that workspace
-- QA X account is the previously established dedicated safe test account
-- `publish_enabled=false`
-- required Vault secret references exist (presence only; do not read values)
-- no other production account is selected
-- no overlapping task
+Do not read secret values.
 
-Do not expose user ids, account ids, secret refs, token values, or PII in report.
+## Scope B — multibrand blockers
 
-## Gate B — explicit user consent immediately before live run
+Pay special attention to DB and scheduler constraints that may prevent multiple brands from independently using the same post_type/slot/date.
 
-STOP and ask the user for a direct confirmation immediately before enabling/running the live path.
+Audit at minimum:
+- UNIQUE constraints on `posting_windows`
+- UNIQUE constraints on `scheduled_posts`
+- claim/dedupe key scope
+- logs and retry scope
+- account selection rules
+- one-X-account-per-brand assumptions
+- cross-brand duplicate protection wiring
+- scheduler/Cron dispatch assumptions
+- status/retry/failure semantics
 
-The confirmation request must clearly say that the next action will:
-- temporarily enable history-learning live access
-- read the QA X access token from Vault through the approved RPC
-- call X to read up to 50 of that QA account's past posts (max 2 pages)
-- not publish anything
-- not save raw posts
-- not persist the persona proposal
+Produce a concrete blocker list with severity and exact affected objects/files.
 
-Do not treat a prior generic "OK", "すすめて", or task-start instruction as this live-read consent unless it was given in direct response to this exact confirmation request.
+## Scope C — common publisher target architecture
 
-If explicit consent is not present, do not turn the gate ON and do not call Vault/X.
+Design the minimum safe path from the current `x-test-post` monolith toward a common publisher.
 
-## Gate C — exactly-one QA live run
+Target conceptual flow:
+1. resolve due scheduled row
+2. resolve brand
+3. resolve verified X account
+4. resolve server-side token
+5. resolve brand/profile/settings
+6. generate content
+7. enforce duplicate/publish guards
+8. publish to X
+9. persist success/failure/logs
+10. retry only under bounded rules
 
-After explicit consent only:
-1. enable the server-only live gate by the approved production config method
-2. confirm gate is ON
-3. invoke exactly one authenticated QA history-learning request with `explicit_consent=true`
-4. use only the dedicated QA user/session and its owned QA workspace
-5. allow exactly one access-token RPC resolution path
-6. allow bounded X history fetch max 50 posts / max 2 pages
-7. capture only safe result metadata:
-   - success/failure
-   - analyzed post count
-   - bounded persona signals
-   - HTTP/status/error code if failed
+Requirements:
+- Kabumori-specific generators may remain specialized where necessary
+- other brands should not duplicate whole systems
+- adding a brand should primarily be DB/config/profile driven
+- publish core must not trust client-supplied account/token ids
+- no secret in browser
+- no service-role in browser
 
-Never record/log/report:
-- access token
-- refresh token
-- secret ref/id
-- raw post bodies
-- Authorization bearer
-- service-role key
+This task is design/audit only; do not refactor production code yet unless a tiny documentation-only helper is unavoidable.
 
-## Gate D — immediate gate OFF
+## Scope D — admin / Netlify readiness audit
 
-Immediately after the one live run, regardless of success/failure:
-- set/remove the live gate so production is OFF again
-- read back that gate is absent/OFF
+Inspect `apps/admin` and classify every server-side dependency:
+- Next.js Server Components
+- Server Actions
+- cookie/session handling
+- proxy/middleware behavior
+- `next/cache` / revalidation
+- any server-only Supabase operations
+- whether any privileged credentials are required
 
-Do not leave live history access enabled.
+Determine:
+- what can deploy unchanged on Netlify's current Next runtime
+- what would consume Netlify Function/Edge compute
+- what should instead move to Supabase RPC/Edge Function
+- whether admin can be made thin enough to avoid Netlify Functions entirely or nearly entirely
+- required env vars
+- Supabase Auth compatibility
+- security implications
 
-## Gate E — postflight
+Do not create Netlify project or change Vercel.
 
-Verify:
-- exactly one intended live request occurred
-- no second retry unless separately approved
-- publish/media/repost calls = 0
-- persona/settings writes = 0
-- raw-history persistence = 0
-- OpenAI calls = 0
-- OAuth mutation = 0
-- unrelated account/Vault rows unchanged
-- Function source/version unchanged unless config-only update semantics alter metadata
-- live gate OFF at end
+## Scope E — production safety baseline
 
-If the first QA run fails after Vault/X was reached, do not retry automatically. STOP for C2 with the failure evidence.
+Read-only establish current baseline for:
+- active relevant Functions and versions
+- active relevant Cron jobs
+- existing brands/accounts counts
+- publish-enabled states in aggregate/safe form
+- current scheduler/log row counts
+- current admin app source shape
+- current Vercel presence only if visible from repository/config; do not change it
 
-## Success criteria
+No raw tokens, no secret values, no personal identifiers.
 
-A PASS candidate requires:
-- dedicated QA user/account binding verified
-- explicit user consent captured immediately before run
-- one bounded run succeeds
-- token remains server-only
-- X history belongs only to the dedicated QA account
-- response contains only unconfirmed derived persona signals and count, not raw posts/token
-- live gate is OFF again at the end
-- publish remains disabled
+## Scope F — deliverable
+
+Produce a structured report in `.agent/CODEX_REPORT_2.md` containing:
+
+1. executive summary
+2. already-complete pieces
+3. incomplete pieces
+4. multibrand blockers
+5. Netlify migration/readiness findings
+6. pieces that should move to Supabase
+7. pieces that should stay in Netlify/admin
+8. release-to-stable-operations remaining tasks
+9. recommended phased roadmap
+10. recommended task decomposition across H1/H2/G1/G2, with overlap-safe boundaries
+11. specific next implementation task recommendation
+12. no-change safety proof
+
+## Roadmap constraints
+
+Must preserve:
+- current working auto-posting
+- current Cron
+- existing accounts
+- current Vercel Production until full migration proven
+- no automatic paid upgrades
+- no Netlify paid plan assumptions
+- no direct production rewrite
+
+Target order should generally respect:
+1. posting stability
+2. complete multibrand support
+3. scheduler/retry/dedupe/failure handling
+4. secure admin control
+5. Netlify Free production viability
+6. ops/log/retry/stop controls
+7. long-run test
+
+But refine based on actual repo/live findings.
 
 ## Forbidden
 
-- any non-QA account
-- any production admin X account
-- more than one live run
-- automatic retry after a live Vault/X attempt
-- publishing/posting/media/repost
-- `publish_enabled=true`
-- raw post persistence
-- persona/settings persistence
-- OpenAI call
-- OAuth reconnect/change
-- token refresh implementation/change
-- DB migration/RPC/RLS/ACL mutation
-- unrelated Function deploy
-- leaving live gate ON
+- production schema/RPC/RLS mutation
+- migration apply
+- Function deploy
+- Cron changes
+- OAuth changes
+- token refresh changes
+- X posting
+- Netlify project creation
+- Vercel change/delete
+- secret rotation
+- publish_enabled change
+- unrelated file edits
 
-## Completion / C2
+## Completion
 
-When complete or stopped:
+When complete:
 - status -> `review_required`
 - next_owner -> `chatgpt`
-- update `.agent/CODEX_REPORT_2.md`
+- prepend/update `.agent/CODEX_REPORT_2.md`
+- control-file sync only if no source changes were necessary
+- fresh-check `origin/main`
+- STOP for C2
 
-Report:
-1. preflight result
-2. confirmation gate status
-3. whether live run was executed
-4. QA isolation proof without PII
-5. exact count of live Function requests
-6. access-token RPC invocation count
-7. Vault plaintext read count
-8. X history call/page count
-9. analyzed post count
-10. persona proposal remained unconfirmed
-11. raw post persistence = 0
-12. persona persistence = 0
-13. publish/media/post = 0
-14. live gate final state = OFF
-15. tests/checks
-16. remaining risks
-17. next recommendation
-18. commit/push/fresh origin verification
-
-Then STOP for C2.
-
-
-## Final C2 — 2026-09-23
-
-PASS. Phase23 complete.
-
-Independent review confirmed:
-- production `social-mobile-history-learning` is ACTIVE v4 with `verify_jwt=true`.
-- runtime EZBR SHA-256 remains `0ec1bc506e85f1b54ab63dba3b5848598107cfb53549bac4edb3958cc4636979`, with unchanged `updated_at=1790135565236`; no source deploy occurred during Phase23.
-- runtime source still enforces max 50 posts / max 2 pages, requires `explicit_consent=true`, returns an unconfirmed persona proposal, and has no persona/raw-history persistence or publish adapter.
-- access-token RPC remains SECURITY DEFINER with fixed empty search_path; anon/authenticated EXECUTE=false and service_role EXECUTE=true.
-- H2 evidence records one explicit-consent QA UI action, 9 analyzed posts, no retry, no publish/media/OpenAI/OAuth mutation, and final live gate absent/OFF.
-- QA publish permission remained disabled in H2 postflight.
-
-Observability limitation accepted:
-- platform-level request logs were unavailable, so RPC/Vault counts are inferred from the deterministic successful single-pass path, and exact X pagination count cannot be independently proven beyond the source bound of 1–2 pages. This does not block this one-shot QA result, but future rollout should add safe server-side audit counters before broader use.
-
-Next:
-- keep live history gate OFF.
-- do not perform another history read or persist the persona under this task.
-- the social-mobile history-learning workstream is considered at a clean stopping point.
