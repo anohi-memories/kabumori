@@ -19,14 +19,12 @@
   - Targeted auth/wiring/migration tests: 7/7 passed; Deno check for caller-auth helper passed. Full regression suite / disposable SQL execution not run.
   - Production migration, Vault write, Function secret/config change, and deploy are all 0; each requires separate approval. Keep `verify_jwt=false`.
 
-- Codex slot 2: `done` — `x-autopost-phase0b-publish-claim-brand-scope-and-migration-reconciliation-20260923`
-  - C2 PASS。publish_claim clientをtrusted brand_id必須・brand-scoped conflict/updateへ変更するsource candidate完成。
-  - 4 planner RPCのscheduled_posts ON CONFLICTもbrand-scoped化するforward migration candidate完成。
-  - disposable PostgreSQLで2ブランド共存、same-brand duplicate rejection、planner idempotency、rollback、SECURITY DEFINER/search_path/EXECUTE維持を確認。
-  - tests: targeted 35/35 PASS、x-test-post full regression 403/403 PASS、publish_claim module deno check PASS、git diff check PASS。
-  - production mutationは0。source/history driftはblind replay/history repair禁止、forward-only fail-closed reconciliation方針。
-  - 次のproduction gate順序: compatible x-test-postを先にdeploy→runtime確認→fresh preflight→exact migration apply→read-back。deploy/applyはまだ未承認。
-  - Recommended model for production gate: GPT-6 Sol Medium。
+- Codex slot 2: `ready` — `x-autopost-phase0c-production-brand-scope-rollout-20260923`
+  - Phase0b C2 PASS後のproduction gate。
+  - rollout順序は compatible x-test-post deploy → runtime確認 → fresh schema/planner preflight → exact migration apply → postflight。
+  - deploy/migration直前にユーザーの明示同意が必須。generic OK/すすめてはproduction mutation同意として扱わない。
+  - Cron/OAuth/Vault/publish_enabled/Netlify/Vercelは変更禁止。X投稿も禁止。
+  - Recommended model: GPT-6 Sol Medium。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
