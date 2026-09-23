@@ -1969,3 +1969,20 @@ Candidate awaits C1 review. Stop before any Edge Function deploy; a separate exp
 - merge result: not merged. Required Vercel check failed because the deployment is rate-limited for 24 hours. Admin/branch-protection bypass was not attempted; normal merge was blocked by the failing required check.
 - Important News producer V2 and Portfolio validator candidate remain intact on the freshen branch. No production migration, Function deploy, report regeneration/backfill, or other production mutation occurred.
 - next action: after the required check becomes available, re-run the PR check and merge PR #8, then read back the resulting main SHA and the seven approved files. Production rollout remains a later Sol checkpoint: exact migration apply, `important-news-monitor` deploy, `personalized-reports` deploy, and a safe one-time 9/18 close regeneration/backfill decision are still required and were not performed here.
+
+
+## Latest H1 result — release readiness audit (2026-09-23)
+
+- task_id: kabumori-release-readiness-audit-and-roadmap-20260923
+- result: review_required — read-only audit complete; stop for C1.
+- audit source base: 113df8219e586a813cb4a1936e5152620958b435; fresh main/control baseline at completion: f4e1fe98b679d6a7e29c3c7d150ddad0312085b8. Main remained at that SHA on the final fetch; intervening drift from the initial base was limited to H2 orchestration/control files.
+- deliverable: docs/RELEASE_READINESS_AUDIT_2026-09.md on branch codex/kabumori-release-readiness-audit-20260923.
+- highest priority: source review found important-news-monitor has verify_jwt=false and no inbound JWT/custom cron-secret validation before mode dispatch; production setting metadata shows active and auto_publish true. Treat as P0 potential exposure pending independent verification. Function was not invoked; no candidate injection, X post, configuration change, or deploy occurred. Requires separate approval for remediation.
+- additional blockers: one of two Auth users has no profiles row (cause unknown; no writes); no consumer in-app account deletion or clear privacy/legal/support route found; iPhone E2E, RLS adversarial proof, EAS/TestFlight, Netlify trial, usage limits and App Store materials remain unverified.
+- Supabase Security Advisor read-only findings recorded: 21 RLS-enabled/no-policy tables, mutable search_path warning, anon/authenticated executable SECURITY DEFINER warnings, leaked-password protection disabled. Findings were not changed.
+- Netlify: Next.js/App Router support appears likely, but exact admin deployment/auth-cookie/Server Action behavior needs a non-production trial; Vercel remains fallback. Free-tier schedule arithmetic ~105,840 monthly invocations for identified baseline schedules (~21% of 500k), excluding other jobs/retries/app usage; actual consumption unavailable.
+- migration ledger: 81 source files vs 56 production history entries with naming/version mismatches; do not infer every mismatch is unapplied and do not use blind db push.
+- recommended next tasks: (1) separately authorized P0 Function caller-auth review/remediation; (2) Auth/profile lifecycle + app account deletion/privacy/legal and consumer iPhone E2E; (3) Netlify preview + EAS/TestFlight readiness after blocker closure.
+- local verification limitation: local repository was dirty and 812 commits behind; no local files changed and no local build/test run.
+- production mutation: 0. No DB write/migration, Function invocation/deploy, Cron/settings/secret change, Netlify/Vercel/App Store action, candidate injection, X post, or Push.
+- next_owner: chatgpt; stop for C1.
