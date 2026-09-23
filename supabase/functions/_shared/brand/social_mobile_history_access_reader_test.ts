@@ -100,8 +100,11 @@ test("contract has no refresh selector, generic secret id input, or log/response
   assert.equal(String(createHistoryAccessTokenRpcReader).includes("console"), false);
 });
 
-test("deployed history-learning entrypoint still uses the disabled dependency factory", async () => {
+test("history-learning entrypoint keeps disabled default behind server-only exact gate", async () => {
   const entrypoint = await readFile(new URL("../../social-mobile-history-learning/index.ts", import.meta.url), "utf8");
+  assert.match(entrypoint, /Deno\.env\.get\("SOCIAL_MOBILE_HISTORY_LIVE_ENABLED"\)/u);
+  assert.match(entrypoint, /if \(!historyLiveEnabled/u);
   assert.match(entrypoint, /disabledHistoryLearningDependencies\(\)/u);
+  assert.match(entrypoint, /createLiveHistoryDependencies/u);
   assert.doesNotMatch(entrypoint, /createHistoryLearningCandidateDependencies|createHistoryAccessTokenRpcReader/u);
 });
