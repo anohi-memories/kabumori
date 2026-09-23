@@ -15,7 +15,8 @@
 - safety_counts: Vault plaintext reads **0**; access-token RPC calls **0**; X history/API calls and posts **0**; service-role live wiring **0**; OpenAI calls **0**; persona/settings writes **0**; DB/RPC/RLS/ACL/migration, OAuth, Cron/scheduler, and publish changes **0**; other Function deploys **0**.
 - remaining_risks: The disabled shell proves deployment integrity, not a real authenticated history request. The live reader factory is present in dormant source but unreachable from the entrypoint. The service-role key still has broad privileges in general and must not be wired without a separate security review.
 - next_gate: C2 review this deployment and its disabled-path proof. Only after C2 PASS should Phase22 consider server-only live dependency wiring behind an explicit default-OFF gate; real Vault read/X history fetch requires a later separate QA consent, and publishing stays disabled.
-- control_files: `.agent/tasks/CODEX_TASK_2.md` set to `review_required` / `chatgpt`, and this Report entry prepended. No application source was changed in Phase21. Control commit/push verification: pending final sync.
+- control_files: `.agent/tasks/CODEX_TASK_2.md` set to `review_required` / `chatgpt`, and this Report entry prepended. No application source was changed in Phase21.
+- control_commit_push: Initial H2 control commit `9c75d617e5e2dd47a17b3631cb6b5e4a16f68d10` was pushed to `origin/main`; a fresh fetch/read-back confirmed `origin/main` at that exact SHA with Phase21 as the top Report entry and the TASK at `review_required` / `chatgpt`. This final push-verification note is report-only.
 
 # H2 — Social mobile Phase 20 production history access RPC rollout (review required, 2026-09-23)
 
