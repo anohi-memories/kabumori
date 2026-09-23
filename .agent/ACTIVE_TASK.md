@@ -17,11 +17,11 @@
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: social-mobile-app-phase20-production-history-access-rpc-rollout-20260923
+- task_id: social-mobile-app-phase21-production-history-learning-disabled-deploy-20260923
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
-- note: Phase19 C2 PASS済み。single SECURITY DEFINER access-token RPC candidateのproduction rolloutのみ。Vault plaintext/read, Function deploy, X historyは禁止。Sol推奨。
+- note: Phase20 C2 PASS済み。history-learning Functionのdisabled entrypointだけをproduction deploy。live service-role/RPC/Vault/X historyは禁止。GPT-6 Sol Medium推奨。
 
 ### Claude slot 1
 - owner: claude
