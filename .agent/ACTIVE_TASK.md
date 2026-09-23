@@ -17,11 +17,11 @@
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: x-autopost-phase0-disposable-global-uniqueness-migration-proof-20260923
+- task_id: x-autopost-phase0c-production-brand-scope-rollout-20260923
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
-- note: X自動投稿複数ブランド化P0。3つのlegacy global UNIQUEをbrand-scoped uniquenessへ安全移行できるかdisposable PostgreSQLでmigration/rollback proof。production mutation禁止。GPT-6 Luna推奨。
+- note: compatible x-test-postを先に本番deployし、runtime確認後にexact migrationを適用するPhase0c。production mutation直前に明示同意必須。GPT-6 Sol Medium推奨。
 
 ### Claude slot 1
 - owner: claude
