@@ -17,11 +17,11 @@
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: social-mobile-app-phase21-production-history-learning-disabled-deploy-20260923
+- task_id: social-mobile-app-phase22-live-history-dependency-gate-default-off-20260923
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
-- note: Phase20 C2 PASS済み。history-learning Functionのdisabled entrypointだけをproduction deploy。live service-role/RPC/Vault/X historyは禁止。GPT-6 Sol Medium推奨。
+- note: Phase21 C2 PASS済み。live history dependenciesをserver-only feature gate default OFFで実装・deploy。RPC/Vault/X historyの実呼出しは禁止。GPT-6 Sol Medium推奨。
 
 ### Claude slot 1
 - owner: claude
