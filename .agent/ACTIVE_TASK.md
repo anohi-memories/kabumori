@@ -6,11 +6,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: kabumori-important-news-gpt6-schema-source-merge-20260923
+- task_id: kabumori-important-news-gpt6-production-rollout-20260923
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: PR #9 merged at `83d9946` after required Vercel success on exact head `ae78de1`. No bypass; production migration apply/deploy and DB write remain unperformed.
+- note: PR #9 merged. Exact GPT-6 production migration apply was rejected by authorization guard; no workaround or Function deploy. Await explicit user approval.
 
 
 ### Codex slot 2
