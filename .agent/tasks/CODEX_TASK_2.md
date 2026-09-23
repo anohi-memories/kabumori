@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase22-live-history-dependency-gate-default-off-20260923
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: GPT-6 Sol Medium
 - purpose: Phase21 C2 PASS後、production `social-mobile-history-learning` にlive dependency wiringを追加する。ただしserver-only feature gateはdefault OFFのままdeployし、実Vault plaintext read・access-token RPC invocation・real X history fetchはまだ一切発生させない。
