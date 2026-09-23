@@ -55,6 +55,19 @@ test("statement parser extracts meeting date, publication time, target range, an
   assert.match(parsed.normalizedText, /Federal Reserve issues FOMC statement/);
 });
 
+test("statement normalization preserves paragraph boundaries and excludes site chrome", async () => {
+  const html = `<html><body><header>Federal Reserve navigation</header><nav>About the Fed</nav><main>
+    <p>September 16, 2026</p>
+    <p>For release at 2:00 p.m. EDT</p>
+    <p>The Committee decided to raise the target range for the federal funds rate by 1/4 percentage point to 3-3/4 to 4 percent.</p>
+    <p>Inflation remains elevated.</p>
+  </main><footer>Board of Governors footer</footer></body></html>`;
+  const parsed = await parseFedStatementHtml(URL, html);
+  assert.match(parsed.normalizedText, /target range for the federal funds rate/);
+  assert.match(parsed.normalizedText, /\n/);
+  assert.doesNotMatch(parsed.normalizedText, /Federal Reserve navigation|About the Fed|Board of Governors footer/);
+});
+
 test("target-range parser handles decimal and unicode fraction forms", () => {
   assert.deepEqual(parseFedTargetRange("The target range for the federal funds rate is 3.75 to 4 percent."), { lower: 3.75, upper: 4 });
   assert.deepEqual(parseFedTargetRange("The target range for the federal funds rate is 3¾ to 4 percent."), { lower: 3.75, upper: 4 });

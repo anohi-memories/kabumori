@@ -34,14 +34,26 @@ export type FedStatementDeterministicDiff = {
   removedParagraphs: string[];
   modifiedParagraphs: Array<{ previous: string; current: string }>;
   changes: FedStatementParagraphChange[];
+  policyDecisionChange: FedPolicyDecisionChange;
   buckets: FedStatementSemanticBucket[];
   material: boolean;
   diffHash: string;
 };
 
+export type FedPolicyDecisionChange = {
+  previousDecision: FedDecision | null;
+  currentDecision: FedDecision | null;
+  previousRange: FedTargetRange | null;
+  currentRange: FedTargetRange | null;
+  lowerChangeBps: number | null;
+  upperChangeBps: number | null;
+  material: boolean;
+};
+
 export type FedStatementAiInput = {
   previous: { eventId: string; meetingDate: string; statementUrl: string; decision?: FedDecision; targetRange?: FedTargetRange | null };
   current: { eventId: string; meetingDate: string; statementUrl: string; decision?: FedDecision; targetRange?: FedTargetRange | null };
+  policyDecisionChange: FedPolicyDecisionChange;
   changes: Array<{ previous: string | null; current: string | null; buckets: FedStatementSemanticBucket[] }>;
 };
 
@@ -79,7 +91,7 @@ export const FED_STATEMENT_DIFF_STORAGE: FedStatementDiffStorageRecommendation =
   ],
 };
 
-const EXCLUDED_LINE = /^(header|footer|navigation|copyright|all rights reserved|board of governors|www\.|https?:\/\/|voting members?|for release at|statement on longer-run goals)/i;
+const EXCLUDED_LINE = /^(header|footer|navigation|copyright|all rights reserved|board of governors|www\.|https?:\/\/|voting members?\b|voting against the monetary policy action were\b|for release at|statement on longer-run goals|last update:|for media inquiries:|for media inquiries\b|skip to main content|press release(?: pdf)?$|please enable javascript|implementation note issued|the federal open market committee approved the following statement for release by .+ vote:)/i;
 const BUCKET_RULES: Array<[FedStatementSemanticBucket, RegExp]> = [
   ["inflation", /inflation|price stability|prices?|pce|consumer price|2 percent/i],
   ["labor", /employment|unemployment|payroll|job gains?|labor market|wage/i],
@@ -121,9 +133,35 @@ function isInsignificant(previous: string, current: string): boolean {
   const p = canonicalParagraph(previous);
   const c = canonicalParagraph(current);
   if (p === c) return true;
-  if (/voting|member|governor|president|copyright|all rights reserved/i.test(previous + " " + current)) return true;
-  const withoutDates = (value: string) => value.replace(/\d{1,4}/g, "");
-  return withoutDates(p) === withoutDates(c) && !classifyFedStatementBuckets(current).some((bucket) => bucket !== "other");
+  const withoutDates = (value: string) => normalizeParagraph(value)
+    .toLowerCase()
+    .replace(/\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}(?:st|nd|rd|th)?[,]?\s+\d{4}\b/gi, "")
+    .replace(/\b\d{4}-\d{2}-\d{2}\b/g, "")
+    .replace(/\d{1,4}/g, "")
+    .replace(/[\s\p{P}\p{S}]+/gu, "");
+  return withoutDates(previous) === withoutDates(current) && !classifyFedStatementBuckets(current).some((bucket) => bucket !== "other");
+}
+
+function buildPolicyDecisionChange(previous: FedStatementRecord | null, current: FedStatementRecord): FedPolicyDecisionChange {
+  const previousRange = previous?.targetRange ?? null;
+  const currentRange = current.targetRange ?? null;
+  const lowerChangeBps = previousRange && currentRange
+    ? Math.round((currentRange.lower - previousRange.lower) * 100)
+    : null;
+  const upperChangeBps = previousRange && currentRange
+    ? Math.round((currentRange.upper - previousRange.upper) * 100)
+    : null;
+  const decisionChanged = previous?.decision !== undefined && current.decision !== undefined && previous.decision !== current.decision;
+  const rangeChanged = lowerChangeBps !== null && upperChangeBps !== null && (lowerChangeBps !== 0 || upperChangeBps !== 0);
+  return {
+    previousDecision: previous?.decision ?? null,
+    currentDecision: current.decision ?? null,
+    previousRange,
+    currentRange,
+    lowerChangeBps,
+    upperChangeBps,
+    material: decisionChanged || rangeChanged,
+  };
 }
 
 function paragraphSimilarity(previous: string, current: string): number {
@@ -161,6 +199,7 @@ export async function buildFedStatementDiff(previous: FedStatementRecord | null,
       removedParagraphs: [],
       modifiedParagraphs: [],
       changes: [],
+      policyDecisionChange: buildPolicyDecisionChange(null, current),
       buckets: [],
       material: false,
       diffHash,
@@ -206,11 +245,15 @@ export async function buildFedStatementDiff(previous: FedStatementRecord | null,
     const buckets = classifyFedStatementBuckets(value);
     changes.push({ type: "removed", previous: value, current: null, buckets, material: buckets.some((bucket) => bucket !== "other") });
   }
-  const buckets = [...new Set(changes.flatMap((change) => change.buckets))];
-  const material = changes.some((change) => change.material);
+  const policyDecisionChange = buildPolicyDecisionChange(previous, current);
+  const buckets = [...new Set([
+    ...changes.flatMap((change) => change.buckets),
+    ...(policyDecisionChange.material ? ["policy stance" as const] : []),
+  ])];
+  const material = changes.some((change) => change.material) || policyDecisionChange.material;
   const addedParagraphs = remainingCurrent;
   const removedParagraphs = remainingPrevious;
-  const diffHash = await hashText(JSON.stringify({ comparisonStatus: "compared", unchangedParagraphs, addedParagraphs, removedParagraphs, modifiedParagraphs }));
+  const diffHash = await hashText(JSON.stringify({ comparisonStatus: "compared", unchangedParagraphs, addedParagraphs, removedParagraphs, modifiedParagraphs, policyDecisionChange }));
   return {
     comparisonStatus: "compared",
     skipReason: null,
@@ -219,6 +262,7 @@ export async function buildFedStatementDiff(previous: FedStatementRecord | null,
     removedParagraphs,
     modifiedParagraphs,
     changes,
+    policyDecisionChange,
     buckets,
     material,
     diffHash,
@@ -230,6 +274,7 @@ export function buildFedStatementAiInput(previous: FedStatementRecord, current: 
   return {
     previous: { eventId: previous.eventId, meetingDate: previous.meetingDate, statementUrl: previous.statementUrl, decision: previous.decision, targetRange: previous.targetRange },
     current: { eventId: current.eventId, meetingDate: current.meetingDate, statementUrl: current.statementUrl, decision: current.decision, targetRange: current.targetRange },
+    policyDecisionChange: diff.policyDecisionChange,
     changes: diff.changes.filter((change) => change.material).map(({ previous: oldText, current: newText, buckets }) => ({ previous: oldText, current: newText, buckets })),
   };
 }
@@ -247,7 +292,7 @@ export function validateFedStatementAiOutput(value: unknown): value is FedStatem
   });
 }
 
-export async function buildFedStatementDiffIdentity(previous: FedStatementRecord | null, current: FedStatementRecord, diff: FedStatementDeterministicDiff, promptVersion = FED_STATEMENT_DIFF_PROMPT_VERSION): Promise<string> {
+export async function buildFedStatementDiffIdentity(previous: FedStatementRecord | null, current: FedStatementRecord, diff: FedStatementDeterministicDiff, promptVersion: string = FED_STATEMENT_DIFF_PROMPT_VERSION): Promise<string> {
   return await hashText(JSON.stringify({ previousEventId: previous?.eventId ?? null, previousDocumentHash: previous?.documentHash ?? null, currentEventId: current.eventId, currentDocumentHash: current.documentHash, diffHash: diff.diffHash, promptVersion }));
 }
 

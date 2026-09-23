@@ -49,7 +49,9 @@ export function buildFedStatementDiffRow(
     meeting_date: current.meetingDate,
     previous_meeting_date: previous?.meetingDate ?? null,
     changed_paragraph_count: changed,
-    material_change_count: previous ? diff.changes.filter((change) => change.material).length : 0,
+    material_change_count: previous
+      ? diff.changes.filter((change) => change.material).length + (diff.policyDecisionChange.material ? 1 : 0)
+      : 0,
     deterministic_diff: diff,
     semantic_buckets: previous ? diff.buckets : [],
     ai_interpretation: aiInterpretation,

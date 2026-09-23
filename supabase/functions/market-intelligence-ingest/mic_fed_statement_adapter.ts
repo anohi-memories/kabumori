@@ -97,9 +97,17 @@ function decodeHtml(input: string): string {
 }
 
 export function normalizeFedStatementHtml(html: string): string {
-  const withoutNonContent = html.replace(/<(script|style|noscript)[^>]*>[\s\S]*?<\/\1>/gi, " ");
-  const text = withoutNonContent.replace(/<[^>]+>/g, " ");
-  return decodeHtml(text).replace(/\s+/g, " ").trim();
+  const withoutNonContent = html.replace(/<(script|style|noscript|nav|header|footer|aside)[^>]*>[\s\S]*?<\/\1>/gi, " ");
+  const withParagraphBoundaries = withoutNonContent.replace(
+    /<\/?(?:address|article|blockquote|br|dd|div|dl|dt|figcaption|figure|h[1-6]|hr|li|ol|p|section|table|tbody|td|th|thead|tr|ul)\b[^>]*>/gi,
+    "\n",
+  );
+  const text = withParagraphBoundaries.replace(/<[^>]+>/g, " ");
+  return decodeHtml(text)
+    .replace(/[\t\f\v ]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
 }
 
 function normalizeFedDashFamily(value: string): string {
