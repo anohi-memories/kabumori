@@ -3,11 +3,11 @@
 - task_id: kabumori-important-news-monitor-caller-auth-remediation-candidate-20260923
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: GPT-6 Sol Medium
-- purpose: release-readiness auditで見つかった `important-news-monitor` のcaller-auth境界を、既存Cronを壊さずfail-closedにするsource-only remediation candidateを作る。production設定/Function deploy/auto_publish変更は禁止。
+- purpose: release-readiness auditで見つかった `important-news-monitor` のcaller-auth境界を、既存Cronを壊さずfail-closedにするsource-only remediation candidateを作る。production変更/Function deploy/auto_publish変更は禁止。source-only candidateでは既存4 Cron commandのheader追加・Vault lookup参照を含む。
 
 ## C1 decision
 
@@ -35,6 +35,10 @@ Verified:
 6. Fresh fetch `origin/main`
 7. Inspect all production callers of `important-news-monitor` (Cron/scheduler/manual/admin if any)
 8. Confirm no H2/G1/G2 overlap with this Function or its caller-auth configuration
+
+## User scope addendum (2026-09-23)
+
+The user explicitly authorized a source/config candidate combining (a) a dedicated secret header on exactly the four existing `important-news-monitor` pg_cron jobs, (b) safe Vault-backed secret lookup, and (c) Function-side authentication before mode dispatch. This does not authorize production changes; migration apply, Vault writes, Function secret/config changes, and deployment each require separate approval. Do not change post content, Cron frequency, `auto_publish` conditions, or news judgement logic.
 
 ## Scope
 
@@ -75,10 +79,10 @@ Run relevant Important News tests and changed-file checks.
 Forbidden:
 - Function deploy
 - changing `verify_jwt` production setting
-- Cron changes
+- Production Cron changes (the source migration candidate for exactly the four existing jobs is permitted by the scope addendum)
 - auto_publish setting changes
-- DB writes/migrations
-- secrets/Vault changes
+- DB writes/migrations (including applying the source migration)
+- Production secrets/Vault writes or Function secret configuration
 - manual Function invocation
 - X post / Push
 - candidate injection
