@@ -10,7 +10,7 @@
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: approved exact GPT-6 migration applied/read back. Function deploy rejected by authorization guard; no workaround. Await separate deploy approval/C1. Migration history version differs from repo timestamp; no repair.
+- note: approved exact GPT-6 migration applied/read back; only `important-news-monitor` deployed with `verify_jwt=false`. Natural scheduled runs succeeded through 09:20 UTC, but no new candidate/usage row occurred. Migration history timestamp and Function version-label discrepancies are disclosed; no repair. Stop for C1.
 
 
 ### Codex slot 2
