@@ -15,9 +15,9 @@
 ## Active workstreams
 
 - Codex slot 1: `review_required` — `kabumori-important-news-gpt6-production-rollout-20260923`
-  - Production preflight confirmed the two CHECK constraints allow only GPT-5.6; target migration is absent.
-  - Exact migration apply was rejected by the authorization guard. Post-rejection read-back confirms production is unchanged; no Function deploy.
-  - Await explicit approval for `20260923035652_allow_gpt6_important_news_model_metadata.sql`; stop for C1.
+  - Exact approved migration applied; both CHECK constraints read back with GPT-6 values.
+  - Supabase recorded generated version `20260923084819` under the correct name, differing from repo timestamp; no repair attempted.
+  - Function deploy authorization was rejected; `important-news-monitor` remains v61, `verify_jwt=false`, unchanged source hash. Await separate explicit deploy approval/C1 review.
 - Codex slot 2: `ready` — `social-mobile-app-phase23-dedicated-qa-one-shot-history-learning-20260923`
   - Phase22 C2 PASS済み。次はdedicated QA user/accountでexactly-one live history-learning QA。
   - live実行直前にユーザーの明示同意が必須。genericなOK/すすめてはlive Vault/X read同意として扱わない。
@@ -36,7 +36,7 @@
 
 ## Parallel safety
 
-- H1 GPT-6 source PR #9 is merged; exact production migration is awaiting explicit user authorization after the apply guard rejection. No production mutation.
+- H1 GPT-6 source PR #9 is merged; exact approved migration applied/read back. Function deploy awaits separate explicit approval; migration history version discrepancy is disclosed. No other production mutation.
 - H2/G1/G2 implementation files are untouched by this H1.
 - 同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数slotで同時変更しない。
 - push前にfresh `origin/main`確認。既存未コミット変更は他workstream所有として触らない。
