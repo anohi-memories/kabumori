@@ -23,11 +23,10 @@
   - No Supabase production deploy/migration/backfill yet. Production mutation 0.
   - Recommended model: Luna.
 
-- Codex slot 2: `done` — `social-mobile-app-phase21-production-history-learning-disabled-deploy-20260923`
-  - C2 PASS。production `social-mobile-history-learning` ACTIVE v1、`verify_jwt=true`。
-  - runtime entrypointは `disabledHistoryLearningDependencies()` のまま。live service-role/RPC/Vault/X history pathは未接続。
-  - Vault plaintext read 0、access-token RPC invocation 0、real X history call 0、persona/publish mutation 0。
-  - 次はPhase22: live dependency wiringをserver-only feature gate default OFFで追加・deploy。real fetchはまだ禁止。
+- Codex slot 2: `ready` — `social-mobile-app-phase22-live-history-dependency-gate-default-off-20260923`
+  - Phase21 C2 PASS済み。production history-learning FunctionはACTIVE v1 / verify_jwt=true / disabled dependencyのまま。
+  - 次はlive dependency wiringを追加するが、server-only feature gate default OFFのままproduction deployする。
+  - access-token RPC invocation / Vault plaintext / real X history / persona persistence はまだ禁止。
   - Recommended model: GPT-6 Sol Medium。
 
 
