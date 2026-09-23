@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-23 JST (H1 stopped for C1 after discovering existing GPT-5.6-only model metadata CHECK constraints; production mutation 0)
+- checked_at: 2026-09-23 JST (C1 accepted GPT-6 schema blocker; next H1 queued for narrow migration + source candidate; production mutation 0)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,10 +14,13 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `kabumori-important-news-full-gpt6-model-unification-20260923`
-  - Local source prototype was tested, but stopped before commit/PR because two schema CHECK constraints accept only GPT-5.6 IDs for `judgement_model` and `generation_model`.
-  - No migration was created. Review `.agent/tasks/CODEX_TASK.md` and `.agent/CODEX_REPORT.md`; C1 must decide on a separate narrowly scoped schema task before source rollout.
-  - Production mutation 0; no Function deploy or database operation.
+- Codex slot 1: `ready` — `kabumori-important-news-gpt6-schema-and-source-candidate-20260923`
+  - C1 accepted the GPT-6 prototype diagnosis and schema blocker.
+  - Existing CHECK constraints on `judgement_model` and `generation_model` allow only GPT-5.6 IDs, so direct GPT-6 runtime deployment would fail persisted writes.
+  - Next H1 is authorized to create one narrow forward migration candidate permitting GPT-6 Luna/Sol while preserving GPT-5.6 historical rows, plus rebuild the already-tested GPT-6 source candidate on latest main.
+  - Migration apply and Function deploy remain forbidden in that H1.
+  - Prototype test evidence: targeted 172/0, full Important News 423/0 (--no-check), production mutation 0.
+  - Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase22-live-history-dependency-gate-default-off-20260923`
   - Phase21 C2 PASS済み。production history-learning FunctionはACTIVE v1 / verify_jwt=true / disabled dependencyのまま。
