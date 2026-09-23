@@ -22,10 +22,11 @@
   - Stop for C1.
   - Recommended model: Luna.
 
-- Codex slot 2: `ready` — `social-mobile-app-phase21-production-history-learning-disabled-deploy-20260923`
-  - Phase20 C2 PASS済み。access-token RPCはproduction適用済み・ACL read-back済み。
-  - 次は `social-mobile-history-learning` Functionのdisabled entrypointだけをproduction deployする。
-  - service-role live wiring / RPC invocation / Vault plaintext / real X history はまだ禁止。
+- Codex slot 2: `done` — `social-mobile-app-phase21-production-history-learning-disabled-deploy-20260923`
+  - C2 PASS。production `social-mobile-history-learning` ACTIVE v1、`verify_jwt=true`。
+  - runtime entrypointは `disabledHistoryLearningDependencies()` のまま。live service-role/RPC/Vault/X history pathは未接続。
+  - Vault plaintext read 0、access-token RPC invocation 0、real X history call 0、persona/publish mutation 0。
+  - 次はPhase22: live dependency wiringをserver-only feature gate default OFFで追加・deploy。real fetchはまだ禁止。
   - Recommended model: GPT-6 Sol Medium。
 
 
