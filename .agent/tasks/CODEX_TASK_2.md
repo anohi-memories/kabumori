@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase0-disposable-global-uniqueness-migration-proof-20260923
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: GPT-6 Luna
 - purpose: C2で確認したX自動投稿複数ブランド化のP0 blockerについて、productionへ一切適用せず、disposable PostgreSQLだけで最小migration候補とrollback proofを作り、安全にbrand-scoped uniquenessへ移行できることを証明する。

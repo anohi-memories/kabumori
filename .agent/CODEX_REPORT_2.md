@@ -1,3 +1,64 @@
+# H2 — X autopost Phase 0 uniqueness migration proof (blocked for C2, 2026-09-23)
+
+- task_id: `x-autopost-phase0-disposable-global-uniqueness-migration-proof-20260923`
+- result: **Production preflight and disposable proof completed, but the forward migration is not approved as a complete candidate. Stop for C2 because the current `x-test-post` publish-claim client depends on the legacy global conflict target, while this Phase explicitly forbids publisher-code changes.**
+- source_base: fresh `origin/main` `f4e1fe98b679d6a7e29c3c7d150ddad0312085b8`; task and coordination docs were read from that commit. H1 is a separate read-only release audit, G1 is idle, G2 is done; no slot overlap found.
+- push_preflight: fresh `origin/main` recheck advanced to `f6881db976670bcfac7a441a0defc8996e6340af`; only `.agent/tasks/CODEX_TASK.md` changed since the implementation base, so there is no H2/report/source conflict. The control-only update is being rebased onto this latest base; no H1 file will be included.
+- production_scope: read-only catalog, aggregate, routine-definition, and migration-history queries only. Production DDL/DML = 0; migration apply = 0; Function deploy/invoke = 0; Cron/settings/OAuth/Vault/X changes = 0.
+
+## Production preflight
+
+The three legacy blockers are named table UNIQUE constraints (not standalone indexes):
+
+| Table | Legacy UNIQUE constraint | Intended existing brand-scoped unique index | Live rows / null brand_id / scoped duplicate excess |
+|---|---|---|---|
+| `posting_windows` | `posting_windows_post_type_slot_no_key` (`post_type, slot_no`) | `posting_windows_brand_post_type_slot_key` (`brand_id, post_type, slot_no`) | 19 / 0 / 0 |
+| `scheduled_posts` | `scheduled_posts_schedule_date_post_type_slot_no_key` (`schedule_date, post_type, slot_no`) | `scheduled_posts_brand_schedule_slot_key` (`brand_id, schedule_date, post_type, slot_no`) | 267 / 0 / 0 |
+| `publish_claims` | `publish_claims_post_type_date_jst_key` (`post_type, date_jst`) | `publish_claims_brand_post_type_date_key` (`brand_id, post_type, date_jst`) | 15 / 0 / 0 |
+
+For all three, `brand_id` is NOT NULL with default `kabumori`. The scoped keys are separate valid unique indexes. Read-only aggregate duplicate-excess count was 0 for each. Eight relevant FK definitions reference either `brands.id`, or `scheduled_posts.id`; none references a removed conflict key.
+
+Four live planner RPCs use the old `scheduled_posts` conflict target: `plan_daily_posts(date)`, `plan_morning_report(date)`, `plan_close_report(date)`, and `plan_us_premarket_report(date)`. The historical migration source also contains `posting_windows` seed upserts, but those are migration-time operations; no live routine source referenced the old posting-window conflict target.
+
+Critical remaining dependency: `supabase/functions/x-test-post/publish_claim_logic.ts` issues PostgREST `on_conflict=post_type,date_jst`, inserts no explicit `brand_id`, and its completion/failure PATCH filters omit `brand_id`. After removing the global `publish_claims` key, that upsert target is no longer backed by a unique constraint, and row updates would not be brand-scoped. Correcting this requires a narrowly scoped publisher caller change (pass trusted `brand_id`, use the scoped conflict target, and scope PATCH filters). The task says not to change publisher code in this phase, so this is the required stop condition—not something changed or worked around.
+
+## Migration history/source finding
+
+The production columns/indexes are represented in historical commit `5806e856d4ef0d146c0d11f6728777c05deb23f7` (`20260910170000_add_multibrand_brand_context_foundation.sql`), but that commit is not an ancestor of current `origin/main`; it exists on `origin/feature/multibrand-foundation` and several Codex branches. Production migration history did not list version `20260910170000`. The current `origin/main` migration chain therefore does not contain the source migration establishing the live `brand_id` columns and scoped indexes. This is a source/history drift that must be reconciled in a separate reviewed gate; no history repair was attempted.
+
+## Disposable proof and local draft
+
+A fake-only PostgreSQL 16 container named `codex-h2-phase0-pg-20260923` used a minimal production-shaped baseline: the exact three legacy constraints, exact scoped indexes, non-null/default `brand_id`, representative fake legacy rows, and four SECURITY DEFINER planner fixtures. The draft migration applied successfully. Within a rolled-back proof transaction:
+
+- different brands could insert the same posting-window slot, scheduled date/type/slot, and publish-claim date/type;
+- same-brand duplicates were rejected for all three keys;
+- the planner fixture created the same slot for both brands and repeated calls stayed idempotent;
+- `service_role` EXECUTE, SECURITY DEFINER, and `search_path=public` remained intact;
+- representative legacy row counts remained 1 per table.
+
+The rollback script restored all three original global UNIQUE constraints and old planner targets; read-back found 3 restored constraints and exactly the 3 baseline rows. The disposable container was stopped/removed, with no leftover proof container or test data.
+
+Draft-only caveat: `supabase/migrations/20260923102327_x_autopost_phase0_brand_scoped_uniqueness.sql` plus fixture/proof files exist only as uncommitted work in `/private/tmp/kabumori-h2-phase0`. They are **not a complete or rollout-ready candidate** because the publish-claim caller dependency above is unresolved. They were not committed or pushed.
+
+## Tests and changed files
+
+- Focused static + publish-claim + morning-publish tests: **32/32 passed**.
+- Full `x-test-post` regression: **400/400 passed**.
+- Disposable PostgreSQL apply / behavior / rollback proof: **passed** for the tested SQL/planner fixture.
+- `git diff --check`: passed.
+- `deno check --no-remote`: not completed; environment lacks `npm:@types/node`. No dependency install or manifest change was made.
+- Local draft files: `supabase/migrations/20260923102327_x_autopost_phase0_brand_scoped_uniqueness.sql`; `supabase/tests/x_autopost_phase0_uniqueness_fixture.sql`; `supabase/tests/x_autopost_phase0_uniqueness_behavior.sql`; `supabase/tests/x_autopost_phase0_uniqueness_rollback.sql`; `supabase/functions/x-test-post/multibrand_uniqueness_migration_test.ts`; `supabase/functions/x-test-post/publish_claim_logic.ts`; `supabase/functions/x-test-post/publish_claim_logic_test.ts`; `supabase/functions/x-test-post/morning_greeting_publish_logic.ts`; `supabase/functions/x-test-post/morning_greeting_publish_logic_test.ts`; `supabase/functions/x-test-post/index.ts`. All are isolated local draft changes and were not pushed.
+- Shared change in this report-only commit: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md`.
+
+## Gate recommendation / safety
+
+Do not apply the draft migration. First authorize a separate minimal `x-test-post` publish-claim brand-scoping change and its regression tests, plus decide how the unmerged brand-foundation migration/history drift will be resolved. Then rerun fresh production read-only preflight and disposable apply/rollback against the approved complete source set. Only after C2 PASS should an exact production migration apply be separately authorized. No production rows were printed or changed; no secret or personal record was exposed.
+
+- status: `review_required`
+- next_owner: `chatgpt`
+- implementation commit/push: none (draft blocked)
+- report/task control-sync commit/push: to be recorded after fresh-origin check
+
 # H2 — X autopost foundation / multibrand / Netlify readiness audit (review required, 2026-09-23)
 # H2 — Social mobile Phase 23 dedicated QA one-shot history read (review required, 2026-09-23)
 
