@@ -1,3 +1,54 @@
+## Latest H1 result — GPT-6 schema and runtime source candidate (2026-09-23)
+
+- task_id: `kabumori-important-news-gpt6-schema-and-source-candidate-20260923`
+- result: `review_required` — source-only candidate created and PR opened for C1. No production rollout performed.
+- source_base: fresh `origin/main` `a26370391176c04b78dee417e0f4d7b71fed231a`, then rebased after a second fresh fetch onto latest `origin/main` `3c37799a1a6ff574ba26b2f9d5830ca364c89217`. The intervening H2 commits touched only `.agent` controls and social-mobile files; no H1 source overlap.
+- branch: `codex/kabumori-important-news-gpt6-schema-source-20260923`
+- commit: `eefa3eabf4ddb4b07f6a300f34b0b395a4d7b691`
+- pull_request: https://github.com/anohi-memories/kabumori/pull/9 (open; Vercel and Vercel Preview Comments checks passed)
+- production_mutation: **0**. No migration apply, DB write, Edge Function deploy, Cron/config change, secret/Vault/provider change, report regeneration/backfill, X post, or Push.
+
+### Migration candidate and production read-only evidence
+
+- Added exactly one forward migration: `supabase/migrations/20260923035652_allow_gpt6_important_news_model_metadata.sql`.
+- It transactionally replaces only `important_news_candidates_judgement_model_check` and `important_news_candidates_generation_model_check`. Each allows NULL and the four IDs `gpt-5.6-luna`, `gpt-5.6-sol`, `gpt-6-luna`, and `gpt-6-sol`. No historical migration was edited; no column, RLS, grant, index, trigger, RPC, or unrelated constraint is changed.
+- A static contract test proves the two constraint names, preserved and added allowed values, transaction boundaries, and absence of unrelated DDL/privilege/data changes.
+- Production was queried read-only through the catalog for those two CHECK constraints. Returned definitions:
+  - `important_news_candidates_generation_model_check`: `CHECK (((generation_model IS NULL) OR (generation_model = ANY (ARRAY['gpt-5.6-luna'::text, 'gpt-5.6-sol'::text]))))`
+  - `important_news_candidates_judgement_model_check`: `CHECK (((judgement_model IS NULL) OR (judgement_model = ANY (ARRAY['gpt-5.6-luna'::text, 'gpt-5.6-sol'::text]))))`
+  These match the source migration names and definitions. No production data or schema was modified.
+
+### Runtime, pricing, and retained model references
+
+- Active routes before → after:
+  - judgement first pass: GPT-5.6 Luna → GPT-6 Luna; existing escalation conditions remain unchanged and escalations use GPT-6 Sol.
+  - breaking-market AI search: GPT-5.6 Luna → GPT-6 Luna; search cadence, source allowlist/validation, and freshness behavior are unchanged.
+  - post draft, Fact, Voice, and existing retry calls: GPT-5.6 Luna → GPT-6 Luna; generation/publish gates are unchanged.
+  - generation failure metadata now also stores GPT-6 Luna. Judgment/generation metadata can be persisted because the candidate migration adds those IDs.
+- Current standard short-context prices were re-verified in [OpenAI's model catalog](https://developers.openai.com/api/docs/models) and [API pricing](https://developers.openai.com/api/docs/pricing): GPT-6 Luna `$0.10` input / `$0.50` output per 1M tokens; GPT-6 Sol `$2` / `$10` per 1M.
+- Active usage accounting uses those rates. Unknown-model fallback is GPT-6 Luna, not GPT-5.6 Luna.
+- `gpt-5.6-*` literals remaining under `important-news-monitor` are confined to `usage_ledger.ts` historical rates and corresponding `usage_ledger_test.ts` fixtures that recompute/forward already-written ledger rows. No active runtime selector retains GPT-5.6. The existing GPT-6 app-copy V2 path remains intact.
+
+### Verification
+
+- Migration contract + changed-path targeted tests: **173 passed / 0 failed**.
+- Full `important-news-monitor` suite: **424 passed / 0 failed** with `deno test --no-lock --no-check`.
+- `deno check --no-config --no-lock` passed for changed judgement, search, generation, dispatch, usage-ledger, and test modules.
+- Checking changed `index.ts` reaches a pre-existing `TS2322` in unchanged `supabase/functions/_shared/x_oauth2_post.ts:66` (`Uint8Array<ArrayBufferLike>` vs `BufferSource`). This file is outside the diff; no new index-local type error was reported before that existing dependency error.
+- `git diff --check origin/main...HEAD`: passed.
+- Initial standard `deno check` with repo config could not resolve uncached `npm:@types/node`; the explicit `--no-config --no-lock` checks above passed for the changed logic/test files.
+- Fresh runtime inventory and static test confirm no active GPT-5.6 selector remains.
+
+### Next production sequence — not executed
+
+1. C1 reviews the exact candidate and migration scope; merge only after that review.
+2. Obtain separate explicit authorization before applying the single migration; never use a broad `db push`.
+3. Read back both CHECK definitions after apply.
+4. Obtain separate explicit authorization before deploying only the reviewed `important-news-monitor` candidate.
+5. Observe the natural runtime path and verify model metadata/cost records; do not manually post or alter Cron/config as part of this candidate.
+
+`CODEX_TASK.md` is now `review_required` / `next_owner: chatgpt`. Stop for C1.
+
 ## Latest H1 result — GPT-6 Important News unification stopped for schema review (2026-09-23)
 
 - task_id: `kabumori-important-news-full-gpt6-model-unification-20260923`

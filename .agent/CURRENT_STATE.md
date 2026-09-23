@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-23 JST (C1 accepted GPT-6 schema blocker; next H1 queued for narrow migration + source candidate; production mutation 0)
+- checked_at: 2026-09-23 JST (H1 GPT-6 schema/source candidate completed; awaiting C1; production mutation 0)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,12 +14,12 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `kabumori-important-news-gpt6-schema-and-source-candidate-20260923`
-  - C1 accepted the GPT-6 prototype diagnosis and schema blocker.
-  - Existing CHECK constraints on `judgement_model` and `generation_model` allow only GPT-5.6 IDs, so direct GPT-6 runtime deployment would fail persisted writes.
-  - Next H1 is authorized to create one narrow forward migration candidate permitting GPT-6 Luna/Sol while preserving GPT-5.6 historical rows, plus rebuild the already-tested GPT-6 source candidate on latest main.
-  - Migration apply and Function deploy remain forbidden in that H1.
-  - Prototype test evidence: targeted 172/0, full Important News 423/0 (--no-check), production mutation 0.
+- Codex slot 1: `review_required` — `kabumori-important-news-gpt6-schema-and-source-candidate-20260923`
+  - H1 source-only candidate is PR #9: https://github.com/anohi-memories/kabumori/pull/9 (commit `eefa3eabf4ddb4b07f6a300f34b0b395a4d7b691`), rebased on latest main `3c37799a1a6ff574ba26b2f9d5830ca364c89217`.
+  - Added one migration candidate for only the `judgement_model` and `generation_model` CHECK constraints; production catalog read confirmed their names and GPT-5.6-only definitions match source.
+  - Important News judgement/search/generation runtime now selects GPT-6 Luna/Sol; unknown-model fallback is GPT-6 Luna; historical GPT-5.6 pricing remains only for ledger recomputation.
+  - Verification: targeted 173/0, full Important News suite 424/0, changed logic/test `deno check --no-config --no-lock` passed, `git diff --check` passed. `index.ts` remains affected by pre-existing TS2322 in unchanged `_shared/x_oauth2_post.ts:66`.
+  - Vercel and Vercel Preview Comments checks passed. Stop for C1; no migration apply or Function deploy is authorized.
   - Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase23-dedicated-qa-one-shot-history-learning-20260923`
@@ -40,7 +40,7 @@
 
 ## Parallel safety
 
-- H1 GPT-6 unification is stopped for C1 on model CHECK constraints; local prototype only, no producer deploy/migration/RPC.
+- H1 GPT-6 unification has a source-only PR candidate and is stopped for C1; no production migration/deploy/RPC.
 - H2/G1/G2 implementation files are untouched by this H1.
 - 同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数slotで同時変更しない。
 - push前にfresh `origin/main`確認。既存未コミット変更は他workstream所有として触らない。

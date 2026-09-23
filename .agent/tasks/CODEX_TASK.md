@@ -3,8 +3,8 @@
 - task_id: kabumori-important-news-gpt6-schema-and-source-candidate-20260923
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: C1で確認したGPT-5.6-only CHECK constraint blockerを解消するため、GPT-6 model metadataを許可する狭いmigration candidateを追加し、停止していたImportant News GPT-6 source unification candidateをmain最新上で再構築する。production apply/deployは禁止。

@@ -6,11 +6,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: kabumori-important-news-full-gpt6-model-unification-20260923
+- task_id: kabumori-important-news-gpt6-schema-and-source-candidate-20260923
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: Local GPT-6 source prototype stopped for C1 because existing `judgement_model` / `generation_model` CHECK constraints permit GPT-5.6 IDs only. No migration, source PR, deploy, or DB mutation.
+- note: Source-only migration/runtime candidate is PR #9 (`eefa3ea`), rebased on latest main. C1 review required; no production apply/deploy or DB write.
 
 
 ### Codex slot 2
