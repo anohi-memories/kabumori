@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase22-live-history-dependency-gate-default-off-20260923
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: GPT-6 Sol Medium
 - purpose: Phase21 C2 PASS後、production `social-mobile-history-learning` にlive dependency wiringを追加する。ただしserver-only feature gateはdefault OFFのままdeployし、実Vault plaintext read・access-token RPC invocation・real X history fetchはまだ一切発生させない。
@@ -253,3 +253,22 @@ Phase23 only after C2 PASS:
 - one real access-token RPC/Vault read + bounded X history fetch
 - no publish
 - no persona persistence unless separately approved
+
+
+## Final C2 — 2026-09-23
+
+PASS. Phase22 complete.
+
+Independent review confirmed:
+- production `social-mobile-history-learning` is ACTIVE v2 with `verify_jwt=true`.
+- runtime source matches the pushed gate architecture: only exact case-sensitive `SOCIAL_MOBILE_HISTORY_LIVE_ENABLED=true` selects live dependencies; absent/empty/other values remain OFF.
+- service-role env reads occur only inside the exact-ON branch.
+- live dependency authority order remains Auth -> owner membership -> workspace -> verified X account -> dedicated access-token RPC -> X history fetch.
+- tenant reads use the user's bearer and publishable/anon key; the service role is confined to the dedicated token RPC adapter.
+- no client-controlled user/account/platform/Vault/token values are accepted by the live reader boundary.
+- H2 tests passed 31/31, Function check passed, and reported runtime byte-equivalence is consistent with production source read-back.
+- production gate remained absent/OFF during rollout; access-token RPC calls, Vault plaintext reads, X history calls, persona/raw-history writes, and publish changes were all 0.
+
+Next gate:
+- Phase23 may perform exactly one dedicated-QA history-learning run only after explicit user consent immediately before enabling/running it.
+- publishing and persona persistence remain unapproved.
