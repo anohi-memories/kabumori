@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-24 JST (C1 caller-auth source candidate PASS; PR #12 merge-only queued; Claude G2 mobile release blockers queued)
+- checked_at: 2026-09-24 JST (PR #12 caller-auth source candidate merged; production rollout not authorized)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,13 +14,11 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `kabumori-important-news-caller-auth-merge-only-20260924`
-  - PR #12 caller-auth source candidate is C1 PASS.
-  - Reviewed head `9dffce9620b8a04706cad314a1e558ea141cb105`.
-  - Targeted 7/7, full Important News 431/431, disposable PostgreSQL proof PASS, Vercel PASS.
-  - Next H1: fresh-check main/drift, merge PR #12 only if still semantically identical and checks green.
-  - Production migration/Vault secret/Function secret/deploy/Cron mutation remain forbidden and require separate explicit approval.
-  - PR #11 is stale partial control-sync; never merge.
+- Codex slot 1: `review_required` — `kabumori-important-news-caller-auth-merge-only-20260924`
+  - PR #12 reviewed head `9dffce9620b8a04706cad314a1e558ea141cb105` merged normally as `844c77d6911380822c091b9b646df911810808a4`.
+  - Fresh main after merge is `844c77d6911380822c091b9b646df911810808a4`; all seven implementation files match the reviewed head.
+  - Production read-back: migration unapplied, Vault entry absent, monitor ACTIVE v64 / `verify_jwt=false`, Cron fingerprints and schedules unchanged. Production mutation 0.
+  - PR #11 remains open/draft/untouched. Next: C1 review; production rollout requires separate explicit approval.
 
 - Codex slot 2: `ready` — `x-autopost-phase0c2-production-deploy-retry-20260924`
   - Phase0c C2: first authorized x-test-post deploy stopped on Supabase Functions API HTTP 500. Migration was not applied.

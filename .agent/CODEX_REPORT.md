@@ -2022,3 +2022,19 @@ Candidate awaits C1 review. Stop before any Edge Function deploy; a separate exp
 - remaining_issues: full relevant regression suite and disposable SQL execution remain outstanding; production secret provisioning, migration application, and Function deployment each need their own approval.
 - safety_checks: no credential value was generated or written to source/report; production caller query output redacted headers and URL; candidate excludes the shadow job and does not change the protected business rules.
 - next_recommendation: C1 review the exact source candidate and tests; only then plan the separately approved production rollout sequence.
+
+## Latest H1 result — caller-auth PR #12 merge-only (2026-09-24)
+
+- task_id: `kabumori-important-news-caller-auth-merge-only-20260924`
+- result: `review_required` — source candidate merged; stop for C1. No production rollout was performed.
+- fresh_origin_main_before_merge: `bdbcf94718f1d8898c2360af5025b59302a015ac` (fresh `git fetch origin main`). Drift since tested merge base `118fb488064876536e595e8a5e06fbd3c4c11f7e` affected agent control/report files and `market-intelligence-ingest` files/migration only; none overlapped the approved seven PR files. H2 owns x-test-post/Phase0c; G1 consumer mobile; G2 apps/admin. No file/migration/function/config ownership overlap was found.
+- PR: [#12](https://github.com/anohi-memories/kabumori/pull/12), exact reviewed head `9dffce9620b8a04706cad314a1e558ea141cb105`, remained open, non-draft, mergeable, with exactly the reviewed seven files. Vercel required status was `success`. Repository history uses merge commits for normal PR merges.
+- merge: normal merge commit `844c77d6911380822c091b9b646df911810808a4`; resulting fresh `origin/main` is the same SHA. PR #11 remains open/draft and untouched; it was neither merged nor closed.
+- read_back: `git diff --exit-code <reviewed-head> <merge-sha> -- <seven-approved-files>` returned no differences. The migration is present in source on main.
+- production_read_only: migration `20260923110440` absent from Supabase migration history and independently `caller_auth_migration_applied=0`; Vault name `important_news_monitor_cron_secret` absent. `important-news-monitor` remains ACTIVE v64, `verify_jwt=false`, bundle SHA `4450ee09ff03099f044659cb7408ec00736e5ab9e3354d44fb453c8b2660e4b7`. Pre/post read-only Cron inspection showed identical fingerprints and schedule/active states for the four caller jobs and the excluded shadow job; no candidate Vault lookup/header is present. Secret values were not selected. No safe Function-secret inventory tool was available, so that inventory was not independently queried.
+- production_mutation: 0. No migration apply, Vault or Function secret write, deploy, Cron mutation, manual invocation, candidate injection, X post, or Push.
+- tests: relied on the C1-approved source evidence in the task (targeted 7/7; full Important News 431/431; disposable PostgreSQL proof; Vercel pass). No source was changed by this H1, and tests were not rerun after merge.
+- next_production_prerequisites: separate explicit approval; set one high-entropy value in the Function secret store and Vault through approved secure UI; verify metadata without reading the value; apply only the exact reviewed migration; separately approve/deploy only `important-news-monitor` with `verify_jwt=false`; preserve schedules, request payload/business rules, `auto_publish`, and publication content. Do not manually invoke as part of this merge-only task.
+- changed_files: `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md`, `.agent/CURRENT_STATE.md`, `.agent/ACTIVE_TASK.md` (control/report synchronization only).
+- deploy: none.
+- next_recommendation: C1 review; production rollout remains a separate approval gate.

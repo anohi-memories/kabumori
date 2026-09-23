@@ -3,8 +3,8 @@
 - task_id: kabumori-important-news-caller-auth-merge-only-20260924
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Luna
 - purpose: C1 PASS済みのPR #12 caller-auth source candidateを、最新mainとのsemantic driftを再確認して通常手順でmergeする。production auth rolloutはこのTASKでは行わない。
@@ -38,7 +38,7 @@ Approved evidence:
 - production mutation during candidate work: 0
 - PR #11 is stale/partial control-sync only and must never be merged.
 
-Current main later received only H1 report/control synchronization after the verified base. Before merge, fresh-check again and verify no semantic overlap.
+Pre-merge fresh `origin/main` was `bdbcf94718f1d8898c2360af5025b59302a015ac`; its post-base changes touched only agent control/report files and market-intelligence-ingest files/migration. No path overlapped the seven approved candidate files. This H1 merged only the exact reviewed head and performed read-only post-merge checks.
 
 ## Mandatory startup
 
@@ -105,3 +105,14 @@ Then:
 - STOP for C1
 
 **推奨モデル：Luna。**
+
+## H1 execution result — merge-only (2026-09-24)
+
+- PR #12 was merged normally (merge commit `844c77d6911380822c091b9b646df911810808a4`) from the exact reviewed head `9dffce9620b8a04706cad314a1e558ea141cb105`; Vercel required status was `success` and GitHub reported mergeable before merge.
+- Fresh pre-merge main: `bdbcf94718f1d8898c2360af5025b59302a015ac`; post-merge `origin/main`: `844c77d6911380822c091b9b646df911810808a4`.
+- Read-back compared all seven approved implementation files on merged main to the reviewed PR head; `git diff --exit-code` returned no differences.
+- PR #11 remains open, draft, and untouched; it was not merged or closed.
+- Read-only production checks: caller-auth migration absent from migration history; caller Vault name absent; `important-news-monitor` remains ACTIVE v64 / `verify_jwt=false` / same bundle SHA; the four production caller Cron rows and `important-news-shadow` retained the same pre/post schedule, active state, and command fingerprints; no candidate header/Vault lookup is present. No secret values were selected. The tools do not expose a safe Function-secret inventory, so secret-store absence was not independently read back.
+- Production mutation by this H1: 0. No migration, Vault/Function secret, deployment, Cron, invocation, candidate, X, or Push change.
+- Next production rollout requires separate explicit approval: set the same high-entropy value in the Function secret store and Vault using approved secure UI, verify metadata without reading the value, apply only the reviewed migration, and separately approve/deploy only `important-news-monitor` with `verify_jwt=false`; preserve the four schedules and all business/publish rules.
+- Stop for C1.

@@ -6,11 +6,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: kabumori-important-news-monitor-caller-auth-finalize-20260923
+- task_id: kabumori-important-news-caller-auth-merge-only-20260924
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: PR #12 freshened to `9dffce9` on main `118fb48`; 7 targeted + 431 full tests pass, disposable PostgreSQL migration/rollback proof passes, Vercel succeeds. `index.ts` full check reaches unrelated existing TS2322 in unchanged `_shared/x_oauth2_post.ts:66`. No production mutation. PR #11 remains open/draft/unmerged and untouched. Stop for C1.
+- note: PR #12 reviewed head `9dffce9` merged normally as `844c77d`; all seven files read back identical. Vercel passed. Production migration remains unapplied, Vault entry absent, monitor ACTIVE v64 / `verify_jwt=false`, and Cron fingerprints unchanged. No production mutation. PR #11 remains open/draft/unmerged and untouched. Stop for C1.
 
 
 ### Codex slot 2
