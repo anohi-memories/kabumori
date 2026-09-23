@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { executeFedStatementAiAction } from "./mic_fed_statement_ai_action.ts";
+import { executeFedStatementAiAction, FED_STATEMENT_AI_CLAIM_TTL_MS } from "./mic_fed_statement_ai_action.ts";
 import { computeFedStatementDiffHash, FED_STATEMENT_DIFF_PROMPT_VERSION, type FedStatementDeterministicDiff } from "./mic_fed_statement_diff.ts";
 import { FED_STATEMENT_LUNA_MODEL, type FedStatementAiRequestResult } from "./mic_fed_statement_ai_logic.ts";
 import type { FedStatementAiInput, FedStatementAiOutput } from "./mic_fed_statement_diff.ts";
@@ -73,6 +73,7 @@ function makeFixture() {
     ai_interpretation: null,
     model: null,
     generated_at: null,
+    updated_at: "2026-09-23T12:00:00.000Z",
   };
   const event = (id: string, date: string, hash: string, decision: string, url: string, lower: number, upper: number) => ({
     id,
@@ -100,6 +101,8 @@ function makeFixture() {
   let aiCalls = 0;
   const aiInputs: FedStatementAiInput[] = [];
   const usageRows: Record<string, unknown>[] = [];
+  let failResultSave = false;
+  let failUsageInsert = false;
   const fetchImpl = ((input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input));
     const method = init?.method ?? "GET";
@@ -112,23 +115,29 @@ function makeFixture() {
     if (method === "PATCH" && table === "mic_fed_statement_diffs") {
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
       const filterModel = url.searchParams.get("model");
-      if (filterModel === "is.null") {
-        if (diff.model !== null || diff.ai_interpretation !== null || diff.generated_at !== null) return Promise.resolve(new Response("[]"));
-        diff.model = body.model;
-        return Promise.resolve(new Response(JSON.stringify([{ id: DIFF_ID }])));
+      if ((filterModel === "is.null" && diff.model !== null) ||
+        (filterModel?.startsWith("eq.") && filterModel.slice(3) !== diff.model) ||
+        (diff.ai_interpretation !== null || diff.generated_at !== null)) {
+        return Promise.resolve(new Response("[]"));
       }
-      const modelMatch = filterModel?.replace(/^eq\./, "");
-      if (modelMatch !== diff.model) return Promise.resolve(new Response("[]"));
-      if (body.model === null) diff.model = null;
-      else {
+      if (Object.hasOwn(body, "ai_interpretation")) {
+        if (failResultSave) return Promise.resolve(new Response("save failed", { status: 500 }));
+        const modelMatch = filterModel?.replace(/^eq\./, "");
+        if (modelMatch !== diff.model) return Promise.resolve(new Response("[]"));
         diff.ai_interpretation = body.ai_interpretation;
         diff.model = body.model;
         diff.prompt_version = body.prompt_version;
         diff.generated_at = body.generated_at;
+        return Promise.resolve(new Response(JSON.stringify([{ id: DIFF_ID }])));
       }
-      return Promise.resolve(new Response(JSON.stringify([{ id: DIFF_ID }])));
+      if (filterModel === "is.null" || filterModel?.startsWith("eq.")) {
+        diff.model = body.model;
+        return Promise.resolve(new Response(JSON.stringify([{ id: DIFF_ID }])));
+      }
+      return Promise.resolve(new Response("[]"));
     }
     if (method === "POST" && table === "ai_usage_events") {
+      if (failUsageInsert) return Promise.resolve(new Response("usage failed", { status: 503 }));
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
       usageRows.push(body);
       return Promise.resolve(new Response(JSON.stringify([{ id: 51 }])));
@@ -140,7 +149,17 @@ function makeFixture() {
     aiInputs.push(input);
     return Promise.resolve({ output: validOutput, model: FED_STATEMENT_LUNA_MODEL, inputTokens: 310, outputTokens: 55, costUsd: 0.0000585 });
   };
-  return { diff, events, usageRows, fetchImpl, requestAi, aiInputs, aiCalls: () => aiCalls };
+  return {
+    diff,
+    events,
+    usageRows,
+    fetchImpl,
+    requestAi,
+    aiInputs,
+    aiCalls: () => aiCalls,
+    failResultSave: (value: boolean) => failResultSave = value,
+    failUsageInsert: (value: boolean) => failUsageInsert = value,
+  };
 }
 
 function execute(fixture: ReturnType<typeof makeFixture>) {
@@ -209,6 +228,53 @@ test("already interpreted diff returns without another model call", async () => 
   assert.equal(fixture.usageRows.length, 0);
 });
 
+test("completed interpretation wins over an old claim marker", async () => {
+  const fixture = makeFixture();
+  fixture.diff.ai_interpretation = validOutput;
+  fixture.diff.model = `fed-ai-claim:${Date.now() - FED_STATEMENT_AI_CLAIM_TTL_MS * 2}:00000000-0000-4000-8000-000000000009`;
+  fixture.diff.generated_at = "2026-09-23T11:00:00.000Z";
+  const result = await execute(fixture);
+  assert.equal(result.status, "already_interpreted");
+  assert.equal(fixture.aiCalls(), 0);
+});
+
+test("fresh claim is not reclaimed", async () => {
+  const fixture = makeFixture();
+  fixture.diff.model = `fed-ai-claim:${Date.parse("2026-09-23T11:59:59.999Z")}:00000000-0000-4000-8000-000000000009`;
+  const result = await execute(fixture);
+  assert.equal(result.status, "in_progress");
+  assert.equal(fixture.aiCalls(), 0);
+});
+
+test("stale claim is atomically reclaimed", async () => {
+  const fixture = makeFixture();
+  fixture.diff.model = `fed-ai-claim:${Date.parse("2026-09-23T11:40:00.000Z")}:00000000-0000-4000-8000-000000000009`;
+  const result = await execute(fixture);
+  assert.equal(result.status, "interpreted");
+  assert.equal(fixture.aiCalls(), 1);
+  assert.equal(fixture.usageRows.length, 1);
+  assert.match(String(fixture.diff.model), /^gpt-6-luna$/);
+});
+
+test("legacy claim without embedded time uses existing updated_at", async () => {
+  const fixture = makeFixture();
+  fixture.diff.model = "fed-ai-claim:legacy-worker-id";
+  fixture.diff.updated_at = "2026-09-23T11:40:00.000Z";
+  const result = await execute(fixture);
+  assert.equal(result.status, "interpreted");
+  assert.equal(fixture.aiCalls(), 1);
+});
+
+test("simultaneous stale-claim recovery has exactly one winner", async () => {
+  const fixture = makeFixture();
+  fixture.diff.model = `fed-ai-claim:${Date.parse("2026-09-23T11:40:00.000Z")}:00000000-0000-4000-8000-000000000009`;
+  const results = await Promise.all([execute(fixture), execute(fixture)]);
+  assert.equal(fixture.aiCalls(), 1);
+  assert.equal(fixture.usageRows.length, 1);
+  assert.equal(results.filter((result) => result.status === "interpreted").length, 1);
+  assert.ok(results.some((result) => result.status === "in_progress" || result.status === "already_interpreted"));
+});
+
 test("two concurrent actions acquire only one atomic claim", async () => {
   const fixture = makeFixture();
   const results = await Promise.all([execute(fixture), execute(fixture)]);
@@ -231,7 +297,57 @@ test("invalid AI output is not saved and does not create usage", async () => {
   assert.equal(fixture.aiCalls(), 0);
   assert.equal(fixture.diff.ai_interpretation, null);
   assert.equal(fixture.diff.generated_at, null);
-  assert.equal(fixture.diff.model, null);
+  assert.match(String(fixture.diff.model), /^fed-ai-claim:/);
+  assert.equal(fixture.usageRows.length, 0);
+});
+
+test("transport failure retains claim to prevent immediate duplicate call", async () => {
+  const fixture = makeFixture();
+  const requestAi = fixture.requestAi;
+  fixture.requestAi = (input) => {
+    requestAi(input);
+    return Promise.reject(new Error("transport failure"));
+  };
+  await assert.rejects(() => execute(fixture), /FED_AI_EXECUTION_FAILED/);
+  assert.match(String(fixture.diff.model), /^fed-ai-claim:/);
+  assert.equal(fixture.aiCalls(), 1);
+  const second = await execute(fixture);
+  assert.equal(second.status, "in_progress");
+  assert.equal(fixture.aiCalls(), 1);
+});
+
+test("timeout retains claim to prevent immediate duplicate call", async () => {
+  const fixture = makeFixture();
+  const requestAi = fixture.requestAi;
+  fixture.requestAi = (input) => {
+    requestAi(input);
+    return Promise.reject(new DOMException("request timed out", "TimeoutError"));
+  };
+  await assert.rejects(() => execute(fixture), /FED_AI_EXECUTION_FAILED/);
+  assert.match(String(fixture.diff.model), /^fed-ai-claim:/);
+  const second = await execute(fixture);
+  assert.equal(second.status, "in_progress");
+  assert.equal(fixture.aiCalls(), 1);
+});
+
+test("interpretation persistence failure does not immediately free the claim", async () => {
+  const fixture = makeFixture();
+  fixture.failResultSave(true);
+  await assert.rejects(() => execute(fixture), /FED_AI_EXECUTION_FAILED/);
+  assert.equal(fixture.diff.ai_interpretation, null);
+  assert.match(String(fixture.diff.model), /^fed-ai-claim:/);
+  assert.equal(fixture.usageRows.length, 0);
+});
+
+test("usage ledger failure does not cause another AI call", async () => {
+  const fixture = makeFixture();
+  fixture.failUsageInsert(true);
+  await assert.rejects(() => execute(fixture), /FED_AI_EXECUTION_FAILED/);
+  assert.deepEqual(fixture.diff.ai_interpretation, validOutput);
+  assert.equal(fixture.diff.model, FED_STATEMENT_LUNA_MODEL);
+  const result = await execute(fixture);
+  assert.equal(result.status, "already_interpreted");
+  assert.equal(fixture.aiCalls(), 1);
   assert.equal(fixture.usageRows.length, 0);
 });
 
@@ -250,7 +366,7 @@ test("foreign event URL is rejected without model execution", async () => {
   assert.equal(fixture.aiCalls(), 0);
 });
 
-test("claimed or malformed exact diff cannot be interpreted again", async () => {
+test("legacy/malformed claim marker fails closed", async () => {
   const fixture = makeFixture();
   fixture.diff.model = "fed-ai-claim:someone-else";
   const result = await execute(fixture);

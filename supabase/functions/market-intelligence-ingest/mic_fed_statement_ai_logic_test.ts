@@ -92,6 +92,16 @@ test("invalid structured output fails closed", async () => {
   );
 });
 
+test("provider timeout fails closed without exposing request details", async () => {
+  const pipeline = await buildFedStatementDiffPipeline(current, previous);
+  assert.ok(pipeline.aiInput);
+  const fetchImpl = (() => Promise.reject(new DOMException("request timed out", "TimeoutError"))) as typeof fetch;
+  await assert.rejects(
+    () => requestFedStatementInterpretation({ apiKey: "test-key", input: pipeline.aiInput!, timeoutMs: 30_000 }, fetchImpl),
+    /FED_STATEMENT_AI_FETCH_FAILED/,
+  );
+});
+
 test("cost estimate uses exact model token rates", () => {
   assert.equal(fedStatementLunaCost(1_000_000, 1_000_000), 0.6);
 });

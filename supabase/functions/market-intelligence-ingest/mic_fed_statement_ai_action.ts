@@ -23,6 +23,7 @@ export const INTERPRET_FED_STATEMENT_DIFF_ACTION = "interpret_fed_statement_diff
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const HEX_HASH_PATTERN = /^[0-9a-f]{64}$/i;
 const CLAIM_PREFIX = "fed-ai-claim:";
+export const FED_STATEMENT_AI_CLAIM_TTL_MS = 12 * 60 * 1000;
 const MAX_AI_CHANGE_TEXT_CHARS = 12_000;
 const ALLOWED_BUCKETS = new Set<FedStatementSemanticBucket>([
   "inflation", "labor", "growth/activity", "policy stance", "forward guidance", "balance_sheet",
@@ -49,6 +50,7 @@ type DiffRow = {
   model: string | null;
   prompt_version: string;
   generated_at: string | null;
+  updated_at?: string;
 };
 type EventRow = {
   id: string;
@@ -106,6 +108,20 @@ function readRange(ratesValue: unknown): FedTargetRange | null {
 
 function rangesEqual(left: FedTargetRange | null, right: FedTargetRange): boolean {
   return left !== null && left.lower === right.lower && left.upper === right.upper;
+}
+
+function claimTimestamp(marker: string | null | undefined): number | null {
+  if (!marker?.startsWith(CLAIM_PREFIX)) return null;
+  const match = /^fed-ai-claim:(\d{13}):[0-9a-f-]{36}$/i.exec(marker);
+  if (!match) return null;
+  const timestamp = Number(match[1]);
+  return Number.isSafeInteger(timestamp) ? timestamp : null;
+}
+
+function rowUpdatedTimestamp(value: string | null | undefined): number | null {
+  if (typeof value !== "string") return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
 }
 
 function officialStatementUrl(value: unknown): value is string {
@@ -172,18 +188,6 @@ async function readOne<T>(ctx: RestContext, table: string, query: string, fetchI
   return (rows[0] ?? null) as T | null;
 }
 
-async function releaseClaim(ctx: RestContext, diffId: string, marker: string, fetchImpl: typeof fetch): Promise<void> {
-  const result = await fetchImpl(
-    `${ctx.supabaseUrl}/rest/v1/${FED_STATEMENT_DIFF_TABLE}?id=eq.${encodeURIComponent(diffId)}&model=eq.${encodeURIComponent(marker)}&ai_interpretation=is.null&generated_at=is.null`,
-    {
-      method: "PATCH",
-      headers: restHeaders(ctx.secretKey, "return=minimal"),
-      body: JSON.stringify({ model: null }),
-    },
-  );
-  if (!result.ok) throw new FedStatementAiActionError(`FED_AI_CLAIM_RELEASE_FAILED:${result.status}`, 502);
-}
-
 export async function executeFedStatementAiAction(
   ctx: RestContext,
   diffId: string,
@@ -195,7 +199,7 @@ export async function executeFedStatementAiAction(
   const diff = await readOne<DiffRow>(
     ctx,
     FED_STATEMENT_DIFF_TABLE,
-    `id=eq.${encodeURIComponent(diffId)}&select=id,current_event_id,previous_event_id,current_document_hash,previous_document_hash,diff_hash,meeting_date,previous_meeting_date,changed_paragraph_count,material_change_count,deterministic_diff,semantic_buckets,ai_interpretation,model,prompt_version,generated_at&limit=2`,
+    `id=eq.${encodeURIComponent(diffId)}&select=id,current_event_id,previous_event_id,current_document_hash,previous_document_hash,diff_hash,meeting_date,previous_meeting_date,changed_paragraph_count,material_change_count,deterministic_diff,semantic_buckets,ai_interpretation,model,prompt_version,generated_at,updated_at&limit=2`,
     fetchImpl,
   );
   if (!diff) throw new FedStatementAiActionError("FED_AI_DIFF_NOT_FOUND", 404);
@@ -205,14 +209,27 @@ export async function executeFedStatementAiAction(
     throw new FedStatementAiActionError("FED_AI_DIFF_HASH_INVALID");
   }
   if (diff.ai_interpretation !== null && diff.ai_interpretation !== undefined) {
-    if (diff.generated_at === null || diff.generated_at === undefined || diff.model !== FED_STATEMENT_LUNA_MODEL) {
+    const completedModel = diff.model === FED_STATEMENT_LUNA_MODEL || diff.model?.startsWith(CLAIM_PREFIX) === true;
+    if (diff.generated_at === null || diff.generated_at === undefined || !completedModel) {
       throw new FedStatementAiActionError("FED_AI_INTERPRETATION_STATE_INCONSISTENT");
     }
     return { status: "already_interpreted", diff_id: diffId };
   }
   if (diff.generated_at !== null && diff.generated_at !== undefined) throw new FedStatementAiActionError("FED_AI_GENERATION_STATE_INCONSISTENT");
-  if (diff.model?.startsWith(CLAIM_PREFIX)) return { status: "in_progress", diff_id: diffId };
-  if (diff.model !== null && diff.model !== undefined) throw new FedStatementAiActionError("FED_AI_MODEL_STATE_INCONSISTENT");
+  const observedClaimTimestamp = claimTimestamp(diff.model) ?? rowUpdatedTimestamp(diff.updated_at);
+  const now = dependencies.now?.() ?? new Date();
+  if (diff.model?.startsWith(CLAIM_PREFIX)) {
+    // Older markers did not encode time; use the row's existing updated_at
+    // trigger as their age source. If neither source is trustworthy, fail
+    // closed rather than reclaiming a possibly-live worker.
+    if (observedClaimTimestamp === null || now.getTime() - observedClaimTimestamp < FED_STATEMENT_AI_CLAIM_TTL_MS) {
+      return { status: "in_progress", diff_id: diffId };
+    }
+  }
+  const hasClaimMarker = diff.model?.startsWith(CLAIM_PREFIX) === true;
+  if (diff.model !== null && diff.model !== undefined && !hasClaimMarker) {
+    throw new FedStatementAiActionError("FED_AI_MODEL_STATE_INCONSISTENT");
+  }
   if (!diff.current_event_id || !diff.previous_event_id) throw new FedStatementAiActionError("FED_AI_PREVIOUS_EVENT_REQUIRED");
   if (!UUID_PATTERN.test(diff.current_event_id) || !UUID_PATTERN.test(diff.previous_event_id)) throw new FedStatementAiActionError("FED_AI_EVENT_ID_INVALID");
   const deterministic = diff.deterministic_diff;
@@ -302,9 +319,12 @@ export async function executeFedStatementAiAction(
   if (changedTextChars > MAX_AI_CHANGE_TEXT_CHARS) throw new FedStatementAiActionError("FED_AI_CHANGED_TEXT_TOO_LARGE");
   if (!apiKey) throw new FedStatementAiActionError("FED_AI_SECRET_MISSING", 503);
 
-  const marker = `${CLAIM_PREFIX}${crypto.randomUUID()}`;
+  const marker = `${CLAIM_PREFIX}${now.getTime()}:${crypto.randomUUID()}`;
+  const claimModelFilter = hasClaimMarker
+    ? `model=eq.${encodeURIComponent(diff.model!)}`
+    : "model=is.null";
   const claimResponse = await fetchImpl(
-    `${ctx.supabaseUrl}/rest/v1/${FED_STATEMENT_DIFF_TABLE}?id=eq.${encodeURIComponent(diffId)}&diff_hash=eq.${encodeURIComponent(diff.diff_hash)}&prompt_version=eq.${encodeURIComponent(FED_STATEMENT_DIFF_PROMPT_VERSION)}&ai_interpretation=is.null&generated_at=is.null&model=is.null`,
+    `${ctx.supabaseUrl}/rest/v1/${FED_STATEMENT_DIFF_TABLE}?id=eq.${encodeURIComponent(diffId)}&diff_hash=eq.${encodeURIComponent(diff.diff_hash)}&prompt_version=eq.${encodeURIComponent(FED_STATEMENT_DIFF_PROMPT_VERSION)}&ai_interpretation=is.null&generated_at=is.null&${claimModelFilter}`,
     {
       method: "PATCH",
       headers: restHeaders(ctx.secretKey, "return=representation"),
@@ -353,7 +373,10 @@ export async function executeFedStatementAiAction(
       usage_event_id: usage.id,
     };
   } catch (error) {
-    await releaseClaim(ctx, diffId, marker, fetchImpl);
+    // Do not release after a request may have reached the model provider. A
+    // timeout or transport failure can be ambiguous; retaining the claim
+    // prevents an immediate duplicate billable call. It becomes reclaimable
+    // after the TTL if no completed interpretation was persisted.
     if (error instanceof FedStatementAiActionError) throw error;
     throw new FedStatementAiActionError("FED_AI_EXECUTION_FAILED", 502);
   }
