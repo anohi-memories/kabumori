@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-23 JST (H1 GPT-6 Important News exact migration and only-function deploy complete; scheduled Cron observed; no candidate)
+- checked_at: 2026-09-23 JST (H1 caller-auth source/config candidate ready for C1; production unchanged)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,10 +14,10 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `kabumori-important-news-gpt6-production-rollout-20260923`
-  - Approved exact migration applied; both CHECK constraints read back with GPT-6 IDs.
-  - Only `important-news-monitor` deployed; `verify_jwt=false`; SHA `4450ee09…e4b7`. Latest metadata says v64 but same SHA and source bundle `source/62`; discrepancy disclosed.
-  - Natural Cron runs succeeded through 09:20 UTC; no new candidate/usage row, so GPT-6 persistence remains unverified. Migration history version differs from repo timestamp; no repair.
+- Codex slot 1: `review_required` — `kabumori-important-news-monitor-caller-auth-remediation-candidate-20260923`
+  - PR #12 contains source-only caller-auth validation and a Vault-backed header candidate for exactly the four existing monitor Cron jobs.
+  - Targeted auth/wiring/migration tests: 7/7 passed; Deno check for caller-auth helper passed. Full regression suite / disposable SQL execution not run.
+  - Production migration, Vault write, Function secret/config change, and deploy are all 0; each requires separate approval. Keep `verify_jwt=false`.
 
 - Codex slot 2: `done` — `x-autopost-phase0b-publish-claim-brand-scope-and-migration-reconciliation-20260923`
   - C2 PASS。publish_claim clientをtrusted brand_id必須・brand-scoped conflict/updateへ変更するsource candidate完成。
@@ -39,7 +39,7 @@
 
 ## Parallel safety
 
-- H1 GPT-6 source PR #9 is merged; approved exact migration and only `important-news-monitor` deployment are complete. Natural Cron runs were read-only observed; no qualifying candidate. Migration-history timestamp and Function version-label discrepancies are disclosed; neither was repaired.
+- H1 caller-auth source/config candidate is in PR #12; production migration, Vault/secret configuration, and Function deploy are not approved and remain unapplied.
 - H2/G1/G2 implementation files are untouched by this H1.
 - 同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数slotで同時変更しない。
 - push前にfresh `origin/main`確認。既存未コミット変更は他workstream所有として触らない。
