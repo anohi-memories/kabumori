@@ -3,8 +3,8 @@
 - task_id: kabumori-important-news-gpt6-schema-source-final-merge-20260923
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
 - purpose: Vercel required checkが成功したPR #9をfresh mainへ最終確認後mergeする。production migration apply / Function deployは禁止。
@@ -99,3 +99,17 @@ On completion:
 - STOP for C1
 
 **推奨モデル：Luna。**
+
+
+## Report
+
+- task_id: `kabumori-important-news-gpt6-schema-source-final-merge-20260923`
+- result: `review_required` — PR #9 merged after Vercel success; stop for C1.
+- changed_files: PR #9's 12 approved files; this H1 additionally synced only `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, `.agent/tasks/CODEX_TASK.md`, and `.agent/CODEX_REPORT.md` control/report files.
+- tests: reviewed candidate 173 targeted/migration tests and 424 full Important News tests passed; exact 12-file read-back matched PR head. Vercel required check passed.
+- commit_hash: merge `83d994634f9b4891b8d939723939187b76bedaed` (report/control sync commits follow on main).
+- push: PR #9 merged; H1 control/report sync committed to main.
+- deploy: no Supabase Function deployment; no production migration applied.
+- remaining_issues: exact GPT-6 metadata migration, constraint read-back, reviewed `important-news-monitor` deployment and natural-runtime verification require their separately approved next steps. Personalized Reports rollout and 9/18 close handling remain separate.
+- safety_checks: no branch-protection bypass; production mutation 0; no DB write, Cron/config/secret change, X post, or Push.
+- next_recommendation: C1 review this merged source result, then separately authorize the exact migration and Function deployment.
