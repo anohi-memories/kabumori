@@ -22,10 +22,12 @@
   - Prototype test evidence: targeted 172/0, full Important News 423/0 (--no-check), production mutation 0.
   - Recommended model: Luna.
 
-- Codex slot 2: `ready` — `social-mobile-app-phase22-live-history-dependency-gate-default-off-20260923`
-  - Phase21 C2 PASS済み。production history-learning FunctionはACTIVE v1 / verify_jwt=true / disabled dependencyのまま。
-  - 次はlive dependency wiringを追加するが、server-only feature gate default OFFのままproduction deployする。
-  - access-token RPC invocation / Vault plaintext / real X history / persona persistence はまだ禁止。
+- Codex slot 2: `done` — `social-mobile-app-phase22-live-history-dependency-gate-default-off-20260923`
+  - C2 PASS。production `social-mobile-history-learning` はACTIVE v2 / verify_jwt=true。
+  - live dependency wiringは実装・deploy済みだが、server-only gate `SOCIAL_MOBILE_HISTORY_LIVE_ENABLED` は absent/OFF。
+  - exact `true` の時だけ live path。service-roleはON branchでのみ読まれ、tenant readsはuser bearer + anon/publishable key。
+  - access-token RPC invocation 0、Vault plaintext read 0、real X history call 0、persona/raw-history write 0、publish mutation 0。
+  - 次はPhase23: dedicated QAでexactly-one explicit-consent history-learning run。publish/persona persistenceは別承認。
   - Recommended model: GPT-6 Sol Medium。
 
 
