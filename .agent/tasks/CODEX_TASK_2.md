@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase20-production-history-access-rpc-rollout-20260923
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Sol
 - purpose: Phase19 C2 PASS済みの `read_social_mobile_history_access_token(uuid,text)` SECURITY DEFINER RPC candidateだけをproductionへ安全に適用し、definition/owner/search_path/ACLをread-backする。Vault plaintext read・history-learning Function deploy・real X history callはこのPhaseでは禁止。
