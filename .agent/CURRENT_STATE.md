@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-22 JST (H1 source merge review_required; PR #8 blocked by required Vercel rate limit; production mutation 0)
+- checked_at: 2026-09-23 JST (H1 GPT-6 Luna model-upgrade task ready on existing PR #8 workstream; production mutation 0)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,13 +14,12 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `kabumori-news-producer-portfolio-freshness-source-merge-20260922`
-  - C1 PASS on source candidate.
-  - Important News producer V2 approved: rich source-backed rows can receive independent Fact-checked app copy; thin sources fail closed; no display-time AI.
-  - Portfolio validator fix approved: full-width Latin embedded in Japanese proper-name context passes while ASCII acronyms/untranslated English remain blocked.
-  - Existing 9/18 snapshot is valid, but its failed narrative row still requires a later safe regeneration/backfill after production rollout.
-  - Candidate was freshened onto `origin/main` and PR #8 opened; required Vercel check is rate-limited for 24 hours, so merge awaits a passing check. No migration apply, Function deploy, or report regeneration.
-  - Production rollout remains a later Sol checkpoint; no branch-protection bypass was attempted.
+- Codex slot 1: `ready` — `kabumori-gpt6-luna-model-upgrade-on-pr8-20260923`
+  - Existing PR #8 remains open and blocked only by required Vercel build-rate-limit status.
+  - Next H1 updates the same PR workstream from GPT-5.6 Luna to GPT-6 Luna for Important News app-copy draft/Fact and personalized reports draft/Fact.
+  - H1 must verify the official API model ID and pricing before editing, then update related model assertions and cost estimator constants.
+  - No Sol fallback, no display-time AI, no production deploy/migration/backfill.
+  - Production mutation 0.
   - Recommended model: Luna.
 
 - Codex slot 2: `done` — `social-mobile-app-phase19-live-vault-reader-architecture-and-disposable-proof-20260923`
