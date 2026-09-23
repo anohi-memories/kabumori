@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase19-live-vault-reader-architecture-and-disposable-proof-20260923
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Luna
 - purpose: Phase18 C2 PASS後、live plaintext access-token readerの実装方式を決定し、productionには触れずsource candidate + disposable proofまで行う。service-role-only server adapterとnarrow SECURITY DEFINER RPCを比較し、最小権限・tenant binding・secret非露出の観点から1方式を選ぶ。production deploy / live Vault read / real X history callはまだ禁止。
@@ -210,3 +210,52 @@ When complete:
 - commit/push
 - fresh origin/main check
 - STOP for C2
+
+
+## Final C2 — 2026-09-23 (Phase19 live Vault reader architecture + disposable proof)
+
+**PASS. Phase19 is complete.**
+
+Accepted architecture:
+- selected a dedicated narrow \`SECURITY DEFINER\` RPC callable only by \`service_role\`, rather than a direct generic service-role Vault adapter.
+- this is effectively a server-only RPC boundary: the Edge Function remains responsible for authenticating the mobile user and resolving the trusted user/account binding, while the RPC independently rechecks ownership/account status before plaintext access.
+- \`auth.uid()\` is intentionally not used inside the RPC because the RPC is called with the service-role JWT; instead, the trusted Auth user id comes from the Edge \`getUser()\` result and is revalidated against owner membership in SQL.
+- the rejected direct adapter would have fewer DB objects but would place more of the Vault authorization burden solely in privileged Edge code.
+
+Security properties accepted:
+- no client-supplied Vault secret reference.
+- no refresh-token selector.
+- no arbitrary Vault secret selector.
+- exactly-one X account / identity-verified / nonempty platform id / owner-membership checks occur before the access secret id is selected.
+- only \`vault_access_token_secret_id\` is read.
+- function is \`SECURITY DEFINER\` with fixed empty \`search_path\` and fully qualified object names.
+- EXECUTE is revoked from public/anon/authenticated and granted only to service_role.
+- database/provider errors are normalized and secret values are not embedded in error responses.
+- Phase16 HTTP result still contains no token or secret reference.
+- default Edge entrypoint remains disabled and does not wire the candidate factory.
+
+Disposable proof accepted:
+- exact migration candidate applied successfully in fake-only PostgreSQL proof.
+- positive own-account access worked.
+- cross-tenant, viewer, pending/unverified, missing platform id/ref/secret, forged account, and multiple-X cases failed closed.
+- refresh-token decoy was not selectable.
+- ACL / SECURITY DEFINER / search_path were read back.
+- proof fixtures/function were removed and the disposable container was cleaned up.
+
+Verification accepted:
+- relevant Deno/security suites 34/34 PASS.
+- \`deno check\` PASS.
+- social-mobile typecheck/lint PASS.
+- \`git diff --check\` PASS.
+- implementation commit \`1958f9ca2925519d10018eba2e8c72fb0e246a12\` is on \`origin/main\`.
+- production mutation = 0.
+
+Important next gate:
+- this PASS approves the source/migration candidate only.
+- production migration/RPC apply is NOT yet authorized.
+- next phase must be a narrowly scoped production rollout for this single RPC candidate, with fresh preflight, exact migration hash/read-back, ACL/search_path/owner verification, and no Vault plaintext read.
+- Function deployment must remain a separate gate after the RPC rollout.
+- exactly-one QA Vault read/X-history fetch remains another later gate requiring explicit consent.
+- publishing remains disabled/unapproved.
+
+Recommended model for the next rollout gate: Sol, because the next step is an actual production security-boundary mutation involving a SECURITY DEFINER RPC and Vault access path.
