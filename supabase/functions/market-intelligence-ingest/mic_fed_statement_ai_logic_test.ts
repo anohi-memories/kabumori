@@ -51,6 +51,7 @@ test("Luna request contains compact changes and structured decision facts only",
   const input = JSON.stringify(body.input);
   assert.match(input, /policyDecisionChange/);
   assert.match(input, /lowerChangeBps/);
+  assert.match(input, /semanticBuckets/);
   assert.doesNotMatch(input, /normalizedText/);
   assert.match(input, /changes/);
 });

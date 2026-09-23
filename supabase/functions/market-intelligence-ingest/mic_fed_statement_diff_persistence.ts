@@ -192,6 +192,7 @@ export async function persistFedStatementAiInterpretation(
     diffId: string;
     diffHash: string;
     promptVersion: string;
+    claimMarker: string;
     interpretation: FedStatementAiOutput;
     generatedAt: string;
   },
@@ -202,7 +203,8 @@ export async function persistFedStatementAiInterpretation(
       `?id=eq.${encodeURIComponent(params.diffId)}` +
       `&diff_hash=eq.${encodeURIComponent(params.diffHash)}` +
       `&prompt_version=eq.${encodeURIComponent(params.promptVersion)}` +
-      `&ai_interpretation=is.null`,
+      `&model=eq.${encodeURIComponent(params.claimMarker)}` +
+      `&ai_interpretation=is.null&generated_at=is.null`,
     {
       method: "PATCH",
       headers: restHeaders(ctx.secretKey, "return=representation"),

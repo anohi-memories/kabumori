@@ -53,6 +53,7 @@ export type FedPolicyDecisionChange = {
 export type FedStatementAiInput = {
   previous: { eventId: string; meetingDate: string; statementUrl: string; decision?: FedDecision; targetRange?: FedTargetRange | null };
   current: { eventId: string; meetingDate: string; statementUrl: string; decision?: FedDecision; targetRange?: FedTargetRange | null };
+  semanticBuckets: FedStatementSemanticBucket[];
   policyDecisionChange: FedPolicyDecisionChange;
   changes: Array<{ previous: string | null; current: string | null; buckets: FedStatementSemanticBucket[] }>;
 };
@@ -178,6 +179,34 @@ async function hashText(input: string): Promise<string> {
   return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+function canonicalJson(value: unknown): string {
+  const canonicalize = (candidate: unknown): unknown => {
+    if (Array.isArray(candidate)) return candidate.map(canonicalize);
+    if (candidate && typeof candidate === "object") {
+      const record = candidate as Record<string, unknown>;
+      return Object.fromEntries(Object.keys(record).sort().map((key) => [key, canonicalize(record[key])]));
+    }
+    return candidate;
+  };
+  return JSON.stringify(canonicalize(value));
+}
+
+export async function computeFedStatementDiffHash(
+  diff: Omit<FedStatementDeterministicDiff, "diffHash">,
+): Promise<string> {
+  return await hashText(canonicalJson({
+    comparisonStatus: diff.comparisonStatus,
+    unchangedParagraphs: diff.unchangedParagraphs,
+    addedParagraphs: diff.addedParagraphs,
+    removedParagraphs: diff.removedParagraphs,
+    modifiedParagraphs: diff.modifiedParagraphs,
+    changes: diff.changes,
+    policyDecisionChange: diff.policyDecisionChange,
+    buckets: diff.buckets,
+    material: diff.material,
+  }));
+}
+
 export function selectPreviousFedStatement(events: readonly FedStatementRecord[], currentMeetingDate: string): FedStatementRecord | null {
   return events
     .filter((event) => event.centralBank === "Fed" && event.meetingDate < currentMeetingDate)
@@ -253,7 +282,18 @@ export async function buildFedStatementDiff(previous: FedStatementRecord | null,
   const material = changes.some((change) => change.material) || policyDecisionChange.material;
   const addedParagraphs = remainingCurrent;
   const removedParagraphs = remainingPrevious;
-  const diffHash = await hashText(JSON.stringify({ comparisonStatus: "compared", unchangedParagraphs, addedParagraphs, removedParagraphs, modifiedParagraphs, policyDecisionChange }));
+  const diffHash = await computeFedStatementDiffHash({
+    comparisonStatus: "compared",
+    skipReason: null,
+    unchangedParagraphs,
+    addedParagraphs,
+    removedParagraphs,
+    modifiedParagraphs,
+    changes,
+    policyDecisionChange,
+    buckets,
+    material,
+  });
   return {
     comparisonStatus: "compared",
     skipReason: null,
@@ -274,6 +314,7 @@ export function buildFedStatementAiInput(previous: FedStatementRecord, current: 
   return {
     previous: { eventId: previous.eventId, meetingDate: previous.meetingDate, statementUrl: previous.statementUrl, decision: previous.decision, targetRange: previous.targetRange },
     current: { eventId: current.eventId, meetingDate: current.meetingDate, statementUrl: current.statementUrl, decision: current.decision, targetRange: current.targetRange },
+    semanticBuckets: diff.buckets,
     policyDecisionChange: diff.policyDecisionChange,
     changes: diff.changes.filter((change) => change.material).map(({ previous: oldText, current: newText, buckets }) => ({ previous: oldText, current: newText, buckets })),
   };

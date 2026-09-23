@@ -1,11 +1,9 @@
 // Market Intelligence Core (MIC) Phase 1A ingestion entry point.
 //
-// Scope: accumulate Facts and interpret material Fed statement changes only.
-// It never touches any X-autopost table and never writes outside MIC tables
-// plus the AI usage ledger. Fed interpretation is gated on deterministic
-// material changes and has no web-search tools.
-// Never writes anything outside the MIC tables added by
-// 20260912090000_add_market_intelligence_core_phase1a.sql.
+// Scope: accumulate MIC Facts. Fed statement AI interpretation is an explicit,
+// separately authorized action in this endpoint and is never part of ingest.
+// The explicit Fed interpretation action also writes the shared AI usage
+// ledger; ordinary source ingestion does not call the model.
 //
 // Auth model, deliberately copied from stocks-master-sync/index.ts: never
 // called with a Supabase JWT, only by pg_cron/manual invocation carrying
@@ -53,15 +51,13 @@ import {
   type FedStatement,
   type FedStatementIdentity,
 } from "./mic_fed_statement_adapter.ts";
+import { buildFedStatementDiffPipeline, persistFedStatementDiff } from "./mic_fed_statement_diff_persistence.ts";
+import type { FedStatementRecord } from "./mic_fed_statement_diff.ts";
 import {
-  buildFedStatementDiffPipeline,
-  hasFedStatementAiInterpretation,
-  persistFedStatementAiInterpretation,
-  persistFedStatementAiUsage,
-  persistFedStatementDiff,
-} from "./mic_fed_statement_diff_persistence.ts";
-import { FED_STATEMENT_DIFF_PROMPT_VERSION, type FedStatementRecord } from "./mic_fed_statement_diff.ts";
-import { requestFedStatementInterpretation } from "./mic_fed_statement_ai_logic.ts";
+  executeFedStatementAiAction,
+  FedStatementAiActionError,
+  INTERPRET_FED_STATEMENT_DIFF_ACTION,
+} from "./mic_fed_statement_ai_action.ts";
 import {
   buildMacroReleaseEvent,
   decideMacroReleaseEvent,
@@ -459,36 +455,7 @@ async function runSource(
             targetRange: result.fedStatement.targetRange,
           };
           const pipeline = await buildFedStatementDiffPipeline(currentStatement, result.previousFedStatement ?? null);
-          const diffResult = await persistFedStatementDiff(ctx, pipeline.row);
-          if (pipeline.aiInput && pipeline.row.material_change_count > 0 && diffResult.id) {
-            const alreadyInterpreted = await hasFedStatementAiInterpretation(
-              ctx,
-              diffResult.id,
-              pipeline.row.diff_hash,
-              FED_STATEMENT_DIFF_PROMPT_VERSION,
-            );
-            if (!alreadyInterpreted) {
-              const apiKey = Deno.env.get("OPENAI_API_KEY");
-              if (!apiKey) throw new Error("FED_STATEMENT_AI_SECRET_MISSING");
-              const generated = await requestFedStatementInterpretation({ apiKey, input: pipeline.aiInput });
-              const generatedAt = now.toISOString();
-              const saved = await persistFedStatementAiInterpretation(ctx, {
-                diffId: diffResult.id,
-                diffHash: pipeline.row.diff_hash,
-                promptVersion: FED_STATEMENT_DIFF_PROMPT_VERSION,
-                interpretation: generated.output,
-                generatedAt,
-              });
-              if (!saved) throw new Error("FED_STATEMENT_AI_RESULT_NOT_PERSISTED");
-              await persistFedStatementAiUsage(
-                ctx,
-                generated.inputTokens,
-                generated.outputTokens,
-                generated.costUsd,
-                diffResult.id,
-              );
-            }
-          }
+          await persistFedStatementDiff(ctx, pipeline.row);
         }
       }
     }
@@ -520,12 +487,26 @@ Deno.serve(async (req) => {
   const ctx: RestContext = { supabaseUrl, secretKey };
 
   const requestBody = await req.json().catch(() => ({})) as {
+    action?: unknown;
+    diff_id?: unknown;
     trigger?: unknown;
     sources?: unknown;
     historicalFedStatementUrls?: unknown;
     historicalFredRange?: unknown;
     allowedFedDuplicateEventIds?: unknown;
   };
+  if (requestBody.action !== undefined) {
+    if (requestBody.action !== INTERPRET_FED_STATEMENT_DIFF_ACTION || typeof requestBody.diff_id !== "string") {
+      return response({ error: "INVALID_ACTION_REQUEST" }, 400);
+    }
+    try {
+      const result = await executeFedStatementAiAction(ctx, requestBody.diff_id, Deno.env.get("OPENAI_API_KEY") ?? "");
+      return response(result);
+    } catch (error) {
+      if (error instanceof FedStatementAiActionError) return response({ error: error.code }, error.status);
+      return response({ error: "FED_AI_ACTION_FAILED" }, 502);
+    }
+  }
   const triggerType: "manual" | "scheduled" = requestBody.trigger === "scheduled" ? "scheduled" : "manual";
   const requestedSources = Array.isArray(requestBody.sources)
     ? requestBody.sources.filter((s): s is SourceKeyWithFed =>

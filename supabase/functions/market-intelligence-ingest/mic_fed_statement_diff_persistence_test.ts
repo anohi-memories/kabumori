@@ -179,6 +179,7 @@ test("AI result patches only the exact empty formal diff row", async () => {
       diffId: "00000000-0000-0000-0000-000000000099",
       diffHash: pipeline.row.diff_hash,
       promptVersion: pipeline.row.prompt_version,
+      claimMarker: "fed-ai-claim:test-token",
       interpretation: mockLunaInterpretation(pipeline.aiInput!),
       generatedAt: "2026-09-23T00:00:00.000Z",
     },
@@ -187,6 +188,7 @@ test("AI result patches only the exact empty formal diff row", async () => {
   assert.equal(saved, true);
   assert.equal(calls[0].method, "PATCH");
   assert.match(calls[0].url, /ai_interpretation=is\.null/);
+  assert.match(calls[0].url, /model=eq\.fed-ai-claim/);
   const body = await calls[0].json();
   assert.equal(body.model, FED_STATEMENT_LUNA_MODEL);
 });

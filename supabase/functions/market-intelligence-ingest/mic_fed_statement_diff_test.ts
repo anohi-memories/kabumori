@@ -5,6 +5,7 @@ import {
   buildFedStatementDiff,
   buildFedStatementDiffIdentity,
   classifyFedStatementBuckets,
+  computeFedStatementDiffHash,
   FED_STATEMENT_DIFF_STORAGE,
   selectPreviousFedStatement,
   shouldRunFedStatementAi,
@@ -279,6 +280,16 @@ test("diff identity is versioned and duplicate AI runs are suppressed", async ()
   assert.equal(shouldRunFedStatementAi(identity, []), true);
   assert.equal(shouldRunFedStatementAi(identity, [identity]), false);
   assert.notEqual(await buildFedStatementDiffIdentity(previous, current, diff, "v2"), identity);
+});
+
+test("deterministic diff hash is stable across JSONB object key ordering", async () => {
+  const diff = await buildFedStatementDiff(previous, current);
+  const reordered = {
+    ...diff,
+    policyDecisionChange: Object.fromEntries(Object.entries(diff.policyDecisionChange).reverse()) as typeof diff.policyDecisionChange,
+    changes: diff.changes.map((change) => Object.fromEntries(Object.entries(change).reverse()) as typeof change),
+  };
+  assert.equal(await computeFedStatementDiffHash(diff), await computeFedStatementDiffHash(reordered));
 });
 
 test("AI output contract accepts valid mock and rejects unsafe or malformed output", () => {
