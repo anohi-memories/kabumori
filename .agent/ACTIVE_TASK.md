@@ -10,7 +10,7 @@
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: PR #9 merged. Exact GPT-6 production migration apply was rejected by authorization guard; no workaround or Function deploy. Await explicit user approval.
+- note: approved exact GPT-6 migration applied/read back. Function deploy rejected by authorization guard; no workaround. Await separate deploy approval/C1. Migration history version differs from repo timestamp; no repair.
 
 
 ### Codex slot 2
