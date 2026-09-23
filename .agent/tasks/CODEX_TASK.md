@@ -1,54 +1,29 @@
 # Codex Task
 
-- task_id: kabumori-release-readiness-audit-and-roadmap-20260923
+- task_id: kabumori-important-news-monitor-caller-auth-remediation-candidate-20260923
 - owner: codex
 - slot: codex-1
 - status: ready
 - next_owner: codex
-- priority: high
-- recommended_model: Luna
-- purpose: かぶモリを正式リリース可能な状態へ最短で持っていくため、現状実装をread-onlyで棚卸しし、Expo + Supabase + Netlify Free（Vercel Pro前提なし、追加インフラ月額0円方針）との差分・未完成・release blocker・最短ロードマップを確定する。実装や本番変更はまだ行わない。
+- priority: critical
+- recommended_model: GPT-6 Sol Medium
+- purpose: release-readiness auditで見つかった `important-news-monitor` のcaller-auth境界を、既存Cronを壊さずfail-closedにするsource-only remediation candidateを作る。production設定/Function deploy/auto_publish変更は禁止。
 
-## Context
+## C1 decision
 
-Important News GPT-6 production rollout is C1 PASS済み。
-- GPT-6 metadata migration applied
-- both CHECK constraints allow GPT-6 Luna/Sol
-- only `important-news-monitor` deployed
-- natural Cron runs succeeded
-- no manual traffic/X/Push
-- Personalized Reports / 9/18 regeneration untouched
+Previous task `kabumori-release-readiness-audit-and-roadmap-20260923` is **PASS for audit content, merge held**.
 
-The project now shifts toward release completion.
-
-## User-approved architecture/cost direction
-
-- Smartphone app: Expo / React Native
-- Backend: Supabase
-  - DB
-  - Auth
-  - Edge Functions
-  - Cron / scheduled processing
-- Operator Web Admin: Netlify Free as production hosting candidate
-- Do not require Vercel Pro
-- Do not unnecessarily increase Vercel dependency
-- Target additional infrastructure monthly cost: 0 JPY
-- Keep heavy/periodic/AI/posting processing on Supabase rather than Netlify where practical
-- Do not destroy/delete/change the currently working Vercel setup without a separate approved migration plan
-- If Netlify Free / Supabase Free limits appear likely to be exceeded, report before any paid-plan proposal
-
-## Priority order for release work
-
-1. Release blocker inventory
-2. Smartphone app required-function completion
-3. Supabase production stabilization
-4. Netlify Free compatibility verification for admin
-5. Netlify trial deployment readiness
-6. iPhone real-device / TestFlight E2E QA
-7. App Store required items, legal/account deletion/privacy/support
-8. Final security/release audit
-9. App Store submission
-10. UI polish / optional features after blocker removal unless UI issue affects usability
+Verified:
+- PR #10 is open and mergeable.
+- Audit document covers the requested release-readiness scope and gives a shortest-path roadmap.
+- Production mutation = 0.
+- PR #10 required Vercel check is currently **failure** due to the daily deployment/build-rate limit; do not bypass branch protection and do not merge until the required check succeeds.
+- The audit's urgent finding is credible from source review:
+  - production `important-news-monitor` has `verify_jwt=false`
+  - the Deno.serve entry path checks POST, loads service-role credentials, parses caller-controlled JSON, then dispatches modes
+  - no inbound Authorization/JWT or dedicated cron-secret validation appears before dispatch
+  - `publish_ready` can reach auto-publish/X side effects when enabled
+- Endpoint exploitability was not tested; no invocation is authorized by this task.
 
 ## Mandatory startup
 
@@ -56,151 +31,79 @@ The project now shifts toward release completion.
 2. Read `.agent/ORCHESTRATION.md`
 3. Read `.agent/CURRENT_STATE.md`
 4. Read this TASK
-5. Read relevant recent reports only as needed
+5. Read PR #10 audit document
 6. Fresh fetch `origin/main`
-7. Confirm no overlap/conflict with H2/G1/G2
-8. Do not alter other slot TASK/Report files
+7. Inspect all production callers of `important-news-monitor` (Cron/scheduler/manual/admin if any)
+8. Confirm no H2/G1/G2 overlap with this Function or its caller-auth configuration
 
-## Read-only audit scope
+## Scope
 
-### A. Smartphone app
-Inventory current state of:
-- Auth/login/signup/session restore/logout
-- profile lifecycle
-- account deletion
-- holdings/watchlist/search
-- Portfolio
-- Personalized Reports
-- Important News
-- Push permission/token/deep-link flow
-- loading/error/empty/offline behavior
-- settings/support/contact/legal entry points
-- native iOS assumptions
-- app icon/splash/scheme/bundle/version/build config
-- EAS/TestFlight/App Store prerequisites
-- any current release-blocking UX problems
+Design and implement a **source-only** caller-auth remediation candidate for:
+- `supabase/functions/important-news-monitor`
 
-Classify every major area:
-- implemented
-- incomplete
-- unverified
-- blocker
-- deferred polish
+Requirements:
+- preserve legitimate scheduled execution
+- reject unauthenticated/untrusted external invocation before mode dispatch
+- do not expose service-role or cron secrets in responses/logs
+- fail closed on missing/malformed credentials
+- keep dry-run/admin/manual paths protected as well
+- preserve existing mode behavior after successful authentication
+- do not change publish selection, GPT routing, source selection, Cron cadence, X OAuth, Push logic, or auto-publish business rules
+- prefer one explicit, reviewable auth contract over mode-specific ad hoc checks
 
-### B. Supabase backend
-Audit:
-- production-vs-source status for consumer-facing migrations/RPC/RLS
-- Auth dependencies
-- Edge Functions used by app
-- Cron/scheduled jobs
-- Important News
-- Personalized Reports
-- Push
-- known migration-history drift
-- known build/type issues
-- security boundaries
-- free-tier risk: DB size, egress, Function invocation count, Cron cadence
+Evaluate the safest compatible option based on actual callers, for example:
+- gateway JWT verification if all callers can present a valid JWT, or
+- a dedicated shared secret/header validated before dispatch if Cron requires `verify_jwt=false`
 
-Do not mutate production.
+Do not guess. Inspect existing caller construction first.
 
-### C. Admin Web / Netlify
-Audit `apps/admin` for Netlify Free suitability:
-- Next.js version
-- App Router
-- Server Components
-- Server Actions
-- proxy/middleware behavior
-- Route Handlers if any
-- environment variables
-- Supabase SSR/Auth cookies
-- redirect URLs
-- admin authorization boundary
-- any Vercel-specific runtime/build assumptions
-- likely Netlify Functions usage
-- whether heavy work already lives in Supabase
+## Verification
 
-Classify each compatibility point:
-- confirmed
-- likely
-- needs trial deploy
+Add targeted tests proving at minimum:
+- missing auth rejected
+- malformed/wrong auth rejected
+- valid scheduled caller auth accepted
+- privileged modes cannot execute before auth
+- auth check occurs before any DB/OpenAI/X side-effect path
+- response/logs do not reveal secret material
+- existing mode dispatch still works behind valid auth
 
-Use official current docs if needed.
+Run relevant Important News tests and changed-file checks.
 
-### D. Vercel dependency inventory
-Identify:
-- production runtime dependencies
-- Preview/CI-only dependencies
-- branch protection/check dependencies
-- what can remain temporarily
-- what must be decoupled to achieve “Vercel Pro not required”
-
-No Vercel changes.
-
-### E. App Store release readiness
-Inventory at minimum:
-- bundle identifier
-- version/build strategy
-- app icon/splash
-- privacy policy URL
-- terms/support/contact URL
-- account deletion flow
-- permissions/privacy disclosures
-- push permission UX
-- screenshots/metadata
-- review notes/demo account need
-- TestFlight readiness
-- production EAS build/submit readiness
-- crash/error logging expectation
-- final security checklist
-
-## Deliverable
-
-Create a new concise document under `docs/` containing:
-
-1. Current architecture
-2. Confirmed implemented features
-3. Incomplete/unverified items
-4. Release blockers
-5. Deferred polish
-6. Netlify Free compatibility matrix
-7. Vercel dependency matrix
-8. Supabase/Netlify free-tier cost-risk checklist
-9. Shortest-path roadmap to first App Store release
-10. Recommended H1/H2/G1/G2 decomposition that avoids overlapping files/DB objects
-11. Final release-gate checklist with PASS/FAIL fields
-
-Also update `PROJECT_RULES.md` only if a short permanent section can safely record the user-approved architecture/cost policy without changing orchestration semantics.
-
-## Restrictions
+## Production restrictions
 
 Forbidden:
-- production deploy/mutation
-- DB write/migration apply
-- Netlify deploy
-- Vercel setting change
-- Supabase setting change
-- App Store/TestFlight submission
-- feature implementation
-- Vercel deletion/destructive change
-- paid-plan change
+- Function deploy
+- changing `verify_jwt` production setting
+- Cron changes
+- auto_publish setting changes
+- DB writes/migrations
+- secrets/Vault changes
+- manual Function invocation
+- X post / Push
+- candidate injection
+- PR #10 branch-protection bypass
 
-Read-only web research is allowed only for current Netlify/Expo/Supabase compatibility questions.
+## PR #10
+
+Do not fold unrelated auth implementation into PR #10.
+If the Vercel required check later becomes green, report that separately; PR #10 remains a docs/control PR.
 
 ## Handoff
 
-Update `.agent/CODEX_REPORT.md` with:
-- audit base SHA
-- docs/rules changed
-- release blockers
-- Netlify findings
-- Vercel dependency findings
-- App Store blockers
-- next 3 recommended implementation tasks
+Create a focused source PR for the auth remediation candidate and update `.agent/CODEX_REPORT.md` with:
+- discovered production caller contract
+- chosen auth design and why
+- changed files
+- tests/checks
+- compatibility risks
+- rollout requirements
 - production mutation = 0
+- PR link/head SHA
 
 Then:
 - status -> `review_required`
 - next_owner -> `chatgpt`
 - STOP for C1
 
-**推奨モデル：Luna。**
+**推奨モデル：GPT-6 Sol Medium。**
