@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase23-dedicated-qa-one-shot-history-learning-20260923
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: GPT-6 Sol Medium
 - purpose: Phase22 C2 PASS後、dedicated QA Auth userと既存の安全なQA X accountだけを対象に、exactly-oneの実history-learning QAを行う。実行直前にユーザーの明示同意を必須とし、1回だけaccess-token RPC/Vault plaintext readとbounded X history fetchを許可する。publish/persona persistenceは引き続き禁止。
@@ -180,3 +180,24 @@ Report:
 18. commit/push/fresh origin verification
 
 Then STOP for C2.
+
+
+## Final C2 — 2026-09-23
+
+PASS. Phase23 complete.
+
+Independent review confirmed:
+- production `social-mobile-history-learning` is ACTIVE v4 with `verify_jwt=true`.
+- runtime EZBR SHA-256 remains `0ec1bc506e85f1b54ab63dba3b5848598107cfb53549bac4edb3958cc4636979`, with unchanged `updated_at=1790135565236`; no source deploy occurred during Phase23.
+- runtime source still enforces max 50 posts / max 2 pages, requires `explicit_consent=true`, returns an unconfirmed persona proposal, and has no persona/raw-history persistence or publish adapter.
+- access-token RPC remains SECURITY DEFINER with fixed empty search_path; anon/authenticated EXECUTE=false and service_role EXECUTE=true.
+- H2 evidence records one explicit-consent QA UI action, 9 analyzed posts, no retry, no publish/media/OpenAI/OAuth mutation, and final live gate absent/OFF.
+- QA publish permission remained disabled in H2 postflight.
+
+Observability limitation accepted:
+- platform-level request logs were unavailable, so RPC/Vault counts are inferred from the deterministic successful single-pass path, and exact X pagination count cannot be independently proven beyond the source bound of 1–2 pages. This does not block this one-shot QA result, but future rollout should add safe server-side audit counters before broader use.
+
+Next:
+- keep live history gate OFF.
+- do not perform another history read or persist the persona under this task.
+- the social-mobile history-learning workstream is considered at a clean stopping point.
