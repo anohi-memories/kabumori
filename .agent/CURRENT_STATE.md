@@ -19,13 +19,12 @@
   - Only `important-news-monitor` deployed; `verify_jwt=false`; SHA `4450ee09…e4b7`. Latest metadata says v64 but same SHA and source bundle `source/62`; discrepancy disclosed.
   - Natural Cron runs succeeded through 09:20 UTC; no new candidate/usage row, so GPT-6 persistence remains unverified. Migration history version differs from repo timestamp; no repair.
 
-- Codex slot 2: `done` — `x-autopost-foundation-audit-multibrand-netlify-roadmap-20260923`
-  - C2 PASS。X自動投稿基盤のread-only棚卸し完了。
-  - productionでP0 blockerを独立確認: posting_windows / scheduled_posts / publish_claims にbrand-scoped UNIQUEとlegacy global UNIQUEが併存。
-  - 現状はpartially multibrand。publisher/token/account routing、queue/retry/idempotency、common dedupe completion、admin tenancyはまだ統一未完。
-  - posting core/Cron/Vault/X publishはSupabaseに残し、Netlifyはthin admin UI候補。既存Vercel ProductionはNetlify canary/rollback proof完了まで維持。
-  - 次の実装gateは3つのglobal uniqueness blockerを対象にしたdisposable-only migration/rollback proof。production applyは未承認。
-  - Recommended model for next proof: GPT-6 Luna。
+- Codex slot 2: `ready` — `x-autopost-phase0-disposable-global-uniqueness-migration-proof-20260923`
+  - X自動投稿基盤audit C2 PASS後のPhase0。
+  - posting_windows / scheduled_posts / publish_claims のlegacy global UNIQUEを外しbrand-scoped uniquenessだけを残せるか、disposable PostgreSQLでmigration/rollback proofする。
+  - production apply / DDL / deploy / Cron / X投稿はすべて禁止。
+  - ON CONFLICT依存があれば同一migration候補内の最小修正可否を精査。大きくなるならSTOP。
+  - Recommended model: GPT-6 Luna。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
