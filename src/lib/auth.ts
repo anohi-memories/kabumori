@@ -1,25 +1,21 @@
 import { AuthError, Session } from '@supabase/supabase-js';
+import * as Linking from 'expo-linking';
 
+import { RECOVERY_PATH, resetEmailIssue } from '@/lib/password-recovery';
 import { removeThisDevicePushTokenBestEffort } from '@/lib/push-notifications';
 import { supabase } from '@/lib/supabase';
 
-export async function ensureProfile(userId: string) {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('id', userId)
-    .maybeSingle();
-
-  if (error) throw new Error(`プロフィールを確認できませんでした。${error.message}`);
-  if (data) return;
-
-  const { error: insertError } = await supabase.from('profiles').insert({ id: userId });
-  if (insertError?.code === '23505') return;
-  if (insertError) throw new Error(`プロフィールを作成できませんでした。${insertError.message}`);
+// The profile row is created by public.ensure_my_profile(), which derives the id from auth.uid()
+// inside one idempotent statement. The previous client-side select-then-insert could not be made
+// atomic and defined this invariant in app code; the RPC makes it a server-side guarantee that a
+// caller can only ever apply to their own account.
+export async function ensureProfile() {
+  const { error } = await supabase.rpc('ensure_my_profile');
+  if (error) throw new Error(`プロフィールを準備できませんでした。${error.message}`);
 }
 
 export async function prepareSession(session: Session) {
-  await ensureProfile(session.user.id);
+  await ensureProfile();
   return session;
 }
 
@@ -43,6 +39,23 @@ export async function signOut() {
   // valid -- removing this device's own token, not other devices'.
   await removeThisDevicePushTokenBestEffort();
   const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+}
+
+/**
+ * Sends the password reset email. The deep link it returns to is built from the app's own scheme,
+ * so the same code works in development and in a release build without a hardcoded URL.
+ *
+ * Supabase deliberately answers the same way whether or not the address has an account, and this
+ * function keeps that property: the caller shows one neutral message either way, so the screen
+ * cannot be used to find out who is registered.
+ */
+export async function requestPasswordReset(email: string) {
+  const issue = resetEmailIssue(email);
+  if (issue) throw new Error(issue);
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+    redirectTo: Linking.createURL(RECOVERY_PATH),
+  });
   if (error) throw error;
 }
 

@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { authErrorMessage, signInWithEmail, signUpWithEmail } from '@/lib/auth';
+import { authErrorMessage, requestPasswordReset, signInWithEmail, signUpWithEmail } from '@/lib/auth';
 
 type Mode = 'sign-in' | 'sign-up';
 
@@ -52,6 +52,26 @@ export function AuthScreen({ startupError, onRetry }: { startupError?: string | 
           setMode('sign-in');
         }
       }
+    } catch (error) {
+      setMessage(authErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function sendReset() {
+    if (loading) return;
+    setLoading(true);
+    setMessage(null);
+    setSuccess(false);
+    try {
+      await requestPasswordReset(email);
+      // The same message whether or not the address has an account, so this screen cannot be used
+      // to find out who is registered.
+      setSuccess(true);
+      setMessage(
+        'パスワード再設定用のメールを送信しました。メール内のリンクを開いて、新しいパスワードを設定してください。',
+      );
     } catch (error) {
       setMessage(authErrorMessage(error));
     } finally {
@@ -134,6 +154,18 @@ export function AuthScreen({ startupError, onRetry }: { startupError?: string | 
                 {mode === 'sign-in' ? '初めての方はこちら（新規登録）' : 'アカウントをお持ちの方（ログイン）'}
               </Text>
             </Pressable>
+            {mode === 'sign-in' && (
+              <Pressable
+                onPress={() => void sendReset()}
+                disabled={loading}
+                style={styles.switchButton}
+                accessibilityRole="button"
+                accessibilityHint="入力したメールアドレス宛に、パスワード再設定用のリンクを送ります">
+                <Text style={styles.secondaryText}>
+                  パスワードをお忘れの方（再設定メールを送る）
+                </Text>
+              </Pressable>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -160,5 +192,6 @@ const styles = StyleSheet.create({
   primaryText: { color: '#fff', fontSize: 16, fontWeight: '900' },
   switchButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 6 },
   switchText: { color: '#477554', fontWeight: '700', textAlign: 'center' },
+  secondaryText: { color: '#68736b', fontWeight: '700', textAlign: 'center', fontSize: 13 },
   disabled: { opacity: 0.55 },
 });

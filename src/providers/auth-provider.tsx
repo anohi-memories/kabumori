@@ -7,7 +7,14 @@ import { supabase } from '@/lib/supabase';
 type AuthState = {
   session: Session | null;
   loading: boolean;
+  /** A startup problem that happened before any session was accepted. */
   error: string | null;
+  /**
+   * The session is valid but its profile row could not be prepared. The session is deliberately
+   * kept so the app can show a controlled recovery screen; dropping it here used to send the user
+   * back to the login form, which told them their password was the problem when it was not.
+   */
+  profileError: string | null;
   retry: () => void;
 };
 
@@ -17,6 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const generation = useRef(0);
 
@@ -27,6 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (active && requestGeneration === generation.current) {
           setSession(null);
           setError(null);
+          setProfileError(null);
           setLoading(false);
         }
         return;
@@ -37,13 +46,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (active && requestGeneration === generation.current) {
           setSession(nextSession);
           setError(null);
+          setProfileError(null);
         }
-      } catch (profileError) {
+      } catch (preparationError) {
         if (active && requestGeneration === generation.current) {
-          setSession(null);
-          setError(
-            profileError instanceof Error
-              ? profileError.message
+          setSession(nextSession);
+          setError(null);
+          setProfileError(
+            preparationError instanceof Error
+              ? preparationError.message
               : 'プロフィールを準備できませんでした。',
           );
         }
@@ -82,7 +93,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, loading, error, retry: () => { setLoading(true); setAttempt((value) => value + 1); } }}>
+      value={{
+        session,
+        loading,
+        error,
+        profileError,
+        retry: () => {
+          setProfileError(null);
+          setLoading(true);
+          setAttempt((value) => value + 1);
+        },
+      }}>
       {children}
     </AuthContext.Provider>
   );
