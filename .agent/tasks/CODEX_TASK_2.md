@@ -1,28 +1,27 @@
 # Codex Task 2
 
-- task_id: social-mobile-app-phase22-live-history-dependency-gate-default-off-20260923
+- task_id: social-mobile-app-phase23-dedicated-qa-one-shot-history-learning-20260923
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: codex
 - priority: critical
 - recommended_model: GPT-6 Sol Medium
-- purpose: Phase21 C2 PASS後、production `social-mobile-history-learning` にlive dependency wiringを追加する。ただしserver-only feature gateはdefault OFFのままdeployし、実Vault plaintext read・access-token RPC invocation・real X history fetchはまだ一切発生させない。
+- purpose: Phase22 C2 PASS後、dedicated QA Auth userと既存の安全なQA X accountだけを対象に、exactly-oneの実history-learning QAを行う。実行直前にユーザーの明示同意を必須とし、1回だけaccess-token RPC/Vault plaintext readとbounded X history fetchを許可する。publish/persona persistenceは引き続き禁止。
 
 ## Goal
 
-Production Functionに「将来ONにできるlive wiring」を実装するが、
-**このPhaseでは必ずOFFのまま**にする。
+Phase23では初めてlive pathを1回だけ実証する。
 
-実装対象:
-- Auth user resolution
-- owner membership / workspace / verified X account reads
-- dedicated access-token RPC reader
-- X history fetch adapter
+Allowed only after explicit user consent immediately before execution:
+- set/enable the history live gate for the QA run
+- one dedicated QA authenticated request
+- one trusted-account access-token RPC invocation
+- one bounded Vault plaintext access through that RPC
+- X history fetch bounded by existing limits (max 50 posts / max 2 pages)
+- return an unconfirmed persona proposal only
 
-ただし entrypoint では server-only feature gate が true の時だけ live dependencies を構築する。
-
-Default/production value = OFF.
+No publishing and no persona persistence.
 
 ## Mandatory fresh start
 
@@ -33,242 +32,151 @@ H2開始時:
 4. `.agent/CURRENT_STATE.md`
 5. this TASK
 6. `.agent/CODEX_REPORT_2.md`
-7. Phase20 RPC production metadata read-back
-8. Phase21 deployed runtime source read-back
+7. Phase22 production Function/runtime read-back
+8. Phase20 RPC production metadata read-back
 9. other-slot overlap check
 
-If another slot touches `social-mobile-history-learning`, its shared reader modules, the access-token RPC, or related production env/config, STOP.
+If another slot touches the history-learning Function, live gate/config, access-token RPC, QA account, or related OAuth/Vault resources, STOP.
 
 ## Model policy
 
 Use **GPT-6 Sol Medium**.
 
-Raise effort only for a concrete blocker involving:
-- Supabase Function secret/env semantics
-- service-role credential boundary
-- bearer-auth validation
-- feature-gate fail-closed behavior
-- RPC/Vault access control
+## Gate A — preflight only, no live read yet
 
-## Scope A — live dependency factory implementation
+Before requesting consent:
+- confirm production Function ACTIVE and source hash/runtime still matches Phase22
+- `verify_jwt=true`
+- gate currently absent/OFF
+- Phase20 RPC still service_role-only, SECURITY DEFINER, fixed search_path
+- dedicated QA Auth user still exists and is non-admin
+- QA user still owns exactly one intended QA brand/workspace
+- exactly one verified X account belongs to that workspace
+- QA X account is the previously established dedicated safe test account
+- `publish_enabled=false`
+- required Vault secret references exist (presence only; do not read values)
+- no other production account is selected
+- no overlapping task
 
-Implement production-shaped dependencies for:
-- `readAuthUser`
-- `readOwnerMemberships`
-- `readWorkspace`
-- `readXAccounts`
-- `readAccessToken` via existing dedicated RPC adapter
-- `fetchXPage` via existing X read adapter
+Do not expose user ids, account ids, secret refs, token values, or PII in report.
 
-Required authority order:
-1. request must include explicit consent
-2. Supabase Auth validates bearer and yields user id
-3. owner memberships resolved for that user
-4. requested/sole workspace validated
-5. workspace ownership rechecked
-6. exactly one verified X account resolved
-7. dedicated RPC receives only trusted user/account binding
-8. only then may an access token be read
-9. only then may X history be fetched
+## Gate B — explicit user consent immediately before live run
 
-No client-supplied:
-- user id
-- social account id
-- platform user id
-- Vault secret id/ref
+STOP and ask the user for a direct confirmation immediately before enabling/running the live path.
+
+The confirmation request must clearly say that the next action will:
+- temporarily enable history-learning live access
+- read the QA X access token from Vault through the approved RPC
+- call X to read up to 50 of that QA account's past posts (max 2 pages)
+- not publish anything
+- not save raw posts
+- not persist the persona proposal
+
+Do not treat a prior generic "OK", "すすめて", or task-start instruction as this live-read consent unless it was given in direct response to this exact confirmation request.
+
+If explicit consent is not present, do not turn the gate ON and do not call Vault/X.
+
+## Gate C — exactly-one QA live run
+
+After explicit consent only:
+1. enable the server-only live gate by the approved production config method
+2. confirm gate is ON
+3. invoke exactly one authenticated QA history-learning request with `explicit_consent=true`
+4. use only the dedicated QA user/session and its owned QA workspace
+5. allow exactly one access-token RPC resolution path
+6. allow bounded X history fetch max 50 posts / max 2 pages
+7. capture only safe result metadata:
+   - success/failure
+   - analyzed post count
+   - bounded persona signals
+   - HTTP/status/error code if failed
+
+Never record/log/report:
 - access token
 - refresh token
-
-## Scope B — server-only feature gate
-
-Introduce one explicit gate, e.g.
-`SOCIAL_MOBILE_HISTORY_LIVE_ENABLED`.
-
-Rules:
-- absent => OFF
-- empty => OFF
-- unknown value => OFF
-- only exact documented truthy value may enable
-- gate evaluated server-side only
-- mobile cannot override it
-- request body/query/header cannot override it
-- OFF path must use disabled dependencies and fail closed before RPC/X
-- do not log secret/env values
-
-Document exact accepted value.
-
-## Scope C — server-only credentials
-
-Live factory may require:
-- project URL
+- secret ref/id
+- raw post bodies
+- Authorization bearer
 - service-role key
 
-Rules:
-- service-role key is read only inside Function runtime when gate is ON
-- no key in source/test fixtures/reports
-- no mobile exposure
-- no response exposure
-- missing key while gate ON => fail closed with normalized safe error
-- no fallback to anon/publishable key for RPC
-- no direct generic Vault query; use only approved dedicated RPC
+## Gate D — immediate gate OFF
 
-Do not create/rotate/change production service-role credentials.
+Immediately after the one live run, regardless of success/failure:
+- set/remove the live gate so production is OFF again
+- read back that gate is absent/OFF
 
-## Scope D — source tests
+Do not leave live history access enabled.
 
-Add tests proving:
-- default gate OFF
-- missing env OFF
-- malformed env OFF
-- request cannot force gate ON
-- OFF path never calls RPC/X
-- ON factory creation fails closed if server config missing
-- client identity values are ignored/not accepted
-- auth -> owner -> workspace -> account -> token -> X order
-- refresh token never referenced
-- response/log-safe behavior
-- max 50 posts / 2 pages remains
-- raw post bodies are not persisted
-- proposal remains unconfirmed
+## Gate E — postflight
 
-## Scope E — production preflight
+Verify:
+- exactly one intended live request occurred
+- no second retry unless separately approved
+- publish/media/repost calls = 0
+- persona/settings writes = 0
+- raw-history persistence = 0
+- OpenAI calls = 0
+- OAuth mutation = 0
+- unrelated account/Vault rows unchanged
+- Function source/version unchanged unless config-only update semantics alter metadata
+- live gate OFF at end
 
-Read-only:
-- Phase20 RPC still exact and service_role-only
-- Phase21 Function ACTIVE and byte-matches approved disabled source
-- check current Function secret/config metadata only as permitted; do not retrieve actual secret values
-- determine whether required standard Supabase runtime env vars are automatically available
-- determine safe method for feature-gate env configuration
+If the first QA run fails after Vault/X was reached, do not retry automatically. STOP for C2 with the failure evidence.
 
-If feature-gate configuration would require an unsafe/manual secret mutation path or cannot be proven default-OFF, STOP.
+## Success criteria
 
-## Scope F — production deploy
-
-Deploy only `social-mobile-history-learning`.
-
-Allowed:
-- source update with gated live wiring
-- server-only feature flag configuration set explicitly OFF if needed
-
-Preferred:
-- design so absence of the flag is OFF, avoiding extra production config mutation if possible
-
-Must preserve:
-- `verify_jwt=true` unless a concrete technical incompatibility is proven and separately reported before changing
-- no DB/RPC/migration changes
-
-## Scope G — post-deploy proof
-
-Read back runtime source and metadata.
-
-Prove:
-- Function ACTIVE
-- expected new version
-- `verify_jwt=true`
-- live factory exists
-- entrypoint chooses live factory only when server-only gate is exactly ON
-- production gate is OFF / absent and therefore fail-closed
-- no request-controlled bypass
-- unrelated Functions unchanged
-
-## Scope H — safe smoke
-
-Only safe requests that cannot reach live dependencies.
-
-Allowed:
-- unauthenticated GET/POST rejected by gateway
-- OPTIONS if useful
-- any test only when gate is confirmed OFF and no real-user bearer is used
-
-Forbidden:
-- real QA bearer with explicit consent
-- real workspace/account
-- service-role invocation
-- real access-token RPC
-- Vault plaintext
-- X history API
+A PASS candidate requires:
+- dedicated QA user/account binding verified
+- explicit user consent captured immediately before run
+- one bounded run succeeds
+- token remains server-only
+- X history belongs only to the dedicated QA account
+- response contains only unconfirmed derived persona signals and count, not raw posts/token
+- live gate is OFF again at the end
+- publish remains disabled
 
 ## Forbidden
 
-- turning the live gate ON
-- invoking `read_social_mobile_history_access_token`
-- reading Vault plaintext
-- calling X history API
-- persisting persona
-- storing raw history
-- OpenAI live call
-- OAuth changes
-- publish/media/repost
+- any non-QA account
+- any production admin X account
+- more than one live run
+- automatic retry after a live Vault/X attempt
+- publishing/posting/media/repost
 - `publish_enabled=true`
-- Cron/scheduler
-- DB migration/RPC/RLS/ACL changes
-- secret rotation
+- raw post persistence
+- persona/settings persistence
+- OpenAI call
+- OAuth reconnect/change
+- token refresh implementation/change
+- DB migration/RPC/RLS/ACL mutation
 - unrelated Function deploy
-
-## Production mutation budget
-
-Allowed:
-- one `social-mobile-history-learning` Function deploy/update
-- optionally one feature-gate config write only if required, and it must be OFF
-
-Everything else mutation = 0.
+- leaving live gate ON
 
 ## Completion / C2
 
-When complete:
+When complete or stopped:
 - status -> `review_required`
 - next_owner -> `chatgpt`
 - update `.agent/CODEX_REPORT_2.md`
 
-Report must include:
-1. fresh source commit
-2. exact gate name/accepted ON value/default behavior
-3. live dependency implementation summary
-4. auth/tenant/account authority order
-5. service-role boundary proof
-6. tests
-7. production preflight
-8. deploy version
-9. verify_jwt value
-10. runtime source read-back
-11. proof gate is OFF/absent in production
-12. safe smoke
-13. access-token RPC calls = 0
-14. Vault plaintext reads = 0
-15. X history calls = 0
-16. persona/raw-history writes = 0
-17. unrelated production mutation = 0
-18. remaining risks
-19. exact next gate recommendation
-20. commit/push/fresh origin verification
+Report:
+1. preflight result
+2. confirmation gate status
+3. whether live run was executed
+4. QA isolation proof without PII
+5. exact count of live Function requests
+6. access-token RPC invocation count
+7. Vault plaintext read count
+8. X history call/page count
+9. analyzed post count
+10. persona proposal remained unconfirmed
+11. raw post persistence = 0
+12. persona persistence = 0
+13. publish/media/post = 0
+14. live gate final state = OFF
+15. tests/checks
+16. remaining risks
+17. next recommendation
+18. commit/push/fresh origin verification
 
 Then STOP for C2.
-
-## Next gate after PASS
-
-Phase23 only after C2 PASS:
-- exactly-one QA history-learning run
-- dedicated QA Auth user + already-linked safe test X account only
-- user explicit consent immediately before run
-- one real access-token RPC/Vault read + bounded X history fetch
-- no publish
-- no persona persistence unless separately approved
-
-
-## Final C2 — 2026-09-23
-
-PASS. Phase22 complete.
-
-Independent review confirmed:
-- production `social-mobile-history-learning` is ACTIVE v2 with `verify_jwt=true`.
-- runtime source matches the pushed gate architecture: only exact case-sensitive `SOCIAL_MOBILE_HISTORY_LIVE_ENABLED=true` selects live dependencies; absent/empty/other values remain OFF.
-- service-role env reads occur only inside the exact-ON branch.
-- live dependency authority order remains Auth -> owner membership -> workspace -> verified X account -> dedicated access-token RPC -> X history fetch.
-- tenant reads use the user's bearer and publishable/anon key; the service role is confined to the dedicated token RPC adapter.
-- no client-controlled user/account/platform/Vault/token values are accepted by the live reader boundary.
-- H2 tests passed 31/31, Function check passed, and reported runtime byte-equivalence is consistent with production source read-back.
-- production gate remained absent/OFF during rollout; access-token RPC calls, Vault plaintext reads, X history calls, persona/raw-history writes, and publish changes were all 0.
-
-Next gate:
-- Phase23 may perform exactly one dedicated-QA history-learning run only after explicit user consent immediately before enabling/running it.
-- publishing and persona persistence remain unapproved.
