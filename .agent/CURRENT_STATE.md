@@ -19,12 +19,13 @@
   - Only `important-news-monitor` deployed; `verify_jwt=false`; SHA `4450ee09…e4b7`. Latest metadata says v64 but same SHA and source bundle `source/62`; discrepancy disclosed.
   - Natural Cron runs succeeded through 09:20 UTC; no new candidate/usage row, so GPT-6 persistence remains unverified. Migration history version differs from repo timestamp; no repair.
 
-- Codex slot 2: `ready` — `x-autopost-phase0-disposable-global-uniqueness-migration-proof-20260923`
-  - X自動投稿基盤audit C2 PASS後のPhase0。
-  - posting_windows / scheduled_posts / publish_claims のlegacy global UNIQUEを外しbrand-scoped uniquenessだけを残せるか、disposable PostgreSQLでmigration/rollback proofする。
-  - production apply / DDL / deploy / Cron / X投稿はすべて禁止。
-  - ON CONFLICT依存があれば同一migration候補内の最小修正可否を精査。大きくなるならSTOP。
-  - Recommended model: GPT-6 Luna。
+- Codex slot 2: `ready` — `x-autopost-phase0b-publish-claim-brand-scope-and-migration-reconciliation-20260923`
+  - Phase0 C2はBLOCKED。disposable DBで3 global UNIQUE除去自体は成立したが、current publish_claim clientがlegacy `post_type,date_jst` conflict targetに依存しているため、そのままのmigrationは本番候補にできない。
+  - `claimPublishSlot` はbrand_id未送信、complete/fail PATCHもbrand_id未指定。先にtrusted brand_idでbrand-scoped化が必要。
+  - 4 planner RPCもscheduled_postsのold conflict target依存をsource-onlyで更新候補化する。
+  - multibrand foundation migrationのsource/history driftはblind replay/repairせず、forward-only reconciliation案を作る。
+  - production mutation/deploy/Cron/X投稿は0のまま。
+  - Recommended model: GPT-6 Sol Medium。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
