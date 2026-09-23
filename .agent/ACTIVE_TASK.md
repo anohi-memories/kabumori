@@ -6,11 +6,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: kabumori-important-news-gpt6-production-rollout-20260923
+- task_id: kabumori-release-readiness-audit-and-roadmap-20260923
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: approved exact GPT-6 migration applied/read back; only `important-news-monitor` deployed with `verify_jwt=false`. Natural scheduled runs succeeded through 09:20 UTC, but no new candidate/usage row occurred. Migration history timestamp and Function version-label discrepancies are disclosed; no repair. Stop for C1.
+- note: Read-only release readiness audit delivered on review branch. P0 potential important-news-monitor caller-auth exposure; no invocation or production mutation. Stop for C1.
 
 
 ### Codex slot 2
