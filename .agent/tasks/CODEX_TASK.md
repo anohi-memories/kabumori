@@ -1,39 +1,43 @@
 # Codex Task
 
-- task_id: kabumori-pr8-gpt6-news-portfolio-final-merge-20260923
+- task_id: kabumori-important-news-full-gpt6-model-unification-20260923
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
-- purpose: C1 PASS済みのPR #8（Important News producer V2 + Portfolio validator fix + GPT-6 Luna upgrade）をlatest mainへfreshenし、必要チェック通過後mainへmergeする。production deploy/migration/backfillは行わない。
+- purpose: PR #8 merge後のImportant News monitoring pipelineに残るGPT-5.6 model参照を公式GPT-6系へ統一するsource candidateを作る。production deployは行わない。
 
-## C1 decision
+## Prior C1 decision
 
-Previous task `kabumori-gpt6-luna-model-upgrade-on-pr8-20260923` is **PASS**.
+Previous task `kabumori-pr8-gpt6-news-portfolio-final-merge-20260923` is **PASS**.
 
-Verified at C1:
-- Official OpenAI model ID is `gpt-6-luna`.
-- Standard short-context pricing is input $0.10 / 1M tokens and output $0.50 / 1M tokens.
-- Important News app-copy model constant is `gpt-6-luna`.
-- Personalized Reports model constant is `gpt-6-luna`.
-- Usage ledger includes explicit GPT-6 Luna pricing.
-- PR #8 head `6f5b184bfd7406d356f2f499342013774fec02d5` has required Vercel status = success.
-- PR #8 remains open and git-mergeable.
-- Current main is 25 commits ahead of the old merge base, but those main-side changes have **zero overlap** with the 11 PR #8 changed files.
-- Production mutation = 0.
+Verified:
+- PR #8 is merged and closed.
+- resulting main: `cd7ad8994d6e20c752735a52b0d933e1c2bb0a16`
+- Vercel status on resulting main: success.
+- all 11 approved files on main match final feature head `ab593c74fe6825ffbf9ba8ef2bed004a5b92b731`.
+- Important News app-copy V2, Portfolio validator fix, GPT-6 Luna app-copy, and GPT-6 Luna Personalized Reports are on main.
+- Supabase production migration/deploy/backfill remains unperformed.
+- production mutation = 0.
 
-## Approved PR contents
+## User-requested next goal
 
-PR #8 currently contains:
-- Important News source-backed app-copy V2
-- Portfolio full-width Japanese company-name validator fix
-- GPT-6 Luna upgrade for Important News app-copy draft/Fact
-- GPT-6 Luna upgrade for Personalized Reports draft/Fact
-- GPT-6 Luna cost-estimator updates and related tests
+The remaining Important News monitoring AI paths still use GPT-5.6 models. Unify the **Important News monitoring pipeline** to GPT-6 series before production rollout.
 
-Do not broaden scope.
+Confirmed remaining main references at the C1 baseline include:
+- `importance_judgement_logic.ts`
+  - `gpt-5.6-luna`
+  - `gpt-5.6-sol`
+- `breaking_market_source_fetchers.ts`
+  - `gpt-5.6-luna`
+- `post_generation_logic.ts`
+  - `gpt-5.6-luna`
+- `usage_ledger.ts`
+  - legacy GPT-5.6 rate entries/default fallback still exist because these remaining paths still depend on them.
+
+The already-merged app-copy and Personalized Reports paths use `gpt-6-luna` and must remain so.
 
 ## Mandatory startup
 
@@ -42,71 +46,122 @@ Do not broaden scope.
 3. Read this TASK
 4. Read `.agent/CODEX_REPORT.md`
 5. Fresh fetch `origin/main`
-6. Re-check PR #8 head/status and current main
-7. Re-check overlap against these approved files:
-   - `supabase/functions/important-news-monitor/app_copy_logic.ts`
-   - `supabase/functions/important-news-monitor/app_copy_logic_test.ts`
-   - `supabase/functions/important-news-monitor/app_copy_v2_migration_static_test.ts`
-   - `supabase/functions/important-news-monitor/cost_path_audit_test.ts`
-   - `supabase/functions/important-news-monitor/index.ts`
-   - `supabase/functions/important-news-monitor/usage_ledger.ts`
-   - `supabase/functions/important-news-monitor/usage_ledger_test.ts`
-   - `supabase/functions/personalized-reports/report_logic.ts`
-   - `supabase/functions/personalized-reports/report_logic_test.ts`
-   - `supabase/functions/personalized-reports/shared_market_consumer_test.ts`
-   - `supabase/migrations/20260922110000_important_news_app_copy_v2_source_backed_candidates.sql`
-8. Confirm no H2/G1/G2 ownership conflict.
+6. Confirm no H2/G1/G2 file/object ownership conflict
+7. Inventory **all** `gpt-5.6-luna` and `gpt-5.6-sol` references under `supabase/functions/important-news-monitor/` and classify each before editing.
 
-## Freshen / merge rules
+## Official model/pricing verification
 
-- Freshen/rebase/cherry-pick onto latest `origin/main` as needed without dragging stale `.agent` control history.
-- If a genuinely new semantic main edit appears in any approved file, STOP for C1 instead of auto-resolving.
-- Rerun relevant tests after freshening.
-- Required Vercel check must be success on the final merge head.
-- No branch-protection bypass.
-- If Vercel rate limit returns, leave PR open and report blocker.
+Before edits, verify current official OpenAI API docs for:
+- GPT-6 Luna exact model ID
+- GPT-6 Sol exact model ID
+- current standard short-context input/output pricing for each
+
+Expected from prior review, but must re-verify:
+- Luna model: `gpt-6-luna`
+- Sol model: `gpt-6-sol`
+- Luna pricing: $0.10 input / $0.50 output per 1M tokens
+- Sol pricing: expected $2 input / $10 output per 1M tokens
+
+If official IDs or pricing differ, STOP for C1 instead of guessing.
+
+## Required source changes
+
+### A. Importance judgement
+Update the monitoring judgement path:
+- first-pass judgement: GPT-5.6 Luna -> GPT-6 Luna
+- escalation path: GPT-5.6 Sol -> GPT-6 Sol
+- preserve existing escalation policy/thresholds
+- preserve reasoning effort semantics unless the official model API requires a documented compatibility adjustment
+- no new Sol fallback conditions
+
+### B. Breaking-market AI search
+Update the model used by `breaking_market_source_fetchers.ts`:
+- GPT-5.6 Luna -> GPT-6 Luna
+- preserve web-search/source-validation behavior
+- do not loosen URL/source validation
+- do not change query cadence or Cron
+
+### C. Important News post generation
+Update the monitoring/X-copy generation model under `post_generation_logic.ts`:
+- GPT-5.6 Luna -> GPT-6 Luna
+- preserve draft/fact/voice sequence and retry behavior
+- do not change publish/auto-publish gates
+- no manual X post
+
+### D. Cost accounting
+Update model types/rates/defaults so:
+- GPT-6 Luna calls use official GPT-6 Luna rates
+- GPT-6 Sol calls use official GPT-6 Sol rates
+- no active Important News path silently falls back to GPT-5.6 Luna pricing
+- retain legacy 5.6 entries only if historical ledger decoding/tests genuinely require them; document why
+- new active fallback/default should reflect the active GPT-6 path, not 5.6
+
+### E. Tests
+Update/add tests covering:
+- judgement first pass uses GPT-6 Luna
+- escalation uses GPT-6 Sol
+- breaking-market search uses GPT-6 Luna
+- post generation uses GPT-6 Luna
+- cost estimator uses correct GPT-6 Luna/Sol rates
+- no active Important News runtime path still selects GPT-5.6 models
+- escalation behavior remains unchanged except model IDs
+
+## Scope boundaries
+
+Do not touch:
+- Personalized Reports architecture beyond shared test assertions strictly required by model accounting
+- app UI
+- Portfolio behavior
+- DB schema/migrations unless strictly required for static metadata compatibility; if a migration seems necessary, STOP for C1
+- H2/G1/G2 files
+- X OAuth/token handling
+- Cron scheduling
+- provider/source allowlists
+- search query strategy
+- notification policy
+
+## Production restrictions
+
+Forbidden in this H1:
+- Supabase migration apply
+- Edge Function deploy
+- production DB write
+- report regeneration/backfill
+- Cron change
+- secret/Vault/provider setting change
+- manual/synthetic X post
+- manual Push
+- branch-protection bypass
+
+Production mutation must remain 0.
 
 ## Verification
 
-Minimum:
-- targeted Important News app-copy tests PASS
-- targeted Personalized Reports tests PASS
-- model-id assertions PASS
-- cost-estimator tests PASS
-- important-news relevant/full suite status recorded
+At minimum:
+- targeted importance judgement tests PASS
+- breaking-market source-fetcher tests PASS
+- post-generation tests PASS
+- usage-ledger/cost tests PASS
+- full Important News test suite PASS, or any unrelated pre-existing failure explicitly proven unchanged
 - changed-file Deno checks PASS
 - `git diff --check` PASS
-- verify GPT-6 Luna constants/pricing preserved
-- verify previously approved producer V2 and Portfolio validator behavior preserved
+- fresh grep/inventory proves no active Important News runtime path still chooses `gpt-5.6-luna` or `gpt-5.6-sol`
+- existing GPT-6 app-copy V2 remains intact
 - production mutation = 0
 
-## Merge
-
-If all checks pass:
-- merge PR #8 to `main`
-- read back resulting main SHA
-- verify PR is merged/closed
-- verify approved files on main
-- do NOT apply migration
-- do NOT deploy `important-news-monitor`
-- do NOT deploy `personalized-reports`
-- do NOT regenerate/backfill the 9/18 close report
-
-## Handoff
+## Deliverables / C1
 
 Update `.agent/CODEX_REPORT.md` with:
-1. pre-freshen main SHA
-2. final PR head SHA
-3. verification results
-4. Vercel required-check result
-5. PR merge/resulting main SHA
-6. read-back proof that GPT-6 Luna + producer V2 + Portfolio validator fix are on main
-7. production mutation = 0
-8. remaining production rollout items:
-   - exact migration apply
-   - `important-news-monitor` deploy
-   - `personalized-reports` deploy
-   - safe one-time 9/18 close regeneration/backfill decision
+1. official GPT-6 Luna/Sol IDs and pricing source checked
+2. complete pre/post inventory of 5.6 references in Important News monitor
+3. exact changed files
+4. model routing before/after
+5. cost constants before/after
+6. test/check results
+7. any intentionally retained legacy 5.6 constants and why
+8. candidate branch/commit/PR if created
+9. production mutation = 0
+10. explicit note that Supabase production rollout remains a later separate checkpoint
 
 On completion:
 - status -> `review_required`
