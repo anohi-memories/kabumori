@@ -1,24 +1,25 @@
 # Codex Task 2
 
-- task_id: social-mobile-app-phase20-production-history-access-rpc-rollout-20260923
+- task_id: social-mobile-app-phase21-production-history-learning-disabled-deploy-20260923
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: critical
-- recommended_model: Sol
-- purpose: Phase19 C2 PASS済みの `read_social_mobile_history_access_token(uuid,text)` SECURITY DEFINER RPC candidateだけをproductionへ安全に適用し、definition/owner/search_path/ACLをread-backする。Vault plaintext read・history-learning Function deploy・real X history callはこのPhaseでは禁止。
+- recommended_model: GPT-6 Sol Medium
+- purpose: Phase20 C2 PASS済みのaccess-token RPCを前提に、`social-mobile-history-learning` Edge Functionをproductionへ初回deployする。ただしdefault entrypointはdisabled adapterのまま維持し、service-role live wiring・Vault plaintext read・real X history fetchはまだ有効化しない。
 
-## Scope
+## Goal
 
-This is a **single-RPC production security-boundary rollout**.
+Productionに history-learning Function の**安全な殻だけ**を置く。
 
-Allowed production mutation:
-- apply exactly `supabase/migrations/20260923120000_social_mobile_history_access_token_reader.sql`
-- only if fresh preflight confirms the candidate is still compatible and absent
-- then read back exact function metadata/definition/ACL
+このPhaseで認める本番変更:
+- `social-mobile-history-learning` Edge Functionのdeployのみ
+- sourceはapproved `origin/main` とbyte-equivalent
+- default dependencyは `disabledHistoryLearningDependencies()` のまま
+- live RPC/Vault/X dependency factoryはentrypointから未接続
 
-Everything else remains out of scope.
+このPhaseでは実際の過去投稿取得は絶対に起こさない。
 
 ## Mandatory fresh start
 
@@ -29,194 +30,195 @@ H2開始時:
 4. `.agent/CURRENT_STATE.md`
 5. this TASK
 6. `.agent/CODEX_REPORT_2.md`
-7. Phase19 migration + source + tests read-back
-8. other-slot overlap check
+7. Phase20 RPC production read-back
+8. relevant Phase16/18/19 source/tests
+9. other-slot overlap check
 
-If H1/G1/G2 now touches the same migration/RPC/Vault/history-learning production objects, STOP.
+If another slot touches `social-mobile-history-learning`, the access-token RPC, Vault/history-learning production settings, or the same shared reader modules, STOP.
 
 ## Model policy
 
-- **Sol推奨・原則Solで実施**
-- 理由: production SECURITY DEFINER RPC + Vault access pathという本番security boundary mutation
-- Lunaに落とさない
-- ただし通常のread-only metadata read-backはSolのまま継続してよい
+Use **GPT-6 Sol Medium** for this Phase.
 
-## Gate A — exact source integrity
+Reason:
+- production Edge deployment
+- security boundary around bearer Auth / service-role-only RPC
+- need exact proof that live Vault/X path remains unreachable
 
-Before touching production:
-- confirm migration path exactly:
-  `supabase/migrations/20260923120000_social_mobile_history_access_token_reader.sql`
-- record exact SHA-256
-- compare file contents with Phase19-approved candidate
-- confirm no new drift in:
-  - function name/signature
-  - SECURITY DEFINER
-  - fixed empty search_path
-  - fully qualified public/vault references
-  - revoke/grant ACL
-  - service_role-only execute
-  - no refresh-token selection
-  - no arbitrary secret-id parameter
-  - normalized error behavior
-- rerun relevant static/security tests if source changed after Phase19
+Raise effort only if there is a concrete deploy/runtime/auth ambiguity.
 
-If migration drift exists, STOP for C2. Do not apply.
+## Gate A — source integrity
 
-## Gate B — production read-only preflight
+Read and verify:
+- `supabase/functions/social-mobile-history-learning/index.ts`
+- `logic.ts`
+- `../_shared/brand/social_mobile_history_access_reader.ts`
+- tests
+- Phase20 RPC metadata from production
 
-Target production:
-- project: `stock-x-autopost`
-- ref: `wsmznyzcvmuitkglfeuj`
+Must prove before deploy:
+- `index.ts` calls only `disabledHistoryLearningDependencies()`
+- `index.ts` does NOT call/import `createHistoryLearningCandidateDependencies()`
+- no `Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")` or equivalent live secret wiring exists in the entrypoint
+- no live RPC call can be reached from current deployed default dependency
+- no X fetch can be reached because Auth resolution itself fails closed in disabled deps
+- response never contains token/ref
+- no write/publish path exists
+- max history remains 50 posts / 2 pages in dormant logic
+- raw posts are not persisted
 
-Read-only preflight only:
-- target RPC absent
-- migration version/name not already recorded
-- `social_accounts`, `brand_memberships`, `vault.decrypted_secrets` still exist
-- required columns still have compatible types
-- required roles `public`, `anon`, `authenticated`, `service_role` exist
-- production Vault catalog shape still compatible
-- no same-name/same-signature conflicting function
-- existing OAuth/admin RPCs unchanged from latest known approved baseline
-- no active parallel task mutating same objects
+If current source differs materially from Phase19-approved security model, STOP for C2 before deploy.
 
-Do NOT select:
-- `decrypted_secret`
-- access tokens
-- refresh tokens
-- secret ids unless catalog/type metadata inherently requires object identity; do not report actual secret ids
-- QA handle/user PII
+## Gate B — production preflight
 
-If any preflight mismatch exists, STOP before mutation.
+Target:
+- project `stock-x-autopost`
+- ref `wsmznyzcvmuitkglfeuj`
 
-## Gate C — exact production migration apply
+Read-only checks:
+- Phase20 RPC exists exactly once with approved ACL/search_path/security-definer properties
+- no existing `social-mobile-history-learning` Function, or if it exists unexpectedly, read back and compare before any deploy
+- existing unrelated Functions baseline recorded
+- required public Supabase URL is available as normal project metadata
+- do NOT obtain/use a service-role key in this Phase
+- do NOT inspect Vault plaintext
+- no overlapping task/deploy
 
-User has explicitly authorized proceeding to this production rollout by saying to continue after Phase19 C2 PASS.
+If Function already exists with unknown/different source, STOP.
 
-Apply only the exact approved migration.
+## Gate C — tests before deploy
 
-Rules:
-- use migration API / exact migration application path
-- no `supabase db push`
-- no migration-history repair/reconcile
-- no manual ad-hoc SQL rewrite in production
-- no extra ACL/RLS/schema changes
-- no Function deploy
-- no Vault plaintext read
-- no X call
+Run at minimum:
+- history-learning logic tests
+- access-reader tests
+- migration/static security tests relevant to Phase19/20
+- Deno check for Function entrypoint/logic
+- social-mobile typecheck/lint only if shared/mobile source changed
+- `git diff --check`
 
-If automated safety tooling blocks the apply, STOP and report. Do not work around it.
+Add/retain explicit regression proving:
+- default entrypoint uses disabled dependencies
+- disabled path cannot invoke RPC
+- disabled path cannot invoke X
+- disabled path cannot return token
+- explicit consent alone is insufficient while live dependency is disabled
 
-## Gate D — immediate postflight
+## Gate D — production deploy
 
-Read back and verify:
-- function exists exactly once:
-  `public.read_social_mobile_history_access_token(uuid,text)`
-- language = plpgsql
-- SECURITY DEFINER = true
-- search_path fixed exactly as candidate
-- function owner recorded
-- source/definition hash matches approved candidate semantics
-- EXECUTE:
-  - public = no
-  - anon = no
-  - authenticated = no
-  - service_role = yes
-- no extra overloads
-- no refresh-token reference in function definition
-- no generic secret selector
-- migration history contains exactly one new corresponding entry
-- existing OAuth/admin RPC definitions/ACL/search_paths unchanged
-- no production row mutation expected
+Deploy only:
+- Function: `social-mobile-history-learning`
 
-Do not call the new RPC with a real account in this Phase.
+Deployment source must be byte-equivalent to approved `origin/main`.
 
-## Gate E — safe smoke without Vault plaintext
+### JWT policy
 
-Permitted smoke:
-- metadata/catalog validation only
-- optional call that deterministically fails **before Vault read** using non-sensitive impossible/invalid identifiers, only if you can prove from function structure that failure occurs before Vault lookup
+Determine the correct `verify_jwt` setting from the current mobile/Supabase Auth architecture and existing approved Function patterns.
 
-Preferred: skip invocation entirely if metadata/read-back proves rollout.
+Preferred if compatible: `verify_jwt=true`.
 
-Forbidden smoke:
-- any call capable of resolving a real account
-- any Vault plaintext read
-- any service-role token retrieval
-- any X API call
+If project architecture requires custom bearer validation with `verify_jwt=false`, do not assume it. Prove why from current source/tests and record it in report.
 
-## Rollback posture
+Important:
+- do not add a service-role secret/env
+- do not wire live reader factory
+- do not change RPC/DB
+- do not change OAuth
+- deploy no other Function
 
-Do not automatically rollback a successfully applied migration unless postflight finds a concrete critical defect.
+## Gate E — post-deploy source/read-back
 
-If rollback is needed:
-- STOP and report exact defect first
-- design reverse migration separately
-- do not ad-hoc drop/change the function without approval unless immediate security exposure exists and authorized safety tooling requires containment
+Read back Function metadata/source and prove:
+- ACTIVE
+- exact function slug
+- exact verify_jwt value + rationale
+- runtime `index.ts` / `logic.ts` / shared reader files match approved source
+- entrypoint still uses `disabledHistoryLearningDependencies()`
+- live candidate factory still not wired
+- unrelated Functions unchanged
 
-## Verification
+Record version / updated_at / source hashes where available.
 
-Minimum:
-- exact migration hash recorded
-- preflight PASS
-- exact migration apply result
-- postflight function metadata/ACL/search_path PASS
-- existing OAuth/admin objects unchanged
-- production Vault plaintext reads = 0
+## Gate F — safe smoke only
+
+Permitted smoke must terminate before Vault/X.
+
+Examples:
+- unsupported GET -> 405
+- POST without usable Auth -> 401 / safe fail-closed equivalent
+- OPTIONS -> safe CORS response if useful
+
+Do NOT send:
+- a real QA user's bearer token with explicit consent
+- real workspace/account ids
+- service-role credential
+- any request capable of reaching the production RPC
+
+Smoke proof must show:
+- Vault plaintext reads = 0
+- access-token RPC calls = 0
 - X calls = 0
-- Function deploys = 0
-- publish changes = 0
-- `git diff --check` / relevant tests if source was touched
-- fresh origin/main before final control/report push
+- persona/settings writes = 0
 
-## Production boundary
+## Forbidden in Phase21
 
-Allowed:
-- exactly one approved migration/RPC production apply
-
-Forbidden:
-- deploy `social-mobile-history-learning`
-- wire service-role env into live Function
-- call new RPC for a real account/token
-- read Vault plaintext
-- real X history API
-- OAuth scope/Portal change
-- persona/settings writes
+- wiring `createHistoryLearningCandidateDependencies()` into production entrypoint
+- using `SUPABASE_SERVICE_ROLE_KEY` for live history access
+- invoking `read_social_mobile_history_access_token`
+- reading Vault plaintext
+- real X `/2/users/:id/tweets` call
+- storing raw historical posts
+- persisting persona proposal
 - OpenAI live call
-- X post/media/repost
+- OAuth changes
+- publish/media/repost
 - `publish_enabled=true`
-- Cron/scheduler/scheduled_posts
-- unrelated schema/RLS/ACL/RPC changes
-- migration history repair
-- blind db push
+- Cron/scheduler
+- DB migration/RPC/RLS/ACL mutation
+- migration-history repair
+- unrelated Function deploy
+
+## Production mutation budget
+
+Exactly:
+- one Edge Function deploy/update: `social-mobile-history-learning`
+
+Everything else mutation = 0.
 
 ## Completion / C2
 
-On completion:
+When complete:
 - status -> `review_required`
 - next_owner -> `chatgpt`
-- `.agent/CODEX_REPORT_2.md` must include:
-  1. source SHA/hash
-  2. production preflight
-  3. exact migration apply result
-  4. production migration history version/name
-  5. RPC signature
-  6. owner / SECURITY DEFINER / search_path
-  7. exact ACL read-back
-  8. no-refresh/no-generic-secret proof
-  9. existing OAuth/admin compatibility read-back
-  10. Vault plaintext read count = 0
-  11. Function deploy = 0
-  12. X history call = 0
-  13. production mutations limited to this one RPC migration
-  14. remaining risks
-  15. next gate recommendation
-- commit/push control files
-- fresh origin/main verification
-- STOP for C2
+- update `.agent/CODEX_REPORT_2.md`
+
+Report must include:
+1. fresh source commit
+2. source integrity proof
+3. Phase20 RPC preflight
+4. tests
+5. exact deploy result/version
+6. verify_jwt value and rationale
+7. runtime byte/source hash comparison
+8. safe smoke results
+9. proof default adapter remains disabled
+10. Vault plaintext reads = 0
+11. access-token RPC invocations = 0
+12. X history calls = 0
+13. service-role live wiring = 0
+14. unrelated production mutation = 0
+15. remaining risks
+16. exact next gate recommendation
+17. commit/push/fresh origin verification
+
+Then STOP for C2.
 
 ## Next gate after PASS
 
-Only after C2 PASS:
-- separate Phase21 for deploying `social-mobile-history-learning` with server-only configuration while keeping real history fetch disabled
-- later separate QA phase for exactly-one real Vault read + X history fetch with explicit user consent
-- publishing remains separate and disabled
+Phase22 only after C2 PASS:
+- prepare live dependency wiring behind an explicit server-side feature gate/default OFF
+- deploy that wiring while keeping the gate OFF
+- still no real Vault/X call
+
+A later separate QA phase may perform exactly one real Vault access-token read + X history fetch, only with explicit user consent.
+
+Publishing remains separate and disabled.
