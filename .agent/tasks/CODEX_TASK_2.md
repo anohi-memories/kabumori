@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase21-production-history-learning-disabled-deploy-20260923
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: GPT-6 Sol Medium
 - purpose: Phase20 C2 PASS済みのaccess-token RPCを前提に、`social-mobile-history-learning` Edge Functionをproductionへ初回deployする。ただしdefault entrypointはdisabled adapterのまま維持し、service-role live wiring・Vault plaintext read・real X history fetchはまだ有効化しない。
