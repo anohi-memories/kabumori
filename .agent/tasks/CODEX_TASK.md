@@ -3,8 +3,8 @@
 - task_id: kabumori-important-news-monitor-caller-auth-finalize-20260923
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Luna
 - purpose: PR #12のcaller-auth candidateを最新mainへfreshenし、full regressionとdisposable PostgreSQLでmigration実行証明まで行い、merge可能な最終candidateへ仕上げる。本番変更はまだ行わない。
@@ -133,3 +133,14 @@ Then:
 - STOP for C1
 
 **推奨モデル：Luna。問題が出た場合のみGPT-6 Sol Mediumへ上げる。**
+
+## Report
+
+- result: `review_required`; PR #12 refreshed onto `origin/main` `118fb488064876536e595e8a5e06fbd3c4c11f7e`, final candidate head `9dffce9620b8a04706cad314a1e558ea141cb105`.
+- changed scope: the original seven implementation files only; no `.agent` files are in PR #12.
+- tests: targeted auth/wiring/migration `7/7`; full Important News suite `431/431`; candidate modules `deno check` and `git diff --check` pass. Handler-wide check reaches the pre-existing error in unchanged `_shared/x_oauth2_post.ts:66`.
+- PostgreSQL: exact candidate migration passed against disposable PostgreSQL 16.15 with representative Cron/Vault stubs. Four intended jobs alone were patched; runtime Vault resolution, metadata preservation, missing/noncanonical secret, missing job, late command-shape drift rollback, and rerun fail-closed were verified. Temporary container removed.
+- checks: Vercel passed on final head; GitHub Actions reported no workflow runs.
+- PR #11 remains open/draft/unmerged and untouched.
+- production_mutation: `0`; no migration apply, Vault or Function secret/config change, Function deploy, Cron mutation, invocation, candidate injection, X post, or Push.
+- C1 recommendation: review PR #12 and decide merge; no production action is part of this task.

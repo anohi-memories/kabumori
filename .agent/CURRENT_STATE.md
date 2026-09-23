@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-23 JST (H1 caller-auth source/config candidate ready for C1; production unchanged)
+- checked_at: 2026-09-23 JST (H1 caller-auth candidate freshened and fully verified; awaiting C1; production unchanged)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,9 +14,10 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `kabumori-important-news-monitor-caller-auth-remediation-candidate-20260923`
-  - PR #12 contains source-only caller-auth validation and a Vault-backed header candidate for exactly the four existing monitor Cron jobs.
-  - Targeted auth/wiring/migration tests: 7/7 passed; Deno check for caller-auth helper passed. Full regression suite / disposable SQL execution not run.
+- Codex slot 1: `review_required` — `kabumori-important-news-monitor-caller-auth-finalize-20260923`
+  - PR #12 is freshened on `118fb488`; final head `9dffce9`, 7 files. Vercel passed.
+  - Targeted auth/wiring/migration tests: 7/7; full Important News suite: 431/431; disposable PostgreSQL migration/rollback proof passed.
+  - Handler-wide Deno check reaches existing TS2322 in unchanged `_shared/x_oauth2_post.ts:66`; changed auth modules/tests check cleanly.
   - Production migration, Vault write, Function secret/config change, and deploy are all 0; each requires separate approval. Keep `verify_jwt=false`.
 
 - Codex slot 2: `ready` — `x-autopost-phase0c-production-brand-scope-rollout-20260923`
@@ -37,7 +38,7 @@
 
 ## Parallel safety
 
-- H1 caller-auth source/config candidate is in PR #12; production migration, Vault/secret configuration, and Function deploy are not approved and remain unapplied.
+- H1 caller-auth source/config candidate is in PR #12; production migration, Vault/secret configuration, and Function deploy are not approved and remain unapplied. PR #11 remains open/draft/unmerged and was not touched.
 - H2/G1/G2 implementation files are untouched by this H1.
 - 同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数slotで同時変更しない。
 - push前にfresh `origin/main`確認。既存未コミット変更は他workstream所有として触らない。

@@ -1,3 +1,36 @@
+## Latest H1 result — caller-auth final candidate for C1 (2026-09-23)
+
+- task_id: `kabumori-important-news-monitor-caller-auth-finalize-20260923`
+- result: `review_required` — PR #12 was rebased onto fresh `origin/main`, regression and disposable PostgreSQL proof completed, and the final source candidate is ready for C1. Do not merge without C1.
+- fresh_main: `118fb488064876536e595e8a5e06fbd3c4c11f7e`
+- final_pr_head: `9dffce9620b8a04706cad314a1e558ea141cb105`
+- pull_request: https://github.com/anohi-memories/kabumori/pull/12 (open, mergeable, not merged; 7 changed files)
+- implementation_scope: exactly the seven task-approved files: `docs/runbooks/important-news-monitor-caller-auth.md`; `supabase/functions/important-news-monitor/{caller_auth.ts,caller_auth_migration_test.ts,caller_auth_test.ts,caller_auth_wiring_test.ts,index.ts}`; `supabase/migrations/20260923110440_important_news_monitor_caller_auth.sql`. No `.agent` history was added to the implementation PR.
+
+### Verification
+
+- Targeted auth/wiring/migration tests: **7 passed / 0 failed**.
+- Full Important News suite: **431 passed / 0 failed** using `deno test --no-lock --no-check --allow-read supabase/functions/important-news-monitor/*test.ts`.
+- Changed auth helper and three changed test files pass `deno check --no-config --no-lock`. Checking `index.ts` also reports the pre-existing TS2322 in unchanged `supabase/functions/_shared/x_oauth2_post.ts:66` (`Uint8Array<ArrayBufferLike>` vs `BufferSource`). No type error was reported in the changed auth modules/tests.
+- `git diff --check`: passed.
+- Vercel required status on final PR head: **success**. GitHub Actions workflow runs: none reported.
+
+### Disposable PostgreSQL proof
+
+- Executed the exact final migration against a local disposable PostgreSQL **16.15** fixture with representative `cron.job`, `cron.alter_job`, and `vault.decrypted_secrets` shapes. The fixture used local compatible stubs rather than Supabase's installed pg_cron/Vault extensions; no production connection was used.
+- Successful apply changed only the `command` for exactly four intended jobs. Executed all four resulting commands through a local capture stub: URL, distinct request body/mode, pre-existing Authorization header, schedules, active flags, other seeded cron metadata, and `important-news-shadow` remained unchanged. A changed fixture Vault value was reflected at command runtime without rewriting stored commands. Stored commands contained the lookup expression and no secret literal.
+- Fail-closed proof: missing Vault value, noncanonical Vault value, missing expected job, unexpected header shape on the last job after earlier rows were eligible for update, and rerun after patch all raised; snapshot comparisons confirmed zero partial Cron-row changes for each failing migration statement.
+- The temporary PostgreSQL container was stopped and removed. The rollback procedure is documented in the runbook: only a separately approved coordinated rollback from an access-controlled pre-change command snapshot; no rollback migration was created.
+
+### Security and production boundary
+
+- Missing, malformed, and wrong credentials fail closed before body parsing, privileged credential loading, or mode dispatch; one gate covers all request modes. Responses contain stable error codes and no credential material. The 256-bit base64url shape check also enforces canonical final padding bits.
+- Production mutation: **0**. No production migration, Vault write, Function secret/config change, deploy, Cron change, invocation, candidate injection, `auto_publish` change, X post, or Push occurred. Keep `verify_jwt=false`.
+- PR #11 remains open, draft, unmerged, and stale/partial; it was not changed.
+- next_owner: `chatgpt`; C1 should review PR #12. Production rollout remains separate and needs separate approval.
+
+---
+
 ## Latest H1 result — GPT-6 Important News production rollout (2026-09-23)
 
 - task_id: `kabumori-important-news-gpt6-production-rollout-20260923`

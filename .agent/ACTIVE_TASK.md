@@ -6,11 +6,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: kabumori-important-news-monitor-caller-auth-remediation-candidate-20260923
+- task_id: kabumori-important-news-monitor-caller-auth-finalize-20260923
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: source-only caller-auth candidate is in PR #12 for exactly four existing monitor Cron jobs; 7 targeted tests and Deno helper check pass. No production migration, Vault write, Function secret/config change, or deploy. Keep `verify_jwt=false`; production rollout requires separate approval. Stop for C1.
+- note: PR #12 freshened to `9dffce9` on main `118fb48`; 7 targeted + 431 full tests pass, disposable PostgreSQL migration/rollback proof passes, Vercel succeeds. `index.ts` full check reaches unrelated existing TS2322 in unchanged `_shared/x_oauth2_post.ts:66`. No production mutation. PR #11 remains open/draft/unmerged and untouched. Stop for C1.
 
 
 ### Codex slot 2
