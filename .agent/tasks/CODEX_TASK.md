@@ -23,8 +23,8 @@ Verified:
   - judgement escalation -> `gpt-6-sol`
   - breaking-market search -> `gpt-6-luna`
   - post draft/Fact/Voice/retries -> `gpt-6-luna`
-- production migration and `important-news-monitor` deployment have **not** yet been performed.
-- production mutation from prior H1 = 0.
+- Following explicit approvals, the exact production migration and reviewed `important-news-monitor` deployment have been performed; see the completion report below.
+- production mutation before this rollout = 0.
 
 ## Mandatory startup
 
@@ -162,12 +162,15 @@ On completion:
 ## Report
 
 - task_id: `kabumori-important-news-gpt6-production-rollout-20260923`
-- result: `review_required` — exact approved migration applied and read back; reviewed Function deployment rejected by approval guard.
-- changed_files: production change is only the reviewed CHECK-constraint migration; controls/report updated on main.
-- tests: source candidate's prior 173 targeted/migration and 424 full-suite passes carried forward; no production runtime tests because Function is not deployed.
-- commit_hash: production main source `83d994634f9b4891b8d939723939187b76bedaed`; completion control/report commits follow on main.
-- push: completion controls synced to main.
-- deploy: no Edge Function deployed. Existing `important-news-monitor` remains ACTIVE v61, `verify_jwt=false`, source hash unchanged.
-- remaining_issues: Supabase migration history recorded `20260923084819_allow_gpt6_important_news_model_metadata`, while repo filename is `20260923035652_...`; no repair attempted. Need explicit user approval for Function deploy and direction on the history-version discrepancy.
-- safety_checks: no alternate deployment path, no branch/migration-history repair, no other DDL/RLS/grant/config/Cron/secrets/X/Push changes.
-- next_recommendation: C1 review postflight and authorize next action explicitly.
+- result: `review_required` — exact approved migration and only the reviewed `important-news-monitor` production deploy completed; stop for C1.
+- changed_files: shared controls/report only; no local source edits. Production changes: the single approved migration and one Function deployment.
+- tests: carried-forward reviewed source results: 173 targeted/migration tests and 424 full Important News tests passed.
+- commit_hash: implementation source remains main merge `83d994634f9b4891b8d939723939187b76bedaed`; shared report/control sync is committed separately on main.
+- push: TASK, CODEX_REPORT, CURRENT_STATE, and ACTIVE_TASK synced to main.
+- migration: applied only `20260923035652_allow_gpt6_important_news_model_metadata.sql`. Both named CHECK constraints read back permitting NULL and GPT-5.6 Luna/Sol plus GPT-6 Luna/Sol. Production history entry is version `20260923084819` under the correct migration name; timestamp differs from repo filename and was not repaired.
+- deploy: only `important-news-monitor`; deploy response ACTIVE v62, SHA `4450ee09ff03099f044659cb7408ec00736e5ab9e3354d44fb453c8b2660e4b7`, `verify_jwt=false`. Latest read-only metadata reports ACTIVE v64 with the identical SHA, `verify_jwt=false`, and source bundle path `source/62`; label discrepancy unexplained. Immediate read-back matched all 25 reviewed latest-main files exactly.
+- natural_runtime: scheduled-only observation from 09:03:56 through 09:20:24 UTC. Successful observed runs: publish-ready at 09:05/09:10/09:15/09:20, judgement 09:07, generation 09:14, fetch 09:20. No failed rows. Candidate rollup after deploy returned 0 rows; no qualifying GPT-6 model metadata or usage/cost row occurred, so persistence via real model call remains unverified. No manual invocation, candidate injection, X post, or Push.
+- production_mutations: exactly the approved single migration and the one approved Function deployment with JWT verification disabled as requested. No Cron/config/secrets/OAuth/other Function/schema/report/X/Push changes.
+- remaining_issues: no natural qualifying candidate during observation; migration history version differs from repo filename; Function version label currently reads v64 while deploy response/source package indicates v62, same SHA. No history repair or further deployment attempted.
+- untouched: Personalized Reports, 9/18 regeneration, `personalized-reports`, `important-news-shadow`, `x-test-post`, all other Functions and Cron schedules.
+- next_recommendation: C1 review; stop here.
