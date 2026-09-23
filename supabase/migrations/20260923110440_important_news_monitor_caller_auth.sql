@@ -44,7 +44,8 @@ begin
     where jobname = any(expected_job_names)
     order by jobname
   loop
-    if job.command ~* 'x-important-news-cron-secret' then
+    if job.command !~* 'important-news-monitor'
+       or job.command ~* 'x-important-news-cron-secret' then
       raise exception 'IMPORTANT_NEWS_MONITOR_CRON_AUTH_HEADER_ALREADY_PRESENT';
     end if;
 
