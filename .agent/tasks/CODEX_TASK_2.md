@@ -1,36 +1,28 @@
 # Codex Task 2
 
-- task_id: x-autopost-foundation-audit-multibrand-netlify-roadmap-20260923
+- task_id: x-autopost-phase0-disposable-global-uniqueness-migration-proof-20260923
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: none
-- priority: high
+- status: ready
+- next_owner: codex
+- priority: critical
 - recommended_model: GPT-6 Luna
-- purpose: social-mobile history-learning Phase23完了後、現在のX自動投稿基盤を壊さずに棚卸しし、複数ブランド/複数Xアカウント対応の完成、Supabase中核化、Netlify Free管理画面移行までの安全な実装ロードマップを確定する。今回は原則read-only調査と設計のみ。Production mutation/deploy/migrationはしない。
+- purpose: C2で確認したX自動投稿複数ブランド化のP0 blockerについて、productionへ一切適用せず、disposable PostgreSQLだけで最小migration候補とrollback proofを作り、安全にbrand-scoped uniquenessへ移行できることを証明する。
 
-## Product direction
+## Background / confirmed production blocker
 
-今後の基本構成:
-- 管理画面: Netlify Freeを本番候補
-- DB: Supabase
-- Cron / scheduler: Supabase
-- Edge Functions: Supabase
-- X posting core: Supabase Edge Functions / RPC
-- X API: existing paid contract
-- Vercel Pro移行は前提にしない
+Productionには以下が併存している:
+- `posting_windows`
+  - intended: UNIQUE `(brand_id, post_type, slot_no)`
+  - obsolete blocker: UNIQUE `(post_type, slot_no)`
+- `scheduled_posts`
+  - intended: UNIQUE `(brand_id, schedule_date, post_type, slot_no)`
+  - obsolete blocker: UNIQUE `(schedule_date, post_type, slot_no)`
+- `publish_claims`
+  - intended: UNIQUE `(brand_id, post_type, date_jst)`
+  - obsolete blocker: UNIQUE `(post_type, date_jst)`
 
-Architecture target:
-
-Netlify admin UI
-↓
-Supabase Auth / RLS / RPC / Edge Functions
-↓
-Supabase DB / Cron
-↓
-X API
-
-Netlify should be a thin authenticated control UI, not the home for heavy/background processing.
+This task does not authorize production apply.
 
 ## Mandatory fresh start
 
@@ -40,197 +32,127 @@ Netlify should be a thin authenticated control UI, not the home for heavy/backgr
 4. read `.agent/CURRENT_STATE.md`
 5. read this TASK
 6. read latest `.agent/CODEX_REPORT_2.md`
-7. inspect other slot scopes for overlap
-8. inspect production metadata read-only where needed
+7. inspect H1/G1/G2 for overlap
+8. read-only production metadata refresh for exact current constraint/index names
+9. inspect migration history/source for where brand-scoped indexes and old constraints originated
 
-If another slot is modifying the same X publisher/Cron/schema/admin files, do not edit them. Continue read-only analysis only, or STOP if safe separation cannot be established.
+If another slot touches these three tables/migrations/constraints, STOP.
 
-## Scope A — current X platform inventory
+## Scope A — production read-only preflight
 
-Map the live and source architecture for:
-- `x-test-post`
-- X OAuth connect paths
-- token/Vault handling and refresh
-- `brands`
-- `social_accounts`
-- `brand_settings`
-- `brand_memberships`
-- `posting_windows`
-- `scheduled_posts`
-- `post_execution_logs`
-- `publish_claims`
-- `published_content_fingerprints`
-- `daily_content_plans`
-- relevant Cron jobs
-- important-news publish path where it intersects X
-- shared brand generator/context/publish guard/dedupe modules
-- current admin app
+Read-only confirm:
+- exact table/constraint/index names
+- whether legacy uniqueness is backed by a named table constraint or standalone unique index
+- brand_id nullability/default/backfill state
+- duplicate-risk rows that would violate intended brand-scoped uniqueness
+- existing rows with null brand_id
+- dependent FKs/RPCs/functions that reference the obsolete constraint/index names directly
+- planner/on-conflict code that depends on the old conflict target
 
-Identify:
-- what is already genuinely multibrand
-- what is still Kabumori-specific
-- what is partially generalized
-- what still assumes one brand/account
-- what production objects are active today
+Do not expose row content or identifiers; aggregate/safe metadata only.
 
-Do not read secret values.
+## Scope B — minimal migration candidate
 
-## Scope B — multibrand blockers
+Create one source-only forward migration candidate that:
+- removes only the three obsolete global uniqueness blockers
+- preserves the three brand-scoped unique indexes/constraints
+- does not rename unrelated objects
+- does not modify data unless absolutely required and separately justified
+- fails closed if the expected current objects do not match
+- avoids blind `DROP INDEX IF EXISTS` if a stronger exact-object assertion is possible
+- documents rollback strategy
 
-Pay special attention to DB and scheduler constraints that may prevent multiple brands from independently using the same post_type/slot/date.
+Important:
+- determine whether `ON CONFLICT (...)` statements in current RPC/functions depend on the old global key.
+- if they do, the same candidate must include the minimum exact update needed to switch conflict target to brand-scoped keys, or STOP and report that a larger migration is required.
+- do not alter queue fairness, token routing, retry semantics, or publisher code in this phase.
 
-Audit at minimum:
-- UNIQUE constraints on `posting_windows`
-- UNIQUE constraints on `scheduled_posts`
-- claim/dedupe key scope
-- logs and retry scope
-- account selection rules
-- one-X-account-per-brand assumptions
-- cross-brand duplicate protection wiring
-- scheduler/Cron dispatch assumptions
-- status/retry/failure semantics
+## Scope C — disposable PostgreSQL proof
 
-Produce a concrete blocker list with severity and exact affected objects/files.
+Use fake-only/disposable PostgreSQL.
 
-## Scope C — common publisher target architecture
+Prove at minimum:
 
-Design the minimum safe path from the current `x-test-post` monolith toward a common publisher.
+### posting_windows
+- brand A can insert `post_type=X, slot=1`
+- brand B can insert same `post_type=X, slot=1`
+- same brand duplicate still fails
 
-Target conceptual flow:
-1. resolve due scheduled row
-2. resolve brand
-3. resolve verified X account
-4. resolve server-side token
-5. resolve brand/profile/settings
-6. generate content
-7. enforce duplicate/publish guards
-8. publish to X
-9. persist success/failure/logs
-10. retry only under bounded rules
+### scheduled_posts
+- brand A and B can insert same date/post_type/slot independently
+- same brand duplicate still fails
 
-Requirements:
-- Kabumori-specific generators may remain specialized where necessary
-- other brands should not duplicate whole systems
-- adding a brand should primarily be DB/config/profile driven
-- publish core must not trust client-supplied account/token ids
-- no secret in browser
-- no service-role in browser
+### publish_claims
+- brand A and B can claim same date/post_type independently
+- same brand duplicate still fails
 
-This task is design/audit only; do not refactor production code yet unless a tiny documentation-only helper is unavoidable.
+Also prove:
+- current representative legacy rows survive migration
+- any required `ON CONFLICT` function/RPC still behaves correctly
+- migration apply succeeds from a production-shaped baseline
+- rollback/reverse script restores the original uniqueness state in disposable DB
+- cleanup leaves no residual proof objects/container
 
-## Scope D — admin / Netlify readiness audit
+## Scope D — source/static tests
 
-Inspect `apps/admin` and classify every server-side dependency:
-- Next.js Server Components
-- Server Actions
-- cookie/session handling
-- proxy/middleware behavior
-- `next/cache` / revalidation
-- any server-only Supabase operations
-- whether any privileged credentials are required
+Add narrow tests for:
+- exact obsolete object names
+- exact brand-scoped replacement remains present
+- no unrelated table/index/constraint change
+- no `supabase db push`
+- no production apply path
 
-Determine:
-- what can deploy unchanged on Netlify's current Next runtime
-- what would consume Netlify Function/Edge compute
-- what should instead move to Supabase RPC/Edge Function
-- whether admin can be made thin enough to avoid Netlify Functions entirely or nearly entirely
-- required env vars
-- Supabase Auth compatibility
-- security implications
-
-Do not create Netlify project or change Vercel.
-
-## Scope E — production safety baseline
-
-Read-only establish current baseline for:
-- active relevant Functions and versions
-- active relevant Cron jobs
-- existing brands/accounts counts
-- publish-enabled states in aggregate/safe form
-- current scheduler/log row counts
-- current admin app source shape
-- current Vercel presence only if visible from repository/config; do not change it
-
-No raw tokens, no secret values, no personal identifiers.
-
-## Scope F — deliverable
-
-Produce a structured report in `.agent/CODEX_REPORT_2.md` containing:
-
-1. executive summary
-2. already-complete pieces
-3. incomplete pieces
-4. multibrand blockers
-5. Netlify migration/readiness findings
-6. pieces that should move to Supabase
-7. pieces that should stay in Netlify/admin
-8. release-to-stable-operations remaining tasks
-9. recommended phased roadmap
-10. recommended task decomposition across H1/H2/G1/G2, with overlap-safe boundaries
-11. specific next implementation task recommendation
-12. no-change safety proof
-
-## Roadmap constraints
-
-Must preserve:
-- current working auto-posting
-- current Cron
-- existing accounts
-- current Vercel Production until full migration proven
-- no automatic paid upgrades
-- no Netlify paid plan assumptions
-- no direct production rewrite
-
-Target order should generally respect:
-1. posting stability
-2. complete multibrand support
-3. scheduler/retry/dedupe/failure handling
-4. secure admin control
-5. Netlify Free production viability
-6. ops/log/retry/stop controls
-7. long-run test
-
-But refine based on actual repo/live findings.
+Run relevant migration/static tests and `git diff --check`.
 
 ## Forbidden
 
-- production schema/RPC/RLS mutation
-- migration apply
+- production migration apply
+- production DDL/DML
+- changing live Cron
+- x-test-post deploy
 - Function deploy
-- Cron changes
-- OAuth changes
-- token refresh changes
-- X posting
-- Netlify project creation
-- Vercel change/delete
-- secret rotation
+- X API call/post
+- OAuth/Vault/token change
 - publish_enabled change
-- unrelated file edits
+- Netlify/Vercel change
+- unrelated publisher refactor
+- queue/retry/token/account-routing changes
 
-## Completion
+## Production mutation budget
+
+Exactly 0.
+
+## Completion / C2
 
 When complete:
 - status -> `review_required`
 - next_owner -> `chatgpt`
 - prepend/update `.agent/CODEX_REPORT_2.md`
-- control-file sync only if no source changes were necessary
-- fresh-check `origin/main`
-- STOP for C2
 
+Report must include:
+1. fresh source commit
+2. exact production preflight findings
+3. exact obsolete object names
+4. exact intended brand-scoped objects
+5. whether any ON CONFLICT / RPC dependency required adjustment
+6. migration candidate path
+7. disposable baseline shape
+8. apply result
+9. two-brand coexistence proof
+10. same-brand duplicate rejection proof
+11. rollback proof
+12. tests
+13. changed files
+14. production mutation = 0 proof
+15. remaining risks
+16. exact recommended production rollout gate
+17. commit/push/fresh-origin verification
 
-## Final C2 — 2026-09-23
+Then STOP for C2.
 
-PASS. Read-only X autopost foundation / multibrand / Netlify readiness audit accepted.
+## Next gate after PASS
 
-Independent review confirmed the central P0 finding in production:
-- `posting_windows` has both brand-scoped UNIQUE `(brand_id, post_type, slot_no)` and legacy global UNIQUE `(post_type, slot_no)`.
-- `scheduled_posts` has both brand-scoped UNIQUE `(brand_id, schedule_date, post_type, slot_no)` and legacy global UNIQUE `(schedule_date, post_type, slot_no)`.
-- `publish_claims` has both brand-scoped UNIQUE `(brand_id, post_type, date_jst)` and legacy global UNIQUE `(post_type, date_jst)`.
-- production aggregate baseline independently matched the audit: brands=4, X accounts=3, publish-enabled X accounts=2, posting_windows=19, scheduled_posts=267, execution_logs=643, publish_claims=15, fingerprints=51, daily_content_plans=0.
-- no production mutation was required or performed for C2.
-
-Audit conclusion accepted:
-- current platform is partially multibrand but not yet safe for independent multibrand scheduling/publishing at scale.
-- posting core remains in Supabase; Netlify is a management-UI hosting candidate only.
-- existing Vercel Production must remain until Netlify preview/canary and rollback proof pass.
-- the next implementation gate is a disposable-only migration/rollback proof for removing the three obsolete global uniqueness blockers while retaining brand-scoped uniqueness. No production apply is authorized by this C2.
+Only after C2 PASS:
+- separately authorize production preflight + exact migration apply
+- read back constraints/indexes and conflict behavior
+- do not combine with publisher/account/token refactor in the same production gate
