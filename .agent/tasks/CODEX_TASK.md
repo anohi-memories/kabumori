@@ -1,35 +1,30 @@
 # Codex Task
 
-- task_id: kabumori-important-news-gpt6-schema-source-final-merge-20260923
+- task_id: kabumori-important-news-gpt6-production-rollout-20260923
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
-- priority: high
-- recommended_model: Luna
-- purpose: Vercel required checkが成功したPR #9をfresh mainへ最終確認後mergeする。production migration apply / Function deployは禁止。
+- status: ready
+- next_owner: codex
+- priority: critical
+- recommended_model: GPT-6 Sol Medium
+- purpose: C1 PASS済みのGPT-6 Important News sourceを、承認済みの単一migration適用 → constraint read-back → reviewed `important-news-monitor` deploy → 自然実行確認の順でproductionへ安全に反映する。Personalized Reportsや9/18再生成は混ぜない。
 
 ## C1 decision
 
-Previous task `kabumori-important-news-gpt6-schema-source-merge-20260923` is **PASS to resume merge**.
+Previous task `kabumori-important-news-gpt6-schema-source-final-merge-20260923` is **PASS**.
 
-Verified at C1:
-- PR #9 remains open and mergeable.
-- Current PR head: `ae78de17b2eb461b06e1674cdb045a78f7dbf620`.
-- Required Vercel check on that exact head is now **success**.
-- The retry commit from prior head `ebe3c588ec4edb080848d706d8ec5cf8ada42b1d` to `ae78de17b2eb461b06e1674cdb045a78f7dbf620` has **zero file changes**; it only retriggered the check.
-- Main has advanced only one control/report commit since PR base `4d27304d4dce804c2ae5226fa338252e17f4560a`, touching only:
-  - `.agent/ACTIVE_TASK.md`
-  - `.agent/CODEX_REPORT.md`
-  - `.agent/CURRENT_STATE.md`
-  - `.agent/tasks/CODEX_TASK.md`
-- No approved PR #9 implementation/migration/test file has main-side semantic drift.
-- Previously verified candidate behavior/tests remain:
-  - migration + targeted tests 173 / 0
-  - full Important News 424 / 0
-  - changed logic/test checks passed
-  - git diff --check passed
-- production mutation = 0.
+Verified:
+- PR #9 is merged and closed.
+- merge/resulting main: `83d994634f9b4891b8d939723939187b76bedaed`
+- Vercel on resulting main: success.
+- all 12 approved source/migration/test files were read back as matching the final PR head.
+- source-level active routes are:
+  - judgement first-pass -> `gpt-6-luna`
+  - judgement escalation -> `gpt-6-sol`
+  - breaking-market search -> `gpt-6-luna`
+  - post draft/Fact/Voice/retries -> `gpt-6-luna`
+- production migration and `important-news-monitor` deployment have **not** yet been performed.
+- production mutation from prior H1 = 0.
 
 ## Mandatory startup
 
@@ -38,78 +33,126 @@ Verified at C1:
 3. Read this TASK
 4. Read `.agent/CODEX_REPORT.md`
 5. Fresh fetch `origin/main`
-6. Re-check PR #9 head/status and required checks
-7. Confirm no new semantic overlap in the 12 approved files
-8. Confirm H2/G1/G2 ownership remains non-conflicting
+6. Confirm main still contains the exact reviewed migration:
+   - `supabase/migrations/20260923035652_allow_gpt6_important_news_model_metadata.sql`
+7. Confirm no H2/G1/G2 ownership conflict on:
+   - `important_news_candidates` CHECK constraints
+   - `important-news-monitor` Edge Function
+   - relevant Cron/config
+8. Confirm current production schema read-only before mutation:
+   - both CHECK constraints exist under the reviewed names
+   - both still permit only GPT-5.6 IDs before apply
+9. Do **not** use blind `supabase db push`, `--include-all`, migration-history repair, or broad migration application.
 
-## Final merge rules
+## Production rollout sequence
 
-- Do not create another source change just to retrigger CI.
-- If current PR head still has Vercel success and there is no semantic overlap, merge PR #9.
-- No branch-protection bypass.
-- If Vercel turns failing/pending again, STOP for C1.
-- Do not alter the approved migration or GPT-6 routing.
+### Step 1 — exact migration apply
 
-## Read-back after merge
+Apply **only**:
+`20260923035652_allow_gpt6_important_news_model_metadata.sql`
 
-Verify:
-- PR #9 is merged/closed
-- resulting main SHA
-- all 12 approved candidate files on main match the final PR head
-- active Important News runtime routes:
-  - judgement first pass -> `gpt-6-luna`
-  - judgement escalation -> `gpt-6-sol`
-  - breaking-market search -> `gpt-6-luna`
-  - post draft/Fact/Voice/retries -> `gpt-6-luna`
-- migration candidate is on main but **not applied**
-- GPT-5.6 references in runtime area are historical ledger/test fixtures only
+No other migration may be applied.
 
-## Production restrictions
+Immediately read back both production CHECK constraints and prove:
+- `important_news_candidates_judgement_model_check`
+- `important_news_candidates_generation_model_check`
 
-Still forbidden:
-- applying `20260923035652_allow_gpt6_important_news_model_metadata.sql`
-- Edge Function deploy
-- DB write
-- Cron/config/secrets change
-- report regeneration/backfill
-- manual X/Push
+allow:
+- NULL
+- `gpt-5.6-luna`
+- `gpt-5.6-sol`
+- `gpt-6-luna`
+- `gpt-6-sol`
 
-Production mutation must remain 0.
+and no unrelated schema/RLS/grant/index/trigger/RPC change occurred.
+
+If exact apply or read-back is ambiguous, STOP for C1 before Function deploy.
+
+### Step 2 — deploy reviewed Function only
+
+Deploy only:
+- `supabase/functions/important-news-monitor`
+
+Use exact source from current reviewed main. Do not edit source during rollout.
+
+Read back deployed Function metadata/version/source hash if supported and verify it corresponds to reviewed source.
+
+Do not deploy:
+- `personalized-reports`
+- `important-news-shadow`
+- `x-test-post`
+- any social-mobile Function
+- any other Function.
+
+### Step 3 — natural runtime verification
+
+Do not manually inject a candidate and do not manually post to X.
+
+Observe natural scheduled/runtime activity after deploy and verify, when a qualifying model call naturally occurs:
+- stored judgement/generation model metadata accepts GPT-6 IDs without constraint error
+- usage records use GPT-6 model IDs/rates
+- no new `CHECK constraint` / model-ID persistence error
+- no unexpected increase in failure state attributable to the rollout
+
+If no qualifying candidate occurs in the bounded observation window, report that explicitly; do not manufacture traffic.
+
+## Safety restrictions
+
+Do not change:
+- Cron schedule
+- provider/source allowlists
+- search cadence/query strategy
+- secrets/Vault/provider credentials
+- publish/auto-publish gates
+- X OAuth
+- Push
+- app UI
+- Portfolio
+- Personalized Reports
+- 9/18 close report
+- Vercel/Netlify settings
+
+No manual/synthetic X post or Push.
+
+## Verification
+
+Record:
+- preflight production constraint definitions
+- exact migration application result
+- postflight constraint definitions
+- Edge Function before/after version/hash where available
+- source-to-deployed read-back evidence where available
+- natural runtime observation result
+- any errors
+- exact production mutations performed
+
+## Stop conditions
+
+STOP immediately for C1 if:
+- production constraint names/definitions differ materially from reviewed assumptions
+- exact single-migration apply cannot be guaranteed
+- migration applies but read-back differs from expected
+- Function source cannot be matched to reviewed main
+- another workstream owns the same DB constraints/Function/config
+- deploy creates unexpected regression/error
 
 ## Handoff
 
 Update `.agent/CODEX_REPORT.md` with:
-1. pre-merge main SHA
-2. final PR head SHA
-3. required-check result
-4. merge/resulting main SHA
-5. 12-file read-back result
-6. active GPT-6 route confirmation
-7. production mutation = 0
-8. explicit remaining production rollout:
-   - exact migration apply
-   - read back both CHECK constraints
-   - deploy reviewed `important-news-monitor`
-   - natural runtime verification
-   - separately handle `personalized-reports` production deploy + 9/18 close regeneration
+1. preflight schema evidence
+2. exact migration apply method/result
+3. postflight schema evidence
+4. Function before/after metadata/hash
+5. natural runtime verification result
+6. any observed GPT-6 metadata/cost row evidence
+7. production mutations, explicitly enumerated
+8. anything still unverified
+9. confirmation that Personalized Reports and 9/18 regeneration were untouched
+10. recommendation for C1
 
 On completion:
 - status -> `review_required`
 - next_owner -> `chatgpt`
 - STOP for C1
 
-**推奨モデル：Luna。**
-
-
-## Report
-
-- task_id: `kabumori-important-news-gpt6-schema-source-final-merge-20260923`
-- result: `review_required` — PR #9 merged after Vercel success; stop for C1.
-- changed_files: PR #9's 12 approved files; this H1 additionally synced only `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, `.agent/tasks/CODEX_TASK.md`, and `.agent/CODEX_REPORT.md` control/report files.
-- tests: reviewed candidate 173 targeted/migration tests and 424 full Important News tests passed; exact 12-file read-back matched PR head. Vercel required check passed.
-- commit_hash: merge `83d994634f9b4891b8d939723939187b76bedaed` (report/control sync commits follow on main).
-- push: PR #9 merged; H1 control/report sync committed to main.
-- deploy: no Supabase Function deployment; no production migration applied.
-- remaining_issues: exact GPT-6 metadata migration, constraint read-back, reviewed `important-news-monitor` deployment and natural-runtime verification require their separately approved next steps. Personalized Reports rollout and 9/18 close handling remain separate.
-- safety_checks: no branch-protection bypass; production mutation 0; no DB write, Cron/config/secret change, X post, or Push.
-- next_recommendation: C1 review this merged source result, then separately authorize the exact migration and Function deployment.
+**推奨モデル：GPT-6 Sol Medium。**
