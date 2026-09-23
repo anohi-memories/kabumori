@@ -3,8 +3,8 @@
 - task_id: kabumori-important-news-monitor-caller-auth-remediation-candidate-20260923
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: GPT-6 Sol Medium
 - purpose: release-readiness auditで見つかった `important-news-monitor` のcaller-auth境界を、既存Cronを壊さずfail-closedにするsource-only remediation candidateを作る。production設定/Function deploy/auto_publish変更は禁止。
@@ -107,3 +107,8 @@ Then:
 - STOP for C1
 
 **推奨モデル：GPT-6 Sol Medium。**
+
+
+## H1 stop finding — caller contract is unauthenticated (2026-09-23)
+
+The production caller audit found no safe source-only authentication change that preserves existing scheduled execution. All four active pg_cron jobs invoke the same Function with Content-Type only; they send no Authorization, apikey, or dedicated secret. Any Function-side gate or verify_jwt=true would reject these current calls, including publish_ready. The task forbids the required Cron/secret changes, so stop before changing Function source. Re-scope as a coordinated caller credential + storage + Function enforcement rollout with explicit approval; do not weaken the gate to preserve unauthenticated calls.
