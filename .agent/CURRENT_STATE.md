@@ -24,20 +24,23 @@
 
 - Codex slot 2: current TASK is authoritative; keep ownership isolated from H1/G2. No overlap with Important News caller-auth or consumer mobile files is permitted.
 
-- Claude slot 1: existing market-report shared-platform task remains its own workstream. Do not repurpose unless separately instructed.
-
-- Claude slot 2: `ready` — `kabumori-release-mobile-blockers-phase1-auth-account-settings-20260924`
+- Claude slot 1: `ready` — `kabumori-release-mobile-blockers-phase1-auth-account-settings-20260924`
   - Main release-completion workstream for consumer mobile.
   - Scope: Auth/profile lifecycle, password recovery, account deletion source candidate, Settings/Account/Privacy/Terms/Support/Contact/Logout routes and tests.
   - Dedicated branch/PR; production mutation 0.
   - Must not touch Important News caller-auth, x-test-post/social-mobile, market-report, Netlify/Vercel settings, TestFlight/App Store Connect.
   - Recommended model: Opus 5.5.
 
+- Claude slot 2: `idle` — empty
+  - Previous mobile release blocker task moved to G1.
+  - Available for a new non-conflicting workstream.
+
 ## Parallel safety
 
 - H1 owns only PR #12 merge/read-back and related Important News caller-auth source scope.
-- G2 owns consumer mobile Auth/account/settings/legal source scope.
-- H1 and G2 are intentionally separated and may run in parallel if fresh-origin checks confirm no file/DB-object overlap.
+- G1 owns consumer mobile Auth/account/settings/legal source scope.
+- G2 is intentionally free for a new non-conflicting workstream.
+- H1 and G1 are intentionally separated and may run in parallel if fresh-origin checks confirm no file/DB-object overlap.
 - G1/H2 remain separate existing workstreams; same file, migration, RPC, Edge Function, workflow, or production setting must never be edited in parallel.
 - push前にfresh `origin/main`確認。既存未コミット変更は他workstream所有として触らない。
 
