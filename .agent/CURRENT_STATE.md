@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-23 JST (H1 GPT-6 Luna model-upgrade pushed to PR #8; review_required for C1; production mutation 0)
+- checked_at: 2026-09-23 JST (C1 PASS on GPT-6 Luna upgrade; PR #8 final freshen/merge queued; production mutation 0)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,11 +14,15 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `kabumori-gpt6-luna-model-upgrade-on-pr8-20260923`
-  - PR #8 remains open at `6f5b184bfd7406d356f2f499342013774fec02d5`; required Vercel check passed.
-  - Important News app-copy draft/Fact and personalized reports draft/Fact now use GPT-6 Luna; C1 review is next.
-  - No Sol fallback, display-time AI, production deploy, migration, or backfill.
-  - Production mutation 0.
+- Codex slot 1: `ready` — `kabumori-pr8-gpt6-news-portfolio-final-merge-20260923`
+  - C1 PASS on GPT-6 Luna upgrade.
+  - Official model id/pricing verified: `gpt-6-luna`, $0.10 input / $0.50 output per 1M tokens for standard short-context pricing.
+  - Important News app-copy draft/Fact and Personalized Reports draft/Fact use GPT-6 Luna on PR #8.
+  - GPT-6 Luna cost estimator entries/tests are included.
+  - PR #8 required Vercel status is success and PR is git-mergeable.
+  - Current main advanced 25 commits from the old merge base, but none touch the 11 approved PR #8 files.
+  - Next H1 freshens PR #8 onto latest main and merges if required checks remain green.
+  - No production deploy/migration/backfill yet. Production mutation 0.
   - Recommended model: Luna.
 
 - Codex slot 2: `ready` — `social-mobile-app-phase20-production-history-access-rpc-rollout-20260923`
