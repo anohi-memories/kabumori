@@ -55,8 +55,10 @@ import { buildFedStatementDiffPipeline, persistFedStatementDiff } from "./mic_fe
 import type { FedStatementRecord } from "./mic_fed_statement_diff.ts";
 import {
   executeFedStatementAiAction,
+  executeFedStatementAiUsageRepairAction,
   FedStatementAiActionError,
   INTERPRET_FED_STATEMENT_DIFF_ACTION,
+  REPAIR_FED_STATEMENT_DIFF_USAGE_ACTION,
 } from "./mic_fed_statement_ai_action.ts";
 import {
   buildMacroReleaseEvent,
@@ -496,11 +498,14 @@ Deno.serve(async (req) => {
     allowedFedDuplicateEventIds?: unknown;
   };
   if (requestBody.action !== undefined) {
-    if (requestBody.action !== INTERPRET_FED_STATEMENT_DIFF_ACTION || typeof requestBody.diff_id !== "string") {
+    if ((requestBody.action !== INTERPRET_FED_STATEMENT_DIFF_ACTION &&
+      requestBody.action !== REPAIR_FED_STATEMENT_DIFF_USAGE_ACTION) || typeof requestBody.diff_id !== "string") {
       return response({ error: "INVALID_ACTION_REQUEST" }, 400);
     }
     try {
-      const result = await executeFedStatementAiAction(ctx, requestBody.diff_id, Deno.env.get("OPENAI_API_KEY") ?? "");
+      const result = requestBody.action === INTERPRET_FED_STATEMENT_DIFF_ACTION
+        ? await executeFedStatementAiAction(ctx, requestBody.diff_id, Deno.env.get("OPENAI_API_KEY") ?? "")
+        : await executeFedStatementAiUsageRepairAction(ctx, requestBody.diff_id);
       return response(result);
     } catch (error) {
       if (error instanceof FedStatementAiActionError) return response({ error: error.code }, error.status);

@@ -7,11 +7,53 @@ import {
   type FedStatementRecord,
 } from "./mic_fed_statement_diff.ts";
 import { FED_STATEMENT_LUNA_MODEL } from "./mic_fed_statement_ai_logic.ts";
-import { recordAiUsageEvent, type AiUsageEvent } from "./mic_ai_usage_logic.ts";
+import type { AiUsageEvent } from "./mic_ai_usage_logic.ts";
 import { restHeaders, type RestContext } from "./mic_writer_logic.ts";
 
 export const FED_STATEMENT_DIFF_TABLE = "mic_fed_statement_diffs" as const;
 export const FED_STATEMENT_DIFF_FEATURE = "mic_fed_statement_diff" as const;
+
+export type FedStatementAiUsageReceipt = {
+  feature: typeof FED_STATEMENT_DIFF_FEATURE;
+  diff_id: string;
+  diff_hash: string;
+  prompt_version: string;
+  model: typeof FED_STATEMENT_LUNA_MODEL;
+  input_tokens: number;
+  output_tokens: number;
+  web_search_calls: 0;
+  cost_usd: number;
+  generated_at: string;
+  usage_event_key: string;
+};
+
+export function fedStatementAiUsageEventKey(diffId: string, promptVersion: string, diffHash: string): string {
+  return `${FED_STATEMENT_DIFF_FEATURE}:${diffId}:${promptVersion}:${diffHash}:${FED_STATEMENT_LUNA_MODEL}`;
+}
+
+export function buildFedStatementAiUsageReceipt(params: {
+  diffId: string;
+  diffHash: string;
+  promptVersion: string;
+  generatedAt: string;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}): FedStatementAiUsageReceipt {
+  return {
+    feature: FED_STATEMENT_DIFF_FEATURE,
+    diff_id: params.diffId,
+    diff_hash: params.diffHash,
+    prompt_version: params.promptVersion,
+    model: FED_STATEMENT_LUNA_MODEL,
+    input_tokens: params.inputTokens,
+    output_tokens: params.outputTokens,
+    web_search_calls: 0,
+    cost_usd: params.costUsd,
+    generated_at: params.generatedAt,
+    usage_event_key: fedStatementAiUsageEventKey(params.diffId, params.promptVersion, params.diffHash),
+  };
+}
 
 export type FedStatementDiffRow = {
   current_event_id: string;
@@ -29,14 +71,14 @@ export type FedStatementDiffRow = {
   model: string | null;
   prompt_version: string;
   generated_at: string | null;
+  ai_usage_receipt: FedStatementAiUsageReceipt | null;
+  ai_usage_recorded_at: string | null;
 };
 
 export function buildFedStatementDiffRow(
   current: FedStatementRecord,
   previous: FedStatementRecord | null,
   diff: FedStatementDeterministicDiff,
-  aiInterpretation: FedStatementAiOutput | null = null,
-  generatedAt: string | null = null,
 ): FedStatementDiffRow {
   const changed = previous
     ? diff.addedParagraphs.length + diff.removedParagraphs.length + diff.modifiedParagraphs.length
@@ -55,10 +97,12 @@ export function buildFedStatementDiffRow(
       : 0,
     deterministic_diff: diff,
     semantic_buckets: previous ? diff.buckets : [],
-    ai_interpretation: aiInterpretation,
-    model: aiInterpretation ? FED_STATEMENT_LUNA_MODEL : null,
+    ai_interpretation: null,
+    model: null,
     prompt_version: FED_STATEMENT_DIFF_PROMPT_VERSION,
-    generated_at: generatedAt,
+    generated_at: null,
+    ai_usage_receipt: null,
+    ai_usage_recorded_at: null,
   };
 }
 
@@ -126,10 +170,18 @@ export async function persistFedStatementDiff(
 ): Promise<{ id: string | null; outcome: "inserted" | "duplicate" | "replaced_baseline" | "recomputed" }> {
   const lookupUrl = `${ctx.supabaseUrl}/rest/v1/${FED_STATEMENT_DIFF_TABLE}` +
     `?current_event_id=eq.${encodeURIComponent(row.current_event_id)}` +
-    `&select=id,previous_event_id,diff_hash,prompt_version&limit=2`;
+    `&select=id,previous_event_id,diff_hash,prompt_version,ai_interpretation,ai_usage_receipt,ai_usage_recorded_at&limit=2`;
   const lookup = await fetchImpl(lookupUrl, { headers: restHeaders(ctx.secretKey) });
   if (!lookup.ok) throw new Error(`FED_STATEMENT_DIFF_LOOKUP_FAILED:${lookup.status}`);
-  const existing = await lookup.json() as Array<{ id?: unknown; previous_event_id?: unknown; diff_hash?: unknown; prompt_version?: unknown }>;
+  const existing = await lookup.json() as Array<{
+    id?: unknown;
+    previous_event_id?: unknown;
+    diff_hash?: unknown;
+    prompt_version?: unknown;
+    ai_interpretation?: unknown;
+    ai_usage_receipt?: unknown;
+    ai_usage_recorded_at?: unknown;
+  }>;
   if (existing.length > 1) throw new Error("FED_STATEMENT_DIFF_MULTIPLE_ACTIVE_ROWS");
   const current = existing[0];
   if (current) {
@@ -139,15 +191,38 @@ export async function persistFedStatementDiff(
     if (previousEventId === row.previous_event_id && current.diff_hash === row.diff_hash && current.prompt_version === row.prompt_version) {
       return { id, outcome: "duplicate" };
     }
+    if (current.ai_usage_receipt !== null && current.ai_usage_receipt !== undefined &&
+      (current.ai_usage_recorded_at === null || current.ai_usage_recorded_at === undefined)) {
+      throw new Error("FED_STATEMENT_DIFF_PENDING_AI_USAGE");
+    }
+    if (current.ai_interpretation !== null && current.ai_interpretation !== undefined &&
+      (current.ai_usage_receipt === null || current.ai_usage_receipt === undefined)) {
+      throw new Error("FED_STATEMENT_DIFF_AI_RECEIPT_MISSING");
+    }
+    const previouslyInterpreted = current.ai_interpretation !== null && current.ai_interpretation !== undefined;
+    const aiStateFilter = previouslyInterpreted
+      ? "ai_interpretation=not.is.null&ai_usage_receipt=not.is.null&ai_usage_recorded_at=not.is.null"
+      : "ai_interpretation=is.null&ai_usage_receipt=is.null";
+    const previousFilter = previousEventId === null
+      ? "previous_event_id=is.null"
+      : `previous_event_id=eq.${encodeURIComponent(previousEventId)}`;
     const replacement = await fetchImpl(
-      `${ctx.supabaseUrl}/rest/v1/${FED_STATEMENT_DIFF_TABLE}?id=eq.${encodeURIComponent(id)}`,
+      `${ctx.supabaseUrl}/rest/v1/${FED_STATEMENT_DIFF_TABLE}` +
+        `?id=eq.${encodeURIComponent(id)}` +
+        `&diff_hash=eq.${encodeURIComponent(String(current.diff_hash))}` +
+        `&prompt_version=eq.${encodeURIComponent(String(current.prompt_version))}` +
+        `&${previousFilter}&${aiStateFilter}`,
       {
         method: "PATCH",
-        headers: restHeaders(ctx.secretKey, "return=minimal"),
+        headers: restHeaders(ctx.secretKey, "return=representation"),
         body: JSON.stringify(row),
       },
     );
     if (!replacement.ok) throw new Error(`FED_STATEMENT_DIFF_UPDATE_FAILED:${replacement.status}`);
+    const replacedRows = await replacement.json() as Array<{ id?: unknown }>;
+    if (replacedRows.length !== 1 || replacedRows[0]?.id !== id) {
+      throw new Error("FED_STATEMENT_DIFF_CONCURRENT_UPDATE");
+    }
     return { id, outcome: previousEventId === null && row.previous_event_id !== null ? "replaced_baseline" : "recomputed" };
   }
 
@@ -195,6 +270,9 @@ export async function persistFedStatementAiInterpretation(
     claimMarker: string;
     interpretation: FedStatementAiOutput;
     generatedAt: string;
+    inputTokens: number;
+    outputTokens: number;
+    costUsd: number;
   },
   fetchImpl: typeof fetch = fetch,
 ): Promise<boolean> {
@@ -204,7 +282,8 @@ export async function persistFedStatementAiInterpretation(
       `&diff_hash=eq.${encodeURIComponent(params.diffHash)}` +
       `&prompt_version=eq.${encodeURIComponent(params.promptVersion)}` +
       `&model=eq.${encodeURIComponent(params.claimMarker)}` +
-      `&ai_interpretation=is.null&generated_at=is.null`,
+      `&ai_interpretation=is.null&generated_at=is.null` +
+      `&ai_usage_receipt=is.null&ai_usage_recorded_at=is.null`,
     {
       method: "PATCH",
       headers: restHeaders(ctx.secretKey, "return=representation"),
@@ -213,6 +292,8 @@ export async function persistFedStatementAiInterpretation(
         model: FED_STATEMENT_LUNA_MODEL,
         prompt_version: params.promptVersion,
         generated_at: params.generatedAt,
+        ai_usage_receipt: buildFedStatementAiUsageReceipt(params),
+        ai_usage_recorded_at: null,
       }),
     },
   );
@@ -223,11 +304,20 @@ export async function persistFedStatementAiInterpretation(
 
 export async function persistFedStatementAiUsage(
   ctx: RestContext,
-  inputTokens: number,
-  outputTokens: number,
-  costUsd: number,
   diffId: string,
   fetchImpl: typeof fetch = fetch,
-): Promise<{ id: number | null }> {
-  return await recordAiUsageEvent(ctx, buildFedStatementAiUsageEvent(diffId, inputTokens, outputTokens, costUsd), fetchImpl);
+): Promise<{ id: number; status: "recorded" | "already_recorded" }> {
+  const result = await fetchImpl(`${ctx.supabaseUrl}/rest/v1/rpc/record_mic_fed_statement_diff_usage`, {
+    method: "POST",
+    headers: restHeaders(ctx.secretKey),
+    body: JSON.stringify({ p_diff_id: diffId }),
+  });
+  if (!result.ok) throw new Error(`FED_STATEMENT_AI_USAGE_RPC_FAILED:${result.status}`);
+  const rows = await result.json() as unknown;
+  if (!Array.isArray(rows) || rows.length !== 1 ||
+    !Number.isSafeInteger(rows[0]?.usage_event_id) || rows[0].usage_event_id <= 0 ||
+    (rows[0]?.result_status !== "recorded" && rows[0]?.result_status !== "already_recorded")) {
+    throw new Error("FED_STATEMENT_AI_USAGE_RPC_MALFORMED");
+  }
+  return { id: rows[0].usage_event_id, status: rows[0].result_status };
 }

@@ -20,6 +20,7 @@ import {
 import { restHeaders, type RestContext } from "./mic_writer_logic.ts";
 
 export const INTERPRET_FED_STATEMENT_DIFF_ACTION = "interpret_fed_statement_diff" as const;
+export const REPAIR_FED_STATEMENT_DIFF_USAGE_ACTION = "repair_fed_statement_diff_usage" as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const HEX_HASH_PATTERN = /^[0-9a-f]{64}$/i;
 const CLAIM_PREFIX = "fed-ai-claim:";
@@ -51,6 +52,8 @@ type DiffRow = {
   prompt_version: string;
   generated_at: string | null;
   updated_at?: string;
+  ai_usage_receipt: unknown;
+  ai_usage_recorded_at: string | null;
 };
 type EventRow = {
   id: string;
@@ -77,6 +80,12 @@ export type FedStatementAiActionResult =
   | { status: "interpreted"; diff_id: string; model: string; input_tokens: number; output_tokens: number; cost_usd: number; usage_event_id: number | null }
   | { status: "already_interpreted"; diff_id: string }
   | { status: "in_progress"; diff_id: string };
+
+export type FedStatementAiUsageRepairResult = {
+  status: "usage_recorded" | "usage_already_recorded";
+  diff_id: string;
+  usage_event_id: number;
+};
 
 type ActionDependencies = {
   fetchImpl?: typeof fetch;
@@ -199,7 +208,7 @@ export async function executeFedStatementAiAction(
   const diff = await readOne<DiffRow>(
     ctx,
     FED_STATEMENT_DIFF_TABLE,
-    `id=eq.${encodeURIComponent(diffId)}&select=id,current_event_id,previous_event_id,current_document_hash,previous_document_hash,diff_hash,meeting_date,previous_meeting_date,changed_paragraph_count,material_change_count,deterministic_diff,semantic_buckets,ai_interpretation,model,prompt_version,generated_at,updated_at&limit=2`,
+    `id=eq.${encodeURIComponent(diffId)}&select=id,current_event_id,previous_event_id,current_document_hash,previous_document_hash,diff_hash,meeting_date,previous_meeting_date,changed_paragraph_count,material_change_count,deterministic_diff,semantic_buckets,ai_interpretation,model,prompt_version,generated_at,updated_at,ai_usage_receipt,ai_usage_recorded_at&limit=2`,
     fetchImpl,
   );
   if (!diff) throw new FedStatementAiActionError("FED_AI_DIFF_NOT_FOUND", 404);
@@ -214,6 +223,12 @@ export async function executeFedStatementAiAction(
       throw new FedStatementAiActionError("FED_AI_INTERPRETATION_STATE_INCONSISTENT");
     }
     return { status: "already_interpreted", diff_id: diffId };
+  }
+  if (
+    (diff.ai_usage_receipt !== null && diff.ai_usage_receipt !== undefined) ||
+    (diff.ai_usage_recorded_at !== null && diff.ai_usage_recorded_at !== undefined)
+  ) {
+    throw new FedStatementAiActionError("FED_AI_USAGE_STATE_INCONSISTENT");
   }
   if (diff.generated_at !== null && diff.generated_at !== undefined) throw new FedStatementAiActionError("FED_AI_GENERATION_STATE_INCONSISTENT");
   const observedClaimTimestamp = claimTimestamp(diff.model) ?? rowUpdatedTimestamp(diff.updated_at);
@@ -324,7 +339,7 @@ export async function executeFedStatementAiAction(
     ? `model=eq.${encodeURIComponent(diff.model!)}`
     : "model=is.null";
   const claimResponse = await fetchImpl(
-    `${ctx.supabaseUrl}/rest/v1/${FED_STATEMENT_DIFF_TABLE}?id=eq.${encodeURIComponent(diffId)}&diff_hash=eq.${encodeURIComponent(diff.diff_hash)}&prompt_version=eq.${encodeURIComponent(FED_STATEMENT_DIFF_PROMPT_VERSION)}&ai_interpretation=is.null&generated_at=is.null&${claimModelFilter}`,
+    `${ctx.supabaseUrl}/rest/v1/${FED_STATEMENT_DIFF_TABLE}?id=eq.${encodeURIComponent(diffId)}&diff_hash=eq.${encodeURIComponent(diff.diff_hash)}&prompt_version=eq.${encodeURIComponent(FED_STATEMENT_DIFF_PROMPT_VERSION)}&ai_interpretation=is.null&generated_at=is.null&ai_usage_receipt=is.null&ai_usage_recorded_at=is.null&${claimModelFilter}`,
     {
       method: "PATCH",
       headers: restHeaders(ctx.secretKey, "return=representation"),
@@ -353,16 +368,27 @@ export async function executeFedStatementAiAction(
       !Number.isInteger(generated.outputTokens) || generated.outputTokens < 0 || !Number.isFinite(generated.costUsd) || generated.costUsd < 0) {
       throw new FedStatementAiActionError("FED_AI_USAGE_INVALID", 502);
     }
+    const generatedAt = (dependencies.now?.() ?? new Date()).toISOString();
     const saved = await persistFedStatementAiInterpretation(ctx, {
       diffId,
       diffHash: diff.diff_hash,
       promptVersion: FED_STATEMENT_DIFF_PROMPT_VERSION,
       claimMarker: marker,
       interpretation: generated.output,
-      generatedAt: (dependencies.now?.() ?? new Date()).toISOString(),
+      generatedAt,
+      inputTokens: generated.inputTokens,
+      outputTokens: generated.outputTokens,
+      costUsd: generated.costUsd,
     }, fetchImpl);
     if (!saved) throw new FedStatementAiActionError("FED_AI_RESULT_NOT_PERSISTED", 502);
-    const usage = await persistFedStatementAiUsage(ctx, generated.inputTokens, generated.outputTokens, generated.costUsd, diffId, fetchImpl);
+    let usage: Awaited<ReturnType<typeof persistFedStatementAiUsage>>;
+    try {
+      usage = await persistFedStatementAiUsage(ctx, diffId, fetchImpl);
+    } catch {
+      // The interpretation and exact accounting receipt are already durable.
+      // The separate repair action can complete the ledger without Luna.
+      throw new FedStatementAiActionError("FED_AI_USAGE_PENDING_REPAIR", 503);
+    }
     return {
       status: "interpreted",
       diff_id: diffId,
@@ -379,5 +405,23 @@ export async function executeFedStatementAiAction(
     // after the TTL if no completed interpretation was persisted.
     if (error instanceof FedStatementAiActionError) throw error;
     throw new FedStatementAiActionError("FED_AI_EXECUTION_FAILED", 502);
+  }
+}
+
+export async function executeFedStatementAiUsageRepairAction(
+  ctx: RestContext,
+  diffId: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<FedStatementAiUsageRepairResult> {
+  if (!UUID_PATTERN.test(diffId)) throw new FedStatementAiActionError("FED_AI_DIFF_ID_INVALID", 400);
+  try {
+    const usage = await persistFedStatementAiUsage(ctx, diffId, fetchImpl);
+    return {
+      status: usage.status === "recorded" ? "usage_recorded" : "usage_already_recorded",
+      diff_id: diffId,
+      usage_event_id: usage.id,
+    };
+  } catch {
+    throw new FedStatementAiActionError("FED_AI_USAGE_REPAIR_FAILED", 503);
   }
 }

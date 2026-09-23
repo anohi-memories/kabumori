@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { executeFedStatementAiAction, FED_STATEMENT_AI_CLAIM_TTL_MS } from "./mic_fed_statement_ai_action.ts";
+import {
+  executeFedStatementAiAction,
+  executeFedStatementAiUsageRepairAction,
+  FED_STATEMENT_AI_CLAIM_TTL_MS,
+} from "./mic_fed_statement_ai_action.ts";
 import { computeFedStatementDiffHash, FED_STATEMENT_DIFF_PROMPT_VERSION, type FedStatementDeterministicDiff } from "./mic_fed_statement_diff.ts";
 import { FED_STATEMENT_LUNA_MODEL, type FedStatementAiRequestResult } from "./mic_fed_statement_ai_logic.ts";
 import type { FedStatementAiInput, FedStatementAiOutput } from "./mic_fed_statement_diff.ts";
@@ -74,6 +78,8 @@ function makeFixture() {
     model: null,
     generated_at: null,
     updated_at: "2026-09-23T12:00:00.000Z",
+    ai_usage_receipt: null,
+    ai_usage_recorded_at: null,
   };
   const event = (id: string, date: string, hash: string, decision: string, url: string, lower: number, upper: number) => ({
     id,
@@ -117,6 +123,8 @@ function makeFixture() {
       const filterModel = url.searchParams.get("model");
       if ((filterModel === "is.null" && diff.model !== null) ||
         (filterModel?.startsWith("eq.") && filterModel.slice(3) !== diff.model) ||
+        (url.searchParams.get("ai_usage_receipt") === "is.null" && diff.ai_usage_receipt !== null) ||
+        (url.searchParams.get("ai_usage_recorded_at") === "is.null" && diff.ai_usage_recorded_at !== null) ||
         (diff.ai_interpretation !== null || diff.generated_at !== null)) {
         return Promise.resolve(new Response("[]"));
       }
@@ -128,6 +136,8 @@ function makeFixture() {
         diff.model = body.model;
         diff.prompt_version = body.prompt_version;
         diff.generated_at = body.generated_at;
+        diff.ai_usage_receipt = body.ai_usage_receipt;
+        diff.ai_usage_recorded_at = body.ai_usage_recorded_at;
         return Promise.resolve(new Response(JSON.stringify([{ id: DIFF_ID }])));
       }
       if (filterModel === "is.null" || filterModel?.startsWith("eq.")) {
@@ -136,11 +146,29 @@ function makeFixture() {
       }
       return Promise.resolve(new Response("[]"));
     }
-    if (method === "POST" && table === "ai_usage_events") {
+    if (method === "POST" && table === "record_mic_fed_statement_diff_usage") {
       if (failUsageInsert) return Promise.resolve(new Response("usage failed", { status: 503 }));
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-      usageRows.push(body);
-      return Promise.resolve(new Response(JSON.stringify([{ id: 51 }])));
+      const receipt = diff.ai_usage_receipt as Record<string, unknown> | null;
+      if (body.p_diff_id !== DIFF_ID || !receipt || !diff.ai_interpretation ||
+        receipt.diff_id !== DIFF_ID || receipt.diff_hash !== diff.diff_hash ||
+        receipt.prompt_version !== diff.prompt_version || receipt.model !== diff.model ||
+        receipt.generated_at !== diff.generated_at) {
+        return Promise.resolve(new Response("invalid receipt", { status: 409 }));
+      }
+      const existing = usageRows.find((row) => row.usage_event_key === receipt.usage_event_key);
+      if (!existing) {
+        usageRows.push({
+          ...receipt,
+          related_table: "mic_fed_statement_diffs",
+          related_id: DIFF_ID,
+        });
+      }
+      diff.ai_usage_recorded_at = "2026-09-23T12:00:01.000Z";
+      return Promise.resolve(new Response(JSON.stringify([{
+        usage_event_id: 51,
+        result_status: existing ? "already_recorded" : "recorded",
+      }])));
     }
     return Promise.resolve(new Response("unexpected request", { status: 500 }));
   }) as typeof fetch;
@@ -185,6 +213,19 @@ test("explicit action interprets an exact material diff and writes linked usage"
   assert.deepEqual(fixture.diff.ai_interpretation, validOutput);
   assert.equal(fixture.diff.model, FED_STATEMENT_LUNA_MODEL);
   assert.equal(fixture.diff.generated_at, "2026-09-23T12:00:00.000Z");
+  assert.deepEqual(fixture.diff.ai_usage_receipt, {
+    feature: "mic_fed_statement_diff",
+    diff_id: DIFF_ID,
+    diff_hash: DIFF_HASH,
+    prompt_version: FED_STATEMENT_DIFF_PROMPT_VERSION,
+    model: FED_STATEMENT_LUNA_MODEL,
+    input_tokens: 310,
+    output_tokens: 55,
+    web_search_calls: 0,
+    cost_usd: 0.0000585,
+    generated_at: "2026-09-23T12:00:00.000Z",
+    usage_event_key: `mic_fed_statement_diff:${DIFF_ID}:${FED_STATEMENT_DIFF_PROMPT_VERSION}:${DIFF_HASH}:${FED_STATEMENT_LUNA_MODEL}`,
+  });
   assert.equal(fixture.usageRows.length, 1);
   assert.equal(fixture.usageRows[0].feature, "mic_fed_statement_diff");
   assert.equal(fixture.usageRows[0].related_table, "mic_fed_statement_diffs");
@@ -342,13 +383,96 @@ test("interpretation persistence failure does not immediately free the claim", a
 test("usage ledger failure does not cause another AI call", async () => {
   const fixture = makeFixture();
   fixture.failUsageInsert(true);
-  await assert.rejects(() => execute(fixture), /FED_AI_EXECUTION_FAILED/);
+  await assert.rejects(() => execute(fixture), /FED_AI_USAGE_PENDING_REPAIR/);
   assert.deepEqual(fixture.diff.ai_interpretation, validOutput);
   assert.equal(fixture.diff.model, FED_STATEMENT_LUNA_MODEL);
+  assert.ok(fixture.diff.ai_usage_receipt);
   const result = await execute(fixture);
   assert.equal(result.status, "already_interpreted");
   assert.equal(fixture.aiCalls(), 1);
   assert.equal(fixture.usageRows.length, 0);
+});
+
+test("usage failure is repaired from durable receipt without Luna and twice remains one ledger row", async () => {
+  const fixture = makeFixture();
+  fixture.failUsageInsert(true);
+  await assert.rejects(() => execute(fixture), /FED_AI_USAGE_PENDING_REPAIR/);
+  fixture.failUsageInsert(false);
+  const first = await executeFedStatementAiUsageRepairAction(context, DIFF_ID, fixture.fetchImpl);
+  const second = await executeFedStatementAiUsageRepairAction(context, DIFF_ID, fixture.fetchImpl);
+  assert.equal(first.status, "usage_recorded");
+  assert.equal(second.status, "usage_already_recorded");
+  assert.equal(fixture.usageRows.length, 1);
+  assert.equal(fixture.aiCalls(), 1);
+});
+
+test("crash after ledger insert is repaired without duplicate ledger", async () => {
+  const fixture = makeFixture();
+  await execute(fixture);
+  fixture.diff.ai_usage_recorded_at = null;
+  const repaired = await executeFedStatementAiUsageRepairAction(context, DIFF_ID, fixture.fetchImpl);
+  assert.equal(repaired.status, "usage_already_recorded");
+  assert.equal(fixture.usageRows.length, 1);
+  assert.equal(fixture.aiCalls(), 1);
+});
+
+test("concurrent usage repair creates exactly one ledger row", async () => {
+  const fixture = makeFixture();
+  fixture.failUsageInsert(true);
+  await assert.rejects(() => execute(fixture), /FED_AI_USAGE_PENDING_REPAIR/);
+  fixture.failUsageInsert(false);
+  const results = await Promise.all([
+    executeFedStatementAiUsageRepairAction(context, DIFF_ID, fixture.fetchImpl),
+    executeFedStatementAiUsageRepairAction(context, DIFF_ID, fixture.fetchImpl),
+  ]);
+  assert.equal(fixture.usageRows.length, 1);
+  assert.deepEqual(new Set(results.map((result) => result.status)), new Set(["usage_recorded", "usage_already_recorded"]));
+  assert.equal(fixture.aiCalls(), 1);
+});
+
+test("usage repair fails closed for missing receipt or interpretation", async () => {
+  const fixture = makeFixture();
+  fixture.diff.ai_interpretation = validOutput;
+  fixture.diff.model = FED_STATEMENT_LUNA_MODEL;
+  fixture.diff.generated_at = "2026-09-23T12:00:00.000Z";
+  await assert.rejects(
+    () => executeFedStatementAiUsageRepairAction(context, DIFF_ID, fixture.fetchImpl),
+    /FED_AI_USAGE_REPAIR_FAILED/,
+  );
+  fixture.diff.ai_interpretation = null;
+  fixture.diff.ai_usage_receipt = { diff_id: DIFF_ID };
+  await assert.rejects(
+    () => executeFedStatementAiUsageRepairAction(context, DIFF_ID, fixture.fetchImpl),
+    /FED_AI_USAGE_REPAIR_FAILED/,
+  );
+  assert.equal(fixture.usageRows.length, 0);
+});
+
+test("usage repair rejects wrong diff hash and prompt version", async () => {
+  const fixture = makeFixture();
+  await execute(fixture);
+  fixture.usageRows.length = 0;
+  fixture.diff.ai_usage_recorded_at = null;
+  const receipt = fixture.diff.ai_usage_receipt as Record<string, unknown>;
+  receipt.diff_hash = "d".repeat(64);
+  await assert.rejects(
+    () => executeFedStatementAiUsageRepairAction(context, DIFF_ID, fixture.fetchImpl),
+    /FED_AI_USAGE_REPAIR_FAILED/,
+  );
+  receipt.diff_hash = DIFF_HASH;
+  receipt.prompt_version = "wrong-version";
+  await assert.rejects(
+    () => executeFedStatementAiUsageRepairAction(context, DIFF_ID, fixture.fetchImpl),
+    /FED_AI_USAGE_REPAIR_FAILED/,
+  );
+  assert.equal(fixture.usageRows.length, 0);
+});
+
+test("orphan receipt prevents a new AI claim", async () => {
+  const fixture = makeFixture();
+  fixture.diff.ai_usage_receipt = { diff_id: DIFF_ID };
+  await assert.rejects(() => execute(fixture), /FED_AI_USAGE_STATE_INCONSISTENT/);
+  assert.equal(fixture.aiCalls(), 0);
 });
 
 test("tampered deterministic hash is rejected without model execution", async () => {
