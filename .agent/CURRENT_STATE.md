@@ -41,7 +41,7 @@
 
 ## Parallel safety
 
-- H1 GPT-6 source PR #9 is merged; production migration/deploy/RPC remain unperformed.
+- H1 GPT-6 source PR #9 is merged; exact production migration is awaiting explicit user authorization after the apply guard rejection. No production mutation.
 - H2/G1/G2 implementation files are untouched by this H1.
 - 同じファイル・DB migration/RPC・Edge Function・workflow・production設定を複数slotで同時変更しない。
 - push前にfresh `origin/main`確認。既存未コミット変更は他workstream所有として触らない。
