@@ -3,8 +3,8 @@
 - task_id: kabumori-important-news-gpt6-production-rollout-20260923
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: GPT-6 Sol Medium
 - purpose: C1 PASS済みのGPT-6 Important News sourceを、承認済みの単一migration適用 → constraint read-back → reviewed `important-news-monitor` deploy → 自然実行確認の順でproductionへ安全に反映する。Personalized Reportsや9/18再生成は混ぜない。
@@ -156,3 +156,17 @@ On completion:
 - STOP for C1
 
 **推奨モデル：GPT-6 Sol Medium。**
+
+
+## Report
+
+- task_id: `kabumori-important-news-gpt6-production-rollout-20260923`
+- result: `review_required` — stopped before production mutation because the exact migration apply was rejected by the authorization gate.
+- changed_files: no implementation files; control/report sync only.
+- tests: no tests rerun; reviewed candidate remains 173 targeted/migration and 424 full-suite passes. Read-only post-rejection schema/history checks confirm unchanged production state.
+- commit_hash: control/report commits on main after source main `c59058c3ba41218cf490f16b96bf4cb130e6ef8c`.
+- push: completion controls synced to origin/main.
+- deploy: none. `important-news-monitor` not deployed.
+- remaining_issues: need explicit user approval for the exact production migration before continuing; then read back constraints and separately continue the reviewed Function deploy/natural verification sequence.
+- safety_checks: rejected migration was not retried through another path. No DB/Function/Cron/config/secrets/X/Push mutation.
+- next_recommendation: request exact migration approval; stop for C1.
