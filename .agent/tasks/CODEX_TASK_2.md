@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase21-production-history-learning-disabled-deploy-20260923
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: GPT-6 Sol Medium
 - purpose: Phase20 C2 PASS済みのaccess-token RPCを前提に、`social-mobile-history-learning` Edge Functionをproductionへ初回deployする。ただしdefault entrypointはdisabled adapterのまま維持し、service-role live wiring・Vault plaintext read・real X history fetchはまだ有効化しない。
@@ -222,3 +222,19 @@ Phase22 only after C2 PASS:
 A later separate QA phase may perform exactly one real Vault access-token read + X history fetch, only with explicit user consent.
 
 Publishing remains separate and disabled.
+
+
+## Final C2 — 2026-09-23
+
+PASS. Phase21 complete.
+
+Independent review confirmed:
+- production Function `social-mobile-history-learning` is ACTIVE v1 with `verify_jwt=true`;
+- runtime entrypoint still uses `disabledHistoryLearningDependencies()`;
+- runtime source includes dormant live-reader code but the entrypoint does not wire it;
+- no service-role live wiring, access-token RPC invocation, Vault plaintext read, real X history call, persona write, or publish path was enabled;
+- H2 reported source/tests/runtime byte-equivalence and safe unauthenticated smoke are consistent with the production read-back.
+
+Next gate:
+- Phase22 may add server-only live dependency wiring behind an explicit default-OFF feature gate.
+- real Vault/X history access remains a later explicit-consent QA gate.
