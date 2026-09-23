@@ -1,4 +1,7 @@
-const SECRET_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+// 32-byte base64url values have 43 unpadded chars; the last char's unused
+// padding bits are zero, so canonical encodings end on a base64url index
+// divisible by four.
+const SECRET_PATTERN = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/;
 const SECRET_HEADER = "x-important-news-cron-secret";
 
 export function isConfiguredImportantNewsCronSecret(value: string | undefined): value is string {

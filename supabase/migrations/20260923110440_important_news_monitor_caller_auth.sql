@@ -30,7 +30,7 @@ begin
   where name = 'important_news_monitor_cron_secret';
 
   if configured_secret is null
-     or configured_secret !~ '^[A-Za-z0-9_-]{43}$' then
+     or configured_secret !~ '^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$' then
     raise exception 'IMPORTANT_NEWS_MONITOR_CRON_SECRET_NOT_CONFIGURED';
   end if;
 

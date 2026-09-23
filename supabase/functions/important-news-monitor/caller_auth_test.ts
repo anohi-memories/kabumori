@@ -24,7 +24,7 @@ test("rejects missing, malformed, and wrong caller credentials", () => {
     headers: { "x-important-news-cron-secret": "not-a-cron-secret" },
   });
   const wrong = new Request("https://example.test/functions/v1/important-news-monitor", {
-    headers: { "x-important-news-cron-secret": "B".repeat(43) },
+    headers: { "x-important-news-cron-secret": "B".repeat(42) + "Q" },
   });
 
   assert.equal(importantNewsCronSecretHeader(missing), null);
@@ -37,6 +37,7 @@ test("fails closed when the server secret is missing or not a canonical 32-byte 
   assert.equal(isConfiguredImportantNewsCronSecret(undefined), false);
   assert.equal(isConfiguredImportantNewsCronSecret("short"), false);
   assert.equal(isConfiguredImportantNewsCronSecret("!".repeat(43)), false);
+  assert.equal(isConfiguredImportantNewsCronSecret("A".repeat(42) + "B"), false);
   assert.equal(isValidImportantNewsCronSecret(undefined, secret), false);
   assert.equal(isValidImportantNewsCronSecret(secret, "A".repeat(44)), false);
 });
