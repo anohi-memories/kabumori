@@ -5,9 +5,12 @@ import {
   buildFedStatementAiUsageEvent,
   buildFedStatementDiffPipeline,
   buildFedStatementDiffRow,
+  hasFedStatementAiInterpretation,
   mockLunaInterpretation,
+  persistFedStatementAiInterpretation,
   persistFedStatementDiff,
 } from "./mic_fed_statement_diff_persistence.ts";
+import { FED_STATEMENT_LUNA_MODEL } from "./mic_fed_statement_ai_logic.ts";
 import type { FedStatementRecord } from "./mic_fed_statement_diff.ts";
 
 const previous: FedStatementRecord = {
@@ -55,7 +58,7 @@ test("material wording change creates compact Luna candidate and persistence row
   const interpretation = mockLunaInterpretation(pipeline.aiInput!);
   const row = buildFedStatementDiffRow(current, previous, pipeline.diff, interpretation, "2026-09-22T00:00:00.000Z");
   assert.equal(row.material_change_count, 1);
-  assert.equal(row.model, "luna");
+  assert.equal(row.model, FED_STATEMENT_LUNA_MODEL);
   assert.equal(row.deterministic_diff.addedParagraphs.length, 0);
   assert.equal(row.ai_interpretation?.overall_bias_change, "neutral");
   assert.equal(Object.hasOwn(row, "normalizedText"), false);
@@ -66,7 +69,7 @@ test("AI usage contract is linked to the diff table with web search disabled", (
   const usage = buildFedStatementAiUsageEvent("00000000-0000-0000-0000-000000000099", 12, 8, 0.001);
   assert.deepEqual(usage, {
     feature: "mic_fed_statement_diff",
-    model: "luna",
+    model: FED_STATEMENT_LUNA_MODEL,
     inputTokens: 12,
     outputTokens: 8,
     webSearchCalls: 0,
@@ -116,10 +119,76 @@ test("same current event never creates a second active diff row", async () => {
       id: "00000000-0000-0000-0000-000000000099",
       previous_event_id: previous.eventId,
       diff_hash: pipeline.row.diff_hash,
+      prompt_version: pipeline.row.prompt_version,
     }])));
   }) as typeof fetch;
   const result = await persistFedStatementDiff({ supabaseUrl: "https://example.supabase.co", secretKey: "test" }, pipeline.row, fetchImpl);
   assert.equal(result.outcome, "duplicate");
+});
+
+test("diff persistence recomputes when the prompt version changes", async () => {
+  const pipeline = await buildFedStatementDiffPipeline(current, previous);
+  const calls: Request[] = [];
+  const fetchImpl = ((input: string | URL | Request, init?: RequestInit) => {
+    calls.push(new Request(input, init));
+    if (!init?.method) return Promise.resolve(new Response(JSON.stringify([{
+      id: "00000000-0000-0000-0000-000000000099",
+      previous_event_id: previous.eventId,
+      diff_hash: pipeline.row.diff_hash,
+      prompt_version: "old-version",
+    }])));
+    return Promise.resolve(new Response(null, { status: 204 }));
+  }) as typeof fetch;
+  const result = await persistFedStatementDiff({ supabaseUrl: "https://example.supabase.co", secretKey: "test" }, pipeline.row, fetchImpl);
+  assert.equal(result.outcome, "recomputed");
+  assert.equal(calls[1].method, "PATCH");
+});
+
+test("AI interpretation state is exact to diff hash and prompt version", async () => {
+  const calls: Request[] = [];
+  const fetchImpl = ((input: string | URL | Request, init?: RequestInit) => {
+    calls.push(new Request(input, init));
+    return Promise.resolve(new Response(JSON.stringify([{
+      id: "00000000-0000-0000-0000-000000000099",
+      diff_hash: "diff-hash",
+      prompt_version: "prompt-v2",
+      ai_interpretation: { summary: "saved" },
+    }])));
+  }) as typeof fetch;
+  const has = await hasFedStatementAiInterpretation(
+    { supabaseUrl: "https://example.supabase.co", secretKey: "test" },
+    "00000000-0000-0000-0000-000000000099",
+    "diff-hash",
+    "prompt-v2",
+    fetchImpl,
+  );
+  assert.equal(has, true);
+  assert.match(calls[0].url, /diff_hash,prompt_version,ai_interpretation/);
+});
+
+test("AI result patches only the exact empty formal diff row", async () => {
+  const pipeline = await buildFedStatementDiffPipeline(current, previous);
+  const calls: Request[] = [];
+  const fetchImpl = ((input: string | URL | Request, init?: RequestInit) => {
+    calls.push(new Request(input, init));
+    return Promise.resolve(new Response('[{"id":"00000000-0000-0000-0000-000000000099"}]'));
+  }) as typeof fetch;
+  const saved = await persistFedStatementAiInterpretation(
+    { supabaseUrl: "https://example.supabase.co", secretKey: "test" },
+    {
+      diffId: "00000000-0000-0000-0000-000000000099",
+      diffHash: pipeline.row.diff_hash,
+      promptVersion: pipeline.row.prompt_version,
+      interpretation: mockLunaInterpretation(pipeline.aiInput!),
+      generatedAt: "2026-09-23T00:00:00.000Z",
+    },
+    fetchImpl,
+  );
+  assert.equal(saved, true);
+  assert.equal(calls[0].method, "PATCH");
+  assert.match(calls[0].url, /ai_interpretation=is\.null/);
+  const body = await calls[0].json();
+  assert.equal(body.model, FED_STATEMENT_LUNA_MODEL);
 });
 
 test("multiple active rows for one current event fail closed", async () => {

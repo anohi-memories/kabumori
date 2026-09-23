@@ -6,6 +6,7 @@ import {
   type FedStatementDeterministicDiff,
   type FedStatementRecord,
 } from "./mic_fed_statement_diff.ts";
+import { FED_STATEMENT_LUNA_MODEL } from "./mic_fed_statement_ai_logic.ts";
 import { recordAiUsageEvent, type AiUsageEvent } from "./mic_ai_usage_logic.ts";
 import { restHeaders, type RestContext } from "./mic_writer_logic.ts";
 
@@ -55,7 +56,7 @@ export function buildFedStatementDiffRow(
     deterministic_diff: diff,
     semantic_buckets: previous ? diff.buckets : [],
     ai_interpretation: aiInterpretation,
-    model: aiInterpretation ? "luna" : null,
+    model: aiInterpretation ? FED_STATEMENT_LUNA_MODEL : null,
     prompt_version: FED_STATEMENT_DIFF_PROMPT_VERSION,
     generated_at: generatedAt,
   };
@@ -82,8 +83,8 @@ export async function buildFedStatementDiffPipeline(
   };
 }
 
-// Candidate-only mock: it validates the Phase 2B4 contract without making a
-// network request. Real Luna transport is intentionally a later phase.
+// Mock-only helper for deterministic unit tests; production uses
+// requestFedStatementInterpretation from mic_fed_statement_ai_logic.ts.
 export function mockLunaInterpretation(input: NonNullable<ReturnType<typeof buildFedStatementAiInput>>): FedStatementAiOutput {
   return {
     summary: `Deterministic statement wording changes across ${input.changes.length} material paragraph(s).`,
@@ -108,7 +109,7 @@ export function buildFedStatementAiUsageEvent(
 ): AiUsageEvent {
   return {
     feature: FED_STATEMENT_DIFF_FEATURE,
-    model: "luna",
+    model: FED_STATEMENT_LUNA_MODEL,
     inputTokens,
     outputTokens,
     webSearchCalls: 0,
@@ -125,18 +126,17 @@ export async function persistFedStatementDiff(
 ): Promise<{ id: string | null; outcome: "inserted" | "duplicate" | "replaced_baseline" | "recomputed" }> {
   const lookupUrl = `${ctx.supabaseUrl}/rest/v1/${FED_STATEMENT_DIFF_TABLE}` +
     `?current_event_id=eq.${encodeURIComponent(row.current_event_id)}` +
-    `&prompt_version=eq.${encodeURIComponent(row.prompt_version)}` +
-    `&select=id,previous_event_id,diff_hash&limit=2`;
+    `&select=id,previous_event_id,diff_hash,prompt_version&limit=2`;
   const lookup = await fetchImpl(lookupUrl, { headers: restHeaders(ctx.secretKey) });
   if (!lookup.ok) throw new Error(`FED_STATEMENT_DIFF_LOOKUP_FAILED:${lookup.status}`);
-  const existing = await lookup.json() as Array<{ id?: unknown; previous_event_id?: unknown; diff_hash?: unknown }>;
+  const existing = await lookup.json() as Array<{ id?: unknown; previous_event_id?: unknown; diff_hash?: unknown; prompt_version?: unknown }>;
   if (existing.length > 1) throw new Error("FED_STATEMENT_DIFF_MULTIPLE_ACTIVE_ROWS");
   const current = existing[0];
   if (current) {
     const id = typeof current.id === "string" ? current.id : null;
     if (!id) throw new Error("FED_STATEMENT_DIFF_LOOKUP_MISSING_ID");
     const previousEventId = typeof current.previous_event_id === "string" ? current.previous_event_id : null;
-    if (previousEventId === row.previous_event_id && current.diff_hash === row.diff_hash) {
+    if (previousEventId === row.previous_event_id && current.diff_hash === row.diff_hash && current.prompt_version === row.prompt_version) {
       return { id, outcome: "duplicate" };
     }
     const replacement = await fetchImpl(
@@ -163,6 +163,60 @@ export async function persistFedStatementDiff(
   const rows = await result.json() as Array<{ id?: unknown }>;
   const id = typeof rows[0]?.id === "string" ? rows[0].id : null;
   return { id, outcome: rows.length === 0 ? "duplicate" : "inserted" };
+}
+
+export async function hasFedStatementAiInterpretation(
+  ctx: RestContext,
+  diffId: string,
+  diffHash: string,
+  promptVersion: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<boolean> {
+  const result = await fetchImpl(
+    `${ctx.supabaseUrl}/rest/v1/${FED_STATEMENT_DIFF_TABLE}` +
+      `?id=eq.${encodeURIComponent(diffId)}&select=id,diff_hash,prompt_version,ai_interpretation&limit=2`,
+    { headers: restHeaders(ctx.secretKey) },
+  );
+  if (!result.ok) throw new Error(`FED_STATEMENT_AI_STATE_LOOKUP_FAILED:${result.status}`);
+  const rows = await result.json() as Array<{ id?: unknown; diff_hash?: unknown; prompt_version?: unknown; ai_interpretation?: unknown }>;
+  if (rows.length !== 1 || rows[0]?.id !== diffId) throw new Error("FED_STATEMENT_AI_DIFF_ROW_MISSING_OR_DUPLICATE");
+  if (rows[0].diff_hash !== diffHash || rows[0].prompt_version !== promptVersion) {
+    throw new Error("FED_STATEMENT_AI_DIFF_IDENTITY_MISMATCH");
+  }
+  return rows[0].ai_interpretation !== null && rows[0].ai_interpretation !== undefined;
+}
+
+export async function persistFedStatementAiInterpretation(
+  ctx: RestContext,
+  params: {
+    diffId: string;
+    diffHash: string;
+    promptVersion: string;
+    interpretation: FedStatementAiOutput;
+    generatedAt: string;
+  },
+  fetchImpl: typeof fetch = fetch,
+): Promise<boolean> {
+  const result = await fetchImpl(
+    `${ctx.supabaseUrl}/rest/v1/${FED_STATEMENT_DIFF_TABLE}` +
+      `?id=eq.${encodeURIComponent(params.diffId)}` +
+      `&diff_hash=eq.${encodeURIComponent(params.diffHash)}` +
+      `&prompt_version=eq.${encodeURIComponent(params.promptVersion)}` +
+      `&ai_interpretation=is.null`,
+    {
+      method: "PATCH",
+      headers: restHeaders(ctx.secretKey, "return=representation"),
+      body: JSON.stringify({
+        ai_interpretation: params.interpretation,
+        model: FED_STATEMENT_LUNA_MODEL,
+        prompt_version: params.promptVersion,
+        generated_at: params.generatedAt,
+      }),
+    },
+  );
+  if (!result.ok) throw new Error(`FED_STATEMENT_AI_UPDATE_FAILED:${result.status}`);
+  const rows = await result.json() as Array<{ id?: unknown }>;
+  return rows.length === 1 && rows[0]?.id === params.diffId;
 }
 
 export async function persistFedStatementAiUsage(

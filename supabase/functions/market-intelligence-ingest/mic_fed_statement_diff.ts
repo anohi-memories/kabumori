@@ -1,6 +1,6 @@
 import type { FedDecision, FedTargetRange } from "./mic_fed_statement_adapter.ts";
 
-export const FED_STATEMENT_DIFF_PROMPT_VERSION = "fed-statement-diff-v1" as const;
+export const FED_STATEMENT_DIFF_PROMPT_VERSION = "fed-statement-diff-v2" as const;
 
 export type FedStatementRecord = {
   eventId: string;
@@ -285,10 +285,17 @@ export function validateFedStatementAiOutput(value: unknown): value is FedStatem
   const directions = new Set(["more_hawkish", "more_dovish", "neutral", "unclear"]);
   const overall = new Set(["more_hawkish", "more_dovish", "neutral", "mixed", "unclear"]);
   if (typeof output.summary !== "string" || !overall.has(String(output.overall_bias_change)) || typeof output.confidence !== "number" || output.confidence < 0 || output.confidence > 1 || !Array.isArray(output.changes)) return false;
+  const buckets = new Set<FedStatementSemanticBucket>([
+    "inflation", "labor", "growth/activity", "policy stance", "forward guidance",
+    "balance_sheet", "financial_conditions", "risks", "other",
+  ]);
   return output.changes.every((change) => {
     if (!change || typeof change !== "object") return false;
     const item = change as Record<string, unknown>;
-    return typeof item.bucket === "string" && directions.has(String(item.direction)) && typeof item.previous === "string" && typeof item.current === "string" && typeof item.interpretation === "string" && typeof item.confidence === "number" && item.confidence >= 0 && item.confidence <= 1;
+    return typeof item.bucket === "string" && buckets.has(item.bucket as FedStatementSemanticBucket) &&
+      directions.has(String(item.direction)) && typeof item.previous === "string" &&
+      typeof item.current === "string" && typeof item.interpretation === "string" &&
+      typeof item.confidence === "number" && item.confidence >= 0 && item.confidence <= 1;
   });
 }
 

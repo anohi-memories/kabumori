@@ -1,8 +1,10 @@
 // Market Intelligence Core (MIC) Phase 1A ingestion entry point.
 //
-// Scope: accumulate Facts only (market_events / market_metrics). This
-// function never calls OpenAI, never touches any X-autopost table, and
-// never writes anything outside the 5 MIC tables added by
+// Scope: accumulate Facts and interpret material Fed statement changes only.
+// It never touches any X-autopost table and never writes outside MIC tables
+// plus the AI usage ledger. Fed interpretation is gated on deterministic
+// material changes and has no web-search tools.
+// Never writes anything outside the MIC tables added by
 // 20260912090000_add_market_intelligence_core_phase1a.sql.
 //
 // Auth model, deliberately copied from stocks-master-sync/index.ts: never
@@ -51,8 +53,15 @@ import {
   type FedStatement,
   type FedStatementIdentity,
 } from "./mic_fed_statement_adapter.ts";
-import { buildFedStatementDiffPipeline, persistFedStatementDiff } from "./mic_fed_statement_diff_persistence.ts";
-import type { FedStatementRecord } from "./mic_fed_statement_diff.ts";
+import {
+  buildFedStatementDiffPipeline,
+  hasFedStatementAiInterpretation,
+  persistFedStatementAiInterpretation,
+  persistFedStatementAiUsage,
+  persistFedStatementDiff,
+} from "./mic_fed_statement_diff_persistence.ts";
+import { FED_STATEMENT_DIFF_PROMPT_VERSION, type FedStatementRecord } from "./mic_fed_statement_diff.ts";
+import { requestFedStatementInterpretation } from "./mic_fed_statement_ai_logic.ts";
 import {
   buildMacroReleaseEvent,
   decideMacroReleaseEvent,
@@ -426,27 +435,59 @@ async function runSource(
         const existingEventId = sourceKey === FED_STATEMENT_SOURCE_KEY && meetingDate
           ? result.fedExistingEventIds?.[meetingDate]
           : undefined;
+        let persistedEventId: string | null = null;
         if (existingEventId) {
           await updateMarketEvent(ctx, existingEventId, finalized);
           newCount += 1;
+          persistedEventId = existingEventId;
         } else {
           const written = await writeMarketEvent(ctx, finalized);
           if (written.outcome === "duplicate") duplicateCount += 1;
           else newCount += 1;
+          persistedEventId = written.id;
+        }
 
-          if (sourceKey === FED_STATEMENT_SOURCE_KEY && result.fedStatement && written.id) {
-            const currentStatement: FedStatementRecord = {
-              eventId: written.id,
-              centralBank: "Fed",
-              meetingDate: result.fedStatement.meetingDate,
-              documentHash: result.fedStatement.documentHash,
-              normalizedText: result.fedStatement.normalizedText,
-              statementUrl: result.fedStatement.statementUrl,
-              decision: result.fedStatement.decision,
-              targetRange: result.fedStatement.targetRange,
-            };
-            const pipeline = await buildFedStatementDiffPipeline(currentStatement, result.previousFedStatement ?? null);
-            await persistFedStatementDiff(ctx, pipeline.row);
+        if (sourceKey === FED_STATEMENT_SOURCE_KEY && result.fedStatement && persistedEventId) {
+          const currentStatement: FedStatementRecord = {
+            eventId: persistedEventId,
+            centralBank: "Fed",
+            meetingDate: result.fedStatement.meetingDate,
+            documentHash: result.fedStatement.documentHash,
+            normalizedText: result.fedStatement.normalizedText,
+            statementUrl: result.fedStatement.statementUrl,
+            decision: result.fedStatement.decision,
+            targetRange: result.fedStatement.targetRange,
+          };
+          const pipeline = await buildFedStatementDiffPipeline(currentStatement, result.previousFedStatement ?? null);
+          const diffResult = await persistFedStatementDiff(ctx, pipeline.row);
+          if (pipeline.aiInput && pipeline.row.material_change_count > 0 && diffResult.id) {
+            const alreadyInterpreted = await hasFedStatementAiInterpretation(
+              ctx,
+              diffResult.id,
+              pipeline.row.diff_hash,
+              FED_STATEMENT_DIFF_PROMPT_VERSION,
+            );
+            if (!alreadyInterpreted) {
+              const apiKey = Deno.env.get("OPENAI_API_KEY");
+              if (!apiKey) throw new Error("FED_STATEMENT_AI_SECRET_MISSING");
+              const generated = await requestFedStatementInterpretation({ apiKey, input: pipeline.aiInput });
+              const generatedAt = now.toISOString();
+              const saved = await persistFedStatementAiInterpretation(ctx, {
+                diffId: diffResult.id,
+                diffHash: pipeline.row.diff_hash,
+                promptVersion: FED_STATEMENT_DIFF_PROMPT_VERSION,
+                interpretation: generated.output,
+                generatedAt,
+              });
+              if (!saved) throw new Error("FED_STATEMENT_AI_RESULT_NOT_PERSISTED");
+              await persistFedStatementAiUsage(
+                ctx,
+                generated.inputTokens,
+                generated.outputTokens,
+                generated.costUsd,
+                diffResult.id,
+              );
+            }
           }
         }
       }
