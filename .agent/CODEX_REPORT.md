@@ -1,4 +1,19 @@
-## Latest H1 result — production migration stopped by authorization gate (2026-09-23)
+## Latest H1 result — exact migration applied; Function deploy awaits separate approval (2026-09-23)
+
+- task_id: `kabumori-important-news-gpt6-production-rollout-20260923`
+- result: `review_required` — after the user explicitly approved the exact GPT-6 migration, its SQL was applied and both CHECK constraints read back correctly. The subsequent production Function deploy was rejected by the approval guard because the user's explicit approval covered the migration only. No alternate deploy path was attempted.
+- source: latest reviewed main includes `20260923035652_allow_gpt6_important_news_model_metadata.sql`; exact SQL was passed to the Supabase migration tool.
+- migration: applied successfully. Postflight definitions for both `important_news_candidates_judgement_model_check` and `important_news_candidates_generation_model_check` allow NULL plus `gpt-5.6-luna`, `gpt-5.6-sol`, `gpt-6-luna`, and `gpt-6-sol`.
+- migration_history_note: Supabase recorded the correct migration name under generated version `20260923084819`, rather than repository file version `20260923035652`. No migration-history repair was performed. This discrepancy is disclosed for C1; do not repair without separate direction.
+- Function preflight: `important-news-monitor` was ACTIVE v61, `verify_jwt=false`, source hash `ce7b4bf79da6fb35f8593c4a692ef125acdbdb0ed26c189a761f15eeb5a4070f`. Latest-main package preflight covered 25 deployed runtime files and verified GPT-6 Luna/Sol routes.
+- Function deploy: authorization guard rejected it because no explicit user approval for production `important-news-monitor` deployment was present. Post-rejection read-back confirms still v61 with the same source hash and `verify_jwt=false`. No Function deploy occurred.
+- natural_runtime: not observed because the reviewed Function has not been deployed. No manual candidate, X post, or Push was created.
+- verification: reviewed candidate results carried forward: 173 targeted/migration tests and 424 full Important News tests passed. No production runtime tests were run.
+- production_mutations: exactly one change — the approved migration/DDL above. No other schema/RLS/grant/index/trigger/RPC changes, no Function/Cron/config/secrets change, no report regeneration, X post, or Push.
+- remaining: obtain separate explicit approval for only the reviewed `important-news-monitor` deployment (preserving `verify_jwt=false`); resolve whether the generated migration-history version needs a separately approved reconciliation. Personalized Reports and 9/18 regeneration remain untouched.
+- next_owner: `chatgpt`; stop for C1.
+
+## Previous H1 result — production migration initially stopped by authorization gate (2026-09-23)
 
 - task_id: `kabumori-important-news-gpt6-production-rollout-20260923`
 - result: `review_required` — preflight passed, but the exact production migration apply was rejected by the approval guard because the trusted user message did not explicitly authorize this GPT-6 production schema DDL. No alternate execution path was attempted.
