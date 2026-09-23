@@ -17,11 +17,11 @@
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: social-mobile-app-phase23-dedicated-qa-one-shot-history-learning-20260923
+- task_id: x-autopost-foundation-audit-multibrand-netlify-roadmap-20260923
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
-- note: dedicated QAでexactly-one live history-learning QA。実Vault/X read直前に明示同意必須、終了後gate OFF。publish/persona persistence禁止。GPT-6 Sol Medium推奨。
+- note: X自動投稿基盤のread-only棚卸し、完全複垢化、Supabase中核化、Netlify Free管理画面移行までのロードマップ確定。Production変更禁止。GPT-6 Luna推奨。
 
 ### Claude slot 1
 - owner: claude
