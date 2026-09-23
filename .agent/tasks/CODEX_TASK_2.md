@@ -3,8 +3,8 @@
 - task_id: social-mobile-app-phase23-dedicated-qa-one-shot-history-learning-20260923
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: GPT-6 Sol Medium
 - purpose: Phase22 C2 PASS後、dedicated QA Auth userと既存の安全なQA X accountだけを対象に、exactly-oneの実history-learning QAを行う。実行直前にユーザーの明示同意を必須とし、1回だけaccess-token RPC/Vault plaintext readとbounded X history fetchを許可する。publish/persona persistenceは引き続き禁止。
