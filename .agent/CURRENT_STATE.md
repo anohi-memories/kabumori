@@ -14,15 +14,10 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `kabumori-important-news-gpt6-production-rollout-20260923`
-  - C1 PASS on PR #9 final merge.
-  - PR #9 is merged/closed at main `83d994634f9b4891b8d939723939187b76bedaed`; Vercel on resulting main is success.
-  - GPT-6 source routing and the narrow metadata CHECK migration are on main.
-  - Production still has not applied the migration and has not deployed the reviewed `important-news-monitor`.
-  - Next H1 is the controlled production rollout: exact single migration only, read back constraints, deploy only `important-news-monitor`, then observe natural runtime. No manual traffic/X post.
-  - Personalized Reports deploy and 9/18 close regeneration remain separate and untouched.
-  - Recommended model: GPT-6 Sol Medium.
-
+- Codex slot 1: `review_required` — `kabumori-important-news-gpt6-production-rollout-20260923`
+  - Production preflight confirmed the two CHECK constraints allow only GPT-5.6; target migration is absent.
+  - Exact migration apply was rejected by the authorization guard. Post-rejection read-back confirms production is unchanged; no Function deploy.
+  - Await explicit approval for `20260923035652_allow_gpt6_important_news_model_metadata.sql`; stop for C1.
 - Codex slot 2: `ready` — `social-mobile-app-phase23-dedicated-qa-one-shot-history-learning-20260923`
   - Phase22 C2 PASS済み。次はdedicated QA user/accountでexactly-one live history-learning QA。
   - live実行直前にユーザーの明示同意が必須。genericなOK/すすめてはlive Vault/X read同意として扱わない。
