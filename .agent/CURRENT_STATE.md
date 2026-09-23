@@ -25,11 +25,11 @@
   - No production deploy/migration/backfill yet. Production mutation 0.
   - Recommended model: Luna.
 
-- Codex slot 2: `ready` — `social-mobile-app-phase20-production-history-access-rpc-rollout-20260923`
-  - Phase19 C2 PASS後のproduction security-boundary rollout。
-  - exact `read_social_mobile_history_access_token(uuid,text)` migrationだけを本番適用し、SECURITY DEFINER/search_path/ACLをread-backする。
-  - Vault plaintext読取 / history-learning Function deploy / real X history は禁止。
-  - Recommended model: Sol。
+- Codex slot 2: `ready` — `social-mobile-app-phase21-production-history-learning-disabled-deploy-20260923`
+  - Phase20 C2 PASS済み。access-token RPCはproduction適用済み・ACL read-back済み。
+  - 次は `social-mobile-history-learning` Functionのdisabled entrypointだけをproduction deployする。
+  - service-role live wiring / RPC invocation / Vault plaintext / real X history はまだ禁止。
+  - Recommended model: GPT-6 Sol Medium。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
