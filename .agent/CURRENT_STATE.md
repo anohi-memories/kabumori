@@ -28,11 +28,13 @@
   - Recommended model: GPT-6 Sol Medium。
 
 
-- Claude slot 1: `ready` — `kabumori-release-mobile-blockers-phase1-auth-account-settings-20260924`
-  - Main release-completion workstream for consumer mobile.
-  - Scope: Auth/profile lifecycle, password recovery, account deletion source candidate, Settings/Account/Privacy/Terms/Support/Contact/Logout routes and tests.
-  - Dedicated branch/PR; production mutation 0.
-  - Must not touch Important News caller-auth, x-test-post/social-mobile, market-report, Netlify/Vercel settings, TestFlight/App Store Connect.
+- Claude slot 1: `review_required` — `kabumori-release-mobile-blockers-phase1-auth-account-settings-20260924`
+  - Source candidate complete. PR #13, head `8b78ecc22524b830c5e440e8f0b995fbb9a6f014`, branch `claude1/mobile-release-blockers-auth-account`. Not merged.
+  - Adds `ensure_my_profile()` RPC (migration `20260924100000`), new `account-delete` Edge Function, password recovery, and a Settings entry point with privacy/terms/support as configuration.
+  - Tests: app suite 77/0, account-delete 17/0, `deno check` PASS, Expo web export PASS (10 routes, unchanged), disposable PostgreSQL proof PASS with negative control, diff whitespace check PASS. Pre-existing `/portfolio` typed-route errors unchanged at 2.
+  - production mutation 0: migration not applied, Function not deployed, Auth redirect allowlist not changed, no real reset mail, no real deletion.
+  - Important News caller-auth files and its migration untouched; no file overlap with merged PR #12.
+  - Next: K1 review, then a separately approved single-file migration apply + `account-delete`-only deploy.
   - Recommended model: Opus 5.5.
 
 - Claude slot 2: `ready` — `x-admin-netlify-thin-control-plane-phase1-20260924`
