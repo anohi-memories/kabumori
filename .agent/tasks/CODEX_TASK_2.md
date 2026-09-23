@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase0b-publish-claim-brand-scope-and-migration-reconciliation-20260923
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: GPT-6 Sol Medium
 - purpose: Phase0 C2で確認されたblockerを解消するため、productionを一切変更せず、publish_claim clientをtrusted brand_idでbrand-scoped化するsource candidateと、multibrand foundation migration/source-history driftの安全な解消案を作る。完成後にPhase0 migration proofを再実行可能な状態へ戻す。

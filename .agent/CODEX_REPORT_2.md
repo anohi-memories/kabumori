@@ -1,3 +1,36 @@
+# H2 — X autopost Phase 0b brand-scoped publish claim and forward migration candidate (review required, 2026-09-23)
+
+- task_id: `x-autopost-phase0b-publish-claim-brand-scope-and-migration-reconciliation-20260923`
+- status: `review_required`; next_owner: `chatgpt`
+- source_base: fresh `origin/main` `4ff252132b6b4613ccd52508a387ad743c3b433b`; only H2 source/control files were changed in an isolated clean worktree. H1 is a separate `important-news-monitor` caller-auth task; G1 idle and G2 done. No file, migration, RPC, or production-setting overlap was found.
+- implementation_commit: `76dfe74` (`Scope X publish claims and schedule conflicts by brand`), pushed to `origin/main` from the isolated worktree after a fresh fetch confirmed an unchanged base and only the ten listed source/test files in the commit.
+
+## Exact source changes and trusted identity
+
+- `claimPublishSlot` now requires a nonblank `brandId` at type and runtime boundaries, explicitly sends `brand_id`, and uses `on_conflict=brand_id,post_type,date_jst`. It still ignores an existing claim regardless of status; there is no automatic reclaim or retry.
+- `completePublishSlot` and `failPublishSlot` require the same brand and PATCH only `brand_id + post_type + date_jst + status=publishing`. Missing/blank brand fails before any network request. Existing confirmed-X completion/failure handling and receipt behavior were not changed.
+- Both `runMorningGreetingManualPublish` callers pass `brandContext.brand.id`. The manual HTTP path obtains that context from the server-side literal `brandId: "kabumori"` after admin authorization; the scheduled path obtains it from the server-claimed `scheduledPost.brand_id` (with the existing explicit legacy-Kabumori row fallback) and `loadBrandContext`, not from client JSON. No new client-selectable brand, account, or token authority was introduced.
+- Mock tests prove different brands can claim one type/day independently, same-brand duplicates are blocked, complete/fail for one brand do not mutate the other brand, the exact conflict target/body are sent, a missing brand makes zero network calls, and confirmed-X/no-retry behavior remains intact.
+
+## Planner and migration candidate
+
+- The exact four live planners—`plan_daily_posts(date)`, `plan_morning_report(date)`, `plan_close_report(date)`, and `plan_us_premarket_report(date)`—still contained one `ON CONFLICT (schedule_date, post_type, slot_no) DO NOTHING` each. The source-only forward migration verifies each routine's identity/security and exactly one old target, then replaces only that target with `ON CONFLICT (brand_id, schedule_date, post_type, slot_no) DO NOTHING`. Existing bodies, other filters, SECURITY DEFINER, `search_path=public`, and EXECUTE grants are preserved. No queue fairness or other planner behavior was changed.
+- The migration first asserts the exact three old table UNIQUE constraints, valid brand-scoped unique indexes, NOT NULL `brand_id`, and absence of scoped duplicates. It then drops only the old globals on `posting_windows`, `scheduled_posts`, and `publish_claims`. A failed assertion aborts the transaction. This is a review candidate, **not applied to production**.
+- Historical `posting_windows` seed upserts still target `(post_type,slot_no)` in earlier migration files. They are migration-time only, not live RPCs; do not replay them against a live post-Phase0 schema. A future clean-bootstrap/source-history reconciliation must explicitly rewrite or supersede those historical seed steps without rewriting applied history.
+- Live brand columns/scoped indexes exist, while the older foundation migration's source commit is not in current `origin/main` ancestry and version `20260910170000` is absent from production migration history. A blind replay could duplicate objects, collide with current data, or misstate applied provenance; `db push`/history repair is unsafe. For this live deployment, use the new forward migration's fail-closed shape assertions rather than backfilling/replaying the old DDL. No production history marker is required to execute this exact forward migration; an idempotent source bootstrap/baseline for clean environments is a separately reviewed task, not a fake history repair.
+
+## Verification
+
+- Fresh read-only production catalog check reconfirmed the three old constraints, `publish_claims.brand_id` NOT NULL/default `kabumori`, and all four planners' old conflict targets; all four planner routines remain SECURITY DEFINER with `search_path=public` and `service_role` EXECUTE. No production row values or secrets were printed.
+- Targeted publish-claim/morning-publish/migration tests: **35/35 passed**. Full `x-test-post` regression: **403/403 passed**. `deno check --no-remote` on changed `publish_claim_logic.ts`: **passed**. Checking the imported morning-publish dependency graph reports two existing unrelated type errors (`_shared/x_oauth2_post.ts` BufferSource and `morning_greeting_logic.ts` retry_count); the same two errors reproduce on untouched `origin/main`. No scope-expanding edits were made. `git diff --check`: **passed**.
+- Disposable PostgreSQL 16 proof: fake production-shaped old constraints, scoped indexes and non-null brand columns applied; candidate migration applied; two brands shared the same posting-window slot, scheduled-post slot/day, and publish-claim type/day; same-brand duplicates were rejected; all four updated planner calls worked, including repeat idempotency; SECURITY DEFINER/search_path/EXECUTE were unchanged; behavior writes rolled back; reverse script restored the three old global constraints and baseline rows. The disposable container was stopped and auto-removed.
+- Changed files: `supabase/functions/x-test-post/{index.ts,morning_greeting_publish_logic.ts,morning_greeting_publish_logic_test.ts,publish_claim_logic.ts,publish_claim_logic_test.ts,multibrand_uniqueness_migration_test.ts}`, `supabase/migrations/20260923102327_x_autopost_phase0_brand_scoped_uniqueness.sql`, and the three `supabase/tests/x_autopost_phase0_uniqueness_{fixture,behavior,rollback}.sql` proof files. This REPORT and H2 TASK are the only subsequent control-file changes.
+- Production mutation: **0**. Migration apply 0, Function deploy/invoke 0, Cron/settings 0, OAuth/Vault/token 0, OpenAI/X API and X posts 0. Formal repo's unrelated uncommitted changes were not touched.
+
+## Next production gate (not authorized now)
+
+C2 must review the migration/source-history caveat and code diff. If separately approved, deploy the brand-scoped `x-test-post` client first while the old global keys still exist, verify runtime source/setting, then fresh-read live schema/data/planner definitions and apply only the exact forward migration with read-back. Do not apply the migration before the compatible client is active. A clean-environment migration-chain reconciliation remains separate; never use `supabase db push` or blind history repair.
+
 # H2 — X autopost Phase 0 uniqueness migration proof (blocked for C2, 2026-09-23)
 
 - task_id: `x-autopost-phase0-disposable-global-uniqueness-migration-proof-20260923`
