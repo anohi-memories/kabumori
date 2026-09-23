@@ -14,15 +14,10 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `kabumori-important-news-gpt6-schema-source-final-merge-20260923`
-  - C1 confirmed PR #9 exact head `ae78de17b2eb461b06e1674cdb045a78f7dbf620` has Vercel success.
-  - The retry commit from `ebe3c588` to `ae78de1` changes no files; it only retriggered CI.
-  - Main drift since PR base is control/report files only; no overlap with the 12 approved implementation/migration/test files.
-  - Next H1 may merge PR #9 if the required check remains green and no new semantic overlap appears.
-  - Do not apply the GPT-6 metadata migration or deploy `important-news-monitor` in this H1.
-  - Production mutation 0.
-  - Recommended model: Luna.
-
+- Codex slot 1: `review_required` — `kabumori-important-news-gpt6-schema-source-final-merge-20260923`
+  - PR #9 merged at `83d994634f9b4891b8d939723939187b76bedaed` after required Vercel success on `ae78de17b2eb461b06e1674cdb045a78f7dbf620`.
+  - All 12 approved files on main match the final PR head. No production migration apply or Function deployment; production mutation 0.
+  - Stop for C1.
 - Codex slot 2: `ready` — `social-mobile-app-phase23-dedicated-qa-one-shot-history-learning-20260923`
   - Phase22 C2 PASS済み。次はdedicated QA user/accountでexactly-one live history-learning QA。
   - live実行直前にユーザーの明示同意が必須。genericなOK/すすめてはlive Vault/X read同意として扱わない。
