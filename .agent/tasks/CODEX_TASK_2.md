@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase0b-publish-claim-brand-scope-and-migration-reconciliation-20260923
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: GPT-6 Sol Medium
 - purpose: Phase0 C2で確認されたblockerを解消するため、productionを一切変更せず、publish_claim clientをtrusted brand_idでbrand-scoped化するsource candidateと、multibrand foundation migration/source-history driftの安全な解消案を作る。完成後にPhase0 migration proofを再実行可能な状態へ戻す。
@@ -139,3 +139,27 @@ When complete:
   - exact next production gate
 
 Then STOP for C2.
+
+
+## Final C2 — 2026-09-23
+
+PASS.
+
+Accepted findings:
+- publish-claim client now requires trusted `brandId`, writes `brand_id`, uses `on_conflict=brand_id,post_type,date_jst`, and scopes complete/fail PATCH by brand.
+- current morning-greeting call sites derive brand identity from trusted server-side context; no new client-selectable brand/account/token authority was added.
+- all four affected planner routines are covered by the forward migration candidate, which changes only the scheduled_posts conflict target to the brand-scoped key after fail-closed shape/security assertions.
+- disposable PostgreSQL proof passed for two-brand coexistence, same-brand duplicate rejection, planner idempotency, rollback, and security/ACL preservation.
+- targeted tests 35/35 PASS; full x-test-post regression 403/403 PASS; changed publish-claim module deno check PASS; git diff check PASS.
+- the two dependency-graph type errors reported are pre-existing on untouched origin/main and are not introduced by this task.
+- source/history drift handling is acceptable for this phase: do not replay the missing historical foundation migration or repair history blindly; use forward-only fail-closed live-shape assertions. Clean-bootstrap reconciliation remains separate.
+- production mutation remained 0.
+
+Important rollout order:
+1. deploy the compatible brand-scoped x-test-post client first while the legacy global constraints still exist;
+2. verify runtime source and production safety;
+3. perform a fresh schema/data/planner preflight;
+4. only then apply the exact forward migration removing the three obsolete global uniqueness constraints;
+5. read back indexes/constraints/planner definitions and do not combine this gate with token/account-routing or queue-refactor work.
+
+This C2 does not itself authorize production deploy or migration apply.
