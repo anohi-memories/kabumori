@@ -167,6 +167,7 @@ export async function runMorningGreetingManualPublish(args: {
   supabaseUrl: string;
   serviceRoleKey: string;
   openAiApiKey: string;
+  brandId: string;
   xAuth: XAuthContext;
   now?: Date;
   fetchImpl?: FetchLike;
@@ -222,6 +223,7 @@ export async function runMorningGreetingManualPublish(args: {
     const claim = await claimPublishSlot({
       supabaseUrl: args.supabaseUrl,
       serviceRoleKey: args.serviceRoleKey,
+      brandId: args.brandId,
       postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE,
       dateJst,
       executionId: crypto.randomUUID(),
@@ -304,6 +306,7 @@ export async function runMorningGreetingManualPublish(args: {
     await completePublishSlot({
       supabaseUrl: args.supabaseUrl,
       serviceRoleKey: args.serviceRoleKey,
+      brandId: args.brandId,
       postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE,
       dateJst,
       xPostId,
@@ -372,6 +375,7 @@ export async function runMorningGreetingManualPublish(args: {
         await failPublishSlot({
           supabaseUrl: args.supabaseUrl,
           serviceRoleKey: args.serviceRoleKey,
+          brandId: args.brandId,
           postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE,
           dateJst,
           errorCode: failedErrorCode,

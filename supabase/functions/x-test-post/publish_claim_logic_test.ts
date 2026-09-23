@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE,
+  PUBLISH_CLAIM_BRAND_ID_REQUIRED,
   claimPublishSlot,
   completePublishSlot,
   failPublishSlot,
@@ -9,8 +10,10 @@ import {
 
 const SUPABASE_URL = "https://example.supabase.co";
 const SERVICE_ROLE_KEY = "service-role-key";
+const BRAND_ID = "kabumori";
 
 type ClaimRow = {
+  brand_id: string;
   post_type: string;
   date_jst: string;
   status: "publishing" | "published" | "failed";
@@ -19,17 +22,17 @@ type ClaimRow = {
   error_code: string | null;
 };
 
-// A minimal in-memory stand-in for the publish_claims table's unique(post_type, date_jst) constraint plus
+// A minimal in-memory stand-in for the publish_claims table's unique(brand_id, post_type, date_jst) constraint plus
 // PostgREST's ignore-duplicates upsert and filtered PATCH semantics — enough to exercise the real race.
 function tableFetcher(rows: ClaimRow[]) {
   return async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const url = new URL(String(input));
     if (init?.method === "POST") {
-      const body = JSON.parse(String(init.body)) as { post_type: string; date_jst: string; execution_id: string };
-      const exists = rows.some((row) => row.post_type === body.post_type && row.date_jst === body.date_jst);
+      const body = JSON.parse(String(init.body)) as { brand_id: string; post_type: string; date_jst: string; execution_id: string };
+      const exists = rows.some((row) => row.brand_id === body.brand_id && row.post_type === body.post_type && row.date_jst === body.date_jst);
       if (exists) return Response.json([]); // ignore-duplicates: conflict -> no rows returned
       rows.push({
-        post_type: body.post_type, date_jst: body.date_jst, status: "publishing",
+        brand_id: body.brand_id, post_type: body.post_type, date_jst: body.date_jst, status: "publishing",
         execution_id: body.execution_id, x_post_id: null, error_code: null,
       });
       return Response.json([rows.at(-1)]);
@@ -39,8 +42,9 @@ function tableFetcher(rows: ClaimRow[]) {
       const dateJst = url.searchParams.get("date_jst")?.replace(/^eq\./u, "");
       const statusFilter = url.searchParams.get("status")?.replace(/^eq\./u, "");
       const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+      const brandId = url.searchParams.get("brand_id")?.replace(/^eq\./u, "");
       const row = rows.find((item) =>
-        item.post_type === postType && item.date_jst === dateJst && item.status === statusFilter
+        item.brand_id === brandId && item.post_type === postType && item.date_jst === dateJst && item.status === statusFilter
       );
       if (row) Object.assign(row, body);
       return Response.json(row ? [row] : []);
@@ -53,6 +57,7 @@ test("1: the first claim for a date succeeds", async () => {
   const rows: ClaimRow[] = [];
   const result = await claimPublishSlot({
     supabaseUrl: SUPABASE_URL, serviceRoleKey: SERVICE_ROLE_KEY,
+    brandId: BRAND_ID,
     postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE, dateJst: "2026-09-03", executionId: "exec-1",
     fetcher: tableFetcher(rows),
   });
@@ -63,16 +68,42 @@ test("1: the first claim for a date succeeds", async () => {
 
 test("2: a second claim for the same date fails", async () => {
   const rows: ClaimRow[] = [{
+    brand_id: BRAND_ID,
     post_type: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE, date_jst: "2026-09-03",
     status: "publishing", execution_id: "exec-1", x_post_id: null, error_code: null,
   }];
   const result = await claimPublishSlot({
     supabaseUrl: SUPABASE_URL, serviceRoleKey: SERVICE_ROLE_KEY,
+    brandId: BRAND_ID,
     postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE, dateJst: "2026-09-03", executionId: "exec-2",
     fetcher: tableFetcher(rows),
   });
   assert.equal(result.claimed, false);
   assert.equal(rows.length, 1); // no second row was created
+});
+
+test("different brands can claim the same post type and JST date independently", async () => {
+  const rows: ClaimRow[] = [];
+  const first = await claimPublishSlot({
+    supabaseUrl: SUPABASE_URL, serviceRoleKey: SERVICE_ROLE_KEY, brandId: "brand-a",
+    postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE, dateJst: "2026-09-03", executionId: "exec-a",
+    fetcher: tableFetcher(rows),
+  });
+  const second = await claimPublishSlot({
+    supabaseUrl: SUPABASE_URL, serviceRoleKey: SERVICE_ROLE_KEY, brandId: "brand-b",
+    postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE, dateJst: "2026-09-03", executionId: "exec-b",
+    fetcher: tableFetcher(rows),
+  });
+  assert.equal(first.claimed, true);
+  assert.equal(second.claimed, true);
+  assert.equal(rows.length, 2);
+  const duplicate = await claimPublishSlot({
+    supabaseUrl: SUPABASE_URL, serviceRoleKey: SERVICE_ROLE_KEY, brandId: "brand-a",
+    postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE, dateJst: "2026-09-03", executionId: "exec-a2",
+    fetcher: tableFetcher(rows),
+  });
+  assert.equal(duplicate.claimed, false);
+  assert.equal(rows.length, 2);
 });
 
 test("3: of two concurrent claims for the same date, only one succeeds", async () => {
@@ -81,11 +112,13 @@ test("3: of two concurrent claims for the same date, only one succeeds", async (
   const [first, second] = await Promise.all([
     claimPublishSlot({
       supabaseUrl: SUPABASE_URL, serviceRoleKey: SERVICE_ROLE_KEY,
+      brandId: BRAND_ID,
       postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE, dateJst: "2026-09-03", executionId: "exec-a",
       fetcher,
     }),
     claimPublishSlot({
       supabaseUrl: SUPABASE_URL, serviceRoleKey: SERVICE_ROLE_KEY,
+      brandId: BRAND_ID,
       postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE, dateJst: "2026-09-03", executionId: "exec-b",
       fetcher,
     }),
@@ -97,11 +130,13 @@ test("3: of two concurrent claims for the same date, only one succeeds", async (
 
 test("5: completing a claim transitions publishing -> published", async () => {
   const rows: ClaimRow[] = [{
+    brand_id: BRAND_ID,
     post_type: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE, date_jst: "2026-09-03",
     status: "publishing", execution_id: "exec-1", x_post_id: null, error_code: null,
   }];
   await completePublishSlot({
     supabaseUrl: SUPABASE_URL, serviceRoleKey: SERVICE_ROLE_KEY,
+    brandId: BRAND_ID,
     postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE, dateJst: "2026-09-03", xPostId: "12345",
     fetcher: tableFetcher(rows),
   });
@@ -110,11 +145,13 @@ test("5: completing a claim transitions publishing -> published", async () => {
 
 test("6: completing a claim stores the x_post_id", async () => {
   const rows: ClaimRow[] = [{
+    brand_id: BRAND_ID,
     post_type: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE, date_jst: "2026-09-03",
     status: "publishing", execution_id: "exec-1", x_post_id: null, error_code: null,
   }];
   await completePublishSlot({
     supabaseUrl: SUPABASE_URL, serviceRoleKey: SERVICE_ROLE_KEY,
+    brandId: BRAND_ID,
     postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE, dateJst: "2026-09-03", xPostId: "post-999",
     fetcher: tableFetcher(rows),
   });
@@ -123,11 +160,13 @@ test("6: completing a claim stores the x_post_id", async () => {
 
 test("7: an existing 'publishing' job (e.g. still mid-flight, or crashed) is never reclaimed", async () => {
   const rows: ClaimRow[] = [{
+    brand_id: BRAND_ID,
     post_type: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE, date_jst: "2026-09-03",
     status: "publishing", execution_id: "exec-old", x_post_id: null, error_code: null,
   }];
   const result = await claimPublishSlot({
     supabaseUrl: SUPABASE_URL, serviceRoleKey: SERVICE_ROLE_KEY,
+    brandId: BRAND_ID,
     postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE, dateJst: "2026-09-03", executionId: "exec-new",
     fetcher: tableFetcher(rows),
   });
@@ -137,11 +176,13 @@ test("7: an existing 'publishing' job (e.g. still mid-flight, or crashed) is nev
 
 test("8: a 'failed' job from earlier the same day is never automatically retried", async () => {
   const rows: ClaimRow[] = [{
+    brand_id: BRAND_ID,
     post_type: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE, date_jst: "2026-09-03",
     status: "failed", execution_id: "exec-old", x_post_id: null, error_code: "MORNING_GREETING_X_POST_FAILED:503",
   }];
   const result = await claimPublishSlot({
     supabaseUrl: SUPABASE_URL, serviceRoleKey: SERVICE_ROLE_KEY,
+    brandId: BRAND_ID,
     postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE, dateJst: "2026-09-03", executionId: "exec-retry",
     fetcher: tableFetcher(rows),
   });
@@ -150,11 +191,13 @@ test("8: a 'failed' job from earlier the same day is never automatically retried
 
 test("9: a different date_jst can still be claimed", async () => {
   const rows: ClaimRow[] = [{
+    brand_id: BRAND_ID,
     post_type: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE, date_jst: "2026-09-02",
     status: "published", execution_id: "exec-yesterday", x_post_id: "post-1", error_code: null,
   }];
   const result = await claimPublishSlot({
     supabaseUrl: SUPABASE_URL, serviceRoleKey: SERVICE_ROLE_KEY,
+    brandId: BRAND_ID,
     postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE, dateJst: "2026-09-03", executionId: "exec-today",
     fetcher: tableFetcher(rows),
   });
@@ -162,13 +205,91 @@ test("9: a different date_jst can still be claimed", async () => {
   assert.equal(rows.length, 2);
 });
 
+test("claim request carries the exact scoped conflict target and explicit brand", async () => {
+  let calls = 0;
+  await claimPublishSlot({
+    supabaseUrl: SUPABASE_URL, serviceRoleKey: SERVICE_ROLE_KEY,
+    brandId: BRAND_ID, postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE,
+    dateJst: "2026-09-03", executionId: "exec-1",
+    fetcher: async (input, init) => {
+      calls++;
+      assert.equal(new URL(String(input)).searchParams.get("on_conflict"), "brand_id,post_type,date_jst");
+      assert.equal(JSON.parse(String(init?.body)).brand_id, BRAND_ID);
+      return Response.json([{ brand_id: BRAND_ID }]);
+    },
+  });
+  assert.equal(calls, 1);
+});
+
+test("completion and failure for brand A cannot change brand B", async () => {
+  const rows: ClaimRow[] = ["brand-a", "brand-b"].map((brand_id) => ({
+    brand_id, post_type: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE,
+    date_jst: "2026-09-03", status: "publishing" as const,
+    execution_id: `exec-${brand_id}`, x_post_id: null, error_code: null,
+  }));
+  const fetcher = tableFetcher(rows);
+  await completePublishSlot({
+    supabaseUrl: SUPABASE_URL, serviceRoleKey: SERVICE_ROLE_KEY,
+    brandId: "brand-a", postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE,
+    dateJst: "2026-09-03", xPostId: "post-a", fetcher,
+  });
+  assert.equal(rows[0].status, "published");
+  assert.equal(rows[1].status, "publishing");
+  assert.equal(rows[1].x_post_id, null);
+  await failPublishSlot({
+    supabaseUrl: SUPABASE_URL, serviceRoleKey: SERVICE_ROLE_KEY,
+    brandId: "brand-a", postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE,
+    dateJst: "2026-09-03", errorCode: "ignored-after-publish", fetcher,
+  });
+  assert.equal(rows[0].status, "published");
+  assert.equal(rows[1].status, "publishing");
+  await failPublishSlot({
+    supabaseUrl: SUPABASE_URL, serviceRoleKey: SERVICE_ROLE_KEY,
+    brandId: "brand-b", postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE,
+    dateJst: "2026-09-03", errorCode: "brand-b-failure", fetcher,
+  });
+  assert.equal(rows[0].status, "published");
+  assert.equal(rows[1].status, "failed");
+  assert.equal(rows[1].error_code, "brand-b-failure");
+
+  const failureRows: ClaimRow[] = ["brand-a", "brand-b"].map((brand_id) => ({
+    brand_id, post_type: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE,
+    date_jst: "2026-09-04", status: "publishing" as const,
+    execution_id: `exec-${brand_id}`, x_post_id: null, error_code: null,
+  }));
+  await failPublishSlot({
+    supabaseUrl: SUPABASE_URL, serviceRoleKey: SERVICE_ROLE_KEY,
+    brandId: "brand-a", postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE,
+    dateJst: "2026-09-04", errorCode: "brand-a-failure", fetcher: tableFetcher(failureRows),
+  });
+  assert.equal(failureRows[0].status, "failed");
+  assert.equal(failureRows[1].status, "publishing");
+  assert.equal(failureRows[1].error_code, null);
+});
+
+test("missing brand fails closed before any claim or update request", async () => {
+  let calls = 0;
+  const fetcher: typeof fetch = async () => { calls++; return Response.json([]); };
+  const base = {
+    supabaseUrl: SUPABASE_URL, serviceRoleKey: SERVICE_ROLE_KEY,
+    brandId: "", postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE,
+    dateJst: "2026-09-03", fetcher,
+  };
+  await assert.rejects(() => claimPublishSlot({ ...base, executionId: "exec-1" }), { message: PUBLISH_CLAIM_BRAND_ID_REQUIRED });
+  await assert.rejects(() => completePublishSlot({ ...base, xPostId: "post-1" }), { message: PUBLISH_CLAIM_BRAND_ID_REQUIRED });
+  await assert.rejects(() => failPublishSlot({ ...base, errorCode: "error" }), { message: PUBLISH_CLAIM_BRAND_ID_REQUIRED });
+  assert.equal(calls, 0);
+});
+
 test("failing a claim records the error code without touching a non-publishing row", async () => {
   const rows: ClaimRow[] = [{
+    brand_id: BRAND_ID,
     post_type: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE, date_jst: "2026-09-03",
     status: "publishing", execution_id: "exec-1", x_post_id: null, error_code: null,
   }];
   await failPublishSlot({
     supabaseUrl: SUPABASE_URL, serviceRoleKey: SERVICE_ROLE_KEY,
+    brandId: BRAND_ID,
     postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE, dateJst: "2026-09-03",
     errorCode: "MORNING_GREETING_X_POST_FAILED:500",
     fetcher: tableFetcher(rows),
@@ -181,6 +302,7 @@ test("a claim insert failure surfaces as a dedicated error", async () => {
   const failingFetcher: typeof fetch = async () => new Response("error", { status: 500 });
   await assert.rejects(() => claimPublishSlot({
     supabaseUrl: SUPABASE_URL, serviceRoleKey: SERVICE_ROLE_KEY,
+    brandId: BRAND_ID,
     postType: MORNING_GREETING_PUBLISH_CLAIM_POST_TYPE, dateJst: "2026-09-03", executionId: "exec-1",
     fetcher: failingFetcher,
   }));

@@ -3326,6 +3326,7 @@ Deno.serve(async (req) => {
           supabaseUrl,
           serviceRoleKey,
           openAiApiKey,
+          brandId: brandContext.brand.id,
           xAuth: manualXAuth,
           now: referenceTime,
         });
@@ -4500,6 +4501,7 @@ Deno.serve(async (req) => {
         supabaseUrl,
         serviceRoleKey,
         openAiApiKey,
+        brandId: brandContext.brand.id,
         xAuth,
       });
       await callRpc(supabaseUrl, serviceRoleKey, "complete_morning_greeting_post", {
