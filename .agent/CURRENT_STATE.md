@@ -19,15 +19,11 @@
   - Only `important-news-monitor` deployed; `verify_jwt=false`; SHA `4450ee09…e4b7`. Latest metadata says v64 but same SHA and source bundle `source/62`; discrepancy disclosed.
   - Natural Cron runs succeeded through 09:20 UTC; no new candidate/usage row, so GPT-6 persistence remains unverified. Migration history version differs from repo timestamp; no repair.
 
-- Codex slot 2: `done` — `social-mobile-app-phase23-dedicated-qa-one-shot-history-learning-20260923`
-  - C2 PASS。dedicated QAでexactly-one live history-learning QA完了。
-  - 明示同意後に1回だけ実行し、9件を分析して未確定persona候補を返した。
-  - production FunctionはACTIVE v4 / verify_jwt=true / runtime SHAはPhase22から不変。source deployなし。
-  - access-token RPCはservice_role-only / SECURITY DEFINER / fixed empty search_pathを維持。
-  - publish/media/OpenAI/OAuth mutation/persona persistence/raw-history persistenceは0。publish permissionも無効のまま。
-  - live gateは終了時OFF。追加history readは未承認。
-  - request-level監査ログ不足によりRPC/Vault正確回数とX pagination正確回数は独立証明できず。広域展開前にsafe audit counter追加推奨。
-  - ここをsocial-mobile history-learning workstreamの区切りとする。
+- Codex slot 2: `ready` — `x-autopost-foundation-audit-multibrand-netlify-roadmap-20260923`
+  - Phase23 C2 PASSでsocial-mobile history-learningは一区切り。
+  - 次はX自動投稿基盤全体をread-only棚卸しし、複数ブランド/複数Xアカウント完成、Supabase中核化、Netlify Free管理画面移行までの実装ロードマップを確定する。
+  - Production mutation / deploy / migration / Cron変更 / Netlify作成 / Vercel変更は禁止。
+  - Recommended model: GPT-6 Luna。
 
 
 - Claude slot 1: `idle` — `market-report-shared-platform-phase2-consumer-cutover-20260917`
