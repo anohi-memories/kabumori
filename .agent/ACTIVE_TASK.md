@@ -17,11 +17,11 @@
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: social-mobile-app-phase19-live-vault-reader-architecture-and-disposable-proof-20260923
+- task_id: social-mobile-app-phase20-production-history-access-rpc-rollout-20260923
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
-- note: Phase18 C2 PASS済み。service-role-only adapterとnarrow SECURITY DEFINER RPCを比較・選定し、fake-only disposable proofまで。production Vault/deploy/X historyは禁止。Luna推奨。
+- note: Phase19 C2 PASS済み。single SECURITY DEFINER access-token RPC candidateのproduction rolloutのみ。Vault plaintext/read, Function deploy, X historyは禁止。Sol推奨。
 
 ### Claude slot 1
 - owner: claude
