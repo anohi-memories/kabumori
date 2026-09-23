@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-23 JST (PR #8 freshened onto latest main and merged as cd7ad89; Supabase production rollout remains unperformed)
+- checked_at: 2026-09-23 JST (C1 PASS on PR #8 merge; next H1 queued for full Important News GPT-6 model unification; production mutation 0)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,12 +14,13 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `kabumori-pr8-gpt6-news-portfolio-final-merge-20260923`
-  - PR #8 merged and closed as `cd7ad8994d6e20c752735a52b0d933e1c2bb0a16`; all 11 approved files on main match freshened candidate `ab593c74fe6825ffbf9ba8ef2bed004a5b92b731`.
-  - GPT-6 Luna, Important News producer V2, and Portfolio validator fix are on main; required Vercel check passed.
-  - Main merge triggered an automatic Vercel Production build (success). No Supabase Edge Function deploy, DB migration, or report backfill was performed.
-  - Remaining production rollout requires the exact migration apply, both Function deploys, and a safe 9/18 close regeneration/backfill decision.
-  - Stop for C1.
+- Codex slot 1: `ready` — `kabumori-important-news-full-gpt6-model-unification-20260923`
+  - C1 PASS on PR #8 final merge.
+  - PR #8 is merged/closed at main `cd7ad8994d6e20c752735a52b0d933e1c2bb0a16`; resulting Vercel status is success.
+  - Important News app-copy V2, Portfolio validator fix, GPT-6 Luna app-copy, and GPT-6 Luna Personalized Reports are on main.
+  - Remaining Important News runtime paths still on GPT-5.6 are importance judgement/escalation, breaking-market AI search, and Important News post-generation.
+  - Next H1 inventories all remaining GPT-5.6 references under `important-news-monitor` and upgrades active paths to GPT-6 Luna / GPT-6 Sol with pricing/tests.
+  - No Supabase production deploy/migration/backfill yet. Production mutation 0.
   - Recommended model: Luna.
 
 - Codex slot 2: `done` — `social-mobile-app-phase21-production-history-learning-disabled-deploy-20260923`
