@@ -1,37 +1,62 @@
 # Codex Task
 
-- task_id: kabumori-important-news-gpt6-schema-and-source-candidate-20260923
+- task_id: kabumori-important-news-gpt6-schema-source-merge-20260923
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna
-- purpose: C1で確認したGPT-5.6-only CHECK constraint blockerを解消するため、GPT-6 model metadataを許可する狭いmigration candidateを追加し、停止していたImportant News GPT-6 source unification candidateをmain最新上で再構築する。production apply/deployは禁止。
+- purpose: C1 PASS済みのPR #9（GPT-6 model metadata CHECK migration candidate + Important News runtime GPT-6 unification）をlatest mainへfreshenし、再検証後mainへmergeする。production migration apply / Function deployは禁止。
 
 ## C1 decision
 
-Previous task `kabumori-important-news-full-gpt6-model-unification-20260923` is **PASS on diagnosis / BLOCKED only by schema compatibility**.
+Previous task `kabumori-important-news-gpt6-schema-and-source-candidate-20260923` is **PASS**.
 
-Accepted findings:
-- `important_news_candidates.judgement_model` currently CHECKs only `gpt-5.6-luna` / `gpt-5.6-sol`.
-- `important_news_candidates.generation_model` currently CHECKs only `gpt-5.6-luna` / `gpt-5.6-sol`.
-- Runtime persists GPT model IDs into those columns.
-- Therefore switching active runtime selectors to GPT-6 without a schema migration would fail at write time.
-- The local prototype otherwise passed:
-  - targeted changed-path tests: 172 / 0
-  - full Important News suite: 423 / 0 with --no-check
+Verified at C1:
+- PR #9 is open, mergeable, and required Vercel check is success.
+- Candidate commit: `eefa3eabf4ddb4b07f6a300f34b0b395a4d7b691`.
+- Exactly one forward migration was added:
+  - `supabase/migrations/20260923035652_allow_gpt6_important_news_model_metadata.sql`
+- The migration only replaces:
+  - `important_news_candidates_judgement_model_check`
+  - `important_news_candidates_generation_model_check`
+- Allowed values after migration are:
+  - `gpt-5.6-luna`
+  - `gpt-5.6-sol`
+  - `gpt-6-luna`
+  - `gpt-6-sol`
+  - NULL remains allowed.
+- Production catalog read-only evidence matched the source constraint names/definitions before migration.
+- No column type/nullability/RLS/grant/index/trigger/RPC/data behavior changed.
+- Active Important News runtime routing on the candidate is:
+  - judgement first pass -> `gpt-6-luna`
+  - judgement escalation -> `gpt-6-sol`
+  - breaking-market AI search -> `gpt-6-luna`
+  - post draft/Fact/Voice/retries -> `gpt-6-luna`
+- Active pricing:
+  - GPT-6 Luna $0.10 input / $0.50 output per 1M
+  - GPT-6 Sol $2 / $10 per 1M
+- Unknown-model fallback now uses GPT-6 Luna rates.
+- GPT-5.6 rates remain only for historical ledger recomputation/tests.
+- Verification reported:
+  - targeted 173 / 0
+  - full Important News 424 / 0 with --no-check
   - changed logic/test deno checks passed
   - git diff --check passed
-- production mutation = 0.
+- The only index.ts typecheck blocker is the pre-existing unchanged `_shared/x_oauth2_post.ts:66` ArrayBufferLike/BufferSource issue.
+- Production mutation = 0.
 
-## Goal
+## Main drift review at C1
 
-Create a **source-only candidate** containing both:
-1. a narrow schema migration that permits GPT-6 metadata IDs while preserving historical GPT-5.6 rows, and
-2. the GPT-6 runtime unification already prototyped.
+PR #9 is currently behind main by 4 commits. Main changes since candidate merge-base are control files only:
+- `.agent/ACTIVE_TASK.md`
+- `.agent/CODEX_REPORT.md`
+- `.agent/CURRENT_STATE.md`
+- `.agent/tasks/CODEX_TASK.md`
+- `.agent/tasks/CODEX_TASK_2.md`
 
-Do not apply the migration or deploy any Function in this H1.
+There is no overlap with the 12 PR #9 implementation/migration/test files.
 
 ## Mandatory startup
 
@@ -40,103 +65,61 @@ Do not apply the migration or deploy any Function in this H1.
 3. Read this TASK
 4. Read `.agent/CODEX_REPORT.md`
 5. Fresh fetch `origin/main`
-6. Confirm no H2/G1/G2 file/object ownership conflict
-7. Re-read the two original migrations that define the current CHECK constraints and inspect current source writes.
+6. Re-check PR #9 and current main
+7. Confirm no new semantic overlap in the 12 approved PR #9 files
+8. Confirm no H2/G1/G2 ownership conflict
 
-## Migration candidate requirements
+## Freshen rules
 
-Create exactly one new forward migration that:
-- does **not** edit historical migration files
-- preserves existing GPT-5.6 values
-- permits:
-  - `gpt-6-luna`
-  - `gpt-6-sol`
-- updates only the model-ID CHECK constraints needed for:
-  - `judgement_model`
-  - `generation_model`
-- does not alter column types, nullability, RLS, grants, indexes, triggers, RPCs, or unrelated constraints
-- is idempotence-safe only to the extent normal project migration conventions require; do not add broad defensive DDL that masks schema drift
-- has a static/SQL contract test proving the allowed set and scope
+- Rebase/freshen PR #9 onto latest main without dragging stale `.agent` control history.
+- If any new semantic main change touches an approved PR #9 implementation/migration/test file, STOP for C1 instead of auto-resolving.
+- Do not alter the approved migration scope.
+- Do not broaden model-routing behavior.
 
-If production schema read-only evidence shows the live constraint names/definitions materially differ from source, STOP for C1 rather than guessing.
-
-## Runtime source changes
-
-Rebuild the previously tested prototype on latest main:
-
-### Importance judgement
-- first pass: `gpt-5.6-luna` -> `gpt-6-luna`
-- escalation: `gpt-5.6-sol` -> `gpt-6-sol`
-- preserve escalation criteria and reasoning effort
-
-### Breaking-market AI search
-- `gpt-5.6-luna` -> `gpt-6-luna`
-- preserve web-search/source validation, query cadence, and source rules
-
-### Important News post generation
-- draft / Fact / Voice / retry model -> `gpt-6-luna`
-- preserve retry/publish/auto-publish behavior
-
-### Cost accounting
-- active GPT-6 Luna: $0.10 input / $0.50 output per 1M
-- active GPT-6 Sol: $2 input / $10 output per 1M
-- unknown active-model fallback must no longer silently use GPT-5.6 Luna pricing
-- retain GPT-5.6 historical rates only where needed for already-written `ai_usage_events` / historical recomputation, with tests proving they are historical-only
-
-## Model verification
-
-Re-verify official OpenAI docs before finalizing:
-- `gpt-6-luna`
-- `gpt-6-sol`
-- current standard short-context pricing
-
-If IDs/prices differ from the values above, STOP for C1.
-
-## Verification
+## Verification after freshen
 
 At minimum:
 - migration static/contract test PASS
 - importance judgement tests PASS
 - breaking-market source-fetcher tests PASS
-- post-generation tests PASS
-- generation-dispatch tests PASS where model assertions changed
+- post-generation/generation-dispatch tests PASS
 - usage-ledger/cost tests PASS
-- full Important News suite PASS or unrelated pre-existing failure explicitly proven unchanged
+- full Important News suite status recorded
 - changed-file Deno checks PASS
 - `git diff --check` PASS
-- fresh inventory proves no **active runtime selector** under `important-news-monitor` still chooses GPT-5.6
-- any retained GPT-5.6 literals are historical-accounting/test fixtures only and documented
-- existing GPT-6 app-copy V2 remains intact
+- grep/inventory proves no active Important News runtime selector uses GPT-5.6
+- retained GPT-5.6 literals are historical accounting/test fixtures only
+- Vercel required check = success on final PR head
 - production mutation = 0
 
-## Production restrictions
+## Merge
 
-Forbidden:
-- migration apply
-- production DB write
-- Edge Function deploy
-- Cron/config change
-- secret/Vault/provider setting change
-- report regeneration/backfill
-- manual/synthetic X post
-- Push
-- branch-protection bypass
+If checks pass:
+- merge PR #9 to `main`
+- read back resulting main SHA
+- verify PR merged/closed
+- verify all 12 approved files on main match the freshened candidate
+- do NOT apply `20260923035652_allow_gpt6_important_news_model_metadata.sql`
+- do NOT deploy `important-news-monitor`
+- do NOT change Cron/config/secrets
+- do NOT manually post to X or Push
 
-Read-only production schema inspection is allowed only if needed to verify current constraint definitions.
-
-## Deliverables / C1
+## Handoff
 
 Update `.agent/CODEX_REPORT.md` with:
-1. exact new migration filename and DDL scope
-2. read-only schema evidence if queried
-3. source files changed
-4. active model routing before/after
-5. pricing/accounting before/after
-6. complete test/check results
-7. inventory of any retained GPT-5.6 literals and justification
-8. branch/commit/PR
-9. production mutation = 0
-10. explicit next production rollout sequence, but do not execute it
+1. pre-freshen main SHA
+2. final PR head SHA
+3. test/check results
+4. Vercel result
+5. merge/resulting main SHA
+6. read-back proof that migration candidate + GPT-6 runtime unification are on main
+7. production mutation = 0
+8. explicit remaining rollout sequence:
+   - exact single migration apply
+   - read back both CHECK constraints
+   - deploy only reviewed `important-news-monitor`
+   - observe natural runtime/model metadata/cost records
+   - separately handle the previously approved `personalized-reports` deploy / 9/18 close regeneration work; do not mix it into this merge
 
 On completion:
 - status -> `review_required`
