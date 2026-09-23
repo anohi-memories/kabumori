@@ -6,11 +6,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: kabumori-news-producer-portfolio-freshness-source-merge-20260922
+- task_id: kabumori-gpt6-luna-model-upgrade-on-pr8-20260923
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: C1-approved candidate was freshened and PR #8 opened, but required Vercel check is rate-limited for 24 hours; merge is pending without bypass. Production mutation 0.
+- note: GPT-6 Luna upgrade pushed to PR #8 (`6f5b184`); required Vercel check passed; stop for C1. Production mutation 0.
 
 
 ### Codex slot 2

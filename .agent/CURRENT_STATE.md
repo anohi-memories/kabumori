@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-23 JST (H1 GPT-6 Luna model-upgrade task ready on existing PR #8 workstream; production mutation 0)
+- checked_at: 2026-09-23 JST (H1 GPT-6 Luna model-upgrade pushed to PR #8; review_required for C1; production mutation 0)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,11 +14,10 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `kabumori-gpt6-luna-model-upgrade-on-pr8-20260923`
-  - Existing PR #8 remains open and blocked only by required Vercel build-rate-limit status.
-  - Next H1 updates the same PR workstream from GPT-5.6 Luna to GPT-6 Luna for Important News app-copy draft/Fact and personalized reports draft/Fact.
-  - H1 must verify the official API model ID and pricing before editing, then update related model assertions and cost estimator constants.
-  - No Sol fallback, no display-time AI, no production deploy/migration/backfill.
+- Codex slot 1: `review_required` — `kabumori-gpt6-luna-model-upgrade-on-pr8-20260923`
+  - PR #8 remains open at `6f5b184bfd7406d356f2f499342013774fec02d5`; required Vercel check passed.
+  - Important News app-copy draft/Fact and personalized reports draft/Fact now use GPT-6 Luna; C1 review is next.
+  - No Sol fallback, display-time AI, production deploy, migration, or backfill.
   - Production mutation 0.
   - Recommended model: Luna.
 

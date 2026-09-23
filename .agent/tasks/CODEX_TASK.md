@@ -3,17 +3,17 @@
 - task_id: kabumori-gpt6-luna-model-upgrade-on-pr8-20260923
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna
-- purpose: open PR #8の同一workstream上で、ニュースapp copy生成・Factチェック・personalized reportsのOpenAI modelをGPT-6 Lunaへ更新し、関連テスト/コスト定数を追従させる。PR #8のVercel rate-limit blockerは維持し、production deploy/migration/backfillは行わない。
+- purpose: open PR #8の同一workstream上で、ニュースapp copy生成・Factチェック・personalized reportsのOpenAI modelをGPT-6 Lunaへ更新し、関連テスト/コスト定数を追従させる。required Vercel checkは迂回せず、production deploy/migration/backfillは行わない。
 
 ## Current PR / blocker
 
 - PR #8 is open and not merged.
-- PR head before this task: `f5978b1f8d101f48206a65bc38772fb65db95de8`.
-- Required Vercel check is currently failing only because of the Vercel build-rate-limit / quota condition.
+- PR head before this task: `f5978b1f8d101f48206a65bc38772fb65db95de8`; updated head: `6f5b184bfd7406d356f2f499342013774fec02d5`.
+- The new required Vercel check completed successfully; the previously observed rate-limit condition is no longer blocking this head.
 - Do not bypass branch protection.
 - Do not create a competing implementation branch if the existing PR #8 branch can be safely updated.
 

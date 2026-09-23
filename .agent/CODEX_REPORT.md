@@ -1,3 +1,47 @@
+## Latest H1 result — GPT-6 Luna upgrade on PR #8 (2026-09-23)
+
+- task_id: `kabumori-gpt6-luna-model-upgrade-on-pr8-20260923`
+- result: `review_required` — updated the existing PR #8 branch and stopped for C1.
+- official_model: `gpt-6-luna`, verified at [OpenAI GPT-6 Luna model documentation](https://developers.openai.com/api/docs/models/gpt-6-luna).
+- pricing_source: [OpenAI API pricing](https://developers.openai.com/api/docs/pricing) — input `$0.10 / 1M tokens`, output `$0.50 / 1M tokens`.
+- branch: `codex/kabumori-news-producer-portfolio-freshen-20260922`
+- previous_head: `f5978b1f8d101f48206a65bc38772fb65db95de8`
+- commit / PR head: `6f5b184bfd7406d356f2f499342013774fec02d5`
+- pull_request: https://github.com/anohi-memories/kabumori/pull/8 (open, not merged)
+- checks: `gh pr checks 8` reports Vercel `pass` and Vercel Preview Comments `pass`. The earlier rate-limit condition no longer blocks this head.
+
+### Changed files
+
+- `supabase/functions/important-news-monitor/app_copy_logic.ts`
+- `supabase/functions/important-news-monitor/app_copy_logic_test.ts`
+- `supabase/functions/important-news-monitor/usage_ledger.ts`
+- `supabase/functions/important-news-monitor/usage_ledger_test.ts`
+- `supabase/functions/important-news-monitor/cost_path_audit_test.ts`
+- `supabase/functions/personalized-reports/report_logic.ts`
+- `supabase/functions/personalized-reports/report_logic_test.ts`
+- `supabase/functions/personalized-reports/shared_market_consumer_test.ts`
+
+### Model, pricing, and preserved scope
+
+- `APP_COPY_MODEL`: `gpt-5.6-luna` → `gpt-6-luna`; both app-copy draft and Fact use this constant.
+- `REPORT_MODEL`: `gpt-5.6-luna` → `gpt-6-luna`; both personalized-report draft and Fact use this constant.
+- Both application-side estimators: input `$0.20` → `$0.10` / 1M tokens; output `$1.20` → `$0.50` / 1M tokens.
+- Usage ledger adds GPT-6 Luna rates while retaining GPT-5.6 Luna rates for untouched paths.
+- Other GPT-5.6 Luna usages intentionally remain in `importance_judgement_logic.ts` and its tests, `breaking_market_source_fetchers.ts`, and X-post generation metadata/logic in `index.ts`, `post_generation_logic.ts`, and related tests. These are outside app-copy and personalized-report draft/Fact scope and were not changed.
+- Diff from the pre-task PR head is limited to the eight files above; source-backed app-copy selection and the full-width Japanese proper-name validator remain present and unchanged apart from model/pricing constants and assertions.
+
+### Verification and safety
+
+- Important News app-copy tests: **13 passed / 0 failed**.
+- Usage ledger + cost-path audit tests: **11 passed / 0 failed**.
+- Full Important News test suite: **421 passed / 0 failed** with `--no-check`; normal whole-suite typechecking was blocked because `npm:unpdf@1.8.1` is not installed in the local Deno node_modules cache.
+- Personalized report and shared-market consumer tests: **26 passed / 0 failed** with normal Deno typechecking.
+- `deno check --no-lock` across all eight changed TypeScript files: passed.
+- `git diff --check`: passed.
+- Production mutation = **0**. No database migration/write, Edge Function deploy, Cron change, secret/Vault setting, report regeneration/backfill, or X/Push behavior change.
+- Existing Important News producer V2 and Portfolio validator candidate remain in PR #8; no production rollout or merge was performed.
+- next_recommendation: C1 review PR #8 at `6f5b184bfd7406d356f2f499342013774fec02d5`; do not merge/deploy from this H1 turn.
+
 ## Latest H1 result — PR #7 freshened and merged (2026-09-22)
 
 - task_id: `kabumori-mobile-holdings-watch-news-detail-merge-retry-20260922`
