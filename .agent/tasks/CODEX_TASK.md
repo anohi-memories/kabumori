@@ -1,29 +1,36 @@
 # Codex Task
 
-- task_id: kabumori-important-news-monitor-caller-auth-remediation-candidate-20260923
+- task_id: kabumori-important-news-monitor-caller-auth-finalize-20260923
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: critical
-- recommended_model: GPT-6 Sol Medium
-- purpose: release-readiness auditで見つかった `important-news-monitor` のcaller-auth境界を、既存Cronを壊さずfail-closedにするsource-only remediation candidateを作る。production変更/Function deploy/auto_publish変更は禁止。source-only candidateでは既存4 Cron commandのheader追加・Vault lookup参照を含む。
+- recommended_model: Luna
+- purpose: PR #12のcaller-auth candidateを最新mainへfreshenし、full regressionとdisposable PostgreSQLでmigration実行証明まで行い、merge可能な最終candidateへ仕上げる。本番変更はまだ行わない。
 
 ## C1 decision
 
-Previous task `kabumori-release-readiness-audit-and-roadmap-20260923` is **PASS for audit content, merge held**.
+Previous task `kabumori-important-news-monitor-caller-auth-remediation-candidate-20260923` is **NOT PASS for merge yet, but design direction is accepted**.
 
-Verified:
-- PR #10 is open and mergeable.
-- Audit document covers the requested release-readiness scope and gives a shortest-path roadmap.
-- Production mutation = 0.
-- PR #10 required Vercel check is currently **failure** due to the daily deployment/build-rate limit; do not bypass branch protection and do not merge until the required check succeeds.
-- The audit's urgent finding is credible from source review:
-  - production `important-news-monitor` has `verify_jwt=false`
-  - the Deno.serve entry path checks POST, loads service-role credentials, parses caller-controlled JSON, then dispatches modes
-  - no inbound Authorization/JWT or dedicated cron-secret validation appears before dispatch
-  - `publish_ready` can reach auto-publish/X side effects when enabled
-- Endpoint exploitability was not tested; no invocation is authorized by this task.
+Accepted findings/design:
+- production has exactly four current pg_cron callers for `important-news-monitor`
+- current callers had no credential
+- Function-only auth would break all four jobs
+- chosen design is coherent:
+  - dedicated high-entropy header
+  - Function-side fail-closed validation before service-role load/body parse/mode dispatch
+  - Cron header value resolved from Vault at runtime
+  - `verify_jwt=false` remains because pg_cron is not using a user JWT
+- PR #12 is focused and production mutation remains 0
+- targeted auth/wiring/migration tests passed 7/7
+- Vercel preview check succeeded
+
+Merge blockers:
+1. PR #12 branch is behind/diverged from current main and must be freshened before review.
+2. Full Important News regression suite was not run.
+3. The migration was not executed against disposable PostgreSQL, so exact cron command patching / transactional fail-closed behavior is not yet proven.
+4. PR #11 is a stale partial control-sync draft and must not be merged.
 
 ## Mandatory startup
 
@@ -31,83 +38,98 @@ Verified:
 2. Read `.agent/ORCHESTRATION.md`
 3. Read `.agent/CURRENT_STATE.md`
 4. Read this TASK
-5. Read PR #10 audit document
+5. Read PR #12 and its runbook
 6. Fresh fetch `origin/main`
-7. Inspect all production callers of `important-news-monitor` (Cron/scheduler/manual/admin if any)
-8. Confirm no H2/G1/G2 overlap with this Function or its caller-auth configuration
+7. Confirm H2/G1/G2 do not own `important-news-monitor`, these four Cron jobs, or the auth migration
+8. Do not touch PR #11 except to report that it remains unmerged/stale
 
-## User scope addendum (2026-09-23)
+## Work
 
-The user explicitly authorized a source/config candidate combining (a) a dedicated secret header on exactly the four existing `important-news-monitor` pg_cron jobs, (b) safe Vault-backed secret lookup, and (c) Function-side authentication before mode dispatch. This does not authorize production changes; migration apply, Vault writes, Function secret/config changes, and deployment each require separate approval. Do not change post content, Cron frequency, `auto_publish` conditions, or news judgement logic.
+### 1. Freshen PR #12
 
-## Scope
+- Rebase/cherry-pick the focused PR #12 implementation onto latest `origin/main`
+- Resolve only genuine conflicts
+- Do not carry stale `.agent` history into the implementation PR unless required by repository convention
+- Reconfirm changed implementation scope remains limited to:
+  - `supabase/functions/important-news-monitor/caller_auth.ts`
+  - `supabase/functions/important-news-monitor/index.ts`
+  - targeted tests
+  - one forward migration for the four Cron jobs
+  - operator runbook
 
-Design and implement a **source-only** caller-auth remediation candidate for:
-- `supabase/functions/important-news-monitor`
+### 2. Full verification
 
-Requirements:
-- preserve legitimate scheduled execution
-- reject unauthenticated/untrusted external invocation before mode dispatch
-- do not expose service-role or cron secrets in responses/logs
-- fail closed on missing/malformed credentials
-- keep dry-run/admin/manual paths protected as well
-- preserve existing mode behavior after successful authentication
-- do not change publish selection, GPT routing, source selection, Cron cadence, X OAuth, Push logic, or auto-publish business rules
-- prefer one explicit, reviewable auth contract over mode-specific ad hoc checks
+Run:
+- targeted auth tests
+- full `important-news-monitor` regression suite using the repository-approved invocation
+- changed-file `deno check` / equivalent
+- `git diff --check`
 
-Evaluate the safest compatible option based on actual callers, for example:
-- gateway JWT verification if all callers can present a valid JWT, or
-- a dedicated shared secret/header validated before dispatch if Cron requires `verify_jwt=false`
+Document any pre-existing unrelated type issue separately.
 
-Do not guess. Inspect existing caller construction first.
+### 3. Disposable PostgreSQL proof
 
-## Verification
+Execute the migration candidate against an isolated disposable PostgreSQL/Supabase-compatible environment that contains a representative `cron.job` shape for the four jobs.
 
-Add targeted tests proving at minimum:
-- missing auth rejected
-- malformed/wrong auth rejected
-- valid scheduled caller auth accepted
-- privileged modes cannot execute before auth
-- auth check occurs before any DB/OpenAI/X side-effect path
-- response/logs do not reveal secret material
-- existing mode dispatch still works behind valid auth
+Prove:
+- exactly the four intended jobs are patched
+- schedules remain unchanged
+- request bodies remain unchanged
+- URLs remain unchanged
+- active flags/other cron metadata remain unchanged
+- only command header expression gains the dedicated secret header
+- Vault lookup is runtime-only; secret literal is never embedded
+- missing Vault secret fails before any partial update
+- missing/extra job or unexpected command/header shape fails transactionally
+- rerun after patch fails closed rather than silently duplicating the header
+- rollback strategy is understood and documented; do not create a production rollback migration unless explicitly needed
 
-Run relevant Important News tests and changed-file checks.
+### 4. Security checks
+
+Confirm:
+- missing/malformed/wrong secret rejected before body parse and privileged credential loading
+- valid secret permits normal dispatch
+- secret never appears in source, logs, responses, tests, reports, or migration text
+- dry-run/manual/admin modes are protected by the same gate
+- no mode bypass exists before authentication
 
 ## Production restrictions
 
 Forbidden:
+- production migration apply
+- Vault write
+- Function secret/config change
 - Function deploy
-- changing `verify_jwt` production setting
-- Production Cron changes (the source migration candidate for exactly the four existing jobs is permitted by the scope addendum)
-- auto_publish setting changes
-- DB writes/migrations (including applying the source migration)
-- Production secrets/Vault writes or Function secret configuration
+- Cron mutation
+- `verify_jwt` change
+- auto_publish change
 - manual Function invocation
-- X post / Push
 - candidate injection
-- PR #10 branch-protection bypass
+- X post / Push
+- any unrelated schema/config change
 
-## PR #10
+## PR handling
 
-Do not fold unrelated auth implementation into PR #10.
-If the Vercel required check later becomes green, report that separately; PR #10 remains a docs/control PR.
+- PR #12 may be updated/replaced with a fresh final candidate branch.
+- Do not merge until all checks above pass and C1 approves.
+- PR #11 must remain unmerged; if it is obsolete, report that for later cleanup rather than merging it.
 
 ## Handoff
 
-Create a focused source PR for the auth remediation candidate and update `.agent/CODEX_REPORT.md` with:
-- discovered production caller contract
-- chosen auth design and why
-- changed files
-- tests/checks
-- compatibility risks
-- rollout requirements
+Update `.agent/CODEX_REPORT.md` with:
+- fresh main SHA
+- final PR/head SHA
+- exact changed files
+- full regression result
+- disposable PostgreSQL proof result
+- Vercel/check status
+- compatibility/rollback notes
 - production mutation = 0
-- PR link/head SHA
+- C1 recommendation
 
 Then:
 - status -> `review_required`
 - next_owner -> `chatgpt`
 - STOP for C1
 
-**推奨モデル：GPT-6 Sol Medium。**
+**推奨モデル：Luna。問題が出た場合のみGPT-6 Sol Mediumへ上げる。**
