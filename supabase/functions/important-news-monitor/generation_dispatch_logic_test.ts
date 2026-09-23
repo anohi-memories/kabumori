@@ -29,7 +29,7 @@ function passingRunner(): GenerationRunner {
     payload: step === "draft"
       ? { text: "テスト株式会社が通期業績予想を上方修正しました。", sufficient_information: true, notes: [] }
       : { passed: true, issues: [] },
-    model: "gpt-5.6-luna",
+    model: "gpt-6-luna",
     inputTokens: 100,
     outputTokens: 50,
     estimatedCost: 0.00008,

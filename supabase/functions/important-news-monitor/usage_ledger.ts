@@ -11,13 +11,14 @@
 // ignored. Rates live here only, and every row keeps the raw token/call counts
 // so the estimate can be recomputed once billing confirms the real prices.
 
-export type PricedModel = "gpt-5.6-luna" | "gpt-6-luna" | "gpt-5.6-sol";
+export type PricedModel = "gpt-5.6-luna" | "gpt-6-luna" | "gpt-5.6-sol" | "gpt-6-sol";
 
 /** USD per 1M tokens. */
 export const MODEL_RATES: Record<PricedModel, { input: number; output: number }> = {
   "gpt-5.6-luna": { input: 0.2, output: 1.2 },
   "gpt-6-luna": { input: 0.1, output: 0.5 },
   "gpt-5.6-sol": { input: 4, output: 20 },
+  "gpt-6-sol": { input: 2, output: 10 },
 };
 
 /** USD per web_search tool call (same assumption as x-test-post's morningApiCostUsd). */
@@ -52,7 +53,8 @@ function count(value: unknown): number {
 }
 
 export function estimateCostUsd(model: string, inputTokens: number, outputTokens: number, webSearchCalls = 0): number {
-  const rates = MODEL_RATES[model as PricedModel] ?? MODEL_RATES["gpt-5.6-luna"];
+  // Keep 5.6 rates for historical rows; unknown active models use current GPT-6 Luna rates.
+  const rates = MODEL_RATES[model as PricedModel] ?? MODEL_RATES["gpt-6-luna"];
   const tokens = (count(inputTokens) * rates.input + count(outputTokens) * rates.output) / 1_000_000;
   return Number((tokens + count(webSearchCalls) * WEB_SEARCH_CALL_USD).toFixed(8));
 }

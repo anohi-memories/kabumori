@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  importantNewsModelCost,
   judgeCandidateWithEscalation,
   parseModelJudgement,
   statusForJudgement,
@@ -22,6 +23,11 @@ const candidate: JudgementCandidate = {
   publishedAt: "2026-08-31T06:00:00.000Z",
 };
 
+test("judgement estimator uses current GPT-6 Luna and Sol standard rates", () => {
+  assert.equal(importantNewsModelCost("gpt-6-luna", 1_000_000, 1_000_000), 0.6);
+  assert.equal(importantNewsModelCost("gpt-6-sol", 1_000_000, 1_000_000), 12);
+});
+
 function judgement(overrides: Partial<ModelJudgement> = {}): ModelJudgement {
   return {
     importance: "important",
@@ -32,7 +38,7 @@ function judgement(overrides: Partial<ModelJudgement> = {}): ModelJudgement {
     confidence: 0.9,
     needsSol: false,
     factCheckStatus: "passed",
-    model: "gpt-5.6-luna",
+    model: "gpt-6-luna",
     inputTokens: 100,
     outputTokens: 50,
     estimatedCost: 0.00008,
@@ -61,7 +67,7 @@ test("most_important candidate is reviewed by Sol", async () => {
     models.push(model);
     return judgement({ importance: "most_important", model });
   });
-  assert.deepEqual(models, ["gpt-5.6-luna", "gpt-5.6-sol"]);
+  assert.deepEqual(models, ["gpt-6-luna", "gpt-6-sol"]);
   assert.equal(result.final.importance, "most_important");
   assert.equal(result.escalatedToSol, true);
 });
@@ -70,13 +76,13 @@ test("low Luna confidence escalates to Sol", async () => {
   let calls = 0;
   const result = await judgeCandidateWithEscalation(candidate, { solEscalationEnabled: true }, async (_candidate, model) => {
     calls += 1;
-    return model === "gpt-5.6-luna"
+    return model === "gpt-6-luna"
       ? judgement({ confidence: 0.55 })
       : judgement({ model, confidence: 0.92 });
   });
   assert.equal(calls, 2);
   assert.ok(result.escalationReasons.includes("LOW_CONFIDENCE"));
-  assert.equal(result.final.model, "gpt-5.6-sol");
+  assert.equal(result.final.model, "gpt-6-sol");
 });
 
 test("high-confidence Luna result completes without Sol", async () => {
@@ -87,7 +93,7 @@ test("high-confidence Luna result completes without Sol", async () => {
   });
   assert.equal(calls, 1);
   assert.equal(result.escalatedToSol, false);
-  assert.equal(result.final.model, "gpt-5.6-luna");
+  assert.equal(result.final.model, "gpt-6-luna");
 });
 
 test("insufficient facts are safely rejected after review", async () => {
@@ -163,7 +169,7 @@ test("17: a market_macro candidate can be judged most_important and is escalated
       return judgement({ importance: "most_important", category: "boj", model });
     },
   );
-  assert.deepEqual(models, ["gpt-5.6-luna", "gpt-5.6-sol"]);
+  assert.deepEqual(models, ["gpt-6-luna", "gpt-6-sol"]);
   assert.equal(result.final.importance, "most_important");
 });
 
@@ -213,7 +219,7 @@ test("20: a breaking_market candidate can be judged most_important and is escala
       return judgement({ importance: "most_important", category: "tariffs", model });
     },
   );
-  assert.deepEqual(models, ["gpt-5.6-luna", "gpt-5.6-sol"]);
+  assert.deepEqual(models, ["gpt-6-luna", "gpt-6-sol"]);
   assert.equal(result.final.importance, "most_important");
 });
 
@@ -227,7 +233,7 @@ test("structured result validation and DB status mapping accept declared values"
     confidence: 0.88,
     needs_sol: false,
     fact_check_status: "passed",
-  }, "gpt-5.6-luna");
+  }, "gpt-6-luna");
   assert.equal(parsed.category, "share_buyback");
   assert.equal(statusForJudgement(parsed.importance), "ready_for_generation");
   assert.equal(statusForJudgement("no_post"), "rejected");

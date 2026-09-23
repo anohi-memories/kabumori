@@ -44,7 +44,7 @@ function runner(overrides: Partial<Record<GenerationStep, unknown>> = {}): Gener
     payload: overrides[step] ?? (step === "draft"
       ? { text: "テスト株式会社が通期業績予想を上方修正しました。業績の見通しが変わる発表として、同社株の反応が意識されそうです。", sufficient_information: true, notes: [] }
       : { passed: true, issues: [] }),
-    model: "gpt-5.6-luna",
+    model: "gpt-6-luna",
     inputTokens: 100,
     outputTokens: 50,
     estimatedCost: 0.00008,
@@ -1077,7 +1077,7 @@ function scriptedRunner(
       throw new Error(`UNEXPECTED_STEP_CALL:${step} (expected ${entry?.step ?? "end of script"})`);
     }
     index += 1;
-    return { payload: entry.payload, model: "gpt-5.6-luna", inputTokens: 100, outputTokens: 50, estimatedCost: 0.00008 };
+    return { payload: entry.payload, model: "gpt-6-luna", inputTokens: 100, outputTokens: 50, estimatedCost: 0.00008 };
   };
   return { runner, calls };
 }
