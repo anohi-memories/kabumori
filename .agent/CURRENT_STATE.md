@@ -27,12 +27,11 @@
   - Recommended model: GPT-6 Sol Medium。
 
 
-- Claude slot 1: `review_required` — `kabumori-mobile-release-blockers-phase1-production-rollout-20260924`
-  - Gate A PASS: `public.ensure_my_profile()` applied alone (no db push / no history write). Security invoker, `search_path=""`, EXECUTE only for postgres (the owner) and authenticated; anon and service_role have none.
-  - Gate B PASS: `account-delete` v1 ACTIVE with verify_jwt=true. Source is AST-identical to reviewed main, with a negative control. The other 16 functions are unchanged.
-  - Gate C STOPPED: the CLI cannot safely add one Auth redirect entry. Manual Dashboard step: add `kabumori://reset-password` to Redirect URLs.
-  - Gate D PASS: rollback-contained RPC contract check; unauthenticated and non-user token calls return 401; auth.users=2 / profiles=1 unchanged.
-  - Production mutations: exactly 2 (migration + account-delete deploy). Legal/support URLs still unresolved.
+- Claude slot 1: `done` — `kabumori-mobile-release-blockers-phase1-production-rollout-20260924`
+  - K1 PASS. `ensure_my_profile` migration applied alone and `account-delete` v1 deployed with `verify_jwt=true`.
+  - Production mutations exactly 2; RPC/security postflight and fail-closed checks passed.
+  - Manual remaining step: add `kabumori://reset-password` to Supabase Auth Redirect URLs without changing existing entries.
+  - No real reset email/account deletion/TestFlight/App Store action was performed. Legal/support URLs remain unresolved.
 
 - Claude slot 2: `ready` — `x-admin-multibrand-selector-phase2-merge-only-20260924`
   - K2 PASS済みPR #15を最新mainへfreshen/rebaseし、apps/admin/**の意味的差分がレビュー済みcandidateと同一であることを確認してからmergeする。
