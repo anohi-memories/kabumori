@@ -233,9 +233,61 @@ test("evaluateMaterialChange: no new observations -> not material", () => {
 test("eventTypesForDomain: geopolitical/corporate_events/rates/macro are mapped; equity_index is not (open question)", () => {
   assert.deepEqual(eventTypesForDomain("geopolitical"), ["geopolitical", "sanction", "political_statement"]);
   assert.ok(eventTypesForDomain("corporate_events").includes("regulatory"));
-  assert.deepEqual(eventTypesForDomain("rates"), ["rate_decision"]);
+  assert.deepEqual(eventTypesForDomain("rates"), ["rate_decision", "central_bank_decision"]);
   assert.deepEqual(eventTypesForDomain("macro"), ["macro_release"]);
   assert.deepEqual(eventTypesForDomain("equity_index"), []);
+});
+
+// --- central_bank_decision (Fed statement events) added to rates' event
+// scope -- no new evaluator logic, reuses the exact same generic
+// high/critical-importance material rule every other domain's events
+// already go through.
+
+test("eventTypesForDomain: rates includes central_bank_decision alongside the pre-existing rate_decision, in that order", () => {
+  const types = eventTypesForDomain("rates");
+  assert.equal(types.includes("rate_decision"), true);
+  assert.equal(types.includes("central_bank_decision"), true);
+  assert.equal(types.length, 2);
+});
+
+test("evaluateEventMaterialChange: a rates-domain central_bank_decision event with importance=high is material", () => {
+  const decision = evaluateEventMaterialChange([
+    event({ eventType: "central_bank_decision", importance: "high", id: "22222222-2222-2222-2222-222222222222" }),
+  ]);
+  assert.equal(decision.isMaterial, true);
+  assert.match(decision.reason, /22222222-2222-2222-2222-222222222222/);
+});
+
+test("evaluateEventMaterialChange: a rates-domain central_bank_decision event with importance=critical is material", () => {
+  const decision = evaluateEventMaterialChange([
+    event({ eventType: "central_bank_decision", importance: "critical" }),
+  ]);
+  assert.equal(decision.isMaterial, true);
+});
+
+test("evaluateEventMaterialChange: a central_bank_decision event with importance=medium or low is NOT material", () => {
+  assert.equal(evaluateEventMaterialChange([event({ eventType: "central_bank_decision", importance: "medium" })]).isMaterial, false);
+  assert.equal(evaluateEventMaterialChange([event({ eventType: "central_bank_decision", importance: "low" })]).isMaterial, false);
+});
+
+test("evaluateEventMaterialChange: existing rate_decision behavior is unchanged (importance is what governs materiality, not event_type)", () => {
+  assert.equal(evaluateEventMaterialChange([event({ eventType: "rate_decision", importance: "high" })]).isMaterial, true);
+  assert.equal(evaluateEventMaterialChange([event({ eventType: "rate_decision", importance: "medium" })]).isMaterial, false);
+});
+
+test("eventTypesForDomain: adding central_bank_decision to rates does not change any other domain's event-type mapping", () => {
+  assert.deepEqual(eventTypesForDomain("geopolitical"), ["geopolitical", "sanction", "political_statement"]);
+  assert.deepEqual(eventTypesForDomain("corporate_events"), [
+    "earnings", "guidance", "buyback", "dividend", "ma_deal", "large_order", "regulatory", "shareholder_structure",
+  ]);
+  assert.deepEqual(eventTypesForDomain("macro"), ["macro_release"]);
+  assert.deepEqual(eventTypesForDomain("equity_index"), []);
+  assert.deepEqual(eventTypesForDomain("commodities"), []);
+  assert.deepEqual(eventTypesForDomain("fx"), []);
+  // central_bank_decision must not leak into any domain other than rates.
+  for (const domain of ["geopolitical", "corporate_events", "macro", "equity_index", "commodities", "fx"]) {
+    assert.equal(eventTypesForDomain(domain).includes("central_bank_decision"), false, `central_bank_decision leaked into ${domain}`);
+  }
 });
 
 function event(overrides: Partial<EventFact> = {}): EventFact {

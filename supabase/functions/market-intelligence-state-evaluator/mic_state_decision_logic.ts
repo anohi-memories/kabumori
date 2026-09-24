@@ -170,7 +170,16 @@ const DOMAIN_EVENT_TYPES: Record<string, readonly string[]> = {
     "regulatory",
     "shareholder_structure",
   ],
-  rates: ["rate_decision"],
+  // central_bank_decision (Fed statement events, importance='high') is
+  // added alongside the existing rate_decision type -- no new evaluator
+  // logic, no Fed-specific code path. evaluateEventMaterialChange already
+  // treats any importance='high'|'critical' event as material regardless
+  // of event_type, so this is a pure scope addition: the rates domain now
+  // also looks at market_events rows of this type when gathering recent
+  // events, and any that arrive get folded into the same generic
+  // high/critical-importance material check every other domain already
+  // uses.
+  rates: ["rate_decision", "central_bank_decision"],
   macro: ["macro_release"],
 };
 
