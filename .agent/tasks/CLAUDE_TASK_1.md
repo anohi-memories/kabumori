@@ -3,7 +3,7 @@
 - task_id: kabumori-release-foundation-appstore-web-links-eas-audit-20260924
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: critical
 - recommended_model: Opus5.5（高）
