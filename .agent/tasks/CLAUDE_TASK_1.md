@@ -3,8 +3,8 @@
 - task_id: kabumori-mobile-recovery-deeplink-routing-fix-and-e2e-resume-20260924
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Opus 5.5
 - purpose: K1で確認した mobile recovery deep-link の Unmatched Route blockerを最小修正し、既存の同一disposable test accountで残りE2Eを完了する。
@@ -254,3 +254,33 @@ No migration, deploy, Auth config change, or admin/manual action was made.
 3. The confirmation/recovery redirect lands on an unreachable Site URL (Auth config, needs approval).
 4. Privacy / terms / support URLs are still undecided.
 5. For future E2E runs: use a separate device or simulator, so the owner's own push-token row is not moved.
+
+
+## Final K1 — 2026-09-24
+
+Result: **PASS — real-device Auth/recovery/account-deletion E2E complete.**
+
+Accepted:
+- recovery deep-link opens the intended recovery UI on the real iPhone
+- password reset succeeds
+- logout and login with the new password succeeds
+- in-app self-deletion succeeds
+- disposable auth user/profile/user-owned rows are removed
+- baseline counts are restored except the disclosed owner-device push-token side effect
+- account-delete and ensure_my_profile remained unchanged
+- no unrelated production mutation, migration, deploy, Auth config change, admin delete, secret/token/password exposure
+
+Disclosed side effect:
+- the owner's iPhone push-token row moved to the disposable account during device switching and was deleted with that account
+- no other existing-user data changed
+- the push token is expected to restore when the owner signs back in on that device
+
+Source state:
+- PR #17 remains open/unmerged
+- source fix and real-device behavior are accepted by K1
+- merge is deferred pending final Codex auth/security review and repository check availability
+
+Remaining release blockers outside this completed G1:
+- custom SMTP
+- reachable confirmation/recovery redirect/Site URL
+- privacy / terms / support URLs
