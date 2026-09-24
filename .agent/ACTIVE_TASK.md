@@ -55,11 +55,11 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-pr23-merge-redeploy-close-dryrun-20260924
+- task_id: kabumori-close-unknown-cause-prefix-fix-20260924
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: assigned; PR #23 merge + production redeploy + repeated close dry-run
+- allocation: assigned; narrow unknown-cause prefix validator fix, source-only
 
 ## Claude G3
 - owner: claude
