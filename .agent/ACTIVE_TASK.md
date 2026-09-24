@@ -54,12 +54,12 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: done
-- task_id: kabumori-pr19-merge-postmerge-verify-20260924
+- status: ready
+- task_id: kabumori-personalized-reports-prod-deploy-dryrun-20260924
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: closed; Final K2 PASS, production rollout not yet authorized
+- allocation: production deploy + dry-run validation; app_enabled must stay false
 
 ## Claude G3
 - owner: claude
