@@ -1,3 +1,43 @@
+## Latest H1 result — Important News caller-auth production rollout (2026-09-24)
+
+- task_id: `kabumori-important-news-caller-auth-production-rollout-20260924`
+- result: **review_required** — approved rollout completed; stop for C1.
+- fresh_main_at_final_source_check: `3e026ee83ec3436920f63561912d29fcc407a570` (GitHub main read-back). Local `git fetch origin` could not resolve github.com in this environment; the GitHub connector read `main` directly and the deployed source was compared against that fresh ref.
+- approved source: all seven caller-auth files on latest main remain byte-identical to reviewed PR #12 merge `844c77d6911380822c091b9b646df911810808a4`.
+
+### Secret gate
+
+- Function secret `IMPORTANT_NEWS_CRON_SECRET`: configured per the user's explicit Dashboard confirmation recorded in this TASK. The available Function metadata API does not expose configured secret names; no secret value was read.
+- Vault `important_news_monitor_cron_secret`: present. A database-side boolean check verified the value has the expected canonical 43-character base64url format. The plaintext was never returned, logged, or copied.
+
+### Migration and Cron postflight
+
+- Applied only `20260923110440_important_news_monitor_caller_auth.sql`; tool result succeeded.
+- Migration history now records `important_news_monitor_caller_auth` once, under tool-assigned version `20260924024406` (different from the repository filename timestamp). No history repair/reconcile was performed.
+- Exactly these four existing commands gained the reviewed Vault-backed header expression: fetch, judgement, generation, publish-ready.
+- For each command, removing only that exact appended expression reproduces its preflight MD5 exactly:
+  - fetch `b9a98c88ada68d0552ac66c9e8e19983`
+  - judgement `438fb5cb0d1206bdfc6af7b379c06788`
+  - generation `951233b2a4fe7ae2b82ef83292276565`
+  - publish-ready `bc7fddb4557c9babecec6af57fede247`
+- All four schedules and active flags are unchanged. `important-news-shadow` remains unchanged (MD5 `c0a89803846abb2464a1af02934266e1`); no secret plaintext was selected.
+
+### Function deploy and verification
+
+- Deployed only `important-news-monitor`: ACTIVE v65 → **v66**, `verify_jwt=false` preserved.
+- Deployed bundle SHA: `8192d004167b01e3a48c55df584ca6393e896db1c752f3bb7a247849c2c0257e`.
+- Read-back: all 26 deployed source modules match current latest-main files exactly. All 16 other Function metadata/version/SHA records match predeploy.
+- One empty, unauthenticated POST with no caller-secret header returned **401 UNAUTHORIZED**. Source order confirms rejection precedes service-role loading, request-body parsing, and mode dispatch. No candidate or business payload was sent.
+- Natural Cron observations (UTC, all pg_cron status `succeeded`): publish-ready 02:50, 02:55, 03:00, 03:05; generation 02:54; fetch 03:00; judgement 03:07. DB pg_net responses observed through 03:07 were 49/49 HTTP 200, with zero error JSON, unauthorized, 5xx, timeout, or transport errors. No manual X post, candidate injection, or Push was performed.
+
+### Exact scope and remaining
+
+Production changes performed: (1) the one approved migration (which changed only the four existing Cron command strings), and (2) deployment of `important-news-monitor` only. User had configured the two secret stores before this rollout. Cron cadence/body/URL/auto_publish logic, shadow Cron, every other Function, OAuth, Push, X posting logic, and other workstreams were not changed.
+
+Remaining: C1 review. No other production action is authorized by this report.
+
+---
+
 ## Latest H1 result — caller-auth final candidate for C1 (2026-09-23)
 
 - task_id: `kabumori-important-news-monitor-caller-auth-finalize-20260923`
