@@ -5,7 +5,13 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { fetchReport } from '@/lib/personalized-reports';
 import {
   CLAIM_TYPE_LABEL,
+  STANCE_LABEL,
+  buildImpactRows,
   buildStockRows,
+  changeDirection,
+  hasHoldingImpacts,
+  marketDirectionLabel,
+  stanceSummary,
   dataGapNotes,
   direction,
   formatDateJa,
@@ -19,7 +25,11 @@ import {
   reportTypeLabel,
   toneLabel,
   type Direction,
+  type ImpactRow,
+  type MarketDetail,
+  type OutlookCheck,
   type PersonalizedReport,
+  type Stance,
   type StockRow,
 } from '@/lib/report-presentation';
 
@@ -77,21 +87,16 @@ export default function ReportDetailScreen() {
   const byTicker = new Map(rows.holdings.map((row) => [row.stock.ticker_code, row]));
   const movers = (tickers: string[]) => tickers.map((ticker) => byTicker.get(ticker)).filter((row): row is StockRow => !!row);
   const marketNews = snapshot.news.filter((item) => !item.ticker_code);
+  const detail = report.body?.market_detail ?? null;
+  const upgraded = hasHoldingImpacts(report);
+  const impactRows = upgraded ? buildImpactRows(report) : [];
+  const stanceLine = stanceSummary(impactRows);
 
-  return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-      <View style={styles.badgeRow}>
-        <Text style={[styles.typeBadge, close && styles.closeBadge]}>{reportTypeLabel(report.report_type)}</Text>
-        <Text style={styles.date}>{formatDateJa(report.trading_date)}</Text>
-        {tone && <Text style={[styles.toneBadge, styles[`tone_${tone.tone}`]]}>{tone.text}</Text>}
-      </View>
-      <Text style={styles.title}>{report.title_ja}</Text>
-      {!!report.summary_ja && <Text style={styles.lead}>{report.summary_ja}</Text>}
-      <Text style={styles.meta}>{formatTimeJa(report.generated_at)} 作成・{close ? '当日の終値' : '前営業日の終値'}ベース</Text>
-
-      {/* Deterministic figures (computed in code, not by the AI). */}
+  // Deterministic figures (computed in code, not by the AI).
+  const figures = (
+    <>
       <View style={styles.figures}>
-        {snapshot.indices.map((index) => (
+        {!detail && snapshot.indices.map((index) => (
           <View key={index.label} style={styles.figure}>
             <Text style={styles.figureLabel}>{index.label}</Text>
             <Text style={styles.figureValue}>{index.price.status === 'ok' ? formatPrice(index.price.close) : '—'}</Text>
@@ -122,9 +127,27 @@ export default function ReportDetailScreen() {
         )}
       </View>
       {close && !!relative && <Text style={styles.relative}>市場との比較: {relative}</Text>}
+    </>
+  );
+
+  return (
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+      <View style={styles.badgeRow}>
+        <Text style={[styles.typeBadge, close && styles.closeBadge]}>{reportTypeLabel(report.report_type)}</Text>
+        <Text style={styles.date}>{formatDateJa(report.trading_date)}</Text>
+        {tone && <Text style={[styles.toneBadge, styles[`tone_${tone.tone}`]]}>{tone.text}</Text>}
+      </View>
+      <Text style={styles.title}>{report.title_ja}</Text>
+      {!!report.summary_ja && <Text style={styles.lead}>{report.summary_ja}</Text>}
+      <Text style={styles.meta}>{formatTimeJa(report.generated_at)} 作成・{close ? '当日の終値' : '前営業日の終値'}ベース</Text>
+
+      {!detail && figures}
+
+      {/* Market-wide detail, built in code from the same shared packets X uses (no per-user AI). */}
+      {!!detail && <MarketDetailSection detail={detail} close={close} />}
 
       {/* Shared market analysis: identical to the X post's source, shown verbatim. */}
-      {!!report.body?.market_section && (
+      {!detail && !!report.body?.market_section && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{close ? '今日の市場全体' : 'けさの市場全体'}</Text>
           <Text style={styles.marketHeadline}>{report.body.market_section.headline_ja}</Text>
@@ -143,10 +166,25 @@ export default function ReportDetailScreen() {
         </View>
       )}
 
+      {upgraded && (
+        <View style={styles.partHeader}>
+          <Text style={styles.partTitle}>{close ? '保有株への実際の影響' : '保有株への今日の影響見通し'}</Text>
+          {!!stanceLine && <Text style={styles.partSub}>{stanceLine}</Text>}
+        </View>
+      )}
+      {!!detail && figures}
+
       {!!report.body?.overview_ja && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{close ? '今日のポート総括' : '今日のポート見通し'}</Text>
           <Text style={styles.paragraph}>{report.body.overview_ja}</Text>
+        </View>
+      )}
+
+      {close && !!report.body?.morning_review_ja && (
+        <View style={[styles.section, styles.reviewCard]}>
+          <Text style={styles.sectionTitle}>朝の見通しとの答え合わせ</Text>
+          <Text style={styles.paragraph}>{report.body.morning_review_ja}</Text>
         </View>
       )}
 
@@ -166,7 +204,20 @@ export default function ReportDetailScreen() {
         </View>
       )}
 
-      {rows.holdings.length > 0 && (
+      {upgraded && impactRows.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{close ? '保有銘柄ごとの結果' : '保有銘柄ごとの見通し'}</Text>
+          {impactRows.map((row) => <ImpactCard key={row.stock.ticker_code} row={row} close={close} />)}
+        </View>
+      )}
+
+      {upgraded && impactRows.length === 0 && (
+        <View style={styles.section}>
+          <Text style={styles.footnote}>保有銘柄が登録されていないため、保有株への影響は表示していません。</Text>
+        </View>
+      )}
+
+      {!upgraded && rows.holdings.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{close ? '保有銘柄の値動きと材料' : '影響が大きそうな順の保有銘柄'}</Text>
           {rows.holdings.map((row, index) => (
@@ -236,6 +287,167 @@ export default function ReportDetailScreen() {
         </Text>
       </View>
     </ScrollView>
+  );
+}
+
+const STANCE_STYLE: Record<Stance, { color: string; backgroundColor: string }> = {
+  tailwind: { color: '#2c6940', backgroundColor: '#e4f1e7' },
+  headwind: { color: '#a1352c', backgroundColor: '#fbe7e4' },
+  neutral: { color: '#5e6d63', backgroundColor: '#eef1ee' },
+  no_clear_material: { color: '#6b766f', backgroundColor: '#f1f3f1' },
+};
+
+const CHECK_COLOR: Record<OutlookCheck, string> = {
+  matched: '#2c6940', diverged: '#a1352c', mixed: '#946222', not_comparable: '#89918c',
+};
+
+function MarketDetailSection({ detail, close }: { detail: MarketDetail; close: boolean }) {
+  const flowClaims = close ? detail.today_claims : detail.overnight_claims;
+  const secondaryClaims = close ? detail.overnight_claims : detail.today_claims;
+  return (
+    <View>
+      <View style={styles.partHeader}>
+        <Text style={styles.partTitle}>{close ? '市場全体の大引け詳報' : '市場全体の朝刊'}</Text>
+        <Text style={styles.partSub}>方向感: {marketDirectionLabel(detail.direction)}</Text>
+      </View>
+      <View style={styles.section}>
+        <Text style={styles.marketHeadline}>{detail.headline_ja}</Text>
+        <Text style={styles.paragraph}>{detail.summary_ja}</Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>{close ? '主要指標（今日の終値ベース）' : '主要指標（前営業日・海外市場）'}</Text>
+        {detail.metric_groups.map((group) => (
+          <View key={group.group_ja} style={styles.metricGroup}>
+            <Text style={styles.metricGroupTitle}>{group.group_ja}</Text>
+            {group.items.map((item) => (
+              <View key={item.key} style={styles.metricRow}>
+                <Text style={styles.metricLabel}>{item.label}</Text>
+                <View style={styles.metricValues}>
+                  <Text style={styles.metricValue}>{item.value_display ?? '—'}</Text>
+                  {!!item.change_display && (
+                    <Text style={[styles.metricChange, { color: DIRECTION_COLOR[changeDirection(item.change_display)] }]}>
+                      {item.change_display}
+                    </Text>
+                  )}
+                </View>
+                {!!item.note_ja && <Text style={styles.metricNote}>{item.note_ja}</Text>}
+              </View>
+            ))}
+          </View>
+        ))}
+      </View>
+
+      {flowClaims.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{close ? '今日の相場の流れと主導した材料' : '海外市場・前日の流れ'}</Text>
+          {flowClaims.map((claim, index) => <ClaimBullet key={`flow-${index}`} text={claim.text_ja} type={claim.claim_type} />)}
+        </View>
+      )}
+      {secondaryClaims.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{close ? '海外・為替などの影響' : '日本市場の状況'}</Text>
+          {secondaryClaims.map((claim, index) => <ClaimBullet key={`sub-${index}`} text={claim.text_ja} type={claim.claim_type} />)}
+        </View>
+      )}
+
+      {(detail.tailwind_themes_ja.length > 0 || detail.headwind_themes_ja.length > 0) && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{close ? '業種・テーマ別の強弱' : 'セクター別の追い風・逆風'}</Text>
+          {detail.tailwind_themes_ja.map((theme) => <Bullet key={`tw-${theme}`} text={`${close ? '強い' : '追い風'}: ${theme}`} />)}
+          {detail.headwind_themes_ja.map((theme) => <Bullet key={`hw-${theme}`} text={`${close ? '弱い' : '逆風'}: ${theme}`} />)}
+        </View>
+      )}
+
+      {detail.key_news.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{close ? '当日の重要ニュース・決算' : '国内外の重要ニュース・決算'}</Text>
+          {detail.key_news.map((item) => (
+            <View key={item.ref_id} style={styles.newsItem}>
+              <Text style={styles.newsHeadline}>{item.headline_ja}</Text>
+              <Text style={styles.newsWhy}>{item.why_it_matters_ja}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {close && !!detail.morning_reference && (
+        <View style={[styles.section, styles.reviewCard]}>
+          <Text style={styles.sectionTitle}>朝の想定と実際</Text>
+          <Text style={styles.paragraph}>朝の見立て: {detail.morning_reference.headline_ja}（{marketDirectionLabel(detail.morning_reference.direction)}）</Text>
+          <Text style={styles.paragraph}>実際: {detail.headline_ja}（{marketDirectionLabel(detail.direction)}）</Text>
+          {detail.morning_reference.next_watch_ja.map((item, index) => <Bullet key={`mw-${index}`} text={`朝の注目点: ${item}`} />)}
+        </View>
+      )}
+
+      {(detail.watch_points_ja.length > 0 || detail.risks_ja.length > 0) && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{close ? '翌営業日に持ち越す注目材料' : '寄り付き前の注目ポイントとシナリオ'}</Text>
+          {detail.watch_points_ja.map((item, index) => <Bullet key={`wp-${index}`} text={item} />)}
+          {detail.risks_ja.map((item, index) => <Bullet key={`rk-${index}`} text={`リスク: ${item}`} />)}
+        </View>
+      )}
+
+      {detail.data_gaps_ja.length > 0 && (
+        <View style={styles.gapBox}>
+          {detail.data_gaps_ja.map((note) => <Text key={note} style={styles.footnote}>{note}</Text>)}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function ClaimBullet({ text, type }: { text: string; type: string }) {
+  return (
+    <View style={styles.pointRow}>
+      <Text style={styles.pointDot}>・</Text>
+      <Text style={styles.pointText}>
+        {text}
+        {!!CLAIM_TYPE_LABEL[type] && <Text style={styles.claimTag}>（{CLAIM_TYPE_LABEL[type]}）</Text>}
+      </Text>
+    </View>
+  );
+}
+
+function ImpactCard({ row, close }: { row: ImpactRow; close: boolean }) {
+  const impact = row.impact;
+  const brief = row.stock.detail_level === 'brief';
+  return (
+    <View style={[styles.stockCard, brief && styles.briefCard]}>
+      <View style={styles.stockHead}>
+        {!!impact && <Text style={[styles.stanceBadge, STANCE_STYLE[impact.stance]]}>{STANCE_LABEL[impact.stance]}</Text>}
+        <Text style={styles.ticker}>{row.stock.ticker_code}</Text>
+        <Text style={[styles.change, { color: DIRECTION_COLOR[row.changeDirection] }]}>{row.changeLine}</Text>
+      </View>
+      <Text style={styles.stockName}>{row.stock.company_name}</Text>
+      <Text style={styles.stockLine}>{row.priceLine}{row.relativeLine ? `・${row.relativeLine}` : ''}</Text>
+      {!!row.plLine && <Text style={styles.stockLineSub}>{row.plLine}</Text>}
+      {close && !!row.outlookLine && (
+        <Text style={[styles.outlookLine, { color: CHECK_COLOR[row.outlookCheck ?? 'not_comparable'] }]}>{row.outlookLine}</Text>
+      )}
+      {!!impact?.fact_ja && <ImpactLine label="事実" text={impact.fact_ja} />}
+      {!!impact?.inference_ja && <ImpactLine label="推定" text={impact.inference_ja} />}
+      {!!impact?.watch_ja && <ImpactLine label={close ? '翌営業日の確認点' : '見るポイント'} text={impact.watch_ja} />}
+      {!impact && <Text style={styles.stockLineSub}>この銘柄の解説はありません。</Text>}
+      {row.news.map((item) => (
+        <Pressable
+          key={item.news_id}
+          onPress={() => router.push({ pathname: '/news/[id]', params: { id: item.news_id } })}
+          style={styles.newsLink}
+          accessibilityRole="button">
+          <Text style={styles.newsLinkText}>{item.headline_ja} ›</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+function ImpactLine({ label, text }: { label: string; text: string }) {
+  return (
+    <View style={styles.impactLine}>
+      <Text style={styles.impactLabel}>{label}</Text>
+      <Text style={styles.impactText}>{text}</Text>
+    </View>
   );
 }
 
@@ -331,4 +543,26 @@ const styles = StyleSheet.create({
   checkCard: { backgroundColor: '#eef3ed', borderRadius: 16, padding: 16 },
   disclaimer: { marginTop: 28, borderTopWidth: 1, borderTopColor: '#e1e5e2', paddingTop: 14, gap: 6 },
   footnote: { color: '#89918c', fontSize: 12, lineHeight: 18 },
+  partHeader: { marginTop: 30, paddingBottom: 8, borderBottomWidth: 2, borderBottomColor: '#397449' },
+  partTitle: { color: '#17211a', fontWeight: '900', fontSize: 18 },
+  partSub: { color: '#5e6d63', fontSize: 13, fontWeight: '700', marginTop: 4 },
+  metricGroup: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e1e5e2', paddingHorizontal: 12, paddingVertical: 8, marginBottom: 8 },
+  metricGroupTitle: { color: '#548161', fontSize: 12, fontWeight: '900', marginBottom: 4 },
+  metricRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', paddingVertical: 5 },
+  metricLabel: { flex: 1, minWidth: 140, color: '#3d4a42', fontSize: 14, fontWeight: '700' },
+  metricValues: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  metricValue: { color: '#17211a', fontSize: 15, fontWeight: '900' },
+  metricChange: { fontSize: 13, fontWeight: '800' },
+  metricNote: { width: '100%', color: '#89918c', fontSize: 12, marginTop: 2 },
+  newsItem: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e1e5e2', padding: 12, marginBottom: 8 },
+  newsHeadline: { color: '#17211a', fontSize: 14, fontWeight: '900', lineHeight: 21 },
+  newsWhy: { color: '#3d4a42', fontSize: 14, lineHeight: 21, marginTop: 4 },
+  reviewCard: { backgroundColor: '#f4f1e8', borderRadius: 16, padding: 16 },
+  gapBox: { marginTop: 12, gap: 4 },
+  briefCard: { paddingVertical: 10 },
+  stanceBadge: { fontSize: 11, fontWeight: '900', borderRadius: 99, paddingHorizontal: 8, paddingVertical: 4, overflow: 'hidden' },
+  outlookLine: { fontSize: 13, fontWeight: '800', marginTop: 6 },
+  impactLine: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  impactLabel: { width: 64, color: '#548161', fontSize: 12, fontWeight: '900', lineHeight: 22 },
+  impactText: { flex: 1, color: '#2f3a33', fontSize: 15, lineHeight: 23 },
 });

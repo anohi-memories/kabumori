@@ -31,6 +31,54 @@ export type ReportStock = {
   unrealized_pl_percent: number | null;
   news_ids: string[];
   market_news_ids: string[];
+  // Added with holding impacts; absent on older stored reports.
+  detail_level?: 'detailed' | 'brief';
+  relative_to_benchmark_pt?: number | null;
+  relative_label?: 'stronger' | 'weaker' | 'similar' | null;
+  morning_stance?: Stance | null;
+  outlook_check?: OutlookCheck | null;
+};
+
+export type Stance = 'tailwind' | 'headwind' | 'neutral' | 'no_clear_material';
+export type OutlookCheck = 'matched' | 'diverged' | 'mixed' | 'not_comparable';
+
+export type HoldingImpact = {
+  ticker_code: string;
+  stance: Stance;
+  basis: string[];
+  fact_ja: string;
+  inference_ja: string;
+  watch_ja: string;
+};
+
+// App-only detailed market section, built in code from the shared packets (same facts X uses).
+export type MarketDetail = {
+  version: string;
+  report_type: ReportType;
+  direction: 'up' | 'down' | 'mixed' | 'flat' | 'unknown';
+  headline_ja: string;
+  summary_ja: string;
+  metric_groups: Array<{
+    group_ja: string;
+    items: Array<{
+      key: string;
+      label: string;
+      value_display: string | null;
+      change_display: string | null;
+      session_date: string | null;
+      freshness: 'fresh' | 'stale' | 'unavailable';
+      note_ja: string | null;
+    }>;
+  }>;
+  overnight_claims: Array<{ text_ja: string; claim_type: string }>;
+  today_claims: Array<{ text_ja: string; claim_type: string }>;
+  tailwind_themes_ja: string[];
+  headwind_themes_ja: string[];
+  key_news: Array<{ ref_id: string; headline_ja: string; why_it_matters_ja: string }>;
+  watch_points_ja: string[];
+  risks_ja: string[];
+  data_gaps_ja: string[];
+  morning_reference: { headline_ja: string; direction: string; next_watch_ja: string[]; risks_ja: string[] } | null;
 };
 
 export type ReportSnapshot = {
@@ -95,8 +143,11 @@ export const CLAIM_TYPE_LABEL: Record<string, string> = {
 
 export type ReportBody = {
   market_section?: MarketSection;
+  market_detail?: MarketDetail;
   tone?: 'positive' | 'neutral' | 'cautious';
   overview_ja?: string;
+  holding_impacts?: HoldingImpact[];
+  morning_review_ja?: string;
   stock_notes?: Array<{ ticker_code: string; note_ja: string }>;
   watch_notes?: Array<{ ticker_code: string; note_ja: string }>;
   risk_notes_ja?: string[];
@@ -279,4 +330,106 @@ export function reportRouteForPush(data: { source_type?: unknown; source_id?: un
   if (data?.source_type !== 'personalized_report') return null;
   const id = typeof data.source_id === 'string' ? data.source_id : '';
   return /^[0-9a-f-]{36}$/i.test(id) ? `/reports/${id}` : '/reports';
+}
+
+// ---------------------------------------------------------------------------
+// Upgraded reports: market detail + per-holding impact
+// ---------------------------------------------------------------------------
+
+export const STANCE_LABEL: Record<Stance, string> = {
+  tailwind: '追い風',
+  headwind: '逆風',
+  neutral: '中立',
+  no_clear_material: '明確な材料なし',
+};
+
+export const OUTLOOK_CHECK_LABEL: Record<OutlookCheck, string> = {
+  matched: '見通しどおり',
+  diverged: '見通しと逆',
+  mixed: 'どちらとも言えない',
+  not_comparable: '比較なし',
+};
+
+const DIRECTION_JA: Record<MarketDetail['direction'], string> = {
+  up: '上昇', down: '下落', mixed: 'まちまち', flat: 'ほぼ横ばい', unknown: '判断できず',
+};
+
+export function marketDirectionLabel(direction: string): string {
+  return DIRECTION_JA[direction as MarketDetail['direction']] ?? '判断できず';
+}
+
+/** Up / down color for a preformatted change such as "+1.38%" or "-0.26%". */
+export function changeDirection(display: string | null): Direction {
+  if (!display) return 'none';
+  if (display.startsWith('+')) return 'up';
+  if (display.startsWith('-') || display.startsWith('−')) return 'down';
+  return 'flat';
+}
+
+export type ImpactRow = {
+  stock: ReportStock;
+  impact: HoldingImpact | null;
+  priceLine: string;
+  changeLine: string;
+  changeDirection: Direction;
+  plLine: string | null;
+  relativeLine: string | null;
+  outlookLine: string | null;
+  outlookCheck: OutlookCheck | null;
+  news: ReportSnapshot['news'];
+};
+
+/** True for reports written with per-holding impacts; older reports keep the stock_notes layout. */
+export function hasHoldingImpacts(report: PersonalizedReport): boolean {
+  return Array.isArray(report.body?.holding_impacts);
+}
+
+/**
+ * Holdings in snapshot priority order, each with its Fact-passed impact. Detailed
+ * holdings come first so material-heavy stocks lead and thin ones stay short.
+ */
+export function buildImpactRows(report: PersonalizedReport): ImpactRow[] {
+  const snapshot = report.portfolio_snapshot;
+  if (!snapshot) return [];
+  const impacts = new Map((report.body?.holding_impacts ?? []).map((impact) => [impact.ticker_code, impact]));
+  const newsById = new Map(snapshot.news.map((item) => [item.news_id, item]));
+  const close = snapshot.report_type === 'close';
+  const benchmark = snapshot.totals.benchmark_label || 'TOPIX連動ETF（1306）';
+  const rows = snapshot.holdings.map((stock): ImpactRow => {
+    const relative = stock.relative_to_benchmark_pt ?? null;
+    const check = close ? stock.outlook_check ?? null : null;
+    return {
+      stock,
+      impact: impacts.get(stock.ticker_code) ?? null,
+      priceLine: stock.price.status === 'ok'
+        ? `${close ? '終値' : '前日終値'} ${formatPrice(stock.price.close)}円`
+        : '価格を取得できませんでした',
+      changeLine: stock.price.status === 'ok' ? `${close ? '前日比' : '前営業日'} ${formatPercent(stock.price.changePercent)}` : '',
+      changeDirection: stock.price.status === 'ok' ? direction(stock.price.changePercent) : 'none',
+      plLine: close ? stock.day_pl !== null ? `今日の損益 ${formatSignedYen(stock.day_pl)}` : '今日の損益 —（数量未登録）' : null,
+      relativeLine: close && relative !== null
+        ? `${benchmark}比 ${relative > 0 ? '+' : relative < 0 ? '-' : '±'}${Math.abs(relative).toFixed(2)}ポイント`
+        : null,
+      outlookLine: close && stock.morning_stance
+        ? `朝の見通し「${STANCE_LABEL[stock.morning_stance]}」→ ${OUTLOOK_CHECK_LABEL[check ?? 'not_comparable']}`
+        : null,
+      outlookCheck: check,
+      news: stock.news_ids.map((id) => newsById.get(id)).filter((item): item is ReportSnapshot['news'][number] => !!item),
+    };
+  });
+  const detailed = rows.filter((row) => row.stock.detail_level !== 'brief');
+  const brief = rows.filter((row) => row.stock.detail_level === 'brief');
+  return [...detailed, ...brief];
+}
+
+/** Count of holdings per stance, for the section header ("追い風 2・逆風 1・…"). */
+export function stanceSummary(rows: readonly ImpactRow[]): string | null {
+  const counts = new Map<Stance, number>();
+  for (const row of rows) {
+    if (row.impact) counts.set(row.impact.stance, (counts.get(row.impact.stance) ?? 0) + 1);
+  }
+  const parts = (Object.keys(STANCE_LABEL) as Stance[])
+    .filter((stance) => (counts.get(stance) ?? 0) > 0)
+    .map((stance) => `${STANCE_LABEL[stance]} ${counts.get(stance)}`);
+  return parts.length ? parts.join('・') : null;
 }
