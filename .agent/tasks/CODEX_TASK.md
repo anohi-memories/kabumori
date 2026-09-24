@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: GPT-5.6 Sol Medium
 - purpose: Phase1C C2で判明したsplit-brain blockerを解消するため、legacy dispatcherはunbound rowsだけ、v2 dispatcherはexplicitly bound rowsだけをclaimできるようにするsource-only claim-domain partition candidateを作り、planner側のsocial_account_id authority境界を明文化・検証する。productionには適用しない。
