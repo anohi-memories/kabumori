@@ -22,24 +22,25 @@
 
 ## Deployment policy — user approved
 
-- 開発中・PR・テスト用Web PreviewはNetlifyへ寄せる。
+- X自動投稿・Web管理画面の開発中/PR/テスト用PreviewはNetlifyへ寄せる。
 - レビュー完了後の最終production deployのみVercelを使う。
-- Vercelのrate limitを通常の開発・レビュー工程のブロッカーにしない。
+- Vercelのrate limitを通常のX/Web開発・レビュー工程のブロッカーにしない。
 - 現在Vercel待ちのPR #15 final gateは一旦保留。
-- かぶモリExpoアプリについてNetlifyはExpo Web Preview用途であり、iOS実機/TestFlight/native-only機能の代替ではない。
+- かぶモリExpo/native本体はVercel制限の主対象ではないため、Netlify Web Preview対応は現時点では進めない。
+- かぶモリのiOS実機/TestFlight/native-only機能は従来どおりExpo/EAS/実機で確認する。
 
 ## Current slot snapshot
 
 - H1: `done` — `kabumori-mobile-recovery-pr17-final-auth-security-review-20260924`
 - H2: `idle` / task_id `none`
 - G1: `done` — `kabumori-mobile-recovery-deeplink-routing-fix-and-e2e-resume-20260924`
-- G2: `ready` — `kabumori-netlify-expo-web-preview-pipeline-20260924`
+- G2: `idle` / task_id `none`
 - G3: `ready` — `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`
 - G4: `ready` — `x-admin-netlify-deploy-preview-pipeline-20260924`
 
 ## Parallel safety
 
-- G2 owns root Expo/Web preview configuration and Kabumori Netlify preview setup.
+- G2 is free for future Kabumori implementation work.
 - G3 owns X queue/planner SQL/RPC/x-test-post Phase1D.
 - G4 owns apps/admin Netlify Preview configuration only.
 - H1 final Auth/security review of PR #17 is complete (C1 PASS).
@@ -58,8 +59,9 @@
 ## Deferred work
 
 - PR #15 final Vercel check -> merge -> post-merge read-back -> production Admin QA.
+- Kabumori Expo Web Netlify Preview setup.
 - Prior reviewed code/test evidence remains preserved in the old G4/G2 reports.
-- Resume only after Netlify Preview workflow is established or user explicitly asks.
+- Resume either deferred item only when needed or user explicitly asks.
 
 ## Known issues / observations
 
