@@ -1,0 +1,36 @@
+# Phase 1 candidate: not yet used to create or configure any Netlify site (per this task's production
+# mutation budget of 0). See ../docs/phase1-netlify-thin-control-plane.md for the full readiness
+# assessment this file is based on.
+#
+# Intended setup: a NEW Netlify site with this repository connected and "Base directory" set to
+# "apps/admin" in the Netlify UI (this repo has no root-level workspace tooling -- apps/admin is a
+# self-contained Next.js app with its own package.json/lockfile, the same way it is deployed to Vercel
+# today). The current Vercel Production deployment is untouched by this file's existence; adding this
+# file does not by itself create, modify, or deploy anything.
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+# Netlify's own Next.js Runtime (bundled automatically for detected Next.js sites) reads the build output
+# above and provisions the necessary Netlify Functions for SSR/Server Actions/the proxy (middleware)
+# itself -- no explicit @netlify/plugin-nextjs entry is needed for currently-supported Next.js major
+# versions, but this app is on Next.js 16.3.4 (very recent at the time this candidate was written).
+# Confirm Netlify's published supported Next.js version range covers 16.x before actually deploying;
+# if it does not yet, that is this project's one real, must-verify-before-deploy Netlify readiness risk
+# (see the design doc's "Netlify readiness" section) -- everything else in this app (no service-role key,
+# no Node-only APIs outside the one Server Action, standard cookies-based @supabase/ssr session handling)
+# is already compatible with how Netlify's Next.js Runtime works.
+
+[build.environment]
+  NODE_VERSION = "24"
+
+# Public, non-secret values only (the anon/publishable Supabase key is meant to ship in the client bundle
+# -- see apps/admin/src/lib/supabase/env.ts). Never add SUPABASE_SERVICE_ROLE_KEY, X_CLIENT_SECRET,
+# OPENAI_API_KEY, or any other server secret here or in the Netlify UI's environment variables for this
+# site: this app's source has no code path that would even read such a variable today, and it must stay
+# that way for Netlify to remain a thin, secret-free authenticated UI as this task's Goal requires.
+#
+# Uncomment locally in the Netlify UI (do not hardcode real values in this file, even though they are not
+# secret, so the same file can be reused across environments without editing):
+#   NEXT_PUBLIC_SUPABASE_URL
+#   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
