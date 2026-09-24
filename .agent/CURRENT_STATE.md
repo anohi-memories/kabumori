@@ -28,11 +28,12 @@
   - Recommended model: GPT-6 Sol Medium。
 
 
-- Claude slot 1: `ready` — `kabumori-mobile-release-blockers-phase1-production-rollout-20260924`
-  - User-approved production rollout after K1 PASS.
-  - Sequence: exact `ensure_my_profile` migration → `account-delete`-only deploy → recovery redirect allowlist → postflight/readiness verification.
-  - No real user deletion/reset email, no TestFlight/App Store action, no privacy/terms/support URL guessing.
-  - Recommended model: Opus 5.5.
+- Claude slot 1: `review_required` — `kabumori-mobile-release-blockers-phase1-production-rollout-20260924`
+  - Gate A PASS: `public.ensure_my_profile()` applied alone (no db push / no history write). Security invoker, `search_path=""`, EXECUTE only for postgres (the owner) and authenticated; anon and service_role have none.
+  - Gate B PASS: `account-delete` v1 ACTIVE with verify_jwt=true. Source is AST-identical to reviewed main, with a negative control. The other 16 functions are unchanged.
+  - Gate C STOPPED: the CLI cannot safely add one Auth redirect entry. Manual Dashboard step: add `kabumori://reset-password` to Redirect URLs.
+  - Gate D PASS: rollback-contained RPC contract check; unauthenticated and non-user token calls return 401; auth.users=2 / profiles=1 unchanged.
+  - Production mutations: exactly 2 (migration + account-delete deploy). Legal/support URLs still unresolved.
 
 - Claude slot 2: `ready` — `x-admin-multibrand-selector-query-parameterization-phase2-20260924`
   - Phase1 admin foundationの次段階。server-sideで権限確認済みselected brandを使うbrand selector UIと4 query modulesのbrand_id parameterization。

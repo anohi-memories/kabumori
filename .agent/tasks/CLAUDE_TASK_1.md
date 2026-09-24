@@ -3,8 +3,8 @@
 - task_id: kabumori-mobile-release-blockers-phase1-production-rollout-20260924
 - owner: claude
 - slot: claude-1
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Opus 5.5
 - purpose: K1 PASS済みのconsumer mobile release-blockerを、本番へ最小安全範囲で反映する。ensure_my_profile migration適用、account-delete単独deploy、recovery redirect設定、postflight確認までを順序付きゲートで実施する。
@@ -212,3 +212,130 @@ Then:
 - STOP for K1
 
 **推奨モデル：Opus 5.5。**
+
+## Report
+
+- task_id: kabumori-mobile-release-blockers-phase1-production-rollout-20260924
+- result: **Gate A PASS, Gate B PASS, Gate C STOPPED (manual Dashboard step), Gate D PASS (read-only / rollback-contained)**
+- chat confirmation: this TASK records the user's authorization, and I confirmed it again in chat before the first production mutation. The user answered 「進めてOK」 to exactly ① the single migration and ② an `account-delete`-only deploy, with ③ reported as a manual step.
+
+### 1. Fresh main
+
+- at start: `0a73250`; my in_progress control commit is `fae7d8c`
+- the reviewed source was unchanged on latest main: `git diff 8b78ecc2 origin/main` over the migration, `supabase/functions/account-delete`, `src`, `tests/app` and `docs/mobile-release` is empty
+- sha256:
+  - migration `65de26c8c1057194a0ba1615220fd23fc5eaab679ffedc47f350d500aa8c3679`
+  - `index.ts` `4e3f3c3a…`
+  - `delete_logic.ts` `eee8f3cf…`
+- ownership: H1 (Important News caller-auth rollout), H2 (x-autopost queue foundation) and G2 (admin multibrand selector) own none of `ensure_my_profile`, migration `20260924100000`, `account-delete` or the Auth redirect allowlist
+
+### 2. Production preflight (read-only)
+
+- migration history: `20260924100000` was local-only with no remote entry. The only 2026-09-24 remote entry is `20260924001508`, which belongs to another workstream (unchanged since the last report).
+- `pg_proc` had 0 rows for `public.ensure_my_profile`, so there was nothing unexpected to inspect
+- `public.profiles` had 3 policies (`profiles_insert_own:INSERT`, `profiles_select_own:SELECT`, `profiles_update_own:UPDATE`) and 1 non-internal trigger, and `authenticated` had INSERT. This matches the assumptions the security-invoker design depends on.
+- functions baseline: 16 functions with versions, `updated_at`, `verify_jwt` and `ezbr_sha256` recorded. No `account-delete`.
+- Auth redirect config: not readable with the available tooling (see Gate C)
+- production shape matched the reviewed assumptions, so I continued
+
+### 3. Gate A — migration apply
+
+- Applied exactly `supabase/migrations/20260924100000_ensure_my_profile.sql`, wrapped in `begin; … commit;`
+- The embedded body's sha256 was asserted equal to the reviewed file's `65de26c8…` before the file was executed
+- Ran `supabase db query --linked -f <wrapped file>`, which succeeded with empty rows
+- **No `supabase db push`, no migration history write, no history repair/reconcile, and no other migration was run.** This matches repository practice: the earlier Phase 1/2 migrations also appear as local-only in the history.
+
+### 4. RPC postflight
+
+| Property | Result |
+| --- | --- |
+| signature | `ensure_my_profile()` returns `uuid`, 1 overload only |
+| security | `prosecdef = false` → **security invoker** |
+| volatility | `v` (volatile) |
+| `search_path` | `{search_path=""}` |
+| owner | `postgres` |
+| ACL | `{postgres=X/postgres,authenticated=X/postgres}` |
+| `anon` EXECUTE | **false** |
+| `authenticated` EXECUTE | true |
+| `service_role` EXECUTE | **false** |
+| `profiles` policies after | unchanged: the same 3 |
+| `profiles` triggers after | unchanged: 1 |
+| `auth.users` user triggers | 0 (none added) |
+| migration history | `20260924100000` still has no remote entry (no history write, as intended) |
+
+### 5. Gate B — `account-delete` deploy
+
+- `supabase functions deploy account-delete --project-ref wsmznyzcvmuitkglfeuj`, run from the latest main source in this worktree. The worktree has its own `supabase/config.toml` with no `account-delete` entry, so the CLI default `verify_jwt = true` applies. Deploy succeeded on the first attempt.
+- read-back: **`account-delete` v1, ACTIVE, `verify_jwt = True`**, ezbr `0f1cc97736e3…`
+- **Other functions:** a full before/after diff of all 16 functions (slug, version, `updated_at`, `verify_jwt`, ezbr sha) shows **no change**. The only difference is the added `account-delete` line.
+- **Source read-back:** `supabase functions download` returns the eszip's stored module, which is type-stripped JavaScript, so byte equality with the TypeScript source is not possible. I compared structurally instead. Both sides were type-stripped with the TypeScript transpiler and walked as ASTs, recording every node kind plus every identifier, literal and template-part text.
+  - `index.ts`: **AST-identical** (164 nodes)
+  - `delete_logic.ts`: **AST-identical** (339 nodes)
+- **Negative control for that comparator:**
+  - Changing the admin URL in code, `DELETE`→`POST`, and `404`→`403` each produced `READBACK_MISMATCH`.
+  - Restoring the file returned it to `MATCH`.
+  - My first control mutated a comment by mistake. Comments are correctly ignored, so I redid the control on the code occurrences.
+
+### 6. Gate C — Auth redirect allowlist: **STOPPED, manual step required**
+
+The Supabase CLI has no read command for remote Auth config. Its only write path is `supabase config push`, which pushes the whole local `config.toml` and could overwrite unrelated remote Auth/API settings. It cannot add one entry while provably preserving the others. Reading or writing through the Management API would mean extracting the CLI access token, which I did not do. Per this TASK, I did not guess.
+
+**Exact Dashboard step:** Supabase Dashboard → project `wsmznyzcvmuitkglfeuj` → Authentication → URL Configuration → Redirect URLs → **Add URL** → `kabumori://reset-password` → Save. Do not remove or edit any existing entry. Leave the Site URL and providers unchanged.
+
+**Dev redirect URL: not added, and not needed for the dev client.** This project uses `expo-dev-client`, where `Linking.createURL('reset-password')` resolves through the app scheme to the same `kabumori://reset-password`. An Expo Go URL (`exp://<LAN IP>:<port>/--/reset-password`) changes with the network, so it cannot be "exactly determined". I did not add one.
+
+### 7. Explicitly untouched
+
+- Important News caller-auth (H1)
+- x-test-post / queue (H2)
+- admin / Netlify (G2)
+- market-report shared platform
+- X OAuth / Vault
+- Push production settings
+- Auth providers, signup and email-confirmation settings
+- App Store Connect / TestFlight
+- Vercel / Netlify
+- every other migration and every other Function
+
+### 8. Exact production mutations performed
+
+1. `public.ensure_my_profile()` created, together with its `revoke` / `grant` (one migration, one transaction)
+2. Edge Function `account-delete` v1 deployed
+
+Nothing else. The Gate D check below ran in a transaction that always rolled back.
+
+### 9. Tests / checks / read-only runtime verification
+
+- **Rollback-contained RPC contract check.** It ran as `authenticated` in a DO block that always ends in `raise`, so nothing it did can persist.
+  - It chose an existing user who already has a profile. Only booleans and counts left the database.
+  - Result: `returned_own_id=t profiles_before=1 profiles_after=1 no_jwt_guard=AUTHENTICATION_REQUIRED`.
+- `account-delete` with no Authorization header: **401** (the platform JWT gate).
+- `account-delete` with the public publishable key as the bearer (a non-user token): **401 `{"error":"ACCOUNT_DELETE_AUTH_REQUIRED"}`**. The request reached the function, and its own `/auth/v1/user` re-verification refused it. The key was never printed.
+- Counts after rollout: `auth.users = 2`, `profiles = 1`, the same as the known inventory. **No account was deleted and no profile was created.**
+- No real password-reset email was sent. No disposable test account is designated, so I did not create or delete any account.
+- Source-side suite on merged main (previous report): 94 / 0.
+
+### 10. Privacy / terms / support URLs: still unresolved (release blocker)
+
+- There is no authoritative value on main: no page, no `eas.json` / env entry, and no public web source.
+- `EXPO_PUBLIC_PRIVACY_POLICY_URL`, `EXPO_PUBLIC_TERMS_OF_SERVICE_URL` and `EXPO_PUBLIC_SUPPORT_URL` stay unset. The app shows 準備中 for them.
+- They must be decided and published before App Store submission.
+
+### 11. Remaining E2E work
+
+1. Complete the Dashboard step in Gate C.
+2. Designate a disposable test account, then run on a real device / dev client:
+   - signup → confirmation → first login (profile created by the RPC)
+   - password reset mail → deep link → new password
+   - in-app deletion → confirm the rows are gone
+3. Existing production user without a profile: their row will be created by `ensure_my_profile` at their next sign-in. That is expected behaviour, not a backfill.
+4. Social-mobile follow-up (owned by that workstream): `brands` / `social_accounts` remain after a user is deleted.
+
+### 12. Next recommended release phase
+
+1. The user completes the Gate C Dashboard step. Then a short read-only G1 check.
+2. Disposable-account E2E on the dev client and TestFlight (recovery and deletion).
+3. Decide and publish the three legal/support URLs, and set them in the build config.
+4. Then TestFlight / App Store metadata and the final security gate.
+
+- production mutation total for this TASK: **2** (listed in §8). Both were approved and verified.
