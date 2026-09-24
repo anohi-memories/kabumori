@@ -1,3 +1,36 @@
+## H2 — PR #26 unknown-cause prefix final review — 2026-09-25
+
+- task_id: `kabumori-pr26-unknown-cause-prefix-final-review-20260925`
+- result: **PASS**. The optional move-subject prefix is narrowly anchored; no PR-introduced causal-assertion or free-text bypass was found. Safe for C2 merge review; no merge or deploy performed.
+- fresh_main_sha: `9934391fc59085ffd66f9a15396deb686a93f804`.
+- reviewed_pr: #26, `g2-close-unknown-cause-prefix-20260924`, exact requested head `2b40a617e34c73c301e40a17692883ac70fd3e0a`; fetched PR head matched exactly. Main contains PR #23 merge `5df9512b43c885fff28b625d089eda249320b3c3`.
+- production_readback: project `stock-x-autopost` (`wsmznyzcvmuitkglfeuj`); `personalized-reports` v25 ACTIVE, `verify_jwt=false`; `market_report_consumer_settings.app_enabled=false` and `x_enabled=false`. Read-only metadata/query only.
+- changed_files: no PR source changes. H2 control files only: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md`.
+
+### Review findings
+
+- `UNDETERMINED_MOVE_PREFIX` permits only optional `当日の` + one of `下落|上昇|値動き|変動` + optional `の`. The remainder is a fixed unknown-cause phrase and the expression remains whole-string anchored.
+- `CAUSAL_ASSERTION` is still evaluated before the unknown-cause/hedge acceptance paths. Sentence splitting remains in place. `因果関係は確認できません` is accepted as a bounded uncertainty statement; unrelated subjects, assertions, and mixed unsafe sentences are rejected.
+- Additional read-only adversarial evaluation: `急な下落…`, `半導体株の下落…`, `円安による上昇…`, cause-as-fact variants, mixed clauses, and Japanese/ASCII punctuation variants all reject. `下落の要因は特定できない可能性があります` is accepted by the existing generic `HEDGE` branch, not the new anchored regex; it is a hedged uncertainty, not a causal assertion, and the HEDGE branch was unchanged by this PR.
+- `morning=120` / `close=160` remain unchanged.
+
+### Verification
+
+- Focused close-validator suite: **20/20 PASS**.
+- Full personalized-reports suite: **64/64 PASS**.
+- `deno check --no-lock` for `index.ts` and `report_logic.ts`: **PASS**.
+- `deno lint supabase/functions/personalized-reports`: **PASS**, 8 files.
+- `git diff --check origin/main...HEAD`: **PASS**.
+- PR diff is limited to `report_logic.ts` and `close_validator_fix_test.ts` (81 insertions, 2 deletions).
+
+### C2 disposition / safety
+
+- verdict: **PASS**; source is safe to consider for merge. H2 did not merge or deploy.
+- recommendation: after C2 approval and normal merge gates, redeploy `personalized-reports` only under a separate authorization with `app_enabled=false`, then perform 3–5 natural/dry-run close validations as assigned; retain the known-good v21 rollback source and do not enable app publishing until results are accepted.
+- production DB/schema/RLS/RPC/settings/Cron mutation: **0**; Edge deploy: **0**; LLM/API invocation: **0**; X/Push/post: **0**; merge: **0**; secrets exposed: **0**.
+- remaining_issues: C2 merge decision and any later redeploy/dry-run are separate. The accepted generic hedge case above is pre-existing behavior and is not a PR-introduced widening.
+- safety_checks: review and control report were performed in separate clean H2 worktrees. No other slot files or source were changed.
+
 ## H2 — PR #23 close validator final review — 2026-09-24
 
 - task_id: `kabumori-pr23-close-validator-final-review-20260924`
@@ -2284,35 +2317,3 @@ Then apply the exact migration file via `podman exec -i <container> psql -X -v O
 - push: `origin/main` contains `732c630166bf8bc0fcaf7a4b5968d1d24a53c0db` after fresh fetch/read-back.
 - safety_checks: Formal repo and existing uncommitted changes were untouched; no `apps/admin/**`, `HANDOFF.md`, H1 files, production settings, migrations, secrets, tokens, OAuth, X/OpenAI/Vault/Storage/Cron operations were changed or exposed.
 - next_recommendation: C2 review the production-shaped contract and metadata findings. Do not create/apply a production reader, deploy history-learning, or call X history until the separate rollout gate is approved.
-## H2 — PR #26 unknown-cause prefix final review — 2026-09-25
-
-- task_id: `kabumori-pr26-unknown-cause-prefix-final-review-20260925`
-- result: **PASS**. The optional move-subject prefix is narrowly anchored; no PR-introduced causal-assertion or free-text bypass was found. Safe for C2 merge review; no merge or deploy performed.
-- fresh_main_sha: `9934391fc59085ffd66f9a15396deb686a93f804`.
-- reviewed_pr: #26, `g2-close-unknown-cause-prefix-20260924`, exact requested head `2b40a617e34c73c301e40a17692883ac70fd3e0a`; fetched PR head matched exactly. Main contains PR #23 merge `5df9512b43c885fff28b625d089eda249320b3c3`.
-- production_readback: project `stock-x-autopost` (`wsmznyzcvmuitkglfeuj`); `personalized-reports` v25 ACTIVE, `verify_jwt=false`; `market_report_consumer_settings.app_enabled=false` and `x_enabled=false`. Read-only metadata/query only.
-- changed_files: no PR source changes. H2 control files only: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md`.
-
-### Review findings
-
-- `UNDETERMINED_MOVE_PREFIX` permits only optional `当日の` + one of `下落|上昇|値動き|変動` + optional `の`. The remainder is a fixed unknown-cause phrase and the expression remains whole-string anchored.
-- `CAUSAL_ASSERTION` is still evaluated before the unknown-cause/hedge acceptance paths. Sentence splitting remains in place. `因果関係は確認できません` is accepted as a bounded uncertainty statement; unrelated subjects, assertions, and mixed unsafe sentences are rejected.
-- Additional read-only adversarial evaluation: `急な下落…`, `半導体株の下落…`, `円安による上昇…`, cause-as-fact variants, mixed clauses, and Japanese/ASCII punctuation variants all reject. `下落の要因は特定できない可能性があります` is accepted by the existing generic `HEDGE` branch, not the new anchored regex; it is a hedged uncertainty, not a causal assertion, and the HEDGE branch was unchanged by this PR.
-- `morning=120` / `close=160` remain unchanged.
-
-### Verification
-
-- Focused close-validator suite: **20/20 PASS**.
-- Full personalized-reports suite: **64/64 PASS**.
-- `deno check --no-lock` for `index.ts` and `report_logic.ts`: **PASS**.
-- `deno lint supabase/functions/personalized-reports`: **PASS**, 8 files.
-- `git diff --check origin/main...HEAD`: **PASS**.
-- PR diff is limited to `report_logic.ts` and `close_validator_fix_test.ts` (81 insertions, 2 deletions).
-
-### C2 disposition / safety
-
-- verdict: **PASS**; source is safe to consider for merge. H2 did not merge or deploy.
-- recommendation: after C2 approval and normal merge gates, redeploy `personalized-reports` only under a separate authorization with `app_enabled=false`, then perform 3–5 natural/dry-run close validations as assigned; retain the known-good v21 rollback source and do not enable app publishing until results are accepted.
-- production DB/schema/RLS/RPC/settings/Cron mutation: **0**; Edge deploy: **0**; LLM/API invocation: **0**; X/Push/post: **0**; merge: **0**; secrets exposed: **0**.
-- remaining_issues: C2 merge decision and any later redeploy/dry-run are separate. The accepted generic hedge case above is pre-existing behavior and is not a PR-introduced widening.
-- safety_checks: review and control report were performed in separate clean H2 worktrees. No other slot files or source were changed.
