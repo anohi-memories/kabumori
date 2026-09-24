@@ -4,7 +4,10 @@
 
 ## Routing preference
 
-- ユーザーから明示指定がない限り、H1/G1はかぶモリアプリ側、H2/G2はX自動投稿・複数ブランドX運用側を優先する。
+- かぶモリアプリ実装は G1 / G2 を使用する。
+- X自動投稿・複数ブランドX実装は G3 / G4 を使用する。
+- 各ペア内の割当は空き状況・競合・依存関係を見てChatGPTが決める。
+- H1/H2はCodexのレビュー・バグ修正・検証枠。
 - ユーザーの個別指定がある場合はその指定を優先する。
 - 競合防止ルールは常に優先する。
 
@@ -17,7 +20,7 @@
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: unassigned; reserved primarily for Kabumori app review/bugfix/verification
+- allocation: unassigned
 
 ## Codex H2
 - owner: codex
@@ -28,27 +31,27 @@
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: assigned; not available for a new TASK
+- allocation: assigned
 
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: in_progress
+- status: review_required
 - task_id: kabumori-mobile-recovery-deeplink-routing-fix-and-e2e-resume-20260924
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: assigned; not available for a new TASK
+- allocation: assigned
 
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
+- status: done
 - task_id: x-admin-multibrand-selector-phase2-merge-only-20260924
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: assigned; awaiting K2 / Vercel gate
+- allocation: closed; unfinished continuation moved to G4
 
 ## Claude G3
 - owner: claude
@@ -58,17 +61,17 @@
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: unassigned
+- allocation: unassigned; X implementation slot
 
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: idle
-- task_id: none
+- status: ready
+- task_id: x-admin-phase2-vercel-gate-merge-and-postmerge-qa-20260924
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: unassigned
+- allocation: assigned; X implementation continuation
 
 ## Control codes
 
