@@ -33,7 +33,7 @@
 
 - H1: `done` — `kabumori-mobile-recovery-pr17-final-auth-security-review-20260924`
 - H2: `idle` / task_id `none`
-- G1: `done` — `kabumori-mobile-recovery-deeplink-routing-fix-and-e2e-resume-20260924`
+- G1: `ready` — `kabumori-mobile-recovery-pr17-merge-and-postmerge-verify-20260924`
 - G2: `idle` / task_id `none`
 - G3: `ready` — `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`
 - G4: `ready` — `x-admin-netlify-deploy-preview-pipeline-20260924`
@@ -49,11 +49,18 @@
 - 各slotは独立worktree/checkoutを使用する。
 - 既存未コミット変更は他workstream所有として触らない。
 
+## Kabumori native PR merge policy
+
+- Native Expo/React Native PRs do not require Vercel deployment checks to merge.
+- Native verification uses code review, tests, Expo/EAS and real-device evidence as appropriate.
+- Future Kabumori Web Preview/Production uses Netlify.
+- G2 remains idle until a separate Kabumori implementation task is needed.
+
 ## C1 result
 
 - PR #17 Auth/security review PASS.
 - H1 fixed one P2 classifier issue and pushed reviewed head `b3798aa6be82b6a29d8d2dcf21ca27fb19ef5f50`.
-- PR #17 is safe to merge once required repository checks pass.
+- PR #17 is Auth/security-approved. It may be merged after fresh-main verification; Vercel is not a native merge gate.
 - Current Vercel failure is rate-limit related and was not bypassed.
 
 ## Deferred work
