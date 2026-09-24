@@ -117,3 +117,13 @@ PR #17 is safe to merge **once the required repository checks pass**, subject to
 ## Recommendation
 
 The privacy corrections are pushed to PR #18, but **do not merge yet** while the required Vercel status is failing. Once the required check passes, the source change is review-ready subject to C1 and operator/legal approval of the first-draft legal text. The App Store/EAS and public-site blockers above remain outside this PR review.
+
+
+## Final C1 assessment — PR #18
+
+- verdict: **PASS after H1 fixes**
+- reviewed head: `6f3277639bc19fb1f420cd0e771c1d77f6d23519`
+- focused tests: 17 passed / 0 failed
+- production mutation: 0
+- Vercel rate-limit failure is not treated as a Kabumori Web merge-quality blocker because Kabumori Web Preview/Production uses Netlify.
+- next: G1 fresh-main merge + post-merge verification for PR #18.
