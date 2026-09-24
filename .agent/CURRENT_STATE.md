@@ -27,11 +27,12 @@
   - Recommended model: GPT-6 Sol Medium。
 
 
-- Claude slot 1: `done` — `kabumori-mobile-release-blockers-phase1-production-rollout-20260924`
-  - K1 PASS. `ensure_my_profile` migration applied alone and `account-delete` v1 deployed with `verify_jwt=true`.
-  - Production mutations exactly 2; RPC/security postflight and fail-closed checks passed.
-  - Manual remaining step: add `kabumori://reset-password` to Supabase Auth Redirect URLs without changing existing entries.
-  - No real reset email/account deletion/TestFlight/App Store action was performed. Legal/support URLs remain unresolved.
+- Claude slot 1: `ready` — `kabumori-mobile-auth-real-e2e-disposable-account-20260924`
+  - User-approved real E2E using exactly one new disposable test account.
+  - Flow: signup → confirmation → first login/profile creation → session restore/logout/re-login → password recovery/deep-link → new password → in-app delete → DB/Auth read-back.
+  - Existing production users must not be touched. If no test email is available, stop and ask user for one; never ask for password in chat.
+  - Current Kabumori dev server may use 8082; do not stop the separate social-mobile process on 8081.
+  - Recommended model: Opus 5.5.
 
 - Claude slot 2: `ready` — `x-admin-multibrand-selector-phase2-merge-only-20260924`
   - K2 PASS済みPR #15を最新mainへfreshen/rebaseし、apps/admin/**の意味的差分がレビュー済みcandidateと同一であることを確認してからmergeする。
