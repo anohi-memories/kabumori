@@ -13,6 +13,8 @@ marked **source-complete** needs a person, an account, or a production setting.
 | Public pages: `/privacy`, `/terms`, `/support`, `/account-deletion`, `/` | `apps/kabumori-web` |
 | In-app links to privacy / terms / support, from one origin | `src/lib/legal-links.ts` (`EXPO_PUBLIC_KABUMORI_WEB_URL`) |
 | Production build number auto-increment | `eas.json` → `build.production.autoIncrement` |
+| Home-screen app display name is 「かぶモリ」 | `app.json` → `expo.name` |
+| Production-env preflight, checked by hand or CI before `eas build --profile production` | `scripts/verify-production-env.mjs` (`npm run verify-production-env`) |
 
 The privacy page describes the data flows as implemented today, audited from source:
 
@@ -37,6 +39,8 @@ For the native build:
 
 | Variable | Meaning |
 | --- | --- |
+| `EXPO_PUBLIC_SUPABASE_URL` | the Supabase project API URL used by the app client |
+| `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | the client-side publishable key; never use a secret or `service_role` key |
 | `EXPO_PUBLIC_KABUMORI_WEB_URL` | the published https origin of `apps/kabumori-web`, with no path |
 
 **The legal text is a factual first draft, not legal advice.** Have the operator, and ideally a professional, review it before publication.
@@ -45,12 +49,13 @@ For the native build:
 
 | # | Finding | Why it matters | Needs |
 | --- | --- | --- | --- |
-| A1 | **The app icon and splash are still the Expo template.** `assets/expo.icon` is the Expo logo; `splash-icon.png` is the template splash on the template blue `#208AEF`. | The store listing and home screen would show Expo's logo, a likely review problem and not Kabumori. | Kabumori icon and splash artwork (design decision) |
-| A2 | **Production builds have no Supabase configuration.** `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` exist only in the git-ignored local `.env`, which EAS cloud builds do not receive. | A production build would start without a backend. | Create them, plus `EXPO_PUBLIC_KABUMORI_WEB_URL`, as EAS environment variables for the `production` environment. They are public values. |
-| A3 | Home-screen name is `kabumori`, from `expo.name`. | The icon label shows the romanised lowercase name. | Decide the display name, e.g. 「かぶモリ」 |
+| A1 | **`app.json`'s app icon (`assets/images/icon.png`, also used for `ios.icon` via the Icon Composer bundle `assets/expo.icon`) and the native splash background (`#208AEF`, the Expo brand blue) are the Expo template artwork, not a Kabumori mark.** | The App Store listing and the home screen icon would show Expo's default template, not Kabumori. | Kabumori icon and splash artwork (design decision — see exact specs below) |
+| A1b | **On normal launches, `src/app/_layout.tsx` renders `AnimatedSplashOverlay` after auth loading; a recovery-link route takes precedence. The overlay displays `assets/images/expo-logo.png` — Expo's own wordmark — over a `#208AEF` gradient, animated in and out.** Confirmed by reading the component, not inferred from the filename. | This is live in-app UI, not an unused leftover, and appears during normal startup. | Replace with a Kabumori equivalent once artwork exists (see below); this file is unchanged in this task per the "do not generate artwork" rule |
+| A2 | **The repository does not provide or enforce EAS production values.** `src/lib/supabase.ts` creates the client during app startup from `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; absent build-time values cause startup failure (`supabaseUrl is required` was reproduced in the prior export smoke). The legal-web URL instead fails soft and shows a preparation message. | EAS can still produce a build if the operator has not configured its production environment; the missing Supabase values prevent the app from starting. | Set all three values in EAS's `production` environment. The verifier checks only the current process environment, does not read remote EAS values, and is manual/CI-only; it does not automatically gate `eas build`. |
+| A3 | ~~Home-screen name is `kabumori`~~ **Fixed in this task**: `expo.name` is now 「かぶモリ」. `slug`, `scheme` and `bundleIdentifier` are untouched. | — | done |
 | A4 | `submit.production` is empty. | `eas submit` will prompt for the App Store Connect app, Apple ID and team. | Fill in once the App Store Connect record exists |
 | A5 | Export compliance (`ITSAppUsesNonExemptEncryption`) is not declared. | Every upload asks the question. The app only uses the OS's HTTPS, which is normally exempt, but this is a legal declaration. | The operator confirms, then set `ios.config.usesNonExemptEncryption: false` |
-| A6 | Leftover template images (`expo-logo.png`, `react-logo*.png`, `tutorial-web.png`, `expo-badge*.png`). | Not bundled unless referenced. Cosmetic. | Optional cleanup |
+| A6 | `assets/images/react-logo*.png`, `tutorial-web.png` and `expo-badge*.png` are not referenced anywhere in `src/` or `app.json` and are not bundled. `logo-glow.png` is referenced only by the unused `AnimatedIcon` export in the same file as A1b (not rendered anywhere). Cosmetic, no release impact. | — | Optional cleanup |
 
 Checked and fine as-is:
 
@@ -63,14 +68,22 @@ Checked and fine as-is:
 
 ## 4. Pending production / account work (not done by source changes)
 
-1. **Supabase Auth Site URL and redirect.** The signup confirmation link currently lands on an unreachable page. Once the site exists, the site origin or a confirmation page is a natural target.
-2. **Custom SMTP.** The built-in sender allows about 2 emails per hour. Choose a provider and set up the sending domain's SPF and DKIM.
-3. **Netlify:** create the site with base directory `apps/kabumori-web`, set the three operator variables, publish, and map a domain.
-4. **App Store Connect:**
+1. **Kabumori icon and splash artwork.** No suitable official asset exists in the repo today (only the Expo template — see A1/A1b). Exact specs needed from the operator/designer:
+   - **App icon**: 1024×1024 PNG, no transparency, no rounded corners (Apple applies the mask). Replaces `assets/images/icon.png`. If a distinct iOS Icon Composer variant is wanted, replaces `assets/expo.icon` (otherwise that field can be dropped and `expo.icon` alone will be used for iOS).
+   - **Splash**: a mark or wordmark PNG plus a background colour, sized to work with `expo-splash-screen`'s existing `imageWidth: 76` config in `app.json` (or a chosen new width), to replace `splash-icon.png` and the `#208AEF` background.
+   - **Animated launch overlay** (optional but recommended, since A1b is currently the most visible Expo branding in the app): a PNG to replace `assets/images/expo-logo.png` in `src/components/animated-icon.tsx`, plus a background colour/gradient to replace `#208AEF` / `linear-gradient(180deg, #3C9FFE, #0274DF)` in that file's `splashOverlay`/`background` styles. The app's existing accent colour is `#397449` (`KABUMORI_COLORS.light.accent` in `src/constants/kabumori-theme.ts`).
+   - **Android adaptive icon**: foreground/background/monochrome layers, replacing the three `android-icon-*.png` files (background colour currently `#E6F4FE`, unrelated to A1/A1b, not investigated further as this task audits the iOS release path).
+2. **Supabase Auth Site URL and redirect.** The signup confirmation link currently lands on an unreachable page. Once the site exists, the site origin or a confirmation page is a natural target.
+3. **Custom SMTP.** The built-in sender allows about 2 emails per hour. Choose a provider and set up the sending domain's SPF and DKIM.
+4. **Netlify:** create the site with base directory `apps/kabumori-web`, set the three operator variables, publish, and map a domain.
+5. **EAS production environment variables**, verified locally first with `npm run verify-production-env`.
+6. **App Store Connect:**
    - app record
+   - set the localized App Store product name to 「かぶモリ」 (separate from the home-screen name in `expo.name`)
    - Privacy Policy URL (`/privacy`) and Support URL (`/support`)
    - App Privacy questionnaire, answered consistently with `/privacy` (email and portfolio data linked to the user, no tracking)
    - age rating
    - screenshots, description and category
    - review notes that give reviewers a demo account
-5. **EAS / TestFlight:** production build, TestFlight upload, internal test on a real device, then submission.
+   - export compliance declaration (A5)
+7. **EAS / TestFlight:** production build, TestFlight upload, internal test on a real device, then submission.
