@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: done
 - task_id: kabumori-release-pr18-privacy-dataflow-eas-light-review-20260924
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: assigned; PR #18 privacy/data-flow/EAS light review
+- allocation: closed; Final C1 PASS
 
 ## Codex H2
 - owner: codex
@@ -44,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: done
-- task_id: kabumori-release-foundation-appstore-web-links-eas-audit-20260924
+- status: ready
+- task_id: kabumori-release-pr18-merge-postmerge-verify-20260924
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: closed; K1 implementation PASS, H1 review pending
+- allocation: assigned; merge reviewed PR #18 and verify main
 
 ## Claude G2
 - owner: claude
