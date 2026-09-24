@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1b-account-bound-queue-schema-and-outcome-ledger-20260924
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: GPT-6 Sol Medium
 - purpose: Phase1 C2で確認したsafe boundaryを解消するため、productionを一切変更せず、scheduled_postsを明示的なsocial_account_idへbindするschema/API candidateと、durable provider-attempt/outcome ledgerをsource-only + disposable PostgreSQLで設計・実装する。legacy rowの暗黙推測は禁止。
