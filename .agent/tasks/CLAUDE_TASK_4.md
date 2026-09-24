@@ -3,8 +3,8 @@
 - task_id: x-admin-netlify-deploy-preview-pipeline-20260924
 - owner: claude
 - slot: claude-4
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: X自動投稿・複数ブランド管理画面 apps/admin の開発中PreviewをNetlifyへ移し、Vercelのdeployment rate limitに依存せずテスト・レビューできる状態を作る。最終production deployのみVercelへ残す。
@@ -313,3 +313,62 @@ Final K4 can PASS with Netlify live Preview still externally blocked, provided:
 - repository changes are safely pushed/reviewable,
 - exact external authorization blocker remains documented,
 - production mutation remains 0.
+
+## Report (delivery confirmation, addressing K4 Review 2026-09-24)
+
+- task_id: x-admin-netlify-deploy-preview-pipeline-20260924
+- result: **修正済み**。3ファイルの変更は実際には元から`origin/main`へ直接pushされて配信済みだったが、Reportに明示的な`commit_hash`/`push`フィールドが無く、かつ通常のfeature branch+PRフローを経由していなかった。今回、事実確認・専用branchのpush・明示的な記録を行った。
+
+### K4レビューの指摘事項への対応
+
+K4レビュー（`26d8b34`）は「GitHubへ未配信」「remote G4 branchが存在しない」「Reportにcommit hash/push確認が無い」の3点を指摘した。事実確認結果：
+
+1. **「GitHubへ未配信」について**：GitHub API（`gh api repos/anohi-memories/kabumori/commits/12b994e...`）で直接確認したところ、commit `12b994e00a4f7ae83076e6c9c44a09d339cebb9d`は**確かにGitHub上に存在し、`origin/main`の履歴に含まれている**（`git merge-base --is-ancestor`でも確認済み）。3ファイル（`apps/admin/netlify.toml` / `apps/admin/.gitignore` / `apps/admin/docs/phase2-netlify-deploy-preview.md`）は実際には配信済みだった。
+2. **「remote G4 branchが存在しない」について**：これは正確な指摘だった。前回は`main`へ直接pushしており、Phase 1（PR #14）のような専用feature branchを経由していなかった。**今回、`admin-netlify-deploy-preview-phase2-20260924`ブランチをcommit `12b994e`から作成し、`origin`へpushした**（`git push origin admin-netlify-deploy-preview-phase2-20260924`で`new branch`として反映を確認）。
+3. **「Reportにcommit hash/push確認が無い」について**：これも正確な指摘だった。前回Reportは本文中に触れてはいたが、`commit_hash:`/`push:`という明示ラベル付きフィールドとして書いていなかった。以下に明示する。
+
+### commit_hash
+
+`12b994e00a4f7ae83076e6c9c44a09d339cebb9d`（`feat(admin): Netlify Deploy Preview pipeline Phase 2`）
+
+### push
+
+- `origin/main`へ直接push済み（2026-09-24 16:41:20 +0900、`7ad3539..12b994e`）。GitHub API・`git merge-base --is-ancestor`の両方で存在を再確認した。
+- 加えて今回、同一commitを指す専用branch `admin-netlify-deploy-preview-phase2-20260924`を`origin`へpush済み。
+
+### 専用branch経由でPRを作らなかった理由
+
+`admin-netlify-deploy-preview-phase2-20260924`から`main`へのPRは、対象3ファイルの変更が**既にmainへ含まれているため差分が発生しない**（`git log 12b994e..origin/main -- apps/admin/`は今回のfetch時点でも0件）。このタイミングでPRを開いても「変更なし」または、branch作成後にmainが先に進んだことによる無関係な逆差分が表示されるだけで、レビューとして意味を持たない。そのためPRは作成せず、branch pushによる「明示的な参照可能な記録」の提供に留めた。PRベースのレビューフローを厳密に求める場合は、次回同種の変更から着手前にbranchを切ることを徹底する。
+
+### Scope確認（continuation要求の2番）
+
+- fresh fetch origin/main実施（作業中最終`334d7a5`まで前進を確認）。
+- `git log 12b994e..origin/main -- apps/admin/`：**0件**。apps/adminへの重複・競合する変更は着手時から一貫して発生していない。
+
+### Forbidden項目の再確認
+
+- Netlify interactive account authorizationは試みていない（引き続き未実施）。
+- PR #15のmergeは行っていない。
+- Vercel/production/DB/DNS設定への変更は0件。
+
+### changed_files（再掲、内容は前回から無変更）
+
+- `apps/admin/netlify.toml`
+- `apps/admin/.gitignore`
+- `apps/admin/docs/phase2-netlify-deploy-preview.md`
+
+### remaining_issues
+
+1. `proxy.ts`のNetlify上での実際の動作は引き続き未検証（live siteが無いため）。
+2. live Netlify siteは引き続き未作成（interactive authorization待ち）。
+3. プロセス上の教訓：今後、apps/admin配下のsource/config/doc変更を伴うTASKは、着手前に専用feature branchを作成し、完了時にPRを開く（Phase 1のPR #14と同じ手順）ことを徹底する。直接`main`へpushするのは`.agent/**`のcontrol file更新に限定する。
+
+### next_recommendation
+
+1. 上記のプロセス修正（先にbranchを切る）を今後のG3/G4 TASKへ反映することを推奨。
+2. 実体面の次ステップは変更なし：Netlifyサイト作成の5ステップ（`apps/admin/docs/phase2-netlify-deploy-preview.md`記載）を、権限を持つ人間または別途authorizeされたタスクで実施。
+
+## Completion (delivery confirmation)
+
+- status -> review_required
+- next_owner -> chatgpt
