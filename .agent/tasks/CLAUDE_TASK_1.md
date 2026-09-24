@@ -3,7 +3,7 @@
 - task_id: kabumori-pr24-privacy-merge-postmerge-verify-20260924
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: medium
 - recommended_model: Sonnet5（中）
