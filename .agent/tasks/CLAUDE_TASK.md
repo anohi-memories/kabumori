@@ -3,7 +3,7 @@
 - task_id: x-admin-multibrand-selector-phase2-merge-only-20260924
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Opus 5.5
