@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1e-auth-secret-provider-final-review-20260924
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: K3 PASS済みのPhase1E exact-account credential resolver / one-request provider seamを、Auth・secret/Vault境界・RPC ACL・provider outcome semanticsの観点で最終レビューする。production apply/deploy/X API callは行わない。
