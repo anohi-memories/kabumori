@@ -3,7 +3,7 @@
 - task_id: kabumori-mobile-release-blockers-phase1-merge-only-20260924
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Opus 5.5
