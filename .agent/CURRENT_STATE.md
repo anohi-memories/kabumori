@@ -35,13 +35,13 @@
 - H2: `idle` / task_id `none`
 - G1: `review_required` — `kabumori-mobile-recovery-pr17-merge-and-postmerge-verify-20260924`
   - PR #17 merged at reviewed head `b3798aa` → main `7ad3539`. 3 files byte-identical; 98/0 tests, tsc src 0, web export 10 routes. Vercel ignored per native policy. Backend mutation 0.
-- G2: `idle` / task_id `none`
+- G2: `ready` — `kabumori-app-morning-close-report-detail-and-portfolio-impact-20260924`
 - G3: `ready` — `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`
 - G4: `ready` — `x-admin-netlify-deploy-preview-pipeline-20260924`
 
 ## Parallel safety
 
-- G2 is free for future Kabumori implementation work.
+- G2 owns Kabumori app morning/closing report detail + portfolio-impact implementation.
 - G3 owns X queue/planner SQL/RPC/x-test-post Phase1D.
 - G4 owns apps/admin Netlify Preview configuration only.
 - H1 final Auth/security review of PR #17 is complete (C1 PASS).
@@ -55,7 +55,7 @@
 - Native Expo/React Native PRs do not require Vercel deployment checks to merge.
 - Native verification uses code review, tests, Expo/EAS and real-device evidence as appropriate.
 - Future Kabumori Web Preview/Production uses Netlify.
-- G2 remains idle until a separate Kabumori implementation task is needed.
+- G1/G2 are both normal Kabumori implementation slots; G2 is used when safe parallel work is available.
 
 ## C1 result
 
