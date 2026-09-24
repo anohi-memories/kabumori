@@ -3,8 +3,8 @@
 - task_id: kabumori-pr19-report-detail-portfolio-privacy-final-review-20260924
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Luna（極高）
 - purpose: K2 PASS済みのPR #19（朝刊/大引け詳細化＋保有株影響分析）を、LLM validation・本人データ境界・朝刊参照・既存互換性の観点で最終レビューする。production deploy/mergeは行わない。
@@ -170,3 +170,30 @@ When complete:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for C2.
+
+
+## Final C2 — 2026-09-24
+
+Verdict: **PASS-WITH-FIX**.
+
+Accepted review fix:
+- PR #19 head `7dcf41c5714d620c41b3077376b9f5febbd129b2`
+- missing-market-value display fix in `market_detail.ts`
+- focused review tests 49/49 PASS
+- deno check/lint PASS
+- git diff --check PASS
+- production mutation=0
+
+Product-scope resolution:
+- "market-only report works with no holdings" does **not** expand the scheduled eligible-user cohort.
+- Existing cohort remains users represented by active `tracked_stocks` rows.
+- A watch-only user can receive a market-only report.
+- A user with zero active holdings **and** zero watch rows is outside this task's scheduled cohort.
+- Do not infer eligibility from profiles/alert settings or enumerate all users in this PR.
+- Any future expansion to zero-tracked users is a separate product/cost/consent decision.
+
+Residual semantic relevance:
+- accepted for this PR because basis-category validation + hedging + semantic Fact gate are layered, and H2 found no concrete bypass producing an unsupported stock-causal claim.
+- keep this as a future hardening area, not a merge blocker.
+
+PR #19 may proceed to fresh-main rebase/conflict resolution, merge, and post-merge verification.
