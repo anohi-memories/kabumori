@@ -3,8 +3,8 @@
 - task_id: x-admin-netlify-thin-control-plane-phase1-merge-only-20260924
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Opus 5.5
 - purpose: K2 PASS済みのPhase1 candidate branchを最新mainへfreshen/rebaseし、apps/admin/**のdrift/競合がないこととtestsを再確認したうえで、Phase1変更だけをmainへ安全にmergeする。brand selector配線やquery parameterizationはこのtaskではまだ行わない。
@@ -146,3 +146,23 @@ Then STOP for K2.
 10. **next recommendation**: 別タスクとしてPhase 2（brand selector UIの追加 + 4クエリモジュールの`KABUMORI_BRAND_ID`定数を「選択済み・`canAccessBrand`で検証済みのbrand id」へparameterize + それに合わせた`brand-boundary.test.ts`の更新）を切り出す。既存のsafety-tested invariantを書き換えるため、独立したK2レビューを推奨。
 
 11. **fresh-origin verification**: merge直後に`git fetch origin`して`origin/main == a9c0ef7`（PR #14のmerge commit）であることを確認し、その状態でread-back（7.）を実施。
+
+
+## Final K2 — 2026-09-24
+
+PASS.
+
+Accepted:
+- reviewed Phase1 candidate was freshened rather than merging the stale head directly.
+- no apps/admin drift existed on main since the reviewed candidate; two intervening main advances were outside apps/admin.
+- rebases were conflict-free and semantic content stayed unchanged.
+- merge changed exactly the five reviewed apps/admin files.
+- tests/build passed after final freshen: node 12/12, tsc PASS, lint PASS, Next build PASS, git diff --check PASS; secret scan remained clean.
+- PR #14 merged as `a9c0ef71954cdaa01e0ee7eb34bcd37dbcc6ec15`; post-merge read-back confirmed byte identity of all five reviewed files.
+- existing Kabumori-only query modules, brand-boundary test, and system-toggle remained unchanged.
+- production mutation remained 0; no Netlify site/deploy, DB/Function/Cron/OAuth/Vault, x-test-post, consumer-mobile, or Important News production change occurred.
+- independent K2 fresh compare confirmed current main only advanced beyond the merge by Claude slot2 control-file updates; no apps/admin source drift occurred after merge.
+
+Next recommendation:
+- separate Phase2 task for brand selector UI + server-side selected-brand validation + parameterizing the four currently Kabumori-hardcoded admin query modules while preserving fail-closed brand isolation.
+- keep cross-brand aggregate view and Netlify preview/site creation as later separately reviewed gates.
