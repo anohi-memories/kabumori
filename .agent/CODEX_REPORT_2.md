@@ -1,3 +1,17 @@
+## Final C2 assessment — PR #19
+
+- verdict: **PASS-WITH-FIX**
+- reviewed head: `7dcf41c5714d620c41b3077376b9f5febbd129b2`
+- accepted H2 fix: missing-value/change display guard
+- focused tests: 49/49 PASS
+- privacy boundary: PASS; no cross-user path found
+- morning-to-close isolation: PASS
+- compatibility/X invariants: PASS
+- production mutation: 0
+- product-scope decision: scheduled cohort is unchanged; users with zero active tracked rows are outside this task. Watch-only users satisfy the "no holdings" market-only case.
+- semantic evidence relevance remains a future hardening item, not a merge blocker.
+- next: G2 fresh-main rebase/conflict resolution + merge/post-merge verification.
+
 # H2 — PR #19 report detail / portfolio privacy final review (2026-09-24)
 
 - task_id: `kabumori-pr19-report-detail-portfolio-privacy-final-review-20260924`
