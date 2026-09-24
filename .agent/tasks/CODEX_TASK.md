@@ -3,8 +3,8 @@
 - task_id: kabumori-important-news-caller-auth-production-rollout-20260924
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Luna
 - purpose: mainへmerge済みの Important News caller-auth を、本番Cronを止めずに安全に有効化する。専用secret設定 → exact migration apply → important-news-monitor単独deploy → 自然Cron観測までを順序付きゲートで実施する。
@@ -282,3 +282,20 @@ Do not regenerate or replace either secret unless a mismatch is proven and a coo
 - remaining_issues: C1 review. Function secret was confirmed by user attestation; no plaintext was accessed.
 - next_owner: chatgpt.
 
+
+
+## Final C1 — 2026-09-24
+
+PASS.
+
+Accepted production rollout evidence:
+- exactly the approved caller-auth migration was applied; no blind db push or migration-history repair.
+- exactly the four intended Important News Cron commands gained the Vault-backed caller-auth header; schedules, active flags, request bodies, URLs, other command semantics, and important-news-shadow remained unchanged.
+- only important-news-monitor was deployed; it is ACTIVE v66 and verify_jwt=false is preserved.
+- deployed source matches latest reviewed main; all other Function metadata remained unchanged.
+- all four natural Cron paths succeeded after rollout, with observed pg_net responses 49/49 HTTP 200 and no auth/server/transport errors in the observation window.
+- an unauthenticated empty request returned 401 UNAUTHORIZED before privileged credential loading, body parsing, or mode dispatch; no business side effect was triggered.
+- no manual X post, candidate injection, Push, OAuth change, other Function deploy, unrelated Cron/migration/config change, or business-logic/auto_publish/cadence change occurred.
+- secret plaintext was not exposed. Function-secret presence is supported by the user's explicit Dashboard confirmation; Vault presence/format was verified without returning the value.
+
+No further H1 production action is authorized or required by this task.
