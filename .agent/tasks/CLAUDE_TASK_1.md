@@ -3,8 +3,8 @@
 - task_id: kabumori-mobile-auth-real-e2e-disposable-account-20260924
 - owner: claude
 - slot: claude-1
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Opus 5.5
 - purpose: K1 PASS済みのmobile Auth/account lifecycleを、production backend + real dev client/deviceで disposable test account 1件だけ使って end-to-end 検証する。signup → confirmation → first login/profile creation → password recovery/deep-link → new password → in-app account deletion → backend deletion確認までを安全に通す。
@@ -204,3 +204,99 @@ Update this TASK with:
 - STOP for K1
 
 **推奨モデル：Opus 5.5。**
+
+## Report — G1 result
+
+- task_id: kabumori-mobile-auth-real-e2e-disposable-account-20260924
+- result: **Gate A PASS, Gate B PASS, Gate C FAIL** (a source bug in the recovery deep-link handling). **Gate D and Gate E not run.** I stopped here per this TASK. No production patch was made.
+- fresh main at start: `3e026ee`; in_progress control commit `61ffed2`
+
+### Device / dev-client / server context
+
+- real iPhone running the Kabumori dev client, against the production Supabase backend
+- the Mac was rebooted during the task. After the reboot port 8081 was free (social-mobile was no longer running), so I restarted **only the Kabumori Metro**, on `8081`, from this worktree at main's code. LAN IP after the reboot: `192.168.188.127`. `packager-status:running` confirmed.
+- app scheme: `kabumori`
+
+### Baseline (counts only, before signup)
+
+| Table | Count |
+| --- | --- |
+| `auth.users` | 2 |
+| `profiles` | 1 |
+| `tracked_stocks` | 20 |
+| `alert_settings` | 1 |
+| `alert_category_settings` | 16 |
+| `notifications` | 18 |
+| `device_push_tokens` | 1 |
+| `personalized_reports` | 12 |
+
+- `ensure_my_profile` present: security invoker, ACL `{postgres=X/postgres,authenticated=X/postgres}`
+- `account-delete` ACTIVE, `verify_jwt=true`, ezbr `0f1cc97736e3` and `updated_at` unchanged since my deploy
+- the test identity was checked before signup: 0 existing `auth.users` rows for it
+- Observations (not mine):
+  - Every function's listed version moved +1 at the same moment with unchanged `updated_at` and hash, which looks like platform renumbering (`account-delete` is now listed as v2 with identical code).
+  - `important-news-monitor` changed hash and `updated_at` (v66), consistent with the H1 rollout.
+
+### Gate A — signup + confirmation: **PASS**
+
+- signup accepted in the app, and the 「確認メールを送信しました」 message was shown
+- confirmation email received
+- confirmation completed: `email_confirmed_at` is set. `auth.users` went 2 → 3, and exactly 1 row exists for the test identity.
+- no profile at this point. This is expected (confirmation on means no session at signup) and confirms root cause #1 from the phase-1 audit.
+- **Issue found (release blocker, not changed):** after the link verifies, Supabase redirects to the project Site URL. On the phone this showed 「サーバーに接続できませんでした」. The confirmation itself succeeded, but a real user sees what looks like an error. It needs a reachable Site URL or a confirmation redirect, which is an Auth config change and was not approved here.
+
+### Gate B — first login + profile lifecycle: **PASS**
+
+- The first login reached the home screen, with no profile recovery screen.
+- `ensure_my_profile()` created the test user's profile. Profiles went 1 → 2, with **exactly 1** row for the test user.
+- Session restore (full app kill and relaunch) stayed signed in.
+- Logout from 設定 worked, and re-login worked.
+- After all of the above the test user still had **exactly 1** profile row, so there was no duplicate.
+- The test user had 1 `device_push_token` row: this device, registered by the app. It is left for the deletion cascade check.
+
+### Gate C — password recovery: **FAIL at step 5**
+
+- The reset request from the login screen worked, and the success message was shown. `recovery_sent_at` is set for the test user.
+- The reset email was received.
+- The link opened on the iPhone, went through Supabase's verify step, and **iOS handed `kabumori://reset-password` to the Kabumori app**. So the Redirect URL allowlist entry the user added works, and the scheme is registered.
+- **Failure:** the app showed expo-router's default 「Unmatched Route — Page could not be found. kabumori://reset-password」 screen instead of the password reset screen. No password was changed.
+- **Likely cause (source):**
+  - The recovery screen is rendered by `AuthGate` in `src/app/_layout.tsx` via `useRecoveryLink()`.
+  - When the incoming path matches no route, expo-router renders its Unmatched screen and our root layout's gate is not shown. The user was signed out, and the phone showed the Unmatched screen rather than the login form, which means `AuthGate` was not what rendered.
+  - There is no route for `/reset-password`, and there is no `src/app/+native-intent.tsx`.
+  - The unit tests covered `parseRecoveryLink` in isolation but not expo-router's handling of an unknown system path. That gap in the phase-1 tests is my own.
+- **Candidate fix (needs its own PR and review; not done here):**
+  - Add `src/app/+native-intent.tsx` whose `redirectSystemPath` maps an incoming `reset-password` system path to `/`, so the router never lands on Unmatched.
+  - Keep the original URL available to `useRecoveryLink()`, either from `Linking.useURL()` or by carrying the link parameters over.
+  - Add a test that feeds a `reset-password` system path through the redirect function.
+  - A real `app/reset-password` route is not an option, because under `NativeTabs` it would become a visible tab.
+- Nothing about the link or token was recorded. The user was asked not to paste the URL.
+
+### Gate D — in-app deletion: **not run**
+
+The test account was **kept on purpose**, so Gate C can be re-run with the same identity after the fix and then continue straight into Gate D in the planned order. This TASK forbids recreating the account, and deleting it now would mean a second disposable signup later. If K1 prefers cleanup now, the next G1 can run Gate D alone with this account: in-app deletion, then a cascade check.
+
+### Gate E — regression: **partial**
+
+- Current counts: `auth.users` 3 (+1, the test user) and `profiles` 2 (+1, the test user's profile). No existing user or profile changed.
+- `account-delete` and `ensure_my_profile` are unchanged.
+- No secrets, tokens, reset URLs or passwords were printed or recorded. The test email appears only in read-only query predicates; no email appears in this report.
+
+### Production mutations attributable to this task
+
+All of them are the disposable identity's own normal user flow:
+
+1. signup of 1 test auth user
+2. its confirmation
+3. its sessions
+4. its own `profiles` row (created by the RPC)
+5. its own `device_push_tokens` row (created by the app)
+6. one recovery email to it
+
+Nothing else was mutated: no admin or service-role action, no Auth config, no deploy, no migration, and no other user touched.
+
+### Next release blockers
+
+1. **Recovery deep link fix.** `+native-intent` redirect plus a test, through a PR and K1. Then re-run Gate C → D → E with the same test account.
+2. **Confirmation (and recovery) redirect lands on an unreachable Site URL.** Decide a reachable Site URL, or add an `emailRedirectTo` for signup. This is an Auth config change and needs its own approval.
+3. Privacy / terms / support URLs are still undecided.

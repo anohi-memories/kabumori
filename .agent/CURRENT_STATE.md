@@ -34,10 +34,11 @@
   - **X自動投稿アプリ専用**として空けている。
   - かぶモリ本体のタスクは、ユーザー明示指定なしにここへ入れない。
 
-- Claude slot 1: `ready` — `kabumori-mobile-auth-real-e2e-disposable-account-20260924`
-  - かぶモリアプリ側。
-  - User-approved real E2E using exactly one new disposable test account.
-  - Existing production users must not be touched.
+- Claude slot 1: `review_required` — `kabumori-mobile-auth-real-e2e-disposable-account-20260924`
+  - Real iPhone dev client against production. Gate A PASS (signup + confirmation) and Gate B PASS (first login, exactly one profile via RPC, session restore, logout/re-login).
+  - Gate C FAIL: the recovery link reaches the app (the redirect allowlist works), but expo-router shows Unmatched Route for `kabumori://reset-password`. Source fix candidate: `+native-intent` redirectSystemPath. No production patch.
+  - Gate D/E not run. The disposable test account is kept for re-running C→D after the fix. auth.users 3 / profiles 2 (+1 test each); no existing user changed.
+  - Also found: the confirmation redirect lands on an unreachable Site URL (Auth config, needs approval).
 
 - Claude slot 2: `ready` — `x-admin-multibrand-selector-phase2-merge-only-20260924`
   - X複数ブランド管理側。
