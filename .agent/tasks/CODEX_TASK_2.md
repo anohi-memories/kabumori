@@ -3,8 +3,8 @@
 - task_id: kabumori-pr21-branding-eas-preflight-final-review-20260924
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: medium
 - recommended_model: Luna（高）
 - purpose: K1 PASS済みPR #21を、Expo identity安全性・production env preflight・release-readiness記述の正確性の観点で軽量独立レビューする。原則review-only、必要ならPR #21範囲の最小修正のみ。
@@ -87,3 +87,33 @@ When complete:
 - next_owner -> chatgpt
 - update .agent/CODEX_REPORT_2.md
 - STOP for C2.
+
+
+## Final C2 — PR #21
+
+Verdict: **PASS-WITH-FIX**.
+
+Accepted H2 fix commit:
+- `0a71f0882136aa8930cf0572033e1a0ba28c0760`
+
+Accepted fixes:
+- publishable-key validation hardened:
+  - accepts `sb_publishable_...`
+  - accepts legacy JWT only when role=anon
+  - rejects malformed/arbitrary values
+  - rejects secret/service-role credentials in EXPO_PUBLIC variable
+  - does not echo supplied values
+- App Store listing name vs `expo.name` wording corrected
+- launch-overlay scope wording corrected
+
+Review result:
+- identity/linkage safety PASS
+- env preflight PASS
+- A1/A1b artwork findings factual
+- 8/8 focused verifier tests PASS
+- 116/116 scoped tests PASS
+- git diff --check PASS
+- production mutation=0
+
+PR #21 is safe to proceed to fresh-main merge/post-merge verification.
+Production build/release remains blocked on official artwork, EAS production env values, and App Store Connect operator inputs.
