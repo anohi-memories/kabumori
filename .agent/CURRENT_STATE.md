@@ -20,14 +20,12 @@
   - Keep `verify_jwt=false`; no business logic/auto_publish/Cron cadence/X/Push changes.
   - Start with Luna; use Sol only if production/security judgment becomes ambiguous.
 
-- Codex slot 2: `done` — `x-autopost-phase0c2-production-deploy-retry-20260924`
-  - C2 PASS。x-test-post compatible brand-scoped clientはproduction v119へdeploy済み。
-  - runtime SHA `4642f128…d322`、verify_jwt=false。deployed publish_claim pathはbrand_id込みのconflict/complete/fail scopeを確認。
-  - 3 legacy global UNIQUEはproductionから除去済み、3 brand-scoped unique indexesはvalid/ready/unique。
-  - 4 planner RPCはbrand-scoped ON CONFLICTへ移行済みでold targetなし。SECURITY DEFINER / search_path=public維持。
-  - migration history: `20260924001508 x_autopost_phase0_brand_scoped_uniqueness`。
-  - publish_enabled aggregate 2 true / 1 falseで維持。C2で追加production mutationなし。
-  - known caveat: older multibrand foundation migration-history driftが残るためblind db push / old migration replay / history repair禁止。
+- Codex slot 2: `ready` — `x-autopost-phase1-common-queue-idempotency-foundation-20260924`
+  - Phase0c2 C2 PASS後の次段階。共通queue/idempotency/retry/outcome分類とstale-running reconciliationをsource-only + disposable PostgreSQLで固める。
+  - 重点: pre-X retryable / terminal / X outcome uncertain / X confirmed DB incomplete / completed を明示し、uncertain/confirmed-Xを自動再投稿しない。
+  - brand/account scoped claim・fairness・no-double-claimを検証。production mutation 0。
+  - apps/admin/**には触れないためG2と並行可。
+  - Recommended model: GPT-6 Sol Medium。
 
 
 - Claude slot 1: `done` — `kabumori-mobile-release-blockers-phase1-merge-only-20260924`
@@ -37,13 +35,12 @@
   - Do not ship a mobile build from this main before applying `20260924100000_ensure_my_profile.sql`.
   - Next production phase requires separate approval.
 
-- Claude slot 2: `done` — `x-admin-netlify-thin-control-plane-phase1-merge-only-20260924`
-  - K2 PASS。Phase1 admin candidateをfreshen/rebase後、PR #14としてmerge。
-  - merge SHA `a9c0ef71954cdaa01e0ee7eb34bcd37dbcc6ec15`。merge対象はreview済み5ファイルのみ。
-  - tests/build: node 12/12、tsc/lint/build、git diff checkすべてPASS。secret scanもclean。
-  - post-merge read-backで5ファイルbyte一致。既存Kabumori-only query modules / brand-boundary test / system-toggleは無変更。
-  - production mutation 0。Netlify site/deployも未実施。
-  - 次候補: Phase2 brand selector UI + server-side selected-brand validation + 4 admin query modulesのbrand parameterization。cross-brand集計とNetlify実deployは別gate。
+- Claude slot 2: `ready` — `x-admin-multibrand-selector-query-parameterization-phase2-20260924`
+  - Phase1 admin foundationの次段階。server-sideで権限確認済みselected brandを使うbrand selector UIと4 query modulesのbrand_id parameterization。
+  - 既存のexplicit brand filterを維持し、tampered selectorはfail-closed。cross-brand aggregateはまだ行わない。
+  - system-toggleは安全にparameterizeできなければKabumori-onlyのまま明示。DB/RPC追加は禁止。
+  - production mutation 0。x-test-post/queue系には触れないためH2と並行可。
+  - Recommended model: Opus 5.5。
 
 
 ## Parallel safety
