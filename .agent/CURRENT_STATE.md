@@ -31,13 +31,13 @@
 
 ## Current slot snapshot
 
-- H1: `review_required` — `x-autopost-phase1f-ledger-atomic-completion-final-review-20260924` (PR #25; source-only PASS-WITH-FIX; C1 pending)
+- H1: `done` — `x-autopost-phase1f-ledger-atomic-completion-final-review-20260924`
 - H2: `done` — `kabumori-pr23-close-validator-final-review-20260924`
 - G1: `done` — `kabumori-pr24-privacy-merge-postmerge-verify-20260924`
   - PR #24 merged at reviewed head `46515c5` -> main `ff4c43c`. Files byte-identical; 122/0 tests, production web build shows the new disclosure text. personalized-reports/account-deletion.html untouched. Mutation 0.
   - Privacy dataflow gap from PR #21 review is now closed on main. Remaining blockers: icon/splash/overlay artwork, EAS production env, Netlify publish, Auth Site URL/SMTP, App Store Connect.
 - G2: `ready` — `kabumori-close-unknown-cause-prefix-fix-20260924`
-- G3: `done` — `x-autopost-phase1f-atomic-completion-provider-outcome-model-20260924`
+- G3: `ready` — `x-autopost-phase1f-pr25-merge-postmerge-verify-20260924`
 - G4: `done` — `x-admin-netlify-deploy-preview-pipeline-20260924`
 
 ## Final K1 PR #24 result
@@ -317,6 +317,19 @@
 - Fixed direct API-role `scheduled_posts` DML bypass, invalid provider-step kind/first-step sequencing, and late unfinished-step mutation after terminal attempt.
 - Focused 55/55 and related Deno 980/980; disposable PostgreSQL Phase1D/1E/1F behavior and race proofs PASS.
 - No production apply/deploy, token, Cron, or X API mutation. Production activation remains **NO**; live ACL/definition preflight and ordered rollout require separate authorization.
+
+## C1 Phase1F result
+
+- H1 verdict: **PASS-WITH-FIX for source-only candidate**.
+- reviewed implementation: `0b752925b28b1b922b94a4cb7629ee942f82120f`.
+- H1 fix/reviewed head: `b3740cc7c39010f02ad3505721a5b37d2e707dba` on PR #25.
+- Fixed P1 direct scheduled_posts API-role DML bypass.
+- Fixed P2 provider-step first-kind/order/reply-parent integrity.
+- Fixed P2 late unfinished-step mutation after terminal attempt.
+- focused 55/55; x-test-post/_shared/important-news-monitor 980/980; disposable Phase1D/E/F proofs PASS.
+- production activation remains NO.
+- G3 now owns PR #25 fresh-main merge/post-merge verification.
+- recommended model: Sonnet5（高）.
 
 ## K4 Netlify result
 
