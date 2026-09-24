@@ -33,11 +33,20 @@
 
 - H1: `done` — `kabumori-release-pr18-privacy-dataflow-eas-light-review-20260924`
 - H2: `ready` — `kabumori-pr19-report-detail-portfolio-privacy-final-review-20260924`
-- G1: `review_required` — `kabumori-release-pr18-merge-postmerge-verify-20260924`
+- G1: `ready` — `kabumori-release-branding-eas-preflight-20260924`
   - PR #18 merged at reviewed head `6f32776` -> main `a41b306`. Files byte-identical; 108/0 tests, tsc src 0, web export 10 routes, public-site preview+production dry-run builds PASS. Vercel ignored per Netlify hosting policy. Mutation 0.
 - G2: `done` — `kabumori-app-morning-close-report-detail-and-portfolio-impact-20260924`
 - G3: `ready` — `x-autopost-phase1e-exact-account-credential-resolver-20260924`
 - G4: `ready` — `x-admin-netlify-deploy-preview-pipeline-20260924`
+
+## K1 PR #18 merge result
+
+- PASS.
+- PR #18 merged at reviewed head `6f327763...` -> main `a41b306de1cdf6e9c7e91ad7e22403a031650883`.
+- 108/108 tests PASS; src TypeScript 0 errors; Expo export 10 routes; public Web preview/production dry-run builds PASS.
+- No G2/PR #19 files were touched.
+- production mutation=0 excluding normal GitHub merge.
+- G1 advanced to branding/EAS preflight.
 
 ## K1 release foundation result
 
