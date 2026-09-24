@@ -23,19 +23,19 @@
 ## Current slot snapshot
 
 - H1: `idle` / task_id `none`
-- H2: `ready` — `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`
+- H2: `idle` / task_id `none`
 - G1: `review_required` — `kabumori-mobile-recovery-deeplink-routing-fix-and-e2e-resume-20260924`
 - G2: `done` — `x-admin-multibrand-selector-phase2-merge-only-20260924`
   - K2 accepted completed verification/freshen work; remaining merge/Vercel/QA continuation moved to G4.
-- G3: `idle` / task_id `none`
+- G3: `ready` — `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`
 - G4: `ready` — `x-admin-phase2-vercel-gate-merge-and-postmerge-qa-20260924`
 
 ## Parallel safety
 
-- H2 owns X queue/planner SQL/RPC/x-test-post Phase1D.
+- G3 owns X queue/planner SQL/RPC/x-test-post Phase1D implementation.
 - G4 owns apps/admin PR #15 merge gate and post-merge QA only.
 - G1 owns consumer mobile recovery/auth E2E.
-- G3 is currently free.
+- H1/H2 are currently reserved for Codex review/verification work.
 - push前にfresh `origin/main`確認。
 - 既存未コミット変更は他workstream所有として触らない。
 - 競合可能性を安全に否定できない場合は開始せず、具体的な競合箇所を報告する。
