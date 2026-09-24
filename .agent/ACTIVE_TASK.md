@@ -34,12 +34,12 @@
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: x-autopost-phase1d-db-rpc-concurrency-final-review-20260924
+- task_id: kabumori-pr19-report-detail-portfolio-privacy-final-review-20260924
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: assigned; Phase1D DB/RPC/permission/concurrency final review
+- allocation: assigned; PR #19 LLM/privacy/user-boundary final review
 
 ## Claude G1
 - owner: claude
@@ -59,7 +59,7 @@
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: closed; K2 implementation PASS, Codex review queued
+- allocation: closed; K2 implementation PASS, H2 review in progress queue
 
 ## Claude G3
 - owner: claude
