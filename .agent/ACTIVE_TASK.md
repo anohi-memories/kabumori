@@ -13,10 +13,10 @@
 
 ## Deployment policy
 
-- 開発中・PR・テスト用Web PreviewはNetlifyを優先する。
+- X自動投稿・Web管理画面の開発中/PR/テスト用PreviewはNetlifyを優先する。
 - レビュー完了後の最終production deployのみVercelを使う。
-- Vercel rate limit待ちの既存production作業は保留し、Netlify Preview整備を優先する。
-- Expo native/iOS実機・TestFlightはNetlify Previewでは代替しない。
+- かぶモリExpo/native本体はVercel制限の主対象ではないため、Netlify Web Preview対応は現時点では保留。
+- Expo native/iOS実機・TestFlightは従来どおり別工程。
 
 ## Codex H1
 - owner: codex
@@ -53,12 +53,12 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
-- task_id: kabumori-netlify-expo-web-preview-pipeline-20260924
+- status: idle
+- task_id: none
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: assigned; Kabumori Netlify Expo Web preview setup
+- allocation: unassigned; Kabumori implementation slot
 
 ## Claude G3
 - owner: claude
@@ -83,7 +83,7 @@
 ## Deferred
 
 - PR #15 final Vercel gate / merge / post-merge Admin QA is intentionally deferred while Netlify Preview is introduced.
-- The prior G4 Report remains the evidence source for the deferred PR #15 state.
+- Kabumori Expo Web Netlify Preview task is also deferred because it is not currently needed for the native app workflow.
 
 ## Control codes
 
