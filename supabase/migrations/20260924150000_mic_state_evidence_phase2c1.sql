@@ -25,17 +25,24 @@
 --   (b) mic_state_evidence -- typed, append-only evidence rows. A
 --       market_event row stores both the FK and an immutable
 --       market_event_snapshot of exactly the fields the evaluator used
---       (material judgment + AI facts). A fed_statement_diff row references
---       the append-only diff artifact.
+--       (material judgment + AI facts). A fed_statement_diff row stores both
+--       the FK and an immutable fed_statement_diff_snapshot of the diff row
+--       (diff rows are also PATCHed in place under a stable id).
 --   (c) apply_mic_state_material_update -- ONE transaction for history,
 --       current, evidence, and the run's terminal 'evaluated' status. It
---       re-verifies under lock that every event is unchanged since the
---       evaluator read it.
+--       re-verifies under lock that every event and Fed diff is unchanged
+--       since the evaluator read it, and that the run's usage row belongs
+--       to that run.
 --   (d) apply_mic_state_no_change_update -- ONE transaction for the
 --       status-only current refresh and the run's terminal 'no_change'
 --       status.
---   (e) terminal-status protection on mic_state_evaluation_runs: once a run
---       is no_change/evaluated/failed its status can never change again.
+--   (e) terminal-run protection on mic_state_evaluation_runs: once a run is
+--       no_change/evaluated/failed it can never change again.
+--
+-- AI usage: the State evaluator records every Luna/Sol call in the existing
+-- ai_usage_events ledger with related_table = 'mic_state_evaluation_runs'
+-- and related_id = the run id (feature keeps the domain). related_id is
+-- already text, so no ai_usage_events schema change is needed.
 --
 -- Scope: market_event and fed_statement_diff evidence only. metric evidence
 -- is deliberately deferred.
@@ -66,6 +73,11 @@ create table if not exists public.mic_state_evidence (
   -- stable id; this copy is not, so the State input stays reproducible.
   market_event_snapshot jsonb,
 
+  -- The Fed diff row exactly as the evaluator read it. mic_fed_statement_diffs
+  -- rows can be PATCHed in place (interpretation, usage receipt, repair), so
+  -- the FK alone cannot reproduce what this State referenced.
+  fed_statement_diff_snapshot jsonb,
+
   created_at timestamptz not null default now(),
 
   constraint mic_state_evidence_kind_shape_check check (
@@ -74,13 +86,39 @@ create table if not exists public.mic_state_evidence (
       and market_event_id is not null
       and market_event_snapshot is not null
       and fed_statement_diff_id is null
+      and fed_statement_diff_snapshot is null
     )
     or
     (
       evidence_kind = 'fed_statement_diff'
       and fed_statement_diff_id is not null
+      and fed_statement_diff_snapshot is not null
       and market_event_id is null
       and market_event_snapshot is null
+    )
+  ),
+
+  -- Strict shape: exactly the audited diff columns (every column except
+  -- created_at), describing the very row the FK points at.
+  constraint mic_state_evidence_fed_diff_snapshot_check check (
+    fed_statement_diff_snapshot is null
+    or (
+      jsonb_typeof(fed_statement_diff_snapshot) = 'object'
+      and fed_statement_diff_snapshot ?& array[
+        'id', 'current_event_id', 'previous_event_id', 'current_document_hash',
+        'previous_document_hash', 'diff_hash', 'meeting_date', 'previous_meeting_date',
+        'changed_paragraph_count', 'material_change_count', 'deterministic_diff',
+        'semantic_buckets', 'ai_interpretation', 'model', 'prompt_version', 'generated_at',
+        'ai_usage_receipt', 'ai_usage_recorded_at', 'updated_at'
+      ]
+      and (fed_statement_diff_snapshot - array[
+        'id', 'current_event_id', 'previous_event_id', 'current_document_hash',
+        'previous_document_hash', 'diff_hash', 'meeting_date', 'previous_meeting_date',
+        'changed_paragraph_count', 'material_change_count', 'deterministic_diff',
+        'semantic_buckets', 'ai_interpretation', 'model', 'prompt_version', 'generated_at',
+        'ai_usage_receipt', 'ai_usage_recorded_at', 'updated_at'
+      ]::text[]) = '{}'::jsonb
+      and fed_statement_diff_snapshot->>'id' = fed_statement_diff_id::text
     )
   ),
 
@@ -175,10 +213,22 @@ for each row execute function public.mic_state_evaluation_runs_guard_terminal_st
 -- 'evaluated'. Any RAISE rolls back every effect of the invocation, so
 -- State, history, evidence and the run's terminal status always agree.
 --
--- Lock order: market_state_current (one row per domain, serializes writers
--- for the domain) -> the run row -> the evidence market_events rows
--- (FOR SHARE, so an ingest update to one of them waits until this
--- transaction commits and cannot slip in between verification and commit).
+-- Lock order (always the same, every multi-row step ordered by id):
+--   1. market_state_current row (FOR UPDATE; one row per domain, serializes
+--      State writers for the domain)
+--   2. the run row (FOR UPDATE)
+--   3. evidence market_events rows (FOR SHARE, ordered by id)
+--   4. evidence mic_fed_statement_diffs rows (FOR SHARE, ordered by id)
+-- FOR SHARE makes an ingest/interpretation update of a verified row wait
+-- until this transaction commits, so nothing can change between
+-- verification and commit. No known writer locks a diff row and then a
+-- market_events / State / run row in the same transaction, so this order
+-- cannot form a cycle with them; a deadlock with an unknown multi-row writer
+-- would abort one side and fail closed.
+--
+-- AI usage: every Luna/Sol call is recorded before this RPC with
+-- related_table = 'mic_state_evaluation_runs', related_id = run id. The
+-- run's ai_usage_event_id must be one of this run's own usage rows.
 --
 -- Response-loss retry: a run can only reach 'evaluated' through this
 -- function. If the run is already 'evaluated' and this run is provably the
@@ -210,7 +260,7 @@ create or replace function public.apply_mic_state_material_update(
   p_decision_detail jsonb,
   p_ai_usage_event_id bigint,
   p_market_event_snapshots jsonb,
-  p_fed_statement_diff_evidence_ids uuid[]
+  p_fed_statement_diff_snapshots jsonb
 )
 returns table(result_status text)
 language plpgsql
@@ -223,6 +273,7 @@ declare
   v_run_domain text;
   v_run_started_at timestamptz;
   v_snapshot_ids uuid[];
+  v_diff_ids uuid[];
   v_updated integer;
 begin
   select * into v_current
@@ -282,6 +333,14 @@ begin
   if p_ai_usage_event_id is null then
     raise exception 'MIC_STATE_AI_USAGE_EVENT_REQUIRED';
   end if;
+  if not exists (
+    select 1 from public.ai_usage_events u
+    where u.id = p_ai_usage_event_id
+      and u.related_table = 'mic_state_evaluation_runs'
+      and u.related_id = p_run_id::text
+  ) then
+    raise exception 'MIC_STATE_AI_USAGE_EVENT_RUN_MISMATCH';
+  end if;
 
   -- Snapshot shape: an array of objects with exactly the evaluator's event
   -- fields and a well-formed id.
@@ -327,6 +386,38 @@ begin
     raise exception 'MIC_STATE_EVENT_EVIDENCE_MISMATCH';
   end if;
 
+  -- Fed diff snapshot shape: an array of objects with exactly the audited
+  -- diff columns, a well-formed id, and no duplicate ids.
+  if p_fed_statement_diff_snapshots is null or jsonb_typeof(p_fed_statement_diff_snapshots) <> 'array' then
+    raise exception 'MIC_STATE_FED_DIFF_SNAPSHOT_INVALID';
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(p_fed_statement_diff_snapshots) as s(e)
+    where case
+      when jsonb_typeof(s.e) <> 'object' then true
+      else not (s.e ?& array[
+          'id', 'current_event_id', 'previous_event_id', 'current_document_hash',
+          'previous_document_hash', 'diff_hash', 'meeting_date', 'previous_meeting_date',
+          'changed_paragraph_count', 'material_change_count', 'deterministic_diff',
+          'semantic_buckets', 'ai_interpretation', 'model', 'prompt_version', 'generated_at',
+          'ai_usage_receipt', 'ai_usage_recorded_at', 'updated_at'
+        ])
+        or (select count(*) from jsonb_object_keys(s.e)) <> 19
+        or jsonb_typeof(s.e->'id') <> 'string'
+        or (s.e->>'id') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    end
+  ) then
+    raise exception 'MIC_STATE_FED_DIFF_SNAPSHOT_INVALID';
+  end if;
+
+  select coalesce(array_agg((s.e->>'id')::uuid), '{}'::uuid[])
+  into v_diff_ids
+  from jsonb_array_elements(p_fed_statement_diff_snapshots) as s(e);
+
+  if cardinality(v_diff_ids) <> (select count(distinct id) from unnest(v_diff_ids) as ids(id)) then
+    raise exception 'MIC_STATE_FED_DIFF_EVIDENCE_DUPLICATE';
+  end if;
+
   -- Hold every evidence event still until commit, then verify each one is
   -- byte-for-byte what the evaluator read before calling AI. A missing row
   -- or any differing field means State would be built on stale input.
@@ -351,10 +442,46 @@ begin
     raise exception 'MIC_STATE_EVENT_CHANGED_DURING_EVALUATION';
   end if;
 
+  -- Same for every Fed diff: hold it still, then require it to be exactly
+  -- the row the evaluator read (a PATCH to interpretation, receipt, or any
+  -- diff field in between means the evidence would not match what was used).
+  perform 1
+  from public.mic_fed_statement_diffs d
+  where d.id = any(v_diff_ids)
+  order by d.id
+  for share;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(p_fed_statement_diff_snapshots) as s(e)
+    left join public.mic_fed_statement_diffs d on d.id = (s.e->>'id')::uuid
+    where d.id is null
+      or d.current_event_id is distinct from (s.e->>'current_event_id')::uuid
+      or d.previous_event_id is distinct from (s.e->>'previous_event_id')::uuid
+      or d.current_document_hash is distinct from s.e->>'current_document_hash'
+      or d.previous_document_hash is distinct from s.e->>'previous_document_hash'
+      or d.diff_hash is distinct from s.e->>'diff_hash'
+      or d.meeting_date is distinct from (s.e->>'meeting_date')::date
+      or d.previous_meeting_date is distinct from (s.e->>'previous_meeting_date')::date
+      or d.changed_paragraph_count is distinct from (s.e->>'changed_paragraph_count')::integer
+      or d.material_change_count is distinct from (s.e->>'material_change_count')::integer
+      or d.deterministic_diff is distinct from s.e->'deterministic_diff'
+      or to_jsonb(d.semantic_buckets) is distinct from s.e->'semantic_buckets'
+      or coalesce(d.ai_interpretation, 'null'::jsonb) is distinct from s.e->'ai_interpretation'
+      or d.model is distinct from s.e->>'model'
+      or d.prompt_version is distinct from s.e->>'prompt_version'
+      or d.generated_at is distinct from (s.e->>'generated_at')::timestamptz
+      or coalesce(d.ai_usage_receipt, 'null'::jsonb) is distinct from s.e->'ai_usage_receipt'
+      or d.ai_usage_recorded_at is distinct from (s.e->>'ai_usage_recorded_at')::timestamptz
+      or d.updated_at is distinct from (s.e->>'updated_at')::timestamptz
+  ) then
+    raise exception 'MIC_STATE_FED_DIFF_CHANGED_DURING_EVALUATION';
+  end if;
+
   -- A Fed diff is evidence for its own current market_event only.
   if exists (
     select 1 from public.mic_fed_statement_diffs d
-    where d.id = any(coalesce(p_fed_statement_diff_evidence_ids, '{}'::uuid[]))
+    where d.id = any(v_diff_ids)
       and not (d.current_event_id = any(v_snapshot_ids))
   ) then
     raise exception 'MIC_STATE_FED_DIFF_EVENT_MISMATCH';
@@ -393,9 +520,11 @@ begin
   from jsonb_array_elements(p_market_event_snapshots) as s(e)
   on conflict (state_evaluation_run_id, market_event_id) where market_event_id is not null do nothing;
 
-  insert into public.mic_state_evidence (state_evaluation_run_id, evidence_kind, fed_statement_diff_id)
-  select p_run_id, 'fed_statement_diff', ids.id
-  from unnest(coalesce(p_fed_statement_diff_evidence_ids, '{}'::uuid[])) as ids(id)
+  insert into public.mic_state_evidence (
+    state_evaluation_run_id, evidence_kind, fed_statement_diff_id, fed_statement_diff_snapshot
+  )
+  select p_run_id, 'fed_statement_diff', (s.e->>'id')::uuid, s.e
+  from jsonb_array_elements(p_fed_statement_diff_snapshots) as s(e)
   on conflict (state_evaluation_run_id, fed_statement_diff_id) where fed_statement_diff_id is not null do nothing;
 
   update public.mic_state_evaluation_runs
@@ -418,11 +547,11 @@ $$;
 
 revoke all on function public.apply_mic_state_material_update(
   text, uuid, timestamptz, timestamptz, text, text, text, numeric, text, jsonb, jsonb, jsonb, jsonb,
-  text[], uuid[], text, numeric, integer, integer, numeric, text, jsonb, bigint, jsonb, uuid[]
+  text[], uuid[], text, numeric, integer, integer, numeric, text, jsonb, bigint, jsonb, jsonb
 ) from public, anon, authenticated;
 grant execute on function public.apply_mic_state_material_update(
   text, uuid, timestamptz, timestamptz, text, text, text, numeric, text, jsonb, jsonb, jsonb, jsonb,
-  text[], uuid[], text, numeric, integer, integer, numeric, text, jsonb, bigint, jsonb, uuid[]
+  text[], uuid[], text, numeric, integer, integer, numeric, text, jsonb, bigint, jsonb, jsonb
 ) to service_role;
 
 -- ---------------------------------------------------------------------------

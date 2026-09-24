@@ -9,14 +9,15 @@
 //   marks the run 'no_change'. No history row.
 // - applyMaterialChangeUpdate: a material change with a new AI narrative.
 //   Writes history, current, source_evaluation_run_id, evidence (with
-//   immutable event snapshots re-verified against market_events under lock)
-//   and marks the run 'evaluated'.
+//   immutable event and Fed diff snapshots re-verified under lock) and marks
+//   the run 'evaluated'.
 //
 // Both return 'already_applied' when the run had already reached that
 // terminal state (e.g. a retry after the HTTP response was lost).
 import { restHeaders } from "./mic_state_run_logic.ts";
 import type { RestContext } from "./mic_state_run_logic.ts";
 import type { CoverageStatus, Domain, EventFact, FetchStatus, ObservationStatus } from "./mic_state_types.ts";
+import type { FedStatementDiffSnapshot } from "./mic_state_query_logic.ts";
 
 export type StatusRefresh = {
   asOf: string | null;
@@ -119,9 +120,12 @@ export function toMarketEventSnapshot(event: EventFact): MarketEventSnapshot {
 
 export type MaterialChangeEvidence = {
   marketEventSnapshots: MarketEventSnapshot[];
-  fedStatementDiffIds: string[];
+  fedStatementDiffSnapshots: FedStatementDiffSnapshot[];
 };
 
+// aiUsageEventId must be one of this run's own ai_usage_events rows
+// (related_table = 'mic_state_evaluation_runs', related_id = runId); the RPC
+// rejects anything else.
 export type MaterialRunCompletion = RunCompletion & { aiUsageEventId: number };
 
 export function applyMaterialChangeUpdate(
@@ -158,6 +162,6 @@ export function applyMaterialChangeUpdate(
     p_decision_detail: completion.decisionDetail,
     p_ai_usage_event_id: completion.aiUsageEventId,
     p_market_event_snapshots: evidence.marketEventSnapshots,
-    p_fed_statement_diff_evidence_ids: evidence.fedStatementDiffIds,
+    p_fed_statement_diff_snapshots: evidence.fedStatementDiffSnapshots,
   }, fetchImpl);
 }

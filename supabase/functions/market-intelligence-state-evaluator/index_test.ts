@@ -86,9 +86,12 @@ function makeMockFetch(opts: {
   usageEventIdStart?: number;
   // What the post-error read-back of the run reports as committed.
   runStatusAfterError?: string;
+  // Run ids handed out by successive claims (defaults to "run-1").
+  runIds?: string[];
 }) {
   const calls: MockCall[] = [];
   let usageEventId = opts.usageEventIdStart ?? 100;
+  const runIds = [...(opts.runIds ?? [])];
 
   const fetchImpl = async (url: string | URL, init?: RequestInit) => {
     const u = String(url);
@@ -103,7 +106,7 @@ function makeMockFetch(opts: {
       return new Response(JSON.stringify([]), { status: 200 });
     }
     if (u.includes("/rest/v1/mic_state_evaluation_runs") && method === "POST") {
-      return new Response(JSON.stringify([{ id: "run-1" }]), { status: 201 });
+      return new Response(JSON.stringify([{ id: runIds.shift() ?? "run-1" }]), { status: 201 });
     }
     if (u.includes("/rest/v1/mic_state_evaluation_runs") && method === "PATCH") {
       return new Response(null, { status: 204 });
@@ -125,7 +128,7 @@ function makeMockFetch(opts: {
     }
     if (u.includes("/rest/v1/mic_fed_statement_diffs") && method === "GET") {
       // Most tests in this file never exercise a central_bank_decision
-      // event, so resolveFedStatementDiffEvidenceIds never actually
+      // event, so resolveFedStatementDiffEvidence never actually
       // reaches this route for them (it returns [] before fetching for an
       // empty event-id list) -- kept as a safe default for those tests,
       // overridden per-test (via a wrapping fetchImpl) where the fed diff
@@ -159,6 +162,9 @@ test("[E] Luna-only evaluation records exactly one ai_usage_events row, referenc
   const usageInserts = calls.filter((c) => c.url.includes("/rest/v1/ai_usage_events") && c.method === "POST");
   assert.equal(usageInserts.length, 1, "expected exactly one ai_usage_events row for a Luna-only evaluation");
   assert.equal(usageInserts[0].body.model, "gpt-5.6-luna");
+  assert.equal(usageInserts[0].body.related_table, "mic_state_evaluation_runs", "usage is linked to the run, not the domain");
+  assert.equal(usageInserts[0].body.related_id, "run-1");
+  assert.equal(usageInserts[0].body.feature, "mic_state_evaluation_rates", "domain kept as metadata");
 
   // The run is completed inside the material RPC's transaction, so the usage
   // id travels in the RPC payload and there is no separate run PATCH.
@@ -191,6 +197,11 @@ test("[F] Luna -> Sol escalation records two ai_usage_events rows (one per actua
   assert.equal(usageInserts.length, 2, "expected two ai_usage_events rows: one for Luna, one for Sol");
   assert.equal(usageInserts[0].body.model, "gpt-5.6-luna");
   assert.equal(usageInserts[1].body.model, "gpt-5.6-sol");
+  assert.deepEqual(
+    usageInserts.map((u) => [u.body.related_table, u.body.related_id]),
+    [["mic_state_evaluation_runs", "run-1"], ["mic_state_evaluation_runs", "run-1"]],
+    "both Luna and Sol usage rows belong to the same run",
+  );
 });
 
 test("[G] the evaluation run's ai_usage_event_id references the FINAL model's event (Sol, when escalated)", async () => {
@@ -302,7 +313,34 @@ function centralBankEvent(overrides: Record<string, unknown> = {}) {
   };
 }
 
-test("[J] a rates evaluation with a central_bank_decision event but NO matching fed diff row calls the RPC with an empty fed_statement_diff_evidence_ids array (0 diffs -> no diff evidence, not an error)", async () => {
+// A complete mic_fed_statement_diffs row as PostgREST returns it for the
+// evaluator's select list.
+function fedDiffRow(id: string, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    current_event_id: "39ec45a4-77b5-4869-a011-2f4aa98c228d",
+    previous_event_id: "50e3601d-2de6-483c-bed3-86892cff3cd3",
+    current_document_hash: "f".repeat(64),
+    previous_document_hash: "e".repeat(64),
+    diff_hash: "1".repeat(64),
+    meeting_date: "2026-09-16",
+    previous_meeting_date: "2026-07-29",
+    changed_paragraph_count: 3,
+    material_change_count: 4,
+    deterministic_diff: { comparisonStatus: "compared" },
+    semantic_buckets: ["policy stance", "risks"],
+    ai_interpretation: { overall_bias_change: "hawkish" },
+    model: "gpt-6-luna",
+    prompt_version: "fed-statement-diff-v2",
+    generated_at: "2026-09-16T19:00:00+00:00",
+    ai_usage_receipt: { feature: "mic_fed_statement_diff" },
+    ai_usage_recorded_at: "2026-09-16T19:00:01+00:00",
+    updated_at: "2026-09-16T19:00:01+00:00",
+    ...overrides,
+  };
+}
+
+test("[J] a rates evaluation with a central_bank_decision event but NO matching fed diff row calls the RPC with no Fed diff snapshots (0 diffs -> no diff evidence, not an error)", async () => {
   const { fetchImpl, calls } = makeMockFetch({ lunaOutput: LUNA_CONFIDENT_OUTPUT });
   const originalFetch = globalThis.fetch;
   globalThis.fetch = fetchImpl as typeof fetch;
@@ -338,19 +376,18 @@ test("[J] a rates evaluation with a central_bank_decision event but NO matching 
     published_at: "2026-09-16T18:00:00.000Z",
     updated_at: "2026-09-16T18:00:00.000Z",
   }]);
-  assert.deepEqual(rpcCall?.body.p_fed_statement_diff_evidence_ids, []);
+  assert.deepEqual(rpcCall?.body.p_fed_statement_diff_snapshots, []);
   assert.equal(rpcCall?.body.p_run_id, "run-1");
 });
 
-test("[K] a rates evaluation with a central_bank_decision event AND exactly one matching fed diff row includes that diff id in the RPC call", async () => {
+test("[K] a rates evaluation with a central_bank_decision event AND exactly one matching fed diff row passes that diff's snapshot, as read before AI, in the RPC call", async () => {
   const { fetchImpl: baseFetch, calls } = makeMockFetch({ lunaOutput: LUNA_CONFIDENT_OUTPUT });
+  const diff = fedDiffRow("4c6f1ad7-255e-4ac7-8eab-b44904bf94b0");
   const fetchImpl = async (url: string | URL, init?: RequestInit) => {
     const u = String(url);
     if (u.includes("/rest/v1/mic_fed_statement_diffs") && (init?.method ?? "GET") === "GET") {
-      return new Response(
-        JSON.stringify([{ id: "4c6f1ad7-255e-4ac7-8eab-b44904bf94b0", current_event_id: "39ec45a4-77b5-4869-a011-2f4aa98c228d" }]),
-        { status: 200 },
-      );
+      calls.push({ url: u, method: "GET", body: undefined });
+      return new Response(JSON.stringify([diff]), { status: 200 });
     }
     return baseFetch(url, init);
   };
@@ -370,11 +407,14 @@ test("[K] a rates evaluation with a central_bank_decision event AND exactly one 
   }
 
   const rpcCall = calls.find((c) => c.url.includes("/rest/v1/rpc/apply_mic_state_material_update"));
-  assert.deepEqual(rpcCall?.body.p_fed_statement_diff_evidence_ids, ["4c6f1ad7-255e-4ac7-8eab-b44904bf94b0"]);
+  assert.deepEqual(rpcCall?.body.p_fed_statement_diff_snapshots, [diff]);
 
-  // Exactly 1 diff is not ambiguous -- Luna still runs normally.
-  const openAiCalls = calls.filter((c) => c.url === "https://api.openai.com/v1/responses");
-  assert.equal(openAiCalls.length, 1, "exactly 1 matching diff is not ambiguous -- Luna must still run");
+  // Exactly 1 diff is not ambiguous -- Luna still runs normally, and the
+  // diff was read before the AI call (fail-before-AI ordering).
+  const openAiIndex = calls.findIndex((c) => c.url === "https://api.openai.com/v1/responses");
+  const diffIndex = calls.findIndex((c) => c.url.includes("/rest/v1/mic_fed_statement_diffs"));
+  assert.ok(openAiIndex > diffIndex && diffIndex >= 0, "Fed diff is read before Luna");
+  assert.equal(calls.filter((c) => c.url === "https://api.openai.com/v1/responses").length, 1);
 });
 
 test("[L] a central_bank_decision event with 2+ matching fed diff rows fails closed BEFORE any AI call: the whole run fails, Luna is never called, no ai_usage_events row is recorded, and the RPC is never called (no State/history/evidence write)", async () => {
@@ -384,8 +424,8 @@ test("[L] a central_bank_decision event with 2+ matching fed diff rows fails clo
     if (u.includes("/rest/v1/mic_fed_statement_diffs") && (init?.method ?? "GET") === "GET") {
       return new Response(
         JSON.stringify([
-          { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", current_event_id: "39ec45a4-77b5-4869-a011-2f4aa98c228d" },
-          { id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", current_event_id: "39ec45a4-77b5-4869-a011-2f4aa98c228d" },
+          fedDiffRow("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+          fedDiffRow("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", { prompt_version: "fed-statement-diff-v3" }),
         ]),
         { status: 200 },
       );
@@ -576,7 +616,7 @@ test("[S] a rate_decision event is snapshotted as evidence without any Fed diff 
   assert.deepEqual(snapshots.map((s) => [s.id, s.event_type, s.importance]), [
     ["11111111-2222-3333-4444-555555555555", "rate_decision", "critical"],
   ]);
-  assert.deepEqual(rpcCall?.body.p_fed_statement_diff_evidence_ids, []);
+  assert.deepEqual(rpcCall?.body.p_fed_statement_diff_snapshots, []);
 });
 
 test("[T] a network error during Fed diff lookup is never treated as 0 diffs: the run fails before any AI call", async () => {
@@ -601,4 +641,69 @@ test("[U] the event snapshot sent as evidence carries exactly the event content 
   for (const field of ["title", "summary", "importance", "event_type", "published_at"]) {
     assert.ok(aiPayloadText.includes(JSON.stringify(snapshot[field]).slice(1, -1)), `AI input must contain snapshot.${field}`);
   }
+});
+
+// --- P1/P2: Fed diff snapshot guard, run-linked AI usage ---
+
+const isUsageInsert = (c: MockCall) => c.url.includes("/rest/v1/ai_usage_events") && c.method === "POST";
+const rpcError = (message: string) => () =>
+  Promise.resolve(new Response(JSON.stringify({ code: "P0001", message }), { status: 400 }));
+const withFedDiff = (baseFetch: FetchFn, diff: Record<string, unknown>) =>
+  withOverride(baseFetch, (u) => u.includes("/rest/v1/mic_fed_statement_diffs"), () =>
+    Promise.resolve(new Response(JSON.stringify([diff]), { status: 200 })));
+
+test("[V] a Fed diff PATCHed while AI ran: the RPC fails closed, the run fails, and the Luna usage stays attributed to that failed run", async () => {
+  const { fetchImpl: baseFetch, calls } = makeMockFetch({ runIds: ["run-V"] });
+  const fetchImpl = withOverride(
+    withFedDiff(baseFetch, fedDiffRow("4c6f1ad7-255e-4ac7-8eab-b44904bf94b0")),
+    isMaterialRpc,
+    rpcError("MIC_STATE_FED_DIFF_CHANGED_DURING_EVALUATION"),
+  );
+  const result = await runWith(fetchImpl, decisionResult({ recentEvents: [centralBankEvent()] }));
+  assert.equal(result.status, "failed");
+  assert.match(result.error ?? "", /MIC_STATE_FED_DIFF_CHANGED_DURING_EVALUATION/);
+  const usage = calls.filter(isUsageInsert);
+  assert.deepEqual(usage.map((u) => u.body.related_id), ["run-V"]);
+  assert.ok(calls.some((c) => c.method === "PATCH" && c.url.includes("id=eq.run-V&status=eq.running") && c.body.status === "failed"));
+});
+
+test("[W] State RPC failure after AI: the run is failed and its usage row (real cost) remains linked to that failed run", async () => {
+  const { fetchImpl: baseFetch, calls } = makeMockFetch({ runIds: ["run-W"], runStatusAfterError: "failed" });
+  const fetchImpl = withOverride(baseFetch, isMaterialRpc, rpcError("MIC_STATE_STALE_DECISION"));
+  const result = await runWith(fetchImpl, decisionResult());
+  assert.equal(result.status, "failed");
+  const usage = calls.filter(isUsageInsert);
+  assert.equal(usage.length, 1);
+  assert.equal(usage[0].body.related_table, "mic_state_evaluation_runs");
+  assert.equal(usage[0].body.related_id, "run-W");
+});
+
+test("[X] retry: failed run A and new run B each own their own AI usage rows -- nothing is shared or mixed", async () => {
+  const { fetchImpl: baseFetch, calls } = makeMockFetch({ runIds: ["run-A", "run-B"], usageEventIdStart: 300 });
+  const rpcBodies: Array<{ p_run_id: string; p_ai_usage_event_id: number }> = [];
+  const fetchImpl: FetchFn = (url, init) => {
+    if (!isMaterialRpc(String(url))) return baseFetch(url, init);
+    rpcBodies.push(JSON.parse(String(init?.body)));
+    return rpcBodies.length === 1
+      ? rpcError("MIC_STATE_EVENT_CHANGED_DURING_EVALUATION")()
+      : Promise.resolve(new Response(JSON.stringify([{ result_status: "applied" }]), { status: 200 }));
+  };
+  const first = await runWith(fetchImpl, decisionResult());
+  const second = await runWith(fetchImpl, decisionResult());
+  assert.equal(first.status, "failed");
+  assert.equal(second.status, "evaluated");
+
+  const usage = calls.filter(isUsageInsert);
+  assert.deepEqual(usage.map((u) => u.body.related_id), ["run-A", "run-B"], "each AI call is linked to the run that made it");
+  assert.deepEqual(rpcBodies.map((b) => [b.p_run_id, b.p_ai_usage_event_id]), [["run-A", 300], ["run-B", 301]]);
+});
+
+test("[Y] response loss after commit: reconciled as evaluated, and the run's usage row relation is unchanged", async () => {
+  const { fetchImpl: baseFetch, calls } = makeMockFetch({ runIds: ["run-Y"], runStatusAfterError: "evaluated" });
+  const fetchImpl = withOverride(baseFetch, isMaterialRpc, () => Promise.reject(new TypeError("connection reset")));
+  const result = await runWith(fetchImpl, decisionResult());
+  assert.equal(result.status, "evaluated");
+  assert.equal(result.reason, "reconciled_after_error");
+  assert.deepEqual(calls.filter(isUsageInsert).map((u) => u.body.related_id), ["run-Y"]);
+  assert.equal(calls.filter(isUsageInsert).length, 1, "no extra usage row is written by the reconcile path");
 });

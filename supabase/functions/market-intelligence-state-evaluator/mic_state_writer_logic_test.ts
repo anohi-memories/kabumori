@@ -122,7 +122,29 @@ test("toMarketEventSnapshot: exactly the evaluator's event fields, values copied
   });
 });
 
-test("applyMaterialChangeUpdate: one RPC call carrying State, event snapshots, Fed diff ids, and the run completion (decision_detail + usage id)", async () => {
+const fedDiffSnapshot = {
+  id: "4c6f1ad7-255e-4ac7-8eab-b44904bf94b0",
+  current_event_id: "39ec45a4-77b5-4869-a011-2f4aa98c228d",
+  previous_event_id: "50e3601d-2de6-483c-bed3-86892cff3cd3",
+  current_document_hash: "f".repeat(64),
+  previous_document_hash: "e".repeat(64),
+  diff_hash: "1".repeat(64),
+  meeting_date: "2026-09-16",
+  previous_meeting_date: "2026-07-29",
+  changed_paragraph_count: 3,
+  material_change_count: 4,
+  deterministic_diff: { comparisonStatus: "compared" },
+  semantic_buckets: ["policy stance"],
+  ai_interpretation: null,
+  model: null,
+  prompt_version: "fed-statement-diff-v2",
+  generated_at: null,
+  ai_usage_receipt: null,
+  ai_usage_recorded_at: null,
+  updated_at: "2026-09-16T18:10:00+00:00",
+};
+
+test("applyMaterialChangeUpdate: one RPC call carrying State, event snapshots, Fed diff snapshots, and the run completion (decision_detail + usage id)", async () => {
   const { calls, fetchImpl } = recordingFetch([{ result_status: "applied" }]);
   const result = await applyMaterialChangeUpdate(
     ctx,
@@ -131,7 +153,7 @@ test("applyMaterialChangeUpdate: one RPC call carrying State, event snapshots, F
     "1 high/critical event(s)",
     {
       marketEventSnapshots: [toMarketEventSnapshot(fedEvent)],
-      fedStatementDiffIds: ["4c6f1ad7-255e-4ac7-8eab-b44904bf94b0"],
+      fedStatementDiffSnapshots: [fedDiffSnapshot],
     },
     {
       runId: "22222222-2222-2222-2222-222222222222",
@@ -156,8 +178,9 @@ test("applyMaterialChangeUpdate: one RPC call carrying State, event snapshots, F
   assert.equal(body.p_ai_usage_event_id, 101);
   assert.deepEqual(body.p_source_event_ids, ["39ec45a4-77b5-4869-a011-2f4aa98c228d"]);
   assert.deepEqual(body.p_market_event_snapshots, [toMarketEventSnapshot(fedEvent)]);
-  assert.deepEqual(body.p_fed_statement_diff_evidence_ids, ["4c6f1ad7-255e-4ac7-8eab-b44904bf94b0"]);
+  assert.deepEqual(body.p_fed_statement_diff_snapshots, [fedDiffSnapshot]);
   assert.equal("p_market_event_evidence_ids" in body, false, "ids-only evidence was replaced by snapshots");
+  assert.equal("p_fed_statement_diff_evidence_ids" in body, false, "ids-only diff evidence was replaced by snapshots");
   // ai_evaluated_at / completed_at come from SQL now() inside the transaction.
   assert.equal("p_ai_evaluated_at" in body, false);
   assert.equal("p_completed_at" in body, false);
@@ -167,7 +190,7 @@ test("applyMaterialChangeUpdate: already_applied (response-loss retry) is passed
   const { fetchImpl } = recordingFetch([{ result_status: "already_applied" }]);
   const result = await applyMaterialChangeUpdate(
     ctx, "rates", sampleUpdate(), "r",
-    { marketEventSnapshots: [], fedStatementDiffIds: [] },
+    { marketEventSnapshots: [], fedStatementDiffSnapshots: [] },
     { runId: "r", decisionDetail: {}, aiUsageEventId: 1 },
     fetchImpl,
   );
@@ -180,11 +203,25 @@ test("applyMaterialChangeUpdate: an event changed during evaluation (RPC fail-cl
     () =>
       applyMaterialChangeUpdate(
         ctx, "rates", sampleUpdate(), "r",
-        { marketEventSnapshots: [toMarketEventSnapshot(fedEvent)], fedStatementDiffIds: [] },
+        { marketEventSnapshots: [toMarketEventSnapshot(fedEvent)], fedStatementDiffSnapshots: [] },
         { runId: "r", decisionDetail: {}, aiUsageEventId: 1 },
         fetchImpl,
       ),
     /STATE_MATERIAL_UPDATE_RPC_FAILED:400:.*MIC_STATE_EVENT_CHANGED_DURING_EVALUATION/,
+  );
+});
+
+test("applyMaterialChangeUpdate: a Fed diff changed during evaluation (RPC fail-closed) is surfaced as an error", async () => {
+  const { fetchImpl } = recordingFetch({ code: "P0001", message: "MIC_STATE_FED_DIFF_CHANGED_DURING_EVALUATION" }, 400);
+  await assert.rejects(
+    () =>
+      applyMaterialChangeUpdate(
+        ctx, "rates", sampleUpdate(), "r",
+        { marketEventSnapshots: [toMarketEventSnapshot(fedEvent)], fedStatementDiffSnapshots: [fedDiffSnapshot] },
+        { runId: "r", decisionDetail: {}, aiUsageEventId: 1 },
+        fetchImpl,
+      ),
+    /STATE_MATERIAL_UPDATE_RPC_FAILED:400:.*MIC_STATE_FED_DIFF_CHANGED_DURING_EVALUATION/,
   );
 });
 
@@ -194,7 +231,7 @@ test("applyMaterialChangeUpdate: an unrecognized result_status is never treated 
     () =>
       applyMaterialChangeUpdate(
         ctx, "rates", sampleUpdate(), "r",
-        { marketEventSnapshots: [], fedStatementDiffIds: [] },
+        { marketEventSnapshots: [], fedStatementDiffSnapshots: [] },
         { runId: "r", decisionDetail: {}, aiUsageEventId: 1 },
         fetchImpl,
       ),

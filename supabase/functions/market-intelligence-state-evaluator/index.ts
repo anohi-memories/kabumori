@@ -43,7 +43,7 @@ import {
   fetchPriorState,
   fetchRecentDomainEvents,
   fetchSourceFetchStatuses,
-  resolveFedStatementDiffEvidenceIds,
+  resolveFedStatementDiffEvidence,
 } from "./mic_state_query_logic.ts";
 import {
   claimStateEvaluationRun,
@@ -262,18 +262,20 @@ export async function evaluateDomain(
     // (decision.recentEvents is the bounded set actually supplied to the
     // AI facts payload; only its previously-unseen subset can trigger a
     // new material decision), so evidence never drifts from what
-    // source_event_ids already claims. fedStatementDiffEvidenceIds resolves
+    // source_event_ids already claims. fedStatementDiffEvidence resolves
     // only the central_bank_decision events among them; when a single Fed
     // event maps to more than one mic_fed_statement_diffs row,
-    // resolveFedStatementDiffEvidenceIds throws FedStatementDiffAmbiguousError
+    // resolveFedStatementDiffEvidence throws FedStatementDiffAmbiguousError
     // (propagating to the catch below, which fails the whole run) rather
     // than guessing -- and it does so before any AI call, so an ambiguous
     // run never invokes Luna, never records ai_usage_events, and never
-    // writes history/current/evidence.
+    // writes history/current/evidence. Each resolved diff carries the exact
+    // row content read here; the RPC re-verifies it under lock and fails
+    // closed with MIC_STATE_FED_DIFF_CHANGED_DURING_EVALUATION on any change.
     const centralBankDecisionEventIds = decision.recentEvents
       .filter((e) => e.eventType === "central_bank_decision")
       .map((e) => e.id);
-    const fedStatementDiffEvidenceIds = await resolveFedStatementDiffEvidenceIds(ctx, centralBankDecisionEventIds);
+    const fedStatementDiffEvidence = await resolveFedStatementDiffEvidence(ctx, centralBankDecisionEventIds);
     // Built from the very same EventFact objects passed to the AI below. The
     // RPC re-reads these rows under lock and fails closed with
     // MIC_STATE_EVENT_CHANGED_DURING_EVALUATION if ingest changed any of
@@ -297,16 +299,17 @@ export async function evaluateDomain(
       fetchStatus: decision.fetchStatus,
     };
     const lunaResult = await requestStateEvaluation({ apiKey: openAiApiKey, model: STATE_EVAL_LUNA_MODEL, input: aiInput });
-    // Every actual OpenAI call gets its own ai_usage_events row -- record
-    // Luna's usage immediately, before the escalation decision, so a Sol
-    // escalation never leaves Luna's tokens/cost untracked.
+    // Every actual OpenAI call gets its own ai_usage_events row linked to this
+    // run -- record Luna's usage immediately, before the escalation decision,
+    // so a Sol escalation or a later State-write failure never leaves this
+    // run's real cost untracked.
     const lunaUsageRecord = await recordStateAiUsageEvent(ctx, {
+      runId: claim.runId,
       domain,
       model: lunaResult.model,
       inputTokens: lunaResult.inputTokens,
       outputTokens: lunaResult.outputTokens,
       costUsd: lunaResult.costUsd,
-      relatedId: domain,
     });
 
     const hasCriticalGeopoliticalEvent = domain === "geopolitical" &&
@@ -328,12 +331,12 @@ export async function evaluateDomain(
         input: aiInput,
       });
       const solUsageRecord = await recordStateAiUsageEvent(ctx, {
+        runId: claim.runId,
         domain,
         model: solResult.model,
         inputTokens: solResult.inputTokens,
         outputTokens: solResult.outputTokens,
         costUsd: solResult.costUsd,
-        relatedId: domain,
       });
       finalResult = solResult;
       finalUsageEventId = solUsageRecord.id;
@@ -367,7 +370,7 @@ export async function evaluateDomain(
       reason,
       {
         marketEventSnapshots,
-        fedStatementDiffIds: fedStatementDiffEvidenceIds,
+        fedStatementDiffSnapshots: fedStatementDiffEvidence.map((d) => d.snapshot),
       },
       {
         runId: claim.runId,

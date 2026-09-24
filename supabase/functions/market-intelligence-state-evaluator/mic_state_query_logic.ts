@@ -161,8 +161,8 @@ export async function fetchRecentDomainEvents(
 
 // State Evidence Phase 2C1: resolves the mic_fed_statement_diffs row (if
 // any) for each given central_bank_decision market_events.id, so
-// evaluateDomain can pass a concrete, already-decided list of diff ids
-// into apply_mic_state_material_update's evidence arguments -- this
+// evaluateDomain can pass a concrete, already-decided list of diff
+// snapshots into apply_mic_state_material_update's evidence arguments -- this
 // module makes the *decision* (including refusing to guess), the RPC only
 // *persists* an already-resolved list.
 //
@@ -189,23 +189,54 @@ export class FedStatementDiffAmbiguousError extends Error {
   }
 }
 
-export async function resolveFedStatementDiffEvidenceIds(
+// Every mic_fed_statement_diffs column except created_at. The row is read
+// once, here, and this exact content is what the evidence snapshot stores and
+// what apply_mic_state_material_update re-verifies under lock.
+export const FED_STATEMENT_DIFF_SNAPSHOT_FIELDS = [
+  "id",
+  "current_event_id",
+  "previous_event_id",
+  "current_document_hash",
+  "previous_document_hash",
+  "diff_hash",
+  "meeting_date",
+  "previous_meeting_date",
+  "changed_paragraph_count",
+  "material_change_count",
+  "deterministic_diff",
+  "semantic_buckets",
+  "ai_interpretation",
+  "model",
+  "prompt_version",
+  "generated_at",
+  "ai_usage_receipt",
+  "ai_usage_recorded_at",
+  "updated_at",
+] as const;
+
+export type FedStatementDiffSnapshot =
+  & Record<(typeof FED_STATEMENT_DIFF_SNAPSHOT_FIELDS)[number], unknown>
+  & { id: string; current_event_id: string };
+
+export type FedStatementDiffEvidence = { id: string; snapshot: FedStatementDiffSnapshot };
+
+export async function resolveFedStatementDiffEvidence(
   ctx: RestContext,
   centralBankDecisionEventIds: string[],
   fetchImpl: typeof fetch = fetch,
-): Promise<string[]> {
+): Promise<FedStatementDiffEvidence[]> {
   const uniqueEventIds = [...new Set(centralBankDecisionEventIds)];
   if (uniqueEventIds.length === 0) return [];
   const inList = uniqueEventIds.map((id) => encodeURIComponent(id)).join(",");
   const result = await fetchImpl(
     `${ctx.supabaseUrl}/rest/v1/mic_fed_statement_diffs?current_event_id=in.(${inList})` +
-      `&select=id,current_event_id`,
+      `&select=${FED_STATEMENT_DIFF_SNAPSHOT_FIELDS.join(",")}`,
     { headers: { ...restHeaders(ctx.secretKey), Prefer: "count=exact" } },
   );
   if (!result.ok) {
     throw new Error(`FED_STATEMENT_DIFF_LOOKUP_FAILED:${result.status}:${(await result.text()).slice(0, 500)}`);
   }
-  const rows = await result.json() as Array<{ id?: unknown; current_event_id?: unknown }>;
+  const rows = await result.json() as unknown;
   if (!Array.isArray(rows)) throw new Error("FED_STATEMENT_DIFF_LOOKUP_INVALID_RESPONSE");
   // PostgREST may cap a batched result. With an exact Content-Range total,
   // never mistake an omitted second diff for an unambiguous single match.
@@ -214,25 +245,33 @@ export async function resolveFedStatementDiffEvidenceIds(
     throw new Error("FED_STATEMENT_DIFF_LOOKUP_TRUNCATED");
   }
   const requestedEventIds = new Set(uniqueEventIds);
-  const matchesByEvent = new Map<string, string[]>();
+  const matchesByEvent = new Map<string, FedStatementDiffSnapshot[]>();
   for (const row of rows) {
-    if (typeof row?.id !== "string" || typeof row?.current_event_id !== "string" ||
-      !requestedEventIds.has(row.current_event_id)) {
+    if (
+      typeof row !== "object" || row === null || Array.isArray(row) ||
+      Object.keys(row).length !== FED_STATEMENT_DIFF_SNAPSHOT_FIELDS.length ||
+      !FED_STATEMENT_DIFF_SNAPSHOT_FIELDS.every((field) => field in row)
+    ) {
       throw new Error("FED_STATEMENT_DIFF_LOOKUP_INVALID_RESPONSE");
     }
-    const list = matchesByEvent.get(row.current_event_id) ?? [];
-    list.push(row.id);
-    matchesByEvent.set(row.current_event_id, list);
+    const snapshot = row as FedStatementDiffSnapshot;
+    if (typeof snapshot.id !== "string" || typeof snapshot.current_event_id !== "string" ||
+      !requestedEventIds.has(snapshot.current_event_id)) {
+      throw new Error("FED_STATEMENT_DIFF_LOOKUP_INVALID_RESPONSE");
+    }
+    const list = matchesByEvent.get(snapshot.current_event_id) ?? [];
+    list.push(snapshot);
+    matchesByEvent.set(snapshot.current_event_id, list);
   }
 
-  const diffIds: string[] = [];
+  const evidence: FedStatementDiffEvidence[] = [];
   for (const eventId of uniqueEventIds) {
     const matches = matchesByEvent.get(eventId) ?? [];
     if (matches.length === 0) continue; // no diff computed yet for this event -- fine, just no evidence for it
     if (matches.length > 1) {
       throw new FedStatementDiffAmbiguousError(eventId, matches.length);
     }
-    diffIds.push(matches[0]);
+    evidence.push({ id: matches[0].id, snapshot: matches[0] });
   }
-  return diffIds;
+  return evidence;
 }
