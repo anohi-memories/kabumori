@@ -3,8 +3,8 @@
 - task_id: kabumori-pr23-close-validator-final-review-20260924
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Luna（極高）
 - purpose: production v22 dry-runで発覚した大引け3/3 failureに対するPR #23を、validator安全性・文字数上限・未知原因文allowlist・回帰の観点で独立レビューする。review-onlyを基本とし、必要ならPR #23範囲の最小修正のみ。
@@ -162,3 +162,26 @@ When complete:
 - next_owner -> chatgpt
 - update .agent/CODEX_REPORT_2.md
 - STOP for C2.
+
+
+## Final C2 — PR #23
+
+Verdict: **PASS-WITH-FIX**.
+
+Accepted reviewed head:
+- `47d8c7830ed08b087b2dff7bbe7cc8c0f4cc382f`
+
+Accepted H2 fix:
+- causal assertion cannot be laundered by adding a hedge token later in the same sentence
+- sentence splitting covers Japanese/ASCII punctuation, semicolons, and newlines
+- narrow unknown-cause wording remains allowed
+- ordinary causal inference still requires hedge wording
+
+Validation:
+- close-validator tests: 14/14 PASS
+- personalized-reports suite: 58/58 PASS
+- deno check/lint PASS
+- git diff --check PASS
+- production mutation=0
+
+PR #23 is safe to proceed to fresh-main merge, redeploy with app_enabled=false, and repeated close dry-run validation.
