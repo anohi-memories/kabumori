@@ -32,14 +32,26 @@
 ## Current slot snapshot
 
 - H1: `done` — `x-autopost-phase1e-auth-secret-provider-final-review-20260924`
-- H2: `ready` — `kabumori-pr21-branding-eas-preflight-final-review-20260924`
-- G1: `done` — `kabumori-release-branding-eas-preflight-20260924`
+- H2: `done` — `kabumori-pr21-branding-eas-preflight-final-review-20260924`
+- G1: `ready` — `kabumori-pr21-merge-postmerge-verify-20260924`
   - PR #21 open (unmerged): expo.name -> かぶモリ (slug/scheme/bundleId untouched); scripts/verify-production-env.mjs preflight; RELEASE_READINESS.md corrected/expanded. 114/0 tests, tsc src 0.
   - New finding A1b: AnimatedSplashOverlay renders Expo's logo on every launch (not just the static app.json icon/splash). No artwork generated; exact specs documented for the operator.
   - Confirmed: missing Supabase env vars crash the app on launch, not a silent degrade. Production mutation 0.
 - G2: `ready` — `kabumori-personalized-reports-prod-deploy-dryrun-20260924`
 - G3: `ready` — `x-autopost-phase1f-atomic-completion-provider-outcome-model-20260924`
 - G4: `done` — `x-admin-netlify-deploy-preview-pipeline-20260924`
+
+## C2 PR #21 result
+
+- verdict: **PASS-WITH-FIX**.
+- H2 fix/reviewed head: `0a71f0882136aa8930cf0572033e1a0ba28c0760`.
+- publishable-key validation hardened; malformed/secret/service-role values rejected without value echo.
+- App Store listing-name wording corrected; `expo.name` only covers installed app display name.
+- AnimatedSplashOverlay wording corrected to normal-startup scope.
+- 8/8 verifier tests + 116/116 scoped tests PASS; git diff --check PASS.
+- production mutation=0.
+- G1 assigned PR #21 fresh-main merge + post-merge verification.
+- production build/release still blocked by official artwork, EAS production values and App Store Connect inputs.
 
 ## K1 PR #21 result
 
