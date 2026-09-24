@@ -14,11 +14,10 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `kabumori-important-news-caller-auth-merge-only-20260924`
-  - PR #12 reviewed head `9dffce9620b8a04706cad314a1e558ea141cb105` merged normally as `844c77d6911380822c091b9b646df911810808a4`.
-  - Fresh main after merge is `844c77d6911380822c091b9b646df911810808a4`; all seven implementation files match the reviewed head.
-  - Production read-back: migration unapplied, Vault entry absent, monitor ACTIVE v64 / `verify_jwt=false`, Cron fingerprints and schedules unchanged. Production mutation 0.
-  - PR #11 remains open/draft/untouched. Next: C1 review; production rollout requires separate explicit approval.
+- Codex slot 1: `done` — `kabumori-important-news-caller-auth-merge-only-20260924`
+  - C1 PASS. PR #12 merged as `844c77d6911380822c091b9b646df911810808a4`.
+  - Source caller-auth protection is on main; production rollout is still unapplied/unconfigured/undeployed and requires separate explicit approval.
+  - PR #11 remains stale draft/unmerged.
 
 - Codex slot 2: `ready` — `x-autopost-phase0c2-production-deploy-retry-20260924`
   - Phase0c C2: first authorized x-test-post deploy stopped on Supabase Functions API HTTP 500. Migration was not applied.
@@ -28,14 +27,11 @@
   - Recommended model: GPT-6 Sol Medium。
 
 
-- Claude slot 1: `review_required` — `kabumori-release-mobile-blockers-phase1-auth-account-settings-20260924`
-  - Source candidate complete. PR #13, head `8b78ecc22524b830c5e440e8f0b995fbb9a6f014`, branch `claude1/mobile-release-blockers-auth-account`. Not merged.
-  - Adds `ensure_my_profile()` RPC (migration `20260924100000`), new `account-delete` Edge Function, password recovery, and a Settings entry point with privacy/terms/support as configuration.
-  - Tests: app suite 77/0, account-delete 17/0, `deno check` PASS, Expo web export PASS (10 routes, unchanged), disposable PostgreSQL proof PASS with negative control, diff whitespace check PASS. Pre-existing `/portfolio` typed-route errors unchanged at 2.
-  - production mutation 0: migration not applied, Function not deployed, Auth redirect allowlist not changed, no real reset mail, no real deletion.
-  - Important News caller-auth files and its migration untouched; no file overlap with merged PR #12.
-  - Next: K1 review, then a separately approved single-file migration apply + `account-delete`-only deploy.
-  - Recommended model: Opus 5.5.
+- Claude slot 1: `ready` — `kabumori-mobile-release-blockers-phase1-merge-only-20260924`
+  - K1 PASS for PR #13 source candidate.
+  - Source candidate covers profile lifecycle, password recovery, account deletion and Settings/legal/support UX.
+  - App 77/77, account-delete 17/17, disposable DB proof PASS, Expo web export PASS, Vercel PASS.
+  - Next G1: fresh-check/freshen and merge only. Production migration/deploy/Auth settings remain forbidden.
 
 - Claude slot 2: `ready` — `x-admin-netlify-thin-control-plane-phase1-20260924`
   - H2と分離した別系統。apps/admin/**中心でNetlify Free向けthin management UI設計/source candidate。
