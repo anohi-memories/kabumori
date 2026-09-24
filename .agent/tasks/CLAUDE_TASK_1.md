@@ -3,7 +3,7 @@
 - task_id: kabumori-mobile-recovery-pr17-merge-and-postmerge-verify-20260924
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Sonnet5（高）
