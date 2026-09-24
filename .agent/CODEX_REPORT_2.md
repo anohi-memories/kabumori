@@ -20,6 +20,10 @@
 - Disposable PostgreSQL fairness/concurrency/rollback proof, migration/static assertions, focused tests, and `x-test-post` regression were **not run**: no account-bound source candidate was safely constructible from the current live contract. This is the explicit stopping condition, not a claimed test pass. After C2 approves the schema/API gate, use fake-only fixtures to prove two-brand progress, no double claim, account isolation, retry/stale gates, and rollback before any production proposal.
 - changed files: this H2 TASK and `.agent/CODEX_REPORT_2.md` only. Source/test/migration changes 0. Production DB, migration, Edge Function, Cron, OAuth/Vault, X/OpenAI/Push calls, and posts: **0**. No `apps/admin/**`, H1, G1, or G2 file was modified. Control-only commit/push result is recorded in a follow-up note after remote verification.
 
+## Control sync
+
+- The two-file control-only commit `c7482d4ca2479295d4125ee9164c6bb225f8a237` was pushed to `origin/main` after a fresh fetch found only unrelated G1 control-file changes. A post-push fresh fetch read that exact commit from `origin/main`; the remote H2 TASK showed `review_required` / `chatgpt`, and the remote REPORT headed this Phase 1 task. This addendum records the read-back only; there were no further source or production actions.
+
 # H2 — X autopost Phase 0c2 production rollout completed (2026-09-24)
 
 - task_id: `x-autopost-phase0c2-production-deploy-retry-20260924`
