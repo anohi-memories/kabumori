@@ -61,61 +61,81 @@ function sampleUpdate() {
   };
 }
 
-test("applyMaterialChangeUpdate: fetches the pre-update row, PATCHes the new interpretation, then appends history with the OLD snapshot", async () => {
+function sampleEvidence(overrides: Partial<{ runId: string; marketEventIds: string[]; fedStatementDiffIds: string[] }> = {}) {
+  return {
+    runId: "11111111-1111-1111-1111-111111111111",
+    marketEventIds: [],
+    fedStatementDiffIds: [],
+    ...overrides,
+  };
+}
+
+// State Evidence Phase 2C1: applyMaterialChangeUpdate is now a single POST
+// to the apply_mic_state_material_update RPC -- the previous
+// GET-then-PATCH-then-POST 3-call sequence (and its "history captures the
+// pre-update row" behavior) is now entirely inside that RPC's own SQL
+// transaction (verified separately by the local-DB RPC tests, not
+// mockable at the TS-fetch level since it never leaves the database). What
+// this module is responsible for is building the RPC call correctly and
+// interpreting its response.
+
+test("applyMaterialChangeUpdate: POSTs a single call to the apply_mic_state_material_update RPC with the full update payload plus run id and evidence", async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
-  const previousRow = { domain: "rates", narrative: "old narrative", as_of: "2026-09-12T00:00:00.000Z" };
   const fetchImpl = async (url: string | URL, init?: RequestInit) => {
     calls.push({ url: String(url), init });
-    if (!init || init.method === undefined) {
-      // the pre-update GET
-      return new Response(JSON.stringify([previousRow]), { status: 200 });
-    }
-    if (init.method === "PATCH") return new Response(null, { status: 204 });
-    if (init.method === "POST") return new Response(null, { status: 201 });
-    throw new Error(`unexpected method ${init.method}`);
+    return new Response(JSON.stringify([{ result_status: "applied" }]), { status: 200 });
   };
-  await applyMaterialChangeUpdate(ctx, "rates", sampleUpdate(), "US10Y crossed threshold", fetchImpl as typeof fetch);
-
-  assert.equal(calls.length, 3);
-  assert.match(calls[0].url, /market_state_current\?domain=eq\.rates&select=\*/);
-  assert.equal(calls[1].init?.method, "PATCH");
-  const patchBody = JSON.parse(String(calls[1].init?.body));
-  assert.equal(patchBody.narrative, "米金利は落ち着いた動き。");
-  assert.equal(patchBody.ai_model, "gpt-5.6-luna");
-  assert.ok(typeof patchBody.ai_evaluated_at === "string");
-
-  assert.equal(calls[2].init?.method, "POST");
-  assert.match(calls[2].url, /market_state_history$/);
-  const historyBody = JSON.parse(String(calls[2].init?.body));
-  assert.equal(historyBody.domain, "rates");
-  assert.equal(historyBody.triggered_by, "material_change");
-  assert.equal(historyBody.reason, "US10Y crossed threshold");
-  // The history row captures what the state looked like BEFORE this
-  // update -- the old narrative, not the new one.
-  assert.deepEqual(historyBody.snapshot, previousRow);
-});
-
-test("applyMaterialChangeUpdate: throws if the pre-update fetch fails, without attempting the PATCH", async () => {
-  const calls: string[] = [];
-  const fetchImpl = async (url: string | URL) => {
-    calls.push(String(url));
-    return new Response("error", { status: 500 });
-  };
-  await assert.rejects(
-    () => applyMaterialChangeUpdate(ctx, "rates", sampleUpdate(), "reason", fetchImpl as typeof fetch),
-    /STATE_PRE_UPDATE_FETCH_FAILED:500/,
+  const result = await applyMaterialChangeUpdate(
+    ctx,
+    "rates",
+    sampleUpdate(),
+    "US10Y crossed threshold",
+    sampleEvidence({
+      runId: "22222222-2222-2222-2222-222222222222",
+      marketEventIds: ["39ec45a4-77b5-4869-a011-2f4aa98c228d"],
+      fedStatementDiffIds: ["4c6f1ad7-255e-4ac7-8eab-b44904bf94b0"],
+    }),
+    fetchImpl as typeof fetch,
   );
-  assert.equal(calls.length, 1);
+  assert.deepEqual(result, { status: "applied" });
+
+  assert.equal(calls.length, 1, "exactly one HTTP call -- the RPC does history+current+evidence atomically, no separate REST calls from this module");
+  assert.equal(calls[0].init?.method, "POST");
+  assert.match(calls[0].url, /\/rest\/v1\/rpc\/apply_mic_state_material_update$/);
+
+  const body = JSON.parse(String(calls[0].init?.body));
+  assert.equal(body.p_domain, "rates");
+  assert.equal(body.p_run_id, "22222222-2222-2222-2222-222222222222");
+  assert.equal(body.p_narrative, "米金利は落ち着いた動き。");
+  assert.equal(body.p_ai_model, "gpt-5.6-luna");
+  assert.equal(body.p_reason, "US10Y crossed threshold");
+  assert.deepEqual(body.p_market_event_evidence_ids, ["39ec45a4-77b5-4869-a011-2f4aa98c228d"]);
+  assert.deepEqual(body.p_fed_statement_diff_evidence_ids, ["4c6f1ad7-255e-4ac7-8eab-b44904bf94b0"]);
+  // ai_evaluated_at is no longer set from TS Date.now() -- the RPC uses
+  // SQL now() inside the same transaction instead, so it is deliberately
+  // absent from the outgoing payload.
+  assert.equal("ai_evaluated_at" in body, false);
+  assert.equal("p_ai_evaluated_at" in body, false);
 });
 
-test("applyMaterialChangeUpdate: throws if the history insert fails after a successful PATCH", async () => {
-  const fetchImpl = async (_url: string | URL, init?: RequestInit) => {
-    if (!init || init.method === undefined) return new Response(JSON.stringify([{ domain: "rates" }]), { status: 200 });
-    if (init.method === "PATCH") return new Response(null, { status: 204 });
-    return new Response("error", { status: 500 });
-  };
+test("applyMaterialChangeUpdate: returns already_applied when the RPC reports the run was already applied (retry idempotency)", async () => {
+  const fetchImpl = async () => new Response(JSON.stringify([{ result_status: "already_applied" }]), { status: 200 });
+  const result = await applyMaterialChangeUpdate(ctx, "rates", sampleUpdate(), "reason", sampleEvidence(), fetchImpl as typeof fetch);
+  assert.deepEqual(result, { status: "already_applied" });
+});
+
+test("applyMaterialChangeUpdate: throws if the RPC call itself fails (non-2xx)", async () => {
+  const fetchImpl = async () => new Response("error", { status: 500 });
   await assert.rejects(
-    () => applyMaterialChangeUpdate(ctx, "rates", sampleUpdate(), "reason", fetchImpl as typeof fetch),
-    /STATE_HISTORY_INSERT_FAILED:500/,
+    () => applyMaterialChangeUpdate(ctx, "rates", sampleUpdate(), "reason", sampleEvidence(), fetchImpl as typeof fetch),
+    /STATE_MATERIAL_UPDATE_RPC_FAILED:500/,
+  );
+});
+
+test("applyMaterialChangeUpdate: throws if the RPC returns an unrecognized result_status (defensive -- never silently treat an unknown response as success)", async () => {
+  const fetchImpl = async () => new Response(JSON.stringify([{ result_status: "something_unexpected" }]), { status: 200 });
+  await assert.rejects(
+    () => applyMaterialChangeUpdate(ctx, "rates", sampleUpdate(), "reason", sampleEvidence(), fetchImpl as typeof fetch),
+    /STATE_MATERIAL_UPDATE_RPC_RESPONSE_INVALID/,
   );
 });

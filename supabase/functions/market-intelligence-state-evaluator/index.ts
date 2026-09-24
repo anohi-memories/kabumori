@@ -42,6 +42,7 @@ import {
   fetchPriorState,
   fetchRecentDomainEvents,
   fetchSourceFetchStatuses,
+  resolveFedStatementDiffEvidenceIds,
 } from "./mic_state_query_logic.ts";
 import {
   claimStateEvaluationRun,
@@ -307,6 +308,23 @@ export async function evaluateDomain(
     }
 
     const reason = decision.metricDecision.isMaterial ? decision.metricDecision.reason : decision.eventDecision.reason;
+
+    // State Evidence Phase 2C1: marketEventEvidenceIds is deliberately the
+    // exact same set as sourceEventIds below (decision.recentEvents is
+    // already "the events actually used for this evaluation's material
+    // judgment and AI facts payload" -- not "every event that ever
+    // existed"), so evidence never drifts from what source_event_ids
+    // already claims. fedStatementDiffEvidenceIds resolves only the
+    // central_bank_decision events among them; resolveFedStatementDiffEvidenceIds
+    // throws FedStatementDiffAmbiguousError (propagating to the catch
+    // below, which fails the whole run) rather than guessing when a
+    // single Fed event maps to more than one mic_fed_statement_diffs row --
+    // no history/current/evidence write happens in that case.
+    const centralBankDecisionEventIds = decision.recentEvents
+      .filter((e) => e.eventType === "central_bank_decision")
+      .map((e) => e.id);
+    const fedStatementDiffEvidenceIds = await resolveFedStatementDiffEvidenceIds(ctx, centralBankDecisionEventIds);
+
     await applyMaterialChangeUpdate(
       ctx,
       domain,
@@ -332,6 +350,11 @@ export async function evaluateDomain(
         aiCostUsd: finalResult.costUsd,
       },
       reason,
+      {
+        runId: claim.runId,
+        marketEventIds: decision.recentEvents.map((e) => e.id),
+        fedStatementDiffIds: fedStatementDiffEvidenceIds,
+      },
     );
 
     await completeStateEvaluationRun(ctx, claim.runId, {

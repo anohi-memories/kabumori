@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  FedStatementDiffAmbiguousError,
   fetchDomainMetricMap,
   fetchMetricObservationStatus,
   fetchPriorState,
   fetchRecentDomainEvents,
   fetchSourceFetchStatuses,
+  resolveFedStatementDiffEvidenceIds,
 } from "./mic_state_query_logic.ts";
 import type { RestContext } from "./mic_state_run_logic.ts";
 
@@ -139,4 +141,73 @@ test("fetchRecentDomainEvents: geopolitical filters on its mapped event_types", 
   assert.match(calls[0], /event_type=in\.\(geopolitical,sanction,political_statement\)/);
   assert.equal(events.length, 1);
   assert.equal(events[0].importance, "high");
+});
+
+// --- State Evidence Phase 2C1: resolveFedStatementDiffEvidenceIds ---
+
+test("resolveFedStatementDiffEvidenceIds: empty input never calls fetch, returns []", async () => {
+  let called = false;
+  const fetchImpl = async () => {
+    called = true;
+    return new Response("[]", { status: 200 });
+  };
+  const ids = await resolveFedStatementDiffEvidenceIds(ctx, [], fetchImpl as typeof fetch);
+  assert.deepEqual(ids, []);
+  assert.equal(called, false);
+});
+
+test("resolveFedStatementDiffEvidenceIds: 0 matching diffs for an event -> that event contributes no evidence id (not an error)", async () => {
+  const fetchImpl = async () => new Response(JSON.stringify([]), { status: 200 });
+  const ids = await resolveFedStatementDiffEvidenceIds(ctx, ["39ec45a4-77b5-4869-a011-2f4aa98c228d"], fetchImpl as typeof fetch);
+  assert.deepEqual(ids, []);
+});
+
+test("resolveFedStatementDiffEvidenceIds: exactly 1 matching diff -> that diff id is returned", async () => {
+  const calls: string[] = [];
+  const fetchImpl = async (url: string | URL) => {
+    calls.push(String(url));
+    return new Response(
+      JSON.stringify([{ id: "4c6f1ad7-255e-4ac7-8eab-b44904bf94b0", current_event_id: "39ec45a4-77b5-4869-a011-2f4aa98c228d" }]),
+      { status: 200 },
+    );
+  };
+  const ids = await resolveFedStatementDiffEvidenceIds(ctx, ["39ec45a4-77b5-4869-a011-2f4aa98c228d"], fetchImpl as typeof fetch);
+  assert.deepEqual(ids, ["4c6f1ad7-255e-4ac7-8eab-b44904bf94b0"]);
+  assert.match(calls[0], /current_event_id=in\.\(39ec45a4-77b5-4869-a011-2f4aa98c228d\)/);
+});
+
+test("resolveFedStatementDiffEvidenceIds: 2+ matching diffs for the SAME event -> fails closed with FedStatementDiffAmbiguousError, never guesses 'latest'", async () => {
+  const fetchImpl = async () =>
+    new Response(
+      JSON.stringify([
+        { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", current_event_id: "39ec45a4-77b5-4869-a011-2f4aa98c228d" },
+        { id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", current_event_id: "39ec45a4-77b5-4869-a011-2f4aa98c228d" },
+      ]),
+      { status: 200 },
+    );
+  await assert.rejects(
+    () => resolveFedStatementDiffEvidenceIds(ctx, ["39ec45a4-77b5-4869-a011-2f4aa98c228d"], fetchImpl as typeof fetch),
+    FedStatementDiffAmbiguousError,
+  );
+});
+
+test("resolveFedStatementDiffEvidenceIds: resolves multiple distinct events independently (one ambiguous does not silently drop the others -- it throws before returning anything)", async () => {
+  const fetchImpl = async () =>
+    new Response(
+      JSON.stringify([
+        { id: "cccccccc-cccc-cccc-cccc-cccccccccccc", current_event_id: "event-a" },
+        { id: "dddddddd-dddd-dddd-dddd-dddddddddddd", current_event_id: "event-b" },
+      ]),
+      { status: 200 },
+    );
+  const ids = await resolveFedStatementDiffEvidenceIds(ctx, ["event-a", "event-b"], fetchImpl as typeof fetch);
+  assert.deepEqual(ids.sort(), ["cccccccc-cccc-cccc-cccc-cccccccccccc", "dddddddd-dddd-dddd-dddd-dddddddddddd"]);
+});
+
+test("resolveFedStatementDiffEvidenceIds: throws on a non-2xx status", async () => {
+  const fetchImpl = async () => new Response("error", { status: 500 });
+  await assert.rejects(
+    () => resolveFedStatementDiffEvidenceIds(ctx, ["39ec45a4-77b5-4869-a011-2f4aa98c228d"], fetchImpl as typeof fetch),
+    /FED_STATEMENT_DIFF_LOOKUP_FAILED:500/,
+  );
 });

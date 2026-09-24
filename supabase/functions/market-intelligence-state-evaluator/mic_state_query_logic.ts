@@ -152,3 +152,69 @@ export async function fetchRecentDomainEvents(
     publishedAt: String(row.published_at),
   }));
 }
+
+// State Evidence Phase 2C1: resolves the mic_fed_statement_diffs row (if
+// any) for each given central_bank_decision market_events.id, so
+// evaluateDomain can pass a concrete, already-decided list of diff ids
+// into apply_mic_state_material_update's evidence arguments -- this
+// module makes the *decision* (including refusing to guess), the RPC only
+// *persists* an already-resolved list.
+//
+// mic_fed_statement_diffs' own unique index is keyed on
+// (current_event_id, coalesce(previous_event_id, ...), diff_hash,
+// prompt_version) -- current_event_id alone is NOT unique, so a given Fed
+// event could in principle have more than one diff row (e.g. a future
+// prompt_version bump, or a historical reprocess that produced a new
+// diff_hash without removing the old row, since this table is an
+// append-only interpretation artifact). Per explicit instruction, this
+// never picks "the latest by created_at" or any other implicit rule --
+// 2+ matches for the same event fails closed with
+// FedStatementDiffAmbiguousError, which the caller lets propagate (no
+// catch-and-continue), so the whole evaluation run fails rather than
+// silently recording a guessed diff as evidence.
+export class FedStatementDiffAmbiguousError extends Error {
+  readonly eventId: string;
+  readonly matchCount: number;
+  constructor(eventId: string, matchCount: number) {
+    super(`FED_STATEMENT_DIFF_AMBIGUOUS:${eventId}:${matchCount} diffs`);
+    this.name = "FedStatementDiffAmbiguousError";
+    this.eventId = eventId;
+    this.matchCount = matchCount;
+  }
+}
+
+export async function resolveFedStatementDiffEvidenceIds(
+  ctx: RestContext,
+  centralBankDecisionEventIds: string[],
+  fetchImpl: typeof fetch = fetch,
+): Promise<string[]> {
+  if (centralBankDecisionEventIds.length === 0) return [];
+  const inList = centralBankDecisionEventIds.map((id) => encodeURIComponent(id)).join(",");
+  const result = await fetchImpl(
+    `${ctx.supabaseUrl}/rest/v1/mic_fed_statement_diffs?current_event_id=in.(${inList})` +
+      `&select=id,current_event_id`,
+    { headers: restHeaders(ctx.secretKey) },
+  );
+  if (!result.ok) {
+    throw new Error(`FED_STATEMENT_DIFF_LOOKUP_FAILED:${result.status}:${(await result.text()).slice(0, 500)}`);
+  }
+  const rows = await result.json() as Array<{ id?: unknown; current_event_id?: unknown }>;
+  const matchesByEvent = new Map<string, string[]>();
+  for (const row of rows) {
+    if (typeof row.id !== "string" || typeof row.current_event_id !== "string") continue;
+    const list = matchesByEvent.get(row.current_event_id) ?? [];
+    list.push(row.id);
+    matchesByEvent.set(row.current_event_id, list);
+  }
+
+  const diffIds: string[] = [];
+  for (const eventId of centralBankDecisionEventIds) {
+    const matches = matchesByEvent.get(eventId) ?? [];
+    if (matches.length === 0) continue; // no diff computed yet for this event -- fine, just no evidence for it
+    if (matches.length > 1) {
+      throw new FedStatementDiffAmbiguousError(eventId, matches.length);
+    }
+    diffIds.push(matches[0]);
+  }
+  return diffIds;
+}

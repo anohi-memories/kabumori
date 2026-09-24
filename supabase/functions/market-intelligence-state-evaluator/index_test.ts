@@ -111,14 +111,24 @@ function makeMockFetch(opts: {
       const id = usageEventId++;
       return new Response(JSON.stringify([{ id }]), { status: 201 });
     }
-    if (u.includes("/rest/v1/market_state_current") && method === "GET") {
-      return new Response(JSON.stringify([{ domain: "rates", narrative: null, as_of: null }]), { status: 200 });
-    }
     if (u.includes("/rest/v1/market_state_current") && method === "PATCH") {
+      // refreshStatusOnly's route (no_change / all-stale-guard passes).
+      // applyMaterialChangeUpdate no longer touches market_state_current
+      // directly -- that now happens inside the
+      // apply_mic_state_material_update RPC transaction (mocked below).
       return new Response(null, { status: 204 });
     }
-    if (u.includes("/rest/v1/market_state_history") && method === "POST") {
-      return new Response(null, { status: 201 });
+    if (u.includes("/rest/v1/mic_fed_statement_diffs") && method === "GET") {
+      // Most tests in this file never exercise a central_bank_decision
+      // event, so resolveFedStatementDiffEvidenceIds never actually
+      // reaches this route for them (it returns [] before fetching for an
+      // empty event-id list) -- kept as a safe default for those tests,
+      // overridden per-test (via a wrapping fetchImpl) where the fed diff
+      // resolution result itself is what's being asserted on.
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
+    if (u.includes("/rest/v1/rpc/apply_mic_state_material_update") && method === "POST") {
+      return new Response(JSON.stringify([{ result_status: "applied" }]), { status: 200 });
     }
     throw new Error(`unexpected mock fetch call: ${method} ${u}`);
   };
@@ -214,10 +224,10 @@ test("[A] low data_confidence caused by stale/partial Facts does NOT escalate to
   const usageInserts = calls.filter((c) => c.url.includes("/rest/v1/ai_usage_events") && c.method === "POST");
   assert.equal(usageInserts.length, 1);
 
-  const materialUpdate = calls.find((c) => c.url.includes("/rest/v1/market_state_current") && c.method === "PATCH");
-  assert.equal(materialUpdate?.body.narrative, "stale narrative", "Luna's low-confidence result is still saved as-is");
+  const materialUpdate = calls.find((c) => c.url.includes("/rest/v1/rpc/apply_mic_state_material_update") && c.method === "POST");
+  assert.equal(materialUpdate?.body.p_narrative, "stale narrative", "Luna's low-confidence result is still saved as-is");
   // [H] confidence clamp still applies: stored ai_confidence never exceeds data_confidence.
-  assert.equal(materialUpdate?.body.ai_confidence, Math.min(0.55, 0.6));
+  assert.equal(materialUpdate?.body.p_ai_confidence, Math.min(0.55, 0.6));
 });
 
 test("[I] all-stale guard still short-circuits before any AI call", async () => {
@@ -260,4 +270,142 @@ test("[I] all-stale guard still short-circuits before any AI call", async () => 
   assert.equal(openAiCalls.length, 0, "all-stale guard must prevent any AI call");
   const usageInserts = calls.filter((c) => c.url.includes("/rest/v1/ai_usage_events") && c.method === "POST");
   assert.equal(usageInserts.length, 0);
+});
+
+// --- State Evidence Phase 2C1: evidence resolution + the transactional RPC ---
+
+function centralBankEvent(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "39ec45a4-77b5-4869-a011-2f4aa98c228d",
+    title: "Fed raises target range by 25bp",
+    summary: "s",
+    importance: "high" as const,
+    eventType: "central_bank_decision",
+    publishedAt: "2026-09-16T18:00:00.000Z",
+    ...overrides,
+  };
+}
+
+test("[J] a rates evaluation with a central_bank_decision event but NO matching fed diff row calls the RPC with an empty fed_statement_diff_evidence_ids array (0 diffs -> no diff evidence, not an error)", async () => {
+  const { fetchImpl, calls } = makeMockFetch({ lunaOutput: LUNA_CONFIDENT_OUTPUT });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = fetchImpl as typeof fetch;
+  try {
+    const result = await evaluateDomain(
+      ctx,
+      "rates",
+      decisionResult({ recentEvents: [centralBankEvent()] }),
+      new Date("2026-09-16T18:20:00Z"),
+      1,
+    );
+    assert.equal(result.status, "evaluated");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  const diffLookup = calls.find((c) => c.url.includes("/rest/v1/mic_fed_statement_diffs") && c.method === "GET");
+  assert.ok(diffLookup, "must query mic_fed_statement_diffs for the central_bank_decision event id");
+  assert.match(diffLookup!.url, /current_event_id=in\.\(39ec45a4-77b5-4869-a011-2f4aa98c228d\)/);
+
+  const rpcCall = calls.find((c) => c.url.includes("/rest/v1/rpc/apply_mic_state_material_update"));
+  assert.deepEqual(rpcCall?.body.p_market_event_evidence_ids, ["39ec45a4-77b5-4869-a011-2f4aa98c228d"]);
+  assert.deepEqual(rpcCall?.body.p_fed_statement_diff_evidence_ids, []);
+  assert.equal(rpcCall?.body.p_run_id, "run-1");
+});
+
+test("[K] a rates evaluation with a central_bank_decision event AND exactly one matching fed diff row includes that diff id in the RPC call", async () => {
+  const { fetchImpl: baseFetch, calls } = makeMockFetch({ lunaOutput: LUNA_CONFIDENT_OUTPUT });
+  const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+    const u = String(url);
+    if (u.includes("/rest/v1/mic_fed_statement_diffs") && (init?.method ?? "GET") === "GET") {
+      return new Response(
+        JSON.stringify([{ id: "4c6f1ad7-255e-4ac7-8eab-b44904bf94b0", current_event_id: "39ec45a4-77b5-4869-a011-2f4aa98c228d" }]),
+        { status: 200 },
+      );
+    }
+    return baseFetch(url, init);
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = fetchImpl as typeof fetch;
+  try {
+    const result = await evaluateDomain(
+      ctx,
+      "rates",
+      decisionResult({ recentEvents: [centralBankEvent()] }),
+      new Date("2026-09-16T18:20:00Z"),
+      1,
+    );
+    assert.equal(result.status, "evaluated");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  const rpcCall = calls.find((c) => c.url.includes("/rest/v1/rpc/apply_mic_state_material_update"));
+  assert.deepEqual(rpcCall?.body.p_fed_statement_diff_evidence_ids, ["4c6f1ad7-255e-4ac7-8eab-b44904bf94b0"]);
+});
+
+test("[L] a central_bank_decision event with 2+ matching fed diff rows fails closed: the whole run fails, the RPC is never called (no State/history/evidence write)", async () => {
+  const { fetchImpl: baseFetch, calls } = makeMockFetch({ lunaOutput: LUNA_CONFIDENT_OUTPUT });
+  const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+    const u = String(url);
+    if (u.includes("/rest/v1/mic_fed_statement_diffs") && (init?.method ?? "GET") === "GET") {
+      return new Response(
+        JSON.stringify([
+          { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", current_event_id: "39ec45a4-77b5-4869-a011-2f4aa98c228d" },
+          { id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", current_event_id: "39ec45a4-77b5-4869-a011-2f4aa98c228d" },
+        ]),
+        { status: 200 },
+      );
+    }
+    if (u.includes("/rest/v1/mic_state_evaluation_runs") && (init?.method ?? "GET") === "PATCH") {
+      // failStateEvaluationRun's PATCH -- allow it through so evaluateDomain can return cleanly.
+      return new Response(null, { status: 204 });
+    }
+    return baseFetch(url, init);
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = fetchImpl as typeof fetch;
+  try {
+    const result = await evaluateDomain(
+      ctx,
+      "rates",
+      decisionResult({ recentEvents: [centralBankEvent()] }),
+      new Date("2026-09-16T18:20:00Z"),
+      1,
+    );
+    assert.equal(result.status, "failed");
+    assert.match(result.error ?? "", /FED_STATEMENT_DIFF_AMBIGUOUS/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  const rpcCall = calls.find((c) => c.url.includes("/rest/v1/rpc/apply_mic_state_material_update"));
+  assert.equal(rpcCall, undefined, "the transactional RPC must never be called when diff resolution is ambiguous");
+  const openAiCalls = calls.filter((c) => c.url === "https://api.openai.com/v1/responses");
+  assert.equal(openAiCalls.length, 1, "Luna was already called before the ambiguity was discovered -- that AI usage is still recorded/billed");
+});
+
+test("[M] no_change (not material) never calls mic_fed_statement_diffs or the material-update RPC", async () => {
+  const { fetchImpl, calls } = makeMockFetch({});
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = fetchImpl as typeof fetch;
+  try {
+    const result = await evaluateDomain(
+      ctx,
+      "rates",
+      decisionResult({
+        isMaterial: false,
+        metricDecision: { isMaterial: false, materialMetricKeys: [], reason: "no change" },
+        recentEvents: [centralBankEvent()],
+      }),
+      new Date("2026-09-16T18:20:00Z"),
+      1,
+    );
+    assert.equal(result.status, "no_change");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(calls.some((c) => c.url.includes("/rest/v1/mic_fed_statement_diffs")), false);
+  assert.equal(calls.some((c) => c.url.includes("/rest/v1/rpc/apply_mic_state_material_update")), false);
 });

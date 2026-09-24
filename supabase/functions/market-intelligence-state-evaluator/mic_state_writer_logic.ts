@@ -8,9 +8,16 @@
 //   market_state_history row is written for this (routine status ticks
 //   are not the kind of interpretive change history exists to audit).
 // - applyMaterialChangeUpdate: only called when Step 2 (material_change)
-//   is true and AI has produced a new narrative. Updates the full row
-//   AND inserts a market_state_history snapshot of what the row looked
-//   like immediately before this update (never overwritten).
+//   is true and AI has produced a new narrative. State Evidence Phase 2C1:
+//   this is now a single call to the apply_mic_state_material_update RPC
+//   (see the migration for the full transactional definition) instead of
+//   a GET-then-PATCH-then-POST sequence of 3 separate REST calls. The RPC
+//   updates market_state_current, inserts the market_state_history
+//   snapshot, sets source_evaluation_run_id, and writes every
+//   mic_state_evidence row in ONE Postgres transaction -- a failure
+//   partway through (e.g. an evidence FK violation) rolls back the
+//   current/history writes too, which the previous 3-call sequence could
+//   never guarantee.
 import { restHeaders } from "./mic_state_run_logic.ts";
 import type { RestContext } from "./mic_state_run_logic.ts";
 import type { CoverageStatus, Domain, FetchStatus, ObservationStatus } from "./mic_state_types.ts";
@@ -63,70 +70,73 @@ export type MaterialChangeUpdate = StatusRefresh & {
   aiCostUsd: number;
 };
 
-// Fetches the row as it stands *before* the update (for the history
-// snapshot), then PATCHes the new interpretation in, then inserts the
-// pre-update snapshot into market_state_history. Never deletes/overwrites
-// history -- each call appends exactly one row.
+// State Evidence Phase 2C1: the evaluation run this update belongs to
+// (becomes market_state_current.source_evaluation_run_id), plus the
+// already-resolved (never guessed) list of immutable artifacts this run
+// actually used. marketEventIds is normally the same set as
+// update.sourceEventIds -- kept as a separate field here rather than
+// derived internally so this module never has to re-decide "which events
+// count as evidence"; that decision is made once, by the caller, from
+// decision.recentEvents.
+export type MaterialChangeEvidence = {
+  runId: string;
+  marketEventIds: string[];
+  fedStatementDiffIds: string[];
+};
+
+export type ApplyMaterialChangeResult = { status: "applied" | "already_applied" };
+
+// Single atomic call to the apply_mic_state_material_update RPC (see the
+// State Evidence Phase 2C1 migration): updates market_state_current,
+// inserts the pre-update market_state_history snapshot, sets
+// source_evaluation_run_id, and writes every mic_state_evidence row, all
+// in one Postgres transaction. A failure anywhere inside the RPC (e.g. an
+// evidence FK violation) rolls back the current/history writes too --
+// this is exactly the "State updated but evidence missing" inconsistency
+// the previous 3-separate-REST-call design could not prevent.
 export async function applyMaterialChangeUpdate(
   ctx: RestContext,
   domain: Domain,
   update: MaterialChangeUpdate,
   reason: string,
+  evidence: MaterialChangeEvidence,
   fetchImpl: typeof fetch = fetch,
-): Promise<void> {
-  const before = await fetchImpl(
-    `${ctx.supabaseUrl}/rest/v1/market_state_current?domain=eq.${encodeURIComponent(domain)}&select=*`,
-    { headers: restHeaders(ctx.secretKey) },
-  );
-  if (!before.ok) {
-    throw new Error(`STATE_PRE_UPDATE_FETCH_FAILED:${before.status}:${(await before.text()).slice(0, 500)}`);
-  }
-  const beforeRows = await before.json() as Array<Record<string, unknown>>;
-  const previousSnapshot = beforeRows[0] ?? { domain };
-
-  const patchResult = await fetchImpl(
-    `${ctx.supabaseUrl}/rest/v1/market_state_current?domain=eq.${encodeURIComponent(domain)}`,
-    {
-      method: "PATCH",
-      headers: restHeaders(ctx.secretKey, "return=minimal"),
-      body: JSON.stringify({
-        as_of: update.asOf,
-        narrative: update.narrative,
-        bullish_factors: update.bullishFactors,
-        bearish_factors: update.bearishFactors,
-        key_risks: update.keyRisks,
-        numeric_baseline_snapshot: update.numericBaselineSnapshot,
-        source_metric_keys: update.sourceMetricKeys,
-        source_event_ids: update.sourceEventIds,
-        ai_model: update.aiModel,
-        ai_confidence: update.aiConfidence,
-        ai_input_tokens: update.aiInputTokens,
-        ai_output_tokens: update.aiOutputTokens,
-        ai_cost_usd: update.aiCostUsd,
-        ai_evaluated_at: new Date().toISOString(),
-        coverage_status: update.coverageStatus,
-        fetch_status: update.fetchStatus,
-        observation_status: update.observationStatus,
-        data_confidence: update.dataConfidence,
-      }),
-    },
-  );
-  if (!patchResult.ok) {
-    throw new Error(`STATE_MATERIAL_UPDATE_FAILED:${patchResult.status}:${(await patchResult.text()).slice(0, 500)}`);
-  }
-
-  const historyResult = await fetchImpl(`${ctx.supabaseUrl}/rest/v1/market_state_history`, {
+): Promise<ApplyMaterialChangeResult> {
+  const result = await fetchImpl(`${ctx.supabaseUrl}/rest/v1/rpc/apply_mic_state_material_update`, {
     method: "POST",
-    headers: restHeaders(ctx.secretKey, "return=minimal"),
+    headers: restHeaders(ctx.secretKey, "return=representation"),
     body: JSON.stringify({
-      domain,
-      as_of: (previousSnapshot as Record<string, unknown>).as_of ?? null,
-      snapshot: previousSnapshot,
-      triggered_by: "material_change",
-      reason,
+      p_domain: domain,
+      p_run_id: evidence.runId,
+      p_as_of: update.asOf,
+      p_coverage_status: update.coverageStatus,
+      p_fetch_status: update.fetchStatus,
+      p_observation_status: update.observationStatus,
+      p_data_confidence: update.dataConfidence,
+      p_narrative: update.narrative,
+      p_bullish_factors: update.bullishFactors,
+      p_bearish_factors: update.bearishFactors,
+      p_key_risks: update.keyRisks,
+      p_numeric_baseline_snapshot: update.numericBaselineSnapshot,
+      p_source_metric_keys: update.sourceMetricKeys,
+      p_source_event_ids: update.sourceEventIds,
+      p_ai_model: update.aiModel,
+      p_ai_confidence: update.aiConfidence,
+      p_ai_input_tokens: update.aiInputTokens,
+      p_ai_output_tokens: update.aiOutputTokens,
+      p_ai_cost_usd: update.aiCostUsd,
+      p_reason: reason,
+      p_market_event_evidence_ids: evidence.marketEventIds,
+      p_fed_statement_diff_evidence_ids: evidence.fedStatementDiffIds,
     }),
   });
-  if (!historyResult.ok) {
-    throw new Error(`STATE_HISTORY_INSERT_FAILED:${historyResult.status}:${(await historyResult.text()).slice(0, 500)}`);
+  if (!result.ok) {
+    throw new Error(`STATE_MATERIAL_UPDATE_RPC_FAILED:${result.status}:${(await result.text()).slice(0, 500)}`);
   }
+  const rows = await result.json() as Array<{ result_status?: unknown }>;
+  const status = rows[0]?.result_status;
+  if (status !== "applied" && status !== "already_applied") {
+    throw new Error(`STATE_MATERIAL_UPDATE_RPC_RESPONSE_INVALID:${JSON.stringify(rows).slice(0, 500)}`);
+  }
+  return { status };
 }
