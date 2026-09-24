@@ -153,6 +153,23 @@ test("unhedged causal or directional claims still fail", () => {
   }
 });
 
+test("a later hedge or unknown-cause phrase cannot launder an asserted cause", () => {
+  for (const text of [
+    "円高が逆風になりましたが、要因は特定できない可能性があります。",
+    "円高が逆風になりましたが、影響する可能性があります。",
+    "円高を受けて下落しましたが理由は特定できません。",
+    "円高が逆風になりました. 影響が続く可能性があります。",
+    "円高が逆風になりました！影響が続く可能性があります。",
+    "円高が逆風になりました\n影響が続く可能性があります。",
+    "材料は特定できません。今日は株価が必ず上昇します。",
+    "為替の影響が広がっていますが、個別材料は確認できません。",
+    "市場背景は悪化し、要因は特定できません。",
+    "株価は大幅に下落しましたが、明確な材料は確認できません。",
+  ]) {
+    assert.equal(inferenceIsHedged(text), false, text);
+  }
+});
+
 test("hedged inference still passes, including mixed with an unknown-cause sentence", () => {
   assert.equal(inferenceIsHedged("円高が逆風になる可能性があります。"), true);
   assert.equal(inferenceIsHedged("金利上昇が重荷になったと考えられます。"), true);

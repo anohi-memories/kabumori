@@ -1132,26 +1132,29 @@ export function localReportIssues(
 // Inference text must read as an estimate, never as a reported fact.
 const HEDGE = /可能性|考えられ|とみられ|見られ|かもしれ|余地|想定され|うかがえ|見込まれ|推測され|推定され/u;
 
-// A sentence that only states the cause / material cannot be determined is not an inference and
-// needs no hedge. Kept deliberately narrow: it must name what is unknown (要因・原因・理由・材料・
-// 因果関係・影響・背景), end with an explicit "cannot determine / not confirmed", and carry no
-// causal assertion. "円高が逆風になりました。" still fails.
-const UNDETERMINED_SUBJECT = /要因|原因|理由|材料|因果関係|影響|背景/u;
-const UNDETERMINED_END =
-  /(?:特定|判断|断定|確認|説明|結び付けること|結びつけること)(?:は|が|も)?(?:できません|できていません|できない|されていません)[。．]?$/u;
+// Only a complete, simple inability-to-determine statement may omit a hedge. Anchoring the
+// whole sentence prevents an unrelated allowed noun (e.g. "材料") from laundering another claim.
+const UNDETERMINED_ONLY =
+  /^(?:(?:入力情報|確認できる情報)から)?(?:明確な)?(?:個別(?:の)?)?(?:要因|原因|理由|材料|影響|背景)(?:との因果関係)?(?:は|が|を)?(?:特定|判断|断定|確認|説明)(?:できません|できていません|できない|されていません)$/u;
+// The exact production dry-run wording is a longer but still bounded statement that no cause is
+// being attributed; keep this exception anchored rather than allowing arbitrary surrounding prose.
+const UNDETERMINED_ATTRIBUTION =
+  /^(?:個別|明確な個別)材料(?:が|は)確認できないため[、,]?(?:当日の)?(?:下落|上昇|値動き|変動)を特定の(?:要因|原因|理由)に結び(?:付け|つけ)ることはできません$/u;
 const CAUSAL_ASSERTION =
-  /(?:逆風|追い風)(?:に|と)なり(?:ました|ます)|(?:原因|要因)(?:です|でした)|(?:により|によって|を受けて)(?:売られ|買われ|下落し|上昇し)|で(?:売られ|買われ)ました/u;
+  /(?:逆風|追い風)(?:に|と)なり(?:ました|ます)|(?:原因|要因)(?:(?:に|と)なりました|です|でした)|(?:により|によって|を受けて)(?:売られ|買われ)(?:ました|ます)|(?:により|によって|を受けて)(?:下落|上昇)しました|で(?:売られ|買われ)ました/u;
 
 function inferenceSentences(text: string): string[] {
-  return text.split(/(?<=[。．！？])/u).map((sentence) => sentence.trim()).filter(Boolean);
+  return text.split(/(?:[。．！？!?]+|[;；]+|[\r\n]+|\.(?=\s|$))/u).map((sentence) => sentence.trim()).filter(Boolean);
 }
 
 /** True when every sentence is either hedged or a narrow "cannot be determined" statement. */
 export function inferenceIsHedged(text: string): boolean {
-  return inferenceSentences(text).every((sentence) =>
-    HEDGE.test(sentence) ||
-    (UNDETERMINED_SUBJECT.test(sentence) && UNDETERMINED_END.test(sentence) && !CAUSAL_ASSERTION.test(sentence))
-  );
+  return inferenceSentences(text).every((sentence) => {
+    // A hedge later in the same sentence must not launder an already-asserted cause.
+    if (CAUSAL_ASSERTION.test(sentence)) return false;
+    return HEDGE.test(sentence) ||
+      UNDETERMINED_ONLY.test(sentence) || UNDETERMINED_ATTRIBUTION.test(sentence);
+  });
 }
 
 function packetAllowedBasis(packet: unknown): Map<string, Set<string>> {
