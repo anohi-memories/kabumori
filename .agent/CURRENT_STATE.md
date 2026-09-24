@@ -36,7 +36,7 @@
 - G1: `ready` — `kabumori-release-branding-eas-preflight-20260924`
   - PR #18 merged at reviewed head `6f32776` -> main `a41b306`. Files byte-identical; 108/0 tests, tsc src 0, web export 10 routes, public-site preview+production dry-run builds PASS. Vercel ignored per Netlify hosting policy. Mutation 0.
 - G2: `ready` — `kabumori-pr19-merge-postmerge-verify-20260924`
-- G3: `ready` — `x-autopost-phase1e-exact-account-credential-resolver-20260924`
+- G3: `done` — `x-autopost-phase1e-exact-account-credential-resolver-20260924`
 - G4: `done` — `x-admin-netlify-deploy-preview-pipeline-20260924`
 
 ## K1 PR #18 merge result
@@ -148,6 +148,18 @@
 - Add a one-request provider seam so a durable provider-start boundary cannot hide a second X create request.
 - Source-only; production mutation/X API calls = 0.
 - Recommended model: Opus5.5（高）.
+
+## K3 Phase1E result
+
+- Phase1E exact-account credential resolver IMPLEMENTATION PASS.
+- implementation commit: `1868cc0e418ebda15ecfdfc88c55c9dd25a471f7`.
+- claim.social_account_id is the sole v2 credential-routing authority.
+- no brand/first-row/legacy/env/hardcoded-account fallback.
+- one-request provider seam prevents hidden second X create after provider-start.
+- x-test-post 422/422, _shared 114/114, important-news-monitor 431/431 PASS.
+- production mutation/deploy/token refresh/X API calls=0.
+- Independent Codex review is still required before Phase1E can be accepted beyond source-candidate status.
+- H1/H2 app-owned task records were not overwritten by this X-owner workflow.
 
 ## K4 Netlify result
 
