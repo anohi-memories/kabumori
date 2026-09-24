@@ -11,6 +11,13 @@
 - ユーザーの個別指定がある場合はその指定を優先する。
 - 競合防止ルールは常に優先する。
 
+## Deployment policy
+
+- 開発中・PR・テスト用Web PreviewはNetlifyを優先する。
+- レビュー完了後の最終production deployのみVercelを使う。
+- Vercel rate limit待ちの既存production作業は保留し、Netlify Preview整備を優先する。
+- Expo native/iOS実機・TestFlightはNetlify Previewでは代替しない。
+
 ## Codex H1
 - owner: codex
 - slot: codex-1
@@ -31,7 +38,7 @@
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: unassigned; review/bugfix/verification pool
+- allocation: unassigned
 
 ## Claude G1
 - owner: claude
@@ -41,17 +48,17 @@
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: closed; Final K1 PASS
+- allocation: closed; H1 final review pending
 
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: done
-- task_id: x-admin-multibrand-selector-phase2-merge-only-20260924
+- status: ready
+- task_id: kabumori-netlify-expo-web-preview-pipeline-20260924
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: closed; unfinished continuation moved to G4
+- allocation: assigned; Kabumori Netlify Expo Web preview setup
 
 ## Claude G3
 - owner: claude
@@ -61,17 +68,22 @@
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: assigned; X auto-post implementation
+- allocation: assigned; X auto-post Phase1D implementation
 
 ## Claude G4
 - owner: claude
 - slot: claude-4
 - status: ready
-- task_id: x-admin-phase2-vercel-gate-merge-and-postmerge-qa-20260924
+- task_id: x-admin-netlify-deploy-preview-pipeline-20260924
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: assigned; X implementation continuation
+- allocation: assigned; X admin Netlify Deploy Preview setup
+
+## Deferred
+
+- PR #15 final Vercel gate / merge / post-merge Admin QA is intentionally deferred while Netlify Preview is introduced.
+- The prior G4 Report remains the evidence source for the deferred PR #15 state.
 
 ## Control codes
 
