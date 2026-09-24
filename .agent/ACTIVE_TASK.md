@@ -36,12 +36,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: in_progress
+- status: review_required
 - task_id: x-admin-netlify-thin-control-plane-phase1-merge-only-20260924
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: K2 PASS済みPhase1 admin candidateのfreshen/rebase・drift確認・tests再実行・mainへのmergeに着手。
+- note: Phase1をPR #14でmain mergeした（merge SHA a9c0ef7）。apps/adminのdriftなし・conflictなし、2回freshenしてもK2レビュー済み内容とバイト一致。tests 12/12・tsc・lint・build・Vercelすべてpass。merge後のread-backでも5ファイル一致を確認。production mutation 0。K2待ち。
 
 ## Control codes
 
