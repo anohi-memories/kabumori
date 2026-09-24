@@ -3,7 +3,7 @@
 - task_id: kabumori-close-unknown-cause-prefix-fix-20260924
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Sonnet5（極高）
