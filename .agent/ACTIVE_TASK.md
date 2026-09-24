@@ -36,12 +36,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: in_progress
+- status: review_required
 - task_id: x-admin-multibrand-selector-query-parameterization-phase2-20260924
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: Phase2着手。selected-brand authority helper・header selector・4 query moduleのparameterizationを実装中。production mutation 0。
+- note: Phase2実装完了。PR #15（未merge）。server再検証付きbrand selector、4 query moduleをAuthorizedBrandIdでparameterize、system-toggleはKabumori専用のまま posting_windows をKabumori固定に。tests 31/31、tsc/lint/build pass。production mutation 0。K2待ち。
 
 ## Control codes
 
