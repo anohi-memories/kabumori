@@ -25,6 +25,8 @@
 - H1: `idle` / task_id `none`
 - H2: `idle` / task_id `none`
 - G1: `review_required` — `kabumori-mobile-recovery-deeplink-routing-fix-and-e2e-resume-20260924`
+  - FULL real-device E2E PASS (recovery via PR #17 fix, new-password login, in-app deletion, cascade to baseline). PR #17 unmerged (Vercel free-tier rate limit).
+  - Side effect: the owner's iPhone push-token row was moved and then removed by the device switch. It restores when they sign back in.
 - G2: `done` — `x-admin-multibrand-selector-phase2-merge-only-20260924`
   - K2 accepted completed verification/freshen work; remaining merge/Vercel/QA continuation moved to G4.
 - G3: `ready` — `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`

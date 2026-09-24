@@ -3,8 +3,8 @@
 - task_id: kabumori-mobile-recovery-deeplink-routing-fix-and-e2e-resume-20260924
 - owner: claude
 - slot: claude-1
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Opus 5.5
 - purpose: K1で確認した mobile recovery deep-link の Unmatched Route blockerを最小修正し、既存の同一disposable test accountで残りE2Eを完了する。
@@ -170,3 +170,87 @@ Resume:
 - PR #17 merge remains gated by successful required checks and final fresh-main review
 
 No Auth Site URL/SMTP/config change is authorized by this K1.
+
+## Report — G1 resume result (full E2E)
+
+- result: **FULL E2E PASS**: Gate C (retest), Gate D and Gate E all pass on the real iPhone with the same disposable account. One side effect on an existing user's push-token row is disclosed below.
+- source under test: PR #17 head `7dc5c9ae2b5c5dea626c8a21bc2bc7c18c724a43`, served by the Kabumori Metro on 8081 from `claude1/recovery-deeplink-fix` (LAN `192.168.188.127`). PR #17 is still **unmerged**, gated on required checks and the final fresh-main review, as K1 instructed.
+- resume control commit: `05e183d`
+- email rate limit: the retest was run after the rolling hour cleared; the only email in the previous hour was the one at 05:45 UTC. No Auth, SMTP or rate-limit setting was changed.
+
+### Gate C — password recovery retest: **PASS**
+
+- The reset email arrived, and the link opened the Kabumori app.
+- The 「パスワードの再設定」 screen was shown. The fix works on the device: no Unmatched Route.
+- The new password was set, followed by 「かぶモリを開く」 → logout → a successful login with the new password.
+- Read-only: the test user's `auth.users.updated_at` advanced after the resume, consistent with the password update. The test user still had exactly 1 `profiles` row.
+- No URL, token or password was recorded.
+
+### Gate D — in-app account deletion: **PASS**
+
+Rows owned by the test user just before deletion:
+
+| Table | Rows |
+| --- | --- |
+| auth user | 1 |
+| `profiles` | 1 |
+| `tracked_stocks` | 1 (added by the user during testing) |
+| `device_push_tokens` | 1 |
+| `alert_settings` | 0 |
+| `alert_category_settings` | 0 |
+| `notifications` | 0 |
+| `personalized_reports` | 0 |
+
+- The app flow was 設定 → アカウントを削除 → retype the address → 「アカウントを完全に削除する」. The app returned to the login screen.
+- No admin or manual delete was used. The only deleting path was the app → `account-delete` → a service-role delete of the verified caller.
+
+After deletion (read-only):
+
+- auth rows for the test identity: **0**
+- orphan checks: `profiles` without an auth user 0; `tracked_stocks`, `device_push_tokens` and `notifications` without a profile all 0
+
+| Table | Baseline | Now |
+| --- | --- | --- |
+| `auth.users` | 2 | **2** |
+| `profiles` | 1 | **1** |
+| `tracked_stocks` | 20 | **20** |
+| `alert_settings` | 1 | **1** |
+| `alert_category_settings` | 16 | **16** |
+| `notifications` | 18 | **18** |
+| `personalized_reports` | 12 | **12** |
+| `device_push_tokens` | 1 | **0** (see below) |
+
+The cascade removed every row the test user owned.
+
+### Gate E — regression: **PASS, with one disclosed side effect**
+
+- `account-delete`: v2, ACTIVE, `verify_jwt=True`, ezbr `0f1cc97736e3`, `updated_at` `1790210823880`. Unchanged.
+- `ensure_my_profile`: security invoker, `search_path=""`, ACL `{postgres=X/postgres,authenticated=X/postgres}`. Unchanged.
+- All 17 functions match the snapshot taken at the start of this E2E. The only change during the day was H1's `important-news-monitor` (v66), before this resume.
+- **Side effect on an existing user:** the existing user's `device_push_tokens` row for this iPhone is gone (1 → 0).
+  - Cause: the E2E ran on the owner's own iPhone. `device_push_tokens.expo_push_token` is globally unique by design (one device notifies one account).
+  - Signing the real account out (`signOut` removes this device's token) or signing the test account in (the upsert reassigns the token) moved the row to the test user. The deletion cascade then removed it.
+  - This is the app's intended device-switch behaviour. It is not data corruption and no other user row was touched.
+  - It is **restored automatically when the owner signs back in to their real account on this iPhone**. Until then, that account gets no push on this device.
+  - The user has been told to sign back in.
+- No other existing user or row changed. No secrets, tokens, URLs or passwords were printed or recorded.
+
+### Production mutations attributable to this task (all normal app flows)
+
+1. the test user's recovery email
+2. its recovery session
+3. its password update
+4. its sessions
+5. one stock the user added while testing
+6. its in-app self-deletion, with the cascade
+7. the reassignment and removal of this iPhone's push-token row, as above
+
+No migration, deploy, Auth config change, or admin/manual action was made.
+
+### Remaining blockers
+
+1. PR #17 merge. It is blocked only on the repository's Vercel free-tier deployment rate limit; per K1 that check must not be bypassed. Merge once checks are green, after a fresh-main review.
+2. Custom SMTP (Auth config, needs approval).
+3. The confirmation/recovery redirect lands on an unreachable Site URL (Auth config, needs approval).
+4. Privacy / terms / support URLs are still undecided.
+5. For future E2E runs: use a separate device or simulator, so the owner's own push-token row is not moved.
