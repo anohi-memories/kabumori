@@ -51,6 +51,11 @@ begin
      or not has_table_privilege('service_role', 'public.post_queue_attempts_v2', 'SELECT') then
     raise exception 'v2 ledger writable by service_role';
   end if;
+  if has_table_privilege('service_role', 'public.scheduled_posts', 'UPDATE')
+     or has_table_privilege('service_role', 'public.scheduled_posts', 'INSERT')
+     or has_table_privilege('authenticated', 'public.scheduled_posts', 'UPDATE') then
+    raise exception 'scheduled_posts direct API writes can bypass the v2 ledger';
+  end if;
 end $$;
 
 revoke execute on function public.claim_due_post() from service_role;  -- Phase1D activation gate
@@ -73,8 +78,10 @@ insert into plan values
   ('b_close', 'brand_b', 'acct_b', 'close_report', 2);
 select public.schedule_account_bound_post_v2(p.brand, p.account, current_date, p.post_type, p.slot,
   now() - interval '1 hour' - p.slot * interval '1 minute') from plan p;
+reset role;
 insert into public.scheduled_posts (brand_id, schedule_date, post_type, slot_no, scheduled_for)
 values ('brand_a', current_date, 'interaction', 50, now() - interval '2 hours');  -- legacy/unbound
+set role service_role;
 
 create temporary table claims (label text primary key, attempt_id uuid, claim_token uuid,
   account text, brand text, post_id uuid, post_type text);
@@ -97,6 +104,14 @@ begin
   end if;
 end $$;
 create function pg_temp.c(p_label text) returns claims language sql as $$ select * from claims where label = p_label $$;
+
+-- A caller-set v2 domain marker must not authorize direct schedule mutation.
+do $$ begin
+  perform set_config('kabumori.x_queue_domain', 'v2', true);
+  perform pg_temp.expect_error($q$update public.scheduled_posts set status = 'failed'
+    where id = (select post_id from claims where label = 'a_tip')$q$, '42501');
+  perform set_config('kabumori.x_queue_domain', '', true);
+end $$;
 
 -- 2. Started log per v2 claim (legacy-shaped observability).
 do $$ begin
@@ -331,6 +346,8 @@ begin
     'ATTEMPT_NOT_PROVIDER_STARTED');
   perform pg_temp.expect_error(format('select public.begin_provider_step_v2(%L,%L,2::smallint,%L)', t.attempt_id, t.claim_token, 'create_post'),
     'PROVIDER_STEP_OUT_OF_ORDER');
+  perform pg_temp.expect_error(format('select public.begin_provider_step_v2(%L,%L,1::smallint,%L,%L)',
+    t.attempt_id, t.claim_token, 'create_reply', 'unrelated_parent'), 'PROVIDER_STEP_FIRST_MUST_CREATE');
   perform public.begin_provider_step_v2(t.attempt_id, t.claim_token, 1::smallint, 'create_post');
   perform pg_temp.expect_error(format('select public.begin_provider_step_v2(%L,%L,1::smallint,%L)', t.attempt_id, t.claim_token, 'create_post'),
     'PROVIDER_STEP_ALREADY_STARTED');
@@ -340,6 +357,8 @@ begin
      or public.finish_provider_step_v2(t.attempt_id, t.claim_token, 1::smallint, 'provider_object_confirmed', 't1', null) <> 'already_finished' then
     raise exception 'step finish not idempotent';
   end if;
+  perform pg_temp.expect_error(format('select public.begin_provider_step_v2(%L,%L,2::smallint,%L)',
+    t.attempt_id, t.claim_token, 'create_post'), 'PROVIDER_STEP_KIND_SEQUENCE_INVALID');
   perform pg_temp.expect_error(format('select public.finish_provider_step_v2(%L,%L,1::smallint,%L,%L,null)', t.attempt_id, t.claim_token,
     'provider_object_confirmed', 't_other'), 'PROVIDER_STEP_CONFLICT');
   perform pg_temp.expect_error(format('select public.begin_provider_step_v2(%L,%L,2::smallint,%L,%L)', t.attempt_id, t.claim_token, 'create_reply', 'wrong'),
@@ -351,6 +370,8 @@ begin
   -- Greeting: media upload then create, each its own step.
   perform public.begin_provider_step_v2(g.attempt_id, g.claim_token, 1::smallint, 'media_upload');
   perform public.finish_provider_step_v2(g.attempt_id, g.claim_token, 1::smallint, 'provider_object_confirmed', 'media_1', null);
+  perform pg_temp.expect_error(format('select public.begin_provider_step_v2(%L,%L,2::smallint,%L,%L)',
+    g.attempt_id, g.claim_token, 'create_reply', 'media_1'), 'PROVIDER_STEP_KIND_SEQUENCE_INVALID');
   perform public.begin_provider_step_v2(g.attempt_id, g.claim_token, 2::smallint, 'create_post');
   perform public.finish_provider_step_v2(g.attempt_id, g.claim_token, 2::smallint, 'x_outcome_uncertain', null, 'X_CREATE_HTTP_503');
   if (select string_agg(step_no || step_kind || ':' || outcome || ':' || coalesce(provider_object_id, '-'), ',' order by step_no)
@@ -366,9 +387,42 @@ begin
   if (select status from public.scheduled_posts where id = t.post_id) <> 'running' then raise exception 'tip changed'; end if;
 end $$;
 
+-- A terminal attempt must not acquire a new provider-step outcome later.
+do $$
+declare c claims := pg_temp.c('b_close');
+        t claims := pg_temp.c('a_tip');
+begin
+  perform public.begin_provider_step_v2(c.attempt_id, c.claim_token, 1::smallint, 'create_post');
+  perform public.record_post_x_rejected_v2(c.attempt_id, c.claim_token, 'X_CREATE_REJECTED_403');
+  perform pg_temp.expect_error(format('select public.finish_provider_step_v2(%L,%L,1::smallint,%L,%L,null)',
+    c.attempt_id, c.claim_token, 'provider_object_confirmed', 'late_x_id'), 'ATTEMPT_NOT_PROVIDER_STARTED');
+  if (select phase from public.post_provider_steps_v2 where attempt_id = c.attempt_id and step_no = 1) <> 'provider_started' then
+    raise exception 'terminal attempt changed provider-step state';
+  end if;
+  perform public.record_post_x_uncertain_v2(t.attempt_id, t.claim_token, 'X_CREATE_NETWORK_UNCERTAIN');
+  if public.finish_provider_step_v2(t.attempt_id, t.claim_token, 2::smallint,
+       'x_outcome_uncertain', null, 'X_CREATE_NETWORK_UNCERTAIN') <> 'already_finished' then
+    raise exception 'exact finished-step replay after terminal attempt was not read-only';
+  end if;
+end $$;
+
 -- 9. Domain restored; legacy rows untouched; API roles denied.
 do $$ begin
   if coalesce(current_setting('kabumori.x_queue_domain', true), '') <> '' then raise exception 'domain leaked'; end if;
+end $$;
+-- Revoking direct schedule DML must not break the owner-executed legacy RPCs
+-- for unbound rows, which remain a separate lane during migration.
+do $$
+declare v_claimed public.scheduled_posts%rowtype;
+begin
+  select * into v_claimed from public.claim_due_post_legacy_unbound_v2();
+  if v_claimed.id is null or v_claimed.social_account_id is not null or v_claimed.slot_no <> 50 then
+    raise exception 'legacy unbound claim failed after direct DML revoke';
+  end if;
+  perform public.fail_scheduled_post(v_claimed.id, 'fixture legacy fail');
+  if (select status from public.scheduled_posts where id = v_claimed.id) <> 'failed' then
+    raise exception 'legacy unbound completion failed after direct DML revoke';
+  end if;
 end $$;
 reset role;
 set role authenticated;

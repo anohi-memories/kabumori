@@ -76,6 +76,11 @@ grant select on public.post_provider_steps_v2 to service_role;
 -- service_role, may read attempts but never write the ledger directly.
 revoke insert, update, delete, truncate on public.post_queue_attempts_v2, public.post_queue_account_turns_v2
   from service_role;
+-- Phase1D's custom domain setting is caller-settable; it is not an ACL.
+-- Keep bound-post lifecycle writes inside the reviewed SECURITY DEFINER RPCs.
+-- Legacy owner-executed planners/completions remain available for unbound rows.
+revoke insert, update, delete, truncate on public.scheduled_posts
+  from public, anon, authenticated, service_role;
 
 -- 3. Shared internal transition for a confirmed X create. Locks the attempt and
 --    the post, proves claim/account/brand/post-type identity, and moves both
@@ -326,11 +331,19 @@ begin
        (select max(s.step_no) from public.post_provider_steps_v2 s where s.attempt_id = p_attempt_id), 0) + 1 then
     raise exception 'PROVIDER_STEP_OUT_OF_ORDER' using errcode = 'P0001';
   end if;
+  if p_step_no = 1 and p_step_kind = 'create_reply' then
+    raise exception 'PROVIDER_STEP_FIRST_MUST_CREATE' using errcode = 'P0001';
+  end if;
   if p_step_no > 1 then
     select s.* into v_prev_step from public.post_provider_steps_v2 s
     where s.attempt_id = p_attempt_id and s.step_no = p_step_no - 1;
     if v_prev_step.phase <> 'finished' or v_prev_step.outcome <> 'provider_object_confirmed' then
       raise exception 'PROVIDER_STEP_PREVIOUS_NOT_CONFIRMED' using errcode = 'P0001';
+    end if;
+    if (v_prev_step.step_kind = 'media_upload' and p_step_kind is distinct from 'create_post')
+       or (v_prev_step.step_kind in ('create_post', 'create_reply')
+           and p_step_kind is distinct from 'create_reply') then
+      raise exception 'PROVIDER_STEP_KIND_SEQUENCE_INVALID' using errcode = 'P0001';
     end if;
     if p_step_kind = 'create_reply'
        and p_parent_provider_object_id is distinct from v_prev_step.provider_object_id then
@@ -346,10 +359,14 @@ create function public.finish_provider_step_v2(
   p_attempt_id uuid, p_claim_token uuid, p_step_no smallint, p_outcome text,
   p_provider_object_id text, p_error_code text
 ) returns text language plpgsql security definer set search_path = '' as $$
-declare v_step public.post_provider_steps_v2%rowtype;
+declare v_attempt public.post_queue_attempts_v2%rowtype;
+        v_step public.post_provider_steps_v2%rowtype;
 begin
-  if not exists (select 1 from public.post_queue_attempts_v2 a
-                 where a.id = p_attempt_id and a.claim_token = p_claim_token) then
+  -- Lock the attempt before the step, as begin_provider_step_v2 does. This
+  -- serializes a finish against any terminal attempt transition.
+  select a.* into v_attempt from public.post_queue_attempts_v2 a
+  where a.id = p_attempt_id and a.claim_token = p_claim_token for update;
+  if not found then
     raise exception 'X_COMPLETION_CLAIM_INVALID' using errcode = 'P0001';
   end if;
   select s.* into v_step from public.post_provider_steps_v2 s
@@ -361,6 +378,9 @@ begin
       return 'already_finished';
     end if;
     raise exception 'PROVIDER_STEP_CONFLICT' using errcode = 'P0001';
+  end if;
+  if v_attempt.phase <> 'provider_started' or v_attempt.outcome is not null then
+    raise exception 'ATTEMPT_NOT_PROVIDER_STARTED' using errcode = 'P0001';
   end if;
   update public.post_provider_steps_v2 s
   set phase = 'finished', outcome = p_outcome, provider_object_id = p_provider_object_id,
