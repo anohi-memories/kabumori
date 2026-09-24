@@ -277,7 +277,7 @@ Do not regenerate or replace either secret unless a mismatch is proven and a coo
 - Cron postflight: exactly four intended commands have the new Vault-backed header. Removing only the appended expression reproduces every original command MD5; schedules/active flags unchanged; shadow fingerprint unchanged.
 - deploy: only `important-news-monitor`, ACTIVE v66, SHA `8192d004167b01e3a48c55df584ca6393e896db1c752f3bb7a247849c2c0257e`, `verify_jwt=false`. All 26 deployed modules match latest main; other 16 Function metadata records unchanged.
 - auth rejection: one empty unauthenticated POST returned 401 `UNAUTHORIZED`; code rejects before credentials/body/mode. No candidate data.
-- natural Cron: publish-ready 02:50/02:55/03:00/03:05 UTC, generation 02:54, fetch 03:00, judgement 03:07 — all `succeeded`. Through 03:07, 49 observed pg_net responses all HTTP 200; no auth/server/transport errors.
+- natural Cron: publish-ready 02:50/02:55/03:00/03:05 UTC, generation 02:54, fetch 03:00, judgement 03:07 — all `succeeded`. Through 03:07, 49 observed pg_net responses all HTTP 200; no auth/server/transport errors. Read-only publication counts since deploy: `x_published_at` 0; X-post IDs 0.
 - production changes: one exact migration plus one Function deploy. No X post, candidate injection, Push, OAuth change, other Function/Cron/migration/config change, or business-logic/auto_publish/cadence change.
 - remaining_issues: C1 review. Function secret was confirmed by user attestation; no plaintext was accessed.
 - next_owner: chatgpt.
