@@ -1,3 +1,45 @@
+## H2 — PR #23 close validator final review — 2026-09-24
+
+- task_id: `kabumori-pr23-close-validator-final-review-20260924`
+- result: **PASS-WITH-FIX** for source review. Found and fixed one adversarial validator bypass in PR #23, added regression coverage, and pushed the minimal fix. PR remains unmerged; no production action was performed.
+- fresh_main_sha: `9ca14d802bc8f15c4618369b8c4212bc0bcbe5ea` at task start; latest pre-push `origin/main`: `b3780609d655136eab05648235f1a31113a72182`.
+- reviewed_pr: #23, branch `g2-close-report-validator-fix-20260924`; requested initial head `5c22c71961496fc63e698e42e7c18cacc7f7cff3`; post-fix head `47d8c7830ed08b087b2dff7bbe7cc8c0f4cc382f`. Post-push fetch confirmed the branch at `47d8c78`.
+- changed_files (H2 fix only):
+  - `supabase/functions/personalized-reports/report_logic.ts`
+  - `supabase/functions/personalized-reports/close_validator_fix_test.ts`
+- implementation_commit: `47d8c7830ed08b087b2dff7bbe7cc8c0f4cc382f`; push to PR branch succeeded. No merge.
+
+### Review findings and fixes
+
+1. **Fixed before merge — same-sentence hedge laundering.** Before the fix, an explicit causal assertion followed by a hedge token in the same sentence passed `inferenceIsHedged()`, e.g. `円高が逆風になりましたが、要因は特定できない可能性があります。` The old broad unknown-subject/end check could also accept unrelated assertions merely because `材料` or another allowed noun appeared in the sentence. This was a deterministic local-validator bypass; the semantic Fact check remained in place, so it was not a direct X/posting bypass.
+2. The validator now rejects recognized causal assertions before considering hedge tokens, splits on Japanese and common ASCII punctuation plus semicolons/newlines, and permits unhedged uncertainty only for a whole-sentence anchored statement or the bounded production dry-run wording. The ordinary hedged inference path remains available.
+3. Added adversarial tests for causal text followed by a hedge/unknown-cause clause, Japanese/ASCII punctuation and newline boundaries, unrelated allowed nouns, and additional unrelated assertions. The exact production unknown-cause sentence remains accepted.
+
+### Length and safety assessment
+
+- Final brief limits: morning **120** characters; close **160** characters. The same report-type-specific value is used in the prompt and local validator; brief length remains combined `fact_ja + inference_ja + watch_ja`. Detailed per-field limits remain 160 / 160 / 80. `DRAFT_SCHEMA` defines field shape but has no character `maxLength`; a JSON Schema property cap cannot express this context-dependent combined-field budget. The local validator remains the fail-closed enforcement point after generation. No schema-limit mismatch can bypass that check, but this distinction is recorded for C2.
+- Boundary tests: close 160 passes / 161 fails; morning 120 passes / 121 fails; observed 104–136 character close fixtures pass.
+- Unsupported numeric/date/URL/advice, unknown/duplicate/missing holdings, unsupported basis, shared-direction contradiction, Fact-vs-inference separation, and `no_clear_material` regression checks remain covered by the relevant suite.
+- No `apps/` source changed; no directly relevant app test file was found. The app itself was not changed.
+
+### Verification
+
+- Focused close-validator tests: **14 passed / 0 failed**.
+- Full `supabase/functions/personalized-reports` suite: **58 passed / 0 failed** (`deno test --no-check --allow-read`).
+- `deno check --no-lock` for `index.ts` and `report_logic.ts`: **PASS**.
+- `deno lint supabase/functions/personalized-reports`: **PASS** (8 files).
+- `git diff --check`: **PASS**.
+- A type-checked `deno test --allow-read` attempt could not start because this clean worktree lacks `npm:@types/node`; no dependency installation was attempted. The no-check tests and changed-source type check passed.
+- Fresh-main delta after task start touched only agent coordination and Phase1F/X-autopost files; it did not overlap PR #23's personalized-report files. PR diff remains confined to the three intended personalized-report files; H2's fix changes two of those.
+
+### C2 disposition / safety
+
+- Source review verdict: **PASS-WITH-FIX** at PR head `47d8c78`. The runtime length policy is fail-closed and prompt/local-validator values match; C2 should note the shape-only schema distinction above when deciding merge readiness. H2 did not merge it.
+- After merge and separate deploy authorization, redeploy `personalized-reports` with `app_enabled=false`, then run repeated close dry-runs (at least three) and verify local/Fact results before any later activation decision. Keep the known-good v21 rollback source available.
+- production DB/schema/migration/RLS/RPC/settings/Cron mutation: **0**; Edge deploy: **0**; manual LLM/API invocation: **0**; X/Push/post: **0**; Auth/admin/X scope changes: **0**; secrets displayed: **0**.
+- remaining_issues: GitHub merge checks/merge and any later deployment/dry-run remain separate steps. No app-level integration or real-model output was exercised in this review.
+- safety_checks: work was isolated to the PR #23 clean worktree and this H2 control worktree; no G1/X/admin source or formal checkout changes. H2 stops for C2.
+
 ## Final C2 disposition — PR #21
 
 - verdict: **PASS-WITH-FIX**

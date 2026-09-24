@@ -3,8 +3,8 @@
 - task_id: kabumori-pr23-close-validator-final-review-20260924
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna（極高）
 - purpose: production v22 dry-runで発覚した大引け3/3 failureに対するPR #23を、validator安全性・文字数上限・未知原因文allowlist・回帰の観点で独立レビューする。review-onlyを基本とし、必要ならPR #23範囲の最小修正のみ。
