@@ -157,3 +157,22 @@ When complete:
 3. `market_report_consumer_settings.app_enabled=true` にするかを判断する。ONにすると市場詳細が表示される。ただし共有packetが作れない日（例：blockedの朝刊）は、アプリのレポートがskipされる（fail closed）。
 4. 実機でのQA（朝刊→大引けの答え合わせは、新形式の朝刊が保存された日から有効になる）。
 5. tracked stocksを持たないユーザーへの配信は、product/cost/consentの判断として別TASKで扱う（本PRでは対象外）。
+
+
+## Final K2 — PR #19 post-merge
+
+Result: **PASS**.
+
+Accepted:
+- PR #19 merged at head `2b743f3a9799f35409ab1e61652b9e76b04977c5`
+- merge/main SHA `518542702f820e490d0c02050b0ef470f023ce5a`
+- 154/154 tests PASS
+- deno check/lint PASS
+- no new src TypeScript errors
+- Expo export 10 routes PASS
+- X/shared-fact paths unchanged
+- H2 missing-value fix confirmed on main
+- deploy/gate flip not performed
+- production mutation=0 excluding normal GitHub merge
+
+G2 implementation/merge task is complete. Any production rollout (Edge deploy, dry-run, app_enabled decision, real-device QA) requires a new task.
