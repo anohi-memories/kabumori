@@ -175,3 +175,27 @@ No EAS remote env/secret change, no Netlify, Supabase Auth, SMTP, App Store Conn
 ### 10. Recommended next G1 task
 
 K1 review of PR #21 and #18's merge state (#18 already merged; #21 pending). Once artwork exists (operator-provided), a follow-up task to wire the new icon/splash/launch-overlay files into `app.json` and `animated-icon.tsx` — source-only, still no EAS build. In parallel, a Netlify-publication task can proceed once the three `KABUMORI_*` operator values and a domain are provided (independent of artwork).
+
+
+## Final K1 — branding/EAS preflight
+
+Result: **IMPLEMENTATION PASS / merge pending independent review**.
+
+Accepted:
+- PR #21 head `db5143fe399df25902739f4c60a07af712c3743a`
+- display name -> 「かぶモリ」
+- slug/scheme/bundleIdentifier unchanged
+- EAS production env preflight added
+- 114/114 tests PASS
+- src TypeScript 0 errors
+- Expo export 10 routes PASS
+- production mutation=0
+
+Important release finding:
+- no official Kabumori artwork exists in repo
+- static Expo icon/splash remain
+- launch-time AnimatedSplashOverlay also shows Expo branding every launch
+- no artwork was generated or guessed
+
+Merge decision:
+- Do not merge PR #21 until independent H2 review completes.
