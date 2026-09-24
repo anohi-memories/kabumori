@@ -3,8 +3,8 @@
 - task_id: kabumori-release-pr18-privacy-dataflow-eas-light-review-20260924
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna（高）
 - purpose: K1 PASS済みPR #18の公開Privacy/Terms/Support/Account-deletionページ、native legal links、EAS設定を、実際のデータフローとApp Store提出観点から独立レビューする。実装はClaude完了済み。原則review-only、必要なら最小修正のみ。
