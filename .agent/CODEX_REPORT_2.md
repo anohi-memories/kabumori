@@ -1,3 +1,56 @@
+# H2 — Phase 1C account-bound cutover candidate stopped at unsafe integration boundary (2026-09-24)
+
+- task_id: `x-autopost-phase1c-dispatcher-planner-account-bound-cutover-candidate-20260924`
+- status: `review_required`; next_owner: `chatgpt`
+- result: **CUTOVER CANDIDATE NOT APPROVED / NO DISPATCHER IMPLEMENTATION.** The TASK explicitly requires failing the candidate if existing post-type effects cannot be preserved. The current Phase1B source and live legacy dispatch cannot safely coexist as-is. No partial v2 publisher was added or activated. C2 must review the concrete blockers and split/authorize the necessary queue, per-provider, and completion work before implementation continues.
+- source: fresh `origin/main` `1be56db97d89f103bbd822a8f17b3bdf97dd3654` at start; isolated clean clone `/private/tmp/kabumori-h2-phase1c-qghsg8`. Formal checkout's unrelated dirty files were not changed/staged. H1 idle; G1 app Auth E2E; G2 admin PR merge only; no same-file/object overlap at start. Production read-only SQL only.
+
+## Hard blockers (confirmed)
+
+1. **Split-brain claim:** the live `claim_due_post()` selects any due `pending` row without `social_account_id` exclusion, and runs five legacy planners before claiming. Phase1B `claim_due_post_v2()` excludes unbound rows but Phase1B intentionally leaves old claim untouched. A bound row created by v2 would therefore be eligible for **both** dispatchers. This is a direct duplicate/misroute risk. Source: live `pg_get_functiondef(public.claim_due_post())`, Phase1B migration, `x-test-post/index.ts` `claimDuePost()`.
+2. **Planner authority absent:** all five live creators — `plan_daily_posts(date)`, `plan_morning_report(date)`, `plan_close_report(date)`, `plan_us_premarket_report(date)`, `plan_weekly_useful_tips(date)` — have no account parameter or account reference in their SQL source. Phase1B only provides an explicit-account `plan_daily_posts_v2`; nothing supplies its trusted account argument. Existing row uniqueness on `(brand_id,schedule_date,post_type,slot_no)` means a legacy planner's unbound row can occupy the same slot before a bound planner runs. A brand's current single X account is **not** proof of intended routing.
+3. **Completion is not atomic with the v2 ledger:** Phase1B `complete_post_x_confirmed_v2()` changes `scheduled_posts` and attempt outcome, but does not perform type-specific completion effects or `post_execution_logs`. Existing `complete_*_post` RPCs do those effects in separate transactions and generally change the row to `succeeded` first. Calling either completion first creates a failure gap or an incompatible status for the other. A new versioned, atomic completion contract for every supported type is required; this is not safe to paper over with two HTTP calls.
+4. **One X ID is not enough for every type:** `tip` uses `postThreadToX`, issuing multiple X create requests, then records only the first ID. A later thread-part failure can leave a partially published thread. The one-attempt/one-`x_post_id` Phase1B ledger cannot represent per-part confirmed/uncertain outcomes or safely replay them. `morning_greeting` performs X media upload and X post inside `runMorningGreetingManualPublish`, with its own `publish_claims` and Storage receipt; the current helper does not expose the durable v2 provider boundary before the first HTTP request. Wrapping only the outer call would not preserve exact outcome and receipt semantics.
+5. **Credential routing remains brand-derived:** `loadBrandContext` fetches the first X social account for a brand using `limit=1`; `loadBrandXTokens` reads the shared Kabumori legacy token store; the AI Lab Vault loader hardcodes its account. None accepts `claim.social_account_id` as the sole authority. Calling the current `postToX` also allows a 401 refresh/re-request after provider start. A new exact-account resolver and a one-request provider adapter are needed before a v2 dispatch can be safe.
+
+## Planner/caller coverage matrix
+
+| Current caller | Post types | Current provenance | Candidate disposition | Ready? |
+| --- | --- | --- | --- | --- |
+| `claim_due_post` → `plan_daily_posts` | tip, interaction, morning_greeting, brand_post/windows | brand/window only; no account | Explicit trusted account input plus legacy/v2 claim partition and uniqueness handling | NO |
+| `plan_morning_report` | morning_report | report settings/brand only | Versioned planner with explicit account input, no brand inference | NO |
+| `plan_close_report` | close_report | report settings/brand only | Same; preserve JPX timing/collision rules | NO |
+| `plan_us_premarket_report` | us_premarket_report | report settings/brand only | Same; preserve DST/collision rules | NO |
+| `plan_weekly_useful_tips` | useful_tip | weekly planner, no account input | Same; preserve eligibility and cadence | NO |
+| Direct/manual scheduled row writers | not evidenced in live `pg_proc` insert audit | no trusted mapping proven | Require explicit account or remain legacy; no silent backfill | NO |
+
+## Per-post-type effect audit
+
+| Type | Existing confirmed-X effects that v2 must retain | Gap |
+| --- | --- | --- |
+| tip | `tips.last_used_at/use_count`, schedule completion, success log | multi-post thread/partial outcomes; atomic ledger completion missing |
+| interaction | topic usage, schedule completion, success log, `interaction_post_metrics` | atomic ledger completion missing |
+| useful_tip | topic usage, schedule completion, verification metadata in success log | atomic ledger completion missing |
+| morning_report | report run status/X ID, schedule completion, source/model/cost success log; shared-report packet path | atomic ledger completion missing |
+| close_report | same close-run/linkage, source/model/cost log; shared-report packet path | atomic ledger completion missing |
+| us_premarket_report | run status/X ID, schedule completion, source/model/cost log | atomic ledger completion missing |
+| morning_greeting | same-day `publish_claims`, generated-image/receipt flow, schedule completion and log | media+tweet two provider calls hidden in helper; dual claim/receipt lifecycle |
+| brand_post | AI Lab fingerprint, schedule completion, success log | live completion RPC hardcodes `ai_salaryman_lab_x`; not a generic claimed-account completion |
+
+Phase1B v2 claim itself also does not write the legacy `started` execution log. Pre-X/uncertain/terminal ledger RPCs do not create the existing `failed` execution log. These are required observability side effects, not optional UI details. Important News uses a separate Function/publish path and was not modified.
+
+## Legacy rows and staged cutover
+
+- Read-only live inventory at the audit: **15 pending, 0 running**: AI Lab `brand_post` 6; Kabumori `close_report` 1, `interaction` 1, `tip` 2, `useful_tip` 4. None was due at the query time. Production lacks `scheduled_posts.social_account_id` and `post_queue_attempts_v2`; all these rows are unbound. No row/backfill was changed.
+- Brand/post type and the fact that there is presently one verified X account per brand do not prove each row's intended account. Explicit row-level scheduler intent or an operator-approved mapping is required. Until then: allow safe **legacy drain** under the unchanged legacy dispatcher, or manually review/cancel with a separately approved plan. Do not auto-bind.
+- Safe future order: (a) review a source migration that partitions old claim to `social_account_id IS NULL` while v2 keeps `IS NOT NULL`, including planner conflict handling; (b) implement exact-account credential resolver; (c) add per-type atomic v2 completion and provider-step ledger contract, especially tip thread and greeting media/receipt; (d) test with fake brands/accounts and concurrent workers; (e) only after separate C2 approval, apply migration, deploy versioned dispatcher gated OFF, drain/dispose legacy rows, activate explicit-account planners and v2 dispatcher atomically. Rollback before any provider request may release only durable pre-X work; after `provider_started`, unknown or confirmed outcomes require reconciliation, never auto-republish.
+
+## Tests, changed files, and safety
+
+- Baseline focused Phase1B static tests **6/6 PASS**; current `x-test-post` plus `_shared/brand` regression **495/495 PASS**, `deno test --no-check --allow-read ...`. Normal `deno test` type-check could not start because this isolated clone lacks the local `npm:@types/node` package; no dependency installation or unrelated package edits were performed. No Phase1C source/test/migration changes were made, so no false new-feature test pass or disposable integration proof is claimed. `git diff --check` checked on the control-only patch before commit.
+- changed_files: `.agent/tasks/CODEX_TASK_2.md`, `.agent/CODEX_REPORT_2.md` only. implementation_commit: **none**; control commit/push/read-back result recorded in the sync addendum when available.
+- Production mutation **0**: migration/DB write/backfill 0, Function deploy 0, Cron/settings/OAuth/Vault 0, X/OpenAI/Push API invocation 0, X posts 0. H1/G1/G2 and `apps/admin/**` unchanged. No secrets or personal row data were printed.
+
 # H2 — explicit-account X queue and durable outcome candidate (2026-09-24)
 
 - task_id: `x-autopost-phase1b-account-bound-queue-schema-and-outcome-ledger-20260924`

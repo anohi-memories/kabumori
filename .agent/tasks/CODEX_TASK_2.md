@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1c-dispatcher-planner-account-bound-cutover-candidate-20260924
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: GPT-5.6 Sol Medium
 - purpose: C2 PASS済みPhase1Bの明示的 social_account_id binding / durable attempt ledger / v2 queue RPC candidateを前提に、X自動投稿のactive planner/dispatcher/credential routingを account-bound に揃える production未適用のsource-only cutover candidateを作る。claim.social_account_id以外から投稿先アカウントを推測しない。
