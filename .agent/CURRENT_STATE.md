@@ -31,9 +31,9 @@
 
 ## Current slot snapshot
 
-- H1: `ready` — `kabumori-release-pr18-privacy-dataflow-eas-light-review-20260924`
+- H1: `done` — `kabumori-release-pr18-privacy-dataflow-eas-light-review-20260924`
 - H2: `ready` — `kabumori-pr19-report-detail-portfolio-privacy-final-review-20260924`
-- G1: `done` — `kabumori-release-foundation-appstore-web-links-eas-audit-20260924`
+- G1: `ready` — `kabumori-release-pr18-merge-postmerge-verify-20260924`
   - PR #18 open (unmerged): apps/kabumori-web public pages (/privacy /terms /support /account-deletion), one-origin in-app links, eas autoIncrement, RELEASE_READINESS.md. 108/0 tests, tsc src 0. Production mutation 0.
   - Audit blockers: Expo template icon/splash; EAS production lacks Supabase env vars; operator values / Netlify / Auth Site URL / SMTP pending.
 - G2: `done` — `kabumori-app-morning-close-report-detail-and-portfolio-impact-20260924`
@@ -46,6 +46,14 @@
 - PR #18 remains open/unmerged.
 - H1 review required for privacy/data-flow factual consistency and release-page accuracy.
 - H1 recommended model: Luna（高）.
+
+## C1 PR #18 result
+
+- H1 review PASS after minimal privacy/data-flow fixes.
+- reviewed PR #18 head: `6f3277639bc19fb1f420cd0e771c1d77f6d23519`
+- 17/17 focused tests PASS; production mutation=0.
+- Vercel rate-limit failure is not a Kabumori Web merge-quality blocker; Kabumori Web uses Netlify.
+- G1 assigned fresh-main merge + post-merge verification.
 
 ## Kabumori release lanes
 
