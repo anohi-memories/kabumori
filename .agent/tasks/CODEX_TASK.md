@@ -3,8 +3,8 @@
 - task_id: kabumori-important-news-caller-auth-production-rollout-20260924
 - owner: codex
 - slot: codex-1
-- status: in_progress
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Luna
 - purpose: mainへmerge済みの Important News caller-auth を、本番Cronを止めずに安全に有効化する。専用secret設定 → exact migration apply → important-news-monitor単独deploy → 自然Cron観測までを順序付きゲートで実施する。
@@ -265,3 +265,20 @@ Required resume sequence:
 7. stop for C1.
 
 Do not regenerate or replace either secret unless a mismatch is proven and a coordinated reset is separately approved.
+
+
+## Report — 2026-09-24 production rollout
+
+- task_id: kabumori-important-news-caller-auth-production-rollout-20260924
+- result: **review_required**; completed within the approved scope; stop for C1.
+- latest_main_source_check: `3e026ee83ec3436920f63561912d29fcc407a570`; caller-auth seven-file source remains identical to reviewed merge `844c77d6911380822c091b9b646df911810808a4`. Local `git fetch origin` failed on DNS; GitHub main refs were read directly.
+- secrets: Function secret presence is based on the user's explicit Dashboard confirmation (Function inventory does not expose names); Vault name present and format predicate valid. No secret value was read or returned.
+- migration: applied only `20260923110440_important_news_monitor_caller_auth.sql`, successful. History row name is `important_news_monitor_caller_auth`, tool-assigned version `20260924024406`; no history repair.
+- Cron postflight: exactly four intended commands have the new Vault-backed header. Removing only the appended expression reproduces every original command MD5; schedules/active flags unchanged; shadow fingerprint unchanged.
+- deploy: only `important-news-monitor`, ACTIVE v66, SHA `8192d004167b01e3a48c55df584ca6393e896db1c752f3bb7a247849c2c0257e`, `verify_jwt=false`. All 26 deployed modules match latest main; other 16 Function metadata records unchanged.
+- auth rejection: one empty unauthenticated POST returned 401 `UNAUTHORIZED`; code rejects before credentials/body/mode. No candidate data.
+- natural Cron: publish-ready 02:50/02:55/03:00/03:05 UTC, generation 02:54, fetch 03:00, judgement 03:07 — all `succeeded`. Through 03:07, 49 observed pg_net responses all HTTP 200; no auth/server/transport errors.
+- production changes: one exact migration plus one Function deploy. No X post, candidate injection, Push, OAuth change, other Function/Cron/migration/config change, or business-logic/auto_publish/cadence change.
+- remaining_issues: C1 review. Function secret was confirmed by user attestation; no plaintext was accessed.
+- next_owner: chatgpt.
+
