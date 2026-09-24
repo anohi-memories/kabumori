@@ -36,12 +36,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: in_progress
+- status: review_required
 - task_id: x-admin-multibrand-selector-phase2-merge-only-20260924
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: K2 PASS済みPR #15をfreshen/rebase→31 tests + tsc/lint/build再確認→意味差分なしならmerge。Netlify deploy/DB policy変更なし。production mutation 0。Opus 5.5推奨。着手済み（freshen/検証中）。
+- note: PR #15をb278c04へfreshen（range-diff同一・apps/admin差分0）、31/31・tsc/lint/build PASS。Vercel checkがrate limit(24h)でfailureのため先例どおりmerge保留・bypassなし。production mutation 0。K2待ち。
 
 ## Control codes
 
