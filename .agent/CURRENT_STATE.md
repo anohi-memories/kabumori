@@ -28,12 +28,11 @@
   - Recommended model: GPT-6 Sol Medium。
 
 
-- Claude slot 1: `done` — `kabumori-mobile-release-blockers-phase1-merge-only-20260924`
-  - K1 PASS. PR #13 merged as `f7ace17336c29edec49bb8daa0f95116a30d42fb`.
-  - 25 reviewed files byte-identical; merged-main regression 94/0 PASS.
-  - Production mutation 0. `ensure_my_profile` migration unapplied; `account-delete` undeployed; Auth redirect allowlist unchanged.
-  - Do not ship a mobile build from this main before applying `20260924100000_ensure_my_profile.sql`.
-  - Next production phase requires separate approval.
+- Claude slot 1: `ready` — `kabumori-mobile-release-blockers-phase1-production-rollout-20260924`
+  - User-approved production rollout after K1 PASS.
+  - Sequence: exact `ensure_my_profile` migration → `account-delete`-only deploy → recovery redirect allowlist → postflight/readiness verification.
+  - No real user deletion/reset email, no TestFlight/App Store action, no privacy/terms/support URL guessing.
+  - Recommended model: Opus 5.5.
 
 - Claude slot 2: `ready` — `x-admin-multibrand-selector-query-parameterization-phase2-20260924`
   - Phase1 admin foundationの次段階。server-sideで権限確認済みselected brandを使うbrand selector UIと4 query modulesのbrand_id parameterization。
