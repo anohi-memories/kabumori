@@ -3,7 +3,7 @@
 - task_id: kabumori-mobile-release-blockers-phase1-merge-only-20260924
 - owner: claude
 - slot: claude-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: high
 - recommended_model: Opus 5.5
@@ -158,3 +158,31 @@ Then:
 ### Ordering note for step 1
 
 The app on main now calls `ensure_my_profile` on every accepted session. A build shipped before the migration is applied will fail profile preparation and show the recovery screen. So in production, **apply the migration before shipping any build from this main.**
+
+
+## Final K1 review — 2026-09-24
+
+**PASS**
+
+Verified:
+- PR #13 merged normally after explicit user approval; no safety/branch-protection bypass.
+- Reviewed head `8b78ecc22524b830c5e440e8f0b995fbb9a6f014` merged as `f7ace17336c29edec49bb8daa0f95116a30d42fb`.
+- All 25 reviewed implementation files read back byte-identical on merged main.
+- Merged-main regression remained **94 / 0**.
+- Production mutation = **0**.
+- `20260924100000_ensure_my_profile.sql` remains unapplied; `public.ensure_my_profile` is absent in production.
+- `account-delete` remains undeployed.
+- No Auth redirect allowlist/dashboard change, real recovery email, real account deletion, TestFlight/App Store action, or Vercel/Netlify production change occurred.
+- No overlap with Important News caller-auth, x-test-post/social-mobile, or market-report workstreams.
+
+Release-order requirement:
+- Do **not** ship a mobile build from this main before the `ensure_my_profile` migration is applied, because the app now calls that RPC on accepted sessions.
+
+Next production phase requires separate explicit approval:
+1. apply only `20260924100000_ensure_my_profile.sql`;
+2. deploy only `account-delete`;
+3. configure the recovery redirect allowlist;
+4. set real privacy/terms/support URLs;
+5. run one real recovery and one real deletion against a disposable test account.
+
+Claude slot 1 is complete and returns to `done`.
