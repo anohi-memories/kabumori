@@ -30,6 +30,10 @@
 - C2 must review the candidate. A separate approved cutover must bind active planners and dispatcher to the same explicit account, route credentials from the claim's account ID, preserve each post type's domain completion side effects, reconcile legacy pending rows only with direct provenance, and verify history/admin visibility. **Do not apply this migration alone and do not activate v2 claim under the old dispatcher.** No implicit brand→account mapping or `limit=1` fallback is permitted.
 - Production migration apply **0**, production DDL/DML/backfill **0**, Function deploy **0**, Cron/settings/OAuth/Vault/secrets changes **0**, X/OpenAI/Push API calls and posts **0**. `apps/admin/**`, H1/G1/G2, and formal checkout uncommitted files unchanged. No personal rows or secrets were printed.
 
+## Control sync
+
+- Fresh `origin/main` changed during H2 only in H1/G1/G2 control files; the isolated source/control commits rebased cleanly with no same-file collision. Pre-push fresh-check confirmed `origin/main` was ancestor and the exact seven H2 files were the only delta. Implementation `e3cf07a` and control `8ffb0174aca90f607fd9d16f54ccc56b250f6f12` pushed successfully to `origin/main` (remote HEAD `8ffb0174aca90f607fd9d16f54ccc56b250f6f12`). Post-push fresh fetch read the H2 implementation commit as an ancestor and the remote TASK as `review_required` / `chatgpt`; the remote REPORT headed this Phase1b task. This addendum records only that verification; production changes remain 0.
+
 # H2 — X autopost Phase 1 queue foundation stopped at account/outcome boundary (2026-09-24)
 
 - task_id: `x-autopost-phase1-common-queue-idempotency-foundation-20260924`
