@@ -36,12 +36,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - task_id: x-admin-multibrand-selector-query-parameterization-phase2-20260924
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: brand selector + server-authorized selected-brand boundary + 4 admin query modulesのbrand parameterization。production mutation 0。x-test-post/queue系には触れない。Opus 5.5推奨。
+- note: Phase2着手。selected-brand authority helper・header selector・4 query moduleのparameterizationを実装中。production mutation 0。
 
 ## Control codes
 
