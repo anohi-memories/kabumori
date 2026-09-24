@@ -33,14 +33,21 @@
 
 - H1: `done` — `kabumori-mobile-recovery-pr17-final-auth-security-review-20260924`
 - H2: `idle` / task_id `none`
-- G1: `done` — `kabumori-mobile-recovery-pr17-merge-and-postmerge-verify-20260924`
+- G1: `ready` — `kabumori-release-foundation-appstore-web-links-eas-audit-20260924`
   - Final K1 PASS. PR #17 merged at reviewed head `b3798aa` → main `7ad3539`; post-merge verification PASS; backend mutation 0.
 - G2: `ready` — `kabumori-app-morning-close-report-detail-and-portfolio-impact-20260924`
 - G3: `ready` — `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`
 - G4: `ready` — `x-admin-netlify-deploy-preview-pipeline-20260924`
 
+## Kabumori release lanes
+
+- G1: release-readiness implementation (App Store/EAS/public release Web/Auth release blockers).
+- G2: app content/feature depth (currently morning/closing reports + portfolio impact).
+- G1/G2 may run in parallel only when file/API/Auth/DB boundaries do not overlap.
+
 ## Parallel safety
 
+- G1 owns App Store release foundation/public legal-support Web/native release links/EAS audit.
 - G2 owns Kabumori app morning/closing report detail + portfolio-impact implementation.
 - G3 owns X queue/planner SQL/RPC/x-test-post Phase1D.
 - G4 owns apps/admin Netlify Preview configuration only.
