@@ -14,11 +14,14 @@
 
 ## Active workstreams
 
-- Codex slot 1: `review_required` — `kabumori-important-news-caller-auth-production-rollout-20260924`
-  - Exact approved caller-auth migration applied; only `important-news-monitor` deployed (ACTIVE v66, `verify_jwt=false`).
-  - Four Cron jobs postflight preserved schedules/active/body/URL; shadow and all other Functions unchanged.
-  - All four natural Cron paths succeeded; unauthorized empty request rejected 401. Secrets never exposed. See latest `.agent/CODEX_REPORT.md`.
-  - Stop for C1.
+- Codex slot 1: `ready` — `x-autopost-phase1c-dispatcher-planner-account-bound-cutover-candidate-20260924`
+  - Phase1B C2 PASS済みのaccount-bound queue foundationを、active planner/dispatcher/credential routingへつなぐsource-only cutover candidate。
+  - claim.social_account_idのみを投稿先authorityとして使用し、brand_id単独推測・LIMIT 1 fallbackは禁止。
+  - durable attempt/outcome lifecycleをdispatcherへ統合し、uncertain/confirmed-Xの自動再投稿を禁止。
+  - planner coverage、post-type side effects、legacy pending-row disposition、coexistence/cutover順序を証明する。
+  - production mutation 0。migration/deploy/Cron/OAuth/Vault/X API callは禁止。
+  - Recommended model: GPT-5.6 Sol Medium。
+
 - Codex slot 2: `done` — `x-autopost-phase1b-account-bound-queue-schema-and-outcome-ledger-20260924`
   - C2 PASS。source-only account-bound queue foundation candidate承認。
   - explicit nullable social_account_id + DB brand/account/platform integrity、durable attempt/outcome ledger、versioned service-role-only v2 RPC候補を実装。
@@ -46,7 +49,7 @@
 
 ## Parallel safety
 
-- H1 completed the exact authorized Important News caller-auth production rollout; awaiting C1.
+- Codex slot1 Important News caller-auth rollout is C1 PASS/done; slot1 is reassigned to the source-only X autopost Phase1C cutover candidate.
 - G1 owns consumer mobile Auth/account/settings/legal source scope.
 - G2 is intentionally free for a new non-conflicting workstream.
 - H1 and G1 are intentionally separated and may run in parallel if fresh-origin checks confirm no file/DB-object overlap.
