@@ -3,8 +3,8 @@
 - task_id: kabumori-important-news-caller-auth-production-rollout-20260924
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: in_progress
+- next_owner: user
 - priority: critical
 - recommended_model: Luna
 - purpose: mainへmerge済みの Important News caller-auth を、本番Cronを止めずに安全に有効化する。専用secret設定 → exact migration apply → important-news-monitor単独deploy → 自然Cron観測までを順序付きゲートで実施する。
@@ -216,3 +216,34 @@ Then:
 - STOP for C1
 
 **推奨モデル：Lunaで開始。production shape/secret/deployの判断が曖昧になった場合のみGPT-6 Sol Mediumへ上げる。**
+
+
+## H1 stop — manual secret setup required (2026-09-24)
+
+Read-only production preflight completed and matched the reviewed assumptions:
+
+- `important-news-monitor`: ACTIVE v64 / `verify_jwt=false`
+- caller-auth migration: not applied
+- Vault `important_news_monitor_cron_secret`: not configured
+- four target Cron jobs: existing schedules/command fingerprints unchanged
+- `important-news-shadow`: unchanged
+- candidate auth header/Vault lookup: not present in production
+- production mutation: **0**
+
+The automated run stopped before Gate A because no safe non-echoing secret-write path was available through the current tooling.
+
+### Manual user action required
+
+Generate one cryptographically strong random 32-byte value encoded as unpadded base64url (43 characters), then set the **same value** in Supabase Dashboard:
+
+1. Edge Functions / Secrets:
+   - name: `IMPORTANT_NEWS_CRON_SECRET`
+2. Vault:
+   - name: `important_news_monitor_cron_secret`
+
+Do not paste the secret into chat, GitHub, terminal history, SQL, screenshots, or reports.
+
+After both are configured, the user should report only:
+`両方設定済み`
+
+Then Codex slot 1 may resume this same task from Gate A verification. Do not regenerate/replace one side independently unless both are coordinated to the same value.
