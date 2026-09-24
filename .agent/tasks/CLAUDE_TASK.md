@@ -3,8 +3,8 @@
 - task_id: x-admin-netlify-thin-control-plane-phase1-20260924
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Opus 5.5
 - purpose: X自動投稿本番rollout(H2)と競合しない別系統として、apps/adminをNetlify Free向けのthin management UIへ安全に近づける設計・source candidateを進める。Supabaseをexecution/control planeの正本とし、Netlifyへsecretや重いbackground処理を持たせない。
@@ -171,3 +171,24 @@ When complete:
 
 - ブランチ`admin-netlify-thin-control-plane-phase1-20260924`、コミット`3505269`をpush済み（mainへは未マージ、レビュー待ち）。
 - `.agent/tasks/CLAUDE_TASK.md`本Reportをorigin/mainへpushする。
+
+
+## Final K2 — 2026-09-24
+
+PASS.
+
+Review findings:
+- Scope stayed within `apps/admin/**`; no x-test-post, Phase0 migrations, Cron, OAuth/Vault, Important News, consumer-mobile, Netlify/Vercel production configuration, or production DB object was changed.
+- Source candidate is intentionally non-wired: existing Kabumori-only query filters remain unchanged, so this phase does not weaken the current brand-isolation invariant.
+- `resolveAdminBrandAccess` cleanly separates global `admin_users` authority from scoped `brand_memberships` owner/admin authority; membership read errors fail closed to zero scoped brands and no client-provided brand/user selector is trusted by this module.
+- Existing admin source still contains no service-role/X/OpenAI/OAuth secret dependency; the Netlify candidate uses only public Supabase envs.
+- Tests/build evidence accepted: 12/12 node tests PASS, tsc PASS, lint PASS, Next build PASS, production mutation 0.
+- Independent review of current Netlify official docs confirms modern Next.js support is via OpenNext for Next.js 13.5+ and the adapter is tested with every stable Next.js release; App Router, SSR, RSC, Server Actions, Middleware, Turbopack and revalidation are supported. Netlify currently lists Node.js 24 as the default build version, so `NODE_VERSION=24` is compatible with current docs.
+- The candidate branch is currently 17 commits behind main. This is not a correctness failure because its changed files are isolated to `apps/admin/**`, but it MUST be freshly rebased/fresh-checked before any merge. Do not merge the stale head directly without conflict/drift review.
+- No Netlify site creation/deploy is authorized by this K2.
+
+Next recommendation:
+1. fresh-rebase the admin branch onto current main and re-run the same tests;
+2. merge only after no `apps/admin/**` drift/conflict is found;
+3. then create a separate G2 task for brand-selector wiring + parameterizing the four Kabumori-hardcoded admin query modules while preserving server-side `canAccessBrand` checks;
+4. Netlify preview/site creation remains a later explicit production/external-action gate.
