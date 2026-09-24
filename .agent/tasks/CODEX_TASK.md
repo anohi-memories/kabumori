@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1f-ledger-atomic-completion-final-review-20260924
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: K3 PASS済みPhase1Fのprovider outcome state machine、typed atomic completion、provider-step ledger、ACL hardening、execution-log semanticsを独立レビューする。production apply/deploy/X API callは行わない。

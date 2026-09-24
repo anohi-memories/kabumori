@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: x-autopost-phase1f-ledger-atomic-completion-final-review-20260924
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: assigned; Phase1F ledger/atomic-completion/ACL final review
+- allocation: H1 source-only final review complete; PR #25 and report await C1
 
 ## Codex H2
 - owner: codex

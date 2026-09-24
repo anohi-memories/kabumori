@@ -170,3 +170,44 @@ Checks at the fixed source: focused Phase1E **31/31**; Phase1B+1D focused static
 ## Next recommendation
 
 C1 review PR #22 and this report. The Phase1E candidate may remain in source after merge, but **do not activate/deploy**. First complete Phase1B/1D atomic rollout preflight and live-definition/ACL read-back, per-account Vault credential preparation, provider-start durability wiring, post-type completion/outcome contracts, and dedicated production authorization. `x_rejected` must remain uncertain in any interim mapping.
+
+---
+
+# H1 — Phase1F ledger / atomic completion final review (2026-09-24)
+
+- task_id: `x-autopost-phase1f-ledger-atomic-completion-final-review-20260924`
+- status: `review_required`; next_owner: `chatgpt`
+- verdict: **PASS-WITH-FIX for source candidate**; [PR #25](https://github.com/anohi-memories/kabumori/pull/25) awaits C1. **Production activation: NO.**
+- reviewed implementation: `0b752925b28b1b922b94a4cb7629ee942f82120f`; fix commit: `b3740cc7c39010f02ad3505721a5b37d2e707dba` on `codex/h1-phase1f-ledger-review-20260924`.
+- fresh `origin/main`: `0d1aec0105de7f7bccb8bad56b2a44c2a42b6f51` at startup; `a359f0808ed8126ae4de8b694c9a4ec8db3f1d15` at report preparation. Intervening main changes did not touch Phase1F source or the H1 task.
+- source push: complete; PR #25 open. Deploy, production migration/DDL/DML, Cron/OAuth/Vault/token change, and X API call/post: **0**. The dirty `/Users/yuya/Developer/kabumori` checkout was not changed; work used independent throwaway worktrees.
+
+## Findings and minimal fixes
+
+- **P1, fixed — direct schedule-table DML bypass.** Default `service_role` table grants left `scheduled_posts` writable. Phase1D's `kabumori.x_queue_domain` is a caller-settable custom setting, not an ACL, so a privileged API client could mutate a bound post's lifecycle without the attempt ledger. Phase1F now revokes API-role direct INSERT/UPDATE/DELETE/TRUNCATE on `scheduled_posts`. The disposable proof shows direct UPDATE denied even after setting the domain marker, while owner-executed bound and legacy unbound RPCs still work. Production direct-write consumers and live grants need read-back before any apply.
+- **P2, fixed — provider-step chain integrity.** Step 1 could previously be a `create_reply` naming an arbitrary parent. After a confirmed step, an unrelated second root post or a reply to a media ID could be recorded. The RPC now requires first create/media and kind order `media_upload → create_post` or `create_post → create_reply → …`, preserving exact reply-parent matching.
+- **P2, fixed — late step outcome after terminal attempt.** `finish_provider_step_v2` accepted an unfinished step after the parent attempt became terminal. It now locks the attempt before the step and requires active `provider_started` for a new outcome. Exact replay of an already-finished step remains read-only/idempotent.
+- No remaining confirmed P1/P2 source defect within this Phase1F review scope. `service_role` is still a trusted privileged runtime; this contract is not confinement against arbitrary SQL with broader table/Vault privileges.
+
+## Assessment
+
+- **State machine:** The Phase1B/1D claim-domain partition and Phase1F outcome checks keep pre-X retry/terminal transitions before provider start; `x_rejected`, `x_outcome_uncertain`, `x_confirmed_db_incomplete`, and `completed` are non-reclaimable after provider start. Claim token, attempt, post/account/brand/type, provider phase, and running status are checked under row locks. Duplicate completion returns `already_completed`, with one set of side effects; a local concurrent two-session race proves this. Error-injection proof shows mid-completion failure rolls back status, attempt and side effects.
+- **Typed completion fidelity:** Interaction, useful_tip, morning_report, close_report, and us_premarket_report functions were compared with the legacy completion source. Each moves the post and attempt together, writes the success execution log only after the type-specific effects, and updates the corresponding topic/tip/report-run linkage in one PostgreSQL function transaction. No generic success path remains executable by service_role.
+- **Disabled types:** tip, morning_greeting and brand_post have no v2 typed completion and stay disabled in the outcome mapping. The provider-step ledger is foundation only; it does not enable multi-request posting. No live dispatcher wiring was changed.
+- **Observability:** A claim records one started log; terminal non-success outcomes record failed logs with fixed error codes, without turning the attempt retryable. The completion race produced one success log. No secret/token/response body was added to logs or reports.
+- **ACL:** Public functions use `SECURITY DEFINER` and fixed empty search path, with qualified objects. API EXECUTE on internal helpers/triggers is closed; public typed RPCs are service_role-only. service_role can SELECT, not directly write, the attempt/turn/step ledgers or `scheduled_posts`. This was checked with actual disposable role grants, not only text matching.
+- **Migration:** Phase1F is deliberately non-idempotent and depends on ordered Phase1B → 1D → 1E → 1F application. It uses an explicit transaction plus a preflight assertion of the old attempt constraint; a failed statement rolls back the transaction in the disposable proof. The migration must be reviewed against the chosen apply tool's transaction behavior and live definitions/ACLs. Retiring generic completion is safe only while the live dispatcher has not switched to v2; source confirms it remains unwired. No production read-back/apply was performed.
+
+## Changed files and checks
+
+- PR #25 source files: `supabase/migrations/20260924180000_x_autopost_phase1f_atomic_completion.sql`, `supabase/tests/x_autopost_phase1f_behavior.sql`, `supabase/functions/x-test-post/atomic_completion_migration_test.ts`, `supabase/tests/x_autopost_phase1f_atomic_completion.md`.
+- Control/report sync: `.agent/tasks/CODEX_TASK.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, `.agent/CODEX_REPORT.md`.
+- Focused Phase1B/1D/1E/1F and provider/seam tests: **55 passed, 0 failed**.
+- Full `x-test-post`, `_shared`, `important-news-monitor`: **980 passed, 0 failed** (respective suites 429/120/431).
+- Disposable local PostgreSQL: Phase1D behavior/concurrency/cleanup **PASS**; Phase1E behavior/cleanup **PASS**; Phase1F behavior/duplicate-completion race/cleanup **PASS**. Fake data only; cluster stopped and removed.
+- `deno check --no-config` and `deno lint --no-config` for the changed TS test, `bash -n` on all three runners, and `git diff --check`: **PASS**.
+- PR #25 has a Vercel `build-rate-limit` failure at report time; no check bypass, merge, or production action was attempted.
+
+## Remaining blockers / recommendation
+
+C1 should review PR #25 and this report. The source candidate can remain for further work, but **do not apply or activate in production**. Before any separately approved rollout: read back live constraints, function definitions, owners, grants and direct-write consumers; agree on an ordered atomic migration/apply and rollback plan; complete exact-account Vault readiness, provider-start durability wiring, typed dispatcher use, multi-request completion for tip/greeting, and the AI Lab brand_post path. Keep disabled types disabled until those gates are independently reviewed.
