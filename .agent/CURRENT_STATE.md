@@ -33,9 +33,8 @@
 
 - H1: `done` — `kabumori-release-pr18-privacy-dataflow-eas-light-review-20260924`
 - H2: `ready` — `kabumori-pr19-report-detail-portfolio-privacy-final-review-20260924`
-- G1: `ready` — `kabumori-release-pr18-merge-postmerge-verify-20260924`
-  - PR #18 open (unmerged): apps/kabumori-web public pages (/privacy /terms /support /account-deletion), one-origin in-app links, eas autoIncrement, RELEASE_READINESS.md. 108/0 tests, tsc src 0. Production mutation 0.
-  - Audit blockers: Expo template icon/splash; EAS production lacks Supabase env vars; operator values / Netlify / Auth Site URL / SMTP pending.
+- G1: `review_required` — `kabumori-release-pr18-merge-postmerge-verify-20260924`
+  - PR #18 merged at reviewed head `6f32776` -> main `a41b306`. Files byte-identical; 108/0 tests, tsc src 0, web export 10 routes, public-site preview+production dry-run builds PASS. Vercel ignored per Netlify hosting policy. Mutation 0.
 - G2: `done` — `kabumori-app-morning-close-report-detail-and-portfolio-impact-20260924`
 - G3: `ready` — `x-autopost-phase1e-exact-account-credential-resolver-20260924`
 - G4: `ready` — `x-admin-netlify-deploy-preview-pipeline-20260924`
