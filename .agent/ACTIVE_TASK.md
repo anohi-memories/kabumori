@@ -33,13 +33,13 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: kabumori-pr23-close-validator-final-review-20260924
+- status: ready
+- task_id: kabumori-pr26-unknown-cause-prefix-final-review-20260925
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: closed; Final C2 PASS-WITH-FIX
+- allocation: assigned; PR #26 unknown-cause prefix final validator review
 
 ## Claude G1
 - owner: claude
@@ -54,12 +54,12 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: done
 - task_id: kabumori-close-unknown-cause-prefix-fix-20260924
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: assigned; narrow unknown-cause prefix validator fix, source-only
+- allocation: closed; Final K2 PASS, PR #26 awaiting H2 review
 
 ## Claude G3
 - owner: claude
