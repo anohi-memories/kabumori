@@ -105,6 +105,11 @@ test("the privacy page names every processor the app actually sends data to", ()
   assert.match(privacy, /最長30日間/);
   assert.match(privacy, /認証基盤が発行するユーザーID/);
   assert.match(privacy, /バックアップやセキュリティログ/);
+  // Regression for the 2026-09-24 dataflow re-audit: personalized-reports' packet also sends
+  // portfolio-level totals and sector-weight composition to OpenAI (buildPacket's `portfolio`
+  // block: sector_weights, relative_to_topix), which the page did not previously name.
+  assert.match(privacy, /業種別の構成比率/);
+  assert.match(privacy, /TOPIXとの比較/);
 });
 
 test("the account deletion page describes the in-app path that exists", () => {
