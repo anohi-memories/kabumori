@@ -33,8 +33,9 @@
 
 - H1: `ready` — `x-autopost-phase1f-ledger-atomic-completion-final-review-20260924`
 - H2: `ready` — `kabumori-pr23-close-validator-final-review-20260924`
-- G1: `ready` — `kabumori-pr24-privacy-merge-postmerge-verify-20260924`
-  - PASS-WITH-FIX. PR #24 open (unmerged): privacy.html now names portfolio totals / sector-weight composition / TOPIX-relative comparison sent to OpenAI (buildPacket's portfolio block), which the page did not previously state. Everything else re-verified accurate (no email/userid/memo/target-price/push-token sent; store:false on both calls; no new tracking processor). 122/0 tests. No personalized-reports source touched. Mutation 0.
+- G1: `review_required` — `kabumori-pr24-privacy-merge-postmerge-verify-20260924`
+  - PR #24 merged at reviewed head `46515c5` -> main `ff4c43c`. Files byte-identical; 122/0 tests, production web build shows the new disclosure text. personalized-reports/account-deletion.html untouched. Mutation 0.
+  - Privacy dataflow gap from PR #21 review is now closed on main. Remaining blockers: icon/splash/overlay artwork, EAS production env, Netlify publish, Auth Site URL/SMTP, App Store Connect.
 - G2: `done` — `kabumori-personalized-reports-prod-deploy-dryrun-20260924`
 - G3: `done` — `x-autopost-phase1f-atomic-completion-provider-outcome-model-20260924`
 - G4: `done` — `x-admin-netlify-deploy-preview-pipeline-20260924`
