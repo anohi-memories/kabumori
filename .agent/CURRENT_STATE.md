@@ -7,48 +7,34 @@
 - branch: main
 - orchestration:
   - 共通ルール: `.agent/ORCHESTRATION.md`
-  - Codex slot1開始=`H1`、完了確認=`C1`
-  - Codex slot2開始=`H2`、完了確認=`C2`
-  - Claude slot1開始=`G1`、完了確認=`K1`
-  - Claude slot2開始=`G2`、完了確認=`K2`
+  - Codex: H1/H2開始、C1/C2完了確認
+  - Claude: G1〜G4開始、K1〜K4完了確認
+  - F: 全6枠統括
 
-## User routing preference
+## Operating model
 
-- H2 / G2 は **X自動投稿アプリ専用**。
-- H1 / G1 は **かぶモリ本体側**を優先。
-- かぶモリ本体内のX投稿基盤・queue・dispatcher改善は、ユーザーの明示指定どおりH1/G1側で扱う。
-- ユーザーが明示的に別スロットを指定した場合はその指示を優先する。
-- 同一ファイル / migration / RPC / Edge Function / workflow / production設定の競合禁止ルールは常に優先する。
+- Claude Code（くろちゃん）が通常の実装主担当。G1〜G4を使用する。
+- Codex（こでさん）は通常、レビュー・バグ修正・検証担当。H1/H2を使用する。
+- Claudeが5時間利用制限に到達した場合だけ、ChatGPT（ちゃ）がCodexへ臨時実装TASKを割り当てられる。
+- ChatGPTは実装の節目と変更リスクを見てレビュー時期を判断し、未割当のH枠へ具体的なレビューTASKを作る。
+- 以前のH1/G1=かぶモリ本体、H2/G2=X自動投稿アプリという固定ルーティングは新しい役割ベース運用では使用しない。ユーザーが個別TASKについて明示指定した場合はその指定を優先する。
 
-## Active workstreams
+## Current slot snapshot
 
-- Codex slot 1: `ready` — `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`
-  - かぶモリ本体側のX投稿基盤 prerequisite。
-  - legacy claimはunbound rowsのみ、v2 claimはbound rowsのみを扱うhard partition candidateを作る。
-  - plannerのsocial_account_id authorityを分類し、trusted contextがある経路だけ明示bindingする。
-  - retry/stale/reconcileでもclaim domainが混ざらないことをdisposable PostgreSQLで証明する。
-  - production mutation 0。migration/deploy/Cron/OAuth/Vault/X API callは禁止。
-  - Recommended model: GPT-5.6 Sol Medium。
+各TASKを正本として確認した現在地:
 
-- Codex slot 2: `idle`
-  - **X自動投稿アプリ専用**として空けている。
-  - かぶモリ本体のタスクは、ユーザー明示指定なしにここへ入れない。
+- H1: `ready` — `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`
+- H2: `idle` / task_id `none` — 未割当
+- G1: `review_required` — `kabumori-mobile-auth-real-e2e-disposable-account-20260924`
+- G2: `review_required` — `x-admin-multibrand-selector-phase2-merge-only-20260924`
+- G3: `idle` / task_id `none` — 未割当
+- G4: `idle` / task_id `none` — 未割当
 
-- Claude slot 1: `review_required` — `kabumori-mobile-auth-real-e2e-disposable-account-20260924`
-  - Real iPhone dev client against production. Gate A PASS (signup + confirmation) and Gate B PASS (first login, exactly one profile via RPC, session restore, logout/re-login).
-  - Gate C FAIL: the recovery link reaches the app (the redirect allowlist works), but expo-router shows Unmatched Route for `kabumori://reset-password`. Source fix candidate: `+native-intent` redirectSystemPath. No production patch.
-  - Gate D/E not run. The disposable test account is kept for re-running C→D after the fix. auth.users 3 / profiles 2 (+1 test each); no existing user changed.
-  - Also found: the confirmation redirect lands on an unreachable Site URL (Auth config, needs approval).
-
-- Claude slot 2: `ready` — `x-admin-multibrand-selector-phase2-merge-only-20260924`
-  - X複数ブランド管理側。
-  - K2 PASS済みPR #15を最新mainへfreshen/rebaseし、レビュー済みcandidateとの意味的同一性確認後にmergeする。
-  - Netlify deploy/DB policy変更は禁止。production mutation 0。
+statusだけで空きと判断しない。task_id、TASK本文、Report、next_ownerを確認し、既存割当を保護する。
 
 ## Parallel safety
 
-- H1/G1はかぶモリ本体側、H2/G2はX自動投稿アプリ専用。
-- 同じファイル、DB migration、RPC、Edge Function、workflow、production設定を複数slotで同時変更しない。
+- 同じファイル、DB migration、RPC、Edge Function、workflow、production設定、API境界、認証・権限ロジックを複数枠で同時変更しない。
 - push前にfresh `origin/main`確認。
 - 既存未コミット変更は他workstream所有として触らない。
 - 競合可能性を安全に否定できない場合は開始せず、具体的な競合箇所を報告する。
@@ -63,6 +49,6 @@
 
 ## 更新ルール
 
-- 各専用TASKが正本。正本と索引が矛盾する場合はTASKを優先する。
+- 各専用TASK/Reportが正本。索引やCURRENT_STATEと矛盾する場合はTASK/Reportを優先する。
 - 作業完了時に確認できた現在値だけを反映する。
 - 推測は事実として書かず、秘密情報・認証情報・個人情報は書かない。
