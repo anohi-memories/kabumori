@@ -4,7 +4,7 @@
 - owner: codex
 - slot: codex-1
 - status: in_progress
-- next_owner: user
+- next_owner: codex
 - priority: critical
 - recommended_model: Luna
 - purpose: mainへmerge済みの Important News caller-auth を、本番Cronを止めずに安全に有効化する。専用secret設定 → exact migration apply → important-news-monitor単独deploy → 自然Cron観測までを順序付きゲートで実施する。
@@ -247,3 +247,21 @@ After both are configured, the user should report only:
 `両方設定済み`
 
 Then Codex slot 1 may resume this same task from Gate A verification. Do not regenerate/replace one side independently unless both are coordinated to the same value.
+
+
+## User confirmation — manual secret setup complete (2026-09-24)
+
+The user explicitly confirmed: `両方設定済み`.
+
+Treat this as authorization to resume the same H1 task from Gate A verification onward.
+
+Required resume sequence:
+1. read-only verify the Function secret and Vault entry are both configured, without exposing either value;
+2. verify the Vault entry shape/metadata safely;
+3. apply only `20260923110440_important_news_monitor_caller_auth.sql`;
+4. run the required four-Cron postflight;
+5. deploy only `important-news-monitor` with `verify_jwt=false`;
+6. observe natural scheduled executions and verify unauthenticated fail-closed behavior safely;
+7. stop for C1.
+
+Do not regenerate or replace either secret unless a mismatch is proven and a coordinated reset is separately approved.
