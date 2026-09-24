@@ -14,13 +14,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: idle
-- task_id: none
+- status: ready
+- task_id: kabumori-mobile-recovery-pr17-final-auth-security-review-20260924
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: unassigned
+- allocation: assigned; final Auth/security review for PR #17
 
 ## Codex H2
 - owner: codex
@@ -36,12 +36,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: review_required
+- status: done
 - task_id: kabumori-mobile-recovery-deeplink-routing-fix-and-e2e-resume-20260924
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: assigned
+- allocation: closed; Final K1 PASS
 
 ## Claude G2
 - owner: claude
