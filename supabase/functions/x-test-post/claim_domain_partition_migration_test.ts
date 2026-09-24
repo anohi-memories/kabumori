@@ -44,6 +44,9 @@ test("trigger makes bindings immutable and bound lifecycle v2-only", () => {
   const guard = definition("scheduled_posts_claim_domain_guard");
   assert.match(guard, /raise exception 'CLAIM_DOMAIN_IMMUTABLE'/u);
   assert.match(guard, /raise exception 'BOUND_ROW_REQUIRES_V2_PATH'/u);
+  assert.match(guard, /if not v_in_v2 then raise exception 'BOUND_ROW_REQUIRES_V2_PATH'; end if;/u);
+  assert.match(guard, /raise exception 'BOUND_ROW_INVALID_INITIAL_STATE'/u);
+  assert.match(guard, /raise exception 'BOUND_ROW_ROUTING_IMMUTABLE'/u);
   assert.match(guard, /raise exception 'UNBOUND_ROW_IN_V2_DOMAIN'/u);
   assert.match(guard, /raise exception 'LEGACY_UNPARTITIONED_CLAIM_ACTIVE'/u);
   assert.match(sql, /before insert or update on public\.scheduled_posts\s+for each row execute function public\.scheduled_posts_claim_domain_guard\(\);/u);

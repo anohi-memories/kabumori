@@ -40,8 +40,15 @@ begin
   if tg_op = 'INSERT' then
     if new.social_account_id is null then
       if v_in_v2 then raise exception 'UNBOUND_ROW_IN_V2_DOMAIN'; end if;
-    elsif not public.x_queue_legacy_claim_retired_v2() then
-      raise exception 'LEGACY_UNPARTITIONED_CLAIM_ACTIVE';
+    else
+      if not public.x_queue_legacy_claim_retired_v2() then
+        raise exception 'LEGACY_UNPARTITIONED_CLAIM_ACTIVE';
+      end if;
+      if not v_in_v2 then raise exception 'BOUND_ROW_REQUIRES_V2_PATH'; end if;
+      if new.status <> 'pending' or new.attempt_count <> 0
+         or new.started_at is not null or new.finished_at is not null then
+        raise exception 'BOUND_ROW_INVALID_INITIAL_STATE';
+      end if;
     end if;
     return new;
   end if;
@@ -53,6 +60,13 @@ begin
   if new.social_account_id is null then
     if v_in_v2 then raise exception 'UNBOUND_ROW_IN_V2_DOMAIN'; end if;
     return new;
+  end if;
+
+  -- Routing identity is fixed even when a bound row's lifecycle tuple is
+  -- unchanged. Ordinary non-routing updates to historical rows remain allowed.
+  if (new.brand_id, new.schedule_date, new.post_type, new.slot_no)
+     is distinct from (old.brand_id, old.schedule_date, old.post_type, old.slot_no) then
+    raise exception 'BOUND_ROW_ROUTING_IMMUTABLE';
   end if;
 
   if (new.status, new.attempt_count, new.scheduled_for, new.started_at, new.finished_at)

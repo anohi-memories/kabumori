@@ -114,6 +114,17 @@ revoke execute on function public.claim_due_post() from service_role;
 set role service_role;
 do $$ begin
   if not public.x_queue_legacy_claim_retired_v2() then raise exception 'gate should be open'; end if;
+  perform pg_temp.expect_error($q$insert into public.scheduled_posts
+    (brand_id, social_account_id, schedule_date, post_type, slot_no, scheduled_for)
+    values ('brand_a','acct_a',current_date,'tip',11,now())$q$, 'BOUND_ROW_REQUIRES_V2_PATH');
+  perform pg_temp.expect_error($q$insert into public.scheduled_posts
+    (brand_id, social_account_id, schedule_date, post_type, slot_no, scheduled_for, status)
+    values ('brand_a','acct_a',current_date,'tip',12,now(),'running')$q$, 'BOUND_ROW_REQUIRES_V2_PATH');
+  perform set_config('kabumori.x_queue_domain', 'v2', true);
+  perform pg_temp.expect_error($q$insert into public.scheduled_posts
+    (brand_id, social_account_id, schedule_date, post_type, slot_no, scheduled_for, status)
+    values ('brand_a','acct_a',current_date,'tip',13,now(),'running')$q$, 'BOUND_ROW_INVALID_INITIAL_STATE');
+  perform set_config('kabumori.x_queue_domain', '', true);
 end $$;
 
 -- 2. Seed: bound rows are OLDER than the unbound row, so a global-oldest legacy
@@ -192,6 +203,10 @@ begin
     'BOUND_ROW_REQUIRES_V2_PATH');
   perform pg_temp.expect_error(format('update public.scheduled_posts set status = %L where id = %L', 'failed', v_a),
     'BOUND_ROW_REQUIRES_V2_PATH');
+  perform pg_temp.expect_error(format('update public.scheduled_posts set post_type = %L where id = %L', 'interaction', v_a),
+    'BOUND_ROW_ROUTING_IMMUTABLE');
+  perform pg_temp.expect_error(format('update public.scheduled_posts set schedule_date = schedule_date + 1 where id = %L', v_a),
+    'BOUND_ROW_ROUTING_IMMUTABLE');
   perform pg_temp.expect_error(format('update public.scheduled_posts set social_account_id = null where id = %L', v_a),
     'CLAIM_DOMAIN_IMMUTABLE');
   perform pg_temp.expect_error(format('update public.scheduled_posts set social_account_id = %L where id = %L', 'acct_a', v_l),
@@ -311,6 +326,9 @@ do $$ begin
     raise exception 'terminal outcome/binding mismatch';
   end if;
 end $$;
+-- An unrelated metadata update to a terminal row is not blocked by the guard.
+update public.scheduled_posts set created_at = created_at + interval '1 second'
+where id = (pg_temp.post(3::smallint)).id;
 
 -- 9. Mismatched brand/account and non-X bindings fail; no automatic legacy
 --    binding; a legacy-occupied slot is never rebound.
@@ -322,7 +340,7 @@ begin
     'brand_a','acct_other',current_date,'tip',21::smallint,now())$q$, 'ACCOUNT_BINDING_NOT_VERIFIED');
   perform pg_temp.expect_error($q$insert into public.scheduled_posts
     (brand_id, social_account_id, schedule_date, post_type, slot_no, scheduled_for)
-    values ('brand_a','acct_b',current_date,'tip',22,now())$q$, '23503');
+    values ('brand_a','acct_b',current_date,'tip',22,now())$q$, 'BOUND_ROW_REQUIRES_V2_PATH');
 end $$;
 reset role;
 insert into public.posting_windows (brand_id, post_type, slot_no, start_time, end_time)
