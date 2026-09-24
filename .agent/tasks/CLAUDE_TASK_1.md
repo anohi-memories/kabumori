@@ -3,7 +3,7 @@
 - task_id: kabumori-mobile-auth-real-e2e-disposable-account-20260924
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: critical
 - recommended_model: Opus 5.5
