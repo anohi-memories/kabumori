@@ -37,7 +37,7 @@
   - PR #21 open (unmerged): expo.name -> かぶモリ (slug/scheme/bundleId untouched); scripts/verify-production-env.mjs preflight; RELEASE_READINESS.md corrected/expanded. 114/0 tests, tsc src 0.
   - New finding A1b: AnimatedSplashOverlay renders Expo's logo on every launch (not just the static app.json icon/splash). No artwork generated; exact specs documented for the operator.
   - Confirmed: missing Supabase env vars crash the app on launch, not a silent degrade. Production mutation 0.
-- G2: `in_progress` — `kabumori-pr19-merge-postmerge-verify-20260924`
+- G2: `done` — `kabumori-pr19-merge-postmerge-verify-20260924`
 - G3: `done` — `x-autopost-phase1e-exact-account-credential-resolver-20260924`
 - G4: `done` — `x-admin-netlify-deploy-preview-pipeline-20260924`
 
@@ -113,6 +113,16 @@
 - Kabumori Expo Web Netlify Preview setup.
 - Prior reviewed code/test evidence remains preserved in the old G4/G2 reports.
 - Resume either deferred item only when needed or user explicitly asks.
+
+## Final K2 PR #19 result
+
+- PASS.
+- PR #19 merged at head `2b743f3a9799f35409ab1e61652b9e76b04977c5` -> main `518542702f820e490d0c02050b0ef470f023ce5a`.
+- post-merge 154/154 tests PASS; deno check/lint PASS; no new src TypeScript errors; Expo export 10 routes PASS.
+- X/shared-fact paths unchanged; H2 missing-value fix confirmed on main.
+- no Edge deploy, no app_enabled flip, no cron/DB/Auth/X mutation.
+- production mutation=0 excluding normal GitHub merge.
+- next rollout is a separate G2 task after explicit approval: Edge deploy -> dry-run validation -> app_enabled decision -> real-device QA.
 
 ## K2 result
 
