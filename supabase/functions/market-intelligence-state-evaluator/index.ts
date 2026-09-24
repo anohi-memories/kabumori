@@ -4,8 +4,8 @@
 // decide deterministically whether anything material changed per domain,
 // and only call AI (Luna, escalating to Sol) when it did. Never calls
 // OpenAI on a routine/no-change pass. Writes only to market_state_current,
-// market_state_history, mic_state_evaluation_runs, and ai_usage_events --
-// never to market_metrics/market_events (Facts stay Facts).
+// market_state_history, mic_state_evidence, mic_state_evaluation_runs, and
+// ai_usage_events -- never to market_metrics/market_events (Facts stay Facts).
 //
 // Auth model, same convention as market-intelligence-ingest/index.ts:
 // never called with a Supabase JWT, only by cron/manual invocation
@@ -47,14 +47,14 @@ import {
 } from "./mic_state_query_logic.ts";
 import {
   claimStateEvaluationRun,
-  completeStateEvaluationRun,
   computeRunWindow,
   failStateEvaluationRun,
+  fetchStateEvaluationRunStatus,
   reconcileStaleStateEvaluationRuns,
   safeErrorMessage,
 } from "./mic_state_run_logic.ts";
 import type { RestContext } from "./mic_state_run_logic.ts";
-import { applyMaterialChangeUpdate, refreshStatusOnly } from "./mic_state_writer_logic.ts";
+import { applyMaterialChangeUpdate, applyNoChangeUpdate, toMarketEventSnapshot } from "./mic_state_writer_logic.ts";
 import {
   requestStateEvaluation,
   shouldEscalateToSol,
@@ -214,19 +214,22 @@ export async function evaluateDomain(
   }
   const decision = decisionResult.decision;
 
+  const statusRefresh = {
+    asOf: decision.latestAsOf,
+    expectedCurrentUpdatedAt: decision.priorUpdatedAt,
+    coverageStatus: decision.coverageStatus,
+    fetchStatus: decision.fetchStatus,
+    observationStatus: decision.observationStatus,
+    dataConfidence: decision.dataConfidence,
+  };
+
   try {
+    // Each outcome below is a single RPC that writes State AND moves the run
+    // to its terminal status in one transaction -- there is no separate
+    // "complete run" call that could fail after State was already written.
     if (!decision.isMaterial) {
-      const statusResult = await refreshStatusOnly(ctx, domain, {
-        asOf: decision.latestAsOf,
-        expectedCurrentUpdatedAt: decision.priorUpdatedAt,
-        coverageStatus: decision.coverageStatus,
-        fetchStatus: decision.fetchStatus,
-        observationStatus: decision.observationStatus,
-        dataConfidence: decision.dataConfidence,
-      });
-      if (statusResult === "stale") throw new Error("MIC_STATE_STALE_DECISION");
-      await completeStateEvaluationRun(ctx, claim.runId, {
-        status: "no_change",
+      await applyNoChangeUpdate(ctx, domain, statusRefresh, {
+        runId: claim.runId,
         decisionDetail: { material: false, reason: decision.metricDecision.reason },
       });
       return { domain, status: "no_change", reason: decision.metricDecision.reason };
@@ -241,17 +244,8 @@ export async function evaluateDomain(
     // record in decisionDetail that this was a material decision the guard
     // suppressed, not a genuine absence of new data.
     if (shouldSkipAiForStaleness(decision.metrics, decision.eventDecision)) {
-      const statusResult = await refreshStatusOnly(ctx, domain, {
-        asOf: decision.latestAsOf,
-        expectedCurrentUpdatedAt: decision.priorUpdatedAt,
-        coverageStatus: decision.coverageStatus,
-        fetchStatus: decision.fetchStatus,
-        observationStatus: decision.observationStatus,
-        dataConfidence: decision.dataConfidence,
-      });
-      if (statusResult === "stale") throw new Error("MIC_STATE_STALE_DECISION");
-      await completeStateEvaluationRun(ctx, claim.runId, {
-        status: "no_change",
+      await applyNoChangeUpdate(ctx, domain, statusRefresh, {
+        runId: claim.runId,
         decisionDetail: {
           material: true,
           ai_skipped: true,
@@ -263,8 +257,8 @@ export async function evaluateDomain(
     }
 
     // State Evidence Phase 2C1 (fail-before-AI ordering): resolve Fed diff
-    // evidence BEFORE calling Luna, not after. marketEventEvidenceIds is
-    // deliberately the exact same set as sourceEventIds below
+    // evidence BEFORE calling Luna, not after. marketEventSnapshots cover
+    // deliberately the exact same event set as sourceEventIds below
     // (decision.recentEvents is the bounded set actually supplied to the
     // AI facts payload; only its previously-unseen subset can trigger a
     // new material decision), so evidence never drifts from what
@@ -280,6 +274,12 @@ export async function evaluateDomain(
       .filter((e) => e.eventType === "central_bank_decision")
       .map((e) => e.id);
     const fedStatementDiffEvidenceIds = await resolveFedStatementDiffEvidenceIds(ctx, centralBankDecisionEventIds);
+    // Built from the very same EventFact objects passed to the AI below. The
+    // RPC re-reads these rows under lock and fails closed with
+    // MIC_STATE_EVENT_CHANGED_DURING_EVALUATION if ingest changed any of
+    // them while AI was running; otherwise the snapshots are stored as the
+    // immutable record of the State input.
+    const marketEventSnapshots = decision.recentEvents.map(toMarketEventSnapshot);
 
     const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
     if (!openAiApiKey) {
@@ -340,17 +340,15 @@ export async function evaluateDomain(
     }
 
     const reason = decision.metricDecision.isMaterial ? decision.metricDecision.reason : decision.eventDecision.reason;
+    if (finalUsageEventId === null) {
+      throw new Error("AI_USAGE_EVENT_ID_MISSING");
+    }
 
     await applyMaterialChangeUpdate(
       ctx,
       domain,
       {
-        asOf: decision.latestAsOf,
-        expectedCurrentUpdatedAt: decision.priorUpdatedAt,
-        coverageStatus: decision.coverageStatus,
-        fetchStatus: decision.fetchStatus,
-        observationStatus: decision.observationStatus,
-        dataConfidence: decision.dataConfidence,
+        ...statusRefresh,
         narrative: finalResult.output.narrative,
         bullishFactors: finalResult.output.bullishFactors,
         bearishFactors: finalResult.output.bearishFactors,
@@ -368,21 +366,27 @@ export async function evaluateDomain(
       },
       reason,
       {
-        runId: claim.runId,
-        marketEventIds: decision.recentEvents.map((e) => e.id),
+        marketEventSnapshots,
         fedStatementDiffIds: fedStatementDiffEvidenceIds,
       },
+      {
+        runId: claim.runId,
+        decisionDetail: { material: true, reason },
+        aiUsageEventId: finalUsageEventId,
+      },
     );
-
-    await completeStateEvaluationRun(ctx, claim.runId, {
-      status: "evaluated",
-      decisionDetail: { material: true, reason },
-      aiUsageEventId: finalUsageEventId,
-    });
     return { domain, status: "evaluated" };
   } catch (error) {
     const reason = safeErrorMessage(error);
+    // Only moves a still-'running' run to failed; a terminal run is never
+    // overwritten. Then read back what actually committed: if a State write
+    // RPC succeeded but its response was lost, the run is already terminal
+    // and the State change is complete -- report that, not a failure.
     await failStateEvaluationRun(ctx, claim.runId, reason);
+    const committedStatus = await fetchStateEvaluationRunStatus(ctx, claim.runId);
+    if (committedStatus === "evaluated" || committedStatus === "no_change") {
+      return { domain, status: committedStatus, reason: "reconciled_after_error", error: reason };
+    }
     return { domain, status: "failed", error: reason };
   }
 }

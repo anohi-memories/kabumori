@@ -81,34 +81,11 @@ export async function claimStateEvaluationRun(
   return { claimed: true, runId: id, attemptNo };
 }
 
-export async function completeStateEvaluationRun(
-  ctx: RestContext,
-  runId: string,
-  outcome: {
-    status: "no_change" | "evaluated";
-    decisionDetail: Record<string, unknown>;
-    aiUsageEventId?: number | null;
-  },
-  fetchImpl: typeof fetch = fetch,
-): Promise<void> {
-  const result = await fetchImpl(
-    `${ctx.supabaseUrl}/rest/v1/mic_state_evaluation_runs?id=eq.${encodeURIComponent(runId)}&status=eq.running`,
-    {
-      method: "PATCH",
-      headers: restHeaders(ctx.secretKey, "return=minimal"),
-      body: JSON.stringify({
-        status: outcome.status,
-        decision_detail: outcome.decisionDetail,
-        ai_usage_event_id: outcome.aiUsageEventId ?? null,
-        completed_at: new Date().toISOString(),
-      }),
-    },
-  );
-  if (!result.ok) {
-    throw new Error(`STATE_RUN_COMPLETE_FAILED:${result.status}:${(await result.text()).slice(0, 500)}`);
-  }
-}
-
+// Successful completion ('no_change' / 'evaluated') happens only inside the
+// State write RPCs (mic_state_writer_logic.ts), in the same transaction as
+// the State change. This module only ever moves a still-'running' run to
+// 'failed'; the status=eq.running filter (and a DB trigger) keeps it from
+// overwriting a terminal status.
 export async function failStateEvaluationRun(
   ctx: RestContext,
   runId: string,
@@ -127,6 +104,33 @@ export async function failStateEvaluationRun(
       }),
     },
   ).catch(() => undefined);
+}
+
+export type StateEvaluationRunStatus = "running" | "no_change" | "evaluated" | "failed";
+
+// Used after an error to learn what actually committed: a State write RPC
+// whose response was lost may still have marked the run terminal. Never
+// throws; null means the status could not be read.
+export async function fetchStateEvaluationRunStatus(
+  ctx: RestContext,
+  runId: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<StateEvaluationRunStatus | null> {
+  try {
+    const result = await fetchImpl(
+      `${ctx.supabaseUrl}/rest/v1/mic_state_evaluation_runs?id=eq.${encodeURIComponent(runId)}&select=status`,
+      { headers: restHeaders(ctx.secretKey) },
+    );
+    if (!result.ok) return null;
+    const rows = await result.json() as Array<{ status?: unknown }>;
+    if (!Array.isArray(rows) || rows.length !== 1) return null;
+    const status = rows[0]?.status;
+    return status === "running" || status === "no_change" || status === "evaluated" || status === "failed"
+      ? status
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 export const MIC_STATE_STALE_RUN_THRESHOLD_MS = 15 * 60 * 1000;
