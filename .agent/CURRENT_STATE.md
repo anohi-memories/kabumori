@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-24 JST (PR #12 caller-auth source candidate merged; production rollout not authorized)
+- checked_at: 2026-09-24 JST (H1 caller-auth production rollout completed; latest main read before sync: 22cab8714ff1cf3bdfe033d95b3b8851ffeda31d)
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -14,11 +14,11 @@
 
 ## Active workstreams
 
-- Codex slot 1: `in_progress` — `kabumori-important-news-caller-auth-production-rollout-20260924`
-  - User confirmed both caller-auth secrets are configured manually.
-  - Resume from read-only secret presence verification → exact caller-auth migration → four-Cron postflight → important-news-monitor-only deploy → natural runtime verification.
-  - Never expose/read back plaintext secret values; keep `verify_jwt=false`; no business logic/auto_publish/Cron cadence/X/Push changes.
-
+- Codex slot 1: `review_required` — `kabumori-important-news-caller-auth-production-rollout-20260924`
+  - Exact approved caller-auth migration applied; only `important-news-monitor` deployed (ACTIVE v66, `verify_jwt=false`).
+  - Four Cron jobs postflight preserved schedules/active/body/URL; shadow and all other Functions unchanged.
+  - All four natural Cron paths succeeded; unauthorized empty request rejected 401. Secrets never exposed. See latest `.agent/CODEX_REPORT.md`.
+  - Stop for C1.
 - Codex slot 2: `done` — `x-autopost-phase1b-account-bound-queue-schema-and-outcome-ledger-20260924`
   - C2 PASS。source-only account-bound queue foundation candidate承認。
   - explicit nullable social_account_id + DB brand/account/platform integrity、durable attempt/outcome ledger、versioned service-role-only v2 RPC候補を実装。
@@ -46,7 +46,7 @@
 
 ## Parallel safety
 
-- H1 owns only PR #12 merge/read-back and related Important News caller-auth source scope.
+- H1 completed the exact authorized Important News caller-auth production rollout; awaiting C1.
 - G1 owns consumer mobile Auth/account/settings/legal source scope.
 - G2 is intentionally free for a new non-conflicting workstream.
 - H1 and G1 are intentionally separated and may run in parallel if fresh-origin checks confirm no file/DB-object overlap.
@@ -55,7 +55,7 @@
 
 ## Known issues / observations
 
-- PR #12 caller-auth production rollout is now explicitly authorized only within H1 TASK gates: secure Function/Vault secret setup, exact migration apply, important-news-monitor-only deploy, and runtime verification.
+- PR #12 caller-auth production rollout completed within the exact H1 authorization; see the latest `.agent/CODEX_REPORT.md` for pre/postflight and runtime evidence.
 - Release-readiness audit identified remaining release blockers: Auth/profile lifecycle, in-app account deletion, password recovery, legal/support entry points, iPhone/TestFlight E2E, Netlify admin trial, App Store metadata/privacy, and final security gate.
 - PR #10 release-readiness audit docs remain separate from implementation work and should not be used to bypass required checks.
 - multibrand migration history不整合の可能性があるためblind `supabase db push`禁止。
