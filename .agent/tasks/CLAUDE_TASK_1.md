@@ -3,8 +3,8 @@
 - task_id: kabumori-mobile-recovery-pr17-merge-and-postmerge-verify-20260924
 - owner: claude
 - slot: claude-1
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: K1 PASS + C1 Auth/security review PASS済みのPR #17を、fresh mainとの競合・意味差分を確認したうえでmainへmergeし、main上で回帰確認を行う。かぶモリnativeアプリPRのためVercel checkはmerge blockerとして扱わない。
@@ -123,3 +123,59 @@ When complete:
     - reachable Auth confirmation/recovery redirect/Site URL
     - privacy / terms / support Web URLs
 - STOP for K1.
+
+## Report — G1 result
+
+- task_id: kabumori-mobile-recovery-pr17-merge-and-postmerge-verify-20260924
+- result: **PR #17 merged and verified on main.** Production and backend mutation = 0; the only mutation was the normal GitHub merge.
+- workspace: a fresh independent clone in my scratchpad, not the shared worktree. This follows the earlier incident in which another session committed to and reset `claude1/recovery-deeplink-fix` inside the shared `ios-push-e2e` worktree.
+
+### Pre-merge
+
+- fresh main before merge: `2794ff5` (my in_progress control commit on `736d86c`)
+- verified PR head: **`b3798aa6be82b6a29d8d2dcf21ca27fb19ef5f50`**, which matches the C1-reviewed head. It is my `7dc5c9a` plus C1's P2 classifier restriction `b3798aa`.
+- PR diff against its base `3ee7c1d`: exactly 3 files:
+  - `src/app/+native-intent.tsx`
+  - `src/lib/password-recovery.ts`
+  - `tests/app/recovery-routing_test.ts`
+- **Drift and conflict:** main since `3ee7c1d` changed none of `src/`, `tests/`, `supabase/functions/account-delete/`, `app.json` or `package.json`. It did change:
+  - MIC state-evaluator files
+  - X autopost Phase 1D tests
+  - migrations `20260924150000` and `20260924160000`
+  - `PROJECT_RULES.md`
+  - `.agent/*`
+
+  None overlaps the 3 PR files. There was no semantic conflict and no unreviewed change.
+- C1's commit re-read: recovery links must now be addressed to the app (`kabumori:` / `exp(s):` / the synthetic bare-path origin) and must use the exact recovery path, or the callback path with `type=recovery` and a payload. This is stricter than my original substring match. It keeps the real-device-verified shape `kabumori://reset-password#…`.
+- tests on the PR head (clean clone): **98 passed / 0 failed**
+- merge state: `MERGEABLE` / `UNSTABLE`. The only failing check is Vercel ("Deployment rate limited — retry in 24 hours"). **Per the hosting policy, Vercel was explicitly ignored as irrelevant to this native-app merge.** It was not retried, bypassed or reconfigured, and no web deploy was made.
+
+### Merge
+
+- `gh pr merge 17 --merge --match-head-commit b3798aa6be82b6a29d8d2dcf21ca27fb19ef5f50`, a normal merge pinned to the reviewed head
+- merge commit / post-merge `origin/main`: **`7ad3539026eb458c6048df4f300e80332e60f06e`**, mergedAt 2026-09-24T07:39:07Z. PR #17 state: MERGED.
+
+### Post-merge verification (on `7ad3539`)
+
+- `git diff b3798aa 7ad3539` over the 3 reviewed files is **empty**. They are byte-identical to the reviewed content.
+- `git diff --name-only 2794ff5 7ad3539` shows exactly those 3 files. No other mobile or Auth source changed in the merge.
+- `deno test --no-check --no-lock --allow-read tests/app/ supabase/functions/account-delete/`: **98 passed / 0 failed**
+- `npx tsc --noEmit`, `src/` scope: **0 errors**
+  - In the bare clone it first showed 2 CSS-module declaration errors, because the gitignored, Expo-generated `expo-env.d.ts` (`/// <reference types="expo/types" />`) does not exist in a fresh clone.
+  - With that standard generated file present, as in any normal dev checkout, the result is 0. It is an environment artifact, not a PR effect: neither file involved is touched by the PR.
+- `git diff --check` over the merge: PASS
+- Expo web export smoke: **PASS, 10 static routes (unchanged)**.
+  - It ran with dummy, non-secret `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` values (`https://export-smoke.invalid`), because static rendering constructs the client.
+  - No production secret or `.env` was used.
+- No real-device E2E was repeated, since K1 already accepted the full run.
+
+### Production / backend mutation = 0
+
+No Supabase Auth, SMTP, email-template, migration, RPC, DDL/DML, `account-delete`, Vercel or Netlify change, and no production user touched.
+
+### Remaining release blockers (outside this PR)
+
+1. **Custom SMTP.** The Supabase built-in sender allows about 2 emails per hour.
+2. **A reachable Auth confirmation/recovery redirect / Site URL.** Today the confirmation link lands on an unreachable page.
+3. **Privacy / terms / support web URLs**, still undecided.
+4. For operations: the shared `ios-push-e2e` worktree is being used by another session. Future G1 work should keep using an independent checkout.
