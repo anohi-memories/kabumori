@@ -3,8 +3,8 @@
 - task_id: kabumori-close-unknown-cause-prefix-fix-20260924
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（極高）
 - purpose: production v24 dry-runで確認した「妥当な原因不明文の誤拒否」を、validatorの安全性を維持したまま最小修正する。source/test/PRまで。deploy禁止。
@@ -132,3 +132,88 @@ When complete:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for K2.
+
+## Report
+
+### Summary
+
+- task_id：`kabumori-close-unknown-cause-prefix-fix-20260924`
+- result：validatorの最小修正を完了し、PR #26を作成した（**未merge・未deploy**）。K2待ち。
+- changed_files：`supabase/functions/personalized-reports/report_logic.ts`、`supabase/functions/personalized-reports/close_validator_fix_test.ts`
+- tests：
+  - close_validator **20/20**（新規7件）
+  - personalized-reports **64/64**
+  - 関連スイート（tests/app＋personalized-reports＋market-report-analysis）**182/182**
+  - deno check・deno lint・git diff --checkはPASS
+- commit_hash：PR head `2b40a617e34c73c301e40a17692883ac70fd3e0a`
+- push：`origin/g2-close-unknown-cause-prefix-20260924`。PR https://github.com/anohi-memories/kabumori/pull/26
+- deploy：なし
+- safety_checks：
+  - production mutation 0（read-onlyの確認だけ）。
+  - prompt・上限値・market_detail・DB・cron・Auth・X・G1は未変更。
+  - 共有ファイルは未変更。
+
+### root cause
+
+- `UNDETERMINED_ONLY` は文全体の一致（anchored）で判定しており、主語の前置きを許していなかった。
+- 実際のモデル出力（production v24の大引けdry_run）は「**下落の**要因は…」「**当日の下落**要因は…」のように、「原因が不明な値動き」を主語として前に付ける。そのため、妥当な文が `INFERENCE_NOT_HEDGED` になった（3回中2回）。
+
+### exact regex change
+
+追加したのは、任意の主語の前置き `UNDETERMINED_MOVE_PREFIX = (?:(?:当日の)?(?:下落|上昇|値動き|変動)(?:の)?)?` を、不明な対象の名詞の直前に置くことだけ。
+
+```
+^(?:(?:入力情報|確認できる情報)から)?(?:(?:当日の)?(?:下落|上昇|値動き|変動)(?:の)?)?(?:明確な)?(?:個別(?:の)?)?(?:要因|原因|理由|材料|因果関係|影響|背景)(?:との因果関係)?(?:は|が|を)?(?:特定|判断|断定|確認|説明)(?:できません|できていません|できない|されていません)$
+```
+
+- 対象の名詞に `因果関係` を単独で追加した。
+- 次は変更していない：文全体の一致、`CAUSAL_ASSERTION` を先に判定する順序、文単位での検証、`UNDETERMINED_ATTRIBUTION`。
+
+### allow / reject examples（すべてテスト済み）
+
+- **PASS**
+  - 下落の要因は特定できません（本番の失敗1）
+  - 当日の下落要因は特定できません（本番の失敗2）
+  - 要因は特定できません
+  - 上昇の理由は判断できません
+  - 値動きの原因は確認できません
+  - 当日の変動要因は説明できません
+  - 当日の上昇の要因は特定できません
+  - 下落の背景は確認できていません
+  - 因果関係は確認できません
+  - 既存の本番文言（個別材料が確認できないため…結び付けることはできません）
+- **FAIL**
+  - 因果の断定＋「特定できない」節
+    - 円高が逆風になりましたが、要因は特定できません
+    - 円高を受けて下落しましたが理由は特定できません
+    - 金利上昇が原因です。ただし要因は特定できません
+  - hedgeによる言い逃れ
+    - 円高で売られました、…可能性があります
+    - 円高が逆風になりました。可能性もあります
+  - 改行・`；`・`!` で区切った危険な複数文
+  - 前置きの前の自由文、または許可外の主語
+    - 円安による上昇の要因…
+    - 半導体株の下落の要因…
+    - 急な下落の要因…
+  - 許可された名詞を含む事実の断定
+    - 下落の要因は円高です
+    - 上昇の理由は好決算です
+    - 材料が出たため下落しました
+    - 値動きの原因は需給悪化でした
+- mutationの確認：前置きの許可を外すと、新規テストのうち2件がfailする。
+- 上限値（朝刊120／大引け160）は不変であることもテストで確認した。
+
+### production state read-back（read-only）
+
+- `personalized-reports`：**v25**、ACTIVE、verify_jwt=false。
+  - `--use-api` でdownloadしたindex / report_logicは、v21（`4590ba6`）とbyte一致。
+- `app_enabled=false`、`x_enabled=false`（updated_atは2026-09-17のまま）。
+- production mutation：**0**（deploy・LLM呼び出し・DB変更はいずれもなし）。
+
+### recommendation
+
+1. H2でPR #26を軽量レビューする（正規表現の変更が狭く保たれているかを確認）。
+2. K2でPASSならmergeし、`personalized-reports` を再deployする（`--use-api --no-verify-jwt`、`app_enabled=false` のまま）。
+3. 大引けdry_runを**3回以上**（できれば5回）実施し、全件がlocal検証とFactを通過することを確認する。朝刊も1回確認する。
+4. 大引けが1回でもlocal検証で失敗したら、`4590ba6` へ即ロールバックする（手順は確立済み）。
+5. すべて通過したら、数日の自然cronでの運用を経て、`app_enabled` のON判断を別TASKで行う。
