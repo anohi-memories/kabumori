@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-24 JST (H1 caller-auth production rollout completed; latest main read before sync: 22cab8714ff1cf3bdfe033d95b3b8851ffeda31d)
+- checked_at: 2026-09-24 JST
 - repo: kabumori
 - branch: main
 - orchestration:
@@ -12,9 +12,20 @@
   - Claude slot1開始=`G1`、完了確認=`K1`
   - Claude slot2開始=`G2`、完了確認=`K2`
 
+## User routing preference
+
+- ユーザーから明示指定がない限り、X自動投稿・複数ブランドX運用系は H2 / G2 を使用する。
+- H1 / G1 は、かぶモリアプリ側の作業に優先して確保する。
+- 明示的なユーザー指定がある場合はその指定を優先する。
+- 同一ファイル / migration / RPC / Edge Function / workflow / production設定の競合禁止ルールは常に優先する。
+
 ## Active workstreams
 
-- Codex slot 1: `ready` — `x-autopost-phase1c-dispatcher-planner-account-bound-cutover-candidate-20260924`
+- Codex slot 1: `idle`
+  - かぶモリアプリ側のCodex作業用として空けている。
+  - idleなのでユーザー指示なしに新規作業を開始しない。
+
+- Codex slot 2: `ready` — `x-autopost-phase1c-dispatcher-planner-account-bound-cutover-candidate-20260924`
   - Phase1B C2 PASS済みのaccount-bound queue foundationを、active planner/dispatcher/credential routingへつなぐsource-only cutover candidate。
   - claim.social_account_idのみを投稿先authorityとして使用し、brand_id単独推測・LIMIT 1 fallbackは禁止。
   - durable attempt/outcome lifecycleをdispatcherへ統合し、uncertain/confirmed-Xの自動再投稿を禁止。
@@ -22,45 +33,30 @@
   - production mutation 0。migration/deploy/Cron/OAuth/Vault/X API callは禁止。
   - Recommended model: GPT-5.6 Sol Medium。
 
-- Codex slot 2: `done` — `x-autopost-phase1b-account-bound-queue-schema-and-outcome-ledger-20260924`
-  - C2 PASS。source-only account-bound queue foundation candidate承認。
-  - explicit nullable social_account_id + DB brand/account/platform integrity、durable attempt/outcome ledger、versioned service-role-only v2 RPC候補を実装。
-  - focused 6/6、x-test-post 409/409、disposable PostgreSQL fairness/concurrency/retry/stale/rollback proof PASS。
-  - production catalog独立確認: social_account_id列0、v2 tables 0、v2 RPCs 0。production mutation 0。
-  - live legacy queueは205 succeeded / 63 failed / 15 pending / 0 running。15 pendingは暗黙backfill禁止。
-  - migration単独適用禁止。old dispatcherのままclaim_due_post_v2有効化禁止。
-  - 次候補: source-only dispatcher/planner cutover candidate。claim.social_account_idでcredential routingし、remaining planners/callersをversion化してからproduction gate。
-
-
 - Claude slot 1: `ready` — `kabumori-mobile-auth-real-e2e-disposable-account-20260924`
+  - かぶモリアプリ側。
   - User-approved real E2E using exactly one new disposable test account.
-  - Flow: signup → confirmation → first login/profile creation → session restore/logout/re-login → password recovery/deep-link → new password → in-app delete → DB/Auth read-back.
-  - Existing production users must not be touched. If no test email is available, stop and ask user for one; never ask for password in chat.
-  - Current Kabumori dev server may use 8082; do not stop the separate social-mobile process on 8081.
-  - Recommended model: Opus 5.5.
+  - Existing production users must not be touched.
 
 - Claude slot 2: `ready` — `x-admin-multibrand-selector-phase2-merge-only-20260924`
-  - K2 PASS済みPR #15を最新mainへfreshen/rebaseし、apps/admin/**の意味的差分がレビュー済みcandidateと同一であることを確認してからmergeする。
-  - tests: node 31/31想定、tsc/lint/build/diff/secret scanを再実行。
-  - selector/brand registry/query semanticsの新規変更は禁止。Netlify deploy/DB policy変更も禁止。
-  - production mutation 0。
-  - Recommended model: Opus 5.5。
-
+  - X複数ブランド管理側。
+  - K2 PASS済みPR #15を最新mainへfreshen/rebaseし、レビュー済みcandidateとの意味的同一性確認後にmergeする。
+  - Netlify deploy/DB policy変更は禁止。production mutation 0。
 
 ## Parallel safety
 
-- Codex slot1 Important News caller-auth rollout is C1 PASS/done; slot1 is reassigned to the source-only X autopost Phase1C cutover candidate.
-- G1 owns consumer mobile Auth/account/settings/legal source scope.
-- G2 is intentionally free for a new non-conflicting workstream.
-- H1 and G1 are intentionally separated and may run in parallel if fresh-origin checks confirm no file/DB-object overlap.
-- G1/H2 remain separate existing workstreams; same file, migration, RPC, Edge Function, workflow, or production setting must never be edited in parallel.
-- push前にfresh `origin/main`確認。既存未コミット変更は他workstream所有として触らない。
+- H1/G1はかぶモリアプリ側、H2/G2はX自動投稿側を原則とする。
+- 同じファイル、DB migration、RPC、Edge Function、workflow、production設定を複数slotで同時変更しない。
+- push前にfresh `origin/main`確認。
+- 既存未コミット変更は他workstream所有として触らない。
+- 競合可能性を安全に否定できない場合は開始せず、具体的な競合箇所を報告する。
 
 ## Known issues / observations
 
-- PR #12 caller-auth production rollout completed within the exact H1 authorization; see the latest `.agent/CODEX_REPORT.md` for pre/postflight and runtime evidence.
-- Release-readiness audit identified remaining release blockers: Auth/profile lifecycle, in-app account deletion, password recovery, legal/support entry points, iPhone/TestFlight E2E, Netlify admin trial, App Store metadata/privacy, and final security gate.
-- PR #10 release-readiness audit docs remain separate from implementation work and should not be used to bypass required checks.
+- Phase1B account-bound queue foundationはC2 PASS済み。
+- Phase1B migration単独適用禁止。
+- old dispatcherのまま claim_due_post_v2 有効化禁止。
+- legacy pending rowsの暗黙account backfill禁止。
 - multibrand migration history不整合の可能性があるためblind `supabase db push`禁止。
 
 ## 更新ルール
