@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1e-exact-account-credential-resolver-20260924
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Opus5.5（高）
 - purpose: Phase1C/C2で残ったcredential-routing blockerを解消するため、v2 claimの `social_account_id` を唯一の権威としてX資格情報を解決するsource-only exact-account resolverを実装する。production deploy/apply/X API callは行わない。
@@ -271,3 +271,33 @@ Do not deploy or activate Phase1E in production.
     - Atomic per-type completion (Phase1C blocker 3); tip threads and morning_greeting media+create are not compatible with the one-request primitive; interaction polls not in the text-only seam.
     - Earlier gates still open: live-definition diff, atomic migration proof, staged rollback plan.
 13. next_recommendation: K3, then Codex review (auth/secret boundary + provider semantics). Next implementation prerequisite: per-post-type atomic v2 completion + provider-step outcome model (with `x_rejected`), then tip-thread / morning_greeting multi-request steps and a per-account pre-X refresh writer.
+
+
+## Final K3 — Phase1E
+
+Result: IMPLEMENTATION PASS / CODEX REVIEW REQUIRED.
+
+Accepted:
+- exact-account credential resolver source candidate complete
+- claim.social_account_id is the sole v2 credential-routing authority
+- no brand-only / first-row / legacy-token / env-token / hardcoded-account fallback
+- service-role/Vault boundary remains server-only
+- credential values are redacted from normal serialization/inspection and fixed-code errors are used
+- one-request provider seam performs at most one X create request after provider-start
+- 401/refresh-after-start does not trigger a hidden second create
+- resolver failure causes zero provider calls
+- legacy dispatcher/credential/posting paths remain unchanged
+- implementation commit `1868cc0e418ebda15ecfdfc88c55c9dd25a471f7` exists on GitHub
+- resolver tests 11/11 PASS
+- provider seam tests 12/12 PASS
+- Phase1E static tests 6/6 PASS
+- focused Phase1B+Phase1D static tests 19/19 PASS
+- full x-test-post 422/422 PASS
+- full _shared 114/114 PASS
+- important-news-monitor 431/431 PASS
+- production mutation / deploy / token refresh / X API calls = 0
+
+Review requirement:
+- Final acceptance requires independent Codex review of auth/secret boundary, RPC ACL assumptions, Vault access semantics, provider outcome classification, and one-request guarantees.
+- This X-owner chat does not overwrite H1/H2 tasks currently owned/recorded by the Kabumori app workstream.
+- Keep Phase1E source-only and unactivated until that review is assigned by a truly free H slot.
