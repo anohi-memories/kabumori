@@ -27,11 +27,12 @@
   - Recommended model: GPT-6 Sol Medium。
 
 
-- Claude slot 1: `ready` — `kabumori-mobile-release-blockers-phase1-merge-only-20260924`
-  - K1 PASS for PR #13 source candidate.
-  - Source candidate covers profile lifecycle, password recovery, account deletion and Settings/legal/support UX.
-  - App 77/77, account-delete 17/17, disposable DB proof PASS, Expo web export PASS, Vercel PASS.
-  - Next G1: fresh-check/freshen and merge only. Production migration/deploy/Auth settings remain forbidden.
+- Claude slot 1: `review_required` — `kabumori-mobile-release-blockers-phase1-merge-only-20260924`
+  - PR #13 merged normally (user approved in chat after the auto-mode check stopped the first attempt). Resulting main `f7ace17336c29edec49bb8daa0f95116a30d42fb`.
+  - All 25 reviewed files byte-identical to reviewed head `8b78ecc2`; 94/0 tests on merged main.
+  - Production read-only: `account-delete` absent from functions list; `public.ensure_my_profile` absent (catalog count 0); migration `20260924100000` unapplied. Production mutation 0.
+  - Apply the migration before shipping any build from this main: the app now calls `ensure_my_profile` on every session.
+  - Next: K1, then separately approved migration apply + `account-delete`-only deploy + Auth redirect allowlist.
 
 - Claude slot 2: `ready` — `x-admin-netlify-thin-control-plane-phase1-merge-only-20260924`
   - K2 PASS済みPhase1 candidateを最新mainへfreshen/rebaseし、apps/admin/** drift確認＋tests再実行後にPhase1だけmergeする。
