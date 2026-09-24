@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1f-atomic-completion-provider-outcome-model-20260924
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Opus5.5（高）
 - purpose: Phase1E merge完了後の次 prerequisite として、v2 dispatcherがX provider結果を安全に永続化し、post_type固有の完了副作用とledger更新を同一transactionで確定できる source-only Phase1F candidateを実装する。production apply/deployは行わない。
@@ -307,3 +307,28 @@ Do not deploy/apply/activate Phase1F in production.
     - v2 dispatcher itself (claim → resolve → seam → ledger/typed completion) not written; per-account pre-X refresh writer; Kabumori credential into its account's Vault refs.
     - production gates still open: live-definition diff (legacy RPCs, planners, social_accounts Vault columns, AI Lab RPCs, Vault ACL), atomic migration proof for the 1B→1F chain (explicit transactions in 1E/1F vs. apply tooling), staged rollback plan.
 17. next_recommendation: K3, then Codex review of the ledger state machine, typed completion fidelity vs. legacy RPCs, ACL hardening and trigger logging (Opus5.5/Sol high). Next implementation: Phase1G step-ledger completions for tip/morning_greeting (or, if preferred first, the v2 dispatcher for the five enabled types behind a gate that stays OFF).
+
+
+## Final K3 — Phase1F
+
+Result: IMPLEMENTATION PASS / CODEX REVIEW REQUIRED.
+
+Accepted:
+- implementation commit `0b752925b28b1b922b94a4cb7629ee942f82120f`
+- durable x_rejected terminal outcome
+- typed atomic completion for 5 post types
+- provider-step ledger foundation for tip/morning_greeting
+- tip/morning_greeting/brand_post remain disabled
+- v2 started/success/failure observability added
+- Phase1B ledger API-write hardening added
+- focused 55/55 PASS
+- x-test-post 429/429 PASS
+- _shared 120/120 PASS
+- important-news-monitor 431/431 PASS
+- disposable PostgreSQL behavior and duplicate-completion race PASS
+- production mutation/X API calls=0
+
+Decision:
+- Phase1F implementation is accepted for independent review.
+- Production activation remains NO.
+- H1 owns the final DB/RPC/ledger/ACL review using Sol（高）.
