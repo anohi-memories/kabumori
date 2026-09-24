@@ -6,12 +6,11 @@
 - owner: codex
 - slot: codex-1
 - status: review_required
-- task_id: kabumori-important-news-caller-auth-merge-only-20260924
+- task_id: kabumori-important-news-caller-auth-production-rollout-20260924
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
-- note: PR #12 reviewed head `9dffce9` merged normally as `844c77d`; all seven files read back identical. Vercel passed. Production migration remains unapplied, Vault entry absent, monitor ACTIVE v64 / `verify_jwt=false`, and Cron fingerprints unchanged. No production mutation. PR #11 remains open/draft/unmerged and untouched. Stop for C1.
-
+- note: Exact approved caller-auth migration applied; `important-news-monitor` only deployed as ACTIVE v66 / `verify_jwt=false`. Four target Cron commands/schedules preserved; shadow and all other Functions unchanged. All four natural Cron paths succeeded; empty unauthenticated POST failed closed with 401. No X post/candidate injection/Push. Stop for C1.
 
 ### Codex slot 2
 - owner: codex
