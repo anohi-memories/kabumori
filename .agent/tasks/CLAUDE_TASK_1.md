@@ -3,8 +3,8 @@
 - task_id: kabumori-mobile-auth-real-e2e-disposable-account-20260924
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Opus 5.5
 - purpose: K1 PASS済みのmobile Auth/account lifecycleを、production backend + real dev client/deviceで disposable test account 1件だけ使って end-to-end 検証する。signup → confirmation → first login/profile creation → password recovery/deep-link → new password → in-app account deletion → backend deletion確認までを安全に通す。
@@ -300,3 +300,26 @@ Nothing else was mutated: no admin or service-role action, no Auth config, no de
 1. **Recovery deep link fix.** `+native-intent` redirect plus a test, through a PR and K1. Then re-run Gate C → D → E with the same test account.
 2. **Confirmation (and recovery) redirect lands on an unreachable Site URL.** Decide a reachable Site URL, or add an `emailRedirectTo` for signup. This is an Auth config change and needs its own approval.
 3. Privacy / terms / support URLs are still undecided.
+
+
+## Final K1 — 2026-09-24
+
+Result: **FAIL — release E2E incomplete; safe-stop accepted.**
+
+Accepted evidence:
+- Gate A signup/confirmation PASS.
+- Gate B first login/profile lifecycle/session restore/logout/re-login PASS.
+- exactly one profile row was created for the disposable test user; no duplicate profile was observed.
+- Gate C reset request/email delivery and iOS handoff to the kabumori scheme succeeded.
+- Gate C failed at app routing: `kabumori://reset-password` reached the app but expo-router rendered Unmatched Route instead of the recovery UI.
+- no password was changed after the failed deep-link routing.
+- Gate D account deletion and Gate E full regression were not run, as required by the stop condition.
+- the disposable test account was intentionally retained so the same identity can resume Gate C after a reviewed fix; no second test account should be created.
+- no existing production user/account/profile was changed.
+- no migration, deploy, Auth config mutation, admin delete, unrelated Function/DB change, secret exposure, or other production mutation occurred outside the disposable user's normal flow.
+
+K1 conclusion:
+- this task does not satisfy the release E2E success criteria.
+- the failure is a concrete source/release blocker in native recovery routing.
+- the next G1 task should implement and review a minimal recovery deep-link routing fix (for example a tested `+native-intent.tsx` redirect or equivalent architecture), then re-run Gate C -> D -> E using the same disposable account.
+- confirmation-email post-verify redirect to the unreachable Site URL remains a separate release blocker and must not be silently changed without explicit approval.
