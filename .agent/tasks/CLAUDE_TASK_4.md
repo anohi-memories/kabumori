@@ -3,8 +3,8 @@
 - task_id: x-admin-netlify-deploy-preview-pipeline-20260924
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: X自動投稿・複数ブランド管理画面 apps/admin の開発中PreviewをNetlifyへ移し、Vercelのdeployment rate limitに依存せずテスト・レビューできる状態を作る。最終production deployのみVercelへ残す。
@@ -275,3 +275,41 @@ Vercel設定・deploy・DNS/domain変更：0件。今回はNetlify側のreposito
 
 - status -> review_required
 - next_owner -> chatgpt
+
+
+## K4 Review — 2026-09-24 Netlify Preview pipeline
+
+Result: SOURCE PREPARATION ACCEPTED / DELIVERY INCOMPLETE.
+
+Accepted:
+- dedicated G4 worktree isolation
+- Next.js 16 / Supabase SSR / proxy.ts / env-boundary audit
+- apps/admin source semantics unchanged
+- local tests/build/type/lint/diff/secret checks PASS
+- Netlify interactive authorization blocker documented with exact remaining UI steps
+- Vercel production mutation = 0
+- PR #15 remains untouched and deferred
+
+Blocking issue before final K4 PASS:
+- The three G4 source changes are not yet delivered to GitHub.
+- No remote G4 branch is currently present.
+- Report does not contain a commit hash or push confirmation.
+
+Required continuation:
+1. fresh fetch origin/main
+2. verify no overlapping apps/admin config/doc changes landed
+3. commit only:
+   - apps/admin/netlify.toml
+   - apps/admin/.gitignore
+   - apps/admin/docs/phase2-netlify-deploy-preview.md
+4. push to a dedicated G4 remote branch
+5. record exact commit SHA and remote branch
+6. create/update a PR if appropriate for normal review flow
+7. do NOT attempt Netlify interactive account authorization
+8. do NOT merge PR #15
+9. do NOT mutate Vercel/production/DB/DNS
+
+Final K4 can PASS with Netlify live Preview still externally blocked, provided:
+- repository changes are safely pushed/reviewable,
+- exact external authorization blocker remains documented,
+- production mutation remains 0.
