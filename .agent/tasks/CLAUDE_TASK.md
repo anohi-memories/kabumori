@@ -185,3 +185,17 @@ Then STOP for K2.
 11. **fresh-origin verification**
     - 報告直前に `git fetch` した：origin/mainは `3c3a0e4`。
     - `b278c04..origin/main` の間に `apps/admin` の変更は0件。PR #15 のheadは `b278c04` のまま。
+
+### Addendum — Vercel retry (2026-09-24 ~04:00 UTC)
+
+- ユーザー指示「リトライしてみて」を受け、`apps/admin` の中身を変えずにcommitだけ作り直して再pushし、Vercelを再トリガーした。
+  - freshened headは `b04442561d9e9c6d01b4a9fcf640c2cf731cd923`（base：main `a2e2480`）。
+  - `apps/admin` の差分は `b278c04` 比・reviewed `6c23227` 比ともに0行。main..headの差分は `apps/admin/src/**` の18ファイルのみ。
+- 結果：Vercelは再び `failure — Deployment rate limited — retry in 24 hours`。**PR #15はmergeしていない**（OPEN、head `b044425`）。
+- **操作ミスとその復旧**（本番への影響なし）：
+  - 再pushの1回目で作業用worktreeが消えていたため、コマンドがメインcheckoutで実行された。
+  - その結果、ローカル `main` のHEAD `e9cb57f` の日付だけがamendされて `1e2d228` になり（treeは同一）、PR branchへforce pushされた。
+  - 数十秒以内に、PR branchを `--force-with-lease`（expectedは `1e2d228`）で `b278c04` へ戻した。ローカル `main` の参照も `e9cb57f` に戻した。
+  - rebaseは未commitの変更を検出して中断しており、ユーザーの未commit作業（working tree/index）には一切影響していない。origin/mainにも影響していない。
+- production mutation：0。
+- 次：Vercelのrate limitが解けた後（直近の失敗status：`b044425`、約04:00 UTC）、同じ手順でcheckの `pass` を確認してからmergeする。

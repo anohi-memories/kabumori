@@ -40,7 +40,7 @@
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: PR #15をb278c04へfreshen（range-diff同一・apps/admin差分0）、31/31・tsc/lint/build PASS。Vercel checkがrate limit(24h)でfailureのため先例どおりmerge保留・bypassなし。production mutation 0。K2待ち。
+- note: PR #15をb044425へ再freshen（apps/admin差分0）しVercelをリトライしたが、再びrate limit(24h)でfailure。merge保留・bypassなし。production mutation 0。K2待ち。
 
 ## Control codes
 
