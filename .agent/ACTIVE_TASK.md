@@ -54,12 +54,12 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - task_id: kabumori-pr19-merge-postmerge-verify-20260924
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: assigned; PR #19 fresh-main integration + merge/post-merge verification
+- allocation: PR #19 merged by ChatGPT; post-merge verification only remains
 
 ## Claude G3
 - owner: claude
