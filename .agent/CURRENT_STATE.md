@@ -34,13 +34,12 @@
   - Gate D PASS: rollback-contained RPC contract check; unauthenticated and non-user token calls return 401; auth.users=2 / profiles=1 unchanged.
   - Production mutations: exactly 2 (migration + account-delete deploy). Legal/support URLs still unresolved.
 
-- Claude slot 2: `done` — `x-admin-multibrand-selector-query-parameterization-phase2-20260924`
-  - K2 PASS。brand selector + server-authorized selected-brand boundary + 4 admin query modulesのbrand parameterization source candidateを承認。
-  - tampered/unknown selectorはfail-closed。queryはexplicit brand_id filter維持。Important NewsはKabumori-only gate。
-  - system-toggleはKabumori-only維持し、posting_windows mutationへKabumori brand filterを追加して境界を狭めた。
-  - tests/build: node 31/31、tsc/lint/build、git diff check PASS、secret scan clean。production mutation 0。
-  - PR #15はopen/unmerged。branchはcurrent mainより5 commits behindだが差分は.agent control filesのみでapps/admin driftなし。
-  - 次候補: merge-only G2でfreshen/rebase→tests再実行→PR #15 merge。Netlify実deployやDB policyは別gate。
+- Claude slot 2: `ready` — `x-admin-multibrand-selector-phase2-merge-only-20260924`
+  - K2 PASS済みPR #15を最新mainへfreshen/rebaseし、apps/admin/**の意味的差分がレビュー済みcandidateと同一であることを確認してからmergeする。
+  - tests: node 31/31想定、tsc/lint/build/diff/secret scanを再実行。
+  - selector/brand registry/query semanticsの新規変更は禁止。Netlify deploy/DB policy変更も禁止。
+  - production mutation 0。
+  - Recommended model: Opus 5.5。
 
 
 ## Parallel safety
