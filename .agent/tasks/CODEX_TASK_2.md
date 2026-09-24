@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1b-account-bound-queue-schema-and-outcome-ledger-20260924
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: GPT-6 Sol Medium
 - purpose: Phase1 C2で確認したsafe boundaryを解消するため、productionを一切変更せず、scheduled_postsを明示的なsocial_account_idへbindするschema/API candidateと、durable provider-attempt/outcome ledgerをsource-only + disposable PostgreSQLで設計・実装する。legacy rowの暗黙推測は禁止。
@@ -166,3 +166,30 @@ When complete:
 - next_owner -> chatgpt
 - update CODEX_REPORT_2 with exact schema/RPC candidates, call-site audit, planner coverage, legacy cutover plan, disposable proof, tests, changed files, commit/push/fresh-origin, production mutation=0, and next gate
 - STOP for C2.
+
+
+## Final C2 — 2026-09-24
+
+PASS.
+
+Accepted as a source-only foundation candidate.
+
+Independent review confirmed:
+- production remains untouched: `scheduled_posts.social_account_id` absent, v2 queue tables absent, v2 RPCs absent.
+- live scheduled_posts counts remain 205 succeeded / 63 failed / 15 pending / 0 running, matching the report.
+- the candidate adds explicit nullable account binding with no default and DB-level brand/account/platform integrity.
+- no implicit brand->account lookup, no `limit=1` routing fallback, and no production backfill is introduced.
+- durable attempt state distinguishes pre-X, provider-started, uncertain-X, confirmed-X/db-incomplete, and completed outcomes.
+- uncertain-X and confirmed-X/db-incomplete paths are non-retryable by automatic claim/reconcile logic.
+- legacy claim/retry/fail RPCs remain untouched; v2 RPCs are versioned, service-role-only, SECURITY DEFINER with fixed empty search_path.
+- fairness is account-scoped and the final disposable proof covers two-brand progress, account integrity, retry cap, stale pre-X reconciliation, uncertain/confirmed-X no-reclaim, and rollback cleanup.
+- tests accepted: focused 6/6 PASS, full x-test-post regression 409/409 PASS, diff check PASS.
+- production mutation 0 is independently consistent with current production catalog.
+
+Important cutover boundary:
+- do NOT apply this migration by itself under the old dispatcher.
+- do NOT activate claim_due_post_v2 until active planners/dispatcher/credential routing all use the same explicit social_account_id.
+- the 15 current pending legacy rows require separately reviewed explicit mapping or disposition; one-account-per-brand is not sufficient evidence.
+
+Next recommended task:
+- source-only dispatcher/planner cutover candidate that routes credentials strictly by claim.social_account_id, versions the remaining active planners/callers, preserves each post type's completion side effects, and proves coexistence/cutover behavior in disposable tests before any production migration.
