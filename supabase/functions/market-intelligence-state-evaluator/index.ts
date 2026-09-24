@@ -249,6 +249,25 @@ export async function evaluateDomain(
       return { domain, status: "no_change", reason: "all_metrics_stale_or_unknown" };
     }
 
+    // State Evidence Phase 2C1 (fail-before-AI ordering): resolve Fed diff
+    // evidence BEFORE calling Luna, not after. marketEventEvidenceIds is
+    // deliberately the exact same set as sourceEventIds below
+    // (decision.recentEvents is already "the events actually used for this
+    // evaluation's material judgment and AI facts payload" -- not "every
+    // event that ever existed"), so evidence never drifts from what
+    // source_event_ids already claims. fedStatementDiffEvidenceIds resolves
+    // only the central_bank_decision events among them; when a single Fed
+    // event maps to more than one mic_fed_statement_diffs row,
+    // resolveFedStatementDiffEvidenceIds throws FedStatementDiffAmbiguousError
+    // (propagating to the catch below, which fails the whole run) rather
+    // than guessing -- and it does so before any AI call, so an ambiguous
+    // run never invokes Luna, never records ai_usage_events, and never
+    // writes history/current/evidence.
+    const centralBankDecisionEventIds = decision.recentEvents
+      .filter((e) => e.eventType === "central_bank_decision")
+      .map((e) => e.id);
+    const fedStatementDiffEvidenceIds = await resolveFedStatementDiffEvidenceIds(ctx, centralBankDecisionEventIds);
+
     const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
     if (!openAiApiKey) {
       throw new Error("SECRET_MISSING:OPENAI_API_KEY");
@@ -308,22 +327,6 @@ export async function evaluateDomain(
     }
 
     const reason = decision.metricDecision.isMaterial ? decision.metricDecision.reason : decision.eventDecision.reason;
-
-    // State Evidence Phase 2C1: marketEventEvidenceIds is deliberately the
-    // exact same set as sourceEventIds below (decision.recentEvents is
-    // already "the events actually used for this evaluation's material
-    // judgment and AI facts payload" -- not "every event that ever
-    // existed"), so evidence never drifts from what source_event_ids
-    // already claims. fedStatementDiffEvidenceIds resolves only the
-    // central_bank_decision events among them; resolveFedStatementDiffEvidenceIds
-    // throws FedStatementDiffAmbiguousError (propagating to the catch
-    // below, which fails the whole run) rather than guessing when a
-    // single Fed event maps to more than one mic_fed_statement_diffs row --
-    // no history/current/evidence write happens in that case.
-    const centralBankDecisionEventIds = decision.recentEvents
-      .filter((e) => e.eventType === "central_bank_decision")
-      .map((e) => e.id);
-    const fedStatementDiffEvidenceIds = await resolveFedStatementDiffEvidenceIds(ctx, centralBankDecisionEventIds);
 
     await applyMaterialChangeUpdate(
       ctx,

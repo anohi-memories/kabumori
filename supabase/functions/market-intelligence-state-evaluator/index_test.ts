@@ -307,6 +307,10 @@ test("[J] a rates evaluation with a central_bank_decision event but NO matching 
   assert.ok(diffLookup, "must query mic_fed_statement_diffs for the central_bank_decision event id");
   assert.match(diffLookup!.url, /current_event_id=in\.\(39ec45a4-77b5-4869-a011-2f4aa98c228d\)/);
 
+  // 0 diffs is not ambiguous -- Luna still runs normally.
+  const openAiCalls = calls.filter((c) => c.url === "https://api.openai.com/v1/responses");
+  assert.equal(openAiCalls.length, 1, "0 matching diffs is not ambiguous -- Luna must still run");
+
   const rpcCall = calls.find((c) => c.url.includes("/rest/v1/rpc/apply_mic_state_material_update"));
   assert.deepEqual(rpcCall?.body.p_market_event_evidence_ids, ["39ec45a4-77b5-4869-a011-2f4aa98c228d"]);
   assert.deepEqual(rpcCall?.body.p_fed_statement_diff_evidence_ids, []);
@@ -342,9 +346,13 @@ test("[K] a rates evaluation with a central_bank_decision event AND exactly one 
 
   const rpcCall = calls.find((c) => c.url.includes("/rest/v1/rpc/apply_mic_state_material_update"));
   assert.deepEqual(rpcCall?.body.p_fed_statement_diff_evidence_ids, ["4c6f1ad7-255e-4ac7-8eab-b44904bf94b0"]);
+
+  // Exactly 1 diff is not ambiguous -- Luna still runs normally.
+  const openAiCalls = calls.filter((c) => c.url === "https://api.openai.com/v1/responses");
+  assert.equal(openAiCalls.length, 1, "exactly 1 matching diff is not ambiguous -- Luna must still run");
 });
 
-test("[L] a central_bank_decision event with 2+ matching fed diff rows fails closed: the whole run fails, the RPC is never called (no State/history/evidence write)", async () => {
+test("[L] a central_bank_decision event with 2+ matching fed diff rows fails closed BEFORE any AI call: the whole run fails, Luna is never called, no ai_usage_events row is recorded, and the RPC is never called (no State/history/evidence write)", async () => {
   const { fetchImpl: baseFetch, calls } = makeMockFetch({ lunaOutput: LUNA_CONFIDENT_OUTPUT });
   const fetchImpl = async (url: string | URL, init?: RequestInit) => {
     const u = String(url);
@@ -381,8 +389,14 @@ test("[L] a central_bank_decision event with 2+ matching fed diff rows fails clo
 
   const rpcCall = calls.find((c) => c.url.includes("/rest/v1/rpc/apply_mic_state_material_update"));
   assert.equal(rpcCall, undefined, "the transactional RPC must never be called when diff resolution is ambiguous");
+  // Fail-before-AI ordering: Fed diff evidence is resolved BEFORE Luna is
+  // called, so an ambiguous diff set must short-circuit the whole run
+  // before any OpenAI call happens -- no Luna call, no ai_usage_events
+  // row, no billing for a run that is guaranteed to fail closed.
   const openAiCalls = calls.filter((c) => c.url === "https://api.openai.com/v1/responses");
-  assert.equal(openAiCalls.length, 1, "Luna was already called before the ambiguity was discovered -- that AI usage is still recorded/billed");
+  assert.equal(openAiCalls.length, 0, "Luna must NOT be called when Fed diff evidence resolution is ambiguous");
+  const usageInserts = calls.filter((c) => c.url.includes("/rest/v1/ai_usage_events") && c.method === "POST");
+  assert.equal(usageInserts.length, 0, "no ai_usage_events row must be recorded when Fed diff evidence resolution is ambiguous");
 });
 
 test("[M] no_change (not material) never calls mic_fed_statement_diffs or the material-update RPC", async () => {
