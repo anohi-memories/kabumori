@@ -44,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: done
 - task_id: kabumori-pr24-privacy-merge-postmerge-verify-20260924
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: assigned; PR #24 privacy merge + post-merge verification
+- allocation: closed; Final K1 PASS, awaiting artwork/operator release inputs
 
 ## Claude G2
 - owner: claude
