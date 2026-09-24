@@ -25,7 +25,8 @@
 
 - H1: `idle` / task_id `none` — かぶモリアプリ側用に空き
 - H2: `ready` — `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`
-- G1: `in_progress` — `kabumori-mobile-recovery-deeplink-routing-fix-and-e2e-resume-20260924`
+- G1: `review_required` — `kabumori-mobile-recovery-deeplink-routing-fix-and-e2e-resume-20260924`
+  - Deep-link fix: PR #17, unmerged. Real-device E2E paused by the user (Supabase built-in email limit). Resume later with the same disposable account. New blocker: custom SMTP.
 - G2: `review_required` — `x-admin-multibrand-selector-phase2-merge-only-20260924`
 - G3: `idle` / task_id `none`
 - G4: `idle` / task_id `none`
