@@ -76,6 +76,30 @@ export function parseRecoveryLink(rawUrl: string): RecoveryLink {
   return { kind: 'error', message: GENERIC_LINK_ERROR };
 }
 
+/**
+ * Router-side half of recovery handling, used by `src/app/+native-intent.tsx`.
+ *
+ * expo-router resolves every incoming system URL to a route before any component runs. There is no
+ * `reset-password` route (under NativeTabs every top-level route would become a visible tab), so a
+ * recovery link used to land on the Unmatched Route screen and the recovery UI above the auth gate
+ * never mounted. Recovery links are therefore sent to `/`; the original URL, fragment included,
+ * still reaches `useRecoveryLink()` through expo-linking, which reads the native URL event itself
+ * and is unaffected by this rewrite.
+ *
+ * Every other path is returned unchanged, so genuinely unknown links keep their normal Unmatched
+ * behaviour instead of being silently swallowed.
+ */
+export function recoveryRedirectPath(path: string): string {
+  if (parseRecoveryLink(path).kind !== 'none') return '/';
+  // expo-router may hand over a bare path rather than a full URL; give it a throwaway origin so the
+  // same classifier applies. `.invalid` is reserved and never resolves.
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(path)) {
+    const withOrigin = `https://recovery.invalid${path.startsWith('/') ? '' : '/'}${path}`;
+    if (parseRecoveryLink(withOrigin).kind !== 'none') return '/';
+  }
+  return path;
+}
+
 export function newPasswordIssue(password: string, confirmation: string): string | null {
   if (password.length < 6) return 'パスワードは6文字以上で入力してください。';
   if (password !== confirmation) return '確認用パスワードが一致しません。';
