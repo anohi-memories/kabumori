@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: x-autopost-phase1e-auth-secret-provider-final-review-20260924
+- status: ready
+- task_id: x-autopost-phase1f-ledger-atomic-completion-final-review-20260924
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: closed; Final C1 PASS-WITH-FIX
+- allocation: assigned; Phase1F ledger/atomic-completion/ACL final review
 
 ## Codex H2
 - owner: codex
@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: done
 - task_id: x-autopost-phase1f-atomic-completion-provider-outcome-model-20260924
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: assigned; Phase1F atomic per-post-type completion + provider outcome model
+- allocation: closed; Final K3 implementation PASS, H1 review pending
 
 ## Claude G4
 - owner: claude
