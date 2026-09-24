@@ -3,8 +3,8 @@
 - task_id: kabumori-release-foundation-appstore-web-links-eas-audit-20260924
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Opus5.5（高）
 - purpose: かぶモリをApp Store提出可能な状態へ近づけるため、Apple審査で必要になる公開Web導線（Privacy / Terms / Support / Account deletion案内）、アプリ内リンク、EAS/App Store向け設定を監査・実装する。G2の朝刊/大引け機能改修とは完全に分離する。
@@ -358,3 +358,25 @@ After PR #18 is reviewed and merged: **a Netlify preview/production publication 
 - The code risk is low: static pages, a pure link builder, and one `eas.json` key.
 - But the privacy and terms text makes factual claims about data flows that must stay true. An independent reviewer should re-verify the OpenAI field list against `personalized-reports` (especially after G2's changes) and check the `/privacy` table against the tables that actually exist.
 - No Auth or security code changed.
+
+
+## Final K1 — 2026-09-24
+
+Result: **IMPLEMENTATION PASS / merge pending Codex review**.
+
+Accepted:
+- PR #18 source candidate is complete and open at reviewed implementation head `2b91cc482be05536abca2a83ef2e346e5f4522f4`.
+- public Web routes created: /, /privacy, /terms, /support, /account-deletion
+- native legal/support links centralized through EXPO_PUBLIC_KABUMORI_WEB_URL
+- EAS production build autoIncrement added
+- 108 tests passed / 0 failed
+- mobile src TypeScript: 0 errors
+- Expo export: PASS / 10 routes
+- static output secret scan: PASS
+- git diff --check: PASS
+- production mutation=0
+
+Merge decision:
+- Do not merge PR #18 yet.
+- Independent factual review is required for privacy/terms claims against the actual data flows, especially because G2 is concurrently changing personalized-report behavior.
+- H1 review assigned.
