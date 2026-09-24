@@ -15,6 +15,11 @@
 - changed repository files: `.agent/tasks/CODEX_TASK_2.md` and `.agent/CODEX_REPORT_2.md` only. Code/source/migration files were not edited in this task. Control-file commit/push and final fresh-origin read-back are recorded in the follow-up control-sync note below.
 - remaining risks: no synthetic production cross-brand DML was created; rely on prior disposable PostgreSQL proof and natural operation for behavior. The older multibrand foundation migration marker remains absent from production history, so blind `supabase db push` or old migration replay remains unsafe. C2 should review the rollout evidence before any further production change.
 
+## Control sync
+
+- Initial control-only commit `fb1116ed0d27066821d52fe5ee416cbb5f727db9` changed exactly `.agent/CODEX_REPORT_2.md` and `.agent/tasks/CODEX_TASK_2.md` and was pushed to `origin/main` after a fresh fetch found no conflicting change.
+- A fresh post-push fetch read `origin/main=fb1116ed0d27066821d52fe5ee416cbb5f727db9`; the remote H2 TASK contained `status: review_required` / `next_owner: chatgpt`, and the remote REPORT headed this Phase0c2 task. This final note is a report-only follow-up; no code or production action accompanied it.
+
 # H2 — X autopost Phase 0c production rollout stopped at Function deploy (2026-09-24)
 
 - task_id: `x-autopost-phase0c-production-brand-scope-rollout-20260923`
