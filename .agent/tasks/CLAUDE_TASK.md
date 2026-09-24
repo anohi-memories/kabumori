@@ -3,8 +3,8 @@
 - task_id: x-admin-multibrand-selector-query-parameterization-phase2-20260924
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Opus 5.5
 - purpose: K2 PASS済みPhase1 admin foundationを使い、apps/adminへ明示的なbrand selectorを配線し、現在Kabumori固定の4 query moduleを「server-sideで権限確認済みのselected brand_id」へ安全にparameterizeする。production mutationは0。
@@ -296,3 +296,24 @@ Then STOP for K2.
     - 報告直前に `git fetch` し、origin/mainは `bf1e93e`（H2 queue関連のみ、`apps/admin/**` の変更なし）だった。
     - PR branchは `708890e` を基点としており、`apps/admin/**` での競合はない。
     - 報告commitは本TASK fileと `ACTIVE_TASK.md` のClaude slot 2の欄だけを更新する。
+
+
+## Final K2 — 2026-09-24
+
+PASS.
+
+Review findings:
+- Scope is confined to `apps/admin/src/**`; no DB migration/RPC/view/Edge Function, x-test-post, Cron, OAuth/Vault/token, consumer mobile, Important News backend, Netlify/Vercel production setting, or production deploy was changed.
+- The selected-brand boundary is server-side and fail-closed: identity from `auth.getUser()`, authority from `resolveAdminBrandAccess()`, cookie only as a selector, and `chooseActiveBrand()` revalidates against the code-owned registry and current authority before producing an `AuthorizedBrandId`.
+- Tampered/unknown/out-of-scope selections are not honored; zero authorized options redirects to unauthorized.
+- Query modules remain explicitly brand-filtered; no unscoped fallback or cross-brand aggregate was introduced. Important News is gated to Kabumori because its table has no brand_id.
+- `system-toggle` remains Kabumori-only; its posting_windows mutation was narrowed with an explicit Kabumori brand filter, reducing future cross-brand mutation risk.
+- Test/build evidence accepted: 31/31 node tests PASS, tsc PASS, lint PASS, Next build PASS, git diff --check PASS, secret scan clean, production mutation 0.
+- Independent compare confirms the PR branch is now 5 commits behind current main, but those five commits modify only .agent control files; there is no `apps/admin/**` drift since branch base `708890e`. The source candidate remains semantically reviewable, but the stale head should still be freshened before merge.
+- PR #15 remains open and unmerged as intended.
+
+Next recommendation:
+1. create a merge-only G2 task to freshen/rebase PR #15 onto current main;
+2. rerun the 31 tests + tsc/lint/build/diff/secret scan;
+3. merge only if the apps/admin diff remains semantically identical;
+4. after merge, keep Netlify preview/deploy and any DB policy work as separate gates.
