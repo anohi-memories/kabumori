@@ -65,11 +65,11 @@
 - owner: claude
 - slot: claude-3
 - status: ready
-- task_id: x-autopost-phase1f-pr25-merge-postmerge-verify-20260924
+- task_id: x-autopost-phase1g-multistep-tip-greeting-completion-20260925
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: assigned; PR #25 fresh-main merge + post-merge verification
+- allocation: assigned; Phase1G tip-thread + morning_greeting multi-step completion
 
 ## Claude G4
 - owner: claude
