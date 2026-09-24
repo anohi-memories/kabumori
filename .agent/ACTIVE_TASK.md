@@ -45,11 +45,11 @@
 - owner: claude
 - slot: claude-1
 - status: ready
-- task_id: kabumori-privacy-dataflow-reaudit-after-report-upgrade-20260924
+- task_id: kabumori-pr24-privacy-merge-postmerge-verify-20260924
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: assigned; privacy/data-flow re-audit before Netlify publication
+- allocation: assigned; PR #24 privacy merge + post-merge verification
 
 ## Claude G2
 - owner: claude
