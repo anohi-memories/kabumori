@@ -20,11 +20,11 @@
   - Blocked on manual secure secret setup because current tooling has no confirmed non-echoing write path.
   - User must set the same 43-char 32-byte base64url value in Function secret `IMPORTANT_NEWS_CRON_SECRET` and Vault `important_news_monitor_cron_secret`, then report only `両方設定済み`.
 
-- Codex slot 2: `ready` — `x-autopost-phase1-common-queue-idempotency-foundation-20260924`
-  - Phase0c2 C2 PASS後の次段階。共通queue/idempotency/retry/outcome分類とstale-running reconciliationをsource-only + disposable PostgreSQLで固める。
-  - 重点: pre-X retryable / terminal / X outcome uncertain / X confirmed DB incomplete / completed を明示し、uncertain/confirmed-Xを自動再投稿しない。
-  - brand/account scoped claim・fairness・no-double-claimを検証。production mutation 0。
-  - apps/admin/**には触れないためG2と並行可。
+- Codex slot 2: `ready` — `x-autopost-phase1b-account-bound-queue-schema-and-outcome-ledger-20260924`
+  - Phase1 C2はsafe-stopとしてPASS。独立read-backでscheduled_posts/post_execution_logsにsocial_account_id/account bindingやdurable provider outcomeが無いことを確認。
+  - current claim_due_postはglobal oldest pendingをFOR UPDATE SKIP LOCKEDで1件claim、retry_scheduled_postはdurable provider phaseなしでrunning→pending可能。現状のままaccount/fairness/retryを拡張するのは危険。
+  - 次H2はsource-onlyで明示social_account_id binding + DB integrity + durable attempt/outcome ledger + versioned claim/reconcile RPC候補を作り、disposable PostgreSQLで証明する。
+  - legacy rowsのaccount推測/backfill禁止。production mutation 0。
   - Recommended model: GPT-6 Sol Medium。
 
 
