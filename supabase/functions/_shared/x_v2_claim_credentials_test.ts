@@ -110,6 +110,7 @@ test("the RPC request carries only the claim identity, never a brand-only select
   const fetchImpl: typeof fetch = async (input, init) => {
     sent = JSON.parse(String(init?.body));
     assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer srk");
+    assert.equal(init?.redirect, "manual");
     return fakeRpcFetch([exactAttempt])(input, init);
   };
   await resolveXCredentialForClaim(claim, reader(fetchImpl));
@@ -117,6 +118,17 @@ test("the RPC request carries only the claim identity, never a brand-only select
     "p_attempt_id", "p_claim_token", "p_expected_brand_id", "p_require_publish_enabled", "p_social_account_id",
   ]);
   assert.equal(sent.p_require_publish_enabled, true);
+});
+
+test("RPC redirect is rejected without following a service-role-key request", async () => {
+  let calls = 0;
+  const fetchImpl: typeof fetch = async (_input, init) => {
+    calls += 1;
+    assert.equal(init?.redirect, "manual");
+    return new Response(null, { status: 307, headers: { Location: "https://example.invalid/steal" } });
+  };
+  await expectCode(resolveXCredentialForClaim(claim, reader(fetchImpl)), "X_CREDENTIAL_READ_FAILED");
+  assert.equal(calls, 1);
 });
 
 test("claim for a different-brand account is rejected", async () => {

@@ -11,6 +11,9 @@
 -- no first-row selection, no hardcoded account, no shared/legacy token, and no
 -- fallback to any other account. Only the access token is returned; refresh
 -- tokens and Vault references never leave the database.
+-- Keep CREATE and REVOKE in one transaction: there must be no committed
+-- interval in which PUBLIC can execute this token-returning function.
+begin;
 create function public.read_x_publish_credential_for_claim_v2(
   p_attempt_id uuid,
   p_claim_token uuid,
@@ -84,8 +87,14 @@ begin
   if v_access_secret_id is null then
     raise exception 'X_CREDENTIAL_NOT_CONFIGURED' using errcode = 'P0001';
   end if;
-  select ds.decrypted_secret into v_access_token
-  from vault.decrypted_secrets ds where ds.id = v_access_secret_id;
+  -- Vault is a separate trust boundary. Even a P0001 raised inside its view
+  -- must not pass through the outer fixed-code exception handler verbatim.
+  begin
+    select ds.decrypted_secret into v_access_token
+    from vault.decrypted_secrets ds where ds.id = v_access_secret_id;
+  exception when others then
+    raise exception 'X_CREDENTIAL_UNAVAILABLE' using errcode = 'P0001';
+  end;
   if not found or nullif(v_access_token, '') is null then
     raise exception 'X_CREDENTIAL_UNAVAILABLE' using errcode = 'P0001';
   end if;
@@ -108,3 +117,4 @@ revoke all on function public.read_x_publish_credential_for_claim_v2(uuid, uuid,
   from public, anon, authenticated;
 grant execute on function public.read_x_publish_credential_for_claim_v2(uuid, uuid, text, text, boolean)
   to service_role;
+commit;

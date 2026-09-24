@@ -66,6 +66,7 @@ export async function verifyXCredentialIdentityPreX(
   try {
     response = await fetchImpl(X_USERS_ME_URL, {
       method: "GET",
+      redirect: "manual",
       headers: { Authorization: credential.bearerHeader() },
       signal: AbortSignal.timeout(timeoutMs),
     });
@@ -96,8 +97,8 @@ function classifyCreateResponse(status: number, body: unknown): XV2ProviderOutco
       ? { kind: "x_created", xPostId: id, httpStatus: status, createRequests: 1 }
       : { kind: "x_outcome_uncertain", code: "X_CREATE_RESPONSE_MISSING_POST_ID", httpStatus: status, createRequests: 1 };
   }
-  // 408 and 5xx: X may have created the post before failing to answer.
-  if (status === 408 || status >= 500) {
+  // Redirects and unexpected statuses are not proof that X rejected the create.
+  if (status < 400 || status === 408 || status >= 500) {
     return { kind: "x_outcome_uncertain", code: `X_CREATE_HTTP_${status}`, httpStatus: status, createRequests: 1 };
   }
   // Other 4xx (including 401 and 429): X answered and did not create.
@@ -137,6 +138,7 @@ export async function createXTextPostOnceV2(
   try {
     response = await fetchImpl(X_CREATE_POST_URL, {
       method: "POST",
+      redirect: "manual",
       headers: { Authorization: credential.bearerHeader(), "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
       signal: AbortSignal.timeout(timeoutMs),

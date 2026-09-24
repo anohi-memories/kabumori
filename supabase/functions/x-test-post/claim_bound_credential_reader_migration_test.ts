@@ -31,6 +31,9 @@ test("every metadata check precedes the Vault read and only the access token lea
 });
 
 test("errors are fixed codes and database errors are masked", () => {
+  assert.match(code, /begin;\s+create function public\.read_x_publish_credential_for_claim_v2/u);
+  assert.match(code, /to service_role;\s+commit;/u);
+  assert.match(code, /from vault\.decrypted_secrets ds where ds\.id = v_access_secret_id;\s+exception when others then\s+raise exception 'X_CREDENTIAL_UNAVAILABLE'/u);
   assert.match(code, /when sqlstate 'P0001' then\s+raise;\s+when others then\s+raise exception 'X_CREDENTIAL_UNAVAILABLE'/u);
   assert.doesNotMatch(code, /raise exception '[^']*%/u);
 });

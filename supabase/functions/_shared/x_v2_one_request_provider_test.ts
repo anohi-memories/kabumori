@@ -20,11 +20,11 @@ type Step = Response | Error;
 
 /** Scripted X: counts every request by URL and fails on anything unexpected. */
 function scriptedX(script: { me?: Step; create?: Step }) {
-  const calls: Array<{ url: string; method: string; auth: string | null }> = [];
+  const calls: Array<{ url: string; method: string; auth: string | null; redirect: RequestRedirect | undefined }> = [];
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = String(input);
     const headers = new Headers(init?.headers);
-    calls.push({ url, method: init?.method ?? "GET", auth: headers.get("Authorization") });
+    calls.push({ url, method: init?.method ?? "GET", auth: headers.get("Authorization"), redirect: init?.redirect });
     const step = url === ME ? script.me : url === CREATE ? script.create : undefined;
     if (!step) throw new Error(`unexpected request ${url}`);
     if (step instanceof Error) throw step;
@@ -53,6 +53,15 @@ test("success: identity check, durable start mark, then exactly one create", asy
   assert.equal(x.count(CREATE), 1);
   assert.deepEqual(s.state.order, [ME, "mark", CREATE]);
   assert.ok(x.calls.every((c) => c.auth === `Bearer ${SECRET}`));
+  assert.ok(x.calls.every((c) => c.redirect === "manual"));
+});
+
+test("redirect responses cannot trigger an automatic second X create", async () => {
+  const x = scriptedX({ me: meOk(), create: new Response(null, { status: 307, headers: { Location: "https://example.invalid/2/tweets" } }) });
+  const outcome = await createXTextPostOnceV2({ credential: credential(), text: "hi", markProviderStarted: async () => {} }, { fetchImpl: x.fetchImpl });
+  assert.deepEqual(outcome, { kind: "x_outcome_uncertain", code: "X_CREATE_HTTP_307", httpStatus: 307, createRequests: 1 });
+  assert.equal(x.count(CREATE), 1);
+  assert.equal(x.calls.find((call) => call.url === CREATE)?.redirect, "manual");
 });
 
 test("401 after provider start is a rejection with no refresh and no second create", async () => {
