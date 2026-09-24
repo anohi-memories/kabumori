@@ -3,8 +3,8 @@
 - task_id: kabumori-mobile-recovery-pr17-final-auth-security-review-20260924
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: K1 PASS済みのPR #17 recovery deep-link修正を、merge前の最終Auth/securityレビューとして検証する。実装はClaudeが完了済みで、Codexはレビュー・必要最小限のバグ修正・回帰確認のみ行う。
@@ -76,3 +76,29 @@ When complete:
 - next_owner -> chatgpt
 - update .agent/CODEX_REPORT.md
 - STOP for C1.
+
+
+## Final C1 — 2026-09-24
+
+Result: **PASS**.
+
+Accepted:
+- H1 found one P2 recovery-link classification issue and fixed it minimally.
+- PR #17 head after review: `b3798aa6be82b6a29d8d2dcf21ca27fb19ef5f50`.
+- Unrelated/external links no longer enter recovery handling merely because they contain recovery-like text or `type=recovery`.
+- Recovery handling is restricted to accepted app schemes/internal bare-path normalization and exact recovery routes/callback payloads.
+- No auth/session weakening, token/password logging, persistence, production mutation, DB change, or Auth config change.
+- Focused/auth/account-delete tests: 98 passed / 0 failed.
+- Mobile src TypeScript scope: 0 errors.
+- Expo web export: PASS, 10 routes unchanged.
+- git diff --check: PASS.
+
+Merge decision:
+- PR #17 is considered safe to merge from the Auth/security review perspective.
+- Do not merge while required repository checks remain failed.
+- Current Vercel failure is the free-tier deployment rate limit; do not bypass it in this C1.
+
+Remaining release blockers outside PR #17:
+- custom SMTP
+- reachable confirmation/recovery Site URL
+- privacy / terms / support URLs
