@@ -37,7 +37,7 @@
   - PR #18 open (unmerged): apps/kabumori-web public pages (/privacy /terms /support /account-deletion), one-origin in-app links, eas autoIncrement, RELEASE_READINESS.md. 108/0 tests, tsc src 0. Production mutation 0.
   - Audit blockers: Expo template icon/splash; EAS production lacks Supabase env vars; operator values / Netlify / Auth Site URL / SMTP pending.
 - G2: `done` — `kabumori-app-morning-close-report-detail-and-portfolio-impact-20260924`
-- G3: `done` — `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`
+- G3: `ready` — `x-autopost-phase1e-exact-account-credential-resolver-20260924`
 - G4: `ready` — `x-admin-netlify-deploy-preview-pipeline-20260924`
 
 ## K1 release foundation result
@@ -57,7 +57,7 @@
 
 - G1 owns App Store release foundation/public legal-support Web/native release links/EAS audit.
 - G2 owns Kabumori app morning/closing report detail + portfolio-impact implementation.
-- G3 Phase1D implementation + H2 DB/RPC/permission/concurrency review are complete; Phase1D remains source-only and not production-authorized.
+- G3 Phase1D implementation + DB/RPC/concurrency review are complete; G3 now owns Phase1E exact-account credential resolver + one-request provider seam. Phase1D remains source-only and not production-authorized.
 - G4 owns apps/admin Netlify Preview configuration only.
 - H1 final Auth/security review of PR #17 is complete (C1 PASS).
 - H2 now owns PR #19 LLM/privacy/user-boundary final review.
@@ -112,6 +112,15 @@
 - Production mutation/deploy/X API calls = 0.
 - Final DB/RPC/permission/concurrency acceptance is delegated to H2 using Sol（高）.
 - No production activation until C2 review and later live-definition/prerequisite gates pass.
+
+## Phase1E next step
+
+- G3 assigned: `x-autopost-phase1e-exact-account-credential-resolver-20260924`.
+- Goal: make `claim.social_account_id` the sole credential-routing authority for future v2 dispatch.
+- No brand-only / first-row / hardcoded-account / legacy-token fallback.
+- Add a one-request provider seam so a durable provider-start boundary cannot hide a second X create request.
+- Source-only; production mutation/X API calls = 0.
+- Recommended model: Opus5.5（高）.
 
 ## Known issues / observations
 
