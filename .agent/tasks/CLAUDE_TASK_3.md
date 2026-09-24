@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924
 - owner: claude
 - slot: claude-3
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Opus5.5（高）
 - purpose: Phase1Cで判明したsplit-brain blockerを解消するため、legacy dispatcherはunbound rowsのみ、v2 dispatcherはexplicitly bound rowsのみをclaimするsource-only Phase1D candidateを完成させる。productionには適用しない。
@@ -167,3 +167,39 @@ When complete:
 - STOP for K3.
 
 Do not deploy/apply Phase1D to production.
+
+## Report
+
+- task_id: `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`
+- result: **source-only candidate complete; production mutation 0.** An additive migration partitions the claim domain in the database: the versioned legacy claim takes only unbound rows, a `scheduled_posts` trigger makes the account binding immutable and restricts bound-row lifecycle changes to the v2 RPCs, v2 RPCs cannot touch unbound rows, and no bound row can be written or claimed while the unpartitioned live `claim_due_post()` is executable by an API role. Stop for K3.
+- worktree: dedicated G3 worktree `/Users/yuya/Developer/kabumori-g3-phase1d`, branch `claude/g3-phase1d-claim-domain`. Shared checkout and other slots' worktrees/branches untouched.
+- fresh main: started on `a8c5be4`; pre-commit fresh fetch `13ce1af` (control files only since start: G1/G4/H1/ORCHESTRATION/PROJECT_RULES, no overlap); implementation rebased onto `13ce1af`.
+- changed_files:
+  - `supabase/migrations/20260924160000_x_autopost_phase1d_claim_domain_partition.sql` (new)
+  - `supabase/functions/x-test-post/claim_domain_partition_migration_test.ts` (new, 7 static tests)
+  - `supabase/tests/x_autopost_phase1d_fixture.sql`, `x_autopost_phase1d_behavior.sql`, `x_autopost_phase1d_run.sh`, `x_autopost_phase1d_claim_domain_partition.md` (new)
+  - this TASK file (status + Report)
+  - Not changed: `x-test-post/index.ts` and every other runtime file, live legacy RPCs, Phase1B migration, `apps/admin/**`, mobile, G1/G2/G4/H1/H2 files.
+- old unpublished candidate (`/private/tmp/kabumori-h1-phase1d-f074560`): **reworked, not reused.** Compared semantically against fresh main. Kept the idea of a versioned legacy claim with the live five-planner body. Rejected: (a) versioned legacy retry/fail RPCs — replaced by a DB trigger that also fences every `complete_*_post`, the morning-report stale reconciler and direct writes, which the old candidate left open; (b) changing `index.ts` in the same commit — pushing it to main before the migration is applied would break all scheduled dispatch; (c) procedural-only activation — replaced by a DB-enforced gate; (d) its concurrency test did not make lanes contend. Its files were read only; nothing was copied or cherry-picked, and it was not modified.
+- claim-domain contract: NULL → legacy only; NOT NULL → v2 only; binding immutable (`CLAIM_DOMAIN_IMMUTABLE`); bound lifecycle only inside v2 (`BOUND_ROW_REQUIRES_V2_PATH`); v2 never touches unbound (`UNBOUND_ROW_IN_V2_DOMAIN`); gate `LEGACY_UNPARTITIONED_CLAIM_ACTIVE` blocks bound insert and bound `pending→running` while live `claim_due_post()` is API-executable, including after an accidental re-grant (fail closed). No brand/account-count inference, no `limit 1` account lookup, no implicit binding at claim, no rebind through retry, historical rows untouched.
+- design note: a non-superuser owner cannot use `ALTER FUNCTION … SET <custom setting>` (`permission denied to set parameter`, reproduced as non-superuser). So the nine Phase1B functions are renamed to `*_core` **byte-for-byte**, EXECUTE on cores is revoked from all API roles including `service_role`, and each public v2 name is a service_role-only wrapper that sets `kabumori.x_queue_domain='v2'` transaction-locally and restores the previous value.
+- planner authority matrix: in the `.md` §2. Class 1 (trusted account already available): none. Class 2: `plan_daily_posts_v2` / `schedule_account_bound_post_v2` (explicit inputs; no trusted producer yet; gate keeps them closed). Class 3: all five live planners (`plan_daily_posts`, `plan_morning_report`, `plan_close_report`, `plan_us_premarket_report`, `plan_weekly_useful_tips`) and direct writers — stay unbound/legacy. The three report planners could become class 2 only through an explicit operator-set account on their settings row; not present.
+- retry/stale/reconcile proof: `.md` §3, all proved on disposable PostgreSQL (legacy retry/reclaim/fail keep NULL; v2 pre-X retry keeps the account and returns only to v2; stale reconcile sees only v2 pre-X; unbound running rows never enter v2 reconcile or ledger; uncertain / confirmed-X-DB-incomplete are claimable by neither lane; partition holds across failure/retry).
+- coexistence/cutover design: `.md` §4 — (1) apply Phase1B+Phase1D after diffing live function definitions; (2) deploy the one-line `claimDuePost()` switch to `claim_due_post_legacy_unbound_v2` **after** the migration; (3) drain/verify runtime; (4) revoke `claim_due_post()` EXECUTE (opens the gate; full rollback possible until a bound row exists); (5) bound producers and v2 dispatcher stay off; (6) only after the Phase1C prerequisites, enable per slot.
+- tests:
+  - disposable PostgreSQL 17 (local cluster, non-superuser owner, Supabase-style default grants): behavior proof **PASS**; concurrency race (2 legacy + 2 v2 workers holding claim transactions open) **PASS** — legacy 1 unbound, v2 1 bound, no double claim, no cross-domain claim; follow-up claim serves the second account, final state 1 unbound running / 2 bound running / 2 pre-X attempts; cleanup **PASS** (databases dropped, 0 left). 3 runs on the final source (plus 3 before the trigger-function rename), identical results.
+  - Phase1B's own `x_autopost_phase1b_behavior.sql` re-run on fixture → Phase1B → Phase1D: **PASS**.
+  - focused static tests (Phase1D 7 + Phase1B 6): **13/13 PASS**.
+  - full `x-test-post` regression (`deno test --no-check --allow-read .`): **416/416 PASS** (409 before Phase1D tests + 7 new), re-run after rebase.
+  - `deno check --no-config` on the new test and the Phase1B test: PASS. Plain `deno check` in this fresh worktree fails for both identically on missing `npm:@types/node` in `node_modules` (environment, pre-existing; no dependency installed).
+  - `git diff --cached --check`: PASS. `bash -n` on the runner: PASS.
+- commit_hash: implementation `238247a` (`Add X autopost Phase1D claim-domain partition candidate`); this Report is a separate control commit on top.
+- push: both commits pushed to `origin/main` from the G3 worktree after a fresh fetch (fast-forward); post-push read-back confirms both are ancestors of `origin/main`.
+- deploy: none. Production migration/DDL/DML/backfill 0, live RPC replacement 0, Edge Function deploy 0, Cron/OAuth/Vault/token 0, X API calls 0.
+- remaining_issues:
+  1. **Live definitions not re-read.** A read-only production `pg_get_functiondef` query was blocked by this session's permission policy and was not worked around. The fixture uses main's live-source bodies plus the Phase1C production audit's description of the live claim. Production also has multibrand-foundation objects (brand columns, log brand trigger) whose source is not on main. Activation step 1 must diff live `claim_due_post` / `retry_scheduled_post` / `fail_scheduled_post` / planners first.
+  2. Phase1B observation (unchanged): `claim_due_post_v2_core`'s `FOR … FOR UPDATE SKIP LOCKED` cursor prefetch locks every eligible account turn during one claim transaction (diagnostic: 0 of 2 lockable by a second worker). Concurrent v2 claims defer instead of serving another account; non-blocking, never double-claims. Fix later if parallel v2 workers are needed.
+  3. Phase1C prerequisites remain open: exact-account credential resolver, one-request provider adapter, atomic per-type completion, tip-thread and greeting media/receipt outcome model, v2 `started`/`failed` execution logs.
+  4. Unrelated pre-existing test `yume_reference_logic_test.ts` "morning_greeting remains excluded from X dispatcher claim" asserts the never-applied draft `20260901044548`; live dispatch does claim `morning_greeting` (`20260905010000`). Misleading but out of scope; not changed.
+- safety_checks: dedicated worktree only; shared checkout HEAD/branch unchanged and no file in it edited or staged; no other slot's branch checked out/reset/rebased; old candidate temp tree only read; disposable cluster on a local socket in `/private/tmp`, `service_role` etc. are local fake roles; no secrets, tokens or production rows printed or stored; the runner refuses non-`/tmp` sockets.
+- next_recommendation: K3 review, then an H-slot Codex review of the trigger/gate/wrapper design (DB/RPC/permission layer). Before any activation, a separately approved read-only live definition diff (remaining issue 1).
