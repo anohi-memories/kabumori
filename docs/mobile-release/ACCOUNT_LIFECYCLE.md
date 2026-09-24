@@ -155,9 +155,9 @@ Entry point: 設定 button in the ホーム screen header → settings sheet.
 | ログイン中のメールアドレス | information only |
 | パスワードを変更 | sends the reset mail to the signed-in address |
 | 通知の設定 | points at the existing 重要ニュース screen (not duplicated) |
-| プライバシーポリシー | opens `EXPO_PUBLIC_PRIVACY_POLICY_URL`, or says 準備中 |
-| 利用規約 | opens `EXPO_PUBLIC_TERMS_OF_SERVICE_URL`, or says 準備中 |
-| お問い合わせ・サポート | opens `EXPO_PUBLIC_SUPPORT_URL`, or says 準備中 |
+| プライバシーポリシー | opens `<EXPO_PUBLIC_KABUMORI_WEB_URL>/privacy`, or says 準備中 |
+| 利用規約 | opens `<EXPO_PUBLIC_KABUMORI_WEB_URL>/terms`, or says 準備中 |
+| お問い合わせ・サポート | opens `<EXPO_PUBLIC_KABUMORI_WEB_URL>/support`, or says 準備中 |
 | ログアウト | signs out |
 | アカウントを削除 | deletion screen with typed confirmation |
 
@@ -169,14 +169,9 @@ real routes unchanged once a stack is introduced above the tabs.
 
 ### Unresolved values (must be decided before submission)
 
-| Variable | Needs | Status |
-| --- | --- | --- |
-| `EXPO_PUBLIC_PRIVACY_POLICY_URL` | published https URL | not decided |
-| `EXPO_PUBLIC_TERMS_OF_SERVICE_URL` | published https URL | not decided |
-| `EXPO_PUBLIC_SUPPORT_URL` | https URL or `mailto:` address | not decided |
-
-No placeholder URL is committed. A value that is not an `https://` or `mailto:` destination is
-treated as unset, so a leftover `TODO` can never become a broken link in review.
+Superseded: the three per-page variables were replaced by one origin,
+`EXPO_PUBLIC_KABUMORI_WEB_URL`, and the pages now exist in `apps/kabumori-web`. See
+[RELEASE_READINESS.md](RELEASE_READINESS.md) for what is still unset.
 
 ## 6. Manual steps this task did not perform
 
