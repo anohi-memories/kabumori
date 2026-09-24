@@ -3,7 +3,7 @@
 - task_id: kabumori-app-morning-close-report-detail-and-portfolio-impact-20260924
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Opus5.5（高）
