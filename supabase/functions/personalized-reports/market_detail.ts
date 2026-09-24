@@ -134,7 +134,9 @@ export function metricLine(metric: RawMetric, reportType: ReportType, tradingDat
     key: String(metric.key ?? ""),
     label: str(metric.label) ?? String(metric.key ?? ""),
     value_display: showValue ? metricValueDisplay(unit, value!) : null,
-    change_display: freshness === "fresh" ? metricChangeDisplay(unit, num(metric.change), num(metric.change_pct)) : null,
+    change_display: showValue && freshness === "fresh"
+      ? metricChangeDisplay(unit, num(metric.change), num(metric.change_pct))
+      : null,
     session_date: showValue ? str(metric.session_date) : null,
     freshness: showValue ? freshness : "unavailable",
     note_ja: gapNote(showValue ? metric : { ...metric, freshness: "unavailable" }, reportType, tradingDate),

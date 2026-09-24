@@ -197,6 +197,8 @@ test("close market detail carries the shared morning expectation for the morning
 test("missing market datapoints stay missing: unavailable or stale values never reach the per-user packet as facts", () => {
   const line = metricLine({ key: "wti", label: "WTI原油", unit: "usd_per_barrel", value: 107, freshness: "unavailable", gap_reason: "fetch_failed" }, "close", DAY);
   assert.deepEqual([line.value_display, line.change_display, line.note_ja], [null, null, "取得できませんでした"]);
+  const malformedFresh = metricLine({ key: "wti", label: "WTI原油", unit: "usd_per_barrel", value: null, change_pct: 2.5, freshness: "fresh" }, "close", DAY);
+  assert.deepEqual([malformedFresh.value_display, malformedFresh.change_display, malformedFresh.freshness], [null, null, "unavailable"]);
   const lines = crossAssetLines(detail("close"));
   assert.ok(lines.some((l) => l.startsWith("半導体: フィラデルフィア半導体株指数（SOX） 11,599.49（前日比 +3.14%）")));
   assert.ok(!lines.some((l) => l.includes("日本国債")), "stale JGB yields are not offered as today's facts");
