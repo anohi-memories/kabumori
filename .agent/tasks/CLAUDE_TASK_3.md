@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1f-atomic-completion-provider-outcome-model-20260924
 - owner: claude
 - slot: claude-3
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Opus5.5（高）
 - purpose: Phase1E merge完了後の次 prerequisite として、v2 dispatcherがX provider結果を安全に永続化し、post_type固有の完了副作用とledger更新を同一transactionで確定できる source-only Phase1F candidateを実装する。production apply/deployは行わない。
@@ -279,3 +279,31 @@ When complete:
 STOP for K3.
 
 Do not deploy/apply/activate Phase1F in production.
+
+## Report
+
+- task_id: `x-autopost-phase1f-atomic-completion-provider-outcome-model-20260924`
+- result: **source-only candidate complete; production mutation 0; X API calls 0.** Durable `x_rejected`, typed atomic v2 completions for 5 of 8 post types, a provider-step ledger foundation for multi-request types, v2 execution logs, and ledger ACL hardening. tip / morning_greeting / brand_post stay v2-disabled. Stop for K3.
+1. fresh main SHA: started `43da78b`; pre-commit fresh fetch `9ca14d8`, then `5b65c7c` at push (15+3 commits: G1/G2/H2 app + control files, **0** files under `supabase/`); implementation rebased onto `5b65c7c`.
+2. worktree/branch: dedicated G3 worktree `/Users/yuya/Developer/kabumori-g3-phase1d`, branch `claude/g3-phase1f-atomic-completion`. No overlap: G2 personalized-reports task forbids DB changes; G1/H2 app; G4/H1 done.
+3. provider outcome state machine: `supabase/tests/x_autopost_phase1f_atomic_completion.md` §1. pre_x → (settle/reconcile) pre_x_retryable|pre_x_terminal; provider_started → completed | x_rejected (new) | x_outcome_uncertain | x_confirmed_db_incomplete → (same typed completion, same id) completed. Nothing returns across the provider-start boundary; rejected/uncertain/incomplete leave the post `failed` and are non-reclaimable; completion exactly-once (`FOR UPDATE`, repeat → `already_completed` with no side effect, other id → `X_COMPLETION_CONFLICT`, newer attempt makes older non-confirmable).
+4. per-post-type matrix (§2): **v2 atomic completion** — interaction (`complete_interaction_post_v2`), useful_tip (`complete_useful_tip_post_v2`), morning_report / close_report / us_premarket_report (`complete_report_post_v2`, run must belong to the post). **Disabled** — tip (thread: N creates), morning_greeting (media + create, publish_claims/receipt), brand_post (`complete_ai_salaryman_lab_brand_post` SQL is production-only, not in repo source). Interaction additionally needs a poll-capable seam before dispatch.
+5. changed_files (all new): `supabase/migrations/20260924180000_x_autopost_phase1f_atomic_completion.sql`; `supabase/functions/_shared/x_v2_outcome_ledger.ts` + `_test.ts`; `supabase/functions/x-test-post/atomic_completion_migration_test.ts`; `supabase/tests/x_autopost_phase1f_{fixture.sql,behavior.sql,run.sh,atomic_completion.md}`; this TASK. No existing file edited.
+6. atomicity/idempotency: each typed completion is one plpgsql function (one transaction): validate claim/account/brand/type/state → post succeeded → attempt completed with x id → the exact legacy side effects (same tables/columns/messages/metadata as the matching `complete_*_post`) → success log. Any error rolls back all of it (proved with a forced `interaction_post_metrics.x_post_id` unique violation). Recovery: `record_post_x_confirmed_incomplete_v2` keeps the confirmed id; the same typed completion later finishes it exactly once (proved). Concurrency: two sessions completing the same attempt → one `completed`, one `already_completed`, one set of side effects (race proof).
+7. x_rejected: new outcome value + shape constraint (provider_started_at required, x_post_id forbidden, error_code required); `record_post_x_rejected_v2` only from provider_started; post → failed; log `X_REJECTED:<code>`; non-reclaimable; cannot be completed afterwards. `ledgerCallForOutcome` maps the Phase1E seam's `x_rejected` to it.
+8. tip-thread status: provider-step ledger `post_provider_steps_v2` + `begin_provider_step_v2`/`finish_provider_step_v2` (durable before each request, strictly sequential, never restarted, reply must chain to the previous confirmed part, idempotent finish). Proved for a 2-part thread with an uncertain second part (no third part can start). **tip remains v2-disabled**: no completion consumes the step ledger yet.
+9. morning_greeting status: same foundation proved for media_upload → create_post with an uncertain create. **Remains v2-disabled**: publish_claims + Storage receipt lifecycle not yet folded in.
+10. observability: AFTER INSERT trigger writes a legacy-shaped `started` log per v2 claim; AFTER UPDATE OF phase writes a `failed` log with `error_code` and `<OUTCOME>:<code>` for every non-completed finish (confirmed-incomplete also carries the x id); success logs only from typed completions. Log statuses stay within started/succeeded/failed; reclaimability is decided only by the ledger.
+11. migration/ACL safety: single explicit `begin; … commit;` (no PUBLIC EXECUTE window; apply as its own unit with a tool that does not wrap files in a transaction; not re-runnable). Fails closed on drifted Phase1B constraints. All 10 functions SECURITY DEFINER + `search_path=''`; public RPCs service_role-only; internal helpers/trigger functions have no API EXECUTE. Retires the effect-less `complete_post_x_confirmed_v2` for service_role. `post_provider_steps_v2` SELECT-only for service_role; **hardening:** Phase1B `post_queue_attempts_v2` / `post_queue_account_turns_v2` lose service_role INSERT/UPDATE/DELETE/TRUNCATE (Supabase default privileges had left them writable). Depends on 1B/1D/1E; not independently applicable.
+12. disposable PostgreSQL proof (PG17, non-superuser owner, Supabase-style default grants, fake data): Phase1F behavior **PASS ×3**, duplicate-completion race **PASS ×3**, cleanup PASS. Phase1E proof re-run PASS; Phase1D proof re-run PASS. Stacked on Phase1F: Phase1E behavior PASS; Phase1D behavior fails only on its assertion that `complete_post_x_confirmed_v2` is service_role-executable — intended by Phase1F.
+13. tests: focused Phase1B/1D/1E/1F static + resolver/seam/outcome-ledger **55/55**; full `x-test-post` **429/429** (422 + 7 new; includes existing report/greeting/interaction/tip tests); `_shared` **120/120** (116 + 4 new); `important-news-monitor` **431/431**; re-run after rebase. `deno check --no-config` on new TS: PASS; `bash -n` runner: PASS; `git diff --cached --check`: PASS.
+14. commit/push/PR: implementation `0b75292`; this Report is a separate control commit; both pushed directly to `origin/main` from the G3 worktree after a fresh fetch (same flow as Phase1D/1E). No PR opened.
+15. production mutation: **0** (apply/DDL/DML/RPC 0, db push 0, deploy 0, Cron 0, OAuth/Vault/token 0, refresh 0, X API/posts/media 0, dispatcher/producers 0, legacy row binding 0). Generated `deno.lock` removed, not committed.
+16. remaining blockers:
+    - step-ledger-driven completions for tip (all parts, tip usage, one log) and morning_greeting (publish_claims + receipt); TS providers driving steps.
+    - brand_post: live `complete_ai_salaryman_lab_brand_post` definition must be captured into source before a v2 completion can be written.
+    - interaction polls: extend the one-request seam to a poll payload.
+    - uncertain → proven-created reconciliation path (operator-reviewed) does not exist.
+    - v2 dispatcher itself (claim → resolve → seam → ledger/typed completion) not written; per-account pre-X refresh writer; Kabumori credential into its account's Vault refs.
+    - production gates still open: live-definition diff (legacy RPCs, planners, social_accounts Vault columns, AI Lab RPCs, Vault ACL), atomic migration proof for the 1B→1F chain (explicit transactions in 1E/1F vs. apply tooling), staged rollback plan.
+17. next_recommendation: K3, then Codex review of the ledger state machine, typed completion fidelity vs. legacy RPCs, ACL hardening and trigger logging (Opus5.5/Sol high). Next implementation: Phase1G step-ledger completions for tip/morning_greeting (or, if preferred first, the v2 dispatcher for the five enabled types behind a gate that stays OFF).
