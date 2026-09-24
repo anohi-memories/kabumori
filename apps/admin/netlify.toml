@@ -1,25 +1,35 @@
-# Phase 1 candidate: not yet used to create or configure any Netlify site (per this task's production
-# mutation budget of 0). See ../docs/phase1-netlify-thin-control-plane.md for the full readiness
-# assessment this file is based on.
+# Phase 2 (deploy preview pipeline): still not used to create or configure any Netlify site --
+# creating a site requires interactive Netlify account authorization this task cannot perform (per this
+# task's production mutation budget of 0). See ../docs/phase1-netlify-thin-control-plane.md (Phase 1
+# readiness audit) and ../docs/phase2-netlify-deploy-preview.md (this file's setup runbook + verified
+# Next.js 16 support + the one remaining risk that needs a live Deploy Preview) for the full picture.
 #
-# Intended setup: a NEW Netlify site with this repository connected and "Base directory" set to
-# "apps/admin" in the Netlify UI (this repo has no root-level workspace tooling -- apps/admin is a
-# self-contained Next.js app with its own package.json/lockfile, the same way it is deployed to Vercel
-# today). The current Vercel Production deployment is untouched by this file's existence; adding this
-# file does not by itself create, modify, or deploy anything.
+# Setup once a site exists: connect this repository with "Base directory" set to "apps/admin" in the
+# Netlify UI (this repo has no root-level workspace tooling -- apps/admin is a self-contained Next.js app
+# with its own package.json/lockfile, the same way it is deployed to Vercel today). Netlify auto-detects
+# netlify.toml at the configured Base directory, so no root-level file is needed. Base directory also
+# scopes build triggers: only pushes/PRs touching apps/admin/** build this site. The current Vercel
+# Production deployment is untouched by this file's existence; adding/editing it does not by itself
+# create, modify, or deploy anything.
 [build]
   command = "npm run build"
   publish = ".next"
 
-# Netlify's own Next.js Runtime (bundled automatically for detected Next.js sites) reads the build output
-# above and provisions the necessary Netlify Functions for SSR/Server Actions/the proxy (middleware)
-# itself -- no explicit @netlify/plugin-nextjs entry is needed for currently-supported Next.js major
-# versions, but this app is on Next.js 16.3.4 (very recent at the time this candidate was written).
-# Confirm Netlify's published supported Next.js version range covers 16.x before actually deploying;
-# if it does not yet, that is this project's one real, must-verify-before-deploy Netlify readiness risk
-# (see the design doc's "Netlify readiness" section) -- everything else in this app (no service-role key,
-# no Node-only APIs outside the one Server Action, standard cookies-based @supabase/ssr session handling)
-# is already compatible with how Netlify's Next.js Runtime works.
+# Netlify's own Next.js Runtime (bundled automatically for detected Next.js sites, not pinned here on
+# purpose -- Netlify recommends leaving the adapter version unpinned so each build picks up its latest
+# compatibility fixes) reads the build output above and provisions the necessary Netlify Functions for
+# SSR/Server Actions/the proxy itself -- no explicit @netlify/plugin-nextjs entry is needed.
+#
+# Next.js 16 is officially supported by Netlify with zero required configuration (confirmed via Netlify's
+# own changelog; this app's 16.3.4 is also past the 16.3.3 minimum a 2026-08 Netlify security advisory
+# recommended). The one remaining, NOT locally verifiable risk: this app uses `src/proxy.ts` (Next.js 16's
+# rename of middleware.ts). Community reports as of this writing describe proxy.ts support depending on
+# the exact bundled adapter version and recommend confirming the request that runs through it (session
+# cookie refresh, in this app's case) actually fires on a real Netlify Deploy Preview before relying on
+# it in production -- see docs/phase2-netlify-deploy-preview.md "Netlify readiness (Phase 2)" for detail
+# and citations. Everything else in this app (no service-role key, no Node-only APIs outside the one
+# Server Action, standard cookies-based @supabase/ssr session handling) is already compatible with how
+# Netlify's Next.js Runtime works.
 
 [build.environment]
   NODE_VERSION = "24"
