@@ -3,7 +3,7 @@
 - task_id: kabumori-mobile-release-blockers-phase1-production-rollout-20260924
 - owner: claude
 - slot: claude-1
-- status: review_required
+- status: done
 - next_owner: chatgpt
 - priority: critical
 - recommended_model: Opus 5.5
@@ -339,3 +339,43 @@ Nothing else. The Gate D check below ran in a transaction that always rolled bac
 4. Then TestFlight / App Store metadata and the final security gate.
 
 - production mutation total for this TASK: **2** (listed in §8). Both were approved and verified.
+
+
+## Final K1 review — 2026-09-24
+
+**PASS**
+
+Verified and accepted:
+- Gate A PASS: only `20260924100000_ensure_my_profile.sql` was applied; no `db push`, no history repair/reconcile.
+- `public.ensure_my_profile()` exists with the reviewed contract:
+  - security invoker
+  - `search_path=""`
+  - EXECUTE for postgres owner + authenticated
+  - no anon/service_role EXECUTE
+  - no new trigger/policy/auth-schema mutation
+- Gate B PASS: only `account-delete` was deployed.
+  - ACTIVE v1
+  - `verify_jwt=true`
+  - deployed source is structurally identical to reviewed main source
+  - all other Functions remained unchanged
+- Gate D PASS:
+  - rollback-contained RPC contract check passed
+  - unauthenticated and non-user-token requests fail closed with 401
+  - auth.users / profiles counts remained unchanged
+  - no account deletion or password-reset email was performed
+- Production mutations were exactly the two approved changes above.
+- Important News H1, x-test-post/H2, G2 admin/Netlify, market-report, X OAuth/Vault, Push, TestFlight/App Store and unrelated DB objects were untouched.
+
+Gate C is an accepted manual blocker, not a K1 failure:
+- Supabase Dashboard must add exactly `kabumori://reset-password` to Authentication → URL Configuration → Redirect URLs.
+- Do not remove/replace existing entries or change Site URL/providers.
+- No Expo Go wildcard/dev URL is required by this task.
+
+Remaining release blockers:
+1. manual recovery redirect allowlist entry
+2. real recovery/deletion E2E using a designated disposable test account
+3. real privacy / terms / support URLs
+4. TestFlight / real-device E2E
+5. final App Store/security gate
+
+Claude slot 1 production rollout is complete and returns to `done`.
