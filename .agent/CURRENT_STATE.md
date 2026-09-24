@@ -15,10 +15,9 @@
 ## Active workstreams
 
 - Codex slot 1: `in_progress` — `kabumori-important-news-caller-auth-production-rollout-20260924`
-  - Read-only preflight matched assumptions: monitor ACTIVE v64 / verify_jwt=false, migration unapplied, Vault entry absent, four target Cron jobs and shadow unchanged.
-  - Production mutation 0.
-  - Blocked on manual secure secret setup because current tooling has no confirmed non-echoing write path.
-  - User must set the same 43-char 32-byte base64url value in Function secret `IMPORTANT_NEWS_CRON_SECRET` and Vault `important_news_monitor_cron_secret`, then report only `両方設定済み`.
+  - User confirmed both caller-auth secrets are configured manually.
+  - Resume from read-only secret presence verification → exact caller-auth migration → four-Cron postflight → important-news-monitor-only deploy → natural runtime verification.
+  - Never expose/read back plaintext secret values; keep `verify_jwt=false`; no business logic/auto_publish/Cron cadence/X/Push changes.
 
 - Codex slot 2: `ready` — `x-autopost-phase1b-account-bound-queue-schema-and-outcome-ledger-20260924`
   - Phase1 C2はsafe-stopとしてPASS。独立read-backでscheduled_posts/post_execution_logsにsocial_account_id/account bindingやdurable provider outcomeが無いことを確認。
