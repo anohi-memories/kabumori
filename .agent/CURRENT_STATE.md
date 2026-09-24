@@ -33,13 +33,12 @@
   - App 77/77, account-delete 17/17, disposable DB proof PASS, Expo web export PASS, Vercel PASS.
   - Next G1: fresh-check/freshen and merge only. Production migration/deploy/Auth settings remain forbidden.
 
-- Claude slot 2: `done` — `x-admin-netlify-thin-control-plane-phase1-20260924`
-  - K2 PASS。apps/adminのみのNetlify thin-control-plane設計/source candidate完成。production mutation 0。
-  - admin_users=global、brand_memberships owner/admin=brand-scoped のaccess resolverと7 tests追加。既存Kabumori hard-filterは未配線・未変更。
-  - tests: node 12/12 PASS、tsc/lint/build PASS。
-  - Netlify公式の現行docsを独立確認: OpenNextでNext.js 13.5+をサポートしstable releaseごとに検証、App Router/SSR/RSC/Server Actions/Middleware/Turbopack対応。Node.js 24も現行build defaultとして利用可能。
-  - branch `admin-netlify-thin-control-plane-phase1-20260924` はmainより17 commits behind。merge前にfresh rebase + test rerun必須。
-  - 次候補: brand selector配線 + 4 admin query modulesのbrand parameterization。Netlify実deploy/site作成は別の明示gate。
+- Claude slot 2: `ready` — `x-admin-netlify-thin-control-plane-phase1-merge-only-20260924`
+  - K2 PASS済みPhase1 candidateを最新mainへfreshen/rebaseし、apps/admin/** drift確認＋tests再実行後にPhase1だけmergeする。
+  - reviewed branch: `admin-netlify-thin-control-plane-phase1-20260924` / reviewed commit `3505269386b6345468a025749a5dd22b4ededbb7`。
+  - brand selector配線・4 query module parameterization・DB/RPC・Netlify deployはこのtaskでは禁止。
+  - production mutation 0。
+  - Recommended model: Opus 5.5。
 
 
 ## Parallel safety
