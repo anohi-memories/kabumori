@@ -1,127 +1,168 @@
 # Codex Task 2
 
-- task_id: x-autopost-phase0c2-production-deploy-retry-20260924
+- task_id: x-autopost-phase1-common-queue-idempotency-foundation-20260924
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: codex
 - priority: critical
 - recommended_model: GPT-6 Sol Medium
-- purpose: Phase0c C2 reviewで、最初のx-test-post production deployがSupabase Functions API HTTP 500で失敗し、migration未適用・production mutation 0のまま停止した。Phase0b compatible clientを同じ安全順序で再試行し、成功時のみruntime確認→fresh preflight→exact migration applyへ進む。
+- purpose: Phase0c2でbrand-scoped uniquenessのproduction rolloutがC2 PASSした後の次段階として、複数ブランド/複数Xアカウント運用に必要な共通queue・idempotency・retry/outcome分類のfoundationをsource-onlyで設計・実装・disposable proofする。production mutationは0。
 
-## C2 outcome carried forward
+## Context carried forward
 
-- Phase0c result: STOPPED before migration.
-- One authorized deploy attempt returned Supabase Functions API HTTP 500 internal error.
-- Independent C2 read-back confirmed:
-  - x-test-post remains ACTIVE v118
-  - verify_jwt=false
-  - runtime bundle SHA remains f15bc31519a31181bb739504f9a24be895e7f5a95f01725bca15349db38349c4
-  - the three legacy global UNIQUE constraints still exist
-  - Phase0c migration was not applied
-- No successful production deploy, DB write, Cron/OAuth/Vault/settings mutation, or intentional X publish occurred.
+Production now has:
+- x-test-post v119 with brand-scoped publish_claim behavior
+- legacy global UNIQUE constraints removed
+- brand-scoped unique indexes active
+- four planner RPCs using brand-scoped scheduled_posts conflict targets
+
+Known next risks from the architecture audit:
+- claim_due_post() globally claims the oldest due row and has no brand fairness
+- retry/outcome states do not yet cleanly distinguish:
+  - safe pre-X retry
+  - uncertain X outcome
+  - confirmed X but DB completion failed
+  - terminal failure
+- stale running reconciliation/observability is incomplete
+- confirmed X must never be retried merely because DB completion is uncertain
+- queue/account/idempotency behavior must remain brand/account scoped
 
 ## Mandatory fresh start
 
-1. fetch fresh origin/main
-2. read ORCHESTRATION / CURRENT_STATE / this TASK / latest REPORT2
-3. inspect all active slots for overlap
-4. verify Phase0b source commit 76dfe74 or byte-equivalent source is still present
-5. read-only production metadata for x-test-post + three constraints/indexes + four planners + Cron
-6. determine whether the previous HTTP 500 appears transient/platform-side or indicates a reproducible packaging problem
+1. git fetch origin main
+2. fresh origin/main
+3. read ORCHESTRATION / CURRENT_STATE / this TASK / latest CODEX_REPORT_2
+4. inspect H1/G1/G2 scopes for overlap
+5. inspect current x-test-post scheduler/claim/completion/logging code and live read-only metadata
+6. identify exact tables/RPCs/functions involved before writing
 
-If another slot touches x-test-post, these three tables, four planner RPCs, the migration, Cron, or production settings, STOP.
+If another slot touches x-test-post queue/claim/retry/log tables or the same migration/RPC/function files, STOP.
 
-## Gate A — diagnostic/preflight only
+## Scope A — current-state audit
 
-Before any production retry:
-- reproduce local bundle/build/package preparation without deployment if possible
-- inspect Supabase CLI/API error context without exposing secrets
-- confirm no source/package/config regression
-- confirm production remains on old compatible-with-legacy runtime
-- confirm migration remains unapplied
-- confirm all three legacy global constraints remain
-- confirm brand-scoped indexes remain valid and scoped duplicates remain zero
-- confirm four planner RPCs still use old target
-- confirm Cron unchanged
+Read-only/source audit:
+- claim_due_post() exact ordering/locking/claim semantics
+- scheduled_posts lifecycle/status/attempt_count fields
+- post_execution_logs write lifecycle
+- publish_claims relationship to generic scheduled posting
+- existing retry helpers and stale-running logic
+- AI Lab confirmed-X completion protection
+- existing dedupe/fingerprint tables and completion paths
+- current Cron cadence and invocation contract (read-only)
 
-## Gate B — explicit user consent immediately before retry
+Produce a concise invariant map before implementation.
 
-STOP and ask the user directly before the next production deploy attempt.
+## Scope B — canonical outcome model
 
-The request must say:
-- retry only the compatible x-test-post deploy first
-- if deploy succeeds, verify runtime/hash/source and perform a non-publish safe smoke
-- then fresh-check schema/planners
-- only then apply the exact reviewed migration
-- no Cron/OAuth/Vault/publish_enabled/Netlify/Vercel changes
-- no intentional X publish
-- stop immediately on any mismatch/error
+Design a small shared outcome/state contract for scheduled posting that distinguishes at minimum:
 
-Prior generic OK does not count unless it directly answers this exact retry confirmation.
+1. pre_x_retryable
+2. pre_x_terminal
+3. x_outcome_uncertain
+4. x_confirmed_db_incomplete
+5. completed
 
-## Gate C — retry policy
+Requirements:
+- no automatic retry for x_outcome_uncertain
+- no automatic retry for x_confirmed_db_incomplete
+- confirmed X post id, when known, is preserved
+- retry eligibility is explicit and machine-testable
+- no provider response body/token/secret persistence
+- normalized stable error codes only
 
-- one retry attempt only under this task unless separately approved
-- deploy only x-test-post
-- preserve verify_jwt=false
-- no secret/config change
-- no unrelated Function deploy
-- if HTTP 500 repeats, STOP and report; do not switch deployment method or retry again automatically
-- if deploy succeeds, runtime files/hash must match approved origin source before migration
+Do not overfit to one brand.
 
-## Gate D/E/F — same safe rollout order
+## Scope C — queue claim foundation
 
-After successful deploy:
-1. safe non-publish smoke
-2. fresh schema/data/planner preflight
-3. apply only supabase/migrations/20260923102327_x_autopost_phase0_brand_scoped_uniqueness.sql with exact reviewed bytes
-4. no db push/history repair/old migration replay
-5. postflight read-back:
-   - legacy global constraints absent
-   - brand-scoped unique indexes valid
-   - no scoped duplicates
-   - four planners use brand-scoped conflict target
-   - planner security/search_path/ACL unchanged
-   - x-test-post runtime unchanged from successful deploy
-   - Cron unchanged
-   - unrelated Functions unchanged
-   - publish_enabled/OAuth/Vault untouched
-   - intentional X publish/media/repost = 0
+Prepare source-only migration/RPC candidate and/or shared logic that:
+- keeps claims atomic with FOR UPDATE SKIP LOCKED or equivalent
+- scopes deterministic claim/idempotency identity by brand and target account where available
+- avoids one noisy brand permanently starving others
+- supports bounded concurrency/fairness without changing Cron cadence yet
+- prevents duplicate simultaneous claim of the same scheduled row
+- records enough state for stale-running reconciliation
+- fails closed on ambiguous/missing brand/account context
 
-## Forbidden
+If exact account_id is not yet reliably available on scheduled_posts, do not invent a fake fallback. Document the minimum schema/API change required and stop at the safe boundary.
 
-- automatic second retry
-- alternative deploy path after repeat failure without new approval
-- unrelated Function deploy
-- Cron/OAuth/Vault/token/publish_enabled mutation
-- X publish/media/repost
-- migration history repair
-- db push
+## Scope D — stale-running reconciliation
+
+Design/implement source-only reconciliation logic that can classify stale running rows without causing duplicate X posts.
+
+At minimum prove:
+- pre-X stale work can become retryable under strict conditions
+- rows with uncertain provider outcome do not auto-retry
+- rows with confirmed X id but incomplete DB completion become repair/manual-reconcile, not republish
+- terminal failures stay terminal unless explicitly reset by an operator path not built in this task
+
+## Scope E — disposable PostgreSQL proof
+
+Use fake-only PostgreSQL fixtures to prove:
+- two brands with due work can both make progress under the proposed claim policy
+- same row cannot be claimed twice concurrently
+- brand isolation
+- retryable pre-X row can re-enter safely
+- uncertain-X row cannot be reclaimed
+- confirmed-X/db-incomplete row cannot be republished
+- stale reconciliation transitions only the allowed categories
+- rollback/cleanup leaves no residue
+
+No production data writes.
+
+## Scope F — tests
+
+Add focused tests for:
+- outcome classification
+- retry gating
+- no-double-claim
+- fairness/bounded selection
+- stale reconciliation
+- confirmed-X no-retry invariant
+- brand/account fail-closed behavior
+- exact migration/static assertions
+
+Run relevant x-test-post regression and git diff --check.
+
+## Explicit non-goals / forbidden
+
+- production migration apply
+- Function deploy
+- Cron change
+- OAuth/Vault/token mutation
+- X API call/post/media/repost
 - Netlify/Vercel change
-- queue/token/account-routing refactor
+- apps/admin/**
+- G2 brand selector/query parameterization
+- generic token-router implementation
+- account onboarding/OAuth changes
+- blind db push/history repair
+- broad x-test-post rewrite unrelated to queue/idempotency
 
-## Completion
+## Production mutation budget
 
-When complete or stopped:
+0.
+
+## Completion / C2
+
+When complete:
 - status -> review_required
 - next_owner -> chatgpt
-- update CODEX_REPORT_2 with diagnostic result, consent, retry count, deploy metadata, runtime verification, migration status, postflight, mutation counts, remaining risk, commit/push/fresh-origin verification
-- STOP for C2
+- update CODEX_REPORT_2
 
+Report:
+1. fresh source commit
+2. current queue invariant map
+3. proposed outcome model
+4. exact claim/fairness design
+5. stale reconciliation design
+6. migration/RPC/source candidate paths
+7. disposable proof results
+8. tests/regression counts
+9. changed files
+10. production mutation=0 proof
+11. remaining blocker for account-scoped routing if any
+12. exact next production/source gate
+13. commit/push/fresh-origin verification
 
-## Final C2 — 2026-09-24
-
-PASS.
-
-Independent production verification confirmed:
-- `x-test-post` is ACTIVE v119, `verify_jwt=false`, runtime SHA `4642f128a14d7eb8a269f6d50023956f33d0762f3a0dd91b8b6fdc3ef3d0d322`.
-- Deployed `publish_claim_logic.ts` contains the approved brand-scoped conflict target `on_conflict=brand_id,post_type,date_jst`, writes `brand_id`, and scopes both complete/fail PATCH paths by brand.
-- All three legacy global UNIQUE constraints are absent.
-- All three intended brand-scoped unique indexes remain unique/valid/ready.
-- All four planner RPCs use the new brand-scoped scheduled-post conflict target and no longer contain the old target; SECURITY DEFINER and `search_path=public` remain intact.
-- Production migration history contains exactly the applied `x_autopost_phase0_brand_scoped_uniqueness` migration under version `20260924001508`.
-- publish-enabled aggregate remains 2 true / 1 false, matching the rollout report.
-- No further production mutation was required for C2.
-
-C2 accepts the Phase0c2 production rollout as complete. The known older multibrand foundation migration-history drift remains a separate operational caveat: continue to avoid blind `supabase db push` or replay/history repair.
+Then STOP for C2.
