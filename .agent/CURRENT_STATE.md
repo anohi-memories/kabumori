@@ -17,30 +17,42 @@
 
 ## Model routing
 
-- Claude（くろちゃん）: Sonnet 5 / Opus 5.5。通常実装はSonnet 5優先、高リスク・複雑設計のみOpus 5.5。
-- Codex（こでさん）: Luna / Sol。利用枠節約のためLunaで安全に処理できるTASKはLuna優先、高リスク境界のみSol。
+- Claude（くろちゃん）: Sonnet5（中/高/極高） / Opus5.5（中/高/極高）。Sonnet5で安全な作業はSonnet5優先。
+- Codex（こでさん）: Luna（中/高/極高） / Sol（中/高/極高）。利用枠節約のためLunaで安全なTASKはLuna優先。
+
+## Deployment policy — user approved
+
+- 開発中・PR・テスト用Web PreviewはNetlifyへ寄せる。
+- レビュー完了後の最終production deployのみVercelを使う。
+- Vercelのrate limitを通常の開発・レビュー工程のブロッカーにしない。
+- 現在Vercel待ちのPR #15 final gateは一旦保留。
+- かぶモリExpoアプリについてNetlifyはExpo Web Preview用途であり、iOS実機/TestFlight/native-only機能の代替ではない。
 
 ## Current slot snapshot
 
 - H1: `ready` — `kabumori-mobile-recovery-pr17-final-auth-security-review-20260924`
 - H2: `idle` / task_id `none`
 - G1: `done` — `kabumori-mobile-recovery-deeplink-routing-fix-and-e2e-resume-20260924`
-  - Final K1 PASS: full real-device recovery/password-reset/re-login/account-deletion E2E complete.
-  - PR #17 remains unmerged; H1 final Auth/security review is queued before merge.
-- G2: `done` — `x-admin-multibrand-selector-phase2-merge-only-20260924`
-  - K2 accepted completed verification/freshen work; remaining merge/Vercel/QA continuation moved to G4.
+- G2: `ready` — `kabumori-netlify-expo-web-preview-pipeline-20260924`
 - G3: `ready` — `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`
-- G4: `ready` — `x-admin-phase2-vercel-gate-merge-and-postmerge-qa-20260924`
+- G4: `ready` — `x-admin-netlify-deploy-preview-pipeline-20260924`
 
 ## Parallel safety
 
-- G3 owns X queue/planner SQL/RPC/x-test-post Phase1D implementation.
-- G4 owns apps/admin PR #15 merge gate and post-merge QA only.
-- G1 owns consumer mobile recovery/auth E2E.
-- H1/H2 are currently reserved for Codex review/verification work.
+- G2 owns root Expo/Web preview configuration and Kabumori Netlify preview setup.
+- G3 owns X queue/planner SQL/RPC/x-test-post Phase1D.
+- G4 owns apps/admin Netlify Preview configuration only.
+- H1 owns final Auth/security review of PR #17 and must not be overlapped by G2 changes to the exact PR #17 files.
+- H2 is free for review/verification work.
 - push前にfresh `origin/main`確認。
+- 各slotは独立worktree/checkoutを使用する。
 - 既存未コミット変更は他workstream所有として触らない。
-- 競合可能性を安全に否定できない場合は開始せず、具体的な競合箇所を報告する。
+
+## Deferred work
+
+- PR #15 final Vercel check -> merge -> post-merge read-back -> production Admin QA.
+- Prior reviewed code/test evidence remains preserved in the old G4/G2 reports.
+- Resume only after Netlify Preview workflow is established or user explicitly asks.
 
 ## Known issues / observations
 
@@ -48,9 +60,8 @@
 - Phase1B migration単独適用禁止。
 - old dispatcherのまま `claim_due_post_v2` 有効化禁止。
 - legacy pending rowsの暗黙account backfill禁止。
-- Phase1Cは安全停止C2 PASS。Phase1Dでclaim-domain partitionをsource-only検証する。
+- Phase1Cは安全停止C2 PASS。Phase1DはG3。
 - multibrand migration history不整合の可能性があるためblind `supabase db push`禁止。
-- PR #15はVercel deployment rate limit解除後にG4でmerge continuation。
 
 ## 更新ルール
 
