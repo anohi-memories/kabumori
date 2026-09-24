@@ -3,8 +3,8 @@
 - task_id: kabumori-release-pr18-privacy-dataflow-eas-light-review-20260924
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Luna（高）
 - purpose: K1 PASS済みPR #18の公開Privacy/Terms/Support/Account-deletionページ、native legal links、EAS設定を、実際のデータフローとApp Store提出観点から独立レビューする。実装はClaude完了済み。原則review-only、必要なら最小修正のみ。
@@ -108,3 +108,23 @@ When complete:
 - H1 re-ran the web build, legal-links and settings tests against that exact head: 17 passed / 0 failed.
 - Vercel remains failed for build rate limit; no bypass, merge, or deploy was performed.
 - The review result and remaining C1 decision are recorded in `.agent/CODEX_REPORT.md`.
+
+
+## Final C1 — 2026-09-24
+
+Result: **PASS after H1 fixes**.
+
+Accepted reviewed PR #18 head:
+`6f3277639bc19fb1f420cd0e771c1d77f6d23519`
+
+Accepted:
+- privacy/data-flow corrections
+- account-deletion retention caveat
+- OpenAI data disclosure correction
+- legal-link/build checks
+- 17 passed / 0 failed focused tests
+- git diff --check PASS
+- production mutation=0
+
+Vercel build-rate-limit failure is not a Kabumori Web quality gate under the current hosting policy. Kabumori Web uses Netlify.
+PR #18 may proceed to fresh-main merge/post-merge verification.
