@@ -1,122 +1,135 @@
 # Claude Task 4
 
-- task_id: x-admin-phase2-vercel-gate-merge-and-postmerge-qa-20260924
+- task_id: x-admin-netlify-deploy-preview-pipeline-20260924
 - owner: claude
 - slot: claude-4
 - status: ready
 - next_owner: claude
 - priority: high
-- recommended_model: Sonnet 5
-- purpose: G2/K2で実装・freshen・全検証PASS済みのPR #15について、Vercel rate limit解除後のcheck確認、必要最小限の再freshen、PR merge、post-merge read-back、本番Admin QAまでを完了する。新機能実装はしない。
+- recommended_model: Sonnet5（高）
+- purpose: X自動投稿・複数ブランド管理画面 apps/admin の開発中PreviewをNetlifyへ移し、Vercelのdeployment rate limitに依存せずテスト・レビューできる状態を作る。最終production deployのみVercelへ残す。
 
-## Carry-forward from K2
+## Deferred previous G4 task
 
-Completed and accepted:
-- reviewed Phase2 patch semantics unchanged
-- freshened branch/head verified against reviewed candidate
-- apps/admin/** only, 18 reviewed files
-- node tests 31/31 PASS
-- npx tsc --noEmit PASS
-- npm run lint PASS
-- npm run build PASS
-- git diff --check PASS
-- secret scan clean
-- production mutation 0
+Previous task:
+- x-admin-phase2-vercel-gate-merge-and-postmerge-qa-20260924
+- PR #15 remains unmerged because Vercel check is rate-limited
+- reviewed code/test state is preserved in prior G4 Report
+- do NOT discard or reinterpret that work
+- its remaining steps (Vercel final gate -> merge -> post-merge read-back -> production QA) are intentionally deferred by explicit user instruction while Netlify Preview is introduced
 
-Current PR state from prior report:
-- PR #15 OPEN
-- last known head: `b04442561d9e9c6d01b4a9fcf640c2cf731cd923`
-- merge blocked only because Vercel reported `Deployment rate limited — retry in 24 hours`
-- prior retry preserved apps/admin semantics; no source behavior change
-- no merge has occurred yet
+This Netlify task supersedes the active slot temporarily; the deferred PR #15 final-production gate must be resumed later as a separately assigned task after Netlify workflow is established.
+
+## User-approved deployment policy
+
+New standard:
+- development / PR / test deploy: Netlify Deploy Preview
+- code review occurs against source + Netlify Preview
+- Vercel is reserved for final production deployment after implementation and review are complete
+- do not spend Vercel deployment quota on ordinary intermediate testing where Netlify can validate the same web behavior
 
 ## Mandatory startup
 
-1. fresh fetch origin/main
-2. read ORCHESTRATION / CURRENT_STATE / this TASK / prior G2 Report
-3. inspect G1/G2/G3/H1/H2 for scope overlap
-4. inspect PR #15 current head/checks/status
-5. compare PR head against fresh main
-6. if main changed only outside apps/admin/**, freshen only as needed
-7. if main contains overlapping apps/admin/** changes, STOP and report exact files
+1. Read PROJECT_RULES.md
+2. Read .agent/ORCHESTRATION.md
+3. Read .agent/CURRENT_STATE.md
+4. Read this TASK and prior G4/G2 reports for PR #15 context
+5. Fresh fetch origin/main
+6. Confirm dedicated independent G4 worktree
+7. Inspect G3/H1/H2/G1/G2 scopes and prove no overlap
+8. Audit apps/admin Next.js version, package scripts, proxy/middleware, Supabase SSR, Server Actions, dynamic routes, and current Vercel-specific config
+9. Audit any existing Netlify config before changing files
 
-## Scope A — Vercel gate
+## Scope A — Netlify Preview architecture
 
-- Check current PR #15 Vercel status.
-- Do not repeatedly force empty retriggers if the provider is still rate-limited.
-- If Vercel check is still rate-limited, STOP and report unchanged blocker.
-- If Vercel check passes, continue.
-- Do not bypass/ignore a failed Vercel check.
+Configure apps/admin so PR/branch builds can run as Netlify Deploy Previews.
 
-## Scope B — freshen safety
+Requirements:
+- preserve Next.js 16 App Router semantics
+- preserve Supabase SSR/cookie behavior
+- preserve protected route behavior
+- preserve Server Actions / proxy or middleware behavior supported by the chosen Netlify adapter/runtime
+- do not convert secure server reads to client-side reads merely to make Netlify work
+- no weakening of auth/RLS/admin boundaries
+- no production DNS/domain change
+- no production Supabase mutation
 
-If PR #15 is behind:
-- rebase/freshen onto fresh main only when there is no semantic apps/admin overlap
-- verify patch equivalence to the K2-approved Phase2 candidate
-- rerun required verification after any freshen
+If a Vercel-specific assumption blocks Netlify, document and minimally abstract it; do not redesign unrelated admin behavior.
 
-Required verification before merge:
-- node tests 31/31 or higher only for unrelated added tests
-- npx tsc --noEmit PASS
-- npm run lint PASS
-- npm run build PASS using public Supabase env only
-- git diff --check PASS
-- secret scan clean
-- selected-brand authority unchanged
-- all operational queries remain explicitly brand-scoped
+## Scope B — environment and secret boundary
+
+Classify every env var needed by apps/admin:
+- public/browser-safe
+- server-only
+- unavailable / external setup required
+
+Rules:
+- never commit secret values
+- never expose service_role, OAuth secrets, Vault material, OpenAI private keys, or other server-only values via NEXT_PUBLIC
+- Preview must fail closed if required server-only configuration is absent
+- document exact Netlify UI environment-variable names required, but not values
+
+If Netlify connection/site setup requires interactive account authorization, prepare the repository completely and report only the exact remaining UI steps.
+
+## Scope C — build and preview verification
+
+Run:
+- apps/admin clean install as appropriate
+- node tests (31/31 baseline or current higher count)
+- npx tsc --noEmit
+- npm run lint
+- npm run build
+- Netlify-compatible local/build command if available
+- git diff --check
+- secret scan
+
+If actual Netlify Preview deploy is available through existing credentials/integration, verify:
+- deploy succeeded
+- login/auth redirect behavior
+- protected pages
+- Kabumori / AI Lab selector rendering
 - Important News remains Kabumori-only
-- system-toggle remains Kabumori-only
-- posting_windows update remains Kabumori brand-filtered
+- AI Lab does not expose Kabumori-only toggle
+- representative SSR/dynamic pages render
 
-## Scope C — merge
+Do not mutate production operational settings during QA.
 
-Merge PR #15 only if:
-- Vercel check PASS
-- fresh compare PASS
-- no semantic drift from reviewed Phase2 candidate
-- exact head is pinned/verified immediately before merge
+## Scope D — deployment workflow
 
-Use the normal reviewed PR merge path.
-Do not bypass checks.
+Document the new normal flow:
 
-Note: merge is expected to trigger the existing Vercel Production auto-deploy for admin. This continuation is specifically authorized to finish the previously approved merge path once the Vercel gate passes; do not make any unrelated Vercel configuration change.
+feature branch/PR
+-> local tests
+-> Netlify Deploy Preview
+-> Claude implementation completion
+-> ChatGPT K review
+-> Codex review when required
+-> fixes/regression
+-> final approval
+-> Vercel production deploy only at the end
 
-## Scope D — post-merge read-back
+Vercel failure/rate-limit must no longer block ordinary implementation review if Netlify Preview and local tests cover the required web checks.
 
-After merge:
-- fresh-read origin/main
-- confirm PR #15 is merged/closed
-- record merge SHA
-- verify the reviewed 18 apps/admin files are present
-- confirm no unrelated apps/admin files changed
-- confirm no DB/RPC/policy/Edge/Cron/OAuth/Vault/token settings changed
+## Scope E — preserve PR #15
 
-## Scope E — production Admin QA
+Do not merge PR #15 merely as part of setting up Netlify.
 
-Read-only/normal UI QA only:
-- switch Kabumori / AI Lab brand selector
-- verify data does not mix across brands
-- verify tampered/unknown/unauthorized selector fails closed or safe-fallbacks as designed
-- verify AI Lab does not show Kabumori-only system toggle
-- verify Important News remains Kabumori-only
-- do not mutate operational content/settings beyond ordinary selector navigation
-
-If QA requires a production mutation beyond the already-approved merge-triggered deploy, STOP.
+After Netlify Preview is working:
+- identify whether PR #15 can be previewed on Netlify without modifying its reviewed semantics
+- if yes, record the safe procedure for the later final gate
+- keep the actual production merge/deploy deferred until separately resumed
 
 ## Forbidden
 
-- new Phase2 feature work
-- selector semantics changes
-- ADMIN_BRANDS changes
-- DB migration/RPC/view/policy
-- Netlify deploy/site creation
-- manual Vercel configuration mutation
-- x-test-post/**
-- queue/idempotency work
-- Cron/OAuth/Vault/token changes
-- consumer mobile changes
-- Important News backend changes
-- cross-brand aggregate dashboard
+- PR #15 merge in this task
+- Vercel production deploy/config/plan change
+- DNS/domain change
+- DB migration/RPC/view/policy changes
+- Edge Function/Cron/OAuth/Vault/token changes
+- x-test-post/queue Phase1D changes
+- selector semantics or ADMIN_BRANDS behavior changes
+- weakening auth/RLS
+- secret exposure
 
 ## Completion / K4
 
@@ -125,164 +138,16 @@ When complete:
 - next_owner -> chatgpt
 - append Report with:
   - fresh main SHA
-  - PR #15 final head/check status
-  - any freshen details
-  - tests/build counts
-  - merge result + merge SHA
-  - post-merge read-back
-  - production Admin QA results
-  - production mutation details
+  - worktree
+  - exact changed files
+  - Netlify config/adapter/build decisions
+  - environment variable classification
+  - local build/test results
+  - actual Preview deploy result or exact external authorization blocker
+  - preview QA results
+  - proof PR #15 semantics remain unchanged
+  - Vercel production mutation=0
+  - deferred PR #15 state
   - remaining risks
   - next recommendation
 - STOP for K4.
-
-## Report
-
-- task_id: x-admin-phase2-vercel-gate-merge-and-postmerge-qa-20260924
-- result: **保留（未merge）**。Vercelのdeployment rate limitが解除されておらず、Scope Aの指示（rate limit中は再トリガーせず停止）に従い、checkのconfirmと安全確認のみでSTOPした。merge・post-merge read-back・production Admin QAは未実施。
-- model_used: Sonnet 5（TASK指定どおり）
-
-### Mandatory startup（1〜7）
-
-1. fresh fetch origin/main：着手時 `19c5924` → 作業中に3回origin/mainが進み、最終的に `efaa31b`（`a8c5be4` はfetch後に追加で観測、後述）まで確認した。
-2. ORCHESTRATION.md / CURRENT_STATE.md / 本TASK / G2 Report（`.agent/tasks/CLAUDE_TASK.md`）を確認した。CURRENT_STATE.mdは「G4: ready — 本task_id」「G4 owns apps/admin PR #15 merge gate and post-merge QA only」と明記しており、既存割当と一致していた。
-3. G1/G2/G3/H1/H2のscope overlapを確認：
-   - G1: `review_required`（mobile recovery/E2E、apps/admin対象外）
-   - G2: `done`（本タスクの前工程、merge continuationをG4へ移管済み）
-   - G3: Phase1D（X queue/claim-domain、`x-test-post`系、apps/admin対象外）
-   - H1: `idle`
-   - H2: `release`済み（Phase1DがG3へ移管され、H2はidleに戻った形跡をCURRENT_STATE.mdで確認）
-   - いずれも `apps/admin/**` と重なりなし。
-4. PR #15の現在状態：`gh pr view 15` で確認。
-   - state: OPEN
-   - head: `b04442561d9e9c6d01b4a9fcf640c2cf731cd923`（G2 Reportの最終headと同一、変化なし）
-   - base: main
-   - mergeable/mergeStateStatus: UNKNOWN（Vercel checkがfailureのため未計算）
-   - checks: Vercel = **FAILURE**、`Deployment rate limited — retry in 24 hours.`（`gh pr checks 15`）
-5. fresh mainとPR headの比較：
-   - `git merge-base origin/main b044425` = `a2e2480`（G2 Reportに記録されたfreshened headのbaseと一致）
-   - `git log a2e2480..origin/main -- apps/admin/` = **0件**。PR baseから現在のfresh main（`efaa31b`、以後`a8c5be4`も観測）まで、`apps/admin/**` の変更は無い。
-6. main側の差分は `.agent/**` のcontrol file更新とmobile/X系のみ（Phase1D移管、routing/model方針の同期、G1のE2E報告など）。`apps/admin` に触れるcommitは0件のため、**freshenは不要**と判断した。
-7. overlapするapps/admin変更は無いため、STOPせず継続してScope Aへ進んだ。
-
-### Scope A — Vercel gate
-
-- `gh pr checks 15` の結果：`Vercel fail 0 https://vercel.com/kabumori?upgradeToPro=build-rate-limit Deployment rate limited — retry in 24 hours.`
-- 直前のG2 Report（Addendum、約2026-09-24 04:00 UTC時点で同一headに対して確認された失敗）と**同一のブロッカー**であることを確認した。今回の観測時刻は06:41 UTCで、経過は約2時間50分。「retry in 24 hours」の猶予にはまだ遠く及ばない。
-- TASK指示「Do not repeatedly force empty retriggers if the provider is still rate-limited」に従い、**空commitでの再トリガーは行わなかった**。
-- 結論：Vercel checkは依然failureのため、**ここでSTOPして変化なしのブロッカーを報告する**。
-
-### Scope B〜E
-
-- 未実施。Vercel checkがPASSしていないため、TASKの完了条件（Scope C「Vercel check PASS」が前提）に到達していない。
-- freshenは不要（apps/admin driftなし）だったため、再検証（node tests / tsc / lint / build）も実施していない。直近の有効な検証結果は、現在のPR head `b044425` に対してG2が実施した以下の結果のまま:
-  - node tests: 31/31 pass
-  - `npx tsc --noEmit`: PASS
-  - `npm run lint`: PASS
-  - `npm run build`: PASS（dummy public Supabase envのみ）
-  - `git diff --check`: PASS
-  - secret scan: 0 hit
-  - apps/admin diffはreviewed candidate（`6c23227`）と意味差分0
-
-### PR #15 merge result + merge SHA
-
-- **未merge**。merge SHAなし。理由は上記Vercel gate未通過のみ。
-
-### post-merge read-back
-
-- 対象外（merge未実施）。
-
-### production Admin QA結果
-
-- 対象外（merge未実施のためproduction QAは未着手）。
-
-### production mutation詳細
-
-- **0件**。今回のセッションでdeploy・merge・DB/RPC/policy/Edge Function/Cron/OAuth/Vault/token・Vercel設定変更は一切行っていない。変更したのは自スロットのTASK file（`status: ready → in_progress`）のみ。
-- `gh pr checks` / `gh pr view` はいずれもread-only。空commitでの再トリガーも行っていない。
-
-### remaining risks
-
-1. Vercelのbuild rate limitは依然解除されていない（`upgradeToPro=build-rate-limit` の表示から、プロジェクトのビルド枠自体が逼迫している可能性がある。単純な時間経過だけでなく、Vercel側のプラン/枠の問題である可能性もこの機会に留意点として記録する）。
-2. rate limit解除まで再開できない。解除後、再度mainとの差分確認（今回同様 `apps/admin` driftが無ければfreshen不要）→ Vercel check PASS確認 → mergeの順で進める。
-3. 解除待ちの間にmainへ `apps/admin/**` の変更が入った場合は、再度drift確認・freshen・検証が必要になる。
-
-### next_recommendation
-
-- Vercelのrate limitが解除された後に、本TASKを再度 `ready` にして再開する。
-- 再開時の手順（変更なし、G2 Reportの推奨と同一）：
-  1. `apps/admin` のdriftがないことを再確認（あればfreshen＋再検証）。
-  2. `gh pr checks 15` でVercelが `pass` になったことを確認。
-  3. `gh pr merge 15 --merge --match-head-commit <verified head>` でmerge。
-  4. post-merge read-back（reviewed 18ファイルの存在確認、無関係差分無し確認、DB/RPC/policy/Edge/Cron/OAuth/Vault/token無変更の確認）。
-  5. production Admin QA（brand切替、データ非混在、tampered selectorのfail-closed、AI Labでtoggle非表示、Important NewsがKabumori限定であることの確認）。
-- 24時間の目安であれば次の自然な再確認は本日 2026-09-25 04:00 UTC以降が妥当。ただしVercel側の表示が単純なtime-based rate limitではなくプラン起因の可能性もあるため、次回もまずfailureメッセージの文言変化（時間ベースか、upgrade訴求のままか）を確認することを推奨する。
-
-### safety_checks
-
-- deploy対象・DB migration・RPC・policy・Edge Function・Cron・OAuth・Vault・token変更：0件。
-- `apps/admin` 以外のファイルは一切変更していない（自スロットのTASK fileを除く）。
-- 他スロット（G1/G2/G3/H1/H2）の未コミット変更・TASK/Reportには触れていない。
-- 空commitでのVercel再トリガーは行っていない（TASK禁止事項を遵守）。
-- 共有control file（PROJECT_RULES.md / ORCHESTRATION.md / CURRENT_STATE.md / ACTIVE_TASK.md）は今回一切編集していない。
-
-
-## K4 Review — 2026-09-24
-
-Result: SAFE STOP ACCEPTED / TASK NOT COMPLETE.
-
-Accepted:
-- fresh main and slot-overlap checks were performed
-- PR #15 head remained unchanged
-- no apps/admin/** drift was found
-- existing reviewed verification remains valid for the unchanged head
-- no empty retrigger was forced while Vercel remained rate-limited
-- production mutation remained 0
-
-Still required before final K4 PASS:
-1. Vercel check PASS
-2. exact-head verified PR #15 merge
-3. post-merge origin/main read-back
-4. production Admin QA for brand isolation / selector fallback / Kabumori-only controls
-
-Resume rule:
-- status is returned to ready so the same G4 task can continue later.
-- when G4 starts again, first check the current Vercel status.
-- if still rate-limited, stop without retriggering.
-- if PASS, continue through merge and QA.
-
-## Report (resume attempt 2, dedicated worktree)
-
-- task_id: x-admin-phase2-vercel-gate-merge-and-postmerge-qa-20260924
-- result: **依然保留（未merge）**。K4指示どおり、まずVercel statusを確認 → 依然rate-limitedのため再トリガーせず停止。
-- worktree: 今回から **G4専用の独立worktree** `/Users/yuya/Developer/kabumori/.claude/worktrees/g4-x-admin-pr15`（branch `worktree-g4-x-admin-pr15`）を新規作成し、fresh origin/main（`ccee0b7`）から開始した。G1/G2/G3と共有していた旧checkoutは使用していない。
-- Vercel status（`gh pr checks 15`）：`fail — Deployment rate limited — retry in 24 hours.`（前回観測時 06:41 UTCと同一メッセージ、PR head `b044425` も不変）。今回の観測は 06:53 UTC、経過はわずか約12分。
-- apps/admin drift：`git log a2e2480..HEAD -- apps/admin/` = 0件（fresh origin/main比でも変化なし）。
-- 空commitでの再トリガーは行っていない。production mutationは0件。
-- 次：Vercelのrate limitが解除された後、再度G4を`ready`にして、新しい専用worktreeから再開する。
-
-## Completion
-
-- status -> review_required
-- next_owner -> chatgpt
-
-
-## K4 Review — resume attempt 2
-
-Result: SAFE STOP ACCEPTED / TASK STILL NOT COMPLETE.
-
-Accepted:
-- dedicated G4 worktree used
-- PR #15 head remained unchanged
-- apps/admin drift remained 0
-- Vercel failure is still the same deployment rate-limit blocker
-- no empty retrigger was forced
-- production mutation remained 0
-
-Still required before final K4 PASS:
-1. Vercel check PASS
-2. exact-head verified PR #15 merge
-3. post-merge origin/main read-back
-4. production Admin QA
-
-Status returned to ready for later continuation. On next G4 start, check Vercel first and do nothing else if rate limiting remains.
