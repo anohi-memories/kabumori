@@ -64,8 +64,14 @@ test("provider steps are sequential, never restarted, and chained", () => {
   const begin = definition("begin_provider_step_v2");
   assert.match(begin, /PROVIDER_STEP_ALREADY_STARTED/u);
   assert.match(begin, /PROVIDER_STEP_OUT_OF_ORDER/u);
+  assert.match(begin, /p_step_no = 1 and p_step_kind = 'create_reply'/u);
+  assert.match(begin, /PROVIDER_STEP_FIRST_MUST_CREATE/u);
   assert.match(begin, /PROVIDER_STEP_PREVIOUS_NOT_CONFIRMED/u);
+  assert.match(begin, /PROVIDER_STEP_KIND_SEQUENCE_INVALID/u);
   assert.match(begin, /PROVIDER_STEP_PARENT_MISMATCH/u);
+  const finish = definition("finish_provider_step_v2");
+  assert.match(finish, /a\.claim_token = p_claim_token for update/u);
+  assert.match(finish, /v_attempt\.phase <> 'provider_started' or v_attempt\.outcome is not null/u);
   assert.match(code, /primary key \(attempt_id, step_no\)/u);
 });
 
@@ -77,6 +83,7 @@ test("ACL: typed RPCs service_role-only, internals API-closed, generic completio
   assert.match(code, /revoke execute on function public\.complete_post_x_confirmed_v2\(uuid, uuid, text\) from service_role;/u);
   assert.match(code, /revoke all on public\.post_provider_steps_v2 from public, anon, authenticated, service_role;/u);
   assert.match(code, /revoke insert, update, delete, truncate on public\.post_queue_attempts_v2, public\.post_queue_account_turns_v2\s+from service_role;/u);
+  assert.match(code, /revoke insert, update, delete, truncate on public\.scheduled_posts\s+from public, anon, authenticated, service_role;/u);
   const grant = code.slice(code.lastIndexOf("grant execute on function"));
   assert.doesNotMatch(grant, /x_v2_/u);
 });
