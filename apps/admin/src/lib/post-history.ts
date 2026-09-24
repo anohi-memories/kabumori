@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { KABUMORI_BRAND_ID } from "./brand-boundary";
-import { getPostTypeLabel, getStatusLabel, getStatusTone } from "./today-scheduled-posts";
+import { KABUMORI_BRAND_ID } from "./brand-boundary.ts";
+import type { ActiveBrand, AuthorizedBrandId } from "./selected-brand.ts";
+import { getPostTypeLabel, getStatusLabel, getStatusTone } from "./today-scheduled-posts.ts";
 
 const DEFAULT_HISTORY_LIMIT = 30;
 const ERROR_MESSAGE_LIMIT = 500;
@@ -98,9 +99,9 @@ function selectMatchingReportRun(log: ExecutionLogRow, rows: ReportRunRow[]) {
   );
 }
 
-function safeXPostUrl(xPostId: string | null) {
-  return xPostId && /^\d+$/.test(xPostId)
-    ? `https://x.com/yume_daka/status/${xPostId}`
+function safeXPostUrl(xHandle: string, xPostId: string | null) {
+  return xPostId && /^\d+$/.test(xPostId) && /^[A-Za-z0-9_]{1,15}$/.test(xHandle)
+    ? `https://x.com/${xHandle}/status/${xPostId}`
     : null;
 }
 
@@ -112,12 +113,12 @@ function safeErrorMessage(message: string | null) {
     : normalized;
 }
 
-async function getScheduledPosts(supabase: SupabaseClient, ids: string[]) {
+async function getScheduledPosts(supabase: SupabaseClient, brandId: AuthorizedBrandId, ids: string[]) {
   if (ids.length === 0) return [];
   const { data, error } = await supabase
     .from("scheduled_posts")
     .select("id,scheduled_for,attempt_count")
-    .eq("brand_id", KABUMORI_BRAND_ID)
+    .eq("brand_id", brandId)
     .in("id", ids);
   if (error) {
     logQueryError("scheduled_posts", error.code);
@@ -128,6 +129,7 @@ async function getScheduledPosts(supabase: SupabaseClient, ids: string[]) {
 
 async function getReportRuns(
   supabase: SupabaseClient,
+  brandId: AuthorizedBrandId,
   table: "morning_report_runs" | "close_report_runs" | "us_premarket_report_runs",
   ids: string[],
 ) {
@@ -135,6 +137,7 @@ async function getReportRuns(
   const { data, error } = await supabase
     .from(table)
     .select("id,scheduled_post_id,status,generated_text,x_post_id,created_at")
+    .eq("brand_id", brandId)
     .in("scheduled_post_id", ids)
     .order("created_at", { ascending: false });
   if (error) {
@@ -159,6 +162,7 @@ async function getImportantNews(supabase: SupabaseClient, ids: string[]) {
 
 export async function getPostHistory(
   supabase: SupabaseClient,
+  brand: ActiveBrand,
   limit = DEFAULT_HISTORY_LIMIT,
 ): Promise<PostHistoryResult> {
   const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), DEFAULT_HISTORY_LIMIT);
@@ -167,7 +171,7 @@ export async function getPostHistory(
     .select(
       "id,scheduled_post_id,post_type,status,tip_id,useful_tip_id,important_news_candidate_id,x_post_id,message,error_code,created_at",
     )
-    .eq("brand_id", KABUMORI_BRAND_ID)
+    .eq("brand_id", brand.id)
     .in("status", ["succeeded", "failed"])
     .order("created_at", { ascending: false })
     .limit(safeLimit);
@@ -181,15 +185,19 @@ export async function getPostHistory(
   const scheduledPostIds = [...new Set(logs.flatMap((log) =>
     log.scheduled_post_id ? [log.scheduled_post_id] : [],
   ))];
-  const importantNewsIds = [...new Set(logs.flatMap((log) =>
-    log.important_news_candidate_id ? [log.important_news_candidate_id] : [],
-  ))];
+  // important_news_candidates has no brand_id column: Important News is a Kabumori-only system, so it
+  // is never looked up for any other active brand.
+  const importantNewsIds = brand.id === KABUMORI_BRAND_ID
+    ? [...new Set(logs.flatMap((log) =>
+      log.important_news_candidate_id ? [log.important_news_candidate_id] : [],
+    ))]
+    : [];
 
   const [scheduledPosts, morningRuns, closeRuns, usRuns, importantNews] = await Promise.all([
-    getScheduledPosts(supabase, scheduledPostIds),
-    getReportRuns(supabase, "morning_report_runs", scheduledPostIds),
-    getReportRuns(supabase, "close_report_runs", scheduledPostIds),
-    getReportRuns(supabase, "us_premarket_report_runs", scheduledPostIds),
+    getScheduledPosts(supabase, brand.id, scheduledPostIds),
+    getReportRuns(supabase, brand.id, "morning_report_runs", scheduledPostIds),
+    getReportRuns(supabase, brand.id, "close_report_runs", scheduledPostIds),
+    getReportRuns(supabase, brand.id, "us_premarket_report_runs", scheduledPostIds),
     getImportantNews(supabase, importantNewsIds),
   ]);
 
@@ -231,7 +239,7 @@ export async function getPostHistory(
       statusTone: getStatusTone(log.status),
       generatedText: reportRun?.generated_text ?? news?.generated_text ?? null,
       xPostId,
-      xPostUrl: safeXPostUrl(xPostId),
+      xPostUrl: safeXPostUrl(brand.xHandle, xPostId),
       errorCode: log.error_code,
       message: safeErrorMessage(log.message),
       attemptCount: scheduled?.attempt_count ?? null,

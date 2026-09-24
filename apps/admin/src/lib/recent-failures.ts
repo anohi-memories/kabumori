@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { KABUMORI_BRAND_ID } from "./brand-boundary";
-import { getPostTypeLabel } from "./today-scheduled-posts";
+import { KABUMORI_BRAND_ID } from "./brand-boundary.ts";
+import type { AuthorizedBrandId } from "./selected-brand.ts";
+import { getPostTypeLabel } from "./today-scheduled-posts.ts";
 
 const FETCH_LIMIT_PER_SOURCE = 20;
 const DISPLAY_LIMIT = 10;
@@ -154,31 +155,38 @@ function logQueryError(source: string, code: string) {
 
 export async function getRecentFailures(
   supabase: SupabaseClient,
+  brandId: AuthorizedBrandId,
 ): Promise<RecentFailuresResult> {
+  // important_news_candidates has no brand_id column: Important News is a Kabumori-only system, so its
+  // failures are only ever read while Kabumori is the active brand.
+  const includeImportantNews = brandId === KABUMORI_BRAND_ID;
   const [executionResult, morningResult, importantNewsResult] = await Promise.all([
     supabase
       .from("post_execution_logs")
       .select(
         "id,scheduled_post_id,important_news_candidate_id,post_type,message,error_code,created_at",
       )
-      .eq("brand_id", KABUMORI_BRAND_ID)
+      .eq("brand_id", brandId)
       .eq("status", "failed")
       .order("created_at", { ascending: false })
       .limit(FETCH_LIMIT_PER_SOURCE),
     supabase
       .from("morning_report_runs")
       .select("id,scheduled_post_id,status,error,fact_check_status,fact_check_notes,created_at")
+      .eq("brand_id", brandId)
       .eq("status", "failed")
       .order("created_at", { ascending: false })
       .limit(FETCH_LIMIT_PER_SOURCE),
-    supabase
-      .from("important_news_candidates")
-      .select(
-        "id,company_name,title,status,generation_fact_status,generation_fact_issues,generation_voice_status,generation_voice_issues,generation_error,created_at",
-      )
-      .or("status.eq.generation_failed,generation_fact_status.eq.failed,generation_voice_status.eq.failed")
-      .order("created_at", { ascending: false })
-      .limit(FETCH_LIMIT_PER_SOURCE),
+    includeImportantNews
+      ? supabase
+        .from("important_news_candidates")
+        .select(
+          "id,company_name,title,status,generation_fact_status,generation_fact_issues,generation_voice_status,generation_voice_issues,generation_error,created_at",
+        )
+        .or("status.eq.generation_failed,generation_fact_status.eq.failed,generation_voice_status.eq.failed")
+        .order("created_at", { ascending: false })
+        .limit(FETCH_LIMIT_PER_SOURCE)
+      : Promise.resolve({ data: [] as ImportantNewsCandidateRow[], error: null }),
   ]);
 
   if (executionResult.error || morningResult.error || importantNewsResult.error) {
@@ -213,7 +221,7 @@ export async function getRecentFailures(
     const { data, error } = await supabase
       .from("scheduled_posts")
       .select("id,scheduled_for")
-      .eq("brand_id", KABUMORI_BRAND_ID)
+      .eq("brand_id", brandId)
       .in("id", scheduledPostIds);
 
     if (error) {
@@ -266,7 +274,7 @@ export async function getRecentFailures(
       voiceStatusLabel: null,
       voiceIssues: [],
     })),
-    ...(importantNewsResult.data as ImportantNewsCandidateRow[]).map<RecentFailure>(
+    ...((importantNewsResult.data ?? []) as ImportantNewsCandidateRow[]).map<RecentFailure>(
       (candidate) => ({
         id: `important-${candidate.id}`,
         source: "important_news_candidate",
