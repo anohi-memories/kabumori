@@ -33,13 +33,13 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: idle
-- task_id: none
+- status: ready
+- task_id: x-autopost-phase1d-db-rpc-concurrency-final-review-20260924
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: unassigned
+- allocation: assigned; Phase1D DB/RPC/permission/concurrency final review
 
 ## Claude G1
 - owner: claude
@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: done
 - task_id: x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: assigned; X auto-post Phase1D implementation
+- allocation: closed; Final K3 implementation PASS, H2 review pending
 
 ## Claude G4
 - owner: claude
