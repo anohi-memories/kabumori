@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1c-dispatcher-planner-account-bound-cutover-candidate-20260924
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: GPT-5.6 Sol Medium
 - purpose: C2 PASS済みPhase1Bの明示的 social_account_id binding / durable attempt ledger / v2 queue RPC candidateを前提に、X自動投稿のactive planner/dispatcher/credential routingを account-bound に揃える production未適用のsource-only cutover candidateを作る。claim.social_account_id以外から投稿先アカウントを推測しない。
@@ -212,3 +212,31 @@ When complete:
 - STOP for C2.
 
 Do not apply Phase1B/Phase1C to production in this task.
+
+
+## Final C2 — 2026-09-24
+
+PASS — safe-stop accepted.
+
+This Phase1C task is complete as a boundary audit, not as an implementation rollout.
+
+Accepted findings:
+- live legacy claim and v2 claim would create split-brain eligibility for account-bound rows unless the claim domains are partitioned first
+- active planners do not currently carry trusted social_account_id authority
+- Phase1B completion is not atomic with existing type-specific completion side effects
+- tip threads and morning_greeting require provider-step-aware outcome handling beyond one attempt / one X ID
+- credential routing still contains brand-derived / first-account / specialized-token paths and cannot yet use claim.social_account_id as sole authority
+- legacy pending rows remain unbound and must not be auto-mapped
+- production mutation remained 0
+- regression evidence accepted: Phase1B focused 6/6 PASS and x-test-post + shared-brand regression 495/495 PASS
+- control commit e20131754808a4dc1a05602972c01a6e3244dbc1 is present on origin/main
+
+No Phase1C dispatcher implementation is approved by this C2.
+
+Next recommended H2 work must be split into source-only prerequisites before another full cutover attempt:
+1. claim/planner partition design so legacy claims only unbound rows and v2 claims only bound rows, with uniqueness/coexistence proof
+2. exact social_account_id credential resolver and one-request provider boundary
+3. versioned atomic completion contracts preserving per-post-type side effects
+4. provider-step outcome model for multi-request tip threads and morning_greeting media/post flow
+
+Do not apply Phase1B/Phase1C migrations, deploy a v2 dispatcher, activate v2 planners, backfill legacy rows, or call X until those prerequisites pass separate review.
