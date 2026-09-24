@@ -14,11 +14,11 @@
 
 ## Active workstreams
 
-- Codex slot 1: `ready` — `kabumori-important-news-caller-auth-production-rollout-20260924`
-  - User-approved production rollout for merged PR #12 caller-auth.
-  - Sequence: secure Function/Vault secret setup → exact caller-auth migration only → four-Cron postflight → important-news-monitor-only deploy → natural runtime verification.
-  - Keep `verify_jwt=false`; no business logic/auto_publish/Cron cadence/X/Push changes.
-  - Start with Luna; use Sol only if production/security judgment becomes ambiguous.
+- Codex slot 1: `in_progress` — `kabumori-important-news-caller-auth-production-rollout-20260924`
+  - Read-only preflight matched assumptions: monitor ACTIVE v64 / verify_jwt=false, migration unapplied, Vault entry absent, four target Cron jobs and shadow unchanged.
+  - Production mutation 0.
+  - Blocked on manual secure secret setup because current tooling has no confirmed non-echoing write path.
+  - User must set the same 43-char 32-byte base64url value in Function secret `IMPORTANT_NEWS_CRON_SECRET` and Vault `important_news_monitor_cron_secret`, then report only `両方設定済み`.
 
 - Codex slot 2: `ready` — `x-autopost-phase1-common-queue-idempotency-foundation-20260924`
   - Phase0c2 C2 PASS後の次段階。共通queue/idempotency/retry/outcome分類とstale-running reconciliationをsource-only + disposable PostgreSQLで固める。
