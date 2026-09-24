@@ -36,12 +36,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: x-admin-netlify-thin-control-plane-phase1-20260924
+- status: ready
+- task_id: x-admin-netlify-thin-control-plane-phase1-merge-only-20260924
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: apps/admin inventory完了（secret参照0件、既にNetlify向きの構成と判明）。multibrand admin context（admin_users=global/brand_memberships owner・admin=scoped）を設計しresolveAdminBrandAccess候補実装、既存ページへの配線は安全性テストとの兼ね合いで意図的に先送り。netlify.toml候補追加。ブランチ`admin-netlify-thin-control-plane-phase1-20260924`(commit 3505269)へpush。build/typecheck/lint/test(12/12)すべてpass。production変更0件。K2待ち。
+- note: K2 PASS済みPhase1 admin candidateを最新mainへfreshen/rebaseし、tests再実行＋drift確認後にPhase1だけmerge。brand selectorやquery parameterizationは次task。production mutation 0。Opus 5.5推奨。
 
 ## Control codes
 
