@@ -93,6 +93,9 @@ create table if not exists public.mic_state_evidence (
       and market_event_snapshot ?& array[
         'id', 'title', 'summary', 'importance', 'event_type', 'published_at', 'updated_at'
       ]
+      and (market_event_snapshot - array[
+        'id', 'title', 'summary', 'importance', 'event_type', 'published_at', 'updated_at'
+      ]::text[]) = '{}'::jsonb
       and market_event_snapshot->>'id' = market_event_id::text
     )
   )
@@ -115,15 +118,17 @@ create index if not exists mic_state_evidence_fed_diff_idx
 
 alter table public.mic_state_evidence enable row level security;
 revoke all on public.mic_state_evidence from public, anon, authenticated;
+revoke all on public.mic_state_evidence from service_role;
 grant select, insert on public.mic_state_evidence to service_role;
 grant select on public.mic_state_evidence to authenticated;
 drop policy if exists admin_select_mic_state_evidence on public.mic_state_evidence;
 create policy admin_select_mic_state_evidence on public.mic_state_evidence
   for select to authenticated using ((select private.is_admin()));
 
--- Evidence is append-only. No role is granted UPDATE, and this trigger also
--- stops the table owner, so a stored snapshot can never be rewritten.
-create or replace function public.mic_state_evidence_reject_update()
+-- Evidence is append-only. Ordinary roles have neither UPDATE, DELETE nor
+-- TRUNCATE; triggers also block those operations by the table owner. As with all
+-- database controls, a superuser/owner who disables triggers is trusted.
+create or replace function public.mic_state_evidence_reject_mutation()
 returns trigger
 language plpgsql
 set search_path = ''
@@ -134,22 +139,25 @@ end;
 $$;
 
 drop trigger if exists trg_mic_state_evidence_reject_update on public.mic_state_evidence;
-create trigger trg_mic_state_evidence_reject_update
-before update on public.mic_state_evidence
-for each row execute function public.mic_state_evidence_reject_update();
+drop trigger if exists trg_mic_state_evidence_reject_mutation on public.mic_state_evidence;
+create trigger trg_mic_state_evidence_reject_mutation
+before update or delete on public.mic_state_evidence
+for each row execute function public.mic_state_evidence_reject_mutation();
+drop trigger if exists trg_mic_state_evidence_reject_truncate on public.mic_state_evidence;
+create trigger trg_mic_state_evidence_reject_truncate
+before truncate on public.mic_state_evidence
+for each statement execute function public.mic_state_evidence_reject_mutation();
 
--- Terminal run status protection. Every writer already filters on
--- status='running', but the database itself now guarantees that an
--- evaluated / no_change / failed run can never be moved to a different
--- status (e.g. evaluated -> failed after a lost response).
+-- Terminal runs are immutable in full, not just in status: their completion
+-- timestamp, usage link, decision details, and error are audit fields too.
 create or replace function public.mic_state_evaluation_runs_guard_terminal_status()
 returns trigger
 language plpgsql
 set search_path = ''
 as $$
 begin
-  if old.status <> 'running' and new.status is distinct from old.status then
-    raise exception 'MIC_STATE_RUN_TERMINAL_STATUS_IMMUTABLE:%->%', old.status, new.status;
+  if old.status <> 'running' then
+    raise exception 'MIC_STATE_RUN_TERMINAL_IMMUTABLE:%', old.status;
   end if;
   return new;
 end;
@@ -296,6 +304,14 @@ begin
   select coalesce(array_agg((s.e->>'id')::uuid), '{}'::uuid[])
   into v_snapshot_ids
   from jsonb_array_elements(p_market_event_snapshots) as s(e);
+
+  if cardinality(v_snapshot_ids) <> (
+    select count(distinct id) from unnest(v_snapshot_ids) as ids(id)
+  ) or cardinality(coalesce(p_source_event_ids, '{}'::uuid[])) <> (
+    select count(distinct id) from unnest(coalesce(p_source_event_ids, '{}'::uuid[])) as ids(id)
+  ) then
+    raise exception 'MIC_STATE_EVENT_EVIDENCE_DUPLICATE';
+  end if;
 
   -- Evidence must describe exactly the event set saved on current as
   -- source_event_ids (and supplied to the AI).
