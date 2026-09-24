@@ -65,11 +65,11 @@
 - owner: claude
 - slot: claude-3
 - status: ready
-- task_id: x-autopost-phase1e-pr22-merge-postmerge-verify-20260924
+- task_id: x-autopost-phase1f-atomic-completion-provider-outcome-model-20260924
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: assigned; PR #22 fresh-main merge + post-merge verification
+- allocation: assigned; Phase1F atomic per-post-type completion + provider outcome model
 
 ## Claude G4
 - owner: claude
