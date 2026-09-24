@@ -3,8 +3,8 @@
 - task_id: kabumori-close-unknown-cause-prefix-fix-20260924
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（極高）
 - purpose: production v24 dry-runで確認した「妥当な原因不明文の誤拒否」を、validatorの安全性を維持したまま最小修正する。source/test/PRまで。deploy禁止。
@@ -217,3 +217,22 @@ When complete:
 3. 大引けdry_runを**3回以上**（できれば5回）実施し、全件がlocal検証とFactを通過することを確認する。朝刊も1回確認する。
 4. 大引けが1回でもlocal検証で失敗したら、`4590ba6` へ即ロールバックする（手順は確立済み）。
 5. すべて通過したら、数日の自然cronでの運用を経て、`app_enabled` のON判断を別TASKで行う。
+
+
+## Final K2 — PR #26 source fix
+
+Result: **PASS**.
+
+Accepted:
+- PR #26 head `2b40a617e34c73c301e40a17692883ac70fd3e0a`
+- change limited to report validator + tests
+- exact production false-reject sentences now covered
+- close-validator 20/20 PASS
+- personalized-reports 64/64 PASS
+- related suite 182/182 PASS
+- deno check/lint/diff PASS
+- production remains v25 known-good source
+- app_enabled=false
+- production mutation=0
+
+Next: H2 independent regex/over-permission review before merge/deploy.
