@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1d-db-rpc-concurrency-final-review-20260924
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: K3 PASS済みのPhase1D claim-domain partition candidateを、DB/RPC/permission/concurrency観点で最終レビューする。production applyは行わない。
