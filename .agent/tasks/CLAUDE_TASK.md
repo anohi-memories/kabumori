@@ -3,8 +3,8 @@
 - task_id: kabumori-app-morning-close-report-detail-and-portfolio-impact-20260924
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Opus5.5（高）
 - purpose: かぶモリアプリの朝刊・大引けレポートを、X「かぶモリ」アカウントと基本テーマ・材料・論点を揃えつつ、アプリ版では市場全体の詳細分析とユーザー保有株への影響分析を追加した上位版へ改修する。
@@ -409,3 +409,26 @@ When complete:
 2. Edge Functionのdeploy（承認後）
 3. dry_runの並走で、実LLM出力のFact合格率と表示を確認
 4. `app_enabled` をONにするかの判断
+
+
+## Final K2 — 2026-09-24
+
+Result: **IMPLEMENTATION PASS / merge pending Codex review**.
+
+Accepted:
+- PR #19 source implementation complete at head `acbc1b6ceac04d978b7fe6fb8e3d266734d3826a`.
+- shared market fact/X paths unchanged.
+- app morning/close reports now add detailed market-wide sections and per-holding impact analysis.
+- morning→close comparison implemented without new schema/migration.
+- user isolation / no cross-user portfolio leakage covered by tests.
+- 151 tests passed / 0 failed.
+- deno check/lint PASS.
+- no new src TypeScript errors.
+- Expo web export PASS / 10 routes.
+- git diff --check PASS; secret scan 0.
+- production mutation=0.
+
+Merge decision:
+- Do not merge PR #19 yet.
+- Codex review is required before merge because this change materially modifies LLM prompt/schema/validation, user-bound morning lookup, and portfolio privacy boundaries.
+- H1 and H2 are currently assigned to other reviews. Queue this review for the first safe Codex slot that becomes free.
