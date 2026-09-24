@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Opus5.5（高）
 - purpose: Phase1Cで判明したsplit-brain blockerを解消するため、legacy dispatcherはunbound rowsのみ、v2 dispatcherはexplicitly bound rowsのみをclaimするsource-only Phase1D candidateを完成させる。productionには適用しない。
@@ -203,3 +203,25 @@ Do not deploy/apply Phase1D to production.
   4. Unrelated pre-existing test `yume_reference_logic_test.ts` "morning_greeting remains excluded from X dispatcher claim" asserts the never-applied draft `20260901044548`; live dispatch does claim `morning_greeting` (`20260905010000`). Misleading but out of scope; not changed.
 - safety_checks: dedicated worktree only; shared checkout HEAD/branch unchanged and no file in it edited or staged; no other slot's branch checked out/reset/rebased; old candidate temp tree only read; disposable cluster on a local socket in `/private/tmp`, `service_role` etc. are local fake roles; no secrets, tokens or production rows printed or stored; the runner refuses non-`/tmp` sockets.
 - next_recommendation: K3 review, then an H-slot Codex review of the trigger/gate/wrapper design (DB/RPC/permission layer). Before any activation, a separately approved read-only live definition diff (remaining issue 1).
+
+
+## Final K3 — 2026-09-24
+
+Result: IMPLEMENTATION PASS / CODEX REVIEW REQUIRED.
+
+Accepted:
+- source-only Phase1D candidate is complete
+- claim-domain partition contract is explicit and DB-enforced
+- planner authority classification is documented
+- retry/stale/reconcile invariants are covered
+- disposable PostgreSQL concurrency proof PASS
+- focused Phase1B/Phase1D tests 13/13 PASS
+- x-test-post regression 416/416 PASS
+- implementation commit `238247a57287c3bb835b6e2a0ca8ee4a2d910fdf` exists on GitHub
+- production mutation / deploy / X API calls = 0
+- runtime dispatcher intentionally remains unchanged pending separately reviewed activation ordering
+
+Review requirement:
+- Because this change introduces a migration, SECURITY DEFINER wrappers, trigger-based domain fencing, RPC renames/wrappers, ACL changes, and concurrent claim semantics, final acceptance requires Codex review before any activation.
+- H2 is assigned for that review.
+- Production apply remains prohibited.
