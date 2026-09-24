@@ -36,7 +36,7 @@
 - G1: `done` — `kabumori-release-foundation-appstore-web-links-eas-audit-20260924`
   - PR #18 open (unmerged): apps/kabumori-web public pages (/privacy /terms /support /account-deletion), one-origin in-app links, eas autoIncrement, RELEASE_READINESS.md. 108/0 tests, tsc src 0. Production mutation 0.
   - Audit blockers: Expo template icon/splash; EAS production lacks Supabase env vars; operator values / Netlify / Auth Site URL / SMTP pending.
-- G2: `ready` — `kabumori-app-morning-close-report-detail-and-portfolio-impact-20260924`
+- G2: `done` — `kabumori-app-morning-close-report-detail-and-portfolio-impact-20260924`
 - G3: `done` — `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`
 - G4: `ready` — `x-admin-netlify-deploy-preview-pipeline-20260924`
 
@@ -85,6 +85,14 @@
 - Kabumori Expo Web Netlify Preview setup.
 - Prior reviewed code/test evidence remains preserved in the old G4/G2 reports.
 - Resume either deferred item only when needed or user explicitly asks.
+
+## K2 result
+
+- G2 implementation PASS for PR #19 at head `acbc1b6`.
+- PR #19 remains open/unmerged.
+- 151/0 tests; deno check/lint PASS; no new src TypeScript errors; production mutation=0.
+- Codex review required before merge due LLM validation, user-bound morning lookup, and portfolio privacy boundaries.
+- H1/H2 are currently occupied; assign PR #19 review to the first safe Codex slot after C1/C2 closes one.
 
 ## K3 result
 
