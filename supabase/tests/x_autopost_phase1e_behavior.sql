@@ -191,4 +191,19 @@ do $$ begin
 end $$;
 reset role;
 
+-- 8. A Vault view failure with SQLSTATE P0001 must not leak its own message.
+create function vault.raise_fake_error(p_secret text, p_ref uuid) returns text
+language plpgsql as $$
+begin
+  raise exception 'fake_%_%', p_secret, p_ref using errcode = 'P0001';
+end;
+$$;
+create or replace view vault.decrypted_secrets as
+  select s.id, vault.raise_fake_error(s.secret, s.id) as decrypted_secret from vault.secrets s;
+set role service_role;
+do $$ begin
+  perform pg_temp.expect_error(pg_temp.read_sql('acct_a2', 'acct_a2', 'brand_a'), 'X_CREDENTIAL_UNAVAILABLE');
+end $$;
+reset role;
+
 select 'PHASE1E_BEHAVIOR_PASS' as result;

@@ -16,7 +16,7 @@ Files:
 
 Enforced twice:
 
-1. **Database (`read_x_publish_credential_for_claim_v2`)** — the authority is the open v2 attempt `(attempt_id, claim_token)`. It must be `phase = 'pre_x'`, its `social_account_id`/`brand_id` must equal the caller's, and its post must still be `running` and bound to that account. The account is then read **by primary key** from the attempt. Checks in order: exists → `platform = 'x'` → brand equals claim brand → `identity_verified` with non-blank `platform_user_id` → `publish_enabled` (unless the caller explicitly waives it) → the row's own `vault_access_token_secret_id` → the decrypted secret. No Vault reference is selected until every metadata check has passed. Only the access token is returned; refresh tokens and Vault references never leave the database. Errors are fixed codes (`P0001`); any other database error becomes `X_CREDENTIAL_UNAVAILABLE`. service_role-only, `SECURITY DEFINER`, empty `search_path`, read-only.
+1. **Database (`read_x_publish_credential_for_claim_v2`)** — the authority is the open v2 attempt `(attempt_id, claim_token)`. It must be `phase = 'pre_x'`, its `social_account_id`/`brand_id` must equal the caller's, and its post must still be `running` and bound to that account. The account is then read **by primary key** from the attempt. Checks in order: exists → `platform = 'x'` → brand equals claim brand → `identity_verified` with non-blank `platform_user_id` → `publish_enabled` (unless the caller explicitly waives it) → the row's own `vault_access_token_secret_id` → the decrypted secret. No Vault reference is selected until every metadata check has passed. Only the access token is returned; refresh tokens and Vault references never leave the database. Errors are fixed codes (`P0001`); Vault-side failures, including its own `P0001`, become `X_CREDENTIAL_UNAVAILABLE`. The create/revoke/grant statements are atomic, avoiding a committed PUBLIC EXECUTE window. The reader is service_role-only, `SECURITY DEFINER`, empty `search_path`, read-only.
 2. **TypeScript (`resolveXCredentialForClaim`)** — validates the claim shape before any request, requires exactly one returned row, and discards the credential unless the returned `social_account_id`/`brand_id` equal the claim. The token is held in a private field of `XAccountCredential`; `JSON.stringify`, `String()` and `Deno.inspect` are redacted; the only use is `bearerHeader()`.
 
 Never used by the v2 path: brand-only lookup, `limit=1`/first row, account count, `oauth_token_store`, env tokens (`X_OAUTH2_*`), the hardcoded AI Lab account/RPC, or another account after a failure.
@@ -44,11 +44,11 @@ All legacy helpers above are **unchanged** and remain legacy-only.
 
 1. **Pre-X identity check** — `GET /2/users/me` with the exact credential. `data.id` must equal the account's `platform_user_id` (proves the token belongs to exactly this account). `401` → `pre_x_retryable X_ACCESS_TOKEN_REFRESH_REQUIRED_PRE_X`; `403` → `pre_x_terminal X_IDENTITY_CHECK_FORBIDDEN`; other id → `pre_x_terminal X_CREDENTIAL_IDENTITY_MISMATCH`; network/429/5xx → `pre_x_retryable X_IDENTITY_CHECK_UNAVAILABLE`. No create is sent and `markProviderStarted` is not called.
 2. **Durable boundary** — awaits `markProviderStarted()` (the caller commits `mark_post_provider_started_v2`). If it throws → `pre_x_retryable X_PROVIDER_START_NOT_RECORDED`, nothing sent.
-3. **Exactly one `POST /2/tweets`**, with a timeout. No refresh, no retry, no loop.
+3. **Exactly one `POST /2/tweets`**, with a timeout and `redirect: manual`. Neither the credential RPC nor the X identity GET follows redirects. No refresh, no retry, no loop.
    - 2xx with `data.id` → `x_created`
    - 2xx without id / unparsable → `x_outcome_uncertain X_CREATE_RESPONSE_MISSING_POST_ID`
    - network error / timeout → `x_outcome_uncertain X_CREATE_NETWORK_UNCERTAIN`
-   - 408 / 5xx → `x_outcome_uncertain X_CREATE_HTTP_<status>`
+   - 3xx, 408 / 5xx, or other unexpected status → `x_outcome_uncertain X_CREATE_HTTP_<status>`
    - other 4xx, including 401 and 429 → `x_rejected X_CREATE_REJECTED_<status>` (X answered and did not create)
 
 `publishClaimedXTextPostV2` composes resolver + seam; a resolver failure returns its pre-X outcome with zero X requests.
@@ -79,7 +79,7 @@ PHASE1E_PGHOST=/private/tmp/<sock> PHASE1E_PGPORT=<port> PHASE1E_PGSUPER=<local 
   supabase/tests/x_autopost_phase1e_run.sh
 ```
 
-Non-superuser owner, Supabase-style default grants, a fake `vault.decrypted_secrets`, a fake legacy `oauth_token_store` row and a fake AI Lab token. Proves: two X accounts in one brand each resolve only their own token; the caller cannot redirect a claim to a sibling, another brand, or the AI Lab account; bad/foreign claim tokens, provider-started and settled attempts fail closed; publish-disabled, unverified, blank identity, missing reference and missing secret fail with fixed codes and never fall back; errors contain no secret or reference; the reader changes no row; anon/authenticated are denied; service_role cannot read the vault directly.
+Non-superuser owner, Supabase-style default grants, a fake `vault.decrypted_secrets`, a fake legacy `oauth_token_store` row and a fake AI Lab token. Proves: two X accounts in one brand each resolve only their own token; the caller cannot redirect a claim to a sibling, another brand, or the AI Lab account; bad/foreign claim tokens, provider-started and settled attempts fail closed; publish-disabled, unverified, blank identity, missing reference and missing secret fail with fixed codes and never fall back; even a Vault-side `P0001` with a fake secret/reference is masked; the reader changes no row; anon/authenticated are denied. **The fixture denies service_role direct Vault SELECT, but production metadata from the prior Phase18 read-only audit showed service_role has `vault.decrypted_secrets` SELECT.** Thus the fixture proves only the intended RPC path and cannot establish a database-wide restriction against an arbitrary service_role caller. The service-role credential must remain in the trusted server runtime; recheck live Vault ACL and function owner/grants before activation without reading plaintext.
 
 ## 7. Next prerequisite
 

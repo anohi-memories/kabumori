@@ -161,6 +161,7 @@ export function createXClaimCredentialRpcReader({
       try {
         response = await fetchImpl(endpoint, {
           method: "POST",
+          redirect: "manual",
           headers: {
             apikey: serviceRoleKey,
             Authorization: `Bearer ${serviceRoleKey}`,
