@@ -35,12 +35,13 @@
   - Apply the migration before shipping any build from this main: the app now calls `ensure_my_profile` on every session.
   - Next: K1, then separately approved migration apply + `account-delete`-only deploy + Auth redirect allowlist.
 
-- Claude slot 2: `ready` — `x-admin-netlify-thin-control-plane-phase1-merge-only-20260924`
-  - K2 PASS済みPhase1 candidateを最新mainへfreshen/rebaseし、apps/admin/** drift確認＋tests再実行後にPhase1だけmergeする。
-  - reviewed branch: `admin-netlify-thin-control-plane-phase1-20260924` / reviewed commit `3505269386b6345468a025749a5dd22b4ededbb7`。
-  - brand selector配線・4 query module parameterization・DB/RPC・Netlify deployはこのtaskでは禁止。
-  - production mutation 0。
-  - Recommended model: Opus 5.5。
+- Claude slot 2: `done` — `x-admin-netlify-thin-control-plane-phase1-merge-only-20260924`
+  - K2 PASS。Phase1 admin candidateをfreshen/rebase後、PR #14としてmerge。
+  - merge SHA `a9c0ef71954cdaa01e0ee7eb34bcd37dbcc6ec15`。merge対象はreview済み5ファイルのみ。
+  - tests/build: node 12/12、tsc/lint/build、git diff checkすべてPASS。secret scanもclean。
+  - post-merge read-backで5ファイルbyte一致。既存Kabumori-only query modules / brand-boundary test / system-toggleは無変更。
+  - production mutation 0。Netlify site/deployも未実施。
+  - 次候補: Phase2 brand selector UI + server-side selected-brand validation + 4 admin query modulesのbrand parameterization。cross-brand集計とNetlify実deployは別gate。
 
 
 ## Parallel safety
