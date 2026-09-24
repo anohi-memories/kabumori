@@ -3,7 +3,7 @@
 - task_id: x-admin-phase2-vercel-gate-merge-and-postmerge-qa-20260924
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Sonnet 5
