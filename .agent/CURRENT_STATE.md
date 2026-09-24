@@ -37,7 +37,7 @@
   - PR #18 merged at reviewed head `6f32776` -> main `a41b306`. Files byte-identical; 108/0 tests, tsc src 0, web export 10 routes, public-site preview+production dry-run builds PASS. Vercel ignored per Netlify hosting policy. Mutation 0.
 - G2: `done` — `kabumori-app-morning-close-report-detail-and-portfolio-impact-20260924`
 - G3: `ready` — `x-autopost-phase1e-exact-account-credential-resolver-20260924`
-- G4: `ready` — `x-admin-netlify-deploy-preview-pipeline-20260924`
+- G4: `done` — `x-admin-netlify-deploy-preview-pipeline-20260924`
 
 ## K1 PR #18 merge result
 
@@ -74,7 +74,7 @@
 - G1 owns App Store release foundation/public legal-support Web/native release links/EAS audit.
 - G2 owns Kabumori app morning/closing report detail + portfolio-impact implementation.
 - G3 Phase1D implementation + DB/RPC/concurrency review are complete; G3 now owns Phase1E exact-account credential resolver + one-request provider seam. Phase1D remains source-only and not production-authorized.
-- G4 owns apps/admin Netlify Preview configuration only.
+- G4 Netlify repository preparation is complete; live Netlify site connection/QA remains pending interactive authorization.
 - H1 final Auth/security review of PR #17 is complete (C1 PASS).
 - H2 now owns PR #19 LLM/privacy/user-boundary final review.
 - push前にfresh `origin/main`確認。
@@ -137,6 +137,15 @@
 - Add a one-request provider seam so a durable provider-start boundary cannot hide a second X create request.
 - Source-only; production mutation/X API calls = 0.
 - Recommended model: Opus5.5（高）.
+
+## K4 Netlify result
+
+- Final K4 PASS for repository-side Netlify Deploy Preview preparation.
+- implementation commit: `12b994e00a4f7ae83076e6c9c44a09d339cebb9d`.
+- dedicated remote branch: `admin-netlify-deploy-preview-phase2-20260924`.
+- apps/admin source semantics unchanged; config/docs only.
+- Vercel/production/DB/DNS mutation=0.
+- Live Netlify site creation and `proxy.ts` runtime QA are still pending interactive account authorization.
 
 ## Known issues / observations
 
