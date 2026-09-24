@@ -37,7 +37,7 @@
   - PR #21 open (unmerged): expo.name -> かぶモリ (slug/scheme/bundleId untouched); scripts/verify-production-env.mjs preflight; RELEASE_READINESS.md corrected/expanded. 114/0 tests, tsc src 0.
   - New finding A1b: AnimatedSplashOverlay renders Expo's logo on every launch (not just the static app.json icon/splash). No artwork generated; exact specs documented for the operator.
   - Confirmed: missing Supabase env vars crash the app on launch, not a silent degrade. Production mutation 0.
-- G2: `ready` — `kabumori-pr19-merge-postmerge-verify-20260924`
+- G2: `in_progress` — `kabumori-pr19-merge-postmerge-verify-20260924`
 - G3: `done` — `x-autopost-phase1e-exact-account-credential-resolver-20260924`
 - G4: `done` — `x-admin-netlify-deploy-preview-pipeline-20260924`
 
@@ -111,6 +111,14 @@
 - 151/0 tests; deno check/lint PASS; no new src TypeScript errors; production mutation=0.
 - Codex review required before merge due LLM validation, user-bound morning lookup, and portfolio privacy boundaries.
 - H2 has now been assigned the PR #19 review after C2 closed the Phase1D review.
+
+## PR #19 merge handoff
+
+- PR #19 merged successfully after fresh head/mergeability verification.
+- merged head: `2b743f3a9799f35409ab1e61652b9e76b04977c5`
+- merge/main SHA: `518542702f820e490d0c02050b0ef470f023ce5a`
+- G2 now needs post-merge verification only.
+- production mutation remains 0 except normal GitHub merge.
 
 ## C2 PR #19 result
 
