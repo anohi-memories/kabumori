@@ -1,199 +1,89 @@
 # Codex Task 2
 
-- task_id: kabumori-pr19-report-detail-portfolio-privacy-final-review-20260924
+- task_id: kabumori-pr21-branding-eas-preflight-final-review-20260924
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: none
-- priority: high
-- recommended_model: Luna（極高）
-- purpose: K2 PASS済みのPR #19（朝刊/大引け詳細化＋保有株影響分析）を、LLM validation・本人データ境界・朝刊参照・既存互換性の観点で最終レビューする。production deploy/mergeは行わない。
+- status: ready
+- next_owner: codex
+- priority: medium
+- recommended_model: Luna（高）
+- purpose: K1 PASS済みPR #21を、Expo identity安全性・production env preflight・release-readiness記述の正確性の観点で軽量独立レビューする。原則review-only、必要ならPR #21範囲の最小修正のみ。
 
-## Previous C2 closure
+## Target
 
-Previous H2 task:
-- `x-autopost-phase1d-db-rpc-concurrency-final-review-20260924`
-- C2 verdict: **PASS-WITH-FIX as source-only candidate**
-- H2 fixed two P1 issues in commit `4468a060d368d6d94c205eba1a86ff58195740e4`
-- Phase1D remains **NOT authorized for production activation**
-- remaining gates: live-definition diff, atomic migration proof, Phase1C prerequisites, staged rollback plan
-- production mutation remained 0
-- detailed evidence remains in `.agent/CODEX_REPORT_2.md`
-
-## Review target
-
-PR #19:
-- branch: `g2-app-report-detail-portfolio-impact-20260924`
-- reviewed implementation head from K2: `acbc1b6ceac04d978b7fe6fb8e3d266734d3826a`
-- H2 minimal review fix pushed to PR branch: `7dcf41c5714d620c41b3077376b9f5febbd129b2`
+PR #21
+- branch: `claude1/release-branding-eas-preflight`
+- reviewed implementation head: `db5143fe399df25902739f4c60a07af712c3743a`
 - state: open / unmerged
 
-Primary changed files:
-- `supabase/functions/personalized-reports/market_detail.ts`
-- `supabase/functions/personalized-reports/report_upgrade_test.ts`
-- `tests/app/report-impact_test.ts`
-- `supabase/functions/personalized-reports/report_logic.ts`
-- `supabase/functions/personalized-reports/index.ts`
-- `supabase/functions/personalized-reports/report_logic_test.ts`
-- `supabase/functions/personalized-reports/shared_market_consumer_test.ts`
-- `src/lib/report-presentation.ts`
-- `src/app/reports/[id].tsx`
+## Review scope
 
-K2 evidence:
-- 151 tests passed / 0 failed
-- deno check/lint PASS
-- no new src TypeScript errors
-- Expo web export PASS / 10 routes
-- git diff --check PASS
-- secret scan 0
-- production mutation 0
+1. Fresh fetch origin/main and PR #21.
+2. Confirm no unreviewed semantic drift.
+3. Verify `expo.name -> かぶモリ` does not alter:
+   - slug
+   - scheme
+   - ios.bundleIdentifier
+   - EAS projectId/linkage
+   - Auth/recovery deep-link behavior.
+4. Audit `scripts/verify-production-env.mjs`:
+   - exact required variables
+   - validation correctness
+   - no secret logging
+   - no remote mutation
+   - fail-closed behavior
+   - consistency with app's own URL normalization.
+5. Review documented claim that missing Supabase public env values crash at launch.
+6. Verify A1/A1b icon/splash/AnimatedSplashOverlay findings against source.
+7. Confirm no official Kabumori artwork was overlooked in-repo.
+8. Verify RELEASE_READINESS.md does not overstate source-complete status.
+9. Re-run focused tests/checks.
 
-## Mandatory startup
+## Required checks
 
-1. Read PROJECT_RULES.md
-2. Read .agent/ORCHESTRATION.md
-3. Read .agent/CURRENT_STATE.md
-4. Read G2 TASK including Report and Final K2
-5. Fresh fetch origin/main and PR #19 head
-6. Confirm independent H2 worktree/checkout
-7. Inspect H1/G1/G3/G4 scopes and prove no overlap
-8. Compare PR #19 against fresh main for semantic drift
-9. Do not merge/deploy
-
-## Review scope A — user/portfolio privacy boundary
-
-Verify:
-- only authenticated user's holdings are used
-- morning report lookup is hard-bound to same user
-- returned morning row is rechecked for same user
-- no cross-user portfolio leakage path
-- no user/account IDs leak into LLM output unnecessarily
-- service-role is not exposed to mobile
-- existing RLS assumptions are not weakened or bypassed
-
-Test adversarial cases where another user's morning report/holding could be present in mocked data.
-
-## Review scope B — LLM prompt/schema/validation
-
-Audit:
-- `holdingImpactIssues`
-- stance/basis validation
-- English-token allowlist relaxation
-- Fact vs inference separation
-- hedging requirements
-- unknown/missing holdings rejection
-- duplicate holding rejection
-- no unsupported individual-stock causal claim
-- no invented material when `no_clear_material`
-- existing numeric/source/date/URL/trading-advice safeguards remain effective
-
-Try to construct prompt/output cases that pass local validation incorrectly.
-
-## Review scope C — morning-to-close comparison
-
-Verify:
-- morning lookup cannot cross users/dates
-- comparison fallback when morning report absent is safe
-- 1306-relative thresholds are deterministic and correctly applied
-- no schema migration is required
-- saved JSON remains backward compatible enough for existing app reader
-- old reports without new fields still render safely
-
-## Review scope D — shared market/X invariants
-
-Confirm:
-- shared market fact packet remains the authority
-- X-specific queue/planner/posting behavior is unchanged
-- `formatSharedXPost` behavior is unchanged
-- app enrichment cannot mutate shared facts or feed back into X output
-- missing data is surfaced as missing rather than fabricated
-
-## Review scope E — UI/backward compatibility
-
-Review:
-- old `personalized_reports` bodies still render
-- existing `stock_notes` behavior remains intact
-- no crash on no holdings / missing market section / partial older JSON
-- section ordering is stable
-- large output does not create obvious rendering/parser failure paths
-
-## Required tests
-
-At minimum:
-- focused personalized-reports tests
-- app report-impact/presentation tests
-- adversarial cross-user tests
-- LLM validation negative tests
-- deno check/lint for changed function files
-- relevant TypeScript/static checks
-- Expo web export if feasible
+- relevant app/release tests
+- production-env verifier tests
+- src TypeScript if feasible
+- Expo config/export smoke if feasible
 - git diff --check
+- production mutation=0
 
-If a concrete bug is found, minimal fix is allowed only within PR #19 scope, with rerun of affected tests.
+## Fix policy
+
+If concrete issue found:
+- only minimal changes inside PR #21 files/tests/docs
+- do not generate artwork
+- do not touch G2/report files
+- do not touch X/admin/MIC files
+- do not deploy or mutate EAS/Netlify/Supabase/App Store settings
 
 ## Forbidden
 
-- merge PR #19
-- Edge Function production deploy
-- `app_enabled=true`
-- production DML/DDL/migration
-- Auth/RLS weakening
-- service-role exposure
-- X queue/planner/posting changes
-- G1 release-Web work
-- G3 Phase1D files
-- G4 admin/Netlify files
-- Vercel/Netlify production mutation
-
-## Production mutation budget
-
-0.
+- merge PR #21
+- EAS production build
+- EAS remote env mutation
+- Netlify deploy/domain mutation
+- Supabase Auth/SMTP change
+- App Store Connect/TestFlight action
+- DB/migration changes
 
 ## Completion / C2
 
-Update `.agent/CODEX_REPORT_2.md` with:
+Report:
 - verdict PASS / PASS-WITH-FIX / FAIL
-- fresh main and PR head
+- fresh main + PR head
 - findings by severity
+- identity/linkage assessment
+- env preflight assessment
+- icon/splash/A1b factual assessment
 - exact changed files if any
-- privacy/user-boundary assessment
-- LLM validation assessment
-- backward-compatibility assessment
-- X/shared-fact invariants
-- exact tests/counts
-- whether PR #19 is safe to merge
-- remaining deploy/gate requirements
+- tests/checks
+- whether PR #21 is safe to merge
+- remaining operator actions
 - production mutation=0
-- next recommendation
 
 When complete:
 - status -> review_required
 - next_owner -> chatgpt
+- update .agent/CODEX_REPORT_2.md
 - STOP for C2.
-
-
-## Final C2 — 2026-09-24
-
-Verdict: **PASS-WITH-FIX**.
-
-Accepted review fix:
-- PR #19 head `7dcf41c5714d620c41b3077376b9f5febbd129b2`
-- missing-market-value display fix in `market_detail.ts`
-- focused review tests 49/49 PASS
-- deno check/lint PASS
-- git diff --check PASS
-- production mutation=0
-
-Product-scope resolution:
-- "market-only report works with no holdings" does **not** expand the scheduled eligible-user cohort.
-- Existing cohort remains users represented by active `tracked_stocks` rows.
-- A watch-only user can receive a market-only report.
-- A user with zero active holdings **and** zero watch rows is outside this task's scheduled cohort.
-- Do not infer eligibility from profiles/alert settings or enumerate all users in this PR.
-- Any future expansion to zero-tracked users is a separate product/cost/consent decision.
-
-Residual semantic relevance:
-- accepted for this PR because basis-category validation + hedging + semantic Fact gate are layered, and H2 found no concrete bypass producing an unsupported stock-causal claim.
-- keep this as a future hardening area, not a merge blocker.
-
-PR #19 may proceed to fresh-main rebase/conflict resolution, merge, and post-merge verification.
