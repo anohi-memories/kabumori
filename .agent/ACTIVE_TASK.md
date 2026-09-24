@@ -21,13 +21,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: done
 - task_id: kabumori-mobile-recovery-pr17-final-auth-security-review-20260924
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: assigned; final Auth/security review for PR #17
+- allocation: closed; Final C1 PASS
 
 ## Codex H2
 - owner: codex
