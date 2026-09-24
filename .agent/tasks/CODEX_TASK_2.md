@@ -3,8 +3,8 @@
 - task_id: kabumori-pr26-unknown-cause-prefix-final-review-20260925
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna（高）
 - purpose: PR #26のunknown-cause prefix拡張が、productionで観測した妥当文だけを通し、因果断定や自由文を新たに許可していないことを独立レビューする。
