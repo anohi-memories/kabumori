@@ -25,13 +25,15 @@
   - かぶモリアプリ側のCodex作業用として空けている。
   - idleなのでユーザー指示なしに新規作業を開始しない。
 
-- Codex slot 2: `ready` — `x-autopost-phase1c-dispatcher-planner-account-bound-cutover-candidate-20260924`
-  - Phase1B C2 PASS済みのaccount-bound queue foundationを、active planner/dispatcher/credential routingへつなぐsource-only cutover candidate。
-  - claim.social_account_idのみを投稿先authorityとして使用し、brand_id単独推測・LIMIT 1 fallbackは禁止。
-  - durable attempt/outcome lifecycleをdispatcherへ統合し、uncertain/confirmed-Xの自動再投稿を禁止。
-  - planner coverage、post-type side effects、legacy pending-row disposition、coexistence/cutover順序を証明する。
+- Codex slot 2: `ready` — `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`
+  - Phase1C C2で判明したsplit-brain blockerを解消するsource-only prerequisite。
+  - legacy claimはunbound rowsのみ、v2 claimはbound rowsのみを扱うhard partition candidateを作る。
+  - active plannerのsocial_account_id authorityを分類し、trusted contextがある経路だけ明示bindingする。
+  - retry/stale/reconcileでもclaim domainが混ざらないことをdisposable PostgreSQLで証明する。
+  - credential resolver / atomic completion / provider-step modelは後続タスクとして触らない。
   - production mutation 0。migration/deploy/Cron/OAuth/Vault/X API callは禁止。
   - Recommended model: GPT-5.6 Sol Medium。
+
 
 - Claude slot 1: `ready` — `kabumori-mobile-auth-real-e2e-disposable-account-20260924`
   - かぶモリアプリ側。
