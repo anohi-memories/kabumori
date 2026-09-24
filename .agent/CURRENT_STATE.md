@@ -14,10 +14,11 @@
 
 ## Active workstreams
 
-- Codex slot 1: `done` — `kabumori-important-news-caller-auth-merge-only-20260924`
-  - C1 PASS. PR #12 merged as `844c77d6911380822c091b9b646df911810808a4`.
-  - Source caller-auth protection is on main; production rollout is still unapplied/unconfigured/undeployed and requires separate explicit approval.
-  - PR #11 remains stale draft/unmerged.
+- Codex slot 1: `ready` — `kabumori-important-news-caller-auth-production-rollout-20260924`
+  - User-approved production rollout for merged PR #12 caller-auth.
+  - Sequence: secure Function/Vault secret setup → exact caller-auth migration only → four-Cron postflight → important-news-monitor-only deploy → natural runtime verification.
+  - Keep `verify_jwt=false`; no business logic/auto_publish/Cron cadence/X/Push changes.
+  - Start with Luna; use Sol only if production/security judgment becomes ambiguous.
 
 - Codex slot 2: `ready` — `x-autopost-phase0c2-production-deploy-retry-20260924`
   - Phase0c C2: first authorized x-test-post deploy stopped on Supabase Functions API HTTP 500. Migration was not applied.
@@ -53,7 +54,7 @@
 
 ## Known issues / observations
 
-- PR #12 production rollout is not yet authorized: migration apply, Vault write, Function secret/config and `important-news-monitor` deploy are still pending a separate approval after merge.
+- PR #12 caller-auth production rollout is now explicitly authorized only within H1 TASK gates: secure Function/Vault secret setup, exact migration apply, important-news-monitor-only deploy, and runtime verification.
 - Release-readiness audit identified remaining release blockers: Auth/profile lifecycle, in-app account deletion, password recovery, legal/support entry points, iPhone/TestFlight E2E, Netlify admin trial, App Store metadata/privacy, and final security gate.
 - PR #10 release-readiness audit docs remain separate from implementation work and should not be used to bypass required checks.
 - multibrand migration history不整合の可能性があるためblind `supabase db push`禁止。
