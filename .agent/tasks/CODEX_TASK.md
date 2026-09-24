@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1f-ledger-atomic-completion-final-review-20260924
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: K3 PASS済みPhase1Fのprovider outcome state machine、typed atomic completion、provider-step ledger、ACL hardening、execution-log semanticsを独立レビューする。production apply/deploy/X API callは行わない。
@@ -203,3 +203,26 @@ Then:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for C1.
+
+
+## Final C1 — Phase1F
+
+Verdict: **PASS-WITH-FIX for source-only candidate**.
+
+Accepted:
+- reviewed implementation `0b752925b28b1b922b94a4cb7629ee942f82120f`
+- H1 fix commit `b3740cc7c39010f02ad3505721a5b37d2e707dba`
+- PR #25 contains the accepted source-only fixes
+- P1 direct scheduled_posts API-role DML bypass closed
+- P2 provider-step kind/order integrity fixed
+- P2 late unfinished-step mutation after terminal attempt fixed
+- focused 55/55 PASS
+- x-test-post/_shared/important-news-monitor total 980/980 PASS
+- disposable Phase1D/1E/1F behavior/concurrency/race proofs PASS
+- deno check/lint, bash -n, git diff --check PASS
+- production mutation/deploy/token/Cron/X API calls = 0
+
+Decision:
+- Phase1F is accepted as a source candidate after the H1 fixes.
+- Production activation remains **NO**.
+- Next step: G3 fresh-main verify PR #25 -> merge -> post-merge regression.
