@@ -33,8 +33,8 @@
 
 - H1: `done` — `kabumori-mobile-recovery-pr17-final-auth-security-review-20260924`
 - H2: `idle` / task_id `none`
-- G1: `review_required` — `kabumori-mobile-recovery-pr17-merge-and-postmerge-verify-20260924`
-  - PR #17 merged at reviewed head `b3798aa` → main `7ad3539`. 3 files byte-identical; 98/0 tests, tsc src 0, web export 10 routes. Vercel ignored per native policy. Backend mutation 0.
+- G1: `done` — `kabumori-mobile-recovery-pr17-merge-and-postmerge-verify-20260924`
+  - Final K1 PASS. PR #17 merged at reviewed head `b3798aa` → main `7ad3539`; post-merge verification PASS; backend mutation 0.
 - G2: `ready` — `kabumori-app-morning-close-report-detail-and-portfolio-impact-20260924`
 - G3: `ready` — `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`
 - G4: `ready` — `x-admin-netlify-deploy-preview-pipeline-20260924`
