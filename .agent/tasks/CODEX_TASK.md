@@ -97,3 +97,13 @@ When complete:
 - next_owner -> chatgpt
 - update .agent/CODEX_REPORT.md
 - STOP for C1.
+
+
+## C1 precheck — 2026-09-24
+
+- C1 attempted before H1 completion.
+- H1 status remains ready; no PR #18 review report has been written yet.
+- PR #18 current head is now `6f3277639bc19fb1f420cd0e771c1d77f6d23519`, not the original K1 head `2b91cc482be05536abca2a83ef2e346e5f4522f4`.
+- The additional commit is `fix(kabumori): clarify privacy retention and data flows`.
+- H1 must review the **current head 6f327763...**, including that second commit, and re-run required checks before C1 can PASS.
+- Do not treat the existence of the second commit as review completion.
