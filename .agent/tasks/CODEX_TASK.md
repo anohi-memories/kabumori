@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1e-auth-secret-provider-final-review-20260924
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: K3 PASS済みのPhase1E exact-account credential resolver / one-request provider seamを、Auth・secret/Vault境界・RPC ACL・provider outcome semanticsの観点で最終レビューする。production apply/deploy/X API callは行わない。
@@ -219,3 +219,28 @@ When complete:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for C1.
+
+
+## Final C1 — Phase1E
+
+Verdict: **PASS-WITH-FIX for source-only candidate**.
+
+Accepted:
+- reviewed implementation commit `1868cc0e418ebda15ecfdfc88c55c9dd25a471f7`
+- H1 fix commit `7406c1c60506323400247b6c24162a5da4097419`
+- PR #22 contains the accepted source-only fixes
+- P1 redirect/replay risk fixed with manual redirects and conservative 3xx handling
+- P1 Vault-origin error leakage fixed with nested masking to fixed code
+- P2 PUBLIC EXECUTE window closed with transactional CREATE/REVOKE/GRANT
+- focused Phase1E 31/31 PASS
+- Phase1B+1D focused static 13/13 PASS; combined static 19/19
+- x-test-post 422/422 PASS
+- _shared 116/116 PASS
+- important-news-monitor 431/431 PASS
+- disposable PostgreSQL proof PASS
+- production mutation/deploy/token refresh/X API calls = 0
+
+Decision:
+- Phase1E is accepted as a source candidate.
+- Production activation remains **NO**.
+- Next step is G3 fresh-main integration/merge of PR #22 and post-merge verification before Phase1F work.
