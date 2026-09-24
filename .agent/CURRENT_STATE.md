@@ -36,7 +36,7 @@
 - G1: `done` — `kabumori-pr24-privacy-merge-postmerge-verify-20260924`
   - PR #24 merged at reviewed head `46515c5` -> main `ff4c43c`. Files byte-identical; 122/0 tests, production web build shows the new disclosure text. personalized-reports/account-deletion.html untouched. Mutation 0.
   - Privacy dataflow gap from PR #21 review is now closed on main. Remaining blockers: icon/splash/overlay artwork, EAS production env, Netlify publish, Auth Site URL/SMTP, App Store Connect.
-- G2: `ready` — `kabumori-pr23-merge-redeploy-close-dryrun-20260924`
+- G2: `ready` — `kabumori-close-unknown-cause-prefix-fix-20260924`
 - G3: `done` — `x-autopost-phase1f-atomic-completion-provider-outcome-model-20260924`
 - G4: `done` — `x-admin-netlify-deploy-preview-pipeline-20260924`
 
@@ -146,6 +146,20 @@
 - Kabumori Expo Web Netlify Preview setup.
 - Prior reviewed code/test evidence remains preserved in the old G4/G2 reports.
 - Resume either deferred item only when needed or user explicitly asks.
+
+## K2 PR #23 redeploy result
+
+- result: **safety containment PASS / rollout not accepted**.
+- PR #23 merged -> main `5df9512b43c885fff28b625d089eda249320b3c3`.
+- v24 deployed with app_enabled=false.
+- close dry-run: 1/3 PASS, 2/3 false-rejected legitimate unknown-cause wording.
+- morning dry-run PASS.
+- IMPACT_TOO_LONG fixed; remaining blocker is narrow unknown-cause prefix parsing.
+- no persistence / notification; rollback triggered as designed.
+- production now v25 = known-good v21 source `4590ba6`; app_enabled=false.
+- activation remains NO.
+- G2 assigned a source-only minimal validator fix; no deploy in that task.
+- recommended model: Sonnet5（極高）.
 
 ## C2 PR #23 result
 
