@@ -17,11 +17,11 @@
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: x-autopost-phase0c-production-brand-scope-rollout-20260923
+- task_id: x-autopost-phase1-common-queue-idempotency-foundation-20260924
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
-- note: compatible x-test-postを先に本番deployし、runtime確認後にexact migrationを適用するPhase0c。production mutation直前に明示同意必須。GPT-6 Sol Medium推奨。
+- note: common queue/idempotency/retry/outcome foundationをsource-only + disposable DBで実装検証。production mutation 0。apps/adminには触れない。GPT-6 Sol Medium推奨。
 
 ### Claude slot 1
 - owner: claude
@@ -36,12 +36,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: x-admin-netlify-thin-control-plane-phase1-merge-only-20260924
+- status: ready
+- task_id: x-admin-multibrand-selector-query-parameterization-phase2-20260924
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: Phase1をPR #14でmain mergeした（merge SHA a9c0ef7）。apps/adminのdriftなし・conflictなし、2回freshenしてもK2レビュー済み内容とバイト一致。tests 12/12・tsc・lint・build・Vercelすべてpass。merge後のread-backでも5ファイル一致を確認。production mutation 0。K2待ち。
+- note: brand selector + server-authorized selected-brand boundary + 4 admin query modulesのbrand parameterization。production mutation 0。x-test-post/queue系には触れない。Opus 5.5推奨。
 
 ## Control codes
 
