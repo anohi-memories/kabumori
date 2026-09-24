@@ -1,95 +1,210 @@
 # Claude Task 1
 
-- task_id: kabumori-mobile-release-blockers-phase1-merge-only-20260924
+- task_id: kabumori-mobile-release-blockers-phase1-production-rollout-20260924
 - owner: claude
 - slot: claude-1
-- status: done
-- next_owner: chatgpt
-- priority: high
+- status: ready
+- next_owner: claude
+- priority: critical
 - recommended_model: Opus 5.5
-- purpose: K1 PASS済みのPR #13 consumer mobile release-blocker candidateを最新mainへfreshenし、semantic driftを確認したうえで通常手順でmergeする。production migration/deploy/Auth設定変更は行わない。
+- purpose: K1 PASS済みのconsumer mobile release-blockerを、本番へ最小安全範囲で反映する。ensure_my_profile migration適用、account-delete単独deploy、recovery redirect設定、postflight確認までを順序付きゲートで実施する。
 
-## K1 decision
+## User authorization
 
-Previous task `kabumori-release-mobile-blockers-phase1-auth-account-settings-20260924` is **PASS for source candidate**.
+2026-09-24、ユーザーは前K1で提示した次工程に対し「つづけて」と明示した。
 
-Accepted candidate:
-- PR #13 head: `8b78ecc22524b830c5e440e8f0b995fbb9a6f014`
-- Implements:
-  - idempotent `ensure_my_profile()` RPC candidate
-  - missing-profile recovery UX
-  - password reset request + recovery deep-link handling
-  - dedicated `account-delete` Edge Function candidate
-  - Settings / Account / Privacy / Terms / Support / Logout / Delete Account entry points
-- Account deletion trusts only the verified JWT identity; no caller-supplied arbitrary user id.
-- Existing FK cascades are used rather than maintaining a drifting per-table delete list.
-- App tests: 77/77 PASS
-- account-delete tests: 17/17 PASS
-- combined: 94/94 PASS
-- new Function deno checks PASS
-- Expo web export PASS; 10 routes unchanged
-- disposable PostgreSQL proof PASS, including a negative control for privileges
-- `git diff --check` PASS
-- two app TypeScript errors are pre-existing stale Expo typed-route errors and unchanged from clean base
-- Vercel check on PR #13 head: success
-- production mutation = 0
-- Important News caller-auth files/migration untouched
+このTASKで承認されるproduction mutationは以下に限定する。
 
-Current main drift since PR #13 base is control/task-only at review time; however fresh-check again before merge.
+1. `supabase/migrations/20260924100000_ensure_my_profile.sql` **1本だけ**の適用
+2. `account-delete` Edge Function **だけ**のdeploy
+3. Supabase Auth redirect allowlistへ `kabumori://reset-password` を追加
+4. 開発検証に必要で、current Expo dev URLが安全に確定できる場合のみ、そのdev redirect URL追加
+5. 上記のread-only preflight/postflight
+
+以下はまだ承認しない:
+- broad `supabase db push`
+- migration history repair/reconcile
+- 他migration apply
+- 他Function deploy
+- Auth provider変更
+- user signup設定変更
+- real user削除
+- real production user/profile行の編集
+- 実ユーザーへのpassword-resetメール送信
+- TestFlight/App Store submission
+- Vercel/Netlify変更
+- Important News / x-test-post / market-report / admin workstream変更
+- privacy/terms/support URLの推測値設定
+
+## Approved source basis
+
+PR #13:
+- reviewed head: `8b78ecc22524b830c5e440e8f0b995fbb9a6f014`
+- merged main: `f7ace17336c29edec49bb8daa0f95116a30d42fb`
+
+K1 accepted:
+- app tests 77/77 PASS
+- account-delete tests 17/17 PASS
+- combined 94/94 PASS
+- disposable PostgreSQL proof PASS
+- Expo web export PASS
+- Vercel PASS
+- 25 reviewed files byte-identical on merged main
+- production mutation so far = 0
+
+Important release ordering:
+- the current app calls `ensure_my_profile()` on accepted sessions
+- therefore migration must be applied before shipping any mobile build from this main
 
 ## Mandatory startup
+
+Before any production mutation:
 
 1. Read `PROJECT_RULES.md`
 2. Read `.agent/ORCHESTRATION.md`
 3. Read `.agent/CURRENT_STATE.md`
-4. Read this TASK and the prior task report
+4. Read this TASK and previous G1/K1 Report
 5. Fresh fetch `origin/main`
-6. Inspect PR #13 current head/checks/mergeability
-7. Compare latest main against PR #13 base/head
-8. Confirm H1/H2/G2 ownership does not overlap any of PR #13's 25 changed files or `ensure_my_profile` / `account-delete`
+6. Confirm reviewed migration/function source still exists unchanged on latest main
+7. Confirm H1/H2/G2 do not own:
+   - `public.ensure_my_profile`
+   - migration `20260924100000_ensure_my_profile.sql`
+   - `account-delete`
+   - Supabase Auth redirect allowlist
+8. Read-only production preflight:
+   - migration history
+   - `pg_proc` existence/count for `public.ensure_my_profile`
+   - grants/owner/security mode if already present unexpectedly
+   - Functions list and current versions
+   - Auth redirect configuration, if safely readable
+   - do not expose secrets
 
-## Work
+If production shape materially differs from reviewed assumptions, STOP before mutation and return for K1.
 
-If and only if:
-- PR #13 still contains the reviewed semantics,
-- latest-main drift has no semantic overlap,
-- required checks remain green,
-- no conflicting workstream owns the same files/DB objects,
+## Gate A — exact ensure_my_profile migration
 
-then freshen/rebase as needed and merge PR #13 using normal repository rules.
+Apply only:
+`supabase/migrations/20260924100000_ensure_my_profile.sql`
 
-After merge:
-- read back resulting main SHA
-- verify all reviewed implementation files are present and semantically unchanged
-- confirm migration `20260924100000_ensure_my_profile.sql` is source-only and unapplied
-- confirm `account-delete` is not deployed
-- confirm no Auth redirect allowlist/dashboard setting changed
-- confirm no real reset email or account deletion occurred
+Do NOT run `supabase db push`.
 
-## Forbidden production actions
+Postflight must prove:
+- `public.ensure_my_profile()` exists
+- correct signature
+- `security invoker`
+- expected `search_path`
+- EXECUTE granted only to the intended authenticated role(s)
+- anon does not gain execute
+- no table/policy/trigger/auth-schema change
+- no unrelated migration/history repair
 
-Do NOT:
-- apply the migration
-- deploy `account-delete`
-- change Supabase Auth redirect allowlist/settings
-- send a real recovery email
-- delete a real account
-- modify production user/profile rows
-- perform TestFlight/App Store action
-- change Vercel/Netlify settings
-- touch Important News caller-auth rollout
-- touch x-test-post/social-mobile/market-report workstreams
+If any result differs, STOP. Do not deploy account-delete.
+
+## Gate B — deploy only account-delete
+
+Only after Gate A passes:
+
+Deploy only:
+`supabase/functions/account-delete`
+
+Requirements:
+- use latest reviewed main source
+- platform JWT verification ON unless current project tooling requires an equivalent secure boundary; do not weaken auth
+- Function must continue to re-verify caller token using `/auth/v1/user`
+- service role used only server-side
+- no caller-supplied user id
+- no secret/token in response/logs
+- no other Function deploy
+
+Postflight:
+- read back function version/status/verify_jwt/source metadata where available
+- verify no unrelated Function version/updated_at moved
+- do not invoke against a real user
+
+If deploy fails:
+- one careful diagnosis allowed
+- no repeated retry loop
+- no alternate deploy/config path without K1/user review
+
+## Gate C — recovery redirect allowlist
+
+After Gate A/B pass:
+
+Add:
+- `kabumori://reset-password`
+
+Optional:
+- current Expo dev redirect URL only if it can be derived exactly from current project/dev configuration and is clearly for development testing.
+
+Do not:
+- remove existing redirect URLs
+- change auth provider configuration
+- disable email confirmation
+- weaken session/security settings
+- add wildcard redirects unless already part of an explicitly reviewed project convention
+
+Postflight:
+- read back redirect allowlist without exposing unrelated sensitive values
+- prove existing entries preserved and required entry added
+
+If available tooling cannot safely mutate/read Auth redirect config, STOP and report the exact Dashboard manual step instead of guessing.
+
+## Gate D — runtime/readiness verification
+
+Do read-only verification after rollout:
+
+- existing authenticated user session path can resolve `ensure_my_profile` contract without changing another user's data
+- migration and Function are both present
+- no production account is deleted
+- no real reset email is sent unless there is an already-designated disposable test account and the task can prove it is non-user production data
+
+If there is no clearly designated disposable test account:
+- do **not** create/delete a real account in this TASK
+- report real recovery/deletion E2E as the next manual/testflight gate
+
+## Legal/support URL handling
+
+Current source expects:
+- `EXPO_PUBLIC_PRIVACY_POLICY_URL`
+- `EXPO_PUBLIC_TERMS_OF_SERVICE_URL`
+- `EXPO_PUBLIC_SUPPORT_URL`
+
+Do not invent values.
+Audit whether real production URLs now exist on main/current public web.
+
+If exact URLs are confirmed from authoritative project source, report them for the next build configuration.
+If not, leave unset and mark them as a release blocker for the next phase.
+
+## Safety / untouched
+
+Must remain untouched:
+- Important News caller-auth H1 rollout
+- x-test-post/H2 queue work
+- G2 admin/Netlify work
+- market-report shared platform
+- X OAuth/Vault accounts
+- Push production settings
+- App Store Connect/TestFlight
+- unrelated DB objects
+
+No blind migration replay. No history repair.
 
 ## Handoff
 
-Update this task Report with:
-- pre-merge main SHA
-- final PR head/checks
-- drift/conflict result
-- merge/resulting main SHA
-- read-back result
-- production mutation = 0
-- exact production prerequisites still pending
+Update this TASK `## Report` with:
+
+1. fresh main SHA
+2. production preflight findings
+3. exact migration apply result
+4. RPC postflight: signature/security/grants/search_path
+5. account-delete deploy result + version/verify_jwt/source read-back
+6. Auth redirect allowlist result or exact manual blocker
+7. explicit untouched list
+8. exact production mutations performed
+9. tests/checks/read-only runtime verification
+10. unresolved privacy/terms/support URLs
+11. remaining real-device/recovery/deletion E2E work
+12. next recommended release phase
 
 Then:
 - status -> `review_required`
@@ -97,92 +212,3 @@ Then:
 - STOP for K1
 
 **推奨モデル：Opus 5.5。**
-
-## Report
-
-- task_id: kabumori-mobile-release-blockers-phase1-merge-only-20260924
-- result: PR #13 merged with a normal merge commit after the user approved it in chat. Production mutation = 0.
-- merge approval: my first `gh pr merge` was denied by the auto-mode safety check ("merge without review"). I stopped and did not work around it. The user then approved in chat: a normal merge, no bypass of the safety check or branch protection. The second attempt used the same normal `gh pr merge 13 --merge`.
-
-### Pre-merge state
-
-- pre-merge main SHA: `2343e26` (my in_progress control commit on `9500b0c`). Merge landed on top of G2's concurrent control commits (`f405270`, `7b2d826`).
-- PR #13 head: `8b78ecc22524b830c5e440e8f0b995fbb9a6f014`. This is the exact K1-reviewed SHA; no new commits.
-- mergeability: `MERGEABLE` / `CLEAN`, checked twice (before and after main moved)
-- checks: Vercel `pass`, Vercel Preview Comments `pass`
-
-### Drift / conflict result
-
-- Main changed since the PR base (`bc30294`): `.agent/*` control files, the PR #12 Important News caller-auth files, `docs/runbooks/important-news-monitor-caller-auth.md`, and migration `20260923110440`. None overlaps the 25 PR files.
-- Migration ordering: the latest main migration before this was `20260924090000`, and `20260924100000_ensure_my_profile.sql` stays last. No collision.
-- Ownership: H1 (Important News caller-auth), H2 (x-test-post Phase0c) and G2 (apps/admin Netlify) do not own any of the 25 files, `ensure_my_profile`, or `account-delete`.
-
-### Merge / resulting main
-
-- merge commit / resulting main SHA: `f7ace17336c29edec49bb8daa0f95116a30d42fb`
-- mergedAt: 2026-09-24T00:15:19Z
-
-### Read-back
-
-- `git diff 8b78ecc2 f7ace17 -- <all 25 reviewed files>` returned an empty diff. All 25 files are byte-identical to the reviewed head.
-- `git diff --name-only 2343e26 f7ace17` shows 28 paths: the 25 reviewed files plus 3 `.agent` files from G2's concurrent pushes. No other implementation file changed.
-- On merged main, `deno test --no-check --no-lock --allow-read tests/app/ supabase/functions/account-delete/` passed **94 / 0**, the same as at review time.
-
-### Production state (read-only verification, no mutation)
-
-- **account-delete not deployed:** `supabase functions list` returns 16 functions and no `account-delete`.
-- **Migration not applied:**
-  - `supabase migration list` shows `20260924100000` as local only, with no remote entry.
-  - This repo's remote history is known to drift from local timestamps, so the history alone is weak evidence. I also ran a read-only catalog query, which returned `ensure_my_profile_exists = 0` (`public.ensure_my_profile` does not exist in production).
-- **Remote history entry I did not make:** `20260924001508` was recorded at 00:15:08 UTC. This session ran no migration apply, `db push` or history repair. The entry comes from another workstream and I did not investigate it (outside this slot's scope).
-- **Not changed by this session:**
-  - Auth redirect allowlist and dashboard settings. No Auth config command was run.
-  - No real recovery email was sent.
-  - No real account was deleted.
-  - No production user or profile row was modified.
-  - No TestFlight or App Store action was taken.
-  - No Vercel or Netlify setting was changed.
-- Not touched: the Important News caller-auth rollout, and the x-test-post, social-mobile and market-report workstreams.
-- The only production calls were read-only: `functions list`, `migration list`, and one `pg_proc` count query.
-
-### Production prerequisites still pending (each needs separate approval)
-
-1. Apply only `supabase/migrations/20260924100000_ensure_my_profile.sql`, as a single file. No `db push` and no history repair/reconcile. Then read back the function's existence, its `security invoker` setting and its grants.
-2. Deploy only `account-delete`, with `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` and platform JWT verification on. Then read back the runtime source and confirm no other function's version or `updated_at` moved.
-3. Add `kabumori://reset-password` (plus the Expo dev URL for testing) to the Supabase Auth redirect allowlist.
-4. Confirm the project's auth flow (PKCE or implicit). The PKCE branch only succeeds on PKCE.
-5. Decide `EXPO_PUBLIC_PRIVACY_POLICY_URL` / `EXPO_PUBLIC_TERMS_OF_SERVICE_URL` / `EXPO_PUBLIC_SUPPORT_URL`.
-6. Run one real recovery and one real deletion on a disposable test account.
-7. Social-mobile follow-up, owned by that workstream: when a user is deleted, their `brands` / `social_accounts` rows remain.
-
-### Ordering note for step 1
-
-The app on main now calls `ensure_my_profile` on every accepted session. A build shipped before the migration is applied will fail profile preparation and show the recovery screen. So in production, **apply the migration before shipping any build from this main.**
-
-
-## Final K1 review — 2026-09-24
-
-**PASS**
-
-Verified:
-- PR #13 merged normally after explicit user approval; no safety/branch-protection bypass.
-- Reviewed head `8b78ecc22524b830c5e440e8f0b995fbb9a6f014` merged as `f7ace17336c29edec49bb8daa0f95116a30d42fb`.
-- All 25 reviewed implementation files read back byte-identical on merged main.
-- Merged-main regression remained **94 / 0**.
-- Production mutation = **0**.
-- `20260924100000_ensure_my_profile.sql` remains unapplied; `public.ensure_my_profile` is absent in production.
-- `account-delete` remains undeployed.
-- No Auth redirect allowlist/dashboard change, real recovery email, real account deletion, TestFlight/App Store action, or Vercel/Netlify production change occurred.
-- No overlap with Important News caller-auth, x-test-post/social-mobile, or market-report workstreams.
-
-Release-order requirement:
-- Do **not** ship a mobile build from this main before the `ensure_my_profile` migration is applied, because the app now calls that RPC on accepted sessions.
-
-Next production phase requires separate explicit approval:
-1. apply only `20260924100000_ensure_my_profile.sql`;
-2. deploy only `account-delete`;
-3. configure the recovery redirect allowlist;
-4. set real privacy/terms/support URLs;
-5. run one real recovery and one real deletion against a disposable test account.
-
-Claude slot 1 is complete and returns to `done`.
