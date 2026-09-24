@@ -3,7 +3,7 @@
 - task_id: kabumori-pr19-merge-postmerge-verify-20260924
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Sonnet5（高）
