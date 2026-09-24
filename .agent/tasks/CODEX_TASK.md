@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: critical
 - recommended_model: GPT-5.6 Sol Medium
 - purpose: Phase1C C2で判明したsplit-brain blockerを解消するため、legacy dispatcherはunbound rowsだけ、v2 dispatcherはexplicitly bound rowsだけをclaimできるようにするsource-only claim-domain partition candidateを作り、planner側のsocial_account_id authority境界を明文化・検証する。productionには適用しない。
@@ -173,3 +173,21 @@ When complete:
 - STOP for C1.
 
 Do not apply or deploy anything from this task to production.
+
+
+## C1 resume authorization — 2026-09-24
+
+Result: RESUME APPROVED.
+
+The prior C1 review accepted the safe stop as incomplete rather than failed. The task must continue from the same Phase1D scope.
+
+Resume requirements:
+- start from fresh origin/main (confirmed at C1: 63653f4a3498e372c3a4576440a3d0ff3775b68a)
+- use an isolated clean checkout/worktree; do not touch unrelated dirty files
+- obtain a disposable PostgreSQL runtime before claiming completion
+- create and test the source-only claim-domain partition candidate
+- keep production mutation at 0
+- preserve all existing forbidden operations and routing rules
+- when complete, return to review_required / next_owner: chatgpt and stop for C1
+
+This is authorization to resume the existing task only; it does not authorize production apply/deploy.
