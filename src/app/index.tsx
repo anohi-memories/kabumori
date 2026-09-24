@@ -20,6 +20,8 @@ import { dashboardGreeting, dashboardSectionError, summarizeTrackedStocks, today
 import type { TrackedStock } from '@/lib/stocks';
 import { supabase } from '@/lib/supabase';
 import { KABUMORI_COLORS, type KabumoriPalette } from '@/constants/kabumori-theme';
+import { SettingsSheet } from '@/components/settings-sheet';
+import { useAuth } from '@/providers/auth-provider';
 const REPORT_SCHEDULE: Record<ReportType, string> = { morning: '平日の朝8時半ごろに届きます', close: '平日の17時すぎに届きます' };
 
 async function fetchTrackedStocks(): Promise<TrackedStock[]> {
@@ -57,6 +59,8 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errors, setErrors] = useState({ stocks: '', news: '', reports: '' });
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const { session } = useAuth();
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -87,8 +91,20 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]} edges={['top']}>
       <ScrollView contentContainerStyle={styles.container} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={palette.accent} />}>
-        <Text style={[styles.eyebrow, { color: palette.accent }]}>{greeting.eyebrow}</Text>
-        <Text style={[styles.title, { color: palette.text }]}>{greeting.title}</Text>
+        <View style={styles.titleRow}>
+          <View style={styles.titleMain}>
+            <Text style={[styles.eyebrow, { color: palette.accent }]}>{greeting.eyebrow}</Text>
+            <Text style={[styles.title, { color: palette.text }]}>{greeting.title}</Text>
+          </View>
+          <Pressable
+            onPress={() => setSettingsOpen(true)}
+            style={({ pressed }) => [styles.settingsButton, { backgroundColor: palette.accentSoft }, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="設定"
+            accessibilityHint="アカウント・通知・規約・ログアウトの設定を開きます">
+            <Text style={[styles.settingsText, { color: palette.muted }]}>設定</Text>
+          </Pressable>
+        </View>
         <Text style={[styles.description, { color: palette.muted }]}>あなたの保有・監視銘柄に必要な情報をまとめます。</Text>
 
         <View style={styles.actionGrid}>
@@ -132,6 +148,11 @@ export default function HomeScreen() {
           {!loading && !errors.reports ? <View style={styles.reportGrid}>{(['morning', 'close'] as ReportType[]).map((type) => { const report = reportsToday[type]; return <Pressable key={type} disabled={!report} onPress={() => report && router.push({ pathname: '/reports/[id]', params: { id: report.id } })} style={({ pressed }) => [styles.reportCard, { backgroundColor: report ? palette.softBlue : palette.soft }, pressed && styles.pressed]} accessibilityRole="button" accessibilityHint={report ? `${reportTypeLabel(type)}を開きます` : undefined}><View style={styles.reportHead}><Text style={[styles.reportType, { color: palette.accent }]}>{reportTypeLabel(type)}</Text>{report ? <Text style={[styles.reportTime, { color: palette.muted }]}>{formatTimeJa(report.generated_at)}</Text> : null}</View>{report ? <><Text style={[styles.reportTitle, { color: palette.text }]} numberOfLines={2}>{report.title_ja}</Text>{report.summary_ja ? <Text style={[styles.reportSummary, { color: palette.muted }]} numberOfLines={2}>{report.summary_ja}</Text> : null}<Text style={[styles.reportMore, { color: palette.accent }]}>読む ›</Text></> : <Text style={[styles.reportEmpty, { color: palette.muted }]}>今日のレポートはまだありません。{REPORT_SCHEDULE[type]}。</Text>}</Pressable>; })}</View> : null}
         </View>
       </ScrollView>
+      <SettingsSheet
+        visible={settingsOpen}
+        email={session?.user.email ?? null}
+        onClose={() => setSettingsOpen(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -139,6 +160,10 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   container: { width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 110, gap: 14 },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  titleMain: { flex: 1 },
+  settingsButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, marginTop: 4 },
+  settingsText: { fontSize: 12, fontWeight: '800' },
   eyebrow: { fontWeight: '900', letterSpacing: 2, fontSize: 12 },
   title: { fontSize: 32, fontWeight: '900', marginTop: 5 },
   description: { fontSize: 15, lineHeight: 22, marginTop: 7, marginBottom: 4 },

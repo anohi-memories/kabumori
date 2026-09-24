@@ -5,7 +5,10 @@ import { ActivityIndicator, StyleSheet, useColorScheme, View } from 'react-nativ
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
 import { AuthScreen } from '@/components/auth-screen';
+import { PasswordResetScreen } from '@/components/password-reset-screen';
+import { ProfileRecoveryScreen } from '@/components/profile-recovery-screen';
 import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
+import { useRecoveryLink } from '@/hooks/use-recovery-link';
 import { useRegisterPushToken } from '@/hooks/use-register-push-token';
 import { usePushNotificationNavigation } from '@/hooks/use-push-notification-navigation';
 import { AuthProvider, useAuth } from '@/providers/auth-provider';
@@ -13,10 +16,15 @@ import { AuthProvider, useAuth } from '@/providers/auth-provider';
 SplashScreen.preventAutoHideAsync();
 
 function AuthGate() {
-  const { session, loading, error, retry } = useAuth();
+  const { session, loading, error, profileError, retry } = useAuth();
   const colorScheme = useColorScheme();
+  const { link, clearRecoveryLink } = useRecoveryLink();
   useRegisterPushToken(session);
   usePushNotificationNavigation(session);
+
+  // A reset link takes precedence over both the app and the login form: it can arrive while signed
+  // out, and it also creates a session of its own that would otherwise skip the new password.
+  if (link) return <PasswordResetScreen link={link} onClose={clearRecoveryLink} />;
 
   if (loading) {
     return (
@@ -29,7 +37,13 @@ function AuthGate() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <AnimatedSplashOverlay />
-      {session ? <AppTabs /> : <AuthScreen startupError={error} onRetry={retry} />}
+      {session && profileError ? (
+        <ProfileRecoveryScreen message={profileError} onRetry={retry} />
+      ) : session ? (
+        <AppTabs />
+      ) : (
+        <AuthScreen startupError={error} onRetry={retry} />
+      )}
     </ThemeProvider>
   );
 }
