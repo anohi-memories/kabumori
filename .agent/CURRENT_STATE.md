@@ -33,12 +33,24 @@
 
 - H1: `done` — `x-autopost-phase1e-auth-secret-provider-final-review-20260924`
 - H2: `ready` — `kabumori-pr23-close-validator-final-review-20260924`
-- G1: `review_required` — `kabumori-pr21-merge-postmerge-verify-20260924`
+- G1: `ready` — `kabumori-privacy-dataflow-reaudit-after-report-upgrade-20260924`
   - PR #21 merged at H2-reviewed head `0a71f08` -> main `0d4ebad`. Files byte-identical; 122/0 tests, tsc src 0, web export 10 routes. Identity fields (slug/scheme/bundleId/projectId) and all icon/splash/overlay assets unchanged. Mutation 0.
   - Flagged for K1: G2's report_logic.ts/market_detail.ts already landed on main after the privacy-page audit; recommend a re-audit of apps/kabumori-web/pages/privacy.html's OpenAI data-flow claims before Netlify publication.
 - G2: `done` — `kabumori-personalized-reports-prod-deploy-dryrun-20260924`
 - G3: `ready` — `x-autopost-phase1f-atomic-completion-provider-outcome-model-20260924`
 - G4: `done` — `x-admin-netlify-deploy-preview-pipeline-20260924`
+
+## Final K1 PR #21 merge result
+
+- PASS.
+- PR #21 reviewed head `0a71f0882136aa8930cf0572033e1a0ba28c0760` merged -> main `0d4ebad98a5a25e300f766600231eb60b36e5c07`.
+- merged content byte-identical to H2-reviewed head.
+- 122/122 scoped tests PASS; src TypeScript 0; Expo web export 10 routes PASS.
+- identity/linkage unchanged except installed app display name 「かぶモリ」.
+- no artwork changed.
+- production mutation=0 excluding normal GitHub merge.
+- next G1: privacy/data-flow re-audit against current report implementation before Netlify publication.
+- recommended model: Sonnet5（高）.
 
 ## C2 PR #21 result
 
