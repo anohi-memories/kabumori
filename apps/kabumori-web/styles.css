@@ -1,0 +1,86 @@
+:root {
+  --bg: #f7f8f5;
+  --card: #ffffff;
+  --text: #17211a;
+  --muted: #667169;
+  --border: #e1e5e2;
+  --accent: #397449;
+  --unset-bg: #fff0d7;
+  --unset-text: #7a4b00;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101511;
+    --card: #1b241d;
+    --text: #f1f6f2;
+    --muted: #b6c2b9;
+    --border: #344238;
+    --accent: #8cc79c;
+    --unset-bg: #413522;
+    --unset-text: #ffd89a;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  line-height: 1.8;
+}
+
+.preview-banner {
+  margin: 0;
+  padding: 8px 16px;
+  background: var(--unset-bg);
+  color: var(--unset-text);
+  font-size: 14px;
+  text-align: center;
+}
+
+.site-header, main, .site-footer {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+.site-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-top: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.brand { color: var(--accent); font-weight: 900; font-size: 20px; text-decoration: none; }
+.site-header nav { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; }
+a { color: var(--accent); }
+
+main { padding-top: 12px; padding-bottom: 32px; }
+h1 { font-size: 26px; line-height: 1.4; margin: 20px 0 8px; }
+h2 { font-size: 18px; margin: 28px 0 8px; }
+p, li { font-size: 16px; }
+.lead { color: var(--muted); }
+.note { color: var(--muted); font-size: 14px; }
+
+table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 15px; }
+th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+th { background: var(--card); }
+
+mark.unset { background: var(--unset-bg); color: var(--unset-text); padding: 0 4px; border-radius: 4px; }
+
+.site-footer {
+  padding-top: 16px;
+  padding-bottom: 32px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 14px;
+}
+.site-footer p { margin: 4px 0; font-size: 14px; }

@@ -1,0 +1,19 @@
+# Netlify site for Kabumori's public pages. Set the site's base directory to `apps/kabumori-web`.
+#
+# The build needs no install step. In the production context build.mjs refuses to run until
+# KABUMORI_OPERATOR_NAME, KABUMORI_SUPPORT_EMAIL and KABUMORI_POLICY_EFFECTIVE_DATE are set in the
+# Netlify site's environment, so these pages cannot go live with a placeholder in them. Deploy
+# previews render missing values visibly and are marked noindex.
+[build]
+  command = "node build.mjs"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Frame-Options = "DENY"

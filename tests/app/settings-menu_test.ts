@@ -5,9 +5,7 @@ import { buildLegalLinks } from "../../src/lib/legal-links.ts";
 import { settingsEntries } from "../../src/lib/settings-menu.ts";
 
 const configured = buildLegalLinks({
-  EXPO_PUBLIC_PRIVACY_POLICY_URL: "https://example.com/privacy",
-  EXPO_PUBLIC_TERMS_OF_SERVICE_URL: "https://example.com/terms",
-  EXPO_PUBLIC_SUPPORT_URL: "mailto:support@example.com",
+  EXPO_PUBLIC_KABUMORI_WEB_URL: "https://kabumori.example.com",
 });
 
 test("every release-blocking entry is present and in a predictable order", () => {
