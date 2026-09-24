@@ -31,14 +31,14 @@
 
 ## Current slot snapshot
 
-- H1: `ready` — `x-autopost-phase1e-auth-secret-provider-final-review-20260924`
+- H1: `done` — `x-autopost-phase1e-auth-secret-provider-final-review-20260924`
 - H2: `ready` — `kabumori-pr21-branding-eas-preflight-final-review-20260924`
 - G1: `done` — `kabumori-release-branding-eas-preflight-20260924`
   - PR #21 open (unmerged): expo.name -> かぶモリ (slug/scheme/bundleId untouched); scripts/verify-production-env.mjs preflight; RELEASE_READINESS.md corrected/expanded. 114/0 tests, tsc src 0.
   - New finding A1b: AnimatedSplashOverlay renders Expo's logo on every launch (not just the static app.json icon/splash). No artwork generated; exact specs documented for the operator.
   - Confirmed: missing Supabase env vars crash the app on launch, not a silent degrade. Production mutation 0.
 - G2: `ready` — `kabumori-personalized-reports-prod-deploy-dryrun-20260924`
-- G3: `done` — `x-autopost-phase1e-exact-account-credential-resolver-20260924`
+- G3: `ready` — `x-autopost-phase1e-pr22-merge-postmerge-verify-20260924`
 - G4: `done` — `x-admin-netlify-deploy-preview-pipeline-20260924`
 
 ## K1 PR #21 result
@@ -199,6 +199,19 @@
 - production mutation/deploy/token refresh/X API calls=0.
 - Independent Codex review is assigned to H1 using Sol（高） before Phase1E can be accepted beyond source-candidate status.
 - H1/H2 app-owned task records were not overwritten by this X-owner workflow.
+
+## C1 Phase1E result
+
+- H1 verdict: **PASS-WITH-FIX for source-only candidate**.
+- reviewed implementation: `1868cc0e418ebda15ecfdfc88c55c9dd25a471f7`.
+- H1 fix: `7406c1c60506323400247b6c24162a5da4097419` on PR #22.
+- Fixed P1: redirect-follow replay risk after provider-start.
+- Fixed P1: Vault-origin P0001 secret/reference leakage.
+- Fixed P2: default PUBLIC EXECUTE window during token RPC creation.
+- Phase1E 31/31; x-test-post 422/422; _shared 116/116; important-news-monitor 431/431; disposable PostgreSQL PASS.
+- production activation remains NO.
+- G3 now owns PR #22 fresh-main merge/post-merge verification.
+- recommended model: Sonnet5（高）.
 
 ## K4 Netlify result
 
