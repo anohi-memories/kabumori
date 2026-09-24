@@ -3,8 +3,8 @@
 - task_id: kabumori-pr21-branding-eas-preflight-final-review-20260924
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: medium
 - recommended_model: Luna（高）
 - purpose: K1 PASS済みPR #21を、Expo identity安全性・production env preflight・release-readiness記述の正確性の観点で軽量独立レビューする。原則review-only、必要ならPR #21範囲の最小修正のみ。

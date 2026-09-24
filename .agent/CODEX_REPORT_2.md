@@ -1,3 +1,46 @@
+# H2 — PR #21 branding / EAS preflight final review (2026-09-24)
+
+- task_id: `kabumori-pr21-branding-eas-preflight-final-review-20260924`
+- result: **PASS-WITH-FIX; source review is complete.** The concrete validation/accuracy issues below were fixed within PR #21 and pushed. No production activation was performed.
+- fresh_main_sha: `592b8ebc1d7ce68e3ff0624f0a67cb26f88223b1` at task re-read; latest pre-control-report origin/main: `64234acfc4ff12d9f37aaa4bc4cb637309d1da0c`.
+- reviewed_pr: #21, branch `claude1/release-branding-eas-preflight`; original K1 head `db5143fe399df25902739f4c60a07af712c3743a`; H2 fix commit `0a71f0882136aa8930cf0572033e1a0ba28c0760` pushed and read back as the remote branch head.
+- GitHub read-back: PR OPEN, unmerged, `mergeable=true`, `mergeStateStatus=UNSTABLE`; no mainline merge performed.
+
+## Findings and minimal fixes
+
+1. **P2 fixed — publishable-key validation was length-only.** A long arbitrary string passed the original preflight, and a `service_role`-style credential would also pass the length check despite being unsafe in an `EXPO_PUBLIC_*` variable. The validator now accepts the documented `sb_publishable_…` shape or a legacy JWT whose payload role is `anon`; arbitrary strings, `sb_secret_…`, and `service_role` JWTs fail with a fixed message that never includes the supplied value. This is structural validation only: it does not authenticate the key, prove it belongs to the configured project URL, or contact Supabase. The accepted formats follow [Supabase's API-key format guidance](https://supabase.com/docs/guides/getting-started/api-keys).
+2. **P2 fixed — App Store listing name was conflated with `expo.name`.** The readiness document now says `expo.name` sets the home-screen app name and explicitly leaves the localized App Store product name as an App Store Connect operator action. Apple's App Store Connect documentation describes that listing name as app metadata managed there: [App information](https://developer.apple.com/help/app-store-connect/reference/app-information/app-information).
+3. **P2 wording corrected — launch overlay scope.** The overlay is rendered on normal startup after auth loading, but a recovery-link route takes precedence. The document no longer claims every route/launch displays it.
+
+## Identity, artwork, and release assessment
+
+- `app.json` changed only `expo.name` to `かぶモリ`; `slug`, `scheme`, iOS `bundleIdentifier`, and EAS `projectId` compare unchanged against main. Auth/recovery deep-link identity remains `kabumori`.
+- Source/config use exactly `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `EXPO_PUBLIC_KABUMORI_WEB_URL`. The first two are read by `src/lib/supabase.ts`; the third uses the same `normalizeWebOrigin()` helper as the app. Errors name variables but do not echo values. No service-role value is added to source.
+- Missing Supabase build-time values fail at app startup because the root Auth provider imports the client during startup; the prior K1 export smoke had reproduced `supabaseUrl is required`. This H2 isolated worktree lacked dependencies, so that runtime reproduction was not repeated.
+- The preflight checks only the current process environment, does not read EAS remote values, does not contact Supabase, and is not automatically wired into `eas build`; direct builds can bypass it. The readiness document now states this limitation. Operator must configure EAS `production` values and run the preflight in the intended environment/CI before a production build.
+- The complete tracked raster/vector asset listing showed only Expo/React template art, generic tab icons, and a blue glow; `assets/images/icon.png`, `assets/expo.icon`, splash art, and the launch overlay are not official Kabumori artwork. `AnimatedSplashOverlay` is rendered by `src/app/_layout.tsx` for normal startup and references `expo-logo.png`; the web-specific overlay returns `null`. No artwork was generated or changed.
+- App Store Connect localized listing name, official icon/splash/overlay art, EAS production values, and remaining account/release setup remain operator actions. Source-level PR content is reviewed; wait for required GitHub checks because PR state currently reports `UNSTABLE` before merge.
+
+## Changed files and verification
+
+- H2 review fix commit `0a71f0882136aa8930cf0572033e1a0ba28c0760` changed only:
+  - `scripts/verify-production-env.mjs`
+  - `tests/app/verify-production-env_test.ts`
+  - `docs/mobile-release/RELEASE_READINESS.md`
+- `node --experimental-strip-types --test tests/app/verify-production-env_test.ts`: **8/8 PASS**.
+- Scoped suite `deno test --no-check --no-lock --allow-read --allow-write --allow-env tests/app/ supabase/functions/account-delete/ apps/kabumori-web/build_test.ts`: **116/116 PASS**.
+- `npm run verify-production-env`: missing values -> exit 1; fake well-shaped values -> exit 0; long malformed key -> exit 1. Test values were synthetic only; no production keys were read or displayed.
+- Static `app.json` parse and identity/linkage comparison: PASS; `git diff --check`: PASS.
+- `src` TypeScript and Expo config/export smoke were not rerun: the clean worktree had no `node_modules`, and no global `tsc`/Expo CLI was available. No dependency installation was attempted. K1's earlier source-head report recorded src TypeScript 0 errors and a 10-route Expo export; H2 does not claim those as fresh reruns.
+- Changed scope had no overlapping paths with changes on `origin/main` since the PR branch base. No H1/G2/G3/G4 files were changed by H2.
+
+## Safety and C2 disposition
+
+- merge: **source review PASS-WITH-FIX**; PR remains open and unmerged. GitHub reports mergeable but `UNSTABLE`; wait for checks/normal merge process. Do not treat this as approval to build/release with missing operator inputs.
+- production DB/schema/migration/RLS/RPC/Auth/SMTP/EAS remote env/Netlify/App Store/TestFlight/API/X mutation: **0**. No merge, deploy, production build, artwork generation, or secret display.
+- control changed_files: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md` only.
+- next_recommendation: C2 review this report and the three-file PR #21 fix; keep production build blocked until official artwork, App Store Connect metadata, and EAS production variables are supplied and verified.
+
 ## Final C2 assessment — PR #19
 
 - verdict: **PASS-WITH-FIX**
