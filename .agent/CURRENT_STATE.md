@@ -31,13 +31,13 @@
 
 ## Current slot snapshot
 
-- H1: `done` — `x-autopost-phase1e-auth-secret-provider-final-review-20260924`
+- H1: `ready` — `x-autopost-phase1f-ledger-atomic-completion-final-review-20260924`
 - H2: `ready` — `kabumori-pr23-close-validator-final-review-20260924`
 - G1: `ready` — `kabumori-privacy-dataflow-reaudit-after-report-upgrade-20260924`
   - PR #21 merged at H2-reviewed head `0a71f08` -> main `0d4ebad`. Files byte-identical; 122/0 tests, tsc src 0, web export 10 routes. Identity fields (slug/scheme/bundleId/projectId) and all icon/splash/overlay assets unchanged. Mutation 0.
   - Flagged for K1: G2's report_logic.ts/market_detail.ts already landed on main after the privacy-page audit; recommend a re-audit of apps/kabumori-web/pages/privacy.html's OpenAI data-flow claims before Netlify publication.
 - G2: `done` — `kabumori-personalized-reports-prod-deploy-dryrun-20260924`
-- G3: `ready` — `x-autopost-phase1f-atomic-completion-provider-outcome-model-20260924`
+- G3: `done` — `x-autopost-phase1f-atomic-completion-provider-outcome-model-20260924`
 - G4: `done` — `x-admin-netlify-deploy-preview-pipeline-20260924`
 
 ## Final K1 PR #21 merge result
@@ -261,6 +261,20 @@
 - Phase1E remains source-only; production activation is not authorized.
 - G3 advanced to Phase1F atomic completion/provider outcome model.
 - recommended model: Opus5.5（高）.
+
+## K3 Phase1F result
+
+- Phase1F IMPLEMENTATION PASS.
+- implementation commit: `0b752925b28b1b922b94a4cb7629ee942f82120f`.
+- durable x_rejected terminal outcome added.
+- atomic typed completions implemented for interaction/useful_tip/morning_report/close_report/us_premarket_report.
+- tip/morning_greeting/brand_post remain v2-disabled.
+- provider-step ledger foundation and execution-log observability added.
+- focused 55/55; x-test-post 429/429; _shared 120/120; important-news-monitor 431/431 PASS.
+- disposable PostgreSQL behavior/race PASS.
+- production mutation/X API calls=0.
+- H1 final review assigned with Sol（高）.
+- production activation remains NO.
 
 ## K4 Netlify result
 
