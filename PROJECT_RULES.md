@@ -71,6 +71,9 @@ Sonnet5で安全に処理できる作業はSonnet5を優先する。設計判断
 
 ## 安全な開発
 
+- G1〜G4 / H1・H2を並行稼働する場合、各slotは他slotと共有しない独立Git worktreeまたは独立checkoutで作業する。同じ作業ディレクトリを複数セッション/slotで共有しない。
+- 各slotは他slotのbranchをcheckout/reset/rebaseせず、他slotの未コミット変更・作業ファイル・dev serverを変更、削除、stage、commit、停止、再起動しない。開始時に作業ディレクトリが他slotと共有されていないことを確認する。
+- 安全な独立worktree/checkoutを用意できずshared checkoutしか使えない場合は、作業を開始せず停止して報告する。
 - `.env`、APIキー、トークン、Cookie、秘密鍵などの秘密情報を表示、コミット、ログ出力しない。
 - 変更前後に差分と対象ファイルを確認し、意図したファイルだけをステージする。
 - 既存の未コミット変更を上書き、削除、整形、ステージしない。

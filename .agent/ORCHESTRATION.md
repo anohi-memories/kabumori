@@ -146,6 +146,11 @@ Reportにはtask_id、result、changed_files、tests、commit_hash、push、depl
 
 ## 並行作業と競合防止
 
+- G1〜G4 / H1・H2を並行稼働させる場合、各slotは**専用の独立Git worktreeまたは独立checkout**を使う。同一ディレクトリを複数セッション/slotで共有しない。Git branchが別でも作業ディレクトリが同じなら独立とはみなさない。
+- 作業開始時に、`git worktree list`等で自分の作業ディレクトリとbranchを確認し、他slotと共有されていないことを確かめる。既存の別slotのworktree/checkoutへ切り替えて作業しない。
+- 各slotは他slotのbranchをcheckout/reset/rebaseしない。他slot所有の未コミット変更・作業ファイルを変更、削除、stage、commitしない。必要な変更の引き継ぎは所有者と内容を確認し、明示的に合意した安全な方法で行う。
+- dev serverは可能な限り自分のworktreeから起動し、他slotのserverを停止・再起動しない。serverの作業ディレクトリや所有者が確認できない場合は操作しない。
+- shared checkoutしか利用できず、安全な独立worktree/checkoutを作成できない場合は作業開始前に停止し、理由と必要な対応を報告する。共有状態のままbranch切替やreset等で作業を進めない。
 - 6枠は別task_idかつ変更対象が分離される場合のみ同時進行可能。
 - 同じファイルを複数枠で同時編集しない。
 - 同じDB migration / RPC / Edge Function / workflow / production設定 / API境界 / 認証・権限ロジックを複数枠で同時変更しない。
