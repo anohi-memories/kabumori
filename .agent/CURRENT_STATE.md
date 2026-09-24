@@ -20,12 +20,14 @@
   - Keep `verify_jwt=false`; no business logic/auto_publish/Cron cadence/X/Push changes.
   - Start with Luna; use Sol only if production/security judgment becomes ambiguous.
 
-- Codex slot 2: `ready` — `x-autopost-phase0c2-production-deploy-retry-20260924`
-  - Phase0c C2: first authorized x-test-post deploy stopped on Supabase Functions API HTTP 500. Migration was not applied.
-  - Independent read-back: x-test-post remains ACTIVE v118 / verify_jwt=false / same runtime SHA; three legacy global UNIQUE constraints remain.
-  - production mutation 0。次はpreflight/diagnostic後、明示同意を取ってx-test-post deployを1回だけretry。成功時のみruntime確認→fresh preflight→exact migration。
-  - repeat failure時は自動再retry/別方式切替禁止。
-  - Recommended model: GPT-6 Sol Medium。
+- Codex slot 2: `done` — `x-autopost-phase0c2-production-deploy-retry-20260924`
+  - C2 PASS。x-test-post compatible brand-scoped clientはproduction v119へdeploy済み。
+  - runtime SHA `4642f128…d322`、verify_jwt=false。deployed publish_claim pathはbrand_id込みのconflict/complete/fail scopeを確認。
+  - 3 legacy global UNIQUEはproductionから除去済み、3 brand-scoped unique indexesはvalid/ready/unique。
+  - 4 planner RPCはbrand-scoped ON CONFLICTへ移行済みでold targetなし。SECURITY DEFINER / search_path=public維持。
+  - migration history: `20260924001508 x_autopost_phase0_brand_scoped_uniqueness`。
+  - publish_enabled aggregate 2 true / 1 falseで維持。C2で追加production mutationなし。
+  - known caveat: older multibrand foundation migration-history driftが残るためblind db push / old migration replay / history repair禁止。
 
 
 - Claude slot 1: `review_required` — `kabumori-mobile-release-blockers-phase1-merge-only-20260924`
