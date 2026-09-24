@@ -33,13 +33,13 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: kabumori-pr19-report-detail-portfolio-privacy-final-review-20260924
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: assigned; PR #19 LLM/privacy/user-boundary final review
+- allocation: closed; Final C2 PASS-WITH-FIX
 
 ## Claude G1
 - owner: claude
@@ -54,12 +54,12 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: done
-- task_id: kabumori-app-morning-close-report-detail-and-portfolio-impact-20260924
+- status: ready
+- task_id: kabumori-pr19-merge-postmerge-verify-20260924
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: closed; K2 implementation PASS, H2 review in progress queue
+- allocation: assigned; PR #19 fresh-main integration + merge/post-merge verification
 
 ## Claude G3
 - owner: claude
