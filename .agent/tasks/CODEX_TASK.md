@@ -3,8 +3,8 @@
 - task_id: kabumori-mobile-recovery-pr17-final-auth-security-review-20260924
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: K1 PASS済みのPR #17 recovery deep-link修正を、merge前の最終Auth/securityレビューとして検証する。実装はClaudeが完了済みで、Codexはレビュー・必要最小限のバグ修正・回帰確認のみ行う。
