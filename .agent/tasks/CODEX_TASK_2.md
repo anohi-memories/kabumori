@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase0c2-production-deploy-retry-20260924
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: GPT-6 Sol Medium
 - purpose: Phase0c C2 reviewで、最初のx-test-post production deployがSupabase Functions API HTTP 500で失敗し、migration未適用・production mutation 0のまま停止した。Phase0b compatible clientを同じ安全順序で再試行し、成功時のみruntime確認→fresh preflight→exact migration applyへ進む。
