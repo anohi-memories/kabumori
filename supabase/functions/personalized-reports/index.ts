@@ -269,6 +269,8 @@ Deno.serve(async (req) => {
       return response({ status: "skipped", reason: "CLOSE_TOO_EARLY", reportType, tradingDate });
     }
 
+    // Scheduled cohort: users with active tracked_stocks rows only (holdings and/or watch).
+    // Users with no tracked stocks are never enumerated, whatever their alert settings.
     const trackedRows = await db.get<TrackedRow[]>(
       "tracked_stocks?is_active=eq.true" +
         (onlyUser ? `&user_id=eq.${onlyUser}` : "") +

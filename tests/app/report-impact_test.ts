@@ -97,7 +97,7 @@ test("older stored reports without holding impacts keep the previous layout", ()
   assert.ok(rows.every((row) => row.impact === null));
 });
 
-test("no holdings: no impact rows, the market part stands on its own", () => {
+test("no holdings (e.g. a watch-only user): no impact rows, the market part stands on its own", () => {
   const empty = report({}, []);
   assert.deepEqual(buildImpactRows(empty), []);
   assert.equal(hasHoldingImpacts(empty), true);

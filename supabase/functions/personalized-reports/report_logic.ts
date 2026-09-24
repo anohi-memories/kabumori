@@ -531,8 +531,10 @@ export function buildSnapshot(input: {
 
 /**
  * Reasons a report must not be generated at all (fail-safe: no report, no push).
- * With the shared market analysis present, a user without tracked stocks still
- * gets a valid market-wide report.
+ * With the shared market analysis present, an empty portfolio is not a blocker, so
+ * a watch-only user (no holdings) gets a valid market-wide report. This is report
+ * logic only: the scheduled cohort is unchanged (index.ts selects users with active
+ * tracked_stocks rows), so a user with no tracked stocks at all is never scheduled.
  */
 export function snapshotBlockers(snapshot: PortfolioSnapshot, hasSharedMarket = false): string[] {
   const blockers: string[] = [];

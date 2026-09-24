@@ -296,7 +296,23 @@ test("multiple holdings: every holding gets exactly one impact, unknown or dupli
     .includes("DUPLICATE_TICKER_NOTE"));
 });
 
-test("no holdings: a market-wide report still stands when the shared analysis exists", async () => {
+test("no holdings (watch-only user): the market-wide report stands and holding impacts stay empty", async () => {
+  const snapshot = snapshotFor({
+    tracked: [tracked("4444", { trackingType: "watch", quantity: null, averagePrice: null, positionType: null, side: null })],
+    prices: { "4444": FLAT },
+  });
+  assert.equal(snapshot.holdings.length, 0);
+  assert.deepEqual(snapshotBlockers(snapshot, true), []);
+  const packet = buildPacket(snapshot, [], shared(detail()));
+  const outcome = await generateReport(snapshot, packet, requester(body({ overview_ja: "今日は保有銘柄がないため、市場全体と監視銘柄を中心に確認しました。" })));
+  assert.equal(outcome.status, "passed", outcome.issues.join(","));
+  const update = reportUpdate(outcome, snapshot, {}, new Date("2026-09-18T08:20:00Z"), null, detail());
+  assert.deepEqual((update.body as { holding_impacts: unknown[] }).holding_impacts, []);
+  assert.ok((update.body as { market_detail?: unknown }).market_detail);
+});
+
+// Report logic only: the scheduled cohort (index.ts) never includes users without tracked stocks.
+test("empty snapshot (logic only): not a blocker when the shared analysis exists", async () => {
   const snapshot = snapshotFor({ tracked: [], prices: {} });
   assert.deepEqual(snapshotBlockers(snapshot), ["NO_TRACKED_STOCKS"], "legacy lane without market data: nothing to say");
   assert.deepEqual(snapshotBlockers(snapshot, true), []);
