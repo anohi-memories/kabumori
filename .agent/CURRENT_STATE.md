@@ -33,10 +33,9 @@
 
 - H1: `done` — `x-autopost-phase1e-auth-secret-provider-final-review-20260924`
 - H2: `done` — `kabumori-pr21-branding-eas-preflight-final-review-20260924`
-- G1: `ready` — `kabumori-pr21-merge-postmerge-verify-20260924`
-  - PR #21 open (unmerged): expo.name -> かぶモリ (slug/scheme/bundleId untouched); scripts/verify-production-env.mjs preflight; RELEASE_READINESS.md corrected/expanded. 114/0 tests, tsc src 0.
-  - New finding A1b: AnimatedSplashOverlay renders Expo's logo on every launch (not just the static app.json icon/splash). No artwork generated; exact specs documented for the operator.
-  - Confirmed: missing Supabase env vars crash the app on launch, not a silent degrade. Production mutation 0.
+- G1: `review_required` — `kabumori-pr21-merge-postmerge-verify-20260924`
+  - PR #21 merged at H2-reviewed head `0a71f08` -> main `0d4ebad`. Files byte-identical; 122/0 tests, tsc src 0, web export 10 routes. Identity fields (slug/scheme/bundleId/projectId) and all icon/splash/overlay assets unchanged. Mutation 0.
+  - Flagged for K1: G2's report_logic.ts/market_detail.ts already landed on main after the privacy-page audit; recommend a re-audit of apps/kabumori-web/pages/privacy.html's OpenAI data-flow claims before Netlify publication.
 - G2: `ready` — `kabumori-personalized-reports-prod-deploy-dryrun-20260924`
 - G3: `ready` — `x-autopost-phase1f-atomic-completion-provider-outcome-model-20260924`
 - G4: `done` — `x-admin-netlify-deploy-preview-pipeline-20260924`
