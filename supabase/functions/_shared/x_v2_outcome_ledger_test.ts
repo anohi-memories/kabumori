@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  V2_MULTISTEP_PLAN_KIND,
   confirmedIncompleteCall,
   ledgerCallForOutcome,
   typedCompletionRpcFor,
@@ -43,7 +44,10 @@ test("post types split into typed completions and v2-disabled types with no over
   assert.equal(typedCompletionRpcFor("interaction"), "complete_interaction_post_v2");
   assert.equal(typedCompletionRpcFor("useful_tip"), "complete_useful_tip_post_v2");
   for (const t of ["morning_report", "close_report", "us_premarket_report"]) assert.equal(typedCompletionRpcFor(t), "complete_report_post_v2");
-  for (const t of ["tip", "morning_greeting", "brand_post", "unknown", "__proto__", "toString"]) assert.equal(typedCompletionRpcFor(t), null, t);
+  assert.equal(typedCompletionRpcFor("tip"), "complete_tip_post_v2");
+  assert.equal(typedCompletionRpcFor("morning_greeting"), "complete_morning_greeting_post_v2");
+  for (const t of ["brand_post", "unknown", "__proto__", "toString"]) assert.equal(typedCompletionRpcFor(t), null, t);
+  assert.deepEqual(Object.keys(V2_MULTISTEP_PLAN_KIND).sort(), ["morning_greeting", "tip"]);
   const typed = Object.keys(V2_TYPED_COMPLETION_RPC);
   const disabled = Object.keys(V2_DISABLED_POST_TYPES);
   assert.deepEqual([...typed, ...disabled].sort(), [
@@ -52,8 +56,9 @@ test("post types split into typed completions and v2-disabled types with no over
   assert.ok(Object.isFrozen(V2_TYPED_COMPLETION_RPC) && Object.isFrozen(V2_DISABLED_POST_TYPES));
 });
 
-test("typed completion RPCs named here exist in the Phase1F migration and the generic one is retired", async () => {
-  const sql = await Deno.readTextFile(new URL("../../migrations/20260924180000_x_autopost_phase1f_atomic_completion.sql", import.meta.url));
+test("typed completion RPCs named here exist in the Phase1F/1G migrations and the generic one is retired", async () => {
+  const sql = await Deno.readTextFile(new URL("../../migrations/20260924180000_x_autopost_phase1f_atomic_completion.sql", import.meta.url)) +
+    await Deno.readTextFile(new URL("../../migrations/20260925090000_x_autopost_phase1g_multistep_completion.sql", import.meta.url));
   for (const rpc of new Set(Object.values(V2_TYPED_COMPLETION_RPC))) {
     assert.match(sql, new RegExp(`create function public\\.${rpc}\\(`, "u"), rpc);
   }

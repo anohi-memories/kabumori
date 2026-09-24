@@ -9,9 +9,9 @@
  * - x_created must go through the post type's typed atomic completion. If
  *   that completion fails, record_post_x_confirmed_incomplete_v2 keeps the
  *   confirmed X id so the same typed completion can finish it later.
- * - tip, morning_greeting and brand_post have no v2 completion: tip and
- *   morning_greeting need several provider steps, brand_post's live
- *   completion RPC is not in repository source. They stay v2-disabled.
+ * - tip and morning_greeting complete through their Phase1G step-ledger
+ *   completions (see x_v2_multistep.ts). brand_post has no v2 completion: its
+ *   live completion RPC is not in repository source, so it stays v2-disabled.
  */
 import type { XV2Claim } from "./x_v2_claim_credentials.ts";
 import type { XV2ProviderOutcome } from "./x_v2_one_request_provider.ts";
@@ -24,11 +24,17 @@ export const V2_TYPED_COMPLETION_RPC: Readonly<Record<string, string>> = Object.
   morning_report: "complete_report_post_v2",
   close_report: "complete_report_post_v2",
   us_premarket_report: "complete_report_post_v2",
+  tip: "complete_tip_post_v2",
+  morning_greeting: "complete_morning_greeting_post_v2",
+});
+
+/** Post types whose v2 publish is a planned multi-request step sequence. */
+export const V2_MULTISTEP_PLAN_KIND: Readonly<Record<string, "tip_thread" | "morning_greeting_media_post">> = Object.freeze({
+  tip: "tip_thread",
+  morning_greeting: "morning_greeting_media_post",
 });
 
 export const V2_DISABLED_POST_TYPES: Readonly<Record<string, string>> = Object.freeze({
-  tip: "MULTI_STEP_THREAD_NOT_SUPPORTED",
-  morning_greeting: "MEDIA_AND_CREATE_NOT_SUPPORTED",
   brand_post: "COMPLETION_SOURCE_NOT_IN_REPOSITORY",
 });
 
