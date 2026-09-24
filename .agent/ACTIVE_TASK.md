@@ -33,23 +33,23 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: kabumori-pr19-report-detail-portfolio-privacy-final-review-20260924
+- status: ready
+- task_id: kabumori-pr21-branding-eas-preflight-final-review-20260924
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: closed; Final C2 PASS-WITH-FIX
+- allocation: assigned; PR #21 branding/EAS preflight final review
 
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: done
 - task_id: kabumori-release-branding-eas-preflight-20260924
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: assigned; release branding + EAS production env preflight
+- allocation: closed; K1 implementation PASS, H2 review pending
 
 ## Claude G2
 - owner: claude
