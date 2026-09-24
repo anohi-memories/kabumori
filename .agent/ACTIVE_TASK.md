@@ -15,8 +15,9 @@
 
 - X自動投稿・Web管理画面の開発中/PR/テスト用PreviewはNetlifyを優先する。
 - レビュー完了後の最終production deployのみVercelを使う。
-- かぶモリExpo/native本体はVercel制限の主対象ではないため、Netlify Web Preview対応は現時点では保留。
+- かぶモリExpo/native本体はVercelを通常開発・merge gateに使用しない。
 - Expo native/iOS実機・TestFlightは従来どおり別工程。
+- かぶモリ将来WebはPreview/ProductionともNetlifyを使用する。
 
 ## Codex H1
 - owner: codex
@@ -43,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: done
-- task_id: kabumori-mobile-recovery-deeplink-routing-fix-and-e2e-resume-20260924
+- status: ready
+- task_id: kabumori-mobile-recovery-pr17-merge-and-postmerge-verify-20260924
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: closed; H1 final review pending
+- allocation: assigned; merge reviewed native recovery fix and verify main
 
 ## Claude G2
 - owner: claude
