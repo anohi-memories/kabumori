@@ -307,3 +307,21 @@ When complete:
   - stanceバッジ
   - 答え合わせ行（新形式の朝刊ができた翌日の大引けから）
   - 旧形式のレポートの表示互換
+
+
+## Final K2 — production rollback + PR #23
+
+Result: **PASS for rollback/safety containment; source fix pending independent review**.
+
+Accepted:
+- v22 dry-run exposed close-report regression safely.
+- production rolled back successfully to v21 source, deployed as v23.
+- rollback source commit corrected to `4590ba6`.
+- deployed rollback source read-back byte-identical to known-good v21.
+- `app_enabled=false` remained unchanged.
+- dry-run persistence/notification side effects confirmed 0.
+- no cron/DB/schema/Auth/X changes.
+- PR #23 head `5c22c71961496fc63e698e42e7c18cacc7f7cff3` contains validator fix only.
+- tests 167/167 PASS; deno check/lint/git diff --check PASS.
+
+PR #23 must not be merged or redeployed until H2 independent review completes.
