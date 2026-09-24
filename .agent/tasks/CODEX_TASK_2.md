@@ -1,160 +1,110 @@
 # Codex Task 2
 
-- task_id: kabumori-pr23-close-validator-final-review-20260924
+- task_id: kabumori-pr26-unknown-cause-prefix-final-review-20260925
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: codex
 - priority: high
-- recommended_model: Luna（極高）
-- purpose: production v22 dry-runで発覚した大引け3/3 failureに対するPR #23を、validator安全性・文字数上限・未知原因文allowlist・回帰の観点で独立レビューする。review-onlyを基本とし、必要ならPR #23範囲の最小修正のみ。
-
-## Incident context
-
-Production sequence:
-- v21: known-good
-- v22: PR #19 implementation deployed with app_enabled=false
-- morning dry-run: PASS
-- close dry-run: 3/3 local validation failure
-  - 1x INFERENCE_NOT_HEDGED
-  - 2x IMPACT_TOO_LONG (brief total 104–136 chars vs old 100 limit)
-- fail-closed: no report persistence / no notification
-- production rolled back to v21 source, deployed as v23
-- rollback read-back byte-identical to v21 source commit `4590ba6`
-- app_enabled remains false
+- recommended_model: Luna（高）
+- purpose: PR #26のunknown-cause prefix拡張が、productionで観測した妥当文だけを通し、因果断定や自由文を新たに許可していないことを独立レビューする。
 
 ## Review target
 
-PR #23
-- branch: `g2-close-report-validator-fix-20260924`
-- head: `5c22c71961496fc63e698e42e7c18cacc7f7cff3`
-- changed source scope:
+PR #26
+- branch: `g2-close-unknown-cause-prefix-20260924`
+- head: `2b40a617e34c73c301e40a17692883ac70fd3e0a`
+- changed files:
   - `supabase/functions/personalized-reports/report_logic.ts`
-  - `supabase/functions/personalized-reports/report_upgrade_test.ts`
   - `supabase/functions/personalized-reports/close_validator_fix_test.ts`
 
-## Intended fix
+Production remains:
+- v25 = known-good v21 source `4590ba6`
+- app_enabled=false
+- verify_jwt=false
+- no deploy in PR #26 work
 
-### Brief limits
-- morning brief: 120 chars
-- close brief: 160 chars
-- detailed remains per-field 160 / 160 / 80
+## Intended behavior
 
-### Unknown-cause inference
-Allow unhedged text only when it is narrowly an inability-to-determine statement.
-Examples intended to pass:
-- 明確な要因は特定できません
-- 個別材料は確認できていません
-- 材料との因果関係は確認できません
+Must PASS:
+- 下落の要因は特定できません
+- 当日の下落要因は特定できません
+- 要因は特定できません
+- 上昇の理由は判断できません
+- 値動きの原因は確認できません
+- 当日の変動要因は説明できません
+- 因果関係は確認できません
 
-Still reject causal assertions without hedge:
-- 円高が逆風になりました
-- 半導体安が下落の原因です
-- 金利上昇で売られました
-- causal assertion + unknown-cause phrase appended
+Must FAIL:
+- 円高が逆風になりましたが、要因は特定できません
+- 円高を受けて下落しましたが理由は特定できません
+- 金利上昇が原因です。ただし要因は特定できません
+- causal assertion + hedge token laundering
+- unrelated free-text subjects
+- allowed noun used in a factual causal assertion
+- unsafe multi-sentence variants
 
 ## Mandatory startup
 
-1. Use independent worktree/checkout.
-2. Read PROJECT_RULES.md, .agent/ORCHESTRATION.md, .agent/CURRENT_STATE.md, G2 Report, this TASK.
-3. Fresh fetch origin/main and PR #23.
-4. Verify PR head exactly `5c22c71961496fc63e698e42e7c18cacc7f7cff3`.
-5. Confirm no overlap with G1/PR #21 and no X/admin scope.
-6. Do not deploy or alter production.
+1. Independent worktree/checkout.
+2. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / this TASK / G2 Report.
+3. Fresh fetch origin/main + PR #26.
+4. Verify head exactly `2b40a617e34c73c301e40a17692883ac70fd3e0a`.
+5. No deploy / merge / production mutation.
 
-## Review scope A — length policy
+## Review focus
 
-Verify:
-- report_type actually selects the intended 120/160 limit
-- combined brief length still includes fact + inference + watch
-- detailed limits unchanged
-- 160 close limit is enough for observed 104–136 range without turning brief entries into detailed prose
-- prompt/schema/validator agree on the same limit
-- exact boundary 160 pass / 161 fail
-- morning remains concise and does not accidentally inherit close limit
+- whole-sentence anchors remain intact
+- CAUSAL_ASSERTION still runs before unknown-cause acceptance
+- sentence-by-sentence validation remains intact
+- optional prefix is limited to:
+  - optional 当日の
+  - 下落|上昇|値動き|変動
+  - optional の
+- no arbitrary adjective/noun/causal subject can sneak in
+- `因果関係` standalone target does not create bypasses
+- punctuation/newline splitting still catches unsafe mixed text
+- morning120 / close160 unchanged
+- existing exact production wording still passes
 
-## Review scope B — unknown-cause allowlist
+## Adversarial cases
 
-Adversarially test the parser/regex.
-
-Must pass only narrow uncertainty statements.
-Try bypasses such as:
-- causal claim before/after an allowed phrase
-- multiple sentences with one unsafe sentence
-- punctuation variants
-- negation tricks
-- "原因です。ただし特定できません"
-- "円高を受けて下落しましたが理由は特定できません"
-- allowed nouns used in unrelated sentences
-
-Confirm checking is per sentence and one unsafe sentence rejects the whole inference.
-
-## Review scope C — safety regression
-
-Ensure existing checks remain:
-- unsupported numeric facts
-- dates/URLs
-- trading advice
-- unknown/duplicate/missing holdings
-- unsupported basis
-- direction contradiction
-- Fact vs inference separation
-- hedging for ordinary inference
-- no_clear_material semantics
-
-## Review scope D — production incident fidelity
-
-Confirm fixtures genuinely represent the v22 dry-run failure modes rather than synthetic easy cases.
-Check that:
-- the exact unknown-cause sentence from production dry-run now passes
-- 104–136 char close briefs pass
-- >160 fails
-- morning known-good behavior remains unchanged
+Try at least:
+- 急な下落の要因は特定できません
+- 半導体株の下落の要因は特定できません
+- 円安による上昇の要因は特定できません
+- 下落の要因は円高です
+- 当日の下落要因は円高です
+- 下落の要因は特定できませんが、円高が逆風です
+- 下落の要因は特定できない可能性があります
+- 要因は特定できません。円高が逆風です
+- punctuation variants using 、。,.!！;；newline
 
 ## Required verification
 
-At minimum:
-- new close-validator tests
-- full personalized-reports / relevant app tests
+- focused close-validator suite
+- full personalized-reports suite
 - deno check
 - deno lint
 - git diff --check
 
-If feasible, run fuzz/adversarial variants around unknown-cause parsing.
-
-## Bugfix authority
-
-If a concrete issue is found:
-- minimal fix only inside PR #23 scope
-- add regression test
-- push to PR #23
-- do not merge
-- do not deploy
-- do not touch G1/X/admin/DB
-
-## Forbidden
-
-- production deploy
-- app_enabled change
-- cron/settings mutation
-- DB/schema/migration
-- Auth/RLS changes
-- X changes
-- merge PR #23
+If a concrete bypass is found:
+- minimal fix only in PR #26 scope
+- add regression
+- push to PR #26
+- do not merge/deploy
 
 ## Completion / C2
 
 Report:
 - verdict PASS / PASS-WITH-FIX / FAIL
-- fresh main + PR head
-- findings by severity
-- final morning/close limits
-- unknown-cause allowlist assessment
-- adversarial bypass results
-- regression/safety assessment
-- exact tests/counts
-- whether PR #23 is safe to merge
-- whether redeploy + repeated close dry-run is recommended
+- final PR head
+- findings
+- exact allow/reject boundary
+- adversarial results
+- tests/counts
+- safe-to-merge assessment
+- recommendation for merge + redeploy + close dry-run 3–5 times
 - production mutation=0
 
 When complete:
@@ -162,26 +112,3 @@ When complete:
 - next_owner -> chatgpt
 - update .agent/CODEX_REPORT_2.md
 - STOP for C2.
-
-
-## Final C2 — PR #23
-
-Verdict: **PASS-WITH-FIX**.
-
-Accepted reviewed head:
-- `47d8c7830ed08b087b2dff7bbe7cc8c0f4cc382f`
-
-Accepted H2 fix:
-- causal assertion cannot be laundered by adding a hedge token later in the same sentence
-- sentence splitting covers Japanese/ASCII punctuation, semicolons, and newlines
-- narrow unknown-cause wording remains allowed
-- ordinary causal inference still requires hedge wording
-
-Validation:
-- close-validator tests: 14/14 PASS
-- personalized-reports suite: 58/58 PASS
-- deno check/lint PASS
-- git diff --check PASS
-- production mutation=0
-
-PR #23 is safe to proceed to fresh-main merge, redeploy with app_enabled=false, and repeated close dry-run validation.
