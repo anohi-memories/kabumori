@@ -1,130 +1,221 @@
 # Codex Task
 
-- task_id: kabumori-release-pr18-privacy-dataflow-eas-light-review-20260924
+- task_id: x-autopost-phase1e-auth-secret-provider-final-review-20260924
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: none
-- priority: high
-- recommended_model: Luna（高）
-- purpose: K1 PASS済みPR #18の公開Privacy/Terms/Support/Account-deletionページ、native legal links、EAS設定を、実際のデータフローとApp Store提出観点から独立レビューする。実装はClaude完了済み。原則review-only、必要なら最小修正のみ。
+- status: ready
+- next_owner: codex
+- priority: critical
+- recommended_model: Sol（高）
+- purpose: K3 PASS済みのPhase1E exact-account credential resolver / one-request provider seamを、Auth・secret/Vault境界・RPC ACL・provider outcome semanticsの観点で最終レビューする。production apply/deploy/X API callは行わない。
 
-## Target
+## Review target
 
-PR #18
-- branch: claude1/release-foundation-web-links
-- K1 reviewed head: 2b91cc482be05536abca2a83ef2e346e5f4522f4
-- PR remains open/unmerged
+Primary implementation commit:
+- `1868cc0e418ebda15ecfdfc88c55c9dd25a471f7`
 
-## Review scope
+Primary source files:
+- `supabase/migrations/20260924170000_x_autopost_phase1e_claim_bound_credential_reader.sql`
+- `supabase/functions/_shared/x_v2_claim_credentials.ts`
+- `supabase/functions/_shared/x_v2_claim_credentials_test.ts`
+- `supabase/functions/_shared/x_v2_one_request_provider.ts`
+- `supabase/functions/_shared/x_v2_one_request_provider_test.ts`
+- `supabase/functions/x-test-post/claim_bound_credential_reader_migration_test.ts`
+- `supabase/tests/x_autopost_phase1e_fixture.sql`
+- `supabase/tests/x_autopost_phase1e_behavior.sql`
+- `supabase/tests/x_autopost_phase1e_run.sh`
+- `supabase/tests/x_autopost_phase1e_exact_account_credentials.md`
 
-1. Fresh fetch origin/main and PR #18.
-2. Confirm no unreviewed semantic drift since K1.
-3. Re-audit the privacy claims against source:
-   - Supabase tables/data actually stored
-   - tracked_stocks fields
-   - device_push_tokens / push flow
-   - personalized_reports flow
-   - exact fields sent to OpenAI
-   - whether store:false is really used
-   - whether email/user id/memo/target prices are excluded as claimed
-   - analytics/tracking/ad SDK absence claim
-4. Review account-deletion page against the implemented delete cascade and real-device verified flow.
-5. Review Terms/Support text for factual accuracy and unsupported promises.
-6. Review src/lib/legal-links.ts:
-   - safe URL normalization
-   - no broken/unsafe scheme handling
-   - route consistency with built site
-7. Review apps/kabumori-web build behavior:
-   - preview noindex
-   - production refuses missing operator values
-   - secret/internal identifier leakage
-   - Netlify suitability
-8. Review eas.json autoIncrement change and RELEASE_READINESS findings for source accuracy.
-9. Consider current G2 task:
-   - if G2 has changed what personalized-reports sends to OpenAI, identify exact privacy text drift
-   - do not edit G2-owned files
-10. Re-run focused tests/checks.
+K3 evidence:
+- exact-account resolver implementation PASS
+- resolver 11/11 PASS
+- provider seam 12/12 PASS
+- Phase1E static 6/6 PASS
+- Phase1B+1D focused static 19/19 PASS
+- x-test-post 422/422 PASS
+- _shared 114/114 PASS
+- important-news-monitor 431/431 PASS
+- production mutation/deploy/token refresh/X API calls = 0
 
-## Fix policy
+## Mandatory startup
 
-If concrete issue found:
-- make only minimal fixes inside PR #18-owned files/tests/docs
-- do not modify G2 report-generation files
-- do not modify Auth, DB, migration, SMTP, DNS, Netlify production, App Store Connect
-- do not deploy anything
+1. Read PROJECT_RULES.md
+2. Read .agent/ORCHESTRATION.md
+3. Read .agent/CURRENT_STATE.md
+4. Read G3 TASK including Phase1E Report + Final K3
+5. Read prior Phase1D C2 review findings relevant to claim binding and ACL
+6. Fresh fetch origin/main
+7. Confirm independent H1 worktree/checkout
+8. Inspect H2/G3/G4 ownership and prove no overlap
+9. Review exact implementation commit and current main for semantic drift
+10. Do not deploy/apply anything
 
-## Required checks
+## Review scope A — exact-account authority
+
+Verify the v2 credential path cannot select credentials by:
+- brand only
+- first row / `limit=1`
+- current account count
+- legacy Kabumori shared token store
+- env fallback
+- AI Lab hardcoded account
+- another account after failure
+
+Prove:
+- `claim.social_account_id` is the sole credential authority
+- expected brand is cross-checked
+- platform must be X
+- identity/connection state is sufficiently verified
+- publish-enabled requirement is enforced when required
+- claim attempt/token/account/brand must all match
+- no missing-data fallback silently switches identity
+
+Try adversarial same-brand multi-account cases.
+
+## Review scope B — RPC / Vault / ACL
+
+Review `read_x_publish_credential_for_claim_v2` for:
+- SECURITY DEFINER correctness
+- fixed/empty search_path safety
+- exact table/schema qualification
+- service_role-only EXECUTE
+- anon/authenticated/public denial
+- function owner / default EXECUTE concerns
+- Vault reference ownership to the exact account
+- no refresh-token exposure
+- no generic secret-id reader capability
+- no token/secret-id leakage in errors
+- read-only behavior
+- failure masking
+
+Flag any case where service_role or another role could call a lower-level primitive and bypass exact-account checks.
+
+## Review scope C — TS secret boundary
+
+Verify:
+- token is server-only
+- no client/mobile/admin import path
+- serialization/inspection redaction is effective enough
+- bearer header construction is the only intended token use
+- error types/codes never embed token material
+- logging/catch paths do not leak raw RPC responses
+- no accidental token retention in structured result objects
+
+If a redaction limitation exists, classify whether it is merely defense-in-depth or a blocker.
+
+## Review scope D — one-request provider guarantee
+
+Audit `createXTextPostOnceV2` / composition path:
+- pre-X identity check occurs before durable provider-start
+- provider-start mark completes before create request
+- exactly one POST /2/tweets occurs after provider-start
+- no automatic refresh/retry loop after provider-start
+- 401 after provider-start never triggers another create
+- network timeout/5xx/408 become uncertain, not silently retried
+- 2xx without tweet id is uncertain
+- confirmed rejection vs uncertain outcome is classified safely
+- resolver failure causes zero X requests
+- pre-X 401/refresh-required does not create an X post
+
+Review whether GET /2/users/me before provider-start has side effects or rate-limit implications that matter to correctness.
+
+## Review scope E — outcome-model seam
+
+Assess the current result mapping against Phase1B ledger states.
+
+Specifically:
+- `pre_x_retryable`
+- `pre_x_terminal`
+- `x_created`
+- `x_rejected`
+- `x_outcome_uncertain`
+
+Confirm K3's note that `x_rejected` currently lacks a dedicated Phase1B ledger outcome.
+Determine whether future dispatcher must map it to uncertain until a dedicated safe terminal contract exists.
+
+Do not redesign the whole ledger in this review unless a concrete correctness bug requires a minimal source-only fix.
+
+## Review scope F — migration/source safety
+
+Review Phase1E migration for:
+- dependency on Phase1B/1D objects
+- production schema assumptions
+- default grants
+- transaction/partial-apply risk
+- non-idempotency
+- compatibility with current source-only activation plan
+- live-definition assumptions that still require production read-back
+
+No production apply.
+
+## Required verification
 
 At minimum:
-- relevant web build tests
-- legal-links/settings tests
-- relevant personalized-report source read-only verification
-- TypeScript/static check if needed
+- focused resolver/provider tests
+- Phase1E static tests
+- relevant Phase1D regression
+- full x-test-post if feasible
+- _shared tests if feasible
+- important-news-monitor regression if feasible
+- disposable PostgreSQL behavior proof if local environment permits
+- Deno/static checks
 - git diff --check
-- production mutation=0
+- secret/logging grep
+
+If any cannot run, state exactly why.
+
+## Bugfix authority
+
+If a concrete correctness/security bug is found:
+- make only the minimal source-only fix within Phase1E files/tests/docs
+- rerun affected tests
+- push the fix safely
+- do not alter live dispatcher/legacy credential routing unless strictly necessary for a source-only defect and explicitly justified
 
 ## Forbidden
 
-- merge PR #18
-- production Netlify deploy
-- DNS mutation
-- EAS production build
-- TestFlight/App Store submission
-- Supabase Auth config
-- SMTP config
-- DB/migration changes
-- G2/G3/G4 implementation files
+- production migration/DDL/DML/RPC apply
+- `supabase db push`
+- migration-history repair
+- Edge Function deploy
+- Cron mutation
+- OAuth/Vault production mutation
+- token rotation/refresh
+- X API calls/posts/media uploads
+- switching live dispatcher
+- enabling v2 producers
+- apps/admin/**
+- consumer mobile/**
+- G1/G2 app work
+- G4 Netlify work
+- unrelated MIC work
+
+## Production mutation budget
+
+0.
 
 ## Completion / C1
 
-Report:
+Update `.agent/CODEX_REPORT.md` with:
+- verdict PASS / PASS-WITH-FIX / FAIL
 - fresh main SHA
-- PR head SHA
+- reviewed commit SHA
 - findings by severity
-- factual privacy/data-flow assessment
-- account deletion accuracy assessment
-- legal-links/web build assessment
-- EAS/release-readiness assessment
 - exact changed files if any
-- tests/checks
-- whether PR #18 is safe to merge
+- exact-account authority assessment
+- RPC/Vault/ACL assessment
+- TS secret-boundary assessment
+- one-request provider assessment
+- outcome-model assessment
+- migration/source safety assessment
+- exact tests/counts
+- whether Phase1E is safe to keep as source candidate
+- whether it is safe for production activation now (expected: NO unless all later prerequisites also pass)
 - remaining blockers
 - production mutation=0
+- next recommendation
 
 When complete:
 - status -> review_required
 - next_owner -> chatgpt
-- update .agent/CODEX_REPORT.md
 - STOP for C1.
-
-
-## C1 precheck — 2026-09-24
-
-- C1 attempted before H1 completion.
-- H1 has now reviewed the current PR #18 head and completed focused verification.
-- PR #18 current head is now `6f3277639bc19fb1f420cd0e771c1d77f6d23519`, not the original K1 head `2b91cc482be05536abca2a83ef2e346e5f4522f4`.
-- The additional commit is `fix(kabumori): clarify privacy retention and data flows`.
-- H1 re-ran the web build, legal-links and settings tests against that exact head: 17 passed / 0 failed.
-- Vercel remains failed for build rate limit; no bypass, merge, or deploy was performed.
-- The review result and remaining C1 decision are recorded in `.agent/CODEX_REPORT.md`.
-
-
-## Final C1 — 2026-09-24
-
-Result: **PASS after H1 fixes**.
-
-Accepted reviewed PR #18 head:
-`6f3277639bc19fb1f420cd0e771c1d77f6d23519`
-
-Accepted:
-- privacy/data-flow corrections
-- account-deletion retention caveat
-- OpenAI data disclosure correction
-- legal-link/build checks
-- 17 passed / 0 failed focused tests
-- git diff --check PASS
-- production mutation=0
-
-Vercel build-rate-limit failure is not a Kabumori Web quality gate under the current hosting policy. Kabumori Web uses Netlify.
-PR #18 may proceed to fresh-main merge/post-merge verification.
