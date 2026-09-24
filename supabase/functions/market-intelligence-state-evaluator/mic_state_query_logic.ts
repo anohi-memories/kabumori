@@ -102,7 +102,7 @@ export async function fetchPriorState(
 ): Promise<PriorState> {
   const result = await fetchImpl(
     `${ctx.supabaseUrl}/rest/v1/market_state_current?domain=eq.${encodeURIComponent(domain)}` +
-      `&select=domain,narrative,numeric_baseline_snapshot&limit=1`,
+      `&select=domain,narrative,numeric_baseline_snapshot,source_event_ids,updated_at,ai_evaluated_at&limit=1`,
     { headers: restHeaders(ctx.secretKey) },
   );
   if (!result.ok) {
@@ -115,6 +115,11 @@ export async function fetchPriorState(
     narrativeIsNull: !row || row.narrative === null || row.narrative === undefined,
     numericBaselineSnapshot:
       (row?.numeric_baseline_snapshot as PriorState["numericBaselineSnapshot"]) ?? null,
+    sourceEventIds: Array.isArray(row?.source_event_ids)
+      ? row.source_event_ids.filter((id): id is string => typeof id === "string")
+      : [],
+    updatedAt: typeof row?.updated_at === "string" ? row.updated_at : null,
+    aiEvaluatedAt: typeof row?.ai_evaluated_at === "string" ? row.ai_evaluated_at : null,
   };
 }
 
@@ -136,7 +141,7 @@ export async function fetchRecentDomainEvents(
   const sinceFilter = sinceIso ? `&published_at=gt.${encodeURIComponent(sinceIso)}` : "";
   const result = await fetchImpl(
     `${ctx.supabaseUrl}/rest/v1/market_events?event_type=in.(${inList})${sinceFilter}` +
-      `&select=id,title,summary,importance,event_type,published_at&order=published_at.desc&limit=50`,
+      `&select=id,title,summary,importance,event_type,published_at,updated_at&order=published_at.desc&limit=50`,
     { headers: restHeaders(ctx.secretKey) },
   );
   if (!result.ok) {
@@ -150,6 +155,7 @@ export async function fetchRecentDomainEvents(
     importance: (row.importance as EventFact["importance"]) ?? null,
     eventType: String(row.event_type),
     publishedAt: String(row.published_at),
+    updatedAt: typeof row.updated_at === "string" ? row.updated_at : null,
   }));
 }
 
@@ -188,27 +194,39 @@ export async function resolveFedStatementDiffEvidenceIds(
   centralBankDecisionEventIds: string[],
   fetchImpl: typeof fetch = fetch,
 ): Promise<string[]> {
-  if (centralBankDecisionEventIds.length === 0) return [];
-  const inList = centralBankDecisionEventIds.map((id) => encodeURIComponent(id)).join(",");
+  const uniqueEventIds = [...new Set(centralBankDecisionEventIds)];
+  if (uniqueEventIds.length === 0) return [];
+  const inList = uniqueEventIds.map((id) => encodeURIComponent(id)).join(",");
   const result = await fetchImpl(
     `${ctx.supabaseUrl}/rest/v1/mic_fed_statement_diffs?current_event_id=in.(${inList})` +
       `&select=id,current_event_id`,
-    { headers: restHeaders(ctx.secretKey) },
+    { headers: { ...restHeaders(ctx.secretKey), Prefer: "count=exact" } },
   );
   if (!result.ok) {
     throw new Error(`FED_STATEMENT_DIFF_LOOKUP_FAILED:${result.status}:${(await result.text()).slice(0, 500)}`);
   }
   const rows = await result.json() as Array<{ id?: unknown; current_event_id?: unknown }>;
+  if (!Array.isArray(rows)) throw new Error("FED_STATEMENT_DIFF_LOOKUP_INVALID_RESPONSE");
+  // PostgREST may cap a batched result. With an exact Content-Range total,
+  // never mistake an omitted second diff for an unambiguous single match.
+  const total = result.headers.get("Content-Range")?.match(/\/(\d+)$/)?.[1];
+  if (total !== undefined && Number(total) > rows.length) {
+    throw new Error("FED_STATEMENT_DIFF_LOOKUP_TRUNCATED");
+  }
+  const requestedEventIds = new Set(uniqueEventIds);
   const matchesByEvent = new Map<string, string[]>();
   for (const row of rows) {
-    if (typeof row.id !== "string" || typeof row.current_event_id !== "string") continue;
+    if (typeof row?.id !== "string" || typeof row?.current_event_id !== "string" ||
+      !requestedEventIds.has(row.current_event_id)) {
+      throw new Error("FED_STATEMENT_DIFF_LOOKUP_INVALID_RESPONSE");
+    }
     const list = matchesByEvent.get(row.current_event_id) ?? [];
     list.push(row.id);
     matchesByEvent.set(row.current_event_id, list);
   }
 
   const diffIds: string[] = [];
-  for (const eventId of centralBankDecisionEventIds) {
+  for (const eventId of uniqueEventIds) {
     const matches = matchesByEvent.get(eventId) ?? [];
     if (matches.length === 0) continue; // no diff computed yet for this event -- fine, just no evidence for it
     if (matches.length > 1) {

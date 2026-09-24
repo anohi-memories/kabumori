@@ -35,6 +35,7 @@ import {
   rollUpFetchStatus,
   rollUpObservationStatus,
   shouldSkipAiForStaleness,
+  unseenEvents,
 } from "./mic_state_decision_logic.ts";
 import {
   fetchDomainMetricMap,
@@ -117,6 +118,7 @@ export type DomainDecision = {
   observationStatus: ObservationStatus;
   dataConfidence: number;
   latestAsOf: string | null;
+  priorUpdatedAt: string;
 };
 
 export type DomainDecisionOrError = { ok: true; decision: DomainDecision } | { ok: false; domain: Domain; error: string };
@@ -139,6 +141,7 @@ async function computeDomainDecision(ctx: RestContext, domain: Domain): Promise<
     fetchPriorState(ctx, domain),
   ]);
   const domainMapById = new Map(domainMapRows.map((row) => [row.metricKey, row]));
+  if (!prior.updatedAt) throw new Error("PRIOR_STATE_UPDATED_AT_MISSING");
 
   const sourceKeys = metrics.map((m) => m.sourceKey).filter((k): k is string => k !== null);
   const fetchStatusBySource = await fetchSourceFetchStatuses(ctx, sourceKeys);
@@ -147,7 +150,12 @@ async function computeDomainDecision(ctx: RestContext, domain: Domain): Promise<
   const metricDecision = evaluateMaterialChange(newObservations, domainMapById);
 
   const recentEvents = await fetchRecentDomainEvents(ctx, domain, null);
-  const eventDecision = evaluateEventMaterialChange(recentEvents);
+  // Events already recorded in the last material State remain available as
+  // AI context/evidence, but they must not trigger another AI call on every
+  // subsequent run window just because they are still in the recent-50 list.
+  const eventDecision = evaluateEventMaterialChange(
+    unseenEvents(recentEvents, prior.sourceEventIds, prior.aiEvaluatedAt),
+  );
 
   const isMaterial = metricDecision.isMaterial || eventDecision.isMaterial ||
     (prior.narrativeIsNull && metrics.some((m) => m.currentValue !== null));
@@ -176,6 +184,7 @@ async function computeDomainDecision(ctx: RestContext, domain: Domain): Promise<
     observationStatus,
     dataConfidence,
     latestAsOf,
+    priorUpdatedAt: prior.updatedAt,
   };
 }
 
@@ -207,13 +216,15 @@ export async function evaluateDomain(
 
   try {
     if (!decision.isMaterial) {
-      await refreshStatusOnly(ctx, domain, {
+      const statusResult = await refreshStatusOnly(ctx, domain, {
         asOf: decision.latestAsOf,
+        expectedCurrentUpdatedAt: decision.priorUpdatedAt,
         coverageStatus: decision.coverageStatus,
         fetchStatus: decision.fetchStatus,
         observationStatus: decision.observationStatus,
         dataConfidence: decision.dataConfidence,
       });
+      if (statusResult === "stale") throw new Error("MIC_STATE_STALE_DECISION");
       await completeStateEvaluationRun(ctx, claim.runId, {
         status: "no_change",
         decisionDetail: { material: false, reason: decision.metricDecision.reason },
@@ -230,13 +241,15 @@ export async function evaluateDomain(
     // record in decisionDetail that this was a material decision the guard
     // suppressed, not a genuine absence of new data.
     if (shouldSkipAiForStaleness(decision.metrics, decision.eventDecision)) {
-      await refreshStatusOnly(ctx, domain, {
+      const statusResult = await refreshStatusOnly(ctx, domain, {
         asOf: decision.latestAsOf,
+        expectedCurrentUpdatedAt: decision.priorUpdatedAt,
         coverageStatus: decision.coverageStatus,
         fetchStatus: decision.fetchStatus,
         observationStatus: decision.observationStatus,
         dataConfidence: decision.dataConfidence,
       });
+      if (statusResult === "stale") throw new Error("MIC_STATE_STALE_DECISION");
       await completeStateEvaluationRun(ctx, claim.runId, {
         status: "no_change",
         decisionDetail: {
@@ -252,9 +265,9 @@ export async function evaluateDomain(
     // State Evidence Phase 2C1 (fail-before-AI ordering): resolve Fed diff
     // evidence BEFORE calling Luna, not after. marketEventEvidenceIds is
     // deliberately the exact same set as sourceEventIds below
-    // (decision.recentEvents is already "the events actually used for this
-    // evaluation's material judgment and AI facts payload" -- not "every
-    // event that ever existed"), so evidence never drifts from what
+    // (decision.recentEvents is the bounded set actually supplied to the
+    // AI facts payload; only its previously-unseen subset can trigger a
+    // new material decision), so evidence never drifts from what
     // source_event_ids already claims. fedStatementDiffEvidenceIds resolves
     // only the central_bank_decision events among them; when a single Fed
     // event maps to more than one mic_fed_statement_diffs row,
@@ -333,6 +346,7 @@ export async function evaluateDomain(
       domain,
       {
         asOf: decision.latestAsOf,
+        expectedCurrentUpdatedAt: decision.priorUpdatedAt,
         coverageStatus: decision.coverageStatus,
         fetchStatus: decision.fetchStatus,
         observationStatus: decision.observationStatus,

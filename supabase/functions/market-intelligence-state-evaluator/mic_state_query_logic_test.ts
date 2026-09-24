@@ -103,7 +103,7 @@ test("fetchSourceFetchStatuses: dedupes source keys in the in.() filter and buil
 test("fetchPriorState: no existing row -> narrativeIsNull true, baseline null", async () => {
   const fetchImpl = async () => new Response("[]", { status: 200 });
   const state = await fetchPriorState(ctx, "rates", fetchImpl as typeof fetch);
-  assert.deepEqual(state, { domain: "rates", narrativeIsNull: true, numericBaselineSnapshot: null });
+  assert.deepEqual(state, { domain: "rates", narrativeIsNull: true, numericBaselineSnapshot: null, sourceEventIds: [], updatedAt: null, aiEvaluatedAt: null });
 });
 
 test("fetchPriorState: existing row with a narrative -> narrativeIsNull false", async () => {
@@ -115,6 +115,20 @@ test("fetchPriorState: existing row with a narrative -> narrativeIsNull false", 
   const state = await fetchPriorState(ctx, "rates", fetchImpl as typeof fetch);
   assert.equal(state.narrativeIsNull, false);
   assert.deepEqual(state.numericBaselineSnapshot, { US10Y: { value: 4.5, observedDate: "2026-09-10", observedAt: null } });
+  assert.deepEqual(state.sourceEventIds, []);
+  assert.equal(state.updatedAt, null);
+  assert.equal(state.aiEvaluatedAt, null);
+});
+
+test("fetchPriorState: reads prior event IDs and AI timestamp for the revision-aware material-event gate", async () => {
+  const fetchImpl = () => Promise.resolve(new Response(JSON.stringify([{
+    narrative: "existing", source_event_ids: ["event-a"],
+    ai_evaluated_at: "2026-09-14T00:00:00Z", updated_at: "2026-09-14T00:00:01Z",
+  }]), { status: 200 }));
+  const state = await fetchPriorState(ctx, "rates", fetchImpl as typeof fetch);
+  assert.deepEqual(state.sourceEventIds, ["event-a"]);
+  assert.equal(state.aiEvaluatedAt, "2026-09-14T00:00:00Z");
+  assert.equal(state.updatedAt, "2026-09-14T00:00:01Z");
 });
 
 test("fetchRecentDomainEvents: a domain with no mapped event_types (e.g. equity_index) never calls fetch", async () => {
@@ -133,7 +147,7 @@ test("fetchRecentDomainEvents: geopolitical filters on its mapped event_types", 
   const fetchImpl = async (url: string | URL) => {
     calls.push(String(url));
     return new Response(
-      JSON.stringify([{ id: "1", title: "t", summary: "s", importance: "high", event_type: "geopolitical", published_at: "2026-09-13T00:00:00.000Z" }]),
+      JSON.stringify([{ id: "1", title: "t", summary: "s", importance: "high", event_type: "geopolitical", published_at: "2026-09-13T00:00:00.000Z", updated_at: "2026-09-14T00:00:00.000Z" }]),
       { status: 200 },
     );
   };
@@ -141,6 +155,7 @@ test("fetchRecentDomainEvents: geopolitical filters on its mapped event_types", 
   assert.match(calls[0], /event_type=in\.\(geopolitical,sanction,political_statement\)/);
   assert.equal(events.length, 1);
   assert.equal(events[0].importance, "high");
+  assert.equal(events[0].updatedAt, "2026-09-14T00:00:00.000Z");
 });
 
 // --- State Evidence Phase 2C1: resolveFedStatementDiffEvidenceIds ---
@@ -191,7 +206,7 @@ test("resolveFedStatementDiffEvidenceIds: 2+ matching diffs for the SAME event -
   );
 });
 
-test("resolveFedStatementDiffEvidenceIds: resolves multiple distinct events independently (one ambiguous does not silently drop the others -- it throws before returning anything)", async () => {
+test("resolveFedStatementDiffEvidenceIds: resolves multiple distinct events independently", async () => {
   const fetchImpl = async () =>
     new Response(
       JSON.stringify([
@@ -204,10 +219,55 @@ test("resolveFedStatementDiffEvidenceIds: resolves multiple distinct events inde
   assert.deepEqual(ids.sort(), ["cccccccc-cccc-cccc-cccc-cccccccccccc", "dddddddd-dddd-dddd-dddd-dddddddddddd"]);
 });
 
+test("resolveFedStatementDiffEvidenceIds: one ambiguous event in a multi-event response fails the whole lookup", async () => {
+  const fetchImpl = () => Promise.resolve(new Response(JSON.stringify([
+    { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", current_event_id: "event-a" },
+    { id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", current_event_id: "event-b" },
+    { id: "cccccccc-cccc-cccc-cccc-cccccccccccc", current_event_id: "event-b" },
+  ]), { status: 200 }));
+  await assert.rejects(
+    () => resolveFedStatementDiffEvidenceIds(ctx, ["event-a", "event-b"], fetchImpl as typeof fetch),
+    FedStatementDiffAmbiguousError,
+  );
+});
+
 test("resolveFedStatementDiffEvidenceIds: throws on a non-2xx status", async () => {
   const fetchImpl = async () => new Response("error", { status: 500 });
   await assert.rejects(
     () => resolveFedStatementDiffEvidenceIds(ctx, ["39ec45a4-77b5-4869-a011-2f4aa98c228d"], fetchImpl as typeof fetch),
     /FED_STATEMENT_DIFF_LOOKUP_FAILED:500/,
+  );
+});
+
+test("resolveFedStatementDiffEvidenceIds: duplicate input event IDs return one diff ID", async () => {
+  const eventId = "39ec45a4-77b5-4869-a011-2f4aa98c228d";
+  const diffId = "4c6f1ad7-255e-4ac7-8eab-b44904bf94b0";
+  const fetchImpl = () => Promise.resolve(new Response(JSON.stringify([{ id: diffId, current_event_id: eventId }]), { status: 200 }));
+  assert.deepEqual(await resolveFedStatementDiffEvidenceIds(ctx, [eventId, eventId], fetchImpl as typeof fetch), [diffId]);
+});
+
+test("resolveFedStatementDiffEvidenceIds: malformed successful response fails closed", async () => {
+  const fetchImpl = () => Promise.resolve(new Response(JSON.stringify([{ id: null, current_event_id: "event-a" }]), { status: 200 }));
+  await assert.rejects(
+    () => resolveFedStatementDiffEvidenceIds(ctx, ["event-a"], fetchImpl as typeof fetch),
+    /FED_STATEMENT_DIFF_LOOKUP_INVALID_RESPONSE/,
+  );
+});
+
+test("resolveFedStatementDiffEvidenceIds: capped PostgREST response fails closed", async () => {
+  const fetchImpl = () => Promise.resolve(new Response(JSON.stringify([
+    { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", current_event_id: "event-a" },
+  ]), { status: 206, headers: { "Content-Range": "0-0/2" } }));
+  await assert.rejects(
+    () => resolveFedStatementDiffEvidenceIds(ctx, ["event-a"], fetchImpl as typeof fetch),
+    /FED_STATEMENT_DIFF_LOOKUP_TRUNCATED/,
+  );
+});
+
+test("resolveFedStatementDiffEvidenceIds: network failure is not treated as zero diffs", async () => {
+  const fetchImpl = () => Promise.reject(new Error("network unavailable"));
+  await assert.rejects(
+    () => resolveFedStatementDiffEvidenceIds(ctx, ["event-a"], fetchImpl as typeof fetch),
+    /network unavailable/,
   );
 });

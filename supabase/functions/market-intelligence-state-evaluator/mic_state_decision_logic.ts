@@ -187,6 +187,20 @@ export function eventTypesForDomain(domain: string): readonly string[] {
   return DOMAIN_EVENT_TYPES[domain] ?? [];
 }
 
+export function unseenEvents(events: EventFact[], priorSourceEventIds: string[], priorAiEvaluatedAt: string | null): EventFact[] {
+  const seen = new Set(priorSourceEventIds);
+  const priorEvaluationMs = priorAiEvaluatedAt ? Date.parse(priorAiEvaluatedAt) : NaN;
+  return events.filter((event) => {
+    if (!seen.has(event.id)) return true;
+    const eventUpdatedMs = event.updatedAt ? Date.parse(event.updatedAt) : NaN;
+    // Same-id in-place corrections (including Fed canonical reprocess) must
+    // be reconsidered. Missing/invalid timestamps fail open toward an AI
+    // reevaluation, never toward silently missing a revised policy event.
+    return !Number.isFinite(priorEvaluationMs) || !Number.isFinite(eventUpdatedMs) ||
+      eventUpdatedMs > priorEvaluationMs;
+  });
+}
+
 export function evaluateEventMaterialChange(events: EventFact[]): MaterialChangeDecision {
   const material = events.filter((event) => event.importance === "high" || event.importance === "critical");
   return {

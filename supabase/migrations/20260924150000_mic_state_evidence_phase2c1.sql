@@ -103,7 +103,7 @@ create index if not exists mic_state_evidence_fed_diff_idx
   on public.mic_state_evidence (fed_statement_diff_id) where fed_statement_diff_id is not null;
 
 alter table public.mic_state_evidence enable row level security;
-revoke all on public.mic_state_evidence from anon, authenticated;
+revoke all on public.mic_state_evidence from public, anon, authenticated;
 grant select, insert on public.mic_state_evidence to service_role;
 grant select on public.mic_state_evidence to authenticated;
 drop policy if exists admin_select_mic_state_evidence on public.mic_state_evidence;
@@ -131,7 +131,8 @@ create policy admin_select_mic_state_evidence on public.mic_state_evidence
 --
 -- Idempotency: locks the domain's single market_state_current row with
 -- FOR UPDATE first (this table has exactly one row per domain, so this
--- also serializes concurrent calls for the same domain). If that row's
+-- also serializes concurrent calls for the same domain). The run row is
+-- then locked and its domain verified. If current's
 -- source_evaluation_run_id already equals p_run_id, this exact run's
 -- material update has already been durably applied by a prior successful
 -- call -- returns 'already_applied' immediately without writing
@@ -144,17 +145,18 @@ create policy admin_select_mic_state_evidence on public.mic_state_evidence
 -- happen in the normal Cron/manual-invoke path, since a fresh claim for
 -- the same window is blocked while the old row is still 'running'. It
 -- exists for correctness under retry/repair scenarios regardless.
+-- The caller also supplies the exact updated_at value read during its
+-- deterministic pre-pass. A mismatch under the row lock rejects a stale
+-- decision even if the claimant's run row was inserted after that read.
 --
 -- Evidence rows use ON CONFLICT ... DO NOTHING against the two partial
--- unique indexes above, so calling this RPC again for a run that already
--- has SOME but not all of its evidence recorded (only possible if a
--- previous attempt failed before reaching this point, since a fully
--- successful attempt returns 'already_applied' before ever reaching the
--- evidence inserts again) still converges to the same final evidence set
--- without erroring on the rows that already exist.
+-- unique indexes above, so duplicate IDs in an input array are harmless.
+-- A failed invocation rolls back ALL inserts; it cannot leave partial
+-- evidence behind. A later retry can then execute the whole RPC afresh.
 create or replace function public.apply_mic_state_material_update(
   p_domain text,
   p_run_id uuid,
+  p_expected_current_updated_at timestamptz,
   p_as_of timestamptz,
   p_coverage_status text,
   p_fetch_status text,
@@ -184,6 +186,8 @@ as $$
 declare
   v_current public.market_state_current%rowtype;
   v_run_status text;
+  v_run_domain text;
+  v_run_started_at timestamptz;
 begin
   select * into v_current
   from public.market_state_current
@@ -194,13 +198,8 @@ begin
     raise exception 'MIC_STATE_CURRENT_ROW_NOT_FOUND';
   end if;
 
-  if v_current.source_evaluation_run_id = p_run_id then
-    result_status := 'already_applied';
-    return next;
-    return;
-  end if;
-
-  select status into v_run_status
+  select domain, status, started_at
+  into v_run_domain, v_run_status, v_run_started_at
   from public.mic_state_evaluation_runs
   where id = p_run_id
   for update;
@@ -208,8 +207,59 @@ begin
   if not found then
     raise exception 'MIC_STATE_RUN_NOT_FOUND';
   end if;
+  if v_run_domain <> p_domain then
+    raise exception 'MIC_STATE_RUN_DOMAIN_MISMATCH';
+  end if;
+
+  -- A response-lost retry is valid even after the run was completed.
+  -- Validate its domain first, then return without another history row.
+  if v_current.source_evaluation_run_id = p_run_id then
+    result_status := 'already_applied';
+    return next;
+    return;
+  end if;
+
+  -- The decision was computed from a pre-claim read of this row. A newer
+  -- material write OR status-only refresh between that read and this RPC
+  -- invalidates the decision, even if this run was claimed later.
+  if p_expected_current_updated_at is null or
+     v_current.updated_at is distinct from p_expected_current_updated_at then
+    raise exception 'MIC_STATE_STALE_DECISION';
+  end if;
+
   if v_run_status <> 'running' then
     raise exception 'MIC_STATE_RUN_NOT_RUNNING:%', v_run_status;
+  end if;
+  -- The per-domain row lock serializes writes but does not establish their
+  -- logical order: an older AI run can arrive after a newer material write
+  -- or status refresh. updated_at covers both kinds of prior update.
+  if v_current.updated_at > v_run_started_at then
+    raise exception 'MIC_STATE_STALE_RUN';
+  end if;
+
+  -- Evidence must describe the exact event set supplied as AI facts and
+  -- saved on current. A missing evidence array must never silently produce
+  -- a narrative with an incomplete provenance trail.
+  if exists (
+    select id from unnest(coalesce(p_source_event_ids, '{}'::uuid[])) as ids(id)
+    except
+    select id from unnest(coalesce(p_market_event_evidence_ids, '{}'::uuid[])) as ids(id)
+  ) or exists (
+    select id from unnest(coalesce(p_market_event_evidence_ids, '{}'::uuid[])) as ids(id)
+    except
+    select id from unnest(coalesce(p_source_event_ids, '{}'::uuid[])) as ids(id)
+  ) then
+    raise exception 'MIC_STATE_EVENT_EVIDENCE_MISMATCH';
+  end if;
+
+  -- A Fed diff is evidence for its own current market_event, not for some
+  -- unrelated event that happened to be present in the same evaluation.
+  if exists (
+    select 1 from public.mic_fed_statement_diffs d
+    where d.id = any(coalesce(p_fed_statement_diff_evidence_ids, '{}'::uuid[]))
+      and not (d.current_event_id = any(coalesce(p_market_event_evidence_ids, '{}'::uuid[])))
+  ) then
+    raise exception 'MIC_STATE_FED_DIFF_EVENT_MISMATCH';
   end if;
 
   -- Snapshot the OLD row (as it stood before this update) into history --
@@ -258,11 +308,11 @@ end;
 $$;
 
 revoke all on function public.apply_mic_state_material_update(
-  text, uuid, timestamptz, text, text, text, numeric, text, jsonb, jsonb, jsonb, jsonb,
+  text, uuid, timestamptz, timestamptz, text, text, text, numeric, text, jsonb, jsonb, jsonb, jsonb,
   text[], uuid[], text, numeric, integer, integer, numeric, text, uuid[], uuid[]
 ) from public, anon, authenticated;
 grant execute on function public.apply_mic_state_material_update(
-  text, uuid, timestamptz, text, text, text, numeric, text, jsonb, jsonb, jsonb, jsonb,
+  text, uuid, timestamptz, timestamptz, text, text, text, numeric, text, jsonb, jsonb, jsonb, jsonb,
   text[], uuid[], text, numeric, integer, integer, numeric, text, uuid[], uuid[]
 ) to service_role;
 

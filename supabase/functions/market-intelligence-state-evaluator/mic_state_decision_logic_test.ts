@@ -12,6 +12,7 @@ import {
   rollUpFetchStatus,
   rollUpObservationStatus,
   shouldSkipAiForStaleness,
+  unseenEvents,
 } from "./mic_state_decision_logic.ts";
 import type { EventFact, MetricDomainMapRow, MetricObservationRow } from "./mic_state_types.ts";
 
@@ -258,6 +259,15 @@ test("evaluateEventMaterialChange: a rates-domain central_bank_decision event wi
   assert.match(decision.reason, /22222222-2222-2222-2222-222222222222/);
 });
 
+test("unseenEvents: an event already used by the previous State cannot re-trigger material AI", () => {
+  const oldEvent = event({ id: "11111111-1111-1111-1111-111111111111", importance: "high", updatedAt: "2026-09-13T00:00:00Z" });
+  const newEvent = event({ id: "22222222-2222-2222-2222-222222222222", importance: "high" });
+  const priorAiAt = "2026-09-14T00:00:00Z";
+  assert.equal(evaluateEventMaterialChange(unseenEvents([oldEvent], [oldEvent.id], priorAiAt)).isMaterial, false);
+  assert.deepEqual(unseenEvents([oldEvent, newEvent], [oldEvent.id], priorAiAt), [newEvent]);
+  assert.deepEqual(unseenEvents([{ ...oldEvent, updatedAt: "2026-09-15T00:00:00Z" }], [oldEvent.id], priorAiAt).map((e) => e.id), [oldEvent.id]);
+});
+
 test("evaluateEventMaterialChange: a rates-domain central_bank_decision event with importance=critical is material", () => {
   const decision = evaluateEventMaterialChange([
     event({ eventType: "central_bank_decision", importance: "critical" }),
@@ -298,6 +308,7 @@ function event(overrides: Partial<EventFact> = {}): EventFact {
     importance: "high",
     eventType: "regulatory",
     publishedAt: "2026-09-13T00:00:00.000Z",
+    updatedAt: "2026-09-13T00:00:00.000Z",
     ...overrides,
   };
 }

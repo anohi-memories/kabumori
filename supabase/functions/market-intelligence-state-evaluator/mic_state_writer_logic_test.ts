@@ -9,17 +9,18 @@ test("refreshStatusOnly: PATCHes only the deterministic status columns, never na
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   const fetchImpl = async (url: string | URL, init?: RequestInit) => {
     calls.push({ url: String(url), init });
-    return new Response(null, { status: 204 });
+    return new Response(JSON.stringify([{ domain: "rates" }]), { status: 200 });
   };
   await refreshStatusOnly(
     ctx,
     "rates",
-    { asOf: "2026-09-13T00:00:00.000Z", coverageStatus: "full", fetchStatus: "fresh", observationStatus: "fresh", dataConfidence: 1.0 },
+    { asOf: "2026-09-13T00:00:00.000Z", expectedCurrentUpdatedAt: "2026-09-12T00:00:00.000Z", coverageStatus: "full", fetchStatus: "fresh", observationStatus: "fresh", dataConfidence: 1.0 },
     fetchImpl as typeof fetch,
   );
   assert.equal(calls.length, 1);
   assert.equal(calls[0].init?.method, "PATCH");
   assert.match(calls[0].url, /market_state_current\?domain=eq\.rates/);
+  assert.match(calls[0].url, /updated_at=eq\.2026-09-12T00%3A00%3A00\.000Z/);
   const body = JSON.parse(String(calls[0].init?.body));
   assert.deepEqual(Object.keys(body).sort(), ["as_of", "coverage_status", "data_confidence", "fetch_status", "observation_status"]);
   assert.equal(body.coverage_status, "full");
@@ -32,16 +33,26 @@ test("refreshStatusOnly: throws on a non-2xx status", async () => {
       refreshStatusOnly(
         ctx,
         "rates",
-        { asOf: null, coverageStatus: "unavailable", fetchStatus: "unknown", observationStatus: "unknown", dataConfidence: 0 },
+        { asOf: null, expectedCurrentUpdatedAt: "2026-09-12T00:00:00.000Z", coverageStatus: "unavailable", fetchStatus: "unknown", observationStatus: "unknown", dataConfidence: 0 },
         fetchImpl as typeof fetch,
       ),
     /STATE_STATUS_REFRESH_FAILED:500/,
   );
 });
 
+test("refreshStatusOnly: a CAS miss reports stale and cannot overwrite newer State", async () => {
+  const fetchImpl = () => Promise.resolve(new Response("[]", { status: 200 }));
+  const result = await refreshStatusOnly(ctx, "rates", {
+    asOf: null, expectedCurrentUpdatedAt: "2026-09-12T00:00:00.000Z",
+    coverageStatus: "full", fetchStatus: "fresh", observationStatus: "fresh", dataConfidence: 1,
+  }, fetchImpl as typeof fetch);
+  assert.equal(result, "stale");
+});
+
 function sampleUpdate() {
   return {
     asOf: "2026-09-13T00:00:00.000Z",
+    expectedCurrentUpdatedAt: "2026-09-12T00:00:00.000Z",
     coverageStatus: "full" as const,
     fetchStatus: "fresh" as const,
     observationStatus: "fresh" as const,
@@ -106,6 +117,7 @@ test("applyMaterialChangeUpdate: POSTs a single call to the apply_mic_state_mate
   const body = JSON.parse(String(calls[0].init?.body));
   assert.equal(body.p_domain, "rates");
   assert.equal(body.p_run_id, "22222222-2222-2222-2222-222222222222");
+  assert.equal(body.p_expected_current_updated_at, "2026-09-12T00:00:00.000Z");
   assert.equal(body.p_narrative, "米金利は落ち着いた動き。");
   assert.equal(body.p_ai_model, "gpt-5.6-luna");
   assert.equal(body.p_reason, "US10Y crossed threshold");

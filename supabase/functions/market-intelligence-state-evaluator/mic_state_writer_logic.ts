@@ -1,12 +1,14 @@
 // Writers for market_state_current / market_state_history.
 //
 // Two distinct update shapes, matching the design doc's flow (section 5):
-// - refreshStatusOnly: runs on every evaluation, change or not. Updates
+// - refreshStatusOnly: runs on no-change / AI-skipped evaluations. Updates
 //   only the deterministic status/confidence columns (coverage_status,
 //   fetch_status, observation_status, data_confidence, as_of) -- never
 //   narrative/bullish/bearish/numeric_baseline_snapshot/ai_*. No
 //   market_state_history row is written for this (routine status ticks
 //   are not the kind of interpretive change history exists to audit).
+//   An updated_at compare-and-swap prevents a stale decision from
+//   overwriting a newer run's status or as_of.
 // - applyMaterialChangeUpdate: only called when Step 2 (material_change)
 //   is true and AI has produced a new narrative. State Evidence Phase 2C1:
 //   this is now a single call to the apply_mic_state_material_update RPC
@@ -24,6 +26,7 @@ import type { CoverageStatus, Domain, FetchStatus, ObservationStatus } from "./m
 
 export type StatusRefresh = {
   asOf: string | null;
+  expectedCurrentUpdatedAt: string;
   coverageStatus: CoverageStatus;
   fetchStatus: FetchStatus;
   observationStatus: ObservationStatus;
@@ -35,12 +38,13 @@ export async function refreshStatusOnly(
   domain: Domain,
   refresh: StatusRefresh,
   fetchImpl: typeof fetch = fetch,
-): Promise<void> {
+): Promise<"updated" | "stale"> {
   const result = await fetchImpl(
-    `${ctx.supabaseUrl}/rest/v1/market_state_current?domain=eq.${encodeURIComponent(domain)}`,
+    `${ctx.supabaseUrl}/rest/v1/market_state_current?domain=eq.${encodeURIComponent(domain)}` +
+      `&updated_at=eq.${encodeURIComponent(refresh.expectedCurrentUpdatedAt)}&select=domain`,
     {
       method: "PATCH",
-      headers: restHeaders(ctx.secretKey, "return=minimal"),
+      headers: restHeaders(ctx.secretKey, "return=representation"),
       body: JSON.stringify({
         as_of: refresh.asOf,
         coverage_status: refresh.coverageStatus,
@@ -53,6 +57,9 @@ export async function refreshStatusOnly(
   if (!result.ok) {
     throw new Error(`STATE_STATUS_REFRESH_FAILED:${result.status}:${(await result.text()).slice(0, 500)}`);
   }
+  const rows = await result.json() as unknown;
+  if (!Array.isArray(rows) || rows.length > 1) throw new Error("STATE_STATUS_REFRESH_RESPONSE_INVALID");
+  return rows.length === 1 ? "updated" : "stale";
 }
 
 export type MaterialChangeUpdate = StatusRefresh & {
@@ -108,6 +115,7 @@ export async function applyMaterialChangeUpdate(
     body: JSON.stringify({
       p_domain: domain,
       p_run_id: evidence.runId,
+      p_expected_current_updated_at: update.expectedCurrentUpdatedAt,
       p_as_of: update.asOf,
       p_coverage_status: update.coverageStatus,
       p_fetch_status: update.fetchStatus,

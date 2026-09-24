@@ -54,6 +54,7 @@ function baseDecision(overrides: Partial<DomainDecision> = {}): DomainDecision {
     observationStatus: "delayed_expected",
     dataConfidence: 0.9,
     latestAsOf: "2026-09-12T00:00:00.000Z",
+    priorUpdatedAt: "2026-09-12T00:00:00.000Z",
     ...overrides,
   };
 }
@@ -116,7 +117,7 @@ function makeMockFetch(opts: {
       // applyMaterialChangeUpdate no longer touches market_state_current
       // directly -- that now happens inside the
       // apply_mic_state_material_update RPC transaction (mocked below).
-      return new Response(null, { status: 204 });
+      return new Response(JSON.stringify([{ domain: "rates" }]), { status: 200 });
     }
     if (u.includes("/rest/v1/mic_fed_statement_diffs") && method === "GET") {
       // Most tests in this file never exercise a central_bank_decision
@@ -282,6 +283,7 @@ function centralBankEvent(overrides: Record<string, unknown> = {}) {
     importance: "high" as const,
     eventType: "central_bank_decision",
     publishedAt: "2026-09-16T18:00:00.000Z",
+    updatedAt: "2026-09-16T18:00:00.000Z",
     ...overrides,
   };
 }
@@ -422,4 +424,28 @@ test("[M] no_change (not material) never calls mic_fed_statement_diffs or the ma
 
   assert.equal(calls.some((c) => c.url.includes("/rest/v1/mic_fed_statement_diffs")), false);
   assert.equal(calls.some((c) => c.url.includes("/rest/v1/rpc/apply_mic_state_material_update")), false);
+});
+
+test("a no-change decision with a stale State CAS cannot overwrite newer status or complete as no_change", async () => {
+  const { fetchImpl: baseFetch, calls } = makeMockFetch({});
+  const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+    if (String(url).includes("/rest/v1/market_state_current") && init?.method === "PATCH") {
+      return new Response("[]", { status: 200 });
+    }
+    return baseFetch(url, init);
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = fetchImpl as typeof fetch;
+  try {
+    const result = await evaluateDomain(ctx, "rates", decisionResult({
+      isMaterial: false,
+      metricDecision: { isMaterial: false, materialMetricKeys: [], reason: "no change" },
+    }), new Date("2026-09-16T18:20:00Z"), 0);
+    assert.equal(result.status, "failed");
+    assert.match(result.error ?? "", /MIC_STATE_STALE_DECISION/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.equal(calls.some((call) => call.url === "https://api.openai.com/v1/responses"), false);
+  assert.equal(calls.some((call) => call.url.includes("/rest/v1/rpc/apply_mic_state_material_update")), false);
 });

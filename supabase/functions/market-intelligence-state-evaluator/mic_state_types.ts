@@ -68,6 +68,9 @@ export type PriorState = {
   domain: Domain;
   narrativeIsNull: boolean;
   numericBaselineSnapshot: Record<string, { value: number; observedDate: string | null; observedAt: string | null }> | null;
+  sourceEventIds: string[];
+  updatedAt: string | null;
+  aiEvaluatedAt: string | null;
 };
 
 export type NewObservation = {
@@ -90,4 +93,5 @@ export type EventFact = {
   importance: "low" | "medium" | "high" | "critical" | null;
   eventType: string;
   publishedAt: string;
+  updatedAt: string | null;
 };
