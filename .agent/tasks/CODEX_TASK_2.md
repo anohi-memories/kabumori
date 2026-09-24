@@ -1,157 +1,148 @@
 # Codex Task 2
 
-- task_id: x-autopost-phase1d-db-rpc-concurrency-final-review-20260924
+- task_id: kabumori-pr19-report-detail-portfolio-privacy-final-review-20260924
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
-- priority: critical
-- recommended_model: Sol（高）
-- purpose: K3 PASS済みのPhase1D claim-domain partition candidateを、DB/RPC/permission/concurrency観点で最終レビューする。production applyは行わない。
+- status: ready
+- next_owner: codex
+- priority: high
+- recommended_model: Luna（極高）
+- purpose: K2 PASS済みのPR #19（朝刊/大引け詳細化＋保有株影響分析）を、LLM validation・本人データ境界・朝刊参照・既存互換性の観点で最終レビューする。production deploy/mergeは行わない。
+
+## Previous C2 closure
+
+Previous H2 task:
+- `x-autopost-phase1d-db-rpc-concurrency-final-review-20260924`
+- C2 verdict: **PASS-WITH-FIX as source-only candidate**
+- H2 fixed two P1 issues in commit `4468a060d368d6d94c205eba1a86ff58195740e4`
+- Phase1D remains **NOT authorized for production activation**
+- remaining gates: live-definition diff, atomic migration proof, Phase1C prerequisites, staged rollback plan
+- production mutation remained 0
+- detailed evidence remains in `.agent/CODEX_REPORT_2.md`
 
 ## Review target
 
-Primary implementation commit:
-- `238247a57287c3bb835b6e2a0ca8ee4a2d910fdf`
+PR #19:
+- branch: `g2-app-report-detail-portfolio-impact-20260924`
+- reviewed implementation head from K2: `acbc1b6ceac04d978b7fe6fb8e3d266734d3826a`
+- state: open / unmerged
 
 Primary changed files:
-- `supabase/migrations/20260924160000_x_autopost_phase1d_claim_domain_partition.sql`
-- `supabase/functions/x-test-post/claim_domain_partition_migration_test.ts`
-- `supabase/tests/x_autopost_phase1d_fixture.sql`
-- `supabase/tests/x_autopost_phase1d_behavior.sql`
-- `supabase/tests/x_autopost_phase1d_run.sh`
-- `supabase/tests/x_autopost_phase1d_claim_domain_partition.md`
+- `supabase/functions/personalized-reports/market_detail.ts`
+- `supabase/functions/personalized-reports/report_upgrade_test.ts`
+- `tests/app/report-impact_test.ts`
+- `supabase/functions/personalized-reports/report_logic.ts`
+- `supabase/functions/personalized-reports/index.ts`
+- `supabase/functions/personalized-reports/report_logic_test.ts`
+- `supabase/functions/personalized-reports/shared_market_consumer_test.ts`
+- `src/lib/report-presentation.ts`
+- `src/app/reports/[id].tsx`
 
-G3/K3 evidence:
-- disposable PostgreSQL PASS
-- concurrent legacy/v2 claim proof PASS
-- focused static tests 13/13 PASS
-- x-test-post regression 416/416 PASS
+K2 evidence:
+- 151 tests passed / 0 failed
+- deno check/lint PASS
+- no new src TypeScript errors
+- Expo web export PASS / 10 routes
+- git diff --check PASS
+- secret scan 0
 - production mutation 0
-- runtime dispatcher unchanged by design
 
 ## Mandatory startup
 
 1. Read PROJECT_RULES.md
 2. Read .agent/ORCHESTRATION.md
 3. Read .agent/CURRENT_STATE.md
-4. Read G3 TASK including Report and Final K3
-5. Fresh fetch origin/main
+4. Read G2 TASK including Report and Final K2
+5. Fresh fetch origin/main and PR #19 head
 6. Confirm independent H2 worktree/checkout
-7. Inspect G2/G4/H1/G1 ownership and prove no overlap
-8. Review exact implementation commit and current main for semantic drift
-9. Do not infer production state from source; live-definition uncertainty must remain explicit
+7. Inspect H1/G1/G3/G4 scopes and prove no overlap
+8. Compare PR #19 against fresh main for semantic drift
+9. Do not merge/deploy
 
-## Review scope A — migration safety
-
-Review:
-- additive/versioned behavior claim
-- dependency on Phase1B
-- rename-to-core mechanics for all 9 Phase1B v2 functions
-- recreation of public wrapper signatures/defaults/return types
-- grants/revokes after rename
-- behavior on partially-applied / failed migration
-- idempotency expectations and migration re-run behavior
-- interaction with existing Supabase default EXECUTE grants
-- SECURITY DEFINER + `search_path = ''` correctness
-- function ownership / callable-core exposure risks
-
-Flag any case where applying this migration could strand or break existing runtime even before activation.
-
-## Review scope B — claim-domain guard
-
-Verify the trigger and helper guarantee:
-- unbound rows remain legacy-only
-- bound rows remain v2-only
-- no bind/rebind/unbind of existing rows
-- no bound lifecycle mutation outside v2 path
-- no v2 mutation of unbound rows
-- accidental re-grant of old `claim_due_post()` fails closed
-- historical terminal rows are not unexpectedly blocked by unrelated updates
-- direct SQL writes cannot bypass intended invariants through unchanged columns/status combinations
-
-Review whether the selected guarded columns are complete enough for all relevant lifecycle mutations.
-
-## Review scope C — wrapper/session-state correctness
-
-Audit every v2 wrapper:
-- sets `kabumori.x_queue_domain='v2'` transaction-locally
-- restores prior value correctly
-- restoration behavior on exception
-- PL/pgSQL `RETURN QUERY` control flow correctness
-- no path can leak v2 domain state to subsequent calls in the same transaction
-- nested v2 calls behave safely
-- no caller can spoof the custom GUC to bypass the trigger without also having inappropriate DB privileges
-
-If exception restoration is not guaranteed but transaction-local rollback makes it safe, document why.
-
-## Review scope D — ACL / auth boundary
+## Review scope A — user/portfolio privacy boundary
 
 Verify:
-- *_core functions are not callable by anon/authenticated/service_role
-- public wrapper functions have only the intended callable roles
-- trigger/helper functions are not unintentionally executable
-- `has_function_privilege` gate correctly models the API-role threat
-- role membership / owner privileges do not create a bypass that matters in Supabase runtime
-- no service_role exposure of unintended primitives
+- only authenticated user's holdings are used
+- morning report lookup is hard-bound to same user
+- returned morning row is rechecked for same user
+- no cross-user portfolio leakage path
+- no user/account IDs leak into LLM output unnecessarily
+- service-role is not exposed to mobile
+- existing RLS assumptions are not weakened or bypassed
 
-## Review scope E — concurrency and correctness
+Test adversarial cases where another user's morning report/holding could be present in mocked data.
 
-Re-run/inspect:
-- legacy unbound vs v2 bound separation
-- two lanes cannot double-claim the same row
-- two accounts remain eventually independently claimable
-- Phase1B turn-row locking observation does not violate correctness
-- stale/retry/reconcile paths preserve domain
-- uncertain / confirmed-X-db-incomplete remain non-reclaimable
-- race tests actually contend and are not false positives
+## Review scope B — LLM prompt/schema/validation
 
-## Review scope F — activation seam
+Audit:
+- `holdingImpactIssues`
+- stance/basis validation
+- English-token allowlist relaxation
+- Fact vs inference separation
+- hedging requirements
+- unknown/missing holdings rejection
+- duplicate holding rejection
+- no unsupported individual-stock causal claim
+- no invented material when `no_clear_material`
+- existing numeric/source/date/URL/trading-advice safeguards remain effective
 
-Validate G3's required ordering:
-1. live-definition diff first
-2. apply Phase1B + Phase1D source migrations
-3. deploy one-line legacy dispatcher switch to `claim_due_post_legacy_unbound_v2`
-4. drain/verify
-5. revoke old `claim_due_post()` EXECUTE
-6. keep bound producers/v2 dispatcher disabled until remaining Phase1C prerequisites pass
+Try to construct prompt/output cases that pass local validation incorrectly.
 
-Check for any unsafe interval or rollback gap.
+## Review scope C — morning-to-close comparison
+
+Verify:
+- morning lookup cannot cross users/dates
+- comparison fallback when morning report absent is safe
+- 1306-relative thresholds are deterministic and correctly applied
+- no schema migration is required
+- saved JSON remains backward compatible enough for existing app reader
+- old reports without new fields still render safely
+
+## Review scope D — shared market/X invariants
+
+Confirm:
+- shared market fact packet remains the authority
+- X-specific queue/planner/posting behavior is unchanged
+- `formatSharedXPost` behavior is unchanged
+- app enrichment cannot mutate shared facts or feed back into X output
+- missing data is surfaced as missing rather than fabricated
+
+## Review scope E — UI/backward compatibility
+
+Review:
+- old `personalized_reports` bodies still render
+- existing `stock_notes` behavior remains intact
+- no crash on no holdings / missing market section / partial older JSON
+- section ordering is stable
+- large output does not create obvious rendering/parser failure paths
 
 ## Required tests
 
 At minimum:
-- focused Phase1D tests
-- relevant Phase1B tests
-- full x-test-post regression if feasible
-- disposable PostgreSQL behavior/concurrency proof if local environment permits
-- git diff --check / shell syntax/static checks as applicable
+- focused personalized-reports tests
+- app report-impact/presentation tests
+- adversarial cross-user tests
+- LLM validation negative tests
+- deno check/lint for changed function files
+- relevant TypeScript/static checks
+- Expo web export if feasible
+- git diff --check
 
-If a test cannot run, state exactly why; do not replace evidence with assumption.
-
-## Bugfix authority
-
-If a concrete correctness/security bug is found:
-- make only the minimal source-only fix within the Phase1D migration/tests/docs
-- do not apply anything to production
-- do not edit runtime dispatcher unless strictly necessary to fix a source-only correctness defect and explicitly explain why
-- rerun affected tests
-- report exact changed files and commit/push status
+If a concrete bug is found, minimal fix is allowed only within PR #19 scope, with rerun of affected tests.
 
 ## Forbidden
 
-- production migration/DDL/DML/backfill
-- live RPC replacement
-- `supabase db push`
-- migration-history repair
-- Edge Function deploy
-- Cron/OAuth/Vault/token mutation
-- X API calls
-- production row injection
-- apps/admin/**
-- consumer mobile/**
-- PR #15 work
-- unrelated G2/G4 work
+- merge PR #19
+- Edge Function production deploy
+- `app_enabled=true`
+- production DML/DDL/migration
+- Auth/RLS weakening
+- service-role exposure
+- X queue/planner/posting changes
+- G1 release-Web work
+- G3 Phase1D files
+- G4 admin/Netlify files
+- Vercel/Netlify production mutation
 
 ## Production mutation budget
 
@@ -159,19 +150,18 @@ If a concrete correctness/security bug is found:
 
 ## Completion / C2
 
-Report in `.agent/CODEX_REPORT_2.md`:
+Update `.agent/CODEX_REPORT_2.md` with:
 - verdict PASS / PASS-WITH-FIX / FAIL
-- fresh main SHA
-- reviewed commit SHA
+- fresh main and PR head
 - findings by severity
 - exact changed files if any
-- migration/RPC/trigger/ACL assessment
-- concurrency assessment
-- activation-order assessment
-- exact tests and counts
-- whether Phase1D is safe to keep as a source candidate
-- whether it is safe for production activation now (expected answer should remain NO unless all prerequisites and live-definition checks are separately satisfied)
-- remaining blockers
+- privacy/user-boundary assessment
+- LLM validation assessment
+- backward-compatibility assessment
+- X/shared-fact invariants
+- exact tests/counts
+- whether PR #19 is safe to merge
+- remaining deploy/gate requirements
 - production mutation=0
 - next recommendation
 
