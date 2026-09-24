@@ -31,14 +31,21 @@
 
 ## Current slot snapshot
 
-- H1: `done` — `kabumori-mobile-recovery-pr17-final-auth-security-review-20260924`
+- H1: `ready` — `kabumori-release-pr18-privacy-dataflow-eas-light-review-20260924`
 - H2: `ready` — `x-autopost-phase1d-db-rpc-concurrency-final-review-20260924`
-- G1: `review_required` — `kabumori-release-foundation-appstore-web-links-eas-audit-20260924`
+- G1: `done` — `kabumori-release-foundation-appstore-web-links-eas-audit-20260924`
   - PR #18 open (unmerged): apps/kabumori-web public pages (/privacy /terms /support /account-deletion), one-origin in-app links, eas autoIncrement, RELEASE_READINESS.md. 108/0 tests, tsc src 0. Production mutation 0.
   - Audit blockers: Expo template icon/splash; EAS production lacks Supabase env vars; operator values / Netlify / Auth Site URL / SMTP pending.
 - G2: `ready` — `kabumori-app-morning-close-report-detail-and-portfolio-impact-20260924`
 - G3: `done` — `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`
 - G4: `ready` — `x-admin-netlify-deploy-preview-pipeline-20260924`
+
+## K1 release foundation result
+
+- G1 implementation PASS for PR #18 at head `2b91cc4`.
+- PR #18 remains open/unmerged.
+- H1 review required for privacy/data-flow factual consistency and release-page accuracy.
+- H1 recommended model: Luna（高）.
 
 ## Kabumori release lanes
 
