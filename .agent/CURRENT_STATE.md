@@ -32,7 +32,7 @@
 ## Current slot snapshot
 
 - H1: `ready` — `kabumori-release-pr18-privacy-dataflow-eas-light-review-20260924`
-- H2: `ready` — `x-autopost-phase1d-db-rpc-concurrency-final-review-20260924`
+- H2: `ready` — `kabumori-pr19-report-detail-portfolio-privacy-final-review-20260924`
 - G1: `done` — `kabumori-release-foundation-appstore-web-links-eas-audit-20260924`
   - PR #18 open (unmerged): apps/kabumori-web public pages (/privacy /terms /support /account-deletion), one-origin in-app links, eas autoIncrement, RELEASE_READINESS.md. 108/0 tests, tsc src 0. Production mutation 0.
   - Audit blockers: Expo template icon/splash; EAS production lacks Supabase env vars; operator values / Netlify / Auth Site URL / SMTP pending.
@@ -57,10 +57,10 @@
 
 - G1 owns App Store release foundation/public legal-support Web/native release links/EAS audit.
 - G2 owns Kabumori app morning/closing report detail + portfolio-impact implementation.
-- G3 Phase1D implementation is complete; H2 now owns its DB/RPC/permission/concurrency final review.
+- G3 Phase1D implementation + H2 DB/RPC/permission/concurrency review are complete; Phase1D remains source-only and not production-authorized.
 - G4 owns apps/admin Netlify Preview configuration only.
 - H1 final Auth/security review of PR #17 is complete (C1 PASS).
-- H2 owns Phase1D DB/RPC/permission/concurrency final review; production apply remains prohibited.
+- H2 now owns PR #19 LLM/privacy/user-boundary final review.
 - push前にfresh `origin/main`確認。
 - 各slotは独立worktree/checkoutを使用する。
 - 既存未コミット変更は他workstream所有として触らない。
@@ -92,7 +92,17 @@
 - PR #19 remains open/unmerged.
 - 151/0 tests; deno check/lint PASS; no new src TypeScript errors; production mutation=0.
 - Codex review required before merge due LLM validation, user-bound morning lookup, and portfolio privacy boundaries.
-- H1/H2 are currently occupied; assign PR #19 review to the first safe Codex slot after C1/C2 closes one.
+- H2 has now been assigned the PR #19 review after C2 closed the Phase1D review.
+
+## C2 Phase1D result
+
+- H2 verdict: **PASS-WITH-FIX for source-only candidate**.
+- P1 fix 1: bound INSERT now requires v2 domain and valid pending initial state.
+- P1 fix 2: bound routing identity (brand/date/post_type/slot) is immutable.
+- fix commit: `4468a060d368d6d94c205eba1a86ff58195740e4`.
+- fixed behavior/concurrency proof PASS; Phase1D static 7/7; full x-test-post 416/416.
+- production mutation=0.
+- Production activation remains **NO** until live-definition diff, atomic migration proof, Phase1C prerequisites and staged rollback plan pass.
 
 ## K3 result
 
