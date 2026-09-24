@@ -33,13 +33,13 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: kabumori-pr21-branding-eas-preflight-final-review-20260924
+- status: ready
+- task_id: kabumori-pr23-close-validator-final-review-20260924
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: closed; Final C2 PASS-WITH-FIX
+- allocation: assigned; PR #23 close-report validator final review
 
 ## Claude G1
 - owner: claude
@@ -54,12 +54,12 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: done
 - task_id: kabumori-personalized-reports-prod-deploy-dryrun-20260924
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: production deploy + dry-run validation; app_enabled must stay false
+- allocation: closed; rollback safety PASS, PR #23 awaiting H2 review
 
 ## Claude G3
 - owner: claude
