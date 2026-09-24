@@ -32,11 +32,11 @@
 ## Current slot snapshot
 
 - H1: `done` — `x-autopost-phase1e-auth-secret-provider-final-review-20260924`
-- H2: `done` — `kabumori-pr21-branding-eas-preflight-final-review-20260924`
+- H2: `ready` — `kabumori-pr23-close-validator-final-review-20260924`
 - G1: `review_required` — `kabumori-pr21-merge-postmerge-verify-20260924`
   - PR #21 merged at H2-reviewed head `0a71f08` -> main `0d4ebad`. Files byte-identical; 122/0 tests, tsc src 0, web export 10 routes. Identity fields (slug/scheme/bundleId/projectId) and all icon/splash/overlay assets unchanged. Mutation 0.
   - Flagged for K1: G2's report_logic.ts/market_detail.ts already landed on main after the privacy-page audit; recommend a re-audit of apps/kabumori-web/pages/privacy.html's OpenAI data-flow claims before Netlify publication.
-- G2: `ready` — `kabumori-personalized-reports-prod-deploy-dryrun-20260924`
+- G2: `done` — `kabumori-personalized-reports-prod-deploy-dryrun-20260924`
 - G3: `ready` — `x-autopost-phase1f-atomic-completion-provider-outcome-model-20260924`
 - G4: `done` — `x-admin-netlify-deploy-preview-pipeline-20260924`
 
@@ -124,6 +124,19 @@
 - Kabumori Expo Web Netlify Preview setup.
 - Prior reviewed code/test evidence remains preserved in the old G4/G2 reports.
 - Resume either deferred item only when needed or user explicitly asks.
+
+## Final K2 production rollback result
+
+- PASS for safety containment.
+- v22 exposed close-report regression in controlled dry-run; no saved reports or notifications.
+- production rolled back to known-good v21 source, deployed as v23.
+- correct rollback source commit: `4590ba6`.
+- rollback read-back byte-identical; verify_jwt=false.
+- app_enabled=false remained unchanged.
+- PR #23 head `5c22c71961496fc63e698e42e7c18cacc7f7cff3` contains source validator fix only.
+- tests 167/167 PASS; deno check/lint/diff PASS.
+- H2 independent validator review assigned before merge/redeploy.
+- recommended model: Luna（極高）.
 
 ## G2 production rollout stage 1
 
