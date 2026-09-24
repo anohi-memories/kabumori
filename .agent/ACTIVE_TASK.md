@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924
+- status: ready
+- task_id: x-autopost-phase1e-exact-account-credential-resolver-20260924
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: closed; Final K3 implementation PASS, H2 review pending
+- allocation: assigned; Phase1E exact-account credential resolver + one-request provider seam
 
 ## Claude G4
 - owner: claude
