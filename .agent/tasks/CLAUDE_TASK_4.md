@@ -3,8 +3,8 @@
 - task_id: x-admin-phase2-vercel-gate-merge-and-postmerge-qa-20260924
 - owner: claude
 - slot: claude-4
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet 5
 - purpose: G2/K2で実装・freshen・全検証PASS済みのPR #15について、Vercel rate limit解除後のcheck確認、必要最小限の再freshen、PR merge、post-merge read-back、本番Admin QAまでを完了する。新機能実装はしない。
@@ -135,3 +135,93 @@ When complete:
   - remaining risks
   - next recommendation
 - STOP for K4.
+
+## Report
+
+- task_id: x-admin-phase2-vercel-gate-merge-and-postmerge-qa-20260924
+- result: **保留（未merge）**。Vercelのdeployment rate limitが解除されておらず、Scope Aの指示（rate limit中は再トリガーせず停止）に従い、checkのconfirmと安全確認のみでSTOPした。merge・post-merge read-back・production Admin QAは未実施。
+- model_used: Sonnet 5（TASK指定どおり）
+
+### Mandatory startup（1〜7）
+
+1. fresh fetch origin/main：着手時 `19c5924` → 作業中に3回origin/mainが進み、最終的に `efaa31b`（`a8c5be4` はfetch後に追加で観測、後述）まで確認した。
+2. ORCHESTRATION.md / CURRENT_STATE.md / 本TASK / G2 Report（`.agent/tasks/CLAUDE_TASK.md`）を確認した。CURRENT_STATE.mdは「G4: ready — 本task_id」「G4 owns apps/admin PR #15 merge gate and post-merge QA only」と明記しており、既存割当と一致していた。
+3. G1/G2/G3/H1/H2のscope overlapを確認：
+   - G1: `review_required`（mobile recovery/E2E、apps/admin対象外）
+   - G2: `done`（本タスクの前工程、merge continuationをG4へ移管済み）
+   - G3: Phase1D（X queue/claim-domain、`x-test-post`系、apps/admin対象外）
+   - H1: `idle`
+   - H2: `release`済み（Phase1DがG3へ移管され、H2はidleに戻った形跡をCURRENT_STATE.mdで確認）
+   - いずれも `apps/admin/**` と重なりなし。
+4. PR #15の現在状態：`gh pr view 15` で確認。
+   - state: OPEN
+   - head: `b04442561d9e9c6d01b4a9fcf640c2cf731cd923`（G2 Reportの最終headと同一、変化なし）
+   - base: main
+   - mergeable/mergeStateStatus: UNKNOWN（Vercel checkがfailureのため未計算）
+   - checks: Vercel = **FAILURE**、`Deployment rate limited — retry in 24 hours.`（`gh pr checks 15`）
+5. fresh mainとPR headの比較：
+   - `git merge-base origin/main b044425` = `a2e2480`（G2 Reportに記録されたfreshened headのbaseと一致）
+   - `git log a2e2480..origin/main -- apps/admin/` = **0件**。PR baseから現在のfresh main（`efaa31b`、以後`a8c5be4`も観測）まで、`apps/admin/**` の変更は無い。
+6. main側の差分は `.agent/**` のcontrol file更新とmobile/X系のみ（Phase1D移管、routing/model方針の同期、G1のE2E報告など）。`apps/admin` に触れるcommitは0件のため、**freshenは不要**と判断した。
+7. overlapするapps/admin変更は無いため、STOPせず継続してScope Aへ進んだ。
+
+### Scope A — Vercel gate
+
+- `gh pr checks 15` の結果：`Vercel fail 0 https://vercel.com/kabumori?upgradeToPro=build-rate-limit Deployment rate limited — retry in 24 hours.`
+- 直前のG2 Report（Addendum、約2026-09-24 04:00 UTC時点で同一headに対して確認された失敗）と**同一のブロッカー**であることを確認した。今回の観測時刻は06:41 UTCで、経過は約2時間50分。「retry in 24 hours」の猶予にはまだ遠く及ばない。
+- TASK指示「Do not repeatedly force empty retriggers if the provider is still rate-limited」に従い、**空commitでの再トリガーは行わなかった**。
+- 結論：Vercel checkは依然failureのため、**ここでSTOPして変化なしのブロッカーを報告する**。
+
+### Scope B〜E
+
+- 未実施。Vercel checkがPASSしていないため、TASKの完了条件（Scope C「Vercel check PASS」が前提）に到達していない。
+- freshenは不要（apps/admin driftなし）だったため、再検証（node tests / tsc / lint / build）も実施していない。直近の有効な検証結果は、現在のPR head `b044425` に対してG2が実施した以下の結果のまま:
+  - node tests: 31/31 pass
+  - `npx tsc --noEmit`: PASS
+  - `npm run lint`: PASS
+  - `npm run build`: PASS（dummy public Supabase envのみ）
+  - `git diff --check`: PASS
+  - secret scan: 0 hit
+  - apps/admin diffはreviewed candidate（`6c23227`）と意味差分0
+
+### PR #15 merge result + merge SHA
+
+- **未merge**。merge SHAなし。理由は上記Vercel gate未通過のみ。
+
+### post-merge read-back
+
+- 対象外（merge未実施）。
+
+### production Admin QA結果
+
+- 対象外（merge未実施のためproduction QAは未着手）。
+
+### production mutation詳細
+
+- **0件**。今回のセッションでdeploy・merge・DB/RPC/policy/Edge Function/Cron/OAuth/Vault/token・Vercel設定変更は一切行っていない。変更したのは自スロットのTASK file（`status: ready → in_progress`）のみ。
+- `gh pr checks` / `gh pr view` はいずれもread-only。空commitでの再トリガーも行っていない。
+
+### remaining risks
+
+1. Vercelのbuild rate limitは依然解除されていない（`upgradeToPro=build-rate-limit` の表示から、プロジェクトのビルド枠自体が逼迫している可能性がある。単純な時間経過だけでなく、Vercel側のプラン/枠の問題である可能性もこの機会に留意点として記録する）。
+2. rate limit解除まで再開できない。解除後、再度mainとの差分確認（今回同様 `apps/admin` driftが無ければfreshen不要）→ Vercel check PASS確認 → mergeの順で進める。
+3. 解除待ちの間にmainへ `apps/admin/**` の変更が入った場合は、再度drift確認・freshen・検証が必要になる。
+
+### next_recommendation
+
+- Vercelのrate limitが解除された後に、本TASKを再度 `ready` にして再開する。
+- 再開時の手順（変更なし、G2 Reportの推奨と同一）：
+  1. `apps/admin` のdriftがないことを再確認（あればfreshen＋再検証）。
+  2. `gh pr checks 15` でVercelが `pass` になったことを確認。
+  3. `gh pr merge 15 --merge --match-head-commit <verified head>` でmerge。
+  4. post-merge read-back（reviewed 18ファイルの存在確認、無関係差分無し確認、DB/RPC/policy/Edge/Cron/OAuth/Vault/token無変更の確認）。
+  5. production Admin QA（brand切替、データ非混在、tampered selectorのfail-closed、AI Labでtoggle非表示、Important NewsがKabumori限定であることの確認）。
+- 24時間の目安であれば次の自然な再確認は本日 2026-09-25 04:00 UTC以降が妥当。ただしVercel側の表示が単純なtime-based rate limitではなくプラン起因の可能性もあるため、次回もまずfailureメッセージの文言変化（時間ベースか、upgrade訴求のままか）を確認することを推奨する。
+
+### safety_checks
+
+- deploy対象・DB migration・RPC・policy・Edge Function・Cron・OAuth・Vault・token変更：0件。
+- `apps/admin` 以外のファイルは一切変更していない（自スロットのTASK fileを除く）。
+- 他スロット（G1/G2/G3/H1/H2）の未コミット変更・TASK/Reportには触れていない。
+- 空commitでのVercel再トリガーは行っていない（TASK禁止事項を遵守）。
+- 共有control file（PROJECT_RULES.md / ORCHESTRATION.md / CURRENT_STATE.md / ACTIVE_TASK.md）は今回一切編集していない。
