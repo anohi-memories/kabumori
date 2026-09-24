@@ -9,6 +9,12 @@ const VALID = {
   EXPO_PUBLIC_KABUMORI_WEB_URL: "https://kabumori.example.com",
 };
 
+const legacyAnonPayload = btoa(JSON.stringify({ role: "anon" }))
+  .replace(/=/g, "")
+  .replace(/\+/g, "-")
+  .replace(/\//g, "_");
+const LEGACY_ANON_KEY = `e30.${legacyAnonPayload}.signature`;
+
 test("no problems when every value is set and well-formed", () => {
   assert.deepEqual(verifyProductionEnv(VALID), []);
 });
@@ -25,9 +31,37 @@ test("a malformed Supabase URL is rejected, not just an empty one", () => {
   assert.ok(problems.some((problem) => problem.startsWith("EXPO_PUBLIC_SUPABASE_URL")));
 });
 
-test("a placeholder-looking key is rejected", () => {
-  const problems = verifyProductionEnv({ ...VALID, EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "x" });
+test("a long arbitrary key string is rejected", () => {
+  const problems = verifyProductionEnv({
+    ...VALID,
+    EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "this-is-not-a-supabase-key-but-is-long-enough",
+  });
   assert.ok(problems.some((problem) => problem.startsWith("EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY")));
+});
+
+test("a legacy anon JWT remains accepted", () => {
+  assert.deepEqual(
+    verifyProductionEnv({ ...VALID, EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: LEGACY_ANON_KEY }),
+    [],
+  );
+});
+
+test("secret keys and service_role JWTs are rejected", () => {
+  const secretKey = verifyProductionEnv({
+    ...VALID,
+    EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_secret_aaaaaaaaaaaaaaaaaaaaaaaa",
+  });
+  const serviceRolePayload = btoa(JSON.stringify({ role: "service_role" }))
+    .replace(/=/g, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
+  const serviceRoleJwt = verifyProductionEnv({
+    ...VALID,
+    EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: `e30.${serviceRolePayload}.signature`,
+  });
+
+  assert.ok(secretKey.some((problem) => problem.startsWith("EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY")));
+  assert.ok(serviceRoleJwt.some((problem) => problem.startsWith("EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY")));
 });
 
 test("a web URL with a path is rejected the same way an empty one is", () => {

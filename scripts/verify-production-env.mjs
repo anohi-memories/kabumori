@@ -28,8 +28,24 @@ function checkSupabaseUrl(value) {
 
 function checkPublishableKey(value) {
   if (!value) return 'is not set';
-  if (value.trim().length < 20) return 'looks too short to be a real key';
-  return null;
+  const key = value.trim();
+  if (key.length < 20) return 'looks too short to be a real key';
+  if (/^sb_publishable_[A-Za-z0-9_-]+$/.test(key)) return null;
+  if (isLegacyAnonKey(key)) return null;
+  return 'does not look like a Supabase publishable or legacy anon key; secret/service_role keys must not be used';
+}
+
+function isLegacyAnonKey(key) {
+  const parts = key.split('.');
+  if (parts.length !== 3 || parts.some((part) => !/^[A-Za-z0-9_-]+$/.test(part))) return false;
+
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')));
+    return payload?.role === 'anon';
+  } catch {
+    return false;
+  }
 }
 
 function checkWebUrl(value) {

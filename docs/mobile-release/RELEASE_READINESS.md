@@ -13,7 +13,7 @@ marked **source-complete** needs a person, an account, or a production setting.
 | Public pages: `/privacy`, `/terms`, `/support`, `/account-deletion`, `/` | `apps/kabumori-web` |
 | In-app links to privacy / terms / support, from one origin | `src/lib/legal-links.ts` (`EXPO_PUBLIC_KABUMORI_WEB_URL`) |
 | Production build number auto-increment | `eas.json` → `build.production.autoIncrement` |
-| Home-screen / App Store display name is 「かぶモリ」 | `app.json` → `expo.name` |
+| Home-screen app display name is 「かぶモリ」 | `app.json` → `expo.name` |
 | Production-env preflight, checked by hand or CI before `eas build --profile production` | `scripts/verify-production-env.mjs` (`npm run verify-production-env`) |
 
 The privacy page describes the data flows as implemented today, audited from source:
@@ -39,6 +39,8 @@ For the native build:
 
 | Variable | Meaning |
 | --- | --- |
+| `EXPO_PUBLIC_SUPABASE_URL` | the Supabase project API URL used by the app client |
+| `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | the client-side publishable key; never use a secret or `service_role` key |
 | `EXPO_PUBLIC_KABUMORI_WEB_URL` | the published https origin of `apps/kabumori-web`, with no path |
 
 **The legal text is a factual first draft, not legal advice.** Have the operator, and ideally a professional, review it before publication.
@@ -48,8 +50,8 @@ For the native build:
 | # | Finding | Why it matters | Needs |
 | --- | --- | --- | --- |
 | A1 | **`app.json`'s app icon (`assets/images/icon.png`, also used for `ios.icon` via the Icon Composer bundle `assets/expo.icon`) and the native splash background (`#208AEF`, the Expo brand blue) are the Expo template artwork, not a Kabumori mark.** | The App Store listing and the home screen icon would show Expo's default template, not Kabumori. | Kabumori icon and splash artwork (design decision — see exact specs below) |
-| A1b | **Worse than A1: `src/components/animated-icon.tsx`'s `AnimatedSplashOverlay`, rendered by every launch (`src/app/_layout.tsx`), actively displays `assets/images/expo-logo.png` — Expo's own wordmark — over a `#208AEF` gradient, animated in and out.** Confirmed by reading the component, not inferred from the filename. | This is not an unused leftover: it is live, in-app UI shown to every user, every time the app opens. | Replace with a Kabumori equivalent once artwork exists (see below); this file is unchanged in this task per the "do not generate artwork" rule |
-| A2 | **Production builds have no Supabase configuration.** `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` exist only in the git-ignored local `.env`, which EAS cloud builds do not receive. `src/lib/supabase.ts` asserts them non-null, so a build without them does not run — it crashes on launch (`Error: supabaseUrl is required`, reproduced while export-smoke-testing this repo). | Not "silent" — the app cannot open at all. | Create them, plus `EXPO_PUBLIC_KABUMORI_WEB_URL`, as EAS environment variables for the `production` environment. They are public values. `npm run verify-production-env` checks all three are set and well-formed before a build is started. |
+| A1b | **On normal launches, `src/app/_layout.tsx` renders `AnimatedSplashOverlay` after auth loading; a recovery-link route takes precedence. The overlay displays `assets/images/expo-logo.png` — Expo's own wordmark — over a `#208AEF` gradient, animated in and out.** Confirmed by reading the component, not inferred from the filename. | This is live in-app UI, not an unused leftover, and appears during normal startup. | Replace with a Kabumori equivalent once artwork exists (see below); this file is unchanged in this task per the "do not generate artwork" rule |
+| A2 | **The repository does not provide or enforce EAS production values.** `src/lib/supabase.ts` creates the client during app startup from `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; absent build-time values cause startup failure (`supabaseUrl is required` was reproduced in the prior export smoke). The legal-web URL instead fails soft and shows a preparation message. | EAS can still produce a build if the operator has not configured its production environment; the missing Supabase values prevent the app from starting. | Set all three values in EAS's `production` environment. The verifier checks only the current process environment, does not read remote EAS values, and is manual/CI-only; it does not automatically gate `eas build`. |
 | A3 | ~~Home-screen name is `kabumori`~~ **Fixed in this task**: `expo.name` is now 「かぶモリ」. `slug`, `scheme` and `bundleIdentifier` are untouched. | — | done |
 | A4 | `submit.production` is empty. | `eas submit` will prompt for the App Store Connect app, Apple ID and team. | Fill in once the App Store Connect record exists |
 | A5 | Export compliance (`ITSAppUsesNonExemptEncryption`) is not declared. | Every upload asks the question. The app only uses the OS's HTTPS, which is normally exempt, but this is a legal declaration. | The operator confirms, then set `ios.config.usesNonExemptEncryption: false` |
@@ -77,6 +79,7 @@ Checked and fine as-is:
 5. **EAS production environment variables**, verified locally first with `npm run verify-production-env`.
 6. **App Store Connect:**
    - app record
+   - set the localized App Store product name to 「かぶモリ」 (separate from the home-screen name in `expo.name`)
    - Privacy Policy URL (`/privacy`) and Support URL (`/support`)
    - App Privacy questionnaire, answered consistently with `/privacy` (email and portfolio data linked to the user, no tracking)
    - age rating
