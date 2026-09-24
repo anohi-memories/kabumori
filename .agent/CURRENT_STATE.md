@@ -32,10 +32,10 @@
 ## Current slot snapshot
 
 - H1: `done` — `kabumori-release-pr18-privacy-dataflow-eas-light-review-20260924`
-- H2: `ready` — `kabumori-pr19-report-detail-portfolio-privacy-final-review-20260924`
+- H2: `done` — `kabumori-pr19-report-detail-portfolio-privacy-final-review-20260924`
 - G1: `ready` — `kabumori-release-branding-eas-preflight-20260924`
   - PR #18 merged at reviewed head `6f32776` -> main `a41b306`. Files byte-identical; 108/0 tests, tsc src 0, web export 10 routes, public-site preview+production dry-run builds PASS. Vercel ignored per Netlify hosting policy. Mutation 0.
-- G2: `done` — `kabumori-app-morning-close-report-detail-and-portfolio-impact-20260924`
+- G2: `ready` — `kabumori-pr19-merge-postmerge-verify-20260924`
 - G3: `ready` — `x-autopost-phase1e-exact-account-credential-resolver-20260924`
 - G4: `done` — `x-admin-netlify-deploy-preview-pipeline-20260924`
 
@@ -109,6 +109,17 @@
 - 151/0 tests; deno check/lint PASS; no new src TypeScript errors; production mutation=0.
 - Codex review required before merge due LLM validation, user-bound morning lookup, and portfolio privacy boundaries.
 - H2 has now been assigned the PR #19 review after C2 closed the Phase1D review.
+
+## C2 PR #19 result
+
+- verdict: **PASS-WITH-FIX**.
+- reviewed PR #19 head: `7dcf41c5714d620c41b3077376b9f5febbd129b2`.
+- H2 fixed missing-value/change display; 49/49 focused tests PASS.
+- privacy/user-boundary and morning-to-close isolation PASS.
+- scheduled cohort remains users with active tracked_stocks; zero-tracked users are outside this task. Watch-only users cover the no-holdings market-only case.
+- semantic evidence relevance remains future hardening, not a merge blocker.
+- G2 assigned fresh-main integration + merge/post-merge verification.
+- production mutation=0.
 
 ## C2 Phase1D result
 
