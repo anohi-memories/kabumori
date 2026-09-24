@@ -12,6 +12,13 @@
 - Claudeが5時間利用制限に到達した場合に限り、ChatGPTの判断でCodexへ臨時実装を割り当ててよい。
 - 並行作業はtask_idと変更対象が安全に分離されている場合だけ許可する。
 
+### 固定ルーティング（2026-09-24〜）
+
+- `G1` / `G2`: かぶモリアプリ（モバイルアプリ本体）開発
+- `G3` / `G4`: X自動投稿アプリ開発
+- ユーザーから個別TASKについて明示指示がある場合はその指示を優先する。
+- Codex（H1/H2）はアプリ別に固定しない。原則レビュー・バグ修正・検証を担当する。
+
 ## タスク正本
 
 - Codex H1: `.agent/tasks/CODEX_TASK.md` / `.agent/CODEX_REPORT.md`
@@ -154,3 +161,20 @@ Reportにはtask_id、result、changed_files、tests、commit_hash、push、depl
 Claude実装 → ChatGPT完了確認 → ChatGPTがレビュー要否判断 → 必要なら空きH枠へCodexレビュー/バグ修正 → ChatGPT確認 → 必要ならClaudeへ差し戻し → 最終確認 → deploy
 
 小規模・低リスク変更ではCodexレビューを省略してよい。高リスク変更では複数回レビューを入れてよい。
+
+## モデル運用（2026-09-24〜）
+
+Claude向けTASKには推薦モデルを併記する。候補:
+
+- Sonnet5（中）
+- Sonnet5（高）
+- Sonnet5（極高）
+- Opus5.5（中）
+- Opus5.5（高）
+- Opus5.5（極高）
+
+Sonnet5で安全に処理できる作業はSonnet5を優先する。設計判断、複数レイヤーにまたがる変更、認証/権限、DB/RPC/Edge Function、高リスクなproduction変更などはOpus5.5を使用する。
+
+## MICおよびその他案件
+
+G1〜G4に安全な空き枠がない場合、既存スロットへ無理に割り込ませない。その場合はChatGPTが直接コピーしてClaudeへ渡せる完成指示を作る。

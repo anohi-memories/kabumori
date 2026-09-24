@@ -10,13 +10,34 @@
 
 ## Codex / Claude の短縮開始コード
 
-このプロジェクトでは、単独の `H1` / `H2` / `G1` / `G2` は見出し指定や一般文字列ではなく、実装スロット開始コードとして扱う。意味をユーザーに聞き返さない。
+このプロジェクトでは、単独の `H1` / `H2` / `G1` / `G2` / `G3` / `G4` は見出し指定や一般文字列ではなく、実装スロット開始コードとして扱う。意味をユーザーに聞き返さない。
 
 - Codexに `H1` とだけ送られた場合: Codex slot 1。`.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、`.agent/tasks/CODEX_TASK.md` を確認し、TASKが `ready` または `in_progress` のときだけ作業開始する。
 - Codexに `H2` とだけ送られた場合: Codex slot 2。`.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、`.agent/tasks/CODEX_TASK_2.md` を確認し、TASKが `ready` または `in_progress` のときだけ作業開始する。
 - `H1` / `H2` が `idle` / `done` / `review_required` の場合は勝手に新規作業を作らない。
-- Claude Codeに `G1` とだけ送られた場合は `.agent/tasks/CLAUDE_TASK_1.md`、`G2` は `.agent/tasks/CLAUDE_TASK.md` を自分のTASKとして扱う。
+- Claude Codeに `G1` は `.agent/tasks/CLAUDE_TASK_1.md`、`G2` は `.agent/tasks/CLAUDE_TASK.md`、`G3` は `.agent/tasks/CLAUDE_TASK_3.md`、`G4` は `.agent/tasks/CLAUDE_TASK_4.md` を自分のTASKとして扱う。TASKが `ready` または `in_progress` のときだけ作業開始する。
+- 完了確認コードは Codex が `C1`/`C2`、Claude が `K1`/`K2`/`K3`/`K4`（各Gスロットに対応）。
 - 並行作業・完了コード・競合防止の詳細は `.agent/ORCHESTRATION.md` に従う。
+
+## 固定ルーティング（2026-09-24〜）
+
+- `G1` / `G2`: かぶモリアプリ（モバイルアプリ本体）開発
+- `G3` / `G4`: X自動投稿アプリ開発
+- ユーザーから個別TASKについて明示指示がある場合はその指示を優先する。
+- Codex（H1/H2）はアプリ別に固定せず、原則レビュー・バグ修正・検証を担当する。Claudeが5時間利用制限に到達した場合のみ、ChatGPTの判断でH1/H2へ臨時実装を割り当てることがある。
+
+## モデル運用
+
+Claude向けTASKには推薦モデルを併記する。候補:
+
+- Sonnet5（中）
+- Sonnet5（高）
+- Sonnet5（極高）
+- Opus5.5（中）
+- Opus5.5（高）
+- Opus5.5（極高）
+
+Sonnet5で安全に処理できる作業はSonnet5を優先する。設計判断、複数レイヤーにまたがる変更、認証/権限、DB/RPC/Edge Function、高リスクなproduction変更などはOpus5.5を使用する。
 
 ## 作業開始時
 
