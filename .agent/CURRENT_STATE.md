@@ -32,14 +32,24 @@
 ## Current slot snapshot
 
 - H1: `ready` — `x-autopost-phase1e-auth-secret-provider-final-review-20260924`
-- H2: `done` — `kabumori-pr19-report-detail-portfolio-privacy-final-review-20260924`
-- G1: `review_required` — `kabumori-release-branding-eas-preflight-20260924`
+- H2: `ready` — `kabumori-pr21-branding-eas-preflight-final-review-20260924`
+- G1: `done` — `kabumori-release-branding-eas-preflight-20260924`
   - PR #21 open (unmerged): expo.name -> かぶモリ (slug/scheme/bundleId untouched); scripts/verify-production-env.mjs preflight; RELEASE_READINESS.md corrected/expanded. 114/0 tests, tsc src 0.
   - New finding A1b: AnimatedSplashOverlay renders Expo's logo on every launch (not just the static app.json icon/splash). No artwork generated; exact specs documented for the operator.
   - Confirmed: missing Supabase env vars crash the app on launch, not a silent degrade. Production mutation 0.
 - G2: `in_progress` — `kabumori-pr19-merge-postmerge-verify-20260924`
 - G3: `done` — `x-autopost-phase1e-exact-account-credential-resolver-20260924`
 - G4: `done` — `x-admin-netlify-deploy-preview-pipeline-20260924`
+
+## K1 PR #21 result
+
+- G1 implementation PASS for PR #21 at head `db5143fe399df25902739f4c60a07af712c3743a`.
+- display name -> 「かぶモリ」; slug/scheme/bundleIdentifier unchanged.
+- production env preflight added; 114/114 tests PASS; src TypeScript 0; Expo export 10 routes PASS.
+- A1/A1b confirmed: static icon/splash and launch-time AnimatedSplashOverlay still expose Expo branding.
+- no official Kabumori artwork found; none generated.
+- production mutation=0.
+- H2 independent light review required before merge; recommended Luna（高）.
 
 ## K1 PR #18 merge result
 
