@@ -1,3 +1,43 @@
+# H2 — PR #19 report detail / portfolio privacy final review (2026-09-24)
+
+- task_id: `kabumori-pr19-report-detail-portfolio-privacy-final-review-20260924`
+- status: `review_required`; next_owner: `chatgpt`
+- verdict: **FAIL / hold merge pending product-scope resolution.** The source and privacy review found no cross-user data path, but the advertised zero-tracked-user market-only case is unreachable from the scheduled handler. H2 fixed one independent missing-market-value display defect; this does not resolve the cohort gap.
+- fresh_main_sha: `188b16541a13998e5ff32501e52082b94e3251fe` at task re-read; latest pre-report/push base: `e60ad3b3e633841cb42debe616bacb7db1ded129`.
+- reviewed_pr: #19, branch `g2-app-report-detail-portfolio-impact-20260924`, initial K2 head `acbc1b6ceac04d978b7fe6fb8e3d266734d3826a`; review fix `7dcf41c5714d620c41b3077376b9f5febbd129b2` was pushed as a fast-forward. GitHub read-back: PR OPEN, unmerged, head exactly `7dcf41c...`.
+- merge: **not performed**. Production deploy/mutation: **0**.
+
+## Findings
+
+1. **P1 — zero-tracked-user market-only report is unreachable (merge blocker if this is in scope).** `personalized-reports/index.ts` builds `byUser` exclusively from active `tracked_stocks`, derives `userIds` only from those keys, and returns before report generation when the list is empty. `report_logic.ts` and its new test allow an empty snapshot when shared market data exists, but that state cannot be reached by the scheduled handler for a user with no active holding or watch row. Users with a watch row but no holdings are included. There is no safe source/cohort decision in this PR for users with zero tracked rows; deciding whether to enumerate alert settings/profiles changes targeting, cost, and consent semantics. Clarify the intended cohort and add a scoped integration test before claiming zero-tracked-user coverage.
+2. **P2 — fixed missing value with fresh change.** `metricLine()` previously emitted `change_display` when `freshness="fresh"` even if `value` was missing/invalid, so the UI could show a day change beside an unavailable value. The guard now requires `showValue && freshness === "fresh"`; a malformed-fresh fixture verifies both value and change remain absent. Fix commit: `7dcf41c5714d620c41b3077376b9f5febbd129b2`.
+3. **P2 residual — evidence relevance is semantic, not fully deterministic.** `allowedBasis()` exposes `market_theme`/`macro` to every holding whenever shared themes/cross-asset lines exist. Local validation ensures the basis category exists, hedge language is used, and the Fact-check prompt rejects unsupported or contradictory claims, but code does not independently prove that a particular theme/metric is relevant to each holding's sector. No concrete failing output bypass was established; C2 should decide whether the semantic Fact gate meets the intended guarantee.
+
+## Review assessment
+
+- **Privacy boundary:** the function is server-side, requires the existing cron secret, and does not expose the service-role key to the mobile client. Active tracked rows are grouped by `user_id`; each generation uses only that user's tracked rows and calls `personalized_report_news_inputs` with that same user. The prompt omits user ID/email but intentionally contains that user's ticker/company/sector and portfolio quantities/prices/position. `store:false` is set on the OpenAI request.
+- **Morning-to-close isolation:** the query is pinned to the same `user_id`, report type, trading date, completed status, and passed Fact status; returned rows are rechecked for the same user, and unknown stances are ignored. Lookup failure drops the comparison rather than failing open with another user's data. No schema/migration was added.
+- **LLM/local validation:** strict JSON schema constrains fields/enums; code validates holding coverage, unknown/duplicate tickers, allowed basis categories, inference hedging, length, numeric packet membership, advice, URLs, dates, markup, and shared-direction contradiction before the semantic Fact call. Fact failure stores no report body and therefore cannot enqueue completion push.
+- **Compatibility/UI:** `market_detail` and `holding_impacts` are optional JSON additions; legacy `stock_notes` is retained and built from the same Fact-passed text. Older bodies without `holding_impacts` use the legacy UI path. Missing/stale market data is not offered as a prompt fact; stale values are labeled in the UI. Shared-market packet is not mutated and the X formatter output remains unchanged in tests. No X queue/planner/posting files changed.
+- **Files in review fix:** `supabase/functions/personalized-reports/market_detail.ts`, `supabase/functions/personalized-reports/report_upgrade_test.ts` only; commit `7dcf41c...` pushed to PR #19. No source merge or deploy.
+
+## Tests and safety
+
+- Focused personalized-reports plus app-impact tests: **49/49 pass** with `deno test --no-check --no-lock --allow-read`.
+- `deno check` for `index.ts`, `market_detail.ts`, `report_logic.ts`: **PASS**.
+- `deno lint` for the same three files: **PASS**.
+- `git diff --check`: **PASS**.
+- Normal type-checked Deno test invocation could not start because this isolated worktree has no cached `npm:@types/node`; no dependencies were installed. Expo web export / app `tsc` were not rerun because the worktree has no Expo/TypeScript `node_modules`. G2's prior K2 run reported those checks passing at the original implementation head; H2 does not claim a fresh rerun.
+- production DB/schema/RPC/migration/Function/Cron/settings/Auth/OAuth/Vault/API/X mutation: **0**. No merge, deploy, manual API, Push, or X post. Formal checkout/unrelated workstreams were untouched.
+
+## Remaining decision / next step
+
+- C2 should decide whether a user with zero active holdings **and** zero watch rows is meant to receive a market-only personalized report. If yes, G2 needs an explicit eligible-user source and end-to-end test; do not infer eligibility from alert settings or enumerate users without product approval. If no, adjust the stated/tested zero-tracked guarantee and confirm watch-only accounts cover the accepted requirement.
+- Until that is resolved, **PR #19 is not approved to merge**. No production activation is approved by this review.
+- control changed_files: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md`.
+
+# Prior H2 reports
+
 # H2 — Phase1D claim-domain DB/RPC/concurrency final review (2026-09-24)
 
 - task_id: `x-autopost-phase1d-db-rpc-concurrency-final-review-20260924`

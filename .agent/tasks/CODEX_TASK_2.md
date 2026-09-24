@@ -3,8 +3,8 @@
 - task_id: kabumori-pr19-report-detail-portfolio-privacy-final-review-20260924
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna（極高）
 - purpose: K2 PASS済みのPR #19（朝刊/大引け詳細化＋保有株影響分析）を、LLM validation・本人データ境界・朝刊参照・既存互換性の観点で最終レビューする。production deploy/mergeは行わない。
@@ -25,6 +25,7 @@ Previous H2 task:
 PR #19:
 - branch: `g2-app-report-detail-portfolio-impact-20260924`
 - reviewed implementation head from K2: `acbc1b6ceac04d978b7fe6fb8e3d266734d3826a`
+- H2 minimal review fix pushed to PR branch: `7dcf41c5714d620c41b3077376b9f5febbd129b2`
 - state: open / unmerged
 
 Primary changed files:
