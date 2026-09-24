@@ -1,143 +1,159 @@
 # Codex Task 2
 
-- task_id: x-autopost-phase1-common-queue-idempotency-foundation-20260924
+- task_id: x-autopost-phase1b-account-bound-queue-schema-and-outcome-ledger-20260924
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: codex
 - priority: critical
 - recommended_model: GPT-6 Sol Medium
-- purpose: Phase0c2でbrand-scoped uniquenessのproduction rolloutがC2 PASSした後の次段階として、複数ブランド/複数Xアカウント運用に必要な共通queue・idempotency・retry/outcome分類のfoundationをsource-onlyで設計・実装・disposable proofする。production mutationは0。
+- purpose: Phase1 C2で確認したsafe boundaryを解消するため、productionを一切変更せず、scheduled_postsを明示的なsocial_account_idへbindするschema/API candidateと、durable provider-attempt/outcome ledgerをsource-only + disposable PostgreSQLで設計・実装する。legacy rowの暗黙推測は禁止。
 
-## Context carried forward
+## C2 finding carried forward
 
-Production now has:
-- x-test-post v119 with brand-scoped publish_claim behavior
-- legacy global UNIQUE constraints removed
-- brand-scoped unique indexes active
-- four planner RPCs using brand-scoped scheduled_posts conflict targets
+Independent C2 production read-back confirmed:
+- scheduled_posts has brand_id/status/attempt_count but no social_account_id/account_id and no durable X outcome fields
+- post_execution_logs has brand_id/status/x_post_id/error_code but no account binding/canonical retry outcome
+- claim_due_post() globally claims oldest pending row with FOR UPDATE SKIP LOCKED
+- retry_scheduled_post() can move running -> pending without a durable provider-call phase
+- fail_scheduled_post() marks running -> failed
+- therefore current live schema cannot safely support account-scoped fairness/retry without inventing account routing or risking duplicate X posts
 
-Known next risks from the architecture audit:
-- claim_due_post() globally claims the oldest due row and has no brand fairness
-- retry/outcome states do not yet cleanly distinguish:
-  - safe pre-X retry
-  - uncertain X outcome
-  - confirmed X but DB completion failed
-  - terminal failure
-- stale running reconciliation/observability is incomplete
-- confirmed X must never be retried merely because DB completion is uncertain
-- queue/account/idempotency behavior must remain brand/account scoped
+Phase1 correctly STOPPED before source migration/RPC changes. Production mutation remained 0.
 
 ## Mandatory fresh start
 
 1. git fetch origin main
-2. fresh origin/main
-3. read ORCHESTRATION / CURRENT_STATE / this TASK / latest CODEX_REPORT_2
-4. inspect H1/G1/G2 scopes for overlap
-5. inspect current x-test-post scheduler/claim/completion/logging code and live read-only metadata
-6. identify exact tables/RPCs/functions involved before writing
+2. read ORCHESTRATION / CURRENT_STATE / this TASK / latest CODEX_REPORT_2
+3. inspect H1/G1/G2 for overlap
+4. refresh read-only production metadata for scheduled_posts, post_execution_logs, social_accounts, relevant planner RPCs, claim/retry/fail RPCs
+5. inspect all source call sites that create scheduled_posts rows and all paths that dispatch them
 
-If another slot touches x-test-post queue/claim/retry/log tables or the same migration/RPC/function files, STOP.
+If any other slot touches the same queue tables/RPCs/functions/migrations, STOP.
 
-## Scope A — current-state audit
+## Scope A — explicit account binding model
 
-Read-only/source audit:
-- claim_due_post() exact ordering/locking/claim semantics
-- scheduled_posts lifecycle/status/attempt_count fields
-- post_execution_logs write lifecycle
-- publish_claims relationship to generic scheduled posting
-- existing retry helpers and stale-running logic
-- AI Lab confirmed-X completion protection
-- existing dedupe/fingerprint tables and completion paths
-- current Cron cadence and invocation contract (read-only)
-
-Produce a concise invariant map before implementation.
-
-## Scope B — canonical outcome model
-
-Design a small shared outcome/state contract for scheduled posting that distinguishes at minimum:
-
-1. pre_x_retryable
-2. pre_x_terminal
-3. x_outcome_uncertain
-4. x_confirmed_db_incomplete
-5. completed
+Design a source-only migration candidate that introduces an explicit account binding for scheduled work.
 
 Requirements:
-- no automatic retry for x_outcome_uncertain
-- no automatic retry for x_confirmed_db_incomplete
-- confirmed X post id, when known, is preserved
-- retry eligibility is explicit and machine-testable
-- no provider response body/token/secret persistence
-- normalized stable error codes only
+- scheduled_posts gains nullable-at-first `social_account_id` (or exact equivalent only if schema conventions require another name)
+- FK to public.social_accounts.id
+- DB-level integrity that bound account.brand_id matches scheduled_posts.brand_id and account.platform='x'
+- do not rely on app-only checks for cross-brand/account integrity
+- no default account lookup
+- no `limit=1`
+- no deriving from brand_id at claim time
+- legacy rows remain explicitly unbound until a separately reviewed backfill/cutover policy exists
+- planners/callers must be audited and source candidates updated so newly planned rows can carry the intended account when trusted context exists
+- if some planner has no trustworthy account source, fail closed/document rather than infer
 
-Do not overfit to one brand.
+## Scope B — durable attempt/outcome ledger
 
-## Scope C — queue claim foundation
+Create a production-shaped source candidate for a per-attempt ledger or equivalent guarded columns that records at minimum:
+- attempt_id / claim token
+- scheduled_post_id
+- brand_id
+- social_account_id
+- phase/provider-call-started marker
+- canonical outcome:
+  - pre_x_retryable
+  - pre_x_terminal
+  - x_outcome_uncertain
+  - x_confirmed_db_incomplete
+  - completed
+- stable error_code
+- optional confirmed x_post_id
+- claimed_at / provider_started_at / finished_at or equivalent bounded timestamps
 
-Prepare source-only migration/RPC candidate and/or shared logic that:
-- keeps claims atomic with FOR UPDATE SKIP LOCKED or equivalent
-- scopes deterministic claim/idempotency identity by brand and target account where available
-- avoids one noisy brand permanently starving others
-- supports bounded concurrency/fairness without changing Cron cadence yet
-- prevents duplicate simultaneous claim of the same scheduled row
-- records enough state for stale-running reconciliation
-- fails closed on ambiguous/missing brand/account context
+Requirements:
+- no tokens/secrets/provider raw bodies
+- confirmed x_post_id preserved
+- unique/constraint model prevents double completion/duplicate attempt ambiguity
+- account/brand scope enforced at DB boundary
+- legacy execution logs remain historical; do not rewrite them in this task
 
-If exact account_id is not yet reliably available on scheduled_posts, do not invent a fake fallback. Document the minimum schema/API change required and stop at the safe boundary.
+## Scope C — versioned RPC candidates
 
-## Scope D — stale-running reconciliation
+Prepare new versioned RPCs rather than mutating live claim/retry/fail behavior in place.
 
-Design/implement source-only reconciliation logic that can classify stale running rows without causing duplicate X posts.
+Candidate operations:
+- claim next eligible work
+- mark provider call started
+- mark pre-X retryable/terminal
+- record uncertain provider outcome
+- record confirmed X + DB-incomplete
+- complete confirmed X
+- reconcile stale pre-X attempts only when durable phase proves provider not started
 
-At minimum prove:
-- pre-X stale work can become retryable under strict conditions
-- rows with uncertain provider outcome do not auto-retry
-- rows with confirmed X id but incomplete DB completion become repair/manual-reconcile, not republish
-- terminal failures stay terminal unless explicitly reset by an operator path not built in this task
+Requirements:
+- SECURITY DEFINER only where necessary
+- fixed search_path
+- service_role-only EXECUTE for privileged queue operations
+- fail closed on missing/mismatched brand/account
+- FOR UPDATE SKIP LOCKED or equivalent for atomic claims
+- no automatic reclaim of uncertain/confirmed-X states
+- old live RPCs remain unchanged/unapplied
 
-## Scope E — disposable PostgreSQL proof
+## Scope D — fairness design
 
-Use fake-only PostgreSQL fixtures to prove:
-- two brands with due work can both make progress under the proposed claim policy
-- same row cannot be claimed twice concurrently
-- brand isolation
-- retryable pre-X row can re-enter safely
-- uncertain-X row cannot be reclaimed
-- confirmed-X/db-incomplete row cannot be republished
-- stale reconciliation transitions only the allowed categories
-- rollback/cleanup leaves no residue
+Implement a source candidate that demonstrates bounded fairness across explicit (brand_id,social_account_id) queues.
 
-No production data writes.
+Acceptable strategies:
+- round-robin/last-served cursor
+- per-account oldest eligible followed by global bounded selection
+- another deterministic scheme with proof
 
-## Scope F — tests
+Must prove:
+- one noisy brand/account cannot permanently starve another
+- no same-row double claim
+- deterministic/account-scoped behavior
+- no Cron cadence change required yet
 
-Add focused tests for:
-- outcome classification
-- retry gating
-- no-double-claim
-- fairness/bounded selection
-- stale reconciliation
-- confirmed-X no-retry invariant
-- brand/account fail-closed behavior
-- exact migration/static assertions
+## Scope E — legacy row cutover plan
 
-Run relevant x-test-post regression and git diff --check.
+Do NOT backfill production.
 
-## Explicit non-goals / forbidden
+Produce a precise plan that classifies existing scheduled_posts rows:
+- terminal/succeeded historical rows that need no routing
+- pending/running future/live rows requiring explicit mapping
+- rows that cannot be mapped with high confidence
+
+State exactly what evidence would be required for any future backfill. No implicit "one account per brand" shortcut.
+
+## Scope F — disposable PostgreSQL proof
+
+Fake-only proof must cover:
+- FK/account-brand/platform integrity
+- two brands/two accounts making progress
+- no double claim under concurrent workers
+- unbound row is not claimable by new RPC
+- mismatched brand/account rejected
+- provider-started attempt cannot be auto-retried
+- uncertain outcome cannot be reclaimed
+- confirmed-X/db-incomplete cannot be republished
+- pre-X retryable can safely re-enter within cap
+- stale reconciliation only touches durable pre-X phase
+- rollback/cleanup
+
+## Scope G — tests
+
+Add focused static/unit/migration tests and run relevant x-test-post regression.
+
+Report exact counts. No X API call.
+
+## Forbidden
 
 - production migration apply
+- production DDL/DML/backfill
 - Function deploy
 - Cron change
 - OAuth/Vault/token mutation
 - X API call/post/media/repost
-- Netlify/Vercel change
 - apps/admin/**
-- G2 brand selector/query parameterization
-- generic token-router implementation
-- account onboarding/OAuth changes
+- Netlify/Vercel change
 - blind db push/history repair
-- broad x-test-post rewrite unrelated to queue/idempotency
+- live RPC replacement
+- account routing inferred from brand_id
 
 ## Production mutation budget
 
@@ -148,21 +164,5 @@ Run relevant x-test-post regression and git diff --check.
 When complete:
 - status -> review_required
 - next_owner -> chatgpt
-- update CODEX_REPORT_2
-
-Report:
-1. fresh source commit
-2. current queue invariant map
-3. proposed outcome model
-4. exact claim/fairness design
-5. stale reconciliation design
-6. migration/RPC/source candidate paths
-7. disposable proof results
-8. tests/regression counts
-9. changed files
-10. production mutation=0 proof
-11. remaining blocker for account-scoped routing if any
-12. exact next production/source gate
-13. commit/push/fresh-origin verification
-
-Then STOP for C2.
+- update CODEX_REPORT_2 with exact schema/RPC candidates, call-site audit, planner coverage, legacy cutover plan, disposable proof, tests, changed files, commit/push/fresh-origin, production mutation=0, and next gate
+- STOP for C2.
