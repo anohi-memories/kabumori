@@ -30,12 +30,12 @@
   - known caveat: older multibrand foundation migration-history driftが残るためblind db push / old migration replay / history repair禁止。
 
 
-- Claude slot 1: `review_required` — `kabumori-mobile-release-blockers-phase1-merge-only-20260924`
-  - PR #13 merged normally (user approved in chat after the auto-mode check stopped the first attempt). Resulting main `f7ace17336c29edec49bb8daa0f95116a30d42fb`.
-  - All 25 reviewed files byte-identical to reviewed head `8b78ecc2`; 94/0 tests on merged main.
-  - Production read-only: `account-delete` absent from functions list; `public.ensure_my_profile` absent (catalog count 0); migration `20260924100000` unapplied. Production mutation 0.
-  - Apply the migration before shipping any build from this main: the app now calls `ensure_my_profile` on every session.
-  - Next: K1, then separately approved migration apply + `account-delete`-only deploy + Auth redirect allowlist.
+- Claude slot 1: `done` — `kabumori-mobile-release-blockers-phase1-merge-only-20260924`
+  - K1 PASS. PR #13 merged as `f7ace17336c29edec49bb8daa0f95116a30d42fb`.
+  - 25 reviewed files byte-identical; merged-main regression 94/0 PASS.
+  - Production mutation 0. `ensure_my_profile` migration unapplied; `account-delete` undeployed; Auth redirect allowlist unchanged.
+  - Do not ship a mobile build from this main before applying `20260924100000_ensure_my_profile.sql`.
+  - Next production phase requires separate approval.
 
 - Claude slot 2: `done` — `x-admin-netlify-thin-control-plane-phase1-merge-only-20260924`
   - K2 PASS。Phase1 admin candidateをfreshen/rebase後、PR #14としてmerge。
