@@ -18,7 +18,8 @@ The privacy page describes the data flows as implemented today, audited from sou
 
 - Supabase stores the account and the app data.
 - Expo Push and APNs deliver notifications.
-- OpenAI receives the portfolio fields used to write personalized reports: ticker, name, sector, holding or watch, quantity, average cost, cash or margin, long or short, and derived P/L. It receives no email, user id, memo or target price, and requests are sent with `store: false`.
+- OpenAI receives the portfolio fields used to write personalized reports: ticker, name, sector, holding or watch, quantity, average cost, cash or margin, long or short, and derived P/L, plus related news headlines/summaries and public market data/analysis. It receives no email, user id, memo or target price. Requests use `store: false`, which disables Responses API application-state storage, not abuse-monitoring logs; OpenAI's default abuse-monitoring retention may keep prompts and responses for up to 30 days, subject to applicable data controls ([OpenAI API data controls](https://developers.openai.com/api/docs/guides/your-data)).
+- Account deletion removes the active account and associated service data, but provider backups or security logs may retain copies for their configured retention periods.
 
 **If the report generator changes what it sends** (G2 is currently working on reports), the table in `apps/kabumori-web/pages/privacy.html` must be updated in the same PR.
 

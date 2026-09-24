@@ -99,6 +99,12 @@ test("the privacy page names every processor the app actually sends data to", ()
   }
   // The report generator does not send these; the page must not claim otherwise.
   assert.match(privacy, /メールアドレス、ユーザーID、メモ、目標価格は送信しません/);
+  assert.match(privacy, /関連ニュースの見出し・要約や公開市場データ・分析/);
+  assert.match(privacy, /store: false/);
+  assert.match(privacy, /不正利用監視ログ/);
+  assert.match(privacy, /最長30日間/);
+  assert.match(privacy, /認証基盤が発行するユーザーID/);
+  assert.match(privacy, /バックアップやセキュリティログ/);
 });
 
 test("the account deletion page describes the in-app path that exists", () => {
@@ -106,4 +112,5 @@ test("the account deletion page describes the in-app path that exists", () => {
   assert.match(pages["/account-deletion"], /「設定」/);
   assert.match(pages["/account-deletion"], /「アカウントを削除」/);
   assert.match(pages["/account-deletion"], /「アカウントを完全に削除する」/);
+  assert.match(pages["/account-deletion"], /バックアップやセキュリティログ/);
 });
