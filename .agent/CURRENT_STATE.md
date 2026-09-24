@@ -37,7 +37,7 @@
   - PR #21 open (unmerged): expo.name -> かぶモリ (slug/scheme/bundleId untouched); scripts/verify-production-env.mjs preflight; RELEASE_READINESS.md corrected/expanded. 114/0 tests, tsc src 0.
   - New finding A1b: AnimatedSplashOverlay renders Expo's logo on every launch (not just the static app.json icon/splash). No artwork generated; exact specs documented for the operator.
   - Confirmed: missing Supabase env vars crash the app on launch, not a silent degrade. Production mutation 0.
-- G2: `done` — `kabumori-pr19-merge-postmerge-verify-20260924`
+- G2: `ready` — `kabumori-personalized-reports-prod-deploy-dryrun-20260924`
 - G3: `done` — `x-autopost-phase1e-exact-account-credential-resolver-20260924`
 - G4: `done` — `x-admin-netlify-deploy-preview-pipeline-20260924`
 
@@ -113,6 +113,15 @@
 - Kabumori Expo Web Netlify Preview setup.
 - Prior reviewed code/test evidence remains preserved in the old G4/G2 reports.
 - Resume either deferred item only when needed or user explicitly asks.
+
+## G2 production rollout stage 1
+
+- assigned: `kabumori-personalized-reports-prod-deploy-dryrun-20260924`
+- authorized: deploy `personalized-reports` to production + controlled dry-run/read-only validation.
+- mandatory: `app_enabled` remains false for the entire task.
+- no cron/schema/Auth/X/cohort changes.
+- goal: observe real LLM/Fact behavior, latency/output/cost, and push safety before any gate activation.
+- recommended model: Opus5.5（高）.
 
 ## Final K2 PR #19 result
 
