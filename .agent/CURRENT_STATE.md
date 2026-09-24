@@ -14,26 +14,25 @@
 
 ## User routing preference
 
-- ユーザーから明示指定がない限り、X自動投稿・複数ブランドX運用系は H2 / G2 を使用する。
-- H1 / G1 は、かぶモリアプリ側の作業に優先して確保する。
-- 明示的なユーザー指定がある場合はその指定を優先する。
+- H2 / G2 は **X自動投稿アプリ専用**。
+- H1 / G1 は **かぶモリ本体側**を優先。
+- かぶモリ本体内のX投稿基盤・queue・dispatcher改善は、ユーザーの明示指定どおりH1/G1側で扱う。
+- ユーザーが明示的に別スロットを指定した場合はその指示を優先する。
 - 同一ファイル / migration / RPC / Edge Function / workflow / production設定の競合禁止ルールは常に優先する。
 
 ## Active workstreams
 
-- Codex slot 1: `idle`
-  - かぶモリアプリ側のCodex作業用として空けている。
-  - idleなのでユーザー指示なしに新規作業を開始しない。
-
-- Codex slot 2: `ready` — `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`
-  - Phase1C C2で判明したsplit-brain blockerを解消するsource-only prerequisite。
+- Codex slot 1: `ready` — `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`
+  - かぶモリ本体側のX投稿基盤 prerequisite。
   - legacy claimはunbound rowsのみ、v2 claimはbound rowsのみを扱うhard partition candidateを作る。
-  - active plannerのsocial_account_id authorityを分類し、trusted contextがある経路だけ明示bindingする。
+  - plannerのsocial_account_id authorityを分類し、trusted contextがある経路だけ明示bindingする。
   - retry/stale/reconcileでもclaim domainが混ざらないことをdisposable PostgreSQLで証明する。
-  - credential resolver / atomic completion / provider-step modelは後続タスクとして触らない。
   - production mutation 0。migration/deploy/Cron/OAuth/Vault/X API callは禁止。
   - Recommended model: GPT-5.6 Sol Medium。
 
+- Codex slot 2: `idle`
+  - **X自動投稿アプリ専用**として空けている。
+  - かぶモリ本体のタスクは、ユーザー明示指定なしにここへ入れない。
 
 - Claude slot 1: `ready` — `kabumori-mobile-auth-real-e2e-disposable-account-20260924`
   - かぶモリアプリ側。
@@ -47,7 +46,7 @@
 
 ## Parallel safety
 
-- H1/G1はかぶモリアプリ側、H2/G2はX自動投稿側を原則とする。
+- H1/G1はかぶモリ本体側、H2/G2はX自動投稿アプリ専用。
 - 同じファイル、DB migration、RPC、Edge Function、workflow、production設定を複数slotで同時変更しない。
 - push前にfresh `origin/main`確認。
 - 既存未コミット変更は他workstream所有として触らない。
