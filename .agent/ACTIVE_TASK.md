@@ -44,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: done
-- task_id: kabumori-mobile-recovery-pr17-merge-and-postmerge-verify-20260924
+- status: ready
+- task_id: kabumori-release-foundation-appstore-web-links-eas-audit-20260924
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: closed; Final K1 PASS
+- allocation: assigned; Kabumori App Store release foundation
 
 ## Claude G2
 - owner: claude
