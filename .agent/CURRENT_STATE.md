@@ -33,12 +33,22 @@
 
 - H1: `ready` — `x-autopost-phase1f-ledger-atomic-completion-final-review-20260924`
 - H2: `done` — `kabumori-pr23-close-validator-final-review-20260924`
-- G1: `review_required` — `kabumori-pr24-privacy-merge-postmerge-verify-20260924`
+- G1: `done` — `kabumori-pr24-privacy-merge-postmerge-verify-20260924`
   - PR #24 merged at reviewed head `46515c5` -> main `ff4c43c`. Files byte-identical; 122/0 tests, production web build shows the new disclosure text. personalized-reports/account-deletion.html untouched. Mutation 0.
   - Privacy dataflow gap from PR #21 review is now closed on main. Remaining blockers: icon/splash/overlay artwork, EAS production env, Netlify publish, Auth Site URL/SMTP, App Store Connect.
 - G2: `ready` — `kabumori-pr23-merge-redeploy-close-dryrun-20260924`
 - G3: `done` — `x-autopost-phase1f-atomic-completion-provider-outcome-model-20260924`
 - G4: `done` — `x-admin-netlify-deploy-preview-pipeline-20260924`
+
+## Final K1 PR #24 result
+
+- PASS.
+- PR #24 reviewed head `46515c56f88bb8a9f55c9e235477d660e8b8bd04` merged -> main `ff4c43c08752276a17f4124dce33a09b92749ee9`.
+- 122/122 scoped tests PASS; production web build PASS.
+- Privacy now explicitly covers portfolio-level valuation / sector composition / TOPIX-relative comparison sent to OpenAI.
+- personalized-reports and account-deletion remained untouched.
+- production mutation=0 excluding normal GitHub merge.
+- G1 is closed for now; next release task should wait for finalized artwork or operator/publication inputs.
 
 ## Final K1 PR #21 merge result
 
