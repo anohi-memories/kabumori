@@ -3,8 +3,8 @@
 - task_id: kabumori-mobile-recovery-deeplink-routing-fix-and-e2e-resume-20260924
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: critical
 - recommended_model: Opus 5.5
 - purpose: K1で確認した mobile recovery deep-link の Unmatched Route blockerを最小修正し、既存の同一disposable test accountで残りE2Eを完了する。
@@ -132,3 +132,41 @@ PR: https://github.com/anohi-memories/kabumori/pull/17
 2. The confirmation (and recovery) redirect lands on an unreachable Site URL (from the previous report).
 3. Privacy / terms / support URLs are still undecided.
 4. PR #17: K1 review, then merge. After that, finish the E2E resume above.
+
+
+## K1 review — 2026-09-24
+
+Result: **SOURCE FIX APPROVED / FULL E2E NOT YET PASS**.
+
+Reviewed PR #17 at head `7dc5c9ae2b5c5dea626c8a21bc2bc7c18c724a43`.
+
+Accepted source evidence:
+- only 3 files changed: `src/app/+native-intent.tsx`, `src/lib/password-recovery.ts`, `tests/app/recovery-routing_test.ts`
+- recovery system paths are redirected to the valid root route so the existing recovery gate can render
+- original recovery URL data remains available to the existing recovery hook
+- unrelated/unknown routes pass through unchanged
+- no visible tab/route was added
+- focused/auth tests: 98 passed / 0 failed
+- TypeScript src scope: 0 errors
+- Expo web export: PASS, 10 routes unchanged
+- git diff --check: PASS
+- no production mutation from the source fix
+
+PR state:
+- PR #17 remains open and unmerged
+- Vercel status is failure only because of the repository deployment free-tier rate limit
+- do not bypass that check merely to merge
+
+E2E status:
+- Gate C real-device retest is still pending because Supabase built-in email sending rate-limited the reset request
+- Gate D account deletion and Gate E final regression are still pending
+- same disposable account must be reused; do not create another account
+
+Resume:
+- keep this same task
+- after the email rate limit clears, retry Gate C on the real iPhone using the same account
+- if Gate C passes, continue directly to Gate D and Gate E
+- after full E2E passes, return to `review_required` / `next_owner: chatgpt` for final K1
+- PR #17 merge remains gated by successful required checks and final fresh-main review
+
+No Auth Site URL/SMTP/config change is authorized by this K1.
