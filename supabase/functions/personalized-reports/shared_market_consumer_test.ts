@@ -77,6 +77,9 @@ test("the shared analysis is passed as read-only context with its own instructio
     summary: SECTION.market_summary_ja,
     points: ["日経平均は+0.33%でした。"],
     next_watch: ["今夜の米国株"],
+    tailwind_themes: [],
+    headwind_themes: [],
+    cross_asset: [],
   });
   const instructions = String(reportDraftRequestBody("close", packet).instructions);
   assert.ok(instructions.includes("shared_market と矛盾する方向"));
@@ -95,7 +98,11 @@ test("portfolio text cannot contradict the shared market direction", () => {
   const body: ReportBody = {
     title_ja: "今日のポート", summary_ja: "保有は上昇しました。", tone: "positive",
     overview_ja: "市場全体が下落するなか、保有銘柄は上昇しました。",
-    stock_notes: [{ ticker_code: "4751", note_ja: "サイバーエージェントは上昇しました。" }],
+    holding_impacts: [{
+      ticker_code: "4751", stance: "no_clear_material", basis: [],
+      fact_ja: "サイバーエージェントは上昇しました。", inference_ja: "", watch_ja: "",
+    }],
+    morning_review_ja: "",
     watch_notes: [], risk_notes_ja: [], checkpoints_ja: ["明日の値動き"],
   };
   assert.ok(localReportIssues(body, snapshot(), packet).includes("CONTRADICTS_SHARED_MARKET:SAID_DOWN"));
@@ -106,7 +113,7 @@ test("the stored body carries the shared market section verbatim; legacy body un
     status: "passed",
     body: {
       title_ja: "t", summary_ja: "s", tone: "neutral", overview_ja: "o",
-      stock_notes: [], watch_notes: [], risk_notes_ja: [], checkpoints_ja: ["c"],
+      holding_impacts: [], morning_review_ja: "", watch_notes: [], risk_notes_ja: [], checkpoints_ja: ["c"],
     },
     issues: [], error: null, model: "gpt-6-luna", calls: 2, inputTokens: 1, outputTokens: 1, estimatedCost: 0,
   };

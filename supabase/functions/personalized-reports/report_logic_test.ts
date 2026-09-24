@@ -22,6 +22,7 @@ import {
   unsupportedMultiDayWords,
   type NewsInput,
   type PriceSeries,
+  type HoldingImpact,
   type ReportBody,
   type Requester,
   type TrackedInput,
@@ -251,13 +252,21 @@ test("packet carries only Fact-passed news text and preformatted numbers", () =>
 
 // --- local checks ---------------------------------------------------------
 
+function impact(ticker: string, overrides: Partial<HoldingImpact> = {}): HoldingImpact {
+  return { ticker_code: ticker, stance: "no_clear_material", basis: [], fact_ja: "上昇しました。", inference_ja: "", watch_ja: "", ...overrides };
+}
+
 function body(overrides: Partial<ReportBody> = {}): ReportBody {
   return {
     title_ja: "保有株は上昇、TOPIX連動ETFより強い一日",
     summary_ja: "保有銘柄は前日比+10.00%でした。",
     tone: "positive",
     overview_ja: "ポートは+11,000円で、TOPIX連動ETF（1306）より強い結果でした。",
-    stock_notes: [{ ticker_code: "1111", note_ja: "終値は1,210円、前日比+10.00%でした。自己株式の取得を決定したと確認できます。" }],
+    holding_impacts: [impact("1111", {
+      stance: "tailwind", basis: ["company_news"],
+      fact_ja: "終値は1,210円、前日比+10.00%でした。自己株式の取得を決定したと確認できます。",
+    })],
+    morning_review_ja: "",
     watch_notes: [],
     risk_notes_ja: [],
     checkpoints_ja: ["自己株式取得の進み具合を確認します。"],
@@ -284,9 +293,9 @@ test("unknown tickers, advice and URLs fail the local checks", () => {
   const snapshot = closeSnapshot();
   const packet = buildPacket(snapshot, []);
   const base = body({ summary_ja: "保有銘柄は上昇しました。", overview_ja: "ポートは上昇しました。",
-    stock_notes: [{ ticker_code: "1111", note_ja: "上昇しました。" }] });
+    holding_impacts: [impact("1111")] });
   assert.deepEqual(localReportIssues(base, snapshot, packet), []);
-  assert.ok(localReportIssues({ ...base, stock_notes: [{ ticker_code: "9999", note_ja: "上昇。" }] }, snapshot, packet)
+  assert.ok(localReportIssues({ ...base, holding_impacts: [impact("9999")] }, snapshot, packet)
     .includes("UNKNOWN_HOLDING_TICKER"));
   assert.ok(localReportIssues({ ...base, watch_notes: [{ ticker_code: "1111", note_ja: "注目。" }] }, snapshot, packet)
     .includes("UNKNOWN_WATCH_TICKER"));
@@ -298,7 +307,7 @@ test("unknown tickers, advice and URLs fail the local checks", () => {
     .includes("CONTAINS_INVESTMENT_ADVICE"));
   assert.ok(localReportIssues({ ...base, overview_ja: "詳しくは https://example.com へ。" }, snapshot, packet)
     .includes("CONTAINS_URL"));
-  assert.ok(localReportIssues({ ...base, stock_notes: [] }, snapshot, packet).includes("MISSING_HOLDING_NOTES"));
+  assert.ok(localReportIssues({ ...base, holding_impacts: [] }, snapshot, packet).includes("MISSING_HOLDING_IMPACTS"));
   assert.ok(localReportIssues({ ...base, overview_ja: "2026-09-11のポートは上昇しました。" }, snapshot, packet)
     .includes("CONTAINS_ISO_DATE"));
   assert.ok(localReportIssues({ ...base, risk_notes_ja: ["セクターウェightsはサービス業です。"] }, snapshot, packet)
@@ -351,7 +360,11 @@ test("close report positive: one draft + one Fact check, stored as completed", a
   assert.equal(update.status, "completed");
   assert.equal(update.fact_status, "passed");
   assert.equal(update.title_ja, body().title_ja);
-  assert.equal((update.body as { stock_notes: unknown[] }).stock_notes.length, 1);
+  assert.equal((update.body as { holding_impacts: unknown[] }).holding_impacts.length, 1);
+  // Older app builds keep reading stock_notes, joined in code from the same Fact-passed text.
+  assert.deepEqual((update.body as { stock_notes: unknown[] }).stock_notes, [
+    { ticker_code: "1111", note_ja: body().holding_impacts[0].fact_ja },
+  ]);
 });
 
 test("morning report positive", async () => {
@@ -368,7 +381,8 @@ test("morning report positive", async () => {
     summary_ja: "目立った材料は確認できていません。",
     tone: "neutral",
     overview_ja: "前営業日の終値は1,100円でした。",
-    stock_notes: [{ ticker_code: "1111", note_ja: "目立った材料は確認できていません。" }],
+    holding_impacts: [impact("1111", { fact_ja: "明確な個別材料は確認できていません。", watch_ja: "寄り付きの値動きを確認します。" })],
+    morning_review_ja: "",
     watch_notes: [],
     risk_notes_ja: ["サービス業に偏っています。"],
     checkpoints_ja: ["寄り付きの値動きを確認します。"],
@@ -384,7 +398,7 @@ test("Fact failure stores a failed report with no text (and so no push)", async 
   const snapshot = closeSnapshot();
   const packet = buildPacket(snapshot, []);
   const draft = { ...body({ summary_ja: "上昇しました。", overview_ja: "上昇しました。",
-    stock_notes: [{ ticker_code: "1111", note_ja: "上昇しました。" }] }), sufficient_information: true };
+    holding_impacts: [impact("1111")] }), sufficient_information: true };
   const outcome = await generateReport(snapshot, packet, requester(draft, { passed: false, issues: ["因果の断定"] }));
   assert.equal(outcome.status, "failed");
   assert.equal(outcome.error, "REPORT_FACT_FAILED");

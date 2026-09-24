@@ -38,8 +38,12 @@ import {
   CLOSE_SESSION_END_MINUTES,
   priceFactFromSharedMetric,
   type SharedMarketInput,
+  morningReportPath,
+  morningStancesFromRows,
+  type Stance,
 } from "./report_logic.ts";
 import { appMarketSection, parseSharedMarketReportResult, type SharedMarketReportResult } from "../_shared/market_report_packet.ts";
+import { buildAppMarketDetail, crossAssetLines, type AppMarketDetail } from "./market_detail.ts";
 
 const jsonHeaders = { "Content-Type": "application/json; charset=utf-8" };
 const YAHOO_CHART_URL = "https://query2.finance.yahoo.com/v8/finance/chart/";
@@ -288,7 +292,24 @@ Deno.serve(async (req) => {
       return response({ status: "skipped", reason: "SHARED_MARKET_REPORT_UNAVAILABLE", reportType, tradingDate, shared: sharedReport.status });
     }
     const shared = sharedReport.enabled && sharedReport.status === "completed" ? sharedReport : null;
-    const sharedInput: SharedMarketInput | null = shared
+    // Close: the same day's shared morning analysis, for the morning→close review.
+    // Optional — a missing or failed morning packet only drops the review.
+    let morningShared: SharedMarketReportResult | null = null;
+    if (shared && reportType === "close") {
+      morningShared = await loadSharedMarketReport(db, "morning", tradingDate).catch(() => null);
+    }
+    // Built once per run in code: identical for every user, never AI-rewritten.
+    const marketDetail: AppMarketDetail | null = shared
+      ? buildAppMarketDetail({
+        reportType,
+        tradingDate,
+        reportPacketId: shared.report_packet_id,
+        report: shared.report,
+        metrics: (shared.data.metrics ?? []) as Array<Record<string, unknown>>,
+        morningPacket: morningShared?.enabled && morningShared.status === "completed" ? morningShared.report : null,
+      })
+      : null;
+    const sharedInput: SharedMarketInput | null = shared && marketDetail
       ? {
         direction: shared.report.market_direction,
         headlineJa: shared.report.headline_ja,
@@ -296,6 +317,10 @@ Deno.serve(async (req) => {
         claims: shared.report.claims,
         nextWatchJa: shared.report.next_watch_ja,
         section: appMarketSection(shared.report, shared.report_packet_id, shared.report_content_hash),
+        tailwindThemesJa: marketDetail.tailwind_themes_ja,
+        headwindThemesJa: marketDetail.headwind_themes_ja,
+        crossAssetJa: crossAssetLines(marketDetail),
+        morningWatchJa: marketDetail.morning_reference?.next_watch_ja ?? [],
       }
       : null;
 
@@ -341,8 +366,19 @@ Deno.serve(async (req) => {
           p_user_id: userId, p_since: since,
         });
         const news = (newsRows ?? []).map(toNews);
+        // Close: this user's own morning outlook (user_id pinned in the query and re-checked).
+        let morningStances = new Map<string, Stance>();
+        let morningReportId: string | null = null;
+        if (reportType === "close") {
+          // Optional: a failed lookup only drops the comparison, never the report.
+          const rows = await db.get<Array<{ id?: unknown; user_id?: unknown; body?: unknown }>>(morningReportPath(userId, tradingDate))
+            .catch(() => null);
+          const morning = morningStancesFromRows(rows, userId);
+          morningStances = morning.stances;
+          morningReportId = morning.reportId;
+        }
         const snapshot = buildSnapshot({
-          reportType, tradingDate, tracked: byUser.get(userId)!, prices, indices, news,
+          reportType, tradingDate, tracked: byUser.get(userId)!, prices, indices, news, morningStances,
         });
         const packet = buildPacket(snapshot, news, sharedInput);
         const outcome = await generateReport(snapshot, packet, requester);
@@ -351,7 +387,8 @@ Deno.serve(async (req) => {
           news_ids: snapshot.news.map((item) => item.news_id),
           price_source: "yahoo_chart_1d",
           index_symbols: INDEX_SYMBOLS.map((index) => index.symbol),
-          lane: shared ? "app_personalized_v2_shared_market" : "app_personalized_v1",
+          lane: shared ? "app_personalized_v3_market_detail" : "app_personalized_v1",
+          ...(reportType === "close" ? { morning_report_id: morningReportId } : {}),
           ...(shared
             ? {
               index_source: "market_data_packet",
@@ -362,7 +399,7 @@ Deno.serve(async (req) => {
             }
             : {}),
         };
-        const update = reportUpdate(outcome, snapshot, sourceBasis, new Date(), sharedInput?.section ?? null);
+        const update = reportUpdate(outcome, snapshot, sourceBasis, new Date(), sharedInput?.section ?? null, marketDetail);
         let notification: string = "not_attempted";
         if (!dryRun && reportId) {
           await db.patch(`personalized_reports?id=eq.${reportId}`, update);

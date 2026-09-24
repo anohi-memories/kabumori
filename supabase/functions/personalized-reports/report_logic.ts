@@ -9,8 +9,15 @@
 //     Fact-checks that commentary against the same packet.
 //   * Local checks reject unknown tickers, numbers absent from the packet,
 //     investment advice, URLs, emoji and markup before the Fact call.
+//   * Per holding, code decides which evidence exists (own news, sector-matched
+//     market news, shared market themes / cross-asset moves), how much space the
+//     holding gets, its move relative to the benchmark, and — on a close — how
+//     that compares with the same user's morning outlook. The LLM only labels a
+//     stance from evidence code says exists, and writes fact / inference / watch
+//     text that is checked against the packet.
 
 import type { AppMarketSection, MarketDirection } from "../_shared/market_report_packet.ts";
+import type { AppMarketDetail } from "./market_detail.ts";
 
 export type ReportType = "morning" | "close";
 export type TrackingType = "holding" | "watch";
@@ -186,6 +193,12 @@ export type SharedMarketInput = {
   claims: Array<{ text_ja: string; claim_type: string }>;
   nextWatchJa: string[];
   section: AppMarketSection;
+  // App enrichment (market_detail.ts): themes and preformatted cross-asset lines.
+  tailwindThemesJa?: string[];
+  headwindThemesJa?: string[];
+  crossAssetJa?: string[];
+  // Close only: the shared morning analysis' watch points, for the morning→close review.
+  morningWatchJa?: string[];
 };
 
 type SharedMetric = { key?: unknown; value?: unknown; previous_close?: unknown; change?: unknown; change_pct?: unknown; session_date?: unknown; freshness?: unknown };
@@ -218,6 +231,15 @@ const DIRECTION_JA: Record<MarketDirection, string> = {
 // Deterministic snapshot
 // ---------------------------------------------------------------------------
 
+export type Stance = "tailwind" | "headwind" | "neutral" | "no_clear_material";
+export type ImpactBasis = "company_news" | "sector_news" | "market_theme" | "macro";
+export type OutlookCheck = "matched" | "diverged" | "mixed" | "not_comparable";
+
+export const STANCES: readonly Stance[] = ["tailwind", "headwind", "neutral", "no_clear_material"];
+export const IMPACT_BASES: readonly ImpactBasis[] = ["company_news", "sector_news", "market_theme", "macro"];
+// A holding gets a detailed write-up only when there is something to say about it.
+export const RELATIVE_DETAIL_PT = 1.0;
+
 export type StockSnapshot = {
   ticker_code: string;
   company_name: string;
@@ -236,6 +258,15 @@ export type StockSnapshot = {
   top_severity: string | null;
   market_news_ids: string[];
   priority_rank: number | null;
+  // Which evidence exists for this stock (decided in code, never by the LLM).
+  evidence: { company_news: boolean; sector_news: boolean };
+  detail_level: "detailed" | "brief";
+  // Close only: the stock's day change minus the benchmark's, and its band label.
+  relative_to_benchmark_pt: number | null;
+  relative_label: "stronger" | "weaker" | "similar" | null;
+  // Close only: the same user's morning stance for this stock and how the day compared.
+  morning_stance: Stance | null;
+  outlook_check: OutlookCheck | null;
 };
 
 export type IndexSnapshot = { label: string; price: PriceFact };
@@ -279,6 +310,31 @@ function severityScore(value: string | null): number {
   return value ? SEVERITY_SCORE[value] ?? 0 : 0;
 }
 
+function bandLabel(value: number | null): "stronger" | "weaker" | "similar" | null {
+  if (value === null) return null;
+  return value >= RELATIVE_STRENGTH_BAND_PT ? "stronger" : value <= -RELATIVE_STRENGTH_BAND_PT ? "weaker" : "similar";
+}
+
+/**
+ * Morning outlook vs the close, per holding. Only a directional morning stance is
+ * comparable; the relative move vs the benchmark is used when available, else the
+ * stock's own day change.
+ */
+export function outlookCheck(
+  stance: Stance | null,
+  price: PriceFact,
+  relativePt: number | null,
+): OutlookCheck {
+  if (stance !== "tailwind" && stance !== "headwind") return "not_comparable";
+  if (price.status !== "ok" || price.changePercent === null) return "not_comparable";
+  const sign = stance === "tailwind" ? 1 : -1;
+  const move = relativePt ?? price.changePercent;
+  const band = relativePt === null ? 0 : RELATIVE_STRENGTH_BAND_PT;
+  if (sign * move > band) return "matched";
+  if (sign * move < -band) return "diverged";
+  return "mixed";
+}
+
 export function buildSnapshot(input: {
   reportType: ReportType;
   tradingDate: string;
@@ -287,6 +343,8 @@ export function buildSnapshot(input: {
   // price, when given, is the shared market_data_packet value and replaces the Yahoo series.
   indices: Array<{ label: string; series: PriceSeries | null; price?: PriceFact }>;
   news: NewsInput[];
+  // Close only: this same user's morning stances by ticker (never another user's).
+  morningStances?: ReadonlyMap<string, Stance>;
 }): PortfolioSnapshot {
   const { reportType, tradingDate } = input;
   const companyNews = input.news.filter((item) => item.tickerCode);
@@ -329,6 +387,12 @@ export function buildSnapshot(input: {
         (best, item) => severityScore(item.severity) > severityScore(best) ? item.severity : best, null),
       market_news_ids: market.map((item) => item.newsId),
       priority_rank: null,
+      evidence: { company_news: own.length > 0, sector_news: market.length > 0 },
+      detail_level: own.length > 0 || market.length > 0 ? "detailed" : "brief",
+      relative_to_benchmark_pt: null,
+      relative_label: null,
+      morning_stance: null,
+      outlook_check: null,
     };
   });
 
@@ -356,6 +420,23 @@ export function buildSnapshot(input: {
     return { label: index.label, price };
   });
 
+  const benchmark = indices.find((index) => index.label === BENCHMARK_LABEL)?.price;
+  if (reportType === "close") {
+    for (const stock of stocks) {
+      const relative = stock.price.status === "ok" && benchmark?.status === "ok" &&
+          stock.price.changePercent !== null && benchmark.changePercent !== null
+        ? round(stock.price.changePercent - benchmark.changePercent, 2)
+        : null;
+      stock.relative_to_benchmark_pt = relative;
+      stock.relative_label = bandLabel(relative);
+      if (relative !== null && Math.abs(relative) >= RELATIVE_DETAIL_PT) stock.detail_level = "detailed";
+      if (stock.tracking_type === "holding") {
+        stock.morning_stance = input.morningStances?.get(stock.ticker_code) ?? null;
+        stock.outlook_check = outlookCheck(stock.morning_stance, stock.price, relative);
+      }
+    }
+  }
+
   const valued = holdings.filter((stock) => stock.market_value !== null);
   const allValued = holdings.length > 0 && valued.length === holdings.length;
   if (holdings.some((stock) => !stock.quantity)) gaps.push("HOLDING_QUANTITY_MISSING");
@@ -373,8 +454,7 @@ export function buildSnapshot(input: {
   const unrealized = allValued && withAverage.length === holdings.length
     ? round(sum(withAverage.map((stock) => stock.unrealized_pl)), 0)
     : null;
-  const topix = indices.find((index) => index.label === BENCHMARK_LABEL)?.price;
-  const topixPercent = reportType === "close" && topix?.status === "ok" ? topix.changePercent : null;
+  const topixPercent = reportType === "close" && benchmark?.status === "ok" ? benchmark.changePercent : null;
   const relative = dayChangePercent !== null && topixPercent !== null ? round(dayChangePercent - topixPercent, 2) : null;
 
   // Sector weights: by market value when every holding is valued, else by count.
@@ -428,9 +508,7 @@ export function buildSnapshot(input: {
       benchmark_label: BENCHMARK_LABEL,
       topix_change_percent: topixPercent,
       relative_to_topix_pt: relative,
-      relative_label: relative === null
-        ? null
-        : relative >= RELATIVE_STRENGTH_BAND_PT ? "stronger" : relative <= -RELATIVE_STRENGTH_BAND_PT ? "weaker" : "similar",
+      relative_label: bandLabel(relative),
     },
     sector_weights: sectorWeights,
     top_impact: reportType === "morning" ? holdings.slice(0, 3).map((stock) => stock.ticker_code) : [],
@@ -451,10 +529,14 @@ export function buildSnapshot(input: {
   };
 }
 
-/** Reasons a report must not be generated at all (fail-safe: no report, no push). */
-export function snapshotBlockers(snapshot: PortfolioSnapshot): string[] {
+/**
+ * Reasons a report must not be generated at all (fail-safe: no report, no push).
+ * With the shared market analysis present, a user without tracked stocks still
+ * gets a valid market-wide report.
+ */
+export function snapshotBlockers(snapshot: PortfolioSnapshot, hasSharedMarket = false): string[] {
   const blockers: string[] = [];
-  if (snapshot.holdings.length === 0 && snapshot.watch.length === 0) blockers.push("NO_TRACKED_STOCKS");
+  if (snapshot.holdings.length === 0 && snapshot.watch.length === 0 && !hasSharedMarket) blockers.push("NO_TRACKED_STOCKS");
   const all = [...snapshot.holdings, ...snapshot.watch];
   if (all.length > 0 && all.every((stock) => stock.price.status !== "ok")) blockers.push("PRICES_UNAVAILABLE");
   return blockers;
@@ -506,7 +588,36 @@ const RELATIVE_TEXT = {
   similar: `${BENCHMARK_LABEL}とほぼ同じ`,
 } as const;
 
-function stockPacket(stock: StockSnapshot, reportType: ReportType, newsById: Map<string, NewsInput>) {
+export const STANCE_JA: Record<Stance, string> = {
+  tailwind: "追い風",
+  headwind: "逆風",
+  neutral: "中立",
+  no_clear_material: "明確な個別材料なし",
+};
+
+export const OUTLOOK_CHECK_JA: Record<OutlookCheck, string> = {
+  matched: "朝の見通しどおりの動き",
+  diverged: "朝の見通しと逆の動き",
+  mixed: "朝の見通しとの差は小さく、どちらとも言えない",
+  not_comparable: "朝の見通しとは比較できない",
+};
+
+/** The evidence kinds a stance may cite for this stock (decided in code). */
+export function allowedBasis(stock: StockSnapshot, shared: SharedMarketInput | null): ImpactBasis[] {
+  const basis: ImpactBasis[] = [];
+  if (stock.evidence.company_news) basis.push("company_news");
+  if (stock.evidence.sector_news) basis.push("sector_news");
+  if (shared && ((shared.tailwindThemesJa?.length ?? 0) + (shared.headwindThemesJa?.length ?? 0)) > 0) basis.push("market_theme");
+  if (shared && (shared.crossAssetJa?.length ?? 0) > 0) basis.push("macro");
+  return basis;
+}
+
+function stockPacket(
+  stock: StockSnapshot,
+  reportType: ReportType,
+  newsById: Map<string, NewsInput>,
+  shared: SharedMarketInput | null,
+) {
   const ownNews = stock.news_ids.map((id) => newsById.get(id)).filter((item): item is NewsInput => !!item);
   const marketNews = stock.market_news_ids.map((id) => newsById.get(id)).filter((item): item is NewsInput => !!item);
   return {
@@ -530,6 +641,18 @@ function stockPacket(stock: StockSnapshot, reportType: ReportType, newsById: Map
         unrealized_profit_loss_vs_average_price: stock.unrealized_pl === null
           ? null
           : `${formatSignedYen(stock.unrealized_pl)}（${formatPercent(stock.unrealized_pl_percent)}）`,
+      }
+      : {}),
+    ...(stock.tracking_type === "holding"
+      ? {
+        detail: stock.detail_level === "detailed" ? "詳しく" : "簡潔に",
+        allowed_basis: allowedBasis(stock, shared),
+        relative_to_benchmark: reportType === "close" && stock.relative_label
+          ? `${RELATIVE_TEXT[stock.relative_label]}（差 ${formatPoints(stock.relative_to_benchmark_pt)}）`
+          : undefined,
+        morning_outlook: reportType === "close" && stock.morning_stance
+          ? { stance: STANCE_JA[stock.morning_stance], check: OUTLOOK_CHECK_JA[stock.outlook_check ?? "not_comparable"] }
+          : undefined,
       }
       : {}),
     own_news: ownNews.map((item) => ({
@@ -575,8 +698,8 @@ export function buildPacket(snapshot: PortfolioSnapshot, news: NewsInput[], shar
     top_impact_holdings: snapshot.top_impact.map(nameOf),
     gainers: snapshot.gainers.map(nameOf),
     decliners: snapshot.decliners.map(nameOf),
-    holdings: snapshot.holdings.map((stock) => stockPacket(stock, snapshot.report_type, newsById)),
-    watch: snapshot.watch.map((stock) => stockPacket(stock, snapshot.report_type, newsById)),
+    holdings: snapshot.holdings.map((stock) => stockPacket(stock, snapshot.report_type, newsById, shared)),
+    watch: snapshot.watch.map((stock) => stockPacket(stock, snapshot.report_type, newsById, shared)),
     market_news: news.filter((item) => marketNewsIds.has(item.newsId)).map((item) => ({
       severity: item.severity,
       headline: item.headlineJa,
@@ -592,6 +715,10 @@ export function buildPacket(snapshot: PortfolioSnapshot, news: NewsInput[], shar
           summary: shared.summaryJa,
           points: shared.claims.map((claim) => claim.text_ja),
           next_watch: shared.nextWatchJa,
+          tailwind_themes: shared.tailwindThemesJa ?? [],
+          headwind_themes: shared.headwindThemesJa ?? [],
+          cross_asset: shared.crossAssetJa ?? [],
+          ...(close && (shared.morningWatchJa?.length ?? 0) > 0 ? { morning_watch: shared.morningWatchJa } : {}),
         },
       }
       : {}),
@@ -606,7 +733,11 @@ export const REPORT_LIMITS = {
   title: 40,
   summary: 160,
   overview: 400,
-  stockNote: 160,
+  impactFact: 160,
+  impactInference: 160,
+  impactWatch: 80,
+  impactBrief: 100,
+  morningReview: 300,
   watchNote: 120,
   riskNote: 100,
   checkpoint: 80,
@@ -628,20 +759,35 @@ const COMMON_INSTRUCTIONS = [
   "入力にあるのは1日分の値動き（当日と前日の終値）だけです。「続落」「続伸」「反発」「反落」「年初来」「最高値」のような、複数日の推移や記録を前提にする言葉は使いません。",
 ].join("\n");
 
+const IMPACT_INSTRUCTIONS = [
+  "holding_impacts は holdings の全銘柄について1件ずつ、holdings の順に書きます（holdings が空なら空配列）。",
+  "stance は tailwind（追い風）/ headwind（逆風）/ neutral（中立）/ no_clear_material（明確な個別材料なし）から選びます。",
+  "basis にはその銘柄の allowed_basis にある値だけを入れます。company_news は own_news、sector_news は related_market_news を根拠にした場合です。",
+  "tailwind / headwind には basis が1つ以上必要です。根拠が無い・弱い銘柄は無理に理由を作らず no_clear_material にし、fact_ja に「明確な個別材料は確認できていません」と書きます。",
+  "fact_ja は入力で確認できる事実だけ、inference_ja は推定だけ（必ず「〜の可能性があります」「〜と考えられます」「〜とみられます」のような推定の言い方）、watch_ja は観察ポイントだけを書き、三つを混ぜません。",
+  "inference_ja では、業種・為替・金利・原油・米国株・半導体指数と銘柄の一般的な関係に触れてよいですが、入力に無い数字・固有の事実は書かず、推定として書きます。根拠が無ければ空文字にします。",
+  "detail が「簡潔に」の銘柄は fact_ja を1文にし、inference_ja と watch_ja は空文字でかまいません。「詳しく」の銘柄を中心に書きます。",
+].join("\n");
+
 const MORNING_INSTRUCTIONS = [
-  "これは朝刊です。前営業日の終値と、前営業日の引け以降に確認できたニュースをもとに「今日どこを見ればよいか」を伝えます。",
+  "これは朝刊です。前営業日の終値と、前営業日の引け以降に確認できたニュース・海外市場・為替・金利などをもとに「保有株に今日どんな影響がありそうか・どこを見ればよいか」を伝えます。",
   "tone は材料全体の印象です。好材料が目立てば positive、悪材料や重大ニュースが目立てば cautious、どちらでもなければ neutral。断定はしません。",
-  "stock_notes は top_impact_holdings の順に、保有銘柄それぞれの主要材料と今日の注目点を書きます。材料が無い銘柄は「目立った材料は確認できていません」と短く書きます。",
+  IMPACT_INSTRUCTIONS,
+  "朝刊の stance は今日の見通しです。株価の方向を断定せず、観察ポイントとシナリオとして書きます。watch_ja には寄り付きや場中で見るべき点を書きます。",
+  "morning_review_ja は朝刊では空文字にします。",
   "watch_notes は材料がある監視銘柄だけ（最大5件）。risk_notes_ja は業種の偏り（sector_weights）や市場ニュースから、ポートに関係するリスク要因を書きます。",
   "checkpoints_ja は今日確認するとよい点を1〜4個、短く書きます。",
 ].join("\n");
 
 const CLOSE_INSTRUCTIONS = [
-  "これは大引けレポートです。当日の終値・前日比・評価損益と、当日確認できたニュースをもとに「今日なぜこう動いたか（確認できる範囲）/ 明日何を見るか」を伝えます。",
+  "これは大引けレポートです。当日の終値・前日比・評価損益と、当日確認できたニュースをもとに「保有株に今日実際にどんな影響があったか（確認できる範囲）/ 明日何を見るか」を伝えます。",
   "day_profit_loss（当日の損益）と unrealized_profit_loss_vs_average_price（取得単価からの含み損益）は別物です。混同しません。",
   "overview_ja では portfolio.relative_to_topix があればそれを使って市場との比較を書きます。無ければ比較しません。",
   "tone は当日のポートの結果の印象です（上昇が目立てば positive、下落が目立てば cautious、それ以外は neutral）。",
-  "stock_notes は保有銘柄それぞれの値動きと、確認できた材料を書きます。材料が無ければ値動きだけを書き、理由を推測しません。",
+  IMPACT_INSTRUCTIONS,
+  "大引けの stance は、その日の材料が実際どう作用したと確認できるかです。fact_ja には today_change と relative_to_benchmark（あれば）と確認できた材料を書きます。個別材料が無ければ、市場・業種要因の話は inference_ja に推定として分けます。watch_ja には翌営業日の確認点を書きます。",
+  "morning_outlook がある銘柄は、fact_ja で morning_outlook.check の文言を使って朝の見通しとの答え合わせに触れます。判定を自分で変えません。",
+  `morning_review_ja は、朝の注目点（morning_watch）や morning_outlook がある場合だけ、朝の想定と実際の差を${REPORT_LIMITS.morningReview}字以内でまとめます。無ければ空文字にします。`,
   "watch_notes は値動きや材料が目立つ監視銘柄だけ（最大5件）。checkpoints_ja は明日見るポイントを1〜4個、短く書きます。",
 ].join("\n");
 
@@ -649,6 +795,8 @@ const SHARED_MARKET_INSTRUCTIONS = [
   "入力の shared_market は、X投稿とアプリで共通に使う市場全体の分析です（Factチェック済み）。アプリでは別枠でそのまま表示されます。",
   "市場全体の方向・理由・注目点を新しく作ったり言い換えて広げたりしません。shared_market と矛盾する方向（上昇/下落）や理由を書きません。",
   "overview_ja では市場全体の説明を繰り返さず、このポートフォリオと市場の関係（portfolio.relative_to_topix など）と保有銘柄の動きに集中します。市場の話に触れる場合は shared_market の範囲に限ります。",
+  "basis の market_theme は shared_market の tailwind_themes / headwind_themes、macro は shared_market の cross_asset（米国株・半導体・為替・金利・原油）を根拠にした場合です。数字は文字列どおりに使います。",
+  "holdings と watch が両方空の場合も、overview_ja と checkpoints_ja は shared_market の範囲でこのユーザー向けに短く書きます。",
 ].join("\n");
 
 const DRAFT_SCHEMA = {
@@ -656,7 +804,7 @@ const DRAFT_SCHEMA = {
   additionalProperties: false,
   required: [
     "sufficient_information", "title_ja", "summary_ja", "tone", "overview_ja",
-    "stock_notes", "watch_notes", "risk_notes_ja", "checkpoints_ja",
+    "holding_impacts", "morning_review_ja", "watch_notes", "risk_notes_ja", "checkpoints_ja",
   ],
   properties: {
     sufficient_information: { type: "boolean" },
@@ -664,13 +812,23 @@ const DRAFT_SCHEMA = {
     summary_ja: { type: "string" },
     tone: { type: "string", enum: ["positive", "neutral", "cautious"] },
     overview_ja: { type: "string" },
-    stock_notes: {
+    holding_impacts: {
       type: "array",
       items: {
-        type: "object", additionalProperties: false, required: ["ticker_code", "note_ja"],
-        properties: { ticker_code: { type: "string" }, note_ja: { type: "string" } },
+        type: "object",
+        additionalProperties: false,
+        required: ["ticker_code", "stance", "basis", "fact_ja", "inference_ja", "watch_ja"],
+        properties: {
+          ticker_code: { type: "string" },
+          stance: { type: "string", enum: [...STANCES] },
+          basis: { type: "array", items: { type: "string", enum: [...IMPACT_BASES] } },
+          fact_ja: { type: "string" },
+          inference_ja: { type: "string" },
+          watch_ja: { type: "string" },
+        },
       },
     },
+    morning_review_ja: { type: "string" },
     watch_notes: {
       type: "array",
       items: {
@@ -694,6 +852,8 @@ export const REPORT_FACT_INSTRUCTIONS = [
   "あなたは個人向けポートフォリオレポートの厳格なFactチェッカーです。入力の packet（根拠データ）と report（生成文）だけを照合します。Web検索や外部知識は使いません。",
   "次を検出したら passed を false にします: packetに無い数字・日付・固有名詞・事実、数字の書き換えや独自計算、銘柄と材料の取り違え、当日損益と含み損益の混同、ニュースと値動きの因果の断定、将来の値動きの断定、売買推奨、価格未取得・未登録の項目を推測で埋めた記述、packetに無い市場比較。",
   "packet に shared_market がある場合、それは確定済みの市場分析です。report が shared_market と矛盾する市場の方向や理由を書いていたら passed を false にします。",
+  "holding_impacts の inference_ja は推定欄です。推定の言い方で書かれ、packet に無い数字や固有の事実を含まない限り、業種・為替・金利・原油・米国株と銘柄の一般的な関係に基づく推論は許容します。fact_ja に推定や因果の断定が混ざっていたら passed を false にします。",
+  "stance が根拠と矛盾する（例: 好材料しか無いのに headwind、根拠が無いのに tailwind/headwind）、または morning_outlook.check と食い違う答え合わせを書いていたら passed を false にします。",
   "自然な言い換えや要約は許容します。issues は短い日本語で返します。",
 ].join("\n");
 
@@ -706,13 +866,13 @@ export function reportDraftRequestBody(reportType: ReportType, packet: unknown):
     model: REPORT_MODEL,
     store: false,
     reasoning: { effort: "low" },
-    max_output_tokens: 4000,
+    max_output_tokens: 12000,
     instructions: [
       COMMON_INSTRUCTIONS,
       reportType === "close" ? CLOSE_INSTRUCTIONS : MORNING_INSTRUCTIONS,
       ...(hasSharedMarket(packet) ? [SHARED_MARKET_INSTRUCTIONS] : []),
-      `title_ja: ${REPORT_LIMITS.title}字以内。summary_ja: 2文以内・${REPORT_LIMITS.summary}字以内。overview_ja: ${REPORT_LIMITS.overview}字以内。stock_notes の各 note_ja: ${REPORT_LIMITS.stockNote}字以内。watch_notes の各 note_ja: ${REPORT_LIMITS.watchNote}字以内。risk_notes_ja: 最大${REPORT_LIMITS.maxRisks}個・各${REPORT_LIMITS.riskNote}字以内。checkpoints_ja: 各${REPORT_LIMITS.checkpoint}字以内。`,
-      "ticker_code は入力の holdings / watch にある値だけを使います。stock_notes は holdings、watch_notes は watch の銘柄だけです。",
+      `title_ja: ${REPORT_LIMITS.title}字以内。summary_ja: 2文以内・${REPORT_LIMITS.summary}字以内。overview_ja: ${REPORT_LIMITS.overview}字以内。holding_impacts: 「詳しく」の銘柄は fact_ja・inference_ja 各${REPORT_LIMITS.impactFact}字以内、watch_ja ${REPORT_LIMITS.impactWatch}字以内。「簡潔に」の銘柄は三つの合計で${REPORT_LIMITS.impactBrief}字以内。watch_notes の各 note_ja: ${REPORT_LIMITS.watchNote}字以内。risk_notes_ja: 最大${REPORT_LIMITS.maxRisks}個・各${REPORT_LIMITS.riskNote}字以内。checkpoints_ja: 各${REPORT_LIMITS.checkpoint}字以内。`,
+      "ticker_code は入力の holdings / watch にある値だけを使います。holding_impacts は holdings、watch_notes は watch の銘柄だけです。",
       "入力だけでは正確に書けない場合は sufficient_information を false にし、文字列を空、配列を空にします。",
     ].join("\n"),
     input: JSON.stringify(packet),
@@ -737,12 +897,21 @@ export function reportFactRequestBody(packet: unknown, report: ReportBody): Reco
 // ---------------------------------------------------------------------------
 
 export type StockNote = { ticker_code: string; note_ja: string };
+export type HoldingImpact = {
+  ticker_code: string;
+  stance: Stance;
+  basis: ImpactBasis[];
+  fact_ja: string;
+  inference_ja: string;
+  watch_ja: string;
+};
 export type ReportBody = {
   title_ja: string;
   summary_ja: string;
   tone: "positive" | "neutral" | "cautious";
   overview_ja: string;
-  stock_notes: StockNote[];
+  holding_impacts: HoldingImpact[];
+  morning_review_ja: string;
   watch_notes: StockNote[];
   risk_notes_ja: string[];
   checkpoints_ja: string[];
@@ -760,6 +929,25 @@ function notes(value: unknown): StockNote[] {
   })).filter((item) => item.ticker_code && item.note_ja);
 }
 
+function impacts(value: unknown): HoldingImpact[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((raw) => {
+    const item = (raw ?? {}) as Record<string, unknown>;
+    const stance = STANCES.includes(item.stance as Stance) ? item.stance as Stance : "no_clear_material";
+    const basis = Array.isArray(item.basis)
+      ? [...new Set(item.basis.filter((entry): entry is ImpactBasis => IMPACT_BASES.includes(entry as ImpactBasis)))]
+      : [];
+    return {
+      ticker_code: clean(item.ticker_code).toUpperCase(),
+      stance,
+      basis,
+      fact_ja: clean(item.fact_ja),
+      inference_ja: clean(item.inference_ja),
+      watch_ja: clean(item.watch_ja),
+    };
+  }).filter((item) => item.ticker_code && item.fact_ja);
+}
+
 export function parseReportDraft(payload: unknown): { body: ReportBody | null; error: string | null } {
   if (typeof payload !== "object" || payload === null) return { body: null, error: "REPORT_INVALID_OUTPUT" };
   const item = payload as Record<string, unknown>;
@@ -770,7 +958,8 @@ export function parseReportDraft(payload: unknown): { body: ReportBody | null; e
     summary_ja: clean(item.summary_ja),
     tone,
     overview_ja: clean(item.overview_ja),
-    stock_notes: notes(item.stock_notes),
+    holding_impacts: impacts(item.holding_impacts),
+    morning_review_ja: clean(item.morning_review_ja),
     watch_notes: notes(item.watch_notes),
     risk_notes_ja: Array.isArray(item.risk_notes_ja) ? item.risk_notes_ja.map(clean).filter(Boolean) : [],
     checkpoints_ja: Array.isArray(item.checkpoints_ja) ? item.checkpoints_ja.map(clean).filter(Boolean) : [],
@@ -857,6 +1046,16 @@ export function latinWords(value: string): string[] {
     .map((match) => match[0]);
 }
 
+/** Every prose string value in the packet, recursively (keys and the allowed_basis codes excluded). */
+function packetStringValues(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(packetStringValues);
+  if (value && typeof value === "object") {
+    return Object.entries(value).flatMap(([key, entry]) => key === "allowed_basis" ? [] : packetStringValues(entry));
+  }
+  return [];
+}
+
 function length(value: string): number {
   return Array.from(value).length;
 }
@@ -864,7 +1063,8 @@ function length(value: string): number {
 export function reportTexts(body: ReportBody): string[] {
   return [
     body.title_ja, body.summary_ja, body.overview_ja,
-    ...body.stock_notes.map((note) => note.note_ja),
+    ...body.holding_impacts.flatMap((impact) => [impact.fact_ja, impact.inference_ja, impact.watch_ja]),
+    body.morning_review_ja,
     ...body.watch_notes.map((note) => note.note_ja),
     ...body.risk_notes_ja, ...body.checkpoints_ja,
   ];
@@ -885,7 +1085,7 @@ export function localReportIssues(
   if (length(body.title_ja) > REPORT_LIMITS.title) issues.push("TITLE_TOO_LONG");
   if (length(body.summary_ja) > REPORT_LIMITS.summary) issues.push("SUMMARY_TOO_LONG");
   if (length(body.overview_ja) > REPORT_LIMITS.overview) issues.push("OVERVIEW_TOO_LONG");
-  if (body.stock_notes.some((note) => length(note.note_ja) > REPORT_LIMITS.stockNote)) issues.push("STOCK_NOTE_TOO_LONG");
+  issues.push(...holdingImpactIssues(body, snapshot, packet));
   if (body.watch_notes.some((note) => length(note.note_ja) > REPORT_LIMITS.watchNote)) issues.push("WATCH_NOTE_TOO_LONG");
   if (body.watch_notes.length > REPORT_LIMITS.maxWatchNotes) issues.push("TOO_MANY_WATCH_NOTES");
   if (body.risk_notes_ja.length > REPORT_LIMITS.maxRisks || body.risk_notes_ja.some((note) => length(note) > REPORT_LIMITS.riskNote)) {
@@ -895,13 +1095,14 @@ export function localReportIssues(
       body.checkpoints_ja.some((note) => length(note) > REPORT_LIMITS.checkpoint)) {
     issues.push("CHECKPOINTS_INVALID");
   }
-  if (body.stock_notes.some((note) => !holdingTickers.has(note.ticker_code))) issues.push("UNKNOWN_HOLDING_TICKER");
+  if (body.holding_impacts.some((impact) => !holdingTickers.has(impact.ticker_code))) issues.push("UNKNOWN_HOLDING_TICKER");
   if (body.watch_notes.some((note) => !watchTickers.has(note.ticker_code))) issues.push("UNKNOWN_WATCH_TICKER");
-  if (new Set(body.stock_notes.map((note) => note.ticker_code)).size !== body.stock_notes.length ||
+  if (new Set(body.holding_impacts.map((impact) => impact.ticker_code)).size !== body.holding_impacts.length ||
       new Set(body.watch_notes.map((note) => note.ticker_code)).size !== body.watch_notes.length) {
     issues.push("DUPLICATE_TICKER_NOTE");
   }
-  if (snapshot.holdings.length > 0 && body.stock_notes.length === 0) issues.push("MISSING_HOLDING_NOTES");
+  const covered = new Set(body.holding_impacts.map((impact) => impact.ticker_code));
+  if (snapshot.holdings.some((stock) => !covered.has(stock.ticker_code))) issues.push("MISSING_HOLDING_IMPACTS");
   const allowed = allowedNumbers(packet);
   const unknown = texts.flatMap((text) => unknownNumbers(text, allowed));
   if (unknown.length > 0) issues.push(`NUMBER_NOT_IN_PACKET:${[...new Set(unknown)].slice(0, 5).join("/")}`);
@@ -913,10 +1114,51 @@ export function localReportIssues(
   if (texts.some((text) => ISO_DATE.test(text))) issues.push("CONTAINS_ISO_DATE");
   const multiDay = unsupportedMultiDayWords(texts, packet);
   if (multiDay.length > 0) issues.push(`UNSUPPORTED_MULTI_DAY_WORD:${multiDay.slice(0, 3).join("/")}`);
-  const latin = texts.flatMap(latinWords);
+  // Whole Latin words the packet's own text carries (e.g. SOX, WTI in the shared cross-asset lines) are allowed.
+  const packetLatin = new Set(packetStringValues(packet).flatMap((value) => value.match(/[A-Za-zＡ-Ｚａ-ｚ]{3,}/gu) ?? []));
+  const latin = texts.flatMap(latinWords).filter((word) => !packetLatin.has(word));
   if (latin.length > 0) issues.push(`CONTAINS_LATIN_WORD:${[...new Set(latin)].slice(0, 3).join("/")}`);
   const contradiction = sharedDirectionContradiction(texts, packet);
   if (contradiction) issues.push(`CONTRADICTS_SHARED_MARKET:${contradiction}`);
+  return issues;
+}
+
+// Inference text must read as an estimate, never as a reported fact.
+const HEDGE = /可能性|考えられ|とみられ|見られ|かもしれ|余地|想定され|うかがえ|見込まれ|推測され|推定され/u;
+
+function packetAllowedBasis(packet: unknown): Map<string, Set<string>> {
+  const holdings = (packet as { holdings?: Array<{ ticker_code?: unknown; allowed_basis?: unknown }> } | null)?.holdings ?? [];
+  return new Map(holdings.map((holding) => [
+    String(holding.ticker_code ?? ""),
+    new Set(Array.isArray(holding.allowed_basis) ? holding.allowed_basis.map(String) : []),
+  ]));
+}
+
+/** Stance / basis / section-length checks for holding_impacts (code-verifiable only). */
+export function holdingImpactIssues(body: ReportBody, snapshot: PortfolioSnapshot, packet: unknown): string[] {
+  const issues: string[] = [];
+  const allowed = packetAllowedBasis(packet);
+  const stocks = new Map(snapshot.holdings.map((stock) => [stock.ticker_code, stock]));
+  for (const impact of body.holding_impacts) {
+    const stock = stocks.get(impact.ticker_code);
+    if (!stock) continue;
+    const available = allowed.get(impact.ticker_code) ?? new Set<string>();
+    if (impact.basis.some((basis) => !available.has(basis))) issues.push(`BASIS_NOT_AVAILABLE:${impact.ticker_code}`);
+    if ((impact.stance === "tailwind" || impact.stance === "headwind") && impact.basis.length === 0) {
+      issues.push(`STANCE_WITHOUT_BASIS:${impact.ticker_code}`);
+    }
+    if (impact.stance === "no_clear_material" && impact.basis.includes("company_news")) {
+      issues.push(`STANCE_BASIS_MISMATCH:${impact.ticker_code}`);
+    }
+    if (impact.inference_ja && !HEDGE.test(impact.inference_ja)) issues.push(`INFERENCE_NOT_HEDGED:${impact.ticker_code}`);
+    const tooLong = stock.detail_level === "detailed"
+      ? length(impact.fact_ja) > REPORT_LIMITS.impactFact || length(impact.inference_ja) > REPORT_LIMITS.impactInference ||
+        length(impact.watch_ja) > REPORT_LIMITS.impactWatch
+      : length(impact.fact_ja) + length(impact.inference_ja) + length(impact.watch_ja) > REPORT_LIMITS.impactBrief;
+    if (tooLong) issues.push(`IMPACT_TOO_LONG:${impact.ticker_code}`);
+  }
+  if (snapshot.report_type === "morning" && body.morning_review_ja) issues.push("MORNING_REVIEW_ON_MORNING");
+  if (length(body.morning_review_ja) > REPORT_LIMITS.morningReview) issues.push("MORNING_REVIEW_TOO_LONG");
   return issues;
 }
 
@@ -977,7 +1219,7 @@ export async function generateReport(
     outcome.outputTokens += result.outputTokens;
     outcome.estimatedCost = lunaCost(outcome.inputTokens, outcome.outputTokens);
   };
-  const blockers = snapshotBlockers(snapshot);
+  const blockers = snapshotBlockers(snapshot, hasSharedMarket(packet));
   if (blockers.length > 0) {
     outcome.error = blockers[0];
     outcome.issues = blockers;
@@ -1013,6 +1255,17 @@ export async function generateReport(
   }
 }
 
+/**
+ * stock_notes for app builds that predate holding_impacts: the same Fact-passed
+ * fact / inference text joined in code (no new wording).
+ */
+export function legacyStockNotes(impacts: HoldingImpact[]): StockNote[] {
+  return impacts.map((impact) => ({
+    ticker_code: impact.ticker_code,
+    note_ja: [impact.fact_ja, impact.inference_ja].filter(Boolean).join(" "),
+  }));
+}
+
 /** Columns written for the claimed row. Failed reports keep no body. */
 export function reportUpdate(
   outcome: ReportOutcome,
@@ -1020,6 +1273,7 @@ export function reportUpdate(
   sourceBasis: Record<string, unknown>,
   now = new Date(),
   marketSection: AppMarketSection | null = null,
+  marketDetail: AppMarketDetail | null = null,
 ): Record<string, unknown> {
   const passed = outcome.status === "passed" && outcome.body !== null;
   return {
@@ -1031,12 +1285,16 @@ export function reportUpdate(
       ? {
         tone: outcome.body!.tone,
         overview_ja: outcome.body!.overview_ja,
-        stock_notes: outcome.body!.stock_notes,
+        holding_impacts: outcome.body!.holding_impacts,
+        ...(outcome.body!.morning_review_ja ? { morning_review_ja: outcome.body!.morning_review_ja } : {}),
+        stock_notes: legacyStockNotes(outcome.body!.holding_impacts),
         watch_notes: outcome.body!.watch_notes,
         risk_notes_ja: outcome.body!.risk_notes_ja,
         checkpoints_ja: outcome.body!.checkpoints_ja,
         // Verbatim shared market analysis (never AI-rewritten per user).
         ...(marketSection ? { market_section: marketSection } : {}),
+        // App-only detailed market section, built in code from the same shared packets.
+        ...(marketDetail ? { market_detail: marketDetail } : {}),
       }
       : {},
     portfolio_snapshot: snapshot,
@@ -1050,6 +1308,42 @@ export function reportUpdate(
     generated_at: now.toISOString(),
     updated_at: now.toISOString(),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Morning → close (same user only)
+// ---------------------------------------------------------------------------
+
+/**
+ * PostgREST path for this user's own completed morning report of the same day.
+ * user_id is always pinned; the caller passes the user being processed.
+ */
+export function morningReportPath(userId: string, tradingDate: string): string {
+  if (!/^[0-9a-f-]{36}$/i.test(userId) || !/^\d{4}-\d{2}-\d{2}$/.test(tradingDate)) {
+    throw new Error("MORNING_REPORT_QUERY_INVALID");
+  }
+  return `personalized_reports?user_id=eq.${userId}&report_type=eq.morning&trading_date=eq.${tradingDate}` +
+    "&status=eq.completed&fact_status=eq.passed&select=id,user_id,body&limit=1";
+}
+
+/**
+ * Morning stances by ticker from rows returned for morningReportPath. Rows for any
+ * other user are ignored (defence in depth), as are unknown stance values.
+ */
+export function morningStancesFromRows(
+  rows: Array<{ id?: unknown; user_id?: unknown; body?: unknown }> | null,
+  userId: string,
+): { reportId: string | null; stances: Map<string, Stance> } {
+  const row = (rows ?? []).find((item) => item?.user_id === userId);
+  const stances = new Map<string, Stance>();
+  const list = (row?.body as { holding_impacts?: unknown } | undefined)?.holding_impacts;
+  if (Array.isArray(list)) {
+    for (const item of list) {
+      const ticker = typeof item?.ticker_code === "string" ? item.ticker_code : "";
+      if (ticker && STANCES.includes(item?.stance)) stances.set(ticker, item.stance as Stance);
+    }
+  }
+  return { reportId: typeof row?.id === "string" && stances.size > 0 ? row.id : null, stances };
 }
 
 // ---------------------------------------------------------------------------
