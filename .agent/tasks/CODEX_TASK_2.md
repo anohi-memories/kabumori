@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1-common-queue-idempotency-foundation-20260924
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: GPT-6 Sol Medium
 - purpose: Phase0c2でbrand-scoped uniquenessのproduction rolloutがC2 PASSした後の次段階として、複数ブランド/複数Xアカウント運用に必要な共通queue・idempotency・retry/outcome分類のfoundationをsource-onlyで設計・実装・disposable proofする。production mutationは0。
