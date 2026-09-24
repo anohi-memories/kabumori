@@ -33,8 +33,10 @@
 
 - H1: `ready` — `x-autopost-phase1e-auth-secret-provider-final-review-20260924`
 - H2: `done` — `kabumori-pr19-report-detail-portfolio-privacy-final-review-20260924`
-- G1: `ready` — `kabumori-release-branding-eas-preflight-20260924`
-  - PR #18 merged at reviewed head `6f32776` -> main `a41b306`. Files byte-identical; 108/0 tests, tsc src 0, web export 10 routes, public-site preview+production dry-run builds PASS. Vercel ignored per Netlify hosting policy. Mutation 0.
+- G1: `review_required` — `kabumori-release-branding-eas-preflight-20260924`
+  - PR #21 open (unmerged): expo.name -> かぶモリ (slug/scheme/bundleId untouched); scripts/verify-production-env.mjs preflight; RELEASE_READINESS.md corrected/expanded. 114/0 tests, tsc src 0.
+  - New finding A1b: AnimatedSplashOverlay renders Expo's logo on every launch (not just the static app.json icon/splash). No artwork generated; exact specs documented for the operator.
+  - Confirmed: missing Supabase env vars crash the app on launch, not a silent degrade. Production mutation 0.
 - G2: `ready` — `kabumori-pr19-merge-postmerge-verify-20260924`
 - G3: `done` — `x-autopost-phase1e-exact-account-credential-resolver-20260924`
 - G4: `done` — `x-admin-netlify-deploy-preview-pipeline-20260924`
