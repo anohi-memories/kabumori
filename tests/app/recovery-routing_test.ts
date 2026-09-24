@@ -19,6 +19,8 @@ const RECOVERY_LINKS = [
   "/reset-password#access_token=at&refresh_token=rt&type=recovery",
   "reset-password?code=c1",
   "/reset-password",
+  "exp://127.0.0.1:8081/--/reset-password?code=c1",
+  "/--/reset-password?code=c1",
 ];
 
 test("every recovery link shape is routed to / instead of an unmatched route", () => {
@@ -50,6 +52,12 @@ test("other links, including unknown ones, pass through unchanged", () => {
     "/does-not-exist",
     "kabumori-social://oauth-callback?code=xyz&state=s",
     "https://example.com/reset",
+    "https://example.com/reset-password?code=not-our-link",
+    "kabumori://reset-password-help?code=not-recovery",
+    "kabumori://news/reset-password-guide?code=not-recovery",
+    "/news/reset-password-guide",
+    "kabumori://news/abc?type=recovery",
+    "kabumori://news/abc?type=recovery&code=not-our-link",
   ]) {
     assert.equal(recoveryRedirectPath(path), path, path);
   }

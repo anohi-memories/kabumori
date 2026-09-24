@@ -51,12 +51,37 @@ export function parseRecoveryLink(rawUrl: string): RecoveryLink {
     return { kind: 'none' };
   }
 
+  // Only URLs addressed to this app can establish a recovery session. The synthetic origin is
+  // used by recoveryRedirectPath() when expo-router supplies a bare path instead of a URL.
+  const isAppLink =
+    url.protocol === 'kabumori:' ||
+    url.protocol === 'exp:' ||
+    url.protocol === 'exps:' ||
+    url.origin === 'https://recovery.invalid';
+  if (!isAppLink) return { kind: 'none' };
+
   const params = collectParams(url);
   const type = params.get('type');
   // `kabumori://reset-password` parses with an empty pathname and the path in `host`, so both are
-  // checked rather than assuming a shape.
-  const onRecoveryPath = `${url.host}${url.pathname}`.includes(RECOVERY_PATH);
-  if (type !== 'recovery' && !onRecoveryPath) return { kind: 'none' };
+  // checked. Expo Go can include /--/ before the app route. Do not match unrelated paths that
+  // merely contain "reset-password" in a news slug or another route.
+  const onRecoveryPath =
+    url.host === RECOVERY_PATH ||
+    url.pathname === `/${RECOVERY_PATH}` ||
+    url.pathname === `/--/${RECOVERY_PATH}`;
+  const onRecoveryCallback =
+    url.host === 'callback' ||
+    url.pathname === '/callback' ||
+    url.pathname === '/--/callback';
+  const hasRecoveryPayload =
+    params.has('token_hash') ||
+    (params.has('access_token') && params.has('refresh_token')) ||
+    params.has('code') ||
+    params.has('error') ||
+    params.has('error_code');
+  if (!onRecoveryPath && !(onRecoveryCallback && type === 'recovery' && hasRecoveryPayload)) {
+    return { kind: 'none' };
+  }
 
   const errorCode = params.get('error_code') ?? params.get('error');
   if (errorCode) {
