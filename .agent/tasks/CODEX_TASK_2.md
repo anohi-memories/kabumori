@@ -1,159 +1,190 @@
 # Codex Task 2
 
-- task_id: x-autopost-phase1b-account-bound-queue-schema-and-outcome-ledger-20260924
+- task_id: x-autopost-phase1c-dispatcher-planner-account-bound-cutover-candidate-20260924
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: codex
 - priority: critical
-- recommended_model: GPT-6 Sol Medium
-- purpose: Phase1 C2で確認したsafe boundaryを解消するため、productionを一切変更せず、scheduled_postsを明示的なsocial_account_idへbindするschema/API candidateと、durable provider-attempt/outcome ledgerをsource-only + disposable PostgreSQLで設計・実装する。legacy rowの暗黙推測は禁止。
+- recommended_model: GPT-5.6 Sol Medium
+- purpose: C2 PASS済みPhase1Bの明示的 social_account_id binding / durable attempt ledger / v2 queue RPC candidateを前提に、X自動投稿のactive planner/dispatcher/credential routingを account-bound に揃える production未適用のsource-only cutover candidateを作る。claim.social_account_id以外から投稿先アカウントを推測しない。
 
-## C2 finding carried forward
+## Routing rule
 
-Independent C2 production read-back confirmed:
-- scheduled_posts has brand_id/status/attempt_count but no social_account_id/account_id and no durable X outcome fields
-- post_execution_logs has brand_id/status/x_post_id/error_code but no account binding/canonical retry outcome
-- claim_due_post() globally claims oldest pending row with FOR UPDATE SKIP LOCKED
-- retry_scheduled_post() can move running -> pending without a durable provider-call phase
-- fail_scheduled_post() marks running -> failed
-- therefore current live schema cannot safely support account-scoped fairness/retry without inventing account routing or risking duplicate X posts
+このタスクはX自動投稿系のためCodex slot 2（H2）で実施する。
+ユーザーから明示指定がない限り、X自動投稿系はH2/G2を優先し、H1/G1はかぶモリアプリ側に確保する。
 
-Phase1 correctly STOPPED before source migration/RPC changes. Production mutation remained 0.
+## Context carried forward
 
-## Mandatory fresh start
+Phase1B C2 PASS済み:
+- scheduled_posts に nullable-at-first social_account_id を追加するsource candidate
+- social_accountsとのbrand/platform整合をDB boundaryで強制
+- durable attempt/outcome ledger candidate
+- versioned service-role-only v2 claim/reconcile RPC candidate
+- uncertain-X / confirmed-X-db-incomplete は自動再投稿禁止
+- fairness/concurrency/retry/stale proof PASS
+- production mutation 0
 
-1. git fetch origin main
-2. read ORCHESTRATION / CURRENT_STATE / this TASK / latest CODEX_REPORT_2
-3. inspect H1/G1/G2 for overlap
-4. refresh read-only production metadata for scheduled_posts, post_execution_logs, social_accounts, relevant planner RPCs, claim/retry/fail RPCs
-5. inspect all source call sites that create scheduled_posts rows and all paths that dispatch them
+Important cutover boundary:
+- Phase1B migrationだけをold dispatcher下で適用してはいけない
+- claim_due_post_v2をactive planners/dispatcher/credential routingが揃う前に有効化してはいけない
+- live legacy pending rowsは暗黙backfill禁止
 
-If any other slot touches the same queue tables/RPCs/functions/migrations, STOP.
+## Mandatory startup
 
-## Scope A — explicit account binding model
+1. Read PROJECT_RULES.md
+2. Read .agent/ORCHESTRATION.md
+3. Read .agent/CURRENT_STATE.md
+4. Read this TASK
+5. Read latest .agent/CODEX_REPORT_2.md and prior Phase1B C2 result
+6. Fresh fetch origin/main
+7. Inspect H1/G1/G2 current ownership and prove no overlap
+8. Audit all active scheduled_posts producers/planners and x-test-post dispatch paths
+9. Audit all credential-selection paths for X posting
+10. Audit all completion/failure/retry side effects by post type
 
-Design a source-only migration candidate that introduces an explicit account binding for scheduled work.
+If another slot currently owns the same x-test-post file, migration, RPC, workflow, or queue object, STOP and report the exact overlap.
 
-Requirements:
-- scheduled_posts gains nullable-at-first `social_account_id` (or exact equivalent only if schema conventions require another name)
-- FK to public.social_accounts.id
-- DB-level integrity that bound account.brand_id matches scheduled_posts.brand_id and account.platform='x'
-- do not rely on app-only checks for cross-brand/account integrity
-- no default account lookup
-- no `limit=1`
-- no deriving from brand_id at claim time
-- legacy rows remain explicitly unbound until a separately reviewed backfill/cutover policy exists
-- planners/callers must be audited and source candidates updated so newly planned rows can carry the intended account when trusted context exists
-- if some planner has no trustworthy account source, fail closed/document rather than infer
+## Scope A — dispatcher v2 candidate
 
-## Scope B — durable attempt/outcome ledger
+Create a source-only dispatcher path that:
+- claims only through the reviewed v2 account-bound RPC candidate
+- treats claim.social_account_id as authoritative
+- loads exactly the matching social_accounts row
+- verifies brand_id/account/platform consistency again at the application boundary
+- selects OAuth credentials strictly for that claimed social_account_id
+- never falls back to "first account for brand"
+- never uses LIMIT 1 as routing
+- never derives account from brand_id alone
+- fails closed if the bound account is missing, disabled, mismatched, non-X, or lacks required credentials
 
-Create a production-shaped source candidate for a per-attempt ledger or equivalent guarded columns that records at minimum:
-- attempt_id / claim token
-- scheduled_post_id
-- brand_id
-- social_account_id
-- phase/provider-call-started marker
-- canonical outcome:
-  - pre_x_retryable
-  - pre_x_terminal
-  - x_outcome_uncertain
-  - x_confirmed_db_incomplete
-  - completed
-- stable error_code
-- optional confirmed x_post_id
-- claimed_at / provider_started_at / finished_at or equivalent bounded timestamps
+Do not mutate the live legacy dispatcher in place unless a versioned wrapper/cutover seam preserves safe rollback and coexistence.
 
-Requirements:
-- no tokens/secrets/provider raw bodies
-- confirmed x_post_id preserved
-- unique/constraint model prevents double completion/duplicate attempt ambiguity
-- account/brand scope enforced at DB boundary
-- legacy execution logs remain historical; do not rewrite them in this task
+## Scope B — planner/caller account propagation
 
-## Scope C — versioned RPC candidates
+Audit every active path that creates future scheduled_posts rows.
 
-Prepare new versioned RPCs rather than mutating live claim/retry/fail behavior in place.
+For each active planner/caller:
+- identify where trusted social_account_id context comes from
+- propagate explicit social_account_id into new scheduled work
+- if no trustworthy account context exists, fail closed or leave that planner on legacy path and document the exact blocker
+- do not infer "one account per brand"
+- do not silently bind legacy rows
+- do not change posting cadence/content rules except where necessary to pass the explicit account id
 
-Candidate operations:
-- claim next eligible work
-- mark provider call started
-- mark pre-X retryable/terminal
-- record uncertain provider outcome
-- record confirmed X + DB-incomplete
-- complete confirmed X
-- reconcile stale pre-X attempts only when durable phase proves provider not started
+Produce a coverage matrix:
+planner/caller -> post type -> current source of brand/account -> candidate behavior -> cutover readiness.
 
-Requirements:
-- SECURITY DEFINER only where necessary
-- fixed search_path
-- service_role-only EXECUTE for privileged queue operations
-- fail closed on missing/mismatched brand/account
-- FOR UPDATE SKIP LOCKED or equivalent for atomic claims
-- no automatic reclaim of uncertain/confirmed-X states
-- old live RPCs remain unchanged/unapplied
+## Scope C — provider attempt lifecycle integration
 
-## Scope D — fairness design
+Wire the source candidate to the reviewed Phase1B attempt/outcome model.
 
-Implement a source candidate that demonstrates bounded fairness across explicit (brand_id,social_account_id) queues.
+Required ordering:
+1. claim creates/returns an attempt identity
+2. local/pre-X validation failures record pre_x_retryable or pre_x_terminal
+3. immediately before the first provider request, mark provider_started
+4. if provider result is unknown/transport ambiguous, record x_outcome_uncertain
+5. if X confirms a post id but downstream DB finalization fails, persist x_confirmed_db_incomplete with x_post_id
+6. only successful finalization becomes completed
 
-Acceptable strategies:
-- round-robin/last-served cursor
-- per-account oldest eligible followed by global bounded selection
-- another deterministic scheme with proof
+Safety:
+- never automatically reclaim x_outcome_uncertain
+- never automatically republish x_confirmed_db_incomplete
+- retry only durable pre-X states within cap
+- stable error codes; no raw provider response/tokens/secrets in ledger
+- preserve confirmed x_post_id
 
-Must prove:
-- one noisy brand/account cannot permanently starve another
-- no same-row double claim
-- deterministic/account-scoped behavior
-- no Cron cadence change required yet
+## Scope D — post-type side effects
 
-## Scope E — legacy row cutover plan
+Audit current successful completion behavior for every active post type handled by the dispatcher.
 
-Do NOT backfill production.
+The v2 candidate must preserve required existing side effects, including where applicable:
+- scheduled_posts status/final timestamps
+- x_post_id persistence
+- execution logs
+- source/report/candidate linkage
+- published markers
+- any Important News or market-report completion markers
+- retry counters / terminal failure semantics
 
-Produce a precise plan that classifies existing scheduled_posts rows:
-- terminal/succeeded historical rows that need no routing
-- pending/running future/live rows requiring explicit mapping
-- rows that cannot be mapped with high confidence
+Do not invent new product behavior.
+If a legacy side effect cannot safely be reproduced under v2, document and fail the cutover candidate rather than silently dropping it.
 
-State exactly what evidence would be required for any future backfill. No implicit "one account per brand" shortcut.
+## Scope E — coexistence and cutover design
 
-## Scope F — disposable PostgreSQL proof
+Design a source-only staged cutover that avoids split-brain publishing.
 
-Fake-only proof must cover:
-- FK/account-brand/platform integrity
-- two brands/two accounts making progress
-- no double claim under concurrent workers
-- unbound row is not claimable by new RPC
-- mismatched brand/account rejected
-- provider-started attempt cannot be auto-retried
+Must specify:
+- how legacy dispatcher and v2 dispatcher coexist before activation
+- exact activation gate
+- how new account-bound rows are prevented from being claimed by legacy code
+- how legacy unbound rows are prevented from being claimed by v2
+- rollback behavior before any X provider call
+- behavior after provider_started where rollback/retry is unsafe
+- whether a feature flag/versioned RPC/function entrypoint is required
+- exact order for future production migration + deploy + planner activation
+
+Do not activate anything in production.
+
+## Scope F — legacy pending-row disposition analysis
+
+Read-only classify current legacy pending/running rows by available evidence.
+
+Do not modify/backfill them.
+
+For each class, document:
+- whether explicit account mapping is provable
+- what evidence would be required
+- safe future disposition: explicit map / allow legacy drain / cancel / manual review
+
+No "brand has one account" shortcut.
+
+## Scope G — disposable proof
+
+Use fake/disposable data only. No X API calls.
+
+Prove at minimum:
+- two brands / two X accounts route to the correct credentials
+- no cross-brand/account credential leakage
+- missing/mismatched/disabled account fails closed before provider_started
+- unbound legacy row cannot be claimed by v2
+- account-bound v2 row cannot be accidentally consumed by legacy candidate path
+- concurrent workers do not double-claim
+- pre-X retryable can retry within cap
+- provider_started cannot be auto-retried
 - uncertain outcome cannot be reclaimed
 - confirmed-X/db-incomplete cannot be republished
-- pre-X retryable can safely re-enter within cap
-- stale reconciliation only touches durable pre-X phase
-- rollback/cleanup
+- completion preserves all required side effects for each active post type
+- rollback/cleanup of disposable fixtures
 
-## Scope G — tests
+## Scope H — tests
 
-Add focused static/unit/migration tests and run relevant x-test-post regression.
+Run focused tests plus the full relevant x-test-post regression suite.
 
-Report exact counts. No X API call.
+Report exact pass/fail counts.
+Run git diff --check.
+Run appropriate static/type checks for changed code.
+No provider/network posting calls.
 
 ## Forbidden
 
 - production migration apply
 - production DDL/DML/backfill
-- Function deploy
+- live RPC replacement
+- Edge Function deploy
 - Cron change
 - OAuth/Vault/token mutation
-- X API call/post/media/repost
+- X API post/media/repost
+- manual production candidate/scheduled row injection
+- account inference from brand_id
+- LIMIT 1 account fallback
 - apps/admin/**
-- Netlify/Vercel change
-- blind db push/history repair
-- live RPC replacement
-- account routing inferred from brand_id
+- consumer mobile/**
+- Netlify/Vercel production change
+- Important News business logic/cadence/content change
+- blind supabase db push
+- migration history repair
+- editing Phase1B accepted semantics without returning for C2
 
 ## Production mutation budget
 
@@ -164,32 +195,20 @@ Report exact counts. No X API call.
 When complete:
 - status -> review_required
 - next_owner -> chatgpt
-- update CODEX_REPORT_2 with exact schema/RPC candidates, call-site audit, planner coverage, legacy cutover plan, disposable proof, tests, changed files, commit/push/fresh-origin, production mutation=0, and next gate
+- update .agent/CODEX_REPORT_2.md with:
+  - fresh main SHA
+  - exact changed files
+  - planner/caller coverage matrix
+  - credential routing proof
+  - attempt/outcome integration
+  - per-post-type side-effect audit
+  - coexistence/cutover design
+  - legacy-row disposition analysis
+  - disposable proof
+  - test counts
+  - commit/push/fresh-origin status
+  - production mutation=0
+  - exact remaining blockers before any production rollout
 - STOP for C2.
 
-
-## Final C2 — 2026-09-24
-
-PASS.
-
-Accepted as a source-only foundation candidate.
-
-Independent review confirmed:
-- production remains untouched: `scheduled_posts.social_account_id` absent, v2 queue tables absent, v2 RPCs absent.
-- live scheduled_posts counts remain 205 succeeded / 63 failed / 15 pending / 0 running, matching the report.
-- the candidate adds explicit nullable account binding with no default and DB-level brand/account/platform integrity.
-- no implicit brand->account lookup, no `limit=1` routing fallback, and no production backfill is introduced.
-- durable attempt state distinguishes pre-X, provider-started, uncertain-X, confirmed-X/db-incomplete, and completed outcomes.
-- uncertain-X and confirmed-X/db-incomplete paths are non-retryable by automatic claim/reconcile logic.
-- legacy claim/retry/fail RPCs remain untouched; v2 RPCs are versioned, service-role-only, SECURITY DEFINER with fixed empty search_path.
-- fairness is account-scoped and the final disposable proof covers two-brand progress, account integrity, retry cap, stale pre-X reconciliation, uncertain/confirmed-X no-reclaim, and rollback cleanup.
-- tests accepted: focused 6/6 PASS, full x-test-post regression 409/409 PASS, diff check PASS.
-- production mutation 0 is independently consistent with current production catalog.
-
-Important cutover boundary:
-- do NOT apply this migration by itself under the old dispatcher.
-- do NOT activate claim_due_post_v2 until active planners/dispatcher/credential routing all use the same explicit social_account_id.
-- the 15 current pending legacy rows require separately reviewed explicit mapping or disposition; one-account-per-brand is not sufficient evidence.
-
-Next recommended task:
-- source-only dispatcher/planner cutover candidate that routes credentials strictly by claim.social_account_id, versions the remaining active planners/callers, preserves each post type's completion side effects, and proves coexistence/cutover behavior in disposable tests before any production migration.
+Do not apply Phase1B/Phase1C to production in this task.
