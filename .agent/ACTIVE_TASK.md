@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: kabumori-release-pr18-privacy-dataflow-eas-light-review-20260924
+- status: ready
+- task_id: x-autopost-phase1e-auth-secret-provider-final-review-20260924
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: closed; Final C1 PASS
+- allocation: assigned; Phase1E auth/secret/Vault/provider-semantics final review
 
 ## Codex H2
 - owner: codex
