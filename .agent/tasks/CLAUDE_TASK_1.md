@@ -3,8 +3,8 @@
 - task_id: kabumori-pr24-privacy-merge-postmerge-verify-20260924
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: medium
 - recommended_model: Sonnet5（中）
 - purpose: K1 PASS-WITH-FIX済みPR #24をfresh main確認後にmergeし、Privacy/Release docs反映とWeb build回帰をpost-merge検証する。
@@ -111,3 +111,27 @@ No Netlify publish or domain change, no `personalized-reports`/PR #23 edit, no E
 4. Supabase Auth Site URL/redirect, custom SMTP, App Store Connect setup (app record, localized listing name, Privacy/Support URLs, App Privacy questionnaire, age rating, metadata, export-compliance declaration, `submit.production`), then EAS build → TestFlight → submission.
 
 No new blocker was introduced by this task; the privacy-dataflow gap identified after PR #21's K1 review is now closed.
+
+
+## Final K1 — PR #24 merge
+
+Result: **PASS**.
+
+Accepted:
+- reviewed head `46515c56f88bb8a9f55c9e235477d660e8b8bd04`
+- PR #24 merged
+- merge SHA `ff4c43c08752276a17f4124dce33a09b92749ee9`
+- reviewed files byte-identical after merge
+- 122/122 scoped tests PASS
+- production web build PASS
+- privacy disclosure read-back PASS
+- personalized-reports source untouched
+- account-deletion page untouched
+- production mutation=0 excluding normal GitHub merge
+
+Remaining release blockers:
+- official icon/splash/launch-overlay artwork
+- EAS production env values
+- operator legal values + Netlify publication
+- Supabase Auth Site URL/redirect + custom SMTP
+- App Store Connect/TestFlight/submission
