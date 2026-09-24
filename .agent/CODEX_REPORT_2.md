@@ -1,3 +1,16 @@
+## Final C2 disposition — PR #21
+
+- verdict: **PASS-WITH-FIX**
+- reviewed/fixed head: `0a71f0882136aa8930cf0572033e1a0ba28c0760`
+- identity/linkage: PASS
+- env preflight: PASS
+- artwork/A1/A1b findings: factual and accepted
+- focused verifier tests: 8/8 PASS
+- scoped suite: 116/116 PASS
+- production mutation: 0
+- merge disposition: safe for fresh-main merge/post-merge verification
+- release disposition: do not production-build/release until official artwork, EAS production vars, and App Store Connect inputs are ready
+
 # H2 — PR #21 branding / EAS preflight final review (2026-09-24)
 
 - task_id: `kabumori-pr21-branding-eas-preflight-final-review-20260924`
