@@ -3,8 +3,8 @@
 - task_id: x-admin-netlify-deploy-preview-pipeline-20260924
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: X自動投稿・複数ブランド管理画面 apps/admin の開発中PreviewをNetlifyへ移し、Vercelのdeployment rate limitに依存せずテスト・レビューできる状態を作る。最終production deployのみVercelへ残す。
@@ -372,3 +372,24 @@ K4レビュー（`26d8b34`）は「GitHubへ未配信」「remote G4 branchが�
 
 - status -> review_required
 - next_owner -> chatgpt
+
+
+## Final K4 — 2026-09-24
+
+Result: PASS.
+
+Accepted:
+- repository-side Netlify Deploy Preview preparation is complete
+- changed files are present on GitHub
+- implementation commit: `12b994e00a4f7ae83076e6c9c44a09d339cebb9d`
+- dedicated remote branch: `admin-netlify-deploy-preview-phase2-20260924`
+- source semantics under `apps/admin/src/**` unchanged
+- local tests/typecheck/lint/build/diff/secret checks PASS
+- PR #15 remains untouched and unmerged
+- Vercel/production/DB/DNS mutation = 0
+- interactive Netlify account authorization remains the only external blocker
+
+Review decision:
+- No additional Codex review is required for this repository-preparation step because the change is limited to Netlify config/gitignore/docs and does not alter application source, auth logic, DB/RPC, or runtime semantics.
+- Live Netlify Preview verification is still required after site connection, especially `src/proxy.ts` session refresh behavior.
+- Do not treat this K4 PASS as proof that live Netlify runtime behavior has already been verified.
