@@ -19,12 +19,14 @@
   - Resume from read-only secret presence verification → exact caller-auth migration → four-Cron postflight → important-news-monitor-only deploy → natural runtime verification.
   - Never expose/read back plaintext secret values; keep `verify_jwt=false`; no business logic/auto_publish/Cron cadence/X/Push changes.
 
-- Codex slot 2: `ready` — `x-autopost-phase1b-account-bound-queue-schema-and-outcome-ledger-20260924`
-  - Phase1 C2はsafe-stopとしてPASS。独立read-backでscheduled_posts/post_execution_logsにsocial_account_id/account bindingやdurable provider outcomeが無いことを確認。
-  - current claim_due_postはglobal oldest pendingをFOR UPDATE SKIP LOCKEDで1件claim、retry_scheduled_postはdurable provider phaseなしでrunning→pending可能。現状のままaccount/fairness/retryを拡張するのは危険。
-  - 次H2はsource-onlyで明示social_account_id binding + DB integrity + durable attempt/outcome ledger + versioned claim/reconcile RPC候補を作り、disposable PostgreSQLで証明する。
-  - legacy rowsのaccount推測/backfill禁止。production mutation 0。
-  - Recommended model: GPT-6 Sol Medium。
+- Codex slot 2: `done` — `x-autopost-phase1b-account-bound-queue-schema-and-outcome-ledger-20260924`
+  - C2 PASS。source-only account-bound queue foundation candidate承認。
+  - explicit nullable social_account_id + DB brand/account/platform integrity、durable attempt/outcome ledger、versioned service-role-only v2 RPC候補を実装。
+  - focused 6/6、x-test-post 409/409、disposable PostgreSQL fairness/concurrency/retry/stale/rollback proof PASS。
+  - production catalog独立確認: social_account_id列0、v2 tables 0、v2 RPCs 0。production mutation 0。
+  - live legacy queueは205 succeeded / 63 failed / 15 pending / 0 running。15 pendingは暗黙backfill禁止。
+  - migration単独適用禁止。old dispatcherのままclaim_due_post_v2有効化禁止。
+  - 次候補: source-only dispatcher/planner cutover candidate。claim.social_account_idでcredential routingし、remaining planners/callersをversion化してからproduction gate。
 
 
 - Claude slot 1: `ready` — `kabumori-mobile-auth-real-e2e-disposable-account-20260924`
