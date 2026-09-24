@@ -91,3 +91,14 @@ When complete:
   - production mutation=0
   - remaining rollout steps
 - STOP for K2.
+
+
+## ChatGPT merge handoff — 2026-09-24
+
+- PR #19 was merged by ChatGPT via the normal GitHub merge operation after fresh verification.
+- merged head: `2b743f3a9799f35409ab1e61652b9e76b04977c5`
+- merge commit / main SHA: `518542702f820e490d0c02050b0ef470f023ce5a`
+- PR #19 is now closed/merged.
+- No deploy, `app_enabled` flip, DB/schema/Auth/X mutation was performed.
+- Continue this same G2 task with **post-merge verification only**.
+- After post-merge checks, set status -> review_required / next_owner -> chatgpt and complete the Report for K2.
