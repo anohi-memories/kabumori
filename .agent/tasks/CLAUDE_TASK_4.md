@@ -3,8 +3,8 @@
 - task_id: x-admin-phase2-vercel-gate-merge-and-postmerge-qa-20260924
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: high
 - recommended_model: Sonnet 5
 - purpose: G2/K2で実装・freshen・全検証PASS済みのPR #15について、Vercel rate limit解除後のcheck確認、必要最小限の再freshen、PR merge、post-merge read-back、本番Admin QAまでを完了する。新機能実装はしない。
@@ -265,3 +265,24 @@ Resume rule:
 
 - status -> review_required
 - next_owner -> chatgpt
+
+
+## K4 Review — resume attempt 2
+
+Result: SAFE STOP ACCEPTED / TASK STILL NOT COMPLETE.
+
+Accepted:
+- dedicated G4 worktree used
+- PR #15 head remained unchanged
+- apps/admin drift remained 0
+- Vercel failure is still the same deployment rate-limit blocker
+- no empty retrigger was forced
+- production mutation remained 0
+
+Still required before final K4 PASS:
+1. Vercel check PASS
+2. exact-head verified PR #15 merge
+3. post-merge origin/main read-back
+4. production Admin QA
+
+Status returned to ready for later continuation. On next G4 start, check Vercel first and do nothing else if rate limiting remains.
