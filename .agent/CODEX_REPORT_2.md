@@ -51,6 +51,10 @@ Phase1B v2 claim itself also does not write the legacy `started` execution log. 
 - changed_files: `.agent/tasks/CODEX_TASK_2.md`, `.agent/CODEX_REPORT_2.md` only. implementation_commit: **none**; control commit/push/read-back result recorded in the sync addendum when available.
 - Production mutation **0**: migration/DB write/backfill 0, Function deploy 0, Cron/settings/OAuth/Vault 0, X/OpenAI/Push API invocation 0, X posts 0. H1/G1/G2 and `apps/admin/**` unchanged. No secrets or personal row data were printed.
 
+## Control sync
+
+- The two-file control commit `e20131754808a4dc1a05602972c01a6e3244dbc1` was pushed to `origin/main` after a fresh fetch showed no overlap. A post-push fresh fetch read that exact commit, TASK `review_required` / `chatgpt`, and this Phase1C Report at the head of the remote file. This addendum records the push/read-back; it does not change the cutover decision or any production state.
+
 # H2 — explicit-account X queue and durable outcome candidate (2026-09-24)
 
 - task_id: `x-autopost-phase1b-account-bound-queue-schema-and-outcome-ledger-20260924`
