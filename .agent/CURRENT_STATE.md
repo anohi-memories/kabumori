@@ -31,7 +31,7 @@
 
 ## Current slot snapshot
 
-- H1: `done` — `kabumori-release-pr18-privacy-dataflow-eas-light-review-20260924`
+- H1: `ready` — `x-autopost-phase1e-auth-secret-provider-final-review-20260924`
 - H2: `done` — `kabumori-pr19-report-detail-portfolio-privacy-final-review-20260924`
 - G1: `ready` — `kabumori-release-branding-eas-preflight-20260924`
   - PR #18 merged at reviewed head `6f32776` -> main `a41b306`. Files byte-identical; 108/0 tests, tsc src 0, web export 10 routes, public-site preview+production dry-run builds PASS. Vercel ignored per Netlify hosting policy. Mutation 0.
@@ -158,7 +158,7 @@
 - one-request provider seam prevents hidden second X create after provider-start.
 - x-test-post 422/422, _shared 114/114, important-news-monitor 431/431 PASS.
 - production mutation/deploy/token refresh/X API calls=0.
-- Independent Codex review is still required before Phase1E can be accepted beyond source-candidate status.
+- Independent Codex review is assigned to H1 using Sol（高） before Phase1E can be accepted beyond source-candidate status.
 - H1/H2 app-owned task records were not overwritten by this X-owner workflow.
 
 ## K4 Netlify result
