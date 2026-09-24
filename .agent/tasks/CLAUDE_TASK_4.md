@@ -3,8 +3,8 @@
 - task_id: x-admin-phase2-vercel-gate-merge-and-postmerge-qa-20260924
 - owner: claude
 - slot: claude-4
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet 5
 - purpose: G2/K2で実装・freshen・全検証PASS済みのPR #15について、Vercel rate limit解除後のcheck確認、必要最小限の再freshen、PR merge、post-merge read-back、本番Admin QAまでを完了する。新機能実装はしない。
@@ -250,3 +250,18 @@ Resume rule:
 - when G4 starts again, first check the current Vercel status.
 - if still rate-limited, stop without retriggering.
 - if PASS, continue through merge and QA.
+
+## Report (resume attempt 2, dedicated worktree)
+
+- task_id: x-admin-phase2-vercel-gate-merge-and-postmerge-qa-20260924
+- result: **依然保留（未merge）**。K4指示どおり、まずVercel statusを確認 → 依然rate-limitedのため再トリガーせず停止。
+- worktree: 今回から **G4専用の独立worktree** `/Users/yuya/Developer/kabumori/.claude/worktrees/g4-x-admin-pr15`（branch `worktree-g4-x-admin-pr15`）を新規作成し、fresh origin/main（`ccee0b7`）から開始した。G1/G2/G3と共有していた旧checkoutは使用していない。
+- Vercel status（`gh pr checks 15`）：`fail — Deployment rate limited — retry in 24 hours.`（前回観測時 06:41 UTCと同一メッセージ、PR head `b044425` も不変）。今回の観測は 06:53 UTC、経過はわずか約12分。
+- apps/admin drift：`git log a2e2480..HEAD -- apps/admin/` = 0件（fresh origin/main比でも変化なし）。
+- 空commitでの再トリガーは行っていない。production mutationは0件。
+- 次：Vercelのrate limitが解除された後、再度G4を`ready`にして、新しい専用worktreeから再開する。
+
+## Completion
+
+- status -> review_required
+- next_owner -> chatgpt
