@@ -738,7 +738,11 @@ export const REPORT_LIMITS = {
   impactFact: 160,
   impactInference: 160,
   impactWatch: 80,
-  impactBrief: 100,
+  // Brief holdings: fact + inference + watch combined. A close brief also has to carry the day's
+  // move, the gap to the benchmark and whether any material exists, so it gets more room
+  // (production v22 close dry-runs produced 104-136 characters for valid brief entries).
+  impactBriefMorning: 120,
+  impactBriefClose: 160,
   morningReview: 300,
   watchNote: 120,
   riskNote: 100,
@@ -766,7 +770,7 @@ const IMPACT_INSTRUCTIONS = [
   "stance は tailwind（追い風）/ headwind（逆風）/ neutral（中立）/ no_clear_material（明確な個別材料なし）から選びます。",
   "basis にはその銘柄の allowed_basis にある値だけを入れます。company_news は own_news、sector_news は related_market_news を根拠にした場合です。",
   "tailwind / headwind には basis が1つ以上必要です。根拠が無い・弱い銘柄は無理に理由を作らず no_clear_material にし、fact_ja に「明確な個別材料は確認できていません」と書きます。",
-  "fact_ja は入力で確認できる事実だけ、inference_ja は推定だけ（必ず「〜の可能性があります」「〜と考えられます」「〜とみられます」のような推定の言い方）、watch_ja は観察ポイントだけを書き、三つを混ぜません。",
+  "fact_ja は入力で確認できる事実だけ、inference_ja は推定だけ（必ず「〜の可能性があります」「〜と考えられます」「〜とみられます」のような推定の言い方）、watch_ja は観察ポイントだけを書き、三つを混ぜません。要因が分からない場合、inference_ja は「要因は特定できません」のように、特定できないことだけを書いてかまいません。",
   "inference_ja では、業種・為替・金利・原油・米国株・半導体指数と銘柄の一般的な関係に触れてよいですが、入力に無い数字・固有の事実は書かず、推定として書きます。根拠が無ければ空文字にします。",
   "detail が「簡潔に」の銘柄は fact_ja を1文にし、inference_ja と watch_ja は空文字でかまいません。「詳しく」の銘柄を中心に書きます。",
 ].join("\n");
@@ -873,7 +877,7 @@ export function reportDraftRequestBody(reportType: ReportType, packet: unknown):
       COMMON_INSTRUCTIONS,
       reportType === "close" ? CLOSE_INSTRUCTIONS : MORNING_INSTRUCTIONS,
       ...(hasSharedMarket(packet) ? [SHARED_MARKET_INSTRUCTIONS] : []),
-      `title_ja: ${REPORT_LIMITS.title}字以内。summary_ja: 2文以内・${REPORT_LIMITS.summary}字以内。overview_ja: ${REPORT_LIMITS.overview}字以内。holding_impacts: 「詳しく」の銘柄は fact_ja・inference_ja 各${REPORT_LIMITS.impactFact}字以内、watch_ja ${REPORT_LIMITS.impactWatch}字以内。「簡潔に」の銘柄は三つの合計で${REPORT_LIMITS.impactBrief}字以内。watch_notes の各 note_ja: ${REPORT_LIMITS.watchNote}字以内。risk_notes_ja: 最大${REPORT_LIMITS.maxRisks}個・各${REPORT_LIMITS.riskNote}字以内。checkpoints_ja: 各${REPORT_LIMITS.checkpoint}字以内。`,
+      `title_ja: ${REPORT_LIMITS.title}字以内。summary_ja: 2文以内・${REPORT_LIMITS.summary}字以内。overview_ja: ${REPORT_LIMITS.overview}字以内。holding_impacts: 「詳しく」の銘柄は fact_ja・inference_ja 各${REPORT_LIMITS.impactFact}字以内、watch_ja ${REPORT_LIMITS.impactWatch}字以内。「簡潔に」の銘柄は三つの合計で${reportType === "close" ? REPORT_LIMITS.impactBriefClose : REPORT_LIMITS.impactBriefMorning}字以内。watch_notes の各 note_ja: ${REPORT_LIMITS.watchNote}字以内。risk_notes_ja: 最大${REPORT_LIMITS.maxRisks}個・各${REPORT_LIMITS.riskNote}字以内。checkpoints_ja: 各${REPORT_LIMITS.checkpoint}字以内。`,
       "ticker_code は入力の holdings / watch にある値だけを使います。holding_impacts は holdings、watch_notes は watch の銘柄だけです。",
       "入力だけでは正確に書けない場合は sufficient_information を false にし、文字列を空、配列を空にします。",
     ].join("\n"),
@@ -1128,6 +1132,31 @@ export function localReportIssues(
 // Inference text must read as an estimate, never as a reported fact.
 const HEDGE = /可能性|考えられ|とみられ|見られ|かもしれ|余地|想定され|うかがえ|見込まれ|推測され|推定され/u;
 
+// Only a complete, simple inability-to-determine statement may omit a hedge. Anchoring the
+// whole sentence prevents an unrelated allowed noun (e.g. "材料") from laundering another claim.
+const UNDETERMINED_ONLY =
+  /^(?:(?:入力情報|確認できる情報)から)?(?:明確な)?(?:個別(?:の)?)?(?:要因|原因|理由|材料|影響|背景)(?:との因果関係)?(?:は|が|を)?(?:特定|判断|断定|確認|説明)(?:できません|できていません|できない|されていません)$/u;
+// The exact production dry-run wording is a longer but still bounded statement that no cause is
+// being attributed; keep this exception anchored rather than allowing arbitrary surrounding prose.
+const UNDETERMINED_ATTRIBUTION =
+  /^(?:個別|明確な個別)材料(?:が|は)確認できないため[、,]?(?:当日の)?(?:下落|上昇|値動き|変動)を特定の(?:要因|原因|理由)に結び(?:付け|つけ)ることはできません$/u;
+const CAUSAL_ASSERTION =
+  /(?:逆風|追い風)(?:に|と)なり(?:ました|ます)|(?:原因|要因)(?:(?:に|と)なりました|です|でした)|(?:により|によって|を受けて)(?:売られ|買われ)(?:ました|ます)|(?:により|によって|を受けて)(?:下落|上昇)しました|で(?:売られ|買われ)ました/u;
+
+function inferenceSentences(text: string): string[] {
+  return text.split(/(?:[。．！？!?]+|[;；]+|[\r\n]+|\.(?=\s|$))/u).map((sentence) => sentence.trim()).filter(Boolean);
+}
+
+/** True when every sentence is either hedged or a narrow "cannot be determined" statement. */
+export function inferenceIsHedged(text: string): boolean {
+  return inferenceSentences(text).every((sentence) => {
+    // A hedge later in the same sentence must not launder an already-asserted cause.
+    if (CAUSAL_ASSERTION.test(sentence)) return false;
+    return HEDGE.test(sentence) ||
+      UNDETERMINED_ONLY.test(sentence) || UNDETERMINED_ATTRIBUTION.test(sentence);
+  });
+}
+
 function packetAllowedBasis(packet: unknown): Map<string, Set<string>> {
   const holdings = (packet as { holdings?: Array<{ ticker_code?: unknown; allowed_basis?: unknown }> } | null)?.holdings ?? [];
   return new Map(holdings.map((holding) => [
@@ -1141,6 +1170,7 @@ export function holdingImpactIssues(body: ReportBody, snapshot: PortfolioSnapsho
   const issues: string[] = [];
   const allowed = packetAllowedBasis(packet);
   const stocks = new Map(snapshot.holdings.map((stock) => [stock.ticker_code, stock]));
+  const briefLimit = snapshot.report_type === "close" ? REPORT_LIMITS.impactBriefClose : REPORT_LIMITS.impactBriefMorning;
   for (const impact of body.holding_impacts) {
     const stock = stocks.get(impact.ticker_code);
     if (!stock) continue;
@@ -1152,11 +1182,11 @@ export function holdingImpactIssues(body: ReportBody, snapshot: PortfolioSnapsho
     if (impact.stance === "no_clear_material" && impact.basis.includes("company_news")) {
       issues.push(`STANCE_BASIS_MISMATCH:${impact.ticker_code}`);
     }
-    if (impact.inference_ja && !HEDGE.test(impact.inference_ja)) issues.push(`INFERENCE_NOT_HEDGED:${impact.ticker_code}`);
+    if (impact.inference_ja && !inferenceIsHedged(impact.inference_ja)) issues.push(`INFERENCE_NOT_HEDGED:${impact.ticker_code}`);
     const tooLong = stock.detail_level === "detailed"
       ? length(impact.fact_ja) > REPORT_LIMITS.impactFact || length(impact.inference_ja) > REPORT_LIMITS.impactInference ||
         length(impact.watch_ja) > REPORT_LIMITS.impactWatch
-      : length(impact.fact_ja) + length(impact.inference_ja) + length(impact.watch_ja) > REPORT_LIMITS.impactBrief;
+      : length(impact.fact_ja) + length(impact.inference_ja) + length(impact.watch_ja) > briefLimit;
     if (tooLong) issues.push(`IMPACT_TOO_LONG:${impact.ticker_code}`);
   }
   if (snapshot.report_type === "morning" && body.morning_review_ja) issues.push("MORNING_REVIEW_ON_MORNING");

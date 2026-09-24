@@ -271,7 +271,7 @@ test("holding with no direct material: no invented reason, basis must exist, bri
     holdingImpactIssues(body({ holding_impacts: [impact("2222", { inference_ja: "円高が逆風になりました。" })] }), snapshot, packet),
     ["INFERENCE_NOT_HEDGED:2222"],
   );
-  const long = "明確な個別材料は確認できていません。".repeat(6);
+  const long = "明確な個別材料は確認できていません。".repeat(9); // 162 chars > close brief limit 160
   assert.deepEqual(
     holdingImpactIssues(body({ holding_impacts: [impact("2222", { fact_ja: long })] }), snapshot, packet),
     ["IMPACT_TOO_LONG:2222"],
