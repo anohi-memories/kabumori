@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase0c2-production-deploy-retry-20260924
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: GPT-6 Sol Medium
 - purpose: Phase0c C2 reviewで、最初のx-test-post production deployがSupabase Functions API HTTP 500で失敗し、migration未適用・production mutation 0のまま停止した。Phase0b compatible clientを同じ安全順序で再試行し、成功時のみruntime確認→fresh preflight→exact migration applyへ進む。
@@ -108,3 +108,20 @@ When complete or stopped:
 - next_owner -> chatgpt
 - update CODEX_REPORT_2 with diagnostic result, consent, retry count, deploy metadata, runtime verification, migration status, postflight, mutation counts, remaining risk, commit/push/fresh-origin verification
 - STOP for C2
+
+
+## Final C2 — 2026-09-24
+
+PASS.
+
+Independent production verification confirmed:
+- `x-test-post` is ACTIVE v119, `verify_jwt=false`, runtime SHA `4642f128a14d7eb8a269f6d50023956f33d0762f3a0dd91b8b6fdc3ef3d0d322`.
+- Deployed `publish_claim_logic.ts` contains the approved brand-scoped conflict target `on_conflict=brand_id,post_type,date_jst`, writes `brand_id`, and scopes both complete/fail PATCH paths by brand.
+- All three legacy global UNIQUE constraints are absent.
+- All three intended brand-scoped unique indexes remain unique/valid/ready.
+- All four planner RPCs use the new brand-scoped scheduled-post conflict target and no longer contain the old target; SECURITY DEFINER and `search_path=public` remain intact.
+- Production migration history contains exactly the applied `x_autopost_phase0_brand_scoped_uniqueness` migration under version `20260924001508`.
+- publish-enabled aggregate remains 2 true / 1 false, matching the rollout report.
+- No further production mutation was required for C2.
+
+C2 accepts the Phase0c2 production rollout as complete. The known older multibrand foundation migration-history drift remains a separate operational caveat: continue to avoid blind `supabase db push` or replay/history repair.
