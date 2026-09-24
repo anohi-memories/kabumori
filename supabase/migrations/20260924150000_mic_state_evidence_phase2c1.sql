@@ -228,7 +228,8 @@ for each row execute function public.mic_state_evaluation_runs_guard_terminal_st
 --
 -- AI usage: every Luna/Sol call is recorded before this RPC with
 -- related_table = 'mic_state_evaluation_runs', related_id = run id. The
--- run's ai_usage_event_id must be one of this run's own usage rows.
+-- run's ai_usage_event_id must be one of this run's own usage rows for
+-- the domain and model actually saved on State.
 --
 -- Response-loss retry: a run can only reach 'evaluated' through this
 -- function. If the run is already 'evaluated' and this run is provably the
@@ -338,6 +339,8 @@ begin
     where u.id = p_ai_usage_event_id
       and u.related_table = 'mic_state_evaluation_runs'
       and u.related_id = p_run_id::text
+      and u.feature = 'mic_state_evaluation_' || p_domain
+      and u.model = p_ai_model
   ) then
     raise exception 'MIC_STATE_AI_USAGE_EVENT_RUN_MISMATCH';
   end if;
