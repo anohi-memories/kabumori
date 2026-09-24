@@ -36,12 +36,12 @@
 ### Claude slot 2
 - owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: x-admin-multibrand-selector-query-parameterization-phase2-20260924
+- status: ready
+- task_id: x-admin-multibrand-selector-phase2-merge-only-20260924
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- note: Phase2実装完了。PR #15（未merge）。server再検証付きbrand selector、4 query moduleをAuthorizedBrandIdでparameterize、system-toggleはKabumori専用のまま posting_windows をKabumori固定に。tests 31/31、tsc/lint/build pass。production mutation 0。K2待ち。
+- note: K2 PASS済みPR #15をfreshen/rebase→31 tests + tsc/lint/build再確認→意味差分なしならmerge。Netlify deploy/DB policy変更なし。production mutation 0。Opus 5.5推奨。
 
 ## Control codes
 
