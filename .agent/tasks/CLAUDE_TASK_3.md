@@ -1,25 +1,50 @@
 # Claude Task 3
 
-- task_id: x-autopost-phase1f-pr25-merge-postmerge-verify-20260924
+- task_id: x-autopost-phase1g-multistep-tip-greeting-completion-20260925
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
-- priority: high
-- recommended_model: Sonnet5（高）
-- purpose: C1 PASS-WITH-FIX済みのPhase1F PR #25をfresh mainに対して安全にmergeし、post-merge回帰確認する。production activation/deployは行わない。
+- status: ready
+- next_owner: claude
+- priority: critical
+- recommended_model: Opus5.5（高）
+- purpose: Phase1Fで導入したprovider-step ledgerを使い、tip thread と morning_greeting のmulti-request投稿を安全に完了できるsource-only completion/provider-step契約を実装する。production apply/deploy/X API callは行わない。
 
-## Reviewed target
+## Previous K3 closure
 
-PR #25:
-- branch: `codex/h1-phase1f-ledger-review-20260924`
-- reviewed head: `b3740cc7c39010f02ad3505721a5b37d2e707dba`
-- state at C1: OPEN / unmerged
+Previous task:
+- `x-autopost-phase1f-pr25-merge-postmerge-verify-20260924`
 
-Accepted H1 fixes:
-1. revoke direct API-role DML on `scheduled_posts`
-2. enforce provider-step first-kind/order/reply-parent integrity
-3. reject late unfinished-step mutation once parent attempt is terminal
+Final K3 result:
+- PASS
+- PR #25 reviewed head `b3740cc7c39010f02ad3505721a5b37d2e707dba` merged unchanged
+- merge commit `b2fdc1f58114eac55b3f31a1f781e3c555558cf4`
+- focused Phase1B/1D/1E/1F 55/55 PASS
+- x-test-post 429/429 PASS
+- _shared 120/120 PASS
+- important-news-monitor 431/431 PASS
+- disposable Phase1D/1E/1F behavior/race PASS
+- production mutation 0 excluding GitHub merge
+
+Phase1F is now on main as source candidate only. Production activation remains prohibited.
+
+## Goal
+
+Close the two remaining multi-request completion blockers:
+
+1. `tip` thread posting:
+   - multiple create requests
+   - reply chaining
+   - partial success/uncertain outcome
+   - exactly-once DB completion after all expected parts confirm
+
+2. `morning_greeting`:
+   - media upload
+   - tweet create
+   - publish_claims / receipt lifecycle
+   - partial media/create outcomes
+   - exactly-once same-day completion
+
+Do not enable either type in production.
 
 ## Mandatory startup
 
@@ -27,44 +52,179 @@ Accepted H1 fixes:
 2. Read .agent/ORCHESTRATION.md
 3. Read .agent/CURRENT_STATE.md
 4. Read this TASK
-5. Read H1 Phase1F report + Final C1
-6. Fresh fetch origin/main and PR #25 head
+5. Read Phase1F migration/docs/tests and H1 C1 findings
+6. Fresh fetch origin/main
 7. Confirm dedicated independent G3 worktree
-8. Confirm no overlap with active G4/H1/H2/G1/G2 work
-9. Verify PR #25 head still equals reviewed `b3740cc7...`
-10. If semantic drift exists, STOP
+8. Inspect G4/H1/H2/G1/G2 scopes and prove no overlap
+9. Audit the current legacy tip thread and morning_greeting posting/completion paths end-to-end
+10. Record production-only dependencies separately; do not infer them from source
 
-## Pre-merge checks
+## Scope A — tip provider-step contract
 
-- compare PR #25 changed files against fresh main
-- verify only reviewed Phase1F scope is present
-- check no conflicts in Phase1F migration/tests
-- verify mergeability
-- rerun:
-  - focused Phase1F + Phase1B/1D/1E regressions
-  - x-test-post
-  - _shared
-  - important-news-monitor
-  - disposable PostgreSQL behavior/race if available
-  - deno check/lint
-  - bash -n
-  - git diff --check
+Audit current `postThreadToX` and legacy tip completion.
 
-## Merge
+Define exact durable step semantics for a thread:
+- step 1 = root `create_post`
+- step N>1 = `create_reply`
+- each reply parent must equal the previous confirmed X post id
+- expected part count must be known before starting provider execution
+- no step may start until the previous step is confirmed
+- confirmed step cannot be replayed
+- rejected/uncertain step blocks later steps
+- retry must never duplicate already-confirmed parts
 
-If reviewed head unchanged and checks remain acceptable, merge PR #25 using normal repository flow.
+Store enough data to prove:
+- part index
+- expected total parts
+- step kind
+- parent id where applicable
+- confirmed X post id
+- terminal error/outcome
 
-Do not bypass unrelated required checks; Vercel build-rate-limit is not relevant to this Supabase source-only change and must not trigger any production deployment workaround.
+Do not collapse a multi-part thread into one X id.
 
-## Post-merge verification
+## Scope B — tip atomic completion
 
-After merge:
-1. fresh fetch origin/main
-2. record merge commit SHA
-3. confirm reviewed Phase1F files on main match PR #25 semantics
-4. rerun focused Phase1F and key regressions
-5. confirm live dispatcher/producers remain unwired
-6. confirm no migration apply/deploy occurred
+Implement a versioned source-only completion for `tip` that succeeds only when:
+- all expected thread steps exist
+- every expected step is confirmed
+- reply chain is internally consistent
+- no extra/unexpected step exists
+- attempt/account/post/claim identity matches
+- post is still in valid running state
+
+One DB transaction must:
+- mark schedule success
+- finalize v2 attempt
+- preserve all confirmed thread X ids in an auditable structure
+- perform legacy-equivalent tip usage/topic side effects exactly once
+- write exactly one success execution log
+- reject duplicate/replayed completion without duplicating counters/logs
+
+If source legacy semantics cannot be reproduced exactly, stop and keep tip disabled instead of approximating.
+
+## Scope C — morning_greeting provider-step contract
+
+Audit current:
+- image/media generation/storage
+- media upload
+- tweet create
+- publish_claims
+- receipt / asset references
+- completion/logging
+
+Define durable steps at minimum:
+1. media_upload
+2. create_post
+
+Required:
+- create_post cannot start until media_upload confirmed
+- media id used by create_post must equal the confirmed media step output
+- confirmed media must not be re-uploaded automatically after later uncertainty
+- tweet uncertainty must not cause blind replay
+- same-day publish claim ownership must remain tied to the same post/attempt/account
+- stale or competing attempt cannot reuse another attempt's media receipt
+
+## Scope D — morning_greeting atomic completion
+
+Implement source-only completion only if all source-backed side effects can be preserved exactly.
+
+A successful completion transaction must cover:
+- scheduled_posts
+- attempt ledger
+- provider-step records
+- publish_claim / receipt state
+- greeting-specific success metadata
+- execution log
+
+If storage receipt lifecycle requires an external/non-transactional system that cannot be atomically proven, model the durable DB receipt boundary explicitly and keep any unsafe transition fail-closed.
+
+## Scope E — multi-step provider helpers
+
+Add server-only helpers for:
+- begin next provider step
+- finish confirmed/rejected/uncertain step
+- return only the next safe action
+- reconstruct confirmed prior step ids without secret leakage
+
+No helper may:
+- auto-loop through all steps without persisting each boundary
+- retry an uncertain step
+- re-upload confirmed media
+- recreate a confirmed tweet/reply
+- infer account by brand
+
+Reuse Phase1E exact-account credential resolver; do not weaken it.
+
+## Scope F — disabled/enabled matrix
+
+Update v2 post-type support matrix.
+
+Expected target if safely completed:
+- tip -> v2-ready source candidate
+- morning_greeting -> v2-ready source candidate
+- brand_post -> still disabled unless exact completion source is now available and independently auditable
+
+Do not enable live routing.
+
+## Scope G — adversarial disposable PostgreSQL tests
+
+Prove at minimum:
+
+Tip:
+- 2-part happy path completes once
+- 3-part happy path completes once
+- duplicate finish/completion is idempotent
+- wrong reply parent rejected
+- missing middle part rejected
+- uncertain part blocks later steps
+- rejected part blocks later steps
+- concurrent completion creates one set of side effects
+- forced side-effect failure rolls back completion
+
+Morning greeting:
+- media then create happy path
+- create before media rejected
+- media id mismatch rejected
+- uncertain create blocks replay
+- competing attempt cannot reuse receipt/media step
+- duplicate completion idempotent
+- forced completion failure rolls back all DB effects
+
+Cross-cutting:
+- wrong claim/account/brand rejected
+- terminal attempt cannot accept new step outcome
+- legacy/unbound row cannot use v2 multi-step completion
+- cleanup PASS
+
+## Scope H — regression
+
+Run:
+- Phase1G focused tests
+- Phase1B/1D/1E/1F regressions
+- full x-test-post
+- _shared
+- important-news-monitor
+- morning_greeting-specific tests
+- tip/thread-specific tests
+- Deno/static checks
+- bash -n
+- git diff --check
+
+Report exact counts.
+
+## Migration / ACL rules
+
+Any migration must:
+- be additive/versioned
+- depend explicitly on 1B/1D/1E/1F
+- use SECURITY DEFINER + fixed empty search_path where appropriate
+- qualify schema names
+- be service_role-only for API-callable RPCs
+- close PUBLIC/default grant windows transactionally
+- leave step/ledger tables non-writable directly by API roles
+- document transaction/apply-tool assumptions
+- remain unapplied in production
 
 ## Forbidden
 
@@ -72,57 +232,41 @@ After merge:
 - `supabase db push`
 - migration-history repair
 - deploy
-- Cron/OAuth/Vault/token production mutation
-- X API/posts/media
-- enabling v2 dispatcher/producers
+- Cron/OAuth/Vault/token mutation
+- real X API calls/posts/media uploads
+- switching/enabling v2 dispatcher or producers
+- automatic legacy binding/backfill
 - apps/admin/**
 - consumer mobile/**
 - G1/G2 app work
 - G4 work
+- unrelated MIC work
 
 ## Production mutation budget
 
-0, excluding normal GitHub merge.
+0.
 
 ## Completion / K3
 
 Report:
-- fresh main
-- reviewed PR head
-- mergeability/conflicts
-- exact test counts
-- merge commit SHA
-- post-merge read-back
-- production mutation=0 excluding GitHub merge
-- remaining blockers
-- next recommendation
+1. fresh main SHA
+2. worktree/branch
+3. tip step model
+4. tip completion semantics
+5. greeting step model
+6. greeting completion semantics
+7. changed files
+8. ACL/migration safety
+9. exact adversarial tests
+10. regression counts
+11. commit/push/PR
+12. production mutation=0
+13. remaining blockers
+14. next recommendation
 
 When complete:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for K3.
 
-Do not start Phase1G in this task.
-
-## Report
-
-- task_id: `x-autopost-phase1f-pr25-merge-postmerge-verify-20260924`
-- result: **PR #25 merged; post-merge verification PASS; production mutation 0 (excluding the GitHub merge).** Stop for K3.
-- worktree/branch: dedicated G3 worktree `/Users/yuya/Developer/kabumori-g3-phase1d`; local-only `claude/g3-pr25-premerge-check` (merge preview) and `claude/g3-pr25-postmerge` (read-back). No overlap: G2 in_progress owns only `personalized-reports` (DB/X forbidden to it); G1/G4/H1/H2 done.
-- fresh main before merge: `ac97508` (no `supabase/` change between the merge preview and the merge).
-- reviewed PR head: `b3740cc7c39010f02ad3505721a5b37d2e707dba` = PR head, single commit `fix: harden Phase1F ledger transitions and schedule ACL`; merge pinned with `--match-head-commit`.
-- scope check: 4 files (Phase1F migration, `atomic_completion_migration_test.ts`, Phase1F behavior SQL, Phase1F `.md`), exactly the three C1-accepted fixes: (1) `revoke insert, update, delete, truncate on public.scheduled_posts from public, anon, authenticated, service_role`; (2) provider steps: first step cannot be `create_reply`, kind sequence enforced (`media_upload → create_post`, `create_* → create_reply`), reply parent chained; (3) `finish_provider_step_v2` locks the attempt `FOR UPDATE` and refuses to finish a step once the attempt is terminal. No other change.
-- mergeability/conflicts: main had no changes to any Phase1F file since the PR base `26311f5`; GitHub `MERGEABLE`; local merge preview clean. Only check: Vercel `FAILURE` = `build-rate-limit`; not relevant to this Supabase-source-only PR and not worked around.
-- tests (pre-merge on the local merge preview; repeated post-merge on `origin/main`, identical):
-  - focused Phase1B/1D/1E/1F static + resolver/seam/outcome-ledger **55/55**
-  - `x-test-post` **429/429**; `_shared` **120/120**; `important-news-monitor` **431/431**
-  - disposable PostgreSQL 17: Phase1F behavior + duplicate-completion race **PASS ×2** pre-merge, **PASS** post-merge (race: one `completed`, one `already_completed`, side effects `2|1`); Phase1E proof PASS; Phase1D proof PASS; cleanup PASS
-  - `deno check --no-config` and `deno lint` on the changed/related TS: PASS; `bash -n` runner: PASS; `git diff --check`: PASS
-- merge commit SHA: `b2fdc1f58114eac55b3f31a1f781e3c555558cf4` (merge commit, repo convention; branch kept; merged 2026-09-24T14:47:38Z).
-- post-merge read-back (`origin/main` = `b2fdc1f`): reviewed head is an ancestor; all 8 Phase1F files (migration, static test, outcome-ledger TS + test, fixture, behavior, runner, doc) are blob-identical to `b3740cc`; diff vs. pre-merge main = exactly the 4 PR files; `x-test-post/index.ts`, `_shared/x_oauth2_post.ts`, `_shared/brand/**`, `important-news-monitor/**` unchanged; `index.ts` contains 0 references to any v2 claim/completion/step RPC → dispatcher and producers remain unwired.
-- production mutation: **0** excluding the GitHub merge (apply/DDL/DML/RPC 0, db push 0, deploy 0, Cron/OAuth/Vault/token 0, X API 0, dispatcher/producers 0). Generated `deno.lock` removed.
-- remaining blockers before Phase1G / production:
-  - new live-definition dependency from fix (1): after apply, **no API role (incl. service_role) can INSERT/UPDATE/DELETE `scheduled_posts` directly**. Repository source has no such writer (admin `recent-failures`/`today-scheduled-posts`/`post-history`, social-mobile and the morning-report stale reconciler only SELECT; all writes go through owner-executed RPCs), but any production-only writer (SQL console jobs, functions not in repo) must be checked in the live-definition diff before apply.
-  - step-ledger-driven completions for tip and morning_greeting; brand_post completion SQL must be captured into source; poll-capable seam for interaction; v2 dispatcher itself; per-account pre-X refresh writer; Kabumori credential into its account's Vault refs; uncertain→proven-created reconciliation path.
-  - production gates: live-definition diff, atomic migration proof for the 1B→1F chain (explicit transactions in 1E/1F vs. apply tooling), staged rollback plan.
-- next_recommendation: K3. Then Phase1G as source-only (step-ledger completions for tip/morning_greeting, or the gated-OFF v2 dispatcher for the five enabled types), recommended Opus5.5（高）.
+Do not implement or enable the live v2 dispatcher in this task.
