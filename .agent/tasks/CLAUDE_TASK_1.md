@@ -3,8 +3,8 @@
 - task_id: kabumori-mobile-recovery-pr17-merge-and-postmerge-verify-20260924
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: K1 PASS + C1 Auth/security review PASS済みのPR #17を、fresh mainとの競合・意味差分を確認したうえでmainへmergeし、main上で回帰確認を行う。かぶモリnativeアプリPRのためVercel checkはmerge blockerとして扱わない。
@@ -179,3 +179,22 @@ No Supabase Auth, SMTP, email-template, migration, RPC, DDL/DML, `account-delete
 2. **A reachable Auth confirmation/recovery redirect / Site URL.** Today the confirmation link lands on an unreachable page.
 3. **Privacy / terms / support web URLs**, still undecided.
 4. For operations: the shared `ios-push-e2e` worktree is being used by another session. Future G1 work should keep using an independent checkout.
+
+
+## Final K1 — 2026-09-24 (merge closeout)
+
+Result: **PASS**.
+
+Accepted:
+- PR #17 merged to main at `7ad3539026eb458c6048df4f300e80332e60f06e`
+- merged source is byte-identical to reviewed head `b3798aa6be82b6a29d8d2dcf21ca27fb19ef5f50`
+- exactly 3 reviewed files changed
+- 98 tests passed / 0 failed
+- mobile src TypeScript scope: 0 errors
+- git diff --check: PASS
+- Expo web export smoke: PASS / 10 routes
+- no unrelated mobile/Auth change
+- backend/production mutation=0
+- Vercel failure ignored per Kabumori native hosting policy
+
+G1 is closed.
