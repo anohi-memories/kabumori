@@ -32,11 +32,11 @@
 ## Current slot snapshot
 
 - H1: `done` — `kabumori-mobile-recovery-pr17-final-auth-security-review-20260924`
-- H2: `idle` / task_id `none`
+- H2: `ready` — `x-autopost-phase1d-db-rpc-concurrency-final-review-20260924`
 - G1: `ready` — `kabumori-release-foundation-appstore-web-links-eas-audit-20260924`
   - Final K1 PASS. PR #17 merged at reviewed head `b3798aa` → main `7ad3539`; post-merge verification PASS; backend mutation 0.
 - G2: `ready` — `kabumori-app-morning-close-report-detail-and-portfolio-impact-20260924`
-- G3: `ready` — `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`
+- G3: `done` — `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`
 - G4: `ready` — `x-admin-netlify-deploy-preview-pipeline-20260924`
 
 ## Kabumori release lanes
@@ -49,10 +49,10 @@
 
 - G1 owns App Store release foundation/public legal-support Web/native release links/EAS audit.
 - G2 owns Kabumori app morning/closing report detail + portfolio-impact implementation.
-- G3 owns X queue/planner SQL/RPC/x-test-post Phase1D.
+- G3 Phase1D implementation is complete; H2 now owns its DB/RPC/permission/concurrency final review.
 - G4 owns apps/admin Netlify Preview configuration only.
 - H1 final Auth/security review of PR #17 is complete (C1 PASS).
-- H2 is free for review/verification work.
+- H2 owns Phase1D DB/RPC/permission/concurrency final review; production apply remains prohibited.
 - push前にfresh `origin/main`確認。
 - 各slotは独立worktree/checkoutを使用する。
 - 既存未コミット変更は他workstream所有として触らない。
@@ -77,6 +77,15 @@
 - Kabumori Expo Web Netlify Preview setup.
 - Prior reviewed code/test evidence remains preserved in the old G4/G2 reports.
 - Resume either deferred item only when needed or user explicitly asks.
+
+## K3 result
+
+- Phase1D source-only candidate IMPLEMENTATION PASS.
+- Implementation commit: `238247a57287c3bb835b6e2a0ca8ee4a2d910fdf`.
+- Disposable PostgreSQL/concurrency proof PASS; focused tests 13/13; x-test-post 416/416.
+- Production mutation/deploy/X API calls = 0.
+- Final DB/RPC/permission/concurrency acceptance is delegated to H2 using Sol（高）.
+- No production activation until C2 review and later live-definition/prerequisite gates pass.
 
 ## Known issues / observations
 
