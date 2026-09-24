@@ -28,7 +28,7 @@
 - Deployed bundle SHA: `8192d004167b01e3a48c55df584ca6393e896db1c752f3bb7a247849c2c0257e`.
 - Read-back: all 26 deployed source modules match current latest-main files exactly. All 16 other Function metadata/version/SHA records match predeploy.
 - One empty, unauthenticated POST with no caller-secret header returned **401 UNAUTHORIZED**. Source order confirms rejection precedes service-role loading, request-body parsing, and mode dispatch. No candidate or business payload was sent.
-- Natural Cron observations (UTC, all pg_cron status `succeeded`): publish-ready 02:50, 02:55, 03:00, 03:05; generation 02:54; fetch 03:00; judgement 03:07. DB pg_net responses observed through 03:07 were 49/49 HTTP 200, with zero error JSON, unauthorized, 5xx, timeout, or transport errors. No manual X post, candidate injection, or Push was performed.
+- Natural Cron observations (UTC, all pg_cron status `succeeded`): publish-ready 02:50, 02:55, 03:00, 03:05; generation 02:54; fetch 03:00; judgement 03:07. DB pg_net responses observed through 03:07 were 49/49 HTTP 200, with zero error JSON, unauthorized, 5xx, timeout, or transport errors. No manual X post, candidate injection, or Push was performed. A separate read-only count confirmed `x_published_at` since deploy = 0 and X-post IDs since deploy = 0.
 
 ### Exact scope and remaining
 
