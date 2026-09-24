@@ -54,12 +54,12 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: done
 - task_id: kabumori-app-morning-close-report-detail-and-portfolio-impact-20260924
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: assigned; Kabumori morning/closing report + portfolio-impact implementation
+- allocation: closed; K2 implementation PASS, Codex review queued
 
 ## Claude G3
 - owner: claude
