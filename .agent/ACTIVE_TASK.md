@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: x-universal-oauth-refresh-pr37-merge-postverify-20260926
+- status: ready
+- task_id: x-universal-oauth-refresh-production-stage0-2-20260926
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: closed; Final K3 PASS, PR #37 merged -> `777997a13c39c12ba409a0c6dc95cad18360038a`; production rollout not started
+- allocation: assigned; production Stage 0→1→2 rollout for universal OAuth refresh and one controlled AI Lab recovery; recommended Opus5.5（高）
 
 ## Claude G4
 - owner: claude
