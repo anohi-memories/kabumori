@@ -1,242 +1,219 @@
 # Claude Task 2
 
-- task_id: kabumori-morning-prompt-fact-contract-fix-20260925
+- task_id: kabumori-pr32-merge-redeploy-dryrun-review-deferred-20260925
 - owner: claude
 - slot: claude-2
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: claude
 - priority: high
-- recommended_model: Sonnet5（極高）
-- purpose: production v28 dry-runで判明した朝刊promptとFact checkerの契約矛盾を、Fact基準を緩めずsource-onlyで最小修正する。deploy禁止。
+- recommended_model: Opus5.5（高）
+- purpose: ユーザー判断でH2レビューを一時保留し、PR #32の現在headをfresh検証したうえでmerge、personalized-reportsのみcontrolled redeploy、app_enabled=falseのまま朝刊/大引けdry-runを実施する。レビュー保留中のためactivationは禁止。
 
-## K2 evidence
+## User override
 
-Production:
+User explicitly requested:
+- Codex review is temporarily deferred because Codex became unavailable mid-review.
+- Continue forward now.
+- Review will be done later.
+
+Therefore:
+- do NOT claim PR #32 independently reviewed.
+- do NOT set app_enabled=true.
+- do NOT treat this task as final activation approval.
+- H2 review debt remains open and must be revisited before final activation/release.
+
+## Current PR #32
+
+PR #32:
+- branch: `g2-morning-prompt-fact-contract-20260925`
+- current head: `722d191dcbe4ba4ce5cf549659493df03d35a353`
+- original G2 head: `749ce19f01ae191398a5b32420b657263c54dd57`
+
+Mid-review Codex commit now included:
+- `722d191dcbe4ba4ce5cf549659493df03d35a353`
+- message: `Align no-material prompt with packet-wide news condition`
+- it tightens empty-news wording so the input-state meta-claim is allowed only when holdings/watch own_news + related_market_news + market_news are all empty
+- when any news exists, empty-input claims must fail
+- it also avoids forcing no_clear_material fact_ja to claim global emptiness when only one holding lacks material
+- adds adversarial tests for mixed-news / intraday / causal cases
+
+This commit is **not a completed H2 review verdict**. Treat it as an unreviewed candidate change that must be revalidated by G2 before merge.
+
+## Production baseline
+
 - personalized-reports v28
-- merge SHA: `47ea87d33734fbd9e8489f2112c732cb0b2ca11f`
 - verify_jwt=false
 - app_enabled=false
 - x_enabled=false
-
-Dry-run:
-- close 5/5 PASS
-- morning 0/2
-- local validator issues 0
-- persistence 0
-- notifications 0
-
-Morning Fact failures:
-1. 「個別ニュースは確認されていません／入力されたニュースはありません」
-   - Fact checker interpreted this as a claim that no news exists.
-2. 「寄り付き後」「場中」
-   - current morning generation prompt itself asks for these timing phrases, but packet has no such future intraday observations.
-
-This is a prompt↔Fact contract mismatch.
-
-## Goal
-
-Make morning generation express only claims that are verifiable from the packet, without weakening factual/safety checks.
-
-## Required changes
-
-### A. Future/intraday wording
-
-Remove or replace instructions that encourage unsupported timing claims such as:
-- 寄り付き後
-- 場中
-- 今日の値動きで〜
-
-Preferred wording should be observational and packet-grounded, e.g.:
-- 確認ポイント
-- 注目点
-- 前営業日の終値や入力された材料に照らして確認する点
-
-Do not imply a future observation already exists.
-
-### B. Empty-news wording
-
-When the packet/news input is empty, generated text may only describe the input state, not the world state.
-
-Allowed style:
-- 「入力に個別の材料は含まれていません」
-- 「このレポートの入力には個別ニュースがありません」
-
-Avoid:
-- 「個別ニュースは確認されていません」
-- 「ニュースはありません」
-- 「材料はありません」
-
-unless the underlying packet explicitly proves that broader claim.
-
-### C. Fact checker
-
-Do NOT broadly relax the Fact checker.
-
-If a clarification is needed, only allow the precise meta-claim that the packet/input news array is empty.
-
-No broad permission for:
-- no-news-in-the-world claims
-- unsupported future/intraday claims
-- unsupported causal claims
+- close v28 dry-run previously 5/5 PASS
+- morning v28 dry-run previously 0/2 Fact FAIL
+- no current persistence/notification from dry-runs
 
 ## Mandatory startup
 
-1. Independent worktree.
-2. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / this TASK / previous G2 Report.
-3. Fresh origin/main.
-4. Confirm production v28 and app_enabled=false read-only.
-5. Confirm no active slot edits personalized-reports.
-6. If another slot overlaps the same files, STOP.
+1. Independent worktree / checkout.
+2. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / this TASK.
+3. Fresh fetch origin/main + PR #32.
+4. Verify PR #32 head exactly `722d191dcbe4ba4ce5cf549659493df03d35a353`.
+5. Compare `749ce19...` -> `722d191...` and confirm the only semantic delta is the packet-wide empty-news tightening + tests described above.
+6. Confirm no active slot edits/deploys personalized-reports.
+7. Read production version/settings before mutation.
+8. If app_enabled != false or production personalized-reports has changed beyond v28, STOP and report.
 
-## Scope
+## Step 1 — pre-merge source verification
 
-Prefer only:
-- `supabase/functions/personalized-reports/report_logic.ts`
-- related personalized-reports tests
-
-Do not change:
-- validator regexes unless unavoidable; if unavoidable STOP and report first
-- MIC integration
-- market_detail
-- _shared market packet
-- DB/schema/migration
-- cron
-- app_enabled/x_enabled
-- X/admin/G1 files
-
-## Tests
-
-Add exact regressions for:
-- empty news input → allowed meta-claim about input only
-- broad “news does not exist” claim → rejected
-- prompt does not request 寄り付き後/場中 as observed facts
-- prompt still produces watch/checkpoint content
-- morning 120 / close 160 unchanged
-- existing close validator safety unchanged
-- MIC tests unchanged
-
-Run:
-- new focused tests
-- full personalized-reports
-- related report tests
+Run at current PR head:
+- morning_contract tests
+- report_hardening
+- close_validator
+- full personalized-reports suite
+- MIC context/integration tests
+- related report/app suite
 - deno check
 - deno lint
 - git diff --check
 
-## Forbidden
+Explicitly verify:
+- mixed-news packet cannot produce empty-input claim
+- empty packet can produce only precise input-state meta-claim
+- broad no-news world-state claims remain rejected
+- unsupported intraday claims remain rejected
+- causal assertions remain rejected
+- Fact/Safety existing rules remain present
+- validator regexes unchanged
+- limits remain morning 120 / close 160
+- MIC/market_detail/shared packet unchanged
 
-- deploy
-- production LLM/dry-run
-- merge before K2
-- Fact/Safety weakening
-- app_enabled change
-- cron/settings mutation
+If any of these fail, STOP before merge.
+
+## Step 2 — merge
+
+If source verification passes:
+- merge PR #32 at exact head `722d191dcbe4ba4ce5cf549659493df03d35a353`
+- fresh fetch main
+- verify merged personalized-reports source byte/semantic identity with reviewed candidate
+- record merge SHA
+
+## Step 3 — controlled deploy
+
+Deploy only:
+- `supabase/functions/personalized-reports`
+
+Rules:
+- verify_jwt=false
+- app_enabled=false throughout
+- x_enabled=false unchanged
+- no cron change
+- no DB/schema/migration
+- no Auth/RLS
+- no X/admin/G1/MIC changes
+- no other Edge Function deploy
+
+After deploy:
+- read back deployed version/source
+- confirm source matches merged main
+- confirm app_enabled=false
+- confirm x_enabled=false
+- confirm cron unchanged
+
+## Step 4 — dry-run
+
+Required minimum:
+- morning: **3 runs**
+- close: **3 runs**
+
+For each run record:
+- completed / failed
+- Fact pass/fail
+- local issues
+- empty-news wording class
+- intraday wording class
+- causal assertion presence
+- brief length if relevant
+- malformed/truncation
+- reportId/null
+- notification status
+- latency/cost if available
+
+Do not include user IDs, email, tokens, or detailed holdings.
+
+### Morning acceptance
+
+Need 3/3:
+- Fact PASS
+- local issues 0
+- no broad “ニュースはありません / 材料はありません / 個別ニュースは確認されていません”
+- no unsupported observed-fact “寄り付き後 / 場中 / 今日の値動きで〜”
+- if no news, only precise input-state wording
+- if any news exists, no false empty-input claim
+- no unsafe causal assertion
+- no malformed/truncated output
+
+### Close acceptance
+
+Need 3/3:
+- Fact PASS
+- local issues 0
+- no regression from v28 close 5/5
+- no false INFERENCE_NOT_HEDGED
+- no factual lead in inference
+- no unsafe causal assertion
+- no malformed/truncated output
+
+### Safety acceptance
+
+All dry-runs:
+- reportId=null
+- notification not_attempted
+- no persistence
+- app_enabled=false
+- x_enabled=false
+
+## Rollback
+
+Rollback if:
+- deployed source mismatches merged main
+- new deterministic regression appears
+- repeated legitimate Fact/local false reject remains
+- unsafe assertion passes
+- unexpected persistence/notification occurs
+- close regresses materially from v28 baseline
+
+Do not rollback for one obviously stochastic LLM failure without classification; repeat safely within a bounded count and report.
+
+## Explicit activation gate
+
+**Do NOT set app_enabled=true.**
+Independent review remains deferred, not waived.
+
+Even if all dry-runs PASS:
+- production may remain on the new version with app_enabled=false
+- activation decision waits for later review / explicit ChatGPT orchestration
+
+## Voice policy
+
+Do not implement PASS/WARN/BLOCK in this task.
+That follows after report generation stabilization.
 
 ## Completion / K2
 
-Create PR and report:
-- root cause
-- exact prompt changes
-- whether Fact checker changed
-- exact allowed/rejected empty-news wording
-- tests/counts
-- PR/head
-- production read-back
-- production mutation=0
-- recommendation for independent review before merge/deploy
+Report:
+- fresh main
+- PR head
+- pre-merge tests
+- merge SHA
+- deployed version
+- deployed-source read-back
+- morning >=3 results
+- close >=3 results
+- app_enabled/x_enabled before/after
+- persistence/notification safety
+- rollback status
+- production mutations
+- residual review debt: H2 PR #32 review deferred by user
+- whether report generation is technically stable enough for later review/activation decision
 
 When complete:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for K2.
-
-## Report
-
-### Summary
-
-- task_id：`kabumori-morning-prompt-fact-contract-fix-20260925`
-- result：source-onlyの修正を完了し、PR #32を作成した（**未merge・未deploy**）。K2待ち。
-- changed_files：
-  - `supabase/functions/personalized-reports/report_logic.ts`（promptとFactの文言だけ）
-  - `supabase/functions/personalized-reports/morning_contract_test.ts`（新規）
-- tests：
-  - 新規 **6/6**
-  - report_hardening 9/9、close_validator 23/23、MIC 14/14・6/6
-  - personalized-reports **102/102**、関連スイート **220/220**
-  - deno check・deno lint・git diff --checkはPASS
-- commit_hash：PR head `749ce19f01ae191398a5b32420b657263c54dd57`
-- push：`origin/g2-morning-prompt-fact-contract-20260925`。PR https://github.com/anohi-memories/kabumori/pull/32
-- deploy：なし
-- safety_checks：
-  - production mutation 0（read-onlyの確認だけ。LLMの呼び出しもdry_runもしていない）。
-  - validatorの正規表現・上限値・MIC・market_detail・_sharedは未変更。
-  - Fact checkerの既存の拒否項目は1つも削除していない。
-  - 共有ファイルは未変更。
-
-### root cause
-
-- **A. 時点の表現**：朝刊のpromptが「watch_ja には寄り付きや場中で見るべき点を書きます」と指示していた。packetには当日の場中データがないため、Fact checkerが「寄り付き後」「場中」をpacket外の時点情報として拒否していた。**promptとFactの契約が矛盾していた**。
-- **B. ニュースが空のときの表現**：「個別ニュースは確認されていません／入力されたニュースはありません」を、Fact checkerが「世の中にニュースが無い」という断定と解釈した。
-
-### exact prompt changes
-
-- 朝刊のwatch_jaの指示を、「前営業日の終値や入力された材料に照らして確認する点（確認ポイント・注目点）を書きます」に変更した。
-- `MORNING_TIMING_RULE`（新設、朝刊のみ）：
-  - 入力には今日の寄り付き・場中の値動きは含まれていない。
-  - 「寄り付き後」「場中」「今日の値動きで〜」を観測済みの事実のように書かない。
-  - 確認する点は「前営業日の終値や入力された材料に照らして確認する点／確認ポイント／注目点」として書く。
-- `EMPTY_NEWS_RULE`（新設、COMMONに入れて朝刊・大引けの両方に適用）：入力が空のときは、入力の状態だけを書く。
-- no_clear_materialのときのfact_jaの定型文：「明確な個別材料は確認できていません」→「入力に明確な個別材料は含まれていません」。
-
-### Fact checkerの変更
-
-- **1行だけ追加した**（`EMPTY_NEWS_FACT_RULE`）。
-  - packetのnews（own_news・related_market_news・market_news）が空のとき、「入力に個別の材料は含まれていません」「このレポートの入力には個別ニュースがありません」は事実どおりなので許容する。
-  - 「ニュースはありません」「材料はありません」「個別ニュースは確認されていません」や、packetにない寄り付き・場中の値動きを観測済みとして書くことは、**従来どおり不合格**。
-- 既存の拒否項目は、すべて残っていることをテストで確認した：packetにない数字・事実、因果の断定、将来の値動きの断定、売買推奨、推測による穴埋め、shared_marketとの矛盾、fact_jaへの推定の混入。
-
-### empty-newsの文言（許可／不許可）
-
-- **許可**（入力の状態として書くもの）：「入力に個別の材料は含まれていません」「このレポートの入力には個別ニュースがありません」「入力に明確な個別材料は含まれていません」
-- **不許可**（世の中について書くもの）：「個別ニュースは確認されていません」「ニュースはありません」「材料はありません」
-
-### tests
-
-- `morning_contract_test.ts`（6件）：
-  - 旧指示が消えていること。寄り付き・場中の語は、禁止ルールの中にしか出てこないこと。
-  - watch・checkpointの指示は残っていること。時点ルールは朝刊だけに入っていること。
-  - 両reportのpromptにempty-newsの許可文・不許可文があること。定型文が置き換わっていること。
-  - Factは、入力が空であることを述べる文だけを許可していること。既存の拒否項目がすべて残っていること。
-  - 上限値が120／160のままであること。
-- mutationの確認：修正を元に戻すと、6件のうち4件がfailする。
-
-### production read-back（read-only）
-
-- `personalized-reports` は **v28**、verify_jwt=false。
-- `app_enabled=false`、`x_enabled=false`。
-- 着手時点で、同じ関数を扱うopen PRや作業中の他slotはなかった。
-
-### recommendation
-
-1. H2で独立レビューする（Factへの追加が許可範囲の拡大として妥当か、既存の拒否を弱めていないかの確認）。
-2. K2でPASSならmergeし、承認を得て再deployする。
-3. **次の朝刊cronは月曜9/28 08:35 JST**。それより前に、朝刊dry_runを3回以上、大引けdry_runを3回以上実施する。朝刊が安定しなければ、同じ手順でv28に戻す（v28の大引けは5/5でPASS）。
-
-
-## Final K2 — PR #32 source contract fix
-
-Verdict: **PASS for source implementation; independent review required before merge/deploy**.
-
-Accepted:
-- PR #32 head `749ce19f01ae191398a5b32420b657263c54dd57`
-- prompt removes unsupported intraday-observation framing
-- empty-news wording is constrained to packet/input-state claims
-- Fact checker receives only a narrow meta-claim allowance; no existing rejection removed
-- validator/MIC/market_detail/shared packet unchanged
-- new 6/6 tests
-- personalized-reports 102/102
-- related suite 220/220
-- deno check/lint/diff PASS
-- production mutation=0
-
-Because Fact acceptance semantics change, H2 independent review is required before merge/deploy.
