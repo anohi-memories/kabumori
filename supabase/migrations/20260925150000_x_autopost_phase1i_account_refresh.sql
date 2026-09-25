@@ -1,6 +1,9 @@
 -- SOURCE CANDIDATE ONLY. Do not apply until a separately reviewed activation.
--- Requires Phase1B..1H (20260924023133 .. 20260925120000) and the production
--- social_accounts shape (oauth_client_ref, updated_at, vault_*_secret_id).
+-- Requires Phase1B..1H (20260924023133 .. 20260925120000) and the universal
+-- credential refresh core (20260925140000), which owns the per-account refresh
+-- state table, the generic release RPC and the account health mirror. This
+-- file only adds the v2-attempt lease kind: one table, one single-flight lease
+-- per account for both the legacy and the v2 publish paths.
 --
 -- Exact-account pre-X token refresh. The only authority is an open pre-X v2
 -- attempt (attempt id + claim token) bound to exactly one social account.
@@ -22,6 +25,11 @@ begin
      or to_regclass('vault.decrypted_secrets') is null then
     raise exception 'PHASE1I_PRECONDITION_PHASE1H_OR_VAULT_MISSING';
   end if;
+  if to_regclass('public.x_account_refresh_state_v2') is null
+     or to_regprocedure('public.release_x_account_refresh_v2(uuid,text,text,text)') is null
+     or to_regprocedure('public.commit_x_account_refresh_legacy_post(uuid,text,text,text,integer)') is null then
+    raise exception 'PHASE1I_PRECONDITION_REFRESH_CORE_MISSING';
+  end if;
   if (select count(*) from information_schema.columns
       where table_schema = 'public' and table_name = 'social_accounts'
         and column_name in ('oauth_client_ref', 'updated_at', 'vault_access_token_secret_id',
@@ -31,29 +39,10 @@ begin
   end if;
 end $$;
 
--- 1. Per-account refresh state. One row per account, created on first use.
-create table public.x_account_refresh_state_v2 (
-  social_account_id text primary key references public.social_accounts (id),
-  status text not null default 'idle'
-    check (status in ('idle', 'refreshing', 'uncertain', 'reauth_required')),
-  generation bigint not null default 0,
-  lease_token uuid,
-  lease_attempt_id uuid references public.post_queue_attempts_v2 (id),
-  leased_at timestamptz,
-  account_updated_at timestamptz,
-  leased_brand_id text,
-  leased_platform_user_id text,
-  leased_oauth_client_ref text,
-  leased_access_secret_id uuid,
-  leased_refresh_secret_id uuid,
-  last_refreshed_at timestamptz,
-  last_error_code text check (last_error_code is null or last_error_code ~ '^[A-Z][A-Z0-9_]{1,99}$'),
-  check ((status = 'refreshing') = (lease_token is not null)),
-  check ((lease_token is null) = (lease_attempt_id is null) and (lease_token is null) = (leased_at is null))
-);
-alter table public.x_account_refresh_state_v2 enable row level security;
-revoke all on public.x_account_refresh_state_v2 from public, anon, authenticated, service_role;
-grant select on public.x_account_refresh_state_v2 to service_role;
+-- 1. The core lease table gains the attempt FK for the v2 lease kind.
+alter table public.x_account_refresh_state_v2
+  add constraint x_account_refresh_state_v2_lease_attempt_fkey
+  foreign key (lease_attempt_id) references public.post_queue_attempts_v2 (id);
 
 -- 2. Begin: validate the exact claim/account, take the single-flight lease,
 --    and hand the refresh token to the server refresh helper only.
@@ -141,7 +130,8 @@ begin
 
   v_lease := gen_random_uuid();
   update public.x_account_refresh_state_v2 st
-  set status = 'refreshing', lease_token = v_lease, lease_attempt_id = v_attempt.id, leased_at = now(),
+  set status = 'refreshing', lease_token = v_lease, lease_kind = 'v2_attempt',
+      lease_attempt_id = v_attempt.id, leased_at = now(),
       account_updated_at = v_account.updated_at, leased_brand_id = v_account.brand_id,
       leased_platform_user_id = v_account.platform_user_id,
       leased_oauth_client_ref = v_account.oauth_client_ref,
@@ -165,7 +155,8 @@ $$;
 --    re-connected) since the lease was taken. Secrets and lease release are
 --    one transaction. An account change turns the lease into 'uncertain'.
 create function public.commit_x_account_refresh_v2(
-  p_lease_token uuid, p_social_account_id text, p_access_token text, p_refresh_token text default null
+  p_lease_token uuid, p_social_account_id text, p_access_token text,
+  p_refresh_token text default null, p_expires_in integer default null
 ) returns text language plpgsql security definer set search_path = '' as $$
 declare v_account record;
         v_state public.x_account_refresh_state_v2%rowtype;
@@ -175,15 +166,17 @@ declare v_account record;
 begin
   if p_lease_token is null or nullif(btrim(p_social_account_id), '') is null
      or nullif(btrim(p_access_token), '') is null
-     or (p_refresh_token is not null and nullif(btrim(p_refresh_token), '') is null) then
+     or (p_refresh_token is not null and nullif(btrim(p_refresh_token), '') is null)
+     or (p_expires_in is not null and (p_expires_in < 1 or p_expires_in > 2592000)) then
     raise exception 'X_REFRESH_REQUEST_INVALID' using errcode = 'P0001';
   end if;
   -- Freeze account-reference membership while validating and writing Vault.
-  -- SHARE is compatible with another refresh reader but excludes account DML.
-  lock table public.social_accounts in share mode;
+  -- Self-conflicting (as in the core commit) so concurrent commits, whose
+  -- health mirror may update social_accounts, serialize instead of deadlocking.
+  lock table public.social_accounts in share row exclusive mode;
   select st.lease_attempt_id into v_attempt_id from public.x_account_refresh_state_v2 st
   where st.social_account_id = p_social_account_id and st.status = 'refreshing'
-    and st.lease_token = p_lease_token;
+    and st.lease_token = p_lease_token and st.lease_kind = 'v2_attempt';
   if v_attempt_id is null then return 'lease_lost'; end if;
   -- Attempt -> post -> account -> state: the same row-lock order as the queue.
   select a.* into v_attempt from public.post_queue_attempts_v2 a
@@ -200,7 +193,8 @@ begin
   select st.* into v_state from public.x_account_refresh_state_v2 st
   where st.social_account_id = p_social_account_id for update;
   if v_account.id is null or v_state.social_account_id is null
-     or v_state.status <> 'refreshing' or v_state.lease_token is distinct from p_lease_token then
+     or v_state.status <> 'refreshing' or v_state.lease_token is distinct from p_lease_token
+     or v_state.lease_kind is distinct from 'v2_attempt' then
     return 'lease_lost';
   end if;
   if v_attempt.id is distinct from v_state.lease_attempt_id
@@ -228,7 +222,7 @@ begin
      or v_account.platform is distinct from 'x' or v_account.connection_status is distinct from 'identity_verified'
      or v_account.updated_at is distinct from v_state.account_updated_at then
     update public.x_account_refresh_state_v2 st
-    set status = 'uncertain', lease_token = null, lease_attempt_id = null, leased_at = null,
+    set status = 'uncertain', lease_token = null, lease_kind = null, lease_attempt_id = null, leased_at = null,
         last_error_code = 'X_REFRESH_ACCOUNT_CHANGED'
     where st.social_account_id = p_social_account_id;
     return 'account_changed';
@@ -244,8 +238,10 @@ begin
     raise exception 'X_REFRESH_PERSIST_FAILED' using errcode = 'P0001';
   end;
   update public.x_account_refresh_state_v2 st
-  set status = 'idle', generation = st.generation + 1, lease_token = null, lease_attempt_id = null,
-      leased_at = null, last_refreshed_at = now(), last_error_code = null
+  set status = 'idle', generation = st.generation + 1, lease_token = null, lease_kind = null,
+      lease_attempt_id = null, leased_at = null,
+      access_expires_at = case when p_expires_in is null then null else now() + make_interval(secs => p_expires_in) end,
+      last_refreshed_at = now(), last_error_code = null
   where st.social_account_id = p_social_account_id;
   return 'committed';
 exception
@@ -254,32 +250,8 @@ exception
 end;
 $$;
 
--- 4. Release a lease without new tokens. 'not_rotated' only when X answered
---    that it issued nothing (the stored refresh token is still the current
---    one); 'reauth_required' when X rejected the grant; 'uncertain' whenever
---    X may have rotated the token.
-create function public.release_x_account_refresh_v2(
-  p_lease_token uuid, p_social_account_id text, p_outcome text, p_error_code text
-) returns text language plpgsql security definer set search_path = '' as $$
-declare v_state public.x_account_refresh_state_v2%rowtype;
-begin
-  if p_lease_token is null or nullif(btrim(p_social_account_id), '') is null
-     or p_outcome is null or p_outcome not in ('not_rotated', 'reauth_required', 'uncertain')
-     or p_error_code is null or p_error_code !~ '^[A-Z][A-Z0-9_]{1,99}$' then
-    raise exception 'X_REFRESH_REQUEST_INVALID' using errcode = 'P0001';
-  end if;
-  select st.* into v_state from public.x_account_refresh_state_v2 st
-  where st.social_account_id = p_social_account_id for update;
-  if not found or v_state.status <> 'refreshing' or v_state.lease_token is distinct from p_lease_token then
-    return 'lease_lost';
-  end if;
-  update public.x_account_refresh_state_v2 st
-  set status = case p_outcome when 'not_rotated' then 'idle' else p_outcome end,
-      lease_token = null, lease_attempt_id = null, leased_at = null, last_error_code = p_error_code
-  where st.social_account_id = p_social_account_id;
-  return case p_outcome when 'not_rotated' then 'idle' else p_outcome end;
-end;
-$$;
+-- 4. Release (not_rotated / reauth_required / uncertain) is the core's
+--    generic release_x_account_refresh_v2; it serves both lease kinds.
 
 -- 5. While an account holds a refresh lease, none of its attempts may cross
 --    the provider-start boundary or begin a provider step. The account row is
@@ -310,14 +282,12 @@ before insert on public.post_provider_steps_v2
 for each row execute function public.x_v2_block_provider_during_refresh();
 
 revoke all on function public.begin_x_account_refresh_v2(uuid, uuid, text, text),
-  public.commit_x_account_refresh_v2(uuid, text, text, text),
-  public.release_x_account_refresh_v2(uuid, text, text, text),
+  public.commit_x_account_refresh_v2(uuid, text, text, text, integer),
   public.x_v2_block_provider_during_refresh()
 from public, anon, authenticated, service_role;
 grant execute on function
   public.begin_x_account_refresh_v2(uuid, uuid, text, text),
-  public.commit_x_account_refresh_v2(uuid, text, text, text),
-  public.release_x_account_refresh_v2(uuid, text, text, text)
+  public.commit_x_account_refresh_v2(uuid, text, text, text, integer)
 to service_role;
 
 commit;

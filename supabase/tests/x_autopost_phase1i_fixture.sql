@@ -6,7 +6,9 @@ set timezone = 'UTC';
 
 alter table public.social_accounts
   add column oauth_client_ref text default 'default',
-  add column updated_at timestamptz not null default now();
+  add column updated_at timestamptz not null default now(),
+  add column last_connection_error_code text,
+  add column verified_at timestamptz;
 
 create function vault.update_secret(
   secret_id uuid, new_secret text default null, new_name text default null,

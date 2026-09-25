@@ -203,33 +203,35 @@ test("exact cross-brand duplicate is blocked before X", async () => {
   assert.equal(published, 0);
 });
 
-test("x-test-post routes only AI Lab to Vault tokens and disables refresh before the X call", async () => {
+test("x-test-post routes AI Lab (and every non-Kabumori brand) to the generic exact-account Vault port, never the legacy store", async () => {
   const source = await Deno.readTextFile(
     new URL("../../x-test-post/index.ts", import.meta.url),
   );
   const branchStart = source.indexOf(
-    'if (brandContext.brand.id === "ai_salaryman_lab")',
+    "if (brandContext.brand.id !== LEGACY_KABUMORI_BRAND_ID) {",
   );
   const legacyCredentialsStart = source.indexOf(
     'const xAccessToken = Deno.env.get("X_OAUTH2_ACCESS_TOKEN");',
     branchStart,
   );
   assert.ok(branchStart >= 0 && legacyCredentialsStart > branchStart);
-  const aiLabBranch = source.slice(branchStart, legacyCredentialsStart).replace(
+  const vaultBranch = source.slice(branchStart, legacyCredentialsStart).replace(
     /\/\/.*$/gmu,
     "",
   );
-  assert.match(aiLabBranch, /loadAiLabVaultBackedXTokens/u);
-  assert.match(aiLabBranch, /allowRefresh:\s*false/u);
+  assert.match(vaultBranch, /VaultAccountXAuth\.load\(/u);
+  // The AI Lab refresh dead-end is gone: no allowRefresh:false-only credential source.
+  assert.doesNotMatch(vaultBranch, /loadAiLabVaultBackedXTokens/u);
   assert.doesNotMatch(
-    aiLabBranch,
+    vaultBranch,
     /loadBrandXTokens|oauth_token_store|X_OAUTH2_ACCESS_TOKEN/u,
   );
 
   const postStart = source.indexOf("async function postToX(");
   const postEnd = source.indexOf("async function postThreadToX(", postStart);
   const postImplementation = source.slice(postStart, postEnd);
-  assert.match(postImplementation, /auth\.allowRefresh === false/u);
+  assert.match(postImplementation, /if \(auth\.vaultAccount\) \{[\s\S]*?auth\.vaultAccount\.send\(/u);
+  // Kabumori's legacy refresh stays as it was.
   assert.match(
     postImplementation,
     /throw new Error\("X_REQUEST_FAILED:401"\)[\s\S]*?await refreshXTokens/u,

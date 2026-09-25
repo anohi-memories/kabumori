@@ -2,9 +2,11 @@
 
 Status: **source-only**. Not applied, not deployed, not wired into the live dispatcher or any v2 entrypoint. No token endpoint call, no Vault read/write in production.
 
+Restructured 2026-09-25 (universal refresh task): the refresh state table, `release_x_account_refresh_v2` and the account health mirror moved to the standalone core `20260925140000_x_account_credential_refresh_core.sql` (see `x_account_refresh_core.md`), which the live dispatcher uses for Vault-backed accounts. This file now adds only the `v2_attempt` lease kind on the same table, so there is one single-flight lease per account across both publish paths. `commit_x_account_refresh_v2` gained `p_expires_in` and a `SHARE ROW EXCLUSIVE` lock (plain `SHARE` could deadlock two commits whose health mirror updates `social_accounts`).
+
 Files:
 
-- `supabase/migrations/20260925150000_x_autopost_phase1i_account_refresh.sql` — refresh state table, `begin/commit/release_x_account_refresh_v2`, provider-start/step guard
+- `supabase/migrations/20260925150000_x_autopost_phase1i_account_refresh.sql` — attempt FK on the core table, `begin/commit_x_account_refresh_v2` (lease kind `v2_attempt`), provider-start/step guard
 - `supabase/functions/_shared/x_v2_account_refresh.ts` (+ `_test.ts`) — one-request refresh helper, lease type, RPC adapter, client resolver
 - `supabase/functions/x-test-post/v2_dispatcher.ts` — optional `refreshAccountPreX` port (Phase1H seam), `refreshRequests` counter
 - tests: `v2_dispatcher_test.ts` (+4), `account_refresh_migration_test.ts`, `supabase/tests/x_autopost_phase1i_{fixture.sql,behavior.sql,run.sh}`
@@ -18,7 +20,7 @@ The only authority is an **open pre-X v2 attempt** (`attempt_id` + `claim_token`
 - `begin` returns `lease_token`, `oauth_client_ref` and the refresh token — to the server refresh helper only (`XRefreshLease`, private field, redacted in JSON/String/inspect). The dispatcher receives only `{ postOutcome, code, tokenRequests }`.
 - The access token and optional rotated refresh token are written by `commit` to the **same account's own** Vault secrets (`vault.update_secret`); no secret id is accepted from the caller. `begin` snapshots the exact brand, X user, OAuth client and both Vault refs; `commit` rechecks them, the still-open pre-X attempt/post, and exclusive ownership of both refs under a table lock before writing. Omitted `refresh_token` in X's response leaves the stored refresh token unchanged.
 - Fixed error codes only. Vault read and write failures, including Vault's own `P0001`, are masked (`X_REFRESH_CREDENTIAL_UNAVAILABLE`, `X_REFRESH_PERSIST_FAILED`). Nothing logs tokens, bodies or ids (the helper has no `console.*`).
-- ACL: the three RPCs are service_role-only, `SECURITY DEFINER`, `search_path = ''`; the guard function has no API EXECUTE; `x_account_refresh_state_v2` is SELECT-only for service_role; API roles cannot write Vault.
+- ACL: begin/commit (here) and release (core) are service_role-only, `SECURITY DEFINER`, `search_path = ''`; the guard function has no API EXECUTE; `x_account_refresh_state_v2` is SELECT-only for service_role; API roles cannot write Vault.
 
 ## 3. One refresh request
 
@@ -33,7 +35,7 @@ Exactly one `POST https://api.x.com/2/oauth2/token` (`grant_type=refresh_token`,
 | 400 `invalid_grant` | `reauth_required` `X_REFRESH_GRANT_REJECTED` | reauth_required | `pre_x_terminal` |
 | other 400 / 401 / 403 / other 4xx | `not_rotated` (`X_REFRESH_REQUEST_REJECTED_400`, `X_REFRESH_CLIENT_REJECTED_*`, `X_REFRESH_REJECTED_*`) | idle | `pre_x_terminal` |
 
-Before any request: begin refusals (`X_REFRESH_IN_PROGRESS` / `X_REFRESH_UNAVAILABLE` → retryable; everything else → terminal) and an unknown `oauth_client_ref` (`X_REFRESH_CLIENT_NOT_CONFIGURED`, lease released unchanged) make **zero** token requests. The only client today is `oauth_client_ref = 'default'` → `X_CLIENT_ID` / `X_CLIENT_SECRET` (the app client every account was authorized with).
+Before any request: begin refusals (`X_REFRESH_IN_PROGRESS` / `X_REFRESH_UNAVAILABLE` → retryable; everything else → terminal) and an unknown `oauth_client_ref` (`X_REFRESH_CLIENT_NOT_CONFIGURED`, lease released unchanged) make **zero** token requests. Clients come from the server-side registry `xOAuthClientRegistryFromEnv` (`default` → `X_CLIENT_ID` / `X_CLIENT_SECRET`; approved ref `r` → `X_OAUTH_CLIENT_<R>_ID` / `_SECRET`).
 
 ## 4. Write ordering and partial failure
 
@@ -47,7 +49,7 @@ X refresh tokens are single-use, so step 2 → 3 is the one boundary that cannot
 - `lease_lost` / `account_changed` (re-connected, ref mutation, or stale attempt during the refresh) → the new tokens are not stored; `account_changed` sets `uncertain`.
 - Unknown X outcome → `uncertain`; no automatic replay (replaying a possibly-consumed refresh token is not assumed safe).
 
-Operator recovery for `uncertain` / `reauth_required` / stuck `refreshing`: re-connect the account through the social-mobile OAuth flow (writes fresh Vault secrets), then reset the account's refresh state to `idle` by reviewed owner SQL. No API role can reset it.
+Operator recovery for `uncertain` / `reauth_required`: re-connect the account through its OAuth flow (writes fresh Vault secrets and stamps `verified_at`); the core's reconnect trigger resets the refresh state to `idle`. A stuck `refreshing` lease needs reviewed owner SQL. No API role can reset it. `reauth_required` also sets `connection_status = 'failed'` (core health mirror), so the account is refused before any generation.
 
 ## 5. Concurrency
 
@@ -64,7 +66,7 @@ Operator recovery for `uncertain` / `reauth_required` / stuck `refreshing`: re-c
 
 ## 7. Activation prerequisites (add to Phase1H §6)
 
-- Apply order: 1B → 1D → 1E → 1F → 1G → 1H → **1I**, each alone (explicit transactions).
+- Apply order: refresh core (may already be live for the legacy path) and 1B → 1D → 1E → 1F → 1G → 1H, then **1I**, each alone (explicit transactions).
 - Live read-back before apply: `social_accounts` columns (`oauth_client_ref`, `updated_at`, both `vault_*_secret_id`), `vault.update_secret(uuid,text,text,text,uuid)` signature and owner privileges, Vault ACL (service_role must not write Vault directly), no two accounts sharing a secret id, `X_CLIENT_ID`/`X_CLIENT_SECRET` present for the Edge runtime.
 - Provisioning: an account is refresh-ready only when its own access **and** refresh tokens are in its own Vault secrets, written by the social-mobile OAuth completion (or an equivalent reviewed owner step). **Kabumori is not ready** while its token lives in `oauth_token_store`/env; AI Lab needs its refresh secret id verified on its own row. Accounts without both refs get `X_REFRESH_CREDENTIAL_NOT_CONFIGURED` and never call X.
 - Rollback: before any refresh, nothing to undo (gate OFF, seam unused). After a committed refresh, the old access/refresh tokens are gone at X — rollback means re-connecting, not restoring. An `uncertain` account stays blocked until an operator re-connects and resets it.

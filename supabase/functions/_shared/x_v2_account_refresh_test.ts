@@ -7,6 +7,7 @@ import {
   createXAccountRefreshRpcLedger,
   defaultXOAuthClientResolver,
   refreshXAccountPreX,
+  xOAuthClientRegistryFromEnv,
   XRefreshLease,
   type XAccountRefreshLedger,
 } from "./x_v2_account_refresh.ts";
@@ -284,7 +285,7 @@ test("RPC adapter: exact parameters, no ref ids accepted, manual redirects, fixe
   assert.equal(await ledger.release(lease, "acct_a", "not_rotated", "X_REFRESH_RATE_LIMITED"), "idle");
   assert.deepEqual(sent.map((s) => [s.url.replace("https://e.supabase.co/rest/v1/rpc/", ""), s.body]), [
     ["begin_x_account_refresh_v2", { p_attempt_id: "att_a", p_claim_token: "ct_a", p_social_account_id: "acct_a", p_brand_id: "brand_a" }],
-    ["commit_x_account_refresh_v2", { p_lease_token: "L1", p_social_account_id: "acct_a", p_access_token: "tok_new", p_refresh_token: null }],
+    ["commit_x_account_refresh_v2", { p_lease_token: "L1", p_social_account_id: "acct_a", p_access_token: "tok_new", p_refresh_token: null, p_expires_in: null }],
     ["release_x_account_refresh_v2", { p_lease_token: "L1", p_social_account_id: "acct_a", p_outcome: "not_rotated", p_error_code: "X_REFRESH_RATE_LIMITED" }],
   ]);
   assert.ok(sent.every((s) => s.redirect === "manual"));
@@ -299,12 +300,22 @@ test("RPC adapter: exact parameters, no ref ids accepted, manual redirects, fixe
   await assert.rejects(malformed.begin(claimA), (e: unknown) => e instanceof Error && e.message === "X_REFRESH_UNAVAILABLE");
 });
 
-test("default client resolver serves only oauth_client_ref 'default' from server env", () => {
-  const env: Record<string, string> = { X_CLIENT_ID: "id", X_CLIENT_SECRET: "sec" };
-  const resolve = defaultXOAuthClientResolver((k) => env[k]);
+test("client registry: 'default' and approved server-side refs only; unknown/malformed refs fail closed", () => {
+  const env: Record<string, string> = {
+    X_CLIENT_ID: "id", X_CLIENT_SECRET: "sec",
+    X_OAUTH_CLIENT_PARTNER_ID: "pid", X_OAUTH_CLIENT_PARTNER_SECRET: "psec",
+    X_OAUTH_CLIENT_HALF_ID: "hid", SUPABASE_SERVICE_ROLE_KEY: "srk",
+  };
+  const seen: string[] = [];
+  const resolve = xOAuthClientRegistryFromEnv((k) => { seen.push(k); return env[k]; });
   assert.deepEqual(resolve("default"), { clientId: "id", clientSecret: "sec" });
-  assert.equal(resolve("other"), null);
+  assert.deepEqual(resolve("partner"), { clientId: "pid", clientSecret: "psec" });
+  for (const ref of ["other", "half", "", " default", "DEFAULT", "partner/../x", "a".repeat(41), "supabase_service_role_key"]) {
+    assert.equal(resolve(ref), null, ref);
+  }
+  assert.ok(seen.every((k) => /^X_(CLIENT|OAUTH_CLIENT_[A-Z0-9_]+)_(ID|SECRET)$/u.test(k)), seen.join(","));
   assert.equal(defaultXOAuthClientResolver(() => undefined)("default"), null);
+  assert.equal(defaultXOAuthClientResolver, xOAuthClientRegistryFromEnv);
 });
 
 test("refresh source: no legacy store, env tokens, console, loops, or ref-id inputs", async () => {

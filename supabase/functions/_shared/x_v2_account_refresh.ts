@@ -1,5 +1,9 @@
 /**
- * Phase1I exact-account pre-X token refresh (source only; no live caller).
+ * Exact-account X OAuth token refresh (source only; not activated).
+ *
+ * `runXTokenRefresh` is the one refresh routine for every Vault-backed X
+ * account and every publish path: the caller's port binds the exact account
+ * (a v2 claim here, a running legacy post in x-test-post/vault_account_auth.ts).
  *
  * Flow for one v2 claim that is still pre-X:
  *   1. begin_x_account_refresh_v2 — the DB checks the exact claim/account and
@@ -24,6 +28,8 @@ import type { XV2Claim } from "./x_v2_claim_credentials.ts";
 const X_TOKEN_URL = "https://api.x.com/2/oauth2/token";
 const DEFAULT_TIMEOUT_MS = 15_000;
 const CODE = /^[A-Z][A-Z0-9_]{1,99}$/u;
+
+const EXPIRES_IN_MAX_SECONDS = 2_592_000;
 
 export type XOAuthClient = { clientId: string; clientSecret: string };
 /** Resolves an account's oauth_client_ref to the app client it was issued by; null = not configured. */
@@ -58,7 +64,10 @@ export type XAccountRefreshLedger = {
   /** begin_x_account_refresh_v2; throws Error(code) on refusal. */
   begin(claim: XV2Claim): Promise<XRefreshLease>;
   /** commit_x_account_refresh_v2; resolves "committed" | "lease_lost" | "account_changed". */
-  commit(lease: XRefreshLease, socialAccountId: string, accessToken: string, refreshToken: string | null): Promise<string>;
+  commit(
+    lease: XRefreshLease, socialAccountId: string, accessToken: string, refreshToken: string | null,
+    expiresIn?: number | null,
+  ): Promise<string>;
   /** release_x_account_refresh_v2. */
   release(lease: XRefreshLease, socialAccountId: string, outcome: "not_rotated" | "reauth_required" | "uncertain", code: string): Promise<string>;
 };
@@ -71,6 +80,23 @@ export type XAccountRefreshResult = {
   tokenRequests: 0 | 1;
 };
 
+/** One exact account's lease operations; every method is bound to that account by the caller. */
+export type XTokenRefreshPort = {
+  /** Takes the account's single-flight lease; throws Error(code) on refusal. */
+  begin(): Promise<XRefreshLease>;
+  /** Stores the confirmed tokens in the account's own Vault secrets; "committed" | "lease_lost" | "account_changed". */
+  commit(lease: XRefreshLease, accessToken: string, refreshToken: string | null, expiresIn: number | null): Promise<string>;
+  release(lease: XRefreshLease, outcome: "not_rotated" | "reauth_required" | "uncertain", code: string): Promise<string>;
+};
+
+export type XTokenRefreshOutcome = {
+  kind: "refreshed" | "not_started" | "not_rotated" | "reauth_required" | "uncertain";
+  code: string;
+  /** Another run may succeed without operator action. */
+  retryable: boolean;
+  tokenRequests: 0 | 1;
+};
+
 /** Refusals from begin that another run can clear by itself. */
 const RETRYABLE_BEGIN_CODES = new Set(["X_REFRESH_IN_PROGRESS", "X_REFRESH_UNAVAILABLE", "V2_LEDGER_UNAVAILABLE"]);
 
@@ -80,7 +106,7 @@ function code(error: unknown, fallback: string): string {
 }
 
 type TokenClassification =
-  | { kind: "confirmed"; accessToken: string; refreshToken: string | null }
+  | { kind: "confirmed"; accessToken: string; refreshToken: string | null; expiresIn: number | null }
   | { kind: "not_rotated"; code: string; retryable: boolean }
   | { kind: "reauth_required"; code: string }
   | { kind: "uncertain"; code: string };
@@ -102,7 +128,12 @@ async function classifyTokenResponse(response: Response): Promise<TokenClassific
     if (typeof record.token_type === "string" && record.token_type.toLowerCase() !== "bearer") {
       return { kind: "uncertain", code: "X_REFRESH_RESPONSE_INVALID" };
     }
-    return { kind: "confirmed", accessToken: access, refreshToken: typeof refresh === "string" ? refresh : null };
+    // expires_in only schedules the next proactive refresh; an odd value never blocks storing valid tokens.
+    const expires = record.expires_in;
+    const expiresIn = typeof expires === "number" && Number.isInteger(expires) && expires >= 1 && expires <= EXPIRES_IN_MAX_SECONDS
+      ? expires
+      : null;
+    return { kind: "confirmed", accessToken: access, refreshToken: typeof refresh === "string" ? refresh : null, expiresIn };
   }
   // 3xx is not followed; X may already have processed the grant.
   if (status < 400 || status === 408 || status >= 500) return { kind: "uncertain", code: `X_REFRESH_HTTP_${status}` };
@@ -118,11 +149,10 @@ async function classifyTokenResponse(response: Response): Promise<TokenClassific
 }
 
 async function release(
-  ledger: XAccountRefreshLedger, lease: XRefreshLease, accountId: string,
-  outcome: "not_rotated" | "reauth_required" | "uncertain", errorCode: string,
+  port: XTokenRefreshPort, lease: XRefreshLease, outcome: "not_rotated" | "reauth_required" | "uncertain", errorCode: string,
 ): Promise<void> {
   try {
-    await ledger.release(lease, accountId, outcome, errorCode);
+    await port.release(lease, outcome, errorCode);
   } catch {
     // The lease stays 'refreshing', which already blocks refresh and provider
     // start for this account: fail-closed, operator review.
@@ -130,29 +160,20 @@ async function release(
 }
 
 /**
- * Refresh exactly the claimed account's access token, before provider start.
- * Never throws; never exposes token material.
+ * One refresh of one exact account: lease, at most one token request, then
+ * commit or an honest release. Never throws; never exposes token material.
  */
-export async function refreshXAccountPreX(
-  {
-    claim,
-    ledger,
-    resolveClient,
-  }: { claim: XV2Claim; ledger: XAccountRefreshLedger; resolveClient: XOAuthClientResolver },
+export async function runXTokenRefresh(
+  port: XTokenRefreshPort,
+  resolveClient: XOAuthClientResolver,
   { fetchImpl = fetch, timeoutMs = DEFAULT_TIMEOUT_MS }: { fetchImpl?: typeof fetch; timeoutMs?: number } = {},
-): Promise<XAccountRefreshResult> {
-  const notStarted = (c: string, retryable: boolean): XAccountRefreshResult => ({
-    kind: "not_started", postOutcome: retryable ? "pre_x_retryable" : "pre_x_terminal", code: c, tokenRequests: 0,
-  });
-  if (!claim || [claim.attemptId, claim.claimToken, claim.socialAccountId, claim.brandId].some((v) => typeof v !== "string" || !v.trim())) {
-    return notStarted("X_REFRESH_REQUEST_INVALID", false);
-  }
+): Promise<XTokenRefreshOutcome> {
   let lease: XRefreshLease;
   try {
-    lease = await ledger.begin(claim);
+    lease = await port.begin();
   } catch (error) {
     const c = code(error, "X_REFRESH_UNAVAILABLE");
-    return notStarted(c, RETRYABLE_BEGIN_CODES.has(c));
+    return { kind: "not_started", code: c, retryable: RETRYABLE_BEGIN_CODES.has(c), tokenRequests: 0 };
   }
   const client = (() => {
     try {
@@ -162,8 +183,8 @@ export async function refreshXAccountPreX(
     }
   })();
   if (!client || !client.clientId || !client.clientSecret) {
-    await release(ledger, lease, claim.socialAccountId, "not_rotated", "X_REFRESH_CLIENT_NOT_CONFIGURED");
-    return notStarted("X_REFRESH_CLIENT_NOT_CONFIGURED", false);
+    await release(port, lease, "not_rotated", "X_REFRESH_CLIENT_NOT_CONFIGURED");
+    return { kind: "not_started", code: "X_REFRESH_CLIENT_NOT_CONFIGURED", retryable: false, tokenRequests: 0 };
   }
 
   let classification: TokenClassification;
@@ -189,34 +210,62 @@ export async function refreshXAccountPreX(
 
   switch (classification.kind) {
     case "not_rotated":
-      await release(ledger, lease, claim.socialAccountId, "not_rotated", classification.code);
-      return { kind: "not_rotated", postOutcome: classification.retryable ? "pre_x_retryable" : "pre_x_terminal", code: classification.code, tokenRequests: 1 };
+      await release(port, lease, "not_rotated", classification.code);
+      return { kind: "not_rotated", code: classification.code, retryable: classification.retryable, tokenRequests: 1 };
     case "reauth_required":
-      await release(ledger, lease, claim.socialAccountId, "reauth_required", classification.code);
-      return { kind: "reauth_required", postOutcome: "pre_x_terminal", code: classification.code, tokenRequests: 1 };
+      await release(port, lease, "reauth_required", classification.code);
+      return { kind: "reauth_required", code: classification.code, retryable: false, tokenRequests: 1 };
     case "uncertain":
-      await release(ledger, lease, claim.socialAccountId, "uncertain", classification.code);
-      return { kind: "uncertain", postOutcome: "pre_x_terminal", code: classification.code, tokenRequests: 1 };
+      await release(port, lease, "uncertain", classification.code);
+      return { kind: "uncertain", code: classification.code, retryable: false, tokenRequests: 1 };
     case "confirmed": {
       let committed: string;
       try {
-        committed = await ledger.commit(lease, claim.socialAccountId, classification.accessToken, classification.refreshToken);
+        committed = await port.commit(lease, classification.accessToken, classification.refreshToken, classification.expiresIn);
       } catch (error) {
         const c = code(error, "X_REFRESH_PERSIST_FAILED");
-        await release(ledger, lease, claim.socialAccountId, "uncertain", "X_REFRESH_PERSIST_FAILED");
-        return { kind: "uncertain", postOutcome: "pre_x_terminal", code: c, tokenRequests: 1 };
+        await release(port, lease, "uncertain", "X_REFRESH_PERSIST_FAILED");
+        return { kind: "uncertain", code: c, retryable: false, tokenRequests: 1 };
       }
       if (committed === "committed") {
-        // Re-entry: the next run re-resolves and re-verifies the new token.
-        return { kind: "refreshed", postOutcome: "pre_x_retryable", code: "X_ACCESS_TOKEN_REFRESHED_PRE_X", tokenRequests: 1 };
+        return { kind: "refreshed", code: "X_ACCESS_TOKEN_REFRESHED", retryable: true, tokenRequests: 1 };
       }
       // lease_lost / account_changed: the new tokens were not stored.
       return {
-        kind: "uncertain", postOutcome: "pre_x_terminal",
-        code: committed === "account_changed" ? "X_REFRESH_ACCOUNT_CHANGED" : "X_REFRESH_LEASE_LOST", tokenRequests: 1,
+        kind: "uncertain", retryable: false, tokenRequests: 1,
+        code: committed === "account_changed" ? "X_REFRESH_ACCOUNT_CHANGED" : "X_REFRESH_LEASE_LOST",
       };
     }
   }
+}
+
+/**
+ * Refresh exactly the claimed account's access token, before provider start.
+ * Never throws; never exposes token material.
+ */
+export async function refreshXAccountPreX(
+  {
+    claim,
+    ledger,
+    resolveClient,
+  }: { claim: XV2Claim; ledger: XAccountRefreshLedger; resolveClient: XOAuthClientResolver },
+  options: { fetchImpl?: typeof fetch; timeoutMs?: number } = {},
+): Promise<XAccountRefreshResult> {
+  if (!claim || [claim.attemptId, claim.claimToken, claim.socialAccountId, claim.brandId].some((v) => typeof v !== "string" || !v.trim())) {
+    return { kind: "not_started", postOutcome: "pre_x_terminal", code: "X_REFRESH_REQUEST_INVALID", tokenRequests: 0 };
+  }
+  const outcome = await runXTokenRefresh({
+    begin: () => ledger.begin(claim),
+    commit: (lease, access, refresh, expiresIn) => ledger.commit(lease, claim.socialAccountId, access, refresh, expiresIn),
+    release: (lease, result, errorCode) => ledger.release(lease, claim.socialAccountId, result, errorCode),
+  }, resolveClient, options);
+  return {
+    kind: outcome.kind,
+    postOutcome: outcome.retryable ? "pre_x_retryable" : "pre_x_terminal",
+    // Re-entry: the next run re-resolves and re-verifies the new token.
+    code: outcome.kind === "refreshed" ? "X_ACCESS_TOKEN_REFRESHED_PRE_X" : outcome.code,
+    tokenRequests: outcome.tokenRequests,
+  };
 }
 
 // --- PostgREST adapter ------------------------------------------------------------
@@ -256,10 +305,10 @@ export function createXAccountRefreshRpcLedger(
       }
       return new XRefreshLease(row.lease_token, row.oauth_client_ref, row.refresh_token);
     },
-    async commit(lease, socialAccountId, accessToken, refreshToken) {
+    async commit(lease, socialAccountId, accessToken, refreshToken, expiresIn = null) {
       const out = await rpc("commit_x_account_refresh_v2", {
         p_lease_token: lease.leaseToken, p_social_account_id: socialAccountId,
-        p_access_token: accessToken, p_refresh_token: refreshToken,
+        p_access_token: accessToken, p_refresh_token: refreshToken, p_expires_in: expiresIn,
       });
       if (out !== "committed" && out !== "lease_lost" && out !== "account_changed") throw new Error("X_REFRESH_PERSIST_FAILED");
       return out;
@@ -274,12 +323,25 @@ export function createXAccountRefreshRpcLedger(
   };
 }
 
-/** The only client today: oauth_client_ref 'default' -> the app's X OAuth client. */
-export function defaultXOAuthClientResolver(getEnv: (name: string) => string | undefined): XOAuthClientResolver {
+const CLIENT_REF = /^[a-z][a-z0-9_]{0,39}$/u;
+
+/**
+ * Server-side OAuth client registry keyed by social_accounts.oauth_client_ref.
+ * 'default' is the app client every current account was authorized with
+ * (X_CLIENT_ID / X_CLIENT_SECRET). Another client is approved by configuring
+ * X_OAUTH_CLIENT_<REF>_ID / X_OAUTH_CLIENT_<REF>_SECRET in the Edge runtime;
+ * no account-specific source change. Unknown or malformed refs resolve to
+ * null (X_REFRESH_CLIENT_NOT_CONFIGURED). The token endpoint is fixed.
+ */
+export function xOAuthClientRegistryFromEnv(getEnv: (name: string) => string | undefined): XOAuthClientResolver {
   return (ref) => {
-    if (ref !== "default") return null;
-    const clientId = getEnv("X_CLIENT_ID");
-    const clientSecret = getEnv("X_CLIENT_SECRET");
+    if (typeof ref !== "string" || !CLIENT_REF.test(ref)) return null;
+    const prefix = ref === "default" ? "X_CLIENT" : `X_OAUTH_CLIENT_${ref.toUpperCase()}`;
+    const clientId = getEnv(`${prefix}_ID`)?.trim();
+    const clientSecret = getEnv(`${prefix}_SECRET`)?.trim();
     return clientId && clientSecret ? { clientId, clientSecret } : null;
   };
 }
+
+/** Phase1I name for the registry (kept for the reviewed v2 seam wiring). */
+export const defaultXOAuthClientResolver = xOAuthClientRegistryFromEnv;

@@ -64,11 +64,13 @@ import {
 } from "./shared_market_report_consumer.ts";
 import {
   brandIdFromScheduledRow,
+  LEGACY_KABUMORI_BRAND_ID,
   loadBrandContext,
 } from "../_shared/brand/brand_context.ts";
 import { assertBrandPublishAllowed } from "../_shared/brand/publish_guard.ts";
 import { loadBrandXTokens } from "../_shared/brand/token_loader.ts";
-import { loadAiLabVaultBackedXTokens } from "../_shared/brand/ai_lab_vault_token_source.ts";
+import { xOAuthClientRegistryFromEnv } from "../_shared/x_v2_account_refresh.ts";
+import { createVaultAccountCredentialRpc, VaultAccountXAuth } from "./vault_account_auth.ts";
 import {
   loadAiLabRecentDedupeFingerprints,
   recordAndCompleteAiLabBrandPost,
@@ -194,6 +196,8 @@ type XAuthContext = {
   serviceRoleKey: string;
   refreshExecuted: boolean;
   allowRefresh?: boolean;
+  /** Vault-backed exact-account credentials; when set, X requests go through it only. */
+  vaultAccount?: VaultAccountXAuth;
 };
 
 type InteractionTopic = {
@@ -3149,6 +3153,16 @@ async function postToX(
   replyToId?: string,
   pollOptions?: string[] | null,
 ): Promise<unknown> {
+  if (auth.vaultAccount) {
+    const sent = await auth.vaultAccount.send((accessToken) =>
+      requestXPost(accessToken, text, replyToId, pollOptions)
+    );
+    if (sent.status < 200 || sent.status >= 300) {
+      console.error("X API request failed", { status: sent.status });
+      throw new Error(`X_REQUEST_FAILED:${sent.status}`);
+    }
+    return sent.body;
+  }
   let result = await requestXPost(
     auth.tokens.accessToken,
     text,
@@ -3926,25 +3940,43 @@ Deno.serve(async (req) => {
     });
     assertBrandPublishAllowed(brandContext);
     const xAuth: XAuthContext = await (async () => {
-      if (brandContext.brand.id === "ai_salaryman_lab") {
+      // Every brand except legacy Kabumori publishes through its own Vault-backed
+      // X account: exact account, exact Vault refs, generic refresh port. The
+      // credential read runs before generation, so a blocked or
+      // re-authorization-required account fails closed at no generation cost.
+      if (brandContext.brand.id !== LEGACY_KABUMORI_BRAND_ID) {
         if (scheduledPost.post_type !== "brand_post") {
           throw new Error("AI_LAB_POST_TYPE_NOT_ENABLED");
         }
+        if (!brandContext.socialAccount) throw new Error("BRAND_X_ACCOUNT_DISABLED");
+        const vaultBrandId = brandContext.brand.id;
+        const vaultAccount = await VaultAccountXAuth.load(
+          {
+            scheduledPostId: scheduledPost.id,
+            socialAccountId: brandContext.socialAccount.id,
+            brandId: vaultBrandId,
+          },
+          createVaultAccountCredentialRpc({ supabaseUrl, serviceRoleKey }),
+          {
+            resolveClient: xOAuthClientRegistryFromEnv((name) => Deno.env.get(name)),
+            refreshEnabled: Deno.env.get("X_VAULT_ACCOUNT_REFRESH") === "enabled",
+          },
+        );
         return {
-          tokens: await loadAiLabVaultBackedXTokens({
-            context: brandContext,
-            supabaseUrl,
-            serviceRoleKey,
-          }),
-          // AI Lab dispatch never refreshes or writes to the legacy token store.
+          // Vault-backed accounts never expose raw tokens to other code paths
+          // and never touch Kabumori's oauth_token_store.
+          get tokens(): XTokenState {
+            throw new Error("X_VAULT_ACCOUNT_DIRECT_TOKEN_ACCESS_FORBIDDEN");
+          },
           clientId: "",
           clientSecret: "",
           supabaseUrl,
           serviceRoleKey,
-          refreshExecuted: false,
-          // AI Lab refresh tokens remain untouched; an expired access token fails closed for separate
-          // re-authorization/approval instead of falling back to Kabumori's oauth_token_store.
+          get refreshExecuted() {
+            return vaultAccount.refreshExecuted;
+          },
           allowRefresh: false,
+          vaultAccount,
         };
       }
 

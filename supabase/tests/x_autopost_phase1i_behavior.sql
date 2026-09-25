@@ -1,6 +1,6 @@
 -- Fake-only Phase1I behavior proof (exact-account pre-X refresh lease).
 -- Run by x_autopost_phase1i_run.sh after: 1D/1E/1F/1G/1I fixtures ->
--- 1B -> 1D -> 1E -> 1F -> 1G -> 1H -> 1I migrations.
+-- 1B -> 1D -> 1E -> 1F -> 1G -> 1H -> refresh core -> 1I migrations.
 \set ON_ERROR_STOP on
 set timezone = 'Asia/Tokyo';
 
@@ -191,12 +191,21 @@ begin
   select * into r from public.begin_x_account_refresh_v2((pg_temp.c('b2')).attempt_id, (pg_temp.c('b2')).claim_token, 'acct_b', 'brand_b');
   if public.release_x_account_refresh_v2(r.lease_token, 'acct_b', 'reauth_required', 'X_REFRESH_GRANT_REJECTED') <> 'reauth_required' then
     raise exception 'reauth release wrong'; end if;
-  perform pg_temp.expect_error(pg_temp.begin_sql('b3'), 'X_REFRESH_REAUTH_REQUIRED');
+  -- Core health mirror: re-authorization required -> connection_status 'failed' + code,
+  -- so the account is refused before the refresh state is even consulted.
+  perform pg_temp.expect_error(pg_temp.begin_sql('b3'), 'X_ACCOUNT_NOT_VERIFIED');
 end $$;
+reset role;
+do $$ begin
+  if (select connection_status || ':' || coalesce(last_connection_error_code, '-') from public.social_accounts where id = 'acct_b')
+     <> 'failed:X_REFRESH_GRANT_REJECTED' then raise exception 'reauth health mirror wrong'; end if;
+end $$;
+set role service_role;
 
 -- 6. Writer failure rolls back; reconnect during refresh turns the lease uncertain.
 reset role;
-update public.x_account_refresh_state_v2 set status = 'idle', last_error_code = null where social_account_id = 'acct_b';  -- operator reset (owner only)
+update public.x_account_refresh_state_v2 set status = 'idle', last_error_code = null where social_account_id = 'acct_b';
+update public.social_accounts set connection_status = 'identity_verified', last_connection_error_code = null where id = 'acct_b';  -- re-connect  -- operator reset (owner only)
 set role service_role;
 select public.schedule_account_bound_post_v2('brand_b', 'acct_b', current_date, 'useful_tip', 9::smallint, now() - interval '1 hour');
 select public.schedule_account_bound_post_v2('brand_b', 'acct_b', current_date, 'useful_tip', 10::smallint, now() - interval '1 hour');
@@ -215,6 +224,7 @@ begin
 end $$;
 reset role;
 update public.x_account_refresh_state_v2 set status = 'idle', last_error_code = null where social_account_id = 'acct_b';
+update public.social_accounts set connection_status = 'identity_verified', last_connection_error_code = null where id = 'acct_b';  -- re-connect
 set role service_role;
 do $$
 declare r record;
@@ -236,6 +246,7 @@ end $$;
 -- another account's secret, even if updated_at is not maintained by a writer.
 reset role;
 update public.x_account_refresh_state_v2 set status = 'idle', last_error_code = null where social_account_id = 'acct_b';
+update public.social_accounts set connection_status = 'identity_verified', last_connection_error_code = null where id = 'acct_b';  -- re-connect
 set role service_role;
 select public.schedule_account_bound_post_v2('brand_b', 'acct_b', current_date, 'useful_tip', 11::smallint, now() - interval '1 hour');
 insert into claims select 'b_ref', attempt_id, claim_token, social_account_id, brand_id from public.claim_due_post_v2();
@@ -262,6 +273,7 @@ reset role;
 update public.social_accounts set vault_access_token_secret_id = '00000000-0000-4000-8000-00000000000b'
 where id = 'acct_b';
 update public.x_account_refresh_state_v2 set status = 'idle', last_error_code = null where social_account_id = 'acct_b';
+update public.social_accounts set connection_status = 'identity_verified', last_connection_error_code = null where id = 'acct_b';  -- re-connect
 set role service_role;
 select public.schedule_account_bound_post_v2('brand_b', 'acct_b', current_date, 'useful_tip', 12::smallint, now() - interval '1 hour');
 insert into claims select 'b_settled', attempt_id, claim_token, social_account_id, brand_id from public.claim_due_post_v2();

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Disposable-only Phase1I proof runner. Creates a throwaway database on a LOCAL
 # Unix-socket PostgreSQL cluster, applies Phase1D/1E/1F/1G/1I fixtures ->
-# Phase1B -> 1D -> 1E -> 1F -> 1G -> 1H -> 1I as a non-superuser owner, runs the
+# Phase1B -> 1D -> 1E -> 1F -> 1G -> 1H -> refresh core -> 1I as a non-superuser owner, runs the
 # Phase1I behavior proof and refresh-lease races, then drops the database.
 # Fake data only; never production.
 # Usage: PHASE1I_PGHOST=/private/tmp/<socket-dir> PHASE1I_PGPORT=<port> \
@@ -53,6 +53,7 @@ SQL
 "${as_owner[@]}" -f "$migrations/20260924180000_x_autopost_phase1f_atomic_completion.sql"
 "${as_owner[@]}" -f "$migrations/20260925090000_x_autopost_phase1g_multistep_completion.sql"
 "${as_owner[@]}" -f "$migrations/20260925120000_x_autopost_phase1h_dispatch_resume.sql"
+"${as_owner[@]}" -f "$migrations/20260925140000_x_account_credential_refresh_core.sql"
 "${as_owner[@]}" -f "$migrations/20260925150000_x_autopost_phase1i_account_refresh.sql"
 "${as_owner[@]}" -f "$here/x_autopost_phase1i_behavior.sql"
 
@@ -61,7 +62,8 @@ SQL
 # open; a third races provider start. Then cross-account leases in parallel.
 as_service=("$psql_bin" -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$db")
 "${as_owner[@]}" <<'SQL'
-update public.x_account_refresh_state_v2 set status = 'idle', last_error_code = null, lease_token = null, lease_attempt_id = null, leased_at = null;
+update public.x_account_refresh_state_v2 set status = 'idle', last_error_code = null, lease_token = null, lease_kind = null, lease_attempt_id = null, leased_at = null;
+update public.social_accounts set connection_status = 'identity_verified', last_connection_error_code = null where id in ('acct_b', 'acct_c');
 -- Fixture cleanup through the v2 domain (the Phase1D guard forbids anything else).
 select set_config('kabumori.x_queue_domain', 'v2', false);
 update public.post_queue_attempts_v2 set phase = 'finished', outcome = 'pre_x_terminal', error_code = 'FIXTURE_CLEANUP', finished_at = now() where phase = 'pre_x';
