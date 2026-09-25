@@ -1,137 +1,339 @@
 # Claude Task 3
 
-- task_id: x-autopost-phase1i-pr30-merge-postmerge-verify-20260925
+- task_id: x-universal-oauth-refresh-productionization-20260925
 - owner: claude
 - slot: claude-3
-- status: done
-- next_owner: none
-- priority: high
-- recommended_model: Sonnet5（高）
-- purpose: C1 PASS-WITH-FIX済みPR #30をfresh mainで安全にmergeし、Phase1I修正がreviewed headから変わっていないこととpost-merge回帰を確認する。production migration/apply/deploy/refreshは禁止。
+- status: ready
+- next_owner: claude
+- priority: critical
+- recommended_model: Opus5.5（高）
+- purpose: 会社員AIラボで連続発生している X_REQUEST_FAILED:401 を根本修復し、今後追加する全ブランド・全ユーザーのXアカウントで同じ事故を繰り返さない、exact-account / Vault-backed / refresh-token-rotation-safe な共通OAuth refresh基盤をproduction-readyにする。Phase1Iでレビュー済みのexact-account refresh実装を土台にし、AI Lab固有のallowRefresh=false暫定経路を廃止可能な共通アカウント経路へ統合する。production activation/deploy/real token refreshはCodexレビュー前に行わない。
 
-## Reviewed source
+## Incident facts — read-only confirmed
 
-- PR #30 reviewed/fixed head: `94000720e10649612e84cb3811327de1a63364e9`
-- Review verdict: PASS-WITH-FIX
-- Production activation: NO
+Project: stock-x-autopost
+
+AI Lab social account:
+- id: `ai_salaryman_lab_x`
+- brand_id: `ai_salaryman_lab`
+- handle: `kaishain_ai_lab`
+- publish_enabled: true
+- connection_status: identity_verified
+- Vault access-token ref: configured
+- Vault refresh-token ref: configured
+- oauth_client_ref: default
+
+Observed:
+- last confirmed successful AI Lab post: 2026-09-23 22:33 UTC / 2026-09-24 07:33 JST
+- first confirmed `X_REQUEST_FAILED:401`: 2026-09-24 00:51 UTC / 09:51 JST
+- all observed AI Lab brand_post attempts after that have failed with 401
+- current live `x-test-post` loads AI Lab tokens from Vault but explicitly sets `allowRefresh:false`
+- `postToX()` therefore throws immediately on 401 without using the configured refresh token
+- `social_accounts.connection_status` remains `identity_verified` and `last_connection_error_code` remains null despite persistent 401s, so observability/state is misleading
+
+Important:
+- do not assume the refresh token itself is invalid
+- do not log/read out plaintext tokens to reports
+- do not touch Kabumori legacy credentials as a shortcut
+
+## Architectural goal
+
+Build one generic X credential lifecycle for every current/future social account:
+
+`scheduled/queued post -> exact social_account_id -> exact account metadata -> exact Vault refs -> access token -> pre-X refresh decision / 401 recovery -> OAuth token endpoint -> rotate only that exact account's Vault secrets -> commit account refresh state -> retry the intended X request at most once when safe`
+
+Required properties:
+- no brand-first lookup
+- no first-row lookup
+- no hardcoded AI Lab account exception
+- no fallback to another brand/account's token
+- no fallback to Kabumori `oauth_token_store` for a Vault-backed account
+- exact `social_account_id` is the authority
+- access and refresh Vault refs must belong to that same account and be distinct
+- refresh request is single-attempt, manual-redirect, no blind retry
+- refresh token rotation handled safely
+- stale account/attempt/ref mutation cannot commit
+- provider-started X write must never trigger refresh replay
+- unknown/ambiguous provider outcome becomes `uncertain`, not automatic replay
+- invalid_grant / revoked refresh credential becomes `reauth_required`
+- connection state exposed truthfully
 
 ## Mandatory startup
 
-1. Read PROJECT_RULES.md
-2. Read .agent/ORCHESTRATION.md
-3. Read .agent/CURRENT_STATE.md
-4. Read H1 Phase1I report and Final C1
-5. Fresh fetch origin/main
-6. Fresh fetch PR #30
-7. Confirm PR head is still exactly `94000720e10649612e84cb3811327de1a63364e9`
-8. Confirm mergeability and no Phase1I file drift
-9. Confirm dedicated G3 worktree and no overlap with active slots
+1. Read `PROJECT_RULES.md`
+2. Read `.agent/ORCHESTRATION.md`
+3. Read `.agent/CURRENT_STATE.md`
+4. Read G3 Phase1I TASK/Report and H1/C1 Phase1I review
+5. Fresh fetch `origin/main`
+6. Confirm dedicated independent G3 worktree/checkout
+7. Confirm no overlap with active G4 `apps/admin/**` work
+8. Inspect current:
+   - `supabase/functions/x-test-post/index.ts`
+   - `supabase/functions/_shared/brand/*token*`
+   - Phase1I refresh helper/migration/tests
+   - `social_accounts` schema/state fields
+   - Vault read/write RPCs
+   - X OAuth connect/reconnect flows
+   - current scheduler/claim path
+9. Read production definitions/grants in read-only mode where needed
+10. Do not deploy/apply/refresh real tokens before review
 
-## Scope A — merge
+## Scope A — immediate incident containment design
 
-If and only if reviewed head is unchanged and merge is clean:
-- merge PR #30 to main
-- do not alter source semantics
-- record merge commit
+Do not silently leave AI Lab in an endless failing state.
 
-If head changed or conflict affects Phase1I scope:
-- STOP and report; do not resolve semantically without new review
+Implement source/state handling so repeated 401s lead to an explicit account health state rather than endless opaque failure:
+- classify access-token unauthorized separately from generic X request failure
+- preserve `identity_verified` only when appropriate
+- expose/use `refreshing`, `connected/identity_verified`, `reauth_required`, `uncertain` or the closest existing reviewed state model
+- maintain a fixed non-secret `last_connection_error_code`
+- repeated scheduled jobs for a known `reauth_required` account must fail closed before generation/X write, without consuming unnecessary OpenAI generation cost
+- do not create automatic infinite retry loops
+- do not disable all brands globally
 
-## Scope B — post-merge verification
+If a minimal production-only emergency containment mutation is truly required before reviewed activation, STOP and report the exact proposed mutation; do not perform it in this implementation task.
 
-Run:
+## Scope B — generalize Phase1I to all Vault-backed social accounts
+
+Reuse the reviewed Phase1I exact-account lease/commit model instead of creating a parallel weaker refresh system.
+
+Generalize hardcoded/special-case parts so the common refresh path accepts the exact account resolved from the post/claim.
+
+It must validate:
+- exact social_account_id
+- brand_id matches post/claim
+- platform = x
+- publish_enabled = true
+- connection state allows publish/refresh
+- oauth_client_ref resolves to an approved server-side client configuration
+- access/refresh Vault refs exist, are valid, distinct and exclusively owned as required
+- account identity/ref snapshot remains unchanged through commit
+- attempt/post remains eligible and pre-X
+- no provider step has started
+
+No caller may pass arbitrary Vault secret IDs as authority.
+
+## Scope C — OAuth client routing for future accounts
+
+Make `oauth_client_ref` a real server-side routing key rather than AI-Lab-specific hardcoding.
+
+Requirements:
+- approved mapping from `oauth_client_ref` -> server-side client id/client secret configuration
+- client secret never stored in social_accounts/client/browser/logs
+- unknown client ref fails closed with fixed error
+- support current `default` client safely
+- architecture should allow additional OAuth client registrations later without source changes to account-specific logic
+- no user-controlled URL/token endpoint
+- token endpoint remains fixed X endpoint
+
+Do not expose secrets in admin/mobile bundles.
+
+## Scope D — refresh policy
+
+Support both:
+1. proactive refresh when trustworthy expiry/refresh-needed state says refresh is required before X provider-start
+2. reactive refresh on a first X 401 only when the X request is known not to have been accepted/provider-started and the operation is safe to retry
+
+Rules:
+- max one refresh execution per publish attempt
+- max one retry of the exact intended X request after successful refresh
+- never refresh after durable provider-start
+- never retry ambiguous/non-idempotent provider outcomes
+- redirect disabled/manual
+- network/timeout/408/5xx/ambiguous -> uncertain; no blind replay
+- invalid_grant / invalid refresh credential -> reauth_required
+- malformed 2xx -> fail closed
+- rotated refresh token updates both exact Vault refs atomically as far as Phase1I reviewed DB/Vault boundary permits
+- if provider omits new refresh token, preserve the existing refresh token
+- no token value in error text/log
+
+## Scope E — live dispatch integration, source-only candidate
+
+Replace the AI Lab `allowRefresh:false` dead-end with the common exact-account refresh port.
+
+Also make the integration suitable for every future Vault-backed X account.
+
+Important:
+- do not switch Kabumori legacy credential source blindly in this task if it is not yet Vault-backed
+- preserve current Kabumori behavior unless a clean migration path is explicitly part of the reviewed design
+- new/future accounts must default toward the generic Vault-backed resolver, not a new brand-specific helper
+- remove/retire AI-Lab-only credential branching where safe, but do not break production before reviewed rollout
+
+## Scope F — account health / observability
+
+Ensure operators can distinguish:
+- healthy/connected
+- refresh in progress
+- reauth required
+- uncertain/manual reconciliation required
+- generic publish error
+
+At minimum update/consume existing:
+- `connection_status`
+- `last_connection_error_code`
+- `verified_at` or a better existing reviewed timestamp where semantically correct
+
+Do not mark a credential healthy merely because the identity was verified days ago.
+
+Add deterministic fixed error codes for:
+- access token unauthorized
+- refresh invalid_grant / revoked
+- refresh timeout/network/5xx uncertainty
+- account changed during refresh
+- Vault write/commit failure
+- unsupported oauth_client_ref
+
+No plaintext provider response body in persisted errors.
+
+## Scope G — tests
+
+Add adversarial tests covering at least:
+
+### AI Lab incident reproduction
+- valid Vault refs + expired/invalid access token
+- X first request 401
+- generic refresh path runs once
+- rotated token committed to same exact account
+- exact request retried once
+- succeeds without touching Kabumori credentials
+
+### future account
+- a second synthetic brand/social account works via the same generic resolver without code special-casing that brand
+- distinct Vault refs and account identity preserved
+
+### cross-account safety
+- wrong social_account_id
+- brand/account mismatch
+- shared/swapped access ref
+- shared/swapped refresh ref
+- ref changed mid-refresh
+- account disabled mid-refresh
+- oauth_client_ref changed mid-refresh
+- attempt settled mid-refresh
+- provider-started attempt cannot refresh
+- stale lease cannot commit
+
+### provider semantics
+- invalid_grant -> reauth_required
+- timeout/network/5xx -> uncertain
+- 3xx not followed
+- malformed 2xx
+- rotated refresh token
+- omitted refresh token preserves old
+- second 401 after one refresh fails closed
+- no infinite retry
+
+### observability
+- repeated known reauth_required stops before generation/X call
+- healthy state restored only after successful verified refresh/reconnect
+- error codes contain no token material
+
+Rerun:
 - Phase1I focused/helper/static/dispatcher
 - Phase1B–1I focused
-- x-test-post
+- x-test-post full
 - _shared
 - important-news-monitor
 - greeting/tip-specific
-- disposable Phase1I behavior/concurrency
+- disposable PostgreSQL Phase1I behavior/concurrency
 - relevant Phase1D/E/F/G/H proofs
-- changed TS deno check/lint
+- deno check/lint
 - bash -n
-- git diff/check as appropriate
+- git diff --check
+- targeted secret scan
 
-Verify:
-- cross-account ref-swap regression remains fixed
-- settled-attempt commit regression remains fixed
-- gate remains OFF/unwired
-- production migration remains unapplied
-- no real OAuth/Vault/X operation
+## Scope H — rollout plan (document, do not activate yet)
 
-## Forbidden
+Produce an explicit staged production plan:
 
-- production migration/apply
-- db push/history repair
-- Edge deploy
-- Cron change
-- real OAuth refresh/token rotation
-- production Vault read/write
-- real X API/post/media
-- gate enable
-- scheduler/claim switch
-- apps/admin/**
-- G4 work
+Stage 0:
+- live schema/function/grant/read-back
+- exact account rows and Vault ref ownership checks
+- confirm AI Lab refresh ref exists without revealing secret
+
+Stage 1:
+- apply only reviewed required migration/RPC changes
+- deploy exact reviewed Edge source
+- keep any new global gate OFF if introduced
+
+Stage 2 — AI Lab recovery:
+- controlled single refresh/post-safe validation for `ai_salaryman_lab_x`
+- prove only AI Lab refs changed
+- prove Kabumori refs/store unchanged
+- verify connection_status/error cleared correctly
+- restore scheduled posting only after safe success
+
+Stage 3 — generic future-account proof:
+- synthetic/dry-run or non-posting account-path proof
+- no real X write required
+
+Stage 4:
+- enable generic refresh policy for all Vault-backed accounts
+- monitor reauth_required/uncertain/refresh success counts
+- rollback plan
+
+Do not execute these stages before ChatGPT K3 + Codex review.
 
 ## Production mutation budget
 
-0 excluding normal GitHub merge.
+This implementation task:
+- DB/schema/migration apply: 0
+- Edge deploy: 0
+- real OAuth refresh/token rotation: 0
+- production Vault write: 0
+- real X API post/media: 0
+- Cron/settings mutation: 0
+- business-data mutation: 0
+
+Read-only production inspection is allowed.
+
+## Forbidden
+
+- reading/logging plaintext Vault tokens into Report
+- copying token values into env/files/issues
+- changing Kabumori legacy tokens as a shortcut
+- brand-first/first-row credential fallback
+- arbitrary secret-id caller authority
+- blind retry after ambiguous provider result
+- more than one refresh per attempt
+- automatic reauth user impersonation
+- OAuth/Vault/DB production activation before independent review
+- G4 `apps/admin/**` changes
+- overwriting H2 deferred task
+- unrelated cleanup/refactor
 
 ## Completion / K3
 
 Report:
-- fresh main before merge
-- exact reviewed PR head
-- mergeability
-- merge commit
-- post-merge test counts
-- safety checks
-- production mutation=0 excluding merge
+- exact root cause confirmation
+- architecture before/after
+- changed files
+- whether AI Lab special-case refresh dead-end is removed
+- how future accounts use the same path
+- account health state model
+- provider retry/ambiguity semantics
+- exact-account/Vault safety proof
+- tests/counts
+- production read-only findings
+- production mutation=0
+- rollout plan
 - remaining blockers
 - next recommendation
 
 Then:
 - status -> review_required
 - next_owner -> chatgpt
-- STOP for K3.
+- STOP for K3
 
-Do not activate/deploy Phase1I.
+Because this crosses OAuth/Vault/X publish/concurrency boundaries, independent Codex review is mandatory before production activation.
+
+## Review routing after K3
+
+Expected:
+- H1 if free
+- recommended model: Codex Sol（高）
+- review scope should be tightly limited to OAuth/Vault/exact-account/concurrency/production rollout safety, not a broad repo review
 
 ## Report
 
-- task_id: `x-autopost-phase1i-pr30-merge-postmerge-verify-20260925`
-- result: **PR #30 merged; post-merge verification PASS; production mutation 0 (excluding the GitHub merge).** Run on Opus 5.5 (recommended Sonnet5（高）; no quality impact, noted to the user). Stop for K3.
-- worktree/branch: dedicated G3 worktree `/Users/yuya/Developer/kabumori-g3-phase1d`; local-only `claude/g3-pr30-premerge-check` and `claude/g3-pr30-postmerge`. No overlap: H2 ready on PR #32 (app morning Fact contract); G1/G2/G4/H1 done.
-- fresh main before merge: `31235d7` (no Phase1I-file drift since the PR base `7204253`; other main changes were `.agent/**` and `important-news-monitor`, which explains that suite's growth to 473 — unrelated).
-- reviewed PR head: `94000720e10649612e84cb3811327de1a63364e9` = PR head (single commit); merge pinned with `--match-head-commit`.
-- scope check: 4 files (Phase1I migration, `account_refresh_migration_test.ts`, Phase1I behavior SQL, Phase1I doc). The fix: `begin` snapshots brand / platform user id / oauth client / both Vault ref ids into the lease; `commit` takes `SHARE` on `social_accounts`, locks attempt → post → account → state, and turns the lease `uncertain` (`X_REFRESH_ACCOUNT_CHANGED`) unless the attempt is still the leased, `pre_x`, outcome-less attempt of a `running` post bound to the same account/brand, the account is unchanged (brand, platform user id, publish, client, both ref ids, `updated_at`), refs are distinct, and no other account references them. Closes (a) a silent Vault-ref swap that could have written a rotated token into another account's secret and (b) a commit after the attempt was settled. No other change; TS and dispatcher untouched.
-- mergeability/conflicts: GitHub `MERGEABLE` (`UNSTABLE` only because Vercel = `build-rate-limit`, target `…?upgradeToPro=build-rate-limit`; the PR touches no `apps/**`; Netlify deploy-preview SUCCESS); local merge preview clean.
-- tests (pre-merge preview; repeated post-merge on `origin/main`, identical): focused Phase1B–1I **124/124**; `x-test-post` **477/477**; greeting/publish_claim/tip **138/138**; `_shared` **141/141**; `important-news-monitor` **473/473**; disposable PostgreSQL 17 Phase1I behavior (incl. new §7 silent ref swap and §8 attempt settled mid-refresh) + races **PASS ×2 pre-merge, PASS post-merge**; Phase1D/1E/1F/1G/1H proofs PASS; `deno check --no-config` + `deno lint` PASS; `bash -n` on all six runners PASS; `git diff --check` PASS.
-- merge commit SHA: `a9b1ef4d359d5ef554284fc56427e0cafeaec648` (merge commit; branch kept; merged 2026-09-25T09:42:30Z).
-- post-merge read-back (`origin/main` = `a9b1ef4`): reviewed head is an ancestor; all 10 Phase1I-related files are blob-identical to `9400072`; diff vs. pre-merge main = exactly the 4 PR files; `x-test-post/index.ts` has 0 references to the v2 gate, dispatcher or refresh path → gate OFF/unwired; migrations remain unapplied.
-- production mutation: **0** excluding the GitHub merge (apply/db push/history 0, deploy 0, Cron 0, real OAuth refresh/rotation 0, production Vault read/write 0, X API/post/media 0, gate enable 0, scheduler/claim switch 0).
-- remaining blockers: unchanged from Phase1I — Kabumori token still in `oauth_token_store`/env; AI Lab refresh ref to verify on its own row; operator runbook + monitoring for `refreshing`/`uncertain`/`reauth_required`; the fix adds a brief `SHARE` lock on `social_accounts` per commit — confirm no long-running `social_accounts` writer in the live-definition read-back; interaction poll seam; brand_post completion source; real v2 content adapters + gate-OFF entrypoint; production gates (ordered 1B→1I apply proof, staged rollback plan).
-- next_recommendation: K3. Next source-only step: gate-OFF v2 entrypoint with real content adapters and the refresh port wired, or the Kabumori credential migration plan into its account's Vault refs (Opus5.5（高）).
-
-
-## Final K3
-
-- verdict: **PASS**
-- checked_by: ChatGPT
-- checked_at: 2026-09-25 JST
-- PR #30: merged
-- reviewed head: `94000720e10649612e84cb3811327de1a63364e9`
-- merge commit: `a9b1ef4d359d5ef554284fc56427e0cafeaec648`
-- post-merge verification: PASS
-  - focused Phase1B–1I: 124/124
-  - x-test-post: 477/477
-  - greeting/publish_claim/tip: 138/138
-  - _shared: 141/141
-  - important-news-monitor: 473/473
-  - disposable PostgreSQL Phase1I behavior/concurrency: PASS
-  - Deno check/lint, bash -n, git diff --check: PASS
-- production mutation: 0 excluding normal GitHub merge
-- activation/deploy: not performed; gate remains OFF/unwired
-- additional Codex review: not required; this task merged the already H1-reviewed/fixed head and verified it post-merge
-- remaining issues: unchanged Phase1I rollout/credential/monitoring gates documented in Report
-- slot disposition: closed; G3 may be reused after fresh allocation check
+- pending
