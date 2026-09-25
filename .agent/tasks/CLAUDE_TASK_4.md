@@ -3,8 +3,8 @@
 - task_id: x-admin-pr15-merge-production-verify-20260925
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（中）
 - purpose: Codexレビュー済み・authenticated live QA済みのPR #15を、reviewed head以降の差分がNetlify再build用コメント1行だけであることをfreshに再確認したうえでmainへmergeし、Web管理画面のproduction反映とブランド境界を安全に確認する。新規機能実装ではなくmerge-only + production verificationを主眼とする。
@@ -416,3 +416,27 @@ PR差分（Scope A時）・merge後src・client bundle・本番HTMLのいずれ�
 
 1. PR #15のproduction検証は完了。K4で最終確認をお願いします。
 2. 会社員AIラボのX 401失敗を、別TASKとしてX自動投稿側に割り当てることを推奨。
+
+
+## Final K4 — PR #15 production verification
+
+- verdict: **PASS**
+- PR #15 merged head: `f04c44ac564aa775fc0d68106648a0d2e4fcd564`
+- merge commit: `f610503761729bdc09dfa483bd218a769350a2dc`
+- post-merge apps/admin tests: 34/34 PASS
+- focused brand-boundary tests: 27/27 PASS
+- tsc/lint/build/diff checks: PASS
+- Vercel production: PR #15 code confirmed live via subsequent same-code deployment
+- authenticated production QA: PASS
+  - Admin login PASS
+  - かぶモリ ⇄ 会社員AIラボ切替 PASS
+  - brand-scoped data isolation PASS
+  - AI Lab選択中のKabumori-only controls unavailable PASS
+  - invalid/tampered selector values rejected server-side PASS
+  - unauthorized/tampered-session fail-closed PASS
+  - non-admin live-account test unavailable; existing admin_users source/test boundary remains intact
+- secret/service_role exposure: none observed
+- DB/Auth/RLS/OAuth/Vault/X/business-data mutation: 0
+- no additional Codex review required: reviewed semantics unchanged; this phase was merge + production verification only
+- AI Lab X 401 incident is out of scope here and is now assigned separately to G3 as `x-universal-oauth-refresh-productionization-20260925`
+- G4 is closed and reusable after fresh allocation check.
