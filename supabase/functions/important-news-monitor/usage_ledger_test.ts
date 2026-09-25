@@ -169,8 +169,9 @@ test("the breaking fetcher records billed tokens and cost from the response", as
   assert.equal(result.diagnostics.webSearchCallCount, 1);
   assert.equal(result.diagnostics.inputTokens, 11800);
   assert.equal(result.diagnostics.outputTokens, 640);
-  assert.equal(result.diagnostics.estimatedCostUsd, 0.0115);
-  assert.equal(result.diagnostics.model, "gpt-6-luna");
+  // breaking_market is held on gpt-5.6-luna (see MODEL in breaking_market_source_fetchers.ts).
+  assert.equal(result.diagnostics.estimatedCostUsd, 0.013128);
+  assert.equal(result.diagnostics.model, "gpt-5.6-luna");
 });
 
 test("the run diagnostics carry a per-cycle breaking cost summary", () => {

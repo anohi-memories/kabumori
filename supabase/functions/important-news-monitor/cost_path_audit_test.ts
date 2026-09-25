@@ -35,7 +35,6 @@ const mixedCandidates = (bodyLengths: number[]): GenerationCandidate[] => bodyLe
 test("active Important News runtime entrypoints do not select GPT-5.6 models", () => {
   const runtimeFiles = [
     "./importance_judgement_logic.ts",
-    "./breaking_market_source_fetchers.ts",
     "./post_generation_logic.ts",
     "./index.ts",
   ];
@@ -43,6 +42,13 @@ test("active Important News runtime entrypoints do not select GPT-5.6 models", (
     const source = readFileSync(new URL(path, import.meta.url), "utf8");
     assert.doesNotMatch(source, /gpt-5\.6-(?:luna|sol)/, `${path} must not select a legacy model`);
   }
+});
+
+test("breaking_market is the single documented GPT-5.6 exception, and only for Luna", () => {
+  // 2026-09-25 recovery: gpt-6-luna returned no breaking candidates in production (see MODEL comment).
+  const source = readFileSync(new URL("./breaking_market_source_fetchers.ts", import.meta.url), "utf8");
+  assert.match(source, /const MODEL = "gpt-5\.6-luna" as const;/);
+  assert.doesNotMatch(source, /gpt-5\.6-sol/);
 });
 
 test("mixed important-news cost fixture measures stage and whole-path input reduction", () => {

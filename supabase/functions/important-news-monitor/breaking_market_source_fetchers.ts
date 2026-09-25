@@ -182,7 +182,13 @@ export const BREAKING_MARKET_SOURCE_DOMAINS = [
 export const MAX_BREAKING_MARKET_ITEM_AGE_MS = 3 * 60 * 60 * 1000;
 const MAX_BREAKING_MARKET_FUTURE_SKEW_MS = 60 * 60 * 1000;
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
-const MODEL = "gpt-6-luna" as const;
+// Temporarily held on GPT-5.6 Luna (recall first). After the 2026-09-23 switch, gpt-6-luna returned an
+// empty candidates array for all 152 production queries, including runs where the search itself
+// surfaced 16-23 allowed-domain sources (search + open_page) and the response parsed cleanly: the model
+// declines the sources under this prompt ("only URLs actually opened"), while gpt-5.6-luna produced
+// candidates from the same prompt. Re-enable GPT-6 only after it yields candidates on this request body
+// (breakingMarketRequestBody makes a same-request comparison possible).
+const MODEL = "gpt-5.6-luna" as const;
 const BREAKING_MARKET_REQUEST_TIMEOUT_MS = 60_000;
 
 /** The critical topic is always fixed; Phase 2 topics may declare slot: "fixed" too. */

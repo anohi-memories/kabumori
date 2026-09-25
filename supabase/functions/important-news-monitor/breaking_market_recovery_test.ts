@@ -261,12 +261,12 @@ test("A: web_search summary tolerates missing actions and non-object output", ()
   );
 });
 
-test("A: the request body is identical across models apart from the model field", () => {
-  const gpt6 = breakingMarketRequestBody(query, now);
-  const legacy = breakingMarketRequestBody(query, now, "gpt-5.6-luna");
+test("A: the lane is held on gpt-5.6-luna and the request is identical across models apart from the model", () => {
+  const active = breakingMarketRequestBody(query, now);
+  const gpt6 = breakingMarketRequestBody(query, now, "gpt-6-luna");
+  assert.equal(active.model, "gpt-5.6-luna");
   assert.equal(gpt6.model, "gpt-6-luna");
-  assert.equal(legacy.model, "gpt-5.6-luna");
-  assert.deepEqual({ ...gpt6, model: null }, { ...legacy, model: null });
-  assert.equal(gpt6.max_tool_calls, 1);
-  assert.deepEqual(gpt6.include, ["web_search_call.action.sources"]);
+  assert.deepEqual({ ...active, model: null }, { ...gpt6, model: null });
+  assert.equal(active.max_tool_calls, 1);
+  assert.deepEqual(active.include, ["web_search_call.action.sources"]);
 });
