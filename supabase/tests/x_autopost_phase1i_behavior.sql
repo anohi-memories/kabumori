@@ -232,7 +232,55 @@ do $$ begin
     raise exception 'reconnect race not fail-closed: %', pg_temp.state('acct_b'); end if;
 end $$;
 
--- 7. API roles.
+-- 7. A silent Vault-reference swap must never redirect a rotated token into
+-- another account's secret, even if updated_at is not maintained by a writer.
+reset role;
+update public.x_account_refresh_state_v2 set status = 'idle', last_error_code = null where social_account_id = 'acct_b';
+set role service_role;
+select public.schedule_account_bound_post_v2('brand_b', 'acct_b', current_date, 'useful_tip', 11::smallint, now() - interval '1 hour');
+insert into claims select 'b_ref', attempt_id, claim_token, social_account_id, brand_id from public.claim_due_post_v2();
+do $$
+declare r record;
+begin
+  select * into r from public.begin_x_account_refresh_v2((pg_temp.c('b_ref')).attempt_id, (pg_temp.c('b_ref')).claim_token, 'acct_b', 'brand_b');
+  perform set_config('phase1i.lease_ref', r.lease_token::text, false);
+end $$;
+reset role;
+update public.social_accounts set vault_access_token_secret_id = '00000000-0000-4000-8000-00000000000a'
+where id = 'acct_b'; -- same updated_at; points to acct_a's access secret
+set role service_role;
+do $$ begin
+  if public.commit_x_account_refresh_v2(current_setting('phase1i.lease_ref')::uuid, 'acct_b', 'fake_CROSS_ACCOUNT', 'fake_CROSS_ACCOUNT') <> 'account_changed'
+     or pg_temp.secret('00000000-0000-4000-8000-00000000000a') <> 'fake_A_access_2'
+     or pg_temp.secret('00000000-0000-4000-8000-00000000000b') <> 'fake_B_access_2'
+     or pg_temp.state('acct_b') not like 'uncertain:%:X_REFRESH_ACCOUNT_CHANGED' then
+    raise exception 'silent secret-ref swap crossed account boundary'; end if;
+end $$;
+
+-- 8. A pre-X attempt settled while X refresh is in flight must not commit.
+reset role;
+update public.social_accounts set vault_access_token_secret_id = '00000000-0000-4000-8000-00000000000b'
+where id = 'acct_b';
+update public.x_account_refresh_state_v2 set status = 'idle', last_error_code = null where social_account_id = 'acct_b';
+set role service_role;
+select public.schedule_account_bound_post_v2('brand_b', 'acct_b', current_date, 'useful_tip', 12::smallint, now() - interval '1 hour');
+insert into claims select 'b_settled', attempt_id, claim_token, social_account_id, brand_id from public.claim_due_post_v2();
+do $$
+declare r record;
+begin
+  select * into r from public.begin_x_account_refresh_v2((pg_temp.c('b_settled')).attempt_id, (pg_temp.c('b_settled')).claim_token, 'acct_b', 'brand_b');
+  perform set_config('phase1i.lease_settled', r.lease_token::text, false);
+end $$;
+select public.settle_post_pre_x_v2(attempt_id, claim_token, false, 'FIXTURE_SETTLED')
+from claims where label = 'b_settled';
+do $$ begin
+  if public.commit_x_account_refresh_v2(current_setting('phase1i.lease_settled')::uuid, 'acct_b', 'fake_STALE_ATTEMPT', 'fake_STALE_ATTEMPT') <> 'account_changed'
+     or pg_temp.secret('00000000-0000-4000-8000-00000000000b') <> 'fake_B_access_2'
+     or pg_temp.state('acct_b') not like 'uncertain:%:X_REFRESH_ACCOUNT_CHANGED' then
+    raise exception 'settled attempt wrote refreshed tokens'; end if;
+end $$;
+
+-- 9. API roles.
 reset role;
 set role authenticated;
 do $$ begin

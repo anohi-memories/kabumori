@@ -16,7 +16,7 @@ The only authority is an **open pre-X v2 attempt** (`attempt_id` + `claim_token`
 ## 2. Secret boundary
 
 - `begin` returns `lease_token`, `oauth_client_ref` and the refresh token — to the server refresh helper only (`XRefreshLease`, private field, redacted in JSON/String/inspect). The dispatcher receives only `{ postOutcome, code, tokenRequests }`.
-- The access token and optional rotated refresh token are written by `commit` to the **same account's own** Vault secrets (`vault.update_secret`); no secret id is accepted from the caller. Omitted `refresh_token` in X's response leaves the stored refresh token unchanged.
+- The access token and optional rotated refresh token are written by `commit` to the **same account's own** Vault secrets (`vault.update_secret`); no secret id is accepted from the caller. `begin` snapshots the exact brand, X user, OAuth client and both Vault refs; `commit` rechecks them, the still-open pre-X attempt/post, and exclusive ownership of both refs under a table lock before writing. Omitted `refresh_token` in X's response leaves the stored refresh token unchanged.
 - Fixed error codes only. Vault read and write failures, including Vault's own `P0001`, are masked (`X_REFRESH_CREDENTIAL_UNAVAILABLE`, `X_REFRESH_PERSIST_FAILED`). Nothing logs tokens, bodies or ids (the helper has no `console.*`).
 - ACL: the three RPCs are service_role-only, `SECURITY DEFINER`, `search_path = ''`; the guard function has no API EXECUTE; `x_account_refresh_state_v2` is SELECT-only for service_role; API roles cannot write Vault.
 
@@ -39,12 +39,12 @@ Before any request: begin refusals (`X_REFRESH_IN_PROGRESS` / `X_REFRESH_UNAVAIL
 
 1. `begin` (one DB transaction): validate, take the lease (`refreshing`), read the refresh token.
 2. One token request (outside the DB).
-3. `commit` (one DB transaction): lease still held, account unchanged since the lease (`updated_at` snapshot), then both Vault writes and the lease release. Vault is in the same Postgres, so secrets + state are atomic.
+3. `commit` (one DB transaction): lease still held; attempt still pre-X and post running; account identity, OAuth client, Vault refs and `updated_at` still match the lease; no other account shares either ref. A `SHARE` table lock serializes the shared-ref check with social-account writes. Then both Vault writes and the lease release. Vault is in the same Postgres, so secrets + state are atomic.
 
 X refresh tokens are single-use, so step 2 → 3 is the one boundary that cannot be made atomic:
 
 - `commit` fails (e.g. Vault write error) → the transaction rolls back, the helper releases the lease as `uncertain`; if that release also fails the lease stays `refreshing`. Either state blocks further refreshes and provider start on that account; the post attempt is `pre_x_terminal`. **Never reported as success.**
-- `lease_lost` / `account_changed` (re-connected during the refresh) → the new tokens are not stored; `account_changed` sets `uncertain`.
+- `lease_lost` / `account_changed` (re-connected, ref mutation, or stale attempt during the refresh) → the new tokens are not stored; `account_changed` sets `uncertain`.
 - Unknown X outcome → `uncertain`; no automatic replay (replaying a possibly-consumed refresh token is not assumed safe).
 
 Operator recovery for `uncertain` / `reauth_required` / stuck `refreshing`: re-connect the account through the social-mobile OAuth flow (writes fresh Vault secrets), then reset the account's refresh state to `idle` by reviewed owner SQL. No API role can reset it.
@@ -55,6 +55,7 @@ Operator recovery for `uncertain` / `reauth_required` / stuck `refreshing`: re-c
 - **Provider-start race**: triggers on `post_queue_attempts_v2` (pre_x → provider_started) and `post_provider_steps_v2` (insert) share-lock the account row and refuse with `X_REFRESH_IN_PROGRESS` while a lease is held; begin and mark lock attempt → account in the same order (proved concurrently).
 - **Different accounts** refresh independently (proved concurrently).
 - **Stale leases** cannot write or release (`lease_lost`), and a used lease cannot be replayed.
+- An attempt settled during the external refresh, or a silent Vault-ref change without an `updated_at` bump, cannot commit; both leave the state `uncertain`. Shared refs are rechecked at commit, serialized against concurrent account DML.
 - `uncertain` / `reauth_required` block refresh but not posting with a token that still passes the identity check.
 
 ## 6. Dispatcher contract (Phase1H seam, not wired)
@@ -71,4 +72,4 @@ Operator recovery for `uncertain` / `reauth_required` / stuck `refreshing`: re-c
 
 ## 8. Verification
 
-`supabase/tests/x_autopost_phase1i_run.sh` (disposable PostgreSQL, non-superuser owner, fake Vault with `update_secret` and a fault-injection trigger): ACL; rejections before any lease (bad token, account/brand mismatch both ways, provider-started attempt, shared secret ref, missing refresh ref, invalid input); disabled account never claimed; lease returns only that account's refresh token; same-account second lease, provider start and provider step refused while leased; other account independent; foreign/invalid/replayed commits refused; access-only and rotated commits touch only the owner's secrets; not_rotated / uncertain / reauth releases; stale lease cannot write/release; blocked states refuse new leases but not posting; Vault write failure rolls back both secrets and never commits; re-connect during refresh → `account_changed` / `uncertain`; API roles denied. Races: two concurrent leases on one account (one winner), concurrent provider start refused, cross-account lease in parallel. TS: helper 12 tests (fake transport, global `fetch` forbidden), dispatcher +4.
+`supabase/tests/x_autopost_phase1i_run.sh` (disposable PostgreSQL, non-superuser owner, fake Vault with `update_secret` and a fault-injection trigger): ACL; rejections before any lease (bad token, account/brand mismatch both ways, provider-started attempt, shared secret ref, missing refresh ref, invalid input); disabled account never claimed; lease returns only that account's refresh token; same-account second lease, provider start and provider step refused while leased; other account independent; foreign/invalid/replayed commits refused; access-only and rotated commits touch only the owner's secrets; not_rotated / uncertain / reauth releases; stale lease cannot write/release; blocked states refuse new leases but not posting; Vault write failure rolls back both secrets and never commits; re-connect during refresh, silent cross-account Vault-ref swap, or settled attempt → `account_changed` / `uncertain`; API roles denied. Races: two concurrent leases on one account (one winner), concurrent provider start refused, cross-account lease in parallel. TS: helper 12 tests (fake transport, global `fetch` forbidden), dispatcher +4.

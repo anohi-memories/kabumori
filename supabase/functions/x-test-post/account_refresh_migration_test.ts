@@ -42,6 +42,11 @@ test("commit: lease holder only, same account only, account unchanged, Vault wri
   assert.match(commit, /v_state\.lease_token is distinct from p_lease_token/u);
   assert.match(commit, /return 'lease_lost'/u);
   assert.match(commit, /v_account\.updated_at is distinct from v_state\.account_updated_at/u);
+  assert.match(commit, /lock table public\.social_accounts in share mode/u);
+  assert.match(commit, /v_account\.vault_access_token_secret_id is distinct from v_state\.leased_access_secret_id/u);
+  assert.match(commit, /v_account\.vault_refresh_token_secret_id is distinct from v_state\.leased_refresh_secret_id/u);
+  assert.match(commit, /v_attempt\.phase is distinct from 'pre_x'/u);
+  assert.match(commit, /v_post\.status is distinct from 'running'/u);
   assert.match(commit, /return 'account_changed'/u);
   assert.match(commit, /perform vault\.update_secret\(v_account\.vault_access_token_secret_id, p_access_token\)/u);
   assert.match(commit, /if p_refresh_token is not null then\s+perform vault\.update_secret\(v_account\.vault_refresh_token_secret_id, p_refresh_token\)/u);
