@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: x-autopost-phase1h-gated-dispatcher-final-review-20260925
+- status: ready
+- task_id: x-autopost-phase1i-exact-account-refresh-final-review-20260925
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: closed; Final C1 PASS-WITH-FIX
+- allocation: assigned; Phase1I exact-account OAuth/Vault/concurrency final review
 
 ## Codex H2
 - owner: codex
@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: done
 - task_id: x-autopost-phase1i-exact-account-prex-refresh-writer-20260925
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: assigned; Phase1I exact-account pre-X refresh writer source candidate
+- allocation: closed; Final K3 PASS, H1 review assigned
 
 ## Claude G4
 - owner: claude
