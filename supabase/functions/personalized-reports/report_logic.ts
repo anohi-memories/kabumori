@@ -732,7 +732,14 @@ export function buildPacket(
       : {}),
     // MIC (Market Intelligence Core) State: optional, non-authoritative background
     // context. Never overrides or contradicts shared_market (see MIC_MARKET_INSTRUCTIONS).
-    ...(mic && mic.length > 0 ? { mic_market: mic } : {}),
+    ...(mic && mic.length > 0 ? {
+      mic_market: mic.map((entry) => ({
+        ...entry,
+        bullish_points: [...entry.bullish_points],
+        bearish_points: [...entry.bearish_points],
+        key_risks: [...entry.key_risks],
+      })),
+    } : {}),
   };
 }
 

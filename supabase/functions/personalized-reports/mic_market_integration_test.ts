@@ -43,15 +43,17 @@ const micEntries = toMicPacketEntries([
     domain: "rates", narrative: "米金利は前日から小幅な動きにとどまりました。",
     bullish_factors: ["インフレ鈍化観測"], bearish_factors: [], key_risks: ["米雇用統計の下振れ"],
     data_confidence: 0.9, coverage_status: "full", observation_status: "fresh",
-    ai_model: "gpt-5.6-luna", as_of: "2026-09-17T09:00:00Z", source_evaluation_run_id: "run-1",
+    ai_model: "gpt-5.6-luna", ai_evaluated_at: "2026-09-17T09:00:00Z",
+    as_of: "2026-09-17T09:00:00Z", source_evaluation_run_id: "run-1",
   })!,
-]);
+], Date.parse("2026-09-17T10:00:00Z"));
 
 test("mic_market reaches the packet only when passed and non-empty; the writer instructions gain MIC_MARKET_INSTRUCTIONS only then", () => {
   const withMic = buildPacket(snapshot(), [], null, micEntries) as Record<string, unknown>;
   assert.deepEqual(withMic.mic_market, micEntries);
   const instructions = String(reportDraftRequestBody("close", withMic).instructions);
   assert.ok(instructions.includes(MIC_MARKET_INSTRUCTIONS));
+  assert.ok(String(reportDraftRequestBody("morning", withMic).instructions).includes(MIC_MARKET_INSTRUCTIONS));
 
   const withoutMic = buildPacket(snapshot(), [], null, []) as Record<string, unknown>;
   assert.equal("mic_market" in withoutMic, false, "an empty MIC array must not add the key at all");
@@ -59,6 +61,14 @@ test("mic_market reaches the packet only when passed and non-empty; the writer i
 
   const legacy = buildPacket(snapshot(), []) as Record<string, unknown>;
   assert.equal("mic_market" in legacy, false, "the pre-existing 3-arg call site is untouched (fallback)");
+});
+
+test("each user packet gets independent MIC arrays; mutating one packet cannot change the shared entries or another packet", () => {
+  const first = buildPacket(snapshot(), [], null, micEntries) as { mic_market: Array<{ bullish_points: string[] }> };
+  const second = buildPacket(snapshot(), [], null, micEntries) as { mic_market: Array<{ bullish_points: string[] }> };
+  first.mic_market[0].bullish_points.push("user-specific mutation");
+  assert.deepEqual(second.mic_market[0].bullish_points, ["インフレ鈍化観測"]);
+  assert.deepEqual(micEntries[0].bullish_points, ["インフレ鈍化観測"]);
 });
 
 test("mic_market and shared_market can both be present, independently, and neither disables the other's instructions", () => {
@@ -74,6 +84,9 @@ test("mic_market instructions explicitly forbid verbatim pasting, require infere
   assert.ok(MIC_MARKET_INSTRUCTIONS.includes("fact_ja"));
   assert.ok(MIC_MARKET_INSTRUCTIONS.includes("低"));
   assert.ok(MIC_MARKET_INSTRUCTIONS.includes("shared_market を優先"));
+  assert.ok(MIC_MARKET_INSTRUCTIONS.includes("narrative_freshness が stale または unknown"));
+  assert.ok(MIC_MARKET_INSTRUCTIONS.includes("observation_status が stale または unknown"));
+  assert.ok(MIC_MARKET_INSTRUCTIONS.includes("coverage_status が unavailable"));
 });
 
 test("the Fact-check prompt gains MIC_MARKET_FACT_INSTRUCTIONS only when the packet carries mic_market, and REPORT_FACT_INSTRUCTIONS itself is untouched", () => {

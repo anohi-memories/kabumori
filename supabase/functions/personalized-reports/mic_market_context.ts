@@ -43,6 +43,7 @@ export type MicMarketRow = {
   coverage_status?: unknown;
   observation_status?: unknown;
   ai_model?: unknown;
+  ai_evaluated_at?: unknown;
   as_of?: unknown;
   source_evaluation_run_id?: unknown;
 };
@@ -58,6 +59,7 @@ export type MicDomainState = {
   coverageStatus: string | null;
   observationStatus: string | null;
   aiModel: string | null;
+  aiEvaluatedAt: string | null;
   asOf: string | null;
   sourceEvaluationRunId: string | null;
 };
@@ -72,7 +74,8 @@ function stringArray(value: unknown): string[] {
 export function toMicDomainState(row: MicMarketRow): MicDomainState | null {
   if (!MIC_DOMAINS.includes(row.domain as MicDomain)) return null;
   if (typeof row.narrative !== "string" || row.narrative.trim().length === 0) return null;
-  if (typeof row.data_confidence !== "number") return null;
+  if (typeof row.data_confidence !== "number" || !Number.isFinite(row.data_confidence) ||
+      row.data_confidence < 0 || row.data_confidence > 1) return null;
   const dataConfidence = row.data_confidence;
   return {
     domain: row.domain as MicDomain,
@@ -85,17 +88,28 @@ export function toMicDomainState(row: MicMarketRow): MicDomainState | null {
     coverageStatus: typeof row.coverage_status === "string" ? row.coverage_status : null,
     observationStatus: typeof row.observation_status === "string" ? row.observation_status : null,
     aiModel: typeof row.ai_model === "string" ? row.ai_model : null,
+    aiEvaluatedAt: typeof row.ai_evaluated_at === "string" ? row.ai_evaluated_at : null,
     asOf: typeof row.as_of === "string" ? row.as_of : null,
     sourceEvaluationRunId: typeof row.source_evaluation_run_id === "string" ? row.source_evaluation_run_id : null,
   };
 }
 
 export function toMicDomainStates(rows: MicMarketRow[]): MicDomainState[] {
-  return rows.map(toMicDomainState).filter((state): state is MicDomainState => state !== null);
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    if (typeof row.domain === "string") counts.set(row.domain, (counts.get(row.domain) ?? 0) + 1);
+  }
+  // The DB primary key normally prevents this. If a malformed response repeats
+  // a domain, omit that domain rather than letting conflicting narratives win
+  // by response order.
+  return rows
+    .filter((row) => typeof row.domain !== "string" || counts.get(row.domain) === 1)
+    .map(toMicDomainState)
+    .filter((state): state is MicDomainState => state !== null);
 }
 
 const MIC_SELECT = "domain,narrative,bullish_factors,bearish_factors,key_risks,data_confidence," +
-  "coverage_status,observation_status,ai_model,as_of,source_evaluation_run_id";
+  "coverage_status,observation_status,ai_model,ai_evaluated_at,as_of,source_evaluation_run_id";
 
 // Fail-open by design: this is additional context, never a hard dependency of
 // report generation (see the file header). Any failure -- missing table,
@@ -126,16 +140,40 @@ export type MicPacketEntry = {
   bearish_points: string[];
   key_risks: string[];
   confidence: string;
+  narrative_freshness: "fresh" | "recent" | "stale" | "unknown";
+  observation_status: "fresh" | "delayed_expected" | "stale" | "unknown";
+  coverage_status: "full" | "partial" | "unavailable";
 };
 
-export function toMicPacketEntries(states: MicDomainState[]): MicPacketEntry[] {
+function narrativeFreshness(aiEvaluatedAt: string | null, now: number): MicPacketEntry["narrative_freshness"] {
+  if (aiEvaluatedAt === null) return "unknown";
+  const evaluatedAt = Date.parse(aiEvaluatedAt);
+  const ageMs = now - evaluatedAt;
+  if (!Number.isFinite(evaluatedAt) || ageMs < 0) return "unknown";
+  // The evaluator normally runs once per weekday. Allow a little scheduling
+  // drift for fresh, then a weekend-sized window for recent; older narratives
+  // are explicitly marked stale. This measures narrative age, unlike as_of,
+  // which the no_change RPC refreshes without regenerating the narrative.
+  if (ageMs <= 36 * 60 * 60 * 1000) return "fresh";
+  if (ageMs <= 96 * 60 * 60 * 1000) return "recent";
+  return "stale";
+}
+
+export function toMicPacketEntries(states: MicDomainState[], now = Date.now()): MicPacketEntry[] {
   return states.map((state) => ({
     domain: MIC_DOMAIN_LABEL_JA[state.domain],
     narrative: state.narrative,
-    bullish_points: state.bullishFactors,
-    bearish_points: state.bearishFactors,
-    key_risks: state.keyRisks,
+    bullish_points: [...state.bullishFactors],
+    bearish_points: [...state.bearishFactors],
+    key_risks: [...state.keyRisks],
     confidence: CONFIDENCE_LABEL_JA[state.confidence],
+    narrative_freshness: narrativeFreshness(state.aiEvaluatedAt, now),
+    observation_status: ["fresh", "delayed_expected", "stale", "unknown"].includes(state.observationStatus ?? "")
+      ? state.observationStatus as MicPacketEntry["observation_status"]
+      : "unknown",
+    coverage_status: ["full", "partial", "unavailable"].includes(state.coverageStatus ?? "")
+      ? state.coverageStatus as MicPacketEntry["coverage_status"]
+      : "unavailable",
   }));
 }
 
@@ -146,6 +184,7 @@ export function micSourceBasis(states: MicDomainState[]): Record<string, unknown
     mic_state: states.map((state) => ({
       domain: state.domain,
       ai_model: state.aiModel,
+      ai_evaluated_at: state.aiEvaluatedAt,
       as_of: state.asOf,
       source_evaluation_run_id: state.sourceEvaluationRunId,
       data_confidence: state.dataConfidence,
@@ -162,6 +201,7 @@ export const MIC_MARKET_INSTRUCTIONS = [
   "mic_market の narrative や bullish_points / bearish_points / key_risks を、そのまま書き写したり要約として貼り付けたりしません。overview_ja や holding_impacts の inference_ja で、一般的な市場環境の背景として触れる場合だけ使います。",
   "mic_market の内容は確定した事実（fact_ja）として書きません。触れる場合は必ず推定の言い方（inference_ja）にします。",
   "mic_market の confidence が「低」の項目は、参考程度にとどめ、断定的な言い方や強い結論の根拠にしません。",
+  "narrative_freshness が stale または unknown、observation_status が stale または unknown、または coverage_status が unavailable の項目は、現在の市場状況の根拠として使いません。recent や delayed_expected は時間差を意識した弱い推定に限り、coverage_status=partial は結論を弱めます。",
   "mic_market と shared_market の内容が食い違う場合は shared_market を優先し、その論点では mic_market 側の内容を書きません。",
 ].join("\n");
 
@@ -169,4 +209,4 @@ export const MIC_MARKET_INSTRUCTIONS = [
 // non-empty mic_market -- mirrors REPORT_FACT_INSTRUCTIONS' existing
 // shared_market contradiction check.
 export const MIC_MARKET_FACT_INSTRUCTIONS =
-  "packet に mic_market がある場合、それは未確定の参考情報です。report がその内容を確定事実（fact_ja）として書いていたり、confidence が「低」の項目を断定的な結論に使っていたり、shared_market と矛盾する内容を mic_market 側の情報で書いていたら passed を false にします。";
+  "packet に mic_market がある場合、それは未確定の参考情報です。report がその内容を確定事実（fact_ja）として書いていたり、confidence が「低」の項目を断定的な結論に使っていたり、narrative_freshness が stale/unknown、observation_status が stale/unknown、または coverage_status が unavailable の内容を現在の根拠として使っていたり、shared_market と矛盾する内容を mic_market 側の情報で書いていたら passed を false にします。";

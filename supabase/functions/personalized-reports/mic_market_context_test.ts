@@ -23,6 +23,7 @@ function row(overrides: Partial<MicMarketRow> = {}): MicMarketRow {
     coverage_status: "full",
     observation_status: "fresh",
     ai_model: "gpt-5.6-luna",
+    ai_evaluated_at: "2026-09-24T09:00:00Z",
     as_of: "2026-09-24T09:00:00Z",
     source_evaluation_run_id: "318bfbe1-cfda-40b1-aabd-d743f31e3c00",
     ...overrides,
@@ -46,6 +47,8 @@ test("toMicDomainState: parses a normal row, only the 3 target domains are recog
   assert.deepEqual(state?.bullishFactors, ["インフレ鈍化観測"]);
   assert.equal(toMicDomainState(row({ domain: "geopolitical" })), null, "domain outside rates/macro/equity_index is excluded");
   assert.equal(toMicDomainState(row({ domain: "fx" })), null);
+  assert.equal(toMicDomainState(row({ data_confidence: Number.NaN })), null);
+  assert.equal(toMicDomainState(row({ data_confidence: 1.01 })), null);
 });
 
 test("toMicDomainState: a never-evaluated domain (narrative null) yields no context, not an error", () => {
@@ -61,19 +64,20 @@ test("toMicDomainState: malformed rows fail open to null (per-row, not per-fetch
   assert.deepEqual(toMicDomainState(row({ bullish_factors: ["a", 1, null, "b"] }))?.bullishFactors, ["a", "b"]);
 });
 
-test("toMicDomainStates: mixes valid/never-evaluated/invalid rows, keeps only usable ones", () => {
+test("toMicDomainStates: mixes valid/never-evaluated/invalid rows, and drops duplicate domains", () => {
   const states = toMicDomainStates([
     row({ domain: "rates" }),
     row({ domain: "macro", narrative: null }),
     row({ domain: "equity_index", data_confidence: 0.6 }),
+    row({ domain: "equity_index", narrative: "conflicting duplicate" }),
     row({ domain: "geopolitical" }),
   ]);
-  assert.deepEqual(states.map((s) => s.domain), ["rates", "equity_index"]);
-  assert.equal(states[1].confidence, "medium");
+  assert.deepEqual(states.map((s) => s.domain), ["rates"]);
+  assert.equal(states[0].confidence, "high");
 });
 
 test("toMicPacketEntries: exposes only narrative/factors/confidence label -- no raw number, model, run id or as_of reaches the AI packet", () => {
-  const entries = toMicPacketEntries([toMicDomainState(row())!]);
+  const entries = toMicPacketEntries([toMicDomainState(row())!], Date.parse("2026-09-24T10:00:00Z"));
   assert.deepEqual(entries, [{
     domain: "金利",
     narrative: "米金利は前日から小幅な動きにとどまりました。",
@@ -81,6 +85,9 @@ test("toMicPacketEntries: exposes only narrative/factors/confidence label -- no 
     bearish_points: ["FRBのタカ派発言"],
     key_risks: ["米雇用統計の下振れ"],
     confidence: "高",
+    narrative_freshness: "fresh",
+    observation_status: "fresh",
+    coverage_status: "full",
   }]);
   for (const key of ["ai_model", "as_of", "source_evaluation_run_id", "data_confidence", "dataConfidence"]) {
     assert.equal(key in entries[0], false, `${key} must not reach the AI-visible packet`);
@@ -93,7 +100,7 @@ test("toMicPacketEntries: domain label and confidence label are in Japanese for 
     toMicDomainState(row({ domain: "macro" }))!,
     toMicDomainState(row({ domain: "equity_index", data_confidence: 0.2 }))!,
   ];
-  const entries = toMicPacketEntries(states);
+  const entries = toMicPacketEntries(states, Date.parse("2026-09-24T10:00:00Z"));
   assert.deepEqual(entries.map((e) => e.domain), ["金利", "マクロ経済", "国内株式（指数）"]);
   assert.equal(entries[2].confidence, "低");
 });
@@ -103,10 +110,39 @@ test("micSourceBasis: undefined when empty (spreads to nothing), carries provena
   const basis = micSourceBasis([toMicDomainState(row())!]);
   assert.deepEqual(basis, {
     mic_state: [{
-      domain: "rates", ai_model: "gpt-5.6-luna", as_of: "2026-09-24T09:00:00Z",
+      domain: "rates", ai_model: "gpt-5.6-luna", ai_evaluated_at: "2026-09-24T09:00:00Z",
+      as_of: "2026-09-24T09:00:00Z",
       source_evaluation_run_id: "318bfbe1-cfda-40b1-aabd-d743f31e3c00", data_confidence: 0.9,
     }],
   });
+});
+
+test("narrative freshness distinguishes an old material narrative from a recent no_change status refresh", () => {
+  const now = Date.parse("2026-09-25T09:00:00Z");
+  const stale = toMicDomainState(row({
+    ai_evaluated_at: "2026-09-20T09:00:00Z",
+    as_of: "2026-09-25T08:55:00Z",
+    observation_status: "fresh",
+  }))!;
+  const entries = toMicPacketEntries([stale], now);
+  assert.equal(entries[0].narrative_freshness, "stale");
+  assert.equal(entries[0].observation_status, "fresh");
+  assert.equal(micSourceBasis([stale])?.mic_state instanceof Array, true);
+
+  const unknown = toMicPacketEntries([toMicDomainState(row({ ai_evaluated_at: "not-a-date" }))!], now);
+  assert.equal(unknown[0].narrative_freshness, "unknown");
+  const missing = toMicPacketEntries([toMicDomainState(row({ ai_evaluated_at: null }))!], now);
+  assert.equal(missing[0].narrative_freshness, "unknown");
+});
+
+test("malformed freshness/coverage states fail closed to unknown/unavailable labels", () => {
+  const state = toMicDomainState(row({
+    observation_status: "unexpected",
+    coverage_status: { broken: true },
+  }))!;
+  const entry = toMicPacketEntries([state], Date.parse("2026-09-24T10:00:00Z"))[0];
+  assert.equal(entry.observation_status, "unknown");
+  assert.equal(entry.coverage_status, "unavailable");
 });
 
 test("loadMicMarketContext: queries market_state_current only, for exactly the 3 target domains, never mic_state_evaluation_runs/mic_state_evidence", async () => {
