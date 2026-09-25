@@ -1,136 +1,130 @@
 # Codex Task 2
 
-- task_id: kabumori-pr26-unknown-cause-prefix-final-review-20260925
+- task_id: kabumori-pr29-plus-v27-validator-final-review-20260925
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: codex
 - priority: high
-- recommended_model: Luna（高）
-- purpose: PR #26のunknown-cause prefix拡張が、productionで観測した妥当文だけを通し、因果断定や自由文を新たに許可していないことを独立レビューする。
+- recommended_model: Luna（極高）
+- purpose: PR #29のprompt hardeningと、review前にmain→production v27へ入った commit 510acf5 のvalidator拡張を一体で最終レビューする。merge/deployは禁止。
 
-## Review target
+## Review targets
 
-PR #26
-- branch: `g2-close-unknown-cause-prefix-20260924`
-- head: `2b40a617e34c73c301e40a17692883ac70fd3e0a`
-- changed files:
-  - `supabase/functions/personalized-reports/report_logic.ts`
-  - `supabase/functions/personalized-reports/close_validator_fix_test.ts`
-
-Production remains:
-- v25 = known-good v21 source `4590ba6`
+A. Already on main / production v27:
+- commit: `510acf5954b37410b50c23ff92c3f54af6458a72`
+- change: UNDETERMINED_MOVE_PREFIX に `値下がり|値上がり` を追加
+- related tests in close_validator_fix_test.ts
+- production v27 is reported byte-identical to this source plus existing MIC integration
 - app_enabled=false
-- verify_jwt=false
-- no deploy in PR #26 work
 
-## Intended behavior
+B. PR #29:
+- branch: `g2-report-false-reject-hardening-20260925`
+- head: `bed5e79d0ab22e94be6a7c1ebd0f7c8f157ea0c0`
+- changed:
+  - personalized-reports/report_logic.ts
+  - personalized-reports/report_hardening_test.ts
+- source-only, unmerged, undeployed
+
+## Required assessment
+
+### 1. Validator safety for 510acf5
+
+Confirm `値下がり|値上がり` widening is truly narrow.
 
 Must PASS:
-- 下落の要因は特定できません
-- 当日の下落要因は特定できません
-- 要因は特定できません
-- 上昇の理由は判断できません
-- 値動きの原因は確認できません
-- 当日の変動要因は説明できません
-- 因果関係は確認できません
+- 値下がりの要因は特定できません
+- 当日の値下がり要因は特定できません
+- 値上がりの理由は判断できません
+- 当日の値上がりの原因は確認できません
 
 Must FAIL:
-- 円高が逆風になりましたが、要因は特定できません
-- 円高を受けて下落しましたが理由は特定できません
-- 金利上昇が原因です。ただし要因は特定できません
-- causal assertion + hedge token laundering
-- unrelated free-text subjects
-- allowed noun used in a factual causal assertion
-- unsafe multi-sentence variants
+- 急な値下がりの要因は特定できません
+- 半導体株の値上がり要因は特定できません
+- 円安による値上がりの要因は特定できません
+- 値下がりの要因は円高です
+- 値上がりの理由は好決算です
+- causal assertion + unknown-cause laundering
+- multi-sentence/punctuation bypasses
 
-## Mandatory startup
+Verify:
+- whole-string anchor intact
+- CAUSAL_ASSERTION still evaluated first
+- sentence splitting intact
+- no free-text subject widening
 
-1. Independent worktree/checkout.
-2. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / this TASK / G2 Report.
-3. Fresh fetch origin/main + PR #26.
-4. Verify head exactly `2b40a617e34c73c301e40a17692883ac70fd3e0a`.
-5. No deploy / merge / production mutation.
+### 2. PR #29 prompt hardening
 
-## Review focus
+Confirm PR #29 does NOT weaken validator or Fact checker.
 
-- whole-sentence anchors remain intact
-- CAUSAL_ASSERTION still runs before unknown-cause acceptance
-- sentence-by-sentence validation remains intact
-- optional prefix is limited to:
-  - optional 当日の
-  - 下落|上昇|値動き|変動
-  - optional の
-- no arbitrary adjective/noun/causal subject can sneak in
-- `因果関係` standalone target does not create bypasses
-- punctuation/newline splitting still catches unsafe mixed text
-- morning120 / close160 unchanged
-- existing exact production wording still passes
+Close inference:
+- facts/comparison clauses must stay out of inference_ja
+- unsupported causation should reduce to one bounded unknown-cause sentence
+- validator must remain fail-closed
 
-## Adversarial cases
+Morning wording:
+- advisory-sounding wording is discouraged at generation time
+- Fact checker should remain semantically unchanged
+- neutral replacements do not themselves create unsupported claims
 
-Try at least:
-- 急な下落の要因は特定できません
-- 半導体株の下落の要因は特定できません
-- 円安による上昇の要因は特定できません
-- 下落の要因は円高です
-- 当日の下落要因は円高です
-- 下落の要因は特定できませんが、円高が逆風です
-- 下落の要因は特定できない可能性があります
-- 要因は特定できません。円高が逆風です
-- punctuation variants using 、。,.!！;；newline
+### 3. MIC compatibility
 
-## Required verification
+Main already contains MIC report-context integration.
 
-- focused close-validator suite
+Confirm PR #29:
+- does not alter mic_market_context.ts
+- does not alter MIC semantics
+- does not remove MIC context from prompts
+- only changes wording discipline around generated output
+- does not create overlap with active MIC work
+
+### 4. Test verification
+
+Run:
+- report_hardening tests
+- close_validator tests
 - full personalized-reports suite
+- relevant MIC/report tests
 - deno check
 - deno lint
 - git diff --check
 
-If a concrete bypass is found:
-- minimal fix only in PR #26 scope
-- add regression
-- push to PR #26
+Add adversarial regressions if a concrete bypass is found.
+
+If a concrete issue is found:
+- minimal fix only
+- push to PR #29
 - do not merge/deploy
+
+## Production safety
+
+Read-only verify:
+- personalized-reports v27
+- verify_jwt=false
+- app_enabled=false
+- x_enabled=false
+- cron unchanged
+
+Do not invoke production LLM.
+Do not deploy.
+Do not change DB/schema/settings.
 
 ## Completion / C2
 
 Report:
 - verdict PASS / PASS-WITH-FIX / FAIL
-- final PR head
-- findings
-- exact allow/reject boundary
-- adversarial results
-- tests/counts
-- safe-to-merge assessment
-- recommendation for merge + redeploy + close dry-run 3–5 times
+- final PR #29 head
+- separate verdict for already-deployed 510acf5
+- validator boundary
+- prompt/Fact boundary
+- MIC compatibility
+- test counts
+- production read-back
 - production mutation=0
+- recommendation for merge + controlled redeploy/dry-runs
 
 When complete:
 - status -> review_required
 - next_owner -> chatgpt
 - update .agent/CODEX_REPORT_2.md
 - STOP for C2.
-
-
-## Final C2 — PR #26
-
-Verdict: **PASS**.
-
-Accepted reviewed head:
-- `2b40a617e34c73c301e40a17692883ac70fd3e0a`
-
-Accepted:
-- optional move-subject prefix remains whole-string anchored
-- CAUSAL_ASSERTION still runs first
-- sentence-by-sentence validation remains intact
-- no arbitrary adjective/noun/causal subject bypass found
-- `因果関係` standalone target is bounded
-- morning 120 / close 160 unchanged
-- focused 20/20 PASS
-- personalized-reports 64/64 PASS
-- deno check/lint/diff PASS
-- production mutation=0
-
-PR #26 is safe for fresh-main merge and a controlled redeploy/dry-run with app_enabled=false.
