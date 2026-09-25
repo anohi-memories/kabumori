@@ -1,18 +1,22 @@
-// Writes one row to the shared ai_usage_events ledger (schema added in
-// Phase 1A, unused until now) per AI call this evaluator makes. Mirrors
-// market-intelligence-ingest/mic_ai_usage_logic.ts; duplicated locally
-// rather than imported across function directories, consistent with this
-// codebase's existing per-function convention.
+// Writes one row to the shared ai_usage_events ledger per AI call this
+// evaluator makes. Mirrors market-intelligence-ingest/mic_ai_usage_logic.ts;
+// duplicated locally rather than imported across function directories,
+// consistent with this codebase's existing per-function convention.
+//
+// The primary relation is the evaluation run (related_table =
+// 'mic_state_evaluation_runs', related_id = run id), so every Luna/Sol call
+// -- including calls made by a run that later failed -- is attributable to
+// exactly one run. The domain stays in feature.
 import { restHeaders } from "./mic_state_run_logic.ts";
 import type { RestContext } from "./mic_state_run_logic.ts";
 
 export type StateAiUsageEvent = {
+  runId: string;
   domain: string;
   model: string;
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
-  relatedId: string; // domain, used as related_id since market_state_current's PK is domain
 };
 
 export async function recordStateAiUsageEvent(
@@ -30,8 +34,8 @@ export async function recordStateAiUsageEvent(
       output_tokens: event.outputTokens,
       web_search_calls: 0,
       cost_usd: event.costUsd,
-      related_table: "market_state_current",
-      related_id: event.relatedId,
+      related_table: "mic_state_evaluation_runs",
+      related_id: event.runId,
     }),
   });
   if (!result.ok) {

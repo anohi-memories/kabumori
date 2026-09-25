@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   claimStateEvaluationRun,
-  completeStateEvaluationRun,
   computeRunWindow,
   failStateEvaluationRun,
+  fetchStateEvaluationRunStatus,
   MIC_STATE_STALE_RUN_THRESHOLD_MS,
   reconcileStaleStateEvaluationRuns,
 } from "./mic_state_run_logic.ts";
@@ -73,40 +73,40 @@ test("claimStateEvaluationRun: throws on a non-2xx, non-409 insert response", as
   );
 });
 
-test("completeStateEvaluationRun: PATCHes status=eq.running with decision_detail and ai_usage_event_id", async () => {
+test("failStateEvaluationRun: only targets a still-running run, so a terminal (evaluated/no_change) run is never overwritten", async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
-  const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+  const fetchImpl = (url: string | URL, init?: RequestInit) => {
     calls.push({ url: String(url), init });
-    return new Response(null, { status: 204 });
+    return Promise.resolve(new Response(null, { status: 204 }));
   };
-  await completeStateEvaluationRun(
-    ctx,
-    "run-1",
-    { status: "evaluated", decisionDetail: { material: true }, aiUsageEventId: 42 },
-    fetchImpl as typeof fetch,
-  );
+  await failStateEvaluationRun(ctx, "run-1", "SOME_ERROR", fetchImpl as typeof fetch);
+  assert.equal(calls.length, 1);
   assert.equal(calls[0].init?.method, "PATCH");
-  assert.match(calls[0].url, /id=eq\.run-1&status=eq\.running/);
-  const body = JSON.parse(String(calls[0].init?.body));
-  assert.equal(body.status, "evaluated");
-  assert.deepEqual(body.decision_detail, { material: true });
-  assert.equal(body.ai_usage_event_id, 42);
+  assert.match(calls[0].url, /id=eq\.run-1&status=eq\.running$/);
+  assert.equal(JSON.parse(String(calls[0].init?.body)).status, "failed");
 });
 
-test("completeStateEvaluationRun: no_change status omits ai_usage_event_id (defaults to null)", async () => {
-  const calls: Array<{ init?: RequestInit }> = [];
-  const fetchImpl = async (_url: string | URL, init?: RequestInit) => {
-    calls.push({ init });
-    return new Response(null, { status: 204 });
+test("fetchStateEvaluationRunStatus: reads the run's committed status", async () => {
+  const calls: string[] = [];
+  const fetchImpl = (url: string | URL) => {
+    calls.push(String(url));
+    return Promise.resolve(new Response(JSON.stringify([{ status: "evaluated" }]), { status: 200 }));
   };
-  await completeStateEvaluationRun(
-    ctx,
-    "run-1",
-    { status: "no_change", decisionDetail: { material: false } },
-    fetchImpl as typeof fetch,
-  );
-  const body = JSON.parse(String(calls[0].init?.body));
-  assert.equal(body.ai_usage_event_id, null);
+  assert.equal(await fetchStateEvaluationRunStatus(ctx, "run-1", fetchImpl as typeof fetch), "evaluated");
+  assert.match(calls[0], /mic_state_evaluation_runs\?id=eq\.run-1&select=status$/);
+});
+
+test("fetchStateEvaluationRunStatus: never throws; unreadable/unknown results are null", async () => {
+  const cases: Array<() => Promise<Response>> = [
+    () => Promise.reject(new Error("network down")),
+    () => Promise.resolve(new Response("err", { status: 500 })),
+    () => Promise.resolve(new Response(JSON.stringify([]), { status: 200 })),
+    () => Promise.resolve(new Response(JSON.stringify([{ status: "weird" }]), { status: 200 })),
+    () => Promise.resolve(new Response("not json", { status: 200 })),
+  ];
+  for (const respond of cases) {
+    assert.equal(await fetchStateEvaluationRunStatus(ctx, "run-1", respond as typeof fetch), null);
+  }
 });
 
 test("failStateEvaluationRun: never throws even if the PATCH itself fails", async () => {

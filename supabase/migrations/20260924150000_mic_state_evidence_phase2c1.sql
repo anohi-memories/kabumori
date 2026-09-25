@@ -1,47 +1,51 @@
 -- Market Intelligence Core (MIC) State Evidence Phase 2C1.
 --
--- Problem: market_state_current.source_event_ids (uuid[], added in the
--- original Phase 1B migration) records which market_events rows were
--- consulted for the CURRENT evaluation, but cannot answer, in a way that
--- is guaranteed rather than guessed:
+-- NOT YET APPLIED TO PRODUCTION. This file is still being revised on a
+-- review branch; once it is applied anywhere shared it must never be edited
+-- again (a follow-up migration is required instead).
+--
+-- Problem: market_state_current.source_event_ids (uuid[], Phase 1B) records
+-- which market_events rows were consulted for the CURRENT evaluation, but
+-- cannot answer, in a way that is guaranteed rather than guessed:
 --   1. which mic_state_evaluation_runs row produced the current narrative
---      (no FK from market_state_current back to the run that wrote it)
---   2. which mic_fed_statement_diffs row (if any) a central_bank_decision
---      event's deterministic diff / AI interpretation corresponds to
---   3. how to reconstruct, from a market_state_history row alone, exactly
---      which run and which immutable artifacts justified that historical
---      narrative
--- "Guess by matching timestamps" is explicitly not an acceptable answer
--- to any of the above -- this migration adds two additive, FK-backed
--- structures instead:
---   (a) market_state_current.source_evaluation_run_id -- a direct FK to
---       the mic_state_evaluation_runs row that most recently wrote this
---       domain's narrative via a material change. market_state_history
---       needs no new column: its snapshot already copies the ENTIRE
---       market_state_current row (including this new column) at the
---       moment it is superseded, so a past source_evaluation_run_id is
---       automatically preserved inside snapshot->>'source_evaluation_run_id'
---       with zero additional writer code.
---   (b) mic_state_evidence -- a dedicated, typed evidence table (NOT a
---       polymorphic source_table/source_id text pair, which would give up
---       FK integrity). One row per (run, artifact) pair. evidence_kind is
---       constrained to exactly one of two mutually-exclusive typed FK
---       columns being populated, enforced by a CHECK constraint, so a
---       market_event evidence row can never silently point at nothing (or
---       at both) and a fed_statement_diff evidence row is symmetrically
---       constrained.
+--   2. which mic_fed_statement_diffs row a central_bank_decision event's
+--      deterministic diff corresponds to
+--   3. what the event content the AI actually saw was -- market_events rows
+--      keep their canonical id while their content is corrected in place
+--      (e.g. Fed historical reprocessing), so an id alone cannot reproduce
+--      a past State's input months later
+--   4. whether the run that wrote State actually finished -- State writes
+--      and the run's terminal status were separate HTTP calls
 --
--- Both structures are purely additive: market_state_current gains one
--- nullable column (existing rows are NULL, no backfill), and
--- mic_state_evidence is a brand-new table referenced by nothing else yet.
--- No existing column, table, or RLS policy is altered.
+-- This migration adds:
+--   (a) market_state_current.source_evaluation_run_id -- FK to the run that
+--       most recently wrote this domain's narrative. market_state_history
+--       needs no new column: its snapshot copies the ENTIRE current row, so
+--       a past source_evaluation_run_id is preserved automatically.
+--   (b) mic_state_evidence -- typed, append-only evidence rows. A
+--       market_event row stores both the FK and an immutable
+--       market_event_snapshot of exactly the fields the evaluator used
+--       (material judgment + AI facts). A fed_statement_diff row stores both
+--       the FK and an immutable fed_statement_diff_snapshot of the diff row
+--       (diff rows are also PATCHed in place under a stable id).
+--   (c) apply_mic_state_material_update -- ONE transaction for history,
+--       current, evidence, and the run's terminal 'evaluated' status. It
+--       re-verifies under lock that every event and Fed diff is unchanged
+--       since the evaluator read it, and that the run's usage row belongs
+--       to that run.
+--   (d) apply_mic_state_no_change_update -- ONE transaction for the
+--       status-only current refresh and the run's terminal 'no_change'
+--       status.
+--   (e) terminal-run protection on mic_state_evaluation_runs: once a run is
+--       no_change/evaluated/failed it can never change again.
 --
--- Scope of this phase: market_event and fed_statement_diff evidence only.
--- metric_observation evidence is deliberately deferred (market_metrics
--- already has its own dedupe-key uniqueness and is referenced via
--- numeric_baseline_snapshot; extending evidence_kind to cover it later
--- only needs one more nullable FK column + a CHECK constraint update, no
--- redesign).
+-- AI usage: the State evaluator records every Luna/Sol call in the existing
+-- ai_usage_events ledger with related_table = 'mic_state_evaluation_runs'
+-- and related_id = the run id (feature keeps the domain). related_id is
+-- already text, so no ai_usage_events schema change is needed.
+--
+-- Scope: market_event and fed_statement_diff evidence only. metric evidence
+-- is deliberately deferred.
 begin;
 
 alter table public.market_state_current
@@ -58,36 +62,84 @@ create table if not exists public.mic_state_evidence (
     check (evidence_kind in ('market_event', 'fed_statement_diff')),
 
   -- Typed, mutually-exclusive FKs -- never a polymorphic
-  -- (source_table text, source_id text) pair. Exactly one of these two is
-  -- non-null per row, enforced below.
+  -- (source_table, source_id) pair.
   market_event_id uuid
     references public.market_events(id) on delete restrict,
   fed_statement_diff_id uuid
     references public.mic_fed_statement_diffs(id) on delete restrict,
 
+  -- The event content exactly as the evaluator read it and fed to material
+  -- judgment / AI facts. market_events rows are mutable in place under a
+  -- stable id; this copy is not, so the State input stays reproducible.
+  market_event_snapshot jsonb,
+
+  -- The Fed diff row exactly as the evaluator read it. mic_fed_statement_diffs
+  -- rows can be PATCHed in place (interpretation, usage receipt, repair), so
+  -- the FK alone cannot reproduce what this State referenced.
+  fed_statement_diff_snapshot jsonb,
+
   created_at timestamptz not null default now(),
 
-  check (
+  constraint mic_state_evidence_kind_shape_check check (
     (
       evidence_kind = 'market_event'
       and market_event_id is not null
+      and market_event_snapshot is not null
       and fed_statement_diff_id is null
+      and fed_statement_diff_snapshot is null
     )
     or
     (
       evidence_kind = 'fed_statement_diff'
       and fed_statement_diff_id is not null
+      and fed_statement_diff_snapshot is not null
       and market_event_id is null
+      and market_event_snapshot is null
+    )
+  ),
+
+  -- Strict shape: exactly the audited diff columns (every column except
+  -- created_at), describing the very row the FK points at.
+  constraint mic_state_evidence_fed_diff_snapshot_check check (
+    fed_statement_diff_snapshot is null
+    or (
+      jsonb_typeof(fed_statement_diff_snapshot) = 'object'
+      and fed_statement_diff_snapshot ?& array[
+        'id', 'current_event_id', 'previous_event_id', 'current_document_hash',
+        'previous_document_hash', 'diff_hash', 'meeting_date', 'previous_meeting_date',
+        'changed_paragraph_count', 'material_change_count', 'deterministic_diff',
+        'semantic_buckets', 'ai_interpretation', 'model', 'prompt_version', 'generated_at',
+        'ai_usage_receipt', 'ai_usage_recorded_at', 'updated_at'
+      ]
+      and (fed_statement_diff_snapshot - array[
+        'id', 'current_event_id', 'previous_event_id', 'current_document_hash',
+        'previous_document_hash', 'diff_hash', 'meeting_date', 'previous_meeting_date',
+        'changed_paragraph_count', 'material_change_count', 'deterministic_diff',
+        'semantic_buckets', 'ai_interpretation', 'model', 'prompt_version', 'generated_at',
+        'ai_usage_receipt', 'ai_usage_recorded_at', 'updated_at'
+      ]::text[]) = '{}'::jsonb
+      and fed_statement_diff_snapshot->>'id' = fed_statement_diff_id::text
+    )
+  ),
+
+  -- A snapshot must describe the very row its FK points at, and carry every
+  -- field the evaluator uses.
+  constraint mic_state_evidence_event_snapshot_check check (
+    market_event_snapshot is null
+    or (
+      jsonb_typeof(market_event_snapshot) = 'object'
+      and market_event_snapshot ?& array[
+        'id', 'title', 'summary', 'importance', 'event_type', 'published_at', 'updated_at'
+      ]
+      and (market_event_snapshot - array[
+        'id', 'title', 'summary', 'importance', 'event_type', 'published_at', 'updated_at'
+      ]::text[]) = '{}'::jsonb
+      and market_event_snapshot->>'id' = market_event_id::text
     )
   )
 );
 
--- Idempotency: a retried write for the same run must never create a
--- second evidence row for the same artifact. Partial unique indexes
--- (rather than a single composite unique constraint across both nullable
--- FK columns) so each evidence_kind's uniqueness is independent and a
--- future third kind's column addition needs only its own new partial
--- index, not a change to these two.
+-- Idempotency: one evidence row per (run, artifact).
 create unique index if not exists mic_state_evidence_run_event_uidx
   on public.mic_state_evidence (state_evaluation_run_id, market_event_id)
   where market_event_id is not null;
@@ -103,58 +155,91 @@ create index if not exists mic_state_evidence_fed_diff_idx
   on public.mic_state_evidence (fed_statement_diff_id) where fed_statement_diff_id is not null;
 
 alter table public.mic_state_evidence enable row level security;
-revoke all on public.mic_state_evidence from anon, authenticated;
+revoke all on public.mic_state_evidence from public, anon, authenticated;
+revoke all on public.mic_state_evidence from service_role;
 grant select, insert on public.mic_state_evidence to service_role;
 grant select on public.mic_state_evidence to authenticated;
 drop policy if exists admin_select_mic_state_evidence on public.mic_state_evidence;
 create policy admin_select_mic_state_evidence on public.mic_state_evidence
   for select to authenticated using ((select private.is_admin()));
 
+-- Evidence is append-only. Ordinary roles have neither UPDATE, DELETE nor
+-- TRUNCATE; triggers also block those operations by the table owner. As with all
+-- database controls, a superuser/owner who disables triggers is trusted.
+create or replace function public.mic_state_evidence_reject_mutation()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  raise exception 'MIC_STATE_EVIDENCE_IMMUTABLE';
+end;
+$$;
+
+drop trigger if exists trg_mic_state_evidence_reject_update on public.mic_state_evidence;
+drop trigger if exists trg_mic_state_evidence_reject_mutation on public.mic_state_evidence;
+create trigger trg_mic_state_evidence_reject_mutation
+before update or delete on public.mic_state_evidence
+for each row execute function public.mic_state_evidence_reject_mutation();
+drop trigger if exists trg_mic_state_evidence_reject_truncate on public.mic_state_evidence;
+create trigger trg_mic_state_evidence_reject_truncate
+before truncate on public.mic_state_evidence
+for each statement execute function public.mic_state_evidence_reject_mutation();
+
+-- Terminal runs are immutable in full, not just in status: their completion
+-- timestamp, usage link, decision details, and error are audit fields too.
+create or replace function public.mic_state_evaluation_runs_guard_terminal_status()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if old.status <> 'running' then
+    raise exception 'MIC_STATE_RUN_TERMINAL_IMMUTABLE:%', old.status;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_mic_state_evaluation_runs_guard_terminal_status on public.mic_state_evaluation_runs;
+create trigger trg_mic_state_evaluation_runs_guard_terminal_status
+before update on public.mic_state_evaluation_runs
+for each row execute function public.mic_state_evaluation_runs_guard_terminal_status();
+
 -- ---------------------------------------------------------------------------
--- apply_mic_state_material_update: the single atomic transaction that
--- replaces the Edge Function's previous 3-step
--- (GET market_state_current -> PATCH market_state_current -> POST
--- market_state_history) sequence, now also writing
--- source_evaluation_run_id and the evidence rows in the SAME transaction.
+-- apply_mic_state_material_update
 --
--- Every PL/pgSQL function body already runs as one implicit transaction
--- (a single top-level statement invoking it is atomic by Postgres's own
--- rules -- the same property the existing
--- record_mic_fed_statement_diff_usage RPC's header comment relies on): if
--- any RAISE EXCEPTION fires anywhere in this function, EVERY effect of
--- this invocation (the history insert, the current update, all evidence
--- inserts) is rolled back together. There is no code path that can leave
--- market_state_current updated while market_state_history or
--- mic_state_evidence is missing its corresponding row, or vice versa --
--- this is exactly the failure mode the previous 3-separate-HTTP-calls
--- design could not prevent.
+-- One transaction: validate -> history -> current -> evidence -> run
+-- 'evaluated'. Any RAISE rolls back every effect of the invocation, so
+-- State, history, evidence and the run's terminal status always agree.
 --
--- Idempotency: locks the domain's single market_state_current row with
--- FOR UPDATE first (this table has exactly one row per domain, so this
--- also serializes concurrent calls for the same domain). If that row's
--- source_evaluation_run_id already equals p_run_id, this exact run's
--- material update has already been durably applied by a prior successful
--- call -- returns 'already_applied' immediately without writing
--- history/current/evidence again, so a caller retry after e.g. losing the
--- HTTP response (but the transaction actually committed) can never
--- duplicate a history row. This guard is a defensive backstop: under the
--- existing claim design (a domain+run_window's active-claim unique index
--- keeps holding a 'running'/'no_change'/'evaluated' row until it
--- terminates), the exact same run_id calling this RPC twice should not
--- happen in the normal Cron/manual-invoke path, since a fresh claim for
--- the same window is blocked while the old row is still 'running'. It
--- exists for correctness under retry/repair scenarios regardless.
+-- Lock order (always the same, every multi-row step ordered by id):
+--   1. market_state_current row (FOR UPDATE; one row per domain, serializes
+--      State writers for the domain)
+--   2. the run row (FOR UPDATE)
+--   3. evidence market_events rows (FOR SHARE, ordered by id)
+--   4. evidence mic_fed_statement_diffs rows (FOR SHARE, ordered by id)
+-- FOR SHARE makes an ingest/interpretation update of a verified row wait
+-- until this transaction commits, so nothing can change between
+-- verification and commit. No known writer locks a diff row and then a
+-- market_events / State / run row in the same transaction, so this order
+-- cannot form a cycle with them; a deadlock with an unknown multi-row writer
+-- would abort one side and fail closed.
 --
--- Evidence rows use ON CONFLICT ... DO NOTHING against the two partial
--- unique indexes above, so calling this RPC again for a run that already
--- has SOME but not all of its evidence recorded (only possible if a
--- previous attempt failed before reaching this point, since a fully
--- successful attempt returns 'already_applied' before ever reaching the
--- evidence inserts again) still converges to the same final evidence set
--- without erroring on the rows that already exist.
+-- AI usage: every Luna/Sol call is recorded before this RPC with
+-- related_table = 'mic_state_evaluation_runs', related_id = run id. The
+-- run's ai_usage_event_id must be one of this run's own usage rows for
+-- the domain and model actually saved on State.
+--
+-- Response-loss retry: a run can only reach 'evaluated' through this
+-- function. If the run is already 'evaluated' and this run is provably the
+-- writer of current (or of a later-superseded current preserved in
+-- history), return 'already_applied' without writing anything.
+-- ---------------------------------------------------------------------------
 create or replace function public.apply_mic_state_material_update(
   p_domain text,
   p_run_id uuid,
+  p_expected_current_updated_at timestamptz,
   p_as_of timestamptz,
   p_coverage_status text,
   p_fetch_status text,
@@ -173,8 +258,10 @@ create or replace function public.apply_mic_state_material_update(
   p_ai_output_tokens integer,
   p_ai_cost_usd numeric,
   p_reason text,
-  p_market_event_evidence_ids uuid[] default '{}',
-  p_fed_statement_diff_evidence_ids uuid[] default '{}'
+  p_decision_detail jsonb,
+  p_ai_usage_event_id bigint,
+  p_market_event_snapshots jsonb,
+  p_fed_statement_diff_snapshots jsonb
 )
 returns table(result_status text)
 language plpgsql
@@ -184,38 +271,225 @@ as $$
 declare
   v_current public.market_state_current%rowtype;
   v_run_status text;
+  v_run_domain text;
+  v_run_started_at timestamptz;
+  v_snapshot_ids uuid[];
+  v_diff_ids uuid[];
+  v_updated integer;
 begin
   select * into v_current
   from public.market_state_current
   where domain = p_domain
   for update;
-
   if not found then
     raise exception 'MIC_STATE_CURRENT_ROW_NOT_FOUND';
   end if;
 
-  if v_current.source_evaluation_run_id = p_run_id then
-    result_status := 'already_applied';
-    return next;
-    return;
-  end if;
-
-  select status into v_run_status
+  select domain, status, started_at
+  into v_run_domain, v_run_status, v_run_started_at
   from public.mic_state_evaluation_runs
   where id = p_run_id
   for update;
-
   if not found then
     raise exception 'MIC_STATE_RUN_NOT_FOUND';
+  end if;
+  if v_run_domain <> p_domain then
+    raise exception 'MIC_STATE_RUN_DOMAIN_MISMATCH';
+  end if;
+
+  if v_run_status = 'evaluated' then
+    if v_current.source_evaluation_run_id = p_run_id or exists (
+      select 1 from public.market_state_history h
+      where h.domain = p_domain
+        and h.snapshot->>'source_evaluation_run_id' = p_run_id::text
+    ) then
+      result_status := 'already_applied';
+      return next;
+      return;
+    end if;
+    raise exception 'MIC_STATE_RUN_NOT_RUNNING:evaluated';
+  end if;
+  -- Under this design current can only name a run whose transaction also
+  -- marked it evaluated; anything else is corruption, never a retry.
+  if v_current.source_evaluation_run_id = p_run_id then
+    raise exception 'MIC_STATE_RUN_STATE_INCONSISTENT:%', v_run_status;
+  end if;
+
+  -- The decision was computed from a pre-claim read of current. Any write
+  -- since then (material or status-only) invalidates it.
+  if p_expected_current_updated_at is null or
+     v_current.updated_at is distinct from p_expected_current_updated_at then
+    raise exception 'MIC_STATE_STALE_DECISION';
   end if;
   if v_run_status <> 'running' then
     raise exception 'MIC_STATE_RUN_NOT_RUNNING:%', v_run_status;
   end if;
+  if v_current.updated_at > v_run_started_at then
+    raise exception 'MIC_STATE_STALE_RUN';
+  end if;
 
-  -- Snapshot the OLD row (as it stood before this update) into history --
-  -- to_jsonb(v_current) already includes its own source_evaluation_run_id
-  -- (the run that produced THAT narrative), so history automatically
-  -- carries the previous evidence trail forward with no extra write.
+  if p_decision_detail is null or jsonb_typeof(p_decision_detail) <> 'object' then
+    raise exception 'MIC_STATE_DECISION_DETAIL_INVALID';
+  end if;
+  if p_ai_usage_event_id is null then
+    raise exception 'MIC_STATE_AI_USAGE_EVENT_REQUIRED';
+  end if;
+  if not exists (
+    select 1 from public.ai_usage_events u
+    where u.id = p_ai_usage_event_id
+      and u.related_table = 'mic_state_evaluation_runs'
+      and u.related_id = p_run_id::text
+      and u.feature = 'mic_state_evaluation_' || p_domain
+      and u.model = p_ai_model
+  ) then
+    raise exception 'MIC_STATE_AI_USAGE_EVENT_RUN_MISMATCH';
+  end if;
+
+  -- Snapshot shape: an array of objects with exactly the evaluator's event
+  -- fields and a well-formed id.
+  if p_market_event_snapshots is null or jsonb_typeof(p_market_event_snapshots) <> 'array' then
+    raise exception 'MIC_STATE_EVENT_SNAPSHOT_INVALID';
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(p_market_event_snapshots) as s(e)
+    where case
+      when jsonb_typeof(s.e) <> 'object' then true
+      else not (s.e ?& array['id', 'title', 'summary', 'importance', 'event_type', 'published_at', 'updated_at'])
+        or (select count(*) from jsonb_object_keys(s.e)) <> 7
+        or jsonb_typeof(s.e->'id') <> 'string'
+        or (s.e->>'id') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    end
+  ) then
+    raise exception 'MIC_STATE_EVENT_SNAPSHOT_INVALID';
+  end if;
+
+  select coalesce(array_agg((s.e->>'id')::uuid), '{}'::uuid[])
+  into v_snapshot_ids
+  from jsonb_array_elements(p_market_event_snapshots) as s(e);
+
+  if cardinality(v_snapshot_ids) <> (
+    select count(distinct id) from unnest(v_snapshot_ids) as ids(id)
+  ) or cardinality(coalesce(p_source_event_ids, '{}'::uuid[])) <> (
+    select count(distinct id) from unnest(coalesce(p_source_event_ids, '{}'::uuid[])) as ids(id)
+  ) then
+    raise exception 'MIC_STATE_EVENT_EVIDENCE_DUPLICATE';
+  end if;
+
+  -- Evidence must describe exactly the event set saved on current as
+  -- source_event_ids (and supplied to the AI).
+  if exists (
+    select id from unnest(coalesce(p_source_event_ids, '{}'::uuid[])) as ids(id)
+    except
+    select id from unnest(v_snapshot_ids) as ids(id)
+  ) or exists (
+    select id from unnest(v_snapshot_ids) as ids(id)
+    except
+    select id from unnest(coalesce(p_source_event_ids, '{}'::uuid[])) as ids(id)
+  ) then
+    raise exception 'MIC_STATE_EVENT_EVIDENCE_MISMATCH';
+  end if;
+
+  -- Fed diff snapshot shape: an array of objects with exactly the audited
+  -- diff columns, a well-formed id, and no duplicate ids.
+  if p_fed_statement_diff_snapshots is null or jsonb_typeof(p_fed_statement_diff_snapshots) <> 'array' then
+    raise exception 'MIC_STATE_FED_DIFF_SNAPSHOT_INVALID';
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(p_fed_statement_diff_snapshots) as s(e)
+    where case
+      when jsonb_typeof(s.e) <> 'object' then true
+      else not (s.e ?& array[
+          'id', 'current_event_id', 'previous_event_id', 'current_document_hash',
+          'previous_document_hash', 'diff_hash', 'meeting_date', 'previous_meeting_date',
+          'changed_paragraph_count', 'material_change_count', 'deterministic_diff',
+          'semantic_buckets', 'ai_interpretation', 'model', 'prompt_version', 'generated_at',
+          'ai_usage_receipt', 'ai_usage_recorded_at', 'updated_at'
+        ])
+        or (select count(*) from jsonb_object_keys(s.e)) <> 19
+        or jsonb_typeof(s.e->'id') <> 'string'
+        or (s.e->>'id') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    end
+  ) then
+    raise exception 'MIC_STATE_FED_DIFF_SNAPSHOT_INVALID';
+  end if;
+
+  select coalesce(array_agg((s.e->>'id')::uuid), '{}'::uuid[])
+  into v_diff_ids
+  from jsonb_array_elements(p_fed_statement_diff_snapshots) as s(e);
+
+  if cardinality(v_diff_ids) <> (select count(distinct id) from unnest(v_diff_ids) as ids(id)) then
+    raise exception 'MIC_STATE_FED_DIFF_EVIDENCE_DUPLICATE';
+  end if;
+
+  -- Hold every evidence event still until commit, then verify each one is
+  -- byte-for-byte what the evaluator read before calling AI. A missing row
+  -- or any differing field means State would be built on stale input.
+  perform 1
+  from public.market_events m
+  where m.id = any(v_snapshot_ids)
+  order by m.id
+  for share;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(p_market_event_snapshots) as s(e)
+    left join public.market_events m on m.id = (s.e->>'id')::uuid
+    where m.id is null
+      or m.title is distinct from s.e->>'title'
+      or m.summary is distinct from s.e->>'summary'
+      or m.importance is distinct from s.e->>'importance'
+      or m.event_type is distinct from s.e->>'event_type'
+      or m.published_at is distinct from (s.e->>'published_at')::timestamptz
+      or m.updated_at is distinct from (s.e->>'updated_at')::timestamptz
+  ) then
+    raise exception 'MIC_STATE_EVENT_CHANGED_DURING_EVALUATION';
+  end if;
+
+  -- Same for every Fed diff: hold it still, then require it to be exactly
+  -- the row the evaluator read (a PATCH to interpretation, receipt, or any
+  -- diff field in between means the evidence would not match what was used).
+  perform 1
+  from public.mic_fed_statement_diffs d
+  where d.id = any(v_diff_ids)
+  order by d.id
+  for share;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(p_fed_statement_diff_snapshots) as s(e)
+    left join public.mic_fed_statement_diffs d on d.id = (s.e->>'id')::uuid
+    where d.id is null
+      or d.current_event_id is distinct from (s.e->>'current_event_id')::uuid
+      or d.previous_event_id is distinct from (s.e->>'previous_event_id')::uuid
+      or d.current_document_hash is distinct from s.e->>'current_document_hash'
+      or d.previous_document_hash is distinct from s.e->>'previous_document_hash'
+      or d.diff_hash is distinct from s.e->>'diff_hash'
+      or d.meeting_date is distinct from (s.e->>'meeting_date')::date
+      or d.previous_meeting_date is distinct from (s.e->>'previous_meeting_date')::date
+      or d.changed_paragraph_count is distinct from (s.e->>'changed_paragraph_count')::integer
+      or d.material_change_count is distinct from (s.e->>'material_change_count')::integer
+      or d.deterministic_diff is distinct from s.e->'deterministic_diff'
+      or to_jsonb(d.semantic_buckets) is distinct from s.e->'semantic_buckets'
+      or coalesce(d.ai_interpretation, 'null'::jsonb) is distinct from s.e->'ai_interpretation'
+      or d.model is distinct from s.e->>'model'
+      or d.prompt_version is distinct from s.e->>'prompt_version'
+      or d.generated_at is distinct from (s.e->>'generated_at')::timestamptz
+      or coalesce(d.ai_usage_receipt, 'null'::jsonb) is distinct from s.e->'ai_usage_receipt'
+      or d.ai_usage_recorded_at is distinct from (s.e->>'ai_usage_recorded_at')::timestamptz
+      or d.updated_at is distinct from (s.e->>'updated_at')::timestamptz
+  ) then
+    raise exception 'MIC_STATE_FED_DIFF_CHANGED_DURING_EVALUATION';
+  end if;
+
+  -- A Fed diff is evidence for its own current market_event only.
+  if exists (
+    select 1 from public.mic_fed_statement_diffs d
+    where d.id = any(v_diff_ids)
+      and not (d.current_event_id = any(v_snapshot_ids))
+  ) then
+    raise exception 'MIC_STATE_FED_DIFF_EVENT_MISMATCH';
+  end if;
+
   insert into public.market_state_history (domain, as_of, snapshot, triggered_by, reason)
   values (p_domain, v_current.as_of, to_jsonb(v_current), 'material_change', p_reason);
 
@@ -242,15 +516,32 @@ begin
     data_confidence = p_data_confidence
   where domain = p_domain;
 
-  insert into public.mic_state_evidence (state_evaluation_run_id, evidence_kind, market_event_id)
-  select p_run_id, 'market_event', ids.id
-  from unnest(p_market_event_evidence_ids) as ids(id)
+  insert into public.mic_state_evidence (
+    state_evaluation_run_id, evidence_kind, market_event_id, market_event_snapshot
+  )
+  select p_run_id, 'market_event', (s.e->>'id')::uuid, s.e
+  from jsonb_array_elements(p_market_event_snapshots) as s(e)
   on conflict (state_evaluation_run_id, market_event_id) where market_event_id is not null do nothing;
 
-  insert into public.mic_state_evidence (state_evaluation_run_id, evidence_kind, fed_statement_diff_id)
-  select p_run_id, 'fed_statement_diff', ids.id
-  from unnest(p_fed_statement_diff_evidence_ids) as ids(id)
+  insert into public.mic_state_evidence (
+    state_evaluation_run_id, evidence_kind, fed_statement_diff_id, fed_statement_diff_snapshot
+  )
+  select p_run_id, 'fed_statement_diff', (s.e->>'id')::uuid, s.e
+  from jsonb_array_elements(p_fed_statement_diff_snapshots) as s(e)
   on conflict (state_evaluation_run_id, fed_statement_diff_id) where fed_statement_diff_id is not null do nothing;
+
+  update public.mic_state_evaluation_runs
+  set
+    status = 'evaluated',
+    decision_detail = p_decision_detail,
+    ai_usage_event_id = p_ai_usage_event_id,
+    completed_at = now(),
+    error = null
+  where id = p_run_id and status = 'running';
+  get diagnostics v_updated = row_count;
+  if v_updated <> 1 then
+    raise exception 'MIC_STATE_RUN_COMPLETE_FAILED';
+  end if;
 
   result_status := 'applied';
   return next;
@@ -258,12 +549,120 @@ end;
 $$;
 
 revoke all on function public.apply_mic_state_material_update(
-  text, uuid, timestamptz, text, text, text, numeric, text, jsonb, jsonb, jsonb, jsonb,
-  text[], uuid[], text, numeric, integer, integer, numeric, text, uuid[], uuid[]
+  text, uuid, timestamptz, timestamptz, text, text, text, numeric, text, jsonb, jsonb, jsonb, jsonb,
+  text[], uuid[], text, numeric, integer, integer, numeric, text, jsonb, bigint, jsonb, jsonb
 ) from public, anon, authenticated;
 grant execute on function public.apply_mic_state_material_update(
-  text, uuid, timestamptz, text, text, text, numeric, text, jsonb, jsonb, jsonb, jsonb,
-  text[], uuid[], text, numeric, integer, integer, numeric, text, uuid[], uuid[]
+  text, uuid, timestamptz, timestamptz, text, text, text, numeric, text, jsonb, jsonb, jsonb, jsonb,
+  text[], uuid[], text, numeric, integer, integer, numeric, text, jsonb, bigint, jsonb, jsonb
+) to service_role;
+
+-- ---------------------------------------------------------------------------
+-- apply_mic_state_no_change_update
+--
+-- One transaction: status-only current CAS update + run 'no_change'. Never
+-- touches narrative/baseline/ai_*/source_* columns and writes no history
+-- (routine status ticks are not interpretive changes).
+--
+-- Response-loss retry: a run can only reach 'no_change' through this
+-- function, so an already-'no_change' run returns 'already_applied'.
+-- ---------------------------------------------------------------------------
+create or replace function public.apply_mic_state_no_change_update(
+  p_domain text,
+  p_run_id uuid,
+  p_expected_current_updated_at timestamptz,
+  p_as_of timestamptz,
+  p_coverage_status text,
+  p_fetch_status text,
+  p_observation_status text,
+  p_data_confidence numeric,
+  p_decision_detail jsonb
+)
+returns table(result_status text)
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_current public.market_state_current%rowtype;
+  v_run_status text;
+  v_run_domain text;
+  v_run_started_at timestamptz;
+  v_updated integer;
+begin
+  select * into v_current
+  from public.market_state_current
+  where domain = p_domain
+  for update;
+  if not found then
+    raise exception 'MIC_STATE_CURRENT_ROW_NOT_FOUND';
+  end if;
+
+  select domain, status, started_at
+  into v_run_domain, v_run_status, v_run_started_at
+  from public.mic_state_evaluation_runs
+  where id = p_run_id
+  for update;
+  if not found then
+    raise exception 'MIC_STATE_RUN_NOT_FOUND';
+  end if;
+  if v_run_domain <> p_domain then
+    raise exception 'MIC_STATE_RUN_DOMAIN_MISMATCH';
+  end if;
+
+  if v_run_status = 'no_change' then
+    result_status := 'already_applied';
+    return next;
+    return;
+  end if;
+
+  if p_expected_current_updated_at is null or
+     v_current.updated_at is distinct from p_expected_current_updated_at then
+    raise exception 'MIC_STATE_STALE_DECISION';
+  end if;
+  if v_run_status <> 'running' then
+    raise exception 'MIC_STATE_RUN_NOT_RUNNING:%', v_run_status;
+  end if;
+  if v_current.updated_at > v_run_started_at then
+    raise exception 'MIC_STATE_STALE_RUN';
+  end if;
+
+  if p_decision_detail is null or jsonb_typeof(p_decision_detail) <> 'object' then
+    raise exception 'MIC_STATE_DECISION_DETAIL_INVALID';
+  end if;
+
+  update public.market_state_current
+  set
+    as_of = p_as_of,
+    coverage_status = p_coverage_status,
+    fetch_status = p_fetch_status,
+    observation_status = p_observation_status,
+    data_confidence = p_data_confidence
+  where domain = p_domain;
+
+  update public.mic_state_evaluation_runs
+  set
+    status = 'no_change',
+    decision_detail = p_decision_detail,
+    ai_usage_event_id = null,
+    completed_at = now(),
+    error = null
+  where id = p_run_id and status = 'running';
+  get diagnostics v_updated = row_count;
+  if v_updated <> 1 then
+    raise exception 'MIC_STATE_RUN_COMPLETE_FAILED';
+  end if;
+
+  result_status := 'applied';
+  return next;
+end;
+$$;
+
+revoke all on function public.apply_mic_state_no_change_update(
+  text, uuid, timestamptz, timestamptz, text, text, text, numeric, jsonb
+) from public, anon, authenticated;
+grant execute on function public.apply_mic_state_no_change_update(
+  text, uuid, timestamptz, timestamptz, text, text, text, numeric, jsonb
 ) to service_role;
 
 commit;
