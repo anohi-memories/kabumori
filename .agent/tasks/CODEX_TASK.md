@@ -1,116 +1,78 @@
 # Codex Task
 
-- task_id: x-admin-pr33-final-auth-security-review-20260926
+- task_id: x-admin-pr33-auth-fix-round2-final-review-20260926
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Sol（高）
-- purpose: K4 PASS済みPR #33（Web Admin password recovery / invite flow）を、Auth/session/open-redirect/account-enumeration/admin-boundaryの観点だけに絞って独立最終レビューする。production Auth設定・ユーザー変更・mergeは禁止。
+- purpose: K4 PASS済みPR #33 head 2528b56 の3つのAuth修正を再レビューし、merge前のsource gateを判定する。レビュー範囲はC1指摘3点と既存Admin境界への回帰に限定する。
 
 ## Target
 
 PR #33:
-- branch: `g4/admin-password-recovery-20260925`
-- reviewed candidate head: `e6b93be`
-- current known state: OPEN / MERGEABLE
-- Netlify Deploy Preview: PASS at exact head
-- source scope: main比で `apps/admin/src` の認証フロー10ファイルのみ
+- head: `2528b5686bcbb3630fb636cec12162803f921f8f`
+- previous failing head: `e6b93beccfb9209dbe640fb9ea1464f2568f3c74`
+- status: OPEN / MERGEABLE
+- Netlify Preview: PASS
 
-## Review focus
+## Required review
 
-### A. recovery/invite trust boundary
-Verify:
-- normal password-login session cannot use reset-password.
-- only sufficiently recent email-link-authenticated recovery/invite session can show/reset.
-- stale/expired AMR fails closed.
-- unsupported callback types fail closed.
-- reused/invalid callback cannot escalate.
+Verify all three findings are actually fixed:
 
-### B. redirect / URL safety
-Verify:
-- no user-controlled `next` / `redirect_to`.
-- callback and post-reset destinations are fixed local routes.
-- Netlify/proxy behavior cannot turn fixed local redirects into open redirects.
-- fragments/query credentials are stripped/not logged/not persisted.
+1. generic `otp` / `magiclink` can no longer authorize reset.
+2. recovery/invite purpose and 15-minute freshness are rechecked immediately before password update using verified server-side claims/current server time.
+3. signOut returned-error and thrown-error paths cannot claim confirmed logout or redirect to success.
 
-### C. account enumeration / credential safety
-Verify:
-- forgot-password response remains indistinguishable across account existence outcomes.
-- password/token values never enter URL/log/client telemetry.
-- no service_role/client secret exposure.
-- no Auth response body leakage.
+Also verify:
+- no open redirect/account enumeration regression
+- no service_role/client secret exposure
+- admin_users remains sole Admin gate
+- non-admin cannot gain Admin through reset/invite
+- PR #15 multibrand/brand isolation remains intact
+- no mobile reset flow changes outside apps/admin
 
-### D. Admin authorization boundary
-Verify:
-- password reset/invite establishes Auth identity only; it never grants Admin.
-- `admin_users` remains sole Admin authorization gate.
-- non-admin after password reset cannot enter Admin pages.
-- PR #15 multibrand/brand-isolation remains intact.
+## Tests
 
-### E. session semantics
-Pay special attention to:
-- actual Supabase AMR claim shapes expected for recovery/invite/otp/magiclink.
-- 15-minute freshness logic and clock assumptions.
-- implicit-flow fragment handling order.
-- PKCE code exchange/cookie establishment.
-- sign-out after password update.
-
-If AMR assumptions are not sufficiently guaranteed from code/tests/docs, classify as a blocker or require bounded real E2E before merge.
-
-## Required verification
-
-Run focused only:
-- all `apps/admin/src/lib/*.test.ts`
-- recovery/invite tests
+Run focused:
+- apps/admin src/lib tests
+- new recovery-context/action tests
+- otp/magiclink negative cases
+- stale-open-form case
+- signOut returned/thrown failures
 - admin/brand boundary tests
-- adversarial redirect/session tests
-- tsc
-- lint
-- build
+- tsc/lint/build
 - git diff --check
 - targeted secret scan
 
-Netlify Preview may be read-only tested. Do not send real reset/invite email unless explicitly authorized.
+## Real E2E gate
+
+Determine whether source is review-approved before E2E.
+
+Even if source PASS:
+- do not merge yet.
+- one bounded real recovery flow and one invite flow remain required before merge.
+- no real email/Auth mutation in this review.
 
 ## Production safety
 
 Read-only only.
-
-Forbidden:
-- PR merge
-- Supabase Site URL/Redirect URL mutation
-- Auth user/admin_users mutation
-- DB/RLS/RPC/migration
-- service_role exposure
-- production deploy
-- unrelated X OAuth/Vault changes
-- important-news/common-search work
+No merge, production deploy, Supabase Auth config/user mutation, DB/RLS/RPC migration, service_role exposure, G3 OAuth changes, or important-news/common-search work.
 
 ## Completion / C1
 
 Report:
 - verdict PASS / PASS-WITH-FIX / FAIL
-- final reviewed/fixed PR head
-- AMR/session verdict
-- redirect/enumeration/admin-boundary verdict
+- reviewed/fixed head
+- verdict on each of the 3 prior findings
 - tests/counts
-- whether real recovery E2E is required before merge
-- remaining operator gates
+- source readiness for real E2E
+- exact remaining E2E/operator gate
 - production mutation=0
-- recommendation for merge/production config
 
-When complete:
+Then:
 - status -> review_required
 - next_owner -> chatgpt
-- update `.agent/CODEX_REPORT.md`
+- update .agent/CODEX_REPORT.md
 - STOP for C1.
-
-
-## Final C1 disposition
-
-- verdict: **FAIL accepted**.
-- PR #33 must not merge at head `e6b93beccfb9209dbe640fb9ea1464f2568f3c74`.
-- G4 owns narrowly scoped fixes for the three H1 findings, then K4 and another focused H1 review.
-- one bounded real recovery/invite E2E is required after source fixes before merge.
