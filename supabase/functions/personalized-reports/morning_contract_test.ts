@@ -15,7 +15,10 @@ import {
   REPORT_FACT_INSTRUCTIONS,
   REPORT_LIMITS,
   reportDraftRequestBody,
+  reportFactRequestBody,
+  type NewsInput,
   type PriceSeries,
+  type ReportBody,
 } from "./report_logic.ts";
 
 function series(closes: Array<[string, number]>): PriceSeries {
@@ -74,7 +77,9 @@ test("B: both prompts describe empty news as an input state, never as a world st
   }
   // The no-material fact_ja template now states the input, not the world.
   const prompt = instructions("close");
-  assert.ok(prompt.includes("fact_ja に「入力に明確な個別材料は含まれていません」と書きます。"));
+  assert.ok(prompt.includes("すべて空の場合に限り、fact_ja に「入力に明確な個別材料は含まれていません」と書けます。"));
+  assert.ok(prompt.includes("書ける事実がなければ空文字にします。"));
+  assert.ok(!prompt.includes("no_clear_material にし、fact_ja に「入力に明確な個別材料は含まれていません」と書きます。"));
   assert.ok(!prompt.includes("fact_ja に「明確な個別材料は確認できていません」と書きます。"));
 });
 
@@ -84,10 +89,72 @@ test("C: the Fact checker allows only the precise empty-input meta-claim", () =>
   assert.ok(REPORT_FACT_INSTRUCTIONS.includes(EMPTY_NEWS_FACT_RULE));
   assert.ok(EMPTY_NEWS_FACT_RULE.includes("空のとき"), "only when the packet's news is empty");
   assert.ok(EMPTY_NEWS_FACT_RULE.includes("「入力に個別の材料は含まれていません」"));
+  assert.ok(EMPTY_NEWS_FACT_RULE.includes("1件でもあるのに空入力を断定した場合は passed を false"));
   // Broad no-news claims and unsupported intraday claims remain failures.
   for (const stillRejected of ["「ニュースはありません」", "「材料はありません」", "「個別ニュースは確認されていません」", "寄り付き・場中の値動きを観測済みの事実として書く", "passed を false にします"]) {
     assert.ok(EMPTY_NEWS_FACT_RULE.includes(stillRejected), stillRejected);
   }
+});
+
+test("B/C: mixed per-stock news cannot trigger an unconditional empty-input fact_ja", () => {
+  const tracked = ["1111", "2222"].map((tickerCode) => ({
+    trackedStockId: `t${tickerCode}`, tickerCode, companyName: `会社${tickerCode}`, sector: "サービス業",
+    trackingType: "holding" as const, quantity: 100, averagePrice: 900,
+    positionType: "cash" as const, side: "long" as const,
+  }));
+  const news: NewsInput[] = [{
+    newsId: "n1", tickerCode: "1111", companyName: "会社1111", trackingType: "holding",
+    severity: "medium", matchedSectors: [], newsTime: "2026-09-25T06:00:00Z",
+    sourceUrl: null, sourceType: null, textOrigin: "verified_post", headlineJa: "会社1111が資料を公表",
+    summaryJa: null, keyPointsJa: [],
+  }];
+  const snapshot = buildSnapshot({
+    reportType: "morning", tradingDate: "2026-09-28", tracked,
+    prices: new Map([["1111", FLAT], ["2222", FLAT]]),
+    indices: [{ label: "日経平均", series: FLAT }, { label: BENCHMARK_LABEL, series: FLAT }], news,
+  });
+  const packet = buildPacket(snapshot, news);
+  assert.equal(packet.holdings[0].own_news.length, 1);
+  assert.equal(packet.holdings[1].own_news.length, 0);
+
+  const draftInstructions = String(reportDraftRequestBody("morning", packet).instructions);
+  assert.ok(draftInstructions.includes("すべて空の場合に限り、fact_ja に「入力に明確な個別材料は含まれていません」と書けます。"));
+  const report = {
+    title_ja: "朝刊", summary_ja: "概要", tone: "neutral", overview_ja: "概要", holding_impacts: [],
+    morning_review_ja: "", watch_notes: [], risk_notes_ja: [], checkpoints_ja: ["確認点"],
+  } satisfies ReportBody;
+  const factRequest = reportFactRequestBody(packet, report);
+  assert.equal(factRequest.instructions, REPORT_FACT_INSTRUCTIONS);
+  assert.ok(String(factRequest.input).includes("会社1111が資料を公表"));
+  assert.ok(String(factRequest.instructions).includes("1件でもあるのに空入力を断定した場合は passed を false"));
+});
+
+test("C: adversarial absence, intraday and causal text reaches the Fact gate verbatim", () => {
+  const emptyPacket = { holdings: [], watch: [], market_news: [] };
+  const nonemptyPacket = { holdings: [{ own_news: [{ headline: "資料を公表" }], related_market_news: [] }], watch: [], market_news: [] };
+  for (const [packet, text] of [
+    [nonemptyPacket, "入力に個別の材料は含まれていません。"],
+    [emptyPacket, "ニュースはありません。"],
+    [emptyPacket, "個別ニュースは確認されていません。"],
+    [emptyPacket, "寄り付き後に上昇しています。"],
+    [emptyPacket, "場中は強含みです。"],
+    [emptyPacket, "今日の値動きでは買い場です。"],
+    [emptyPacket, "入力に個別の材料は含まれていません。円高が上昇の原因です。"],
+    [emptyPacket, "入力に個別の材料は含まれていません\n円高が上昇の原因です。"],
+  ] as const) {
+    const report = {
+      title_ja: "朝刊", summary_ja: "概要", tone: "neutral", overview_ja: text,
+      holding_impacts: [], morning_review_ja: "", watch_notes: [], risk_notes_ja: [], checkpoints_ja: ["確認点"],
+    } satisfies ReportBody;
+    const request = reportFactRequestBody(packet, report);
+    const sent = JSON.parse(String(request.input)) as { report: ReportBody };
+    assert.equal(sent.report.overview_ja, text);
+    assert.ok(String(request.instructions).includes(EMPTY_NEWS_FACT_RULE));
+  }
+  // These are instructions to the real Fact model, not a deterministic semantic classification test.
+  assert.ok(EMPTY_NEWS_FACT_RULE.includes("1件でもあるのに空入力を断定した場合は passed を false"));
+  assert.ok(REPORT_FACT_INSTRUCTIONS.includes("将来の値動きの断定、売買推奨"));
+  assert.ok(REPORT_FACT_INSTRUCTIONS.includes("ニュースと値動きの因果の断定"));
 });
 
 test("C: the existing Fact rejections are all still present", () => {

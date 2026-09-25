@@ -777,7 +777,7 @@ export const MORNING_TIMING_RULE =
 // Empty news: describe the input, never the world. Production v28 morning Fact FAIL:
 // 「個別ニュースは確認されていません」 was read as a claim that no news exists.
 export const EMPTY_NEWS_RULE =
-  "入力のニュースや材料が空の場合、書けるのは入力の状態だけです。「入力に個別の材料は含まれていません」「このレポートの入力には個別ニュースがありません」のように書き、「個別ニュースは確認されていません」「ニュースはありません」「材料はありません」のような、世の中にニュースが無いと受け取れる書き方はしません。";
+  "入力の holdings/watch の own_news・related_market_news と market_news がすべて空の場合に限り、入力の状態として「入力に個別の材料は含まれていません」「このレポートの入力には個別ニュースがありません」のように書けます。どれかにニュースが1件でもあれば空入力の断定はしません。「個別ニュースは確認されていません」「ニュースはありません」「材料はありません」のような、世の中にニュースが無いと受け取れる書き方もしません。";
 
 const COMMON_INSTRUCTIONS = [
   "あなたは日本の個人投資家向けアプリで、そのユーザー専用のポートフォリオレポートを書く編集者です。",
@@ -810,7 +810,7 @@ const IMPACT_INSTRUCTIONS = [
   "holding_impacts は holdings の全銘柄について1件ずつ、holdings の順に書きます（holdings が空なら空配列）。",
   "stance は tailwind（追い風）/ headwind（逆風）/ neutral（中立）/ no_clear_material（明確な個別材料なし）から選びます。",
   "basis にはその銘柄の allowed_basis にある値だけを入れます。company_news は own_news、sector_news は related_market_news を根拠にした場合です。",
-  "tailwind / headwind には basis が1つ以上必要です。根拠が無い・弱い銘柄は無理に理由を作らず no_clear_material にし、fact_ja に「入力に明確な個別材料は含まれていません」と書きます。",
+  "tailwind / headwind には basis が1つ以上必要です。根拠が無い・弱い銘柄は無理に理由を作らず no_clear_material にします。fact_ja にはその銘柄について入力で確認できる事実だけを書き、書ける事実がなければ空文字にします。入力の holdings/watch の own_news・related_market_news と market_news がすべて空の場合に限り、fact_ja に「入力に明確な個別材料は含まれていません」と書けます。",
   "fact_ja は入力で確認できる事実だけ、inference_ja は推定だけ（必ず「〜の可能性があります」「〜と考えられます」「〜とみられます」のような推定の言い方）、watch_ja は観察ポイントだけを書き、三つを混ぜません。要因が分からない場合、inference_ja は「要因は特定できません」のように、特定できないことだけを書いてかまいません。",
   "inference_ja では、業種・為替・金利・原油・米国株・半導体指数と銘柄の一般的な関係に触れてよいですが、入力に無い数字・固有の事実は書かず、推定として書きます。根拠が無ければ空文字にします。",
   INFERENCE_FIELD_RULE,
@@ -901,7 +901,7 @@ const CHECK_SCHEMA = {
 // The only Fact clarification: a precise statement about the packet's own (empty) news input is accurate.
 // Claims about the world ("no news exists") and unsupported future / intraday claims stay failures.
 export const EMPTY_NEWS_FACT_RULE =
-  "packet の news（own_news・related_market_news・market_news）が空のとき、「入力に個別の材料は含まれていません」「このレポートの入力には個別ニュースがありません」のように入力の状態として書くことは事実どおりなので許容します。ただし「ニュースはありません」「材料はありません」「個別ニュースは確認されていません」のように世の中にニュースが無いと断定する書き方、packet に無い今日の寄り付き・場中の値動きを観測済みの事実として書くことは、従来どおり passed を false にします。";
+  "packet の holdings/watch の own_news・related_market_news と market_news がすべて空のときに限り、「入力に個別の材料は含まれていません」「このレポートの入力には個別ニュースがありません」「入力に明確な個別材料は含まれていません」のような入力状態の記述を許容します。どれかにニュースが1件でもあるのに空入力を断定した場合は passed を false にします。「ニュースはありません」「材料はありません」「個別ニュースは確認されていません」のように世の中にニュースが無いと断定する書き方、packet に無い今日の寄り付き・場中の値動きを観測済みの事実として書くことも、従来どおり passed を false にします。";
 
 export const REPORT_FACT_INSTRUCTIONS = [
   "あなたは個人向けポートフォリオレポートの厳格なFactチェッカーです。入力の packet（根拠データ）と report（生成文）だけを照合します。Web検索や外部知識は使いません。",
