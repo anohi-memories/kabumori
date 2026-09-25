@@ -3,8 +3,8 @@
 - task_id: kabumori-release-readiness-gap-closure-20260925
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Opus5.5（高）
 - purpose: かぶモリiOS/TestFlight前の残ブロッカーをfresh mainと実サービスread-onlyで再確認し、コード/設定ファイル側で安全に解消できるものをまとめて解消する。秘密情報・本番Auth mutation・TestFlight uploadは行わない。
@@ -346,3 +346,27 @@ No Supabase Auth/SMTP mutation, no DB/schema/RLS/RPC change, no `personalized-re
 5. Then a first internal/TestFlight-track EAS build, per this task's own restriction, still requires separate authorization and is not part of this task.
 
 No Codex review requested, per the reduced-review policy for ordinary source/config/doc audits (and no code changed at all here).
+
+
+## Final K1 — release readiness
+
+Verdict: **PASS for audit/documentation; release is not yet ready for first TestFlight build**.
+
+Accepted findings:
+- no source/code bug found
+- PR #35 documentation-only head `5b5acd69d20c622b73e3b6f73f510a2479b9d318`
+- PR #35 merged -> `26b0e8903b434a7a5222370c65aa4ed565af113e`
+- app icon is complete
+- EAS source config and env verifier are correct
+- Kabumori public/legal Web source is ready but has no separate Netlify site yet
+- live Auth/SMTP config could not be read safely from this environment
+- AnimatedSplashOverlay/native splash still use Expo template artwork and should be fixed before first TestFlight
+- production mutation from the audit = 0
+
+Remaining operator/artwork gates:
+1. approve/provide startup splash / overlay artwork
+2. create separate Netlify site for `apps/kabumori-web`
+3. provide operator name/support email/policy effective date and public domain choice
+4. set EAS production env names/values
+5. configure Supabase Auth Site URL/redirects and custom SMTP
+6. then separately authorize first EAS/TestFlight build
