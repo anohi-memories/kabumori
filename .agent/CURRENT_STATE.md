@@ -39,7 +39,7 @@
   - Awaiting separately authorized EAS/TestFlight real-iPhone visual verification.
 - G2: `ready` — `kabumori-morning-prompt-fact-contract-fix-20260925`
 - G3: `ready` — `x-autopost-phase1i-pr30-merge-postmerge-verify-20260925`
-- G4: `ready` — `x-admin-password-recovery-invite-flow-20260925`
+- G4: `done` — `x-admin-password-recovery-invite-flow-20260925`; Final K4 PASS, operator E2E pending
 
 ## K1 PR #31 icon integration
 
@@ -143,6 +143,20 @@
 - password setup must never imply admin authorization; `admin_users` gate remains mandatory.
 - Auth/security change requires independent Codex review before merge or production Auth URL configuration mutation.
 - recommended model: Opus5.5（高）.
+
+## Final K4 Admin password recovery / invite flow
+
+- result: **PASS for source + Netlify Preview**.
+- PR #33 head: `e2e1ff52a99e37d108a0f9a1f024dc507a7bedaf`; unmerged.
+- implemented `/forgot-password`, `/auth/confirm`, `/reset-password`.
+- account enumeration/open redirect/token logging protections PASS.
+- password setup does not grant admin; `admin_users` gate remains mandatory.
+- Netlify Preview SUCCESS; live unauth route QA PASS.
+- tests 47/47; tsc/lint/build/diff PASS.
+- production mutation=0; Supabase Site URL/Redirect URLs unchanged.
+- Codex review intentionally deferred per user instruction.
+- next operator gate: add exact Preview redirect URL, then perform one real recovery/invite E2E; keep Site URL unchanged for now.
+- recommended model for later continuation: Opus5.5（高）.
 
 ## Approved app icon decision
 
