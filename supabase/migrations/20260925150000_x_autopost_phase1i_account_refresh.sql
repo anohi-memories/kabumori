@@ -41,6 +41,11 @@ create table public.x_account_refresh_state_v2 (
   lease_attempt_id uuid references public.post_queue_attempts_v2 (id),
   leased_at timestamptz,
   account_updated_at timestamptz,
+  leased_brand_id text,
+  leased_platform_user_id text,
+  leased_oauth_client_ref text,
+  leased_access_secret_id uuid,
+  leased_refresh_secret_id uuid,
   last_refreshed_at timestamptz,
   last_error_code text check (last_error_code is null or last_error_code ~ '^[A-Z][A-Z0-9_]{1,99}$'),
   check ((status = 'refreshing') = (lease_token is not null)),
@@ -137,7 +142,12 @@ begin
   v_lease := gen_random_uuid();
   update public.x_account_refresh_state_v2 st
   set status = 'refreshing', lease_token = v_lease, lease_attempt_id = v_attempt.id, leased_at = now(),
-      account_updated_at = v_account.updated_at, last_error_code = null
+      account_updated_at = v_account.updated_at, leased_brand_id = v_account.brand_id,
+      leased_platform_user_id = v_account.platform_user_id,
+      leased_oauth_client_ref = v_account.oauth_client_ref,
+      leased_access_secret_id = v_account.vault_access_token_secret_id,
+      leased_refresh_secret_id = v_account.vault_refresh_token_secret_id,
+      last_error_code = null
   where st.social_account_id = v_account.id;
 
   lease_token := v_lease;
@@ -159,13 +169,31 @@ create function public.commit_x_account_refresh_v2(
 ) returns text language plpgsql security definer set search_path = '' as $$
 declare v_account record;
         v_state public.x_account_refresh_state_v2%rowtype;
+        v_attempt public.post_queue_attempts_v2%rowtype;
+        v_post public.scheduled_posts%rowtype;
+        v_attempt_id uuid;
 begin
   if p_lease_token is null or nullif(btrim(p_social_account_id), '') is null
      or nullif(btrim(p_access_token), '') is null
      or (p_refresh_token is not null and nullif(btrim(p_refresh_token), '') is null) then
     raise exception 'X_REFRESH_REQUEST_INVALID' using errcode = 'P0001';
   end if;
-  select sa.id, sa.platform, sa.connection_status, sa.updated_at,
+  -- Freeze account-reference membership while validating and writing Vault.
+  -- SHARE is compatible with another refresh reader but excludes account DML.
+  lock table public.social_accounts in share mode;
+  select st.lease_attempt_id into v_attempt_id from public.x_account_refresh_state_v2 st
+  where st.social_account_id = p_social_account_id and st.status = 'refreshing'
+    and st.lease_token = p_lease_token;
+  if v_attempt_id is null then return 'lease_lost'; end if;
+  -- Attempt -> post -> account -> state: the same row-lock order as the queue.
+  select a.* into v_attempt from public.post_queue_attempts_v2 a
+  where a.id = v_attempt_id for update;
+  if v_attempt.id is not null then
+    select s.* into v_post from public.scheduled_posts s
+    where s.id = v_attempt.scheduled_post_id for update;
+  end if;
+  select sa.id, sa.brand_id, sa.platform, sa.connection_status, sa.platform_user_id,
+         sa.publish_enabled, sa.oauth_client_ref, sa.updated_at,
          sa.vault_access_token_secret_id, sa.vault_refresh_token_secret_id
     into v_account
   from public.social_accounts sa where sa.id = p_social_account_id for update;
@@ -175,9 +203,30 @@ begin
      or v_state.status <> 'refreshing' or v_state.lease_token is distinct from p_lease_token then
     return 'lease_lost';
   end if;
-  if v_account.platform is distinct from 'x' or v_account.connection_status is distinct from 'identity_verified'
-     or v_account.updated_at is distinct from v_state.account_updated_at
-     or v_account.vault_access_token_secret_id is null or v_account.vault_refresh_token_secret_id is null then
+  if v_attempt.id is distinct from v_state.lease_attempt_id
+     or v_attempt.phase is distinct from 'pre_x' or v_attempt.outcome is not null
+     or v_attempt.social_account_id is distinct from p_social_account_id
+     or v_attempt.brand_id is distinct from v_state.leased_brand_id
+     or v_post.id is distinct from v_attempt.scheduled_post_id
+     or v_post.status is distinct from 'running'
+     or v_post.social_account_id is distinct from p_social_account_id
+     or v_post.brand_id is distinct from v_state.leased_brand_id
+     or v_account.brand_id is distinct from v_state.leased_brand_id
+     or v_account.platform_user_id is distinct from v_state.leased_platform_user_id
+     or v_account.publish_enabled is distinct from true
+     or v_account.oauth_client_ref is distinct from v_state.leased_oauth_client_ref
+     or v_account.vault_access_token_secret_id is distinct from v_state.leased_access_secret_id
+     or v_account.vault_refresh_token_secret_id is distinct from v_state.leased_refresh_secret_id
+     or v_account.vault_access_token_secret_id is null
+     or v_account.vault_refresh_token_secret_id is null
+     or v_account.vault_access_token_secret_id = v_account.vault_refresh_token_secret_id
+     or exists (
+       select 1 from public.social_accounts o where o.id <> p_social_account_id
+         and (o.vault_access_token_secret_id in (v_state.leased_access_secret_id, v_state.leased_refresh_secret_id)
+           or o.vault_refresh_token_secret_id in (v_state.leased_access_secret_id, v_state.leased_refresh_secret_id))
+     )
+     or v_account.platform is distinct from 'x' or v_account.connection_status is distinct from 'identity_verified'
+     or v_account.updated_at is distinct from v_state.account_updated_at then
     update public.x_account_refresh_state_v2 st
     set status = 'uncertain', lease_token = null, lease_attempt_id = null, leased_at = null,
         last_error_code = 'X_REFRESH_ACCOUNT_CHANGED'
