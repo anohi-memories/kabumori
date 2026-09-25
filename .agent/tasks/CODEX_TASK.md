@@ -1,176 +1,206 @@
 # Codex Task
 
-- task_id: x-autopost-phase1g-multistep-tip-greeting-final-review-20260925
+- task_id: x-autopost-phase1h-gated-dispatcher-final-review-20260925
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: codex
 - priority: critical
 - recommended_model: Sol（高）
-- purpose: K3 PASS済みPhase1Gのtip thread / morning_greeting multi-step provider-step ledger、atomic completion、publish_claim lifecycle、ACL/migration安全性を独立レビューする。production apply/deploy/X API callは行わない。
+- purpose: K3 PASS済みPhase1H gated-OFF v2 dispatcher source candidateを、gate fail-closed、no-legacy-fallback、resume安全性、exact-account credential、provider-start durability、typed completion wiring、ACL/migrationの観点で独立レビューする。production deploy/activation/X API callは行わない。
 
 ## Target
 
 Implementation commit:
-- `e0f7785`
+- `59bd54412eae989400b6ce7e9ecb56dc943db94f`
 
 Primary files:
-- `supabase/migrations/20260925090000_x_autopost_phase1g_multistep_completion.sql`
-- `supabase/functions/_shared/x_v2_multistep.ts`
-- `supabase/functions/_shared/x_v2_multistep_test.ts`
-- `supabase/functions/_shared/x_v2_outcome_ledger.ts`
-- `supabase/functions/_shared/x_v2_outcome_ledger_test.ts`
-- `supabase/functions/x-test-post/multistep_completion_migration_test.ts`
-- `supabase/tests/x_autopost_phase1g_fixture.sql`
-- `supabase/tests/x_autopost_phase1g_behavior.sql`
-- `supabase/tests/x_autopost_phase1g_run.sh`
-- `supabase/tests/x_autopost_phase1g_multistep_completion.md`
+- `supabase/functions/x-test-post/v2_dispatcher.ts`
+- `supabase/functions/x-test-post/v2_dispatch_ledger_rpc.ts`
+- `supabase/functions/x-test-post/v2_dispatcher_test.ts`
+- `supabase/functions/x-test-post/v2_dispatch_ledger_rpc_test.ts`
+- `supabase/functions/x-test-post/dispatch_resume_migration_test.ts`
+- `supabase/migrations/20260925120000_x_autopost_phase1h_dispatch_resume.sql`
+- `supabase/tests/x_autopost_phase1h_behavior.sql`
+- `supabase/tests/x_autopost_phase1h_run.sh`
+- `supabase/tests/x_autopost_phase1h_gated_dispatcher.md`
 
 K3 evidence:
-- tip + morning_greeting source-ready candidate
-- focused 72/72 PASS
-- x-test-post 437/437 PASS
+- gate hard OFF by default
+- live legacy dispatcher unchanged/unwired
+- focused Phase1B–1H 99/99 PASS
+- x-test-post 464/464 PASS
 - _shared 129/129 PASS
 - important-news-monitor 431/431 PASS
-- greeting/tip-specific 138/138 PASS
-- disposable PostgreSQL Phase1G behavior/race PASS ×4
-- production mutation/X API/media calls = 0
+- greeting/tip 138/138 PASS
+- disposable Phase1H behavior PASS
+- production mutation/X API calls = 0
 
 ## Mandatory startup
 
 1. Read PROJECT_RULES.md
 2. Read .agent/ORCHESTRATION.md
 3. Read .agent/CURRENT_STATE.md
-4. Read G3 Phase1G TASK/Report
-5. Read Phase1F migration/docs and H1 C1 findings
+4. Read G3 Phase1H TASK/Report
+5. Read Phase1E/1F/1G review history
 6. Fresh fetch origin/main
 7. Confirm independent H1 worktree/checkout
-8. Inspect H2/G1/G2/G3/G4 scopes and prove no overlap
-9. Review implementation commit/current main for semantic drift
-10. Do not deploy/apply anything
+8. Inspect H2/G1/G2/G3/G4 and prove no overlap
+9. Review implementation commit and current main for drift
+10. Do not deploy/apply/activate anything
 
-## Review A — tip thread plan/step integrity
-
-Verify:
-- immutable expected part count and plan kind
-- 1..N exact step cardinality
-- step1 create_post only
-- stepN>1 create_reply only
-- reply parent exactly previous confirmed X id
-- no extra step beyond plan
-- no missing middle step accepted
-- no confirmed step replay
-- rejected/uncertain step blocks later steps
-- confirmed prior parts cannot be duplicated by retry
-- attempt with confirmed provider object cannot later be recorded x_rejected
-
-Try adversarial step ordering, parent spoofing, plan mismatch, and duplicate start/finish.
-
-## Review B — tip atomic completion fidelity
-
-Compare with legacy tip completion semantics.
-
-Verify one transaction:
-- validates claim/attempt/account/brand/type/running state
-- verifies all planned steps confirmed
-- preserves all part X ids durably/auditably
-- marks scheduled post succeeded
-- marks attempt completed
-- performs exact tip/topic usage side effects once
-- writes one success execution log
-- duplicate completion is idempotent
-- concurrent completion produces one side-effect set
-- forced downstream error rolls back all completion effects
-
-Assess confirmed-incomplete recovery with same root id.
-
-## Review C — morning_greeting claim/media/create integrity
+## Review A — hard gate
 
 Verify:
-- publish_claim belongs to exact brand/day/post/attempt
-- competing/stale attempt cannot steal/reuse claim
-- media_upload must confirm before create_post
-- create_post input media id equals same attempt’s confirmed media output
-- confirmed media never re-uploaded after later uncertainty
-- uncertain/rejected create blocks replay
-- already-published day fails closed safely
-- same-day claim lifecycle remains legacy-compatible enough for source candidate
+- missing/malformed env => OFF
+- only exact documented value enables
+- gate evaluated before claim/credential/provider work
+- no client/admin/mobile input can enable it
+- no partially-started v2 attempt can fall through to legacy posting
+- gate OFF causes zero v2 claim/X calls
+- live legacy path remains unchanged
 
-Pay special attention to residual direct service_role DML on publish_claims.
+Try whitespace/case/alternate truthy values and env-read failure.
 
-## Review D — morning_greeting atomic completion
+## Review B — claim / exact-account authority
 
-Verify completion transaction covers all DB-side authoritative state:
-- scheduled_posts
-- attempt ledger
-- provider-step records/plan state
-- publish_claims published state/x_post_id/published_at
-- greeting success metadata
-- exactly one success execution log
+Verify dispatcher:
+- calls only v2 account-bound claim path
+- never calls old unpartitioned claim
+- never binds legacy pending rows
+- claim.social_account_id remains sole credential authority
+- resume credential reader cannot cross account/brand/post/attempt
+- no brand-only/first-row/hardcoded/env/legacy token fallback
+- wrong-account credential response fails before X
 
-Confirm external Storage receipt is correctly treated as non-transactional/best-effort and cannot undermine DB authority or cause duplicate X create/media upload.
-
-## Review E — multistep helper safety
-
-Review server-only helper(s):
-- next safe action only
-- no auto-loop through steps
-- no retry of uncertain step
-- no recreation/reupload of confirmed object
-- no brand-only credential routing
-- no secret/provider response leakage
-
-Confirm Phase1E exact-account resolver assumptions are preserved.
-
-## Review F — ACL / migration
+## Review C — resume safety
 
 Review:
+- oldest resumable attempt selection
+- resumable classes only
+- completed/rejected/uncertain/incomplete behavior
+- snapshot/plan immutability
+- resume cannot regenerate content inconsistently
+- resume cannot resend confirmed provider steps
+- confirmed-incomplete re-entry performs only DB completion, no provider call
+- crash after provider response before finish is blocked/manual, not replayed
+
+Try adversarial stale/newer-attempt and cross-account resume cases.
+
+## Review D — provider-start / one-request guarantee
+
+Single-create:
+- provider-start durable before POST
+- persistence failure => 0 X calls
+- exactly one create after start
+- no hidden refresh/retry
+- 401/rejection after start => no second create
+- network/timeout/408/5xx/3xx/2xx-no-id => uncertain
+- completion failure after x_created => same-id confirmed-incomplete
+
+Multi-step:
+- durable begin before each media/create/reply request
+- one request per step per run
+- no in-memory loop across unpersisted steps
+- restart between every step remains exact-once
+- failed finish write after real provider call never causes replay
+
+## Review E — tip/greeting integration
+
+Tip:
+- snapshot part count matches plan
+- re-entry uses immutable snapshot content
+- reply chain uses ledger ids
+- uncertain/rejected stops later parts
+- completion only after all confirmed
+
+Greeting:
+- stale JST zero provider calls
+- attempt-bound publish_claim acquisition
+- media confirmation durable before create
+- create uses exact media id
+- resume never reuploads confirmed media
+- uncertain create never replays
+- storage receipt callback only after authoritative DB completion
+
+## Review F — unsupported types / poll fidelity
+
+Verify:
+- interaction remains disabled because poll seam missing
+- no silent text-only degradation
+- brand_post remains disabled
+- unknown types fail closed
+- bound unsupported type settles without provider calls and does not become retryable accidentally
+
+## Review G — ledger/result classes
+
+Review all dispatcher result classes and scheduler implications:
+- gate_off
+- no_work
+- unsupported_type
+- pre_x_retryable
+- pre_x_terminal
+- provider_rejected
+- provider_uncertain
+- confirmed_db_incomplete
+- completed
+- in_progress
+- blocked_manual_reconciliation
+
+Verify non-reclaimable classes cannot be automatically retried.
+
+## Review H — ACL / migration
+
+Review Phase1H migration:
+- ordered dependency on 1B→1G
+- additive/versioned semantics
+- explicit transaction
+- no default PUBLIC EXECUTE window
 - SECURITY DEFINER + empty search_path
-- schema qualification
-- service_role-only public RPCs
-- internal/trigger API EXECUTE closed
-- plan/step tables non-writable by API roles
-- raw Phase1F begin RPC revocation is safe
-- publish_claims residual grants are understood and do not bypass new v2 invariants
-- explicit transaction and PUBLIC window
-- non-idempotency / ordered 1B→1G apply dependency
+- service_role-only API RPCs
+- snapshot table read-only to API roles
+- trigger guard plan+snapshot requirement
+- resume credential reader secret boundary
 - apply-tool nested transaction risk
-- live-definition dependencies before rollout
+- live-definition/grant dependencies
 
-## Required verification
+## Review I — tests
 
-At minimum:
-- focused Phase1G
-- Phase1B/1D/1E/1F regressions
+At minimum rerun:
+- dispatcher/adapter tests
+- focused Phase1B–1H
 - x-test-post
 - _shared
 - important-news-monitor
-- greeting/tip-specific tests
-- disposable PostgreSQL behavior + concurrency/race
-- Deno check/lint
+- greeting/tip-specific
+- disposable Phase1H behavior
+- relevant Phase1D/E/F/G proofs
+- deno check/lint
 - bash -n
 - git diff --check
 
-If concrete defect found:
-- minimal Phase1G-scope source-only fix allowed
+If concrete bug is found:
+- minimal Phase1H-scope source-only fix allowed
 - add regression
-- rerun affected/full safety suites
 - push safely
-- no deploy/apply
+- no deploy/apply/activation
 
 ## Forbidden
 
 - production migration/DDL/DML/RPC apply
 - db push/history repair
-- deploy
-- Cron/OAuth/Vault/token mutation
-- real X API/posts/media
-- dispatcher/producers enable
+- Edge deploy
+- Cron mutation
+- OAuth/Vault/token mutation/refresh
+- real X API/post/media
+- gate enable
+- scheduler/claim switch
+- old claim revoke
+- automatic legacy binding
 - apps/admin/**
 - consumer mobile/**
 - G1/G2 app work
 - G4 work
-- unrelated MIC work
 
 ## Production mutation budget
 
@@ -182,14 +212,16 @@ Update `.agent/CODEX_REPORT.md` with:
 - verdict PASS / PASS-WITH-FIX / FAIL
 - findings by severity
 - exact changed files/fix commit if any
-- tip plan/step assessment
-- tip completion fidelity
-- greeting claim/media/create assessment
-- greeting completion fidelity
-- helper safety
-- ACL/migration safety
+- gate assessment
+- claim/exact-account assessment
+- resume assessment
+- provider one-request assessment
+- tip/greeting assessment
+- unsupported type assessment
+- result-class/retry assessment
+- ACL/migration assessment
 - exact tests/counts
-- whether Phase1G is safe to keep as source candidate
+- source-candidate acceptance
 - production activation decision (expected NO)
 - remaining blockers
 - production mutation=0
@@ -199,26 +231,3 @@ Then:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for C1.
-
-
-## Final C1 — Phase1G
-
-Verdict: **PASS-WITH-FIX for source-only candidate**.
-
-Accepted:
-- reviewed implementation `e0f7785`
-- H1 fix commit `5a62af547dbc840c1f7b140d6d51d8876c1a7223`
-- PR #27 contains the accepted source-only fixes
-- P1 stale prior-day greeting claim/provider-step authorization fixed using execution-day JST validation
-- P3 duplicate confirmed thread IDs rejected earlier by the helper
-- focused 72/72 PASS
-- x-test-post/_shared/important-news-monitor total 997/997 PASS
-- greeting/tip-specific 138/138 PASS
-- disposable Phase1D/1E/1F/1G behavior and race proofs PASS
-- deno check/lint, bash -n, git diff --check PASS
-- production migration/deploy/token/Cron/X API/media calls = 0
-
-Decision:
-- Phase1G is accepted as a source candidate after H1 fixes.
-- Production activation remains **NO**.
-- Next step: G3 fresh-main verify PR #27 -> merge -> post-merge regression.
