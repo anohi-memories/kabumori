@@ -33,13 +33,13 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: kabumori-pr29-plus-v27-validator-final-review-20260925
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: assigned; combined review of already-deployed 510acf5 + PR #29
+- allocation: closed; Final C2 PASS-WITH-FIX, PR #29 final head ef960374
 
 ## Claude G1
 - owner: claude
@@ -55,11 +55,11 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-voice-gate-product-policy-audit-20260925
+- task_id: kabumori-pr29-merge-redeploy-final-dryrun-20260925
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: assigned; read-only VOICE gate audit + PASS/WARN/BLOCK product policy design, no source/deploy
+- allocation: assigned; merge reviewed PR #29, controlled redeploy, close 5x + morning 2x dry-run with app_enabled=false
 
 ## Claude G3
 - owner: claude
