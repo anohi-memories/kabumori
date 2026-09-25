@@ -3,8 +3,8 @@
 - task_id: x-admin-pr15-netlify-preview-live-qa-continuation-20260925
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: Netlify visibility blockerとPR #15 Preview再トリガーが解消したため、PR #15の実Deploy Previewでproxy/auth/selector/cross-brand QAを完了する。PR #15 merge/Vercel productionは禁止。
@@ -251,3 +251,32 @@ head `a8f9844`のまま。mergeしていない。
 
 - status -> review_required
 - next_owner -> chatgpt
+
+
+## Final K4 — PR #15 Netlify live QA
+
+Result: **PASS / PREVIEW_QA_PASS_AUTH_BLOCKED**.
+
+Accepted:
+- PR #15 head `a8f98444425c25796e9fef611445b0f574120669`
+- empty retrigger commit tree-identical to prior reviewed head
+- Netlify Deploy Preview SUCCESS
+- preview URL live and public
+- /login renders normally
+- unauthenticated /, /posts, /important-news all fail closed via single redirect to /login
+- tampered session cookie also fails closed
+- no redirect loop, no Netlify 404, no 5xx
+- Netlify Next.js Runtime active
+- source regression 31/31 PASS
+- tsc/lint/build PASS
+- production mutation=0
+- PR #15 remains unmerged
+
+Residual:
+- authenticated live selector/session QA could not be performed because no authorized admin session/credentials were available to the task
+- this residual is non-blocking for K4 but requires independent auth/authorization review before merge
+
+Decision:
+- G4 accepted as K4 PASS with auth-only residual.
+- PR #15 remains unmerged.
+- H2 assigned final auth/authorization/cross-brand review.
