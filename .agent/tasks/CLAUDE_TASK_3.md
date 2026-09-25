@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1g-multistep-tip-greeting-completion-20260925
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Opus5.5（高）
 - purpose: Phase1Fで導入したprovider-step ledgerを使い、tip thread と morning_greeting のmulti-request投稿を安全に完了できるsource-only completion/provider-step契約を実装する。production apply/deploy/X API callは行わない。
@@ -289,3 +289,28 @@ Do not implement or enable the live v2 dispatcher in this task.
 12. production mutation: **0** (apply/DDL/DML/RPC 0, db push 0, deploy 0, Cron/OAuth/Vault/token 0, refresh 0, X API/posts/media 0, dispatcher/producers 0, legacy binding 0). Generated `deno.lock` removed.
 13. remaining blockers: v2 dispatcher + producers (not written/enabled); brand_post completion SQL not in source; interaction poll seam; per-account pre-X refresh writer; Kabumori credential into its account's Vault refs; uncertain→proven-created reconciliation; operator path for failed greeting days; production gates (live-definition diff incl. publish_claims/tips/scheduled_posts writers, atomic 1B→1G apply proof, staged rollback plan).
 14. next_recommendation: K3, then Codex review (step/plan invariants, greeting claim lifecycle, legacy-fidelity of tip/greeting side effects). Next source-only step: the v2 dispatcher behind a gate that stays OFF, composed from the Phase1E resolver/seam, Phase1F/1G ledger and typed completions (Opus5.5（高）).
+
+
+## Final K3 — Phase1G
+
+Result: IMPLEMENTATION PASS / CODEX REVIEW REQUIRED.
+
+Accepted:
+- implementation commit `e0f7785`
+- tip thread planned multi-step contract and typed completion
+- morning_greeting media->create plan and publish_claim-bound completion
+- exact part/media identity checks and fail-closed uncertain handling
+- tip/morning_greeting moved to source-ready typed multistep candidates
+- brand_post remains disabled
+- focused 72/72 PASS
+- x-test-post 437/437 PASS
+- _shared 129/129 PASS
+- important-news-monitor 431/431 PASS
+- greeting/tip-specific 138/138 PASS
+- disposable PostgreSQL behavior/race PASS
+- production mutation/X API/media calls=0
+
+Decision:
+- Phase1G implementation accepted for independent review.
+- Production activation remains NO.
+- H1 owns final multi-step/claim/ACL review with Sol（高）.
