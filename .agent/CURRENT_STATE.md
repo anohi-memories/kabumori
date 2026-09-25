@@ -33,12 +33,10 @@
 
 - H1: `review_required` — `x-autopost-phase1i-exact-account-refresh-final-review-20260925`; source-only fix PR #30 awaits C1, production activation NO
 - H2: `ready` — `x-admin-pr15-auth-crossbrand-final-review-20260925`
-- G1: `ready` — `kabumori-pr31-icon-merge-postmerge-verify-20260925`
-  - K1 PASS for PR #31 at head `8939ce9f`.
-  - Exact approved icon source verified and wired into Expo/iOS.
-  - No independent Codex review required due asset/config-only low-risk scope with real prebuild verification.
-  - Next: fresh-main merge + post-merge verification only; no EAS/TestFlight yet.
-  - recommended model: Sonnet5（中）.
+- G1: `review_required` — `kabumori-pr31-icon-merge-postmerge-verify-20260925`
+  - PR #31 merged at reviewed head `8939ce9` -> main `7aa394f`. Files byte-identical; master sha256 31eda537...49a3f8 confirmed; icon 1024x1024 no-alpha; expo config icon/ios.icon both resolve correctly; identity fields (slug/scheme/bundleId/projectId) and splash/overlay unchanged.
+  - Re-ran expo prebuild on merged main: generated AppIcon hash reproducible, matches pre-merge run exactly. 126/0 tests, tsc src 0, web export 10 routes. Prebuild's package.json script side-effect caught and discarded again.
+  - Production mutation 0. Repo ready for a separately authorized real-device build; final visual acceptance still pending on an actual iPhone.
 - G2: `ready` — `kabumori-morning-prompt-fact-contract-fix-20260925`
 - G3: `ready` — `x-autopost-phase1i-exact-account-prex-refresh-writer-20260925`
 - G4: `done` — `x-admin-pr15-netlify-preview-live-qa-continuation-20260925`
