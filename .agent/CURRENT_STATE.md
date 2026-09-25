@@ -38,7 +38,7 @@
   - Privacy dataflow gap from PR #21 review is now closed on main. Remaining blockers: icon/splash/overlay artwork, EAS production env, Netlify publish, Auth Site URL/SMTP, App Store Connect.
 - G2: `ready` — `kabumori-pr26-merge-redeploy-final-dryrun-20260925`
 - G3: `done` — `x-autopost-phase1h-gated-v2-dispatcher-source-candidate-20260925`
-- G4: `done` — `x-admin-netlify-deploy-preview-pipeline-20260924`
+- G4: `ready` — `x-admin-netlify-live-site-preview-qa-20260925`
 
 ## Final K1 PR #24 result
 
@@ -436,6 +436,16 @@
 - apps/admin source semantics unchanged; config/docs only.
 - Vercel/production/DB/DNS mutation=0.
 - Live Netlify site creation and `proxy.ts` runtime QA are still pending interactive account authorization.
+
+## G4 Netlify live preview continuation
+
+- assigned: `x-admin-netlify-live-site-preview-qa-20260925`.
+- goal: connect/create the real Netlify admin site and validate first Deploy Preview.
+- preferred QA target: PR #15, without merge.
+- primary unresolved technical gate: Next.js 16 `src/proxy.ts` session refresh behavior on Netlify runtime.
+- Netlify development/preview configuration is allowed; Vercel production, DNS cutover, production DB/Auth/X mutation remain forbidden.
+- if interactive Netlify authorization is required, G4 must stop and report the exact one-time user action.
+- recommended model: Sonnet5（高）.
 
 ## Known issues / observations
 
