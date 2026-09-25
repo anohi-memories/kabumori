@@ -37,9 +37,26 @@
   - PR #31 open (unmerged): approved icon (user-supplied ~/Desktop/アイコン.png, sha256 31eda537...49a3f8, 1254x1254 opaque) preserved as master + resized to 1024x1024, wired into app.json's ios.icon/expo.icon/notifications icon. assets/expo.icon (old Icon Composer bundle) left unreferenced on disk.
   - Verified via a real `expo prebuild --platform ios`: generated AppIcon.appiconset matches the new artwork, no template mark. 126/0 tests, tsc src 0, web export 10 routes.
   - Discarded prebuild's incidental package.json script rewrite before committing. Splash/AnimatedSplashOverlay untouched. Production mutation 0; real iPhone acceptance still pending a separately authorized EAS build.
-- G2: `ready` — `kabumori-pr29-merge-redeploy-final-dryrun-20260925`
+- G2: `ready` — `kabumori-morning-prompt-fact-contract-fix-20260925`
 - G3: `ready` — `x-autopost-phase1i-exact-account-prex-refresh-writer-20260925`
 - G4: `done` — `x-admin-pr15-netlify-preview-live-qa-continuation-20260925`
+
+## Final K2 PR #29 deploy/dry-run
+
+- verdict: **partial PASS / activation NO**.
+- PR #29 merged -> `47ea87d33734fbd9e8489f2112c732cb0b2ca11f`.
+- production personalized-reports v28; verify_jwt=false; app_enabled=false; x_enabled=false.
+- post-merge tests all PASS: personalized-reports 96/96, related 214/214.
+- close dry-run: **5/5 PASS**; false INFERENCE_NOT_HEDGED and factual-lead regression resolved.
+- morning dry-run: **0/2**, both Fact FAIL with local issues 0.
+- current morning failure is a prompt↔Fact contract mismatch:
+  - prompt encourages 寄り付き後/場中 wording although packet has no future intraday observation
+  - empty-news wording can become an overly broad world-state claim
+- no persistence, no notification, no malformed/truncated output.
+- rollback not required; v28 improves close and does not newly cause the morning issue.
+- activation remains NO.
+- next G2: source-only morning prompt/Fact contract fix.
+- recommended model: Sonnet5（極高）.
 
 ## Approved app icon decision
 
