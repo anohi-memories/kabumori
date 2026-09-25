@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-25 JST
+- checked_at: 2026-09-26 JST
 - repo: kabumori
 - branch: main
 
@@ -42,7 +42,7 @@
 
 ## Current slot snapshot
 
-- H1: `done` — `x-autopost-phase1i-exact-account-refresh-final-review-20260925`; Final C1 PASS-WITH-FIX
+- H1: `review_required` — `x-universal-oauth-refresh-final-review-20260925`; source-only PASS-WITH-FIX, PR #37 awaits C1, production activation NO
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
 - G1: `done` — `kabumori-branded-launch-screen-20260925`
   - Final K1 PASS.
@@ -54,6 +54,13 @@
 - G2: `done` — `kabumori-pr34-shadow-merge-deploy-20260925`
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS
+
+## H1 universal OAuth refresh final review
+
+- Verdict: **PASS-WITH-FIX for source only**. PR #37 prevents automatic redirect-follow on Vault-backed X create requests; Kabumori legacy behavior is unchanged. C1 required before merge/activation.
+- Stage 0 read-only production metadata: AI Lab has distinct access/refresh Vault refs, shared refs 0, required `social_accounts` shape/unique constraint and Vault function present; core/Phase1I are unapplied. `service_role` already has direct Vault read/update privilege, not widened by this candidate. Edge OAuth-client environment-variable presence remains unverified.
+- Disposable core and stacked Phase1I behavior/race proofs PASS; X-related 642/642 tests PASS; targeted Deno check/lint PASS. `index.ts` retains six pre-existing type errors and three pre-existing lint findings, none on changed lines.
+- Stage 1/2 production changes remain **not approved**. Reconnect-versus-commit deadlock is fail-closed but can require operator reconnection; review rollout safeguards in `.agent/CODEX_REPORT.md`.
 
 ## Final K1 branded launch screen
 

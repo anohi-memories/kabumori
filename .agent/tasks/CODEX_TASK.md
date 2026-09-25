@@ -3,8 +3,8 @@
 - task_id: x-universal-oauth-refresh-final-review-20260925
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: K3 PASS済みの universal exact-account Vault-backed X OAuth refresh 実装を、OAuth/Vault/exact-account/concurrency/production rollout safety に限定して独立最終レビューする。広いrepoレビューはしない。production mutationは禁止。

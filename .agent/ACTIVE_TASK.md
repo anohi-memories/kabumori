@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: x-universal-oauth-refresh-final-review-20260925
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: assigned; focused universal OAuth/Vault/exact-account/concurrency rollout review; recommended Sol（高）
+- allocation: source-only PASS-WITH-FIX; PR #37 and H1 report await C1; production activation NO
 
 ## Codex H2
 - owner: codex
