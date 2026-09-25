@@ -924,3 +924,24 @@
 - this task does not merge PR #33 and does not mutate production Supabase Auth config/users, DB/RLS/RPC, Vercel production, OAuth/Vault/X.
 - Auth/security-sensitive; focused Codex review expected after K4.
 - recommended Claude model: Opus5.5（高）.
+
+## Final C1 universal OAuth refresh review
+
+- verdict: **PASS-WITH-FIX accepted for source candidate**.
+- H1 reviewed G3 implementation `acbac42`; fixed head `7309805953b4e4ec9763377a0a02093065da8c82` in PR #37.
+- H1 fixed one P2: Vault-backed X create requests now use manual redirect handling so 307/308 cannot silently replay a POST.
+- exact-account/Vault, one-refresh/one-safe-retry, fail-closed uncertainty/reauth semantics and core/Phase1I concurrency proofs accepted.
+- production activation remains NO; Stage 0 is partial and Stage 1/2 need separate production approval and read-back gates.
+- G3 assigned PR #37 fresh-main merge + post-merge source verification only.
+- recommended Claude model: Sonnet5（高）.
+
+## Final K4 PR #33 stabilization
+
+- verdict: **PASS**.
+- PR #33 final candidate `e6b93be` is MERGEABLE after fresh-main integration.
+- only conflict was Netlify comment-only overlap; main runtime config preserved.
+- Admin/Auth tests 73/73 PASS; tsc/lint/build/diff/secret scan PASS; PR #15 multibrand/Admin regression PASS.
+- Netlify Deploy Preview PASS.
+- production mutation=0.
+- H1 assigned focused final Auth/security review before merge.
+- recommended Codex model: Sol（高）.
