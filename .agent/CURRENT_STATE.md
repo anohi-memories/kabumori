@@ -38,7 +38,7 @@
   - Privacy dataflow gap from PR #21 review is now closed on main. Remaining blockers: icon/splash/overlay artwork, EAS production env, Netlify publish, Auth Site URL/SMTP, App Store Connect.
 - G2: `ready` — `kabumori-report-dryrun-false-reject-hardening-20260925`
 - G3: `ready` — `x-autopost-phase1i-exact-account-prex-refresh-writer-20260925`
-- G4: `ready` — `x-admin-netlify-pr15-live-preview-auth-qa-20260925`
+- G4: `done` — `x-admin-netlify-pr15-live-preview-auth-qa-20260925`
 
 ## Final K1 PR #24 result
 
@@ -515,6 +515,20 @@
 - G4 now owns PR #15 real Deploy Preview + proxy/auth/selector boundary QA.
 - PR #15 merge and Vercel production remain forbidden.
 - recommended model: Sonnet5（高）.
+
+## Final K4 PR #15 Netlify QA result
+
+- classification: **SAFE_STOP_OPERATOR_ACTION**.
+- PR #15 remains open/unmerged at `b04442561d9e9c6d01b4a9fcf640c2cf731cd923`.
+- main apps/admin tests 12/12 PASS; PR #15 tests 31/31 PASS.
+- TypeScript/lint/build PASS; secret scan clean.
+- live QA blocked by Netlify Team protection in Claude session.
+- PR #15 has no Deploy Preview because it predates the Netlify site.
+- source-neutral freshen merge was proven conflict-free locally but not pushed.
+- no Netlify preview mutation; production mutation=0.
+- next user actions: remove/adjust Netlify Team protection for QA and retrigger/update PR #15 so Netlify creates a Deploy Preview.
+- after that, resume G4 live proxy/auth/selector QA.
+- recommended continuation model: Sonnet5（高）.
 
 ## Known issues / observations
 
