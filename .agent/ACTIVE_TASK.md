@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - task_id: x-autopost-phase1h-gated-dispatcher-final-review-20260925
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: assigned; Phase1H gated dispatcher final review
+- allocation: closed; Final C1 PASS-WITH-FIX
 
 ## Codex H2
 - owner: codex
@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: x-autopost-phase1h-gated-v2-dispatcher-source-candidate-20260925
+- status: ready
+- task_id: x-autopost-phase1h-pr28-merge-postmerge-verify-20260925
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: closed; Final K3 implementation PASS, H1 review pending
+- allocation: assigned; PR #28 fresh-main merge + post-merge verification
 
 ## Claude G4
 - owner: claude
