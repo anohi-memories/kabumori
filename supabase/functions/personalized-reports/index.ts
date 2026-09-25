@@ -44,6 +44,7 @@ import {
 } from "./report_logic.ts";
 import { appMarketSection, parseSharedMarketReportResult, type SharedMarketReportResult } from "../_shared/market_report_packet.ts";
 import { buildAppMarketDetail, crossAssetLines, type AppMarketDetail } from "./market_detail.ts";
+import { withDeliveryPolicy } from "./delivery_policy.ts";
 import { loadMicMarketContext, micSourceBasis, toMicPacketEntries } from "./mic_market_context.ts";
 
 const jsonHeaders = { "Content-Type": "application/json; charset=utf-8" };
@@ -409,7 +410,12 @@ Deno.serve(async (req) => {
             : {}),
           ...micSourceBasis(micStates),
         };
-        const update = reportUpdate(outcome, snapshot, sourceBasis, new Date(), sharedInput?.section ?? null, marketDetail);
+        // Phase 1 shadow telemetry only: adds source_basis.delivery_policy; status / body / notify unchanged.
+        const update = reportUpdate(
+          outcome, snapshot, withDeliveryPolicy(sourceBasis, outcome), new Date(), sharedInput?.section ?? null, marketDetail,
+        );
+        const deliveryPolicy = (update.source_basis as { delivery_policy?: { voice_status?: string; delivery_blocked_by?: string | null } })
+          .delivery_policy;
         let notification: string = "not_attempted";
         if (!dryRun && reportId) {
           await db.patch(`personalized_reports?id=eq.${reportId}`, update);
@@ -424,6 +430,7 @@ Deno.serve(async (req) => {
           event: "personalized_report", reportType, tradingDate, user: userId.slice(0, 8), dryRun,
           status: update.status, error: update.error, issues: outcome.issues, calls: outcome.calls,
           gaps: snapshot.data_gaps, news: snapshot.news.length, notification,
+          voice_status: deliveryPolicy?.voice_status, delivery_blocked_by: deliveryPolicy?.delivery_blocked_by ?? null,
         }));
         results.push({
           user: userId.slice(0, 8),
@@ -434,6 +441,7 @@ Deno.serve(async (req) => {
           calls: outcome.calls,
           cost: outcome.estimatedCost,
           notification,
+          delivery_policy: deliveryPolicy,
           ...(dryRun ? { snapshot, report: outcome.body } : {}),
         });
       } catch (error) {
