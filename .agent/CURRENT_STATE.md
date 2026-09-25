@@ -36,9 +36,18 @@
 - G1: `done` — `kabumori-pr24-privacy-merge-postmerge-verify-20260924`
   - PR #24 merged at reviewed head `46515c5` -> main `ff4c43c`. Files byte-identical; 122/0 tests, production web build shows the new disclosure text. personalized-reports/account-deletion.html untouched. Mutation 0.
   - Privacy dataflow gap from PR #21 review is now closed on main. Remaining blockers: icon/splash/overlay artwork, EAS production env, Netlify publish, Auth Site URL/SMTP, App Store Connect.
-- G2: `done` — `kabumori-report-dryrun-false-reject-hardening-20260925`
+- G2: `ready` — `kabumori-voice-gate-product-policy-audit-20260925`
 - G3: `ready` — `x-autopost-phase1i-exact-account-prex-refresh-writer-20260925`
 - G4: `done` — `x-admin-netlify-pr15-live-preview-auth-qa-20260925`
+
+## VOICE gate product-policy audit
+
+- User decision: routine paid-user delivery reliability should outrank minor style perfection.
+- Target policy: separate Fact/Safety from Voice quality; evaluate PASS / WARN / BLOCK.
+- WARN should not automatically suppress delivery.
+- G2 assigned read-only audit/design only; no source/deploy.
+- X-side implementation is out of scope for this room; G2 should produce a handoff for X担当ちゃ.
+- recommended model: Opus5.5（中）.
 
 ## Final K2 PR #29 source hardening
 
