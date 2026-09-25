@@ -55,11 +55,11 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-voice-policy-phase1-shadow-20260925
+- task_id: kabumori-pr34-shadow-merge-deploy-20260925
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: assigned; shadow PASS/WARN/BLOCK telemetry only, no delivery behavior change, no deploy
+- allocation: assigned; merge reviewed PR #34 and deploy shadow telemetry only, app_enabled=false
 
 ## Claude G3
 - owner: claude
