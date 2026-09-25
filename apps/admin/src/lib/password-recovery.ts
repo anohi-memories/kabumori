@@ -12,8 +12,9 @@
 //                        or #access_token=...&type=invite (default invite template, implicit)
 //   /auth/confirm     -> establishes the session server-side, then redirects to /reset-password
 //                        (a URL fragment survives that redirect and is consumed client-side)
-//   /reset-password   -> only usable while the session carries a fresh email-link
-//                        authentication; updateUser({ password }) then signOut()
+//   /reset-password   -> only usable while the session carries a fresh recovery/invite
+//                        authentication, re-verified server-side immediately before
+//                        updateUser({ password }); then a verified signOut()
 //
 // Setting a password never grants Admin access: the (admin) layout still
 // requires an admin_users row after the user logs in normally.
@@ -39,17 +40,17 @@ const EMAIL_MAX_LENGTH = 254;
 const RECOVERY_LINK_TYPES = ["recovery", "invite"] as const;
 export type RecoveryLinkType = (typeof RECOVERY_LINK_TYPES)[number];
 
-// Authentication methods that prove possession of the account's email inbox
-// just now. GoTrue records the method that created a session in the JWT `amr`
-// claim; a normal password login records "password" and is therefore never
-// accepted here, which keeps /reset-password from turning an already-open
-// Admin session into a "change the password without knowing it" page.
-const EMAIL_LINK_AMR_METHODS: ReadonlySet<string> = new Set([
-  "recovery",
-  "invite",
-  "otp",
-  "magiclink",
-]);
+// The only authentication methods that authorize setting a password here.
+// GoTrue records the method that created a session in the JWT `amr` claim, and
+// Supabase documents "recovery" and "invite" as distinct values. Generic "otp"
+// (which can come from phone verification) and "magiclink" prove a sign-in,
+// not that a password-recovery or invite link was followed, so they are NOT
+// accepted; neither is an ordinary "password" login, which keeps an open Admin
+// session from becoming a "change the password without knowing it" page. If a
+// real recovery/invite flow turns out to emit something else, this fails
+// closed until that is verified end to end -- it must not be widened to all
+// OTP / magic-link sessions.
+const RECOVERY_AMR_METHODS: ReadonlySet<string> = new Set(["recovery", "invite"]);
 
 const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
@@ -170,16 +171,17 @@ export function parseRecoveryFragment(hash: string): RecoveryFragment {
 }
 
 /**
- * True only when the verified session was created by following an email link
- * within the last RECOVERY_CONTEXT_MAX_AGE_SECONDS. Malformed or string-only
- * AMR claims (no timestamps) fail closed.
+ * True only when the verified session was created by following a recovery or
+ * invite link within the last RECOVERY_CONTEXT_MAX_AGE_SECONDS. Any other AMR
+ * method (password, otp, magiclink, ...) and malformed or string-only AMR
+ * claims (no timestamps) fail closed.
  */
 export function hasRecoveryContext(amr: unknown, nowSeconds: number): boolean {
   if (!Array.isArray(amr)) return false;
   return amr.some((entry) => {
     if (typeof entry !== "object" || entry === null) return false;
     const { method, timestamp } = entry as { method?: unknown; timestamp?: unknown };
-    if (typeof method !== "string" || !EMAIL_LINK_AMR_METHODS.has(method)) return false;
+    if (typeof method !== "string" || !RECOVERY_AMR_METHODS.has(method)) return false;
     if (typeof timestamp !== "number" || !Number.isFinite(timestamp)) return false;
     const age = nowSeconds - timestamp;
     return age >= -CLOCK_SKEW_ALLOWANCE_SECONDS && age <= RECOVERY_CONTEXT_MAX_AGE_SECONDS;
@@ -227,20 +229,40 @@ export async function requestPasswordReset(
 }
 
 export type CompleteResetResult =
+  // Password changed and the recovery session was signed out.
   | { status: "updated" }
+  // Password changed, but sign-out could not be confirmed. The session may
+  // still be active; the UI must not say it was cleared and must offer a retry.
+  | { status: "updated_signout_unconfirmed" }
   | { status: "invalid"; reason: Exclude<PasswordValidation, { ok: true }>["reason"] }
+  // No fresh recovery/invite context at submit time (e.g. the form was left
+  // open past the window). updateUser was not called.
   | { status: "no_context" }
   | { status: "failed" };
 
+/**
+ * `verifyContext` must re-verify, at call time, the session's signed claims,
+ * their recovery/invite purpose and their freshness against a trusted clock
+ * (in the app: the verifyRecoveryContext Server Action). Deciding this only
+ * when the page rendered would let a form left open past the window still
+ * change the password. It runs immediately before updateUser and any failure
+ * (false or thrown) stops the update.
+ */
 export async function completePasswordReset(
   auth: Pick<RecoveryAuthClient, "updateUser" | "signOut">,
   password: string,
   confirmation: string,
-  hasContext: boolean,
+  verifyContext: () => Promise<boolean>,
 ): Promise<CompleteResetResult> {
   const validation = validateNewPassword(password, confirmation);
   if (!validation.ok) return { status: "invalid", reason: validation.reason };
-  if (!hasContext) return { status: "no_context" };
+  let fresh = false;
+  try {
+    fresh = await verifyContext();
+  } catch {
+    fresh = false;
+  }
+  if (!fresh) return { status: "no_context" };
   try {
     const { error } = await auth.updateUser({ password });
     if (error) return { status: "failed" };
@@ -249,12 +271,22 @@ export async function completePasswordReset(
   }
   // Drop the recovery session so it cannot be reused for anything else; the
   // user logs in with the new password, which re-runs the admin_users check.
+  return (await signOutConfirmed(auth))
+    ? { status: "updated" }
+    : { status: "updated_signout_unconfirmed" };
+}
+
+/**
+ * True only when signOut() reported success. A returned error or a thrown
+ * failure is treated as "not signed out": the session may still be present.
+ */
+export async function signOutConfirmed(auth: Pick<RecoveryAuthClient, "signOut">): Promise<boolean> {
   try {
-    await auth.signOut();
+    const { error } = await auth.signOut();
+    return !error;
   } catch {
-    // supabase-js clears the local session even when the revoke call fails.
+    return false;
   }
-  return { status: "updated" };
 }
 
 export type FragmentSessionStatus = "established" | "invalid" | "none";

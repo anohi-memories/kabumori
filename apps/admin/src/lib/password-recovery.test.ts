@@ -15,6 +15,7 @@ import {
   RECOVERY_CONTEXT_MAX_AGE_SECONDS,
   requestPasswordReset,
   resolveConfirmAction,
+  signOutConfirmed,
   validateNewPassword,
   type RecoveryAuthClient,
 } from "./password-recovery.ts";
@@ -294,8 +295,8 @@ test("a normal password-login session is never a recovery context", () => {
   assert.equal(hasRecoveryContext([{ method: "anonymous", timestamp: NOW }], NOW), false);
 });
 
-test("a fresh email-link authentication is a recovery context", () => {
-  for (const method of ["recovery", "invite", "otp", "magiclink"]) {
+test("only a fresh recovery or invite authentication is a recovery context", () => {
+  for (const method of ["recovery", "invite"]) {
     assert.equal(hasRecoveryContext([{ method, timestamp: NOW - 60 }], NOW), true, method);
   }
   assert.equal(
@@ -308,6 +309,35 @@ test("a fresh email-link authentication is a recovery context", () => {
     ),
     true,
   );
+});
+
+test("generic OTP and magic-link sessions are not recovery/invite authority (C1 P1)", () => {
+  // A signed, fresh otp/magiclink claim proves a sign-in, not that a recovery
+  // or invite link was followed. It must neither render nor submit a reset.
+  for (const method of ["otp", "magiclink", "email/signup", "email_change", "sso/saml", "totp", "token_refresh"]) {
+    assert.equal(hasRecoveryContext([{ method, timestamp: NOW - 5 }], NOW), false, method);
+  }
+  assert.equal(
+    hasRecoveryContext(
+      [
+        { method: "otp", timestamp: NOW - 5 },
+        { method: "magiclink", timestamp: NOW - 5 },
+      ],
+      NOW,
+    ),
+    false,
+  );
+});
+
+test("a generic OTP / magic-link session cannot submit a reset either", async () => {
+  for (const method of ["otp", "magiclink"]) {
+    const { client, calls } = fakeAuth();
+    const verify = async () => hasRecoveryContext([{ method, timestamp: NOW - 5 }], NOW);
+    assert.deepEqual(await completePasswordReset(client, "longenough1", "longenough1", verify), {
+      status: "no_context",
+    });
+    assert.equal(calls.length, 0, method);
+  }
 });
 
 test("the recovery context expires and malformed claims fail closed", () => {
@@ -353,30 +383,84 @@ test("passwords are validated locally before anything is sent", () => {
   assert.deepEqual(validateNewPassword(multibyte, multibyte), { ok: false, reason: "too_long" });
 });
 
-test("invalid input never calls updateUser", async () => {
+const freshContext = async () => true;
+const noContext = async () => false;
+
+test("invalid input never calls updateUser (or even the context check)", async () => {
   const { client, calls } = fakeAuth();
-  assert.deepEqual(await completePasswordReset(client, "short", "short", true), {
+  let verifications = 0;
+  const verify = async () => {
+    verifications += 1;
+    return true;
+  };
+  assert.deepEqual(await completePasswordReset(client, "short", "short", verify), {
     status: "invalid",
     reason: "too_short",
   });
-  assert.deepEqual(await completePasswordReset(client, "longenough1", "longenough2", true), {
+  assert.deepEqual(await completePasswordReset(client, "longenough1", "longenough2", verify), {
     status: "invalid",
     reason: "mismatch",
   });
   assert.equal(calls.length, 0);
+  assert.equal(verifications, 0);
 });
 
 test("updateUser is never called without a recovery context", async () => {
   const { client, calls } = fakeAuth();
-  assert.deepEqual(await completePasswordReset(client, "longenough1", "longenough1", false), {
+  assert.deepEqual(await completePasswordReset(client, "longenough1", "longenough1", noContext), {
     status: "no_context",
   });
   assert.equal(calls.length, 0);
 });
 
-test("a successful update is followed by sign-out, in that order", async () => {
+test("a context check that throws fails closed before updateUser", async () => {
   const { client, calls } = fakeAuth();
-  assert.deepEqual(await completePasswordReset(client, "longenough1", "longenough1", true), {
+  const broken = async () => {
+    throw new Error("server action unavailable");
+  };
+  assert.deepEqual(await completePasswordReset(client, "longenough1", "longenough1", broken), {
+    status: "no_context",
+  });
+  assert.equal(calls.length, 0);
+});
+
+test("stale open form: valid at render, window passes, submit is rejected (C1 P2)", async () => {
+  // The recovery authentication happened at T. The page renders one minute
+  // later (valid), the user leaves the form open, and submits after the window
+  // has passed. The context is re-checked against the clock at submit time, so
+  // updateUser must not run.
+  const authenticatedAt = NOW;
+  const amr = [{ method: "recovery", timestamp: authenticatedAt }];
+  let clock = authenticatedAt + 60;
+  const verifyAtSubmit = async () => hasRecoveryContext(amr, clock);
+
+  assert.equal(await verifyAtSubmit(), true, "render-time check passes");
+
+  clock = authenticatedAt + RECOVERY_CONTEXT_MAX_AGE_SECONDS + 1;
+  const { client, calls } = fakeAuth();
+  assert.deepEqual(await completePasswordReset(client, "longenough1", "longenough1", verifyAtSubmit), {
+    status: "no_context",
+  });
+  assert.equal(calls.length, 0);
+});
+
+test("the context is re-checked at submit time, after validation and before updateUser", async () => {
+  const order: string[] = [];
+  const { client, calls } = fakeAuth();
+  const verify = async () => {
+    order.push(`verify(calls=${calls.length})`);
+    return true;
+  };
+  assert.deepEqual(await completePasswordReset(client, "longenough1", "longenough1", verify), {
+    status: "updated",
+  });
+  assert.deepEqual(order, ["verify(calls=0)"]);
+  assert.deepEqual(calls.map((call) => call.method), ["updateUser", "signOut"]);
+});
+
+test("a successful update is followed by a confirmed sign-out, in that order", async () => {
+  const { client, calls } = fakeAuth();
+  assert.deepEqual(await completePasswordReset(client, "longenough1", "longenough1", freshContext), {
     status: "updated",
   });
   assert.deepEqual(calls, [
@@ -387,7 +471,7 @@ test("a successful update is followed by sign-out, in that order", async () => {
 
 test("a rejected update reports failure and keeps nothing half-done", async () => {
   const rejected = fakeAuth({ updateUser: async () => ({ error: { code: "weak_password" } }) });
-  assert.deepEqual(await completePasswordReset(rejected.client, "longenough1", "longenough1", true), {
+  assert.deepEqual(await completePasswordReset(rejected.client, "longenough1", "longenough1", freshContext), {
     status: "failed",
   });
   assert.deepEqual(rejected.calls.map((call) => call.method), ["updateUser"]);
@@ -397,18 +481,41 @@ test("a rejected update reports failure and keeps nothing half-done", async () =
       throw new Error("network");
     },
   });
-  assert.deepEqual(await completePasswordReset(thrown.client, "longenough1", "longenough1", true), {
+  assert.deepEqual(await completePasswordReset(thrown.client, "longenough1", "longenough1", freshContext), {
     status: "failed",
   });
 });
 
-test("a sign-out failure after a successful update still completes", async () => {
+test("a sign-out that returns an error is not reported as signed out (C1 P2)", async () => {
+  const { client, calls } = fakeAuth({ signOut: async () => ({ error: { status: 500 } }) });
+  assert.deepEqual(await completePasswordReset(client, "longenough1", "longenough1", freshContext), {
+    status: "updated_signout_unconfirmed",
+  });
+  assert.deepEqual(calls.map((call) => call.method), ["updateUser", "signOut"]);
+});
+
+test("a sign-out that throws is not reported as signed out (C1 P2)", async () => {
   const { client } = fakeAuth({
     signOut: async () => {
-      throw new Error("network");
+      throw new Error("storage unavailable");
     },
   });
-  assert.deepEqual(await completePasswordReset(client, "longenough1", "longenough1", true), {
-    status: "updated",
+  assert.deepEqual(await completePasswordReset(client, "longenough1", "longenough1", freshContext), {
+    status: "updated_signout_unconfirmed",
   });
+});
+
+test("signOutConfirmed is true only for a sign-out that reported success", async () => {
+  assert.equal(await signOutConfirmed(fakeAuth().client), true);
+  assert.equal(await signOutConfirmed(fakeAuth({ signOut: async () => ({ error: { status: 401 } }) }).client), false);
+  assert.equal(
+    await signOutConfirmed(
+      fakeAuth({
+        signOut: async () => {
+          throw new Error("network");
+        },
+      }).client,
+    ),
+    false,
+  );
 });

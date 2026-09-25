@@ -10,6 +10,7 @@ import { CONFIRM_SUCCESS_DESTINATION } from "./password-recovery.ts";
 // forces that to be an explicit, reviewed decision.
 
 const APP_DIR = new URL("../app/", import.meta.url);
+const RECOVERY_CONTEXT_ACTION = new URL("./actions/recovery-context.ts", import.meta.url);
 
 const PUBLIC_PAGES = new Set([
   "login/page.tsx",
@@ -134,8 +135,12 @@ test("a successful reset goes to /login, never straight into an Admin route", as
   // and the (admin) layout's admin_users check decides, so a non-admin whose
   // reset succeeds still ends at /unauthorized.
   const form = withoutLineComments(await appSource("reset-password/reset-password-form.tsx"));
-  const navigations = form.match(/window\.location\.(?:assign|replace)\([^)]*\)/gu) ?? [];
-  assert.deepEqual(navigations, ['window.location.replace("/login?reason=password_updated")']);
+  assert.match(form, /const PASSWORD_UPDATED_LOGIN = "\/login\?reason=password_updated";/u);
+  const navigations = form.match(/window\.location\.(?:assign|replace|href)\b[^;]*/gu) ?? [];
+  assert.ok(navigations.length > 0);
+  for (const navigation of navigations) {
+    assert.equal(navigation, "window.location.replace(PASSWORD_UPDATED_LOGIN)", navigation);
+  }
   const confirmTarget = new URL(CONFIRM_SUCCESS_DESTINATION, "https://x.invalid");
   assert.ok(PUBLIC_PAGES.has(`${confirmTarget.pathname.slice(1)}/page.tsx`));
 });
@@ -159,8 +164,39 @@ test("public recovery pages do not depend on the Admin brand context", async () 
 });
 
 test("the reset page gates the form on a verified recovery context", async () => {
-  const page = await appSource("reset-password/page.tsx");
-  assert.match(page, /supabase\.auth\.getClaims\(\)/u);
-  assert.match(page, /hasRecoveryContext\(/u);
+  const page = withoutLineComments(await appSource("reset-password/page.tsx"));
+  assert.match(page, /const recoveryContext = await verifyRecoveryContext\(\);/u);
   assert.match(page, /recoveryContext \? \(/u);
+});
+
+test("the recovery authority check verifies signed claims on the server clock", async () => {
+  const action = withoutLineComments(await readFile(RECOVERY_CONTEXT_ACTION, "utf8"));
+  assert.match(action, /^"use server";/u);
+  assert.match(action, /supabase\.auth\.getClaims\(\)/u);
+  assert.match(action, /hasRecoveryContext\(data\.claims\.amr, Math\.floor\(Date\.now\(\) \/ 1000\)\)/u);
+  // Same data-safety rules as the pages: no table reads, no Admin grant, no
+  // service role, no logging.
+  assert.doesNotMatch(action, /\.from\(|admin_users|service_role|SERVICE_ROLE|console\./u);
+  // Takes no arguments, so the password can never be sent through it.
+  assert.match(action, /export async function verifyRecoveryContext\(\): Promise<boolean>/u);
+  assert.equal((action.match(/export async function/gu) ?? []).length, 1);
+});
+
+test("the password update re-verifies the context at submit time (C1 P2)", async () => {
+  const form = withoutLineComments(await appSource("reset-password/reset-password-form.tsx"));
+  // The form no longer receives a render-time boolean it could trust later.
+  assert.doesNotMatch(form, /recoveryContext/u);
+  assert.match(
+    form,
+    /completePasswordReset\(\s*createAdminBrowserClient\(\)\.auth,\s*password,\s*confirmation,\s*verifyRecoveryContext,\s*\)/u,
+  );
+});
+
+test("an unconfirmed sign-out never navigates away as if signed out (C1 P2)", async () => {
+  const form = withoutLineComments(await appSource("reset-password/reset-password-form.tsx"));
+  // Navigation to the post-update login happens only for "updated" and after
+  // a retry that signOutConfirmed() reports as successful.
+  assert.match(form, /if \(result\.status === "updated"\) \{\s*[^}]*window\.location\.replace\(PASSWORD_UPDATED_LOGIN\);/u);
+  assert.match(form, /if \(await signOutConfirmed\(createAdminBrowserClient\(\)\.auth\)\) \{\s*window\.location\.replace\(PASSWORD_UPDATED_LOGIN\);/u);
+  assert.match(form, /case "updated_signout_unconfirmed":\s*setPassword\(""\);\s*setConfirmation\(""\);\s*setSignOutPending\(true\);\s*return;/u);
 });
