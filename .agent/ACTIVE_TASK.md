@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: x-autopost-phase1i-pr30-merge-postmerge-verify-20260925
+- status: ready
+- task_id: x-universal-oauth-refresh-productionization-20260925
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: closed; Final K3 PASS, PR #30 merged -> `a9b1ef4d359d5ef554284fc56427e0cafeaec648`, post-merge verification PASS, production mutation 0 excluding merge
+- allocation: assigned; universal exact-account Vault-backed X OAuth refresh + AI Lab 401 root fix; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 
 ## Claude G4
 - owner: claude
