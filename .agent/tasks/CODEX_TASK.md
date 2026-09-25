@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1h-gated-dispatcher-final-review-20260925
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: K3 PASS済みPhase1H gated-OFF v2 dispatcher source candidateを、gate fail-closed、no-legacy-fallback、resume安全性、exact-account credential、provider-start durability、typed completion wiring、ACL/migrationの観点で独立レビューする。production deploy/activation/X API callは行わない。
@@ -231,3 +231,28 @@ Then:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for C1.
+
+
+## Final C1 — Phase1H
+
+Verdict: **PASS-WITH-FIX for source-only candidate**.
+
+Accepted:
+- reviewed implementation `59bd54412eae989400b6ce7e9ecb56dc943db94f`
+- H1 fix commit `ce60d7a29022956d049521ffaeb533a749152a60`
+- PR #28 contains the accepted source-only fix
+- P2 fixed: dispatcher now reports the committed pre-X ledger class, including attempt-cap terminalization
+- failed/malformed settle writes now return `blocked_manual_reconciliation` instead of pretending durable retry/terminal state
+- unsupported_type is returned only after terminal settle is committed
+- focused Phase1B–1H 102/102 PASS
+- x-test-post 467/467 PASS
+- _shared 129/129 PASS
+- important-news-monitor 431/431 PASS
+- greeting/tip/publish_claim 138/138 PASS
+- disposable Phase1D/E/F/G/H proofs PASS
+- production mutation/deploy/gate/X API calls = 0
+
+Decision:
+- Phase1H accepted as source candidate after H1 fix.
+- Production activation remains NO.
+- Next step: G3 fresh-main verify PR #28 -> merge -> post-merge regression.
