@@ -80,7 +80,11 @@ export function createV2DispatchLedgerRpc(config: Config): V2DispatchLedger {
     },
     async markProviderStarted(a, t) { await rpc("mark_post_provider_started_v2", ids(a, t)); },
     async settlePreX(a, t, retryable, code) {
-      await rpc("settle_post_pre_x_v2", { ...ids(a, t), p_retryable: retryable, p_error_code: code });
+      const outcome = await rpc("settle_post_pre_x_v2", { ...ids(a, t), p_retryable: retryable, p_error_code: code });
+      if (outcome !== "pre_x_retryable" && outcome !== "pre_x_terminal") {
+        throw new V2LedgerError("V2_LEDGER_INVALID_RESPONSE");
+      }
+      return outcome;
     },
     async recordRejected(a, t, code) { await rpc("record_post_x_rejected_v2", { ...ids(a, t), p_error_code: code }); },
     async recordUncertain(a, t, code) { await rpc("record_post_x_uncertain_v2", { ...ids(a, t), p_error_code: code }); },

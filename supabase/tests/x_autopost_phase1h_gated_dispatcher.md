@@ -35,7 +35,7 @@ Files:
 gate OFF ───────────────────────────────────────────────► gate_off
 list_resumable_v2_attempts(1) ── row ──► RESUME (below)
 claim_due_post_v2() ── none ──► no_work
-  disabled type ──► settle terminal ──► unsupported_type
+  disabled type ──► committed terminal settle ──► unsupported_type
   resolve credential (Phase1E, claim.social_account_id only) ── fail ──► settle ──► pre_x_retryable | pre_x_terminal
 SINGLE: prepare content ─► createXTextPostOnceV2 (identity → mark provider start → exactly one create)
   pre-X outcome ─► settle ─► pre_x_*
@@ -55,13 +55,16 @@ MULTI: [greeting: schedule_date must be today JST, else settle terminal — no X
 RESUME: snapshot + ledger only (no memory). Credential via read_x_publish_credential_for_resume_v2
   (only when a next step exists). Greeting whose day passed with a step still to send ─► attempt uncertain.
 Any ledger write that fails after provider start ─► blocked_manual_reconciliation (never re-sent).
+Pre-X settle returns the DB's committed outcome (the third attempted retry is terminal).
+If that write fails or its response is invalid, the result is `blocked_manual_reconciliation`,
+not a claimed terminal/retryable outcome; stale-pre-X reconciliation still requires monitoring.
 ```
 
 Return classes: `gate_off`, `no_work`, `unsupported_type`, `pre_x_retryable`, `pre_x_terminal`, `provider_rejected`, `provider_uncertain`, `confirmed_db_incomplete`, `completed`, `in_progress`, `blocked_manual_reconciliation`. `V2_NON_RECLAIMABLE_CLASSES` = all except `gate_off`, `no_work`, `pre_x_retryable`, `in_progress`. The ledger enforces this independently: only `pre_x_retryable` returns a post to `pending`; only resumable multi-step attempts (all finished steps confirmed, none in flight) are continued.
 
 ## 4. Proofs (fake ledger mirroring the reviewed SQL rules + fake X transport; global `fetch` throws)
 
-- **Single create exact-once**: one create per claim with the claimed account's own token (two accounts, two tokens); later runs `no_work`; 401 after start → rejected, no refresh, one create; timeout / 503 / 307 / 2xx-without-id → uncertain, one create, never retried; completion failure → confirmed-incomplete with the same id, three further runs make no request, the operator's typed completion then completes exactly once.
+- **Single create exact-once**: one create per claim with the claimed account's own token (two accounts, two tokens); later runs `no_work`; 401 after start → rejected, no refresh, one create; timeout / 503 / 307 / 2xx-without-id → uncertain, one create, never retried; completion failure → confirmed-incomplete with the same id, three further runs make no request, the operator's typed completion then completes exactly once. At the pre-X attempt cap, the returned class matches the DB's terminal outcome; a failed settle does not report success.
 - **Tip restart**: 3 parts, `maxProviderStepsPerRun = 1`, a fresh ports object per run (no memory survives): runs `in_progress, in_progress, completed`; exactly 3 creates; texts from the snapshot in order; replies chained to the previous confirmed id; 3 distinct ids; one completion. Uncertain second part → no third create ever. Rejected reply after confirmed root → recorded uncertain. Crash between the X response and recording (finish fails) → blocked, never re-sent.
 - **Greeting restart**: run 1 uploads media and stops; run 2 (fresh memory) creates with exactly the media id read from the ledger and completes; 1 upload, 1 create; day claim published; after-commit receipt hook called once. Uncertain create → never replayed, day claim failed. Stale JST schedule → zero X calls of any kind (not even identity). Expired token → found before the day claim is taken.
 - **SQL** (disposable PostgreSQL): snapshot validation/immutability, plan+snapshot required before provider start for tip/greeting (single types unaffected), resumable listing excludes in-flight/uncertain/pre-X/single-create/completed, resume credential only while a next step exists and only for the exact account.
