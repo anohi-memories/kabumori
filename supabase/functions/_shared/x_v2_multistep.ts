@@ -61,6 +61,7 @@ export function nextThreadAction(expectedSteps: number, steps: readonly StepReco
   const list = ordered(steps);
   if (!list || list.length > expectedSteps) return { action: "blocked", code: "THREAD_STEPS_INCONSISTENT" };
   let parent: string | null = null;
+  const confirmedIds = new Set<string>();
   for (const step of list) {
     const block = lastBlock(step);
     if (block) return block;
@@ -68,6 +69,8 @@ export function nextThreadAction(expectedSteps: number, steps: readonly StepReco
     if (step.step_kind !== expectedKind || step.parent_provider_object_id !== parent || step.input_provider_object_id !== null) {
       return { action: "blocked", code: "THREAD_STEPS_INCONSISTENT" };
     }
+    if (confirmedIds.has(step.provider_object_id as string)) return { action: "blocked", code: "THREAD_STEPS_INCONSISTENT" };
+    confirmedIds.add(step.provider_object_id as string);
     parent = step.provider_object_id;
   }
   if (list.length === expectedSteps) {
@@ -220,6 +223,7 @@ export const STEP_LEDGER_ERROR_CODES = [
   "PROVIDER_STEP_KIND_SEQUENCE_INVALID", "PROVIDER_STEP_PARENT_MISMATCH", "PROVIDER_STEP_FIRST_MUST_CREATE",
   "PROVIDER_STEP_NOT_STARTED", "PROVIDER_STEP_CONFLICT",
   "GREETING_ALREADY_PUBLISHED", "GREETING_PUBLISH_CLAIM_HELD", "GREETING_PUBLISH_CLAIM_NOT_HELD",
+  "GREETING_SCHEDULE_DATE_STALE",
   "GREETING_STEPS_NOT_COMPLETE", "THREAD_STEPS_NOT_COMPLETE",
 ] as const;
 

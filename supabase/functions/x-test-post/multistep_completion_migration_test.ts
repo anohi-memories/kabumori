@@ -37,6 +37,7 @@ test("steps start only through the plan and consume only confirmed media", () =>
     assert.ok(begin.includes(token), token);
   }
   assert.match(begin, /p_input_provider_object_id is distinct from v_media\.provider_object_id/u);
+  assert.match(begin, /GREETING_SCHEDULE_DATE_STALE/u);
   assert.match(begin, /perform public\.begin_provider_step_v2\(/u);
   assert.match(code, /revoke execute on function public\.begin_provider_step_v2\(uuid, uuid, smallint, text, text\) from service_role;/u);
 });
@@ -61,6 +62,7 @@ test("greeting completion binds media, create and the day claim of this attempt"
   assert.match(claim, /on conflict \(brand_id, post_type, date_jst\) do nothing/u);
   assert.match(claim, /GREETING_ALREADY_PUBLISHED/u);
   assert.match(claim, /GREETING_PUBLISH_CLAIM_HELD/u);
+  assert.match(claim, /GREETING_SCHEDULE_DATE_STALE/u);
 });
 
 test("attempt guards: no rejected thread after a confirmed create; failed ends fail the day claim", () => {

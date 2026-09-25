@@ -29,6 +29,16 @@ alter table public.publish_claims enable row level security;
 revoke all on public.publish_claims from anon, authenticated;
 grant select, insert, update on public.publish_claims to service_role;
 
+-- Give each same-day greeting scenario its own brand/day claim while retaining
+-- one overdue greeting for the stale-schedule adversarial case.
+insert into public.brands (id) values
+  ('brand_g_order'), ('brand_g_mis'), ('brand_g_unc'), ('brand_g_fail'),
+  ('brand_g_comp'), ('brand_g_pub'), ('brand_g_stale');
+insert into public.social_accounts
+  (id, brand_id, platform, platform_user_id, connection_status, publish_enabled)
+select 'acct_' || id, id, 'x', 'x_' || id, 'identity_verified', true
+from public.brands where id like 'brand_g_%';
+
 insert into public.tips (id, title) values
   ('00000000-0000-4000-8000-0000000000f1', 'tip one'),
   ('00000000-0000-4000-8000-0000000000f2', 'tip two'),

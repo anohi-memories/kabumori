@@ -1,7 +1,7 @@
 -- Fake-only Phase1G behavior proof. Run by x_autopost_phase1g_run.sh after:
 -- 1D/1E/1F/1G fixtures -> 1B -> 1D -> 1E -> 1F -> 1G migrations.
 \set ON_ERROR_STOP on
-set timezone = 'UTC';
+set timezone = 'Asia/Tokyo';
 
 create function pg_temp.expect_error(p_sql text, p_expected text) returns void
 language plpgsql as $$
@@ -45,20 +45,27 @@ end $$;
 
 revoke execute on function public.claim_due_post() from service_role;  -- Phase1D activation gate
 insert into public.publish_claims (brand_id, post_type, date_jst, execution_id, status, x_post_id, published_at)
-values ('brand_a', 'morning_greeting', current_date - 7, 'legacy-exec', 'published', 'x_legacy', now());
+values ('brand_g_pub', 'morning_greeting', current_date, 'legacy-exec', 'published', 'x_legacy', now());
 insert into public.scheduled_posts (brand_id, schedule_date, post_type, slot_no, scheduled_for)
 values ('brand_a', current_date, 'tip', 50, now() - interval '2 hours');  -- legacy/unbound
 set role service_role;
 
 -- 1. Seed and claim.
-create temporary table plan (label text, post_type text, slot smallint, day integer);
+create temporary table plan (label text, post_type text, slot smallint, day integer, brand text, account text);
 insert into plan values
-  ('t2', 'tip', 1, 0), ('t3', 'tip', 2, 0), ('t_parent', 'tip', 3, 0), ('t_gap', 'tip', 4, 0),
-  ('t_unc', 'tip', 5, 0), ('t_rej', 'tip', 6, 0), ('t_fail', 'tip', 7, 0), ('t_noplan', 'tip', 9, 0),
-  ('g_ok', 'morning_greeting', 1, 1), ('g_order', 'morning_greeting', 1, 2), ('g_mis', 'morning_greeting', 1, 3),
-  ('g_unc', 'morning_greeting', 1, 4), ('g_fail', 'morning_greeting', 1, 5), ('g_comp', 'morning_greeting', 1, 6),
-  ('g_pub', 'morning_greeting', 1, 7);
-select public.schedule_account_bound_post_v2('brand_a', 'acct_a', current_date - p.day, p.post_type, p.slot,
+  ('t2', 'tip', 1, 0, 'brand_a', 'acct_a'), ('t3', 'tip', 2, 0, 'brand_a', 'acct_a'),
+  ('t_parent', 'tip', 3, 0, 'brand_a', 'acct_a'), ('t_gap', 'tip', 4, 0, 'brand_a', 'acct_a'),
+  ('t_unc', 'tip', 5, 0, 'brand_a', 'acct_a'), ('t_rej', 'tip', 6, 0, 'brand_a', 'acct_a'),
+  ('t_fail', 'tip', 7, 0, 'brand_a', 'acct_a'), ('t_noplan', 'tip', 9, 0, 'brand_a', 'acct_a'),
+  ('g_ok', 'morning_greeting', 1, 0, 'brand_a', 'acct_a'),
+  ('g_order', 'morning_greeting', 1, 0, 'brand_g_order', 'acct_brand_g_order'),
+  ('g_mis', 'morning_greeting', 1, 0, 'brand_g_mis', 'acct_brand_g_mis'),
+  ('g_unc', 'morning_greeting', 1, 0, 'brand_g_unc', 'acct_brand_g_unc'),
+  ('g_fail', 'morning_greeting', 1, 0, 'brand_g_fail', 'acct_brand_g_fail'),
+  ('g_comp', 'morning_greeting', 1, 0, 'brand_g_comp', 'acct_brand_g_comp'),
+  ('g_pub', 'morning_greeting', 1, 0, 'brand_g_pub', 'acct_brand_g_pub'),
+  ('g_stale', 'morning_greeting', 1, 1, 'brand_g_stale', 'acct_brand_g_stale');
+select public.schedule_account_bound_post_v2(p.brand, p.account, current_date - p.day, p.post_type, p.slot,
   now() - interval '1 hour' - p.slot * interval '1 second' - p.day * interval '1 minute') from plan p;
 create temporary table claims (label text primary key, attempt_id uuid, claim_token uuid, post_id uuid);
 do $$
@@ -69,11 +76,11 @@ begin
     exit when r.scheduled_post_id is null;
     insert into claims select p.label, r.attempt_id, r.claim_token, r.scheduled_post_id
     from plan p join public.scheduled_posts s on s.post_type = p.post_type and s.slot_no = p.slot
-      and s.schedule_date = current_date - p.day and s.brand_id = 'brand_a'
+      and s.schedule_date = current_date - p.day and s.brand_id = p.brand
     where s.id = r.scheduled_post_id;
     n := n + 1;
   end loop;
-  if n <> 15 or (select count(*) from claims) <> 15 then raise exception 'setup: 15 claims expected, got %', n; end if;
+  if n <> 16 or (select count(*) from claims) <> 16 then raise exception 'setup: 16 claims expected, got %', n; end if;
 end $$;
 create function pg_temp.c(p_label text) returns claims language sql as $$ select * from claims where label = p_label $$;
 create function pg_temp.q(p_fmt text, p_label text, variadic p_args text[] default '{}') returns text language sql as $$
@@ -102,6 +109,7 @@ begin
      or public.acquire_greeting_publish_claim_v2((pg_temp.c('g_ok')).attempt_id, (pg_temp.c('g_ok')).claim_token) <> 'claimed' then
     raise exception 'greeting claim not idempotent for its owner'; end if;
   perform pg_temp.expect_error(pg_temp.q('select public.acquire_greeting_publish_claim_v2(%L,%L)', 'g_pub'), 'GREETING_ALREADY_PUBLISHED');
+  perform pg_temp.expect_error(pg_temp.q('select public.acquire_greeting_publish_claim_v2(%L,%L)', 'g_stale'), 'GREETING_SCHEDULE_DATE_STALE');
   perform pg_temp.expect_error(pg_temp.q('select public.acquire_greeting_publish_claim_v2(%L,%L)', 't3'), 'X_COMPLETION_POST_TYPE_MISMATCH');
   perform public.acquire_greeting_publish_claim_v2(c.attempt_id, c.claim_token) from claims c where c.label in ('g_order', 'g_mis', 'g_unc', 'g_fail', 'g_comp');
   perform public.plan_provider_steps_v2(c.attempt_id, c.claim_token, 'morning_greeting_media_post', 2::smallint)
@@ -109,6 +117,19 @@ begin
   if (select count(*) from public.publish_claims c join claims k on c.execution_id = k.attempt_id::text where c.status = 'publishing') <> 6 then
     raise exception 'greeting claims not owned by their attempts';
   end if;
+end $$;
+
+-- Even a legacy-privileged direct claim write cannot authorize an overdue
+-- greeting's provider request through the plan-aware entry point.
+insert into public.publish_claims (brand_id, post_type, date_jst, execution_id, status)
+select 'brand_g_stale', 'morning_greeting', current_date - 1, c.attempt_id::text, 'publishing'
+from claims c where c.label = 'g_stale';
+select public.plan_provider_steps_v2(attempt_id, claim_token, 'morning_greeting_media_post', 2::smallint)
+from claims where label = 'g_stale';
+select public.mark_post_provider_started_v2(attempt_id, claim_token) from claims where label = 'g_stale';
+do $$ begin
+  perform pg_temp.expect_error(pg_temp.q('select public.begin_planned_provider_step_v2(%L,%L,1::smallint,%L)',
+    'g_stale', 'media_upload'), 'GREETING_SCHEDULE_DATE_STALE');
 end $$;
 
 -- 3. Competing / stale attempt cannot take over a day claim; a pre-X end fails it.
@@ -125,7 +146,7 @@ begin
   perform pg_temp.expect_error(format('select public.begin_planned_provider_step_v2(%L,%L,1::smallint,%L)', r.attempt_id, r.claim_token, 'media_upload'), 'PROVIDER_STEP_PLAN_REQUIRED');
 end $$;
 
-select public.mark_post_provider_started_v2(attempt_id, claim_token) from claims where label not in ('g_comp', 'g_pub');
+select public.mark_post_provider_started_v2(attempt_id, claim_token) from claims where label not in ('g_comp', 'g_pub', 'g_stale');
 
 -- 4. Plan is mandatory and fixed after provider start; raw Phase1F entry is closed.
 do $$ begin
@@ -278,7 +299,7 @@ begin
   perform public.finish_provider_step_v2(g.attempt_id, g.claim_token, 2::smallint, 'x_outcome_uncertain', null, 'X_CREATE_HTTP_503');
   perform pg_temp.expect_error(format('select public.begin_planned_provider_step_v2(%L,%L,2::smallint,%L,null,%L)', g.attempt_id, g.claim_token, 'create_post', 'm_unc'), 'PROVIDER_STEP_ALREADY_STARTED');
   perform pg_temp.expect_error(format('select public.begin_planned_provider_step_v2(%L,%L,1::smallint,%L)', g.attempt_id, g.claim_token, 'media_upload'), 'PROVIDER_STEP_ALREADY_STARTED');
-  perform pg_temp.expect_error(format('select public.complete_morning_greeting_post_v2(%L,%L,%L,%L)', g.attempt_id, g.claim_token, 'acct_a', 'brand_a'), 'GREETING_STEPS_NOT_COMPLETE');
+  perform pg_temp.expect_error(format('select public.complete_morning_greeting_post_v2(%L,%L,%L,%L)', g.attempt_id, g.claim_token, 'acct_brand_g_unc', 'brand_g_unc'), 'GREETING_STEPS_NOT_COMPLETE');
   perform public.record_post_x_uncertain_v2(g.attempt_id, g.claim_token, 'X_CREATE_HTTP_503');
   if (select status || ':' || error_code from public.publish_claims where execution_id = g.attempt_id::text)
      <> 'failed:X_OUTCOME_UNCERTAIN:X_CREATE_HTTP_503' then raise exception 'uncertain greeting did not fail its day claim'; end if;
@@ -288,7 +309,7 @@ begin
   perform public.finish_provider_step_v2(g.attempt_id, g.claim_token, 1::smallint, 'provider_object_confirmed', 'm_fail', null);
   perform public.begin_planned_provider_step_v2(g.attempt_id, g.claim_token, 2::smallint, 'create_post', null, 'm_fail');
   perform public.finish_provider_step_v2(g.attempt_id, g.claim_token, 2::smallint, 'provider_object_confirmed', 'x_force_fail', null);
-  perform pg_temp.expect_error(format('select public.complete_morning_greeting_post_v2(%L,%L,%L,%L)', g.attempt_id, g.claim_token, 'acct_a', 'brand_a'), 'FIXTURE_FORCED_GREETING_LOG_FAILURE');
+  perform pg_temp.expect_error(format('select public.complete_morning_greeting_post_v2(%L,%L,%L,%L)', g.attempt_id, g.claim_token, 'acct_brand_g_fail', 'brand_g_fail'), 'FIXTURE_FORCED_GREETING_LOG_FAILURE');
   if (select status from public.publish_claims where execution_id = g.attempt_id::text) <> 'publishing'
      or (select status from public.scheduled_posts where id = g.post_id) <> 'running'
      or (select phase from public.post_queue_attempts_v2 where id = g.attempt_id) <> 'provider_started' then

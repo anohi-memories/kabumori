@@ -67,6 +67,11 @@ begin
      or v_post.social_account_id is distinct from v_attempt.social_account_id then
     raise exception 'X_COMPLETION_POST_TYPE_MISMATCH' using errcode = 'P0001';
   end if;
+  -- The legacy greeting publisher uses the execution day's JST date. Do not
+  -- let an overdue scheduled row claim a prior day and publish again today.
+  if v_post.schedule_date <> (pg_catalog.clock_timestamp() at time zone 'Asia/Tokyo')::date then
+    raise exception 'GREETING_SCHEDULE_DATE_STALE' using errcode = 'P0001';
+  end if;
   insert into public.publish_claims (brand_id, post_type, date_jst, execution_id, status)
   values (v_attempt.brand_id, 'morning_greeting', v_post.schedule_date, v_attempt.id::text, 'publishing')
   on conflict (brand_id, post_type, date_jst) do nothing;
@@ -144,6 +149,16 @@ begin
     raise exception 'PROVIDER_STEP_KIND_NOT_IN_PLAN' using errcode = 'P0001';
   end if;
   if v_plan.plan_kind = 'morning_greeting_media_post' then
+    -- Recheck immediately before every X step: a plan/claim made before JST
+    -- midnight must not authorize a later-day media upload or tweet create.
+    if not exists (
+      select 1 from public.post_queue_attempts_v2 a
+      join public.scheduled_posts s on s.id = a.scheduled_post_id
+      where a.id = p_attempt_id
+        and s.schedule_date = (pg_catalog.clock_timestamp() at time zone 'Asia/Tokyo')::date
+    ) then
+      raise exception 'GREETING_SCHEDULE_DATE_STALE' using errcode = 'P0001';
+    end if;
     if not exists (select 1 from public.publish_claims c
                    where c.execution_id = p_attempt_id::text and c.post_type = 'morning_greeting'
                      and c.status = 'publishing') then

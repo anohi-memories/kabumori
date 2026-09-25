@@ -41,6 +41,7 @@ test("thread: in-flight, uncertain, rejected, gaps, wrong parents and extras blo
     [3, [ok(1, "create_post", "a"), step(2, "create_reply", "x_outcome_uncertain", null, "a")], "STEP_OUTCOME_UNCERTAIN"],
     [3, [ok(1, "create_post", "a"), ok(3, "create_reply", "c", "a")], "THREAD_STEPS_INCONSISTENT"],
     [2, [ok(1, "create_post", "a"), ok(2, "create_reply", "b", "WRONG")], "THREAD_STEPS_INCONSISTENT"],
+    [2, [ok(1, "create_post", "a"), ok(2, "create_reply", "a", "a")], "THREAD_STEPS_INCONSISTENT"],
     [2, [ok(1, "create_reply", "a", "p")], "THREAD_STEPS_INCONSISTENT"],
     [1, [ok(1, "create_post", "a"), ok(2, "create_reply", "b", "a")], "THREAD_STEPS_INCONSISTENT"],
     [4, [], "THREAD_PLAN_INVALID"],
