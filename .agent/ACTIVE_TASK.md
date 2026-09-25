@@ -74,16 +74,16 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: done
 - task_id: x-admin-pr15-merge-production-verify-20260925
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: assigned; PR #15 merged by ChatGPT -> `f610503761729bdc09dfa483bd218a769350a2dc`; resume post-merge + production Admin verification only; recommended Sonnet5（中）
+- allocation: closed; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS; G4 reusable after fresh allocation check
 
 ## Deferred
 
-- PR #15 merge / post-merge / production verification is assigned to G4. PR #33 remains unmerged and its Auth/security review/merge decision stays deferred until PR #15 is closed.
+- PR #15 is closed with Final K4 PASS. PR #33 remains unmerged; its Auth/security review/merge decision can now be scheduled separately after fresh slot review.
 - Kabumori Expo Web Netlify Preview task is also deferred because it is not currently needed for the native app workflow.
 
 ## Control codes
