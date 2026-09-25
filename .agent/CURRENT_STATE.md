@@ -37,7 +37,7 @@
   - PR #24 merged at reviewed head `46515c5` -> main `ff4c43c`. Files byte-identical; 122/0 tests, production web build shows the new disclosure text. personalized-reports/account-deletion.html untouched. Mutation 0.
   - Privacy dataflow gap from PR #21 review is now closed on main. Remaining blockers: icon/splash/overlay artwork, EAS production env, Netlify publish, Auth Site URL/SMTP, App Store Connect.
 - G2: `ready` — `kabumori-pr26-merge-redeploy-final-dryrun-20260925`
-- G3: `ready` — `x-autopost-phase1h-pr28-merge-postmerge-verify-20260925`
+- G3: `ready` — `x-autopost-phase1i-exact-account-prex-refresh-writer-20260925`
 - G4: `done` — `x-admin-netlify-live-site-preview-qa-20260925`
 
 ## Final K1 PR #24 result
@@ -448,6 +448,19 @@
 - production activation remains NO.
 - G3 now owns PR #28 fresh-main merge/post-merge verification.
 - recommended model: Sonnet5（高）.
+
+## Final K3 PR #28 result
+
+- PASS.
+- PR #28 reviewed head `ce60d7a29022956d049521ffaeb533a749152a60` merged without semantic drift.
+- merge commit: `d1fa8a3bbc8ba7c8bab3725573e0cd6a5a3890f3`.
+- focused Phase1B–1H 102/102 PASS.
+- x-test-post 467/467; _shared 129/129; important-news-monitor 450/450; greeting/tip 138/138 PASS.
+- disposable Phase1H behavior PASS.
+- live legacy dispatcher remains unchanged; v2 gate remains unwired/OFF.
+- production mutation=0 excluding normal GitHub merge.
+- G3 advanced to Phase1I exact-account pre-X refresh writer.
+- recommended model: Opus5.5（高）.
 
 ## G4 Netlify live preview continuation
 
