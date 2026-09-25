@@ -3,7 +3,7 @@
 - task_id: x-universal-oauth-refresh-production-stage0-2-20260926
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: critical
 - recommended_model: Opus5.5（高）
