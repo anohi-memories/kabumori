@@ -65,11 +65,11 @@
 - owner: claude
 - slot: claude-3
 - status: ready
-- task_id: x-autopost-phase1h-pr28-merge-postmerge-verify-20260925
+- task_id: x-autopost-phase1i-exact-account-prex-refresh-writer-20260925
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: assigned; PR #28 fresh-main merge + post-merge verification
+- allocation: assigned; Phase1I exact-account pre-X refresh writer source candidate
 
 ## Claude G4
 - owner: claude
