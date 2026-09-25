@@ -88,9 +88,11 @@ No exact-account pre-X refresh writer exists. The dispatcher never refreshes. An
 
 Rollback points: before any bound row exists, gate OFF + re-grant the legacy claim is a full rollback. After provider start, nothing can be rolled back automatically: a created X post exists; uncertain/rejected/incomplete attempts stay failed and non-reclaimable; recovery is operator reconciliation (typed completion with the confirmed id, or manual review). Turning the gate OFF stops new work immediately; in-progress multi-step attempts simply wait (they are only resumed by the v2 dispatcher).
 
+Phase1I update: the refresh writer now exists as a source candidate (`x_autopost_phase1i_account_refresh.md`). Insert between steps 3 and 5: apply **1I** after 1H, verify the Vault/`social_accounts` read-back in Phase1I §7, and wire `refreshAccountPreX` in the gate-OFF entrypoint. Kabumori stays blocked until its token is moved out of `oauth_token_store` into its own account's Vault secrets.
+
 ## 7. Remaining blockers
 
-- Phase1I refresh writer; Kabumori credential into its account's Vault refs.
+- ~~Phase1I refresh writer~~ (source candidate, see Phase1I doc); Kabumori credential into its account's Vault refs.
 - interaction poll seam; brand_post completion source.
 - uncertain → proven-created reconciliation tooling (operator); operator path for failed greeting days.
 - Real content adapters for v2 (OpenAI generation, report-run creation, greeting media from Storage) — the dispatcher takes them as injected ports; not written here.

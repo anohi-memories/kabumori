@@ -119,6 +119,14 @@ export type V2DispatchPorts = {
   fetchImpl?: typeof fetch;
   /** Provider steps per run for multi-step posts (default: until done/blocked). */
   maxProviderStepsPerRun?: number;
+  /**
+   * Phase1I exact-account pre-X refresh (refreshXAccountPreX). Called at most
+   * once per run, only while the attempt is still pre-X and only after X
+   * rejected the access token at the identity pre-check. The attempt is then
+   * settled with the returned outcome; a successful refresh is used by the
+   * next run (re-entry), never by this one. Omitted = no refresh.
+   */
+  refreshAccountPreX?(claim: V2ClaimRow): Promise<{ postOutcome: "pre_x_retryable" | "pre_x_terminal"; code: string; tokenRequests: number }>;
 };
 
 export type V2DispatchClass =
@@ -134,6 +142,7 @@ export type V2DispatchResult = {
   xPostIds?: string[];
   createRequests: number;
   mediaUploads: number;
+  refreshRequests: number;
 };
 
 /** Classes after which the scheduler must never reclaim or republish automatically. */
@@ -144,7 +153,9 @@ export const V2_NON_RECLAIMABLE_CLASSES: ReadonlySet<V2DispatchClass> = new Set(
 
 // --- helpers -------------------------------------------------------------------
 
-type Counters = { createRequests: number; mediaUploads: number };
+type Counters = { createRequests: number; mediaUploads: number; refreshRequests: number };
+
+export const X_ACCESS_TOKEN_REFRESH_REQUIRED = "X_ACCESS_TOKEN_REFRESH_REQUIRED_PRE_X";
 
 function toClaim(row: V2ClaimRow): XV2Claim {
   return { attemptId: row.attemptId, claimToken: row.claimToken, socialAccountId: row.socialAccountId, brandId: row.brandId };
@@ -161,6 +172,7 @@ function result(cls: V2DispatchClass, claim: V2ClaimRow | null, counters: Counte
     ...(claim ? { attemptId: claim.attemptId, postType: claim.postType } : {}),
     createRequests: counters.createRequests,
     mediaUploads: counters.mediaUploads,
+    refreshRequests: counters.refreshRequests,
     ...extra,
   };
 }
@@ -174,6 +186,26 @@ async function settle(ports: V2DispatchPorts, claim: V2ClaimRow, retryable: bool
     // never report the requested outcome as though the write had committed.
     return result("blocked_manual_reconciliation", claim, counters, { code: "PRE_X_SETTLEMENT_NOT_RECORDED" });
   }
+}
+
+/**
+ * Pre-X identity failure. When X rejected the access token and a refresh port
+ * exists, refresh the exact account once, then settle the attempt so the next
+ * run re-resolves and re-verifies the new token. Never refreshes after
+ * provider start (callers only reach this before markProviderStarted).
+ */
+async function settleIdentityFailure(
+  ports: V2DispatchPorts, claim: V2ClaimRow, retryable: boolean, code: string, counters: Counters,
+): Promise<V2DispatchResult> {
+  if (code !== X_ACCESS_TOKEN_REFRESH_REQUIRED || !ports.refreshAccountPreX) return settle(ports, claim, retryable, code, counters);
+  let refreshed: { postOutcome: "pre_x_retryable" | "pre_x_terminal"; code: string; tokenRequests: number };
+  try {
+    refreshed = await ports.refreshAccountPreX(claim);
+  } catch {
+    refreshed = { postOutcome: "pre_x_terminal", code: "X_REFRESH_HELPER_FAILED", tokenRequests: 0 };
+  }
+  counters.refreshRequests += refreshed.tokenRequests;
+  return settle(ports, claim, refreshed.postOutcome === "pre_x_retryable", refreshed.code, counters);
 }
 
 async function recordAfterStart(
@@ -338,7 +370,7 @@ async function dispatchSingle(ports: V2DispatchPorts, claim: V2ClaimRow, counter
   switch (outcome.kind) {
     case "pre_x_retryable":
     case "pre_x_terminal":
-      return settle(ports, claim, outcome.kind === "pre_x_retryable", outcome.code, counters);
+      return settleIdentityFailure(ports, claim, outcome.kind === "pre_x_retryable", outcome.code, counters);
     case "x_rejected":
       return recordAfterStart(ports, claim, "rejected", outcome.code, counters);
     case "x_outcome_uncertain":
@@ -369,7 +401,7 @@ async function dispatchMultiStep(ports: V2DispatchPorts, claim: V2ClaimRow, coun
   // Identity (and token validity) before taking the day claim, so an expired
   // token does not burn the greeting day.
   const identity = await verifyXCredentialIdentityPreX(resolved.credential, { fetchImpl: ports.fetchImpl });
-  if (identity.kind !== "ok") return settle(ports, claim, identity.kind === "pre_x_retryable", identity.code, counters);
+  if (identity.kind !== "ok") return settleIdentityFailure(ports, claim, identity.kind === "pre_x_retryable", identity.code, counters);
   let content: V2PreparedContent;
   try {
     content = await ports.content.prepare(claim);
@@ -452,7 +484,7 @@ async function resume(ports: V2DispatchPorts, row: V2ResumableRow, counters: Cou
 
 /** Run one unit of v2 work. Does nothing at all unless `gateOn` is true. */
 export async function runV2DispatchOnce(ports: V2DispatchPorts, gateOn: boolean): Promise<V2DispatchResult> {
-  const counters: Counters = { createRequests: 0, mediaUploads: 0 };
+  const counters: Counters = { createRequests: 0, mediaUploads: 0, refreshRequests: 0 };
   if (gateOn !== true) return result("gate_off", null, counters);
   let resumable: V2ResumableRow[];
   try {

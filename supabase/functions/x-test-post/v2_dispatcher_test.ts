@@ -603,3 +603,129 @@ test("legacy dispatcher is untouched and does not import the v2 dispatcher", asy
   const source = (await Deno.readTextFile(new URL("./v2_dispatcher.ts", import.meta.url))).replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gmu, "");
   assert.doesNotMatch(source, /claim_due_post\b|postToX|postThreadToX|refreshXTokens|oauth_token_store|loadBrandXTokens|loadBrandContext|Deno\.env|console\./u);
 });
+
+// --- Phase1I refresh seam -----------------------------------------------------------
+
+function tokenSwitchingReader(db: FakeDb, current: Record<string, string>): XClaimCredentialReader {
+  return {
+    readForClaim: async (claim) => {
+      const at = db.attempts.get(claim.attemptId);
+      if (!at || at.token !== claim.claimToken || at.phase !== "pre_x") throw new Error("X_CLAIM_NOT_PRE_X");
+      const acct = ACCOUNTS[at.account];
+      return [{ social_account_id: at.account, brand_id: acct.brand, platform_user_id: acct.xid, access_token: current[at.account] }];
+    },
+  };
+}
+
+test("refresh seam: expired token -> one pre-X refresh, attempt settled for re-entry, next run posts once", async () => {
+  const db = new FakeDb();
+  const x = new FakeX();
+  const current: Record<string, string> = { acct_a: "tok_EXPIRED" };
+  const refreshed: string[] = [];
+  db.addPost({ id: "pa", brand: "brand_a", account: "acct_a", postType: "useful_tip" });
+  const p = () => ports(db, x, {
+    claimCredentials: tokenSwitchingReader(db, current),
+    refreshAccountPreX: async (claim) => {
+      // The seam is only reached while the attempt is still pre-X.
+      assert.equal(db.attempts.get(claim.attemptId)!.phase, "pre_x");
+      refreshed.push(claim.socialAccountId);
+      current[claim.socialAccountId] = ACCOUNTS[claim.socialAccountId].token;
+      return { postOutcome: "pre_x_retryable", code: "X_ACCESS_TOKEN_REFRESHED_PRE_X", tokenRequests: 1 };
+    },
+  });
+  const r1 = await runV2DispatchOnce(p(), true);
+  assert.equal(r1.class, "pre_x_retryable");
+  assert.equal(r1.code, "X_ACCESS_TOKEN_REFRESHED_PRE_X");
+  assert.equal(r1.refreshRequests, 1);
+  assert.equal(r1.createRequests, 0);
+  assert.equal(db.posts.get("pa")!.status, "pending");
+  const r2 = await runV2DispatchOnce(p(), true);
+  assert.equal(r2.class, "completed");
+  assert.equal(r2.refreshRequests, 0);
+  assert.deepEqual(refreshed, ["acct_a"]);
+  assert.equal(x.count("create"), 1);
+  assert.equal(x.calls.find((c) => c.url.endsWith("/2/tweets"))!.auth, "Bearer tok_A_secret");
+});
+
+test("refresh seam: terminal refresh result fails the post with zero creates; no seam keeps the old behavior", async () => {
+  const db = new FakeDb();
+  const x = new FakeX();
+  db.addPost({ id: "pa", brand: "brand_a", account: "acct_a", postType: "close_report" });
+  const r = await runV2DispatchOnce(ports(db, x, {
+    claimCredentials: tokenSwitchingReader(db, { acct_a: "tok_EXPIRED" }),
+    refreshAccountPreX: async () => ({ postOutcome: "pre_x_terminal", code: "X_REFRESH_BLOCKED_UNCERTAIN", tokenRequests: 0 }),
+  }), true);
+  assert.equal(r.class, "pre_x_terminal");
+  assert.equal(r.code, "X_REFRESH_BLOCKED_UNCERTAIN");
+  assert.equal(db.posts.get("pa")!.status, "failed");
+  assert.equal(x.count("create"), 0);
+
+  const db2 = new FakeDb();
+  db2.addPost({ id: "pb", brand: "brand_a", account: "acct_a", postType: "close_report" });
+  const r2 = await runV2DispatchOnce(ports(db2, x, { claimCredentials: tokenSwitchingReader(db2, { acct_a: "tok_EXPIRED" }) }), true);
+  assert.equal(r2.class, "pre_x_retryable");
+  assert.equal(r2.code, "X_ACCESS_TOKEN_REFRESH_REQUIRED_PRE_X");
+
+  const db3 = new FakeDb();
+  db3.addPost({ id: "pc", brand: "brand_a", account: "acct_a", postType: "close_report" });
+  const r3 = await runV2DispatchOnce(ports(db3, x, {
+    claimCredentials: tokenSwitchingReader(db3, { acct_a: "tok_EXPIRED" }),
+    refreshAccountPreX: async () => { throw new Error("boom"); },
+  }), true);
+  assert.equal(r3.class, "pre_x_terminal");
+  assert.equal(r3.code, "X_REFRESH_HELPER_FAILED");
+  assert.equal(x.count("create"), 0);
+});
+
+test("refresh seam: only for an X-rejected token, never for other identity failures", async () => {
+  const db = new FakeDb();
+  const x = new FakeX();
+  let refreshCalls = 0;
+  db.addPost({ id: "pa", brand: "brand_a", account: "acct_a", postType: "useful_tip" });
+  const other: XClaimCredentialReader = {
+    readForClaim: async () => [{ social_account_id: "acct_a", brand_id: "brand_a", platform_user_id: "x_WRONG", access_token: "tok_A_secret" }],
+  };
+  const r = await runV2DispatchOnce(ports(db, x, {
+    claimCredentials: other,
+    refreshAccountPreX: async () => { refreshCalls++; return { postOutcome: "pre_x_retryable", code: "X", tokenRequests: 1 }; },
+  }), true);
+  assert.equal(r.class, "pre_x_terminal");
+  assert.equal(r.code, "X_CREDENTIAL_IDENTITY_MISMATCH");
+  assert.equal(refreshCalls, 0);
+});
+
+test("refresh seam: greeting refreshes before the day claim; resume after provider start never refreshes", async () => {
+  const db = new FakeDb();
+  const x = new FakeX();
+  const current: Record<string, string> = { acct_a: "tok_EXPIRED" };
+  let refreshCalls = 0;
+  db.addPost({ id: "pg", brand: "brand_a", account: "acct_a", postType: "morning_greeting" });
+  const r = await runV2DispatchOnce(ports(db, x, {
+    claimCredentials: tokenSwitchingReader(db, current),
+    refreshAccountPreX: async () => { refreshCalls++; return { postOutcome: "pre_x_retryable", code: "X_ACCESS_TOKEN_REFRESHED_PRE_X", tokenRequests: 1 }; },
+  }), true);
+  assert.equal(r.class, "pre_x_retryable");
+  assert.equal(refreshCalls, 1);
+  assert.equal(db.greetingClaims.size, 0);
+  assert.equal(x.count("media") + x.count("create"), 0);
+
+  // A tip in flight (provider started, root confirmed) with an expired token on resume.
+  const db2 = new FakeDb();
+  const x2 = new FakeX();
+  db2.addPost({ id: "pt", brand: "brand_a", account: "acct_a", postType: "tip" });
+  await runV2DispatchOnce(ports(db2, x2, { prepared: CONTENT.tip2, maxProviderStepsPerRun: 1 }), true);
+  assert.equal(x2.count("create"), 1);
+  let resumeRefreshCalls = 0;
+  const expiredResume: XClaimCredentialReader = {
+    readForClaim: async () => [{ social_account_id: "acct_a", brand_id: "brand_a", platform_user_id: "x_a", access_token: "tok_EXPIRED" }],
+  };
+  const r2 = await runV2DispatchOnce(ports(db2, x2, {
+    prepared: CONTENT.tip2,
+    resumeCredentials: expiredResume,
+    refreshAccountPreX: async () => { resumeRefreshCalls++; return { postOutcome: "pre_x_retryable", code: "X", tokenRequests: 1 }; },
+  }), true);
+  assert.equal(r2.class, "in_progress");
+  assert.equal(r2.code, "X_ACCESS_TOKEN_REFRESH_REQUIRED_PRE_X");
+  assert.equal(resumeRefreshCalls, 0);
+  assert.equal(x2.count("create"), 1);
+});
