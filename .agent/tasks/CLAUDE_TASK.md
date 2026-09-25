@@ -3,8 +3,8 @@
 - task_id: kabumori-report-dryrun-false-reject-hardening-20260925
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（極高）
 - purpose: production v26 dry-runで残った大引けのfalse reject 2系統と朝刊Fact false positiveを、validator安全性を緩めずsource-onlyで最小修正する。deploy禁止。
@@ -291,3 +291,23 @@ When complete:
 2. K2でPASSならmergeし、承認を得たうえで再deployする。deployの前に、mainに直接入った `510acf5` もレビュー対象として確認するのが望ましい。
 3. 再deploy後、大引けdry_runを5回と朝刊dry_run（できれば2回）で実出力を検証する。朝刊は、MICの入力あり・なしの差を見るために、dry_runの応答の `mic` の有無も記録する。
 4. **運用上の推奨**：`personalized-reports` のdeployは1つのslotに一本化し、PRを経由しないmainへの直接commitとdeployは避ける（今回、レビュー前のcodeが本番に入った）。
+
+
+## Final K2 — PR #29 source hardening
+
+Result: **PASS for source implementation; independent review required before merge/deploy**.
+
+Accepted:
+- PR #29 head `bed5e79d0ab22e94be6a7c1ebd0f7c8f157ea0c0`
+- prompt-only hardening in PR #29
+- validator and Fact checker are not weakened by PR #29
+- new 9/9 tests
+- close-validator 23/23
+- personalized-reports 96/96
+- related suite 214/214
+- deno check/lint/diff PASS
+- production mutation from this G2 task = 0
+
+Important exception:
+- `510acf5954b37410b50c23ff92c3f54af6458a72` was independently committed to main and deployed as production v27 before this K2.
+- H2 must review both that already-deployed validator change and PR #29 together.
