@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: done
 - task_id: x-universal-oauth-refresh-pr37-merge-postverify-20260926
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: assigned; merge C1-approved PR #37 + post-merge verification only; no production activation; recommended Sonnet5（高）
+- allocation: closed; Final K3 PASS, PR #37 merged -> `777997a13c39c12ba409a0c6dc95cad18360038a`; production rollout not started
 
 ## Claude G4
 - owner: claude
