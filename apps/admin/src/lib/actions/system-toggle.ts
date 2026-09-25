@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveBrandContext } from "@/lib/active-brand";
 import { KABUMORI_BRAND_ID } from "@/lib/brand-boundary";
+import { isKabumoriMutationAllowed } from "@/lib/selected-brand";
 import { createAdminServerClient } from "@/lib/supabase/server";
 
 // Fixed allowlist of what a client is allowed to flip, and exactly which
@@ -205,6 +207,12 @@ export async function setSystemEnabled(systemKey: string, enabled: boolean): Pro
     .maybeSingle();
   if (adminError || !admin) {
     logToggleEvent("caller is not an admin", { systemKey });
+    return { ok: false, error: "not_admin" };
+  }
+
+  const activeBrand = await getActiveBrandContext();
+  if (!isKabumoriMutationAllowed(activeBrand)) {
+    logToggleEvent("Kabumori toggle rejected for selected brand", { systemKey });
     return { ok: false, error: "not_admin" };
   }
 

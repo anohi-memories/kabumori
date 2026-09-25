@@ -32,6 +32,8 @@ export type ActiveBrandResolution =
     }
   | { kind: "no_brand" };
 
+export type AdminActiveBrandResolution = ActiveBrandResolution | { kind: "not_admin" };
+
 function toActive(brand: AdminBrandDefinition): ActiveBrand {
   return { id: brand.id as AuthorizedBrandId, label: brand.label, xHandle: brand.xHandle };
 }
@@ -62,4 +64,21 @@ export function chooseActiveBrand({
       ? options[0]
       : options.find((brand) => brand.id === KABUMORI_BRAND_ID) ?? options[0];
   return { kind: "ok", active: toActive(fallback), options, selectionRejected: requested !== null };
+}
+
+// The admin app's entry gate is admin_users. Brand membership alone may allow reads under mobile RLS,
+// but must never authorize this admin app or its Server Actions.
+export function chooseAdminActiveBrand(
+  input: Parameters<typeof chooseActiveBrand>[0],
+): AdminActiveBrandResolution {
+  if (input.access.kind !== "global") return { kind: "not_admin" };
+  return chooseActiveBrand(input);
+}
+
+export function isKabumoriMutationAllowed(
+  context: AdminActiveBrandResolution | { kind: "unauthenticated" },
+): boolean {
+  return context.kind === "ok" &&
+    !context.selectionRejected &&
+    context.active.id === KABUMORI_BRAND_ID;
 }

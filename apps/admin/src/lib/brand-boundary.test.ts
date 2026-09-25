@@ -87,9 +87,19 @@ test("system toggles stay Kabumori-only: posting_windows read and update are pin
   for (const statement of statements) {
     assert.match(statement, /\.eq\("brand_id", KABUMORI_BRAND_ID\)/u);
   }
-  // The toggle action never takes a brand from the client or the selected-brand cookie.
-  assert.doesNotMatch(contents, /brand_selection|kabumori_admin_brand|getActiveBrandContext/u);
+  // The action revalidates the current selection and rejects AI Lab or a rejected fallback before DML.
+  assert.doesNotMatch(contents, /brand_selection|kabumori_admin_brand/u);
+  assert.match(contents, /const activeBrand = await getActiveBrandContext\(\);/u);
+  assert.match(contents, /if \(!isKabumoriMutationAllowed\(activeBrand\)\)/u);
+  assert.ok(contents.indexOf("if (!isKabumoriMutationAllowed(activeBrand))") < contents.indexOf("  const result =\n    config.mode"));
   assert.match(contents, /export async function setSystemEnabled\(systemKey: string, enabled: boolean\)/u);
+});
+
+test("page and brand-selection action independently require the admin_users authority", async () => {
+  const active = await source("./active-brand.ts");
+  const action = await source("./actions/select-brand.ts");
+  assert.match(active, /return chooseAdminActiveBrand\(\{ access, requestedBrandId, registry: ADMIN_BRANDS \}\)/u);
+  assert.match(action, /chooseAdminActiveBrand\(\{ access, requestedBrandId: requested, registry: ADMIN_BRANDS \}\)/u);
 });
 
 test("the Admin brand boundary remains the exact Kabumori id", async () => {

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { AdminBrandAccess } from "./admin-context.ts";
 import { ADMIN_BRANDS } from "./admin-brands.ts";
-import { chooseActiveBrand } from "./selected-brand.ts";
+import { chooseActiveBrand, chooseAdminActiveBrand, isKabumoriMutationAllowed } from "./selected-brand.ts";
 
 const GLOBAL: AdminBrandAccess = { kind: "global", brandIds: null };
 
@@ -75,4 +75,23 @@ test("the admin registry is the exact allowlist and excludes Mio", () => {
       { id: "ai_salaryman_lab", xHandle: "kaishain_ai_lab" },
     ],
   );
+});
+
+test("brand membership alone cannot enter the admin app or change its selected brand", () => {
+  const scoped: AdminBrandAccess = { kind: "scoped", brandIds: ["ai_salaryman_lab"] };
+  assert.deepEqual(
+    chooseAdminActiveBrand({ access: scoped, requestedBrandId: "ai_salaryman_lab", registry: ADMIN_BRANDS }),
+    { kind: "not_admin" },
+  );
+});
+
+test("Kabumori settings can change only while its authorized selection is active", () => {
+  const select = (requestedBrandId: string | null) =>
+    chooseAdminActiveBrand({ access: GLOBAL, requestedBrandId, registry: ADMIN_BRANDS });
+  assert.equal(isKabumoriMutationAllowed(select(null)), true);
+  assert.equal(isKabumoriMutationAllowed(select("kabumori")), true);
+  assert.equal(isKabumoriMutationAllowed(select("ai_salaryman_lab")), false);
+  assert.equal(isKabumoriMutationAllowed(select("unknown-brand")), false);
+  assert.equal(isKabumoriMutationAllowed({ kind: "not_admin" }), false);
+  assert.equal(isKabumoriMutationAllowed({ kind: "unauthenticated" }), false);
 });

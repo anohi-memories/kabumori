@@ -14,11 +14,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 //   (e.g. the `admin_select_*` RLS policies alongside the Phase 5 social-mobile `brand_memberships`
 //   tenant policies) -- this module does not invent a new authority concept, it exposes the existing one
 //   in a typed, admin-app-local form.
-// - `brand_memberships` rows with role 'owner' or 'admin' grant BRAND-SCOPED admin authority: such a
-//   user may act on exactly those brands, and no others. 'member'/'viewer' roles are read-only in the
-//   mobile app's own model and are not admin authority here.
-// - A user with neither is not an admin of this app at all; existing (admin)/layout.tsx already redirects
-//   that case to /unauthorized before any page-level code (including this resolver) would run.
+// - `brand_memberships` rows with role 'owner' or 'admin' resolve BRAND-SCOPED authority for callers
+//   that support it. They do not grant entry to this admin app: the layout, independently rendered
+//   pages, and Server Actions still require an `admin_users` row. 'member'/'viewer' roles are not
+//   admin authority here.
 
 export type AdminBrandAccess =
   | { kind: "global"; brandIds: null }
@@ -29,8 +28,9 @@ type BrandMembershipRow = { brand_id: string; role: string };
 const BRAND_ADMIN_ROLES = new Set(["owner", "admin"]);
 
 /**
- * Resolves which brands `userId` (already confirmed to be a real, signed-in admin_users-or-not user by
- * the caller) may act on. Never trusts a client-supplied brand id or user id -- `userId` must come from
+ * Resolves which brands `userId` (confirmed to be a real signed-in user by the caller) may act on.
+ * Callers in this admin app separately require `admin_users` before accepting the result as authority.
+ * Never trusts a client-supplied brand id or user id -- `userId` must come from
  * `supabase.auth.getUser()` on the current request, and every read here is scoped to that exact id.
  */
 export async function resolveAdminBrandAccess(

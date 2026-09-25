@@ -5,19 +5,20 @@ import { ADMIN_BRANDS } from "@/lib/admin-brands";
 import { resolveAdminBrandAccess } from "@/lib/admin-context";
 import {
   BRAND_SELECTION_COOKIE,
-  chooseActiveBrand,
+  chooseAdminActiveBrand,
   type ActiveBrand,
-  type ActiveBrandResolution,
+  type AdminActiveBrandResolution,
 } from "@/lib/selected-brand";
 import { createAdminServerClient } from "@/lib/supabase/server";
 
-export type ActiveBrandContext = ActiveBrandResolution | { kind: "unauthenticated" };
+export type ActiveBrandContext = AdminActiveBrandResolution | { kind: "unauthenticated" };
 
 /**
  * Resolves the active brand for the current request. Runs on every request (memoized per request via
  * React cache so the layout and page share one resolution): identity always comes from
- * supabase.auth.getUser(), authority from resolveAdminBrandAccess(), and the cookie value is treated only
- * as a request to be validated -- never as authority.
+ * supabase.auth.getUser(), admin entry from admin_users (the global access result), and the cookie
+ * value is treated only as a request to be validated -- never as authority. Pages run in parallel with
+ * their layout, so this check must independently enforce the admin_users gate before a page queries.
  */
 export const getActiveBrandContext = cache(async (): Promise<ActiveBrandContext> => {
   const supabase = await createAdminServerClient();
@@ -29,7 +30,7 @@ export const getActiveBrandContext = cache(async (): Promise<ActiveBrandContext>
 
   const access = await resolveAdminBrandAccess(supabase, user.id);
   const requestedBrandId = (await cookies()).get(BRAND_SELECTION_COOKIE)?.value ?? null;
-  return chooseActiveBrand({ access, requestedBrandId, registry: ADMIN_BRANDS });
+  return chooseAdminActiveBrand({ access, requestedBrandId, registry: ADMIN_BRANDS });
 });
 
 /**
