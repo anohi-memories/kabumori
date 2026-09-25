@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: x-admin-pr33-final-auth-security-review-20260926
+- status: ready
+- task_id: x-admin-pr33-auth-fix-round2-final-review-20260926
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: closed; Final C1 FAIL accepted, PR #33 must not merge at `e6b93be`; three Auth fixes returned to G4
+- allocation: assigned; focused re-review of PR #33 three Auth fixes before real E2E; recommended Sol（高）
 
 ## Codex H2
 - owner: codex
@@ -74,12 +74,12 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: done
 - task_id: x-admin-pr33-auth-fix-round2-20260926
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: assigned; fix three C1 Auth findings on PR #33, then re-review; recommended Opus5.5（高）
+- allocation: closed; Final K4 PASS, PR #33 head `2528b56`, three C1 findings fixed, H1 re-review assigned
 
 ## Deferred
 
