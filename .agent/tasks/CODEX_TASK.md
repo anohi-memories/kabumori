@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1i-exact-account-refresh-final-review-20260925
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: K3 PASS済みPhase1I exact-account pre-X refresh writerを、account authority / Vault secret boundary / OAuth rotation / concurrency / provider-start race / ACL/migrationの観点で独立レビューする。production apply/deploy/real token refresh/X API callは禁止。
@@ -189,3 +189,27 @@ Then:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for C1.
+
+
+## Final C1 — Phase1I
+
+Verdict: **PASS-WITH-FIX for source candidate**.
+
+Accepted reviewed/fixed head:
+- PR #30: `94000720e10649612e84cb3811327de1a63364e9`
+
+Accepted fixes:
+- P1 cross-account Vault write after silent secret-ref change fixed.
+- P2 stale attempt commit after settlement fixed.
+
+Verification accepted:
+- Phase1I focused 41/41 PASS
+- x-test-post + _shared 618/618 PASS
+- important-news-monitor 473/473 PASS
+- disposable Phase1D–1I behavior/concurrency proofs PASS
+- production mutation=0
+
+Decision:
+- source candidate accepted.
+- production activation remains NO.
+- G3 should perform fresh-main merge of PR #30 and post-merge verification.
