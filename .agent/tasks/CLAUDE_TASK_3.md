@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1h-gated-v2-dispatcher-source-candidate-20260925
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Opus5.5（高）
 - purpose: Phase1E〜1Gのexact-account credential、provider boundary、outcome ledger、typed completion、multi-step planを一つのv2 dispatcher source candidateとして接続する。ただしlive gateはOFFのまま、production deploy/activation/X API callは行わない。
@@ -310,3 +310,28 @@ Do not deploy or activate the v2 dispatcher.
 14. activation safety document: `x_autopost_phase1h_gated_dispatcher.md` §6 — live-definition/ACL read-back → ordered 1B→1H apply proof (each file alone) → exact-account Vault readiness (Kabumori out of `oauth_token_store`) → refresh writer → deploy with gate OFF → shadow/no-provider validation → one account + one type cohort (legacy dispatcher switched to `claim_due_post_legacy_unbound_v2`, drained, then `claim_due_post` EXECUTE revoked, which opens the Phase1D bound-row gate) → observe → staged expansion (tip/greeting last) → legacy retirement after drain/read-back. Rollback: full before the first bound row; after provider start nothing is automatically reversible (operator reconciliation only); gate OFF stops new work and leaves in-progress attempts parked.
 15. remaining blockers: Phase1I refresh writer; Kabumori credential into its account's Vault refs; interaction poll seam; brand_post completion source; real v2 content adapters (OpenAI generation, report-run creation, greeting Storage media) — injected ports only here; uncertain→proven-created operator tooling; failed-greeting-day operator path; production gates in §6.
 16. next recommendation: K3, then Codex review of the dispatcher composition (gate, no-fallback, restart/resume safety, resume credential RPC). Next source-only step: Phase1I per-account pre-X refresh writer (Opus5.5（高）), then the content adapters + a gate-OFF entrypoint.
+
+
+## Final K3 — Phase1H
+
+Result: IMPLEMENTATION PASS / CODEX REVIEW REQUIRED.
+
+Accepted:
+- implementation commit `59bd54412eae989400b6ce7e9ecb56dc943db94f`
+- hard OFF server-side gate
+- v2 dispatcher composes Phase1D claim + Phase1E exact-account credential/provider + Phase1F/1G ledger/completions
+- restart-safe single and multi-step flows
+- interaction remains disabled because poll seam missing
+- brand_post remains disabled
+- focused Phase1B–1H 99/99 PASS
+- x-test-post 464/464 PASS
+- _shared 129/129 PASS
+- important-news-monitor 431/431 PASS
+- greeting/tip-specific 138/138 PASS
+- disposable Phase1H behavior PASS
+- production mutation/X API calls=0
+
+Decision:
+- Phase1H implementation accepted for independent review.
+- Production activation remains NO.
+- H1 owns final gated-dispatcher/no-fallback/resume/ACL review with Sol（高）.
