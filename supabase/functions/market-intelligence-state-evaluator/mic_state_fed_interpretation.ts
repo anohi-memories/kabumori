@@ -26,13 +26,16 @@ const OVERALL_BIAS = new Set(["more_hawkish", "more_dovish", "neutral", "mixed",
 // The generator caps output at 2000 tokens, but the stored jsonb column has no
 // size constraint. An interpretation over any of these limits is excluded as a
 // whole -- never truncated mid-text -- so a bad row cannot inflate the State
-// prompt. The largest production interpretation (2026-09-25) was 1,408 chars
-// in total: summary 113, 5 changes, longest change interpretation 82.
+// prompt. The total cap also bounds three individually valid but unusually
+// large entries. The measured 2026-09-25 interpretation was 1,408 chars;
+// this is a reference point, not the limit.
 export const FED_INTERPRETATION_LIMITS = {
   summaryChars: 1000,
   changeInterpretationChars: 500,
   maxChanges: 12,
   maxEntries: 3,
+  maxTotalChars: 10_000,
+  metadataChars: 80,
 } as const;
 
 export type FedStatementInterpretationChange = {
@@ -44,10 +47,10 @@ export type FedStatementInterpretationChange = {
 
 export type FedStatementInterpretationContext = {
   meeting_date: string;
-  previous_meeting_date: string | null;
+  previous_meeting_date: string;
   // Deterministic (code-computed) diff metadata.
-  changed_paragraph_count: number | null;
-  material_change_count: number | null;
+  changed_paragraph_count: number;
+  material_change_count: number;
   semantic_buckets: string[];
   // Secondary AI interpretation.
   interpretation: {
@@ -57,11 +60,29 @@ export type FedStatementInterpretationContext = {
     changes: FedStatementInterpretationChange[];
   };
   interpretation_model: string;
-  interpretation_prompt_version: string | null;
+  interpretation_prompt_version: string;
   interpretation_generated_at: string;
 };
 
 const charLength = (value: string) => Array.from(value).length;
+
+function isDateOnly(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = Date.parse(`${value}T00:00:00Z`);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString().slice(0, 10) === value;
+}
+
+function isTimestamp(value: unknown): value is string {
+  return typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
+    isDateOnly(value.slice(0, 10)) &&
+    Number.isFinite(Date.parse(value));
+}
+
+function isMetadataId(value: unknown): value is string {
+  return typeof value === "string" && charLength(value) <= FED_INTERPRETATION_LIMITS.metadataChars &&
+    /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value);
+}
 
 function isConfidence(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
@@ -82,7 +103,7 @@ function parseInterpretation(value: unknown): FedStatementInterpretationContext[
     const change = item as Record<string, unknown>;
     if (typeof change.bucket !== "string" || !CHANGE_BUCKETS.has(change.bucket)) return null;
     if (typeof change.direction !== "string" || !CHANGE_DIRECTIONS.has(change.direction)) return null;
-    if (typeof change.interpretation !== "string") return null;
+    if (typeof change.interpretation !== "string" || change.interpretation.trim().length === 0) return null;
     if (charLength(change.interpretation) > FED_INTERPRETATION_LIMITS.changeInterpretationChars) return null;
     if (!isConfidence(change.confidence)) return null;
     // previous/current (the generator's quotes of the statement wording) are
@@ -103,30 +124,35 @@ function parseInterpretation(value: unknown): FedStatementInterpretationContext[
   };
 }
 
-function nonNegativeInteger(value: unknown): number | null {
-  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
 function toContext(snapshot: FedStatementDiffSnapshot): FedStatementInterpretationContext | null {
   if (snapshot.ai_interpretation === null || snapshot.ai_interpretation === undefined) return null;
-  if (typeof snapshot.meeting_date !== "string") return null;
+  if (!isDateOnly(snapshot.meeting_date) || !isDateOnly(snapshot.previous_meeting_date) ||
+    snapshot.previous_meeting_date >= snapshot.meeting_date || typeof snapshot.previous_event_id !== "string") return null;
   // An interpretation is only complete once it was written together with its
   // model and generated_at (the explicit AI action stores all three at once).
-  if (typeof snapshot.model !== "string" || snapshot.model.length === 0) return null;
-  if (typeof snapshot.generated_at !== "string" || snapshot.generated_at.length === 0) return null;
+  if (!isMetadataId(snapshot.model) || !isMetadataId(snapshot.prompt_version) ||
+    !isTimestamp(snapshot.generated_at)) return null;
+  if (!isNonNegativeInteger(snapshot.changed_paragraph_count) ||
+    !isNonNegativeInteger(snapshot.material_change_count)) return null;
+  if (!Array.isArray(snapshot.semantic_buckets) ||
+    snapshot.semantic_buckets.length > CHANGE_BUCKETS.size ||
+    !snapshot.semantic_buckets.every((bucket) => typeof bucket === "string" && CHANGE_BUCKETS.has(bucket)) ||
+    new Set(snapshot.semantic_buckets).size !== snapshot.semantic_buckets.length) return null;
   const interpretation = parseInterpretation(snapshot.ai_interpretation);
   if (!interpretation) return null;
   return {
     meeting_date: snapshot.meeting_date,
-    previous_meeting_date: typeof snapshot.previous_meeting_date === "string" ? snapshot.previous_meeting_date : null,
-    changed_paragraph_count: nonNegativeInteger(snapshot.changed_paragraph_count),
-    material_change_count: nonNegativeInteger(snapshot.material_change_count),
-    semantic_buckets: Array.isArray(snapshot.semantic_buckets)
-      ? snapshot.semantic_buckets.filter((bucket): bucket is string => typeof bucket === "string")
-      : [],
+    previous_meeting_date: snapshot.previous_meeting_date,
+    changed_paragraph_count: snapshot.changed_paragraph_count,
+    material_change_count: snapshot.material_change_count,
+    semantic_buckets: [...snapshot.semantic_buckets],
     interpretation,
     interpretation_model: snapshot.model,
-    interpretation_prompt_version: typeof snapshot.prompt_version === "string" ? snapshot.prompt_version : null,
+    interpretation_prompt_version: snapshot.prompt_version,
     interpretation_generated_at: snapshot.generated_at,
   };
 }
@@ -150,9 +176,18 @@ export function buildFedStatementInterpretationContext(
   snapshots: readonly FedStatementDiffSnapshot[],
 ): FedStatementInterpretationContext[] {
   if (domain !== "rates") return [];
-  return [...snapshots]
+  const valid = [...snapshots]
     .sort(compareSnapshots)
     .map(toContext)
-    .filter((entry): entry is FedStatementInterpretationContext => entry !== null)
-    .slice(0, FED_INTERPRETATION_LIMITS.maxEntries);
+    .filter((entry): entry is FedStatementInterpretationContext => entry !== null);
+  const selected: FedStatementInterpretationContext[] = [];
+  let totalChars = 2; // JSON array brackets
+  for (const entry of valid) {
+    if (selected.length === FED_INTERPRETATION_LIMITS.maxEntries) break;
+    const size = charLength(JSON.stringify(entry)) + (selected.length > 0 ? 1 : 0); // comma
+    if (totalChars + size > FED_INTERPRETATION_LIMITS.maxTotalChars) continue;
+    selected.push(entry);
+    totalChars += size;
+  }
+  return selected;
 }
