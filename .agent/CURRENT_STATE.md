@@ -551,6 +551,19 @@
 - after that, resume G4 live proxy/auth/selector QA.
 - recommended continuation model: Sonnet5（高）.
 
+## Final K3 Phase1I result
+
+- result: **PASS for source-only implementation**.
+- implementation: `12e9fd1`.
+- exact-account pre-X refresh writer completed with no fallback to brand-first/first-row/env/legacy token paths.
+- one-request OAuth refresh seam, Vault-bound exact-account write model, uncertain-result fail-closed behavior, and concurrency lease model implemented.
+- focused Phase1B–1I 124/124; x-test-post 477/477; _shared 141/141; important-news-monitor 451/451; greeting/tip 138/138 PASS.
+- disposable PostgreSQL Phase1I behavior/race and prior-phase proofs PASS.
+- production migration/apply/deploy/token refresh/Vault mutation/X API calls = 0.
+- production activation remains NO.
+- H1 assigned final OAuth/Vault/concurrency/ACL review.
+- recommended model: Sol（高）.
+
 ## Known issues / observations
 
 - Phase1B account-bound queue foundationはC2 PASS済み。
