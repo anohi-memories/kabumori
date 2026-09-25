@@ -20,6 +20,17 @@
 - Claude（くろちゃん）: Sonnet5（中/高/極高） / Opus5.5（中/高/極高）。Sonnet5で安全な作業はSonnet5優先。
 - Codex（こでさん）: Luna（中/高/極高） / Sol（中/高/極高）。利用枠節約のためLunaで安全なTASKはLuna優先。
 
+## Review cadence policy — reduced
+
+- User decision (2026-09-25): Codex review frequency is reduced substantially to preserve the 5-hour review budget.
+- Default: low-risk/UI/copy/prompt/image/small bug/test-only/local logic changes proceed via Claude + ChatGPT confirmation without H1/H2.
+- Repeated small fixes in the same feature are bundled; review once at a meaningful stabilization/release boundary instead of after every change.
+- Keep Codex focused on DB/migration/RLS/auth/RPC/OAuth/Vault/secrets, real external writes, X publish paths, cross-tenant boundaries, concurrency/idempotency, destructive production risk, major multi-layer changes and release-critical gates.
+- Review omission never means test/dry-run/Preview/read-back omission.
+- Prefer Luna for lighter reviews; reserve Sol for high-risk boundaries.
+- Existing incomplete review tasks must be preserved as deferred, not overwritten.
+- Canonical details: `.agent/ORCHESTRATION.md#レビュー最適化方針（2026-09-25〜）`.
+
 ## Deployment policy — user approved
 
 - X自動投稿・Web管理画面の開発中/PR/テスト用PreviewはNetlifyへ寄せる。
