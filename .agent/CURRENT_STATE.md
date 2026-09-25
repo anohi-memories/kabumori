@@ -44,13 +44,23 @@
 
 - H1: `done` — `x-autopost-phase1i-exact-account-refresh-final-review-20260925`; Final C1 PASS-WITH-FIX
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
-- G1: `done` — `kabumori-pr31-icon-merge-postmerge-verify-20260925`
-  - Final K1 PASS. PR #31 merged -> `7aa394fc1dc73edd0c67b6529923ec4dc9616e7f`.
-  - Approved icon reproducibly wired into Expo/iOS; 126/126 tests; no production mutation.
-  - Awaiting separately authorized EAS/TestFlight real-iPhone visual verification.
+- G1: `ready` — `kabumori-release-readiness-gap-closure-20260925`
+  - release-readiness audit + safe source gap closure
+  - EAS env / Netlify legal Web / Auth redirects / SMTP / TestFlight prerequisites
+  - no secrets, no Auth mutation, no EAS/TestFlight upload
+  - recommended model: Opus5.5（高）
 - G2: `done` — `kabumori-pr34-shadow-merge-deploy-20260925`
 - G3: `done` — `x-autopost-phase1i-pr30-merge-postmerge-verify-20260925`; Final K3 PASS, PR #30 merged -> `a9b1ef4d359d5ef554284fc56427e0cafeaec648`, post-merge verification PASS
 - G4: `ready` — `x-admin-pr15-merge-production-verify-20260925`; PR #15 merge-only + post-merge/production Admin verification; recommended Sonnet5（中）
+
+## G1 release-readiness gap closure
+
+- assigned: `kabumori-release-readiness-gap-closure-20260925`.
+- goal: while G2 waits for Monday natural-cron telemetry, advance native release readiness.
+- covers EAS production env prerequisites, Kabumori Netlify public/legal pages, Supabase Auth Site URL/redirect requirements, custom SMTP readiness, App Store/TestFlight prerequisites, and remaining startup artwork.
+- safe source/config/doc fixes allowed; production Auth/SMTP/credentials/DNS/TestFlight/App Store mutation forbidden.
+- no overlap with G2 personalized-reports or X/admin scopes.
+- recommended model: Opus5.5（高）.
 
 ## Final K3 PR #30 merge
 
