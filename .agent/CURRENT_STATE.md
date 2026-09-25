@@ -33,12 +33,25 @@
 
 - H1: `done` — `x-autopost-phase1h-gated-dispatcher-final-review-20260925`
 - H2: `done` — `kabumori-pr29-plus-v27-validator-final-review-20260925`
-- G1: `done` — `kabumori-pr24-privacy-merge-postmerge-verify-20260924`
-  - PR #24 merged at reviewed head `46515c5` -> main `ff4c43c`. Files byte-identical; 122/0 tests, production web build shows the new disclosure text. personalized-reports/account-deletion.html untouched. Mutation 0.
-  - Privacy dataflow gap from PR #21 review is now closed on main. Remaining blockers: icon/splash/overlay artwork, EAS production env, Netlify publish, Auth Site URL/SMTP, App Store Connect.
+- G1: `ready` — `kabumori-approved-app-icon-integration-20260925`
+  - User-approved icon is now the current app-icon candidate.
+  - Integrate exact source only; no redraw/regeneration.
+  - Icon-only task; Splash and AnimatedSplashOverlay remain separate decisions.
+  - Final visual acceptance happens on real iPhone/TestFlight.
+  - recommended model: Sonnet5（高）.
 - G2: `ready` — `kabumori-pr29-merge-redeploy-final-dryrun-20260925`
 - G3: `ready` — `x-autopost-phase1i-exact-account-prex-refresh-writer-20260925`
 - G4: `done` — `x-admin-netlify-pr15-live-preview-auth-qa-20260925`
+
+## Approved app icon decision
+
+- User selected the latest newspaper/chart/leaf/「かぶモリ」 image as the current official app-icon candidate.
+- Source supplied in ChatGPT as `アイコン.png`, 1254x1254, opaque square.
+- G1 should use that exact source, deterministically resize to required native asset sizes, and must not regenerate or redesign it.
+- Splash and AnimatedSplashOverlay are not approved by this decision and must remain unchanged.
+- Final icon acceptance is deferred until actual iPhone home-screen verification.
+- If Claude cannot access the exact source asset, it must STOP with `USER_ASSET_REQUIRED` rather than substitute an approximation.
+- recommended model: Sonnet5（高）.
 
 ## K2 VOICE gate audit result
 
