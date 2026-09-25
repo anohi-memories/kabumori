@@ -271,7 +271,7 @@ test("v24 production failures: a move subject before the unknown cause now passe
   assert.equal(inferenceIsHedged("個別材料が確認できないため、当日の下落を特定の要因に結び付けることはできません。"), true);
 });
 
-test("the move subject is narrow: only (当日の)(下落|上昇|値動き|変動)(の) before a named unknown", () => {
+test("the move subject is narrow: only (当日の)(下落|上昇|値下がり|値上がり|値動き|変動)(の) before a named unknown", () => {
   for (const text of [
     "上昇の理由は判断できません。",
     "値動きの原因は確認できません。",
@@ -279,6 +279,9 @@ test("the move subject is narrow: only (当日の)(下落|上昇|値動き|変�
     "当日の上昇の要因は特定できません。",
     "下落の背景は確認できていません。",
     "因果関係は確認できません。",
+    "値下がりの要因は特定できません。",
+    "値上がりの要因は特定できません。",
+    "当日の値下がりの要因は特定できません。",
   ]) {
     assert.equal(inferenceIsHedged(text), true, text);
   }
@@ -287,9 +290,48 @@ test("the move subject is narrow: only (当日の)(下落|上昇|値動き|変�
     "半導体株の下落の要因は特定できません。", // subject other than the allowed move nouns
     "当日の要因は特定できません。円高が逆風になりました。",
     "急な下落の要因は特定できません。",
+    "急な値下がりの要因は特定できません。",
   ]) {
     assert.equal(inferenceIsHedged(text), false, text);
   }
+});
+
+// --- D. 値下がり/値上がり recognized as the same "cause unknown" statement as 下落/上昇 ----------
+// Root cause: UNDETERMINED_MOVE_PREFIX's move-noun alternation had 下落/上昇 but not their more
+// colloquial verb-noun synonyms 値下がり/値上がり, so a semantically identical hedge was wrongly
+// rejected (observed in a production v26 close dry-run: 「値下がりの要因は特定できません」).
+
+test("値下がり/値上がり pass exactly like their 下落/上昇 synonyms (root-cause regression)", () => {
+  for (const text of [
+    "下落の要因は特定できません。",
+    "値下がりの要因は特定できません。",
+    "上昇の要因は特定できません。",
+    "値上がりの要因は特定できません。",
+  ]) {
+    assert.equal(inferenceIsHedged(text), true, text);
+  }
+});
+
+test("値下がり/値上がり do not weaken hedging safety: an unrelated allowed noun is still not laundered, and a causal assertion naming 値下がり/値上がり is still rejected", () => {
+  for (const text of [
+    "値下がりの要因は円高です。", // asserts a cause using the allowed noun -- must still fail
+    "値上がりの理由は好決算です。",
+    "円高を受けて値下がりしましたが理由は特定できません。", // causal assertion elsewhere in the sentence
+    "値下がりの要因は特定できません\n円高が逆風になりました", // multi-sentence: second sentence unhedged
+  ]) {
+    assert.equal(inferenceIsHedged(text), false, text);
+  }
+});
+
+test("a holding_impacts draft using 値下がり/値上がり passes the local checks and reaches the Fact call (was INFERENCE_NOT_HEDGED, no MIC content involved)", async () => {
+  const snap = snapshot("close", { "1111": DOWN, "2222": FLAT });
+  const packet = buildPacket(snap, []);
+  const unknownCauseFall = impact({ ticker_code: "2222", inference_ja: "値下がりの要因は特定できません。" });
+  const unknownCauseRise = impact({ ticker_code: "1111", inference_ja: "値上がりの要因は特定できません。" });
+  const calls: string[] = [];
+  const outcome = await generateReport(snap, packet, requester(body({ holding_impacts: [unknownCauseFall, unknownCauseRise] }), calls));
+  assert.equal(outcome.status, "passed", outcome.issues.join(","));
+  assert.deepEqual(calls, ["draft", "fact"], "local checks pass and the Fact check runs");
 });
 
 test("causal assertions are still rejected even with an unknown-cause clause or a hedge", () => {

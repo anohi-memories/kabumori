@@ -1158,9 +1158,12 @@ const HEDGE = /可能性|考えられ|とみられ|見られ|かもしれ|余地
 // Only a complete, simple inability-to-determine statement may omit a hedge. Anchoring the
 // whole sentence prevents an unrelated allowed noun (e.g. "材料") from laundering another claim.
 // The only free-ish part is an optional subject naming the move whose cause is unknown
-// ("(当日の)(下落|上昇|値動き|変動)(の)"), which the model commonly prepends
-// (production v24 close dry-runs: 「下落の要因は特定できません」「当日の下落要因は特定できません」).
-const UNDETERMINED_MOVE_PREFIX = "(?:(?:当日の)?(?:下落|上昇|値動き|変動)(?:の)?)?";
+// ("(当日の)(下落|上昇|値下がり|値上がり|値動き|変動)(の)"), which the model commonly prepends
+// (production v24 close dry-runs: 「下落の要因は特定できません」「当日の下落要因は特定できません」;
+// production v26 close dry-run: 「値下がりの要因は特定できません」 -- 値下がり/値上がり are the
+// same "cause unknown" statement as 下落/上昇, just phrased with the more colloquial verb-noun
+// synonym, and were wrongly rejected before this fix).
+const UNDETERMINED_MOVE_PREFIX = "(?:(?:当日の)?(?:下落|上昇|値下がり|値上がり|値動き|変動)(?:の)?)?";
 const UNDETERMINED_ONLY = new RegExp(
   "^(?:(?:入力情報|確認できる情報)から)?" + UNDETERMINED_MOVE_PREFIX +
     "(?:明確な)?(?:個別(?:の)?)?(?:要因|原因|理由|材料|因果関係|影響|背景)(?:との因果関係)?(?:は|が|を)?" +
