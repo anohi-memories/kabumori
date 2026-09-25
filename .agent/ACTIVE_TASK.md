@@ -44,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: done
-- task_id: kabumori-pr24-privacy-merge-postmerge-verify-20260924
+- status: ready
+- task_id: kabumori-approved-app-icon-integration-20260925
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: closed; Final K1 PASS, awaiting artwork/operator release inputs
+- allocation: assigned; integrate exact user-approved app icon for iPhone verification, icon only
 
 ## Claude G2
 - owner: claude
