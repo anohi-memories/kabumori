@@ -248,13 +248,17 @@ test("A: invalid JSON and empty output fail with stable codes and keep billed us
 });
 
 test("A: web_search summary tolerates missing actions and non-object output", () => {
-  assert.deepEqual(summarizeBreakingMarketWebSearch(null), { actions: {}, sourceCount: 0, allowedSourceCount: 0 });
+  const counts = (value: unknown) => {
+    const { actions, sourceCount, allowedSourceCount } = summarizeBreakingMarketWebSearch(value);
+    return { actions, sourceCount, allowedSourceCount };
+  };
+  assert.deepEqual(counts(null), { actions: {}, sourceCount: 0, allowedSourceCount: 0 });
   assert.deepEqual(
-    summarizeBreakingMarketWebSearch({ output: [{ type: "web_search_call" }, { type: "message" }, 3] }),
+    counts({ output: [{ type: "web_search_call" }, { type: "message" }, 3] }),
     { actions: { unknown: 1 }, sourceCount: 0, allowedSourceCount: 0 },
   );
   assert.deepEqual(
-    summarizeBreakingMarketWebSearch({
+    counts({
       output: [{ type: "web_search_call", action: { type: "search", sources: [{ url: AP }, { url: "https://example.com/x" }] } }],
     }),
     { actions: { search: 1 }, sourceCount: 2, allowedSourceCount: 1 },

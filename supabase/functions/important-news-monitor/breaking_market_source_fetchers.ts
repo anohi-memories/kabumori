@@ -344,13 +344,78 @@ export function countBreakingMarketWebSearchCalls(response: unknown): number {
  * domains. An empty candidates array with zero allowed sources means the search returned nothing usable;
  * with sources present it means the model declined them.
  */
+export const BREAKING_MARKET_SOURCE_SAMPLE_LIMIT = 5;
+const SOURCE_SAMPLE_URL_MAX = 300;
+const SOURCE_SAMPLE_TITLE_MAX = 160;
+const SEARCH_QUERY_MAX = 200;
+
+/**
+ * Observability only: metadata of a web_search source, never its content. publishedAt is whatever
+ * date the tool itself attached to the source (null when it attached none); urlDate is a YYYY-MM-DD
+ * read from the URL path (e.g. reuters.com/.../2026-09-25/), so an undated source can still be aged.
+ */
+export type BreakingMarketSourceSample = {
+  url: string | null;
+  domain: string | null;
+  title: string | null;
+  publishedAt: string | null;
+  urlDate: string | null;
+  opened: boolean;
+};
+
+function clip(value: unknown, max: number): string | null {
+  return typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null;
+}
+
+function urlDomain(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+function urlDate(url: string | null): string | null {
+  const path = (() => {
+    try {
+      return url ? new URL(url).pathname : "";
+    } catch {
+      return "";
+    }
+  })();
+  const found = path.match(/(20\d{2})[-/](\d{2})[-/](\d{2})(?![\d])/);
+  return found ? `${found[1]}-${found[2]}-${found[3]}` : null;
+}
+
+function sourceDate(source: Record<string, unknown>): string | null {
+  for (const key of ["published_at", "publishedAt", "published_date", "date", "last_updated"]) {
+    const value = clip(source[key], 40);
+    if (value) return value;
+  }
+  return null;
+}
+
+/**
+ * What the web_search tool actually did and returned, independent of the model's answer: action types
+ * (search / open_page / find_in_page), how many source URLs it surfaced (total and on the allowed
+ * domains), the first BREAKING_MARKET_SOURCE_SAMPLE_LIMIT sources in the tool's own order, the pages it
+ * opened, and the search strings the model issued. An empty candidates array with zero allowed sources
+ * means the search returned nothing usable; with sources present it means the model declined them.
+ */
 export function summarizeBreakingMarketWebSearch(response: unknown): {
   actions: Record<string, number>;
   sourceCount: number;
   allowedSourceCount: number;
+  sourcesSample: BreakingMarketSourceSample[];
+  openedUrls: string[];
+  searchQueries: string[];
 } {
   const actions: Record<string, number> = {};
   let sourceCount = 0;
+  const sources: Record<string, unknown>[] = [];
+  const openedUrls: string[] = [];
+  const searchQueries: string[] = [];
   const output = typeof response === "object" && response !== null
     ? (response as { output?: unknown }).output
     : null;
@@ -359,18 +424,42 @@ export function summarizeBreakingMarketWebSearch(response: unknown): {
       if (typeof item !== "object" || item === null) continue;
       if ((item as { type?: unknown }).type !== "web_search_call") continue;
       const action = (item as { action?: unknown }).action;
-      const type = typeof action === "object" && action !== null &&
-          typeof (action as { type?: unknown }).type === "string"
-        ? (action as { type: string }).type
-        : "unknown";
+      const record = typeof action === "object" && action !== null ? action as Record<string, unknown> : {};
+      const type = typeof record.type === "string" ? record.type : "unknown";
       actions[type] = (actions[type] ?? 0) + 1;
-      const sources = typeof action === "object" && action !== null
-        ? (action as { sources?: unknown }).sources
-        : null;
-      if (Array.isArray(sources)) sourceCount += sources.length;
+      if (Array.isArray(record.sources)) {
+        sourceCount += record.sources.length;
+        for (const source of record.sources) {
+          sources.push(typeof source === "object" && source !== null ? source as Record<string, unknown> : {});
+        }
+      }
+      const opened = type === "open_page" ? clip(record.url, SOURCE_SAMPLE_URL_MAX) : null;
+      if (opened && !openedUrls.includes(opened)) openedUrls.push(opened);
+      for (const query of [record.query, ...(Array.isArray(record.queries) ? record.queries : [])]) {
+        const text = clip(query, SEARCH_QUERY_MAX);
+        if (text && !searchQueries.includes(text)) searchQueries.push(text);
+      }
     }
   }
-  return { actions, sourceCount, allowedSourceCount: collectBreakingMarketSourceUrls(response).size };
+  const sourcesSample = sources.slice(0, BREAKING_MARKET_SOURCE_SAMPLE_LIMIT).map((source) => {
+    const url = clip(source.url, SOURCE_SAMPLE_URL_MAX);
+    return {
+      url,
+      domain: urlDomain(url),
+      title: clip(source.title, SOURCE_SAMPLE_TITLE_MAX),
+      publishedAt: sourceDate(source),
+      urlDate: urlDate(url),
+      opened: url !== null && openedUrls.includes(url),
+    };
+  });
+  return {
+    actions,
+    sourceCount,
+    allowedSourceCount: collectBreakingMarketSourceUrls(response).size,
+    sourcesSample,
+    openedUrls: openedUrls.slice(0, 3),
+    searchQueries: searchQueries.slice(0, 3),
+  };
 }
 
 type RawBreakingMarketCandidate = {
@@ -414,6 +503,12 @@ export type BreakingMarketQueryDiagnostics = BreakingMarketValidationDiagnostics
   /** Source URLs the search surfaced, in total and on BREAKING_MARKET_SOURCE_DOMAINS. */
   searchSourceCount?: number;
   allowedSourceCount?: number;
+  /** Up to BREAKING_MARKET_SOURCE_SAMPLE_LIMIT source metadata rows, in the tool's order. */
+  searchSourcesSample?: BreakingMarketSourceSample[];
+  /** Pages the tool opened (open_page actions), at most 3. */
+  openedUrls?: string[];
+  /** Search strings the model issued (search actions), at most 3. */
+  searchQueries?: string[];
 };
 
 export type BreakingMarketQueryResult = {
@@ -733,6 +828,9 @@ export async function fetchBreakingMarketQueryWithDiagnostics(
   diagnostics.webSearchActions = search.actions;
   diagnostics.searchSourceCount = search.sourceCount;
   diagnostics.allowedSourceCount = search.allowedSourceCount;
+  diagnostics.searchSourcesSample = search.sourcesSample;
+  diagnostics.openedUrls = search.openedUrls;
+  diagnostics.searchQueries = search.searchQueries;
   // Recorded before any later failure: an incomplete or unparsable response is still billed.
   const usage = usageFromResponse(raw);
   diagnostics.inputTokens = usage.inputTokens;
