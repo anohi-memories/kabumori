@@ -33,13 +33,13 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: idle
 - task_id: kabumori-pr32-morning-fact-contract-final-review-20260925
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: assigned; PR #32 morning prompt/Fact contract final review
+- allocation: deferred by user after Codex interruption; incomplete review preserved, do not treat slot as free for overwrite
 
 ## Claude G1
 - owner: claude
@@ -54,12 +54,12 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: done
-- task_id: kabumori-morning-prompt-fact-contract-fix-20260925
+- status: ready
+- task_id: kabumori-pr32-merge-redeploy-dryrun-review-deferred-20260925
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: closed; Final K2 source PASS, H2 review assigned
+- allocation: assigned; validate current PR #32 head incl. partial Codex fix, merge/redeploy/dry-run with app_enabled=false; review debt remains
 
 ## Claude G3
 - owner: claude
