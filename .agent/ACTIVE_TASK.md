@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - task_id: x-admin-pr33-final-auth-security-review-20260926
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: H1 final review FAIL; PR #33 remains open/unmerged; AMR allowlist and submit-time freshness are blockers; C1 required; recommended Sol（高）
+- allocation: closed; Final C1 FAIL accepted, PR #33 must not merge at `e6b93be`; three Auth fixes returned to G4
 
 ## Codex H2
 - owner: codex
@@ -74,12 +74,12 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: done
-- task_id: x-admin-pr33-rebase-stabilize-auth-review-prep-20260925
+- status: ready
+- task_id: x-admin-pr33-auth-fix-round2-20260926
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: closed; Final K4 PASS, PR #33 head `e6b93be` mergeable + Netlify Preview PASS; H1 final Auth/security review assigned
+- allocation: assigned; fix three C1 Auth findings on PR #33, then re-review; recommended Opus5.5（高）
 
 ## Deferred
 
