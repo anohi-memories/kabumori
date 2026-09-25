@@ -45,11 +45,11 @@
 - owner: claude
 - slot: claude-1
 - status: ready
-- task_id: kabumori-approved-app-icon-integration-20260925
+- task_id: kabumori-pr31-icon-merge-postmerge-verify-20260925
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: assigned; integrate exact user-approved app icon for iPhone verification, icon only
+- allocation: assigned; merge reviewed PR #31 and verify icon on main, no EAS/TestFlight
 
 ## Claude G2
 - owner: claude
