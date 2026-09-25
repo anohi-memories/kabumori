@@ -1,189 +1,151 @@
 # Codex Task
 
-- task_id: x-autopost-phase1h-gated-dispatcher-final-review-20260925
+- task_id: x-autopost-phase1i-exact-account-refresh-final-review-20260925
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: codex
 - priority: critical
 - recommended_model: Sol（高）
-- purpose: K3 PASS済みPhase1H gated-OFF v2 dispatcher source candidateを、gate fail-closed、no-legacy-fallback、resume安全性、exact-account credential、provider-start durability、typed completion wiring、ACL/migrationの観点で独立レビューする。production deploy/activation/X API callは行わない。
+- purpose: K3 PASS済みPhase1I exact-account pre-X refresh writerを、account authority / Vault secret boundary / OAuth rotation / concurrency / provider-start race / ACL/migrationの観点で独立レビューする。production apply/deploy/real token refresh/X API callは禁止。
 
 ## Target
 
-Implementation commit:
-- `59bd54412eae989400b6ce7e9ecb56dc943db94f`
+Implementation:
+- `12e9fd1`
 
-Primary files:
+Primary scope:
+- `supabase/migrations/20260925150000_x_autopost_phase1i_account_refresh.sql`
+- `supabase/functions/_shared/x_v2_account_refresh.ts`
+- `supabase/functions/_shared/x_v2_account_refresh_test.ts`
+- `supabase/functions/x-test-post/account_refresh_migration_test.ts`
 - `supabase/functions/x-test-post/v2_dispatcher.ts`
-- `supabase/functions/x-test-post/v2_dispatch_ledger_rpc.ts`
 - `supabase/functions/x-test-post/v2_dispatcher_test.ts`
-- `supabase/functions/x-test-post/v2_dispatch_ledger_rpc_test.ts`
-- `supabase/functions/x-test-post/dispatch_resume_migration_test.ts`
-- `supabase/migrations/20260925120000_x_autopost_phase1h_dispatch_resume.sql`
-- `supabase/tests/x_autopost_phase1h_behavior.sql`
-- `supabase/tests/x_autopost_phase1h_run.sh`
-- `supabase/tests/x_autopost_phase1h_gated_dispatcher.md`
-
-K3 evidence:
-- gate hard OFF by default
-- live legacy dispatcher unchanged/unwired
-- focused Phase1B–1H 99/99 PASS
-- x-test-post 464/464 PASS
-- _shared 129/129 PASS
-- important-news-monitor 431/431 PASS
-- greeting/tip 138/138 PASS
-- disposable Phase1H behavior PASS
-- production mutation/X API calls = 0
+- `supabase/tests/x_autopost_phase1i_fixture.sql`
+- `supabase/tests/x_autopost_phase1i_behavior.sql`
+- `supabase/tests/x_autopost_phase1i_run.sh`
+- `supabase/tests/x_autopost_phase1i_account_refresh.md`
 
 ## Mandatory startup
 
 1. Read PROJECT_RULES.md
 2. Read .agent/ORCHESTRATION.md
 3. Read .agent/CURRENT_STATE.md
-4. Read G3 Phase1H TASK/Report
-5. Read Phase1E/1F/1G review history
-6. Fresh fetch origin/main
-7. Confirm independent H1 worktree/checkout
-8. Inspect H2/G1/G2/G3/G4 and prove no overlap
-9. Review implementation commit and current main for drift
-10. Do not deploy/apply/activate anything
+4. Read G3 Phase1I TASK/Report and prior Phase1E/1H review history
+5. Fresh fetch origin/main
+6. Confirm independent H1 worktree/checkout
+7. Confirm H2/G1/G2/G3/G4 scopes do not overlap this review
+8. Review implementation commit and current-main drift
+9. Do not apply/deploy/refresh anything
 
-## Review A — hard gate
+## Review A — exact-account authority
+
+Verify before token endpoint call:
+- attempt/claim owns exact social_account_id
+- scheduled post remains running and bound
+- brand/account/platform match
+- X + identity_verified + publish_enabled
+- access/refresh refs belong only to exact account
+- shared/ambiguous refs fail closed
+- no brand-first/first-row/hardcoded/env/oauth_token_store fallback
+- no caller-supplied generic secret-id authority
+
+Attack with wrong account/brand/ref/attempt/stale claim.
+
+## Review B — secret/Vault boundary
 
 Verify:
-- missing/malformed env => OFF
-- only exact documented value enables
-- gate evaluated before claim/credential/provider work
-- no client/admin/mobile input can enable it
-- no partially-started v2 attempt can fall through to legacy posting
-- gate OFF causes zero v2 claim/X calls
-- live legacy path remains unchanged
+- refresh/access plaintext never reaches client/admin/mobile/result/log
+- refresh token stays only in trusted server helper
+- provider response body/token/ref IDs are never logged
+- only exact account's own Vault refs are writable
+- rotated refresh updates both; omitted refresh preserves existing refresh secret
+- Vault error messages are fixed-code masked
+- direct API roles cannot write state/Vault through Phase1I public surface
+- SECURITY DEFINER + empty search_path + schema qualification
+- service_role-only EXECUTE
+- no default PUBLIC EXECUTE window
 
-Try whitespace/case/alternate truthy values and env-read failure.
+Assess residual production service_role Vault powers explicitly.
 
-## Review B — claim / exact-account authority
+## Review C — provider refresh semantics
 
-Verify dispatcher:
-- calls only v2 account-bound claim path
-- never calls old unpartitioned claim
-- never binds legacy pending rows
-- claim.social_account_id remains sole credential authority
-- resume credential reader cannot cross account/brand/post/attempt
-- no brand-only/first-row/hardcoded/env/legacy token fallback
-- wrong-account credential response fails before X
+Verify exactly one POST to token endpoint:
+- manual redirect
+- timeout
+- no retry
+- no second request on 3xx
+- malformed 2xx fails closed
+- invalid_grant -> reauth_required
+- unknown/network/timeout/408/5xx -> uncertain and no blind replay
+- 429/other 4xx classes match documented source semantics
+- no X create/media call in refresh helper
 
-## Review C — resume safety
+## Review D — ordering / external atomicity
 
 Review:
-- oldest resumable attempt selection
-- resumable classes only
-- completed/rejected/uncertain/incomplete behavior
-- snapshot/plan immutability
-- resume cannot regenerate content inconsistently
-- resume cannot resend confirmed provider steps
-- confirmed-incomplete re-entry performs only DB completion, no provider call
-- crash after provider response before finish is blocked/manual, not replayed
+- DB lease acquired before refresh request
+- commit requires unchanged exact account/attempt/lease
+- Vault writes and state release are transactionally coherent inside Postgres
+- X's external single-use refresh rotation is explicitly non-atomic
+- failed/uncertain commit never reports success
+- release failure cannot silently allow provider-start
+- operator recovery path is explicit and not auto-replayed
 
-Try adversarial stale/newer-attempt and cross-account resume cases.
+## Review E — concurrency / races
 
-## Review D — provider-start / one-request guarantee
+Adversarially verify:
+- same account concurrent refresh -> one winner
+- different accounts independent
+- provider-start transition cannot race past refresh lease
+- stale attempt cannot overwrite rotated credentials
+- reconnect/account mutation invalidates old writer
+- used/lost lease cannot commit
+- uncertain/reauth_required states cannot be blindly retried
+- resumed multi-step/provider-started paths do not refresh
 
-Single-create:
-- provider-start durable before POST
-- persistence failure => 0 X calls
-- exactly one create after start
-- no hidden refresh/retry
-- 401/rejection after start => no second create
-- network/timeout/408/5xx/3xx/2xx-no-id => uncertain
-- completion failure after x_created => same-id confirmed-incomplete
+## Review F — dispatcher integration contract
 
-Multi-step:
-- durable begin before each media/create/reply request
-- one request per step per run
-- no in-memory loop across unpersisted steps
-- restart between every step remains exact-once
-- failed finish write after real provider call never causes replay
+Verify source-only optional refresh port:
+- called only for documented pre-X refresh-required condition
+- never after durable provider-start
+- refresh success settles/re-enters safely
+- does not chain refresh + hidden create in unsafe opaque block
+- live legacy dispatcher and production v2 entry remain unwired/OFF
 
-## Review E — tip/greeting integration
-
-Tip:
-- snapshot part count matches plan
-- re-entry uses immutable snapshot content
-- reply chain uses ledger ids
-- uncertain/rejected stops later parts
-- completion only after all confirmed
-
-Greeting:
-- stale JST zero provider calls
-- attempt-bound publish_claim acquisition
-- media confirmation durable before create
-- create uses exact media id
-- resume never reuploads confirmed media
-- uncertain create never replays
-- storage receipt callback only after authoritative DB completion
-
-## Review F — unsupported types / poll fidelity
+## Review G — migration / rollout safety
 
 Verify:
-- interaction remains disabled because poll seam missing
-- no silent text-only degradation
-- brand_post remains disabled
-- unknown types fail closed
-- bound unsupported type settles without provider calls and does not become retryable accidentally
-
-## Review G — ledger/result classes
-
-Review all dispatcher result classes and scheduler implications:
-- gate_off
-- no_work
-- unsupported_type
-- pre_x_retryable
-- pre_x_terminal
-- provider_rejected
-- provider_uncertain
-- confirmed_db_incomplete
-- completed
-- in_progress
-- blocked_manual_reconciliation
-
-Verify non-reclaimable classes cannot be automatically retried.
-
-## Review H — ACL / migration
-
-Review Phase1H migration:
-- ordered dependency on 1B→1G
-- additive/versioned semantics
+- additive ordered dependency after Phase1H
 - explicit transaction
-- no default PUBLIC EXECUTE window
-- SECURITY DEFINER + empty search_path
-- service_role-only API RPCs
-- snapshot table read-only to API roles
-- trigger guard plan+snapshot requirement
-- resume credential reader secret boundary
-- apply-tool nested transaction risk
-- live-definition/grant dependencies
+- preflight dependencies are correct
+- no create-or-replace/drop of unrelated live objects
+- triggers and state table enforce lease invariants
+- service_role-only API RPCs; API roles cannot mutate Vault/state
+- apply-tool/nested transaction assumptions documented
+- production migration remains unapplied
+- live-definition/grant/read-back prerequisites are sufficient
 
-## Review I — tests
+## Review H — tests
 
-At minimum rerun:
-- dispatcher/adapter tests
-- focused Phase1B–1H
+Rerun at minimum:
+- Phase1I focused/helper/static/dispatcher
+- Phase1B–1I focused
 - x-test-post
 - _shared
 - important-news-monitor
 - greeting/tip-specific
-- disposable Phase1H behavior
-- relevant Phase1D/E/F/G proofs
+- disposable Phase1I behavior/concurrency
+- relevant Phase1D/E/F/G/H proofs
 - deno check/lint
 - bash -n
 - git diff --check
 
-If concrete bug is found:
-- minimal Phase1H-scope source-only fix allowed
+If a concrete bug is found:
+- minimal source-only fix is allowed
 - add regression
 - push safely
-- no deploy/apply/activation
+- no deploy/apply/real refresh/token/Vault/X mutation
 
 ## Forbidden
 
@@ -191,16 +153,14 @@ If concrete bug is found:
 - db push/history repair
 - Edge deploy
 - Cron mutation
-- OAuth/Vault/token mutation/refresh
+- real OAuth refresh/token rotation
+- production Vault plaintext read/write
 - real X API/post/media
 - gate enable
 - scheduler/claim switch
-- old claim revoke
-- automatic legacy binding
 - apps/admin/**
 - consumer mobile/**
-- G1/G2 app work
-- G4 work
+- unrelated G2/H2 work
 
 ## Production mutation budget
 
@@ -211,48 +171,21 @@ If concrete bug is found:
 Update `.agent/CODEX_REPORT.md` with:
 - verdict PASS / PASS-WITH-FIX / FAIL
 - findings by severity
-- exact changed files/fix commit if any
-- gate assessment
-- claim/exact-account assessment
-- resume assessment
-- provider one-request assessment
-- tip/greeting assessment
-- unsupported type assessment
-- result-class/retry assessment
+- exact-account assessment
+- Vault/secret assessment
+- refresh provider assessment
+- external atomicity/uncertain-result assessment
+- concurrency/race assessment
+- dispatcher integration assessment
 - ACL/migration assessment
 - exact tests/counts
-- source-candidate acceptance
+- changed files/fix commit if any
+- production mutation=0
 - production activation decision (expected NO)
 - remaining blockers
-- production mutation=0
 - next recommendation
 
 Then:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for C1.
-
-
-## Final C1 — Phase1H
-
-Verdict: **PASS-WITH-FIX for source-only candidate**.
-
-Accepted:
-- reviewed implementation `59bd54412eae989400b6ce7e9ecb56dc943db94f`
-- H1 fix commit `ce60d7a29022956d049521ffaeb533a749152a60`
-- PR #28 contains the accepted source-only fix
-- P2 fixed: dispatcher now reports the committed pre-X ledger class, including attempt-cap terminalization
-- failed/malformed settle writes now return `blocked_manual_reconciliation` instead of pretending durable retry/terminal state
-- unsupported_type is returned only after terminal settle is committed
-- focused Phase1B–1H 102/102 PASS
-- x-test-post 467/467 PASS
-- _shared 129/129 PASS
-- important-news-monitor 431/431 PASS
-- greeting/tip/publish_claim 138/138 PASS
-- disposable Phase1D/E/F/G/H proofs PASS
-- production mutation/deploy/gate/X API calls = 0
-
-Decision:
-- Phase1H accepted as source candidate after H1 fix.
-- Production activation remains NO.
-- Next step: G3 fresh-main verify PR #28 -> merge -> post-merge regression.
