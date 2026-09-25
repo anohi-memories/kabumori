@@ -1015,3 +1015,11 @@
 - production/config mutation by Claude=0; operator created one test-only Auth user, not in admin_users.
 - Preview callback URL already existed; no wildcard added; mobile redirect and Reset Password template unchanged.
 - next prerequisite: custom SMTP setup in a separate task, then resume bounded recovery+invite E2E.
+
+## G4 PR #33 Auth E2E resume after SMTP
+
+- user saved temporary Gmail Custom SMTP in Supabase on 2026-09-26 JST.
+- G4 assigned to resume the previously blocked bounded real recovery + invite E2E only.
+- PR #33 remains unmerged; merge waits for K4 E2E result.
+- no real Admin account, admin_users grant, wildcard redirect, shared Reset Password template change, or Vercel production deploy is authorized.
+- recommended Claude model: Opus5.5（高）.
