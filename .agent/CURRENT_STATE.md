@@ -32,7 +32,7 @@
 ## Current slot snapshot
 
 - H1: `done` — `x-autopost-phase1i-exact-account-refresh-final-review-20260925`; Final C1 PASS-WITH-FIX
-- H2: `ready` — `kabumori-pr32-morning-fact-contract-final-review-20260925`
+- H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
 - G1: `done` — `kabumori-pr31-icon-merge-postmerge-verify-20260925`
   - Final K1 PASS. PR #31 merged -> `7aa394fc1dc73edd0c67b6529923ec4dc9616e7f`.
   - Approved icon reproducibly wired into Expo/iOS; 126/126 tests; no production mutation.
@@ -55,6 +55,16 @@
 - Codex review skipped as low-risk asset/config-only change.
 - next G1: fresh-main merge + post-merge verification. EAS/TestFlight requires separate authorization.
 - recommended model: Sonnet5（中）.
+
+## PR #32 review deferred / continue validation
+
+- User explicitly deferred H2 because Codex became unavailable mid-review.
+- H2 has no final verdict and remains incomplete.
+- During the partial review, Codex pushed `722d191dcbe4ba4ce5cf549659493df03d35a353`, tightening empty-news handling to packet-wide emptiness and adding mixed-news/adversarial tests.
+- Current PR #32 head is `722d191...`.
+- G2 will independently rerun full source verification, then may merge/deploy with app_enabled=false and perform morning>=3 / close>=3 dry-runs.
+- app_enabled=true remains forbidden until later review/activation decision.
+- recommended model: Opus5.5（高）.
 
 ## Final K2 PR #32 source contract fix
 
