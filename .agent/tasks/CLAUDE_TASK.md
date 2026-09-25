@@ -1,313 +1,197 @@
 # Claude Task 2
 
-- task_id: kabumori-report-dryrun-false-reject-hardening-20260925
+- task_id: kabumori-voice-gate-product-policy-audit-20260925
 - owner: claude
 - slot: claude-2
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: claude
 - priority: high
-- recommended_model: Sonnet5（極高）
-- purpose: production v26 dry-runで残った大引けのfalse reject 2系統と朝刊Fact false positiveを、validator安全性を緩めずsource-onlyで最小修正する。deploy禁止。
+- recommended_model: Opus5.5（中）
+- purpose: かぶモリの定期配信でVOICEチェックが過剰にfail-closedになっていないかを監査し、Fact/Safetyと文体品質を分離した PASS / WARN / BLOCK 方針を設計する。今回は監査・設計のみ。source変更・deploy禁止。
 
-## Latest K2 evidence
+## Product decision
 
-PR #26:
-- reviewed head: `2b40a617e34c73c301e40a17692883ac70fd3e0a`
-- merged: `f7498cd3a3c8be36c5c56ba19a437ba300d6f93a`
+有料ユーザー向けの定期配信では、
+- 少し不自然
+- AIっぽい
+- 語尾や絵文字が微妙
+- 軽い言い回しの違和感
+程度で朝刊/大引け等が欠配になるより、Fact/Safetyを満たすレポートが毎日届くことを優先する。
 
-Current production:
-- personalized-reports v26
-- deployed by another workstream (MIC report-context integration), not by G2
-- source matched then-current origin/main `4382a33`
-- verify_jwt=false
-- app_enabled=false
-- cron unchanged
+VOICEは原則として「文章品質」の判定に寄せ、
+Fact/Safetyと役割を分離する。
 
-v26 dry-run:
-- close: 3/5 PASS
-- close failures:
-  1. `値下がりの要因は特定できません。` => INFERENCE_NOT_HEDGED
-  2. factual lead + unknown-cause clause, e.g. `小幅高でしたが、指数との比較では相対的に弱く、値動きの要因は特定できません。` => INFERENCE_NOT_HEDGED
-- morning: 0/1, local issues 0 but Fact FAIL
-- no truncation
-- no IMPACT_TOO_LONG
-- no unsafe causal assertion observed
-- no persistence / no notification
-- app_enabled remained false
+目標分類:
+- PASS: 問題なし
+- WARN: 文体上の軽微な問題。配信は止めない
+- BLOCK: 意味破綻・安全上の問題など、本当に配信停止すべきもの
 
-## Goal
+## Critical constraint
 
-Fix only the remaining observed false-reject / false-positive classes while preserving fail-closed behavior.
+現在H2が `kabumori-pr29-plus-v27-validator-final-review-20260925` をレビュー中。
+そのレビュー対象ファイルやPRを変更しないこと。
 
-### A. Unknown-cause movement vocabulary
-
-Add only the clearly equivalent movement nouns:
-- `値下がり`
-- `値上がり`
-
-to the narrow movement-prefix allowlist.
-
-Keep:
-- whole-sentence anchoring
-- CAUSAL_ASSERTION-first rejection
-- sentence-by-sentence validation
-- no arbitrary adjective/noun prefix
-- no free-text subject
-
-Must PASS:
-- 値下がりの要因は特定できません
-- 当日の値下がり要因は特定できません
-- 値上がりの理由は判断できません
-- 当日の値上がりの原因は確認できません
-
-Must still FAIL:
-- 急な値下がりの要因は特定できません
-- 半導体株の値上がり要因は特定できません
-- 円安による値上がりの要因は特定できません
-- 値下がりの要因は円高です
-- 値上がりの理由は好決算です
-
-### B. Close inference-field prompt hardening
-
-Do NOT broaden the validator to accept a factual clause before an unknown-cause statement in this task.
-
-Instead, strengthen the generation instructions so the inference field contains inference only.
-
-The model must not write factual performance/comparison clauses such as:
-- 小幅高でしたが
-- 指数との比較では相対的に弱く
-- 前日比で上昇しており
-
-inside the inference field.
-
-Facts belong in the fact field.
-
-When causation cannot be supported, inference should be a bounded sentence such as:
-- 値動きの要因は特定できません。
-- 値下がりの要因は特定できません。
-
-Do not duplicate facts from the packet merely to introduce that sentence.
-
-Add regression tests that lock this prompt rule.
-
-### C. Morning Fact false-positive hardening
-
-Observed Fact FAIL treated wording such as:
-- 「値動きを見守る朝刊」
-- 「注意が必要」
-- 「影響しやすい構成」
-
-as recommendation / unsupported impact.
-
-Preferred fix:
-- harden the morning generation prompt/output wording
-- avoid advisory-sounding phrases
-- use neutral observation language, e.g. `注目点`, `確認ポイント`, `値動きを確認`
-- do NOT weaken numeric/entity/factual Fact checks
-- do NOT broadly relax the Fact checker
-
-If a tiny Fact-instruction clarification is truly required, it must be narrowly justified by a regression test and must not make unsupported advice/impact claims pass.
+今回はread-only監査・設計だけ。
+コード変更、PR作成、merge、deploy、設定変更は禁止。
 
 ## Mandatory startup
 
-1. Use an independent worktree / checkout.
-2. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / this TASK / latest G2 report / H2 PR #26 report.
-3. Fresh fetch origin/main.
-4. Confirm PR #26 merge `f7498cd` is in main.
-5. Inspect all later main changes touching personalized-reports, especially MIC integration.
-6. Confirm changed files do not overlap another active workstream.
-7. Production read-only check only.
-8. No deploy.
+1. 独立worktree / checkoutを使う。
+2. fresh origin/main。
+3. 読む:
+   - PROJECT_RULES
+   - .agent/ORCHESTRATION.md
+   - .agent/CURRENT_STATE.md
+   - 本TASK
+   - 最新G2 report
+   - H2の現在TASK
+4. H2とファイル競合が起きないことを確認。
+5. productionは必要ならread-onlyだけ。
 
-If another active workstream is editing the same file(s), STOP and report the collision.
+## Audit scope
 
-## Scope
+### A. かぶモリアプリ側
 
-Prefer changing only:
-- `supabase/functions/personalized-reports/report_logic.ts`
-- related personalized-reports tests
+必ず確認:
+- personalized-reports の Fact/local/VOICE 相当の全gate
+- morning / close
+- Pushまでの経路
+- どの条件で「保存されない」「通知されない」になるか
+- retry/rewriteの有無
+- 文体上の問題が配信停止に直結している箇所
 
-May adjust another file inside `supabase/functions/personalized-reports/` only if the morning Fact prompt/instruction actually lives there and the change is necessary.
+### B. 共通/shared側
 
-Do not change:
-- `mic_market_context.ts`
-- MIC context semantics
-- `market_detail.ts` unless evidence proves necessary
-- `_shared/market_report_packet.ts`
-- DB/schema/migration
-- cron
-- Auth/RLS
-- X
-- G1 release files
-- prompt length budgets (morning 120 / close 160)
+確認:
+- `_shared/kabumori_voice.ts`
+- 共通market report packet
+- Voice/Fact/Safetyの責務分離
+- アプリとXで共通化できるpolicy境界
 
-## Tests
+### C. X側はread-only inventoryのみ
 
-Add exact regression coverage for:
+この部屋からX実装TASKは作らない。
 
-PASS:
-- 値下がりの要因は特定できません
-- 当日の値下がり要因は特定できません
-- 値上がりの理由は判断できません
-- 当日の値上がりの原因は確認できません
+ただし統一方針のため、read-onlyで以下を棚卸し:
+- morning_report
+- close_report
+- useful_tip
+- morning_greeting
+- interaction
+- us_premarket_report
+- その他 Voice evaluator 利用箇所
 
-FAIL:
-- 急な値下がりの要因は特定できません
-- 半導体株の値上がり要因は特定できません
-- 円安による値上がりの要因は特定できません
-- 値下がりの要因は円高です
-- causal assertion + unknown-cause laundering
-- factual lead clause + unsafe causal assertion
-- punctuation/newline bypass variants
+各経路について:
+- VOICE failで投稿が止まるか
+- rewriteがあるか
+- rewrite失敗時に元のFact-passed本文を使えるか
+- Fact/SafetyとVOICEが混ざっていないか
 
-Prompt/output-policy tests:
-- close inference prompt explicitly forbids factual lead clauses
-- morning prompt avoids recommendation-like wording
-- morning/close brief limits remain 120/160
+X側の変更提案は「X担当ちゃへ渡すhandoff案」としてまとめるだけ。
 
-Run:
-- close-validator focused suite
-- full personalized-reports suite
-- related app/report tests if touched
-- deno check
-- deno lint
-- git diff --check
+## Required design
 
-## Forbidden
+### 1. PASS / WARN / BLOCK matrix
 
-- Edge deploy
-- production invoke / LLM dry-run
-- app_enabled change
-- cron/settings mutation
-- DB/schema/migration
-- MIC behavior change
-- merge before K2
+最低限以下を分類する。
 
-## Completion / K2
+WARN候補:
+- 少しAIっぽい
+- 語尾の単調さ
+- 軽い冗長
+- 絵文字数/位置の違和感
+- 見出しが少し不自然
+- ニュース記事っぽい文体
+- 軽微な日本語のぎこちなさ
+- 同義反復
+- ブランドトーンからの軽微なズレ
 
-Create a PR and report:
-- root causes separated into A/B/C
-- exact source changes
-- exact allow/reject boundary
-- prompt wording change
-- whether Fact checker itself changed; if yes, why
-- tests/counts
-- PR number/head
-- production read-back
-- production mutation=0
-- overlap check with MIC/shared personalized-reports work
-- recommendation for H2 review before any merge/deploy
+BLOCK候補:
+- 意味不明/文意破綻
+- 内容が逆転する誤訳
+- 明示的な危険な売買推奨
+- Fact-passed本文をrewriteで事実変更
+- 禁止された断定/捏造
+- 個人情報/秘密情報漏洩
+- 構造破損で画面/配信が成立しない
+- 法令/安全上明確に止めるべき内容
 
-When complete:
+Fact側に残すもの:
+- 数値
+- 銘柄/主体
+- 日付
+- 因果
+- 根拠
+- 市場データとの整合
+- unsupported impact
+- hallucination
+
+VOICE側に残すもの:
+- 自然さ
+- 読みやすさ
+- ブランドトーン
+- 絵文字
+- 冗長さ
+- 語尾
+- AI記事感
+
+### 2. Delivery policy proposal
+
+最低でも次の案を比較する:
+
+A. 現行 fail-closed
+B. WARNは1回rewrite、rewrite失敗なら元のFact-passed本文を配信
+C. WARNはそのまま配信、非同期改善だけ記録
+D. severity閾値方式
+
+推奨案では、
+「週に何回も欠配する」ことを避けることを明示的なKPIにする。
+
+### 3. Observability
+
+設計に以下を含める:
+- voice_status: pass / warn / block
+- warning_codes[]
+- rewrite_attempted
+- rewrite_succeeded
+- fallback_original_used
+- delivery_blocked_by
+- daily delivery success rate
+- block reason breakdown
+- Fact pass rate vs Voice warn rate vs true block rate
+
+### 4. Rollout
+
+big-bang禁止。
+
+提案する段階:
+1. shadow classification
+2. WARN配信許可を一部経路でON
+3. 朝刊/大引け
+4. その他
+5. X側は別部屋で独立レビュー後に切替
+
+## Deliverable
+
+TASK末尾Reportに:
+- 現行全経路のgate一覧
+- 欠配原因の分類
+- Fact / Safety / Voiceの責務分離表
+- PASS/WARN/BLOCK定義
+- 推奨delivery policy
+- 実装影響ファイル候補
+- migration要否
+- backward compatibility
+- rollback
+- telemetry
+- app側実装TASK案
+- X担当ちゃへ渡す完成handoff案
+- 推薦実装モデル
+- 推薦レビューmodel
+
+今回はsource変更0、production mutation 0。
+
+完了時:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for K2.
-
-## Report
-
-### Summary
-
-- task_id：`kabumori-report-dryrun-false-reject-hardening-20260925`
-- result：source-onlyの修正を完了し、PR #29を作成した（**未merge・未deploy**）。K2待ち。
-- changed_files：
-  - `supabase/functions/personalized-reports/report_logic.ts`（+15行。promptの定数だけ）
-  - `supabase/functions/personalized-reports/report_hardening_test.ts`（新規）
-- tests：
-  - 新規 **9/9**
-  - close_validator **23/23**
-  - personalized-reports **96/96**（MICのテストを含む）
-  - 関連スイート **214/214**
-  - deno check・deno lint・git diff --checkはPASS
-- commit_hash：PR head `bed5e79d0ab22e94be6a7c1ebd0f7c8f157ea0c0`
-- push：`origin/g2-report-false-reject-hardening-20260925`。PR https://github.com/anohi-memories/kabumori/pull/29
-- deploy：なし
-- safety_checks：
-  - production mutation 0。本番はread-onlyで確認しただけで、LLMの呼び出しもしていない。
-  - MIC・market_detail・_shared・上限値・validatorの正規表現・Fact checkerは未変更。
-  - 共有ファイルは未変更。
-
-### 前提の変化と衝突の確認
-
-- TASKの記載は「本番はv26」だったが、着手時点では変わっていた。
-  - 別のセッションが16:26に `510acf5`（値下がり／値上がりの修正）を**PRを経由せずmainへ直接commit**し、16:32に**v27としてdeploy**していた。
-  - v27は `510acf5` とbyte一致（`--use-api` のdownloadで確認）。
-- 衝突として報告した。ユーザーから「MICの作業は終了。MICの変更を壊さず、レビュー付きでG2の内容を実行」と指示を受けて着手した。
-- 着手時点で、`personalized-reports` を変更しているopen PR・作業中のbranchはなかった。
-- 本PRは、MICの変更（`ca239cf`、`6419fc9`）と `510acf5` を含むmainの上に作成した。MIC関連のファイルには触れていない。
-
-### root causes（A / B / C）
-
-- **A. 語彙の不足**：`UNDETERMINED_MOVE_PREFIX` に「値下がり／値上がり」がなかった。
-  - 修正は `510acf5` で既にmainに入っている。本PRでは、TASKが指定した境界をテストで固定しただけ。
-- **B. 推定欄の文頭に事実の節が入る**：例「小幅高でしたが、指数との比較では相対的に弱く、値動きの要因は特定できません。」
-  - validatorの拒否は正しい動作なので、**validatorは広げていない**。
-  - 生成側のpromptで、推定欄に事実を書かせないようにした。
-- **C. 朝刊のFact false positive**：「見守る」「注意が必要」「〜しやすい構成」が、推奨や根拠のない影響と判定された。
-  - 生成側のpromptで、中立な観察の言い方に誘導した。**Fact checkerは変更していない**。
-  - MICの入力（`mic_market`）が見通しっぽい表現を誘発した可能性がある。ただし、比較できたのは各1回だけで、確定はしていない。
-
-### exact source changes（report_logic.ts）
-
-- `INFERENCE_FIELD_RULE`（新設。`IMPACT_INSTRUCTIONS` に追加し、朝刊・大引けの両方に適用）：
-  - inference_ja には値動き・騰落率・指数との比較などの事実を書かない。
-  - 「小幅高でしたが」「指数との比較では相対的に弱く」「前日比で上昇しており」を例として明記して禁止した。
-  - 事実は fact_ja にだけ書く。
-  - 要因を裏付けられない場合は「値動きの要因は特定できません。」などの1文だけにし、その文を導くために事実を繰り返さない。
-- `MORNING_WORDING_RULE`（新設。`MORNING_INSTRUCTIONS` にだけ追加）：
-  - 対象：title・summary・overview・watch・risk_notes・checkpoints。
-  - 「見守る／注意が必要／警戒が必要／〜しやすい構成／影響を受けやすい」は使わない。
-  - 代わりに「注目点／確認ポイント／値動きを確認します」を使う。
-- Fact checker：**変更なし**（`REPORT_FACT_INSTRUCTIONS` が不変であることをテストで固定。MICがない場合のFact instructionsが基本セットと完全一致することも確認）。
-
-### allow / reject boundary（テスト済み）
-
-- **PASS**
-  - 値下がりの要因は特定できません
-  - 当日の値下がり要因は特定できません
-  - 値上がりの理由は判断できません
-  - 当日の値上がりの原因は確認できません
-  - 値動きの要因は特定できません
-- **FAIL**
-  - 語彙の外側：急な値下がり… / 半導体株の値上がり… / 円安による値上がり…
-  - 要因名詞を使った事実の断定：値下がりの要因は円高です / 値上がりの理由は好決算です
-  - 因果の断定を後ろの節で打ち消そうとするもの（4パターン）
-  - 改行・`；`・`!`・`.` で区切って危険な文を混ぜるもの（4パターン）
-  - 事実の前置き＋特定不能の文（観測された文）と、前日比の前置き文
-  - 事実の前置き＋因果の断定
-- mutationの確認：
-  - promptのルールを外すと2件がfailする。
-  - 値下がり／値上がりを外すと1件がfailする。
-- 上限値（朝刊120／大引け160）が不変であることもテストで確認した。
-
-### production read-back（read-only）
-
-- `personalized-reports`：**v27**（別セッションによるdeploy、`510acf5` とbyte一致）、verify_jwt=false。
-- `app_enabled=false`、`x_enabled=false`、cronは不変。
-- 本日の大引けcron（17:15）は、確認時点（16:42）ではまだ実行前。
-
-### recommendation
-
-1. H2でPR #29をレビューする（promptだけの変更で、validatorとFactを緩めていないことの確認）。
-2. K2でPASSならmergeし、承認を得たうえで再deployする。deployの前に、mainに直接入った `510acf5` もレビュー対象として確認するのが望ましい。
-3. 再deploy後、大引けdry_runを5回と朝刊dry_run（できれば2回）で実出力を検証する。朝刊は、MICの入力あり・なしの差を見るために、dry_runの応答の `mic` の有無も記録する。
-4. **運用上の推奨**：`personalized-reports` のdeployは1つのslotに一本化し、PRを経由しないmainへの直接commitとdeployは避ける（今回、レビュー前のcodeが本番に入った）。
-
-
-## Final K2 — PR #29 source hardening
-
-Result: **PASS for source implementation; independent review required before merge/deploy**.
-
-Accepted:
-- PR #29 head `bed5e79d0ab22e94be6a7c1ebd0f7c8f157ea0c0`
-- prompt-only hardening in PR #29
-- validator and Fact checker are not weakened by PR #29
-- new 9/9 tests
-- close-validator 23/23
-- personalized-reports 96/96
-- related suite 214/214
-- deno check/lint/diff PASS
-- production mutation from this G2 task = 0
-
-Important exception:
-- `510acf5954b37410b50c23ff92c3f54af6458a72` was independently committed to main and deployed as production v27 before this K2.
-- H2 must review both that already-deployed validator change and PR #29 together.
