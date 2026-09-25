@@ -55,11 +55,11 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-pr26-merge-redeploy-final-dryrun-20260925
+- task_id: kabumori-report-dryrun-false-reject-hardening-20260925
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: assigned; PR #26 merge + production redeploy + final repeated dry-runs
+- allocation: assigned; v26 dry-run remaining false-reject + morning Fact prompt hardening, source-only/no deploy
 
 ## Claude G3
 - owner: claude
