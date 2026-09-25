@@ -984,3 +984,14 @@
 - Netlify Preview PASS; production mutation=0.
 - H1 assigned focused re-review before bounded real recovery/invite E2E.
 - recommended Codex model: Sol（高）.
+
+## Final C1 PR #33 round2 source review
+
+- verdict: **PASS for source readiness to bounded real E2E**.
+- reviewed PR #33 head `2528b5686bcbb3630fb636cec12162803f921f8f`.
+- all three prior findings fixed: generic otp/magiclink denied, submit-time freshness revalidated server-side, signOut failure no longer reported as confirmed logout.
+- tests 83/83 PASS; tsc/lint/build/diff/secret scan PASS; Admin/multibrand regression PASS.
+- production mutation=0.
+- PR #33 remains unmerged.
+- merge remains blocked on one bounded real recovery flow + one invite flow and operator verification of Redirect URL/template/SMTP/session behavior.
+- real E2E/Auth config mutation requires separate user authorization.
