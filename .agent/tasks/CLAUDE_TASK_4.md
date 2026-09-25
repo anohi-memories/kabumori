@@ -3,8 +3,8 @@
 - task_id: x-admin-netlify-live-site-preview-qa-20260925
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: 既にrepository準備済みの apps/admin を実際のNetlifyサイトへ接続し、最初のDeploy Previewで proxy.ts / Supabase SSR / protected route / PR #15 UI semantics を安全にQAする。PR #15 mergeやVercel production deployは行わない。
@@ -362,3 +362,41 @@ head `b044425`のまま、mergeしていない。上記のとおりread-onlyで�
 
 - status -> review_required
 - next_owner -> chatgpt
+
+
+## Final K4 — Netlify live site blocker
+
+Result: **SAFE STOP / USER ACTION REQUIRED**.
+
+Accepted:
+- G4 used an independent worktree
+- main apps/admin local regression 12/12 PASS
+- PR #15 scoped regression 31/31 PASS
+- TypeScript/lint/build/diff/secret scan PASS
+- PR #15 head remains `b04442561d9e9c6d01b4a9fcf640c2cf731cd923` and unmerged
+- no unexpected selector/auth/build semantic drift
+- production mutation = 0
+- Netlify mutation = 0
+
+Blocker:
+- no existing authorized Netlify session/integration exists
+- Netlify site creation requires an explicit human account/repository authorization step
+- Claude correctly did not bypass or persist third-party authorization
+
+Required one-time user action:
+1. Netlify dashboard -> Add new site -> Import an existing project
+2. connect `anohi-memories/kabumori`
+3. Base directory = `apps/admin`
+4. set only:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+5. keep default Deploy Preview behavior enabled
+6. create the site
+
+After that, assign a new G4 continuation for:
+- first Deploy Preview
+- `proxy.ts` runtime QA
+- auth/protected-route QA
+- PR #15 selector/cross-brand QA
+
+Do not merge PR #15 or use Vercel production as a workaround.
