@@ -74,12 +74,12 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: done
 - task_id: x-admin-password-recovery-invite-flow-20260925
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: assigned; Admin forgot/reset/invite password flow + Netlify Preview, no production Auth config mutation
+- allocation: closed; Final K4 PASS for source + Netlify Preview, Codex review intentionally deferred, operator E2E pending
 
 ## Deferred
 
