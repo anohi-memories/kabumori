@@ -3,8 +3,8 @@
 - task_id: kabumori-pr32-morning-fact-contract-final-review-20260925
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: idle
+- next_owner: none
 - priority: high
 - recommended_model: Sol（高）
 - purpose: PR #32の朝刊prompt↔Fact契約修正が、入力状態の正確なmeta-claimだけを許可し、no-news断定・unsupported intraday・因果/助言等の既存BLOCKを弱めていないことを独立最終レビューする。
@@ -140,3 +140,14 @@ When complete:
 - next_owner -> chatgpt
 - update `.agent/CODEX_REPORT_2.md`
 - STOP for C2.
+
+
+## Deferred by user — 2026-09-25
+
+- Review did not complete.
+- Codex became unavailable mid-review.
+- User explicitly requested to defer this review and continue implementation/validation first.
+- A partial review commit was pushed to PR #32: `722d191dcbe4ba4ce5cf549659493df03d35a353`.
+- This is **not** a PASS/PASS-WITH-FIX verdict.
+- Preserve this TASK and resume later from current PR/main state before any final activation decision.
+- Do not treat H2 as complete.
