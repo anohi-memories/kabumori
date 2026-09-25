@@ -44,11 +44,11 @@
 
 - H1: `done` — `x-autopost-phase1i-exact-account-refresh-final-review-20260925`; Final C1 PASS-WITH-FIX
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
-- G1: `ready` — `kabumori-release-readiness-gap-closure-20260925`
-  - release-readiness audit + safe source gap closure
-  - EAS env / Netlify legal Web / Auth redirects / SMTP / TestFlight prerequisites
-  - no secrets, no Auth mutation, no EAS/TestFlight upload
-  - recommended model: Opus5.5（高）
+- G1: `review_required` — `kabumori-release-readiness-gap-closure-20260925`
+  - Full A-F audit: no code bug found, every prior source fix still holds. PR #35 (docs only) open (unmerged).
+  - Corrected stale RELEASE_READINESS.md: A1 wrongly still said the icon shows the Expo template (fixed by PR #31). A1b (AnimatedSplashOverlay, still shows Expo's logo on every launch) reclassified should-fix-before-TestFlight.
+  - New finding: apps/kabumori-web has never had a Netlify site (distinct from apps/admin's, which now exists) -- made explicit to avoid conflation.
+  - Auth Site URL/redirect and SMTP status remain BLOCKED (read-only; no tool can inspect live config without extracting a token). 126/0 tests (unchanged, no code touched). Production mutation 0.
 - G2: `done` — `kabumori-pr34-shadow-merge-deploy-20260925`
 - G3: `done` — `x-autopost-phase1i-pr30-merge-postmerge-verify-20260925`; Final K3 PASS, PR #30 merged -> `a9b1ef4d359d5ef554284fc56427e0cafeaec648`, post-merge verification PASS
 - G4: `ready` — `x-admin-pr15-merge-production-verify-20260925`; PR #15 merge-only + post-merge/production Admin verification; recommended Sonnet5（中）
