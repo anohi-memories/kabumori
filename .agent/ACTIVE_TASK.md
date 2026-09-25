@@ -22,24 +22,24 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - task_id: x-autopost-phase1i-exact-account-refresh-final-review-20260925
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: H1 PASS-WITH-FIX source review complete; PR #30 and report await C1; production activation NO
+- allocation: closed; Final C1 PASS-WITH-FIX, PR #30 accepted for merge
 
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: x-admin-pr15-auth-crossbrand-final-review-20260925
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: assigned; PR #15 auth/authorization/cross-brand final review
+- allocation: closed; Final C2 PASS-WITH-FIX, PR #15 held for authenticated live QA
 
 ## Claude G1
 - owner: claude
@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: x-autopost-phase1i-exact-account-prex-refresh-writer-20260925
+- status: ready
+- task_id: x-autopost-phase1i-pr30-merge-postmerge-verify-20260925
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: closed; Final K3 PASS, H1 review assigned
+- allocation: assigned; merge reviewed PR #30 + post-merge Phase1I verification
 
 ## Claude G4
 - owner: claude
