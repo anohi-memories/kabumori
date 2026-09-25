@@ -31,7 +31,7 @@
 
 ## Current slot snapshot
 
-- H1: `ready` — `x-autopost-phase1g-multistep-tip-greeting-final-review-20260925`
+- H1: `review_required` — `x-autopost-phase1g-multistep-tip-greeting-final-review-20260925` (PR #27; source-only PASS-WITH-FIX; C1 pending)
 - H2: `done` — `kabumori-pr26-unknown-cause-prefix-final-review-20260925`
 - G1: `done` — `kabumori-pr24-privacy-merge-postmerge-verify-20260924`
   - PR #24 merged at reviewed head `46515c5` -> main `ff4c43c`. Files byte-identical; 122/0 tests, production web build shows the new disclosure text. personalized-reports/account-deletion.html untouched. Mutation 0.
@@ -381,6 +381,13 @@
 - production mutation/X API/media calls=0.
 - H1 final review assigned with Sol（高）.
 - production activation remains NO.
+
+## H1 Phase1G final review
+
+- Source-only verdict: **PASS-WITH-FIX**, pending C1 review of PR #27 (`5a62af547dbc840c1f7b140d6d51d8876c1a7223`).
+- Fixed stale prior-day morning-greeting claim/provider-step authorization using the execution day's JST date. The failure was reproduced first in a disposable database; Phase1F already guards non-reply parent IDs by CHECK constraint.
+- Focused 72/72; related Deno 997/997; greeting/tip 138/138; disposable PostgreSQL Phase1D/1E/1F/1G behavior/race proofs PASS.
+- Production migration, deploy, token/Cron, X API/media calls: **0**. Production activation remains **NO**; live schema/grant/read-back and ordered rollout need separate review/approval.
 
 ## K4 Netlify result
 

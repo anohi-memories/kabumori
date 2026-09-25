@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: x-autopost-phase1g-multistep-tip-greeting-final-review-20260925
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: assigned; Phase1G tip/greeting multistep completion final review
+- allocation: H1 source-only Phase1G review complete; PR #27 and report await C1
 
 ## Codex H2
 - owner: codex

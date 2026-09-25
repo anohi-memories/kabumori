@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1g-multistep-tip-greeting-final-review-20260925
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: K3 PASS済みPhase1Gのtip thread / morning_greeting multi-step provider-step ledger、atomic completion、publish_claim lifecycle、ACL/migration安全性を独立レビューする。production apply/deploy/X API callは行わない。
