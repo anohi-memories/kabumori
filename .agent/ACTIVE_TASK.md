@@ -44,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: done
-- task_id: kabumori-pr31-icon-merge-postmerge-verify-20260925
+- status: ready
+- task_id: kabumori-release-readiness-gap-closure-20260925
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: closed; Final K1 PASS, awaiting separately authorized EAS/TestFlight device check
+- allocation: assigned; release-readiness audit + safe source gap closure, no EAS/TestFlight/Auth/SMTP production mutation
 
 ## Claude G2
 - owner: claude
