@@ -36,7 +36,7 @@
 - X自動投稿・Web管理画面の開発中/PR/テスト用PreviewはNetlifyへ寄せる。
 - レビュー完了後の最終production deployのみVercelを使う。
 - Vercelのrate limitを通常のX/Web開発・レビュー工程のブロッカーにしない。
-- 現在Vercel待ちのPR #15 final gateは一旦保留。
+- PR #15のmerge / post-merge / production verificationはG4へ割当済み。Vercel Preview rate-limit failure単独はmerge前ブロッカーにしないが、production deploy結果は実確認必須。
 - かぶモリExpo/native本体はVercel制限の主対象ではないため、Netlify Web Preview対応は現時点では進めない。
 - かぶモリのiOS実機/TestFlight/native-only機能は従来どおりExpo/EAS/実機で確認する。
 
@@ -49,8 +49,17 @@
   - Approved icon reproducibly wired into Expo/iOS; 126/126 tests; no production mutation.
   - Awaiting separately authorized EAS/TestFlight real-iPhone visual verification.
 - G2: `done` — `kabumori-pr34-shadow-merge-deploy-20260925`
-- G3: `ready` — `x-autopost-phase1i-pr30-merge-postmerge-verify-20260925`
-- G4: `done` — `x-admin-password-recovery-invite-flow-20260925`; Final K4 PASS, operator E2E pending
+- G3: `done` — `x-autopost-phase1i-pr30-merge-postmerge-verify-20260925`; Final K3 PASS, PR #30 merged -> `a9b1ef4d359d5ef554284fc56427e0cafeaec648`, post-merge verification PASS
+- G4: `ready` — `x-admin-pr15-merge-production-verify-20260925`; PR #15 merge-only + post-merge/production Admin verification; recommended Sonnet5（中）
+
+## Final K3 PR #30 merge
+
+- verdict: **PASS**.
+- reviewed/fixed head `94000720e10649612e84cb3811327de1a63364e9` merged -> `a9b1ef4d359d5ef554284fc56427e0cafeaec648`.
+- post-merge focused Phase1B–1I 124/124; x-test-post 477/477; greeting/publish_claim/tip 138/138; _shared 141/141; important-news-monitor 473/473; DB behavior/concurrency proof PASS; Deno check/lint/bashe/diff checks PASS.
+- production migration/deploy/OAuth/Vault/X mutation = 0; Phase1I remains OFF/unwired.
+- additional Codex review not required because the already H1-reviewed/fixed head was merged unchanged and verified post-merge.
+- G3 closed and reusable after fresh allocation check.
 
 ## K1 PR #31 icon integration
 
