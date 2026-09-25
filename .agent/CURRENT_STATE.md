@@ -50,7 +50,7 @@
   - No code bug found.
   - Remaining gates: startup artwork, separate Netlify site, operator/legal env, EAS env, Auth/SMTP, then first TestFlight build.
 - G2: `done` — `kabumori-pr34-shadow-merge-deploy-20260925`
-- G3: `done` — `x-autopost-phase1i-pr30-merge-postmerge-verify-20260925`; Final K3 PASS, PR #30 merged -> `a9b1ef4d359d5ef554284fc56427e0cafeaec648`, post-merge verification PASS
+- G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `ready` — `x-admin-pr15-merge-production-verify-20260925`; PR #15 merged by ChatGPT -> `f610503761729bdc09dfa483bd218a769350a2dc`; resume post-merge/production Admin verification only; recommended Sonnet5（中）
 
 ## Final K1 release-readiness audit
@@ -72,6 +72,15 @@
 - covers EAS production env prerequisites, Kabumori Netlify public/legal pages, Supabase Auth Site URL/redirect requirements, custom SMTP readiness, App Store/TestFlight prerequisites, and remaining startup artwork.
 - safe source/config/doc fixes allowed; production Auth/SMTP/credentials/DNS/TestFlight/App Store mutation forbidden.
 - no overlap with G2 personalized-reports or X/admin scopes.
+- recommended model: Opus5.5（高）.
+
+## AI Lab 401 / universal OAuth refresh
+
+- incident confirmed: AI Lab last success 2026-09-24 07:33 JST; first continuous X_REQUEST_FAILED:401 at 09:51 JST.
+- live AI Lab account has exact access/refresh Vault refs and remains publish_enabled=true, but current x-test-post deliberately sets allowRefresh=false for AI Lab.
+- root issue: access-token 401 cannot invoke the configured refresh token; repeated failures remain opaque while connection_status still appears identity_verified.
+- G3 assigned to productionize the already-reviewed Phase1I exact-account refresh architecture for AI Lab plus all future Vault-backed X social accounts.
+- source-only implementation first; no real refresh/Vault write/X call/deploy until K3 + focused Codex review.
 - recommended model: Opus5.5（高）.
 
 ## Final K3 PR #30 merge
