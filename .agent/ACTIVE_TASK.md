@@ -74,12 +74,12 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: done
 - task_id: x-admin-netlify-pr15-live-preview-auth-qa-20260925
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: assigned; PR #15 live Netlify Deploy Preview + proxy/auth/brand-boundary QA
+- allocation: closed; SAFE STOP pending Netlify Team protection removal + PR #15 preview retrigger
 
 ## Deferred
 
