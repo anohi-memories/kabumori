@@ -3,8 +3,8 @@
 - task_id: kabumori-pr29-plus-v27-validator-final-review-20260925
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Luna（極高）
 - purpose: PR #29のprompt hardeningと、review前にmain→production v27へ入った commit 510acf5 のvalidator拡張を一体で最終レビューする。merge/deployは禁止。
@@ -128,3 +128,19 @@ When complete:
 - next_owner -> chatgpt
 - update .agent/CODEX_REPORT_2.md
 - STOP for C2.
+
+
+## Final C2 — PR #29 + v27 validator
+
+Verdict: **PASS-WITH-FIX**.
+
+Accepted:
+- production/main validator commit `510acf5954b37410b50c23ff92c3f54af6458a72`: PASS
+- PR #29 final reviewed head `ef9603749a43d0f63ff1ab0ca0f24b33a7bdc1c1`
+- H2 minimal fix added `watch_notes[*].note_ja` to the neutral morning wording instruction
+- validator and Fact semantics remain fail-closed and unweakened
+- MIC compatibility PASS
+- focused 32/32; personalized-reports 96/96; deno check/lint/diff PASS
+- production mutation from H2 = 0
+
+Next: G2 fresh-main merge + controlled personalized-reports redeploy with app_enabled=false + repeated dry-runs.
