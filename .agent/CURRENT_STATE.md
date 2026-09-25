@@ -908,3 +908,12 @@
 - 各専用TASK/Reportが正本。索引やCURRENT_STATEと矛盾する場合はTASK/Reportを優先する。
 - 作業完了時に確認できた現在値だけを反映する。
 - 推測は事実として書かず、秘密情報・認証情報・個人情報は書かない。
+
+## G4 PR #33 continuation — Admin password recovery/invite
+
+- assigned: `x-admin-pr33-rebase-stabilize-auth-review-prep-20260925`.
+- PR #33 is open at head `dd66921a1578d6b54e707e5dce81eaa6ab1701af`, 5 commits / 11 files, currently `mergeable=false` / `dirty` against fresh main.
+- goal: resolve main drift/conflicts while preserving PR #15 multibrand/Admin behavior and all password-recovery security invariants, rerun full Admin/Auth tests, and obtain an updated Netlify Preview candidate.
+- this task does not merge PR #33 and does not mutate production Supabase Auth config/users, DB/RLS/RPC, Vercel production, OAuth/Vault/X.
+- Auth/security-sensitive; focused Codex review expected after K4.
+- recommended Claude model: Opus5.5（高）.
