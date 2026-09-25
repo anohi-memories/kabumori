@@ -55,11 +55,14 @@ test("every Expo config field that renders the app icon points at the new master
   assert.equal(notifications[1].icon, "./assets/images/icon.png");
 });
 
-test("splash and the animated launch overlay were not touched by this task", async () => {
+test("this task's own scope stayed to the app icon: identity fields untouched", async () => {
+  // Splash/launch-overlay branding is covered by kabumori-branded-launch-screen-20260925 (see
+  // tests/app/app-splash_test.ts); this test only pins what must never move regardless of which
+  // task touches startup visuals.
   const config = JSON.parse(await Deno.readTextFile(new URL("app.json", repoRoot)));
-  const splash = config.expo.plugins.find((p: unknown) => Array.isArray(p) && p[0] === "expo-splash-screen");
-  assert.equal(splash[1].image, "./assets/images/splash-icon.png");
-  assert.equal(splash[1].backgroundColor, "#208AEF");
-  const overlay = await Deno.readTextFile(new URL("src/components/animated-icon.tsx", repoRoot));
-  assert.match(overlay, /assets\/images\/expo-logo\.png/);
+  const expo = config.expo;
+  assert.equal(expo.slug, "kabumori");
+  assert.equal(expo.scheme, "kabumori");
+  assert.equal(expo.ios.bundleIdentifier, "com.anohimemories.kabumori");
+  assert.equal(expo.extra.eas.projectId, "eb80adf3-861e-4a48-a373-2d9a85b58899");
 });
