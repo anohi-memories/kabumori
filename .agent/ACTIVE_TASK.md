@@ -22,7 +22,7 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: x-autopost-phase1h-gated-dispatcher-final-review-20260925
 - start_code: H1
 - finish_code: C1

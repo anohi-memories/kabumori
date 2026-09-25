@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1h-gated-dispatcher-final-review-20260925
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: K3 PASS済みPhase1H gated-OFF v2 dispatcher source candidateを、gate fail-closed、no-legacy-fallback、resume安全性、exact-account credential、provider-start durability、typed completion wiring、ACL/migrationの観点で独立レビューする。production deploy/activation/X API callは行わない。

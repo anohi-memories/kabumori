@@ -31,7 +31,7 @@
 
 ## Current slot snapshot
 
-- H1: `ready` — `x-autopost-phase1h-gated-dispatcher-final-review-20260925`
+- H1: `review_required` — `x-autopost-phase1h-gated-dispatcher-final-review-20260925` (source review PASS-WITH-FIX; PR #28, C1 pending)
 - H2: `done` — `kabumori-pr26-unknown-cause-prefix-final-review-20260925`
 - G1: `done` — `kabumori-pr24-privacy-merge-postmerge-verify-20260924`
   - PR #24 merged at reviewed head `46515c5` -> main `ff4c43c`. Files byte-identical; 122/0 tests, production web build shows the new disclosure text. personalized-reports/account-deletion.html untouched. Mutation 0.
