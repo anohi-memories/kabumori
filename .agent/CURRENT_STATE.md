@@ -51,7 +51,7 @@
   - Remaining gates: startup artwork, separate Netlify site, operator/legal env, EAS env, Auth/SMTP, then first TestFlight build.
 - G2: `done` — `kabumori-pr34-shadow-merge-deploy-20260925`
 - G3: `done` — `x-autopost-phase1i-pr30-merge-postmerge-verify-20260925`; Final K3 PASS, PR #30 merged -> `a9b1ef4d359d5ef554284fc56427e0cafeaec648`, post-merge verification PASS
-- G4: `ready` — `x-admin-pr15-merge-production-verify-20260925`; PR #15 merge-only + post-merge/production Admin verification; recommended Sonnet5（中）
+- G4: `ready` — `x-admin-pr15-merge-production-verify-20260925`; PR #15 merged by ChatGPT -> `f610503761729bdc09dfa483bd218a769350a2dc`; resume post-merge/production Admin verification only; recommended Sonnet5（中）
 
 ## Final K1 release-readiness audit
 
@@ -82,6 +82,13 @@
 - production migration/deploy/OAuth/Vault/X mutation = 0; Phase1I remains OFF/unwired.
 - additional Codex review not required because the already H1-reviewed/fixed head was merged unchanged and verified post-merge.
 - G3 closed and reusable after fresh allocation check.
+
+## PR #15 merge continuation
+
+- PR #15 head `f04c44ac564aa775fc0d68106648a0d2e4fcd564` merged by ChatGPT with expected-head protection.
+- merge/main commit: `f610503761729bdc09dfa483bd218a769350a2dc`.
+- G4 should resume Scope C/D only: post-merge tests, brand/auth boundary verification, actual Vercel production status, and authenticated production QA if deployment succeeded.
+- no additional Codex review required unless semantic source drift is introduced.
 
 ## K1 PR #31 icon integration
 
