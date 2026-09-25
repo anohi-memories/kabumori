@@ -32,13 +32,25 @@
 ## Current slot snapshot
 
 - H1: `done` — `x-autopost-phase1h-gated-dispatcher-final-review-20260925`
-- H2: `done` — `kabumori-pr26-unknown-cause-prefix-final-review-20260925`
+- H2: `ready` — `kabumori-pr29-plus-v27-validator-final-review-20260925`
 - G1: `done` — `kabumori-pr24-privacy-merge-postmerge-verify-20260924`
   - PR #24 merged at reviewed head `46515c5` -> main `ff4c43c`. Files byte-identical; 122/0 tests, production web build shows the new disclosure text. personalized-reports/account-deletion.html untouched. Mutation 0.
   - Privacy dataflow gap from PR #21 review is now closed on main. Remaining blockers: icon/splash/overlay artwork, EAS production env, Netlify publish, Auth Site URL/SMTP, App Store Connect.
-- G2: `ready` — `kabumori-report-dryrun-false-reject-hardening-20260925`
+- G2: `done` — `kabumori-report-dryrun-false-reject-hardening-20260925`
 - G3: `ready` — `x-autopost-phase1i-exact-account-prex-refresh-writer-20260925`
 - G4: `done` — `x-admin-netlify-pr15-live-preview-auth-qa-20260925`
+
+## Final K2 PR #29 source hardening
+
+- source implementation verdict: **PASS; review required before merge/deploy**.
+- PR #29 head `bed5e79d0ab22e94be6a7c1ebd0f7c8f157ea0c0`.
+- prompt-only hardening for close inference-field discipline and neutral morning wording.
+- PR #29 does not weaken validator or Fact checker.
+- tests: new 9/9; close-validator 23/23; personalized-reports 96/96; related 214/214; deno check/lint/diff PASS.
+- separate concern: commit `510acf5` added 値下がり/値上がり directly to main and was deployed as v27 before independent review.
+- H2 assigned combined review of 510acf5 + PR #29.
+- production remains app_enabled=false.
+- recommended model: Luna（極高）.
 
 ## Final K1 PR #24 result
 
