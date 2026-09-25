@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: x-autopost-phase1i-exact-account-refresh-final-review-20260925
+- status: ready
+- task_id: x-universal-oauth-refresh-final-review-20260925
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: closed; Final C1 PASS-WITH-FIX, PR #30 accepted for merge
+- allocation: assigned; focused universal OAuth/Vault/exact-account/concurrency rollout review; recommended Sol（高）
 
 ## Codex H2
 - owner: codex
@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: done
 - task_id: x-universal-oauth-refresh-productionization-20260925
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: assigned; universal exact-account Vault-backed X OAuth refresh + AI Lab 401 root fix; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
+- allocation: closed; Final K3 PASS for source implementation at `acbac42`; production activation deferred pending H1/C1
 
 ## Claude G4
 - owner: claude
