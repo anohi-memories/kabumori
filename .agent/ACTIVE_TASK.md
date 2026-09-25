@@ -79,7 +79,7 @@
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: assigned; merge reviewed PR #15 + post-merge/production Admin verification; recommended Sonnet5（中）
+- allocation: assigned; PR #15 merged by ChatGPT -> `f610503761729bdc09dfa483bd218a769350a2dc`; resume post-merge + production Admin verification only; recommended Sonnet5（中）
 
 ## Deferred
 
