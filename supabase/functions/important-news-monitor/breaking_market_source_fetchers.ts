@@ -190,20 +190,28 @@ export function isFixedBreakingMarketQuery(query: BreakingMarketQuery): boolean 
   return query.key === CRITICAL_BREAKING_MARKET_QUERY_KEY || query.slot === "fixed";
 }
 
-// Deterministic, stateless selection: the fixed queries run in every cycle and the remaining slots
-// rotate. Concurrent/retried calls within the same 20-minute window therefore pick the same queries.
-// maxPerCycle is still the hard ceiling: with more fixed topics than slots the extra fixed topics are
-// dropped (in declaration order) rather than exceeding the search budget.
+// The fixed queries run in every cycle and the remaining slots rotate. maxPerCycle is still the hard
+// ceiling: with more fixed topics than slots the extra fixed topics are dropped (in declaration order)
+// rather than exceeding the search budget.
+//
+// Rotation is least-recently-searched when the caller supplies lastSearchedAt (query key -> epoch ms of
+// its latest attempt, from recent run diagnostics). A wall-clock index only visits every topic when the
+// fetch cadence is exactly one ROTATION_INTERVAL: at the hourly/2-hourly cadence the index advanced by 3
+// or 6 per run, and with 9 rotating topics only 3 of them were ever selected. The history-based order
+// does not depend on the cadence or on the number of topics. Without history (first run, or the history
+// read failed) the stateless wall-clock index remains the fallback.
 export function selectBreakingMarketQueriesForCycle(
   queries: BreakingMarketQuery[],
   now: Date = new Date(),
   maxPerCycle: number = MAX_BREAKING_MARKET_SEARCHES_PER_FETCH,
+  lastSearchedAt: ReadonlyMap<string, number> | null = null,
 ): BreakingMarketQuery[] {
   if (queries.length === 0 || !Number.isInteger(maxPerCycle) || maxPerCycle < 1) return [];
   const cycleIndex = Math.floor(now.getTime() / BREAKING_MARKET_ROTATION_INTERVAL_MS);
   const fixed = queries.filter(isFixedBreakingMarketQuery);
   const rotating = queries.filter((query) => !isFixedBreakingMarketQuery(query));
   if (fixed.length === 0) {
+    if (lastSearchedAt) return leastRecentlySearched(queries, lastSearchedAt, maxPerCycle);
     const start = (cycleIndex * maxPerCycle) % queries.length;
     return Array.from({ length: Math.min(maxPerCycle, queries.length) }, (_, offset) =>
       queries[(start + offset) % queries.length]
@@ -211,10 +219,45 @@ export function selectBreakingMarketQueriesForCycle(
   }
   const selected = fixed.slice(0, maxPerCycle);
   const rotatingSlots = Math.min(maxPerCycle - selected.length, rotating.length);
+  if (lastSearchedAt) return [...selected, ...leastRecentlySearched(rotating, lastSearchedAt, rotatingSlots)];
   for (let offset = 0; offset < rotatingSlots; offset += 1) {
     selected.push(rotating[(cycleIndex * rotatingSlots + offset) % rotating.length]);
   }
   return selected;
+}
+
+/** Never-searched topics first, then the oldest attempt; ties keep declaration order. */
+function leastRecentlySearched(
+  queries: BreakingMarketQuery[],
+  lastSearchedAt: ReadonlyMap<string, number>,
+  count: number,
+): BreakingMarketQuery[] {
+  return queries
+    .map((query, order) => ({ query, order, at: lastSearchedAt.get(query.key) ?? Number.NEGATIVE_INFINITY }))
+    .sort((a, b) => a.at - b.at || a.order - b.order)
+    .slice(0, Math.max(0, count))
+    .map((item) => item.query);
+}
+
+/**
+ * Latest attempt per query key from important_news_monitor_runs rows shaped
+ * `{ started_at, queries: diagnostics->breakingMarket->queries }`. Malformed rows are skipped.
+ */
+export function breakingMarketLastSearchedAt(rows: unknown): Map<string, number> {
+  const latest = new Map<string, number>();
+  if (!Array.isArray(rows)) return latest;
+  for (const row of rows) {
+    if (typeof row !== "object" || row === null) continue;
+    const record = row as { started_at?: unknown; queries?: unknown };
+    const at = typeof record.started_at === "string" ? Date.parse(record.started_at) : NaN;
+    if (!Number.isFinite(at) || !Array.isArray(record.queries)) continue;
+    for (const item of record.queries) {
+      const key = typeof item === "object" && item !== null ? (item as { queryKey?: unknown }).queryKey : null;
+      if (typeof key !== "string") continue;
+      if (at > (latest.get(key) ?? Number.NEGATIVE_INFINITY)) latest.set(key, at);
+    }
+  }
+  return latest;
 }
 
 /** How long a rotating topic can go unwatched, in minutes — stated so the cost/latency trade-off is explicit. */
@@ -289,6 +332,41 @@ export function countBreakingMarketWebSearchCalls(response: unknown): number {
   ).length;
 }
 
+/**
+ * What the web_search tool actually did and returned, independent of the model's answer: action types
+ * (search / open_page / find_in_page) and how many source URLs it surfaced, in total and on the allowed
+ * domains. An empty candidates array with zero allowed sources means the search returned nothing usable;
+ * with sources present it means the model declined them.
+ */
+export function summarizeBreakingMarketWebSearch(response: unknown): {
+  actions: Record<string, number>;
+  sourceCount: number;
+  allowedSourceCount: number;
+} {
+  const actions: Record<string, number> = {};
+  let sourceCount = 0;
+  const output = typeof response === "object" && response !== null
+    ? (response as { output?: unknown }).output
+    : null;
+  if (Array.isArray(output)) {
+    for (const item of output) {
+      if (typeof item !== "object" || item === null) continue;
+      if ((item as { type?: unknown }).type !== "web_search_call") continue;
+      const action = (item as { action?: unknown }).action;
+      const type = typeof action === "object" && action !== null &&
+          typeof (action as { type?: unknown }).type === "string"
+        ? (action as { type: string }).type
+        : "unknown";
+      actions[type] = (actions[type] ?? 0) + 1;
+      const sources = typeof action === "object" && action !== null
+        ? (action as { sources?: unknown }).sources
+        : null;
+      if (Array.isArray(sources)) sourceCount += sources.length;
+    }
+  }
+  return { actions, sourceCount, allowedSourceCount: collectBreakingMarketSourceUrls(response).size };
+}
+
 type RawBreakingMarketCandidate = {
   title: string;
   summary: string | null;
@@ -325,6 +403,11 @@ export type BreakingMarketQueryDiagnostics = BreakingMarketValidationDiagnostics
   estimatedCostUsd: number;
   model: string;
   failureCode: string | null;
+  /** web_search_call action types in the response (see summarizeBreakingMarketWebSearch). */
+  webSearchActions?: Record<string, number>;
+  /** Source URLs the search surfaced, in total and on BREAKING_MARKET_SOURCE_DOMAINS. */
+  searchSourceCount?: number;
+  allowedSourceCount?: number;
 };
 
 export type BreakingMarketQueryResult = {
@@ -535,6 +618,70 @@ function diagnosticBase(query: BreakingMarketQuery): BreakingMarketQueryDiagnost
   };
 }
 
+/** The Responses API request for one breaking_market query. Exported so a model comparison can send
+ * byte-identical instructions/schema with only the model changed. */
+export function breakingMarketRequestBody(
+  query: BreakingMarketQuery,
+  now: Date,
+  model: string = MODEL,
+): Record<string, unknown> {
+  return {
+    model,
+    store: false,
+    reasoning: { effort: "low" },
+    max_output_tokens: 1200,
+    max_tool_calls: 1,
+    tools: [{
+      type: "web_search",
+      filters: { allowed_domains: BREAKING_MARKET_SOURCE_DOMAINS },
+      search_context_size: "low",
+    }],
+    tool_choice: "required",
+    include: ["web_search_call.action.sources"],
+    instructions: [
+      "あなたは市場に影響しうる速報ニュース収集の担当です。1回だけ検索し、投稿文ではなく候補JSONを返します。推測や捏造は禁止です。",
+      query.followUpOnly
+        ? "許可ドメインで実際に確認できた、直近6時間以内に新たに公表された『進行中事象の具体的な続報』だけを候補にします。復旧見通し、停止期間、供給量、航行再開、被害更新、追加制裁、政策変更など新しい情報が必要です。元の事象が古くても、今回の更新自体が直近6時間以内なら対象です。過去記事の再掲、初報、分析、単なる現状まとめは除外します。記事は6時間以内に公開されている必要があります。該当がなければcandidatesは空配列にします。"
+        : "許可ドメインの検索結果で実際に確認できた、直近3時間以内に発生・発表され、記事も直近3時間以内に公開された材料だけを候補にします。該当がなければcandidatesは空配列にします。",
+      "candidatesは最大3件。各候補にはtitle、summary（1-2文の事実要約）、source_url（実際に開いた許可ドメインのURL）、published_at（記事公開日時、時刻付きISO 8601）、event_at（実際の発生・公表日時、確認できない場合null）、categoryを含めます。",
+      query.requireEventTimestamp
+        ? "この検索枠ではevent_atをsource_urlで時刻まで確認できる候補だけを返します。event_at不明、日付だけ、過去イベントの後追い記事は候補にしません。"
+        : query.followUpOnly
+        ? "event_atは報告対象となる今回の続報・復旧見通し等が公表された具体的時刻（元の危機発生日ではない）を確認して必ず時刻付きISO 8601で返します。今回の更新時刻を確認できない候補は除外します。記事公開時刻も必須です。"
+        : "event_atが確認できる場合は必ず時刻付きISO 8601で返します。過去イベントの後追い記事を新しい速報として返しません。",
+      "categoryは次のいずれかから最も近いものを選びます: " + IMPORTANT_NEWS_CATEGORIES.join(", "),
+      "未確定・予定・観測記事・分析記事ではなく、既に発生・発表が確認された事実だけを対象にします。日本株や世界市場への影響が具体的に見込まれない軽微な話題は候補にしません。",
+      "source_urlが無い、または検索結果で実際に開いていないURLを候補にしません。APIキーや秘密値は返しません。",
+    ].join("\n"),
+    input: `search topic: ${query.searchQuery}\nreference UTC: ${now.toISOString()}`,
+    text: { format: { type: "json_schema", name: "breaking_market_candidates", strict: true, schema: {
+      type: "object",
+      properties: {
+        candidates: {
+          type: "array",
+          minItems: 0,
+          maxItems: 3,
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              summary: { type: "string" },
+              source_url: { type: "string" },
+              published_at: { type: "string" },
+              event_at: { type: ["string", "null"] },
+              category: { type: "string", enum: IMPORTANT_NEWS_CATEGORIES },
+            },
+            required: ["title", "summary", "source_url", "published_at", "event_at", "category"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["candidates"],
+      additionalProperties: false,
+    } } },
+  };
+}
+
 export async function fetchBreakingMarketQueryWithDiagnostics(
   openAiApiKey: string,
   query: BreakingMarketQuery,
@@ -548,61 +695,7 @@ export async function fetchBreakingMarketQueryWithDiagnostics(
       method: "POST",
       headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
       signal: AbortSignal.timeout(BREAKING_MARKET_REQUEST_TIMEOUT_MS),
-      body: JSON.stringify({
-      model: MODEL,
-      store: false,
-      reasoning: { effort: "low" },
-      max_output_tokens: 1200,
-      max_tool_calls: 1,
-      tools: [{
-        type: "web_search",
-        filters: { allowed_domains: BREAKING_MARKET_SOURCE_DOMAINS },
-        search_context_size: "low",
-      }],
-      tool_choice: "required",
-      include: ["web_search_call.action.sources"],
-      instructions: [
-        "あなたは市場に影響しうる速報ニュース収集の担当です。1回だけ検索し、投稿文ではなく候補JSONを返します。推測や捏造は禁止です。",
-        query.followUpOnly
-          ? "許可ドメインで実際に確認できた、直近6時間以内に新たに公表された『進行中事象の具体的な続報』だけを候補にします。復旧見通し、停止期間、供給量、航行再開、被害更新、追加制裁、政策変更など新しい情報が必要です。元の事象が古くても、今回の更新自体が直近6時間以内なら対象です。過去記事の再掲、初報、分析、単なる現状まとめは除外します。記事は6時間以内に公開されている必要があります。該当がなければcandidatesは空配列にします。"
-          : "許可ドメインの検索結果で実際に確認できた、直近3時間以内に発生・発表され、記事も直近3時間以内に公開された材料だけを候補にします。該当がなければcandidatesは空配列にします。",
-        "candidatesは最大3件。各候補にはtitle、summary（1-2文の事実要約）、source_url（実際に開いた許可ドメインのURL）、published_at（記事公開日時、時刻付きISO 8601）、event_at（実際の発生・公表日時、確認できない場合null）、categoryを含めます。",
-        query.requireEventTimestamp
-          ? "この検索枠ではevent_atをsource_urlで時刻まで確認できる候補だけを返します。event_at不明、日付だけ、過去イベントの後追い記事は候補にしません。"
-          : query.followUpOnly
-          ? "event_atは報告対象となる今回の続報・復旧見通し等が公表された具体的時刻（元の危機発生日ではない）を確認して必ず時刻付きISO 8601で返します。今回の更新時刻を確認できない候補は除外します。記事公開時刻も必須です。"
-          : "event_atが確認できる場合は必ず時刻付きISO 8601で返します。過去イベントの後追い記事を新しい速報として返しません。",
-        "categoryは次のいずれかから最も近いものを選びます: " + IMPORTANT_NEWS_CATEGORIES.join(", "),
-        "未確定・予定・観測記事・分析記事ではなく、既に発生・発表が確認された事実だけを対象にします。日本株や世界市場への影響が具体的に見込まれない軽微な話題は候補にしません。",
-        "source_urlが無い、または検索結果で実際に開いていないURLを候補にしません。APIキーや秘密値は返しません。",
-      ].join("\n"),
-      input: `search topic: ${query.searchQuery}\nreference UTC: ${now.toISOString()}`,
-      text: { format: { type: "json_schema", name: "breaking_market_candidates", strict: true, schema: {
-        type: "object",
-        properties: {
-          candidates: {
-            type: "array",
-            minItems: 0,
-            maxItems: 3,
-            items: {
-              type: "object",
-              properties: {
-                title: { type: "string" },
-                summary: { type: "string" },
-                source_url: { type: "string" },
-                published_at: { type: "string" },
-                event_at: { type: ["string", "null"] },
-                category: { type: "string", enum: IMPORTANT_NEWS_CATEGORIES },
-              },
-              required: ["title", "summary", "source_url", "published_at", "event_at", "category"],
-              additionalProperties: false,
-            },
-          },
-        },
-        required: ["candidates"],
-        additionalProperties: false,
-      } } },
-      }),
+      body: JSON.stringify(breakingMarketRequestBody(query, now)),
     });
   } catch {
     const code = `BREAKING_MARKET_REQUEST_FAILED:${query.key}`;
@@ -630,6 +723,10 @@ export async function fetchBreakingMarketQueryWithDiagnostics(
       ? record.incomplete_details.reason : null;
   }
   diagnostics.webSearchCallCount = countBreakingMarketWebSearchCalls(raw);
+  const search = summarizeBreakingMarketWebSearch(raw);
+  diagnostics.webSearchActions = search.actions;
+  diagnostics.searchSourceCount = search.sourceCount;
+  diagnostics.allowedSourceCount = search.allowedSourceCount;
   // Recorded before any later failure: an incomplete or unparsable response is still billed.
   const usage = usageFromResponse(raw);
   diagnostics.inputTokens = usage.inputTokens;

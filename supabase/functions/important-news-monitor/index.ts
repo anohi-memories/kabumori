@@ -58,7 +58,9 @@ import {
   BREAKING_MARKET_QUERIES,
   BREAKING_MARKET_SOURCE_DOMAINS,
   BreakingMarketQueryError,
+  breakingMarketLastSearchedAt,
   fetchBreakingMarketQueryWithDiagnostics,
+  MAX_BREAKING_MARKET_SEARCHES_PER_FETCH,
   selectBreakingMarketQueriesForCycle,
   type BreakingMarketQueryDiagnostics,
 } from "./breaking_market_source_fetchers.ts";
@@ -516,6 +518,37 @@ async function updateRun(
     body: JSON.stringify(values),
   });
   if (!result.ok) throw new Error("NEWS_MONITOR_RUN_UPDATE_FAILED");
+}
+
+// 48 hours covers several full rotations at any cadence up to 2 hours; a topic absent from it is
+// treated as never searched and therefore goes first.
+const BREAKING_MARKET_HISTORY_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+/** Latest attempt per breaking_market query key, or null (stateless fallback) when the read fails. */
+async function recentBreakingMarketSearchHistory(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  now: Date,
+): Promise<Map<string, number> | null> {
+  const params = new URLSearchParams({
+    select: "started_at,queries:diagnostics->breakingMarket->queries",
+    started_at: `gte.${new Date(now.getTime() - BREAKING_MARKET_HISTORY_WINDOW_MS).toISOString()}`,
+    order: "started_at.desc",
+    limit: "500",
+  });
+  try {
+    const result = await fetch(`${supabaseUrl}/rest/v1/important_news_monitor_runs?${params}`, {
+      headers: headers(serviceRoleKey),
+    });
+    if (!result.ok) throw new Error(`HTTP_${result.status}`);
+    return breakingMarketLastSearchedAt(await result.json());
+  } catch (error) {
+    console.error("Important news breaking market rotation history unavailable", {
+      code: "NEWS_BREAKING_ROTATION_HISTORY_FAILED",
+      reason: safeError(error),
+    });
+    return null;
+  }
 }
 
 async function monitorIsActive(supabaseUrl: string, serviceRoleKey: string): Promise<boolean> {
@@ -2020,7 +2053,12 @@ Deno.serve(async (req) => {
         sourceErrors.push("breaking_market:OPENAI_API_KEY_MISSING");
       } else {
         const now = new Date();
-        const selectedQueries = selectBreakingMarketQueriesForCycle(BREAKING_MARKET_QUERIES, now);
+        const selectedQueries = selectBreakingMarketQueriesForCycle(
+          BREAKING_MARKET_QUERIES,
+          now,
+          MAX_BREAKING_MARKET_SEARCHES_PER_FETCH,
+          await recentBreakingMarketSearchHistory(supabaseUrl, serviceRoleKey, now),
+        );
         breakingMarketQueriesRun = selectedQueries.map((query) => query.key);
         const breakingCandidates: IncomingNewsCandidate[] = [];
         for (const query of selectedQueries) {
