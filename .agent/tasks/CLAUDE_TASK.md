@@ -3,8 +3,8 @@
 - task_id: kabumori-pr32-merge-redeploy-dryrun-review-deferred-20260925
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Opus5.5（高）
 - purpose: ユーザー判断でH2レビューを一時保留し、PR #32の現在headをfresh検証したうえでmerge、personalized-reportsのみcontrolled redeploy、app_enabled=falseのまま朝刊/大引けdry-runを実施する。レビュー保留中のためactivationは禁止。
@@ -217,3 +217,47 @@ When complete:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for K2.
+
+## Report — SAFE STOP before merge
+
+### Summary
+
+- task_id：`kabumori-pr32-merge-redeploy-dryrun-review-deferred-20260925`
+- result：**Step 1（mergeの前のsource検証）で、決定的な回帰を検出したため、merge前にSTOPした**。merge・deploy・dry_runはいずれも実施していない。
+- changed_files：なし
+- tests：PR #32のhead `722d191` で実施。
+  - morning_contract 8/8、report_hardening 9/9、close_validator 23/23、MIC 14/14・6/6
+  - personalized-reports 104/104、関連スイート 226/226
+  - deno check・lint・diff checkはPASS
+  - **ただし、既存のテストでは下記の回帰を検出できない**。
+- commit_hash / push：本Reportのみ
+- deploy：なし
+- safety_checks：
+  - production mutation **0**。
+  - 本番は **v28**、verify_jwt=false、`app_enabled=false`、`x_enabled=false`（read-onlyで確認）。
+  - H2によるPR #32のレビューは**保留中のまま**（完了扱いにしていない）。
+
+### 検出した問題（`722d191` のCodex追加commitによるもの）
+
+- 変更内容：IMPACT_INSTRUCTIONSを「no_clear_materialのとき…fact_ja には…書ける事実がなければ**空文字**にします」に変更した。
+- しかし、`parseReportDraft` の `impacts()` は、**fact_jaが空のimpactを捨てる**（`report_logic.ts:1011`、`.filter((item) => item.ticker_code && item.fact_ja)`）。
+- その結果：保有銘柄のimpactが欠落し、`MISSING_HOLDING_IMPACTS` → `REPORT_LOCAL_CHECK_FAILED` となり、**その日のレポート全体が不合格（欠配）になる**。
+- 再現：head `722d191` に対してprobe test（リポジトリには追加していない一時ファイル）を実行した。fact_jaが空のno_clear_materialを1件与えると、「impacts kept: 0」「issues: [MISSING_HOLDING_IMPACTS]」になることを確認した。
+- 発生条件：packetのどこかにニュースがあり（そのため空入力の定型文は禁止される）、かつ材料のない保有銘柄がある日。promptに従うほど、欠配になりやすい。
+- それ以外の差分（`749ce19`→`722d191`）：
+  - 空ニュースの定型文を、「packetのholdings/watchのown_news・related_market_newsとmarket_newsがすべて空のときだけ」に限定する変更（prompt・Factとも）と、そのadversarial test。
+  - これは意図どおりで妥当。
+  - MIC・market_detail・_shared・validatorの正規表現・上限値は不変であることを確認した。
+
+### 修正案（どちらか1つ、PR #32の範囲内で小さく）
+
+- **案1（推奨）**：promptを「fact_jaを空にしない」方向に戻す。ニュースがある日の材料なし銘柄は、**その銘柄の入力について**だけ書くようにする。例：「この銘柄の入力（own_news・related_market_news）には個別材料が含まれていません」（銘柄ごとの入力状態で、packetから検証できる）。Factにも、この銘柄単位の記述を許可する1行を追加する。
+- **案2**：parserとvalidatorで、`stance === "no_clear_material"` のときだけ空のfact_jaを許容する（impactを捨てない）。アプリ側は、空欄の行を表示しない（既存の分岐で対応済み）。
+- どちらの案でも、**「fact_jaが空のimpactが原因で `MISSING_HOLDING_IMPACTS` にならない」ことを固定する回帰テスト**を追加する。
+
+### 次の推奨
+
+1. ChatGPT：案1か案2を選び、G2へ小さな修正TASKを出す（source-only）。
+2. 修正後、改めてmerge→deploy→朝刊・大引けのdry_runを各3回以上行う（本TASKのStep 2〜4を再実行）。
+3. 月曜9/28 08:35の朝刊cronまでに間に合わない場合も、v28のまま（fail-closed）で安全。朝刊はv28で0/2だったので、欠配の可能性はある。
+4. H2によるPR #32のレビュー負債は残っている（今回の指摘を含めて、後で独立レビューが必要）。
