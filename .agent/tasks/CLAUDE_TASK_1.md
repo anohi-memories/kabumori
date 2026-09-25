@@ -3,7 +3,7 @@
 - task_id: kabumori-approved-app-icon-integration-20260925
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Sonnet5（高）
