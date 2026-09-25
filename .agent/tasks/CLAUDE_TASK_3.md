@@ -3,8 +3,8 @@
 - task_id: x-universal-oauth-refresh-productionization-20260925
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Opus5.5（高）
 - purpose: 会社員AIラボで連続発生している X_REQUEST_FAILED:401 を根本修復し、今後追加する全ブランド・全ユーザーのXアカウントで同じ事故を繰り返さない、exact-account / Vault-backed / refresh-token-rotation-safe な共通OAuth refresh基盤をproduction-readyにする。Phase1Iでレビュー済みのexact-account refresh実装を土台にし、AI Lab固有のallowRefresh=false暫定経路を廃止可能な共通アカウント経路へ統合する。production activation/deploy/real token refreshはCodexレビュー前に行わない。
@@ -368,3 +368,24 @@ Expected:
   - service_role direct Vault privileges (finding above).
 - safety_checks: dedicated G3 worktree only; no G4 `apps/admin/**`, no shared rule files, no H2 task touched; fresh origin/main checked before push (no overlap); no plaintext token read/logged/copied; Kabumori legacy credentials untouched.
 - next_recommendation: ChatGPT K3 → Codex H1 review (Sol高), scope limited to OAuth/Vault/exact-account/concurrency/rollout; then owner decision on containment and Stage 0–2.
+
+
+## Final K3 — universal OAuth refresh productionization
+
+Verdict: **PASS for source implementation**.
+
+Accepted:
+- root cause reproduced and removed in source: AI Lab no longer uses an `allowRefresh:false` dead-end.
+- generic exact-account Vault-backed refresh path implemented for current/future non-Kabumori X accounts.
+- Kabumori legacy credential path remains unchanged.
+- one-refresh / one-safe-retry semantics, uncertain/reauth_required fail-closed handling, exact-account Vault ownership checks, health-state observability and anti-cross-account guards are present.
+- production mutation remained 0: no migration apply, Edge deploy, real OAuth refresh, Vault write, X post, Cron/settings or business-data mutation.
+- disposable PostgreSQL core/race proofs PASS; x-test-post 500/500; _shared 141/141; important-news-monitor 473/473; targeted check/lint/bash/diff/secret scan PASS with only documented pre-existing baseline issues.
+- implementation commit: `acbac42`.
+
+K3 disposition:
+- G3 implementation is complete and closed.
+- production activation is **NOT approved yet**.
+- independent Codex review is mandatory before Stage 0–2 rollout because this crosses OAuth/Vault/exact-account/concurrency/X publish boundaries.
+- H1 assigned the focused final review.
+- recommended review model: **Sol（高）**.
