@@ -3,7 +3,7 @@
 - task_id: kabumori-pr32-no-clear-material-fix-merge-dryrun-20260925
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Opus5.5（高）
