@@ -44,14 +44,26 @@
 
 - H1: `done` — `x-autopost-phase1i-exact-account-refresh-final-review-20260925`; Final C1 PASS-WITH-FIX
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
-- G1: `review_required` — `kabumori-release-readiness-gap-closure-20260925`
-  - Full A-F audit: no code bug found, every prior source fix still holds. PR #35 (docs only) open (unmerged).
-  - Corrected stale RELEASE_READINESS.md: A1 wrongly still said the icon shows the Expo template (fixed by PR #31). A1b (AnimatedSplashOverlay, still shows Expo's logo on every launch) reclassified should-fix-before-TestFlight.
-  - New finding: apps/kabumori-web has never had a Netlify site (distinct from apps/admin's, which now exists) -- made explicit to avoid conflation.
-  - Auth Site URL/redirect and SMTP status remain BLOCKED (read-only; no tool can inspect live config without extracting a token). 126/0 tests (unchanged, no code touched). Production mutation 0.
+- G1: `done` — `kabumori-release-readiness-gap-closure-20260925`
+  - Final K1 PASS for audit/docs.
+  - PR #35 merged -> `26b0e8903b434a7a5222370c65aa4ed565af113e`.
+  - No code bug found.
+  - Remaining gates: startup artwork, separate Netlify site, operator/legal env, EAS env, Auth/SMTP, then first TestFlight build.
 - G2: `done` — `kabumori-pr34-shadow-merge-deploy-20260925`
 - G3: `done` — `x-autopost-phase1i-pr30-merge-postmerge-verify-20260925`; Final K3 PASS, PR #30 merged -> `a9b1ef4d359d5ef554284fc56427e0cafeaec648`, post-merge verification PASS
 - G4: `ready` — `x-admin-pr15-merge-production-verify-20260925`; PR #15 merge-only + post-merge/production Admin verification; recommended Sonnet5（中）
+
+## Final K1 release-readiness audit
+
+- verdict: **PASS for audit/documentation**.
+- PR #35 docs-only head `5b5acd69d20c622b73e3b6f73f510a2479b9d318` merged -> `26b0e8903b434a7a5222370c65aa4ed565af113e`.
+- no source/code bug found.
+- icon done; EAS source config/verifier ready.
+- Kabumori public/legal Web source ready, but no separate Netlify site exists yet.
+- Auth/SMTP live state could not be safely read from this environment.
+- AnimatedSplashOverlay/native splash remain Expo template and should be replaced before first TestFlight.
+- next blockers are operator/artwork gates, not another code review.
+- no Codex review needed under reduced-review policy.
 
 ## G1 release-readiness gap closure
 
