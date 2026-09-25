@@ -384,8 +384,13 @@ function urlDate(url: string | null): string | null {
       return "";
     }
   })();
+  // Only real calendar dates count: "/2026/08/34ec41..." is a hash fragment, not 34 August.
   const found = path.match(/(20\d{2})[-/](\d{2})[-/](\d{2})(?![\d])/);
-  return found ? `${found[1]}-${found[2]}-${found[3]}` : null;
+  if (!found) return null;
+  const [year, month, day] = [Number(found[1]), Number(found[2]), Number(found[3])];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const real = date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+  return real ? `${found[1]}-${found[2]}-${found[3]}` : null;
 }
 
 function sourceDate(source: Record<string, unknown>): string | null {
@@ -719,6 +724,20 @@ function diagnosticBase(query: BreakingMarketQuery): BreakingMarketQueryDiagnost
   };
 }
 
+const ENGLISH_MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/**
+ * Recency words the model must put in its search string, dated from the runtime clock in JST
+ * (e.g. "latest breaking news September 25 2026"). Never hard-coded.
+ */
+export function breakingMarketRecencyTerms(now: Date): string {
+  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  return `latest breaking news ${ENGLISH_MONTHS[jst.getUTCMonth()]} ${jst.getUTCDate()} ${jst.getUTCFullYear()}`;
+}
+
 /** The Responses API request for one breaking_market query. Exported so a model comparison can send
  * byte-identical instructions/schema with only the model changed. */
 export function breakingMarketRequestBody(
@@ -753,8 +772,9 @@ export function breakingMarketRequestBody(
       "categoryは次のいずれかから最も近いものを選びます: " + IMPORTANT_NEWS_CATEGORIES.join(", "),
       "未確定・予定・観測記事・分析記事ではなく、既に発生・発表が確認された事実だけを対象にします。日本株や世界市場への影響が具体的に見込まれない軽微な話題は候補にしません。",
       "source_urlが無い、または検索結果で実際に開いていないURLを候補にしません。APIキーや秘密値は返しません。",
+      "検索語のルール: site:演算子、ドメイン名、媒体名（Reuters、AP等）を検索語に入れません。対象ドメインは検索ツール側で既に制限されています。search topicの具体語からこの枠で最も重要な語を選び、12語程度までの短い英語の検索語にします。検索語には必ずrecency termsをそのまま含めます。",
     ].join("\n"),
-    input: `search topic: ${query.searchQuery}\nreference UTC: ${now.toISOString()}`,
+    input: `search topic: ${query.searchQuery}\nrecency terms: ${breakingMarketRecencyTerms(now)}\nreference UTC: ${now.toISOString()}`,
     text: { format: { type: "json_schema", name: "breaking_market_candidates", strict: true, schema: {
       type: "object",
       properties: {
