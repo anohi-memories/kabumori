@@ -1,215 +1,127 @@
 # Codex Task
 
-- task_id: x-autopost-phase1i-exact-account-refresh-final-review-20260925
+- task_id: x-universal-oauth-refresh-final-review-20260925
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: codex
 - priority: critical
 - recommended_model: Sol（高）
-- purpose: K3 PASS済みPhase1I exact-account pre-X refresh writerを、account authority / Vault secret boundary / OAuth rotation / concurrency / provider-start race / ACL/migrationの観点で独立レビューする。production apply/deploy/real token refresh/X API callは禁止。
+- purpose: K3 PASS済みの universal exact-account Vault-backed X OAuth refresh 実装を、OAuth/Vault/exact-account/concurrency/production rollout safety に限定して独立最終レビューする。広いrepoレビューはしない。production mutationは禁止。
 
 ## Target
 
 Implementation:
-- `12e9fd1`
+- `acbac42`
 
 Primary scope:
+- `supabase/migrations/20260925140000_x_account_credential_refresh_core.sql`
 - `supabase/migrations/20260925150000_x_autopost_phase1i_account_refresh.sql`
 - `supabase/functions/_shared/x_v2_account_refresh.ts`
 - `supabase/functions/_shared/x_v2_account_refresh_test.ts`
-- `supabase/functions/x-test-post/account_refresh_migration_test.ts`
-- `supabase/functions/x-test-post/v2_dispatcher.ts`
-- `supabase/functions/x-test-post/v2_dispatcher_test.ts`
-- `supabase/tests/x_autopost_phase1i_fixture.sql`
-- `supabase/tests/x_autopost_phase1i_behavior.sql`
-- `supabase/tests/x_autopost_phase1i_run.sh`
-- `supabase/tests/x_autopost_phase1i_account_refresh.md`
+- `supabase/functions/x-test-post/vault_account_auth.ts`
+- `supabase/functions/x-test-post/vault_account_auth_test.ts`
+- `supabase/functions/x-test-post/index.ts`
+- core/Phase1I PostgreSQL behavior+race proof files
 
-## Mandatory startup
+## Review focus
 
-1. Read PROJECT_RULES.md
-2. Read .agent/ORCHESTRATION.md
-3. Read .agent/CURRENT_STATE.md
-4. Read G3 Phase1I TASK/Report and prior Phase1E/1H review history
-5. Fresh fetch origin/main
-6. Confirm independent H1 worktree/checkout
-7. Confirm H2/G1/G2/G3/G4 scopes do not overlap this review
-8. Review implementation commit and current-main drift
-9. Do not apply/deploy/refresh anything
-
-## Review A — exact-account authority
-
-Verify before token endpoint call:
-- attempt/claim owns exact social_account_id
-- scheduled post remains running and bound
-- brand/account/platform match
-- X + identity_verified + publish_enabled
-- access/refresh refs belong only to exact account
-- shared/ambiguous refs fail closed
-- no brand-first/first-row/hardcoded/env/oauth_token_store fallback
-- no caller-supplied generic secret-id authority
-
-Attack with wrong account/brand/ref/attempt/stale claim.
-
-## Review B — secret/Vault boundary
-
+### A. exact-account / cross-account safety
 Verify:
-- refresh/access plaintext never reaches client/admin/mobile/result/log
-- refresh token stays only in trusted server helper
-- provider response body/token/ref IDs are never logged
-- only exact account's own Vault refs are writable
-- rotated refresh updates both; omitted refresh preserves existing refresh secret
-- Vault error messages are fixed-code masked
-- direct API roles cannot write state/Vault through Phase1I public surface
-- SECURITY DEFINER + empty search_path + schema qualification
-- service_role-only EXECUTE
-- no default PUBLIC EXECUTE window
+- exact social_account_id / brand / platform / account identity remain authoritative.
+- no brand-first / first-row / other-account fallback.
+- access and refresh Vault refs cannot be swapped/shared/cross-written.
+- future non-Kabumori accounts use the same generic path without account-specific hardcoding.
+- Kabumori legacy token path is not accidentally migrated or mutated.
 
-Assess residual production service_role Vault powers explicitly.
-
-## Review C — provider refresh semantics
-
-Verify exactly one POST to token endpoint:
-- manual redirect
-- timeout
-- no retry
-- no second request on 3xx
-- malformed 2xx fails closed
-- invalid_grant -> reauth_required
-- unknown/network/timeout/408/5xx -> uncertain and no blind replay
-- 429/other 4xx classes match documented source semantics
-- no X create/media call in refresh helper
-
-## Review D — ordering / external atomicity
-
-Review:
-- DB lease acquired before refresh request
-- commit requires unchanged exact account/attempt/lease
-- Vault writes and state release are transactionally coherent inside Postgres
-- X's external single-use refresh rotation is explicitly non-atomic
-- failed/uncertain commit never reports success
-- release failure cannot silently allow provider-start
-- operator recovery path is explicit and not auto-replayed
-
-## Review E — concurrency / races
-
-Adversarially verify:
-- same account concurrent refresh -> one winner
-- different accounts independent
-- provider-start transition cannot race past refresh lease
-- stale attempt cannot overwrite rotated credentials
-- reconnect/account mutation invalidates old writer
-- used/lost lease cannot commit
-- uncertain/reauth_required states cannot be blindly retried
-- resumed multi-step/provider-started paths do not refresh
-
-## Review F — dispatcher integration contract
-
-Verify source-only optional refresh port:
-- called only for documented pre-X refresh-required condition
-- never after durable provider-start
-- refresh success settles/re-enters safely
-- does not chain refresh + hidden create in unsafe opaque block
-- live legacy dispatcher and production v2 entry remain unwired/OFF
-
-## Review G — migration / rollout safety
-
+### B. OAuth refresh semantics
 Verify:
-- additive ordered dependency after Phase1H
-- explicit transaction
-- preflight dependencies are correct
-- no create-or-replace/drop of unrelated live objects
-- triggers and state table enforce lease invariants
-- service_role-only API RPCs; API roles cannot mutate Vault/state
-- apply-tool/nested transaction assumptions documented
-- production migration remains unapplied
-- live-definition/grant/read-back prerequisites are sufficient
+- max one refresh per publish attempt.
+- max one retry of the exact intended X request after a safe 401 recovery.
+- no retry after provider-start or ambiguous outcome.
+- redirects not followed; no blind retry.
+- invalid_grant/revoked -> reauth_required.
+- timeout/network/408/5xx/malformed response -> uncertain/fail closed.
+- omitted refresh token preserves the existing refresh token.
+- second 401 after refresh fails closed.
+- no plaintext token/provider body leakage.
 
-## Review H — tests
+### C. Vault / RPC / ACL
+Verify:
+- only exact account refs are writable.
+- caller cannot supply arbitrary secret IDs as authority.
+- SECURITY DEFINER/search_path/grants/default PUBLIC EXECUTE windows are safe.
+- migration ordering is valid on the documented current production baseline.
+- health mirror/reset triggers cannot create privilege or cross-account bypass.
+- residual service_role direct Vault powers are documented accurately and not widened.
 
-Rerun at minimum:
-- Phase1I focused/helper/static/dispatcher
-- Phase1B–1I focused
-- x-test-post
-- _shared
-- important-news-monitor
-- greeting/tip-specific
-- disposable Phase1I behavior/concurrency
-- relevant Phase1D/E/F/G/H proofs
-- deno check/lint
-- bash -n
+### D. concurrency
+Attack/review:
+- same-account parallel refresh.
+- two-account parallel refresh.
+- stale lease.
+- account/ref/client/publish state changes mid-refresh.
+- post attempt settlement mid-refresh.
+- reconnect racing refresh commit.
+- stuck refreshing lease recovery assumptions.
+Determine whether the documented reconnect-vs-table-lock deadlock residual is acceptable fail-closed behavior or needs a fix before rollout.
+
+### E. production rollout safety
+Review Stage 0–2 only:
+- Stage 0 live read-back.
+- Stage 1 core migration + exact reviewed Edge deploy with gate OFF.
+- Stage 2 one controlled AI Lab recovery.
+Confirm rollback limits, especially irreversible X refresh-token rotation.
+Do not activate Stage 3/4.
+
+## Required verification
+
+Run focused tests/proofs only:
+- core migration static tests
+- vault_account_auth tests
+- x_v2_account_refresh tests
+- focused x-test-post
+- disposable PostgreSQL core behavior/race
+- stacked Phase1I behavior/race as needed
+- deno check/lint targeted changed modules
 - git diff --check
+- targeted secret scan
 
-If a concrete bug is found:
-- minimal source-only fix is allowed
-- add regression
-- push safely
-- no deploy/apply/real refresh/token/Vault/X mutation
+Add minimal adversarial regressions/fixes only if a concrete issue is found.
 
-## Forbidden
+## Production safety
 
-- production migration/DDL/DML/RPC apply
-- db push/history repair
+Read-only production inspection only.
+
+Forbidden:
+- migration apply
 - Edge deploy
-- Cron mutation
-- real OAuth refresh/token rotation
-- production Vault plaintext read/write
-- real X API/post/media
-- gate enable
-- scheduler/claim switch
-- apps/admin/**
-- consumer mobile/**
-- unrelated G2/H2 work
-
-## Production mutation budget
-
-0.
+- real OAuth refresh
+- Vault writes
+- X API/media/post
+- Cron/settings mutation
+- business-data mutation
+- secret/token plaintext output
+- H2 task overwrite
+- unrelated important-news/common-search work
 
 ## Completion / C1
 
-Update `.agent/CODEX_REPORT.md` with:
+Report:
 - verdict PASS / PASS-WITH-FIX / FAIL
-- findings by severity
-- exact-account assessment
-- Vault/secret assessment
-- refresh provider assessment
-- external atomicity/uncertain-result assessment
-- concurrency/race assessment
-- dispatcher integration assessment
-- ACL/migration assessment
-- exact tests/counts
-- changed files/fix commit if any
+- reviewed/fixed head
+- exact-account/Vault findings
+- concurrency verdict
+- provider retry semantics
+- ACL/migration verdict
+- Stage 0–2 rollout recommendation
+- tests/counts
 - production mutation=0
-- production activation decision (expected NO)
-- remaining blockers
-- next recommendation
+- remaining risks
+- whether AI Lab controlled recovery may proceed
 
-Then:
+When complete:
 - status -> review_required
 - next_owner -> chatgpt
+- update `.agent/CODEX_REPORT.md`
 - STOP for C1.
-
-
-## Final C1 — Phase1I
-
-Verdict: **PASS-WITH-FIX for source candidate**.
-
-Accepted reviewed/fixed head:
-- PR #30: `94000720e10649612e84cb3811327de1a63364e9`
-
-Accepted fixes:
-- P1 cross-account Vault write after silent secret-ref change fixed.
-- P2 stale attempt commit after settlement fixed.
-
-Verification accepted:
-- Phase1I focused 41/41 PASS
-- x-test-post + _shared 618/618 PASS
-- important-news-monitor 473/473 PASS
-- disposable Phase1D–1I behavior/concurrency proofs PASS
-- production mutation=0
-
-Decision:
-- source candidate accepted.
-- production activation remains NO.
-- G3 should perform fresh-main merge of PR #30 and post-merge verification.
