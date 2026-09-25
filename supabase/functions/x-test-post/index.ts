@@ -3122,9 +3122,11 @@ async function requestXPost(
   text: string,
   replyToId?: string,
   pollOptions?: string[] | null,
+  redirect?: RequestRedirect,
 ): Promise<{ status: number; body: unknown }> {
   const response = await fetch(X_API_URL, {
     method: "POST",
+    ...(redirect ? { redirect } : {}),
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
@@ -3155,7 +3157,7 @@ async function postToX(
 ): Promise<unknown> {
   if (auth.vaultAccount) {
     const sent = await auth.vaultAccount.send((accessToken) =>
-      requestXPost(accessToken, text, replyToId, pollOptions)
+      requestXPost(accessToken, text, replyToId, pollOptions, "manual")
     );
     if (sent.status < 200 || sent.status >= 300) {
       console.error("X API request failed", { status: sent.status });

@@ -123,3 +123,12 @@ test("live dispatcher: every non-Kabumori brand uses the generic Vault account p
   assert.ok(post.indexOf("auth.vaultAccount.send(") < post.indexOf("await refreshXTokens(auth)"));
   assert.match(post, /throw new Error\("X_REQUEST_FAILED:401"\)[\s\S]*?await refreshXTokens/u);
 });
+
+test("Vault-backed X writes refuse redirects without changing the Kabumori request default", () => {
+  const request = dispatcher.slice(dispatcher.indexOf("async function requestXPost("), dispatcher.indexOf("async function postToX("));
+  assert.match(request, /redirect\?: RequestRedirect/u);
+  assert.match(request, /\.\.\.\(redirect \? \{ redirect \} : \{\}\)/u);
+  const vault = dispatcher.slice(dispatcher.indexOf("if (auth.vaultAccount) {", dispatcher.indexOf("async function postToX(")));
+  assert.match(vault, /requestXPost\(accessToken, text, replyToId, pollOptions, "manual"\)/u);
+  assert.match(vault, /requestXPost\(\s*auth\.tokens\.accessToken,\s*text,\s*replyToId,\s*pollOptions,\s*\)/u);
+});
