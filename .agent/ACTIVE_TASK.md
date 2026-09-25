@@ -74,12 +74,12 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: done
-- task_id: x-admin-pr33-bounded-real-auth-e2e-20260926
+- status: ready
+- task_id: x-admin-pr33-bounded-real-auth-e2e-resume-20260926
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: closed; Final K4 SAFE STOP — PR #33 source/Preview remains good, but bounded real recovery+invite E2E is blocked by missing custom SMTP
+- allocation: assigned; resume PR #33 bounded real recovery+invite E2E after user saved temporary Gmail Custom SMTP; recommended Opus5.5（高）
 
 ## Deferred
 
