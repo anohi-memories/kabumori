@@ -64,26 +64,26 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: done
 - task_id: x-autopost-phase1i-pr30-merge-postmerge-verify-20260925
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: assigned; merge reviewed PR #30 + post-merge Phase1I verification
+- allocation: closed; Final K3 PASS, PR #30 merged -> `a9b1ef4d359d5ef554284fc56427e0cafeaec648`, post-merge verification PASS, production mutation 0 excluding merge
 
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: done
-- task_id: x-admin-password-recovery-invite-flow-20260925
+- status: ready
+- task_id: x-admin-pr15-merge-production-verify-20260925
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: closed; Final K4 PASS for source + Netlify Preview, Codex review intentionally deferred, operator E2E pending
+- allocation: assigned; merge reviewed PR #15 + post-merge/production Admin verification; recommended Sonnet5（中）
 
 ## Deferred
 
-- PR #15 final Vercel gate / merge / post-merge Admin QA is intentionally deferred while Netlify Preview is introduced.
+- PR #15 merge / post-merge / production verification is assigned to G4. PR #33 remains unmerged and its Auth/security review/merge decision stays deferred until PR #15 is closed.
 - Kabumori Expo Web Netlify Preview task is also deferred because it is not currently needed for the native app workflow.
 
 ## Control codes
