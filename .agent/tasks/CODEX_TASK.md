@@ -1,174 +1,170 @@
 # Codex Task
 
-- task_id: x-autopost-phase1f-ledger-atomic-completion-final-review-20260924
+- task_id: x-autopost-phase1g-multistep-tip-greeting-final-review-20260925
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: codex
 - priority: critical
 - recommended_model: Sol（高）
-- purpose: K3 PASS済みPhase1Fのprovider outcome state machine、typed atomic completion、provider-step ledger、ACL hardening、execution-log semanticsを独立レビューする。production apply/deploy/X API callは行わない。
+- purpose: K3 PASS済みPhase1Gのtip thread / morning_greeting multi-step provider-step ledger、atomic completion、publish_claim lifecycle、ACL/migration安全性を独立レビューする。production apply/deploy/X API callは行わない。
 
 ## Target
 
 Implementation commit:
-- `0b752925b28b1b922b94a4cb7629ee942f82120f`
+- `e0f7785`
 
 Primary files:
-- `supabase/migrations/20260924180000_x_autopost_phase1f_atomic_completion.sql`
+- `supabase/migrations/20260925090000_x_autopost_phase1g_multistep_completion.sql`
+- `supabase/functions/_shared/x_v2_multistep.ts`
+- `supabase/functions/_shared/x_v2_multistep_test.ts`
 - `supabase/functions/_shared/x_v2_outcome_ledger.ts`
 - `supabase/functions/_shared/x_v2_outcome_ledger_test.ts`
-- `supabase/functions/x-test-post/atomic_completion_migration_test.ts`
-- `supabase/tests/x_autopost_phase1f_fixture.sql`
-- `supabase/tests/x_autopost_phase1f_behavior.sql`
-- `supabase/tests/x_autopost_phase1f_run.sh`
-- `supabase/tests/x_autopost_phase1f_atomic_completion.md`
+- `supabase/functions/x-test-post/multistep_completion_migration_test.ts`
+- `supabase/tests/x_autopost_phase1g_fixture.sql`
+- `supabase/tests/x_autopost_phase1g_behavior.sql`
+- `supabase/tests/x_autopost_phase1g_run.sh`
+- `supabase/tests/x_autopost_phase1g_multistep_completion.md`
 
 K3 evidence:
-- source-only candidate complete
-- typed atomic completions for interaction/useful_tip/morning_report/close_report/us_premarket_report
-- tip/morning_greeting/brand_post remain disabled
-- durable x_rejected outcome added
-- provider-step ledger foundation added
-- focused 55/55 PASS
-- x-test-post 429/429 PASS
-- _shared 120/120 PASS
+- tip + morning_greeting source-ready candidate
+- focused 72/72 PASS
+- x-test-post 437/437 PASS
+- _shared 129/129 PASS
 - important-news-monitor 431/431 PASS
-- disposable PostgreSQL Phase1F behavior/race PASS
-- production mutation/X API calls = 0
+- greeting/tip-specific 138/138 PASS
+- disposable PostgreSQL Phase1G behavior/race PASS ×4
+- production mutation/X API/media calls = 0
 
 ## Mandatory startup
 
 1. Read PROJECT_RULES.md
 2. Read .agent/ORCHESTRATION.md
 3. Read .agent/CURRENT_STATE.md
-4. Read G3 Phase1F TASK/Report
-5. Read Phase1B/1C/1D/1E review history relevant to ledger/completion
+4. Read G3 Phase1G TASK/Report
+5. Read Phase1F migration/docs and H1 C1 findings
 6. Fresh fetch origin/main
 7. Confirm independent H1 worktree/checkout
-8. Confirm no overlap with active H2/G1/G2/G4 work
-9. Review implementation commit and current main for drift
+8. Inspect H2/G1/G2/G3/G4 scopes and prove no overlap
+9. Review implementation commit/current main for semantic drift
 10. Do not deploy/apply anything
 
-## Review A — state machine safety
+## Review A — tip thread plan/step integrity
 
 Verify:
-- pre_x -> retryable/terminal only before provider-start
-- provider_started cannot regress to pre_x
-- x_rejected is durable terminal and non-reclaimable
-- x_outcome_uncertain non-reclaimable
-- x_confirmed_db_incomplete non-reclaimable
-- completed exactly-once
-- duplicate calls cannot duplicate side effects
-- older attempt cannot overwrite a newer claim
-- wrong claim token/account/post/brand rejected
-- no path can silently convert uncertain into retryable
+- immutable expected part count and plan kind
+- 1..N exact step cardinality
+- step1 create_post only
+- stepN>1 create_reply only
+- reply parent exactly previous confirmed X id
+- no extra step beyond plan
+- no missing middle step accepted
+- no confirmed step replay
+- rejected/uncertain step blocks later steps
+- confirmed prior parts cannot be duplicated by retry
+- attempt with confirmed provider object cannot later be recorded x_rejected
 
-Try adversarial state transitions.
+Try adversarial step ordering, parent spoofing, plan mismatch, and duplicate start/finish.
 
-## Review B — typed atomic completion fidelity
+## Review B — tip atomic completion fidelity
 
-For each supported type:
-- interaction
-- useful_tip
-- morning_report
-- close_report
-- us_premarket_report
+Compare with legacy tip completion semantics.
 
-Compare Phase1F typed completion side effects against legacy source semantics.
+Verify one transaction:
+- validates claim/attempt/account/brand/type/running state
+- verifies all planned steps confirmed
+- preserves all part X ids durably/auditably
+- marks scheduled post succeeded
+- marks attempt completed
+- performs exact tip/topic usage side effects once
+- writes one success execution log
+- duplicate completion is idempotent
+- concurrent completion produces one side-effect set
+- forced downstream error rolls back all completion effects
 
-Verify one transaction covers:
-- scheduled_posts status/timestamps
-- v2 attempt outcome/x id
-- post_execution_logs
-- type-specific side effects
-- report-run linkage/metadata where applicable
-- interaction/topic/tip metrics as applicable
+Assess confirmed-incomplete recovery with same root id.
 
-Inject or reason through mid-function failure and confirm full rollback.
-
-Check idempotency and concurrent duplicate completion.
-
-## Review C — disabled types are truly disabled
+## Review C — morning_greeting claim/media/create integrity
 
 Verify:
-- tip cannot use a generic one-id completion path
-- morning_greeting cannot use a generic single-create path
-- brand_post remains disabled without repository-source completion fidelity
-- no dispatcher path can accidentally select these typed completions
+- publish_claim belongs to exact brand/day/post/attempt
+- competing/stale attempt cannot steal/reuse claim
+- media_upload must confirm before create_post
+- create_post input media id equals same attempt’s confirmed media output
+- confirmed media never re-uploaded after later uncertainty
+- uncertain/rejected create blocks replay
+- already-published day fails closed safely
+- same-day claim lifecycle remains legacy-compatible enough for source candidate
 
-Assess provider-step ledger foundation for:
-- strictly ordered steps
-- no duplicate start
-- uncertain step blocks later unsafe replay
-- thread reply chain identity
-- media/create separation
+Pay special attention to residual direct service_role DML on publish_claims.
 
-Do not require full implementation of disabled types in this review.
+## Review D — morning_greeting atomic completion
 
-## Review D — observability/logging
+Verify completion transaction covers all DB-side authoritative state:
+- scheduled_posts
+- attempt ledger
+- provider-step records/plan state
+- publish_claims published state/x_post_id/published_at
+- greeting success metadata
+- exactly one success execution log
 
-Verify:
-- v2 started log timing is semantically correct
-- success only written after atomic confirmed completion
-- rejected/uncertain/incomplete logging does not imply reclaimability
-- failure/error codes do not leak secret/token data
-- duplicate completion does not duplicate logs
-- trigger behavior cannot recursively or multiply log
+Confirm external Storage receipt is correctly treated as non-transactional/best-effort and cannot undermine DB authority or cause duplicate X create/media upload.
 
-## Review E — ACL/security
+## Review E — multistep helper safety
+
+Review server-only helper(s):
+- next safe action only
+- no auto-loop through steps
+- no retry of uncertain step
+- no recreation/reupload of confirmed object
+- no brand-only credential routing
+- no secret/provider response leakage
+
+Confirm Phase1E exact-account resolver assumptions are preserved.
+
+## Review F — ACL / migration
 
 Review:
-- SECURITY DEFINER functions
-- fixed empty search_path
+- SECURITY DEFINER + empty search_path
 - schema qualification
 - service_role-only public RPCs
-- internal helper/trigger EXECUTE revoked
-- ledger tables read-only to service_role where intended
-- default privileges / PUBLIC windows closed
-- no direct API-role writes that bypass state-machine invariants
-- no regression of Phase1D/1E ACL assumptions
-
-Pay special attention to hardening Phase1B ledger table DML grants.
-
-## Review F — migration safety
-
-Assess:
-- dependencies on 1B/1D/1E
-- explicit transaction semantics
-- nested transaction/apply-tool risk
-- non-idempotency
-- partial-apply behavior
-- whether Phase1F can only be applied as part of an ordered bundle
-- whether retiring `complete_post_x_confirmed_v2` is safe before dispatcher activation
-- live-definition assumptions still requiring production read-back
-
-No production apply.
+- internal/trigger API EXECUTE closed
+- plan/step tables non-writable by API roles
+- raw Phase1F begin RPC revocation is safe
+- publish_claims residual grants are understood and do not bypass new v2 invariants
+- explicit transaction and PUBLIC window
+- non-idempotency / ordered 1B→1G apply dependency
+- apply-tool nested transaction risk
+- live-definition dependencies before rollout
 
 ## Required verification
 
 At minimum:
-- focused Phase1F
-- Phase1B/1D/1E regressions
+- focused Phase1G
+- Phase1B/1D/1E/1F regressions
 - x-test-post
 - _shared
 - important-news-monitor
-- disposable PostgreSQL behavior
-- duplicate-completion concurrency/race proof
-- Deno/static checks
+- greeting/tip-specific tests
+- disposable PostgreSQL behavior + concurrency/race
+- Deno check/lint
 - bash -n
 - git diff --check
 
-If a concrete bug is found, minimal Phase1F-scope source-only fix is allowed with rerun.
+If concrete defect found:
+- minimal Phase1G-scope source-only fix allowed
+- add regression
+- rerun affected/full safety suites
+- push safely
+- no deploy/apply
 
 ## Forbidden
 
 - production migration/DDL/DML/RPC apply
-- `supabase db push`
-- migration-history repair
+- db push/history repair
 - deploy
 - Cron/OAuth/Vault/token mutation
-- X API/posts/media
+- real X API/posts/media
 - dispatcher/producers enable
 - apps/admin/**
 - consumer mobile/**
@@ -186,15 +182,15 @@ Update `.agent/CODEX_REPORT.md` with:
 - verdict PASS / PASS-WITH-FIX / FAIL
 - findings by severity
 - exact changed files/fix commit if any
-- state-machine assessment
-- typed-completion fidelity
-- disabled-type assessment
-- observability assessment
-- ACL assessment
-- migration/apply safety
+- tip plan/step assessment
+- tip completion fidelity
+- greeting claim/media/create assessment
+- greeting completion fidelity
+- helper safety
+- ACL/migration safety
 - exact tests/counts
-- whether Phase1F is safe to keep as source candidate
-- whether production activation is authorized (expected NO)
+- whether Phase1G is safe to keep as source candidate
+- production activation decision (expected NO)
 - remaining blockers
 - production mutation=0
 - next recommendation
@@ -203,26 +199,3 @@ Then:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for C1.
-
-
-## Final C1 — Phase1F
-
-Verdict: **PASS-WITH-FIX for source-only candidate**.
-
-Accepted:
-- reviewed implementation `0b752925b28b1b922b94a4cb7629ee942f82120f`
-- H1 fix commit `b3740cc7c39010f02ad3505721a5b37d2e707dba`
-- PR #25 contains the accepted source-only fixes
-- P1 direct scheduled_posts API-role DML bypass closed
-- P2 provider-step kind/order integrity fixed
-- P2 late unfinished-step mutation after terminal attempt fixed
-- focused 55/55 PASS
-- x-test-post/_shared/important-news-monitor total 980/980 PASS
-- disposable Phase1D/1E/1F behavior/concurrency/race proofs PASS
-- deno check/lint, bash -n, git diff --check PASS
-- production mutation/deploy/token/Cron/X API calls = 0
-
-Decision:
-- Phase1F is accepted as a source candidate after the H1 fixes.
-- Production activation remains **NO**.
-- Next step: G3 fresh-main verify PR #25 -> merge -> post-merge regression.
