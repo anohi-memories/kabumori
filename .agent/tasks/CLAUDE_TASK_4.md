@@ -3,8 +3,8 @@
 - task_id: x-admin-pr33-rebase-stabilize-auth-review-prep-20260925
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Opus5.5（高）
 - purpose: open PR #33（Web Admin password recovery / invite flow）をfresh mainへ安全に追従させ、現在のmerge conflictを解消し、既存Admin/Auth/brand境界を壊さずにsource/Preview候補として再安定化する。production Auth URL設定・merge・本番反映はこのTASKでは行わず、K4後に独立Codexレビューへ渡せる状態まで仕上げる。
@@ -263,3 +263,19 @@ PR #33全体のmain比差分: `apps/admin/src`の10ファイル、追加のみ�
 
 - status -> review_required
 - next_owner -> chatgpt
+
+
+## Final K4 — PR #33 stabilization
+
+Verdict: **PASS**.
+
+- PR #33 updated onto fresh main without force-push history rewrite.
+- only real conflict was `apps/admin/netlify.toml`; current-main runtime config preserved, PR-only retrigger comment dropped.
+- final candidate head: `e6b93be`.
+- PR #33 now MERGEABLE.
+- Admin/Auth tests 73/73 PASS; tsc/lint/build/diff/secret scan PASS.
+- PR #15 multibrand/Admin regressions PASS.
+- Netlify Deploy Preview PASS; no 404/5xx/redirect loops in tested unauthenticated/error paths.
+- production mutation=0; no Auth config/user/DB/Vercel/X/OAuth/Vault mutation.
+- independent H1 Auth/security final review assigned before merge.
+- recommended Codex model: Sol（高）.
