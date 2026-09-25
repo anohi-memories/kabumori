@@ -36,7 +36,7 @@
 - G1: `done` — `kabumori-pr24-privacy-merge-postmerge-verify-20260924`
   - PR #24 merged at reviewed head `46515c5` -> main `ff4c43c`. Files byte-identical; 122/0 tests, production web build shows the new disclosure text. personalized-reports/account-deletion.html untouched. Mutation 0.
   - Privacy dataflow gap from PR #21 review is now closed on main. Remaining blockers: icon/splash/overlay artwork, EAS production env, Netlify publish, Auth Site URL/SMTP, App Store Connect.
-- G2: `ready` — `kabumori-pr26-merge-redeploy-final-dryrun-20260925`
+- G2: `ready` — `kabumori-report-dryrun-false-reject-hardening-20260925`
 - G3: `ready` — `x-autopost-phase1i-exact-account-prex-refresh-writer-20260925`
 - G4: `ready` — `x-admin-netlify-pr15-live-preview-auth-qa-20260925`
 
@@ -146,6 +146,23 @@
 - Kabumori Expo Web Netlify Preview setup.
 - Prior reviewed code/test evidence remains preserved in the old G4/G2 reports.
 - Resume either deferred item only when needed or user explicitly asks.
+
+## K2 v26 repeated dry-run result
+
+- result: **safety containment PASS / rollout not accepted**.
+- PR #26 merged at reviewed head -> `f7498cd3a3c8be36c5c56ba19a437ba300d6f93a`.
+- production v26 had already been deployed by MIC report-context integration; G2 did not overwrite it.
+- production v26 matched then-current main and kept verify_jwt=false / app_enabled=false.
+- close dry-run: 3/5 PASS.
+- remaining false rejects:
+  - `値下がりの要因は特定できません。`
+  - factual lead clause + bounded unknown-cause sentence
+- morning dry-run: Fact FAIL with local validator 0; likely advisory-sounding neutral wording false positive.
+- no unsafe causal assertion, truncation, persistence, or notification observed.
+- no G2 deploy/rollback performed; production v26 retained per user decision.
+- activation remains NO.
+- next G2: source-only vocabulary + prompt hardening; deploy forbidden until review.
+- recommended model: Sonnet5（極高）.
 
 ## C2 PR #26 result
 
