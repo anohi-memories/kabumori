@@ -48,7 +48,7 @@
   - Final K1 PASS. PR #31 merged -> `7aa394fc1dc73edd0c67b6529923ec4dc9616e7f`.
   - Approved icon reproducibly wired into Expo/iOS; 126/126 tests; no production mutation.
   - Awaiting separately authorized EAS/TestFlight real-iPhone visual verification.
-- G2: `ready` — `kabumori-morning-prompt-fact-contract-fix-20260925`
+- G2: `ready` — `kabumori-pr32-no-clear-material-fix-merge-dryrun-20260925`
 - G3: `ready` — `x-autopost-phase1i-pr30-merge-postmerge-verify-20260925`
 - G4: `done` — `x-admin-password-recovery-invite-flow-20260925`; Final K4 PASS, operator E2E pending
 
@@ -66,6 +66,17 @@
 - Codex review skipped as low-risk asset/config-only change.
 - next G1: fresh-main merge + post-merge verification. EAS/TestFlight requires separate authorization.
 - recommended model: Sonnet5（中）.
+
+## K2 PR #32 safe-stop regression
+
+- verdict: **SAFE STOP before merge**.
+- current PR #32 head `722d191...` passes existing tests but has a deterministic no_clear_material regression not covered by them.
+- cause: prompt permits empty `fact_ja`; parser drops empty-fact impacts; local validator then raises `MISSING_HOLDING_IMPACTS`, causing delivery failure.
+- production remains v28; no merge/deploy/dry-run occurred in the stopped task; mutation=0.
+- chosen fix: keep parser unchanged and generate a holding-scoped non-empty input-state fact for no-material holdings.
+- per reduced-review policy, G2 will fix/test/update same PR/merge/redeploy/dry-run in one task; no new Codex review now.
+- app_enabled=true remains forbidden.
+- recommended model: Opus5.5（高）.
 
 ## PR #32 review deferred / continue validation
 
