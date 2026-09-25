@@ -33,13 +33,13 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: kabumori-pr29-plus-v27-validator-final-review-20260925
+- status: ready
+- task_id: x-admin-pr15-auth-crossbrand-final-review-20260925
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: closed; Final C2 PASS-WITH-FIX, PR #29 final head ef960374
+- allocation: assigned; PR #15 auth/authorization/cross-brand final review
 
 ## Claude G1
 - owner: claude
@@ -74,12 +74,12 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: done
 - task_id: x-admin-pr15-netlify-preview-live-qa-continuation-20260925
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: assigned; PR #15 Netlify Deploy Preview live proxy/auth/selector QA
+- allocation: closed; Final K4 PASS_AUTH_BLOCKED, H2 review assigned
 
 ## Deferred
 
