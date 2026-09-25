@@ -44,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: done
 - task_id: kabumori-release-readiness-gap-closure-20260925
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: assigned; release-readiness audit + safe source gap closure, no EAS/TestFlight/Auth/SMTP production mutation
+- allocation: closed; Final K1 PASS, PR #35 merged -> `26b0e8903b434a7a5222370c65aa4ed565af113e`, awaiting startup artwork + Netlify/EAS/Auth/SMTP operator gates
 
 ## Claude G2
 - owner: claude
