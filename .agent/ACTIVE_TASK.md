@@ -74,12 +74,12 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: done
-- task_id: x-admin-pr33-auth-fix-round2-20260926
+- status: ready
+- task_id: x-admin-pr33-bounded-real-auth-e2e-20260926
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: closed; Final K4 PASS, PR #33 head `2528b56`, three C1 findings fixed, H1 re-review assigned
+- allocation: assigned; bounded real recovery + invite E2E on PR #33 Preview, temporary exact redirect allowlist only if needed; recommended Opus5.5（高）
 
 ## Deferred
 
