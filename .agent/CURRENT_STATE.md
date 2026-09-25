@@ -954,3 +954,12 @@
 - Kabumori legacy token path unchanged.
 - production mutation=0.
 - G3 closed. Stage 0/1/2 production rollout remains separately gated and requires explicit approval/new TASK.
+
+## G3 universal OAuth refresh production Stage 0–2
+
+- user authorized proceeding on 2026-09-26 JST.
+- assigned: `x-universal-oauth-refresh-production-stage0-2-20260926`.
+- scope: Stage 0 read-only preflight -> Stage 1 reviewed core migration + reviewed x-test-post deploy with gate OFF -> Stage 2 one controlled AI Lab recovery.
+- generic Stage 3/4 enablement, bulk replay, Kabumori credential migration, Admin PR #33, and important-news/common-search are excluded.
+- any invalid-grant, uncertainty, deadlock, lease/account mismatch, persistence failure, second 401, duplicate provider request, or cross-account effect requires gate OFF and immediate stop.
+- recommended Claude model: Opus5.5（高）.
