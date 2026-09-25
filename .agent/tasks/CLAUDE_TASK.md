@@ -3,8 +3,8 @@
 - task_id: kabumori-report-dryrun-false-reject-hardening-20260925
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（極高）
 - purpose: production v26 dry-runで残った大引けのfalse reject 2系統と朝刊Fact false positiveを、validator安全性を緩めずsource-onlyで最小修正する。deploy禁止。
@@ -202,3 +202,92 @@ When complete:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for K2.
+
+## Report
+
+### Summary
+
+- task_id：`kabumori-report-dryrun-false-reject-hardening-20260925`
+- result：source-onlyの修正を完了し、PR #29を作成した（**未merge・未deploy**）。K2待ち。
+- changed_files：
+  - `supabase/functions/personalized-reports/report_logic.ts`（+15行。promptの定数だけ）
+  - `supabase/functions/personalized-reports/report_hardening_test.ts`（新規）
+- tests：
+  - 新規 **9/9**
+  - close_validator **23/23**
+  - personalized-reports **96/96**（MICのテストを含む）
+  - 関連スイート **214/214**
+  - deno check・deno lint・git diff --checkはPASS
+- commit_hash：PR head `bed5e79d0ab22e94be6a7c1ebd0f7c8f157ea0c0`
+- push：`origin/g2-report-false-reject-hardening-20260925`。PR https://github.com/anohi-memories/kabumori/pull/29
+- deploy：なし
+- safety_checks：
+  - production mutation 0。本番はread-onlyで確認しただけで、LLMの呼び出しもしていない。
+  - MIC・market_detail・_shared・上限値・validatorの正規表現・Fact checkerは未変更。
+  - 共有ファイルは未変更。
+
+### 前提の変化と衝突の確認
+
+- TASKの記載は「本番はv26」だったが、着手時点では変わっていた。
+  - 別のセッションが16:26に `510acf5`（値下がり／値上がりの修正）を**PRを経由せずmainへ直接commit**し、16:32に**v27としてdeploy**していた。
+  - v27は `510acf5` とbyte一致（`--use-api` のdownloadで確認）。
+- 衝突として報告した。ユーザーから「MICの作業は終了。MICの変更を壊さず、レビュー付きでG2の内容を実行」と指示を受けて着手した。
+- 着手時点で、`personalized-reports` を変更しているopen PR・作業中のbranchはなかった。
+- 本PRは、MICの変更（`ca239cf`、`6419fc9`）と `510acf5` を含むmainの上に作成した。MIC関連のファイルには触れていない。
+
+### root causes（A / B / C）
+
+- **A. 語彙の不足**：`UNDETERMINED_MOVE_PREFIX` に「値下がり／値上がり」がなかった。
+  - 修正は `510acf5` で既にmainに入っている。本PRでは、TASKが指定した境界をテストで固定しただけ。
+- **B. 推定欄の文頭に事実の節が入る**：例「小幅高でしたが、指数との比較では相対的に弱く、値動きの要因は特定できません。」
+  - validatorの拒否は正しい動作なので、**validatorは広げていない**。
+  - 生成側のpromptで、推定欄に事実を書かせないようにした。
+- **C. 朝刊のFact false positive**：「見守る」「注意が必要」「〜しやすい構成」が、推奨や根拠のない影響と判定された。
+  - 生成側のpromptで、中立な観察の言い方に誘導した。**Fact checkerは変更していない**。
+  - MICの入力（`mic_market`）が見通しっぽい表現を誘発した可能性がある。ただし、比較できたのは各1回だけで、確定はしていない。
+
+### exact source changes（report_logic.ts）
+
+- `INFERENCE_FIELD_RULE`（新設。`IMPACT_INSTRUCTIONS` に追加し、朝刊・大引けの両方に適用）：
+  - inference_ja には値動き・騰落率・指数との比較などの事実を書かない。
+  - 「小幅高でしたが」「指数との比較では相対的に弱く」「前日比で上昇しており」を例として明記して禁止した。
+  - 事実は fact_ja にだけ書く。
+  - 要因を裏付けられない場合は「値動きの要因は特定できません。」などの1文だけにし、その文を導くために事実を繰り返さない。
+- `MORNING_WORDING_RULE`（新設。`MORNING_INSTRUCTIONS` にだけ追加）：
+  - 対象：title・summary・overview・watch・risk_notes・checkpoints。
+  - 「見守る／注意が必要／警戒が必要／〜しやすい構成／影響を受けやすい」は使わない。
+  - 代わりに「注目点／確認ポイント／値動きを確認します」を使う。
+- Fact checker：**変更なし**（`REPORT_FACT_INSTRUCTIONS` が不変であることをテストで固定。MICがない場合のFact instructionsが基本セットと完全一致することも確認）。
+
+### allow / reject boundary（テスト済み）
+
+- **PASS**
+  - 値下がりの要因は特定できません
+  - 当日の値下がり要因は特定できません
+  - 値上がりの理由は判断できません
+  - 当日の値上がりの原因は確認できません
+  - 値動きの要因は特定できません
+- **FAIL**
+  - 語彙の外側：急な値下がり… / 半導体株の値上がり… / 円安による値上がり…
+  - 要因名詞を使った事実の断定：値下がりの要因は円高です / 値上がりの理由は好決算です
+  - 因果の断定を後ろの節で打ち消そうとするもの（4パターン）
+  - 改行・`；`・`!`・`.` で区切って危険な文を混ぜるもの（4パターン）
+  - 事実の前置き＋特定不能の文（観測された文）と、前日比の前置き文
+  - 事実の前置き＋因果の断定
+- mutationの確認：
+  - promptのルールを外すと2件がfailする。
+  - 値下がり／値上がりを外すと1件がfailする。
+- 上限値（朝刊120／大引け160）が不変であることもテストで確認した。
+
+### production read-back（read-only）
+
+- `personalized-reports`：**v27**（別セッションによるdeploy、`510acf5` とbyte一致）、verify_jwt=false。
+- `app_enabled=false`、`x_enabled=false`、cronは不変。
+- 本日の大引けcron（17:15）は、確認時点（16:42）ではまだ実行前。
+
+### recommendation
+
+1. H2でPR #29をレビューする（promptだけの変更で、validatorとFactを緩めていないことの確認）。
+2. K2でPASSならmergeし、承認を得たうえで再deployする。deployの前に、mainに直接入った `510acf5` もレビュー対象として確認するのが望ましい。
+3. 再deploy後、大引けdry_runを5回と朝刊dry_run（できれば2回）で実出力を検証する。朝刊は、MICの入力あり・なしの差を見るために、dry_runの応答の `mic` の有無も記録する。
+4. **運用上の推奨**：`personalized-reports` のdeployは1つのslotに一本化し、PRを経由しないmainへの直接commitとdeployは避ける（今回、レビュー前のcodeが本番に入った）。
