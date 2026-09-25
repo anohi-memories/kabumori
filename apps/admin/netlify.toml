@@ -44,3 +44,5 @@
 # secret, so the same file can be reused across environments without editing):
 #   NEXT_PUBLIC_SUPABASE_URL
 #   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+
+# Retrigger PR #15 Deploy Preview after Netlify environment variable update (no runtime effect).

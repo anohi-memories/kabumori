@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { KABUMORI_BRAND_ID } from "./brand-boundary";
+import type { AuthorizedBrandId } from "./selected-brand.ts";
 
 const JST_TIME_ZONE = "Asia/Tokyo";
 
@@ -119,13 +119,14 @@ function summarizeFailureReason(log: ExecutionLogRow | undefined) {
 
 export async function getTodayScheduledPosts(
   supabase: SupabaseClient,
+  brandId: AuthorizedBrandId,
   now = new Date(),
 ): Promise<TodayScheduledPostsResult> {
   const dateJst = getJstDate(now);
   const { data: scheduleData, error: scheduleError } = await supabase
     .from("scheduled_posts")
     .select("id,schedule_date,post_type,scheduled_for,status")
-    .eq("brand_id", KABUMORI_BRAND_ID)
+    .eq("brand_id", brandId)
     .eq("schedule_date", dateJst)
     .order("scheduled_for", { ascending: true });
 
@@ -145,7 +146,7 @@ export async function getTodayScheduledPosts(
   const { data: logData, error: logError } = await supabase
     .from("post_execution_logs")
     .select("id,scheduled_post_id,status,x_post_id,message,error_code,created_at")
-    .eq("brand_id", KABUMORI_BRAND_ID)
+    .eq("brand_id", brandId)
     .in("scheduled_post_id", scheduledPostIds)
     .order("created_at", { ascending: false });
 
