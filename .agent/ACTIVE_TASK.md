@@ -74,12 +74,12 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: done
-- task_id: x-admin-netlify-deploy-preview-pipeline-20260924
+- status: ready
+- task_id: x-admin-netlify-live-site-preview-qa-20260925
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: closed; Final K4 PASS, live Netlify site connection/QA remains external follow-up
+- allocation: assigned; Netlify live site connection + Deploy Preview/proxy/auth/PR#15 QA
 
 ## Deferred
 
