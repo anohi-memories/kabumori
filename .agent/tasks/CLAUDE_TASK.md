@@ -3,8 +3,8 @@
 - task_id: kabumori-morning-prompt-fact-contract-fix-20260925
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（極高）
 - purpose: production v28 dry-runで判明した朝刊promptとFact checkerの契約矛盾を、Fact基準を緩めずsource-onlyで最小修正する。deploy禁止。
@@ -221,3 +221,22 @@ When complete:
 1. H2で独立レビューする（Factへの追加が許可範囲の拡大として妥当か、既存の拒否を弱めていないかの確認）。
 2. K2でPASSならmergeし、承認を得て再deployする。
 3. **次の朝刊cronは月曜9/28 08:35 JST**。それより前に、朝刊dry_runを3回以上、大引けdry_runを3回以上実施する。朝刊が安定しなければ、同じ手順でv28に戻す（v28の大引けは5/5でPASS）。
+
+
+## Final K2 — PR #32 source contract fix
+
+Verdict: **PASS for source implementation; independent review required before merge/deploy**.
+
+Accepted:
+- PR #32 head `749ce19f01ae191398a5b32420b657263c54dd57`
+- prompt removes unsupported intraday-observation framing
+- empty-news wording is constrained to packet/input-state claims
+- Fact checker receives only a narrow meta-claim allowance; no existing rejection removed
+- validator/MIC/market_detail/shared packet unchanged
+- new 6/6 tests
+- personalized-reports 102/102
+- related suite 220/220
+- deno check/lint/diff PASS
+- production mutation=0
+
+Because Fact acceptance semantics change, H2 independent review is required before merge/deploy.
