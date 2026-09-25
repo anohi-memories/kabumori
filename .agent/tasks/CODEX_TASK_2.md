@@ -1,146 +1,184 @@
 # Codex Task 2
 
-- task_id: kabumori-pr29-plus-v27-validator-final-review-20260925
+- task_id: x-admin-pr15-auth-crossbrand-final-review-20260925
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: none
-- priority: high
-- recommended_model: Luna（極高）
-- purpose: PR #29のprompt hardeningと、review前にmain→production v27へ入った commit 510acf5 のvalidator拡張を一体で最終レビューする。merge/deployは禁止。
+- status: ready
+- next_owner: codex
+- priority: critical
+- recommended_model: Sol（高）
+- purpose: K4 PASS済みPR #15 multi-brand admin selectorを、認証・認可・cross-brand leakage・server-side brand scoping・Netlify Preview実挙動の観点で独立最終レビューする。merge/Vercel production/DB mutationは禁止。
 
-## Review targets
+## Target
 
-A. Already on main / production v27:
-- commit: `510acf5954b37410b50c23ff92c3f54af6458a72`
-- change: UNDETERMINED_MOVE_PREFIX に `値下がり|値上がり` を追加
-- related tests in close_validator_fix_test.ts
-- production v27 is reported byte-identical to this source plus existing MIC integration
-- app_enabled=false
+PR #15:
+- branch: `admin-multibrand-selector-phase2-20260924`
+- current head: `a8f98444425c25796e9fef611445b0f574120669`
+- previous semantic head: `b04442561d9e9c6d01b4a9fcf640c2cf731cd923`
+- the new head is an empty retrigger commit; tree must be identical
 
-B. PR #29:
-- branch: `g2-report-false-reject-hardening-20260925`
-- head: `bed5e79d0ab22e94be6a7c1ebd0f7c8f157ea0c0`
-- changed:
-  - personalized-reports/report_logic.ts
-  - personalized-reports/report_hardening_test.ts
-- source-only, unmerged, undeployed
+Netlify Preview:
+- site: `shiny-kheer-77a154`
+- preview: `https://deploy-preview-15--shiny-kheer-77a154.netlify.app`
+- K4 result: `PREVIEW_QA_PASS_AUTH_BLOCKED`
 
-## Required assessment
+## Mandatory startup
 
-### 1. Validator safety for 510acf5
+1. Read PROJECT_RULES.md
+2. Read .agent/ORCHESTRATION.md
+3. Read .agent/CURRENT_STATE.md
+4. Read G4 TASK/Report and PR #15 description
+5. Fresh fetch origin/main and PR #15
+6. Confirm independent H2 worktree
+7. Confirm H1 Phase1I review and G1/G2/G3/G4 do not overlap apps/admin scope
+8. Verify `a8f9844` tree identity with `b044425`
+9. Do not merge/deploy/apply anything
 
-Confirm `値下がり|値上がり` widening is truly narrow.
-
-Must PASS:
-- 値下がりの要因は特定できません
-- 当日の値下がり要因は特定できません
-- 値上がりの理由は判断できません
-- 当日の値上がりの原因は確認できません
-
-Must FAIL:
-- 急な値下がりの要因は特定できません
-- 半導体株の値上がり要因は特定できません
-- 円安による値上がりの要因は特定できません
-- 値下がりの要因は円高です
-- 値上がりの理由は好決算です
-- causal assertion + unknown-cause laundering
-- multi-sentence/punctuation bypasses
+## Review A — authentication gate
 
 Verify:
-- whole-string anchor intact
-- CAUSAL_ASSERTION still evaluated first
-- sentence splitting intact
-- no free-text subject widening
+- unauthenticated access cannot render admin content
+- `/login` is public only as intended
+- protected layout requires current authenticated Supabase user
+- admin authorization requires intended admin boundary
+- unauthorized users land in fail-closed state
+- no client-only check can bypass server auth
+- server actions independently enforce auth/authorization
+- invalid/tampered cookies cannot grant access
+- redirect behavior does not loop
 
-### 2. PR #29 prompt hardening
+Use existing Netlify Preview for read-only HTTP checks where helpful.
 
-Confirm PR #29 does NOT weaken validator or Fact checker.
+## Review B — active brand authority
 
-Close inference:
-- facts/comparison clauses must stay out of inference_ja
-- unsupported causation should reduce to one bounded unknown-cause sentence
-- validator must remain fail-closed
+Verify:
+- active brand cookie/input is only a request, never authority
+- every request revalidates brand through server-authorized allowlist/access resolver
+- unknown/unauthorized brand fails closed or safely defaults
+- no raw query/cookie/header value can directly parameterize privileged data access
+- no client-only selector state controls authorization
+- default brand behavior is explicit and safe
 
-Morning wording:
-- advisory-sounding wording is discouraged at generation time
-- Fact checker should remain semantically unchanged
-- neutral replacements do not themselves create unsupported claims
+## Review C — cross-brand read isolation
 
-### 3. MIC compatibility
+For all PR #15 data reads:
+- scheduled posts
+- post history
+- recent failures
+- system status
+- report-run lookups
+- morning_report_runs
+- posting windows
+- X profile links/handles
 
-Main already contains MIC report-context integration.
+Verify every brand-scoped query uses the already-authorized brand id and that no nested/secondary query omits the brand predicate.
 
-Confirm PR #29:
-- does not alter mic_market_context.ts
-- does not alter MIC semantics
-- does not remove MIC context from prompts
-- only changes wording discipline around generated output
-- does not create overlap with active MIC work
+Adversarially inspect same-table and nested lookups for cross-brand leakage.
 
-### 4. Test verification
+## Review D — Kabumori-only surfaces
 
-Run:
-- report_hardening tests
-- close_validator tests
-- full personalized-reports suite
-- relevant MIC/report tests
-- deno check
-- deno lint
+Verify:
+- Important News remains Kabumori-only
+- singleton settings lacking brand_id are not exposed for AI Lab
+- system-toggle remains pinned server-side to Kabumori
+- AI Lab cannot trigger Kabumori-only write paths by tampering cookie/query/body
+- read-only fallback for other brands cannot mutate shared settings
+
+## Review E — mutations / Server Actions
+
+Review all changed or affected Server Actions:
+- active-brand change
+- system toggles
+- any mutation reachable from dashboard
+
+Verify:
+- authenticated
+- authorized
+- server-side brand allowlist
+- no arbitrary brand id
+- no CSRF-like cross-brand state confusion through cookie-only trust
+- no widened Supabase policy reliance
+
+## Review F — RLS / backend assumptions
+
+PR #15 intentionally uses code-owned `ADMIN_BRANDS` because admins cannot read `brands/social_accounts` under current RLS.
+
+Verify:
+- code registry cannot accidentally include unsupported brands/users
+- Mio remains excluded
+- no service_role introduced
+- existing RLS is not bypassed
+- admin_users gate semantics remain unchanged
+- no claim is made that code registry substitutes for DB policy where it does not
+
+Document remaining backend contract limitations separately.
+
+## Review G — Netlify Preview evidence
+
+Independently verify read-only:
+- Preview head is exact target
+- /login renders
+- /, /posts, /important-news fail closed unauthenticated
+- invalid session cookie fails closed
+- no 404/5xx/redirect loop
+- Next.js Runtime handles protected routes
+
+Authenticated live QA may remain unavailable if no authorized session exists; do not request passwords/tokens.
+
+## Review H — tests
+
+Rerun:
+- all apps/admin lib tests
+- selected-brand tests
+- brand-boundary/no-leak tests
+- tsc --noEmit
+- lint
+- build
 - git diff --check
+- targeted secret scan
 
-Add adversarial regressions if a concrete bypass is found.
+Add adversarial tests if a concrete gap is found.
 
 If a concrete issue is found:
-- minimal fix only
-- push to PR #29
-- do not merge/deploy
+- minimal PR #15 source fix allowed
+- add regression
+- push safely to PR branch
+- no merge/deploy/DB mutation
 
-## Production safety
+## Forbidden
 
-Read-only verify:
-- personalized-reports v27
-- verify_jwt=false
-- app_enabled=false
-- x_enabled=false
-- cron unchanged
+- merge PR #15
+- Vercel production deploy
+- Netlify production config mutation
+- production DB/schema/RPC/RLS/Auth mutation
+- service_role addition/exposure
+- X API/post/media
+- OAuth/Vault/token changes
+- G1/G2/G3 work
 
-Do not invoke production LLM.
-Do not deploy.
-Do not change DB/schema/settings.
+## Production mutation budget
+
+0.
 
 ## Completion / C2
 
-Report:
+Update `.agent/CODEX_REPORT_2.md` with:
 - verdict PASS / PASS-WITH-FIX / FAIL
-- final PR #29 head
-- separate verdict for already-deployed 510acf5
-- validator boundary
-- prompt/Fact boundary
-- MIC compatibility
-- test counts
-- production read-back
+- findings by severity
+- auth gate assessment
+- brand authority assessment
+- cross-brand read assessment
+- Kabumori-only surface assessment
+- Server Action/mutation assessment
+- RLS/backend assumption assessment
+- Netlify Preview evidence
+- exact tests/counts
+- changed files/fix commit if any
 - production mutation=0
-- recommendation for merge + controlled redeploy/dry-runs
+- merge recommendation
+- authenticated-live-QA residual if still blocked
 
-When complete:
+Then:
 - status -> review_required
 - next_owner -> chatgpt
-- update .agent/CODEX_REPORT_2.md
 - STOP for C2.
-
-
-## Final C2 — PR #29 + v27 validator
-
-Verdict: **PASS-WITH-FIX**.
-
-Accepted:
-- production/main validator commit `510acf5954b37410b50c23ff92c3f54af6458a72`: PASS
-- PR #29 final reviewed head `ef9603749a43d0f63ff1ab0ca0f24b33a7bdc1c1`
-- H2 minimal fix added `watch_notes[*].note_ja` to the neutral morning wording instruction
-- validator and Fact semantics remain fail-closed and unweakened
-- MIC compatibility PASS
-- focused 32/32; personalized-reports 96/96; deno check/lint/diff PASS
-- production mutation from H2 = 0
-
-Next: G2 fresh-main merge + controlled personalized-reports redeploy with app_enabled=false + repeated dry-runs.
