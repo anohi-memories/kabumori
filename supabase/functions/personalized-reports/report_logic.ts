@@ -649,6 +649,9 @@ function stockPacket(
     ...(stock.tracking_type === "holding"
       ? {
         detail: stock.detail_level === "detailed" ? "詳しく" : "簡潔に",
+        // Code-decided: whether this holding's own input carries individual material (own_news or
+        // sector-matched related_market_news). Grounds the holding-scoped no-material sentence.
+        material_in_input: stock.evidence.company_news || stock.evidence.sector_news ? "含まれている" : "含まれていない",
         allowed_basis: allowedBasis(stock, shared),
         relative_to_benchmark: reportType === "close" && stock.relative_label
           ? `${RELATIVE_TEXT[stock.relative_label]}（差 ${formatPoints(stock.relative_to_benchmark_pt)}）`
@@ -810,7 +813,7 @@ const IMPACT_INSTRUCTIONS = [
   "holding_impacts は holdings の全銘柄について1件ずつ、holdings の順に書きます（holdings が空なら空配列）。",
   "stance は tailwind（追い風）/ headwind（逆風）/ neutral（中立）/ no_clear_material（明確な個別材料なし）から選びます。",
   "basis にはその銘柄の allowed_basis にある値だけを入れます。company_news は own_news、sector_news は related_market_news を根拠にした場合です。",
-  "tailwind / headwind には basis が1つ以上必要です。根拠が無い・弱い銘柄は無理に理由を作らず no_clear_material にします。fact_ja にはその銘柄について入力で確認できる事実だけを書き、書ける事実がなければ空文字にします。入力の holdings/watch の own_news・related_market_news と market_news がすべて空の場合に限り、fact_ja に「入力に明確な個別材料は含まれていません」と書けます。",
+  "tailwind / headwind には basis が1つ以上必要です。根拠が無い・弱い銘柄は無理に理由を作らず no_clear_material にします。fact_ja は空にしません。その銘柄の material_in_input が「含まれていない」場合は、fact_ja に「この銘柄の入力には個別材料が含まれていません」と書き、入力で確認できるその銘柄の値動きなどを続けてかまいません。material_in_input が「含まれている」銘柄にはこの文を書きません。入力の holdings/watch の own_news・related_market_news と market_news がすべて空の場合に限り、fact_ja に「入力に明確な個別材料は含まれていません」と書くこともできます。",
   "fact_ja は入力で確認できる事実だけ、inference_ja は推定だけ（必ず「〜の可能性があります」「〜と考えられます」「〜とみられます」のような推定の言い方）、watch_ja は観察ポイントだけを書き、三つを混ぜません。要因が分からない場合、inference_ja は「要因は特定できません」のように、特定できないことだけを書いてかまいません。",
   "inference_ja では、業種・為替・金利・原油・米国株・半導体指数と銘柄の一般的な関係に触れてよいですが、入力に無い数字・固有の事実は書かず、推定として書きます。根拠が無ければ空文字にします。",
   INFERENCE_FIELD_RULE,
@@ -903,6 +906,11 @@ const CHECK_SCHEMA = {
 export const EMPTY_NEWS_FACT_RULE =
   "packet の holdings/watch の own_news・related_market_news と market_news がすべて空のときに限り、「入力に個別の材料は含まれていません」「このレポートの入力には個別ニュースがありません」「入力に明確な個別材料は含まれていません」のような入力状態の記述を許容します。どれかにニュースが1件でもあるのに空入力を断定した場合は passed を false にします。「ニュースはありません」「材料はありません」「個別ニュースは確認されていません」のように世の中にニュースが無いと断定する書き方、packet に無い今日の寄り付き・場中の値動きを観測済みの事実として書くことも、従来どおり passed を false にします。";
 
+// Holding-scoped no-material statement: accurate only for a holding whose own input has no material.
+export const HOLDING_NO_MATERIAL_SENTENCE = "この銘柄の入力には個別材料が含まれていません";
+export const HOLDING_NO_MATERIAL_FACT_RULE =
+  `holdings の各銘柄について、その銘柄の material_in_input が「含まれていない」（own_news と related_market_news が空）ときに限り、fact_ja の「${HOLDING_NO_MATERIAL_SENTENCE}」は事実どおりなので許容します。material_in_input が「含まれている」銘柄にこの文を書いた場合、またはこの文を根拠に世の中にニュースが無いと断定した場合は passed を false にします。`;
+
 export const REPORT_FACT_INSTRUCTIONS = [
   "あなたは個人向けポートフォリオレポートの厳格なFactチェッカーです。入力の packet（根拠データ）と report（生成文）だけを照合します。Web検索や外部知識は使いません。",
   "次を検出したら passed を false にします: packetに無い数字・日付・固有名詞・事実、数字の書き換えや独自計算、銘柄と材料の取り違え、当日損益と含み損益の混同、ニュースと値動きの因果の断定、将来の値動きの断定、売買推奨、価格未取得・未登録の項目を推測で埋めた記述、packetに無い市場比較。",
@@ -910,6 +918,7 @@ export const REPORT_FACT_INSTRUCTIONS = [
   "holding_impacts の inference_ja は推定欄です。推定の言い方で書かれ、packet に無い数字や固有の事実を含まない限り、業種・為替・金利・原油・米国株と銘柄の一般的な関係に基づく推論は許容します。fact_ja に推定や因果の断定が混ざっていたら passed を false にします。",
   "stance が根拠と矛盾する（例: 好材料しか無いのに headwind、根拠が無いのに tailwind/headwind）、または morning_outlook.check と食い違う答え合わせを書いていたら passed を false にします。",
   EMPTY_NEWS_FACT_RULE,
+  HOLDING_NO_MATERIAL_FACT_RULE,
   "自然な言い換えや要約は許容します。issues は短い日本語で返します。",
 ].join("\n");
 
@@ -1249,6 +1258,11 @@ export function holdingImpactIssues(body: ReportBody, snapshot: PortfolioSnapsho
     }
     if (impact.stance === "no_clear_material" && impact.basis.includes("company_news")) {
       issues.push(`STANCE_BASIS_MISMATCH:${impact.ticker_code}`);
+    }
+    // The holding-scoped no-material sentence is only true when this holding's input has no material.
+    if ((stock.evidence.company_news || stock.evidence.sector_news) &&
+        [impact.fact_ja, impact.inference_ja, impact.watch_ja].some((text) => text.includes(HOLDING_NO_MATERIAL_SENTENCE))) {
+      issues.push(`FALSE_NO_MATERIAL_CLAIM:${impact.ticker_code}`);
     }
     if (impact.inference_ja && !inferenceIsHedged(impact.inference_ja)) issues.push(`INFERENCE_NOT_HEDGED:${impact.ticker_code}`);
     const tooLong = stock.detail_level === "detailed"

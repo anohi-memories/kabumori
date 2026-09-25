@@ -77,8 +77,9 @@ test("B: both prompts describe empty news as an input state, never as a world st
   }
   // The no-material fact_ja template now states the input, not the world.
   const prompt = instructions("close");
-  assert.ok(prompt.includes("すべて空の場合に限り、fact_ja に「入力に明確な個別材料は含まれていません」と書けます。"));
-  assert.ok(prompt.includes("書ける事実がなければ空文字にします。"));
+  assert.ok(prompt.includes("すべて空の場合に限り、fact_ja に「入力に明確な個別材料は含まれていません」と書くこともできます。"));
+  assert.ok(!prompt.includes("書ける事実がなければ空文字にします。"), "fact_ja is never asked to be empty");
+  assert.ok(prompt.includes("fact_ja は空にしません。"));
   assert.ok(!prompt.includes("no_clear_material にし、fact_ja に「入力に明確な個別材料は含まれていません」と書きます。"));
   assert.ok(!prompt.includes("fact_ja に「明確な個別材料は確認できていません」と書きます。"));
 });
@@ -118,7 +119,7 @@ test("B/C: mixed per-stock news cannot trigger an unconditional empty-input fact
   assert.equal(packet.holdings[1].own_news.length, 0);
 
   const draftInstructions = String(reportDraftRequestBody("morning", packet).instructions);
-  assert.ok(draftInstructions.includes("すべて空の場合に限り、fact_ja に「入力に明確な個別材料は含まれていません」と書けます。"));
+  assert.ok(draftInstructions.includes("すべて空の場合に限り、fact_ja に「入力に明確な個別材料は含まれていません」と書くこともできます。"));
   const report = {
     title_ja: "朝刊", summary_ja: "概要", tone: "neutral", overview_ja: "概要", holding_impacts: [],
     morning_review_ja: "", watch_notes: [], risk_notes_ja: [], checkpoints_ja: ["確認点"],
