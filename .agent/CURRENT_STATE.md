@@ -1004,3 +1004,14 @@
 - no real operator/Admin account changes, no admin_users grant, no wildcard redirect, no shared Reset Password template change, no PR merge or Vercel production deploy.
 - if safe disposable/test accounts or email access require user interaction, G4 must stop and request only that exact action.
 - recommended Claude model: Opus5.5（高）.
+
+## Final K4 PR #33 bounded real Auth E2E
+
+- verdict: **SAFE STOP / OPERATOR GATE**.
+- PR #33 head `2528b5686bcbb3630fb636cec12162803f921f8f` remains source-reviewed and mergeable, but not merge-approved.
+- one real recovery request reached Supabase Auth (HTTP 200 generic response), but email was not delivered because custom SMTP is not configured; project still uses Supabase default mail delivery.
+- invite E2E is blocked by the same mail/template limitation.
+- actual recovery/invite AMR, password update, logout/relogin and non-admin denial remain unverified in real E2E.
+- production/config mutation by Claude=0; operator created one test-only Auth user, not in admin_users.
+- Preview callback URL already existed; no wildcard added; mobile redirect and Reset Password template unchanged.
+- next prerequisite: custom SMTP setup in a separate task, then resume bounded recovery+invite E2E.
