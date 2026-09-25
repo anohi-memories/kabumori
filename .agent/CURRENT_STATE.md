@@ -995,3 +995,12 @@
 - PR #33 remains unmerged.
 - merge remains blocked on one bounded real recovery flow + one invite flow and operator verification of Redirect URL/template/SMTP/session behavior.
 - real E2E/Auth config mutation requires separate user authorization.
+
+## G4 PR #33 bounded real Auth E2E
+
+- user explicitly authorized proceeding after C1 source PASS.
+- assigned: `x-admin-pr33-bounded-real-auth-e2e-20260926`.
+- scope: exact Preview callback allowlist if needed, one disposable recovery flow, one disposable invite flow, actual AMR/session/logout/non-admin denial verification, cleanup/restore afterward.
+- no real operator/Admin account changes, no admin_users grant, no wildcard redirect, no shared Reset Password template change, no PR merge or Vercel production deploy.
+- if safe disposable/test accounts or email access require user interaction, G4 must stop and request only that exact action.
+- recommended Claude model: Opus5.5（高）.
