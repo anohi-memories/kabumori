@@ -86,7 +86,7 @@ export type V2DispatchLedger = {
   claim(): Promise<V2ClaimRow | null>;
   readScheduleDate(scheduledPostId: string): Promise<string | null>;
   markProviderStarted(attemptId: string, claimToken: string): Promise<void>;
-  settlePreX(attemptId: string, claimToken: string, retryable: boolean, code: string): Promise<void>;
+  settlePreX(attemptId: string, claimToken: string, retryable: boolean, code: string): Promise<"pre_x_retryable" | "pre_x_terminal">;
   recordRejected(attemptId: string, claimToken: string, code: string): Promise<void>;
   recordUncertain(attemptId: string, claimToken: string, code: string): Promise<void>;
   recordConfirmedIncomplete(attemptId: string, claimToken: string, xPostId: string, code: string): Promise<void>;
@@ -167,11 +167,13 @@ function result(cls: V2DispatchClass, claim: V2ClaimRow | null, counters: Counte
 
 async function settle(ports: V2DispatchPorts, claim: V2ClaimRow, retryable: boolean, code: string, counters: Counters): Promise<V2DispatchResult> {
   try {
-    await ports.ledger.settlePreX(claim.attemptId, claim.claimToken, retryable, code);
+    const outcome = await ports.ledger.settlePreX(claim.attemptId, claim.claimToken, retryable, code);
+    return result(outcome, claim, counters, { code });
   } catch {
-    // The attempt stays pre-X; reconcile_stale_pre_x_v2 settles it later. No X request was made.
+    // No durable outcome is known. A stale-pre-X reconciler may decide later;
+    // never report the requested outcome as though the write had committed.
+    return result("blocked_manual_reconciliation", claim, counters, { code: "PRE_X_SETTLEMENT_NOT_RECORDED" });
   }
-  return result(retryable ? "pre_x_retryable" : "pre_x_terminal", claim, counters, { code });
 }
 
 async function recordAfterStart(
@@ -468,10 +470,10 @@ export async function runV2DispatchOnce(ports: V2DispatchPorts, gateOn: boolean)
   if (!claim) return result("no_work", null, counters);
   if (Object.hasOwn(V2_DISABLED_TYPES, claim.postType)) {
     const settled = await settle(ports, claim, false, V2_DISABLED_TYPES[claim.postType], counters);
-    return { ...settled, class: "unsupported_type" };
+    return settled.class === "pre_x_terminal" ? { ...settled, class: "unsupported_type" } : settled;
   }
   if ((V2_SINGLE_CREATE_TYPES as readonly string[]).includes(claim.postType)) return dispatchSingle(ports, claim, counters);
   if ((V2_MULTI_STEP_TYPES as readonly string[]).includes(claim.postType)) return dispatchMultiStep(ports, claim, counters);
   const settled = await settle(ports, claim, false, "V2_UNSUPPORTED_POST_TYPE", counters);
-  return { ...settled, class: "unsupported_type" };
+  return settled.class === "pre_x_terminal" ? { ...settled, class: "unsupported_type" } : settled;
 }

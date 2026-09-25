@@ -46,11 +46,12 @@ test("empty claim is no work; malformed rows fail closed", async () => {
 });
 
 test("outcome, completion and snapshot calls send exactly the reviewed parameters", async () => {
-  const r = recorder((url) => url.includes("complete_") ? Response.json("completed") : url.includes("post_v2_content_snapshots")
+  const r = recorder((url) => url.includes("settle_post_pre_x_v2") ? Response.json("pre_x_retryable")
+    : url.includes("complete_") ? Response.json("completed") : url.includes("post_v2_content_snapshots")
     ? Response.json([{ payload: { text: "t" } }]) : url.includes("scheduled_posts") ? Response.json([{ schedule_date: "2026-09-25" }]) : Response.json(null));
   const ledger = createV2DispatchLedgerRpc({ supabaseUrl: "https://e.supabase.co", serviceRoleKey: "srk", fetchImpl: r.fetchImpl });
   await ledger.markProviderStarted("att", "tok");
-  await ledger.settlePreX("att", "tok", true, "X_IDENTITY_CHECK_UNAVAILABLE");
+  assert.equal(await ledger.settlePreX("att", "tok", true, "X_IDENTITY_CHECK_UNAVAILABLE"), "pre_x_retryable");
   await ledger.recordRejected("att", "tok", "X_CREATE_REJECTED_403");
   await ledger.recordUncertain("att", "tok", "X_CREATE_HTTP_503");
   await ledger.recordConfirmedIncomplete("att", "tok", "x1", "V2_TYPED_COMPLETION_FAILED");
@@ -81,6 +82,16 @@ test("outcome, completion and snapshot calls send exactly the reviewed parameter
   assert.ok(String(bodies[8][0]).startsWith("post_v2_content_snapshots?select=payload&attempt_id=eq.att"));
   assert.ok(String(bodies[9][0]).startsWith("scheduled_posts?select=schedule_date&id=eq.post"));
   assert.ok(r.sent.every((s) => s.redirect === "manual"));
+});
+
+test("pre-X settle exposes the committed terminal outcome and rejects malformed replies", async () => {
+  const terminal = createV2DispatchLedgerRpc({ supabaseUrl: "https://e", serviceRoleKey: "k",
+    fetchImpl: recorder(() => Response.json("pre_x_terminal")).fetchImpl });
+  assert.equal(await terminal.settlePreX("a", "t", true, "X_RETRY_LIMIT"), "pre_x_terminal");
+  const malformed = createV2DispatchLedgerRpc({ supabaseUrl: "https://e", serviceRoleKey: "k",
+    fetchImpl: recorder(() => Response.json(null)).fetchImpl });
+  await assert.rejects(malformed.settlePreX("a", "t", true, "X_RETRY_LIMIT"),
+    (e: unknown) => e instanceof V2LedgerError && e.code === "V2_LEDGER_INVALID_RESPONSE");
 });
 
 test("errors: known codes pass through, everything else becomes V2_LEDGER_UNAVAILABLE without the body", async () => {

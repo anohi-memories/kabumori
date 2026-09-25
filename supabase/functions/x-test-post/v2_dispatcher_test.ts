@@ -44,6 +44,7 @@ class FakeDb implements V2DispatchLedger {
   effects: Record<string, number> = {};
   failCompletion = new Set<string>();
   failMark = false;
+  failSettle = false;
   failFinishOnce = false;
   calls: string[] = [];
   private seq = 0;
@@ -110,10 +111,12 @@ class FakeDb implements V2DispatchLedger {
   }
   async settlePreX(a: string, t: string, retryable: boolean, code: string) {
     this.calls.push(`settle:${retryable}:${code}`);
+    if (this.failSettle) throw new Error("RPC_UNAVAILABLE");
     const at = this.attempt(a, t);
     if (at.phase !== "pre_x") throw new Error("ATTEMPT_NOT_PRE_X");
     const retry = retryable && at.attemptNo < 3;
     this.finish(at, retry ? "pre_x_retryable" : "pre_x_terminal", code, null, retry ? "pending" : "failed");
+    return retry ? "pre_x_retryable" as const : "pre_x_terminal" as const;
   }
   private started(a: string, t: string): Attempt {
     const at = this.attempt(a, t);
@@ -335,6 +338,33 @@ test("no work and unsupported types never reach the provider", async () => {
   }
   assert.equal(x.calls.length, 0);
   assert.ok(V2_NON_RECLAIMABLE_CLASSES.has("unsupported_type") && !V2_NON_RECLAIMABLE_CLASSES.has("pre_x_retryable"));
+});
+
+test("pre-X result reflects the durable terminal outcome at the attempt cap", async () => {
+  const db = new FakeDb();
+  const x = new FakeX();
+  db.addPost({ id: "p", brand: "brand_a", account: "acct_a", postType: "useful_tip" });
+  const scoped = ports(db, x, { content: { prepare: async () => { throw new Error("CONTENT_UNAVAILABLE"); }, loadGreetingMedia: async () => { throw new Error("NOT_USED"); } } });
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const r = await runV2DispatchOnce(scoped, true);
+    assert.equal(r.class, attempt < 3 ? "pre_x_retryable" : "pre_x_terminal");
+  }
+  assert.equal(db.posts.get("p")!.status, "failed");
+  assert.equal(x.calls.length, 0);
+});
+
+test("failed pre-X settlement never reports a committed terminal/unsupported result", async () => {
+  for (const postType of ["interaction", "useful_tip"]) {
+    const db = new FakeDb();
+    const x = new FakeX();
+    db.failSettle = true;
+    db.addPost({ id: "p", brand: "brand_a", account: "acct_a", postType });
+    const r = await runV2DispatchOnce(ports(db, x, { content: { prepare: async () => { throw new Error("CONTENT_UNAVAILABLE"); }, loadGreetingMedia: async () => { throw new Error("NOT_USED"); } } }), true);
+    assert.equal(r.class, "blocked_manual_reconciliation");
+    assert.equal(r.code, "PRE_X_SETTLEMENT_NOT_RECORDED");
+    assert.equal(db.posts.get("p")!.status, "running");
+    assert.equal(x.calls.length, 0);
+  }
 });
 
 // --- single create ---------------------------------------------------------------
