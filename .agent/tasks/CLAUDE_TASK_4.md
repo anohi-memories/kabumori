@@ -3,8 +3,8 @@
 - task_id: x-admin-pr15-merge-production-verify-20260925
 - owner: claude
 - slot: claude-4
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（中）
 - purpose: Codexレビュー済み・authenticated live QA済みのPR #15を、reviewed head以降の差分がNetlify再build用コメント1行だけであることをfreshに再確認したうえでmainへmergeし、Web管理画面のproduction反映とブランド境界を安全に確認する。新規機能実装ではなくmerge-only + production verificationを主眼とする。
@@ -301,3 +301,81 @@ PR差分に対して実施（上記）。問題なし。
   - if production deployed, verify exact merged commit and perform authenticated read-only production QA
 - do not repeat merge
 - if Vercel production is blocked by rate limit, report deployment BLOCKED/PENDING rather than success
+
+## Report (post-merge / production, Scope C + D)
+
+- task_id: x-admin-pr15-merge-production-verify-20260925
+- result: **merge PASS（ChatGPT実施） / post-merge source verification PASS / Vercel production deploy PASS（PR #15入りのbuildが本番で配信中と確認） / authenticated production QA BLOCKED（操作者のログイン済みセッションが無い）**。TASKのPASS条件のうち「ログイン込みの本番QA」だけが未達のため、全体はPASSとせず review_required とする。
+- model_used: Opus 5.5（TASK推奨 Sonnet5（中）。セッションのモデルは自分で変更できないため現行のまま）
+- dedicated worktree / branch: G4専用 `/Users/yuya/Developer/kabumori/.claude/worktrees/g4-x-admin-pr15`（`worktree-g4-x-admin-pr15`）。mergeは再実行していない。
+
+### merge（ChatGPT continuation記載の事実を再確認）
+
+- PR #15: MERGED（2026-09-25T14:11:55Z）
+- merge commit `f610503761729bdc09dfa483bd218a769350a2dc`、parents = main `26b0e89` + PR head `f04c44a`（期待headどおり）
+- 現在のmain（着手時 `a06ea70`）はmerge commitを含む。
+
+### Scope C — post-merge source verification（fresh main上）
+
+- 現在mainの`apps/admin`とPR head `f04c44a`の差分は、main側に既にあったPhase 2の3ファイル（`.gitignore`・`docs/phase2-netlify-deploy-preview.md`・`netlify.toml`のコメント）のみ。**`apps/admin/src`はPR headと完全一致**（PR #15の全ファイルがreview済みの内容のままmergeされている）。
+- clean install後:
+  - `node --experimental-strip-types --test src/lib/*.test.ts`: **34/34 pass**（review時と同数）
+  - focused brand-boundary（`brand-boundary.test.ts` + `brand-query-isolation.test.ts` + `selected-brand.test.ts`）: **27/27 pass**
+  - `npx tsc --noEmit`: PASS / `npm run lint`: PASS / `npm run build`（ダミー公開env）: PASS
+  - `git diff --check`: PASS（作業ツリーの変更は自TASK fileのみ）
+  - client bundleのJWTリテラル: 0件
+- 境界のソース確認:
+  - brand_id絞り込み: `today-scheduled-posts`（2箇所）・`post-history`（3）・`recent-failures`（3）・`system-status`（3）すべて`.eq("brand_id", brandId/brand.id)`
+  - `setSystemEnabled()`: 変更前に`getActiveBrandContext()`→`isKabumoriMutationAllowed()`で選択中ブランドがかぶモリ以外なら拒否。`posting_windows`の読み書きは`KABUMORI_BRAND_ID`固定（クライアントや選択ブランドからは取らない）→ 他ブランド選択中にかぶモリの設定を変更できない。
+  - 重要ニュース: 選択中ブランドがかぶモリの時だけ読み込み、それ以外は案内文のみ。
+  - `admin_users`: `(admin)/layout.tsx`で従来どおりsession→`admin_users`→無ければ`/unauthorized`。
+  - `service_role` / service client（`createClient(`）: admin src全体で0件。
+
+### Scope D — Vercel production deploy
+
+- merge commit `f610503`のVercel status: **failure「Canceled from the Vercel Dashboard」**（deployment `6662686152`）。
+- 直後のcommit `fefb182`（merge commitに`.agent/tasks/CLAUDE_TASK_4.md`の変更を足しただけ。`apps/admin`は`f610503`と完全一致を確認）のVercel production deploy: **success「Deployment has completed」**（deployment `6662686163`、2026-09-25T14:12:53Z）。
+- それ以降のmain commit（`a06ea70`・`b2ce60f`等）は`Deployment rate limited — retry in 24 hours.`で失敗 → 本番は`fefb182`のdeploymentのまま。
+- **本番が実際にPR #15入りのbuildであることの直接証拠**: 本番エイリアス（`HANDOFF.md`記載 `https://admin-lime-one-zucdop4nh7.vercel.app`）の`/login`が読み込む共通CSS（`/_next/static/immutable/chunks/3ul2w7chwj9tp.css`）に、PR #15で追加された`.brand-selector` / `.brand-selector-single` / `.brand-selector-pending` / `.brand-selection-warning` / `.brand-scope-note`の**5クラスがすべて含まれる**ことを確認。
+- 補足: `f610503`自身のdeployがcanceledになった理由（手動キャンセルか、同時刻の`fefb182`に置き換えられたか）はGitHub側の記録からは判別できない。実害はない（`fefb182`が同一コードで成功）。
+
+### production QA（未認証で実施できた範囲）
+
+本番エイリアスに対して:
+- `/login` 200、`/unauthorized` 200
+- `/`・`/posts`・`/important-news`（未認証）→ `/login`へ1回転送、loop無し、5xx無し
+- tampered session cookieで`/posts` → 307 `/login`（fail closed）
+- `/login`のHTMLに秘密値らしき文字列（JWT・`sb_secret_`・`service_role`）0件
+- `server: Vercel`、`x-powered-by: Next.js`
+
+### authenticated production QA — BLOCKED
+
+- このセッションのブラウザには本番ドメインのログイン状態が無く（`/`→`/login`、`sb-`cookie 0件）、操作者の認証情報は要求・入力していない（TASK指示どおり記録もしない）。
+- 未実施: ログイン成功、かぶモリ ⇄ 会社員AIラボの切替、ブランド別データの非混在、AI Lab選択中のかぶモリ専用操作不可、非adminのfail closed（ログイン後）。
+- 同一コードに対する**認証込みのlive QAはNetlify Preview上でPASS済み**（TASK記載のknown-good context）。本番で未確認なのは「本番環境・本番ドメインでの同じ操作」のみ。
+
+### secret/service_role/RLS safety checks
+
+PR差分（Scope A時）・merge後src・client bundle・本番HTMLのいずれも問題なし。RLS/Auth/`admin_users`の変更はPRに含まれていない。
+
+### production mutations performed
+
+**0件（自分による操作）**。mergeはChatGPTが実施済みで、本タスクでは再mergeしていない。本番deployはそのmergeに伴う既存パイプラインの自動deployのみ。DB/Auth/RLS/OAuth/Vault/X/業務データの変更なし。本番QAは読み取りのみ。
+
+### remaining_issues
+
+1. **ログイン込みの本番QAが未実施**（唯一の未達項目）。
+2. mainへの後続commitはVercelのrate limitで本番deployされていない。現状は`.agent`のみの変更なので本番の中身に影響はないが、今後`apps/admin`を変更するmergeは、rate limit解除まで本番に出ない。
+3. merge commit自身のdeployがcanceledになった理由は不明（影響なし）。
+
+### next_recommendation
+
+1. ログイン込みの本番QAを完了するには、次のいずれか:
+   - (A) 操作者がClaudeのブラウザペインで本番エイリアスに自分でログインする（認証情報はClaudeに渡さず、ペイン上で本人が入力）→ その後G4を再開すれば、切替・非混在・かぶモリ専用操作の不可を読み取りのみで確認する。
+   - (B) 操作者自身が本番で同じ項目を目視確認し、結果をTASKに記録する。
+2. 本番のブランド切替はNetlifyで検証済みのコードと同一なので、上記QAはリスク確認というより最終確認の位置づけ。
+
+## Completion (post-merge verified; production deployed; authenticated production QA blocked)
+
+- status -> review_required
+- next_owner -> chatgpt
