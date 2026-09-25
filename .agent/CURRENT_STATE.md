@@ -48,7 +48,7 @@
   - Final K1 PASS. PR #31 merged -> `7aa394fc1dc73edd0c67b6529923ec4dc9616e7f`.
   - Approved icon reproducibly wired into Expo/iOS; 126/126 tests; no production mutation.
   - Awaiting separately authorized EAS/TestFlight real-iPhone visual verification.
-- G2: `ready` — `kabumori-voice-policy-phase1-shadow-20260925`
+- G2: `ready` — `kabumori-pr34-shadow-merge-deploy-20260925`
 - G3: `ready` — `x-autopost-phase1i-pr30-merge-postmerge-verify-20260925`
 - G4: `done` — `x-admin-password-recovery-invite-flow-20260925`; Final K4 PASS, operator E2E pending
 
@@ -66,6 +66,19 @@
 - Codex review skipped as low-risk asset/config-only change.
 - next G1: fresh-main merge + post-merge verification. EAS/TestFlight requires separate authorization.
 - recommended model: Sonnet5（中）.
+
+## Final K2 VOICE Phase 1 shadow source
+
+- verdict: **PASS**.
+- PR #34 head `40828d31124a629e594c7ac2ac3af28e5325f6de`.
+- shadow-only PASS/WARN/BLOCK/unavailable classification implemented.
+- telemetry stored under existing `source_basis.delivery_policy`; no migration.
+- report_logic, prompts, Fact/local semantics, parser, MIC and delivery/save/notify behavior unchanged.
+- new tests 8/8; personalized-reports 119/119; related 241/241; check/lint/diff PASS.
+- production mutation=0; PR remains unmerged at K2.
+- no new Codex review required under reduced-review policy.
+- next G2: fresh-main merge + controlled shadow deploy with app_enabled=false.
+- recommended model: Sonnet5（高）.
 
 ## Final K2 PR #32 stabilization
 
