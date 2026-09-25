@@ -3,8 +3,8 @@
 - task_id: x-admin-pr15-auth-crossbrand-final-review-20260925
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: K4 PASS済みPR #15 multi-brand admin selectorを、認証・認可・cross-brand leakage・server-side brand scoping・Netlify Preview実挙動の観点で独立最終レビューする。merge/Vercel production/DB mutationは禁止。
@@ -182,3 +182,29 @@ Then:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for C2.
+
+
+## Final C2 — PR #15
+
+Verdict: **PASS-WITH-FIX for source/Preview review; merge held for authenticated live QA**.
+
+Accepted reviewed/fixed head:
+- `de354e7ff9f647435a3c42a87629be1e735794eb`
+
+Accepted fixes:
+- P1 independent page/action admin gate now requires global admin_users authorization.
+- P1 Kabumori-only mutation now re-resolves active brand and denies mutation outside Kabumori context.
+- cross-brand reads remain server-authorized and scoped.
+- Important News / Kabumori singleton settings remain Kabumori-only.
+
+Verification accepted:
+- apps/admin tests 34/34 PASS
+- focused selected-brand/boundary 20/20 PASS
+- tsc/lint/build/diff PASS
+- final Netlify Preview SUCCESS
+- unauthenticated/tampered-session routes fail closed
+- production mutation=0
+
+Residual gate:
+- authenticated live Preview QA is still unverified.
+- PR #15 remains unmerged until an authorized admin session verifies selector switching, direct navigation, Kabumori-only controls, and no cross-brand leakage.
