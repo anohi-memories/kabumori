@@ -55,11 +55,11 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-pr32-no-clear-material-fix-merge-dryrun-20260925
+- task_id: kabumori-voice-policy-phase1-shadow-20260925
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: assigned; fix no_clear_material impact-drop regression, update PR32, merge/redeploy/dry-run with app_enabled=false; no new Codex review
+- allocation: assigned; shadow PASS/WARN/BLOCK telemetry only, no delivery behavior change, no deploy
 
 ## Claude G3
 - owner: claude
