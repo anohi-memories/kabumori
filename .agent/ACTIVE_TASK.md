@@ -55,11 +55,11 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-pr32-merge-redeploy-dryrun-review-deferred-20260925
+- task_id: kabumori-pr32-no-clear-material-fix-merge-dryrun-20260925
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: assigned; validate current PR #32 head incl. partial Codex fix, merge/redeploy/dry-run with app_enabled=false; review debt remains
+- allocation: assigned; fix no_clear_material impact-drop regression, update PR32, merge/redeploy/dry-run with app_enabled=false; no new Codex review
 
 ## Claude G3
 - owner: claude
