@@ -48,7 +48,7 @@
   - Final K1 PASS. PR #31 merged -> `7aa394fc1dc73edd0c67b6529923ec4dc9616e7f`.
   - Approved icon reproducibly wired into Expo/iOS; 126/126 tests; no production mutation.
   - Awaiting separately authorized EAS/TestFlight real-iPhone visual verification.
-- G2: `ready` — `kabumori-pr34-shadow-merge-deploy-20260925`
+- G2: `done` — `kabumori-pr34-shadow-merge-deploy-20260925`
 - G3: `ready` — `x-autopost-phase1i-pr30-merge-postmerge-verify-20260925`
 - G4: `done` — `x-admin-password-recovery-invite-flow-20260925`; Final K4 PASS, operator E2E pending
 
@@ -66,6 +66,20 @@
 - Codex review skipped as low-risk asset/config-only change.
 - next G1: fresh-main merge + post-merge verification. EAS/TestFlight requires separate authorization.
 - recommended model: Sonnet5（中）.
+
+## Final K2 PR #34 shadow deploy
+
+- verdict: **PASS**.
+- PR #34 reviewed head `40828d31124a629e594c7ac2ac3af28e5325f6de` merged -> `0cba73236f0e02dd3c88c78e9cb06434b593091f`.
+- production personalized-reports v30; verify_jwt=false.
+- app_enabled=false / x_enabled=false maintained.
+- deployed source read-back matches merged main byte-for-byte.
+- personalized-reports 119/119; related 241/241; check/lint/diff PASS.
+- one non-persisting dry-run smoke: completed, Fact PASS, local 0, voice_status=pass, delivery_blocked_by=null.
+- reportId=null, notification=not_attempted, persistence=0, notifications=0.
+- rollback not required.
+- next meaningful gate: Monday 2026-09-28 natural morning 08:35 JST + close 17:15 JST read-only telemetry/result validation.
+- Phase 2 warn-deliver/rewrite remains deferred until shadow data is observed.
 
 ## Final K2 VOICE Phase 1 shadow source
 
