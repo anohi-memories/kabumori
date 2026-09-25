@@ -33,33 +33,33 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: x-admin-pr15-auth-crossbrand-final-review-20260925
+- status: ready
+- task_id: kabumori-pr32-morning-fact-contract-final-review-20260925
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: closed; Final C2 PASS-WITH-FIX, PR #15 held for authenticated live QA
+- allocation: assigned; PR #32 morning prompt/Fact contract final review
 
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: done
 - task_id: kabumori-pr31-icon-merge-postmerge-verify-20260925
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: assigned; merge reviewed PR #31 and verify icon on main, no EAS/TestFlight
+- allocation: closed; Final K1 PASS, awaiting separately authorized EAS/TestFlight device check
 
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: done
 - task_id: kabumori-morning-prompt-fact-contract-fix-20260925
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: assigned; source-only morning prompt↔Fact contract fix, no deploy
+- allocation: closed; Final K2 source PASS, H2 review assigned
 
 ## Claude G3
 - owner: claude
