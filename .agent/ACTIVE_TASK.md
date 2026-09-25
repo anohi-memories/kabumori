@@ -55,11 +55,11 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-pr29-merge-redeploy-final-dryrun-20260925
+- task_id: kabumori-morning-prompt-fact-contract-fix-20260925
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: assigned; merge reviewed PR #29, controlled redeploy, close 5x + morning 2x dry-run with app_enabled=false
+- allocation: assigned; source-only morning prompt↔Fact contract fix, no deploy
 
 ## Claude G3
 - owner: claude
