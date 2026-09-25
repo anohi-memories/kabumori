@@ -259,3 +259,74 @@ test("v22 close dry-run failure patterns (fixtured) now reach the Fact step and 
   assert.equal(outcome.status, "passed", outcome.issues.join(","));
   assert.deepEqual(calls, ["draft", "fact"], "local checks pass and the Fact check runs");
 });
+
+// --- C. unknown-cause statements with a move subject (production v24 close dry-runs) ----------
+
+test("v24 production failures: a move subject before the unknown cause now passes", () => {
+  // Exact sentences rejected in production v24 close dry-runs #1 and #2.
+  assert.equal(inferenceIsHedged("下落の要因は特定できません。"), true);
+  assert.equal(inferenceIsHedged("当日の下落要因は特定できません。"), true);
+  // The wording that already passed in dry-run #3 and the earlier bounded attribution sentence.
+  assert.equal(inferenceIsHedged("要因は特定できません。"), true);
+  assert.equal(inferenceIsHedged("個別材料が確認できないため、当日の下落を特定の要因に結び付けることはできません。"), true);
+});
+
+test("the move subject is narrow: only (当日の)(下落|上昇|値動き|変動)(の) before a named unknown", () => {
+  for (const text of [
+    "上昇の理由は判断できません。",
+    "値動きの原因は確認できません。",
+    "当日の変動要因は説明できません。",
+    "当日の上昇の要因は特定できません。",
+    "下落の背景は確認できていません。",
+    "因果関係は確認できません。",
+  ]) {
+    assert.equal(inferenceIsHedged(text), true, text);
+  }
+  for (const text of [
+    "円安による上昇の要因は特定できません。", // free text before the subject
+    "半導体株の下落の要因は特定できません。", // subject other than the allowed move nouns
+    "当日の要因は特定できません。円高が逆風になりました。",
+    "急な下落の要因は特定できません。",
+  ]) {
+    assert.equal(inferenceIsHedged(text), false, text);
+  }
+});
+
+test("causal assertions are still rejected even with an unknown-cause clause or a hedge", () => {
+  for (const text of [
+    "円高が逆風になりましたが、要因は特定できません。",
+    "円高を受けて下落しましたが理由は特定できません。",
+    "金利上昇が原因です。ただし要因は特定できません。",
+    "金利上昇が原因です。下落の要因は特定できません。",
+    "円高が逆風になりました。可能性もあります。",
+    "円高で売られました、下落の要因は特定できない可能性があります。",
+  ]) {
+    assert.equal(inferenceIsHedged(text), false, text);
+  }
+});
+
+test("multi-sentence unsafe text fails regardless of punctuation or newlines", () => {
+  for (const text of [
+    "下落の要因は特定できません\n円高が逆風になりました",
+    "下落の要因は特定できません；金利上昇が原因です",
+    "下落の要因は特定できません! 円高で売られました",
+  ]) {
+    assert.equal(inferenceIsHedged(text), false, JSON.stringify(text));
+  }
+});
+
+test("an unrelated sentence containing an allowed noun is not laundered", () => {
+  for (const text of [
+    "下落の要因は円高です。",
+    "上昇の理由は好決算です。",
+    "材料が出たため下落しました。",
+    "値動きの原因は需給悪化でした。",
+  ]) {
+    assert.equal(inferenceIsHedged(text), false, text);
+  }
+});
+
+test("brief boundaries are unchanged (morning 120 / close 160)", () => {
+  assert.equal(REPORT_LIMITS.impactBriefMorning, 120);
+  assert.equal(REPORT_LIMITS.impactBriefClose, 160);
+});
