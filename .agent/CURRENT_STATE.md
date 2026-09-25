@@ -963,3 +963,14 @@
 - generic Stage 3/4 enablement, bulk replay, Kabumori credential migration, Admin PR #33, and important-news/common-search are excluded.
 - any invalid-grant, uncertainty, deadlock, lease/account mismatch, persistence failure, second 401, duplicate provider request, or cross-account effect requires gate OFF and immediate stop.
 - recommended Claude model: Opus5.5（高）.
+
+## C1 PR #33 Auth review FAIL
+
+- verdict: **FAIL accepted** at PR #33 head `e6b93beccfb9209dbe640fb9ea1464f2568f3c74`.
+- blocker 1: generic `otp` / `magiclink` AMR was incorrectly accepted as reset authority.
+- blocker 2: 15-minute freshness was checked only at render, not immediately before password update.
+- blocker 3: signOut failure could still be reported as successful reset/logout.
+- PR #33 must not merge at this head.
+- G4 assigned narrow fixes for all three findings.
+- after fixes, one bounded real recovery + invite E2E is required before merge to verify actual AMR/session/logout behavior.
+- recommended Claude model: Opus5.5（高）.
