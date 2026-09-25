@@ -379,3 +379,40 @@ PR差分（Scope A時）・merge後src・client bundle・本番HTMLのいずれ�
 
 - status -> review_required
 - next_owner -> chatgpt
+
+## Report (authenticated production QA — completed after operator login)
+
+- 実施経緯: 上記Reportの提出後、ユーザーから「このまま続けて」の指示とともに、Claudeのブラウザペインで本番エイリアスへご本人がログイン（認証情報はClaudeに渡っておらず、記録もしていない）。そのセッションで読み取り中心のQAを実施した。
+- **result（更新）: PASS** — merge / post-merge source verification / Vercel production deploy / ログイン込みの本番QAのすべてが完了。
+- 対象: `https://admin-lime-one-zucdop4nh7.vercel.app`（Vercel production、PR #15入りのbuild。上記CSS証拠のとおり）
+
+### 結果
+
+| 項目 | 結果 |
+|---|---|
+| Adminログイン | PASS（ダッシュボード表示、`admin_users`ゲート通過） |
+| ブランドセレクタ表示 | PASS（選択肢は「かぶモリ」「会社員AIラボ」の2件のみ、Mio等なし） |
+| かぶモリ → 会社員AIラボ切替 | PASS（再読込後も`ai_salaryman_lab`が選択、見出しが「会社員AIラボの投稿システムの今日の状況」に変化） |
+| 会社員AIラボ選択中のデータ | AIラボの`brand_post`行・投稿枠10件のみ。かぶモリの投稿種別（朝刊・大引け・お役立ち等）はデータ部分に0件（「朝刊」の語は注記文中の1回のみ） |
+| 会社員AIラボ選択中のかぶモリ専用操作 | **ON/OFFボタン0個**。システム状態は「読み取り専用」の注記付き。重要ニュースカードは「かぶモリ専用のため表示しません」、`/important-news`も案内文のみ |
+| `/posts`（AIラボ） | 「会社員AIラボの直近30件」、かぶモリの投稿種別0件 |
+| 改ざん入力（セレクタ送信値を`unknown_brand` / `mio` / `kabumori' OR 1=1`に書き換え） | すべてサーバー側で拒否。選択ブランドは直前の有効値のまま（未知ブランドへ切り替わらない） |
+| 会社員AIラボ → かぶモリ切替 | PASS（ON/OFFボタン再表示、`brand_post`行なし＝AIラボのデータ混入なし、重要ニュース表示） |
+| 秘密値の露出 | 画面・HTMLに見当たらず（未認証時の確認と合わせて） |
+
+- 書き込みを伴う操作（設定のON/OFF等）は押していない。AIラボ選択中にかぶモリの設定を変更できないことは、UI上ボタンが存在しないことと、ソース（`setSystemEnabled`の選択ブランド検査、`posting_windows`のかぶモリID固定）で確認した（本番での書き込み試行はしない）。
+- ブランド切替はcookie（`kabumori_admin_brand`、httpOnly）を書くだけでDBには書き込まないことをソースで確認のうえ実施。**最後にかぶモリへ戻し、操作者の表示を元の状態に復元済み**。
+- 非adminアカウントでのログイン後fail closedは、非adminのテストアカウントが無いため本番では未実施（layoutの`admin_users`判定→`/unauthorized`はソースとテストで確認済み）。
+
+### 追加で見つかった運用上の問題（本タスクの範囲外、要対応）
+
+- **会社員AIラボのX投稿が、本日（2026-09-25 JST）予定分すべて`X_REQUEST_FAILED:401`で失敗している**（07:36〜22:23の10件、`brand_post`）。X側の認証エラー（トークン失効・権限等）と考えられる。管理画面の変更とは無関係で、PR #15以前からの状態かは未確認。OAuth/Vault/tokenは本タスクで禁止のため調査・修正していない。X自動投稿（G3/H枠）での確認を推奨。
+
+### production mutations（更新）
+
+0件（業務データ・DB・Auth・OAuth・Vault・Xへの変更なし）。ブラウザのブランド選択cookieのみ変更し、かぶモリへ戻した。
+
+### next_recommendation（更新）
+
+1. PR #15のproduction検証は完了。K4で最終確認をお願いします。
+2. 会社員AIラボのX 401失敗を、別TASKとしてX自動投稿側に割り当てることを推奨。
