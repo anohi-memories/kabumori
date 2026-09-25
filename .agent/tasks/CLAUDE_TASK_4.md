@@ -3,7 +3,7 @@
 - task_id: x-admin-pr15-netlify-preview-live-qa-continuation-20260925
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Sonnet5（高）
