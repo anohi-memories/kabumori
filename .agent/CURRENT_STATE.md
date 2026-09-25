@@ -51,7 +51,7 @@
   - recommended model: Sonnet5（高）
 - G2: `done` — `kabumori-pr34-shadow-merge-deploy-20260925`
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
-- G4: `ready` — `x-admin-pr15-merge-production-verify-20260925`; PR #15 merged by ChatGPT -> `f610503761729bdc09dfa483bd218a769350a2dc`; resume post-merge/production Admin verification only; recommended Sonnet5（中）
+- G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS
 
 ## G1 Kabumori branded launch screen
 
@@ -82,6 +82,19 @@
 - safe source/config/doc fixes allowed; production Auth/SMTP/credentials/DNS/TestFlight/App Store mutation forbidden.
 - no overlap with G2 personalized-reports or X/admin scopes.
 - recommended model: Opus5.5（高）.
+
+## Final K4 PR #15 production verification
+
+- verdict: **PASS**.
+- PR #15 merged head `f04c44ac564aa775fc0d68106648a0d2e4fcd564` -> merge `f610503761729bdc09dfa483bd218a769350a2dc`.
+- post-merge apps/admin 34/34; focused brand-boundary 27/27; tsc/lint/build/diff PASS.
+- Vercel production confirmed serving PR #15 code.
+- authenticated production QA PASS: login, Kabumori ⇄ AI Lab switching, brand isolation, Kabumori-only control suppression, invalid selector rejection.
+- unauthenticated/tampered-session boundary fails closed; non-admin live account unavailable but existing admin_users source/test boundary intact.
+- secret/service_role exposure not observed; DB/Auth/RLS/OAuth/Vault/X/business-data mutation 0.
+- no additional Codex review needed; semantics unchanged from reviewed candidate.
+- G4 closed and reusable after fresh allocation check.
+- AI Lab X 401 incident is tracked separately in G3.
 
 ## AI Lab 401 / universal OAuth refresh
 
