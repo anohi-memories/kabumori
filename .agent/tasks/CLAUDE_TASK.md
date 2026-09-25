@@ -3,8 +3,8 @@
 - task_id: kabumori-morning-prompt-fact-contract-fix-20260925
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（極高）
 - purpose: production v28 dry-runで判明した朝刊promptとFact checkerの契約矛盾を、Fact基準を緩めずsource-onlyで最小修正する。deploy禁止。
@@ -149,3 +149,75 @@ When complete:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for K2.
+
+## Report
+
+### Summary
+
+- task_id：`kabumori-morning-prompt-fact-contract-fix-20260925`
+- result：source-onlyの修正を完了し、PR #32を作成した（**未merge・未deploy**）。K2待ち。
+- changed_files：
+  - `supabase/functions/personalized-reports/report_logic.ts`（promptとFactの文言だけ）
+  - `supabase/functions/personalized-reports/morning_contract_test.ts`（新規）
+- tests：
+  - 新規 **6/6**
+  - report_hardening 9/9、close_validator 23/23、MIC 14/14・6/6
+  - personalized-reports **102/102**、関連スイート **220/220**
+  - deno check・deno lint・git diff --checkはPASS
+- commit_hash：PR head `749ce19f01ae191398a5b32420b657263c54dd57`
+- push：`origin/g2-morning-prompt-fact-contract-20260925`。PR https://github.com/anohi-memories/kabumori/pull/32
+- deploy：なし
+- safety_checks：
+  - production mutation 0（read-onlyの確認だけ。LLMの呼び出しもdry_runもしていない）。
+  - validatorの正規表現・上限値・MIC・market_detail・_sharedは未変更。
+  - Fact checkerの既存の拒否項目は1つも削除していない。
+  - 共有ファイルは未変更。
+
+### root cause
+
+- **A. 時点の表現**：朝刊のpromptが「watch_ja には寄り付きや場中で見るべき点を書きます」と指示していた。packetには当日の場中データがないため、Fact checkerが「寄り付き後」「場中」をpacket外の時点情報として拒否していた。**promptとFactの契約が矛盾していた**。
+- **B. ニュースが空のときの表現**：「個別ニュースは確認されていません／入力されたニュースはありません」を、Fact checkerが「世の中にニュースが無い」という断定と解釈した。
+
+### exact prompt changes
+
+- 朝刊のwatch_jaの指示を、「前営業日の終値や入力された材料に照らして確認する点（確認ポイント・注目点）を書きます」に変更した。
+- `MORNING_TIMING_RULE`（新設、朝刊のみ）：
+  - 入力には今日の寄り付き・場中の値動きは含まれていない。
+  - 「寄り付き後」「場中」「今日の値動きで〜」を観測済みの事実のように書かない。
+  - 確認する点は「前営業日の終値や入力された材料に照らして確認する点／確認ポイント／注目点」として書く。
+- `EMPTY_NEWS_RULE`（新設、COMMONに入れて朝刊・大引けの両方に適用）：入力が空のときは、入力の状態だけを書く。
+- no_clear_materialのときのfact_jaの定型文：「明確な個別材料は確認できていません」→「入力に明確な個別材料は含まれていません」。
+
+### Fact checkerの変更
+
+- **1行だけ追加した**（`EMPTY_NEWS_FACT_RULE`）。
+  - packetのnews（own_news・related_market_news・market_news）が空のとき、「入力に個別の材料は含まれていません」「このレポートの入力には個別ニュースがありません」は事実どおりなので許容する。
+  - 「ニュースはありません」「材料はありません」「個別ニュースは確認されていません」や、packetにない寄り付き・場中の値動きを観測済みとして書くことは、**従来どおり不合格**。
+- 既存の拒否項目は、すべて残っていることをテストで確認した：packetにない数字・事実、因果の断定、将来の値動きの断定、売買推奨、推測による穴埋め、shared_marketとの矛盾、fact_jaへの推定の混入。
+
+### empty-newsの文言（許可／不許可）
+
+- **許可**（入力の状態として書くもの）：「入力に個別の材料は含まれていません」「このレポートの入力には個別ニュースがありません」「入力に明確な個別材料は含まれていません」
+- **不許可**（世の中について書くもの）：「個別ニュースは確認されていません」「ニュースはありません」「材料はありません」
+
+### tests
+
+- `morning_contract_test.ts`（6件）：
+  - 旧指示が消えていること。寄り付き・場中の語は、禁止ルールの中にしか出てこないこと。
+  - watch・checkpointの指示は残っていること。時点ルールは朝刊だけに入っていること。
+  - 両reportのpromptにempty-newsの許可文・不許可文があること。定型文が置き換わっていること。
+  - Factは、入力が空であることを述べる文だけを許可していること。既存の拒否項目がすべて残っていること。
+  - 上限値が120／160のままであること。
+- mutationの確認：修正を元に戻すと、6件のうち4件がfailする。
+
+### production read-back（read-only）
+
+- `personalized-reports` は **v28**、verify_jwt=false。
+- `app_enabled=false`、`x_enabled=false`。
+- 着手時点で、同じ関数を扱うopen PRや作業中の他slotはなかった。
+
+### recommendation
+
+1. H2で独立レビューする（Factへの追加が許可範囲の拡大として妥当か、既存の拒否を弱めていないかの確認）。
+2. K2でPASSならmergeし、承認を得て再deployする。
+3. **次の朝刊cronは月曜9/28 08:35 JST**。それより前に、朝刊dry_runを3回以上、大引けdry_runを3回以上実施する。朝刊が安定しなければ、同じ手順でv28に戻す（v28の大引けは5/5でPASS）。
