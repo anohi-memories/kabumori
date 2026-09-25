@@ -3,8 +3,8 @@
 - task_id: x-admin-pr33-auth-fix-round2-final-review-20260926
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol（高）
 - purpose: K4 PASS済みPR #33 head 2528b56 の3つのAuth修正を再レビューし、merge前のsource gateを判定する。レビュー範囲はC1指摘3点と既存Admin境界への回帰に限定する。

@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: x-admin-pr33-auth-fix-round2-final-review-20260926
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: assigned; focused re-review of PR #33 three Auth fixes before real E2E; recommended Sol（高）
+- allocation: source-only PASS for PR #33 head `2528b56`; all three prior findings fixed; bounded real recovery + invite E2E and operator gates remain before merge; C1 required
 
 ## Codex H2
 - owner: codex

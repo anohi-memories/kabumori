@@ -361,3 +361,28 @@ C1 should review PR #25 and this report. The source candidate can remain for fur
 
 - Return PR #33 to G4 for narrowly scoped source/test fixes of all three findings; C1 should not approve merge at `e6b93be`. Re-review the new head, including malicious callback types, stale-open-form, OTP/magic-link and sign-out failure cases.
 - Before merge, perform one bounded real recovery and invite flow on a disposable or expressly approved account/Preview to verify actual AMR methods, PKCE/implicit cookie establishment and logout. This review did not authorize sending email or changing users. Operator must separately confirm exact Supabase Auth Site/Redirect allowlist, template URLs, SMTP deliverability and Netlify proxy/log credential handling. Production Auth/config/user changes and deploy/merge remain unapproved.
+
+---
+
+# H1 — PR #33 Auth-fix round 2 final source review (2026-09-26)
+
+- task_id: `x-admin-pr33-auth-fix-round2-final-review-20260926`; status: `review_required`; next_owner: `chatgpt`; finish code: C1.
+- verdict: **PASS for source readiness to bounded real E2E; not approval to merge.** Exact reviewed PR #33 head: `2528b5686bcbb3630fb636cec12162803f921f8f`; prior failed head: `e6b93beccfb9209dbe640fb9ea1464f2568f3c74`. PR was OPEN/MERGEABLE at review; Netlify Preview SUCCESS at exact head; Vercel context FAILURE from build-rate limit. No source edits or PR push by H1. Latest `origin/main` at report preparation: `5e6f0cef9d1ad9047868076391fc514903b1ab51`.
+
+## Three C1 findings
+
+1. **AMR purpose — fixed.** `hasRecoveryContext()` now accepts only signed, fresh `recovery` or `invite` AMR entries. Password, generic `otp`, `magiclink` and other methods fail closed at render and submission; negative tests cover both. The Supabase [JWT claims reference](https://supabase.com/docs/guides/auth/jwt-fields) defines recovery/invite separately from OTP/magic-link. Actual production Auth AMR shape still requires a bounded real link test; if it differs, do not broaden to all OTP/magic-link sessions.
+2. **15-minute freshness — fixed at source/UI boundary.** `reset-password/page.tsx` checks on render; `completePasswordReset()` calls the new `verifyRecoveryContext` Server Action after local validation and immediately before `updateUser`. The action uses `getClaims()` and server time; false/thrown checks fail closed without an update. A stale-open-form regression passes. This is an app flow gate, not a claim that the public Supabase Auth `updateUser` API enforces the same 15-minute rule for arbitrary custom clients.
+3. **Sign-out failure — fixed.** `signOutConfirmed()` returns true only for a successful `signOut` response. Returned and thrown failures produce `updated_signout_unconfirmed`; the UI clears entered passwords, explains that the session may remain, and offers retry without redirecting to a confirmed-success login. Tests cover both failure types and the retry navigation boundary.
+
+## Regression and safety checks
+
+- Round-2 source diff is only six `apps/admin/src` files; no mobile reset file or other app area changed. Callback and forgot-password routing were unchanged from the prior reviewed head. Netlify Preview read-only probes returned `307 Location: /reset-password?from=email-link` for an external `next` and `307 Location: /forgot-password?reason=link_invalid` for unsupported `type=signup`. No open redirect or callback-type regression observed.
+- Generic reset-request UI remains indistinguishable across account existence outcomes. New Server Action takes no password/token arguments, reads only signed session claims, uses no service-role key, and logs no credential. Targeted changed-source secret-value scan found no secret markers. No Auth response body is rendered.
+- `(admin)/layout.tsx` still requires `getUser()` and an `admin_users` row before brand resolution. Non-admin entry denial and PR #15 multibrand isolation tests passed. This is source/test verification, not a real non-admin production E2E.
+- Tests: all `apps/admin/src/lib/*.test.ts` **83/83 PASS** (recovery/invite, OTP/magic-link negatives, stale-open-form, sign-out returned/thrown errors, Admin/brand boundaries); `tsc --noEmit` PASS; ESLint PASS; production `next build` PASS with dummy public Supabase configuration; `git diff --check` PASS. Build-generated `next-env.d.ts` was restored, leaving the H1 review worktree clean. Dependencies were installed offline in this worktree only.
+- Changed files by H1: `.agent/tasks/CODEX_TASK.md`, `.agent/ACTIVE_TASK.md`, `.agent/CURRENT_STATE.md`, `.agent/CODEX_REPORT.md` (control/report only). Source commit by H1: none; reviewed commit hash above. PR push: none; merge: none; deploy: none. Production Auth/config/user, DB/RLS/RPC/migration, Edge, X/OAuth, and other business-data mutation: **0**.
+
+## Gate before merge
+
+After C1 accepts this source review, run **one bounded real recovery flow and one invite flow** on an expressly approved/disposable account and Preview. Verify actual `amr.method` without logging token values, 15-minute clock semantics, PKCE/token-hash or implicit-fragment cookie establishment, password update, sign-out and non-admin Admin denial. No real email was sent in this review, and no production Auth/user/config mutation was authorized. Operator must separately verify Supabase Site/Redirect allowlist, email templates/SMTP and Netlify proxy/log handling of inbound link credentials. Do not merge or production-deploy PR #33 until these gates are satisfied and reported.

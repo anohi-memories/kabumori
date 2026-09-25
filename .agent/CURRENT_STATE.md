@@ -42,7 +42,7 @@
 
 ## Current slot snapshot
 
-- H1: `review_required` — `x-admin-pr33-final-auth-security-review-20260926`; FAIL, PR #33 must not merge until recovery AMR allowlist and submit-time expiry are fixed and bounded real E2E is completed; C1 required
+- H1: `review_required` — `x-admin-pr33-auth-fix-round2-final-review-20260926`; source-only PASS at PR #33 head `2528b56`, three prior Auth findings fixed; bounded real recovery + invite E2E remains mandatory before merge; C1 required
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
 - G1: `done` — `kabumori-branded-launch-screen-20260925`
   - Final K1 PASS.
