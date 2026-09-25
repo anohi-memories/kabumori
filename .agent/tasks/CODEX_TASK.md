@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1g-multistep-tip-greeting-final-review-20260925
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: K3 PASS済みPhase1Gのtip thread / morning_greeting multi-step provider-step ledger、atomic completion、publish_claim lifecycle、ACL/migration安全性を独立レビューする。production apply/deploy/X API callは行わない。
@@ -199,3 +199,26 @@ Then:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for C1.
+
+
+## Final C1 — Phase1G
+
+Verdict: **PASS-WITH-FIX for source-only candidate**.
+
+Accepted:
+- reviewed implementation `e0f7785`
+- H1 fix commit `5a62af547dbc840c1f7b140d6d51d8876c1a7223`
+- PR #27 contains the accepted source-only fixes
+- P1 stale prior-day greeting claim/provider-step authorization fixed using execution-day JST validation
+- P3 duplicate confirmed thread IDs rejected earlier by the helper
+- focused 72/72 PASS
+- x-test-post/_shared/important-news-monitor total 997/997 PASS
+- greeting/tip-specific 138/138 PASS
+- disposable Phase1D/1E/1F/1G behavior and race proofs PASS
+- deno check/lint, bash -n, git diff --check PASS
+- production migration/deploy/token/Cron/X API/media calls = 0
+
+Decision:
+- Phase1G is accepted as a source candidate after H1 fixes.
+- Production activation remains **NO**.
+- Next step: G3 fresh-main verify PR #27 -> merge -> post-merge regression.
