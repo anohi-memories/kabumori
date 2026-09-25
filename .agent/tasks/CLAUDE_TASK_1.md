@@ -3,8 +3,8 @@
 - task_id: kabumori-approved-app-icon-integration-20260925
 - owner: claude
 - slot: claude-1
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: ユーザーが承認した「かぶモリ」アイコン画像を、iOS実機確認用の正式候補としてExpo/nativeへ組み込む。実機で違和感があれば後で差し替える前提。今回はアイコンだけを確実に反映し、Splash/起動Overlayは勝手に変更しない。
@@ -151,3 +151,71 @@ When complete:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for K1.
+
+## Report — G1 result
+
+- task_id: kabumori-approved-app-icon-integration-20260925
+- result: **source asset obtained and integrated. PR #31 is open and unmerged.** Production mutation = 0.
+- fresh main at task start: `c38a7f8`; in_progress control commit `9258ab7`.
+
+### Exact source asset used
+
+- **Not `USER_ASSET_REQUIRED`** — the exact approved file was obtained.
+- The image the user pasted inline in this chat could not be received as a file I can read/copy — the harness renders it to me visually but drops no path on disk (confirmed by searching this session's whole scratch tree for any new image before and after the paste). Per this task's Critical Asset Rule, regenerating a similar image from that visual impression is explicitly forbidden, so I stopped and asked the user where the approved file was saved on their Mac, rather than guess.
+- The user pointed me to `~/Desktop/アイコン.png`. I copied that file directly (`cp`), verified its sha256 matched before and after the copy (`31eda5379951b3d8f69676add4add33ecea6d799a48545ef076bd6235949a3f8`), and confirmed its properties independently with `file`/`sips` before treating it as source of truth: **1254×1254, 8-bit RGB, no alpha** — matching the task's stated approved-source characteristics exactly.
+- A second file also existed on the Desktop, `アイコンん候補.png` ("icon candidate", an earlier/different file). It was **not used** — only the exact filename and content the user pointed to (`アイコン.png`) was treated as approved.
+
+### Final icon dimensions/mode/alpha status
+
+- Master (preserved as-is): `assets/branding/kabumori-icon-master-2026-09-25.png`, 1254×1254, RGB, no alpha, sha256 identical to the source file.
+- App icon: `assets/images/icon.png`, deterministic `sips -z 1024 1024` resize, **1024×1024, RGB, no alpha**, PNG colour type 2 (truecolor, no alpha channel) confirmed by reading the PNG's own IHDR bytes. No crop was needed (source already square). No sharpening, recoloring, or AI upscaling was applied.
+
+### Changed files (PR #31, branch `claude1/approved-app-icon-integration`, head `8939ce9`)
+
+- `assets/branding/kabumori-icon-master-2026-09-25.png` (new) — the preserved master
+- `assets/images/icon.png` (replaced) — the 1024×1024 derived icon
+- `app.json` (one field) — `ios.icon`: `./assets/expo.icon` → `./assets/images/icon.png`
+- `tests/app/app-icon_test.ts` (new, 4 tests)
+
+### Expo config paths touched / resolved
+
+- `expo.icon` — already `./assets/images/icon.png`; content now updated.
+- `expo.ios.icon` — changed from the unused Icon Composer bundle path `./assets/expo.icon` to the same flat PNG. Rationale: a flat pre-rendered image cannot be decomposed into that bundle's multi-layer format without recomposing it, which would itself be a "redraw" the task forbids; pointing `ios.icon` at a plain 1024×1024 PNG is Expo's standard, well-documented path.
+- `expo.plugins` → `expo-notifications`'s `icon` — already `./assets/images/icon.png`; content now updated, unchanged path.
+- `assets/expo.icon` (the old Icon Composer bundle) is **left on disk, no longer referenced anywhere** — confirmed by grep across the whole tree (excluding `node_modules`) after the change.
+
+### Checks / tests
+
+| Check | Result |
+| --- | --- |
+| `deno test --no-check --no-lock --allow-read --allow-write --allow-env tests/app/ supabase/functions/account-delete/ apps/kabumori-web/build_test.ts` | **126 passed / 0 failed** (122 existing + 4 new) |
+| `npx tsc --noEmit`, `src/` scope | **0 errors** |
+| `npx expo config --json` | `icon` and `ios.icon` both resolve to `./assets/images/icon.png` |
+| `npx expo prebuild --platform ios --no-install --clean` | Generated `ios/app/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png`: **1024×1024, no alpha**, and visually confirmed identical to the new master (opened both; same composition, no rounded-corner mask baked in — square edge to edge, as expected since iOS applies its own mask). Byte hash differs from `assets/images/icon.png` only because Xcode's asset-pipeline re-encodes the PNG on copy; dimensions/alpha/content are identical. |
+| `npx expo export --platform web`, dummy non-secret env | PASS, **10 static routes (unchanged)** |
+| `git diff --check` | PASS |
+
+**Side effect caught and discarded, not shipped:** `expo prebuild` also generated a native `ios/` directory (already gitignored, confirmed absent from `git status`) and silently rewrote `package.json`'s `android`/`ios` npm scripts from the managed-workflow form (`expo start --ios`) to the bare-workflow form (`expo run:ios`). I reverted that `package.json` change with `git checkout -- package.json` and deleted the generated `ios/`/`android`/`.expo` directories before committing — only the icon change is in the PR.
+
+### Proof the Expo template icon is no longer used for the app icon
+
+- `git diff --name-only` shows `app.json`'s `ios.icon` no longer references `assets/expo.icon`.
+- `npx expo config --json` confirms both `icon` fields resolve to the new file.
+- The generated `AppIcon.appiconset` from a real `expo prebuild` run — the same mechanism a production build uses — contains the new artwork, not the Expo template mark.
+- `assets/images/icon.png` itself was replaced with the approved artwork (confirmed visually and via PNG header).
+
+### Confirmation Splash / AnimatedSplashOverlay were untouched
+
+- `git diff` touches no file under `src/components/animated-icon*`, and does not change `expo-splash-screen`'s config (`image: ./assets/images/splash-icon.png`, `backgroundColor: #208AEF` — both unchanged).
+- `assets/images/expo-logo.png` (used by `AnimatedSplashOverlay`) was not modified.
+- A test (`splash and the animated launch overlay were not touched by this task`) pins both facts.
+
+### Production mutation = 0
+
+No EAS build, no EAS credential/env mutation, no TestFlight upload, no App Store Connect action, no production deploy. Only local asset/config changes committed to a PR.
+
+### Next step for iPhone/TestFlight verification
+
+1. K1 review and merge of PR #31.
+2. A separately authorized EAS build (development/internal or preview profile — not production) that installs on the real iPhone already used for the Auth/recovery E2E, so the user can see the icon on their actual home screen.
+3. Per this task's Real-device gate: this integration is **not** the final visual acceptance. If the icon looks wrong on-device (e.g. scaling, mask, contrast against the iOS home-screen background), the master asset can be swapped without reopening the design discussion — the pipeline (master → `sips` resize → config) is now in place for that.

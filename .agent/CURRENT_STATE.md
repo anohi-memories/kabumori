@@ -33,12 +33,10 @@
 
 - H1: `done` — `x-autopost-phase1h-gated-dispatcher-final-review-20260925`
 - H2: `ready` — `x-admin-pr15-auth-crossbrand-final-review-20260925`
-- G1: `ready` — `kabumori-approved-app-icon-integration-20260925`
-  - User-approved icon is now the current app-icon candidate.
-  - Integrate exact source only; no redraw/regeneration.
-  - Icon-only task; Splash and AnimatedSplashOverlay remain separate decisions.
-  - Final visual acceptance happens on real iPhone/TestFlight.
-  - recommended model: Sonnet5（高）.
+- G1: `review_required` — `kabumori-approved-app-icon-integration-20260925`
+  - PR #31 open (unmerged): approved icon (user-supplied ~/Desktop/アイコン.png, sha256 31eda537...49a3f8, 1254x1254 opaque) preserved as master + resized to 1024x1024, wired into app.json's ios.icon/expo.icon/notifications icon. assets/expo.icon (old Icon Composer bundle) left unreferenced on disk.
+  - Verified via a real `expo prebuild --platform ios`: generated AppIcon.appiconset matches the new artwork, no template mark. 126/0 tests, tsc src 0, web export 10 routes.
+  - Discarded prebuild's incidental package.json script rewrite before committing. Splash/AnimatedSplashOverlay untouched. Production mutation 0; real iPhone acceptance still pending a separately authorized EAS build.
 - G2: `ready` — `kabumori-pr29-merge-redeploy-final-dryrun-20260925`
 - G3: `ready` — `x-autopost-phase1i-exact-account-prex-refresh-writer-20260925`
 - G4: `done` — `x-admin-pr15-netlify-preview-live-qa-continuation-20260925`
