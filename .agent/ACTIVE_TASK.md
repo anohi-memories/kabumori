@@ -54,12 +54,12 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: done
 - task_id: kabumori-pr34-shadow-merge-deploy-20260925
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: assigned; merge reviewed PR #34 and deploy shadow telemetry only, app_enabled=false
+- allocation: closed; Final K2 PASS, v30 shadow telemetry deployed, awaiting Monday natural-cron read-only gate
 
 ## Claude G3
 - owner: claude
