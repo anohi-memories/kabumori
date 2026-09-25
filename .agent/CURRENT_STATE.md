@@ -32,7 +32,7 @@
 ## Current slot snapshot
 
 - H1: `done` — `x-autopost-phase1h-gated-dispatcher-final-review-20260925`
-- H2: `done` — `kabumori-pr29-plus-v27-validator-final-review-20260925`
+- H2: `ready` — `x-admin-pr15-auth-crossbrand-final-review-20260925`
 - G1: `ready` — `kabumori-approved-app-icon-integration-20260925`
   - User-approved icon is now the current app-icon candidate.
   - Integrate exact source only; no redraw/regeneration.
@@ -41,7 +41,7 @@
   - recommended model: Sonnet5（高）.
 - G2: `ready` — `kabumori-pr29-merge-redeploy-final-dryrun-20260925`
 - G3: `ready` — `x-autopost-phase1i-exact-account-prex-refresh-writer-20260925`
-- G4: `done` — `x-admin-netlify-pr15-live-preview-auth-qa-20260925`
+- G4: `done` — `x-admin-pr15-netlify-preview-live-qa-continuation-20260925`
 
 ## Approved app icon decision
 
@@ -598,6 +598,20 @@
 - production migration/apply/deploy/token refresh/Vault mutation/X API calls = 0.
 - production activation remains NO.
 - H1 assigned final OAuth/Vault/concurrency/ACL review.
+- recommended model: Sol（高）.
+
+## Final K4 PR #15 live Preview result
+
+- result: **PASS / PREVIEW_QA_PASS_AUTH_BLOCKED**.
+- PR #15 head `a8f98444425c25796e9fef611445b0f574120669` is tree-identical to prior semantic head.
+- Netlify Deploy Preview SUCCESS on the exact head.
+- /login renders; unauthenticated /, /posts and /important-news redirect once to /login.
+- tampered session cookie also fails closed.
+- no redirect loop, 404 or 5xx; Next.js Runtime active.
+- PR #15 source regression 31/31; tsc/lint/build PASS.
+- production mutation=0; PR #15 remains unmerged.
+- authenticated selector/session QA remains unavailable due lack of authorized session.
+- H2 assigned independent auth/authorization/cross-brand final review before merge.
 - recommended model: Sol（高）.
 
 ## Known issues / observations
