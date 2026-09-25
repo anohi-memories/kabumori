@@ -32,11 +32,11 @@
 ## Current slot snapshot
 
 - H1: `done` — `x-autopost-phase1i-exact-account-refresh-final-review-20260925`; Final C1 PASS-WITH-FIX
-- H2: `done` — `x-admin-pr15-auth-crossbrand-final-review-20260925`; Final C2 PASS-WITH-FIX, authenticated live QA still required
-- G1: `review_required` — `kabumori-pr31-icon-merge-postmerge-verify-20260925`
-  - PR #31 merged at reviewed head `8939ce9` -> main `7aa394f`. Files byte-identical; master sha256 31eda537...49a3f8 confirmed; icon 1024x1024 no-alpha; expo config icon/ios.icon both resolve correctly; identity fields (slug/scheme/bundleId/projectId) and splash/overlay unchanged.
-  - Re-ran expo prebuild on merged main: generated AppIcon hash reproducible, matches pre-merge run exactly. 126/0 tests, tsc src 0, web export 10 routes. Prebuild's package.json script side-effect caught and discarded again.
-  - Production mutation 0. Repo ready for a separately authorized real-device build; final visual acceptance still pending on an actual iPhone.
+- H2: `ready` — `kabumori-pr32-morning-fact-contract-final-review-20260925`
+- G1: `done` — `kabumori-pr31-icon-merge-postmerge-verify-20260925`
+  - Final K1 PASS. PR #31 merged -> `7aa394fc1dc73edd0c67b6529923ec4dc9616e7f`.
+  - Approved icon reproducibly wired into Expo/iOS; 126/126 tests; no production mutation.
+  - Awaiting separately authorized EAS/TestFlight real-iPhone visual verification.
 - G2: `ready` — `kabumori-morning-prompt-fact-contract-fix-20260925`
 - G3: `ready` — `x-autopost-phase1i-pr30-merge-postmerge-verify-20260925`
 - G4: `done` — `x-admin-pr15-netlify-preview-live-qa-continuation-20260925`
@@ -55,6 +55,29 @@
 - Codex review skipped as low-risk asset/config-only change.
 - next G1: fresh-main merge + post-merge verification. EAS/TestFlight requires separate authorization.
 - recommended model: Sonnet5（中）.
+
+## Final K2 PR #32 source contract fix
+
+- verdict: **PASS for source implementation; H2 review required**.
+- PR #32 head `749ce19f01ae191398a5b32420b657263c54dd57`.
+- morning prompt no longer requests unsupported intraday-observation wording.
+- empty-news language is constrained to packet/input-state claims.
+- Fact checker gains one narrow empty-input meta-claim allowance; no existing rejection removed.
+- 6/6 new tests; personalized-reports 102/102; related 220/220; check/lint/diff PASS.
+- production remains v28; app_enabled=false; x_enabled=false; mutation=0.
+- H2 assigned independent Fact/Safety boundary review.
+- recommended model: Sol（高）.
+
+## Final K1 PR #31 icon merge
+
+- verdict: **PASS**.
+- reviewed head `8939ce9f` merged -> `7aa394fc1dc73edd0c67b6529923ec4dc9616e7f`.
+- approved master asset preserved exactly; installed icon asset is 1024x1024 RGB/no alpha.
+- Expo config and real prebuild both resolve to the approved artwork.
+- 126/126 tests; src TypeScript 0; Expo export 10 routes; diff PASS.
+- Splash/AnimatedSplashOverlay/expo-logo unchanged.
+- production mutation=0.
+- G1 closed; real iPhone/TestFlight visual acceptance remains a separate authorized step.
 
 ## Final K2 PR #29 deploy/dry-run
 
