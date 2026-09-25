@@ -3,8 +3,8 @@
 - task_id: x-admin-pr33-auth-fix-round2-20260926
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Opus5.5（高）
 - purpose: C1でFAILとなったPR #33のAuth/security問題3点だけを修正し、real E2E前のsource candidateを再安定化する。範囲を広げない。
@@ -212,3 +212,18 @@ SUCCESS。`/login`・`/forgot-password`・`/reset-password`・`/unauthorized` 20
 
 - status -> review_required
 - next_owner -> chatgpt
+
+
+## Final K4 — PR #33 auth fix round2
+
+Verdict: **PASS**.
+
+- all three C1 findings fixed at PR #33 head `2528b5686bcbb3630fb636cec12162803f921f8f`.
+- generic otp/magiclink denied; only recovery/invite purpose accepted.
+- submit-time freshness reverified server-side immediately before updateUser.
+- signOut returned/thrown failure no longer reported as completed logout.
+- apps/admin tests 83/83 PASS; tsc/lint/build/diff/secret scan PASS.
+- PR #15 multibrand/Admin regression PASS.
+- Netlify Preview PASS.
+- production mutation=0; real recovery/invite E2E not yet run.
+- independent H1 re-review required before merge.
