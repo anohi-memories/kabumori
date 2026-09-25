@@ -3,8 +3,8 @@
 - task_id: kabumori-pr26-unknown-cause-prefix-final-review-20260925
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Luna（高）
 - purpose: PR #26のunknown-cause prefix拡張が、productionで観測した妥当文だけを通し、因果断定や自由文を新たに許可していないことを独立レビューする。
@@ -112,3 +112,25 @@ When complete:
 - next_owner -> chatgpt
 - update .agent/CODEX_REPORT_2.md
 - STOP for C2.
+
+
+## Final C2 — PR #26
+
+Verdict: **PASS**.
+
+Accepted reviewed head:
+- `2b40a617e34c73c301e40a17692883ac70fd3e0a`
+
+Accepted:
+- optional move-subject prefix remains whole-string anchored
+- CAUSAL_ASSERTION still runs first
+- sentence-by-sentence validation remains intact
+- no arbitrary adjective/noun/causal subject bypass found
+- `因果関係` standalone target is bounded
+- morning 120 / close 160 unchanged
+- focused 20/20 PASS
+- personalized-reports 64/64 PASS
+- deno check/lint/diff PASS
+- production mutation=0
+
+PR #26 is safe for fresh-main merge and a controlled redeploy/dry-run with app_enabled=false.
