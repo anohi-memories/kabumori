@@ -31,14 +31,14 @@
 
 ## Current slot snapshot
 
-- H1: `review_required` — `x-autopost-phase1i-exact-account-refresh-final-review-20260925`; source-only fix PR #30 awaits C1, production activation NO
-- H2: `ready` — `x-admin-pr15-auth-crossbrand-final-review-20260925`
+- H1: `done` — `x-autopost-phase1i-exact-account-refresh-final-review-20260925`; Final C1 PASS-WITH-FIX
+- H2: `done` — `x-admin-pr15-auth-crossbrand-final-review-20260925`; Final C2 PASS-WITH-FIX, authenticated live QA still required
 - G1: `review_required` — `kabumori-pr31-icon-merge-postmerge-verify-20260925`
   - PR #31 merged at reviewed head `8939ce9` -> main `7aa394f`. Files byte-identical; master sha256 31eda537...49a3f8 confirmed; icon 1024x1024 no-alpha; expo config icon/ios.icon both resolve correctly; identity fields (slug/scheme/bundleId/projectId) and splash/overlay unchanged.
   - Re-ran expo prebuild on merged main: generated AppIcon hash reproducible, matches pre-merge run exactly. 126/0 tests, tsc src 0, web export 10 routes. Prebuild's package.json script side-effect caught and discarded again.
   - Production mutation 0. Repo ready for a separately authorized real-device build; final visual acceptance still pending on an actual iPhone.
 - G2: `ready` — `kabumori-morning-prompt-fact-contract-fix-20260925`
-- G3: `ready` — `x-autopost-phase1i-exact-account-prex-refresh-writer-20260925`
+- G3: `ready` — `x-autopost-phase1i-pr30-merge-postmerge-verify-20260925`
 - G4: `done` — `x-admin-pr15-netlify-preview-live-qa-continuation-20260925`
 
 ## K1 PR #31 icon integration
@@ -79,6 +79,27 @@
 - P1 cross-account Vault write was reproduced with fake local secrets when a ref changed without `updated_at`; P2 stale attempt could commit after settlement. Commit now rechecks leased identity/refs and live attempt/post under locks, and serializes shared-ref ownership check with account DML. Regression tests and disposable Phase1D–1I proofs pass.
 - Full x-test-post + _shared: 618/618; important-news-monitor: 473/473; focused Phase1I: 41/41. Targeted Deno check/lint pass. Broader Deno type-check still has 18 unrelated existing errors; broad tests passed with `--no-check`.
 - `service_role` remains a trusted server boundary. Live owner/ACL/definition read-back and an authorized activation plan remain outstanding. See `.agent/CODEX_REPORT.md` for the full review.
+
+## Final C1 Phase1I
+
+- verdict: **PASS-WITH-FIX**.
+- PR #30 reviewed/fixed head: `94000720e10649612e84cb3811327de1a63364e9`.
+- P1 cross-account Vault ref-swap write and P2 settled-attempt stale commit were fixed.
+- Phase1I 41/41; x-test-post + _shared 618/618; important-news-monitor 473/473; disposable Phase1D–1I proofs PASS.
+- production mutation=0; activation remains NO.
+- G3 assigned reviewed-head merge + post-merge verification.
+- recommended model: Sonnet5（高）.
+
+## Final C2 PR #15
+
+- verdict: **PASS-WITH-FIX for source/Preview**.
+- reviewed/fixed PR #15 head: `de354e7ff9f647435a3c42a87629be1e735794eb`.
+- fixed independent admin gate and Kabumori-only mutation-context P1 issues.
+- apps/admin 34/34; focused boundary 20/20; tsc/lint/build PASS.
+- Netlify Preview SUCCESS; unauthenticated/tampered-session behavior fail-closed.
+- production mutation=0.
+- authenticated live selector/cross-brand QA remains required before merge.
+- PR #15 remains unmerged.
 
 ## Approved app icon decision
 
