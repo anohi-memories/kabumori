@@ -44,13 +44,28 @@
 
 - H1: `done` — `x-autopost-phase1i-exact-account-refresh-final-review-20260925`; Final C1 PASS-WITH-FIX
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
-- G1: `review_required` — `kabumori-branded-launch-screen-20260925`
-  - PR #36 open (unmerged): native splash + AnimatedSplashOverlay both now use the approved icon on #eef3ed (200x200, matched sizes for a seamless handoff), gentle fade+scale exit, Reduce Motion honored via AccessibilityInfo. expo-logo.png/splash-icon.png left on disk (not truly unused / precedent), no artwork generated.
-  - Verified with a real expo prebuild: generated SplashScreenBackground.colorset/SplashScreenLogo.imageset both correct. 135/0 tests (2 assertions confirmed against a real regression via negative control). tsc src 0, web export 10 routes.
-  - RELEASE_READINESS.md updated: A1/A1b done (source), Area F -> READY. Production mutation 0; real-device visual acceptance still pending.
+- G1: `done` — `kabumori-branded-launch-screen-20260925`
+  - Final K1 PASS.
+  - PR #36 merged -> `b869fb557f009ca5817b6d2a853d529bd29c20c2`.
+  - Native splash + AnimatedSplashOverlay now use approved Kabumori icon on #eef3ed; Expo launch branding removed.
+  - 135/135 tests, tsc 0, real prebuild/web export PASS.
+  - Newer Yume-chan + robot visual concept is not yet integrated; current implementation is the simple approved-icon baseline.
+  - Next gate: real-iPhone/TestFlight visual acceptance.
 - G2: `done` — `kabumori-pr34-shadow-merge-deploy-20260925`
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS
+
+## Final K1 branded launch screen
+
+- verdict: **PASS**.
+- PR #36 head `5b72e5784b07ebf7871879471f53fe06e6f072eb` merged -> `b869fb557f009ca5817b6d2a853d529bd29c20c2`.
+- native splash and AnimatedSplashOverlay use the approved Kabumori icon on #eef3ed with matched 200x200 sizing.
+- Expo blue/logo removed from normal launch.
+- restrained 600ms fade/scale exit; Reduce Motion supported.
+- 135/135 tests, src tsc 0, expo config/prebuild/web export/diff PASS.
+- production mutation 0.
+- no Codex review required.
+- newer Yume-chan + robot visual concept remains a separate optional refinement, not part of this merged baseline.
 
 ## G1 Kabumori branded launch screen
 
