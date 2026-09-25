@@ -781,6 +781,19 @@ const COMMON_INSTRUCTIONS = [
   "入力にあるのは1日分の値動き（当日と前日の終値）だけです。「続落」「続伸」「反発」「反落」「年初来」「最高値」のような、複数日の推移や記録を前提にする言葉は使いません。",
 ].join("\n");
 
+// The inference field holds inference only. Production v26 close dry-runs showed the model opening
+// inference_ja with a restated fact (「小幅高でしたが、指数との比較では相対的に弱く、値動きの要因は特定
+// できません。」), which the validator rightly rejects; the fix is to keep facts out of the field, not to
+// let factual lead clauses through the validator.
+export const INFERENCE_FIELD_RULE =
+  "inference_ja には、値動き・騰落率・指数との比較などの事実を書きません。「小幅高でしたが」「指数との比較では相対的に弱く」「前日比で上昇しており」のような事実の前置きは inference_ja に入れず、事実は fact_ja にだけ書きます。要因を裏付けられない場合、inference_ja は「値動きの要因は特定できません。」「値下がりの要因は特定できません。」のような1文だけにし、その文を導くために事実を繰り返しません。";
+
+// Morning wording: production v26 morning dry-run failed the Fact check on advisory-sounding phrases
+// (「値動きを見守る朝刊」「注意が必要」「影響しやすい構成」). Steer generation to neutral observation
+// wording instead of relaxing the Fact checker.
+export const MORNING_WORDING_RULE =
+  "朝刊の title_ja・summary_ja・overview_ja・watch_ja・risk_notes_ja・checkpoints_ja は、中立な観察の言い方にします。「見守る」「注意が必要」「警戒が必要」「〜しやすい構成」「影響を受けやすい」のような、行動を促す言い方や、入力に無い影響の大きさ・受けやすさを示す言い方は使いません。代わりに「注目点」「確認ポイント」「値動きを確認します」のように書きます。";
+
 const IMPACT_INSTRUCTIONS = [
   "holding_impacts は holdings の全銘柄について1件ずつ、holdings の順に書きます（holdings が空なら空配列）。",
   "stance は tailwind（追い風）/ headwind（逆風）/ neutral（中立）/ no_clear_material（明確な個別材料なし）から選びます。",
@@ -788,6 +801,7 @@ const IMPACT_INSTRUCTIONS = [
   "tailwind / headwind には basis が1つ以上必要です。根拠が無い・弱い銘柄は無理に理由を作らず no_clear_material にし、fact_ja に「明確な個別材料は確認できていません」と書きます。",
   "fact_ja は入力で確認できる事実だけ、inference_ja は推定だけ（必ず「〜の可能性があります」「〜と考えられます」「〜とみられます」のような推定の言い方）、watch_ja は観察ポイントだけを書き、三つを混ぜません。要因が分からない場合、inference_ja は「要因は特定できません」のように、特定できないことだけを書いてかまいません。",
   "inference_ja では、業種・為替・金利・原油・米国株・半導体指数と銘柄の一般的な関係に触れてよいですが、入力に無い数字・固有の事実は書かず、推定として書きます。根拠が無ければ空文字にします。",
+  INFERENCE_FIELD_RULE,
   "detail が「簡潔に」の銘柄は fact_ja を1文にし、inference_ja と watch_ja は空文字でかまいません。「詳しく」の銘柄を中心に書きます。",
 ].join("\n");
 
@@ -799,6 +813,7 @@ const MORNING_INSTRUCTIONS = [
   "morning_review_ja は朝刊では空文字にします。",
   "watch_notes は材料がある監視銘柄だけ（最大5件）。risk_notes_ja は業種の偏り（sector_weights）や市場ニュースから、ポートに関係するリスク要因を書きます。",
   "checkpoints_ja は今日確認するとよい点を1〜4個、短く書きます。",
+  MORNING_WORDING_RULE,
 ].join("\n");
 
 const CLOSE_INSTRUCTIONS = [
