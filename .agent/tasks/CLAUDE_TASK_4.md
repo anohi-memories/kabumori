@@ -3,8 +3,8 @@
 - task_id: x-admin-pr15-merge-production-verify-20260925
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: high
 - recommended_model: Sonnet5（中）
 - purpose: Codexレビュー済み・authenticated live QA済みのPR #15を、reviewed head以降の差分がNetlify再build用コメント1行だけであることをfreshに再確認したうえでmainへmergeし、Web管理画面のproduction反映とブランド境界を安全に確認する。新規機能実装ではなくmerge-only + production verificationを主眼とする。
@@ -280,3 +280,24 @@ PR差分に対して実施（上記）。問題なし。
 
 - status -> review_required
 - next_owner -> chatgpt
+
+
+## ChatGPT merge continuation
+
+- checked_at: 2026-09-25 JST
+- PR #15 exact head before merge: `f04c44ac564aa775fc0d68106648a0d2e4fcd564`
+- merge performed by ChatGPT via GitHub connector with expected-head protection
+- merge result: PASS
+- merge commit: `f610503761729bdc09dfa483bd218a769350a2dc`
+- PR #15 state after merge: merged
+- main after merge: `f610503761729bdc09dfa483bd218a769350a2dc`
+- no source changes were added by ChatGPT
+- next action: resume G4 from Scope C and Scope D only
+  - post-merge source verification
+  - relevant apps/admin tests + focused brand-boundary tests
+  - tsc/lint/build/diff/secret checks
+  - confirm brand_id filtering, Kabumori-only boundaries, admin_users gate
+  - determine actual Vercel production deployment status
+  - if production deployed, verify exact merged commit and perform authenticated read-only production QA
+- do not repeat merge
+- if Vercel production is blocked by rate limit, report deployment BLOCKED/PENDING rather than success
