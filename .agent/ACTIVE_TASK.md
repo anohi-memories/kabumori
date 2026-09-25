@@ -65,11 +65,11 @@
 - owner: claude
 - slot: claude-3
 - status: ready
-- task_id: x-autopost-phase1g-pr27-merge-postmerge-verify-20260925
+- task_id: x-autopost-phase1h-gated-v2-dispatcher-source-candidate-20260925
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: assigned; PR #27 fresh-main merge + post-merge verification
+- allocation: assigned; gated-OFF v2 dispatcher source candidate
 
 ## Claude G4
 - owner: claude
