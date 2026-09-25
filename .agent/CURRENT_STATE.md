@@ -38,7 +38,7 @@
   - Privacy dataflow gap from PR #21 review is now closed on main. Remaining blockers: icon/splash/overlay artwork, EAS production env, Netlify publish, Auth Site URL/SMTP, App Store Connect.
 - G2: `ready` — `kabumori-pr26-merge-redeploy-final-dryrun-20260925`
 - G3: `ready` — `x-autopost-phase1h-pr28-merge-postmerge-verify-20260925`
-- G4: `ready` — `x-admin-netlify-live-site-preview-qa-20260925`
+- G4: `done` — `x-admin-netlify-live-site-preview-qa-20260925`
 
 ## Final K1 PR #24 result
 
@@ -458,6 +458,20 @@
 - Netlify development/preview configuration is allowed; Vercel production, DNS cutover, production DB/Auth/X mutation remain forbidden.
 - if interactive Netlify authorization is required, G4 must stop and report the exact one-time user action.
 - recommended model: Sonnet5（高）.
+
+## Final K4 Netlify live-site result
+
+- SAFE STOP / USER ACTION REQUIRED.
+- no authorized Netlify session/integration was available.
+- Netlify site creation requires one-time human account/repository authorization.
+- main apps/admin local regression 12/12 PASS.
+- PR #15 scoped regression 31/31 PASS.
+- TypeScript/lint/build/diff/secret scan PASS.
+- PR #15 remains unmerged at `b04442561d9e9c6d01b4a9fcf640c2cf731cd923`.
+- production mutation=0; Netlify mutation=0.
+- required user step: create/connect the Netlify site for `anohi-memories/kabumori`, base `apps/admin`, and set only the two public Supabase env vars.
+- after that, G4 can resume with live Deploy Preview + proxy/auth/PR#15 QA.
+- recommended continuation model: Sonnet5（高）.
 
 ## Known issues / observations
 
