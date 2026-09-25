@@ -74,12 +74,12 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: done
-- task_id: x-admin-pr15-merge-production-verify-20260925
+- status: ready
+- task_id: x-admin-pr33-rebase-stabilize-auth-review-prep-20260925
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: closed; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS; G4 reusable after fresh allocation check
+- allocation: assigned; PR #33 fresh-main conflict resolution + Auth/security stabilization + Netlify Preview prep; recommended Opus5.5（高）
 
 ## Deferred
 
