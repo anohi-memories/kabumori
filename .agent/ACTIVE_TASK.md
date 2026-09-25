@@ -44,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: done
 - task_id: kabumori-branded-launch-screen-20260925
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: assigned; create Kabumori branded native splash + AnimatedSplashOverlay using approved existing icon, no new artwork
+- allocation: closed; Final K1 PASS, PR #36 merged -> `b869fb557f009ca5817b6d2a853d529bd29c20c2`, real-device visual acceptance pending
 
 ## Claude G2
 - owner: claude
