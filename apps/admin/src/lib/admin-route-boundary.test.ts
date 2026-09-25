@@ -109,6 +109,13 @@ test("the link receiver takes no redirect target from the request", async () => 
   assert.doesNotMatch(route, /searchParams\.get\(/u);
   assert.doesNotMatch(route, /["'](?:next|redirect_to|redirectTo)["']/u);
   assert.match(route, /resolveConfirmAction\(request\.nextUrl\.searchParams\)/u);
+  // Every redirect goes through buildSameOriginRedirect (absolute URL, no
+  // carried-over query); a bare relative redirect was seen to re-attach the
+  // incoming query string on Netlify.
+  const code = withoutLineComments(route);
+  assert.doesNotMatch(code, /from "next\/navigation"/u);
+  assert.match(code, /NextResponse\.redirect\(buildSameOriginRedirect\(request\.url, path\), 307\)/u);
+  assert.equal((code.match(/NextResponse\.redirect\(/gu) ?? []).length, 1);
 });
 
 test("the reset page gates the form on a verified recovery context", async () => {

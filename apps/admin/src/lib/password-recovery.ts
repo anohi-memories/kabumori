@@ -78,6 +78,21 @@ export function buildRecoveryRedirectUrl(origin: string): string | null {
   return new URL(RECOVERY_CONFIRM_PATH, origin).toString();
 }
 
+/**
+ * Absolute, same-origin destination for /auth/confirm's redirects. It is built
+ * from the request's origin plus a fixed internal path only, so nothing from
+ * the incoming query string (a consumed `code` / `token_hash`, or an injected
+ * `next`) is carried along. A relative Location header is not enough: on
+ * Netlify a relative Location was observed to be resolved with the original
+ * query string re-attached.
+ */
+export function buildSameOriginRedirect(requestUrl: string, internalPath: string): string {
+  if (!internalPath.startsWith("/") || internalPath.startsWith("//")) {
+    throw new Error("internal redirect path must be an absolute same-origin path");
+  }
+  return new URL(internalPath, new URL(requestUrl).origin).toString();
+}
+
 export function normalizeEmail(input: string): string | null {
   const email = input.trim();
   if (email.length === 0 || email.length > EMAIL_MAX_LENGTH) return null;

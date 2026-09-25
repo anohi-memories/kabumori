@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildRecoveryRedirectUrl,
+  buildSameOriginRedirect,
   completePasswordReset,
   establishSessionFromFragment,
   hasRecoveryContext,
@@ -197,6 +198,18 @@ test("redirect targets cannot be supplied by the request (no open redirect)", ()
   assert.deepEqual(resolveConfirmAction(new URLSearchParams("next=https://evil.com")), {
     kind: "forward_fragment",
   });
+});
+
+test("confirm redirects are absolute, same-origin, and drop the incoming query", () => {
+  const incoming = `${PREVIEW_ORIGIN}/auth/confirm?code=34e770dd&token_hash=abc&type=recovery&next=https://evil.com`;
+  assert.equal(buildSameOriginRedirect(incoming, "/reset-password"), `${PREVIEW_ORIGIN}/reset-password`);
+  assert.equal(
+    buildSameOriginRedirect(incoming, "/forgot-password?reason=link_invalid"),
+    `${PREVIEW_ORIGIN}/forgot-password?reason=link_invalid`,
+  );
+  for (const bad of ["reset-password", "//evil.com/x", "https://evil.com/x"]) {
+    assert.throws(() => buildSameOriginRedirect(incoming, bad), bad);
+  }
 });
 
 test("a bare callback forwards to the fragment handler", () => {
