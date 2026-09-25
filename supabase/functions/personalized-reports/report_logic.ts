@@ -792,7 +792,7 @@ export const INFERENCE_FIELD_RULE =
 // (「値動きを見守る朝刊」「注意が必要」「影響しやすい構成」). Steer generation to neutral observation
 // wording instead of relaxing the Fact checker.
 export const MORNING_WORDING_RULE =
-  "朝刊の title_ja・summary_ja・overview_ja・watch_ja・risk_notes_ja・checkpoints_ja は、中立な観察の言い方にします。「見守る」「注意が必要」「警戒が必要」「〜しやすい構成」「影響を受けやすい」のような、行動を促す言い方や、入力に無い影響の大きさ・受けやすさを示す言い方は使いません。代わりに「注目点」「確認ポイント」「値動きを確認します」のように書きます。";
+  "朝刊の title_ja・summary_ja・overview_ja・watch_ja・watch_notes の note_ja・risk_notes_ja・checkpoints_ja は、中立な観察の言い方にします。「見守る」「注意が必要」「警戒が必要」「〜しやすい構成」「影響を受けやすい」のような、行動を促す言い方や、入力に無い影響の大きさ・受けやすさを示す言い方は使いません。代わりに「注目点」「確認ポイント」「値動きを確認します」のように書きます。";
 
 const IMPACT_INSTRUCTIONS = [
   "holding_impacts は holdings の全銘柄について1件ずつ、holdings の順に書きます（holdings が空なら空配列）。",

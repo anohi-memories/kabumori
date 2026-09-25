@@ -118,6 +118,7 @@ test("C: the morning prompt steers away from advisory wording toward neutral obs
   for (const avoided of ["見守る", "注意が必要", "〜しやすい構成", "影響を受けやすい"]) {
     assert.ok(MORNING_WORDING_RULE.includes(`「${avoided}」`), avoided);
   }
+  assert.ok(MORNING_WORDING_RULE.includes("watch_notes の note_ja"), "watch-list notes are also user-visible Fact-checked morning output");
   for (const preferred of ["注目点", "確認ポイント", "値動きを確認します"]) {
     assert.ok(MORNING_WORDING_RULE.includes(preferred), preferred);
   }
