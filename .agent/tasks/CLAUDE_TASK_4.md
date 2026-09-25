@@ -3,8 +3,8 @@
 - task_id: x-admin-netlify-pr15-live-preview-auth-qa-20260925
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: ユーザーがNetlify初回サイト接続とNext.js Runtime設定を完了したため、PR #15の実Deploy Previewを成立させ、proxy.ts / Supabase SSR / protected route / Kabumori-AI Lab selector境界をlive Netlify runtimeでQAする。PR #15 merge/Vercel production deployは禁止。
@@ -355,3 +355,43 @@ head `b044425`のまま。mergeしていない。remote branch自体も無変更
 
 - status -> review_required
 - next_owner -> chatgpt
+
+
+## Final K4 — PR #15 Netlify Preview QA
+
+Result: **SAFE_STOP_OPERATOR_ACTION**.
+
+Accepted:
+- fresh main reached `4382a33` during task
+- PR #15 remains open/unmerged at `b04442561d9e9c6d01b4a9fcf640c2cf731cd923`
+- main apps/admin local regression 12/12 PASS
+- PR #15 scoped regression 31/31 PASS
+- TypeScript/lint/build PASS on both
+- secret scan clean
+- no unexpected apps/admin drift
+- no production mutation
+- no Netlify preview mutation
+- no PR #15 remote branch mutation
+
+Blockers:
+1. Netlify Team protection blocks unauthenticated live QA from Claude's session.
+2. PR #15 predates Netlify site creation and has no Deploy Preview; prepared merge/freshen commit could not be pushed from Claude due execution-environment shared-resource guard.
+
+Prepared source-neutral branch refresh:
+- local-only merge commit: `284760e3bf92368e0b384e1648461649d63f7e7b`
+- parents: PR #15 head + fresh main at task time
+- conflict: 0
+- apps/admin reconciliation impact only:
+  - netlify.toml comments
+  - .gitignore .netlify
+  - phase2 Netlify doc
+- selector/brand semantics unchanged
+- NOT pushed; do not assume this SHA exists remotely
+
+User/operator actions required before continuation:
+1. Disable Netlify Team protection/visitor access control for the QA site, or explicitly provide an invited Netlify viewer account through normal Netlify access management.
+2. Retrigger PR #15 Deploy Preview. Safest path is to update the PR branch with fresh main through GitHub UI/normal branch update, or authorize a fresh G4 task to perform an equivalent safe branch refresh.
+
+After those are complete, assign a new G4 continuation for live /login, protected-route, proxy/runtime, selector and cross-brand QA.
+
+Do not merge PR #15 or deploy Vercel production yet.
