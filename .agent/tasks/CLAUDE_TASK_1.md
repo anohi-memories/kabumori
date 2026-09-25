@@ -3,8 +3,8 @@
 - task_id: kabumori-branded-launch-screen-20260925
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: ユーザー決定「かぶモリ専用の起動画面を作る」に基づき、Expoテンプレのnative splash / AnimatedSplashOverlayを、既存の承認済みかぶモリアイコンを使ったブランド起動画面へ置き換える。新しい画像生成は行わない。
@@ -246,3 +246,28 @@ No EAS build, no EAS credential/env mutation, no TestFlight/App Store Connect ac
 ### Ready for first real-iPhone/TestFlight visual acceptance?
 
 **Yes, source-side.** The launch screen is source-complete and verified through a real `expo prebuild`, the same mechanism a production build uses to generate native assets. Per this task's own framing, this does **not** constitute final visual acceptance — that still requires the user seeing it on an actual iPhone via a separately authorized real-device build. If it needs a refinement pass after that (e.g. a dedicated splash derivative distinct from the flat app icon, or adding a wordmark), it can be revisited without redoing this decision.
+
+
+## Final K1 — branded launch screen
+
+Verdict: **PASS**.
+
+Accepted:
+- PR #36 head `5b72e5784b07ebf7871879471f53fe06e6f072eb`
+- merged -> `b869fb557f009ca5817b6d2a853d529bd29c20c2`
+- native splash now uses approved Kabumori icon on `#eef3ed`
+- AnimatedSplashOverlay uses the same approved icon/background/size
+- Expo blue / Expo logo are gone from the normal launch path
+- fade + slight scale exit, 600ms
+- Reduce Motion handled
+- 135/135 tests, src tsc 0, expo config/prebuild/web export/diff PASS
+- app identity fields unchanged
+- production mutation 0
+- no Codex review required under reduced-review policy
+
+Important:
+This implementation is the simple approved-icon baseline. The newer visual concept discussed in ChatGPT (Yume-chan + robot artwork) is not yet wired into the app and remains a later design decision/refinement.
+
+Next gate:
+- real iPhone/TestFlight visual acceptance
+- if user later approves a custom launch artwork, create a separate G1 refinement task rather than changing this accepted baseline implicitly.
