@@ -974,3 +974,13 @@
 - G4 assigned narrow fixes for all three findings.
 - after fixes, one bounded real recovery + invite E2E is required before merge to verify actual AMR/session/logout behavior.
 - recommended Claude model: Opus5.5（高）.
+
+## Final K4 PR #33 auth fix round2
+
+- verdict: **PASS**.
+- PR #33 head `2528b5686bcbb3630fb636cec12162803f921f8f`.
+- generic otp/magiclink denied; submit-time recovery freshness reverified server-side; signOut failures no longer reported as completed logout.
+- apps/admin tests 83/83 PASS; tsc/lint/build/diff/secret scan PASS; PR #15 Admin/multibrand regression PASS.
+- Netlify Preview PASS; production mutation=0.
+- H1 assigned focused re-review before bounded real recovery/invite E2E.
+- recommended Codex model: Sol（高）.
