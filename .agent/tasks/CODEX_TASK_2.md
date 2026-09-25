@@ -3,8 +3,8 @@
 - task_id: x-admin-pr15-auth-crossbrand-final-review-20260925
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: K4 PASS済みPR #15 multi-brand admin selectorを、認証・認可・cross-brand leakage・server-side brand scoping・Netlify Preview実挙動の観点で独立最終レビューする。merge/Vercel production/DB mutationは禁止。

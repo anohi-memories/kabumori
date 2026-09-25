@@ -1,3 +1,34 @@
+## H2 — PR #15 admin auth / cross-brand final review — 2026-09-25
+
+- task_id: `x-admin-pr15-auth-crossbrand-final-review-20260925`
+- verdict: **PASS-WITH-FIX**. Two concrete server-side authorization/context gaps were fixed on PR #15; C2 should review the updated head before any merge. No merge, deploy, or production mutation.
+- fresh_origin_main_at_start: `72042530a1f63c92b0f2faf9d7ac7398b4032ff7`; latest main before PR push: `aa8a68962d1408ed042f8a5ae6c5fea8d8dbf45d`. Intervening changes did not touch `apps/admin` or H2 control files.
+- PR #15: `admin-multibrand-selector-phase2-20260924`, original head `a8f98444425c25796e9fef611445b0f574120669`; the original head and semantic predecessor `b04442561d9e9c6d01b4a9fcf640c2cf731cd923` have identical tree `ab8c572641ee8a148bd97f58660268abd2f36d8c`.
+- fix_commit: `de354e7ff9f647435a3c42a87629be1e735794eb`; pushed to the PR #15 branch and read back as its OPEN PR head.
+- changed_files (PR fix only): `apps/admin/src/lib/actions/select-brand.ts`, `apps/admin/src/lib/actions/system-toggle.ts`, `apps/admin/src/lib/active-brand.ts`, `apps/admin/src/lib/admin-context.ts`, `apps/admin/src/lib/brand-boundary.test.ts`, `apps/admin/src/lib/selected-brand.test.ts`, `apps/admin/src/lib/selected-brand.ts`.
+
+### Findings and boundary assessment
+
+1. **P1 fixed — independent page/action admin gate.** The protected layout checked `admin_users`, but page components execute in parallel and independently called `requireActiveBrand()`. Its resolver accepted `brand_memberships` owner/admin alone as scoped access. A non-`admin_users` member could therefore pass the page-side brand gate and start brand-scoped data reads even while the layout redirected; live RLS permits membership reads on some operational tables. Whether any response fragment leaked in a real authenticated session was not demonstrated. The brand-selection Server Action had the same membership-only acceptance. `chooseAdminActiveBrand()` now requires the existing global `admin_users` result before either page or action accepts a selection. Unauthenticated/unknown/not-admin cases fail closed. The generic resolver's scoped behavior remains available to other callers, but does not authorize this admin app.
+2. **P1 fixed — Kabumori-only mutation context.** `setSystemEnabled()` checked login and `admin_users` and pinned `posting_windows` DML to Kabumori, but did not check which brand was selected. A global admin on the AI Lab view could directly invoke the Server Action and change Kabumori settings despite hidden controls. The action now re-resolves the authorized active brand and denies the mutation unless it is an accepted Kabumori selection, before any read/write path. Unknown/tampered selection also denies. The allowlisted setting keys and fixed Kabumori `brand_id` predicates remain unchanged.
+3. **Cross-brand reads — PASS.** `scheduled_posts`, `post_execution_logs`, nested `scheduled_posts`/report-run lookups, `morning_report_runs`, and `posting_windows` are filtered by the server-authorized brand ID. AI Lab skips the unscoped Important News candidate tables and Kabumori-only singleton settings, showing read-only posting-window status. The X link builder validates numeric post ID and a safe handle from the server-owned registry; no client-supplied handle reaches a URL.
+4. **RLS/backend contract — PASS with limitation.** Read-only live policy inspection showed `admin_users` self-read, `brand_memberships` self-read, member SELECT policies on operational rows, and separate admin SELECT policies. `brands`/`social_accounts` are not globally readable to an `admin_users` user without membership, so the code-owned `ADMIN_BRANDS` allowlist is justified here; it does not replace DB RLS and must be updated deliberately when brands change. Mio remains excluded. No service-role key or RLS bypass was introduced.
+
+### Tests and Preview
+
+- All `apps/admin/src/lib/*.test.ts`: **34/34 PASS** (including 3 added adversarial assertions). Focused selected-brand/boundary: **20/20 PASS**.
+- `npx tsc --noEmit`: PASS. `npm run lint`: PASS. `npm run build`: PASS (Next.js 16.3.4; protected routes dynamically rendered). `git diff --check`: PASS. Targeted added-line secret scan: 0 findings.
+- Netlify Deploy Preview for final commit `de354e7`: commit status `netlify/shiny-kheer-77a154/deploy-preview=success`; URL `https://deploy-preview-15--shiny-kheer-77a154.netlify.app`. Read-only HTTP: `/login` 200; `/`, `/posts`, `/important-news` each 307 to `/login`; invalid synthetic Supabase cookie on `/posts` also 307; following redirect reaches 200 after one hop. Protected response headers include `server: Netlify` and `x-powered-by: Next.js`; no observed 404/5xx/redirect loop.
+- Authenticated live QA remains **unverified**: no legitimately available admin/non-admin test session in this task. No password/token was requested or recorded. Selector behavior and server action denial were covered by source/tests, not real signed-in Preview interaction.
+
+### Disposition and safety
+
+- merge_recommendation: **C2 review of updated PR head required**; do not merge/deploy solely on this report. Authenticated live QA is the remaining acceptance risk if required by C2.
+- production mutation: **0**. DB/schema/RLS/Auth/settings/Cron/Edge deploy/Netlify config: 0. OpenAI/X/Push/post: 0. PR merge: 0. Secrets exposed: 0.
+- other workstreams: unchanged; review and control updates used isolated H2 worktrees, not the formal checkout or other slots. H2 TASK is `review_required` / `next_owner: chatgpt`.
+
+---
+
 ## H2 — PR #29 prompt hardening + v27 validator final review — 2026-09-25
 
 - task_id: `kabumori-pr29-plus-v27-validator-final-review-20260925`
