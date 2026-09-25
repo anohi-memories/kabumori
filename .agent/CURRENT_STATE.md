@@ -945,3 +945,12 @@
 - production mutation=0.
 - H1 assigned focused final Auth/security review before merge.
 - recommended Codex model: Sol（高）.
+
+## Final K3 PR #37 merge/post-verify
+
+- verdict: **PASS**.
+- reviewed head `7309805953b4e4ec9763377a0a02093065da8c82` merged -> `777997a13c39c12ba409a0c6dc95cad18360038a` with no semantic drift.
+- x-test-post 501/501; _shared 141/141; disposable core/Phase1I behavior-race-cleanup proofs PASS.
+- Kabumori legacy token path unchanged.
+- production mutation=0.
+- G3 closed. Stage 0/1/2 production rollout remains separately gated and requires explicit approval/new TASK.
