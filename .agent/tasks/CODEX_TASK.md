@@ -3,8 +3,8 @@
 - task_id: x-admin-pr33-final-auth-security-review-20260926
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol（高）
 - purpose: K4 PASS済みPR #33（Web Admin password recovery / invite flow）を、Auth/session/open-redirect/account-enumeration/admin-boundaryの観点だけに絞って独立最終レビューする。production Auth設定・ユーザー変更・mergeは禁止。

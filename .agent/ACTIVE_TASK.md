@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: x-admin-pr33-final-auth-security-review-20260926
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: assigned; PR #33 focused Auth/session/open-redirect/admin-boundary final review; recommended Sol（高）
+- allocation: H1 final review FAIL; PR #33 remains open/unmerged; AMR allowlist and submit-time freshness are blockers; C1 required; recommended Sol（高）
 
 ## Codex H2
 - owner: codex
