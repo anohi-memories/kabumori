@@ -1,442 +1,168 @@
 # Claude Task 4
 
-- task_id: x-admin-pr15-merge-production-verify-20260925
+- task_id: x-admin-pr33-rebase-stabilize-auth-review-prep-20260925
 - owner: claude
 - slot: claude-4
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: claude
 - priority: high
-- recommended_model: Sonnet5（中）
-- purpose: Codexレビュー済み・authenticated live QA済みのPR #15を、reviewed head以降の差分がNetlify再build用コメント1行だけであることをfreshに再確認したうえでmainへmergeし、Web管理画面のproduction反映とブランド境界を安全に確認する。新規機能実装ではなくmerge-only + production verificationを主眼とする。
+- recommended_model: Opus5.5（高）
+- purpose: open PR #33（Web Admin password recovery / invite flow）をfresh mainへ安全に追従させ、現在のmerge conflictを解消し、既存Admin/Auth/brand境界を壊さずにsource/Preview候補として再安定化する。production Auth URL設定・merge・本番反映はこのTASKでは行わず、K4後に独立Codexレビューへ渡せる状態まで仕上げる。
 
-## Known-good context
+## Current known state
 
-PR:
-- #15 `feat(admin): multibrand selector + brand-parameterized dashboard queries (Phase 2)`
-- branch: `admin-multibrand-selector-phase2-20260924`
-- latest known head: `f04c44ac564aa775fc0d68106648a0d2e4fcd564`
-- Codex reviewed functional head: `de354e7ff9f647435a3c42a87629be1e735794eb`
-- review verdict: PASS-WITH-FIX
-- reviewed-head以降の既知変更: `apps/admin/netlify.toml` のNetlify再build用runtime影響なしコメント1行のみ
-- Netlify Deploy Preview: PASS
-- authenticated live QA: PASS
-- かぶモリ ⇄ 会社員AIラボ ブランド切替: PASS
-- service_role/RLS bypass: none
-- apps/admin tests at review: 34/34
-- focused boundary: 20/20
-- tsc/lint/build: PASS
+PR #33:
+- title: `feat(admin): Web password recovery and invite flow (G4)`
+- branch: `g4/admin-password-recovery-20260925`
+- current head: `dd66921a1578d6b54e707e5dce81eaa6ab1701af`
+- state: open
+- commits: 5
+- changed_files: 11
+- additions: 1198
+- mergeable: false
+- mergeable_state: dirty
 
-Deployment policy:
-- development / PR / Preview: Netlify
-- final production: Vercel
-- Vercel Preview rate-limit failure aloneはこのTASKのmerge前ブロッカーにしない
-- production反映は実際に確認できた場合だけ成功扱いする
+Implemented already:
+- `/forgot-password`
+- `/auth/confirm`
+- `/reset-password`
+- login page password-reset entry/notice
+- generic recovery response to avoid account enumeration
+- fixed-origin redirect construction / no arbitrary next redirect
+- recovery/invite-only confirmation flow
+- recent email-link AMR requirement for reset
+- sign-out after password update
+- Admin authorization remains separate through `admin_users`
+
+Prior source tests:
+- auth/lib tests 46/46
+- tsc/lint/build/diff PASS
+These must be rerun after conflict resolution.
 
 ## Mandatory startup
 
-1. Read `PROJECT_RULES.md`
-2. Read `.agent/ORCHESTRATION.md`
-3. Read `.agent/CURRENT_STATE.md`
-4. Read `.agent/ACTIVE_TASK.md`
-5. Read this G4 TASK
-6. Fresh fetch `origin/main`
-7. Fresh fetch PR #15 metadata / latest head / mergeability / checks
-8. Confirm PR #15 latest head is still `f04c44ac564aa775fc0d68106648a0d2e4fcd564`
-9. Compare `de354e7ff9f647435a3c42a87629be1e735794eb..f04c44ac564aa775fc0d68106648a0d2e4fcd564`
-10. Confirm reviewed head以降の変更がNetlify再build用コメント1行のみで、機能/Auth/brand logic差分がない
-11. Confirm dedicated independent G4 worktree/checkout; do not share a working directory with G1/G2/G3/H1/H2
-12. Confirm no active slot overlaps `apps/admin/**`, auth/admin boundary, production Admin deployment, or PR #15
-13. If any head drift, semantic diff, conflict, or ownership ambiguity exists: STOP and report; do not merge
+1. Read `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, this TASK.
+2. Use a dedicated independent G4 worktree/checkout.
+3. Fresh fetch `origin/main` and PR #33.
+4. Confirm H1 is reviewing universal OAuth files only and there is no overlap with `apps/admin/**`.
+5. Inspect exact PR #33 vs current main conflict set before changing anything.
+6. Preserve all post-PR15 production Admin behavior now on main:
+   - multibrand selector
+   - admin_users gate
+   - Kabumori/AI Lab brand isolation
+   - Netlify/Vercel runtime behavior
+7. Do not touch G3/H1 OAuth/Vault/migration files.
 
-## Scope A — pre-merge safety check
+## Scope A — conflict analysis
 
-Verify:
-- PR #15 remains OPEN and mergeable
-- latest head exactly matches expected candidate
-- reviewed head ancestor / diff is understood
-- no new functional changes since Codex review
-- Netlify Preview remains successful or equivalent latest candidate Preview is successful
-- authenticated QA evidence remains applicable to the exact candidate
-- no unrelated source drift in the PR
-- no secret-bearing diff
-- no service_role addition
-- no RLS bypass
-- no admin_users/Auth user mutation embedded in PR
-- no DB/migration/RPC/Edge Function change embedded in PR
+Determine exactly why PR #33 is dirty against current main.
 
-If semantic source changed since review:
-- do not self-approve
-- STOP for ChatGPT review-routing decision
+For every conflict:
+- identify whether main or PR #33 owns the newer semantic behavior
+- preserve both when non-conflicting
+- do not blindly choose ours/theirs
+- especially inspect login/auth/layout/proxy/runtime files changed since PR #33 branched
 
-## Scope B — merge
+Produce a concise conflict map in the Report.
 
-Only if Scope A passes:
-1. Fresh-check `origin/main` immediately before merge
-2. Reconfirm no competing push changed relevant Admin/auth/brand files
-3. Merge PR #15 to `main`
-4. Record exact merge commit SHA
-5. Do not add unrelated cleanup or refactor
-6. Do not change PR #33 in this task
+## Scope B — integrate PR #33 onto fresh main
 
-## Scope C — post-merge source verification
+Update the PR branch safely so it is based on current main semantics.
 
-On fresh `origin/main` after merge:
-- confirm PR #15 candidate files are present as merged
-- rerun relevant `apps/admin` tests
-- rerun focused brand-boundary tests
+Required invariants:
+- no regression to PR #15 multibrand Admin behavior
+- `admin_users` remains the only Admin authorization gate
+- password reset/invite never grants Admin authorization
+- no service_role in browser/client
+- no password/token in URL/log
+- no account enumeration
+- no open redirect
+- normal password-login session cannot access reset-password flow
+- recovery/invite link is short-lived / appropriately recent per existing design
+- callback types outside allowed recovery/invite fail closed
+- sign-out after password update remains
+- existing mobile `kabumori://reset-password` flow outside apps/admin is untouched
+
+## Scope C — tests
+
+At minimum rerun:
+- all `apps/admin/src/lib/*.test.ts`
+- targeted recovery/invite tests
+- existing PR #15 multibrand/admin boundary tests
 - `npx tsc --noEmit`
 - lint
 - build
 - `git diff --check`
-- targeted secret scan
-- verify brand-scoped data queries retain `brand_id` filtering
-- verify Kabumori-only surfaces remain unavailable/non-operable for AI Lab
-- verify `setSystemEnabled()` cannot mutate Kabumori from another active brand
-- verify `admin_users` remains the Admin entry gate
-- verify no service_role or RLS bypass exists
+- targeted secret/credential scan
 
-## Scope D — production deployment / verification
+Add adversarial tests if needed for:
+- arbitrary `next`/redirect URL
+- recovery email enumeration
+- normal-login session trying `/reset-password`
+- expired/stale recovery session
+- wrong token type
+- reused callback
+- query/fragment credential leakage
+- non-admin reset success followed by Admin route access denial
 
-Use existing approved production deployment path only. Do not invent a new hosting/config model.
+## Scope D — Netlify Preview
 
-1. Determine whether merge to main automatically triggers the intended Vercel production deploy.
-2. If production deploy is blocked by a platform limit or requires a destructive/manual configuration change, do not fake success; report the blocker.
-3. If production deploy completes, verify the exact production deployment corresponds to the merged commit.
-4. Read-only/live QA on production:
-   - `/login` reachable
-   - successful Admin login using the existing operator account without recording credentials
-   - かぶモリ ⇄ 会社員AIラボ selector works
-   - brand-specific dashboard data does not cross-mix
-   - Kabumori-only controls/surfaces are not operable while AI Lab is active
-   - unauthorized/non-admin boundary still fails closed
-   - no obvious secret/token exposure in rendered output or logs available to the task
-5. Do not mutate business data merely to test reads.
-6. If a write-path check would mutate production, use an existing safe read-only/static boundary proof instead unless separately authorized.
+If current repo policy allows automatic PR Preview after branch update:
+- verify exact updated PR head deploys successfully to Netlify
+- unauthenticated `/forgot-password`, `/auth/confirm`, `/reset-password`, `/login` behavior
+- no 404/5xx/redirect loop
+- do not perform destructive Auth mutation merely for Preview QA
+
+If one real recovery E2E requires production/real Auth configuration not already safely available, STOP and report the exact operator gate. Do not change Site URL/Redirect URLs in this task.
 
 ## Explicitly forbidden
 
-- DB/schema change
-- migration apply/create/edit
-- RPC change
-- Edge Function change/deploy
-- RLS/policy change
-- `admin_users` mutation
-- Supabase Auth user mutation
-- Supabase Site URL / Redirect URL change
-- OAuth change
-- Vault read/write for X credentials
-- X secret/token mutation
-- X API post/media action
-- service_role addition/exposure
-- PR #33 merge or modification
-- unrelated source cleanup/refactor
-- G1/G2/G3/H1/H2 task/control-file overwrite
-- changing another slot's branch/worktree/server
+- PR #33 merge
+- Vercel production deploy
+- Supabase Site URL / Redirect URL mutation
+- Auth user/admin_users mutation
+- DB/RLS/RPC/migration changes
+- service_role exposure
+- G3/H1 OAuth/Vault/token-refresh changes
+- X API call/post/media
+- important-news/common-search work
+- unrelated cleanup
 
 ## Production mutation budget
 
-Allowed:
-- normal GitHub merge of PR #15
-- normal production deployment caused by that merge, if it follows the existing approved pipeline
-- authenticated read-only production QA
+- DB/schema/RLS/RPC: 0
+- Auth config/user mutation: 0
+- Edge deploy: 0
+- X/OAuth/Vault: 0
+- production Admin deploy: 0
+- business-data mutation: 0
 
-Not allowed:
-- DB/Auth/RLS/OAuth/Vault/X/business-data mutations
+Netlify PR Preview caused by normal branch update is allowed.
 
-## Completion conditions
+## Completion / K4
 
-PASS only if:
-- exact PR candidate verified against reviewed head
-- no semantic drift requiring new review
-- PR #15 merged successfully
-- post-merge tests/checks pass
-- production deployment status is truthfully determined
-- if deployed, exact merged commit is verified in production
-- authenticated production QA passes for login + brand switching + brand isolation + Kabumori-only boundary
-- forbidden mutations remain 0
+Report:
+- fresh main/head
+- exact conflict map
+- resolution decisions
+- final PR head
+- changed files
+- tests/counts
+- multibrand/Admin regression result
+- security invariants
+- Netlify Preview result
+- production mutation=0
+- remaining operator gates
+- whether independent Codex Auth/security review is ready
 
-If production deployment is blocked:
-- source/merge may be reported PASS
-- deployment must be reported BLOCKED/PENDING, not PASS
-- provide the exact blocker and safest next step
-
-## Report
-
-At completion append `## Report` containing:
-- task_id
-- result
-- model_used
-- dedicated worktree / branch
-- fresh main before merge
-- PR #15 exact head
-- reviewed head comparison result
-- mergeability/checks
-- merge commit SHA
-- changed_files / semantic drift assessment
-- tests with exact counts
-- Netlify status
-- Vercel production deploy status
-- production commit/version evidence
-- authenticated production QA results
-- brand isolation / Kabumori-only boundary results
-- secret/service_role/RLS safety checks
-- production mutations performed
-- remaining_issues
-- next_recommendation
-
-Then set:
+Then:
 - status -> review_required
 - next_owner -> chatgpt
+- STOP for K4.
 
-STOP for K4.
-
-## Review policy for this task
-
-No automatic new Codex review is required if:
-- latest PR head is unchanged,
-- reviewed-head以降が本当にruntime影響なしコメント1行のみ,
-- merge-only/post-merge verification does not alter source semantics.
-
-If any semantic source drift is found, STOP and return to ChatGPT before merge.
+Because this is Auth/security-sensitive, K4 should normally route one focused Codex review before merge.
+Recommended Codex model after K4: Sol（高）.
 
 ## Report
 
 - pending
-
-## Report (execution)
-
-- task_id: x-admin-pr15-merge-production-verify-20260925
-- result: **BLOCKED_AT_MERGE — Scope A（merge前安全確認）PASS / merge未実施**。`gh pr merge`がClaude Code実行環境のauto mode classifierに`[Merge Without Review]`として拒否された。回避は試みず停止。production deploy・post-merge検証・production QAは未実施。
-- model_used: Opus 5.5（TASK推奨 Sonnet5（中）。セッションのモデルは自分で変更できないため現行のまま実施）
-- dedicated worktree / branch: G4専用 `/Users/yuya/Developer/kabumori/.claude/worktrees/g4-x-admin-pr15`（branch `worktree-g4-x-admin-pr15`）。他slotとの共有なし。
-
-### fresh main before merge
-
-`83375da`（merge試行直前にfetch）。in_progress push（`561139d`）以降、`apps/admin`への新規commitは0件。
-
-### PR #15 exact head
-
-`f04c44ac564aa775fc0d68106648a0d2e4fcd564`（TASK記載の期待値と一致）。state OPEN、base `main`。GitHubの`mergeable`/`mergeStateStatus`は確認時点で`UNKNOWN`（算出中）だったため、ローカルで`git merge-tree --write-tree`により**競合0件**を確認（merged tree `0ad1b194`）。
-
-### reviewed head comparison result
-
-- `de354e7`はf04c44aの祖先。間のcommitは`f04c44a chore(netlify): retrigger PR15 preview after env update`の1件のみ。
-- 差分は`apps/admin/netlify.toml`末尾への**コメント1行（＋空行）のみ**:
-  `# Retrigger PR #15 Deploy Preview after Netlify environment variable update (no runtime effect).`
-- 機能/Auth/brandロジックの差分なし → TASKの方針どおり新たなCodexレビューは不要と判断。
-- mainとmergeした場合の`netlify.toml`の実効設定（`[build]` command/publish、`NODE_VERSION`）はmainと同一。Phase 2のコメント更新とPR #15の末尾コメントは別hunkで自動解決。
-
-### mergeability / checks
-
-- `netlify/shiny-kheer-77a154/deploy-preview`: SUCCESS（+ Header/Redirect rules SUCCESS、Pages changed NEUTRAL）
-- `Vercel`: FAILURE（Preview rate limit。TASK方針どおりmerge前ブロッカーにしない）
-
-### changed_files / semantic drift assessment
-
-PR #15の変更（merge-base比）は`apps/admin/**`の20ファイルのみ、`apps/admin`外は0件。追加行のスキャン結果: service_role / sb_secret / JWTリテラル / APIキー形式 0件、`.insert(`/`.delete(`/`.upsert(`/`.rpc(`/新規`.update(` 0件、`createClient(`（service client）0件。DB/migration/RPC/Edge Function/`admin_users`・Auth user変更の混入なし。semantic driftなし。
-
-### merge commit SHA
-
-**なし（未merge）**。
-
-### 実行できなかった操作（いずれもclassifierが拒否、回避せず）
-
-1. `gh pr merge 15 --merge --match-head-commit f04c44ac564aa775fc0d68106648a0d2e4fcd564` → `[Merge Without Review]`
-2. merge後のtreeを事前検証するためのローカル一時worktree作成（simulated merge commit `dd692df`、未push・未参照のローカルobjectのみ） → `[Merge Without Review]`
-3. PR #15 head `f04c44a`での回帰テスト用の一時worktree作成 → `[Production Deploy]`
-
-このため、今回のセッションではPR #15 headでの回帰テストも再実行していない（直近の有効な証拠はTASK記載のreview時点: tests 34/34、focused boundary 20/20、tsc/lint/build PASS、Netlify Preview + authenticated live QA PASS。reviewed head以降の差分はコメント1行のみなので、この証拠は現headにもそのまま当てはまる）。
-
-### Netlify status / Vercel production deploy status / production evidence / production QA
-
-- Netlify Preview: SUCCESS（上記）
-- Vercel production deploy: **未発生（mergeしていないため）**
-- production commit/version evidence: なし
-- authenticated production QA / brand isolation / Kabumori-only boundary（production）: **未実施**
-
-### secret/service_role/RLS safety checks
-
-PR差分に対して実施（上記）。問題なし。
-
-### production mutations performed
-
-**0件**。merge・deploy・DB/Auth/RLS/OAuth/Vault/X/業務データのいずれも変更なし。自スロットのTASK file更新のみ。
-
-### remaining_issues
-
-1. PR #15のmergeはこの実行環境の権限設定で拒否される。人間がmergeするか、この種の操作を許可する設定が必要。
-2. mergeするとVercel productionのadminが自動deployされる（既存パイプライン）。Vercelは直近もPreviewがrate limitでFAILURE続きのため、production deployも同じ制限で止まる可能性がある（その場合はBLOCKEDとして報告すべき）。
-
-### next_recommendation
-
-1. ユーザーが次のどちらかを選ぶ:
-   - (A) ユーザー自身がmergeする:
-     `gh pr merge 15 --repo anohi-memories/kabumori --merge --match-head-commit f04c44ac564aa775fc0d68106648a0d2e4fcd564`
-     （head固定なので、万一headが変わっていればmergeは失敗して安全側に止まる）
-   - (B) Claude Codeの権限設定でこの操作を許可してからG4を再開する。
-2. merge後にG4を再開すれば、Scope C（post-merge検証: tests/tsc/lint/build/brand境界/`admin_users`ゲート/service_role無し）とScope D（Vercel production deployの実際の状態確認、deployされたcommitの一致確認、authenticated production QA）をこのまま実施できる。
-
-## Completion (blocked at merge by execution-environment permission)
-
-- status -> review_required
-- next_owner -> chatgpt
-
-
-## ChatGPT merge continuation
-
-- checked_at: 2026-09-25 JST
-- PR #15 exact head before merge: `f04c44ac564aa775fc0d68106648a0d2e4fcd564`
-- merge performed by ChatGPT via GitHub connector with expected-head protection
-- merge result: PASS
-- merge commit: `f610503761729bdc09dfa483bd218a769350a2dc`
-- PR #15 state after merge: merged
-- main after merge: `f610503761729bdc09dfa483bd218a769350a2dc`
-- no source changes were added by ChatGPT
-- next action: resume G4 from Scope C and Scope D only
-  - post-merge source verification
-  - relevant apps/admin tests + focused brand-boundary tests
-  - tsc/lint/build/diff/secret checks
-  - confirm brand_id filtering, Kabumori-only boundaries, admin_users gate
-  - determine actual Vercel production deployment status
-  - if production deployed, verify exact merged commit and perform authenticated read-only production QA
-- do not repeat merge
-- if Vercel production is blocked by rate limit, report deployment BLOCKED/PENDING rather than success
-
-## Report (post-merge / production, Scope C + D)
-
-- task_id: x-admin-pr15-merge-production-verify-20260925
-- result: **merge PASS（ChatGPT実施） / post-merge source verification PASS / Vercel production deploy PASS（PR #15入りのbuildが本番で配信中と確認） / authenticated production QA BLOCKED（操作者のログイン済みセッションが無い）**。TASKのPASS条件のうち「ログイン込みの本番QA」だけが未達のため、全体はPASSとせず review_required とする。
-- model_used: Opus 5.5（TASK推奨 Sonnet5（中）。セッションのモデルは自分で変更できないため現行のまま）
-- dedicated worktree / branch: G4専用 `/Users/yuya/Developer/kabumori/.claude/worktrees/g4-x-admin-pr15`（`worktree-g4-x-admin-pr15`）。mergeは再実行していない。
-
-### merge（ChatGPT continuation記載の事実を再確認）
-
-- PR #15: MERGED（2026-09-25T14:11:55Z）
-- merge commit `f610503761729bdc09dfa483bd218a769350a2dc`、parents = main `26b0e89` + PR head `f04c44a`（期待headどおり）
-- 現在のmain（着手時 `a06ea70`）はmerge commitを含む。
-
-### Scope C — post-merge source verification（fresh main上）
-
-- 現在mainの`apps/admin`とPR head `f04c44a`の差分は、main側に既にあったPhase 2の3ファイル（`.gitignore`・`docs/phase2-netlify-deploy-preview.md`・`netlify.toml`のコメント）のみ。**`apps/admin/src`はPR headと完全一致**（PR #15の全ファイルがreview済みの内容のままmergeされている）。
-- clean install後:
-  - `node --experimental-strip-types --test src/lib/*.test.ts`: **34/34 pass**（review時と同数）
-  - focused brand-boundary（`brand-boundary.test.ts` + `brand-query-isolation.test.ts` + `selected-brand.test.ts`）: **27/27 pass**
-  - `npx tsc --noEmit`: PASS / `npm run lint`: PASS / `npm run build`（ダミー公開env）: PASS
-  - `git diff --check`: PASS（作業ツリーの変更は自TASK fileのみ）
-  - client bundleのJWTリテラル: 0件
-- 境界のソース確認:
-  - brand_id絞り込み: `today-scheduled-posts`（2箇所）・`post-history`（3）・`recent-failures`（3）・`system-status`（3）すべて`.eq("brand_id", brandId/brand.id)`
-  - `setSystemEnabled()`: 変更前に`getActiveBrandContext()`→`isKabumoriMutationAllowed()`で選択中ブランドがかぶモリ以外なら拒否。`posting_windows`の読み書きは`KABUMORI_BRAND_ID`固定（クライアントや選択ブランドからは取らない）→ 他ブランド選択中にかぶモリの設定を変更できない。
-  - 重要ニュース: 選択中ブランドがかぶモリの時だけ読み込み、それ以外は案内文のみ。
-  - `admin_users`: `(admin)/layout.tsx`で従来どおりsession→`admin_users`→無ければ`/unauthorized`。
-  - `service_role` / service client（`createClient(`）: admin src全体で0件。
-
-### Scope D — Vercel production deploy
-
-- merge commit `f610503`のVercel status: **failure「Canceled from the Vercel Dashboard」**（deployment `6662686152`）。
-- 直後のcommit `fefb182`（merge commitに`.agent/tasks/CLAUDE_TASK_4.md`の変更を足しただけ。`apps/admin`は`f610503`と完全一致を確認）のVercel production deploy: **success「Deployment has completed」**（deployment `6662686163`、2026-09-25T14:12:53Z）。
-- それ以降のmain commit（`a06ea70`・`b2ce60f`等）は`Deployment rate limited — retry in 24 hours.`で失敗 → 本番は`fefb182`のdeploymentのまま。
-- **本番が実際にPR #15入りのbuildであることの直接証拠**: 本番エイリアス（`HANDOFF.md`記載 `https://admin-lime-one-zucdop4nh7.vercel.app`）の`/login`が読み込む共通CSS（`/_next/static/immutable/chunks/3ul2w7chwj9tp.css`）に、PR #15で追加された`.brand-selector` / `.brand-selector-single` / `.brand-selector-pending` / `.brand-selection-warning` / `.brand-scope-note`の**5クラスがすべて含まれる**ことを確認。
-- 補足: `f610503`自身のdeployがcanceledになった理由（手動キャンセルか、同時刻の`fefb182`に置き換えられたか）はGitHub側の記録からは判別できない。実害はない（`fefb182`が同一コードで成功）。
-
-### production QA（未認証で実施できた範囲）
-
-本番エイリアスに対して:
-- `/login` 200、`/unauthorized` 200
-- `/`・`/posts`・`/important-news`（未認証）→ `/login`へ1回転送、loop無し、5xx無し
-- tampered session cookieで`/posts` → 307 `/login`（fail closed）
-- `/login`のHTMLに秘密値らしき文字列（JWT・`sb_secret_`・`service_role`）0件
-- `server: Vercel`、`x-powered-by: Next.js`
-
-### authenticated production QA — BLOCKED
-
-- このセッションのブラウザには本番ドメインのログイン状態が無く（`/`→`/login`、`sb-`cookie 0件）、操作者の認証情報は要求・入力していない（TASK指示どおり記録もしない）。
-- 未実施: ログイン成功、かぶモリ ⇄ 会社員AIラボの切替、ブランド別データの非混在、AI Lab選択中のかぶモリ専用操作不可、非adminのfail closed（ログイン後）。
-- 同一コードに対する**認証込みのlive QAはNetlify Preview上でPASS済み**（TASK記載のknown-good context）。本番で未確認なのは「本番環境・本番ドメインでの同じ操作」のみ。
-
-### secret/service_role/RLS safety checks
-
-PR差分（Scope A時）・merge後src・client bundle・本番HTMLのいずれも問題なし。RLS/Auth/`admin_users`の変更はPRに含まれていない。
-
-### production mutations performed
-
-**0件（自分による操作）**。mergeはChatGPTが実施済みで、本タスクでは再mergeしていない。本番deployはそのmergeに伴う既存パイプラインの自動deployのみ。DB/Auth/RLS/OAuth/Vault/X/業務データの変更なし。本番QAは読み取りのみ。
-
-### remaining_issues
-
-1. **ログイン込みの本番QAが未実施**（唯一の未達項目）。
-2. mainへの後続commitはVercelのrate limitで本番deployされていない。現状は`.agent`のみの変更なので本番の中身に影響はないが、今後`apps/admin`を変更するmergeは、rate limit解除まで本番に出ない。
-3. merge commit自身のdeployがcanceledになった理由は不明（影響なし）。
-
-### next_recommendation
-
-1. ログイン込みの本番QAを完了するには、次のいずれか:
-   - (A) 操作者がClaudeのブラウザペインで本番エイリアスに自分でログインする（認証情報はClaudeに渡さず、ペイン上で本人が入力）→ その後G4を再開すれば、切替・非混在・かぶモリ専用操作の不可を読み取りのみで確認する。
-   - (B) 操作者自身が本番で同じ項目を目視確認し、結果をTASKに記録する。
-2. 本番のブランド切替はNetlifyで検証済みのコードと同一なので、上記QAはリスク確認というより最終確認の位置づけ。
-
-## Completion (post-merge verified; production deployed; authenticated production QA blocked)
-
-- status -> review_required
-- next_owner -> chatgpt
-
-## Report (authenticated production QA — completed after operator login)
-
-- 実施経緯: 上記Reportの提出後、ユーザーから「このまま続けて」の指示とともに、Claudeのブラウザペインで本番エイリアスへご本人がログイン（認証情報はClaudeに渡っておらず、記録もしていない）。そのセッションで読み取り中心のQAを実施した。
-- **result（更新）: PASS** — merge / post-merge source verification / Vercel production deploy / ログイン込みの本番QAのすべてが完了。
-- 対象: `https://admin-lime-one-zucdop4nh7.vercel.app`（Vercel production、PR #15入りのbuild。上記CSS証拠のとおり）
-
-### 結果
-
-| 項目 | 結果 |
-|---|---|
-| Adminログイン | PASS（ダッシュボード表示、`admin_users`ゲート通過） |
-| ブランドセレクタ表示 | PASS（選択肢は「かぶモリ」「会社員AIラボ」の2件のみ、Mio等なし） |
-| かぶモリ → 会社員AIラボ切替 | PASS（再読込後も`ai_salaryman_lab`が選択、見出しが「会社員AIラボの投稿システムの今日の状況」に変化） |
-| 会社員AIラボ選択中のデータ | AIラボの`brand_post`行・投稿枠10件のみ。かぶモリの投稿種別（朝刊・大引け・お役立ち等）はデータ部分に0件（「朝刊」の語は注記文中の1回のみ） |
-| 会社員AIラボ選択中のかぶモリ専用操作 | **ON/OFFボタン0個**。システム状態は「読み取り専用」の注記付き。重要ニュースカードは「かぶモリ専用のため表示しません」、`/important-news`も案内文のみ |
-| `/posts`（AIラボ） | 「会社員AIラボの直近30件」、かぶモリの投稿種別0件 |
-| 改ざん入力（セレクタ送信値を`unknown_brand` / `mio` / `kabumori' OR 1=1`に書き換え） | すべてサーバー側で拒否。選択ブランドは直前の有効値のまま（未知ブランドへ切り替わらない） |
-| 会社員AIラボ → かぶモリ切替 | PASS（ON/OFFボタン再表示、`brand_post`行なし＝AIラボのデータ混入なし、重要ニュース表示） |
-| 秘密値の露出 | 画面・HTMLに見当たらず（未認証時の確認と合わせて） |
-
-- 書き込みを伴う操作（設定のON/OFF等）は押していない。AIラボ選択中にかぶモリの設定を変更できないことは、UI上ボタンが存在しないことと、ソース（`setSystemEnabled`の選択ブランド検査、`posting_windows`のかぶモリID固定）で確認した（本番での書き込み試行はしない）。
-- ブランド切替はcookie（`kabumori_admin_brand`、httpOnly）を書くだけでDBには書き込まないことをソースで確認のうえ実施。**最後にかぶモリへ戻し、操作者の表示を元の状態に復元済み**。
-- 非adminアカウントでのログイン後fail closedは、非adminのテストアカウントが無いため本番では未実施（layoutの`admin_users`判定→`/unauthorized`はソースとテストで確認済み）。
-
-### 追加で見つかった運用上の問題（本タスクの範囲外、要対応）
-
-- **会社員AIラボのX投稿が、本日（2026-09-25 JST）予定分すべて`X_REQUEST_FAILED:401`で失敗している**（07:36〜22:23の10件、`brand_post`）。X側の認証エラー（トークン失効・権限等）と考えられる。管理画面の変更とは無関係で、PR #15以前からの状態かは未確認。OAuth/Vault/tokenは本タスクで禁止のため調査・修正していない。X自動投稿（G3/H枠）での確認を推奨。
-
-### production mutations（更新）
-
-0件（業務データ・DB・Auth・OAuth・Vault・Xへの変更なし）。ブラウザのブランド選択cookieのみ変更し、かぶモリへ戻した。
-
-### next_recommendation（更新）
-
-1. PR #15のproduction検証は完了。K4で最終確認をお願いします。
-2. 会社員AIラボのX 401失敗を、別TASKとしてX自動投稿側に割り当てることを推奨。
-
-
-## Final K4 — PR #15 production verification
-
-- verdict: **PASS**
-- PR #15 merged head: `f04c44ac564aa775fc0d68106648a0d2e4fcd564`
-- merge commit: `f610503761729bdc09dfa483bd218a769350a2dc`
-- post-merge apps/admin tests: 34/34 PASS
-- focused brand-boundary tests: 27/27 PASS
-- tsc/lint/build/diff checks: PASS
-- Vercel production: PR #15 code confirmed live via subsequent same-code deployment
-- authenticated production QA: PASS
-  - Admin login PASS
-  - かぶモリ ⇄ 会社員AIラボ切替 PASS
-  - brand-scoped data isolation PASS
-  - AI Lab選択中のKabumori-only controls unavailable PASS
-  - invalid/tampered selector values rejected server-side PASS
-  - unauthorized/tampered-session fail-closed PASS
-  - non-admin live-account test unavailable; existing admin_users source/test boundary remains intact
-- secret/service_role exposure: none observed
-- DB/Auth/RLS/OAuth/Vault/X/business-data mutation: 0
-- no additional Codex review required: reviewed semantics unchanged; this phase was merge + production verification only
-- AI Lab X 401 incident is out of scope here and is now assigned separately to G3 as `x-universal-oauth-refresh-productionization-20260925`
-- G4 is closed and reusable after fresh allocation check.
