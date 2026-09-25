@@ -39,7 +39,7 @@
   - Awaiting separately authorized EAS/TestFlight real-iPhone visual verification.
 - G2: `ready` — `kabumori-morning-prompt-fact-contract-fix-20260925`
 - G3: `ready` — `x-autopost-phase1i-pr30-merge-postmerge-verify-20260925`
-- G4: `done` — `x-admin-pr15-netlify-preview-live-qa-continuation-20260925`
+- G4: `ready` — `x-admin-password-recovery-invite-flow-20260925`
 
 ## K1 PR #31 icon integration
 
@@ -123,6 +123,16 @@
 - production mutation=0.
 - authenticated live selector/cross-brand QA remains required before merge.
 - PR #15 remains unmerged.
+
+## G4 Admin password recovery / invite flow
+
+- assigned: `x-admin-password-recovery-invite-flow-20260925`.
+- goal: add Web Admin `/forgot-password` + `/reset-password`, support invite/initial-password setup through the same safe receiver, preserve the existing mobile `kabumori://reset-password` redirect.
+- current Supabase Auth Site URL is still `http://localhost:3000`; only redirect allowlist entry currently known is `kabumori://reset-password`.
+- this task is source + Netlify Preview only; production Supabase Site URL/Redirect URL mutation is forbidden.
+- password setup must never imply admin authorization; `admin_users` gate remains mandatory.
+- Auth/security change requires independent Codex review before merge or production Auth URL configuration mutation.
+- recommended model: Opus5.5（高）.
 
 ## Approved app icon decision
 
