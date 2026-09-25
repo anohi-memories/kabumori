@@ -1,18 +1,20 @@
 import { PostHistoryList } from "@/app/post-history-list";
+import { requireActiveBrand } from "@/lib/active-brand";
 import { getPostHistory } from "@/lib/post-history";
 import { createAdminServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
 export default async function PostsPage() {
+  const brand = await requireActiveBrand();
   const supabase = await createAdminServerClient();
-  const result = await getPostHistory(supabase, 30);
+  const result = await getPostHistory(supabase, brand, 30);
 
   return (
     <main className="dashboard-shell">
       <header className="page-header">
         <h1>投稿履歴</h1>
-        <p className="page-description">直近30件の投稿結果を新しい順に表示しています。</p>
+        <p className="page-description">{brand.label}の直近30件の投稿結果を新しい順に表示しています。</p>
       </header>
 
       <section className="dashboard-card post-history-card" aria-labelledby="post-history-title">

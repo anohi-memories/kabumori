@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { KABUMORI_BRAND_ID } from "./brand-boundary";
+import { KABUMORI_BRAND_ID } from "./brand-boundary.ts";
+import type { AuthorizedBrandId } from "./selected-brand.ts";
 import type { SystemToggleKey } from "@/lib/actions/system-toggle";
 
 export type SystemStatusState = "active" | "inactive" | "unavailable";
@@ -38,6 +39,8 @@ export type SystemStatusItem = {
 
 export type SystemStatusResult = {
   systems: SystemStatusItem[];
+  // Shown above the list when the active brand only has a read-only posting_windows summary.
+  scopeNote: string | null;
 };
 
 const STATE_LABELS: Readonly<Record<SystemStatusState, string>> = {
@@ -195,11 +198,14 @@ type PostingWindowRow = {
   timezone: string;
 };
 
-async function getMorningGreetingStatus(supabase: SupabaseClient): Promise<SystemStatusItem> {
+async function getMorningGreetingStatus(
+  supabase: SupabaseClient,
+  brandId: AuthorizedBrandId,
+): Promise<SystemStatusItem> {
   const { data, error } = await supabase
     .from("posting_windows")
     .select("is_active,start_time,end_time,timezone")
-    .eq("brand_id", KABUMORI_BRAND_ID)
+    .eq("brand_id", brandId)
     .eq("post_type", "morning_greeting")
     .order("slot_no", { ascending: true })
     .limit(1)
@@ -248,6 +254,7 @@ type PostingWindowGroupRow = {
 // is no per-slot control in V1.1.
 async function getPostingWindowGroupStatus(
   supabase: SupabaseClient,
+  brandId: AuthorizedBrandId,
   postType: Extract<SystemToggleKey, "tip" | "interaction">,
   key: string,
   name: string,
@@ -256,7 +263,7 @@ async function getPostingWindowGroupStatus(
   const { data, error } = await supabase
     .from("posting_windows")
     .select("is_active,start_time,end_time")
-    .eq("brand_id", KABUMORI_BRAND_ID)
+    .eq("brand_id", brandId)
     .eq("post_type", postType)
     .order("slot_no", { ascending: true });
 
@@ -403,17 +410,89 @@ async function getUsPremarketStatus(supabase: SupabaseClient): Promise<SystemSta
   );
 }
 
-export async function getSystemStatus(supabase: SupabaseClient): Promise<SystemStatusResult> {
+type BrandPostingWindowRow = {
+  post_type: string;
+  slot_no: number;
+  is_active: boolean;
+  start_time: string;
+  end_time: string;
+};
+
+const NON_KABUMORI_SCOPE_NOTE =
+  "このブランドは投稿枠（posting_windows）の状態のみを読み取り専用で表示しています。" +
+  "ON/OFF操作と重要ニュース・朝刊などのかぶモリ専用設定は、かぶモリ選択時のみ表示されます。";
+
+// Read-only summary for a brand other than Kabumori: only that brand's own posting_windows rows,
+// grouped by post_type. No toggles -- the system-toggle actions are Kabumori-only.
+async function getBrandPostingWindowSummary(
+  supabase: SupabaseClient,
+  brandId: AuthorizedBrandId,
+): Promise<SystemStatusItem[]> {
+  const { data, error } = await supabase
+    .from("posting_windows")
+    .select("post_type,slot_no,is_active,start_time,end_time")
+    .eq("brand_id", brandId)
+    .order("post_type", { ascending: true })
+    .order("slot_no", { ascending: true });
+
+  if (error) {
+    logQueryError("posting_windows(brand summary)", error.code);
+    return [
+      buildItem("posting_windows", "投稿枠", null, [], {
+        unavailableReason: "設定を取得できませんでした。",
+      }),
+    ];
+  }
+
+  const rows = (data ?? []) as BrandPostingWindowRow[];
+  if (rows.length === 0) {
+    return [
+      buildItem("posting_windows", "投稿枠", null, [], {
+        unavailableReason: "投稿枠が見つかりません。",
+      }),
+    ];
+  }
+
+  const byPostType = new Map<string, BrandPostingWindowRow[]>();
+  for (const row of rows) {
+    byPostType.set(row.post_type, [...(byPostType.get(row.post_type) ?? []), row]);
+  }
+
+  return [...byPostType.entries()].map(([postType, group]) => {
+    const activeCount = group.filter((row) => row.is_active).length;
+    return buildItem(`posting_windows:${postType}`, postType, activeCount > 0, [
+      { label: "有効な投稿枠", value: `${activeCount}/${group.length}件` },
+      ...group.map((row) => ({
+        label: `投稿枠${row.slot_no}`,
+        value: `${formatTime(row.start_time)}〜${formatTime(row.end_time)}（${row.is_active ? "ON" : "OFF"}）`,
+      })),
+    ]);
+  });
+}
+
+export async function getSystemStatus(
+  supabase: SupabaseClient,
+  brandId: AuthorizedBrandId,
+): Promise<SystemStatusResult> {
+  if (brandId !== KABUMORI_BRAND_ID) {
+    return {
+      systems: await getBrandPostingWindowSummary(supabase, brandId),
+      scopeNote: NON_KABUMORI_SCOPE_NOTE,
+    };
+  }
+
+  // Kabumori: the singleton settings tables (important_news_monitor_settings, *_report_settings,
+  // useful_tip_schedule_settings) are Kabumori-owned systems and are only read on this branch.
   const systems = await Promise.all([
     getImportantNewsStatus(supabase),
     getReportStatus(supabase, "morning_report_settings", "morning_report", "朝刊", "morning_report"),
-    getMorningGreetingStatus(supabase),
+    getMorningGreetingStatus(supabase, brandId),
     getReportStatus(supabase, "close_report_settings", "close_report", "大引けレポート", "close_report"),
     getUsPremarketStatus(supabase),
     getUsefulTipStatus(supabase),
-    getPostingWindowGroupStatus(supabase, "tip", "tip", "株の小ネタ", false),
-    getPostingWindowGroupStatus(supabase, "interaction", "interaction", "交流投稿", true),
+    getPostingWindowGroupStatus(supabase, brandId, "tip", "tip", "株の小ネタ", false),
+    getPostingWindowGroupStatus(supabase, brandId, "interaction", "interaction", "交流投稿", true),
   ]);
 
-  return { systems };
+  return { systems, scopeNote: null };
 }

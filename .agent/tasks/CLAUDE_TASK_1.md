@@ -1,107 +1,175 @@
 # Claude Task 1
 
-- task_id: kabumori-pr31-icon-merge-postmerge-verify-20260925
+- task_id: kabumori-branded-launch-screen-20260925
 - owner: claude
 - slot: claude-1
 - status: done
 - next_owner: none
-- priority: medium
-- recommended_model: Sonnet5（中）
-- purpose: K1 PASS済みPR #31をfresh main確認後にmergeし、承認済みアイコンがmain上で正しく参照されることをpost-merge検証する。EAS/TestFlightはまだ実施しない。
+- priority: high
+- recommended_model: Sonnet5（高）
+- purpose: ユーザー決定「かぶモリ専用の起動画面を作る」に基づき、Expoテンプレのnative splash / AnimatedSplashOverlayを、既存の承認済みかぶモリアイコンを使ったブランド起動画面へ置き換える。新しい画像生成は行わない。
 
-## Accepted K1 state
+## User decision
 
-PR #31:
-- branch: `claude1/approved-app-icon-integration`
-- reviewed head: `8939ce9f2f829cbfb042cadd92760f4e67ce8cc9`
-- mergeable: true
-- changed files:
-  - `assets/branding/kabumori-icon-master-2026-09-25.png`
-  - `assets/images/icon.png`
-  - `app.json`
-  - `tests/app/app-icon_test.ts`
+User explicitly decided:
+- **dedicated Kabumori launch screen will be created**
+- do not keep the Expo template launch experience
+- do not generate a new AI artwork as part of this task
+- use the already approved Kabumori branding/icon as the visual source for this first implementation
+- final visual acceptance will happen on actual iPhone/TestFlight and can be refined later
 
-Approved asset:
-- source: user-approved `アイコン.png`
-- source 1254x1254 RGB opaque
-- sha256 `31eda5379951b3d8f69676add4add33ecea6d799a48545ef076bd6235949a3f8`
-- derived app icon 1024x1024 RGB opaque
-- no redraw / recolor / AI regeneration
+## Approved source asset
 
-Verified before K1:
-- 126/126 tests
-- src TypeScript 0
-- expo config resolves icon + ios.icon to `./assets/images/icon.png`
-- real expo prebuild produced matching 1024x1024 no-alpha AppIcon
-- Expo web export 10 routes
-- git diff --check PASS
-- Splash / AnimatedSplashOverlay / expo-logo untouched
-- production mutation 0
+Use only the already merged approved artwork:
+- `assets/branding/kabumori-icon-master-2026-09-25.png`
+- approved source sha256: `31eda5379951b3d8f69676add4add33ecea6d799a48545ef076bd6235949a3f8`
+- installed icon: `assets/images/icon.png` (1024x1024, RGB opaque)
+
+Do not redraw, regenerate, recolor, or substitute another logo.
+
+## Goal
+
+Replace the remaining Expo-template startup experience with a coherent Kabumori-branded launch flow:
+
+1. native/static splash
+2. in-app AnimatedSplashOverlay
+3. remove Expo logo / blue-template visual references from normal app launch
+
+The visual should be intentionally simple for the first real-device pass:
+- light cream / soft warm background compatible with the approved icon
+- approved Kabumori icon/logo centered
+- optional text `かぶモリ` only if it improves continuity
+- subtle, restrained fade/scale animation
+- no busy illustration
+- no new tagline unless already present in approved product copy
+- no green-theme lock beyond what the approved icon naturally uses
 
 ## Mandatory startup
 
-1. Independent worktree.
+1. Use an independent worktree.
 2. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / this TASK.
-3. Fresh fetch origin/main and PR #31.
-4. Verify PR head exactly `8939ce9f2f829cbfb042cadd92760f4e67ce8cc9`.
-5. Confirm no semantic drift or file conflict.
-6. Confirm G2 still only touches personalized-reports.
-7. If PR head changed or non-trivial conflict exists, STOP.
+3. Fresh fetch origin/main.
+4. Confirm G2 remains done and personalized-reports is out of scope.
+5. Confirm no G4/admin overlap.
+6. Verify approved icon asset sha before editing.
+7. Inspect current:
+   - app.json expo-splash-screen config
+   - assets/images/splash-icon.png
+   - src/components/animated-icon.tsx
+   - src/app/_layout.tsx
+   - assets/images/expo-logo.png usage
+8. If any other active slot is editing the same startup files, STOP.
 
-## Merge
+## Implementation
 
-If unchanged and conflict-free:
-- merge PR #31
-- fresh fetch main
-- record merge SHA
+### A. Native/static splash
 
-## Post-merge verification
+Replace Expo-template splash presentation.
 
-On merged main verify:
-- exact master asset exists
-- `assets/images/icon.png` is 1024x1024, opaque, no alpha
-- `expo.icon` and `expo.ios.icon` point to `./assets/images/icon.png`
-- Expo template icon path is no longer referenced by app icon config
-- Splash config unchanged
-- AnimatedSplashOverlay source unchanged
-- `assets/images/expo-logo.png` unchanged
-- bundleIdentifier / slug / scheme / projectId unchanged
-- G2/personalized-reports files untouched
+Preferred implementation:
+- use approved Kabumori icon asset or a deterministic derivative of it
+- use a light cream / warm neutral background that visually matches the icon
+- preserve correct aspect ratio
+- no baked rounded-corner tricks
+- no Expo logo
+- no blue Expo-template background
+
+If Expo splash asset constraints require a dedicated derivative:
+- derive deterministically from the approved icon/master
+- no generative modification
+- document exact dimensions and derivation
+
+### B. AnimatedSplashOverlay
+
+Replace current Expo-logo animation with Kabumori branding.
+
+Requirements:
+- use approved icon/logo source
+- simple fade / slight scale / gentle reveal
+- short enough that it does not make startup feel slower
+- respect reduced-motion accessibility if the app already exposes it or React Native accessibility API makes this straightforward
+- overlay must disappear reliably after app initialization
+- no new network dependency
+- no font download dependency
+- no user-data dependency
+- no blocking of auth/session initialization
+
+### C. Remove template references
+
+Normal launch must no longer render:
+- `assets/images/expo-logo.png`
+- Expo blue startup background
+- Expo template mark
+
+Do not delete unrelated assets if they are used elsewhere.
+If `expo-logo.png` becomes truly unused, it may be removed only after confirming all references are gone.
+
+### D. Tests
+
+Add/update tests that assert:
+- splash config references Kabumori asset
+- Expo template splash asset/path is not referenced by launch config
+- AnimatedSplashOverlay references Kabumori asset, not expo-logo
+- no normal-launch Expo template reference remains
+- approved icon/master sha is unchanged
+- bundleIdentifier/slug/scheme/projectId remain unchanged
+
+## Scope / forbidden
+
+Allowed:
+- app.json splash config
+- splash asset(s)
+- src/components/animated-icon.tsx
+- narrowly related startup tests
+- removal of truly unused Expo launch asset after reference proof
+
+Do not touch:
+- app icon itself
+- personalized-reports
+- Supabase
+- Auth
+- Netlify
+- X/admin
+- DB/schema/RPC
+- EAS credentials
+- TestFlight/App Store
+- production env
+
+Do not run a production EAS build in this task.
+
+## Verification
 
 Run:
-- app/icon tests
-- scoped app/release tests
+- targeted startup/splash tests
+- full app tests
 - src TypeScript
 - `npx expo config --json`
-- Expo prebuild validation if safe/clean
+- real `expo prebuild --platform ios --no-install --clean` if safe in isolated worktree
+- inspect generated iOS splash/AppIcon references
 - Expo web export
 - git diff --check
 
-Clean any generated native/prebuild artifacts before completion.
+Clean generated native artifacts before completion if not tracked.
 
-## Forbidden
+## Review policy
 
-- EAS build
-- TestFlight upload
-- App Store Connect mutation
-- credentials/env mutation
-- Splash/overlay changes
-- production deploy
-- DB/Supabase/X/admin/MIC changes
+This is UI/branding/startup work.
+Per reduced-review policy:
+- no Codex review required unless a genuine auth/session/startup correctness risk is introduced
+- if startup initialization semantics must change materially, STOP and report before doing so
 
 ## Completion / K1
 
 Report:
-- fresh main before merge
-- verified PR head
-- conflict/drift result
-- merge SHA
-- post-merge test results
-- icon config read-back
-- asset dimensions/alpha
-- Splash/overlay unchanged
+- exact visual implementation
+- changed files
+- source asset hashes/dimensions
+- animation behavior/duration
+- proof Expo branding is gone from normal launch
+- tests
+- PR/head
 - production mutation=0
-- whether repo is ready for separately authorized iPhone/TestFlight build
+- whether ready for first real-iPhone/TestFlight visual acceptance
 
 When complete:
 - status -> review_required
@@ -110,65 +178,96 @@ When complete:
 
 ## Report — G1 result
 
-- task_id: kabumori-pr31-icon-merge-postmerge-verify-20260925
-- result: **PR #31 merged and verified on main.** Production mutation = 0. Repo is ready for a separately authorized real iPhone/TestFlight build.
-- workspace: a fresh independent clone.
+- task_id: kabumori-branded-launch-screen-20260925
+- result: **source-complete. PR #36 is open and unmerged.** Production mutation = 0; no EAS build was run.
+- fresh main at task start: `e3ad303`; in_progress control commit `2724689`.
+- G2/G3/G4 overlap: none (`personalized-reports` untouched; `.agent/CURRENT_STATE.md` shows G3/G4 both on x-autopost/admin work).
+- Approved icon sha verified before editing: `assets/branding/kabumori-icon-master-2026-09-25.png` = `31eda5379951b3d8f69676add4add33ecea6d799a48545ef076bd6235949a3f8`, matching the task's stated value. `assets/images/icon.png` (the installed 1024×1024) confirmed 1024×1024, no alpha, unchanged.
 
-### Pre-merge
+### Exact visual implementation
 
-- fresh main before merge: `9bcb4a2` (in_progress control commit on `e136cb9`)
-- verified PR head: exactly **`8939ce9f2f829cbfb042cadd92760f4e67ce8cc9`**, unchanged from K1's review.
-- PR contents: one commit over base `9258ab7`, touching exactly `assets/branding/kabumori-icon-master-2026-09-25.png`, `assets/images/icon.png`, `app.json`, `tests/app/app-icon_test.ts`.
-- **Drift:** none — `git diff --name-only` between my in_progress control commit and `origin/main` (excluding `.agent/*`) was empty.
-- **G2 check:** same empty-drift check confirms G2 still touches only its own scope; no file overlap with PR #31.
-- merge state: `MERGEABLE` / `UNSTABLE` (the same pre-existing Vercel rate-limit failure, not a Kabumori merge gate).
+Both phases of the launch experience now show the identical approved icon on the identical background, at the identical size — the same continuity property the Expo template had, just with Kabumori's own artwork:
 
-### Merge
+- **Native splash** (`app.json` → `expo-splash-screen`): `image: ./assets/images/icon.png`, `backgroundColor: #eef3ed`, `imageWidth: 200`.
+- **`AnimatedSplashOverlay`**: same icon (`require('@/assets/images/icon.png')`), same `#eef3ed` background (`SPLASH_BACKGROUND` constant), same 200×200 size (`SPLASH_ICON_SIZE` constant, kept equal to `imageWidth` on purpose so there is no size jump at handoff).
+- No new text/tagline added — the icon's own illustration already contains 「かぶモリ」, so adding a separate label would have been redundant continuity, not additional continuity (the task's own qualifier: "only if it improves continuity").
+- `#eef3ed` is not a new colour: it is `KABUMORI_COLORS.light.soft`/`accentSoft` and is already `auth-screen.tsx`'s own `safeArea` background, so the splash now matches the very next screen the user usually sees (the login form) instead of clashing with it the way Expo blue did.
 
-- `gh pr merge 31 --merge --match-head-commit 8939ce9f2f829cbfb042cadd92760f4e67ce8cc9`
-- merge commit / post-merge `origin/main`: **`7aa394fc1dc73edd0c67b6529923ec4dc9616e7f`**, mergedAt 2026-09-25T08:29:10Z. PR #31 state: MERGED.
+### Animation behaviour / duration
 
-### Post-merge verification (on `7aa394f`)
+- Exit animation: fade (`opacity 1 → 0`) + a gentle scale-down (`scale 1 → 0.94`), `Easing.out(Easing.cubic)`, **600ms** (unchanged duration from before — "does not make startup feel slower" was already true and stays true). The old bouncy `Easing.elastic(0.7)` exit is gone, replaced with a restrained ease-out, matching "subtle, restrained."
+- The native-splash-hide handoff mechanics are unchanged: `onLayout` on the static phase-1 `View` still calls `SplashScreen.hideAsync()`, then decides the next phase.
+- **Reduce Motion**: `AccessibilityInfo.isReduceMotionEnabled()` is read once on mount into a `useRef` (not `useState`) specifically so the decision made inside `onLayout`'s `.finally()` callback always sees the latest fetched value regardless of React re-render/closure timing. When Reduce Motion is on, the animated `Animated.View`/`entering` path is skipped entirely and the overlay hides instantly through the exact same `setVisible(false)` call the animated exit's finished-callback uses — chosen deliberately over Reanimated's own `.reduceMotion()` modifier, because I could not verify in this environment that a `reduceMotion`-disabled `entering` keyframe still reliably invokes `withCallback`'s finished callback, and an overlay that fails to disappear would be a worse outcome than one that disappears without a fade.
+- No network dependency, no font download, no user-data dependency. `AuthGate`'s own `loading` gate (auth/session initialization) is architecturally separate and untouched — the overlay's removal timing does not depend on it and vice versa.
 
-- `git diff 8939ce9 7aa394f` over the 4 reviewed files is **empty** — byte-identical to the reviewed content.
-- `git diff --name-only 9bcb4a2 7aa394f` (excluding `.agent/*`) lists exactly those 4 files.
-- **Master asset:** `assets/branding/kabumori-icon-master-2026-09-25.png` present, sha256 `31eda5379951b3d8f69676add4add33ecea6d799a48545ef076bd6235949a3f8` — matches the approved source exactly. 1254×1254, no alpha.
-- **App icon:** `assets/images/icon.png` — **1024×1024, no alpha (RGB)**.
-- **Icon config read-back:** `npx expo config --json` shows both `icon` and `ios.icon` resolving to `./assets/images/icon.png`.
-- **Expo template no longer referenced:** `app.json`'s `ios.icon` points at the new file, not `./assets/expo.icon`.
-- **Identity fields unchanged:** `name: "かぶモリ"`, `slug: "kabumori"`, `scheme: "kabumori"`, `bundleIdentifier: "com.anohimemories.kabumori"`, `projectId: "eb80adf3-861e-4a48-a373-2d9a85b58899"` — all identical to before this merge.
-- **Splash/overlay unchanged:** `git diff` from before the whole icon workstream (`c38a7f8`) over `src/components/animated-icon.tsx`, `assets/images/expo-logo.png`, `assets/images/splash-icon.png` is empty.
-- `deno test --no-check --no-lock --allow-read --allow-write --allow-env tests/app/ supabase/functions/account-delete/ apps/kabumori-web/build_test.ts`: **126 passed / 0 failed**, matching the pre-merge/K1 count.
-- `npx tsc --noEmit`, `src/` scope: **0 errors**
-- **Prebuild validation, re-run on merged main:** `npx expo prebuild --platform ios --no-install --clean` regenerated `ios/app/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png` at **1024×1024, no alpha**, with the identical sha256 to the PR-time run (`07bed3da...53001c5c`), confirming the icon generation is reproducible and unchanged by the merge itself.
-  - **Prebuild's known side effect was caught and discarded again**: it silently rewrote `package.json`'s `android`/`ios` scripts to the bare-workflow form. Reverted with `git checkout -- package.json` before any further step.
-  - The generated `ios/`, `android/`, `.expo/` directories were deleted after inspection; `git status` on merged main shows no trace of them.
-- `npx expo export --platform web`, dummy non-secret env: **PASS, 10 static routes (unchanged)**
-- `git diff --check`: PASS
+### Changed files (PR #36, branch `claude1/branded-launch-screen`, head `5b72e57`)
+
+- `app.json` — 3 fields in the `expo-splash-screen` plugin config
+- `src/components/animated-icon.tsx` — `AnimatedSplashOverlay` rewritten (asset, colour, size, easing, Reduce Motion); `AnimatedIcon` (dead code, nothing imports it) and its styles are untouched
+- `tests/app/app-splash_test.ts` (new, 9 tests)
+- `tests/app/app-icon_test.ts` — its now-obsolete "splash/overlay untouched" assertion (correct only for the prior, icon-only task) replaced with an identity-fields-unchanged pin
+- `docs/mobile-release/RELEASE_READINESS.md` — A1/A1b marked done (source), Area F moved to READY, §4 item 1 rewritten around real-device acceptance
+
+### Source asset hashes/dimensions
+
+- Master (unchanged by this task): `assets/branding/kabumori-icon-master-2026-09-25.png`, 1254×1254, sha256 `31eda537…49a3f8` — re-verified, not re-copied.
+- Installed icon (unchanged by this task, only newly reused as the splash image): `assets/images/icon.png`, 1024×1024, no alpha — re-verified.
+- No new image file was created. The splash uses the existing 1024×1024 file directly; Expo's own `expo-splash-screen` plugin performs its native scaling to `imageWidth: 200` at prebuild time, which is exactly the same mechanism the old template config used, just pointed at a different source file and width.
+
+### Proof Expo branding is gone from a normal launch
+
+- `grep -rn expo-logo` and `#208AEF` inside `AnimatedSplashOverlay`'s own function body: none. (The function body was isolated with a source slice up to the next top-level `const keyframe = ...` declaration, and every assertion in `app-splash_test.ts` that checks this operates on that isolated slice, not the whole file, so it cannot accidentally pass by matching the untouched `AnimatedIcon` export below it.)
+- `src/app/_layout.tsx`: contains no `expo-logo` reference (it never did directly; it only imports `AnimatedSplashOverlay`).
+- A real `npx expo prebuild --platform ios --no-install --clean` regenerated the native splash assets from scratch:
+  - `ios/app/Images.xcassets/SplashScreenBackground.colorset/Contents.json`: RGB `(0.9333, 0.9529, 0.9294)` = `#eef3ed` exactly.
+  - `ios/app/Images.xcassets/SplashScreenLogo.imageset/image.png`: 200×200. Opened and visually confirmed it is the approved Kabumori icon (newspaper/chart/leaf/「かぶモリ」), not the Expo mark.
+- `assets/images/expo-logo.png` is **not "truly unused"**, so per the task's own conditional it was not deleted: the dead, unimported `AnimatedIcon` export in the same file still references it. This is stated explicitly, not silently left ambiguous.
+- `assets/images/splash-icon.png` is now unreferenced by any config but was left on disk, following the same precedent the icon-integration task set with `assets/expo.icon` (minimal diff, nothing deleted that wasn't proven safe with more confidence than "no current reference").
+
+### Tests
+
+| Check | Result |
+| --- | --- |
+| `deno test --no-check --no-lock --allow-read --allow-write --allow-env tests/app/ supabase/functions/account-delete/ apps/kabumori-web/build_test.ts` | **135 passed / 0 failed** (126 existing + 9 new) |
+| `npx tsc --noEmit`, `src/` scope | **0 errors** |
+| `npx expo config --json` | splash plugin config resolves to the new image/colour/width |
+| `npx expo prebuild --platform ios --no-install --clean` | generated splash colorset/imageset correct, verified above |
+| `npx expo export --platform web`, dummy non-secret env | PASS, **10 static routes (unchanged)** |
+| `git diff --check` | PASS |
+
+**Two assertions were verified against a real regression, not just written and trusted:** I temporarily commented out `scheduleOnRN(setVisible, false)` — the corresponding test failed; separately removed the entire Reduce-Motion branch (defaulting to the animated path always) — that test failed too. Both were then reverted and re-confirmed passing. This follows the same discipline as the earlier `ensure_my_profile` migration proof's negative control.
+
+**Side effect caught and discarded, not shipped:** `expo prebuild` again silently rewrote `package.json`'s `android`/`ios` npm scripts to the bare-workflow form. Reverted with `git checkout -- package.json`, and the generated `ios/`/`android`/`.expo/` directories were deleted before committing — same handling as the two prior tasks that ran a real prebuild.
 
 ### Production mutation = 0
 
-No EAS build, no TestFlight upload, no App Store Connect action, no credential/env mutation, no Splash/overlay change, no production deploy. Only the ordinary GitHub merge and the throwaway local prebuild validation (fully discarded, nothing committed from it).
+No EAS build, no EAS credential/env mutation, no TestFlight/App Store Connect action, no Supabase/Auth/Netlify/X/admin change, no `personalized-reports` edit, no DB/schema/RPC change.
 
-### Is the repo ready for a separately authorized iPhone/TestFlight build?
+### Ready for first real-iPhone/TestFlight visual acceptance?
 
-**Yes.** The approved icon is wired through every relevant Expo config path and verified end-to-end through an actual `expo prebuild` run, reproducibly. Per this task's and PR #31's own boundary, this merge does **not** constitute final visual acceptance — that still requires the user seeing it on their actual iPhone home screen via a real device build. Remaining blockers before that build (EAS production env vars, App Store Connect setup, etc.) are unchanged from the prior release-readiness report and are out of scope here.
+**Yes, source-side.** The launch screen is source-complete and verified through a real `expo prebuild`, the same mechanism a production build uses to generate native assets. Per this task's own framing, this does **not** constitute final visual acceptance — that still requires the user seeing it on an actual iPhone via a separately authorized real-device build. If it needs a refinement pass after that (e.g. a dedicated splash derivative distinct from the flat app icon, or adding a wordmark), it can be revisited without redoing this decision.
 
 
-## Final K1 — PR #31 icon merge
+## Final K1 — branded launch screen
 
 Verdict: **PASS**.
 
 Accepted:
-- reviewed PR head `8939ce9f2f829cbfb042cadd92760f4e67ce8cc9`
-- merge SHA `7aa394fc1dc73edd0c67b6529923ec4dc9616e7f`
-- reviewed files byte-identical after merge
-- approved master hash preserved
-- app icon 1024x1024 RGB/no alpha
-- Expo icon and ios.icon both point to `./assets/images/icon.png`
-- real prebuild generated the approved AppIcon reproducibly
-- 126/126 tests, src TypeScript 0, Expo export 10 routes, diff check PASS
-- Splash/AnimatedSplashOverlay/expo-logo untouched
-- production mutation=0
+- PR #36 head `5b72e5784b07ebf7871879471f53fe06e6f072eb`
+- merged -> `b869fb557f009ca5817b6d2a853d529bd29c20c2`
+- native splash now uses approved Kabumori icon on `#eef3ed`
+- AnimatedSplashOverlay uses the same approved icon/background/size
+- Expo blue / Expo logo are gone from the normal launch path
+- fade + slight scale exit, 600ms
+- Reduce Motion handled
+- 135/135 tests, src tsc 0, expo config/prebuild/web export/diff PASS
+- app identity fields unchanged
+- production mutation 0
+- no Codex review required under reduced-review policy
 
-G1 is closed. Repo is ready for a separately authorized EAS/TestFlight real-iPhone verification build.
+Important:
+This implementation is the simple approved-icon baseline. The newer visual concept discussed in ChatGPT (Yume-chan + robot artwork) is not yet wired into the app and remains a later design decision/refinement.
+
+Next gate:
+- real iPhone/TestFlight visual acceptance
+- if user later approves a custom launch artwork, create a separate G1 refinement task rather than changing this accepted baseline implicitly.

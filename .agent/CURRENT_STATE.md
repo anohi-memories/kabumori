@@ -20,26 +20,134 @@
 - Claude（くろちゃん）: Sonnet5（中/高/極高） / Opus5.5（中/高/極高）。Sonnet5で安全な作業はSonnet5優先。
 - Codex（こでさん）: Luna（中/高/極高） / Sol（中/高/極高）。利用枠節約のためLunaで安全なTASKはLuna優先。
 
+## Review cadence policy — reduced
+
+- User decision (2026-09-25): Codex review frequency is reduced substantially to preserve the 5-hour review budget.
+- Default: low-risk/UI/copy/prompt/image/small bug/test-only/local logic changes proceed via Claude + ChatGPT confirmation without H1/H2.
+- Repeated small fixes in the same feature are bundled; review once at a meaningful stabilization/release boundary instead of after every change.
+- Keep Codex focused on DB/migration/RLS/auth/RPC/OAuth/Vault/secrets, real external writes, X publish paths, cross-tenant boundaries, concurrency/idempotency, destructive production risk, major multi-layer changes and release-critical gates.
+- Review omission never means test/dry-run/Preview/read-back omission.
+- Prefer Luna for lighter reviews; reserve Sol for high-risk boundaries.
+- Existing incomplete review tasks must be preserved as deferred, not overwritten.
+- Canonical details: `.agent/ORCHESTRATION.md#レビュー最適化方針（2026-09-25〜）`.
+
 ## Deployment policy — user approved
 
 - X自動投稿・Web管理画面の開発中/PR/テスト用PreviewはNetlifyへ寄せる。
 - レビュー完了後の最終production deployのみVercelを使う。
 - Vercelのrate limitを通常のX/Web開発・レビュー工程のブロッカーにしない。
-- 現在Vercel待ちのPR #15 final gateは一旦保留。
+- PR #15のmerge / post-merge / production verificationはG4へ割当済み。Vercel Preview rate-limit failure単独はmerge前ブロッカーにしないが、production deploy結果は実確認必須。
 - かぶモリExpo/native本体はVercel制限の主対象ではないため、Netlify Web Preview対応は現時点では進めない。
 - かぶモリのiOS実機/TestFlight/native-only機能は従来どおりExpo/EAS/実機で確認する。
 
 ## Current slot snapshot
 
 - H1: `done` — `x-autopost-phase1i-exact-account-refresh-final-review-20260925`; Final C1 PASS-WITH-FIX
-- H2: `ready` — `kabumori-pr32-morning-fact-contract-final-review-20260925`
-- G1: `done` — `kabumori-pr31-icon-merge-postmerge-verify-20260925`
-  - Final K1 PASS. PR #31 merged -> `7aa394fc1dc73edd0c67b6529923ec4dc9616e7f`.
-  - Approved icon reproducibly wired into Expo/iOS; 126/126 tests; no production mutation.
-  - Awaiting separately authorized EAS/TestFlight real-iPhone visual verification.
-- G2: `ready` — `kabumori-morning-prompt-fact-contract-fix-20260925`
-- G3: `ready` — `x-autopost-phase1i-pr30-merge-postmerge-verify-20260925`
-- G4: `ready` — `x-admin-password-recovery-invite-flow-20260925`
+- H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
+- G1: `done` — `kabumori-branded-launch-screen-20260925`
+  - Final K1 PASS.
+  - PR #36 merged -> `b869fb557f009ca5817b6d2a853d529bd29c20c2`.
+  - Native splash + AnimatedSplashOverlay now use approved Kabumori icon on #eef3ed; Expo launch branding removed.
+  - 135/135 tests, tsc 0, real prebuild/web export PASS.
+  - Newer Yume-chan + robot visual concept is not yet integrated; current implementation is the simple approved-icon baseline.
+  - Next gate: real-iPhone/TestFlight visual acceptance.
+- G2: `done` — `kabumori-pr34-shadow-merge-deploy-20260925`
+- G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
+- G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS
+
+## Final K1 branded launch screen
+
+- verdict: **PASS**.
+- PR #36 head `5b72e5784b07ebf7871879471f53fe06e6f072eb` merged -> `b869fb557f009ca5817b6d2a853d529bd29c20c2`.
+- native splash and AnimatedSplashOverlay use the approved Kabumori icon on #eef3ed with matched 200x200 sizing.
+- Expo blue/logo removed from normal launch.
+- restrained 600ms fade/scale exit; Reduce Motion supported.
+- 135/135 tests, src tsc 0, expo config/prebuild/web export/diff PASS.
+- production mutation 0.
+- no Codex review required.
+- newer Yume-chan + robot visual concept remains a separate optional refinement, not part of this merged baseline.
+
+## G1 Kabumori branded launch screen
+
+- user decision: create a dedicated Kabumori launch screen now.
+- first implementation uses the already approved icon/branding; no new generated artwork.
+- replace Expo native splash and AnimatedSplashOverlay template visuals.
+- final aesthetic acceptance will be on real iPhone/TestFlight and may be refined.
+- no Codex review expected for this branding/UI task.
+- recommended model: Sonnet5（高）.
+
+## Final K1 release-readiness audit
+
+- verdict: **PASS for audit/documentation**.
+- PR #35 docs-only head `5b5acd69d20c622b73e3b6f73f510a2479b9d318` merged -> `26b0e8903b434a7a5222370c65aa4ed565af113e`.
+- no source/code bug found.
+- icon done; EAS source config/verifier ready.
+- Kabumori public/legal Web source ready, but no separate Netlify site exists yet.
+- Auth/SMTP live state could not be safely read from this environment.
+- AnimatedSplashOverlay/native splash remain Expo template and should be replaced before first TestFlight.
+- next blockers are operator/artwork gates, not another code review.
+- no Codex review needed under reduced-review policy.
+
+## G1 release-readiness gap closure
+
+- assigned: `kabumori-release-readiness-gap-closure-20260925`.
+- goal: while G2 waits for Monday natural-cron telemetry, advance native release readiness.
+- covers EAS production env prerequisites, Kabumori Netlify public/legal pages, Supabase Auth Site URL/redirect requirements, custom SMTP readiness, App Store/TestFlight prerequisites, and remaining startup artwork.
+- safe source/config/doc fixes allowed; production Auth/SMTP/credentials/DNS/TestFlight/App Store mutation forbidden.
+- no overlap with G2 personalized-reports or X/admin scopes.
+- recommended model: Opus5.5（高）.
+
+
+## Final K3 universal OAuth refresh productionization
+
+- verdict: **PASS for source implementation**.
+- implementation commit: `acbac42`.
+- AI Lab `allowRefresh:false` dead-end removed in source and replaced by the generic exact-account Vault-backed credential lifecycle for non-Kabumori accounts.
+- Kabumori legacy token path unchanged.
+- exact-account/ref ownership, one-refresh/one-safe-retry, uncertain/reauth_required health handling, concurrency lease model and future-account generic routing implemented.
+- x-test-post 500/500; _shared 141/141; important-news-monitor 473/473; disposable core/race proofs PASS.
+- production mutation=0; no migration/deploy/real refresh/Vault write/X call.
+- G3 closed.
+- H1 assigned focused final review before any production activation.
+- recommended Codex model: Sol（高）.
+
+## Final K4 PR #15 production verification
+
+- verdict: **PASS**.
+- PR #15 merged head `f04c44ac564aa775fc0d68106648a0d2e4fcd564` -> merge `f610503761729bdc09dfa483bd218a769350a2dc`.
+- post-merge apps/admin 34/34; focused brand-boundary 27/27; tsc/lint/build/diff PASS.
+- Vercel production confirmed serving PR #15 code.
+- authenticated production QA PASS: login, Kabumori ⇄ AI Lab switching, brand isolation, Kabumori-only control suppression, invalid selector rejection.
+- unauthenticated/tampered-session boundary fails closed; non-admin live account unavailable but existing admin_users source/test boundary intact.
+- secret/service_role exposure not observed; DB/Auth/RLS/OAuth/Vault/X/business-data mutation 0.
+- no additional Codex review needed; semantics unchanged from reviewed candidate.
+- G4 closed and reusable after fresh allocation check.
+- AI Lab X 401 incident is tracked separately in G3.
+
+## AI Lab 401 / universal OAuth refresh
+
+- incident confirmed: AI Lab last success 2026-09-24 07:33 JST; first continuous X_REQUEST_FAILED:401 at 09:51 JST.
+- live AI Lab account has exact access/refresh Vault refs and remains publish_enabled=true, but current x-test-post deliberately sets allowRefresh=false for AI Lab.
+- root issue: access-token 401 cannot invoke the configured refresh token; repeated failures remain opaque while connection_status still appears identity_verified.
+- G3 assigned to productionize the already-reviewed Phase1I exact-account refresh architecture for AI Lab plus all future Vault-backed X social accounts.
+- source-only implementation first; no real refresh/Vault write/X call/deploy until K3 + focused Codex review.
+- recommended model: Opus5.5（高）.
+
+## Final K3 PR #30 merge
+
+- verdict: **PASS**.
+- reviewed/fixed head `94000720e10649612e84cb3811327de1a63364e9` merged -> `a9b1ef4d359d5ef554284fc56427e0cafeaec648`.
+- post-merge focused Phase1B–1I 124/124; x-test-post 477/477; greeting/publish_claim/tip 138/138; _shared 141/141; important-news-monitor 473/473; DB behavior/concurrency proof PASS; Deno check/lint/bashe/diff checks PASS.
+- production migration/deploy/OAuth/Vault/X mutation = 0; Phase1I remains OFF/unwired.
+- additional Codex review not required because the already H1-reviewed/fixed head was merged unchanged and verified post-merge.
+- G3 closed and reusable after fresh allocation check.
+
+## PR #15 merge continuation
+
+- PR #15 head `f04c44ac564aa775fc0d68106648a0d2e4fcd564` merged by ChatGPT with expected-head protection.
+- merge/main commit: `f610503761729bdc09dfa483bd218a769350a2dc`.
+- G4 should resume Scope C/D only: post-merge tests, brand/auth boundary verification, actual Vercel production status, and authenticated production QA if deployment succeeded.
+- no additional Codex review required unless semantic source drift is introduced.
 
 ## K1 PR #31 icon integration
 
@@ -55,6 +163,73 @@
 - Codex review skipped as low-risk asset/config-only change.
 - next G1: fresh-main merge + post-merge verification. EAS/TestFlight requires separate authorization.
 - recommended model: Sonnet5（中）.
+
+## Final K2 PR #34 shadow deploy
+
+- verdict: **PASS**.
+- PR #34 reviewed head `40828d31124a629e594c7ac2ac3af28e5325f6de` merged -> `0cba73236f0e02dd3c88c78e9cb06434b593091f`.
+- production personalized-reports v30; verify_jwt=false.
+- app_enabled=false / x_enabled=false maintained.
+- deployed source read-back matches merged main byte-for-byte.
+- personalized-reports 119/119; related 241/241; check/lint/diff PASS.
+- one non-persisting dry-run smoke: completed, Fact PASS, local 0, voice_status=pass, delivery_blocked_by=null.
+- reportId=null, notification=not_attempted, persistence=0, notifications=0.
+- rollback not required.
+- next meaningful gate: Monday 2026-09-28 natural morning 08:35 JST + close 17:15 JST read-only telemetry/result validation.
+- Phase 2 warn-deliver/rewrite remains deferred until shadow data is observed.
+
+## Final K2 VOICE Phase 1 shadow source
+
+- verdict: **PASS**.
+- PR #34 head `40828d31124a629e594c7ac2ac3af28e5325f6de`.
+- shadow-only PASS/WARN/BLOCK/unavailable classification implemented.
+- telemetry stored under existing `source_basis.delivery_policy`; no migration.
+- report_logic, prompts, Fact/local semantics, parser, MIC and delivery/save/notify behavior unchanged.
+- new tests 8/8; personalized-reports 119/119; related 241/241; check/lint/diff PASS.
+- production mutation=0; PR remains unmerged at K2.
+- no new Codex review required under reduced-review policy.
+- next G2: fresh-main merge + controlled shadow deploy with app_enabled=false.
+- recommended model: Sonnet5（高）.
+
+## Final K2 PR #32 stabilization
+
+- verdict: **PASS for technical stabilization; activation still OFF**.
+- PR #32 final head `8792622d440b008d04ca97fb780a6a765245542a`.
+- merged -> `f34b8c48e0de35626a8c16cd6a8d6109285c2bde`.
+- production personalized-reports v29, verify_jwt=false.
+- app_enabled=false / x_enabled=false.
+- tests: no_material 7/7, morning_contract 8/8, report_hardening 9/9, close_validator 23/23, personalized-reports 111/111, related 233/233, check/lint/diff PASS.
+- dry-run: morning **3/3 PASS**, close **3/3 PASS**.
+- all impacts complete, empty fact_ja 0, MISSING_HOLDING_IMPACTS 0.
+- broad no-news / intraday / unsafe causal regressions not observed.
+- all dry-runs reportId=null and notification=not_attempted; persistence=0.
+- mixed-news live LLM case not naturally observed; deterministic regression test covers it.
+- rollback not required.
+- deferred independent review remains historical debt, not an activation requirement for this low-risk stabilization under the new review-cadence policy.
+- activation remains OFF pending later natural-cron/read-only confirmation and explicit decision.
+- next G2: VOICE PASS/WARN/BLOCK Phase 1 shadow classification + telemetry only.
+- recommended model: Opus5.5（高）.
+
+## K2 PR #32 safe-stop regression
+
+- verdict: **SAFE STOP before merge**.
+- current PR #32 head `722d191...` passes existing tests but has a deterministic no_clear_material regression not covered by them.
+- cause: prompt permits empty `fact_ja`; parser drops empty-fact impacts; local validator then raises `MISSING_HOLDING_IMPACTS`, causing delivery failure.
+- production remains v28; no merge/deploy/dry-run occurred in the stopped task; mutation=0.
+- chosen fix: keep parser unchanged and generate a holding-scoped non-empty input-state fact for no-material holdings.
+- per reduced-review policy, G2 will fix/test/update same PR/merge/redeploy/dry-run in one task; no new Codex review now.
+- app_enabled=true remains forbidden.
+- recommended model: Opus5.5（高）.
+
+## PR #32 review deferred / continue validation
+
+- User explicitly deferred H2 because Codex became unavailable mid-review.
+- H2 has no final verdict and remains incomplete.
+- During the partial review, Codex pushed `722d191dcbe4ba4ce5cf549659493df03d35a353`, tightening empty-news handling to packet-wide emptiness and adding mixed-news/adversarial tests.
+- Current PR #32 head is `722d191...`.
+- G2 will independently rerun full source verification, then may merge/deploy with app_enabled=false and perform morning>=3 / close>=3 dry-runs.
+- app_enabled=true remains forbidden until later review/activation decision.
+- recommended model: Opus5.5（高）.
 
 ## Final K2 PR #32 source contract fix
 
@@ -133,6 +308,20 @@
 - password setup must never imply admin authorization; `admin_users` gate remains mandatory.
 - Auth/security change requires independent Codex review before merge or production Auth URL configuration mutation.
 - recommended model: Opus5.5（高）.
+
+## Final K4 Admin password recovery / invite flow
+
+- result: **PASS for source + Netlify Preview**.
+- PR #33 head: `e2e1ff52a99e37d108a0f9a1f024dc507a7bedaf`; unmerged.
+- implemented `/forgot-password`, `/auth/confirm`, `/reset-password`.
+- account enumeration/open redirect/token logging protections PASS.
+- password setup does not grant admin; `admin_users` gate remains mandatory.
+- Netlify Preview SUCCESS; live unauth route QA PASS.
+- tests 47/47; tsc/lint/build/diff PASS.
+- production mutation=0; Supabase Site URL/Redirect URLs unchanged.
+- Codex review intentionally deferred per user instruction.
+- next operator gate: add exact Preview redirect URL, then perform one real recovery/invite E2E; keep Site URL unchanged for now.
+- recommended model for later continuation: Opus5.5（高）.
 
 ## Approved app icon decision
 
@@ -719,3 +908,12 @@
 - 各専用TASK/Reportが正本。索引やCURRENT_STATEと矛盾する場合はTASK/Reportを優先する。
 - 作業完了時に確認できた現在値だけを反映する。
 - 推測は事実として書かず、秘密情報・認証情報・個人情報は書かない。
+
+## G4 PR #33 continuation — Admin password recovery/invite
+
+- assigned: `x-admin-pr33-rebase-stabilize-auth-review-prep-20260925`.
+- PR #33 is open at head `dd66921a1578d6b54e707e5dce81eaa6ab1701af`, 5 commits / 11 files, currently `mergeable=false` / `dirty` against fresh main.
+- goal: resolve main drift/conflicts while preserving PR #15 multibrand/Admin behavior and all password-recovery security invariants, rerun full Admin/Auth tests, and obtain an updated Netlify Preview candidate.
+- this task does not merge PR #33 and does not mutate production Supabase Auth config/users, DB/RLS/RPC, Vercel production, OAuth/Vault/X.
+- Auth/security-sensitive; focused Codex review expected after K4.
+- recommended Claude model: Opus5.5（高）.

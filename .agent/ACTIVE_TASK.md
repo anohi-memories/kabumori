@@ -22,68 +22,68 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: x-autopost-phase1i-exact-account-refresh-final-review-20260925
+- status: ready
+- task_id: x-universal-oauth-refresh-final-review-20260925
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: closed; Final C1 PASS-WITH-FIX, PR #30 accepted for merge
+- allocation: assigned; focused universal OAuth/Vault/exact-account/concurrency rollout review; recommended Sol（高）
 
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: idle
 - task_id: kabumori-pr32-morning-fact-contract-final-review-20260925
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: assigned; PR #32 morning prompt/Fact contract final review
+- allocation: deferred by user after Codex interruption; incomplete review preserved, do not treat slot as free for overwrite
 
 ## Claude G1
 - owner: claude
 - slot: claude-1
 - status: done
-- task_id: kabumori-pr31-icon-merge-postmerge-verify-20260925
+- task_id: kabumori-branded-launch-screen-20260925
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: closed; Final K1 PASS, awaiting separately authorized EAS/TestFlight device check
+- allocation: closed; Final K1 PASS, PR #36 merged -> `b869fb557f009ca5817b6d2a853d529bd29c20c2`, real-device visual acceptance pending
 
 ## Claude G2
 - owner: claude
 - slot: claude-2
 - status: done
-- task_id: kabumori-morning-prompt-fact-contract-fix-20260925
+- task_id: kabumori-pr34-shadow-merge-deploy-20260925
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: closed; Final K2 source PASS, H2 review assigned
+- allocation: closed; Final K2 PASS, v30 shadow telemetry deployed, awaiting Monday natural-cron read-only gate
 
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
-- task_id: x-autopost-phase1i-pr30-merge-postmerge-verify-20260925
+- status: done
+- task_id: x-universal-oauth-refresh-productionization-20260925
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: assigned; merge reviewed PR #30 + post-merge Phase1I verification
+- allocation: closed; Final K3 PASS for source implementation at `acbac42`; production activation deferred pending H1/C1
 
 ## Claude G4
 - owner: claude
 - slot: claude-4
 - status: ready
-- task_id: x-admin-password-recovery-invite-flow-20260925
+- task_id: x-admin-pr33-rebase-stabilize-auth-review-prep-20260925
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: assigned; Admin forgot/reset/invite password flow + Netlify Preview, no production Auth config mutation
+- allocation: assigned; PR #33 fresh-main conflict resolution + Auth/security stabilization + Netlify Preview prep; recommended Opus5.5（高）
 
 ## Deferred
 
-- PR #15 final Vercel gate / merge / post-merge Admin QA is intentionally deferred while Netlify Preview is introduced.
+- PR #15 is closed with Final K4 PASS. PR #33 remains unmerged; its Auth/security review/merge decision can now be scheduled separately after fresh slot review.
 - Kabumori Expo Web Netlify Preview task is also deferred because it is not currently needed for the native app workflow.
 
 ## Control codes

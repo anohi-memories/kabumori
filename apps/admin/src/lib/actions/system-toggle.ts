@@ -1,6 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveBrandContext } from "@/lib/active-brand";
+import { KABUMORI_BRAND_ID } from "@/lib/brand-boundary";
+import { isKabumoriMutationAllowed } from "@/lib/selected-brand";
 import { createAdminServerClient } from "@/lib/supabase/server";
 
 // Fixed allowlist of what a client is allowed to flip, and exactly which
@@ -41,7 +44,12 @@ type SingleRowToggleConfig = {
   column: "is_active" | "auto_publish";
 };
 
-// posting_windows has one row per (post_type, slot_no). "morning_greeting"
+// Every toggle here controls a Kabumori system. The singleton settings tables are Kabumori-only, and
+// the posting_window mode is pinned to KABUMORI_BRAND_ID server-side (never taken from the client or the
+// selected brand), so no toggle can reach another brand's posting_windows rows. Brand-scoped toggles for
+// other brands are intentionally not offered: they would need a brand-scoped RPC/policy first.
+//
+// posting_windows has one row per (brand_id, post_type, slot_no). "morning_greeting"
 // has a single slot, but "tip" and "interaction" have several independent
 // slots that this mode always updates together — there is no per-slot
 // control in V1.1.
@@ -134,6 +142,7 @@ async function setPostingWindowFlag(
   const { data: currentRows, error: readError } = await supabase
     .from("posting_windows")
     .select("is_active")
+    .eq("brand_id", KABUMORI_BRAND_ID)
     .eq("post_type", config.postType);
   if (readError) {
     logToggleEvent("pre-update read failed", { systemKey, code: readError.code });
@@ -155,6 +164,7 @@ async function setPostingWindowFlag(
   const { data: updatedRows, error: updateError } = await supabase
     .from("posting_windows")
     .update({ is_active: enabled })
+    .eq("brand_id", KABUMORI_BRAND_ID)
     .eq("post_type", config.postType)
     .select("is_active");
 
@@ -197,6 +207,12 @@ export async function setSystemEnabled(systemKey: string, enabled: boolean): Pro
     .maybeSingle();
   if (adminError || !admin) {
     logToggleEvent("caller is not an admin", { systemKey });
+    return { ok: false, error: "not_admin" };
+  }
+
+  const activeBrand = await getActiveBrandContext();
+  if (!isKabumoriMutationAllowed(activeBrand)) {
+    logToggleEvent("Kabumori toggle rejected for selected brand", { systemKey });
     return { ok: false, error: "not_admin" };
   }
 

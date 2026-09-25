@@ -2,6 +2,8 @@ import Link from "next/link";
 import { ImportantNewsCandidateList } from "@/app/important-news-list";
 import { PostHistoryList } from "@/app/post-history-list";
 import { SystemStatusList } from "@/app/system-status-list";
+import { requireActiveBrand } from "@/lib/active-brand";
+import { KABUMORI_BRAND_ID } from "@/lib/brand-boundary";
 import { getImportantNewsCandidates } from "@/lib/important-news";
 import { getPostHistory } from "@/lib/post-history";
 import { getRecentFailures } from "@/lib/recent-failures";
@@ -12,14 +14,17 @@ import { getTodayScheduledPosts } from "@/lib/today-scheduled-posts";
 export const dynamic = "force-dynamic";
 
 export default async function AdminHomePage() {
+  const brand = await requireActiveBrand();
+  const isKabumori = brand.id === KABUMORI_BRAND_ID;
   const supabase = await createAdminServerClient();
   const [scheduleResult, failureResult, historyResult, importantNewsResult, systemStatusResult] =
     await Promise.all([
-      getTodayScheduledPosts(supabase),
-      getRecentFailures(supabase),
-      getPostHistory(supabase, 5),
-      getImportantNewsCandidates(supabase, 5),
-      getSystemStatus(supabase),
+      getTodayScheduledPosts(supabase, brand.id),
+      getRecentFailures(supabase, brand.id),
+      getPostHistory(supabase, brand, 5),
+      // Important News is a Kabumori-only system (no brand_id column); never shown for another brand.
+      isKabumori ? getImportantNewsCandidates(supabase, 5) : null,
+      getSystemStatus(supabase, brand.id),
     ]);
 
   return (
@@ -27,7 +32,7 @@ export default async function AdminHomePage() {
       <header className="dashboard-header">
         <div>
           <h1>ダッシュボード</h1>
-          <p className="page-description">投稿システムの今日の状況</p>
+          <p className="page-description">{brand.label}の投稿システムの今日の状況</p>
         </div>
       </header>
 
@@ -79,6 +84,9 @@ export default async function AdminHomePage() {
 
         <article className="dashboard-card system-status-card">
           <h2>システム状態</h2>
+          {systemStatusResult.scopeNote ? (
+            <p className="brand-scope-note">{systemStatusResult.scopeNote}</p>
+          ) : null}
           <SystemStatusList systems={systemStatusResult.systems} />
         </article>
 
@@ -159,9 +167,13 @@ export default async function AdminHomePage() {
         <article className="dashboard-card important-news-card">
           <div className="card-heading">
             <h2>重要ニュース候補</h2>
-            <Link className="text-link" href="/important-news">重要ニュース候補を見る</Link>
+            {isKabumori ? (
+              <Link className="text-link" href="/important-news">重要ニュース候補を見る</Link>
+            ) : null}
           </div>
-          {importantNewsResult.error ? (
+          {!importantNewsResult ? (
+            <div className="empty-state">重要ニュースはかぶモリ専用のため、このブランドでは表示しません。</div>
+          ) : importantNewsResult.error ? (
             <div className="empty-state" role="alert">
               重要ニュース候補を取得できませんでした。
             </div>
