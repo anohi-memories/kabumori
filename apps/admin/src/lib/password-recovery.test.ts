@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildRecoveryRedirectUrl,
-  buildSameOriginRedirect,
   completePasswordReset,
+  CONFIRM_FAILURE_DESTINATION,
+  CONFIRM_SUCCESS_DESTINATION,
   establishSessionFromFragment,
   hasRecoveryContext,
   isTrustedAdminOrigin,
@@ -200,16 +201,16 @@ test("redirect targets cannot be supplied by the request (no open redirect)", ()
   });
 });
 
-test("confirm redirects are absolute, same-origin, and drop the incoming query", () => {
-  const incoming = `${PREVIEW_ORIGIN}/auth/confirm?code=34e770dd&token_hash=abc&type=recovery&next=https://evil.com`;
-  assert.equal(buildSameOriginRedirect(incoming, "/reset-password"), `${PREVIEW_ORIGIN}/reset-password`);
-  assert.equal(
-    buildSameOriginRedirect(incoming, "/forgot-password?reason=link_invalid"),
-    `${PREVIEW_ORIGIN}/forgot-password?reason=link_invalid`,
-  );
-  for (const bad of ["reset-password", "//evil.com/x", "https://evil.com/x"]) {
-    assert.throws(() => buildSameOriginRedirect(incoming, bad), bad);
+test("confirm destinations are fixed relative same-origin paths with their own query", () => {
+  for (const destination of [CONFIRM_SUCCESS_DESTINATION, CONFIRM_FAILURE_DESTINATION]) {
+    assert.ok(destination.startsWith("/") && !destination.startsWith("//"), destination);
+    // Resolves against any origin without leaving it.
+    assert.equal(new URL(destination, PREVIEW_ORIGIN).origin, PREVIEW_ORIGIN);
+    // A query of its own keeps the platform from re-attaching the incoming one.
+    assert.ok(new URL(destination, PREVIEW_ORIGIN).search.length > 1, destination);
   }
+  assert.equal(new URL(CONFIRM_SUCCESS_DESTINATION, PREVIEW_ORIGIN).pathname, "/reset-password");
+  assert.equal(new URL(CONFIRM_FAILURE_DESTINATION, PREVIEW_ORIGIN).pathname, "/forgot-password");
 });
 
 test("a bare callback forwards to the fragment handler", () => {

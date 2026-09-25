@@ -78,20 +78,18 @@ export function buildRecoveryRedirectUrl(origin: string): string | null {
   return new URL(RECOVERY_CONFIRM_PATH, origin).toString();
 }
 
-/**
- * Absolute, same-origin destination for /auth/confirm's redirects. It is built
- * from the request's origin plus a fixed internal path only, so nothing from
- * the incoming query string (a consumed `code` / `token_hash`, or an injected
- * `next`) is carried along. A relative Location header is not enough: on
- * Netlify a relative Location was observed to be resolved with the original
- * query string re-attached.
- */
-export function buildSameOriginRedirect(requestUrl: string, internalPath: string): string {
-  if (!internalPath.startsWith("/") || internalPath.startsWith("//")) {
-    throw new Error("internal redirect path must be an absolute same-origin path");
-  }
-  return new URL(internalPath, new URL(requestUrl).origin).toString();
-}
+// Destinations for /auth/confirm's redirects. Both are fixed, relative,
+// same-origin paths that carry their own query string, for two reasons
+// observed on the Netlify runtime (PR #33 preview):
+//  - A relative Location is resolved against the host the browser used. An
+//    absolute URL built from request.url pointed at the per-deploy permalink
+//    host instead, where the session cookie just set does not exist.
+//  - When a redirect's Location has no query string, the incoming query is
+//    re-attached to it, which would copy a consumed `code` / `token_hash` (or
+//    an injected `next`) into the next page's URL and history. A Location
+//    with its own query string is left as is.
+export const CONFIRM_SUCCESS_DESTINATION = `${RESET_PASSWORD_PATH}?from=email-link`;
+export const CONFIRM_FAILURE_DESTINATION = `${FORGOT_PASSWORD_PATH}?reason=link_invalid`;
 
 export function normalizeEmail(input: string): string | null {
   const email = input.trim();

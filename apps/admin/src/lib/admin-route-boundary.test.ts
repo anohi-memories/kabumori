@@ -109,13 +109,16 @@ test("the link receiver takes no redirect target from the request", async () => 
   assert.doesNotMatch(route, /searchParams\.get\(/u);
   assert.doesNotMatch(route, /["'](?:next|redirect_to|redirectTo)["']/u);
   assert.match(route, /resolveConfirmAction\(request\.nextUrl\.searchParams\)/u);
-  // Every redirect goes through buildSameOriginRedirect (absolute URL, no
-  // carried-over query); a bare relative redirect was seen to re-attach the
-  // incoming query string on Netlify.
+  // Every redirect targets one of the two fixed destinations (relative path +
+  // own query string). An absolute URL from request.url is not used: on Netlify
+  // it pointed at the per-deploy host, where the session cookie does not exist.
   const code = withoutLineComments(route);
-  assert.doesNotMatch(code, /from "next\/navigation"/u);
-  assert.match(code, /NextResponse\.redirect\(buildSameOriginRedirect\(request\.url, path\), 307\)/u);
-  assert.equal((code.match(/NextResponse\.redirect\(/gu) ?? []).length, 1);
+  assert.doesNotMatch(code, /NextResponse\.redirect|request\.url/u);
+  const redirects = code.match(/redirect\([^)]*\)/gu) ?? [];
+  assert.equal(redirects.length, 3);
+  for (const call of redirects) {
+    assert.match(call, /^redirect\((?:CONFIRM_(?:SUCCESS|FAILURE)_DESTINATION|error \? CONFIRM_FAILURE_DESTINATION : CONFIRM_SUCCESS_DESTINATION)\)$/u, call);
+  }
 });
 
 test("the reset page gates the form on a verified recovery context", async () => {
