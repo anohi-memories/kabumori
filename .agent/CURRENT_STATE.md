@@ -31,13 +31,13 @@
 
 ## Current slot snapshot
 
-- H1: `review_required` — `x-autopost-phase1g-multistep-tip-greeting-final-review-20260925` (PR #27; source-only PASS-WITH-FIX; C1 pending)
+- H1: `done` — `x-autopost-phase1g-multistep-tip-greeting-final-review-20260925`
 - H2: `done` — `kabumori-pr26-unknown-cause-prefix-final-review-20260925`
 - G1: `done` — `kabumori-pr24-privacy-merge-postmerge-verify-20260924`
   - PR #24 merged at reviewed head `46515c5` -> main `ff4c43c`. Files byte-identical; 122/0 tests, production web build shows the new disclosure text. personalized-reports/account-deletion.html untouched. Mutation 0.
   - Privacy dataflow gap from PR #21 review is now closed on main. Remaining blockers: icon/splash/overlay artwork, EAS production env, Netlify publish, Auth Site URL/SMTP, App Store Connect.
 - G2: `ready` — `kabumori-pr26-merge-redeploy-final-dryrun-20260925`
-- G3: `done` — `x-autopost-phase1g-multistep-tip-greeting-completion-20260925`
+- G3: `ready` — `x-autopost-phase1g-pr27-merge-postmerge-verify-20260925`
 - G4: `done` — `x-admin-netlify-deploy-preview-pipeline-20260924`
 
 ## Final K1 PR #24 result
@@ -388,6 +388,18 @@
 - Fixed stale prior-day morning-greeting claim/provider-step authorization using the execution day's JST date. The failure was reproduced first in a disposable database; Phase1F already guards non-reply parent IDs by CHECK constraint.
 - Focused 72/72; related Deno 997/997; greeting/tip 138/138; disposable PostgreSQL Phase1D/1E/1F/1G behavior/race proofs PASS.
 - Production migration, deploy, token/Cron, X API/media calls: **0**. Production activation remains **NO**; live schema/grant/read-back and ordered rollout need separate review/approval.
+
+## C1 Phase1G result
+
+- H1 verdict: **PASS-WITH-FIX for source-only candidate**.
+- reviewed implementation: `e0f7785`.
+- H1 fix/reviewed head: `5a62af547dbc840c1f7b140d6d51d8876c1a7223` on PR #27.
+- Fixed P1 stale prior-day morning_greeting claim/provider-step authorization via current-JST checks.
+- Fixed P3 duplicate confirmed thread IDs in the next-action helper.
+- focused 72/72; x-test-post/_shared/important-news-monitor 997/997; greeting/tip 138/138; disposable Phase1D/E/F/G proofs PASS.
+- production activation remains NO.
+- G3 now owns PR #27 fresh-main merge/post-merge verification.
+- recommended model: Sonnet5（高）.
 
 ## K4 Netlify result
 
