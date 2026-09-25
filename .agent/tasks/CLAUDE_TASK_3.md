@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1i-exact-account-prex-refresh-writer-20260925
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Opus5.5（高）
 - purpose: Phase1Hで残っているexact-account単位のpre-X refresh writerをsource-onlyで実装し、claim.social_account_idを唯一の権限元としてそのアカウント自身のVault credentialだけを安全に更新できるようにする。production apply/deploy/token refreshは行わない。
@@ -278,3 +278,41 @@ Do not activate or deploy refresh.
 12. production mutation: **0** (apply/DDL/DML/RPC 0, db push 0, deploy 0, Cron 0, OAuth/Vault/token 0, real refresh/rotation 0, X API/post/media 0, gate enable 0, scheduler/claim switch 0, legacy claim revoke 0).
 13. remaining blockers: Kabumori token still in `oauth_token_store`/env (not refresh-ready); AI Lab refresh ref must be verified on its own row; live read-back listed in §7; stuck `refreshing` / `uncertain` need an operator runbook (re-connect + reviewed reset SQL) and monitoring; resumed multi-step attempts cannot refresh (by design) and wait for a pre-X refresh or re-connect; interaction poll seam; brand_post completion source; real v2 content adapters and the gate-OFF entrypoint; production gates (ordered 1B→1I apply proof, staged rollback plan).
 14. next_recommendation: K3, then Codex review of the refresh authority/lease/Vault-write boundary and race proofs (Sol high). Next source-only step: the gate-OFF v2 entrypoint with real content adapters and the refresh port wired (Opus5.5（高）), or the Kabumori credential migration plan into its account's Vault refs.
+
+
+## Final K3 — Phase1I
+
+Result: **PASS for source-only implementation; independent H1 review required before further acceptance.**
+
+Accepted:
+- implementation commit `12e9fd1`
+- exact-account authority anchored to claim/attempt `social_account_id`
+- no brand-first / first-row / env / legacy token fallback
+- refresh allowed only pre-provider-start
+- one-request OAuth refresh seam, manual redirects, no hidden retry
+- same-account Vault-only writes with optional refresh-token rotation
+- uncertain refresh outcome fails closed and blocks blind replay
+- same-account concurrency lease / stale-attempt protections present
+- service_role-only SECURITY DEFINER RPC model with empty search_path
+- source-only dispatcher integration seam remains unwired from live production
+- focused Phase1B–1I 124/124 PASS
+- x-test-post 477/477 PASS
+- _shared 141/141 PASS
+- important-news-monitor 451/451 PASS
+- greeting/tip/publish_claim 138/138 PASS
+- disposable PostgreSQL Phase1I behavior/race and prior phase proofs PASS
+- deno check/lint, bash -n, diff check PASS
+- production migration/apply/deploy/token refresh/Vault mutation/X API calls = 0
+
+Risks requiring Codex:
+- OAuth refresh rotation is a high-risk one-way external boundary
+- Vault read/write ownership and ACL assumptions
+- uncertain-result recovery / stuck refreshing operator path
+- provider-start vs refresh concurrency
+- lease release and stale-attempt safety
+- migration ordering and live production grant/read-back prerequisites
+
+Decision:
+- G3 implementation accepted as K3 PASS.
+- Production activation remains **NO**.
+- H1 assigned independent final review using **Sol（高）**.
