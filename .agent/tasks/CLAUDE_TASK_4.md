@@ -3,8 +3,8 @@
 - task_id: x-admin-password-recovery-invite-flow-20260925
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Opus5.5（高）
 - purpose: X管理画面にWeb用の「パスワードを忘れた」「初回招待/パスワード設定」「リカバリ後の新パスワード設定」導線を実装し、Supabase Authのlocalhostフォールバック依存を解消する。まずsource/Netlify Previewまで。production Supabase URL Configuration変更はこのTASKでは行わない。
@@ -355,3 +355,38 @@ Supabase Site URL / Redirect URLs / email template：未変更。Auth userのパ
 
 - status -> review_required
 - next_owner -> chatgpt
+
+
+## Final K4 — Admin password recovery/invite flow
+
+Result: **PASS for source + Netlify Preview**.
+
+Accepted:
+- PR #33 head `e2e1ff52a99e37d108a0f9a1f024dc507a7bedaf`
+- `/forgot-password`, `/auth/confirm`, `/reset-password` implemented
+- password recovery responses are account-enumeration safe
+- redirect destination is fixed/trusted; open-redirect inputs are ignored
+- recovery/invite links do not grant admin authorization
+- `admin_users` gate remains separate and mandatory
+- token/password/session values are not logged
+- direct reset access without valid recovery context fails closed
+- protected admin routes remain protected
+- Netlify Preview SUCCESS
+- live unauthenticated route QA PASS
+- 47/47 tests PASS
+- tsc/lint/build/diff PASS
+- production mutation=0
+
+Important:
+- real recovery email -> valid session -> password update success path is not yet live-tested
+- Supabase production Site URL / Redirect URLs remain unchanged
+- PR #33 remains unmerged
+
+User-directed review policy:
+- Codex review is intentionally deferred for this task because the user requested review to be postponed.
+- Do not auto-assign H1/H2 from this K4.
+
+Next operator step:
+- add exact Preview redirect URL `https://deploy-preview-33--shiny-kheer-77a154.netlify.app/auth/confirm` to Supabase Auth Redirect URLs while preserving `kabumori://reset-password`
+- then perform one real recovery/invite E2E on the Preview
+- do not change Site URL yet
