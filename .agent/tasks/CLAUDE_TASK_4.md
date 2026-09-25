@@ -185,3 +185,56 @@ Then:
 ## Report
 
 - pending
+
+## Report (Stage A preflight — paused for operator actions)
+
+- task_id: x-admin-pr33-bounded-real-auth-e2e-20260926
+- result: **PAUSED_OPERATOR_ACTION** — 読み取りのみの事前確認は完了。以降の段階には、Claudeが行えない操作（テスト用アカウントの作成・招待、パスワード入力、メール受信）と、ダッシュボードでのAuth設定の確認・一時変更が必要なため停止。status は `in_progress` のまま（準備完了後に G4 を再開する）。
+- model_used: Opus 5.5
+
+### Stage A — 確認できたこと
+
+- PR #33: OPEN、head `2528b5686bcbb3630fb636cec12162803f921f8f`（reviewed headと一致）、MERGEABLE、Netlify deploy-preview SUCCESS。
+- Preview: `/login`・`/forgot-password`・`/reset-password` 200、`/auth/confirm?next=https://evil.example` → 307 `/reset-password?from=email-link`（外部へ飛ばない）。
+- 他slot: G3はuniversal OAuth（`apps/admin`外）、H1はPR #33レビュー待ち。重複なし。
+- Supabase公式ドキュメント（JWT fields）: `amr.method`の文書化済みの値に`recovery`（Account recovery）と`invite`（Invitation-based signup）が含まれる。PR #33の許可リスト（この2つのみ）はこれと一致。`otp`・`magiclink`は別の値として文書化されている。
+
+### Stage A — 確認できなかったこと（ダッシュボードが必要）
+
+- 現在のSite URL / Redirect URLs / メールテンプレート / SMTP設定。Supabase CLIには読み取りコマンドがなく（`config push`のみ）、CLIが保持する管理トークンを取り出してManagement APIを呼ぶことはしない。
+
+### Claudeが行えない操作（安全上のルールにより、ユーザーの許可があっても不可）
+
+- アカウントの作成（招待の送信を含む）
+- パスワードの入力（再設定フォームへの新パスワード入力、そのパスワードでのログイン）
+- メールボックスへのアクセス（Claudeは受信メールを読めない）
+
+### 操作者にお願いする手順
+
+**準備**
+1. テスト専用のメールアドレスを2つ用意（本人が受信できるもの。例: 本人Gmailの`+recovery` / `+invite`エイリアス）。**本番の運用・管理者アカウントは使わない**。
+2. Supabaseダッシュボード → Authentication → URL Configuration の現状を記録（Site URL と Redirect URLs の一覧）。ワイルドカードで`deploy-preview-*`等が既に許可されていないかも確認。
+3. Redirect URLsに**完全一致で1件だけ**一時追加: `https://deploy-preview-33--shiny-kheer-77a154.netlify.app/auth/confirm`（`kabumori://reset-password`は削除しない。Site URLは変更しない）。
+4. リカバリ用テストユーザーを1件用意: ダッシュボード → Authentication → Users → Add user（メール1つ目、任意の仮パスワード）。`admin_users`には追加しない。
+
+**リカバリ（Claudeのブラウザ画面で実施 — PKCEのため同じブラウザが必要）**
+5. Claudeのブラウザ画面で `https://deploy-preview-33--shiny-kheer-77a154.netlify.app/forgot-password` を開き、メール1つ目で送信。
+6. 届いたメールのリンクを、**Claudeのブラウザ画面のアドレスバーに貼って**開く（別のブラウザでは開かない）。
+7. `/reset-password`が表示されたら、**パスワードを入力する前に**`g4`と送ってください。Claudeが、セッションの`amr`の値（値の名前のみ記録）とフォーム表示を確認します。
+
+**招待（ダッシュボードの招待は既定でSite URL=localhostへ飛ぶため、招待専用テンプレートの一時変更が必要）**
+8. Authentication → Email Templates → **Invite user** の現在の内容を控えてから、リンク部分を一時的に次へ変更:
+   `https://deploy-preview-33--shiny-kheer-77a154.netlify.app/auth/confirm?token_hash={{ .TokenHash }}&type=invite`
+   **Reset Password テンプレートは変更しない**（モバイルと共用）。
+9. Users → Invite user でメール2つ目へ招待を1通送信。
+
+（手順 8–9 はリカバリの確認後で構いません。Claude側で順番に案内します。）
+
+### 再開後にClaudeが行うこと（読み取り中心）
+
+- 各フローで: `amr`の値の確認（`recovery` / `invite`以外なら即停止・許可リストは広げない）、フォーム表示の確認、パスワード設定後（入力は操作者）の`/login?reason=password_updated`への遷移とログアウト確認、`/reset-password`再訪でフォームが出ないことの確認、新パスワードでのログイン後（入力は操作者）に`/unauthorized`になることの確認。
+- 片付けの案内と確認: 一時Redirect URLの削除、Inviteテンプレートの復元、テストユーザーの扱い、`admin_users`に追加されていないことの確認。
+
+### production/Auth mutations（ここまで）
+
+0件。
