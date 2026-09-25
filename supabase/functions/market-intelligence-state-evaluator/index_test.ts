@@ -707,3 +707,174 @@ test("[Y] response loss after commit: reconciled as evaluated, and the run's usa
   assert.deepEqual(calls.filter(isUsageInsert).map((u) => u.body.related_id), ["run-Y"]);
   assert.equal(calls.filter(isUsageInsert).length, 1, "no extra usage row is written by the reconcile path");
 });
+
+// --- Phase 2C-2: Fed statement interpretation context in the State AI input ---
+
+const OPENAI_URL = "https://api.openai.com/v1/responses";
+const VALID_FED_INTERPRETATION = {
+  summary: "政策金利を25bp引き上げ、インフレ警戒を維持しました。",
+  changes: [
+    {
+      bucket: "policy stance", direction: "more_hawkish", previous: "据え置き", current: "25bp引き上げ",
+      interpretation: "より引き締め的な姿勢です。", confidence: 0.8,
+    },
+  ],
+  overall_bias_change: "more_hawkish",
+  confidence: 0.75,
+};
+const interpretedFedDiff = (overrides: Record<string, unknown> = {}) =>
+  fedDiffRow("4c6f1ad7-255e-4ac7-8eab-b44904bf94b0", { ai_interpretation: VALID_FED_INTERPRETATION, ...overrides });
+
+// deno-lint-ignore no-explicit-any
+function aiFacts(call: MockCall): any {
+  return JSON.parse(call.body.input.find((m: { role: string }) => m.role === "user").content);
+}
+function aiSystem(call: MockCall): string {
+  return call.body.input.find((m: { role: string }) => m.role === "system").content;
+}
+
+test("[A] rates + Fed diff with ai_interpretation: the Luna request carries it as fed_statement_interpretations", async () => {
+  const { fetchImpl: baseFetch, calls } = makeMockFetch({});
+  const result = await runWith(withFedDiff(baseFetch, interpretedFedDiff()), decisionResult({ recentEvents: [centralBankEvent()] }));
+  assert.equal(result.status, "evaluated");
+  const ai = calls.filter((c) => c.url === OPENAI_URL);
+  assert.equal(ai.length, 1);
+  const fed = aiFacts(ai[0]).fed_statement_interpretations;
+  assert.equal(fed.length, 1);
+  assert.equal(fed[0].meeting_date, "2026-09-16");
+  assert.equal(fed[0].previous_meeting_date, "2026-07-29");
+  assert.equal(fed[0].interpretation.summary, VALID_FED_INTERPRETATION.summary);
+  assert.equal(fed[0].interpretation.overall_bias_change, "more_hawkish");
+  assert.equal(fed[0].interpretation_model, "gpt-6-luna");
+  assert.equal(fed[0].interpretation_prompt_version, "fed-statement-diff-v2");
+  assert.match(aiSystem(ai[0]), /二次的な解釈であり、Factではありません/);
+});
+
+test("[A/G] evidence consistency: the interpretation the AI saw comes from the very snapshot sent to the RPC (the diff is read once)", async () => {
+  const { fetchImpl: baseFetch, calls } = makeMockFetch({});
+  let diffLookups = 0;
+  const fetchImpl = withOverride(baseFetch, (u) => u.includes("/rest/v1/mic_fed_statement_diffs"), () => {
+    diffLookups += 1;
+    return Promise.resolve(new Response(JSON.stringify([interpretedFedDiff()]), { status: 200 }));
+  });
+  await runWith(fetchImpl, decisionResult({ recentEvents: [centralBankEvent()] }));
+  assert.equal(diffLookups, 1, "no second Fed diff query");
+  const rpcSnapshot = calls.find((c) => isMaterialRpc(c.url))!.body.p_fed_statement_diff_snapshots[0];
+  const aiEntry = aiFacts(calls.find((c) => c.url === OPENAI_URL)!).fed_statement_interpretations[0];
+  assert.equal(aiEntry.interpretation.summary, rpcSnapshot.ai_interpretation.summary);
+  assert.equal(aiEntry.interpretation_generated_at, rpcSnapshot.generated_at);
+  assert.equal(aiEntry.meeting_date, rpcSnapshot.meeting_date);
+});
+
+test("[G] a Fed diff changed during evaluation still fails closed even when its interpretation was used as AI context", async () => {
+  const { fetchImpl: baseFetch, calls } = makeMockFetch({ runIds: ["run-G"] });
+  const fetchImpl = withOverride(
+    withFedDiff(baseFetch, interpretedFedDiff()),
+    isMaterialRpc,
+    rpcError("MIC_STATE_FED_DIFF_CHANGED_DURING_EVALUATION"),
+  );
+  const result = await runWith(fetchImpl, decisionResult({ recentEvents: [centralBankEvent()] }));
+  assert.equal(result.status, "failed");
+  assert.match(result.error ?? "", /MIC_STATE_FED_DIFF_CHANGED_DURING_EVALUATION/);
+  assert.ok(calls.some((c) => c.method === "PATCH" && c.url.includes("id=eq.run-G&status=eq.running") && c.body.status === "failed"));
+});
+
+test("[C] ai_interpretation null: no Fed context in the AI request, and the rates run still evaluates normally", async () => {
+  const { fetchImpl: baseFetch, calls } = makeMockFetch({});
+  const result = await runWith(
+    withFedDiff(baseFetch, interpretedFedDiff({ ai_interpretation: null, model: null, generated_at: null })),
+    decisionResult({ recentEvents: [centralBankEvent()] }),
+  );
+  assert.equal(result.status, "evaluated");
+  const ai = calls.find((c) => c.url === OPENAI_URL)!;
+  assert.equal("fed_statement_interpretations" in aiFacts(ai), false);
+  assert.equal(aiSystem(ai).includes("fed_statement_interpretations"), false);
+  assert.equal(calls.find((c) => isMaterialRpc(c.url))!.body.p_fed_statement_diff_snapshots.length, 1, "diff evidence unchanged");
+});
+
+test("[C/L] a malformed interpretation is skipped: the AI request is identical to the no-diff request; evidence is unchanged", async () => {
+  const withMalformed = makeMockFetch({});
+  await runWith(
+    withFedDiff(withMalformed.fetchImpl, interpretedFedDiff({ ai_interpretation: { summary: "x", changes: "bad" } })),
+    decisionResult({ recentEvents: [centralBankEvent()] }),
+  );
+  const noDiff = makeMockFetch({});
+  await runWith(noDiff.fetchImpl, decisionResult({ recentEvents: [centralBankEvent()] }));
+  assert.deepEqual(
+    withMalformed.calls.find((c) => c.url === OPENAI_URL)!.body,
+    noDiff.calls.find((c) => c.url === OPENAI_URL)!.body,
+  );
+  assert.equal(withMalformed.calls.find((c) => isMaterialRpc(c.url))!.body.p_fed_statement_diff_snapshots.length, 1);
+});
+
+test("[D] a non-rates domain never gets Fed context, even if a Fed diff snapshot were resolved for it", async () => {
+  const { fetchImpl: baseFetch, calls } = makeMockFetch({});
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = withFedDiff(baseFetch, interpretedFedDiff()) as typeof fetch;
+  try {
+    const result = await evaluateDomain(
+      ctx, "fx", decisionResult({ domain: "fx", recentEvents: [centralBankEvent()] }), new Date("2026-09-16T18:20:00Z"), 1,
+    );
+    assert.equal(result.status, "evaluated");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  const ai = calls.find((c) => c.url === OPENAI_URL)!;
+  assert.equal("fed_statement_interpretations" in aiFacts(ai), false);
+  assert.equal(aiSystem(ai).includes("fed_statement_interpretations"), false);
+});
+
+test("[E] Fed ambiguity (2+ diffs, both interpreted) still fails before any AI call", async () => {
+  const { fetchImpl: baseFetch, calls } = makeMockFetch({});
+  const fetchImpl = withOverride(baseFetch, (u) => u.includes("/rest/v1/mic_fed_statement_diffs"), () =>
+    Promise.resolve(new Response(JSON.stringify([
+      interpretedFedDiff(),
+      fedDiffRow("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", { ai_interpretation: VALID_FED_INTERPRETATION, prompt_version: "fed-statement-diff-v3" }),
+    ]), { status: 200 })));
+  const result = await runWith(fetchImpl, decisionResult({ recentEvents: [centralBankEvent()] }));
+  assert.equal(result.status, "failed");
+  assert.match(result.error ?? "", /FED_STATEMENT_DIFF_AMBIGUOUS/);
+  assert.equal(calls.filter((c) => c.url === OPENAI_URL).length, 0);
+  assert.equal(calls.filter(isUsageInsert).length, 0);
+});
+
+test("[F] Fed diff lookup failure still fails before any AI call", async () => {
+  const { fetchImpl: baseFetch, calls } = makeMockFetch({});
+  const fetchImpl = withOverride(baseFetch, (u) => u.includes("/rest/v1/mic_fed_statement_diffs"), () =>
+    Promise.resolve(new Response("upstream error", { status: 503 })));
+  const result = await runWith(fetchImpl, decisionResult({ recentEvents: [centralBankEvent()] }));
+  assert.equal(result.status, "failed");
+  assert.match(result.error ?? "", /FED_STATEMENT_DIFF_LOOKUP_FAILED/);
+  assert.equal(calls.filter((c) => c.url === OPENAI_URL).length, 0);
+});
+
+test("[H/I] Luna -> Sol: both requests carry the identical Fed context; usage stays one row per real call, both on the same run", async () => {
+  const { fetchImpl: baseFetch, calls } = makeMockFetch({
+    runIds: ["run-H"],
+    lunaOutput: { narrative: "n", bullish_factors: [], bearish_factors: [], key_risks: [], confidence: 0.5, needs_sol: false },
+    solOutput: { narrative: "n2", bullish_factors: [], bearish_factors: [], key_risks: [], confidence: 0.6, needs_sol: false },
+  });
+  const result = await runWith(
+    withFedDiff(baseFetch, interpretedFedDiff()),
+    decisionResult({ dataConfidence: 0.9, recentEvents: [centralBankEvent()] }),
+  );
+  assert.equal(result.status, "evaluated");
+  const ai = calls.filter((c) => c.url === OPENAI_URL);
+  assert.deepEqual(ai.map((c) => c.body.model), ["gpt-5.6-luna", "gpt-5.6-sol"]);
+  assert.equal(aiFacts(ai[1]).fed_statement_interpretations.length, 1);
+  assert.deepEqual(aiFacts(ai[0]).fed_statement_interpretations, aiFacts(ai[1]).fed_statement_interpretations);
+  assert.deepEqual(calls.filter(isUsageInsert).map((u) => [u.body.related_table, u.body.related_id, u.body.feature, u.body.model]), [
+    ["mic_state_evaluation_runs", "run-H", "mic_state_evaluation_rates", "gpt-5.6-luna"],
+    ["mic_state_evaluation_runs", "run-H", "mic_state_evaluation_rates", "gpt-5.6-sol"],
+  ]);
+});
+
+test("no additional OpenAI call: with Fed context the run makes exactly the calls it makes without it", async () => {
+  const withFed = makeMockFetch({});
+  await runWith(withFedDiff(withFed.fetchImpl, interpretedFedDiff()), decisionResult({ recentEvents: [centralBankEvent()] }));
+  const without = makeMockFetch({});
+  await runWith(without.fetchImpl, decisionResult({ recentEvents: [centralBankEvent()] }));
+  assert.equal(withFed.calls.filter((c) => c.url === OPENAI_URL).length, 1);
+  assert.equal(without.calls.filter((c) => c.url === OPENAI_URL).length, 1);
+  assert.equal(withFed.calls.filter(isUsageInsert).length, without.calls.filter(isUsageInsert).length);
+});
