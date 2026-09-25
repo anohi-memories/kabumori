@@ -97,6 +97,20 @@
 - no overlap with G2 personalized-reports or X/admin scopes.
 - recommended model: Opus5.5（高）.
 
+
+## Final K3 universal OAuth refresh productionization
+
+- verdict: **PASS for source implementation**.
+- implementation commit: `acbac42`.
+- AI Lab `allowRefresh:false` dead-end removed in source and replaced by the generic exact-account Vault-backed credential lifecycle for non-Kabumori accounts.
+- Kabumori legacy token path unchanged.
+- exact-account/ref ownership, one-refresh/one-safe-retry, uncertain/reauth_required health handling, concurrency lease model and future-account generic routing implemented.
+- x-test-post 500/500; _shared 141/141; important-news-monitor 473/473; disposable core/race proofs PASS.
+- production mutation=0; no migration/deploy/real refresh/Vault write/X call.
+- G3 closed.
+- H1 assigned focused final review before any production activation.
+- recommended Codex model: Sol（高）.
+
 ## Final K4 PR #15 production verification
 
 - verdict: **PASS**.
