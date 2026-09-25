@@ -33,13 +33,13 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: kabumori-pr26-unknown-cause-prefix-final-review-20260925
+- status: ready
+- task_id: kabumori-pr29-plus-v27-validator-final-review-20260925
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: closed; Final C2 PASS
+- allocation: assigned; combined review of already-deployed 510acf5 + PR #29
 
 ## Claude G1
 - owner: claude
@@ -54,12 +54,12 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: done
 - task_id: kabumori-report-dryrun-false-reject-hardening-20260925
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: assigned; v26 dry-run remaining false-reject + morning Fact prompt hardening, source-only/no deploy
+- allocation: closed; Final K2 source PASS, awaiting H2 combined review
 
 ## Claude G3
 - owner: claude
