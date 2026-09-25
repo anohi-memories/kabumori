@@ -32,13 +32,23 @@
 ## Current slot snapshot
 
 - H1: `done` — `x-autopost-phase1h-gated-dispatcher-final-review-20260925`
-- H2: `ready` — `kabumori-pr29-plus-v27-validator-final-review-20260925`
+- H2: `done` — `kabumori-pr29-plus-v27-validator-final-review-20260925`
 - G1: `done` — `kabumori-pr24-privacy-merge-postmerge-verify-20260924`
   - PR #24 merged at reviewed head `46515c5` -> main `ff4c43c`. Files byte-identical; 122/0 tests, production web build shows the new disclosure text. personalized-reports/account-deletion.html untouched. Mutation 0.
   - Privacy dataflow gap from PR #21 review is now closed on main. Remaining blockers: icon/splash/overlay artwork, EAS production env, Netlify publish, Auth Site URL/SMTP, App Store Connect.
-- G2: `ready` — `kabumori-voice-gate-product-policy-audit-20260925`
+- G2: `ready` — `kabumori-pr29-merge-redeploy-final-dryrun-20260925`
 - G3: `ready` — `x-autopost-phase1i-exact-account-prex-refresh-writer-20260925`
 - G4: `done` — `x-admin-netlify-pr15-live-preview-auth-qa-20260925`
+
+## K2 VOICE gate audit result
+
+- verdict: **PASS** for audit/design.
+- source change=0, production mutation=0.
+- Product direction accepted: Fact/Safety remain BLOCK; Voice quality becomes PASS/WARN/BLOCK, and Voice-only WARN must not suppress delivery.
+- preferred future delivery policy: one rewrite for WARN, re-Fact rewritten text, fallback to original Fact-passed text if rewrite fails or remains stylistically weak.
+- Voice evaluator infrastructure errors should become WARN/unavailable after retry, not automatic content failure.
+- next implementation will start only after PR #29 report stabilization; first phase is shadow classification + telemetry with no delivery behavior change.
+- recommended implementation model: Opus5.5（高）; review: Codex Sol（高）.
 
 ## VOICE gate product-policy audit
 
@@ -48,6 +58,19 @@
 - G2 assigned read-only audit/design only; no source/deploy.
 - X-side implementation is out of scope for this room; G2 should produce a handoff for X担当ちゃ.
 - recommended model: Opus5.5（中）.
+
+## Final C2 PR #29 + v27 validator
+
+- verdict: **PASS-WITH-FIX**.
+- `510acf5` validator widening to 値下がり/値上がり independently reviewed PASS.
+- PR #29 final reviewed head: `ef9603749a43d0f63ff1ab0ca0f24b33a7bdc1c1`.
+- H2 fixed one prompt coverage gap: morning neutral-wording instruction now explicitly includes `watch_notes[*].note_ja`.
+- validator and Fact behavior remain unweakened/fail-closed.
+- MIC compatibility PASS.
+- focused 32/32; personalized-reports 96/96; deno check/lint/diff PASS.
+- production mutation from H2=0.
+- next G2: merge PR #29 -> controlled redeploy -> close 5x + morning 2x dry-run, app_enabled=false.
+- recommended model: Opus5.5（高）.
 
 ## Final K2 PR #29 source hardening
 
