@@ -32,11 +32,11 @@
 ## Current slot snapshot
 
 - H1: `done` — `x-autopost-phase1f-ledger-atomic-completion-final-review-20260924`
-- H2: `ready` — `kabumori-pr26-unknown-cause-prefix-final-review-20260925`
+- H2: `done` — `kabumori-pr26-unknown-cause-prefix-final-review-20260925`
 - G1: `done` — `kabumori-pr24-privacy-merge-postmerge-verify-20260924`
   - PR #24 merged at reviewed head `46515c5` -> main `ff4c43c`. Files byte-identical; 122/0 tests, production web build shows the new disclosure text. personalized-reports/account-deletion.html untouched. Mutation 0.
   - Privacy dataflow gap from PR #21 review is now closed on main. Remaining blockers: icon/splash/overlay artwork, EAS production env, Netlify publish, Auth Site URL/SMTP, App Store Connect.
-- G2: `done` — `kabumori-close-unknown-cause-prefix-fix-20260924`
+- G2: `ready` — `kabumori-pr26-merge-redeploy-final-dryrun-20260925`
 - G3: `ready` — `x-autopost-phase1g-multistep-tip-greeting-completion-20260925`
 - G4: `done` — `x-admin-netlify-deploy-preview-pipeline-20260924`
 
@@ -146,6 +146,17 @@
 - Kabumori Expo Web Netlify Preview setup.
 - Prior reviewed code/test evidence remains preserved in the old G4/G2 reports.
 - Resume either deferred item only when needed or user explicitly asks.
+
+## C2 PR #26 result
+
+- verdict: **PASS**.
+- reviewed head: `2b40a617e34c73c301e40a17692883ac70fd3e0a`.
+- no over-permission or new causal/free-text bypass found.
+- whole-string anchors, CAUSAL_ASSERTION-first ordering, and sentence splitting remain intact.
+- focused 20/20; personalized-reports 64/64; deno check/lint/diff PASS.
+- production mutation=0.
+- G2 assigned fresh-main merge + redeploy + close dry-run 3〜5回 + morning 1回 with app_enabled=false.
+- recommended model: Opus5.5（高）.
 
 ## Final K2 PR #26 source-fix result
 
