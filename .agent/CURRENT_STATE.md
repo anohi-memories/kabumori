@@ -48,7 +48,7 @@
   - Final K1 PASS. PR #31 merged -> `7aa394fc1dc73edd0c67b6529923ec4dc9616e7f`.
   - Approved icon reproducibly wired into Expo/iOS; 126/126 tests; no production mutation.
   - Awaiting separately authorized EAS/TestFlight real-iPhone visual verification.
-- G2: `ready` — `kabumori-pr32-no-clear-material-fix-merge-dryrun-20260925`
+- G2: `ready` — `kabumori-voice-policy-phase1-shadow-20260925`
 - G3: `ready` — `x-autopost-phase1i-pr30-merge-postmerge-verify-20260925`
 - G4: `done` — `x-admin-password-recovery-invite-flow-20260925`; Final K4 PASS, operator E2E pending
 
@@ -66,6 +66,25 @@
 - Codex review skipped as low-risk asset/config-only change.
 - next G1: fresh-main merge + post-merge verification. EAS/TestFlight requires separate authorization.
 - recommended model: Sonnet5（中）.
+
+## Final K2 PR #32 stabilization
+
+- verdict: **PASS for technical stabilization; activation still OFF**.
+- PR #32 final head `8792622d440b008d04ca97fb780a6a765245542a`.
+- merged -> `f34b8c48e0de35626a8c16cd6a8d6109285c2bde`.
+- production personalized-reports v29, verify_jwt=false.
+- app_enabled=false / x_enabled=false.
+- tests: no_material 7/7, morning_contract 8/8, report_hardening 9/9, close_validator 23/23, personalized-reports 111/111, related 233/233, check/lint/diff PASS.
+- dry-run: morning **3/3 PASS**, close **3/3 PASS**.
+- all impacts complete, empty fact_ja 0, MISSING_HOLDING_IMPACTS 0.
+- broad no-news / intraday / unsafe causal regressions not observed.
+- all dry-runs reportId=null and notification=not_attempted; persistence=0.
+- mixed-news live LLM case not naturally observed; deterministic regression test covers it.
+- rollback not required.
+- deferred independent review remains historical debt, not an activation requirement for this low-risk stabilization under the new review-cadence policy.
+- activation remains OFF pending later natural-cron/read-only confirmation and explicit decision.
+- next G2: VOICE PASS/WARN/BLOCK Phase 1 shadow classification + telemetry only.
+- recommended model: Opus5.5（高）.
 
 ## K2 PR #32 safe-stop regression
 
