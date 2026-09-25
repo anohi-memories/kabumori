@@ -1,210 +1,142 @@
 # Codex Task 2
 
-- task_id: x-admin-pr15-auth-crossbrand-final-review-20260925
+- task_id: kabumori-pr32-morning-fact-contract-final-review-20260925
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: none
-- priority: critical
+- status: ready
+- next_owner: codex
+- priority: high
 - recommended_model: Sol（高）
-- purpose: K4 PASS済みPR #15 multi-brand admin selectorを、認証・認可・cross-brand leakage・server-side brand scoping・Netlify Preview実挙動の観点で独立最終レビューする。merge/Vercel production/DB mutationは禁止。
+- purpose: PR #32の朝刊prompt↔Fact契約修正が、入力状態の正確なmeta-claimだけを許可し、no-news断定・unsupported intraday・因果/助言等の既存BLOCKを弱めていないことを独立最終レビューする。
 
-## Target
+## Review target
 
-PR #15:
-- branch: `admin-multibrand-selector-phase2-20260924`
-- current head: `a8f98444425c25796e9fef611445b0f574120669`
-- previous semantic head: `b04442561d9e9c6d01b4a9fcf640c2cf731cd923`
-- the new head is an empty retrigger commit; tree must be identical
+PR #32
+- branch: `g2-morning-prompt-fact-contract-20260925`
+- head: `749ce19f01ae191398a5b32420b657263c54dd57`
+- changed:
+  - `supabase/functions/personalized-reports/report_logic.ts`
+  - `supabase/functions/personalized-reports/morning_contract_test.ts`
 
-Netlify Preview:
-- site: `shiny-kheer-77a154`
-- preview: `https://deploy-preview-15--shiny-kheer-77a154.netlify.app`
-- K4 result: `PREVIEW_QA_PASS_AUTH_BLOCKED`
+Production remains:
+- personalized-reports v28
+- verify_jwt=false
+- app_enabled=false
+- x_enabled=false
+- no deploy from PR #32
 
-## Mandatory startup
+## Review focus
 
-1. Read PROJECT_RULES.md
-2. Read .agent/ORCHESTRATION.md
-3. Read .agent/CURRENT_STATE.md
-4. Read G4 TASK/Report and PR #15 description
-5. Fresh fetch origin/main and PR #15
-6. Confirm independent H2 worktree
-7. Confirm H1 Phase1I review and G1/G2/G3/G4 do not overlap apps/admin scope
-8. Verify `a8f9844` tree identity with `b044425`
-9. Do not merge/deploy/apply anything
+### A. Timing contract
 
-## Review A — authentication gate
+Confirm morning prompt no longer encourages unsupported observed-fact wording:
+- 寄り付き後
+- 場中
+- 今日の値動きで〜
 
-Verify:
-- unauthenticated access cannot render admin content
-- `/login` is public only as intended
-- protected layout requires current authenticated Supabase user
-- admin authorization requires intended admin boundary
-- unauthorized users land in fail-closed state
-- no client-only check can bypass server auth
-- server actions independently enforce auth/authorization
-- invalid/tampered cookies cannot grant access
-- redirect behavior does not loop
+Confirm it still asks for useful watch/checkpoint content grounded in:
+- prior close
+- packet inputs
+- supplied news/materials
 
-Use existing Netlify Preview for read-only HTTP checks where helpful.
+Do not permit future/intraday observations that are absent from packet data.
 
-## Review B — active brand authority
+### B. Empty-news contract
 
-Verify:
-- active brand cookie/input is only a request, never authority
-- every request revalidates brand through server-authorized allowlist/access resolver
-- unknown/unauthorized brand fails closed or safely defaults
-- no raw query/cookie/header value can directly parameterize privileged data access
-- no client-only selector state controls authorization
-- default brand behavior is explicit and safe
+Allowed only when the packet/input news arrays are actually empty:
+- 入力に個別の材料は含まれていません
+- このレポートの入力には個別ニュースがありません
+- 入力に明確な個別材料は含まれていません
 
-## Review C — cross-brand read isolation
+Must remain rejected as broad world-state claims:
+- 個別ニュースは確認されていません
+- ニュースはありません
+- 材料はありません
 
-For all PR #15 data reads:
-- scheduled posts
-- post history
-- recent failures
-- system status
-- report-run lookups
-- morning_report_runs
-- posting windows
-- X profile links/handles
+Confirm the allowance is conditional on packet/input emptiness and cannot be used when news is present.
 
-Verify every brand-scoped query uses the already-authorized brand id and that no nested/secondary query omits the brand predicate.
+### C. Fact/Safety regression
 
-Adversarially inspect same-table and nested lookups for cross-brand leakage.
+Verify no existing rejection was weakened for:
+- unsupported numbers/entities/dates
+- causal assertions
+- unsupported impacts
+- future market assertions
+- buy/sell recommendations
+- hallucinated fills
+- shared_market contradiction
+- inference inside fact_ja
 
-## Review D — Kabumori-only surfaces
+### D. Scope
 
-Verify:
-- Important News remains Kabumori-only
-- singleton settings lacking brand_id are not exposed for AI Lab
-- system-toggle remains pinned server-side to Kabumori
-- AI Lab cannot trigger Kabumori-only write paths by tampering cookie/query/body
-- read-only fallback for other brands cannot mutate shared settings
+Confirm no changes to:
+- validator regexes
+- brief limits 120/160
+- MIC integration
+- market_detail
+- shared market packet
+- DB/schema/migration
+- cron/settings
+- X/admin/G1
 
-## Review E — mutations / Server Actions
+## Adversarial tests
 
-Review all changed or affected Server Actions:
-- active-brand change
-- system toggles
-- any mutation reachable from dashboard
+Try at least:
+- news array non-empty + “入力に個別の材料は含まれていません”
+- empty news + “ニュースはありません”
+- empty news + “個別ニュースは確認されていません”
+- “寄り付き後に上昇しています”
+- “場中は強含みです”
+- “今日の値動きでは買い場です”
+- input-state meta-claim followed by unsupported causal assertion
+- punctuation/newline variants
 
-Verify:
-- authenticated
-- authorized
-- server-side brand allowlist
-- no arbitrary brand id
-- no CSRF-like cross-brand state confusion through cookie-only trust
-- no widened Supabase policy reliance
+## Required verification
 
-## Review F — RLS / backend assumptions
-
-PR #15 intentionally uses code-owned `ADMIN_BRANDS` because admins cannot read `brands/social_accounts` under current RLS.
-
-Verify:
-- code registry cannot accidentally include unsupported brands/users
-- Mio remains excluded
-- no service_role introduced
-- existing RLS is not bypassed
-- admin_users gate semantics remain unchanged
-- no claim is made that code registry substitutes for DB policy where it does not
-
-Document remaining backend contract limitations separately.
-
-## Review G — Netlify Preview evidence
-
-Independently verify read-only:
-- Preview head is exact target
-- /login renders
-- /, /posts, /important-news fail closed unauthenticated
-- invalid session cookie fails closed
-- no 404/5xx/redirect loop
-- Next.js Runtime handles protected routes
-
-Authenticated live QA may remain unavailable if no authorized session exists; do not request passwords/tokens.
-
-## Review H — tests
-
-Rerun:
-- all apps/admin lib tests
-- selected-brand tests
-- brand-boundary/no-leak tests
-- tsc --noEmit
-- lint
-- build
+Run:
+- morning_contract tests
+- report_hardening
+- close_validator
+- full personalized-reports
+- MIC context/integration tests
+- related report/app suite
+- deno check
+- deno lint
 - git diff --check
-- targeted secret scan
 
-Add adversarial tests if a concrete gap is found.
-
-If a concrete issue is found:
-- minimal PR #15 source fix allowed
+If a concrete bypass is found:
+- minimal fix only on PR #32
 - add regression
-- push safely to PR branch
-- no merge/deploy/DB mutation
+- push to PR #32
+- do not merge/deploy
 
-## Forbidden
+## Production safety
 
-- merge PR #15
-- Vercel production deploy
-- Netlify production config mutation
-- production DB/schema/RPC/RLS/Auth mutation
-- service_role addition/exposure
-- X API/post/media
-- OAuth/Vault/token changes
-- G1/G2/G3 work
+Read-only only:
+- confirm v28
+- app_enabled=false
+- x_enabled=false
+- cron unchanged
 
-## Production mutation budget
-
-0.
+No production LLM/dry-run.
+No deploy.
+No settings/DB mutation.
 
 ## Completion / C2
 
-Update `.agent/CODEX_REPORT_2.md` with:
+Report:
 - verdict PASS / PASS-WITH-FIX / FAIL
-- findings by severity
-- auth gate assessment
-- brand authority assessment
-- cross-brand read assessment
-- Kabumori-only surface assessment
-- Server Action/mutation assessment
-- RLS/backend assumption assessment
-- Netlify Preview evidence
-- exact tests/counts
-- changed files/fix commit if any
+- final PR head
+- exact allow/reject boundary
+- adversarial results
+- whether Fact semantics remain fail-closed outside the narrow meta-claim
+- tests/counts
+- production read-back
 - production mutation=0
-- merge recommendation
-- authenticated-live-QA residual if still blocked
+- recommendation for merge + controlled redeploy + morning>=3 / close>=3 dry-runs
 
-Then:
+When complete:
 - status -> review_required
 - next_owner -> chatgpt
+- update `.agent/CODEX_REPORT_2.md`
 - STOP for C2.
-
-
-## Final C2 — PR #15
-
-Verdict: **PASS-WITH-FIX for source/Preview review; merge held for authenticated live QA**.
-
-Accepted reviewed/fixed head:
-- `de354e7ff9f647435a3c42a87629be1e735794eb`
-
-Accepted fixes:
-- P1 independent page/action admin gate now requires global admin_users authorization.
-- P1 Kabumori-only mutation now re-resolves active brand and denies mutation outside Kabumori context.
-- cross-brand reads remain server-authorized and scoped.
-- Important News / Kabumori singleton settings remain Kabumori-only.
-
-Verification accepted:
-- apps/admin tests 34/34 PASS
-- focused selected-brand/boundary 20/20 PASS
-- tsc/lint/build/diff PASS
-- final Netlify Preview SUCCESS
-- unauthenticated/tampered-session routes fail closed
-- production mutation=0
-
-Residual gate:
-- authenticated live Preview QA is still unverified.
-- PR #15 remains unmerged until an authorized admin session verifies selector switching, direct navigation, Kabumori-only controls, and no cross-brand leakage.
