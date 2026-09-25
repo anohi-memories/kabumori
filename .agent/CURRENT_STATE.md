@@ -44,14 +44,23 @@
 
 - H1: `done` — `x-autopost-phase1i-exact-account-refresh-final-review-20260925`; Final C1 PASS-WITH-FIX
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
-- G1: `done` — `kabumori-release-readiness-gap-closure-20260925`
-  - Final K1 PASS for audit/docs.
-  - PR #35 merged -> `26b0e8903b434a7a5222370c65aa4ed565af113e`.
-  - No code bug found.
-  - Remaining gates: startup artwork, separate Netlify site, operator/legal env, EAS env, Auth/SMTP, then first TestFlight build.
+- G1: `ready` — `kabumori-branded-launch-screen-20260925`
+  - replace Expo template native splash + AnimatedSplashOverlay with Kabumori-branded launch screen
+  - use existing approved icon only; no new AI artwork
+  - no TestFlight/EAS production build in this task
+  - recommended model: Sonnet5（高）
 - G2: `done` — `kabumori-pr34-shadow-merge-deploy-20260925`
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `ready` — `x-admin-pr15-merge-production-verify-20260925`; PR #15 merged by ChatGPT -> `f610503761729bdc09dfa483bd218a769350a2dc`; resume post-merge/production Admin verification only; recommended Sonnet5（中）
+
+## G1 Kabumori branded launch screen
+
+- user decision: create a dedicated Kabumori launch screen now.
+- first implementation uses the already approved icon/branding; no new generated artwork.
+- replace Expo native splash and AnimatedSplashOverlay template visuals.
+- final aesthetic acceptance will be on real iPhone/TestFlight and may be refined.
+- no Codex review expected for this branding/UI task.
+- recommended model: Sonnet5（高）.
 
 ## Final K1 release-readiness audit
 
