@@ -18,6 +18,7 @@
 
 import type { AppMarketSection, MarketDirection } from "../_shared/market_report_packet.ts";
 import type { AppMarketDetail } from "./market_detail.ts";
+import { MIC_MARKET_FACT_INSTRUCTIONS, MIC_MARKET_INSTRUCTIONS, type MicPacketEntry } from "./mic_market_context.ts";
 
 export type ReportType = "morning" | "close";
 export type TrackingType = "holding" | "watch";
@@ -668,7 +669,12 @@ function stockPacket(
   };
 }
 
-export function buildPacket(snapshot: PortfolioSnapshot, news: NewsInput[], shared: SharedMarketInput | null = null) {
+export function buildPacket(
+  snapshot: PortfolioSnapshot,
+  news: NewsInput[],
+  shared: SharedMarketInput | null = null,
+  mic: MicPacketEntry[] | null = null,
+) {
   const newsById = new Map(news.map((item) => [item.newsId, item]));
   const close = snapshot.report_type === "close";
   const marketNewsIds = new Set(snapshot.news.filter((item) => !item.ticker_code).map((item) => item.news_id));
@@ -724,6 +730,9 @@ export function buildPacket(snapshot: PortfolioSnapshot, news: NewsInput[], shar
         },
       }
       : {}),
+    // MIC (Market Intelligence Core) State: optional, non-authoritative background
+    // context. Never overrides or contradicts shared_market (see MIC_MARKET_INSTRUCTIONS).
+    ...(mic && mic.length > 0 ? { mic_market: mic } : {}),
   };
 }
 
@@ -867,6 +876,10 @@ function hasSharedMarket(packet: unknown): boolean {
   return typeof packet === "object" && packet !== null && "shared_market" in packet;
 }
 
+function hasMicMarket(packet: unknown): boolean {
+  return typeof packet === "object" && packet !== null && "mic_market" in packet;
+}
+
 export function reportDraftRequestBody(reportType: ReportType, packet: unknown): Record<string, unknown> {
   return {
     model: REPORT_MODEL,
@@ -877,6 +890,7 @@ export function reportDraftRequestBody(reportType: ReportType, packet: unknown):
       COMMON_INSTRUCTIONS,
       reportType === "close" ? CLOSE_INSTRUCTIONS : MORNING_INSTRUCTIONS,
       ...(hasSharedMarket(packet) ? [SHARED_MARKET_INSTRUCTIONS] : []),
+      ...(hasMicMarket(packet) ? [MIC_MARKET_INSTRUCTIONS] : []),
       `title_ja: ${REPORT_LIMITS.title}字以内。summary_ja: 2文以内・${REPORT_LIMITS.summary}字以内。overview_ja: ${REPORT_LIMITS.overview}字以内。holding_impacts: 「詳しく」の銘柄は fact_ja・inference_ja 各${REPORT_LIMITS.impactFact}字以内、watch_ja ${REPORT_LIMITS.impactWatch}字以内。「簡潔に」の銘柄は三つの合計で${reportType === "close" ? REPORT_LIMITS.impactBriefClose : REPORT_LIMITS.impactBriefMorning}字以内。watch_notes の各 note_ja: ${REPORT_LIMITS.watchNote}字以内。risk_notes_ja: 最大${REPORT_LIMITS.maxRisks}個・各${REPORT_LIMITS.riskNote}字以内。checkpoints_ja: 各${REPORT_LIMITS.checkpoint}字以内。`,
       "ticker_code は入力の holdings / watch にある値だけを使います。holding_impacts は holdings、watch_notes は watch の銘柄だけです。",
       "入力だけでは正確に書けない場合は sufficient_information を false にし、文字列を空、配列を空にします。",
@@ -892,7 +906,9 @@ export function reportFactRequestBody(packet: unknown, report: ReportBody): Reco
     store: false,
     reasoning: { effort: "low" },
     max_output_tokens: 1200,
-    instructions: REPORT_FACT_INSTRUCTIONS,
+    instructions: hasMicMarket(packet)
+      ? [REPORT_FACT_INSTRUCTIONS, MIC_MARKET_FACT_INSTRUCTIONS].join("\n")
+      : REPORT_FACT_INSTRUCTIONS,
     input: JSON.stringify({ packet, report }),
     text: { format: { type: "json_schema", name: "personalized_report_fact", strict: true, schema: CHECK_SCHEMA } },
   };
