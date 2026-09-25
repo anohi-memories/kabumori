@@ -1,3 +1,44 @@
+## H2 — PR #29 prompt hardening + v27 validator final review — 2026-09-25
+
+- task_id: `kabumori-pr29-plus-v27-validator-final-review-20260925`
+- result: **PASS-WITH-FIX**. The v27 validator change is narrowly anchored; PR #29 prompt hardening preserves Fact/validator safety. One visible morning-output field was missing the neutral-wording instruction; the minimal prompt/test fix was pushed to PR #29. No merge or deploy.
+- fresh_main_sha_at_task_start: `1abd9f0ab9eb5375395ef30380ea0aff32e61dd5`.
+- latest_origin_main_before_pr_push: `3c223fa38a14b944dc0ca9022e59eff756e7eb70`. The intervening main commits touched only agent coordination/G3 files; no overlap with the reviewed `personalized-reports` files or H2 control files.
+- control_report_base_sha: `de86cfff332624755de162b1ee254eecf158968c`; the only subsequent main change since the pre-push check was G2's separate task file, with no H2 report/task conflict.
+- reviewed_main_commit: `510acf5954b37410b50c23ff92c3f54af6458a72`.
+- reviewed_pr: #29, branch `g2-report-false-reject-hardening-20260925`; initial head `bed5e79d0ab22e94be6a7c1ebd0f7c8f157ea0c0`; final head `ef9603749a43d0f63ff1ab0ca0f24b33a7bdc1c1`.
+- implementation_commit: `ef9603749a43d0f63ff1ab0ca0f24b33a7bdc1c1`; pushed only to the PR #29 branch. Post-push fetch confirmed the remote PR head equals this commit.
+- changed_files:
+  - `supabase/functions/personalized-reports/report_logic.ts`
+  - `supabase/functions/personalized-reports/report_hardening_test.ts`
+
+### Review findings
+
+- **510acf5 validator — PASS.** The `値下がり|値上がり` prefix widening remains constrained by the existing whole-string anchor and fixed unknown-cause remainder. `CAUSAL_ASSERTION` is evaluated first; sentence splitting remains intact. The four requested bounded unknown-cause phrases pass, while free-text subjects (`急な値下がり`, `半導体株の値上がり`, `円安による値上がり`), cause assertions, causal laundering, and punctuation/multi-sentence bypasses reject. No validator code was changed by PR #29.
+- **PR #29 inference prompt — PASS.** Facts/comparison clauses remain in their factual fields rather than `inference_ja`; unsupported causation is constrained to a bounded unknown-cause sentence. Fact checker and fail-closed validator semantics are unchanged.
+- **PR #29 morning wording — PASS-WITH-FIX.** Neutral observation guidance does not relax Fact validation or introduce new factual claims. Review found that `watch_notes[*].note_ja` is also user-visible and included in `reportTexts`, but was omitted from `MORNING_WORDING_RULE`. The prompt now names that field explicitly, with a regression assertion. No other behavior was broadened.
+- **MIC compatibility — PASS.** PR #29 does not change `mic_market_context.ts` or MIC semantics and does not remove MIC context from prompts. Existing MIC/report integration remains unchanged; no active-workstream overlap was found.
+
+### Verification
+
+- Focused `report_hardening_test.ts` + `close_validator_fix_test.ts`: **32/32 PASS** (9 + 23).
+- Full `supabase/functions/personalized-reports` suite: **96/96 PASS**, including MIC context/integration tests (14 + 6).
+- `deno check --no-lock` for `index.ts` and `report_logic.ts`: **PASS**.
+- `deno lint supabase/functions/personalized-reports`: **PASS**, 12 files.
+- `git diff --check`: **PASS**.
+- PR change remains limited to the two listed source/test files; the H2 fix is 2 insertions / 1 deletion on top of the original PR head.
+
+### Production read-back and disposition
+
+- Read-only project `wsmznyzcvmuitkglfeuj`: `personalized-reports` **v27 ACTIVE**, `verify_jwt=false`; `market_report_consumer_settings.app_enabled=false`, `x_enabled=false`.
+- Cron read-back unchanged: job 10 `personalized-reports-morning`, `35 23 * * 0-4`, active; job 11 `personalized-reports-close`, `15 8 * * 1-5`, active.
+- Production DB/settings/Cron/function mutation: **0**. Function deploy: **0**. Production LLM/API invocation: **0**. X/Push/post: **0**. Merge: **0**. Secrets exposed: **0**.
+- remaining_issues: C2 merge decision and any later controlled deploy/dry-run remain separate. No production LLM output or live generated report was exercised in this review.
+- next_recommendation: C2 may review the updated PR head `ef96037`; do not merge/deploy without separate approval.
+- safety_checks: review and control updates used separate clean H2 worktrees; no other slot source, app, settings, or task files were changed. TASK is now `review_required` / `next_owner: chatgpt`; stop for C2.
+
+---
+
 ## H2 — PR #26 unknown-cause prefix final review — 2026-09-25
 
 - task_id: `kabumori-pr26-unknown-cause-prefix-final-review-20260925`

@@ -3,8 +3,8 @@
 - task_id: kabumori-pr29-plus-v27-validator-final-review-20260925
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna（極高）
 - purpose: PR #29のprompt hardeningと、review前にmain→production v27へ入った commit 510acf5 のvalidator拡張を一体で最終レビューする。merge/deployは禁止。
