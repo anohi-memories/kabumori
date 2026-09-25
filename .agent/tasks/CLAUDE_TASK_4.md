@@ -3,8 +3,8 @@
 - task_id: x-admin-pr33-bounded-real-auth-e2e-20260926
 - owner: claude
 - slot: claude-4
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Opus5.5（高）
 - purpose: C1 source PASS済みPR #33について、merge前の最後の実Auth E2Eとして、Netlify Preview上でpassword recovery 1回 + invite 1回を限定実行し、実AMR/session/cookie/logout/Admin-denialを確認する。E2E成功後もこのTASKではmerge/Vercel production deployはしない。
@@ -238,3 +238,59 @@ Then:
 ### production/Auth mutations（ここまで）
 
 0件。
+
+## Report (E2E stopped — custom SMTP required)
+
+- task_id: x-admin-pr33-bounded-real-auth-e2e-20260926
+- result: **STOP_OPERATOR_GATE** — 実メールE2E（リカバリ・招待とも）は、プロジェクトがSupabase標準のメール送信を使っているため実施できない。カスタムSMTPの設定は本TASKの許可範囲外の本番変更（TASKの中止条件「unexpected template dependency requiring broader production changes」に該当）なので、ここで停止してChatGPTの判断に回す。
+- model_used: Opus 5.5
+- PR #33 / Preview: head `2528b5686bcbb3630fb636cec12162803f921f8f`（reviewed headと一致）、MERGEABLE、`https://deploy-preview-33--shiny-kheer-77a154.netlify.app` 正常。未merge。
+
+### 実施したこと
+
+- 操作者がダッシュボードでテスト用ユーザーを1件作成（Claudeはアカウント作成・パスワード入力を行っていない）。
+- 操作者がClaudeのブラウザ画面のPreview `/forgot-password`からテスト用アドレスで再設定を1回要求。
+- Claudeが通信記録を確認: `POST /auth/v1/recover` → **200**（Supabaseが受理）。画面は汎用の「送信しました」表示（列挙対策どおり）。
+- **メールは届かなかった。**
+
+### 原因
+
+- Authentication → Emails に「Set up custom SMTP to edit templates — Emails will be sent using the default templates.」と表示 → **カスタムSMTPは未設定、Supabase標準の送信機能を使用中**。
+- 標準の送信機能は、原則としてSupabase組織メンバーのアドレスにしか送らず、送信数の上限も低い。テスト用アドレスは組織メンバーではないため送信されなかったと判断（`/recover`はアカウントの有無を漏らさないよう200を返す仕様なので、画面上は区別できない）。Auth logsでの個別確認は行っていない。
+- **招待E2Eも同じ理由で実施不可**: 標準の送信機能ではメールテンプレートを編集できない。ダッシュボードからの招待は既定でSite URL（`http://localhost:3000`）へ飛ぶため、Previewの`/auth/confirm`へ届けるための招待テンプレートの一時変更ができない。
+
+組織メンバーのアドレスなら届く可能性があるが、本番の運用・管理者アカウントと同一になる可能性が高く、TASKの「本番の運用・管理者アカウントを使わない」に反するため提案しない。
+
+### Redirect URL（URLのみ）
+
+- 確認時点: `kabumori://reset-password`、`https://deploy-preview-33--shiny-kheer-77a154.netlify.app/auth/confirm` の2件。ワイルドカードなし。Site URLは`http://localhost:3000`のまま。
+- Preview用URLは本TASKで追加したものではない（追加を試みたところ「URL already exists in the allow list」で既に登録済み。ChatGPTとの作業で追加されたもの）。TASKの片付け条件は「本TASKで追加した場合のみ削除」のため削除していない。操作者の判断でも当面残す。PR #33のmerge後など、Previewが不要になった時点で削除することを推奨。
+- モバイルの`kabumori://reset-password`・Reset Passwordテンプレート: 無変更。
+
+### 未実施（ブロック）
+
+- 実際のrecovery / inviteの`amr`値の確認、パスワード更新・ログアウト・再ログイン・非adminの`/unauthorized`確認: すべて未実施。
+- 読み取りで確認済みの前提: Supabase公式ドキュメント上、`amr.method`には`recovery`と`invite`が別の値として文書化されており、PR #33の許可リスト（この2つのみ）と一致。
+
+### テスト用ユーザー
+
+- 操作者が作成した1件がSupabase Authに残っている（管理者権限なし、`admin_users`には追加していない、メールは未達）。削除するかは操作者の判断。
+
+### production/Auth mutations（本TASKでClaudeが行ったもの）
+
+0件。Auth設定・テンプレート・ユーザー・`admin_users`・DBのいずれも変更していない。操作者側の変更はテスト用ユーザー1件の作成と再設定要求1回のみ（Redirect URLは既存）。
+
+### PR #33 is ready for merge?
+
+**まだ**。source review はPASSだが、merge前に必須とされた実メールE2Eが未完了。
+
+### next_recommendation
+
+1. ChatGPT／ユーザーで**カスタムSMTPを設定するか**を判断する。G1のリリース準備でもカスタムSMTPが前提条件に挙がっている。設定する場合は、送信元ドメイン・SPF/DKIM等を含む別TASKとし、Reset Passwordテンプレートがモバイルと共用である点に注意する。
+2. カスタムSMTP設定後、本TASKのStage C（リカバリ）・Stage D（招待、招待テンプレートの一時変更）を再開する。
+3. 代替として、実メールE2Eを行わずにPR #33をmergeするかどうかはChatGPTの判断事項（その場合、実`amr`値が想定と違えば再設定フォームが出ない＝安全側に倒れる状態でリリースされる）。
+
+## Completion
+
+- status -> review_required
+- next_owner -> chatgpt
