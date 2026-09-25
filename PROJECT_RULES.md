@@ -26,6 +26,17 @@
 - ユーザーから個別TASKについて明示指示がある場合はその指示を優先する。
 - Codex（H1/H2）はアプリ別に固定せず、原則レビュー・バグ修正・検証を担当する。Claudeが5時間利用制限に到達した場合のみ、ChatGPTの判断でH1/H2へ臨時実装を割り当てることがある。
 
+## レビュー頻度・Codex利用方針（2026-09-25〜）
+
+ユーザー方針として、Codexレビューは高リスク変更と大きな節目へ集中させる。各Claude実装ごとに機械的にH1/H2レビューを要求しない。
+
+- UI、文言、prompt、画像、軽微なバグ、テスト追加、既存仕様内の局所変更は、原則としてClaude実装＋ChatGPT確認で進めてよい。
+- 同一機能の細かな連続修正は、1件ごとにレビューせず、テスト・dry-run・Preview等で安定化してから必要ならまとめて1回レビューする。
+- Codexレビューを優先するのは、DB schema/migration、RLS/認証/権限、RPC/SECURITY DEFINER、OAuth/token/Vault/secrets、外部API実書き込み、X実投稿、cross-user/cross-brand境界、複雑な並行処理/idempotency、破壊的production変更、重大障害、重要release gate。
+- レビューを減らしても、テスト・dry-run・Preview・read-back等の実証確認は減らさない。
+- TASKまたはChatGPTが `review deferred` / `review not required` とした場合、Claudeは不要なCodex待ちを新たに作らず、指定された範囲まで作業を進める。
+- 詳細な運用は `.agent/ORCHESTRATION.md` の「レビュー最適化方針（2026-09-25〜）」を正とする。
+
 ## モデル運用
 
 Claude向けTASKには推薦モデルを併記する。候補:
