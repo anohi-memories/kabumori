@@ -1,263 +1,235 @@
 # Claude Task 2
 
-- task_id: kabumori-pr32-merge-redeploy-dryrun-review-deferred-20260925
+- task_id: kabumori-pr32-no-clear-material-fix-merge-dryrun-20260925
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: high
 - recommended_model: Opus5.5（高）
-- purpose: ユーザー判断でH2レビューを一時保留し、PR #32の現在headをfresh検証したうえでmerge、personalized-reportsのみcontrolled redeploy、app_enabled=falseのまま朝刊/大引けdry-runを実施する。レビュー保留中のためactivationは禁止。
+- purpose: PR #32 head 722d191で発見した no_clear_material / empty fact_ja 回帰を最小修正し、同じTASK内でPR更新→再テスト→merge→controlled redeploy→朝刊/大引けdry-runまで完了する。Codexレビューはユーザー方針により後回し。activationは禁止。
 
-## User override
+## K2 finding
 
-User explicitly requested:
-- Codex review is temporarily deferred because Codex became unavailable mid-review.
-- Continue forward now.
-- Review will be done later.
-
-Therefore:
-- do NOT claim PR #32 independently reviewed.
-- do NOT set app_enabled=true.
-- do NOT treat this task as final activation approval.
-- H2 review debt remains open and must be revisited before final activation/release.
-
-## Current PR #32
-
-PR #32:
-- branch: `g2-morning-prompt-fact-contract-20260925`
-- current head: `722d191dcbe4ba4ce5cf549659493df03d35a353`
-- original G2 head: `749ce19f01ae191398a5b32420b657263c54dd57`
-
-Mid-review Codex commit now included:
+At PR #32 head:
 - `722d191dcbe4ba4ce5cf549659493df03d35a353`
-- message: `Align no-material prompt with packet-wide news condition`
-- it tightens empty-news wording so the input-state meta-claim is allowed only when holdings/watch own_news + related_market_news + market_news are all empty
-- when any news exists, empty-input claims must fail
-- it also avoids forcing no_clear_material fact_ja to claim global emptiness when only one holding lacks material
-- adds adversarial tests for mixed-news / intraday / causal cases
 
-This commit is **not a completed H2 review verdict**. Treat it as an unreviewed candidate change that must be revalidated by G2 before merge.
+Regression:
+- IMPACT_INSTRUCTIONS now allows `fact_ja=""` for no_clear_material.
+- `parseReportDraft().impacts()` filters out impacts with empty fact_ja.
+- missing impact then causes `MISSING_HOLDING_IMPACTS` -> report fail.
+- reproduced with a probe.
 
-## Production baseline
-
+Production remains safe:
 - personalized-reports v28
-- verify_jwt=false
 - app_enabled=false
 - x_enabled=false
-- close v28 dry-run previously 5/5 PASS
-- morning v28 dry-run previously 0/2 Fact FAIL
-- no current persistence/notification from dry-runs
+- merge/deploy/dry-run from the previous task did not occur
+- production mutation from previous task = 0
 
-## Mandatory startup
+## Chosen fix
 
-1. Independent worktree / checkout.
-2. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / this TASK.
-3. Fresh fetch origin/main + PR #32.
-4. Verify PR #32 head exactly `722d191dcbe4ba4ce5cf549659493df03d35a353`.
-5. Compare `749ce19...` -> `722d191...` and confirm the only semantic delta is the packet-wide empty-news tightening + tests described above.
-6. Confirm no active slot edits/deploys personalized-reports.
-7. Read production version/settings before mutation.
-8. If app_enabled != false or production personalized-reports has changed beyond v28, STOP and report.
+Use **prompt-level per-holding input-state fact**, not parser widening.
 
-## Step 1 — pre-merge source verification
+For a holding with no usable material:
+- keep the impact row
+- keep `stance=no_clear_material`
+- keep `fact_ja` non-empty
+- wording must be scoped to that holding's own input only
 
-Run at current PR head:
-- morning_contract tests
+Preferred example:
+- 「この銘柄の入力には個別材料が含まれていません」
+
+Do NOT use global packet-wide emptiness wording for a single holding.
+
+This avoids changing parser/validator semantics and keeps existing required impact rows intact.
+
+## Required source change
+
+### A. no_clear_material fact_ja
+
+Update prompt so:
+- if the specific holding has no usable `own_news` / `related_market_news`, use a holding-scoped input-state fact
+- do not leave fact_ja empty
+- do not claim there is no news globally
+- do not claim packet-wide emptiness unless packet-wide condition is truly met
+
+### B. Fact checker
+
+Add only the minimum precise allowance needed for the holding-scoped input-state statement.
+
+It must be valid only when that holding's own_news and related_market_news are empty / provide no usable individual material.
+
+Keep rejected:
+- global no-news claims
+- false holding-empty claim when that holding has news
+- unsupported causal assertion
+- unsupported intraday/future claim
+- buy/sell recommendation
+- fabricated data
+
+### C. Regression tests
+
+Must add deterministic regression proving:
+1. no_clear_material impact with no usable holding news retains non-empty fact_ja
+2. parseReportDraft keeps all holding impacts
+3. no `MISSING_HOLDING_IMPACTS`
+4. mixed-news packet:
+   - holding A with news cannot claim no material
+   - holding B without news can use holding-scoped input-state wording
+5. global empty-input meta-claim still only allowed when packet-wide news is empty
+6. broad world-state claims still fail
+7. morning intraday claims still fail
+8. close validator behavior unchanged
+9. limits remain 120 / 160
+
+## Scope
+
+Prefer only:
+- `supabase/functions/personalized-reports/report_logic.ts`
+- `morning_contract_test.ts`
+- a narrowly scoped new regression test only if necessary
+
+Do not change:
+- parser semantics unless this prompt-level fix proves impossible
+- validator regexes
+- MIC
+- market_detail
+- shared packet
+- DB/schema/migration
+- cron
+- app_enabled/x_enabled
+- X/admin/G1
+
+If prompt-level fix is impossible without parser change, STOP and report before changing parser.
+
+## Workflow
+
+### Step 1 — source fix on PR #32
+
+Work on current PR #32 branch/head lineage.
+Do not create a competing PR.
+
+Run:
+- focused new regression
+- morning_contract
 - report_hardening
 - close_validator
-- full personalized-reports suite
-- MIC context/integration tests
+- full personalized-reports
+- MIC context/integration
 - related report/app suite
 - deno check
 - deno lint
 - git diff --check
 
-Explicitly verify:
-- mixed-news packet cannot produce empty-input claim
-- empty packet can produce only precise input-state meta-claim
-- broad no-news world-state claims remain rejected
-- unsupported intraday claims remain rejected
-- causal assertions remain rejected
-- Fact/Safety existing rules remain present
-- validator regexes unchanged
-- limits remain morning 120 / close 160
-- MIC/market_detail/shared packet unchanged
+If any deterministic regression remains, STOP.
 
-If any of these fail, STOP before merge.
+### Step 2 — update PR #32
 
-## Step 2 — merge
+Push the fix to the existing PR #32 branch.
+Record new head.
 
-If source verification passes:
-- merge PR #32 at exact head `722d191dcbe4ba4ce5cf549659493df03d35a353`
-- fresh fetch main
-- verify merged personalized-reports source byte/semantic identity with reviewed candidate
-- record merge SHA
+No Codex review required at this stage per reduced-review policy.
+Do not claim independent review.
 
-## Step 3 — controlled deploy
+### Step 3 — merge
+
+Fresh fetch main and PR.
+If:
+- exact expected head
+- conflict-free
+- no overlapping active personalized-reports workstream
+then merge PR #32.
+
+Record merge SHA.
+
+### Step 4 — controlled deploy
 
 Deploy only:
-- `supabase/functions/personalized-reports`
+- `personalized-reports`
 
 Rules:
 - verify_jwt=false
-- app_enabled=false throughout
-- x_enabled=false unchanged
-- no cron change
-- no DB/schema/migration
-- no Auth/RLS
-- no X/admin/G1/MIC changes
+- app_enabled=false
+- x_enabled=false
+- no cron/settings/db/auth changes
 - no other Edge Function deploy
 
-After deploy:
-- read back deployed version/source
-- confirm source matches merged main
-- confirm app_enabled=false
-- confirm x_enabled=false
-- confirm cron unchanged
+Read back deployed source/version and verify match with merged main.
 
-## Step 4 — dry-run
+### Step 5 — dry-run
 
 Required minimum:
-- morning: **3 runs**
-- close: **3 runs**
+- morning: 3
+- close: 3
 
-For each run record:
-- completed / failed
-- Fact pass/fail
-- local issues
-- empty-news wording class
-- intraday wording class
-- causal assertion presence
-- brief length if relevant
-- malformed/truncation
-- reportId/null
-- notification status
-- latency/cost if available
-
-Do not include user IDs, email, tokens, or detailed holdings.
-
-### Morning acceptance
-
-Need 3/3:
+Morning must pass 3/3:
 - Fact PASS
 - local issues 0
-- no broad “ニュースはありません / 材料はありません / 個別ニュースは確認されていません”
-- no unsupported observed-fact “寄り付き後 / 場中 / 今日の値動きで〜”
-- if no news, only precise input-state wording
-- if any news exists, no false empty-input claim
+- all holdings have impact rows
+- no MISSING_HOLDING_IMPACTS
+- no global no-news false claim
+- holding-scoped no-material wording only when appropriate
+- no unsupported intraday wording
 - no unsafe causal assertion
 - no malformed/truncated output
 
-### Close acceptance
-
-Need 3/3:
+Close must pass 3/3:
 - Fact PASS
 - local issues 0
-- no regression from v28 close 5/5
 - no false INFERENCE_NOT_HEDGED
-- no factual lead in inference
+- no factual lead regression
 - no unsafe causal assertion
 - no malformed/truncated output
-
-### Safety acceptance
 
 All dry-runs:
 - reportId=null
-- notification not_attempted
+- notification=not_attempted
 - no persistence
 - app_enabled=false
 - x_enabled=false
 
-## Rollback
+## Review policy
 
-Rollback if:
-- deployed source mismatches merged main
-- new deterministic regression appears
-- repeated legitimate Fact/local false reject remains
-- unsafe assertion passes
-- unexpected persistence/notification occurs
-- close regresses materially from v28 baseline
+Per user decision:
+- do not create a new H1/H2 review after this low-scope prompt/Fact contract fix
+- preserve existing deferred H2 history
+- final high-risk/release review can be bundled later if needed
 
-Do not rollback for one obviously stochastic LLM failure without classification; repeat safely within a bounded count and report.
+## Activation gate
 
-## Explicit activation gate
+**DO NOT set app_enabled=true.**
 
-**Do NOT set app_enabled=true.**
-Independent review remains deferred, not waived.
-
-Even if all dry-runs PASS:
-- production may remain on the new version with app_enabled=false
-- activation decision waits for later review / explicit ChatGPT orchestration
+Even if all dry-runs pass:
+- leave app_enabled=false
+- report technical readiness only
+- activation is a later ChatGPT/user decision
 
 ## Voice policy
 
 Do not implement PASS/WARN/BLOCK in this task.
-That follows after report generation stabilization.
 
 ## Completion / K2
 
 Report:
-- fresh main
-- PR head
-- pre-merge tests
+- root cause confirmation
+- exact fix
+- new PR #32 head
+- all tests/counts
 - merge SHA
 - deployed version
-- deployed-source read-back
-- morning >=3 results
-- close >=3 results
+- source read-back
+- morning 3+ results
+- close 3+ results
+- impact completeness
 - app_enabled/x_enabled before/after
 - persistence/notification safety
 - rollback status
 - production mutations
-- residual review debt: H2 PR #32 review deferred by user
-- whether report generation is technically stable enough for later review/activation decision
+- remaining review debt / activation gate
+- whether report generation is technically stable enough to proceed to next phase
 
 When complete:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for K2.
-
-## Report — SAFE STOP before merge
-
-### Summary
-
-- task_id：`kabumori-pr32-merge-redeploy-dryrun-review-deferred-20260925`
-- result：**Step 1（mergeの前のsource検証）で、決定的な回帰を検出したため、merge前にSTOPした**。merge・deploy・dry_runはいずれも実施していない。
-- changed_files：なし
-- tests：PR #32のhead `722d191` で実施。
-  - morning_contract 8/8、report_hardening 9/9、close_validator 23/23、MIC 14/14・6/6
-  - personalized-reports 104/104、関連スイート 226/226
-  - deno check・lint・diff checkはPASS
-  - **ただし、既存のテストでは下記の回帰を検出できない**。
-- commit_hash / push：本Reportのみ
-- deploy：なし
-- safety_checks：
-  - production mutation **0**。
-  - 本番は **v28**、verify_jwt=false、`app_enabled=false`、`x_enabled=false`（read-onlyで確認）。
-  - H2によるPR #32のレビューは**保留中のまま**（完了扱いにしていない）。
-
-### 検出した問題（`722d191` のCodex追加commitによるもの）
-
-- 変更内容：IMPACT_INSTRUCTIONSを「no_clear_materialのとき…fact_ja には…書ける事実がなければ**空文字**にします」に変更した。
-- しかし、`parseReportDraft` の `impacts()` は、**fact_jaが空のimpactを捨てる**（`report_logic.ts:1011`、`.filter((item) => item.ticker_code && item.fact_ja)`）。
-- その結果：保有銘柄のimpactが欠落し、`MISSING_HOLDING_IMPACTS` → `REPORT_LOCAL_CHECK_FAILED` となり、**その日のレポート全体が不合格（欠配）になる**。
-- 再現：head `722d191` に対してprobe test（リポジトリには追加していない一時ファイル）を実行した。fact_jaが空のno_clear_materialを1件与えると、「impacts kept: 0」「issues: [MISSING_HOLDING_IMPACTS]」になることを確認した。
-- 発生条件：packetのどこかにニュースがあり（そのため空入力の定型文は禁止される）、かつ材料のない保有銘柄がある日。promptに従うほど、欠配になりやすい。
-- それ以外の差分（`749ce19`→`722d191`）：
-  - 空ニュースの定型文を、「packetのholdings/watchのown_news・related_market_newsとmarket_newsがすべて空のときだけ」に限定する変更（prompt・Factとも）と、そのadversarial test。
-  - これは意図どおりで妥当。
-  - MIC・market_detail・_shared・validatorの正規表現・上限値は不変であることを確認した。
-
-### 修正案（どちらか1つ、PR #32の範囲内で小さく）
-
-- **案1（推奨）**：promptを「fact_jaを空にしない」方向に戻す。ニュースがある日の材料なし銘柄は、**その銘柄の入力について**だけ書くようにする。例：「この銘柄の入力（own_news・related_market_news）には個別材料が含まれていません」（銘柄ごとの入力状態で、packetから検証できる）。Factにも、この銘柄単位の記述を許可する1行を追加する。
-- **案2**：parserとvalidatorで、`stance === "no_clear_material"` のときだけ空のfact_jaを許容する（impactを捨てない）。アプリ側は、空欄の行を表示しない（既存の分岐で対応済み）。
-- どちらの案でも、**「fact_jaが空のimpactが原因で `MISSING_HOLDING_IMPACTS` にならない」ことを固定する回帰テスト**を追加する。
-
-### 次の推奨
-
-1. ChatGPT：案1か案2を選び、G2へ小さな修正TASKを出す（source-only）。
-2. 修正後、改めてmerge→deploy→朝刊・大引けのdry_runを各3回以上行う（本TASKのStep 2〜4を再実行）。
-3. 月曜9/28 08:35の朝刊cronまでに間に合わない場合も、v28のまま（fail-closed）で安全。朝刊はv28で0/2だったので、欠配の可能性はある。
-4. H2によるPR #32のレビュー負債は残っている（今回の指摘を含めて、後で独立レビューが必要）。
