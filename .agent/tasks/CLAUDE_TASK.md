@@ -3,8 +3,8 @@
 - task_id: kabumori-pr34-shadow-merge-deploy-20260925
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: medium
 - recommended_model: Sonnet5（高）
 - purpose: K2 PASS済みPR #34をfresh main確認後にmergeし、personalized-reportsへshadow telemetryのみcontrolled deployする。配信挙動は変えず、app_enabled=falseを維持する。
@@ -138,3 +138,55 @@ When complete:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for K2.
+
+## Report
+
+### Summary
+
+- task_id：`kabumori-pr34-shadow-merge-deploy-20260925`
+- result：PR #34をmergeし、`personalized-reports` を **v30**（shadow telemetryを含む）としてdeployした。smokeのdry_run 1回で、telemetryが出ていることと配信挙動が不変であることを確認した。`app_enabled=false`、`x_enabled=false` を維持している。
+- changed_files：なし（PR #34のmergeのみ）
+- tests（merge後の `0cba732` で実施）：
+  - delivery_policy 8/8、PR #32の回帰7/7、morning_contract 8/8、MIC 14/14・6/6
+  - personalized-reports **119/119**、関連スイート **241/241**
+  - deno check・lint・diff checkはPASS
+- commit_hash：merge `0cba73236f0e02dd3c88c78e9cb06434b593091f`（PR head `40828d31124a629e594c7ac2ac3af28e5325f6de`）
+- push：mergeのみ
+- deploy：`personalized-reports` v30（source `0cba732`、`--use-api --no-verify-jwt`）
+- safety_checks：
+  - smokeの前後で、`personalized_reports` の作成・更新は0件、通知は0件。
+  - cronは不変。
+  - 秘密情報・user_id・銘柄の詳細は本Reportに記載していない。
+
+### 詳細
+
+- **fresh main**：着手時は `1f98783`。PR head `40828d3` が一致し、conflictもなかった。v29以降、mainに関数の変更はない。`personalized-reports` を扱う他のopen PRもなかった。
+- **deploy前のproduction**：v29（`--use-api` のdownloadで `f34b8c4` とbyte一致を確認）、`app_enabled=false`、`x_enabled=false`。
+- **mergeとmerge後の確認**：
+  - mergeされたsourceは、reviewed headと差分なし。
+  - `report_logic.ts`・`mic_market_context.ts`・`market_detail.ts`・`_shared` は、v29（`f34b8c4`）と同一。
+  - v29からの差分は、`delivery_policy.ts`（新規）、`delivery_policy_test.ts`（新規）、`index.ts` の3ファイルだけ。
+  - `index.ts` の差分は、`withDeliveryPolicy(sourceBasis, outcome)` への置き換えと、log・responseへの項目追加だけ。保存・通知・dry_runのガードは不変。
+- **deployed version / read-back**：**v30**、verify_jwt=false。`--use-api` でdownloadした6ファイルが、`0cba732` と**byte一致**。
+  - 6ファイル：index / report_logic / market_detail / mic_market_context / delivery_policy / _shared/market_report_packet
+- **app_enabled / x_enabled**：deploy前・deploy後ともfalse。
+- **telemetryのsmoke**（大引けのdry_run 1回、Vault→`net.http_post`、`dry_run:true`）：
+  - completed、LLM呼び出し2回、Fact passed、local issue 0件、impactは2/2。
+  - `delivery_policy` = `{version: delivery_policy.v1_shadow, mode: shadow, voice_status: pass, warning_codes: [], block_codes: [], delivery_blocked_by: null, would_deliver_under_warn_policy: true, rewrite_attempted: false, rewrite_succeeded: false, fallback_original_used: false}`。
+  - `reportId: null`、`notification: not_attempted`。所要時間は27秒以内。
+  - 結果は、v29の大引けの結果（直近8回PASS）と同じ意味の挙動だった。
+- **production mutations**：
+  - Edge Functionのdeploy 1回（v30）
+  - dry_runの呼び出し1回（保存・通知は0件）
+  - GitHubでのPR #34のmerge
+- **rollback**：不要のため実施していない。known-goodは、v29（`f34b8c4`）・v28（`47ea87d`）・v21（`4590ba6`）。
+
+### 次の自然cronのgate
+
+- **月曜9/28**の朝刊08:35、大引け17:15 JST。
+- read-onlyで確認する項目：
+  - `personalized_reports` のstatus・fact_status・error
+  - `source_basis.delivery_policy` の `voice_status`・`delivery_blocked_by`・`warning_codes`
+  - 通知のenqueue件数
+- 本文やuser情報は出さずに集計する。
+- 朝刊・大引けとも実際に完了して保存されれば、activationの判断（別TASK）に進める材料になる。
