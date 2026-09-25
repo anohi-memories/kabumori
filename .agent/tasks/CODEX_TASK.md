@@ -3,8 +3,8 @@
 - task_id: x-admin-pr33-final-auth-security-review-20260926
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sol（高）
 - purpose: K4 PASS済みPR #33（Web Admin password recovery / invite flow）を、Auth/session/open-redirect/account-enumeration/admin-boundaryの観点だけに絞って独立最終レビューする。production Auth設定・ユーザー変更・mergeは禁止。
@@ -106,3 +106,11 @@ When complete:
 - next_owner -> chatgpt
 - update `.agent/CODEX_REPORT.md`
 - STOP for C1.
+
+
+## Final C1 disposition
+
+- verdict: **FAIL accepted**.
+- PR #33 must not merge at head `e6b93beccfb9209dbe640fb9ea1464f2568f3c74`.
+- G4 owns narrowly scoped fixes for the three H1 findings, then K4 and another focused H1 review.
+- one bounded real recovery/invite E2E is required after source fixes before merge.
