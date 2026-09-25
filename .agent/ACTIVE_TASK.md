@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: review_required
-- task_id: x-universal-oauth-refresh-final-review-20260925
+- status: ready
+- task_id: x-admin-pr33-final-auth-security-review-20260926
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: source-only PASS-WITH-FIX; PR #37 and H1 report await C1; production activation NO
+- allocation: assigned; PR #33 focused Auth/session/open-redirect/admin-boundary final review; recommended Sol（高）
 
 ## Codex H2
 - owner: codex
@@ -64,22 +64,22 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: x-universal-oauth-refresh-productionization-20260925
+- status: ready
+- task_id: x-universal-oauth-refresh-pr37-merge-postverify-20260926
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: closed; Final K3 PASS for source implementation at `acbac42`; production activation deferred pending H1/C1
+- allocation: assigned; merge C1-approved PR #37 + post-merge verification only; no production activation; recommended Sonnet5（高）
 
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: done
 - task_id: x-admin-pr33-rebase-stabilize-auth-review-prep-20260925
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: assigned; PR #33 fresh-main conflict resolution + Auth/security stabilization + Netlify Preview prep; recommended Opus5.5（高）
+- allocation: closed; Final K4 PASS, PR #33 head `e6b93be` mergeable + Netlify Preview PASS; H1 final Auth/security review assigned
 
 ## Deferred
 
