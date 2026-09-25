@@ -3,8 +3,8 @@
 - task_id: kabumori-pr31-icon-merge-postmerge-verify-20260925
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: medium
 - recommended_model: Sonnet5（中）
 - purpose: K1 PASS済みPR #31をfresh main確認後にmergeし、承認済みアイコンがmain上で正しく参照されることをpost-merge検証する。EAS/TestFlightはまだ実施しない。
@@ -153,3 +153,22 @@ No EAS build, no TestFlight upload, no App Store Connect action, no credential/e
 ### Is the repo ready for a separately authorized iPhone/TestFlight build?
 
 **Yes.** The approved icon is wired through every relevant Expo config path and verified end-to-end through an actual `expo prebuild` run, reproducibly. Per this task's and PR #31's own boundary, this merge does **not** constitute final visual acceptance — that still requires the user seeing it on their actual iPhone home screen via a real device build. Remaining blockers before that build (EAS production env vars, App Store Connect setup, etc.) are unchanged from the prior release-readiness report and are out of scope here.
+
+
+## Final K1 — PR #31 icon merge
+
+Verdict: **PASS**.
+
+Accepted:
+- reviewed PR head `8939ce9f2f829cbfb042cadd92760f4e67ce8cc9`
+- merge SHA `7aa394fc1dc73edd0c67b6529923ec4dc9616e7f`
+- reviewed files byte-identical after merge
+- approved master hash preserved
+- app icon 1024x1024 RGB/no alpha
+- Expo icon and ios.icon both point to `./assets/images/icon.png`
+- real prebuild generated the approved AppIcon reproducibly
+- 126/126 tests, src TypeScript 0, Expo export 10 routes, diff check PASS
+- Splash/AnimatedSplashOverlay/expo-logo untouched
+- production mutation=0
+
+G1 is closed. Repo is ready for a separately authorized EAS/TestFlight real-iPhone verification build.
