@@ -3,8 +3,8 @@
 - task_id: kabumori-voice-policy-phase1-shadow-20260925
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Opus5.5（高）
 - purpose: かぶモリアプリのpersonalized-reportsに、VOICEのPASS/WARN/BLOCK分類とtelemetryをshadow導入する。配信可否の挙動は変えない。app_enabled=falseのまま。
@@ -171,3 +171,70 @@ When complete:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for K2.
+
+## Report
+
+### Summary
+
+- task_id：`kabumori-voice-policy-phase1-shadow-20260925`
+- result：shadowでの分類とtelemetryを実装し、PR #34を作成した（**未merge・未deploy**）。配信・保存・Fact・通知の挙動は不変。K2待ち。
+- changed_files：
+  - `supabase/functions/personalized-reports/delivery_policy.ts`（新規。純粋関数）
+  - `supabase/functions/personalized-reports/index.ts`（+9行。source_basisにtelemetryを付与し、logに2項目を追加）
+  - `supabase/functions/personalized-reports/delivery_policy_test.ts`（新規）
+- tests：
+  - 新規 **8/8**
+  - 既存の回帰：no_material 7/7、morning_contract 8/8、report_hardening 9/9、close_validator 23/23、MIC 14/14・6/6、report_upgrade 16/16、report_logic 22/22
+  - personalized-reports **119/119**、関連スイート **241/241**
+  - deno check・lint・diff checkはPASS
+- commit_hash：PR head `40828d31124a629e594c7ac2ac3af28e5325f6de`
+- push：`origin/g2-voice-policy-phase1-shadow-20260925`。PR https://github.com/anohi-memories/kabumori/pull/34
+- deploy：なし
+- safety_checks：
+  - production mutation 0（本番への接続もしていない）。
+  - `report_logic.ts`・MIC・market_detail・_shared・prompt・validator・parser・DB・cronは未変更。
+  - 共有ファイルは未変更。
+
+### 分類の設計（`classifyDelivery(outcome)`）
+
+完了済みのReportOutcomeだけを入力にし、生成・検査・保存には関与しない。
+
+- **PASS**：completed で、Factが合格。
+- **WARN**：ローカル検査の不合格が、**文体系のcodeだけ**の場合。
+  - 対象：`TITLE/SUMMARY/OVERVIEW/IMPACT/WATCH_NOTE/MORNING_REVIEW_TOO_LONG`、`TOO_MANY_WATCH_NOTES`、`RISK_NOTES_INVALID`、`CONTAINS_LATIN_WORD`、`CONTAINS_EMOJI`、`CONTAINS_NEWS_LABEL`、`CONTAINS_ISO_DATE`
+- **BLOCK**：既存の遮断要因を写すだけ。
+  - 対象：Factの不合格、ローカルのFact・Safety系code（`NUMBER_NOT_IN_PACKET`、`UNKNOWN_*_TICKER`、`DUPLICATE_TICKER_NOTE`、`MISSING_HOLDING_IMPACTS`、`BASIS_NOT_AVAILABLE`、`STANCE_*`、`FALSE_NO_MATERIAL_CLAIM`、`INFERENCE_NOT_HEDGED`、`CONTAINS_INVESTMENT_ADVICE`、`CONTAINS_URL`、`CONTAINS_MARKUP`、`CONTRADICTS_SHARED_MARKET`、`UNSUPPORTED_MULTI_DAY_WORD`、`MORNING_REVIEW_ON_MORNING`、`CHECKPOINTS_INVALID`、`NOT_JAPANESE`）、構造エラー（`REPORT_INSUFFICIENT_INFORMATION`、`EMPTY_FIELD`、`INVALID_OUTPUT`、`EMPTY_OUTPUT`）。
+  - **未知のcodeはBLOCKにする**。
+  - report_logicが出すcodeがすべて、どちらか一方にだけ分類されていることをテストで固定した。
+- **unavailable**：データの遮断（`NO_TRACKED_STOCKS`、`PRICES_UNAVAILABLE`）、transportや想定外のエラー、分類器自体の例外。`classifyDelivery` は例外を投げない。
+
+### telemetryの形（`source_basis.delivery_policy`。既存のjsonbなのでmigration不要）
+
+```json
+{ "version": "delivery_policy.v1_shadow", "mode": "shadow",
+  "voice_status": "pass|warn|block|unavailable",
+  "warning_codes": [], "block_codes": [],
+  "delivery_blocked_by": "data|infra|structure|local_fact_safety|local_style|fact|null",
+  "would_deliver_under_warn_policy": false,
+  "rewrite_attempted": false, "rewrite_succeeded": false, "fallback_original_used": false }
+```
+
+- `delivery_blocked_by`：現行の挙動で**実際に**配信を止めた要因。
+- `would_deliver_under_warn_policy`：shadowの指標。文体だけで不合格になった場合もFactは未実施なので、falseになる。
+- rewriteとfallbackは、Phase 1では常にfalse。
+- 同じ情報をrun logとレスポンス（エンドユーザーには見えない）にも出している。アプリの画面には出さない。
+
+### 挙動が変わらないことの証明
+
+- `report_logic.ts` は変更していない。`index.ts` は `withDeliveryPolicy(sourceBasis, outcome)` を渡すことと、logに2項目を足すことだけ。
+- テストで確認したこと：`app_enabled=false`（legacy lane）で、実際の `generateReport` の5つの結果について、`reportUpdate` が**source_basis以外の全列で完全に一致**し、source_basisの差分は `delivery_policy` キーの追加だけ。
+  - 5つの結果：passed／Factの不合格／文体系のみのローカル不合格／情報不足／transportエラー。
+  - このため、通知の条件（`status === "completed"`）も同じ。
+- sourceのテストで、index.tsの保存・通知・dry_runのガード（`if (!dryRun && reportId)`、`if (update.status === "completed")`）が不変であることを固定した。
+
+### recommended next step
+
+1. K2でPR #34を確認する。shadowだけの低リスクな変更なので、現行の方針どおり、新たなCodexレビューは不要と判断している。
+2. merge後のdeployは、別途の承認で行う。deployしてもshadowなので、配信の挙動は変わらない。
+3. **月曜9/28の自然cron（朝刊08:35・大引け17:15）のread-only確認**は、別のgateとしてそのまま実施する。PR #34をdeployしていれば、同じ確認でtelemetryも観測できる。
+4. 1〜2週間分のtelemetry（voice_statusの分布、`local_style` による欠配の件数）を見てから、Phase 2（flagによる `warn_deliver`、rewriteとfallback）を設計する。
