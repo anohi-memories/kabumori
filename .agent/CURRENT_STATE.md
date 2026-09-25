@@ -31,13 +31,13 @@
 
 ## Current slot snapshot
 
-- H1: `done` — `x-autopost-phase1f-ledger-atomic-completion-final-review-20260924`
+- H1: `ready` — `x-autopost-phase1g-multistep-tip-greeting-final-review-20260925`
 - H2: `done` — `kabumori-pr26-unknown-cause-prefix-final-review-20260925`
 - G1: `done` — `kabumori-pr24-privacy-merge-postmerge-verify-20260924`
   - PR #24 merged at reviewed head `46515c5` -> main `ff4c43c`. Files byte-identical; 122/0 tests, production web build shows the new disclosure text. personalized-reports/account-deletion.html untouched. Mutation 0.
   - Privacy dataflow gap from PR #21 review is now closed on main. Remaining blockers: icon/splash/overlay artwork, EAS production env, Netlify publish, Auth Site URL/SMTP, App Store Connect.
 - G2: `ready` — `kabumori-pr26-merge-redeploy-final-dryrun-20260925`
-- G3: `ready` — `x-autopost-phase1g-multistep-tip-greeting-completion-20260925`
+- G3: `done` — `x-autopost-phase1g-multistep-tip-greeting-completion-20260925`
 - G4: `done` — `x-admin-netlify-deploy-preview-pipeline-20260924`
 
 ## Final K1 PR #24 result
@@ -367,6 +367,20 @@
 - production mutation=0 excluding normal GitHub merge.
 - G3 advanced to Phase1G tip-thread + morning_greeting multi-step completion.
 - recommended model: Opus5.5（高）.
+
+## K3 Phase1G result
+
+- Phase1G IMPLEMENTATION PASS.
+- implementation commit: `e0f7785`.
+- tip thread and morning_greeting now have source-ready multistep completion contracts.
+- tip preserves all thread part X ids and enforces reply chaining/part count.
+- greeting enforces media_upload -> create_post and attempt-bound publish_claim lifecycle.
+- brand_post remains disabled.
+- focused 72/72; x-test-post 437/437; _shared 129/129; important-news-monitor 431/431; greeting/tip-specific 138/138 PASS.
+- disposable PostgreSQL behavior/race PASS.
+- production mutation/X API/media calls=0.
+- H1 final review assigned with Sol（高）.
+- production activation remains NO.
 
 ## K4 Netlify result
 
