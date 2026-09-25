@@ -3,8 +3,8 @@
 - task_id: x-autopost-phase1i-exact-account-refresh-final-review-20260925
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: K3 PASS済みPhase1I exact-account pre-X refresh writerを、account authority / Vault secret boundary / OAuth rotation / concurrency / provider-start race / ACL/migrationの観点で独立レビューする。production apply/deploy/real token refresh/X API callは禁止。

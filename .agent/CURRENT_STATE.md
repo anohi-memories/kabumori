@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-24 JST
+- checked_at: 2026-09-25 JST
 - repo: kabumori
 - branch: main
 
@@ -31,7 +31,7 @@
 
 ## Current slot snapshot
 
-- H1: `done` — `x-autopost-phase1h-gated-dispatcher-final-review-20260925`
+- H1: `review_required` — `x-autopost-phase1i-exact-account-refresh-final-review-20260925`; source-only fix PR #30 awaits C1, production activation NO
 - H2: `ready` — `x-admin-pr15-auth-crossbrand-final-review-20260925`
 - G1: `ready` — `kabumori-pr31-icon-merge-postmerge-verify-20260925`
   - K1 PASS for PR #31 at head `8939ce9f`.
@@ -74,6 +74,13 @@
 - activation remains NO.
 - next G2: source-only morning prompt/Fact contract fix.
 - recommended model: Sonnet5（極高）.
+
+## H1 Phase1I exact-account refresh final review
+
+- Verdict: **PASS-WITH-FIX for source only**, PR #30 at `94000720e10649612e84cb3811327de1a63364e9` awaiting C1. Production migration/deploy/real refresh: **NO**.
+- P1 cross-account Vault write was reproduced with fake local secrets when a ref changed without `updated_at`; P2 stale attempt could commit after settlement. Commit now rechecks leased identity/refs and live attempt/post under locks, and serializes shared-ref ownership check with account DML. Regression tests and disposable Phase1D–1I proofs pass.
+- Full x-test-post + _shared: 618/618; important-news-monitor: 473/473; focused Phase1I: 41/41. Targeted Deno check/lint pass. Broader Deno type-check still has 18 unrelated existing errors; broad tests passed with `--no-check`.
+- `service_role` remains a trusted server boundary. Live owner/ACL/definition read-back and an authorized activation plan remain outstanding. See `.agent/CODEX_REPORT.md` for the full review.
 
 ## Approved app icon decision
 
