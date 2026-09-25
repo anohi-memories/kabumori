@@ -33,13 +33,30 @@
 
 - H1: `done` — `x-autopost-phase1h-gated-dispatcher-final-review-20260925`
 - H2: `ready` — `x-admin-pr15-auth-crossbrand-final-review-20260925`
-- G1: `review_required` — `kabumori-approved-app-icon-integration-20260925`
-  - PR #31 open (unmerged): approved icon (user-supplied ~/Desktop/アイコン.png, sha256 31eda537...49a3f8, 1254x1254 opaque) preserved as master + resized to 1024x1024, wired into app.json's ios.icon/expo.icon/notifications icon. assets/expo.icon (old Icon Composer bundle) left unreferenced on disk.
-  - Verified via a real `expo prebuild --platform ios`: generated AppIcon.appiconset matches the new artwork, no template mark. 126/0 tests, tsc src 0, web export 10 routes.
-  - Discarded prebuild's incidental package.json script rewrite before committing. Splash/AnimatedSplashOverlay untouched. Production mutation 0; real iPhone acceptance still pending a separately authorized EAS build.
+- G1: `ready` — `kabumori-pr31-icon-merge-postmerge-verify-20260925`
+  - K1 PASS for PR #31 at head `8939ce9f`.
+  - Exact approved icon source verified and wired into Expo/iOS.
+  - No independent Codex review required due asset/config-only low-risk scope with real prebuild verification.
+  - Next: fresh-main merge + post-merge verification only; no EAS/TestFlight yet.
+  - recommended model: Sonnet5（中）.
 - G2: `ready` — `kabumori-morning-prompt-fact-contract-fix-20260925`
 - G3: `ready` — `x-autopost-phase1i-exact-account-prex-refresh-writer-20260925`
 - G4: `done` — `x-admin-pr15-netlify-preview-live-qa-continuation-20260925`
+
+## K1 PR #31 icon integration
+
+- verdict: **PASS**.
+- PR #31 head: `8939ce9f2f829cbfb042cadd92760f4e67ce8cc9`.
+- exact user-approved source used: 1254x1254 RGB opaque, sha256 `31eda5379951b3d8f69676add4add33ecea6d799a48545ef076bd6235949a3f8`.
+- derived native icon: 1024x1024 RGB opaque/no alpha.
+- Expo config resolves both top-level icon and ios.icon to `./assets/images/icon.png`.
+- real expo prebuild generated the new artwork in AppIcon.appiconset; template icon no longer used by app-icon config.
+- 126/126 tests, src TypeScript 0, Expo web export 10 routes, diff check PASS.
+- Splash config, AnimatedSplashOverlay and expo-logo unchanged.
+- production mutation=0.
+- Codex review skipped as low-risk asset/config-only change.
+- next G1: fresh-main merge + post-merge verification. EAS/TestFlight requires separate authorization.
+- recommended model: Sonnet5（中）.
 
 ## Final K2 PR #29 deploy/dry-run
 
