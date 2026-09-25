@@ -31,13 +31,13 @@
 
 ## Current slot snapshot
 
-- H1: `review_required` — `x-autopost-phase1h-gated-dispatcher-final-review-20260925` (source review PASS-WITH-FIX; PR #28, C1 pending)
+- H1: `done` — `x-autopost-phase1h-gated-dispatcher-final-review-20260925`
 - H2: `done` — `kabumori-pr26-unknown-cause-prefix-final-review-20260925`
 - G1: `done` — `kabumori-pr24-privacy-merge-postmerge-verify-20260924`
   - PR #24 merged at reviewed head `46515c5` -> main `ff4c43c`. Files byte-identical; 122/0 tests, production web build shows the new disclosure text. personalized-reports/account-deletion.html untouched. Mutation 0.
   - Privacy dataflow gap from PR #21 review is now closed on main. Remaining blockers: icon/splash/overlay artwork, EAS production env, Netlify publish, Auth Site URL/SMTP, App Store Connect.
 - G2: `ready` — `kabumori-pr26-merge-redeploy-final-dryrun-20260925`
-- G3: `done` — `x-autopost-phase1h-gated-v2-dispatcher-source-candidate-20260925`
+- G3: `ready` — `x-autopost-phase1h-pr28-merge-postmerge-verify-20260925`
 - G4: `ready` — `x-admin-netlify-live-site-preview-qa-20260925`
 
 ## Final K1 PR #24 result
@@ -436,6 +436,18 @@
 - apps/admin source semantics unchanged; config/docs only.
 - Vercel/production/DB/DNS mutation=0.
 - Live Netlify site creation and `proxy.ts` runtime QA are still pending interactive account authorization.
+
+## C1 Phase1H result
+
+- H1 verdict: **PASS-WITH-FIX for source-only candidate**.
+- reviewed implementation: `59bd54412eae989400b6ce7e9ecb56dc943db94f`.
+- H1 fix/reviewed head: `ce60d7a29022956d049521ffaeb533a749152a60` on PR #28.
+- Fixed P2 pre-X result/ledger divergence at attempt cap.
+- Settle write failure/malformed RPC response now blocks for manual reconciliation instead of reporting false durable state.
+- focused Phase1B–1H 102/102; x-test-post 467/467; _shared 129/129; important-news-monitor 431/431; greeting/tip 138/138 PASS.
+- production activation remains NO.
+- G3 now owns PR #28 fresh-main merge/post-merge verification.
+- recommended model: Sonnet5（高）.
 
 ## G4 Netlify live preview continuation
 
