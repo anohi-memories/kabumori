@@ -3,7 +3,7 @@
 - task_id: x-admin-netlify-live-site-preview-qa-20260925
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Sonnet5（高）
