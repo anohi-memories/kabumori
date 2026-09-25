@@ -44,6 +44,7 @@ import {
 } from "./report_logic.ts";
 import { appMarketSection, parseSharedMarketReportResult, type SharedMarketReportResult } from "../_shared/market_report_packet.ts";
 import { buildAppMarketDetail, crossAssetLines, type AppMarketDetail } from "./market_detail.ts";
+import { loadMicMarketContext, micSourceBasis, toMicPacketEntries } from "./mic_market_context.ts";
 
 const jsonHeaders = { "Content-Type": "application/json; charset=utf-8" };
 const YAHOO_CHART_URL = "https://query2.finance.yahoo.com/v8/finance/chart/";
@@ -326,6 +327,12 @@ Deno.serve(async (req) => {
       }
       : null;
 
+    // MIC (Market Intelligence Core) State: optional, read-only background context
+    // (rates/macro/equity_index), identical for every user in this run. Fetched
+    // once, fails open ([] on any error) -- never blocks report generation.
+    const micStates = await loadMicMarketContext(db);
+    const micPacketEntries = toMicPacketEntries(micStates);
+
     const tickers = [...new Set(userIds.flatMap((id) => byUser.get(id)!.map((stock) => stock.tickerCode)))];
     const series = await fetchAllSeries([
       ...tickers.map(yahooSymbol),
@@ -382,7 +389,7 @@ Deno.serve(async (req) => {
         const snapshot = buildSnapshot({
           reportType, tradingDate, tracked: byUser.get(userId)!, prices, indices, news, morningStances,
         });
-        const packet = buildPacket(snapshot, news, sharedInput);
+        const packet = buildPacket(snapshot, news, sharedInput, micPacketEntries);
         const outcome = await generateReport(snapshot, packet, requester);
         const sourceBasis = {
           news_since: since,
@@ -400,6 +407,7 @@ Deno.serve(async (req) => {
               market_data_content_hash: shared.data_content_hash,
             }
             : {}),
+          ...micSourceBasis(micStates),
         };
         const update = reportUpdate(outcome, snapshot, sourceBasis, new Date(), sharedInput?.section ?? null, marketDetail);
         let notification: string = "not_attempted";
