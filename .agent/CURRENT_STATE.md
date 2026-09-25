@@ -38,7 +38,7 @@
   - Privacy dataflow gap from PR #21 review is now closed on main. Remaining blockers: icon/splash/overlay artwork, EAS production env, Netlify publish, Auth Site URL/SMTP, App Store Connect.
 - G2: `ready` — `kabumori-pr26-merge-redeploy-final-dryrun-20260925`
 - G3: `ready` — `x-autopost-phase1i-exact-account-prex-refresh-writer-20260925`
-- G4: `done` — `x-admin-netlify-live-site-preview-qa-20260925`
+- G4: `ready` — `x-admin-netlify-pr15-live-preview-auth-qa-20260925`
 
 ## Final K1 PR #24 result
 
@@ -485,6 +485,19 @@
 - required user step: create/connect the Netlify site for `anohi-memories/kabumori`, base `apps/admin`, and set only the two public Supabase env vars.
 - after that, G4 can resume with live Deploy Preview + proxy/auth/PR#15 QA.
 - recommended continuation model: Sonnet5（高）.
+
+## G4 Netlify blocker resolved
+
+- user completed Netlify account/site connection for `anohi-memories/kabumori`.
+- site UI showed `shiny-kheer-77a154`.
+- base directory `apps/admin`, public Supabase env names configured.
+- initial deploy detected Next.js 16.3.4 but Runtime was unset and produced 0 functions, causing valid dynamic routes to 404.
+- user set Netlify Runtime = Next.js and redeployed without cache.
+- live `/login` now renders Kabumori Admin successfully.
+- prior interactive authorization/runtime blocker is resolved.
+- G4 now owns PR #15 real Deploy Preview + proxy/auth/selector boundary QA.
+- PR #15 merge and Vercel production remain forbidden.
+- recommended model: Sonnet5（高）.
 
 ## Known issues / observations
 
