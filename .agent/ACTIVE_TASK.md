@@ -54,12 +54,12 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: done
-- task_id: kabumori-report-dryrun-false-reject-hardening-20260925
+- status: ready
+- task_id: kabumori-voice-gate-product-policy-audit-20260925
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: closed; Final K2 source PASS, awaiting H2 combined review
+- allocation: assigned; read-only VOICE gate audit + PASS/WARN/BLOCK product policy design, no source/deploy
 
 ## Claude G3
 - owner: claude
