@@ -45,6 +45,7 @@ import {
   fetchSourceFetchStatuses,
   resolveFedStatementDiffEvidence,
 } from "./mic_state_query_logic.ts";
+import { buildFedStatementInterpretationContext } from "./mic_state_fed_interpretation.ts";
 import {
   claimStateEvaluationRun,
   computeRunWindow,
@@ -282,6 +283,14 @@ export async function evaluateDomain(
     // them while AI was running; otherwise the snapshots are stored as the
     // immutable record of the State input.
     const marketEventSnapshots = decision.recentEvents.map(toMarketEventSnapshot);
+    // Phase 2C-2: optional Fed interpretation context, derived only from the
+    // snapshots resolved above (the same ones the RPC re-verifies), never
+    // re-queried. Not a material trigger: it only rides along when AI already
+    // runs for this domain.
+    const fedStatementInterpretations = buildFedStatementInterpretationContext(
+      domain,
+      fedStatementDiffEvidence.map((d) => d.snapshot),
+    );
 
     const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
     if (!openAiApiKey) {
@@ -297,6 +306,7 @@ export async function evaluateDomain(
       dataConfidence: decision.dataConfidence,
       coverageStatus: decision.coverageStatus,
       fetchStatus: decision.fetchStatus,
+      fedStatementInterpretations,
     };
     const lunaResult = await requestStateEvaluation({ apiKey: openAiApiKey, model: STATE_EVAL_LUNA_MODEL, input: aiInput });
     // Every actual OpenAI call gets its own ai_usage_events row linked to this
