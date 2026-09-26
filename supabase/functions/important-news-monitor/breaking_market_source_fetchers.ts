@@ -195,11 +195,19 @@ export const BREAKING_MARKET_OFFICIAL_DOMAINS = [
 /** Every host a breaking candidate's source_url may use (news outlets plus official sources). */
 export const BREAKING_MARKET_SOURCE_DOMAINS = [...BREAKING_MARKET_NEWS_DOMAINS, ...BREAKING_MARKET_OFFICIAL_DOMAINS];
 
-export type BreakingMarketSearchScope = "news" | "official" | "news_and_official";
+/**
+ * "unrestricted" sends no allowed_domains at all. Only the headline-trigger verification uses it:
+ * the domain-filtered search kept returning days-old articles for stories the outlets had published
+ * that morning. What a candidate may cite does not change — the union below still gates source_url,
+ * and the trigger lane further keeps only NEWS_ARTICLE_HOSTS.
+ */
+export type BreakingMarketSearchScope = "news" | "official" | "news_and_official" | "unrestricted";
 
-/** The web_search allowed_domains for a topic; topics default to the news outlets. */
-export function breakingMarketSearchDomains(query: BreakingMarketQuery): string[] {
+/** The web_search allowed_domains for a topic (null: no filter); topics default to the news outlets. */
+export function breakingMarketSearchDomains(query: BreakingMarketQuery): string[] | null {
   switch (query.searchScope ?? "news") {
+    case "unrestricted":
+      return null;
     case "official":
       return BREAKING_MARKET_OFFICIAL_DOMAINS;
     case "news_and_official":
@@ -768,6 +776,12 @@ export function breakingMarketRecencyTerms(now: Date): string {
   return `latest breaking news ${ENGLISH_MONTHS[jst.getUTCMonth()]} ${jst.getUTCDate()} ${jst.getUTCFullYear()}`;
 }
 
+function webSearchTool(allowedDomains: string[] | null): Record<string, unknown> {
+  return allowedDomains
+    ? { type: "web_search", filters: { allowed_domains: allowedDomains }, search_context_size: "low" }
+    : { type: "web_search", search_context_size: "low" };
+}
+
 /** The Responses API request for one breaking_market query. Exported so a model comparison can send
  * byte-identical instructions/schema with only the model changed. */
 export function breakingMarketRequestBody(
@@ -781,11 +795,7 @@ export function breakingMarketRequestBody(
     reasoning: { effort: "low" },
     max_output_tokens: 1200,
     max_tool_calls: 1,
-    tools: [{
-      type: "web_search",
-      filters: { allowed_domains: breakingMarketSearchDomains(query) },
-      search_context_size: "low",
-    }],
+    tools: [webSearchTool(breakingMarketSearchDomains(query))],
     tool_choice: "required",
     include: ["web_search_call.action.sources"],
     instructions: [

@@ -194,11 +194,11 @@ test("verify query: concrete terms, no site:/domain/outlet names, capped, dated 
   assert.equal(long.split(" ").length, 14 + 6, "14 terms plus the six recency words");
 });
 
-test("verify runs as a news-outlet breaking query with the headline terms and a 6h window", () => {
+test("verify runs as an unrestricted breaking query with the headline terms and a 6h window", () => {
   const query = verifyBreakingQuery("Iran Hormuz reopen latest breaking news September 26 2026", "geopolitics");
   const body = breakingMarketRequestBody(query, NOW);
   assert.match(body.input as string, /search topic: Iran Hormuz reopen/);
-  assert.deepEqual((body.tools as Array<{ filters: { allowed_domains: string[] } }>)[0].filters.allowed_domains, BREAKING_MARKET_NEWS_DOMAINS);
+  assert.deepEqual(body.tools, [{ type: "web_search", search_context_size: "low" }]);
   assert.equal(body.max_tool_calls, 1);
   assert.equal(query.maxItemAgeMs, 6 * 60 * 60 * 1000);
   assert.equal(query.defaultTopicKey, "breaking:trigger:geopolitics");

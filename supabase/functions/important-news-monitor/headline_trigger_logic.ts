@@ -109,6 +109,9 @@ export type TriggerItemRecord = {
   verifyAttempted: boolean;
   verifySourceCount: number | null;
   verifySourcesSample: Array<{ url: string | null; domain: string | null }>;
+  /** Items the model returned and the non-zero reasons the gates dropped them (disallowed_domain, stale_published_at, ...). */
+  verifyRawCandidateCount: number | null;
+  verifyRejections: Record<string, number>;
   candidateCount: number;
   candidateCreated: boolean;
   rejectionReason: string | null;
@@ -398,7 +401,8 @@ export function verifyBreakingQuery(verifyQuery: string, category: ImportantNews
     defaultTopicKey: `breaking:trigger:${category}`,
     // The headline is fresh; the outlet's own article may predate it by a few hours.
     maxItemAgeMs: TRIGGER_WINDOW_MS,
-    searchScope: "news",
+    // Search the whole web; only NEWS_ARTICLE_HOSTS articles can become candidates (see below).
+    searchScope: "unrestricted",
   };
 }
 
@@ -435,6 +439,8 @@ function record(
     verifyAttempted: false,
     verifySourceCount: null,
     verifySourcesSample: [],
+    verifyRawCandidateCount: null,
+    verifyRejections: {},
     candidateCount: 0,
     candidateCreated: false,
     rejectionReason: null,
@@ -515,6 +521,10 @@ export async function runHeadlineTriggerLane(input: {
       item.verifySourceCount = result.diagnostics.searchSourceCount ?? null;
       item.verifySourcesSample = (result.diagnostics.searchSourcesSample ?? []).slice(0, 3)
         .map((source) => ({ url: source.url, domain: source.domain }));
+      item.verifyRawCandidateCount = result.diagnostics.rawCandidateCount;
+      item.verifyRejections = Object.fromEntries(
+        Object.entries(result.diagnostics.rejectionCounts ?? {}).filter(([, count]) => count > 0),
+      );
       const onArticleHosts = result.candidates.filter((candidate) => isNewsArticleHost(candidate.sourceUrl));
       item.candidateCount = onArticleHosts.length;
       item.candidateCreated = onArticleHosts.length > 0;
