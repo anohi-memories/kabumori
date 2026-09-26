@@ -1169,3 +1169,15 @@
 - if a natural expiry cycle cannot be observed safely in the available window, stop with OBSERVATION_PENDING rather than forcing it.
 - no additional Codex review unless new semantic changes appear.
 - recommended Claude model: Opus5.5（高）.
+
+
+## Final K3 Stage 3A fully live
+
+- verdict: **PASS**.
+- PR #38 merged -> `6717b1fe451db83f80e837bf8104268a2b00423d`.
+- production x-test-post v125 deployed from merged main; source byte-identical, verify_jwt=false preserved.
+- rollout rows remain AI Lab only enabled.
+- natural AI Lab scheduled post at 2026-09-27 07:49 JST triggered proactive refresh: generation 6->7, refresh once, post succeeded, no duplicate/second401/uncertain/reauth/stuck state.
+- cross-account check PASS; Kabumori legacy path unchanged.
+- Stage 3A is fully proven in production across DB authority, Edge runtime and one natural token-expiry cycle.
+- next phase: Stage 3B controlled second-account pilot; migration-history normalization remains separate.
