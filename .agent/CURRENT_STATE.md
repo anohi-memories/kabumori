@@ -1043,3 +1043,14 @@
 - no intermediate Codex review will be scheduled; reduced-review policy/user direction is to complete real invite E2E first and bundle final review at the release boundary if needed.
 - operator action required: set server-only Netlify Deploy Preview env `ADMIN_INVITE_BINDING_SECRET` to a random >=32-byte value, Functions scope, then rebuild Preview.
 - after that, G4 should resume one bounded invite E2E; PR remains unmerged.
+
+## Final K3 universal OAuth refresh production rollout
+
+- verdict: **PASS-WITH-DEVIATION**.
+- Stage 0/1/2 all passed; x-test-post v121 live, core refresh migration applied, AI Lab refresh path proven in production.
+- AI Lab scheduled posts 08:27 / 09:09 / 11:29 JST all succeeded; refresh gen 0→1 then 1→2, with no uncertain/reauth/second-401/deadlock/lease/commit failures.
+- Kabumori legacy token path and other account credentials remained unchanged.
+- accepted deviation: monitoring parser failure delayed gate-OFF, so 09:09 also ran with gate ON; no extra refresh/replay/duplicate/cross-account effect occurred.
+- user explicitly turned gate ON again for continued operation; current gate remains ON and AI Lab is recovered.
+- generic Stage 3/4 rollout remains unapproved.
+- migration-history debt remains: core SQL is live but not recorded in `supabase_migrations.schema_migrations`; no blind push/repair.
