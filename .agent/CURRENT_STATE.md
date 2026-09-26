@@ -1086,3 +1086,12 @@
 - migration-history debt remains isolated; no blind db push/repair.
 - because Stage 3A introduces rollout authority + SECURITY DEFINER/RPC ACLs + grandfathering + a production migration path, H1 receives one final release-boundary review before production apply. No intermediate review loop is planned.
 - recommended Codex model: Sol（高）.
+
+## Final C1 Stage 3A rollout review
+
+- verdict: **PASS-WITH-FIX**.
+- reviewed PR #38 `050d62f`; fixed head `748deb13a934129e5696ab5552401f547204b32c` pushed.
+- P2 fixed: unexpected proactive refresh-start failures can no longer fall through to X create with a still-valid token; only expected rollout refusal / in-progress outcomes may continue.
+- rollout modes, pre-Vault exact-account authority, service_role-only mutation ACLs, grandfathering, reauth, stuck-lease behavior, non-secret health observability and migration-history safeguards accepted.
+- disposable DB tests + 655 Deno tests PASS; production mutation=0.
+- next: separate explicit authorization for Stage 3A production apply. Apply only migration `20260926032054`, recheck exact grandfather set immediately before apply, read back all ACL/function/table/rollout state, and stop on any unexpected delta. Edge deploy/refresh observation remains a later gated step.
