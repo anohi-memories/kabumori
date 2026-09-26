@@ -3,8 +3,8 @@
 - task_id: x-admin-pr33-invite-otp-purpose-binding-fix-20260926
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Opus5.5（高）
 - purpose: 実E2Eで確認されたSupabase invite token_hash経路の `amr.method=otp` を安全に扱えるよう、generic otpを許可せず、invite成功直後だけ短時間有効なサーバー側purpose bindingを付与してPR #33を修正する。
@@ -245,3 +245,17 @@ Then:
 
 - status -> review_required
 - next_owner -> chatgpt
+
+
+## Final K4 — invite purpose binding fix
+
+Verdict: **PASS for source/tests; OPERATOR GATE before real invite E2E**.
+
+- PR #33 head: `0cc48fe3ac1c376d747a74b6b31ea34990615805`.
+- signed short-lived httpOnly invite-purpose binding implemented; generic OTP/magiclink remain denied.
+- binding requires same user + same session + fresh OTP + valid signature + <=15 minute window.
+- successful password update clears the purpose binding; missing/short secret fails closed.
+- tests: 103/103 PASS; tsc/lint/build/diff/secret scan PASS; Preview build SUCCESS.
+- no Codex review is inserted at this point per reduced-review policy and user direction; next step is real invite E2E first.
+- blocker: Netlify Deploy Preview needs server-only env `ADMIN_INVITE_BINDING_SECRET` (random >=32 bytes), Functions/Deploy Preview scope, followed by Preview rebuild.
+- PR remains unmerged; production mutation=0.
