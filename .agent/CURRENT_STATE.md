@@ -1128,3 +1128,15 @@
 - exact grandfather set must be rechecked immediately before apply and equal one proven AI Lab account; any discrepancy is a hard stop.
 - no Edge deploy, env change, token refresh, X post, second-account rollout, migration repair, db push, historical batch apply, or Kabumori credential migration is authorized.
 - recommended Claude model: Opus5.5（高）.
+
+## Final K3 Stage 3A production apply
+
+- verdict: **PASS**.
+- production applied only migration `20260926032054_x_account_refresh_rollout_authority.sql` from reviewed PR #38 fixed head `748deb1`.
+- grandfather candidate preflight was exactly one proven AI Lab account; post-apply rollout table contains exactly that account as `enabled` and no other pilot/enabled rows.
+- RLS/ACL/owner/search_path/SECURITY DEFINER/function-definition read-back PASS; no anon/authenticated privilege expansion.
+- Kabumori remains on legacy non-Vault path; other account states unchanged.
+- advisor delta attributable to Stage 3A = 0.
+- Edge deploy/env/token refresh/X post = 0; migration repair/db push = 0.
+- migration history debt remains unnormalized by design.
+- next: merge reviewed PR #38, deploy Stage 3A x-test-post source, then observe one natural AI Lab token-expiry cycle. No extra Codex review unless new semantic changes appear.
