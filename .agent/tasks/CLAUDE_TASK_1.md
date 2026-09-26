@@ -3,7 +3,7 @@
 - task_id: kabumori-onboarding-icon-integration-20260926
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Sonnet5（高）
