@@ -44,16 +44,31 @@
 
 - H1: `review_required` — `x-admin-pr33-auth-fix-round2-final-review-20260926`; source-only PASS at PR #33 head `2528b56`, three prior Auth findings fixed; bounded real recovery + invite E2E remains mandatory before merge; C1 required
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
-- G1: `done` — `kabumori-branded-launch-screen-20260925`
-  - Final K1 PASS.
-  - PR #36 merged -> `b869fb557f009ca5817b6d2a853d529bd29c20c2`.
-  - Native splash + AnimatedSplashOverlay now use approved Kabumori icon on #eef3ed; Expo launch branding removed.
-  - 135/135 tests, tsc 0, real prebuild/web export PASS.
-  - Newer Yume-chan + robot visual concept is not yet integrated; current implementation is the simple approved-icon baseline.
-  - Next gate: real-iPhone/TestFlight visual acceptance.
+- G1: `ready` — `kabumori-onboarding-icon-integration-20260926`
+  - Approved new official app icon + three final 1179x2556 onboarding assets.
+  - Asset ingress is fail-closed by exact filename/dimension/sha256 verification; no artwork regeneration.
+  - Target flow: short native splash -> onboarding v1 once -> existing app/auth flow.
+  - Native page dots; page 3 accessible CTA; page 2 subtle indeterminate progress overlay only if alignment is robust.
+  - No auth/session semantic changes, production build, Supabase, X/admin, or production mutation.
+  - Recommended model: Sonnet5（高）.
 - G2: `done` — `kabumori-pr34-shadow-merge-deploy-20260925`
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS
+
+## G1 Kabumori onboarding + icon integration
+
+- assigned: `kabumori-onboarding-icon-integration-20260926`.
+- user-approved assets are final; Claude must not regenerate or redesign them.
+- new official icon source expected 1254x1254 RGB sha256 `6b083c5156332665a1354199f824bc7590a05d79ec2fe1608ae286425ffd7d4e`.
+- onboarding 01/02/03 expected 1179x2556 RGB with sha256:
+  - 01 `de0f57bd48fb15a3c3cbf11480fed2106677a6729930f57b734f881051a988fb`
+  - 02 `2ac0fda449490867f6f0ced3f89b2023f43bdb424122c8aea8ce3aedb9b5e833`
+  - 03 `6dbbf10caad1eb0c23a4604186ce2474fd8472649f952d4e4662411b1ec93dd6`
+- onboarding shown once for version v1; native page dots; accessible page-3 CTA.
+- page-2 progress is explanatory/indeterminate only, never real market-analysis progress.
+- no Codex review expected if scope remains UI/asset/local-state only.
+- real-iPhone/TestFlight visual acceptance remains a later gate.
+- recommended model: Sonnet5（高）.
 
 ## H1 universal OAuth refresh final review
 
