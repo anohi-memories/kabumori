@@ -3,8 +3,8 @@
 - task_id: x-universal-oauth-refresh-stage3a-production-apply-20260926
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Opus5.5（高）
 - purpose: C1 PASS-WITH-FIX済みのStage 3A rollout authorityをproductionへ限定適用し、exact-account rollout/ACL/grandfatheringをread-back検証する。Edge deploy・2つ目アカウントpilot・migration history repairは行わない。
@@ -271,4 +271,32 @@ After successful apply/read-back OR safe stop:
 
 ## Report
 
-- pending
+- task_id: x-universal-oauth-refresh-stage3a-production-apply-20260926
+- result: K3 ready — Stage 3A DB layer applied to production and read-back PASS. No hard stop triggered.
+- model: Opus 5.5
+- user_approval_in_chat: 2026-09-26 22:53 JST「進める」（Stage 0 PASS 報告後）
+- source: PR #38 fixed head `748deb13a934129e5696ab5552401f547204b32c`. `050d62f..748deb1` changed only `x-test-post/vault_account_auth.ts` (+test); migration/tests identical. Applied file = `git show 748deb1:supabase/migrations/20260926032054_x_account_refresh_rollout_authority.sql`, sha256 `75eb5f855eed84e28a09e89ea6decf6d352c9fed2a08b0790a53582eebd2b5e9`.
+- stage0 (read-only, 22:52 JST): PASS
+  - A: state table present; 9 core functions md5 = Stage 1 read-back (unchanged); live begin owner postgres / SECURITY DEFINER / `search_path=""` / EXECUTE postgres+service_role only; Stage 3A objects absent (table, 4 functions, any `%rollout%` relation = 0); triggers = the 2 core triggers only.
+  - B: history `20260925140000`=unrecorded, `20260926032054`=unrecorded, latest recorded `20260924024406` (known debt).
+  - C: grandfather candidates = **1**: `ai_salaryman_lab_x`（handle `kaishain_ai_lab`, platform_user_id set, identity_verified, generation 6, idle, no error）. Re-checked just before apply: 1, refreshing leases 0.
+  - D: `sa_bfdab0e0…` publish false / no refresh state → not eligible; Kabumori `kabumori_x` has no Vault refs (legacy); shared refs 0.
+- apply: `supabase db query --linked -f <that single file>` (Management API, file's own `begin; … commit;`), 22:53:55 JST, exit 0, empty result, no error. No db push / include-all / repair / other files / manual SQL.
+- readback_rollout_table: exists; columns `social_account_id, mode, pilot_expires_at, pilot_max_generation, reason_code, updated_at`; constraints mode∈off/pilot/enabled, pilot shape, reason code format, PK, FK→social_accounts; RLS on; owner postgres; anon/authenticated no privileges; service_role SELECT only. Rows: exactly `ai_salaryman_lab_x = enabled / GRANDFATHERED_PROVEN_REFRESH` (no pilot fields); no other row.
+- readback_functions: `x_account_refresh_authority`（stable, owner-only EXECUTE）、`set_x_account_refresh_rollout`（service_role）、`get_x_account_refresh_health`（stable, service_role）、`resolve_stale_x_account_refresh_lease`（owner-only）、`begin_x_account_refresh_legacy_post`（grants unchanged: service_role）— all SECURITY DEFINER, owner postgres, `search_path=""`. anon/authenticated EXECUTE on any `%x_account%`/`%legacy_post%` function: none. Health result columns contain no token / secret id / lease token.
+- readback_md5: the 5 new/replaced functions' `pg_get_functiondef` md5 match a disposable apply of the same file 5/5; production begin definition text byte-identical to the disposable one; other 8 core functions md5 unchanged.
+- legacy_begin_semantics: = core body + the single pre-Vault authority call (static test in PR #38 pins this against the core file; production text identical to that source).
+- health_rpc (read-only call): `ai_salaryman_lab_x` enabled / allowed / idle / gen 6 / not stuck / no reauth; `kabumori_x` off / `X_REFRESH_CREDENTIAL_NOT_CONFIGURED`; `sa_bfdab0e0…` off / `X_ACCOUNT_PUBLISH_DISABLED`.
+- ai_lab: rollout row enabled (data-driven grandfathering, no hardcoded identity); refresh state unchanged (idle, gen 6, no error, same last_refreshed_at); social_accounts rows of all accounts unchanged (status/publish/error/updated_at).
+- other_accounts: no other rollout row; none pilot/enabled.
+- advisors (security, linked): 10 findings, same breakdown as baseline (authenticated_security_definer 6, anon_security_definer 2, function_search_path_mutable 1, auth_leaked_password_protection 1); attributable to 3A/core: 0.
+- migration_history_after: `20260925140000` and `20260926032054` both still unrecorded (no repair, as instructed).
+- production_mutations: exactly one — the Stage 3A migration apply (table + 4 functions + begin replacement + 1 grandfather row). Edge deploy 0 / env change 0 / token refresh 0 / X post 0 / rollout change 0 / repair 0.
+- observation: x-test-post is v124 but its code is byte-identical to `777997a` (= origin/main = my Stage 1 v121 deploy, updated_at 00:49 JST). The +3 versions correspond to the three `X_VAULT_ACCOUNT_REFRESH` secret changes in Stage 2; no other deploy.
+- remaining_risks:
+  - live Edge is still the pre-3A TS (no rollout-refusal handling / proactive not-started handling from PR #38). With AI Lab enabled this is harmless; for an account set to off/pilot-limited, the old Edge throws the rollout code on 401 without recording `X_ACCESS_TOKEN_UNAUTHORIZED` (fail-closed, no token request).
+  - PR #38 is not merged yet: main does not contain the applied migration file until it merges.
+  - migration history debt unchanged (never `db push`).
+  - AI Lab now depends on its rollout row; turning it `off` stops its refresh.
+- stage3a_db_ready_for_next_step: yes — DB authority layer proven in production; ready for a separately gated PR #38 merge + x-test-post deploy/observation task.
+- next_recommendation: ChatGPT K3 → merge PR #38 (reviewed head `748deb1`) and a gated Edge deploy + one AI Lab expiry-cycle observation; migration-history single-version normalization as its own approved task.
