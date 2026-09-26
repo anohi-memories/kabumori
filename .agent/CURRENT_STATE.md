@@ -45,9 +45,9 @@
 - H1: `review_required` — `x-oauth-refresh-stage3a-final-security-review-20260926`; PR #38 source-only PASS-WITH-FIX at head `748deb1` (unexpected proactive refresh-start failures now stop before X write); disposable DB/ACL/race and 655 X tests PASS; production apply/deploy remains separately gated; C1 required
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
 - G1: `review_required` — `kabumori-ios-internal-visual-qa-build-20260926`
-  - User authorized setting EXPO_PUBLIC_SUPABASE_URL/EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY (public, non-secret) as EAS preview/development env vars (production untouched, re-verified empty). Build succeeded: iOS preview profile, ID 79955c92-54d2-42ce-ad38-b8710f2f9011, bundle com.anohimemories.kabumori, no new credentials generated (existing cert/profile from 16 days ago reused).
-  - Install link: https://expo.dev/accounts/anohi-memoriess-team/projects/kabumori/builds/79955c92-54d2-42ce-ad38-b8710f2f9011 . Source commit has zero diff from merged main (control-file-only commit). Production mutation 0 for app/backend.
-  - Waiting on the user's real-device checklist result (icon/splash/onboarding/CTA/relaunch) -- not yet observed on the actual iPhone.
+  - Build 79955c92-54d2-42ce-ad38-b8710f2f9011 (iOS preview, com.anohimemories.kabumori) succeeded; user authorized the two public/non-secret EAS preview/development env vars, production untouched.
+  - **Real-device visual acceptance: PASS**, confirmed by the user on an iPhone 17 Pro (all 7 checklist items OK: icon, splash, onboarding pages/swipe, page-2 static bar, page-3 CTA, no repeat on relaunch).
+  - Production mutation 0 for app/backend across this whole task. Ready for chatgpt review.
 - G2: `done` — `kabumori-pr34-shadow-merge-deploy-20260925`
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS

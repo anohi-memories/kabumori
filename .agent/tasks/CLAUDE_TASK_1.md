@@ -325,3 +325,28 @@ I will not mark this checklist PASS myself; it needs the user's own observation 
 
 1. Send the user the install link above and let them work through the checklist on their iPhone.
 2. Once they report the result, a final G1 pass can record PASS/issues found and recommend the next step (either proceeding toward TestFlight/App Store prerequisites, or a source fix if something looks wrong).
+
+## Report — G1 result (real-device visual acceptance: PASS)
+
+- task_id: kabumori-ios-internal-visual-qa-build-20260926
+- **result: the user completed the real-iPhone checklist on an iPhone 17 Pro and confirmed all items OK.** This is the user's own observation, recorded verbatim, not a self-assessment.
+- Build tested: `79955c92-54d2-42ce-ad38-b8710f2f9011` (profile `preview`, source commit `12db86576bdaf6c410b8a92709df0e46504eb831`, zero app-code diff from merged main).
+- Device: iPhone 17 Pro.
+- User's exact response: 「すべてOK」「iPhone17PRO」 — all seven checklist items (home-screen icon, cold-launch splash with no Expo branding/no flash, all three onboarding pages with smooth swiping and no clipping/distortion, page-2's static bar, page-3 CTA reliably proceeding, and no onboarding repeat on relaunch) confirmed good with no exceptions raised.
+
+### This closes the task's own completion condition
+
+"Do not mark visual acceptance PASS yourself without the user's real-device observation" — satisfied: the PASS above is the user's own statement, not my inference.
+
+### Production mutation (cumulative for this task)
+
+Still **0** for the app/backend. The only mutation across this whole task remains the two `preview`/`development` EAS environment variables (public, non-secret, user-authorized), and `production` remains empty, as already verified in the prior report.
+
+### Remaining issues (unchanged from the pre-acceptance report)
+
+1. `ios.infoPlist.ITSAppUsesNonExemptEncryption` is still undeclared (finding A5) — an App Store Connect / TestFlight-time item, not relevant to this Ad Hoc internal build, not fixed here.
+2. Everything else previously tracked in `RELEASE_READINESS.md` §4 (Netlify publication for `apps/kabumori-web`, Auth Site URL/redirect, custom SMTP, App Store Connect setup, `submit.production`) is unchanged and still pending — none of it was in this task's scope.
+
+### Next recommendation
+
+The icon/splash/onboarding visual work is now fully verified end-to-end: source-complete, real `expo prebuild`-verified, and now real-device-accepted. The next gate toward App Store submission is the operator-driven checklist already tracked in `RELEASE_READINESS.md` (Netlify site for `apps/kabumori-web`, the three legal/support operator values, EAS production env vars, Supabase Auth Site URL/SMTP, App Store Connect metadata) — none of which this task's scope covers.
