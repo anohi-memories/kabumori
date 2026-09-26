@@ -42,7 +42,7 @@
 
 ## Current slot snapshot
 
-- H1: `review_required` — `x-admin-pr33-auth-fix-round2-final-review-20260926`; source-only PASS at PR #33 head `2528b56`, three prior Auth findings fixed; bounded real recovery + invite E2E remains mandatory before merge; C1 required
+- H1: `review_required` — `x-oauth-refresh-stage3a-final-security-review-20260926`; PR #38 source-only PASS-WITH-FIX at head `748deb1` (unexpected proactive refresh-start failures now stop before X write); disposable DB/ACL/race and 655 X tests PASS; production apply/deploy remains separately gated; C1 required
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
 - G1: `review_required` — `kabumori-onboarding-icon-integration-20260926`
   - PR #39 open (unmerged): new official icon (sha256 6b083c51...) replaces the 2026-09-25 icon (no app.json change needed, same shared file); 3-page onboarding (assets/onboarding/*, kabumori:onboarding:v1 in AsyncStorage) inserted between splash and the normal auth flow, native page dots, image-relative CTA hit target on page 3.

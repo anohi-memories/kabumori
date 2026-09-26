@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: x-oauth-refresh-stage3a-final-security-review-20260926
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: assigned; single final release-boundary security/ACL/migration review for Stage 3A before any production apply; recommended Sol（高）
+- allocation: completed source review with one fail-closed fix on PR #38; C1 required before any separate production-apply task; recommended Sol（高）
 
 ## Codex H2
 - owner: codex

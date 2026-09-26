@@ -3,8 +3,8 @@
 - task_id: x-oauth-refresh-stage3a-final-security-review-20260926
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol（高）
 - purpose: PR #38 Stage 3A Universal OAuth Refresh rollout foundationを、production apply前の最終1回レビューとして検証する。途中レビューは増やさず、この完成物をまとめて確認する。
