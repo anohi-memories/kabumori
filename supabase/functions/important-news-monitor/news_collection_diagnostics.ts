@@ -21,9 +21,17 @@ export type BreakingMarketQueryRunDiagnostic = {
 const n = (value: number | undefined) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
 
 /** Bounded, secret-free per-run diagnostics; zeroes remain queryable across runs to derive consecutive streaks. */
+export type HeadlineTriggerRunDiagnostic = {
+  /** The lane's own record (feeds, counts, triaged items); also the next runs' dedupe history. */
+  lane: unknown;
+  triage: { inputTokens: number; outputTokens: number; estimatedCostUsd: number } | null;
+  verify: Array<{ webSearchCallCount?: number; inputTokens?: number; outputTokens?: number; estimatedCostUsd?: number }>;
+};
+
 export function buildCollectionRunDiagnostics(input: {
   marketMacroProviders: MarketMacroProviderRunDiagnostic[];
   breakingMarketQueries: BreakingMarketQueryRunDiagnostic[];
+  headlineTrigger?: HeadlineTriggerRunDiagnostic;
 }) {
   const marketMacroProviders = input.marketMacroProviders.map((item) => ({ ...item }));
   const breakingMarketQueries = input.breakingMarketQueries.map((item) => ({
@@ -41,10 +49,23 @@ export function buildCollectionRunDiagnostics(input: {
       ),
     },
   };
+  const trigger = input.headlineTrigger;
+  const headlineTriggerCost = trigger
+    ? {
+      triageCalls: trigger.triage ? 1 : 0,
+      verifySearches: trigger.verify.length,
+      webSearchCalls: trigger.verify.reduce((sum, item) => sum + n(item.webSearchCallCount), 0),
+      inputTokens: n(trigger.triage?.inputTokens) + trigger.verify.reduce((sum, item) => sum + n(item.inputTokens), 0),
+      outputTokens: n(trigger.triage?.outputTokens) + trigger.verify.reduce((sum, item) => sum + n(item.outputTokens), 0),
+      estimatedCostUsd: Number((n(trigger.triage?.estimatedCostUsd) +
+        trigger.verify.reduce((sum, item) => sum + n(item.estimatedCostUsd), 0)).toFixed(6)),
+    }
+    : null;
   return {
     version: 1,
     // Additive (cost optimisation Phase 0); readers of version 1 keep working.
-    cost,
+    cost: headlineTriggerCost ? { ...cost, headlineTrigger: headlineTriggerCost } : cost,
+    ...(trigger ? { triggerLane: trigger.lane } : {}),
     marketMacro: {
       providers: marketMacroProviders,
       zeroResultCount: marketMacroProviders.filter((item) =>

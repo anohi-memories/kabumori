@@ -99,3 +99,38 @@ export function breakingSearchUsageEvents(
       relatedId: runId,
     }));
 }
+
+/** One row for the headline-trigger triage call (a batch of headlines) against its run. */
+export function triggerTriageUsageEvents(
+  usage: { model: string; inputTokens: number; outputTokens: number } | null,
+  runId: string | null,
+): UsageEvent[] {
+  if (!usage || (usage.inputTokens <= 0 && usage.outputTokens <= 0)) return [];
+  return [usageEvent({
+    feature: "news_trigger_triage_luna",
+    model: usage.model,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    relatedTable: RUNS,
+    relatedId: runId,
+  })];
+}
+
+/** One row per headline verification search that reached OpenAI, detailed by the triaged category. */
+export function triggerVerifyUsageEvents(
+  verifications: ReadonlyArray<{ category: string; diagnostics: BreakingMarketQueryDiagnostics }>,
+  runId: string | null,
+): UsageEvent[] {
+  return verifications
+    .filter(({ diagnostics }) => diagnostics.webSearchCallCount > 0 || diagnostics.inputTokens > 0 || diagnostics.outputTokens > 0)
+    .map(({ category, diagnostics }) => usageEvent({
+      feature: "news_trigger_verify_search",
+      detail: category,
+      model: diagnostics.model,
+      inputTokens: diagnostics.inputTokens,
+      outputTokens: diagnostics.outputTokens,
+      webSearchCalls: diagnostics.webSearchCallCount,
+      relatedTable: RUNS,
+      relatedId: runId,
+    }));
+}

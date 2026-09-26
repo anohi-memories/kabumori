@@ -34,7 +34,9 @@ export type UsageFeature =
   | "news_generation_voice"
   | "news_generation_voice_retry"
   | "news_app_copy_draft"
-  | "news_app_copy_fact";
+  | "news_app_copy_fact"
+  | "news_trigger_triage_luna"
+  | "news_trigger_verify_search";
 
 export type UsageEvent = {
   /** A UsageFeature, optionally followed by "|detail" (e.g. Sol escalation reasons). */

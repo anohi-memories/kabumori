@@ -3,13 +3,25 @@ import {
   isConfiguredImportantNewsCronSecret,
   isValidImportantNewsCronSecret,
 } from "./caller_auth.ts";
-import { supabaseUsageWriter, type UsageWriter } from "./usage_ledger.ts";
+import { estimateCostUsd, supabaseUsageWriter, type UsageWriter } from "./usage_ledger.ts";
 import {
   breakingSearchUsageEvents,
   judgementUsageEvents,
   meteredAppCopyRequester,
   meteredGenerationRunner,
+  triggerTriageUsageEvents,
+  triggerVerifyUsageEvents,
 } from "./usage_metering.ts";
+import {
+  fetchTriggerHeadlines,
+  HEADLINE_TRIGGER_LANE_ENABLED,
+  openAiTriageRunner,
+  runHeadlineTriggerLane,
+  TRIGGER_HISTORY_WINDOW_MS,
+  triggerHistoryFromRuns,
+  type TriggerHistory,
+  type TriggerLaneResult,
+} from "./headline_trigger_logic.ts";
 import {
   candidateStatusForDuplicate,
   findNewsDuplicate,
@@ -545,6 +557,64 @@ async function recentBreakingMarketSearchHistory(
   } catch (error) {
     console.error("Important news breaking market rotation history unavailable", {
       code: "NEWS_BREAKING_ROTATION_HISTORY_FAILED",
+      reason: safeError(error),
+    });
+    return null;
+  }
+}
+
+/** Headlines already triaged in recent runs (dedupe) plus verifications deferred by the per-run budget. */
+async function recentHeadlineTriggerHistory(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  now: Date,
+): Promise<TriggerHistory> {
+  const params = new URLSearchParams({
+    select: "started_at,items:diagnostics->triggerLane->items",
+    started_at: `gte.${new Date(now.getTime() - TRIGGER_HISTORY_WINDOW_MS).toISOString()}`,
+    order: "started_at.desc",
+    limit: "200",
+  });
+  const result = await fetch(`${supabaseUrl}/rest/v1/important_news_monitor_runs?${params}`, {
+    headers: headers(serviceRoleKey),
+  });
+  if (!result.ok) throw new Error(`TRIGGER_HISTORY_HTTP_${result.status}`);
+  return triggerHistoryFromRuns(await result.json(), now);
+}
+
+/**
+ * Free headlines -> Luna triage -> headline-specific verification search. Never throws: without its
+ * dedupe history the lane is skipped rather than re-triaging every headline.
+ */
+async function runHeadlineTriggerLaneSafely(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  openAiApiKey: string,
+  now: Date,
+): Promise<TriggerLaneResult | null> {
+  if (!HEADLINE_TRIGGER_LANE_ENABLED) return null;
+  try {
+    const history = await recentHeadlineTriggerHistory(supabaseUrl, serviceRoleKey, now);
+    const { headlines, feeds } = await fetchTriggerHeadlines(fetch, now);
+    const result = await runHeadlineTriggerLane({
+      headlines,
+      feeds,
+      history,
+      triage: openAiTriageRunner(openAiApiKey),
+      verify: (query, at) => fetchBreakingMarketQueryWithDiagnostics(openAiApiKey, query, at),
+      now,
+    });
+    console.info("Important news headline trigger lane", {
+      headlines: result.diagnostics.headlineCount,
+      triaged: result.diagnostics.triagedCount,
+      verifyAttempted: result.diagnostics.verifyAttemptedCount,
+      candidates: result.diagnostics.candidateCount,
+      triageFailure: result.diagnostics.triageFailureCode,
+    });
+    return result;
+  } catch (error) {
+    console.error("Important news headline trigger lane failed", {
+      code: "NEWS_HEADLINE_TRIGGER_FAILED",
       reason: safeError(error),
     });
     return null;
@@ -2047,6 +2117,7 @@ Deno.serve(async (req) => {
     let breakingMarketFetchedCount = 0;
     let breakingMarketQueriesRun: string[] = [];
     const breakingMarketDiagnostics: BreakingMarketQueryDiagnostics[] = [];
+    let headlineTrigger: TriggerLaneResult | null = null;
     if (body.fetchSources === true) {
       const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
       if (!openAiApiKey) {
@@ -2078,6 +2149,11 @@ Deno.serve(async (req) => {
             }
           }
         }
+        // Headline-trigger lane runs alongside the topic searches (which stay as the fallback). Its
+        // verified candidates go first so the per-fetch cap never drops them behind generic results;
+        // both share the same batch, parse, stored-duplicate check and insert below.
+        headlineTrigger = await runHeadlineTriggerLaneSafely(supabaseUrl, serviceRoleKey, openAiApiKey, now);
+        if (headlineTrigger) breakingCandidates.unshift(...headlineTrigger.candidates);
         breakingMarketFetchedCount = breakingCandidates.length;
         const breakingMarketBatch = planImportantNewsCandidateBatch(
           breakingCandidates,
@@ -2098,6 +2174,23 @@ Deno.serve(async (req) => {
     const collectionDiagnostics = buildCollectionRunDiagnostics({
       marketMacroProviders: marketMacroProviderDiagnostics,
       breakingMarketQueries: breakingMarketDiagnostics,
+      headlineTrigger: headlineTrigger
+        ? {
+          lane: headlineTrigger.diagnostics,
+          triage: headlineTrigger.triageUsage
+            ? {
+              inputTokens: headlineTrigger.triageUsage.inputTokens,
+              outputTokens: headlineTrigger.triageUsage.outputTokens,
+              estimatedCostUsd: estimateCostUsd(
+                headlineTrigger.triageUsage.model,
+                headlineTrigger.triageUsage.inputTokens,
+                headlineTrigger.triageUsage.outputTokens,
+              ),
+            }
+            : null,
+          verify: headlineTrigger.verifyDiagnostics.map((item) => item.diagnostics),
+        }
+        : undefined,
     });
     if (body.fetchSources === true) {
       // Store query/source zero counts before the remaining candidate processing. Diagnostics are
@@ -2110,6 +2203,12 @@ Deno.serve(async (req) => {
         });
       }
       await supabaseUsageWriter(supabaseUrl, serviceRoleKey)(breakingSearchUsageEvents(breakingMarketDiagnostics, runId));
+      if (headlineTrigger) {
+        await supabaseUsageWriter(supabaseUrl, serviceRoleKey)([
+          ...triggerTriageUsageEvents(headlineTrigger.triageUsage, runId),
+          ...triggerVerifyUsageEvents(headlineTrigger.verifyDiagnostics, runId),
+        ]);
+      }
     }
 
     const allCandidates: unknown[] = [...suppliedCandidates, ...acquiredCandidates];
