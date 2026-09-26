@@ -1054,3 +1054,14 @@
 - user explicitly turned gate ON again for continued operation; current gate remains ON and AI Lab is recovered.
 - generic Stage 3/4 rollout remains unapproved.
 - migration-history debt remains: core SQL is live but not recorded in `supabase_migrations.schema_migrations`; no blind push/repair.
+
+## G3 Universal OAuth Refresh Stage 3A
+
+- assigned: `x-universal-oauth-refresh-stage3a-rollout-foundation-20260926`.
+- purpose: promote the AI Lab-proven universal OAuth refresh into an account-scoped rollout foundation suitable for future all-user operation.
+- Stage 3A is source-first: explicit OFF/PILOT/ENABLED account authority, centralized eligibility contract, reauth state, non-secret observability, stuck-refresh detection, and a migration-history-safe deployment plan.
+- the current global gate alone must not authorize newly eligible accounts.
+- no additional production X account activation, production migration apply, production Edge deploy, bulk Vault migration, or Kabumori credential migration is authorized in Stage 3A.
+- existing core migration-history debt must be inspected but not blindly repaired/pushed.
+- after K3, expected next phases are Stage 3B controlled second-account pilot -> Stage 3C multi-account pilot -> Stage 4 general rollout.
+- recommended Claude model: Opus5.5（高）.
