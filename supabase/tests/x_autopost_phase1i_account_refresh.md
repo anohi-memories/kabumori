@@ -4,6 +4,8 @@ Status: **source-only**. Not applied, not deployed, not wired into the live disp
 
 Restructured 2026-09-25 (universal refresh task): the refresh state table, `release_x_account_refresh_v2` and the account health mirror moved to the standalone core `20260925140000_x_account_credential_refresh_core.sql` (see `x_account_refresh_core.md`), which the live dispatcher uses for Vault-backed accounts. This file now adds only the `v2_attempt` lease kind on the same table, so there is one single-flight lease per account across both publish paths. `commit_x_account_refresh_v2` gained `p_expires_in` and a `SHARE ROW EXCLUSIVE` lock (plain `SHARE` could deadlock two commits whose health mirror updates `social_accounts`).
 
+Stage 3A (2026-09-26): `begin_x_account_refresh_v2` also calls the exact-account rollout authority `x_account_refresh_authority` (`20260926032054`, see `x_account_refresh_rollout.md`) before reading Vault; without it begin fails closed.
+
 Files:
 
 - `supabase/migrations/20260925150000_x_autopost_phase1i_account_refresh.sql` — attempt FK on the core table, `begin/commit_x_account_refresh_v2` (lease kind `v2_attempt`), provider-start/step guard
