@@ -3,7 +3,7 @@
 - task_id: x-admin-pr33-invite-otp-purpose-binding-fix-20260926
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Opus5.5（高）
