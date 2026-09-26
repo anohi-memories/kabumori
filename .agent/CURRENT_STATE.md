@@ -1033,3 +1033,13 @@
 - successful password setup must clear the marker; forged/expired/mismatched markers fail closed.
 - PR #33 remains unmerged pending source fix, focused H1 review, and one more bounded invite E2E.
 - recommended Claude model: Opus5.5（高）.
+
+## Final K4 PR #33 invite purpose binding
+
+- verdict: **PASS for source/tests; OPERATOR GATE before invite E2E**.
+- PR #33 head `0cc48fe3ac1c376d747a74b6b31ea34990615805` is OPEN/MERGEABLE.
+- secure signed httpOnly invite-purpose binding implemented for real invite `amr=otp`; generic OTP/magiclink remain denied.
+- tests 103/103 PASS; tsc/lint/build/diff/secret scan PASS; Netlify Preview build SUCCESS.
+- no intermediate Codex review will be scheduled; reduced-review policy/user direction is to complete real invite E2E first and bundle final review at the release boundary if needed.
+- operator action required: set server-only Netlify Deploy Preview env `ADMIN_INVITE_BINDING_SECRET` to a random >=32-byte value, Functions scope, then rebuild Preview.
+- after that, G4 should resume one bounded invite E2E; PR remains unmerged.
