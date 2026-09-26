@@ -3,8 +3,8 @@
 - task_id: x-universal-oauth-refresh-stage3a-production-apply-20260926
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Opus5.5（高）
 - purpose: C1 PASS-WITH-FIX済みのStage 3A rollout authorityをproductionへ限定適用し、exact-account rollout/ACL/grandfatheringをread-back検証する。Edge deploy・2つ目アカウントpilot・migration history repairは行わない。
@@ -300,3 +300,20 @@ After successful apply/read-back OR safe stop:
   - AI Lab now depends on its rollout row; turning it `off` stops its refresh.
 - stage3a_db_ready_for_next_step: yes — DB authority layer proven in production; ready for a separately gated PR #38 merge + x-test-post deploy/observation task.
 - next_recommendation: ChatGPT K3 → merge PR #38 (reviewed head `748deb1`) and a gated Edge deploy + one AI Lab expiry-cycle observation; migration-history single-version normalization as its own approved task.
+
+
+## Final K3 — Stage 3A production apply
+
+Verdict: **PASS**.
+
+- applied only `20260926032054_x_account_refresh_rollout_authority.sql` from reviewed PR #38 fixed head `748deb13a934129e5696ab5552401f547204b32c`.
+- immediate pre-apply grandfather candidate set was exactly one proven AI Lab account; no refreshing lease present.
+- post-apply rollout table/constraints/RLS/grants PASS; exactly one row exists and AI Lab is `enabled / GRANDFATHERED_PROVEN_REFRESH`.
+- no other account is pilot/enabled; Kabumori remains on legacy non-Vault path.
+- Stage 3A functions and replaced legacy begin owner/SECURITY DEFINER/search_path/EXECUTE grants match reviewed design; anon/authenticated receive no unintended access.
+- function definitions match disposable application 5/5; other core definitions unchanged.
+- advisor delta attributable to Stage 3A: 0.
+- migration history debt remains intentionally unnormalized; no repair/db push occurred.
+- production mutations were limited to this migration apply; Edge deploy/env/token refresh/X post = 0.
+- DB authority layer is ready for the next separately scoped PR #38 merge + Edge deploy + one natural AI Lab expiry-cycle observation.
+- no additional Codex review is required before that continuation unless new semantic changes are introduced.
