@@ -67,6 +67,20 @@
 - real-iPhone/TestFlight visual acceptance remains a later gate.
 - recommended model: Sonnet5（高）.
 
+## Final K1 onboarding + icon integration
+
+- verdict: **PASS**.
+- PR #39 head `a781240297e66b0ed98738920cacb22940088f7d` merged -> `08355579ef8fd89e12e6723aed4674905440016a`.
+- exact user-approved icon/onboarding asset hashes and dimensions matched before ingress.
+- official app icon now uses the 2026-09-26 master; native splash/AnimatedSplashOverlay continue to reference the installed official icon.
+- onboarding v1: 3 horizontally paged approved images, native page dots, image-relative accessible page-3 CTA, versioned AsyncStorage completion key.
+- local onboarding-flag read is accepted as a presentation gate only; auth/session initialization, recovery-link precedence and routing semantics remain independent.
+- page-2 native progress animation was not implemented; static approved bar retained under the task's explicit safe fallback.
+- 155/155 tests PASS; src TypeScript 0 errors; Expo config/prebuild/web export/diff PASS.
+- production mutation 0; no EAS build/TestFlight/App Store/Supabase/Auth/X/admin mutation.
+- no Codex review required under reduced-review policy.
+- next gate: real-iPhone/TestFlight visual acceptance, especially CTA alignment and overall crop/safe-area appearance.
+
 ## H1 universal OAuth refresh final review
 
 - Verdict: **PASS-WITH-FIX for source only**. PR #37 prevents automatic redirect-follow on Vault-backed X create requests; Kabumori legacy behavior is unchanged. C1 required before merge/activation.
