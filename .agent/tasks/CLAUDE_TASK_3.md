@@ -1,140 +1,227 @@
 # Claude Task 3
 
-- task_id: x-universal-oauth-refresh-production-stage0-2-20260926
+- task_id: x-universal-oauth-refresh-stage3a-rollout-foundation-20260926
 - owner: claude
 - slot: claude-3
-- status: done
-- next_owner: none
-- priority: critical
+- status: ready
+- next_owner: claude
+- priority: high
 - recommended_model: Opus5.5（高）
-- purpose: reviewed universal X OAuth refreshをproductionへ段階反映し、AI Labの401障害を1アカウント限定で復旧確認する。
+- purpose: AI Labでproduction実証済みのUniversal X OAuth refreshを、将来の全ユーザー運用へ安全に広げるためのStage 3A rollout foundationを実装する。全ユーザー一括ONはしない。
 
-## Authorization
+## Background
 
-User approved proceeding on 2026-09-26 JST.
-
-This task is limited to:
-- Stage 0 read-only production preflight
-- Stage 1 reviewed core migration only + reviewed x-test-post deploy with refresh gate OFF
-- Stage 2 one controlled AI Lab recovery validation
-- safe rollback / gate OFF on any anomaly
-
-Not authorized:
-- Phase1B–1I bulk activation
-- generic all-account rollout
-- Kabumori credential migration
-- unrelated DB/Auth/Cron/Admin/important-news changes
-- bulk replay of failed posts
-
-## Reviewed source
-
-- universal refresh source merged through PR #37
-- merge: `777997a13c39c12ba409a0c6dc95cad18360038a`
-- C1/K3 accepted
+Stage 0–2 production rollout completed:
+- x-test-post v121 live
+- reviewed core refresh migration live
+- AI Lab scheduled posts recovered
+- refresh generation 0→1→2 proven under real expiry/401 behavior
 - Kabumori legacy path unchanged
-- production mutation before this task: 0
+- cross-account mutation 0
+- current global refresh gate is ON for existing eligible Vault-backed flow
+
+Known risk:
+- current gate can affect future Vault-backed + publish-enabled accounts if they become active
+- this is not sufficient as a public multi-user rollout control
+- core migration SQL is live but migration history entry is absent; do not blind db push/repair
+
+## Goal
+
+Build the source/schema/observability foundation required so rollout can be controlled **per X account**, not merely by one global environment gate.
+
+Stage 3A must make it possible to safely classify each X account as:
+- not eligible / off
+- controlled pilot
+- generally enabled
+
+Exact schema naming is an implementation decision after inspecting current conventions. Do not invent a parallel authorization model if an existing field/state can safely represent this.
 
 ## Mandatory startup
 
-1. Read PROJECT_RULES.md, .agent/ORCHESTRATION.md, .agent/CURRENT_STATE.md and H1/C1 report.
-2. Read current Supabase changelog/docs relevant to migrations, Edge Functions and secrets.
-3. Fresh fetch origin/main and require no semantic drift in reviewed refresh files.
-4. Use independent G3 worktree.
-5. Do not touch apps/admin/**, important-news/common-search, or H1 PR #33 files.
-6. Never print token values, secret values, secret identifiers, Authorization headers, or raw sensitive provider bodies.
+1. Read:
+   - `.agent/ORCHESTRATION.md`
+   - `.agent/CURRENT_STATE.md`
+   - this TASK
+   - prior G3 Stage 0–2 report
+   - prior H1/C1 OAuth/Vault/concurrency review
+2. Use an independent G3 worktree/checkout.
+3. Fresh fetch `origin/main`.
+4. Read current Supabase skill.
+5. Fetch current Supabase changelog index and relevant docs before implementing:
+   - Edge Functions
+   - secrets/env handling
+   - Postgres/RLS/SECURITY DEFINER
+   - migration workflow/history
+6. Check current Supabase CLI version and discover needed commands with `--help`.
+7. Do not touch G4/Admin Auth PR #33 files.
 
-## Stage 0 — read-only preflight
+## Stage 3A requirements
 
-Confirm:
-- reviewed core objects are not already applied under another migration.
-- required social_accounts / scheduled_posts schema and constraints still match review assumptions.
-- AI Lab exact X account is publish-enabled, uses default OAuth client routing, and has both required credential references present and distinct.
-- no credential reference is shared across accounts.
-- Kabumori remains on its legacy credential path.
-- live x-test-post baseline and refresh gate state are known.
-- required server-side OAuth client configuration is available without revealing values.
-- migration history and apply path are safe for the reviewed single core migration.
+### A. Explicit account-level rollout authority
 
-Any material drift => STOP with production mutation 0.
+Introduce one explicit source of truth for whether an X account may use universal Vault refresh.
 
-## Stage 1 — reviewed core + Edge deploy, gate OFF
+Requirements:
+- global env gate alone must never be enough for a newly eligible account
+- eligibility must be exact-account scoped
+- no brand-first fallback
+- no first-row fallback
+- no implicit "publish_enabled means refresh enabled" shortcut
+- no cross-account credential lookup
+- disabled/unconfigured accounts fail closed before token refresh
 
-Apply only:
-`supabase/migrations/20260925140000_x_account_credential_refresh_core.sql`
+Prefer a small durable DB field/state on the exact social account or a dedicated tightly scoped rollout table, whichever fits the existing model best.
 
-Do not apply Phase1B–1I or unrelated migrations.
+If schema is changed:
+- RLS/GRANT/SECURITY DEFINER implications must be reviewed
+- anon/authenticated must not gain privilege to enable their own rollout unless that is explicitly the intended product authorization model
+- service-side mutation path must be explicit and minimal
 
-After apply, read back:
-- functions/table/trigger definitions
-- SECURITY DEFINER / search_path / owner
-- EXECUTE and table grants
-- no unintended PUBLIC access
-- migration history
-- new security/advisor findings attributable to this migration
+### B. Rollout modes
 
-If read-back differs materially from reviewed source => STOP before deploy.
+Support at minimum:
+- OFF
+- PILOT
+- ENABLED
 
-Then deploy the exact reviewed `x-test-post` source from fresh main with refresh gate OFF.
+Semantics:
+- OFF: never refresh
+- PILOT: refresh only when all pilot safety gates pass
+- ENABLED: normal account-scoped automatic refresh
 
-Verify:
-- deployed source/version corresponds to reviewed main
-- gate remains OFF
-- no real refresh occurred
-- no credential write occurred
-- Kabumori behavior/source remains unchanged
+Do not infer mode from brand name, user email, row order, or env-only allowlist.
 
-Mismatch => rollback Edge deployment if safe, keep gate OFF, STOP.
+### C. Refresh eligibility contract
 
-## Stage 2 — one controlled AI Lab recovery
+Centralize the exact predicate used before reading Vault credentials.
 
-Only if Stage 1 passes.
+It must require, at minimum, the existing valid account health and publishability conditions plus account rollout authority.
 
-Immediately re-check exact AI Lab account binding and that no refresh/reconnect is already in progress.
+The contract must be reusable by every future X publishing path.
 
-Enable the reviewed refresh gate only for the controlled validation window.
+Tests must prove:
+- wrong account cannot inherit another account's rollout state
+- disabled account cannot reach Vault read
+- account with missing refs cannot reach refresh
+- account with invalid health/connection state fails closed
+- Kabumori legacy path remains unchanged
+- PILOT/OFF/ENABLED behave exactly as specified
 
-Observe exactly one AI Lab due attempt. Do not replay historical failures or create duplicates.
+### D. Reauth/reconnect state
 
-Required proof:
-- exact AI Lab account is the only account used
-- at most one refresh request
-- at most one safe retry of the intended X request
-- account health state updates truthfully
-- no other account is changed
-- Kabumori credential path remains untouched
+When refresh returns a terminal user-action case such as `invalid_grant`:
+- exact account must move to the existing appropriate reauth/reconnect state if one exists
+- if no existing state safely expresses it, add the narrowest required state/schema change
+- automatic refresh must stop for that account
+- scheduled posting must not silently fall back to stale/other credentials
+- operator/user-facing state must be queryable without exposing token values
 
-Hard stop and gate OFF on:
-- invalid_grant / reauth-required outcome
-- uncertain/network/timeout/server error
+Do not build the full public reconnect UI in this Stage 3A unless it is already trivial and in-scope. Provide the stable backend contract for it.
+
+### E. Observability
+
+Add a read-safe operational view/query/RPC or existing-admin-compatible data contract for:
+- rollout mode
+- refresh state
+- generation
+- last refresh success time
+- access expiry if already tracked
+- last connection error code
+- reauth required / stuck refreshing indication
+
+Constraints:
+- no token values
+- no Vault secret IDs in end-user surfaces
+- no Authorization headers/provider bodies
+- least privilege
+- if a DB view is used, follow current Supabase `security_invoker` guidance where applicable
+
+### F. Stuck refresh safety
+
+Preserve the current fail-closed concurrency model.
+
+Add tests/detection for:
+- stale `refreshing` lease
+- reconnect-vs-commit conflict
 - second 401
-- lease or account mismatch
-- persistence/commit failure
-- deadlock
-- unexpected duplicate provider request
-- any cross-account effect
+- uncertain token endpoint result
+- owner/manual intervention path
 
-No automatic retry after a hard stop.
+Do not auto-replay an uncertain token refresh.
 
-After the single validation, return gate to OFF unless keeping it ON is proven to affect only this exact account and is separately justified. Generic Stage 3/4 enablement is not part of this task.
+### G. Migration-history debt
 
-## Verification
+The already-live core refresh migration is not currently recorded in `supabase_migrations.schema_migrations`.
 
-Record only non-secret evidence:
-- Stage 0 PASS/STOP
-- exact migration applied and migration history entry
-- ACL/search_path/owner read-back
-- advisor result
-- deployed x-test-post version/source identity
-- gate before/during/after
-- controlled AI Lab attempt result
-- refresh count and X create/retry count
-- account health before/after
-- Kabumori unchanged
-- cross-account mutation check
-- rollback action if any
-- actual production mutations performed
-- whether AI Lab normal scheduling is recovered
-- remaining risks
+For this Stage 3A:
+- inspect and document the exact state
+- do not blind `db push`
+- do not blind `migration repair`
+- if new schema is needed, devise a migration path that cannot accidentally replay the already-live core SQL
+- production history normalization itself is NOT authorized unless a safe exact procedure is proven and separately reported
+
+## Tests
+
+At minimum:
+- account A enabled / account B off isolation
+- account A pilot / account B enabled isolation
+- disabled account reaches zero Vault/token requests
+- missing rollout state defaults fail-closed
+- invalid_grant -> exact account reauth-required, no cross-account mutation
+- uncertain refresh -> no credential commit
+- second 401 -> no second refresh
+- concurrent refresh lease behavior unchanged
+- Kabumori legacy flow unchanged
+- existing Phase1B–1I regression suites PASS
+- x-test-post regression PASS
+- _shared X regression PASS
+- relevant scheduler/dispatcher regression PASS
+
+Also run:
+- TypeScript/lint/build where applicable
+- SQL disposable DB behavior tests if schema/RPC changes
+- Supabase advisors for DB security changes
+- git diff --check
+- targeted secret scan
+
+## Production restrictions
+
+Stage 3A is **source-first**.
+
+Allowed:
+- source implementation
+- migration file creation using current Supabase CLI workflow
+- local/disposable DB verification
+- PR creation/update
+- Netlify/CI-style source checks where relevant
+
+Not allowed without a new explicit TASK:
+- enabling rollout for any additional real X account
+- changing AI Lab rollout mode
+- generic all-user activation
+- bulk Vault migration
+- bulk reconnect/replay
+- production migration apply
+- production Edge deploy
+- production env changes
+- Kabumori credential migration
+
+## Deliverable
+
+Produce:
+1. exact Stage 3A architecture
+2. changed files
+3. schema/data-contract changes
+4. rollout mode semantics
+5. reauth contract
+6. observability contract
+7. migration-history-safe deployment plan
+8. tests/results
+9. security checks
+10. remaining work for:
+   - Stage 3B controlled second-account pilot
+   - Stage 3C multi-account pilot
+   - Stage 4 general user rollout
 
 ## Completion / K3
 
@@ -142,67 +229,21 @@ Set:
 - status -> review_required
 - next_owner -> chatgpt
 
+Report:
+- task_id
+- result
+- changed_files
+- tests
+- commit_hash
+- push/PR
+- production_mutation=0 unless explicitly reauthorized
+- migration_history_findings
+- safety_checks
+- remaining_issues
+- next_recommendation
+
 STOP for K3.
 
 ## Report
 
-- task_id: x-universal-oauth-refresh-production-stage0-2-20260926
-- result: K3 ready — Stage 0 PASS / Stage 1 PASS / Stage 2 AI Lab 復旧確認 PASS。AI Lab の定常投稿は復旧済み（08:27・09:09・11:29 すべて成功）。ただしゲート運用に手順逸脱1件あり（下記 deviation）。
-- model: Opus 5.5
-- user_approval_in_chat: 2026-09-26 00:4x JST「Stage 1 と Stage 2 を両方進める」／10:26 JST「オンに戻して続ける」（ゲート継続）
-- stage0 (read-only, 00:38 JST): PASS
-  - core objects 未適用（table/9 functions absent）、v2 chain absent
-  - social_accounts 必要9列あり、`UNIQUE (brand_id, platform)`、`platform='x'`、connection_status CHECK 5値、trigger なし
-  - scheduled_posts 列/CHECK はレビュー前提どおり（social_account_id なし、attempt_count あり）
-  - AI Lab: identity_verified / publish true / client default / access・refresh 参照あり・別物 / Vault 実体あり（値・ID は未表示）
-  - 参照共有 0、brand あたり X アカウント最大 1
-  - Kabumori: Vault 参照なし（legacy `oauth_token_store`/env のまま）
-  - live x-test-post v120 = pre-G3 main `ad66e4d` と42ファイル byte 一致、verify_jwt=false
-  - secret 名のみ確認: `X_CLIENT_ID`/`X_CLIENT_SECRET` あり、`X_VAULT_ACCOUNT_REFRESH` 未設定（gate OFF）
-  - apply 経路: 本プロジェクト慣例どおり `supabase db query --linked -f`（`db push` / `migration repair` 不使用）
-- stage1: PASS
-  - migration: `supabase/migrations/20260925140000_x_account_credential_refresh_core.sql` のみ適用（sha256 `5839cf4f7ac7d2ff8f58bd75eace9a7eb20b409f2408ff49017f7aea655f2755`、`777997a` と同一）。Phase1B–1I 等は未適用。
-  - migration history: 未記録（慣例どおり repair せず。`supabase_migrations.schema_migrations` に 20260925140000 なし）
-  - read-back: 9 functions 全て SECURITY DEFINER / `search_path=""` / owner postgres。`pg_get_functiondef` md5 が使い捨て DB に同ファイルを適用した値と9件完全一致。service_role EXECUTE は6 RPC のみ、`x_legacy_post_account`/trigger 関数2つは postgres のみ。anon/authenticated EXECUTE 0。state table: RLS on、service_role SELECT のみ、anon/authenticated 権限なし。trigger 2件定義一致。
-  - advisors (security): 10件、全て既存。新規オブジェクト起因 0。
-  - deploy: x-test-post v121（`--use-api --no-verify-jwt`、worktree に config.toml/link を用意して shared checkout 誤デプロイを防止）。download して origin/main と43ファイル byte 一致、`vault_account_auth.ts`/`_shared/x_v2_account_refresh.ts` 含む、verify_jwt=false 維持（共有 config.toml は x-test-post を platform default=true にしてしまうため明示）。
-  - gate OFF 維持、refresh 0、Vault 書き込み 0、アカウント/Kabumori store 変化なし（baseline 記録）。
-- stage2:
-  - 08:14:28 JST gate ON（`X_VAULT_ACCOUNT_REFRESH=enabled`）。直前再確認: AI Lab 参照・状態不変、refresh state 行なし。
-  - 08:27 AI Lab: 08:28:01 claim → 08:28:06 succeeded。refresh 1回（state gen 0→1、`last_refreshed_at` 08:28:06 JST、`access_expires_at` +2h）、AI Lab の2つの secret の updated_at のみ同時刻に更新（rotated refresh token を保存）。X create は 401 → refresh → 再送1回の reactive 経路（proactive 期限情報は未保存だったため）。
-  - 09:09 AI Lab: gate ON のまま実行され成功。refresh なし（gen=1 のまま、secret 更新なし）＝有効トークンで通常投稿。
-  - 10:21:36 JST gate OFF（unset）。10:28:42 JST user 判断により gate ON に戻した（理由: access token 期限 10:28 以降、OFF だと 11:29 から再び 401 失敗が続く。ON の実影響は AI Lab のみ — Kabumori は legacy 経路で対象外、他の Vault アカウント `sa_bfdab0e0…` は publish_enabled=false のため Vault 読込前に `BRAND_X_ACCOUNT_DISABLED` で停止、AI Lab 以外に content dispatcher なし）。
-  - 11:29 AI Lab: 11:30:01 claim → 11:30:05 succeeded。期限切れ後の2回目の refresh（gen 1→2、`access_expires_at` 13:30 JST）。
-  - account health: 全期間 AI Lab `identity_verified` / `last_connection_error_code` null、state `idle`、uncertain/reauth/second 401/lease 不一致/commit 失敗/deadlock 0。
-  - hard-stop 条件: 該当なし。
-- cross_account_check: `sa_bfdab0e0…` の secret updated_at・行 不変、Kabumori アカウント行不変、Kabumori Vault 参照なしのまま。
-- kabumori_check: 10:45 Kabumori tip が v121 で成功（10:46:06 X post created）。`oauth_token_store.updated_at` が 01:46:05 UTC（=10:46 JST）に更新されたのは Kabumori 自身の legacy refresh（コード無変更、時刻が Kabumori 投稿と一致。新経路は oauth_token_store を参照しない）。06:46 Kabumori morning_greeting は `MORNING_GREETING_IMAGE_NOT_FOUND`（当日画像が Storage に無い、X 呼び出し前、v120 と同一コード）で失敗 — 本変更と無関係。
-- deviation (要レビュー): 計画は「08:27 の1回だけ観測してすぐ gate OFF」だったが、監視スクリプトが CLI 出力先頭の `Initialising login role...` で JSON 解析に失敗し続け、その後の確認も遅延（auto-mode 判定の一時エラー含む）したため gate OFF が 10:21 になった。この間 09:09 の AI Lab 投稿1件が gate ON で走った（refresh なしで成功、gate OFF でも同じ結果）。重複投稿・過去失敗の再実行はなし。監視は修正済み。
-- production_mutations_performed: (1) core migration 1本適用 (2) x-test-post v121 deploy (3) secret `X_VAULT_ACCOUNT_REFRESH` set 08:14 → unset 10:21 → set 10:28（現在 ON） (4) 新経路による AI Lab token refresh 2回（08:28, 11:30）とそれに伴う AI Lab Vault 2 secret の更新・refresh state 行1行 (5) 通常スケジュールによる AI Lab X 投稿3件（08:27/09:09/11:29）。手動 invoke・過去投稿の再実行・Cron/設定/他データ変更なし。
-- ai_lab_recovered: yes（gate ON 継続中。2時間ごとに次回投稿時の 401/期限で自動 refresh）
-- current_state: gate ON、x-test-post v121、AI Lab state idle gen=2
-- rollback: gate を unset すれば token request 0 に戻る（その場合 AI Lab は次の期限切れ以降 401）。Edge は v120 ソースを scratch に保存済み。適用済み core は呼び出し元がなければ不活性。
-- remaining_risks:
-  - gate ON は現状 AI Lab のみ影響だが、今後 Vault アカウントの publish を有効化するとそのアカウントも自動 refresh 対象になる（Stage 3/4 相当の判断が必要）
-  - 監視: `x_account_refresh_state_v2` の refreshing 長時間化・uncertain/reauth、AI Lab の `last_connection_error_code`
-  - 既知: reconnect と commit 同時実行時の fail-closed デッドロック、stuck refreshing は owner SQL、service_role の Vault 直接権限、migration history 未記録、`ai_lab_vault_token_source.ts` 未使用
-  - Kabumori morning_greeting の当日画像欠落（別件）
-- changed_files (this report): `.agent/tasks/CLAUDE_TASK_3.md`
-- safety_checks: G3 専用 worktree のみ、apps/admin・PR #33・important-news 不接触、token/secret 値・secret ID・Authorization ヘッダーは一切表示・記録していない
-- next_recommendation: ChatGPT K3 → gate 継続の可否と deviation の確認。問題なければ gate ON のまま AI Lab 監視を継続し、Stage 3/4（他アカウント）は別 TASK。
-
-
-## Final K3 — production Stage 0–2
-
-Verdict: **PASS-WITH-DEVIATION**.
-
-- Stage 0 PASS; Stage 1 PASS; Stage 2 AI Lab controlled recovery PASS.
-- production x-test-post v121 deployed; reviewed core migration applied; Kabumori legacy path unchanged.
-- AI Lab scheduled posts succeeded at 08:27, 09:09, and 11:29 JST.
-- refresh occurred exactly when needed: gen 0→1 at 08:28 and gen 1→2 at 11:30; no uncertain/reauth/second-401/deadlock/lease mismatch/commit failure.
-- cross-account check PASS; no other account credential refs changed.
-- deviation accepted: gate remained ON longer than the one-run window because monitoring JSON parsing failed, so the 09:09 post also ran under gate ON. It did not refresh, duplicate, replay, or affect another account.
-- user later explicitly chose to turn the gate back ON and continue; 11:29 post then proved expiry-time refresh works in normal scheduling.
-- current gate state: ON for AI Lab operation. Generic Stage 3/4 enablement is still not approved; enabling future Vault-backed accounts can broaden gate effect and requires a separate decision.
-- known operational debt: core migration was applied through linked query but is not recorded in supabase_migrations history; do not blind db push/repair. Handle migration-history normalization only in a separate reviewed task.
-- G3 closed.
+- pending
