@@ -3,8 +3,8 @@
 - task_id: x-oauth-refresh-stage3a-final-security-review-20260926
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sol（高）
 - purpose: PR #38 Stage 3A Universal OAuth Refresh rollout foundationを、production apply前の最終1回レビューとして検証する。途中レビューは増やさず、この完成物をまとめて確認する。
@@ -84,3 +84,16 @@ Then:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for C1.
+
+
+## Final C1 — Stage 3A
+
+Verdict: **PASS-WITH-FIX**.
+
+- reviewed PR #38 head `050d62f57971c9d88420da993e9f839929d7197e`.
+- Codex fixed one P2 in proactive refresh handling; fixed head `748deb13a934129e5696ab5552401f547204b32c` pushed to PR #38.
+- unexpected refresh-start failures now stop before X create; only explicit rollout refusals and `X_REFRESH_IN_PROGRESS` may continue with a still-valid token.
+- rollout authority, ACLs, grandfathering, exact-account isolation, observability, reauth, stale-lease and migration-history safeguards accepted.
+- 655 Deno tests PASS plus disposable PostgreSQL behavior/ACL/race tests PASS.
+- production mutation=0.
+- source is ready for a separately authorized, narrow production-apply TASK.
