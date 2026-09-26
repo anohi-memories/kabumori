@@ -3,8 +3,8 @@
 - task_id: kabumori-onboarding-icon-integration-20260926
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: ユーザー確定の新しい「かぶモリ」正式アプリアイコンと、3枚のオンボーディング正本画像をExpo/React Nativeアプリへ安全に統合する。native splashは短い起動ブリッジとして新アイコンへ更新し、その後に初回のみ3画面オンボーディングを表示する。
@@ -404,3 +404,34 @@ The 2026-09-25 icon master file itself was **not deleted**, only its test pin re
 1. K1 review of PR #39, with particular attention to the one flagged `loading`-gate change in section G.
 2. On PASS: merge, then a separately authorized real-device build (development/internal EAS profile, not production) so the operator can see the new icon, launch screen, and onboarding flow, and confirm the page-3 CTA hit target lands correctly.
 3. If page-2's animation is still wanted after that, it needs the bar's fractional region measured precisely (ideally from the design source, not a screenshot) and a real-device check before implementing the overlay — not source-only work.
+
+
+## Final K1 — onboarding + icon integration
+
+Verdict: **PASS**.
+
+Accepted:
+- PR #39 head `a781240297e66b0ed98738920cacb22940088f7d`
+- merged -> `08355579ef8fd89e12e6723aed4674905440016a`
+- all 4 user-approved assets matched the task's exact filename/dimension/sha256 contract before ingress
+- official icon master preserved; installed app icon is 1024x1024 opaque RGB
+- onboarding assets are byte-identical 1179x2556 sources
+- first-run onboarding uses versioned local key `kabumori:onboarding:v1`
+- 3-page horizontal paging + native page dots implemented
+- page-3 visible CTA has an image-relative accessible Pressable hit target
+- page-2 animated progress overlay intentionally deferred; approved static artwork retained, as explicitly allowed by the task fallback
+- recovery-link precedence and existing auth/session branching remain intact
+- the added `loading || onboardingCompleted === null` gate is accepted as a local presentation-read synchronization, not a material auth/session semantic change: auth initialization is still independent, no network dependency was added, and read failure fails open
+- 155/155 tests PASS; src TypeScript 0 errors; Expo config/prebuild/web export/diff checks PASS
+- PR head statuses: Vercel success, Netlify Deploy Preview success
+- production mutation 0; no EAS build/TestFlight/App Store/Supabase/Auth/X/admin mutation
+- main drift before merge touched only `.agent/` control files; PR #39 was mergeable and feature files had no cross-slot conflict
+- no Codex review required under the reduced-review policy because final scope remained UI/assets/local-only state and no security/auth boundary changed
+
+Remaining:
+- real iPhone/TestFlight visual acceptance is still required
+- page-3 CTA alignment should be visually checked on device
+- page-2 progress animation can be reconsidered only after precise fractional measurement + real-device verification
+
+Next gate:
+- separately authorized development/internal EAS build or TestFlight-equivalent real-device pass for visual acceptance
