@@ -3,8 +3,8 @@
 - task_id: kabumori-ios-internal-visual-qa-build-20260926
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: merged main の新正式アイコン＋3画面オンボーディングを、実際のiPhoneで確認するための **非production・内部配布EAS iOS build** を安全に作成し、インストール可能な状態まで進める。App Store提出やproductionリリースは行わない。
@@ -350,3 +350,81 @@ Still **0** for the app/backend. The only mutation across this whole task remain
 ### Next recommendation
 
 The icon/splash/onboarding visual work is now fully verified end-to-end: source-complete, real `expo prebuild`-verified, and now real-device-accepted. The next gate toward App Store submission is the operator-driven checklist already tracked in `RELEASE_READINESS.md` (Netlify site for `apps/kabumori-web`, the three legal/support operator values, EAS production env vars, Supabase Auth Site URL/SMTP, App Store Connect metadata) — none of which this task's scope covers.
+
+
+## Follow-up — official icon full-bleed correction after real-device QA
+
+### User decision
+
+The user found a real-device visual defect in the currently installed icon: the artwork itself contains a rounded-card/white outer margin, so iOS applies its own mask on top and the icon looks visually smaller with a white frame.
+
+The user has now approved a corrected **full-bleed** source that preserves the central newspaper/leaf/chart design but removes the baked-in rounded-card boundary and extends the pale green/white background to all four edges.
+
+The user will **overwrite the existing Desktop source using the exact same filename**:
+
+`~/Desktop/a_clean_glossy_modern_app_icon_style_illustratio.png`
+
+Do not treat the old hash as canonical anymore.
+
+### New source acceptance contract
+
+After the user overwrites the file, the same filename must now resolve to:
+
+- dimensions: **1254 x 1254**
+- PNG mode: RGBA is acceptable only because the alpha channel is fully opaque (all alpha = 255)
+- sha256: **8b821f60b8a4c162c6fda2eafe52245bf4f28aa734778b4db6791c29508e40ed**
+- visual intent: square full-bleed background to all four edges; **no baked-in rounded card, no white outer frame**
+
+If the exact filename still has the previous hash, or the new hash does not match the value above, STOP and report `icon_source_not_updated`. Do not guess or regenerate.
+
+### Required implementation
+
+1. Fresh fetch `origin/main`; use an independent G1 worktree.
+2. Confirm no other slot is editing app-icon/startup assets.
+3. Verify the overwritten Desktop source against the new dimensions/hash above before copying anything.
+4. Replace the repository's current official master **in place**:
+   - `assets/branding/kabumori-icon-master-2026-09-26.png`
+   - keep this repository filename unchanged; it remains the 2026-09-26 official master path.
+   - preserve the exact user-approved source bytes as the master, including its fully-opaque RGBA encoding.
+5. Regenerate `assets/images/icon.png` deterministically at **1024 x 1024, opaque RGB, no crop** from the new master.
+6. Do not alter composition, colors, newspaper, text, leaves, chart, or onboarding artwork.
+7. Update asset-integrity tests/hashes so they pin the **new** official master hash and explicitly prove that any alpha channel in the master is fully opaque.
+8. Existing `app.json`/splash wiring should continue to point at `assets/images/icon.png`; do not change identity fields.
+9. Run focused icon/startup/onboarding tests, src TypeScript, `npx expo config --json`, safe iOS prebuild verification, and `git diff --check`.
+10. Create/push a narrow PR for the icon replacement. No Codex review is expected for this asset-only correction if scope stays narrow and tests pass.
+
+### Internal iPhone rebuild
+
+After the corrected icon PR is merged and post-merge verification passes, create **one new iOS `preview` internal-distribution EAS build** using the already-authorized preview environment.
+
+Do not:
+- submit to App Store/TestFlight;
+- touch production EAS env;
+- change Apple credentials unless EAS requires a non-destructive normal reuse step;
+- change Supabase/Auth/DB/X/admin.
+
+The user will reinstall/update the internal build and verify that the home-screen icon now reaches the iOS mask naturally with **no inner white frame / no double-rounded appearance**.
+
+### Completion
+
+When done:
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K1.
+
+Report:
+- new source hash/dimensions/mode + proof alpha is fully opaque;
+- repo master hash;
+- installed 1024x1024 icon hash/mode;
+- changed files;
+- tests;
+- PR/head/merge commit;
+- new EAS preview build ID/status/install link;
+- production mutation;
+- remaining issue = user real-device icon acceptance only, unless another blocker appears.
+
+### Recommended model
+
+**Sonnet5（中）**
+
+This is a narrow asset swap + deterministic verification/rebuild. Escalate only if an unexpected signing/build-system problem appears.
