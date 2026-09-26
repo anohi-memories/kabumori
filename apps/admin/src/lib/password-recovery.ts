@@ -16,6 +16,11 @@
 //                        authentication, re-verified server-side immediately before
 //                        updateUser({ password }); then a verified signOut()
 //
+// A token_hash invite verified by /auth/confirm yields amr "otp", not "invite"
+// (observed on the real project). Generic otp is still not accepted; instead
+// /auth/confirm issues a short-lived signed invite-purpose binding for that
+// exact session (see invite-purpose.ts).
+//
 // Setting a password never grants Admin access: the (admin) layout still
 // requires an admin_users row after the user logs in normally.
 
@@ -177,15 +182,33 @@ export function parseRecoveryFragment(hash: string): RecoveryFragment {
  * claims (no timestamps) fail closed.
  */
 export function hasRecoveryContext(amr: unknown, nowSeconds: number): boolean {
+  return hasFreshAuthentication(amr, RECOVERY_AMR_METHODS, nowSeconds);
+}
+
+/**
+ * True when the signed `amr` claim contains one of `methods` with a timestamp
+ * inside the recovery window. On its own this proves nothing about purpose;
+ * hasRecoveryContext and the invite-purpose binding decide what it authorizes.
+ */
+export function hasFreshAuthentication(
+  amr: unknown,
+  methods: ReadonlySet<string>,
+  nowSeconds: number,
+): boolean {
   if (!Array.isArray(amr)) return false;
   return amr.some((entry) => {
     if (typeof entry !== "object" || entry === null) return false;
     const { method, timestamp } = entry as { method?: unknown; timestamp?: unknown };
-    if (typeof method !== "string" || !RECOVERY_AMR_METHODS.has(method)) return false;
+    if (typeof method !== "string" || !methods.has(method)) return false;
     if (typeof timestamp !== "number" || !Number.isFinite(timestamp)) return false;
-    const age = nowSeconds - timestamp;
-    return age >= -CLOCK_SKEW_ALLOWANCE_SECONDS && age <= RECOVERY_CONTEXT_MAX_AGE_SECONDS;
+    return isWithinRecoveryWindow(timestamp, nowSeconds);
   });
+}
+
+/** `atSeconds` lies within the recovery window ending now (with clock skew). */
+export function isWithinRecoveryWindow(atSeconds: number, nowSeconds: number): boolean {
+  const age = nowSeconds - atSeconds;
+  return age >= -CLOCK_SKEW_ALLOWANCE_SECONDS && age <= RECOVERY_CONTEXT_MAX_AGE_SECONDS;
 }
 
 // ---------------------------------------------------------------------------
@@ -247,12 +270,17 @@ export type CompleteResetResult =
  * when the page rendered would let a form left open past the window still
  * change the password. It runs immediately before updateUser and any failure
  * (false or thrown) stops the update.
+ *
+ * `clearPurposeBinding` drops the invite-purpose binding (in the app: the
+ * clearInvitePurpose Server Action) once the password has been set, so it
+ * cannot authorize a second change even if sign-out then fails.
  */
 export async function completePasswordReset(
   auth: Pick<RecoveryAuthClient, "updateUser" | "signOut">,
   password: string,
   confirmation: string,
   verifyContext: () => Promise<boolean>,
+  clearPurposeBinding: () => Promise<void> = async () => {},
 ): Promise<CompleteResetResult> {
   const validation = validateNewPassword(password, confirmation);
   if (!validation.ok) return { status: "invalid", reason: validation.reason };
@@ -268,6 +296,12 @@ export async function completePasswordReset(
     if (error) return { status: "failed" };
   } catch {
     return { status: "failed" };
+  }
+  try {
+    await clearPurposeBinding();
+  } catch {
+    // Not fatal: the binding expires with the recovery window and is tied to
+    // this session, which the sign-out below ends.
   }
   // Drop the recovery session so it cannot be reused for anything else; the
   // user logs in with the new password, which re-runs the admin_users check.

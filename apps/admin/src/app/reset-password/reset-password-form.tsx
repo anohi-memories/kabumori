@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { KeyboardEvent, useState } from "react";
-import { verifyRecoveryContext } from "@/lib/actions/recovery-context";
+import { clearInvitePurpose, verifyRecoveryContext } from "@/lib/actions/recovery-context";
 import { createAdminBrowserClient } from "@/lib/supabase/client";
 import {
   completePasswordReset,
@@ -46,6 +46,8 @@ export function ResetPasswordForm() {
       confirmation,
       // Re-verified server-side right now, not trusted from page render.
       verifyRecoveryContext,
+      // The invite-purpose binding is dropped as soon as the password is set.
+      clearInvitePurpose,
     );
     if (result.status === "updated") {
       // Full navigation so the now signed-out state is what the server sees,

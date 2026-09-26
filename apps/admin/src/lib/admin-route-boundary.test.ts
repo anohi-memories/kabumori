@@ -119,15 +119,17 @@ test("the link receiver takes no redirect target from the request", async () => 
   const redirects = code.match(/redirect\([^)]*\)/gu) ?? [];
   assert.equal(redirects.length, 3);
   for (const call of redirects) {
-    assert.match(call, /^redirect\((?:CONFIRM_(?:SUCCESS|FAILURE)_DESTINATION|error \? CONFIRM_FAILURE_DESTINATION : CONFIRM_SUCCESS_DESTINATION)\)$/u, call);
+    assert.match(call, /^redirect\((?:CONFIRM_(?:SUCCESS|FAILURE)_DESTINATION|outcome\.destination)\)$/u, call);
   }
 });
 
 test("a consumed or reused link fails closed instead of reaching the reset form", async () => {
-  // Supabase rejects an already-used code / token_hash; any error from
-  // verifyOtp / exchangeCodeForSession must land on the failure destination.
+  // Supabase rejects an already-used code / token_hash; confirmEmailLink maps
+  // any error from verifyOtp / exchangeCodeForSession to the failure
+  // destination (unit-tested in invite-purpose.test.ts).
   const route = withoutLineComments(await appSource("auth/confirm/route.ts"));
-  assert.match(route, /redirect\(error \? CONFIRM_FAILURE_DESTINATION : CONFIRM_SUCCESS_DESTINATION\)/u);
+  assert.match(route, /const outcome = await confirmEmailLink\(supabase\.auth, action, readInviteBindingSecret\(\), /u);
+  assert.match(route, /redirect\(outcome\.destination\);/u);
 });
 
 test("a successful reset goes to /login, never straight into an Admin route", async () => {
@@ -173,13 +175,21 @@ test("the recovery authority check verifies signed claims on the server clock", 
   const action = withoutLineComments(await readFile(RECOVERY_CONTEXT_ACTION, "utf8"));
   assert.match(action, /^"use server";/u);
   assert.match(action, /supabase\.auth\.getClaims\(\)/u);
-  assert.match(action, /hasRecoveryContext\(data\.claims\.amr, Math\.floor\(Date\.now\(\) \/ 1000\)\)/u);
+  assert.match(
+    action,
+    /hasPasswordSetupAuthority\(\{\s*claims: data\.claims,\s*invitePurposeToken: cookieStore\.get\(INVITE_PURPOSE_COOKIE\)\?\.value \?\? null,\s*secret: readInviteBindingSecret\(\),\s*nowSeconds: Math\.floor\(Date\.now\(\) \/ 1000\),\s*\}\)/u,
+  );
   // Same data-safety rules as the pages: no table reads, no Admin grant, no
   // service role, no logging.
   assert.doesNotMatch(action, /\.from\(|admin_users|service_role|SERVICE_ROLE|console\./u);
-  // Takes no arguments, so the password can never be sent through it.
+  // Neither action takes arguments, so the password can never be sent
+  // through them; the second one can only clear the invite binding.
   assert.match(action, /export async function verifyRecoveryContext\(\): Promise<boolean>/u);
-  assert.equal((action.match(/export async function/gu) ?? []).length, 1);
+  assert.match(
+    action,
+    /export async function clearInvitePurpose\(\): Promise<void> \{\s*const cookieStore = await cookies\(\);\s*cookieStore\.set\(INVITE_PURPOSE_COOKIE, "", CLEARED_INVITE_PURPOSE_COOKIE_OPTIONS\);\s*\}/u,
+  );
+  assert.equal((action.match(/export async function/gu) ?? []).length, 2);
 });
 
 test("the password update re-verifies the context at submit time (C1 P2)", async () => {
@@ -188,8 +198,36 @@ test("the password update re-verifies the context at submit time (C1 P2)", async
   assert.doesNotMatch(form, /recoveryContext/u);
   assert.match(
     form,
-    /completePasswordReset\(\s*createAdminBrowserClient\(\)\.auth,\s*password,\s*confirmation,\s*verifyRecoveryContext,\s*\)/u,
+    /completePasswordReset\(\s*createAdminBrowserClient\(\)\.auth,\s*password,\s*confirmation,\s*verifyRecoveryContext,\s*clearInvitePurpose,\s*\)/u,
   );
+});
+
+test("the invite-purpose cookie is reset on every link and set only from a verified invite", async () => {
+  const route = withoutLineComments(await appSource("auth/confirm/route.ts"));
+  const sets = route.match(/cookieStore\.set\([^;]*\);/gu) ?? [];
+  assert.deepEqual(sets, [
+    'cookieStore.set(INVITE_PURPOSE_COOKIE, "", CLEARED_INVITE_PURPOSE_COOKIE_OPTIONS);',
+    "cookieStore.set(INVITE_PURPOSE_COOKIE, outcome.invitePurposeToken, INVITE_PURPOSE_COOKIE_OPTIONS);",
+  ]);
+  // The clear happens before any early redirect.
+  assert.ok(route.indexOf(sets[0] ?? "") < route.indexOf("redirect("));
+  assert.match(route, /if \(outcome\.invitePurposeToken !== null\) \{\s*cookieStore\.set\(INVITE_PURPOSE_COOKIE, outcome\.invitePurposeToken/u);
+});
+
+test("the invite binding secret stays on the server", async () => {
+  // invite-purpose.ts uses node:crypto and reads ADMIN_INVITE_BINDING_SECRET;
+  // no client component may import it, and nothing reads a public variant.
+  const files = (await listFiles(APP_DIR)).filter((file) => /\.tsx?$/u.test(file));
+  for (const file of files) {
+    const contents = await appSource(file);
+    if (/^"use client";/u.test(contents)) {
+      assert.doesNotMatch(contents, /from "[^"]*\/invite-purpose(?:\.ts)?"/u, `${file} is a client component`);
+    }
+    assert.doesNotMatch(contents, /NEXT_PUBLIC_[A-Z_]*INVITE/u, file);
+  }
+  const lib = await readFile(new URL("./invite-purpose.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(lib, /^"use client";/u);
+  assert.doesNotMatch(lib, /console\.|service_role|SERVICE_ROLE|admin_users|[^r]\.from\(|user_metadata|app_metadata/u);
 });
 
 test("an unconfirmed sign-out never navigates away as if signed out (C1 P2)", async () => {
