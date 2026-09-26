@@ -1,90 +1,86 @@
 # Codex Task
 
-- task_id: x-admin-pr33-auth-fix-round2-final-review-20260926
+- task_id: x-oauth-refresh-stage3a-final-security-review-20260926
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Sol（高）
-- purpose: K4 PASS済みPR #33 head 2528b56 の3つのAuth修正を再レビューし、merge前のsource gateを判定する。レビュー範囲はC1指摘3点と既存Admin境界への回帰に限定する。
+- purpose: PR #38 Stage 3A Universal OAuth Refresh rollout foundationを、production apply前の最終1回レビューとして検証する。途中レビューは増やさず、この完成物をまとめて確認する。
 
-## Target
+## Scope
 
-PR #33:
-- head: `2528b5686bcbb3630fb636cec12162803f921f8f`
-- previous failing head: `e6b93beccfb9209dbe640fb9ea1464f2568f3c74`
-- status: OPEN / MERGEABLE
-- Netlify Preview: PASS
+Review exact PR #38 head `050d62f` and the Stage 3A task/report.
 
-## Required review
+Focus only on:
+1. account-level rollout authority correctness
+2. OFF/PILOT/ENABLED semantics and fail-closed defaults
+3. exact-account isolation before any Vault read
+4. SECURITY DEFINER / owner / search_path / EXECUTE ACLs
+5. service_role-only mutation path
+6. grandfathering safety
+7. invalid_grant / reauth exact-account behavior
+8. stuck refresh / lease / reconnect-vs-commit safety
+9. observability contract not leaking token/secret identifiers
+10. live `begin_x_account_refresh_legacy_post` replacement semantics
+11. migration ordering and deployment plan given live-but-unrecorded core migration
+12. no Kabumori legacy regression
+13. no accidental broad rollout caused by global gate alone
 
-Verify all three findings are actually fixed:
+## Review constraints
 
-1. generic `otp` / `magiclink` can no longer authorize reset.
-2. recovery/invite purpose and 15-minute freshness are rechecked immediately before password update using verified server-side claims/current server time.
-3. signOut returned-error and thrown-error paths cannot claim confirmed logout or redirect to success.
+- read-only review by default
+- do not apply production migration
+- do not deploy Edge Functions
+- do not change env/secrets
+- do not enable any additional production X account
+- do not run migration repair/db push
+- do not touch G4/Admin Auth work
+- do not expose token/secret values or Vault secret identifiers
 
-Also verify:
-- no open redirect/account enumeration regression
-- no service_role/client secret exposure
-- admin_users remains sole Admin gate
-- non-admin cannot gain Admin through reset/invite
-- PR #15 multibrand/brand isolation remains intact
-- no mobile reset flow changes outside apps/admin
+## Required verification
 
-## Tests
+- fresh `origin/main`
+- exact PR head = `050d62f`
+- inspect migration and Edge diffs
+- rerun relevant source/DB tests where practical
+- verify disposable DB behavior for rollout isolation and ACLs
+- verify migration cannot accidentally replay the already-live core objects
+- verify row absence/off mode blocks before Vault access
+- verify grandfathering cannot enable an unrelated account
+- verify health RPC output excludes sensitive credential identifiers
+- verify migration-history plan is safe and explicitly separated from production execution
 
-Run focused:
-- apps/admin src/lib tests
-- new recovery-context/action tests
-- otp/magiclink negative cases
-- stale-open-form case
-- signOut returned/thrown failures
-- admin/brand boundary tests
-- tsc/lint/build
-- git diff --check
-- targeted secret scan
+## Fix policy
 
-## Real E2E gate
+If you find a small, unambiguous source-only P1/P2 issue within this scope, you may fix it directly on the PR branch and rerun tests.
 
-Determine whether source is review-approved before E2E.
+Do NOT:
+- broaden scope
+- alter product behavior outside Stage 3A
+- perform any production mutation
+- normalize migration history in production
 
-Even if source PASS:
-- do not merge yet.
-- one bounded real recovery flow and one invite flow remain required before merge.
-- no real email/Auth mutation in this review.
-
-## Production safety
-
-Read-only only.
-No merge, production deploy, Supabase Auth config/user mutation, DB/RLS/RPC migration, service_role exposure, G3 OAuth changes, or important-news/common-search work.
+If a design-level issue is found, STOP and report it for G3.
 
 ## Completion / C1
 
-Report:
-- verdict PASS / PASS-WITH-FIX / FAIL
-- reviewed/fixed head
-- verdict on each of the 3 prior findings
-- tests/counts
-- source readiness for real E2E
-- exact remaining E2E/operator gate
-- production mutation=0
+Report to `.agent/CODEX_REPORT.md`:
+- verdict: PASS / PASS-WITH-FIX / FAIL
+- exact reviewed head/fixed head
+- findings
+- ACL/security review
+- migration-history safety review
+- tests
+- changed_files
+- commit/push if any
+- production_mutation=0
+- whether Stage 3A is ready for a separate production-apply TASK
+- remaining risks
+- next recommendation
 
 Then:
 - status -> review_required
 - next_owner -> chatgpt
-- update .agent/CODEX_REPORT.md
 - STOP for C1.
-
-
-## Final C1 disposition — round2
-
-- verdict: **PASS for source readiness to bounded real E2E**.
-- reviewed PR #33 head: `2528b5686bcbb3630fb636cec12162803f921f8f`.
-- all three prior Auth findings are fixed.
-- source tests 83/83 PASS; tsc/lint/build/diff/secret scan PASS.
-- PR #15 Admin/multibrand boundaries remain intact.
-- production mutation=0.
-- this is not merge approval. One bounded real recovery flow + one invite flow remain mandatory before merge.
-- the E2E requires separate user authorization because it may require temporary Supabase Redirect URL configuration and test-account/email operations.
