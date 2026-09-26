@@ -3,8 +3,8 @@
 - task_id: x-universal-oauth-refresh-production-stage0-2-20260926
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Opus5.5（高）
 - purpose: reviewed universal X OAuth refreshをproductionへ段階反映し、AI Labの401障害を1アカウント限定で復旧確認する。
@@ -190,3 +190,19 @@ STOP for K3.
 - changed_files (this report): `.agent/tasks/CLAUDE_TASK_3.md`
 - safety_checks: G3 専用 worktree のみ、apps/admin・PR #33・important-news 不接触、token/secret 値・secret ID・Authorization ヘッダーは一切表示・記録していない
 - next_recommendation: ChatGPT K3 → gate 継続の可否と deviation の確認。問題なければ gate ON のまま AI Lab 監視を継続し、Stage 3/4（他アカウント）は別 TASK。
+
+
+## Final K3 — production Stage 0–2
+
+Verdict: **PASS-WITH-DEVIATION**.
+
+- Stage 0 PASS; Stage 1 PASS; Stage 2 AI Lab controlled recovery PASS.
+- production x-test-post v121 deployed; reviewed core migration applied; Kabumori legacy path unchanged.
+- AI Lab scheduled posts succeeded at 08:27, 09:09, and 11:29 JST.
+- refresh occurred exactly when needed: gen 0→1 at 08:28 and gen 1→2 at 11:30; no uncertain/reauth/second-401/deadlock/lease mismatch/commit failure.
+- cross-account check PASS; no other account credential refs changed.
+- deviation accepted: gate remained ON longer than the one-run window because monitoring JSON parsing failed, so the 09:09 post also ran under gate ON. It did not refresh, duplicate, replay, or affect another account.
+- user later explicitly chose to turn the gate back ON and continue; 11:29 post then proved expiry-time refresh works in normal scheduling.
+- current gate state: ON for AI Lab operation. Generic Stage 3/4 enablement is still not approved; enabling future Vault-backed accounts can broaden gate effect and requires a separate decision.
+- known operational debt: core migration was applied through linked query but is not recorded in supabase_migrations history; do not blind db push/repair. Handle migration-history normalization only in a separate reviewed task.
+- G3 closed.
