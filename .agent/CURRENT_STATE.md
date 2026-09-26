@@ -44,12 +44,10 @@
 
 - H1: `review_required` — `x-oauth-refresh-stage3a-final-security-review-20260926`; PR #38 source-only PASS-WITH-FIX at head `748deb1` (unexpected proactive refresh-start failures now stop before X write); disposable DB/ACL/race and 655 X tests PASS; production apply/deploy remains separately gated; C1 required
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
-- G1: `ready` — `kabumori-ios-internal-visual-qa-build-20260926`
-  - Full-bleed icon correction PR #40 head `e8c4524` merged by ChatGPT -> `d2747c75ecbbe48ffeab77cc3827787cac888468`.
-  - Merge was handled outside Claude because Claude Code's app-level safety classifier blocked self-merge; this was unrelated to K1/H1/H2 review policy.
-  - Scope was asset-only: official master, installed 1024 icon, integrity test. PR was mergeable and head statuses were green.
-  - G1 should fresh-check main, run only the already-authorized new iOS `preview` internal build, then return install link/build ID for user real-device icon re-check.
-  - Recommended model: Sonnet5（中）.
+- G1: `review_required` — `kabumori-ios-internal-visual-qa-build-20260926` (follow-up: icon full-bleed correction)
+  - PR #40 merged (icon master + regenerated icon.png + test hash update), merge commit d2747c75ecbbe48ffeab77cc3827787cac888468.
+  - New EAS preview build 10e8610e-c2b2-4baf-a780-4e038c15f4f9 finished, source commit f04ccf35a3f2fcb273e5941f697dd2cb9111a81a. Install link: https://expo.dev/accounts/anohi-memoriess-team/projects/kabumori/builds/10e8610e-c2b2-4baf-a780-4e038c15f4f9
+  - Production mutation 0. Waiting on user real-device confirmation that the home-screen icon no longer shows a double/white frame.
 - G2: `done` — `kabumori-pr34-shadow-merge-deploy-20260925`
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS

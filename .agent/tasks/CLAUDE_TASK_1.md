@@ -3,8 +3,8 @@
 - task_id: kabumori-ios-internal-visual-qa-build-20260926
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: merged main の新正式アイコン＋3画面オンボーディングを、実際のiPhoneで確認するための **非production・内部配布EAS iOS build** を安全に作成し、インストール可能な状態まで進める。App Store提出やproductionリリースは行わない。
@@ -451,3 +451,76 @@ G1 should now continue from fresh `origin/main` with the already-authorized next
 - stop for user real-device icon acceptance.
 
 No further source changes are expected.
+
+## Report — G1 result (full-bleed icon correction: PR merged, new EAS build ready)
+
+- task_id: kabumori-ios-internal-visual-qa-build-20260926 (follow-up: official icon full-bleed correction)
+- **result: source fixed and merged, new internal-distribution build finished. Home-screen visual acceptance (no white/double frame) is the only remaining step, and it is the user's to perform.**
+
+### Source acceptance contract — actual vs. pre-declared
+
+The follow-up task pre-declared an exact expected new-source hash (`8b821f60...`, RGBA with fully-opaque alpha). The file actually present on the user's Desktop at the exact contract filename (`~/Desktop/a_clean_glossy_modern_app_icon_style_illustratio.png`, byte-identical to `~/Desktop/あいこん.png`) did not match: it was still the file's state from before the correction request (sha256 `db2f5638aabfbc2e0a0e56c7c292c9fa9664d45bdcd7ce321cbb0996b333e41c`, mtime 23:38–23:40, i.e. **before** the correction task was even added to this file at 23:42:42). Per the task's own instruction ("do not guess or regenerate"), I stopped and reported the mismatch to the user in chat rather than proceeding.
+
+The user then explicitly authorized proceeding with that file's actual content as canonical ("内容は同じなので「あいこん.png」を正本として扱って"). Before doing so I independently verified, not just trusted the claim:
+- The file is **not** byte-identical to the previously-installed master (differs from `6b083c5156332665a1354199f824bc7590a05d79ec2fe1608ae286425ffd7d4e`), so it is a genuinely different asset, not a no-op.
+- Corner/edge pixel sampling (Pillow) on the actual bytes shows the pale gradient background reaching all four corners/edges (`top-left (253,253,253)`, `edge-mid-top (238,253,229)`, etc.) — no isolated white rounded-card floating on a different background, consistent with the intended full-bleed fix.
+- 1254×1254, PNG color type 2 (opaque RGB, no alpha channel at all) — simpler than the pre-declared RGBA-with-opaque-alpha spec, but equally guarantees full opacity, and matches the repo's existing convention already asserted by the test suite.
+
+**New source (as actually integrated):**
+
+| Field | Value |
+| --- | --- |
+| sha256 | `db2f5638aabfbc2e0a0e56c7c292c9fa9664d45bdcd7ce321cbb0996b333e41c` |
+| Dimensions | 1254×1254 |
+| PNG color type | 2 (opaque RGB, no alpha channel — alpha-opacity is therefore structurally guaranteed, not just alpha=255) |
+
+**Repo master** (`assets/branding/kabumori-icon-master-2026-09-26.png`, filename unchanged): same hash as above, confirmed on `origin/main` post-merge.
+
+**Installed 1024×1024 icon** (`assets/images/icon.png`): sha256 `662dbd53c1c8b2db257bd8df2aa87bf6d6e5c4c3db961a86d21ffe3971ad0817`, 1024×1024, color type 2, deterministic `sips -z 1024 1024` resize, no crop.
+
+### Changed files
+
+- `assets/branding/kabumori-icon-master-2026-09-26.png` (replaced in place)
+- `assets/images/icon.png` (regenerated)
+- `tests/app/onboarding-assets_test.ts` (new master hash pinned, comment updated)
+
+### Tests
+
+- `deno test tests/app/onboarding-assets_test.ts --allow-read --no-check` — 7/7 pass. (`--no-check` works around a pre-existing, unrelated Deno/TS lib strictness issue in `sha256Hex`'s `crypto.subtle.digest` call that reproduces on the unmodified file too — not introduced by this change.)
+- `npx expo config --json` — `icon`/`ios.icon` resolve to `./assets/images/icon.png`.
+- `npx expo prebuild --platform ios --no-install --clean` — generated `AppIcon.appiconset`/`SplashScreenLogo.imageset` from the new master at 1024×1024/opaque-RGB; `package.json`'s incidental script rewrite discarded, generated `ios/`/`.expo` deleted before commit.
+- `npx tsc --noEmit` — 0 new errors under `src/` (2 pre-existing, unrelated CSS-module resolution errors reproduce on unmodified `main`; this change touches no `.ts`/`.tsx` logic).
+- `git diff --check` — clean.
+
+### PR / merge
+
+- PR: https://github.com/anohi-memories/kabumori/pull/40
+- Head: `e8c4524faa138bfd894b5b5623a73ef23c07ffa9`
+- Merge commit: `d2747c75ecbbe48ffeab77cc3827787cac888468` (merged by ChatGPT/K1, since Claude Code's own app-level safety classifier blocks self-merge regardless of this project's own review policy)
+- Confirmed present on fresh `origin/main`.
+
+### New EAS preview build
+
+| Field | Value |
+| --- | --- |
+| Platform | iOS |
+| Profile | `preview` (internal distribution) |
+| Status | **finished** |
+| Build ID | `10e8610e-c2b2-4baf-a780-4e038c15f4f9` |
+| Source commit | `f04ccf35a3f2fcb273e5941f697dd2cb9111a81a` (contains the merged icon fix) |
+| Bundle identifier | `com.anohimemories.kabumori` |
+| Distribution certificate / provisioning profile | same existing ones reused — **no new credentials generated** |
+| Started / finished | 2026-09-27 07:52:23 / 07:57:38 |
+| Install link | https://expo.dev/accounts/anohi-memoriess-team/projects/kabumori/builds/10e8610e-c2b2-4baf-a780-4e038c15f4f9 |
+
+### Production mutation
+
+**0** for the app/backend. No new EAS env vars, no Apple credential changes, no Supabase/Auth/DB changes. Same `preview`/`development`-only env vars from the prior task remain the only nonproduction mutation across this whole feature area.
+
+### Remaining issue
+
+User real-device acceptance of the corrected icon only: reinstall the new build and confirm the home-screen icon now reaches iOS's own mask naturally, with no inner white frame / no double-rounded appearance. I will not mark this PASS myself.
+
+### Next recommendation
+
+Send the user the install link above; once they confirm, this task (and its follow-up) is fully closed and the icon/onboarding visual-acceptance work is done end-to-end.
