@@ -1023,3 +1023,13 @@
 - PR #33 remains unmerged; merge waits for K4 E2E result.
 - no real Admin account, admin_users grant, wildcard redirect, shared Reset Password template change, or Vercel production deploy is authorized.
 - recommended Claude model: Opus5.5（高）.
+
+## G4 PR #33 invite OTP purpose binding
+
+- bounded real E2E observed Supabase invite token_hash flow establishing `amr.method=otp`.
+- recovery E2E passed; invite setup correctly failed closed under the current recovery/invite-only AMR gate.
+- generic otp must remain denied.
+- G4 assigned to implement a short-lived signed httpOnly invite-purpose binding issued only after successful server-side `verifyOtp(type=invite)`, bound to the same authenticated user and existing 15-minute window.
+- successful password setup must clear the marker; forged/expired/mismatched markers fail closed.
+- PR #33 remains unmerged pending source fix, focused H1 review, and one more bounded invite E2E.
+- recommended Claude model: Opus5.5（高）.
