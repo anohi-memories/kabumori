@@ -1,7 +1,13 @@
-// Pins the four approved-artwork assets integrated 2026-09-26: the new official icon and the
+// Pins the four approved-artwork assets integrated 2026-09-26: the official icon and the
 // three onboarding screens. Every hash below was recorded from `shasum -a 256` on the exact file
 // the user placed on their Desktop, before it was copied into the repository -- see
 // kabumori-onboarding-icon-integration-20260926's acceptance contract.
+//
+// The icon master was replaced again the same day (full-bleed correction): the original
+// composition still had a baked-in rounded-card/white outer margin, so iOS's own icon mask
+// produced a double-framed look on the home screen. The corrected source removes that margin
+// and extends the background to all four edges. Both master hashes below are opaque RGB
+// (`colorType === 2`), confirmed byte-for-byte from the file on disk.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -27,7 +33,7 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
 const APPROVED = {
   iconMaster: {
     path: "assets/branding/kabumori-icon-master-2026-09-26.png",
-    sha256: "6b083c5156332665a1354199f824bc7590a05d79ec2fe1608ae286425ffd7d4e",
+    sha256: "db2f5638aabfbc2e0a0e56c7c292c9fa9664d45bdcd7ce321cbb0996b333e41c",
     width: 1254,
     height: 1254,
   },
