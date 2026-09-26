@@ -26,6 +26,8 @@ type Account = {
   brand: string; clientRef: string; access: string; refresh: string; expiresAt: string | null;
   state: "idle" | "refreshing" | "uncertain" | "reauth_required"; lease: string | null;
   connection: "identity_verified" | "failed"; errorCode: string | null; publish: boolean;
+  /** Stage 3A rollout authority; anything but null refuses begin before any Vault read. */
+  rolloutRefusal: string | null;
 };
 
 /**
@@ -37,10 +39,12 @@ class FakeCoreDb implements VaultAccountCredentialRpc {
     ai_salaryman_lab_x: {
       brand: "ai_salaryman_lab", clientRef: "default", access: "tok_AI_expired", refresh: "rt_AI_1", expiresAt: null,
       state: "idle", lease: null, connection: "identity_verified", errorCode: null, publish: true,
+      rolloutRefusal: null,
     },
     acct_future: {
       brand: "brand_future", clientRef: "partner", access: "tok_F_expired", refresh: "rt_F_1", expiresAt: null,
       state: "idle", lease: null, connection: "identity_verified", errorCode: null, publish: true,
+      rolloutRefusal: null,
     },
   };
   /** Kabumori's legacy store: must never be read or written by this path. */
@@ -80,6 +84,7 @@ class FakeCoreDb implements VaultAccountCredentialRpc {
     if (a.state === "refreshing") throw new Error("X_REFRESH_IN_PROGRESS");
     if (a.state === "uncertain") throw new Error("X_REFRESH_BLOCKED_UNCERTAIN");
     if (a.state === "reauth_required") throw new Error("X_REFRESH_REAUTH_REQUIRED");
+    if (a.rolloutRefusal) throw new Error(a.rolloutRefusal);
     const key = `${ref.scheduledPostId}:${this.posts[ref.scheduledPostId].attempt}`;
     if (this.refreshedFor.get(ref.socialAccountId) === key) throw new Error("X_REFRESH_ALREADY_USED_FOR_ATTEMPT");
     this.refreshedFor.set(ref.socialAccountId, key);
@@ -424,4 +429,86 @@ test("source: no Kabumori store/env tokens, no console, no loops, one token requ
   assert.doesNotMatch(source, /secret_id|p_vault|vault\./u);
   assert.doesNotMatch(source, /api\.x\.com/u, "the only token request lives in the shared refresh core");
   assert.equal((source.match(/runXTokenRefresh\(/gu) ?? []).length, 1);
+});
+
+test("Stage 3A rollout off: 401 -> zero token requests, 401 recorded, fixed rollout code; other account unaffected", async () => {
+  const db = new FakeCoreDb();
+  db.accounts.ai_salaryman_lab_x.rolloutRefusal = "X_REFRESH_ROLLOUT_OFF";
+  const x = fakeX([], new Set());
+  await rejects((await load(db, AI, x.fetchImpl)).send(x.request), "X_REFRESH_ROLLOUT_OFF");
+  assert.equal(x.tokenCalls.length, 0);
+  assert.deepEqual(x.creates, ["tok_AI_expired"]);
+  assert.equal(db.accounts.ai_salaryman_lab_x.errorCode, "X_ACCESS_TOKEN_UNAUTHORIZED");
+  assert.equal(db.accounts.ai_salaryman_lab_x.state, "idle");
+  assert.equal(db.accounts.ai_salaryman_lab_x.refresh, "rt_AI_1");
+  // Account B (enabled) refreshes normally in the same process.
+  const xb = fakeX([Response.json({ access_token: "tok_F_new" })], new Set(["tok_F_new"]));
+  assert.equal((await (await load(db, FUTURE, xb.fetchImpl)).send(xb.request)).status, 201);
+  assert.equal(xb.tokenCalls.length, 1);
+  assert.equal(db.accounts.ai_salaryman_lab_x.access, "tok_AI_expired", "A never inherits B's refresh");
+});
+
+test("Stage 3A pilot refusals behave like off: no token request, no retry", async () => {
+  for (const code of ["X_REFRESH_PILOT_LIMIT_REACHED", "X_REFRESH_PILOT_EXPIRED", "X_REFRESH_PILOT_BLOCKED_BY_ERROR"]) {
+    const db = new FakeCoreDb();
+    db.accounts.ai_salaryman_lab_x.rolloutRefusal = code;
+    const x = fakeX([], new Set());
+    await rejects((await load(db, AI, x.fetchImpl)).send(x.request), code);
+    assert.equal(x.tokenCalls.length, 0, code);
+    assert.equal(x.creates.length, 1, code);
+    assert.ok(db.calls.includes("access_unauthorized"), code);
+  }
+});
+
+test("proactive refresh refused before any token request keeps the current token (budget untouched)", async () => {
+  const now = Date.parse("2026-09-25T00:00:00Z");
+  // Still-valid token near expiry, rollout off: post goes through with it.
+  const db = new FakeCoreDb();
+  db.accounts.ai_salaryman_lab_x.access = "tok_AI_valid";
+  db.accounts.ai_salaryman_lab_x.expiresAt = new Date(now + 60_000).toISOString();
+  db.accounts.ai_salaryman_lab_x.rolloutRefusal = "X_REFRESH_ROLLOUT_OFF";
+  const x = fakeX([], new Set(["tok_AI_valid"]));
+  assert.equal((await (await load(db, AI, x.fetchImpl, true, () => now)).send(x.request)).status, 201);
+  assert.equal(x.tokenCalls.length, 0);
+  assert.ok(!db.calls.includes("access_unauthorized"));
+  // Proactive refused, token actually expired: reactive begin is refused too -> fixed code, still no token request.
+  const db2 = new FakeCoreDb();
+  db2.accounts.ai_salaryman_lab_x.expiresAt = new Date(now + 60_000).toISOString();
+  db2.accounts.ai_salaryman_lab_x.rolloutRefusal = "X_REFRESH_ROLLOUT_OFF";
+  const x2 = fakeX([], new Set());
+  await rejects((await load(db2, AI, x2.fetchImpl, true, () => now)).send(x2.request), "X_REFRESH_ROLLOUT_OFF");
+  assert.equal(x2.tokenCalls.length, 0);
+  assert.equal(x2.creates.length, 1);
+  // Proactive that did reach X keeps the one-refresh budget: a later 401 never refreshes again.
+  const db3 = new FakeCoreDb();
+  db3.accounts.ai_salaryman_lab_x.expiresAt = new Date(now + 60_000).toISOString();
+  const x3 = fakeX([Response.json({ access_token: "tok_AI_new", expires_in: 7200 })], new Set());
+  await rejects((await load(db3, AI, x3.fetchImpl, true, () => now)).send(x3.request), "X_ACCESS_TOKEN_REJECTED_AFTER_REFRESH");
+  assert.equal(x3.tokenCalls.length, 1);
+});
+
+test("unexpected proactive begin failure does not send an X write with the stale credential", async () => {
+  const now = Date.parse("2026-09-25T00:00:00Z");
+  for (const code of ["X_REFRESH_UNAVAILABLE", "X_CLAIM_ACCOUNT_MISMATCH"]) {
+    const db = new FakeCoreDb();
+    db.accounts.ai_salaryman_lab_x.access = "tok_AI_still_valid";
+    db.accounts.ai_salaryman_lab_x.expiresAt = new Date(now + 60_000).toISOString();
+    db.accounts.ai_salaryman_lab_x.rolloutRefusal = code;
+    const x = fakeX([], new Set(["tok_AI_still_valid"]));
+    await rejects((await load(db, AI, x.fetchImpl, true, () => now)).send(x.request), code);
+    assert.deepEqual(x.creates, [], code);
+    assert.equal(x.tokenCalls.length, 0, code);
+  }
+});
+
+test("expected concurrent-refresh refusal may use a still-valid credential", async () => {
+  const now = Date.parse("2026-09-25T00:00:00Z");
+  const db = new FakeCoreDb();
+  db.accounts.ai_salaryman_lab_x.access = "tok_AI_still_valid";
+  db.accounts.ai_salaryman_lab_x.expiresAt = new Date(now + 60_000).toISOString();
+  db.accounts.ai_salaryman_lab_x.rolloutRefusal = "X_REFRESH_IN_PROGRESS";
+  const x = fakeX([], new Set(["tok_AI_still_valid"]));
+  assert.equal((await (await load(db, AI, x.fetchImpl, true, () => now)).send(x.request)).status, 201);
+  assert.deepEqual(x.creates, ["tok_AI_still_valid"]);
+  assert.equal(x.tokenCalls.length, 0);
 });

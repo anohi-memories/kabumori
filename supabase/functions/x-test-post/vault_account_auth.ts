@@ -19,8 +19,12 @@
  *     a 401 on a freshly refreshed token marks re-authorization required;
  *   - refresh outcomes other than a committed rotation fail the attempt with
  *     the fixed code (uncertain results are never replayed).
- * Refresh runs only when X_VAULT_ACCOUNT_REFRESH=enabled; otherwise a 401 is
- * recorded as X_ACCESS_TOKEN_UNAUTHORIZED without calling the token endpoint.
+ * Refresh runs only when X_VAULT_ACCOUNT_REFRESH=enabled (global kill switch)
+ * AND the exact account's rollout authority allows it (Stage 3A, enforced in
+ * the database before any Vault read). Otherwise a 401 is recorded on the
+ * account without calling the token endpoint. A proactive refresh that the
+ * database refuses before any token request (rollout off, pilot limits,
+ * another refresh in progress) keeps the current token for this request.
  *
  * Nothing here logs or returns token material; errors carry fixed codes only.
  */
@@ -31,6 +35,10 @@ import {
 } from "../_shared/x_v2_account_refresh.ts";
 
 const CODE = /^[A-Z][A-Z0-9_]{1,99}$/u;
+/** Refusals of the account's rollout authority (Stage 3A): no refresh, record the 401. */
+const ROLLOUT_REFUSALS = new Set([
+  "X_REFRESH_ROLLOUT_OFF", "X_REFRESH_PILOT_EXPIRED", "X_REFRESH_PILOT_LIMIT_REACHED", "X_REFRESH_PILOT_BLOCKED_BY_ERROR",
+]);
 const PROACTIVE_MARGIN_MS = 5 * 60_000;
 
 export type VaultAccountRef = { scheduledPostId: string; socialAccountId: string; brandId: string };
@@ -122,7 +130,7 @@ export class VaultAccountXAuth {
   async send(request: (accessToken: string) => Promise<XRequestResult>): Promise<XRequestResult> {
     if (this.#refreshEnabled && !this.#refreshUsed && !this.#xWriteAccepted && this.#accessExpiresAt !== null
         && this.#accessExpiresAt - this.#now() <= PROACTIVE_MARGIN_MS) {
-      await this.#refresh();
+      await this.#refresh("proactive");
     }
     const first = await request(this.#accessToken);
     if (first.status !== 401) return this.#observe(first);
@@ -132,7 +140,7 @@ export class VaultAccountXAuth {
       throw new Error("X_ACCESS_TOKEN_UNAUTHORIZED");
     }
     // 401: X did not accept the request, so refreshing and replaying it once is safe.
-    await this.#refresh();
+    await this.#refresh("reactive");
     const retried = await request(this.#accessToken);
     if (retried.status === 401) return await this.#rejectedAfterRefresh();
     return this.#observe(retried);
@@ -148,14 +156,21 @@ export class VaultAccountXAuth {
     throw new Error("X_ACCESS_TOKEN_REJECTED_AFTER_REFRESH");
   }
 
-  async #refresh(): Promise<void> {
-    this.#refreshUsed = true;
+  async #refresh(trigger: "proactive" | "reactive"): Promise<void> {
     const ref = this.#ref;
     const outcome = await runXTokenRefresh({
       begin: () => this.#rpc.begin(ref),
       commit: (lease, access, refresh, expiresIn) => this.#rpc.commit(lease, ref, access, refresh, expiresIn),
       release: (lease, result, code) => this.#rpc.release(lease, ref, result, code),
     }, this.#resolveClient, { fetchImpl: this.#fetchImpl, timeoutMs: this.#timeoutMs });
+    // Only expected pre-request refusals may keep a still-valid token.
+    // An unavailable reader or changed account authority must fail closed.
+    if (outcome.kind === "not_started" && trigger === "proactive"
+        && (ROLLOUT_REFUSALS.has(outcome.code) || outcome.code === "X_REFRESH_IN_PROGRESS")) return;
+    this.#refreshUsed = true;
+    if (outcome.kind === "not_started" && ROLLOUT_REFUSALS.has(outcome.code)) {
+      await this.#quiet(() => this.#rpc.recordAccessUnauthorized(ref));
+    }
     if (outcome.kind !== "refreshed") throw new Error(outcome.code);
     // Use what was durably stored, read back through the same exact-account reader.
     let credential: VaultAccountCredential;

@@ -3,7 +3,8 @@
 -- credential refresh core (20260925140000), which owns the per-account refresh
 -- state table, the generic release RPC and the account health mirror. This
 -- file only adds the v2-attempt lease kind: one table, one single-flight lease
--- per account for both the legacy and the v2 publish paths.
+-- per account for both the legacy and the v2 publish paths. begin also calls
+-- the Stage 3A rollout authority (20260926032054) before reading Vault.
 --
 -- Exact-account pre-X token refresh. The only authority is an open pre-X v2
 -- attempt (attempt id + claim token) bound to exactly one social account.
@@ -56,6 +57,7 @@ declare v_attempt public.post_queue_attempts_v2%rowtype;
         v_state public.x_account_refresh_state_v2%rowtype;
         v_refresh text;
         v_lease uuid;
+        v_block text;
 begin
   if p_attempt_id is null or p_claim_token is null
      or nullif(btrim(p_social_account_id), '') is null or nullif(btrim(p_brand_id), '') is null then
@@ -117,6 +119,10 @@ begin
   if v_state.status = 'refreshing' then raise exception 'X_REFRESH_IN_PROGRESS' using errcode = 'P0001'; end if;
   if v_state.status = 'uncertain' then raise exception 'X_REFRESH_BLOCKED_UNCERTAIN' using errcode = 'P0001'; end if;
   if v_state.status = 'reauth_required' then raise exception 'X_REFRESH_REAUTH_REQUIRED' using errcode = 'P0001'; end if;
+  -- Stage 3A exact-account rollout authority (20260926032054), resolved at
+  -- run time: until it is applied this call fails and begin fails closed.
+  v_block := public.x_account_refresh_authority(v_account.id);
+  if v_block is not null then raise exception '%', v_block using errcode = 'P0001'; end if;
 
   begin
     select ds.decrypted_secret into v_refresh

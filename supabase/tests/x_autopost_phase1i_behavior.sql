@@ -1,6 +1,6 @@
 -- Fake-only Phase1I behavior proof (exact-account pre-X refresh lease).
 -- Run by x_autopost_phase1i_run.sh after: 1D/1E/1F/1G/1I fixtures ->
--- 1B -> 1D -> 1E -> 1F -> 1G -> 1H -> refresh core -> 1I migrations.
+-- 1B -> 1D -> 1E -> 1F -> 1G -> 1H -> refresh core -> Stage 3A -> 1I migrations.
 \set ON_ERROR_STOP on
 set timezone = 'Asia/Tokyo';
 
@@ -48,6 +48,10 @@ begin
 end $$;
 
 revoke execute on function public.claim_due_post() from service_role;  -- Phase1D activation gate
+-- Stage 3A: every fixture X account is rolled out ('enabled'); rollout
+-- semantics themselves are proven in x_account_refresh_rollout_run.sh.
+insert into public.x_account_refresh_rollout (social_account_id, mode, reason_code)
+select id, 'enabled', 'FIXTURE_ENABLED' from public.social_accounts where platform = 'x';
 set role service_role;
 
 -- 1. Seed bound pre-X attempts.
@@ -101,6 +105,17 @@ do $$ begin
   perform pg_temp.expect_error($q$select * from public.begin_x_account_refresh_v2(null, null, 'acct_a', 'brand_a')$q$, 'X_REFRESH_REQUEST_INVALID');
   if pg_temp.state('acct_a') <> 'none' or pg_temp.state('acct_b') <> 'none' then raise exception 'lease taken on rejection'; end if;
 end $$;
+-- Stage 3A rollout authority also gates the v2 path, per exact account.
+reset role;
+update public.x_account_refresh_rollout set mode = 'off', reason_code = 'FIXTURE_OFF' where social_account_id = 'acct_b';
+set role service_role;
+do $$ begin
+  perform pg_temp.expect_error(pg_temp.begin_sql('b1'), 'X_REFRESH_ROLLOUT_OFF');
+  if pg_temp.state('acct_b') <> 'none' then raise exception 'lease taken while rollout off'; end if;
+end $$;
+reset role;
+update public.x_account_refresh_rollout set mode = 'enabled', reason_code = 'FIXTURE_ENABLED' where social_account_id = 'acct_b';
+set role service_role;
 reset role;
 update public.social_accounts set publish_enabled = false where id = 'acct_c';
 set role service_role;

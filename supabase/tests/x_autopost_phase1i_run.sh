@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Disposable-only Phase1I proof runner. Creates a throwaway database on a LOCAL
 # Unix-socket PostgreSQL cluster, applies Phase1D/1E/1F/1G/1I fixtures ->
-# Phase1B -> 1D -> 1E -> 1F -> 1G -> 1H -> refresh core -> 1I as a non-superuser owner, runs the
+# Phase1B -> 1D -> 1E -> 1F -> 1G -> 1H -> refresh core -> Stage 3A rollout -> 1I as a non-superuser owner, runs the
 # Phase1I behavior proof and refresh-lease races, then drops the database.
 # Fake data only; never production.
 # Usage: PHASE1I_PGHOST=/private/tmp/<socket-dir> PHASE1I_PGPORT=<port> \
@@ -54,6 +54,7 @@ SQL
 "${as_owner[@]}" -f "$migrations/20260925090000_x_autopost_phase1g_multistep_completion.sql"
 "${as_owner[@]}" -f "$migrations/20260925120000_x_autopost_phase1h_dispatch_resume.sql"
 "${as_owner[@]}" -f "$migrations/20260925140000_x_account_credential_refresh_core.sql"
+"${as_owner[@]}" -f "$migrations/20260926032054_x_account_refresh_rollout_authority.sql"
 "${as_owner[@]}" -f "$migrations/20260925150000_x_autopost_phase1i_account_refresh.sql"
 "${as_owner[@]}" -f "$here/x_autopost_phase1i_behavior.sql"
 
