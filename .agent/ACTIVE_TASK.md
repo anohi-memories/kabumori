@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: x-universal-oauth-refresh-stage3a-production-apply-20260926
+- status: ready
+- task_id: x-universal-oauth-refresh-stage3a-merge-edge-observe-20260926
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: closed; Final K3 PASS — Stage 3A DB authority migration applied and read-back clean; AI Lab only enabled; next is PR #38 merge + Stage 3A Edge deploy + natural expiry-cycle observation
+- allocation: assigned; merge reviewed PR #38, deploy Stage 3A x-test-post only, then observe one natural AI Lab expiry/refresh cycle; no second-account pilot; recommended Opus5.5（高）
 
 ## Claude G4
 - owner: claude
