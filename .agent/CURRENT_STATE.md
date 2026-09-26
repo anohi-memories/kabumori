@@ -44,10 +44,9 @@
 
 - H1: `review_required` — `x-oauth-refresh-stage3a-final-security-review-20260926`; PR #38 source-only PASS-WITH-FIX at head `748deb1` (unexpected proactive refresh-start failures now stop before X write); disposable DB/ACL/race and 655 X tests PASS; production apply/deploy remains separately gated; C1 required
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
-- G1: `review_required` — `kabumori-onboarding-icon-integration-20260926`
-  - PR #39 open (unmerged): new official icon (sha256 6b083c51...) replaces the 2026-09-25 icon (no app.json change needed, same shared file); 3-page onboarding (assets/onboarding/*, kabumori:onboarding:v1 in AsyncStorage) inserted between splash and the normal auth flow, native page dots, image-relative CTA hit target on page 3.
-  - Page-2 animated progress overlay deliberately NOT implemented (task's own sanctioned fallback: alignment risk not verifiable from source). Verified with a real expo prebuild + web export. 155/0 tests, 2 negative controls run. tsc src 0.
-  - Flagged explicitly for K1: the auth `loading` gate now also waits for the onboarding flag's local read, to avoid a flash-then-jump UI bug. Production mutation 0; real-device visual acceptance still pending.
+- G1: `review_required` — `kabumori-ios-internal-visual-qa-build-20260926`
+  - STOPPED before building, per the task's own instruction: preflight all green (EAS login, project linkage, one iPhone already device-registered, prior successful development-profile build history), but `eas env:list` shows NO env vars configured for preview/development/production -- a preview build today would crash on launch (`supabaseUrl is required`, same root cause as finding A2).
+  - Exact next action: authorize setting EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY (public, non-secret, already in local .env) as EAS preview/development environment variables. EXPO_PUBLIC_KABUMORI_WEB_URL not required to unblock (app handles it unset gracefully). No build run, no EAS/Apple mutation, production mutation 0.
 - G2: `done` — `kabumori-pr34-shadow-merge-deploy-20260925`
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS

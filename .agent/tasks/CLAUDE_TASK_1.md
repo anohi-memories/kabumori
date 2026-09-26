@@ -3,8 +3,8 @@
 - task_id: kabumori-ios-internal-visual-qa-build-20260926
 - owner: claude
 - slot: claude-1
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: merged main の新正式アイコン＋3画面オンボーディングを、実際のiPhoneで確認するための **非production・内部配布EAS iOS build** を安全に作成し、インストール可能な状態まで進める。App Store提出やproductionリリースは行わない。
@@ -182,3 +182,82 @@ Report:
 - next recommendation.
 
 STOP for K1.
+
+## Report — G1 result
+
+- task_id: kabumori-ios-internal-visual-qa-build-20260926
+- **result: STOPPED before building, per the task's own explicit instruction.** No build was run. Production mutation = 0.
+- fresh main at task start: `8def946`; in_progress control commit `12db865`.
+- PR #39 merge commit `0835557` confirmed an ancestor of fresh main (`git merge-base --is-ancestor`).
+- G2/G3/G4 overlap: none (`.agent/CURRENT_STATE.md`: G2 `done`, G3 on x-autopost, G4 `done` on admin; no startup/onboarding/icon file touched by any of them).
+
+### Preflight result
+
+| Check | Result |
+| --- | --- |
+| EAS CLI login | Logged in as `anohi-memories` (`voxy1948.p3@gmail.com`); has Owner role on both `anohi-memories` and `anohi-memoriess-team` accounts |
+| EAS project linkage | `eas project:info` resolves `@anohi-memoriess-team/kabumori`, ID `eb80adf3-861e-4a48-a373-2d9a85b58899` — matches `app.json`'s `extra.eas.projectId` exactly |
+| App identity | name 「かぶモリ」, slug `kabumori`, version `1.0.0`, `ios.bundleIdentifier` `com.anohimemories.kabumori` — all as expected |
+| `eas.json` profiles | `preview` (`distribution: internal`, no dev-client) is the correct, safest match for "launch as a normal standalone build" — chosen as the intended profile, not yet used |
+| Apple team | Exactly one: `YUYA TANO (Individual)`, team ID `H2899GWC8N` — unambiguous |
+| Device registration | `eas device:list --apple-team-id H2899GWC8N` shows **one iPhone already registered** for internal distribution under this team. No new device registration needed. |
+| Prior build history | Two earlier `development`-profile iOS builds exist (2026-09-10, both `finished`), confirming iOS signing/credentials have worked for this project before. No `preview`-profile build has been run yet. |
+| **Build-time public env vars** | **`eas env:list preview`, `eas env:list development`, `eas env:list production`: all three report "No variables found for this environment."** Checked names only; no value was ever printed or read from EAS. |
+
+### The blocker
+
+None of `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `EXPO_PUBLIC_KABUMORI_WEB_URL` are configured as EAS environment variables for any environment — this is the exact gap `RELEASE_READINESS.md`'s finding A2 already flagged for `production`, and it turns out to apply identically to `preview`/`development`: nothing in `eas.json` or the EAS dashboard supplies these at cloud-build time (a local `.env` file is never read by a cloud `eas build`).
+
+`src/lib/supabase.ts` asserts the first two non-null and constructs the Supabase client at module load. Per this task's own instruction — "If the chosen internal profile lacks required runtime env and the app would fail to start, STOP" — I stopped. Building anyway would have produced an installable `.ipa` that **crashes immediately on launch** (`Error: supabaseUrl is required`, the same failure mode reproduced during the release-readiness export-smoke checks), which would defeat the entire purpose of a visual-QA build and waste an EAS build credit/minute allotment for nothing.
+
+### Exact single next action needed
+
+Set exactly two EAS environment variables, scoped to the `preview` environment (I'd also add `development` while at it, since it's the documented fallback profile and costs nothing extra to also cover):
+
+- `EXPO_PUBLIC_SUPABASE_URL`
+- `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+
+Both are **public, non-secret values** already used throughout this project's local `.env` and every export-smoke check in prior tasks (the Supabase project URL and its client-side publishable/anon key — never the `service_role` key). I confirmed both variable *names* exist in the local `.env` without reading or printing either value.
+
+`EXPO_PUBLIC_KABUMORI_WEB_URL` does **not** need a value to unblock the build: the app's own `legal-links.ts` design treats it as optional and shows 準備中 instead of crashing when unset — correctly so, since no `apps/kabumori-web` Netlify site exists yet (confirmed in the prior release-readiness report) and there is genuinely no real URL to set.
+
+**I did not set these myself.** Per this task's "Allowed changes" section, a nonproduction EAS config adjustment must be reported and stopped-for *before* being made unless it is strictly mechanical and already implied by existing config — creating new environment-variable state from values that exist only in a local, git-ignored `.env` file is not "already implied," so I am asking rather than acting.
+
+### Chosen profile and why
+
+`preview` (`eas.json`'s `build.preview`, `distribution: internal`, not `developmentClient`) — matches the task's stated preference exactly: internal distribution, launches as a normal standalone build, no Metro/dev-server connection needed. Not yet run.
+
+### Build ID / status / source commit
+
+No build was started. Nothing to report here — deliberately, to avoid spending a build against a commit set that is known in advance to crash on launch.
+
+### Source changes
+
+None. No file in `src/`, `assets/`, `app.json`, or `eas.json` was modified by this task.
+
+### Production mutation
+
+**0.** No EAS environment variable was created or changed (production or otherwise). No Apple/EAS credential was touched. No Supabase/Auth/DB change. No `personalized-reports`/X/admin file touched.
+
+### Remaining issues
+
+1. The env-var blocker above — the only thing standing between this task and an actual build.
+2. Once unblocked, this same gap will recur for the `production` profile too (finding A2, already tracked in `RELEASE_READINESS.md`) — not this task's job to fix, just noting it is the same root cause.
+
+### Exact real-iPhone checklist (prepared in advance, for once a build is installable)
+
+1. **Home screen icon**: the new newspaper/candlestick-chart/leaf icon appears; not the earlier icon or any Expo template mark; the corner mask looks natural (no visible square edges or double-masking).
+2. **Cold launch**: the Kabumori-branded splash appears (icon on a soft off-white/green background); no Expo logo, no Expo blue; the transition from the native splash into the app has no visible flash or jump.
+3. **First-run onboarding**: all three pages (01 brand, 02 AI analysis, 03 report) display correctly; swiping between them feels smooth; artwork is sharp, not blurry or stretched; no critical text, face, or CTA is clipped at the edges; the three page dots are aligned consistently and the active one updates correctly as you swipe.
+4. **Page 2**: the progress bar is the artwork's own static bar (not animated) — this is expected, not a bug; it should not look broken or half-rendered.
+5. **Page 3**: tapping the visible 「はじめる →」 button reliably proceeds every time; the tappable area should feel like it lines up with where the button actually is, not offset from it.
+6. **Relaunch**: force-quit and reopen the app — onboarding must **not** show again; the normal login/app flow should appear directly.
+7. Please also note the device model and screen size you tested on.
+
+I will not mark this checklist PASS myself; it needs the user's own observation on the device.
+
+### Next recommendation
+
+1. **Immediate, in this chat**: decide whether to authorize setting `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` as EAS `preview` (and `development`) environment variables, using the existing public values already in the local `.env`.
+2. Once set, resume this same task (or a follow-up G1 task) to re-run the preflight (confirming `eas env:list preview` now shows both names) and then run the one `preview`-profile iOS build.
+3. After a successful build, share the install link/QR with the user for the real-device checklist above.
