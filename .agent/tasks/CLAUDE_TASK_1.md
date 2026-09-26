@@ -261,3 +261,67 @@ I will not mark this checklist PASS myself; it needs the user's own observation 
 1. **Immediate, in this chat**: decide whether to authorize setting `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` as EAS `preview` (and `development`) environment variables, using the existing public values already in the local `.env`.
 2. Once set, resume this same task (or a follow-up G1 task) to re-run the preflight (confirming `eas env:list preview` now shows both names) and then run the one `preview`-profile iOS build.
 3. After a successful build, share the install link/QR with the user for the real-device checklist above.
+
+## Report — G1 result (resumed, build completed)
+
+- task_id: kabumori-ios-internal-visual-qa-build-20260926
+- **result: build succeeded and is installable. Real-device visual acceptance is the only remaining step, and it is the user's to perform.**
+- Continues the earlier STOP report on this same task: the user explicitly authorized (in chat) setting the two public env vars and proceeding with the build.
+
+### EAS environment variables set (user-authorized)
+
+- `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, both **public/non-secret** values (the Supabase project URL and its client-side publishable key — never `service_role`), read from the existing local `.env` and set via `eas env:set --visibility plaintext` scoped to **`preview` and `development` only**.
+- **`production` was not touched** — re-verified with `eas env:list production` both before and after: "No variables found for this environment," unchanged.
+- `EXPO_PUBLIC_KABUMORI_WEB_URL` remains unset, as previously determined not to be required (the app shows 準備中 instead of crashing when it's absent).
+
+### Build
+
+| Field | Value |
+| --- | --- |
+| Platform | iOS |
+| Profile | `preview` (internal distribution, matches the task's stated preference) |
+| Status | **finished** |
+| Build ID | `79955c92-54d2-42ce-ad38-b8710f2f9011` |
+| Source commit | `12db86576bdaf6c410b8a92709df0e46504eb831` — my own control-file commit (status flip only) on top of fresh main `8def946`, which already contains PR #39. **No app source file differs from merged main.** |
+| Bundle identifier | `com.anohimemories.kabumori` — confirmed both in the pre-build credentials summary and matches `app.json` |
+| Version / build number | `1.0.0` / `1` |
+| Distribution certificate | existing, created 16 days ago, expires 2027-09-10 — **no new certificate was generated** |
+| Provisioning profile | existing Ad Hoc profile (Developer Portal ID `5M79MS9DFQ`), already covering the user's registered iPhone (UDID `00008150-001C09C00AC0401C`) — **no new profile was generated, no device re-registration needed** |
+| Started / finished | 2026-09-26 22:58:42 / 23:04:22 (about 5.5 minutes) |
+| Logs | https://expo.dev/accounts/anohi-memoriess-team/projects/kabumori/builds/79955c92-54d2-42ce-ad38-b8710f2f9011 |
+
+### Install link (share with the user; no credential exposure)
+
+**https://expo.dev/accounts/anohi-memoriess-team/projects/kabumori/builds/79955c92-54d2-42ce-ad38-b8710f2f9011**
+
+Open this on the iPhone (the one already registered — a different device will not be able to install this build) and follow the on-screen "Install" flow, or scan the QR code the `eas build` CLI printed. No Apple ID sign-in or TestFlight is involved; this is Ad Hoc internal distribution.
+
+### Source changes
+
+None, confirmed by the build's own recorded source commit containing zero app-code diff from merged main.
+
+### Production mutation
+
+**0** for the app/backend. The only mutation performed anywhere was the two EAS `preview`/`development` environment variables, explicitly authorized by the user in chat, non-production, non-secret, reversible, and re-verified not to have touched `production`.
+
+### Remaining issues
+
+1. `app.json` is missing `ios.infoPlist.ITSAppUsesNonExemptEncryption` — the build log surfaced this as a notice (not a failure): "Manual configuration is required in App Store Connect before the app can be tested." This matches `RELEASE_READINESS.md`'s finding A5 exactly (export-compliance declaration pending the operator's confirmation) and did not block this internal build. Not fixed here — it's an App Store Connect / TestFlight-time concern, out of this task's scope, and only matters once uploading to TestFlight/App Store, not for this Ad Hoc install.
+2. Real-device visual acceptance is still outstanding — see the checklist below.
+
+### Exact real-iPhone checklist (unchanged from the pre-build report, repeated here for convenience)
+
+1. **Home screen icon**: the new newspaper/candlestick-chart/leaf icon appears; not the earlier icon or any Expo template mark; the corner mask looks natural.
+2. **Cold launch**: the Kabumori-branded splash appears (icon on a soft off-white/green background); no Expo logo, no Expo blue; no visible flash/jump in the transition.
+3. **First-run onboarding**: all three pages display correctly; swiping feels smooth; artwork is sharp, not stretched; no critical text/face/CTA clipped; the three page dots update correctly as you swipe.
+4. **Page 2**: the progress bar is the artwork's own static bar — expected, not a bug.
+5. **Page 3**: tapping 「はじめる →」 reliably proceeds; the tappable area feels aligned with the visible button.
+6. **Relaunch**: force-quit and reopen — onboarding does not show again; the normal login/app flow appears directly.
+7. Please also note the device model/screen size you tested on.
+
+I will not mark this checklist PASS myself; it needs the user's own observation on the device, per the task's own instruction.
+
+### Next recommendation
+
+1. Send the user the install link above and let them work through the checklist on their iPhone.
+2. Once they report the result, a final G1 pass can record PASS/issues found and recommend the next step (either proceeding toward TestFlight/App Store prerequisites, or a source fix if something looks wrong).
