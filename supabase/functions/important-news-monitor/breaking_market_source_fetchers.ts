@@ -39,6 +39,11 @@ export type BreakingMarketQuery = {
    * eight topics would leave them unwatched for up to 160 minutes.
    */
   slot?: "fixed" | "rotating";
+  /**
+   * Which domains the web_search filter uses (see breakingMarketSearchDomains). Defaults to "news":
+   * every current topic looks for fresh reporting; official releases arrive via the official RSS lane.
+   */
+  searchScope?: BreakingMarketSearchScope;
 };
 
 export const CRITICAL_BREAKING_MARKET_QUERY_KEY = "critical_market_events";
@@ -159,8 +164,16 @@ export const BREAKING_MARKET_QUERIES: BreakingMarketQuery[] = [
 export const MAX_BREAKING_MARKET_SEARCHES_PER_FETCH = 4;
 export const BREAKING_MARKET_ROTATION_INTERVAL_MS = 20 * 60 * 1000;
 
-export const BREAKING_MARKET_SOURCE_DOMAINS = [
-  "reuters.com", "apnews.com", "bloomberg.com", "nikkei.com",
+// Domains are split by role. The web_search filter of every breaking topic uses the news outlets only:
+// production diagnostics on 2026-09-25 showed evergreen official pages (BLS, BOJ, JMA, Fed, MOD)
+// crowding fresh reporting out of a mixed filter, so no recent article reached the model. Official
+// releases stay covered by the official RSS lane (market_macro) and remain valid candidate sources:
+// BREAKING_MARKET_SOURCE_DOMAINS, the union, is unchanged and still gates source_url.
+export const BREAKING_MARKET_NEWS_DOMAINS = [
+  "reuters.com", "apnews.com", "bloomberg.com", "nikkei.com", "nhk.or.jp",
+];
+
+export const BREAKING_MARKET_OFFICIAL_DOMAINS = [
   "mof.go.jp", "boj.or.jp", "federalreserve.gov", "ustr.gov",
   "whitehouse.gov", "commerce.gov", "bis.doc.gov", "state.gov",
   "bls.gov", "bea.gov", "treasury.gov",
@@ -176,8 +189,25 @@ export const BREAKING_MARKET_SOURCE_DOMAINS = [
   // return 404 for the documented feed paths), so these hosts reach the pipeline
   // as web_search results instead. Being listed only makes a source_url eligible;
   // the actual-visited-URL, https, freshness and category gates all still apply.
-  "jma.go.jp", "mod.go.jp", "kantei.go.jp", "jpx.co.jp", "fdma.go.jp", "nhk.or.jp",
+  "jma.go.jp", "mod.go.jp", "kantei.go.jp", "jpx.co.jp", "fdma.go.jp",
 ];
+
+/** Every host a breaking candidate's source_url may use (news outlets plus official sources). */
+export const BREAKING_MARKET_SOURCE_DOMAINS = [...BREAKING_MARKET_NEWS_DOMAINS, ...BREAKING_MARKET_OFFICIAL_DOMAINS];
+
+export type BreakingMarketSearchScope = "news" | "official" | "news_and_official";
+
+/** The web_search allowed_domains for a topic; topics default to the news outlets. */
+export function breakingMarketSearchDomains(query: BreakingMarketQuery): string[] {
+  switch (query.searchScope ?? "news") {
+    case "official":
+      return BREAKING_MARKET_OFFICIAL_DOMAINS;
+    case "news_and_official":
+      return BREAKING_MARKET_SOURCE_DOMAINS;
+    default:
+      return BREAKING_MARKET_NEWS_DOMAINS;
+  }
+}
 
 export const MAX_BREAKING_MARKET_ITEM_AGE_MS = 3 * 60 * 60 * 1000;
 const MAX_BREAKING_MARKET_FUTURE_SKEW_MS = 60 * 60 * 1000;
@@ -753,7 +783,7 @@ export function breakingMarketRequestBody(
     max_tool_calls: 1,
     tools: [{
       type: "web_search",
-      filters: { allowed_domains: BREAKING_MARKET_SOURCE_DOMAINS },
+      filters: { allowed_domains: breakingMarketSearchDomains(query) },
       search_context_size: "low",
     }],
     tool_choice: "required",

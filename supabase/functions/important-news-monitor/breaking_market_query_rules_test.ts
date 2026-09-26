@@ -1,11 +1,12 @@
 // Search-string rules for the breaking_market lane (2026-09-25). Production diagnostics showed the model
 // turning the topic into "site:reuters.com OR site:apnews.com ..." (no topic words, stale .gov pages) or
-// "site:nhk.or.jp ..." (a domain outside allowed_domains, zero sources). The request now tells the model
+// "site:nhk.or.jp ..." (zero sources returned). The request now tells the model
 // how to build its search string and hands it dated recency words; nothing else in the request changes.
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
   BREAKING_MARKET_QUERIES,
+  BREAKING_MARKET_NEWS_DOMAINS,
   BREAKING_MARKET_SOURCE_DOMAINS,
   breakingMarketRecencyTerms,
   breakingMarketRequestBody,
@@ -68,7 +69,7 @@ test("every topic's own vocabulary is concrete, not a bare outlet or 'latest new
   }
 });
 
-test("regression: model, allowed domains, context size, tool limit and output schema are unchanged", () => {
+test("regression: model, context size, tool limit and output schema are unchanged; the filter is the news outlets", () => {
   for (const query of BREAKING_MARKET_QUERIES) {
     const body = breakingMarketRequestBody(query, NOW);
     assert.equal(body.model, "gpt-5.6-luna");
@@ -79,7 +80,7 @@ test("regression: model, allowed domains, context size, tool limit and output sc
     assert.deepEqual(body.include, ["web_search_call.action.sources"]);
     assert.deepEqual(body.tools, [{
       type: "web_search",
-      filters: { allowed_domains: BREAKING_MARKET_SOURCE_DOMAINS },
+      filters: { allowed_domains: BREAKING_MARKET_NEWS_DOMAINS },
       search_context_size: "low",
     }]);
     const format = (body.text as { format: { name: string; strict: boolean } }).format;
