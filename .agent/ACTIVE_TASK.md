@@ -49,7 +49,7 @@
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: reopened after real-device icon defect; replace same-named user source with full-bleed master hash `8b821f60...`, regenerate 1024 icon, narrow PR + one new iOS preview build; recommended Sonnet5（中）
+- allocation: PR #40 full-bleed icon correction merged -> `d2747c75ecbbe48ffeab77cc3827787cac888468`; resume one new iOS preview internal build for user icon re-check; recommended Sonnet5（中）
 
 ## Claude G2
 - owner: claude
