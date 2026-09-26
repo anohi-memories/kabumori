@@ -67,6 +67,16 @@
 - real-iPhone/TestFlight visual acceptance remains a later gate.
 - recommended model: Sonnet5（高）.
 
+## G1 real-iPhone visual QA build
+
+- assigned: `kabumori-ios-internal-visual-qa-build-20260926`.
+- user authorized proceeding after Final K1.
+- goal: install current merged main on a real iPhone using one safest nonproduction internal EAS build.
+- preflight must verify EAS login/project, required public env presence, iOS signing and device registration before build.
+- if operator interaction is required, stop with one exact next action.
+- no source change expected; no Codex review expected.
+- recommended model: Sonnet5（高）.
+
 ## Final K1 onboarding + icon integration
 
 - verdict: **PASS**.
