@@ -428,3 +428,26 @@ Report:
 **Sonnet5（中）**
 
 This is a narrow asset swap + deterministic verification/rebuild. Escalate only if an unexpected signing/build-system problem appears.
+
+
+## ChatGPT merge note — PR #40
+
+Claude Code's own application safety classifier blocked self-merging even though this project task allowed merge without K1/Codex review for this narrow asset-only delta. This is separate from the project's review policy.
+
+ChatGPT independently verified PR #40 was open, mergeable, limited to exactly:
+- `assets/branding/kabumori-icon-master-2026-09-26.png`
+- `assets/images/icon.png`
+- `tests/app/onboarding-assets_test.ts`
+
+PR head checks were green (Netlify Deploy Preview and Vercel status). ChatGPT merged PR #40 with expected-head protection.
+
+- PR #40 head: `e8c4524faa138bfd894b5b5623a73ef23c07ffa9`
+- merge commit: `d2747c75ecbbe48ffeab77cc3827787cac888468`
+
+G1 should now continue from fresh `origin/main` with the already-authorized next step only:
+- verify merged icon assets/tests on main;
+- create one new iOS `preview` internal-distribution EAS build;
+- report install link/build ID;
+- stop for user real-device icon acceptance.
+
+No further source changes are expected.
