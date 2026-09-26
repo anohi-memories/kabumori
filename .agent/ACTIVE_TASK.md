@@ -44,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: done
-- task_id: kabumori-onboarding-icon-integration-20260926
+- status: ready
+- task_id: kabumori-ios-internal-visual-qa-build-20260926
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: closed; Final K1 PASS, PR #39 merged -> `08355579ef8fd89e12e6723aed4674905440016a`; real-iPhone/TestFlight visual acceptance pending; no Codex review required
+- allocation: assigned; one nonproduction iOS internal EAS build for real-iPhone visual QA; no TestFlight/App Store/production release; recommended Sonnet5（高）
 
 ## Claude G2
 - owner: claude
