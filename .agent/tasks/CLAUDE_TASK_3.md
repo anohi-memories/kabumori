@@ -3,8 +3,8 @@
 - task_id: x-universal-oauth-refresh-stage3a-merge-edge-observe-20260926
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Opus5.5（高）
 - purpose: reviewed Stage 3A sourceをmainへmergeし、Stage 3A対応版 x-test-post をproduction Edgeへdeployしたうえで、AI Labの自然な期限切れ1サイクルを観測して本番動作を確認する。
@@ -253,4 +253,24 @@ Then:
 
 ## Report
 
-- pending
+- task_id: x-universal-oauth-refresh-stage3a-merge-edge-observe-20260926
+- result: K3 ready — PR #38 merged, Stage 3A x-test-post deployed (v125, byte-identical to merge), one natural AI Lab expiry-cycle observed and PASS. No hard stop.
+- model: Opus 5.5
+- user_approval_in_chat: 2026-09-26 23:06 JST「進める」（事前確認報告後）
+- source: PR #38 head `748deb13a934129e5696ab5552401f547204b32c` → merge `6717b1fe451db83f80e837bf8104268a2b00423d`（`gh pr merge 38 --merge --match-head-commit 748deb1…`, parents `80a96cd` + `748deb1`）
+- merge_verification: main の他変更は important-news-monitor のみ（PR と非重複）。merge 後 `supabase/functions/x-test-post`・`_shared`・`migrations`・`tests` は `748deb1` と完全一致。preview と merge 後でテスト再実行: x-test-post 514/0（focused: vault_account_auth / 3A static / core static / 1I static = 43/0）、_shared 141/0。worktree clean（未追跡は deploy 用 link/config のみ、未コミット）。
+- stage0_production (read-only 23:05 JST): Stage 3A 5関数 md5 = apply 時の read-back と一致; rollout rows = `ai_salaryman_lab_x=enabled/GRANDFATHERED_PROVEN_REFRESH` のみ（pilot なし）; AI Lab idle gen 6、error なし、stuck なし; Kabumori は Vault 参照なし; shared refs 0; 履歴 core/3A とも未記録（既知）; gate `X_VAULT_ACCOUNT_REFRESH` 設定あり; Edge v124（=777997a）。`functions deploy` は migration を適用しない（本 TASK で migration/repair/push 0）。
+- edge_deploy: x-test-post のみ、`supabase functions deploy x-test-post --use-api --no-verify-jwt`（G3 worktree、独自 config.toml/link で shared checkout 誤デプロイを防止）、23:09 JST。prior v124 → new **v125**。download して merge `6717b1f` と43ファイル byte 一致、`ROLLOUT_REFUSALS`/proactive 処理あり。verify_jwt=false 維持。Kabumori 経路（`index.ts`、`_shared/brand/**`）は `777997a` から無変更（今回の差分は `vault_account_auth.ts`＋テストのみ）。
+- post_deploy_checks (23:09 JST): gate ON、rollout rows 不変、AI Lab health 正常（gen 6、secret 更新 21:17 のまま）、deploy による refresh/投稿/状態変化 0、他アカウント・Kabumori store 不変。
+- natural_observation:
+  - 対象: 2026-09-27 07:49 JST の AI Lab 定期投稿 `scheduled_posts.id a9550772-c083-43a3-8515-c73aaa029a6a`（attempt 1）。直前のトークン期限 09-26 23:17 JST（期限切れ状態で到来）。
+  - 07:50:01 claim → 07:50:05 refresh commit → 07:50:06 succeeded（"AI Lab post completed; fingerprint persisted"）。claim 1回、ログ1組。
+  - refresh: あり、1回。generation 6 → 7、`last_refreshed_at` 07:50:05、`access_expires_at` 09:50:05（+2h）、AI Lab の access/refresh secret updated_at が同時刻 07:50:05（同一アカウントのみ）。
+  - X create: 保存済み期限が過ぎていたため新コードの proactive 経路（投稿前更新）の想定。DB 上は create 回数を直接観測できないが、401 記録（`last_connection_error_code`）なし・second 401 なし・成功1件・重複投稿行なし。コード上の上限は create 2回（reactive の場合）。
+  - 終了時: idle、error なし、uncertain/reauth/stuck なし、rollout 不変（updated_at 09-26 22:53 のまま）。
+- cross_account_kabumori: `sa_bfdab0e0…` secret/行 不変; Kabumori 行不変・Vault 参照なし・`oauth_token_store` updated_at 09-26 18:23 のまま。06:49 Kabumori morning_greeting 失敗は `MORNING_GREETING_IMAGE_NOT_FOUND`（当日画像欠落、X 呼び出し前、前日と同じ別件）。
+- production_mutations: (1) PR #38 merge (2) x-test-post v125 deploy (3) 定期スケジュールによる AI Lab の自然な refresh 1回（gen 6→7、AI Lab の2 secret 更新）(4) その AI Lab 定期投稿1件。migration/repair/push/env/rollout 変更・手動 invoke・手動投稿・再実行 0。
+- hard_stops_encountered: none
+- remaining_risks: migration history 未正規化（`db push` 禁止継続）; X create 回数は DB から直接は見えない（必要なら Edge ログで確認）; Kabumori morning_greeting の画像欠落（別件）; Stage 3B 用の2つ目アカウントには x-test-post 側の投稿処理がまだない。
+- stage3a_fully_live: yes — DB 権限層 + Edge（v125）とも本番稼働、AI Lab で proactive 自動更新を実観測。Stage 3B（2つ目アカウント pilot）の計画に進める状態。
+- next_recommendation: ChatGPT K3 → Stage 3B 計画 TASK（対象アカウント選定・同意・コンテンツ経路・pilot 期限/回数・観測/ロールバック手順）。別途 migration history 単一 version 正規化の承認判断。
