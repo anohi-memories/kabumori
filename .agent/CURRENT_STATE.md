@@ -44,10 +44,12 @@
 
 - H1: `review_required` — `x-oauth-refresh-stage3a-final-security-review-20260926`; PR #38 source-only PASS-WITH-FIX at head `748deb1` (unexpected proactive refresh-start failures now stop before X write); disposable DB/ACL/race and 655 X tests PASS; production apply/deploy remains separately gated; C1 required
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
-- G1: `review_required` — `kabumori-ios-internal-visual-qa-build-20260926`
-  - Build 79955c92-54d2-42ce-ad38-b8710f2f9011 (iOS preview, com.anohimemories.kabumori) succeeded; user authorized the two public/non-secret EAS preview/development env vars, production untouched.
-  - **Real-device visual acceptance: PASS**, confirmed by the user on an iPhone 17 Pro (all 7 checklist items OK: icon, splash, onboarding pages/swipe, page-2 static bar, page-3 CTA, no repeat on relaunch).
-  - Production mutation 0 for app/backend across this whole task. Ready for chatgpt review.
+- G1: `ready` — `kabumori-ios-internal-visual-qa-build-20260926`
+  - Real-device QA found one visual defect: current app icon has a baked-in rounded-card/white outer margin, causing a smaller double-rounded appearance under the iOS mask.
+  - User approved a full-bleed replacement and will overwrite the same Desktop filename `a_clean_glossy_modern_app_icon_style_illustratio.png`.
+  - New expected source: 1254x1254, fully opaque RGBA, sha256 `8b821f60b8a4c162c6fda2eafe52245bf4f28aa734778b4db6791c29508e40ed`.
+  - Replace repo master in place, regenerate 1024x1024 opaque RGB icon, narrow PR, then one new iOS preview internal build for re-check.
+  - Recommended model: Sonnet5（中）.
 - G2: `done` — `kabumori-pr34-shadow-merge-deploy-20260925`
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS
@@ -76,6 +78,16 @@
 - if operator interaction is required, stop with one exact next action.
 - no source change expected; no Codex review expected.
 - recommended model: Sonnet5（高）.
+
+## G1 full-bleed official icon correction
+
+- user real-device finding: the approved icon design looked too small because the source itself included a rounded-card/white outer frame.
+- corrected full-bleed artwork is now the intended official master; user will overwrite the previous Desktop source without changing its filename.
+- new source gate: 1254x1254, fully opaque RGBA, sha256 `8b821f60b8a4c162c6fda2eafe52245bf4f28aa734778b4db6791c29508e40ed`.
+- repo master path stays `assets/branding/kabumori-icon-master-2026-09-26.png`; installed icon remains `assets/images/icon.png`, deterministically resized to 1024x1024 opaque RGB.
+- after merge, make one new nonproduction iOS preview internal build and let the user visually confirm the home-screen mask.
+- no Codex review expected if scope remains asset-only.
+- recommended model: Sonnet5（中）.
 
 ## Final K1 onboarding + icon integration
 
