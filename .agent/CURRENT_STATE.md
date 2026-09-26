@@ -1119,3 +1119,13 @@
 - rollout modes, pre-Vault exact-account authority, service_role-only mutation ACLs, grandfathering, reauth, stuck-lease behavior, non-secret health observability and migration-history safeguards accepted.
 - disposable DB tests + 655 Deno tests PASS; production mutation=0.
 - next: separate explicit authorization for Stage 3A production apply. Apply only migration `20260926032054`, recheck exact grandfather set immediately before apply, read back all ACL/function/table/rollout state, and stop on any unexpected delta. Edge deploy/refresh observation remains a later gated step.
+
+## G3 Stage 3A production apply
+
+- user approved assigning the narrow production-apply step on 2026-09-26 JST.
+- assigned: `x-universal-oauth-refresh-stage3a-production-apply-20260926`.
+- reviewed/fixed PR #38 head: `748deb13a934129e5696ab5552401f547204b32c`.
+- scope is limited to read-only preflight -> apply only migration `20260926032054_x_account_refresh_rollout_authority.sql` -> full ACL/function/rollout/grandfather read-back.
+- exact grandfather set must be rechecked immediately before apply and equal one proven AI Lab account; any discrepancy is a hard stop.
+- no Edge deploy, env change, token refresh, X post, second-account rollout, migration repair, db push, historical batch apply, or Kabumori credential migration is authorized.
+- recommended Claude model: Opus5.5（高）.
