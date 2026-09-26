@@ -163,8 +163,10 @@ export class VaultAccountXAuth {
       commit: (lease, access, refresh, expiresIn) => this.#rpc.commit(lease, ref, access, refresh, expiresIn),
       release: (lease, result, code) => this.#rpc.release(lease, ref, result, code),
     }, this.#resolveClient, { fetchImpl: this.#fetchImpl, timeoutMs: this.#timeoutMs });
-    // Refused before any token request: the refresh budget is untouched.
-    if (outcome.kind === "not_started" && trigger === "proactive") return;
+    // Only expected pre-request refusals may keep a still-valid token.
+    // An unavailable reader or changed account authority must fail closed.
+    if (outcome.kind === "not_started" && trigger === "proactive"
+        && (ROLLOUT_REFUSALS.has(outcome.code) || outcome.code === "X_REFRESH_IN_PROGRESS")) return;
     this.#refreshUsed = true;
     if (outcome.kind === "not_started" && ROLLOUT_REFUSALS.has(outcome.code)) {
       await this.#quiet(() => this.#rpc.recordAccessUnauthorized(ref));

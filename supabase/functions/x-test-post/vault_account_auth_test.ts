@@ -486,3 +486,29 @@ test("proactive refresh refused before any token request keeps the current token
   await rejects((await load(db3, AI, x3.fetchImpl, true, () => now)).send(x3.request), "X_ACCESS_TOKEN_REJECTED_AFTER_REFRESH");
   assert.equal(x3.tokenCalls.length, 1);
 });
+
+test("unexpected proactive begin failure does not send an X write with the stale credential", async () => {
+  const now = Date.parse("2026-09-25T00:00:00Z");
+  for (const code of ["X_REFRESH_UNAVAILABLE", "X_CLAIM_ACCOUNT_MISMATCH"]) {
+    const db = new FakeCoreDb();
+    db.accounts.ai_salaryman_lab_x.access = "tok_AI_still_valid";
+    db.accounts.ai_salaryman_lab_x.expiresAt = new Date(now + 60_000).toISOString();
+    db.accounts.ai_salaryman_lab_x.rolloutRefusal = code;
+    const x = fakeX([], new Set(["tok_AI_still_valid"]));
+    await rejects((await load(db, AI, x.fetchImpl, true, () => now)).send(x.request), code);
+    assert.deepEqual(x.creates, [], code);
+    assert.equal(x.tokenCalls.length, 0, code);
+  }
+});
+
+test("expected concurrent-refresh refusal may use a still-valid credential", async () => {
+  const now = Date.parse("2026-09-25T00:00:00Z");
+  const db = new FakeCoreDb();
+  db.accounts.ai_salaryman_lab_x.access = "tok_AI_still_valid";
+  db.accounts.ai_salaryman_lab_x.expiresAt = new Date(now + 60_000).toISOString();
+  db.accounts.ai_salaryman_lab_x.rolloutRefusal = "X_REFRESH_IN_PROGRESS";
+  const x = fakeX([], new Set(["tok_AI_still_valid"]));
+  assert.equal((await (await load(db, AI, x.fetchImpl, true, () => now)).send(x.request)).status, 201);
+  assert.deepEqual(x.creates, ["tok_AI_still_valid"]);
+  assert.equal(x.tokenCalls.length, 0);
+});
