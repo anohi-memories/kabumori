@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: x-admin-pr33-auth-fix-round2-final-review-20260926
+- status: ready
+- task_id: x-oauth-refresh-stage3a-final-security-review-20260926
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: closed; Final C1 PASS for source readiness to bounded real E2E; PR #33 still unmerged
+- allocation: assigned; single final release-boundary security/ACL/migration review for Stage 3A before any production apply; recommended Sol（高）
 
 ## Codex H2
 - owner: codex
@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: done
 - task_id: x-universal-oauth-refresh-stage3a-rollout-foundation-20260926
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: assigned; Stage 3A account-level rollout foundation for future all-user X OAuth refresh; source-first, no additional production account activation; recommended Opus5.5（高）
+- allocation: closed; Final K3 PASS for source-first Stage 3A at PR #38 `050d62f`; production mutation 0; one final release-boundary Codex review assigned before production apply
 
 ## Claude G4
 - owner: claude
