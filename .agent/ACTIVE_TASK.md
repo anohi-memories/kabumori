@@ -49,7 +49,7 @@
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: assigned; one nonproduction iOS internal EAS build for real-iPhone visual QA; no TestFlight/App Store/production release; recommended Sonnet5（高）
+- allocation: reopened after real-device icon defect; replace same-named user source with full-bleed master hash `8b821f60...`, regenerate 1024 icon, narrow PR + one new iOS preview build; recommended Sonnet5（中）
 
 ## Claude G2
 - owner: claude
