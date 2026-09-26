@@ -3,8 +3,8 @@
 - task_id: x-universal-oauth-refresh-stage3a-merge-edge-observe-20260926
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Opus5.5（高）
 - purpose: reviewed Stage 3A sourceをmainへmergeし、Stage 3A対応版 x-test-post をproduction Edgeへdeployしたうえで、AI Labの自然な期限切れ1サイクルを観測して本番動作を確認する。
@@ -274,3 +274,19 @@ Then:
 - remaining_risks: migration history 未正規化（`db push` 禁止継続）; X create 回数は DB から直接は見えない（必要なら Edge ログで確認）; Kabumori morning_greeting の画像欠落（別件）; Stage 3B 用の2つ目アカウントには x-test-post 側の投稿処理がまだない。
 - stage3a_fully_live: yes — DB 権限層 + Edge（v125）とも本番稼働、AI Lab で proactive 自動更新を実観測。Stage 3B（2つ目アカウント pilot）の計画に進める状態。
 - next_recommendation: ChatGPT K3 → Stage 3B 計画 TASK（対象アカウント選定・同意・コンテンツ経路・pilot 期限/回数・観測/ロールバック手順）。別途 migration history 単一 version 正規化の承認判断。
+
+
+## Final K3 — Stage 3A fully live
+
+Verdict: **PASS**.
+
+- PR #38 merged at `6717b1fe451db83f80e837bf8104268a2b00423d`.
+- production `x-test-post` deployed to v125 from merged main; deployed source verified byte-identical and verify_jwt=false preserved.
+- Stage 3A rollout rows unchanged: AI Lab only enabled; no pilot/second enabled account.
+- natural AI Lab scheduled post at 2026-09-27 07:49 JST exercised the expiry path.
+- proactive refresh succeeded exactly once: generation 6 -> 7, state returned idle, no error/reauth/uncertain/stuck condition.
+- scheduled post succeeded with no duplicate observed; no second 401.
+- cross-account state/credential check PASS; Kabumori legacy path/store unchanged.
+- migration/repair/push/env/rollout/manual invoke/manual post mutations = 0 in this continuation.
+- Stage 3A is now fully live across DB authority + Edge runtime + one real natural refresh cycle.
+- ready to plan Stage 3B controlled second-account pilot.
