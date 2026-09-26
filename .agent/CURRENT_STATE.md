@@ -1140,3 +1140,14 @@
 - Edge deploy/env/token refresh/X post = 0; migration repair/db push = 0.
 - migration history debt remains unnormalized by design.
 - next: merge reviewed PR #38, deploy Stage 3A x-test-post source, then observe one natural AI Lab token-expiry cycle. No extra Codex review unless new semantic changes appear.
+
+## G3 Stage 3A merge + Edge + natural observation
+
+- user approved proceeding on 2026-09-26 JST.
+- assigned: `x-universal-oauth-refresh-stage3a-merge-edge-observe-20260926`.
+- scope: verify and merge PR #38 fixed head `748deb1` -> deploy only `x-test-post` from merged main -> verify deployed source -> observe one natural AI Lab token-expiry/refresh cycle.
+- Stage 3A DB authority layer is already live and must not be reapplied; migration repair/db push remain forbidden.
+- no manual refresh/X post, no rollout-row changes, no second account pilot, no Kabumori credential migration.
+- if a natural expiry cycle cannot be observed safely in the available window, stop with OBSERVATION_PENDING rather than forcing it.
+- no additional Codex review unless new semantic changes appear.
+- recommended Claude model: Opus5.5（高）.
