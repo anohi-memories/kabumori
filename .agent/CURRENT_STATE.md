@@ -1080,3 +1080,12 @@
 - existing core migration-history debt must be inspected but not blindly repaired/pushed.
 - after K3, expected next phases are Stage 3B controlled second-account pilot -> Stage 3C multi-account pilot -> Stage 4 general rollout.
 - recommended Claude model: Opus5.5（高）.
+
+## Final K3 Stage 3A rollout foundation
+
+- verdict: **PASS for source-first implementation**.
+- PR #38 head `050d62f` adds exact-account OFF/PILOT/ENABLED rollout authority, pre-Vault eligibility gating, exact-account reauth semantics, non-secret health observability, and migration-history-safe deployment planning.
+- production mutation=0; Kabumori legacy path unchanged.
+- migration-history debt remains isolated; no blind db push/repair.
+- because Stage 3A introduces rollout authority + SECURITY DEFINER/RPC ACLs + grandfathering + a production migration path, H1 receives one final release-boundary review before production apply. No intermediate review loop is planned.
+- recommended Codex model: Sol（高）.
