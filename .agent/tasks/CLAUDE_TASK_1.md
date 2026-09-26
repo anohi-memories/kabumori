@@ -1,273 +1,299 @@
 # Claude Task 1
 
-- task_id: kabumori-branded-launch-screen-20260925
+- task_id: kabumori-onboarding-icon-integration-20260926
 - owner: claude
 - slot: claude-1
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: claude
 - priority: high
 - recommended_model: Sonnet5（高）
-- purpose: ユーザー決定「かぶモリ専用の起動画面を作る」に基づき、Expoテンプレのnative splash / AnimatedSplashOverlayを、既存の承認済みかぶモリアイコンを使ったブランド起動画面へ置き換える。新しい画像生成は行わない。
+- purpose: ユーザー確定の新しい「かぶモリ」正式アプリアイコンと、3枚のオンボーディング正本画像をExpo/React Nativeアプリへ安全に統合する。native splashは短い起動ブリッジとして新アイコンへ更新し、その後に初回のみ3画面オンボーディングを表示する。
 
-## User decision
+## User decision / visual source of truth
 
-User explicitly decided:
-- **dedicated Kabumori launch screen will be created**
-- do not keep the Expo template launch experience
-- do not generate a new AI artwork as part of this task
-- use the already approved Kabumori branding/icon as the visual source for this first implementation
-- final visual acceptance will happen on actual iPhone/TestFlight and can be refined later
+User approved the visual work as final. Do not redesign or regenerate any artwork in this task.
 
-## Approved source asset
+Final approved source assets are expected as user-provided local files:
 
-Use only the already merged approved artwork:
-- `assets/branding/kabumori-icon-master-2026-09-25.png`
-- approved source sha256: `31eda5379951b3d8f69676add4add33ecea6d799a48545ef076bd6235949a3f8`
-- installed icon: `assets/images/icon.png` (1024x1024, RGB opaque)
+1. app icon source
+   - expected filename: `a_clean_glossy_modern_app_icon_style_illustratio.png`
+   - expected size: 1254x1254
+   - expected mode: RGB
+   - expected sha256: `6b083c5156332665a1354199f824bc7590a05d79ec2fe1608ae286425ffd7d4e`
 
-Do not redraw, regenerate, recolor, or substitute another logo.
+2. onboarding 01
+   - expected filename: `1最終版_1179x2556.png`
+   - expected size: 1179x2556
+   - expected mode: RGB
+   - expected sha256: `de0f57bd48fb15a3c3cbf11480fed2106677a6729930f57b734f881051a988fb`
 
-## Goal
+3. onboarding 02
+   - expected filename: `2最終版_1179x2556.png`
+   - expected size: 1179x2556
+   - expected mode: RGB
+   - expected sha256: `2ac0fda449490867f6f0ced3f89b2023f43bdb424122c8aea8ce3aedb9b5e833`
 
-Replace the remaining Expo-template startup experience with a coherent Kabumori-branded launch flow:
+4. onboarding 03
+   - expected filename: `3最終版_1179x2556.png`
+   - expected size: 1179x2556
+   - expected mode: RGB
+   - expected sha256: `6dbbf10caad1eb0c23a4604186ce2474fd8472649f952d4e4662411b1ec93dd6`
 
-1. native/static splash
-2. in-app AnimatedSplashOverlay
-3. remove Expo logo / blue-template visual references from normal app launch
+These hashes are part of the acceptance contract. If the files found locally do not match, STOP rather than substituting or regenerating.
 
-The visual should be intentionally simple for the first real-device pass:
-- light cream / soft warm background compatible with the approved icon
-- approved Kabumori icon/logo centered
-- optional text `かぶモリ` only if it improves continuity
-- subtle, restrained fade/scale animation
-- no busy illustration
-- no new tagline unless already present in approved product copy
-- no green-theme lock beyond what the approved icon naturally uses
+## Mandatory startup / isolation
 
-## Mandatory startup
+1. Use a dedicated independent G1 worktree/checkout. Do not share another slot's working directory.
+2. Read `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, and this TASK.
+3. Fresh fetch `origin/main`; record starting SHA.
+4. Confirm G2 is done and personalized-reports is out of scope.
+5. Confirm no other active slot owns startup/onboarding files before editing.
+6. Inspect current startup/auth routing before deciding the insertion point.
+7. Search only reasonable user asset locations such as the repo-provided handoff area, `~/Downloads`, and `~/Desktop` for the four exact filenames above.
+8. Verify exact dimensions/mode/sha256 before copying any artwork into the repo.
+9. If any required asset is unavailable, STOP with `asset_input_required` and list the missing filename(s). Do not recreate them.
 
-1. Use an independent worktree.
-2. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / this TASK.
-3. Fresh fetch origin/main.
-4. Confirm G2 remains done and personalized-reports is out of scope.
-5. Confirm no G4/admin overlap.
-6. Verify approved icon asset sha before editing.
-7. Inspect current:
-   - app.json expo-splash-screen config
-   - assets/images/splash-icon.png
-   - src/components/animated-icon.tsx
-   - src/app/_layout.tsx
-   - assets/images/expo-logo.png usage
-8. If any other active slot is editing the same startup files, STOP.
+## Product flow
 
-## Implementation
+Target launch flow:
 
-### A. Native/static splash
+native/static splash
+→ existing in-app splash handoff
+→ onboarding v1 if not completed
+→ existing app/auth flow
 
-Replace Expo-template splash presentation.
-
-Preferred implementation:
-- use approved Kabumori icon asset or a deterministic derivative of it
-- use a light cream / warm neutral background that visually matches the icon
-- preserve correct aspect ratio
-- no baked rounded-corner tricks
-- no Expo logo
-- no blue Expo-template background
-
-If Expo splash asset constraints require a dedicated derivative:
-- derive deterministically from the approved icon/master
-- no generative modification
-- document exact dimensions and derivation
-
-### B. AnimatedSplashOverlay
-
-Replace current Expo-logo animation with Kabumori branding.
+Onboarding is explanatory UI, not a real market-analysis request.
 
 Requirements:
-- use approved icon/logo source
-- simple fade / slight scale / gentle reveal
-- short enough that it does not make startup feel slower
-- respect reduced-motion accessibility if the app already exposes it or React Native accessibility API makes this straightforward
-- overlay must disappear reliably after app initialization
-- no new network dependency
-- no font download dependency
-- no user-data dependency
-- no blocking of auth/session initialization
+- onboarding appears once per installation for version v1;
+- existing users without the v1 completion key may see it once after this update;
+- after completion, subsequent launches skip it;
+- auth/session initialization may continue normally behind the onboarding; do not couple onboarding completion to network/auth success;
+- onboarding must never trap the user if local persistence fails.
 
-### C. Remove template references
+Use an existing local persistence primitive already present in the app if suitable. Do not add a new heavy dependency solely for this feature without first reporting why it is necessary.
 
-Normal launch must no longer render:
-- `assets/images/expo-logo.png`
-- Expo blue startup background
-- Expo template mark
+Use a versioned key such as `kabumori:onboarding:v1` or an equivalent project-consistent key.
 
-Do not delete unrelated assets if they are used elsewhere.
-If `expo-logo.png` becomes truly unused, it may be removed only after confirming all references are gone.
+## A. New official app icon
 
-### D. Tests
+Replace the currently merged baseline icon with the new approved source.
 
-Add/update tests that assert:
-- splash config references Kabumori asset
-- Expo template splash asset/path is not referenced by launch config
-- AnimatedSplashOverlay references Kabumori asset, not expo-logo
-- no normal-launch Expo template reference remains
-- approved icon/master sha is unchanged
-- bundleIdentifier/slug/scheme/projectId remain unchanged
+Requirements:
+- preserve the approved artwork exactly;
+- create/install the required 1024x1024 opaque iOS/Expo asset by deterministic high-quality resize only;
+- no AI redraw, recolor, compositional change, crop that changes meaning, or added text;
+- keep bundle identifier / slug / scheme / projectId unchanged;
+- update any icon asset integrity tests/hashes accordingly.
 
-## Scope / forbidden
+Also update the current short native splash / `AnimatedSplashOverlay` to use the new official icon so app icon and startup branding are consistent.
 
-Allowed:
-- app.json splash config
-- splash asset(s)
-- src/components/animated-icon.tsx
-- narrowly related startup tests
-- removal of truly unused Expo launch asset after reference proof
+Do not turn the 3 onboarding screens into the native splash.
 
-Do not touch:
-- app icon itself
-- personalized-reports
-- Supabase
-- Auth
-- Netlify
-- X/admin
-- DB/schema/RPC
-- EAS credentials
-- TestFlight/App Store
-- production env
+## B. Onboarding image assets
 
-Do not run a production EAS build in this task.
+Store the three approved 1179x2556 images as immutable app assets using clear stable names, for example:
 
-## Verification
+- `assets/onboarding/01-brand.png`
+- `assets/onboarding/02-ai-analysis.png`
+- `assets/onboarding/03-report.png`
+
+The exact repo path may follow existing asset conventions, but document it.
+
+Do not:
+- regenerate;
+- recompress destructively;
+- alter text;
+- alter faces;
+- alter UI;
+- recolor;
+- stretch aspect ratio.
+
+Add tests or a deterministic verifier that pins their expected dimensions and sha256 values after ingress.
+
+## C. Three-screen onboarding behavior
+
+Implement a 3-page horizontally swipeable/paged onboarding.
+
+Pages:
+1. brand
+2. AI analysis
+3. report complete
+
+Requirements:
+- use the approved images as the visual source;
+- preserve aspect ratio with no geometric distortion;
+- no OS status bar/time/Wi-Fi/battery graphics are baked into these approved images;
+- adapt safely across supported iPhone viewport sizes without cutting critical text/faces/UI;
+- use a neutral background matching the artwork if any letterboxing is required;
+- no network calls to display onboarding.
+
+### Page indicator
+
+The final artwork intentionally has no baked-in page dots.
+
+Render page dots natively in React Native:
+- 3 dots;
+- active dot dark/brand green;
+- inactive dots light neutral;
+- identical size/spacing/vertical position across all pages;
+- update from the actual current page;
+- accessibility-hidden if redundant, or expose a concise page-position label.
+
+Do not modify the source images to add dots.
+
+## D. Page 2 analysis-progress animation
+
+The progress bar visible in `2最終版_1179x2556.png` is explanatory artwork, not real progress.
+
+User approved adding a subtle native animation so the onboarding feels alive.
+
+Implement only if it can be overlaid robustly without visibly damaging the artwork:
+- cover/mask the baked bar region with a neutral patch matching the local background;
+- render a native track + green indeterminate animation in the same visual position;
+- use normalized/image-relative positioning so it tracks the rendered image viewport;
+- use a slow restrained loop; no percentage;
+- respect Reduce Motion by showing a static neutral state;
+- it must not represent actual AI/network progress.
+
+If exact overlay alignment cannot be made stable across supported device sizes without visible artifacts, keep the approved static bar and report why; do not alter the image.
+
+## E. Page 3 CTA
+
+The approved page 3 artwork already contains the visual `はじめる →` button.
+
+Provide a real accessible press target aligned to that visual:
+- do not duplicate the visible label;
+- overlay a transparent or visually neutral `Pressable` hit target on the approved CTA region;
+- accessibilityRole=`button`;
+- accessibilityLabel=`はじめる`;
+- adequate hit target;
+- on press: persist onboarding-v1 completion, then continue into the existing app/auth flow.
+
+Do not change the artwork just to recreate the button in code.
+
+## F. Swiping / interaction
+
+- horizontal paging must feel native and smooth;
+- track page index deterministically;
+- page 1/2 can advance by swipe;
+- page 3 CTA completes;
+- no accidental completion from swipe alone;
+- no blocking animation longer than the user's gesture;
+- handle orientation policy consistent with the current app; do not introduce new landscape support.
+
+## G. Existing startup semantics
+
+Preserve existing startup/auth correctness from PR #36.
+
+Do not materially change:
+- auth/session initialization semantics;
+- Supabase initialization;
+- routing boundaries;
+- account state;
+- deep-link/reset-password handling.
+
+The onboarding layer may sit visually before the existing app flow, but must not become a new auth dependency.
+
+If implementation requires material startup/auth semantic changes, STOP and report before proceeding.
+
+## H. Tests / verification
+
+At minimum verify:
+
+1. asset integrity
+   - new icon master sha/dimensions;
+   - installed 1024x1024 icon is opaque and derived deterministically;
+   - all three onboarding assets are exactly 1179x2556 and sha-pinned.
+
+2. startup
+   - native splash / AnimatedSplashOverlay use the new official icon;
+   - Expo logo/template does not return;
+   - app identity fields unchanged.
+
+3. onboarding state
+   - first run / absent v1 key shows onboarding;
+   - completion persists v1 key;
+   - subsequent run skips onboarding;
+   - persistence failure cannot trap the user.
+
+4. paging
+   - 3 pages;
+   - page index / native dots stay synchronized;
+   - page 3 CTA completes only from user action.
+
+5. accessibility
+   - page 3 CTA accessible;
+   - Reduce Motion behavior for page-2 progress animation;
+   - no inaccessible duplicate CTA label.
+
+6. responsive layout
+   - verify at representative small and large iPhone dimensions;
+   - no critical text/face/CTA clipping;
+   - no image stretching.
 
 Run:
-- targeted startup/splash tests
-- full app tests
-- src TypeScript
-- `npx expo config --json`
-- real `expo prebuild --platform ios --no-install --clean` if safe in isolated worktree
-- inspect generated iOS splash/AppIcon references
-- Expo web export
-- git diff --check
+- targeted onboarding/startup tests;
+- full app tests;
+- `npx tsc --noEmit` in app/src scope as currently used;
+- `npx expo config --json`;
+- safe iOS prebuild verification in isolated worktree if needed;
+- Expo web export if part of the existing test suite;
+- `git diff --check`.
 
-Clean generated native artifacts before completion if not tracked.
+Do not run a production EAS build or TestFlight submission in this task.
+
+## Scope
+
+Allowed:
+- app icon assets/config;
+- current splash asset references;
+- onboarding image assets;
+- onboarding components/screens/state;
+- narrowly related app root/layout integration;
+- local persistence for onboarding-v1;
+- tests/docs directly related to this feature.
+
+Forbidden:
+- personalized-reports;
+- Supabase DB/schema/RPC/Edge Functions;
+- Auth policy changes;
+- Netlify/Vercel;
+- X/admin;
+- EAS credentials;
+- production environment changes;
+- TestFlight/App Store submission;
+- unrelated refactors.
 
 ## Review policy
 
-This is UI/branding/startup work.
+This is primarily UI/asset/local-state work.
+
 Per reduced-review policy:
-- no Codex review required unless a genuine auth/session/startup correctness risk is introduced
-- if startup initialization semantics must change materially, STOP and report before doing so
+- no automatic Codex review is required if scope stays within the constraints above and tests pass;
+- if auth/session semantics, deep-link routing, security-sensitive persistence, or other high-risk boundaries must change, STOP and report for reclassification.
 
 ## Completion / K1
 
-Report:
-- exact visual implementation
-- changed files
-- source asset hashes/dimensions
-- animation behavior/duration
-- proof Expo branding is gone from normal launch
-- tests
-- PR/head
-- production mutation=0
-- whether ready for first real-iPhone/TestFlight visual acceptance
-
-When complete:
-- status -> review_required
-- next_owner -> chatgpt
+On completion:
+- status -> `review_required`
+- next_owner -> `chatgpt`
 - STOP for K1.
 
-## Report — G1 result
-
-- task_id: kabumori-branded-launch-screen-20260925
-- result: **source-complete. PR #36 is open and unmerged.** Production mutation = 0; no EAS build was run.
-- fresh main at task start: `e3ad303`; in_progress control commit `2724689`.
-- G2/G3/G4 overlap: none (`personalized-reports` untouched; `.agent/CURRENT_STATE.md` shows G3/G4 both on x-autopost/admin work).
-- Approved icon sha verified before editing: `assets/branding/kabumori-icon-master-2026-09-25.png` = `31eda5379951b3d8f69676add4add33ecea6d799a48545ef076bd6235949a3f8`, matching the task's stated value. `assets/images/icon.png` (the installed 1024×1024) confirmed 1024×1024, no alpha, unchanged.
-
-### Exact visual implementation
-
-Both phases of the launch experience now show the identical approved icon on the identical background, at the identical size — the same continuity property the Expo template had, just with Kabumori's own artwork:
-
-- **Native splash** (`app.json` → `expo-splash-screen`): `image: ./assets/images/icon.png`, `backgroundColor: #eef3ed`, `imageWidth: 200`.
-- **`AnimatedSplashOverlay`**: same icon (`require('@/assets/images/icon.png')`), same `#eef3ed` background (`SPLASH_BACKGROUND` constant), same 200×200 size (`SPLASH_ICON_SIZE` constant, kept equal to `imageWidth` on purpose so there is no size jump at handoff).
-- No new text/tagline added — the icon's own illustration already contains 「かぶモリ」, so adding a separate label would have been redundant continuity, not additional continuity (the task's own qualifier: "only if it improves continuity").
-- `#eef3ed` is not a new colour: it is `KABUMORI_COLORS.light.soft`/`accentSoft` and is already `auth-screen.tsx`'s own `safeArea` background, so the splash now matches the very next screen the user usually sees (the login form) instead of clashing with it the way Expo blue did.
-
-### Animation behaviour / duration
-
-- Exit animation: fade (`opacity 1 → 0`) + a gentle scale-down (`scale 1 → 0.94`), `Easing.out(Easing.cubic)`, **600ms** (unchanged duration from before — "does not make startup feel slower" was already true and stays true). The old bouncy `Easing.elastic(0.7)` exit is gone, replaced with a restrained ease-out, matching "subtle, restrained."
-- The native-splash-hide handoff mechanics are unchanged: `onLayout` on the static phase-1 `View` still calls `SplashScreen.hideAsync()`, then decides the next phase.
-- **Reduce Motion**: `AccessibilityInfo.isReduceMotionEnabled()` is read once on mount into a `useRef` (not `useState`) specifically so the decision made inside `onLayout`'s `.finally()` callback always sees the latest fetched value regardless of React re-render/closure timing. When Reduce Motion is on, the animated `Animated.View`/`entering` path is skipped entirely and the overlay hides instantly through the exact same `setVisible(false)` call the animated exit's finished-callback uses — chosen deliberately over Reanimated's own `.reduceMotion()` modifier, because I could not verify in this environment that a `reduceMotion`-disabled `entering` keyframe still reliably invokes `withCallback`'s finished callback, and an overlay that fails to disappear would be a worse outcome than one that disappears without a fade.
-- No network dependency, no font download, no user-data dependency. `AuthGate`'s own `loading` gate (auth/session initialization) is architecturally separate and untouched — the overlay's removal timing does not depend on it and vice versa.
-
-### Changed files (PR #36, branch `claude1/branded-launch-screen`, head `5b72e57`)
-
-- `app.json` — 3 fields in the `expo-splash-screen` plugin config
-- `src/components/animated-icon.tsx` — `AnimatedSplashOverlay` rewritten (asset, colour, size, easing, Reduce Motion); `AnimatedIcon` (dead code, nothing imports it) and its styles are untouched
-- `tests/app/app-splash_test.ts` (new, 9 tests)
-- `tests/app/app-icon_test.ts` — its now-obsolete "splash/overlay untouched" assertion (correct only for the prior, icon-only task) replaced with an identity-fields-unchanged pin
-- `docs/mobile-release/RELEASE_READINESS.md` — A1/A1b marked done (source), Area F moved to READY, §4 item 1 rewritten around real-device acceptance
-
-### Source asset hashes/dimensions
-
-- Master (unchanged by this task): `assets/branding/kabumori-icon-master-2026-09-25.png`, 1254×1254, sha256 `31eda537…49a3f8` — re-verified, not re-copied.
-- Installed icon (unchanged by this task, only newly reused as the splash image): `assets/images/icon.png`, 1024×1024, no alpha — re-verified.
-- No new image file was created. The splash uses the existing 1024×1024 file directly; Expo's own `expo-splash-screen` plugin performs its native scaling to `imageWidth: 200` at prebuild time, which is exactly the same mechanism the old template config used, just pointed at a different source file and width.
-
-### Proof Expo branding is gone from a normal launch
-
-- `grep -rn expo-logo` and `#208AEF` inside `AnimatedSplashOverlay`'s own function body: none. (The function body was isolated with a source slice up to the next top-level `const keyframe = ...` declaration, and every assertion in `app-splash_test.ts` that checks this operates on that isolated slice, not the whole file, so it cannot accidentally pass by matching the untouched `AnimatedIcon` export below it.)
-- `src/app/_layout.tsx`: contains no `expo-logo` reference (it never did directly; it only imports `AnimatedSplashOverlay`).
-- A real `npx expo prebuild --platform ios --no-install --clean` regenerated the native splash assets from scratch:
-  - `ios/app/Images.xcassets/SplashScreenBackground.colorset/Contents.json`: RGB `(0.9333, 0.9529, 0.9294)` = `#eef3ed` exactly.
-  - `ios/app/Images.xcassets/SplashScreenLogo.imageset/image.png`: 200×200. Opened and visually confirmed it is the approved Kabumori icon (newspaper/chart/leaf/「かぶモリ」), not the Expo mark.
-- `assets/images/expo-logo.png` is **not "truly unused"**, so per the task's own conditional it was not deleted: the dead, unimported `AnimatedIcon` export in the same file still references it. This is stated explicitly, not silently left ambiguous.
-- `assets/images/splash-icon.png` is now unreferenced by any config but was left on disk, following the same precedent the icon-integration task set with `assets/expo.icon` (minimal diff, nothing deleted that wasn't proven safe with more confidence than "no current reference").
-
-### Tests
-
-| Check | Result |
-| --- | --- |
-| `deno test --no-check --no-lock --allow-read --allow-write --allow-env tests/app/ supabase/functions/account-delete/ apps/kabumori-web/build_test.ts` | **135 passed / 0 failed** (126 existing + 9 new) |
-| `npx tsc --noEmit`, `src/` scope | **0 errors** |
-| `npx expo config --json` | splash plugin config resolves to the new image/colour/width |
-| `npx expo prebuild --platform ios --no-install --clean` | generated splash colorset/imageset correct, verified above |
-| `npx expo export --platform web`, dummy non-secret env | PASS, **10 static routes (unchanged)** |
-| `git diff --check` | PASS |
-
-**Two assertions were verified against a real regression, not just written and trusted:** I temporarily commented out `scheduleOnRN(setVisible, false)` — the corresponding test failed; separately removed the entire Reduce-Motion branch (defaulting to the animated path always) — that test failed too. Both were then reverted and re-confirmed passing. This follows the same discipline as the earlier `ensure_my_profile` migration proof's negative control.
-
-**Side effect caught and discarded, not shipped:** `expo prebuild` again silently rewrote `package.json`'s `android`/`ios` npm scripts to the bare-workflow form. Reverted with `git checkout -- package.json`, and the generated `ios/`/`android`/`.expo/` directories were deleted before committing — same handling as the two prior tasks that ran a real prebuild.
-
-### Production mutation = 0
-
-No EAS build, no EAS credential/env mutation, no TestFlight/App Store Connect action, no Supabase/Auth/Netlify/X/admin change, no `personalized-reports` edit, no DB/schema/RPC change.
-
-### Ready for first real-iPhone/TestFlight visual acceptance?
-
-**Yes, source-side.** The launch screen is source-complete and verified through a real `expo prebuild`, the same mechanism a production build uses to generate native assets. Per this task's own framing, this does **not** constitute final visual acceptance — that still requires the user seeing it on an actual iPhone via a separately authorized real-device build. If it needs a refinement pass after that (e.g. a dedicated splash derivative distinct from the flat app icon, or adding a wordmark), it can be revisited without redoing this decision.
-
-
-## Final K1 — branded launch screen
-
-Verdict: **PASS**.
-
-Accepted:
-- PR #36 head `5b72e5784b07ebf7871879471f53fe06e6f072eb`
-- merged -> `b869fb557f009ca5817b6d2a853d529bd29c20c2`
-- native splash now uses approved Kabumori icon on `#eef3ed`
-- AnimatedSplashOverlay uses the same approved icon/background/size
-- Expo blue / Expo logo are gone from the normal launch path
-- fade + slight scale exit, 600ms
-- Reduce Motion handled
-- 135/135 tests, src tsc 0, expo config/prebuild/web export/diff PASS
-- app identity fields unchanged
-- production mutation 0
-- no Codex review required under reduced-review policy
-
-Important:
-This implementation is the simple approved-icon baseline. The newer visual concept discussed in ChatGPT (Yume-chan + robot artwork) is not yet wired into the app and remains a later design decision/refinement.
-
-Next gate:
-- real iPhone/TestFlight visual acceptance
-- if user later approves a custom launch artwork, create a separate G1 refinement task rather than changing this accepted baseline implicitly.
+Report must include:
+- exact asset source paths, dimensions and hashes;
+- final installed app-icon hash/dimensions;
+- onboarding asset repo paths;
+- persistence key and first-run behavior;
+- page-2 progress behavior and Reduce Motion behavior;
+- page-3 CTA behavior;
+- changed_files;
+- tests;
+- commit_hash / branch / PR;
+- push state;
+- deploy/build state;
+- production mutation;
+- remaining issues;
+- real-iPhone/TestFlight visual acceptance still required or not;
+- safety checks;
+- next recommendation.
