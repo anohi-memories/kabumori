@@ -75,11 +75,11 @@
 - owner: claude
 - slot: claude-4
 - status: ready
-- task_id: x-admin-pr33-bounded-real-auth-e2e-resume-20260926
+- task_id: x-admin-pr33-invite-otp-purpose-binding-fix-20260926
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: assigned; resume PR #33 bounded real recovery+invite E2E after user saved temporary Gmail Custom SMTP; recommended Opus5.5（高）
+- allocation: assigned; implement secure invite-purpose binding for real invite `amr=otp` without allowing generic OTP; recommended Opus5.5（高）
 
 ## Deferred
 
