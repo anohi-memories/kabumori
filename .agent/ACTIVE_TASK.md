@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: done
 - task_id: x-universal-oauth-refresh-production-stage0-2-20260926
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: assigned; production Stage 0→1→2 rollout for universal OAuth refresh and one controlled AI Lab recovery; recommended Opus5.5（高）
+- allocation: closed; Final K3 PASS-WITH-DEVIATION — AI Lab production OAuth refresh recovered and normal scheduled posts succeeding; gate currently ON by user decision; Stage 3/4 not approved
 
 ## Claude G4
 - owner: claude
