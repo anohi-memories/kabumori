@@ -3,8 +3,8 @@
 - task_id: kabumori-onboarding-icon-integration-20260926
 - owner: claude
 - slot: claude-1
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: ユーザー確定の新しい「かぶモリ」正式アプリアイコンと、3枚のオンボーディング正本画像をExpo/React Nativeアプリへ安全に統合する。native splashは短い起動ブリッジとして新アイコンへ更新し、その後に初回のみ3画面オンボーディングを表示する。
@@ -297,3 +297,110 @@ Report must include:
 - real-iPhone/TestFlight visual acceptance still required or not;
 - safety checks;
 - next recommendation.
+
+## Report — G1 result
+
+- task_id: kabumori-onboarding-icon-integration-20260926
+- result: **all 4 assets found, verified, and integrated. PR #39 is open and unmerged.** Production mutation = 0; no EAS build, no TestFlight.
+- fresh main at task start: `f624485`; in_progress control commit `7c9979a`.
+- G2/G3/G4 overlap: none (`.agent/CURRENT_STATE.md` shows G2 `done`, G3/G4 both on x-autopost/admin work; `personalized-reports` untouched).
+
+### Exact asset source paths, dimensions, hashes
+
+All four found at `~/Desktop` under the exact filenames the task specified. Verified with `shasum -a 256` / `file` before any copy, matching the acceptance contract exactly:
+
+| Asset | Path found | sha256 | Dimensions |
+| --- | --- | --- | --- |
+| icon | `~/Desktop/a_clean_glossy_modern_app_icon_style_illustratio.png` | `6b083c51…5ffd7d4e` | 1254×1254, RGB, no alpha |
+| onboarding 01 | `~/Desktop/1最終版_1179x2556.png` | `de0f57bd…881051a9` | 1179×2556, RGB |
+| onboarding 02 | `~/Desktop/2最終版_1179x2556.png` | `2ac0fda4…4a8ce3ae` | 1179×2556, RGB |
+| onboarding 03 | `~/Desktop/3最終版_1179x2556.png` | `6dbbf10c…d4662411` | 1179×2556, RGB |
+
+No `asset_input_required` STOP was needed. A second, unrelated file (`アイコンん候補.png`) also existed on the Desktop — not used, since it didn't match any expected filename.
+
+### Final installed app-icon hash/dimensions
+
+`assets/images/icon.png`: 1024×1024, RGB, no alpha, regenerated via deterministic `sips -z 1024 1024` from the new master. No crop was needed (source already square). No AI redraw/recolor.
+
+### Onboarding asset repo paths
+
+`assets/onboarding/01-brand.png`, `assets/onboarding/02-ai-analysis.png`, `assets/onboarding/03-report.png` — byte-for-byte copies, hash-verified after copy too.
+
+### Persistence key and first-run behavior
+
+- Key: `kabumori:onboarding:v1` in AsyncStorage (already an app dependency — `src/lib/supabase.ts` uses it for the session; no new dependency added, per the task's explicit ask to report before adding one).
+- First run / no key present → `completed === false` → onboarding shows.
+- On page-3 CTA press → `complete()` sets local state to `true` immediately (UI proceeds without waiting) and writes `'true'` to storage best-effort.
+- Subsequent launches → stored `'true'` read back → onboarding skipped.
+- A storage read failure resolves to `completed = true` (fails **open**: skip onboarding, never trap the user behind a broken local store). A storage write failure is swallowed (`.catch(() => {})`); worst case is onboarding reappearing once on the next cold start, never a block.
+
+### Page-2 progress behavior and Reduce Motion behavior
+
+**Not implemented — deliberately, per the task's own explicit fallback.** The approved page-2 artwork's own static progress bar is kept exactly as designed, unmodified. Reasoning: overlaying a native indeterminate bar precisely aligned to the baked-in bar's position requires that alignment to be verified across every supported iPhone size, which cannot be responsibly confirmed from source alone in this environment — a misaligned patch would visibly damage approved artwork, a worse outcome than no animation. This is documented in `RELEASE_READINESS.md` with the exact reason and the reusable mechanism (`imageFractionToContainerRect`, already implemented and tested for the page-3 CTA) for a future attempt with real-device verification. Since no animation was added for page 2, there is nothing there that needs Reduce Motion handling; no other new animation was introduced in onboarding either (paging is native `ScrollView` scrolling, not a custom `Animated` transition).
+
+### Page-3 CTA behavior
+
+An image-relative `Pressable` (`accessibilityRole="button"`, `accessibilityLabel="はじめる"`) is positioned via `imageFractionToContainerRect()` over the approved artwork's own visible "はじめる →" button — not a re-drawn duplicate label. The fractional region (`x:0.18, y:0.787, width:0.64, height:0.056`) was measured against the actual page-3 source image and padded so the computed on-screen hit target is confirmed ≥44pt (Apple's minimum) on both a small (375×812) and large (430×932) representative iPhone size — pinned by test, verified with a negative control. Pressing it calls `onComplete` → `completeOnboarding` → the hook's `complete()`.
+
+### Changed files (PR #39, branch `claude1/onboarding-icon-integration`, head `a781240`)
+
+New:
+- `assets/branding/kabumori-icon-master-2026-09-26.png`
+- `assets/onboarding/{01-brand,02-ai-analysis,03-report}.png`
+- `src/components/onboarding-screens.tsx`
+- `src/hooks/use-onboarding.ts`
+- `src/lib/onboarding-layout.ts`, `src/lib/onboarding-pages.ts`
+- `tests/app/{onboarding-assets,onboarding-layout,onboarding-integration,use-onboarding}_test.ts`
+
+Modified:
+- `assets/images/icon.png` (new artwork)
+- `src/app/_layout.tsx` (onboarding gate)
+- `docs/mobile-release/RELEASE_READINESS.md` (new icon/onboarding rows, page-2 deferral note)
+
+Removed:
+- `tests/app/app-icon_test.ts` — superseded (pinned the now-old 2026-09-25 hash); its coverage (icon dims/alpha, config wiring, identity fields) is carried forward, updated to the new hash, in `onboarding-assets_test.ts`.
+
+The 2026-09-25 icon master file itself was **not deleted**, only its test pin removed — it remains on disk as an inert historical record, consistent with this project's established precedent (`assets/expo.icon`, `splash-icon.png`).
+
+### Tests / exact results
+
+| Check | Result |
+| --- | --- |
+| `deno test --no-check --no-lock --allow-read --allow-write --allow-env tests/app/ supabase/functions/account-delete/ apps/kabumori-web/build_test.ts` | **155 passed / 0 failed** (135 before this task − 4 removed + 24 new = 155: `onboarding-layout_test.ts` 7, `onboarding-assets_test.ts` 7, `onboarding-integration_test.ts` 6, `use-onboarding_test.ts` 4) |
+| `npx tsc --noEmit`, `src/` scope | **0 errors** |
+| `npx expo config --json` | unaffected fields unchanged; icon/splash already correct with no config edit |
+| `npx expo prebuild --platform ios --no-install --clean` | generated `AppIcon.appiconset`/`SplashScreenLogo.imageset` both visually confirmed to be the new artwork, not the prior icon |
+| `npx expo export --platform web`, dummy non-secret env | PASS, **10 static routes (unchanged)**; the three onboarding `require()`s resolved cleanly (a failure there would have broken the whole export) |
+| `git diff --check` | PASS |
+
+**Negative controls run** (temporarily broke the code, confirmed the corresponding test failed, then restored and reconfirmed passing): the CTA hit-target ≥44pt assertion (shrank the fraction, test caught it), and the onboarding hook's fail-open branch (flipped `true`→`false` in the catch handler, test caught it).
+
+**Side effect caught and discarded, not shipped:** `expo prebuild` again silently rewrote `package.json`'s `android`/`ios` npm scripts to the bare-workflow form. Reverted with `git checkout -- package.json`; generated `ios/`/`android`/`.expo/` deleted before committing — same handling as every prior task that ran a real prebuild.
+
+### Production mutation
+
+**0.** No EAS build, no EAS credential/env mutation, no TestFlight/App Store Connect action, no Supabase/Auth/Netlify/X/admin change, no `personalized-reports` edit, no DB/schema/RPC change.
+
+### Remaining issues
+
+1. Page-2 animated progress overlay not implemented (documented above and in `RELEASE_READINESS.md`, with the reusable mechanism for a future attempt).
+2. The exact fractional region for the page-3 CTA (`ONBOARDING_CTA_FRACTION`) was measured from a single visual read of the source image, not pixel-picked with an image tool. It is generously padded and test-confirmed to land inside the artwork and clear the 44pt minimum on two representative sizes, but should be treated as "verified good enough to ship for review," not "pixel-perfect" — real-device visual acceptance (below) is exactly the point at which any needed nudge would be found.
+3. **One design decision flagged explicitly for K1's judgment**, not silently assumed correct: the `loading` gate in `_layout.tsx` now also waits for the onboarding flag's local read (`loading || onboardingCompleted === null`) before revealing any content, to avoid a flash-then-jump UI bug. This is a change to the exact condition of an existing gate. My reasoning for why this does not materially change auth/session semantics is in the PR description and the commit message; I did not treat my own reasoning as sufficient to skip flagging it.
+
+### Real-iPhone/TestFlight visual acceptance
+
+**Still required, not decided by this task.** The task's own framing: "final visual acceptance will happen on actual iPhone/TestFlight and can be refined later." Everything here is source-complete and verified through a real `expo prebuild` + `expo export`, the same mechanisms a production build uses to generate/bundle assets, but none of it has been seen on an actual device.
+
+### Safety checks
+
+- No `personalized-reports`, Supabase DB/schema/RPC/Edge Function, Auth policy, Netlify/Vercel, X/admin, or EAS-credential file was touched (`git diff --stat` against `f624485` covers only the files listed above).
+- No secret/credential value appears in any new file (assets are images; source files contain no keys).
+- `git diff --check` clean; no whitespace/EOF issues.
+- Auth/session initialization: unchanged except for the one flagged `loading` condition change above.
+- Deep-link/reset-password handling: unchanged; the recovery-link early return in `_layout.tsx` was re-confirmed (by test) to still run before onboarding is ever considered.
+
+### Next recommendation
+
+1. K1 review of PR #39, with particular attention to the one flagged `loading`-gate change in section G.
+2. On PASS: merge, then a separately authorized real-device build (development/internal EAS profile, not production) so the operator can see the new icon, launch screen, and onboarding flow, and confirm the page-3 CTA hit target lands correctly.
+3. If page-2's animation is still wanted after that, it needs the bar's fractional region measured precisely (ideally from the design source, not a screenshot) and a real-device check before implementing the overlay — not source-only work.
