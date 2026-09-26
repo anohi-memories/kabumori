@@ -3,8 +3,8 @@
 - task_id: x-universal-oauth-refresh-stage3a-rollout-foundation-20260926
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Opus5.5（高）
 - purpose: AI Labでproduction実証済みのUniversal X OAuth refreshを、将来の全ユーザー運用へ安全に広げるためのStage 3A rollout foundationを実装する。全ユーザー一括ONはしない。
@@ -274,3 +274,18 @@ STOP for K3.
 - safety_checks: G3 専用 worktree のみ、apps/admin・PR #33 不接触、token/secret 値・secret ID は表示・記録なし、Kabumori legacy 経路はコード不変
 - remaining_issues: Stage 3B（2つ目の実アカウントを pilot に。そのアカウント用の投稿処理が x-test-post にまだない）、3C（複数アカウント pilot、stuck/reauth/block のアラート、G4 管理画面から setter/health を呼ぶ）、Stage 4（新規接続アカウントの既定方針、ユーザー向け再接続フロー、履歴正規化、v2 dispatcher 有効化）。詳細は `x_account_refresh_rollout.md` §7–8。
 - next_recommendation: ChatGPT K3 → Codex レビュー（H1 が空いていれば、Sol高、範囲は rollout 判定・ACL・live begin 置換・grandfathering・移行手順）。承認後に本番適用は別 TASK（手順は同文書 §7）。
+
+
+## Final K3 — Stage 3A rollout foundation
+
+Verdict: **PASS for source-first implementation**.
+
+- PR #38 head: `050d62f`.
+- explicit account-level rollout authority implemented with OFF/PILOT/ENABLED semantics; row absence fails closed.
+- global env gate alone no longer suffices for newly eligible accounts once Stage 3A is applied.
+- exact-account eligibility is checked before Vault reads; no brand-first/first-row/cross-account fallback.
+- invalid_grant/terminal cases remain exact-account reauth/fail-closed.
+- non-secret operational health contract added; no token/secret identifiers exposed.
+- migration-history debt was analyzed but not repaired; no blind db push/repair authorized.
+- production mutation: 0.
+- because this change introduces DB rollout authority, SECURITY DEFINER/RPC ACLs, grandfathering, and a production migration path, one focused Codex review is required before any production apply. This is the single release-boundary review for Stage 3A, not an intermediate review loop.
