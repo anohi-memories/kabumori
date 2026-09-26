@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - task_id: x-oauth-refresh-stage3a-final-security-review-20260926
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: completed source review with one fail-closed fix on PR #38; C1 required before any separate production-apply task; recommended Sol（高）
+- allocation: closed; Final C1 PASS-WITH-FIX; PR #38 fixed head `748deb1`; source ready for separately authorized narrow production apply
 
 ## Codex H2
 - owner: codex
