@@ -782,6 +782,20 @@ function webSearchTool(allowedDomains: string[] | null): Record<string, unknown>
     : { type: "web_search", search_context_size: "low" };
 }
 
+// An unrestricted search (headline-trigger verification) has no tool-side domain filter, so the
+// instructions cannot say "allowed domains" without naming them: they name the citable outlets instead.
+// The code-side gates (source domains, NEWS_ARTICLE_HOSTS) are unchanged and remain authoritative.
+const UNRESTRICTED_OUTLET_RULE =
+  "候補にできる出典は Reuters（reuters.com）、AP（apnews.com）、Bloomberg（bloomberg.com）、日経（nikkei.com、asia.nikkei.com）、NHK（nhk.or.jp）の記事ページだけです。検索結果でこれらの報道機関の該当記事を探し、それ以外のサイトしか見つからない場合はcandidatesを空配列にします。";
+
+function namedOutletInstruction(line: string): string {
+  return line
+    .replace("許可ドメインの検索結果で実際に確認できた", "下記の報道機関の記事として検索結果で実際に確認できた")
+    .replace("許可ドメインで実際に確認できた", "下記の報道機関の記事で実際に確認できた")
+    .replace("実際に開いた許可ドメインのURL", "実際に開いた、下記の報道機関の記事URL")
+    .replace("対象ドメインは検索ツール側で既に制限されています。", "");
+}
+
 /** The Responses API request for one breaking_market query. Exported so a model comparison can send
  * byte-identical instructions/schema with only the model changed. */
 export function breakingMarketRequestBody(
@@ -813,7 +827,9 @@ export function breakingMarketRequestBody(
       "未確定・予定・観測記事・分析記事ではなく、既に発生・発表が確認された事実だけを対象にします。日本株や世界市場への影響が具体的に見込まれない軽微な話題は候補にしません。",
       "source_urlが無い、または検索結果で実際に開いていないURLを候補にしません。APIキーや秘密値は返しません。",
       "検索語のルール: site:演算子、ドメイン名、媒体名（Reuters、AP等）を検索語に入れません。対象ドメインは検索ツール側で既に制限されています。search topicの具体語からこの枠で最も重要な語を選び、12語程度までの短い英語の検索語にします。検索語には必ずrecency termsをそのまま含めます。",
-    ].join("\n"),
+    ].map((line) => (query.searchScope === "unrestricted" ? namedOutletInstruction(line) : line))
+      .concat(query.searchScope === "unrestricted" ? [UNRESTRICTED_OUTLET_RULE] : [])
+      .join("\n"),
     input: `search topic: ${query.searchQuery}\nrecency terms: ${breakingMarketRecencyTerms(now)}\nreference UTC: ${now.toISOString()}`,
     text: { format: { type: "json_schema", name: "breaking_market_candidates", strict: true, schema: {
       type: "object",

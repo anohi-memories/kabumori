@@ -108,7 +108,7 @@ export type TriggerItemRecord = {
   verifyQuery: string | null;
   verifyAttempted: boolean;
   verifySourceCount: number | null;
-  verifySourcesSample: Array<{ url: string | null; domain: string | null }>;
+  verifySourcesSample: Array<{ url: string | null; domain: string | null; urlDate?: string | null }>;
   /** Items the model returned and the non-zero reasons the gates dropped them (disallowed_domain, stale_published_at, ...). */
   verifyRawCandidateCount: number | null;
   verifyRejections: Record<string, number>;
@@ -519,8 +519,8 @@ export async function runHeadlineTriggerLane(input: {
       const result = await input.verify(verifyBreakingQuery(pending.verifyQuery, pending.category), now);
       verifyDiagnostics.push({ category: pending.category, diagnostics: result.diagnostics });
       item.verifySourceCount = result.diagnostics.searchSourceCount ?? null;
-      item.verifySourcesSample = (result.diagnostics.searchSourcesSample ?? []).slice(0, 3)
-        .map((source) => ({ url: source.url, domain: source.domain }));
+      item.verifySourcesSample = (result.diagnostics.searchSourcesSample ?? []).slice(0, 5)
+        .map((source) => ({ url: source.url, domain: source.domain, urlDate: source.urlDate }));
       item.verifyRawCandidateCount = result.diagnostics.rawCandidateCount;
       item.verifyRejections = Object.fromEntries(
         Object.entries(result.diagnostics.rejectionCounts ?? {}).filter(([, count]) => count > 0),
