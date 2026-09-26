@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: x-universal-oauth-refresh-stage3a-rollout-foundation-20260926
+- status: ready
+- task_id: x-universal-oauth-refresh-stage3a-production-apply-20260926
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: closed; Final K3 PASS for source-first Stage 3A at PR #38 `050d62f`; production mutation 0; one final release-boundary Codex review assigned before production apply
+- allocation: assigned; narrow production apply of reviewed Stage 3A rollout authority migration only, with exact grandfather/read-back gates; no Edge deploy or second-account pilot; recommended Opus5.5（高）
 
 ## Claude G4
 - owner: claude
