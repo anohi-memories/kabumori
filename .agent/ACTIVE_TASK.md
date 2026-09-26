@@ -44,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: done
 - task_id: kabumori-onboarding-icon-integration-20260926
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: assigned; approved new app icon + three 1179x2556 onboarding assets; local asset hash gate; native dots + page-3 CTA + optional page-2 indeterminate animation; recommended Sonnet5（高）
+- allocation: closed; Final K1 PASS, PR #39 merged -> `08355579ef8fd89e12e6723aed4674905440016a`; real-iPhone/TestFlight visual acceptance pending; no Codex review required
 
 ## Claude G2
 - owner: claude
