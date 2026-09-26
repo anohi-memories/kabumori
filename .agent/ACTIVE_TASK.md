@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: done
 - task_id: x-universal-oauth-refresh-stage3a-merge-edge-observe-20260926
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: assigned; merge reviewed PR #38, deploy Stage 3A x-test-post only, then observe one natural AI Lab expiry/refresh cycle; no second-account pilot; recommended Opus5.5（高）
+- allocation: closed; Final K3 PASS — PR #38 merged, x-test-post v125 live, natural AI Lab expiry refresh observed successfully; Stage 3A fully live; next Stage 3B second-account pilot
 
 ## Claude G4
 - owner: claude
