@@ -27,9 +27,12 @@ test("brand_post routing: AI Lab keeps its dispatcher; every other Vault-backed 
   assert.match(genericBlock, /if \(!xAuth\.vaultAccount \|\| !vaultAccountId\) throw new Error\("VAULT_BRAND_POST_ACCOUNT_REQUIRED"\);/u);
   assert.ok(genericBlock.indexOf("VAULT_BRAND_POST_ACCOUNT_REQUIRED") < genericBlock.indexOf("dispatchVaultAccountScheduledBrandPost({"));
   assert.match(genericBlock, /socialAccountId: vaultAccountId/u);
-  assert.match(genericBlock, /checkPublishAuthority: \(\) => checkVaultAccountPublishAuthority\(\{\s+supabaseUrl,\s+serviceRoleKey,\s+scheduledPostId: scheduledPost\.id,\s+socialAccountId: vaultAccountId,\s+brandId: vaultBrandPostBrandId,/u);
+  assert.match(genericBlock, /const checkGenericPublishAuthority = \(\) => checkVaultAccountPublishAuthority\(\{\s+supabaseUrl,\s+serviceRoleKey,\s+scheduledPostId: scheduledPost\.id,\s+socialAccountId: vaultAccountId,\s+brandId: vaultBrandPostBrandId,/u);
+  assert.match(genericBlock, /checkPublishAuthority: checkGenericPublishAuthority/u);
   assert.match(genericBlock, /completeVaultAccountBrandPost\(/u);
-  assert.match(genericBlock, /publishText: \(text\) => postToX\(xAuth, text\)/u);
+  assert.match(genericBlock, /publishText: \(text\) => postToX\(xAuth, text, undefined, undefined, checkGenericPublishAuthority\)/u);
+  const postToX = dispatcher.slice(dispatcher.indexOf("async function postToX("), dispatcher.indexOf("async function postThreadToX("));
+  assert.match(postToX, /auth\.vaultAccount\.send\(async \(accessToken\) => \{[\s\S]*?await beforeCreate\?\.\(\);\s+return requestXPost\(accessToken, text, replyToId, pollOptions, "manual"\);/u);
   assert.doesNotMatch(genericBlock, /recordAndCompleteAiLabBrandPost|oauth_token_store|X_OAUTH2_/u);
   // A confirmed X write whose completion is unconfirmed is never failed (and replayed).
   assert.match(genericBlock, /VaultAccountConfirmedPostCompletionError\) \{\s+\/\/[^\n]*\n\s+aiLabXPostConfirmedWithoutCompletion = true;/u);
