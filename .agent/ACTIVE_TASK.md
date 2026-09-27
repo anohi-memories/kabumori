@@ -74,12 +74,12 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: done
 - task_id: x-admin-pr33-bounded-invite-e2e-after-binding-secret-20260927
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: assigned; PR #33 secret-enabled Deploy Preview preflight + one bounded real invite E2E + cleanup; no merge/production deploy; recommended Opus5.5（高）
+- allocation: closed; technical E2E PASS, but invite is not a product requirement for this internal Admin; recovery-only scope should drive PR #33 merge decision
 
 ## Deferred
 
