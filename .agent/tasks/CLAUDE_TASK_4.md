@@ -3,8 +3,8 @@
 - task_id: x-admin-pr33-bounded-invite-e2e-after-binding-secret-20260927
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Opus5.5（高）
 - purpose: Netlify Deploy PreviewへADMIN_INVITE_BINDING_SECRETを設定後、PR #33のinvite-purpose bindingを実メール/実sessionで1回だけE2E検証する。generic OTPは許可せず、招待purpose bindingが同一user/sessionに正しく効くことを確認する。
@@ -408,3 +408,16 @@ STOP for K4.
 
 - status -> review_required
 - next_owner -> chatgpt
+
+
+## Final K4 — product-scope decision
+
+Verdict: **TECHNICAL PASS, but invite is not a product requirement for the current internal Admin**.
+
+- bounded invite E2E passed at PR #33 head `0cc48fe3ac1c376d747a74b6b31ea34990615805`.
+- current Admin is operated by one owner for two internal accounts; invited users are not part of the intended product model.
+- non-admin invited users cannot access the Admin anyway because `admin_users` remains the authority gate.
+- the real requirement is password recovery for the owner's own Admin login.
+- therefore no production invite configuration is required: do not set a Vercel invite-binding secret, do not repoint the production Invite template, and do not add invite users for this Admin.
+- PR #33 should be reconsidered as a recovery-only feature before merge; invite support is unnecessary attack surface/operational complexity.
+- Preview-only invite secret can be removed after the PR decision.
