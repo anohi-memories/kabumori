@@ -3,8 +3,8 @@
 - task_id: x-stage3b-second-account-pilot-final-review-20260927
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sol（高）
 - purpose: PR #41 Stage 3B second-account pilot preparationを、production pilot前の最終1回レビューとして検証する。途中レビューは増やさず、このcross-account publish境界・RPC・pilot契約をまとめて確認する。
@@ -89,3 +89,15 @@ Then:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for C1.
+
+
+## Final C1 — Stage 3B review
+
+Verdict: **FAIL**.
+
+- reviewed PR #41 head `cd7adf5d1eb5a91773f21c7d8959766e1dd38229`.
+- P1 design blocker: Stage 3A rollout mode gates refresh, not X publish. A valid access token could still post after pilot expiry/off/generation ceiling. Stage 3B therefore needs a separate explicit publish authority/timebox checked immediately before X create, with fail-closed revocation/rollback semantics.
+- P2 blocker: generic `complete_vault_account_brand_post` accepts AI Lab's own matching account/row; it must explicitly exclude AI Lab and retain a regression test.
+- other exact-account, ACL, refresh/race and migration-history boundaries were accepted.
+- production mutation=0; no source fix was pushed by H1.
+- returned to G3 for source-only correction and retest before any merge or production pilot.
