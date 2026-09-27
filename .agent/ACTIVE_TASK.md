@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: x-oauth-refresh-stage3a-final-security-review-20260926
+- status: ready
+- task_id: x-stage3b-second-account-pilot-final-review-20260927
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: closed; Final C1 PASS-WITH-FIX; PR #38 fixed head `748deb1`; source ready for separately authorized narrow production apply
+- allocation: assigned; one consolidated final review of PR #41 cross-account publish path + SECURITY DEFINER completion RPC + pilot isolation; recommended Sol（高）
 
 ## Codex H2
 - owner: codex
@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: done
 - task_id: x-universal-oauth-refresh-stage3b-second-account-pilot-prep-20260927
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: assigned; Stage 3B second-account pilot preparation only — candidate assessment, exact-account publish/content path, pilot tests and rollback plan; no production activation; recommended Opus5.5（高）
+- allocation: closed; Final K3 PASS for source/plan prep at PR #41 `cd7adf5`; candidate `yumeyoasobi` identified but owner/product-gated; production mutation 0
 
 ## Claude G4
 - owner: claude
