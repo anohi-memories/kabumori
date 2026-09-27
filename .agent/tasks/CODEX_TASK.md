@@ -1,82 +1,87 @@
 # Codex Task
 
-- task_id: x-oauth-refresh-stage3a-final-security-review-20260926
+- task_id: x-stage3b-second-account-pilot-final-review-20260927
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Sol（高）
-- purpose: PR #38 Stage 3A Universal OAuth Refresh rollout foundationを、production apply前の最終1回レビューとして検証する。途中レビューは増やさず、この完成物をまとめて確認する。
+- purpose: PR #41 Stage 3B second-account pilot preparationを、production pilot前の最終1回レビューとして検証する。途中レビューは増やさず、このcross-account publish境界・RPC・pilot契約をまとめて確認する。
 
 ## Scope
 
-Review exact PR #38 head `050d62f` and the Stage 3A task/report.
+Review exact PR #41 head `cd7adf5d1eb5a91773f21c7d8959766e1dd38229`.
 
 Focus only on:
-1. account-level rollout authority correctness
-2. OFF/PILOT/ENABLED semantics and fail-closed defaults
-3. exact-account isolation before any Vault read
-4. SECURITY DEFINER / owner / search_path / EXECUTE ACLs
-5. service_role-only mutation path
-6. grandfathering safety
-7. invalid_grant / reauth exact-account behavior
-8. stuck refresh / lease / reconnect-vs-commit safety
-9. observability contract not leaking token/secret identifiers
-10. live `begin_x_account_refresh_legacy_post` replacement semantics
-11. migration ordering and deployment plan given live-but-unrecorded core migration
-12. no Kabumori legacy regression
-13. no accidental broad rollout caused by global gate alone
+1. exact-account routing and no brand-first/first-row fallback
+2. AI Lab path unchanged
+3. Kabumori legacy path unchanged
+4. candidate/account/content ownership binding
+5. user-consent/admin-enable gates and fail-closed behavior
+6. new `complete_vault_account_brand_post` SECURITY DEFINER correctness
+7. owner/search_path/EXECUTE ACLs
+8. no cross-account completion/fingerprint/state mutation
+9. pilot OFF/PILOT/ENABLED behavior
+10. pilot expiry/generation ceiling/unresolved-error blocking
+11. invalid_grant/uncertain/lease/race isolation
+12. duplicate claim/post prevention
+13. migration ordering/deployment safety given existing migration-history debt
+14. Stage 3B activation/rollback plan safety
+15. whether owner/product gate is correctly separated from technical readiness
 
-## Review constraints
+## Constraints
 
 - read-only review by default
-- do not apply production migration
-- do not deploy Edge Functions
-- do not change env/secrets
-- do not enable any additional production X account
-- do not run migration repair/db push
-- do not touch G4/Admin Auth work
-- do not expose token/secret values or Vault secret identifiers
+- no production migration apply
+- no Edge deploy
+- no rollout/publish/brand/content-setting mutation
+- no token refresh
+- no X post
+- no migration repair/db push
+- no G4/Admin Auth changes
+- no secret/token/credential identifier exposure
 
 ## Required verification
 
-- fresh `origin/main`
-- exact PR head = `050d62f`
-- inspect migration and Edge diffs
-- rerun relevant source/DB tests where practical
-- verify disposable DB behavior for rollout isolation and ACLs
-- verify migration cannot accidentally replay the already-live core objects
-- verify row absence/off mode blocks before Vault access
-- verify grandfathering cannot enable an unrelated account
-- verify health RPC output excludes sensitive credential identifiers
-- verify migration-history plan is safe and explicitly separated from production execution
+- fresh origin/main
+- exact PR head unchanged
+- inspect all 8 changed files
+- rerun focused Deno tests
+- rerun disposable DB behavior/race/ACL tests
+- verify RPC cannot complete another brand/account row
+- verify no API-role EXECUTE leak
+- verify account/content mismatch stops before generation/X
+- verify AI Lab and Kabumori behavior remains unchanged
+- verify production pilot plan cannot broad-enable another account
+- verify migration does not depend on blind historical apply
 
 ## Fix policy
 
-If you find a small, unambiguous source-only P1/P2 issue within this scope, you may fix it directly on the PR branch and rerun tests.
+Small, unambiguous source-only P1/P2 issues may be fixed directly on PR #41 and retested.
 
 Do NOT:
-- broaden scope
-- alter product behavior outside Stage 3A
-- perform any production mutation
-- normalize migration history in production
+- broaden product scope
+- change candidate/product consent policy
+- activate production pilot
+- normalize migration history
 
-If a design-level issue is found, STOP and report it for G3.
+Design-level issue => STOP and report for G3.
 
 ## Completion / C1
 
 Report to `.agent/CODEX_REPORT.md`:
-- verdict: PASS / PASS-WITH-FIX / FAIL
-- exact reviewed head/fixed head
+- verdict PASS / PASS-WITH-FIX / FAIL
+- reviewed/fixed head
 - findings
-- ACL/security review
-- migration-history safety review
+- exact-account isolation review
+- RPC/ACL/security review
+- pilot/migration safety
 - tests
 - changed_files
 - commit/push if any
 - production_mutation=0
-- whether Stage 3A is ready for a separate production-apply TASK
+- whether PR #41 is technically ready for owner consent + separately authorized Stage 3B production pilot
 - remaining risks
 - next recommendation
 
@@ -84,16 +89,3 @@ Then:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for C1.
-
-
-## Final C1 — Stage 3A
-
-Verdict: **PASS-WITH-FIX**.
-
-- reviewed PR #38 head `050d62f57971c9d88420da993e9f839929d7197e`.
-- Codex fixed one P2 in proactive refresh handling; fixed head `748deb13a934129e5696ab5552401f547204b32c` pushed to PR #38.
-- unexpected refresh-start failures now stop before X create; only explicit rollout refusals and `X_REFRESH_IN_PROGRESS` may continue with a still-valid token.
-- rollout authority, ACLs, grandfathering, exact-account isolation, observability, reauth, stale-lease and migration-history safeguards accepted.
-- 655 Deno tests PASS plus disposable PostgreSQL behavior/ACL/race tests PASS.
-- production mutation=0.
-- source is ready for a separately authorized, narrow production-apply TASK.
