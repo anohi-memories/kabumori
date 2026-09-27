@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - task_id: x-stage3b-publish-authority-focused-rereview-20260927
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: focused PR #41 re-review PASS-WITH-FIX at `59f4f53`; awaiting C1; production mutation 0; recommended Sol（高）
+- allocation: closed; Final C1 PASS-WITH-FIX at PR #41 `59f4f53`; source-level Stage 3B boundary accepted, production pilot not activated
 
 ## Codex H2
 - owner: codex
