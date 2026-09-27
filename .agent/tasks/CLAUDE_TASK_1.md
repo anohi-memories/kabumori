@@ -524,3 +524,10 @@ User real-device acceptance of the corrected icon only: reinstall the new build 
 ### Next recommendation
 
 Send the user the install link above; once they confirm, this task (and its follow-up) is fully closed and the icon/onboarding visual-acceptance work is done end-to-end.
+
+## Report — G1 result (real-device icon acceptance: PASS)
+
+- Build 10e8610e-c2b2-4baf-a780-4e038c15f4f9 (source commit f04ccf35a3f2fcb273e5941f697dd2cb9111a81a) reinstalled by the user.
+- **User's exact response: 「アイコンOK」** — the corrected full-bleed icon now reaches the iOS home-screen mask naturally, no inner white frame / no double-rounded appearance.
+- This closes the icon full-bleed correction follow-up. Combined with the prior real-device PASS (icon/splash/onboarding, iPhone 17 Pro, all 7 checklist items), the icon/splash/onboarding visual-acceptance work for this feature area is now fully closed end-to-end.
+- Production mutation across the whole icon-correction follow-up: 0.

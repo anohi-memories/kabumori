@@ -44,10 +44,9 @@
 
 - H1: `review_required` — `x-oauth-refresh-stage3a-final-security-review-20260926`; PR #38 source-only PASS-WITH-FIX at head `748deb1` (unexpected proactive refresh-start failures now stop before X write); disposable DB/ACL/race and 655 X tests PASS; production apply/deploy remains separately gated; C1 required
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
-- G1: `review_required` — `kabumori-ios-internal-visual-qa-build-20260926` (follow-up: icon full-bleed correction)
-  - PR #40 merged (icon master + regenerated icon.png + test hash update), merge commit d2747c75ecbbe48ffeab77cc3827787cac888468.
-  - New EAS preview build 10e8610e-c2b2-4baf-a780-4e038c15f4f9 finished, source commit f04ccf35a3f2fcb273e5941f697dd2cb9111a81a. Install link: https://expo.dev/accounts/anohi-memoriess-team/projects/kabumori/builds/10e8610e-c2b2-4baf-a780-4e038c15f4f9
-  - Production mutation 0. Waiting on user real-device confirmation that the home-screen icon no longer shows a double/white frame.
+- G1: `review_required` — `kabumori-ios-internal-visual-qa-build-20260926` (icon full-bleed correction)
+  - **Real-device icon acceptance: PASS** ("アイコンOK"). Build 10e8610e-c2b2-4baf-a780-4e038c15f4f9 confirmed by the user: no white/double frame on the home screen.
+  - Icon/splash/onboarding visual-acceptance work for this feature area is now fully closed end-to-end. Production mutation 0. Ready for chatgpt to close out.
 - G2: `done` — `kabumori-pr34-shadow-merge-deploy-20260925`
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS
