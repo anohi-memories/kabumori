@@ -1,261 +1,273 @@
 # Claude Task 4
 
-- task_id: x-admin-pr33-invite-otp-purpose-binding-fix-20260926
+- task_id: x-admin-pr33-bounded-invite-e2e-after-binding-secret-20260927
 - owner: claude
 - slot: claude-4
-- status: done
-- next_owner: none
-- priority: high
+- status: ready
+- next_owner: claude
+- priority: critical
 - recommended_model: Opus5.5（高）
-- purpose: 実E2Eで確認されたSupabase invite token_hash経路の `amr.method=otp` を安全に扱えるよう、generic otpを許可せず、invite成功直後だけ短時間有効なサーバー側purpose bindingを付与してPR #33を修正する。
+- purpose: Netlify Deploy PreviewへADMIN_INVITE_BINDING_SECRETを設定後、PR #33のinvite-purpose bindingを実メール/実sessionで1回だけE2E検証する。generic OTPは許可せず、招待purpose bindingが同一user/sessionに正しく効くことを確認する。
 
-## Observed production behavior
+## Current state
 
-Bounded real E2E on PR #33 head `2528b5686bcbb3630fb636cec12162803f921f8f` showed:
+PR #33:
+- head: `0cc48fe3ac1c376d747a74b6b31ea34990615805`
+- source/tests K4: PASS
+- Admin/Auth tests: 103/103 PASS
+- generic otp/magiclink denied
+- signed invite-purpose cookie implemented
+- cookie bound to same user + same session
+- TTL <= 15 minutes
+- password-update success clears cookie
+- missing/short secret fails closed
+- PR remains unmerged
 
-- recovery E2E: PASS
-- invite via `verifyOtp({ token_hash, type: "invite" })`:
-  - session established
-  - actual `amr.method = otp`
-  - current reset gate correctly fails closed
-  - invite user cannot set password
+Operator actions already completed in this chat:
+- Netlify env `ADMIN_INVITE_BINDING_SECRET` created as sensitive secret
+- Deploy Preview context has a value
+- operator retried Deploy Preview #33 from latest branch commit
+- latest preview rebuild was started around 2026-09-27 19:26 JST
 
-Do NOT solve by adding generic `otp` or `magiclink` to the allowlist.
+Important:
+- Never read, print, log, expose or copy the secret value.
+- Do not ask the user to paste the secret.
 
-## Required design
+## Authorization
 
-Implement a narrow invite-purpose binding:
+User explicitly asked to place this G4 continuation task after configuring the Preview secret.
 
-1. In `/auth/confirm`, only after server-side `verifyOtp(type=invite)` succeeds:
-   - obtain the authenticated user/session identity
-   - issue a short-lived, signed, httpOnly, secure cookie marking **invite-purpose only**
-   - bind it to the authenticated user identity
-   - expiry must be no longer than the existing 15-minute recovery window
-   - SameSite must be appropriately restrictive for this same-site callback/reset flow
-   - do not place token_hash/auth code/JWT/password in the cookie
+Authorized:
+- read-only verification that the new PR #33 Deploy Preview rebuild succeeded
+- bounded Supabase Auth invite E2E for one disposable non-admin user
+- temporary Invite User email-template adjustment only if required to point the invite to the exact PR #33 Preview callback
+- send one invite
+- inspect resulting session claims/AMR without exposing tokens
+- verify invite-purpose cookie presence/attributes without exposing its value
+- set a disposable test password
+- logout/relogin
+- non-admin denial verification
+- restore template and delete disposable user
 
-2. In reset authorization:
-   permit password setup only when either:
-   - signed fresh AMR proves `recovery`, OR
-   - signed fresh AMR is `otp` AND the short-lived invite-purpose cookie is valid AND bound to the same current authenticated user.
+Not authorized:
+- PR #33 merge
+- Vercel production deploy
+- production Admin user modification
+- `admin_users` grant/mutation
+- wildcard redirect
+- mobile reset redirect change
+- Reset Password email-template change
+- service_role exposure
+- DB/RLS/RPC/migration changes
+- X/OAuth/Vault changes
+- unrelated G3 work
 
-3. The cookie must be:
-   - server-generated
-   - integrity protected
-   - not caller-controlled
-   - one-purpose only
-   - cleared after successful password update
-   - cleared on logout/signOut-confirmed path where appropriate
-   - expired/invalid/mismatched cookie => fail closed
+## Mandatory startup
 
-4. Generic OTP sessions without that server-issued invite binding must remain denied.
+1. Read:
+   - `.agent/ORCHESTRATION.md`
+   - `.agent/CURRENT_STATE.md`
+   - this TASK
+   - prior G4 invite-purpose report
+   - prior C1/Auth review reports relevant to PR #33
+2. Use independent G4 worktree/checkout.
+3. Fresh fetch `origin/main`.
+4. Read current Supabase skill.
+5. Fetch current Supabase changelog index and current docs relevant to:
+   - Auth invite / verifyOtp
+   - sessions / getClaims
+   - password update / signOut
+   - email templates / redirect URLs
+6. Verify PR #33 exact head is still `0cc48fe3ac1c376d747a74b6b31ea34990615805` or stop on semantic drift.
+7. Do not touch G3/PR #41.
 
-5. Keep the existing 15-minute submit-time freshness recheck immediately before `updateUser`.
+## Stage 0 — Preview preflight
 
-## Security constraints
+Verify the newly retried Deploy Preview #33:
+- build completed successfully
+- exact PR #33 head is deployed
+- Preview callback URL remains:
+  `https://deploy-preview-33--shiny-kheer-77a154.netlify.app/auth/confirm`
+- no production deploy occurred
+- no wildcard redirect was added
+- mobile `kabumori://reset-password` redirect unchanged
+- Reset Password template unchanged
 
-- no generic otp allowlist
-- no magiclink allowlist
-- no user_metadata/app_metadata for this purpose
-- no client-stored boolean as authority
-- no token_hash/JWT/auth code/password in cookie or URL beyond existing provider callback flow
-- no service_role in client
-- no admin_users mutation
-- admin_users remains sole Admin gate
-- no open redirect
-- no account enumeration regression
-- mobile reset flow unchanged
-- shared Reset Password template unchanged
-- G3 OAuth/Vault/X files untouched
-- important-news/common-search untouched
+Verify the secret operationally WITHOUT exposing value:
+- do not log env
+- do not print secret
+- do not inspect raw process environment
+- infer readiness from successful invite-purpose behavior only
 
-## Secret/key handling
+If Preview rebuild failed, stop and report exact non-secret build reason.
 
-Prefer an existing appropriate server-only signing secret if one already exists and is suitable.
-If no suitable secret exists:
-- do not invent or commit one
-- add a required server-only env var name and fail closed when absent
-- report the exact env var name needed for Preview/production
-- do not set production secrets in this task unless explicitly required for Preview verification and safely available
+## Stage 1 — disposable invite setup
 
-No secret values in source/report/logs.
+Use exactly one disposable non-admin test identity/account.
 
-## Tests
+Required:
+- must not be an existing operator/admin account
+- must not be inserted into `admin_users`
+- must not receive any brand/admin privilege
+- must be deletable after test
 
-Add focused tests proving:
+Before sending:
+- capture current Invite User template text/config safely
+- if current template still points somewhere unsuitable, temporarily set only the Invite User template to:
+  `https://deploy-preview-33--shiny-kheer-77a154.netlify.app/auth/confirm?token_hash={{ .TokenHash }}&type=invite`
+- do not change Reset Password template
+- do not change Site URL unless absolutely required; prefer template-only adjustment
+- do not add wildcard redirects
 
-1. recovery AMR fresh => allowed without invite cookie.
-2. generic otp + no cookie => denied.
-3. generic otp + forged cookie => denied.
-4. generic otp + expired cookie => denied.
-5. generic otp + valid invite cookie for different user => denied.
-6. generic otp + valid fresh invite cookie for same user => allowed.
-7. stale otp even with invite cookie => denied.
-8. invite cookie set only after successful `verifyOtp(type=invite)`.
-9. unsupported callback type cannot set cookie.
-10. failed/invalid invite cannot set cookie.
-11. successful password update clears invite-purpose cookie.
-12. signOut failure semantics remain safe.
-13. existing Admin/multibrand/open-redirect/enumeration tests remain PASS.
+Send exactly ONE invite if possible.
 
-Run:
-- all `apps/admin/src/lib/*.test.ts`
-- targeted callback/reset tests
-- tsc
-- lint
-- build
-- git diff --check
-- targeted secret scan
+If the operator/API causes an accidental duplicate invite:
+- do not click older links
+- use only the newest valid link
+- report duplicate count
+- do not keep resending blindly
 
-## Preview verification
+## Stage 2 — invite link / purpose binding verification
 
-If the implementation needs a new server-only env var:
-- report exact name
-- do not expose value
-- if Netlify Preview can be configured safely with an existing secret source, do so only for Preview and record it
-- otherwise STOP after source/tests and request the exact operator action
+Open the invite link in a controlled browser/session.
 
-Do not run another real invite E2E in this task unless Preview has the required secret/config and no further operator action is needed.
+Before password update, verify all of the following without exposing credentials:
+- callback reaches `/auth/confirm`
+- redirect reaches `/reset-password?from=email-link`
+- authenticated session exists
+- actual AMR contains fresh `otp`
+- user `sub` present
+- session_id present
+- invite-purpose cookie is PRESENT
+- cookie name = `__Host-kabumori-admin-invite`
+- HttpOnly = true
+- Secure = true
+- SameSite = Lax
+- Path = /
+- lifetime <= 900s
+- cookie value is NEVER logged/read/reported
+- password form is visible
+
+Also verify negative boundary if practical without consuming another invite:
+- generic OTP without valid binding is still denied by source/test contract
+- do not create a second real OTP session solely to test this
+
+Hard stop if:
+- AMR is not otp
+- cookie absent
+- cookie malformed by observed attributes
+- form not visible
+- different user/session binding suspected
+- any secret/token appears in logs/output
+
+## Stage 3 — password setup
+
+Set one disposable test password.
+
+Verify:
+- server-side context recheck occurs immediately before update
+- password update succeeds once
+- invite-purpose cookie is cleared after successful update
+- signOut succeeds OR safe signout-unconfirmed state is shown
+- no false successful-logout message on signOut failure
+- reset page revisit does not show password form
+- no token_hash/auth code/JWT/password remains in URL after flow
+
+Do not report the password.
+
+## Stage 4 — relogin and authorization boundary
+
+Relogin with the new disposable credentials.
+
+Verify:
+- login succeeds
+- account remains non-admin
+- `/`
+- `/posts`
+- `/important-news`
+all deny Admin access / route to the established unauthorized behavior
+
+Verify:
+- no `admin_users` row was created
+- no brand access was granted
+
+Then logout and confirm session is cleared.
+
+## Stage 5 — cleanup
+
+Mandatory:
+- restore Invite User template exactly to its prior value/config
+- delete disposable Auth user
+- verify no `admin_users` row exists for it
+- preserve Gmail Custom SMTP configuration
+- preserve existing redirect URLs
+- preserve mobile reset redirect
+- preserve Reset Password template
+- preserve PR #33 unmerged state
+- no Vercel production deploy
+
+## Tests / source regression
+
+Because this is an E2E continuation on unchanged source:
+- rerun focused Admin/Auth tests if practical
+- at minimum confirm current source head unchanged and prior 103/103 suite remains applicable
+- no source edit unless a real E2E defect is found
+
+If a defect is found:
+- STOP before broadening permissions
+- do not add generic otp/magiclink
+- report exact observed failure
+- only make a source fix under a new or explicitly continued scoped task after ChatGPT review
+
+## Completion gate
+
+PASS only if:
+- one real invite establishes `amr=otp`
+- valid signed invite-purpose binding exists for same user/session
+- password form becomes available
+- password update succeeds
+- purpose cookie clears
+- logout/relogin works
+- non-admin Admin denial works
+- cleanup/restoration completes
+- no secret/token/password exposed
+- no unintended production mutation
+
+If all PASS:
+- PR #33 becomes eligible for one final consolidated release-boundary review/merge decision.
+- Do NOT merge in this task.
+
+## Required report
+
+Record:
+- task_id
+- exact PR head
+- Preview rebuild result
+- invite count sent
+- actual AMR method
+- purpose cookie PRESENT/ABSENT + attributes only, never value
+- form displayed yes/no
+- password update result
+- cookie clear result
+- signOut result
+- relogin result
+- non-admin denial result
+- template restored yes/no
+- disposable user deleted yes/no
+- admin_users mutation count = 0
+- source changes if any
+- production/config mutations performed
+- remaining blockers/risks
+- whether PR #33 is ready for final release-boundary review/merge decision
 
 ## Completion / K4
 
-Report:
-- exact design implemented
-- changed files
-- final PR #33 head
-- tests/counts
-- whether generic otp remains denied
-- cookie binding/expiry/user-match semantics
-- env var requirement
-- Preview build/deploy status
-- whether another bounded real invite E2E can start immediately
-- production mutation
-- remaining blockers
-- next recommendation
-
-Then:
+Set:
 - status -> review_required
 - next_owner -> chatgpt
-- STOP for K4.
+
+STOP for K4.
 
 ## Report
 
-- task_id: x-admin-pr33-invite-otp-purpose-binding-fix-20260926
-- result: **PASS (source/tests/Preview build) / OPERATOR GATE for invite E2E** — 招待専用の署名付きpurpose bindingを実装した。generic `otp`／`magiclink`は引き続き拒否する。PR #33 new head `0cc48fe`。Previewには新しいserver-only env varが未設定のため、招待は現在も**失敗側に倒れる**（フォーム非表示）。次の招待E2Eの前に、操作者がNetlifyへ値を1つ設定する必要がある。
-- model_used: Opus 5.5
-- worktree: G4専用 `/Users/yuya/Developer/kabumori/.claude/worktrees/g4-x-admin-pr15`（PR作業は`g4/admin-password-recovery-20260925`、TASK更新はworktree本来のbranchから）
-
-### exact design implemented
-
-1. **発行（`/auth/confirm`）**: 毎リクエストの最初に既存のinvite-purpose cookieを消す。そのうえで、**このリクエスト自身が`verifyOtp(type=invite)`に成功した場合だけ**、verifyOtpが返した新しいsessionのaccess tokenを`getClaims(token)`で署名検証する。claimsに新しい`otp`認証（15分以内）と`sub`・`session_id`があれば、cookieを発行する。
-   - 値: `v1.<user id>.<session id>.<expires>.<HMAC-SHA256署名>`。token_hash・auth code・JWT・パスワードは入れない。
-   - 署名鍵: server-only env `ADMIN_INVITE_BINDING_SECRET`（32 byte以上）。用途固定の文脈文字列を付けて署名。
-   - cookie: `__Host-kabumori-admin-invite`、`HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=900`。
-   - SameSite: Strictにすると、メールリンク（cross-site）から`/reset-password`へのredirectでcookieが送られず、表示時の判定が通らない。Supabaseのsession cookieと同じLaxにした。cross-siteのsubrequest・POSTには送られない。
-2. **判定（`verifyRecoveryContext` Server Action、表示時と更新直前の両方）**: `getClaims()`で検証済みのclaimsとサーバー時計で、次のどちらかの場合だけ許可する。
-   - 新しい`recovery`/`invite` AMR（従来どおり、cookie不要）。
-   - 新しい`otp` AMR、かつ有効なinvite cookie。有効とは、署名が一致し、期限内で、発行から15分以内、かつ`sub`と`session_id`の**両方が現在のsessionと一致**すること。
-3. **消去**: `/auth/confirm`の全リクエストで消す。パスワード更新が成功した直後、signOutの前に、新しいServer Action `clearInvitePurpose()`（引数なし、消すだけ）で消す。cookieは`session_id`に紐づくので、signOut後のsessionでは使えない。
-4. **secretが無い・短い場合**: 発行も受理もしない。招待は失敗側に倒れ、リカバリには影響しない。
-5. 送信直前の15分再検証、signOut確認、固定のredirect先、列挙対策、`admin_users`ゲートは無変更。
-
-### changed files
-
-- `apps/admin/src/lib/invite-purpose.ts`（新規、server-only。`node:crypto`とsecretを使うためclient componentからはimportしない）: 発行・検証、`hasPasswordSetupAuthority`、`/auth/confirm`の処理を`confirmEmailLink`としてテスト可能な形に分離。
-- `apps/admin/src/lib/password-recovery.ts`: AMR鮮度判定を`hasFreshAuthentication`・`isWithinRecoveryWindow`として共通化（許可リストは`recovery`/`invite`のまま）。`completePasswordReset`に、更新成功後に呼ぶ`clearPurposeBinding`を追加。
-- `apps/admin/src/app/auth/confirm/route.ts`: cookieの消去と発行、`confirmEmailLink`経由に変更。redirect先は従来と同じ固定の2つ。
-- `apps/admin/src/lib/actions/recovery-context.ts`: 判定を`hasPasswordSetupAuthority`へ置き換え、`clearInvitePurpose`を追加。
-- `apps/admin/src/app/reset-password/reset-password-form.tsx`: `clearInvitePurpose`を渡すだけ。
-- テスト: `src/lib/invite-purpose.test.ts`（新規）、`src/lib/admin-route-boundary.test.ts`（構造テストを更新）。
-- `apps/admin/netlify.toml`（コメントのみ）、`apps/admin/.env.local.example`（変数名を空値で追加）。
-
-### final PR #33 head
-
-`0cc48fe3ac1c376d747a74b6b31ea34990615805`（`2528b56` + 1 commit）、OPEN、MERGEABLE、未merge。
-
-### tests/counts
-
-- `node --experimental-strip-types --test src/lib/*.test.ts`: **103/103 pass**（前回83 → +20）
-- TASKの必須テストとの対応（`invite-purpose.test.ts`）:
-  - 1. recovery AMR → cookieもsecretも無しで許可
-  - 2. otp／magiclink、cookie無し → 拒否
-  - 3. 偽造cookie（空、`true`、1文字削除・追加、署名無し、期限改ざん、version違い、別鍵の署名、過大長）→ 拒否
-  - 4. 期限切れ → 拒否（期限ちょうどまでは許可）。1窓を超える未来期限 → 拒否
-  - 5. 別ユーザー・別session宛のcookie → 拒否（どちら向きの不一致も）
-  - 6. 同じユーザー・sessionの新しいcookie → 許可
-  - 7. 古いotp（15分超）は有効なcookieがあっても拒否
-  - 8. cookieは`verifyOtp(invite)`成功後にだけ発行され、`getClaims`は返されたsessionのtokenで呼ばれる
-  - 9. recovery（token_hash）・PKCE codeでは発行されない
-  - 10. verifyOtpの失敗・例外、session無し、`getClaims`の失敗・例外、古いotp、otp以外、`session_id`無し、secret無し → いずれも発行されない
-  - 11. 更新成功時は `updateUser` → cookie消去 → `signOut` の順。未更新（no_context・failed）では消去しない
-  - 12. signOut失敗は従来どおり`updated_signout_unconfirmed`。消去が例外でも結果は変わらない
-  - 追加: secretは`ADMIN_INVITE_BINDING_SECRET`のみから読み、32 byte未満・`NEXT_PUBLIC_`版は無視。cookie属性の固定。tokenにはid・期限・署名のみ。
-  - 構造テスト（`admin-route-boundary.test.ts`）: routeは最初に消去し、`outcome.invitePurposeToken`がある時だけ発行（`cookieStore.set`はこの2つのみ）。Actionは引数なしの2つだけ。formは`clearInvitePurpose`を渡す。client componentは`invite-purpose`をimportしない。`NEXT_PUBLIC_*INVITE*`は無い。`invite-purpose.ts`はlog・service_role・admin_users・table読み取り・user/app_metadataを使わない。
-  - 既存のAdmin・multibrand・open-redirect・列挙対策・signOutのテストはすべてPASS。
-- `npx tsc --noEmit`: PASS / `npm run lint`: PASS / `npm run build`: PASS / `git diff --check`: PASS
-- secret scan: 差分にJWT・鍵・パスワードなし。`.next/static`（client bundle）に`ADMIN_INVITE_BINDING_SECRET`・`createHmac`なし。テスト内の鍵は`test-only-...`の明示的なダミー。
-
-### whether generic otp remains denied
-
-**Yes.** cookie無し・偽造・期限切れ・別ユーザー・別session・secret未設定の`otp`、および`magiclink`は、表示時・送信時とも拒否する。
-
-### cookie binding / expiry / user-match semantics
-
-- binding対象は`sub`（ユーザー）と`session_id`（その招待で作られたsession）。両方一致が必須。
-- 期限は発行から900秒（= 既存の15分窓）。cookieの`Max-Age`も900秒。さらに`otp`の`amr.timestamp`も15分以内が必須（時計ずれ許容60秒は既存と同じ）。
-- 不一致・期限切れ・形式不正・署名不一致（`timingSafeEqual`で比較）は失敗側に倒れる。
-
-### env var requirement
-
-- **`ADMIN_INVITE_BINDING_SECRET`**（server-only、ランダム32 byte以上、例: `openssl rand -base64 48`）。値はどこにも記録していない。
-- 本アプリ専用の新しい鍵で、Supabase・Xの権限は持たない。既存の適切なserver-only secretはAdminアプリに無かった（従来、Netlifyのサイトは「secretを持たない」方針。`netlify.toml`のコメントに、この1つだけ例外である旨と理由を追記した）。この方針変更はChatGPTの確認対象。
-- 設定場所: Netlify → Site configuration → Environment variables。ScopeにFunctionsを含め、Deploy contextはDeploy Previews（本番のVercelへの設定はmerge判断時に別途）。**`NEXT_PUBLIC_`は付けない**。設定後、Deploy Previewの再ビルドが必要（server実行時に読むため）。
-- 本TASKでは設定していない。「既存のsecret source」が無く、新しい値の生成と設定は操作者の作業になるため。
-
-### Preview build/deploy status
-
-`0cc48fe`: Netlify deploy-preview **SUCCESS**。
-- `/login`・`/forgot-password`・`/reset-password`・`/unauthorized` 200、`/`は`/login`へ307。
-- `/reset-password`直アクセスでpassword入力欄0件。
-- `/auth/confirm?token_hash=偽&type=invite&next=https://evil.example` → 307 `/forgot-password?reason=link_invalid`（外部へ飛ばない）。応答で`__Host-kabumori-admin-invite`が`Max-Age=0; Secure; HttpOnly; SameSite=lax`で消去されることを確認。
-- `type=magiclink` → `link_invalid`。
-
-### whether another bounded real invite E2E can start immediately
-
-**No.** 先にNetlify Deploy Previewへ`ADMIN_INVITE_BINDING_SECRET`を設定して再ビルドする必要がある（未設定のままだと、招待は正しく失敗側に倒れ、フォームは出ない）。設定後は、前回の手順（Invite userテンプレートの一時変更 → 招待1回 → Claudeのブラウザ画面で開く → パスワード入力前にAMRとcookieの有無を確認 → 設定 → ログアウト → 再ログイン → `/unauthorized` → 片付け）で実施できる。
-
-### production mutation
-
-**0件**（merge・本番deploy・Supabase Auth設定・ユーザー・`admin_users`・DB/RLS/RPC・Netlify/Vercelのenvいずれも無し）。PR branchへのpushのみ。
-
-### remaining blockers
-
-1. Netlify Deploy Previewへの`ADMIN_INVITE_BINDING_SECRET`設定（操作者）。
-2. H1/C1による本修正の焦点レビュー。
-3. 招待1回の限定E2E。
-4. merge前に、本番（Vercel）にも同じ変数を設定する必要がある（Previewとは別の値を推奨）。未設定のまま本番へ出すと、招待だけが失敗側に倒れる。
-
-### next recommendation
-
-1. H1/C1で焦点レビュー（推奨: Sol（高））。重点: cookieの発行条件（invite成功後のみ）、user＋session両方への紐付け、SameSite=Laxの妥当性、消去のタイミング、secret未設定時に失敗側に倒れること、Netlifyを「secretを持たない」方針から外れる1変数の是非。
-2. レビューPASS後、操作者がNetlify（Deploy Previews、Functions scope）に`ADMIN_INVITE_BINDING_SECRET`を設定し、Previewを再ビルドする。
-3. G4で招待1回の限定E2Eを実施。その際、パスワード入力前にClaudeが`amr`（`otp`の想定）とcookieの有無（値は記録しない）を確認する。
-
-## Completion
-
-- status -> review_required
-- next_owner -> chatgpt
-
-
-## Final K4 — invite purpose binding fix
-
-Verdict: **PASS for source/tests; OPERATOR GATE before real invite E2E**.
-
-- PR #33 head: `0cc48fe3ac1c376d747a74b6b31ea34990615805`.
-- signed short-lived httpOnly invite-purpose binding implemented; generic OTP/magiclink remain denied.
-- binding requires same user + same session + fresh OTP + valid signature + <=15 minute window.
-- successful password update clears the purpose binding; missing/short secret fails closed.
-- tests: 103/103 PASS; tsc/lint/build/diff/secret scan PASS; Preview build SUCCESS.
-- no Codex review is inserted at this point per reduced-review policy and user direction; next step is real invite E2E first.
-- blocker: Netlify Deploy Preview needs server-only env `ADMIN_INVITE_BINDING_SECRET` (random >=32 bytes), Functions/Deploy Preview scope, followed by Preview rebuild.
-- PR remains unmerged; production mutation=0.
+- pending
