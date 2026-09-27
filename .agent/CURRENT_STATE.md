@@ -1248,3 +1248,13 @@ Status: backlog only / no G1-G2 task assigned.
 - Stage 3A refresh and AI Lab/Kabumori specialized paths remain unchanged; production mutation=0.
 - one focused H1 re-review assigned for prior P1/P2 + atomicity only.
 - recommended Codex model: Sol（高）.
+
+
+## Final K4 PR #33 product scope correction
+
+- technical invite E2E: PASS at PR #33 `0cc48fe`.
+- product correction: this Admin is an internal operator site for one owner/two accounts; there is no intended invited-user workflow, and non-admin invitees cannot access Admin because `admin_users` remains authoritative.
+- actual requirement is owner password recovery only.
+- do not configure production invite secret/template/redirects for this Admin.
+- before merge, PR #33 should be treated as recovery-only; invite-specific code is unnecessary complexity and should be removed or intentionally left disabled only if removal cost is judged higher.
+- Preview-only `ADMIN_INVITE_BINDING_SECRET` can be deleted after the PR decision.
