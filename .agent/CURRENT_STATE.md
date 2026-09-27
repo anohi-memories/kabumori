@@ -1181,3 +1181,15 @@
 - cross-account check PASS; Kabumori legacy path unchanged.
 - Stage 3A is fully proven in production across DB authority, Edge runtime and one natural token-expiry cycle.
 - next phase: Stage 3B controlled second-account pilot; migration-history normalization remains separate.
+
+
+## Future backlog — user ideas (not assigned)
+
+User requested these ideas be remembered for later implementation; **do not start yet**.
+
+- ニュース内容の充実
+- かぶモリXで投稿しているような話題を扱う「トピック」コーナーの新設
+- アプリ内の設定画面から通知内容・通知カテゴリを変更できるようにする
+- ニュース一覧／記事にサムネイル画像を付ける
+
+Status: backlog only / no G1-G2 task assigned.
