@@ -377,6 +377,33 @@ STOP for K4.
 
 **Yes**（最終のrelease-boundary review・merge判断の対象にできる）。本TASKではmergeしていない。merge時は、上記の1（本番の鍵）と2（本番の招待テンプレート・Redirect URL）を同時に扱う必要がある。
 
+### Addendum for K4 — operator decision input (2026-09-27, after E2E PASS)
+
+操作者（ユーザー）とのやり取りを受けて、K4判断のための追記。
+
+**運用前提**
+- 本Admin（`apps/admin`）は、操作者1人だけが使うサイトである。操作者のアカウント2種を運用するだけで、ほかの人を招待する予定はない。
+- 実際に必要なのは、操作者自身が**パスワードを忘れたときのrecovery**だけ。recoveryは2026-09-26の実E2EでPASS済み。
+- invite対応は、PR #33の最初の設計で、利用者数を考えずにrecoveryと同じ画面で扱う形にしたもの。今回のbinding・鍵・2回の実E2Eは、使わない機能のためのコストだった（G4の設計判断の反省点）。
+
+**X自動投稿アプリ（`apps/social-mobile`）への流用可否 — そのままは不可**
+- 仕組みが違う: social-mobileはExpo/React Nativeで、sessionは端末内（AsyncStorage）に保存する。今回のinvite-purpose bindingは、Next.jsのサーバールート（`/auth/confirm`）とhttpOnlyの`__Host-` cookieに依存するWeb専用の仕組み。
+- 「招待」の意味が違う: 複数ユーザーのアプリで必要になるのは、たぶん「ブランドにメンバーを招く」機能（`brand_memberships`、role: owner/admin/member/viewer）で、アプリ内の権限の話。Supabase AuthのAdmin招待メールとは別物。
+- 現状: social-mobileの認証は`signInWithPassword`のみ（`src/providers/auth-provider.tsx`）。新規登録・招待・recoveryの画面はまだ無い。
+- 流用できるもの:
+  - 実測で得た知見: token_hashの招待`verifyOtp`は`amr=otp`になる。汎用otpを許可せず、用途を別途サーバー側で束縛する必要がある。
+  - Supabase側の運用手順: Custom SMTP、テンプレート変更、Redirect URL登録、実メールE2Eの進め方。
+  - `validateNewPassword`などの小さな純粋関数の一部。
+
+**G4の推奨（K4で判断してほしいこと）**
+1. **推奨: PR #33はrecovery機能としてmerge判断する。本番ではinviteを使わない。**
+   - 本番（Vercel）に`ADMIN_INVITE_BINDING_SECRET`を設定しない。
+   - 本番のInvite userテンプレートも変更しない（現状のまま）。
+   - この場合、inviteのコードは鍵が無いため失敗側に倒れ、入力欄を出さない（安全）。上のReportの「remaining blockers」1・2は**不要**になる。
+2. 代替: inviteのコード（`invite-purpose.ts`、`/auth/confirm`のbinding発行、`clearInvitePurpose`、`netlify.toml`の例外コメント）をPR #33から削除して単純化する。source変更になるため、再テストと焦点レビューが必要。操作者は手間の少ない1を希望。
+3. どちらの場合も、Netlify Deploy Previewの`ADMIN_INVITE_BINDING_SECRET`は、PR #33の決着後に削除してよい（Previewでしか使っていない）。Preview用のRedirect URL、一時的なGmail SMTPの整理も同じタイミングで判断する。
+4. social-mobileでメンバー招待が必要になった時点で、アプリ用の招待（`brand_memberships`連動）を別TASKとして設計する。今回の知見はその設計の入力として使う。
+
 ## Completion
 
 - status -> review_required
