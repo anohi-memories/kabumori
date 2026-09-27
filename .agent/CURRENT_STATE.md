@@ -1265,3 +1265,14 @@ Status: backlog only / no G1-G2 task assigned.
 - separate publish authority and 30-day maximum window fail closed for no row/off/revoked/not-started/expired, consent/admin/account disables and exact account mismatch. Stage 3A refresh ceiling remains refresh-only. Rollback `revoked` blocks subsequent X creates at the next check; one already in-flight create may cross the commit boundary.
 - matching AI Lab row/account is rejected by generic completion without fingerprint/log/status write; AI Lab and Kabumori specialized routes unchanged.
 - H1 fixed final-check gap across proactive/reactive token refresh; PR #41 updated, but no merge, migration, deploy, real token refresh or X post. Owner consent, content-settings contract and separately authorized pilot remain pending. See `.agent/CODEX_REPORT.md`; C1 required.
+
+
+## Final C1 Stage 3B focused re-review
+
+- verdict: **PASS-WITH-FIX for source readiness**.
+- PR #41 final reviewed/fixed head `59f4f53037f231e831774c04e9a1b1982eff3bd9`.
+- publish authority/timebox and AI Lab exclusion are accepted.
+- H1 fixed one additional revocation gap by rechecking publish authority immediately before each actual X create, including post-refresh retry paths.
+- Deno 619/0 plus focused disposable DB behavior/ACL/race tests PASS; production mutation=0.
+- no merge/apply/deploy/second-account production activation occurred.
+- current product direction is to pause further infrastructure deepening and prioritize user-facing X auto-post app features; any Stage 3B production pilot should be a separately authorized future task.
