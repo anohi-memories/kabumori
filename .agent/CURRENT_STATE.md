@@ -1213,3 +1213,14 @@ Status: backlog only / no G1-G2 task assigned.
 - candidate remains owner/product-gated: explicit owner consent and content-settings contract are prerequisites before activation.
 - one final H1 review assigned because the change crosses multi-account publish isolation + SECURITY DEFINER/RPC boundary.
 - recommended Codex model: Sol（高）.
+
+
+## G4 PR #33 invite E2E after binding secret
+
+- user configured sensitive Netlify env `ADMIN_INVITE_BINDING_SECRET` and retried Deploy Preview #33 on 2026-09-27 JST.
+- assigned: `x-admin-pr33-bounded-invite-e2e-after-binding-secret-20260927`.
+- scope: verify rebuilt PR #33 Preview -> one disposable invite -> confirm real AMR=otp + same-user/session signed purpose binding -> password setup -> cookie clear -> logout/relogin -> non-admin denial -> cleanup.
+- cookie/secret/token/password values must never be logged or reported.
+- temporary Invite User template adjustment is allowed only if needed and must be restored; Reset Password template/mobile redirect/admin_users remain untouched.
+- PR merge and Vercel production deploy are not authorized in this task.
+- recommended Claude model: Opus5.5（高）.
