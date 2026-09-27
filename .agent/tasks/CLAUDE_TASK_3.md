@@ -3,8 +3,8 @@
 - task_id: x-universal-oauth-refresh-stage3b-second-account-pilot-prep-20260927
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Opus5.5（高）
 - purpose: Stage 3Aで本番実証済みのUniversal X OAuth refreshを、2つ目の実アカウントへ安全に広げるStage 3B pilot準備を行う。今回は候補確認・投稿経路一般化・pilot契約・テスト・ロールバック設計まで。2つ目アカウントの本番有効化はまだ行わない。
@@ -268,3 +268,16 @@ STOP for K3.
 - remaining_issues: 同意の契約（auto_post_preference＋管理側有効化）は製品判断として要確認; content settings 表が本番未配置; 140 文字上限は保守的; pilot アカウントの refresh token は 09-23 から未使用で invalid_grant の可能性（hard stop → owner 再接続）; pilot 投稿の生成費用は共有 OpenAI キー。
 - safety_checks: G3 専用 worktree のみ、G4/Admin Auth PR #33 不接触、token/secret 値・secret ID 非表示、本番は読み取りのみ
 - next_recommendation: ChatGPT K3 → owner に候補アカウントの確認と同意を依頼 → Codex レビュー（PR #41）→ content settings 適用の製品判断 → Stage 3B 本番有効化 TASK（§6 手順）。
+
+
+## Final K3 — Stage 3B pilot prep
+
+Verdict: **PASS for source/plan preparation; production activation remains gated**.
+
+- PR #41 head `cd7adf5d1eb5a91773f21c7d8959766e1dd38229` is OPEN and mergeable.
+- one candidate was identified read-only: `sa_bfdab0e0696ec8e56ed2dd83` / handle `yumeyoasobi`; exact account/brand ownership is unambiguous, credentials are account-local, no lease/error, rollout row absent=off.
+- candidate is not production-ready yet because owner consent/product enablement is required and the content-settings contract is not yet live.
+- generic exact-account brand_post routing was added without creating a parallel auth path; AI Lab and Kabumori paths remain unchanged.
+- new completion RPC is service_role-only SECURITY DEFINER with empty search_path and exact brand/account completion semantics.
+- Stage 3B isolation/race/off/pilot/invalid_grant/uncertain/Kabumori regression tests PASS; production mutation=0.
+- because this adds a new multi-account publish path and a SECURITY DEFINER RPC across the cross-account boundary, one consolidated H1 review is required before any merge/production pilot.
