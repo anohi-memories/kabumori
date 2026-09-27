@@ -1192,3 +1192,12 @@ User requested these ideas be remembered for later implementation; **do not star
 - ニュース一覧／記事にサムネイル画像を付ける
 
 Status: backlog only / no G1-G2 task assigned.
+
+## G3 Stage 3B second-account pilot prep
+
+- assigned: `x-universal-oauth-refresh-stage3b-second-account-pilot-prep-20260927`.
+- Stage 3A is fully live and proven; next work prepares a controlled second-account pilot.
+- scope is source/plan-first: identify one exact candidate, generalize/prove account-bound publish/content routing, test pilot mode isolation, and produce exact activation/observation/rollback procedure.
+- no second account production activation, rollout-row mutation, publish_enabled change, Edge deploy, production migration apply, manual refresh/X post, migration repair or db push is authorized.
+- if no unambiguous second account exists, candidate selection remains an operator gate rather than being guessed.
+- recommended Claude model: Opus5.5（高）.
