@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: x-stage3b-publish-authority-focused-rereview-20260927
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: assigned; focused re-review of PR #41 publish authority/timebox + AI Lab exclusion + rollback atomicity only; recommended Sol（高）
+- allocation: focused PR #41 re-review PASS-WITH-FIX at `59f4f53`; awaiting C1; production mutation 0; recommended Sol（高）
 
 ## Codex H2
 - owner: codex

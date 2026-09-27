@@ -42,7 +42,7 @@
 
 ## Current slot snapshot
 
-- H1: `review_required` — `x-stage3b-second-account-pilot-final-review-20260927`; PR #41 head `cd7adf5` FAIL: Stage3A OFF/expired/budget blocks refresh but not an already-valid-token X post, so the proposed 7-day pilot/rollback lacks a publish timebox; new completion RPC also accepts AI Lab rows with the matching AI Lab account. No source push or production mutation; C1/G3 redesign required.
+- H1: `review_required` — `x-stage3b-publish-authority-focused-rereview-20260927`; PR #41 source PASS-WITH-FIX at `59f4f53`: publish authority/timebox and AI Lab exclusion verified; H1 added an authority check immediately before each X create after proactive/reactive token refresh. Disposable DB/ACL/race and 619 Deno tests passed. Production mutation 0; awaiting C1 and separate owner/product/production authorization.
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
 - G1: `review_required` — `kabumori-ios-internal-visual-qa-build-20260926` (icon full-bleed correction)
   - **Real-device icon acceptance: PASS** ("アイコンOK"). Build 10e8610e-c2b2-4baf-a780-4e038c15f4f9 confirmed by the user: no white/double frame on the home screen.
@@ -1258,3 +1258,10 @@ Status: backlog only / no G1-G2 task assigned.
 - do not configure production invite secret/template/redirects for this Admin.
 - before merge, PR #33 should be treated as recovery-only; invite-specific code is unnecessary complexity and should be removed or intentionally left disabled only if removal cost is judged higher.
 - Preview-only `ADMIN_INVITE_BINDING_SECRET` can be deleted after the PR decision.
+
+## H1 PR #41 focused re-review
+
+- verdict: PASS-WITH-FIX for source; fixed head `59f4f53`; previous candidate `6b25305`.
+- separate publish authority and 30-day maximum window fail closed for no row/off/revoked/not-started/expired, consent/admin/account disables and exact account mismatch. Stage 3A refresh ceiling remains refresh-only. Rollback `revoked` blocks subsequent X creates at the next check; one already in-flight create may cross the commit boundary.
+- matching AI Lab row/account is rejected by generic completion without fingerprint/log/status write; AI Lab and Kabumori specialized routes unchanged.
+- H1 fixed final-check gap across proactive/reactive token refresh; PR #41 updated, but no merge, migration, deploy, real token refresh or X post. Owner consent, content-settings contract and separately authorized pilot remain pending. See `.agent/CODEX_REPORT.md`; C1 required.

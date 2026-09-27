@@ -3,8 +3,8 @@
 - task_id: x-stage3b-publish-authority-focused-rereview-20260927
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sol（高）
 - purpose: PR #41 fixed headのfocused re-review。前回C1 FAILのP1 publish authority/timeboxとP2 AI Lab除外だけを中心に、atomicity/ACL/回帰を確認する。新規設計レビューを広げない。
@@ -68,3 +68,10 @@ Then:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for C1.
+
+## H1 completion — focused re-review
+
+- verdict: PASS-WITH-FIX; reviewed `6b25305e57bb1d6ad119c06c779042daba210547`, fixed PR #41 head `59f4f53`.
+- prior P1 publish authority/timebox and P2 AI Lab exclusion are resolved at source. H1 fixed an additional P2: authority is now checked after proactive/reactive token refresh, before each actual X create attempt.
+- source tests: 619 passed; disposable PostgreSQL behavior/ACL/AI Lab negative/revocation and race tests passed; production mutation 0.
+- report: `.agent/CODEX_REPORT.md`; C1 decision and separate owner/product/production authorization remain required.
