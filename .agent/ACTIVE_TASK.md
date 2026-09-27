@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - task_id: x-stage3b-second-account-pilot-final-review-20260927
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: reviewed PR #41; FAIL on pilot publish-timebox/rollout semantics and AI Lab completion RPC boundary; C1/G3 correction required before pilot; recommended Sol（高）
+- allocation: closed; Final C1 FAIL — Stage 3B needs explicit publish authority/timebox and AI Lab exclusion before merge/pilot
 
 ## Codex H2
 - owner: codex
@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: x-universal-oauth-refresh-stage3b-second-account-pilot-prep-20260927
+- status: ready
+- task_id: x-stage3b-publish-authority-and-ai-lab-exclusion-fix-20260927
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: closed; Final K3 PASS for source/plan prep at PR #41 `cd7adf5`; candidate `yumeyoasobi` identified but owner/product-gated; production mutation 0
+- allocation: assigned after C1 FAIL; add explicit bounded publish authority/timebox and exclude AI Lab from generic completion path; source/test only; recommended Opus5.5（高）
 
 ## Claude G4
 - owner: claude
