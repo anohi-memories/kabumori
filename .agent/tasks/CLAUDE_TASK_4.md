@@ -3,7 +3,7 @@
 - task_id: x-admin-pr33-bounded-invite-e2e-after-binding-secret-20260927
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: critical
 - recommended_model: Opus5.5（高）
