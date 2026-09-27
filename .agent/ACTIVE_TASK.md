@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: x-stage3b-second-account-pilot-final-review-20260927
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: assigned; one consolidated final review of PR #41 cross-account publish path + SECURITY DEFINER completion RPC + pilot isolation; recommended Sol（高）
+- allocation: reviewed PR #41; FAIL on pilot publish-timebox/rollout semantics and AI Lab completion RPC boundary; C1/G3 correction required before pilot; recommended Sol（高）
 
 ## Codex H2
 - owner: codex

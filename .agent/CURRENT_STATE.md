@@ -42,7 +42,7 @@
 
 ## Current slot snapshot
 
-- H1: `review_required` — `x-oauth-refresh-stage3a-final-security-review-20260926`; PR #38 source-only PASS-WITH-FIX at head `748deb1` (unexpected proactive refresh-start failures now stop before X write); disposable DB/ACL/race and 655 X tests PASS; production apply/deploy remains separately gated; C1 required
+- H1: `review_required` — `x-stage3b-second-account-pilot-final-review-20260927`; PR #41 head `cd7adf5` FAIL: Stage3A OFF/expired/budget blocks refresh but not an already-valid-token X post, so the proposed 7-day pilot/rollback lacks a publish timebox; new completion RPC also accepts AI Lab rows with the matching AI Lab account. No source push or production mutation; C1/G3 redesign required.
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
 - G1: `review_required` — `kabumori-ios-internal-visual-qa-build-20260926` (icon full-bleed correction)
   - **Real-device icon acceptance: PASS** ("アイコンOK"). Build 10e8610e-c2b2-4baf-a780-4e038c15f4f9 confirmed by the user: no white/double frame on the home screen.
