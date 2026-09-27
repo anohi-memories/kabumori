@@ -1201,3 +1201,15 @@ Status: backlog only / no G1-G2 task assigned.
 - no second account production activation, rollout-row mutation, publish_enabled change, Edge deploy, production migration apply, manual refresh/X post, migration repair or db push is authorized.
 - if no unambiguous second account exists, candidate selection remains an operator gate rather than being guessed.
 - recommended Claude model: Opus5.5（高）.
+
+
+## Final K3 Stage 3B pilot prep
+
+- verdict: **PASS for source/plan preparation; production activation remains gated**.
+- PR #41 head `cd7adf5d1eb5a91773f21c7d8959766e1dd38229`.
+- exact second-account candidate identified read-only: `sa_bfdab0e0696ec8e56ed2dd83` / `yumeyoasobi`; rollout remains off, publish disabled, no production mutation.
+- new generic account-bound brand_post path reuses existing VaultAccountXAuth and Stage 3A authority; AI Lab and Kabumori behavior unchanged.
+- new service_role-only SECURITY DEFINER completion RPC added; disposable DB/race/isolation tests PASS.
+- candidate remains owner/product-gated: explicit owner consent and content-settings contract are prerequisites before activation.
+- one final H1 review assigned because the change crosses multi-account publish isolation + SECURITY DEFINER/RPC boundary.
+- recommended Codex model: Sol（高）.
