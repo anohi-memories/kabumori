@@ -1235,3 +1235,16 @@ Status: backlog only / no G1-G2 task assigned.
 - exact-account/ACL/refresh-race boundaries otherwise acceptable; production mutation=0.
 - G3 reassigned source-only correction; no production pilot/merge until fixed and re-reviewed.
 - recommended Claude model: Opus5.5（高）.
+
+
+## Final K3 Stage 3B publish authority fix
+
+- verdict: **PASS for source correction**.
+- PR #41 fixed head `6b25305e57bb1d6ad119c06c779042daba210547`.
+- explicit exact-account publish authority/timebox added separately from refresh rollout.
+- valid-token posts are blocked by missing/off/revoked/not-started/expired publish authority and by consent/admin/account gates; authority is checked again immediately before X create.
+- rollback publish-authority `revoked` alone is sufficient to stop subsequent new X creates.
+- AI Lab/Kabumori are explicitly excluded from generic setter/check/dispatcher/completion path; matching AI Lab regression now fails closed with no side effects.
+- Stage 3A refresh and AI Lab/Kabumori specialized paths remain unchanged; production mutation=0.
+- one focused H1 re-review assigned for prior P1/P2 + atomicity only.
+- recommended Codex model: Sol（高）.
