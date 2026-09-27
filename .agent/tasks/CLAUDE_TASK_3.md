@@ -3,7 +3,7 @@
 - task_id: x-universal-oauth-refresh-stage3b-second-account-pilot-prep-20260927
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Opus5.5（高）
