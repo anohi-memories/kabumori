@@ -3,8 +3,8 @@
 - task_id: x-stage3b-publish-authority-focused-rereview-20260927
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sol（高）
 - purpose: PR #41 fixed headのfocused re-review。前回C1 FAILのP1 publish authority/timeboxとP2 AI Lab除外だけを中心に、atomicity/ACL/回帰を確認する。新規設計レビューを広げない。
@@ -75,3 +75,20 @@ Then:
 - prior P1 publish authority/timebox and P2 AI Lab exclusion are resolved at source. H1 fixed an additional P2: authority is now checked after proactive/reactive token refresh, before each actual X create attempt.
 - source tests: 619 passed; disposable PostgreSQL behavior/ACL/AI Lab negative/revocation and race tests passed; production mutation 0.
 - report: `.agent/CODEX_REPORT.md`; C1 decision and separate owner/product/production authorization remain required.
+
+
+## Final C1 — Stage 3B focused re-review
+
+Verdict: **PASS-WITH-FIX for source readiness**.
+
+- reviewed PR #41 head `6b25305e57bb1d6ad119c06c779042daba210547`.
+- H1 pushed one focused fix; final PR #41 head `59f4f53037f231e831774c04e9a1b1982eff3bd9`.
+- prior P1 publish-authority/timebox issue is resolved.
+- prior P2 AI Lab generic-completion issue is resolved.
+- additional P2 fixed: publish authority is now rechecked inside the Vault request callback immediately before every actual X create, including after proactive/reactive refresh.
+- rollback `revoked` blocks subsequent new X creates at the documented request boundary; an already in-flight external X create cannot be made atomic with a DB commit.
+- new ACL/RLS/search_path/service_role boundaries verified in disposable DB.
+- tests: 619 Deno PASS plus focused/disposable behavior, ACL, race and AI Lab negative tests PASS.
+- production mutation=0.
+- technically ready at source level only. No merge/apply/deploy/production pilot is approved by this C1.
+- per current product direction, infrastructure rollout may pause here and future work should prioritize user-facing X app features unless a production pilot is explicitly requested.
