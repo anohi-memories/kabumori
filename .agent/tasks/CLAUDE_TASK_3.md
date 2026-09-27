@@ -3,8 +3,8 @@
 - task_id: x-stage3b-publish-authority-and-ai-lab-exclusion-fix-20260927
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Opus5.5（高）
 - purpose: C1 FAILとなったPR #41 Stage 3B準備を修正する。bounded pilotを本当に「投稿停止」できる明示的publish authority/timeboxへ分離し、generic completion RPCからAI Labを明示除外する。source/test only。production activationはしない。
@@ -199,3 +199,18 @@ STOP for K3.
 - re_review_ready: yes — PR #41 head `6b25305` を H1 で1回の集中再レビュー（P1/P2 と §2a の原子性の記述）。
 - remaining_gates: owner の対象確認と自動投稿への同意; content settings 表（`20260922045046`）の製品・セキュリティ判断と適用（判定は INVOKER のため service_role の SELECT 付与が必要）; 3B 用 migration 2本の単独適用と Edge デプロイは別 TASK; pilot アカウントの refresh token は 09-23 から未使用（初回 invalid_grant の可能性）。
 - next_recommendation: ChatGPT K3 → H1 集中再レビュー（Sol高、範囲は publish authority・AI Lab 除外・原子性）→ owner 同意取得 → 別 TASK で本番有効化。
+
+
+## Final K3 — Stage 3B publish authority fix
+
+Verdict: **PASS for source correction; focused re-review required before merge/pilot**.
+
+- PR #41 fixed head: `6b25305e57bb1d6ad119c06c779042daba210547`.
+- P1 fixed by adding explicit exact-account publish authority/timebox separate from Stage 3A refresh authority.
+- valid token no longer bypasses publish off/revoked/expired/consent/admin disable gates; authority is checked before generation and immediately before X create.
+- rollback first step `revoked` is independently sufficient to block new X creates.
+- refresh generation ceiling remains refresh-only and is not misrepresented as publish lifetime.
+- P2 fixed: AI Lab and Kabumori are explicitly excluded from generic publish setter/check/completion path; matching AI Lab row/account regression now fails closed with no fingerprint/log write.
+- disposable DB behavior/race/ACL and Deno suites PASS; AI Lab and Stage 3A regressions PASS.
+- production mutation=0.
+- one focused H1 re-review is required only for the prior P1/P2 findings and publish-boundary atomicity.
