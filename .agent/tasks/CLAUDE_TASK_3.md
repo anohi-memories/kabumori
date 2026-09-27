@@ -3,7 +3,7 @@
 - task_id: x-stage3b-publish-authority-and-ai-lab-exclusion-fix-20260927
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: critical
 - recommended_model: Opus5.5（高）
