@@ -1224,3 +1224,14 @@ Status: backlog only / no G1-G2 task assigned.
 - temporary Invite User template adjustment is allowed only if needed and must be restored; Reset Password template/mobile redirect/admin_users remain untouched.
 - PR merge and Vercel production deploy are not authorized in this task.
 - recommended Claude model: Opus5.5（高）.
+
+
+## Final C1 Stage 3B review
+
+- verdict: **FAIL**.
+- PR #41 reviewed head `cd7adf5d1eb5a91773f21c7d8959766e1dd38229`.
+- P1 design blocker: Stage 3A rollout controls refresh, not publish. A valid token could still post after pilot expiry/off/refresh ceiling. Stage 3B requires a separate exact-account publish authority/timebox checked at publish boundary, with fail-closed expiry/revocation.
+- P2 blocker: generic completion RPC accepts AI Lab's own matching row/account and must explicitly exclude AI Lab.
+- exact-account/ACL/refresh-race boundaries otherwise acceptable; production mutation=0.
+- G3 reassigned source-only correction; no production pilot/merge until fixed and re-reviewed.
+- recommended Claude model: Opus5.5（高）.
