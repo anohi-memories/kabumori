@@ -1,50 +1,43 @@
 # Claude Task 3
 
-- task_id: x-universal-oauth-refresh-stage3a-merge-edge-observe-20260926
+- task_id: x-universal-oauth-refresh-stage3b-second-account-pilot-prep-20260927
 - owner: claude
 - slot: claude-3
-- status: done
-- next_owner: none
-- priority: critical
+- status: ready
+- next_owner: claude
+- priority: high
 - recommended_model: Opus5.5（高）
-- purpose: reviewed Stage 3A sourceをmainへmergeし、Stage 3A対応版 x-test-post をproduction Edgeへdeployしたうえで、AI Labの自然な期限切れ1サイクルを観測して本番動作を確認する。
+- purpose: Stage 3Aで本番実証済みのUniversal X OAuth refreshを、2つ目の実アカウントへ安全に広げるStage 3B pilot準備を行う。今回は候補確認・投稿経路一般化・pilot契約・テスト・ロールバック設計まで。2つ目アカウントの本番有効化はまだ行わない。
 
-## Authorization
+## Current production baseline
 
-User approved proceeding on 2026-09-26 JST.
+Stage 3A is fully live:
+- PR #38 merged -> `6717b1fe451db83f80e837bf8104268a2b00423d`
+- production x-test-post v125
+- Stage 3A DB rollout authority live
+- AI Lab only = `enabled`
+- one natural AI Lab expiry-cycle observed successfully
+- proactive refresh generation 6 -> 7
+- no duplicate / second401 / uncertain / reauth / stuck
+- cross-account check PASS
+- Kabumori remains legacy non-Vault
+- migration-history debt remains; blind db push / repair prohibited
 
-This task authorizes ONLY:
-1. PR #38 reviewed/fixed head のfresh-main整合確認
-2. PR #38 merge
-3. merged mainから x-test-post のみ production Edge deploy
-4. deploy後のread-only verification
-5. AI Labの**自然な**次回token-expiry/refresh cycleを1回だけ観測
-6. 安全上必要な場合のgate OFF / safe stop
+Known next gap:
+- second real account exists as a potential candidate, but Stage 3B publish/content path is not yet proven/generic enough for a controlled pilot.
 
-Not authorized:
-- second account pilot
-- Stage 3B / 3C / 4 activation
-- rollout row変更
-- bulk Vault migration
-- manual token refresh
-- manual X test post
-- replay of historical failed posts
-- migration apply/reapply
-- migration repair
-- db push / include-all
-- Kabumori credential migration
-- unrelated DB/Auth/Admin/Cron/important-news changes
+## Goal
 
-## Reviewed state
+Prepare a safe Stage 3B controlled second-account pilot without activating it yet.
 
-- PR #38 fixed head: `748deb13a934129e5696ab5552401f547204b32c`
-- C1: PASS-WITH-FIX
-- Stage 3A migration is already applied in production and read-back PASS
-- production rollout rows at last K3: AI Lab only = enabled
-- no other pilot/enabled rows
-- migration history debt remains intentionally unnormalized
-- live Edge is still pre-Stage3A TypeScript and must be updated only after merge
-- current global refresh gate is expected ON from prior AI Lab recovery, but must be freshly verified
+Deliver a source/test/operational package that makes the next production step narrowly auditable:
+- exact pilot candidate identified
+- account-bound publish path defined
+- no brand-first / first-row fallback
+- pilot mode semantics proven
+- one-account-only rollout mutation procedure defined
+- one natural refresh observation procedure defined
+- rollback procedure defined
 
 ## Mandatory startup
 
@@ -52,241 +45,206 @@ Not authorized:
    - `.agent/ORCHESTRATION.md`
    - `.agent/CURRENT_STATE.md`
    - this TASK
-   - latest G3 Stage 3A production-apply report
+   - latest G3 Stage 3A final report
    - latest H1/C1 Stage 3A report
-2. Use independent G3 worktree/checkout.
+2. Use an independent G3 worktree/checkout.
 3. Fresh fetch `origin/main`.
 4. Read current Supabase skill.
-5. Fetch current Supabase changelog/docs relevant to Edge Functions deploy/secrets/runtime.
-6. Check installed Supabase CLI version and discover deploy commands with `--help`.
-7. Do not touch G4/Admin Auth work.
+5. Fetch current Supabase changelog/docs relevant to:
+   - Edge Functions
+   - Postgres/RLS/RPC
+   - secrets/env
+6. Check current CLI version and relevant `--help`.
+7. Do not touch G4/Admin Auth PR #33 files.
 
-## Stage 0 — pre-merge and production preflight
+## Stage 0 — candidate assessment (read-only)
 
-Before merge, confirm:
+Inspect production safely and identify whether there is exactly one suitable second X account for pilot.
 
-### A. PR identity
-- PR #38 is OPEN
-- exact head = `748deb13a934129e5696ab5552401f547204b32c`
-- no semantic changes after C1
-- mergeable against fresh main
-- any required CI/source checks are green or explainable
-- source diff remains within Stage 3A scope
+Required checks:
+- user/account ownership and intended project/brand binding are unambiguous
+- exact `social_account_id`
+- platform = x
+- identity verified
+- publish status and why it is currently disabled/off if applicable
+- credential refs present and distinct
+- no shared credential refs
+- no current refresh lease
+- no terminal connection error
+- not Kabumori legacy account
+- not AI Lab
+- no conflicting scheduler/dispatcher ownership
 
-Any semantic drift => STOP.
+Do not expose token values, secret IDs, Authorization headers, or provider bodies.
 
-### B. Production DB authority
-Read-only confirm:
-- Stage 3A rollout table/functions exist
-- AI Lab is the only enabled rollout row
-- no pilot row
-- no unexpected second enabled account
-- current AI Lab refresh state is healthy or at least in a known non-terminal state
-- no refreshing lease is unexpectedly stuck
-- Kabumori remains legacy non-Vault path
-- no credential-ref sharing
+If no suitable second account is unambiguous:
+- do not guess
+- continue with generic source/test preparation
+- report candidate selection as a user/operator gate
 
-Unexpected delta => STOP.
+## Stage 1 — account-bound publish path preparation
 
-### C. Migration safety
-Confirm:
-- Stage 3A migration file is already live in production
-- remote migration history remains known-debt/unrecorded
-- this task will NOT run migration apply/repair/db push
-- merge/deploy procedure cannot implicitly apply migrations
+Inspect the current `x-test-post` / scheduler / content dispatcher architecture.
 
-If deployment tooling would auto-apply migrations, STOP.
-
-## Stage 1 — merge PR #38
-
-Merge exact reviewed/fixed head only.
-
-After merge:
-- record merge commit
-- fresh fetch `origin/main`
-- prove Stage 3A semantic files match reviewed head
-- no unexpected unrelated conflict resolution
-- rerun focused source tests required to ensure merge did not alter semantics
-
-Minimum:
-- x-test-post focused tests
-- _shared relevant tests
-- Stage 3A static/migration contract tests
-- git diff/status clean in G3 worktree
-
-If merge introduces semantic drift => STOP before Edge deploy.
-
-## Stage 2 — production Edge deploy
-
-Deploy **x-test-post only** from the verified merged main source.
+Implement the narrowest source change needed so a second Vault-backed X account can be published through the same exact-account auth/refresh machinery without:
+- hardcoded AI Lab identity
+- brand-first lookup
+- first-row fallback
+- env token fallback
+- legacy token-store fallback
+- cross-account content/account mismatch
 
 Requirements:
-- no migration apply
-- no env change unless a rollback safety action is required
-- no other Edge Function deploy
-- preserve verify_jwt behavior exactly as currently intended
-- use the reviewed source corresponding to merged main
-- after deploy, download/read-back or equivalent source identity proof must show exact deployed Stage 3A source
-- confirm Stage 3A rollout refusal/proactive-start handling from fixed head is present
-- confirm Kabumori legacy path is unchanged
+- publish attempt must resolve one exact `social_account_id`
+- content ownership and account ownership must match
+- account rollout authority must be checked before Vault/token use
+- existing AI Lab path must remain behaviorally unchanged
+- Kabumori legacy path must remain unchanged
 
-Record:
-- prior Edge version
-- new Edge version
-- source identity / hash evidence
-- verify_jwt setting
+If a generic account-bound path already exists and only wiring/tests are missing, do not create a parallel path.
 
-Any mismatch => rollback if safe and STOP.
+## Stage 2 — pilot mode contract
 
-## Stage 3 — immediate post-deploy read-only checks
+Use existing Stage 3A `pilot` mode.
 
-Confirm:
-- global refresh gate current state
-- AI Lab rollout = enabled
-- all other rollout rows remain off/absent
-- AI Lab account health remains healthy
-- no token refresh occurred merely from deployment
-- no X post occurred merely from deployment
-- no cross-account mutation
-- no rollout row mutation
+Define and test a safe default pilot policy for the second account:
+- finite expiry
+- finite refresh generation ceiling
+- unresolved error blocks pilot
+- missing rollout row/off fails closed
+- only the exact account may be mutated
+- global env gate remains kill switch only, never authority
 
-If deploy itself causes unexpected refresh/post/mutation => STOP.
+Do not set the real production rollout row in this task.
 
-## Stage 4 — one natural AI Lab expiry-cycle observation
+## Stage 3 — scheduler/content safety
 
-Observe exactly one naturally scheduled AI Lab post that requires or encounters token refresh after token expiry.
+Prove the second account cannot:
+- claim AI Lab content
+- claim Kabumori content
+- publish another brand's scheduled row
+- reuse another account's credentials
+- receive duplicate claims
 
-Do NOT:
-- manually invoke x-test-post
-- create a manual X post
-- shorten expiry
-- alter rollout mode
-- force token invalidation
-- replay old rows
+If schema currently lacks enough account binding for this, implement the smallest source/schema preparation necessary, but keep production apply out of scope.
 
-Required evidence:
-- intended AI Lab scheduled post is claimed once
-- exact AI Lab account is selected
-- at most one refresh request
-- at most one retry of the intended X create after 401, if reactive path occurs
-- refresh generation advances exactly once if a refresh occurs
-- access expiry/last_refreshed_at update consistently
-- rotated credentials commit only to the same AI Lab account
-- final scheduled post succeeds
-- no duplicate X post
-- no second 401
-- no uncertain result
-- no reauth_required
-- no stuck lease
-- no cross-account credential/state change
-- Kabumori remains unchanged
+Any schema change:
+- create migration with current Supabase CLI workflow
+- disposable DB only
+- no production apply
+- no db push
+- no migration repair
 
-If the next natural due post occurs while token is still valid:
-- record a normal success but continue waiting only until the first **practical** natural expiry-cycle candidate within this session/window.
-- do not manufacture a refresh.
-- if no natural expiry-cycle can be observed safely within the available working window, STOP with `OBSERVATION_PENDING`; do not treat as failure.
+## Stage 4 — tests
 
-## Hard stop / rollback conditions
+At minimum prove:
+1. AI Lab enabled + second account off => only AI Lab can refresh.
+2. second account pilot + AI Lab enabled => each account resolves only itself.
+3. second account off/missing rollout => zero Vault read / zero token request.
+4. wrong account/content pairing => fail closed before X.
+5. wrong brand/account pairing => fail closed.
+6. missing credential refs => fail closed.
+7. invalid_grant affects exact second account only.
+8. uncertain refresh commits no credential.
+9. pilot expiry / generation ceiling blocks correctly.
+10. concurrent refresh lease remains account-local.
+11. second account cannot mutate AI Lab state.
+12. AI Lab cannot mutate second account state.
+13. Kabumori legacy path unchanged.
+14. no duplicate claim/post from pilot path.
 
-Hard stop on:
-- PR/source drift
-- merge conflict requiring semantic judgment
-- unexpected rollout row
-- unexpected account becomes eligible
-- Edge source mismatch
-- verify_jwt drift
-- invalid_grant / reauth
-- token endpoint uncertainty/network ambiguity
+Run:
+- x-test-post relevant tests
+- _shared relevant tests
+- scheduler/dispatcher/account-binding tests
+- disposable PostgreSQL behavior/race tests if DB changes
+- tsc/check/lint as applicable
+- git diff --check
+- targeted secret scan
+- advisors if DB objects are added/changed
+
+## Stage 5 — production pilot plan only
+
+Write the exact next-step Stage 3B production activation procedure, but DO NOT execute it.
+
+The plan must include:
+- exact pilot account identifier
+- preflight
+- exact rollout setter call
+- pilot expiry
+- generation ceiling
+- content/scheduler enablement step, if needed
+- one natural post observation
+- one natural expiry/refresh observation
+- exact rollback to OFF
+- hard-stop conditions
+- cross-account verification
+- no historical replay
+
+Hard stops for future pilot:
+- account mismatch
+- shared credential refs
+- unexpected eligible account
+- duplicate claim/post
 - second 401
-- duplicate provider request
-- lease mismatch/stuck refresh
+- invalid_grant
+- uncertain token response
+- stuck lease
 - credential commit mismatch
 - cross-account mutation
-- Kabumori path change
-- unexpected migration execution
-- secret/token exposure
 
-On Edge-deploy regression before a token rotation/uncertain event:
-- rollback to prior known-good x-test-post source if safe
-- leave DB authority layer intact
-- report exact non-secret evidence
+## Production restrictions
 
-Do not blindly retry an uncertain refresh.
+This task is SOURCE/PLAN-FIRST.
 
-## Production mutation allowed
+Allowed:
+- read-only production inspection
+- source changes
+- migration file creation if strictly needed
+- local/disposable DB tests
+- PR creation/update
+- test/CI/Preview verification
 
-Allowed expected mutations:
-- GitHub merge of PR #38
-- x-test-post Edge deployment
-- one natural AI Lab refresh/credential rotation/state update if triggered by its scheduled post
-- one normal AI Lab scheduled X post from existing scheduler
+Not allowed:
+- changing second account publish_enabled
+- changing second account rollout row
+- setting pilot/enabled in production
+- manual token refresh
+- manual X post
+- Edge production deploy
+- production DB migration apply
+- migration repair
+- db push
+- replaying historical posts
+- changing AI Lab rollout
+- changing Kabumori credentials
+- touching G4/Admin Auth work
 
-No other production mutation is authorized.
+## Deliverable
+
+Report:
+- exact candidate assessment
+- whether candidate is ready or operator-gated
+- architecture/path used for second account
+- changed_files
+- schema changes if any
+- tests/results
+- pilot policy
+- scheduler/content isolation proof
+- migration-history implications
+- production mutation=0
+- exact Stage 3B activation/observation/rollback plan
+- remaining risks
+- next recommendation
 
 ## Completion / K3
 
-Report:
-- task_id
-- source head + merge commit
-- merge verification
-- focused tests
-- Edge prior/new version
-- deployed source identity
-- verify_jwt state
-- gate state
-- rollout rows before/after
-- natural observation timestamp/post identity using non-secret identifiers
-- whether refresh happened
-- refresh generation before/after
-- X retry count
-- scheduled post result
-- cross-account/Kabumori checks
-- production mutations
-- hard-stop conditions encountered
-- remaining risks
-- whether Stage 3A is fully live and ready to plan Stage 3B second-account pilot
-
-Then:
+Set:
 - status -> review_required
 - next_owner -> chatgpt
-- STOP for K3.
+
+STOP for K3.
 
 ## Report
 
-- task_id: x-universal-oauth-refresh-stage3a-merge-edge-observe-20260926
-- result: K3 ready — PR #38 merged, Stage 3A x-test-post deployed (v125, byte-identical to merge), one natural AI Lab expiry-cycle observed and PASS. No hard stop.
-- model: Opus 5.5
-- user_approval_in_chat: 2026-09-26 23:06 JST「進める」（事前確認報告後）
-- source: PR #38 head `748deb13a934129e5696ab5552401f547204b32c` → merge `6717b1fe451db83f80e837bf8104268a2b00423d`（`gh pr merge 38 --merge --match-head-commit 748deb1…`, parents `80a96cd` + `748deb1`）
-- merge_verification: main の他変更は important-news-monitor のみ（PR と非重複）。merge 後 `supabase/functions/x-test-post`・`_shared`・`migrations`・`tests` は `748deb1` と完全一致。preview と merge 後でテスト再実行: x-test-post 514/0（focused: vault_account_auth / 3A static / core static / 1I static = 43/0）、_shared 141/0。worktree clean（未追跡は deploy 用 link/config のみ、未コミット）。
-- stage0_production (read-only 23:05 JST): Stage 3A 5関数 md5 = apply 時の read-back と一致; rollout rows = `ai_salaryman_lab_x=enabled/GRANDFATHERED_PROVEN_REFRESH` のみ（pilot なし）; AI Lab idle gen 6、error なし、stuck なし; Kabumori は Vault 参照なし; shared refs 0; 履歴 core/3A とも未記録（既知）; gate `X_VAULT_ACCOUNT_REFRESH` 設定あり; Edge v124（=777997a）。`functions deploy` は migration を適用しない（本 TASK で migration/repair/push 0）。
-- edge_deploy: x-test-post のみ、`supabase functions deploy x-test-post --use-api --no-verify-jwt`（G3 worktree、独自 config.toml/link で shared checkout 誤デプロイを防止）、23:09 JST。prior v124 → new **v125**。download して merge `6717b1f` と43ファイル byte 一致、`ROLLOUT_REFUSALS`/proactive 処理あり。verify_jwt=false 維持。Kabumori 経路（`index.ts`、`_shared/brand/**`）は `777997a` から無変更（今回の差分は `vault_account_auth.ts`＋テストのみ）。
-- post_deploy_checks (23:09 JST): gate ON、rollout rows 不変、AI Lab health 正常（gen 6、secret 更新 21:17 のまま）、deploy による refresh/投稿/状態変化 0、他アカウント・Kabumori store 不変。
-- natural_observation:
-  - 対象: 2026-09-27 07:49 JST の AI Lab 定期投稿 `scheduled_posts.id a9550772-c083-43a3-8515-c73aaa029a6a`（attempt 1）。直前のトークン期限 09-26 23:17 JST（期限切れ状態で到来）。
-  - 07:50:01 claim → 07:50:05 refresh commit → 07:50:06 succeeded（"AI Lab post completed; fingerprint persisted"）。claim 1回、ログ1組。
-  - refresh: あり、1回。generation 6 → 7、`last_refreshed_at` 07:50:05、`access_expires_at` 09:50:05（+2h）、AI Lab の access/refresh secret updated_at が同時刻 07:50:05（同一アカウントのみ）。
-  - X create: 保存済み期限が過ぎていたため新コードの proactive 経路（投稿前更新）の想定。DB 上は create 回数を直接観測できないが、401 記録（`last_connection_error_code`）なし・second 401 なし・成功1件・重複投稿行なし。コード上の上限は create 2回（reactive の場合）。
-  - 終了時: idle、error なし、uncertain/reauth/stuck なし、rollout 不変（updated_at 09-26 22:53 のまま）。
-- cross_account_kabumori: `sa_bfdab0e0…` secret/行 不変; Kabumori 行不変・Vault 参照なし・`oauth_token_store` updated_at 09-26 18:23 のまま。06:49 Kabumori morning_greeting 失敗は `MORNING_GREETING_IMAGE_NOT_FOUND`（当日画像欠落、X 呼び出し前、前日と同じ別件）。
-- production_mutations: (1) PR #38 merge (2) x-test-post v125 deploy (3) 定期スケジュールによる AI Lab の自然な refresh 1回（gen 6→7、AI Lab の2 secret 更新）(4) その AI Lab 定期投稿1件。migration/repair/push/env/rollout 変更・手動 invoke・手動投稿・再実行 0。
-- hard_stops_encountered: none
-- remaining_risks: migration history 未正規化（`db push` 禁止継続）; X create 回数は DB から直接は見えない（必要なら Edge ログで確認）; Kabumori morning_greeting の画像欠落（別件）; Stage 3B 用の2つ目アカウントには x-test-post 側の投稿処理がまだない。
-- stage3a_fully_live: yes — DB 権限層 + Edge（v125）とも本番稼働、AI Lab で proactive 自動更新を実観測。Stage 3B（2つ目アカウント pilot）の計画に進める状態。
-- next_recommendation: ChatGPT K3 → Stage 3B 計画 TASK（対象アカウント選定・同意・コンテンツ経路・pilot 期限/回数・観測/ロールバック手順）。別途 migration history 単一 version 正規化の承認判断。
-
-
-## Final K3 — Stage 3A fully live
-
-Verdict: **PASS**.
-
-- PR #38 merged at `6717b1fe451db83f80e837bf8104268a2b00423d`.
-- production `x-test-post` deployed to v125 from merged main; deployed source verified byte-identical and verify_jwt=false preserved.
-- Stage 3A rollout rows unchanged: AI Lab only enabled; no pilot/second enabled account.
-- natural AI Lab scheduled post at 2026-09-27 07:49 JST exercised the expiry path.
-- proactive refresh succeeded exactly once: generation 6 -> 7, state returned idle, no error/reauth/uncertain/stuck condition.
-- scheduled post succeeded with no duplicate observed; no second 401.
-- cross-account state/credential check PASS; Kabumori legacy path/store unchanged.
-- migration/repair/push/env/rollout/manual invoke/manual post mutations = 0 in this continuation.
-- Stage 3A is now fully live across DB authority + Edge runtime + one real natural refresh cycle.
-- ready to plan Stage 3B controlled second-account pilot.
+- pending
