@@ -10,8 +10,12 @@
  *     already re-derived it from the post's brand) must be the brand's own X
  *     account;
  *   - admin authority: brand live, `brand_post` enabled in brand_settings,
- *     account publish_enabled (assertBrandPublishAllowed); refresh authority
- *     is the account's Stage 3A rollout row, enforced in the database;
+ *     account publish_enabled (assertBrandPublishAllowed);
+ *   - publish authority: check_x_account_publish_authority in the database
+ *     (explicit per-account enabled window, off/revoked, consent, admin state,
+ *     exact account) — called before generation AND again immediately before
+ *     the X create, so expiry/revocation stops new posts even while the access
+ *     token is still valid. Stage 3A rollout remains the refresh authority only;
  *   - user consent: the brand's own content settings must choose
  *     approvalMode = 'auto_post_preference'. Missing table/row/'manual_review'
  *     never publishes.
@@ -31,6 +35,8 @@ import {
   type SocialMobileContentSettings,
 } from "./social_mobile_content_settings.ts";
 
+/** Brands with their own reviewed publish paths; never routed here. */
+const SPECIALIZED_BRAND_IDS: ReadonlySet<string> = new Set(["kabumori", "ai_salaryman_lab"]);
 /** Code profiles reviewed for live publishing through this path. */
 export const VAULT_ACCOUNT_PUBLISH_PROFILES: ReadonlySet<string> = new Set(["social_mobile_user_v1"]);
 /** 140 code points keeps an all-Japanese post inside X's 280 weighted-character limit. */
@@ -68,6 +74,7 @@ export async function dispatchVaultAccountScheduledBrandPost({
   scheduledPostId,
   socialAccountId,
   openAiApiKey,
+  checkPublishAuthority,
   loadContentSettings,
   loadRecentFingerprints,
   publishText,
@@ -80,6 +87,8 @@ export async function dispatchVaultAccountScheduledBrandPost({
   /** The exact account the X port was bound to for this running post. */
   socialAccountId: string;
   openAiApiKey: string;
+  /** check_x_account_publish_authority for this post/account/brand; throws a fixed code when not allowed. */
+  checkPublishAuthority: () => Promise<void>;
   loadContentSettings: () => Promise<SocialMobileContentSettings | null>;
   loadRecentFingerprints: () => Promise<PublishedFingerprint[]>;
   publishText: (text: string) => Promise<unknown>;
@@ -103,6 +112,9 @@ export async function dispatchVaultAccountScheduledBrandPost({
   xPostId: string;
   fingerprintPersisted: boolean;
 }> {
+  if (SPECIALIZED_BRAND_IDS.has(context.brand.id)) {
+    throw new BrandContextError("VAULT_BRAND_POST_BRAND_NOT_ELIGIBLE");
+  }
   if (!VAULT_ACCOUNT_PUBLISH_PROFILES.has(context.codeProfile.key) || context.brand.code_profile_key !== context.codeProfile.key) {
     throw new BrandContextError("VAULT_BRAND_POST_PROFILE_NOT_APPROVED");
   }
@@ -115,6 +127,8 @@ export async function dispatchVaultAccountScheduledBrandPost({
     throw new BrandContextError("VAULT_BRAND_POST_TYPE_NOT_ENABLED");
   }
   assertBrandPublishAllowed(context);
+  // Publish authority before any generation cost.
+  await checkPublishAuthority();
 
   const settings = await loadContentSettings();
   if (!settings || settings.approvalMode !== "auto_post_preference") {
@@ -143,7 +157,10 @@ export async function dispatchVaultAccountScheduledBrandPost({
   if (duplicate.blocked) throw new BrandContextError("VAULT_BRAND_POST_CROSS_BRAND_DUPLICATE");
 
   const normalizedTextSha256 = await fingerprintText(draft.text);
-  // Final gate adjacent to the X callback: no transform may follow the checks.
+  // Re-check publish authority immediately before the one X create: an expiry,
+  // revocation, consent withdrawal or admin disable committed during generation
+  // stops the post here. No transform may follow the final checks.
+  await checkPublishAuthority();
   assertWithinPublishLength(draft.text);
   const xResponse = await publishText(draft.text);
   const xPostId = xPostIdFrom(xResponse);
@@ -259,4 +276,42 @@ export async function completeVaultAccountBrandPost({
     throw new BrandContextError("VAULT_BRAND_POST_COMPLETION_RPC_INVALID_RESPONSE");
   }
   return { fingerprintPersisted: (row as { fingerprint_persisted: boolean }).fingerprint_persisted };
+}
+
+/** check_x_account_publish_authority(post, account, brand): resolves only on 'allowed'. */
+export async function checkVaultAccountPublishAuthority({
+  supabaseUrl,
+  serviceRoleKey,
+  scheduledPostId,
+  socialAccountId,
+  brandId,
+  fetchImpl = fetch,
+}: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  scheduledPostId: string;
+  socialAccountId: string;
+  brandId: string;
+  fetchImpl?: typeof fetch;
+}): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetchImpl(`${supabaseUrl.replace(/\/$/u, "")}/rest/v1/rpc/check_x_account_publish_authority`, {
+      method: "POST",
+      headers: { ...serviceHeaders(serviceRoleKey), "Content-Type": "application/json" },
+      redirect: "manual",
+      body: JSON.stringify({ p_scheduled_post_id: scheduledPostId, p_social_account_id: socialAccountId, p_brand_id: brandId }),
+    });
+  } catch {
+    throw new BrandContextError("VAULT_PUBLISH_AUTHORITY_UNAVAILABLE");
+  }
+  let payload: unknown = null;
+  try {
+    payload = await response.json();
+  } catch { /* classified below */ }
+  if (!response.ok) {
+    const message = (payload as { message?: unknown } | null)?.message;
+    throw new BrandContextError(typeof message === "string" && /^[A-Z][A-Z0-9_]{1,99}$/u.test(message) ? message : "VAULT_PUBLISH_AUTHORITY_UNAVAILABLE");
+  }
+  if (payload !== "allowed") throw new BrandContextError("VAULT_PUBLISH_AUTHORITY_UNAVAILABLE");
 }

@@ -11,6 +11,7 @@ import {
 import { fingerprintText } from "./cross_brand_dedupe.ts";
 import { SOCIAL_MOBILE_USER_DEFAULTS, type SocialMobileContentSettings } from "./social_mobile_content_settings.ts";
 import {
+  checkVaultAccountPublishAuthority,
   completeVaultAccountBrandPost,
   dispatchVaultAccountScheduledBrandPost,
   loadSocialMobileContentSettingsForPublish,
@@ -34,7 +35,10 @@ function pilotContext(overrides: Partial<BrandContext> = {}): BrandContext {
 const AUTO: SocialMobileContentSettings = { ...SOCIAL_MOBILE_USER_DEFAULTS, approvalMode: "auto_post_preference", optionalNgWords: ["禁止語"] };
 
 function harness(options: { text?: string; settings?: SocialMobileContentSettings | null; complete?: () => Promise<{ fingerprintPersisted: boolean }>;
-  publishResponse?: unknown; fingerprints?: Array<{ brandId: string; normalizedTextSha256: string; publishedAt: string }> } = {}) {
+  publishResponse?: unknown; fingerprints?: Array<{ brandId: string; normalizedTextSha256: string; publishedAt: string }>;
+  /** Publish-authority answers per call ("allowed" or a refusal code). */
+  authority?: string[] } = {}) {
+  const authority = [...(options.authority ?? ["allowed", "allowed"])];
   const calls: string[] = [];
   const generated: Array<{ context: BrandContext; contentSettings?: SocialMobileContentSettings }> = [];
   const published: string[] = [];
@@ -47,6 +51,11 @@ function harness(options: { text?: string; settings?: SocialMobileContentSetting
       scheduledPostId: "post_1",
       socialAccountId: "sa_pilot",
       openAiApiKey: "sk-test-not-real",
+      checkPublishAuthority: async () => {
+        calls.push("authority");
+        const answer = authority.shift() ?? "UNEXPECTED_EXTRA_AUTHORITY_CHECK";
+        if (answer !== "allowed") throw new Error(answer);
+      },
       loadContentSettings: async () => { calls.push("settings"); return options.settings === undefined ? AUTO : options.settings; },
       loadRecentFingerprints: async () => { calls.push("fingerprints"); return options.fingerprints ?? []; },
       generate: async (args: { context: BrandContext; postType: string; contentSettings?: SocialMobileContentSettings }) => {
@@ -65,7 +74,7 @@ const rejects = (p: Promise<unknown>, code: string) =>
 test("pilot account: consented, account-bound, length-bounded generation -> one publish -> exact-account completion", async () => {
   const h = harness();
   const result = await dispatchVaultAccountScheduledBrandPost({ context: pilotContext(), ...h.deps });
-  assert.deepEqual(h.calls, ["settings", "fingerprints", "generate", "publish", "complete"]);
+  assert.deepEqual(h.calls, ["authority", "settings", "fingerprints", "generate", "authority", "publish", "complete"]);
   assert.equal(h.published.length, 1);
   assert.deepEqual(h.generated[0].context.codeProfile.postLengthPolicy, VAULT_ACCOUNT_PUBLISH_LENGTH_POLICY);
   assert.equal(h.generated[0].contentSettings?.approvalMode, "auto_post_preference");
@@ -82,11 +91,11 @@ test("no user consent (missing settings or manual_review) stops before fingerpri
   for (const settings of [null, { ...SOCIAL_MOBILE_USER_DEFAULTS }]) {
     const h = harness({ settings });
     await rejects(dispatchVaultAccountScheduledBrandPost({ context: pilotContext(), ...h.deps }), "SOCIAL_MOBILE_AUTO_POST_NOT_CONSENTED");
-    assert.deepEqual(h.calls, ["settings"]);
+    assert.deepEqual(h.calls, ["authority", "settings"]);
   }
 });
 
-test("AI Lab and Kabumori profiles can never publish through this path", async () => {
+test("AI Lab and Kabumori can never publish through this path (brand and profile)", async () => {
   const cases: BrandContext[] = [
     pilotContext({
       brand: { id: "ai_salaryman_lab", display_name: "AI Lab", is_active: true, publish_mode: "live", code_profile_key: "ai_salaryman_lab_v1" },
@@ -97,14 +106,16 @@ test("AI Lab and Kabumori profiles can never publish through this path", async (
       brand: { id: "kabumori", display_name: "kabumori", is_active: true, publish_mode: "live", code_profile_key: "kabumori_v1" },
       codeProfile: KABUMORI_CODE_PROFILE,
     }),
-    // Profile object and brand key disagree.
-    pilotContext({ codeProfile: AI_SALARYMAN_LAB_CODE_PROFILE }),
   ];
   for (const context of cases) {
     const h = harness();
-    await rejects(dispatchVaultAccountScheduledBrandPost({ context, ...h.deps }), "VAULT_BRAND_POST_PROFILE_NOT_APPROVED");
+    await rejects(dispatchVaultAccountScheduledBrandPost({ context, ...h.deps }), "VAULT_BRAND_POST_BRAND_NOT_ELIGIBLE");
     assert.deepEqual(h.calls, []);
   }
+  // A user brand whose profile object and brand key disagree.
+  const h = harness();
+  await rejects(dispatchVaultAccountScheduledBrandPost({ context: pilotContext({ codeProfile: AI_SALARYMAN_LAB_CODE_PROFILE }), ...h.deps }), "VAULT_BRAND_POST_PROFILE_NOT_APPROVED");
+  assert.deepEqual(h.calls, []);
 });
 
 test("account/content binding: wrong account, missing account, foreign-brand account fail before anything", async () => {
@@ -153,6 +164,8 @@ test("content gates after generation: length, NG word, cross-brand duplicate, ge
     generate: async () => ({ brandId: "ai_salaryman_lab", postType: "brand_post", text: "x", model: "m", inputTokens: 0, outputTokens: 0, apiCostUsd: 0, characterCount: 1 }),
   }), "VAULT_BRAND_POST_GENERATION_CONTEXT_MISMATCH");
   for (const h of [long, ng, dup]) assert.ok(!h.calls.includes("publish"));
+  // Length is also enforced after the final authority re-check, adjacent to X.
+  assert.ok(!long.calls.includes("publish"));
 });
 
 test("confirmed X post whose completion fails is never reported as a plain failure; missing id is not completed", async () => {
@@ -199,8 +212,47 @@ test("completion RPC adapter: exact post/account parameters, manual redirect, st
   await rejects(call(Response.json([{}])), "VAULT_BRAND_POST_COMPLETION_RPC_INVALID_RESPONSE");
 });
 
-test("source: no brand names, env tokens, token store, console, or raw fetch outside the adapters", async () => {
+test("source: brand names only in the exclusion set; no env tokens, token store, console, or raw fetch outside the adapters", async () => {
   const source = (await Deno.readTextFile(new URL("./vault_account_brand_post.ts", import.meta.url))).replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gmu, "");
-  assert.doesNotMatch(source, /ai_salaryman_lab|kabumori|oauth_token_store|Deno\.env|console\.|X_OAUTH2_/u);
+  assert.equal((source.match(/ai_salaryman_lab|kabumori/gu) ?? []).length, 2);
+  assert.match(source, /const SPECIALIZED_BRAND_IDS: ReadonlySet<string> = new Set\(\["kabumori", "ai_salaryman_lab"\]\);/u);
+  assert.doesNotMatch(source, /oauth_token_store|Deno\.env|console\.|X_OAUTH2_/u);
   assert.doesNotMatch(source, /api\.x\.com/u);
+});
+
+test("publish authority missing/off/revoked/not started/expired or consent/admin refused at the first check -> no generation, no X", async () => {
+  for (const code of ["VAULT_PUBLISH_AUTHORITY_OFF", "VAULT_PUBLISH_AUTHORITY_REVOKED", "VAULT_PUBLISH_AUTHORITY_NOT_STARTED",
+    "VAULT_PUBLISH_AUTHORITY_EXPIRED", "SOCIAL_MOBILE_AUTO_POST_NOT_CONSENTED", "VAULT_PUBLISH_BRAND_DISABLED", "X_ACCOUNT_PUBLISH_DISABLED"]) {
+    const h = harness({ authority: [code] });
+    await rejects(dispatchVaultAccountScheduledBrandPost({ context: pilotContext(), ...h.deps }), code);
+    assert.deepEqual(h.calls, ["authority"], code);
+  }
+});
+
+test("revocation/expiry/consent withdrawal committed during generation: the pre-create re-check stops the X create", async () => {
+  for (const code of ["VAULT_PUBLISH_AUTHORITY_REVOKED", "VAULT_PUBLISH_AUTHORITY_EXPIRED", "VAULT_PUBLISH_AUTHORITY_OFF",
+    "SOCIAL_MOBILE_AUTO_POST_NOT_CONSENTED", "VAULT_PUBLISH_BRAND_DISABLED", "X_ACCOUNT_PUBLISH_DISABLED"]) {
+    const h = harness({ authority: ["allowed", code] });
+    await rejects(dispatchVaultAccountScheduledBrandPost({ context: pilotContext(), ...h.deps }), code);
+    assert.deepEqual(h.calls, ["authority", "settings", "fingerprints", "generate", "authority"], code);
+    assert.equal(h.published.length, 0, code);
+  }
+});
+
+test("publish authority adapter: exact post/account/brand, manual redirect, only 'allowed' passes, fixed codes", async () => {
+  const sent: Array<{ url: string; body: unknown; redirect: RequestRedirect | undefined }> = [];
+  const call = (reply: Response) => checkVaultAccountPublishAuthority({
+    supabaseUrl: "https://e.supabase.co/", serviceRoleKey: "srk", scheduledPostId: "post_1", socialAccountId: "sa_pilot", brandId: "u_pilot",
+    fetchImpl: async (input, init) => { sent.push({ url: String(input), body: JSON.parse(String(init?.body)), redirect: init?.redirect }); return reply; },
+  });
+  await call(Response.json("allowed"));
+  assert.deepEqual(sent[0], {
+    url: "https://e.supabase.co/rest/v1/rpc/check_x_account_publish_authority",
+    body: { p_scheduled_post_id: "post_1", p_social_account_id: "sa_pilot", p_brand_id: "u_pilot" },
+    redirect: "manual",
+  });
+  await rejects(call(Response.json({ message: "VAULT_PUBLISH_AUTHORITY_EXPIRED" }, { status: 400 })), "VAULT_PUBLISH_AUTHORITY_EXPIRED");
+  await rejects(call(Response.json({ message: "permission denied for table x" }, { status: 403 })), "VAULT_PUBLISH_AUTHORITY_UNAVAILABLE");
+  await rejects(call(Response.json("maybe")), "VAULT_PUBLISH_AUTHORITY_UNAVAILABLE");
+  await rejects(call(Response.json(null)), "VAULT_PUBLISH_AUTHORITY_UNAVAILABLE");
 });

@@ -80,6 +80,7 @@ import {
   dispatchAiLabScheduledBrandPost,
 } from "../_shared/brand/ai_lab_scheduled_brand_post.ts";
 import {
+  checkVaultAccountPublishAuthority,
   completeVaultAccountBrandPost,
   dispatchVaultAccountScheduledBrandPost,
   loadSocialMobileContentSettingsForPublish,
@@ -4026,6 +4027,13 @@ Deno.serve(async (req) => {
             scheduledPostId: scheduledPost.id,
             socialAccountId: vaultAccountId,
             openAiApiKey,
+            checkPublishAuthority: () => checkVaultAccountPublishAuthority({
+              supabaseUrl,
+              serviceRoleKey,
+              scheduledPostId: scheduledPost.id,
+              socialAccountId: vaultAccountId,
+              brandId: vaultBrandPostBrandId,
+            }),
             loadContentSettings: () => loadSocialMobileContentSettingsForPublish({
               supabaseUrl,
               serviceRoleKey,

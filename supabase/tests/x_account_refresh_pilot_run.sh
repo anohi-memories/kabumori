@@ -90,6 +90,18 @@ end;
 $$;
 revoke all on function public.claim_due_post() from public, anon, authenticated;
 grant execute on function public.claim_due_post() to service_role;
+-- Production brand/admin columns the publish predicate reads.
+alter table public.brands add column is_active boolean not null default false,
+  add column publish_mode text not null default 'disabled' check (publish_mode in ('disabled', 'dry_run', 'live'));
+create table public.brand_settings (
+  brand_id text primary key references public.brands (id),
+  fixed_hashtags jsonb not null default '[]'::jsonb,
+  note_url text,
+  image_policy jsonb not null default '{}'::jsonb,
+  enabled_post_types jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
 -- The second (pilot) Vault-backed account and an account without refs.
 insert into public.brands values ('u_pilot'), ('u_norefs');
 insert into vault.secrets (id, secret) values
@@ -111,8 +123,14 @@ SQL
 if "${as_owner[@]}" -f "$migrations/20260927101423_vault_account_brand_post_completion.sql" > /dev/null 2>&1; then
   echo "FAIL Stage 3B re-apply was not refused" >&2; exit 1
 fi
+"${as_owner[@]}" -f "$migrations/20260927124300_x_account_publish_authority.sql"
+if "${as_owner[@]}" -f "$migrations/20260927124300_x_account_publish_authority.sql" > /dev/null 2>&1; then
+  echo "FAIL publish authority re-apply was not refused" >&2; exit 1
+fi
 "${as_owner[@]}" -f "$here/x_account_refresh_pilot_behavior.sql" | grep -q PILOT_BEHAVIOR_PASS || { echo "FAIL behavior" >&2; exit 1; }
 echo "PILOT_BEHAVIOR_PASS"
+"${as_owner[@]}" -f "$here/x_account_publish_authority_behavior.sql" | grep -q PUBLISH_AUTHORITY_BEHAVIOR_PASS || { echo "FAIL publish authority behavior" >&2; exit 1; }
+echo "PUBLISH_AUTHORITY_BEHAVIOR_PASS"
 
 tmp="$(mktemp -d /private/tmp/kabumori-refresh-pilot-race.XXXXXX)"
 trap 'rm -rf "$tmp"; cleanup' EXIT
@@ -158,6 +176,23 @@ dupes="$(cat "$tmp/c1" "$tmp/c2" "$tmp/c3" | grep -E '^[0-9a-f-]{36}$' | sort | 
 starts="$("${as_service[@]}" -c "select count(*) from public.post_execution_logs where status = 'started' and brand_id = 'u_pilot'")"
 [[ "$starts" == 1 ]] || { echo "FAIL started logs=$starts" >&2; exit 1; }
 echo "PILOT_RACE_PASS account_local_leases=ai_salaryman_lab_x,sa_pilot single_claim=$claimed"
+
+# Race 3 (publish boundary): a revocation is effective from its commit. A check
+# that runs while the revocation is still uncommitted sees the last committed
+# state; every check after the commit refuses. (The Edge path re-checks
+# immediately before its single X create, so at most that one in-flight create
+# can straddle a revocation commit.)
+post="$("${as_service[@]}" -c "insert into public.scheduled_posts (brand_id, post_type, status, attempt_count, started_at) values ('u_pilot', 'brand_post', 'running', 1, now()) returning id" | head -1)"
+check_sql="set role service_role; select public.check_x_account_publish_authority('$post', 'sa_pilot', 'u_pilot');"
+[[ "$("${as_service[@]}" -c "$check_sql" 2>&1)" == allowed ]] || { echo "FAIL publish race precondition" >&2; exit 1; }
+"${as_service[@]}" -c "begin; set local role service_role; select public.set_x_account_publish_authority('sa_pilot', 'revoked', 'RACE_REVOKE'); select pg_sleep(2); commit;" > "$tmp/revoke" 2>&1 &
+sleep 0.7
+during="$("${as_service[@]}" -c "$check_sql" 2>&1 | tr -d '\n')"
+wait
+after="$("${as_service[@]}" -c "$check_sql" 2>&1 | tr -d '\n' || true)"
+[[ "$during" == allowed ]] || { echo "FAIL during-revoke check: $during" >&2; exit 1; }
+[[ "$after" == *VAULT_PUBLISH_AUTHORITY_REVOKED* ]] || { echo "FAIL after-revoke check: $after" >&2; exit 1; }
+echo "PUBLISH_RACE_PASS revoke_effective_at_commit during=allowed after=revoked"
 
 cleanup
 left="$("${as_super[@]}" -A -t -d postgres -c "select count(*) from pg_database where datname = '$db'")"

@@ -2,7 +2,8 @@
 --
 -- Stage 3B: completion of a scheduled brand_post published through the
 -- generic Vault-backed account path (_shared/brand/vault_account_brand_post.ts).
--- AI Lab keeps complete_ai_salaryman_lab_brand_post; Kabumori never uses this.
+-- AI Lab keeps complete_ai_salaryman_lab_brand_post and Kabumori its legacy
+-- completions: both brands are refused here explicitly.
 --
 -- The caller names the exact account its X port was bound to. The row is
 -- completed only if that account is the running post's brand's one and only
@@ -40,7 +41,9 @@ begin
     raise exception 'VAULT_BRAND_POST_COMPLETION_ARGUMENT_INVALID' using errcode = 'P0001';
   end if;
   select sp.* into v_post from public.scheduled_posts sp where sp.id = p_scheduled_post_id for update;
-  if not found or v_post.post_type is distinct from 'brand_post' or v_post.brand_id = 'kabumori'
+  -- Specialised paths keep their own completion (Kabumori legacy; AI Lab uses
+  -- complete_ai_salaryman_lab_brand_post) and never complete through here.
+  if not found or v_post.post_type is distinct from 'brand_post' or v_post.brand_id in ('kabumori', 'ai_salaryman_lab')
      or (pg_catalog.to_jsonb(v_post) ->> 'social_account_id') is not null then
     raise exception 'VAULT_BRAND_POST_NOT_FOUND' using errcode = 'P0001';
   end if;

@@ -173,8 +173,9 @@ declare p_ai uuid := pg_temp.run_post('ai_salaryman_lab');
         sha text := repeat('a', 64);
         p_pending uuid;
 begin
-  -- 4. Second account cannot complete AI Lab content; AI Lab account cannot complete the pilot's.
-  perform pg_temp.expect_error(format('select * from public.complete_vault_account_brand_post(%L,%L,%L,%L)', p_ai, 'sa_pilot', '101', sha), 'X_CLAIM_ACCOUNT_MISMATCH');
+  -- 4. Second account cannot complete AI Lab content (AI Lab rows never complete here at all);
+  --    AI Lab account cannot complete the pilot's.
+  perform pg_temp.expect_error(format('select * from public.complete_vault_account_brand_post(%L,%L,%L,%L)', p_ai, 'sa_pilot', '101', sha), 'VAULT_BRAND_POST_NOT_FOUND');
   perform pg_temp.expect_error(format('select * from public.complete_vault_account_brand_post(%L,%L,%L,%L)', p_pi, 'ai_salaryman_lab_x', '102', sha), 'X_CLAIM_ACCOUNT_MISMATCH');
   -- 5. Wrong brand/account pairing for refresh.
   perform pg_temp.expect_error(pg_temp.begin_sql(p_pi, 'sa_pilot', 'ai_salaryman_lab'), 'X_LEGACY_POST_NOT_RUNNING');
