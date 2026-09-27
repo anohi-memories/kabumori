@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: x-universal-oauth-refresh-stage3a-merge-edge-observe-20260926
+- status: ready
+- task_id: x-universal-oauth-refresh-stage3b-second-account-pilot-prep-20260927
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: closed; Final K3 PASS — PR #38 merged, x-test-post v125 live, natural AI Lab expiry refresh observed successfully; Stage 3A fully live; next Stage 3B second-account pilot
+- allocation: assigned; Stage 3B second-account pilot preparation only — candidate assessment, exact-account publish/content path, pilot tests and rollback plan; no production activation; recommended Opus5.5（高）
 
 ## Claude G4
 - owner: claude
