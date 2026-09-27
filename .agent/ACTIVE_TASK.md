@@ -74,12 +74,12 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: done
-- task_id: x-admin-pr33-invite-otp-purpose-binding-fix-20260926
+- status: ready
+- task_id: x-admin-pr33-bounded-invite-e2e-after-binding-secret-20260927
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: closed; Final K4 PASS for source/tests at PR #33 `0cc48fe`; waiting only for operator to set Preview env `ADMIN_INVITE_BINDING_SECRET`, then resume bounded invite E2E without intermediate Codex review
+- allocation: assigned; PR #33 secret-enabled Deploy Preview preflight + one bounded real invite E2E + cleanup; no merge/production deploy; recommended Opus5.5（高）
 
 ## Deferred
 
