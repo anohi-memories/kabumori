@@ -3,8 +3,8 @@
 - task_id: x-stage3b-publish-authority-and-ai-lab-exclusion-fix-20260927
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Opus5.5（高）
 - purpose: C1 FAILとなったPR #41 Stage 3B準備を修正する。bounded pilotを本当に「投稿停止」できる明示的publish authority/timeboxへ分離し、generic completion RPCからAI Labを明示除外する。source/test only。production activationはしない。
@@ -173,4 +173,29 @@ STOP for K3.
 
 ## Report
 
-- pending
+- task_id: x-stage3b-publish-authority-and-ai-lab-exclusion-fix-20260927
+- result: K3 ready — P1/P2 fixed on PR #41; production mutation 0; ready for one focused re-review.
+- model: Opus 5.5
+- final_pr_head: `6b25305e57bb1d6ad119c06c779042daba210547`（PR #41、reviewed `cd7adf5` + fix commit 1件）
+- publish_authority_design（P1）: 新 migration `20260927124300_x_account_publish_authority.sql`（`supabase migration new`）。
+  - `x_account_publish_authority`: X アカウントごと1行、`enabled|off|revoked`、`starts_at`/`expires_at`（≤30日）。行なし＝投稿不可。RLS on、service_role は SELECT のみ。
+  - `set_x_account_publish_authority`: 唯一の変更経路（SECURITY DEFINER、service_role）。enabled は未終了かつ30日以内の期間が必須。off/revoked はいつでも可で、監査用に最後の期間を残す。kabumori/ai_salaryman_lab のアカウントは拒否。
+  - `check_x_account_publish_authority(post, account, brand)`: 単一の投稿判定（SECURITY INVOKER、service_role、stable）。専用ブランド除外 → 実行中 brand_post・同 brand → brand の唯一のアカウント＝指定 → brand active+live → アカウント identity/publish → brand_settings に brand_post → 許可行（off/revoked/未開始/期限切れ）→ 同意（content settings 表なし・行なし・auto_post_preference 以外は拒否）。Vault も refresh rollout も読まない。
+- valid_token_blocking: Edge の汎用 dispatcher は、文章生成前（設定読み込み前）と X 作成の直前に判定を2回呼ぶ。期限切れ・取り消し・同意撤回・管理側無効化が2回目の判定より前に commit されていれば、アクセストークンが有効でも X 作成は起きない。
+- atomicity: 取り消しは commit 時点で有効。未 commit 中の判定は直前の commit 状態を見る（`PUBLISH_RACE_PASS` で実証）。すり抜けうるのは「取り消し commit 時点で既に2回目の判定を通過していた1件の作成」のみで、以降の投稿はすべて止まる。
+- refresh_vs_publish: 独立。publish 有効で refresh 上限到達 → トークン有効な間は投稿可、期限切れ時は refresh 拒否（`X_REFRESH_PILOT_LIMIT_REACHED`、token request 0）で投稿失敗（意図どおり、文書化）。refresh enabled でも publish は許可されない（両方向とも実証）。
+- consent_admin_publish_interaction: 3つとも必須（同意 `auto_post_preference`＋管理側有効化＋publish authority）。いずれか1つの期限切れ・取り消しで新規投稿は止まる。rollback の第一手は publish authority `revoked`（それ単独で十分）。以降の brand/account/window 無効化は多重防御と後片付け。
+- ai_lab_exclusion（P2）: `complete_vault_account_brand_post` が `brand_id in ('kabumori','ai_salaryman_lab')` を明示拒否。H1 の回帰（AI Lab 自身の実行中 brand_post 行＋`ai_salaryman_lab_x`）→ `VAULT_BRAND_POST_NOT_FOUND`、fingerprint/log の書き込みなし、行は running のまま。加えて publish 判定と setter も両ブランドを拒否し、汎用 dispatcher も brand id で最初に拒否。AI Lab の本番経路・権限（専用 dispatcher と `complete_ai_salaryman_lab_brand_post`、Stage 3A refresh）は不変。
+- changed_files: `supabase/migrations/20260927124300_x_account_publish_authority.sql`（新）、`supabase/migrations/20260927101423_vault_account_brand_post_completion.sql`（AI Lab 除外）、`supabase/functions/_shared/brand/vault_account_brand_post.ts`（判定2回・専用ブランド除外・adapter）+`_test.ts`、`supabase/functions/x-test-post/index.ts`（判定の配線のみ）、`supabase/functions/x-test-post/vault_account_brand_post_routing_test.ts`、`supabase/tests/x_account_publish_authority_behavior.sql`（新）、`supabase/tests/x_account_refresh_pilot_{behavior.sql,run.sh}`、`supabase/tests/x_account_refresh_pilot.md`
+- acl_security: 新表 RLS on・API ロール権限なし・service_role は SELECT のみ。判定関数は INVOKER（DEFINER 不要）、setter のみ DEFINER（service_role が表に書けないため）。両方 `search_path=''`、PUBLIC/anon/authenticated の EXECUTE なし。advisors（security+performance、使い捨て DB）: 新規オブジェクト起因 0。
+- tests:
+  - 使い捨て PostgreSQL 17: `PILOT_BEHAVIOR_PASS` / `PUBLISH_AUTHORITY_BEHAVIOR_PASS` / `PILOT_RACE_PASS` / `PUBLISH_RACE_PASS` / `PILOT_CLEANUP_PASS`。TASK 必須 1–17: 行なし・off/revoked・期限切れ・未開始・refresh 上限との独立（両方向）・同意なし/撤回・brand 無効/dry_run・アカウント publish off/未検証・brand_post 無効・誤アカウント/ブランド・AI Lab/Kabumori の判定/setter/完了拒否（書き込みなし）・rollback の revoked 単独で停止・取り消し競合（commit 時点で有効）・二重 claim なし。
+  - わざと壊した7パターン全て検出（期限・revoked・同意の確認削除、判定の AI Lab 許可、行なし許可、完了の AI Lab 許可、dry_run 許可）。
+  - 既存: rollout / core / Phase1I 検証 PASS（Stage 3A refresh 動作不変）。
+  - Deno: x-test-post 518/0（routing pin 4）、_shared 154/0（汎用 dispatcher 13）、important-news-monitor 521/0、social-mobile-brand-dry-run 10/0。AI Lab 既存テスト不変・PASS。
+  - deno check/lint（変更ファイル）clean、index.ts は既存の6件のみ; `bash -n`; `git diff --check`; secret scan 0
+- rollback_semantics: 第一手 `set_x_account_publish_authority('<account>','revoked','PILOT_STAGE3B_ROLLBACK')`（単独で新規 X 作成を停止）→ refresh rollout off → brand 無効 → window 無効 → account publish off → 当該 brand の pending 行を failed（再実行なし）。global gate と AI Lab は触らない。
+- production_mutation: 0（本 TASK は読み取りも実施せず、ソース・使い捨て DB のみ）
+- re_review_ready: yes — PR #41 head `6b25305` を H1 で1回の集中再レビュー（P1/P2 と §2a の原子性の記述）。
+- remaining_gates: owner の対象確認と自動投稿への同意; content settings 表（`20260922045046`）の製品・セキュリティ判断と適用（判定は INVOKER のため service_role の SELECT 付与が必要）; 3B 用 migration 2本の単独適用と Edge デプロイは別 TASK; pilot アカウントの refresh token は 09-23 から未使用（初回 invalid_grant の可能性）。
+- next_recommendation: ChatGPT K3 → H1 集中再レビュー（Sol高、範囲は publish authority・AI Lab 除外・原子性）→ owner 同意取得 → 別 TASK で本番有効化。
