@@ -4,8 +4,11 @@ import {
   buildVerifyQuery,
   HEADLINE_TRIGGER_LANE_ENABLED,
   isNewsArticleHost,
-  MAX_TRIGGER_VERIFY_PER_RUN,
+  MAX_TRIGGER_CANDIDATES_PER_RUN,
   NEWS_ARTICLE_HOSTS,
+  SECONDARY_VERIFY_MAX_PER_RUN,
+  triggerArticleType,
+  TRIGGER_PRIMARY_SOURCES,
   parseTriageOutput,
   parseTriggerFeed,
   runHeadlineTriggerLane,
@@ -24,10 +27,9 @@ import {
 import {
   BREAKING_MARKET_NEWS_DOMAINS,
   breakingMarketRequestBody,
-  fetchBreakingMarketQueryWithDiagnostics,
   type BreakingMarketQueryDiagnostics,
 } from "./breaking_market_source_fetchers.ts";
-import type { IncomingNewsCandidate } from "./news_candidate_logic.ts";
+import { type IncomingNewsCandidate, isImportantNewsCategory } from "./news_candidate_logic.ts";
 import { buildCollectionRunDiagnostics } from "./news_collection_diagnostics.ts";
 import { triggerTriageUsageEvents, triggerVerifyUsageEvents } from "./usage_metering.ts";
 import { supabaseUsageWriter } from "./usage_ledger.ts";
@@ -115,23 +117,26 @@ test("duplicates within the batch and against history are removed, newest first,
   assert.deepEqual(selected.map((item) => [item.id, item.title]), [["h1", "Newest"], ["h2", "Older"]]);
 });
 
-test("history keeps every triaged URL/title and returns only unsearched fresh verifies as deferred", () => {
+test("history keeps every triaged URL/title and returns only budget-deferred fresh verifies", () => {
   const history = triggerHistoryFromRuns([
     { items: [
-      { url: "https://www.aljazeera.com/news/a", titleKey: "a", decision: "verify", verifyAttempted: false, publishedAt: "2026-09-26T02:00:00Z", triagedAt: "2026-09-26T03:00:00Z", title: "A", source: "al_jazeera" },
-      { url: "https://www.aljazeera.com/news/b", titleKey: "b", decision: "ignore", verifyAttempted: false, publishedAt: "2026-09-26T02:00:00Z", triagedAt: "2026-09-26T03:00:00Z" },
-      { url: "https://www.aljazeera.com/news/c", titleKey: "c", decision: "verify", verifyAttempted: false, publishedAt: "2026-09-25T20:00:00Z", triagedAt: "2026-09-26T03:00:00Z" },
+      { url: "https://www.aljazeera.com/news/a", titleKey: "a", decision: "verify", candidateCreated: false, rejectionReason: "candidate_deferred_budget", publishedAt: "2026-09-26T02:00:00Z", triagedAt: "2026-09-26T03:00:00Z", title: "A", source: "al_jazeera", summary: "s" },
+      { url: "https://www.aljazeera.com/news/b", titleKey: "b", decision: "ignore", candidateCreated: false, rejectionReason: null, publishedAt: "2026-09-26T02:00:00Z", triagedAt: "2026-09-26T03:00:00Z" },
+      { url: "https://www.aljazeera.com/news/c", titleKey: "c", decision: "verify", candidateCreated: false, rejectionReason: "candidate_deferred_budget", publishedAt: "2026-09-25T20:00:00Z", triagedAt: "2026-09-26T03:00:00Z" },
+      { url: "https://www.aljazeera.com/news/e", titleKey: "e", decision: "verify", candidateCreated: false, rejectionReason: "duplicate", publishedAt: "2026-09-26T02:00:00Z", triagedAt: "2026-09-26T03:00:00Z" },
+      { url: "https://www.aljazeera.com/news/f", titleKey: "f", decision: "verify", verifyAttempted: false, rejectionReason: "verify_deferred_budget", publishedAt: "2026-09-26T02:00:00Z", triagedAt: "2026-09-26T03:00:00Z" },
     ] },
     { items: [
-      { url: "https://www.aljazeera.com/news/d", titleKey: "d", decision: "verify", verifyAttempted: false, publishedAt: "2026-09-26T02:00:00Z", triagedAt: "2026-09-26T02:00:00Z" },
-      { url: "https://www.aljazeera.com/news/d", titleKey: "d", decision: "verify", verifyAttempted: true, publishedAt: "2026-09-26T02:00:00Z", triagedAt: "2026-09-26T03:00:00Z" },
+      { url: "https://www.aljazeera.com/news/d", titleKey: "d", decision: "verify", candidateCreated: false, rejectionReason: "candidate_deferred_budget", publishedAt: "2026-09-26T02:00:00Z", triagedAt: "2026-09-26T02:00:00Z" },
+      { url: "https://www.aljazeera.com/news/d", titleKey: "d", decision: "verify", candidateCreated: true, rejectionReason: null, publishedAt: "2026-09-26T02:00:00Z", triagedAt: "2026-09-26T03:00:00Z" },
     ] },
     { items: null },
     null,
   ], NOW);
-  assert.equal(history.seenUrls.size, 4);
-  assert.deepEqual([...history.seenTitles].sort(), ["a", "b", "c", "d"]);
-  assert.deepEqual(history.deferred.map((item) => item.titleKey), ["a"], "c is too old, d was searched later");
+  assert.equal(history.seenUrls.size, 6);
+  assert.deepEqual([...history.seenTitles].sort(), ["a", "b", "c", "d", "e", "f"]);
+  assert.deepEqual(history.deferred.map((item) => item.titleKey), ["a"],
+    "c is too old, d was created later, e was a duplicate, f is a pre-2026-09-28 search deferral");
 });
 
 // --- Luna triage -----------------------------------------------------------------------------------
@@ -224,7 +229,7 @@ test("article hosts: outlet article hosts pass, help/marketing/search subdomains
   assert.ok(NEWS_ARTICLE_HOSTS.every((host) => BREAKING_MARKET_NEWS_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`))));
 });
 
-// --- Orchestration ---------------------------------------------------------------------------------
+// --- Orchestration: BBC / Al Jazeera as primary sources ---------------------------------------------
 
 function diagnostics(overrides: Partial<BreakingMarketQueryDiagnostics> = {}): BreakingMarketQueryDiagnostics {
   return {
@@ -245,145 +250,212 @@ function candidateAt(url: string, title: string): IncomingNewsCandidate {
   };
 }
 
-function triageAll(decision: TriageResult["decision"], terms = "Iran Hormuz reopen") {
+function triageAll(decision: TriageResult["decision"], terms = "Iran Hormuz reopen", category: TriageResult["category"] = "geopolitics") {
   return (headlines: TriggerHeadline[]) => Promise.resolve({
-    results: new Map(headlines.map((item) => [item.id, { decision, category: "geopolitics" as const, reason: "r", searchTerms: terms }])),
+    results: new Map(headlines.map((item) => [item.id, { decision, category, reason: "r", searchTerms: terms }])),
     inputTokens: 1200,
     outputTokens: 90,
   });
 }
 
-test("verify decision + visited fresh article on an article host becomes a candidate", async () => {
-  const seen: string[] = [];
-  const verify: VerifyRunner = (query) => {
-    seen.push(query.searchQuery);
-    return Promise.resolve({ candidates: [candidateAt("https://apnews.com/article/abc", "Iran offers to reopen Hormuz")], diagnostics: diagnostics() });
-  };
+const neverSearched: VerifyRunner = () => Promise.reject(new Error("the forced verification search must not run"));
+
+test("BBC news article: verify becomes a candidate straight from the feed, without any web search", async () => {
   const result = await runHeadlineTriggerLane({
-    headlines: [headline("Iran offers US deal to reopen Strait of Hormuz in seven days", "https://www.bbc.co.uk/news/articles/x")],
-    feeds: {}, history: EMPTY_HISTORY, triage: triageAll("verify"), verify, now: NOW,
+    headlines: [{ ...headline("Iran offers US deal to reopen Strait of Hormuz in seven days", "https://www.bbc.co.uk/news/articles/cqgmrr9ekr7ko?at_medium=RSS&at_campaign=rss", "2026-09-26T03:14:30Z", "bbc_world"), summary: "Tehran says it will reopen the waterway within a week." }],
+    feeds: {}, history: EMPTY_HISTORY, triage: triageAll("verify"), verify: neverSearched, now: NOW,
   });
   assert.equal(result.candidates.length, 1);
-  assert.deepEqual(seen, ["Iran Hormuz reopen latest breaking news September 26 2026"]);
+  const [candidate] = result.candidates;
+  assert.equal(candidate.sourceType, "breaking_market");
+  assert.equal(candidate.sourceName, "bbc_world");
+  assert.equal(candidate.sourceUrl, "https://www.bbc.co.uk/news/articles/cqgmrr9ekr7ko", "feed campaign parameters dropped");
+  assert.equal(candidate.publishedAt, "2026-09-26T03:14:30Z", "the RSS timestamp is the source timestamp");
+  assert.equal(candidate.entityKey, "breaking:trigger:geopolitics");
+  assert.match(candidate.bodySummary ?? "", /^\[単一ソース: BBC News 記事（RSS見出し・本文要約）\] Tehran says/);
   const [item] = result.diagnostics.items;
-  assert.equal(item.decision, "verify");
+  assert.equal(item.articleType, "news");
+  assert.equal(item.primarySource, "bbc_world");
   assert.equal(item.candidateCreated, true);
-  assert.equal(item.verifySourceCount, 12);
-  assert.equal(result.triageUsage?.model, "gpt-6-luna");
+  assert.equal(item.dedupeResult, "unique");
+  assert.equal(item.secondaryVerificationAttempted, false);
+  assert.equal(result.verifyDiagnostics.length, 0, "no search, no verify usage row");
 });
 
-test("ignore and watch never search; nothing becomes a candidate", async () => {
-  let searched = 0;
-  const verify: VerifyRunner = () => { searched += 1; return Promise.reject(new Error("unexpected")); };
+test("ignore and watch never create candidates and never search", async () => {
   for (const decision of ["ignore", "watch"] as const) {
     const result = await runHeadlineTriggerLane({
-      headlines: [headline(`Football ${decision}`, `https://www.aljazeera.com/sport/${decision}`)],
-      feeds: {}, history: EMPTY_HISTORY, triage: triageAll(decision), verify, now: NOW,
+      headlines: [headline(`Football ${decision}`, `https://www.aljazeera.com/news/2026/9/26/${decision}`)],
+      feeds: {}, history: EMPTY_HISTORY, triage: triageAll(decision), verify: neverSearched, now: NOW,
     });
     assert.equal(result.candidates.length, 0);
     assert.equal(result.diagnostics.items[0].decision, decision);
-    assert.equal(result.diagnostics.items[0].verifyAttempted, false);
+    assert.equal(result.diagnostics.items[0].candidateCreated, false);
   }
-  assert.equal(searched, 0);
 });
 
-test("verification without an article: zero sources, stale-only and non-article hosts are recorded, not dropped silently", async () => {
-  const cases: Array<[string, Awaited<ReturnType<VerifyRunner>>]> = [
-    ["verify_no_sources", { candidates: [], diagnostics: diagnostics({ searchSourceCount: 0, rawCandidateCount: 0 }) }],
-    ["verify_no_fresh_article", { candidates: [], diagnostics: diagnostics({ rawCandidateCount: 0 }) }],
-    ["verify_non_article_host", { candidates: [candidateAt("https://assist.bloomberg.com/", "Help")], diagnostics: diagnostics() }],
+test("Al Jazeera article types are recorded and labelled for judgement; every type can reach judgement", async () => {
+  const cases: Array<[string, string, string]> = [
+    ["https://www.aljazeera.com/news/2026/9/26/houthis-seize-islands", "news", "Al Jazeera 記事"],
+    ["https://www.aljazeera.com/news/liveblog/2026/9/26/iran-war-live", "liveblog", "Al Jazeera ライブブログ（速報まとめ）"],
+    ["https://www.aljazeera.com/video/newsfeed/2026/9/26/iran-pitches", "video", "Al Jazeera 動画ニュース"],
+    ["https://www.aljazeera.com/features/2026/9/26/why-yemen", "feature", "Al Jazeera 特集"],
+    ["https://www.aljazeera.com/opinions/2026/9/26/diplomacy", "opinion", "Al Jazeera オピニオン・解説"],
   ];
-  for (const [reason, verified] of cases) {
+  for (const [url, type, label] of cases) {
+    assert.equal(triggerArticleType("al_jazeera", url), type, url);
     const result = await runHeadlineTriggerLane({
-      headlines: [headline("Houthis declare blockade on Saudi shipping", `https://www.aljazeera.com/news/${reason}`)],
-      feeds: {}, history: EMPTY_HISTORY, triage: triageAll("verify"), verify: () => Promise.resolve(verified), now: NOW,
+      headlines: [headline(`Distinct event ${type}`, url)], feeds: {}, history: EMPTY_HISTORY,
+      triage: triageAll("verify"), now: NOW,
     });
-    assert.equal(result.candidates.length, 0, reason);
-    assert.equal(result.diagnostics.items[0].rejectionReason, reason);
-    assert.equal(result.diagnostics.items[0].decision, "verify", "the unverified high-signal headline stays recorded");
+    assert.equal(result.candidates.length, 1, url);
+    assert.ok((result.candidates[0].bodySummary ?? "").startsWith(`[単一ソース: ${label}`), url);
+    assert.equal(result.diagnostics.items[0].articleType, type);
   }
+  assert.equal(triggerArticleType("bbc_world", "https://www.bbc.co.uk/news/live/c123"), "liveblog");
+  assert.equal(triggerArticleType("bbc_world", "https://www.bbc.co.uk/news/videos/c123"), "video");
 });
 
-test("verification failure and triage failure never throw out of the lane", async () => {
-  const failingVerify: VerifyRunner = () => Promise.reject(Object.assign(new Error("BREAKING_MARKET_SEARCH_FAILED:x:429"), { diagnostics: diagnostics({ webSearchCallCount: 0, inputTokens: 0, outputTokens: 0 }) }));
-  const verifyFailed = await runHeadlineTriggerLane({
-    headlines: [headline("Strike on tanker", "https://www.aljazeera.com/news/t")],
-    feeds: {}, history: EMPTY_HISTORY, triage: triageAll("verify"), verify: failingVerify, now: NOW,
+test("stale, non-primary and non-https items are not candidates", async () => {
+  const stale = await runHeadlineTriggerLane({
+    headlines: [headline("Old", "https://www.aljazeera.com/news/2026/9/25/old", "2026-09-25T20:00:00Z")],
+    feeds: {}, history: EMPTY_HISTORY, triage: triageAll("verify"), now: NOW,
   });
-  assert.match(verifyFailed.diagnostics.items[0].rejectionReason ?? "", /^verify_failed:BREAKING_MARKET_SEARCH_FAILED/);
-  const triageFailed = await runHeadlineTriggerLane({
-    headlines: [headline("Strike on tanker", "https://www.aljazeera.com/news/t")],
-    feeds: {}, history: EMPTY_HISTORY, triage: () => Promise.reject(new Error("TRIGGER_TRIAGE_HTTP_500")),
-    verify: failingVerify, now: NOW,
+  assert.equal(stale.candidates.length, 0);
+  assert.equal(stale.diagnostics.items[0].rejectionReason, "stale_or_invalid_headline");
+  const foreign = await runHeadlineTriggerLane({
+    headlines: [headline("Elsewhere", "https://example.com/news/x", "2026-09-26T03:30:00Z", "al_jazeera")],
+    feeds: {}, history: EMPTY_HISTORY, triage: triageAll("verify"), now: NOW,
   });
-  assert.equal(triageFailed.diagnostics.triageFailureCode, "TRIGGER_TRIAGE_HTTP_500");
-  assert.equal(triageFailed.diagnostics.items[0].decision, "triage_failed");
-  assert.equal(triageFailed.candidates.length, 0);
+  assert.equal(foreign.candidates.length, 0);
+  assert.equal(foreign.diagnostics.items[0].rejectionReason, "not_primary_source_url");
 });
 
-test("the per-run verify budget defers extras, and a deferred verify is retried from history next run", async () => {
-  const headlines = Array.from({ length: MAX_TRIGGER_VERIFY_PER_RUN + 2 }, (_, i) =>
-    headline(`Event ${i}`, `https://www.aljazeera.com/news/e${i}`, `2026-09-26T03:${String(10 + i).padStart(2, "0")}:00Z`));
-  let calls = 0;
-  const verify: VerifyRunner = () => { calls += 1; return Promise.resolve({ candidates: [], diagnostics: diagnostics({ rawCandidateCount: 0 }) }); };
-  const first = await runHeadlineTriggerLane({ headlines, feeds: {}, history: EMPTY_HISTORY, triage: triageAll("verify"), verify, now: NOW });
-  assert.equal(calls, MAX_TRIGGER_VERIFY_PER_RUN);
-  assert.equal(first.diagnostics.verifyDeferredCount, 2);
-  const history = triggerHistoryFromRuns([{ items: first.diagnostics.items }], new Date(NOW.getTime() + 60 * 60 * 1000));
+test("same event from BBC and Al Jazeera in one run: one candidate, the news report wins over the liveblog", async () => {
+  const result = await runHeadlineTriggerLane({
+    headlines: [
+      headline("Iran war live: Tehran offers US plan to reopen Hormuz within seven days", "https://www.aljazeera.com/news/liveblog/2026/9/26/iran-war-live", "2026-09-26T00:00:00Z"),
+      headline("Iran offers US deal to reopen Strait of Hormuz in seven days", "https://www.bbc.co.uk/news/articles/cqgmrr9ekr7ko", "2026-09-26T03:14:30Z", "bbc_world"),
+    ],
+    feeds: {}, history: EMPTY_HISTORY, triage: triageAll("verify"), now: NOW,
+  });
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].sourceName, "bbc_world");
+  assert.equal(result.diagnostics.duplicateCount, 1);
+  const liveblog = result.diagnostics.items.find((item) => item.articleType === "liveblog")!;
+  assert.match(liveblog.dedupeResult ?? "", /^same_event_in_run:https:\/\/www\.bbc\.co\.uk/);
+});
+
+test("a headline similar to a candidate stored in the last 24h (e.g. from breaking search) is not created again", async () => {
+  const result = await runHeadlineTriggerLane({
+    headlines: [headline("Houthis declare blockade on Saudi shipping in the Red Sea", "https://www.aljazeera.com/news/2026/9/26/houthis-blockade")],
+    feeds: {}, history: EMPTY_HISTORY, triage: triageAll("verify"), now: NOW,
+    recentCandidateTitles: ["Houthis declare blockade on Saudi shipping in Bab el-Mandeb and Red Sea"],
+  });
+  assert.equal(result.candidates.length, 0);
+  assert.match(result.diagnostics.items[0].dedupeResult ?? "", /^similar_recent_candidate:/);
+  const distinct = await runHeadlineTriggerLane({
+    headlines: [headline("Trump rejects Iran's seven-day roadmap", "https://www.aljazeera.com/news/2026/9/26/trump-rejects")],
+    feeds: {}, history: EMPTY_HISTORY, triage: triageAll("verify"), now: NOW,
+    recentCandidateTitles: ["Iran offers US deal to reopen Strait of Hormuz in seven days"],
+  });
+  assert.equal(distinct.candidates.length, 1, "a different development of the same story is a new candidate");
+});
+
+test("optional secondary search: success records evidence, failure or no article never drops the candidate", async () => {
+  const ok = await runHeadlineTriggerLane({
+    headlines: [headline("Strike on tanker in Hormuz", "https://www.aljazeera.com/news/2026/9/26/tanker")],
+    feeds: {}, history: EMPTY_HISTORY, triage: triageAll("verify"), now: NOW, maxSecondary: 1,
+    verify: () => Promise.resolve({ candidates: [candidateAt("https://apnews.com/article/tanker", "Tanker struck")], diagnostics: diagnostics() }),
+  });
+  assert.equal(ok.candidates.length, 1);
+  assert.equal(ok.candidates[0].sourceName, "al_jazeera", "the candidate stays the primary source item");
+  assert.equal(ok.diagnostics.items[0].secondaryVerificationFound, true);
+  assert.equal(ok.diagnostics.items[0].secondaryVerificationUrl, "https://apnews.com/article/tanker");
+  assert.equal(ok.verifyDiagnostics.length, 1);
+
+  const none = await runHeadlineTriggerLane({
+    headlines: [headline("Strike on tanker in Hormuz", "https://www.aljazeera.com/news/2026/9/26/tanker")],
+    feeds: {}, history: EMPTY_HISTORY, triage: triageAll("verify"), now: NOW, maxSecondary: 1,
+    verify: () => Promise.resolve({ candidates: [], diagnostics: diagnostics({ rawCandidateCount: 0 }) }),
+  });
+  assert.equal(none.candidates.length, 1);
+  assert.equal(none.diagnostics.items[0].secondaryVerificationFound, false);
+
+  const failed = await runHeadlineTriggerLane({
+    headlines: [headline("Strike on tanker in Hormuz", "https://www.aljazeera.com/news/2026/9/26/tanker")],
+    feeds: {}, history: EMPTY_HISTORY, triage: triageAll("verify"), now: NOW, maxSecondary: 1,
+    verify: () => Promise.reject(Object.assign(new Error("BREAKING_MARKET_SEARCH_FAILED:x:429"), { diagnostics: diagnostics({ webSearchCallCount: 0, inputTokens: 0, outputTokens: 0 }) })),
+  });
+  assert.equal(failed.candidates.length, 1);
+  assert.equal(failed.diagnostics.items[0].secondaryVerificationAttempted, true);
+  assert.equal(failed.diagnostics.items[0].secondaryVerificationFound, false);
+});
+
+test("the forced verification search is off by default", () => {
+  assert.equal(SECONDARY_VERIFY_MAX_PER_RUN, 0);
+});
+
+test("triage failure creates nothing and never throws", async () => {
+  const result = await runHeadlineTriggerLane({
+    headlines: [headline("Strike on tanker", "https://www.aljazeera.com/news/2026/9/26/t")],
+    feeds: {}, history: EMPTY_HISTORY, triage: () => Promise.reject(new Error("TRIGGER_TRIAGE_HTTP_500")), now: NOW,
+  });
+  assert.equal(result.diagnostics.triageFailureCode, "TRIGGER_TRIAGE_HTTP_500");
+  assert.equal(result.diagnostics.items[0].decision, "triage_failed");
+  assert.equal(result.candidates.length, 0);
+});
+
+test("the per-run candidate budget defers extras, which are created from history next run without re-triage", async () => {
+  const headlines = Array.from({ length: MAX_TRIGGER_CANDIDATES_PER_RUN + 2 }, (_, i) =>
+    ({ ...headline(`Unrelated event number ${i} alpha${i} beta${i}`, `https://www.aljazeera.com/news/2026/9/26/e${i}`, `2026-09-26T03:${String(10 + i).padStart(2, "0")}:00Z`), summary: `Summary ${i}` }));
+  const first = await runHeadlineTriggerLane({ headlines, feeds: {}, history: EMPTY_HISTORY, triage: triageAll("verify"), now: NOW });
+  assert.equal(first.candidates.length, MAX_TRIGGER_CANDIDATES_PER_RUN);
+  assert.equal(first.diagnostics.candidateDeferredCount, 2);
+  const later = new Date(NOW.getTime() + 60 * 60 * 1000);
+  const history = triggerHistoryFromRuns([{ items: first.diagnostics.items }], later);
   assert.equal(history.deferred.length, 2);
-  calls = 0;
   const second = await runHeadlineTriggerLane({
-    headlines, feeds: {}, history, triage: () => Promise.reject(new Error("no new headlines expected")), verify,
-    now: new Date(NOW.getTime() + 60 * 60 * 1000),
+    headlines, feeds: {}, history, triage: () => Promise.reject(new Error("no new headlines expected")), now: later,
   });
-  assert.equal(calls, 2, "only the deferred two are searched; nothing is re-triaged");
+  assert.equal(second.candidates.length, 2);
   assert.equal(second.diagnostics.newHeadlineCount, 0);
+  assert.ok(second.candidates.every((candidate) => /Summary \d+$/.test(candidate.bodySummary ?? "")), "summary kept for deferred items");
 });
 
 // --- Replay: past important events ------------------------------------------------------------------
 
-const REPLAY: Array<{ name: string; title: string; terms: string; article: string; category: TriageResult["category"] }> = [
-  { name: "North Korea missile", title: "North Korea launches unidentified projectile toward the sea", terms: "North Korea launches projectile sea Japan", article: "https://apnews.com/article/ad020d996b61dedd358cc689db614fdb", category: "major_security_incident" },
-  { name: "Houthi Red Sea blockade", title: "Houthis declare blockade on Saudi shipping in Bab el-Mandeb and Red Sea", terms: "Houthis blockade Saudi shipping Bab el-Mandeb Red Sea", article: "https://apnews.com/article/93dfe17125c63897b232f6461d81d85c", category: "geopolitics" },
-  { name: "Hormuz tanker strike", title: "Projectile strikes tanker entering Strait of Hormuz, injuring two crew", terms: "projectile strikes tanker Strait of Hormuz crew injured", article: "https://apnews.com/article/82714681bde58c6525c2d7a1bc587b25", category: "major_security_incident" },
-  { name: "Hormuz reopening offer", title: "Iran offers US deal to reopen Strait of Hormuz in seven days", terms: "Iran offers US deal reopen Strait of Hormuz seven days", article: "https://www.reuters.com/world/middle-east/iran-offers-reopen-hormuz-2026-09-26/", category: "geopolitics" },
-  { name: "US-China trade truce", title: "Trump welcomes Xi to Washington as US, China agree to extend trade truce", terms: "US China extend trade truce Trump Xi Washington", article: "https://www.bloomberg.com/news/articles/2026-09-24/us-china-extend-trade-truce", category: "tariffs" },
-  { name: "Major disaster", title: "Typhoon Dujuan hits Japan with deadly floods, travel chaos near Tokyo", terms: "Typhoon Dujuan Japan deadly floods Tokyo", article: "https://www3.nhk.or.jp/news/html/20260922/k10014900000000.html", category: "disaster" },
-  { name: "Tariffs", title: "Canada strikes back with tariffs on about $20 billion worth of US goods", terms: "Canada retaliatory tariffs 20 billion US goods", article: "https://apnews.com/article/461f9e97f78983653c59408c0b55757a", category: "tariffs" },
-  { name: "BOJ decision", title: "Bank of Japan raises benchmark interest rate to 1.25%", terms: "Bank of Japan raises interest rate 1.25%", article: "https://apnews.com/article/67e71246d3af41bcfc61aa788f9959c7", category: "boj" },
+const REPLAY: Array<{ name: string; title: string; url: string; source: string; category: TriageResult["category"] }> = [
+  { name: "Hormuz reopening offer", title: "Iran offers US deal to reopen Strait of Hormuz in seven days", url: "https://www.bbc.co.uk/news/articles/cqgmrr9ekr7ko", source: "bbc_world", category: "geopolitics" },
+  { name: "Iran seven-day ceasefire plan", title: "Iran pitches US a seven-day end to the war at UNGA", url: "https://www.aljazeera.com/video/newsfeed/2026/9/26/iran-pitches-us-a-seven-day-end", source: "al_jazeera", category: "war_ceasefire" },
+  { name: "North Korea missile", title: "North Korea launches ballistic missile toward the sea, South Korea says", url: "https://www.aljazeera.com/news/2026/9/12/north-korea-launches-ballistic-missile", source: "al_jazeera", category: "major_security_incident" },
+  { name: "Houthis", title: "Houthis seize 2 strategic Red Sea islands near Bab el-Mandeb", url: "https://www.bbc.co.uk/news/articles/houthis-islands", source: "bbc_world", category: "geopolitics" },
+  { name: "US-China AI channel", title: "China, US to open AI 'communication channel' after summit, White House says", url: "https://www.aljazeera.com/news/2026/9/26/china-us-ai-channel", source: "al_jazeera", category: "semiconductor_ai" },
+  { name: "Major disaster", title: "Typhoon Dujuan hits Japan with deadly floods, travel chaos near Tokyo", url: "https://www.aljazeera.com/news/2026/9/22/typhoon-dujuan-hits-japan", source: "al_jazeera", category: "disaster" },
 ];
 
 for (const event of REPLAY) {
-  test(`replay: ${event.name} — headline -> verify -> specific search -> candidate`, async () => {
-    const triage = (headlines: TriggerHeadline[]) => Promise.resolve({
-      results: new Map([[headlines[0].id, { decision: "verify" as const, category: event.category, reason: "r", searchTerms: event.terms }]]),
-      inputTokens: 900, outputTokens: 60,
-    });
-    // The verify step goes through the real breaking fetcher (request, visited-URL, host, freshness gates).
-    const verify: VerifyRunner = (query, now) => fetchBreakingMarketQueryWithDiagnostics("k", query, now, (_url, init) => {
-      const body = JSON.parse(String(init?.body));
-      assert.match(body.input, new RegExp(`search topic: ${event.terms.split(" ")[0]}`));
-      assert.doesNotMatch(body.input, /site:/);
-      return Promise.resolve(new Response(JSON.stringify({
-        status: "completed",
-        usage: { input_tokens: 11000, output_tokens: 260 },
-        output: [
-          { type: "web_search_call", action: { type: "search", query: body.input, sources: [{ url: event.article }] } },
-          { type: "message", content: [{ type: "output_text", text: JSON.stringify({ candidates: [{
-            title: event.title, summary: "s", source_url: event.article,
-            published_at: "2026-09-26T03:20:00Z", event_at: null, category: event.category,
-          }] }) }] },
-        ],
-      }), { status: 200 }));
-    });
+  test(`replay: ${event.name} — RSS -> Luna verify -> candidate -> accepted by the existing candidate parser`, async () => {
     const result = await runHeadlineTriggerLane({
-      headlines: [headline(event.title, `https://www.aljazeera.com/news/${encodeURIComponent(event.name)}`)],
-      feeds: {}, history: EMPTY_HISTORY, triage, verify, now: NOW,
+      headlines: [headline(event.title, event.url, "2026-09-26T03:30:00Z", event.source)],
+      feeds: {}, history: EMPTY_HISTORY, now: NOW, verify: neverSearched,
+      triage: (headlines) => Promise.resolve({
+        results: new Map([[headlines[0].id, { decision: "verify" as const, category: event.category, reason: "r", searchTerms: "" }]]),
+        inputTokens: 900, outputTokens: 60,
+      }),
     });
     assert.equal(result.candidates.length, 1, event.name);
-    assert.equal(result.candidates[0].sourceType, "breaking_market");
-    assert.equal(result.candidates[0].sourceUrl, event.article);
-    assert.equal(result.diagnostics.items[0].candidateCreated, true);
+    const [candidate] = result.candidates;
+    assert.equal(candidate.sourceName, event.source);
+    assert.equal(candidate.sourceUrl, event.url);
+    assert.equal(candidate.category, event.category);
+    // What index.ts SOURCE_POLICY enforces for these source names before judgement.
+    const host = new URL(candidate.sourceUrl).hostname;
+    assert.ok(TRIGGER_PRIMARY_SOURCES[event.source].domains.some((domain) => host === domain || host.endsWith(`.${domain}`)));
+    // And the candidate is judgement-ready: category valid, timestamp present, single-source label on the summary.
+    assert.ok(isImportantNewsCategory(candidate.category));
+    assert.ok(Number.isFinite(Date.parse(candidate.publishedAt)));
+    assert.match(candidate.bodySummary ?? "", /^\[単一ソース: /);
   });
 }
 

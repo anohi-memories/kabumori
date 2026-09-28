@@ -1,6 +1,7 @@
-// Headline-trigger verification searches the whole web (no allowed_domains) since 2026-09-26, while
-// the set of hosts a candidate may cite is unchanged. The search may surface any site; only fresh,
-// visited articles on NEWS_ARTICLE_HOSTS become candidates.
+// The optional secondary search of the headline-trigger lane searches the whole web (no allowed_domains,
+// since 2026-09-26). Since 2026-09-28 it is evidence only: the candidate is the BBC / Al Jazeera feed
+// item itself, and a secondary article counts as "found" only when it is a fresh, visited article on
+// NEWS_ARTICLE_HOSTS. Other sites, official domains and outlet noise subdomains are never evidence.
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -35,7 +36,7 @@ const triage = (headlines: TriggerHeadline[]) => Promise.resolve({
 
 type Found = { url: string; publishedAt?: string; visited?: boolean };
 
-/** A verify step through the real breaking fetcher; the fake API returns the given model candidates. */
+/** A secondary search through the real breaking fetcher; the fake API returns the given model candidates. */
 function verifyReturning(found: Found[], sent: Array<Record<string, unknown>> = []): VerifyRunner {
   return (query, now) => fetchBreakingMarketQueryWithDiagnostics("k", query, now, (_url, init) => {
     sent.push(JSON.parse(String(init?.body)));
@@ -54,10 +55,12 @@ function verifyReturning(found: Found[], sent: Array<Record<string, unknown>> = 
 }
 
 async function run(found: Found[], sent: Array<Record<string, unknown>> = []) {
-  return await runHeadlineTriggerLane({ headlines: [HEADLINE], feeds: {}, history: EMPTY, triage, verify: verifyReturning(found, sent), now: NOW });
+  return await runHeadlineTriggerLane({
+    headlines: [HEADLINE], feeds: {}, history: EMPTY, triage, verify: verifyReturning(found, sent), now: NOW, maxSecondary: 1,
+  });
 }
 
-test("the trigger verify request carries no allowed_domains; everything else in the tool is unchanged", async () => {
+test("the secondary search request carries no allowed_domains; everything else in the tool is unchanged", async () => {
   const sent: Array<Record<string, unknown>> = [];
   await run([], sent);
   assert.equal(sent.length, 1);
@@ -74,32 +77,32 @@ test("the generic breaking searches still send the news-outlet allowed_domains",
   }
 });
 
-test("an article on an allowed host can become a candidate", async () => {
+test("an allowed-host article is recorded as secondary evidence; the candidate stays the BBC item", async () => {
   const result = await run([{ url: "https://apnews.com/article/iran-us-war-negotiations-strait-hormuz-d8b9749fee99a11dd77513d326b824b6" }]);
   assert.equal(result.candidates.length, 1);
-  assert.equal(result.diagnostics.items[0].candidateCreated, true);
-  assert.equal(result.diagnostics.items[0].verifyRawCandidateCount, 1);
+  assert.equal(result.candidates[0].sourceName, "bbc_world");
+  const [item] = result.diagnostics.items;
+  assert.equal(item.secondaryVerificationFound, true);
+  assert.match(item.secondaryVerificationUrl ?? "", /^https:\/\/apnews\.com\//);
+  assert.equal(item.verifyRawCandidateCount, 1);
 });
 
-test("a fresh article from a site outside the allowed domains is not a candidate (and is recorded)", async () => {
+test("fresh articles from other sites are not evidence (and are recorded); the candidate is kept", async () => {
   const result = await run([
-    { url: "https://www.bbc.co.uk/news/articles/cqgmrr9ekr7ko" },
+    { url: "https://www.theguardian.com/world/2026/sep/26/iran" },
     { url: "https://www.aljazeera.com/news/2026/9/26/iran-hormuz" },
     { url: "https://www.cnn.com/2026/09/26/middleeast/iran-hormuz" },
   ]);
-  assert.equal(result.candidates.length, 0);
+  assert.equal(result.candidates.length, 1);
   const [item] = result.diagnostics.items;
+  assert.equal(item.secondaryVerificationFound, false);
   assert.equal(item.verifyRawCandidateCount, 3);
   assert.deepEqual(item.verifyRejections, { disallowed_domain: 3 });
 });
 
-test("official domains pass source validation but never become trigger candidates", async () => {
-  const result = await run([{ url: "https://www.whitehouse.gov/briefings-statements/2026/09/iran/" }]);
-  assert.equal(result.candidates.length, 0);
-  assert.equal(result.diagnostics.items[0].rejectionReason, "verify_non_article_host");
-});
-
-test("noise subdomains of allowed outlets never become candidates", async () => {
+test("official domains and outlet noise subdomains are never secondary evidence", async () => {
+  const official = await run([{ url: "https://www.whitehouse.gov/briefings-statements/2026/09/iran/" }]);
+  assert.equal(official.diagnostics.items[0].secondaryVerificationFound, false);
   const noise = [
     "https://assist.bloomberg.com/x", "https://research.bloomberg.com/x", "https://professional.content.cirrus.bloomberg.com/x",
     "https://pitch.nikkei.com/x", "https://promotion.asia.nikkei.com/x", "https://help.asia.nikkei.com/x",
@@ -107,24 +110,26 @@ test("noise subdomains of allowed outlets never become candidates", async () => 
   ];
   for (const url of noise) assert.ok(!NEWS_ARTICLE_HOSTS.includes(new URL(url).hostname), url);
   const result = await run(noise.map((url) => ({ url })));
-  assert.equal(result.candidates.length, 0);
-  assert.equal(result.diagnostics.items[0].rejectionReason, "verify_non_article_host");
+  assert.equal(result.diagnostics.items[0].secondaryVerificationFound, false);
+  assert.equal(result.candidates.length, 1);
 });
 
-test("the 6h freshness and visited-URL gates still apply", async () => {
+test("the 6h freshness and visited-URL gates still decide what counts as evidence", async () => {
   const stale = await run([{ url: "https://apnews.com/article/old", publishedAt: "2026-09-25T20:00:00Z" }]);
-  assert.equal(stale.candidates.length, 0);
+  assert.equal(stale.diagnostics.items[0].secondaryVerificationFound, false);
   assert.deepEqual(stale.diagnostics.items[0].verifyRejections, { stale_published_at: 1 });
   const unvisited = await run([{ url: "https://apnews.com/article/claimed", visited: false }]);
-  assert.equal(unvisited.candidates.length, 0);
+  assert.equal(unvisited.diagnostics.items[0].secondaryVerificationFound, false);
   assert.deepEqual(unvisited.diagnostics.items[0].verifyRejections, { source_not_visited: 1 });
 });
 
-test("usage metering, diagnostics and dedupe history are unchanged by the unrestricted search", async () => {
+test("usage is metered only when a secondary search ran; history dedupes the headline", async () => {
   const result = await run([{ url: "https://www.reuters.com/world/middle-east/iran-hormuz-2026-09-26/" }]);
   const usage = triggerVerifyUsageEvents(result.verifyDiagnostics, "run-1");
   assert.deepEqual(usage.map((event) => [event.feature, event.webSearchCalls]), [["news_trigger_verify_search|geopolitics", 1]]);
   const history = triggerHistoryFromRuns([{ items: result.diagnostics.items }], NOW);
   assert.ok(history.seenUrls.has("https://bbc.co.uk/news/articles/cqgmrr9ekr7ko"));
-  assert.equal(history.deferred.length, 0, "a searched headline is not searched again");
+  assert.equal(history.deferred.length, 0);
+  const noSearch = await runHeadlineTriggerLane({ headlines: [HEADLINE], feeds: {}, history: EMPTY, triage, now: NOW });
+  assert.deepEqual(triggerVerifyUsageEvents(noSearch.verifyDiagnostics, "run-2"), []);
 });

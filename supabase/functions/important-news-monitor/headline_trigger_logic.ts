@@ -1,14 +1,16 @@
-// Headline-trigger lane (Phase 1, 2026-09-26): free news headlines -> Luna triage -> a web search
-// built from the headline's own words -> the existing breaking_market candidate path.
+// Headline-trigger lane: BBC World / Al Jazeera headlines -> Luna triage -> candidate.
 //
-// Why: the topic-wide breaking searches returned no same-day article even when the news existed
-// (2026-09-26: Iran's offer to reopen the Strait of Hormuz was on Al Jazeera at 07:33 JST, while the
-// 13:00 shipping search on the news outlets returned zero sources). A search seeded with the specific
-// names from a fresh headline finds the article; the generic topic search stays as the fallback.
+// Since 2026-09-28 the two feeds are primary sources. Web search is no longer a gate: from v75 to v77
+// (2026-09-26/27) 32 headline-specific verification searches found no fresh Reuters/AP/Bloomberg/
+// Nikkei/NHK article, while the feeds carried the Hormuz, ceasefire, US-China and Houthi stories first.
+// Requiring a fresh article from the five outlets was dropping real news.
 //
-// Nothing here posts: a headline only becomes a candidate after Luna asks for verification AND the
-// web search returns a visited, fresh article on a news-outlet article host. The candidate then goes
-// through the unchanged dedupe, judgement, Sol, generation and publish gates.
+// A headline becomes a candidate only when it is on the feed (https, title, RSS published_at inside
+// TRIGGER_WINDOW_MS), Luna triages it "verify", and it is not a repeat (lane history, same event in this
+// run, or a similar candidate stored in the last 24h). Nothing posts from here: the candidate goes
+// through the unchanged stored-duplicate check, judgement, Sol, generation Fact/Voice and publish
+// gates, labelled as a single-source RSS item with its article type. An optional secondary web search
+// (SECONDARY_VERIFY_MAX_PER_RUN, off by default) can only add evidence; it never removes a candidate.
 import { SHADOW_SOURCES } from "../important-news-shadow/shadow_sources.ts";
 import {
   type BreakingMarketQuery,
@@ -30,7 +32,12 @@ export const TRIGGER_TRIAGE_MODEL = "gpt-6-luna" as const;
 /** Headlines older than this are not triaged, and a deferred verification is dropped after it. */
 export const TRIGGER_WINDOW_MS = 6 * 60 * 60 * 1000;
 export const MAX_TRIGGER_TRIAGE_PER_RUN = 40;
-export const MAX_TRIGGER_VERIFY_PER_RUN = 4;
+/** Candidates created per run; further "verify" headlines wait for the next run (still inside the window). */
+export const MAX_TRIGGER_CANDIDATES_PER_RUN = 8;
+/** Optional secondary web searches per run. 0: the forced verification search is off. */
+export const SECONDARY_VERIFY_MAX_PER_RUN = 0;
+/** Title-token overlap at or above which two headlines are treated as the same event. */
+export const SAME_EVENT_TITLE_OVERLAP = 0.7;
 /** Items kept in run diagnostics (they are also the dedupe history for the next runs). */
 export const MAX_TRIGGER_ITEMS_RECORDED = 80;
 export const TRIGGER_HISTORY_WINDOW_MS = 48 * 60 * 60 * 1000;
@@ -96,15 +103,25 @@ export type TriageResult = {
   searchTerms: string;
 };
 
+export type TriggerArticleType = "news" | "liveblog" | "video" | "feature" | "opinion" | "other";
+
 export type TriggerItemRecord = {
   source: string;
   title: string;
   url: string;
   publishedAt: string;
   titleKey: string;
+  articleType?: TriggerArticleType;
+  /** Kept only while a candidate waits for the next run's budget. */
+  summary?: string | null;
   decision: TriggerDecision | "triage_failed" | "not_triaged";
   category: string | null;
   reason: string | null;
+  primarySource?: string | null;
+  dedupeResult?: string | null;
+  secondaryVerificationAttempted?: boolean;
+  secondaryVerificationFound?: boolean;
+  secondaryVerificationUrl?: string | null;
   verifyQuery: string | null;
   verifyAttempted: boolean;
   verifySourceCount: number | null;
@@ -127,6 +144,8 @@ export type TriggerLaneDiagnostics = {
   verifyAttemptedCount: number;
   verifyDeferredCount: number;
   candidateCount: number;
+  candidateDeferredCount: number;
+  duplicateCount: number;
   triageFailureCode: string | null;
   items: TriggerItemRecord[];
 };
@@ -197,7 +216,7 @@ export async function fetchTriggerHeadlines(
 export type TriggerHistory = {
   seenUrls: Set<string>;
   seenTitles: Set<string>;
-  /** verify decisions that were not searched yet (budget), newest record per headline. */
+  /** verify decisions that missed the per-run candidate budget, newest record per headline. */
   deferred: TriggerItemRecord[];
 };
 
@@ -222,7 +241,7 @@ export function triggerHistoryFromRuns(rows: unknown, now: Date): TriggerHistory
     }
   }
   const deferred = [...latest.values()].filter((item) =>
-    item.decision === "verify" && !item.verifyAttempted &&
+    item.decision === "verify" && !item.candidateCreated && item.rejectionReason === "candidate_deferred_budget" &&
     now.getTime() - Date.parse(item.publishedAt) <= TRIGGER_WINDOW_MS
   );
   return { seenUrls, seenTitles, deferred };
@@ -412,6 +431,110 @@ export type VerifyRunner = (query: BreakingMarketQuery, now: Date) => Promise<{
 }>;
 
 // ---------------------------------------------------------------------------------------------------
+// Primary-source candidates
+
+/** Citable primary sources: the feed key doubles as the candidate's source_name (see SOURCE_POLICY). */
+export const TRIGGER_PRIMARY_SOURCES: Record<string, { label: string; domains: string[] }> = {
+  bbc_world: { label: "BBC News", domains: ["bbc.co.uk", "bbc.com"] },
+  al_jazeera: { label: "Al Jazeera", domains: ["aljazeera.com"] },
+};
+
+const ARTICLE_TYPE_LABEL: Record<TriggerArticleType, string> = {
+  news: "記事",
+  liveblog: "ライブブログ（速報まとめ）",
+  video: "動画ニュース",
+  feature: "特集",
+  opinion: "オピニオン・解説",
+  other: "その他の記事",
+};
+
+/** Article type from the feed URL path; anything not recognisably a news report is not "news". */
+export function triggerArticleType(source: string, url: string): TriggerArticleType {
+  let path = "";
+  try {
+    path = new URL(url).pathname.toLowerCase();
+  } catch {
+    return "other";
+  }
+  if (source === "al_jazeera") {
+    if (path.startsWith("/news/liveblog/")) return "liveblog";
+    if (path.startsWith("/video/") || path.startsWith("/program/")) return "video";
+    if (path.startsWith("/features/")) return "feature";
+    if (path.startsWith("/opinions/")) return "opinion";
+    if (path.startsWith("/news/") || path.startsWith("/economy/")) return "news";
+    return "other";
+  }
+  if (source === "bbc_world") {
+    if (path.startsWith("/news/live/")) return "liveblog";
+    if (path.startsWith("/news/videos/") || path.includes("/av/")) return "video";
+    if (path.startsWith("/news/")) return "news";
+    return "other";
+  }
+  return "other";
+}
+
+function isPrimarySourceUrl(source: string, url: string): boolean {
+  const policy = TRIGGER_PRIMARY_SOURCES[source];
+  if (!policy) return false;
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    return parsed.protocol === "https:" && policy.domains.some((domain) => host === domain || host.endsWith(`.${domain}`));
+  } catch {
+    return false;
+  }
+}
+
+/** Feed URLs carry campaign parameters (BBC "?at_medium=RSS"); the stored source_url drops them. */
+export function primarySourceUrl(url: string): string {
+  const parsed = new URL(url);
+  for (const key of [...parsed.searchParams.keys()]) {
+    if (/^(at_|utm_)/i.test(key)) parsed.searchParams.delete(key);
+  }
+  parsed.hash = "";
+  return parsed.toString();
+}
+
+/**
+ * The candidate built from the feed item itself. The summary starts with a single-source label and the
+ * article type so judgement and Fact see what they are working from, and never read it as confirmed by
+ * several independent sources.
+ */
+export function primaryCandidate(
+  headline: Pick<TriggerHeadline, "source" | "title" | "url" | "publishedAt" | "summary">,
+  category: ImportantNewsCategory,
+  articleType: TriggerArticleType,
+): IncomingNewsCandidate {
+  const label = `[単一ソース: ${TRIGGER_PRIMARY_SOURCES[headline.source].label} ${ARTICLE_TYPE_LABEL[articleType]}（RSS見出し・本文要約）]`;
+  return {
+    sourceType: "breaking_market",
+    sourceName: headline.source,
+    sourceUrl: primarySourceUrl(headline.url),
+    title: headline.title,
+    bodySummary: headline.summary ? `${label} ${headline.summary}` : label,
+    companyName: null,
+    companyCode: null,
+    entityKey: `breaking:trigger:${category}`,
+    category,
+    publishedAt: headline.publishedAt,
+  };
+}
+
+function titleTokens(value: string): Set<string> {
+  return new Set(normalizeTriggerTitle(value).split(" ").filter((token) => token.length >= 3));
+}
+
+/** Share of the smaller title's tokens present in the other (0..1). */
+export function titleOverlap(a: string, b: string): number {
+  const left = titleTokens(a);
+  const right = titleTokens(b);
+  if (!left.size || !right.size) return 0;
+  let common = 0;
+  for (const token of left) if (right.has(token)) common += 1;
+  return common / Math.min(left.size, right.size);
+}
+
+// ---------------------------------------------------------------------------------------------------
 // Orchestration
 
 export type TriggerLaneResult = {
@@ -432,9 +555,15 @@ function record(
     url: headline.url.slice(0, 300),
     publishedAt: headline.publishedAt,
     titleKey: normalizeTriggerTitle(headline.title),
+    articleType: triggerArticleType(headline.source, headline.url),
     decision: "not_triaged",
     category: null,
     reason: null,
+    primarySource: null,
+    dedupeResult: null,
+    secondaryVerificationAttempted: false,
+    secondaryVerificationFound: false,
+    secondaryVerificationUrl: null,
     verifyQuery: null,
     verifyAttempted: false,
     verifySourceCount: null,
@@ -449,17 +578,25 @@ function record(
   };
 }
 
+const ARTICLE_TYPE_PREFERENCE: TriggerArticleType[] = ["news", "liveblog", "video", "feature", "opinion", "other"];
+
 export async function runHeadlineTriggerLane(input: {
   headlines: TriggerHeadline[];
   feeds: TriggerLaneDiagnostics["feeds"];
   history: TriggerHistory;
   triage: TriageRunner;
-  verify: VerifyRunner;
+  /** Optional secondary search; used only when SECONDARY_VERIFY_MAX_PER_RUN (or maxSecondary) > 0. */
+  verify?: VerifyRunner;
+  /** Titles of candidates stored in the last 24h (any lane) for same-event dedupe. */
+  recentCandidateTitles?: string[];
   now: Date;
-  maxVerify?: number;
+  maxCandidates?: number;
+  maxSecondary?: number;
 }): Promise<TriggerLaneResult> {
   const { now } = input;
-  const maxVerify = input.maxVerify ?? MAX_TRIGGER_VERIFY_PER_RUN;
+  const maxCandidates = input.maxCandidates ?? MAX_TRIGGER_CANDIDATES_PER_RUN;
+  const maxSecondary = input.maxSecondary ?? SECONDARY_VERIFY_MAX_PER_RUN;
+  const recentTitles = input.recentCandidateTitles ?? [];
   const fresh = selectNewHeadlines(input.headlines, input.history);
   const items: TriggerItemRecord[] = [];
   let triageUsage: TriggerLaneResult["triageUsage"] = null;
@@ -473,23 +610,22 @@ export async function runHeadlineTriggerLane(input: {
       triageUsage = { model: TRIGGER_TRIAGE_MODEL, inputTokens: triaged.inputTokens, outputTokens: triaged.outputTokens };
     } catch (error) {
       triageFailureCode = error instanceof Error ? error.message.slice(0, 80) : "TRIGGER_TRIAGE_FAILED";
-      if (error instanceof TriggerTriageError) {
-        triageUsage = { model: TRIGGER_TRIAGE_MODEL, ...error.usage };
-      }
+      if (error instanceof TriggerTriageError) triageUsage = { model: TRIGGER_TRIAGE_MODEL, ...error.usage };
     }
   }
 
-  // Verification queue: deferred verifies from earlier runs first (older news waits least), then new.
-  type Pending = { record: TriggerItemRecord; category: ImportantNewsCategory; verifyQuery: string };
-  const queue: Pending[] = [];
+  type Pending = {
+    record: TriggerItemRecord;
+    headline: Pick<TriggerHeadline, "source" | "title" | "url" | "publishedAt" | "summary">;
+    category: ImportantNewsCategory;
+  };
+  const verified: Pending[] = [];
+  // Budget-deferred candidates from earlier runs first: they have waited longest.
   for (const deferred of input.history.deferred) {
     const category = isImportantNewsCategory(deferred.category ?? "") ? deferred.category as ImportantNewsCategory : "other_market_moving";
-    const verifyQuery = deferred.verifyQuery ?? buildVerifyQuery(deferred.title, "", now);
-    const item = record(deferred, now, {
-      decision: "verify", category, reason: deferred.reason, verifyQuery, rejectionReason: "deferred_retry",
-    });
+    const item = record(deferred, now, { decision: "verify", category, reason: deferred.reason, summary: deferred.summary ?? null });
     items.push(item);
-    queue.push({ record: item, category, verifyQuery });
+    verified.push({ record: item, headline: { ...deferred, summary: deferred.summary ?? null }, category });
   }
   for (const headline of fresh) {
     const result = results.get(headline.id);
@@ -502,21 +638,73 @@ export async function runHeadlineTriggerLane(input: {
     }
     const item = record(headline, now, { decision: result.decision, category: result.category, reason: result.reason });
     items.push(item);
-    if (result.decision !== "verify") continue;
-    item.verifyQuery = buildVerifyQuery(headline.title, result.searchTerms, now);
-    queue.push({ record: item, category: result.category, verifyQuery: item.verifyQuery });
+    if (result.decision === "verify") {
+      item.verifyQuery = buildVerifyQuery(headline.title, result.searchTerms, now);
+      verified.push({ record: item, headline, category: result.category });
+    }
   }
 
-  const toVerify = queue.slice(0, maxVerify);
-  for (const pending of queue.slice(maxVerify)) pending.record.rejectionReason = "verify_deferred_budget";
+  // Gates and dedupe. News reports win a same-event group over liveblogs/video/features, then the
+  // earliest published item.
+  const ordered = [...verified].sort((a, b) =>
+    ARTICLE_TYPE_PREFERENCE.indexOf(a.record.articleType ?? "other") - ARTICLE_TYPE_PREFERENCE.indexOf(b.record.articleType ?? "other") ||
+    Date.parse(a.headline.publishedAt) - Date.parse(b.headline.publishedAt)
+  );
+  const kept: Pending[] = [];
+  let duplicateCount = 0;
+  for (const pending of ordered) {
+    const { record: item, headline } = pending;
+    if (!TRIGGER_PRIMARY_SOURCES[headline.source] || !isPrimarySourceUrl(headline.source, headline.url)) {
+      item.rejectionReason = "not_primary_source_url";
+      continue;
+    }
+    const age = now.getTime() - Date.parse(headline.publishedAt);
+    if (!headline.title.trim() || !Number.isFinite(age) || age > TRIGGER_WINDOW_MS || age < -60 * 60 * 1000) {
+      item.rejectionReason = "stale_or_invalid_headline";
+      continue;
+    }
+    const sameRun = kept.find((other) => titleOverlap(other.headline.title, headline.title) >= SAME_EVENT_TITLE_OVERLAP);
+    if (sameRun) {
+      item.dedupeResult = `same_event_in_run:${sameRun.record.url.slice(0, 200)}`;
+      item.rejectionReason = "duplicate";
+      duplicateCount += 1;
+      continue;
+    }
+    const recent = recentTitles.find((title) => titleOverlap(title, headline.title) >= SAME_EVENT_TITLE_OVERLAP);
+    if (recent) {
+      item.dedupeResult = `similar_recent_candidate:${recent.slice(0, 120)}`;
+      item.rejectionReason = "duplicate";
+      duplicateCount += 1;
+      continue;
+    }
+    item.dedupeResult = "unique";
+    kept.push(pending);
+  }
 
+  const created = kept.slice(0, maxCandidates);
+  for (const pending of kept.slice(maxCandidates)) {
+    pending.record.rejectionReason = "candidate_deferred_budget";
+    pending.record.summary = pending.headline.summary;
+  }
   const candidates: IncomingNewsCandidate[] = [];
+  for (const pending of created) {
+    const candidate = primaryCandidate(pending.headline, pending.category, pending.record.articleType ?? "other");
+    candidates.push(candidate);
+    pending.record.primarySource = pending.headline.source;
+    pending.record.candidateCreated = true;
+    pending.record.candidateCount = 1;
+    pending.record.rejectionReason = null;
+  }
+
+  // Optional secondary search: evidence only, never a gate.
   const verifyDiagnostics: TriggerLaneResult["verifyDiagnostics"] = [];
-  await Promise.all(toVerify.map(async (pending) => {
+  const secondary = input.verify && maxSecondary > 0 ? created.slice(0, maxSecondary) : [];
+  await Promise.all(secondary.map(async (pending) => {
     const item = pending.record;
+    item.secondaryVerificationAttempted = true;
     item.verifyAttempted = true;
     try {
-      const result = await input.verify(verifyBreakingQuery(pending.verifyQuery, pending.category), now);
+      const result = await input.verify!(verifyBreakingQuery(item.verifyQuery ?? buildVerifyQuery(item.title, "", now), pending.category), now);
       verifyDiagnostics.push({ category: pending.category, diagnostics: result.diagnostics });
       item.verifySourceCount = result.diagnostics.searchSourceCount ?? null;
       item.verifySourcesSample = (result.diagnostics.searchSourcesSample ?? []).slice(0, 5)
@@ -525,18 +713,13 @@ export async function runHeadlineTriggerLane(input: {
       item.verifyRejections = Object.fromEntries(
         Object.entries(result.diagnostics.rejectionCounts ?? {}).filter(([, count]) => count > 0),
       );
-      const onArticleHosts = result.candidates.filter((candidate) => isNewsArticleHost(candidate.sourceUrl));
-      item.candidateCount = onArticleHosts.length;
-      item.candidateCreated = onArticleHosts.length > 0;
-      item.rejectionReason = onArticleHosts.length > 0 ? null
-        : result.candidates.length > 0 ? "verify_non_article_host"
-        : (result.diagnostics.searchSourceCount ?? 0) === 0 ? "verify_no_sources"
-        : "verify_no_fresh_article";
-      candidates.push(...onArticleHosts);
+      const found = result.candidates.find((candidate) => isNewsArticleHost(candidate.sourceUrl));
+      item.secondaryVerificationFound = Boolean(found);
+      item.secondaryVerificationUrl = found?.sourceUrl ?? null;
     } catch (error) {
       const diagnostics = (error as { diagnostics?: BreakingMarketQueryDiagnostics }).diagnostics;
       if (diagnostics) verifyDiagnostics.push({ category: pending.category, diagnostics });
-      item.rejectionReason = `verify_failed:${error instanceof Error ? error.message.slice(0, 60) : "UNKNOWN"}`;
+      item.secondaryVerificationFound = false;
     }
   }));
 
@@ -550,13 +733,14 @@ export async function runHeadlineTriggerLane(input: {
       headlineCount: input.headlines.length,
       newHeadlineCount: fresh.length,
       triagedCount: results.size,
-      verifyRequestedCount: queue.length,
-      verifyAttemptedCount: toVerify.length,
-      verifyDeferredCount: Math.max(0, queue.length - toVerify.length),
+      verifyRequestedCount: verified.length,
+      verifyAttemptedCount: secondary.length,
+      verifyDeferredCount: 0,
       candidateCount: candidates.length,
+      candidateDeferredCount: Math.max(0, kept.length - created.length),
+      duplicateCount,
       triageFailureCode,
       items: recorded,
     },
   };
 }
-

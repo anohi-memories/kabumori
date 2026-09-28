@@ -72,11 +72,11 @@ test("the persisted verify sample keeps five sources with their URL dates", asyn
   ];
   const headline: TriggerHeadline = {
     id: "", source: "al_jazeera", title: "Trump rejects Iran’s seven-day roadmap to reopen Strait of Hormuz",
-    url: "https://www.aljazeera.com/news/2026/9/26/trump-rejects", publishedAt: "2026-09-26T15:30:00Z", summary: null,
+    url: "https://www.aljazeera.com/news/2026/9/26/trump-rejects", publishedAt: "2026-09-26T22:30:00Z", summary: null,
   };
   const history: TriggerHistory = { seenUrls: new Set(), seenTitles: new Set(), deferred: [] };
   const result = await runHeadlineTriggerLane({
-    headlines: [headline], feeds: {}, history, now: NOW,
+    headlines: [headline], feeds: {}, history, now: NOW, maxSecondary: 1,
     triage: (items) => Promise.resolve({
       results: new Map([[items[0].id, { decision: "verify" as const, category: "war_ceasefire" as const, reason: "r", searchTerms: "Trump Iran seven-day roadmap Strait of Hormuz" }]]),
       inputTokens: 1, outputTokens: 1,

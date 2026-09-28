@@ -18,6 +18,7 @@ import {
   openAiTriageRunner,
   runHeadlineTriggerLane,
   TRIGGER_HISTORY_WINDOW_MS,
+  TRIGGER_PRIMARY_SOURCES,
   triggerHistoryFromRuns,
   type TriggerHistory,
   type TriggerLaneResult,
@@ -139,6 +140,10 @@ const SOURCE_POLICY: Record<string, { type: ImportantNewsSourceType; priority: 1
   company_ir: { type: "company_ir", priority: 1 },
   market_macro: { type: "market_macro", priority: 1, domains: MARKET_MACRO_ALLOWED_DOMAINS },
   breaking_market: { type: "breaking_market", priority: 1, domains: BREAKING_MARKET_SOURCE_DOMAINS },
+  // Headline-trigger primary sources (2026-09-28): BBC World / Al Jazeera feed items stored as
+  // breaking_market candidates under their own source_name; each is limited to its own domains.
+  bbc_world: { type: "breaking_market", priority: 1, domains: TRIGGER_PRIMARY_SOURCES.bbc_world.domains },
+  al_jazeera: { type: "breaking_market", priority: 1, domains: TRIGGER_PRIMARY_SOURCES.al_jazeera.domains },
 };
 
 const BLOCKED_SOURCE_DOMAINS = [
@@ -586,6 +591,23 @@ async function recentHeadlineTriggerHistory(
  * Free headlines -> Luna triage -> headline-specific verification search. Never throws: without its
  * dedupe history the lane is skipped rather than re-triaging every headline.
  */
+/** Titles of candidates stored in the last 24h, for same-event dedupe of headline-trigger items. */
+async function recentCandidateTitles(supabaseUrl: string, serviceRoleKey: string, now: Date): Promise<string[]> {
+  const params = new URLSearchParams({
+    select: "title",
+    created_at: `gte.${new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()}`,
+    source_type: "in.(breaking_market,market_macro)",
+    order: "created_at.desc",
+    limit: "500",
+  });
+  const result = await fetch(`${supabaseUrl}/rest/v1/important_news_candidates?${params}`, {
+    headers: headers(serviceRoleKey),
+  });
+  if (!result.ok) throw new Error(`TRIGGER_RECENT_CANDIDATES_HTTP_${result.status}`);
+  const rows = await result.json() as Array<{ title?: unknown }>;
+  return rows.map((row) => row.title).filter((title): title is string => typeof title === "string");
+}
+
 async function runHeadlineTriggerLaneSafely(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -595,13 +617,16 @@ async function runHeadlineTriggerLaneSafely(
   if (!HEADLINE_TRIGGER_LANE_ENABLED) return null;
   try {
     const history = await recentHeadlineTriggerHistory(supabaseUrl, serviceRoleKey, now);
+    const recentTitles = await recentCandidateTitles(supabaseUrl, serviceRoleKey, now);
     const { headlines, feeds } = await fetchTriggerHeadlines(fetch, now);
     const result = await runHeadlineTriggerLane({
       headlines,
       feeds,
       history,
       triage: openAiTriageRunner(openAiApiKey),
+      // Optional secondary evidence only (SECONDARY_VERIFY_MAX_PER_RUN); never a candidate gate.
       verify: (query, at) => fetchBreakingMarketQueryWithDiagnostics(openAiApiKey, query, at),
+      recentCandidateTitles: recentTitles,
       now,
     });
     console.info("Important news headline trigger lane", {
@@ -609,6 +634,7 @@ async function runHeadlineTriggerLaneSafely(
       triaged: result.diagnostics.triagedCount,
       verifyAttempted: result.diagnostics.verifyAttemptedCount,
       candidates: result.diagnostics.candidateCount,
+      duplicates: result.diagnostics.duplicateCount,
       triageFailure: result.diagnostics.triageFailureCode,
     });
     return result;
