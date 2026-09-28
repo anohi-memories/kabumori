@@ -34,12 +34,12 @@
 - owner: codex
 - slot: codex-2
 - status: idle
-- task_id: kabumori-pr32-morning-fact-contract-final-review-20260925
+- task_id: none
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: deferred by user after Codex interruption; incomplete review preserved, do not treat slot as free for overwrite
+- allocation: unassigned; previous deferred PR #32 review closed as stale/obsolete after the target PR was already merged; historical report preserved
 
 ## Claude G1
 - owner: claude
