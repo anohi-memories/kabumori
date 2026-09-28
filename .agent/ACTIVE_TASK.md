@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - task_id: x-social-mobile-auth-phase2-final-acceptance-review-20260928
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: final acceptance complete; PASS-WITH-FIX at PR #47 `ed5f8b7`; focused prior 7 + additional 3 boundaries accepted, small H1 fixes pushed, tests 43+14 PASS; production mutation 0; awaiting C1/source merge decision, provider/device activation remains gated
+- allocation: closed; Final C1 PASS-WITH-FIX; PR #47 accepted at `ed5f8b7` and merged as `fbddef2`
 
 ## Codex H2
 - owner: codex
