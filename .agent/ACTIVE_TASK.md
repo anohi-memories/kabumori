@@ -44,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: review_required
+- status: done
 - task_id: kabumori-daily-topic-level-settings-20260928
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: K1 source PASS at PR #48 `98732bf`; migration/RPC independent review still mandatory before merge/apply. H1 currently occupied by X Auth review; H2 deferred task protected, so no review slot overwritten. Preferred next H1 with Sol（高） when genuinely free.
+- allocation: closed; K1 source PASS + independent separate-Claude DB/RPC PASS at PR #48 `98732bf`; merged -> `9ccbb59d`; production migration not yet applied; no Codex budget used
 
 ## Claude G2
 - owner: claude
