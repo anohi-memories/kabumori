@@ -59,7 +59,7 @@
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: assigned after Final K2 PASS and PR #45 merge; deploy only market-report-analysis with app/x gates OFF, read-back exact source, then observe next natural morning+close retry diagnostics; recommended Sonnet5（高）
+- allocation: in progress; shared-checkout config incident recovered; continue ONLY from `/Users/yuya/Developer/kabumori-g2-market-report-reliability` on fresh main `fc0afd32`; old PR #45 branch/worktree and shared checkout are forbidden for deploy; deploy only market-report-analysis with app/x gates OFF; recommended Sonnet5（高）
 
 ## Claude G3
 - owner: claude
