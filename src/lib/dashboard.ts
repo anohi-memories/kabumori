@@ -12,12 +12,13 @@ export type TrackedStockSummary = {
   totalCount: number;
 };
 
-export type DashboardSection = 'stocks' | 'news' | 'reports';
+export type DashboardSection = 'stocks' | 'news' | 'reports' | 'topic';
 
 export const DASHBOARD_ERROR_MESSAGES: Record<DashboardSection, string> = {
   stocks: '登録銘柄を読み込めませんでした。',
   news: '重要ニュースを読み込めませんでした。',
   reports: 'レポートを読み込めませんでした。',
+  topic: '今日のトピックを読み込めませんでした。',
 };
 
 export function dashboardSectionError(section: DashboardSection): string {

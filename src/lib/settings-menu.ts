@@ -20,6 +20,11 @@ export type SettingsEntry = {
 export function settingsEntries(
   legal: LegalLink[],
   account: { email: string | null },
+  // The caller resolves the label (rather than this module importing
+  // TOPIC_LEVEL_LABEL as a value) so this file's only cross-module
+  // dependency stays the type-only LegalLink import, which keeps it
+  // importable by this suite's plain Deno tests.
+  topicLevelLabel: string,
 ): SettingsEntry[] {
   const legalEntries: SettingsEntry[] = legal.map((link) => ({
     id: link.key,
@@ -47,6 +52,12 @@ export function settingsEntries(
       label: '通知の設定',
       description: '「重要ニュース」画面から変更できます',
       kind: 'info',
+    },
+    {
+      id: 'topic-level',
+      label: '今日のトピック 投資知識レベル',
+      description: `現在: ${topicLevelLabel}`,
+      kind: 'action',
     },
     ...legalEntries,
     { id: 'logout', label: 'ログアウト', description: '', kind: 'action' },
