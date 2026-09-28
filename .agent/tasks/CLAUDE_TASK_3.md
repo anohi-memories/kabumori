@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-auth-x-connect-onboarding-phase1-20260928
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Opus5.5（高）
 - purpose: `apps/social-mobile` を一般ユーザーが実際に使えるX自動投稿アプリへ進める第1段階。認証・X接続・初期オンボーディングを棚卸しし、既存基盤を壊さず「初回利用者がログイン→X接続→必要設定→利用開始」まで一本で通せる状態へ近づける。
@@ -179,3 +179,20 @@ STOP for K3.
 - remaining_ux_gaps: ホーム（G4 担当）の「接続済み」表示が固定値（`connectionStatus` を読むべき）; X 接続の解除機能なし（backend に revoke RPC なし）; 複数ワークスペースの UI; 新規登録・再設定。
 - production_mutation: 0
 - next_recommendation: ChatGPT K3 → PR #42 レビュー → 製品判断（新規登録方針・content settings 配置）→ 次の G3: 新規登録/再設定の実装、または content settings 配置 TASK。
+
+
+## Final K3 — social-mobile onboarding phase 1
+
+Verdict: **PASS**.
+
+- PR #42 head `c5e0157f867450047a5f79a204df45aaeefecfa6` is OPEN/MERGEABLE.
+- first-run path now exists in source: login -> X connect/reconnect -> verified handle confirmation -> minimum settings gate/skip -> Home.
+- existing Supabase session and `x-oauth-connect-user` path are reused; no parallel auth/OAuth system was introduced.
+- real-data mode no longer falls back to fake account data.
+- ambiguous multiple-workspace/account states fail closed rather than choosing a first row.
+- X connect state/verifier remain memory-only; no token/service_role/secret exposure.
+- G4-owned Home/settings/history/post files were not modified.
+- tests: 16/16 plus typecheck/lint/Expo web export/diff/secret scan PASS.
+- production mutation=0.
+- sign-up and password recovery intentionally remain product gates, not guessed implementations.
+- no intermediate H1 review is required; combine any app-side review after G4 Phase 1 unless a new backend/Auth security boundary appears.
