@@ -3,8 +3,8 @@
 - task_id: kabumori-daily-topic-level-settings-20260928
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: Homeの「今日のトピック」を実データ化し、設定画面で「初心者向け / 中級者向け / 上級者向け」を選べるようにする。既存のtips資産を再利用し、OpenAI呼び出し・ニュース取得基盤・G2 shared market reportには触れない。
@@ -583,3 +583,33 @@ until a real H slot is free.
 
 Preferred review slot when available: **H1**.
 Recommended Codex model: **Sol（高）**.
+
+
+## Independent Claude DB/RPC review — PASS
+
+- reviewer: separate Claude Code session / independent scratch PostgreSQL review
+- reviewed PR/head: #48 at `98732bf36b79190d52e6bca779fd19a7eb2b8a33`
+- verdict: **PASS**
+- P1/P2/P3 findings: none
+- SECURITY DEFINER: accepted; function accesses only `public.tips`.
+- `search_path = ''`: accepted with fully-qualified table reference; no hijack path found.
+- ACL/grants: authenticated EXECUTE only; anon/PUBLIC denied; direct authenticated table SELECT denied.
+- RLS boundary: existing table RLS unchanged; RPC remains narrow, active-tip-only, 5-column return.
+- read-only: confirmed no INSERT/UPDATE/DELETE/use_count/last_used_at mutation.
+- deterministic selector: bigint-safe and deterministic; no off-by-one/zero-row error found.
+- invalid level / SQL-injection-shaped input: fail closed, 0 rows.
+- inactive tips: excluded.
+- returned columns: only id/title/category/base_text/difficulty.
+- scratch PostgreSQL 17.11 validation completed and destroyed after use.
+- app-side focused tests: 30/30 PASS.
+- production mutation during review: 0.
+- reviewer explicitly did not merge or apply the migration.
+
+## Final K1 disposition
+
+- independent review requirement satisfied without Codex usage.
+- PR #48 was re-verified OPEN/mergeable at the exact reviewed head.
+- ChatGPT merged PR #48 with expected-head protection.
+- merge commit: `9ccbb59da2b6c48b0022ec2a31305a69262c2966`
+- production migration apply: **not performed**.
+- task is closed.
