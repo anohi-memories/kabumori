@@ -64,22 +64,22 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: x-stage3b-publish-authority-and-ai-lab-exclusion-fix-20260927
+- status: ready
+- task_id: x-social-mobile-auth-x-connect-onboarding-phase1-20260928
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: closed; Final K3 PASS at PR #41 `6b25305`; prior P1/P2 fixed; production mutation 0; focused H1 re-review assigned
+- allocation: assigned; social-mobile auth/X connection/onboarding first-run implementation phase; recommended Opus5.5（高）
 
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: done
-- task_id: x-admin-pr33-bounded-invite-e2e-after-binding-secret-20260927
+- status: ready
+- task_id: x-social-mobile-home-posting-settings-ux-phase1-20260928
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: closed; technical E2E PASS, but invite is not a product requirement for this internal Admin; recovery-only scope should drive PR #33 merge decision
+- allocation: assigned; social-mobile Home/posting settings/posting UX implementation phase; recommended Sonnet5（高）
 
 ## Deferred
 
