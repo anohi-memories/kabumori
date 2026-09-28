@@ -3,7 +3,7 @@
 - task_id: kabumori-shared-analysis-prod-deploy-observe-20260928
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: highest
 - recommended_model: Sonnet5（高）
