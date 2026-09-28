@@ -42,8 +42,9 @@ import {
   morningStancesFromRows,
   type Stance,
 } from "./report_logic.ts";
-import { appMarketSection, parseSharedMarketReportResult, type SharedMarketReportResult } from "../_shared/market_report_packet.ts";
-import { buildAppMarketDetail, crossAssetLines, type AppMarketDetail } from "./market_detail.ts";
+import { parseSharedMarketReportResult, type SharedMarketReportResult } from "../_shared/market_report_packet.ts";
+import type { AppMarketDetail } from "./market_detail.ts";
+import { buildSharedConsumption, sharedGateDecision } from "./shared_gate.ts";
 import { withDeliveryPolicy } from "./delivery_policy.ts";
 import { loadMicMarketContext, micSourceBasis, toMicPacketEntries } from "./mic_market_context.ts";
 
@@ -290,12 +291,12 @@ Deno.serve(async (req) => {
 
     // Gate ON: market values and the market analysis come only from the shared
     // packets; without a completed shared report nothing is generated (fail closed).
-    const sharedReport = await loadSharedMarketReport(db, reportType, tradingDate);
-    if (sharedReport.enabled && sharedReport.status !== "completed") {
-      console.log(JSON.stringify({ event: "personalized_report_shared_unavailable", reportType, tradingDate, status: sharedReport.status }));
-      return response({ status: "skipped", reason: "SHARED_MARKET_REPORT_UNAVAILABLE", reportType, tradingDate, shared: sharedReport.status });
+    const gate = sharedGateDecision(await loadSharedMarketReport(db, reportType, tradingDate));
+    if (gate.action === "skip") {
+      console.log(JSON.stringify({ event: "personalized_report_shared_unavailable", reportType, tradingDate, status: gate.status }));
+      return response({ status: "skipped", reason: "SHARED_MARKET_REPORT_UNAVAILABLE", reportType, tradingDate, shared: gate.status });
     }
-    const shared = sharedReport.enabled && sharedReport.status === "completed" ? sharedReport : null;
+    const shared = gate.action === "shared" ? gate.shared : null;
     // Close: the same day's shared morning analysis, for the morning→close review.
     // Optional — a missing or failed morning packet only drops the review.
     let morningShared: SharedMarketReportResult | null = null;
@@ -303,30 +304,9 @@ Deno.serve(async (req) => {
       morningShared = await loadSharedMarketReport(db, "morning", tradingDate).catch(() => null);
     }
     // Built once per run in code: identical for every user, never AI-rewritten.
-    const marketDetail: AppMarketDetail | null = shared
-      ? buildAppMarketDetail({
-        reportType,
-        tradingDate,
-        reportPacketId: shared.report_packet_id,
-        report: shared.report,
-        metrics: (shared.data.metrics ?? []) as Array<Record<string, unknown>>,
-        morningPacket: morningShared?.enabled && morningShared.status === "completed" ? morningShared.report : null,
-      })
-      : null;
-    const sharedInput: SharedMarketInput | null = shared && marketDetail
-      ? {
-        direction: shared.report.market_direction,
-        headlineJa: shared.report.headline_ja,
-        summaryJa: shared.report.market_summary_ja,
-        claims: shared.report.claims,
-        nextWatchJa: shared.report.next_watch_ja,
-        section: appMarketSection(shared.report, shared.report_packet_id, shared.report_content_hash),
-        tailwindThemesJa: marketDetail.tailwind_themes_ja,
-        headwindThemesJa: marketDetail.headwind_themes_ja,
-        crossAssetJa: crossAssetLines(marketDetail),
-        morningWatchJa: marketDetail.morning_reference?.next_watch_ja ?? [],
-      }
-      : null;
+    const consumption = shared ? buildSharedConsumption({ reportType, tradingDate, shared, morningShared }) : null;
+    const marketDetail: AppMarketDetail | null = consumption?.marketDetail ?? null;
+    const sharedInput: SharedMarketInput | null = consumption?.sharedInput ?? null;
 
     // MIC (Market Intelligence Core) State: optional, read-only background context
     // (rates/macro/equity_index), identical for every user in this run. Fetched

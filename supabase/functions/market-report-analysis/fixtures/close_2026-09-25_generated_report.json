@@ -1,0 +1,248 @@
+{
+  "content_hash": "ad2d2cf78d8e28b0d9805968dc441481dd953203b5017beac5a038ed0c2c31c9",
+  "id": "3c5597ae-6775-4566-9e43-428bae9d90a4",
+  "payload": {
+    "claims": [
+      {
+        "claim_id": "c1",
+        "claim_type": "observation",
+        "evidence_refs": [
+          "metric:nikkei225"
+        ],
+        "scope": "today",
+        "text_ja": "9月25日の日経平均は66,364.20（前日比+1.30%）でした。"
+      },
+      {
+        "claim_id": "c2",
+        "claim_type": "observation",
+        "evidence_refs": [
+          "metric:topix_proxy_1306"
+        ],
+        "scope": "today",
+        "text_ja": "9月25日のTOPIX連動ETF（1306）は430.3円（前日比+1.29%）でした。"
+      },
+      {
+        "claim_id": "c3",
+        "claim_type": "observation",
+        "evidence_refs": [
+          "metric:dow",
+          "metric:sp500",
+          "metric:nasdaq_composite",
+          "metric:sox"
+        ],
+        "scope": "overnight",
+        "text_ja": "9月24日の米国市場は、NYダウとSOXが下落し、S&P500は小幅下落、ナスダック総合は小幅上昇でした。"
+      },
+      {
+        "claim_id": "c4",
+        "claim_type": "observation",
+        "evidence_refs": [
+          "metric:usdjpy"
+        ],
+        "scope": "overnight",
+        "text_ja": "9月24日のドル円は158.85円でした。"
+      },
+      {
+        "claim_id": "c5",
+        "claim_type": "causal",
+        "evidence_refs": [
+          "news:a03481ec-fcfb-4945-962c-68d76a8df361"
+        ],
+        "scope": "today",
+        "text_ja": "ディア・ライフは2026年9月期通期連結業績目標の修正を発表しました。市場全体の上昇との因果は確認できません。"
+      },
+      {
+        "claim_id": "c6",
+        "claim_type": "insufficient_evidence",
+        "evidence_refs": [
+          "metric:nikkei225",
+          "metric:topix_proxy_1306"
+        ],
+        "scope": "today",
+        "text_ja": "東京市場の上昇について、入力されたニュースから確認できる具体的な理由は限られています。"
+      },
+      {
+        "claim_id": "c7",
+        "claim_type": "watch_point",
+        "evidence_refs": [
+          "metric:dow",
+          "metric:nasdaq_composite",
+          "metric:usdjpy"
+        ],
+        "scope": "next",
+        "text_ja": "次回は、米国株の方向や為替水準が東京市場にどう反映されるかを確認します。"
+      }
+    ],
+    "data_content_hash": "1efbfbd233dc4fee3a0e3748a3512b2e0b584c0009c20affd9b275226c3af5e1",
+    "data_gaps_ja": [
+      "日本国債2年利回りは8月31日時点の値です",
+      "日本国債10年利回りは8月31日時点の値です",
+      "日経平均先物は確認できる取得元がないため載せていません",
+      "東証グロース市場250指数は確認できる取得元がないため載せていません",
+      "業種別の騰落は取得元がないため載せていません",
+      "経済指標の予定は取得元がないため載せていません"
+    ],
+    "data_packet_id": "f845aa99-1c31-47bf-92d0-5591d35bbf0d",
+    "direction_basis": [
+      "nikkei225",
+      "topix_proxy_1306"
+    ],
+    "fact": {
+      "ai_status": "passed",
+      "generation_attempts": 2,
+      "local_issues": []
+    },
+    "generated_at": "2026-09-25T07:35:34.393Z",
+    "headline_ja": "東京市場は主要指標そろって上昇",
+    "key_news": [
+      {
+        "headline_ja": "2026年９月期通期連結業績目標の修正に関するお知らせ",
+        "ref_id": "news:a03481ec-fcfb-4945-962c-68d76a8df361",
+        "why_it_matters_ja": "ディア・ライフが2026年9月期通期連結業績目標の修正を発表しました。"
+      },
+      {
+        "headline_ja": "オリコン（4800）は、普通株式が9月28日をもって東証スタンダード市場で上場廃止となると発表しました",
+        "ref_id": "news:adf169b7-1a95-49ee-969c-d5a26c74d0d2",
+        "why_it_matters_ja": "オリコンは9月28日をもって東証スタンダード市場で上場廃止となると発表しました。"
+      },
+      {
+        "headline_ja": "山大（7426）は、9月28日付で東証スタンダード市場を上場廃止となります",
+        "ref_id": "news:09853654-3ba6-43f7-929d-3fddeb745ce7",
+        "why_it_matters_ja": "山大は9月28日付で東証スタンダード市場を上場廃止となると公表しました。"
+      }
+    ],
+    "major_moves": [
+      {
+        "change_pct_display": "+1.30%",
+        "freshness": "fresh",
+        "label": "日経平均",
+        "metric_key": "nikkei225",
+        "session_date": "2026-09-25",
+        "value_display": "66,364.20"
+      },
+      {
+        "change_pct_display": "+1.29%",
+        "freshness": "fresh",
+        "label": "TOPIX連動ETF（1306）",
+        "metric_key": "topix_proxy_1306",
+        "session_date": "2026-09-25",
+        "value_display": "430.3円"
+      },
+      {
+        "change_pct_display": "−0.31%",
+        "freshness": "fresh",
+        "label": "NYダウ",
+        "metric_key": "dow",
+        "session_date": "2026-09-24",
+        "value_display": "51,349.98"
+      },
+      {
+        "change_pct_display": "−0.02%",
+        "freshness": "fresh",
+        "label": "S&P500",
+        "metric_key": "sp500",
+        "session_date": "2026-09-24",
+        "value_display": "7,704.13"
+      },
+      {
+        "change_pct_display": "+0.01%",
+        "freshness": "fresh",
+        "label": "ナスダック総合",
+        "metric_key": "nasdaq_composite",
+        "session_date": "2026-09-24",
+        "value_display": "26,939.37"
+      },
+      {
+        "change_pct_display": "−0.33%",
+        "freshness": "fresh",
+        "label": "フィラデルフィア半導体株指数（SOX）",
+        "metric_key": "sox",
+        "session_date": "2026-09-24",
+        "value_display": "12,492.54"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "ドル円",
+        "metric_key": "usdjpy",
+        "session_date": "2026-09-24",
+        "value_display": "158.85円"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "米国2年債利回り",
+        "metric_key": "us2y",
+        "session_date": "2026-09-23",
+        "value_display": "4.85%"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "米国10年債利回り",
+        "metric_key": "us10y",
+        "session_date": "2026-09-23",
+        "value_display": "5.11%"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "stale",
+        "label": "日本国債2年利回り",
+        "metric_key": "jgb2y",
+        "session_date": "2026-08-31",
+        "value_display": "1.743%"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "stale",
+        "label": "日本国債10年利回り",
+        "metric_key": "jgb10y",
+        "session_date": "2026-08-31",
+        "value_display": "2.943%"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "WTI原油",
+        "metric_key": "wti",
+        "session_date": "2026-09-22",
+        "value_display": "96.41ドル"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "ブレント原油",
+        "metric_key": "brent",
+        "session_date": "2026-09-22",
+        "value_display": "114.89ドル"
+      }
+    ],
+    "market_direction": "up",
+    "market_summary_ja": "9月25日の東京市場は、日経平均が66,364.20（前日比+1.30%）、TOPIX連動ETF（1306）が430.3円（前日比+1.29%）と、主要指標がそろって上昇しました。9月24日の米国市場はまちまちで、NYダウとSOXは下落、ナスダック総合は小幅上昇でした。ディア・ライフは2026年9月期通期連結業績目標の修正を発表しましたが、全体の値動きとの因果は確認できません。",
+    "model": "gpt-5.6-luna",
+    "next_watch_ja": [
+      "米国株の方向とドル円158.85円の水準",
+      "ディア・ライフの業績目標修正の内容",
+      "日本国債利回りは古い値のため、最新値の確認"
+    ],
+    "report_type": "close",
+    "risks_ja": [
+      "東京市場の上昇理由は入力情報だけでは特定できません",
+      "米国株は指数ごとに方向が分かれています",
+      "日本国債利回りは8月31日時点の値です"
+    ],
+    "schema_version": "market_report_packet.v1",
+    "strong_themes": [],
+    "trading_date": "2026-09-25",
+    "weak_themes": [],
+    "x_post": {
+      "closing_ja": "上昇の具体的な理由は、今回の材料だけでは絞りにくいです。",
+      "lead_ja": "東京市場は主要指標がそろって上昇しました📈",
+      "points_ja": [
+        "日経平均は66,364.20（前日比+1.30%）。",
+        "TOPIX連動ETF（1306）は430.3円（前日比+1.29%）。",
+        "ディア・ライフは通期連結業績目標の修正を発表。"
+      ]
+    }
+  }
+}
