@@ -3,8 +3,8 @@
 - task_id: kabumori-daily-topic-level-settings-20260928
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: Homeの「今日のトピック」を実データ化し、設定画面で「初心者向け / 中級者向け / 上級者向け」を選べるようにする。既存のtips資産を再利用し、OpenAI呼び出し・ニュース取得基盤・G2 shared market reportには触れない。
@@ -479,3 +479,69 @@ After fixes:
 Do not merge or apply the migration to production.
 
 Recommended model: **Sonnet5（高）**.
+
+## Report — G1 result (K1 changes-required fix, before Codex DB/RPC review)
+
+- task_id: kabumori-daily-topic-level-settings-20260928
+- fresh main SHA at start: `8223ad1` (advanced only in unrelated G3 auth-correction reporting; no Home/topic-source overlap)
+- **result: all three K1 findings fixed, pushed to PR #48's existing branch. Not self-merged, not applied to production.**
+
+### Fix 1 — stale topic across a level/date change
+
+Added `TopicRequestKey = { level, jstDate }` and a pure `topicKeyMatches(loaded, current)` in `home-topic.ts`. `index.tsx` now tracks `topicKey` alongside `topic`, sets both together only on a *successful* fetch, and leaves both untouched on failure. A `displayedTopic` memo shows `topic` only when `topicKeyMatches(topicKey, currentKey)` is true — so a level change (or date rollover) hides the previous content the instant the key stops matching, even if the new fetch then fails, while a same-key refresh failure can still show the last-good topic (same tradeoff already accepted on the report hero). The AsyncStorage write and the content fetch stay independent outcomes: `handleTopicLevelChange` never rolls back an already-saved level just because the follow-up fetch failed.
+
+New tests in `home-topic_test.ts`:
+- `topicKeyMatches: a topic loaded for beginner does not match after changing to advanced` — PASS
+- `topicKeyMatches: same date + same level (a same-key refresh failure) may still show the loaded topic` — PASS
+- `topicKeyMatches: a successful level change is reflected once the key is updated to match` — PASS
+- `topicKeyMatches: a topic loaded for yesterday does not match after the JST date rolls over` — PASS
+- `topicKeyMatches: nothing loaded yet never matches` — PASS
+
+### Fix 2 — "today" no longer frozen at mount
+
+`todayJstValue` is now `useState(() => todayJst())`, not a mount-only `useMemo`. `load()` resolves `todayJst()` fresh on every call (initial load, every focus via `useFocusEffect`, every pull-to-refresh) and pushes it into state before the fetch batch; `handleTopicLevelChange` does the same. The topic fetch, the report hero (`currentReport(reports, todayJstValue)`), and the header date (`formatDateJa(todayJstValue)`) all derive from this same live state, so a Home screen left mounted across JST midnight re-scopes to the new day on the next focus/refresh instead of staying pinned to the mount-time date. Rollover detection itself is exercised by the pure, injectable `topicKeyMatches` tests above (different `jstDate` → no match) — no wall-clock sleep needed.
+
+### Fix 3 — RPC `abs(hashtext(...))` int4 overflow
+
+`hashtext()` returns a signed int4; `abs(-2147483648::int4)` raises `integer out of range`. Changed the selector to `abs(hashtext(...)::bigint) % total`, casting to bigint before `abs()` so the same deterministic value is preserved but the overflow is structurally impossible (bigint holds `2147483648` comfortably). No other part of the function changed.
+
+### Changed files (this fix, on top of the prior PR)
+
+- `src/lib/home-topic.ts` (added `TopicRequestKey`, `topicKeyMatches`)
+- `src/app/index.tsx` (topic-key tracking, live `todayJstValue` state, `displayedTopic`)
+- `supabase/migrations/20260928120000_add_daily_kabumori_tip_rpc.sql` (bigint-safe selector)
+- `tests/app/home-topic_test.ts` (+5 tests, 21 total in this file)
+
+### Re-verification
+
+- `home-topic_test.ts`: **21/21 pass** (16 prior + 5 new for finding 1/2).
+- Full regression: `home-report-highlights_test.ts`, `home-news-sections_test.ts`, `home-news-visual_test.ts`, `settings-menu_test.ts`, `dashboard_test.ts`, `news-labels_test.ts`, `news-presentation_test.ts`, `report-presentation_test.ts`, `account-deletion_test.ts` — **71/71 pass total** (21 + 50), 0 failures.
+- Migration dry-run re-run against a fresh throwaway local Postgres (same procedure as before: mock schema + Supabase roles, applied verbatim, dropped afterward, service stopped): all 10 original functional/security checks still pass, **plus 2 new checks added specifically for finding 3** — a direct proof that raw `abs(-2147483648::int4)` still overflows (confirms the bug was real) and that `abs(-2147483648::int4::bigint) = 2147483648` (confirms the fix), plus a plain successful call to the fixed function. **12/12 checks passed.**
+- `npx tsc --noEmit` — 0 new errors under `src/` (same 2 pre-existing, unrelated CSS-module errors as `main`).
+- `npx expo config --json` — resolves cleanly.
+- `npx expo export --platform web --clear` — full static export succeeds again, `/` (home) server-renders at 25KB.
+- `git diff --check` — clean.
+- Fresh `origin/main` re-checked immediately before push; no non-fast-forward conflict on PR #48's own branch.
+
+### PR / mergeability
+
+- PR: https://github.com/anohi-memories/kabumori/pull/48 (unchanged, same PR — fix pushed to its existing branch)
+- New head: `98732bf` on `claude/daily-topic-level-settings-20260928`
+- Confirmed via `gh pr view 48`: `state: OPEN`, `mergeable: MERGEABLE`
+- **Not self-merged. Migration not applied to production.**
+
+### Unchanged (confirmed still true after the fix)
+
+- `public.tips` reuse, difficulty mapping, local AsyncStorage preference for this phase — all unchanged.
+- No persistence-on-sign-out change (K1 explicitly accepted the current non-clearing behavior).
+- `security definer set search_path = ''` with fully-qualified references — unchanged, still pending Codex's own judgment.
+- No table-wide authenticated SELECT grant, no LLM/AI call, no `important-news-monitor`/`market-report-analysis`/`useful_tips` overlap.
+- Production mutation: **0**.
+
+### Remaining issues
+
+Same as the prior report (real-device visual QA, sign-out AsyncStorage-clearing policy audited-but-unchanged, bottom-tab/character/AI-route follow-ups) — nothing new introduced by this fix.
+
+### Next recommendation
+
+K1 re-review of the fix commit on PR #48 → if satisfied, route the now-stable source to an open H1/H2 slot for the DB/RPC (grants/RLS/security-definer/search_path) review before any merge or migration apply.
