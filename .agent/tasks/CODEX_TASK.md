@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-phase1-consolidated-integration-review-20260928
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Luna（高）
 - purpose: social-mobile Phase 1のG3/G4成果を1回だけまとめてレビューする。PR #42（auth/X-connect/onboarding）とPR #44（Home/posting settings/history UX）の統合、merge順、provider/state境界、content-settings保存の回帰を確認する。
@@ -77,3 +77,20 @@ Then:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for C1.
+
+
+## Final C1 — social-mobile Phase 1 consolidated review
+
+Verdict: **PASS-WITH-FIX**.
+
+- PR #42 accepted head: `c5e0157f867450047a5f79a204df45aaeefecfa6`.
+- PR #44 accepted fixed head: `966d4123c13c4dcda1799772d262dde5be8cacb8`.
+- H1 fixed one P2 on PR #44: persisted scheduler status mapping now maps `succeeded` to published and History excludes unpublished rows.
+- combined integration tree built from latest main with merge order #42 -> #44 passed.
+- tests: social-mobile 16/16, data-view 14/14, typecheck/lint/Expo web export/diff all PASS.
+- real-data mode remains fail-closed with no mock fallback on blocked/unavailable states.
+- onboarding/X-connect/provider state and Home/schedule/history integration accepted.
+- consult persistence preserves existing settings and fails safely if content-settings backend is unavailable.
+- production mutation=0.
+- Phase 1 source work is complete and may be closed after merging PR #42 then PR #44.
+- no additional H1 loop required unless merge introduces a concrete discrepancy.
