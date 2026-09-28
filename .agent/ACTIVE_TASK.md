@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: review_required
 - task_id: x-social-mobile-account-lifecycle-release-phase4-20260928
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: resumed from preserved checkpoint; continue only in existing G3 worktree; source-only completion; independent review required before merge/deploy; recommended Opus5.5（高）
+- allocation: Final K3 source-only PASS at draft PR #52 `12146c4`; privileged account-deletion boundary requires independent separate-Claude review before merge/apply/deploy; recommended Opus5.5（高）
 
 ## Claude G4
 - owner: claude
