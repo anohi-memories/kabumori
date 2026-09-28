@@ -60,7 +60,7 @@
 - H1: `review_required` — `x-stage3b-publish-authority-focused-rereview-20260927`; PR #41 source PASS-WITH-FIX at `59f4f53`: publish authority/timebox and AI Lab exclusion verified; H1 added an authority check immediately before each X create after proactive/reactive token refresh. Disposable DB/ACL/race and 619 Deno tests passed. Production mutation 0; awaiting C1 and separate owner/product/production authorization.
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
 - G1: `ready` — `kabumori-home-news-first-ui-implementation-20260928`; prior icon/splash/onboarding visual QA is closed PASS. New scope is Home UI only: report summary card -> market important news -> holding news -> topic shell -> AI entry shell, reusing existing reads and avoiding backend/API-optimization overlap; recommended Sonnet5（高）.
-- G2: `ready` — `kabumori-shared-report-reliability-hardening-20260928`; PR #43 shared-unification proof merged; next blocker is bounded 429/5xx resilience in market-report-analysis; consumer gates remain OFF; recommended Opus5.5（高）
+- G2: `ready` — `kabumori-shared-analysis-prod-deploy-observe-20260928`; PR #45 merged; controlled deploy of market-report-analysis only with consumer gates OFF, then natural morning+close observation; recommended Sonnet5（高）
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS
 
@@ -80,6 +80,23 @@
   - old X close failed `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE`
 - implication: shared architecture is the correct path, but upstream-analysis reliability must be hardened before enabling both consumers.
 - no Codex review required for PR #43 itself; focused release-boundary review is reserved for the later live shared-gate activation.
+
+## Final K2 shared analysis reliability hardening
+
+- verdict: **PASS**.
+- PR #45 head `b37e1c9` merged by ChatGPT -> `6ea31efec1876596085e9b66727b2626ab0ba477`.
+- retry scope is bounded to transient OpenAI transport failures; claim/idempotency/content-validation semantics unchanged.
+- related suite 338/338 PASS; production mutation before merge=0; gates remain app=false / x=false.
+- no separate Codex review before gated-OFF deployment under reduced-review policy; H1 is occupied and H2 is preserved deferred, so neither is overwritten.
+- focused Codex review remains required/strongly preferred before consumer activation, especially `x_enabled=true`.
+
+## G2 shared analysis production observation
+
+- assigned: `kabumori-shared-analysis-prod-deploy-observe-20260928`.
+- deploy only `market-report-analysis` from merged main; preserve verify_jwt=false and all cron/settings.
+- no manual cycle forcing; observe the next natural morning and close cycle.
+- app/x consumer gates remain false throughout.
+- recommended Claude model: Sonnet5（高）.
 
 ## G2 shared analysis reliability hardening
 
