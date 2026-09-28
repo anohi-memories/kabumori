@@ -47,6 +47,37 @@ do $$ begin
   exception when insufficient_privilege then null; end;
 end $$;
 
+\echo '--- T1c catalog read-back: all 7 tables/functions, RLS, owner, empty path, ACL'
+reset role;
+do $$ declare r record; n integer := 0; begin
+  for r in select c.oid, c.relname, c.relrowsecurity from pg_class c join pg_namespace ns on ns.oid = c.relnamespace
+    where ns.nspname = 'public' and c.relkind = 'r' and c.relname like 'news_discovery%' loop
+    n := n + 1;
+    if not r.relrowsecurity or has_table_privilege('anon', r.oid, 'SELECT,INSERT,UPDATE,DELETE')
+      or has_table_privilege('authenticated', r.oid, 'SELECT,INSERT,UPDATE,DELETE')
+      or not has_table_privilege('service_role', r.oid, 'SELECT')
+      or has_table_privilege('service_role', r.oid, 'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') then
+      raise exception 'FAIL table ACL/RLS %', r.relname;
+    end if;
+  end loop;
+  if n <> 7 then raise exception 'FAIL table count %', n; end if;
+  n := 0;
+  for r in select p.*, owner.rolname, owner.rolsuper from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
+    join pg_roles owner on owner.oid = p.proowner where ns.nspname = 'public' and p.proname like 'news_discovery%' loop
+    n := n + 1;
+    if not r.prosecdef or not coalesce('search_path=""' = any(r.proconfig), false) or r.rolsuper
+      or r.rolname <> current_user
+      or has_function_privilege('anon', r.oid, 'EXECUTE') or has_function_privilege('authenticated', r.oid, 'EXECUTE')
+      or not has_function_privilege('service_role', r.oid, 'EXECUTE')
+      or exists (select 1 from aclexplode(coalesce(r.proacl, acldefault('f', r.proowner))) a
+                 where a.grantee = 0 and a.privilege_type = 'EXECUTE') then
+      raise exception 'FAIL function owner/path/ACL %', r.proname;
+    end if;
+  end loop;
+  if n <> 7 then raise exception 'FAIL function count %', n; end if;
+end $$;
+set role service_role;
+
 \echo '--- T2 begin run + insert (tickers/entities separate; same-source same-title docs both kept)'
 select (public.news_discovery_begin_run('{"trigger_type":"local_validation","requested_sources":["jp_kantei_news"],"code_version":"t"}') ->> 'run_id') as run_id \gset
 select set_config('app.run', :'run_id', false);
@@ -221,6 +252,51 @@ begin
   exception when check_violation then null; end;
 end $$;
 
+\echo '--- T8b review: cross-run search references/escalation, weak-only claims, raw body rejected'
+do $$
+declare
+  v_other text := public.news_discovery_begin_run('{"trigger_type":"local_validation"}') ->> 'run_id';
+  v_search text := (select id::text from public.news_discovery_searches where search_key = 'anomaly:WTI' and reason = 'trigger_market_anomaly');
+  r jsonb;
+  rejected integer := 0;
+begin
+  begin
+    perform public.news_discovery_insert_signals(jsonb_build_object('run_id', v_other, 'signals', jsonb_build_array(
+      pg_temp.sig(repeat('3', 64), 'web_search', 'cross run reference', 'https://news.example/cross-run',
+        jsonb_build_object('search_id', v_search)))));
+  exception when raise_exception then
+    if sqlerrm <> 'NEWS_DISCOVERY_SEARCH_RUN_MISMATCH' then raise; end if;
+    rejected := rejected + 1;
+  end;
+  r := public.news_discovery_reserve_search(jsonb_build_object('run_id', v_other, 'lane', 'ENERGY', 'reason', 'escalation',
+    'search_key', 'anomaly:WTI', 'parent_search_id', v_search, 'query', 'q', 'provider', 'mock', 'model', 'm'));
+  if r ->> 'reason' <> 'bad_parent' then raise exception 'FAIL cross-run parent %', r; end if;
+  begin
+    perform public.news_discovery_insert_signals(jsonb_build_object('run_id', v_other, 'signals', jsonb_build_array(
+      pg_temp.sig(repeat('4', 64), 'jp_mof_news', 'single weak alias claiming multiple', 'https://news.example/weak',
+        jsonb_build_object('tickers', jsonb_build_array(jsonb_build_object('ticker', '4477', 'status', 'confirmed',
+          'confirmation_basis', 'multiple_weak', 'match_types', jsonb_build_array('WEAK_ALIAS'),
+          'matched_aliases', jsonb_build_array('BASE'), 'in_title', true, 'score', 0.4)))))));
+  exception when check_violation then rejected := rejected + 1; end;
+  begin
+    perform public.news_discovery_insert_signals(jsonb_build_object('run_id', v_other, 'signals', jsonb_build_array(
+      pg_temp.sig(repeat('6', 64), 'jp_mof_news', 'same weak alias duplicated', 'https://news.example/duplicate-weak',
+        jsonb_build_object('tickers', jsonb_build_array(jsonb_build_object('ticker', '4477', 'status', 'confirmed',
+          'confirmation_basis', 'multiple_weak', 'match_types', jsonb_build_array('WEAK_ALIAS'),
+          'matched_aliases', jsonb_build_array('BASE', 'BASE'), 'in_title', true, 'score', 0.4)))))));
+  exception when check_violation then rejected := rejected + 1; end;
+  begin
+    perform public.news_discovery_insert_signals(jsonb_build_object('run_id', v_other, 'signals', jsonb_build_array(
+      pg_temp.sig(repeat('5', 64), 'gdelt_doc', 'hidden body', 'https://news.example/body',
+        jsonb_build_object('policy', 'DISCOVERY_ONLY', 'discovery_only', true, 'source_type', 'gdelt_doc_json',
+          'title_display_allowed', false, 'raw_reference', jsonb_build_object('body', 'must not persist'))))));
+  exception when check_violation then rejected := rejected + 1; end;
+  if rejected <> 4 then raise exception 'FAIL T8b rejected %/4', rejected; end if;
+  if exists (select 1 from public.news_discovery_signals where first_run_id = v_other::uuid) then
+    raise exception 'FAIL T8b partial write';
+  end if;
+end $$;
+
 \echo '--- T9 finish_run records totals + sources once'
 do $$
 declare r jsonb;
@@ -242,6 +318,64 @@ begin
   exception when raise_exception then
     if sqlerrm <> 'NEWS_DISCOVERY_RUN_NOT_RUNNING' then raise; end if;
   end;
+end $$;
+\echo '--- T10 M1: persisted counts come from the DB; a failed run keeps the real search usage'
+do $$
+declare v_run text; v_search text; r jsonb;
+  row_s public.news_discovery_searches; row_r public.news_discovery_runs;
+begin
+  v_run := public.news_discovery_begin_run('{"trigger_type":"local_validation"}') ->> 'run_id';
+  r := public.news_discovery_reserve_search(jsonb_build_object('run_id', v_run, 'lane', 'TECH', 'reason', 'manual',
+    'search_key', 'm1-proof', 'query', 'q', 'provider', 'mock', 'model', 'm'));
+  if not (r ->> 'allowed')::boolean then raise exception 'FAIL T10 reserve %', r; end if;
+  v_search := r ->> 'search_id';
+  -- signals of the search are persisted BEFORE its row is completed
+  r := public.news_discovery_insert_signals(jsonb_build_object('run_id', v_run, 'signals', jsonb_build_array(
+    pg_temp.sig(repeat('7', 64), 'web_search', 'Chipmaker halts output after fire', 'https://m1.example/a',
+      jsonb_build_object('policy', 'SEARCH_DISCOVERY', 'discovery_only', true, 'source_type', 'web_search',
+        'title_display_allowed', false, 'search_id', v_search, 'topics', '["supply_chain"]'::jsonb,
+        'published_at', null, 'published_at_precision', null, 'detected_at', '2026-09-28T06:00:00Z')),
+    pg_temp.sig(repeat('8', 64), 'web_search', 'Unclassified result', 'https://m1.example/b',
+      jsonb_build_object('policy', 'SEARCH_DISCOVERY', 'discovery_only', true, 'source_type', 'web_search',
+        'title_display_allowed', false, 'search_id', v_search, 'topics', '[]'::jsonb,
+        'published_at', null, 'published_at_precision', null, 'detected_at', '2026-09-28T06:00:00Z')))));
+  -- client claims 5 discovered / 4 useful; the DB counts what is really stored: 2 / 1
+  perform public.news_discovery_complete_search(jsonb_build_object('search_id', v_search, 'status', 'succeeded',
+    'result_count', 6, 'new_signal_count', 5, 'useful_signal_count', 4, 'model_calls', 1, 'web_search_calls', 1,
+    'input_tokens', 9000, 'output_tokens', 400));
+  select * into row_s from public.news_discovery_searches where id = v_search::uuid;
+  if row_s.persisted_signal_count <> 2 or row_s.persisted_useful_signal_count <> 1 or row_s.input_tokens <> 9000 then
+    raise exception 'FAIL T10 persisted counts % %', row_s.persisted_signal_count, row_s.persisted_useful_signal_count;
+  end if;
+  -- the run then fails and finishes with EMPTY client totals: usage must still show
+  perform public.news_discovery_finish_run(jsonb_build_object('run_id', v_run, 'status', 'failed', 'totals', '{}'::jsonb,
+    'error_summary', 'RUN_FAILED:fixture', 'execution', jsonb_build_object('deadline_reached', true, 'searches_skipped', 1)));
+  select * into row_r from public.news_discovery_runs where id = v_run::uuid;
+  if row_r.search_count <> 1 or row_r.ai_calls <> 1 or row_r.web_search_calls <> 1 or row_r.search_result_count <> 6
+     or row_r.search_useful_signal_count <> 1 or row_r.inserted_count <> 2 then
+    raise exception 'FAIL T10 run usage % % % % % %', row_r.search_count, row_r.ai_calls, row_r.web_search_calls,
+      row_r.search_result_count, row_r.search_useful_signal_count, row_r.inserted_count;
+  end if;
+  if (row_r.execution ->> 'deadline_reached')::boolean is not true or (row_r.execution ->> 'signals_persisted')::int <> 2 then
+    raise exception 'FAIL T10 execution %', row_r.execution;
+  end if;
+end $$;
+
+\echo '--- T11 M2 (sequential): same URL from another source is a DB duplicate; same source + same URL + new title is kept'
+do $$
+declare v_run text; r jsonb;
+begin
+  v_run := public.news_discovery_begin_run('{"trigger_type":"local_validation"}') ->> 'run_id';
+  r := public.news_discovery_insert_signals(jsonb_build_object('run_id', v_run, 'signals', jsonb_build_array(
+    pg_temp.sig(repeat('5', 64), 'jp_esri', '景気動向指数（7月分速報）', 'https://www.esri.cao.go.jp/jp/stat/di/di.html'),
+    pg_temp.sig(repeat('6', 64), 'jp_esri', '景気動向指数（6月分改訂）', 'https://www.esri.cao.go.jp/jp/stat/di/di.html'),
+    pg_temp.sig(repeat('4', 64), 'web_search', 'ESRI index page', 'https://www.esri.cao.go.jp/jp/stat/di/di.html',
+      jsonb_build_object('policy', 'SEARCH_DISCOVERY', 'discovery_only', true, 'source_type', 'web_search', 'title_display_allowed', false,
+        'published_at', null, 'published_at_precision', null)))));
+  if jsonb_array_length(r -> 'inserted') <> 2 or jsonb_array_length(r -> 'duplicates') <> 1
+     or r -> 'duplicates' -> 0 ->> 'duplicate_of' <> repeat('5', 64) then
+    raise exception 'FAIL T11 %', r;
+  end if;
 end $$;
 reset role;
 \echo 'BEHAVIOR_PROOF_PASSED'

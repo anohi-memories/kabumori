@@ -24,8 +24,9 @@ const NOW = new Date("2026-09-28T06:00:00Z");
 
 function openAiResponse(items: Array<{ url: string; title: string; publisher?: string | null }>, sources: string[], cited: string[] = []) {
   return {
+    status: "completed",
     output: [
-      { type: "web_search_call", action: { type: "search", sources: sources.map((url) => ({ type: "url", url })) } },
+      { type: "web_search_call", status: "completed", action: { type: "search", sources: sources.map((url) => ({ type: "url", url })) } },
       {
         type: "message",
         content: [{
@@ -74,11 +75,18 @@ const rotation = (lane: SearchLane): SearchRequest => ({
 
 // ---------------------------------------------------------------------------------------- provider
 
-test("request body: one web_search call, sources included, no domain filter, no per-company query", () => {
+test("request body: one web_search call, sources included, no_access excluded without a publisher allowlist", () => {
   const body = openAiSearchRequestBody({ query: SEARCH_LANES.ENERGY.query, lane: "ENERGY", maxResults: 8, recencyHours: 6, now: NOW });
   assert.equal(body.max_tool_calls, 1);
   assert.deepEqual(body.include, ["web_search_call.action.sources"]);
-  assert.deepEqual(body.tools, [{ type: "web_search", search_context_size: "low" }]);
+  const [tool] = body.tools as Array<{ type: string; search_context_size: string; filters: { blocked_domains: string[]; allowed_domains?: string[] } }>;
+  assert.equal(tool.type, "web_search");
+  assert.equal(tool.search_context_size, "low");
+  assert.ok(tool.filters.blocked_domains.includes("ft.com"));
+  assert.ok(tool.filters.blocked_domains.includes("aljazeera.com"));
+  assert.ok(tool.filters.blocked_domains.includes("diamond.jp"));
+  assert.ok(!tool.filters.blocked_domains.includes("nhk.or.jp"));
+  assert.equal(tool.filters.allowed_domains, undefined);
   assert.equal(body.store, false);
   assert.match(String(body.instructions), /Do not summarize, do not invent URLs/);
 });

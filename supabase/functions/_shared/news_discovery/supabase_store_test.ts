@@ -50,6 +50,8 @@ function signal(overrides: Partial<NewsSignal> = {}): NewsSignal {
     image_source: null,
     image_usage_allowed: false,
     discovery_only: false,
+    restricted_publisher: false,
+    search_id: null,
     discovered_via: "feed:jp_mof_news",
     raw_reference: { feed_url: "https://www.mof.go.jp/news.rss", item_index: 0 },
     fingerprint: id,
@@ -120,7 +122,7 @@ test("save aggregates inserted and conflicted ids per chunk and passes the run i
   });
   const store = new SupabaseNewsSignalStore(rpc, "run-1", "alias-v0");
   const result = await store.save([signal({ id: "1".repeat(64) }), signal({ id: "2".repeat(64) })]);
-  assert.deepEqual(result, { inserted: ["2".repeat(64)], conflicted: ["1".repeat(64)] });
+  assert.deepEqual(result, { inserted: ["2".repeat(64)], conflicted: ["1".repeat(64)], duplicates: [] });
   assert.equal(rpc.calls[0].payload.run_id, "run-1");
   assert.equal(rpc.calls[0].payload.alias_dictionary_version, "alias-v0");
 });
@@ -151,14 +153,14 @@ test("PostgREST client: posts {p}, retries once on 5xx, never retries 4xx, never
       return Promise.resolve(new Response(JSON.stringify({ code: "XX000", message: `secret ${key}` }), { status }));
     },
   });
-  await assert.rejects(() => client.call("news_discovery_begin_run", {}), (error: unknown) => {
+  await assert.rejects(() => client.call("news_discovery_finish_run", {}), (error: unknown) => {
     assert.ok(error instanceof NewsDiscoveryDbError);
     assert.ok(!error.message.includes(key));
-    assert.equal(error.message, "DB_RPC_FAILED:news_discovery_begin_run:XX000:503");
+    assert.equal(error.message, "DB_RPC_FAILED:news_discovery_finish_run:XX000:503");
     return true;
   });
   assert.equal(seen.length, 2, "one retry for 5xx");
-  assert.equal(seen[0].url, "https://proj.supabase.co/rest/v1/rpc/news_discovery_begin_run");
+  assert.equal(seen[0].url, "https://proj.supabase.co/rest/v1/rpc/news_discovery_finish_run");
   assert.deepEqual(JSON.parse(String(seen[0].init?.body)), { p: {} });
   seen.length = 0;
   status = 400;

@@ -13,6 +13,7 @@
 // Independent of important-news-monitor's search code (not imported, not changed).
 import { canonicalizeUrl } from "./normalize.ts";
 import type { DiscoveryRun, GroupingSignal } from "./pipeline.ts";
+import type { RunDeadline } from "./run_deadline.ts";
 import {
   ANOMALY_INSTRUMENT_LANES,
   SEARCH_BUDGET_DEFAULTS,
@@ -26,7 +27,7 @@ import {
   TOPIC_TO_LANE,
   TRIGGER_TOPICS,
 } from "./search_config.ts";
-import { publisherRestriction, sourceById } from "./source_registry.ts";
+import { NEWS_SOURCE_REGISTRY, publisherRestriction, sourceById } from "./source_registry.ts";
 import type { NewsSignal, RawItem } from "./types.ts";
 
 // ------------------------------------------------------------------------------------------------
@@ -41,7 +42,8 @@ export type ProviderResult =
 export interface WebSearchProvider {
   readonly name: string;
   readonly model: string;
-  search(input: { query: string; lane: SearchLane; maxResults: number; recencyHours: number; now: Date }): Promise<ProviderResult>;
+  /** timeoutMs: the run deadline's cap; the provider never waits longer than its own timeout either. */
+  search(input: { query: string; lane: SearchLane; maxResults: number; recencyHours: number; now: Date; timeoutMs?: number }): Promise<ProviderResult>;
 }
 
 const NO_USAGE: ProviderUsage = { model_calls: 0, web_search_calls: 0, input_tokens: 0, output_tokens: 0 };
@@ -53,13 +55,16 @@ export function openAiSearchRequestBody(
   input: { query: string; lane: SearchLane; maxResults: number; recencyHours: number; now: Date },
   config: SearchProviderConfig = SEARCH_PROVIDER_DEFAULTS,
 ): Record<string, unknown> {
+  const blockedDomains = [...new Set(NEWS_SOURCE_REGISTRY
+    .filter((source) => source.policy === "DISABLED" && source.disabled_scope === "no_access")
+    .flatMap((source) => source.publisher_domains ?? []))];
   return {
     model: config.model,
     store: false,
     reasoning: { effort: "low" },
     max_output_tokens: config.max_output_tokens,
     max_tool_calls: 1,
-    tools: [{ type: "web_search", search_context_size: config.search_context_size }],
+    tools: [{ type: "web_search", search_context_size: config.search_context_size, filters: { blocked_domains: blockedDomains } }],
     tool_choice: "required",
     include: ["web_search_call.action.sources"],
     instructions: [
@@ -100,12 +105,30 @@ export function openAiSearchRequestBody(
   };
 }
 
+/** Public-looking article URLs only; no credentials, IP literals or local network names.
+ * This is NOT DNS/redirect validation. Any future article fetcher must independently enforce SSRF
+ * controls on DNS answers and every redirect (these results are never fetched here).
+ */
+export function safeSearchUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return null;
+    url.hostname = url.hostname.toLowerCase().replace(/\.$/, "");
+    const host = url.hostname;
+    if (!host.includes('.') || host.includes(':') || /^\d+(\.\d+){3}$/.test(host) ||
+      /(^|\.)(localhost|local|internal|lan|home|arpa)$/.test(host)) return null;
+    return canonicalizeUrl(url.toString());
+  } catch {
+    return null;
+  }
+}
+
 /** URLs the search tool actually returned or cited. Model-claimed URLs outside this set are rejected. */
 export function verifiedUrlsFromResponse(raw: unknown): Set<string> {
   const urls = new Set<string>();
   const add = (value: unknown) => {
     if (typeof value !== "string") return;
-    const canonical = canonicalizeUrl(value);
+    const canonical = safeSearchUrl(value);
     if (canonical) urls.add(canonical);
   };
   const output = (raw as { output?: unknown })?.output;
@@ -118,9 +141,9 @@ export function verifiedUrlsFromResponse(raw: unknown): Set<string> {
     }
     if (record?.type === "message" && Array.isArray(record.content)) {
       for (const part of record.content as Array<Record<string, unknown>>) {
-        if (!Array.isArray(part.annotations)) continue;
+        if (!part || !Array.isArray(part.annotations)) continue;
         for (const annotation of part.annotations as Array<Record<string, unknown>>) {
-          if (annotation.type === "url_citation") add(annotation.url);
+          if (annotation?.type === "url_citation") add(annotation.url);
         }
       }
     }
@@ -128,21 +151,28 @@ export function verifiedUrlsFromResponse(raw: unknown): Set<string> {
   return urls;
 }
 
-export function parseOpenAiSearchResponse(raw: unknown): { results: WebSearchResultItem[]; rejected_unverified: number; usage: ProviderUsage } | null {
-  const record = raw as { output?: unknown; usage?: { input_tokens?: unknown; output_tokens?: unknown } };
-  if (!record || !Array.isArray(record.output)) return null;
-  const webSearchCalls = record.output.filter((item) => (item as { type?: unknown })?.type === "web_search_call").length;
-  const usage: ProviderUsage = {
+function responseUsage(raw: unknown): ProviderUsage {
+  const record = raw as { output?: unknown; usage?: { input_tokens?: unknown; output_tokens?: unknown } } | null;
+  const tokenCount = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+  return {
     model_calls: 1,
-    web_search_calls: webSearchCalls,
-    input_tokens: typeof record.usage?.input_tokens === "number" ? record.usage.input_tokens : 0,
-    output_tokens: typeof record.usage?.output_tokens === "number" ? record.usage.output_tokens : 0,
+    web_search_calls: Array.isArray(record?.output) ? record.output.filter((item) => (item as { type?: unknown })?.type === "web_search_call").length : 0,
+    input_tokens: tokenCount(record?.usage?.input_tokens),
+    output_tokens: tokenCount(record?.usage?.output_tokens),
   };
+}
+
+export function parseOpenAiSearchResponse(raw: unknown): { results: WebSearchResultItem[]; rejected_unverified: number; usage: ProviderUsage } | null {
+  const record = raw as { status?: unknown; output?: unknown };
+  if (!record || record.status !== "completed" || !Array.isArray(record.output)) return null;
+  const calls = record.output.filter((item) => (item as { type?: unknown })?.type === "web_search_call") as Array<{ status?: unknown; action?: { type?: unknown } }>;
+  if (calls.length !== 1 || calls[0].status !== "completed" || calls[0].action?.type !== "search") return null;
+  const usage = responseUsage(raw);
   let text = "";
   for (const item of record.output as Array<Record<string, unknown>>) {
     if (item?.type !== "message" || !Array.isArray(item.content)) continue;
     for (const part of item.content as Array<Record<string, unknown>>) {
-      if (part.type === "output_text" && typeof part.text === "string") text += part.text;
+      if (part?.type === "output_text" && typeof part.text === "string") text += part.text;
     }
   }
   let parsed: { items?: unknown };
@@ -151,14 +181,14 @@ export function parseOpenAiSearchResponse(raw: unknown): { results: WebSearchRes
   } catch {
     return null;
   }
-  if (!Array.isArray(parsed.items)) return null;
+  if (!parsed || !Array.isArray(parsed.items) || parsed.items.length > SEARCH_BUDGET_DEFAULTS.max_results_per_search) return null;
   const verified = verifiedUrlsFromResponse(raw);
   const results: WebSearchResultItem[] = [];
   let rejected = 0;
   for (const value of parsed.items as Array<Record<string, unknown>>) {
-    const url = typeof value.url === "string" ? value.url : "";
-    const title = typeof value.title === "string" ? value.title.trim() : "";
-    const canonical = canonicalizeUrl(url);
+    const url = typeof value?.url === "string" ? value.url : "";
+    const title = typeof value?.title === "string" ? value.title.trim() : "";
+    const canonical = safeSearchUrl(url);
     if (!canonical || !title || !verified.has(canonical)) {
       rejected += 1;
       continue;
@@ -179,7 +209,7 @@ export class OpenAiWebSearchProvider implements WebSearchProvider {
     this.model = config.model;
   }
 
-  async search(input: { query: string; lane: SearchLane; maxResults: number; recencyHours: number; now: Date }): Promise<ProviderResult> {
+  async search(input: { query: string; lane: SearchLane; maxResults: number; recencyHours: number; now: Date; timeoutMs?: number }): Promise<ProviderResult> {
     if (!this.apiKey) return { ok: false, code: "PROVIDER_NOT_CONFIGURED", status: null, usage: NO_USAGE };
     let response: Response;
     try {
@@ -187,7 +217,7 @@ export class OpenAiWebSearchProvider implements WebSearchProvider {
         method: "POST",
         headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify(openAiSearchRequestBody(input, this.config)),
-        signal: AbortSignal.timeout(this.config.timeout_ms),
+        signal: AbortSignal.timeout(Math.max(1, Math.min(this.config.timeout_ms, input.timeoutMs ?? this.config.timeout_ms))),
       });
     } catch (error) {
       const timeout = error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError");
@@ -209,7 +239,7 @@ export class OpenAiWebSearchProvider implements WebSearchProvider {
       return { ok: false, code: "PROVIDER_BAD_RESPONSE", status: response.status, usage: { ...NO_USAGE, model_calls: 1 } };
     }
     const parsed = parseOpenAiSearchResponse(raw);
-    if (!parsed) return { ok: false, code: "PROVIDER_BAD_RESPONSE", status: response.status, usage: { ...NO_USAGE, model_calls: 1 } };
+    if (!parsed) return { ok: false, code: "PROVIDER_BAD_RESPONSE", status: response.status, usage: responseUsage(raw) };
     return { ok: true, ...parsed };
   }
 }
@@ -236,6 +266,10 @@ export type SearchCompletion = {
   status: "succeeded" | "failed";
   error_code: string | null;
   result_count: number;
+  /**
+   * Discovered in memory (candidates). What was actually persisted is counted by the DB from the
+   * signals rows carrying this search_id — the source of truth for "useful signals per search".
+   */
   new_signal_count: number;
   useful_signal_count: number;
   duplicate_count: number;
@@ -255,7 +289,7 @@ export function budgetDay(now: Date): string {
   return new Date(now.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
-type BudgetRow = SearchRequest & { id: string; day: string; at: number; status: "reserved" | "succeeded" | "failed" };
+type BudgetRow = SearchRequest & { run_id: string; id: string; day: string; at: number; status: "reserved" | "succeeded" | "failed" };
 
 /** In-memory budget with exactly the rules of news_discovery_reserve_search (tests / local runs). */
 export class InMemorySearchBudget implements SearchBudget {
@@ -265,7 +299,7 @@ export class InMemorySearchBudget implements SearchBudget {
   #seq = 0;
   constructor(private readonly config: SearchBudgetConfig = SEARCH_BUDGET_DEFAULTS, private readonly now: () => Date = () => new Date()) {}
 
-  reserve(request: SearchRequest & { run_id: string }): Promise<ReserveResult> {
+  reserve(request: SearchRequest & { run_id: string; provider?: string; model?: string }): Promise<ReserveResult> {
     const now = this.now();
     const day = budgetDay(now);
     const today = this.rows.filter((row) => row.day === day);
@@ -276,7 +310,9 @@ export class InMemorySearchBudget implements SearchBudget {
     if (today.length >= this.config.daily_hard_limit) return deny("hard_cap");
     if (request.reason === "scheduled_rotation" && today.length >= this.config.daily_soft_budget) return deny("soft_budget");
     if (request.reason === "escalation") {
-      if (!request.parent_search_id || !this.rows.some((row) => row.id === request.parent_search_id && row.search_key === request.search_key)) {
+      if (!request.parent_search_id || !this.rows.some((row) => row.id === request.parent_search_id && row.search_key === request.search_key &&
+        row.run_id === request.run_id && row.day === day && row.lane === request.lane &&
+        (row.reason === "trigger_market_anomaly" || row.reason === "trigger_discovery_signal"))) {
         return deny("bad_parent");
       }
       const escalations = today.filter((row) => row.reason === "escalation" && row.search_key === request.search_key).length;
@@ -294,8 +330,10 @@ export class InMemorySearchBudget implements SearchBudget {
 
   complete(completion: SearchCompletion): Promise<void> {
     const row = this.rows.find((entry) => entry.id === completion.search_id);
-    if (row && row.status === "reserved") row.status = completion.status;
-    this.completions.push(completion);
+    if (row && row.status === "reserved") {
+      row.status = completion.status;
+      this.completions.push(completion);
+    }
     return Promise.resolve();
   }
 }
@@ -305,7 +343,7 @@ export class InMemorySearchBudget implements SearchBudget {
 
 export type MarketAnomaly = { instrument: string; change_pct?: number; window_minutes?: number; observed_at?: string };
 
-export type PlannedSkip = { search_key: string; reason: "explained_by_pool" | "unknown_instrument" | "per_run_limit" | "no_trigger" };
+export type PlannedSkip = { search_key: string; reason: "explained_by_pool" | "unknown_instrument" | "per_run_limit" | "no_trigger" | "deadline" };
 
 export type SearchPlan = { requests: SearchRequest[]; skipped: PlannedSkip[] };
 
@@ -446,7 +484,13 @@ export type SearchStageStats = {
   web_search_calls: number;
   input_tokens: number;
   output_tokens: number;
-  per_search: Array<{ search_id: string; lane: SearchLane; reason: SearchReason; search_key: string; results: number; useful: number; duplicates: number }>;
+  per_search: Array<{ search_id: string; lane: SearchLane; reason: SearchReason; search_key: string; results: number; useful: number; duplicates: number; persisted: number; persisted_useful: number }>;
+  /** Signals of successful searches that the store confirmed as written (client view; DB is authoritative). */
+  persisted_signal_count: number;
+  persisted_useful_signal_count: number;
+  /** A search's signals could not be written: no further search is started in this run. */
+  persist_failed: boolean;
+  deadline_skipped: number;
 };
 
 export function emptySearchStats(): SearchStageStats {
@@ -454,6 +498,7 @@ export function emptySearchStats(): SearchStageStats {
     planned: 0, skipped: [], executed: 0, denied: [], failed: [], escalations: 0, result_count: 0, new_signal_count: 0,
     useful_signal_count: 0, duplicate_count: 0, restricted_count: 0, policy_blocked_count: 0, rejected_unverified_count: 0,
     model_calls: 0, web_search_calls: 0, input_tokens: 0, output_tokens: 0, per_search: [],
+    persisted_signal_count: 0, persisted_useful_signal_count: 0, persist_failed: false, deadline_skipped: 0,
   };
 }
 
@@ -470,6 +515,8 @@ export async function executeSearchStage(input: {
   budget: SearchBudget;
   config?: SearchBudgetConfig;
   log?: (line: Record<string, unknown>) => void;
+  /** Run deadline: no reservation (and no API call) without enough usable time. */
+  deadline?: RunDeadline;
 }): Promise<SearchStageStats> {
   const config = input.config ?? SEARCH_BUDGET_DEFAULTS;
   const source = sourceById("web_search")!;
@@ -480,6 +527,15 @@ export async function executeSearchStage(input: {
 
   while (queue.length > 0) {
     const request = queue.shift()!;
+    const followUp = request.reason === "escalation";
+    if (input.deadline && !input.deadline.canStartSearch(followUp)) {
+      // Not reserved: a reservation without an API call would only burn budget.
+      stats.skipped.push({ search_key: request.search_key, reason: "deadline" });
+      stats.deadline_skipped += 1;
+      input.deadline.stats.searches_skipped += 1;
+      input.log?.({ event: "news_discovery_search_skipped_deadline", search_key: request.search_key, lane: request.lane, follow_up: followUp });
+      continue;
+    }
     const reservation = await input.budget.reserve({ ...request, run_id: input.runId, provider: input.provider.name, model: input.provider.model });
     if (!reservation.allowed) {
       stats.denied.push({ search_key: request.search_key, reason: reservation.reason });
@@ -493,8 +549,10 @@ export async function executeSearchStage(input: {
       maxResults: config.max_results_per_search,
       recencyHours: config.recency_hours,
       now,
+      timeoutMs: input.deadline ? input.deadline.capTimeout(Number.MAX_SAFE_INTEGER) : undefined,
     });
     stats.executed += 1;
+    if (input.deadline) input.deadline.stats.searches_completed += 1;
     if (request.reason === "escalation") stats.escalations += 1;
     stats.model_calls += response.usage.model_calls;
     stats.web_search_calls += response.usage.web_search_calls;
@@ -557,6 +615,23 @@ export async function executeSearchStage(input: {
     });
     const duplicates = input.run.duplicates.length - duplicatesBefore;
     const useful = fresh.filter(isUsefulSignal).length;
+
+    // Persist this search's signals BEFORE completing its row, so the DB can count what was really
+    // stored for this search_id. A write failure keeps the search's usage (the row is completed with
+    // an error code) and is never "fixed" by searching again: no further search starts in this run.
+    let persistError: string | null = null;
+    let persistedIds = new Set<string>();
+    try {
+      persistedIds = new Set((await input.run.persist(fresh)).inserted);
+    } catch (error) {
+      persistError = "SIGNAL_PERSIST_FAILED";
+      stats.persist_failed = true;
+      input.log?.({ event: "news_discovery_search_persist_failed", search_id: reservation.search_id, error: error instanceof Error ? error.message.slice(0, 120) : "unknown" });
+    }
+    const persistedFresh = fresh.filter((signal) => persistedIds.has(signal.id));
+    const persistedUseful = persistedFresh.filter(isUsefulSignal).length;
+    stats.persisted_signal_count += persistedFresh.length;
+    stats.persisted_useful_signal_count += persistedUseful;
     stats.result_count += response.results.length;
     stats.new_signal_count += fresh.length;
     stats.useful_signal_count += useful;
@@ -564,9 +639,12 @@ export async function executeSearchStage(input: {
     stats.restricted_count += restricted;
     stats.policy_blocked_count += blocked;
     stats.rejected_unverified_count += response.rejected_unverified;
-    stats.per_search.push({ search_id: reservation.search_id, lane: request.lane, reason: request.reason, search_key: request.search_key, results: response.results.length, useful, duplicates });
+    stats.per_search.push({
+      search_id: reservation.search_id, lane: request.lane, reason: request.reason, search_key: request.search_key,
+      results: response.results.length, useful, duplicates, persisted: persistedFresh.length, persisted_useful: persistedUseful,
+    });
     await input.budget.complete({
-      search_id: reservation.search_id, status: "succeeded", error_code: null, result_count: response.results.length,
+      search_id: reservation.search_id, status: "succeeded", error_code: persistError, result_count: response.results.length,
       new_signal_count: fresh.length, useful_signal_count: useful, duplicate_count: duplicates, restricted_count: restricted,
       policy_blocked_count: blocked, rejected_unverified_count: response.rejected_unverified, usage: response.usage,
     });
@@ -574,7 +652,9 @@ export async function executeSearchStage(input: {
       event: "news_discovery_search", search_id: reservation.search_id, lane: request.lane, reason: request.reason,
       results: response.results.length, new_signals: fresh.length, useful, duplicates, restricted, policy_blocked: blocked,
       rejected_unverified: response.rejected_unverified, searches_today: reservation.searches_today,
+      persisted: persistedFresh.length, persisted_useful: persistedUseful, persist_error: persistError,
     });
+    if (persistError) break;
 
     // Escalation: a trigger that found nothing useful gets one broader follow-up, never more.
     if (useful === 0 && (request.reason === "trigger_market_anomaly" || request.reason === "trigger_discovery_signal")) {

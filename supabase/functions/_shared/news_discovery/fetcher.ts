@@ -33,6 +33,8 @@ export class HostRateGate {
 export type ValidatorCache = Map<string, { etag: string | null; lastModified: string | null }>;
 
 export type FetchOptions = {
+  /** Per-request timeout override (the run deadline caps it; never above the source timeout). */
+  timeoutMs?: number;
   fetchImpl?: FetchImpl;
   gate?: HostRateGate;
   now?: () => Date;
@@ -106,6 +108,7 @@ export async function fetchSource(source: SourceDefinition, options: FetchOption
     fetched_at: now().toISOString(),
   });
 
+  const timeoutMs = Math.max(1, Math.min(source.timeout_ms, options.timeoutMs ?? source.timeout_ms));
   const refused = refusal(source);
   if (refused) return fail(refused, null, "refused by source policy");
 
@@ -122,10 +125,10 @@ export async function fetchSource(source: SourceDefinition, options: FetchOption
 
   let response: Response;
   try {
-    response = await fetchImpl(url, { headers, signal: AbortSignal.timeout(source.timeout_ms), redirect: "follow" });
+    response = await fetchImpl(url, { headers, signal: AbortSignal.timeout(timeoutMs), redirect: "follow" });
   } catch (error) {
     return isTimeout(error)
-      ? fail("TIMEOUT", null, `no response within ${source.timeout_ms} ms`)
+      ? fail("TIMEOUT", null, `no response within ${timeoutMs} ms`)
       : fail("NETWORK_ERROR", null, error instanceof Error ? error.name : "unknown");
   }
   const fetchedAt = now().toISOString();

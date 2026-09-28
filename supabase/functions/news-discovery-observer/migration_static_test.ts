@@ -57,6 +57,20 @@ test("observer invariants and source policy are enforced by constraints", () => 
   // Dedupe safety: title / URL are never unique (same-source same-title documents must survive).
   assert.doesNotMatch(code, /unique index[^;]*\((title|title_fingerprint|canonical_url|url_key)\b/i);
   assert.match(code, /unique index news_discovery_signals_source_external_uidx[\s\S]*where external_id is not null/);
+  // M2: URL duplicates between concurrent runs are resolved under per-url_key locks taken in sorted
+  // order (deadlock-free), not by a unique constraint.
+  assert.match(code, /for v_key in select distinct x\.value ->> 'url_key'[\s\S]*?order by 1 loop\s*perform pg_advisory_xact_lock\(hashtext\('news_discovery_url'\), hashtext\(v_key\)\)/);
+});
+
+test("M1: run usage and persisted counts are derived from rows, not trusted from the client", () => {
+  const finish = code.slice(code.indexOf("create function public.news_discovery_finish_run"), code.indexOf("create function public.news_discovery_reserve_search"));
+  assert.match(finish, /from public\.news_discovery_searches s where s\.run_id = v_run/);
+  assert.match(finish, /search_count = v_searches/);
+  assert.match(finish, /ai_calls = greatest\(v_model,/);
+  assert.match(finish, /search_useful_signal_count = v_persisted_useful/);
+  assert.match(finish, /inserted_count = v_inserted/);
+  const complete = code.slice(code.indexOf("create function public.news_discovery_complete_search"));
+  assert.match(complete, /persisted_signal_count = v_persisted/);
 });
 
 test("header marks the file as a source candidate that must not be applied without review", () => {

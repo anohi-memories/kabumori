@@ -16,6 +16,8 @@
 | [n2_discovery_observer.md](n2_discovery_observer.md) | **N2**：観測専用 News Discovery 基盤＋銘柄紐付け v0 の設計・実地確認結果・残課題（コード: `supabase/functions/_shared/news_discovery/`） |
 | [news_pool_schema_proposal.md](news_pool_schema_proposal.md) | **N2**：News Signal Pool の DB schema 案（未適用・migration なし） |
 | [n3_observer_db_function.md](n3_observer_db_function.md) | **N3 v2**：観測専用 DB（migration・未適用）＋独立 Observer Function＋限定 Web Search（予算・レーン・トリガー）、ローカル検証結果 |
+| [n3_review.md](n3_review.md) | N3 Codex レビュー報告（回収済みの修正と残課題） |
+| [n3_hardening.md](n3_hardening.md) | **N3 hardening**：Codex 修正の回収、全体 deadline（H1）、検索費用と保存済み signal の整合（M1）、並行 dedupe（M2）、検証結果 |
 
 ## 主要所見
 
