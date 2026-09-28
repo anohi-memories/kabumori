@@ -40,13 +40,26 @@
 - かぶモリExpo/native本体はVercel制限の主対象ではないため、Netlify Web Preview対応は現時点では進めない。
 - かぶモリのiOS実機/TestFlight/native-only機能は従来どおりExpo/EAS/実機で確認する。
 
+## G1 Home news-first UI implementation
+
+- assigned: `kabumori-home-news-first-ui-implementation-20260928`.
+- previous G1 icon/splash/onboarding visual QA is closed by user real-device PASS.
+- approved Home information order: 今日のかぶモリレポート -> 重要ニュース -> あなたの保有銘柄 最新ニュース -> 今日のトピック -> AIに聞いてみる.
+- report points are dynamic text; point rows have **no individual chevron**; only the report CTA opens detail.
+- reuse existing `fetchRecentReports()` + `fetchMyImportantStockNews()` + tracked-stock reads; do not add page-load LLM generation or duplicate news fetch.
+- market news and holding news must be separated from the same existing feed where possible.
+- thumbnail UI is future-ready but must fail to category/neutral fallback when current feed lacks image metadata; no OG scraping/new news API in G1.
+- Yume-chan/robot area is an independently replaceable asset slot; Claude must not generate a new character asset.
+- topic/AI/backend gaps are to be surfaced honestly rather than filled with fabricated production content or dead navigation.
+- G2 concurrently owns `market-report-analysis` reliability; G1 must not touch it, important-news-monitor, shared consumer gates, DB/RPC/cron/Auth/X/admin.
+- no Codex review expected if scope remains UI/read-only/local presentation.
+- recommended model: Sonnet5（高）.
+
 ## Current slot snapshot
 
 - H1: `review_required` — `x-stage3b-publish-authority-focused-rereview-20260927`; PR #41 source PASS-WITH-FIX at `59f4f53`: publish authority/timebox and AI Lab exclusion verified; H1 added an authority check immediately before each X create after proactive/reactive token refresh. Disposable DB/ACL/race and 619 Deno tests passed. Production mutation 0; awaiting C1 and separate owner/product/production authorization.
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
-- G1: `review_required` — `kabumori-ios-internal-visual-qa-build-20260926` (icon full-bleed correction)
-  - **Real-device icon acceptance: PASS** ("アイコンOK"). Build 10e8610e-c2b2-4baf-a780-4e038c15f4f9 confirmed by the user: no white/double frame on the home screen.
-  - Icon/splash/onboarding visual-acceptance work for this feature area is now fully closed end-to-end. Production mutation 0. Ready for chatgpt to close out.
+- G1: `ready` — `kabumori-home-news-first-ui-implementation-20260928`; prior icon/splash/onboarding visual QA is closed PASS. New scope is Home UI only: report summary card -> market important news -> holding news -> topic shell -> AI entry shell, reusing existing reads and avoiding backend/API-optimization overlap; recommended Sonnet5（高）.
 - G2: `ready` — `kabumori-shared-report-reliability-hardening-20260928`; PR #43 shared-unification proof merged; next blocker is bounded 429/5xx resilience in market-report-analysis; consumer gates remain OFF; recommended Opus5.5（高）
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS
