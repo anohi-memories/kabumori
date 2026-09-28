@@ -184,7 +184,10 @@ export class ScenarioAiError extends Error {
 
 // Wording that would turn a conditional Scenario into a price call, a
 // probability or advice. Checked on every output string.
-const FORBIDDEN = /目標株価|目標値|買い推奨|売り推奨|買うべき|売るべき|買い時|売り時|買い増し|損切り|利益確定|ポジションを|\d+(?:\.\d+)?\s*[%％]の確率|確率は\s*\d|確率が\s*\d/u;
+// Conservative percentage exclusion: no numerical likelihood is needed for
+// this qualitative layer. NFKC handles full-width digits/letters as well.
+const FORBIDDEN = /目標株価|株価目標|価格目標|目標価格|目標値|目標水準|買い推奨|売り推奨|購入推奨|売却推奨|買うべき|売るべき|買い時|売り時|買い増し|損切り|利益確定|ポジションを|\d+(?:\.\d+)?\s*%|確率[はが:]?\s*\d|\b(?:price\s+(?:target|objective)|target\s+(?:price|level)|(?:buy|sell)\s+(?:recommendation|rating|now)|(?:recommend|should|must)\s+(?:buy(?:ing)?|sell(?:ing)?)|(?:increase|reduce|add|cut)\s+(?:your\s+)?(?:position|exposure)|(?:will|is\s+going\s+to)\s+(?:rise|fall|rally|crash))\b/iu;
+const FORECAST_ASSERTION = /(?:上昇|下落)(?:します|する)(?:[。.!?]|$)|(?:明日|翌日|来週)[^。.!?]{0,60}(?:上がります|下がります|上がるでしょう|下がるでしょう)|\b(?:will|is\s+going\s+to)\s+(?:reach|hit|trade\s+at)\b|\b\d+(?:\.\d+)?\s*(?:percent|per\s+cent)\b|\b(?:probability|chance|likelihood)\s*(?:is|of|[:=])?\s*\d/iu;
 
 const charLength = (value: string) => Array.from(value).length;
 
@@ -196,7 +199,8 @@ function checkText(value: unknown, field: string, max: number, required: boolean
   if (typeof value !== "string") malformed(`${field} is not a string`);
   if (required && value.trim().length === 0) malformed(`${field} is empty`);
   if (charLength(value) > max) malformed(`${field} exceeds ${max} chars`);
-  if (FORBIDDEN.test(value)) malformed(`${field} contains forbidden wording`);
+  const normalized = value.normalize("NFKC");
+  if (FORBIDDEN.test(normalized) || FORECAST_ASSERTION.test(normalized)) malformed(`${field} contains forbidden wording`);
   return value;
 }
 
@@ -207,15 +211,18 @@ function checkList(value: unknown, field: string, required: boolean): string[] {
   return value.map((item, index) => checkText(item, `${field}[${index}]`, SCENARIO_OUTPUT_LIMITS.itemChars, true));
 }
 
-function checkObject(value: unknown, field: string): Record<string, unknown> {
+function checkObject(value: unknown, field: string, keys: readonly string[]): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) malformed(`${field} is not an object`);
+  if (Object.keys(value).some((key) => !keys.includes(key)) || keys.some((key) => !(key in value))) {
+    malformed(`${field} does not match the strict schema`);
+  }
   return value as Record<string, unknown>;
 }
 
-function parseBaseCase(value: unknown, usedDomains: ReadonlySet<string>): BaseCase {
-  const raw = checkObject(value, "base_case");
+function parseBaseCase(value: unknown, usedDomains: ReadonlySet<string>, assessed: boolean): BaseCase {
+  const raw = checkObject(value, "base_case", BASE_CASE_SCHEMA.required);
   const domains = raw.supporting_state_domains;
-  if (!Array.isArray(domains) || domains.some((d) => typeof d !== "string" || !usedDomains.has(d)) ||
+  if (!Array.isArray(domains) || (assessed && domains.length === 0) || domains.some((d) => typeof d !== "string" || !usedDomains.has(d)) ||
     new Set(domains).size !== domains.length) {
     malformed("base_case.supporting_state_domains must be distinct domains from the input states");
   }
@@ -230,7 +237,7 @@ function parseBaseCase(value: unknown, usedDomains: ReadonlySet<string>): BaseCa
 }
 
 function parseDirectionalCase(value: unknown, field: string, required: boolean): DirectionalCase {
-  const raw = checkObject(value, field);
+  const raw = checkObject(value, field, DIRECTIONAL_CASE_SCHEMA.required);
   return {
     title: checkText(raw.title, `${field}.title`, SCENARIO_OUTPUT_LIMITS.titleChars, required),
     description: checkText(raw.description, `${field}.description`, SCENARIO_OUTPUT_LIMITS.descriptionChars, required),
@@ -261,7 +268,7 @@ export function parseScenarioResponse(payload: unknown, usedDomains: ReadonlySet
   } catch {
     malformed("structured output was not valid JSON");
   }
-  const raw = checkObject(parsed, "output");
+  const raw = checkObject(parsed, "output", SCENARIO_RESPONSE_SCHEMA.required);
   if (raw.assessment_status !== "assessed" && raw.assessment_status !== "indeterminate") {
     malformed("assessment_status is invalid");
   }
@@ -272,7 +279,7 @@ export function parseScenarioResponse(payload: unknown, usedDomains: ReadonlySet
   const assessed = raw.assessment_status === "assessed";
   return {
     assessmentStatus: raw.assessment_status,
-    baseCase: parseBaseCase(raw.base_case, usedDomains),
+    baseCase: parseBaseCase(raw.base_case, usedDomains, assessed),
     upsideCase: parseDirectionalCase(raw.upside_case, "upside_case", assessed),
     downsideCase: parseDirectionalCase(raw.downside_case, "downside_case", assessed),
     stateConflicts: checkList(raw.state_conflicts, "state_conflicts", false),

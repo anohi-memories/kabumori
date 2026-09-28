@@ -107,6 +107,12 @@ test("[L] malformed responses fail", () => {
     responsePayload(validOutput({ base_case: { ...validOutput().base_case, supporting_state_domains: ["fx"] } })),
     responsePayload(validOutput({ base_case: { ...validOutput().base_case, supporting_state_domains: ["macro"] } })),
     responsePayload(validOutput({ base_case: { ...validOutput().base_case, supporting_state_domains: ["rates", "rates"] } })),
+    responsePayload(validOutput({ base_case: { ...validOutput().base_case, supporting_state_domains: [] } })),
+    responsePayload(validOutput({ base_case: { ...validOutput().base_case, title: "   " } })),
+    responsePayload(validOutput({ probability: 0.9 })),
+    responsePayload(validOutput({ upside_case: { ...validOutput().upside_case, recommendation: "buy" } })),
+    responsePayload(validOutput({ confidence: Number.NaN })),
+    responsePayload(validOutput({ confidence: Number.POSITIVE_INFINITY })),
     responsePayload(validOutput({ upside_case: { ...validOutput().upside_case, triggers: [] } })),
     responsePayload(validOutput({ state_conflicts: "none" })),
     responsePayload(validOutput({ downside_case: { ...validOutput().downside_case, watch_items: [1] } })),
@@ -159,4 +165,22 @@ test("Sol escalation: only when inputs are good enough AND Luna reports difficul
   assert.equal(shouldEscalateScenarioToSol(luna({ confidence: 0.4 }), 0.8), true);
   assert.equal(shouldEscalateScenarioToSol(luna({ needsSol: true }), 0.55), false, "weak inputs: Sol cannot help");
   assert.equal(shouldEscalateScenarioToSol(luna({ confidence: 0.8 }), 0.9), false);
+});
+
+test("forecast guard: Japanese/English targets, percentages and advice fail; conditional prose passes", () => {
+  for (const text of [
+    "価格目標は50,000です", "株価目標を引き上げます", "70%", "７０％", "70% chance of a rally",
+    "Our price target is 500", "Target price: 500", "Buy now", "We recommend buying", "You should sell",
+    "Reduce your position", "The index will rise tomorrow", "確率:90", "購入推奨",
+    "70 percent chance of a rally", "probability: 0.9", "The index will reach 50,000",
+    "明日は株価が上昇します。", "来週は指数が下がるでしょう",
+  ]) {
+    assert.throws(() => parseScenarioResponse(responsePayload(validOutput({ state_conflicts: [text] })), USED), /forbidden wording/, text);
+  }
+  for (const text of [
+    "条件が成立すれば上振れケースの可能性がある", "下振れケースは条件の悪化を確認する場合に限る",
+    "If conditions hold, the environment may improve", "An upside case is conditional, not a prediction",
+  ]) {
+    assert.doesNotThrow(() => parseScenarioResponse(responsePayload(validOutput({ state_conflicts: [text] })), USED), text);
+  }
 });

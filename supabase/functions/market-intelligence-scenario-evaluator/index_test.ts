@@ -99,7 +99,7 @@ test("[A][I] first Scenario: Luna once, one usage row linked to the run, one RPC
 
 test("[B][D] same State set as the current Scenario: no AI, no usage, no RPC; run -> no_change", async () => {
   const b = backend({
-    current: { updated_at: "2026-09-28T02:00:00Z", source_state_run_ids: [EQ_RUN, RATES_RUN], input_fingerprint: "x", source_scenario_run_id: "r" },
+    current: { updated_at: "2026-09-28T02:00:00Z", source_state_run_ids: [EQ_RUN, RATES_RUN], input_fingerprint: "mic-scenario-v1|old", source_scenario_run_id: "r" },
   });
   const result = await evaluateScenario(ctx, "sk-openai", NOW, b.impl);
   assert.deepEqual(result, { status: "no_change", runId: RUN, reason: "no_new_state_evaluation" });
@@ -120,7 +120,7 @@ test("[C] fewer than two usable States: no AI, no_change insufficient_usable_sta
 test("[E] a new State evaluation run on one domain triggers regeneration", async () => {
   const b = backend({
     ai: [lunaOk],
-    current: { updated_at: "2026-09-28T02:00:00Z", source_state_run_ids: [EQ_RUN, "66666666-6666-4666-8666-666666666666"], input_fingerprint: "x", source_scenario_run_id: "r" },
+    current: { updated_at: "2026-09-28T02:00:00Z", source_state_run_ids: [EQ_RUN, "66666666-6666-4666-8666-666666666666"], input_fingerprint: "mic-scenario-v1|old", source_scenario_run_id: "r" },
   });
   const result = await evaluateScenario(ctx, "sk-openai", NOW, b.impl);
   assert.deepEqual(result, { status: "evaluated", runId: RUN, reason: "new_state_evaluation:rates" });

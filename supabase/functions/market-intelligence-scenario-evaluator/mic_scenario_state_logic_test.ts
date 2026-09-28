@@ -88,6 +88,9 @@ test("exclusions: every unusable State is excluded with an explicit reason, neve
     [{ bullish_factors: null }, "malformed_state"],
     [{ key_risks: ["ok", 1] }, "malformed_state"],
     [{ ai_confidence: "0.8" }, "malformed_state"],
+    [{ ai_confidence: 1.2 }, "malformed_state"],
+    [{ observation_status: "unexpected" }, "malformed_state"],
+    [{ coverage_status: "unexpected" }, "malformed_state"],
     [{ data_confidence: 1.2 }, "invalid_data_confidence"],
     [{ data_confidence: null }, "invalid_data_confidence"],
     [{ ai_evaluated_at: null }, "freshness_unknown"],
@@ -165,7 +168,7 @@ test("[B] unchanged source_evaluation_run_ids -> no AI", () => {
 
 test("[C] a no_change status refresh (quality signals change, same run id) -> no AI", () => {
   const current: ScenarioCurrentRow = {
-    updatedAt: "x", sourceStateRunIds: [RUN.rates, RUN.macro, RUN.equity_index], inputFingerprint: "old", sourceScenarioRunId: "s1",
+    updatedAt: "x", sourceStateRunIds: [RUN.rates, RUN.macro, RUN.equity_index], inputFingerprint: `${SCENARIO_PROMPT_VERSION}|old`, sourceScenarioRunId: "s1",
   };
   const refreshed = classifyStates([
     stateRow("rates", { data_confidence: 0.6, observation_status: "stale" }), stateRow("macro"), stateRow("equity_index"),
@@ -177,7 +180,7 @@ test("[C] a no_change status refresh (quality signals change, same run id) -> no
 
 test("a State aging out (usable set shrinks, nothing new) -> no AI", () => {
   const current: ScenarioCurrentRow = {
-    updatedAt: "x", sourceStateRunIds: [RUN.rates, RUN.macro, RUN.equity_index], inputFingerprint: "old", sourceScenarioRunId: "s1",
+    updatedAt: "x", sourceStateRunIds: [RUN.rates, RUN.macro, RUN.equity_index], inputFingerprint: `${SCENARIO_PROMPT_VERSION}|old`, sourceScenarioRunId: "s1",
   };
   const shrunk = classifyStates([stateRow("rates"), stateRow("macro", { ai_evaluated_at: hoursAgo(24 * 40) }), stateRow("equity_index")], NOW);
   assert.equal(decideScenarioRegeneration(shrunk, current).generate, false);
@@ -185,7 +188,7 @@ test("a State aging out (usable set shrinks, nothing new) -> no AI", () => {
 
 test("a newly evaluated State (new run id) triggers regeneration and names the domain", () => {
   const current: ScenarioCurrentRow = {
-    updatedAt: "x", sourceStateRunIds: [RUN.rates, RUN.macro, RUN.equity_index], inputFingerprint: "old", sourceScenarioRunId: "s1",
+    updatedAt: "x", sourceStateRunIds: [RUN.rates, RUN.macro, RUN.equity_index], inputFingerprint: `${SCENARIO_PROMPT_VERSION}|old`, sourceScenarioRunId: "s1",
   };
   const updated = classifyStates([
     stateRow("rates", { source_evaluation_run_id: "44444444-4444-4444-8444-444444444444" }), stateRow("macro"), stateRow("equity_index"),
@@ -227,4 +230,25 @@ test("[K] clamp: stored confidence never exceeds the cap or the AI's own confide
 test("state_as_of is the oldest narrative used", () => {
   const { usable } = classifyStates([stateRow("rates", { ai_evaluated_at: hoursAgo(1) }), stateRow("equity_index", { ai_evaluated_at: hoursAgo(30) })], NOW);
   assert.equal(stateAsOf(usable), hoursAgo(30));
+});
+
+test("prompt version changes regenerate the same State set, unlike status-only refreshes", () => {
+  const classification = classifyStates(allFresh(), NOW);
+  const current = { ...emptyCurrent, sourceStateRunIds: Object.values(RUN), sourceScenarioRunId: "s1",
+    inputFingerprint: inputFingerprint(classification.usable).replace(SCENARIO_PROMPT_VERSION, "mic-scenario-v0") };
+  assert.deepEqual(decideScenarioRegeneration(classification, current), {
+    generate: true, reason: "prompt_version_changed", fingerprint: inputFingerprint(classification.usable), newDomains: [],
+  });
+});
+
+test("confidence rejects non-finite/out-of-range inputs and stays bounded over the full quality range", () => {
+  for (const value of [Number.NaN, Number.POSITIVE_INFINITY, -0.1, 1.1]) {
+    assert.throws(() => clampScenarioConfidence(value, 0.8, "assessed"), /CONFIDENCE_INVALID/);
+    assert.throws(() => clampScenarioConfidence(0.8, value, "assessed"), /CONFIDENCE_INVALID/);
+  }
+  for (let i = 0; i <= 100; i++) for (let j = 0; j <= 100; j++) {
+    const result = clampScenarioConfidence(i / 100, j / 100, "assessed");
+    assert.ok(result.confidence >= 0 && result.confidence <= 1 && result.confidence <= result.aiConfidence);
+    assert.ok(result.confidence <= j / 100 && result.confidence <= i / 100);
+  }
 });

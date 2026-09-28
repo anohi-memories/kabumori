@@ -92,7 +92,8 @@ export function classifyStates(rows: readonly StateRow[], now: number): StateCla
       excluded.push({ domain, reason: "malformed_state" });
       continue;
     }
-    if (row.ai_confidence !== null && (typeof row.ai_confidence !== "number" || !Number.isFinite(row.ai_confidence))) {
+    if (row.ai_confidence !== null && (typeof row.ai_confidence !== "number" || !Number.isFinite(row.ai_confidence) ||
+      row.ai_confidence < 0 || row.ai_confidence > 1)) {
       excluded.push({ domain, reason: "malformed_state" });
       continue;
     }
@@ -101,7 +102,9 @@ export function classifyStates(rows: readonly StateRow[], now: number): StateCla
       excluded.push({ domain, reason: "invalid_data_confidence" });
       continue;
     }
-    if (typeof row.coverage_status !== "string" || typeof row.observation_status !== "string") {
+    if (typeof row.coverage_status !== "string" || typeof row.observation_status !== "string" ||
+      !["full", "partial", "unavailable"].includes(row.coverage_status) ||
+      !["fresh", "delayed_expected", "stale", "unknown"].includes(row.observation_status)) {
       excluded.push({ domain, reason: "malformed_state" });
       continue;
     }
@@ -182,10 +185,12 @@ export function decideScenarioRegeneration(
   const newDomains = classification.usable
     .filter((state) => !seen.has(state.snapshot.source_evaluation_run_id))
     .map((state) => state.snapshot.domain);
-  if (newDomains.length === 0 || fingerprint === current.inputFingerprint) {
+  const promptChanged = current.sourceScenarioRunId !== null && current.inputFingerprint !== null &&
+    current.inputFingerprint.split("|")[0] !== SCENARIO_PROMPT_VERSION;
+  if (fingerprint === current.inputFingerprint || (newDomains.length === 0 && !promptChanged)) {
     return { generate: false, reason: "no_new_state_evaluation", fingerprint };
   }
-  const reason = current.sourceStateRunIds.length === 0
+  const reason = promptChanged ? "prompt_version_changed" : current.sourceStateRunIds.length === 0
     ? "initial_scenario"
     : `new_state_evaluation:${[...newDomains].sort().join(",")}`;
   return { generate: true, reason, fingerprint, newDomains };
@@ -219,6 +224,9 @@ export function clampScenarioConfidence(
   cap: number,
   assessmentStatus: "assessed" | "indeterminate",
 ): { aiConfidence: number; confidence: number } {
+  if (![aiConfidence, cap].every((value) => Number.isFinite(value) && value >= 0 && value <= 1)) {
+    throw new Error("SCENARIO_CONFIDENCE_INVALID");
+  }
   const ai = round3(aiConfidence);
   let bounded = Math.min(aiConfidence, cap);
   if (assessmentStatus === "indeterminate") bounded = Math.min(bounded, INDETERMINATE_CONFIDENCE_CAP);
@@ -227,6 +235,6 @@ export function clampScenarioConfidence(
 
 // State as of which the Scenario holds: the oldest narrative it used.
 export function stateAsOf(usable: readonly UsableState[]): string | null {
-  const times = usable.map((state) => state.snapshot.ai_evaluated_at).sort();
+  const times = usable.map((state) => state.snapshot.ai_evaluated_at).sort((a, b) => Date.parse(a) - Date.parse(b));
   return times[0] ?? null;
 }

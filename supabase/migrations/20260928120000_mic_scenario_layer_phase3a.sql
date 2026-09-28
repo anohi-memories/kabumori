@@ -44,6 +44,9 @@ create table if not exists public.mic_scenario_evaluation_runs (
   error text,
   constraint mic_scenario_runs_evaluated_shape check (
     status <> 'evaluated' or (input_fingerprint is not null and ai_usage_event_id is not null and completed_at is not null)
+  ),
+  constraint mic_scenario_runs_terminal_shape check (
+    (status = 'running' and completed_at is null) or (status <> 'running' and completed_at is not null)
   )
 );
 
@@ -94,6 +97,10 @@ create table if not exists public.mic_scenario_current (
   ai_confidence numeric(4, 3) check (ai_confidence is null or ai_confidence between 0 and 1),
   -- Oldest ai_evaluated_at among the States used (the most dated input).
   state_as_of timestamptz,
+  -- Hard upper bound, not a promise of validity: consumers must ALSO compare
+  -- the evidence with live State quality/source run ids at read time. A
+  -- no_change quality downgrade does not regenerate or refresh a Scenario.
+  valid_until timestamptz,
   source_state_run_ids uuid[],
   source_state_domains text[],
   input_fingerprint text,
@@ -108,6 +115,17 @@ create table if not exists public.mic_scenario_current (
   updated_at timestamptz not null default now(),
   constraint mic_scenario_current_confidence_clamped check (
     confidence is null or ai_confidence is null or confidence <= ai_confidence
+  ),
+  constraint mic_scenario_current_evaluated_shape check (
+    source_scenario_run_id is null or coalesce((
+      assessment_status is not null and confidence is not null and ai_confidence is not null
+      and input_fingerprint is not null and prompt_version is not null and ai_evaluated_at is not null
+      and state_as_of is not null and valid_until is not null and valid_until > state_as_of
+      and cardinality(source_state_domains) between 2 and 3
+      and cardinality(source_state_run_ids) = cardinality(source_state_domains)
+      and jsonb_typeof(base_case) = 'object' and jsonb_typeof(upside_case) = 'object'
+      and jsonb_typeof(downside_case) = 'object' and jsonb_typeof(state_conflicts) = 'array'
+    ), false)
   )
 );
 
@@ -149,7 +167,7 @@ create table if not exists public.mic_scenario_evidence (
   usability text not null check (usability in ('strong', 'weak')),
   state_snapshot jsonb not null,
   created_at timestamptz not null default now(),
-  constraint mic_scenario_evidence_snapshot_shape check (
+  constraint mic_scenario_evidence_snapshot_shape check (coalesce((
     jsonb_typeof(state_snapshot) = 'object'
     and state_snapshot ?& array[
       'domain', 'narrative', 'bullish_factors', 'bearish_factors', 'key_risks', 'ai_confidence',
@@ -161,7 +179,7 @@ create table if not exists public.mic_scenario_evidence (
     ]::text[]) = '{}'::jsonb
     and state_snapshot->>'domain' = domain
     and state_snapshot->>'source_evaluation_run_id' = state_evaluation_run_id::text
-  )
+  ), false))
 );
 
 create unique index if not exists mic_scenario_evidence_run_domain_uidx
@@ -287,6 +305,8 @@ declare
   v_expected_fingerprint text;
   v_min_data_confidence numeric;
   v_state_as_of timestamptz;
+  v_valid_until timestamptz;
+  v_confidence_cap numeric;
   v_updated integer;
   v_keys constant text[] := array[
     'domain', 'narrative', 'bullish_factors', 'bearish_factors', 'key_risks', 'ai_confidence',
@@ -358,6 +378,8 @@ begin
       and u.related_id = p_run_id::text
       and u.feature = 'mic_scenario_evaluation'
       and u.model = p_ai_model
+      and u.input_tokens = p_ai_input_tokens and u.output_tokens = p_ai_output_tokens
+      and u.cost_usd = p_ai_cost_usd::numeric(12,8) and u.web_search_calls = 0
   ) then
     raise exception 'MIC_SCENARIO_AI_USAGE_EVENT_RUN_MISMATCH';
   end if;
@@ -373,10 +395,18 @@ begin
       when jsonb_typeof(s.e) <> 'object' then true
       else not (s.e ?& v_keys)
         or (select count(*) from jsonb_object_keys(s.e)) <> 11
-        or (s.e->>'domain') not in ('rates', 'macro', 'equity_index')
-        or jsonb_typeof(s.e->'source_evaluation_run_id') <> 'string'
+        or coalesce((s.e->>'domain') not in ('rates', 'macro', 'equity_index'), true)
+        or jsonb_typeof(s.e->'source_evaluation_run_id') is distinct from 'string'
         or (s.e->>'source_evaluation_run_id') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-        or jsonb_typeof(s.e->'data_confidence') <> 'number'
+        or jsonb_typeof(s.e->'data_confidence') is distinct from 'number'
+        or jsonb_typeof(s.e->'narrative') is distinct from 'string'
+        or coalesce(length(btrim(s.e->>'narrative')), 0) = 0
+        or jsonb_typeof(s.e->'ai_evaluated_at') is distinct from 'string'
+        or jsonb_typeof(s.e->'bullish_factors') is distinct from 'array'
+        or jsonb_typeof(s.e->'bearish_factors') is distinct from 'array'
+        or jsonb_typeof(s.e->'key_risks') is distinct from 'array'
+        or coalesce((s.e->>'coverage_status') not in ('full', 'partial'), true)
+        or coalesce((s.e->>'observation_status') not in ('fresh', 'delayed_expected', 'stale', 'unknown'), true)
     end
   ) then
     raise exception 'MIC_SCENARIO_STATE_SNAPSHOT_INVALID';
@@ -391,6 +421,15 @@ begin
 
   if cardinality(v_domains) <> (select count(distinct d) from unnest(v_domains) as x(d)) then
     raise exception 'MIC_SCENARIO_STATE_SNAPSHOT_DUPLICATE';
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(p_state_snapshots) as s(e)
+    where (s.e->>'data_confidence')::numeric not between 0.3 and 1
+      or (s.e->>'ai_evaluated_at')::timestamptz > now() + interval '5 minutes'
+      or (s.e->>'ai_evaluated_at')::timestamptz < now() -
+         case when s.e->>'domain' = 'macro' then interval '840 hours' else interval '96 hours' end
+  ) then
+    raise exception 'MIC_SCENARIO_STATE_UNUSABLE';
   end if;
 
   -- The fingerprint must be exactly the one derived from these snapshots.
@@ -421,6 +460,35 @@ begin
     raise exception 'MIC_SCENARIO_EVIDENCE_META_INVALID';
   end if;
 
+  -- Derive freshness/usability again, including aging during the AI call.
+  -- Do not trust caller-provided metadata or a caller-provided confidence cap.
+  if exists (
+    select 1 from jsonb_array_elements(p_state_snapshots) as s(e)
+    join jsonb_array_elements(p_evidence_meta) as m(e) on m.e->>'domain' = s.e->>'domain'
+    cross join lateral (select case
+      when (s.e->>'ai_evaluated_at')::timestamptz >= now() -
+        case when s.e->>'domain' = 'macro' then interval '168 hours' else interval '36 hours' end
+      then 'fresh' else 'recent' end as freshness) as f
+    where m.e->>'freshness' is distinct from f.freshness
+      or m.e->>'usability' is distinct from case
+        when f.freshness = 'recent' or s.e->>'observation_status' in ('stale', 'unknown')
+          or s.e->>'coverage_status' = 'partial' or (s.e->>'data_confidence')::numeric < 0.7
+        then 'weak' else 'strong' end
+  ) then
+    raise exception 'MIC_SCENARIO_FRESHNESS_META_MISMATCH';
+  end if;
+  select greatest(0, min((s.e->>'data_confidence')::numeric *
+           case when m.e->>'freshness' = 'recent' then 0.8 else 1 end) - 0.1 * (3 - cardinality(v_domains))),
+         min((s.e->>'ai_evaluated_at')::timestamptz +
+           case when s.e->>'domain' = 'macro' then interval '840 hours' else interval '96 hours' end)
+  into v_confidence_cap, v_valid_until
+  from jsonb_array_elements(p_state_snapshots) as s(e)
+  join jsonb_array_elements(p_evidence_meta) as m(e) on m.e->>'domain' = s.e->>'domain';
+  if p_assessment_status = 'indeterminate' then v_confidence_cap := least(v_confidence_cap, 0.3); end if;
+  if p_confidence > floor(v_confidence_cap * 1000) / 1000 then
+    raise exception 'MIC_SCENARIO_CONFIDENCE_ABOVE_CAP';
+  end if;
+
   -- Hold the source States still and require them to be exactly what the
   -- evaluator read. Any change (a new narrative, or even a status-only
   -- refresh of the quality signals) means the Scenario was built on input
@@ -449,8 +517,11 @@ begin
     raise exception 'MIC_SCENARIO_STATE_CHANGED_DURING_EVALUATION';
   end if;
 
-  insert into public.mic_scenario_history (scenario_key, snapshot, superseded_by_run_id)
-  values (p_scenario_key, to_jsonb(v_current), p_run_id);
+  -- The empty seed is not a previously evaluated Scenario.
+  if v_current.source_scenario_run_id is not null then
+    insert into public.mic_scenario_history (scenario_key, snapshot, superseded_by_run_id)
+    values (p_scenario_key, to_jsonb(v_current), p_run_id);
+  end if;
 
   update public.mic_scenario_current
   set
@@ -462,6 +533,7 @@ begin
     confidence = p_confidence,
     ai_confidence = p_ai_confidence,
     state_as_of = v_state_as_of,
+    valid_until = v_valid_until,
     source_state_run_ids = v_run_ids,
     source_state_domains = v_domains,
     input_fingerprint = p_input_fingerprint,
