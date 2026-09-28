@@ -1478,3 +1478,22 @@ Recommended Claude model: Sonnet5（高）.
 - production Auth/config/DB/X mutation=0.
 - because this changes Auth/provider identity boundaries, one focused H1 review is assigned before merge/provider activation.
 - recommended Codex model: Sol（高）.
+
+
+## Final C1 multi-provider Auth focused review
+
+- verdict: **FAIL**.
+- PR #47 reviewed head `7bda196147a749431774fba915a86d41bf43dc5d`; remains unmerged.
+- seven executable Auth-boundary failures reproduced:
+  1. explicit provider linking rejects Supabase-returned external provider URL.
+  2. duplicate callbacks can report false success before/after failed exchange.
+  3. native PKCE callback drops `sb_flow_id`, risking wrong verifier selection.
+  4. signup UI reintroduces existing-email enumeration through distinct messages.
+  5. provider access/refresh credentials can be persisted implicitly in plaintext AsyncStorage by SDK session persistence.
+  6. password-recovery mode is not exact-user/session bound and survives incompatible user switch.
+  7. callback parser accepts malformed/ambiguous authority/duplicate-conflicting credential params.
+- additional gaps: stale onboarding/new-account state across time/user switch; provider/email readiness truthfulness; Apple linking config/path distinction.
+- passed boundaries: X app-login remains separate from posting-X; Apple native nonce source contract passed; no service_role/user_metadata authorization/provider-token logging found.
+- production_mutation=0.
+- G3 reassigned one bundled Auth correction task; recommended Claude model Opus5.5（高）.
+- after K3, use one final focused H1 acceptance pass only.
