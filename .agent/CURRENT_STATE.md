@@ -1536,3 +1536,31 @@ Recommended Claude model: Sonnet5（高）.
 - PR #47 merged to main as `fbddef2535b82bf4775c2e4fddb93eeefb8c638a`.
 - production provider enablement, redirect allowlist, SMTP/template, Apple/Google/X developer-console setup, real-device E2E and real X posting remain separate future gates.
 - no further H1 loop is required absent a concrete discrepancy.
+
+
+## G3 Auth release readiness Phase 3 — assigned 2026-09-28
+
+- task_id: `x-social-mobile-auth-release-readiness-phase3-20260928`
+- slot: G3
+- status: ready
+- accepted Auth Phase 2 is merged to main as `fbddef2535b82bf4775c2e4fddb93eeefb8c638a`; no further H1 loop required absent a concrete discrepancy.
+- scope: account/login-method UX, provider readiness truthfulness, Auth/deep-link/build-config validation, and exact real-device/console E2E checklist.
+- preserve all accepted callback/PKCE/recovery/session/provider-token boundaries.
+- no production provider/config/SMTP/redirect/developer-console mutation; no DB migration; no real X post.
+- must not edit G4 posting interaction files.
+- review policy: no automatic Codex review; if independent review becomes necessary while Codex capacity is constrained, use separate Claude review first.
+- recommended Claude model: **Opus5.5（高）**.
+
+
+## G4 posting interaction Phase 2 — assigned 2026-09-28
+
+- task_id: `x-social-mobile-posting-interaction-phase2-20260928`
+- slot: G4
+- status: ready
+- scope: truthful post preview/detail, manual edit where persistence exists, AI regenerate where backend exists, approve/schedule/post wiring only on real contracts, failure reason/retry/reconnect UX, and schedule/history/detail navigation.
+- never fake backend success; unavailable capabilities must remain visibly unavailable.
+- manual approval and auto-post remain distinct.
+- no real X post, publish-authority activation, production DB/RLS/RPC/backend mutation, or Auth/provider mutation.
+- must not edit G3 Auth/account/provider-readiness files.
+- review policy: no automatic Codex review unless a new high-risk DB/API/Auth/publish boundary is introduced.
+- recommended Claude model: **Sonnet5（高）**.

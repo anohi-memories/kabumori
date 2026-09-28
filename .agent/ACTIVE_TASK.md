@@ -64,22 +64,22 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: x-social-mobile-auth-phase2-bundled-correction-20260928
+- status: ready
+- task_id: x-social-mobile-auth-release-readiness-phase3-20260928
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: closed; Final K3 PASS for correction at PR #47 `5fd483a`; final focused H1 acceptance assigned
+- allocation: assigned; Auth Phase 2 is accepted/merged. Proceed with release-readiness/account settings/config validation only; no production provider/config mutation. Independent G3 worktree required. Recommended Opus5.5（高）.
 
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: done
-- task_id: x-social-mobile-home-posting-settings-ux-phase1-20260928
+- status: ready
+- task_id: x-social-mobile-posting-interaction-phase2-20260928
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: closed; Final K4 PASS at PR #44 `f0ecc9f`; Home/posting/history truth-state fixes complete; production mutation 0
+- allocation: assigned; implement truthful preview/edit/regenerate/approve/retry/reconnect UX only where backend contracts exist. No real X post or production mutation. Independent G4 worktree required. Recommended Sonnet5（高）.
 
 ## Deferred
 
