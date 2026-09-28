@@ -348,3 +348,17 @@ Then:
    - 使い捨てのテストアカウントで実機 E2E
    - `EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED=true` と規約 URL を設定する
 4. 別レーン（G1/G2）への提案: Kabumori の `account-delete` は、`brand_memberships` を持つユーザーを拒否するか、この境界に処理を委ねるべき。今のままでは、social-mobile も使ったユーザーのワークスペース・X の認可・Vault のシークレットが残る。
+
+
+## Final K3 — Account lifecycle Phase 4
+
+Verdict: **PASS for source-only implementation; independent privileged-boundary review mandatory before merge/apply/deploy**.
+
+- PR #52 draft head: `12146c4ab2bc635a2781b673146e1f8ad8350258`.
+- production_mutation=0.
+- account/security UX, legal-link configuration, account deletion client flow, source-only deletion migration candidate and Edge Function candidate are implemented.
+- privileged boundary includes service_role-only DB functions, Vault secret cleanup, auth admin user deletion, X revoke and Apple revoke.
+- tests: social-mobile 71/71, data-view 14/14, Deno 13/13, disposable Postgres behavior/race/cleanup PASS, mutation checks 22/22; typecheck/lint/Expo web+iOS export/diff/secret scan PASS.
+- production read-only verification confirms `brand_memberships` exists; older project notes saying it was unapplied are stale on that point.
+- PR remains DRAFT and must not be merged before independent review.
+- recommended independent reviewer: separate Claude Opus5.5（高） in an independent worktree.
