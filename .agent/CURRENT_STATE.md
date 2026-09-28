@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-26 JST
+- checked_at: 2026-09-28 JST
 - repo: kabumori
 - branch: main
 
@@ -47,9 +47,25 @@
 - G1: `review_required` — `kabumori-ios-internal-visual-qa-build-20260926` (icon full-bleed correction)
   - **Real-device icon acceptance: PASS** ("アイコンOK"). Build 10e8610e-c2b2-4baf-a780-4e038c15f4f9 confirmed by the user: no white/double frame on the home screen.
   - Icon/splash/onboarding visual-acceptance work for this feature area is now fully closed end-to-end. Production mutation 0. Ready for chatgpt to close out.
-- G2: `done` — `kabumori-pr34-shadow-merge-deploy-20260925`
+- G2: `ready` — `kabumori-shared-market-report-unification-20260928`; shared morning/close market truth unification; X simplified + App market-complete + App personalized non-destructive proof first; production gates OFF pending K2/review; recommended Opus5.5（高）
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS
+
+
+## G2 shared morning/close unification
+
+- assigned: `kabumori-shared-market-report-unification-20260928`.
+- user priority: stop spending effort on legacy X morning/close VOICE-only fixes before unification; first make X and App consume the same market truth.
+- target product split:
+  - X = market-wide simplified morning/close.
+  - App = complete report with `市場全体 | マイポート`; market tab uses shared packet, my-portfolio tab adds holdings/news/impacts.
+- source of truth: `market_data_packet -> market_report_packet`.
+- first gate is non-destructive proof for X simplified / App market-complete / App personalized using the same report_packet_id/content_hash.
+- production `app_enabled/x_enabled` activation is NOT authorized in this source task; prepare cutover plan, then stop for K2 and focused review if needed.
+- legacy X VOICE issue is frozen and will be re-evaluated only on the unified shared path.
+- known conflict: open PR #41 changes `supabase/functions/x-test-post/index.ts`; G2 must not edit that file while PR #41 remains unresolved. If required, STOP and report conflict.
+- G3/G4 current social-mobile tasks are separate worktrees/scopes and must not be touched.
+- recommended Claude model: Opus5.5（高）.
 
 ## G1 Kabumori onboarding + icon integration
 
