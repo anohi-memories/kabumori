@@ -69,7 +69,7 @@
 
 ## Current slot snapshot
 
-- H1: `review_required` — `x-social-mobile-multi-provider-auth-focused-review-20260928`; FAIL at unchanged PR #47 `7bda196`; seven executable Auth-boundary negative probes failed (linking URL, callback result/PKCE flow ID, signup enumeration, provider-token persistence, recovery-user binding, malformed callback). Existing mobile 32/32 + domain 14/14, typecheck/lint/web+iOS export PASS. No source fix/PR push/merge/deploy; production mutation 0. Awaiting C1; do not merge/activate providers before coordinated source correction; see latest `.agent/CODEX_REPORT.md` section.
+- H1: `review_required` — `x-social-mobile-auth-phase2-final-acceptance-review-20260928`; PASS-WITH-FIX at PR #47 `ed5f8b7` (initial G3 correction `5fd483a`); prior 7 + additional 3 source boundaries accepted. H1 pinned callback/recovery contexts, retained in-flight exchanges and limited provider authorize paths; fix pushed. Mobile 43/43 + data-view 14/14, typecheck/lint/Web+iOS export and four H1 mutation probes PASS; exact-head Preview SUCCESS. Production mutation 0; awaiting C1/source merge, real provider/device activation remains separately gated; see latest `.agent/CODEX_REPORT.md`.
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
 - G1: `review_required` — `kabumori-daily-topic-level-settings-20260928`; K1 source PASS at PR #48 `98732bf`; awaiting independent DB/RPC review before merge/apply. H1 occupied, H2 protected deferred; preferred next H1 Sol（高） when free.
 - G2: `ready` — `kabumori-shared-analysis-prod-deploy-observe-20260928`; PR #45 merged; controlled deploy of market-report-analysis only with consumer gates OFF, then natural morning+close observation; recommended Sonnet5（高）

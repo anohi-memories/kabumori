@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: x-social-mobile-auth-phase2-final-acceptance-review-20260928
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: assigned; final focused acceptance of PR #47 fixed head `5fd483a`; verify only prior Auth findings + bundled corrections; recommended Sol（高）
+- allocation: final acceptance complete; PASS-WITH-FIX at PR #47 `ed5f8b7`; focused prior 7 + additional 3 boundaries accepted, small H1 fixes pushed, tests 43+14 PASS; production mutation 0; awaiting C1/source merge decision, provider/device activation remains gated
 
 ## Codex H2
 - owner: codex

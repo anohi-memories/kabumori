@@ -578,3 +578,84 @@ Source correction/retests and C1 must come **first**. Console changes alone cann
 - push: no PR #47 source push; only these four report/control files are submitted for GitHub sync. deploy: none. safety_checks: isolated worktrees, exact-head recheck, synthetic fixtures, no real secrets, no production mutation, other-slot changes preserved.
 - merge / deploy / provider enablement / redirect allowlist / SMTP / developer-console / DB / Vault / OAuth consent / Cron / X posting / Stage 3B activation: **none**. `production_mutation=0`; no service-role key or real user/provider credential was read.
 - next_recommendation: C1 confirms **FAIL**, keeps PR #47 unmerged/provider activation gated, and decides one bundled G3 correction assignment covering the Auth findings plus onboarding/provider-readiness gaps. **推薦モデル：Opus5.5（高）** for that coordinated Auth correction. Do not overwrite the G3 TASK automatically or start another review loop under the completed H1. The fixed head should then receive one focused regression/acceptance pass (**推薦モデル：Sol（高）**) before any separately authorized activation.
+
+---
+
+# H1 — Auth Phase 2 final focused acceptance (2026-09-28)
+
+- task_id: `x-social-mobile-auth-phase2-final-acceptance-review-20260928`
+- result: **PASS-WITH-FIX — ready for the C1/source merge decision at the exact accepted head; not authorization for production provider activation.**
+- status: `review_required`; next_owner: `chatgpt`; finish code: C1.
+- initial reviewed correction: [PR #47](https://github.com/anohi-memories/kabumori/pull/47) `5fd483a5fc651da07d0791c68eaa557cdb201357`; previous failed head: `7bda196147a749431774fba915a86d41bf43dc5d`.
+- exact accepted/fixed head / commit_hash: **`ed5f8b7890e538593dba369dd85cb99a12b27242`**, one H1 correction commit on top of `5fd483a`. Source push to `claude/g3-multi-provider-auth` confirmed; GitHub head read back matches.
+- startup fresh main: `0d5c43cd0fea0b4dcfdebadef9406dfc797fcc63`; pre-push/report base: `fd1746fd4ca7d75729808a7226f72deeefea2082`. No concurrent main change to the mobile Auth files or this H1 assignment was found. Review and report used separate H1-owned independent worktrees; shared checkout, other slots and their work were preserved.
+- Scope was limited to the `7bda196..5fd483a` correction and the TASK's listed Auth boundaries. No new broad feature/design review, production inspection or activation was performed. This final result supersedes the earlier FAIL for the old head, not its historical evidence.
+
+## Prior seven findings — final status
+
+| Prior finding | Final acceptance |
+| --- | --- |
+| 1. Linking URL rejected | **PASS-WITH-FIX**. Authenticated external-provider URLs now have separate provenance checks, provider-specific HTTPS host **and authorize path**, no credentials/unexpected port, and exactly one redirect to the project's Supabase Auth callback. Old H1 actual-SDK linking/browser probe now passes. Explicit owner comparison remains after linking. |
+| 2. Duplicate false success | **PASS-WITH-FIX**. Code/token-hash duplicates share the real promise/result, including failed exchanges. H1 additionally binds remembered results to their original flow/OTP type and prevents eviction of an in-flight exchange under cache pressure; no success borrowed by a conflicting callback. |
+| 3. Lost PKCE flow ID | **PASS-WITH-FIX**. Strict parsed flow ID, SDK `appendPkceFlowIdToRedirects`, and explicit `exchangeCodeForSession(code,{flowId})` select the correct verifier. Real locked-SDK tests prove A/B/C selection, mismatch refusal without consuming C, and stale/malformed rejection. H1 closes the cached-result bypass for a changed flow ID. |
+| 4. Signup enumeration | **PASS**. New/obfuscated-existing no-session results and duplicate-address error variants use the same fixed outcome/message. Actual provider wrapper/UI wiring was inspected. Confirmation-on policy remains an explicit console/device gate, not silently disabled. |
+| 5. Provider credential persistence | **PASS** for the defined app storage/context policy. Actual SDK storage payload excludes provider access/refresh fields; Supabase app access/refresh session and PKCE state remain restorable. Native AsyncStorage/Web localStorage use the sanitizer; exact provider-source harness confirms React context redaction. Required Supabase session refresh is distinct from prohibited provider/posting credentials. |
+| 6. Recovery user/session binding | **PASS-WITH-FIX**. PASSWORD_RECOVERY creates a user/session-ID binding; incompatible user or new same-user session/sign-out invalidates it. H1 also pins each password action to its starting binding so a newer recovery event during `getSession()` cannot retarget the password update or erase the newer valid context. |
+| 7. Malformed callback accepted | **PASS**. Credentials/port, foreign/posting authority/path, unknown fields/implicit tokens, duplicate/conflicting credential params and malformed/missing flow IDs fail closed. No client-name/handle/user_metadata merge or authorization introduced. |
+
+## Additional three gaps — final status
+
+1. **Onboarding/new-account continuation: PASS at source level.** The notice no longer expires after 30 minutes; a single non-email identity without workspace/explicit acknowledgment continues to see it after interruption. Loaded input/progress is user-tagged and a user change yields loading until the correct user's state is read; the effect depends on current user ID and acknowledgment cannot modify another user's loaded state. Per-user local storage and existing exact-user server workspace path are retained. Actual device/backend continuation remains E2E, not accepted from export alone.
+2. **Provider/Email readiness: PASS under the documented policy.** Social readiness requires both project enablement and explicit build declaration; Apple native also requires bundle ID/API availability; E2E is never claimed by source (`e2eVerified:false`). Missing build config/disabled providers cannot initiate signup/social linking. Email signup/reset require known enabled settings, and signup must explicitly be open. Existing password sign-in deliberately remains callable while project settings are unknown (server still decides); it is disabled when email is known disabled or absent from build declaration. This compatibility exception is not a verified-ready claim for signup/providers. UI and wrapper checks both enforce capabilities.
+3. **Apple linking path/config distinction: PASS at source/current SDK contract.** iOS explicitly uses authenticated `linkIdentity({provider:'apple',token,nonce})`; the installed SDK posts `link_identity:true` with the current user's app JWT. Non-iOS uses gated browser linking (`apple_web`, Services ID/secret). SHA-256 nonce to Apple/raw nonce to Supabase remains intact. Missing current `ios.bundleIdentifier` truthfully disables native Apple; no console/build setting was added by H1.
+
+X app-login remains strictly separate from posting X: Supabase app-auth routes/helpers do not call posting connection/publish APIs; existing `x-oauth-connect-user` + Vault stays the posting path. No service-role/provider secret, provider-token log or `user_metadata` authorization was found. No source change to G4 Home/posting/history, Supabase functions/migrations, admin, Cron or publishing authority was made.
+
+## Small H1 corrections within the permitted boundaries
+
+At `5fd483a`, targeted source-executed probes found the following residual cases. The TASK explicitly permits small obvious defects in these boundaries, so H1 fixed/retested them directly rather than starting a new design/review loop:
+
+- **Callback context / in-flight retention:** the cache indexed only a credential, so the same code under flow B could borrow cached success from flow A; likewise a token hash with another OTP type/flow. Its 32-entry FIFO could evict a still-pending first exchange, allowing a second exchange on duplicate delivery. Remembered entries now retain context and pending state, conflicting replays fail before an SDK call, and capacity only retires completed entries; all-pending capacity refuses a new distinct callback without losing duplicate sharing.
+- **Recovery action race:** recovery A's save could await `getSession`, receive PASSWORD_RECOVERY(B), and then compare against the newly changed reference B, updating B with the password entered for A. The action now snapshots A's binding before awaiting, refuses a changed binding/session and preserves any newer valid B recovery. This is client recovery-context correctness, not a claimed server authorization bypass.
+- **Authorize-path validation:** expected provider host/redirect checks still admitted an unrelated `/home` page on X/Google/Apple. Provider-specific authorize paths now supplement the existing host/redirect checks; current Google/Apple public OIDC authorization endpoints and Supabase X provider implementation were verified before choosing the paths. No arbitrary external host permission was added.
+
+Durable `tests/auth-boundary-regression.test.mjs` has six tests for those cases, exact recovery success, sign-in-switch/fresh-context rejection and actual React-context credential stripping. Five negative assertions reproduced unsafe behavior before their fixes (including pending-cache pressure); all six pass on the accepted head. Tests use synthetic in-memory sessions/hooks and execute the exact provider source; no real Auth/DB/OAuth call. This does **not** claim device-relaunch E2E or that JWT decoding authorizes a user.
+
+## Verification
+
+| Check | Result on accepted source |
+| --- | --- |
+| Full mobile `npm test` | **43/43 PASS** (G3 baseline 37, H1 regressions 6) |
+| `node --experimental-strip-types --test src/domain/data-view.test.ts` | **14/14 PASS** |
+| `npm run typecheck` / `npm run lint` | **PASS / PASS** |
+| `git diff --check`, staged diff check | **PASS** |
+| Actual-SDK tests | provider-token-free storage + restored app session, concurrent flow/verifier selection, stale/mismatched flows, duplicate real failure/success and token-hash single completion **PASS** |
+| Old H1 actual-SDK linking/browser rejection probe recreated | **1/1 PASS** on the correction |
+| H1 in-memory mutation probes | **4/4 detected**: removed callback context guard, authorize-path guard, SDK flow-ID argument, callback userinfo guard. Unmutated controls pass; repository source was never rewritten for this mutation run. |
+| Source/diff secret/token scan | **PASS**: provider field names only in the sanitizer; service-role text only in rejection logic; no real secret/provider log/user_metadata authorization found |
+| Expo Web / iOS exports after H1 source fixes | **PASS / PASS**, synthetic public Supabase env; iOS is JS/Hermes export, **not** native signing/build/device E2E |
+| Exact-head GitHub read-back | PR #47 OPEN, MERGEABLE, head `ed5f8b7890e538593dba369dd85cb99a12b27242`; Vercel + Netlify Preview SUCCESS, auxiliary Netlify checks NEUTRAL |
+
+- H1 independently ran the four mutations above. G3's reported 11/11 mutation run was inspected in its Report but was **not** claimed as rerun by H1.
+- Local-only mutation script: `/private/tmp/kabumori-h1-social-mobile-latest-20260928/apps/social-mobile/review/h1-final-mutations.mjs`; old probe: `review/h1-auth-boundary.test.mjs`. Neither local review folder nor generated `dist-h1-*` outputs is committed/pushed. The six new regressions **are** in PR #47.
+- Supabase skill/changelog checked first; current [flow-ID exchange reference](https://supabase.com/docs/reference/javascript/auth-exchangecodeforsession), [identity-linking guide](https://supabase.com/docs/guides/auth/auth-identity-linking), installed auth-js 2.115.0 and [Expo SDK 57 Apple docs](https://docs.expo.dev/versions/v57.0.0/sdk/apple-authentication/) checked for the focused semantics. [Google OIDC configuration](https://accounts.google.com/.well-known/openid-configuration), [Apple OIDC configuration](https://appleid.apple.com/.well-known/openid-configuration) and [Supabase X provider](https://github.com/supabase/auth/blob/master/internal/api/provider/x.go) support the authorize-path restrictions. Unrelated database/self-host changelog changes were not applied.
+
+## Remaining provider-console / real-device gates only
+
+No open source blocker remains **within this focused assignment**. Source acceptance does not enable any provider or publication authority. Before separately authorized activation/E2E:
+
+1. Approved Auth callback allowlist must accommodate the appended `sb_flow_id` on supported builds, separately from posting callback; email confirmation/SMTP/templates must support confirmation and recovery. Use the narrowest approved callback matching policy; H1 did not add a wildcard or alter confirmation settings.
+2. Signed development build/device: Email signup/confirmation/recovery, two competing recovery contexts, relaunch/restoration/logout and first-workspace acknowledgment/user-switch E2E; X/Google PKCE success/cancel/error and concurrent callbacks. Existing backend/RLS readiness is checked in that E2E, not by mutating schemas during H1.
+3. X app-login OAuth client and Supabase callback/email permission remain distinct from posting-X client/consent. App login must not activate posting.
+4. Apple standalone bundle ID/capability and Supabase native accepted client ID; real-device native sign-in **and** identity linking, plus normal Apple button/branding release QA. Browser Apple on non-iOS separately needs Services ID/secret and its rotation plan; it is not implied by native config.
+5. Google OAuth client/callback and Manual linking enablement/collision tests. Add each provider to the explicit build declaration only after its approved config/device gate; no fake E2E verification flag.
+
+## Change/safety/C1 handoff
+
+- changed_files by H1 on PR #47: `apps/social-mobile/src/domain/auth-flows.ts`, `src/providers/auth-provider.tsx`, `tests/auth-flows.test.mjs`, new `tests/auth-boundary-regression.test.mjs`, `docs/multi-provider-auth-phase2.md` (all under that app).
+- Reporting files: `.agent/tasks/CODEX_TASK.md`, `.agent/ACTIVE_TASK.md` H1 only, `.agent/CURRENT_STATE.md` H1 snapshot only, `.agent/CODEX_REPORT.md` appended. Other slots/reports retained; report-control commit is separately visible in Git history.
+- push: **source fix pushed and exact head verified**; only own report/control files submitted for main sync. merge: none. deploy: no production deploy. Preview CI is successful and separate from Auth/device acceptance.
+- safety_checks: independent owned worktrees, fresh main/exact-head checks, explicit staging of own five app files, synthetic SDK/hooks, no real credentials, no changes to other slots, no publishing/backend authority change.
+- `production_mutation=0`: no provider console, redirect/SMTP/template, Apple/Google/X console, DB/migration, Vault, OAuth consent, Cron, Stage 3B activation or real X post.
+- remaining_issues: only the unexecuted console/device gates above; no further source design correction requested in this focused pass.
+- next_recommendation: C1 confirm **PASS-WITH-FIX** and exact PR #47 `ed5f8b7890e538593dba369dd85cb99a12b27242`, then make the normal source merge decision/checks. Keep real-provider/device/production activation separately authorized. Do not start another review loop without a concrete discrepancy. **推薦モデル：Luna（中）** for the report/exact-head C1 confirmation; this H1 stops here.

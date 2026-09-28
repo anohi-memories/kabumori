@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-auth-phase2-final-acceptance-review-20260928
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: PR #47 fixed headの最終Auth受け入れ確認。前回H1で再現した7件＋追加3件の修正だけをfocused regressionで確認し、merge可否を確定する。新しい広範レビューや別設計への拡張はしない。
@@ -88,3 +88,11 @@ Then:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for C1.
+
+## H1 final acceptance — 2026-09-28
+
+- **PASS-WITH-FIX**. Initial fixed head `5fd483a5fc651da07d0791c68eaa557cdb201357`; accepted PR #47 head after the permitted small H1 correction: `ed5f8b7890e538593dba369dd85cb99a12b27242`.
+- Prior seven findings and three continuation/readiness/Apple-linking gaps pass focused source acceptance. H1 tightened cached callback flow/type binding and in-flight retention, recovery-action context pinning, and provider authorize paths; added six durable regression tests.
+- Final mobile tests 43/43 + data-view 14/14, typecheck/lint, Web+iOS export, diff/secret checks PASS; four H1 in-memory mutations detected. Real provider/device E2E remains a separately authorized gate.
+- Source correction pushed to PR #47; final exact head read back OPEN/MERGEABLE with Vercel/Netlify Preview SUCCESS. No merge, production deploy/config/DB/OAuth/X mutation; `production_mutation=0`.
+- Ready for C1 and normal source merge decision at the accepted head. Full report: latest final-acceptance section of `.agent/CODEX_REPORT.md`. STOP for C1; no further review loop without a concrete discrepancy/new assignment.
