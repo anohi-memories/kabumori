@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-home-posting-settings-ux-phase1-20260928
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: `apps/social-mobile` のHome・投稿設定・投稿UXを棚卸しし、一般ユーザーが「何がいつ投稿されるか」「自動投稿がONか」「投稿内容をどう調整するか」を理解・操作できる実用画面へ近づける。
@@ -261,3 +261,19 @@ STOP for K4.
 
 - status -> review_required
 - next_owner -> chatgpt
+
+
+## Final K4 — social-mobile Home/posting UX phase 1
+
+Verdict: **PASS**.
+
+- PR #44 head `f0ecc9f984a676acb3a2d4fd522c6219583e06eb` is OPEN/MERGEABLE.
+- Home now truthfully shows connected account summary, auto-post state, next planned post, latest result, and settings/schedule/history CTAs.
+- real-data posts are no longer hidden by the invalid per-account filter on `scheduled_posts`.
+- blocked/unavailable real-data states no longer fall through to mock-preview UI/data.
+- real post detail now resolves from real snapshot rather than mockRepository only.
+- consult confirmation now persists through the existing content-settings repository instead of local state only, and preserves already-saved settings as the merge base.
+- no DB/RLS/RPC/migration or production mutation.
+- G3-owned provider/auth files were not changed; known provider overlap is intentionally left for PR #42 to resolve.
+- tests: 12/12 plus typecheck/lint/Expo web export/diff PASS.
+- because G3 Phase 1 and G4 Phase 1 now converge on the same user journey, one consolidated H1 integration review is appropriate before merge.
