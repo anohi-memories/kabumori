@@ -66,13 +66,19 @@
 - follow-ups still open: production migration apply + authenticated real-device topic/settings QA, approved mini Yume+robot assets, AI route/service, final tab redesign.
 
 
-## G1 Daily topic production rollout preflight
+## Final K1 Daily topic rollout preflight
 
-- task_id: `kabumori-daily-topic-prod-rollout-preflight-20260928` -- `review_required`, next_owner chatgpt.
-- Phase A done: PR #51 (`claude/daily-topic-migration-rename-20260928`, head `164485b`) renames only `20260928120000_add_daily_kabumori_tip_rpc.sql` -> `20260928123000_add_daily_kabumori_tip_rpc.sql`; SHA-256 identical before/after (`425f1e33...`), pure rename, MIC Phase 3A migration untouched. Not self-merged, no production mutation.
-- Read-only preflight: `supabase migration list --project-ref` confirms neither colliding version `20260928120000` is present in production's applied-migration history (both remote:""), so no migration-history repair needed.
-- **Gap**: a deeper schema-dump check to directly confirm `get_daily_kabumori_tip`/MIC Phase 3A objects aren't already live was blocked by this session's own safety classifier ("Production Reads"), not by any concerning finding. Recommend closing this gap (user grants the read, or does it themselves) before authorizing the actual production apply continuation task -- not before merging this rename.
-- After K1 merges the rename PR, a separate continuation task should authorize the exact production apply + ACL/readback/smoke checks.
+- verdict: **PASS**.
+- PR #51 exact head `164485b` is a pure rename, 0 content changes; target path is now `20260928123000_add_daily_kabumori_tip_rpc.sql`.
+- PR #51 merged -> `4c07a81702c36f95bd26acdccd68a137d8bd5eea`.
+- direct production read-only K1 closed the prior gap:
+  - daily-topic RPC does not exist yet;
+  - remote migration history contains neither 20260928120000 nor 20260928123000;
+  - MIC Phase 3A tables already exist despite missing migration-history entry, confirming pre-existing out-of-band migration drift.
+- unrelated older duplicate prefix `20260922090000` remains in repo; not part of this task.
+- because of migration-history drift, broad `db push` is explicitly forbidden for daily-topic rollout.
+- G1 advanced to exact one-RPC production apply/readback task, recommended Sonnet5（高）.
+
 
 ## H2 stale review cleanup
 
@@ -88,7 +94,7 @@
 
 - H1: `review_required` — `x-social-mobile-auth-phase2-final-acceptance-review-20260928`; PASS-WITH-FIX at PR #47 `ed5f8b7` (initial G3 correction `5fd483a`); prior 7 + additional 3 source boundaries accepted. H1 pinned callback/recovery contexts, retained in-flight exchanges and limited provider authorize paths; fix pushed. Mobile 43/43 + data-view 14/14, typecheck/lint/Web+iOS export and four H1 mutation probes PASS; exact-head Preview SUCCESS. Production mutation 0; awaiting C1/source merge, real provider/device activation remains separately gated; see latest `.agent/CODEX_REPORT.md`.
 - H2: `idle` — unassigned; stale deferred PR #32 morning Fact-contract review was closed as obsolete after PR #32 had already been merged. Historical partial report preserved; slot is now genuinely reusable.
-- G1: `review_required` — `kabumori-daily-topic-prod-rollout-preflight-20260928`; PR #51 head `164485b` renames the colliding migration only, SHA-256 identical, production migration history confirms neither version applied remotely; a deeper function-existence schema check was blocked by this session's safety classifier (flagged for K1/user); production mutation 0.
+- G1: `ready` — `kabumori-daily-topic-prod-apply-verify-20260928`; PR #51 merged `4c07a817`; daily-topic RPC absent in prod; MIC objects already live out-of-band. Apply only exact reviewed daily-topic SQL, no broad db push/history repair; then ACL/RLS/determinism/read-only verification. Recommended Sonnet5（高）.
 - G2: `ready` — `kabumori-shared-analysis-prod-deploy-observe-20260928`; PR #45 merged; controlled deploy of market-report-analysis only with consumer gates OFF, then natural morning+close observation; recommended Sonnet5（高）
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS
