@@ -74,12 +74,12 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: done
-- task_id: x-social-mobile-posting-interaction-phase2-20260928
+- status: ready
+- task_id: x-social-mobile-posting-backend-foundation-phase3-20260928
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: closed; Final K4 PASS; PR #49 `15e9f74` merged as `9eef82b`; truthful source-only posting interaction UX complete; backend write actions remain future reviewed work
+- allocation: assigned after Final K4 Phase 2 PASS and PR #49 merge `9eef82bf`; source-only backend foundation for authoritative post body, safe detail read/edit, and sanitized failure reason. No production mutation. Independent G4 worktree required. Recommended Opus5.5（高）.
 
 ## Deferred
 
