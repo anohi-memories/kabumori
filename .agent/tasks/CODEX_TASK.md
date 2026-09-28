@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-multi-provider-auth-focused-review-20260928
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: PR #47 multi-provider Auth Phase 2を1回だけ集中レビューする。X/Apple/Google/Email認証、identity linking、PKCE/deep link、password recovery、X app-authとposting-Xの分離を確認し、production provider activation前のAuth境界を固める。
@@ -96,3 +96,17 @@ Then:
 - Existing mobile tests 32/32 + data-view 14/14, typecheck, lint, web+iOS export and diff check PASS. These do not establish real-device/provider E2E readiness.
 - Source fix / PR push / merge / deploy: none. Coordinated Auth-boundary design is required; stopped under the TASK fix policy. `production_mutation=0`.
 - Full findings, source locations, reproduction contracts and activation gates: `.agent/CODEX_REPORT.md`, latest H1 multi-provider Auth section. Await C1; do not restart this finished review under H1 without a new assignment.
+
+
+## Final C1 — multi-provider Auth focused review
+
+Verdict: **FAIL**.
+
+- reviewed PR #47 head `7bda196147a749431774fba915a86d41bf43dc5d`.
+- seven Auth boundary findings were reproduced with executable synthetic probes.
+- no source fix was made in H1 because the issues require one coordinated design correction.
+- X app-login vs posting-X separation itself passed.
+- Apple native nonce contract passed.
+- identity linking, callback/PKCE, recovery, provider-session storage, onboarding exact-user continuation and provider-readiness require correction before merge/provider activation.
+- production_mutation=0.
+- returned to G3 as one bundled correction task; after K3, exactly one focused H1 acceptance pass should be used.
