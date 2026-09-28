@@ -1693,3 +1693,14 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - production_mutation=0; no migration apply, Edge deploy, real deletion or X post.
 - independent review mandatory before merge because this crosses auth-admin/Vault/service_role/external revoke boundaries.
 - use a separate Claude Opus5.5（高） review in an independent worktree; do not merge PR #52 before that review.
+
+
+## H2 assigned — PR #52 privileged account deletion review
+
+- task_id: `x-social-mobile-account-deletion-privileged-review-20260928`
+- target: draft PR #52 head `12146c4ab2bc635a2781b673146e1f8ad8350258`
+- review focus: service_role DB functions, function ACL/search_path, Vault cleanup authority, Auth admin deletion/session behavior, X revoke, Apple revoke, exact-user/workspace binding, races, idempotency and partial-failure recovery.
+- production mutation forbidden.
+- small bounded fixes allowed; design-level uncertainty must stop and report.
+- finish code: C2.
+- recommended Codex model: Sol（高）.
