@@ -44,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: done
-- task_id: kabumori-daily-topic-level-settings-20260928
+- status: ready
+- task_id: kabumori-daily-topic-prod-rollout-preflight-20260928
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: closed; K1 source PASS + independent separate-Claude DB/RPC PASS at PR #48 `98732bf`; merged -> `9ccbb59d`; production migration not yet applied; no Codex budget used
+- allocation: production rollout preflight for PR #48; first resolve duplicate migration version `20260928120000` by rename-only PR with byte-identical SQL, plus production read-only history/function check. No production mutation/apply in this phase. Recommended Sonnet5（高）
 
 ## Claude G2
 - owner: claude
