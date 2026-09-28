@@ -1411,3 +1411,34 @@ Recommended Claude model: Opus5.5（高）.
 - Phase 1 auth/X-connect/onboarding + Home/posting/history source work is accepted and may be closed after merge.
 - production DB/config/OAuth/real-account E2E remain separate future gates.
 - next G3 after merge: queued multi-provider signup/login (X / Apple / Google / Email), provider linking, duplicate-account prevention, password recovery and first-workspace onboarding.
+
+
+## G3 social-mobile multi-provider Auth Phase 2
+
+- assigned: `x-social-mobile-multi-provider-auth-phase2-20260928`.
+- mandatory first step: integrate accepted Phase 1 in reviewed order PR #42 `c5e0157` -> PR #44 `966d412`, with exact-head/check verification and fresh-main regression.
+- after integration, implement source-first X / Apple / Google / Email signup/login.
+- X app-auth and X posting-account authorization must remain separate; posting continues through existing `x-oauth-connect-user`/Vault path.
+- provider linking and duplicate-account prevention are mandatory.
+- password recovery and first-workspace/onboarding continuation are included.
+- no production provider enablement, Auth console mutation, DB migration, Stage 3B activation or real X post without separate authorization.
+- recommended Claude model: Opus5.5（高）.
+
+## Queued G4 next — posting interaction Phase 2
+
+Status: queued; start after PR #42/#44 are integrated to main to avoid stale-base/provider overlap.
+
+Planned scope:
+- draft/post preview
+- manual edit
+- AI regenerate
+- approve
+- schedule/post action wiring only where backend contract already exists
+- failure reason
+- retry
+- reconnect-to-X CTA when auth requires it
+- schedule/history -> detail -> edit/approve flow
+- preserve explicit distinction between manual approval and auto-post
+- no production post or publish-authority activation by default
+
+Recommended Claude model: Sonnet5（高）.
