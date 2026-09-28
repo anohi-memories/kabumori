@@ -3,8 +3,8 @@
 - task_id: kabumori-shared-report-reliability-hardening-20260928
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Opus5.5（高）
 - purpose: 共通 `market_report_packet` をX/アプリの正本として本番切替できるようにするため、`market-report-analysis` のOpenAI 429/一時障害耐性を最小変更で強化し、朝刊・大引けの共有packet完成率を上げる。旧X生成/VOICE経路は修正しない。
@@ -236,7 +236,158 @@ When complete:
 
 ## Report
 
-Pending.
+### Report — kabumori-shared-report-reliability-hardening-20260928
+
+- task_id：`kabumori-shared-report-reliability-hardening-20260928`
+- result：**source-readyのPASS候補**。`market-report-analysis` に、429・5xx・ネットワーク断に限った再試行（回数と待ち時間に上限あり）を実装した。deploy・gate変更・cron変更はしていない。
+- fresh main SHA：`a5c5eaf8c1dee1237f73ef21b206ca26a37300c9`（着手時。merge `a0ac648` を含む）
+- worktree/branch：G2専用worktree `scratchpad/kabumori-g2-rel`、branch `g2-shared-analysis-reliability-20260928`
+
+#### 2026-09-28 failure analysis（production read-only）
+
+- **朝刊のcycle**：
+  - `report_attempt_count=2`、`report_status=failed`、`report_last_error=ANALYSIS_OPENAI_GENERATE_FAILED:429`
+  - attempt 1が07:55、attempt 2が08:05 JST。最後の更新は08:05:02で、claimから約2秒後に失敗していた。
+  - つまり、**両方の回とも最初のgeneration requestが429**だった。
+- **仕組み**：
+  - `openAiRequester` は、okでないresponseを受けた時点で即座にthrowする。
+  - そのエラーがhandlerのcatchで `fail_market_report_analysis` になる。**run内の再試行はなかった**。
+  - 同じ時間帯（08:20〜08:25）には、旧X朝刊のlaneも429を3回受けていた。持続的なrate limitの窓があったと判断した。
+  - 429の `Retry-After` の有無は、pg_netの応答記録が保持期限切れで確認できなかった。そのため、実装側で両方のheader形式に対応した。
+- **大引け**（参考）：09-24、09-25、09-28のいずれも、attempt 1（16:20）が失敗しattempt 2（16:35）で完了している。
+  - 09-28のattempt 1の応答を確認すると `ANALYSIS_FACT_FAILED`（内容の問題）で、transportの問題ではない。本TASKの対象外。
+
+#### existing retry / cron behavior
+
+- claim：`claim_market_report_analysis(p_max_attempts=3, stale 600s)`。1つのcycleにつき最大3回claimでき、`already_completed`・`in_progress`・`attempts_exhausted` の場合は何もしない。
+- cron：
+  - 朝刊：data 22:50、analysis 22:55、retry 23:05（UTC）＝ 07:50 / 07:55 / 08:05 JST
+  - 大引け：data 07:15、analysis 07:20、retry 07:35（UTC）＝ 16:15 / 16:20 / 16:35 JST
+  - いずれも pg_net timeout 150,000ms。
+- **scheduleされているのは2回だけ**（3回目のclaim枠は未使用）。
+- run内の呼び出し：generationは最大2回（`MAX_GENERATIONS=2`）、Factは最大2回。成功したrunの所要時間は20〜37秒。
+
+#### implemented retry policy
+
+- 実装場所：`transport_retry.ts`（新規）を `openAiRequester` のfetch部分にだけ適用した。
+- 再試行するもの：
+  - HTTP 429（ただし `insufficient_quota` は除く）
+  - 500 / 502 / 503 / 504
+  - fetchのネットワークエラー（TypeError）
+- 再試行しないもの：
+  - それ以外の4xx
+  - 自前の90秒timeoutによるabort
+  - 空の出力、不正なJSON
+  - localの検査やFactによる拒否（生成ロジックは無変更）
+- 待ち時間：
+  - `retry-after-ms`、`retry-after`（秒またはHTTP-date）を最大20秒まで尊重する。
+  - 20秒を超える指定は待たず、scheduleされたretryに任せる。
+  - 指定がなければ2秒、次に6秒待つ。
+- 上限：
+  - 1回の呼び出しにつき追加requestは最大2回
+  - 1runの合計で追加requestは最大3回
+  - 1runの待ち時間の合計は最大30秒
+- 最終的にokでないresponseは、**既存のerror codeのまま**扱う（本番の監視やretryの分類に影響しない）。
+- 変更していないもの：claimのfencing、complete/fail RPC、1cycleにpacket 1つ・不変であること、scheduleされたretry。
+
+#### changed_files（PR #45）
+
+- `supabase/functions/market-report-analysis/transport_retry.ts`（新規）
+- `supabase/functions/market-report-analysis/handler.ts`（requesterへの配線、Depsに任意の `sleep` を追加、diagnosticsを追加）
+- `supabase/functions/market-report-analysis/transport_retry_test.ts`（新規）
+
+#### tests
+
+- 新規 `transport_retry_test.ts`：**14/14**
+  - 429のあと成功
+  - Retry-Afterの尊重・上限・3形式のparse
+  - 429の連続で上限に達する
+  - 5xxとnetworkは再試行、timeoutは再試行しない
+  - 4xxと `insufficient_quota` は再試行しない
+  - run全体の上限
+  - **handler統合テスト（朝刊・大引けとも）**：claim 1回・complete 1回・fail 0回、diagnosticsを記録、秘密情報なし
+  - 429が続く場合は、本番と同じcode `ANALYSIS_OPENAI_GENERATE_FAILED:429` とfailを記録する（2026-09-28の再現）
+  - Factの拒否はtransport再試行の対象外
+  - 最悪ケースの上限
+- 既存と関連：
+  - market-report-analysis 35/35、market-report-data-packet 42/42
+  - PR #43のunification 6/6、X shared consumer 6/6、personalized shared consumer 4/4
+  - personalized-reports 125/125、関連スイート **338/338**
+- deno check・deno lint（変更ファイル）・git diff --checkはPASS。
+  - 既存の `handler_test.ts`・`analysis_test.ts` にある `require-await` のlint 2件は、main上にもともとあるもの。
+
+#### max / worst-case call budget
+
+- 1runあたり：
+  - generationは最大2回、Factは最大2回（model呼び出しは最大4回で従来どおり）
+  - transportの追加requestは最大3回
+  - HTTP requestは最大7回
+  - 追加の待ち時間は最大30秒
+- 1cycleあたり：
+  - claimは最大3run（cronは2run）
+  - 最悪でHTTP requestは21回、課金されるmodel呼び出しは12回（従来と同じ上限。429の応答は出力を生まない）
+- 所要時間：成功時の20〜37秒に、最大30秒の待ちと追加requestが加わる。pg_netの150秒以内に収まる設計。
+
+#### diagnostics / observability
+
+- 既存の `p_diagnostics`（complete・failとも）に次の項目を追加した：
+  - `transport_retries`
+  - `transport_retry_wait_ms`
+  - `transport_retry_reasons`（例：`http_429,http_503`）
+  - `transport_retry_exhausted`
+  - `transport_success_after_retry`
+- prompt・key・responseの本文は記録しない。schemaの変更もない。
+
+#### commit / PR / push / deploy
+
+- commit：`b37e1c921dff47430b8c1d70991bc8eadfc09190`
+- PR：https://github.com/anohi-memories/kabumori/pull/45（open・未merge）
+- push：branchへpushした
+- deploy：**なし**
+
+#### app_enabled / x_enabled
+
+- 着手前：false / false。
+- 本TASKでは変更しておらず、完了時もfalse / false（設定は触っていない）。
+
+#### production mutations
+
+- **0**（read-onlyのSELECTだけ）。
+
+#### overlap checks
+
+- `market-report-analysis/**` を扱う他slotや、open PRはない。
+- `x-test-post/index.ts`（PR #41）・important-news・MIC・G3/G4の範囲には触れていない。
+
+#### remaining issues
+
+1. 持続的な429の窓（09-28は07:55〜08:25頃）には、run内の最大30秒の再試行だけでは足りない可能性がある。
+   - claimの3回目の枠を使う**追加のscheduled retry（例：08:15 JST）**が有効。ただしcronの変更になるため、別途の承認が必要。
+   - 共有packetを読むconsumer（X 08:20、アプリ 08:35）より前に終わる時刻にする必要がある。
+2. 大引けのattempt 1が内容の問題（Fact）で毎回落ちている。attempt 2で完了しているので配信は間に合っているが、cost・時間とも倍かかる。promptとFactの整合は別TASKで扱うのが望ましい。
+3. 429の根本原因（組織全体のrate・quotaの競合。同時刻の他のworkload）は未特定。
+
+#### rollback plan
+
+- `market-report-analysis` を直前の版（現行本番のv11のsource）へ戻すdeployだけで済む。DB・cron・settingsの変更はないので、戻す対象はコードだけ。
+- 本PRはretry層を足しただけなので、無効化もrevert 1 commitで済む。
+
+#### exact next step toward shared production cutover
+
+1. K2の後、PR #45をmergeし、`market-report-analysis` **だけ**をdeployする（別gate）。
+   - deploy後に `--use-api` でbyte照合する。
+   - 自然cronの朝刊・大引けで、diagnosticsの `transport_*` と、packetが完成したかを確認する。
+2. 必要なら、3回目のscheduled retryを追加する（別gate、cronの変更）。
+3. 共有packetの完成率が安定したら（例：5営業日連続で朝刊・大引けとも完成）、**App gateのON**（`app_enabled=true`）を行う。
+   - 最初の自然な朝刊・大引けで、保存された `body.market_section.report_packet_id` とcycleのpacket idが一致することを確認する。
+4. その後、focusedなCodexレビューを経て **X gateのON**。
+5. 旧経路の削除。
+
+#### Codex review recommendation
+
+- **本PR #45は、軽いreviewを推奨**。本番のcron経路の挙動（再試行の回数と待ち時間）を変えるため。
+- 分類（何を再試行するか）と上限の確認が中心で、重いreviewは不要と判断している。
+
 
 ---
 
