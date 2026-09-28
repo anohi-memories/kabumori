@@ -19,6 +19,7 @@ import { deleteConfirmationIssue } from '@/lib/account-deletion';
 import { authErrorMessage, requestPasswordReset, signOut } from '@/lib/auth';
 import { legalLinks } from '@/lib/legal-links';
 import { settingsEntries, type SettingsEntry } from '@/lib/settings-menu';
+import { TOPIC_LEVELS, TOPIC_LEVEL_HINT, TOPIC_LEVEL_LABEL, type TopicLevel } from '@/lib/home-topic';
 
 const palette = KABUMORI_COLORS.light;
 
@@ -26,15 +27,19 @@ const palette = KABUMORI_COLORS.light;
 // expo-router's NativeTabs, where every top-level route becomes a visible tab, so adding
 // `app/settings` would add a sixth tab to the bar. The screens below are self-contained, so they
 // can move to real routes unchanged once the navigator gains a stack above the tabs.
-type SheetView = 'menu' | 'delete';
+type SheetView = 'menu' | 'delete' | 'topic-level';
 
 export function SettingsSheet({
   visible,
   email,
+  topicLevel,
+  onTopicLevelChange,
   onClose,
 }: {
   visible: boolean;
   email: string | null;
+  topicLevel: TopicLevel;
+  onTopicLevelChange: (level: TopicLevel) => Promise<boolean>;
   onClose: () => void;
 }) {
   const [view, setView] = useState<SheetView>('menu');
@@ -48,9 +53,17 @@ export function SettingsSheet({
     <Modal visible={visible} animationType="slide" onRequestClose={close} transparent={false}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         {view === 'menu' ? (
-          <SettingsMenu email={email} onClose={close} onDeleteAccount={() => setView('delete')} />
-        ) : (
+          <SettingsMenu
+            email={email}
+            topicLevel={topicLevel}
+            onClose={close}
+            onDeleteAccount={() => setView('delete')}
+            onOpenTopicLevel={() => setView('topic-level')}
+          />
+        ) : view === 'delete' ? (
           <DeleteAccountView email={email} onBack={() => setView('menu')} />
+        ) : (
+          <TopicLevelView current={topicLevel} onChange={onTopicLevelChange} onBack={() => setView('menu')} />
         )}
       </SafeAreaView>
     </Modal>
@@ -59,15 +72,19 @@ export function SettingsSheet({
 
 function SettingsMenu({
   email,
+  topicLevel,
   onClose,
   onDeleteAccount,
+  onOpenTopicLevel,
 }: {
   email: string | null;
+  topicLevel: TopicLevel;
   onClose: () => void;
   onDeleteAccount: () => void;
+  onOpenTopicLevel: () => void;
 }) {
   const [busy, setBusy] = useState(false);
-  const entries = settingsEntries(legalLinks(), { email });
+  const entries = settingsEntries(legalLinks(), { email }, TOPIC_LEVEL_LABEL[topicLevel]);
 
   async function sendPasswordReset() {
     if (!email) {
@@ -122,6 +139,7 @@ function SettingsMenu({
     if (entry.id === 'password') return void sendPasswordReset();
     if (entry.id === 'logout') return void logOut();
     if (entry.id === 'delete-account') return onDeleteAccount();
+    if (entry.id === 'topic-level') return onOpenTopicLevel();
   }
 
   return (
@@ -244,6 +262,76 @@ function DeleteAccountView({ email, onBack }: { email: string | null; onBack: ()
   );
 }
 
+function TopicLevelView({
+  current,
+  onChange,
+  onBack,
+}: {
+  current: TopicLevel;
+  onChange: (level: TopicLevel) => Promise<boolean>;
+  onBack: () => void;
+}) {
+  const [selected, setSelected] = useState<TopicLevel>(current);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function choose(level: TopicLevel) {
+    if (saving || level === selected) return;
+    const previous = selected;
+    // Optimistic: the UI reflects the choice immediately, but is reverted
+    // below if the write actually fails -- never left claiming a save that
+    // didn't happen.
+    setSelected(level);
+    setSaving(true);
+    setMessage(null);
+    const ok = await onChange(level);
+    setSaving(false);
+    if (!ok) {
+      setSelected(previous);
+      setMessage('保存できませんでした。もう一度お試しください。');
+    }
+  }
+
+  return (
+    <ScrollView contentContainerStyle={styles.topicContainer}>
+      <Pressable onPress={onBack} disabled={saving} accessibilityRole="button" style={styles.backButton}>
+        <Text style={styles.backText}>‹ 設定にもどる</Text>
+      </Pressable>
+      <Text style={styles.title}>投資知識レベル</Text>
+      <Text style={styles.topicLead}>「今日のトピック」の説明の深さを選べます。</Text>
+      <View style={styles.topicOptions}>
+        {TOPIC_LEVELS.map((level) => {
+          const isSelected = level === selected;
+          return (
+            <Pressable
+              key={level}
+              onPress={() => void choose(level)}
+              disabled={saving}
+              style={[styles.topicOption, isSelected && styles.topicOptionSelected]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isSelected, disabled: saving }}
+              accessibilityLabel={`${TOPIC_LEVEL_LABEL[level]}${isSelected ? '、選択中' : ''}`}>
+              <View style={styles.topicOptionMain}>
+                <Text style={[styles.topicOptionLabel, isSelected && styles.topicOptionLabelSelected]}>
+                  {TOPIC_LEVEL_LABEL[level]}
+                </Text>
+                <Text style={styles.topicOptionHint}>{TOPIC_LEVEL_HINT[level]}</Text>
+              </View>
+              {isSelected ? <Text style={styles.topicCheck}>✓</Text> : null}
+            </Pressable>
+          );
+        })}
+      </View>
+      {saving ? <ActivityIndicator color={palette.accent} style={styles.busy} /> : null}
+      {!!message && (
+        <View style={styles.messageBox}>
+          <Text style={styles.messageText}>{message}</Text>
+        </View>
+      )}
+    </ScrollView>
+  );
+}
+
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: palette.background },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 6 },
@@ -275,4 +363,14 @@ const styles = StyleSheet.create({
   deleteButton: { minHeight: 52, marginTop: 8, borderRadius: 14, backgroundColor: '#9a3631', alignItems: 'center', justifyContent: 'center' },
   deleteButtonText: { color: '#fff', fontSize: 16, fontWeight: '900' },
   disabled: { opacity: 0.55 },
+  topicContainer: { padding: 20, gap: 12 },
+  topicLead: { color: palette.muted, fontSize: 14, lineHeight: 20, marginTop: 2, marginBottom: 4 },
+  topicOptions: { gap: 10 },
+  topicOption: { flexDirection: 'row', alignItems: 'center', backgroundColor: palette.card, borderColor: palette.border, borderWidth: 1, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14 },
+  topicOptionSelected: { borderColor: palette.accent, backgroundColor: palette.accentSoft },
+  topicOptionMain: { flex: 1, gap: 3 },
+  topicOptionLabel: { color: palette.text, fontSize: 15, fontWeight: '800' },
+  topicOptionLabelSelected: { color: palette.accent },
+  topicOptionHint: { color: palette.muted, fontSize: 13, lineHeight: 19 },
+  topicCheck: { color: palette.accent, fontSize: 18, fontWeight: '900', marginLeft: 10 },
 });

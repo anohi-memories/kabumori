@@ -10,6 +10,9 @@ import { formatDateJa, type PersonalizedReport } from '@/lib/report-presentation
 import { dashboardGreeting, dashboardSectionError, todayJst } from '@/lib/dashboard';
 import { currentReport, buildReportHighlights } from '@/lib/home-report-highlights';
 import { splitHomeNewsSections } from '@/lib/home-news-sections';
+import { fetchDailyTopic } from '@/lib/daily-topic';
+import { readTopicLevel, writeTopicLevel } from '@/lib/topic-level-storage';
+import type { HomeTopic, TopicLevel } from '@/lib/home-topic';
 import { KABUMORI_COLORS, type KabumoriPalette } from '@/constants/kabumori-theme';
 import { SettingsSheet } from '@/components/settings-sheet';
 import { ReportHighlightCard } from '@/components/home/report-highlight-card';
@@ -25,37 +28,68 @@ export default function HomeScreen() {
   const greeting = dashboardGreeting();
   const [news, setNews] = useState<ImportantStockNews[]>([]);
   const [reports, setReports] = useState<PersonalizedReport[]>([]);
+  const [topic, setTopic] = useState<HomeTopic | null>(null);
+  const [topicLevel, setTopicLevel] = useState<TopicLevel>('beginner');
   const [loading, setLoading] = useState(true);
+  const [topicLoading, setTopicLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [errors, setErrors] = useState({ news: '', reports: '' });
+  const [errors, setErrors] = useState({ news: '', reports: '', topic: '' });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { session } = useAuth();
 
-  // Two network calls total (news feed + reports), down from three: the home
-  // screen no longer fetches tracked_stocks directly -- market vs. holding
+  const todayJstValue = useMemo(() => todayJst(), []);
+
+  // Three network calls total (news feed + reports + daily topic), down from
+  // the original three-call layout's tracked_stocks fetch: market/holding
   // news comes from the same get_my_important_stock_news feed via
-  // tracking_type, so nothing is fetched twice.
+  // tracking_type, so nothing is fetched twice. The topic level preference
+  // itself is a fast local AsyncStorage read, not a network call.
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
-    const [newsResult, reportsResult] = await Promise.allSettled([
+    const level = await readTopicLevel();
+    setTopicLevel(level);
+    const [newsResult, reportsResult, topicResult] = await Promise.allSettled([
       fetchMyImportantStockNews(),
       fetchRecentReports(),
+      fetchDailyTopic(level, todayJstValue),
     ]);
     setErrors({
       news: newsResult.status === 'rejected' ? dashboardSectionError('news') : '',
       reports: reportsResult.status === 'rejected' ? dashboardSectionError('reports') : '',
+      topic: topicResult.status === 'rejected' ? dashboardSectionError('topic') : '',
     });
     if (newsResult.status === 'fulfilled') setNews(newsResult.value.items);
     if (reportsResult.status === 'fulfilled') setReports(reportsResult.value);
+    if (topicResult.status === 'fulfilled') setTopic(topicResult.value);
     setLoading(false);
     setRefreshing(false);
-  }, []);
+  }, [todayJstValue]);
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
+  // Settings changes the level and immediately refetches just the topic
+  // (same deterministic RPC, so the new level's topic is stable too) -- the
+  // rest of Home is untouched. Returns whether the write actually
+  // succeeded, so Settings never claims a save that didn't happen.
+  const handleTopicLevelChange = useCallback(async (level: TopicLevel): Promise<boolean> => {
+    const ok = await writeTopicLevel(level);
+    if (!ok) return false;
+    setTopicLevel(level);
+    setTopicLoading(true);
+    try {
+      const nextTopic = await fetchDailyTopic(level, todayJstValue);
+      setTopic(nextTopic);
+      setErrors((previous) => ({ ...previous, topic: '' }));
+    } catch {
+      setErrors((previous) => ({ ...previous, topic: dashboardSectionError('topic') }));
+    } finally {
+      setTopicLoading(false);
+    }
+    return true;
+  }, [todayJstValue]);
+
   const newsSections = useMemo(() => splitHomeNewsSections(news), [news]);
-  const todayJstValue = useMemo(() => todayJst(), []);
   const report = useMemo(() => currentReport(reports, todayJstValue), [reports, todayJstValue]);
   const highlights = useMemo(() => buildReportHighlights(report), [report]);
   const today = useMemo(() => formatDateJa(todayJstValue), [todayJstValue]);
@@ -115,13 +149,21 @@ export default function HomeScreen() {
           onRetry={() => void load(true)}
         />
 
-        <TopicCard palette={palette} topic={null} loading={false} />
+        <TopicCard
+          palette={palette}
+          topic={topic}
+          loading={(loading && !topic) || topicLoading}
+          error={errors.topic}
+          onRetry={() => void load(true)}
+        />
 
         <AskAiEntry palette={palette} />
       </ScrollView>
       <SettingsSheet
         visible={settingsOpen}
         email={session?.user.email ?? null}
+        topicLevel={topicLevel}
+        onTopicLevelChange={handleTopicLevelChange}
         onClose={() => setSettingsOpen(false)}
       />
     </SafeAreaView>
