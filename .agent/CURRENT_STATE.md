@@ -90,6 +90,9 @@
 
 ## G2 shared analysis production observation
 
+- 2026-09-28 recovery note: accidental local shared-checkout `supabase/config.toml` overwrite was restored; production mutation=0. Continue deployment only from dedicated checkout `/Users/yuya/Developer/kabumori-g2-market-report-reliability` at fresh main `fc0afd32`. Historical branch `g2-shared-analysis-reliability-20260928` and shared checkout are not deployment workspaces.
+
+
 - assigned: `kabumori-shared-analysis-prod-deploy-observe-20260928`.
 - deploy only `market-report-analysis` from merged main; preserve verify_jwt=false and all cron/settings.
 - no manual cycle forcing; observe the next natural morning and close cycle.
