@@ -1,10 +1,208 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-shared-analysis-prod-deploy-observe-20260928
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Sonnet5（高）
+- purpose: PR #45でmerge済みのbounded transport retryを、consumer gate OFFのままproduction `market-report-analysis` のみにcontrolled deployし、deployed sourceをread-back照合したうえで、次の自然な朝刊・大引けcycleで共有packet完成率とretry diagnosticsを確認する。
+
+## Accepted baseline
+
+- shared unification proof merged in PR #43.
+- retry hardening PR #45 merged -> main `6ea31efec1876596085e9b66727b2626ab0ba477`.
+- `app_enabled=false`, `x_enabled=false`.
+- no Codex review required before this gated-OFF deploy; focused review is deferred to the consumer activation/public-X release boundary.
+- 2026-09-28 morning shared analysis failed with OpenAI 429; 2026-09-28 close shared analysis completed on retry schedule.
+
+## Why Sonnet5（高）
+
+This is a narrow production rollout/read-back/observation task with source already reviewed and merged. No new architecture or code design is expected. Escalate only if live behavior diverges from the reviewed source.
+
+## Mandatory startup
+
+1. Use dedicated G2 worktree/checkout.
+2. Read:
+   - `PROJECT_RULES.md`
+   - `.agent/ORCHESTRATION.md`
+   - `.agent/CURRENT_STATE.md`
+   - this TASK and prior K2 report
+3. Fresh fetch `origin/main`; require merge `6ea31efe`.
+4. Confirm no newer commit changed `supabase/functions/market-report-analysis/**` after the reviewed merge without explicit review.
+5. Read production:
+   - current `market-report-analysis` version/source
+   - verify_jwt
+   - consumer settings
+   - cron schedule
+6. Confirm:
+   - app_enabled=false
+   - x_enabled=false
+   - no active slot owns `market-report-analysis/**`
+
+If any precondition differs unexpectedly: STOP.
+
+## Deploy scope
+
+Deploy only:
+
+- `supabase/functions/market-report-analysis`
+
+From exact merged main source containing PR #45.
+
+Rules:
+- preserve `verify_jwt=false`
+- do not deploy any other Edge Function
+- do not change DB/schema/RPC
+- do not change cron
+- do not change consumer settings
+- do not invoke X
+- do not modify legacy X morning/close/VOICE
+
+After deploy:
+- read production function version
+- download/read-back deployed source
+- verify reviewed retry code matches merged main
+- verify app_enabled=false / x_enabled=false
+- verify cron unchanged
+
+## No manual cycle forcing
+
+Do NOT manually invoke `market-report-analysis` against a real current cycle merely to test retry.
+
+Reason:
+- claim/attempt counters are production state
+- forcing a run can consume an attempt and distort natural validation
+
+Use natural cron only.
+
+Safe read-only queries/log inspection are allowed.
+
+## Natural morning validation
+
+On the next JPX trading morning, inspect the natural shared cycle.
+
+Capture without sensitive content:
+
+- cycle_status
+- report_status
+- report_attempt_count
+- report_last_error
+- current_data_packet_id
+- current_report_packet_id
+- analysis diagnostics:
+  - transport_retries
+  - transport_retry_wait_ms
+  - transport_retry_reasons
+  - transport_retry_exhausted
+  - transport_success_after_retry
+- packet creation count / duplicate check
+- timestamps / duration
+
+PASS conditions:
+- if no upstream transient occurs: normal completion with retry count 0 is valid
+- if a retryable transient occurs: bounded retry behavior matches policy and can recover
+- no duplicate report packet
+- no unexpected claim churn
+- no consumer gate activation
+
+If morning fails for a retryable condition despite reviewed retry, preserve evidence and continue only with read-only diagnosis; do not hot-patch blindly.
+
+## Natural close validation
+
+On the same next JPX trading day, inspect the natural close cycle.
+
+Capture the same fields.
+
+Also distinguish:
+- transport failures
+- existing `ANALYSIS_FACT_FAILED` content failure
+
+Do not treat a Fact failure as a transport-retry bug.
+
+PASS conditions:
+- shared close ultimately completes safely under existing scheduled retry semantics
+- no duplicate packet
+- transport diagnostics are accurate
+- no regression in cycle fencing
+
+## Consumer safety check
+
+Throughout:
+- `app_enabled=false`
+- `x_enabled=false`
+
+The app/X continue legacy behavior for user-facing output while shared packet generation is observed in background.
+
+Do not judge old X VOICE/close failures as blockers for this task; they are being replaced by the shared path.
+
+## No source changes expected
+
+This is deployment/observation only.
+
+If a source bug is discovered:
+- do not patch production ad hoc
+- record exact repro/evidence
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for a new source TASK
+
+## Completion conditions
+
+PASS when:
+
+1. exact PR #45 source is deployed to `market-report-analysis` only.
+2. deployed source/read-back matches merged main.
+3. verify_jwt and cron are unchanged.
+4. app/x consumer gates remain false.
+5. at least one natural morning and one natural close shared cycle after deploy are observed.
+6. no duplicate packet/idempotency regression occurs.
+7. retry diagnostics behave coherently.
+8. any remaining failure is correctly classified as transport vs Fact/content vs data.
+
+## Required Report
+
+- task_id
+- result
+- fresh main SHA
+- worktree/branch
+- production version before/after
+- deployed source identity/read-back
+- verify_jwt before/after
+- app_enabled/x_enabled before/after
+- cron before/after
+- morning cycle result + retry diagnostics
+- close cycle result + retry diagnostics
+- packet IDs / duplicate check
+- production mutations
+- rollback status
+- remaining issues
+- recommendation:
+  - ready for consumer activation review
+  - or further reliability work needed
+- Codex review recommendation for activation boundary
+
+When complete:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+Pending.
+
+---
+
+# Previous completed G2 task — reliability hardening
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-shared-report-reliability-hardening-20260928
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Opus5.5（高）
 - purpose: 共通 `market_report_packet` をX/アプリの正本として本番切替できるようにするため、`market-report-analysis` のOpenAI 429/一時障害耐性を最小変更で強化し、朝刊・大引けの共有packet完成率を上げる。旧X生成/VOICE経路は修正しない。
@@ -387,6 +585,39 @@ When complete:
 
 - **本PR #45は、軽いreviewを推奨**。本番のcron経路の挙動（再試行の回数と待ち時間）を変えるため。
 - 分類（何を再試行するか）と上限の確認が中心で、重いreviewは不要と判断している。
+
+
+## Final K2 — shared analysis reliability hardening
+
+Verdict: **PASS**.
+
+Accepted:
+- PR #45 head `b37e1c921dff47430b8c1d70991bc8eadfc09190`
+- changed files limited to:
+  - `market-report-analysis/handler.ts`
+  - `market-report-analysis/transport_retry.ts`
+  - `market-report-analysis/transport_retry_test.ts`
+- bounded retry only for transient 429 / selected 5xx / network TypeError
+- non-retryable 4xx, quota exhaustion, timeout abort, local validation and Fact rejection remain non-retry transport paths
+- run budget: <=3 extra requests, <=30s wait; per-call <=2 retries
+- existing claim/complete/fail fencing and packet idempotency untouched
+- related suite 338/338 PASS; check/lint/diff PASS
+- production gates remained app=false / x=false; source task production mutation=0
+- no overlap with PR #41 / important-news / MIC / G3/G4
+
+ChatGPT review decision:
+- no separate Codex review required for this source PR before gated-OFF deployment.
+- reason: the change is isolated to background shared-analysis transport reliability, consumers remain OFF, DB/cron/auth/public-X behavior is unchanged, and deterministic regression coverage is strong.
+- Codex is reserved for the release boundary before consumer activation/public X use. H1 is currently occupied and H2 is preserved deferred; no slot is overwritten.
+
+Merge:
+- PR #45 merged by ChatGPT after diff/scope/mergeability review.
+- merge/main SHA: `6ea31efec1876596085e9b66727b2626ab0ba477`.
+
+Next:
+- deploy only `market-report-analysis` from merged main with both consumer gates OFF.
+- verify deployed source read-back.
+- observe the next natural morning and close cycles; no manual cycle forcing.
 
 
 ---
@@ -1149,5 +1380,6 @@ Accepted:
 
 G2 is closed for now.
 Next gate: Monday 2026-09-28 natural morning 08:35 JST and close 17:15 JST read-only validation. Phase 2 warn-deliver remains deferred until telemetry is observed.
+
 
 
