@@ -3,8 +3,8 @@
 - task_id: kabumori-home-news-first-ui-implementation-20260928
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（中）
 - purpose: ユーザー承認済みの「ニュース中心・AI整理型」トップページを、現在のExpo/React Nativeアプリへ実装可能な形で落とし込む。既存データ取得を再利用し、重要ニュース・保有銘柄ニュース・今日のレポートを整理して見せる。ニュース取得基盤/API最適化/Edge Functionには触れない。
@@ -530,3 +530,44 @@ Same as the prior report (character asset, topic backend, AI chat route, bottom-
 ### Next recommendation
 
 K1/ChatGPT re-review of the fix commit on PR #46; merge if satisfied, or a further changes-required round if not.
+
+
+## Final K1 — PASS / merged
+
+- verdict: **PASS** after the K1 correctness fixes.
+- PR #46 final head: `f95f9c2f629dbc04224edd0e5a2b3b53b0b2d810`.
+- merged by ChatGPT with expected-head protection -> main merge commit `58b53777ce64c054f6c8859940914b71a89472d4`.
+- GitHub reported PR mergeable before merge; post-merge main contains the corrected Home implementation.
+
+### K1 fixes verified
+
+1. Home hero is strictly scoped to `trading_date === todayJst()`; yesterday/future rows cannot appear as "今日のかぶモリレポート".
+2. Report fetch failure has explicit error + retry and is no longer mislabeled as "まだありません".
+3. Point rows have no individual chevrons; one report CTA remains the only detail transition.
+4. Home uses one existing important-news feed for both market and holding sections and one reports read: home network fan-out remains 2.
+5. No page-load LLM generation, no DB/RPC/Edge/cron/Auth/API-optimization change, and production mutation remains 0.
+
+### Verification evidence accepted
+
+- Home tests: 22/22 PASS.
+- Existing focused regressions: 38/38 PASS.
+- `npx tsc --noEmit`: 0 new src errors; 2 unrelated pre-existing CSS-module errors remain.
+- Expo config resolves.
+- Expo web export succeeds and home server-renders.
+- `git diff --check`: clean.
+- PR head checks observed green before merge; merge commit verified on main.
+
+### Review decision
+
+No Codex review required. The delta is UI/read-only/local presentation, with no DB/Auth/API/security/production boundary change.
+
+### Remaining follow-ups — not blockers for this merge
+
+- approved mini Yume-chan + robot cutout assets for the replaceable character slot;
+- actual daily-topic backend/data source + beginner/intermediate/advanced setting;
+- actual AI chat route/service;
+- final bottom-tab redesign once those routes exist;
+- authenticated real-device visual QA of the new Home layout and real data;
+- real news thumbnail metadata/source work belongs to the separate news-acquisition lane, not this G1 UI task.
+
+This G1 task is closed.
