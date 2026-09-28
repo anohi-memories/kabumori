@@ -44,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: review_required
 - task_id: kabumori-daily-topic-level-settings-20260928
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: K1 changes required on PR #48 before DB/RPC review: prevent stale previous-level topic after level-change fetch failure, refresh JST date on each load/focus, and remove abs(hashtext) int4 overflow edge; source-only, production mutation forbidden; recommended Sonnet5（高）
+- allocation: K1 source PASS at PR #48 `98732bf`; migration/RPC independent review still mandatory before merge/apply. H1 currently occupied by X Auth review; H2 deferred task protected, so no review slot overwritten. Preferred next H1 with Sol（高） when genuinely free.
 
 ## Claude G2
 - owner: claude
