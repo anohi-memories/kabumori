@@ -1620,3 +1620,30 @@ Recommended Claude model: Sonnet5（高）.
 - G4 posting backend files are excluded.
 - if a new privileged account-deletion boundary is implemented, independent review is mandatory; with Codex constrained, use separate-room Claude Opus5.5（高） in an independent worktree.
 - implementation recommended model: **Opus5.5（高）**.
+
+
+## G3 / G4 temporarily closed by user — 2026-09-28
+
+User requested both X-app Claude slots to stop at the current clean boundary.
+
+### G3
+- slot: G3
+- status: **idle / unassigned**
+- previous task: `x-social-mobile-account-lifecycle-release-phase4-20260928`
+- state at close: in progress, no completion Report yet; do **not** treat as done/PASS.
+- accepted foundation remains Auth Phase 3 merged main `ff46c397018a215c53b091feaae86076b37489a7`.
+- any local branch/worktree changes from the interrupted session must be preserved and inspected before future reuse.
+- future resume requires a new explicit TASK or reactivation.
+- recommended model on resume: **Opus5.5（高）**.
+
+### G4
+- slot: G4
+- status: **idle / unassigned**
+- previous task: `x-social-mobile-posting-backend-foundation-phase3-20260928`
+- state at close: safe STOP after Stage A; no source/migration/RPC/Edge changes; production_mutation=0.
+- key preserved finding: production lacks an applied canonical user→brand/workspace membership boundary required for safe mobile post read/edit authorization.
+- next dependency before resuming: review/decide the existing `brand_memberships` Phase 4 candidate, then resume post-body/read/edit/failure-reason design on that single membership authority.
+- no review is pending for the stopped G4 task because it introduced no new boundary.
+- recommended model on resume: **Opus5.5（高）**.
+
+No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
