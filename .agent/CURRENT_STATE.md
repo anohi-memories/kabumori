@@ -55,17 +55,15 @@
 - follow-ups: approved mini Yume+robot cutout assets, topic backend + level setting, AI route/service, final tab redesign, authenticated real-device Home visual QA.
 
 
-## K1 Daily topic + knowledge level
+## Final K1 Daily topic + knowledge level
 
-- verdict: **PASS for source implementation**.
-- PR #48 head `98732bf` is OPEN/mergeable; production mutation 0; migration not applied.
-- prior K1 fixes verified: cross-level/date stale topic hidden via request key, JST date refreshed per load/focus/refresh, `hashtext` selector casts to bigint before `abs`.
-- accepted architecture: existing `public.tips` reuse, local beginner/intermediate/advanced preference, authenticated read-only narrow RPC, no LLM/news/G2/X overlap.
-- verification accepted: topic 21/21, focused regressions 71/71, migration dry-run 12/12, Expo/TypeScript/diff checks clean apart from known unrelated CSS module errors.
-- merge/apply remains blocked on independent Codex DB/RPC review.
-- H1 is currently occupied by X Auth final acceptance; H2 deferred incomplete review is protected. No H slot was overwritten.
-- preferred next review when free: H1, recommended Sol（高）.
-
+- verdict: **PASS**.
+- PR #48 reviewed head `98732bf` received independent separate-Claude DB/RPC review PASS with no P1/P2/P3 findings.
+- reviewer validated SECURITY DEFINER/search_path/ACL/RLS/read-only/determinism/fail-closed behavior against a disposable PostgreSQL 17.11 instance and ran focused app tests 30/30 PASS.
+- ChatGPT merged the exact reviewed head -> main `9ccbb59da2b6c48b0022ec2a31305a69262c2966`.
+- no Codex review budget was used.
+- production migration apply remains **not performed**; app code is merged but RPC is not live until the migration is applied in a later controlled step.
+- follow-ups still open: production migration apply + authenticated real-device topic/settings QA, approved mini Yume+robot assets, AI route/service, final tab redesign.
 
 
 ## H2 stale review cleanup
@@ -82,7 +80,7 @@
 
 - H1: `review_required` — `x-social-mobile-auth-phase2-final-acceptance-review-20260928`; PASS-WITH-FIX at PR #47 `ed5f8b7` (initial G3 correction `5fd483a`); prior 7 + additional 3 source boundaries accepted. H1 pinned callback/recovery contexts, retained in-flight exchanges and limited provider authorize paths; fix pushed. Mobile 43/43 + data-view 14/14, typecheck/lint/Web+iOS export and four H1 mutation probes PASS; exact-head Preview SUCCESS. Production mutation 0; awaiting C1/source merge, real provider/device activation remains separately gated; see latest `.agent/CODEX_REPORT.md`.
 - H2: `idle` — unassigned; stale deferred PR #32 morning Fact-contract review was closed as obsolete after PR #32 had already been merged. Historical partial report preserved; slot is now genuinely reusable.
-- G1: `review_required` — `kabumori-daily-topic-level-settings-20260928`; K1 source PASS at PR #48 `98732bf`; awaiting independent DB/RPC review before merge/apply. H1 occupied, H2 protected deferred; preferred next H1 Sol（高） when free.
+- G1: `done` — `kabumori-daily-topic-level-settings-20260928`; independent separate-Claude DB/RPC PASS, PR #48 merged -> `9ccbb59d`; production migration not yet applied, so live topic RPC remains a separate controlled step.
 - G2: `ready` — `kabumori-shared-analysis-prod-deploy-observe-20260928`; PR #45 merged; controlled deploy of market-report-analysis only with consumer gates OFF, then natural morning+close observation; recommended Sonnet5（高）
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS
