@@ -1,6 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 import { createContext, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 import { getSupabaseConfig, supabase } from '@/lib/supabase';
+import { signInErrorMessage } from '@/lib/auth-errors';
 
 type AuthContextValue = {
   session: Session | null;
@@ -41,7 +42,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       if (!supabase) return { ok: false, message: error ?? 'Supabase接続設定がありません。' };
       setError(null);
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInError) { setError('メールアドレスまたはパスワードを確認してください。'); return { ok: false, message: 'メールアドレスまたはパスワードを確認してください。' }; }
+      if (signInError) { const message = signInErrorMessage(signInError); setError(message); return { ok: false, message }; }
       return { ok: true };
     },
     signOut: async () => {

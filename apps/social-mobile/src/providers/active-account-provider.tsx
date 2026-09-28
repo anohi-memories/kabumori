@@ -8,7 +8,12 @@ const ActiveAccountContext = createContext<ActiveAccountContextValue | null>(nul
 
 export function ActiveAccountProvider({ children }: PropsWithChildren) {
   const { status, snapshot } = useDataStatus();
-  const accounts = status === 'ready' && snapshot ? snapshot.accounts : mockRepository.getAccounts();
+  // Mock accounts only in the explicit local preview. With real data, a blocked/loading/unavailable
+  // state shows no account at all rather than someone else's (fake) account.
+  const accounts = useMemo(
+    () => (status === 'mock_preview' ? mockRepository.getAccounts() : status === 'ready' && snapshot ? snapshot.accounts : []),
+    [snapshot, status],
+  );
   const [activeId, setActiveId] = useState(accounts[0]?.id ?? '');
   const value = useMemo(() => ({ accounts, activeAccount: accounts.find((account) => account.id === activeId) ?? accounts[0] ?? null, selectAccount: (accountId: string) => { if (accounts.some((account) => account.id === accountId)) setActiveId(accountId); } }), [accounts, activeId]);
   return <ActiveAccountContext.Provider value={value}>{children}</ActiveAccountContext.Provider>;
