@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: idle
-- task_id: none
+- status: ready
+- task_id: x-social-mobile-account-lifecycle-release-phase4-20260928
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: unassigned; user-requested pause. Previous Phase 4 task remains preserved in TASK history and was not completed. No automatic restart.
+- allocation: resumed from preserved checkpoint; continue only in existing G3 worktree; source-only completion; independent review required before merge/deploy; recommended Opus5.5（高）
 
 ## Claude G4
 - owner: claude
