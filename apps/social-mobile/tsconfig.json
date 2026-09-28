@@ -2,7 +2,12 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
-    "paths": { "@/*": ["./src/*"] }
+    "paths": { "@/*": ["./src/*"] },
+    // Lets *.test.ts files import their subject with an explicit ".ts" extension, which
+    // `node --experimental-strip-types --test` requires (same convention as apps/admin).
+    // Type-checking-only; noEmit is already true via expo/tsconfig.base.
+    "allowImportingTsExtensions": true,
+    "types": ["node"]
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"]
 }
