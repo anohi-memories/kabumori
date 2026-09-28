@@ -1682,3 +1682,14 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - no production mutation/deploy/migration apply/real account deletion.
 - independent review mandatory before merge because privileged deletion boundary is included.
 - recommended Claude model: Opus5.5（高）.
+
+
+## Final K3 account lifecycle Phase 4
+
+- verdict: **PASS for source-only implementation**.
+- draft PR #52 head `12146c4ab2bc635a2781b673146e1f8ad8350258`.
+- implemented: legal/privacy/support config, account deletion UX, recent-auth reauthentication flow, source-only service_role deletion RPC candidate, `social-mobile-account-delete` Edge candidate, X revoke, Apple revoke, Vault cleanup and hashed audit.
+- tests: mobile 71/71, data-view 14/14, Deno 13/13, disposable Postgres behavior/race/cleanup PASS, mutation checks 22/22; typecheck/lint/Expo web+iOS export PASS.
+- production_mutation=0; no migration apply, Edge deploy, real deletion or X post.
+- independent review mandatory before merge because this crosses auth-admin/Vault/service_role/external revoke boundaries.
+- use a separate Claude Opus5.5（高） review in an independent worktree; do not merge PR #52 before that review.
