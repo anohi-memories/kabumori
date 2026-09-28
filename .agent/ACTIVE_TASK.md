@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - task_id: x-social-mobile-multi-provider-auth-focused-review-20260928
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: review complete; FAIL at PR #47 `7bda196`, seven Auth-boundary negative probes reproduced; no source fix or production mutation; not merge/activation-ready; awaiting C1 and a coordinated G3 correction decision
+- allocation: closed; Final C1 FAIL on PR #47 `7bda196`; seven Auth findings reproduced; returned to G3 bundled correction
 
 ## Codex H2
 - owner: codex
@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: x-social-mobile-multi-provider-auth-phase2-20260928
+- status: ready
+- task_id: x-social-mobile-auth-phase2-bundled-correction-20260928
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: closed; Final K3 PASS for source implementation at PR #47 `7bda196`; Auth-focused H1 review assigned before merge/activation
+- allocation: reassigned after C1 FAIL; bundled correction for linking URL, callback race, flowId, signup enumeration, provider-token persistence, recovery binding, callback parser, onboarding user-switch and provider readiness; recommended Opus5.5（高）
 
 ## Claude G4
 - owner: claude
