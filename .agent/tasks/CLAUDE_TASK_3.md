@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-account-lifecycle-release-phase4-20260928
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: idle
+- next_owner: none
 - priority: high
 - recommended_model: Opus5.5（高）
 - purpose: Auth Phase 3の次として、公開前に必要なアカウント管理・アカウント削除・プライバシー/法務導線を棚卸しし、安全なsource/UI設計を実装する。production user deletionやAuth設定変更は行わない。
@@ -198,3 +198,15 @@ Then:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for K3.
+
+
+## Paused by user — 2026-09-28
+
+- user requested G3/G4 to be closed at a clean stopping point.
+- this TASK is **not completed** and must not be treated as PASS/done.
+- current accepted base remains Auth Phase 3 merged main `ff46c397018a215c53b091feaae86076b37489a7`.
+- no completion Report was present at close time.
+- preserve any existing G3 branch/worktree/local changes; do not discard, stage, commit, or merge them merely because the slot is closed.
+- if an active Claude session sees this update, stop creating new changes, preserve its current checkpoint, and report any uncommitted work before exit.
+- resume only after ChatGPT assigns a new explicit G3 TASK or reactivates this task as `ready`.
+- recommended model on resume: **Opus5.5（高）**.
