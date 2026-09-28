@@ -545,3 +545,41 @@ Same as the prior report (real-device visual QA, sign-out AsyncStorage-clearing 
 ### Next recommendation
 
 K1 re-review of the fix commit on PR #48 → if satisfied, route the now-stable source to an open H1/H2 slot for the DB/RPC (grants/RLS/security-definer/search_path) review before any merge or migration apply.
+
+
+## K1 re-review — PASS for source / Codex DB-RPC review still required
+
+- verdict: **PASS for G1 source implementation** at PR #48 head `98732bf36b79190d52e6bca779fd19a7eb2b8a33`.
+- PR #48 is OPEN and GitHub reports mergeable.
+- The three prior K1 findings are resolved:
+  1. loaded topic is keyed by `level + JST date`; old-level/old-date content cannot remain visible as current after a level/date change.
+  2. `todayJst()` is resolved on each load/focus/refresh and used for topic request, report scoping and header date.
+  3. deterministic SQL selector casts `hashtext()` to bigint before `abs()`, removing the int4 minimum overflow edge.
+- same-key refresh is intentionally allowed to keep last-good topic content; cross-key stale content is hidden.
+- tests/report evidence accepted: topic 21/21, total focused regression 71/71, migration functional/security dry-run 12/12, no new src TypeScript errors, Expo config/export and diff checks PASS.
+- production mutation remains 0; migration is not applied.
+- no overlap with `important-news-monitor`, `market-report-analysis`, X useful-tip scheduler or social-mobile.
+- local topic preference remaining on device across sign-out/account deletion remains accepted for this phase because it is non-sensitive presentation state.
+
+### Review routing
+
+This PR contains a new migration/RPC and **must not merge/apply before independent Codex DB/RPC review** of:
+- SECURITY DEFINER boundary
+- `search_path = ''`
+- grants / PUBLIC / anon / authenticated execute ACL
+- unchanged table RLS/table SELECT exposure
+- deterministic selector/read-only behavior
+- returned-column minimization and input fail-closed behavior
+
+At this K1 check:
+- H1 is occupied by `x-social-mobile-auth-phase2-final-acceptance-review-20260928`.
+- H2 preserves deferred incomplete `kabumori-pr32-morning-fact-contract-final-review-20260925` and is not available.
+- therefore no H slot is overwritten.
+
+Keep:
+- status: `review_required`
+- next_owner: `chatgpt`
+until a real H slot is free.
+
+Preferred review slot when available: **H1**.
+Recommended Codex model: **Sol（高）**.
