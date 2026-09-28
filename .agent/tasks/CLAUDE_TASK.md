@@ -1,10 +1,254 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-shared-report-reliability-hardening-20260928
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Opus5.5（高）
+- purpose: 共通 `market_report_packet` をX/アプリの正本として本番切替できるようにするため、`market-report-analysis` のOpenAI 429/一時障害耐性を最小変更で強化し、朝刊・大引けの共有packet完成率を上げる。旧X生成/VOICE経路は修正しない。
+
+## Accepted K2 baseline
+
+- PR #43 merged -> main `a0ac6484ecdc59670241c2ffb2e0340e93fd5994`.
+- One shared packet identity feeding:
+  - X simplified
+  - App 市場全体
+  - App マイポート
+  is proven.
+- `app_enabled=false`, `x_enabled=false` remain the required production state for this task.
+- 2026-09-28:
+  - shared morning data completed but shared analysis failed: `ANALYSIS_OPENAI_GENERATE_FAILED:429`
+  - shared close analysis ultimately completed on report attempt 2
+  - old X close failed `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE`
+  - App legacy close completed
+- Therefore the architecture is accepted; the immediate blocker is shared-analysis reliability, not old X VOICE or old X close logic.
+
+## Product decision for degradation
+
+For the initial shared cutover, **do not fall back to a second independent legacy market analysis when the shared packet is unavailable**.
+
+Reason:
+- the user's priority is one market truth for X and App
+- legacy fallback would reintroduce contradictory market narratives
+
+Current fail-closed semantics stay in place during this task.
+
+A future "portfolio-only degraded mode" that does not invent/recompute market direction may be designed separately if needed. Do not implement it here.
+
+## Mandatory startup
+
+1. Dedicated independent G2 worktree/checkout.
+2. Read:
+   - `PROJECT_RULES.md`
+   - `.agent/ORCHESTRATION.md`
+   - `.agent/CURRENT_STATE.md`
+   - this TASK
+   - previous K2 report
+   - `docs/market-report-shared-platform/DESIGN.md`
+3. Fresh fetch `origin/main`; require main to contain merge `a0ac6484`.
+4. Read current production versions/settings before mutation.
+5. Confirm no active slot overlaps:
+   - `supabase/functions/market-report-analysis/**`
+   - relevant shared cycle scheduler/retry ownership
+6. Preserve PR #41 / G3/G4 / important-news / MIC ownership boundaries.
+
+## Primary investigation
+
+Read-only first. Determine exactly why morning 2026-09-28 ended in 429 while close later completed.
+
+Inspect:
+- current `market-report-analysis` requester / handler
+- existing report claim/retry semantics
+- existing cron schedule and retry times
+- whether 429 response carries `Retry-After`
+- how many OpenAI calls can occur from:
+  - first generation
+  - regeneration after local/Fact failure
+  - Fact call
+  - scheduled retry
+- current time budget / Edge execution limits
+- idempotency / claim fencing when a retry occurs
+
+Do not guess the retry model.
+
+## Required implementation outcome
+
+Implement the narrowest safe reliability improvement for transient upstream failures.
+
+Preferred direction, if supported by the audit:
+- retry only retryable transport/upstream conditions:
+  - HTTP 429
+  - HTTP 5xx
+  - bounded network/timeout failures where safe
+- honor `Retry-After` when present and sane
+- otherwise use a short capped backoff
+- strict maximum retry count
+- no infinite loops
+- no retry on:
+  - local schema/validation failure
+  - Fact rejection
+  - non-retryable 4xx
+  - malformed product input
+- preserve current claim/idempotency model
+- preserve one completed packet as the only truth
+- keep cost bounded and observable
+
+If the existing scheduled retry is already sufficient and the better fix is scheduling rather than in-function retry, document exact evidence and implement the safer minimal alternative. Do not add a new cron blindly.
+
+## Call-budget safety
+
+Explicitly calculate and test worst-case OpenAI call count.
+
+The reliability layer must not accidentally multiply:
+- generation regeneration
+- Fact
+- scheduled retry
+into an unbounded or unexpectedly expensive sequence.
+
+Report:
+- max generation calls per run
+- max Fact calls per run
+- max transient retry calls per request/run
+- max scheduled attempts per cycle
+- worst-case bounded total
+
+## Observability
+
+Add only non-sensitive observability needed to distinguish:
+- upstream 429
+- 5xx/network retry
+- retry exhausted
+- success after retry
+
+Do not log:
+- prompts
+- user portfolio data
+- secrets
+- raw credentials
+
+Prefer existing diagnostics fields/log structure; no schema change unless absolutely necessary.
+
+## Tests
+
+At minimum:
+
+- first generation gets 429 then succeeds
+- repeated 429 exhausts bounded retry and fails cleanly
+- 500 then success where retryable
+- non-retryable 4xx does not retry
+- Fact/local rejection does not trigger transport retry
+- no duplicate `market_report_packet`
+- claim/idempotency remains intact
+- completed cycle remains immutable/current correctly
+- morning and close both covered
+- existing market-report-analysis suite
+- market-report-data-packet related regression
+- shared unification tests from PR #43
+- X shared consumer
+- personalized shared consumer
+- `deno check`
+- `deno lint`
+- `git diff --check`
+
+Use injected fake requester/fetch/timer where possible. Do not sleep real test time unnecessarily.
+
+## Production / deploy constraint
+
+This task is **source + deterministic validation only** unless ChatGPT explicitly extends it after K2.
+
+Forbidden:
+- `app_enabled=true`
+- `x_enabled=true`
+- real X post
+- consumer-gate mutation
+- production cron mutation
+- migration apply
+- unrelated Edge deploy
+- legacy X morning/close VOICE patch
+
+If a production deploy is necessary to prove the retry itself, STOP at source-ready and request the next gate.
+
+## Scope boundaries
+
+Allowed:
+- `supabase/functions/market-report-analysis/**`
+- narrowly related shared report tests/helpers/docs
+
+Avoid unless truly required:
+- `market-report-data-packet/**`
+- `personalized-reports/**`
+- X consumer code
+
+Forbidden:
+- `important-news-monitor/**`
+- news API optimization/shadow files
+- MIC implementation
+- `x-test-post/index.ts`
+- PR #41 Stage 3B files
+- G3/G4 social-mobile
+- Admin/Auth/OAuth/Vault
+- unrelated migrations/RPCs
+
+## Completion conditions
+
+PASS only if:
+
+1. 2026-09-28 429 failure mode is reproduced or mechanistically demonstrated.
+2. Retryable upstream errors have a bounded, tested recovery path.
+3. Non-retryable/content failures are not retried as transport failures.
+4. Cost/call amplification is bounded and documented.
+5. Claim/idempotency behavior remains safe.
+6. Existing shared unification proof still passes.
+7. No consumer gate or production publishing was activated.
+8. Exact next cutover/deploy plan is written.
+
+## Required Report
+
+- task_id
+- result
+- fresh main SHA
+- worktree/branch
+- 2026-09-28 failure analysis
+- existing retry/cron behavior
+- implemented retry policy
+- changed_files
+- tests
+- max/worst-case call budget
+- diagnostics/observability changes
+- commit_hash
+- PR
+- push
+- deploy
+- app_enabled/x_enabled before/after
+- production mutations
+- overlap checks
+- remaining issues
+- rollback plan
+- exact next step toward shared production cutover
+- Codex review recommendation
+
+When complete:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+Pending.
+
+---
+
+# Previous completed G2 task — shared unification proof
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-shared-market-report-unification-20260928
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Opus5.5（高）
 - purpose: 朝刊・大引けの「市場全体分析」を `market_data_packet -> market_report_packet` に一本化し、Xはその簡易版、かぶモリアプリは市場全体の完全版＋マイポート完全版として同じ正本から生成できることを非破壊で実証する。旧X朝刊/大引けのVOICE NG個別修正は凍結し、共通化後に必要な問題だけ再評価する。
@@ -505,6 +749,36 @@ When complete:
 - **X gateのON（手順4）の直前には推奨**：公開X投稿の境界を越えるため。App gateのON（手順3）も、最初の本番配信なので、軽いreviewがあると望ましい。
 
 
+## Final K2 — shared market report unification proof
+
+Verdict: **PASS for source/non-destructive unification proof; production cutover NOT yet approved**.
+
+Accepted:
+- PR #43 head `4aa4251de07b446fedf9e6bec09f24f50dc7d810`
+- merged by ChatGPT after scope/mergeability review -> main `a0ac6484ecdc59670241c2ffb2e0340e93fd5994`
+- changed source is a no-behavior-change extraction of the app shared gate plus tests/real market fixtures; `x-test-post/index.ts` was not touched
+- shared_unification 6/6; personalized-reports 125/125; related 318/318; check/lint/diff PASS
+- one `market_report_packet` identity can feed X simplified, App market-complete and App personalized output without a second market analysis
+- report_packet_id/content_hash propagation and public/private data boundary PASS
+- legacy X VOICE-only bug was not patched
+- production mutation from G2 = 0; consumer gates remained OFF
+
+Fresh K2 production read-only observation at 2026-09-28 17:5x JST:
+- `x_enabled=false`, `app_enabled=false`
+- shared morning cycle: data completed, analysis failed with `ANALYSIS_OPENAI_GENERATE_FAILED:429`; no report packet
+- shared close cycle: completed; report completed on attempt 2 with current report packet `1a0cf2b9-8de9-4e10-a4ea-059428637b31`
+- App legacy close: completed / Fact passed / notified, because app gate is still OFF
+- old X close: failed with `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE`
+- this strengthens the product case for shared cutover, but also proves shared-analysis 429 reliability must be hardened before enabling both consumers
+
+Review decision:
+- no Codex review required for PR #43 itself under reduced-review policy
+- a focused Codex release-boundary review WILL be required after reliability hardening and before public X shared-gate activation
+
+Next:
+- G2 moves immediately to bounded shared-analysis reliability hardening.
+
+
 ---
 
 # Previous completed G2 task — preserved history
@@ -724,4 +998,5 @@ Accepted:
 
 G2 is closed for now.
 Next gate: Monday 2026-09-28 natural morning 08:35 JST and close 17:15 JST read-only validation. Phase 2 warn-deliver remains deferred until telemetry is observed.
+
 
