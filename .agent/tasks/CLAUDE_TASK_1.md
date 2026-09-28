@@ -3,8 +3,8 @@
 - task_id: kabumori-daily-topic-prod-apply-verify-20260928
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: merged/reviewed daily-topic RPCをproductionへ1本だけ安全に反映し、ACL・RLS境界・determinism・アプリ契約をread-back/smokeで確認する。広範なmigration pushは禁止。
@@ -437,3 +437,101 @@ This session runs under a local safety layer that blocks any direct production-d
 ### Next recommendation
 
 Route this to the user for an explicit decision: either they run the apply themselves using the exact command/file identified above (with the pre-apply checks first), or they extend this session's permissions so G1 can complete Phase B end-to-end in a future pass. Not recommending any workaround within this session.
+
+
+## Final K1 / ChatGPT production apply completion
+
+- result: **PASS**
+- production apply completed by ChatGPT after Claude stopped at the safety gate.
+- source used: current-main exact file `supabase/migrations/20260928123000_add_daily_kabumori_tip_rpc.sql`
+- GitHub blob SHA: `b383c31af29d64cb47afd5a3eb8446ca9deff398`
+- SQL length observed at apply: 1943 bytes/chars as returned by GitHub connector; content was fetched directly from main and passed unchanged to the production SQL executor.
+- reviewed SHA-256 from PR #48/#51 remained `425f1e33276c8766a223775f56cd15e79aa551fd87ab0603c1fef020f04872e1`.
+
+### Fresh pre-apply read-only state
+
+Production project: `wsmznyzcvmuitkglfeuj`
+
+Confirmed immediately before apply:
+- `public.get_daily_kabumori_tip(text,date)`: absent
+- `public.tips`: present
+- authenticated direct SELECT on tips: false
+- anon direct SELECT on tips: false
+- service_role SELECT on tips: true
+- tips RLS enabled: true
+- remote migration history still ended at the existing tracked migrations; neither `20260928120000` nor `20260928123000` was recorded
+
+### Exact production mutation
+
+Executed exactly the contents of the reviewed daily-topic SQL file through the Supabase SQL execution connector.
+
+No broad migration push.
+No other migration.
+No migration-history repair.
+No table data edit.
+No MIC/G2/news/X/Auth/cron/settings/Vault change.
+
+### Post-apply production read-back
+
+Function:
+- exact signature exists: PASS
+- SECURITY DEFINER: `prosecdef=true`
+- volatility: stable
+- function config: empty search_path
+- function ACL: owner + authenticated only
+- authenticated execute: true
+- anon execute: false
+- PUBLIC execute: absent from ACL
+- authenticated direct SELECT on `public.tips`: false
+- anon direct SELECT on `public.tips`: false
+- service_role SELECT on `public.tips`: true
+- tips RLS: still enabled
+- tips policy count: 0
+- body references `public.tips`, filters `t.is_active`, and contains no INSERT/UPDATE/DELETE
+- returned table columns verified from output arg metadata: id/title/category/base_text/difficulty only
+
+Role-level proof:
+- `SET LOCAL ROLE authenticated` call returned exactly one beginner/初級 row
+- `SET LOCAL ROLE anon` call failed with PostgreSQL 42501 permission denied for function
+
+Functional smoke for JST date 2026-09-28:
+- beginner -> 1 row, 初級
+- intermediate -> 1 row, 中級
+- advanced -> 1 row, 実践
+- invalid `expert` -> 0 rows
+- repeated same date + same beginner level -> same id
+
+Read-only behavior proof:
+- sampled tip had `use_count=2` and unchanged `last_used_at` before repeated RPC calls
+- after repeated calls, both values remained exactly unchanged
+
+### Migration-history note
+
+Because the task intentionally used exact direct SQL execution rather than broad migration tooling, remote migration history still does not record local version `20260928123000`.
+
+This is consistent with the already-known production migration-history drift (including MIC objects that exist out-of-band). Do not run a broad `supabase db push` until migration-history hygiene is handled in a dedicated task.
+
+No migration-history repair was performed here.
+
+### Production mutation scope
+
+Only:
+- create/replace `public.get_daily_kabumori_tip(text,date)`
+- revoke EXECUTE from PUBLIC/anon
+- grant EXECUTE to authenticated
+
+Nothing else.
+
+### Remaining issues
+
+1. Authenticated database-role smoke passed; real-device visual/settings interaction remains a later UI QA step.
+2. Production migration-history drift remains an infrastructure hygiene item and is not repaired by this task.
+3. Broad `db push` remains unsafe until that drift is reconciled deliberately.
+
+### Final disposition
+
+Daily-topic backend is now live in production and the reviewed security/behavior contract passed production read-back.
+
+No Codex review required; exact independently-reviewed SQL was applied unchanged.
+
+Task closed.
