@@ -33,13 +33,13 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: idle
-- task_id: none
+- status: ready
+- task_id: x-social-mobile-account-deletion-privileged-review-20260928
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: unassigned; previous deferred PR #32 review closed as stale/obsolete after the target PR was already merged; historical report preserved
+- allocation: assigned; privileged review of draft PR #52 account deletion boundary (service_role/Vault/Auth admin/X revoke/Apple revoke/partial failure); recommended Sol（高）
 
 ## Claude G1
 - owner: claude
