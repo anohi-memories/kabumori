@@ -3,8 +3,8 @@
 - task_id: kabumori-daily-topic-prod-apply-verify-20260928
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: merged/reviewed daily-topic RPCをproductionへ1本だけ安全に反映し、ACL・RLS境界・determinism・アプリ契約をread-back/smokeで確認する。広範なmigration pushは禁止。
@@ -396,3 +396,44 @@ A deeper check specifically confirming `public.get_daily_kabumori_tip(text,date)
 
 K1 verifies the rename-only PR and merges if safe. A continuation task can then authorize the actual production migration apply + ACL/readback/smoke checks, ideally after the function/object-existence gap above is closed by someone with production-read access.
 
+## Report — G1 result (production apply: STOPPED before mutation)
+
+- task_id: kabumori-daily-topic-prod-apply-verify-20260928
+- fresh main SHA at start: `4d308af`
+- worktree/branch: independent scratch checkout (read-only preparation only; no branch was created, since no source change was made)
+
+### Exact apply mechanism identified (not yet used)
+
+`supabase db query --project-ref wsmznyzcvmuitkglfeuj --file supabase/migrations/20260928123000_add_daily_kabumori_tip_rpc.sql` — this executes exactly that one file's SQL against the database via a direct query, with no interaction with the migration-history tracking table and no possibility of pulling in other pending migrations. This satisfies the task's "mechanism that can prove it applies the exact reviewed daily-topic SQL and nothing else" requirement, and avoids `supabase db push`'s broad-apply risk entirely. **Caveat for K1**: because this bypasses the migration-history mechanism, `supabase migration list` will still show `20260928123000` as unapplied remotely even after a successful apply this way — expected, not a bug, and consistent with the pre-existing MIC migration-history drift K1 already flagged as informational.
+
+### Target SQL hash/bytes proof
+
+`supabase/migrations/20260928123000_add_daily_kabumori_tip_rpc.sql` on fresh main (`4d308af`): SHA-256 `425f1e33276c8766a223775f56cd15e79aa551fd87ab0603c1fef020f04872e1` — **identical** to the hash recorded and independently verified through PR #48 and PR #51.
+
+### Pre-apply read-only checks: BLOCKED, not performed
+
+I attempted the mandated pre-apply read-only check (`to_regprocedure('public.get_daily_kabumori_tip(text,date)')` / `to_regclass('public.tips')` via `supabase db query`, read-only SELECT, no mutation) and it was **refused by this session's own auto-mode safety classifier under the "Production Reads" category** — the same category that blocked the schema-dump check in the predecessor task. I did not attempt to route around it with a different tool, host, or encoding, per the denial's own explicit instructions.
+
+**None of the mandated pre-apply checks were performed**:
+- `to_regprocedure('public.get_daily_kabumori_tip(text,date)')` absence — not confirmed
+- `public.tips` existence — not confirmed (already known from prior tasks, but not freshly re-confirmed as required)
+- current table-level privileges for anon/authenticated/service_role — not confirmed
+- no direct authenticated SELECT has appeared — not confirmed
+- current remote migration-history tail — not re-recorded fresh for this task (last known from the predecessor task's report only)
+
+### Production mutation performed
+
+**0. No apply was attempted.** The task's own instruction is explicit: "If any unexpected daily-topic RPC already exists or privileges drift: STOP before applying and report" and "If your available tooling cannot guarantee one-file / exact-SQL scope: STOP before mutation; report the safest available options for K1; do not improvise a broad push." Since I could not even perform the mandated pre-apply confirmation that nothing has drifted, applying anyway would directly violate this task's own safety gate — independent of my session's tooling restriction, I would not have proceeded past this point regardless.
+
+### Why this happened (both this task and its predecessor)
+
+This session runs under a local safety layer that blocks any direct production-database read or write by default ("Production Reads" / presumably an equivalent "Production Writes" category for the apply step, untested since I stopped before reaching it). This is separate from the project's own K1/Codex review process and from Supabase access itself being configured (the CLI is authenticated and the project is reachable — `supabase migration list --project-ref` succeeded earlier in the predecessor task, which is apparently categorized differently from `db query`/`db dump`).
+
+### Remaining issues
+
+1. Someone with this restriction lifted — the user directly, or a session with different permission settings — needs to either (a) perform the pre-apply checks + apply themselves (Supabase SQL editor or CLI, using the exact `supabase db query --project-ref wsmznyzcvmuitkglfeuj --file supabase/migrations/20260928123000_add_daily_kabumori_tip_rpc.sql` command identified above), or (b) grant this session a Bash permission rule covering Supabase production reads/writes so a future G1 pass can complete this task end-to-end.
+2. The exact reviewed SQL is ready and hash-verified; nothing about the SQL itself is in question. This is purely a tooling-permission blocker, not a content or safety concern about the migration itself.
+
+### Next recommendation
+
+Route this to the user for an explicit decision: either they run the apply themselves using the exact command/file identified above (with the pre-apply checks first), or they extend this session's permissions so G1 can complete Phase B end-to-end in a future pass. Not recommending any workaround within this session.

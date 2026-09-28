@@ -66,6 +66,15 @@
 - follow-ups still open: production migration apply + authenticated real-device topic/settings QA, approved mini Yume+robot assets, AI route/service, final tab redesign.
 
 
+## G1 Daily topic production apply: STOPPED before mutation
+
+- task_id: `kabumori-daily-topic-prod-apply-verify-20260928` -- `review_required`, next_owner chatgpt.
+- Identified the exact-scope apply mechanism (`supabase db query --project-ref ... --file supabase/migrations/20260928123000_add_daily_kabumori_tip_rpc.sql`, not a broad `db push`) and re-confirmed the target SQL's SHA-256 (`425f1e33...`) unchanged on fresh main.
+- **Did not apply anything.** This session's own safety layer refused the mandated pre-apply read-only checks (`to_regprocedure`/`public.tips` existence, privilege check) under a "Production Reads" classifier category -- the same one that blocked the predecessor task's schema-dump check. No workaround was attempted.
+- Since the task's own instruction requires STOPping before mutation whenever pre-apply confirmation can't be completed, no apply was attempted regardless of tooling.
+- Needs either the user to run the identified command themselves (after the pre-apply checks), or this session's permissions extended, for a future G1 pass to complete Phase B end-to-end.
+- Production mutation 0.
+
 ## Final K1 Daily topic rollout preflight
 
 - verdict: **PASS**.
@@ -94,7 +103,7 @@
 
 - H1: `review_required` — `x-social-mobile-auth-phase2-final-acceptance-review-20260928`; PASS-WITH-FIX at PR #47 `ed5f8b7` (initial G3 correction `5fd483a`); prior 7 + additional 3 source boundaries accepted. H1 pinned callback/recovery contexts, retained in-flight exchanges and limited provider authorize paths; fix pushed. Mobile 43/43 + data-view 14/14, typecheck/lint/Web+iOS export and four H1 mutation probes PASS; exact-head Preview SUCCESS. Production mutation 0; awaiting C1/source merge, real provider/device activation remains separately gated; see latest `.agent/CODEX_REPORT.md`.
 - H2: `idle` — unassigned; stale deferred PR #32 morning Fact-contract review was closed as obsolete after PR #32 had already been merged. Historical partial report preserved; slot is now genuinely reusable.
-- G1: `ready` — `kabumori-daily-topic-prod-apply-verify-20260928`; PR #51 merged `4c07a817`; daily-topic RPC absent in prod; MIC objects already live out-of-band. Apply only exact reviewed daily-topic SQL, no broad db push/history repair; then ACL/RLS/determinism/read-only verification. Recommended Sonnet5（高）.
+- G1: `review_required` — `kabumori-daily-topic-prod-apply-verify-20260928`; STOPPED before mutation -- this session's safety layer refused the mandated pre-apply production reads, so no apply was attempted; exact apply command identified for the user or a differently-permissioned session to run; production mutation 0.
 - G2: `ready` — `kabumori-shared-analysis-prod-deploy-observe-20260928`; PR #45 merged; controlled deploy of market-report-analysis only with consumer gates OFF, then natural morning+close observation; recommended Sonnet5（高）
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS
