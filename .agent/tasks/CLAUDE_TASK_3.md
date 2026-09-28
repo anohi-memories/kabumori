@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-multi-provider-auth-phase2-20260928
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Opus5.5（高）
 - purpose: social-mobile Phase 1 accepted sourceを正しくmainへ統合したうえで、一般ユーザー向けのmulti-provider signup/login Phase 2をsource-firstで実装する。対象は X / Apple / Google / Email。認証用OAuthと自動投稿用X OAuthを混同せず、安全なprovider linkingと重複アカウント防止を設計・実装する。
@@ -250,3 +250,22 @@ STOP for K3.
 - remaining_gaps: プロバイダのコンソール設定と実機 E2E; ネイティブ Google Sign-In への移行; 連携解除; 複数ワークスペース UI; ホームの「接続済み」固定表示（G4 担当）; content settings 表の本番配置。
 - activation_order_recommendation: (1) Redirect 許可リスト＋メール確認方針 → (2) メール新規登録・再設定を実機確認 → (3) X プロバイダ（投稿用とは別クライアント）→ (4) Apple（bundle id 設定・Client ID 登録・実機 dev build）→ (5) Google → (6) 手動連携を有効化して連携と衝突時の表示を確認。
 - next_recommendation: ChatGPT K3 → 認証の境界に関わるため H1 の集中レビューを1回（範囲: X ログイン≠投稿用 X、連携方針、PKCE/戻りリンク、再設定）→ その後コンソール設定の TASK。
+
+
+## Final K3 — multi-provider Auth Phase 2
+
+Verdict: **PASS for source implementation; focused Auth review required before merge/activation**.
+
+- Phase 0 integration PASS:
+  - PR #42 merged -> `f0cac1505184a2abd9c9d504142012a1be999cf3`
+  - PR #44 merged -> `7870d10170d31e0a6b78ab245f4e9152a3628f00`
+  - accepted source verified on main; regressions PASS.
+- Phase 2 PR #47 head: `7bda196147a749431774fba915a86d41bf43dc5d` (OPEN/MERGEABLE).
+- source support implemented for X / Apple / Google / Email signup/login.
+- email signup + password recovery source path implemented.
+- X app-auth remains separate from posting-account OAuth/Vault path.
+- provider linking is explicit; no name/handle/user_metadata-based account merge.
+- provider availability is config-gated and does not fake readiness.
+- no production Auth provider/config/database mutation; no real X post.
+- tests: npm test 32/32, data-view 14/14, typecheck/lint, Expo web+iOS export, diff/secret scan PASS.
+- because this touches Auth identities, PKCE, provider linking and recovery, one focused H1 review is required before merge or provider activation.
