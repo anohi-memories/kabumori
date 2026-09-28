@@ -43,6 +43,27 @@ This is a narrow production rollout/read-back/observation task with source alrea
 
 If any precondition differs unexpectedly: STOP.
 
+## Resume after shared-checkout recovery
+
+The accidental shared-checkout `supabase/config.toml` overwrite has been repaired by the operator.
+
+Verified coordination state:
+- shared checkout recovery changed only `supabase/config.toml`
+- production mutation remained 0
+- fresh main is `fc0afd32d6697940e96d3b9b52d91ef2c48a76ff`
+- use **only** this new dedicated checkout for the remainder of this task:
+  - `/Users/yuya/Developer/kabumori-g2-market-report-reliability`
+- the older implementation branch/worktree `g2-shared-analysis-reliability-20260928` is historical PR #45 source and MUST NOT be used for deployment
+- the shared checkout `/Users/yuya/Developer/kabumori` MUST NOT be used for deploy commands or config edits
+- do not copy the shared local `supabase/config.toml` into the G2 checkout
+- use explicit deploy arguments (`--project-ref wsmznyzcvmuitkglfeuj`, `--no-verify-jwt`, and the already-established API deploy mode where required) rather than creating/editing deploy config in the shared checkout
+
+Before deploy, fail hard on directory mismatch. Use an equivalent guard to:
+`cd /Users/yuya/Developer/kabumori-g2-market-report-reliability || exit 1`
+and verify `git rev-parse HEAD` is fresh main and includes PR #45.
+
+If the dedicated checkout is missing, dirty from another owner, or not on the expected fresh-main lineage: STOP. Do not fall back to the shared checkout.
+
 ## Deploy scope
 
 Deploy only:
