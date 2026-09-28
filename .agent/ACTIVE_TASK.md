@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: x-social-mobile-phase1-consolidated-integration-review-20260928
+- status: ready
+- task_id: x-social-mobile-multi-provider-auth-focused-review-20260928
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: closed; Final C1 PASS-WITH-FIX; PR #42 accepted at `c5e0157`, PR #44 accepted/fixed at `966d412`; merge order #42 -> #44
+- allocation: assigned; focused review of PR #47 Auth/provider-linking/PKCE/recovery/X-login-vs-posting-X boundaries; recommended Sol（高）
 
 ## Codex H2
 - owner: codex
@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: done
 - task_id: x-social-mobile-multi-provider-auth-phase2-20260928
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: assigned; first merge accepted PR #42 -> #44, then implement X/Apple/Google/Email signup-login, provider linking, recovery and onboarding continuation; recommended Opus5.5（高）
+- allocation: closed; Final K3 PASS for source implementation at PR #47 `7bda196`; Auth-focused H1 review assigned before merge/activation
 
 ## Claude G4
 - owner: claude
