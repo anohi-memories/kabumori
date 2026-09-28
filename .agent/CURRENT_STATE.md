@@ -1405,3 +1405,15 @@ Reason for deferral:
 - after C1, merge/integrate Phase 1 first, then branch the next G3 from the accepted main state.
 
 Recommended Claude model: Opus5.5（高）.
+
+
+## Final C1 social-mobile Phase 1 consolidated review
+
+- verdict: **PASS-WITH-FIX**.
+- accepted heads: PR #42 `c5e0157f867450047a5f79a204df45aaeefecfa6`; PR #44 fixed `966d4123c13c4dcda1799772d262dde5be8cacb8`.
+- H1 fixed one P2 status-mapping/history issue in PR #44 and retested the combined tree.
+- required merge order: #42 then #44.
+- combined checks: social-mobile 16/16, data-view 14/14, typecheck/lint/Expo web export/diff PASS.
+- Phase 1 auth/X-connect/onboarding + Home/posting/history source work is accepted and may be closed after merge.
+- production DB/config/OAuth/real-account E2E remain separate future gates.
+- next G3 after merge: queued multi-provider signup/login (X / Apple / Google / Email), provider linking, duplicate-account prevention, password recovery and first-workspace onboarding.
