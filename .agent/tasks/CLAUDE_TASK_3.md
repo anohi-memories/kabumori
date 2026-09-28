@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-multi-provider-auth-phase2-20260928
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Opus5.5（高）
 - purpose: social-mobile Phase 1 accepted sourceを正しくmainへ統合したうえで、一般ユーザー向けのmulti-provider signup/login Phase 2をsource-firstで実装する。対象は X / Apple / Google / Email。認証用OAuthと自動投稿用X OAuthを混同せず、安全なprovider linkingと重複アカウント防止を設計・実装する。
@@ -228,4 +228,25 @@ STOP for K3.
 
 ## Report
 
-- pending
+- task_id: x-social-mobile-multi-provider-auth-phase2-20260928
+- result: K3 ready — Phase 0 PASS（#42 → #44 の順で統合）、Phase 2 のソース実装を PR #47 に作成。production mutation 0（GitHub 上の PR マージ2件を除く）。
+- model: Opus 5.5
+- phase0: PR #42 head `c5e0157`（OPEN/CLEAN、チェック緑）→ merge `f0cac1505184a2abd9c9d504142012a1be999cf3`、main に #42 の内容を確認 → PR #44 head `966d412` を新 main に対して再確認（CLEAN、重なりは `package.json` の別行のみ）→ merge `7870d10170d31e0a6b78ab245f4e9152a3628f00`。merge 後の main で #42 由来45ファイル・#44 由来11ファイルとも受入済み head とバイト一致。回帰: `npm test` 16/16、data-view 14/14、typecheck、lint、Expo web export すべて PASS。
+- push/PR: branch `claude/g3-multi-provider-auth`、PR https://github.com/anohi-memories/kabumori/pull/47、commit `7bda196`
+- provider_support_matrix:
+  - メールアドレス: 新規登録（PKCE、確認リンク）・ログイン（既存のまま）・パスワード再設定（リンク → `PASSWORD_RECOVERY` → 新パスワード画面 → `updateUser`）— 実装済み
+  - X: Supabase Auth の `x`（OAuth 2.0）を `signInWithOAuth` ＋アプリ内ブラウザ＋`exchangeCodeForSession` — 実装済み・設定待ち
+  - Apple: iOS はネイティブ `expo-apple-authentication` → `signInWithIdToken`（nonce はハッシュを Apple、元値を Supabase へ）、iOS 以外はブラウザ OAuth — 実装済み・設定待ち
+  - Google: ブラウザ OAuth ＋ PKCE — 実装済み・設定待ち（Supabase 推奨のネイティブ Google Sign-In は後の改善、各 client id と dev build が必要）
+  - どの方法も本番設定（`GET /auth/v1/settings`）で有効な場合だけ押せる。無効なら「（準備中）」で成功を装わない。
+- implemented_source_changes: ログイン画面（4ボタン＋メールの ログイン/新規登録/パスワードを忘れた）; AuthProvider（PKCE、新規登録・再設定・各プロバイダ・明示的な連携・認証の戻りリンク処理・利用可能プロバイダ取得・再設定モード）; `auth-callback` route（戻すだけ、解析しない）; 新パスワード画面（再設定中は最優先表示）; ログイン方法画面（連携の一覧と追加）; 初回案内に「新しいアカウントを作成しました」確認と X ログイン後の案内; `app.json` に Apple サインイン設定; `expo-apple-authentication` 追加。
+- config_blockers（本番・コンソール側、未実施）: Redirect URL 許可リストに `kabumori-social://**`; メール確認の有効/無効と SMTP; X プロバイダ（Supabase コールバック用 OAuth 2.0 クライアント、メール要求 ON、投稿用コネクタとは別クライアント）; Apple（`ios.bundleIdentifier` 未設定 → 設定して Client ID に登録、Android/Web で使うなら Services ID と半年ごとの鍵更新）; Google OAuth クライアント; 手動連携（Manual linking）の有効化。
+- identity_linking_policy: 自動連携は Supabase 自身の「確認済み同一メール」の場合のみ（名前・ハンドルで統合しない、`user_metadata` は一切読まない）。メール→後で Google（同じ確認済みメール）は Supabase が自動連携。後から Apple/X を足すのは「アカウント → ログイン方法」からの明示的な `linkIdentity` のみ（手動連携が無効なら正直に表示）。メールが返らない X/Apple でログインすると新ユーザーになるため、ワークスペース作成前に「新しいアカウントを作成しました（以前別の方法で登録していたならログアウトして元の方法で入り、ログイン方法から追加）」を表示。別ユーザーで使用中の方法の連携は `identity_already_exists` で拒否し統合しない。既存メールでの新規登録・再設定は存在の有無を明かさない。連携解除は今回なし。誤って作った2つ目のアカウントはワークスペースを持たないため、元の方法で入り直せば影響なし（削除は既存の account-delete／運用対応）。
+- first_workspace_onboarding_contract: 変更なしで接続 — ログイン →（該当時）新アカウント確認 → 初回案内 → 投稿用 X 接続（サーバー側 `begin_social_mobile_x_oauth_connection` が `u_…` ワークスペースとオーナー所属をちょうど1つ作成）→ ハンドル確認 → 最小設定 → ホーム。クライアントからの特権書き込みなし。
+- changed_files: 新規 `src/domain/auth-flows.ts`、`src/lib/auth-client-flows.ts`、`src/app/auth-callback.tsx`、`src/app/login-methods.tsx`、`src/components/new-password-screen.tsx`、`tests/auth-flows.test.mjs`、`tests/multi-provider-auth-contract.test.mjs`、`docs/multi-provider-auth-phase2.md`; 変更 `src/providers/auth-provider.tsx`、`src/components/auth-screen.tsx`、`src/app/_layout.tsx`、`src/app/accounts/index.tsx`（ログイン方法への導線）、`src/features/onboarding/onboarding-gate.tsx`、`src/lib/supabase.ts`（PKCE）、`app.json`、`package.json`/`package-lock.json`（expo-apple-authentication）。すべて `apps/social-mobile` 配下、G4 のタブ画面は未変更。
+- tests: `npm test` 32/32（新規16: 認証の戻りリンク解析〔投稿用リンク・別スキーム・不正値の拒否〕、新規登録の結果、ブラウザ/Apple の成功・キャンセル・失敗、利用可能プロバイダ判定、固定エラー文言、新パスワード検証、重複アカウント確認、X ログイン≠投稿用 X、`user_metadata`/プロバイダトークン/service role 不使用、PKCE と開いてよいホストの限定、コードの二重交換防止、Apple の nonce、連携は明示のみ、既存パスワードログイン・セッション復元・ログアウト・再設定の順序）。わざと壊した5パターン全て検出。data-view 14/14、typecheck、lint、Expo export（web・iOS）、`git diff --check`、secret scan（一致はマージコミット ID のみ）。
+- security_checks: モバイルに service_role/秘密鍵なし; プロバイダのアクセス/リフレッシュトークンは読まない・保存しない・ログしない; 投稿用 X トークンはクライアントに来ない; ユーザー/ワークスペース/アカウントの先頭行フォールバックなし; 認証済みユーザーへの厳密な結び付け; RLS/テナント分離は不変; `user_metadata` で認可しない; 本番 Auth 設定・プロバイダ有効化・マイグレーション・Stage 3B・X 投稿はいずれも未実施。
+- production_mutation: 0（コード・設定・DB。GitHub 上の PR #42/#44 マージのみ）
+- remaining_gaps: プロバイダのコンソール設定と実機 E2E; ネイティブ Google Sign-In への移行; 連携解除; 複数ワークスペース UI; ホームの「接続済み」固定表示（G4 担当）; content settings 表の本番配置。
+- activation_order_recommendation: (1) Redirect 許可リスト＋メール確認方針 → (2) メール新規登録・再設定を実機確認 → (3) X プロバイダ（投稿用とは別クライアント）→ (4) Apple（bundle id 設定・Client ID 登録・実機 dev build）→ (5) Google → (6) 手動連携を有効化して連携と衝突時の表示を確認。
+- next_recommendation: ChatGPT K3 → 認証の境界に関わるため H1 の集中レビューを1回（範囲: X ログイン≠投稿用 X、連携方針、PKCE/戻りリンク、再設定）→ その後コンソール設定の TASK。
