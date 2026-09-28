@@ -1576,3 +1576,26 @@ Recommended Claude model: Sonnet5（高）.
 - production_mutation=0; no extra Codex review required.
 - PR #49 merged as `9eef82bf0729c25bf6aaf15951c138704b5b67b7`.
 - remaining real posting-operation blockers: no canonical post body/edit persistence, dispatcher RPCs service_role-only/unapplied, and failure-log authenticated read path unresolved.
+
+
+## Final K4 social-mobile posting interaction Phase 2
+
+- verdict: **PASS**.
+- PR #49 head `15e9f74a6de98a4a8b49eadb6c2f962a6250c94e` verified OPEN/MERGEABLE with exactly 4 changed files and no G3 overlap.
+- implementation truthfully exposes post status/mode/reconnect state and disabled edit/regenerate/approve/retry actions with explicit reasons rather than fake backend success.
+- no new DB/API/Auth/publish boundary; new read reuses the existing content-settings repository only.
+- tests: post-interaction 8/8, data-view 14/14, auth/mobile 43/43, typecheck/lint, Expo web+iOS export, diff/secret checks PASS.
+- production mutation=0; no real X post.
+- Codex review: **not required**.
+- PR #49 squash-merged to main as `9eef82bf0729c25bf6aaf15951c138704b5b67b7`.
+
+## G4 posting backend foundation Phase 3 — assigned 2026-09-28
+
+- task_id: `x-social-mobile-posting-backend-foundation-phase3-20260928`.
+- goal: unlock authoritative post body + safe post-detail read + draft edit persistence + sanitized failure reason first; regenerate/approve/retry remain later.
+- mandatory first step: read-only verify live schema/grants for `scheduled_posts`, `post_execution_logs`, and membership authority. Stop on material schema discrepancy.
+- do not weaken existing service-role dispatcher RPC grants merely for mobile access.
+- candidate DB/API/Edge changes are source-only; no migration apply/deploy/production mutation.
+- G3 Auth/account/provider-readiness files are excluded.
+- because Phase 3 introduces a new DB/API authorization boundary, independent review is required before merge/apply; while Codex capacity is constrained, use a **separate-room Claude Opus5.5（高）** reviewer in an independent worktree rather than H1/H2.
+- implementation recommended model: **Opus5.5（高）**.
