@@ -1498,3 +1498,18 @@ Recommended Claude model: Sonnet5（高）.
 - production_mutation=0.
 - G3 reassigned one bundled Auth correction task; recommended Claude model Opus5.5（高）.
 - after K3, use one final focused H1 acceptance pass only.
+
+
+## Final K3 Auth Phase 2 bundled correction
+
+- verdict: **PASS for source correction**.
+- PR #47 fixed head `5fd483a5fc651da07d0791c68eaa557cdb201357`.
+- all seven prior H1 Auth findings corrected:
+  provider-link URL provenance, duplicate callback truthfulness, flowId PKCE selection, signup enumeration, provider-credential persistence, exact-user/session recovery, strict callback parsing.
+- additional corrections: exact-user onboarding/user-switch handling, fail-closed provider readiness, Apple native-vs-browser linking/config distinction.
+- provider tokens are stripped from persisted storage/context while Supabase app-session restore remains supported.
+- X app-auth remains separate from posting-X/Vault.
+- tests 37/37 + data-view 14/14 + typecheck/lint + Expo web/iOS export PASS; mutation tests 11/11 detect guarded regressions.
+- production_mutation=0.
+- one final focused H1 acceptance review assigned; no further review loop unless it finds a concrete defect.
+- recommended Codex model: Sol（高）.
