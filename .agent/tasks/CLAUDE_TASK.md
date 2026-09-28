@@ -3,8 +3,8 @@
 - task_id: kabumori-shared-market-report-unification-20260928
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Opus5.5（高）
 - purpose: 朝刊・大引けの「市場全体分析」を `market_data_packet -> market_report_packet` に一本化し、Xはその簡易版、かぶモリアプリは市場全体の完全版＋マイポート完全版として同じ正本から生成できることを非破壊で実証する。旧X朝刊/大引けのVOICE NG個別修正は凍結し、共通化後に必要な問題だけ再評価する。
@@ -362,7 +362,148 @@ When complete:
 
 ## Report
 
-Pending.
+### Report — kabumori-shared-market-report-unification-20260928
+
+- task_id：`kabumori-shared-market-report-unification-20260928`
+- result：**PASS候補（source-onlyの非破壊証明）**。
+  - 共通のmarket packetが、X簡易版・App市場全体・Appマイポートの唯一の正本として機能することを、本番の実packet（朝刊2026-09-24／大引け2026-09-25）で証明した。
+  - 本番の切り替えはしていない。
+  - 切り替え前に解消すべき信頼性の課題（OpenAIの429による共有分析の失敗）を特定した。
+- fresh main SHA：`c171b34648097b4c17b0ca1163355b1b442a080c`（着手時。PRはその上にrebaseした）
+- worktree/branch：G2専用worktree `scratchpad/kabumori-g2-unify`、branch `g2-shared-market-unification-20260928`
+
+#### production read-only preflight
+
+- 関数（verify_jwtはすべてfalse）：
+  - `market-report-data-packet` v10（09-17）
+  - `market-report-analysis` v11（09-18）
+  - `personalized-reports` v33（09-25 22:11）
+  - `x-test-post` v125（09-26）
+- `app_enabled=false`、`x_enabled=false`（updated_at 2026-09-17）
+- 共有cycle：
+  - 09-24は朝刊・大引けともcompleted。
+  - 09-25の朝刊はcycleが**blocked**、大引けはcompleted。
+  - **09-28の朝刊はcycle completedだがreportがfailed（`ANALYSIS_OPENAI_GENERATE_FAILED:429`）**。
+
+#### 2026-09-28の自然cronの観測（実行時点：14:3x JST。大引け17:15はまだ）
+
+- X朝刊（旧経路）：08:20・08:22・08:25に `MORNING_REPORT_LANE_A_US_MARKET_FAILED:429` が3回、09:46に `MORNING_REPORT_FACT_CHECK_FAILED`。**投稿なし**。
+- アプリ朝刊：cronは08:35に起動（succeeded）したが、行が作られたのは**09:46**（completed、legacy lane v1、delivery_policyはpass）。
+- 09:46に、X朝刊とアプリ朝刊の両方がほぼ同時に再実行されている。起動元は未特定。
+- 当日は全経路でOpenAIの429が集中していた。
+
+#### common packetの監査結果
+
+- **Morning（09-24）**：
+  - freshな指標：日経平均、1306、NYダウ、S&P500、ナスダック、SOX、ドル円、米2年債・米10年債、WTI、ブレント（11指標）。
+  - stale：JGB 2年・10年（08-31時点）。unavailable：日経先物。
+  - news_refsは30件。
+  - claimsはovernightが3件・todayが5件。next_watchが3件、risksが3件、data_gapsが5件。
+  - x_postのpointsは3件。
+- **Close（09-25）**：
+  - 指標は同じ構成で、growth250もunavailable。news_refsは20件。
+  - claimsにはnextもあり、data_gapsは6件。
+- **満たせている項目**：前夜の米国市場、米国の主要指数、SOX、前営業日（または当日）の日本株、為替、米金利、原油、重要ニュース、今日・次に見る点、リスク、鮮度と欠損の明示。
+- 大引けのmorning referenceは、アプリ側で同日の共有朝刊packetから付与する（朝刊packetがない日は欠落するだけ）。
+
+#### missing data / contract gaps（捏造せず、gapのまま）
+
+1. **共有分析の信頼性**：09-28の朝刊が429でfailed、09-25の朝刊がblocked。gateをONにすると、この日はX・アプリとも欠配する（fail-closed）。**切り替え前の最重要課題**。
+2. JGBの利回りが8月末からstaleのまま（取得元側の問題）。
+3. 日経先物・グロース250・業種別騰落・経済指標カレンダー：検証済みの取得元がない（`calendar_refs: unavailable`）。
+4. strong/weak themesが空になりやすい（09-24は0/1、09-25は0/0）。テーマにはニュースの根拠が必須なため。アプリの「追い風・逆風」欄が薄くなる主因。
+5. アプリはgate ON時に共有packetがないと、**マイポートも含めてrun全体をskipする**。DESIGN §7.4は、マイポートだけでも作る縮退を想定している。productの判断が必要。
+6. ニュース取得の拡充（重要ニュースworkstream）は本TASKの対象外。入力は現行のnews_refsのまま。
+
+#### changed_files（PR #43）
+
+- `supabase/functions/personalized-reports/shared_gate.ts`（新規。index.tsのインライン処理を移動しただけ）
+- `supabase/functions/personalized-reports/index.ts`（+11／−31。挙動は同一）
+- `supabase/functions/personalized-reports/shared_unification_test.ts`（新規）
+- `supabase/functions/market-report-analysis/fixtures/{morning_2026-09-24,close_2026-09-25}_{data_packet,generated_report}.json`（本番の実packet。市場データとニュースだけで、user情報は含まない）
+
+#### tests
+
+- shared_unification **6/6**
+- personalized-reports **125/125**
+- market-report-analysis 21/21、market-report-data-packet 42/42、X shared consumer 6/6
+- 関連スイート **318/318**
+- deno check・lint・git diff --checkはPASS
+
+#### commit / PR / push / deploy
+
+- commit：`4aa4251de07b446fedf9e6bec09f24f50dc7d810`
+- PR：https://github.com/anohi-memories/kabumori/pull/43（open・未merge）
+- push：branchへpushした
+- deploy：**なし**
+
+#### proofs（実packet、fake deps。保存・通知・X投稿はない）
+
+- **morning shared proof（09-24、report `93ff6ee5…`、direction down）**：
+  - X投稿文は、formatSharedXPostの結果に固定hashtagを付けたもので、sharedXPostIssuesは0件。
+  - X runの記録：model_usedは `shared_market_report`、api_cost 0、web_search 0、sharedMarketReportにpacketとdataのid・hashがある。
+  - アプリ：market_detail・market_sectionのreport_packet_idとhashが一致し、方向も一致。freshな指標はすべてdata packetの値。
+- **close shared proof（09-25、report `3c5597ae…`、direction up）**：
+  - 朝刊と同じ内容を確認した。
+  - morning referenceは、同日の朝刊packetがblockedだったためnull。朝刊packetを与えればreferenceが付くことも確認した。
+- **X simplified proof**：市場全体だけ。lead、ちょうど3つのpoints、closingで、ユーザー・ポートフォリオの情報は0件。
+- **App market-complete proof**：headline・summary、指標のgroup、overnight・todayのclaims、key_news、themes、watch points、risks、data gaps、（大引けの）morning referenceをすべて共有層から出している。user情報は0件。
+- **App personalized proof**：同じsharedInput（方向・claims・themes・cross-asset）の上に、保有銘柄・impactを追加する。指数の値も同じdata packetから取る。
+- **report_packet_id / content_hashの伝播**：X runのmarket_data、アプリの `body.market_section`、`body.market_detail` で一致した。
+- **privacy boundary**：X（投稿文とrun記録）、market_detail、market_sectionに、holdingのticker・会社名・user_idが出ないことをテストで確認した。holdingが出るのはpersonalized packetだけ。
+- **legacy fallback**：gateがOFFのとき、personalized packetにshared_marketはなく、legacyの挙動は不変（既存テストもPASS）。
+
+#### VOICE handling conclusion
+
+- 旧X朝刊・大引けのVOICE問題は、**単独では修正していない**（凍結）。
+- 共有のX経路にVOICE評価器がないのは設計どおりで、安全と判断した。理由は次のとおり。
+  - x_postは共有分析のローカル検査とFact check（analysis全体を照合）を通過している。
+  - 共有consumerは決定的なformatと厳格な形式検査（文字数、points=3、URL・hashtag・空行の禁止）だけを行い、model・web・Yahooを呼ばない。この点をテストで固定した。
+- 共有経路の文体の品質が問題になれば、後続として共有経路側で扱う。
+
+#### production mutations
+
+- **0**（read-onlyのSELECTだけ）。
+
+#### PR #41 overlap check
+
+- `x-test-post/index.ts` は未変更。PR #41のファイルにも触れていない。
+- X側は `shared_market_report_consumer.ts` をテストからread-onlyでimportしただけ。
+
+#### remaining issues
+
+- 上記gapの1〜5。特に1（429）と5（skipか縮退か）。
+- 09-28の09:46の再実行の起動元は未特定。
+- personalized-reportsのv33と、G2が最後にdeployしたv30（`0cba732`）の関係は未照合（次のdeploy前にbyte照合が必要）。
+
+#### exact recommended production cutover sequence（本TASKでは実行しない）
+
+1. **信頼性の先行対応（別TASK）**：`market-report-analysis` の429対策。
+   - 例：run内での指数backoffによる再試行（1〜2回）と、既存のretry cron（+10分）の後に、さらに1回の救済runを置く。
+   - 目的：朝刊packetの完成率を上げること。
+   - あわせて、アプリをgate ONにしたときの縮退方針（skipか、マイポートだけにするか）を決める。
+2. PR #43をmergeし、reviewedなconsumerを確定する（アプリ `personalized-reports` とX shared consumerは、現行mainのまま）。
+3. **App gateを先にONにする**（`app_enabled=true`、`x_enabled=false` のまま）。
+   - 最初の自然な朝刊と大引けで、次をread-onlyで確認する。
+     - 保存された `body.market_section.report_packet_id` が、そのcycleの `current_report_packet_id` と一致すること
+     - delivery_policy
+     - 通知
+4. 数営業日安定したら、**X gateをONにする**（`x_enabled=true`）。
+   - 最初の自然な朝刊と大引けで、X runの `market_data.sharedMarketReport.reportPacketId` と、アプリの保存行のpacket idが**同じ日に同じ値**であることを照合する。
+   - X投稿は公開境界を越えるため、直前に集中的なCodexレビューを行う。
+5. 旧経路（web_search・Yahoo・旧VOICE）の削除は、安定を確認した後に別TASKで行う。
+
+#### rollback plan
+
+- **gateを戻す**：`market_report_consumer_settings` の `x_enabled` や `app_enabled` をfalseに戻すだけで、即座にlegacyの挙動へ戻る（コードのdeploy不要）。settings行の1回のUPDATEで済み、履歴はupdated_atに残る。
+- **コードの問題**：`personalized-reports` はknown-goodのv29（`f34b8c4`）やv30（`0cba732`）の手順で、X consumerは既存のdeploy手順で、それぞれ戻す。
+- 共有のpacketとcycleはinsert-onlyなので、戻しでDBを変更する必要はない。
+
+#### focused Codex reviewは推奨か
+
+- **本PR #43だけなら不要**：テストと、挙動が同一のrefactorだけで、低リスク。
+- **X gateのON（手順4）の直前には推奨**：公開X投稿の境界を越えるため。App gateのON（手順3）も、最初の本番配信なので、軽いreviewがあると望ましい。
+
 
 ---
 
