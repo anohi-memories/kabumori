@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: x-social-mobile-auth-x-connect-onboarding-phase1-20260928
+- status: ready
+- task_id: x-social-mobile-multi-provider-auth-phase2-20260928
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: closed; Final K3 PASS at PR #42 `c5e0157`; first-run auth/X-connect/onboarding source path implemented; production mutation 0; no intermediate H1
+- allocation: assigned; first merge accepted PR #42 -> #44, then implement X/Apple/Google/Email signup-login, provider linking, recovery and onboarding continuation; recommended Opus5.5（高）
 
 ## Claude G4
 - owner: claude
