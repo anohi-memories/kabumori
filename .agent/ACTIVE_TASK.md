@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: x-social-mobile-multi-provider-auth-focused-review-20260928
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: assigned; focused review of PR #47 Auth/provider-linking/PKCE/recovery/X-login-vs-posting-X boundaries; recommended Sol（高）
+- allocation: review complete; FAIL at PR #47 `7bda196`, seven Auth-boundary negative probes reproduced; no source fix or production mutation; not merge/activation-ready; awaiting C1 and a coordinated G3 correction decision
 
 ## Codex H2
 - owner: codex

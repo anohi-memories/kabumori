@@ -68,7 +68,7 @@
 
 ## Current slot snapshot
 
-- H1: `review_required` — `x-social-mobile-phase1-consolidated-integration-review-20260928`; PASS-WITH-FIX source review, latest main `94aa3ea`, PR #42 `c5e0157`, PR #44 fixed head `966d4123`. Integrated #42 → #44 cleanly; fixed persisted `succeeded` posts being rendered as scheduled and leaking into History. Mobile tests 16/16 + domain tests 14/14, typecheck/lint/web export pass. Production mutation 0; awaiting C1. Real Supabase/backend readiness remains a separate gate; see `.agent/CODEX_REPORT.md`.
+- H1: `review_required` — `x-social-mobile-multi-provider-auth-focused-review-20260928`; FAIL at unchanged PR #47 `7bda196`; seven executable Auth-boundary negative probes failed (linking URL, callback result/PKCE flow ID, signup enumeration, provider-token persistence, recovery-user binding, malformed callback). Existing mobile 32/32 + domain 14/14, typecheck/lint/web+iOS export PASS. No source fix/PR push/merge/deploy; production mutation 0. Awaiting C1; do not merge/activate providers before coordinated source correction; see latest `.agent/CODEX_REPORT.md` section.
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
 - G1: `ready` — `kabumori-daily-topic-level-settings-20260928`; reuse existing `public.tips` for deterministic daily topic, add local beginner/intermediate/advanced preference and Settings UI; source-only RPC migration/app work, production mutation forbidden; recommended Opus5.5（高）.
 - G2: `ready` — `kabumori-shared-analysis-prod-deploy-observe-20260928`; PR #45 merged; controlled deploy of market-report-analysis only with consumer gates OFF, then natural morning+close observation; recommended Sonnet5（高）

@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-multi-provider-auth-focused-review-20260928
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: PR #47 multi-provider Auth Phase 2を1回だけ集中レビューする。X/Apple/Google/Email認証、identity linking、PKCE/deep link、password recovery、X app-authとposting-Xの分離を確認し、production provider activation前のAuth境界を固める。
@@ -88,3 +88,11 @@ Then:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for C1.
+
+## H1 result — 2026-09-28
+
+- **FAIL** at unchanged PR #47 head `7bda196147a749431774fba915a86d41bf43dc5d`; not ready for merge/provider activation.
+- Seven executable negative probes reproduced linking URL rejection, false-success duplicate callbacks, lost PKCE flow ID, signup enumeration, implicit provider-token persistence, unbound recovery context and malformed callback acceptance.
+- Existing mobile tests 32/32 + data-view 14/14, typecheck, lint, web+iOS export and diff check PASS. These do not establish real-device/provider E2E readiness.
+- Source fix / PR push / merge / deploy: none. Coordinated Auth-boundary design is required; stopped under the TASK fix policy. `production_mutation=0`.
+- Full findings, source locations, reproduction contracts and activation gates: `.agent/CODEX_REPORT.md`, latest H1 multi-provider Auth section. Await C1; do not restart this finished review under H1 without a new assignment.
