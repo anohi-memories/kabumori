@@ -1443,3 +1443,19 @@ Planned scope:
 - no production post or publish-authority activation by default
 
 Recommended Claude model: Sonnet5（高）.
+
+
+## Final K3 social-mobile multi-provider Auth Phase 2
+
+- verdict: **PASS for source implementation**.
+- Phase 0 merged accepted Phase 1 in required order:
+  - PR #42 -> `f0cac1505184a2abd9c9d504142012a1be999cf3`
+  - PR #44 -> `7870d10170d31e0a6b78ab245f4e9152a3628f00`
+- Phase 2 PR #47 head `7bda196147a749431774fba915a86d41bf43dc5d`.
+- X / Apple / Google / Email signup/login source support implemented.
+- email signup/recovery, explicit provider linking, duplicate-account guard and first-workspace/onboarding continuation implemented.
+- X app-auth and posting-account OAuth/Vault path remain intentionally separate.
+- tests 32/32 + data-view 14/14 + typecheck/lint/Expo web+iOS export PASS.
+- production Auth/config/DB/X mutation=0.
+- because this changes Auth/provider identity boundaries, one focused H1 review is assigned before merge/provider activation.
+- recommended Codex model: Sol（高）.
