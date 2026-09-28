@@ -1276,3 +1276,17 @@ Status: backlog only / no G1-G2 task assigned.
 - Deno 619/0 plus focused disposable DB behavior/ACL/race tests PASS; production mutation=0.
 - no merge/apply/deploy/second-account production activation occurred.
 - current product direction is to pause further infrastructure deepening and prioritize user-facing X auto-post app features; any Stage 3B production pilot should be a separately authorized future task.
+
+
+## X social-mobile app implementation phase 1
+
+- user explicitly directed pausing deeper Stage 3B/Admin infrastructure work and moving to user-facing app feature implementation.
+- G3 assigned: `x-social-mobile-auth-x-connect-onboarding-phase1-20260928`.
+  - scope: auth/session/X connect/reauth/onboarding inventory + narrow implementation gaps.
+  - must reuse existing OAuth/Vault authority; no Stage 3B production activation.
+  - recommended Claude model: Opus5.5（高）.
+- G4 assigned: `x-social-mobile-home-posting-settings-ux-phase1-20260928`.
+  - scope: Home/posting status/settings/schedule/history/posting UX inventory + narrow user-facing implementation gaps.
+  - no fake backend behavior, no production posting.
+  - recommended Claude model: Sonnet5（高）.
+- G3/G4 must use independent worktrees and stop on file overlap.
