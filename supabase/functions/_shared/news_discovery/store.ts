@@ -1,6 +1,7 @@
 // Storage adapter for the News Signal Pool. N2 has no DB (no migration yet); the pipeline talks
 // to this interface only, so a Postgres adapter (docs/news-sources/news_pool_schema_proposal.md)
 // can replace the in-memory / JSON-file adapters without touching the pipeline.
+import type { GroupingSignal } from "./pipeline.ts";
 import type { NewsSignal } from "./types.ts";
 
 export type DedupeLookup = {
@@ -14,12 +15,18 @@ export type DedupeLookup = {
 
 export type DedupeHit = { reason: "canonical_url" | "normalized_url" | "source_external_id" | "title_fingerprint"; signal_id: string };
 
+export type DuplicateLookup = DedupeLookup & { canonical_url: string; title_fingerprint_any: string };
+
+/** Which signals a store actually wrote (a DB may skip rows another run inserted first). */
+export type SaveResult = { inserted: string[]; conflicted: string[] };
+
 export interface NewsSignalStore {
-  findDuplicate(lookup: DedupeLookup & { canonical_url: string; title_fingerprint_any: string }): Promise<DedupeHit | null>;
+  findDuplicate(lookup: DuplicateLookup): Promise<DedupeHit | null>;
+  /** Optional batched form (one round trip per request); results align with `lookups`. */
+  findDuplicates?(lookups: readonly DuplicateLookup[]): Promise<Array<DedupeHit | null>>;
   /** Recent signals for same-event grouping (bounded window). */
-  recent(sinceMs: number): Promise<NewsSignal[]>;
-  save(signals: readonly NewsSignal[]): Promise<void>;
-  all(): Promise<NewsSignal[]>;
+  recent(sinceMs: number): Promise<GroupingSignal[]>;
+  save(signals: readonly NewsSignal[]): Promise<SaveResult | void>;
 }
 
 type IndexedRef = { id: string; source_id: string; title_fingerprint: string; at: number };
@@ -61,7 +68,7 @@ export class InMemoryNewsSignalStore implements NewsSignalStore {
     }
   }
 
-  findDuplicate(lookup: DedupeLookup & { canonical_url: string; title_fingerprint_any: string }): Promise<DedupeHit | null> {
+  findDuplicate(lookup: DuplicateLookup): Promise<DedupeHit | null> {
     const urlHit = (refs: IndexedRef[] | undefined) =>
       refs?.find((ref) => ref.source_id !== lookup.source_id || ref.title_fingerprint === lookup.title_fingerprint_any);
     if (lookup.external_id) {
@@ -81,13 +88,13 @@ export class InMemoryNewsSignalStore implements NewsSignalStore {
     return Promise.resolve(null);
   }
 
-  recent(sinceMs: number): Promise<NewsSignal[]> {
+  recent(sinceMs: number): Promise<GroupingSignal[]> {
     return Promise.resolve(this.signals.filter((signal) => Date.parse(signal.fetched_at) >= sinceMs));
   }
 
-  save(signals: readonly NewsSignal[]): Promise<void> {
+  save(signals: readonly NewsSignal[]): Promise<SaveResult> {
     this.#index(signals);
-    return Promise.resolve();
+    return Promise.resolve({ inserted: signals.map((signal) => signal.id), conflicted: [] });
   }
 
   all(): Promise<NewsSignal[]> {
@@ -111,8 +118,9 @@ export class JsonFileNewsSignalStore extends InMemoryNewsSignalStore {
     return new JsonFileNewsSignalStore(path, urlKeyOf, initial);
   }
 
-  override async save(signals: readonly NewsSignal[]): Promise<void> {
-    await super.save(signals);
+  override async save(signals: readonly NewsSignal[]): Promise<SaveResult> {
+    const result = await super.save(signals);
     await Deno.writeTextFile(this.path, JSON.stringify(this.signals, null, 1));
+    return result;
   }
 }

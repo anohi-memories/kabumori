@@ -4,7 +4,7 @@
 // "Can be fetched" and "may be stored / shown" are separate fields on purpose: a DISCOVERY_ONLY
 // source is fetched but its items are never displayed and never carry a body or an image.
 // DISABLED entries are kept here (with the reason) so nobody re-adds them without reading N1.
-import type { SourceDefinition, Topic } from "./types.ts";
+import type { DisabledScope, SourceDefinition, Topic } from "./types.ts";
 
 const MINUTE = 60;
 
@@ -47,8 +47,12 @@ function disabled(
   commercial_usage_status: SourceDefinition["commercial_usage_status"],
   terms_url: string | null,
   notes: string,
+  disabled_scope: DisabledScope = "no_direct_fetch",
+  publisher_domains: string[] = [new URL(endpoint).hostname.replace(/^(www|rss|feeds|news|search)\./, "")],
 ): SourceDefinition {
   return {
+    disabled_scope,
+    publisher_domains,
     source_id,
     source_name,
     operator,
@@ -489,7 +493,7 @@ export const NEWS_SOURCE_REGISTRY: readonly SourceDefinition[] = [
   disabled("boj_whatsnew", "日本銀行 新着", "日本銀行", "JP", "https://www.boj.or.jp/rss/whatsnew.xml", "unclear",
     "https://www.boj.or.jp/about/copyright.htm", "独自規約: 商用目的の転載・複製は事前相談。相談前は N2 で使わない（既存 market_macro は別所管）。"),
   disabled("nhk_news", "NHK ニュース RSS", "NHK", "JP", "https://news.web.nhk/n-data/conf/na/rss/cat0.xml", "prohibited",
-    "https://www.nhk.or.jp/toppage/rss/index.html", "個人利用のみ。商業目的の再配信・再提供は不可。"),
+    "https://www.nhk.or.jp/toppage/rss/index.html", "個人利用のみ。商業目的の再配信・再提供は不可。", "no_direct_fetch", ["nhk.or.jp", "news.web.nhk"]),
   disabled("jiji_rss", "時事通信 RSS", "時事通信社", "JP", "https://www.jiji.com/rss/ranking.rdf", "prohibited",
     "https://www.jiji.com/policy/rss.html", "個人の私的利用のみ。"),
   disabled("asahi_rss", "朝日新聞 RSS", "朝日新聞社", "JP", "https://www.asahi.com/rss/asahi/newsheadlines.rdf", "prohibited",
@@ -497,36 +501,100 @@ export const NEWS_SOURCE_REGISTRY: readonly SourceDefinition[] = [
   disabled("mainichi_rss", "毎日新聞 RSS", "毎日新聞社", "JP", "https://mainichi.jp/rss/etc/mainichi-flash.rss", "prohibited",
     "https://mainichi.jp/rss/", "商業目的の利用はお断り。"),
   disabled("yahoo_news_jp", "Yahoo!ニュース RSS", "LINEヤフー", "JP", "https://news.yahoo.co.jp/rss/topics/business.xml", "prohibited",
-    "https://news.yahoo.co.jp/rss", "個人利用のみ。アプリでの公開は不許可。"),
+    "https://news.yahoo.co.jp/rss", "個人利用のみ。アプリでの公開は不許可。", "no_direct_fetch", ["news.yahoo.co.jp", "finance.yahoo.co.jp"]),
   disabled("google_news_rss", "Google News RSS", "Google", "INT", "https://news.google.com/rss", "prohibited",
-    "https://www.google.com/intl/ja_jp/terms_google_news.html", "営利目的以外の個人的使用が条件。"),
+    "https://www.google.com/intl/ja_jp/terms_google_news.html", "営利目的以外の個人的使用が条件。", "no_direct_fetch", ["news.google.com"]),
   disabled("tdnet_list", "TDnet 閲覧サイト", "JPX", "JP", "https://www.release.tdnet.info/inbs/", "prohibited",
-    null, "robots.txt Disallow: /。有料 TDnet API が正規経路。"),
+    null, "robots.txt Disallow: /。有料 TDnet API が正規経路。", "no_direct_fetch", ["release.tdnet.info"]),
   disabled("jpx_rss", "JPX RSS", "日本取引所グループ", "JP", "https://www.jpx.co.jp/rss/markets_news.xml", "prohibited",
-    "https://www.jpx.co.jp/term-of-use/index.html", "商用目的のデータ収集・二次利用・再配信不可。"),
+    "https://www.jpx.co.jp/term-of-use/index.html", "商用目的のデータ収集・二次利用・再配信不可。", "no_direct_fetch", ["jpx.co.jp"]),
   disabled("prtimes_rss", "PR TIMES RSS", "PR TIMES", "JP", "https://prtimes.jp/index.rdf", "unclear",
     "https://prtimes.jp/main/html/kiyaku", "営利利用は許可制。提携後に再評価（企業ニュースで最有力）。"),
   disabled("itmedia_rss", "ITmedia RSS", "アイティメディア", "JP", "https://rss.itmedia.co.jp/rss/2.0/news_bursts.xml", "unclear",
-    "https://corp.itmedia.co.jp/media/rss_condition/", "アプリ組み込みは許諾制。"),
+    "https://corp.itmedia.co.jp/media/rss_condition/", "アプリ組み込みは許諾制。", "no_direct_fetch", ["itmedia.co.jp"]),
   disabled("bbc_world", "BBC World RSS", "BBC", "GB", "https://feeds.bbci.co.uk/news/world/rss.xml", "unclear",
-    "https://www.bbc.co.uk/news/10628494", "商用可否の明記なし。robots で AI クローラー拒否。"),
+    "https://www.bbc.co.uk/news/10628494", "商用可否の明記なし。robots で AI クローラー拒否。", "no_direct_fetch", ["bbc.co.uk", "bbc.com"]),
   disabled("al_jazeera", "Al Jazeera RSS", "Al Jazeera Media Network", "QA", "https://www.aljazeera.com/xml/rss/all.xml", "prohibited",
-    "https://www.aljazeera.com/terms-and-conditions", "personal, non-commercial。AI・TDM・商用を明示禁止。"),
+    "https://www.aljazeera.com/terms-and-conditions", "personal, non-commercial。AI・TDM・商用を明示禁止。", "no_access", ["aljazeera.com"]),
   disabled("un_news", "UN News RSS", "United Nations", "INT", "https://news.un.org/feed/subscribe/en/news/all/rss.xml", "unclear",
-    "https://www.un.org/en/about-us/terms-of-use", "UN サイト規約は personal, non-commercial use。"),
+    "https://www.un.org/en/about-us/terms-of-use", "UN サイト規約は personal, non-commercial use。", "no_direct_fetch", ["news.un.org"]),
   disabled("cnbc_rss", "CNBC RSS", "Versant", "US", "https://search.cnbc.com/rs/search/combinedcms/view.xml", "prohibited",
-    "https://www.cnbc.com/nbcuniversal-terms-of-service/", "personal / non-commercial。"),
+    "https://www.cnbc.com/nbcuniversal-terms-of-service/", "personal / non-commercial。", "no_direct_fetch", ["cnbc.com"]),
   disabled("ft_rss", "Financial Times RSS", "FT", "GB", "https://www.ft.com/world?format=rss", "prohibited",
-    null, "robots.txt で ML/AI 利用を明示禁止。"),
+    null, "robots.txt で ML/AI 利用を明示禁止。", "no_access", ["ft.com"]),
+  disabled("diamond_online", "ダイヤモンド・オンライン", "ダイヤモンド社", "JP", "https://diamond.jp/list/feed/rss/dol", "prohibited",
+    "https://www.diamond.co.jp/tos/dol.html", "スクレイピング収集・生成 AI への利用を明示禁止。", "no_access", ["diamond.jp"]),
+  disabled("toyokeizai_rss", "東洋経済オンライン", "東洋経済新報社", "JP", "https://toyokeizai.net/list/feed/rss", "prohibited",
+    "https://toyokeizai.net/list/base-terms", "営利目的の利用・クローラ収集を禁止。", "no_direct_fetch", ["toyokeizai.net"]),
+  disabled("nyt_rss", "New York Times", "NYT", "US", "https://rss.nytimes.com/services/xml/rss/nyt/World.xml", "prohibited",
+    "https://www.nytimes.com/rss", "事前の書面許可なき商用利用禁止。", "no_direct_fetch", ["nytimes.com"]),
+  disabled("dowjones_rss", "MarketWatch / WSJ", "Dow Jones", "US", "https://feeds.content.dowjones.io/public/rss/mw_topstories", "prohibited",
+    null, "一般に個人・非商用。", "no_direct_fetch", ["marketwatch.com", "wsj.com"]),
+  // ---------------------------------------------------------------- Observer Web Search (N3 v2)
+  {
+    source_id: "web_search",
+    source_name: "Observer limited Web Search",
+    operator: "OpenAI Responses API web_search (observer-owned lanes)",
+    category: "discovery",
+    country: "INT",
+    language: "mul",
+    source_type: "web_search",
+    endpoint: "https://api.openai.com/v1/responses",
+    fetch_interval_hint_sec: 0, // driven by the search budget, not by polling
+    min_request_gap_ms: 0,
+    timeout_ms: 60_000,
+    policy: "SEARCH_DISCOVERY",
+    commercial_usage_status: "allowed_search_metadata",
+    content_usage_scope: "discovery_only",
+    trust_level: "discovery_metadata",
+    discovery_only: true,
+    article_body_allowed: false,
+    // URL, domain and the discovery title only; the title is never displayed and never
+    // treated as a fact. Result pages are not fetched.
+    headline_storage_allowed: true,
+    image_usage_allowed: false,
+    requires_api_key: true,
+    enabled_for_n2: false, // never polled by the feed fetcher; the search stage calls it under budget
+    default_topics: [],
+    terms_url: null,
+    attribution: null,
+    notes:
+      "Radar, not a source of record: a result means 'a story exists'. Confirm with an official/primary source before any use. Independent of important-news-monitor's searches.",
+  },
 ];
 
 export function sourceById(sourceId: string): SourceDefinition | undefined {
   return NEWS_SOURCE_REGISTRY.find((source) => source.source_id === sourceId);
 }
 
-/** Sources the N2 observer may actually request. */
+/** Feed/API sources the observer may actually request (Web Search is budgeted separately). */
 export function fetchableSources(registry: readonly SourceDefinition[] = NEWS_SOURCE_REGISTRY): SourceDefinition[] {
-  return registry.filter((source) => source.policy !== "DISABLED" && source.enabled_for_n2 && !source.requires_api_key);
+  return registry.filter((source) =>
+    (source.policy === "DIRECT_SOURCE" || source.policy === "DISCOVERY_ONLY") && source.enabled_for_n2 && !source.requires_api_key
+  );
+}
+
+export type PublisherRestriction = { source_id: string; scope: DisabledScope } | null;
+
+/** Recognises a DISABLED publisher by URL host (exact domain or subdomain). */
+export function publisherRestriction(url: string, registry: readonly SourceDefinition[] = NEWS_SOURCE_REGISTRY): PublisherRestriction {
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  let found: PublisherRestriction = null;
+  for (const source of registry) {
+    if (source.policy !== "DISABLED" || !source.disabled_scope) continue;
+    for (const domain of source.publisher_domains ?? []) {
+      if (host === domain || host.endsWith(`.${domain}`)) {
+        // no_access wins over no_direct_fetch if a host is listed twice.
+        if (!found || source.disabled_scope === "no_access") found = { source_id: source.source_id, scope: source.disabled_scope };
+      }
+    }
+  }
+  return found;
 }
 
 /**
@@ -543,10 +611,16 @@ export function validateRegistry(registry: readonly SourceDefinition[] = NEWS_SO
     if (source.policy === "DISABLED" && source.enabled_for_n2) {
       problems.push(`${source.source_id}: DISABLED source cannot be enabled`);
     }
-    if (source.policy === "DISCOVERY_ONLY") {
-      if (!source.discovery_only) problems.push(`${source.source_id}: DISCOVERY_ONLY must set discovery_only`);
+    if (source.policy === "DISABLED" && (!source.disabled_scope || !(source.publisher_domains ?? []).length)) {
+      problems.push(`${source.source_id}: DISABLED source needs disabled_scope and publisher_domains`);
+    }
+    if (source.policy === "SEARCH_DISCOVERY" && (source.enabled_for_n2 || !source.requires_api_key)) {
+      problems.push(`${source.source_id}: SEARCH_DISCOVERY is budgeted, never polled`);
+    }
+    if (source.policy === "DISCOVERY_ONLY" || source.policy === "SEARCH_DISCOVERY") {
+      if (!source.discovery_only) problems.push(`${source.source_id}: ${source.policy} must set discovery_only`);
       if (source.article_body_allowed || source.image_usage_allowed) {
-        problems.push(`${source.source_id}: DISCOVERY_ONLY cannot allow body or images`);
+        problems.push(`${source.source_id}: ${source.policy} cannot allow body or images`);
       }
     }
     if (source.policy !== "DISABLED" && (source.commercial_usage_status === "prohibited" ||

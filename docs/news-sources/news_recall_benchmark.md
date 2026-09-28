@@ -107,3 +107,20 @@ ChatGPT 監視の結果は取りこぼし・誤りを含み得るため、正解
 - event 台帳のスプレッドシート（または DB 新規テーブル。migration は別途承認）
 - 週次集計 SQL / スクリプト
 - miss_reason → 改善 backlog のテンプレート
+
+## 追記（N3 v2、2026-09-28）: 限定 Web Search 導入後の miss_reason
+
+N3 v2 で Layer 3（限定 Web Search）を導入したため、§2.2 に次の理由コードを追加して集計する（既存コードは維持）。新基盤の実装は n3_observer_db_function.md。
+
+| code | 意味 | 確認する記録 |
+|---|---|---|
+| `source_gap` | 該当分野の無料 source が無い（§2.2 の `no_source` と同義。以後はこちらを使う） | registry |
+| `search_not_triggered` | 検索すべき状況だったが、トリガー条件に当たらなかった / 説明済みと誤判定した | `news_discovery_searches` に該当 search_key が無い、または plan の skipped |
+| `query_gap` | 検索は実行されたが、レーンの query が事象を拾わなかった | searches.result_count / useful_signal_count |
+| `delayed_source` | 取れたが遅い（`source_slow` と同義） | signals.fetched_at − first_public_at |
+| `policy_blocked` | 規約上使えない媒体（no_access）にしか無かった | searches.policy_blocked_count |
+| `dedupe_error` | 別事象を重複として統合した（`dedupe_merged_wrong` と同義） | run の duplicates と signal の対応 |
+| `classification_error` | topic / ticker の付与漏れ・誤り（`entity_unmatched` を含む） | signal_topics / signal_tickers |
+| `budget_exhausted` | soft budget / hard cap で検索が拒否された | searches.status='denied'、deny_reason |
+
+時刻比較は `news_discovery_signals.fetched_at`（新基盤の初回取得）と、`detected_at`（GDELT / 検索の検知時刻）を使う。`published_at` で代用しない。

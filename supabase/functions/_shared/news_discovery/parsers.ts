@@ -238,5 +238,8 @@ export function parseSourcePayload(source: SourceDefinition, body: string): RawI
       return parseGdeltDoc(body);
     case "edinet_documents_json":
       return parseEdinetDocuments(body);
+    case "web_search":
+      // Web Search results come from the budgeted search stage, never from an HTTP fetch of a source.
+      throw new ParseError("WEB_SEARCH_IS_NOT_FETCHED");
   }
 }

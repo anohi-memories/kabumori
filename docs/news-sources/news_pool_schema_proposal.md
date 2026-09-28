@@ -146,3 +146,15 @@ v0 はコード内の `KNOWN_ALIASES_V0` と `stocks_master` からの自動生�
 2. `NewsSignalStore` の Postgres 実装を追加（`store.ts` のインターフェースはそのまま）。
 3. 新規 Edge Function（例: `news-discovery-observer`）から呼ぶ。**Cron 登録は別承認**。
 4. ベンチマーク（news_recall_benchmark.md）用に `fetched_at` を event 台帳と突き合わせる SQL を用意。
+
+## 追記（N3、2026-09-28）: 実装済みの差分
+
+本案をもとに migration `supabase/migrations/20260928120000_news_discovery_observer.sql` を作成した（**未適用**）。本案からの主な変更点は次のとおり。詳細は n3_observer_db_function.md §2。
+
+- テーブル名：すべて `news_discovery_` 接頭辞にした（本番ニュースのテーブルと取り違えないため）。
+- 追加テーブル：`news_discovery_search_config`、`news_discovery_searches`（限定 Web Search の予算と記録）。`company_aliases` は作らず、v0 はコード内の辞書のまま。
+- 権限：テーブルへの書き込みは誰にも許さず、書き込みは SECURITY DEFINER 関数（service_role のみ実行可）だけで行う。
+- 公開時刻：`published_at`（時刻）と `published_date`（日付のみ）を別列にした。
+- ticker：`confirmation_basis` を追加した。
+- signal：`restricted_publisher` と `search_id` を追加した。
+- 除外ログ：`news_source_run_items` は作らず、source 単位の `news_discovery_run_sources.requests` と件数で代替した。item 単位の除外ログが必要になったら追加する。
