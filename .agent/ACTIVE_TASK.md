@@ -49,7 +49,7 @@
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: assigned after prior icon/splash/onboarding real-device PASS; implement approved news-first Home UI using existing read paths only; no important-news-monitor/market-report-analysis/backend changes; recommended Sonnet5（高）
+- allocation: K1 changes required on PR #46: Home hero must not label an older report as today's, and report fetch errors must not be presented as "not generated yet"; scope remains UI/read-only; recommended Sonnet5（中）
 
 ## Claude G2
 - owner: claude
