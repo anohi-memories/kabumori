@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-posting-interaction-phase2-20260928
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: accepted Phase 1 Home/posting/history基盤の次として、一般ユーザーが投稿内容を確認・編集・再生成・承認し、失敗時に理由と次の行動を理解できる投稿操作UXを実装する。既存backend契約を再利用し、存在しないbackend機能をfakeしない。
@@ -330,3 +330,18 @@ Home→次の投稿→詳細、投稿予定→詳細、履歴→詳細はPhase1�
 
 - status -> review_required
 - next_owner -> chatgpt
+
+
+## Final K4 — posting interaction Phase 2
+
+Verdict: **PASS**.
+
+- PR #49 head `15e9f74a6de98a4a8b49eadb6c2f962a6250c94e` accepted.
+- truthful source-only UX implemented for post detail/status, posting mode, X reconnect CTA and unavailable edit/regenerate/approve/retry actions.
+- unavailable backend capabilities remain visibly disabled with explicit reasons; no fake success.
+- no new DB/API/Auth/publish boundary introduced.
+- tests: post-interaction 8/8, data-view 14/14, mobile 43/43, typecheck/lint, Expo web+iOS export, diff/secret scan PASS.
+- production_mutation=0.
+- no Codex review required under task review policy.
+- PR #49 merged to main as `9eef82bf0729c25bf6aaf15951c138704b5b67b7`.
+- real edit/regenerate/approve/schedule/retry remains blocked on backend contracts/schema/RPC work and should be a separate reviewed task.
