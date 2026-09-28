@@ -8,7 +8,7 @@ import { targetLabel } from '@/lib/news-labels';
 import { fetchRecentReports } from '@/lib/personalized-reports';
 import { formatDateJa, type PersonalizedReport } from '@/lib/report-presentation';
 import { dashboardGreeting, dashboardSectionError, todayJst } from '@/lib/dashboard';
-import { latestReport, buildReportHighlights } from '@/lib/home-report-highlights';
+import { currentReport, buildReportHighlights } from '@/lib/home-report-highlights';
 import { splitHomeNewsSections } from '@/lib/home-news-sections';
 import { KABUMORI_COLORS, type KabumoriPalette } from '@/constants/kabumori-theme';
 import { SettingsSheet } from '@/components/settings-sheet';
@@ -55,9 +55,10 @@ export default function HomeScreen() {
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
   const newsSections = useMemo(() => splitHomeNewsSections(news), [news]);
-  const report = useMemo(() => latestReport(reports), [reports]);
+  const todayJstValue = useMemo(() => todayJst(), []);
+  const report = useMemo(() => currentReport(reports, todayJstValue), [reports, todayJstValue]);
   const highlights = useMemo(() => buildReportHighlights(report), [report]);
-  const today = useMemo(() => formatDateJa(todayJst()), []);
+  const today = useMemo(() => formatDateJa(todayJstValue), [todayJstValue]);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]} edges={['top']}>
@@ -85,7 +86,9 @@ export default function HomeScreen() {
           report={report}
           points={highlights.points}
           loading={loading && !reports.length}
+          error={errors.reports}
           onOpen={() => report && router.push({ pathname: '/reports/[id]', params: { id: report.id } })}
+          onRetry={() => void load(true)}
         />
 
         <HomeNewsSection

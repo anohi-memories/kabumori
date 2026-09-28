@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { KabumoriPalette } from '@/constants/kabumori-theme';
 import { reportTypeLabel, type PersonalizedReport } from '@/lib/report-presentation';
+import { reportCardStatus } from '@/lib/home-report-highlights';
 import { CharacterSlot } from '@/components/home/character-slot';
 
 type ReportHighlightCardProps = {
@@ -9,14 +10,17 @@ type ReportHighlightCardProps = {
   report: PersonalizedReport | null;
   points: string[];
   loading: boolean;
+  error: string;
   onOpen: () => void;
+  onRetry: () => void;
 };
 
 // The primary home card. Point rows have no per-row chevron/tap target --
 // detail navigation is a single CTA at the bottom of the card, per the
 // approved design ("各ポイントは個別遷移ではない").
-export function ReportHighlightCard({ palette, report, points, loading, onOpen }: ReportHighlightCardProps) {
+export function ReportHighlightCard({ palette, report, points, loading, error, onOpen, onRetry }: ReportHighlightCardProps) {
   const hasReport = !!report;
+  const status = reportCardStatus(hasReport, loading, error);
 
   return (
     <View style={[styles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
@@ -31,9 +35,16 @@ export function ReportHighlightCard({ palette, report, points, loading, onOpen }
         <CharacterSlot palette={palette} />
       </View>
 
-      {loading && !hasReport ? (
+      {status === 'loading' ? (
         <Text style={[styles.emptyText, { color: palette.muted }]}>読み込み中です…</Text>
-      ) : hasReport ? (
+      ) : status === 'error' ? (
+        <View style={[styles.errorCard, { backgroundColor: palette.error }]}>
+          <Text style={[styles.errorText, { color: palette.muted }]}>{error}</Text>
+          <Pressable onPress={onRetry} style={[styles.retryButton, { backgroundColor: palette.accent }]} accessibilityRole="button" accessibilityLabel="もう一度読み込む">
+            <Text style={styles.retryText}>もう一度試す</Text>
+          </Pressable>
+        </View>
+      ) : status === 'report' && report ? (
         <>
           <Text style={[styles.reportMeta, { color: palette.muted }]}>
             {reportTypeLabel(report.report_type)}
@@ -86,6 +97,10 @@ const styles = StyleSheet.create({
   pointDot: { width: 6, height: 6, borderRadius: 3, marginTop: 7 },
   pointText: { flex: 1, fontSize: 14, lineHeight: 20, fontWeight: '700' },
   emptyText: { fontSize: 13, lineHeight: 19, marginTop: 14 },
+  errorCard: { borderRadius: 12, padding: 12, marginTop: 14 },
+  errorText: { fontSize: 13, lineHeight: 19 },
+  retryButton: { alignSelf: 'flex-start', borderRadius: 9, paddingHorizontal: 12, paddingVertical: 8, marginTop: 10 },
+  retryText: { color: '#fff', fontWeight: '900', fontSize: 12 },
   cta: { borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginTop: 16 },
   ctaText: { fontSize: 14, fontWeight: '900' },
   pressed: { opacity: 0.85 },

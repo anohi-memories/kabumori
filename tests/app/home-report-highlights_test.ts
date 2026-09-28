@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildReportHighlights, latestReport } from "../../src/lib/home-report-highlights.ts";
+import { buildReportHighlights, currentReport, reportCardStatus } from "../../src/lib/home-report-highlights.ts";
 import type { PersonalizedReport, ReportBody } from "../../src/lib/report-presentation.ts";
 
 function report(overrides: Partial<PersonalizedReport> & { body?: ReportBody | null } = {}): PersonalizedReport {
@@ -17,12 +17,30 @@ function report(overrides: Partial<PersonalizedReport> & { body?: ReportBody | n
   };
 }
 
-test("latestReport picks the newest by trading_date then generated_at", () => {
-  const older = report({ id: "a", trading_date: "2026-09-27" });
-  const sameDayEarlier = report({ id: "b", trading_date: "2026-09-28", generated_at: "2026-09-28T00:00:00Z" });
-  const sameDayLater = report({ id: "c", trading_date: "2026-09-28", generated_at: "2026-09-28T08:00:00Z" });
-  assert.equal(latestReport([older, sameDayEarlier, sameDayLater])?.id, "c");
-  assert.equal(latestReport([])?.id, undefined);
+const TODAY = "2026-09-28";
+
+test("currentReport: yesterday-only rows never leak in as today's report", () => {
+  const yesterday = report({ id: "a", trading_date: "2026-09-27" });
+  assert.equal(currentReport([yesterday], TODAY), null);
+  assert.equal(currentReport([], TODAY), null);
+});
+
+test("currentReport: today's morning report is used when it's the only one today", () => {
+  const morning = report({ id: "m", trading_date: TODAY, report_type: "morning", generated_at: "2026-09-28T00:00:00Z" });
+  const yesterday = report({ id: "y", trading_date: "2026-09-27", generated_at: "2026-09-28T09:00:00Z" });
+  assert.equal(currentReport([yesterday, morning], TODAY)?.id, "m");
+});
+
+test("currentReport: with both morning and close today, the later-generated one wins", () => {
+  const morning = report({ id: "m", trading_date: TODAY, report_type: "morning", generated_at: "2026-09-28T00:00:00Z" });
+  const close = report({ id: "c", trading_date: TODAY, report_type: "close", generated_at: "2026-09-28T08:30:00Z" });
+  assert.equal(currentReport([morning, close], TODAY)?.id, "c");
+  assert.equal(currentReport([close, morning], TODAY)?.id, "c");
+});
+
+test("currentReport: a future-dated row never leaks in either", () => {
+  const future = report({ id: "f", trading_date: "2026-09-29" });
+  assert.equal(currentReport([future], TODAY), null);
 });
 
 test("no report yields no points, source none", () => {
@@ -114,4 +132,21 @@ test("drops duplicate/empty points and caps at 3", () => {
     body: { checkpoints_ja: ["同じ文です。", "同じ文です。", "", "二つ目です。", "三つ目です。", "四つ目です。"] },
   }));
   assert.deepEqual(result.points, ["同じ文です。", "二つ目です。", "三つ目です。"]);
+});
+
+test("reportCardStatus: loading only applies while nothing is shown yet", () => {
+  assert.equal(reportCardStatus(false, true, ""), "loading");
+  assert.equal(reportCardStatus(true, true, ""), "report");
+});
+
+test("reportCardStatus: a fetch error is never shown as the empty/not-generated state", () => {
+  assert.equal(reportCardStatus(false, false, "レポートを読み込めませんでした。"), "error");
+});
+
+test("reportCardStatus: an already-loaded report is shown even if a later refresh errors", () => {
+  assert.equal(reportCardStatus(true, false, "レポートを読み込めませんでした。"), "report");
+});
+
+test("reportCardStatus: no report and no error, loading finished, is the honest empty state", () => {
+  assert.equal(reportCardStatus(false, false, ""), "empty");
 });

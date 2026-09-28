@@ -20,6 +20,20 @@ export type ReportHighlights = {
   source: ReportHighlightsSource;
 };
 
+export type ReportCardStatus = 'loading' | 'error' | 'report' | 'empty';
+
+/**
+ * The report hero card's render branch, made an explicit, independently
+ * testable decision: a fetch error must never be shown as "not generated
+ * yet" once loading ends, and loading only applies while nothing is shown.
+ */
+export function reportCardStatus(hasReport: boolean, loading: boolean, error: string): ReportCardStatus {
+  if (loading && !hasReport) return 'loading';
+  if (!hasReport && error) return 'error';
+  if (hasReport) return 'report';
+  return 'empty';
+}
+
 const MAX_POINTS = 3;
 const POINT_MAX_CHARS = 90;
 
@@ -49,15 +63,18 @@ function fromStrings(values: readonly unknown[] | undefined): string[] {
   return points;
 }
 
-/** Selects the most recently generated report; ties broken by generated_at. */
-export function latestReport(reports: readonly PersonalizedReport[]): PersonalizedReport | null {
-  return reports
+/**
+ * The hero card's report, scoped strictly to `today`: an older stored report
+ * (yesterday, last week) must never be shown labeled "today's report" just
+ * because it happens to be the newest row. When both morning and close exist
+ * for today, the later-generated one wins (normally close). Returns null,
+ * not a fallback, when nothing was generated for today yet.
+ */
+export function currentReport(reports: readonly PersonalizedReport[], today: string): PersonalizedReport | null {
+  const todays = reports.filter((report) => report.trading_date === today);
+  return todays
     .slice()
-    .sort((left, right) => {
-      const dateOrder = right.trading_date.localeCompare(left.trading_date);
-      if (dateOrder !== 0) return dateOrder;
-      return (right.generated_at ?? '').localeCompare(left.generated_at ?? '');
-    })[0] ?? null;
+    .sort((left, right) => (right.generated_at ?? '').localeCompare(left.generated_at ?? ''))[0] ?? null;
 }
 
 /**
