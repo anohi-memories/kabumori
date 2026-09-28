@@ -83,3 +83,13 @@ export function onboardingStorageKey(userId: string): string {
   if (!/^[0-9a-f-]{36}$/u.test(userId)) throw new Error('ONBOARDING_USER_ID_INVALID');
   return `social-mobile:onboarding:v1:${userId}`;
 }
+
+/**
+ * Onboarding state loaded for one user is never shown to another: after a
+ * session/user switch the gate is "loading" until that user's state is read.
+ */
+export function inputForCurrentUser(loaded: { userId: string | null; input: OnboardingInput }, currentUserId: string | null): OnboardingInput {
+  if (loaded.input.kind === 'mock') return loaded.input;
+  if (!currentUserId || loaded.userId !== currentUserId) return { kind: 'loading' };
+  return loaded.input;
+}

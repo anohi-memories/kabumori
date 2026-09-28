@@ -8,10 +8,14 @@
     "scheme": "kabumori-social",
     "plugins": [
       "expo-router",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-apple-authentication"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "ios": {
+      "usesAppleSignIn": true
     }
   }
 }
