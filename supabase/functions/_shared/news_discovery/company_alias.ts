@@ -500,12 +500,22 @@ export function matchTickers(input: MatchInput, index: AliasIndex): TickerCandid
     const types = [...item.types];
     const onlyWeak = types.every((type) => type === "WEAK_ALIAS");
     const confirmed = !onlyWeak || item.contextHit || item.weakAliases.size >= 2;
+    const basis: TickerCandidate["confirmation_basis"] = !confirmed
+      ? null
+      : types.includes("EXACT_COMPANY_NAME") || types.includes("STRONG_ALIAS")
+      ? "strong_match"
+      : types.includes("TICKER_CODE")
+      ? "ticker_code"
+      : item.contextHit
+      ? "weak_with_context"
+      : "multiple_weak";
     const base = Math.max(...types.map((type) => SCORE[type]));
     const score = Math.min(1, base + (item.inTitle ? 0.05 : 0) + (onlyWeak && confirmed ? 0.3 : 0));
     out.push({
       ticker,
       company_name: index.tickers.get(ticker) ?? ticker,
       status: confirmed ? "confirmed" : "candidate",
+      confirmation_basis: basis,
       match_types: types,
       matched_aliases: [...item.aliases],
       in_title: item.inTitle,
@@ -514,6 +524,11 @@ export function matchTickers(input: MatchInput, index: AliasIndex): TickerCandid
   }
   // More than 10 companies in one headline is a market round-up, not company news.
   const confirmedCount = out.filter((candidate) => candidate.status === "confirmed").length;
-  if (confirmedCount > 10) for (const candidate of out) candidate.status = "candidate";
+  if (confirmedCount > 10) {
+    for (const candidate of out) {
+      candidate.status = "candidate";
+      candidate.confirmation_basis = null;
+    }
+  }
   return out.sort((a, b) => b.score - a.score || a.ticker.localeCompare(b.ticker));
 }
