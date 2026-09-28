@@ -580,7 +580,7 @@ export type PublisherRestriction = { source_id: string; scope: DisabledScope } |
 export function publisherRestriction(url: string, registry: readonly SourceDefinition[] = NEWS_SOURCE_REGISTRY): PublisherRestriction {
   let host: string;
   try {
-    host = new URL(url).hostname.toLowerCase();
+    host = new URL(url).hostname.toLowerCase().replace(/\.$/, "");
   } catch {
     return null;
   }

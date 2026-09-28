@@ -67,6 +67,10 @@ create table public.news_discovery_runs (
   web_search_calls integer not null default 0 check (web_search_calls >= 0),
   check (ai_calls <= search_count),
   error_summary text check (error_summary is null or char_length(error_summary) <= 2000),
+  -- Deadline / progress facts (deadline_reached, sources/searches completed or skipped,
+  -- signals_persisted, elapsed_ms). One small object instead of more columns.
+  execution jsonb not null default '{}'::jsonb
+    check (jsonb_typeof(execution) = 'object' and octet_length(execution::text) <= 2000),
   check ((status = 'running') = (completed_at is null)),
   check (successful_sources + failed_sources <= source_count)
 );
@@ -132,6 +136,10 @@ create table public.news_discovery_searches (
   restricted_count integer not null default 0 check (restricted_count >= 0),
   policy_blocked_count integer not null default 0 check (policy_blocked_count >= 0),
   rejected_unverified_count integer not null default 0 check (rejected_unverified_count >= 0),
+  -- Counted by complete_search from news_discovery_signals (search_id), i.e. what was really stored.
+  -- new/useful_signal_count above are the in-memory discovered candidates.
+  persisted_signal_count integer not null default 0 check (persisted_signal_count >= 0),
+  persisted_useful_signal_count integer not null default 0 check (persisted_useful_signal_count >= 0),
   model_calls integer not null default 0 check (model_calls between 0 and 1),
   web_search_calls integer not null default 0 check (web_search_calls between 0 and 5),
   input_tokens integer not null default 0 check (input_tokens >= 0),
@@ -142,7 +150,8 @@ create table public.news_discovery_searches (
   -- Only escalations have a parent; an escalation that actually ran always has one.
   check (parent_search_id is null or reason = 'escalation'),
   check (reason <> 'escalation' or status = 'denied' or parent_search_id is not null),
-  check (useful_signal_count <= new_signal_count and new_signal_count <= result_count)
+  check (useful_signal_count <= new_signal_count and new_signal_count <= result_count),
+  check (persisted_useful_signal_count <= persisted_signal_count)
 );
 create index news_discovery_searches_day_idx on public.news_discovery_searches (search_day, status);
 create index news_discovery_searches_key_idx on public.news_discovery_searches (search_key, reserved_at desc);
@@ -197,6 +206,11 @@ create table public.news_discovery_signals (
   -- Discovery sources (GDELT, Web Search): metadata only.
   check (not discovery_only or (summary_hint is null and image_url is null and not title_display_allowed
                                 and not image_usage_allowed)),
+  check (not discovery_only or (
+    raw_reference - array['feed_url', 'item_index']::text[] = '{}'::jsonb
+    and (not (raw_reference ? 'feed_url') or jsonb_typeof(raw_reference -> 'feed_url') = 'string')
+    and (not (raw_reference ? 'item_index') or jsonb_typeof(raw_reference -> 'item_index') = 'number')
+  )),
   check (image_url is null or image_usage_allowed),
   check (
     (published_at_precision is null and published_at is null and published_date is null)
@@ -233,7 +247,8 @@ create table public.news_discovery_signal_tickers (
   check (confirmation_basis is distinct from 'strong_match'
          or match_types && array['EXACT_COMPANY_NAME', 'STRONG_ALIAS']::text[]),
   check (confirmation_basis is distinct from 'ticker_code' or 'TICKER_CODE' = any (match_types)),
-  check (confirmation_basis not in ('weak_with_context', 'multiple_weak') or match_types = array['WEAK_ALIAS']::text[])
+  check (confirmation_basis not in ('weak_with_context', 'multiple_weak') or match_types = array['WEAK_ALIAS']::text[]),
+  check (confirmation_basis is distinct from 'multiple_weak' or cardinality(matched_aliases) >= 2)
 );
 create index news_discovery_signal_tickers_ticker_idx on public.news_discovery_signal_tickers (ticker_code, status);
 
@@ -344,6 +359,16 @@ $$;
 -- One transaction per call: either every row of the batch is written or none is. Signals that
 -- already exist (same id, or same source + external id) are skipped and reported as conflicts,
 -- so a retried batch is safe. Relations are written only for newly inserted signals.
+--
+-- Concurrent runs (M2): the batch first takes a transaction advisory lock per url_key, in sorted
+-- order (no deadlock between batches), then applies the URL rule of find_duplicates inside the
+-- lock: an existing row with the same canonical URL / url_key from ANOTHER source, or from the SAME
+-- source with the same title fingerprint, makes the new row a duplicate ('duplicates' in the result;
+-- not written, not an error). No unique constraint is added: a source may reuse one URL for a new
+-- title (ESRI), and same-source same-title documents with different URLs/ids are always kept
+-- (官邸). The cross-source 72 h title rule stays application-level (find_duplicates), by design.
+-- The lock protocol relies on READ COMMITTED (PostgREST default): each statement after the lock
+-- sees rows committed by the run that held it.
 create function public.news_discovery_insert_signals(p jsonb)
 returns jsonb
 language plpgsql
@@ -358,14 +383,38 @@ declare
   v_conflicted text[] := '{}';
   v_ticker jsonb;
   v_entity jsonb;
+  v_key text;
+  v_dup text;
+  v_duplicates jsonb := '[]'::jsonb;
 begin
   if p is null or jsonb_typeof(p -> 'signals') <> 'array' then raise exception 'NEWS_DISCOVERY_BAD_INPUT'; end if;
   if jsonb_array_length(p -> 'signals') > 500 then raise exception 'NEWS_DISCOVERY_BATCH_TOO_LARGE'; end if;
   v_run := (p ->> 'run_id')::uuid;
-  if not exists (select 1 from public.news_discovery_runs r where r.id = v_run and r.status = 'running') then
+  perform 1 from public.news_discovery_runs r where r.id = v_run and r.status = 'running' for update;
+  if not found then
     raise exception 'NEWS_DISCOVERY_RUN_NOT_RUNNING';
   end if;
+  for v_key in select distinct x.value ->> 'url_key' from jsonb_array_elements(p -> 'signals') x
+               where x.value ->> 'url_key' is not null order by 1 loop
+    perform pg_advisory_xact_lock(hashtext('news_discovery_url'), hashtext(v_key));
+  end loop;
   for v_signal in select value from jsonb_array_elements(p -> 'signals') loop
+    if v_signal ->> 'search_id' is not null and not exists (
+      select 1 from public.news_discovery_searches s
+      where s.id = (v_signal ->> 'search_id')::uuid and s.run_id = v_run and s.status <> 'denied'
+    ) then
+      raise exception 'NEWS_DISCOVERY_SEARCH_RUN_MISMATCH';
+    end if;
+    v_dup := null;
+    select s.id into v_dup from public.news_discovery_signals s
+      where (s.canonical_url = v_signal ->> 'canonical_url' or s.url_key = v_signal ->> 'url_key')
+        and s.id <> v_signal ->> 'id'
+        and (s.source_id <> v_signal ->> 'source_id' or s.title_fingerprint = v_signal ->> 'title_fingerprint')
+      order by s.fetched_at, s.id limit 1;
+    if v_dup is not null then
+      v_duplicates := v_duplicates || jsonb_build_array(jsonb_build_object('id', v_signal ->> 'id', 'duplicate_of', v_dup, 'reason', 'url'));
+      continue;
+    end if;
     v_id := null;
     insert into public.news_discovery_signals (
       id, first_run_id, source_id, source_type, policy, discovery_only, restricted_publisher, search_id, discovered_via, source_url,
@@ -398,6 +447,11 @@ begin
     v_inserted := v_inserted || v_id;
 
     for v_ticker in select value from jsonb_array_elements(coalesce(v_signal -> 'tickers', '[]'::jsonb)) loop
+      if v_ticker ->> 'confirmation_basis' = 'multiple_weak' and (
+        select count(distinct value) from jsonb_array_elements_text(coalesce(v_ticker -> 'matched_aliases', '[]'::jsonb))
+      ) < 2 then
+        raise check_violation using message = 'NEWS_DISCOVERY_MULTIPLE_WEAK_REQUIRES_DISTINCT_ALIASES';
+      end if;
       insert into public.news_discovery_signal_tickers (
         signal_id, ticker_code, status, confirmation_basis, match_types, matched_aliases, in_title,
         confidence, alias_dictionary_version)
@@ -414,7 +468,7 @@ begin
       on conflict do nothing;
     end loop;
   end loop;
-  return jsonb_build_object('inserted', to_jsonb(v_inserted), 'conflicted', to_jsonb(v_conflicted));
+  return jsonb_build_object('inserted', to_jsonb(v_inserted), 'conflicted', to_jsonb(v_conflicted), 'duplicates', v_duplicates);
 end;
 $$;
 
@@ -452,10 +506,32 @@ declare
   v_totals jsonb := coalesce(p -> 'totals', '{}'::jsonb);
   v_source jsonb;
   v_updated integer;
+  v_searches integer;
+  v_denied integer;
+  v_model integer;
+  v_tool integer;
+  v_results integer;
+  v_persisted_useful integer;
+  v_inserted integer;
 begin
   if coalesce(p ->> 'status', '') not in ('completed', 'completed_with_errors', 'failed') then
     raise exception 'NEWS_DISCOVERY_BAD_STATUS';
   end if;
+  if p -> 'execution' is not null and jsonb_typeof(p -> 'execution') <> 'object' then
+    raise exception 'NEWS_DISCOVERY_BAD_INPUT';
+  end if;
+  -- Usage and persisted counts come from the rows themselves (M1): a failed run, or a client that
+  -- lost its in-memory totals, can never hide searches/model calls that were actually made.
+  select count(*) filter (where s.status <> 'denied'), count(*) filter (where s.status = 'denied'),
+         coalesce(sum(s.model_calls), 0), coalesce(sum(s.web_search_calls), 0), coalesce(sum(s.result_count), 0)
+    into v_searches, v_denied, v_model, v_tool, v_results
+    from public.news_discovery_searches s where s.run_id = v_run;
+  select count(*) into v_persisted_useful from public.news_discovery_signals g
+    join public.news_discovery_searches s on s.id = g.search_id
+    where s.run_id = v_run
+      and (cardinality(g.topics) > 0 or exists (select 1 from public.news_discovery_signal_tickers t
+                                                where t.signal_id = g.id and t.status = 'confirmed'));
+  select count(*) into v_inserted from public.news_discovery_signals g where g.first_run_id = v_run;
   update public.news_discovery_runs r set
     status = p ->> 'status',
     completed_at = now(),
@@ -467,19 +543,20 @@ begin
     filtered_count = coalesce((v_totals ->> 'filtered_count')::integer, 0),
     normalized_count = coalesce((v_totals ->> 'normalized_count')::integer, 0),
     duplicate_count = coalesce((v_totals ->> 'duplicate_count')::integer, 0),
-    inserted_count = coalesce((v_totals ->> 'inserted_count')::integer, 0),
+    inserted_count = v_inserted,
     insert_conflict_count = coalesce((v_totals ->> 'insert_conflict_count')::integer, 0),
     topic_matched_count = coalesce((v_totals ->> 'topic_matched_count')::integer, 0),
     ticker_confirmed_count = coalesce((v_totals ->> 'ticker_confirmed_count')::integer, 0),
     ticker_candidate_count = coalesce((v_totals ->> 'ticker_candidate_count')::integer, 0),
-    search_count = coalesce((v_totals ->> 'search_count')::integer, 0),
-    search_denied_count = coalesce((v_totals ->> 'search_denied_count')::integer, 0),
-    search_result_count = coalesce((v_totals ->> 'search_result_count')::integer, 0),
-    search_useful_signal_count = coalesce((v_totals ->> 'search_useful_signal_count')::integer, 0),
+    search_count = v_searches,
+    search_denied_count = v_denied,
+    search_result_count = greatest(v_results, coalesce((v_totals ->> 'search_result_count')::integer, 0)),
+    search_useful_signal_count = v_persisted_useful,
     search_duplicate_count = coalesce((v_totals ->> 'search_duplicate_count')::integer, 0),
-    ai_calls = coalesce((v_totals ->> 'ai_calls')::integer, 0),
-    web_search_calls = coalesce((v_totals ->> 'web_search_calls')::integer, 0),
-    error_summary = left(p ->> 'error_summary', 2000)
+    ai_calls = greatest(v_model, coalesce((v_totals ->> 'ai_calls')::integer, 0)),
+    web_search_calls = greatest(v_tool, coalesce((v_totals ->> 'web_search_calls')::integer, 0)),
+    error_summary = left(p ->> 'error_summary', 2000),
+    execution = coalesce(p -> 'execution', '{}'::jsonb) || jsonb_build_object('signals_persisted', v_inserted)
   where r.id = v_run and r.status = 'running';
   get diagnostics v_updated = row_count;
   if v_updated = 0 then return jsonb_build_object('finished', false); end if;
@@ -524,7 +601,10 @@ declare
 begin
   if p is null or jsonb_typeof(p) <> 'object' then raise exception 'NEWS_DISCOVERY_BAD_INPUT'; end if;
   perform pg_advisory_xact_lock(hashtext('news_discovery_search_budget'));
-  select * into v_config from public.news_discovery_search_config where id;
+  -- Also create a row version: advisory locks alone cannot refresh a REPEATABLE READ snapshot.
+  -- A stale snapshot now fails with serialization_failure instead of overbooking the cap.
+  update public.news_discovery_search_config set updated_at = updated_at where id
+    returning * into v_config;
   if not found then raise exception 'NEWS_DISCOVERY_SEARCH_CONFIG_MISSING'; end if;
   select count(*) into v_today from public.news_discovery_searches s
     where s.search_day = v_day and s.status <> 'denied';
@@ -535,7 +615,10 @@ begin
     v_deny := 'soft_budget';
   elsif v_reason = 'escalation' then
     if v_parent is null or not exists (select 1 from public.news_discovery_searches s
-                                       where s.id = v_parent and s.search_key = v_key and s.status <> 'denied') then
+                                       where s.id = v_parent and s.search_key = v_key and s.status <> 'denied'
+                                         and s.run_id is not distinct from (p ->> 'run_id')::uuid
+                                         and s.search_day = v_day and s.lane = p ->> 'lane'
+                                         and s.reason in ('trigger_market_anomaly', 'trigger_discovery_signal')) then
       v_deny := 'bad_parent';
     elsif (select count(*) from public.news_discovery_searches s
            where s.search_day = v_day and s.reason = 'escalation' and s.search_key = v_key and s.status <> 'denied')
@@ -578,8 +661,17 @@ set search_path = ''
 as $$
 declare
   v_updated integer;
+  v_search uuid := (p ->> 'search_id')::uuid;
+  v_persisted integer;
+  v_persisted_useful integer;
 begin
   if coalesce(p ->> 'status', '') not in ('succeeded', 'failed') then raise exception 'NEWS_DISCOVERY_BAD_STATUS'; end if;
+  -- What this search really stored (its signals are persisted before the row is completed).
+  select count(*),
+         count(*) filter (where cardinality(g.topics) > 0 or exists (
+           select 1 from public.news_discovery_signal_tickers t where t.signal_id = g.id and t.status = 'confirmed'))
+    into v_persisted, v_persisted_useful
+    from public.news_discovery_signals g where g.search_id = v_search;
   update public.news_discovery_searches s set
     status = p ->> 'status',
     error_code = left(p ->> 'error_code', 64),
@@ -594,8 +686,10 @@ begin
     web_search_calls = coalesce((p ->> 'web_search_calls')::integer, 0),
     input_tokens = coalesce((p ->> 'input_tokens')::integer, 0),
     output_tokens = coalesce((p ->> 'output_tokens')::integer, 0),
+    persisted_signal_count = v_persisted,
+    persisted_useful_signal_count = v_persisted_useful,
     completed_at = now()
-  where s.id = (p ->> 'search_id')::uuid and s.status = 'reserved';
+  where s.id = v_search and s.status = 'reserved';
   get diagnostics v_updated = row_count;
   return jsonb_build_object('completed', v_updated = 1);
 end;

@@ -18,7 +18,15 @@ export type DedupeHit = { reason: "canonical_url" | "normalized_url" | "source_e
 export type DuplicateLookup = DedupeLookup & { canonical_url: string; title_fingerprint_any: string };
 
 /** Which signals a store actually wrote (a DB may skip rows another run inserted first). */
-export type SaveResult = { inserted: string[]; conflicted: string[] };
+/**
+ * Which signals a store actually wrote. `duplicates` are rows the DB itself resolved as URL
+ * duplicates of a row another (concurrent) run committed first — not written, not an error.
+ */
+export type SaveResult = {
+  inserted: string[];
+  conflicted: string[];
+  duplicates?: Array<{ id: string; duplicate_of: string; reason: string }>;
+};
 
 export interface NewsSignalStore {
   findDuplicate(lookup: DuplicateLookup): Promise<DedupeHit | null>;

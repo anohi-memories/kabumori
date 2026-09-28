@@ -21,7 +21,8 @@ import {
   truncateHint,
   urlDedupeKey,
 } from "./normalize.ts";
-import { type DedupeHit, type DuplicateLookup, InMemoryNewsSignalStore, type NewsSignalStore } from "./store.ts";
+import type { RunDeadline } from "./run_deadline.ts";
+import { type DedupeHit, type DuplicateLookup, InMemoryNewsSignalStore, type NewsSignalStore, type SaveResult } from "./store.ts";
 import { classifyTopics, extractEntities } from "./topics.ts";
 import type { FetchFailureCode, NewsSignal, RawItem, SourceDefinition, VerificationFlag } from "./types.ts";
 
@@ -219,7 +220,9 @@ export type SourceStats = {
   insert_conflicts: number;
   duration_ms: number;
   /** One entry per HTTP request: codes and counts only (never article text). */
-  request_log: Array<{ via: string; outcome: "ok" | "not_modified" | FetchFailureCode; http_status: number | null; duration_ms: number; items: number; detail: string | null }>;
+  request_log: Array<{ via: string; outcome: "ok" | "not_modified" | "DEADLINE_SKIPPED" | FetchFailureCode; http_status: number | null; duration_ms: number; items: number; detail: string | null }>;
+  /** Requests not started because the run deadline left no usable time (not a source failure). */
+  skipped_deadline: number;
 };
 
 export type DiscoveryRunResult = {
@@ -229,6 +232,7 @@ export type DiscoveryRunResult = {
   duplicates: Array<{ source_id: string; title: string; reason: DedupeHit["reason"]; duplicate_of: string }>;
   stats: SourceStats[];
   totals: Omit<SourceStats, "source_id" | "policy" | "failures" | "request_log" | "duration_ms"> & { failed_requests: number };
+  db_duplicates: number;
   /** Model calls and web_search tool calls (only the search stage makes any). */
   ai_calls: number;
   web_search_calls: number;
@@ -247,6 +251,8 @@ export type RunOptions = {
   maxItemsPerSource?: number;
   /** Structured per-source log line (codes and counts only). */
   log?: (line: Record<string, unknown>) => void;
+  /** Invocation deadline: no request starts without usable time; timeouts are capped. */
+  deadline?: RunDeadline;
 };
 
 function emptyStats(source: SourceDefinition): SourceStats {
@@ -273,6 +279,7 @@ function emptyStats(source: SourceDefinition): SourceStats {
     insert_conflicts: 0,
     duration_ms: 0,
     request_log: [],
+    skipped_deadline: 0,
   };
 }
 
@@ -289,6 +296,10 @@ export class DiscoveryRun {
   #batch = new InMemoryNewsSignalStore(signalUrlKey);
   #recent: GroupingSignal[] = [];
   #aiCalls = 0;
+  /** Signals already handed to the store (persisted, or resolved as conflicts / DB duplicates). */
+  #resolved = new Set<string>();
+  #insertedIds = new Set<string>();
+  #dbDuplicates = 0;
   #webSearchCalls = 0;
   readonly now: () => Date;
 
@@ -337,12 +348,26 @@ export class DiscoveryRun {
         : [{ url: source.endpoint, via: `feed:${source.source_id}` }];
 
       for (const request of requests) {
+        const deadline = this.options.deadline;
+        if (deadline && !deadline.canStartFetch()) {
+          // No usable time left: do not start the request; the reserve stays for persisting.
+          sourceStats.skipped_deadline += 1;
+          sourceStats.request_log.push({ via: request.via, outcome: "DEADLINE_SKIPPED", http_status: null, duration_ms: 0, items: 0, detail: null });
+          continue;
+        }
         sourceStats.requests += 1;
         const requestStarted = Date.now();
         // Isolation: fetchSource never throws for source failures; anything unexpected is recorded too.
         let result;
         try {
-          result = await fetchSource(source, { fetchImpl: this.options.fetchImpl, gate, now: this.now, validators: this.options.validators, url: request.url });
+          result = await fetchSource(source, {
+            fetchImpl: this.options.fetchImpl,
+            gate,
+            now: this.now,
+            validators: this.options.validators,
+            url: request.url,
+            timeoutMs: deadline ? deadline.capTimeout(source.timeout_ms) : undefined,
+          });
         } catch (error) {
           result = {
             source_id: source.source_id,
@@ -372,7 +397,37 @@ export class DiscoveryRun {
         await this.ingest(source, items, { via: request.via, feedUrl: request.url, fetchedAt: result.fetched_at });
       }
       sourceStats.duration_ms += Date.now() - sourceStarted;
+      if (this.options.deadline) {
+        if (sourceStats.skipped_deadline > 0) this.options.deadline.stats.sources_skipped += 1;
+        else this.options.deadline.stats.sources_completed += 1;
+      }
     }
+  }
+
+  /**
+   * Hand not-yet-persisted signals to the store now (all pending ones, or just `signals`). Used to
+   * flush feed signals before the search stage and each search's signals before its search row is
+   * completed, so persisted counts are real. Throws if the store cannot write; those signals stay
+   * pending (a later persist retries the DB write — never the search).
+   */
+  async persist(signals?: readonly NewsSignal[]): Promise<SaveResult> {
+    const pending = (signals ?? this.kept).filter((signal) => !this.#resolved.has(signal.id));
+    if (pending.length === 0) return { inserted: [], conflicted: [], duplicates: [] };
+    const saved = await this.options.store.save(pending);
+    const result: SaveResult = saved ?? { inserted: pending.map((signal) => signal.id), conflicted: [] };
+    for (const signal of pending) this.#resolved.add(signal.id);
+    for (const id of result.inserted) this.#insertedIds.add(id);
+    this.#dbDuplicates += result.duplicates?.length ?? 0;
+    return result;
+  }
+
+  get persistedCount(): number {
+    return this.#insertedIds.size;
+  }
+
+  /** Usage so far (for a failed run's final record). */
+  get usage(): { ai_calls: number; web_search_calls: number } {
+    return { ai_calls: this.#aiCalls, web_search_calls: this.#webSearchCalls };
   }
 
   /**
@@ -452,8 +507,8 @@ export class DiscoveryRun {
 
   /** Persist and summarize. A store that cannot write throws: the caller decides how the run ends. */
   async finish(): Promise<DiscoveryRunResult> {
-    const saved = await this.options.store.save(this.kept);
-    const inserted = new Set(saved ? saved.inserted : this.kept.map((signal) => signal.id));
+    await this.persist();
+    const inserted = this.#insertedIds;
     for (const sourceStats of this.stats) {
       const own = this.kept.filter((signal) => signal.source_id === sourceStats.source_id);
       sourceStats.inserted = own.filter((signal) => inserted.has(signal.id)).length;
@@ -504,7 +559,10 @@ export class DiscoveryRun {
         bytes: sum((s) => s.bytes),
         inserted: sum((s) => s.inserted),
         insert_conflicts: sum((s) => s.insert_conflicts),
+        skipped_deadline: sum((s) => s.skipped_deadline),
       },
+      /** Rows the DB resolved as URL duplicates of a concurrent run's rows (subset of insert_conflicts). */
+      db_duplicates: this.#dbDuplicates,
       ai_calls: this.#aiCalls,
       web_search_calls: this.#webSearchCalls,
     };

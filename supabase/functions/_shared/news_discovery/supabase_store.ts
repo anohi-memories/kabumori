@@ -33,8 +33,8 @@ export class NewsDiscoveryDbError extends Error {
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 /**
- * PostgREST RPC client. One retry for transport errors / 5xx: every function is either read-only
- * or idempotent (insert uses ON CONFLICT DO NOTHING; finish_run is a no-op once finished).
+ * Retry read-only/idempotent RPCs only. A lost acknowledgement of begin_run or reserve_search
+ * may already have committed: replay would create a second run or consume another reservation.
  */
 export function postgrestRpcClient(
   supabaseUrl: string,
@@ -46,7 +46,9 @@ export function postgrestRpcClient(
   return {
     async call(fn, payload) {
       let lastError: NewsDiscoveryDbError | null = null;
-      for (let attempt = 0; attempt <= (options.retries ?? 1); attempt += 1) {
+      const retries = fn === "news_discovery_begin_run" || fn === "news_discovery_reserve_search"
+        ? 0 : Math.max(0, Math.min(options.retries ?? 1, 1));
+      for (let attempt = 0; attempt <= retries; attempt += 1) {
         let response: Response;
         try {
           response = await fetchImpl(`${base}/rest/v1/rpc/${fn}`, {
@@ -120,7 +122,9 @@ export function signalToRow(signal: NewsSignal): Record<string, unknown> {
     same_event_group: signal.same_event_group,
     image_url: signal.image_usage_allowed && !signal.discovery_only ? signal.image_url : null,
     image_usage_allowed: signal.image_usage_allowed && !signal.discovery_only,
-    raw_reference: signal.raw_reference,
+    raw_reference: signal.discovery_only
+      ? { feed_url: signal.raw_reference.feed_url, item_index: signal.raw_reference.item_index }
+      : signal.raw_reference,
     tickers: signal.ticker_candidates.map((ticker) => ({
       ticker: ticker.ticker,
       status: ticker.status,
@@ -199,18 +203,21 @@ export class SupabaseNewsSignalStore implements NewsSignalStore {
    * no-op for them (ON CONFLICT DO NOTHING), so retrying a whole run is safe.
    */
   async save(signals: readonly NewsSignal[]): Promise<SaveResult> {
-    const result: SaveResult = { inserted: [], conflicted: [] };
+    const result: SaveResult = { inserted: [], conflicted: [], duplicates: [] };
     for (const chunk of chunks(signals, MAX_RPC_BATCH)) {
       const response = await this.rpc.call("news_discovery_insert_signals", {
         run_id: this.runId,
         alias_dictionary_version: this.aliasDictionaryVersion,
         signals: chunk.map(signalToRow),
-      }) as { inserted?: unknown; conflicted?: unknown };
-      if (!Array.isArray(response?.inserted) || !Array.isArray(response?.conflicted)) {
+      }) as { inserted?: unknown; conflicted?: unknown; duplicates?: unknown };
+      if (!Array.isArray(response?.inserted) || !Array.isArray(response?.conflicted) ||
+        (response.duplicates !== undefined && !Array.isArray(response.duplicates))) {
         throw new NewsDiscoveryDbError("DB_RPC_BAD_RESPONSE:insert_signals", null, false);
       }
       result.inserted.push(...response.inserted as string[]);
       result.conflicted.push(...response.conflicted as string[]);
+      // URL duplicates of rows a concurrent run committed first (resolved inside the DB under a lock).
+      result.duplicates!.push(...(response.duplicates ?? []) as NonNullable<SaveResult["duplicates"]>);
     }
     return result;
   }
@@ -246,9 +253,16 @@ export async function finishRun(
   input: {
     run_id: string;
     status: "completed" | "completed_with_errors" | "failed";
+    /**
+     * Client-side counts. Search usage (search_count, ai_calls, web_search_calls, results, persisted
+     * useful signals) and inserted_count are NOT taken from here: finish_run derives them from the
+     * search rows and persisted signals, so a failed run still shows what was actually spent.
+     */
     totals: Record<string, number>;
     sources: RunSourceRecord[];
     error_summary: string | null;
+    /** Deadline / progress facts (deadline_reached, sources/searches completed or skipped, ...). */
+    execution?: Record<string, number | boolean>;
   },
 ): Promise<boolean> {
   const response = await rpc.call("news_discovery_finish_run", input) as { finished?: unknown };
