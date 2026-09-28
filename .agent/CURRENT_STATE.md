@@ -68,14 +68,11 @@
 
 ## G1 Daily topic production rollout preflight
 
-- assigned: `kabumori-daily-topic-prod-rollout-preflight-20260928`.
-- newly detected blocker: daily-topic migration and MIC Phase 3A migration both use version prefix `20260928120000`.
-- production apply is paused until the daily-topic migration is renamed to a fresh unique version with byte-identical reviewed SQL.
-- Phase A is rename-only + read-only production history/function preflight; no `db push`, no production DDL/DML, no migration-history repair.
-- after K1 merge of the rename-only PR, G1 can continue with exact production apply/readback in a separate authorized continuation.
-- no Codex review expected for the rename-only phase.
-- recommended model: Sonnet5（高）.
-
+- task_id: `kabumori-daily-topic-prod-rollout-preflight-20260928` -- `review_required`, next_owner chatgpt.
+- Phase A done: PR #51 (`claude/daily-topic-migration-rename-20260928`, head `164485b`) renames only `20260928120000_add_daily_kabumori_tip_rpc.sql` -> `20260928123000_add_daily_kabumori_tip_rpc.sql`; SHA-256 identical before/after (`425f1e33...`), pure rename, MIC Phase 3A migration untouched. Not self-merged, no production mutation.
+- Read-only preflight: `supabase migration list --project-ref` confirms neither colliding version `20260928120000` is present in production's applied-migration history (both remote:""), so no migration-history repair needed.
+- **Gap**: a deeper schema-dump check to directly confirm `get_daily_kabumori_tip`/MIC Phase 3A objects aren't already live was blocked by this session's own safety classifier ("Production Reads"), not by any concerning finding. Recommend closing this gap (user grants the read, or does it themselves) before authorizing the actual production apply continuation task -- not before merging this rename.
+- After K1 merges the rename PR, a separate continuation task should authorize the exact production apply + ACL/readback/smoke checks.
 
 ## H2 stale review cleanup
 
@@ -91,7 +88,7 @@
 
 - H1: `review_required` — `x-social-mobile-auth-phase2-final-acceptance-review-20260928`; PASS-WITH-FIX at PR #47 `ed5f8b7` (initial G3 correction `5fd483a`); prior 7 + additional 3 source boundaries accepted. H1 pinned callback/recovery contexts, retained in-flight exchanges and limited provider authorize paths; fix pushed. Mobile 43/43 + data-view 14/14, typecheck/lint/Web+iOS export and four H1 mutation probes PASS; exact-head Preview SUCCESS. Production mutation 0; awaiting C1/source merge, real provider/device activation remains separately gated; see latest `.agent/CODEX_REPORT.md`.
 - H2: `idle` — unassigned; stale deferred PR #32 morning Fact-contract review was closed as obsolete after PR #32 had already been merged. Historical partial report preserved; slot is now genuinely reusable.
-- G1: `ready` — `kabumori-daily-topic-prod-rollout-preflight-20260928`; before production apply, resolve duplicate migration version `20260928120000` between daily-topic and MIC via rename-only PR with byte-identical reviewed SQL; read-only production migration/function preflight only; no production mutation in this phase; recommended Sonnet5（高）.
+- G1: `review_required` — `kabumori-daily-topic-prod-rollout-preflight-20260928`; PR #51 head `164485b` renames the colliding migration only, SHA-256 identical, production migration history confirms neither version applied remotely; a deeper function-existence schema check was blocked by this session's safety classifier (flagged for K1/user); production mutation 0.
 - G2: `ready` — `kabumori-shared-analysis-prod-deploy-observe-20260928`; PR #45 merged; controlled deploy of market-report-analysis only with consumer gates OFF, then natural morning+close observation; recommended Sonnet5（高）
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS

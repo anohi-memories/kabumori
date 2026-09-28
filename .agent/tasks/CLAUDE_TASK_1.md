@@ -3,8 +3,8 @@
 - task_id: kabumori-daily-topic-prod-rollout-preflight-20260928
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: PR #48でmerge済みの「今日のトピック」RPCをproductionへ安全に反映する前提を整える。まずmain上のmigration version衝突を解消し、内容が独立レビュー済みSQLと完全一致することを証明してPR化する。production applyはこのPhaseではまだ行わない。
@@ -139,3 +139,64 @@ Include:
 - PR number/head SHA
 - remaining issues
 - next recommendation
+
+## Report — G1 result (Phase A: migration-version collision fix)
+
+- task_id: kabumori-daily-topic-prod-rollout-preflight-20260928
+- fresh main SHA at start: `db6fa5c`
+- independent worktree/branch: scratch clone, branch `claude/daily-topic-migration-rename-20260928`
+- **result: rename-only PR opened. Not self-merged. No production mutation.**
+
+### Colliding migration filenames found
+
+- `supabase/migrations/20260928120000_add_daily_kabumori_tip_rpc.sql` (mine, from PR #48)
+- `supabase/migrations/20260928120000_mic_scenario_layer_phase3a.sql` (unrelated MIC task, untouched)
+
+### Production read-only preflight
+
+`supabase migration list --project-ref wsmznyzcvmuitkglfeuj` (read-only; no `db push`/apply): the two most recent entries in the remote migration history are both `{"local":"20260928120000","remote":""}` — **version `20260928120000` is not present in production's applied-migration history, for either colliding file.** No migration-history repair needed.
+
+A deeper check specifically confirming `public.get_daily_kabumori_tip(text,date)` and the MIC Phase 3A objects don't already exist via some other path was attempted (`supabase db dump --project-ref ... --schema public`, still read-only) but was **blocked by this session's own safety classifier ("Production Reads")**, not by any ambiguous or concerning data. I did not attempt to route around it with another tool, per the denial's own instructions. Flagging this gap honestly: the migration-history evidence is strong on its own (this codebase's only path to creating these objects is a tracked migration, and neither is recorded as applied), but I could not independently verify function/object non-existence myself. Recommend K1 or the user do that specific check (their own access, or explicitly granting this session a Bash permission rule) before authorizing the actual production apply in the follow-up task — not before merging this rename, which touches no production state at all.
+
+### Rename
+
+- Old path: `supabase/migrations/20260928120000_add_daily_kabumori_tip_rpc.sql`
+- New path: `supabase/migrations/20260928123000_add_daily_kabumori_tip_rpc.sql`
+- Chosen timestamp verified unused against fresh main's full `supabase/migrations/` listing (97 files) before renaming.
+
+### SHA-256 proof
+
+- Before: `425f1e33276c8766a223775f56cd15e79aa551fd87ab0603c1fef020f04872e1`
+- After: `425f1e33276c8766a223775f56cd15e79aa551fd87ab0603c1fef020f04872e1`
+- **Identical.**
+
+### Diff summary
+
+`git diff --stat`: 1 file changed, 0 insertions(+), 0 deletions(-). `git diff` shows a pure `rename from` / `rename to` with `similarity index 100%` — no content, whitespace, or comment change of any kind.
+
+### Tests / checks
+
+- Fresh-main migration filename uniqueness re-checked after rename: no duplicate prefixes remain anywhere in `supabase/migrations/`.
+- Old path absent, new path present — confirmed via `ls`/`git status`.
+- `git diff --check` — clean.
+- No source/app (`src/`) file touched; no MIC migration touched; no G2 file/worktree touched.
+
+### Production mutation
+
+**0.** No `supabase db push`, no migration apply, no migration-history repair, no DDL/DML, no Edge deploy, no cron/settings/Auth/RLS/Vault/X change.
+
+### PR / head SHA
+
+- PR: https://github.com/anohi-memories/kabumori/pull/51
+- Head: `164485b` on `claude/daily-topic-migration-rename-20260928`
+- Base: fresh `main` at `db6fa5c`
+- **Not self-merged.**
+
+### Remaining issues
+
+1. The direct schema-level confirmation that `get_daily_kabumori_tip`/MIC Phase 3A objects aren't already live was blocked by this session's safety classifier — see preflight note above. Recommend resolving before the production-apply follow-up task, not before merging this rename.
+2. No Codex review expected for this rename-only phase, per the task's own instruction.
+
+### Next recommendation
+
+K1 verifies the rename-only PR and merges if safe. A continuation task can then authorize the actual production migration apply + ACL/readback/smoke checks, ideally after the function/object-existence gap above is closed by someone with production-read access.
