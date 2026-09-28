@@ -5,7 +5,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { createSanitizingStorage, type KeyValueStore } from '@/lib/session-storage';
 
 export type SupabaseConfig = { url: string; publishableKey: string };
-export type SupabaseConfigResult = { ok: true; config: SupabaseConfig } | { ok: false; reason: string };
+export type SupabaseConfigResult = { ok: true; config: SupabaseConfig } | { ok: false; kind: 'missing' | 'invalid'; reason: string };
 
 // Expo only inlines EXPO_PUBLIC_* values when they are referenced statically.
 // Reading the keys through a generic `process.env` object leaves them absent
@@ -18,9 +18,9 @@ const expoPublicEnv = {
 export function getSupabaseConfig(env: Record<string, string | undefined> = expoPublicEnv): SupabaseConfigResult {
   const url = env.EXPO_PUBLIC_SUPABASE_URL?.trim();
   const publishableKey = env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim();
-  if (!url || !publishableKey) return { ok: false, reason: 'Supabase接続設定がありません。apps/social-mobile/.env.exampleを参照してください。' };
-  if (!/^https:\/\//u.test(url)) return { ok: false, reason: 'Supabase URLはhttps://で始まる必要があります。' };
-  if (/service_role|secret/iu.test(publishableKey)) return { ok: false, reason: '公開クライアントへservice role/secret keyを設定できません。' };
+  if (!url || !publishableKey) return { ok: false, kind: 'missing', reason: 'Supabase接続設定がありません。apps/social-mobile/.env.exampleを参照してください。' };
+  if (!/^https:\/\//u.test(url)) return { ok: false, kind: 'invalid', reason: 'Supabase URLはhttps://で始まる必要があります。' };
+  if (/service_role|secret/iu.test(publishableKey)) return { ok: false, kind: 'invalid', reason: '公開クライアントへservice role/secret keyを設定できません。' };
   return { ok: true, config: { url, publishableKey } };
 }
 

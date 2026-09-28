@@ -97,3 +97,16 @@ test('auth deep-link route never parses the link itself; posting and auth callba
   assert.match(domain, /AUTH_CALLBACK_URL = 'kabumori-social:\/\/auth-callback'/u);
   assert.match(domain, /POSTING_CALLBACK_URL = 'kabumori-social:\/\/oauth-callback'/u);
 });
+
+test('account screen: identities from the authenticated user only; operator diagnostics only in development builds', async () => {
+  const screen = await read('src/app/login-methods.tsx');
+  assert.match(screen, /auth\.getUserIdentities\(\)/u);
+  assert.doesNotMatch(screen, /identity_data|app_metadata|unlinkIdentity|access_token|refresh_token/u);
+  assert.match(screen, /\{__DEV__ \? \(\s*<Card>\s*<Text[^>]*>開発者向け/u, 'diagnostics card exists only behind __DEV__');
+  assert.equal((screen.match(/formatAuthDiagnostics\(/gu) ?? []).length, 1);
+  const provider = await read('src/providers/auth-provider.tsx');
+  for (const name of ['signInWithProvider', 'linkProvider']) {
+    const body = provider.slice(provider.indexOf(`const ${name} = useCallback`), provider.indexOf('}, [', provider.indexOf(`const ${name} = useCallback`)));
+    assert.match(body, /if \(!readiness\(provider\)\.usableNow\) return \{ ok: false/u, `${name} re-checks the fail-closed readiness`);
+  }
+});

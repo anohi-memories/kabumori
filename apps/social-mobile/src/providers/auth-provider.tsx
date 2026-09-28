@@ -20,19 +20,17 @@ import {
   AUTH_CALLBACK_URL,
   authFlowMessage,
   classifySignUp,
-  emailCapabilities,
   parseAuthSettings,
   parseConfiguredProviders,
-  providerReadiness,
   signUpErrorIsNeutral,
   validateNewPassword,
   type AuthProviderId,
   type BuildAuthConfig,
-  type ProviderReadiness,
   type ProviderSettings,
   type SignUpOutcome,
   type SocialProviderId,
 } from '@/domain/auth-flows';
+import { authReleaseReadiness, type AppAuthConfig, type AuthReleaseReport, type ProviderReleaseReadiness } from '@/domain/auth-release-readiness';
 import { nextRecoveryBinding, recoveryMatches, type RecoveryBinding } from '@/domain/recovery-binding';
 
 type AuthContextValue = {
@@ -41,10 +39,12 @@ type AuthContextValue = {
   loading: boolean;
   error: string | null;
   backendAvailable: boolean;
-  /** Per provider: enabled on the project, configured for this build, never claimed E2E-verified. */
-  readiness: (provider: AuthProviderId) => ProviderReadiness;
+  /** Per provider: enabled in Supabase, build config, source path, never claimed E2E-verified; usableNow is fail-closed. */
+  readiness: (provider: AuthProviderId) => ProviderReleaseReadiness;
   email: { signIn: boolean; signUp: boolean; reset: boolean };
   settingsKnown: boolean;
+  /** Full report for developer/operator diagnostics (no secrets, booleans and codes only). */
+  releaseReport: AuthReleaseReport;
   /** A password-recovery session bound to one user/session is active: set a new password first. */
   recoveryMode: boolean;
   signIn: (email: string, password: string) => Promise<{ ok: boolean; message?: string }>;
@@ -58,14 +58,27 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 const NO_BACKEND = { ok: false as const, message: 'Supabase接続設定がありません。' };
 // Build-time declaration of the providers configured for this build (static reference for Expo inlining).
-const CONFIGURED_PROVIDERS = parseConfiguredProviders(process.env.EXPO_PUBLIC_AUTH_PROVIDERS);
+const DECLARED_PROVIDERS = process.env.EXPO_PUBLIC_AUTH_PROVIDERS;
+const CONFIGURED_PROVIDERS = parseConfiguredProviders(DECLARED_PROVIDERS);
+
+function appAuthConfig(config: ReturnType<typeof getSupabaseConfig>): AppAuthConfig {
+  const expo = Constants.expoConfig;
+  return {
+    supabase: config.ok ? 'ok' : config.kind,
+    scheme: expo?.scheme,
+    iosBundleIdentifier: expo?.ios?.bundleIdentifier,
+    usesAppleSignIn: expo?.ios?.usesAppleSignIn === true,
+    plugins: expo?.plugins ?? [],
+    declaredProviders: DECLARED_PROVIDERS,
+  };
+}
 
 function appSession(session: Session | null): Session | null {
   return session ? stripProviderCredentials(session) : null;
 }
 
 export function AuthProvider({ children }: PropsWithChildren) {
-  const config = getSupabaseConfig();
+  const config = useMemo(() => getSupabaseConfig(), []);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(Boolean(supabase));
   const [error, setError] = useState<string | null>(config.ok ? null : config.reason);
@@ -139,13 +152,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
     nativeAppleAvailable: nativeApple,
     iosBundleIdentifier: Constants.expoConfig?.ios?.bundleIdentifier ?? null,
   }), [nativeApple]);
-  const readiness = useCallback((provider: AuthProviderId) => providerReadiness(provider, settings, build), [build, settings]);
-  const email = useMemo(() => emailCapabilities(settings, build), [build, settings]);
+  const releaseReport = useMemo(() => authReleaseReadiness({ settings, build, app: appAuthConfig(config) }), [build, config, settings]);
+  const readiness = useCallback((provider: AuthProviderId) => releaseReport.providers[provider], [releaseReport]);
+  const email = releaseReport.email;
 
   const signInWithProvider = useCallback(async (provider: SocialProviderId): Promise<AuthFlowResult> => {
     const host = getSupabaseHost();
     if (!supabase || !host) return NO_BACKEND;
-    if (!readiness(provider).usable) return { ok: false, message: authFlowMessage('provider_disabled') };
+    if (!readiness(provider).usableNow) return { ok: false, message: authFlowMessage('provider_disabled') };
     setError(null);
     if (provider === 'apple' && applePath(build) === 'native') return signInWithAppleNative(supabase);
     return signInWithOAuthProvider(supabase, host, provider);
@@ -155,14 +169,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
     const host = getSupabaseHost();
     const userId = session?.user.id;
     if (!supabase || !host || !userId) return NO_BACKEND;
-    if (!readiness(provider).usable) return { ok: false, message: authFlowMessage('provider_disabled') };
+    if (!readiness(provider).usableNow) return { ok: false, message: authFlowMessage('provider_disabled') };
     if (provider === 'apple' && applePath(build) === 'native') return linkAppleNative(supabase, userId);
     return linkOAuthProvider(supabase, host, provider, userId);
   }, [build, readiness, session?.user.id]);
 
   const value = useMemo<AuthContextValue>(() => ({
     session, loading, error, backendAvailable: Boolean(supabase), readiness, email,
-    settingsKnown: settings !== null, recoveryMode: recovery !== null,
+    settingsKnown: settings !== null, releaseReport, recoveryMode: recovery !== null,
     signIn: async (address, password) => {
       if (!supabase) return { ok: false, message: error ?? 'Supabase接続設定がありません。' };
       if (!email.signIn) return { ok: false, message: authFlowMessage('provider_disabled') };
@@ -220,7 +234,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setRecovery(null);
       return { ok: true };
     },
-  }), [email, error, linkProvider, loading, readiness, recovery, session, settings, signInWithProvider]);
+  }), [email, error, linkProvider, loading, readiness, recovery, releaseReport, session, settings, signInWithProvider]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

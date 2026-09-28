@@ -18,7 +18,7 @@ export function AuthScreen() {
   const [password, setPassword] = useState('');
 
   // Offered only when enabled on the project AND configured for this build (never "verified" by source).
-  const available = (provider: SocialProvider) => backendAvailable && auth.readiness(provider).usable;
+  const available = (provider: SocialProvider) => backendAvailable && auth.readiness(provider).usableNow;
   const modeAllowed = (value: EmailMode) => backendAvailable && (value === 'sign_in' ? emailCaps.signIn : value === 'sign_up' ? emailCaps.signUp : emailCaps.reset);
 
   async function continueWith(provider: SocialProvider) {

@@ -7,6 +7,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import * as flows from '../src/domain/auth-flows.ts';
 import * as recovery from '../src/domain/recovery-binding.ts';
+import * as release from '../src/domain/auth-release-readiness.ts';
 import * as storage from '../src/lib/session-storage.ts';
 
 const flowA = 'a'.repeat(32), flowB = 'b'.repeat(32);
@@ -102,7 +103,7 @@ async function providerHarness() {
     '@/lib/auth-errors': { signInErrorMessage: () => 'fixed error' },
     '@/lib/session-storage': storage,
     '@/lib/auth-client-flows': { completeAuthCallbackUrl: async () => null, isNativeAppleAvailable: async () => false },
-    '@/domain/auth-flows': flows, '@/domain/recovery-binding': recovery,
+    '@/domain/auth-flows': flows, '@/domain/recovery-binding': recovery, '@/domain/auth-release-readiness': release,
   };
   const source = await readFile(new URL('../src/providers/auth-provider.tsx', import.meta.url), 'utf8');
   const js = ts.transpileModule(source, { compilerOptions: {
