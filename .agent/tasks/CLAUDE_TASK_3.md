@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-account-lifecycle-release-phase4-20260928
 - owner: claude
 - slot: claude-3
-- status: idle
-- next_owner: none
+- status: ready
+- next_owner: claude
 - priority: high
 - recommended_model: Opus5.5（高）
 - purpose: Auth Phase 3の次として、公開前に必要なアカウント管理・アカウント削除・プライバシー/法務導線を棚卸しし、安全なsource/UI設計を実装する。production user deletionやAuth設定変更は行わない。
@@ -210,3 +210,15 @@ Then:
 - if an active Claude session sees this update, stop creating new changes, preserve its current checkpoint, and report any uncommitted work before exit.
 - resume only after ChatGPT assigns a new explicit G3 TASK or reactivates this task as `ready`.
 - recommended model on resume: **Opus5.5（高）**.
+
+
+## Resume checkpoint
+
+- resume the same Phase 4 task from the preserved G3 worktree `/Users/yuya/Developer/kabumori-g3-phase1d`.
+- branch: `claude/g3-account-lifecycle-p4`.
+- preserve all existing uncommitted changes; do not reset, discard, or overwrite them.
+- fresh-fetch origin/main before continuing and inspect divergence before any integration.
+- finish the existing source-only implementation, tests, docs, and PR preparation only.
+- no production mutation, deploy, migration apply, or real account deletion.
+- because this task introduces a privileged account-deletion boundary, independent review is mandatory before merge.
+- recommended model: Opus5.5（高）.
