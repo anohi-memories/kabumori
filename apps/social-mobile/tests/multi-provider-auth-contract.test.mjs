@@ -16,9 +16,13 @@ async function sources(dir) {
 }
 
 test('login X is never a posting credential: no provider tokens anywhere; auth code never calls the posting connector', async () => {
+  // Only the storage sanitizer may name the provider credential fields (to strip them).
   for (const { path, text } of await sources('src')) {
+    if (path === 'src/lib/session-storage.ts') continue;
     assert.doesNotMatch(text, /provider_token|provider_refresh_token|providerToken/u, path);
   }
+  assert.match(await read('src/lib/supabase.ts'), /storage: createSanitizingStorage\(/u, 'every persisted session passes the sanitizer');
+  assert.match(await read('src/providers/auth-provider.tsx'), /stripProviderCredentials\(session\)/u, 'React state never holds provider credentials');
   const flows = await read('src/lib/auth-client-flows.ts');
   const provider = await read('src/providers/auth-provider.tsx');
   for (const text of [flows, provider]) assert.doesNotMatch(text, /x-oauth-connect-user|useXConnect/u);
@@ -34,15 +38,22 @@ test('PKCE and redirect contract: fixed auth callback, only the project host may
   assert.match(await read('src/lib/supabase.ts'), /flowType: 'pkce'/u);
   const flows = await read('src/lib/auth-client-flows.ts');
   assert.equal((flows.match(/redirectTo: AUTH_CALLBACK_URL, skipBrowserRedirect: true/gu) ?? []).length, 2);
-  assert.match(flows, /target\.protocol !== 'https:' \|\| target\.host !== supabaseHost \|\| !target\.pathname\.startsWith\('\/auth\/v1\/'\)/u);
+  assert.match(await read('src/lib/supabase.ts'), /appendPkceFlowIdToRedirects: true/u);
+  assert.match(flows, /isAllowedSignInUrl\(flow\.url, supabaseHost\)/u, 'sign-in opens only the project authorize endpoint');
+  assert.match(flows, /isAllowedLinkUrl\(flow\.url, provider, supabaseHost\)/u, 'linking opens only the provider authorize URL bound to the project callback');
   assert.match(flows, /openAuthSessionAsync\(authorizeUrl, AUTH_CALLBACK_URL\)/u);
-  assert.match(flows, /if \(handledCodes\.has\(callback\.code\)\) return \{ ok: true \};/u, 'a code is exchanged at most once');
+  assert.match(flows, /completeAuthCallback\(callbackClient\(client\), parseAuthCallbackUrl\(outcome\.url\), \{ flowId \}\)/u, 'the browser result completes exactly the started flow');
+  const domain = await read('src/domain/auth-flows.ts');
+  assert.match(domain, /exchangeCodeForSession\(callback\.code, \{ flowId: callback\.flowId \}\)/u, 'the verifier is looked up by flow id');
+  assert.doesNotMatch(domain, /handledCodes/u, 'no success sentinel for duplicates');
 });
 
 test('Apple native: nonce hashed to Apple, raw to Supabase', async () => {
   const flows = await read('src/lib/auth-client-flows.ts');
   assert.match(flows, /nonce: hashedNonce/u);
-  assert.match(flows, /signInWithIdToken\(\{ provider: 'apple', token: credential\.identityToken, nonce: rawNonce \}\)/u);
+  assert.match(flows, /const rawNonce = bytesToHex\(await Crypto\.getRandomBytesAsync\(32\)\)/u);
+  assert.match(flows, /signInWithIdToken\(\{ provider: 'apple', token: credential\.identityToken, nonce: credential\.rawNonce \}\)/u);
+  assert.match(flows, /linkIdentity\(\{ provider: 'apple', token: credential\.identityToken, nonce: credential\.rawNonce \}\)/u);
 });
 
 test('linking is explicit and authenticated: linkIdentity only in linkOAuthProvider, used only by the login-methods screen', async () => {
@@ -52,15 +63,22 @@ test('linking is explicit and authenticated: linkIdentity only in linkOAuthProvi
   const users = (await sources('src')).filter(({ text }) => /linkProvider\(/u.test(code(text))).map(({ path }) => path).sort();
   assert.deepEqual(users, ['src/app/login-methods.tsx'], 'only the explicit login-methods screen links');
   assert.doesNotMatch(await read('src/app/login-methods.tsx'), /unlinkIdentity/u, 'no unlink in this phase');
+  const flows = await read('src/lib/auth-client-flows.ts');
+  const same = flows.slice(flows.indexOf('async function sameUserAfter'), flows.indexOf('export async function linkOAuthProvider'));
+  assert.match(same, /result\.userId === expectedUserId && data\.session\?\.user\.id === expectedUserId/u, 'a link must end as the same user');
+  assert.match(same, /await client\.auth\.signOut\(\);/u, 'never continue as someone else');
+  assert.equal((flows.match(/sameUserAfter\(client, /gu) ?? []).length, 2, 'both OAuth and native Apple linking check the user');
 });
 
 test('existing password login, session restore, logout and recovery ordering are preserved', async () => {
   const provider = await read('src/providers/auth-provider.tsx');
-  assert.match(provider, /signInWithPassword\(\{ email, password \}\)/u);
+  assert.match(provider, /signInWithPassword\(\{ email: address, password \}\)/u);
   assert.match(provider, /auth\.getSession\(\)/u);
   assert.match(provider, /onAuthStateChange\(\(event, nextSession\)/u);
-  assert.match(provider, /if \(event === 'PASSWORD_RECOVERY'\) setRecoveryMode\(true\);/u);
-  assert.match(provider, /setSession\(null\);\s+setRecoveryMode\(false\);/u);
+  assert.match(provider, /nextRecoveryBinding\(recoveryRef\.current, event, nextSession\)/u);
+  assert.match(provider, /setSession\(null\);\s+recoveryRef\.current = null;\s+setRecovery\(null\);/u);
+  const complete = provider.slice(provider.indexOf('completePasswordRecovery: async'), provider.indexOf('signInWithProvider,\n'));
+  assert.ok(complete.indexOf('recoveryMatches(') > 0 && complete.indexOf('recoveryMatches(') < complete.indexOf('updateUser('), 'recovery binding re-checked before updateUser');
   assert.match(provider, /\/auth\/v1\/settings/u);
   assert.doesNotMatch(provider, /SERVICE_ROLE|service_role/u);
   const layout = await read('src/app/_layout.tsx');

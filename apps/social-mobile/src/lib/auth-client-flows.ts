@@ -7,87 +7,93 @@ import {
   AUTH_CALLBACK_URL,
   authFlowMessage,
   classifyBrowserResult,
+  completeAuthCallback,
+  FLOW_ID_PATTERN,
+  isAllowedLinkUrl,
+  isAllowedSignInUrl,
   isAppleCancel,
   parseAuthCallbackUrl,
-  type AuthCallback,
+  type AuthFlowResult,
+  type CallbackAuthClient,
+  type SocialProviderId,
 } from '@/domain/auth-flows';
 import { bytesToHex } from '@/lib/x-oauth-onboarding';
 
-export type AuthFlowResult = { ok: true } | { ok: false; cancelled?: boolean; message: string };
-type OAuthProvider = 'x' | 'google' | 'apple';
+export type { AuthFlowResult } from '@/domain/auth-flows';
 
 const FAILED: AuthFlowResult = { ok: false, message: authFlowMessage(null) };
-const handledCodes = new Set<string>();
+const CANCELLED: AuthFlowResult = { ok: false, cancelled: true, message: 'ログインをキャンセルしました。' };
 
 function errorCode(error: unknown): string | null {
   const code = typeof error === 'object' && error !== null ? (error as { code?: unknown }).code : null;
   return typeof code === 'string' ? code : null;
 }
 
-/**
- * Completes one Supabase Auth return (PKCE code or e-mail token hash). A code
- * is exchanged at most once per app process (the in-app browser result and a
- * delivered deep link can both carry it). Only the session is kept; provider
- * tokens are never read.
- */
-export async function completeAuthCallback(client: SupabaseClient, callback: AuthCallback): Promise<AuthFlowResult> {
-  if (callback.kind === 'invalid') return FAILED;
-  if (callback.kind === 'error') return { ok: false, cancelled: callback.errorCode === 'access_denied', message: authFlowMessage(callback.errorCode) };
-  if (callback.kind === 'code') {
-    if (handledCodes.has(callback.code)) return { ok: true };
-    handledCodes.add(callback.code);
-    const { error } = await client.auth.exchangeCodeForSession(callback.code);
-    return error ? { ok: false, message: authFlowMessage(errorCode(error)) } : { ok: true };
-  }
-  const { error } = await client.auth.verifyOtp({ token_hash: callback.tokenHash, type: callback.type });
-  return error ? { ok: false, message: authFlowMessage(errorCode(error)) } : { ok: true };
-}
+const callbackClient = (client: SupabaseClient) => client as unknown as CallbackAuthClient;
 
+/** A delivered deep link: completes it only if it is an exact auth callback (never the posting one). */
 export async function completeAuthCallbackUrl(client: SupabaseClient, url: string): Promise<AuthFlowResult | null> {
   const callback = parseAuthCallbackUrl(url);
-  if (callback.kind === 'invalid') return null;  // not an auth return (e.g. the posting-account callback)
-  return completeAuthCallback(client, callback);
+  if (callback.kind === 'invalid') return null;
+  return completeAuthCallback(callbackClient(client), callback);
 }
 
-async function viaBrowser(authorizeUrl: string | undefined, client: SupabaseClient, supabaseHost: string): Promise<AuthFlowResult> {
-  if (typeof authorizeUrl !== 'string') return FAILED;
-  let target: URL;
-  try {
-    target = new URL(authorizeUrl);
-  } catch {
-    return FAILED;
-  }
-  // Only the project's own Supabase Auth authorize endpoint may be opened.
-  if (target.protocol !== 'https:' || target.host !== supabaseHost || !target.pathname.startsWith('/auth/v1/')) return FAILED;
+/** Runs one browser round trip for a flow this process started, and completes exactly that flow. */
+async function roundTrip(client: SupabaseClient, authorizeUrl: string, flowId: string): Promise<AuthFlowResult> {
   const outcome = classifyBrowserResult(await WebBrowser.openAuthSessionAsync(authorizeUrl, AUTH_CALLBACK_URL));
-  if (outcome.kind === 'cancelled') return { ok: false, cancelled: true, message: 'ログインをキャンセルしました。' };
+  if (outcome.kind === 'cancelled') return CANCELLED;
   if (outcome.kind === 'failed') return FAILED;
-  return (await completeAuthCallbackUrl(client, outcome.url)) ?? FAILED;
+  return completeAuthCallback(callbackClient(client), parseAuthCallbackUrl(outcome.url), { flowId });
 }
 
-/** X / Google / Apple (non-iOS) sign-in via Supabase Auth OAuth + PKCE in the in-app browser. */
-export async function signInWithOAuthProvider(client: SupabaseClient, supabaseHost: string, provider: OAuthProvider): Promise<AuthFlowResult> {
+function startedFlow(data: unknown): { url: string; flowId: string } | null {
+  const record = (data ?? {}) as { url?: unknown; flowId?: unknown };
+  return typeof record.url === 'string' && typeof record.flowId === 'string' && FLOW_ID_PATTERN.test(record.flowId)
+    ? { url: record.url, flowId: record.flowId }
+    : null;
+}
+
+/** X / Google / Apple (browser) sign-in: Supabase Auth OAuth + PKCE, opened only at the project's authorize endpoint. */
+export async function signInWithOAuthProvider(client: SupabaseClient, supabaseHost: string, provider: SocialProviderId): Promise<AuthFlowResult> {
   try {
     const { data, error } = await client.auth.signInWithOAuth({
       provider,
       options: { redirectTo: AUTH_CALLBACK_URL, skipBrowserRedirect: true },
     });
     if (error) return { ok: false, message: authFlowMessage(errorCode(error)) };
-    return await viaBrowser(data?.url, client, supabaseHost);
+    const flow = startedFlow(data);
+    if (!flow || !isAllowedSignInUrl(flow.url, supabaseHost)) return FAILED;
+    return await roundTrip(client, flow.url, flow.flowId);
   } catch {
     return FAILED;
   }
 }
 
-/** Explicit, authenticated linking of one more login method to the current user. */
-export async function linkOAuthProvider(client: SupabaseClient, supabaseHost: string, provider: OAuthProvider): Promise<AuthFlowResult> {
+async function sameUserAfter(client: SupabaseClient, result: AuthFlowResult, expectedUserId: string): Promise<AuthFlowResult> {
+  if (!result.ok) return result;
+  const { data } = await client.auth.getSession();
+  if (result.userId === expectedUserId && data.session?.user.id === expectedUserId) return result;
+  // Never continue as someone else after a linking attempt.
+  await client.auth.signOut();
+  return { ok: false, message: authFlowMessage('link_user_mismatch') };
+}
+
+/**
+ * Explicit, authenticated linking for the signed-in user. The URL Supabase
+ * returns is the provider's own authorize URL: accepted only for that provider
+ * and only when it redirects to this project's Supabase callback. The result
+ * must be the same user.
+ */
+export async function linkOAuthProvider(client: SupabaseClient, supabaseHost: string, provider: SocialProviderId, userId: string): Promise<AuthFlowResult> {
   try {
     const { data, error } = await client.auth.linkIdentity({
       provider,
       options: { redirectTo: AUTH_CALLBACK_URL, skipBrowserRedirect: true },
     });
     if (error) return { ok: false, message: authFlowMessage(errorCode(error)) };
-    return await viaBrowser(data?.url, client, supabaseHost);
+    const flow = startedFlow(data);
+    if (!flow || !isAllowedLinkUrl(flow.url, provider, supabaseHost)) return FAILED;
+    return await sameUserAfter(client, await roundTrip(client, flow.url, flow.flowId), userId);
   } catch {
     return FAILED;
   }
@@ -102,23 +108,49 @@ export async function isNativeAppleAvailable(): Promise<boolean> {
   }
 }
 
-/**
- * iOS native Sign in with Apple → signInWithIdToken. A fresh random nonce is
- * sent hashed to Apple and raw to Supabase, which checks it against the token.
- */
-export async function signInWithAppleNative(client: SupabaseClient): Promise<AuthFlowResult> {
+async function appleCredential(): Promise<{ identityToken: string; rawNonce: string } | 'cancelled' | null> {
   try {
+    // Fresh random nonce: its SHA-256 goes to Apple, the raw value to Supabase.
     const rawNonce = bytesToHex(await Crypto.getRandomBytesAsync(32));
     const hashedNonce = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, rawNonce);
     const credential = await AppleAuthentication.signInAsync({
       requestedScopes: [AppleAuthentication.AppleAuthenticationScope.FULL_NAME, AppleAuthentication.AppleAuthenticationScope.EMAIL],
       nonce: hashedNonce,
     });
-    if (!credential.identityToken) return FAILED;
-    const { error } = await client.auth.signInWithIdToken({ provider: 'apple', token: credential.identityToken, nonce: rawNonce });
-    return error ? { ok: false, message: authFlowMessage(errorCode(error)) } : { ok: true };
+    return credential.identityToken ? { identityToken: credential.identityToken, rawNonce } : null;
   } catch (error) {
-    if (isAppleCancel(error)) return { ok: false, cancelled: true, message: 'ログインをキャンセルしました。' };
+    return isAppleCancel(error) ? 'cancelled' : null;
+  }
+}
+
+/** iOS native Sign in with Apple → signInWithIdToken. */
+export async function signInWithAppleNative(client: SupabaseClient): Promise<AuthFlowResult> {
+  const credential = await appleCredential();
+  if (credential === 'cancelled') return CANCELLED;
+  if (!credential) return FAILED;
+  try {
+    const { data, error } = await client.auth.signInWithIdToken({ provider: 'apple', token: credential.identityToken, nonce: credential.rawNonce });
+    return error ? { ok: false, message: authFlowMessage(errorCode(error)) } : { ok: true, userId: data.user?.id ?? null };
+  } catch {
+    return FAILED;
+  }
+}
+
+/**
+ * iOS native Apple linking: linkIdentity with the Apple ID token, sent with
+ * the signed-in user's own session (auth-js `link_identity`), so it is the
+ * same explicit, authenticated linking — no browser/Services ID involved.
+ */
+export async function linkAppleNative(client: SupabaseClient, userId: string): Promise<AuthFlowResult> {
+  const credential = await appleCredential();
+  if (credential === 'cancelled') return CANCELLED;
+  if (!credential) return FAILED;
+  try {
+    const { data, error } = await client.auth.linkIdentity({ provider: 'apple', token: credential.identityToken, nonce: credential.rawNonce });
+    if (error) return { ok: false, message: authFlowMessage(errorCode(error)) };
+    const linkedUser = (data as { user?: { id?: unknown } | null } | null)?.user?.id;
+    return await sameUserAfter(client, { ok: true, userId: typeof linkedUser === 'string' ? linkedUser : null }, userId);
+  } catch {
     return FAILED;
   }
 }

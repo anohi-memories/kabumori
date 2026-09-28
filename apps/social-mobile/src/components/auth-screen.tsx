@@ -1,21 +1,15 @@
 import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@/constants/theme';
-import { PROVIDER_LABELS, type SignUpOutcome } from '@/domain/auth-flows';
+import { PROVIDER_LABELS, SIGN_UP_CHECK_EMAIL_MESSAGE } from '@/domain/auth-flows';
 import { useAuth } from '@/providers/auth-provider';
 
 type SocialProvider = 'x' | 'apple' | 'google';
 type EmailMode = 'sign_in' | 'sign_up' | 'reset';
 
-const SIGN_UP_TEXT: Record<SignUpOutcome, string> = {
-  signed_in: '',
-  confirmation_sent: '確認メールを送りました。メール内のリンクをこの端末で開くと登録が完了します。',
-  check_inbox_or_sign_in: '確認メールが届かない場合は、すでに登録済みの可能性があります。ログインまたはパスワード再設定をお試しください。',
-};
-
 export function AuthScreen() {
   const auth = useAuth();
-  const { backendAvailable, error: authError, providers } = auth;
+  const { backendAvailable, error: authError, email: emailCaps, settingsKnown } = auth;
   const [busy, setBusy] = useState<SocialProvider | 'email' | null>(null);
   const [message, setMessage] = useState<{ tone: 'error' | 'info'; text: string } | null>(null);
   const [emailOpen, setEmailOpen] = useState(false);
@@ -23,9 +17,9 @@ export function AuthScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  // Offered only when the project really has the provider enabled; Apple on iOS also needs the native API.
-  const available = (provider: SocialProvider) =>
-    backendAvailable && providers !== null && providers[provider] && (provider !== 'apple' || Platform.OS !== 'ios' || auth.nativeApple);
+  // Offered only when enabled on the project AND configured for this build (never "verified" by source).
+  const available = (provider: SocialProvider) => backendAvailable && auth.readiness(provider).usable;
+  const modeAllowed = (value: EmailMode) => backendAvailable && (value === 'sign_in' ? emailCaps.signIn : value === 'sign_up' ? emailCaps.signUp : emailCaps.reset);
 
   async function continueWith(provider: SocialProvider) {
     setBusy(provider); setMessage(null);
@@ -36,6 +30,7 @@ export function AuthScreen() {
 
   async function submitEmail() {
     const trimmed = email.trim();
+    if (!modeAllowed(mode)) { setMessage({ tone: 'error', text: 'この操作は現在利用できません。' }); return; }
     if (!trimmed || (mode !== 'reset' && !password)) { setMessage({ tone: 'error', text: 'メールアドレスとパスワードを入力してください。' }); return; }
     setBusy('email'); setMessage(null);
     if (mode === 'sign_in') {
@@ -44,7 +39,8 @@ export function AuthScreen() {
     } else if (mode === 'sign_up') {
       const result = await auth.signUpWithEmail(trimmed, password);
       if (!result.ok) setMessage({ tone: 'error', text: result.message });
-      else if (result.outcome !== 'signed_in') setMessage({ tone: 'info', text: SIGN_UP_TEXT[result.outcome] });
+      // Identical for a new address and an already-registered one (no enumeration).
+      else if (result.outcome === 'check_email') setMessage({ tone: 'info', text: SIGN_UP_CHECK_EMAIL_MESSAGE });
     } else {
       const result = await auth.requestPasswordReset(trimmed);
       setMessage({ tone: result.ok ? 'info' : 'error', text: result.message });
@@ -65,7 +61,7 @@ export function AuthScreen() {
       >
         {busy === provider ? <ActivityIndicator color={primary ? '#fff' : colors.primary} /> : (
           <Text style={primary ? styles.primaryText : styles.secondaryText}>
-            {PROVIDER_LABELS[provider]}で続ける{enabled || providers === null ? '' : '（準備中）'}
+            {PROVIDER_LABELS[provider]}で続ける{enabled || !settingsKnown ? '' : '（準備中）'}
           </Text>
         )}
       </Pressable>
@@ -85,20 +81,20 @@ export function AuthScreen() {
           {socialButton('x', true)}
           {socialButton('apple')}
           {socialButton('google')}
-          <Pressable accessibilityRole="button" disabled={busy !== null} onPress={() => { setEmailOpen(!emailOpen); setMessage(null); }} style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>
-            <Text style={styles.secondaryText}>{PROVIDER_LABELS.email}で続ける</Text>
+          <Pressable accessibilityRole="button" accessibilityState={{ disabled: busy !== null || !emailCaps.signIn }} disabled={busy !== null || !emailCaps.signIn} onPress={() => { setEmailOpen(!emailOpen); setMessage(null); }} style={({ pressed }) => [styles.secondary, pressed && styles.pressed, !emailCaps.signIn && styles.disabled]}>
+            <Text style={styles.secondaryText}>{PROVIDER_LABELS.email}で続ける{emailCaps.signIn ? '' : '（準備中）'}</Text>
           </Pressable>
 
           {emailOpen ? (
             <View style={styles.emailBox}>
               <View style={styles.tabs}>
                 {([['sign_in', 'ログイン'], ['sign_up', '新規登録'], ['reset', 'パスワードを忘れた']] as const).map(([key, label]) => (
-                  <Pressable key={key} accessibilityRole="tab" accessibilityState={{ selected: mode === key }} onPress={() => { setMode(key); setMessage(null); }} style={[styles.tab, mode === key && styles.tabActive]}>
+                  <Pressable key={key} accessibilityRole="tab" accessibilityState={{ selected: mode === key, disabled: !modeAllowed(key) }} disabled={!modeAllowed(key)} onPress={() => { setMode(key); setMessage(null); }} style={[styles.tab, mode === key && styles.tabActive, !modeAllowed(key) && styles.disabled]}>
                     <Text style={[styles.tabText, mode === key && styles.tabTextActive]}>{label}</Text>
                   </Pressable>
                 ))}
               </View>
-              {mode === 'sign_up' && providers?.signupDisabled ? <Text style={styles.caption}>現在、新規登録を受け付けていません。</Text> : null}
+              {!emailCaps.signUp ? <Text style={styles.caption}>新規登録{emailCaps.reset ? '' : 'とパスワード再設定'}は、現在このアプリでは利用できません。</Text> : null}
               <Text style={styles.label}>メールアドレス</Text>
               <TextInput autoCapitalize="none" autoComplete="email" keyboardType="email-address" onChangeText={setEmail} placeholder="you@example.com" style={styles.input} value={email} />
               {mode !== 'reset' ? (
@@ -107,7 +103,7 @@ export function AuthScreen() {
                   <TextInput autoCapitalize="none" autoComplete={mode === 'sign_up' ? 'new-password' : 'password'} onChangeText={setPassword} placeholder="パスワード" secureTextEntry style={styles.input} value={password} />
                 </>
               ) : null}
-              <Pressable accessibilityRole="button" disabled={busy !== null || !backendAvailable} onPress={() => void submitEmail()} style={({ pressed }) => [styles.primary, (pressed || busy === 'email' || !backendAvailable) && styles.disabled]}>
+              <Pressable accessibilityRole="button" disabled={busy !== null || !modeAllowed(mode)} onPress={() => void submitEmail()} style={({ pressed }) => [styles.primary, (pressed || busy === 'email' || !modeAllowed(mode)) && styles.disabled]}>
                 {busy === 'email' ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{mode === 'sign_in' ? 'ログイン' : mode === 'sign_up' ? '登録する' : '再設定メールを送る'}</Text>}
               </Pressable>
             </View>

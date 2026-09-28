@@ -6,7 +6,7 @@ import { ActionButton, Card, Pill, Screen, SectionTitle, styles } from '@/compon
 import { SignOutButton } from '@/components/sign-out-button';
 import { selectDataSource } from '@/data/repository-selection';
 import { SupabaseOnboardingRepository } from '@/data/onboarding-repository';
-import { deriveOnboardingStep, onboardingStorageKey, type OnboardingInput } from '@/domain/onboarding';
+import { deriveOnboardingStep, inputForCurrentUser, onboardingStorageKey, type OnboardingInput } from '@/domain/onboarding';
 import { shouldShowNewAccountNotice } from '@/domain/auth-flows';
 import { useAuth } from '@/providers/auth-provider';
 import { useXConnect } from '@/features/x-connect/use-x-connect';
@@ -58,12 +58,13 @@ function Progress({ current }: { current: number }) {
 export function OnboardingGate({ children }: PropsWithChildren) {
   const { reload: reloadData } = useDataStatus();
   const { session } = useAuth();
-  const [acknowledged, setAcknowledged] = useState<boolean | null>(null);
-  const [loadedAt, setLoadedAt] = useState(0);
+  const currentUserId = session?.user.id ?? null;
   const selection = useMemo(() => selectDataSource(), []);
   const repository = useMemo(() => (supabase ? new SupabaseOnboardingRepository(supabase) : null), []);
-  const [input, setInput] = useState<OnboardingInput>(selection.kind === 'mock' ? { kind: 'mock' } : { kind: 'loading' });
-  const [userId, setUserId] = useState<string | null>(null);
+  // Everything loaded is tagged with the user it belongs to; another user never sees it.
+  const [loaded, setLoaded] = useState<{ userId: string | null; input: OnboardingInput; acknowledged: boolean }>(
+    { userId: null, input: selection.kind === 'mock' ? { kind: 'mock' } : { kind: 'loading' }, acknowledged: false },
+  );
   const [generation, setGeneration] = useState(0);
   const refresh = useCallback(() => setGeneration((value) => value + 1), []);
 
@@ -73,23 +74,22 @@ export function OnboardingGate({ children }: PropsWithChildren) {
     // All state updates happen asynchronously (same pattern as DataProvider).
     void Promise.resolve().then(async () => {
       if (selection.kind === 'blocked' || !repository) {
-        if (!cancelled) setInput({ kind: 'error', reason: selection.kind === 'blocked' ? selection.reason : 'Supabase clientを作成できません。' });
+        if (!cancelled) setLoaded({ userId: currentUserId, input: { kind: 'error', reason: selection.kind === 'blocked' ? selection.reason : 'Supabase clientを作成できません。' }, acknowledged: false });
         return;
       }
-      if (!cancelled) setInput({ kind: 'loading' });
       try {
         const result = await repository.read(readDeferred);
         if (cancelled) return;
-        setUserId(result.userId);
-        setAcknowledged(result.userId ? (await readProgress(result.userId)).newAccountAcknowledged === true : false);
-        setLoadedAt(Date.now());
-        setInput(result.input);
+        const acknowledged = result.userId ? (await readProgress(result.userId)).newAccountAcknowledged === true : false;
+        if (!cancelled) setLoaded({ userId: result.userId, input: result.input, acknowledged });
       } catch {
-        if (!cancelled) setInput({ kind: 'error', reason: '初期設定の状態を確認できません。' });
+        if (!cancelled) setLoaded({ userId: currentUserId, input: { kind: 'error', reason: '初期設定の状態を確認できません。' }, acknowledged: false });
       }
     });
     return () => { cancelled = true; };
-  }, [generation, repository, selection]);
+  }, [currentUserId, generation, repository, selection]);
+  const input = inputForCurrentUser({ userId: loaded.userId, input: loaded.input }, currentUserId);
+  const userId = loaded.userId === currentUserId ? currentUserId : null;
 
   const onConnected = useCallback(() => { refresh(); reloadData(); }, [refresh, reloadData]);
   const { state: connectState, stateText, verifiedHandle, connect } = useXConnect(onConnected);
@@ -99,21 +99,20 @@ export function OnboardingGate({ children }: PropsWithChildren) {
     refresh();
   }, [refresh, userId]);
   const acknowledgeNewAccount = useCallback(async () => {
-    if (userId) await writeProgress(userId, { newAccountAcknowledged: true });
-    setAcknowledged(true);
+    if (!userId) return;
+    await writeProgress(userId, { newAccountAcknowledged: true });
+    setLoaded((current) => (current.userId === userId ? { ...current, acknowledged: true } : current));
   }, [userId]);
 
   const step = deriveOnboardingStep(input);
   if (step.step === 'preview' || step.step === 'done') return <>{children}</>;
-  const identities = (session?.user.identities ?? []).map((identity) => ({ provider: identity.provider, createdAt: identity.created_at }));
+  const identities = (session?.user.identities ?? []).map((identity) => ({ provider: identity.provider }));
   // Display only (never authorization): how this session signed in.
   const signedInWithX = identities.some((identity) => identity.provider === 'x');
-  const showNewAccountNotice = input.kind === 'loaded' && acknowledged === false && shouldShowNewAccountNotice({
+  const showNewAccountNotice = input.kind === 'loaded' && shouldShowNewAccountNotice({
     identities,
-    userCreatedAt: session?.user.created_at,
     hasWorkspace: input.brandIds.length > 0,
-    acknowledged: false,
-    now: loadedAt,
+    acknowledged: loaded.acknowledged,
   });
   if (showNewAccountNotice) {
     return (

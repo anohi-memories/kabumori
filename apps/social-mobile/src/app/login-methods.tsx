@@ -19,7 +19,7 @@ function label(provider: string): string {
  * Posting-account X is managed separately on the Accounts screen.
  */
 export default function LoginMethodsScreen() {
-  const { linkProvider, providers } = useAuth();
+  const { linkProvider, readiness } = useAuth();
   const [identities, setIdentities] = useState<UserIdentity[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: 'success' | 'warning'; text: string } | null>(null);
@@ -65,7 +65,8 @@ export default function LoginMethodsScreen() {
           <Text style={{ color: colors.ink, fontWeight: '800' }}>ログイン方法を追加</Text>
           <Text style={styles.muted}>いまログインしているアカウントに追加します。別のアカウントで使われている方法は追加できません。</Text>
           {LINKABLE.filter((provider) => !linked.has(provider)).map((provider) => {
-            const enabled = providers?.[provider] === true;
+            // Apple uses native linking on iOS (same explicit linkIdentity), browser linking elsewhere.
+            const enabled = readiness(provider).usable;
             return (
               <Pressable key={provider} accessibilityRole="button" disabled={!enabled || busy !== null} onPress={() => void link(provider)} style={({ pressed }) => [styles.button, pressed && styles.buttonPressed, (!enabled || busy !== null) && { opacity: 0.5 }]}>
                 {busy === provider ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{label(provider)}を追加{enabled ? '' : '（準備中）'}</Text>}
