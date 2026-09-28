@@ -103,7 +103,8 @@ export type CallbackAuthClient = {
 export type CallbackExpectation = { flowId?: string | null };
 
 const MAX_REMEMBERED = 32;
-const outcomes = new Map<string, Promise<AuthFlowResult>>();
+type RememberedOutcome = { context: string; promise: Promise<AuthFlowResult>; pending: boolean };
+const outcomes = new Map<string, RememberedOutcome>();
 
 function errorCodeOf(error: unknown): string | null {
   const code = typeof error === 'object' && error !== null ? (error as { code?: unknown }).code : null;
@@ -125,8 +126,19 @@ export function completeAuthCallback(client: CallbackAuthClient, callback: AuthC
     return Promise.resolve({ ok: false, message: authFlowMessage('flow_state_not_found') });
   }
   const key = callback.kind === 'code' ? `code:${callback.code}` : `otp:${callback.tokenHash}`;
+  const context = callback.kind === 'code' ? callback.flowId : `${callback.type}:${callback.flowId ?? ''}`;
   const existing = outcomes.get(key);
-  if (existing) return existing;
+  // A duplicate must represent the same flow/type, not just the same credential.
+  // Refuse conflicting replays before they can borrow a result or consume a verifier.
+  if (existing) return existing.context === context
+    ? existing.promise
+    : Promise.resolve({ ok: false, message: authFlowMessage('flow_state_not_found') });
+  if (outcomes.size >= MAX_REMEMBERED) {
+    // Never evict an exchange in flight: its duplicate must still share it.
+    const settled = [...outcomes].find(([, entry]) => !entry.pending);
+    if (!settled) return Promise.resolve({ ok: false, message: authFlowMessage(null) });
+    outcomes.delete(settled[0]);
+  }
   const outcome = (async (): Promise<AuthFlowResult> => {
     try {
       const { data, error } = callback.kind === 'code'
@@ -138,8 +150,9 @@ export function completeAuthCallback(client: CallbackAuthClient, callback: AuthC
       return { ok: false, message: authFlowMessage(null) };
     }
   })();
-  outcomes.set(key, outcome);
-  while (outcomes.size > MAX_REMEMBERED) outcomes.delete(outcomes.keys().next().value as string);
+  const entry: RememberedOutcome = { context, promise: outcome, pending: true };
+  outcomes.set(key, entry);
+  void outcome.then(() => { entry.pending = false; });
   return outcome;
 }
 
@@ -173,6 +186,11 @@ const PROVIDER_AUTHORIZE_HOSTS: Record<SocialProviderId, readonly string[]> = {
   x: ['x.com', 'twitter.com'],
   apple: ['appleid.apple.com'],
 };
+const PROVIDER_AUTHORIZE_PATHS: Record<SocialProviderId, readonly string[]> = {
+  google: ['/o/oauth2/v2/auth', '/o/oauth2/auth'],
+  x: ['/i/oauth2/authorize'],
+  apple: ['/auth/authorize'],
+};
 
 /**
  * Authenticated linking (linkIdentity) returns the provider's own authorize
@@ -182,6 +200,7 @@ const PROVIDER_AUTHORIZE_HOSTS: Record<SocialProviderId, readonly string[]> = {
 export function isAllowedLinkUrl(url: string, provider: SocialProviderId, supabaseHost: string): boolean {
   const parsed = strictHttps(url);
   if (!parsed || !PROVIDER_AUTHORIZE_HOSTS[provider].includes(parsed.hostname)) return false;
+  if (!PROVIDER_AUTHORIZE_PATHS[provider].includes(parsed.pathname)) return false;
   const redirects = parsed.searchParams.getAll('redirect_uri');
   return redirects.length === 1 && redirects[0] === `https://${supabaseHost}/auth/v1/callback`;
 }

@@ -189,13 +189,18 @@ export function AuthProvider({ children }: PropsWithChildren) {
     },
     completePasswordRecovery: async (password, confirmation) => {
       if (!supabase || !recoveryRef.current) return { ok: false, message: authFlowMessage('recovery_context_lost') };
+      const startedRecovery = recoveryRef.current;
       const valid = validateNewPassword(password, confirmation);
       if (!valid.ok) return valid;
       // Re-check the exact recovery user/session immediately before changing the password.
       const { data } = await supabase.auth.getSession();
-      if (!recoveryMatches(recoveryRef.current, data.session)) {
-        recoveryRef.current = null;
-        setRecovery(null);
+      if (recoveryRef.current !== startedRecovery || !recoveryMatches(startedRecovery, data.session)) {
+        // A newer recovery link must not retarget this password action, nor be
+        // discarded merely because an older action finished its session check.
+        if (recoveryRef.current === startedRecovery) {
+          recoveryRef.current = null;
+          setRecovery(null);
+        }
         return { ok: false, message: authFlowMessage('recovery_context_lost') };
       }
       const { error: updateError } = await supabase.auth.updateUser({ password });

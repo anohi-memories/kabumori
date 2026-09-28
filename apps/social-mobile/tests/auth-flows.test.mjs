@@ -60,6 +60,7 @@ test('browser destinations: sign-in only at the project authorize endpoint; link
     `https://user@${HOST}/auth/v1/authorize`, `https://${HOST}:444/auth/v1/authorize`]) assert.equal(isAllowedSignInUrl(url, HOST), false, url);
   const cb = encodeURIComponent(`https://${HOST}/auth/v1/callback`);
   assert.equal(isAllowedLinkUrl(`https://accounts.google.com/o/oauth2/v2/auth?client_id=c&redirect_uri=${cb}&state=s`, 'google', HOST), true);
+  assert.equal(isAllowedLinkUrl(`https://accounts.google.com/o/oauth2/auth?redirect_uri=${cb}`, 'google', HOST), true);
   assert.equal(isAllowedLinkUrl(`https://x.com/i/oauth2/authorize?redirect_uri=${cb}`, 'x', HOST), true);
   assert.equal(isAllowedLinkUrl(`https://twitter.com/i/oauth2/authorize?redirect_uri=${cb}`, 'x', HOST), true);
   assert.equal(isAllowedLinkUrl(`https://appleid.apple.com/auth/authorize?redirect_uri=${cb}`, 'apple', HOST), true);

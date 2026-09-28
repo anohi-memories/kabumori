@@ -57,11 +57,14 @@ A method is offered only when `usable = enabledInSupabase && configuredForBuild`
 - supabase-js is created with `flowType: 'pkce'` and `experimental.appendPkceFlowIdToRedirects: true`, so each redirect carries its own `sb_flow_id`. A `code` without a valid `sb_flow_id` (`^[A-Za-z0-9_-]{8,64}$`) is invalid. The code is exchanged with `exchangeCodeForSession(code, { flowId })`: the verifier is looked up only for that flow — no fallback to the latest verifier, so concurrent flows A/B each use their own verifier and a stale flow fails closed.
 - A browser round trip completes only the flow it started (`expectation.flowId`); another flow's callback is refused before any exchange.
 - The same code / token hash delivered twice (browser result and OS deep link) shares one in-flight promise and gets the real result (success or failure) — never an assumed success. Up to 32 outcomes are remembered.
+- A remembered result is bound to the original flow ID and, for token hashes, OTP type; a conflicting replay is refused before another verifier is consumed.
+- The 32-entry bound never evicts an in-flight exchange. Completed entries can be retired; if all slots are pending, a new distinct callback fails without exchanging, while duplicates still share their pending result.
 - Operator gate: the redirect allow-list must accept `kabumori-social://auth-callback?sb_flow_id=…` (e.g. `kabumori-social://**`).
 
 ## 6. Identity linking
 
 - Sign-in URLs must be `https://<project host>/auth/v1/authorize` (no userinfo/port). Link URLs returned by `linkIdentity` are the provider's own authorize URL: accepted only for that provider's host (Google `accounts.google.com`, X `x.com`/`twitter.com`, Apple `appleid.apple.com`), https without userinfo/port, and with exactly one `redirect_uri` equal to `https://<project host>/auth/v1/callback`. Anything else is never opened.
+- Linking also requires an approved authorize path: Google `/o/oauth2/v2/auth` or `/o/oauth2/auth`, X `/i/oauth2/authorize`, Apple `/auth/authorize`; an unrelated page on an otherwise approved host is not an Auth destination.
 - Linking is explicit from **アカウント → ログイン方法** only, for the signed-in user. After the round trip, the result user and the current session user must both equal the user who started the link; otherwise the app signs out and shows `link_user_mismatch` — never continues as another user.
 - Apple linking path: **iOS uses native** Sign in with Apple and `linkIdentity({ provider: 'apple', token, nonce })` (ID-token link with the user's own session; no Services ID). Other platforms use the browser OAuth link and require `apple_web`.
 - Automatic linking remains Supabase's own verified-e-mail behavior. No merging by name/handle, no `user_metadata` (enforced by test). `identity_already_exists` ⇒ fixed message. Unlinking is not offered.
@@ -73,6 +76,8 @@ A new address and an already registered address give the same UX: when no sessio
 ## 8. Password recovery binding
 
 `PASSWORD_RECOVERY` binds recovery to `{ userId, sessionId }` (JWT `session_id`). Any other auth event whose session is not that exact user+session (another user's login, a new sign-in, sign-out) clears it. `completePasswordRecovery` re-reads `getSession()` and re-checks the binding immediately before `updateUser`; on mismatch it clears recovery and returns `recovery_context_lost` without changing any password.
+
+Each password action also retains the recovery binding present when it started. A newer recovery link received while the session check awaits cannot retarget that action; the older action fails without clearing the newer valid recovery context.
 
 ## 9. New-account notice and user switch
 
