@@ -7,6 +7,7 @@ import {
   parseDailyTipRow,
   readTopicLevelFrom,
   topicCardStatus,
+  topicKeyMatches,
   writeTopicLevelTo,
   TOPIC_LEVEL_STORAGE_KEY,
   type KeyValueStorage,
@@ -122,4 +123,34 @@ test("topicCardStatus: an already-loaded topic survives a later refresh error", 
 
 test("topicCardStatus: no topic and no error, loading finished, is the honest empty state", () => {
   assert.equal(topicCardStatus(false, false, ""), "empty");
+});
+
+// --- topic request key (K1 finding 1: stale content across a level/date change) ---
+
+test("topicKeyMatches: a topic loaded for beginner does not match after changing to advanced", () => {
+  const loaded = { level: "beginner" as const, jstDate: "2026-09-28" };
+  const currentAfterChange = { level: "advanced" as const, jstDate: "2026-09-28" };
+  assert.equal(topicKeyMatches(loaded, currentAfterChange), false);
+});
+
+test("topicKeyMatches: same date + same level (a same-key refresh failure) may still show the loaded topic", () => {
+  const loaded = { level: "beginner" as const, jstDate: "2026-09-28" };
+  const current = { level: "beginner" as const, jstDate: "2026-09-28" };
+  assert.equal(topicKeyMatches(loaded, current), true);
+});
+
+test("topicKeyMatches: a successful level change is reflected once the key is updated to match", () => {
+  const afterSuccessfulFetch = { level: "advanced" as const, jstDate: "2026-09-28" };
+  const current = { level: "advanced" as const, jstDate: "2026-09-28" };
+  assert.equal(topicKeyMatches(afterSuccessfulFetch, current), true);
+});
+
+test("topicKeyMatches: a topic loaded for yesterday does not match after the JST date rolls over", () => {
+  const loaded = { level: "beginner" as const, jstDate: "2026-09-27" };
+  const currentAfterRollover = { level: "beginner" as const, jstDate: "2026-09-28" };
+  assert.equal(topicKeyMatches(loaded, currentAfterRollover), false);
+});
+
+test("topicKeyMatches: nothing loaded yet never matches", () => {
+  assert.equal(topicKeyMatches(null, { level: "beginner", jstDate: "2026-09-28" }), false);
 });

@@ -40,7 +40,11 @@ as $$
   select id, title, category, base_text, difficulty
   from eligible
   where total > 0
-    and rn = (abs(hashtext(p_jst_date::text || ':' || p_level)) % total) + 1
+    -- hashtext() returns a signed int4; abs(-2147483648::int4) overflows
+    -- int4's range and raises "integer out of range". Casting to bigint
+    -- first keeps the same deterministic value but makes abs() safe (bigint
+    -- comfortably holds 2147483648).
+    and rn = (abs(hashtext(p_jst_date::text || ':' || p_level)::bigint) % total) + 1
 $$;
 
 revoke all on function public.get_daily_kabumori_tip(text, date) from public, anon;

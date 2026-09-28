@@ -108,3 +108,22 @@ export function topicCardStatus(hasTopic: boolean, loading: boolean, error: stri
   if (hasTopic) return 'topic';
   return 'empty';
 }
+
+/** Identifies which (level, JST date) a loaded topic was fetched for. */
+export type TopicRequestKey = {
+  level: TopicLevel;
+  jstDate: string;
+};
+
+/**
+ * A loaded topic may only keep being shown as current if it was fetched for
+ * exactly today's date and the currently selected level. Changing the level,
+ * or the JST date rolling over while the app stays mounted, must never leave
+ * a stale topic on screen looking current -- even if a later refresh for the
+ * new key fails. A same-key refresh failure is allowed to keep showing the
+ * already-loaded topic (that's the ordinary "stale is better than a scary
+ * error" tradeoff already used by the report hero).
+ */
+export function topicKeyMatches(loaded: TopicRequestKey | null, current: TopicRequestKey): boolean {
+  return loaded !== null && loaded.level === current.level && loaded.jstDate === current.jstDate;
+}

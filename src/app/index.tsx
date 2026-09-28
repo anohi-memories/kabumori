@@ -12,7 +12,7 @@ import { currentReport, buildReportHighlights } from '@/lib/home-report-highligh
 import { splitHomeNewsSections } from '@/lib/home-news-sections';
 import { fetchDailyTopic } from '@/lib/daily-topic';
 import { readTopicLevel, writeTopicLevel } from '@/lib/topic-level-storage';
-import type { HomeTopic, TopicLevel } from '@/lib/home-topic';
+import { topicKeyMatches, type HomeTopic, type TopicLevel, type TopicRequestKey } from '@/lib/home-topic';
 import { KABUMORI_COLORS, type KabumoriPalette } from '@/constants/kabumori-theme';
 import { SettingsSheet } from '@/components/settings-sheet';
 import { ReportHighlightCard } from '@/components/home/report-highlight-card';
@@ -29,15 +29,18 @@ export default function HomeScreen() {
   const [news, setNews] = useState<ImportantStockNews[]>([]);
   const [reports, setReports] = useState<PersonalizedReport[]>([]);
   const [topic, setTopic] = useState<HomeTopic | null>(null);
+  const [topicKey, setTopicKey] = useState<TopicRequestKey | null>(null);
   const [topicLevel, setTopicLevel] = useState<TopicLevel>('beginner');
+  // Resolved fresh on every load/focus/refresh (not once at mount): if the
+  // app stays mounted across JST midnight, a later focus or pull-to-refresh
+  // must not keep fetching/scoping content to yesterday.
+  const [todayJstValue, setTodayJstValue] = useState(() => todayJst());
   const [loading, setLoading] = useState(true);
   const [topicLoading, setTopicLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [errors, setErrors] = useState({ news: '', reports: '', topic: '' });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { session } = useAuth();
-
-  const todayJstValue = useMemo(() => todayJst(), []);
 
   // Three network calls total (news feed + reports + daily topic), down from
   // the original three-call layout's tracked_stocks fetch: market/holding
@@ -47,12 +50,14 @@ export default function HomeScreen() {
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
+    const today = todayJst();
+    setTodayJstValue(today);
     const level = await readTopicLevel();
     setTopicLevel(level);
     const [newsResult, reportsResult, topicResult] = await Promise.allSettled([
       fetchMyImportantStockNews(),
       fetchRecentReports(),
-      fetchDailyTopic(level, todayJstValue),
+      fetchDailyTopic(level, today),
     ]);
     setErrors({
       news: newsResult.status === 'rejected' ? dashboardSectionError('news') : '',
@@ -61,25 +66,38 @@ export default function HomeScreen() {
     });
     if (newsResult.status === 'fulfilled') setNews(newsResult.value.items);
     if (reportsResult.status === 'fulfilled') setReports(reportsResult.value);
-    if (topicResult.status === 'fulfilled') setTopic(topicResult.value);
+    // A rejected topic fetch deliberately leaves `topic`/`topicKey` alone: a
+    // same-key retry can still show the last-good topic (matches the report
+    // hero's precedent), while topicKeyMatches() below hides it the moment
+    // the key no longer matches (level changed, or the date rolled over).
+    if (topicResult.status === 'fulfilled') {
+      setTopic(topicResult.value);
+      setTopicKey({ level, jstDate: today });
+    }
     setLoading(false);
     setRefreshing(false);
-  }, [todayJstValue]);
+  }, []);
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
   // Settings changes the level and immediately refetches just the topic
   // (same deterministic RPC, so the new level's topic is stable too) -- the
   // rest of Home is untouched. Returns whether the write actually
-  // succeeded, so Settings never claims a save that didn't happen.
+  // succeeded, so Settings never claims a save that didn't happen. The
+  // preference save and the content fetch are independent outcomes: a
+  // failed fetch here never rolls back the already-saved preference, and
+  // (via topicKeyMatches) never leaves the old level's topic looking current.
   const handleTopicLevelChange = useCallback(async (level: TopicLevel): Promise<boolean> => {
     const ok = await writeTopicLevel(level);
     if (!ok) return false;
     setTopicLevel(level);
     setTopicLoading(true);
+    const today = todayJst();
+    setTodayJstValue(today);
     try {
-      const nextTopic = await fetchDailyTopic(level, todayJstValue);
+      const nextTopic = await fetchDailyTopic(level, today);
       setTopic(nextTopic);
+      setTopicKey({ level, jstDate: today });
       setErrors((previous) => ({ ...previous, topic: '' }));
     } catch {
       setErrors((previous) => ({ ...previous, topic: dashboardSectionError('topic') }));
@@ -87,12 +105,17 @@ export default function HomeScreen() {
       setTopicLoading(false);
     }
     return true;
-  }, [todayJstValue]);
+  }, []);
 
   const newsSections = useMemo(() => splitHomeNewsSections(news), [news]);
   const report = useMemo(() => currentReport(reports, todayJstValue), [reports, todayJstValue]);
   const highlights = useMemo(() => buildReportHighlights(report), [report]);
   const today = useMemo(() => formatDateJa(todayJstValue), [todayJstValue]);
+  const currentTopicKey = useMemo<TopicRequestKey>(() => ({ level: topicLevel, jstDate: todayJstValue }), [topicLevel, todayJstValue]);
+  const displayedTopic = useMemo(
+    () => (topicKeyMatches(topicKey, currentTopicKey) ? topic : null),
+    [topic, topicKey, currentTopicKey],
+  );
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]} edges={['top']}>
@@ -151,8 +174,8 @@ export default function HomeScreen() {
 
         <TopicCard
           palette={palette}
-          topic={topic}
-          loading={(loading && !topic) || topicLoading}
+          topic={displayedTopic}
+          loading={(loading && !displayedTopic) || topicLoading}
           error={errors.topic}
           onRetry={() => void load(true)}
         />
