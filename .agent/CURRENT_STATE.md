@@ -40,18 +40,26 @@
 - かぶモリExpo/native本体はVercel制限の主対象ではないため、Netlify Web Preview対応は現時点では進めない。
 - かぶモリのiOS実機/TestFlight/native-only機能は従来どおりExpo/EAS/実機で確認する。
 
-## G1 Home news-first UI implementation
+## Final K1 Home news-first UI
 
-- task_id: `kabumori-home-news-first-ui-implementation-20260928` -- `review_required`, next_owner chatgpt.
-- PR #46 (`claude/home-news-first-ui-20260928`, head `f95f9c2`) -- fixed after K1 changes-required: report hero now scoped strictly to trading_date===today (no stale-day mislabel), reports fetch error now shown as error+retry instead of false "not generated yet". Not self-merged.
-- Tests: 22 home-UI unit tests + 38 existing regression tests all pass. tsc/expo config/web export/git diff --check all clean.
-- Production mutation 0. Same open follow-ups as before (character asset, topic backend, AI chat route, bottom-tab redesign, real-device visual QA).
+- verdict: **PASS**.
+- PR #46 final head `f95f9c2` merged -> main `58b53777ce64c054f6c8859940914b71a89472d4`.
+- approved Home order implemented: 今日のかぶモリレポート -> 重要ニュース -> 保有銘柄最新ニュース -> 今日のトピック -> AIに聞く.
+- report hero uses today's stored report only; older/future reports cannot be mislabeled as today. Report fetch failure has explicit error/retry.
+- report points are dynamic text with no per-point chevrons; one CTA opens report detail.
+- one existing important-news feed is split into market/holding sections; home network calls 3 -> 2.
+- topic and AI remain honest future-ready "準備中" shells because no production source/route exists yet.
+- current news feed has no thumbnail URL field; UI uses deterministic fallback visuals only. Real thumbnail acquisition is a separate news lane.
+- 22 Home tests + 38 focused regressions PASS; no new src TypeScript errors; Expo config/export/diff checks PASS.
+- production mutation 0; no Codex review required.
+- follow-ups: approved mini Yume+robot cutout assets, topic backend + level setting, AI route/service, final tab redesign, authenticated real-device Home visual QA.
+
 
 ## Current slot snapshot
 
 - H1: `review_required` — `x-social-mobile-phase1-consolidated-integration-review-20260928`; PASS-WITH-FIX source review, latest main `94aa3ea`, PR #42 `c5e0157`, PR #44 fixed head `966d4123`. Integrated #42 → #44 cleanly; fixed persisted `succeeded` posts being rendered as scheduled and leaking into History. Mobile tests 16/16 + domain tests 14/14, typecheck/lint/web export pass. Production mutation 0; awaiting C1. Real Supabase/backend readiness remains a separate gate; see `.agent/CODEX_REPORT.md`.
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
-- G1: `ready` — `kabumori-home-news-first-ui-implementation-20260928`; PR #46 K1 changes required: date-scope hero to today only and surface report-load error/retry. No backend overlap; recommended Sonnet5（中）.
+- G1: `done` — `kabumori-home-news-first-ui-implementation-20260928`; Final K1 PASS, PR #46 merged -> `58b53777`; Home source implementation closed; follow-up visual QA/topic/AI/character/tab work remains separate.
 - G2: `ready` — `kabumori-shared-analysis-prod-deploy-observe-20260928`; PR #45 merged; controlled deploy of market-report-analysis only with consumer gates OFF, then natural morning+close observation; recommended Sonnet5（高）
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS
