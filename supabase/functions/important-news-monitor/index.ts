@@ -15,6 +15,7 @@ import {
 import {
   fetchTriggerHeadlines,
   HEADLINE_TRIGGER_LANE_ENABLED,
+  httpArticleLeadFetcher,
   openAiTriageRunner,
   runHeadlineTriggerLane,
   TRIGGER_HISTORY_WINDOW_MS,
@@ -627,6 +628,7 @@ async function runHeadlineTriggerLaneSafely(
       // Optional secondary evidence only (SECONDARY_VERIFY_MAX_PER_RUN); never a candidate gate.
       verify: (query, at) => fetchBreakingMarketQueryWithDiagnostics(openAiApiKey, query, at),
       recentCandidateTitles: recentTitles,
+      fetchArticleLead: httpArticleLeadFetcher(),
       now,
     });
     console.info("Important news headline trigger lane", {
@@ -635,6 +637,7 @@ async function runHeadlineTriggerLaneSafely(
       verifyAttempted: result.diagnostics.verifyAttemptedCount,
       candidates: result.diagnostics.candidateCount,
       duplicates: result.diagnostics.duplicateCount,
+      articleLeads: result.diagnostics.articleLeadOkCount,
       triageFailure: result.diagnostics.triageFailureCode,
     });
     return result;

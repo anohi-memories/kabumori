@@ -38,6 +38,10 @@ export const MAX_TRIGGER_CANDIDATES_PER_RUN = 8;
 export const SECONDARY_VERIFY_MAX_PER_RUN = 0;
 /** Title-token overlap at or above which two headlines are treated as the same event. */
 export const SAME_EVENT_TITLE_OVERLAP = 0.7;
+/** Article lead added to a candidate's summary: stop after LEAD_TARGET_CHARS, never exceed LEAD_MAX_CHARS. */
+export const LEAD_TARGET_CHARS = 800;
+export const LEAD_MAX_CHARS = 1200;
+const LEAD_FETCH_TIMEOUT_MS = 10_000;
 /** Items kept in run diagnostics (they are also the dedupe history for the next runs). */
 export const MAX_TRIGGER_ITEMS_RECORDED = 80;
 export const TRIGGER_HISTORY_WINDOW_MS = 48 * 60 * 60 * 1000;
@@ -122,6 +126,9 @@ export type TriggerItemRecord = {
   secondaryVerificationAttempted?: boolean;
   secondaryVerificationFound?: boolean;
   secondaryVerificationUrl?: string | null;
+  /** Article lead fetch: "ok", "empty" (no body paragraphs found), "failed:<code>" or "not_attempted". */
+  articleLeadStatus?: string;
+  articleLeadChars?: number;
   verifyQuery: string | null;
   verifyAttempted: boolean;
   verifySourceCount: number | null;
@@ -145,6 +152,7 @@ export type TriggerLaneDiagnostics = {
   verifyDeferredCount: number;
   candidateCount: number;
   candidateDeferredCount: number;
+  articleLeadOkCount: number;
   duplicateCount: number;
   triageFailureCode: string | null;
   items: TriggerItemRecord[];
@@ -485,11 +493,14 @@ function isPrimarySourceUrl(source: string, url: string): boolean {
   }
 }
 
-/** Feed URLs carry campaign parameters (BBC "?at_medium=RSS"); the stored source_url drops them. */
+/**
+ * Feed URLs carry campaign parameters (BBC "?at_medium=RSS", Al Jazeera "?traffic_source=rss"); the
+ * stored source_url drops them.
+ */
 export function primarySourceUrl(url: string): string {
   const parsed = new URL(url);
   for (const key of [...parsed.searchParams.keys()]) {
-    if (/^(at_|utm_)/i.test(key)) parsed.searchParams.delete(key);
+    if (/^(at_|utm_|traffic_source$)/i.test(key)) parsed.searchParams.delete(key);
   }
   parsed.hash = "";
   return parsed.toString();
@@ -504,19 +515,94 @@ export function primaryCandidate(
   headline: Pick<TriggerHeadline, "source" | "title" | "url" | "publishedAt" | "summary">,
   category: ImportantNewsCategory,
   articleType: TriggerArticleType,
+  articleLead: string | null = null,
 ): IncomingNewsCandidate {
   const label = `[単一ソース: ${TRIGGER_PRIMARY_SOURCES[headline.source].label} ${ARTICLE_TYPE_LABEL[articleType]}（RSS見出し・本文要約）]`;
+  const parts = [label, headline.summary, articleLead ? `本文冒頭: ${articleLead}` : null].filter(Boolean);
   return {
     sourceType: "breaking_market",
     sourceName: headline.source,
     sourceUrl: primarySourceUrl(headline.url),
     title: headline.title,
-    bodySummary: headline.summary ? `${label} ${headline.summary}` : label,
+    bodySummary: parts.join(" "),
     companyName: null,
     companyCode: null,
     entityKey: `breaking:trigger:${category}`,
     category,
     publishedAt: headline.publishedAt,
+  };
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Article lead (judgement material)
+
+const HTML_ENTITIES: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
+  lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”", ndash: "–", mdash: "—", hellip: "…",
+};
+
+function decodeEntities(text: string): string {
+  return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, code: string) => {
+    if (code[0] === "#") {
+      const value = code[1] === "x" || code[1] === "X" ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
+      return Number.isFinite(value) ? String.fromCodePoint(value) : match;
+    }
+    return HTML_ENTITIES[code.toLowerCase()] ?? match;
+  });
+}
+
+const NOISE_PARAGRAPH = /^(listen|save|share|advertisement|recommended stories|follow al jazeera|sign up|getty images|reuters|external)\b/i;
+
+/**
+ * The first body paragraphs of a BBC / Al Jazeera article page, as plain text: Al Jazeera's article body
+ * (div.wysiwyg) or the BBC <article>, without scripts, navigation, figures, captions, asides, headers and
+ * footers; paragraphs under 40 characters (buttons, bylines, credits) are skipped. Stops once
+ * LEAD_TARGET_CHARS is reached and never returns more than LEAD_MAX_CHARS. Null when no body is found.
+ */
+export function extractArticleLead(source: string, html: string): string | null {
+  let scope = "";
+  if (source === "al_jazeera") {
+    const start = html.search(/<div[^>]*class="[^"]*\bwysiwyg\b[^"]*"/i);
+    if (start >= 0) scope = html.slice(start, start + 80_000);
+  } else if (source === "bbc_world") {
+    const start = html.search(/<article\b/i);
+    if (start >= 0) {
+      const end = html.indexOf("</article>", start);
+      scope = html.slice(start, end > start ? end : start + 120_000);
+    }
+  }
+  if (!scope) return null;
+  scope = scope.replace(/<(script|style|nav|aside|figure|figcaption|footer|header|svg|noscript|button|form)\b[\s\S]*?<\/\1>/gi, " ");
+  const paragraphs = [...scope.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)]
+    .map((match) => decodeEntities(match[1].replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim())
+    .filter((text) => text.length >= 40 && !NOISE_PARAGRAPH.test(text));
+  let lead = "";
+  for (const paragraph of paragraphs) {
+    const next = lead ? `${lead} ${paragraph}` : paragraph;
+    if (next.length > LEAD_MAX_CHARS) {
+      if (!lead) lead = paragraph.slice(0, LEAD_MAX_CHARS);
+      break;
+    }
+    lead = next;
+    if (lead.length >= LEAD_TARGET_CHARS) break;
+  }
+  return lead || null;
+}
+
+export type ArticleLeadFetcher = (source: string, url: string) => Promise<string | null>;
+
+/** Fetches the page and returns only the extracted lead; the HTML itself is never kept. */
+export function httpArticleLeadFetcher(fetchImpl: typeof fetch = fetch): ArticleLeadFetcher {
+  return async (source, url) => {
+    const response = await fetchImpl(url, {
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+        "User-Agent": "Mozilla/5.0 (compatible; Kabumori-important-news/1.0)",
+      },
+      signal: AbortSignal.timeout(LEAD_FETCH_TIMEOUT_MS),
+    });
+    if (!response.ok) throw new Error(`LEAD_HTTP_${response.status}`);
+    return extractArticleLead(source, await response.text());
   };
 }
 
@@ -587,6 +673,8 @@ export async function runHeadlineTriggerLane(input: {
   triage: TriageRunner;
   /** Optional secondary search; used only when SECONDARY_VERIFY_MAX_PER_RUN (or maxSecondary) > 0. */
   verify?: VerifyRunner;
+  /** Article lead for created candidates; a failure keeps the RSS-only candidate. */
+  fetchArticleLead?: ArticleLeadFetcher;
   /** Titles of candidates stored in the last 24h (any lane) for same-event dedupe. */
   recentCandidateTitles?: string[];
   now: Date;
@@ -686,9 +774,26 @@ export async function runHeadlineTriggerLane(input: {
     pending.record.rejectionReason = "candidate_deferred_budget";
     pending.record.summary = pending.headline.summary;
   }
+  // Article leads for the created candidates, fetched in parallel; never a gate.
+  const leads = await Promise.all(created.map(async (pending) => {
+    if (!input.fetchArticleLead) {
+      pending.record.articleLeadStatus = "not_attempted";
+      return null;
+    }
+    try {
+      const lead = await input.fetchArticleLead(pending.headline.source, primarySourceUrl(pending.headline.url));
+      pending.record.articleLeadStatus = lead ? "ok" : "empty";
+      pending.record.articleLeadChars = lead?.length ?? 0;
+      return lead;
+    } catch (error) {
+      pending.record.articleLeadStatus = `failed:${error instanceof Error ? error.message.slice(0, 40) : "UNKNOWN"}`;
+      pending.record.articleLeadChars = 0;
+      return null;
+    }
+  }));
   const candidates: IncomingNewsCandidate[] = [];
-  for (const pending of created) {
-    const candidate = primaryCandidate(pending.headline, pending.category, pending.record.articleType ?? "other");
+  for (const [index, pending] of created.entries()) {
+    const candidate = primaryCandidate(pending.headline, pending.category, pending.record.articleType ?? "other", leads[index]);
     candidates.push(candidate);
     pending.record.primarySource = pending.headline.source;
     pending.record.candidateCreated = true;
@@ -738,6 +843,7 @@ export async function runHeadlineTriggerLane(input: {
       verifyDeferredCount: 0,
       candidateCount: candidates.length,
       candidateDeferredCount: Math.max(0, kept.length - created.length),
+      articleLeadOkCount: created.filter((pending) => pending.record.articleLeadStatus === "ok").length,
       duplicateCount,
       triageFailureCode,
       items: recorded,
