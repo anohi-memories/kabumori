@@ -1,533 +1,277 @@
 # Claude Task 1
 
-- task_id: kabumori-ios-internal-visual-qa-build-20260926
+- task_id: kabumori-home-news-first-ui-implementation-20260928
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: high
 - recommended_model: Sonnet5（高）
-- purpose: merged main の新正式アイコン＋3画面オンボーディングを、実際のiPhoneで確認するための **非production・内部配布EAS iOS build** を安全に作成し、インストール可能な状態まで進める。App Store提出やproductionリリースは行わない。
+- purpose: ユーザー承認済みの「ニュース中心・AI整理型」トップページを、現在のExpo/React Nativeアプリへ実装可能な形で落とし込む。既存データ取得を再利用し、重要ニュース・保有銘柄ニュース・今日のレポートを整理して見せる。ニュース取得基盤/API最適化/Edge Functionには触れない。
 
-## User authorization
+## Previous G1 closure
 
-User explicitly said 「やってみよう」 after Final K1 identified the next gate as a real-iPhone visual acceptance pass.
+前G1 `kabumori-ios-internal-visual-qa-build-20260926` は、full-bleed icon修正後の実機確認までユーザーがPASS（「アイコンOK」）しており、icon/splash/onboarding visual QAは完了済み。旧TASKの詳細ReportはGit履歴とCURRENT_STATEに残っている。今回のTASKは別task_idの新規ホームUI実装。
 
-This authorizes:
-- read-only EAS/Expo/Apple provisioning preflight;
-- if prerequisites are already satisfied, **one iOS internal-distribution build** for visual QA;
-- normal EAS build artifacts needed for that internal build.
+## User-approved product direction
 
-This does **not** authorize:
-- App Store submission;
-- TestFlight external distribution;
-- production release;
-- Supabase/Auth/DB changes;
-- EAS production environment changes;
-- Apple certificate/profile deletion or broad credential rotation;
-- new paid service purchase.
+かぶモリはリアルタイム株価を主役にする証券アプリではない。
 
-If EAS/Apple authentication, device registration, agreement acceptance, missing env, or another operator-only action is required, STOP and report the exact single next action rather than guessing.
+ホームの価値は、上から自然に:
 
-## Mandatory startup / slot isolation
+1. 今日の要点
+2. 市場全体の重要ニュース
+3. 自分の保有銘柄に関係する最新ニュース
+4. 今日ひとつ学ぶ
+5. 分からなければAIへ聞く
 
-1. Use a dedicated G1 worktree/checkout.
-2. Read `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, this TASK, `eas.json`, and `docs/mobile-release/RELEASE_READINESS.md`.
-3. Fresh fetch `origin/main`; record SHA.
-4. Confirm PR #39 merge commit `08355579ef8fd89e12e6723aed4674905440016a` is contained in fresh main.
-5. Confirm G2 has no overlapping startup/onboarding/app-icon edits.
-6. Do not modify G3/G4/X/admin work.
-7. Confirm worktree is clean before any EAS action.
+という体験を作ること。
 
-## Goal
+ユーザーが承認したモックの情報順:
+- ヘッダー
+- 今日のかぶモリレポート
+- 重要ニュース
+- あなたの保有銘柄 最新ニュース
+- 今日のトピック
+- AIに聞いてみる
+- 下部ナビ
 
-Get the current merged Kabumori native app onto the user's real iPhone for **visual QA only**, with the minimum-risk build path.
+デザインは白〜アイボリー、淡いミントグリーン、深いブランドグリーン、柔らかい角丸、十分な余白。金融アプリとしての信頼感を優先し、キャラクターは補助に留める。
 
-Preferred path:
-- iOS `preview` internal distribution if it can install directly on the registered device and launch as a normal standalone build.
+## Mandatory startup / isolation
 
-Fallback:
-- iOS `development` internal build only if preview is unsuitable and the reason is documented.
+1. G1専用の独立worktree / checkoutを使う。同じ作業ディレクトリを他slotと共有しない。
+2. `PROJECT_RULES.md`、`.agent/ORCHESTRATION.md`、`.agent/CURRENT_STATE.md`、このTASKを読む。
+3. fresh `origin/main` を取得し、開始SHAを記録。
+4. `src/app/index.tsx`、`src/components/app-tabs.tsx`、home/dashboard/news/report関連libとtestsを先に確認し、既存挙動を壊さない実装計画を作る。
+5. G2は `market-report-analysis` の429/5xx reliability hardening中。G1はそのEdge Function、shared report packet生成、consumer gate、cron、DBを触らない。
+6. G3/G4/X/adminのファイル・branch・worktreeを触らない。
+7. 他slotの未コミット変更を変更/stage/commitしない。
 
-Do not choose the `production` profile merely for convenience.
+## Scope
 
-## Read-only preflight first
+### A. Home screen redesign
 
-Before building, inspect without exposing secrets:
+主対象は `src/app/index.tsx` と、必要に応じて新規のhome用presentational components/helpers/tests。
 
-- EAS CLI login/account/project linkage;
-- `eas.json` profile definitions;
-- Expo app identity;
-- whether required build-time public variables are available for the chosen nonproduction profile:
-  - `EXPO_PUBLIC_SUPABASE_URL`
-  - `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-  - `EXPO_PUBLIC_KABUMORI_WEB_URL`
-- iOS signing/provisioning status;
-- whether the user's iPhone is already registered for internal distribution;
-- any Apple Developer agreement or credential blocker.
+現在の「アクショングリッド → 銘柄一覧 → 重要ニュース → 今日のレポート」中心のホームを、承認済みの順番へ再構成する。
 
-Only report env **presence/absence**, never values.
+#### 1. Header
 
-If the chosen internal profile lacks required runtime env and the app would fail to start, STOP. Do not silently substitute production secrets or change EAS production env.
+- かぶモリらしいコンパクトなヘッダー。
+- 時間帯に応じた挨拶 + 日付。
+- 通知/設定への既存導線は壊さない。
+- ファーストビューの高さを使いすぎない。
 
-## Build
+#### 2. 今日のかぶモリレポート — primary card
 
-If all preflight gates pass:
+このカードをホームの主役にする。
 
-1. Use current fresh main; no feature-code changes expected.
-2. Run one iOS internal build using the safest suitable nonproduction profile.
-3. Do not submit to App Store Connect/TestFlight.
-4. Capture:
-   - profile used;
-   - build ID;
-   - source commit;
-   - build status;
-   - install URL/QR availability (do not expose secret credentials);
-   - expiration/registration constraints if EAS reports them.
-5. Verify EAS built the expected bundle identifier `com.anohimemories.kabumori`.
+- タイトル: `今日の かぶモリレポート`
+- 説明: 「今日の市場とあなたの保有銘柄への影響をAIが整理しました。」相当。
+- 2〜3件の「今日のポイント」を表示。
+- **各ポイント右端に `>` / chevronを付けない。各ポイントは個別遷移ではない。**
+- 詳細遷移はカード下部の `レポートを見る →` CTAへ一本化。
+- CTAは表示中の最新/当日レポートへ遷移。レポート無しなら押せるふりをせず、自然なempty state。
+- タイトル/説明/ポイント/CTAは画像へ焼き込まずReact Nativeの動的テキストとして実装。
+- 1ポイントは最大1〜2行で崩れない。
+- 画面幅が狭くてもテキストがキャラクター領域に潜り込まない。
 
-If EAS asks for a destructive credential operation, broad certificate replacement, or ambiguous Apple account change, STOP.
+**ポイント生成について重要:**
+- page open時に新規LLM/API生成を追加しない。
+- `fetchRecentReports()` が返す保存済みcompleted reportの既存fields/body/summaryを確認し、既存構造から安全に抽出できる短い要点だけを使う。
+- 2〜3点を安全に抽出できない場合はsummary等の既存保存済みテキストへfail-softし、内容を捏造しない。
+- backend/prompt/report generatorの変更はこのTASK外。
 
-## Real-iPhone acceptance checklist
+#### 3. Character slot
 
-Once installable, the user will perform the visual pass. Prepare a concise checklist for them to verify:
+右側に「日替わりミニゆめちゃん＋ロボ」を差し替えられる独立画像slotを設ける設計にする。
 
-1. Home screen icon:
-   - new official newspaper/chart/leaf icon;
-   - not old icon/template;
-   - cropping/mask looks natural.
+ただし:
+- 新しいゆめちゃん/ロボ画像をClaudeが勝手に生成・描き直ししない。
+- repoに承認済みの独立cutout assetが存在する場合だけ利用可。
+- 存在しない場合は、レイアウトを壊さないneutral fallback/空きslotにし、必要asset仕様をReportする。
+- onboardingの正本画像を雑にcropして代用品にしない。
+- 将来8〜12種類程度を同じ占有サイズで差し替え可能な構造にする。
+- キャラはカード主役にしない。
 
-2. Cold launch:
-   - Kabumori icon splash appears;
-   - no Expo logo/blue;
-   - transition has no obvious flash/jump.
+### B. 重要ニュース
 
-3. First-run onboarding:
-   - 01, 02, 03 all display;
-   - swipe is smooth;
-   - artwork is sharp;
-   - no critical text/face/CTA clipping;
-   - no distortion/stretching;
-   - page dots align consistently and update correctly.
+既存 `fetchMyImportantStockNews()` の結果を再利用し、新規network callを増やさないことを優先。
 
-4. Page 2:
-   - static progress bar is acceptable;
-   - no expectation of real progress.
+- `tracking_type === 'market'` 等、既存feedで市場全体ニュースを識別できる契約を確認して重要ニュース枠に最大3件。
+- severity/importance/news_time等の既存metadataを使って、重要度と鮮度が分かるようにする。
+- 見出しは2行程度、補足は必要最小限。
+- `すべて見る` は既存news画面へ。
+- 空データ/取得失敗時もホーム全体を巻き込まずsection単位でfail-soft。
 
-5. Page 3:
-   - tapping visible 「はじめる →」 reliably proceeds;
-   - touch area visually corresponds to the artwork.
+### C. あなたの保有銘柄 最新ニュース
 
-6. Relaunch:
-   - onboarding does not show again after completion;
-   - normal auth/app flow appears.
+同じ既存news feedを使い、保有銘柄に紐づく新着を最大3件。
 
-7. If practical, also note display on the user's actual iPhone model / screen size.
+- `tracking_type === 'holding'` を基本に、保有銘柄だけを対象。
+- 監視銘柄を勝手に「保有」と表示しない。
+- 銘柄名/コード/見出し/カテゴリ/更新時刻を表示。
+- リアルタイム株価は追加しない。
+- item tapは既存 `/news/[id]` 詳細へ。
+- section `すべて見る` は既存news一覧へ。
 
-Do not mark visual acceptance PASS yourself without the user's real-device observation.
+### D. News thumbnail contract / fallback
+
+モックはサムネ付きだが、現在の `ImportantStockNews` には画像URLが常にある前提を置かない。
+
+このTASKではニュース取得基盤やOG scrapingを新設しない。
+
+UI側だけ以下の拡張可能な順序を持てる構造にする:
+1. 将来、正規のthumbnail/image URLがfeedへ来た場合は表示可能
+2. 無い場合はcategory/source_typeに応じた安全な標準visual/icon
+3. それも無ければneutral fallback
+
+禁止:
+- article URLをhome側から直接scrape
+- 任意外部画像URLを推測
+- 企業ロゴを勝手にWeb検索/取得
+- image取得のための新規Edge Function/RPC
+- API最適化側のimportant-news-monitor変更
+
+**Reportでは、現時点で実サムネmetadataがどこまで存在したかを明記すること。**
+
+### E. 今日のトピック
+
+ユーザー方針:
+- 設定で `初心者向け / 中級者向け / 上級者向け`
+- 同じテーマでも説明の深さを変えられる将来設計
+- ホームにはレベルバッジ + 1件カード
+
+ただし現状repoに日次トピックの正式backend/sourceが無い場合:
+- このTASKで新しいLLM生成/DB/RPC/Edge Functionを勝手に作らない。
+- reusable TopicCard + typed data contract + loading/empty/future-ready stateまで実装可。
+- production表示に「今日生成された」と誤認させる架空ニュース/架空トピックをハードコードしない。
+- 既存の安全なソースが見つかる場合のみ実データ接続。
+- 必要なbackend/data-source gapをReportへ明記。
+
+### F. AIに聞いてみる
+
+モック同様、home下部に入口を設ける方向。
+
+ただし現時点で正式AI chat route/serviceが無い場合:
+- dead button / fake chatを作らない。
+- UI shell・質問chipのpresentational componentまでは可。
+- 実際に遷移できる既存routeが無ければdisabled/準備状態を明示し、Reportにgapを書く。
+- 新規LLM endpoint/Edge FunctionはこのTASK外。
+
+### G. Bottom navigation
+
+現在の `app-tabs.tsx` は Home / 銘柄 / ポート / レポート / 重要ニュース。
+
+承認モックは Home / 銘柄 / レポート / AIに聞く / 設定。
+
+今回は**機能を失う変更やdead tabを作らないことを優先**する。
+
+- AI/設定の正式routeが存在しないなら、無理にtab構成を完成モックへ合わせない。
+- portfolio/newsへの既存到達性を消さない。
+- home UI実装を先行し、tab差分は「安全に実装できる範囲」だけ。
+- 必要な別TASKをReportに明記。
+- settings sheetの既存auth/notification/legal/logout導線を壊さない。
+
+## Data / performance constraints
+
+- home open時のnetwork fan-outを増やさない。
+- 既存の `Promise.allSettled` とsection-level failure isolation思想を維持/改善。
+- 同じimportant-news feedを「市場重要ニュース」「保有銘柄最新ニュース」に再利用し、同一データを二重fetchしない。
+- reportは保存済みデータを読むだけ。home render時に生成処理を呼ばない。
+- unnecessary pollingは禁止。
+- pull-to-refreshは維持可。
+- loading skeleton/placeholderは必要最小限でlayout shiftを抑える。
+
+## Visual requirements
+
+- user-approved mockをピクセルコピーするのではなく、実端末/動的データで成立するよう再現。
+- white / ivory / pale mint / deep green。
+- rounded cards、明確なtype hierarchy、余白。
+- iPhone 17 Proを基準にしつつsmall-width iPhoneでも破綻しない。
+- font scaling / accessibility labelsを壊さない。
+- 重要ニュースのカードは実機で文字が小さくなりすぎないこと。3枚横並びが窮屈なら、1大+2小またはhorizontal scrollなど実装上安全な方を選ぶ。
+- point rowsのchevronは**無し**。
 
 ## Allowed changes
 
-Expected source changes: none.
+主に:
+- `src/app/index.tsx`
+- 新規/既存のhome UI components
+- UI presentation helpers/types
+- `src/constants` のhome用theme token（必要最小限）
+- home/dashboard/news presentationのfocused tests
+- `src/components/app-tabs.tsx` は上記navigation制約を守る場合のみ
 
-Allowed only if needed for build metadata and proven harmless:
-- narrow nonproduction EAS config adjustment that does not affect production behavior, but STOP before making it and report why unless it is strictly mechanical and already implied by existing config.
+既存query/read helperのごく小さな整理は、network semanticsを変えない場合のみ可。
 
-Do not touch:
-- onboarding artwork;
-- app icon artwork;
-- startup/auth/session semantics;
-- Supabase DB/Auth;
-- personalized-reports;
-- X/admin;
-- production EAS env;
-- App Store metadata;
-- Netlify/Vercel.
+## Forbidden
 
-## Tests
+- `supabase/functions/important-news-monitor/**`
+- `supabase/functions/market-report-analysis/**`
+- personalized report生成ロジック/prompt/Fact/VOICE変更
+- DB schema / migration / RPC変更
+- cron変更
+- app_enabled/x_enabled変更
+- shared market-report consumer gate変更
+- API cost optimization / search trigger変更
+- OG scraper / 新規外部ニュースAPI追加
+- auth/RLS/permission変更
+- X/admin/G2/G3/G4 scope
+- production deploy
+- App Store/TestFlight submission
+- キャラクター画像の新規生成
 
-Before build:
-- confirm main contains Final K1 feature;
-- `npx expo config --json`;
-- targeted onboarding/startup tests if any local source change is made;
-- if no source change, do not rerun the entire expensive suite merely for formality unless build/preflight exposes a regression.
+上記が必要になった場合は勝手に越境せずSTOPし、必要な別TASKを報告。
 
-After build:
-- verify build source commit/profile/bundle identifier from EAS metadata.
+## Tests / verification
 
-## Review policy
+最低限:
+- home/dashboard presentationのfocused unit testsを追加/更新
+- market vs holding news分離のdeterministic test
+- report point extraction/fallbackのtest
+- empty/error/loading state test可能範囲
+- `npx tsc --noEmit`（pre-existing issueは分離して記録）
+- Expo config / web export or equivalent safe render/build check
+- `git diff --check`
 
-No Codex review is needed for a no-source-change internal visual-QA build.
+可能なら複数widthでvisual確認:
+- iPhone 17 Pro相当
+- small iPhone相当
 
-If any source/config change becomes necessary and it affects auth, credentials, signing, production environment, or release semantics, STOP for ChatGPT reclassification before changing it.
+このTASKではEAS buildは不要。source implementation + safe preview/render validationまで。
 
-## Completion / K1
+## PR / completion
 
-On completion set:
+- narrow feature branch + PR。
+- mainへ自己mergeしない。K1でChatGPTが確認する。
+- production mutation = 0。
+- low-risk UI/read-only scopeに留まる限り、Codexレビューは原則不要。API/DB/Auth/security境界へ変更が拡大した場合はSTOP。
+
+完了時:
 - status -> `review_required`
 - next_owner -> `chatgpt`
-
-Report:
-- preflight result;
-- EAS account/project check;
-- chosen profile and why;
-- env presence-only result;
-- device-registration status;
-- build ID/status/source commit;
-- installability / exact user action if blocked;
-- source changes (expected none);
-- production mutation;
-- remaining issues;
-- exact real-iPhone checklist;
-- next recommendation.
-
-STOP for K1.
-
-## Report — G1 result
-
-- task_id: kabumori-ios-internal-visual-qa-build-20260926
-- **result: STOPPED before building, per the task's own explicit instruction.** No build was run. Production mutation = 0.
-- fresh main at task start: `8def946`; in_progress control commit `12db865`.
-- PR #39 merge commit `0835557` confirmed an ancestor of fresh main (`git merge-base --is-ancestor`).
-- G2/G3/G4 overlap: none (`.agent/CURRENT_STATE.md`: G2 `done`, G3 on x-autopost, G4 `done` on admin; no startup/onboarding/icon file touched by any of them).
-
-### Preflight result
-
-| Check | Result |
-| --- | --- |
-| EAS CLI login | Logged in as `anohi-memories` (`voxy1948.p3@gmail.com`); has Owner role on both `anohi-memories` and `anohi-memoriess-team` accounts |
-| EAS project linkage | `eas project:info` resolves `@anohi-memoriess-team/kabumori`, ID `eb80adf3-861e-4a48-a373-2d9a85b58899` — matches `app.json`'s `extra.eas.projectId` exactly |
-| App identity | name 「かぶモリ」, slug `kabumori`, version `1.0.0`, `ios.bundleIdentifier` `com.anohimemories.kabumori` — all as expected |
-| `eas.json` profiles | `preview` (`distribution: internal`, no dev-client) is the correct, safest match for "launch as a normal standalone build" — chosen as the intended profile, not yet used |
-| Apple team | Exactly one: `YUYA TANO (Individual)`, team ID `H2899GWC8N` — unambiguous |
-| Device registration | `eas device:list --apple-team-id H2899GWC8N` shows **one iPhone already registered** for internal distribution under this team. No new device registration needed. |
-| Prior build history | Two earlier `development`-profile iOS builds exist (2026-09-10, both `finished`), confirming iOS signing/credentials have worked for this project before. No `preview`-profile build has been run yet. |
-| **Build-time public env vars** | **`eas env:list preview`, `eas env:list development`, `eas env:list production`: all three report "No variables found for this environment."** Checked names only; no value was ever printed or read from EAS. |
-
-### The blocker
-
-None of `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `EXPO_PUBLIC_KABUMORI_WEB_URL` are configured as EAS environment variables for any environment — this is the exact gap `RELEASE_READINESS.md`'s finding A2 already flagged for `production`, and it turns out to apply identically to `preview`/`development`: nothing in `eas.json` or the EAS dashboard supplies these at cloud-build time (a local `.env` file is never read by a cloud `eas build`).
-
-`src/lib/supabase.ts` asserts the first two non-null and constructs the Supabase client at module load. Per this task's own instruction — "If the chosen internal profile lacks required runtime env and the app would fail to start, STOP" — I stopped. Building anyway would have produced an installable `.ipa` that **crashes immediately on launch** (`Error: supabaseUrl is required`, the same failure mode reproduced during the release-readiness export-smoke checks), which would defeat the entire purpose of a visual-QA build and waste an EAS build credit/minute allotment for nothing.
-
-### Exact single next action needed
-
-Set exactly two EAS environment variables, scoped to the `preview` environment (I'd also add `development` while at it, since it's the documented fallback profile and costs nothing extra to also cover):
-
-- `EXPO_PUBLIC_SUPABASE_URL`
-- `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-
-Both are **public, non-secret values** already used throughout this project's local `.env` and every export-smoke check in prior tasks (the Supabase project URL and its client-side publishable/anon key — never the `service_role` key). I confirmed both variable *names* exist in the local `.env` without reading or printing either value.
-
-`EXPO_PUBLIC_KABUMORI_WEB_URL` does **not** need a value to unblock the build: the app's own `legal-links.ts` design treats it as optional and shows 準備中 instead of crashing when unset — correctly so, since no `apps/kabumori-web` Netlify site exists yet (confirmed in the prior release-readiness report) and there is genuinely no real URL to set.
-
-**I did not set these myself.** Per this task's "Allowed changes" section, a nonproduction EAS config adjustment must be reported and stopped-for *before* being made unless it is strictly mechanical and already implied by existing config — creating new environment-variable state from values that exist only in a local, git-ignored `.env` file is not "already implied," so I am asking rather than acting.
-
-### Chosen profile and why
-
-`preview` (`eas.json`'s `build.preview`, `distribution: internal`, not `developmentClient`) — matches the task's stated preference exactly: internal distribution, launches as a normal standalone build, no Metro/dev-server connection needed. Not yet run.
-
-### Build ID / status / source commit
-
-No build was started. Nothing to report here — deliberately, to avoid spending a build against a commit set that is known in advance to crash on launch.
-
-### Source changes
-
-None. No file in `src/`, `assets/`, `app.json`, or `eas.json` was modified by this task.
-
-### Production mutation
-
-**0.** No EAS environment variable was created or changed (production or otherwise). No Apple/EAS credential was touched. No Supabase/Auth/DB change. No `personalized-reports`/X/admin file touched.
-
-### Remaining issues
-
-1. The env-var blocker above — the only thing standing between this task and an actual build.
-2. Once unblocked, this same gap will recur for the `production` profile too (finding A2, already tracked in `RELEASE_READINESS.md`) — not this task's job to fix, just noting it is the same root cause.
-
-### Exact real-iPhone checklist (prepared in advance, for once a build is installable)
-
-1. **Home screen icon**: the new newspaper/candlestick-chart/leaf icon appears; not the earlier icon or any Expo template mark; the corner mask looks natural (no visible square edges or double-masking).
-2. **Cold launch**: the Kabumori-branded splash appears (icon on a soft off-white/green background); no Expo logo, no Expo blue; the transition from the native splash into the app has no visible flash or jump.
-3. **First-run onboarding**: all three pages (01 brand, 02 AI analysis, 03 report) display correctly; swiping between them feels smooth; artwork is sharp, not blurry or stretched; no critical text, face, or CTA is clipped at the edges; the three page dots are aligned consistently and the active one updates correctly as you swipe.
-4. **Page 2**: the progress bar is the artwork's own static bar (not animated) — this is expected, not a bug; it should not look broken or half-rendered.
-5. **Page 3**: tapping the visible 「はじめる →」 button reliably proceeds every time; the tappable area should feel like it lines up with where the button actually is, not offset from it.
-6. **Relaunch**: force-quit and reopen the app — onboarding must **not** show again; the normal login/app flow should appear directly.
-7. Please also note the device model and screen size you tested on.
-
-I will not mark this checklist PASS myself; it needs the user's own observation on the device.
-
-### Next recommendation
-
-1. **Immediate, in this chat**: decide whether to authorize setting `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` as EAS `preview` (and `development`) environment variables, using the existing public values already in the local `.env`.
-2. Once set, resume this same task (or a follow-up G1 task) to re-run the preflight (confirming `eas env:list preview` now shows both names) and then run the one `preview`-profile iOS build.
-3. After a successful build, share the install link/QR with the user for the real-device checklist above.
-
-## Report — G1 result (resumed, build completed)
-
-- task_id: kabumori-ios-internal-visual-qa-build-20260926
-- **result: build succeeded and is installable. Real-device visual acceptance is the only remaining step, and it is the user's to perform.**
-- Continues the earlier STOP report on this same task: the user explicitly authorized (in chat) setting the two public env vars and proceeding with the build.
-
-### EAS environment variables set (user-authorized)
-
-- `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, both **public/non-secret** values (the Supabase project URL and its client-side publishable key — never `service_role`), read from the existing local `.env` and set via `eas env:set --visibility plaintext` scoped to **`preview` and `development` only**.
-- **`production` was not touched** — re-verified with `eas env:list production` both before and after: "No variables found for this environment," unchanged.
-- `EXPO_PUBLIC_KABUMORI_WEB_URL` remains unset, as previously determined not to be required (the app shows 準備中 instead of crashing when it's absent).
-
-### Build
-
-| Field | Value |
-| --- | --- |
-| Platform | iOS |
-| Profile | `preview` (internal distribution, matches the task's stated preference) |
-| Status | **finished** |
-| Build ID | `79955c92-54d2-42ce-ad38-b8710f2f9011` |
-| Source commit | `12db86576bdaf6c410b8a92709df0e46504eb831` — my own control-file commit (status flip only) on top of fresh main `8def946`, which already contains PR #39. **No app source file differs from merged main.** |
-| Bundle identifier | `com.anohimemories.kabumori` — confirmed both in the pre-build credentials summary and matches `app.json` |
-| Version / build number | `1.0.0` / `1` |
-| Distribution certificate | existing, created 16 days ago, expires 2027-09-10 — **no new certificate was generated** |
-| Provisioning profile | existing Ad Hoc profile (Developer Portal ID `5M79MS9DFQ`), already covering the user's registered iPhone (UDID `00008150-001C09C00AC0401C`) — **no new profile was generated, no device re-registration needed** |
-| Started / finished | 2026-09-26 22:58:42 / 23:04:22 (about 5.5 minutes) |
-| Logs | https://expo.dev/accounts/anohi-memoriess-team/projects/kabumori/builds/79955c92-54d2-42ce-ad38-b8710f2f9011 |
-
-### Install link (share with the user; no credential exposure)
-
-**https://expo.dev/accounts/anohi-memoriess-team/projects/kabumori/builds/79955c92-54d2-42ce-ad38-b8710f2f9011**
-
-Open this on the iPhone (the one already registered — a different device will not be able to install this build) and follow the on-screen "Install" flow, or scan the QR code the `eas build` CLI printed. No Apple ID sign-in or TestFlight is involved; this is Ad Hoc internal distribution.
-
-### Source changes
-
-None, confirmed by the build's own recorded source commit containing zero app-code diff from merged main.
-
-### Production mutation
-
-**0** for the app/backend. The only mutation performed anywhere was the two EAS `preview`/`development` environment variables, explicitly authorized by the user in chat, non-production, non-secret, reversible, and re-verified not to have touched `production`.
-
-### Remaining issues
-
-1. `app.json` is missing `ios.infoPlist.ITSAppUsesNonExemptEncryption` — the build log surfaced this as a notice (not a failure): "Manual configuration is required in App Store Connect before the app can be tested." This matches `RELEASE_READINESS.md`'s finding A5 exactly (export-compliance declaration pending the operator's confirmation) and did not block this internal build. Not fixed here — it's an App Store Connect / TestFlight-time concern, out of this task's scope, and only matters once uploading to TestFlight/App Store, not for this Ad Hoc install.
-2. Real-device visual acceptance is still outstanding — see the checklist below.
-
-### Exact real-iPhone checklist (unchanged from the pre-build report, repeated here for convenience)
-
-1. **Home screen icon**: the new newspaper/candlestick-chart/leaf icon appears; not the earlier icon or any Expo template mark; the corner mask looks natural.
-2. **Cold launch**: the Kabumori-branded splash appears (icon on a soft off-white/green background); no Expo logo, no Expo blue; no visible flash/jump in the transition.
-3. **First-run onboarding**: all three pages display correctly; swiping feels smooth; artwork is sharp, not stretched; no critical text/face/CTA clipped; the three page dots update correctly as you swipe.
-4. **Page 2**: the progress bar is the artwork's own static bar — expected, not a bug.
-5. **Page 3**: tapping 「はじめる →」 reliably proceeds; the tappable area feels aligned with the visible button.
-6. **Relaunch**: force-quit and reopen — onboarding does not show again; the normal login/app flow appears directly.
-7. Please also note the device model/screen size you tested on.
-
-I will not mark this checklist PASS myself; it needs the user's own observation on the device, per the task's own instruction.
-
-### Next recommendation
-
-1. Send the user the install link above and let them work through the checklist on their iPhone.
-2. Once they report the result, a final G1 pass can record PASS/issues found and recommend the next step (either proceeding toward TestFlight/App Store prerequisites, or a source fix if something looks wrong).
-
-## Report — G1 result (real-device visual acceptance: PASS)
-
-- task_id: kabumori-ios-internal-visual-qa-build-20260926
-- **result: the user completed the real-iPhone checklist on an iPhone 17 Pro and confirmed all items OK.** This is the user's own observation, recorded verbatim, not a self-assessment.
-- Build tested: `79955c92-54d2-42ce-ad38-b8710f2f9011` (profile `preview`, source commit `12db86576bdaf6c410b8a92709df0e46504eb831`, zero app-code diff from merged main).
-- Device: iPhone 17 Pro.
-- User's exact response: 「すべてOK」「iPhone17PRO」 — all seven checklist items (home-screen icon, cold-launch splash with no Expo branding/no flash, all three onboarding pages with smooth swiping and no clipping/distortion, page-2's static bar, page-3 CTA reliably proceeding, and no onboarding repeat on relaunch) confirmed good with no exceptions raised.
-
-### This closes the task's own completion condition
-
-"Do not mark visual acceptance PASS yourself without the user's real-device observation" — satisfied: the PASS above is the user's own statement, not my inference.
-
-### Production mutation (cumulative for this task)
-
-Still **0** for the app/backend. The only mutation across this whole task remains the two `preview`/`development` EAS environment variables (public, non-secret, user-authorized), and `production` remains empty, as already verified in the prior report.
-
-### Remaining issues (unchanged from the pre-acceptance report)
-
-1. `ios.infoPlist.ITSAppUsesNonExemptEncryption` is still undeclared (finding A5) — an App Store Connect / TestFlight-time item, not relevant to this Ad Hoc internal build, not fixed here.
-2. Everything else previously tracked in `RELEASE_READINESS.md` §4 (Netlify publication for `apps/kabumori-web`, Auth Site URL/redirect, custom SMTP, App Store Connect setup, `submit.production`) is unchanged and still pending — none of it was in this task's scope.
-
-### Next recommendation
-
-The icon/splash/onboarding visual work is now fully verified end-to-end: source-complete, real `expo prebuild`-verified, and now real-device-accepted. The next gate toward App Store submission is the operator-driven checklist already tracked in `RELEASE_READINESS.md` (Netlify site for `apps/kabumori-web`, the three legal/support operator values, EAS production env vars, Supabase Auth Site URL/SMTP, App Store Connect metadata) — none of which this task's scope covers.
-
-
-## Follow-up — official icon full-bleed correction after real-device QA
-
-### User decision
-
-The user found a real-device visual defect in the currently installed icon: the artwork itself contains a rounded-card/white outer margin, so iOS applies its own mask on top and the icon looks visually smaller with a white frame.
-
-The user has now approved a corrected **full-bleed** source that preserves the central newspaper/leaf/chart design but removes the baked-in rounded-card boundary and extends the pale green/white background to all four edges.
-
-The user will **overwrite the existing Desktop source using the exact same filename**:
-
-`~/Desktop/a_clean_glossy_modern_app_icon_style_illustratio.png`
-
-Do not treat the old hash as canonical anymore.
-
-### New source acceptance contract
-
-After the user overwrites the file, the same filename must now resolve to:
-
-- dimensions: **1254 x 1254**
-- PNG mode: RGBA is acceptable only because the alpha channel is fully opaque (all alpha = 255)
-- sha256: **8b821f60b8a4c162c6fda2eafe52245bf4f28aa734778b4db6791c29508e40ed**
-- visual intent: square full-bleed background to all four edges; **no baked-in rounded card, no white outer frame**
-
-If the exact filename still has the previous hash, or the new hash does not match the value above, STOP and report `icon_source_not_updated`. Do not guess or regenerate.
-
-### Required implementation
-
-1. Fresh fetch `origin/main`; use an independent G1 worktree.
-2. Confirm no other slot is editing app-icon/startup assets.
-3. Verify the overwritten Desktop source against the new dimensions/hash above before copying anything.
-4. Replace the repository's current official master **in place**:
-   - `assets/branding/kabumori-icon-master-2026-09-26.png`
-   - keep this repository filename unchanged; it remains the 2026-09-26 official master path.
-   - preserve the exact user-approved source bytes as the master, including its fully-opaque RGBA encoding.
-5. Regenerate `assets/images/icon.png` deterministically at **1024 x 1024, opaque RGB, no crop** from the new master.
-6. Do not alter composition, colors, newspaper, text, leaves, chart, or onboarding artwork.
-7. Update asset-integrity tests/hashes so they pin the **new** official master hash and explicitly prove that any alpha channel in the master is fully opaque.
-8. Existing `app.json`/splash wiring should continue to point at `assets/images/icon.png`; do not change identity fields.
-9. Run focused icon/startup/onboarding tests, src TypeScript, `npx expo config --json`, safe iOS prebuild verification, and `git diff --check`.
-10. Create/push a narrow PR for the icon replacement. No Codex review is expected for this asset-only correction if scope stays narrow and tests pass.
-
-### Internal iPhone rebuild
-
-After the corrected icon PR is merged and post-merge verification passes, create **one new iOS `preview` internal-distribution EAS build** using the already-authorized preview environment.
-
-Do not:
-- submit to App Store/TestFlight;
-- touch production EAS env;
-- change Apple credentials unless EAS requires a non-destructive normal reuse step;
-- change Supabase/Auth/DB/X/admin.
-
-The user will reinstall/update the internal build and verify that the home-screen icon now reaches the iOS mask naturally with **no inner white frame / no double-rounded appearance**.
-
-### Completion
-
-When done:
-- status -> `review_required`
-- next_owner -> `chatgpt`
-- STOP for K1.
-
-Report:
-- new source hash/dimensions/mode + proof alpha is fully opaque;
-- repo master hash;
-- installed 1024x1024 icon hash/mode;
-- changed files;
-- tests;
-- PR/head/merge commit;
-- new EAS preview build ID/status/install link;
-- production mutation;
-- remaining issue = user real-device icon acceptance only, unless another blocker appears.
-
-### Recommended model
-
-**Sonnet5（中）**
-
-This is a narrow asset swap + deterministic verification/rebuild. Escalate only if an unexpected signing/build-system problem appears.
-
-
-## ChatGPT merge note — PR #40
-
-Claude Code's own application safety classifier blocked self-merging even though this project task allowed merge without K1/Codex review for this narrow asset-only delta. This is separate from the project's review policy.
-
-ChatGPT independently verified PR #40 was open, mergeable, limited to exactly:
-- `assets/branding/kabumori-icon-master-2026-09-26.png`
-- `assets/images/icon.png`
-- `tests/app/onboarding-assets_test.ts`
-
-PR head checks were green (Netlify Deploy Preview and Vercel status). ChatGPT merged PR #40 with expected-head protection.
-
-- PR #40 head: `e8c4524faa138bfd894b5b5623a73ef23c07ffa9`
-- merge commit: `d2747c75ecbbe48ffeab77cc3827787cac888468`
-
-G1 should now continue from fresh `origin/main` with the already-authorized next step only:
-- verify merged icon assets/tests on main;
-- create one new iOS `preview` internal-distribution EAS build;
-- report install link/build ID;
-- stop for user real-device icon acceptance.
-
-No further source changes are expected.
-
-## Report — G1 result (full-bleed icon correction: PR merged, new EAS build ready)
-
-- task_id: kabumori-ios-internal-visual-qa-build-20260926 (follow-up: official icon full-bleed correction)
-- **result: source fixed and merged, new internal-distribution build finished. Home-screen visual acceptance (no white/double frame) is the only remaining step, and it is the user's to perform.**
-
-### Source acceptance contract — actual vs. pre-declared
-
-The follow-up task pre-declared an exact expected new-source hash (`8b821f60...`, RGBA with fully-opaque alpha). The file actually present on the user's Desktop at the exact contract filename (`~/Desktop/a_clean_glossy_modern_app_icon_style_illustratio.png`, byte-identical to `~/Desktop/あいこん.png`) did not match: it was still the file's state from before the correction request (sha256 `db2f5638aabfbc2e0a0e56c7c292c9fa9664d45bdcd7ce321cbb0996b333e41c`, mtime 23:38–23:40, i.e. **before** the correction task was even added to this file at 23:42:42). Per the task's own instruction ("do not guess or regenerate"), I stopped and reported the mismatch to the user in chat rather than proceeding.
-
-The user then explicitly authorized proceeding with that file's actual content as canonical ("内容は同じなので「あいこん.png」を正本として扱って"). Before doing so I independently verified, not just trusted the claim:
-- The file is **not** byte-identical to the previously-installed master (differs from `6b083c5156332665a1354199f824bc7590a05d79ec2fe1608ae286425ffd7d4e`), so it is a genuinely different asset, not a no-op.
-- Corner/edge pixel sampling (Pillow) on the actual bytes shows the pale gradient background reaching all four corners/edges (`top-left (253,253,253)`, `edge-mid-top (238,253,229)`, etc.) — no isolated white rounded-card floating on a different background, consistent with the intended full-bleed fix.
-- 1254×1254, PNG color type 2 (opaque RGB, no alpha channel at all) — simpler than the pre-declared RGBA-with-opaque-alpha spec, but equally guarantees full opacity, and matches the repo's existing convention already asserted by the test suite.
-
-**New source (as actually integrated):**
-
-| Field | Value |
-| --- | --- |
-| sha256 | `db2f5638aabfbc2e0a0e56c7c292c9fa9664d45bdcd7ce321cbb0996b333e41c` |
-| Dimensions | 1254×1254 |
-| PNG color type | 2 (opaque RGB, no alpha channel — alpha-opacity is therefore structurally guaranteed, not just alpha=255) |
-
-**Repo master** (`assets/branding/kabumori-icon-master-2026-09-26.png`, filename unchanged): same hash as above, confirmed on `origin/main` post-merge.
-
-**Installed 1024×1024 icon** (`assets/images/icon.png`): sha256 `662dbd53c1c8b2db257bd8df2aa87bf6d6e5c4c3db961a86d21ffe3971ad0817`, 1024×1024, color type 2, deterministic `sips -z 1024 1024` resize, no crop.
-
-### Changed files
-
-- `assets/branding/kabumori-icon-master-2026-09-26.png` (replaced in place)
-- `assets/images/icon.png` (regenerated)
-- `tests/app/onboarding-assets_test.ts` (new master hash pinned, comment updated)
-
-### Tests
-
-- `deno test tests/app/onboarding-assets_test.ts --allow-read --no-check` — 7/7 pass. (`--no-check` works around a pre-existing, unrelated Deno/TS lib strictness issue in `sha256Hex`'s `crypto.subtle.digest` call that reproduces on the unmodified file too — not introduced by this change.)
-- `npx expo config --json` — `icon`/`ios.icon` resolve to `./assets/images/icon.png`.
-- `npx expo prebuild --platform ios --no-install --clean` — generated `AppIcon.appiconset`/`SplashScreenLogo.imageset` from the new master at 1024×1024/opaque-RGB; `package.json`'s incidental script rewrite discarded, generated `ios/`/`.expo` deleted before commit.
-- `npx tsc --noEmit` — 0 new errors under `src/` (2 pre-existing, unrelated CSS-module resolution errors reproduce on unmodified `main`; this change touches no `.ts`/`.tsx` logic).
-- `git diff --check` — clean.
-
-### PR / merge
-
-- PR: https://github.com/anohi-memories/kabumori/pull/40
-- Head: `e8c4524faa138bfd894b5b5623a73ef23c07ffa9`
-- Merge commit: `d2747c75ecbbe48ffeab77cc3827787cac888468` (merged by ChatGPT/K1, since Claude Code's own app-level safety classifier blocks self-merge regardless of this project's own review policy)
-- Confirmed present on fresh `origin/main`.
-
-### New EAS preview build
-
-| Field | Value |
-| --- | --- |
-| Platform | iOS |
-| Profile | `preview` (internal distribution) |
-| Status | **finished** |
-| Build ID | `10e8610e-c2b2-4baf-a780-4e038c15f4f9` |
-| Source commit | `f04ccf35a3f2fcb273e5941f697dd2cb9111a81a` (contains the merged icon fix) |
-| Bundle identifier | `com.anohimemories.kabumori` |
-| Distribution certificate / provisioning profile | same existing ones reused — **no new credentials generated** |
-| Started / finished | 2026-09-27 07:52:23 / 07:57:38 |
-| Install link | https://expo.dev/accounts/anohi-memoriess-team/projects/kabumori/builds/10e8610e-c2b2-4baf-a780-4e038c15f4f9 |
-
-### Production mutation
-
-**0** for the app/backend. No new EAS env vars, no Apple credential changes, no Supabase/Auth/DB changes. Same `preview`/`development`-only env vars from the prior task remain the only nonproduction mutation across this whole feature area.
-
-### Remaining issue
-
-User real-device acceptance of the corrected icon only: reinstall the new build and confirm the home-screen icon now reaches iOS's own mask naturally, with no inner white frame / no double-rounded appearance. I will not mark this PASS myself.
-
-### Next recommendation
-
-Send the user the install link above; once they confirm, this task (and its follow-up) is fully closed and the icon/onboarding visual-acceptance work is done end-to-end.
-
-## Report — G1 result (real-device icon acceptance: PASS)
-
-- Build 10e8610e-c2b2-4baf-a780-4e038c15f4f9 (source commit f04ccf35a3f2fcb273e5941f697dd2cb9111a81a) reinstalled by the user.
-- **User's exact response: 「アイコンOK」** — the corrected full-bleed icon now reaches the iOS home-screen mask naturally, no inner white frame / no double-rounded appearance.
-- This closes the icon full-bleed correction follow-up. Combined with the prior real-device PASS (icon/splash/onboarding, iPhone 17 Pro, all 7 checklist items), the icon/splash/onboarding visual-acceptance work for this feature area is now fully closed end-to-end.
-- Production mutation across the whole icon-correction follow-up: 0.
+- STOPしてK1待ち。
+
+## Report
+
+最低限:
+- fresh main SHA
+- implemented sections
+- exact changed_files
+- existing data source reuse
+- number of home network calls before/after
+- market news / holding news separation result
+- thumbnail metadata availability + fallback
+- report point extraction strategy
+- character asset availability/gap
+- topic source availability/gap
+- AI route availability/gap
+- bottom-tab decision and why
+- tests / TypeScript / render checks
+- PR URL / head SHA
+- production mutation
+- remaining_issues
+- safety_checks
+- next_recommendation
