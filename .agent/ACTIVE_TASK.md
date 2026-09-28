@@ -44,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: done
 - task_id: kabumori-home-news-first-ui-implementation-20260928
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: K1 changes required on PR #46: Home hero must not label an older report as today's, and report fetch errors must not be presented as "not generated yet"; scope remains UI/read-only; recommended Sonnet5（中）
+- allocation: closed; Final K1 PASS after date-scope + report-error fixes; PR #46 merged -> `58b53777ce64c054f6c8859940914b71a89472d4`; production mutation 0; no Codex review required
 
 ## Claude G2
 - owner: claude
