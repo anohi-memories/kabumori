@@ -49,7 +49,7 @@
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: Home follow-up; reuse existing public.tips for deterministic daily topic + local beginner/intermediate/advanced setting; source-only migration/RPC + app UI, no production apply/deploy, no G2/news/X overlap; recommended Opus5.5（高）
+- allocation: K1 changes required on PR #48 before DB/RPC review: prevent stale previous-level topic after level-change fetch failure, refresh JST date on each load/focus, and remove abs(hashtext) int4 overflow edge; source-only, production mutation forbidden; recommended Sonnet5（高）
 
 ## Claude G2
 - owner: claude
