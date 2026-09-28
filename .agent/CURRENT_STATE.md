@@ -55,19 +55,23 @@
 - follow-ups: approved mini Yume+robot cutout assets, topic backend + level setting, AI route/service, final tab redesign, authenticated real-device Home visual QA.
 
 
-## G1 Daily topic + knowledge level
+## K1 Daily topic + knowledge level
 
-- task_id: `kabumori-daily-topic-level-settings-20260928` -- `review_required`, next_owner chatgpt.
-- PR #48 (`claude/daily-topic-level-settings-20260928`, head `98732bf`) -- fixed after K1 changes-required: topic now tracks a (level, jstDate) request key so a level change or JST rollover never shows stale content even if the new fetch fails; `todayJstValue` resolved fresh every load/focus/refresh instead of once at mount; RPC selector fixed to avoid int4 abs() overflow (cast to bigint before abs). Not self-merged, migration not applied.
-- Tests: 21 home-topic (+5 new) + 71 total across the full regression run pass. Migration dry-run re-run with 2 new overflow-specific checks, 12/12 pass; local Postgres service stopped afterward.
-- **Still needs Codex DB/RPC review before merge** (new migration/RPC).
-- Production mutation 0.
+- verdict: **PASS for source implementation**.
+- PR #48 head `98732bf` is OPEN/mergeable; production mutation 0; migration not applied.
+- prior K1 fixes verified: cross-level/date stale topic hidden via request key, JST date refreshed per load/focus/refresh, `hashtext` selector casts to bigint before `abs`.
+- accepted architecture: existing `public.tips` reuse, local beginner/intermediate/advanced preference, authenticated read-only narrow RPC, no LLM/news/G2/X overlap.
+- verification accepted: topic 21/21, focused regressions 71/71, migration dry-run 12/12, Expo/TypeScript/diff checks clean apart from known unrelated CSS module errors.
+- merge/apply remains blocked on independent Codex DB/RPC review.
+- H1 is currently occupied by X Auth final acceptance; H2 deferred incomplete review is protected. No H slot was overwritten.
+- preferred next review when free: H1, recommended Sol（高）.
+
 
 ## Current slot snapshot
 
 - H1: `review_required` — `x-social-mobile-multi-provider-auth-focused-review-20260928`; FAIL at unchanged PR #47 `7bda196`; seven executable Auth-boundary negative probes failed (linking URL, callback result/PKCE flow ID, signup enumeration, provider-token persistence, recovery-user binding, malformed callback). Existing mobile 32/32 + domain 14/14, typecheck/lint/web+iOS export PASS. No source fix/PR push/merge/deploy; production mutation 0. Awaiting C1; do not merge/activate providers before coordinated source correction; see latest `.agent/CODEX_REPORT.md` section.
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
-- G1: `review_required` — `kabumori-daily-topic-level-settings-20260928`; PR #48 head `98732bf` (K1 changes-required fixed: stale-topic key scoping, live JST date, RPC int4 overflow); still needs Codex DB/RPC review before merge; production mutation 0.
+- G1: `review_required` — `kabumori-daily-topic-level-settings-20260928`; K1 source PASS at PR #48 `98732bf`; awaiting independent DB/RPC review before merge/apply. H1 occupied, H2 protected deferred; preferred next H1 Sol（高） when free.
 - G2: `ready` — `kabumori-shared-analysis-prod-deploy-observe-20260928`; PR #45 merged; controlled deploy of market-report-analysis only with consumer gates OFF, then natural morning+close observation; recommended Sonnet5（高）
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS
