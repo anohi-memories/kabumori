@@ -1,29 +1,20 @@
 # Claude Task 4
 
-- task_id: x-social-mobile-posting-interaction-phase2-20260928
+- task_id: x-social-mobile-posting-backend-foundation-phase3-20260928
 - owner: claude
 - slot: claude-4
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: claude
 - priority: high
-- recommended_model: Sonnet5（高）
-- purpose: accepted Phase 1 Home/posting/history基盤の次として、一般ユーザーが投稿内容を確認・編集・再生成・承認し、失敗時に理由と次の行動を理解できる投稿操作UXを実装する。既存backend契約を再利用し、存在しないbackend機能をfakeしない。
+- recommended_model: Opus5.5（高）
+- purpose: Phase 2で確認した投稿操作backendの欠落を、最小かつ安全な順序で解消する。まず「投稿本文の正本」「投稿詳細の安全な読み取り」「draft本文の編集保存」「失敗理由の安全な読み取り」をsource-onlyで実装し、再生成/承認/再試行は次段へ分離する。
 
-## Source / accepted state
+## Accepted source
 
-- Phase 1 PR #44 accepted/fixed and integrated before current main
-- G3 Auth Phase 2 accepted and merged to main as `fbddef2535b82bf4775c2e4fddb93eeefb8c638a`
-- G4 queued Phase 2 scope from `.agent/CURRENT_STATE.md`:
-  - draft/post preview
-  - manual edit
-  - AI regenerate
-  - approve
-  - schedule/post action only where backend exists
-  - failure reason
-  - retry
-  - reconnect-to-X CTA
-  - schedule/history -> detail -> edit/approve
-  - manual approval vs auto-post distinction
+- PR #49 merged to main as `9eef82bf0729c25bf6aaf15951c138704b5b67b7`
+- Phase 2 verdict: PASS
+- no Codex review required for Phase 2
+- Phase 2 UI truthfully disables edit/regenerate/approve/retry because no client-callable backend existed
 
 ## Mandatory startup
 
@@ -31,317 +22,211 @@
    - `.agent/ORCHESTRATION.md`
    - `.agent/CURRENT_STATE.md`
    - this TASK
-   - current social-mobile Home/schedule/history/post-detail/settings code
-2. Use an independent G4 worktree/checkout.
-3. Fresh fetch `origin/main`; branch from accepted current main.
-4. Inventory backend/data contracts before adding UI actions.
-5. G3 owns Auth/account/login-method/config-readiness files. Stop on overlap.
-6. Do not invent a successful backend action where no contract exists.
+   - latest G4 Phase 2 report
+2. Independent G4 worktree/checkout.
+3. Fresh fetch `origin/main`; branch from latest main including PR #49 merge.
+4. Read current Supabase skill/docs before DB/RLS/RPC/Edge changes.
+5. Read-only inspect current production schema for:
+   - `scheduled_posts`
+   - `post_execution_logs`
+   - relevant brand/workspace membership tables
+   - existing posting/dispatcher RPCs
+6. Confirm G3 file separation. G3 owns Auth/account/provider-readiness files.
+7. If existing production schema differs materially from migration history, STOP before source changes and report the discrepancy.
 
-## Product goal
+## Goal
 
-A user should be able to move through a truthful posting flow:
+Unlock the first real posting interaction safely:
 
-`予定/下書き -> 内容確認 -> 必要なら編集/再生成 -> 承認 -> 予約/投稿状態確認 -> 失敗時は理由と次の行動`
+`post detail -> authoritative body -> edit draft -> persisted reload`
 
-while always understanding whether:
-- this post requires manual approval
-- auto-post is enabled
-- the post is only a preview/draft
-- the post is scheduled
-- the X connection needs reconnect
-- a backend action is unavailable
+and expose a sanitized failure reason for failed posts where the user is authorized.
 
-## Stage A — inventory / contract map
+Do not implement AI regenerate, approval, schedule/post-now, or retry in this TASK.
 
-Classify current capabilities:
-- real and writable
-- real but read-only
-- source-only/not production-applied
-- unavailable
-- mock-only
+## Security principle
 
-Cover:
-- draft/body source
-- edit persistence
-- regenerate endpoint/action
-- approval state
-- schedule action
-- post-now action
-- retry action
-- failure reason
-- reconnect-required state
-- history/detail data
+Do NOT weaken existing dispatcher/service-role RPC grants merely to make the mobile app work.
 
-Document blockers instead of faking them.
+Prefer a narrow authenticated command/read boundary that:
+- derives the user from JWT/session
+- checks exact workspace/brand membership server-side
+- checks exact post ownership/scope
+- constrains mutable statuses
+- never accepts arbitrary brand authorization from client input
+- does not expose service_role to the client
+- does not expose raw provider/X tokens or internal stack traces
 
-## Stage B — post preview/detail UX
+If an Edge Function is the safer boundary than direct authenticated RPC/DML, use it.
 
-Implement or improve a truthful post preview/detail surface.
+## Stage A — production schema read-only verification
 
-Show where available:
-- post body
-- account
-- scheduled time
-- state/status
-- manual approval / auto-post mode
-- latest failure reason
-- retryability
-- X reconnect requirement
+Before implementation, confirm read-only:
+- exact columns/types/constraints on `scheduled_posts`
+- whether `post_execution_logs.brand_id` exists
+- exact relationship between log rows and scheduled posts
+- current RLS/grants for authenticated/service_role
+- exact membership/brand authority source
+- whether an existing body/content table already exists
+- whether any existing safe user-facing API already covers this
 
-If the authoritative body is unavailable in real data, do not silently display mock text.
+Record exact findings in Report.
 
-## Stage C — manual edit
+No production mutation.
 
-If an existing safe persistence contract exists:
-- allow editing draft text
-- validate length/basic input
-- save using existing backend/repository path
-- reload and show persisted truth
+## Stage B — authoritative post body model
 
-If no real persistence contract exists:
-- implement UI boundary/interface only if useful
-- disable action truthfully
-- report exact backend gap
-
-Do not add a new production DB schema in this task unless explicitly required and authorized; STOP if that becomes necessary.
-
-## Stage D — AI regenerate
-
-Use an existing regenerate/generation action only if it already exists and has a safe contract.
+If no existing authoritative body field/table exists, design the narrowest candidate schema.
 
 Requirements:
-- clear loading/error state
-- no duplicate request on repeated tap
-- regenerated content must remain pending approval if manual approval mode applies
-- never auto-post merely because regeneration succeeded
+- one authoritative user-visible body per scheduled/draft post
+- clear nullable/backfill behavior for historical rows
+- no fake body inferred from mock data
+- do not overwrite published historical content unexpectedly
+- define max length / validation consistent with posting contract
+- preserve existing dispatcher behavior unless intentionally adapted in source candidate
 
-If backend regenerate does not exist, do not mock success. Provide a disabled/coming-later state and report.
+Migration is candidate/source-only. Do not apply.
 
-## Stage E — approve / schedule / post action
+## Stage C — safe post-detail read contract
 
-Wire only actions backed by existing contracts.
+Implement source-only contract for an authenticated user to read only posts they are authorized to see.
 
-Preserve:
-- manual approval != auto-post
-- approval does not imply immediate X post unless contract explicitly says so
-- auto-post state is shown clearly
-- no production posting from tests/task execution
+Return only fields needed by the app:
+- post id
+- safe status
+- authoritative body
+- scheduled time
+- approval/posting state if already authoritative
+- sanitized failure summary if available
+- reconnect-needed should continue to come from existing account state, not duplicated here
 
-Prevent accidental double-submit.
+Do not expose:
+- provider tokens
+- service role data
+- raw exception traces
+- unrestricted execution log rows
+- another brand/account's posts
 
-## Stage F — failure / retry / reconnect
+## Stage D — draft edit contract
 
-For failed items:
-- expose human-readable failure reason where safely available
-- distinguish retryable vs non-retryable if backend supports it
-- show reconnect-to-X CTA when auth state indicates reconnect is required
-- CTA may navigate to the existing X connection flow, but G4 must not modify G3 Auth implementation
+Implement edit only for states where mutation is safe.
 
-Never expose raw secrets/provider tokens/server stack traces.
+At minimum:
+- allow only authenticated authorized user
+- exact post/brand scope check
+- only mutable pre-publish states
+- reject publishing/published
+- reject stale/invalid post
+- validate body length/content
+- prevent cross-brand ID guessing
+- return persisted canonical row/result
+- safe idempotency/concurrency behavior where practical
 
-## Stage G — navigation flow
+No direct client access to dispatcher RPCs.
 
-Make these paths coherent where supported:
-- Home -> next post -> detail
-- Schedule -> post detail
-- History -> failed/sent post detail
-- Detail -> edit/regenerate/approve/retry
-- Detail -> reconnect to X when required
+## Stage E — failure reason read
 
-Back navigation must not lose persisted state or fabricate success.
+If `post_execution_logs` can safely support this:
+- expose only a sanitized user-facing failure classification/message
+- latest relevant attempt only or another explicitly defined rule
+- never expose raw stack, request/response secrets, tokens, headers, provider payloads
+- exact post/brand authorization
 
-## Truthfulness rules
+If schema cannot support this safely without larger redesign, leave it disabled and report why.
 
-Never:
-- fall back from unavailable real data to mock data without an explicit dev/mock mode
-- show “投稿済み” if only locally changed
-- show “予約済み” before backend confirmation
-- show “再生成完了” before real response
-- show retry success before backend confirmation
-- imply real posting in task tests
+## Stage F — mobile integration
+
+Update the Phase 2 post detail UI only after the backend/source contract exists.
+
+Expected:
+- real body shown from authoritative source
+- edit action enabled only when contract says editable
+- save waits for confirmed backend result
+- reload reflects persisted value
+- failure reason shown only from sanitized real contract
+- regenerate/approve/retry remain disabled in this phase
+
+No fake success.
 
 ## G3 separation
 
 Do not modify:
-- Auth callback parsing
+- auth callback
 - provider linking
 - PKCE/recovery/session storage
 - login methods
 - provider readiness/config validation
 
-You may consume existing Auth/X reconnect status and navigate to an existing route.
-
-If a G3 file must change, STOP and report.
+If overlap is unavoidable, STOP and report exact file/reason.
 
 ## Tests
 
 Add focused tests for:
-- real vs mock truthfulness
-- edit persistence or disabled state
-- regenerate double-submit prevention
-- approval/manual-auto distinction
-- schedule/post confirmation truthfulness
-- failed-post reason mapping
-- reconnect CTA condition
-- retry state
-- navigation from schedule/history/detail
+- authenticated own-brand read
+- cross-brand denial
+- unauthenticated denial
+- editable status allowlist
+- publishing/published mutation denial
+- invalid/too-long body
+- concurrency/stale update behavior where applicable
+- sanitized failure reason
+- no raw secret/token/log leakage
+- mobile truthfulness
+- reload after save
 
 Run:
+- relevant disposable DB/migration tests
+- Edge/RPC tests
 - full social-mobile tests
 - data-view tests
 - typecheck
 - lint
-- Expo web export
-- Expo iOS export where current project supports it
+- Expo web + iOS export
 - git diff --check
 - secret scan
 
 ## Production constraints
 
 Do NOT:
-- make a real X post
-- enable publish authority
-- change Stage 3B rollout
-- mutate production DB/schema/RLS/RPC
-- deploy production backend
-- alter Auth provider consoles/secrets
+- apply migration
+- deploy Edge Function
+- change RLS/grants in production
+- change dispatcher production behavior
+- make real X post
+- activate publish authority
+- modify Auth provider/config/secrets
 
 production_mutation=0.
 
 ## Review policy
 
-Do not request Codex review automatically.
-This is primarily user-facing app UX on existing contracts.
+This Phase 3 introduces a new DB/API authorization boundary, so independent review IS required before merge/apply.
 
-At K4, report any newly introduced DB/API/auth/publish boundary.
-If none, normal ChatGPT completion review is enough.
+Because Codex capacity is currently constrained:
+- do not assign H1/H2 automatically
+- at K4, recommend a separate-room Claude independent review
+- recommended independent reviewer: **Opus5.5（高）**
+- reviewer must use a separate worktree/read-only checkout from implementer
 
 ## Completion / K4
 
 Report:
-- architecture/flow implemented
-- real backend capabilities found
-- disabled/unavailable capabilities
+- production schema read-only findings
+- chosen API/security boundary
+- body storage design
+- edit authorization/status rules
+- failure reason sanitization
 - changed_files
+- migration/RPC/Edge changes
 - tests
-- screenshots/preview notes if practical
-- backend blockers
 - production_mutation=0
-- G3 overlap=0 or exact overlap reason
-- whether review is actually needed
-- recommended next G4 step
+- G3 overlap
+- remaining disabled actions
+- exact independent review scope
+- recommended next step
 
 Then:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for K4.
-
-
-## Report
-
-- task_id: x-social-mobile-posting-interaction-phase2-20260928
-- result: **PASS（source-only、要求どおりtruthful）**。編集・再生成・承認・再試行のいずれにも、本番から呼べるbackend契約が現状存在しないことを確認した。既存契約が無いものは「使える見た目にしない」方針どおり、理由付きの無効化ボタンとして実装した。PR #49（未merge）。DB/API/Auth/publish境界の新規追加は無し。
-- model_used: Sonnet 5（高）
-- worktree: G4専用 `/Users/yuya/Developer/kabumori/.claude/worktrees/g4-x-admin-pr15`（コードは新規branch `g4/social-mobile-posting-interaction-phase2-20260928`、TASK更新はworktree本来のbranchから）
-- PR: https://github.com/anohi-memories/kabumori/pull/49 （head `15e9f74`、OPEN、MERGEABLE）
-
-### architecture/flow implemented
-
-`Home/投稿予定/履歴 → 投稿詳細` の遷移はPhase1で実装済み（変更なし）。今回は投稿詳細画面（`posts/[id].tsx`）に以下を追加した。
-
-1. **状態・失敗理由**: 既存のPill表示に加えて、`failed`の投稿には失敗理由の行を追加（現状は「まだ確認できません」と正直に表示、下記参照）。
-2. **投稿モードカード**: 「自動投稿 ON/OFF」（`account.postingState`、Homeと同じ既存field）と「承認: 手動確認が必要 / 自動投稿を許可」（`content_settings.approvalMode`、settings/consult画面と同じ既存repository経由）を**別軸**として両方表示。片方だけで判断しない設計。
-3. **Xの再接続CTA**: 接続中のいずれかのXアカウントが`needs_attention`なら、既存の`/accounts`ルートへのカードを表示（G3のOAuth実装は不変更・再利用のみ）。
-4. **4つの操作（編集・再生成・承認・再試行）**: すべて無効化ボタン＋理由テキスト。`retry`は`failed`の投稿にのみカードを表示。
-
-### Stage A — inventory / contract map（結論）
-
-| capability | 分類 | 根拠 |
-|---|---|---|
-| 投稿本文の取得 | unavailable（真実） | `scheduled_posts`に本文列が無い（本番・候補migrationとも）。`text`は常に空文字。 |
-| 投稿本文の編集保存 | unavailable | 同上、書き込み先が存在しない。 |
-| AI再生成（この投稿単位） | unavailable | この投稿1件を再生成して保存するcontractは無い。`social-mobile-brand-dry-run`はワークスペース単位のプレビューのみで、投稿を作成・更新しない（Home既存機能、重複実装しない）。 |
-| 承認/投稿予定への追加 | unavailable | クライアントから呼べるRPCが無い。 |
-| 予約/投稿実行 | unavailable/mock-only | `schedule_account_bound_post_v2`等はすべて`revoke ... from authenticated; grant execute ... to service_role`のみ。加えてこの一式（`supabase/migrations/20260924023133_x_autopost_phase1b_account_bound_queue.sql`）自体が「SOURCE CANDIDATE ONLY. Do not apply until a separately reviewed dispatcher cutover.」で未適用。 |
-| 再試行 | unavailable | 同上（`settle_post_pre_x_v2`等も同じ理由）。 |
-| 失敗理由 | source-only/real but read-only（未接続） | `post_execution_logs.message`はDBに存在するが、基本grantは`service_role`のみ。`authenticated`への読み取りはPhase4候補ポリシー（`social_mobile_brand_memberships`migration、未適用）に依存し、かつ`post_execution_logs.brand_id`列が実際に存在するかがmigration履歴だけでは確認しきれなかった（他のいずれのmigrationにも明示的な追加が見当たらない）。不確実なスキーマに対して投機的なクエリを追加するより、正直に「未接続」と報告する方を選んだ。 |
-| Xの再接続要否 | real, read-only, usable | `social_accounts.connection_status`は既存の`useActiveAccount`経由で取得済み。新規contract不要。 |
-| 承認モード（manual_review/auto_post_preference） | source-only（Phase14候補、本番未適用）だが、読み取りコード自体は既存 | `social_mobile_content_settings`は「Phase 14 source candidate only. Do not apply to production in this phase.」。読み取りに失敗した場合は既存の`unavailable`分類でPillが「確認できません」になる、安全側の設計は変更していない。 |
-| 履歴/詳細データ | real, read-only, usable | Phase1で実装済み、変更なし。 |
-
-### Stage B〜F — 実装内容（disabled/unavailable capabilities含む）
-
-上記「architecture/flow implemented」に記載のとおり。**偽の成功は一切出していない**（Truthfulness rulesの5項目すべてに抵触しない設計・レビュー済み）:
-- 「投稿済み」はローカル変更だけでは出ない（そもそも編集自体ができない）。
-- 「予約済み」はbackend確認前には出ない（そもそも予約操作自体ができない）。
-- 「再生成完了」は実レスポンス前には出ない（そもそも再生成自体ができない）。
-- 「再試行成功」はbackend確認前には出ない（そもそも再試行自体ができない）。
-- テスト・タスク実行中に実投稿を示唆する表示は無い。
-
-### Stage G — navigation flow
-
-Home→次の投稿→詳細、投稿予定→詳細、履歴→詳細はPhase1のまま健全（変更なし、確認のみ）。詳細→編集/再生成/承認/再試行は「無効な操作」として到達可能（Stage Gの要求どおり、隠さず理由を示す）。詳細→Xへの再接続は新規、既存`/accounts`へのnavigateのみ。
-
-### changed_files
-
-新規: `src/domain/post-interaction.ts`、`src/domain/post-interaction.test.ts`。
-変更: `src/app/posts/[id].tsx`（全面書き換え）、`src/components/ui.tsx`（`ActionButton`に`disabled` propを追加、既存呼び出し元は非破壊）。
-すべて`apps/social-mobile`配下。DB/RLS/RPC/migration/Auth設定の変更なし。
-
-### tests
-
-- `node --experimental-strip-types --test src/domain/post-interaction.test.ts`: **8/8 pass**。
-- `node --experimental-strip-types --test src/domain/data-view.test.ts`: **14/14 pass**（回帰なし、Phase1のまま）。
-- `npm test`（`tests/*.test.mjs`、G3 Auth Phase2一式）: **43/43 pass**（無関係・回帰なし）。
-- `npm run typecheck`: PASS（このセッションでの`npm install`実行後に確認。`expo-apple-authentication`等G3 Phase2依存の未インストールを検出・解消してから実施）。
-- `npm run lint`: PASS。
-- `npx expo export --platform web`: 成功。
-- `npx expo export --platform ios`: 成功（1215 modules、エラー0。実機/シミュレータでの起動確認ではなく、bundleの成立確認）。
-- `git diff --check`: PASS。差分に対する簡易secret scan: 該当なし。
-- 実ログイン・実Supabase接続での画面確認: 未実施（このセッションに認証情報が無いため。Phase1と同じ制約）。
-
-### backend blockers
-
-上記Stage Aの表のとおり。要点を再掲:
-1. `scheduled_posts`に本文列が無い（編集・再生成の根本ブロッカー）。
-2. Phase1b dispatcher一式（承認/予約/投稿実行/再試行のRPC群）が`service_role`専用かつmigration自体が未適用。
-3. `post_execution_logs`（失敗理由の格納先）は`authenticated`への読み取り経路が未確定（Phase4候補migration依存＋`brand_id`列の存在が未確認）。
-
-### production_mutation
-
-**0件**。DB/RLS/RPC/migration/Auth設定/本番デプロイいずれも無し。branchへのpush + PR作成のみ。
-
-### G3 overlap
-
-**0件（重なりなし）**。変更ファイルは`posts/[id].tsx`・`ui.tsx`・新規`domain/post-interaction.*`のみで、G3のAuth Phase2/Phase3のファイル一覧（auth-provider・onboarding・x-connect・account/provider-readiness関連）とは重複しない。
-
-### whether review is actually needed
-
-**不要**。新規のDB/API/Auth/publish境界を導入していない（唯一の新規読み取りは、既存の`SupabaseContentSettingsRepository`を承認モード表示のために別画面から再利用しただけで、新しいtable/RPC/grantではない）。TASKのreview policyどおり、通常のChatGPT完了確認で十分と判断する。
-
-### recommended next G4 step
-
-1. Phase 3以降の本格的な投稿操作（編集・再生成・承認・予約・再試行の実backend化）は、今回inventoryした3つのblocker（本文列・dispatcher RPCのauthenticated開放・失敗理由の読み取り経路）を解消する別TASK（DB/RLS/RPCを伴うため、TASKの性質上レビュー必須）が先に必要。範囲・優先度はChatGPT/ユーザーの判断。
-2. `post_execution_logs.brand_id`の実在有無を、DBスキーマの直接確認（migration履歴だけでなくINFORMATION_SCHEMA等）で確定させておくと、次のPhaseで失敗理由の読み取りを安全に設計しやすい。
-3. PR #44・PR #49（Phase1・Phase2）とも、実ログインでの画面確認はこのセッションではできていない。実機/実アカウントでの見た目確認が必要なら、認証情報を用意した別TASKで実施する。
-
-## Completion
-
-- status -> review_required
-- next_owner -> chatgpt
-
-
-## Final K4 — posting interaction Phase 2
-
-Verdict: **PASS**.
-
-- PR #49 head `15e9f74a6de98a4a8b49eadb6c2f962a6250c94e` accepted.
-- truthful source-only UX implemented for post detail/status, posting mode, X reconnect CTA and unavailable edit/regenerate/approve/retry actions.
-- unavailable backend capabilities remain visibly disabled with explicit reasons; no fake success.
-- no new DB/API/Auth/publish boundary introduced.
-- tests: post-interaction 8/8, data-view 14/14, mobile 43/43, typecheck/lint, Expo web+iOS export, diff/secret scan PASS.
-- production_mutation=0.
-- no Codex review required under task review policy.
-- PR #49 merged to main as `9eef82bf0729c25bf6aaf15951c138704b5b67b7`.
-- real edit/regenerate/approve/schedule/retry remains blocked on backend contracts/schema/RPC work and should be a separate reviewed task.

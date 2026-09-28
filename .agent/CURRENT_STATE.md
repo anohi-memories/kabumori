@@ -1564,3 +1564,15 @@ Recommended Claude model: Sonnet5（高）.
 - must not edit G3 Auth/account/provider-readiness files.
 - review policy: no automatic Codex review unless a new high-risk DB/API/Auth/publish boundary is introduced.
 - recommended Claude model: **Sonnet5（高）**.
+
+
+## Final K4 posting interaction Phase 2
+
+- verdict: **PASS**.
+- PR #49 head `15e9f74a6de98a4a8b49eadb6c2f962a6250c94e`.
+- post detail now shows truthful status/failure availability, auto-post vs approval mode, X reconnect CTA, and disabled edit/regenerate/approve/retry controls with reasons when backend support does not exist.
+- no fake backend success and no new DB/API/Auth/publish boundary.
+- tests: post-interaction 8/8, data-view 14/14, mobile 43/43, typecheck/lint, Expo web+iOS export, diff/secret scan PASS.
+- production_mutation=0; no extra Codex review required.
+- PR #49 merged as `9eef82bf0729c25bf6aaf15951c138704b5b67b7`.
+- remaining real posting-operation blockers: no canonical post body/edit persistence, dispatcher RPCs service_role-only/unapplied, and failure-log authenticated read path unresolved.
