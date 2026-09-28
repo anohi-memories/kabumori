@@ -64,22 +64,22 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
-- task_id: x-social-mobile-account-lifecycle-release-phase4-20260928
+- status: idle
+- task_id: none
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: assigned after Final K3 Auth release-readiness PASS and PR #50 merge `ff46c397`; account lifecycle/deletion/privacy release prep, source-only, no production mutation. Independent G3 worktree required. Recommended Opus5.5（高）.
+- allocation: unassigned; user-requested pause. Previous Phase 4 task remains preserved in TASK history and was not completed. No automatic restart.
 
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
-- task_id: x-social-mobile-posting-backend-foundation-phase3-20260928
+- status: idle
+- task_id: none
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: assigned after Final K4 Phase 2 PASS and PR #49 merge `9eef82bf`; source-only backend foundation for authoritative post body, safe detail read/edit, and sanitized failure reason. No production mutation. Independent G4 worktree required. Recommended Opus5.5（高）.
+- allocation: unassigned; user-requested close after safe Stage A STOP. Previous Phase 3 findings remain preserved; no source changes and no pending review.
 
 ## Deferred
 
