@@ -1,96 +1,90 @@
 # Codex Task
 
-- task_id: x-social-mobile-phase1-consolidated-integration-review-20260928
+- task_id: x-social-mobile-multi-provider-auth-focused-review-20260928
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: none
-- priority: high
-- recommended_model: Luna（高）
-- purpose: social-mobile Phase 1のG3/G4成果を1回だけまとめてレビューする。PR #42（auth/X-connect/onboarding）とPR #44（Home/posting settings/history UX）の統合、merge順、provider/state境界、content-settings保存の回帰を確認する。
+- status: ready
+- next_owner: codex
+- priority: critical
+- recommended_model: Sol（高）
+- purpose: PR #47 multi-provider Auth Phase 2を1回だけ集中レビューする。X/Apple/Google/Email認証、identity linking、PKCE/deep link、password recovery、X app-authとposting-Xの分離を確認し、production provider activation前のAuth境界を固める。
 
-## Review targets
+## Review target
 
-- PR #42 head `c5e0157f867450047a5f79a204df45aaeefecfa6`
-- PR #44 reviewed/fixed head `966d4123c13c4dcda1799772d262dde5be8cacb8`
+- PR #47 exact head: `7bda196147a749431774fba915a86d41bf43dc5d`
+- Phase 1 main baseline includes merged PR #42 -> `f0cac15`, PR #44 -> `7870d10`
 
-## Focus
+## Must verify
 
-1. PR #42 -> PR #44 の順で統合したときの競合/型/状態契約
-2. `DataProvider` / `ActiveAccountProvider` と Home/schedule/history の組み合わせ
-3. real-data modeでmock fallbackが復活しないこと
-4. loading/blocked/unavailable/ready/mock_preview の表示整合
-5. onboardingからHome到達後のaccount/status表示
-6. X connect後のreloadとHome反映
-7. multiple workspace/account時のfail-closed維持
-8. consult保存が既存設定を巻き戻さないこと
-9. `saveConfirmedProposal` / `upsert` の呼び分け
-10. content-settings table未配置時に安全にunavailableとなること
-11. no service_role/token/secret exposure
-12. G3/G4間で同じファイルを二重変更していないこと
-13. merge order recommendation
-14. app Phase 1が次の実装へ進める状態か
+1. X app login and X posting-account authorization are strictly separate.
+2. Supabase provider token is never reused/stored/logged as posting credential.
+3. posting X still goes only through existing `x-oauth-connect-user` + Vault path.
+4. OAuth callback only accepts intended scheme/route and rejects posting callback / foreign scheme / malformed input.
+5. PKCE/state/code exchange cannot be replayed or double-exchanged in the implemented client flow.
+6. Apple nonce handling matches current recommended Supabase/Apple flow.
+7. Google/X browser OAuth cancel/error/success paths are safe.
+8. Email signup does not enumerate existing accounts.
+9. Password recovery requires the intended recovery context before password update.
+10. Provider linking is explicit and authenticated.
+11. Duplicate/ambiguous identities fail closed; no merge by name/handle/user_metadata.
+12. `user_metadata` is not used for authorization.
+13. no service_role/provider secret/refresh token in mobile client.
+14. new-account notice occurs before workspace creation where required.
+15. first workspace/onboarding continuation remains exact-user bound.
+16. existing password login/session restore/logout regressions remain clean.
+17. provider availability gating does not create false-ready UI.
+18. no production Auth/config/DB/X mutation occurred.
 
-## Constraints
+## Docs / current behavior
 
-- source review only
-- no production DB/config/OAuth/X mutation
-- no Stage 3B activation
-- no unrelated Admin work
-- no broad redesign
-- no extra review loop unless concrete defect exists
+- Read current Supabase skill first.
+- Check current Supabase docs/changelog for social login, identity linking, Apple, Google, X/Twitter, PKCE/deep linking, password recovery before judging semantics.
+- Do not rely on stale remembered Auth behavior.
 
 ## Verification
 
-- fresh origin/main
-- inspect exact diffs for PR #42 and #44
-- test combined tree in recommended merge order
-- run:
-  - social-mobile tests
-  - typecheck
-  - lint
-  - Expo web export
-  - git diff --check
-- verify real-data/no-mock behavior in source/tests
-- verify consult persistence merge semantics
-- verify no regression to auth/X-connect/onboarding
+- inspect exact PR #47 diff
+- run focused auth tests
+- run full social-mobile tests
+- typecheck
+- lint
+- Expo web + iOS export/build smoke
+- git diff --check
+- secret/token scan
+- source-level negative checks for callback/linking ambiguity
 
 ## Fix policy
 
-Small, obvious integration P1/P2 bug may be fixed directly on the affected PR and retested.
-Anything design-level => report and stop.
+Small, unambiguous P1/P2 Auth/source bug may be fixed directly on PR #47 and retested.
+Any design-level or provider-console uncertainty => report and STOP; do not mutate production configuration.
+
+## Production constraints
+
+- no Supabase provider enablement/disablement
+- no redirect allowlist mutation
+- no SMTP change
+- no Apple/Google/X developer-console change
+- no DB migration
+- no Stage 3B activation
+- no real X post
+- production_mutation=0
 
 ## Completion / C1
 
 Report:
 - PASS / PASS-WITH-FIX / FAIL
-- exact reviewed/fixed heads
-- combined merge order
-- integration findings
+- exact reviewed/fixed PR #47 head
+- findings
+- identity-linking assessment
+- callback/PKCE/recovery assessment
+- X-login-vs-posting-X assessment
 - tests
-- source changes if any
+- source fixes if any
 - production_mutation=0
-- whether PR #42/#44 can be merged and app Phase 1 can proceed
-- next recommended app implementation step
+- whether PR #47 is ready for merge
+- exact remaining console/config gates and recommended activation order
 
 Then:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for C1.
-
-
-## Final C1 — social-mobile Phase 1 consolidated review
-
-Verdict: **PASS-WITH-FIX**.
-
-- PR #42 accepted head: `c5e0157f867450047a5f79a204df45aaeefecfa6`.
-- PR #44 accepted fixed head: `966d4123c13c4dcda1799772d262dde5be8cacb8`.
-- H1 fixed one P2 on PR #44: persisted scheduler status mapping now maps `succeeded` to published and History excludes unpublished rows.
-- combined integration tree built from latest main with merge order #42 -> #44 passed.
-- tests: social-mobile 16/16, data-view 14/14, typecheck/lint/Expo web export/diff all PASS.
-- real-data mode remains fail-closed with no mock fallback on blocked/unavailable states.
-- onboarding/X-connect/provider state and Home/schedule/history integration accepted.
-- consult persistence preserves existing settings and fails safely if content-settings backend is unavailable.
-- production mutation=0.
-- Phase 1 source work is complete and may be closed after merging PR #42 then PR #44.
-- no additional H1 loop required unless merge introduces a concrete discrepancy.
