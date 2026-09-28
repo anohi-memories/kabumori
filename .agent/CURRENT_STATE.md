@@ -1355,3 +1355,23 @@ Status: backlog only / no G1-G2 task assigned.
 - no G3-owned provider/auth files changed; no DB/RLS/RPC/migration/production mutation.
 - one consolidated H1 review assigned for PR #42 + #44 integration before merge.
 - recommended Codex model: Luna（高）.
+
+
+## Queued G3 next — multi-provider signup/login
+
+Status: queued / do not start before Phase 1 consolidated H1/C1 and PR #42/#44 merge decision.
+
+Planned task:
+- X / Apple / Google / Email signup/login
+- provider linking / duplicate-account prevention
+- X login versus X posting-account connection must remain separate trust/consent steps
+- first-workspace creation/onboarding continuation
+- password recovery/deep-link design
+- no production Auth provider/config changes without separate authorization
+
+Reason for deferral:
+- H1 is currently reviewing PR #42 + #44 exact heads and their combined provider/state contract.
+- starting auth/signup work now would touch the same auth/onboarding area and could invalidate or duplicate the review.
+- after C1, merge/integrate Phase 1 first, then branch the next G3 from the accepted main state.
+
+Recommended Claude model: Opus5.5（高）.
