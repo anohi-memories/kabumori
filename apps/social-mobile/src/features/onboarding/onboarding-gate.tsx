@@ -7,17 +7,32 @@ import { SignOutButton } from '@/components/sign-out-button';
 import { selectDataSource } from '@/data/repository-selection';
 import { SupabaseOnboardingRepository } from '@/data/onboarding-repository';
 import { deriveOnboardingStep, onboardingStorageKey, type OnboardingInput } from '@/domain/onboarding';
+import { shouldShowNewAccountNotice } from '@/domain/auth-flows';
+import { useAuth } from '@/providers/auth-provider';
 import { useXConnect } from '@/features/x-connect/use-x-connect';
 import { supabase } from '@/lib/supabase';
 import { useDataStatus } from '@/providers/data-provider';
 
-async function readDeferred(userId: string): Promise<boolean> {
+type LocalProgress = { settingsDeferred?: boolean; newAccountAcknowledged?: boolean };
+
+async function readProgress(userId: string): Promise<LocalProgress> {
   try {
     const raw = await AsyncStorage.getItem(onboardingStorageKey(userId));
-    return raw !== null && (JSON.parse(raw) as { settingsDeferred?: unknown }).settingsDeferred === true;
+    const parsed = raw === null ? {} : JSON.parse(raw) as Record<string, unknown>;
+    return { settingsDeferred: parsed.settingsDeferred === true, newAccountAcknowledged: parsed.newAccountAcknowledged === true };
   } catch {
-    return false;
+    return {};
   }
+}
+
+async function writeProgress(userId: string, patch: LocalProgress): Promise<void> {
+  try {
+    await AsyncStorage.setItem(onboardingStorageKey(userId), JSON.stringify({ ...await readProgress(userId), ...patch }));
+  } catch { /* the gate still re-checks the server on the next launch */ }
+}
+
+async function readDeferred(userId: string): Promise<boolean> {
+  return (await readProgress(userId)).settingsDeferred === true;
 }
 
 const STEPS = ['ログイン', 'Xを接続', '接続を確認', '投稿の好み'] as const;
@@ -42,6 +57,9 @@ function Progress({ current }: { current: number }) {
  */
 export function OnboardingGate({ children }: PropsWithChildren) {
   const { reload: reloadData } = useDataStatus();
+  const { session } = useAuth();
+  const [acknowledged, setAcknowledged] = useState<boolean | null>(null);
+  const [loadedAt, setLoadedAt] = useState(0);
   const selection = useMemo(() => selectDataSource(), []);
   const repository = useMemo(() => (supabase ? new SupabaseOnboardingRepository(supabase) : null), []);
   const [input, setInput] = useState<OnboardingInput>(selection.kind === 'mock' ? { kind: 'mock' } : { kind: 'loading' });
@@ -63,6 +81,8 @@ export function OnboardingGate({ children }: PropsWithChildren) {
         const result = await repository.read(readDeferred);
         if (cancelled) return;
         setUserId(result.userId);
+        setAcknowledged(result.userId ? (await readProgress(result.userId)).newAccountAcknowledged === true : false);
+        setLoadedAt(Date.now());
         setInput(result.input);
       } catch {
         if (!cancelled) setInput({ kind: 'error', reason: '初期設定の状態を確認できません。' });
@@ -75,16 +95,40 @@ export function OnboardingGate({ children }: PropsWithChildren) {
   const { state: connectState, stateText, verifiedHandle, connect } = useXConnect(onConnected);
 
   const deferSettings = useCallback(async () => {
-    if (userId) {
-      try {
-        await AsyncStorage.setItem(onboardingStorageKey(userId), JSON.stringify({ settingsDeferred: true }));
-      } catch { /* the gate still re-checks the server on the next launch */ }
-    }
+    if (userId) await writeProgress(userId, { settingsDeferred: true });
     refresh();
   }, [refresh, userId]);
+  const acknowledgeNewAccount = useCallback(async () => {
+    if (userId) await writeProgress(userId, { newAccountAcknowledged: true });
+    setAcknowledged(true);
+  }, [userId]);
 
   const step = deriveOnboardingStep(input);
   if (step.step === 'preview' || step.step === 'done') return <>{children}</>;
+  const identities = (session?.user.identities ?? []).map((identity) => ({ provider: identity.provider, createdAt: identity.created_at }));
+  // Display only (never authorization): how this session signed in.
+  const signedInWithX = identities.some((identity) => identity.provider === 'x');
+  const showNewAccountNotice = input.kind === 'loaded' && acknowledged === false && shouldShowNewAccountNotice({
+    identities,
+    userCreatedAt: session?.user.created_at,
+    hasWorkspace: input.brandIds.length > 0,
+    acknowledged: false,
+    now: loadedAt,
+  });
+  if (showNewAccountNotice) {
+    return (
+      <Screen>
+        <ScrollView contentContainerStyle={{ gap: 16 }}>
+          <Card>
+            <SectionTitle detail="新しいアカウントでこのアプリを始めます。">新しいアカウントを作成しました</SectionTitle>
+            <Text style={styles.muted}>以前にメールアドレスなど別の方法で登録していた場合は、いったんログアウトして元の方法でログインし、「アカウント → ログイン方法」からこの方法を追加してください。別々のアカウントは自動ではまとめられません。</Text>
+            <ActionButton label="このまま新しく始める" onPress={() => void acknowledgeNewAccount()} />
+          </Card>
+          <SignOutButton />
+        </ScrollView>
+      </Screen>
+    );
+  }
 
   return (
     <Screen>
@@ -111,6 +155,7 @@ export function OnboardingGate({ children }: PropsWithChildren) {
             </SectionTitle>
             {step.step === 'reconnect_x' ? <Pill tone="warning">{step.reason}</Pill> : null}
             {step.step === 'connect_x' && step.resume ? <Text style={styles.muted}>前回の接続が完了していません。もう一度接続してください。</Text> : null}
+            {signedInWithX ? <Text style={styles.muted}>Xでログインしました。このXアカウントを自動投稿にも使う場合は、下のボタンから投稿用の接続を行ってください（ログインとは別の許可です）。</Text> : null}
             <Text style={styles.muted}>{stateText}</Text>
             {connectState === 'connecting' ? <ActivityIndicator color={colors.primary} /> : null}
             <Pressable

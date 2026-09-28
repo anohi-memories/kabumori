@@ -66,6 +66,13 @@ export default function AccountsScreen() {
           </Pressable>
           <Text style={styles.muted}>接続後も投稿機能は自動で有効になりません。</Text>
         </Card>
+
+        <Link href="/login-methods" asChild>
+          <Pressable accessibilityRole="button" style={({ pressed }) => [styles.card, pressed && styles.buttonPressed]}>
+            <Text style={{ color: colors.ink, fontWeight: '800' }}>ログイン方法</Text>
+            <Text style={styles.muted}>X・Apple・Google・メールアドレスのうち、アプリへのログインに使う方法を確認・追加できます。</Text>
+          </Pressable>
+        </Link>
       </ScrollView>
     </Screen>
   );

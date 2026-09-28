@@ -32,6 +32,9 @@ export function createSupabaseClient(env: Record<string, string | undefined> = e
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
+      // PKCE: OAuth sign-in, e-mail confirmation and recovery links return a
+      // one-time code that only this client (holding the verifier) can exchange.
+      flowType: 'pkce',
     },
   });
 }
@@ -43,4 +46,10 @@ if (supabase && Platform.OS !== 'web') {
     if (state === 'active') supabase.auth.startAutoRefresh();
     else supabase.auth.stopAutoRefresh();
   });
+}
+
+/** Host of the configured project; only its /auth/v1 endpoints may be opened for sign-in. */
+export function getSupabaseHost(env: Record<string, string | undefined> = expoPublicEnv): string | null {
+  const result = getSupabaseConfig(env);
+  return result.ok ? new URL(result.config.url).host : null;
 }
