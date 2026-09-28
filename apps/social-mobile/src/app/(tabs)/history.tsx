@@ -3,7 +3,7 @@ import { ScrollView, Text, View } from 'react-native';
 import { mockRepository } from '@/data/mock-repository';
 import { colors } from '@/constants/theme';
 import { Card, EmptyState, Pill, Screen, SectionTitle, styles } from '@/components/ui';
-import { resolvePostsView } from '@/domain/data-view';
+import { filterHistoryPosts, resolvePostsView } from '@/domain/data-view';
 import type { PostStatus } from '@/domain/types';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useDataStatus } from '@/providers/data-provider';
@@ -15,6 +15,7 @@ export default function HistoryScreen() {
   const { status, reason, snapshot } = useDataStatus();
   const mockHistory = mockRepository.getHistory().filter((post) => post.accountId === activeAccount?.id);
   const view = resolvePostsView(status, reason, snapshot?.history, mockHistory);
+  const historyPosts = view.kind === 'posts' ? filterHistoryPosts(view.posts) : [];
 
   return (
     <Screen>
@@ -28,8 +29,8 @@ export default function HistoryScreen() {
           <Text style={styles.muted}>読み込み中…</Text>
         ) : view.kind === 'unavailable' ? (
           <EmptyState title="投稿履歴を確認できません" detail={view.reason ?? '時間をおいて再度お試しください。'} />
-        ) : view.posts.length ? (
-          [...view.posts]
+        ) : historyPosts.length ? (
+          [...historyPosts]
             .sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime())
             .map((post) => {
               const status = statusLabels[post.status];

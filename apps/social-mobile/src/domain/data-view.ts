@@ -30,6 +30,11 @@ export function resolvePostsView(
   return { kind: 'unavailable', reason };
 }
 
+/** History contains terminal results only; planned/running rows stay in schedule. */
+export function filterHistoryPosts(posts: PlannedPost[]): PlannedPost[] {
+  return posts.filter((post) => post.status === 'published' || post.status === 'failed');
+}
+
 export type StatusHeadline = { label: string; tone: 'ready' | 'loading' | 'preview' | 'attention' };
 
 /**

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resolvePostsView, statusHeadline, summarizeHome } from './data-view.ts';
+import { filterHistoryPosts, resolvePostsView, statusHeadline, summarizeHome } from './data-view.ts';
+import { mapScheduledPostStatus } from './post-status.ts';
 import type { PlannedPost, SocialAccount } from './types.ts';
 
 const NOW = new Date('2026-09-28T09:00:00+09:00');
@@ -38,6 +39,24 @@ test('blocked and unavailable never fall back to mock posts (no fake data)', () 
     reason: '所属している運用ワークスペースがありません。',
   });
   assert.deepEqual(resolvePostsView('unavailable', null, [post({ id: 'r1' })], mock), { kind: 'unavailable', reason: null });
+});
+
+test('history excludes posts that are still scheduled or publishing', () => {
+  const posts = [
+    post({ id: 'success', status: 'published' }),
+    post({ id: 'failure', status: 'failed' }),
+    post({ id: 'pending', status: 'scheduled' }),
+    post({ id: 'running', status: 'publishing' }),
+    post({ id: 'draft', status: 'draft' }),
+  ];
+  assert.deepEqual(filterHistoryPosts(posts).map((item) => item.id), ['success', 'failure']);
+});
+
+test('maps persisted scheduled_posts status values to truthful app states', () => {
+  assert.equal(mapScheduledPostStatus('pending'), 'scheduled');
+  assert.equal(mapScheduledPostStatus('running'), 'publishing');
+  assert.equal(mapScheduledPostStatus('succeeded'), 'published');
+  assert.equal(mapScheduledPostStatus('failed'), 'failed');
 });
 
 // --- statusHeadline: blocked/unavailable must not read as an intentional preview ---
