@@ -42,18 +42,22 @@
 
 ## G1 Home news-first UI implementation
 
-- task_id: `kabumori-home-news-first-ui-implementation-20260928` -- `review_required`, next_owner chatgpt.
-- PR #46 (`claude/home-news-first-ui-20260928`, head `2b1c666`) opened against fresh main `b2e1ba8`. Not self-merged.
-- Implemented: report-highlight hero card (2-3 points from existing stored report fields only, no page-load generation), market/holding news split from the single existing important-news feed (home network calls 3 -> 2), topic card and AI entry as honest future-ready/disabled states (no backend exists for either), bottom tabs unchanged.
-- Tests: 15 new (home-report-highlights/home-news-sections/home-news-visual) + 38 existing regression tests all pass. tsc/expo config/web export/git diff --check all clean.
-- Not performed: interactive/authenticated visual QA (no signed-in session available in this environment).
-- Production mutation 0. Gaps flagged for follow-up: character asset, topic backend, AI chat route, full bottom-tab redesign.
+- task_id: `kabumori-home-news-first-ui-implementation-20260928` -- K1 **CHANGES REQUIRED**, slot returned to `ready`, next_owner claude.
+- PR #46 remains open/mergeable at head `2b1c666`; scope is UI/read-only and production mutation is 0.
+- Implemented direction is accepted: dynamic report points with no per-point chevrons, one existing news feed split into market/holding sections, no duplicate news fetch, no backend/API optimization overlap.
+- K1 found two correctness/fail-soft issues before merge:
+  1. current helper selects the latest stored report across dates, so an older report can be shown under "今日のかぶモリレポート"; hero must filter to `trading_date === todayJst()`.
+  2. report fetch errors are currently populated but not rendered, causing a load failure to be shown as "まだありません"; hero must surface error + retry.
+- Required regression cases: yesterday-only -> no hero report; today morning -> morning; today morning+close -> latest same-day; report fetch error -> explicit error/retry.
+- No Codex review required for this narrow correction. Recommended model: Sonnet5（中）.
+- Remaining non-blocking product gaps after merge: approved character cutout asset, daily-topic backend, real AI route/service, final bottom-tab redesign, authenticated real-device visual QA.
+
 
 ## Current slot snapshot
 
 - H1: `review_required` — `x-social-mobile-phase1-consolidated-integration-review-20260928`; PASS-WITH-FIX source review, latest main `94aa3ea`, PR #42 `c5e0157`, PR #44 fixed head `966d4123`. Integrated #42 → #44 cleanly; fixed persisted `succeeded` posts being rendered as scheduled and leaking into History. Mobile tests 16/16 + domain tests 14/14, typecheck/lint/web export pass. Production mutation 0; awaiting C1. Real Supabase/backend readiness remains a separate gate; see `.agent/CODEX_REPORT.md`.
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
-- G1: `ready` — `kabumori-home-news-first-ui-implementation-20260928`; prior icon/splash/onboarding visual QA is closed PASS. New scope is Home UI only: report summary card -> market important news -> holding news -> topic shell -> AI entry shell, reusing existing reads and avoiding backend/API-optimization overlap; recommended Sonnet5（高）.
+- G1: `ready` — `kabumori-home-news-first-ui-implementation-20260928`; PR #46 K1 changes required: date-scope hero to today only and surface report-load error/retry. No backend overlap; recommended Sonnet5（中）.
 - G2: `ready` — `kabumori-shared-analysis-prod-deploy-observe-20260928`; PR #45 merged; controlled deploy of market-report-analysis only with consumer gates OFF, then natural morning+close observation; recommended Sonnet5（高）
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS
