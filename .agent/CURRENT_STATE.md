@@ -1513,3 +1513,15 @@ Recommended Claude model: Sonnet5（高）.
 - production_mutation=0.
 - one final focused H1 acceptance review assigned; no further review loop unless it finds a concrete defect.
 - recommended Codex model: Sol（高）.
+
+
+## Final C1 Auth Phase 2 accepted and merged
+
+- verdict: **PASS-WITH-FIX**.
+- accepted PR #47 head `ed5f8b7890e538593dba369dd85cb99a12b27242`.
+- H1 bounded fixes closed residual callback cache/recovery-action/provider-authorize-path defects.
+- prior seven Auth findings + onboarding/readiness/Apple-linking gaps accepted at source level.
+- final checks: mobile 43/43, data-view 14/14, typecheck/lint, Expo web+iOS export, diff/secret checks PASS.
+- PR #47 merged to main as `fbddef2535b82bf4775c2e4fddb93eeefb8c638a`.
+- production provider enablement, redirect allowlist, SMTP/template, Apple/Google/X developer-console setup, real-device E2E and real X posting remain separate future gates.
+- no further H1 loop is required absent a concrete discrepancy.
