@@ -55,11 +55,11 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-shared-report-reliability-hardening-20260928
+- task_id: kabumori-shared-analysis-prod-deploy-observe-20260928
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: assigned after Final K2 PASS and PR #43 merge; harden shared market-report-analysis transient 429/5xx reliability with bounded retry/call budget, keep shared consumers OFF and legacy X VOICE frozen; recommended Opus5.5（高）
+- allocation: assigned after Final K2 PASS and PR #45 merge; deploy only market-report-analysis with app/x gates OFF, read-back exact source, then observe next natural morning+close retry diagnostics; recommended Sonnet5（高）
 
 ## Claude G3
 - owner: claude
