@@ -66,6 +66,17 @@
 - follow-ups still open: production migration apply + authenticated real-device topic/settings QA, approved mini Yume+robot assets, AI route/service, final tab redesign.
 
 
+## G1 Daily topic production rollout preflight
+
+- assigned: `kabumori-daily-topic-prod-rollout-preflight-20260928`.
+- newly detected blocker: daily-topic migration and MIC Phase 3A migration both use version prefix `20260928120000`.
+- production apply is paused until the daily-topic migration is renamed to a fresh unique version with byte-identical reviewed SQL.
+- Phase A is rename-only + read-only production history/function preflight; no `db push`, no production DDL/DML, no migration-history repair.
+- after K1 merge of the rename-only PR, G1 can continue with exact production apply/readback in a separate authorized continuation.
+- no Codex review expected for the rename-only phase.
+- recommended model: Sonnet5（高）.
+
+
 ## H2 stale review cleanup
 
 - user requested H2 be emptied.
@@ -80,7 +91,7 @@
 
 - H1: `review_required` — `x-social-mobile-auth-phase2-final-acceptance-review-20260928`; PASS-WITH-FIX at PR #47 `ed5f8b7` (initial G3 correction `5fd483a`); prior 7 + additional 3 source boundaries accepted. H1 pinned callback/recovery contexts, retained in-flight exchanges and limited provider authorize paths; fix pushed. Mobile 43/43 + data-view 14/14, typecheck/lint/Web+iOS export and four H1 mutation probes PASS; exact-head Preview SUCCESS. Production mutation 0; awaiting C1/source merge, real provider/device activation remains separately gated; see latest `.agent/CODEX_REPORT.md`.
 - H2: `idle` — unassigned; stale deferred PR #32 morning Fact-contract review was closed as obsolete after PR #32 had already been merged. Historical partial report preserved; slot is now genuinely reusable.
-- G1: `done` — `kabumori-daily-topic-level-settings-20260928`; independent separate-Claude DB/RPC PASS, PR #48 merged -> `9ccbb59d`; production migration not yet applied, so live topic RPC remains a separate controlled step.
+- G1: `ready` — `kabumori-daily-topic-prod-rollout-preflight-20260928`; before production apply, resolve duplicate migration version `20260928120000` between daily-topic and MIC via rename-only PR with byte-identical reviewed SQL; read-only production migration/function preflight only; no production mutation in this phase; recommended Sonnet5（高）.
 - G2: `ready` — `kabumori-shared-analysis-prod-deploy-observe-20260928`; PR #45 merged; controlled deploy of market-report-analysis only with consumer gates OFF, then natural morning+close observation; recommended Sonnet5（高）
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS
