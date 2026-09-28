@@ -45,11 +45,11 @@
 - owner: claude
 - slot: claude-1
 - status: ready
-- task_id: kabumori-daily-topic-prod-rollout-preflight-20260928
+- task_id: kabumori-daily-topic-prod-apply-verify-20260928
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: production rollout preflight for PR #48; first resolve duplicate migration version `20260928120000` by rename-only PR with byte-identical SQL, plus production read-only history/function check. No production mutation/apply in this phase. Recommended Sonnet5（高）
+- allocation: PR #51 rename-only K1 PASS and merged -> `4c07a817`. Production daily-topic RPC is absent; MIC Phase 3A objects are already live out-of-band, so broad db push is forbidden. Apply only the exact reviewed daily-topic SQL, then ACL/RLS/determinism/read-only readback. Recommended Sonnet5（高）
 
 ## Claude G2
 - owner: claude
