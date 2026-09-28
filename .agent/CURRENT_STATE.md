@@ -1306,3 +1306,15 @@ Status: backlog only / no G1-G2 task assigned.
   - no fake backend behavior, no production posting.
   - recommended Claude model: Sonnet5（高）.
 - G3/G4 must use independent worktrees and stop on file overlap.
+
+
+## Final K3 social-mobile auth/X-connect/onboarding phase 1
+
+- verdict: **PASS**.
+- PR #42 head `c5e0157f867450047a5f79a204df45aaeefecfa6`.
+- login -> X connect/reconnect -> verified handle -> minimum settings gate/skip -> Home is now represented as one first-run source journey.
+- existing Supabase session and `x-oauth-connect-user` OAuth path are reused; no parallel auth/token path.
+- real-data fake-account fallback removed; ambiguous workspace/account state fails closed.
+- tests 16/16 plus typecheck/lint/Expo web export PASS; production mutation=0.
+- new signup and password recovery remain explicit product decisions.
+- per reduced-review policy, no H1 is inserted now; review app-side Phase 1 in a consolidated pass after G4 unless a new high-risk boundary is introduced.
