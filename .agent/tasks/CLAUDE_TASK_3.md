@@ -1,23 +1,13 @@
 # Claude Task 3
 
-- task_id: x-social-mobile-auth-x-connect-onboarding-phase1-20260928
+- task_id: x-social-mobile-multi-provider-auth-phase2-20260928
 - owner: claude
 - slot: claude-3
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: claude
 - priority: high
 - recommended_model: Opus5.5（高）
-- purpose: `apps/social-mobile` を一般ユーザーが実際に使えるX自動投稿アプリへ進める第1段階。認証・X接続・初期オンボーディングを棚卸しし、既存基盤を壊さず「初回利用者がログイン→X接続→必要設定→利用開始」まで一本で通せる状態へ近づける。
-
-## Product direction
-
-ここからは基盤深掘りを一旦止め、ユーザー価値が見えるアプリ実装を優先する。
-
-このTASKの最重要ゴール:
-- `apps/social-mobile` の認証/X接続/onboardingを「画面だけ」「部分接続」「実利用可」に分類
-- 欠けている最小実装を追加
-- 一般ユーザーが迷わずX接続まで到達できる導線を作る
-- 既存Universal OAuth/Vault基盤を再利用し、新しい並列認証方式を作らない
+- purpose: social-mobile Phase 1 accepted sourceを正しくmainへ統合したうえで、一般ユーザー向けのmulti-provider signup/login Phase 2をsource-firstで実装する。対象は X / Apple / Google / Email。認証用OAuthと自動投稿用X OAuthを混同せず、安全なprovider linkingと重複アカウント防止を設計・実装する。
 
 ## Mandatory startup
 
@@ -25,123 +15,208 @@
    - `.agent/ORCHESTRATION.md`
    - `.agent/CURRENT_STATE.md`
    - this TASK
-   - latest G3/C1 Stage 3B reports
-   - relevant `apps/social-mobile` auth/accounts/settings screens
+   - Final C1 for social-mobile Phase 1
+   - PR #42 / #44 exact reviewed heads
 2. Use independent G3 worktree/checkout.
 3. Fresh fetch `origin/main`.
-4. Read current Supabase skill before any Supabase/Auth implementation.
-5. Inspect current Expo/React Native auth/session/X OAuth architecture before editing.
-6. Do not touch G4-owned Home/posting UX files unless absolutely necessary; stop on overlap.
+4. Read the current Supabase skill before any Auth/Supabase work.
+5. Fetch the current Supabase changelog index and current docs for:
+   - Email/password signup
+   - Apple social login
+   - Google social login
+   - X/Twitter social login
+   - mobile OAuth/deep linking
+   - identity linking / unlinking / automatic identity linking behavior
+   - password recovery
+6. Do not rely on remembered Supabase behavior when current docs differ.
 
-## Scope
+## Phase 0 — integrate accepted Phase 1 first
 
-### Stage A — inventory
+Accepted heads:
+- PR #42: `c5e0157f867450047a5f79a204df45aaeefecfa6`
+- PR #44: `966d4123c13c4dcda1799772d262dde5be8cacb8`
 
-Classify the current state of:
+Required order:
+1. verify both PRs are still OPEN/MERGEABLE and exact heads are unchanged.
+2. verify required checks are green.
+3. merge PR #42 first.
+4. fresh fetch main and verify #42 contents present.
+5. re-check PR #44 against new main.
+6. merge PR #44 second only if still clean and exact reviewed head.
+7. fresh fetch main and run social-mobile regression:
+   - npm test
+   - typecheck
+   - lint
+   - Expo web export
+   - git diff/status sanity
+8. If either PR head changed or integration produces an unexpected semantic delta, STOP and report. Do not silently re-review.
+
+Only after Phase 0 PASS may Phase 2 implementation begin from fresh accepted main.
+
+## Product contract
+
+The login/sign-up screen should support, where technically and product-wise safe:
+
+1. **Xで続ける**
+2. **Appleで続ける**
+3. **Googleで続ける**
+4. **メールアドレスで続ける**
+
+This app assumes users operate X, so X may be the primary visual CTA.
+
+However:
+
+### Authentication X != posting X
+
+- Supabase/social-login X authentication proves how the user signs into the app.
+- X auto-post access must continue to use the existing `x-oauth-connect-user` + Vault/refresh/account-authority path.
+- Never treat a Supabase provider access token as the posting credential.
+- Never move posting refresh tokens into the mobile client.
+- After X sign-in, UX may offer:
+  「このXアカウントを自動投稿にも使いますか？」
+  but accepting must enter the existing posting-account connection flow as a separate consent/trust step.
+
+## Phase A — inventory exact current Auth contracts
+
+Inspect and document:
+- current `AuthProvider`
+- signInWithPassword
+- session restore/logout
+- existing deep-link callback routes
+- existing X posting connect flow
+- app scheme / Expo linking config
+- current user/workspace/brand creation assumptions
+- any existing identity linking support
+- any Supabase Auth provider configuration dependencies
+
+Classify each as usable / partial / missing / config-gated.
+
+## Phase B — multi-provider auth architecture
+
+Implement source-side support for:
+
+### Email
+- sign up
 - sign in
-- sign up / account creation
-- password recovery if present
-- session restore
-- logout
-- X account connection
-- X OAuth callback/deep-link handling
-- connected-account state
-- reauth/reconnect path
-- onboarding progress
-- first-run settings
-- error/loading/empty states
+- email verification state if required by current Supabase contract
+- password recovery request
+- recovery callback/deep link
+- new password completion
 
-For each, label:
-- implemented and usable
-- partial
-- UI only
-- missing
-- blocked by backend/config
+### Apple
+- sign in / sign up using current recommended Supabase mobile flow
+- iOS-first correctness
+- cancel/error handling
+- account/provider state refresh
 
-Do not guess; inspect source and existing tests.
+### Google
+- sign in / sign up using current recommended Supabase mobile flow
+- cancel/error handling
+- deep-link/session completion
 
-### Stage B — define minimal first-run journey
+### X
+- sign in / sign up using Supabase Auth/social login if current Supabase docs support the target mobile flow
+- no reuse of login provider token as posting credential
+- after app auth completes, offer a separate posting-account connect step if appropriate
 
-Target journey:
-1. launch app
-2. sign in / create account as supported by current product contract
-3. connect X
-4. confirm connected account
-5. complete minimum settings required for later auto-post use
-6. land on app Home
+If one provider cannot be safely completed without external console/provider configuration, implement the client/source contract and expose a truthful config-gated state; do not fake success.
 
-If sign-up/product identity is not yet safe to implement, leave a clear gate instead of inventing policy.
+## Phase C — identity linking / duplicate account prevention
 
-### Stage C — implement narrowest useful gap fixes
+This is mandatory.
 
-Allowed examples:
-- missing routing/guard
-- missing loading/error state
-- missing connected-account status
-- missing reconnect CTA
-- missing callback handling
-- onboarding progress persistence
-- first-run routing
-- account connection failure UX
-- session restore bug
-- obvious auth/X-connect wiring gaps
+Handle at least:
+- same email signs up with email then later Google
+- same user later adds Apple
+- same user later signs in with X
+- provider returns no trusted matching email
+- accidental creation of a second Supabase user
+- existing logged-in user intentionally links a provider
 
-Do NOT:
-- activate Stage 3B production pilot
-- apply pending Stage 3B migrations
-- merge PR #41
-- change Admin PR #33
-- invent billing
-- build multi-SNS
-- redesign all screens
-- add new auth system parallel to existing Supabase flow
+Rules:
+- do not auto-merge identities based only on display name/handle.
+- do not authorize based on user_metadata.
+- use current Supabase identity-linking semantics and docs.
+- if safe automatic linking cannot be guaranteed, fail closed and require explicit authenticated linking.
+- document account-recovery path for duplicate/ambiguous identity cases.
+
+## Phase D — first workspace / onboarding continuation
+
+After successful first account creation:
+- create or obtain exactly one initial workspace/brand using the existing product model.
+- do not invent a parallel tenant model.
+- then continue into existing Phase 1 onboarding:
+  auth -> workspace -> X posting connection -> verified handle -> minimum settings -> Home.
+- if current backend lacks a safe creation path, implement the UI/domain contract and leave a clear backend gate rather than client-side privileged writes.
+
+## UX requirements
+
+- clear Japanese copy
+- loading/cancel/error states per provider
+- no raw provider/Supabase error leakage
+- user can distinguish:
+  - アプリへのログイン
+  - 自動投稿するXアカウントの接続
+- existing users must retain email/password login
+- no hidden account creation on ambiguous linking paths
+- no provider-specific dead-end screens
 
 ## Security constraints
 
-- exact user/account binding
-- no brand-first/first-row account fallback
-- no token/plaintext secret in client/logs
-- no service_role in mobile client
-- fail closed on missing/ambiguous X account
-- existing Vault/OAuth authority remains canonical
-- preserve logout/session semantics
-- preserve tenant isolation
+- no service_role/secret keys in mobile
+- no provider access/refresh token logging
+- no X posting token in client
+- no first-row fallback for user/workspace/account
+- exact authenticated-user binding
+- preserve RLS/tenant isolation
+- do not use `user_metadata` for authorization
+- no production Auth provider enablement/config mutation in this task
+- no production DB migration in this task unless separately authorized
+- no Stage 3B activation
+- no real X post
 
 ## Tests
 
 At minimum:
-- auth/session provider tests where applicable
-- onboarding routing tests
-- X connected/disconnected/reauth states
-- wrong-user/account binding rejection
-- callback/deep-link parsing
-- no secret/token leakage
-- `npm run typecheck`
-- `npm run lint`
-- Expo export/build smoke if practical
-- `git diff --check`
+- email sign-up/sign-in state machine
+- recovery state/deep-link parsing
+- Apple success/cancel/error contract
+- Google success/cancel/error contract
+- X auth success/cancel/error contract
+- X-login != posting-X credential regression
+- identity-linking / duplicate-account cases
+- ambiguous provider identity fails closed
+- first-workspace/onboarding continuation
+- existing password login regression
+- logout/session restore regression
+- no service_role/token/secret exposure
+- typecheck
+- lint
+- Expo export/build smoke
+- git diff --check
 
 ## Deliverable
 
 Report:
-- current-state inventory
-- exact first-run journey
-- implemented gaps
+- Phase 0 merge result with exact merge commits
+- current provider support matrix
+- implemented source changes
+- config/provider-console blockers
+- identity-linking policy
+- first-workspace/onboarding contract
 - changed_files
 - tests
-- screenshots/Preview notes if generated
-- backend/config blockers
 - security checks
-- remaining UX gaps
-- recommended next G3 step
+- production_mutation
+- remaining gaps
+- recommendation for live/provider-console activation order
 
-## Production constraints
+## Review policy
 
-- no production OAuth mutation unless explicitly authorized
-- no production rollout activation
-- no migration apply/db push/repair
-- no real X post
-- no merge of unrelated PRs
+Because this touches Auth/provider identity:
+- K3 should not auto-merge Phase 2 implementation into production.
+- ChatGPT decides whether one focused H1 review is needed after K3.
+- avoid multiple small review loops.
 
 ## Completion / K3
 
@@ -153,46 +228,4 @@ STOP for K3.
 
 ## Report
 
-- task_id: x-social-mobile-auth-x-connect-onboarding-phase1-20260928
-- result: K3 ready — 初回利用の一本道（ログイン → X 接続 → 接続確認 → 最小設定 → ホーム）を実装。PR #42。production mutation 0。
-- model: Opus 5.5
-- push/PR: branch `claude/g3-social-mobile-onboarding`、PR https://github.com/anohi-memories/kabumori/pull/42、commit `c5e0157`
-- inventory（変更前、ソースと既存テストで確認）:
-  - ログイン（メール/パスワード）: 実装済み・利用可
-  - 新規登録: **なし（製品判断待ち）** — 公開登録か招待制か、メール確認の方針が未決定
-  - パスワード再設定: **なし（製品判断待ち）** — 再設定リンクの deep-link 契約が必要
-  - セッション復元・ログアウト: 実装済み・利用可
-  - X 接続: 部分的 — PKCE 一式はアカウント画面内にのみ存在、接続後にデータが古いまま
-  - OAuth コールバック/deep link: 部分的 — 解析・検証はあり（アプリ内認証セッション）、OS から届いた場合の route なし
-  - 接続状態の表示: 部分的 — 本番データの読み込み失敗時に**ダミーのアカウントを表示**していた
-  - 再接続: 部分的 — backend は同じ行を再利用するが、UI は「別のXアカウントを接続」で理由表示なし
-  - 初回案内・進捗: なし（ログイン後いきなりホーム）
-  - 初期設定: 部分的／backend 待ち — 設定タブはあるが `social_mobile_content_settings` は本番未配置
-  - エラー/読み込み/空状態: 部分的 — ログインの全エラーが「メール/パスワードを確認」、アカウント画面に空/不可の表示なし
-- first_run_journey: 起動 → セッション復元 → 未ログインならログイン（新規登録・再設定は「このアプリではまだ行えません」と明示）→ 本番データモードでは `OnboardingGate` がサーバー状態から段階を決定（`domain/onboarding.ts`）: ワークスペースなし/X なし/接続途中 → **X 接続**、`connection_status='failed'` → 理由付き **再接続**、ワークスペース2つ以上/X 2つ以上 → **安全側で停止（推測しない）** → `identity_verified` で **ハンドル確認** → 設定行あり、または「ホームへ進む（投稿の好みはあとで設定）」（ユーザー別のローカル記録）→ **ホーム**。モック表示モードは案内をスキップ。
-- implemented_gaps: 案内ゲート＋段階導出（純粋関数）＋ RLS だけで読む状態取得（自分の所属 → その brand の X アカウントの非秘密列 → 設定行の有無）; X 接続処理を `useXConnect` に一本化（既存フローをそのまま移設、state/verifier はメモリのみ、所有 ID を送らない）; アカウント画面の接続後再読み込み・再接続表示・空/不可状態; DataProvider に `reload()`（追加のみ）; 本番データモードでダミーアカウントを出さない; `oauth-callback` route（ホームへ戻すだけ、リンクは解析・保存しない）; ログインエラーを固定文言へ（サーバー文言を表示しない）
-- changed_files: 新規 `src/domain/onboarding.ts`、`src/data/onboarding-repository.ts`、`src/features/onboarding/onboarding-gate.tsx`、`src/features/x-connect/use-x-connect.ts`、`src/app/oauth-callback.tsx`、`src/lib/auth-errors.ts`、`tests/*.test.mjs`（4本）、`docs/onboarding-auth-x-connect-phase1.md`; 変更 `src/app/_layout.tsx`、`src/app/accounts/index.tsx`、`src/providers/{data,active-account,auth}-provider.tsx`、`src/components/auth-screen.tsx`、`package.json`（`test` script）。すべて `apps/social-mobile` 配下。G4 担当のタブ画面（ホーム/投稿予定/設定/履歴/投稿詳細）は未変更。G4 の push 済みブランチとの重なりなし。
-- tests: `npm test`（node:test）16/16 — 案内の段階判定、中断からの再開、理由付き再接続、曖昧時の停止、他 brand のアカウント無視（誤ユーザー/アカウント結合の拒否）、deep-link/コールバック解析（state 不一致・別 redirect・code 欠落・プロバイダエラー・キャンセル）、ログインエラーの固定文言、クライアントに service role/秘密情報なし、state/verifier の非保存、RLS 読み取り範囲、ダミー非表示、画面の順序。わざと壊した4パターン全て検出。`npm run typecheck` / `npm run lint` clean; `expo export --platform web` 成功; `git diff --check`; secret scan 0。
-- screenshots: 未作成（ログインには Supabase 環境変数が、案内画面にはログイン済みセッションが必要なため。共有チェックアウトで dev server を起動しないルールも考慮）
-- backend_config_blockers: 新規登録/再設定の製品方針; `social_mobile_content_settings` の本番配置（設定保存＝Stage 3B の同意保存先でもある）; X Developer Portal の redirect `kabumori-social://oauth-callback`; 本番データ用ビルドの `EXPO_PUBLIC_DATA_SOURCE=supabase`＋publishable key。
-- security_checks: 利用者と所属/アカウントの厳密な結び付け（自分の所属から導出、クライアント指定の ID は使わない）; brand/行の先頭へのフォールバックなし; トークン・秘密情報はクライアントに出ない（テストで固定）; モバイルで service_role なし; 曖昧・欠落時は安全側で停止; 既存の Vault/OAuth（`x-oauth-connect-user`）が唯一の経路; ログアウト/セッションの意味は不変; テナント分離は RLS のまま。
-- remaining_ux_gaps: ホーム（G4 担当）の「接続済み」表示が固定値（`connectionStatus` を読むべき）; X 接続の解除機能なし（backend に revoke RPC なし）; 複数ワークスペースの UI; 新規登録・再設定。
-- production_mutation: 0
-- next_recommendation: ChatGPT K3 → PR #42 レビュー → 製品判断（新規登録方針・content settings 配置）→ 次の G3: 新規登録/再設定の実装、または content settings 配置 TASK。
-
-
-## Final K3 — social-mobile onboarding phase 1
-
-Verdict: **PASS**.
-
-- PR #42 head `c5e0157f867450047a5f79a204df45aaeefecfa6` is OPEN/MERGEABLE.
-- first-run path now exists in source: login -> X connect/reconnect -> verified handle confirmation -> minimum settings gate/skip -> Home.
-- existing Supabase session and `x-oauth-connect-user` path are reused; no parallel auth/OAuth system was introduced.
-- real-data mode no longer falls back to fake account data.
-- ambiguous multiple-workspace/account states fail closed rather than choosing a first row.
-- X connect state/verifier remain memory-only; no token/service_role/secret exposure.
-- G4-owned Home/settings/history/post files were not modified.
-- tests: 16/16 plus typecheck/lint/Expo web export/diff/secret scan PASS.
-- production mutation=0.
-- sign-up and password recovery intentionally remain product gates, not guessed implementations.
-- no intermediate H1 review is required; combine any app-side review after G4 Phase 1 unless a new backend/Auth security boundary appears.
+- pending
