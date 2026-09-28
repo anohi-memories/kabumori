@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-auth-phase2-bundled-correction-20260928
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Opus5.5（高）
 - purpose: C1 FAILとなったPR #47 multi-provider Auth Phase 2を、H1で再現されたAuth境界の不具合をまとめて1回で修正する。個別パッチをばら撒かず、callback/PKCE/linking/recovery/provider-session/onboarding/provider-readinessを整合した一つの設計として修正する。
@@ -277,3 +277,23 @@ Then:
 
 ### ready for one final focused H1 acceptance pass
 - はい。7件の Must fix と追加修正3件を一つの設計として反映済みで、上記テスト・変異テストで確認済み。STOP for K3。
+
+
+## Final K3 — Auth Phase 2 bundled correction
+
+Verdict: **PASS for source correction; one final focused H1 acceptance pass required**.
+
+- fixed PR #47 head: `5fd483a5fc651da07d0791c68eaa557cdb201357`.
+- prior reviewed head: `7bda196147a749431774fba915a86d41bf43dc5d`.
+- all seven prior H1 Auth findings have coordinated source fixes.
+- additional onboarding/user-switch, provider-readiness and Apple-linking gaps were also addressed.
+- provider credentials are sanitized from persisted session storage/context while Supabase app-session restore remains intact.
+- recovery is exact user/session bound.
+- callback parser and `sb_flow_id` handling are strict and fail closed.
+- duplicate callback deliveries share the real exchange result.
+- explicit linking URL provenance is validated per provider.
+- X app-auth remains separate from posting-X/Vault path.
+- tests: npm test 37/37; data-view 14/14; typecheck/lint; Expo web+iOS export; diff/secret scan PASS.
+- mutation tests 11/11 detect the guarded regressions.
+- production_mutation=0.
+- real provider/device E2E and console configuration remain separate gates.
