@@ -6,15 +6,28 @@ import { Platform } from 'react-native';
 import { getSupabaseConfig, getSupabaseHost, supabase } from '@/lib/supabase';
 import { signInErrorMessage } from '@/lib/auth-errors';
 import { stripProviderCredentials } from '@/lib/session-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   completeAuthCallbackUrl,
   isNativeAppleAvailable,
   linkAppleNative,
   linkOAuthProvider,
+  reauthWithAppleNative,
+  reauthWithOAuthProvider,
   signInWithAppleNative,
   signInWithOAuthProvider,
   type AuthFlowResult,
 } from '@/lib/auth-client-flows';
+import {
+  ACCOUNT_DELETION_CONFIRMATION,
+  ACCOUNT_DELETION_FUNCTION,
+  deletionAvailability,
+  parseDeletionResponse,
+  type DeletionAvailability,
+  type DeletionOutcome,
+  type ReauthMethod,
+} from '@/domain/account-deletion';
+import { onboardingStorageKey } from '@/domain/onboarding';
 import {
   applePath,
   AUTH_CALLBACK_URL,
@@ -54,11 +67,18 @@ type AuthContextValue = {
   signInWithProvider: (provider: SocialProviderId) => Promise<AuthFlowResult>;
   linkProvider: (provider: SocialProviderId) => Promise<AuthFlowResult>;
   signOut: () => Promise<{ ok: boolean; message?: string }>;
+  /** Account deletion is offered only when enabled for this build (backend reviewed + deployed). */
+  accountDeletion: DeletionAvailability;
+  /** A fresh sign-in with one of the user's own methods; must end as the same user. */
+  reauthenticate: (method: ReauthMethod, password?: string) => Promise<{ ok: true; appleAuthorizationCode?: string } | { ok: false; cancelled?: boolean; message: string }>;
+  /** Server-side deletion of the signed-in account; success only when the server confirmed it. */
+  deleteAccount: (appleAuthorizationCode?: string) => Promise<DeletionOutcome>;
 };
 const AuthContext = createContext<AuthContextValue | null>(null);
 const NO_BACKEND = { ok: false as const, message: 'Supabase接続設定がありません。' };
 // Build-time declaration of the providers configured for this build (static reference for Expo inlining).
 const DECLARED_PROVIDERS = process.env.EXPO_PUBLIC_AUTH_PROVIDERS;
+const ACCOUNT_DELETION_ENABLED = process.env.EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED;
 const CONFIGURED_PROVIDERS = parseConfiguredProviders(DECLARED_PROVIDERS);
 
 function appAuthConfig(config: ReturnType<typeof getSupabaseConfig>): AppAuthConfig {
@@ -174,6 +194,55 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return linkOAuthProvider(supabase, host, provider, userId);
   }, [build, readiness, session?.user.id]);
 
+  const reauthenticate = useCallback<AuthContextValue['reauthenticate']>(async (method, password) => {
+    const host = getSupabaseHost();
+    const userId = session?.user.id;
+    const address = session?.user.email;
+    if (!supabase || !host || !userId) return NO_BACKEND;
+    if (method === 'email') {
+      if (!address || !password || !email.signIn) return { ok: false, message: authFlowMessage('provider_disabled') };
+      const { data, error: reauthError } = await supabase.auth.signInWithPassword({ email: address, password });
+      if (reauthError) return { ok: false, message: signInErrorMessage(reauthError) };
+      if (data.user?.id !== userId) { await supabase.auth.signOut(); return { ok: false, message: authFlowMessage('link_user_mismatch') }; }
+      return { ok: true };
+    }
+    if (!readiness(method).usableNow) return { ok: false, message: authFlowMessage('provider_disabled') };
+    if (method === 'apple' && applePath(build) === 'native') {
+      const result = await reauthWithAppleNative(supabase, userId);
+      return result.ok ? { ok: true, appleAuthorizationCode: result.appleAuthorizationCode } : result;
+    }
+    const result = await reauthWithOAuthProvider(supabase, host, method, userId);
+    return result.ok ? { ok: true } : result;
+  }, [build, email.signIn, readiness, session?.user.email, session?.user.id]);
+
+  const deleteAccount = useCallback<AuthContextValue['deleteAccount']>(async (appleAuthorizationCode) => {
+    if (!supabase || !config.ok) return { ok: false, code: 'FAILED' };
+    const { data } = await supabase.auth.getSession();
+    const current = data.session;
+    if (!current) return { ok: false, code: 'AUTH_REQUIRED' };
+    let outcome: DeletionOutcome;
+    try {
+      const response = await fetch(`${config.config.url.replace(/\/$/u, '')}/functions/v1/${ACCOUNT_DELETION_FUNCTION}`, {
+        method: 'POST',
+        headers: { apikey: config.config.publishableKey, Authorization: `Bearer ${current.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(appleAuthorizationCode
+          ? { confirmation: ACCOUNT_DELETION_CONFIRMATION, apple_authorization_code: appleAuthorizationCode }
+          : { confirmation: ACCOUNT_DELETION_CONFIRMATION }),
+      });
+      outcome = parseDeletionResponse(response.status, await response.json().catch(() => null));
+    } catch {
+      outcome = { ok: false, code: 'FAILED' };
+    }
+    if (!outcome.ok) return outcome;
+    // The server deleted the user: forget this device's session and per-user state.
+    try { await AsyncStorage.removeItem(onboardingStorageKey(current.user.id)); } catch { /* best effort */ }
+    await supabase.auth.signOut({ scope: 'local' });
+    setSession(null);
+    recoveryRef.current = null;
+    setRecovery(null);
+    return outcome;
+  }, [config]);
+
   const value = useMemo<AuthContextValue>(() => ({
     session, loading, error, backendAvailable: Boolean(supabase), readiness, email,
     settingsKnown: settings !== null, releaseReport, recoveryMode: recovery !== null,
@@ -234,7 +303,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setRecovery(null);
       return { ok: true };
     },
-  }), [email, error, linkProvider, loading, readiness, recovery, releaseReport, session, settings, signInWithProvider]);
+    accountDeletion: deletionAvailability({ enabledFlag: ACCOUNT_DELETION_ENABLED, backendAvailable: Boolean(supabase) }),
+    reauthenticate,
+    deleteAccount,
+  }), [deleteAccount, email, error, linkProvider, loading, readiness, reauthenticate, recovery, releaseReport, session, settings, signInWithProvider]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

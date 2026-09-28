@@ -1,12 +1,14 @@
 import type { UserIdentity } from '@supabase/supabase-js';
 import { Link } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { colors } from '@/constants/theme';
 import { Card, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { PROVIDER_LABELS, type SocialProviderId } from '@/domain/auth-flows';
 import { formatAuthDiagnostics, RELEASE_PROVIDERS, USER_PROVIDER_STATUS_LABELS, userProviderStatus } from '@/domain/auth-release-readiness';
 import { postingXStatus, POSTING_X_STATUS_LABELS } from '@/domain/account-security';
+import { formatLegalDiagnostics, LEGAL_LINK_LABELS } from '@/domain/legal-links';
+import { LEGAL_LINKS } from '@/lib/legal-config';
 import { supabase } from '@/lib/supabase';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useAuth } from '@/providers/auth-provider';
@@ -25,7 +27,7 @@ const statusTone = { linked: 'success', available: 'neutral', setup_pending: 'wa
  * unlink. Posting-account X is a separate connection managed on Accounts.
  */
 export default function LoginMethodsScreen() {
-  const { session, linkProvider, readiness, email, requestPasswordReset, releaseReport } = useAuth();
+  const { session, linkProvider, readiness, email, requestPasswordReset, releaseReport, accountDeletion } = useAuth();
   const { accounts } = useActiveAccount();
   const { status: dataStatus } = useDataStatus();
   const [identities, setIdentities] = useState<UserIdentity[] | null>(null);
@@ -145,12 +147,39 @@ export default function LoginMethodsScreen() {
           </Link>
         </Card>
 
+        <Card>
+          <Text style={{ color: colors.ink, fontWeight: '800' }}>サポートと規約</Text>
+          {(['privacy', 'terms', 'support'] as const).map((id) => {
+            const link = LEGAL_LINKS[id];
+            return (
+              <View key={id} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={{ color: colors.ink }}>{LEGAL_LINK_LABELS[id]}</Text>
+                {link.href ? (
+                  <Pressable accessibilityRole="link" onPress={() => { if (link.href) void Linking.openURL(link.href); }}>
+                    <Text style={{ color: colors.primary, fontWeight: '700' }}>開く</Text>
+                  </Pressable>
+                ) : <Pill tone="neutral">準備中</Pill>}
+              </View>
+            );
+          })}
+        </Card>
+
+        <Card>
+          <Text style={{ color: colors.ink, fontWeight: '800' }}>アカウントの削除</Text>
+          <Text style={styles.muted}>削除されるもの・残るものを確認してから削除できます。{accountDeletion === 'available' ? '' : 'アプリ内での削除は現在準備中です。'}</Text>
+          <Link href="/account-deletion" asChild>
+            <Pressable accessibilityRole="button" style={({ pressed }) => [styles.button, { backgroundColor: colors.danger }, pressed && styles.buttonPressed]}>
+              <Text style={styles.buttonText}>アカウントの削除について</Text>
+            </Pressable>
+          </Link>
+        </Card>
+
         {message ? <Pill tone={message.tone}>{message.text}</Pill> : null}
 
         {__DEV__ ? (
           <Card>
             <Text style={{ color: colors.ink, fontWeight: '800' }}>開発者向け: ログイン準備状況</Text>
-            {formatAuthDiagnostics(releaseReport).map((line) => <Text key={line} style={styles.muted}>{line}</Text>)}
+            {[...formatAuthDiagnostics(releaseReport), formatLegalDiagnostics(LEGAL_LINKS), `account-deletion: ${accountDeletion}`].map((line) => <Text key={line} style={styles.muted}>{line}</Text>)}
           </Card>
         ) : null}
       </ScrollView>

@@ -16,7 +16,7 @@ function SignedInApp() {
   // A password-recovery link signs the user in only to set a new password.
   if (recoveryMode) return <NewPasswordScreen />;
   // Signed in → first-run gate (real data only) → app.
-  return <DataProvider><OnboardingGate><ActiveAccountProvider><Stack screenOptions={{ headerShown: false }}><Stack.Screen name="(tabs)" /><Stack.Screen name="accounts" options={{ headerShown: true, title: 'アカウント' }} /><Stack.Screen name="media" options={{ headerShown: true, title: '素材BOX' }} /><Stack.Screen name="posts/[id]" options={{ headerShown: true, title: '投稿詳細' }} /><Stack.Screen name="oauth-callback" /><Stack.Screen name="auth-callback" /><Stack.Screen name="login-methods" options={{ headerShown: true, title: 'ログイン方法' }} /></Stack></ActiveAccountProvider></OnboardingGate></DataProvider>;
+  return <DataProvider><OnboardingGate><ActiveAccountProvider><Stack screenOptions={{ headerShown: false }}><Stack.Screen name="(tabs)" /><Stack.Screen name="accounts" options={{ headerShown: true, title: 'アカウント' }} /><Stack.Screen name="media" options={{ headerShown: true, title: '素材BOX' }} /><Stack.Screen name="posts/[id]" options={{ headerShown: true, title: '投稿詳細' }} /><Stack.Screen name="oauth-callback" /><Stack.Screen name="auth-callback" /><Stack.Screen name="login-methods" options={{ headerShown: true, title: 'ログイン方法' }} /><Stack.Screen name="account-deletion" options={{ headerShown: true, title: 'アカウントの削除' }} /></Stack></ActiveAccountProvider></OnboardingGate></DataProvider>;
 }
 
 export default function RootLayout() { return <AuthProvider><StatusBar style="auto" /><SignedInApp /></AuthProvider>;

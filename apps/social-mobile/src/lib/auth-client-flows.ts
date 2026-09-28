@@ -108,7 +108,7 @@ export async function isNativeAppleAvailable(): Promise<boolean> {
   }
 }
 
-async function appleCredential(): Promise<{ identityToken: string; rawNonce: string } | 'cancelled' | null> {
+async function appleCredential(): Promise<{ identityToken: string; rawNonce: string; authorizationCode: string | null } | 'cancelled' | null> {
   try {
     // Fresh random nonce: its SHA-256 goes to Apple, the raw value to Supabase.
     const rawNonce = bytesToHex(await Crypto.getRandomBytesAsync(32));
@@ -117,7 +117,7 @@ async function appleCredential(): Promise<{ identityToken: string; rawNonce: str
       requestedScopes: [AppleAuthentication.AppleAuthenticationScope.FULL_NAME, AppleAuthentication.AppleAuthenticationScope.EMAIL],
       nonce: hashedNonce,
     });
-    return credential.identityToken ? { identityToken: credential.identityToken, rawNonce } : null;
+    return credential.identityToken ? { identityToken: credential.identityToken, rawNonce, authorizationCode: credential.authorizationCode ?? null } : null;
   } catch (error) {
     return isAppleCancel(error) ? 'cancelled' : null;
   }
@@ -153,4 +153,28 @@ export async function linkAppleNative(client: SupabaseClient, userId: string): P
   } catch {
     return FAILED;
   }
+}
+
+/**
+ * Re-authentication with native Apple before account deletion: a fresh
+ * sign-in (recent-auth for the server) that must be the same user. Its
+ * one-time authorization code lets the server revoke the Apple grant.
+ */
+export async function reauthWithAppleNative(client: SupabaseClient, expectedUserId: string): Promise<AuthFlowResult & { appleAuthorizationCode?: string }> {
+  const credential = await appleCredential();
+  if (credential === 'cancelled') return CANCELLED;
+  if (!credential || !credential.authorizationCode) return FAILED;
+  try {
+    const { data, error } = await client.auth.signInWithIdToken({ provider: 'apple', token: credential.identityToken, nonce: credential.rawNonce });
+    if (error) return { ok: false, message: authFlowMessage(errorCode(error)) };
+    const result = await sameUserAfter(client, { ok: true, userId: data.user?.id ?? null }, expectedUserId);
+    return result.ok ? { ...result, appleAuthorizationCode: credential.authorizationCode } : result;
+  } catch {
+    return FAILED;
+  }
+}
+
+/** Browser OAuth re-authentication (X / Google / Apple web) that must end as the same user. */
+export async function reauthWithOAuthProvider(client: SupabaseClient, supabaseHost: string, provider: SocialProviderId, expectedUserId: string): Promise<AuthFlowResult> {
+  return sameUserAfter(client, await signInWithOAuthProvider(client, supabaseHost, provider), expectedUserId);
 }

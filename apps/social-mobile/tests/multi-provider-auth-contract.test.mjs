@@ -67,7 +67,11 @@ test('linking is explicit and authenticated: linkIdentity only in linkOAuthProvi
   const same = flows.slice(flows.indexOf('async function sameUserAfter'), flows.indexOf('export async function linkOAuthProvider'));
   assert.match(same, /result\.userId === expectedUserId && data\.session\?\.user\.id === expectedUserId/u, 'a link must end as the same user');
   assert.match(same, /await client\.auth\.signOut\(\);/u, 'never continue as someone else');
-  assert.equal((flows.match(/sameUserAfter\(client, /gu) ?? []).length, 2, 'both OAuth and native Apple linking check the user');
+  assert.equal((flows.match(/sameUserAfter\(client, /gu) ?? []).length, 4, 'OAuth/Apple linking and both deletion re-auth paths check the user');
+  for (const name of ['export async function reauthWithAppleNative', 'export async function reauthWithOAuthProvider']) {
+    const body = flows.slice(flows.indexOf(name), flows.indexOf('\n}\n', flows.indexOf(name)));
+    assert.match(body, /sameUserAfter\(client, /u, `${name} ends as the same user or signs out`);
+  }
 });
 
 test('existing password login, session restore, logout and recovery ordering are preserved', async () => {

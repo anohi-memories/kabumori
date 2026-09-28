@@ -8,6 +8,8 @@ import ts from 'typescript';
 import * as flows from '../src/domain/auth-flows.ts';
 import * as recovery from '../src/domain/recovery-binding.ts';
 import * as release from '../src/domain/auth-release-readiness.ts';
+import * as deletion from '../src/domain/account-deletion.ts';
+import * as onboarding from '../src/domain/onboarding.ts';
 import * as storage from '../src/lib/session-storage.ts';
 
 const flowA = 'a'.repeat(32), flowB = 'b'.repeat(32);
@@ -64,12 +66,12 @@ function session(userId, sessionId) {
   return { access_token: `synthetic.${payload}.signature`, user: { id: userId } };
 }
 
-async function providerHarness() {
+async function providerHarness({ fetchImpl = null } = {}) {
   const slots = []; let cursor = 0, first = true, subscriber;
   const effects = [];
   const sessionA = session('fixture-a', 'session-a'), sessionB = session('fixture-b', 'session-b');
   let currentSession = null, getSessionImpl = async () => ({ data: { session: currentSession }, error: null });
-  const updates = [];
+  const updates = [], signOuts = [], removed = [];
   const react = {
     createContext: () => ({ Provider: {} }),
     useState: (initial) => {
@@ -90,7 +92,7 @@ async function providerHarness() {
     getSession: () => getSessionImpl(),
     onAuthStateChange: (callback) => { subscriber = callback; return { data: { subscription: { unsubscribe() {} } } }; },
     updateUser: async () => { updates.push(currentSession?.user.id); return { error: null }; },
-    signOut: async () => { currentSession = null; subscriber('SIGNED_OUT', null); return { error: null }; },
+    signOut: async (options) => { signOuts.push(options ?? null); currentSession = null; subscriber('SIGNED_OUT', null); return { error: null }; },
   } };
   const modules = {
     react, 'react/jsx-runtime': { jsx: (type, props) => ({ type, props }) },
@@ -103,7 +105,8 @@ async function providerHarness() {
     '@/lib/auth-errors': { signInErrorMessage: () => 'fixed error' },
     '@/lib/session-storage': storage,
     '@/lib/auth-client-flows': { completeAuthCallbackUrl: async () => null, isNativeAppleAvailable: async () => false },
-    '@/domain/auth-flows': flows, '@/domain/recovery-binding': recovery, '@/domain/auth-release-readiness': release,
+    '@/domain/auth-flows': flows, '@/domain/recovery-binding': recovery, '@/domain/auth-release-readiness': release, '@/domain/account-deletion': deletion, '@/domain/onboarding': onboarding,
+    '@react-native-async-storage/async-storage': { __esModule: true, default: { removeItem: async (key) => { removed.push(key); } } },
   };
   const source = await readFile(new URL('../src/providers/auth-provider.tsx', import.meta.url), 'utf8');
   const js = ts.transpileModule(source, { compilerOptions: {
@@ -113,13 +116,15 @@ async function providerHarness() {
   vm.runInNewContext(js, {
     module, exports: module.exports, process: { env: {} },
     require: (name) => { assert.ok(Object.hasOwn(modules, name), `unexpected import ${name}`); return modules[name]; },
-    fetch: async () => ({ ok: true, json: async () => ({ external: { email: true }, disable_signup: false }) }),
+    fetch: async (url, init) => (String(url).endsWith('/auth/v1/settings') || !fetchImpl
+      ? { ok: true, json: async () => ({ external: { email: true }, disable_signup: false }) }
+      : fetchImpl(String(url), init)),
   }, { filename: 'auth-provider.tsx' });
   const render = () => { cursor = 0; return module.exports.AuthProvider({ children: null }).props.value; };
   render(); first = false; effects.forEach((effect) => effect());
   await new Promise((resolve) => setImmediate(resolve));
   const emit = (event, nextSession) => { currentSession = nextSession; subscriber(event, nextSession); };
-  return { render, emit, updates, sessionA, sessionB, deferSession: () => {
+  return { render, emit, updates, signOuts, removed, sessionA, sessionB, deferSession: () => {
     let resolve;
     getSessionImpl = () => new Promise((done) => { resolve = done; });
     return (nextSession) => resolve({ data: { session: nextSession }, error: null });
@@ -152,4 +157,47 @@ test('exact recovery user/session completes; sign-in switch and restart cannot r
   assert.equal(harness.render().recoveryMode, false);
   assert.equal((await harness.render().completePasswordRecovery('synthetic-password', 'synthetic-password')).ok, false);
   assert.deepEqual(harness.updates, ['fixture-a']);
+});
+
+// Objects created inside the vm sandbox belong to another realm.
+const plain = (value) => JSON.parse(JSON.stringify(value));
+
+test('account deletion: success only on the server\'s explicit confirmation; the body never names a user', async () => {
+  const requests = [];
+  const uuid = '11111111-1111-4111-8111-111111111111';
+  const answers = [
+    { status: 500, body: { ok: false, error: 'X_REVOKE_FAILED' } },
+    { status: 200, body: {} },
+    { status: 200, body: { ok: 'yes' } },
+    { status: 409, body: { ok: false, error: 'DELETION_BLOCKED_SHARED_WORKSPACE' } },
+    null,
+    { status: 200, body: { ok: true } },
+  ];
+  const harness = await providerHarness({ fetchImpl: async (url, init) => {
+    requests.push({ url, init });
+    const answer = answers.shift();
+    if (!answer) throw new Error('network down');
+    return { status: answer.status, json: async () => answer.body };
+  } });
+  harness.emit('SIGNED_IN', { ...session(uuid, 'session-u'), user: { id: uuid } });
+  for (const expected of ['X_REVOKE_FAILED', 'FAILED', 'FAILED', 'DELETION_BLOCKED_SHARED_WORKSPACE', 'FAILED']) {
+    assert.deepEqual(plain(await harness.render().deleteAccount()), { ok: false, code: expected });
+    assert.deepEqual(harness.signOuts, [], 'no local sign-out without a confirmed deletion');
+    assert.equal(harness.render().session?.user.id, uuid);
+  }
+  assert.deepEqual(plain(await harness.render().deleteAccount('apple-code')), { ok: true });
+  assert.deepEqual(plain(harness.signOuts), [{ scope: 'local' }], 'server already deleted the user: local sign-out only');
+  assert.deepEqual(harness.removed, [`social-mobile:onboarding:v1:${uuid}`]);
+  assert.equal(harness.render().session, null);
+  for (const { url, init } of requests) {
+    assert.equal(url, 'https://fixture.supabase.co/functions/v1/social-mobile-account-delete');
+    assert.equal(init.headers.Authorization, `Bearer ${session(uuid, 'session-u').access_token}`);
+  }
+  assert.deepEqual(JSON.parse(requests[0].init.body), { confirmation: 'DELETE_MY_ACCOUNT' });
+  assert.deepEqual(JSON.parse(requests.at(-1).init.body), { confirmation: 'DELETE_MY_ACCOUNT', apple_authorization_code: 'apple-code' });
+});
+
+test('account deletion is setup-pending unless the build enables it', async () => {
+  const harness = await providerHarness();
+  assert.equal(harness.render().accountDeletion, 'setup_pending');
 });
