@@ -44,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: done
-- task_id: kabumori-home-news-first-ui-implementation-20260928
+- status: ready
+- task_id: kabumori-daily-topic-level-settings-20260928
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: closed; Final K1 PASS after date-scope + report-error fixes; PR #46 merged -> `58b53777ce64c054f6c8859940914b71a89472d4`; production mutation 0; no Codex review required
+- allocation: Home follow-up; reuse existing public.tips for deterministic daily topic + local beginner/intermediate/advanced setting; source-only migration/RPC + app UI, no production apply/deploy, no G2/news/X overlap; recommended Opus5.5（高）
 
 ## Claude G2
 - owner: claude
