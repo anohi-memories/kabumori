@@ -466,3 +466,36 @@ After C1 accepts this source review, run **one bounded real recovery flow and on
 ## C1 recommendation
 
 PR #41 is technically ready **at source level** for C1 review and planning a separately authorized Stage 3B pilot; it is **not** approval to merge/apply/deploy/enable/post. C1 should confirm the fixed PR head and this report. Before any production pilot, obtain explicit owner consent for the exact account/window and product consent UI/row, separately approve each required migration/Edge/config step, recheck live object definitions/grants and content-settings service_role SELECT, then read back each applied object. Do not use `db push`, `--include-all`, migration repair, or automatic rollout. No further H1 source work is pending unless C1 finds a discrepancy.
+
+---
+
+# H1 — Social-mobile Phase 1 consolidated integration review (2026-09-28)
+
+- task_id: `x-social-mobile-phase1-consolidated-integration-review-20260928`; status: `review_required`; next_owner: `chatgpt`; finish code: C1; recommended model: Luna（高）.
+- Verdict: **PASS-WITH-FIX for source integration only.** Latest `origin/main` reviewed: `94aa3eafed142576617f5c13480c2af3f9722e3b`. Remote heads verified read-only: PR #42 `c5e0157f867450047a5f79a204df45aaeefecfa6`; PR #44 `966d4123c13c4dcda1799772d262dde5be8cacb8` (updated after H1's P2 fix).
+- Combined tree was built from latest main, merging PR #42 then PR #44. Both merges completed without conflicts; package.json overlap auto-resolved. No source changes were made to PR #42.
+
+## Finding / fix
+
+- **P2 fixed on PR #44:** the adapter mapped scheduler persistence states `pending/running/succeeded/failed` as if they were app display states, so `succeeded` fell through to `scheduled`; successful posts could appear as upcoming, and the History tab could include unpublished rows. Added a dedicated persisted-status mapper (`succeeded` → `published`, `running` → `publishing`, etc.) and filtered History to published/failed outcomes only. Regression tests cover both contracts. Fix commit pushed to PR #44: `966d4123c13c4dcda1799772d262dde5be8cacb8`.
+- No other integration blocker found in the source review. Real-data mode stays fail-closed and does not reveal mock accounts/posts; loading, blocked, unavailable, ready and mock-preview remain distinct. Workspace/X-account ambiguity fails closed rather than selecting the first row. X-connect uses the signed-in session and in-memory OAuth state/PKCE verifier; client source contains no service-role key or X token secret. Consult saves retain existing settings and use the confirmed-proposal path when a persona exists; missing content-settings table/columns resolve to unavailable rather than silently switching to mock data.
+
+## Verification
+
+- Integrated social-mobile tests: **16 passed / 0 failed**.
+- `src/domain/data-view.test.ts`: **14 passed / 0 failed**.
+- `npm run typecheck`: PASS.
+- `npm run lint`: PASS.
+- Expo web export with dummy public Supabase config and `EXPO_PUBLIC_DATA_SOURCE=supabase`: PASS; no live data request/write was performed.
+- `git diff --check origin/main...HEAD`: PASS. (Integration worktree only; no uncommitted source change.)
+- Harmless Node `MODULE_TYPELESS_PACKAGE_JSON` warnings appeared in test output.
+
+## Merge / production boundary
+
+- Source-level merge order is PR #42 followed by PR #44. The exact combined source passed integration checks. H1 did not inspect GitHub required-check/branch-protection status, merge either PR, deploy, or run an iOS simulator/build; therefore this is not a claim that GitHub presently permits merge or that native/iOS UX has been accepted.
+- App Phase 1 can proceed at source level after the project owner completes the normal C1/merge gate. Real Supabase E2E is **not verified**: G3/G4 task records state `social_mobile_content_settings` is a source candidate and not production-applied, and the X OAuth redirect / real-data build configuration remain separate prerequisites. No production database read/write, OAuth, X post, deployment, migration, or other production mutation was performed (`production_mutation=0`). Do not treat this review as authorization for any of those actions.
+- Changed files by H1: `.agent/tasks/CODEX_TASK.md`, `.agent/ACTIVE_TASK.md` (H1 entry), `.agent/CURRENT_STATE.md` (H1 entry), `.agent/CODEX_REPORT.md`; PR #44 source fix files: `apps/social-mobile/src/domain/post-status.ts`, `src/data/supabase-repository.ts`, `src/domain/data-view.ts`, `src/domain/data-view.test.ts`, `src/app/(tabs)/history.tsx`. No source commit in this report worktree; source fix is the separate PR #44 commit above. No PR merge/deploy.
+
+## C1 recommendation
+
+C1 should verify this report, the PR #44 updated head and remaining GitHub checks. If accepted, merge in the documented order (#42 then #44); keep production DB/config/OAuth and real-account E2E as a separate explicitly authorized gate. No additional H1 review loop is requested unless a concrete discrepancy is found.

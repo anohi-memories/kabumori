@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: x-social-mobile-phase1-consolidated-integration-review-20260928
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: assigned; one consolidated integration review of PR #42 + #44; merge-order/provider/state/content-settings regression focus; recommended Luna（高）
+- allocation: completed PASS-WITH-FIX source review of PR #42 + #44; source fixes pushed to PR #44 head `966d4123`; awaiting C1; recommended Luna（高）
 
 ## Codex H2
 - owner: codex

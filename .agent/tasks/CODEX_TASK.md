@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-phase1-consolidated-integration-review-20260928
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna（高）
 - purpose: social-mobile Phase 1のG3/G4成果を1回だけまとめてレビューする。PR #42（auth/X-connect/onboarding）とPR #44（Home/posting settings/history UX）の統合、merge順、provider/state境界、content-settings保存の回帰を確認する。
@@ -12,7 +12,7 @@
 ## Review targets
 
 - PR #42 head `c5e0157f867450047a5f79a204df45aaeefecfa6`
-- PR #44 head `f0ecc9f984a676acb3a2d4fd522c6219583e06eb`
+- PR #44 reviewed/fixed head `966d4123c13c4dcda1799772d262dde5be8cacb8`
 
 ## Focus
 

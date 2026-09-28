@@ -57,7 +57,7 @@
 
 ## Current slot snapshot
 
-- H1: `review_required` — `x-stage3b-publish-authority-focused-rereview-20260927`; PR #41 source PASS-WITH-FIX at `59f4f53`: publish authority/timebox and AI Lab exclusion verified; H1 added an authority check immediately before each X create after proactive/reactive token refresh. Disposable DB/ACL/race and 619 Deno tests passed. Production mutation 0; awaiting C1 and separate owner/product/production authorization.
+- H1: `review_required` — `x-social-mobile-phase1-consolidated-integration-review-20260928`; PASS-WITH-FIX source review, latest main `94aa3ea`, PR #42 `c5e0157`, PR #44 fixed head `966d4123`. Integrated #42 → #44 cleanly; fixed persisted `succeeded` posts being rendered as scheduled and leaking into History. Mobile tests 16/16 + domain tests 14/14, typecheck/lint/web export pass. Production mutation 0; awaiting C1. Real Supabase/backend readiness remains a separate gate; see `.agent/CODEX_REPORT.md`.
 - H2: `idle` — `kabumori-pr32-morning-fact-contract-final-review-20260925` (deferred by user; incomplete)
 - G1: `ready` — `kabumori-home-news-first-ui-implementation-20260928`; prior icon/splash/onboarding visual QA is closed PASS. New scope is Home UI only: report summary card -> market important news -> holding news -> topic shell -> AI entry shell, reusing existing reads and avoiding backend/API-optimization overlap; recommended Sonnet5（高）.
 - G2: `ready` — `kabumori-shared-analysis-prod-deploy-observe-20260928`; PR #45 merged; controlled deploy of market-report-analysis only with consumer gates OFF, then natural morning+close observation; recommended Sonnet5（高）
