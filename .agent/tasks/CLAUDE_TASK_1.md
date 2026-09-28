@@ -3,8 +3,8 @@
 - task_id: kabumori-daily-topic-level-settings-20260928
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Opus5.5（高）
 - purpose: Homeの「今日のトピック」を実データ化し、設定画面で「初心者向け / 中級者向け / 上級者向け」を選べるようにする。既存のtips資産を再利用し、OpenAI呼び出し・ニュース取得基盤・G2 shared market reportには触れない。
@@ -284,3 +284,107 @@ When complete:
 - status -> `review_required`
 - next_owner -> `chatgpt`
 - STOP for K1.
+
+## Report — G1 result (daily topic + level settings implementation)
+
+- task_id: kabumori-daily-topic-level-settings-20260928
+- fresh main SHA at start: `19c00bf`
+- worktree/branch: independent scratch checkout, branch `claude/daily-topic-level-settings-20260928`
+- **result: implemented, tested, migration dry-run validated, PR opened. Not self-merged. Includes a new migration/RPC, so Codex DB/RPC review is required before merge.**
+
+### Existing tips reuse audit
+
+`public.tips` (from `20260828190000_create_tips.sql` + `20260828213000_expand_tips_catalog.sql`) already has ~50 seeded rows and a `difficulty text not null` column constrained to `初級`/`中級`/`実践`. RLS is enabled with no policy for `authenticated`; only `service_role` has table-level `select`. Confirmed distinct from `public.useful_tips` (X scheduler) by reading both migrations directly — no overlap, no shared columns beyond superficial naming.
+
+### Exact architecture
+
+1. **Migration/RPC**: `supabase/migrations/20260928120000_add_daily_kabumori_tip_rpc.sql` — `get_daily_kabumori_tip(p_level text, p_jst_date date)`, pure SQL, `stable security definer set search_path = ''`. Deterministic pick via `hashtext(date||level) % count` over `row_number() over (order by id)`, filtered to `is_active` and the mapped difficulty. Invalid level → zero rows (fail closed). No write, no `use_count`/`last_used_at` mutation.
+2. **Local preference**: `kabumori:topic-level:v1` in AsyncStorage, read/write logic dependency-injected in `src/lib/home-topic.ts` (pure, Deno-tested with an in-memory mock storage — not just regex-matched), bound to real AsyncStorage in `src/lib/topic-level-storage.ts`.
+3. **App client**: `src/lib/daily-topic.ts` calls the RPC; `parseDailyTipRow` (pure) validates the shape and rejects anything malformed rather than fabricating.
+4. **Home**: `src/app/index.tsx` reads the level, then fetches topic alongside news/reports in one `Promise.allSettled`; topic failure isolated to its own error slot, never breaks the other sections.
+5. **Settings**: new "今日のトピック 投資知識レベル" entry in `src/lib/settings-menu.ts` + `TopicLevelView` in `src/components/settings-sheet.tsx`, immediate save with revert-on-failure.
+6. **Topic card**: `topicCardStatus` in `home-topic.ts`, mirroring the `reportCardStatus` pattern just fixed on PR #46 — a fetch error is never shown as the "準備中" empty state.
+
+### Local preference design
+
+Read failure or malformed/unrecognized stored value → fails soft to `beginner`. Write failure returns `false`; the Settings UI reverts its optimistic selection and shows "保存できませんでした。もう一度お試しください。" rather than claiming success.
+
+### Migration/RPC exact contract
+
+```sql
+get_daily_kabumori_tip(p_level text, p_jst_date date)
+  returns table(id uuid, title text, category text, base_text text, difficulty text)
+  language sql stable security definer set search_path = ''
+```
+`revoke all ... from public, anon; grant execute ... to authenticated;` — table stays closed, only the function is callable, only by authenticated users. Returns only the 5 intended columns.
+
+**Deviation flagged**: used `search_path = ''` (fully-qualified `public.tips` references) instead of the task prose's literal `search_path=public`, since `''` is the dominant convention in this repo (46+ occurrences vs 28) and strictly safer. Judgment call — please confirm acceptable.
+
+### Grants/RLS/security-definer safety
+
+- `tips` table: unchanged, still closed to `authenticated`/`anon` (only `service_role` has table-level select, from the original migration).
+- Function: `security definer`, owned by the migration-applying role (same pattern as `get_my_important_stock_news`), `set search_path = ''` prevents search-path-based hijacking, every reference fully qualified.
+- Grants: `authenticated` can execute; `anon` and `public` explicitly cannot — verified functionally (see dry-run below), not just by reading the SQL.
+- No user/portfolio/news data enters or leaves this function; only `p_level` (a fixed 3-value enum) and `p_jst_date` (a date) are accepted, both validated (invalid level fails closed; the date type itself rejects malformed input at the wire level).
+
+### Changed files (exact)
+
+- `supabase/migrations/20260928120000_add_daily_kabumori_tip_rpc.sql` (new)
+- `src/lib/home-topic.ts` (extended)
+- `src/lib/daily-topic.ts` (new)
+- `src/lib/topic-level-storage.ts` (new)
+- `src/lib/dashboard.ts` (added `'topic'` section)
+- `src/lib/settings-menu.ts` (new entry; takes a resolved label string, not a value import from home-topic.ts, so this file stays Deno-testable)
+- `src/components/settings-sheet.tsx` (new `TopicLevelView`)
+- `src/components/home/topic-card.tsx` (real data wiring)
+- `src/app/index.tsx` (topic integrated into Home's load cycle)
+- `tests/app/home-topic_test.ts` (new, 20 tests)
+- `tests/app/settings-menu_test.ts`, `tests/app/dashboard_test.ts` (updated)
+
+### Tests
+
+- New: `home-topic_test.ts` — 20/20 pass (preference read/write incl. all 5 required failure modes, difficulty mapping incl. rejection, RPC row validation, `topicCardStatus` incl. the error-vs-empty distinction).
+- Updated regression: `settings-menu_test.ts` (6/6), `dashboard_test.ts` (4/4) — pass.
+- Existing regression, unchanged and still passing: `home-report-highlights_test.ts`, `home-news-sections_test.ts`, `home-news-visual_test.ts`, `news-labels_test.ts`, `news-presentation_test.ts`, `report-presentation_test.ts`, `account-deletion_test.ts` (settings/auth-adjacent, confirmed unbroken).
+- Migration dry-run (no `supabase db lint` available in this CLI version; substituted with something stricter): started a throwaway local Postgres (`brew services start postgresql@17`, previously stopped), created a scratch database, mocked `public.tips` + the `authenticated`/`anon`/`service_role` roles, applied the migration verbatim, ran 10 functional/security checks — determinism (same call twice → same row), per-level filtering (all 3 levels), inactive-row exclusion, invalid-level fail-closed (0 rows, no error), empty-result handling when a difficulty has 0 active rows, and grant checks (`authenticated` has execute; `anon`/`public` do not). **All 10 passed.** Database and roles dropped, service stopped afterward (restored to its prior stopped state).
+- `npx tsc --noEmit` — 0 new errors under `src/` (same 2 pre-existing, unrelated CSS-module errors as `main`).
+- `npx expo config --json` — resolves cleanly.
+- `npx expo export --platform web --clear` — full static export succeeds; `/` (home) server-renders at 25KB.
+- `git diff --check` — clean.
+
+### Network calls added to Home
+
+**+1** (the new topic RPC). News + reports unchanged at 2 calls, so Home is now 3 total — the new call is genuinely new functionality, not a duplicate of anything existing.
+
+### No-LLM / no-news-overlap proof
+
+The RPC is pure SQL with zero LLM/AI call. Zero references anywhere in this PR to `important-news-monitor`, `market-report-analysis`, `useful_tips`, or any news/report table — confirmed by the migration's `public.tips`-only scope and by grepping the diff for those names (no hits outside this report's own prose).
+
+### Sign-out / account-deletion audit
+
+Read `src/lib/auth.ts` and `src/lib/account-deletion*.ts` in full: neither clears any AsyncStorage key today, not even the existing onboarding-seen flag. Following that precedent, the topic-level preference is **intentionally not cleared** on sign-out or account deletion — a non-sensitive local UI preference, not user data — rather than adding new broad auth-flow logic out of this task's scope. Flagging for K1 in case a wider "clear local prefs on sign-out" policy is later wanted.
+
+### Production mutation
+
+**0.** Source-only PR: migration file created but not applied anywhere, no Edge Function deploy, no cron change.
+
+### PR / head SHA
+
+- PR: https://github.com/anohi-memories/kabumori/pull/48
+- Head: `78e423b` on `claude/daily-topic-level-settings-20260928`
+- Base: fresh `main` at `19c00bf`
+- **Not self-merged.**
+
+### Remaining issues
+
+1. Real-device/authenticated visual QA not performed (same environment limitation noted on the icon and home-UI tasks).
+2. Sign-out AsyncStorage-clearing policy is unaudited beyond this one key.
+3. Bottom-tab redesign, character asset, and AI chat route remain open from the prior home-UI task.
+
+### Whether Codex DB/RPC review is required
+
+**Yes.** This PR adds a new migration/RPC. Per this task's own completion gate, status is set to `review_required` for K1 to route an available H1/H2 slot for the grants/RLS/security-definer/search_path review, being mindful H2 is protecting a deferred task and H1 may be mid X-auth-review per current `CURRENT_STATE.md`.
+
+### Next recommendation
+
+K1 review → assign DB/RPC review to an open H-slot → merge if satisfied → real-device visual QA of the topic card and settings picker.
