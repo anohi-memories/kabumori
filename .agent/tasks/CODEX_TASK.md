@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-auth-phase2-final-acceptance-review-20260928
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: PR #47 fixed headの最終Auth受け入れ確認。前回H1で再現した7件＋追加3件の修正だけをfocused regressionで確認し、merge可否を確定する。新しい広範レビューや別設計への拡張はしない。
@@ -96,3 +96,18 @@ Then:
 - Final mobile tests 43/43 + data-view 14/14, typecheck/lint, Web+iOS export, diff/secret checks PASS; four H1 in-memory mutations detected. Real provider/device E2E remains a separately authorized gate.
 - Source correction pushed to PR #47; final exact head read back OPEN/MERGEABLE with Vercel/Netlify Preview SUCCESS. No merge, production deploy/config/DB/OAuth/X mutation; `production_mutation=0`.
 - Ready for C1 and normal source merge decision at the accepted head. Full report: latest final-acceptance section of `.agent/CODEX_REPORT.md`. STOP for C1; no further review loop without a concrete discrepancy/new assignment.
+
+
+## Final C1 — Auth Phase 2 final acceptance
+
+Verdict: **PASS-WITH-FIX**.
+
+- accepted PR #47 head: `ed5f8b7890e538593dba369dd85cb99a12b27242`.
+- H1 applied one small bounded correction commit and re-ran the focused acceptance suite.
+- prior seven findings and additional onboarding/readiness/Apple-linking gaps are accepted at source level.
+- final tests: mobile 43/43, data-view 14/14, typecheck/lint, Expo web+iOS export, diff/secret checks PASS.
+- X app-auth remains separate from posting-X/Vault.
+- provider credentials are not persisted in plaintext app storage/context under the accepted policy.
+- production_mutation=0 during review.
+- PR #47 merged after C1 at merge commit `fbddef2535b82bf4775c2e4fddb93eeefb8c638a`.
+- remaining gates are real-device/provider-console configuration/E2E only.
