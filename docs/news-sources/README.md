@@ -13,6 +13,8 @@
 | [market_anomaly_news_trigger.md](market_anomaly_news_trigger.md) | 市場異常 → ニュース逆引き |
 | [news_recall_benchmark.md](news_recall_benchmark.md) | ChatGPT 広域監視との比較検証方法（実データは含まない） |
 | [news_cost_estimate.md](news_cost_estimate.md) | HTTP / AI / Web Search の概算コスト |
+| [n2_discovery_observer.md](n2_discovery_observer.md) | **N2**：観測専用 News Discovery 基盤＋銘柄紐付け v0 の設計・実地確認結果・残課題（コード: `supabase/functions/_shared/news_discovery/`） |
+| [news_pool_schema_proposal.md](news_pool_schema_proposal.md) | **N2**：News Signal Pool の DB schema 案（未適用・migration なし） |
 
 ## 主要所見
 
