@@ -3,8 +3,8 @@
 - task_id: kabumori-home-news-first-ui-implementation-20260928
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: ユーザー承認済みの「ニュース中心・AI整理型」トップページを、現在のExpo/React Nativeアプリへ実装可能な形で落とし込む。既存データ取得を再利用し、重要ニュース・保有銘柄ニュース・今日のレポートを整理して見せる。ニュース取得基盤/API最適化/Edge Functionには触れない。
@@ -275,3 +275,116 @@ UI側だけ以下の拡張可能な順序を持てる構造にする:
 - remaining_issues
 - safety_checks
 - next_recommendation
+
+## Report — G1 result (home news-first UI implementation)
+
+- task_id: kabumori-home-news-first-ui-implementation-20260928
+- fresh main SHA at start: `b2e1ba8`
+- **result: implemented and pushed as a PR. Not self-merged, per this task's own instruction.**
+
+### Implemented sections
+
+- **A. Report highlight card** — primary hero card, dynamic text, 2-3 points, CTA-only navigation (no per-point chevron).
+- **B. Character slot** — independent 64x64 replaceable footprint; neutral fallback (no asset generated).
+- **C/D. Market news + holding news** — both from the single existing important-news feed, split by `tracking_type`.
+- **E. Topic card** — typed contract + future-ready empty state (no backend exists).
+- **F. Ask-AI entry** — presentational chips + disabled CTA (no route exists).
+- **G. Bottom navigation** — unchanged; forcing the target tab set would need routes that don't exist yet (see gaps below).
+
+### Changed files (exact)
+
+- `src/app/index.tsx` (rewritten)
+- `src/components/home/report-highlight-card.tsx` (new)
+- `src/components/home/home-news-section.tsx` (new)
+- `src/components/home/character-slot.tsx` (new)
+- `src/components/home/topic-card.tsx` (new)
+- `src/components/home/ask-ai-entry.tsx` (new)
+- `src/lib/home-report-highlights.ts` (new)
+- `src/lib/home-news-sections.ts` (new)
+- `src/lib/home-news-visual.ts` (new)
+- `src/lib/home-topic.ts` (new)
+- `tests/app/home-report-highlights_test.ts` (new, 9 tests)
+- `tests/app/home-news-sections_test.ts` (new, 3 tests)
+- `tests/app/home-news-visual_test.ts` (new, 3 tests)
+
+### Existing data source reuse
+
+- `fetchMyImportantStockNews()` — reused unchanged; split client-side by `tracking_type` for both market and holding sections. No new news fetch.
+- `fetchRecentReports()` — reused unchanged; report highlights extracted from its existing `body`/`summary_ja` columns only, no new columns, no new query.
+- Dropped `fetchTrackedStocks()` entirely — holding-news identification no longer needs a separate tracked_stocks read.
+
+### Home network calls before/after
+
+**3 → 2** (`fetchTrackedStocks` + `fetchMyImportantStockNews` + `fetchRecentReports` → `fetchMyImportantStockNews` + `fetchRecentReports`).
+
+### Market news / holding news separation result
+
+Deterministic client-side split on `tracking_type` (`'market'` → 重要ニュース, `'holding'` → あなたの保有銘柄, `'watch'` items excluded from home per the approved order), each capped at 3, preserving the feed's own relevance ordering. Covered by `home-news-sections_test.ts` (3/3 pass).
+
+### Thumbnail metadata availability + fallback
+
+**None exists today.** Read `ImportantStockNews`'s full type and the `get_my_important_stock_news` RPC call site: there is no image/thumbnail URL field anywhere in the feed. Implemented a deterministic glyph fallback (`source_type` → `coverage_categories` → neutral) with an always-`null` `imageUrl` field reserved for a future real thumbnail field, so no call site needs to change when one is added. No scraping, no guessed URLs, no new Edge Function/RPC.
+
+### Report point extraction strategy
+
+Priority chain, most factual/specific first, never fabricated: `body.market_detail.today_claims[].text_ja` → `body.checkpoints_ja` → `body.market_section.claims[].text_ja` → `body.overview_ja` split into sentences → `report.summary_ja` as a single point → empty. Deduplicated, capped at 3, each point ≤ 90 characters. Covered by `home-report-highlights_test.ts` (9/9 pass, including an explicit "never fabricates when every field is empty" test).
+
+### Character asset availability/gap
+
+No approved cutout asset exists in the repo. `CharacterSlot` renders a neutral fallback and documents the required future contract (transparent-background PNG cutout, square canvas, ~240x240 @1x, centered subject, even padding) directly in `character-slot.tsx`.
+
+### Topic source availability/gap
+
+No daily-topic table/RPC/Edge Function exists anywhere in this repo. Implemented the `TopicLevel`/`HomeTopic` type contract only; the card renders a "準備中です" future-ready empty state. A follow-up task is needed to design and build the actual topic source before this card can show real content.
+
+### AI route availability/gap
+
+No AI chat route or service exists. `AskAiEntry` shows static question chips (presentational only, no fake send action) and a disabled "準備中です" CTA. A follow-up task is needed once a real AI chat endpoint/route exists.
+
+### Bottom-tab decision and why
+
+Left `src/components/app-tabs.tsx` completely unchanged. The approved mock's target tab set (Home/銘柄/レポート/AIに聞く/設定) needs an AI route and a settings-as-tab route, neither of which exist; forcing the change now would either break existing 銘柄/ポート/重要ニュース tab reachability or create dead tabs, both explicitly forbidden by this task. Recommend a separate follow-up task once the AI route exists.
+
+### Tests / TypeScript / render checks
+
+- New tests: 15/15 pass (`home-report-highlights_test.ts` 9, `home-news-sections_test.ts` 3, `home-news-visual_test.ts` 3).
+- Existing regression check: `dashboard_test.ts` + `news-labels_test.ts` + `news-presentation_test.ts` + `report-presentation_test.ts` — 38/38 still pass, no regressions.
+- `npx tsc --noEmit` — 0 new errors under `src/` (2 pre-existing, unrelated CSS-module resolution errors reproduce on unmodified `main`).
+- `npx expo config --json` — resolves cleanly.
+- `npx expo export --platform web` — full static export succeeds; `/` (home) server-renders at 25KB with zero data, exercising every empty-state branch without throwing.
+- `git diff --check` — clean.
+- **Not performed**: interactive/authenticated visual QA (real small-width iPhone, signed-in state with real news/report data). This environment has no signed-in session available to drive that. The static export confirms the component tree renders without throwing; it does not confirm pixel-level layout under real data. Flagging honestly rather than claiming a visual pass I didn't do.
+
+### PR / head SHA
+
+- PR: https://github.com/anohi-memories/kabumori/pull/46
+- Head: `2b1c666` on branch `claude/home-news-first-ui-20260928`
+- Base: fresh `main` at `b2e1ba8`
+- **Not self-merged**, per this task's explicit instruction. Waiting for K1/ChatGPT.
+
+### Production mutation
+
+**0.** No DB/RPC/Edge Function/Auth/cron/production config/deploy touched. `market-report-analysis`, `important-news-monitor` untouched, per the task's Forbidden list.
+
+### Remaining issues
+
+1. Character asset: no approved cutout PNG exists yet (see `character-slot.tsx`'s documented spec).
+2. Topic backend: no daily-topic data source exists yet; card is future-ready-empty only.
+3. AI chat: no route/service exists yet; entry is disabled-only.
+4. Bottom-tab redesign to the full target set is deferred until an AI route exists.
+5. Real-device / small-width-iPhone visual QA with a live signed-in session is still needed before this can be called visually final — not performed in this pass.
+
+### Safety checks
+
+- No file in `supabase/functions/important-news-monitor/**` or `supabase/functions/market-report-analysis/**` touched.
+- No DB schema/migration/RPC/cron/Auth/RLS/permission change.
+- No X/admin/G2/G3/G4 file touched.
+- No new character artwork generated.
+- No production deploy, no App Store/TestFlight submission.
+- Fresh `origin/main` re-checked immediately before commit; no non-fast-forward conflict.
+
+### Next recommendation
+
+1. K1/ChatGPT reviews and merges PR #46 (or requests changes).
+2. Once merged, a real-device or authenticated-preview visual pass (iPhone 17 Pro + a small-width iPhone) should confirm layout under real data before this is considered visually final.
+3. Three follow-up tasks worth queuing separately when ready: (a) daily-topic backend/source, (b) AI chat route/service, (c) character cutout asset + bottom-tab redesign to match the full approved mock.

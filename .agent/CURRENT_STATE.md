@@ -42,18 +42,12 @@
 
 ## G1 Home news-first UI implementation
 
-- assigned: `kabumori-home-news-first-ui-implementation-20260928`.
-- previous G1 icon/splash/onboarding visual QA is closed by user real-device PASS.
-- approved Home information order: 今日のかぶモリレポート -> 重要ニュース -> あなたの保有銘柄 最新ニュース -> 今日のトピック -> AIに聞いてみる.
-- report points are dynamic text; point rows have **no individual chevron**; only the report CTA opens detail.
-- reuse existing `fetchRecentReports()` + `fetchMyImportantStockNews()` + tracked-stock reads; do not add page-load LLM generation or duplicate news fetch.
-- market news and holding news must be separated from the same existing feed where possible.
-- thumbnail UI is future-ready but must fail to category/neutral fallback when current feed lacks image metadata; no OG scraping/new news API in G1.
-- Yume-chan/robot area is an independently replaceable asset slot; Claude must not generate a new character asset.
-- topic/AI/backend gaps are to be surfaced honestly rather than filled with fabricated production content or dead navigation.
-- G2 concurrently owns `market-report-analysis` reliability; G1 must not touch it, important-news-monitor, shared consumer gates, DB/RPC/cron/Auth/X/admin.
-- no Codex review expected if scope remains UI/read-only/local presentation.
-- recommended model: Sonnet5（高）.
+- task_id: `kabumori-home-news-first-ui-implementation-20260928` -- `review_required`, next_owner chatgpt.
+- PR #46 (`claude/home-news-first-ui-20260928`, head `2b1c666`) opened against fresh main `b2e1ba8`. Not self-merged.
+- Implemented: report-highlight hero card (2-3 points from existing stored report fields only, no page-load generation), market/holding news split from the single existing important-news feed (home network calls 3 -> 2), topic card and AI entry as honest future-ready/disabled states (no backend exists for either), bottom tabs unchanged.
+- Tests: 15 new (home-report-highlights/home-news-sections/home-news-visual) + 38 existing regression tests all pass. tsc/expo config/web export/git diff --check all clean.
+- Not performed: interactive/authenticated visual QA (no signed-in session available in this environment).
+- Production mutation 0. Gaps flagged for follow-up: character asset, topic backend, AI chat route, full bottom-tab redesign.
 
 ## Current slot snapshot
 
