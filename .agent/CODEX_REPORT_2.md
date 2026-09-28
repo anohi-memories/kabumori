@@ -2389,3 +2389,16 @@ Then apply the exact migration file via `podman exec -i <container> psql -X -v O
 - push: `origin/main` contains `732c630166bf8bc0fcaf7a4b5968d1d24a53c0db` after fresh fetch/read-back.
 - safety_checks: Formal repo and existing uncommitted changes were untouched; no `apps/admin/**`, `HANDOFF.md`, H1 files, production settings, migrations, secrets, tokens, OAuth, X/OpenAI/Vault/Storage/Cron operations were changed or exposed.
 - next_recommendation: C2 review the production-shaped contract and metadata findings. Do not create/apply a production reader, deploy history-learning, or call X history until the separate rollout gate is approved.
+
+
+---
+
+## H2 stale-task closure — 2026-09-28
+
+- previous_task_id: `kabumori-pr32-morning-fact-contract-final-review-20260925`
+- disposition: **closed as obsolete/stale; no final PASS/PASS-WITH-FIX/FAIL verdict was manufactured**
+- original state: review was interrupted and explicitly deferred on 2026-09-25; partial work was preserved.
+- target PR #32 was later merged independently, so keeping H2 reserved for that unfinished review no longer serves an active merge gate.
+- historical partial review/report content above is preserved unchanged.
+- H2 slot is now intentionally empty and may be reassigned only through a new explicit TASK.
+- production mutation from this cleanup: 0.
