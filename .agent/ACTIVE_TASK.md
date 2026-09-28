@@ -65,11 +65,11 @@
 - owner: claude
 - slot: claude-3
 - status: ready
-- task_id: x-social-mobile-auth-release-readiness-phase3-20260928
+- task_id: x-social-mobile-account-lifecycle-release-phase4-20260928
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: assigned; Auth Phase 2 is accepted/merged. Proceed with release-readiness/account settings/config validation only; no production provider/config mutation. Independent G3 worktree required. Recommended Opus5.5（高）.
+- allocation: assigned after Final K3 Auth release-readiness PASS and PR #50 merge `ff46c397`; account lifecycle/deletion/privacy release prep, source-only, no production mutation. Independent G3 worktree required. Recommended Opus5.5（高）.
 
 ## Claude G4
 - owner: claude
