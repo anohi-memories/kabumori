@@ -55,11 +55,11 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-shared-market-report-unification-20260928
+- task_id: kabumori-shared-report-reliability-hardening-20260928
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: assigned; unify morning/close market truth via shared market_report_packet, prove X simplified + App market-complete + App personalized consumers non-destructively; legacy X VOICE patch frozen; production gates remain OFF pending K2/review; PR #41 x-test-post/index.ts overlap is a hard stop; recommended Opus5.5（高）
+- allocation: assigned after Final K2 PASS and PR #43 merge; harden shared market-report-analysis transient 429/5xx reliability with bounded retry/call budget, keep shared consumers OFF and legacy X VOICE frozen; recommended Opus5.5（高）
 
 ## Claude G3
 - owner: claude
