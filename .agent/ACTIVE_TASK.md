@@ -74,12 +74,12 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: done
 - task_id: x-social-mobile-posting-interaction-phase2-20260928
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: assigned; implement truthful preview/edit/regenerate/approve/retry/reconnect UX only where backend contracts exist. No real X post or production mutation. Independent G4 worktree required. Recommended Sonnet5（高）.
+- allocation: closed; Final K4 PASS; PR #49 `15e9f74` merged as `9eef82b`; truthful source-only posting interaction UX complete; backend write actions remain future reviewed work
 
 ## Deferred
 
