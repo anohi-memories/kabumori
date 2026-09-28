@@ -3,10 +3,10 @@
 - task_id: kabumori-daily-topic-level-settings-20260928
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: high
-- recommended_model: Opus5.5（高）
+- recommended_model: Sonnet5（高）
 - purpose: Homeの「今日のトピック」を実データ化し、設定画面で「初心者向け / 中級者向け / 上級者向け」を選べるようにする。既存のtips資産を再利用し、OpenAI呼び出し・ニュース取得基盤・G2 shared market reportには触れない。
 
 ## Product decision
@@ -388,3 +388,94 @@ Read `src/lib/auth.ts` and `src/lib/account-deletion*.ts` in full: neither clear
 ### Next recommendation
 
 K1 review → assign DB/RPC review to an open H-slot → merge if satisfied → real-device visual QA of the topic card and settings picker.
+
+
+## K1 review — changes required before DB/RPC review
+
+Verdict: **CHANGES REQUIRED**. PR #48 is narrow, mergeable, well-tested, and the architecture is accepted, but three correctness issues should be fixed before handing the final source to Codex for DB/RPC review.
+
+### K1 finding 1 — changing level can leave a stale topic from the previous level
+
+Current flow in `handleTopicLevelChange`:
+
+1. AsyncStorage write succeeds.
+2. `topicLevel` is updated to the new level.
+3. RPC fetch for the new level starts.
+4. If that fetch fails, the old `topic` object is left in state.
+5. `topicCardStatus(hasTopic=true, ..., error)` resolves to `topic`, so the error is hidden.
+
+Result: Settings can say 「上級者向け」 while Home still shows the previous beginner/intermediate topic and badge.
+
+Required fix:
+- topic content must carry/track its request identity at least by `JST date + level`, or equivalent safe logic.
+- A previously loaded topic may remain visible on a refresh failure **only when it belongs to the same date + same level**.
+- When level changes, old-level content must never survive as if it were current.
+- If the new-level fetch fails, show the topic error/retry state while keeping the successfully saved preference.
+- Do not roll back the preference merely because content fetch failed; storage save and content fetch are separate outcomes.
+- Add deterministic tests for:
+  - beginner topic loaded -> change to advanced -> fetch fails -> beginner topic is not shown as current;
+  - same date+same level refresh failure may preserve the already-loaded topic if intentionally supported;
+  - successful level change shows the new level/topic.
+
+### K1 finding 2 — "today" is frozen for the lifetime of the mounted Home screen
+
+`todayJstValue = useMemo(() => todayJst(), [])` is computed once.
+
+If the app remains mounted across JST midnight / a new trading day, later focus or pull-to-refresh can still:
+- fetch yesterday's daily topic;
+- scope the report hero to yesterday;
+- show yesterday's date in the header.
+
+Required fix:
+- Resolve the current JST date on every Home load/focus/refresh, not only at initial mount.
+- Store/update the active Home date explicitly if needed.
+- When the JST date changes, previous-date topic/report content must not be presented as today's.
+- Topic fetch must use the refreshed date.
+- Report hero must use the refreshed date.
+- Header date must use the refreshed date.
+- Add a pure helper/test where practical so the rollover behavior is deterministic and not dependent on wall-clock sleeps.
+
+### K1 finding 3 — avoid `abs(hashtext(...))` integer-min overflow in the RPC
+
+The RPC currently selects the deterministic offset using:
+
+`abs(hashtext(...)) % total`
+
+PostgreSQL `hashtext` returns a signed 32-bit integer. `abs(-2147483648)` cannot be represented as int4 and can raise `integer out of range`.
+
+Required fix:
+- remove `abs(int4)` from the deterministic selector;
+- convert to bigint before normalization, e.g. an overflow-safe non-negative mapping/modulo;
+- preserve deterministic same-date/same-level behavior;
+- keep the function read-only and schema/table permissions unchanged.
+- Extend the migration dry-run/static verification so this selector no longer depends on int4 `abs`.
+
+### Accepted / keep unchanged
+
+- Existing `public.tips` reuse is accepted.
+- App mapping `初級 -> beginner`, `中級 -> intermediate`, `実践 -> advanced` is accepted.
+- Local AsyncStorage preference for this phase is accepted.
+- Persistence across sign-out/account deletion is acceptable for now because this is non-sensitive device-local presentation preference; do not expand auth scope in this PR.
+- `security definer set search_path = ''` with fully-qualified table references is acceptable in principle and should be reviewed by Codex.
+- No table-wide authenticated SELECT grant.
+- No OpenAI/LLM generation.
+- No important-news-monitor / market-report-analysis / X useful-tip overlap.
+- Production mutation remains 0.
+
+### Re-verification
+
+After fixes:
+- rerun all topic/settings/Home tests;
+- add the new level-change stale-content and date-rollover tests;
+- re-run migration functional/security dry-run;
+- `npx tsc --noEmit`;
+- Expo config + safe export;
+- `git diff --check`;
+- fresh `origin/main` conflict check;
+- update PR #48/report with new head SHA;
+- set status -> `review_required`, next_owner -> `chatgpt`;
+- STOP for K1.
+
+Do not merge or apply the migration to production.
+
+Recommended model: **Sonnet5（高）**.
