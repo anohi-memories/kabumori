@@ -44,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: done
 - task_id: kabumori-daily-topic-prod-apply-verify-20260928
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: PR #51 rename-only K1 PASS and merged -> `4c07a817`. Production daily-topic RPC is absent; MIC Phase 3A objects are already live out-of-band, so broad db push is forbidden. Apply only the exact reviewed daily-topic SQL, then ACL/RLS/determinism/read-only readback. Recommended Sonnet5（高）
+- allocation: closed; ChatGPT applied the exact independently-reviewed daily-topic SQL only, production ACL/RLS/determinism/read-only checks PASS; authenticated role call PASS, anon denied; migration history intentionally unrepaired and broad db push remains forbidden until separate hygiene task
 
 ## Claude G2
 - owner: claude
