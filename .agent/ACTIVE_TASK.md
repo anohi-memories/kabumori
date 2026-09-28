@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: x-stage3b-publish-authority-focused-rereview-20260927
+- status: ready
+- task_id: x-social-mobile-phase1-consolidated-integration-review-20260928
 - start_code: H1
 - finish_code: C1
 - source: `.agent/tasks/CODEX_TASK.md`
 - report: `.agent/CODEX_REPORT.md`
-- allocation: closed; Final C1 PASS-WITH-FIX at PR #41 `59f4f53`; source-level Stage 3B boundary accepted, production pilot not activated
+- allocation: assigned; one consolidated integration review of PR #42 + #44; merge-order/provider/state/content-settings regression focus; recommended Luna（高）
 
 ## Codex H2
 - owner: codex
@@ -74,12 +74,12 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: done
 - task_id: x-social-mobile-home-posting-settings-ux-phase1-20260928
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: assigned; social-mobile Home/posting settings/posting UX implementation phase; recommended Sonnet5（高）
+- allocation: closed; Final K4 PASS at PR #44 `f0ecc9f`; Home/posting/history truth-state fixes complete; production mutation 0
 
 ## Deferred
 
