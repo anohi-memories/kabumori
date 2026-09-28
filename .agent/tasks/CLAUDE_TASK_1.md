@@ -3,8 +3,8 @@
 - task_id: kabumori-home-news-first-ui-implementation-20260928
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（中）
 - purpose: ユーザー承認済みの「ニュース中心・AI整理型」トップページを、現在のExpo/React Nativeアプリへ実装可能な形で落とし込む。既存データ取得を再利用し、重要ニュース・保有銘柄ニュース・今日のレポートを整理して見せる。ニュース取得基盤/API最適化/Edge Functionには触れない。
@@ -464,3 +464,69 @@ After the two fixes:
 - STOP for K1.
 
 Recommended model: **Sonnet5（中）**.
+
+## Report — G1 result (K1 changes-required fix)
+
+- task_id: kabumori-home-news-first-ui-implementation-20260928
+- fresh main SHA at start: `942cefc` (advanced only in unrelated G2/control files since PR #46's base; no Home-source overlap)
+- **result: both K1 findings fixed, pushed to the same PR branch. Not self-merged.**
+
+### Fix 1 — report hero scoped strictly to today
+
+Replaced `latestReport()` (newest report across all dates) with `currentReport(reports, today)`, which filters to `trading_date === today` first and only then picks the later-generated row (close over morning when both exist). Returns `null` — not an older fallback — when nothing was generated for today yet; the hero renders its existing honest empty state in that case.
+
+New tests in `home-report-highlights_test.ts`:
+1. `currentReport: yesterday-only rows never leak in as today's report` — PASS
+2. `currentReport: today's morning report is used when it's the only one today` — PASS
+3. `currentReport: with both morning and close today, the later-generated one wins` — PASS (checked both input orders)
+4. `currentReport: a future-dated row never leaks in either` — PASS
+
+### Fix 2 — reports fetch error no longer shown as "not generated yet"
+
+Extracted the hero card's render branch into an explicit, independently-tested `reportCardStatus(hasReport, loading, error): 'loading' | 'error' | 'report' | 'empty'` in `home-report-highlights.ts` (not duplicated in the `.tsx`, so it's Deno-testable like the rest of this module). `index.tsx` now passes `errors.reports` and an `onRetry` (reusing the existing `load(true)`, no new network path) into `ReportHighlightCard`, which renders the same error+retry visual pattern already used by the news sections when `status === 'error'`. An already-successfully-loaded report is still shown if a later background refresh fails (error only wins when there is no report to show).
+
+New tests:
+- `reportCardStatus: loading only applies while nothing is shown yet` — PASS
+- `reportCardStatus: a fetch error is never shown as the empty/not-generated state` — PASS
+- `reportCardStatus: an already-loaded report is shown even if a later refresh errors` — PASS
+- `reportCardStatus: no report and no error, loading finished, is the honest empty state` — PASS
+
+### Changed files (this fix, on top of the prior PR)
+
+- `src/lib/home-report-highlights.ts` (`latestReport` → `currentReport`; added `reportCardStatus`)
+- `src/components/home/report-highlight-card.tsx` (added `error`/`onRetry` props, uses `reportCardStatus`, added error+retry UI)
+- `src/app/index.tsx` (uses `currentReport(reports, todayJst())`; passes `errors.reports`/`onRetry` to the hero card)
+- `tests/app/home-report-highlights_test.ts` (replaced the old `latestReport` test with 4 `currentReport` tests; added 4 `reportCardStatus` tests)
+
+### Re-verification
+
+- New/updated tests: **22/22 pass** (up from 15; 8 new/replaced for these two fixes).
+- Regression check: `dashboard_test.ts` + `news-labels_test.ts` + `news-presentation_test.ts` + `report-presentation_test.ts` — 38/38 still pass.
+- `npx tsc --noEmit` — 0 new errors under `src/` (same 2 pre-existing, unrelated CSS-module errors as before).
+- `npx expo config --json` — resolves cleanly.
+- `npx expo export --platform web` — full static export succeeds again, `/` (home) server-renders at 25KB.
+- `git diff --check` — clean.
+- Fresh `origin/main` re-checked immediately before push; PR #46's own branch had no non-fast-forward conflict.
+
+### PR / mergeability
+
+- PR: https://github.com/anohi-memories/kabumori/pull/46 (unchanged, same PR — fix pushed to its existing branch, not a new PR)
+- New head: `f95f9c2` on `claude/home-news-first-ui-20260928`
+- Confirmed via `gh pr view 46`: `state: OPEN`, `mergeable: MERGEABLE`
+- **Not self-merged**, per this task's explicit instruction.
+
+### Unchanged (confirmed still true after the fix)
+
+- Point rows still have no individual chevron; one CTA only for report detail.
+- No backend/LLM generation at Home open; no new network path (retry reuses `load(true)`).
+- No DB/RPC/Edge/cron/Auth changes; `important-news-monitor`/`market-report-analysis` untouched.
+- No character generation. Topic/AI remain honest "準備中" shells. Bottom tabs unchanged.
+- Production mutation: **0**.
+
+### Remaining issues
+
+Same as the prior report (character asset, topic backend, AI chat route, bottom-tab redesign, and real-device/authenticated visual QA are all still open follow-ups) — nothing new introduced by this fix.
+
+### Next recommendation
+
+K1/ChatGPT re-review of the fix commit on PR #46; merge if satisfied, or a further changes-required round if not.

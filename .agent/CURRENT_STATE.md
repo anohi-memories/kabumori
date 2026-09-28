@@ -42,16 +42,10 @@
 
 ## G1 Home news-first UI implementation
 
-- task_id: `kabumori-home-news-first-ui-implementation-20260928` -- K1 **CHANGES REQUIRED**, slot returned to `ready`, next_owner claude.
-- PR #46 remains open/mergeable at head `2b1c666`; scope is UI/read-only and production mutation is 0.
-- Implemented direction is accepted: dynamic report points with no per-point chevrons, one existing news feed split into market/holding sections, no duplicate news fetch, no backend/API optimization overlap.
-- K1 found two correctness/fail-soft issues before merge:
-  1. current helper selects the latest stored report across dates, so an older report can be shown under "今日のかぶモリレポート"; hero must filter to `trading_date === todayJst()`.
-  2. report fetch errors are currently populated but not rendered, causing a load failure to be shown as "まだありません"; hero must surface error + retry.
-- Required regression cases: yesterday-only -> no hero report; today morning -> morning; today morning+close -> latest same-day; report fetch error -> explicit error/retry.
-- No Codex review required for this narrow correction. Recommended model: Sonnet5（中）.
-- Remaining non-blocking product gaps after merge: approved character cutout asset, daily-topic backend, real AI route/service, final bottom-tab redesign, authenticated real-device visual QA.
-
+- task_id: `kabumori-home-news-first-ui-implementation-20260928` -- `review_required`, next_owner chatgpt.
+- PR #46 (`claude/home-news-first-ui-20260928`, head `f95f9c2`) -- fixed after K1 changes-required: report hero now scoped strictly to trading_date===today (no stale-day mislabel), reports fetch error now shown as error+retry instead of false "not generated yet". Not self-merged.
+- Tests: 22 home-UI unit tests + 38 existing regression tests all pass. tsc/expo config/web export/git diff --check all clean.
+- Production mutation 0. Same open follow-ups as before (character asset, topic backend, AI chat route, bottom-tab redesign, real-device visual QA).
 
 ## Current slot snapshot
 
