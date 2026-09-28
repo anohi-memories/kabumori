@@ -3,7 +3,7 @@
 - task_id: x-social-mobile-home-posting-settings-ux-phase1-20260928
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Sonnet5（高）
