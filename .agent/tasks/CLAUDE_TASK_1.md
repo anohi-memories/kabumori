@@ -3,10 +3,10 @@
 - task_id: kabumori-home-news-first-ui-implementation-20260928
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: high
-- recommended_model: Sonnet5（高）
+- recommended_model: Sonnet5（中）
 - purpose: ユーザー承認済みの「ニュース中心・AI整理型」トップページを、現在のExpo/React Nativeアプリへ実装可能な形で落とし込む。既存データ取得を再利用し、重要ニュース・保有銘柄ニュース・今日のレポートを整理して見せる。ニュース取得基盤/API最適化/Edge Functionには触れない。
 
 ## Previous G1 closure
@@ -388,3 +388,79 @@ Left `src/components/app-tabs.tsx` completely unchanged. The approved mock's tar
 1. K1/ChatGPT reviews and merges PR #46 (or requests changes).
 2. Once merged, a real-device or authenticated-preview visual pass (iPhone 17 Pro + a small-width iPhone) should confirm layout under real data before this is considered visually final.
 3. Three follow-up tasks worth queuing separately when ready: (a) daily-topic backend/source, (b) AI chat route/service, (c) character cutout asset + bottom-tab redesign to match the full approved mock.
+
+
+## K1 review — changes required before merge
+
+Verdict: **CHANGES REQUIRED**. PR #46 is mergeable and scope stayed UI/read-only, but two correctness/fail-soft issues must be fixed before merge. No Codex review is required.
+
+### K1 finding 1 — stale report can be mislabeled as "today"
+
+Current `latestReport(reports)` selects the newest stored report across all trading dates. If today's report has not been generated yet (before the morning report, weekend/holiday, or a generation failure), the Home hero can show a previous trading day's report under:
+
+- `TODAY'S REPORT`
+- `今日の かぶモリレポート`
+- `今日の市場と...`
+
+This is misleading.
+
+Required fix:
+- The hero must only use a report whose `trading_date === todayJst()`.
+- If both morning and close exist today, choose the later generated one (normally close).
+- If no report exists for today, render the honest empty/waiting state; do **not** silently fall back to an older report.
+- Add deterministic tests covering:
+  1. yesterday-only -> no current report;
+  2. today morning -> morning;
+  3. today morning + close -> newest same-day report;
+  4. future/older rows do not leak into the hero.
+
+You may reuse/extend `todaysReports()` or replace `latestReport` with a date-scoped helper, whichever is smaller and clearer.
+
+### K1 finding 2 — report fetch failure is shown as "not generated yet"
+
+`errors.reports` is populated in `index.tsx` but never presented to `ReportHighlightCard`. When `fetchRecentReports()` fails, the hero currently falls through to:
+
+`今日のレポートはまだありません。生成され次第ここに表示されます。`
+
+That converts a network/data-load failure into a false product-state message.
+
+Required fix:
+- Pass the reports error into the hero card.
+- Error state must take precedence over normal no-report empty state once loading ends.
+- Show the existing `dashboardSectionError('reports')` message or equivalent and a working retry action.
+- Do not add a new network path; reuse the existing `load(true)`.
+- Add a focused deterministic/presentation test where practical; at minimum ensure the render branch is explicit and TypeScript-safe.
+
+### Keep unchanged
+
+- Point rows still have **no individual chevron**.
+- One CTA only for report detail.
+- No backend/LLM generation at Home open.
+- No DB/RPC/Edge/cron/Auth changes.
+- No `important-news-monitor` or `market-report-analysis` changes.
+- No character generation.
+- Topic/AI remain honest "準備中" shells.
+- Bottom tabs remain unchanged in this PR.
+- Production mutation remains 0.
+
+### Rebase/fresh-main safety
+
+Current main advanced after the PR base only in orchestration/control files; PR #46 remains GitHub-mergeable. Before push:
+- fresh fetch `origin/main`;
+- confirm no new Home-source overlap;
+- do not merge main into the branch unless needed; keep PR narrow.
+
+### Re-verification
+
+After the two fixes:
+- rerun new Home tests + prior focused regressions;
+- `npx tsc --noEmit` and separate pre-existing errors;
+- `npx expo config --json`;
+- safe export/render check;
+- `git diff --check`;
+- confirm PR #46 head SHA and mergeability;
+- update this Report with the fix commit, tests, and remaining issues;
+- set status -> `review_required`, next_owner -> `chatgpt`;
+- STOP for K1.
+
+Recommended model: **Sonnet5（中）**.
