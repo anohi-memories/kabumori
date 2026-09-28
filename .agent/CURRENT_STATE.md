@@ -99,11 +99,34 @@
 - no new review task was assigned by this cleanup.
 - production mutation: 0.
 
+## Final K1 Daily topic production rollout
+
+- verdict: **PASS**.
+- Claude stopped safely before mutation because its local safety layer blocked production reads.
+- ChatGPT then performed the mandated fresh pre-check using the Supabase connector and confirmed the RPC was absent, tips existed, RLS was enabled, authenticated/anon had no direct tips SELECT, and service_role retained SELECT.
+- exact current-main reviewed SQL `20260928123000_add_daily_kabumori_tip_rpc.sql` was applied directly and alone; no broad migration push or unrelated migration was run.
+- production read-back PASS:
+  - SECURITY DEFINER + empty search_path
+  - authenticated EXECUTE yes
+  - anon/PUBLIC EXECUTE no
+  - direct authenticated/anon tips SELECT no
+  - service_role SELECT unchanged
+  - RLS still enabled, policies unchanged
+  - beginner/intermediate/advanced map to 初級/中級/実践
+  - invalid level returns 0
+  - same date+level deterministic
+  - use_count/last_used_at unchanged across repeated calls
+  - authenticated role invocation succeeds; anon role receives 42501 permission denied
+- daily-topic backend is live.
+- migration-history version `20260928123000` remains unrecorded because exact direct SQL execution was intentionally used. Production already has known out-of-band migration drift; broad `db push` remains forbidden until a dedicated migration-history hygiene task.
+- no Codex review used.
+- remaining product gate: real-device visual/settings QA.
+
 ## Current slot snapshot
 
 - H1: `review_required` — `x-social-mobile-auth-phase2-final-acceptance-review-20260928`; PASS-WITH-FIX at PR #47 `ed5f8b7` (initial G3 correction `5fd483a`); prior 7 + additional 3 source boundaries accepted. H1 pinned callback/recovery contexts, retained in-flight exchanges and limited provider authorize paths; fix pushed. Mobile 43/43 + data-view 14/14, typecheck/lint/Web+iOS export and four H1 mutation probes PASS; exact-head Preview SUCCESS. Production mutation 0; awaiting C1/source merge, real provider/device activation remains separately gated; see latest `.agent/CODEX_REPORT.md`.
 - H2: `idle` — unassigned; stale deferred PR #32 morning Fact-contract review was closed as obsolete after PR #32 had already been merged. Historical partial report preserved; slot is now genuinely reusable.
-- G1: `review_required` — `kabumori-daily-topic-prod-apply-verify-20260928`; STOPPED before mutation -- this session's safety layer refused the mandated pre-apply production reads, so no apply was attempted; exact apply command identified for the user or a differently-permissioned session to run; production mutation 0.
+- G1: `done` — `kabumori-daily-topic-prod-apply-verify-20260928`; exact reviewed daily-topic RPC is live in production; ACL/RLS/determinism/read-only + authenticated/anon role checks PASS. Migration history intentionally unrepaired; broad db push remains forbidden pending separate hygiene work.
 - G2: `ready` — `kabumori-shared-analysis-prod-deploy-observe-20260928`; PR #45 merged; controlled deploy of market-report-analysis only with consumer gates OFF, then natural morning+close observation; recommended Sonnet5（高）
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS
