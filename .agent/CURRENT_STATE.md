@@ -1318,3 +1318,15 @@ Status: backlog only / no G1-G2 task assigned.
 - tests 16/16 plus typecheck/lint/Expo web export PASS; production mutation=0.
 - new signup and password recovery remain explicit product decisions.
 - per reduced-review policy, no H1 is inserted now; review app-side Phase 1 in a consolidated pass after G4 unless a new high-risk boundary is introduced.
+
+
+## Final K4 social-mobile Home/posting UX phase 1
+
+- verdict: **PASS**.
+- PR #44 head `f0ecc9f984a676acb3a2d4fd522c6219583e06eb`.
+- Home now exposes connected account summary, auto-post state, next scheduled post, latest result and clear settings/schedule/history navigation.
+- fixed three truthfulness bugs: invalid per-account filtering of real scheduled/history rows, blocked/unavailable falling through to mock preview, and real post detail reading mockRepository only.
+- consult confirmation now persists through the existing content-settings repository and preserves already-saved settings instead of merging from defaults.
+- no G3-owned provider/auth files changed; no DB/RLS/RPC/migration/production mutation.
+- one consolidated H1 review assigned for PR #42 + #44 integration before merge.
+- recommended Codex model: Luna（高）.
