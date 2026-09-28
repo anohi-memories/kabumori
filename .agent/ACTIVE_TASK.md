@@ -45,11 +45,11 @@
 - owner: claude
 - slot: claude-1
 - status: ready
-- task_id: kabumori-ios-internal-visual-qa-build-20260926
+- task_id: kabumori-home-news-first-ui-implementation-20260928
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: PR #40 full-bleed icon correction merged -> `d2747c75ecbbe48ffeab77cc3827787cac888468`; resume one new iOS preview internal build for user icon re-check; recommended Sonnet5（中）
+- allocation: assigned after prior icon/splash/onboarding real-device PASS; implement approved news-first Home UI using existing read paths only; no important-news-monitor/market-report-analysis/backend changes; recommended Sonnet5（高）
 
 ## Claude G2
 - owner: claude
