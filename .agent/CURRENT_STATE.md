@@ -47,10 +47,35 @@
 - G1: `review_required` — `kabumori-ios-internal-visual-qa-build-20260926` (icon full-bleed correction)
   - **Real-device icon acceptance: PASS** ("アイコンOK"). Build 10e8610e-c2b2-4baf-a780-4e038c15f4f9 confirmed by the user: no white/double frame on the home screen.
   - Icon/splash/onboarding visual-acceptance work for this feature area is now fully closed end-to-end. Production mutation 0. Ready for chatgpt to close out.
-- G2: `ready` — `kabumori-shared-market-report-unification-20260928`; shared morning/close market truth unification; X simplified + App market-complete + App personalized non-destructive proof first; production gates OFF pending K2/review; recommended Opus5.5（高）
+- G2: `ready` — `kabumori-shared-report-reliability-hardening-20260928`; PR #43 shared-unification proof merged; next blocker is bounded 429/5xx resilience in market-report-analysis; consumer gates remain OFF; recommended Opus5.5（高）
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS
 
+
+
+## Final K2 shared market unification proof
+
+- verdict: **PASS for source/non-destructive proof; production cutover still gated**.
+- PR #43 head `4aa4251` merged by ChatGPT -> `a0ac6484ecdc59670241c2ffb2e0340e93fd5994`.
+- 318/318 related tests PASS; same report_packet_id/content_hash proven across X simplified, App market-complete and App personalized surfaces.
+- privacy boundary PASS; `x-test-post/index.ts` / PR #41 untouched; production mutation from G2=0.
+- live read-only K2 at ~17:58 JST:
+  - gates: app=false / x=false
+  - shared morning 2026-09-28: analysis failed on OpenAI 429; no report packet
+  - shared close 2026-09-28: completed on report attempt 2; packet `1a0cf2b9-8de9-4e10-a4ea-059428637b31`
+  - App legacy close completed + Fact passed + notified
+  - old X close failed `CLOSE_REPORT_CLOSE_DATA_UNAVAILABLE`
+- implication: shared architecture is the correct path, but upstream-analysis reliability must be hardened before enabling both consumers.
+- no Codex review required for PR #43 itself; focused release-boundary review is reserved for the later live shared-gate activation.
+
+## G2 shared analysis reliability hardening
+
+- assigned: `kabumori-shared-report-reliability-hardening-20260928`.
+- goal: bounded retry/backoff for retryable 429/5xx/network failures in `market-report-analysis`, with explicit worst-case call budget and no idempotency drift.
+- product policy for initial cutover: keep shared consumer fail-closed; do not fall back to a separate legacy market analysis and reintroduce contradictory market truth.
+- no production gate activation/deploy/cron mutation in this source task.
+- legacy X VOICE-only fixes remain frozen.
+- recommended Claude model: Opus5.5（高）.
 
 ## G2 shared morning/close unification
 
