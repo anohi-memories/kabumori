@@ -1597,3 +1597,26 @@ Recommended Claude model: Sonnet5（高）.
 - G3 Auth/account/provider-readiness files are excluded.
 - because Phase 3 introduces a new DB/API authorization boundary, independent review is required before merge/apply; while Codex capacity is constrained, use a **separate-room Claude Opus5.5（高）** reviewer in an independent worktree rather than H1/H2.
 - implementation recommended model: **Opus5.5（高）**.
+
+
+## Final K3 Auth release readiness Phase 3
+
+- verdict: **PASS**.
+- PR #50 head `d1f34674c10db1f71eab2766308cf4e9bba9482b` verified OPEN/MERGEABLE with 12 changed files and no G4 file overlap.
+- added truthful account/login-method UX, deterministic provider readiness diagnostics, app/deep-link config checks, and exact real-device/operator E2E gates.
+- no new Auth API, privilege, token-storage, DB/RPC, or publish boundary introduced; accepted Phase 2 security boundaries remain intact.
+- tests: mobile 57/57, data-view 14/14, typecheck/lint, Expo web+iOS export, diff/secret checks PASS; mutation checks 11/11.
+- production_mutation=0.
+- Vercel Preview failure was rate-limit-only; not a source blocker.
+- Codex/independent review: **not required**.
+- PR #50 squash-merged to main as `ff46c397018a215c53b091feaae86076b37489a7`.
+- remaining operator gates: iOS bundle identifier, redirect allow-list, provider/SMTP console setup, then real-device E2E G0-G10.
+
+## G3 account lifecycle release Phase 4 — assigned 2026-09-28
+
+- task_id: `x-social-mobile-account-lifecycle-release-phase4-20260928`.
+- goal: inventory and source-prepare account deletion, account/security UX, privacy/terms/support configuration, and release lifecycle requirements.
+- no real-user deletion, production Auth/DB/RLS/RPC/provider mutation, or real X post.
+- G4 posting backend files are excluded.
+- if a new privileged account-deletion boundary is implemented, independent review is mandatory; with Codex constrained, use separate-room Claude Opus5.5（高） in an independent worktree.
+- implementation recommended model: **Opus5.5（高）**.
