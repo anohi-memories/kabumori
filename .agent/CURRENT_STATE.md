@@ -1661,3 +1661,15 @@ User requested both X-app Claude slots to stop at the current clean boundary.
 - recommended model on resume: **Opus5.5（高）**.
 
 No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
+
+
+## G3 Phase 4 resumed from preserved checkpoint
+
+- task: `x-social-mobile-account-lifecycle-release-phase4-20260928`
+- worktree: `/Users/yuya/Developer/kabumori-g3-phase1d`
+- branch: `claude/g3-account-lifecycle-p4`
+- preserve all uncommitted work.
+- continue only to source-only review-ready completion.
+- no production mutation/deploy/migration apply/real account deletion.
+- independent review mandatory before merge because privileged deletion boundary is included.
+- recommended Claude model: Opus5.5（高）.
