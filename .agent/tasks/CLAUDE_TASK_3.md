@@ -3,7 +3,7 @@
 - task_id: x-social-mobile-multi-provider-auth-phase2-20260928
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Opus5.5（高）
