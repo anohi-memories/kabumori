@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-posting-backend-foundation-phase3-20260928
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: idle
+- next_owner: none
 - priority: high
 - recommended_model: Opus5.5（高）
 - purpose: Phase 2で確認した投稿操作backendの欠落を、最小かつ安全な順序で解消する。まず「投稿本文の正本」「投稿詳細の安全な読み取り」「draft本文の編集保存」「失敗理由の安全な読み取り」をsource-onlyで実装し、再生成/承認/再試行は次段へ分離する。
@@ -319,3 +319,15 @@ Phase 2の状態から変更なし: 編集・再生成・承認・再試行は�
 
 - status -> review_required
 - next_owner -> chatgpt
+
+
+## Closed / deferred by user — 2026-09-28
+
+- user requested G3/G4 to be closed at a clean stopping point.
+- this TASK stopped safely after Stage A and is **not a completed implementation**.
+- no source/migration/RPC/Edge changes were created; production_mutation=0.
+- preserved finding: posting backend Phase 3 is blocked on a trustworthy user→brand/workspace membership boundary in production.
+- preserved next dependency: decide/review the existing `brand_memberships` Phase 4 candidate before resuming post-body/read/edit/failure-reason backend design.
+- no independent review is required for this stopped task because no new DB/API boundary was introduced.
+- resume only after ChatGPT assigns a new explicit G4 TASK or reactivates this task as `ready`.
+- recommended model on resume: **Opus5.5（高）**.
