@@ -1,5 +1,126 @@
 # Claude Task 1
 
+- task_id: kabumori-data-packet-session-reuse-prod-sync-20260929
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Sonnet5（高）
+- purpose: K2で判明したproduction `market-report-data-packet` のsource遅れを解消し、mainに既に存在するsame-session reuse fix（`aecfa60`系）を、対象Edge Functionだけへcontrolled deployしてsource read-backまで確認する。新規source修正は禁止。
+
+## Accepted K1/K2 baseline
+
+K1:
+- PR #55 routing fix後のiOS preview buildは完成済み。
+- build id: `eda47220-6c93-4224-91ed-eefe6d778045`
+- source: `28e0588844954463aa6d099fbdcf86b987110b47`
+- build task verdict: PASS。ユーザー実機re-QAは別途継続。
+- このTASKはapp sourceを触らないため、実機re-QAと並行可能。
+
+K2:
+- `market-report-analysis` v12 deploy/read-back自体はPASS。
+- 2026-09-29朝刊はdata段階で `DATA_QUALITY_BLOCKED`。
+- missing: `nikkei225` / gap_reason: `expected_session_not_available`。
+- mainにはsame-session confirmed value reuse fixが既に存在する。
+- verified current main contains:
+  - `supabase/functions/market-report-data-packet/session_reuse.ts`
+  - handler imports/uses session reuse
+- commit `aecfa60` is an ancestor of current main.
+- production `market-report-data-packet` was reported older and missing this fix.
+- consumer gates remain `app_enabled=false`, `x_enabled=false`.
+
+## Mandatory startup / isolation
+
+1. Use a fresh independent G1 worktree/checkout. Do not reuse G2 or shared checkout.
+2. Fresh-fetch `origin/main`; record SHA.
+3. Confirm `aecfa60` is an ancestor of fresh main.
+4. Read PROJECT_RULES, ORCHESTRATION, CURRENT_STATE, this TASK.
+5. Read current main:
+   - `supabase/functions/market-report-data-packet/**`
+   - directly imported local/shared dependencies needed by that function
+6. Read production current `market-report-data-packet` metadata/source in read-only mode.
+7. Confirm no other active slot owns `market-report-data-packet/**`.
+8. G2 owns `market-report-analysis/**`. Do not touch it.
+9. If worktree isolation or ownership is ambiguous, STOP.
+
+## Pre-deploy proof
+
+Before any mutation:
+- record production function version / updated_at
+- record current verify_jwt and preserve it exactly
+- download/read production source
+- prove production lacks or differs from the current-main same-session reuse implementation
+- compare fresh-main deploy source to production
+- confirm cron unchanged and do not edit cron
+- confirm app_enabled=false / x_enabled=false
+- confirm fresh-main source contains the existing tests for same-session reuse and run them
+- run relevant data-packet regression tests, check/lint where applicable, and `git diff --check`
+
+If production already matches fresh main byte-for-byte, do NOT redeploy. Report no-op PASS.
+
+## Deploy scope
+
+Allowed production mutation, only if preflight proves drift:
+- deploy exactly `market-report-data-packet` from fresh main
+- preserve existing verify_jwt
+- use explicit project ref
+- no other Edge Function deploy
+
+Forbidden:
+- any source edit
+- `market-report-analysis` deploy
+- DB/schema/RPC/migration changes
+- cron changes
+- app_enabled/x_enabled changes
+- manual report/data cycle forcing
+- X posting
+- Auth/Vault/secret mutation
+- MIC/news workstream changes
+
+## Post-deploy read-back
+
+Immediately after deploy:
+- record new function version / updated_at
+- download deployed source
+- byte-compare relevant deployed source with fresh main
+- explicitly verify `session_reuse.ts` and handler wiring are present
+- verify verify_jwt unchanged
+- verify cron unchanged
+- verify app_enabled=false / x_enabled=false
+- verify no other function changed
+
+Do not manually invoke a real cycle. Natural cycle validation is a later observation gate.
+
+## Completion / K1
+
+Report:
+- task_id/result
+- fresh main SHA/worktree
+- aecfa60 ancestor proof
+- production version before/after
+- exact source drift proof before deploy
+- tests/checks
+- deployed source identity/read-back
+- verify_jwt before/after
+- cron before/after
+- app_enabled/x_enabled before/after
+- production mutations
+- rollback status
+- remaining issues
+- recommendation for next natural morning observation
+
+When complete:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K1.
+
+---
+
+## Archived predecessor state
+
+# Claude Task 1
+
 - task_id: kabumori-home-v3-routing-fix-postmerge-ios-preview-qa-20260929
 - owner: claude
 - slot: claude-1
