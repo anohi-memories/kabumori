@@ -69,6 +69,16 @@
 - next gate: natural scheduled morning/close observation with consumers OFF. This C1 does not authorize consumer activation.
 - G2 PR #57 content-guard correction remains separate and unresolved.
 
+## K1 interim — PR #60 needs iOS visual build before merge
+
+- source review: PASS for phase-1 scope at head `ccb62538c43e6e8e6d6df40b9cb760cf32d718a5`.
+- PR #60 is open/mergeable; main-side overlap with its 4 files is 0.
+- fixed 04 asset wiring and 96x64 CharacterSlot implementation are acceptable as a starting point.
+- final K1 is deferred because simulator visual QA and fresh iOS preview build have not been reported yet.
+- G1 is returned to ready; next action is simulator check -> optional constant-only micro-adjustment -> one EAS preview build -> K1.
+- no Codex review required.
+- recommended model: Sonnet5（高）.
+
 ## G1 04 asset received
 
 - user supplied the exact approved neutral artwork.
