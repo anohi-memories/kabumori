@@ -49,7 +49,7 @@
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: UI phase 1 — wire exact approved report_04_neutral.webp into Home report card as a fixed image only, tune layout via real iPhone preview, no 10-state selection logic yet. Exact asset must be supplied; no regeneration/substitution. Recommended Sonnet5（高）
+- allocation: UI phase 1 — approved 04 artwork has been supplied. Wire fixed report_04_neutral.webp into Home report card, tune size/position on iPhone, no 10-state selector yet. Source is 1536x1024 transparent RGBA PNG and may only be losslessly converted to WebP; no visual edits. Recommended Sonnet5（高）
 
 ## Claude G2
 - owner: claude
