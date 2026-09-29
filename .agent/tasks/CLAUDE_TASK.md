@@ -1,10 +1,172 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-shared-morning-natural-observation-20260930
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Sonnet5（中）
+- purpose: 2026-09-30の自然な朝刊shared cycleをread-onlyで観測し、data packet・analysis packet・retry diagnostics・重複有無を確認する。source変更・deploy・gate変更・manual invokeは禁止。
+
+## Accepted baseline
+
+- PR #57 content guard is merged and production `market-report-analysis` v14.
+- production `market-report-data-packet` is v12.
+- `app_enabled=false`, `x_enabled=false`.
+- morning schedule:
+  - data packet 07:50 JST
+  - analysis 07:55 JST
+  - analysis retry 08:05 JST
+  - personalized legacy app 08:35 JST
+- this task observes only the shared morning cycle; it does not evaluate/fix legacy X VOICE.
+
+## Timing rule
+
+Do not run the substantive observation before **2026-09-30 08:10 JST**.
+
+If G2 is invoked before 08:10 JST:
+- perform only read-only preflight
+- do not wait/poll in a long-running loop
+- do not mutate anything
+- report `WAIT_UNTIL_AFTER_0810_JST`
+- leave the task available for later continuation
+
+## Mandatory startup
+
+1. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / this TASK / prior K2.
+2. Use the dedicated G2 checkout only if repository inspection is needed.
+3. Fresh-fetch origin/main; source inspection is read-only.
+4. Confirm production:
+   - market-report-data-packet v12 or newer only if already accepted
+   - market-report-analysis v14 or newer only if separately accepted
+   - app_enabled=false
+   - x_enabled=false
+5. No active slot conflict with market-report workflow.
+
+## Read-only observation
+
+After 08:10 JST, inspect the 2026-09-30 morning cycle.
+
+Capture:
+- market_report_cycles:
+  - trading_date
+  - report_type
+  - cycle_status
+  - report_status
+  - attempt_count
+  - report_attempt_count
+  - current_data_packet_id
+  - current_report_packet_id
+  - last_error
+  - report_last_error
+  - started/completed/failed timestamps
+  - diagnostics / report_diagnostics
+- market_data_packets:
+  - packet id/content_hash
+  - data_quality_status
+  - required_missing / stale / intentional gaps
+  - key market metrics needed for morning
+- market_report_packets:
+  - packet id/content_hash
+  - Fact/local status
+  - market_direction/headline
+  - x_post presence/3-point contract
+  - data gaps
+- duplicate/idempotency:
+  - count data packets for cycle
+  - count report packets for cycle
+  - current ids point to the expected single completed packet
+- transport diagnostics:
+  - transport_retries
+  - transport_retry_wait_ms
+  - transport_retry_reasons
+  - transport_retry_exhausted
+  - transport_success_after_retry
+
+## Specific regressions to check
+
+1. data-packet morning block fixed:
+   - prior valid Japanese close may be reused correctly for morning if that is the accepted v12 behavior
+   - no false required-missing block that prevents analysis
+2. 1306 identity:
+   - shared report must not call TOPIX-linked ETF 1306 the TOPIX index itself
+3. causality:
+   - no unsupported causal assertion survives local/Fact checks
+4. retry:
+   - if no transient error occurred, zero retries is correct
+   - if 429/5xx/network occurred, bounded retry diagnostics must be coherent
+5. no duplicate report packet / no claim churn
+
+## Forbidden
+
+- no source edit
+- no deploy
+- no manual Edge invocation
+- no cron mutation
+- no gate mutation
+- no DB write
+- no X post
+- no app notification manipulation
+- no attempt to regenerate a failed cycle manually
+
+If the natural cycle fails:
+- classify only: data / transport / local content / Fact / other
+- preserve exact safe evidence
+- do not hot-fix
+- STOP for K2 so ChatGPT can assign the next source task if necessary
+
+## PASS criteria
+
+PASS if the natural 2026-09-30 morning shared cycle:
+- produces a valid data packet
+- produces one completed market report packet
+- has coherent retry diagnostics
+- has no 1306 relabel regression
+- has no unsupported causality regression
+- has no duplicate/idempotency issue
+- keeps app/x gates false
+
+If it fails, report FAIL/STOP with the exact classification; do not disguise as PASS.
+
+## Required Report
+
+- task_id/result
+- observation time JST
+- fresh main SHA if inspected
+- production function versions
+- app/x gates
+- cycle status/attempts/errors
+- data packet id/hash/quality
+- report packet id/hash
+- retry diagnostics
+- 1306 guard result
+- causality guard result
+- duplicate/idempotency result
+- production mutation = 0
+- remaining issue
+- recommendation for 2026-09-30 close observation or source fix
+
+When complete:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+Pending.
+
+---
+
+# Previous completed G2 task — PR #57 production sync
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-market-report-analysis-prod-sync-content-guard-20260929
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sonnet5（高）
 - purpose: K2 PASS/merge済みPR #57の `market-report-analysis` content guardを、consumer gate OFFのままproductionへ単一Function deployし、source read-back・verify_jwt・cron・consumer gate・他Function非変更を確認する。source実装は禁止。
@@ -2417,4 +2579,23 @@ Next gate: Monday 2026-09-28 natural morning 08:35 JST and close 17:15 JST read-
 - production mutation from G2: 0.
 - no Codex source review required here under reduced-review policy; production rollout is moved to H1.
 - consumer activation remains unapproved.
+
+
+
+## Final K2 — production sync of PR #57 content guard
+
+Verdict: **PASS**.
+
+Independent ChatGPT read-only verification at 2026-09-30 00:3x JST:
+- production `market-report-analysis` is v14, verify_jwt=false, ezbr `755f1534944c...`
+- consumer settings remain `app_enabled=false / x_enabled=false`
+- all eight market-report/personalized cron jobs remain active at the recorded schedules
+- report evidence shows only `market-report-analysis` was deployed by G2; no manual cycle, DB/Auth/Vault/X/cron/gate mutation occurred
+- deploy/read-back and test evidence are accepted
+
+Decision:
+- this deployment is accepted as the production baseline for the next natural-cycle observation
+- no Codex review is required for this deploy-only K2
+- consumer activation remains forbidden
+- next G2 is read-only observation of the 2026-09-30 natural morning cycle; close observation will be a separate follow-up after morning K2
 
