@@ -3,8 +3,8 @@
 - task_id: kabumori-home-v3-routing-fix-postmerge-ios-preview-qa-20260929
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（中）
 - purpose: K1 PASSでmerge済みのPR #55 routing fixをfresh mainから検証し、新しいiOS internal/preview buildを1本だけ作成して、ユーザーが実機でHome v3と全ナビゲーションを再QAできる状態にする。source変更・production mutationは禁止。
@@ -1666,3 +1666,64 @@ Restructured to the standard documented "NativeTabs + Stack" pattern: the 5 real
 
 K1 reviews and merges PR #55 as a priority. Once merged, a new EAS preview build is needed (the existing `d9ed1da1` build must NOT be used for further QA — it's confirmed broken) before the user can re-attempt this task's real-device checklist. I will build it as soon as PR #55 is merged, without waiting for a separate task assignment, given the severity — but will still stop and report rather than self-merge or apply anything to production.
 
+## Report — G1 result (routing-fix post-merge iOS preview build ready for re-QA)
+
+- task_id: kabumori-home-v3-routing-fix-postmerge-ios-preview-qa-20260929
+- fresh main SHA at start: `28e0588` (full: `28e0588844954463aa6d099fbdcf86b987110b47`)
+- worktree/branch: independent scratch checkout (no source change, no branch created)
+- PR #55 merge SHA `e8326163f90f969ede063e52533731a2273ef7b2` confirmed ancestor of fresh main.
+
+### Phase A — fresh-main verification
+
+- `deno test tests/app/ --allow-read --no-check`: **187/187 pass**; `tests/app/root-navigator_test.ts` (routing regression guard) present and passing.
+- `npx tsc --noEmit`: 0 new errors (same 2 pre-existing, unrelated CSS-module errors as before).
+- `npx expo config --json`: clean.
+- `npx expo export --platform web --clear`: succeeds, 19 static routes.
+- `git diff --check`: clean. No source edits.
+
+### Phase B — build
+
+- EAS login: `anohi-memories` (Owner on both accounts); project `@anohi-memoriess-team/kabumori` (`eb80adf3-861e-4a48-a373-2d9a85b58899`); bundle `com.anohimemories.kabumori`.
+- `EXPO_PUBLIC_*` presence in `preview`: both present (names only).
+- Signing: existing Ad Hoc cert + provisioning profile reused; no new credentials, no Apple-login/device-registration prompt.
+- Reuse check: newest existing build was the confirmed-broken `d9ed1da1` (commit `135dcc96`, predates the fix) — **not reused**. Created exactly one new build.
+
+| Field | Value |
+| --- | --- |
+| Profile | `preview` (internal) |
+| Status | **finished** |
+| Build ID | `eda47220-6c93-4224-91ed-eefe6d778045` |
+| Source commit | `28e0588844954463aa6d099fbdcf86b987110b47` (contains PR #55 merge) |
+| Started / finished | 2026-09-29 16:34:25 / 16:39:21 |
+| Install link | https://expo.dev/accounts/anohi-memoriess-team/projects/kabumori/builds/eda47220-6c93-4224-91ed-eefe6d778045 |
+
+### Source changes / production mutation
+
+**0 / 0.** No Supabase, migration, Auth, EAS production env, or App Store/TestFlight action.
+
+### Exact user re-QA checklist
+
+**A. Home見た目**: 1 ヘッダーがコンパクト / 2 今日のかぶモリレポートがコンパクト / 3 旧・大きな丸+🌱が無い / 4 重要ニュースの入口がファーストビュー付近 / 5 キャラクター領域が意図的で控えめ
+
+**B. ナビゲーション復旧（リリースブロッカー）**: 6 「すべて見る」で /news が開く / 7 ニュース行で /news/[id] が開く / 8 今日のトピックで /topic-detail が開く / 9 設定→ポートフォリオで /portfolio が開く / 10 レポート項目で reports/[id] が開く / 11 下部5タブすべて切り替わる
+
+**C. トピック詳細**: 12 タップしたトピックと同じものが表示される / 13 複数セクションの詳細が表示される / 14 戻るでHomeに戻る
+
+**D. Settings safe-area**: 15 Home右上から設定が開く / 16 下部タブから設定が開く / 17 ヘッダーがstatus bar/Dynamic Islandと重ならない / 18 上部の操作がタップ可能 / 19 レベル変更サブ画面の戻るがsafe area内 / 20 アカウント削除サブ画面の戻るがsafe area内 / 21 レベル変更が保存される
+
+**E. 下部タブ**: 22 ホーム/銘柄/レポート/AIに聞く/設定の順 / 23 ポート・重要ニュースは独立タブではない
+
+**F. 回帰**: 24 重要/保有ニュースが読み込まれる / 25 AIに聞くが誠実な準備中画面 / 26 ログアウト・パスワード再設定・アカウント削除でクラッシュしない / 27 赤画面なし
+
+**既知の非ブロッカー観察**: /news と /portfolio は明示的な戻るボタンが無く、iOSの左端スワイプで戻る仕様です。これが受け入れられないと感じるかどうか教えてください（このタスクでは黙って修正しません）。
+
+I will not mark any of these PASS myself; they need the user's own observation on the device.
+
+### Remaining issues
+
+1. Real-device re-QA of the checklist above (user).
+2. Known follow-up: explicit in-app back buttons for `/news` and `/portfolio` (pending the user's opinion on whether the edge-swipe-only behavior is acceptable).
+
+### Next recommendation
+
+Send the user the install link + checklist; a final G1 pass records PASS/issues for K1.
