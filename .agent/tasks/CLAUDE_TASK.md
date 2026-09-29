@@ -1,5 +1,176 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-market-report-analysis-prod-sync-content-guard-20260929
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Sonnet5（高）
+- purpose: K2 PASS/merge済みPR #57の `market-report-analysis` content guardを、consumer gate OFFのままproductionへ単一Function deployし、source read-back・verify_jwt・cron・consumer gate・他Function非変更を確認する。source実装は禁止。
+
+## Accepted source baseline
+
+- PR #57 accepted head: `b8bbfe981735e6a2e42987011f1e4a4e7ab2824c`
+- merge SHA: `9488f9e8b12bb1c7c0fcf872767d078ed818c128`
+- accepted behavior:
+  - 1306 proxy identity preserved
+  - unsupported causal assertions rejected locally
+  - valid cause A does not license unrelated cause B
+  - direction/polarity inversion rejected
+  - controlled aliases preserve polarity
+  - Fact remains strict
+- reported tests:
+  - content guard 16/16
+  - market-report-analysis 51/51
+  - market-report-data-packet 42/42
+  - personalized-reports 125/125
+  - x shared consumer 6/6
+  - _shared 279/279
+  - deno check/lint/diff PASS
+- source-task production mutation: 0
+- data-packet v12 already accepted in production by Final C1
+- consumer gates must remain OFF/OFF
+
+## Routing correction
+
+This task was briefly misassigned to H1 by ChatGPT before execution.
+That H1 assignment is cancelled with production mutation 0.
+The user clarified this rollout belongs to **G2**, which owns the market-report-analysis workstream.
+Do not coordinate through H1 for this deployment.
+
+## Mandatory startup / isolation
+
+1. Use the dedicated independent G2 worktree/checkout; never use H1/G1/shared checkout.
+2. Fresh-fetch `origin/main`; record exact SHA.
+3. Confirm merge `9488f9e8b12bb1c7c0fcf872767d078ed818c128` is an ancestor.
+4. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / this TASK / Final K2.
+5. Read current `supabase/functions/market-report-analysis/**`.
+6. Confirm no newer main commit changed `market-report-analysis/**` after the accepted merge without review.
+7. Confirm no active slot owns the same Edge Function/workflow.
+8. If worktree isolation or ownership is ambiguous, STOP.
+
+## Phase A — production preflight
+
+Read-only:
+- current production `market-report-analysis` version / updated_at / verify_jwt
+- deployed source download/read-back
+- compare production source with fresh-main accepted source
+- canonical consumer settings:
+  - app_enabled
+  - x_enabled
+- relevant market-report cron jobs/schedules
+- metadata snapshot of all Edge Functions sufficient to prove only target changes later
+
+Require before mutation:
+- `app_enabled=false`
+- `x_enabled=false`
+- target production source is stale vs accepted fresh main, or report no-op if already identical
+- preserve current accepted `verify_jwt` setting
+- cron state recorded and sane
+- no ownership conflict
+
+Re-run from fresh main:
+- full market-report-analysis suite
+- content_guard_test
+- handler/transport tests
+- deno check
+- changed-runtime lint
+- git diff --check
+
+If production already matches fresh main byte-for-byte:
+- do not redeploy
+- report no-op PASS
+
+## Phase B — controlled deploy
+
+If preflight proves drift, deploy exactly:
+- `market-report-analysis`
+
+Rules:
+- explicit project ref
+- preserve current accepted verify_jwt setting
+- no broad deploy
+- no db push
+- no other Edge Function deploy
+- no DB/schema/RPC/migration changes
+- no cron changes
+- no app_enabled/x_enabled changes
+- no Auth/Vault/secret mutation
+- no X post
+- no app delivery activation
+- no manual real cycle invocation
+- do not touch `market-report-data-packet/**`
+
+Use the established API deploy mode if required by the environment.
+
+## Phase C — post-deploy read-back
+
+Immediately after deploy:
+1. record target version / updated_at / verify_jwt
+2. download deployed source
+3. byte-compare all deployable runtime files with accepted fresh-main source
+4. explicitly verify PR #57 guard logic is present:
+   - 1306 protection
+   - mixed supported/unsupported causality handling
+   - polarity-preserving cause support
+5. re-read exact cron rows; prove unchanged
+6. re-read consumer gates; prove false/false unchanged
+7. compare all-function metadata; prove no other Function changed by this task
+8. do not manually invoke a cycle
+
+## Failure / rollback
+
+If source identity, verify_jwt, cron/gates, or deployment scope is wrong:
+- STOP immediately
+- rollback only if the pre-deploy exact source was captured and can be restored safely to this one Function
+- record all mutations and rollback evidence
+- do not improvise broader changes
+
+## Acceptance
+
+PASS only if:
+- exact accepted source is in production
+- only `market-report-analysis` changed, if deploy was needed
+- verify_jwt preserved
+- cron unchanged
+- app_enabled=false / x_enabled=false unchanged
+- no manual cycle
+- no DB/Auth/Vault/X mutation
+
+This PASS does **not** authorize consumer activation.
+
+## Completion / K2
+
+Report:
+- task_id
+- PASS / FAIL / STOP
+- fresh main SHA/worktree
+- production version before/after
+- source drift proof
+- tests/checks
+- deploy command/scope
+- source read-back identity
+- verify_jwt before/after
+- cron before/after
+- app/x gates before/after
+- other-function metadata check
+- production mutations
+- rollback status
+- remaining issues
+- next recommendation for natural morning/close observation
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+---
+
+## Archived predecessor state
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-shared-analysis-content-guard-fix-20260929
 - owner: claude
 - slot: claude-2
@@ -2136,3 +2307,4 @@ Next gate: Monday 2026-09-28 natural morning 08:35 JST and close 17:15 JST read-
 - production mutation from G2: 0.
 - no Codex source review required here under reduced-review policy; production rollout is moved to H1.
 - consumer activation remains unapproved.
+
