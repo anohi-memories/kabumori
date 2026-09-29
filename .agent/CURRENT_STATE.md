@@ -40,6 +40,23 @@
 - かぶモリExpo/native本体はVercel制限の主対象ではないため、Netlify Web Preview対応は現時点では進めない。
 - かぶモリのiOS実機/TestFlight/native-only機能は従来どおりExpo/EAS/実機で確認する。
 
+## Final K1 PR #55 routing recovery
+
+- verdict: **PASS**.
+- real-device build `d9ed1da1-9542-45c7-b704-d89eaba9a978` exposed a release-blocking regression: non-tab destinations from Home/Settings were unreachable.
+- root cause: `expo-router/unstable-native-tabs` registered only Trigger-backed screens when rendered as the root navigator.
+- PR #55 reviewed exact head `5859f6ce6f94fbb45a065821afbcc2778598b8a9`.
+- fix restructures to standard root Stack + `(tabs)` NativeTabs group; non-tab routes remain root Stack screens.
+- moved Home/Settings source bodies were byte-identical; main-side work since branch fork did not overlap routing files.
+- reported tests: 187/187 PASS; iOS Simulator release verification recovered /news, /news/[id], /portfolio, /topic-detail, preserved reports/[id] and all 5 tabs.
+- Vercel/Netlify commit statuses success; production mutation 0.
+- PR #55 merged -> `e8326163f90f969ede063e52533731a2273ef7b2`.
+- no Codex review used.
+- old build `d9ed1da1...` is invalid and must not be used further.
+- G1 reassigned to fresh-main post-#55 EAS internal/preview build + user real-device re-QA.
+- known lower-severity follow-up: /news and /portfolio lack explicit in-app back buttons; iOS edge-swipe works.
+- recommended model: Sonnet5（中）.
+
 ## Final K1 Home v3 correction + post-merge iOS QA gate
 
 - verdict: **PASS** for PR #53 source review.
