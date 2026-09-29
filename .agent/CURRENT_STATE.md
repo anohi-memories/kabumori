@@ -1881,3 +1881,23 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - no migration apply, Edge deploy, real deletion/revoke, Vault/Auth/provider mutation or activation.
 - finish code: K3.
 - recommended Claude model: Opus5.5（高）.
+
+
+## Final K3 account deletion production preflight
+
+- verdict: **PASS / READY_FOR_ROLLOUT_WITH_OPERATOR_GATES**.
+- exact accepted migration identified and unchanged.
+- live schema/ownership/ACL/isolation/Auth/Vault/Storage assumptions checked read-only; no STOP condition fired.
+- workspace creation path and READ COMMITTED assumptions match reviewed design.
+- sanitized rollout runbook committed at `apps/social-mobile/docs/account-deletion-rollout-runbook.md`.
+- production_mutation=0.
+- unrelated pre-existing security/configuration findings are intentionally not stored in the public repo and require separate private operational follow-up.
+
+
+## G3 account deletion production rollout Stage 1 assigned
+
+- task_id: `x-social-mobile-account-deletion-prod-rollout-stage1-20260929`
+- scope: exact single migration apply/read-back, then `social-mobile-account-delete` Edge deploy/source identity and non-destructive smoke.
+- forbidden: real user deletion, Vault credential mutation through deletion flow, real X/Apple revoke, app feature activation.
+- after K3 PASS, focused H2 production verification is required before Stage 2 real disposable-account E2E.
+- recommended Claude model: Opus5.5（高）.
