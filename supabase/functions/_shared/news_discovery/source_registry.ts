@@ -19,7 +19,15 @@ type Direct = Omit<
   | "timeout_ms"
   | "requires_api_key"
   | "enabled_for_n2"
-> & Partial<Pick<SourceDefinition, "min_request_gap_ms" | "timeout_ms" | "requires_api_key" | "enabled_for_n2">>;
+  | "max_item_age_days"
+> & Partial<Pick<SourceDefinition, "min_request_gap_ms" | "timeout_ms" | "requires_api_key" | "enabled_for_n2" | "max_item_age_days">>;
+
+/**
+ * Default freshness window for official feeds. Several feeds carry years of history (BEA back to
+ * 2013, observed 2026-09-29); without a window the first run would store that backlog as new.
+ * Per-source values (7 / 30 / 90 days, or null) can override it in the definitions below.
+ */
+export const DIRECT_MAX_ITEM_AGE_DAYS = 30;
 
 /** Official primary publisher. Headline + short summary hint may be stored; bodies are not kept. */
 function direct(def: Direct): SourceDefinition {
@@ -28,6 +36,7 @@ function direct(def: Direct): SourceDefinition {
     timeout_ms: 15_000,
     requires_api_key: false,
     enabled_for_n2: true,
+    max_item_age_days: DIRECT_MAX_ITEM_AGE_DAYS,
     ...def,
     policy: "DIRECT_SOURCE",
     content_usage_scope: "direct",
@@ -74,6 +83,7 @@ function disabled(
     image_usage_allowed: false,
     requires_api_key: false,
     enabled_for_n2: false,
+    max_item_age_days: null,
     default_topics: [],
     terms_url,
     attribution: null,
@@ -483,6 +493,7 @@ export const NEWS_SOURCE_REGISTRY: readonly SourceDefinition[] = [
     image_usage_allowed: false,
     requires_api_key: false,
     enabled_for_n2: true,
+    max_item_age_days: null, // not part of the DIRECT freshness guard
     default_topics: [],
     terms_url: "https://www.gdeltproject.org/about.html",
     attribution: "GDELT Project (citation and link required)",
@@ -555,6 +566,7 @@ export const NEWS_SOURCE_REGISTRY: readonly SourceDefinition[] = [
     image_usage_allowed: false,
     requires_api_key: true,
     enabled_for_n2: false, // never polled by the feed fetcher; the search stage calls it under budget
+    max_item_age_days: null, // not part of the DIRECT freshness guard
     default_topics: [],
     terms_url: null,
     attribution: null,
