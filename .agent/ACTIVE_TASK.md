@@ -44,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - task_id: kabumori-home-ui-continuation-20260929
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: UI phase 1 — approved 04 artwork has been supplied. Wire fixed report_04_neutral.webp into Home report card, tune size/position on iPhone, no 10-state selector yet. Source is 1536x1024 transparent RGBA PNG and may only be losslessly converted to WebP; no visual edits. Recommended Sonnet5（高）
+- allocation: PR #60 visual QA in progress. Fixed 04 Yume-chan only; simulator check then one fresh iOS preview build. No 10-state selector, no backend work, no Codex review. Historical data-packet blocker is already closed by H1/C1. Recommended Sonnet5（高）
 
 ## Claude G2
 - owner: claude
