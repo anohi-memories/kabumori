@@ -201,3 +201,42 @@ Report:
 - recommended next step
 
 Then status -> review_required, next_owner -> chatgpt, STOP for K3.
+
+
+## ChatGPT decision — sanitize preflight report
+
+Decision: use **sanitized publication**.
+
+Do NOT commit or push sensitive production security detail such as:
+- exact secret names
+- malformed secret names
+- detailed privilege weaknesses or over-grant specifics
+- raw role capability inventories that unnecessarily expose production posture
+- any credential/token/key/value
+
+Instead:
+
+1. Rewrite the TASK Report as a sanitized operational summary.
+2. Rewrite `apps/social-mobile/docs/account-deletion-rollout-runbook.md` so it contains:
+   - exact migration file/path and safe apply ordering
+   - read-back categories and expected PASS/STOP conditions
+   - rollback/recovery sequence
+   - Edge deploy sequence and non-destructive smoke checks
+   - disposable-account E2E stages
+   - operator/legal gates
+   but not sensitive production security details.
+3. Record the preflight result as:
+   - `READY_FOR_ROLLOUT_WITH_OPERATOR_GATES`
+   - production_mutation=0
+4. In the sanitized report, state only that:
+   - live production schema/ownership/ACL/isolation assumptions required by the reviewed design were checked read-only and did not hit a STOP condition;
+   - unrelated pre-existing security/configuration findings were observed and intentionally excluded from the public repo;
+   - those findings require separate private operational follow-up before/alongside rollout as appropriate.
+5. Do not alter production.
+6. Push only the sanitized TASK/report/runbook.
+7. Then set:
+   - status: review_required
+   - next_owner: chatgpt
+   - STOP for K3.
+
+Recommended model: **Opus5.5（高）**.
