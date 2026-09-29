@@ -78,3 +78,80 @@
   - secret らしき文字列の scan は 0 件。
 - 使い捨て DB・shim・ローカル専用 key は削除済み。
 - テスト 123 件合格、型検査・lint・`git diff --check` は OK。
+
+---
+
+# 再観測（BLOCKER 修正後）— 2026-09-29：PASS
+
+- 修正 branch：`claude/n4-fix-schemeless-url-20260929`、commit `f11fa84`（base main `c617fac`）。
+  - `resolveHttpUrl` を追加し、`source_url` を解決済みの絶対 URL にした。不正なリンクは記事単位で除外する。
+  - migration と DB 制約は変更していない。テスト 131 件合格。
+- 環境は前回と同じ。新しい使い捨て PostgreSQL 17（N3 migration のみ、proof PASS）、テスト fixture の 23 社、ローカル shim、実 feed を使い、Web Search provider はなし。
+- invocation は 2 回（Run 1＋Run 2）、外部 request は 38 回（各 run 19 回、retry なし）。
+
+## Run 1（新規）
+
+| 指標 | 値 |
+|---|---:|
+| 結果 | HTTP 200、`completed`、`deadline_reached: false` |
+| 所要時間 | 37.7 s（source 取得の合計 34.0 s、RPC 合計 約 1.0 s） |
+| 最長の source | GDELT 17.0 s、EC 4.0 s、SEC 1.9 s |
+| source | 対象 19、成功 19（GDELT 含む）、skip 0、redirect 0 |
+| documents | 取得 575、事前 filter 131（気象庁の定常電文）、正規化 444、不正 URL による除外 0、run 内の重複 0 |
+| signals | **保存 444**（topic 付き 353、ticker は候補 3・確定 0） |
+| 検索 | 0 回。skip は `SEARCH_PROVIDER_NOT_CONFIGURED` として run に記録された |
+
+- BEA 48 件のうち **42 件がスキーム無しの `www.` リンク**だった。すべて `https://www.bea.gov/...` として保存された。
+  - `apps.bea.gov/rss/...` のような誤った canonical は 0 件、`^https?://` を満たさない URL も 0 件。
+
+## Run 2（同一条件で再実行）
+
+| 指標 | 値 |
+|---|---:|
+| 結果 | HTTP 200、`completed`、29.7 s、`deadline_reached: false` |
+| source | DIRECT 18 本は成功。GDELT は **429**（任意の層なので run は悪化しない） |
+| dedupe | 正規化 394 件が**すべて重複**と判定され、保存 0 件。pool は 444 件のまま |
+
+- 同じ canonical URL を再保存しなかった。不要な重複 signal も増えなかった。
+- ESRI の「同じ URL に新しいタイトル」は、前回どおり別 signal として保持されている（N2 の規則どおり）。
+
+## 品質（20 件を人手で確認）
+
+| 分類 | 件数 | 例 |
+|---|---:|---|
+| relevant | 7 | 財務大臣会見（9/29）、流動性供給入札の実施額、金融庁 会計基準の改正公布、EIA Henry Hub 価格、月例経済報告の閣僚会議、GDELT「Iran currency record low」「Iran war timeline」 |
+| ambiguous / low relevance | 5 | 日モンゴル首脳会談、FRB の銀行合併承認、Boeing 耐空性改善通報（FR）、気象庁 震源・震度（規模次第）、UAE–Netanyahu 報道 |
+| irrelevant | 5 | 消費者庁「電気・ガスの契約トラブル」、FR 空港指定の取消、White House「College Sports」、SEC 8-K（Onar Holding）、GDELT 住宅ボイラー補助金（アイルランド） |
+| low-quality | 2 | GDELT のタグ一覧ページ（`newsroomamerica.com/tag/texas_diesel_prices`）、米国の小規模なローカル紙が中心 |
+| stale | 1 | BEA「Multinational Companies, 2011」（2013-04-18） |
+| wrong topic | 3 件で topic の不足 | 月例経済報告 → topic なし、UAE–Netanyahu → topic なし、流動性供給入札 → fiscal のみで rates が無い |
+| restricted-source | 0 | 保存された signal で `restricted_publisher` は 0 件 |
+
+- **会社 alias**：候補 3 件はすべて弱い一致で、確定は 0 件。
+  - 「山口政務官」→ 山口FG（候補止まり）。
+  - 「指定報告機関**ベース**」→ ベース（4481）が 2 件（候補止まり）。
+  - 誤って確定された例は無い。
+- **age**：保存 444 件の内訳は 1 日以内 69、1〜7 日 87、7〜30 日 118、30 日超 77、時刻なし 93。
+  - 30 日超のうち 46 件は BEA（feed に 2013 年以降の履歴が入っている）。EIA は 20 件、Fed は 9 件。
+- **URL / tracking**：`client_id` / `session_id` などは**実 source には 0 件**（query は `id` 19 件、`update` 2 件、`ID` 1 件だけ）。redirect 0、不正 URL 0。
+- **GDELT**：
+  - Run 1 は 17.0 s で 200、記事 50 件（すべて英語）。topic 付きは 24 件。
+  - host は米国のローカル紙が中心（arkansasonline 5、business-standard 4 など）で、日本株向けには質が低めだった。
+  - Run 2 は 11.5 s で 429。
+  - HostRateGate の待ちはクエリ 1 本のため 0 s。
+
+## 判定：PASS
+
+- 次の条件をすべて満たした：実 DIRECT source の取得成功、crash なし、restricted の保存 0、誤った確定 0、重複処理は期待どおり（Run 2 で保存 0）、deadline に余裕あり（最大 37.7 s / 使用可能 95 s）、Web Search 0、production traffic 0、secret 漏洩 0。
+
+## SHOULD FIX（production canary 前に直す価値が高い）
+
+1. **古い item の取り込み**：鮮度の窓が無いため、BEA / EIA / Fed の古い release（2013 年など）が「新しい signal」として初回に大量に入る。source ごとの取り込み窓（例：公開から 30 日以内）が必要。
+2. **GDELT の質と時間**：17 s・429、ローカル紙中心。既定は off のまま維持し、使うなら timeout の短縮とドメインの質の filter が必要。
+3. **topic の不足**：月例経済報告（macro_data）、地政学の見出し（UAE–Israel）、入札（rates）で topic が付かなかった。辞書の拡充が必要。
+
+## FUTURE
+
+- 失敗経路で search の note が上書きされる件（前回観測）。
+- SEC 8-K のノイズ：米国の小型株が大半。日本株との関係づけ（ADR・取引先）が必要。
+- source の並列取得、GDELT の待ちを deadline 計算に含めること。
