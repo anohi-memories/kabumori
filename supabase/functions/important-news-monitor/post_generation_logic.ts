@@ -584,6 +584,19 @@ const NON_RETRYABLE_FACT_ISSUE_PATTERNS: RegExp[] = [
   /数字|数値|金額|割合|コード|証券|日時|時刻|発生|規模|対象範囲|条件|出典|URL|source|情報不足|不明|取り違え|同一性|別企業/iu,
 ];
 
+// An over-assertion: the post states as settled what the source only hedges ("とみられる", "疑い",
+// "意向", "可能性", "暫定", ...). Restoring the source's own qualifier changes no fact, so one rewrite is
+// allowed (2026-09-29: South Korea DMZ blast, Iowa steel mill). The issue must name both the assertion
+// and the hedge, and must not also report a wrong number, person, company, date or event.
+const OVER_ASSERTION_ISSUE = /断定|言い切|確定(?:した|事実|的|とは|して(?:いない|おらず))/u;
+const SOURCE_HEDGE_ISSUE = /とみられ|見られ|疑い|意向|可能性|暫定|推定|見込み|予定|計画|方針|検討|とされ/u;
+const HARD_FACT_ERROR_ISSUE =
+  /誤り|誤認|誤記|取り違え|異な(?:る|っ)|捏造|存在しない|別(?:の|人|企業)|改変|数字|数値|金額|日付|日時|人物名|企業名|社名|証券|市場|影響|因果|解釈/u;
+
+export function isOverAssertionFactIssue(issue: string): boolean {
+  return OVER_ASSERTION_ISSUE.test(issue) && SOURCE_HEDGE_ISSUE.test(issue) && !HARD_FACT_ERROR_ISSUE.test(issue);
+}
+
 function isRetryableFactIssue(
   candidate: GenerationCandidate,
   generatedText: string,
@@ -600,6 +613,7 @@ function isRetryableFactIssue(
     return true;
   }
   if (NON_RETRYABLE_FACT_ISSUE_PATTERNS.some((pattern) => pattern.test(issue))) return false;
+  if (isOverAssertionFactIssue(issue)) return true;
   if (issue === "MISSING_EXPLICIT_YEAR" || /年|日付|年月日.*(?:欠落|不足|抜け|記載)/u.test(issue)) {
     return deterministicIssues.includes("MISSING_EXPLICIT_YEAR") && hasMissingExplicitYear(candidate, generatedText);
   }
@@ -1013,7 +1027,7 @@ export async function requestGenerationStep(
   const schema = isDraft ? DRAFT_SCHEMA : isFactRetry || isVoiceRetry ? VOICE_RETRY_SCHEMA : CHECK_SCHEMA;
   const instructions = isFactRetry ? [
     "あなたは重要ニュース投稿の限定Fact修正担当です。入力候補・一次情報・judgementにある事実を変えず、指摘された軽微なFact不整合だけを機械的に修正してください。",
-    "許可される修正は、入力に明示された年・日付を本文へ戻すこと、根拠のない市場解釈・影響解釈・因果表現を削除すること、確認済み同一企業の安全な正式表記へ統一すること、軽微なラベル/表記整合だけです。",
+    "許可される修正は、入力に明示された年・日付を本文へ戻すこと、根拠のない市場解釈・影響解釈・因果表現を削除すること、確認済み同一企業の安全な正式表記へ統一すること、軽微なラベル/表記整合、そして元情報が『とみられる』『疑い』『意向』『可能性』『暫定』等の留保付きで伝えている内容を本文が確定事実として言い切っている箇所を、元情報と同じ留保表現に戻すことだけです。",
     "数値、企業・証券コードの同一性、日付や出来事の発生時刻、因果関係・規模・対象範囲・条件、元情報、source URLに疑義がある場合は推測で直しません。新しい事実・解釈・市場影響・因果関係を追加しません。",
     "fact_issuesに指摘のない箇所は極力そのまま維持し、修正後の本文だけをtextとして返してください。見出しラベルやURL、『出典』表記はtextに含めず、プログラム側で処理します。",
   ].join("\n") : isVoiceRetry ? [
@@ -1029,6 +1043,9 @@ export async function requestGenerationStep(
     "決算、業績予想修正、配当修正などでは、結論を変える重要事実を落としません。一次情報またはjudgementReasonに予想比の上振れ・下振れ、修正方向、赤字転落、黒字転換、通期予想や配当の変更有無が明記されていれば、最重要なものを本文に含めます。すべての数値を詰め込む必要はありません。",
     "書き終える前にtitle、bodySummary、judgementReasonを照合し、ニュースの結論となる重要事実を本文が反映しているか確認してください。",
     "元情報にない数値、日付、固有名詞、因果、規模、将来予測を追加しません。",
+    "元情報の不確実性・留保表現（『とみられる』『疑い』『意向』『可能性』『暫定』『予定』『計画』『〜と主張』等）は必ず維持し、確定した事実として言い切りません。",
+    "『入力情報からは確認できません』『入力データでは〜』『提供された情報では〜』など、入力や情報源の扱いについて説明する文は書きません。",
+    "日本株への影響が確認できない場合、『日本株への影響は確認できません』のような締めの一文を入れる必要はありません。確認できる事実で終えてください。",
     "一次情報または確定済みjudgementに直接の根拠がない市場解釈は、断定を避けた表現でも追加しません。『材料として意識される』『テーマとして意識される』『関連銘柄へ波及する』『市場の注目を集める』『株価材料になる』『業界全体へ影響する』『投資家心理へ影響する』等は禁止です。",
     "読者向けに自然に見せるためだけの説明、因果、影響、対象を補いません。直接の根拠がない場合は、確認できる事実だけを短く伝えて終えて構いません。",
     "最後の一文にも、根拠のない見通し・可能性・今後の変化・市場反応を足しません。確認できる事実で終えてください。",
