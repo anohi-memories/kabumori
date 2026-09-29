@@ -1,5 +1,165 @@
 # Codex Task
 
+- task_id: kabumori-data-packet-prod-sync-verification-rollout-20260929
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- priority: highest
+- recommended_model: Sol（高）
+- purpose: G1がproduction-read classifierでSTOPした market-report-data-packet 同期を、独立環境でproduction read-only preflightから引き継ぎ、条件が一致する場合だけ reviewed fresh-main source を単一Edge Functionへcontrolled deployし、read-backで同一性と周辺設定不変を確認する。source実装は禁止。
+
+## Handoff from G1
+
+- G1 task: kabumori-data-packet-session-reuse-prod-sync-20260929
+- G1 result: STOP / BLOCKED before mutation
+- production mutation: 0
+- fresh-main verification SHA: 15a7ac72aba611f1eff734c38b3e6c517b4e691c
+- aecfa60 confirmed ancestor
+- data-packet tests: 42/42 PASS
+- production market-report-data-packet observed as version 11, verify_jwt=false
+- production source is older than main and lacks same-session reuse:
+  - session_reuse.ts absent
+  - handler lacks stored-packet lookup/wiring
+  - packet_builder lacks reuse index/application
+  - packet_schema lacks reuse provenance fields/validation
+- G1 could not read production cron/gate rows because its classifier denied DB reads, so it correctly did not deploy.
+- G2 owns market-report-analysis/**. Do not touch it.
+- orchestration re-check found no market-report-data-packet/** or directly imported shared-source change between G1 verification and handoff.
+
+## Role
+
+This is production verification + controlled rollout, not source implementation.
+Do not modify app/function source. Do not create a PR. Do not broaden scope.
+
+## Mandatory startup / isolation
+
+1. Use an independent H1 worktree/checkout; never use G1/G2/shared checkout.
+2. Fresh-fetch origin/main and record exact SHA.
+3. Read ORCHESTRATION, CURRENT_STATE, this TASK, current G1 TASK/latest G1 report, and market-report-data-packet source.
+4. Confirm aecfa60 is an ancestor of fresh main.
+5. Confirm no later main commit changed market-report-data-packet/** or directly imported shared dependencies after G1 verification without review.
+6. Confirm no overlap with G2.
+7. If isolation/ownership is ambiguous, STOP.
+
+## Phase A — independent read-only preflight
+
+Reproduce G1 source-drift proof independently:
+- production function version, updated_at, verify_jwt, entrypoint metadata where exposed
+- download deployed source
+- compare deployed source with fresh-main deployable source
+- prove whether same-session reuse is missing in production
+- run full market-report-data-packet tests, applicable deno check/lint, git diff --check
+
+Read only the minimum production DB state required:
+
+### Cron snapshot
+Read current pg_cron rows relevant to market-report-data-packet and shared market-report-analysis schedules.
+Record jobid, jobname, schedule, active, and command text/identifier only as needed for before/after comparison.
+
+### Consumer gate snapshot
+Determine canonical config location from reviewed source/schema; do not guess.
+Read only fields needed to prove:
+- app_enabled=false
+- x_enabled=false
+
+Do not read user data, report bodies, tokens, Vault plaintext, or secrets.
+
+If any precondition differs, STOP before deploy.
+If production DB reads are blocked in H1 too, STOP; do not route around using hidden credentials/service-key REST.
+
+## Phase B — controlled single-function deploy
+
+Proceed only if Phase A proves:
+- production source stale vs reviewed fresh main
+- same-session reuse exists in fresh main and is absent in production
+- verify_jwt=false
+- cron snapshot sane
+- app_enabled=false
+- x_enabled=false
+- no ownership conflict
+
+Deploy exactly market-report-data-packet from clean fresh main with explicit project ref and preserve verify_jwt=false.
+
+Allowed command shape after preflight:
+supabase functions deploy market-report-data-packet --project-ref wsmznyzcvmuitkglfeuj --no-verify-jwt
+
+Forbidden:
+- source edit
+- broad deploy
+- db push
+- any other Edge Function deploy
+- cron/settings/gate changes
+- DB/schema/RPC/migration write
+- Auth/Vault/secret mutation
+- manual real cycle invocation
+- X/app consumer activation
+
+Do not rely on shared untracked supabase/config.toml. If CLI needs local config, use only minimum isolated non-secret config and do not commit it.
+
+## Phase C — post-deploy read-back
+
+Immediately after deploy:
+1. Record version / updated_at / verify_jwt.
+2. Download deployed source.
+3. Byte-compare deployed bundle files against fresh-main source.
+4. Prove session_reuse.ts, handler wiring, packet_builder reuse wiring, packet_schema provenance/validation are present.
+5. Re-read exact same cron rows and prove unchanged.
+6. Re-read same consumer gates and prove app_enabled=false / x_enabled=false.
+7. Compare Edge Function metadata before/after and confirm no other function was deployed/updated by this task.
+8. Do not manually invoke a cycle.
+
+## Failure / rollback rule
+
+If deployed source does not match reviewed main, verify_jwt is wrong, or unexpected deployment-side mutation appears:
+- STOP immediately.
+- Only if pre-deploy source was downloaded and can be restored exactly with same verify_jwt, perform controlled rollback of this one function; otherwise do not improvise.
+- Record rollback evidence/mutations.
+
+## Acceptance
+
+PASS only if:
+- stale production source independently reproduced
+- one controlled data-packet deploy completed
+- read-back matches reviewed fresh main
+- same-session reuse present
+- verify_jwt remains false
+- cron unchanged
+- app_enabled/x_enabled remain false/false
+- no other function/config/DB mutation
+- no manual cycle invoked
+
+No consumer activation is authorized.
+Natural morning/close validation remains a later gate.
+
+## Completion / C1
+
+Write .agent/CODEX_REPORT.md with:
+- task_id
+- PASS / FAIL / STOP
+- exact fresh main SHA/worktree
+- production version before/after
+- source drift proof before
+- tests/checks
+- cron before/after
+- gates before/after
+- deploy command/scope
+- source identity/read-back
+- verify_jwt before/after
+- other-function mutation check
+- production mutations
+- rollback status
+- remaining issues
+- next recommendation for natural-cycle observation
+
+Then status -> review_required, next_owner -> chatgpt, STOP for C1.
+
+---
+
+## Archived predecessor task
+
+# Codex Task
+
 - task_id: x-social-mobile-auth-phase2-final-acceptance-review-20260928
 - owner: codex
 - slot: codex-1
@@ -111,3 +271,4 @@ Verdict: **PASS-WITH-FIX**.
 - production_mutation=0 during review.
 - PR #47 merged after C1 at merge commit `fbddef2535b82bf4775c2e4fddb93eeefb8c638a`.
 - remaining gates are real-device/provider-console configuration/E2E only.
+
