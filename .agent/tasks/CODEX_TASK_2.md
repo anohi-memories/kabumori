@@ -1,162 +1,101 @@
 # Codex Task 2
 
-- task_id: x-social-mobile-account-deletion-privileged-review-20260928
+- task_id: x-social-mobile-account-deletion-final-acceptance-review-20260929
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: codex
 - priority: critical
 - recommended_model: Sol（高）
-- purpose: Draft PR #52 の account deletion / account lifecycle Phase 4 を独立レビューする。service_role DB functions、Vault cleanup、Auth admin user deletion、X revoke、Apple revoke、recent-auth、tenant/workspace境界、partial failure/idempotencyを重点確認し、merge可否を判定する。
+- purpose: PR #52 Phase 4b fixed head の最終受け入れレビュー。前回C2でFAILしたR1〜R6＋client session pinningだけをfocused regressionし、source merge可否を確定する。
 
 ## Review target
 
 - Draft PR #52
-- exact head: `12146c4ab2bc635a2781b673146e1f8ad8350258`
-- branch: `claude/g3-account-lifecycle-p4`
-- implementation task: `x-social-mobile-account-lifecycle-release-phase4-20260928`
+- exact fixed head: `002d24ac99df2fbdf4e2423c1428ccb488a79f29`
+- previous failed head: `12146c4ab2bc635a2781b673146e1f8ad8350258`
+- implementation task: `x-social-mobile-account-deletion-correction-phase4b-20260929`
 
 ## Mandatory startup
 
-1. Read:
-   - `.agent/ORCHESTRATION.md`
-   - `.agent/CURRENT_STATE.md`
-   - this TASK
-   - G3 TASK + latest Report
-   - PR #52 exact diff
-2. Use an independent H2 worktree/checkout. Do not reuse G3 worktree.
-3. Fresh fetch `origin/main` and PR #52 exact head.
-4. Read current Supabase skill first.
-5. Check current Supabase docs/changelog relevant to:
-   - Auth admin user deletion
-   - session invalidation after user deletion
-   - service_role/security definer behavior
-   - Vault
-   - Edge Function auth
-6. Check current official X token revocation docs and Apple revoke guidance where needed.
-7. Do not mutate production.
+1. Read ORCHESTRATION / CURRENT_STATE / this TASK / latest G3 Report / previous H2 FAIL report.
+2. Independent H2 worktree; never reuse G3 worktree.
+3. Fresh fetch origin/main and exact PR #52 head.
+4. Read current Supabase skill and current docs/changelog relevant to Auth/Vault/Edge/security-definer/session deletion.
+5. Check current X revoke and Apple revoke guidance only where needed.
+6. production mutation = 0.
 
-## Core review questions
+## Focused acceptance
 
-### A. DB privileged boundary
+Re-run and verify the previous failures:
 
-Inspect migration candidate:
-`supabase/migrations/20260928160000_social_mobile_account_deletion_candidate.sql`
+1. R1 durable deletion state:
+   - reconnect after credential snapshot is rejected
+   - reconnect after purge/before login finalization is rejected
+   - refresh/posting/account writers cannot recreate state during deletion
+   - lease/tombstone survives transaction boundaries
+   - operator recovery/retry is safe
 
-Verify:
-- exact schemas of all functions/tables
-- whether any function is SECURITY DEFINER
-- function owner expectations
-- fixed safe `search_path`
-- PUBLIC execute revoked
-- anon/authenticated cannot execute privileged functions
-- service_role is the only intended caller
-- no BOLA/IDOR path through client-supplied IDs
-- exact-user/workspace binding is server-derived
-- multi-member/shared/admin/foreign workspace cases fail closed
-- advisory locking and idempotency are sound
-- in-flight posting / credential refresh races are handled safely
-- purge ordering cannot orphan sensitive credentials/data
-- unexpected FK dependents cause safe failure, not partial silent deletion
-- audit table does not leak raw IDs/secrets
+2. R2 cross-product scope:
+   - Kabumori main-app data is never silently deleted
+   - social_only vs social_and_login is server-decided and UI-consistent
+   - finalize rechecks profile/main-app presence under lock
+   - no hidden auth cascade
 
-### B. Vault cleanup
+3. R3 Vault ownership:
+   - shared/duplicate/foreign secret references fail closed before revoke/purge
+   - bound credential set is stable
+   - no cross-tenant Vault deletion
 
-Verify:
-- whether the execution role/function owner can actually delete intended Vault secrets in production
-- secret selection cannot cross user/workspace boundaries
-- failure to delete Vault secret does not proceed to false-success auth deletion
-- retry semantics are safe
-- no Vault plaintext is surfaced to app/logs
+4. R4 X missing credentials:
+   - truly never-connected may proceed
+   - connected/verified account with missing required material becomes operator_required
+   - no false revoked state
 
-If production capability cannot be proven safely from source/read-only metadata, mark as explicit rollout blocker instead of assuming success.
+5. R5 Apple retry:
+   - single-use authorizationCode is never replayed after successful revoke
+   - durable checkpoint/resume semantics are correct
+   - failure requires truthful fresh reauth where appropriate
 
-### C. Auth/session deletion
+6. R6 CORS/platform:
+   - OPTIONS and required headers work
+   - unsupported Apple browser deletion is truthfully blocked/labeled
 
-Verify:
-- recent-auth requirement cannot be bypassed
-- subject/user is derived from verified bearer session, not request body
-- exact-user reauthentication in client is meaningful and not merely cosmetic
-- auth admin delete happens only after app-data/credential cleanup reaches the intended terminal state
-- deleting auth user does not leave usable sessions/tokens in a way that violates the intended security contract
-- 404/idempotent retry semantics are safe
-- partial failure between app-data purge and auth-user delete is recoverable and observable
+7. Client session pinning:
+   - confirmation bound to exact userId + sessionId
+   - user/session switch before submit sends no deletion request
 
-### D. X revocation
+## Additional final checks
 
-Verify against current X docs:
-- correct endpoint/method/auth requirements
-- access vs refresh revoke behavior/order
-- client authentication is correct for the app type
-- failure semantics: no false deletion completion if revoke was required but failed
-- no raw X token or Authorization header logging
-- only the exact user/workspace credential is selected
+- guard-trigger coverage: verify every relevant current writer/table that can recreate/rotate social workspace/account/credentials is protected.
+- assess trigger interaction risk with dispatcher/posting flows.
+- verify finalize direct SQL deletion of auth.users is safe under expected owner/ACL and consistent with Supabase semantics.
+- confirm SECURITY DEFINER schema/search_path/EXECUTE grants remain safe.
+- confirm audit/logs contain no raw IDs/tokens/secrets.
+- verify PR remains source-only and no production mutation occurred.
 
-If X docs/config make source assumptions unverifiable, identify the precise gate.
+## Required tests
 
-### E. Apple revocation
-
-Verify:
-- fresh authorizationCode requirement and exchange
-- Apple subject returned by exchange is bound to the authenticated user's own Apple identity
-- revocation targets the correct token
-- native vs browser Apple identity behavior is not conflated
-- failure stops safely
-- no client secret/token leakage
-- current Apple account-deletion/revoke expectations are met at source-contract level
-
-### F. Product/data semantics
-
-Verify:
-- UI does not claim deletion is available unless backend/build gate is enabled
-- privacy/terms/support config is truthful
-- "deleted vs retained" copy matches actual backend behavior
-- published X posts not deleted is clearly disclosed
-- retained hashed audit is consistent with documented assumptions
-- no accidental deletion of unrelated Kabumori/X-app data outside exact user scope
-- note any cross-product coupling that must be resolved before production rollout
-
-## Required verification
-
-Run at least:
-- full social-mobile tests
-- account deletion tests
+- reproduce all prior H2 markers
+- disposable Postgres behavior/ACL/race/reconnect/rollback/cleanup
 - Deno tests/check
-- disposable Postgres behavior/ACL/race/rollback tests
-- typecheck
-- lint
+- full social-mobile tests
+- data-view
+- typecheck/lint
 - Expo web+iOS export
 - git diff --check
 - secret/token/log scan
-
-Also add targeted negative tests if needed for:
-- PUBLIC/anon/authenticated function execution
-- wrong user/workspace
-- shared workspace
-- concurrent deletion
-- Vault deletion failure
-- X revoke failure
-- Apple subject mismatch
-- auth delete failure after purge
-- retry after partial completion
+- mutation tests where practical
 
 ## Fix policy
 
-- Small, obvious, local P1/P2 source defects within this PR may be fixed directly on PR #52 and retested.
-- Design-level uncertainty, production capability uncertainty, or destructive rollback ambiguity => report and STOP.
-- Do not broaden into unrelated posting backend work.
+- Small obvious local defect directly within the reviewed fixes may be repaired on PR #52 and retested.
+- New design-level issue or production capability uncertainty => FAIL/STOP and report.
+- Do not broaden review.
 
 ## Production constraints
 
-Absolutely no:
-- migration apply
-- Edge deploy
-- real user/data deletion
-- real Vault mutation
-- real X token revoke
-- real Apple revoke
-- provider/Auth console mutation
-- real X post
+No migration apply, Edge deploy, real deletion, Vault mutation, real X/Apple revoke, Auth/provider console changes, or real X post.
 
 `production_mutation=0`.
 
@@ -165,37 +104,13 @@ Absolutely no:
 Report:
 - PASS / PASS-WITH-FIX / FAIL
 - exact reviewed/fixed PR #52 head
-- DB privileged-boundary assessment
-- Vault capability assessment
-- Auth/session deletion assessment
-- X revoke assessment
-- Apple revoke assessment
-- partial failure/idempotency assessment
+- R1–R6 + session-pinning status
+- guard-trigger coverage
+- auth.users finalization assessment
 - tests
 - any source fixes
 - production_mutation=0
-- whether PR #52 is safe to merge as source
-- exact blockers before production apply/deploy/E2E
+- source merge ready yes/no
+- remaining production apply/deploy/E2E gates
 
-Then:
-- status -> review_required
-- next_owner -> chatgpt
-- STOP for C2.
-
-
-## Final C2 — PR #52 privileged review
-
-Verdict: **FAIL**.
-
-- reviewed head: `12146c4ab2bc635a2781b673146e1f8ad8350258`.
-- merge blockers include:
-  - durable deletion state missing across OAuth reconnect / purge -> auth-delete gap
-  - social-mobile deletion currently cascades shared Auth into Kabumori main-app data without matching consent
-  - ambiguous/shared Vault secret references can cross tenant boundaries
-  - missing X credential material can become false revocation success
-  - Apple single-use authorizationCode retry is not safely resumable
-  - Edge CORS/web deletion path incomplete
-  - client deletion state is not fully pinned to the initiating user/session
-- passed areas include bearer-derived uid, recent-auth gate, privileged RPC ACL/search_path, several workspace guards, purge atomicity for local DB failures, and no production mutation.
-- PR #52 remains DRAFT and must not merge.
-- returned to G3 as one bundled correction task.
+Then status -> review_required, next_owner -> chatgpt, STOP for C2.
