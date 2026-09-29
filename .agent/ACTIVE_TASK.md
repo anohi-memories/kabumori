@@ -49,7 +49,7 @@
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Home/UI/navigation continuation from merged PR #56. UI-only workstream; no market-report backend/DB/Edge Function work. Await concrete user UI instruction/screenshot before source edits. Recommended Sonnet5（高）
+- allocation: UI phase 1 — wire exact approved report_04_neutral.webp into Home report card as a fixed image only, tune layout via real iPhone preview, no 10-state selection logic yet. Exact asset must be supplied; no regeneration/substitution. Recommended Sonnet5（高）
 
 ## Claude G2
 - owner: claude
