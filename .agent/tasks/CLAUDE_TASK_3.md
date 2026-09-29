@@ -3,7 +3,7 @@
 - task_id: x-social-mobile-account-deletion-onboarding-entry-fix-20260930
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Sonnet5（高）
