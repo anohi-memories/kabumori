@@ -1,5 +1,157 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-shared-analysis-content-guard-fix-20260929
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Opus5.5（高）
+- purpose: 2026-09-29大引けshared analysisがlocal check / Factで2回失敗した実例を再現し、1306の誤ラベルと根拠のない因果断定をsource側で最小修正する。transport retry・claim/idempotency・consumer gateは変えない。
+
+## Accepted K2 finding
+
+Previous task `kabumori-shared-analysis-prod-deploy-observe-20260928`:
+- controlled deploy/read-back of PR #45 retry hardening: PASS.
+- app_enabled=false / x_enabled=false preserved.
+- transport retry diagnostics on 9/29 close: retries=0; transport layer was not the cause.
+- 9/29 close:
+  - attempt 1: `ANALYSIS_LOCAL_CHECK_FAILED`
+    - generated text treated TOPIX-linked ETF 1306 as if it were TOPIX itself.
+  - attempt 2: `ANALYSIS_FACT_FAILED`
+    - headline/x_post asserted US-stock/semiconductor weakness as the cause of Tokyo decline although the input did not confirm that causal relationship.
+- market_report_packet remained absent for the close cycle.
+- consumer activation is NOT approved yet.
+
+## Product/content contract
+
+Fix the generator/validation contract; do not weaken validation just to make output pass.
+
+Required semantics:
+1. 1306 is a TOPIX-linked ETF/proxy, not the TOPIX index itself.
+   - Generated content may say `TOPIX連動ETF（1306）`, `TOPIX連動型ETF`, or another accurate proxy wording.
+   - It must not relabel 1306 as `TOPIX` or present its price/move as the index itself.
+2. Causal claims must not exceed the evidence.
+   - If input says the exact decline/rise reason is unconfirmed, generated headline/body/x_post must retain that uncertainty.
+   - Do not convert correlation/timing into a confirmed cause.
+   - Hedged language is allowed only when supported; do not invent a plausible cause merely by adding `可能性`.
+3. Local/Fact checks remain meaningful and strict.
+   - Do not disable, bypass, or broadly relax them.
+4. Preserve the current one-shared-packet truth and fail-closed behavior while gates are OFF.
+
+## Mandatory startup / isolation
+
+1. Use the dedicated G2 worktree/checkout, independent from G1.
+2. Fresh-fetch origin/main and record SHA.
+3. Read PROJECT_RULES, ORCHESTRATION, CURRENT_STATE, this TASK and prior Report.
+4. Read current:
+   - `supabase/functions/market-report-analysis/**`
+   - relevant prompt/generation/regeneration/local-check/Fact flow
+   - shared packet contract/tests
+5. Confirm no newer main commit changed these files unexpectedly.
+6. G1 owns `market-report-data-packet/**` production sync. Do not edit that directory in this task.
+7. If ownership overlaps or fresh isolation is not safe, STOP.
+
+## Reproduction first
+
+Before editing, create a deterministic/sanitized replay fixture or equivalent test reproducing both 9/29 failures:
+- 1306 proxy identity case
+- unconfirmed-causality case
+
+The test input must contain enough source semantics to prove the intended behavior without user/private portfolio content.
+
+Document whether each failure originates in:
+- initial generation instruction
+- regeneration instruction
+- normalization/post-processing
+- local check
+- Fact prompt/contract
+- or a combination
+
+Do not guess.
+
+## Implementation requirements
+
+Make the narrowest source change that reliably prevents both failure classes.
+
+Preferred direction if confirmed by audit:
+- strengthen generation/regeneration instructions to preserve instrument identity
+- explicitly preserve qualifiers/uncertainty from source facts
+- add deterministic guard(s) only where they can be precise without false positives
+- ensure retry/regeneration cannot turn a qualified statement into a stronger causal assertion
+
+Do not:
+- add generic censorship that removes useful market explanation
+- hard-code only the exact 9/29 sentence
+- rename all ETF references blindly
+- weaken Fact/local checks
+- change transport retry behavior
+- change model routing/call budgets unless proven necessary
+- change claim/idempotency/fencing
+- touch consumer gates
+
+## Tests
+
+At minimum:
+- replay: 1306 cannot become TOPIX index
+- replay: unconfirmed cause cannot become asserted cause in headline
+- same for x_post
+- qualified/uncertain wording remains qualified after regeneration
+- a genuinely source-confirmed causal statement can still be expressed as confirmed
+- no regression to existing local/Fact failure handling
+- no transport retry triggered by Fact/local rejection
+- shared packet/idempotency regression
+- morning + close relevant suites
+- existing market-report-analysis suite
+- `deno check`
+- `deno lint`
+- `git diff --check`
+
+Run the broadest relevant deterministic suite available.
+
+## Delivery
+
+This is source + tests only.
+
+Create a focused PR. Do NOT self-merge.
+
+Forbidden:
+- production deploy
+- app_enabled/x_enabled mutation
+- cron mutation
+- DB/schema/RPC/migration
+- manual real cycle invocation
+- X post
+- G1 data-packet files
+
+## Completion / K2
+
+Report:
+- task_id/result
+- fresh main SHA/worktree/branch
+- root cause for each 9/29 failure
+- exact changed files
+- replay tests before/after
+- full test/check/lint results
+- transport/idempotency preserved proof
+- PR URL/head SHA
+- production mutation = 0
+- remaining issues
+- recommendation for review/merge/deploy and later natural-cycle observation
+
+When complete:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+Codex review is deferred until ChatGPT K2 sees the final scope. Consumer activation/public-X boundary will require focused review.
+
+---
+
+## Archived predecessor state
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-shared-analysis-prod-deploy-observe-20260928
 - owner: claude
 - slot: claude-2
