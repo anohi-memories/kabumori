@@ -65,11 +65,11 @@
 - owner: claude
 - slot: claude-3
 - status: ready
-- task_id: x-social-mobile-account-deletion-prod-rollout-stage1-20260929
+- task_id: x-social-mobile-account-deletion-prod-e2e-stage2-20260929
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: production Stage 1 only — exact migration apply/read-back + account-delete Edge deploy/source identity + non-destructive smoke; no real deletion/revoke/activation; recommended Opus5.5（高）
+- allocation: Stage 2 disposable-account E2E only; use test fixtures only; mandatory fresh user confirmation before first destructive valid-user action; feature remains OFF; recommended Opus5.5（高）
 
 ## Claude G4
 - owner: claude
