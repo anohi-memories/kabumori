@@ -106,6 +106,35 @@
 - known non-blocker: /news and /portfolio currently rely on iOS edge-swipe for back.
 - G1 slot may proceed with backend deploy-only work because that cannot change this already-built app binary.
 
+## Final K2 — PR #57 accepted and merged
+
+- verdict: **PASS**.
+- accepted PR #57 head: `b8bbfe981735e6a2e42987011f1e4a4e7ab2824c`.
+- merge SHA: `9488f9e8b12bb1c7c0fcf872767d078ed818c128`.
+- final accepted guard behavior:
+  - 1306 proxy identity is preserved; 1306 is not relabeled as the TOPIX index.
+  - unsupported causal assertions are rejected locally before Fact.
+  - a valid causal claim does not globally license unrelated causal wording.
+  - cause support preserves direction/polarity; inverted cases such as 半導体株安 -> 半導体株高 are rejected.
+  - controlled aliases such as 米株 -> 米国株 retain polarity.
+- final reported tests: content guard 16/16; market-report-analysis 51/51; data-packet 42/42; personalized-reports 125/125; x shared consumer 6/6; _shared 279/279; deno check/lint/diff PASS.
+- source task production mutation: 0.
+- Vercel preview failure on the last head was rate-limit-only; not a source blocker. PR was mergeable and main-side source overlap was 0.
+- no Codex source review added under reduced-review policy.
+- consumer activation remains unapproved.
+
+## H1 — market-report-analysis production sync assigned
+
+- task_id: `kabumori-market-report-analysis-prod-sync-content-guard-20260929`.
+- status: ready.
+- purpose: deploy/read-back only for the merged PR #57 `market-report-analysis` source with app/x gates OFF.
+- H1 must independently verify production source/version, verify_jwt, cron, gates and all-function metadata before mutation.
+- if drift exists, deploy exactly one target Edge Function; no source edits, no DB/schema/RPC/cron/gate/Auth/Vault/X changes, no manual real cycle.
+- post-deploy byte read-back is mandatory.
+- recommended model: **Sol（高）**.
+- next code: H1 -> C1.
+- natural morning/close observation remains the next gate after this production sync.
+
 ## K2 — PR #57 second review: polarity-safe causality still required
 
 - verdict: **CHANGES REQUIRED**; PR #57 remains open, unmerged, undeployed.
