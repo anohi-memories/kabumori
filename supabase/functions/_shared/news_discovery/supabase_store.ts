@@ -91,7 +91,17 @@ function chunks<T>(values: readonly T[], size: number): T[][] {
 }
 
 /** Row sent to news_discovery_insert_signals (column names follow the migration). */
+const ABSOLUTE_HTTP = /^https?:\/\/[^/\s]+/;
+
+/**
+ * Serialize a signal for news_discovery_insert_signals. URLs are resolved in the normalize layer;
+ * this only asserts the DB contract (source_url / canonical_url ~ '^https?://') so a bug surfaces as
+ * a clear internal error instead of a rolled-back batch. It never reinterprets a URL.
+ */
 export function signalToRow(signal: NewsSignal): Record<string, unknown> {
+  if (!ABSOLUTE_HTTP.test(signal.source_url) || !ABSOLUTE_HTTP.test(signal.canonical_url)) {
+    throw new Error(`NEWS_SIGNAL_URL_INVARIANT:${signal.source_id}`);
+  }
   return {
     id: signal.id,
     source_id: signal.source_id,
