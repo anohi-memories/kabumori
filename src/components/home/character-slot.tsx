@@ -13,7 +13,8 @@ import type { KabumoriPalette } from '@/constants/kabumori-theme';
 // (report_04_neutral.webp) so the user can judge size/position on a real device.
 // Every visual knob lives in the constants below so micro-adjustments are a
 // one-line change:
-// - CHARACTER_SLOT_WIDTH: footprint width; height follows the artwork's 3:2 canvas
+// - CHARACTER_SLOT_WIDTH_PERCENT: footprint width as a share of the card content
+//   width; height follows the artwork's 3:2 canvas
 // - CHARACTER_OFFSET_X / _Y: shift the artwork inside/outside its footprint
 //   (+x right, +y down) without moving the text column
 //
@@ -21,8 +22,11 @@ import type { KabumoriPalette } from '@/constants/kabumori-theme';
 // reaching all four edges, so it is shown with contentFit="contain" and never
 // cropped, framed or tinted.
 export const CHARACTER_ASPECT_RATIO = 1536 / 1024;
-export const CHARACTER_SLOT_WIDTH = 96;
-export const CHARACTER_SLOT_HEIGHT = Math.round(CHARACTER_SLOT_WIDTH / CHARACTER_ASPECT_RATIO);
+// Share of the card's content width the character takes (about the right third);
+// the height follows from the aspect ratio, so the size scales with the screen.
+export const CHARACTER_SLOT_WIDTH_PERCENT = '36%';
+// Size of the empty placeholder shown when no artwork is passed.
+export const CHARACTER_PLACEHOLDER_SIZE = 48;
 export const CHARACTER_OFFSET_X = 0;
 export const CHARACTER_OFFSET_Y = 0;
 
@@ -51,13 +55,14 @@ export function CharacterSlot({ source, palette }: CharacterSlotProps) {
 const styles = StyleSheet.create({
   // No overflow clipping: an offset must never crop the artwork.
   slot: {
-    width: CHARACTER_SLOT_WIDTH,
-    height: CHARACTER_SLOT_HEIGHT,
+    width: CHARACTER_SLOT_WIDTH_PERCENT,
+    aspectRatio: CHARACTER_ASPECT_RATIO,
+    flexShrink: 0,
     transform: [{ translateX: CHARACTER_OFFSET_X }, { translateY: CHARACTER_OFFSET_Y }],
   },
   placeholder: {
-    width: CHARACTER_SLOT_HEIGHT,
-    height: CHARACTER_SLOT_HEIGHT,
+    width: CHARACTER_PLACEHOLDER_SIZE,
+    height: CHARACTER_PLACEHOLDER_SIZE,
     borderRadius: 12,
     borderWidth: 1,
     borderStyle: 'dashed',

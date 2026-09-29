@@ -31,7 +31,13 @@ export function ReportHighlightCard({ palette, report, points, loading, error, o
       <View style={styles.headRow}>
         <View style={styles.headText}>
           <Text style={[styles.eyebrow, { color: palette.accent }]}>TODAY&apos;S REPORT</Text>
-          <Text style={[styles.title, { color: palette.text }]}>今日の かぶモリレポート</Text>
+          <Text
+            style={[styles.title, { color: palette.text }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.85}>
+            今日の かぶモリレポート
+          </Text>
           <Text style={[styles.description, { color: palette.muted }]}>
             今日の市場とあなたの保有銘柄への影響をAIが整理しました。
           </Text>
@@ -90,7 +96,8 @@ export function ReportHighlightCard({ palette, report, points, loading, error, o
 
 const styles = StyleSheet.create({
   card: { borderRadius: 18, borderWidth: 1, padding: 14 },
-  headRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  // flex-end: the character sits on the bottom edge of the header block.
+  headRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
   headText: { flex: 1 },
   eyebrow: { fontWeight: '900', letterSpacing: 1.4, fontSize: 11 },
   title: { fontSize: 18, fontWeight: '900', marginTop: 3 },

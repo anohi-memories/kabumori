@@ -47,7 +47,7 @@ test("CharacterSlot keeps the artwork uncropped, decorative and adjustable from 
   assert.ok(!/overflow:\s*'hidden'/.test(slot), "an offset must never crop the artwork");
   assert.ok(slot.includes('importantForAccessibility="no-hide-descendants"'));
   assert.ok(slot.includes("accessible={false}"));
-  for (const name of ["CHARACTER_SLOT_WIDTH", "CHARACTER_OFFSET_X", "CHARACTER_OFFSET_Y", "CHARACTER_ASPECT_RATIO"]) {
+  for (const name of ["CHARACTER_SLOT_WIDTH_PERCENT", "CHARACTER_OFFSET_X", "CHARACTER_OFFSET_Y", "CHARACTER_ASPECT_RATIO"]) {
     assert.ok(new RegExp(`export const ${name} =`).test(slot), name);
   }
   // No frame/glow/background around the transparent artwork.
@@ -56,9 +56,17 @@ test("CharacterSlot keeps the artwork uncropped, decorative and adjustable from 
   assert.ok(!/backgroundColor|border|shadow/.test(slotStyle));
 });
 
-test("the artwork footprint is 3:2 and stays a compact header accessory", async () => {
+test("the artwork takes about the right third of the card, 3:2, bottom-aligned", async () => {
   const slot = await read("src/components/home/character-slot.tsx");
-  const width = Number(/export const CHARACTER_SLOT_WIDTH = (\d+);/.exec(slot)?.[1]);
-  assert.ok(width >= 80 && width <= 120, `width ${width} should stay within a compact header accessory range`);
-  assert.ok(/CHARACTER_SLOT_HEIGHT = Math\.round\(CHARACTER_SLOT_WIDTH \/ CHARACTER_ASPECT_RATIO\)/.test(slot));
+  const percent = Number(/export const CHARACTER_SLOT_WIDTH_PERCENT = '(\d+)%';/.exec(slot)?.[1]);
+  assert.ok(percent >= 30 && percent <= 40, `${percent}% should stay around one third of the card`);
+  assert.ok(/aspectRatio: CHARACTER_ASPECT_RATIO/.test(slot));
+  const card = await read("src/components/home/report-highlight-card.tsx");
+  assert.ok(/headRow: \{[^}]*alignItems: 'flex-end'/.test(card), "the character sits on the bottom edge of the header block");
+});
+
+test("the report title shrinks instead of wrapping a stray glyph when the text column is narrow", async () => {
+  const card = await read("src/components/home/report-highlight-card.tsx");
+  const title = card.slice(card.indexOf("styles.title, {"), card.indexOf("今日の かぶモリレポート"));
+  assert.ok(title.includes("numberOfLines={1}") && title.includes("adjustsFontSizeToFit") && title.includes("minimumFontScale"));
 });
