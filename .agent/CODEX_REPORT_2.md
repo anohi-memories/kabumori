@@ -1,3 +1,80 @@
+## H2 — PR #52 Phase 4c final concurrency acceptance — 2026-09-29
+
+- task_id: `x-social-mobile-account-deletion-final-concurrency-acceptance-20260929`
+- result / verdict: **PASS for source; source merge ready: YES, subject to C2 acceptance.** The previously reproduced first-onboarding race and checked-Deno typing defect are corrected at the exact reviewed head. This is not production activation approval.
+- status: `review_required`; next_owner: `chatgpt`.
+- exact_reviewed_head: `4bc819555c07c8792f5b78ea29aa6b9a35694042`; Draft PR #52, branch `claude/g3-account-lifecycle-p4`. Fresh PR fetch and GitHub API read-back at start/end both confirmed the exact OPEN/DRAFT head; base `249df4ce4debd2de21db101fecbe4cd735c56e39`.
+- previous_failed_head: `002d24ac99df2fbdf4e2423c1428ccb488a79f29`.
+- fresh_origin_main_at_start: `bf260da7f094ca7f66bd8a8cc72c5b864f482506`; final report synchronization base after the other-workstream fresh-check: `38c2bd66f7711a0b5727a4bc862e45fc3071d243` (H2 control files unchanged remotely).
+- independent_review_worktree: `/private/tmp/kabumori-h2-account-deletion-final-20260929`; reused only the previous clean H2-owned checkout and fast-forwarded to the exact PR head. Source remains Git-clean, with no H2 source fixes. Managed-worktree tool was unavailable for this mirror chat (Not a git repository); no G3 checkout was used.
+- implementation_commit: existing G3 `4bc819555c07c8792f5b78ea29aa6b9a35694042`; H2 implementation commits: **0**.
+- changed_files by H2: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md` only, in `/private/tmp/kabumori-h2-account-deletion-report-20260929`.
+- report_commit_hash / push: pending report-only synchronization; confirmed delivery will be recorded after fresh remote read-back.
+- merge / deploy / production_mutation: **0 / 0 / 0**.
+
+### A/B — Independent two-direction proof, with actual lock-wait observation
+
+Used PostgreSQL **17.11**, an H2-only local Unix-socket cluster at `/private/tmp/kabumori-h2-concurrency-proof.W6NlKH`, fake Auth/Vault data and a **non-superuser** fixture owner. The real, unmodified `begin_social_mobile_x_oauth_connection` RPC was loaded from the existing onboarding and reconnect migrations. No replacement writer, real credential or production fixture was used.
+
+1. **Onboarding first, still uncommitted:** A invokes the real authenticated first-onboarding RPC, reaches its completed creation point, then stays open. B starts service-role deletion acquire. H2 independently queries `pg_stat_activity` and observes B waiting on **Lock/advisory** before letting A commit. B then snapshots the committed new workspace. Credentials → mark-X-revoked(empty set for this never-connected fixture) → purge → finalize run as separate committed service-role calls. Finalize returns `completed`, `login_deleted=true`.
+2. **Deletion first:** B acquires deletion inside an open transaction. A invokes real first onboarding. H2 observes A waiting on **Lock/advisory**, then commits B. A fails with `SOCIAL_MOBILE_ACCOUNT_DELETION_IN_PROGRESS`; its transaction creates no workspace. Using the existing lease, the remaining deletion calls finish with `completed`.
+3. After each reported success, independent counts for brands, accounts, memberships, OAuth states (including initiated-by-user), refresh references, tombstones and Auth user are **all 0**. Local `pg_stat_database.deadlocks=0` throughout the independent protocol proof. This verifies the original adverse interleaving, not just a passing reconnect on an already committed workspace.
+
+The existing exact-head runner was also rerun independently and reported all eight markers: BEHAVIOR, ACQUIRE_RACE, RECONNECT_RACE, ONBOARDING_FIRST_RACE(orphan=0), DELETION_FIRST_RACE(orphan=0), ISOLATION_GUARD, NO_DEADLOCK, CLEANUP **PASS**.
+
+### C — Common lock, lock order, isolation and intended RPC boundary
+
+- Shared primitive: `social_mobile_account_deletion_workspace_lock(text)`, a transaction advisory lock on `hashtextextended('social_mobile_workspace:' || derived_workspace, 0)`.
+- The BEFORE INSERT guard on `brands` and `brand_memberships` takes it before creation/FK key-share critical points; deletion acquire takes it before its first workspace snapshot/row locks. Lease-holding and operator steps preserve deletion-lock → workspace-lock → row/Auth-lock order. Existing begin/complete OAuth RPC bodies were not changed.
+- Both writer guard and mutation-capable outer deletion functions are volatile/default-volatile. Under READ COMMITTED the guard reads the tombstone after its lock wait and acquire reads committed workspace rows after waiting; both actual observations above prove the relevant post-lock visibility.
+- Independent **REPEATABLE READ and SERIALIZABLE** first-onboarding probes both fail before workspace creation with `SOCIAL_MOBILE_WORKSPACE_CREATION_REQUIRES_READ_COMMITTED`; workspace rows remain 0. This is a deliberate fail-closed prerequisite, not a silent stale-snapshot acceptance.
+- [PostgREST transaction documentation](https://docs.postgrest.org/en/v13/references/transactions.html#isolation-level) confirms READ COMMITTED by default, but role/function overrides can change it. A future rollout must read back the actual authenticated/service RPC isolation settings; no production setting was inspected or changed in this review. [PG17 isolation](https://www.postgresql.org/docs/17/transaction-iso.html) and [advisory locking](https://www.postgresql.org/docs/17/explicit-locking.html#ADVISORY-LOCKS) were checked. No claim that every unrelated writer is globally deadlock-free is made; the intended two-direction onboarding/deletion protocol is proven without deadlock.
+
+### D — Finalize invariant / negative and mutation evidence
+
+- Under deletion/workspace locks and the Auth row lock, finalize rechecks brands/memberships/accounts/OAuth-state presence before removing login/tombstone.
+- An independent fake-only lease-authorized row-reappearance probe returned `operator_required / WORKSPACE_REAPPEARED`; Auth and tombstone remained. Existing full behavior proof makes the same assertion. This is a defensive owner-only fixture, not evidence an authenticated client can forge a lease.
+- Four H2-only mutation checks changed **only disposable DB function bodies**, restored the exact candidate bodies afterward and detected:
+  1. creator guard's workspace-lock removal;
+  2. acquire's workspace-lock removal;
+  3. isolation guard removal;
+  4. finalize's orphan invariant removal.
+- The first two mutations lose the expected committed-workspace snapshot/invariant and fail the independent complete-success assertions; this is not relabeled a real-provider test. Finalize mutation incorrectly accepts the reappeared row and is detected. The unrelated/redundant hold-lock mutation was not required or counted as detected.
+- Scratch proof scripts are preserved (`acceptance.sql`, `races.mjs`) under the above H2-only directory. C2 can use this Report directly without opening local artifacts.
+
+### E — Checked Deno and required regressions
+
+- `DENO_NO_PACKAGE_JSON=1 deno test --cached-only --no-lock --allow-read=supabase/functions/social-mobile-account-delete supabase/functions/social-mobile-account-delete/`: **17/17 PASS, type checking enabled**. No `--no-check` was used. The environment flag isolates unrelated root package resolution, not TypeScript checking.
+- `DENO_NO_PACKAGE_JSON=1 deno check --cached-only --no-lock supabase/functions/social-mobile-account-delete/*.ts`: **all 7 files PASS**, including tests and entrypoint; TS2353 is gone.
+- Social-mobile `npm test`: **72/72 PASS**. Data-view `node --experimental-strip-types --test src/domain/data-view.test.ts`: **14/14 PASS**.
+- `npm run typecheck` / `npm run lint`: **PASS**.
+- `EXPO_NO_TELEMETRY=1 npx expo export --platform web --platform ios --output-dir <H2 scratch>/expo-export`: **both PASS**. This is bundle proof only, not signed-in real-device QA. No real backend env/secret was supplied.
+- Full PR `git diff --check 249df4c..HEAD` and Phase 4c `git diff --check 002d24a..HEAD`: **PASS**. Exact source checkout stays Git-clean; tracked packages unchanged.
+- Candidate apply inside BEGIN → read back every candidate RPC's client-denied ACL/empty search_path, SECURITY DEFINER except the pure/internal helpers, service-role-denied lock helper/direct state reads, RLS and all **11** guard triggers → ROLLBACK → object absence: **PASS**. Reapply only in the disposable DB for behavior/race proof. Final ACL read-back: invalid entries **0**, test owner superuser=false.
+- Client credential scan found only the existing rejection pattern for service-role/secret input, not a key. Edge console/logger output paths: **0**. Mock tests verify token-free responses and server-derived user identity. Audit fake-data tests remain green.
+- Disposable runner DB cleanup PASS; independent `h2_concurrency_proof` DB removed and database count read back **0**; H2-only PG server stopped. Test scripts/export preserved, no material user files deleted.
+
+### Previous accepted boundaries preserved (focused spot-check)
+
+- **R2:** same server-derived scope; scope mismatch rejects; social-only retains Auth/main profile; late profile before finalize preserves login. Full DB behavior proves these.
+- **R3:** shared/duplicate/foreign Vault references refuse before revoke; credential fingerprints and purge ownership checks remain unchanged. Full DB proof preserves other-workspace secrets.
+- **R4:** verified/connected missing credentials stays operator-required; never-connected has no false required revoke. DB + Edge tests PASS.
+- **R5:** durable Apple success checkpoint survives downstream failure; resume does not reuse a consumed code; client drops codes after attempts. DB + Edge/client tests PASS.
+- **R6:** OPTIONS/CORS and truthful native-iOS Apple requirements unchanged; HTTP tests PASS.
+- **Exact client user/session pin:** switched user or same-user/new session makes no deletion request; full mobile test PASS.
+- No additional Edge implementation, auth/users finalize operation, legal wording or cross-product deletion design changed in Phase 4c. Review does not reopen accepted unrelated boundaries.
+
+### C2 disposition / remaining production gates / safety
+
+- **No remaining source blocker found in this focused acceptance.** C2 may accept the exact reviewed head for source merge. H2 performed no merge.
+- Production remains unapproved/unactivated. Required later gates: exact single-file migration + owner/privilege/managed Auth/Storage/FK/ACL and isolation read-back; JWT-verification-ON deletion Edge deploy + runtime byte comparison; disposable-account real X/Apple/native/browser E2E and lost-response recovery; Kabumori-side delete coordination; owner/legal retention/support/terms decisions and explicit build activation. Issued JWTs still are not instantly invalidated; previous Report's Auth operational caveats remain applicable.
+- Supabase/PostgreSQL skills guided current changelog, isolation, lock-order and privilege verification. Changelog PG17.11 pgcrypto/index warning does not request any production maintenance here; this candidate uses core SHA-256 and no legacy pgcrypto encryption.
+- Production reads/writes/schema/migrations/RLS/RPC/Auth/Vault/Storage/Cron/settings/provider console/OAuth changes, deploy, real X/Apple/OpenAI/Push/API calls/posts: **0**. Only GitHub/official-document read requests, isolated fake-only tests and Report/TASK Git synchronization.
+- Formal repo existing uncommitted changes, other slot source/control files, apps/admin, HANDOFF, root package/lock/.env/src and user dev servers: **untouched**. Latest other-workstream main advances are fast-forwarded only into the H2 Report checkout, not staged as H2 changes.
+- next_recommendation: C2 review this PASS evidence and decide source merge separately from any explicitly approved future production rollout. **STOP for C2.**
+
+---
+
 ## H2 — PR #52 Phase 4b final acceptance — 2026-09-29
 
 - task_id: `x-social-mobile-account-deletion-final-acceptance-review-20260929`

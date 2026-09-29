@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-account-deletion-final-concurrency-acceptance-20260929
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: PR #52 Phase 4c exact headの最終focused acceptance。前回残ったfirst-onboarding/deletion concurrency holeとchecked Deno typing fixだけを独立再現し、source merge可否を確定する。
@@ -113,3 +113,12 @@ Report:
 - remaining production gates
 
 Then status -> review_required, next_owner -> chatgpt, STOP for C2.
+
+## H2 completion — 2026-09-29
+
+- verdict: PASS for the exact source head `4bc819555c07c8792f5b78ea29aa6b9a35694042`; source merge ready: YES, subject to C2 accepting this review. No merge or production rollout was performed.
+- independently observed common advisory-lock waits in both real first-onboarding/deletion orders; completed deletion leaves zero orphan rows.
+- finalize refuses reappeared workspace rows; non-READ-COMMITTED creation fails closed; checked Deno 17/17 and all Edge file checks PASS.
+- disposable full behavior/ACL/race/reconnect/cleanup, mobile 72/72, data-view 14/14, typecheck/lint, Expo Web+iOS, diff checks PASS. Four focused disposable DB mutations detected.
+- production_mutation=0; source fixes=0. Exact evidence and rollout gates are at the head of `.agent/CODEX_REPORT_2.md`.
+- STOP for C2.
