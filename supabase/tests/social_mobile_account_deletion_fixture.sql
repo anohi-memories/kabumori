@@ -11,12 +11,35 @@ alter default privileges in schema public grant execute on functions to anon, au
 
 create schema auth;
 create table auth.users (id uuid primary key);
+-- Minimal auth.uid(): the caller's JWT subject, as PostgREST exposes it.
+create function auth.uid() returns uuid language sql stable
+as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+grant usage on schema auth to anon, authenticated, service_role;
+grant execute on function auth.uid() to anon, authenticated, service_role;
 
 create schema vault;
 create table vault.secrets (id uuid primary key default gen_random_uuid(), secret text not null);
 create view vault.decrypted_secrets as select s.id, s.secret as decrypted_secret from vault.secrets s;
+create function vault.create_secret(new_secret text, new_name text default null, new_description text default '', new_key_id uuid default null)
+returns uuid language plpgsql security definer set search_path = '' as $$
+declare v_id uuid;
+begin
+  insert into vault.secrets (secret) values (new_secret) returning id into v_id;
+  return v_id;
+end;
+$$;
+create function vault.update_secret(secret_id uuid, new_secret text default null, new_name text default null, new_description text default null, new_key_id uuid default null)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  update vault.secrets set secret = coalesce(new_secret, secret) where id = secret_id;
+end;
+$$;
 revoke all on schema vault from public;
 revoke all on all tables in schema vault from public, anon, authenticated, service_role;
+revoke all on all functions in schema vault from public, anon, authenticated;
+
+-- Kabumori main-app data keyed to the shared login.
+create table public.profiles (id uuid primary key references auth.users (id) on delete cascade, display_name text);
 
 create table public.admin_users (user_id uuid primary key references auth.users (id) on delete cascade);
 

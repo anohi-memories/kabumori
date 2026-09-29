@@ -162,16 +162,16 @@ test('exact recovery user/session completes; sign-in switch and restart cannot r
 // Objects created inside the vm sandbox belong to another realm.
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
-test('account deletion: success only on the server\'s explicit confirmation; the body never names a user', async () => {
+test('account deletion: success only on the server\'s explicit confirmation; pinned to the confirmed user + session', async () => {
   const requests = [];
   const uuid = '11111111-1111-4111-8111-111111111111';
   const answers = [
+    { status: 200, body: { ok: true, scope: 'social_and_login', state: 'none', apple_supported: true, apple_code_required: false } },
     { status: 500, body: { ok: false, error: 'X_REVOKE_FAILED' } },
     { status: 200, body: {} },
-    { status: 200, body: { ok: 'yes' } },
-    { status: 409, body: { ok: false, error: 'DELETION_BLOCKED_SHARED_WORKSPACE' } },
+    { status: 409, body: { ok: false, error: 'DELETION_OPERATOR_REQUIRED' } },
     null,
-    { status: 200, body: { ok: true } },
+    { status: 200, body: { ok: true, login_deleted: true } },
   ];
   const harness = await providerHarness({ fetchImpl: async (url, init) => {
     requests.push({ url, init });
@@ -179,22 +179,33 @@ test('account deletion: success only on the server\'s explicit confirmation; the
     if (!answer) throw new Error('network down');
     return { status: answer.status, json: async () => answer.body };
   } });
-  harness.emit('SIGNED_IN', { ...session(uuid, 'session-u'), user: { id: uuid } });
-  for (const expected of ['X_REVOKE_FAILED', 'FAILED', 'FAILED', 'DELETION_BLOCKED_SHARED_WORKSPACE', 'FAILED']) {
-    assert.deepEqual(plain(await harness.render().deleteAccount()), { ok: false, code: expected });
+  const mine = { ...session(uuid, 'session-u'), user: { id: uuid } };
+  const context = { userId: uuid, sessionId: 'session-u' };
+  harness.emit('SIGNED_IN', mine);
+  assert.deepEqual(plain(await harness.render().previewDeletion()), { ok: true, scope: 'social_and_login', state: 'none', appleSupported: true, appleCodeRequired: false });
+  for (const expected of ['X_REVOKE_FAILED', 'FAILED', 'DELETION_OPERATOR_REQUIRED', 'FAILED']) {
+    assert.deepEqual(plain(await harness.render().deleteAccount({ context, scope: 'social_and_login' })), { ok: false, code: expected });
     assert.deepEqual(harness.signOuts, [], 'no local sign-out without a confirmed deletion');
-    assert.equal(harness.render().session?.user.id, uuid);
   }
-  assert.deepEqual(plain(await harness.render().deleteAccount('apple-code')), { ok: true });
-  assert.deepEqual(plain(harness.signOuts), [{ scope: 'local' }], 'server already deleted the user: local sign-out only');
+  // H2 client-context issue: another user, or a new session of the same user, after confirmation.
+  const sent = requests.length;
+  harness.emit('SIGNED_IN', harness.sessionB);
+  assert.deepEqual(plain(await harness.render().deleteAccount({ context, scope: 'social_and_login' })), { ok: false, code: 'SESSION_CHANGED' });
+  harness.emit('SIGNED_IN', { ...session(uuid, 'session-u2'), user: { id: uuid } });
+  assert.deepEqual(plain(await harness.render().deleteAccount({ context, scope: 'social_and_login' })), { ok: false, code: 'SESSION_CHANGED' });
+  assert.equal(requests.length, sent, 'no request is made for a switched session');
+  harness.emit('SIGNED_IN', mine);
+  assert.deepEqual(plain(await harness.render().deleteAccount({ context, scope: 'social_and_login', appleAuthorizationCode: 'apple-code' })), { ok: true, loginDeleted: true, loginKept: false });
+  assert.deepEqual(plain(harness.signOuts), [{ scope: 'local' }], 'local sign-out only after the server confirmed');
   assert.deepEqual(harness.removed, [`social-mobile:onboarding:v1:${uuid}`]);
   assert.equal(harness.render().session, null);
   for (const { url, init } of requests) {
     assert.equal(url, 'https://fixture.supabase.co/functions/v1/social-mobile-account-delete');
-    assert.equal(init.headers.Authorization, `Bearer ${session(uuid, 'session-u').access_token}`);
+    assert.equal(init.headers.Authorization, `Bearer ${mine.access_token}`);
   }
-  assert.deepEqual(JSON.parse(requests[0].init.body), { confirmation: 'DELETE_MY_ACCOUNT' });
-  assert.deepEqual(JSON.parse(requests.at(-1).init.body), { confirmation: 'DELETE_MY_ACCOUNT', apple_authorization_code: 'apple-code' });
+  assert.deepEqual(JSON.parse(requests[0].init.body), { action: 'preview' });
+  assert.deepEqual(JSON.parse(requests[1].init.body), { action: 'delete', confirmation: 'DELETE_MY_ACCOUNT', expected_scope: 'social_and_login' });
+  assert.deepEqual(JSON.parse(requests.at(-1).init.body), { action: 'delete', confirmation: 'DELETE_MY_ACCOUNT', expected_scope: 'social_and_login', apple_authorization_code: 'apple-code' });
 });
 
 test('account deletion is setup-pending unless the build enables it', async () => {

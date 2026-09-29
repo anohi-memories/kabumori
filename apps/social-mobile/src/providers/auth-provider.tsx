@@ -22,9 +22,14 @@ import {
   ACCOUNT_DELETION_CONFIRMATION,
   ACCOUNT_DELETION_FUNCTION,
   deletionAvailability,
+  parseDeletionPreview,
   parseDeletionResponse,
+  sameDeletionContext,
   type DeletionAvailability,
+  type DeletionContext,
   type DeletionOutcome,
+  type DeletionPreview,
+  type DeletionScope,
   type ReauthMethod,
 } from '@/domain/account-deletion';
 import { onboardingStorageKey } from '@/domain/onboarding';
@@ -44,7 +49,7 @@ import {
   type SocialProviderId,
 } from '@/domain/auth-flows';
 import { authReleaseReadiness, type AppAuthConfig, type AuthReleaseReport, type ProviderReleaseReadiness } from '@/domain/auth-release-readiness';
-import { nextRecoveryBinding, recoveryMatches, type RecoveryBinding } from '@/domain/recovery-binding';
+import { nextRecoveryBinding, recoveryMatches, sessionIdOf, type RecoveryBinding } from '@/domain/recovery-binding';
 
 type AuthContextValue = {
   /** The app session without provider OAuth credentials. */
@@ -70,9 +75,12 @@ type AuthContextValue = {
   /** Account deletion is offered only when enabled for this build (backend reviewed + deployed). */
   accountDeletion: DeletionAvailability;
   /** A fresh sign-in with one of the user's own methods; must end as the same user. */
-  reauthenticate: (method: ReauthMethod, password?: string) => Promise<{ ok: true; appleAuthorizationCode?: string } | { ok: false; cancelled?: boolean; message: string }>;
+  /** On success: the exact user + session the confirmation belongs to (deletion is pinned to it). */
+  reauthenticate: (method: ReauthMethod, password?: string) => Promise<{ ok: true; context: DeletionContext; appleAuthorizationCode?: string } | { ok: false; cancelled?: boolean; message: string }>;
+  /** Read-only: the scope and Apple needs the server would apply now. */
+  previewDeletion: () => Promise<DeletionPreview>;
   /** Server-side deletion of the signed-in account; success only when the server confirmed it. */
-  deleteAccount: (appleAuthorizationCode?: string) => Promise<DeletionOutcome>;
+  deleteAccount: (input: { context: DeletionContext; scope: DeletionScope; appleAuthorizationCode?: string }) => Promise<DeletionOutcome>;
 };
 const AuthContext = createContext<AuthContextValue | null>(null);
 const NO_BACKEND = { ok: false as const, message: 'Supabase接続設定がありません。' };
@@ -199,49 +207,80 @@ export function AuthProvider({ children }: PropsWithChildren) {
     const userId = session?.user.id;
     const address = session?.user.email;
     if (!supabase || !host || !userId) return NO_BACKEND;
+    let appleAuthorizationCode: string | undefined;
     if (method === 'email') {
       if (!address || !password || !email.signIn) return { ok: false, message: authFlowMessage('provider_disabled') };
       const { data, error: reauthError } = await supabase.auth.signInWithPassword({ email: address, password });
       if (reauthError) return { ok: false, message: signInErrorMessage(reauthError) };
       if (data.user?.id !== userId) { await supabase.auth.signOut(); return { ok: false, message: authFlowMessage('link_user_mismatch') }; }
-      return { ok: true };
+    } else {
+      if (!readiness(method).usableNow) return { ok: false, message: authFlowMessage('provider_disabled') };
+      if (method === 'apple' && applePath(build) === 'native') {
+        const result = await reauthWithAppleNative(supabase, userId);
+        if (!result.ok) return result;
+        appleAuthorizationCode = result.appleAuthorizationCode;
+      } else {
+        const result = await reauthWithOAuthProvider(supabase, host, method, userId);
+        if (!result.ok) return result;
+      }
     }
-    if (!readiness(method).usableNow) return { ok: false, message: authFlowMessage('provider_disabled') };
-    if (method === 'apple' && applePath(build) === 'native') {
-      const result = await reauthWithAppleNative(supabase, userId);
-      return result.ok ? { ok: true, appleAuthorizationCode: result.appleAuthorizationCode } : result;
-    }
-    const result = await reauthWithOAuthProvider(supabase, host, method, userId);
-    return result.ok ? { ok: true } : result;
+    // Pin the confirmation to the exact user + session this sign-in produced.
+    const { data } = await supabase.auth.getSession();
+    const sessionId = sessionIdOf(data.session);
+    if (data.session?.user.id !== userId || !sessionId) return { ok: false, message: authFlowMessage('link_user_mismatch') };
+    return { ok: true, context: { userId, sessionId }, appleAuthorizationCode };
   }, [build, email.signIn, readiness, session?.user.email, session?.user.id]);
 
-  const deleteAccount = useCallback<AuthContextValue['deleteAccount']>(async (appleAuthorizationCode) => {
+  const callDeletion = useCallback(async (payload: Record<string, unknown>, accessToken: string) => {
+    if (!config.ok) throw new Error('no backend');
+    const response = await fetch(`${config.config.url.replace(/\/$/u, '')}/functions/v1/${ACCOUNT_DELETION_FUNCTION}`, {
+      method: 'POST',
+      headers: { apikey: config.config.publishableKey, Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return { status: response.status, body: await response.json().catch(() => null) as unknown };
+  }, [config]);
+
+  const previewDeletion = useCallback<AuthContextValue['previewDeletion']>(async () => {
+    if (!supabase || !config.ok) return { ok: false, code: 'FAILED' };
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) return { ok: false, code: 'AUTH_REQUIRED' };
+    try {
+      const { status, body } = await callDeletion({ action: 'preview' }, data.session.access_token);
+      return parseDeletionPreview(status, body);
+    } catch {
+      return { ok: false, code: 'FAILED' };
+    }
+  }, [callDeletion, config.ok]);
+
+  const deleteAccount = useCallback<AuthContextValue['deleteAccount']>(async ({ context, scope, appleAuthorizationCode }) => {
     if (!supabase || !config.ok) return { ok: false, code: 'FAILED' };
     const { data } = await supabase.auth.getSession();
     const current = data.session;
     if (!current) return { ok: false, code: 'AUTH_REQUIRED' };
+    // The confirmation belongs to one user + session; any switch cancels it.
+    if (!sameDeletionContext(context, { userId: current.user.id, sessionId: sessionIdOf(current) })) return { ok: false, code: 'SESSION_CHANGED' };
     let outcome: DeletionOutcome;
     try {
-      const response = await fetch(`${config.config.url.replace(/\/$/u, '')}/functions/v1/${ACCOUNT_DELETION_FUNCTION}`, {
-        method: 'POST',
-        headers: { apikey: config.config.publishableKey, Authorization: `Bearer ${current.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(appleAuthorizationCode
-          ? { confirmation: ACCOUNT_DELETION_CONFIRMATION, apple_authorization_code: appleAuthorizationCode }
-          : { confirmation: ACCOUNT_DELETION_CONFIRMATION }),
-      });
-      outcome = parseDeletionResponse(response.status, await response.json().catch(() => null));
+      const { status, body } = await callDeletion({
+        action: 'delete',
+        confirmation: ACCOUNT_DELETION_CONFIRMATION,
+        expected_scope: scope,
+        ...(appleAuthorizationCode ? { apple_authorization_code: appleAuthorizationCode } : {}),
+      }, current.access_token);
+      outcome = parseDeletionResponse(status, body);
     } catch {
       outcome = { ok: false, code: 'FAILED' };
     }
     if (!outcome.ok) return outcome;
-    // The server deleted the user: forget this device's session and per-user state.
+    // The server confirmed: forget this device's session and per-user state.
     try { await AsyncStorage.removeItem(onboardingStorageKey(current.user.id)); } catch { /* best effort */ }
     await supabase.auth.signOut({ scope: 'local' });
     setSession(null);
     recoveryRef.current = null;
     setRecovery(null);
     return outcome;
-  }, [config]);
+  }, [callDeletion, config.ok]);
 
   const value = useMemo<AuthContextValue>(() => ({
     session, loading, error, backendAvailable: Boolean(supabase), readiness, email,
@@ -305,8 +344,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
     },
     accountDeletion: deletionAvailability({ enabledFlag: ACCOUNT_DELETION_ENABLED, backendAvailable: Boolean(supabase) }),
     reauthenticate,
+    previewDeletion,
     deleteAccount,
-  }), [deleteAccount, email, error, linkProvider, loading, readiness, reauthenticate, recovery, releaseReport, session, settings, signInWithProvider]);
+  }), [deleteAccount, email, error, linkProvider, loading, previewDeletion, readiness, reauthenticate, recovery, releaseReport, session, settings, signInWithProvider]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

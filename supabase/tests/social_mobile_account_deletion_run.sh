@@ -46,6 +46,9 @@ create database $db owner $owner;
 SQL
 
 "${as_owner[@]}" -f "$here/social_mobile_account_deletion_fixture.sql"
+# The real, unmodified onboarding/reconnect RPCs (the writers R1 must stop).
+"${as_owner[@]}" -f "$here/../migrations/20260919120000_social_mobile_x_oauth_onboarding.sql"
+"${as_owner[@]}" -f "$here/../migrations/20260922003101_social_mobile_x_oauth_reconnect_preserve_verified.sql"
 "${as_owner[@]}" -f "$migration"
 if "${as_owner[@]}" -f "$migration" > /dev/null 2>&1; then
   echo "FAIL re-apply was not refused" >&2; exit 1
@@ -55,21 +58,32 @@ grep -q SOCIAL_MOBILE_DELETION_BEHAVIOR_PASS <<<"$out" || { echo "FAIL behavior:
 if grep -q 'fake_' <<<"$out"; then echo "FAIL token material in output" >&2; exit 1; fi
 echo "SOCIAL_MOBILE_DELETION_BEHAVIOR_PASS"
 
-# Concurrency: two purges for the same user while the first holds its
-# transaction open. The advisory lock serializes them: one purges, the other
-# finds nothing to purge. Never two partial deletions, never an error.
+# Concurrency 1: two deletion requests for the same user. The first holds its
+# transaction open; the second waits on the per-user lock, then sees the live
+# lease and answers in_progress. Exactly one lease.
 user="00000000-0000-4000-8000-0000000000aa"
 "${as_owner[@]}" -c "select public.fixture_user_with_workspace('$user', 'R')" >/dev/null
-"${as_service[@]}" -c "set role service_role; select public.social_mobile_account_deletion_begin('$user')" >/dev/null
-"${as_service[@]}" -c "begin; set local role service_role; select public.social_mobile_account_deletion_purge('$user'); select pg_sleep(2); commit;" > "$tmp/one" 2>&1 &
+acq="select public.social_mobile_account_deletion_acquire('$user', 'social_and_login', false)"
+"${as_service[@]}" -c "begin; set local role service_role; $acq; select pg_sleep(2); commit;" > "$tmp/one" 2>&1 &
 sleep 0.5
-"${as_service[@]}" -c "set role service_role; select public.social_mobile_account_deletion_purge('$user');" > "$tmp/two" 2>&1 &
+"${as_service[@]}" -c "set role service_role; $acq;" > "$tmp/two" 2>&1 &
 wait
-grep -q '"status": "purged"' "$tmp/one" || { echo "FAIL first purge: $(cat "$tmp/one")" >&2; exit 1; }
-grep -q '"status": "nothing_to_purge"' "$tmp/two" || { echo "FAIL second purge: $(cat "$tmp/two")" >&2; exit 1; }
-left="$("${as_service[@]}" -c "select count(*) from vault.secrets where secret like 'fake_R_%'")"
-[[ "$left" == 0 ]] || { echo "FAIL secrets left after race: $left" >&2; exit 1; }
-echo "SOCIAL_MOBILE_DELETION_RACE_PASS"
+grep -q '"status": "acquired"' "$tmp/one" || { echo "FAIL first acquire: $(cat "$tmp/one")" >&2; exit 1; }
+grep -q '"status": "in_progress"' "$tmp/two" || { echo "FAIL second acquire: $(cat "$tmp/two")" >&2; exit 1; }
+echo "SOCIAL_MOBILE_DELETION_ACQUIRE_RACE_PASS"
+
+# Concurrency 2: an X reconnect racing an uncommitted deletion start. The
+# reconnect waits on the account row lock and then fails closed on the
+# committed tombstone; it never installs new credentials.
+user2="00000000-0000-4000-8000-0000000000bb"
+"${as_owner[@]}" -c "select public.fixture_user_with_workspace('$user2', 'Q')" >/dev/null
+"${as_service[@]}" -c "begin; set local role service_role; select public.social_mobile_account_deletion_acquire('$user2', 'social_and_login', false); select pg_sleep(2); commit;" > "$tmp/del" 2>&1 &
+sleep 0.5
+"${as_service[@]}" -c "begin; select set_config('request.jwt.claim.sub', '$user2', true); set local role authenticated; select * from public.begin_social_mobile_x_oauth_connection(repeat('9', 64), 'kabumori-social://oauth-callback', now() + interval '10 minutes'); commit;" > "$tmp/oauth" 2>&1 &
+wait
+grep -q '"status": "acquired"' "$tmp/del" || { echo "FAIL deletion start: $(cat "$tmp/del")" >&2; exit 1; }
+grep -q 'SOCIAL_MOBILE_ACCOUNT_DELETION_IN_PROGRESS' "$tmp/oauth" || { echo "FAIL reconnect not refused: $(cat "$tmp/oauth")" >&2; exit 1; }
+echo "SOCIAL_MOBILE_DELETION_RECONNECT_RACE_PASS"
 
 cleanup
 trap - EXIT
