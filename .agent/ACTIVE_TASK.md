@@ -45,11 +45,11 @@
 - owner: claude
 - slot: claude-1
 - status: ready
-- task_id: kabumori-home-v3-postmerge-ios-preview-qa-20260929
+- task_id: kabumori-home-v3-routing-fix-postmerge-ios-preview-qa-20260929
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: PR #53 K1 PASS + merge `3b9ca042`; fresh-main EAS internal/preview iOS build and user real-device acceptance for Home v3, Topic Detail, Settings safe-area and approved bottom tabs. Source/prod mutation prohibited. Recommended Sonnet5（中）
+- allocation: PR #55 K1 PASS + merge `e8326163`; build one fresh EAS internal/preview iOS from current main and rerun user real-device navigation/Home/Topic/Settings QA. Broken build `d9ed1da1...` prohibited. Source/prod mutation prohibited. Recommended Sonnet5（中）
 
 ## Claude G2
 - owner: claude
