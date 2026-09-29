@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 
 import type { KabumoriPalette } from '@/constants/kabumori-theme';
 import type { ImportantStockNews } from '@/lib/important-news';
-import { formatNewsTime, importanceLabel } from '@/lib/news-labels';
+import { categoryLabels, formatNewsTime, importanceLabel } from '@/lib/news-labels';
 import { buildNewsPresentation } from '@/lib/news-presentation';
 import { homeNewsVisual } from '@/lib/home-news-visual';
 
@@ -63,6 +63,7 @@ export function HomeNewsSection({
         const importance = importanceLabel(item);
         const view = buildNewsPresentation(item);
         const visual = homeNewsVisual(item);
+        const category = categoryLabels(item.coverage_categories)[0] ?? null;
         return (
           <Pressable
             key={item.news_id}
@@ -83,7 +84,14 @@ export function HomeNewsSection({
               <Text style={[styles.rowTitle, { color: palette.text }]} numberOfLines={2}>
                 {view.title}
               </Text>
-              <Text style={[styles.rowTime, { color: palette.muted }]}>{formatNewsTime(item.news_time)}</Text>
+              <View style={styles.rowFooter}>
+                {category ? (
+                  <Text style={[styles.category, { color: palette.accent, backgroundColor: palette.soft }]} numberOfLines={1}>
+                    {category}
+                  </Text>
+                ) : null}
+                <Text style={[styles.rowTime, { color: palette.muted }]}>{formatNewsTime(item.news_time)}</Text>
+              </View>
             </View>
           </Pressable>
         );
@@ -112,6 +120,8 @@ const styles = StyleSheet.create({
   subtitle: { flex: 1, fontSize: 11, fontWeight: '800' },
   importance: { fontSize: 11, fontWeight: '900' },
   rowTitle: { fontSize: 15, lineHeight: 21, fontWeight: '900', marginTop: 4 },
-  rowTime: { fontSize: 11, marginTop: 5 },
+  rowFooter: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  category: { fontSize: 10, fontWeight: '800', borderRadius: 99, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden' },
+  rowTime: { fontSize: 11 },
   pressed: { opacity: 0.7 },
 });

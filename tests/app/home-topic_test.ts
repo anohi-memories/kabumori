@@ -85,9 +85,22 @@ test("rejects an unrecognized difficulty rather than guessing", () => {
 
 // --- daily tip row validation ----------------------------------------------
 
-test("parses a well-formed RPC row into a HomeTopic", () => {
+test("parses a well-formed RPC row into a HomeTopic, keeping id and category", () => {
   const row = { id: "t1", title: "PERって何？", category: "株の基礎", base_text: "PERの説明。", difficulty: "初級" };
-  assert.deepEqual(parseDailyTipRow(row), { level: "beginner", title: "PERって何？", body: "PERの説明。" });
+  assert.deepEqual(parseDailyTipRow(row), {
+    id: "t1",
+    level: "beginner",
+    category: "株の基礎",
+    title: "PERって何？",
+    body: "PERの説明。",
+  });
+});
+
+test("a row with a missing/blank category still parses, with category null", () => {
+  const row = { id: "t1", title: "t", base_text: "b", difficulty: "初級" };
+  assert.deepEqual(parseDailyTipRow(row), { id: "t1", level: "beginner", category: null, title: "t", body: "b" });
+  const blank = { id: "t1", title: "t", category: "  ", base_text: "b", difficulty: "初級" };
+  assert.equal(parseDailyTipRow(blank)?.category, null);
 });
 
 test("no row (RPC returned nothing) is the honest empty state, not an error", () => {
@@ -100,7 +113,8 @@ test("a row with an unrecognized difficulty is rejected rather than shown with a
   assert.equal(parseDailyTipRow(row), null);
 });
 
-test("a row missing title or base_text is rejected rather than shown blank", () => {
+test("a row missing id, title, or base_text is rejected rather than shown blank/mismatched", () => {
+  assert.equal(parseDailyTipRow({ id: "", title: "t", base_text: "b", difficulty: "初級" }), null);
   assert.equal(parseDailyTipRow({ id: "t1", title: "", base_text: "b", difficulty: "初級" }), null);
   assert.equal(parseDailyTipRow({ id: "t1", title: "t", base_text: "   ", difficulty: "初級" }), null);
   assert.equal(parseDailyTipRow({ id: "t1", difficulty: "初級" }), null);

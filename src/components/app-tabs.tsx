@@ -2,6 +2,10 @@ import { NativeTabs } from 'expo-router/unstable-native-tabs';
 
 import { Colors } from '@/constants/theme';
 
+// Approved v3 bottom navigation: ホーム / 銘柄 / レポート / AIに聞く / 設定.
+// portfolio.tsx and news/ remain real routes (never deleted) -- they are
+// reachable from Home's news "すべて見る" links and from the ポートフォリオ
+// entry inside Settings, just no longer shown as their own tab.
 export default function AppTabs() {
   const colors = Colors.light;
 
@@ -26,15 +30,6 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="portfolio">
-        <NativeTabs.Trigger.Label>ポート</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          sf={{ default: 'chart.pie', selected: 'chart.pie.fill' }}
-          src={require('@/assets/images/tabIcons/explore.png')}
-          renderingMode="template"
-        />
-      </NativeTabs.Trigger>
-
       <NativeTabs.Trigger name="reports">
         <NativeTabs.Trigger.Label>レポート</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
@@ -44,10 +39,19 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="news">
-        <NativeTabs.Trigger.Label>重要ニュース</NativeTabs.Trigger.Label>
+      <NativeTabs.Trigger name="ai">
+        <NativeTabs.Trigger.Label>AIに聞く</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
-          sf={{ default: 'newspaper', selected: 'newspaper.fill' }}
+          sf={{ default: 'sparkles', selected: 'sparkles' }}
+          src={require('@/assets/images/tabIcons/explore.png')}
+          renderingMode="template"
+        />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="settings">
+        <NativeTabs.Trigger.Label>設定</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          sf={{ default: 'gearshape', selected: 'gearshape.fill' }}
           src={require('@/assets/images/tabIcons/explore.png')}
           renderingMode="template"
         />

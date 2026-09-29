@@ -11,15 +11,13 @@ import { dashboardGreeting, dashboardSectionError, todayJst } from '@/lib/dashbo
 import { currentReport, buildReportHighlights } from '@/lib/home-report-highlights';
 import { splitHomeNewsSections } from '@/lib/home-news-sections';
 import { fetchDailyTopic } from '@/lib/daily-topic';
-import { readTopicLevel, writeTopicLevel } from '@/lib/topic-level-storage';
+import { readTopicLevel } from '@/lib/topic-level-storage';
 import { topicKeyMatches, type HomeTopic, type TopicLevel, type TopicRequestKey } from '@/lib/home-topic';
 import { KABUMORI_COLORS, type KabumoriPalette } from '@/constants/kabumori-theme';
-import { SettingsSheet } from '@/components/settings-sheet';
 import { ReportHighlightCard } from '@/components/home/report-highlight-card';
 import { HomeNewsSection } from '@/components/home/home-news-section';
 import { TopicCard } from '@/components/home/topic-card';
 import { AskAiEntry } from '@/components/home/ask-ai-entry';
-import { useAuth } from '@/providers/auth-provider';
 
 export default function HomeScreen() {
   // Keep the core Kabumori screens on one light palette until a complete dark
@@ -36,11 +34,8 @@ export default function HomeScreen() {
   // must not keep fetching/scoping content to yesterday.
   const [todayJstValue, setTodayJstValue] = useState(() => todayJst());
   const [loading, setLoading] = useState(true);
-  const [topicLoading, setTopicLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [errors, setErrors] = useState({ news: '', reports: '', topic: '' });
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const { session } = useAuth();
 
   // Three network calls total (news feed + reports + daily topic), down from
   // the original three-call layout's tracked_stocks fetch: market/holding
@@ -80,33 +75,6 @@ export default function HomeScreen() {
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
-  // Settings changes the level and immediately refetches just the topic
-  // (same deterministic RPC, so the new level's topic is stable too) -- the
-  // rest of Home is untouched. Returns whether the write actually
-  // succeeded, so Settings never claims a save that didn't happen. The
-  // preference save and the content fetch are independent outcomes: a
-  // failed fetch here never rolls back the already-saved preference, and
-  // (via topicKeyMatches) never leaves the old level's topic looking current.
-  const handleTopicLevelChange = useCallback(async (level: TopicLevel): Promise<boolean> => {
-    const ok = await writeTopicLevel(level);
-    if (!ok) return false;
-    setTopicLevel(level);
-    setTopicLoading(true);
-    const today = todayJst();
-    setTodayJstValue(today);
-    try {
-      const nextTopic = await fetchDailyTopic(level, today);
-      setTopic(nextTopic);
-      setTopicKey({ level, jstDate: today });
-      setErrors((previous) => ({ ...previous, topic: '' }));
-    } catch {
-      setErrors((previous) => ({ ...previous, topic: dashboardSectionError('topic') }));
-    } finally {
-      setTopicLoading(false);
-    }
-    return true;
-  }, []);
-
   const newsSections = useMemo(() => splitHomeNewsSections(news), [news]);
   const report = useMemo(() => currentReport(reports, todayJstValue), [reports, todayJstValue]);
   const highlights = useMemo(() => buildReportHighlights(report), [report]);
@@ -129,7 +97,7 @@ export default function HomeScreen() {
             <Text style={[styles.date, { color: palette.muted }]}>{today}</Text>
           </View>
           <Pressable
-            onPress={() => setSettingsOpen(true)}
+            onPress={() => router.push('/settings')}
             style={({ pressed }) => [styles.settingsButton, { backgroundColor: palette.accentSoft }, pressed && styles.pressed]}
             accessibilityRole="button"
             accessibilityLabel="設定"
@@ -175,20 +143,20 @@ export default function HomeScreen() {
         <TopicCard
           palette={palette}
           topic={displayedTopic}
-          loading={(loading && !displayedTopic) || topicLoading}
+          loading={loading && !displayedTopic}
           error={errors.topic}
+          onOpen={() =>
+            displayedTopic &&
+            router.push({
+              pathname: '/topic-detail',
+              params: { id: displayedTopic.id, level: displayedTopic.level, jstDate: todayJstValue },
+            })
+          }
           onRetry={() => void load(true)}
         />
 
         <AskAiEntry palette={palette} />
       </ScrollView>
-      <SettingsSheet
-        visible={settingsOpen}
-        email={session?.user.email ?? null}
-        topicLevel={topicLevel}
-        onTopicLevelChange={handleTopicLevelChange}
-        onClose={() => setSettingsOpen(false)}
-      />
     </SafeAreaView>
   );
 }
