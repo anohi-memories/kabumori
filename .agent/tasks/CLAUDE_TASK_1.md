@@ -3,8 +3,8 @@
 - task_id: kabumori-daily-topic-real-device-qa-20260929
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（中）
 - purpose: productionでliveになった「今日のトピック」機能を、fresh mainのiOS内部配布ビルドで実機確認できる状態にし、ユーザーが初心者/中級/上級の切替とHome表示を最終確認できるようにする。
@@ -702,3 +702,80 @@ No Codex review required; exact independently-reviewed SQL was applied unchanged
 
 Task closed.
 
+## Report — G1 result (daily-topic real-device QA build ready)
+
+- task_id: kabumori-daily-topic-real-device-qa-20260929
+- fresh main SHA at start: `6b59c3f`
+- worktree/branch: independent scratch checkout (no source change needed, so no branch was created/pushed)
+
+### Phase A preflight (read-only)
+
+- EAS/Expo login: `anohi-memories` (voxy1948.p3@gmail.com), Owner on both `anohi-memories` and `anohi-memoriess-team` accounts.
+- Project linkage: `@anohi-memoriess-team/kabumori`, ID `eb80adf3-861e-4a48-a373-2d9a85b58899`.
+- Bundle identifier: `com.anohimemories.kabumori`.
+- `EXPO_PUBLIC_*` presence in the `preview` environment: **both present** (`EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `EXPO_PUBLIC_SUPABASE_URL`) — names only, values never displayed.
+- Signing/device registration: existing Ad Hoc distribution certificate (expires 2027-09-10) and provisioning profile (Developer Portal ID `5M79MS9DFQ`, already covering the registered iPhone) — both reused, no new credentials generated, no device-registration/Apple-login prompt needed.
+- Reusable-build check: the two most recent `preview` builds (`10e8610e...` at commit `f04ccf35...`, `79955c92...` at commit `12db8657...`) both predate PR #46/#48/#51 — **neither contains the daily-topic client code (Home reorg, topic card, settings level picker)**. No reusable build existed; created exactly one new build per the task's instruction.
+
+### Automated verification (before build)
+
+- `deno test` on daily-topic/settings/dashboard/Home regression suite: **52/52 pass** (`home-topic_test.ts`, `settings-menu_test.ts`, `dashboard_test.ts`, `home-report-highlights_test.ts`, `home-news-sections_test.ts`, `home-news-visual_test.ts`).
+- `npx tsc --noEmit`: 0 new errors under `src/` (same 2 pre-existing, unrelated CSS-module errors as `main`).
+- `npx expo config --json`: resolves cleanly.
+- `git diff --check`: clean (fresh clone, no diff).
+
+### Build
+
+| Field | Value |
+| --- | --- |
+| Platform | iOS |
+| Profile | `preview` (internal distribution) |
+| Status | **finished** |
+| Build ID | `9f0e45a1-b2ec-4631-b04b-b510f90a475d` |
+| Source commit | `6b59c3f722811dd76b8e8d9a7435c5604097c494` (fresh main at task start; contains the merged daily-topic feature + migration rename) |
+| Bundle identifier | `com.anohimemories.kabumori` |
+| Distribution certificate / provisioning profile | existing, reused — **no new credentials generated** |
+| Started / finished | 2026-09-29 10:07:09 / 10:12:50 |
+| Install link | https://expo.dev/accounts/anohi-memoriess-team/projects/kabumori/builds/9f0e45a1-b2ec-4631-b04b-b510f90a475d |
+
+### Source changes
+
+**0**, as expected — no blocker was found requiring a source/config change.
+
+### Production mutation
+
+**0.** No Supabase mutation, no migration/DDL/DML, no Auth/SMTP config change, no EAS production secret/env change, no bundle identifier/projectId change.
+
+### Exact user QA checklist
+
+**A. Default beginner**
+1. Install/open the build, sign in.
+2. Home's 今日のトピック shows レベル badge 初心者向け with real title/body content (not 準備中).
+
+**B. Change to intermediate**
+3. 設定 → 今日のトピック 投資知識レベル → 中級者向け を選択。
+4. Home に戻る。
+5. バッジ/内容が中級者向けに変わっている。
+
+**C. Change to advanced**
+6. 同じ流れで 上級者向け を選択 → Home が上級者向けを反映。
+
+**D. Determinism**
+7. 同じ日・同じレベルのまま pull-to-refresh を2回。
+8. トピックのタイトルが変わらないまま。
+
+**E. Regression**
+9. 今日のかぶモリレポートが表示される。
+10. 重要ニュースが表示される。
+11. あなたの保有銘柄 最新ニュースが表示される。
+12. 致命的なエラー/赤画面が出ない。
+
+I will not mark this checklist PASS myself; it needs the user's own observation on the device, per this task's own instruction.
+
+### Remaining issues
+
+None found. Waiting on the user's real-device confirmation of the checklist above.
+
+### Next recommendation
+
+Send the user the install link and checklist; once they report the result, a final G1 pass records PASS/issues for K1.
