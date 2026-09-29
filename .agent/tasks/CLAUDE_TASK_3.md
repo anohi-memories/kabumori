@@ -1,133 +1,203 @@
 # Claude Task 3
 
-- task_id: x-social-mobile-account-deletion-concurrency-fix-phase4c-20260929
+- task_id: x-social-mobile-account-deletion-prod-preflight-20260929
 - owner: claude
 - slot: claude-3
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: claude
 - priority: critical
 - recommended_model: Opus5.5（高）
-- purpose: H2 final acceptanceで残った1件のP1 concurrency holeとDeno test typing defectだけをfocused修正し、PR #52を最終受け入れ可能にする。
+- purpose: PR #52 merge後のaccount deletion本番反映前preflight。production migration/Edge deployを行う前に、現在のlive schema/owner/ACL/isolation/Auth/Vault/Storage/FK/rollback/E2E前提をread-onlyで確認し、exact rollout planとSTOP条件を確定する。**このTASKではapply/deployしない。**
 
-## Review source
-- PR #52 reviewed head: `002d24ac99df2fbdf4e2423c1428ccb488a79f29`
-- H2 verdict: FAIL
-- production_mutation=0
+## Accepted source
 
-## Required correction
-- first-onboarding writerとdeletion acquireが、critical pointに入る前に同じper-user serialization primitiveを取得すること。
-- onboardingが先に始まり未commitのケースでも、deletionが「workspaceなし」と誤認して先にpurge/finalizeしないこと。
-- deletionが先のケースでは、onboardingは安全に待機/拒否されること。
-- lock orderを統一し、deadlockを避けること。
-- deletion成功後は当該user由来のorphan brand/account/membership/credentialが0であること。
-- 既存OAuth挙動は必要最小限だけ変更すること。
+- PR #52 accepted head: `4bc819555c07c8792f5b78ea29aa6b9a35694042`
+- squash merge commit: `136dcd2b35b161ccc4769da15b05e796f095e881`
+- H2 final verdict: PASS for source merge
+- production_mutation so far: 0
 
-## Required tests
-1. onboarding starts first and remains uncommitted -> deletion starts
-2. deletion starts first -> onboarding starts
-3. after reported deletion success, zero orphan rows
-4. no deadlock in tested protocol
-5. existing R1-R6/client pin regression remains green
+## Mandatory startup
 
-## Deno typing fix
-- `supabase/functions/social-mobile-account-delete/delete_logic_test.ts` のTS2353を修正。
-- default checked `deno test` をPASSさせる。
+1. Read:
+   - `.agent/ORCHESTRATION.md`
+   - `.agent/CURRENT_STATE.md`
+   - this TASK
+   - latest G3 Report
+   - latest H2 PASS report
+2. Use a fresh independent G3 worktree/checkout from latest `origin/main`.
+3. Confirm no overlap with G4 or any active slot.
+4. Read current Supabase skill first.
+5. Check current Supabase changelog/docs relevant to:
+   - Auth hard delete/session behavior
+   - Edge Function JWT verification/CORS
+   - SECURITY DEFINER/function ownership
+   - Vault permissions
+   - managed Auth schema
+   - Storage ownership/FKs if relevant
+   - PostgREST transaction isolation
+6. Read current X revoke and Apple revoke guidance if production assumptions depend on them.
+7. Absolutely no production writes.
 
-## Verification
-- disposable Postgres full behavior/ACL/race/reconnect/cleanup
-- checked Deno tests/check
-- social-mobile full tests
-- data-view
-- typecheck/lint
-- Expo web+iOS export
-- diff check
-- secret/token/log scan
-- relevant mutation tests
+## Preflight scope
 
-## Production constraints
-No migration apply, Edge deploy, real deletion, Vault mutation, real X/Apple revoke, Auth/provider console changes, or real X post.
+### A. Exact migration inventory
+
+Identify the exact single migration to apply:
+`supabase/migrations/20260928160000_social_mobile_account_deletion_candidate.sql`
+
+Verify against latest main:
+- file exists exactly once
+- no later migration supersedes/duplicates/conflicts with it
+- no broad `db push` is needed or allowed
+- all referenced tables/functions/columns exist in production with compatible types/constraints
+- all 11 guarded writer tables exist and names still match
+- all onboarding/reconnect RPCs used by the concurrency design still match reviewed assumptions.
+
+Produce:
+- exact migration SHA/content identity
+- exact apply command/method to use later
+- exact read-back SQL after apply
+- exact rollback/recovery plan if apply fails part-way or post-check fails.
+
+### B. Production catalog read-only verification
+
+Read-only confirm:
+- owners of `auth.users`, `vault.secrets`, relevant schemas
+- current role privileges for `postgres`, `service_role`, anon, authenticated
+- existing function EXECUTE grants that may conflict
+- RLS state on new/existing exposed tables assumptions
+- FK graph relevant to auth/users/profile/membership/social/workspace deletion
+- any NO ACTION/CASCADE behavior that changed since review
+- triggers on auth.users or affected tables that would materially change finalize semantics
+- whether any existing object names collide with candidate migration.
+
+Do not read user rows, token plaintext, or Vault plaintext.
+
+### C. Isolation / locking preflight
+
+Read-only verify production role/function transaction isolation settings relevant to:
+- authenticated/PostgREST RPCs
+- service_role RPCs
+- any function-level `SET default_transaction_isolation` or role setting
+
+Confirm intended READ COMMITTED assumption is true for the target paths, or STOP.
+
+Check there is no production-side writer path for first social workspace creation that bypasses the guarded brands/brand_memberships INSERT points. If uncertain, STOP.
+
+### D. Auth finalization assumptions
+
+Confirm current production behavior/metadata supports:
+- direct hard-delete semantics expected by candidate
+- profile/main-app protection check
+- session rows disappear on hard delete
+- no requirement is being assumed for instant JWT invalidation
+- no managed Auth trigger/extension makes direct SQL deletion unsafe
+
+If direct SQL auth.users deletion cannot be confidently approved from current official guidance + live metadata, STOP and propose the safer alternative boundary.
+
+### E. Vault capability
+
+Read-only verify:
+- candidate function owner at apply time would have intended DELETE capability on Vault secrets
+- service_role itself is not accidentally gaining broad direct Vault read/delete surface beyond reviewed design
+- no schema/owner drift invalidates the reviewed definer model
+
+No secret values may be queried.
+
+### F. Storage / external dependent preflight
+
+Confirm whether social-mobile account deletion has any Storage-owned objects/FKs in production today.
+- if none, record none.
+- if any exist, identify exact deletion/retention requirement and STOP if not covered.
+
+Confirm no new tables/RPCs/Edge functions added since PR #52 create an unguarded social workspace/account writer that invalidates the concurrency design.
+
+### G. Edge deployment preflight
+
+For `social-mobile-account-delete`:
+- confirm expected `verify_jwt` behavior/config for production
+- confirm required environment/secret names exist conceptually; do not print values
+- list required X/Apple config gates
+- confirm CORS/platform behavior
+- define exact deploy command for later
+- define post-deploy byte/source identity check
+- define health/smoke check that does not delete anything.
+
+No deploy in this task.
+
+### H. Real E2E rollout plan
+
+Design the later disposable-account E2E in safe stages:
+1. never-connected user deletion
+2. social-only user with Kabumori main profile retained
+3. X-connected user revoke path
+4. Apple-login user on iOS native
+5. lost-response/retry scenario
+6. onboarding-vs-deletion race sanity in a disposable environment if practical
+7. confirm no unrelated workspace/data touched
+
+Specify what must be observed before enabling:
+`EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED=true`.
+
+### I. Legal/operator gates
+
+Inventory only; do not invent legal text.
+Confirm remaining owner decisions:
+- privacy policy URL
+- terms URL
+- support URL/email
+- retention duration for hashed deletion audit
+- wording for published X posts remaining external
+- Kabumori-side account-delete coordination
+
+## STOP conditions
+
+STOP and report without apply/deploy if any of these occur:
+- production schema differs materially from reviewed assumptions
+- migration conflicts with later main migrations
+- role/function isolation not READ COMMITTED where required
+- function owner/Vault DELETE capability cannot be proven safely
+- direct auth.users deletion semantics are uncertain/unsafe
+- new unguarded workspace/account writer exists
+- Storage dependency exists but deletion design does not cover it
+- required X/Apple production configuration is materially different
+- rollback/recovery cannot be defined safely
+- any slot/worktree conflict.
+
+## Forbidden in this TASK
+
+- no migration apply
+- no `db push`
+- no Edge deploy
+- no Auth/provider console mutation
+- no Vault mutation
+- no user deletion
+- no real X/Apple revoke
+- no X post
+- no build activation flag
+- no legal-text invention
 
 `production_mutation=0`.
 
-## Completion / K3
-Report exact fixed PR #52 head, common lock design, changed files, both race proofs, orphan invariant, checked Deno tests, full regressions, production_mutation=0, and readiness for one final H2 focused acceptance.
+## Required Report / K3
+
+Report:
+- result: READY_FOR_ROLLOUT / STOP
+- fresh main commit
+- migration identity
+- production catalog findings
+- isolation findings
+- Auth finalization findings
+- Vault findings
+- Storage/external dependency findings
+- Edge deploy prerequisites
+- exact later apply/deploy/read-back plan
+- rollback/recovery plan
+- E2E plan
+- legal/operator gates
+- changed_files (should normally be TASK/report/docs only unless a source discrepancy requires STOP; do not silently patch production code)
+- tests/checks
+- production_mutation=0
+- recommended next step
 
 Then status -> review_required, next_owner -> chatgpt, STOP for K3.
-
-## Report
-
-- 実行モデル: Opus 5.5（推奨どおり）
-- exact fixed PR #52 head:
-  - `4bc819555c07c8792f5b78ea29aa6b9a35694042`（Draft PR #52、branch `claude/g3-account-lifecycle-p4`）
-  - reviewed head `002d24a` に1コミットを追加したもの。
-- production_mutation=0:
-  - マイグレーション適用、Edge デプロイ、実際の削除、Vault の変更、X/Apple の実失効、Auth/コンソールの変更、X 投稿はいずれもなし。
-  - 本番への問い合わせも行っていない。
-
-### common lock design
-- **共通の直列化手段**: 導出したワークスペース ID に対するトランザクション単位の advisory lock（`hashtextextended('social_mobile_workspace:' || u_…)`、関数 `social_mobile_account_deletion_workspace_lock`）。
-- **作成側**:
-  - guard trigger が、`u_` ワークスペースへの `brands` / `brand_memberships` の INSERT（初回オンボーディングとメンバーシップ作成の地点）でこのロックを取る。
-  - ロック取得後に、新しい snapshot で tombstone を読む。
-  - READ COMMITTED 以外でのワークスペース作成は `SOCIAL_MOBILE_WORKSPACE_CREATION_REQUIRES_READ_COMMITTED` で拒否する（新しい tombstone が見えないため）。
-  - 既存の OAuth RPC（begin/complete）は**変更していない**。
-- **削除側**:
-  - `acquire` は、削除用のユーザーロックの直後、snapshot や行ロックより前に同じロックを取る。
-  - lease を使う各段階（`hold`）と operator の操作も同じロックを取る。
-- **ロック順（全経路で統一）**: 削除用ロック → workspace ロック → 行 / `auth.users` のロック。
-  - 作成側は、FK の key-share ロックより前に workspace ロックを取る。そのため循環せず、deadlock は起きない。
-- **finalize の不変条件**: 両方のロックを持った状態で、ワークスペースの行（brands / memberships / social_accounts / oauth_states）が1件も無いことを再確認し、そのうえでログインと tombstone を削除する。行が残っていれば `WORKSPACE_REAPPEARED` で operator に回す。
-
-### both race proofs（使い捨て PG17、本物の onboarding マイグレーション、偽データのみ）
-1. **onboarding が先に始まり未 commit → 削除開始**（H2 の再現手順どおり）:
-   - A が初回の `begin_social_mobile_x_oauth_connection` を実行し、3秒間 commit しない。
-   - 1秒後に B が acquire → credentials → mark → purge → finalize を、別々の commit で実行する。
-   - B の acquire は workspace ロックで A を待ち、A の commit 後に作成された workspace を snapshot して削除する。
-   - 結果: `finalized=completed`、**orphans=0**（brands / memberships / social_accounts / oauth_states / tombstone / auth.users の合計が0）。`ONBOARDING_FIRST_RACE_PASS`。
-2. **削除が先 → onboarding**:
-   - B が acquire を実行し、2秒間 commit しない。その間に A が初回オンボーディングを開始する。
-   - A はロックを待ち、B の commit 後に `SOCIAL_MOBILE_ACCOUNT_DELETION_IN_PROGRESS` で拒否される。workspace は作成されない。
-   - その後、削除は完了まで進み、orphans=0。`DELETION_FIRST_RACE_PASS`。
-- 追加の確認:
-  - 全出力に deadlock が無いこと（`NO_DEADLOCK_PASS`）。
-  - isolation のガード（`ISOLATION_GUARD_PASS`）。
-  - 行の再出現時に finalize が完了を拒否し、ログインも残すこと（behavior）。
-- 既存の BEHAVIOR / ACQUIRE_RACE / RECONNECT_RACE / CLEANUP もすべて PASS。
-
-### orphan invariant
-- 削除成功（finalize が completed）と報告する時点で、そのユーザー由来のワークスペース・アカウント・メンバーシップ・OAuth state・Vault 参照・tombstone は0件。
-- これは finalize がロック下で強制し、2つのレースで検証している。
-
-### checked Deno tests
-- `delete_logic_test.ts` の TS2353 を修正した（override の型に `providers?` を追加）。
-- 型チェックありの Deno テスト 17/17 PASS、`deno check` 全ファイルでエラー0件。
-- 注意: この環境ではリポジトリ直下の `package.json` があるため、Deno が `npm:@types/node` を node_modules から探して失敗する。これは環境要因でコードとは無関係。`DENO_NO_PACKAGE_JSON=1 deno test --no-lock --allow-read supabase/functions/social-mobile-account-delete/` で実行した。H2 の環境では、既定の checked 実行で TS2353 だけが出ていた。
-
-### full regressions
-- social-mobile `npm test` 72/72、data-view 14/14、typecheck OK、lint OK、Expo export web/ios とも成功、`git diff --check` OK。
-- 機密情報スキャン（追加行）ヒットなし、console 出力なし。
-- R1〜R6 とクライアント固定のテストはすべて緑のまま。
-- 変異テスト（DB）8件中7件を検出:
-  - レビュー時のヘッド相当（作成時に workspace ロックを取らない）、acquire のロック削除、finalize の不変条件削除、isolation チェック削除、R1 の guard 無効化、R1 の古い snapshot の受け入れ、R3 の所有チェック無効化。
-  - **検出されなかった1件**: lease 保持段階（hold）での workspace ロック削除。acquire の commit 後は tombstone が見えるため、作成側は必ず拒否される。このロックは正しさに必須ではなく、ロック順を統一するための冗長な防御として残している。
-
-### changed_files（`002d24a..4bc8195`）
-- `supabase/migrations/20260928160000_social_mobile_account_deletion_candidate.sql`
-- `supabase/tests/social_mobile_account_deletion_behavior.sql`
-- `supabase/tests/social_mobile_account_deletion_run.sh`
-- `supabase/functions/social-mobile-account-delete/delete_logic_test.ts`
-- `apps/social-mobile/docs/account-lifecycle-phase4.md`
-
-### readiness for one final H2 focused acceptance
-- **はい**。指摘された P1 の並行性の穴と Deno の型の不具合だけに絞って修正し、双方向のレース・orphan 0・deadlock 無しを検証した。
-- 最終確認をお願いしたい点:
-  1. 作成地点が `brands` / `brand_memberships` の INSERT だけで網羅できているか（ほかにワークスペースを作る経路は無いか）
-  2. READ COMMITTED 前提の妥当性（PostgREST の RPC は READ COMMITTED）
-- STOP for K3。
-
-
-## Final K3/C2 closure
-- H2 final concurrency acceptance: PASS.
-- accepted PR #52 head: `4bc819555c07c8792f5b78ea29aa6b9a35694042`.
-- PR #52 squash-merged as `136dcd2b35b161ccc4769da15b05e796f095e881`.
-- production mutation/apply/deploy remains 0; rollout is a separate future gate.
