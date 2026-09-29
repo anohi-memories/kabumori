@@ -33,13 +33,13 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: x-social-mobile-account-deletion-final-acceptance-review-20260929
+- status: ready
+- task_id: x-social-mobile-account-deletion-final-concurrency-acceptance-20260929
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: closed; Final C2 FAIL at PR #52 `002d24a`; one remaining first-onboarding/deletion serialization P1 plus checked-Deno typing defect returned to G3
+- allocation: final focused acceptance for PR #52 Phase 4c head `4bc8195`; verify both first-onboarding/deletion race orders, orphan invariant, lock order/isolation, checked Deno tests; recommended Sol（高）
 
 ## Claude G1
 - owner: claude
