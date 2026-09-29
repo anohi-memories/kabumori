@@ -58,8 +58,8 @@
 - task_id: kabumori-shared-analysis-content-guard-fix-20260929
 - start_code: G2
 - finish_code: K2
-- source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: K2 CHANGES REQUIRED on PR #57 head `1c166437`; fix global causal-guard bypass where one valid causal claim licenses unrelated unsupported causal wording; add mixed supported+unsupported regression; no deploy/gates/data-packet edits. Recommended Opus5.5（高）
+- source: .agent/tasks/CLAUDE_TASK.md
+- allocation: K2 CHANGES REQUIRED on PR #57 head 485f4bf; global bypass is fixed, but generic LCS>=3 support matching can treat polarity-inverted causes (e.g. 半導体株安→半導体株高) as supported. Replace with polarity-preserving deterministic matching and add regressions. No deploy/gates/data-packet edits. Recommended Opus5.5（高）
 
 ## Claude G3
 - owner: claude
