@@ -1979,3 +1979,24 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - forbidden: real user deletion, Vault credential mutation through deletion flow, real X/Apple revoke, app feature activation.
 - after K3 PASS, focused H2 production verification is required before Stage 2 real disposable-account E2E.
 - recommended Claude model: Opus5.5（高）.
+
+
+## Final K3 account deletion production rollout Stage 1
+
+- verdict: **PASS**.
+- exact accepted migration applied once in one transaction; post-apply read-back PASS.
+- production objects added only by the accepted migration.
+- `social-mobile-account-delete` Edge Function deployed ACTIVE with JWT verification enabled and deployed source byte-matched accepted source.
+- non-destructive OPTIONS/auth/error smoke PASS.
+- no real user deletion, Vault mutation, X/Apple revoke, X post, provider console change or feature activation.
+- next gate: focused H2 production verification before Stage 2 disposable-account E2E.
+- recommended Codex model: Sol（高）.
+
+
+## H2 production Stage 1 verification assigned
+
+- task_id: `x-social-mobile-account-deletion-prod-stage1-verification-20260929`
+- scope: independently verify applied migration identity/ACL/search_path/triggers/isolation, deployed Edge identity/verify_jwt, non-destructive smoke and production mutation scope.
+- no destructive operations.
+- finish code: C2.
+- recommended Codex model: Sol（高）.
