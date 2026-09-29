@@ -1861,3 +1861,13 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - production mutation prohibited.
 - finish code: C2.
 - recommended Codex model: Sol（高）.
+
+
+## Final C2 PR #52 accepted and merged
+- verdict: **PASS**.
+- accepted exact head: `4bc819555c07c8792f5b78ea29aa6b9a35694042`.
+- H2 independently confirmed both first-onboarding/deletion race orders, orphan invariant=0, no deadlock in intended protocol, READ COMMITTED guard behavior, and checked Deno 17/17.
+- prior R2-R6 and exact client user/session pinning remain accepted.
+- PR #52 squash-merged to main as `136dcd2b35b161ccc4769da15b05e796f095e881`.
+- source-only completion; no production migration apply, Edge deploy, real deletion, Vault mutation, or real X/Apple revoke.
+- remaining rollout gates: exact migration apply/readback, Edge deploy/byte-compare, disposable-account real-device/provider E2E, cross-app delete coordination, and legal/support/retention decisions.
