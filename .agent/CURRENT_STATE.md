@@ -1781,3 +1781,30 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - production_mutation=0.
 - PR #52 remains DRAFT/unmerged.
 - G3 assigned one coordinated correction task; recommended Opus5.5（高）.
+
+
+## Final K3 account deletion correction Phase 4b
+
+- verdict: **PASS for source correction**.
+- PR #52 fixed head `002d24ac99df2fbdf4e2423c1428ccb488a79f29`.
+- previous C2 R1-R6 plus exact user/session client pinning are addressed in one coordinated design.
+- durable tombstone/lease and guard triggers now cover deletion across HTTP/transaction boundaries.
+- cross-product deletion defaults to least-destructive social-only behavior when Kabumori main-app data exists.
+- Vault credential ownership ambiguity fails closed.
+- X missing-credential false success fixed.
+- Apple single-use revoke now has durable checkpoint/retry semantics.
+- CORS/platform behavior made truthful.
+- tests: disposable Postgres behavior/acquire race/reconnect race/cleanup PASS; Deno 17/17; mobile 72/72; data-view 14/14; typecheck/lint/Expo web+iOS; mutation 23/23.
+- production_mutation=0.
+- one final focused H2 acceptance review required before merge.
+- recommended Codex model: Sol（高）.
+
+
+## H2 final acceptance assigned for PR #52
+
+- task_id: `x-social-mobile-account-deletion-final-acceptance-review-20260929`
+- target: PR #52 fixed head `002d24ac99df2fbdf4e2423c1428ccb488a79f29`.
+- focused scope: prior R1-R6, client session pinning, guard-trigger coverage, auth.users finalization and source merge readiness.
+- production mutation prohibited.
+- finish code: C2.
+- recommended Codex model: Sol（高）.
