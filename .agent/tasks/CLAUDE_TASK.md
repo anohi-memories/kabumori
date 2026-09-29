@@ -3,8 +3,8 @@
 - task_id: kabumori-shared-analysis-content-guard-fix-20260929
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Opus5.5（高）
 - purpose: 2026-09-29大引けshared analysisがlocal check / Factで2回失敗した実例を再現し、1306の誤ラベルと根拠のない因果断定をsource側で最小修正する。transport retry・claim/idempotency・consumer gateは変えない。
@@ -145,6 +145,121 @@ When complete:
 - STOP for K2.
 
 Codex review is deferred until ChatGPT K2 sees the final scope. Consumer activation/public-X boundary will require focused review.
+
+## Report
+
+### Report — kabumori-shared-analysis-content-guard-fix-20260929
+
+- task_id：`kabumori-shared-analysis-content-guard-fix-20260929`
+- result：**source-readyのPASS候補**。PR #57（未merge、deployなし）。
+  - 9/29の2種類の失敗（1306の誤ラベル、根拠の無い因果の断定）を、生成・作り直しの指示とローカル検査の両方で塞いだ。
+  - 実際の9/29入力を使った再現テストは、修正前が9/11失敗、修正後が11/11 PASS。
+- fresh main SHA：`d07c10077508dc5f4a05b44d2f6e900faa690422`（着手時。`market-report-analysis/**` と `_shared` の分析関連は、前回deployしたsource `fc0afd3` から変わっていない）。
+- worktree/branch：G2専用checkout `/Users/yuya/Developer/kabumori-g2-market-report-reliability`、branch `g2-shared-analysis-content-guard-20260929`。
+  - G1（data-packetの本番同期）とは別のcheckout。`market-report-data-packet/**` は編集していない。
+
+#### root cause（9/29の各失敗）
+
+- **前提として確認できたこと**
+  - 失敗した生成文は本番に保存されていない。残っているのは、cycleのdiagnosticsの `issues` と、pg_netの応答にある指摘文だけ。したがって、生成文そのものは復元できない。
+  - 9/29大引けの入力（data packet `58f6f5ea` とニュース23件）を読み取りで再構成した結果、次のことが分かった。
+    - 入力で「TOPIX」が出てくるのは、1306の指標名「TOPIX連動ETF（1306）」だけ（ニュースには無い）。
+    - 東京市場の下落理由を書いたニュースは1件も無い。
+  - 呼び出しの順序：
+    - 16:20のrunは、最後の生成がローカル検査で落ちた（最初の生成の失敗理由は保存されていない）。
+    - 16:35のrunは `calls=3` でエラーが `ANALYSIS_FACT_FAILED` だった。この組み合わせになる順序は「生成1がローカル検査で不合格 → 作り直し → Factで不合格」だけ。つまり、**作り直した文が因果を断定してFactに落ちた**。
+- **16:20（`ANALYSIS_LOCAL_CHECK_FAILED`：1306をTOPIXと表記）**
+  - 起点：**生成の指示＋作り直しの指示**。
+    - 生成の指示は「この名前のまま書く」とだけ書いており、見出しなどで略すときの誤りを具体的に示していなかった。
+    - 作り直しの指示に渡るのは「TOPIXと表記」という指摘だけで、どの箇所かが分からなかった。
+  - ローカル検査の検出自体は正しい。入力にTOPIX指数は無いので、1306以外を指す「TOPIX」はありえない。
+  - ただし旧検査は `TOPIX(?!連動ETF（1306）)` で、半角かっこや「TOPIX連動型ETF」のような正確な言い換えまで不合格にしていた（TASKの契約に反する）。
+  - 9/29の生成文が素の「TOPIX」だったのか、正確な言い換えだったのかは、保存が無いので**特定できない**。
+- **16:35（`ANALYSIS_FACT_FAILED`：根拠の無い因果の断定）**
+  - 起点：**生成の指示＋作り直しの指示**。
+    - claim_typeの基準はあるが、見出し・要約・x_postがそれに従う決まりが無かった。
+    - 大引けの指示は「確認できる範囲の理由」を求めていた。
+    - 作り直しの指示に、表現を強めない決まりが無かった。
+  - ローカル検査には因果の検査が無く、Factだけが止めていた。**Factの判定は正しく、Factは緩めていない**。
+  - 正規化・後処理は原因ではない（`text()` は空白を詰めるだけ）。
+
+#### changed_files（PR #57）
+
+- `supabase/functions/market-report-analysis/analysis_logic.ts`
+  - 生成の指示：1306の誤った略し方の例示、理由を書けるのはcausalの場合だけ（推測を含む）。
+  - 作り直しの指示：注記とclaim_typeを保ち、表現を強めない・理由を足さない。
+  - Fact検査の指示：推測で理由を付けたものを検出。1306の正確な言い換えは許容。
+  - `topixMislabels`：NFKCで正規化し、正確な言い換えは許可、素の「TOPIX」は不合格。問題の箇所を引用する。
+  - `unsupportedCausalSentences`：ニュースを根拠にし、打ち消しの無いcausalのclaimが無いとき、因果表現を不合格にする。打ち消しがあり推測の語が無い文は許す。
+- `supabase/functions/market-report-analysis/content_guard_test.ts`（新規、11件）
+- `supabase/functions/market-report-analysis/fixtures/close_2026-09-29_data_packet.json`（新規）
+- `supabase/functions/market-report-analysis/fixtures/close_2026-09-29_news_rows.json`（新規）
+  - 公開の市場データとニュースだけ。利用者・保有の情報は含まない。
+
+#### replay tests before/after
+
+- 修正前のコード：11件中9件FAILED（うち1件はテスト側の正規表現の誤りで、修正済み）。
+  - 素の「TOPIX」は旧検査でも検出できていた。ただし箇所の引用が無かった。
+  - 正確な言い換えは誤って不合格になっていた。
+  - 見出しとx_postの因果の断定は、ローカル検査で**1件も検出できていなかった**。
+  - 作り直しの指示に、注記を保つ決まりが無かった。
+- 修正後：**11/11 PASS**。内容は次のとおり。
+  - 見出し、x_post（冒頭・3ポイント・締め）、要約、因果ではないclaimのそれぞれで、断定と推測の9種類を検出する。
+  - 日付を付けて並べた事実と「理由は確認できません」は許可する。
+  - ニュースが理由を明記している場合は、確定した因果として書ける。
+  - 「causal」のラベルでも、本文が「確認できません」なら根拠として扱わない（09-25で実際にあった形）。
+  - 作り直しで表現が強まった場合は、Factの前に止まる。
+  - handlerの経路で、内容の不合格はtransport retryが0回、claim 1回とfail 1回で、packetは作られない。
+
+#### full test/check/lint
+
+- market-report-analysis：**46/46**
+- market-report-data-packet：42/42
+- personalized-reports：125/125
+- `_shared`：279/279（`--no-check`）
+- x-test-post shared consumer：6/6
+- 誤検出の確認：本番のFact合格packet 5件（09-18大引け、09-24大引け、09-24朝刊、09-25大引け、09-28大引け）は、新しい2つの検査で**0件**だった。
+- `deno check`（market-report-analysis）：PASS。`git diff --check`：PASS。
+- `deno lint`：変更ファイルは問題なし。既存の `require-await` 2件（handler_test・analysis_test）はmainにもともとあるもの。
+- `_shared` の型エラー：`_shared/brand/brand_post_generator_test.ts` にもともとあるもので、本PRでは変更していない。
+
+#### transport / idempotency preserved
+
+- `transport_retry.ts`、`handler.ts`、claim・complete・failのRPC、`MAX_GENERATIONS`、model、呼び出し回数の上限は**変更していない**（差分は `analysis_logic.ts` だけ）。
+- 既存のtransportテスト（14件）とhandlerテストはすべてPASS。
+- 新しいhandlerテストで、内容の不合格ではtransportの待ちもretryも0回であることを確認した。
+- ローカル検査で早く不合格になる分、Factの呼び出しが減ることはあっても、増えることはない。
+
+#### PR
+
+- PR：https://github.com/anohi-memories/kabumori/pull/57
+- head：`1c166437be0e514a25026fbab1c8e2ba9f4d483a`
+- open、未merge。CIはReport作成時点で実行中。
+
+#### production mutations
+
+- **0**。行ったのはread-onlyのSELECTだけ（9/29の入力、過去のpacket、失敗の履歴）。deploy、gate、cron、DB、手動のinvoke、X投稿はいずれもしていない。
+
+#### remaining issues
+
+1. モデルの出力は毎回違うので、今回の修正で完成率が上がるかは、自然なcycleで確かめるしかない。
+2. 因果の検査は語彙のリストによるもの。リストに無い言い回しは、これまで通りFactが最後の砦になる。
+3. 生成文そのものは保存されない。今後は指摘文に問題の箇所が引用されるので、診断はしやすくなる。
+4. （G1の範囲）朝刊がdata段階で止まる問題は、data-packetの本番同期で扱う。
+
+#### recommendation
+
+- K2でscopeを確認したあと、軽いreviewを経てmergeする。
+- そのあと、`market-report-analysis` だけを別gateでdeployし、`--use-api` でbyte照合する。
+- deploy後、数営業日の自然な朝刊・大引けで次を確認する。
+  - 完成率
+  - 指摘の傾向（新しい検査の件数、Factの指摘）
+- consumerの有効化（app、X）は、完成率が安定してからfocused reviewを経て行う。
+
+#### Codex review recommendation
+
+- 本PRは、promptとローカル検査の局所的な変更で、PROJECT_RULESのレビュー方針では原則Claude＋ChatGPTの確認で進められる範囲。
+- ただし共通分析は、将来の公開Xの境界に関わる。そのため、consumerの有効化の前に行うfocused reviewで、この検査もあわせて確認することを推奨する。
 
 ---
 
