@@ -1,5 +1,171 @@
 # Claude Task 1
 
+- task_id: kabumori-daily-topic-real-device-qa-20260929
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（中）
+- purpose: productionでliveになった「今日のトピック」機能を、fresh mainのiOS内部配布ビルドで実機確認できる状態にし、ユーザーが初心者/中級/上級の切替とHome表示を最終確認できるようにする。
+
+## Context
+
+Completed predecessor:
+- PR #48 source implementation merged
+- PR #51 migration filename collision fix merged
+- production RPC `public.get_daily_kabumori_tip(text,date)` is live
+- production ACL/RLS/determinism/read-only verification PASS
+- authenticated DB-role call PASS, anon denied
+- no Codex review needed
+
+Remaining gate:
+- real iPhone visual/settings QA
+
+## Goal
+
+Prepare the safest current-main iOS nonproduction/internal build for the user and verify as much as possible without touching production configuration.
+
+User-facing QA target:
+1. Home「今日のトピック」が実データを表示する
+2. Settingsで
+   - 初心者向け
+   - 中級者向け
+   - 上級者向け
+   を切り替えられる
+3. Homeへ戻ると選択したレベルのtopicに変わる
+4. 同じ日・同じレベルでpull-to-refreshしてもtopicが変わらない
+5. エラー/準備中へ誤表示しない
+6. report/news sectionsを壊していない
+
+## Mandatory startup / isolation
+
+1. Use a fresh independent G1 worktree/checkout.
+2. Fresh-fetch `origin/main`; record SHA.
+3. Read:
+   - `PROJECT_RULES.md`
+   - `.agent/ORCHESTRATION.md`
+   - `.agent/CURRENT_STATE.md`
+   - this TASK
+   - `app.json`
+   - `eas.json` if present
+   - `src/app/index.tsx`
+   - `src/components/settings-sheet.tsx`
+   - `src/components/home/topic-card.tsx`
+4. Confirm fresh main contains the merged daily-topic source and renamed migration.
+5. Do not touch G2/market-report-analysis or any X/MIC/news workstream.
+
+## Phase A — preflight
+
+Read-only / non-destructive checks only:
+
+- EAS/Expo login status
+- project linkage / projectId
+- iOS bundle identifier
+- available nonproduction/internal build profile
+- required `EXPO_PUBLIC_*` variable presence for the selected build environment
+- signing/device-registration readiness
+- whether an already-existing internal build at the current main SHA can be reused
+
+Do not display secret values. Presence only.
+
+If a current-main compatible internal build already exists and is installable, prefer reuse instead of spending a new build.
+
+If no reusable build exists, create exactly one safest nonproduction/internal iOS build.
+
+## Build constraints
+
+Allowed:
+- one EAS internal/preview iOS build from fresh main if needed
+- read-only EAS/Expo metadata checks
+- build-status polling at reasonable intervals
+- install URL/QR information for the user
+
+Forbidden:
+- App Store submission
+- production App Store release
+- TestFlight production rollout unless already the project's normal internal nonproduction path and explicitly safe
+- changing bundle identifier/projectId
+- changing EAS production secrets/env
+- Supabase mutation
+- database migration/DDL/DML
+- Auth/SMTP config mutation
+- source changes unless a concrete build blocker is found
+
+If a source/config change is required:
+- STOP
+- report blocker
+- do not patch and build ad hoc
+
+## Automated verification before build/reuse
+
+Run focused checks from fresh main:
+- daily-topic tests
+- settings-menu/dashboard tests
+- Home regression tests relevant to report/news/topic
+- `npx tsc --noEmit` and distinguish known pre-existing unrelated errors
+- `npx expo config --json`
+- `git diff --check`
+
+No Codex review required for this QA-only task.
+
+## User real-device QA checklist
+
+When the build is ready, report a concise exact checklist for the user:
+
+### A. Default beginner
+- launch/sign in
+- Home topic shows `初心者向け`
+- title/body are real content, not 準備中
+
+### B. Change to intermediate
+- Settings -> 今日のトピック -> 中級者向け
+- return Home
+- badge/content becomes 中級者向け
+
+### C. Change to advanced
+- same flow -> 上級者向け
+- Home reflects 上級者向け
+
+### D. Determinism
+- pull-to-refresh twice on same day at same level
+- same topic title remains
+
+### E. Regression
+- 今日のかぶモリレポート still renders
+- 重要ニュース still renders
+- 保有銘柄最新ニュース still renders
+- no fatal error/red screen
+
+The user will perform the physical iPhone checks; do not claim them PASS until the user reports the result.
+
+## Completion / K1
+
+Report:
+- fresh main SHA
+- worktree
+- EAS project/profile used
+- whether reused existing build or created one new build
+- build id/url/status
+- signing/device registration result
+- env presence checks (names/presence only, never values)
+- automated test results
+- source changes: expected 0
+- production mutation: 0
+- exact user QA checklist
+- remaining issues
+
+Then:
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K1
+
+If build requires user interaction (device registration, Apple login, credential prompt), STOP and report exactly one next action.
+
+## Archived predecessor record
+
+# Claude Task 1
+
 - task_id: kabumori-daily-topic-prod-apply-verify-20260928
 - owner: claude
 - slot: claude-1
@@ -535,3 +701,4 @@ Daily-topic backend is now live in production and the reviewed security/behavior
 No Codex review required; exact independently-reviewed SQL was applied unchanged.
 
 Task closed.
+
