@@ -33,13 +33,13 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: x-social-mobile-account-deletion-final-concurrency-acceptance-20260929
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: final focused acceptance for PR #52 Phase 4c head `4bc8195`; verify both first-onboarding/deletion race orders, orphan invariant, lock order/isolation, checked Deno tests; recommended Sol（高）
+- allocation: closed; Final C2 PASS; PR #52 accepted at `4bc8195` and squash-merged as `136dcd2`
 
 ## Claude G1
 - owner: claude
@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: done
 - task_id: x-social-mobile-account-deletion-concurrency-fix-phase4c-20260929
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: focused correction after final H2 FAIL; common serialization between first-onboarding writer and deletion acquire + checked Deno typing fix; recommended Opus5.5（高）
+- allocation: closed; Phase 4c source correction accepted by H2 and merged via PR #52 as `136dcd2`; production rollout remains separate
 
 ## Claude G4
 - owner: claude
