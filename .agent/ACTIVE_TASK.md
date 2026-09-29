@@ -33,13 +33,13 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: x-social-mobile-account-deletion-final-concurrency-acceptance-20260929
+- status: ready
+- task_id: x-social-mobile-account-deletion-prod-stage1-verification-20260929
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: closed; Final C2 PASS; PR #52 accepted at `4bc8195` and squash-merged as `136dcd2`
+- allocation: independent production verification of Stage 1 migration/read-back + account-delete Edge deploy + non-destructive smoke; no real deletion/revoke; recommended Sol（高）
 
 ## Claude G1
 - owner: claude
