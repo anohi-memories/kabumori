@@ -2094,3 +2094,11 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - app feature activation remains OFF.
 - finish code: K3.
 - recommended Claude model: Opus5.5（高）.
+
+
+## Stage 2 E2E blocked by onboarding deletion entry
+- Stage 2 stopped before any destructive action.
+- blocker: onboarding-incomplete users cannot reach the account-deletion screen.
+- production_mutation=0.
+- G3 assigned a UI/navigation-only fix; no backend change.
+- recommended Claude model: Sonnet5（高）.
