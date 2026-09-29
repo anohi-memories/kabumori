@@ -1,5 +1,288 @@
 # Claude Task 1
 
+- task_id: kabumori-home-v3-topic-detail-safearea-correction-20260929
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（高）
+- purpose: 実機QAで判明したHomeの最終デザイン差分、今日のトピックの情報量不足/詳細画面欠如、Settingsのsafe-area操作不能をまとめて修正する。G2/market-report-analysisには触れない。
+
+## Trigger / user acceptance finding
+
+2026-09-29 iPhone実機スクリーンショットで、現状は不合格。
+
+ユーザー指摘:
+1. Homeが採用済みの構想画像/最終デザインv3と全然違う。
+2. 今日のトピックが短すぎる。
+3. 今日のトピックを押すと別画面へ行き、ちゃんと詳しい説明を読めるようにしたい。
+4. Settingsの「閉じる」等が上すぎてiPhoneの時計/電池/status barと重なり操作できない。
+
+このTASKは前の `kabumori-daily-topic-real-device-qa-20260929` をQA不合格として置き換える修正TASK。
+実機QAをPASS扱いにしてはいけない。
+
+## Canonical Home design to restore
+
+採用済み「トップページ最終デザイン修正版 v3」の正本方針:
+
+順番:
+1. Header
+2. 今日のかぶモリレポート
+3. 重要ニュース
+4. あなたの保有銘柄 最新ニュース
+5. 今日のトピック
+6. AIに聞く
+7. bottom navigation
+
+Visual:
+- iPhone縦 9:19.5 前提
+- 白〜アイボリー背景
+- 淡いミント + 深緑
+- 角丸カード
+- 余白はあるが、今のようにカードが縦に間延びしすぎない
+- first viewportに Header + compactなレポートカード + 重要ニュース入口が見える
+- レポートカードは画面高の半分未満
+
+### Report card
+
+採用済み構成:
+- TODAY'S REPORT
+- 今日のかぶモリレポート
+- 「今日のポイント」動的2〜3件、各1〜2行
+- 右側に独立したキャラクター領域
+- 下部CTAは1つだけ「レポートを見る →」
+- 各ポイントに個別chevron不要
+
+キャラクター:
+- 将来、正本準拠のミニゆめちゃん＋白ロボ（指差し棒）を差し替える独立領域
+- repoには現在approved standalone cutout assetが無い
+- **新しいキャラを勝手に生成/捏造しない**
+- 現在の大きな丸+🌱 fallbackは構想と見た目が離れるため、asset未確定中はレイアウトを壊さない控えめなneutral placeholderまたは空き領域にする
+- character assetの完成は別TASKでよい
+
+### Important news
+
+- 最大3件
+- サムネイル / category fallback visual
+- category
+- headline
+- update time
+- importance
+- 現状の単純な★/glyphだけの見え方より、v3の情報階層に寄せる
+- 本物のthumbnail URLがsourceに無ければ捏造しない。category fallback visualでよい。
+
+### Holding news
+
+- 約3件
+- 最新ニュースがある保有銘柄のみ
+- compact card/list
+- empty stateは誠実に表示
+
+### Today's topic
+
+Home card:
+- level badge
+- title
+- 2〜3行程度のpreview
+- カード全体または明確なCTAをtap可能
+- 「詳しく読む →」を表示してよい
+- dead button禁止
+
+Detail:
+- tapで独立した詳細画面へ遷移
+- Homeと同じtopicを表示
+- level / category / title / summary
+- **同じ50文字前後のbase_textだけを大きく表示して終わりにしない**
+- ちゃんと学べる読み物として、複数段落/ポイント/注意点が読めること
+
+Current `public.tips.base_text` audit:
+- active 50件
+- 初級: median約52.5文字、max 66
+- 中級: median約50文字、max 55
+- 実践: median約51文字、max 56
+つまりUIのnumberOfLinesだけが原因ではなく、正本データ自体が短い。
+
+### Topic detail content — Phase 1 source-only design
+
+このTASKでは、DB schema/production mutationを増やさず進める。
+
+Preferred:
+- current seed tipsを正本にした静的・curatedな詳細解説catalogをapp sourceに追加
+- seed titleをstable keyとして使い、現在の全50topicをcoverage
+- detailは1topicあたり単なる言い換えではなく、目安として:
+  - ひとことで
+  - なぜ大事か
+  - 見るときのポイント
+  - 注意点
+  のような2〜4セクション
+- 200〜450字程度を目安に、初心者/中級/実践の深さに合わせる
+- 売買推奨にしない
+- リアルタイム相場/価格を捏造しない
+- sourceにない「現在の市場状況」を足さない
+- evergreen educational contentに限定
+- current seed title全件がdetail catalogに存在するtestを作る
+- 未知titleはbase_textのみでfail-softし、架空の詳細を生成しない
+
+HomeTopic contract:
+- RPCが既に返している `id` / `category` を捨てず保持するよう拡張してよい
+- detail routeでは今日選ばれたtopicを安全に再取得/検証し、別topicへ化けないこと
+- 新しいDB RPCは原則作らない
+- 既存daily-topic RPCを level + JST date で再利用し、id一致確認する方式を優先
+
+### Ask AI Home section
+
+採用済みv3:
+- 入力欄風のentry:
+  `気になるニュースや銘柄について聞いてみる…`
+- 質問chip
+- AI route/serviceがまだ無いなら「実際に送れた」ように見せない
+- 現状の大きいdisabled「準備中です」CTAでカードを縦に膨らませない
+- no fake chat
+
+### Bottom navigation — approved final items
+
+現状実機:
+- ホーム
+- 銘柄
+- ポート
+- レポート
+- 重要ニュース
+
+これは採用済み構想と不一致。
+
+approved:
+- ホーム
+- 銘柄
+- レポート
+- AIに聞く
+- 設定
+
+Requirements:
+- `portfolio` と `news` のroute自体を勝手に削除しない
+- Home/news links等から既存画面へ行ける状態は維持
+- bottom tab triggerだけをapproved 5項目へ合わせる
+- AI未完成なら専用routeはhonest「準備中」screenでよい。dead crash routeは禁止。
+- 設定は専用screen/tabへ移す方向を優先する
+
+## Settings safe-area — P1 usability fix
+
+Current real-device issue:
+- SETTINGS / 設定 header
+- 「閉じる」
+がiPhone status bar（時計・通信・電池）へ侵入し、ボタン操作不能。
+
+This is release-blocking UX.
+
+Preferred fix:
+- SettingsをModal sheet依存からtop-level Settings screen/tabへ移す
+- approved bottom tab「設定」と整合させる
+- Home右上「設定」も `router.push/navigate('/settings')` 等で同じscreenへ送る
+- main Settings screenなら「閉じる」自体を不要にしてよい
+- Topic level / account deletion等のsubviewは戻る操作をsafe area内に置く
+
+If Modalを残す場合:
+- `SafeAreaView`だけに依存せず、outer providerから `useSafeAreaInsets()` で取得したtop insetを明示反映
+- header/controlの最上端が必ず `insets.top + 8〜12px` 以降
+- iPhone Dynamic Island/notchで操作可能
+
+Acceptance:
+- 390x844系 / notch・Dynamic Island相当の実機でheader/buttonがstatus barに1pxも重ならない
+- tap target min 44pt
+- scroll content first rowもheader下から始まる
+
+## Mandatory startup / isolation
+
+1. fresh independent G1 worktree/check-out
+2. fresh `origin/main`
+3. read:
+   - `PROJECT_RULES.md`
+   - `.agent/ORCHESTRATION.md`
+   - `.agent/CURRENT_STATE.md`
+   - this TASK
+   - `src/app/index.tsx`
+   - `src/components/home/report-highlight-card.tsx`
+   - `src/components/home/home-news-section.tsx`
+   - `src/components/home/topic-card.tsx`
+   - `src/components/home/ask-ai-entry.tsx`
+   - `src/components/settings-sheet.tsx`
+   - `src/components/app-tabs.tsx`
+   - `src/lib/home-topic.ts`
+   - `src/lib/daily-topic.ts`
+   - current topic seed migrations
+4. G2 owns market-report-analysis. Do not touch it.
+5. no MIC/X/important-news ingestion/backend changes.
+
+## Scope / allowed
+
+Allowed:
+- Home presentation/layout correction
+- AppTabs trigger correction
+- Settings route/screen refactor
+- topic detail route
+- static curated topic-detail source catalog
+- HomeTopic contract extension for id/category
+- focused tests
+
+Forbidden:
+- production DB/schema/data mutation
+- new Supabase migration unless a hard blocker is proven; if needed STOP and report before creating/applying
+- new OpenAI/LLM API call
+- news backend/API changes
+- report backend changes
+- G2 files
+- character image generation
+- App Store/TestFlight production release
+
+## Tests / verification
+
+Required:
+- focused topic tests
+- static detail catalog coverage for all current 50 seeded titles
+- unknown topic fail-soft
+- Home topic -> detail navigation contract
+- same date+level same topic/id
+- Settings safe-area/layout contract where testable
+- settings account deletion/password/topic-level regression
+- Home report/news/topic regression
+- AppTabs exact approved labels/order test
+- no deletion of portfolio/news routes
+- `npx tsc --noEmit` (separate pre-existing unrelated errors)
+- `npx expo config --json`
+- iOS/web export where safe
+- `git diff --check`
+
+Create a narrow PR.
+Do not self-merge.
+No Codex review expected if this remains UI/navigation/static-content source-only.
+
+## Required report
+
+- fresh main SHA
+- worktree/branch
+- root cause of Home visual drift
+- exact v3 corrections
+- topic detail architecture
+- detail catalog coverage count
+- Settings safe-area root cause + exact fix
+- bottom nav before/after
+- changed_files
+- tests
+- production mutation=0
+- PR/head SHA
+- real-device QA still required items
+- remaining issues
+- next recommendation
+
+When complete:
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K1
+
+## Archived predecessor task
+
+# Claude Task 1
+
 - task_id: kabumori-daily-topic-real-device-qa-20260929
 - owner: claude
 - slot: claude-1
@@ -779,3 +1062,4 @@ None found. Waiting on the user's real-device confirmation of the checklist abov
 ### Next recommendation
 
 Send the user the install link and checklist; once they report the result, a final G1 pass records PASS/issues for K1.
+
