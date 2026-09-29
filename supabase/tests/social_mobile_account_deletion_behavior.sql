@@ -245,6 +245,14 @@ insert into run select 'w', pg_temp.acquire(pg_temp.uid('w')) ->> 'lease', null;
 update run set creds = pg_temp.step('credentials', pg_temp.uid('w'), lease) where label = 'w';
 select pg_temp.expect((select (creds -> 'accounts' -> 0 ->> 'revoke_required')::boolean = false and creds -> 'accounts' -> 0 ->> 'access_token' is null from run where label = 'w'), 'w nothing to revoke');
 select pg_temp.expect(pg_temp.step('mark_x_revoked', pg_temp.uid('w'), lease, '[]') = '{"status": "x_revoked"}', 'w proceeds without revoke') from run where label = 'w';
+-- Defense in depth: if anything of the workspace reappears (simulated here by
+-- a writer holding the lease), finalize refuses to report completion.
+select pg_temp.expect(pg_temp.step('purge', pg_temp.uid('w'), lease) = '{"status": "purged"}', 'w purged') from run where label = 'w';
+select set_config('kabumori.social_mobile_deletion_lease', lease, false) from run where label = 'w';
+insert into public.brands (id) values (pg_temp.ws(pg_temp.uid('w')));
+select set_config('kabumori.social_mobile_deletion_lease', '', false);
+select pg_temp.expect(pg_temp.step('finalize', pg_temp.uid('w'), lease) = '{"reason": "WORKSPACE_REAPPEARED", "status": "operator_required"}', 'w finalize refuses with orphans') from run where label = 'w';
+select pg_temp.expect(exists (select 1 from auth.users where id = pg_temp.uid('w')), 'w login not deleted while orphans exist');
 -- n: identity verified but no stored material at all -> operator, not a skip.
 insert into public.brands (id) values (pg_temp.ws(pg_temp.uid('n')));
 insert into public.brand_memberships values (pg_temp.ws(pg_temp.uid('n')), pg_temp.uid('n'), 'owner');

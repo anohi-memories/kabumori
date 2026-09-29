@@ -104,7 +104,7 @@ test('happy path: acquire -> revoke -> mark by fingerprint -> purge -> finalize;
 });
 
 test('gates run before any side effect', async () => {
-  const cases: [Parameters<typeof handleAccountDeletion>[0], Partial<DeletionDeps>, number, string][] = [
+  const cases: [Parameters<typeof handleAccountDeletion>[0], Partial<DeletionDeps> & { providers?: string[] }, number, string][] = [
     [{ authorization: null, body: {} }, {}, 401, 'AUTH_REQUIRED'],
     [del(), { getUser: async () => null }, 401, 'AUTH_REQUIRED'],
     [del(), { getUser: async () => { throw new Error('down'); } }, 401, 'AUTH_REQUIRED'],

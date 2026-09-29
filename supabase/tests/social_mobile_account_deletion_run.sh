@@ -85,6 +85,80 @@ grep -q '"status": "acquired"' "$tmp/del" || { echo "FAIL deletion start: $(cat 
 grep -q 'SOCIAL_MOBILE_ACCOUNT_DELETION_IN_PROGRESS' "$tmp/oauth" || { echo "FAIL reconnect not refused: $(cat "$tmp/oauth")" >&2; exit 1; }
 echo "SOCIAL_MOBILE_DELETION_RECONNECT_RACE_PASS"
 
+# Full deletion sequence for one user as separate committed service_role calls
+# (what the Edge Function does). Prints only statuses, never material.
+delete_sequence() {
+  "${as_service[@]}" -v ON_ERROR_STOP=1 -v uid="$1" <<'SQL'
+set role service_role;
+select (public.social_mobile_account_deletion_acquire(:'uid'::uuid, 'social_and_login', false)) ->> 'lease' as lease \gset
+select public.social_mobile_account_deletion_credentials(:'uid'::uuid, :'lease'::uuid) as creds \gset
+select 'marked=' || (public.social_mobile_account_deletion_mark_x_revoked(:'uid'::uuid, :'lease'::uuid, (
+  select coalesce(jsonb_agg(jsonb_build_object('id', a ->> 'id',
+    'access_sha256', encode(sha256(convert_to(a ->> 'access_token', 'UTF8')), 'hex'),
+    'refresh_sha256', encode(sha256(convert_to(a ->> 'refresh_token', 'UTF8')), 'hex')) order by a ->> 'id'), '[]'::jsonb)
+  from jsonb_array_elements((:'creds'::jsonb) -> 'accounts') a where (a ->> 'revoke_required')::boolean)) ->> 'status');
+select 'purged=' || (public.social_mobile_account_deletion_purge(:'uid'::uuid, :'lease'::uuid) ->> 'status');
+select 'finalized=' || (public.social_mobile_account_deletion_finalize(:'uid'::uuid, :'lease'::uuid) ->> 'status');
+SQL
+}
+# Rows the user or the user's derived workspace still has (must be 0 after success).
+orphans() {
+  "${as_owner[@]}" -A -t -c "select (select count(*) from public.brands where id = 'u_' || substr(md5('$1'), 1, 24))
+    + (select count(*) from public.brand_memberships where user_id = '$1' or brand_id = 'u_' || substr(md5('$1'), 1, 24))
+    + (select count(*) from public.social_accounts where brand_id = 'u_' || substr(md5('$1'), 1, 24))
+    + (select count(*) from public.social_account_oauth_states where brand_id = 'u_' || substr(md5('$1'), 1, 24) or initiated_by_user_id = '$1')
+    + (select count(*) from public.social_mobile_account_deletions where user_id = '$1')
+    + (select count(*) from auth.users where id = '$1')"
+}
+onboard_sql() {
+  echo "select set_config('request.jwt.claim.sub', '$1', true); set local role authenticated; select * from public.begin_social_mobile_x_oauth_connection(repeat('$2', 64), 'kabumori-social://oauth-callback', now() + interval '10 minutes'); reset role;"
+}
+
+# Concurrency 3 (H2 phase 4b finding, exact order): a FIRST onboarding starts
+# and stays uncommitted; deletion starts meanwhile. Deletion must wait for the
+# creation, then delete it: success is reported only with zero orphans.
+user3="00000000-0000-4000-8000-0000000000c3"
+"${as_owner[@]}" -c "insert into auth.users values ('$user3')" >/dev/null
+"${as_service[@]}" -c "begin; $(onboard_sql "$user3" a) select pg_sleep(3); commit;" > "$tmp/onboard3" 2>&1 &
+sleep 1
+delete_sequence "$user3" > "$tmp/delete3" 2>&1 &
+wait
+if grep -qi 'error' "$tmp/onboard3"; then echo "FAIL onboarding-first: onboarding errored: $(cat "$tmp/onboard3")" >&2; exit 1; fi
+grep -q 'finalized=completed' "$tmp/delete3" || { echo "FAIL onboarding-first: deletion did not complete: $(cat "$tmp/delete3")" >&2; exit 1; }
+[[ "$(orphans "$user3")" == 0 ]] || { echo "FAIL onboarding-first: orphans after success: $(orphans "$user3")" >&2; exit 1; }
+echo "SOCIAL_MOBILE_DELETION_ONBOARDING_FIRST_RACE_PASS orphans=0"
+
+# Concurrency 4 (reverse order): deletion starts first and holds its start
+# transaction; a FIRST onboarding begins meanwhile. It waits for the
+# workspace lock and then fails closed; nothing is created.
+user4="00000000-0000-4000-8000-0000000000c4"
+"${as_owner[@]}" -c "insert into auth.users values ('$user4')" >/dev/null
+"${as_service[@]}" -c "begin; set local role service_role; select public.social_mobile_account_deletion_acquire('$user4', 'social_and_login', false); select pg_sleep(2); commit;" > "$tmp/delete4" 2>&1 &
+sleep 0.5
+"${as_service[@]}" -c "begin; $(onboard_sql "$user4" b) commit;" > "$tmp/onboard4" 2>&1 &
+wait
+grep -q '"status": "acquired"' "$tmp/delete4" || { echo "FAIL deletion-first: $(cat "$tmp/delete4")" >&2; exit 1; }
+grep -q 'SOCIAL_MOBILE_ACCOUNT_DELETION_IN_PROGRESS' "$tmp/onboard4" || { echo "FAIL deletion-first: onboarding not refused: $(cat "$tmp/onboard4")" >&2; exit 1; }
+[[ "$("${as_owner[@]}" -A -t -c "select count(*) from public.brands where id = 'u_' || substr(md5('$user4'), 1, 24)")" == 0 ]] || { echo "FAIL deletion-first: workspace created" >&2; exit 1; }
+lease4="$(grep -o '"lease": "[0-9a-f-]*"' "$tmp/delete4" | cut -d'"' -f4)"
+"${as_service[@]}" -c "set role service_role; select public.social_mobile_account_deletion_release('$user4', '$lease4')" >/dev/null
+delete_sequence "$user4" > "$tmp/delete4b" 2>&1 || { echo "FAIL deletion-first: resume: $(cat "$tmp/delete4b")" >&2; exit 1; }
+grep -q 'finalized=completed' "$tmp/delete4b" || { echo "FAIL deletion-first: completion: $(cat "$tmp/delete4b")" >&2; exit 1; }
+[[ "$(orphans "$user4")" == 0 ]] || { echo "FAIL deletion-first: orphans" >&2; exit 1; }
+echo "SOCIAL_MOBILE_DELETION_DELETION_FIRST_RACE_PASS orphans=0"
+
+# Workspace creation outside READ COMMITTED would not see a newer tombstone
+# after the lock wait: it is refused.
+user5="00000000-0000-4000-8000-0000000000c5"
+"${as_owner[@]}" -c "insert into auth.users values ('$user5')" >/dev/null
+"${as_service[@]}" -c "begin isolation level repeatable read; $(onboard_sql "$user5" c) commit;" > "$tmp/rr" 2>&1 || true
+grep -q 'SOCIAL_MOBILE_WORKSPACE_CREATION_REQUIRES_READ_COMMITTED' "$tmp/rr" || { echo "FAIL isolation guard: $(cat "$tmp/rr")" >&2; exit 1; }
+echo "SOCIAL_MOBILE_DELETION_ISOLATION_GUARD_PASS"
+
+if grep -qi 'deadlock' "$tmp"/*; then echo "FAIL deadlock detected" >&2; exit 1; fi
+if grep -q 'fake_' "$tmp"/*; then echo "FAIL token material in output" >&2; exit 1; fi
+echo "SOCIAL_MOBILE_DELETION_NO_DEADLOCK_PASS"
+
 cleanup
 trap - EXIT
 left="$("${as_super[@]}" -A -t -d postgres -c "select count(*) from pg_database where datname = '$db'")"

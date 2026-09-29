@@ -1,4 +1,4 @@
-# Account lifecycle / deletion / legal links — phase 4 + 4b (G3, 2026-09-28/29)
+# Account lifecycle / deletion / legal links — phase 4 + 4b + 4c (G3, 2026-09-28/29)
 
 Source-only; nothing was applied, deployed or deleted (`production_mutation=0`).
 - Production was only read: catalog SELECTs, no data rows.
@@ -77,6 +77,17 @@ started / x_revoked / purged --problem--> operator_required --operator: retry | 
   - A refresh that rotates Vault material also updates guarded rows in the same transaction, so it rolls back.
 - **Snapshot race.** Any rotation that still gets through is caught: `mark_x_revoked` accepts only SHA-256 fingerprints equal to the current Vault material, and `purge` re-verifies them. A change goes to `operator_required CREDENTIALS_CHANGED`, never to an unrevoked purge.
 - **Purge → login gap.** The tombstone stays in `purged` until `finalize`, and recreation fails closed. `finalize` deletes the login and the tombstone atomically. After the login is gone, recreation is impossible (membership FK).
+- **Creation vs deletion serialization (phase 4c, H2 final finding).** One primitive is shared by both sides: a transaction advisory lock on the derived workspace id (`social_mobile_workspace:<u_…>`).
+  - **Creation side.** The guard trigger takes the lock on every `INSERT` into `brands` or `brand_memberships` for a `u_` workspace, i.e. the first-onboarding / membership creation point.
+    - It then reads the tombstone with a fresh snapshot.
+    - Workspace creation outside READ COMMITTED is refused, because it could not see a newer tombstone.
+    - The existing OAuth RPCs are unchanged.
+  - **Deletion side.** `acquire` takes the same lock before any snapshot. The lease-holding steps and operator actions take it too.
+  - **Onboarding started first and still uncommitted.** Deletion waits, then snapshots and deletes the new workspace. Success is reported with **zero orphans**.
+  - **Deletion started first.** Onboarding waits, then fails closed.
+  - **Lock order everywhere:** deletion lock → workspace lock → row / `auth.users` locks. Creators take the workspace lock before any FK key-share lock, so no cycle exists.
+  - **finalize** re-checks, under both locks, that no row of the workspace exists (`WORKSPACE_REAPPEARED` → operator) before removing the login and the tombstone.
+  - Proven by the runner's `ONBOARDING_FIRST` / `DELETION_FIRST` races, with deadlock detection.
 - **Posting off first.** Pending posts are locked, and running posts, publishing claims and refreshing credentials block, all before the tombstone commits. Posting is disabled in the same transaction.
 
 **Operator recovery** (`operator_resolve`, service_role, never called by the Edge Function):
@@ -192,4 +203,6 @@ Legal link configuration (`EXPO_PUBLIC_PRIVACY_POLICY_URL`, `EXPO_PUBLIC_TERMS_U
   - the R5 checkpoint;
   - unexpected dependents;
   - audit hygiene;
-  - acquire/acquire and acquire/reconnect races.
+  - acquire/acquire and acquire/reconnect races;
+  - onboarding-first (uncommitted) and deletion-first first-onboarding races, with zero orphans and no deadlock;
+  - the isolation guard.

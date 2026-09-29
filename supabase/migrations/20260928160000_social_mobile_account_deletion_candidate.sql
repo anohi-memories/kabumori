@@ -31,6 +31,16 @@
 --     transaction with the auth row locked. Otherwise only the social-mobile
 --     data is deleted and the login is kept (never a hidden cascade).
 --
+--   * Phase 4c: one per-workspace serialization lock (transaction advisory
+--     lock on the derived workspace id) is taken by every workspace/membership
+--     creation (guard trigger on INSERT into brands / brand_memberships) and
+--     by every deletion step before any snapshot or row lock. An in-flight
+--     first onboarding therefore finishes (and is then deleted) or waits and
+--     fails closed; deletion can never snapshot "no workspace" while one is
+--     being created. Lock order everywhere: deletion lock -> workspace lock ->
+--     row / auth.users locks. finalize re-checks under the locks that no row
+--     of the workspace exists before the login and tombstone are removed.
+--
 -- States: started -> x_revoked -> purged -> (completed: tombstone removed)
 --         any pre-purge state -> operator_required (reason) -> operator resolve
 
@@ -89,6 +99,11 @@ create function public.social_mobile_account_deletion_workspace(p_user_id uuid)
 returns text language sql immutable set search_path = ''
 as $$ select 'u_' || substr(md5(p_user_id::text), 1, 24) $$;
 
+-- The per-workspace serialization primitive shared by creation and deletion.
+create function public.social_mobile_account_deletion_workspace_lock(p_workspace text)
+returns void language sql volatile set search_path = ''
+as $$ select pg_advisory_xact_lock(hashtextextended('social_mobile_workspace:' || p_workspace, 0)) $$;
+
 create function public.social_mobile_account_deletion_record(p_user_id uuid, p_step text, p_reason_code text default null)
 returns void language plpgsql security definer set search_path = ''
 as $$
@@ -117,6 +132,14 @@ begin
   end if;
   if v_workspace is null or v_workspace !~ '^u_' then
     return new;
+  end if;
+  -- Creation of a workspace or membership serializes with deletion; the
+  -- tombstone is then read with a fresh (post-lock) snapshot.
+  if tg_op = 'INSERT' and tg_table_name in ('brands', 'brand_memberships') then
+    if current_setting('transaction_isolation') <> 'read committed' then
+      raise exception 'SOCIAL_MOBILE_WORKSPACE_CREATION_REQUIRES_READ_COMMITTED';
+    end if;
+    perform public.social_mobile_account_deletion_workspace_lock(v_workspace);
   end if;
   select d.lease_token into v_lease from public.social_mobile_account_deletions d where d.workspace_id = v_workspace;
   if not found then
@@ -269,6 +292,7 @@ declare
 begin
   if p_user_id is null or p_lease is null then raise exception 'SOCIAL_MOBILE_DELETION_LEASE_LOST'; end if;
   perform pg_advisory_xact_lock(hashtextextended('social_mobile_account_deletion:' || p_user_id::text, 0));
+  perform public.social_mobile_account_deletion_workspace_lock(public.social_mobile_account_deletion_workspace(p_user_id));
   select * into v_row from public.social_mobile_account_deletions where user_id = p_user_id for update;
   if not found or v_row.lease_token is distinct from p_lease or v_row.lease_expires_at <= now() then
     raise exception 'SOCIAL_MOBILE_DELETION_LEASE_LOST';
@@ -325,6 +349,8 @@ begin
   if p_expected_scope not in ('social_only', 'social_and_login') then raise exception 'SOCIAL_MOBILE_DELETION_SCOPE_INVALID'; end if;
   perform pg_advisory_xact_lock(hashtextextended('social_mobile_account_deletion:' || p_user_id::text, 0));
   v_workspace := public.social_mobile_account_deletion_workspace(p_user_id);
+  -- Before any snapshot: wait for an in-flight workspace creation to finish.
+  perform public.social_mobile_account_deletion_workspace_lock(v_workspace);
   select * into v_row from public.social_mobile_account_deletions where user_id = p_user_id for update;
   if found then
     if v_row.state = 'operator_required' then
@@ -576,8 +602,16 @@ begin
   if v_row.state <> 'purged' then
     return jsonb_build_object('status', 'not_ready', 'state', v_row.state);
   end if;
+  perform 1 from auth.users where id = p_user_id for update;
+  -- Orphan invariant, under the workspace and auth locks: nothing of the
+  -- workspace may exist when deletion is reported complete.
+  if exists (select 1 from public.brands where id = v_row.workspace_id)
+     or exists (select 1 from public.brand_memberships where brand_id = v_row.workspace_id)
+     or exists (select 1 from public.social_accounts where brand_id = v_row.workspace_id)
+     or exists (select 1 from public.social_account_oauth_states where brand_id = v_row.workspace_id) then
+    return public.social_mobile_account_deletion_to_operator(p_user_id, 'WORKSPACE_REAPPEARED');
+  end if;
   if v_row.scope = 'social_and_login' then
-    perform 1 from auth.users where id = p_user_id for update;
     if exists (select 1 from public.profiles where id = p_user_id) then
       v_reason := 'MAIN_APP_ACCOUNT_PRESENT';
     else
@@ -609,6 +643,7 @@ declare
   v_account jsonb;
 begin
   perform pg_advisory_xact_lock(hashtextextended('social_mobile_account_deletion:' || p_user_id::text, 0));
+  perform public.social_mobile_account_deletion_workspace_lock(public.social_mobile_account_deletion_workspace(p_user_id));
   select * into v_row from public.social_mobile_account_deletions where user_id = p_user_id for update;
   if not found then return jsonb_build_object('status', 'not_found'); end if;
   if p_action = 'retry' and v_row.state = 'operator_required' then
@@ -642,6 +677,7 @@ $$;
 
 revoke all on function public.social_mobile_account_deletion_subject(uuid) from public, anon, authenticated, service_role;
 revoke all on function public.social_mobile_account_deletion_workspace(uuid) from public, anon, authenticated, service_role;
+revoke all on function public.social_mobile_account_deletion_workspace_lock(text) from public, anon, authenticated, service_role;
 revoke all on function public.social_mobile_account_deletion_guard() from public, anon, authenticated, service_role;
 revoke all on function public.social_mobile_account_deletion_credential_set(text) from public, anon, authenticated, service_role;
 revoke all on function public.social_mobile_account_deletion_ownership_problem(text) from public, anon, authenticated, service_role;
