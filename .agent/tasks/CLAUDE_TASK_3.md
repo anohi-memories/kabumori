@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-account-deletion-concurrency-fix-phase4c-20260929
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Opus5.5（高）
 - purpose: H2 final acceptanceで残った1件のP1 concurrency holeとDeno test typing defectだけをfocused修正し、PR #52を最終受け入れ可能にする。
@@ -124,3 +124,10 @@ Then status -> review_required, next_owner -> chatgpt, STOP for K3.
   1. 作成地点が `brands` / `brand_memberships` の INSERT だけで網羅できているか（ほかにワークスペースを作る経路は無いか）
   2. READ COMMITTED 前提の妥当性（PostgREST の RPC は READ COMMITTED）
 - STOP for K3。
+
+
+## Final K3/C2 closure
+- H2 final concurrency acceptance: PASS.
+- accepted PR #52 head: `4bc819555c07c8792f5b78ea29aa6b9a35694042`.
+- PR #52 squash-merged as `136dcd2b35b161ccc4769da15b05e796f095e881`.
+- production mutation/apply/deploy remains 0; rollout is a separate future gate.
