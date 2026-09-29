@@ -44,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: in_progress
+- status: ready
 - task_id: kabumori-home-ui-continuation-20260929
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: PR #60 visual QA in progress. Fixed 04 Yume-chan only; simulator check then one fresh iOS preview build. No 10-state selector, no backend work, no Codex review. Historical data-packet blocker is already closed by H1/C1. Recommended Sonnet5（高）
+- allocation: K1 interim accepted PR #60 source, but final visual gate incomplete. Complete simulator check, adjust only CharacterSlot constants if needed, then create one fresh iOS preview build and STOP for K1. No backend, no 10-state selector, no Codex review. Recommended Sonnet5（高）
 
 ## Claude G2
 - owner: claude
