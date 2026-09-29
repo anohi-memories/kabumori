@@ -5,6 +5,10 @@ import { reportTypeLabel, type PersonalizedReport } from '@/lib/report-presentat
 import { reportCardStatus } from '@/lib/home-report-highlights';
 import { CharacterSlot } from '@/components/home/character-slot';
 
+// Phase 1: one fixed approved neutral artwork, shown for every report/loading/empty
+// state. Phase 2 (after visual approval) replaces this constant with a selected source.
+const FIXED_REPORT_CHARACTER_SOURCE = require('@/assets/images/report-states/report_04_neutral.webp');
+
 type ReportHighlightCardProps = {
   palette: KabumoriPalette;
   report: PersonalizedReport | null;
@@ -32,7 +36,7 @@ export function ReportHighlightCard({ palette, report, points, loading, error, o
             今日の市場とあなたの保有銘柄への影響をAIが整理しました。
           </Text>
         </View>
-        <CharacterSlot palette={palette} />
+        <CharacterSlot palette={palette} source={FIXED_REPORT_CHARACTER_SOURCE} />
       </View>
 
       {status === 'loading' ? (
