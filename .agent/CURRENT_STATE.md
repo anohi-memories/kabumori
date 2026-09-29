@@ -89,6 +89,21 @@
 - known non-blocker: /news and /portfolio currently rely on iOS edge-swipe for back.
 - G1 slot may proceed with backend deploy-only work because that cannot change this already-built app binary.
 
+## K2 — PR #57 second review: polarity-safe causality still required
+
+- verdict: **CHANGES REQUIRED**; PR #57 remains open, unmerged, undeployed.
+- reviewed head: `485f4bf8bd767601d70625eb383bb5ec8b6c2248`.
+- previous global bypass is fixed and mixed supported+unsupported regression is present.
+- new confirmed defect: `causeSupported()` uses longest-common-substring >= 3, which can drop direction/polarity and falsely treat an inverted cause as supported.
+  - example: support `半導体株安` vs generated `半導体株高` share `半導体株` and can pass.
+  - example: support `米国株安` vs generated `米国株高` can share enough core text to pass.
+- required: controlled deterministic normalization/matching that preserves movement/polarity semantics; add explicit inverted-direction regressions.
+- current head local report: content guard 13/13, analysis 48/48, data-packet 42/42, personalized 125/125, x-test-post 6/6, _shared 279/279; no production mutation.
+- GitHub: mergeable=true; Vercel/Netlify current head success; no workflow-run Deno CI.
+- main changes since PR merge-base have **0 overlap** with PR #57 files.
+- no Codex review yet; this remains a focused G2 source correction.
+- recommended model: Opus5.5（高）.
+
 ## K2 — PR #57 content guard review
 
 - verdict: **CHANGES REQUIRED**; PR #57 is not merged or deployed.
