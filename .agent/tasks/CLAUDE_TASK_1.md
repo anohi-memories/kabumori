@@ -1454,3 +1454,51 @@ None found in the automated/read-only checks. Waiting on the user's real-device 
 ### Next recommendation
 
 Send the user the install link and checklist; once they report the result, a final G1 pass records PASS/issues for K1.
+
+## URGENT UPDATE — real-device QA FAILED, root cause found and fixed (PR #55)
+
+The user tested build `d9ed1da1-9542-45c7-b704-d89eaba9a978` (reported above as ready) and found: **nothing on the Home screen navigates when tapped.** This is a real, confirmed FAIL of that build's QA checklist, not a false alarm.
+
+### Root cause (confirmed, live-verified in the iOS Simulator)
+
+`expo-router/unstable-native-tabs` (the experimental API `src/components/app-tabs.tsx` used) only registers routes that have a matching `NativeTabs.Trigger` declared inside the same component tree (`useOnlyUserDefinedScreens=true` internally). `app-tabs.tsx` was rendered directly from the root `_layout.tsx`, so any route without its own Trigger there was never registered with the navigator — `router.push()` to it silently does nothing, no error.
+
+PR #53 removed `news`/`portfolio` from the trigger list (to match the approved v3 tab set) and added a new non-trigger route, `topic-detail`. From that point, these all stopped navigating: news rows/`すべて見る`, the topic card, Settings' `ポートフォリオ` entry, and push-notification taps routing to `/news`. `reports/[id]` was unaffected (`reports` itself is still a Trigger). This explains why even previously-working things (news rows, whose own code never changed) appeared broken — their *destination* stopped being registered, not their own logic.
+
+### Fix
+
+Restructured to the standard documented "NativeTabs + Stack" pattern: the 5 real tab screens moved into `src/app/(tabs)/` (with the NativeTabs definition becoming that group's own `_layout.tsx`, triggers/labels/icons unchanged); `news/`, `portfolio.tsx`, `topic-detail.tsx`, `search.tsx` stay as root-level Stack screens via a new `SignedInNavigator` in `src/app/_layout.tsx` (same `<Stack>`-matches-file-routes pattern `news/_layout.tsx`/`reports/_layout.tsx` already used). Deleted `src/components/app-tabs.web.tsx` (dead code, an older pre-v3 implementation nothing imported anymore).
+
+### Live verification (iOS Simulator, Release build, disposable scratch clone with an auth-bypass rig — never touched the shared checkout)
+
+- **Before fix**: confirmed broken exactly as the user described, in a Release build whose bundle was confirmed to contain the current routes.
+- **After fix**: `/news`, `/news/[id]`, `/portfolio`, `/topic-detail` all navigate correctly; all 5 bottom tabs still work; `reports/[id]` still works (unaffected, re-verified after the file move).
+- Not independently re-verified: `kabumori://search` deep link (not one of the 4 broken navigations, not linked from anywhere in-app).
+
+### New regression test
+
+`tests/app/root-navigator_test.ts`: pins that every route pushed to from outside the tab group is registered as a root Stack.Screen, so a future route addition can't silently reintroduce this bug class.
+
+### Tests / verification
+
+- `deno test tests/app/ --allow-read --no-check` — **187/187 pass**.
+- `npx tsc --noEmit` — 0 new errors (same 2 pre-existing, unrelated).
+- `npx expo config --json` — clean.
+- `npx expo export --platform web --clear` — succeeds, 19 static routes, new `native-tabs.module.css` confirms the built-in web NativeTabs renderer is now in use (replacing the deleted custom one).
+- `git diff --check` — clean.
+
+### PR
+
+- **https://github.com/anohi-memories/kabumori/pull/55** — narrow, source-only, not self-merged. **Recommending expedited K1 review given this is release-blocking** (the app was effectively unusable beyond the 5 tab screens themselves).
+
+### Known remaining gap (flagged, not fixed in this PR)
+
+`portfolio.tsx`/`news/index.tsx` have no in-app back button now that they're pushed screens instead of tabs (only iOS edge-swipe works) — a real but lower-severity UX gap versus the navigation-dead regression this PR fixes. Recommend a small follow-up task to add one, matching the pattern already used in `topic-detail.tsx`/`settings.tsx`'s sub-views (`‹ もどる`).
+
+### Production mutation
+
+**0.** Source-only.
+
+### Next recommendation
+
+K1 reviews and merges PR #55 as a priority. Once merged, a new EAS preview build is needed (the existing `d9ed1da1` build must NOT be used for further QA — it's confirmed broken) before the user can re-attempt this task's real-device checklist. I will build it as soon as PR #55 is merged, without waiting for a separate task assignment, given the severity — but will still stop and report rather than self-merge or apply anything to production.
