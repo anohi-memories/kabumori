@@ -10,6 +10,7 @@ import { deriveOnboardingStep, inputForCurrentUser, onboardingStorageKey, type O
 import { shouldShowNewAccountNotice } from '@/domain/auth-flows';
 import { useAuth } from '@/providers/auth-provider';
 import { useXConnect } from '@/features/x-connect/use-x-connect';
+import AccountDeletionScreen from '@/app/account-deletion';
 import { supabase } from '@/lib/supabase';
 import { useDataStatus } from '@/providers/data-provider';
 
@@ -33,6 +34,20 @@ async function writeProgress(userId: string, patch: LocalProgress): Promise<void
 
 async function readDeferred(userId: string): Promise<boolean> {
   return (await readProgress(userId)).settingsDeferred === true;
+}
+
+/**
+ * Secondary action shown on every unfinished onboarding screen. Account deletion
+ * must stay reachable before Home (App Review 5.1.1(v)); the destination is the
+ * same screen as the /account-deletion route, so recent-auth, the typed
+ * confirmation and the user/session pinning are unchanged.
+ */
+function DeletionEntry({ onOpen }: { onOpen: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" onPress={onOpen} style={({ pressed }) => [{ alignItems: 'center', paddingVertical: 10 }, pressed && styles.buttonPressed]}>
+      <Text style={[styles.muted, { textDecorationLine: 'underline' }]}>アカウントの削除について</Text>
+    </Pressable>
+  );
 }
 
 const STEPS = ['ログイン', 'Xを接続', '接続を確認', '投稿の好み'] as const;
@@ -66,6 +81,8 @@ export function OnboardingGate({ children }: PropsWithChildren) {
     { userId: null, input: selection.kind === 'mock' ? { kind: 'mock' } : { kind: 'loading' }, acknowledged: false },
   );
   const [generation, setGeneration] = useState(0);
+  // The deletion view is opened for one user only; another user never inherits it.
+  const [deletionOpenFor, setDeletionOpenFor] = useState<string | null>(null);
   const refresh = useCallback(() => setGeneration((value) => value + 1), []);
 
   useEffect(() => {
@@ -106,6 +123,17 @@ export function OnboardingGate({ children }: PropsWithChildren) {
 
   const step = deriveOnboardingStep(input);
   if (step.step === 'preview' || step.step === 'done') return <>{children}</>;
+  if (currentUserId !== null && deletionOpenFor === currentUserId) {
+    return (
+      <View style={{ flex: 1 }}>
+        <Pressable accessibilityRole="button" onPress={() => setDeletionOpenFor(null)} style={{ padding: 16, paddingBottom: 0 }}>
+          <Text style={{ color: colors.primary, fontWeight: '700' }}>‹ 戻る</Text>
+        </Pressable>
+        <AccountDeletionScreen />
+      </View>
+    );
+  }
+  const openDeletion = () => setDeletionOpenFor(currentUserId);
   const identities = (session?.user.identities ?? []).map((identity) => ({ provider: identity.provider }));
   // Display only (never authorization): how this session signed in.
   const signedInWithX = identities.some((identity) => identity.provider === 'x');
@@ -124,6 +152,7 @@ export function OnboardingGate({ children }: PropsWithChildren) {
             <ActionButton label="このまま新しく始める" onPress={() => void acknowledgeNewAccount()} />
           </Card>
           <SignOutButton />
+          <DeletionEntry onOpen={openDeletion} />
         </ScrollView>
       </Screen>
     );
@@ -183,6 +212,7 @@ export function OnboardingGate({ children }: PropsWithChildren) {
           </Card>
         ) : null}
         <SignOutButton />
+        <DeletionEntry onOpen={openDeletion} />
       </ScrollView>
     </Screen>
   );
