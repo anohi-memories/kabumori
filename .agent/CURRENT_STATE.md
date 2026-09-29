@@ -122,11 +122,21 @@
 - no Codex review used.
 - remaining product gate: real-device visual/settings QA.
 
+## G1 Daily topic real-device QA
+
+- assigned: `kabumori-daily-topic-real-device-qa-20260929`.
+- backend is live and production security/functional readback already PASS.
+- next gate is user-visible iPhone acceptance only.
+- reuse an existing current-main internal build if available; otherwise create exactly one nonproduction/internal iOS build.
+- no source change, no production DB/config mutation, no Codex review expected.
+- user must physically confirm the three level switches, same-day determinism, and Home report/news regression before this feature is considered visually closed.
+- recommended model: Sonnet5（中）.
+
 ## Current slot snapshot
 
 - H1: `review_required` — `x-social-mobile-auth-phase2-final-acceptance-review-20260928`; PASS-WITH-FIX at PR #47 `ed5f8b7` (initial G3 correction `5fd483a`); prior 7 + additional 3 source boundaries accepted. H1 pinned callback/recovery contexts, retained in-flight exchanges and limited provider authorize paths; fix pushed. Mobile 43/43 + data-view 14/14, typecheck/lint/Web+iOS export and four H1 mutation probes PASS; exact-head Preview SUCCESS. Production mutation 0; awaiting C1/source merge, real provider/device activation remains separately gated; see latest `.agent/CODEX_REPORT.md`.
 - H2: `idle` — unassigned; stale deferred PR #32 morning Fact-contract review was closed as obsolete after PR #32 had already been merged. Historical partial report preserved; slot is now genuinely reusable.
-- G1: `done` — `kabumori-daily-topic-prod-apply-verify-20260928`; exact reviewed daily-topic RPC is live in production; ACL/RLS/determinism/read-only + authenticated/anon role checks PASS. Migration history intentionally unrepaired; broad db push remains forbidden pending separate hygiene work.
+- G1: `ready` — `kabumori-daily-topic-real-device-qa-20260929`; prepare/reuse a fresh-main nonproduction iOS internal build, run focused automated regressions, then hand the user an exact iPhone QA checklist for beginner/intermediate/advanced switching and Home determinism. No source/prod mutation expected; recommended Sonnet5（中）.
 - G2: `ready` — `kabumori-shared-analysis-prod-deploy-observe-20260928`; PR #45 merged; controlled deploy of market-report-analysis only with consumer gates OFF, then natural morning+close observation; recommended Sonnet5（高）
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS
