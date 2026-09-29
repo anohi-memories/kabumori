@@ -1,3 +1,134 @@
+## H2 — PR #52 account-deletion privileged review — 2026-09-29
+
+- task_id: `x-social-mobile-account-deletion-privileged-review-20260928`
+- result / verdict: **FAIL — not safe to merge as a deletion implementation at the reviewed head.** Source/production enablement must remain blocked pending C2/G3 decisions and corrections.
+- exact_reviewed_head: `12146c4ab2bc635a2781b673146e1f8ad8350258`; Draft PR #52, branch `claude/g3-account-lifecycle-p4`, source diff base `249df4c`.
+- independent_review_worktree: `/private/tmp/kabumori-h2-account-deletion-review-20260929`; code remained byte-unchanged and Git-clean.
+- fresh_origin_main_at_start: `3d8bbea33dd085a67599d2c9f8e48357c986e4ac`; report base after fresh-check: `d5054639f3608195016ef9771e8dc2203195c487`.
+- source_fixes: **0**. TASK's design-level/partial-destruction STOP policy was invoked; no unrelated OAuth/backend fixes were attempted.
+- changed_files (shared report only): `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md`.
+- implementation_commit: existing G3 head above; no H2 implementation commit.
+- report_commit_hash / push: this two-file report is prepared for normal origin/main synchronization; the actual resulting SHA and remote read-back are reported in the completion message. Do not treat preparation as a successful push.
+- deploy / merge / production_mutation: **0 / 0 / 0**.
+
+### Merge-blocking findings
+
+#### R1 — P1: deletion is not serialized against OAuth reconnect, nor across purge -> Auth deletion
+
+Locations:
+- `supabase/migrations/20260928160000_social_mobile_account_deletion_candidate.sql:127`, `:189` (transaction-local advisory locks); `:193-222` (purge re-check/deletion).
+- `supabase/functions/social-mobile-account-delete/delete_logic.ts:143-175` (separate credentials/revoke/purge/Auth requests).
+- Existing interacting RPCs (read-only review, NOT changed): `begin_social_mobile_x_oauth_connection` and `complete_social_mobile_x_oauth_connection`.
+
+The advisory lock ends at each PostgREST transaction. Turning posting off is not a durable deletion marker: a normal freshly onboarded workspace is also inactive/disabled. Existing authenticated reconnect RPCs do not consult a deletion state or acquire the deletion lock.
+
+Two legal interleavings were independently reproduced with candidate SQL + actual existing onboarding/reconnect RPC source in a disposable PostgreSQL database:
+1. begin -> credentials snapshot -> authenticated reconnect begin+complete -> purge. Complete replaced the Vault tokens with a new fake access/refresh pair after the snapshot. Purge still succeeded. Only the old snapshot is sent to X by the Edge code; newly issued credentials can therefore be discarded locally without being revoked at X. External validity of real new X tokens is an inference from the call order, not a real-provider test.
+2. purge commits -> authenticated begin reconnect recreates the derived workspace/account -> Auth-user delete. Auth deletion cascaded the membership but left the recreated brand and social-account rows as orphans. This also applies to an Auth admin API failure/retry gap. New callback completion during that gap can additionally install new secrets before Auth deletion.
+
+Proof markers:
+- `H2_RECONNECT_AFTER_CREDENTIAL_SNAPSHOT_REPRODUCED`
+- `H2_PURGE_AUTH_DELETE_GAP_ORPHAN_REPRODUCED`
+
+Required decision: a durable per-user deletion state/lease/tombstone honored by every relevant onboarding/complete/post/refresh writer, plus guarded finalization/recovery. A lock on just begin/purge is insufficient. This is cross-boundary design work, not a safe local patch to this PR. G4/other-lane RPCs were not changed.
+
+#### R2 — P1: shared Auth deletion also deletes Kabumori main-app data without matching UI consent
+
+- `supabase/functions/social-mobile-account-delete/index.ts:63-65` deletes the shared Supabase Auth user.
+- `apps/social-mobile/src/domain/account-deletion.ts:27-33` lists login/workspace/X/schedule/history deletion but does not explain deletion of the same user's Kabumori main-app profile/data.
+- G3's own `docs/account-lifecycle-phase4.md` §3 acknowledges this cross-product cascade.
+- Live read-only FK catalog confirms `public.profiles.id -> auth.users.id ON DELETE CASCADE`.
+
+The exact user is correct, but exact-user binding does not settle cross-product destructive consent. C2/owner must choose whether this is global account deletion (and disclose the full product scope) or social-app-only removal that retains shared Auth. Main-app `account-delete` can also orphan the social workspace, as already noted by G3; that other lane was reported only, not edited.
+
+#### R3 — P1 defensive tenant boundary: foreign/shared Vault reference is not rejected
+
+- Migration `:201-220` unions referenced secret IDs and deletes them, without checking whether another workspace/account/OAuth/refresh row also references any of those IDs.
+- Live social-account index metadata contains PK, brand/platform uniqueness and platform/platform_user_id uniqueness, but no unique ownership constraint on Vault secret IDs.
+- An isolated, schema-valid corruption fixture made A's access-secret reference equal B's. A's begin/purge returned ready/purged; B's account remained but its secret was deleted.
+- Marker: `H2_SHARED_SECRET_REFERENCE_CROSS_TENANT_REPRODUCED`.
+
+This is not evidence that an ordinary client can assign arbitrary Vault IDs; it is a missing fail-closed invariant at a privileged destructive boundary. Refuse ambiguous/foreign references before external revoke or deletion, and bind a stable exact credential set. No live secret IDs/plaintext were inspected.
+
+### Additional source defects / release blockers
+
+#### R4 — P2: missing X credential material becomes false revocation completion
+
+`delete_logic.ts:145-157` silently skips null/empty tokens and records credentials_revoked. The credentials RPC can return null for a missing/deleted Vault object and does not expose whether an account was genuinely never connected. The independent mock returned one account with both tokens null: result was 200 ok:true, X revoke calls 0, Auth deletion executed. Distinguish truly unconnected/no-grant accounts from missing required credential material and fail closed on the latter. A direct local fix must not break normal unconnected-account deletion.
+
+#### R5 — P2: Apple single-use-code retry is not idempotent
+
+`apple_revoke.ts:65-75` exchanges and consumes the authorization code before purge/Auth completion; `delete_logic.ts:159-170` repeats the exchange on every retry. With real helper + fake Apple responses, the first request exchanged/revoked successfully then got PURGE_FAILED; retrying the same request got APPLE_REVOKE_FAILED before purge, because the code was already consumed. No durable Apple-revoked checkpoint is used. The screen resets reauth only on REAUTH_REQUIRED/APPLE_REAUTH_REQUIRED, not on this failure, so its normal retry retains the unusable code.
+
+Apple's official guidance describes authorizationCode as single-use; do not claim every step is repeat-safe. Define safe resumption or explicitly obtain a new same-user native authorization code without losing the deletion state. Do not merely ignore revoke failure. [Apple WWDC guidance](https://developer.apple.com/videos/play/wwdc2022/10122/)
+
+#### R6 — P2: web deletion cannot call the candidate Edge endpoint
+
+`index.ts:19` returns 405 for OPTIONS and no response supplies CORS allow-origin/headers. The browser request uses Authorization/apikey/JSON and needs preflight. A local captured entry-handler test confirmed OPTIONS=405 and no Access-Control-Allow-Origin. Native app behavior is different; successful web export does not test this request. [Supabase CORS guidance](https://supabase.com/docs/guides/functions/cors)
+
+Apple browser reauth is a separate limitation: it does not produce the native authorizationCode required by the Edge pre-check. One APPLE_CLIENT_ID is configured; native App ID vs web Services ID/audience and the supported deletion UX need an explicit rollout decision. Do not present browser Apple deletion as supported.
+
+### Boundary assessment (including what passed)
+
+- **Auth / IDOR:** Edge derives uid and provider identities from GET /auth/v1/user using the caller's Bearer token. Client body does not name the subject. Confirmation constant and signed-token sub + newest amr timestamp <=600 seconds precede side effects. Existing gate tests passed; independent wrong body-id probe still used only the verified uid. No source path that lets an unverified client select a different uid was found.
+- **Client exact reauth:** password/native Apple/browser helper compare the resulting user against the previously captured user and reject mismatches. However the deletion screen's reauthed/confirmation state is not keyed/reset to user/session; deleteAccount fetches whichever session is current. Session switching between confirmation and submission is a remaining client-context issue to cover with a pinned user/session test, not a demonstrated cross-user backend IDOR.
+- **DB privileges:** four externally callable RPCs are SECURITY DEFINER with empty search_path; all client/PUBLIC execute revoked, only service_role (plus owner) can execute. Internal helper execute revoked even from service_role. Audit RLS enabled, no direct client/service read grant. Disposable non-superuser owner proof verified actual ACL denial, not just strings.
+- **Workspace guards:** live schema + baseline proof cover admin, foreign owned workspace, foreign profile, shared derived workspace, role mismatch, running post/publishing claim and refreshing state. Own owner membership being absent is not explicitly rejected; derived ID alone is accepted. Blocked cases return/raise fixed codes without proceeding to revoke/purge.
+- **In-flight posting/refresh:** current running/refreshing rows are rejected; begin disables brand/account/refresh rollout, purge re-checks. Existing race proof covers two purge transactions only, not the complete multi-HTTP workflow. R1 remains unresolved.
+- **FK ordering/atomicity:** unknown dependent FK correctly aborts the purge transaction. Independent fake Vault-delete-denied trigger likewise rolled back workspace/account/secrets. Edge purge error test prevented Auth deletion. This protects local purge; it cannot roll back prior X/Apple revocation or begin's committed posting changes.
+- **Vault capability:** live metadata only: vault.secrets and decrypted_secrets owner=supabase_admin; current postgres has SELECT+DELETE, service_role has r/d; no noninternal delete trigger was found. These facts establish capability for a postgres-owned definer under current ACL, NOT an already applied candidate or a test of encrypted deletion. Candidate functions do not exist in production and do not pin OWNER; eventual single-file apply must explicitly verify actual owner, ACL and intended Vault delete capability. No live Vault plaintext read, mutation or production delete proof.
+- **X revoke:** source POST /2/oauth2/revoke, form token/token_type_hint/client_id, Basic client credentials matches X's official SDK for a confidential client. Refresh is attempted before access; any non-2xx/throw stops before purge/Auth. No token/header log path. App type, correct same X client, already-revoked token responses and real revocation semantics remain operator/QA gates; no Developer Portal or real provider request was made. R1/R3/R4 prevent accepting overall revocation safety. [Official X OAuth SDK](https://github.com/xdevplatform/twitter-api-typescript-sdk/blob/main/src/OAuth2User.ts)
+- **Apple binding:** ES256 secret generation/signature test passes, expected iss/kid/aud/sub/5min TTL. Code exchange is server-to-Apple HTTPS; returned id_token sub must match the verified user's Apple identity. Apple subject mismatch/no ID token refuses revoke. Official Supabase Auth identity source maps JSON id to ProviderID(sub), while identity_id is the row UUID: using identity.id here is correct, not a defect. [Supabase identity source](https://github.com/supabase/auth/blob/master/internal/models/identity.go)
+- **Auth terminal state:** purge error blocks Auth delete, Auth failure returns AUTH_DELETE_FAILED, only 200 ok:true reaches client success/local sign-out. Non-Apple mock retry after Auth failure succeeds on nothing_to_purge. 404 counted as success at the adapter, but a later request for an already removed user normally fails getUser before reaching the 404 branch; lost-response terminal recovery is not fully specified.
+- **Session invalidation:** hard Auth delete cascades session rows and invalidates refresh issuance, but issued access JWTs remain cryptographically valid until expiry. No deletion/session tombstone check is added to the existing sensitive RPCs. Do not claim immediate global access-token invalidation; R1 requires a sensitive-operation gate regardless. [Supabase user deletion/session guidance](https://supabase.com/docs/guides/auth/managing-user-data)
+- **UI / legal:** explicit build flag + backend configured is required; otherwise setup_pending. Legal links fail closed on missing/placeholder/secret-like URLs, no invented policy text. X posts retained is disclosed; fixed errors never echo provider/server messages. Retained deterministic uid SHA-256 is pseudonymous, not proof of irreversibly anonymous data; retention and privacy wording need owner/legal decisions. R2 remains unresolved.
+- **Audit:** fixed steps/reasons, uid hash, no raw uid/credential stored. Edge record failure is best-effort and swallowed; terminal deletion can be unrecorded if final audit fails. Define observability/recovery for a lost final response without retrying one-time external actions.
+
+### Verification independently executed at exact PR head
+
+1. `npm ci --offline --ignore-scripts --no-audit --no-fund` in H2's own social-mobile app: 821 packages installed from cache; no shared node_modules used, no tracked dependency/lockfile change. First test attempt without dependencies failed with two module-not-found harness failures; subsequent complete run passed.
+2. `npm test`: **71/71 PASS** (account-deletion client tests included).
+3. `node --test src/domain/data-view.test.ts`: **14/14 PASS**.
+4. `npm run typecheck`, `npm run lint`: **PASS**.
+5. `CI=1 EXPO_NO_TELEMETRY=1 npx --no-install expo export --platform web --platform ios --output-dir <H2-tmp>/expo-export`: **both PASS**, no real backend env injected. Export is bundling proof, not signed-in browser/device QA.
+6. Deno cached-only/no-lock/no-config test with allow-read limited to the candidate directory: **13/13 PASS**; `deno check .../index.ts`: **PASS**. Initial no-allow-read attempt failed one source-reading test due to permission; scoped read permission resolved the harness issue.
+7. G3 disposable runner (PG17, Unix socket only, fake data, non-superuser fixture owner): **BEHAVIOR / RACE / CLEANUP PASS**. Public/client ACL and shared/admin/foreign/active-work guards checked; its race is concurrent purge only.
+8. Independent candidate **apply inside BEGIN -> ACL/object checks -> ROLLBACK -> candidate table/functions absent**: PASS. Then reapplied to own throwaway DB for focused behavior proofs.
+9. Independent SQL probes: R1 reconnect-after-snapshot reproduced; R1 purge/Auth gap orphan reproduced; R3 cross-tenant shared-secret fixture reproduced; Vault-delete-denied atomic rollback PASS. Existing exact onboarding/reconnect RPC bodies used, auth.uid and Vault are local minimal stubs. Production catalog source matched those RPCs. No encrypted real Vault or real provider operation was used.
+10. Additional outside-repo Edge/mock tests **6/6 PASS as reproduction/control checks**: verified uid vs body, null credentials false success (R4), purge/X failure stops Auth, non-Apple Auth retry, consumed Apple-code retry failure (R5), OPTIONS/CORS rejection (R6). A reproduction PASS means the defect was observed, not that release safety passed.
+11. `git diff 249df4c..12146c4 --check`: PASS; review worktree git status clean. Client secret scan has no service role/client secret/private key references; no Edge console/logger path. Key-pattern scan only matched dynamically generated fake PEM in apple_revoke_test, not a literal credential.
+12. Disposable proof database was dropped; catalog count=0 confirmed, own PG server stopped. Scratch evidence files/export preserved under `/private/tmp/kabumori-h2-deletion-proof.QjcRgz`; nothing from them was committed.
+
+### Concrete reproduction / remediation handoff for C2 (no external local file needed)
+
+- R1 snapshot race: create fake own workspace -> service begin -> capture credentials -> authenticated begin OAuth(new state) -> authenticated complete(new fake tokens) -> verify Vault material differs from captured pair -> service purge still returns purged.
+- R1 finalize gap: same fake user still exists after purge -> authenticated begin OAuth recreates workspace -> delete fake auth.users row -> assert brands/social_accounts remain and owner membership is gone.
+- R3: two fake users/workspaces -> set A's access-secret ref to B's access-secret -> begin+purge A -> B social_accounts remains but referenced Vault object is missing. Test source must be local only, never production fixtures.
+- R4: credentials RPC mock array contains an existing account with access_token=null/refresh_token=null -> handleAccountDeletion returns ok:true with zero revoke calls and one Auth delete.
+- R5: real Apple helper with fake first code exchange/revoke 200 + purge RPC error -> repeat same code -> fake exchange 400(single-use) -> APPLE_REVOKE_FAILED, no second purge/Auth.
+- R6: capture Deno.serve handler, send OPTIONS with Origin and requested authorization/apikey/content-type headers -> 405, no allow-origin.
+
+### Exact next gates
+
+- C2 must return R1/R2/R3 for design correction before merging this deletion implementation. Suggested G3 implementation model: **Opus5.5（高）**; do not alter G3's current TASK or another lane automatically.
+- Add durable workflow and writer exclusion/recovery tests, same-user/session confirmation binding, credential completeness/ownership checks, Apple resumability, and truthful native/web support.
+- Resolve global-vs-product-specific deletion and main-app deletion coupling with the owner; resolve retained audit/privacy/history policy.
+- Re-run exact-head tests plus interleavings and destructive boundary proof; independent security review again.
+- Only separately approved production preflight may inspect/apply one migration, pin/check definer ownership/Vault ACL, deploy candidate with JWT verification ON, byte-compare and perform disposable-account/provider E2E.
+- No production apply/deploy/E2E is authorized or recommended from this FAIL report.
+
+### Safety / C2 disposition
+
+- TASK -> `review_required`; next_owner -> `chatgpt`.
+- Production DB/schema/RLS/RPC/Vault/Auth/Storage/settings/Cron mutations: **0**.
+- Edge deploy, actual user/data deletion, real X/Apple revoke, X/OpenAI/Push calls/posts, provider console/OAuth changes: **0**.
+- Other workstream source/control files, apps/admin, HANDOFF, root package/lock/.env/src, formal repo's existing uncommitted changes: **untouched**.
+- Read-only production work limited to schema/FK/index/RPC/owner/ACL/trigger catalogs; no user rows or Vault plaintext.
+- PR #52 remains unchanged at reviewed head; no source fix/merge and no review bypass.
+- Current G1/G2 parallel updates did not overlap H2 controls or deletion source. Earlier N3 unfinished local report/code was preserved separately and not mixed into this task.
+
+---
+
 ## H2 — PR #15 admin auth / cross-brand final review — 2026-09-25
 
 - task_id: `x-admin-pr15-auth-crossbrand-final-review-20260925`

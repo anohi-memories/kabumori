@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-account-deletion-privileged-review-20260928
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: Draft PR #52 の account deletion / account lifecycle Phase 4 を独立レビューする。service_role DB functions、Vault cleanup、Auth admin user deletion、X revoke、Apple revoke、recent-auth、tenant/workspace境界、partial failure/idempotencyを重点確認し、merge可否を判定する。
