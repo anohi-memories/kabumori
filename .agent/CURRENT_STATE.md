@@ -40,6 +40,27 @@
 - かぶモリExpo/native本体はVercel制限の主対象ではないため、Netlify Web Preview対応は現時点では進めない。
 - かぶモリのiOS実機/TestFlight/native-only機能は従来どおりExpo/EAS/実機で確認する。
 
+## Final K1 — PR #56 app navigation/menu/topics consolidation
+
+- verdict: **PASS**.
+- G1 report clarified the queued backend deploy task had not started; no backend deploy was falsely credited.
+- user-directed app baseline supersedes the prior v3 tab set:
+  - bottom tabs = ホーム / 銘柄 / ニュース / レポート / メニュー
+  - メニュー = トピック / AIに聞く / 設定
+  - standalone portfolio removed; portfolio summary is integrated into 銘柄 → ポートフォリオ
+  - /topics added using deterministic existing daily-topic RPC per JST date; no new RPC/migration
+  - shared in-app back button added to pushed screens
+- reviewed PR #56 exact head: `ad42874809b708fd218bd05de246d3490214f2b8`.
+- branch was behind main, but main-side files since merge-base had **0 overlap** with PR #56 files.
+- GitHub mergeable=true; Vercel + Netlify statuses success.
+- reported tests 194/194 PASS; tsc only known unrelated CSS errors; Expo config/export PASS.
+- user real-device PASS was already reported for prior branch build `5531aacd...` at commit `16ae556`.
+- latest branch build `4883189c-f180-4447-b57e-a8365bb8f401` at `ad42874` includes the final portfolio-in-銘柄 change; its user QA is still pending.
+- PR #56 merged -> `6946f810e7353ded46962053201e7cf060aca891`.
+- production mutation 0; no Codex review used.
+- original G1 backend task `kabumori-data-packet-session-reuse-prod-sync-20260929` is re-issued from fresh main; it remains incomplete until separately run.
+- recommended model for re-issued G1: Sonnet5（高）.
+
 ## Final K1 — post-PR55 iOS preview build
 
 - verdict: **PASS for build/readiness gate**.
