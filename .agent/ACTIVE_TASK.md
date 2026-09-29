@@ -44,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: review_required
+- status: done
 - task_id: kabumori-data-packet-session-reuse-prod-sync-20260929
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: STOP before mutation because production DB reads were blocked by G1 classifier. Source drift/tests proven; rollout continuation handed to H1. Do not restart concurrently. Recommended Sonnet5（高）
+- allocation: closed; G1 STOP was superseded by H1 controlled rollout and Final C1 PASS. No remaining work; do not restart.
 
 ## Claude G2
 - owner: claude
