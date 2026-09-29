@@ -65,11 +65,11 @@
 - owner: claude
 - slot: claude-3
 - status: ready
-- task_id: x-social-mobile-account-deletion-prod-e2e-stage2-20260929
+- task_id: x-social-mobile-account-deletion-onboarding-entry-fix-20260930
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: Stage 2 disposable-account E2E only; use test fixtures only; mandatory fresh user confirmation before first destructive valid-user action; feature remains OFF; recommended Opus5.5（高）
+- allocation: UI/navigation-only deletion-entry fix for onboarding-incomplete states; no backend/production mutation; recommended Sonnet5（高）
 
 ## Claude G4
 - owner: claude
