@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: kabumori-data-packet-prod-sync-verification-rollout-20260929
+- status: ready
+- task_id: kabumori-market-report-analysis-prod-sync-content-guard-20260929
 - start_code: H1
 - finish_code: C1
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: closed; Final C1 PASS. market-report-data-packet v11 -> v12, 8/8 source identity, cron/gates/other functions unchanged, consumers remain OFF.
+- allocation: deploy/read-back only for merged PR #57 market-report-analysis with consumer gates OFF; verify source identity, verify_jwt, cron, gates, other Functions unchanged. No manual cycle. Recommended Sol（高）
 
 ## Codex H2
 - owner: codex
@@ -54,12 +54,12 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: done
 - task_id: kabumori-shared-analysis-content-guard-fix-20260929
 - start_code: G2
 - finish_code: K2
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: K2 CHANGES REQUIRED on PR #57 head 485f4bf; global bypass is fixed, but generic LCS>=3 support matching can treat polarity-inverted causes (e.g. 半導体株安→半導体株高) as supported. Replace with polarity-preserving deterministic matching and add regressions. No deploy/gates/data-packet edits. Recommended Opus5.5（高）
+- allocation: closed; Final K2 PASS. PR #57 accepted at b8bbfe9 and merged as 9488f9e. Production rollout moved to H1; consumers remain OFF.
 
 ## Claude G3
 - owner: claude
