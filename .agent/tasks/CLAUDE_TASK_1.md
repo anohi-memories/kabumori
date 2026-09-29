@@ -3,8 +3,8 @@
 - task_id: kabumori-data-packet-session-reuse-prod-sync-20260929
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sonnet5（高）
 - purpose: K2で判明したproduction `market-report-data-packet` のsource遅れを解消し、mainに既に存在するsame-session reuse fix（`aecfa60`系）を、対象Edge Functionだけへcontrolled deployしてsource read-backまで確認する。新規source修正は禁止。
@@ -1926,3 +1926,20 @@ Deploy-path note (important): the production function's current entrypoint was b
 
 ### Status
 Production mutation: 0. Rollback: not needed. `review_required` / next_owner `chatgpt` = STOP for K1 decision on the blocker; the deploy itself is **not done**.
+
+## Final K1 closure — superseded by H1/C1 completion
+
+- verdict: **CLOSED / SUPERSEDED**.
+- G1 itself correctly STOPPED before mutation because its production DB reads were blocked.
+- That blocker was later handed to H1, which independently completed the controlled production sync and passed Final C1.
+- accepted production result from H1/C1:
+  - `market-report-data-packet` v11 -> v12
+  - `verify_jwt=false` preserved
+  - 8/8 runtime files byte-identical to accepted main
+  - same-session reuse live in production source
+  - cron unchanged
+  - app_enabled=false / x_enabled=false unchanged
+  - all other 18 Edge Functions unchanged
+  - no DB/schema/RPC/Auth/Vault/secret/gate mutation
+  - no manual cycle
+- Therefore there is no remaining G1 work on this task and it must not be restarted.
