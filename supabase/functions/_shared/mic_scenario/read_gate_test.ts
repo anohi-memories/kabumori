@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { classifyFreshness, type ScenarioDomain, type StateRow } from "./policy.ts";
+import { classifyFreshness, classifyStates, type ScenarioDomain, type StateRow } from "./policy.ts";
 import { evaluateScenarioRead, type ScenarioReadInput } from "./read_gate.ts";
 
 const HOUR = 60 * 60 * 1000;
@@ -59,6 +59,7 @@ function fixture(opts: FixtureOptions = {}): ScenarioReadInput {
   const fingerprint = ["mic-scenario-v1", ...pairs].join("|");
   const current = {
     source_scenario_run_id: SCENARIO_RUN,
+    prompt_version: "mic-scenario-v1",
     assessment_status: opts.assessment ?? "assessed",
     base_case: { ...baseCase, supporting_state_domains: domains.filter((d) => d !== "macro").slice(0, 2) },
     upside_case: directional("上振れ"),
@@ -78,7 +79,7 @@ function fixture(opts: FixtureOptions = {}): ScenarioReadInput {
     domain: row.domain,
     state_evaluation_run_id: row.source_evaluation_run_id,
     freshness: classifyFreshness(row.domain as ScenarioDomain, row.ai_evaluated_at, GEN),
-    usability: "strong",
+    usability: classifyStates([row], GEN).usable[0]?.usability ?? "strong",
     state_snapshot: snapshotOf(row),
   }));
   const live = (["rates", "macro", "equity_index"] as ScenarioDomain[]).map((d) => {
@@ -161,7 +162,7 @@ test("[D] source run not evaluated -> invalid", () => {
     input.run!.status = status;
     const out = evaluateScenarioRead(input, NOW);
     assert.equal(out.status, "invalid");
-    assert.deepEqual(out.reason_codes, [`source_run_not_evaluated:${status}`]);
+    assert.deepEqual(out.reason_codes, ["source_run_not_evaluated"]);
     assert.equal(out.scenario, null);
   }
   const input = fixture();
@@ -207,13 +208,15 @@ test("[F] live State now carries a different source run -> invalid identity drif
   assert.equal(out.scenario, null);
 });
 
-test("[F] same run but a different narrative timestamp -> invalid; same run text re-save -> not invalid", () => {
+test("[F] same run timestamp drift and changed text fail closed; identical re-save is valid", () => {
   assert.deepEqual(
     evaluateScenarioRead(fixture({ liveStates: { rates: { ai_evaluated_at: "2026-09-28T01:20:00Z" } } }), NOW).reason_codes,
     ["state_identity_drift:rates"],
   );
   const resaved = evaluateScenarioRead(fixture({ liveStates: { rates: { narrative: "same run, text re-saved" } } }), NOW);
-  assert.equal(resaved.status, "usable");
+  assert.equal(resaved.status, "invalid");
+  assert.ok(resaved.reason_codes.includes("state_content_drift:rates"));
+  assert.equal(evaluateScenarioRead(fixture({ liveStates: { rates: { narrative: "rates narrative" } } }), NOW).status, "usable");
 });
 
 test("source State row gone or duplicated -> invalid", () => {
@@ -443,4 +446,126 @@ test("Phase 3A production shape (rates recent/observation stale, equity recent, 
   assert.equal(rates.observation_status, "stale");
   assert.ok(out.reason_codes.includes("narrative_recent:rates") && out.reason_codes.includes("observation_stale:rates"));
   assert.equal(out.reason_codes.includes("observation_stale:equity_index"), false, "delayed_expected is not stale");
+});
+
+test("review: evidence validates every snapshot type, finite confidence, enum and mandatory run identity", () => {
+  const mutations: Array<(row: Record<string, unknown>, snap: Record<string, unknown>) => void> = [
+    (r) => { delete r.scenario_run_id; },
+    (r) => { r.usability = "arbitrary"; },
+    (_, s) => { s.narrative = null; },
+    (_, s) => { s.narrative = " "; },
+    (_, s) => { s.bullish_factors = null; },
+    (_, s) => { s.bearish_factors = [1]; },
+    (_, s) => { s.key_risks = {}; },
+    (_, s) => { s.ai_confidence = Infinity; },
+    (_, s) => { s.ai_confidence = Number.NaN; },
+    (_, s) => { s.ai_confidence = -0.1; },
+    (_, s) => { s.data_confidence = null; },
+    (_, s) => { s.data_confidence = 1.1; },
+    (_, s) => { s.coverage_status = "toString"; },
+    (_, s) => { s.observation_status = "constructor"; },
+    (_, s) => { s.domain = "fx"; },
+    (_, s) => { s.ai_evaluated_at = "2026-02-30T01:00:00Z"; },
+    (_, s) => { s.ai_evaluated_at = "2026-09-28"; },
+  ];
+  for (const [i, mutate] of mutations.entries()) {
+    const f = fixture();
+    mutate(f.evidence[0], f.evidence[0].state_snapshot as Record<string, unknown>);
+    const out = evaluateScenarioRead(f, NOW);
+    assert.equal(out.status, "invalid", `mutation ${i}`);
+    assert.equal(out.scenario, null);
+  }
+});
+
+test("review: valid live rows cannot mask malformed or future generation evidence", () => {
+  const f = fixture();
+  (f.evidence[0].state_snapshot as Record<string, unknown>).ai_evaluated_at = iso(GEN + HOUR);
+  assert.deepEqual(evaluateScenarioRead(f, NOW).reason_codes, ["evidence_malformed"]);
+  const weak = fixture();
+  (weak.evidence[0].state_snapshot as Record<string, unknown>).data_confidence = 0.1;
+  assert.deepEqual(evaluateScenarioRead(weak, NOW).reason_codes, ["evidence_malformed"]);
+});
+
+test("review: stored integrity precedes expiry; expiry precedes live identity drift", () => {
+  const f = fixture();
+  const expired = Date.parse(f.current!.valid_until as string);
+  f.states[0].source_evaluation_run_id = RUN.rates;
+  assert.equal(evaluateScenarioRead(f, expired).status, "expired");
+  f.evidence[0].scenario_run_id = RUN.macro;
+  assert.equal(evaluateScenarioRead(f, expired).status, "invalid");
+  const malformed = fixture();
+  malformed.current!.base_case = {};
+  assert.equal(evaluateScenarioRead(malformed, expired).status, "invalid");
+});
+
+test("review: fingerprint prompt prefix and state_as_of must match authoritative inputs", () => {
+  const f = fixture();
+  f.current!.input_fingerprint = (f.current!.input_fingerprint as string).replace("mic-scenario-v1", "fake");
+  f.run!.input_fingerprint = f.current!.input_fingerprint;
+  assert.deepEqual(evaluateScenarioRead(f, NOW).reason_codes, ["fingerprint_mismatch"]);
+  const asOf = fixture();
+  asOf.current!.state_as_of = iso(GEN);
+  assert.deepEqual(evaluateScenarioRead(asOf, NOW).reason_codes, ["state_as_of_inconsistent"]);
+});
+
+test("review: paired domain/run arrays and evidence are order insensitive; duplicate run rejected", () => {
+  const f = fixture();
+  f.current!.source_state_domains = [...f.current!.source_state_domains as string[]].reverse();
+  f.current!.source_state_run_ids = [...f.current!.source_state_run_ids as string[]].reverse();
+  f.evidence.reverse();
+  f.states.reverse();
+  assert.equal(evaluateScenarioRead(f, NOW).status, "usable");
+  f.current!.source_state_run_ids = [RUN.rates, RUN.rates, RUN.macro];
+  assert.equal(evaluateScenarioRead(f, NOW).status, "invalid");
+});
+
+test("review: same-run factors, risks and AI confidence changes invalidate content", () => {
+  for (const changed of [{ bullish_factors: ["new"] }, { bearish_factors: ["new"] }, { key_risks: ["new"] }, { ai_confidence: 0.3 }]) {
+    const out = evaluateScenarioRead(fixture({ liveStates: { rates: changed } }), NOW);
+    assert.ok(out.reason_codes.includes("state_content_drift:rates"));
+    assert.equal(out.scenario, null);
+  }
+});
+
+test("review: losing any generation source invalidates even when two other sources remain", () => {
+  const out = evaluateScenarioRead(fixture({ liveStates: { macro: { coverage_status: "unavailable" } } }), NOW);
+  assert.equal(out.status, "invalid");
+  assert.equal(out.scenario, null, "do not present a three-domain synthesis as if it used only two");
+});
+
+test("review: delayed_expected is distinct from stale/unknown without confusing narrative age", () => {
+  const delayed = evaluateScenarioRead(fixture({ liveStates: { rates: { observation_status: "delayed_expected" } } }), NOW);
+  assert.equal(delayed.status, "usable");
+  for (const observation_status of ["stale", "unknown"]) {
+    const out = evaluateScenarioRead(fixture({ generationStates: { rates: { observation_status: "delayed_expected" } },
+      liveStates: { rates: { observation_status } } }), NOW);
+    assert.equal(out.status, "degraded");
+    assert.ok(out.reason_codes.includes(`observation_${observation_status}:rates`));
+    assert.equal(out.source_domains.find((d) => d.domain === "rates")!.narrative_freshness, "fresh");
+  }
+});
+
+test("review: timestamps require explicit timezone; equivalent timezone and subsecond expiry accepted", () => {
+  for (const time of ["2026-10-02", "2026-10-02T01:15:00", "2026-10-02T24:00:00Z"]) {
+    const f = fixture(); f.current!.valid_until = time;
+    assert.equal(evaluateScenarioRead(f, NOW).status, "invalid");
+  }
+  const f = fixture();
+  f.current!.valid_until = "2026-10-02T10:15:00.000+09:00";
+  assert.equal(evaluateScenarioRead(f, NOW).status, "usable");
+  const limit = Date.parse(f.current!.valid_until as string);
+  f.current!.valid_until = iso(limit + 1);
+  assert.equal(evaluateScenarioRead(f, NOW).status, "invalid", "even 1ms extension fails closed");
+  f.current!.valid_until = iso(limit - 1);
+  assert.equal(evaluateScenarioRead(f, limit - 2).status, "degraded");
+  assert.equal(evaluateScenarioRead(f, limit - 1).status, "expired");
+});
+
+test("review: confidence flooring cannot round above stored value or live cap at floating edges", () => {
+  for (const cap of [0.3, 0.499999999999999, 0.500000000000001, 0.701, 1]) {
+    const out = evaluateScenarioRead(fixture({ confidence: 0.7, liveStates: { rates: { data_confidence: cap } } }), NOW);
+    assert.ok(out.effective_confidence! <= Math.min(cap, 0.7));
+    assert.equal(out.effective_confidence, Math.floor(Math.min(cap, 0.7) * 1000) / 1000);
+  }
+  assert.equal(evaluateScenarioRead(fixture(), NaN).status, "invalid");
 });

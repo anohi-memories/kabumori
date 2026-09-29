@@ -112,6 +112,8 @@ export type ScenarioReadInput = {
   run: Record<string, unknown> | null; // null: not found / not readable
   evidence: Record<string, unknown>[];
   states: StateRow[];
+  // Adapter detected a change during its optimistic read validation.
+  readRace?: boolean;
 };
 
 const SNAPSHOT_KEYS = [
@@ -125,18 +127,23 @@ const DIRECTIONAL_KEYS = ["title", "description", "triggers", "implications", "i
 const CONTENT_FIELDS = [
   "assessment_status", "base_case", "upside_case", "downside_case", "state_conflicts", "confidence", "ai_confidence",
   "state_as_of", "valid_until", "source_state_run_ids", "source_state_domains", "input_fingerprint", "ai_evaluated_at",
+  "prompt_version",
 ] as const;
 const OBSERVATION_RANK: Record<string, number> = { fresh: 0, delayed_expected: 0, stale: 1, unknown: 2 };
 const COVERAGE_RANK: Record<string, number> = { full: 0, partial: 1, unavailable: 2 };
 const HOUR_MS = 60 * 60 * 1000;
 const EPSILON = 1e-9;
 
-const floor3 = (value: number) => Math.floor(value * 1000 + EPSILON) / 1000;
+const floor3 = (value: number) => Math.floor(value * 1000) / 1000;
 const isObject = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const isConfidence = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
-const isTime = (value: unknown): value is string => typeof value === "string" && Number.isFinite(Date.parse(value));
+const isTime = (value: unknown): value is string => typeof value === "string" &&
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
+  Number.isFinite(Date.parse(value)) &&
+  Number(value.slice(11, 13)) < 24 && Number(value.slice(14, 16)) < 60 && Number(value.slice(17, 19)) < 60 &&
+  Number(value.slice(8, 10)) <= new Date(Date.UTC(Number(value.slice(0, 4)), Number(value.slice(5, 7)), 0)).getUTCDate();
 const isDomain = (value: unknown): value is ScenarioDomain =>
   typeof value === "string" && (SCENARIO_DOMAINS as readonly string[]).includes(value);
 
@@ -245,15 +252,19 @@ function parseCurrent(current: Record<string, unknown>): ParsedCurrent | null {
 type ParsedEvidence = { domain: ScenarioDomain; freshness: "fresh" | "recent"; snapshot: StateSnapshot };
 
 function parseEvidence(row: Record<string, unknown>, runId: string): ParsedEvidence | null {
-  if (row.scenario_run_id !== undefined && row.scenario_run_id !== runId) return null;
+  if (!isObject(row) || row.scenario_run_id !== runId) return null;
   const { domain, state_evaluation_run_id: stateRunId, freshness, state_snapshot: snap } = row;
   if (!isDomain(domain) || typeof stateRunId !== "string" || !UUID_PATTERN.test(stateRunId)) return null;
   if (freshness !== "fresh" && freshness !== "recent") return null;
   if (!isObject(snap) || !hasExactKeys(snap, SNAPSHOT_KEYS)) return null;
   if (snap.domain !== domain || snap.source_evaluation_run_id !== stateRunId) return null;
   if (!isConfidence(snap.data_confidence) || !isTime(snap.ai_evaluated_at)) return null;
-  if (typeof snap.coverage_status !== "string" || !(snap.coverage_status in COVERAGE_RANK)) return null;
-  if (typeof snap.observation_status !== "string" || !(snap.observation_status in OBSERVATION_RANK)) return null;
+  if (typeof snap.narrative !== "string" || snap.narrative.trim() === "" ||
+    !isStringArray(snap.bullish_factors) || !isStringArray(snap.bearish_factors) || !isStringArray(snap.key_risks) ||
+    (snap.ai_confidence !== null && !isConfidence(snap.ai_confidence))) return null;
+  if (typeof snap.coverage_status !== "string" || !Object.hasOwn(COVERAGE_RANK, snap.coverage_status)) return null;
+  if (typeof snap.observation_status !== "string" || !Object.hasOwn(OBSERVATION_RANK, snap.observation_status)) return null;
+  if (row.usability !== "strong" && row.usability !== "weak") return null;
   return { domain, freshness, snapshot: snap as unknown as StateSnapshot };
 }
 
@@ -266,9 +277,14 @@ function derivedValidUntil(evidence: readonly ParsedEvidence[]): number {
 }
 
 export function evaluateScenarioRead(input: ScenarioReadInput, now: number): ScenarioReadResult {
+  if (!Number.isFinite(now)) return result("invalid", ["invalid_read_time"]);
+  if (input.readRace) return result("invalid", ["read_race_detected"]);
+  if (!Array.isArray(input.evidence)) return result("invalid", ["evidence_malformed"]);
+  if (!Array.isArray(input.states) || !input.states.every(isObject)) return result("invalid", ["state_rows_malformed"]);
   // 1. unavailable / missing row
   const current = input.current;
   if (!current) return result("invalid", ["current_row_missing"]);
+  if (!isObject(current)) return result("invalid", ["current_malformed"]);
   if (current.source_scenario_run_id === null || current.source_scenario_run_id === undefined) {
     const partial = CONTENT_FIELDS.some((field) => current[field] !== null && current[field] !== undefined);
     return partial ? result("invalid", ["current_malformed"]) : result("unavailable", ["scenario_not_generated"]);
@@ -281,8 +297,8 @@ export function evaluateScenarioRead(input: ScenarioReadInput, now: number): Sce
   const base = { stored_confidence: parsed.confidence, evaluated_at: parsed.evaluatedAt };
 
   const run = input.run;
-  if (!run || run.id !== parsed.runId) return result("invalid", ["source_run_missing"], base);
-  if (run.status !== "evaluated") return result("invalid", [`source_run_not_evaluated:${String(run.status)}`], base);
+  if (!isObject(run) || run.id !== parsed.runId) return result("invalid", ["source_run_missing"], base);
+  if (run.status !== "evaluated") return result("invalid", ["source_run_not_evaluated"], base);
   if (run.input_fingerprint !== parsed.inputFingerprint) return result("invalid", ["fingerprint_mismatch"], base);
 
   if (input.evidence.length === 0) return result("invalid", ["evidence_missing"], base);
@@ -302,11 +318,22 @@ export function evaluateScenarioRead(input: ScenarioReadInput, now: number): Sce
     .map((item) => `evidence_current_run_mismatch:${item.domain}`);
   if (identityMismatch.length > 0) return result("invalid", identityMismatch, base);
   const expectedPairs = evidence.map((item) => `${item.domain}:${item.snapshot.source_evaluation_run_id}`).sort().join("|");
-  if (parsed.inputFingerprint.split("|").slice(1).join("|") !== expectedPairs) {
+  if (typeof current.prompt_version !== "string" || !current.prompt_version || current.prompt_version.includes("|") ||
+    parsed.inputFingerprint !== `${current.prompt_version}|${expectedPairs}`) {
     return result("invalid", ["fingerprint_mismatch"], base);
   }
+  // Validate generation evidence independently of the live rows. Otherwise
+  // malformed/future inputs can be masked by valid live State replacements.
+  const atGeneration = classifyStates(evidence.map((item) => item.snapshot), Date.parse(parsed.evaluatedAt));
+  if (atGeneration.usable.length !== evidence.length || evidence.some((item, index) => {
+    const classified = atGeneration.usable.find((state) => state.snapshot.domain === item.domain);
+    return !classified || classified.freshness !== item.freshness || classified.usability !== input.evidence[index].usability;
+  })) return result("invalid", ["evidence_malformed"], base);
+  if (Date.parse(current.state_as_of as string) !== Math.min(...evidence.map((item) => Date.parse(item.snapshot.ai_evaluated_at)))) {
+    return result("invalid", ["state_as_of_inconsistent"], base);
+  }
   const derived = derivedValidUntil(evidence);
-  if (parsed.validUntil > derived + 1000) return result("invalid", ["valid_until_inconsistent"], base);
+  if (parsed.validUntil > derived) return result("invalid", ["valid_until_inconsistent"], base);
   const validUntil = Math.min(parsed.validUntil, derived);
   const withValidity = { ...base, valid_until: new Date(validUntil).toISOString() };
 
@@ -329,10 +356,12 @@ export function evaluateScenarioRead(input: ScenarioReadInput, now: number): Sce
     views.push({
       domain,
       narrative_freshness: classifyFreshness(domain, row?.ai_evaluated_at, now),
-      observation_status: typeof row?.observation_status === "string" ? row.observation_status : null,
-      coverage_status: typeof row?.coverage_status === "string" ? row.coverage_status : null,
+      observation_status: typeof row?.observation_status === "string" && Object.hasOwn(OBSERVATION_RANK, row.observation_status)
+        ? row.observation_status : null,
+      coverage_status: typeof row?.coverage_status === "string" && Object.hasOwn(COVERAGE_RANK, row.coverage_status)
+        ? row.coverage_status : null,
       data_confidence: isConfidence(row?.data_confidence) ? row.data_confidence : null,
-      state_evaluated_at: typeof row?.ai_evaluated_at === "string" ? row.ai_evaluated_at : null,
+      state_evaluated_at: isTime(row?.ai_evaluated_at) ? row.ai_evaluated_at : null,
       quality_changed_since_generation: false,
     });
     if (!row) {
@@ -340,13 +369,19 @@ export function evaluateScenarioRead(input: ScenarioReadInput, now: number): Sce
       invalidDomains.push({ domain, reason: rows.length === 0 ? "state_row_missing" : "state_row_duplicated" });
       continue;
     }
-    // Identity: the State must still be the interpretation the Scenario AI
-    // saw. A re-save of the same run's narrative text is not compared (the
-    // run id and its timestamp are the identity); quality is judged below.
+    // Same-run identical re-saves are safe; changed AI content is not. The
+    // service role can write these fields without advancing the run identity.
     if (row.source_evaluation_run_id !== item.snapshot.source_evaluation_run_id ||
       !isTime(row.ai_evaluated_at) || Date.parse(row.ai_evaluated_at) !== Date.parse(item.snapshot.ai_evaluated_at)) {
       invalidReasons.push(`state_identity_drift:${domain}`);
       invalidDomains.push({ domain, reason: "state_identity_drift" });
+      continue;
+    }
+    if (["narrative", "bullish_factors", "bearish_factors", "key_risks", "ai_confidence"].some((key) =>
+      JSON.stringify(row[key as keyof StateRow]) !== JSON.stringify(item.snapshot[key as keyof StateSnapshot])
+    )) {
+      invalidReasons.push(`state_content_drift:${domain}`);
+      invalidDomains.push({ domain, reason: "state_content_drift" });
       continue;
     }
     const live = usableByDomain.get(domain);
