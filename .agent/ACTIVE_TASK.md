@@ -33,13 +33,13 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: x-social-mobile-account-deletion-privileged-review-20260928
+- status: ready
+- task_id: x-social-mobile-account-deletion-final-acceptance-review-20260929
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: closed; Final C2 FAIL on PR #52 `12146c4`; returned to G3 for bundled account-deletion design correction
+- allocation: final focused acceptance of PR #52 fixed head `002d24a`; verify prior R1-R6 plus client-session pinning and merge readiness; recommended Sol（高）
 
 ## Claude G1
 - owner: claude
