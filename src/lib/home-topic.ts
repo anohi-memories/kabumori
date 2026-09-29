@@ -23,7 +23,9 @@ export const TOPIC_LEVEL_HINT: Record<TopicLevel, string> = {
 };
 
 export type HomeTopic = {
+  id: string;
   level: TopicLevel;
+  category: string | null;
   title: string;
   body: string;
 };
@@ -90,10 +92,12 @@ export function parseDailyTipRow(row: unknown): HomeTopic | null {
   if (!row || typeof row !== 'object') return null;
   const candidate = row as Record<string, unknown>;
   const level = mapDifficultyToLevel(candidate.difficulty);
+  const id = typeof candidate.id === 'string' ? candidate.id.trim() : '';
   const title = typeof candidate.title === 'string' ? candidate.title.trim() : '';
   const body = typeof candidate.base_text === 'string' ? candidate.base_text.trim() : '';
-  if (!level || !title || !body) return null;
-  return { level, title, body };
+  const category = typeof candidate.category === 'string' && candidate.category.trim() ? candidate.category.trim() : null;
+  if (!level || !id || !title || !body) return null;
+  return { id, level, category, title, body };
 }
 
 export type TopicCardStatus = 'loading' | 'error' | 'topic' | 'empty';

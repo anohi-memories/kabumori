@@ -1,16 +1,6 @@
-import { useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Linking,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
@@ -20,66 +10,75 @@ import { authErrorMessage, requestPasswordReset, signOut } from '@/lib/auth';
 import { legalLinks } from '@/lib/legal-links';
 import { settingsEntries, type SettingsEntry } from '@/lib/settings-menu';
 import { TOPIC_LEVELS, TOPIC_LEVEL_HINT, TOPIC_LEVEL_LABEL, type TopicLevel } from '@/lib/home-topic';
+import { readTopicLevel, writeTopicLevel } from '@/lib/topic-level-storage';
+import { useAuth } from '@/providers/auth-provider';
 
 const palette = KABUMORI_COLORS.light;
 
-// Settings is presented over the current tab rather than as its own route: the app's navigator is
-// expo-router's NativeTabs, where every top-level route becomes a visible tab, so adding
-// `app/settings` would add a sixth tab to the bar. The screens below are self-contained, so they
-// can move to real routes unchanged once the navigator gains a stack above the tabs.
-type SheetView = 'menu' | 'delete' | 'topic-level';
+// Settings now lives as a top-level route/tab, per the approved v3 bottom
+// navigation, instead of a Modal sheet. The previous Modal + SafeAreaView
+// combination did not reliably respect the device's status-bar inset on a
+// real iPhone (react-native-safe-area-context's inset measurement is
+// unreliable inside RN's own Modal, which renders into a separate native
+// window) -- a real screen inside the normal navigation tree does not have
+// that problem, so no manual useSafeAreaInsets() patch is needed here.
+type View_ = 'menu' | 'delete' | 'topic-level';
 
-export function SettingsSheet({
-  visible,
-  email,
-  topicLevel,
-  onTopicLevelChange,
-  onClose,
-}: {
-  visible: boolean;
-  email: string | null;
-  topicLevel: TopicLevel;
-  onTopicLevelChange: (level: TopicLevel) => Promise<boolean>;
-  onClose: () => void;
-}) {
-  const [view, setView] = useState<SheetView>('menu');
+export default function SettingsScreen() {
+  const { session } = useAuth();
+  const email = session?.user.email ?? null;
+  const [view, setView] = useState<View_>('menu');
+  const [topicLevel, setTopicLevel] = useState<TopicLevel>('beginner');
 
-  function close() {
-    setView('menu');
-    onClose();
+  useEffect(() => {
+    let active = true;
+    readTopicLevel().then((level) => {
+      if (active) setTopicLevel(level);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Reset to the menu whenever Settings regains focus (e.g. returning from
+  // the delete-account sub-flow via the tab bar rather than its own back
+  // button), so the tab never reopens mid-flow unexpectedly.
+  useFocusEffect(useCallback(() => {
+    return () => setView('menu');
+  }, []));
+
+  async function handleTopicLevelChange(level: TopicLevel): Promise<boolean> {
+    const ok = await writeTopicLevel(level);
+    if (ok) setTopicLevel(level);
+    return ok;
   }
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={close} transparent={false}>
-      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-        {view === 'menu' ? (
-          <SettingsMenu
-            email={email}
-            topicLevel={topicLevel}
-            onClose={close}
-            onDeleteAccount={() => setView('delete')}
-            onOpenTopicLevel={() => setView('topic-level')}
-          />
-        ) : view === 'delete' ? (
-          <DeleteAccountView email={email} onBack={() => setView('menu')} />
-        ) : (
-          <TopicLevelView current={topicLevel} onChange={onTopicLevelChange} onBack={() => setView('menu')} />
-        )}
-      </SafeAreaView>
-    </Modal>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      {view === 'menu' ? (
+        <SettingsMenu
+          email={email}
+          topicLevel={topicLevel}
+          onDeleteAccount={() => setView('delete')}
+          onOpenTopicLevel={() => setView('topic-level')}
+        />
+      ) : view === 'delete' ? (
+        <DeleteAccountView email={email} onBack={() => setView('menu')} />
+      ) : (
+        <TopicLevelView current={topicLevel} onChange={handleTopicLevelChange} onBack={() => setView('menu')} />
+      )}
+    </SafeAreaView>
   );
 }
 
 function SettingsMenu({
   email,
   topicLevel,
-  onClose,
   onDeleteAccount,
   onOpenTopicLevel,
 }: {
   email: string | null;
   topicLevel: TopicLevel;
-  onClose: () => void;
   onDeleteAccount: () => void;
   onOpenTopicLevel: () => void;
 }) {
@@ -112,7 +111,6 @@ function SettingsMenu({
     setBusy(true);
     try {
       await signOut();
-      onClose();
     } catch (error) {
       Alert.alert('ログアウト失敗', authErrorMessage(error));
     } finally {
@@ -140,18 +138,14 @@ function SettingsMenu({
     if (entry.id === 'logout') return void logOut();
     if (entry.id === 'delete-account') return onDeleteAccount();
     if (entry.id === 'topic-level') return onOpenTopicLevel();
+    if (entry.id === 'portfolio') return router.push('/portfolio');
   }
 
   return (
     <>
       <View style={styles.headerRow}>
-        <View>
-          <Text style={styles.eyebrow}>SETTINGS</Text>
-          <Text style={styles.title}>設定</Text>
-        </View>
-        <Pressable onPress={onClose} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="設定を閉じる">
-          <Text style={styles.closeText}>閉じる</Text>
-        </Pressable>
+        <Text style={styles.eyebrow}>SETTINGS</Text>
+        <Text style={styles.title}>設定</Text>
       </View>
       <ScrollView contentContainerStyle={styles.list}>
         {entries.map((entry) => {
@@ -334,11 +328,9 @@ function TopicLevelView({
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: palette.background },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 6 },
+  headerRow: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 6 },
   eyebrow: { color: palette.accent, fontWeight: '900', letterSpacing: 2, fontSize: 11 },
   title: { color: palette.text, fontSize: 26, fontWeight: '900', marginTop: 4 },
-  closeButton: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10, backgroundColor: palette.accentSoft },
-  closeText: { color: palette.muted, fontSize: 12, fontWeight: '800' },
   list: { padding: 20, gap: 10 },
   row: { flexDirection: 'row', alignItems: 'center', backgroundColor: palette.card, borderColor: palette.border, borderWidth: 1, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, minHeight: 60 },
   rowMain: { flex: 1, gap: 3 },

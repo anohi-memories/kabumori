@@ -8,14 +8,18 @@ type TopicCardProps = {
   topic: HomeTopic | null;
   loading: boolean;
   error: string;
+  onOpen: () => void;
   onRetry: () => void;
 };
 
 // Reads from the deterministic get_daily_kabumori_tip RPC (see
 // src/lib/daily-topic.ts). A fetch failure must never be shown as "準備中"
 // -- that would turn a network/data error into a false product-state
-// message, the same class of bug fixed on the report hero card.
-export function TopicCard({ palette, topic, loading, error, onRetry }: TopicCardProps) {
+// message, the same class of bug fixed on the report hero card. The whole
+// card is tappable to the topic detail screen once a topic is loaded --
+// base_text alone is too short to read comfortably here, so this is only a
+// preview.
+export function TopicCard({ palette, topic, loading, error, onOpen, onRetry }: TopicCardProps) {
   const status = topicCardStatus(!!topic, loading, error);
 
   return (
@@ -35,17 +39,22 @@ export function TopicCard({ palette, topic, loading, error, onRetry }: TopicCard
           </Pressable>
         </View>
       ) : status === 'topic' && topic ? (
-        <>
+        <Pressable
+          onPress={onOpen}
+          style={({ pressed }) => [styles.topicBody, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel={`${topic.title}、詳しく読む`}>
           <View style={[styles.levelBadge, { backgroundColor: palette.soft }]}>
             <Text style={[styles.levelText, { color: palette.accent }]}>{TOPIC_LEVEL_LABEL[topic.level]}</Text>
           </View>
           <Text style={[styles.topicTitle, { color: palette.text }]} numberOfLines={2}>
             {topic.title}
           </Text>
-          <Text style={[styles.bodyText, { color: palette.muted }]} numberOfLines={3}>
+          <Text style={[styles.bodyText, { color: palette.muted }]} numberOfLines={2}>
             {topic.body}
           </Text>
-        </>
+          <Text style={[styles.link, { color: palette.accent }]}>詳しく読む →</Text>
+        </Pressable>
       ) : (
         <Text style={[styles.bodyText, { color: palette.muted }]}>
           今日のトピックは準備中です。近日中に学べる小さな知識をここでお届けします。
@@ -60,10 +69,13 @@ const styles = StyleSheet.create({
   header: { marginBottom: 4 },
   eyebrow: { fontWeight: '900', letterSpacing: 1.4, fontSize: 11 },
   title: { fontSize: 19, fontWeight: '900', marginTop: 3 },
+  topicBody: {},
+  pressed: { opacity: 0.7 },
   levelBadge: { alignSelf: 'flex-start', borderRadius: 99, paddingHorizontal: 10, paddingVertical: 5, marginTop: 10 },
   levelText: { fontSize: 11, fontWeight: '900' },
   topicTitle: { fontSize: 16, lineHeight: 22, fontWeight: '900', marginTop: 9 },
   bodyText: { fontSize: 13, lineHeight: 19, marginTop: 8 },
+  link: { fontSize: 12, fontWeight: '900', marginTop: 8 },
   errorCard: { borderRadius: 12, padding: 12, marginTop: 10 },
   errorText: { fontSize: 13, lineHeight: 19 },
   retryButton: { alignSelf: 'flex-start', borderRadius: 9, paddingHorizontal: 12, paddingVertical: 8, marginTop: 10 },
