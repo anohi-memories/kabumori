@@ -254,6 +254,73 @@ test("K2 mixed case through regeneration: fixing one issue cannot introduce an u
   assert.equal(fixed.ok, true);
 });
 
+/** A second synthetic news item that states 米国株安 as the reason. */
+const US_STOCKS_NEWS: NewsTextRow = {
+  ...CONFIRMED_NEWS,
+  id: "0f0f0f0f-0000-4000-8000-000000000930",
+  app_title_ja: "東京市場、米国株安を受けて下落",
+  app_summary_ja: "9月29日の東京市場は、前日の米国株安を受けて幅広い銘柄が売られたと報じられました。",
+};
+
+function inputWithUsStocksCause() {
+  const packet = structuredClone(data0929.payload);
+  packet.news_refs.items.push({ ...packet.news_refs.items[0], ref_id: US_STOCKS_NEWS.id });
+  return input0929([...news0929, US_STOCKS_NEWS], packet);
+}
+
+function withUsStocksCause(text: string): GeneratedAnalysis {
+  const analysis = compliant0929();
+  analysis.claims[3] = { claim_id: "c4", text_ja: "東京市場は、前日の米国株安を受けて幅広い銘柄が売られたと報じられました。", claim_type: "causal", evidence_refs: [`news:${US_STOCKS_NEWS.id}`, "metric:nikkei225"], scope: "today" };
+  analysis.headline_ja = text;
+  return analysis;
+}
+
+test("K2 polarity: a supported instrument with the opposite direction is not supported", () => {
+  const semis = inputWithConfirmedCause();
+  for (const headline of ["半導体株高を受けて東京市場は下落", "米半導体株高を受けて東京市場は下落", "半導体株の上昇を受けて東京市場は下落", "半導体株の買いにつれて東京市場は下落"]) {
+    const analysis = withValidCauseA();
+    analysis.headline_ja = headline;
+    assert.ok(hasIssue(localAnalysisIssues(analysis, semis), CAUSAL_ISSUE), `inverted cause accepted: ${headline}`);
+  }
+  const us = inputWithUsStocksCause();
+  for (const headline of ["米国株高を受けて東京市場は下落", "米株高を受けて東京市場は下落"]) {
+    assert.ok(hasIssue(localAnalysisIssues(withUsStocksCause(headline), us), CAUSAL_ISSUE), `inverted cause accepted: ${headline}`);
+  }
+});
+
+test("K2 polarity: the same direction in other wording, and the controlled alias 米株 = 米国株, stay supported", () => {
+  const semis = inputWithConfirmedCause();
+  for (const headline of ["半導体株安を受けて東京市場は下落", "米半導体株安を受けて東京市場は下落", "半導体株の下落を受けて東京市場は下落", "半導体株の売りにつれて東京市場は下落"]) {
+    const analysis = withValidCauseA();
+    analysis.headline_ja = headline;
+    assert.deepEqual(localAnalysisIssues(analysis, semis), [], headline);
+  }
+  const us = inputWithUsStocksCause();
+  for (const headline of ["米国株安を受けて東京市場は下落", "米株安を受けて東京市場は下落", "米国株の下落を受けて東京市場は下落"]) {
+    assert.deepEqual(localAnalysisIssues(withUsStocksCause(headline), us), [], headline);
+  }
+});
+
+test("K2 polarity: valid A plus an inverted B fails, including when B is introduced by regeneration", async () => {
+  const built = inputWithConfirmedCause();
+  const mixed = withValidCauseA();
+  mixed.x_post.lead_ja = "半導体株高を受けて、東京市場も下げました📉";
+  assert.ok(hasIssue(localAnalysisIssues(mixed, built), CAUSAL_ISSUE));
+
+  const first = withValidCauseA();
+  first.x_post.lead_ja = "日経平均もTOPIXも下げました📉";
+  const second = withValidCauseA();
+  second.x_post.lead_ja = "半導体株高が重しとなり、日経平均もTOPIX連動ETF（1306）も下げました📉";
+  const calls: Array<{ step: string; body: Record<string, unknown> }> = [];
+  const outcome = await generateSharedAnalysis(built, requester([
+    { step: "generate", payload: first },
+    { step: "generate", payload: second },
+  ], calls), NOW);
+  assert.equal(!outcome.ok && outcome.error, "ANALYSIS_LOCAL_CHECK_FAILED");
+  assert.ok(!outcome.ok && hasIssue(outcome.issues, CAUSAL_ISSUE));
+  assert.deepEqual(calls.map((call) => call.step), ["generate", "generate"], "no Fact call is spent on it");
+});
+
 test("a cause the news states (a causal claim without disclaimer) can still be written as confirmed", () => {
   const built = inputWithConfirmedCause();
   const analysis = withValidCauseA();

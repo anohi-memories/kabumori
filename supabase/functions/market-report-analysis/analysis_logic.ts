@@ -280,7 +280,16 @@ const CAUSAL_LINK = new RegExp([
   "(?<=(?:株|市場|指数|円|ドル|金利|原油)(?:安|高))で(?!終え|引け|取引)",
 ].join("|"), "g");
 /** Words that follow a cause without naming it (「米株安の流れを受けて」). */
-const GENERIC_CAUSE = new Set(["流れ", "動き", "影響", "売り", "買い", "地合い", "展開", "傾向", "結果", "こと", "材料", "報道", "ニュース"]);
+const GENERIC_CAUSE = new Set(["流れ", "動き", "影響", "地合い", "展開", "傾向", "結果", "こと", "材料", "報道", "ニュース"]);
+/** A direction word that names the move of what precedes it (「半導体株の下落」 → 半導体株 + 下落). */
+const MOVE_WORD = /^(?:安|高|上昇|下落|上げ|下げ|買い|売り|急落|急騰|値下がり|値上がり|低下|反落|反発)$/u;
+/** The direction at the end of a cause: 「半導体株安」 → 半導体株 + 安. */
+const CAUSE_DIRECTION = /(安|高|上昇|下落|上げ|下げ|買い|売り|急落|急騰|値下がり|値上がり|低下|反落|反発)$/u;
+/** The first direction word after an instrument in the news text (「半導体株が売られた」 → 売られ). */
+const SUPPORT_DIRECTION = /安(?!全|定|心)|下落|下げ|売られ|売り|値下がり|急落|軟調|低下|反落|高(?!官|速|齢)|上昇|上げ|買われ|買い|値上がり|急騰|堅調|反発/u;
+const DOWN_WORD = /^(?:安|下落|下げ|売られ|売り|値下がり|急落|軟調|低下|反落)$/u;
+/** Controlled aliases only: the same instrument written two ways, never a similarity match (K2 on PR #57). */
+const CAUSE_ALIASES: Array<[RegExp, string]> = [[/米株/gu, "米国株"], [/NY株/gu, "米国株"], [/米国の株/gu, "米国株"]];
 /** A sentence that itself says the reason is not established. */
 const NEGATED = /(?:確認|断定|判断|特定)でき(?:ませ|な)|分かりませ|わかりませ|分からな|わからな|明記されて(?:い)?(?:ませ|な)|示されて(?:い)?(?:ませ|な)/;
 /** A hedge that still proposes a reason. */
@@ -312,34 +321,41 @@ export function causeParts(sentence: string, index: number, link: string): strin
   if (/原因|要因/.test(link) && !link.startsWith("が") && span.includes("が")) span = span.slice(0, span.indexOf("が"));
   const segments = span.replace(/[にでをがはのとも]+$/u, "").split(/[、，,「」（）()のはが]/u).map((part) => part.trim()).filter(Boolean);
   while (segments.length > 1 && GENERIC_CAUSE.has(segments[segments.length - 1])) segments.pop();
-  const cause = segments[segments.length - 1] ?? "";
+  let cause = segments[segments.length - 1] ?? "";
+  if (segments.length > 1 && MOVE_WORD.test(cause)) cause = `${segments[segments.length - 2]}${cause}`;
   return cause.split(/・|と|や|および|及び/u).map((part) => part.trim()).filter(Boolean);
 }
 
-function longestCommonSubstring(a: string, b: string): number {
-  let best = 0;
-  let previous = new Array<number>(b.length + 1).fill(0);
-  for (let i = 1; i <= a.length; i += 1) {
-    const current = new Array<number>(b.length + 1).fill(0);
-    for (let j = 1; j <= b.length; j += 1) {
-      if (a[i - 1] === b[j - 1]) best = Math.max(best, (current[j] = previous[j - 1] + 1));
-    }
-    previous = current;
-  }
-  return best;
+function canonicalCause(text: string): string {
+  return CAUSE_ALIASES.reduce((value, [pattern, replacement]) => value.replace(pattern, replacement), text.normalize("NFKC"));
 }
 
-/** A cause part is supported when the news text contains it (or a 3+ character core of it, e.g. 半導体株). */
+/**
+ * A cause part is supported when the news text names the same instrument moving in the same direction
+ * (「半導体株安」 is supported by 「半導体株が売られた」, never by 「半導体株高」). A part without a direction
+ * word must appear verbatim. `support` is already canonical.
+ */
 function causeSupported(part: string, support: string): boolean {
-  const normalized = part.normalize("NFKC");
-  return normalized.length > 0 && longestCommonSubstring(normalized, support) >= Math.min(3, normalized.length);
+  const cause = canonicalCause(part);
+  const direction = cause.match(CAUSE_DIRECTION);
+  if (!direction) return cause.length >= 2 && support.includes(cause);
+  const instrument = cause.slice(0, direction.index);
+  if (!instrument) return false;
+  const down = DOWN_WORD.test(direction[0]);
+  for (let at = support.indexOf(instrument); at >= 0; at = support.indexOf(instrument, at + 1)) {
+    const after = support.slice(at + instrument.length, at + instrument.length + 10).split(/[。\n]/u)[0];
+    const stated = after.match(SUPPORT_DIRECTION);
+    if (stated && DOWN_WORD.test(stated[0]) === down) return true;
+  }
+  return false;
 }
 
 /**
  * Sentences that attach a reason to a move that no news item states. Each causal link is checked on its
- * own cause against the text of the news cited by confirmed causal claims, so one supported cause does
- * not license another (K2 on PR #57). A causal claim is confirmed only if it cites news and does not
- * itself say the link is unconfirmed (2026-09-25 carried a "causal" label on "因果は確認できません").
+ * own cause, with its direction, against the text of the news cited by confirmed causal claims, so one
+ * supported cause does not license another (K2 on PR #57). A causal claim is confirmed only if it cites
+ * news and does not itself say the link is unconfirmed (2026-09-25 carried a "causal" label on
+ * "因果は確認できません").
  */
 export function unsupportedCausalSentences(analysis: GeneratedAnalysis, input: AnalysisInput): string[] {
   const supportRefs = new Set(analysis.claims
@@ -348,8 +364,8 @@ export function unsupportedCausalSentences(analysis: GeneratedAnalysis, input: A
   const support = input.news
     .filter((item) => supportRefs.has(item.ref))
     .map((item) => `${item.headline_ja}\n${item.summary_ja ?? ""}`)
-    .join("\n")
-    .normalize("NFKC");
+    .join("\n");
+  const canonicalSupport = canonicalCause(support);
   const texts = [
     analysis.headline_ja,
     analysis.market_summary_ja,
@@ -365,7 +381,7 @@ export function unsupportedCausalSentences(analysis: GeneratedAnalysis, input: A
     if (NEGATED.test(sentence) && !SPECULATION.test(sentence)) continue;
     const supported = links.every((link) => {
       const parts = causeParts(sentence, link.index, link[0]);
-      return parts.length > 0 && parts.every((part) => causeSupported(part, support));
+      return parts.length > 0 && parts.every((part) => causeSupported(part, canonicalSupport));
     });
     if (supported) continue;
     const trimmed = sentence.trim();
