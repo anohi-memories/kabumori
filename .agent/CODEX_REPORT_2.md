@@ -1,3 +1,96 @@
+## H2 — PR #52 Phase 4b final acceptance — 2026-09-29
+
+- task_id: `x-social-mobile-account-deletion-final-acceptance-review-20260929`
+- result / verdict: **FAIL — source merge ready: NO.** The old committed-state scenarios are corrected, but an independently reproduced in-flight first-onboarding race still produces a false successful deletion with orphaned social data. Apply/deploy/activation must remain blocked.
+- exact_reviewed_head: `002d24ac99df2fbdf4e2423c1428ccb488a79f29`; Draft PR #52, `claude/g3-account-lifecycle-p4`. GitHub API read-back still reported this exact OPEN/DRAFT head.
+- previous_failed_head: `12146c4ab2bc635a2781b673146e1f8ad8350258`.
+- independent_review_worktree: `/private/tmp/kabumori-h2-account-deletion-final-20260929`; source stayed Git-clean and byte-unchanged. Managed worktree creation returned Not a git repository for this mirror chat; manual creation of a dedicated H2 worktree was the documented fallback. No G3 checkout was reused.
+- fresh_origin_main_at_start: `a03fefc771e76f5bb53c5f54968fbffb269a0db8`; report-only synchronization base: `267ed44870304671c47c5af93a30e4d639880501`.
+- source_fixes / implementation_commit: **0 / existing G3 head above**. TASK's new-design-issue FAIL/STOP rule was applied; neither the concurrency design nor the test-only typing defect was patched.
+- changed_files: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md` only.
+- push: pending report-only commit/push and remote read-back at the time of writing; completion record follows after actual confirmation.
+- deploy / merge / production_mutation: **0 / 0 / 0**.
+
+### Blocking finding — R1 P1: a pre-existing uncommitted first onboarding escapes the tombstone
+
+Relevant exact-head locations in `supabase/migrations/20260928160000_social_mobile_account_deletion_candidate.sql`:
+- `:121-123`: the guard only reads a currently visible tombstone; no common lock is taken by this writer guard.
+- `:228-230`: blocker returns allowed when the workspace is not visible.
+- `:326-360`: acquire takes a deletion-only per-user advisory lock and snapshots visible workspace rows, without first serializing against an in-flight first membership creation.
+- `:580-594`: finalize locks the Auth user only after purge, then deletes Auth plus the tombstone without rechecking for workspace rows that became visible while waiting.
+
+Independent fake-only PG17 proof used the **real, unmodified** `begin_social_mobile_x_oauth_connection` RPC from the existing onboarding/reconnect migrations and the exact reviewed deletion migration. No fake replacement of that writer was used:
+
+1. Create only a fake Auth user, with no social workspace and no main-app profile.
+2. Connection A: `BEGIN`; set that fake JWT subject; switch to `authenticated`; invoke the real first-onboarding RPC; reset role; keep the transaction uncommitted for four seconds. Its guard checks completed while there was no tombstone. The membership FK holds an Auth key-share lock.
+3. After one second, connection B executes deletion acquire, credentials, mark-X-revoked with an empty set, and purge in separate committed calls. A's rows are invisible: snapshot is empty and purge reports success.
+4. B invokes finalize. Its late Auth `FOR UPDATE` waits for A. A commits its new workspace/account/OAuth state; B then deletes Auth, which cascades membership but not brands/accounts, and removes the tombstone.
+5. Independently observed result:
+
+```json
+{"credential_status":"ok","marked":"x_revoked","purged":"purged","login_deleted":"true","remaining_brands":1,"remaining_accounts":1,"remaining_memberships":0,"remaining_tombstones":0}
+```
+
+This is a normal first-onboarding writer interleaving, not a forged lease, client secret-reference mutation or production fixture. The Edge interprets the completed finalize response as success, although social workspace/account data remains ownerless. The guard cannot retroactively reject writes whose trigger ran before the tombstone existed. G3's reconnect race tests the **opposite** order (deletion first, already committed existing workspace second), so its passing result does not cover this failure.
+
+Required design correction: serialize deletion **before** its first workspace/credential snapshot against first-onboarding/membership creation, and define consistent lock order plus final invariants. A common per-user/creation lock or suitably early Auth-row locking needs its own two-direction concurrency proof; a late finalize-only lock is insufficient. Do not silently patch this protocol during final acceptance. C2 should return this narrowly scoped R1 failure to G3.
+
+### Additional validation issue — P2: checked Deno tests do not compile
+
+`supabase/functions/social-mobile-account-delete/delete_logic_test.ts:107-115` declares the override tuple as `Partial<DeletionDeps>` but includes the fake-only `providers` field. Default checked `deno test` fails **TS2353** at line 115. The helper itself already accepts `Partial<DeletionDeps> & { providers?: string[] }`; this is a test typing mismatch, not an observed production failure. `--no-check` passes 17/17 and entrypoint `deno check` passes. Do not describe all Deno checking as green. No fix was made after invoking the design STOP rule.
+
+### Focused acceptance matrix
+
+| boundary | result at reviewed head |
+| --- | --- |
+| R1 | **FAIL overall**: committed snapshot/reconnect and purge/finalize-gap markers now reject; durable lease/re-acquire works; the pre-start uncommitted first-onboarding race above remains unsafe |
+| R2 | PASS for tested cross-product cases: server scope, expected-scope mismatch, social_only keeps Auth/profile, late profile before finalize preserves login under Auth-row lock; overall completion remains blocked by R1 |
+| R3 | PASS for initial shared/duplicate/foreign-verifier fixtures and ownership checks at credentials/purge; fingerprint checks reject rotation instead of purging unrevoked material |
+| R4 | PASS: connected/verified missing material enters operator_required; truly never-connected needs no revoke; Edge never marks missing required material as revoked |
+| R5 | PASS for completed checkpoint/resume: Apple revoke followed by purge failure resumes without replaying the consumed code; checkpoint absent requires a code; client discards code after every attempt |
+| R6 | PASS: OPTIONS 204 plus required CORS headers, all HTTP responses carry CORS; Apple login deletion on unsupported browser/Android is truthfully labeled native-iOS-required |
+| client pin | PASS: exact userId + JWT sessionId; switched user or same-user/new session produces SESSION_CHANGED with zero new deletion requests |
+
+### Guard coverage / posting interaction
+
+- Eleven INSERT/UPDATE triggers were independently read back: brands, brand_memberships, social_accounts, social_account_oauth_states, x_account_refresh_state_v2, x_account_refresh_rollout, scheduled_posts, publish_claims, published_content_fingerprints, post_execution_logs, posting_windows. They enforce exclusion after a visible tombstone and preserve other-user writes; mere table coverage does **not** establish concurrency completeness (R1).
+- Existing onboarding begin/complete and credential refresh bodies were inspected only for their interaction. Complete/refresh updates Vault and guarded account/state rows in one DB transaction, so a guard exception rolls back those Vault writes. Current running/publishing/refreshing checks and disabling pending posts are retained.
+- Untargeted dependent tables (e.g. brand_settings/report-specific rows) are not silently expanded into purge: NO ACTION FK dependents stop it atomically; daily_content_plans is an intended cascade. Additional guards on unrelated report tables were not added. No dispatcher or other writer was changed.
+- Existing lock order differences may produce an aborted transaction under contention rather than a silent bypass for committed rows. No production concurrency/E2E claim is made. The proven first-onboarding false success is the merge blocker.
+
+### Direct auth.users finalization assessment
+
+- Current read-only production catalog: auth.users owner `supabase_auth_admin`; `postgres` has SELECT and DELETE on auth.users and DELETE on vault.secrets; auth.users has no noninternal trigger. Candidate is **not installed**. Thus a postgres-owned definer has the currently needed table capabilities; the actual migration owner must still be pinned/read back on any separately approved rollout.
+- Live FK catalog confirms Auth deletion cascades identities, sessions, MFA, OAuth consent/authorization, WebAuthn and profiles/memberships; SCIM is NO ACTION. Main-app profile protection is explicitly rechecked under lock. Unknown dependents block rather than requiring a broad purge.
+- Supabase's current official hard-delete handler uses a transaction plus `tx.Destroy(user)`; direct SQL has the same row/FK hard-delete mechanism but does **not** create that handler's Auth audit-log event. This candidate's own successful finalize audit is transactional and pseudonymous. It is not an assertion of complete operational equivalence to every Auth API hook/version.
+- Issued JWTs remain valid until expiration; session rows disappear on hard delete, preventing refresh. No instant global JWT invalidation is claimed. The sensitive writer protection is exactly what R1 still fails for the uncommitted first-onboarding case.
+- Storage ownership/FK capability and managed-schema drift require exact rollout preflight; no live Auth user, token or Storage owner was read or deleted. See [Supabase user-deletion guidance](https://supabase.com/docs/guides/auth/managing-user-data), [official Auth hard-delete source](https://github.com/supabase/auth/blob/master/internal/api/admin.go).
+
+### Independently executed verification
+
+1. Own-worktree `npm ci --offline --ignore-scripts --no-audit --no-fund`: 821 cached packages; tracked dependency files unchanged.
+2. Full social-mobile `npm test`: **72/72 PASS**; data-view **14/14 PASS**; `npm run typecheck` and `npm run lint`: **PASS**.
+3. Expo Web + iOS export: **PASS**, output in H2-only scratch, no real backend environment injected. This is bundling proof, not signed-in device QA.
+4. Deno runtime tests with scoped allow-read / cached-only / `--no-check`: **17/17 PASS**; exact `index.ts` `deno check`: **PASS**. Checked Deno test suite: **FAIL TS2353** as above.
+5. Existing disposable PostgreSQL runner: **BEHAVIOR / ACQUIRE_RACE / RECONNECT_RACE / CLEANUP PASS**, with real onboarding migrations, fake Auth/Vault and non-superuser owner. Prior R1/R3/R4/R5 markers run in its behavior proof; R6/client markers run in Edge/client tests.
+6. Independent apply inside BEGIN -> all candidate function client ACL/search_path checks, state-table RLS/direct-service-read denial, 11-trigger readback -> ROLLBACK and object absence: **PASS**. Reapply only in the same throwaway DB for the independent adverse interleaving.
+7. Independent opposite-order first-onboarding probe: **safety expectation FAIL, defect reproduced**; exact outcome above. Scratch scripts/SQL preserved under `/private/tmp/kabumori-h2-deletion-proof.QjcRgz` but this Report includes the complete sequence and result so C2 need not open a local artifact.
+8. Source `git diff --check` for full PR and Phase 4b diff: **PASS**. Client service-role/private-key patterns: zero matches; Edge console/logger paths: zero. Existing fake Apple signing-key generation is test-only, not a literal secret. Audit behavior test excludes raw IDs/tokens.
+9. New broad mutation suite was **not rerun** after the reproducible design-level STOP; G3's 23/23 claim is not relabeled independent H2 evidence. The independent opposite-order probe demonstrates the existing passing suite's missing interleaving.
+10. H2 throwaway DB dropped, readback count **0**, H2-only PostgreSQL server stopped. Scratch/export preserved. No material user/project file was deleted.
+
+### C2 disposition / exact next gates / safety
+
+- TASK -> `review_required`; next_owner -> `chatgpt`.
+- C2 should return R1's first-onboarding/deletion serialization gap plus the checked-test typing issue to G3; recommended correction model **Opus5.5（高）**. No other TASK was changed or automatically reassigned.
+- Source merge ready **NO** until both are corrected and exact-head focused regression passes, including both orders of first-onboarding vs deletion and zero orphan rows after reported success.
+- Later rollout remains separately gated: single-file migration approval and owner/ACL/Storage/managed Auth readback; JWT-verification-ON Edge deploy + source byte compare; disposable-account real X/Apple/native/browser E2E; cross-app account-delete coordination; owner/legal retention and legal URL decisions; build activation. None was performed here.
+- Production writes/migrations/RLS/RPC/Vault/Auth/Storage/settings/Cron, deploy, real X/Apple/OpenAI/Push/API invokes/posts and console/OAuth changes: **0**. Only two production catalog SELECTs; no user rows or Vault plaintext.
+- Formal repo existing changes, G1/G2/G3/G4/H1 controls/source, apps/admin, HANDOFF, root package/lock/.env/src, dev servers: **untouched**. Report worktree only fast-forwarded approved remote state before editing these two H2 control files.
+- Supabase skills used for current changelog/Auth/Vault/CORS/session semantics and privilege/locking checks; applicable current changelog was inspected, not a request to change production.
+
+---
+
 ## H2 — PR #52 account-deletion privileged review — 2026-09-29
 
 - task_id: `x-social-mobile-account-deletion-privileged-review-20260928`

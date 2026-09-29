@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-account-deletion-final-acceptance-review-20260929
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: PR #52 Phase 4b fixed head の最終受け入れレビュー。前回C2でFAILしたR1〜R6＋client session pinningだけをfocused regressionし、source merge可否を確定する。
