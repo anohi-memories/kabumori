@@ -9,7 +9,8 @@
 - independent_review_worktree: `/private/tmp/kabumori-h2-account-deletion-final-20260929`; reused only the previous clean H2-owned checkout and fast-forwarded to the exact PR head. Source remains Git-clean, with no H2 source fixes. Managed-worktree tool was unavailable for this mirror chat (Not a git repository); no G3 checkout was used.
 - implementation_commit: existing G3 `4bc819555c07c8792f5b78ea29aa6b9a35694042`; H2 implementation commits: **0**.
 - changed_files by H2: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md` only, in `/private/tmp/kabumori-h2-account-deletion-report-20260929`.
-- report_commit_hash / push: pending report-only synchronization; confirmed delivery will be recorded after fresh remote read-back.
+- report_commit_hash: `00a90f1750836f93d2968ee207bcca2f428f83c4` (H2 Report/TASK only).
+- push: **SUCCESS** to origin/main. Fresh remote read-back confirmed this report commit's inclusion, the current task_id/PASS at the Report head and TASK `review_required / next_owner: chatgpt`. This follow-up records only confirmed delivery; final synchronization SHA is in the completion message.
 - merge / deploy / production_mutation: **0 / 0 / 0**.
 
 ### A/B — Independent two-direction proof, with actual lock-wait observation
