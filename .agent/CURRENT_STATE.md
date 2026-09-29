@@ -40,6 +40,33 @@
 - かぶモリExpo/native本体はVercel制限の主対象ではないため、Netlify Web Preview対応は現時点では進めない。
 - かぶモリのiOS実機/TestFlight/native-only機能は従来どおりExpo/EAS/実機で確認する。
 
+## Final K1 — post-PR55 iOS preview build
+
+- verdict: **PASS for build/readiness gate**.
+- fresh-main build source: `28e0588844954463aa6d099fbdcf86b987110b47`, containing PR #55 merge `e8326163...`.
+- tests: 187/187 PASS; routing regression guard PASS; config/export/diff checks PASS; no source changes.
+- new iOS internal preview build: `eda47220-6c93-4224-91ed-eefe6d778045`, status finished.
+- old broken build `d9ed1da1...` remains prohibited.
+- production mutation 0.
+- physical iPhone acceptance is still pending and must be judged from the user's observation; build PASS does not mark visual/navigation QA PASS.
+- known non-blocker: /news and /portfolio currently rely on iOS edge-swipe for back.
+- G1 slot may proceed with backend deploy-only work because that cannot change this already-built app binary.
+
+## Final K2 — shared analysis deploy/observe
+
+- verdict: **CHANGES REQUIRED before consumer activation**.
+- PR #45 retry hardening production deploy/read-back: PASS; transport layer showed no regression.
+- 2026-09-29 natural shared packet completion: **0/2**.
+- morning failure: data-stage block because production `market-report-data-packet` is behind main and lacks same-session reuse fix already present under `aecfa60`.
+- close failure: attempt 1 local-check rejection for mislabeling 1306 as TOPIX; attempt 2 Fact rejection for asserting an unconfirmed causal explanation.
+- transport retries were 0; these were not retry-layer failures.
+- no duplicate packet/fencing issue observed; gates remain app=false/x=false.
+- consumer activation remains blocked.
+- follow-up split safely:
+  - G1: production sync of reviewed `market-report-data-packet` only. Recommended Sonnet5（高）.
+  - G2: source/test correction for instrument identity + causality preservation in `market-report-analysis`. Recommended Opus5.5（高）.
+- Codex review deferred until G2 source scope is final / consumer activation boundary.
+
 ## Final K1 PR #55 routing recovery
 
 - verdict: **PASS**.
