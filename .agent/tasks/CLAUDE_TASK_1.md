@@ -129,23 +129,27 @@ Implement the approved report-state artwork in two phases.
 
 ### Exact asset rule
 
-The exact approved 04 image is not currently committed in the repository.
-Do **not** regenerate, redraw, substitute, crop into a different illustration, or use another Yume-chan image.
+The user has now supplied the exact approved 04 artwork in ChatGPT.
 
-Required asset identity:
-- `report_04_neutral.webp`
-- transparent-background approved Yume-chan/robot artwork from the user's prior image work
+Asset facts verified by ChatGPT:
+- visual identity: approved 04 neutral Yume-chan + robot + pointer + tablet artwork
+- source upload name: `report_04_neutral.webp.png`
+- actual source encoding: PNG
+- dimensions: 1536x1024
+- mode: RGBA with transparent background
+- this exact visual is the canonical 04 artwork
 
-If the exact binary is not available in the G1 environment when starting:
-- STOP before source changes that depend on the asset
-- ask the user to provide/attach the exact `report_04_neutral.webp`
-- do not invent a placeholder replacement
+Do **not** regenerate, redraw, substitute, crop, recolor, remove/add elements, change facial expression, change pointer/tablet/robot, or alter composition.
 
-Preferred repo location once supplied:
+Canonical app asset:
 - `assets/images/report-states/report_04_neutral.webp`
 
+Because the supplied source is PNG despite its upload name, convert it **once to lossless WebP with alpha preserved** for the canonical app asset. The conversion must be visually/pixel-content preserving aside from file encoding. Do not resize during conversion.
+
+If the G1 environment cannot access the uploaded source bytes, STOP and ask the user to provide the exact file to Claude Code/local workspace. Do not use any other artwork.
+
 Creating `assets/images/report-states/` is allowed.
-Do not rename the canonical file.
+Do not change the canonical filename after conversion.
 
 ### Existing implementation to reuse
 
