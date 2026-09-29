@@ -32,12 +32,13 @@ const COMMON = [
   "本文は読者向けの自然な日本語です。入力のキー名、ref（metric:… / news:…）、英字の項目名や記号的な識別子を本文に書きません。例: 「日経平均は65,018.95（前日比+1.38%）」とは書くが、「change_pct」「session_date」のような語は書きません。",
   "「市場の方向」は入力で確定済みです。それと矛盾する方向（上昇/下落）を書きません。",
   "claims の claim_type は次の基準で付けます。observation: 指標の値動きそのもの。causal: 入力のニュース本文が理由として明記している場合だけ（evidence_refs に news の ref を必ず含める）。consistent_with: 同時期に確認できるが因果は確認できない組み合わせ。insufficient_evidence: 理由を確認できない値動き（理由を推測しない）。watch_point: 次に確認する点。",
+  "値動きの理由として書けるのは、入力のニュースが理由として明記しているもの（causal の claim）だけです。それが無い日は、headline_ja・market_summary_ja・x_post・claims のどこでも、同時期の別の値動き（米国株、半導体株、為替など）やニュースを値動きの理由として結びつけません（「〜を受けて」「〜につれて」「〜安で下落」「〜の影響で」「〜が重しとなり」「〜が原因」など）。「〜の可能性」「〜とみられる」を付けても理由の推測なので書きません。同時期の値動きは日付を付けた別々の事実として並べ、理由は確認できないと1回だけ書きます。",
   "日付の違う市場（例: 前日の米国市場と当日の東京市場）を並べるときは、それぞれの日付を明記します（例: 「9月17日の米国市場は上昇、9月18日の東京市場では…」）。「同じ日」「同日」とは書きません。入力の「日付の注意」に従います。",
   "evidence_refs には入力の ref（metric:… または news:…）だけを入れます。ref は evidence_refs の中だけに書き、本文には書きません。",
   "入力の「重要材料」が true のニュース（中央銀行の政策決定など）がある場合は、その出来事そのもの（何が決まったか）を market_summary_ja と x_post に必ず入れます。値動きとの因果は、ニュースが理由として書いていない限り断定しません（出来事は事実として伝え、因果の確度は別に一言添える）。",
   "不確実性の注記は簡潔に、market_summary_ja と x_post ではそれぞれ多くても1回にします。「確認できません」「断定できません」を繰り返しません。insufficient_evidence の claim は最大1件にまとめます。",
   "strong_themes / weak_themes は、根拠のある業種・テーマ（例: 半導体、銀行、金利上昇の恩恵を受けやすい業種）だけです。指数名、指数どうしの方向の違い、ニュースの見出し、一般的な観察はテーマにしません。根拠が足りなければ空の配列にします。",
-  "TOPIX連動ETF（1306）はTOPIXそのものではありません。必ずこの名前のまま書き、「TOPIX」単独では書きません。",
+  "TOPIX連動ETF（1306）はTOPIX（指数）そのものではありません。必ず「TOPIX連動ETF（1306）」と書き、見出しや x_post で短くするときも「TOPIX」単独にしません（誤: 「日経平均とTOPIXがそろって下落」、正: 「日経平均とTOPIX連動ETF（1306）がそろって下落」）。1306の値や前日比をTOPIXの値として書きません。",
   "入力は1日分の値動き（前回値との比較）だけです。「続伸」「続落」「反発」「反落」「年初来」「最高値」「最安値」のような複数日の推移や記録を前提にする言葉は使いません。",
   "古い値（鮮度が「古い値」）は、その日付の値であることを明記したときだけ触れます。",
   "売買の推奨・断定、将来の値動きの断定、URL、ハッシュタグ、HTML、【速報】等のラベルは書きません。",
@@ -130,7 +131,7 @@ const FACT_SCHEMA = {
 
 export const FACT_INSTRUCTIONS = [
   "あなたは市場レポートの厳格なFactチェッカーです。input（根拠）と analysis（生成結果）だけを照合します。Web検索や外部知識は使いません。",
-  "次を検出したら passed を false にします: input に無い数字・日付・固有名詞・事実、数値の書き換えや独自計算、market_direction と矛盾する方向、news に理由として書かれていない因果を causal や断定で書いたもの、consistent_with や insufficient_evidence なのに本文が因果を断定しているもの、TOPIX連動ETF（1306）をTOPIXそのものとして書いたもの、古い値を最新のように書いたもの、将来の値動きの断定、売買推奨。",
+  "次を検出したら passed を false にします: input に無い数字・日付・固有名詞・事実、数値の書き換えや独自計算、market_direction と矛盾する方向、news に理由として書かれていない因果を causal や断定で書いたもの、consistent_with や insufficient_evidence なのに本文が因果を断定しているもの、理由を確認できない値動きに「〜の可能性」「〜とみられる」などの推測で理由を付けたもの、TOPIX連動ETF（1306）をTOPIXそのものとして書いたもの（「TOPIX連動型ETF」のような正確な言い換えは可）、古い値を最新のように書いたもの、将来の値動きの断定、売買推奨。",
   "自然な言い換えや要約は許容します。x_post の口語的な文体は問題にしません。issues は短い日本語で返します。",
 ].join("\n");
 
@@ -145,7 +146,11 @@ export function generationRequestBody(input: AnalysisInput, previousIssues: stri
       ...(input.reportType === "close" ? CLOSE : MORNING),
       "headline_ja: 40字以内。market_summary_ja: 300字以内。claims: 3〜8個・各120字以内。key_news: 入力 news から最大5件・各100字以内。next_watch_ja / risks_ja: 各最大3個・各80字以内。",
       ...(previousIssues.length > 0
-        ? [`前回の生成は次の理由で不合格でした。すべて解消してください: ${previousIssues.join(" / ")}`]
+        ? [
+          `前回の生成は次の理由で不合格でした。すべて解消してください: ${previousIssues.join(" / ")}`,
+          // 2026-09-29 16:35: a regeneration turned an unconfirmed reason into an asserted cause.
+          "直すときは指摘された箇所を直します。不確実性の注記と claim_type は前回のまま保ち、指摘に無い箇所の表現を強めたり、新しい理由を足したりしません。",
+        ]
         : []),
       ...X_VOICE,
     ].join("\n"),
@@ -262,6 +267,66 @@ const SAME_DAY = /同じ日|同日/;
 const NON_THEME = /日経平均|TOPIX|NYダウ|S&P|ナスダック|指数|方向差|乖離|報道|発表後/;
 const MULTI_DAY_WORDS = ["続伸", "続落", "反発", "反落", "連騰", "連落", "連敗", "連勝", "年初来", "上場来", "最高値", "最安値", "高値更新", "安値更新"];
 const ADVICE = /買い推奨|売り推奨|買うべき|売るべき|買い時|売り時|目標株価|おすすめ|推奨します|必ず(?:上が|下が|上昇|下落)|確実に(?:上が|下が|上昇|下落)|(?:上昇|下落)するでしょう|(?:上が|下が)るでしょう/u;
+/** Accurate names for the 1306 proxy; any other "TOPIX" reads as the index itself (checked after NFKC). */
+const TOPIX_PROXY_AT = /TOPIX連動型?(?:ETF|上場投信|投信)/y;
+/** Wording that gives a reason for a move (2026-09-29 16:35: US/semiconductor weakness stated as the cause). */
+const CAUSAL_LINK = new RegExp([
+  "を受け(?:て|た|、)", "を背景に", "につれ", "連れ(?:安|高)", "に押され", "に引きずられ", "足を引っ張", "を嫌気", "を好感",
+  "の流れを引き継", "が波及", "に連動して(?:下落|上昇|下げ|上げ)", "の影響(?:で|から|を受け|とみ|と見)", "が影響し", "が響",
+  "が重(?:し|荷)(?:と|に)", "が(?:追い風|逆風|支え|下支え)(?:と|に)", "(?:原因|要因)(?:で|とな|にな|とみ|と見)", "が(?:原因|要因)",
+  "(?:株|市場|指数|円|ドル|金利|原油)(?:安|高)で(?!終え|引け|取引)",
+].join("|"));
+/** A sentence that itself says the reason is not established. */
+const NEGATED = /(?:確認|断定|判断|特定)でき(?:ませ|な)|分かりませ|わかりませ|分からな|わからな|明記されて(?:い)?(?:ませ|な)|示されて(?:い)?(?:ませ|な)/;
+/** A hedge that still proposes a reason. */
+const SPECULATION = /可能性|とみられ|と見られ|ようで|ようだ|かもしれ|と考えられ|と思われ|でしょう|だろう/;
+
+function excerpt(value: string, index: number, length: number): string {
+  const start = Math.max(0, index - 12);
+  const end = Math.min(value.length, index + length + 12);
+  return `${start > 0 ? "…" : ""}${value.slice(start, end)}${end < value.length ? "…" : ""}`;
+}
+
+/** Places where 1306 is called "TOPIX", quoted so a regeneration can fix exactly that text. */
+export function topixMislabels(texts: string[]): string[] {
+  const found: string[] = [];
+  for (const value of texts) {
+    const normalized = value.normalize("NFKC");
+    for (const match of normalized.matchAll(/TOPIX/g)) {
+      TOPIX_PROXY_AT.lastIndex = match.index;
+      if (!TOPIX_PROXY_AT.test(normalized)) found.push(excerpt(normalized, match.index, match[0].length));
+    }
+  }
+  return found;
+}
+
+/**
+ * Sentences that attach a reason to a move when no news item states one. A causal claim counts as
+ * confirmed only if it cites news and does not itself say the link is unconfirmed (2026-09-25 carried a
+ * "causal" label on "因果は確認できません").
+ */
+export function unsupportedCausalSentences(analysis: GeneratedAnalysis, input: AnalysisInput): string[] {
+  const confirmed = analysis.claims.some((claim) =>
+    claim.claim_type === "causal" && claim.evidence_refs.some((ref) => input.newsRefs.has(ref)) && !NEGATED.test(claim.text_ja)
+  );
+  if (confirmed) return [];
+  const texts = [
+    analysis.headline_ja,
+    analysis.market_summary_ja,
+    ...analysis.claims.filter((claim) => claim.claim_type !== "watch_point").map((claim) => claim.text_ja),
+    analysis.x_post.lead_ja,
+    ...analysis.x_post.points_ja,
+    analysis.x_post.closing_ja,
+  ];
+  const found: string[] = [];
+  for (const sentence of texts.flatMap((value) => value.split(/[。！？!?\n]/))) {
+    if (!CAUSAL_LINK.test(sentence)) continue;
+    if (NEGATED.test(sentence) && !SPECULATION.test(sentence)) continue;
+    const trimmed = sentence.trim();
+    found.push(Array.from(trimmed).length > 40 ? `${Array.from(trimmed).slice(0, 40).join("")}…` : trimmed);
+  }
+  return found;
+}
 
 export function analysisTexts(analysis: GeneratedAnalysis): string[] {
   return [
@@ -300,7 +365,14 @@ export function localAnalysisIssues(analysis: GeneratedAnalysis, input: Analysis
   if (/<[a-zA-Z/!][^>]*>/.test(joined)) issues.push("HTMLを含む");
   if (/【(?:重大)?速報】/u.test(joined)) issues.push("速報ラベルを含む");
   if (ADVICE.test(joined)) issues.push("売買推奨・断定表現を含む");
-  if (/TOPIX(?!連動ETF（1306）)/.test(joined)) issues.push("TOPIX連動ETF（1306）をTOPIXと表記");
+  const mislabels = topixMislabels(texts);
+  if (mislabels.length > 0) {
+    issues.push(`TOPIX連動ETF（1306）をTOPIXと表記: ${mislabels.slice(0, 2).map((value) => `「${value}」`).join(" ")}`);
+  }
+  const causal = unsupportedCausalSentences(analysis, input);
+  if (causal.length > 0) {
+    issues.push(`根拠の無い因果の断定（ニュースに理由の記載なし）: ${causal.slice(0, 2).map((value) => `「${value}」`).join(" ")}`);
+  }
   const leaked = texts.map((value) => value.match(INTERNAL_FIELD)?.[0]).filter(Boolean);
   if (leaked.length > 0) issues.push(`本文に内部の項目名や識別子: ${[...new Set(leaked)].slice(0, 3).join(",")}`);
   if (input.sessionsDiffer && SAME_DAY.test(joined)) {
