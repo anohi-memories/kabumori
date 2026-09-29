@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-account-deletion-privileged-review-20260928
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: Draft PR #52 の account deletion / account lifecycle Phase 4 を独立レビューする。service_role DB functions、Vault cleanup、Auth admin user deletion、X revoke、Apple revoke、recent-auth、tenant/workspace境界、partial failure/idempotencyを重点確認し、merge可否を判定する。
@@ -181,3 +181,21 @@ Then:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for C2.
+
+
+## Final C2 — PR #52 privileged review
+
+Verdict: **FAIL**.
+
+- reviewed head: `12146c4ab2bc635a2781b673146e1f8ad8350258`.
+- merge blockers include:
+  - durable deletion state missing across OAuth reconnect / purge -> auth-delete gap
+  - social-mobile deletion currently cascades shared Auth into Kabumori main-app data without matching consent
+  - ambiguous/shared Vault secret references can cross tenant boundaries
+  - missing X credential material can become false revocation success
+  - Apple single-use authorizationCode retry is not safely resumable
+  - Edge CORS/web deletion path incomplete
+  - client deletion state is not fully pinned to the initiating user/session
+- passed areas include bearer-derived uid, recent-auth gate, privileged RPC ACL/search_path, several workspace guards, purge atomicity for local DB failures, and no production mutation.
+- PR #52 remains DRAFT and must not merge.
+- returned to G3 as one bundled correction task.
