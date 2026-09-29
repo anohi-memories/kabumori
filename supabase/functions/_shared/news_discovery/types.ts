@@ -79,6 +79,12 @@ export type SourceDefinition = {
   /** Needs a secret (API key) we do not have yet. The fetcher refuses such sources. */
   requires_api_key: boolean;
   enabled_for_n2: boolean;
+  /**
+   * Freshness guard: items whose publication (or, without one, update) time is certainly older than
+   * this many days are dropped as stale before persistence. null = no age filter (GDELT keeps its own
+   * query timespan; disabled sources are never fetched). Items without a usable timestamp are kept.
+   */
+  max_item_age_days: number | null;
   /** DISABLED publishers only: what a Web Search result from these domains may still be used for. */
   disabled_scope?: DisabledScope;
   /** Publisher domains (registrable part) used to recognise Web Search results. */

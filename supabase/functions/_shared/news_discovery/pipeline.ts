@@ -14,7 +14,9 @@ import {
 } from "./fetcher.ts";
 import {
   canonicalizeUrl,
+  resolveHttpUrl,
   isFuture,
+  isStale,
   normalizeTitle,
   parseTimestamp,
   sha256Hex,
@@ -67,7 +69,7 @@ export function signalUrlKey(signal: Pick<NewsSignal, "canonical_url">): string 
   return urlDedupeKey(signal.canonical_url);
 }
 
-export type NormalizeDrop = { dropped: true; reason: "invalid_url" | "empty_title" | "filtered"; detail: string };
+export type NormalizeDrop = { dropped: true; reason: "invalid_url" | "empty_title" | "filtered" | "stale"; detail: string };
 
 export async function normalizeItem(
   source: SourceDefinition,
@@ -76,14 +78,22 @@ export async function normalizeItem(
 ): Promise<NewsSignal | NormalizeDrop> {
   const filtered = filterItem(source, item);
   if (!filtered.keep) return { dropped: true, reason: "filtered", detail: filtered.reason };
-  const canonical = canonicalizeUrl(item.link, context.feedUrl);
-  if (!canonical) return { dropped: true, reason: "invalid_url", detail: item.link.slice(0, 120) };
+  // Resolve the raw feed link once: this absolute http(s) URL is what is stored as source_url
+  // (the DB requires ^https?://). An unresolvable link drops only this item, never the batch.
+  const sourceUrl = resolveHttpUrl(item.link, context.feedUrl);
+  const canonical = sourceUrl ? canonicalizeUrl(sourceUrl) : null;
+  if (!sourceUrl || !canonical) return { dropped: true, reason: "invalid_url", detail: item.link.slice(0, 120) };
   const title = item.title.replace(/\s+/g, " ").trim();
   if (!title) return { dropped: true, reason: "empty_title", detail: canonical };
 
   const published = parseTimestamp(item.published_raw);
   const updated = parseTimestamp(item.updated_raw);
   const seen = parseTimestamp(item.seen_raw);
+  // Freshness guard (DIRECT sources): old feed backlog is not new news. detected_at (GDELT/search
+  // first-seen) is deliberately not used here.
+  if (source.max_item_age_days !== null && isStale(published, updated, context.now, source.max_item_age_days)) {
+    return { dropped: true, reason: "stale", detail: (published ?? updated)!.iso };
+  }
   const flags: VerificationFlag[] = [];
   if (!published) flags.push("no_published_at");
   if (published?.precision === "date") flags.push("date_only_precision");
@@ -114,7 +124,7 @@ export async function normalizeItem(
     source_id: source.source_id,
     source_type: source.source_type,
     policy: source.policy,
-    source_url: item.link,
+    source_url: sourceUrl,
     canonical_url: canonical,
     external_id: externalId,
     title,
@@ -223,6 +233,8 @@ export type SourceStats = {
   request_log: Array<{ via: string; outcome: "ok" | "not_modified" | "DEADLINE_SKIPPED" | FetchFailureCode; http_status: number | null; duration_ms: number; items: number; detail: string | null }>;
   /** Requests not started because the run deadline left no usable time (not a source failure). */
   skipped_deadline: number;
+  /** Items dropped by the freshness guard (also counted in `filtered`). */
+  stale_filtered: number;
 };
 
 export type DiscoveryRunResult = {
@@ -280,6 +292,7 @@ function emptyStats(source: SourceDefinition): SourceStats {
     duration_ms: 0,
     request_log: [],
     skipped_deadline: 0,
+    stale_filtered: 0,
   };
 }
 
@@ -452,8 +465,9 @@ export class DiscoveryRun {
         itemIndex,
       });
       if ("dropped" in normalized) {
-        if (normalized.reason === "filtered") sourceStats.filtered += 1;
+        if (normalized.reason === "filtered" || normalized.reason === "stale") sourceStats.filtered += 1;
         else sourceStats.normalize_failed += 1;
+        if (normalized.reason === "stale") sourceStats.stale_filtered += 1;
         continue;
       }
       const decorated = meta.decorate ? meta.decorate(normalized, item) : normalized;
@@ -520,6 +534,7 @@ export class DiscoveryRun {
         requests: sourceStats.request_log.map((entry) => ({ via: entry.via, outcome: entry.outcome, http_status: entry.http_status, duration_ms: entry.duration_ms })),
         fetched: sourceStats.raw_items,
         normalized: sourceStats.normalized,
+        stale_filtered: sourceStats.stale_filtered,
         duplicates: Object.values(sourceStats.duplicates).reduce((a, b) => a + b, 0),
         inserted: sourceStats.inserted,
         ticker_confirmed: sourceStats.with_confirmed_ticker,
@@ -560,6 +575,7 @@ export class DiscoveryRun {
         inserted: sum((s) => s.inserted),
         insert_conflicts: sum((s) => s.insert_conflicts),
         skipped_deadline: sum((s) => s.skipped_deadline),
+        stale_filtered: sum((s) => s.stale_filtered),
       },
       /** Rows the DB resolved as URL duplicates of a concurrent run's rows (subset of insert_conflicts). */
       db_duplicates: this.#dbDuplicates,
