@@ -3,7 +3,7 @@
 - task_id: x-social-mobile-account-deletion-concurrency-fix-phase4c-20260929
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: critical
 - recommended_model: Opus5.5（高）
