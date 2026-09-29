@@ -73,6 +73,20 @@
 - known non-blocker: /news and /portfolio currently rely on iOS edge-swipe for back.
 - G1 slot may proceed with backend deploy-only work because that cannot change this already-built app binary.
 
+## K2 — PR #57 content guard review
+
+- verdict: **CHANGES REQUIRED**; PR #57 is not merged or deployed.
+- reviewed head: `1c166437be0e514a25026fbab1c8e2ba9f4d483a`.
+- overall scope/tests are strong and production mutation remains 0.
+- confirmed flaw: `unsupportedCausalSentences()` returns no issues if **any** valid causal claim exists, creating a global bypass for unrelated unsupported causal wording elsewhere in headline/summary/x_post/claims.
+- current tests cover "no causal support" and "one valid causal support" separately, but not a mixed report containing both one valid cause and a different unsupported cause.
+- required fix: validate unsupported causality without globally licensing all causal wording; add deterministic mixed supported+unsupported regression.
+- main-side change since PR base has no overlap with PR source files; no rebase conflict is currently indicated.
+- Vercel/Netlify status checks on current head are success.
+- keep PR #57 open and amend same branch if practical.
+- no Codex review yet; re-evaluate at corrected K2 / consumer activation boundary.
+- recommended model: Opus5.5（高）.
+
 ## Final K2 — shared analysis deploy/observe
 
 - verdict: **CHANGES REQUIRED before consumer activation**.
