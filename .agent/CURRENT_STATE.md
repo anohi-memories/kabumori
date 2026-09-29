@@ -1819,3 +1819,28 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - additional P2: checked Deno test suite TS2353 test-only typing mismatch.
 - production_mutation=0; PR #52 remains DRAFT/unmerged.
 - G3 Phase 4c assigned; recommended Opus5.5（高）.
+
+
+## Final K3 account deletion Phase 4c
+
+- verdict: **PASS for source correction**.
+- PR #52 fixed head `4bc819555c07c8792f5b78ea29aa6b9a35694042`.
+- common workspace serialization added before onboarding/deletion critical points.
+- onboarding-first and deletion-first race proofs PASS with orphan rows=0 and no deadlock.
+- finalize rechecks no workspace/account state reappeared before success.
+- checked Deno tests 17/17 PASS; TS2353 fixed.
+- mobile 72/72, data-view 14/14, typecheck/lint, Expo web+iOS, diff/secret checks PASS.
+- previous R1-R6/client pinning regressions remain green.
+- production_mutation=0.
+- one final H2 focused acceptance required before merge.
+- recommended Codex model: Sol（高）.
+
+
+## H2 final concurrency acceptance assigned
+
+- task_id: `x-social-mobile-account-deletion-final-concurrency-acceptance-20260929`
+- target: PR #52 head `4bc819555c07c8792f5b78ea29aa6b9a35694042`.
+- scope: onboarding-first/deletion-first concurrency, orphan invariant, deadlock/isolation, checked Deno tests, regression spot-check.
+- production mutation prohibited.
+- finish code: C2.
+- recommended Codex model: Sol（高）.
