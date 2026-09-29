@@ -23,7 +23,7 @@ test("formatTopicDate renders month/day/weekday, and leaves malformed input alon
   assert.equal(formatTopicDate("bad"), "bad");
 });
 
-test("the メニュー tab lists topics, AI, portfolio and settings exactly once each", () => {
-  assert.deepEqual(MENU_ENTRIES.map((e) => e.id), ["topics", "ai", "portfolio", "settings"]);
+test("the メニュー tab lists topics, AI and settings exactly once each", () => {
+  assert.deepEqual(MENU_ENTRIES.map((e) => e.id), ["topics", "ai", "settings"]);
   assert.equal(new Set(MENU_ENTRIES.map((e) => e.href)).size, MENU_ENTRIES.length);
 });

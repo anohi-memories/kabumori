@@ -15,7 +15,7 @@ export function defaultStockSection(items: readonly TrackedStock[]): StockSectio
 }
 
 export function stockSectionLabel(section: StockSection): string {
-  return section === 'holding' ? '保有' : '監視';
+  return section === 'holding' ? 'ポートフォリオ' : 'ウォッチリスト';
 }
 
 export function stockSectionEmptyMessage(section: StockSection): string {

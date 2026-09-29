@@ -31,7 +31,7 @@ async function* sourceFiles(dir = new URL("../../src/", import.meta.url)): Async
 }
 
 test("SignedInNavigator registers (tabs) plus every non-tab screen", async () => {
-  assert.deepEqual(await rootScreens(), ["(tabs)", "portfolio", "topic-detail", "topics", "settings", "ai", "search"]);
+  assert.deepEqual(await rootScreens(), ["(tabs)", "topic-detail", "topics", "settings", "ai", "search"]);
 });
 
 test("the root Stack renders in place of the old AppTabs component (no dangling import)", async () => {

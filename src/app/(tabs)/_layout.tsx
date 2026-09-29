@@ -4,13 +4,13 @@ import { Colors } from '@/constants/theme';
 
 // Bottom navigation (user decision 2026-09-29): ホーム / 銘柄 / ニュース / レポート / メニュー.
 // iOS shows at most 5 native tabs (a 6th would collapse into "その他"), so トピック一覧 /
-// AIに聞く / ポートフォリオ / 設定 live inside the メニュー tab (menu.tsx).
+// AIに聞く / 設定 live inside the メニュー tab (menu.tsx).
 //
 // This must be a route group's own _layout.tsx (not a plain component
 // rendered from the root layout): expo-router/unstable-native-tabs only
 // registers screens that have a matching NativeTabs.Trigger here
 // (useOnlyUserDefinedScreens) -- any route outside this group's file tree
-// (portfolio.tsx, topic-detail.tsx, topics.tsx, settings.tsx, ai.tsx, search.tsx) is simply invisible
+// (topic-detail.tsx, topics.tsx, settings.tsx, ai.tsx, search.tsx) is simply invisible
 // to this navigator, so router.push() to it silently does nothing. Those
 // routes live as siblings of the (tabs) group instead, as plain Stack
 // screens pushed on top -- see SignedInNavigator in src/app/_layout.tsx.
