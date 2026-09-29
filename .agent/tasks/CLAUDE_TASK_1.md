@@ -1,5 +1,168 @@
 # Claude Task 1
 
+- task_id: kabumori-home-v3-routing-fix-postmerge-ios-preview-qa-20260929
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（中）
+- purpose: K1 PASSでmerge済みのPR #55 routing fixをfresh mainから検証し、新しいiOS internal/preview buildを1本だけ作成して、ユーザーが実機でHome v3と全ナビゲーションを再QAできる状態にする。source変更・production mutationは禁止。
+
+## Accepted K1 baseline
+
+PR #55:
+- title: `fix(nav): critical — every non-tab route unreachable since PR #53`
+- reviewed head: `5859f6ce6f94fbb45a065821afbcc2778598b8a9`
+- K1 verdict: PASS
+- merge SHA: `e8326163f90f969ede063e52533731a2273ef7b2`
+- merged: 2026-09-29 JST
+- Codex review: not required under reduced-review policy
+- production mutation: 0
+
+K1 verified:
+- root cause is NativeTabs route registration, not Home row onPress logic.
+- standard `(tabs)` NativeTabs + root Stack structure is used.
+- moved `index.tsx` and `settings.tsx` contents are byte-identical to pre-move files.
+- main-side commits since branch fork touched only .agent/MIC files, not PR #55 app-routing files.
+- GitHub mergeable=true.
+- reported full app tests 187/187 PASS.
+- iOS Simulator release verification recovered /news, /news/[id], /portfolio, /topic-detail and preserved all 5 bottom tabs + reports/[id].
+- Vercel and Netlify commit statuses were success.
+
+Known lower-severity follow-up, not a blocker for this build:
+- root-pushed `/news` and `/portfolio` currently rely on iOS edge-swipe for back navigation and have no explicit in-app back button. Do not expand scope here.
+
+## Mandatory startup / isolation
+
+1. Use a fresh independent G1 worktree/checkout.
+2. Fresh-fetch `origin/main`.
+3. Record fresh main SHA.
+4. Confirm merge SHA `e8326163f90f969ede063e52533731a2273ef7b2` is an ancestor.
+5. Read PROJECT_RULES, ORCHESTRATION, CURRENT_STATE, this TASK, app/eas config, root layout and `src/app/(tabs)/_layout.tsx`.
+6. Confirm no G1 overlap.
+7. Do not touch G2/MIC/X/news-ingestion backend workstreams.
+8. If independent worktree cannot be guaranteed, STOP.
+
+## Phase A — fresh-main verification
+
+Run:
+- `deno test tests/app/ --allow-read --no-check`
+- `npx tsc --noEmit` and distinguish known unrelated pre-existing errors from new errors
+- `npx expo config --json`
+- `npx expo export --platform web --clear` when safe
+- `git diff --check`
+
+Expected:
+- no source edits
+- no new failures
+- routing regression test remains present and passing
+
+If a concrete blocker is found, STOP and report; do not patch ad hoc in this build task.
+
+## Phase B — one fresh EAS internal/preview build
+
+The following build is CONFIRMED BROKEN and MUST NOT be reused:
+- build id: `d9ed1da1-9542-45c7-b704-d89eaba9a978`
+- source: `135dcc96c394fba5948a45ea4eca45f7dea5d595`
+- reason: non-tab Home navigation dead before PR #55.
+
+Read-only preflight:
+- EAS login/account
+- project linkage/projectId
+- bundle identifier
+- preview/internal profile
+- required EXPO_PUBLIC_* names/presence only
+- signing/provisioning readiness
+- latest build source commits
+
+Reuse is allowed only if a newer installable internal build already contains merge `e8326163...`.
+Otherwise create exactly ONE safest nonproduction/internal iOS build from fresh main.
+
+Forbidden:
+- App Store/TestFlight production submission
+- source edits
+- bundle/projectId changes
+- EAS production env mutation
+- Supabase/Auth/DB/migration/DDL/DML mutation
+- G2/MIC/X/news-ingestion changes
+
+If Apple login/device registration/credential interaction is required, STOP and report exact user action.
+
+## User real-device re-QA checklist
+
+Do not self-PASS these. User must confirm on iPhone.
+
+A. Home visual:
+1. Header compact.
+2. 今日のかぶモリレポート compact.
+3. old large circle+🌱 absent.
+4. 重要ニュース入口 visible near first viewport.
+5. character area looks intentional/neutral.
+
+B. Navigation recovery — release blocker:
+6. 重要ニュース「すべて見る」 opens /news.
+7. individual news row opens /news/[id].
+8. 今日のトピック opens /topic-detail.
+9. Settings → ポートフォリオ opens /portfolio.
+10. Report item still opens reports/[id].
+11. all 5 bottom tabs switch correctly.
+
+C. Topic detail:
+12. same tapped topic is shown.
+13. multi-section detail renders.
+14. back returns cleanly to Home.
+
+D. Settings safe-area:
+15. Home top-right Settings opens.
+16. bottom Settings tab opens.
+17. header does not overlap status bar/Dynamic Island.
+18. top controls tappable.
+19. topic-level subview back inside safe area.
+20. account-deletion subview back inside safe area.
+21. level change persists.
+
+E. Bottom tabs exact order:
+22. ホーム / 銘柄 / レポート / AIに聞く / 設定.
+23. ポート and 重要ニュース are not separate tabs.
+
+F. Regression:
+24. important/holding news load.
+25. AIに聞く opens honest 準備中 screen.
+26. logout/password reset/account deletion do not crash.
+27. no fatal error/red screen.
+
+Known non-blocking observation:
+- /news and /portfolio may require iOS edge-swipe to return because explicit in-app back buttons are not yet added. Record whether this feels unacceptable; do not silently fix in this task.
+
+## Completion / K1
+
+Report:
+- task_id
+- fresh main SHA/worktree
+- merge `e8326163...` ancestor proof
+- tests/type/config/export/diff
+- EAS account/project/profile
+- new/reused build id
+- source commit/status/install URL
+- signing/provisioning
+- env presence names only
+- source changes = expected 0
+- production mutation = expected 0
+- exact user QA checklist
+- remaining issues / next recommendation
+
+When build is ready:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K1.
+
+---
+
+## Archived predecessor state
+
+# Claude Task 1
+
 - task_id: kabumori-home-v3-postmerge-ios-preview-qa-20260929
 - owner: claude
 - slot: claude-1
@@ -1502,3 +1665,4 @@ Restructured to the standard documented "NativeTabs + Stack" pattern: the 5 real
 ### Next recommendation
 
 K1 reviews and merges PR #55 as a priority. Once merged, a new EAS preview build is needed (the existing `d9ed1da1` build must NOT be used for further QA — it's confirmed broken) before the user can re-attempt this task's real-device checklist. I will build it as soon as PR #55 is merged, without waiting for a separate task assignment, given the severity — but will still stop and report rather than self-merge or apply anything to production.
+
