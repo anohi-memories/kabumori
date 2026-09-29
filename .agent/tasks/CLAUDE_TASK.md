@@ -3,8 +3,8 @@
 - task_id: kabumori-shared-analysis-content-guard-fix-20260929
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: highest
 - recommended_model: Opus5.5（高）
 - purpose: 2026-09-29大引けshared analysisがlocal check / Factで2回失敗した実例を再現し、1306の誤ラベルと根拠のない因果断定をsource側で最小修正する。transport retry・claim/idempotency・consumer gateは変えない。
@@ -413,6 +413,99 @@ Recommended model: Opus5.5（高）.
 - K2で確認したあと、mergeし、`market-report-analysis` だけを別gateでdeployしてbyte照合する。
 - そのあと、数営業日の自然なcycleで、完成率と指摘の傾向を観察する。
 - consumerの有効化の前のfocused reviewで、この因果の検査もあわせて確認することを推奨する。
+
+## K2 correction required — causal support must preserve direction/polarity
+
+K2 verdict on PR #57 head `485f4bf8bd767601d70625eb383bb5ec8b6c2248`: **CHANGES REQUIRED**. Do not merge/deploy yet.
+
+### What is fixed
+
+The previous global bypass is fixed: one valid causal claim no longer automatically licenses every other causal sentence. The mixed supported+unsupported tests are useful and passing.
+
+### Remaining concrete defect
+
+The new `causeSupported()` currently accepts a cause when:
+
+`longestCommonSubstring(part, support) >= min(3, part.length)`
+
+This can erase the semantic direction/polarity of the cause.
+
+Examples that can be falsely accepted:
+- support/news: `半導体株安`
+- generated cause: `半導体株高`
+- common substring: `半導体株` (4 chars) => incorrectly treated as supported
+
+and similarly:
+- support/news: `米国株安`
+- generated cause: `米国株高`
+- common substring `米国株` can satisfy the threshold
+
+This is not merely a theoretical style issue: it allows an unsupported or inverted causal statement to bypass the new local guard and reach Fact, which is exactly the failure class this PR is intended to reduce.
+
+### Required correction
+
+Replace the generic 3-character longest-common-substring acceptance with a support match that preserves causal meaning.
+
+Requirements:
+1. Movement/polarity tokens must not be discarded. If the cause contains semantics such as:
+   - 安 / 高
+   - 上昇 / 下落
+   - 上げ / 下げ
+   - 買い / 売り
+   - 円高 / 円安
+   then the supporting news must be compatible with that direction, not merely share the instrument/theme core.
+2. Legitimate controlled aliases may still be supported, e.g. `米国株安` vs `米株安`, but use explicit/controlled normalization rather than generic substring similarity that can invert meaning.
+3. Keep the earlier mixed-causality behavior:
+   - supported cause A passes
+   - unrelated unsupported B fails
+   - A+B requires each cause part to be independently supported
+4. Do not weaken Fact.
+5. Do not change transport retry, claim/idempotency/fencing, call budgets, model routing, gates, DB, cron, or data-packet.
+
+Prefer the simplest deterministic rule that is safe. Do not build a general NLP matcher.
+
+### Mandatory regression tests
+
+Add explicit before/after tests for at least:
+- news supports `半導体株安`; generated `半導体株高を受けて…` => MUST fail locally
+- news supports `米国株安`; generated `米国株高を受けて…` => MUST fail locally
+- news supports `半導体株安`; generated equivalent supported wording retaining the same direction => PASS
+- controlled alias retaining polarity (e.g. `米国株安` / `米株安`) => PASS if intentionally supported
+- mixed A(valid) + B(polarity-inverted or unsupported) => fail
+- regeneration cannot introduce an inverted cause while fixing another issue
+
+Also keep all 13 existing content-guard tests passing.
+
+### Re-run
+
+At minimum:
+- content_guard_test full suite
+- market-report-analysis full suite
+- handler/transport tests
+- market-report-data-packet regression
+- personalized-reports regression
+- x-test-post shared consumer regression
+- relevant _shared deterministic suite
+- deno check
+- deno lint changed files
+- git diff --check
+
+### Delivery
+
+Amend PR #57 on the same branch if practical. Do not deploy or merge.
+
+Report:
+- chosen polarity-preserving matching rule
+- explicit inverted-direction tests before/after
+- full test results
+- final PR head SHA
+- CI state
+- production mutation = 0
+
+Then status -> review_required, next_owner -> chatgpt, STOP for K2.
+
+Recommended model: Opus5.5（高）.
+
 
 ---
 
