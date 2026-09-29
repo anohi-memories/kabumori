@@ -69,6 +69,20 @@
 - next gate: natural scheduled morning/close observation with consumers OFF. This C1 does not authorize consumer activation.
 - G2 PR #57 content-guard correction remains separate and unresolved.
 
+## G1 UI phase — fixed report_04_neutral.webp first
+
+- user decision: add the approved 04 neutral Yume-chan artwork to the Home report card first and keep it fixed.
+- purpose of this phase: adjust real-device size/position/spacing only.
+- do not implement the 10-state report-content selector yet.
+- canonical asset filename: `report_04_neutral.webp`.
+- repo currently does not contain that asset; exact prior approved binary must be provided to G1. Regeneration/substitution is forbidden.
+- preferred repo path once supplied: `assets/images/report-states/report_04_neutral.webp`.
+- reuse existing `CharacterSlot` / `ReportHighlightCard` seam; current 48x48 placeholder is not the final visual size.
+- preserve transparent background and no crop/decorative wrapper.
+- after implementation, create fresh iOS preview for user visual QA; expect micro-adjustment rounds.
+- phase 2 (other 9 assets + dynamic selection based on report state) starts only after phase 1 visual acceptance.
+- recommended model: **Sonnet5（高）**.
+
 ## G1 restored to Home/UI workstream
 
 - user direction: continue this room as the Kabumori app UI/Home workstream.
