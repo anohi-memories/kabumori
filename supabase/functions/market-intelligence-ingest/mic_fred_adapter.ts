@@ -333,12 +333,167 @@ export function normalizeFredObservation(
   };
 }
 
+// --- Reliability (2026-09-29) ------------------------------------------------
+// Production evidence (mic_ingestion_runs, 2026-09-22..29): the 25 series
+// were fetched one after another at ~4-5 s each, so a successful run took
+// 108-144 s -- against the 150 s limit of the pg_net call / Edge request that
+// runs it. Twice a slower run was cut off mid-flight and left 'running' until
+// another source's stale sweep marked it MIC_STALE_RUN_TERMINATION; four times
+// a single transient FRED 502 (DGS2, DGS10, NIKKEI225) failed the whole run.
+//
+// Now: bounded concurrency, bounded retry of transient failures only, and a
+// hard deadline for the whole FETCH phase: every FRED request ends (or is
+// aborted) by the deadline and no request starts after it. That bounds only
+// this phase. It does NOT guarantee the run's terminal write: the DB REST
+// calls before and after it (stale sweep, claim, metric/event writes,
+// complete/fail) have no timeout of their own, so a stalled DB call can
+// still outlive the platform limit and leave the run to the stale sweep.
+// Run semantics are unchanged: every series must succeed or the run fails
+// (no partial success); retries never write anything, because persistence
+// happens only after the whole fetch phase returns.
+export const FRED_FETCH_CONCURRENCY = 4;
+export const FRED_MAX_ATTEMPTS = 3;
+export const FRED_ATTEMPT_TIMEOUT_MS = 15_000;
+// Whole fetch phase, sized against the ~150 s pg_net / Edge request limit:
+// the non-fetch work around it took ~2 s in Production (claim ~0.3 s,
+// writes + completion ~1.8 s), so 120 s leaves ~25 s of margin. It is not
+// tighter on purpose: the speed-up from concurrency is not yet measured in
+// Production, and runs that already succeeded sequentially in 108-144 s must
+// not all start failing at the deadline if FRED serves parallel requests no
+// faster.
+export const FRED_FETCH_BUDGET_MS = 120_000;
+const FRED_BACKOFF_BASE_MS = 500;
+// A longer wait (e.g. a Retry-After asking for a minute) is not honored by
+// retrying early: the series fails instead.
+const FRED_MAX_RETRY_DELAY_MS = 5_000;
+// Never start an attempt with less time than this left before the deadline.
+const FRED_MIN_ATTEMPT_MS = 1_000;
+const FRED_RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+
 export type FetchFredMetricsParams = {
   apiKey: string;
   mappings?: FredSeriesMapping[];
   fetchedAt?: Date;
+  // Per-attempt timeout (capped by the remaining budget).
   timeoutMs?: number;
+  concurrency?: number;
+  maxAttempts?: number;
+  budgetMs?: number;
+  // Injectable for tests.
+  now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
 };
+
+type FredAttemptFailure = { code: string; detail: string; retryable: boolean; retryAfterMs: number | null };
+
+function parseRetryAfterMs(value: string | null, nowMs: number): number | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) return Number(trimmed) * 1000;
+  const at = Date.parse(trimmed);
+  return Number.isFinite(at) ? Math.max(0, at - nowMs) : null;
+}
+
+function isAbort(error: unknown): boolean {
+  return error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError");
+}
+
+async function fetchFredSeriesOnce(
+  mapping: FredSeriesMapping,
+  apiKey: string,
+  timeoutMs: number,
+  fetchImpl: typeof fetch,
+  nowMs: number,
+): Promise<{ ok: true; observation: FredObservation } | { ok: false; failure: FredAttemptFailure }> {
+  const url = buildFredObservationsUrl(mapping.seriesId, apiKey, 5, mapping.units);
+  let response: Response;
+  try {
+    response = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) });
+  } catch (error) {
+    // Network error or per-attempt timeout: both transient.
+    const detail = isAbort(error) ? `timeout after ${timeoutMs}ms` : "network error";
+    return { ok: false, failure: { code: "FRED_FETCH_FAILED", detail, retryable: true, retryAfterMs: null } };
+  }
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
+    return {
+      ok: false,
+      failure: {
+        code: "FRED_HTTP_ERROR",
+        detail: `status=${response.status}`,
+        retryable: FRED_RETRYABLE_STATUS.has(response.status),
+        retryAfterMs: parseRetryAfterMs(response.headers.get("retry-after"), nowMs),
+      },
+    };
+  }
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch (error) {
+    // The body timing out mid-read is transient; a complete but unparsable
+    // body is not.
+    if (isAbort(error)) {
+      return { ok: false, failure: { code: "FRED_FETCH_FAILED", detail: `timeout after ${timeoutMs}ms`, retryable: true, retryAfterMs: null } };
+    }
+    return { ok: false, failure: { code: "FRED_MALFORMED_RESPONSE", detail: "invalid JSON", retryable: false, retryAfterMs: null } };
+  }
+  let latest: FredObservation | null;
+  try {
+    latest = latestValidFredObservation(parseFredObservations(payload));
+  } catch (error) {
+    const code = error instanceof FredAdapterError ? error.code : "FRED_MALFORMED_RESPONSE";
+    return { ok: false, failure: { code, detail: "malformed observations", retryable: false, retryAfterMs: null } };
+  }
+  if (!latest) {
+    return { ok: false, failure: { code: "FRED_NO_VALID_OBSERVATION", detail: "no non-missing observation", retryable: false, retryAfterMs: null } };
+  }
+  return { ok: true, observation: latest };
+}
+
+// One series with bounded retry inside the shared deadline.
+async function fetchFredSeriesWithRetry(
+  mapping: FredSeriesMapping,
+  params: Required<Pick<FetchFredMetricsParams, "apiKey" | "now" | "sleep">> & {
+    timeoutMs: number;
+    maxAttempts: number;
+    deadline: number;
+    // True once another series has definitively failed: the run will fail
+    // anyway, so no further retry is spent on this one.
+    stopped: () => boolean;
+  },
+  fetchImpl: typeof fetch,
+): Promise<{ ok: true; observation: FredObservation } | { ok: false; failure: FredAttemptFailure; attempts: number }> {
+  let attempts = 0;
+  let last: FredAttemptFailure | null = null;
+  while (attempts < params.maxAttempts) {
+    const remaining = params.deadline - params.now();
+    if (remaining < FRED_MIN_ATTEMPT_MS) {
+      last = last ?? { code: "FRED_DEADLINE_EXCEEDED", detail: "fetch budget exhausted", retryable: false, retryAfterMs: null };
+      break;
+    }
+    attempts += 1;
+    const outcome = await fetchFredSeriesOnce(
+      mapping,
+      params.apiKey,
+      Math.min(params.timeoutMs, remaining),
+      fetchImpl,
+      params.now(),
+    );
+    if (outcome.ok) return outcome;
+    last = outcome.failure;
+    if (!last.retryable || attempts >= params.maxAttempts || params.stopped()) break;
+    const backoff = Math.min(FRED_BACKOFF_BASE_MS * 2 ** (attempts - 1), FRED_MAX_RETRY_DELAY_MS);
+    // Retry-After can lengthen the wait, never shorten it below our backoff
+    // (e.g. "Retry-After: 0" must not turn into an immediate hammer).
+    const delay = Math.max(backoff, last.retryAfterMs ?? 0);
+    if (delay > FRED_MAX_RETRY_DELAY_MS) break;
+    if (params.now() + delay + FRED_MIN_ATTEMPT_MS > params.deadline) break;
+    await params.sleep(delay);
+    // Another series may have failed definitively during the backoff.
+    if (params.stopped()) break;
+  }
+  return { ok: false, failure: last!, attempts };
+}
 
 export async function fetchFredMetrics(
   params: FetchFredMetricsParams,
@@ -346,34 +501,52 @@ export async function fetchFredMetrics(
 ): Promise<NormalizedMarketMetric[]> {
   const mappings = params.mappings ?? FRED_SERIES_MAPPINGS;
   const fetchedAt = params.fetchedAt ?? new Date();
-  const results: NormalizedMarketMetric[] = [];
+  const now = params.now ?? Date.now;
+  const sleep = params.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const settings = {
+    apiKey: params.apiKey,
+    now,
+    sleep,
+    timeoutMs: params.timeoutMs ?? FRED_ATTEMPT_TIMEOUT_MS,
+    maxAttempts: Math.max(1, params.maxAttempts ?? FRED_MAX_ATTEMPTS),
+    deadline: now() + (params.budgetMs ?? FRED_FETCH_BUDGET_MS),
+    stopped: () => failures.length > 0,
+  };
+  const concurrency = Math.max(1, Math.min(params.concurrency ?? FRED_FETCH_CONCURRENCY, mappings.length || 1));
 
-  for (const mapping of mappings) {
-    const url = buildFredObservationsUrl(mapping.seriesId, params.apiKey, 5, mapping.units);
-    let response: Response;
-    try {
-      response = await fetchImpl(url, { signal: AbortSignal.timeout(params.timeoutMs ?? 15_000) });
-    } catch (error) {
-      throw new FredAdapterError("FRED_FETCH_FAILED", `${mapping.seriesId}: ${String(error)}`);
+  // Results keep mapping order so writes stay deterministic.
+  const observations: Array<FredObservation | null> = mappings.map(() => null);
+  const failures: Array<{ index: number; seriesId: string; failure: FredAttemptFailure; attempts: number }> = [];
+  let next = 0;
+  const worker = async () => {
+    while (next < mappings.length) {
+      const index = next++;
+      const mapping = mappings[index];
+      // Once a series has definitively failed the run will fail; do not
+      // spend further requests on the rest.
+      if (failures.length > 0) return;
+      const outcome = await fetchFredSeriesWithRetry(mapping, settings, fetchImpl);
+      if (outcome.ok) observations[index] = outcome.observation;
+      else failures.push({ index, seriesId: mapping.seriesId, failure: outcome.failure, attempts: outcome.attempts });
     }
-    if (!response.ok) {
-      throw new FredAdapterError("FRED_HTTP_ERROR", `${mapping.seriesId}: status=${response.status}`);
-    }
-    let payload: unknown;
-    try {
-      payload = await response.json();
-    } catch {
-      throw new FredAdapterError("FRED_MALFORMED_RESPONSE", `${mapping.seriesId}: invalid JSON`);
-    }
-    const observations = parseFredObservations(payload);
-    const latest = latestValidFredObservation(observations);
-    if (!latest) {
-      throw new FredAdapterError("FRED_NO_VALID_OBSERVATION", `${mapping.seriesId}: no non-missing observation`);
-    }
-    results.push(normalizeFredObservation(mapping, latest, fetchedAt));
+  };
+  await Promise.all(Array.from({ length: concurrency }, worker));
+
+  if (failures.length > 0) {
+    // Report in mapping order, not completion order, so the run error is
+    // deterministic for the same set of failed series.
+    const [first, ...others] = [...failures].sort((a, b) => a.index - b.index);
+    const extra = others.length > 0 ? `; also failed: ${others.map((f) => f.seriesId).join(",")}` : "";
+    throw new FredAdapterError(
+      first.failure.code,
+      `${first.seriesId}: ${first.failure.detail} (attempts=${first.attempts})${extra}`,
+    );
   }
-
-  return results;
+  return mappings.map((mapping, index) => {
+    const observation = observations[index];
+    if (!observation) throw new FredAdapterError("FRED_FETCH_FAILED", `${mapping.seriesId}: not fetched`);
+    return normalizeFredObservation(mapping, observation, fetchedAt);
+  });
 }
 
 export type FetchFredHistoricalMetricsParams = {
