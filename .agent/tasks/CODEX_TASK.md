@@ -1,5 +1,163 @@
 # Codex Task
 
+- task_id: kabumori-market-report-analysis-prod-sync-content-guard-20260929
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- priority: highest
+- recommended_model: Sol（高）
+- purpose: K2 PASS/merge済みPR #57の `market-report-analysis` content guardを、consumer gate OFFのままproductionへ単一Function deployし、source read-back・verify_jwt・cron・consumer gate・他Function非変更を確認する。source実装は禁止。
+
+## Accepted source baseline
+
+- PR #57 accepted head: `b8bbfe981735e6a2e42987011f1e4a4e7ab2824c`
+- merge SHA: `9488f9e8b12bb1c7c0fcf872767d078ed818c128`
+- accepted behaviors:
+  - 1306 proxy identity preserved
+  - unsupported causal assertions rejected locally
+  - valid cause A does not license unrelated cause B
+  - direction/polarity inversion is rejected
+  - Fact remains strict
+- reported tests:
+  - content guard 16/16
+  - market-report-analysis 51/51
+  - market-report-data-packet 42/42
+  - personalized-reports 125/125
+  - x shared consumer 6/6
+  - _shared 279/279
+  - deno check/lint/diff PASS
+- production mutation from source task: 0
+- consumer gates remain expected OFF/OFF
+- data-packet v12 is already accepted in production by Final C1.
+
+## Mandatory startup / isolation
+
+1. Use a fresh independent H1 worktree/checkout; do not reuse G2/G1/shared checkout.
+2. Fresh-fetch origin/main; record exact SHA.
+3. Confirm merge `9488f9e8b12bb1c7c0fcf872767d078ed818c128` is an ancestor.
+4. Read ORCHESTRATION, CURRENT_STATE, this TASK, Final K2 and current `market-report-analysis/**`.
+5. Confirm no newer main commit changed `market-report-analysis/**` after the accepted merge without review.
+6. Confirm no active slot owns `market-report-analysis/**`.
+7. If isolation/ownership is ambiguous, STOP.
+
+## Phase A — production preflight
+
+Read-only:
+- current production `market-report-analysis` version / updated_at / verify_jwt
+- deployed source download/read-back
+- compare production source with fresh-main accepted source
+- canonical consumer settings:
+  - app_enabled
+  - x_enabled
+- relevant market-report cron jobs/schedules
+- metadata snapshot of all Edge Functions sufficient to prove only target changes later
+
+Require before mutation:
+- `app_enabled=false`
+- `x_enabled=false`
+- target source is stale vs accepted main or otherwise needs sync
+- `verify_jwt=false` unless current reviewed production metadata proves a different accepted setting; do not guess
+- cron state sane and recorded
+- no ownership conflict
+
+If production already matches fresh main byte-for-byte, do not redeploy; report no-op PASS.
+
+Re-run relevant deterministic tests from fresh main:
+- full market-report-analysis suite
+- content_guard_test
+- handler/transport tests
+- deno check
+- changed-runtime lint
+- git diff --check
+
+Do not weaken/alter source.
+
+## Phase B — controlled deploy
+
+If preflight proves drift, deploy exactly:
+- `market-report-analysis`
+
+Rules:
+- explicit project ref
+- preserve current accepted verify_jwt setting
+- no broad deploy
+- no db push
+- no other Edge Function deploy
+- no DB/schema/RPC/migration changes
+- no cron change
+- no app_enabled/x_enabled change
+- no Auth/Vault/secret mutation
+- no X post
+- no app delivery activation
+- no manual real cycle invocation
+
+Use API deploy mode if required by the environment and already-supported CLI path.
+
+## Phase C — read-back
+
+Immediately after deploy:
+1. record target version / updated_at / verify_jwt
+2. download deployed source
+3. byte-compare all deployable runtime files with accepted fresh-main source
+4. explicitly verify the PR #57 guard logic is present:
+   - 1306 protection
+   - mixed supported/unsupported causality handling
+   - polarity-preserving cause support
+5. re-read exact cron rows; prove unchanged
+6. re-read consumer gates; prove false/false unchanged
+7. compare all-function metadata; prove no other Function changed by this task
+8. do not manually invoke a cycle
+
+## Failure / rollback
+
+If source identity, verify_jwt, cron/gates, or deployment scope is wrong:
+- STOP immediately
+- rollback only if the pre-deploy exact source was captured and can be restored safely to this one function
+- record all mutations and rollback evidence
+- do not improvise broader changes
+
+## Acceptance
+
+PASS only if:
+- exact accepted source is in production
+- only market-report-analysis changed, if any deploy was needed
+- verify_jwt preserved
+- cron unchanged
+- app_enabled=false / x_enabled=false unchanged
+- no manual cycle
+- no DB/Auth/Vault/X mutation
+
+This PASS does not authorize consumer activation.
+
+## Completion / C1
+
+Write `.agent/CODEX_REPORT.md` with:
+- task_id
+- PASS / FAIL / STOP
+- fresh main SHA/worktree
+- production version before/after
+- source drift proof
+- test/check results
+- deploy command/scope
+- source read-back identity
+- verify_jwt before/after
+- cron before/after
+- app/x gates before/after
+- other-function metadata check
+- production mutations
+- rollback status
+- remaining issues
+- next recommendation for natural morning/close observation
+
+Then status -> review_required, next_owner -> chatgpt, STOP for C1.
+
+---
+
+## Archived predecessor task
+
+# Codex Task
+
 - task_id: kabumori-data-packet-prod-sync-verification-rollout-20260929
 - owner: codex
 - slot: codex-1
@@ -300,3 +458,4 @@ Verdict: **PASS-WITH-FIX**.
 - rollback not required.
 - post-C1 fresh-main check: current main advanced beyond the deployed commit only in agent/report control files; no `market-report-data-packet/**` or relevant shared-source change, so production v12 is not stale relative to current source.
 - natural-cycle morning/close validation remains a separate gate. Consumer activation remains unapproved.
+
