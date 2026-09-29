@@ -40,19 +40,22 @@
 - かぶモリExpo/native本体はVercel制限の主対象ではないため、Netlify Web Preview対応は現時点では進めない。
 - かぶモリのiOS実機/TestFlight/native-only機能は従来どおりExpo/EAS/実機で確認する。
 
-## H1 — data-packet production sync PASS; C1 confirmation pending
+## Final C1 — data-packet controlled production sync
 
-- task_id: `kabumori-data-packet-prod-sync-verification-rollout-20260929`; `review_required`, next_owner `chatgpt`.
-- fresh main deployed: `d79b0c8524af56cc56c5245f5037517fc689d917`; independent H1 worktree, no source edits.
-- H1's mandatory read-only production checks succeeded; G1's earlier classifier block was not bypassed using credentials.
-- controlled deploy: only `market-report-data-packet`, v11 -> v12; verify_jwt=false retained.
-- source read-back: all 8 deployable files byte-identical to exact reviewed main; session reuse + handler/builder/schema wiring present.
-- data-packet 42/42 PASS; runtime deno check/lint PASS; full-directory lint has one pre-existing test-only require-await finding.
-- cron jobids 28-33 unchanged, including schedules/active/command hashes; canonical `market_report_consumer_settings` gates remain app=false/x=false.
-- all other 18 Edge Functions' metadata unchanged across rollout.
-- production mutations by H1: one target Function deploy only; DB/schema/RPC/Cron/Auth/Vault/secrets/consumer changes=0; manual cycles/X posts=0.
-- details and identity hashes: latest task section in `.agent/CODEX_REPORT.md`.
-- next: C1 confirm controlled sync. Natural morning/close validation and G2 content-guard correction are separate later gates; consumer activation remains unapproved. Recommended Luna（中） for C1 report confirmation.
+- verdict: **PASS**.
+- H1 task `kabumori-data-packet-prod-sync-verification-rollout-20260929` is closed.
+- accepted deployed source: `d79b0c8524af56cc56c5245f5037517fc689d917`.
+- production `market-report-data-packet` v11 -> v12; `verify_jwt=false` preserved.
+- all 8 runtime files read back byte-identical; same-session reuse is live in production source.
+- tests 42/42 PASS; runtime check/lint PASS.
+- cron jobs 28-33 unchanged before/after.
+- consumer gates remain app=false / x=false.
+- all other 18 Edge Functions unchanged.
+- production mutation was exactly one target function deploy; no DB/schema/RPC/Cron/Auth/Vault/secret/gate mutation and no manual cycle.
+- rollback not required.
+- fresh-main post-check: no target/shared source change after deployed commit, so v12 is still current.
+- next gate: natural scheduled morning/close observation with consumers OFF. This C1 does not authorize consumer activation.
+- G2 PR #57 content-guard correction remains separate and unresolved.
 
 ## K1 — data-packet production sync blocked; handed to H1
 
