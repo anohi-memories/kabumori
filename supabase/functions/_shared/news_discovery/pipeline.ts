@@ -14,6 +14,7 @@ import {
 } from "./fetcher.ts";
 import {
   canonicalizeUrl,
+  resolveHttpUrl,
   isFuture,
   normalizeTitle,
   parseTimestamp,
@@ -76,8 +77,11 @@ export async function normalizeItem(
 ): Promise<NewsSignal | NormalizeDrop> {
   const filtered = filterItem(source, item);
   if (!filtered.keep) return { dropped: true, reason: "filtered", detail: filtered.reason };
-  const canonical = canonicalizeUrl(item.link, context.feedUrl);
-  if (!canonical) return { dropped: true, reason: "invalid_url", detail: item.link.slice(0, 120) };
+  // Resolve the raw feed link once: this absolute http(s) URL is what is stored as source_url
+  // (the DB requires ^https?://). An unresolvable link drops only this item, never the batch.
+  const sourceUrl = resolveHttpUrl(item.link, context.feedUrl);
+  const canonical = sourceUrl ? canonicalizeUrl(sourceUrl) : null;
+  if (!sourceUrl || !canonical) return { dropped: true, reason: "invalid_url", detail: item.link.slice(0, 120) };
   const title = item.title.replace(/\s+/g, " ").trim();
   if (!title) return { dropped: true, reason: "empty_title", detail: canonical };
 
@@ -114,7 +118,7 @@ export async function normalizeItem(
     source_id: source.source_id,
     source_type: source.source_type,
     policy: source.policy,
-    source_url: item.link,
+    source_url: sourceUrl,
     canonical_url: canonical,
     external_id: externalId,
     title,

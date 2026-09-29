@@ -133,7 +133,7 @@ test("N3 alias regressions: recall/database/politician headlines never confirm u
 });
 
 test("N3 discovery row: raw_reference cannot smuggle body/summary/image fields", () => {
-  const row = signalToRow({ discovery_only: true, canonical_url: url, ticker_candidates: [], entities: [], raw_reference: {
+  const row = signalToRow({ discovery_only: true, source_url: url, canonical_url: url, ticker_candidates: [], entities: [], raw_reference: {
     feed_url: "https://source.example/feed", item_index: 1, body: "forbidden", summary: "forbidden", image: "forbidden",
   } } as unknown as NewsSignal);
   assert.deepEqual(row.raw_reference, { feed_url: "https://source.example/feed", item_index: 1 });

@@ -24,17 +24,45 @@ function isTrackingParam(name: string): boolean {
 }
 
 /**
- * Resolves `raw` against `base`, then removes fragments, tracking parameters, default ports and
- * a trailing slash; sorts the remaining parameters. Returns null for non-http(s) or unparsable URLs.
+ * A link that starts with "www." + a dotted host and has no scheme (BEA RSS, 2026-09-29:
+ * "www.bea.gov/news/2026/..."). Only this unambiguous form is completed; "bea.gov/foo" is not
+ * guessed (it stays a relative path of the feed).
  */
-export function canonicalizeUrl(raw: string, base?: string): string | null {
+const WWW_SCHEMELESS = /^www\.[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:[/?#:]|$)/i;
+
+/**
+ * Feed link -> absolute http(s) URL, or null (the item is then dropped as invalid_url).
+ * - absolute http(s) URLs are kept as given (only parsed and serialized);
+ * - "www.host.tld/..." without a scheme becomes "https://www.host.tld/...";
+ * - genuine relative ("/path", "page.html") and protocol-relative ("//host/path") links are resolved
+ *   against `base` (the feed URL);
+ * - other schemes (javascript:, data:, file:, ftp:, ...), whitespace/control characters inside the
+ *   link, and anything unparsable -> null.
+ * This is the single place where a raw link becomes a URL; canonicalizeUrl builds on it.
+ */
+export function resolveHttpUrl(raw: string, base?: string): string | null {
+  const value = raw.trim();
+  if (!value || /[\s\u0000-\u001f\u007f]/.test(value)) return null;
+  const candidate = WWW_SCHEMELESS.test(value) ? `https://${value}` : value;
   let url: URL;
   try {
-    url = new URL(raw.trim(), base);
+    url = new URL(candidate, base);
   } catch {
     return null;
   }
-  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  if ((url.protocol !== "https:" && url.protocol !== "http:") || !url.hostname) return null;
+  return url.toString();
+}
+
+/**
+ * Resolves `raw` (via resolveHttpUrl, against `base`), then removes fragments, tracking parameters,
+ * default ports and a trailing slash; sorts the remaining parameters. Returns null for
+ * non-http(s) or unparsable URLs.
+ */
+export function canonicalizeUrl(raw: string, base?: string): string | null {
+  const resolved = resolveHttpUrl(raw, base);
+  if (!resolved) return null;
+  const url = new URL(resolved);
   url.hash = "";
   url.hostname = url.hostname.toLowerCase();
   if ((url.protocol === "https:" && url.port === "443") || (url.protocol === "http:" && url.port === "80")) url.port = "";
