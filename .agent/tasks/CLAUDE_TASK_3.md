@@ -1,20 +1,25 @@
 # Claude Task 3
 
-- task_id: x-social-mobile-account-deletion-prod-preflight-20260929
+- task_id: x-social-mobile-account-deletion-prod-rollout-stage1-20260929
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: critical
 - recommended_model: Opus5.5（高）
-- purpose: PR #52 merge後のaccount deletion本番反映前preflight。production migration/Edge deployを行う前に、現在のlive schema/owner/ACL/isolation/Auth/Vault/Storage/FK/rollback/E2E前提をread-onlyで確認し、exact rollout planとSTOP条件を確定する。**このTASKではapply/deployしない。**
+- purpose: accepted account-deletion sourceをproductionへStage 1反映する。**migrationの単一ファイル適用・read-back・Edge Function deploy・source identity確認・非破壊smokeまで**。実ユーザー削除、実X/Apple revoke、アプリ機能有効化はまだ行わない。
 
-## Accepted source
+## Accepted basis
 
 - PR #52 accepted head: `4bc819555c07c8792f5b78ea29aa6b9a35694042`
-- squash merge commit: `136dcd2b35b161ccc4769da15b05e796f095e881`
-- H2 final verdict: PASS for source merge
-- production_mutation so far: 0
+- squash merge: `136dcd2b35b161ccc4769da15b05e796f095e881`
+- final H2 source verdict: PASS
+- production preflight result: `READY_FOR_ROLLOUT_WITH_OPERATOR_GATES`
+- runbook: `apps/social-mobile/docs/account-deletion-rollout-runbook.md`
+- migration:
+  `supabase/migrations/20260928160000_social_mobile_account_deletion_candidate.sql`
+- expected sha256:
+  `7481078f91e87447216a2ae93e0c12b78ce6a68801205f4fdd74bb9bd6588657`
 
 ## Mandatory startup
 
@@ -22,278 +27,121 @@
    - `.agent/ORCHESTRATION.md`
    - `.agent/CURRENT_STATE.md`
    - this TASK
-   - latest G3 Report
+   - latest G3 preflight Report
    - latest H2 PASS report
-2. Use a fresh independent G3 worktree/checkout from latest `origin/main`.
-3. Confirm no overlap with G4 or any active slot.
-4. Read current Supabase skill first.
-5. Check current Supabase changelog/docs relevant to:
-   - Auth hard delete/session behavior
-   - Edge Function JWT verification/CORS
-   - SECURITY DEFINER/function ownership
-   - Vault permissions
-   - managed Auth schema
-   - Storage ownership/FKs if relevant
-   - PostgREST transaction isolation
-6. Read current X revoke and Apple revoke guidance if production assumptions depend on them.
-7. Absolutely no production writes.
+   - rollout runbook
+2. Fresh independent G3 worktree from latest `origin/main`.
+3. Read current Supabase skill/changelog/docs.
+4. Confirm no G4/H-slot overlap on same migration/Edge/Auth boundary.
+5. Recompute migration SHA and require exact match.
+6. Re-run all sanitized pre-apply read-only checks from runbook.
+7. If any STOP condition fires, **do not apply**.
 
-## Preflight scope
+## Stage 1A — production migration apply
 
-### A. Exact migration inventory
+Apply only the exact accepted migration file.
 
-Identify the exact single migration to apply:
-`supabase/migrations/20260928160000_social_mobile_account_deletion_candidate.sql`
+Rules:
+- single-file only
+- atomic transaction
+- lock timeout + statement timeout
+- **never `db push`**
+- never migration repair
+- no unrelated migration
+- no manual SQL edits during apply
 
-Verify against latest main:
-- file exists exactly once
-- no later migration supersedes/duplicates/conflicts with it
-- no broad `db push` is needed or allowed
-- all referenced tables/functions/columns exist in production with compatible types/constraints
-- all 11 guarded writer tables exist and names still match
-- all onboarding/reconnect RPCs used by the concurrency design still match reviewed assumptions.
+Immediately after apply run the full read-back checks from the runbook.
 
-Produce:
-- exact migration SHA/content identity
-- exact apply command/method to use later
-- exact read-back SQL after apply
-- exact rollback/recovery plan if apply fails part-way or post-check fails.
+Required PASS:
+- expected function inventory/body identity
+- owners as expected
+- safe search_path
+- anon/authenticated EXECUTE denied
+- service-role execute surface only where intended
+- state/audit table protections correct
+- all expected guard triggers present/enabled
+- no unexpected trigger/FK/object collision
+- isolation assumptions unchanged
 
-### B. Production catalog read-only verification
+If read-back differs:
+- STOP
+- do not deploy Edge
+- use only the documented rollback/recovery plan when safe
+- do not improvise destructive cleanup.
 
-Read-only confirm:
-- owners of `auth.users`, `vault.secrets`, relevant schemas
-- current role privileges for `postgres`, `service_role`, anon, authenticated
-- existing function EXECUTE grants that may conflict
-- RLS state on new/existing exposed tables assumptions
-- FK graph relevant to auth/users/profile/membership/social/workspace deletion
-- any NO ACTION/CASCADE behavior that changed since review
-- triggers on auth.users or affected tables that would materially change finalize semantics
-- whether any existing object names collide with candidate migration.
+## Stage 1B — Edge Function deploy
 
-Do not read user rows, token plaintext, or Vault plaintext.
+Only after Stage 1A PASS.
 
-### C. Isolation / locking preflight
+Deploy:
+`social-mobile-account-delete`
 
-Read-only verify production role/function transaction isolation settings relevant to:
-- authenticated/PostgREST RPCs
-- service_role RPCs
-- any function-level `SET default_transaction_isolation` or role setting
+Requirements:
+- JWT verification remains enabled
+- no secret values printed/logged
+- required configuration names checked, values not exposed
+- do not add missing Apple production configuration in this task
+- Apple path remains fail-closed if not configured
 
-Confirm intended READ COMMITTED assumption is true for the target paths, or STOP.
+After deploy:
+- confirm deployed source corresponds to accepted main source
+- perform safe source/byte identity comparison where supported
+- verify function status/metadata
+- verify CORS/OPTIONS and unauthorized/invalid-request behavior only
+- smoke checks must be non-destructive.
 
-Check there is no production-side writer path for first social workspace creation that bypasses the guarded brands/brand_memberships INSERT points. If uncertain, STOP.
+## Allowed smoke checks
 
-### D. Auth finalization assumptions
+Allowed:
+- OPTIONS/CORS
+- missing/invalid Authorization => safe reject
+- malformed/non-destructive request => safe reject
+- feature remains disabled in app
 
-Confirm current production behavior/metadata supports:
-- direct hard-delete semantics expected by candidate
-- profile/main-app protection check
-- session rows disappear on hard delete
-- no requirement is being assumed for instant JWT invalidation
-- no managed Auth trigger/extension makes direct SQL deletion unsafe
+Forbidden:
+- valid disposable-user deletion
+- auth user deletion
+- Vault mutation
+- X revoke
+- Apple revoke
+- X post
+- enabling `EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED`
 
-If direct SQL auth.users deletion cannot be confidently approved from current official guidance + live metadata, STOP and propose the safer alternative boundary.
+Real E2E belongs to Stage 2.
 
-### E. Vault capability
+## Safety constraints
 
-Read-only verify:
-- candidate function owner at apply time would have intended DELETE capability on Vault secrets
-- service_role itself is not accidentally gaining broad direct Vault read/delete surface beyond reviewed design
-- no schema/owner drift invalidates the reviewed definer model
+- Do not expose secrets/tokens/passwords/Authorization headers.
+- Do not change provider consoles.
+- Do not change X/Apple credentials.
+- Do not modify Kabumori main-app account-delete in this room/task.
+- Do not touch unrelated migrations/functions.
+- Do not broaden to posting backend.
+- Protect other slots/worktrees.
 
-No secret values may be queried.
-
-### F. Storage / external dependent preflight
-
-Confirm whether social-mobile account deletion has any Storage-owned objects/FKs in production today.
-- if none, record none.
-- if any exist, identify exact deletion/retention requirement and STOP if not covered.
-
-Confirm no new tables/RPCs/Edge functions added since PR #52 create an unguarded social workspace/account writer that invalidates the concurrency design.
-
-### G. Edge deployment preflight
-
-For `social-mobile-account-delete`:
-- confirm expected `verify_jwt` behavior/config for production
-- confirm required environment/secret names exist conceptually; do not print values
-- list required X/Apple config gates
-- confirm CORS/platform behavior
-- define exact deploy command for later
-- define post-deploy byte/source identity check
-- define health/smoke check that does not delete anything.
-
-No deploy in this task.
-
-### H. Real E2E rollout plan
-
-Design the later disposable-account E2E in safe stages:
-1. never-connected user deletion
-2. social-only user with Kabumori main profile retained
-3. X-connected user revoke path
-4. Apple-login user on iOS native
-5. lost-response/retry scenario
-6. onboarding-vs-deletion race sanity in a disposable environment if practical
-7. confirm no unrelated workspace/data touched
-
-Specify what must be observed before enabling:
-`EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED=true`.
-
-### I. Legal/operator gates
-
-Inventory only; do not invent legal text.
-Confirm remaining owner decisions:
-- privacy policy URL
-- terms URL
-- support URL/email
-- retention duration for hashed deletion audit
-- wording for published X posts remaining external
-- Kabumori-side account-delete coordination
-
-## STOP conditions
-
-STOP and report without apply/deploy if any of these occur:
-- production schema differs materially from reviewed assumptions
-- migration conflicts with later main migrations
-- role/function isolation not READ COMMITTED where required
-- function owner/Vault DELETE capability cannot be proven safely
-- direct auth.users deletion semantics are uncertain/unsafe
-- new unguarded workspace/account writer exists
-- Storage dependency exists but deletion design does not cover it
-- required X/Apple production configuration is materially different
-- rollback/recovery cannot be defined safely
-- any slot/worktree conflict.
-
-## Forbidden in this TASK
-
-- no migration apply
-- no `db push`
-- no Edge deploy
-- no Auth/provider console mutation
-- no Vault mutation
-- no user deletion
-- no real X/Apple revoke
-- no X post
-- no build activation flag
-- no legal-text invention
-
-`production_mutation=0`.
-
-## Required Report / K3
+## Completion / K3
 
 Report:
-- result: READY_FOR_ROLLOUT / STOP
+- result: PASS / STOP / ROLLED_BACK
 - fresh main commit
-- migration identity
-- production catalog findings
-- isolation findings
-- Auth finalization findings
-- Vault findings
-- Storage/external dependency findings
-- Edge deploy prerequisites
-- exact later apply/deploy/read-back plan
-- rollback/recovery plan
-- E2E plan
-- legal/operator gates
-- changed_files (should normally be TASK/report/docs only unless a source discrepancy requires STOP; do not silently patch production code)
-- tests/checks
-- production_mutation=0
-- recommended next step
+- pre-apply recheck result
+- exact migration SHA
+- apply status
+- production read-back result
+- rollback performed? yes/no
+- Edge deploy status/version/identity confirmation
+- non-destructive smoke results
+- production mutations actually performed
+- explicit confirmation that no real user deletion / X or Apple revoke / feature activation occurred
+- remaining Stage 2 E2E/operator/legal gates
+- safety_checks
+- next_recommendation
 
-Then status -> review_required, next_owner -> chatgpt, STOP for K3.
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K3.
 
+Because this is a production DB/Auth/Vault/Edge boundary, after K3 PASS ChatGPT should route one focused H2 production-verification review before Stage 2 activation.
 
-## ChatGPT decision — sanitize preflight report
-
-Decision: use **sanitized publication**.
-
-Do NOT commit or push sensitive production security detail such as:
-- exact secret names
-- malformed secret names
-- detailed privilege weaknesses or over-grant specifics
-- raw role capability inventories that unnecessarily expose production posture
-- any credential/token/key/value
-
-Instead:
-
-1. Rewrite the TASK Report as a sanitized operational summary.
-2. Rewrite `apps/social-mobile/docs/account-deletion-rollout-runbook.md` so it contains:
-   - exact migration file/path and safe apply ordering
-   - read-back categories and expected PASS/STOP conditions
-   - rollback/recovery sequence
-   - Edge deploy sequence and non-destructive smoke checks
-   - disposable-account E2E stages
-   - operator/legal gates
-   but not sensitive production security details.
-3. Record the preflight result as:
-   - `READY_FOR_ROLLOUT_WITH_OPERATOR_GATES`
-   - production_mutation=0
-4. In the sanitized report, state only that:
-   - live production schema/ownership/ACL/isolation assumptions required by the reviewed design were checked read-only and did not hit a STOP condition;
-   - unrelated pre-existing security/configuration findings were observed and intentionally excluded from the public repo;
-   - those findings require separate private operational follow-up before/alongside rollout as appropriate.
-5. Do not alter production.
-6. Push only the sanitized TASK/report/runbook.
-7. Then set:
-   - status: review_required
-   - next_owner: chatgpt
-   - STOP for K3.
-
-Recommended model: **Opus5.5（高）**.
-
-## Report
-
-- 実行モデル: Opus 5.5（推奨どおり）
-- **result: READY_FOR_ROLLOUT_WITH_OPERATOR_GATES**。STOP 条件には該当しなかった。
-- fresh main commit: 開始時 `4c7176c`。PR #52 の squash は `136dcd2`。
-- production_mutation=0:
-  - 本番に対しては、カタログの読み取りと集計値だけを見た。ユーザーの行、トークン、Vault の平文、secret の値は読んでいない。
-  - apply / db push / deploy / Auth・コンソールの変更 / Vault の変更 / 削除 / 失効 / 投稿 / フラグの有効化は、いずれもなし。
-- **機密情報の扱い**: ChatGPT の判断（sanitized publication）とユーザーの指示に従い、本番のセキュリティ上の詳細はリポジトリに記録していない。
-- 手順書: `apps/social-mobile/docs/account-deletion-rollout-runbook.md`（新規）。適用・読み戻し・ロールバック・デプロイ・E2E・gate をまとめた。
-
-### migration identity
-- 対象は `supabase/migrations/20260928160000_social_mobile_account_deletion_candidate.sql` の1ファイルだけ。
-  - sha256: `7481078f91e87447216a2ae93e0c12b78ce6a68801205f4fdd74bb9bd6588657`（受け入れ済みの head `4bc8195` と一致）。
-- 本番では未適用で、同名オブジェクトとの衝突も無い。
-- 後続の migration は、参照先のオブジェクトに触れていない。
-- `db push` は不要で、禁止のまま。
-
-### production findings（sanitized）
-- 確認した内容:
-  - 設計が前提とする本番の schema / 所有者 / ACL / 分離レベル / Auth / Vault / Storage を、読み取り専用で確認した。STOP 条件には当たらなかった。
-  - ワークスペースを作る経路は、レビュー済みのオンボーディング RPC だけ（repo と一致）。
-  - 対象の経路はすべて READ COMMITTED で動く。
-  - social-mobile の Storage 依存は無い。
-  - Apple の失効は未設定なので、Apple でログインしているユーザーは最初から拒否する。
-- 範囲外の既存所見:
-  - 既存のセキュリティ/設定上の所見を確認したが、意図的にリポジトリには記録していない。
-  - ロールアウト前、または並行して、別途非公開での運用対応が必要。
-  - 詳細な証拠はユーザー（オペレーター）が保持している。
-
-### exact later plan / rollback / E2E（詳細は手順書 §2–7）
-- 流れ: 適用直前の再確認 → sha256 を確認したファイルを1トランザクションで適用（`supabase db query --linked --file`） → 読み戻し → Edge のデプロイ（`verify_jwt` は有効のまま） → download と diff で同一性確認 → 削除を伴わない動作確認。
-- 読み戻し SQL と rollback SQL は、使い捨て PG17 で実行して期待どおりだった（21関数の md5 一致、11 trigger が有効、rollback 後は監査テーブルだけ残る）。
-- ロールバック: 削除の途中でない場合だけ、DROP する SQL を用意した。削除の途中なら、先に operator が解消する。Edge は削除するか、フラグを未設定のままにする。
-- E2E は使い捨てアカウントだけで、7段階の手順を用意した。フラグを有効にするのは 1〜3・5・7 が通った後。Apple には、さらに 4 が必要。
-
-### legal/operator gates
-- 未決: social-mobile のプライバシーポリシー / 規約 / 問い合わせ先、監査の保持期間、履歴を保持しない方針の確定、「X に公開済みの投稿は残る」という文言の確認。
-- 調整: Kabumori の `account-delete`（稼働中）と共有ログインの扱い。G1/G2 で対応が必要。
-- 範囲外の所見は、非公開での運用対応とする（リポジトリには記録しない）。
-
-### changed_files
-- `.agent/tasks/CLAUDE_TASK_3.md`
-- `apps/social-mobile/docs/account-deletion-rollout-runbook.md`（新規）
-- ソースと migration は変更していない。
-
-### tests/checks
-- 本番のカタログ読み取り（3系統）。
-- 使い捨て PG17 で、関数 md5 の算出、読み戻し SQL と rollback SQL の実行。
-- 公式ドキュメントの確認（PostgREST の分離レベル、Edge の JWT 検証、Vault、ユーザー削除）。
-- `git diff --check` OK。
-
-### recommended next step
-- 別途承認を得たうえで、手順書どおりに適用 → 読み戻し → デプロイ → 使い捨てアカウントでの E2E を進める。
-- Kabumori との調整と、範囲外所見への非公開での対応は、別 TASK にすることを推奨する。
-- STOP for K3。
+推薦モデル：**Opus5.5（高）**
