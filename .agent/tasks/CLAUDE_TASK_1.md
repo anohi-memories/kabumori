@@ -110,6 +110,129 @@ After a concrete UI increment:
 
 Then status -> review_required, next_owner -> chatgpt, STOP for K1.
 
+## Current UI increment — phase 1: fixed 04 Yume-chan on Home report card
+
+### User decision
+
+Implement the approved report-state artwork in two phases.
+
+**Phase 1 now:**
+- display only the approved neutral artwork, fixed every time
+- canonical filename: `report_04_neutral.webp`
+- use it to tune position, size, spacing and balance on the Home report card
+- do NOT add report-state selection logic yet
+
+**Phase 2 later, only after user visually approves phase 1:**
+- add the other 9 approved state assets
+- choose among all 10 based on morning/close report content/state
+- that mapping/selection contract is explicitly out of scope now
+
+### Exact asset rule
+
+The exact approved 04 image is not currently committed in the repository.
+Do **not** regenerate, redraw, substitute, crop into a different illustration, or use another Yume-chan image.
+
+Required asset identity:
+- `report_04_neutral.webp`
+- transparent-background approved Yume-chan/robot artwork from the user's prior image work
+
+If the exact binary is not available in the G1 environment when starting:
+- STOP before source changes that depend on the asset
+- ask the user to provide/attach the exact `report_04_neutral.webp`
+- do not invent a placeholder replacement
+
+Preferred repo location once supplied:
+- `assets/images/report-states/report_04_neutral.webp`
+
+Creating `assets/images/report-states/` is allowed.
+Do not rename the canonical file.
+
+### Existing implementation to reuse
+
+Current Home already has:
+- `src/components/home/character-slot.tsx`
+- `src/components/home/report-highlight-card.tsx`
+
+`ReportHighlightCard` currently renders `<CharacterSlot palette={palette} />`.
+`CharacterSlot` currently has a 48x48 quiet placeholder and accepts an optional `source`.
+
+Use this existing seam rather than introducing a second character component.
+
+### Phase-1 implementation requirements
+
+1. Add the exact asset at the preferred path above.
+2. Pass that exact asset as the fixed `source` for the Home report card.
+3. Show 04 for every report/loading/empty state for now unless doing so creates a clear UX problem; the goal is visual placement review, not semantic state selection.
+4. The artwork must use `contentFit="contain"` / equivalent and must not be cropped.
+5. Preserve transparent background; do not add a white square, decorative frame, glow, plant, sparkle or speech bubble around it.
+6. Make the visual footprint large enough to judge properly on iPhone. The current 48x48 placeholder is only a temporary stub and is not the target size.
+7. Keep sizing/offsets centralized in `CharacterSlot` styles/constants so the user can request quick micro-adjustments after seeing the build.
+8. The report title/description/points/CTA must remain readable and not be covered by the character.
+9. Do not materially increase the overall Home card height unless the artwork requires it; first try to use the existing header/right-side composition efficiently.
+10. Preserve responsive behavior on narrow iPhones and current max-width behavior.
+11. Accessibility: artwork is decorative for now; keep it out of the accessibility reading order.
+12. Do not change Home data fetching, report selection, report-generation semantics, navigation, backend contracts or consumer logic.
+
+### Important future-proofing without phase-2 implementation
+
+Keep the render seam simple enough that phase 2 can later replace the fixed source with a selected source without rewriting the card layout.
+
+Allowed now:
+- a single clearly named constant such as `FIXED_REPORT_CHARACTER_SOURCE`
+- stable CharacterSlot sizing API if useful for layout
+
+Not allowed now:
+- 10-state enum/mapping
+- heuristics based on report text
+- morning/close sentiment classification
+- LLM calls
+- backend fields/RPC/schema changes
+- dynamic state selector hidden behind a feature flag
+
+### Visual acceptance target
+
+This phase is successful when the user can inspect a real iPhone build and answer:
+- is Yume-chan too large/small?
+- should she move left/right/up/down?
+- is the robot/tablet legible enough?
+- does the character balance the report title and points?
+- does the first viewport still feel compact enough?
+
+Do not over-polish before that feedback. Expect one or more quick UI micro-adjustment rounds.
+
+### Tests / checks
+
+At minimum:
+- relevant Home/app deterministic tests
+- navigation regression tests remain green
+- Expo config/export check
+- TypeScript/lint for changed files where supported
+- `git diff --check`
+
+If asset bundling requires a specific Expo/Metro check, run it.
+
+### Delivery
+
+Create a focused UI branch/PR from fresh main.
+Do not self-merge.
+Do not deploy backend or production services.
+
+Produce a fresh iOS internal/preview build suitable for the user's visual confirmation once the asset is wired and local checks pass.
+
+Report:
+- changed_files
+- exact asset path
+- CharacterSlot dimensions/positioning used
+- tests/checks
+- PR/head
+- iOS build id/link
+- backend/production mutation = 0
+- remaining visual questions only
+
+Then status -> review_required, next_owner -> chatgpt, STOP for K1.
+
+Recommended model: **Sonnet5（高）**.
+
 ---
 
 ## Archived predecessor state
