@@ -529,6 +529,10 @@ const RETRYABLE_VOICE_ISSUE_PATTERNS: RegExp[] = [
   /重複/, /同義反復/, /言い換えの?反復/, /反復/, /繰り返し/, /重ねて?いる/,
   /同じ(?:内容|説明|表現|文)/, /冗長/, /不自然な(?:接続|締め|言い回し|文章)/, /ぎこちない/,
   /^UNNATURAL_EXPLANATORY_CLOSING$/,
+  // Same wording-only issues phrased differently by the Voice checker (2026-09-29, Starship candidate):
+  // a closing that restates ("言い直す") earlier sentences, a sentence "unnatural as a post", and a
+  // meta sentence about the input itself ("入力データについての説明に聞こえ"). None of them touch the event.
+  /言い直/, /(?:投稿文|文章|文)として不自然/, /入力(?:情報|データ)(?:について|への言及|の説明)/,
   // Part A: allowed for important news outright — must never block an otherwise-retryable issue set.
   /ニュース原稿/, /AI要約/, /報道文体/, /会話調/, /定型的/, /証券レポート/,
   // Wording/grammar-only issues the Voice checker itself already knows how to fix: unnatural
@@ -547,6 +551,8 @@ const NON_RETRYABLE_VOICE_ISSUE_PATTERNS: RegExp[] = [
   // of a country (米国, 中国, 韓国, 英国, ...) and wrongly block ordinary grammar-only issues like
   // "「米国の特使が」は複数形と合っていない" that just happen to name a country in passing.
   /人物|企業|国名|制度/, /事実/, /捏造/,
+  // Content missing from the input is an unsupported claim, not wording.
+  /入力(?:情報|データ)に(?:ない|なく|含まれ(?:ない|ず))/,
 ];
 
 export function isRetryableVoiceFailure(issues: string[]): boolean {

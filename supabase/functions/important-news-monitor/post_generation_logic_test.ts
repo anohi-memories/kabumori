@@ -1159,6 +1159,22 @@ test("classifier: mentioning a country by name is not itself a non-retryable sig
   assert.equal(isRetryableVoiceFailure(["国名の誤りがあります（米国ではなく英国が正しい）"]), false); // genuine country-name factual error stays blocked
 });
 
+test("voice retry: restated closings, 'unnatural as a post' and meta sentences about the input are wording-only (2026-09-29 Starship)", () => {
+  assert.equal(isRetryableVoiceFailure([
+    "「日本株への直接的な影響は、入力情報からは確認できません」は入力データについての説明に聞こえ、投稿文として不自然です。",
+    "「関係するのはSpaceXとStarlinkです」は直前までに両者が登場しており、内容を言い直す締めになっています。",
+  ]), true);
+  assert.equal(isRetryableVoiceFailure(["締めの一文が文として不自然です"]), true);
+  assert.equal(isRetryableVoiceFailure(["前段を言い直しているだけの締めです"]), true);
+});
+
+test("voice retry: content missing from the input and factual problems stay non-retryable", () => {
+  assert.equal(isRetryableVoiceFailure(["入力情報にない主張が含まれています"]), false);
+  assert.equal(isRetryableVoiceFailure(["入力データに含まれない数字を言い直しています"]), false);
+  assert.equal(isRetryableVoiceFailure(["言い直した結果、事実が変わっています"]), false);
+  assert.equal(isRetryableVoiceFailure(["投稿文として不自然です", "企業の取り違え"]), false);
+});
+
 test("classifier: grammar/particle-level issues (助詞・単複・文法・敬体) are retryable", () => {
   assert.equal(isRetryableVoiceFailure(["助詞の使い方が不自然です"]), true);
   assert.equal(isRetryableVoiceFailure(["文法的にやや不自然な箇所があります"]), true);
