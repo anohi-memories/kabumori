@@ -3,8 +3,8 @@
 - task_id: kabumori-shared-analysis-content-guard-fix-20260929
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Opus5.5（高）
 - purpose: 2026-09-29大引けshared analysisがlocal check / Factで2回失敗した実例を再現し、1306の誤ラベルと根拠のない因果断定をsource側で最小修正する。transport retry・claim/idempotency・consumer gateは変えない。
@@ -333,6 +333,86 @@ When done:
 
 Recommended model: Opus5.5（高）.
 
+### Report — K2 correction（mixed supported/unsupported causality）
+
+- result：**source-readyのPASS候補**。PR #57の同じbranchに、修正を1 commit追加した（force pushはしていない）。未merge、deployなし。
+- fresh main SHA：`50484ca`（K2の差し戻し時点）。branch `g2-shared-analysis-content-guard-20260929`、G2専用checkout。
+
+#### root cause（K2の指摘）
+
+- 前回の `unsupportedCausalSentences()` は、次の条件を満たすclaimが**1件でもあれば `[]` を返して検査全体を抜けていた**。
+  - claim_typeが `causal`
+  - ニュースのrefを引用している
+  - 本文に打ち消しが無い
+- 「本当に裏付けのある因果があるか」を、レポート全体で1つの真偽値として扱っていたのが原因。そのため、裏付けのある理由Aがあると、見出し・x_post・別のclaimにある無関係の理由Bまで素通りしていた。
+
+#### 実装（全体の真偽値をやめ、因果表現ごとに裏付けを照合）
+
+- **裏付けに使う文**：打ち消しの無い `causal` のclaimが引用しているニュースの、見出しと要約だけ。
+  - モデルが書いたclaimの本文は、裏付けとして使わない（自分で自分を正当化できないようにするため）。
+- **因果表現ごとの照合**：`CAUSAL_LINK` に当たった箇所ごとに、`causeParts()` でその直前の原因の語を取り出す。
+  - 「の・は・が・、」で区切り、「流れ・動き」のような一般的な語は飛ばす。
+  - 「・と・や」で複数の原因に分ける。
+  - 「XがY下落の原因」の形は、主語のXを原因とする。
+- **判定**：原因の各部分が、裏付けの文に含まれていれば合格。
+  - 3文字以上の部分は、その核（例：「半導体株」）が一致すれば合格。2文字以下の部分（例：「円高」）は、そのまま含まれている必要がある。
+  - 1文に因果表現が複数ある場合（A＋Bが同じ文にあっても）、**すべてが裏付けられたときだけ合格**。
+- **変えていないもの**：打ち消しのある文を許す扱い（推測の語が無い場合）、Fact検査の指示、transport retry、claim・idempotency・fencing、model、呼び出し回数の上限、gate。
+- 「重し」「響く」などは、「が」だけでなく「も」が付く形（例：「円高も重しとなり」）も検出するようにした。
+
+#### mixed caseの before/after
+
+- 新しいテスト2件：
+  - 本文に有効な理由A（ニュースが明記）があり、無関係の理由Bが次のどこかにある場合に、Bを検出する。
+    - 見出し
+    - 見出しにA＋B
+    - x_postの冒頭
+    - x_postのポイント
+    - 要約（推測の形）
+    - 別のclaim
+  - Aのclaimがニュースを引用していても、ニュースに無い理由を書いていれば検出する。
+  - Bを外してAだけにすると合格する。
+  - 作り直しの経路：1306の誤ラベルを直すついでにBを足した文は、Factを呼ぶ前にローカル検査で止まる。Bの無い作り直しは、Factを経てpacketになる。
+- **修正前（`1c16643`）**：混在ケース2件がFAILED（最初のBから検出できなかった）。
+- **修正後**：`content_guard_test.ts` は **13/13 PASS**（既存11件＋新規2件。裏付けのある因果を書けるかのテストは、共通の部品を使う形にまとめた）。
+
+#### 再実行した検査
+
+- market-report-analysis：**48/48**（handler・transport・qualityのテストを含む）
+- market-report-data-packet：42/42
+- personalized-reports：125/125
+- x-test-post shared consumer：6/6
+- `_shared`：279/279（`--no-check`。型エラーは既存の `brand_post_generator_test.ts` のもの）
+- 誤検出の確認：本番のFact合格packet 5件に、ニュースの裏付けを使わない最も厳しい条件で新しい検査をかけても、**0件**だった。
+- `deno check`：PASS。`deno lint`（変更ファイル）：問題なし。`git diff --check`：PASS。
+
+#### PR / CI
+
+- PR：https://github.com/anohi-memories/kabumori/pull/57
+- 最終head：`485f4bf8bd767601d70625eb383bb5ec8b6c2248`
+- mergeable：CLEAN。
+- CIは、Web用のプレビュー（Netlify・Vercel）の確認だけで、Denoのテストは含まれていない。
+  - 前のhead：すべてsuccessまたはneutral。
+  - 新しいhead：Report作成時点で、Vercelはsuccess、Netlifyの3件は実行中。
+  - Denoのテストはlocalで実行した（上記）。
+
+#### production mutations
+
+- **0**（今回の修正ではDBの読み取りもしていない）。
+
+#### remaining issues
+
+1. 原因の語の取り出しは、語彙と区切りのルールによる近似。
+   - 裏付けのある語と核が同じ別の原因（例：「半導体株高」）は、通ってしまうことがある。
+   - 取り出せない言い回しは、これまで通りFactで止まる。
+2. 裏付けのある原因でも、ニュースの言い方と3文字以上一致しない略し方（例：ニュースの「米国株安」を「米株安」と書く）は、ローカル検査で不合格になり、作り直しが1回増えることがある（安全側の誤り）。
+3. 前回のReportの残課題（完成率は自然なcycleで確かめるしかない、など）は変わらない。
+
+#### recommendation
+
+- K2で確認したあと、mergeし、`market-report-analysis` だけを別gateでdeployしてbyte照合する。
+- そのあと、数営業日の自然なcycleで、完成率と指摘の傾向を観察する。
+- consumerの有効化の前のfocused reviewで、この因果の検査もあわせて確認することを推奨する。
 
 ---
 
