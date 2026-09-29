@@ -123,17 +123,23 @@
 - no Codex source review added under reduced-review policy.
 - consumer activation remains unapproved.
 
-## H1 — market-report-analysis production sync assigned
+## Routing correction — market-report-analysis production sync belongs to G2
 
-- task_id: `kabumori-market-report-analysis-prod-sync-content-guard-20260929`.
-- status: ready.
-- purpose: deploy/read-back only for the merged PR #57 `market-report-analysis` source with app/x gates OFF.
-- H1 must independently verify production source/version, verify_jwt, cron, gates and all-function metadata before mutation.
-- if drift exists, deploy exactly one target Edge Function; no source edits, no DB/schema/RPC/cron/gate/Auth/Vault/X changes, no manual real cycle.
-- post-deploy byte read-back is mandatory.
-- recommended model: **Sol（高）**.
-- next code: H1 -> C1.
-- natural morning/close observation remains the next gate after this production sync.
+- user correction accepted: `kabumori-market-report-analysis-prod-sync-content-guard-20260929` belongs to **G2**, not H1.
+- previous H1 assignment was still `ready` and had not executed.
+- H1 misassignment is cancelled before start; production mutation 0, deploy 0, source change 0.
+- G2 is now the sole owner of the rollout.
+- G2 scope:
+  - fresh-main preflight
+  - consumer gates must remain app=false / x=false
+  - deploy only `market-report-analysis` if production is stale
+  - exact source read-back
+  - verify_jwt / cron / gates / other-Function invariants
+  - no manual real cycle
+  - no DB/schema/RPC/Auth/Vault/X mutation
+- recommended model: **Sonnet5（高）**.
+- completion code remains **K2**.
+- H1 must not run this rollout concurrently.
 
 ## K2 — PR #57 second review: polarity-safe causality still required
 
