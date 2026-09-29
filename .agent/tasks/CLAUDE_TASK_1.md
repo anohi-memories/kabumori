@@ -3,7 +3,7 @@
 - task_id: kabumori-home-ui-continuation-20260929
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Sonnet5（高）
@@ -236,6 +236,22 @@ Report:
 Then status -> review_required, next_owner -> chatgpt, STOP for K1.
 
 Recommended model: **Sonnet5（高）**.
+
+## Continuation note — PR #60 visual QA only
+
+- PR #60 is open at head `ccb62538c43e6e8e6d6df40b9cb760cf32d718a5` and is the sole current G1 work item.
+- Continue the simulator visual check for:
+  - report title wrapping
+  - card height
+  - Yume-chan/robot/tablet legibility
+  - first-viewport compactness
+- If the 96x64pt footprint causes a clear layout issue, adjust only the centralized CharacterSlot size/offset constants and re-run the focused checks.
+- Once simulator presentation is acceptable, create exactly one fresh iOS internal/preview build for user real-device QA.
+- Do not merge PR #60 yet; stop for K1 after the build/report.
+- Do not add the 10-state selector or other 9 assets in this phase.
+- The historical market-report-data-packet blocker note is stale: that rollout was completed by H1 and accepted by Final C1. Do not restart or wait on that backend task from G1.
+- No Codex review is required for this low-risk UI-only phase.
+- recommended model: Sonnet5（高）.
 
 ---
 
