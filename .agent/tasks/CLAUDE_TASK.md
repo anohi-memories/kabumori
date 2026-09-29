@@ -3,8 +3,8 @@
 - task_id: kabumori-shared-analysis-content-guard-fix-20260929
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: highest
 - recommended_model: Opus5.5（高）
 - purpose: 2026-09-29大引けshared analysisがlocal check / Factで2回失敗した実例を再現し、1306の誤ラベルと根拠のない因果断定をsource側で最小修正する。transport retry・claim/idempotency・consumer gateは変えない。
@@ -260,6 +260,79 @@ Codex review is deferred until ChatGPT K2 sees the final scope. Consumer activat
 
 - 本PRは、promptとローカル検査の局所的な変更で、PROJECT_RULESのレビュー方針では原則Claude＋ChatGPTの確認で進められる範囲。
 - ただし共通分析は、将来の公開Xの境界に関わる。そのため、consumerの有効化の前に行うfocused reviewで、この検査もあわせて確認することを推奨する。
+
+## K2 correction required — mixed supported/unsupported causality
+
+K2 verdict on PR #57 head `1c166437be0e514a25026fbab1c8e2ba9f4d483a`: **CHANGES REQUIRED**. Do not merge/deploy yet.
+
+### Confirmed issue
+
+Current `unsupportedCausalSentences()` does this:
+
+- finds whether **any** claim is `claim_type === "causal"`, cites an input news ref, and is not negated
+- if one exists, returns `[]` immediately
+
+This creates a global bypass. A report can contain one genuinely supported causal claim and, elsewhere in headline/summary/x_post/another claim, also contain a separate unsupported causal assertion. The valid causal claim disables the local guard for the unrelated unsupported one.
+
+This is especially relevant to the stated purpose of this PR: prevent unsupported causality from reaching Fact and consuming another generation/Fact attempt.
+
+### Required correction
+
+Remove the global "one valid causal claim licenses all causal wording" behavior.
+
+The local guard must evaluate causal wording narrowly enough that:
+
+1. a genuinely source-confirmed causal statement remains allowed;
+2. an unrelated unsupported causal statement in headline/summary/x_post/another claim is still rejected even when a different valid causal claim exists in the same analysis;
+3. negated/unconfirmed wording remains allowed as already intended;
+4. Fact remains strict and unchanged;
+5. transport retry, claim/idempotency/fencing, model/call budgets and consumer gates remain unchanged.
+
+Do not solve this by banning all causal language whenever more than one topic exists. Preserve legitimate causal reporting.
+
+### Mandatory regression test
+
+Add a deterministic mixed case using sanitized fixture/input:
+
+- input contains one news item that explicitly supports causal relation A;
+- generated analysis contains a valid causal claim A with the correct news ref;
+- the same analysis also contains an unrelated unsupported causal assertion B in at least headline and x_post (or equivalent reader-facing field);
+- `localAnalysisIssues()` MUST flag B;
+- removing B while leaving valid A MUST pass.
+
+Also cover the same mixed case through regeneration if practical, so an unrelated cause cannot be introduced while fixing another issue.
+
+### Scope
+
+Keep the existing PR #57 scope. Prefer amending the same branch/PR.
+No production deploy, no gate/cron/DB/data-packet changes.
+
+### Re-run
+
+At minimum:
+- new mixed-causality regression
+- existing `content_guard_test.ts`
+- market-report-analysis full suite
+- relevant handler/transport tests
+- data-packet regression
+- personalized/shared consumer regressions already used in the first report
+- deno check/lint for changed files
+- git diff --check
+
+Update the Report with:
+- root cause of the K2 finding
+- implementation chosen to tie causal wording to actual support rather than a global boolean
+- new mixed-case before/after result
+- final PR head SHA / CI
+- production mutation = 0
+
+When done:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+Recommended model: Opus5.5（高）.
+
 
 ---
 
