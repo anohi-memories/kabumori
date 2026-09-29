@@ -1,133 +1,131 @@
 # Codex Task 2
 
-- task_id: x-social-mobile-account-deletion-final-concurrency-acceptance-20260929
+- task_id: x-social-mobile-account-deletion-prod-stage1-verification-20260929
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: codex
 - priority: critical
 - recommended_model: Sol（高）
-- purpose: PR #52 Phase 4c exact headの最終focused acceptance。前回残ったfirst-onboarding/deletion concurrency holeとchecked Deno typing fixだけを独立再現し、source merge可否を確定する。
+- purpose: production Stage 1で適用済みのaccount deletion migration/Edge Functionを独立verificationし、Stage 2 disposable-account E2Eへ進めるか判定する。
 
 ## Review target
-- Draft PR #52
-- exact head: `4bc819555c07c8792f5b78ea29aa6b9a35694042`
-- previous failed head: `002d24ac99df2fbdf4e2423c1428ccb488a79f29`
-- implementation task: `x-social-mobile-account-deletion-concurrency-fix-phase4c-20260929`
+
+- accepted source merge: `136dcd2b35b161ccc4769da15b05e796f095e881`
+- migration:
+  `supabase/migrations/20260928160000_social_mobile_account_deletion_candidate.sql`
+- expected sha256:
+  `7481078f91e87447216a2ae93e0c12b78ce6a68801205f4fdd74bb9bd6588657`
+- deployed Edge:
+  `social-mobile-account-delete`
+- G3 Stage 1 verdict: PASS
 
 ## Mandatory startup
-1. Read ORCHESTRATION / CURRENT_STATE / this TASK / latest G3 Report / previous H2 final-acceptance report.
+
+1. Read ORCHESTRATION / CURRENT_STATE / this TASK / latest G3 Stage 1 Report / rollout runbook.
 2. Independent H2 worktree.
-3. Fresh fetch origin/main and exact PR #52 head.
-4. Read current Supabase skill/docs relevant to transaction isolation/advisory locking.
-5. production_mutation=0.
+3. Fresh fetch origin/main.
+4. Read current Supabase skill/changelog/docs.
+5. Production verification may use read-only catalog/function metadata and non-destructive HTTP smoke only.
+6. No destructive mutation.
 
-## Focused acceptance
+## Verification scope
 
-### A. Onboarding first -> deletion
-Reproduce with the real existing first-onboarding RPC:
-- onboarding transaction starts first
-- guard/creation reaches critical point
-- stays uncommitted
-- deletion starts after
+### A. Migration identity/read-back
+Independently verify:
+- migration source hash still matches accepted value
+- deployed function inventory/body identity matches expected source
+- function owners/search_path/EXECUTE grants are correct
+- anon/authenticated cannot execute privileged deletion RPCs
+- service_role execute surface matches intended functions only
+- state/audit tables have expected RLS/privilege posture
+- all expected guard triggers are present/enabled
+- no unexpected collisions/duplicate objects
+- isolation assumptions remain READ COMMITTED for intended paths
+- onboarding workspace-creator assumptions still hold
 
-Expected:
-- deletion waits or otherwise serializes safely
-- after onboarding commit, deletion sees the committed workspace and deletes/handles it correctly
-- reported deletion success => zero orphan brand/account/membership/oauth/credential rows
-- no false success.
+Do not expose sensitive privilege detail in public report; sanitize.
 
-### B. Deletion first -> onboarding
-- deletion acquires its common workspace/user serialization
-- onboarding begins while deletion is active
-
-Expected:
-- onboarding waits and then fails safely due deletion state, or another explicitly safe result
-- no workspace/account recreation
-- deletion can complete
-- orphan rows = 0.
-
-### C. Lock ordering / isolation
+### B. Edge deployment verification
 Verify:
-- common serialization primitive is truly shared before critical point
-- consistent lock order
-- no deadlock in the tested two-direction protocol
-- READ COMMITTED requirement is explicit and safe for the intended PostgREST RPC path
-- non-READ-COMMITTED workspace creation is safely rejected if that's the design.
+- function ACTIVE
+- `verify_jwt=true`
+- deployed source matches accepted repository source
+- only intended source files included
+- no secret/token logging
+- Apple path remains fail-closed if production Apple config absent
+- no unrelated function/version changed by this rollout
 
-### D. Finalize invariant
-- finalize under lock rechecks no relevant workspace/account rows reappeared.
-- if rows exist, must not report completed.
-- auth/login deletion + tombstone handling remain consistent.
+### C. Non-destructive smoke
+Independently repeat safe checks:
+- OPTIONS/CORS
+- missing auth -> 401
+- malformed JWT -> 401
+- unauthenticated preview/delete request -> safe reject
+- invalid action -> 400
+- GET -> 405
+- no deletion state/audit rows created
 
-### E. Checked Deno
-- default checked Deno tests pass
-- TS2353 is gone
-- no reliance on --no-check for correctness.
+No valid authenticated deletion request.
 
-## Regression preservation
-Spot-check that previous accepted fixes remain intact:
-- R2 cross-product scope
-- R3 Vault ownership
-- R4 X credential missing behavior
-- R5 Apple retry checkpoint
-- R6 CORS/platform
-- client exact user/session pinning
-- privileged RPC ACL/search_path
-- production mutation 0.
+### D. Production mutation audit
+Confirm Stage 1 mutation scope was limited to:
+- accepted migration objects
+- new Edge function deploy
+and no:
+- user deletion
+- Vault token deletion
+- X revoke
+- Apple revoke
+- X post
+- provider/Auth console change
+- app activation flag.
 
-## Required verification
-- both race directions using real onboarding RPC source
-- disposable Postgres full behavior/ACL/race/reconnect/cleanup
-- checked Deno test suite + deno check
-- social-mobile full tests
-- data-view
-- typecheck/lint
-- Expo web+iOS export
-- git diff --check
-- secret/token/log scan
-- mutation/negative checks relevant to common lock.
+### E. Stage 2 readiness
+Assess whether it is safe to proceed to disposable-account E2E for:
+1. never-connected user
+2. social-only user with Kabumori profile retained
+3. X-connected disposable user
+4. lost-response/retry scenario
+5. unrelated-data invariants
 
-## Fix policy
-- only small local defect in the reviewed Phase 4c patch may be fixed directly.
-- any new design-level issue => FAIL/STOP.
-- do not broaden scope.
+Apple E2E remains separately gated until Apple production configuration exists.
+
+## STOP conditions
+
+FAIL/STOP if:
+- any production read-back differs from reviewed source
+- ACL/search_path/owner surface is unsafe
+- guard trigger missing
+- Edge source/verify_jwt differs
+- smoke reaches destructive path unexpectedly
+- state/audit rows appear from non-destructive requests
+- unrelated production changes are detected
+- any sensitive detail would need to be published; sanitize instead.
 
 ## Production constraints
-No migration apply, Edge deploy, real deletion, Vault mutation, real X/Apple revoke, Auth/provider console changes, or real X post.
 
-`production_mutation=0`.
+Absolutely no:
+- real user deletion
+- real X/Apple revoke
+- Vault mutation
+- Auth/provider config changes
+- feature activation
+- migration rewrite/rollback
+- Edge redeploy unless explicitly assigned as a bounded fix later.
 
 ## Completion / C2
+
 Report:
 - PASS / PASS-WITH-FIX / FAIL
-- exact reviewed/fixed head
-- onboarding-first result
-- deletion-first result
-- orphan invariant
-- deadlock/isolation assessment
-- checked Deno result
-- regression spot-checks
-- production_mutation=0
-- source merge ready yes/no
-- remaining production gates
+- migration production identity verdict
+- RPC/ACL/search_path verdict (sanitized)
+- trigger/isolation verdict
+- Edge deployment identity verdict
+- non-destructive smoke results
+- production mutation audit
+- Stage 2 readiness yes/no
+- remaining operator/legal/Apple/cross-app gates
+- production_mutation_by_H2=0
 
 Then status -> review_required, next_owner -> chatgpt, STOP for C2.
-
-## H2 completion — 2026-09-29
-
-- verdict: PASS for the exact source head `4bc819555c07c8792f5b78ea29aa6b9a35694042`; source merge ready: YES, subject to C2 accepting this review. No merge or production rollout was performed.
-- independently observed common advisory-lock waits in both real first-onboarding/deletion orders; completed deletion leaves zero orphan rows.
-- finalize refuses reappeared workspace rows; non-READ-COMMITTED creation fails closed; checked Deno 17/17 and all Edge file checks PASS.
-- disposable full behavior/ACL/race/reconnect/cleanup, mobile 72/72, data-view 14/14, typecheck/lint, Expo Web+iOS, diff checks PASS. Four focused disposable DB mutations detected.
-- production_mutation=0; source fixes=0. Exact evidence and rollout gates are at the head of `.agent/CODEX_REPORT_2.md`.
-- STOP for C2.
-
-
-## Final C2 — accepted and merged
-- verdict: **PASS**.
-- accepted PR #52 head: `4bc819555c07c8792f5b78ea29aa6b9a35694042`.
-- source merge ready: yes.
-- PR #52 squash-merged as `136dcd2b35b161ccc4769da15b05e796f095e881`.
-- production rollout not authorized by this C2.
-- production_mutation=0.
