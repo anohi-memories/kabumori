@@ -2,7 +2,7 @@
 
 引き継ぎに必要な短い現在地だけを記録します。詳細仕様や履歴は各TASK/Reportを正本として参照してください。
 
-- checked_at: 2026-09-28 JST
+- checked_at: 2026-09-29 JST
 - repo: kabumori
 - branch: main
 
@@ -39,6 +39,19 @@
 - PR #15のmerge / post-merge / production verificationはG4へ割当済み。Vercel Preview rate-limit failure単独はmerge前ブロッカーにしないが、production deploy結果は実確認必須。
 - かぶモリExpo/native本体はVercel制限の主対象ではないため、Netlify Web Preview対応は現時点では進めない。
 - かぶモリのiOS実機/TestFlight/native-only機能は従来どおりExpo/EAS/実機で確認する。
+
+## Final K1 Home v3 correction + post-merge iOS QA gate
+
+- verdict: **PASS** for PR #53 source review.
+- reviewed head: `e53465f7cd75fbd0a763347cca51343709f835c2`.
+- PR #53 merged -> main `3b9ca0424e1ef6e079cc852e45ff66d0271c001e`.
+- scope stayed UI/navigation/static educational content only; production mutation 0; no DB/Auth/RLS/backend/G2 change.
+- 17 changed files; reported 103/103 focused regression PASS; Netlify/Vercel status checks were success at K1.
+- main had advanced 10 commits since the PR base, but those implementation changes were news-discovery/backend docs/agent state and did not overlap PR #53 implementation files; GitHub reported mergeable=true.
+- no Codex review used under reduced-review policy.
+- G1 reassigned to `kabumori-home-v3-postmerge-ios-preview-qa-20260929`.
+- next gate: fresh-main EAS internal/preview iOS build, then user physical iPhone acceptance for first viewport, Topic Detail, Settings safe-area and approved bottom tabs.
+- recommended model: Sonnet5（中）.
 
 ## Final K1 Home news-first UI
 
