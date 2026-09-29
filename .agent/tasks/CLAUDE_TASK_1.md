@@ -3,8 +3,8 @@
 - task_id: kabumori-data-packet-session-reuse-prod-sync-20260929
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sonnet5（高）
 - purpose: K2で判明したproduction `market-report-data-packet` のsource遅れを解消し、mainに既に存在するsame-session reuse fix（`aecfa60`系）を、対象Edge Functionだけへcontrolled deployしてsource read-backまで確認する。新規source修正は禁止。
@@ -1848,3 +1848,38 @@ I will not mark any of these PASS myself; they need the user's own observation o
 ### Next recommendation
 
 Send the user the install link + checklist; a final G1 pass records PASS/issues for K1.
+
+## Report — G1 sync for K1: user-directed app changes made OUTSIDE the task queue; this queued task NOT started
+
+- Queued task seen: `kabumori-data-packet-session-reuse-prod-sync-20260929` (production `market-report-data-packet` Edge Function deploy). **I have not started it. No read, no deploy, no test run, no file touched for it.** I only read this task file and the open-PR list, read-only, to write this report.
+- Purpose of this report (user request): tell K1 that the user directed additional app changes to G1 directly in chat, so K1's picture (`eda47220` = latest build, PR #55 = latest app change) is stale.
+
+### What happened after the routing-fix build (`eda47220`, commit `28e0588`)
+
+The user tested a PR #56 branch build and reported "all OK", then asked for further changes in chat. All are **source-only app UI changes, production mutation 0, no DB/migration/RPC/Auth change, no G2/MIC/X/news-ingestion file touched**, and are all in **PR #56 (open, not merged, not self-merged): https://github.com/anohi-memories/kabumori/pull/56**, branch `claude/tabs-news-menu-topics-20260929`, current head `ad42874809b708fd218bd05de246d3490214f2b8` (base was main `6cce9da`).
+
+User-directed decisions (chat, 2026-09-29) — these **deviate from the previously approved v3 bottom-nav set** (ホーム/銘柄/レポート/AIに聞く/設定); K1 should treat the user's decision as the new baseline:
+1. News is the app's core and must be one tap away → **bottom tabs are now ホーム / 銘柄 / ニュース / レポート / メニュー** (iOS allows max 5 native tabs; user chose this over a custom tab bar).
+2. **メニュー tab** contains トピック(一覧) / AIに聞く / 設定 (ポートフォリオ was there in the first cut, then removed by decision 4).
+3. **New `/topics` screen**: past daily topics, newest first, for the user's level. No history table and **no new RPC/migration**: the daily topic is a deterministic function of (level, JST date), so each past day is the existing `get_daily_kabumori_tip` evaluated for that date (14 days/page, max 98). Rows open the existing id-verified `/topic-detail`.
+4. **ポートフォリオ merged into the 銘柄 tab**: 銘柄 keeps search/add; its two segments are renamed ポートフォリオ / ウォッチリスト; the ポートフォリオ segment shows a saved-close-report valuation summary (new `PortfolioSummary`) above the editable holdings list. The standalone `/portfolio` route was removed.
+5. **In-app `‹ もどる` back button** (new shared `BackButton`) on settings, ai, topics, topic-detail (the "no back button" follow-up flagged at PR #55 is resolved).
+
+### Verification actually done
+- `deno test tests/app/`: **194/194**. `root-navigator_test.ts` was strengthened: it now scans every literal `router.push` / `pathname` target in `src/` and requires the top-level segment to be a tab trigger or a root Stack screen (the bug class from PR #53). `app-tabs_test.ts` pins the exact 5 tabs and the ≤5 limit.
+- `tsc`: only the 2 known pre-existing CSS errors. `expo export --platform web`: 21 routes. `expo config`: OK.
+- **iOS Simulator live-tap verification (via an auth-bypass rig in a scratch clone) was done for commit `16ae556`** (5 tabs, all メニュー rows, back buttons, Home links, `/news`, `/news/[id]`, `/topic-detail`, `reports/[id]`): all PASS.
+- **NOT re-verified in the Simulator**: the last commit `ad42874` (portfolio merged into 銘柄). That commit adds no route and removes one; it is covered only by the automated tests above. Also **`/topics` with real data and the PortfolioSummary with real report data have not been seen** (no authenticated session in the rig) — user's real-device check is the gate.
+
+### Builds made (both from the unmerged PR #56 branch, not from main)
+- `5531aacd-14f1-4faf-81f5-0ddfa20897d8`, commit `16ae556` — **user real-device result: 「全てOK」**.
+- `4883189c-f180-4447-b57e-a8365bb8f401`, commit `ad42874` (adds decision 4) — user QA **pending**.
+- Signing: existing Ad Hoc cert/profile reused. No production EAS env, no App Store/TestFlight action.
+
+### Requests / notes for K1
+- PR #56 needs K1 review/merge (I did not merge). After merge, `main` will differ from the K1-known baseline (`eda47220`/`28e0588`); a build from merged `main` may be wanted.
+- **Heads-up on the queued task**: it is a production Edge Function deploy. In this session the local auto-mode classifier has blocked production reads/writes (Supabase `db dump` / `db query` were refused as "Production Reads" in earlier tasks, and PR self-merge is blocked). If K1 still wants G1 to run it, expect that I may hit the same block and need the user (or a session with different permissions) to run the exact read-only/deploy commands. K1 may prefer routing it to a slot/session that can do production reads. I can start it as soon as K1 confirms.
+- Production mutation across everything above: **0**.
+
+### Status
+`review_required` / next_owner `chatgpt` is set **only to hand this sync back to K1**. It does **not** mean the queued task was completed — it was not started. K1 please re-issue/confirm the queued task (or reassign it) after reading this.
