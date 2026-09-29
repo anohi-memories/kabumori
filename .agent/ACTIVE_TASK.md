@@ -55,11 +55,11 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-market-report-analysis-prod-sync-content-guard-20260929
+- task_id: kabumori-shared-morning-natural-observation-20260930
 - start_code: G2
 - finish_code: K2
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: controlled production sync of merged PR #57 market-report-analysis only; consumers OFF, source read-back + verify_jwt/cron/gates/other-functions invariants, no manual cycle. Recommended Sonnet5（高）
+- allocation: read-only 2026-09-30 natural morning shared-cycle observation after 08:10 JST; no source/deploy/gate/manual invoke; recommended Sonnet5（中）
 
 ## Claude G3
 - owner: claude
