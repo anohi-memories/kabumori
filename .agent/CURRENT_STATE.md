@@ -132,11 +132,23 @@
 - user must physically confirm the three level switches, same-day determinism, and Home report/news regression before this feature is considered visually closed.
 - recommended model: Sonnet5（中）.
 
+## G1 real-device Home QA — changes required
+
+- 2026-09-29 user iPhone screenshots: **CHANGES REQUIRED**.
+- Home does not visually match approved v3 despite section order being correct.
+- concrete drift: oversized/empty report hero + 🌱 placeholder, generic news visuals, oversized disabled AI area, bottom tabs still Home/銘柄/ポート/レポート/重要ニュース instead of approved Home/銘柄/レポート/AIに聞く/設定.
+- today's topic backend works, but `public.tips.base_text` is intrinsically short (50 active tips; median roughly 50–53 Japanese chars by difficulty), so truncation alone is not the issue.
+- G1 correction adds a tappable topic detail screen plus source-only curated long-form evergreen explanations for all 50 current seed titles; no new DB/LLM call.
+- Settings header/close control overlaps iPhone status bar and is treated as a P1 usability defect; preferred fix is a dedicated Settings route/tab with proper safe-area handling.
+- character cutout asset is still not approved in repo; do not invent one.
+- no Codex review expected if scope stays UI/navigation/static educational content only.
+- recommended model: Sonnet5（高）.
+
 ## Current slot snapshot
 
 - H1: `review_required` — `x-social-mobile-auth-phase2-final-acceptance-review-20260928`; PASS-WITH-FIX at PR #47 `ed5f8b7` (initial G3 correction `5fd483a`); prior 7 + additional 3 source boundaries accepted. H1 pinned callback/recovery contexts, retained in-flight exchanges and limited provider authorize paths; fix pushed. Mobile 43/43 + data-view 14/14, typecheck/lint/Web+iOS export and four H1 mutation probes PASS; exact-head Preview SUCCESS. Production mutation 0; awaiting C1/source merge, real provider/device activation remains separately gated; see latest `.agent/CODEX_REPORT.md`.
 - H2: `idle` — unassigned; stale deferred PR #32 morning Fact-contract review was closed as obsolete after PR #32 had already been merged. Historical partial report preserved; slot is now genuinely reusable.
-- G1: `review_required` — `kabumori-daily-topic-real-device-qa-20260929`; new iOS preview build 9f0e45a1-b2ec-4631-b04b-b510f90a475d (commit 6b59c3f, contains merged daily-topic feature) ready, no reusable build existed; 52/52 focused tests pass, tsc/expo config clean; 0 source/production mutation; waiting on user real-device checklist result.
+- G1: `ready` — `kabumori-home-v3-topic-detail-safearea-correction-20260929`; real-device QA CHANGES REQUIRED. Restore approved Home v3 visual hierarchy, add real topic detail reading flow with static detailed coverage for current 50 tips, correct bottom tabs, and fix Settings status-bar/safe-area overlap. No DB/G2/backend mutation expected; recommended Sonnet5（高）.
 - G2: `ready` — `kabumori-shared-analysis-prod-deploy-observe-20260928`; PR #45 merged; controlled deploy of market-report-analysis only with consumer gates OFF, then natural morning+close observation; recommended Sonnet5（高）
 - G3: `ready` — `x-universal-oauth-refresh-productionization-20260925`; AI Lab 401 root fix + universal exact-account Vault-backed OAuth refresh; production activation deferred pending K3 + Codex; recommended Opus5.5（高）
 - G4: `done` — `x-admin-pr15-merge-production-verify-20260925`; Final K4 PASS, PR #15 production live + authenticated brand-isolation QA PASS
