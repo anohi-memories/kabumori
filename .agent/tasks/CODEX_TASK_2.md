@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-account-deletion-final-acceptance-review-20260929
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: PR #52 Phase 4b fixed head の最終受け入れレビュー。前回C2でFAILしたR1〜R6＋client session pinningだけをfocused regressionし、source merge可否を確定する。
@@ -114,3 +114,13 @@ Report:
 - remaining production apply/deploy/E2E gates
 
 Then status -> review_required, next_owner -> chatgpt, STOP for C2.
+
+
+## Final C2 — Phase 4b final acceptance
+Verdict: **FAIL**.
+- reviewed head: `002d24ac99df2fbdf4e2423c1428ccb488a79f29`
+- R2-R6 and client-session pinning passed.
+- remaining P1: pre-existing uncommitted first-onboarding can escape tombstone visibility and later leave orphaned social rows after a reported deletion success.
+- additional P2: checked Deno test TS2353 typing mismatch.
+- source merge ready: NO.
+- production_mutation=0.
