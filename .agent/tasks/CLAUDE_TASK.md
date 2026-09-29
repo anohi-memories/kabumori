@@ -3,8 +3,8 @@
 - task_id: kabumori-shared-analysis-prod-deploy-observe-20260928
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sonnet5（高）
 - purpose: PR #45でmerge済みのbounded transport retryを、consumer gate OFFのままproduction `market-report-analysis` のみにcontrolled deployし、deployed sourceをread-back照合したうえで、次の自然な朝刊・大引けcycleで共有packet完成率とretry diagnosticsを確認する。
@@ -211,7 +211,123 @@ When complete:
 
 ## Report
 
-Pending.
+### Report — kabumori-shared-analysis-prod-deploy-observe-20260928
+
+- task_id：`kabumori-shared-analysis-prod-deploy-observe-20260928`
+- result：**PARTIAL（deployはPASS、自然cycleの観察は完了。共有packetは2026-09-29の朝刊・大引けとも未完成）**。
+  - transport retryの不具合ではない。朝刊は**data段階のblock**、大引けは**内容の検査（local check・Fact）による失敗**で、transport retryは発生していない（0回）。
+  - 完了条件5（朝刊・大引けのcycleを各1回観察）は満たした。ただし朝刊はanalysisまで到達しておらず、retry層が朝刊の実runで動いたことは確認できていない。
+- fresh main SHA：deploy時は `fc0afd32d6697940e96d3b9b52d91ef2c48a76ff`（PR #45のmerge `6ea31ef` を含む）。Report作成時は `907c67d`。
+- worktree/branch：G2専用checkout `/Users/yuya/Developer/kabumori-g2-market-report-reliability`（detached、`fc0afd3`）。共有checkoutではdeployもconfigの編集もしていない（DBのread-onlyなSELECTだけ）。
+
+#### production version before/after
+
+- `market-report-analysis`：v11（`94aa3ea` 相当）→ **v12（PR #45）**。
+  - deploy：2026-09-28 18:49:33 JST
+  - `supabase functions list` の表示は `version:13` だが、`updated_at` は上記deploy時刻のまま。一覧の番号の数え方の違いで、追加のdeployはない。
+- ほかのfunctionはdeployしていない。
+
+#### deployed source identity/read-back
+
+- deploy直後と2026-09-29 18:40 JST の2回、`supabase functions download --use-api` でbyte照合した。どちらも**8ファイルがすべて一致**。
+  - `_shared/kabumori_voice.ts`
+  - `_shared/market_report_packet.ts`
+  - `market-report-analysis/{analysis_input,analysis_logic,handler,index,transport_retry}.ts`
+  - `market-report-data-packet/session_logic.ts`
+
+#### 設定の前後比較
+
+- verify_jwt：false → false
+- app_enabled / x_enabled：false / false → false / false（2026-09-29 18:40 JST にも確認）
+- cron：変更なし。9/29の実行も、次のscheduleどおりにすべて `succeeded` だった。
+  - data：`50 22 * * 0-4`、`15 7 * * 1-5`
+  - analysis：`55 22 * * 0-4`、`5 23 * * 0-4`、`20 7 * * 1-5`、`35 7 * * 1-5`
+
+#### morning cycle（2026-09-29）
+
+- **data段階でblockされた**：
+  - `cycle_status=blocked`、`last_error=DATA_QUALITY_BLOCKED`（07:50:03）
+  - `required_missing=["nikkei225"]`、`gap_reason=expected_session_not_available`（Yahooが9/28の終値を返さなかった）
+- analysis側：
+  - `report_status=pending`、`report_attempt_count=0`、`report_last_error=null`
+  - `current_data_packet_id=null`、`current_report_packet_id=null`
+  - 07:55と08:05のcronは実行されたが、claimは起きていない（不要なclaimの繰り返しはない）。
+  - transport diagnosticsは記録なし（runが始まっていないため）。
+- **見つかったdeployの漏れ（要判断）**：
+  - 9/28の大引けpacketには、日経平均が `session_date=2026-09-28` のfreshな値（65,877.62）として保存されている。
+  - 同じsessionの値を再利用するfix `aecfa60`（2026-09-18、`session_reuse.ts`）はmainにある。**しかし本番の `market-report-data-packet` には入っていない**。
+    - 本番の最終deployは2026-09-17 14:43 JST。
+    - `--use-api` でdownloadしたsourceには `session_reuse.ts` がなく、handlerにも再利用のcodeがない。
+  - 同じ原因のblockが09-18、09-25、09-29に起きている。このfixをdeployすれば、今回のblockは避けられた可能性が高い。
+  - 本TASKの範囲外（data-packetのdeployは禁止）なので、何もしていない。
+
+#### close cycle（2026-09-29）
+
+- data段階：`completed`（16:15）、`dataQuality=partial`、`requiredMissing=[]`。data packetは `58f6f5ea…`。
+- analysis：
+  - attempt 1（16:20）：`ANALYSIS_LOCAL_CHECK_FAILED`。
+    - 指摘は「TOPIX連動ETF（1306）をTOPIXと表記」で、内容の問題。
+  - attempt 2（16:35:00〜16:35:25）：`ANALYSIS_FACT_FAILED`。
+    - 指摘は、見出しと `x_post` の冒頭が、米株安・半導体株安を東京市場の下落の原因と断定していたこと。入力では、具体的な下落理由は確認できないとされていた。
+    - 内容の問題。
+  - 最終状態：
+    - `report_status=failed`、`report_attempt_count=2`
+    - `current_report_packet_id=null`
+    - 3回目のclaim枠は、scheduleされたrunがないため未使用。
+- attempt 2のdiagnostics：
+  - `transport_retries=0`、`transport_retry_wait_ms=0`、`transport_retry_reasons=""`
+  - `transport_retry_exhausted=false`、`transport_success_after_retry=false`
+  - calls=3、cost約$0.0068、model `gpt-5.6-luna`
+- 分類：**transportの失敗はない。2回とも内容（local check・Fact）の失敗**。
+  - Factの拒否はretryの対象外という設計どおりに動いている。
+  - 09-24、09-25、09-28は2回目で完了していたが、09-29は2回とも失敗した。
+
+#### packet IDs / duplicate check
+
+- 2026-09-29の `market_report_packets`：**0件**（朝刊・大引けとも）。重複はない。
+- data packet：朝刊は1件（blocked）、大引けは1件（partial、`58f6f5ea`）。重複はない。
+- cycleのfencingに異常はない。朝刊はclaimされず、大引けは2回のclaimで、それぞれ1回のfailを記録した。
+
+#### production mutations
+
+- 1件だけ：2026-09-28 18:49 JST の `market-report-analysis` のdeploy。
+- それ以外（DB・cron・settings・ほかのfunction・手動のinvoke）は0件。観察はすべてread-onlyのSELECTと、source downloadだけで行った。
+
+#### rollback status
+
+- rollbackはしていない（不要と判断）。
+  - retry層は発動しておらず、失敗の原因はv12の変更と関係がない。
+- 戻す場合は、v11のsource（scratchpadのbackup、`94aa3ea` とbyte一致）を再deployするだけでよい。
+
+#### remaining issues
+
+1. **（data・deployの漏れ）** `market-report-data-packet` の本番に `aecfa60`（同じsessionの値の再利用）が入っていない。
+   - Yahooが前日の日経平均の終値を返さない朝は、共有の朝刊がdata段階で止まる（09-18、09-25、09-29）。
+   - 別gateでのdeploy（mainのdata-packetをbyte照合付きで）を推奨する。
+2. **（内容）** 大引けのanalysisが内容の検査で落ちる。
+   - 1306をTOPIXと表記する。
+   - 理由が確認できないのに、因果を断定する。
+   - 09-29は2回とも落ち、packetが未完成になった。promptとlocal check・Factの整合を扱う別のsource TASKが必要。
+3. transport retryは、実運用ではまだ一度も発動していない。朝刊での実runの確認は、1が直ってからになる。
+4. （既知）JGBとWTI・Brentがstale、先物・セクター・カレンダーはsourceがない。themesが空になりがち。
+5. OpenAIの残高は手動チャージ。`insufficient_quota` の429は設計上retryしない。
+
+#### recommendation
+
+- **further reliability work needed**。consumerの有効化レビューはまだ早い。
+  - 9/29は、共有packetの完成が朝刊・大引けとも0/2だった。
+- 順序の提案：
+  1. data-packetの本番を、main（`aecfa60` を含む）にそろえるdeployのTASK
+  2. 大引けの内容失敗（1306の表記、因果の断定）を直すsourceのTASK
+  3. 数営業日の自然cycleで完成率を再観察する
+  4. そのあとで、consumerの有効化レビューに進む
+
+#### Codex review recommendation for activation boundary
+
+- 有効化（app_enabled、x_enabled）の前には、**focusedなCodex review**を推奨する。
+  - 範囲：共有packetが欠けた場合のconsumerの挙動。現状、appはgateがONでpacketがないとrun全体をskipする。
+  - 範囲：大引けの内容検査の修正。
+- data-packetの再deploy自体は、mainにreview済みのcodeをそろえるだけなので、byte照合付きの軽い確認で十分と考える。
 
 ---
 
