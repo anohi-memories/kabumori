@@ -3,8 +3,8 @@
 - task_id: kabumori-data-packet-prod-sync-verification-rollout-20260929
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（高）
 - purpose: G1がproduction-read classifierでSTOPした market-report-data-packet 同期を、独立環境でproduction read-only preflightから引き継ぎ、条件が一致する場合だけ reviewed fresh-main source を単一Edge Functionへcontrolled deployし、read-backで同一性と周辺設定不変を確認する。source実装は禁止。
@@ -154,6 +154,17 @@ Write .agent/CODEX_REPORT.md with:
 
 Then status -> review_required, next_owner -> chatgpt, STOP for C1.
 
+## H1 execution — 2026-09-29 JST
+
+- result: **PASS**; controlled production sync completed. C1 confirmation pending.
+- deployed source: fresh main `d79b0c8524af56cc56c5245f5037517fc689d917`; no function source edits.
+- production `market-report-data-packet`: v11 -> v12, verify_jwt=false unchanged.
+- downloaded read-back: all 8 deployable files byte-identical to that exact main; same-session reuse and handler/builder/schema wiring present.
+- tests: 42/42 PASS; runtime check + runtime lint PASS. Full-directory lint has one pre-existing test-only require-await finding; recorded without modifying source.
+- cron jobids 28-33 unchanged, including command hashes; app_enabled/x_enabled remain false/false.
+- other 18 functions' metadata unchanged; no manual invocation, no DB/cron/secret/consumer mutation.
+- details: `.agent/CODEX_REPORT.md`, latest section for this task. Stop for C1; natural-cycle validation is a later gate.
+
 ---
 
 ## Archived predecessor task
@@ -271,4 +282,3 @@ Verdict: **PASS-WITH-FIX**.
 - production_mutation=0 during review.
 - PR #47 merged after C1 at merge commit `fbddef2535b82bf4775c2e4fddb93eeefb8c638a`.
 - remaining gates are real-device/provider-console configuration/E2E only.
-

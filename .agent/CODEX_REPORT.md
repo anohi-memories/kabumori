@@ -659,3 +659,105 @@ No open source blocker remains **within this focused assignment**. Source accept
 - `production_mutation=0`: no provider console, redirect/SMTP/template, Apple/Google/X console, DB/migration, Vault, OAuth consent, Cron, Stage 3B activation or real X post.
 - remaining_issues: only the unexecuted console/device gates above; no further source design correction requested in this focused pass.
 - next_recommendation: C1 confirm **PASS-WITH-FIX** and exact PR #47 `ed5f8b7890e538593dba369dd85cb99a12b27242`, then make the normal source merge decision/checks. Keep real-provider/device/production activation separately authorized. Do not start another review loop without a concrete discrepancy. **推薦モデル：Luna（中）** for the report/exact-head C1 confirmation; this H1 stops here.
+
+---
+
+# H1 — data-packet controlled production sync (2026-09-29 JST)
+
+- task_id: `kabumori-data-packet-prod-sync-verification-rollout-20260929`
+- result: **PASS** for the assigned controlled sync/read-back, not natural-cycle/consumer activation acceptance.
+- status: `review_required`; next_owner: `chatgpt`; stop for C1.
+- recommended_model: Sol（高） for this rollout; Luna（中） for C1 report confirmation.
+- exact fresh main / deployed source commit_hash: `d79b0c8524af56cc56c5245f5037517fc689d917`.
+- worktree: `/private/tmp/kabumori-h1-social-mobile-report-20260928`; own branch `codex/h1-data-packet-prod-sync-20260929`. Reused the clean completed H1 report worktree; no G1/G2/shared checkout used or altered.
+- source changes / PR / source merge: **none**. Only H1 completion controls are committed for report sync.
+- reporting base: main advanced to `f04d392aaf75f561975e9519281ecc62b06b4c02` after deploy; the intervening commit changes G2 agent state only. No target/dependency source changes. H1 TASK/Report unchanged; newer G2 state preserved.
+
+## Startup and ownership
+
+- Fresh-fetched main before starting and again immediately before deploy. Read PROJECT_RULES, HANDOFF, ORCHESTRATION, current H1/G1 task/report and data-packet deployable source.
+- `aecfa60` is an ancestor. Diff from G1's `15a7ac72aba611f1eff734c38b3e6c517b4e691c` to deployed main contains **0 changes** under data-packet or `_shared`.
+- All target runtime imports resolve within its own directory; no imported shared file or G2 analysis file enters this bundle.
+- G1 rollout is stopped, handed off to H1; G2 owns analysis source only and is prohibited from data-packet/deploy/gate changes. G3/H2 account-deletion work is disjoint; its existing production state was captured before H1 rollout.
+- Supabase skill, current changelog, current official CLI deploy/download docs and installed CLI help checked. CLI 2.116.0 / Deno 2.9.6. No version upgrade or unrelated platform change performed.
+
+## Independent preflight and stale-source proof
+
+- Production metadata before: id `6d8f284f-5567-4f7a-87dd-9801fb8f95b8`, ACTIVE, **version 11**, verify_jwt=false.
+- created_at = updated_at = `1789623825492`; original entrypoint was the historical ios-push-e2e worktree path, not H1's deployment source.
+- old bundle ezbr_sha256: `0508c3a8ae27ba5fca6e58bbf04608dc2652e2ff519fdcd12387f01bba952323`.
+- Independently downloaded production source to `/private/tmp/kabumori-h1-data-packet-before-iFkaIi` using the explicit function/ref and `--use-api` (no execution). Kept this pre-deploy source for exact rollback if needed.
+- `session_reuse.ts` absent in production. `handler.ts` lacks stored-packet lookup and input wiring; `packet_builder.ts` lacks reuse index/application; `packet_schema.ts` lacks provenance/provider/validation. The other four original runtime files are identical. Tests/fixtures are main-only and not deployed.
+- Canonical gate location established from `20260920100000_market_report_packets_phase2.sql`: singleton `public.market_report_consumer_settings`, read by the shared-consumer RPC. Read only `id, app_enabled, x_enabled` at `id=true`; **false/false**.
+- Cron read limited to relevant market-report rows and returned only job ids/names/schedules/active/target and a command digest, not the command text or credentials. Schedules match existing Phase 1 docs and G2's recorded shared schedule.
+- No hidden credentials/service-key REST fallback. Supabase connector SELECTs succeeded in this H1 session.
+
+## Tests/checks
+
+| Check | Result |
+| --- | --- |
+| Full data-packet suite, `deno test --node-modules-dir=none --allow-read=supabase/functions/market-report-data-packet supabase/functions/market-report-data-packet/` | **42/42 PASS**, including 7 session-reuse cases, authorization/no-I/O rejection, idempotency, blocked quality and no-consumer I/O source guard |
+| `deno check --node-modules-dir=none .../index.ts` | **PASS**, full transitive runtime closure |
+| `deno lint` on all 8 deployable runtime files | **PASS** |
+| Full-directory `deno lint` (14 files, including tests) | **One pre-existing test-only finding**: handler_test.ts:19 `require-await` on fetch mock. Last modification `e0d24ce3dc35267101ed3d569f694169f37d2430`; not a runtime/bundle defect, unchanged by reuse fix/H1. Not suppressed or patched. |
+| `git diff --check`, unchanged tracked source | **PASS** |
+
+Initial default Deno invocation could not resolve Node type references with no local node_modules; `--node-modules-dir=none` uses Deno's installed cache without installing project dependencies. The source-reading test also requires its documented filesystem permission; after scoping `--allow-read` to this function, the canonical full run passes. Those initial setup failures were not counted as passing runs or treated as source regressions. No test network/production invocation was made.
+
+## Exact production mutation
+
+After all production preconditions and applicable runtime checks passed, executed exactly once from the isolated, tracked-source-clean fresh-main worktree:
+
+```text
+supabase functions deploy market-report-data-packet --project-ref wsmznyzcvmuitkglfeuj --no-verify-jwt --use-api
+```
+
+- `--use-api` is the supported Docker-free bundling option verified via CLI help. No broad/no-name deploy or prune.
+- Local untracked `supabase/config.toml` contains only explicit project_id and the target's verify_jwt=false. Did not reuse shared untracked config; this minimal non-secret config and CLI-generated `.temp/cli-latest` are **not committed**.
+- CLI upload log lists exactly the 8 runtime files below and confirms only `market-report-data-packet` deployed, exit 0.
+- Production after: **version 12**, ACTIVE, verify_jwt=false, updated_at `1790688198972` (**2026-09-29 22:23:18.972 JST**), created_at unchanged.
+- current entrypoint: `file:///tmp/user_fn_wsmznyzcvmuitkglfeuj_6d8f284f-5567-4f7a-87dd-9801fb8f95b8_12/source/supabase/functions/market-report-data-packet/index.ts`, import_map=false.
+- new bundle ezbr_sha256: `b7d08f4be6685a3baf2ab784a9c69c86fdee4d11eb577ba4d555480204c4b27e`.
+
+## Read-back / byte identity
+
+Immediately downloaded v12 with the same function/ref to `/private/tmp/kabumori-h1-data-packet-after-gNfDUQ`. Compared each file's raw bytes with `git show d79b0c8524af56cc56c5245f5037517fc689d917:<path>` (not an editable working-tree baseline). **8/8 MATCH**, no extra bundle files.
+
+| Runtime file | SHA-256, equal to deployed main |
+| --- | --- |
+| index.ts | `2a5757c359df68b81fb36e6fa2ca59d71d581d747ae6fc31a6193dc42e503d7e` |
+| handler.ts | `193de33fb30f8efdf9fdc138bd65bea4b1d73cf259d278607dbd7fc3e6835268` |
+| packet_builder.ts | `bb2568eddf6ae4497057dd3b7051362e82ef1539c084113dcdc7ffe4a42932fc` |
+| packet_schema.ts | `7bd340a5b0d093bb88c8c9a513a1825f472edcc3af6e43442cb21e1c11dd360c` |
+| session_reuse.ts | `70368a4016073422c3d6977328ea38aad52b959143a3f60132f06b3a7d28916a` |
+| session_logic.ts | `7403e7c62f5abb6768b76b1d6d45359ad97730d4cdd2ac3e7f1d146b7e246621` |
+| yahoo_daily.ts | `76cb95e88192be999f90e397e7b225162a3e7c89b2ee046825fa5ec71ec3d094` |
+| mic_metrics.ts | `5e2f54a9baa288514841f04bda1daa82d0488e5cc57053ca76e222ca15ca5abb` |
+
+Identity covers the reuse module, handler's bounded stored-packet lookup/input, builder's `buildReuseIndex`/`applySessionReuse`, and schema's lineage/provider/quality consistency validation. Same-session-only/no-chain/current-value-preferred semantics are additionally covered by the passing tests. This is source identity, not a claim that a natural production cycle has yet used reuse.
+
+## Cron / gates / other-function invariants
+
+Repeated the **exact same** SELECTs after deploy. All six row values/digests unchanged; no cron secret text was read or published.
+
+| jobid | jobname | schedule (UTC) | active before/after | command MD5 before = after |
+| --- | --- | --- | --- | --- |
+| 28 | market-report-data-packet-morning | `50 22 * * 0-4` | true / true | `69b29f53d08a7cfae536af0633bbb32f` |
+| 29 | market-report-data-packet-close | `15 7 * * 1-5` | true / true | `fb80310ff7a6e824c181d5696d3a6bab` |
+| 30 | market-report-analysis-morning | `55 22 * * 0-4` | true / true | `82f3090e7feb1a8c52376914d42053ad` |
+| 31 | market-report-analysis-morning-retry | `5 23 * * 0-4` | true / true | `82f3090e7feb1a8c52376914d42053ad` |
+| 32 | market-report-analysis-close | `20 7 * * 1-5` | true / true | `216cf5dae2503140793e4eb9f46ce0da` |
+| 33 | market-report-analysis-close-retry | `35 7 * * 1-5` | true / true | `216cf5dae2503140793e4eb9f46ce0da` |
+
+- Gate singleton before/after: `id=true`, **app_enabled=false / x_enabled=false**; exactly equal.
+- All-functions metadata snapshots: 19 before / 19 after, no added/removed functions. Full returned metadata equality for **all other 18 functions**, including version/updated_at/verify_jwt/bundle identity. Only this target changed (v11 -> v12).
+- H1 production mutations: **one target Function deployment**. Other Function/config/DB/schema/RPC/migration/Cron/Auth/Vault/secrets/gates changes **0**. No function/cycle/manual dry-run invocation, candidate injection, app activation or X post.
+- rollback: **not required / not executed**, because source, authentication mode and invariants all passed. Pre-deploy downloaded source remains available; no improvised rollback.
+
+## Delivery / remaining issues / next recommendation
+
+- changed_files: `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md`, H1-only entry in `.agent/ACTIVE_TASK.md`, H1-only result section in `.agent/CURRENT_STATE.md`. Function/app source unchanged. All other slot TASKs/Reports retained.
+- push: report-only main synchronization is performed separately after the pre-push fresh-main/ownership check; actual remote SHA must be verified, not inferred. Source commit_hash is the deployed exact main above; the separate report commit is visible in Git history.
+- deploy: **completed and independently read back**, single function only; merge/PR: none.
+- remaining_issues: natural morning/close success/reuse observation not performed in this rollout task; G2's separate content-guard correction remains unmerged/undeployed. Pre-existing test-only lint finding remains. Consumer activation still unapproved.
+- next_recommendation: C1 confirm this controlled-sync **PASS**, then arrange separately scoped natural-cycle observation with gates OFF. The existing packet schedules are 07:50 / 16:15 JST; do not invoke a real cycle manually. A source-sync PASS does not close G2 quality gates or authorize app/X cutover. **推薦モデル：Luna（中）** for C1 report confirmation. H1 stops here.

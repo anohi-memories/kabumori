@@ -22,13 +22,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
+- next_owner: chatgpt
 - task_id: kabumori-data-packet-prod-sync-verification-rollout-20260929
 - start_code: H1
 - finish_code: C1
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: take over G1 production-read blocker; independently preflight cron + app/x gates, then controlled single market-report-data-packet deploy/read-back only if safe. No source edits, no manual cycle. Recommended Sol（高）
+- allocation: PASS — market-report-data-packet v11 -> v12; all 8 runtime files match fresh main; cron/gates/other 18 functions unchanged. C1 confirmation pending; no source edits, no manual cycle, consumers OFF. Recommended Sol（高） for completed rollout; Luna（中） for C1 report confirmation.
 
 ## Codex H2
 - owner: codex
