@@ -171,32 +171,92 @@ test("dated parallel facts and an explicit 'reason unconfirmed' stay allowed", (
   }
 });
 
-test("a cause the news states (a causal claim without disclaimer) can still be written as confirmed", () => {
-  const confirmed: NewsTextRow = {
-    id: "0f0f0f0f-0000-4000-8000-000000000929",
-    source_type: "breaking_market",
-    company_code: null,
-    company_name: null,
-    title: "Tokyo stocks fall after semiconductor selloff",
-    coverage_severity: "high",
-    coverage_categories: ["japan_market", "semiconductors"],
-    published_at: "2026-09-29T06:50:00Z",
-    created_at: "2026-09-29T06:51:00Z",
-    app_title_ja: "東京市場、米半導体株安を受けて下落",
-    app_summary_ja: "9月29日の東京市場は、前日の米国市場で半導体株が売られたことを受けて、半導体関連株を中心に下落したと報じられました。",
-    app_copy_fact_status: "passed",
-    generated_text: null,
-    generation_fact_status: null,
-  };
+/** A news item that states cause A: US semiconductor weakness → Tokyo decline (sanitized, synthetic). */
+const CONFIRMED_NEWS: NewsTextRow = {
+  id: "0f0f0f0f-0000-4000-8000-000000000929",
+  source_type: "breaking_market",
+  company_code: null,
+  company_name: null,
+  title: "Tokyo stocks fall after semiconductor selloff",
+  coverage_severity: "high",
+  coverage_categories: ["japan_market", "semiconductors"],
+  published_at: "2026-09-29T06:50:00Z",
+  created_at: "2026-09-29T06:51:00Z",
+  app_title_ja: "東京市場、米半導体株安を受けて下落",
+  app_summary_ja: "9月29日の東京市場は、前日の米国市場で半導体株が売られたことを受けて、半導体関連株を中心に下落したと報じられました。",
+  app_copy_fact_status: "passed",
+  generated_text: null,
+  generation_fact_status: null,
+};
+const CONFIRMED_REF = `news:${CONFIRMED_NEWS.id}`;
+
+function inputWithConfirmedCause() {
   const packet = structuredClone(data0929.payload);
-  packet.news_refs.items.push({ ...packet.news_refs.items[0], ref_id: confirmed.id });
-  const built = input0929([...news0929, confirmed], packet);
-  const ref = `news:${confirmed.id}`;
-  assert.ok(built.newsRefs.has(ref));
+  packet.news_refs.items.push({ ...packet.news_refs.items[0], ref_id: CONFIRMED_NEWS.id });
+  return input0929([...news0929, CONFIRMED_NEWS], packet);
+}
+
+/** 9/29 with a valid causal claim A (cites the news that states it) written as confirmed. */
+function withValidCauseA(): GeneratedAnalysis {
   const analysis = compliant0929();
-  analysis.claims[3] = { claim_id: "c4", text_ja: "東京市場は、前日の米国市場の半導体株安を受けて半導体関連株を中心に下落したと報じられました。", claim_type: "causal", evidence_refs: [ref, "metric:nikkei225"], scope: "today" };
+  analysis.claims[3] = { claim_id: "c4", text_ja: "東京市場は、前日の米国市場の半導体株安を受けて半導体関連株を中心に下落したと報じられました。", claim_type: "causal", evidence_refs: [CONFIRMED_REF, "metric:nikkei225"], scope: "today" };
   analysis.headline_ja = "米半導体株安を受けて東京市場は下落";
   analysis.x_post.closing_ja = "半導体関連株を中心に下げたと報じられています。";
+  return analysis;
+}
+
+test("K2 mixed case: a valid causal claim A does not license an unrelated unsupported cause B", () => {
+  const built = inputWithConfirmedCause();
+  assert.ok(built.newsRefs.has(CONFIRMED_REF));
+  assert.deepEqual(localAnalysisIssues(withValidCauseA(), built), [], "A alone passes");
+
+  const placements: Array<[string, (a: GeneratedAnalysis) => void]> = [
+    ["headline", (a) => { a.headline_ja = "円高を受けて東京市場は下落"; }],
+    ["headline A+B", (a) => { a.headline_ja = "米半導体株安と円高を受けて東京市場は下落"; }],
+    ["x_post lead", (a) => { a.x_post.lead_ja = "原油高が重しとなり、東京市場も下げました📉"; }],
+    ["x_post point", (a) => { a.x_post.points_ja[1] = "中東情勢の緊迫につれて売られました"; }],
+    ["summary", (a) => { a.market_summary_ja = `米国の金利上昇の影響で下落した可能性があります。${a.market_summary_ja}`; }],
+    ["another claim", (a) => { a.claims[2].text_ja = "9月28日の米国株安を受けて、9月29日の東京市場も下落しました。"; }],
+  ];
+  for (const [label, mutate] of placements) {
+    const analysis = withValidCauseA();
+    mutate(analysis);
+    const issues = localAnalysisIssues(analysis, built);
+    assert.ok(hasIssue(issues, CAUSAL_ISSUE), `${label}: unsupported B not detected: ${issues.join(" / ")}`);
+  }
+
+  // A causal claim that cites the news but gives a reason the news does not state is not self-licensing.
+  const wrongReason = withValidCauseA();
+  wrongReason.claims[3].text_ja = "東京市場は、円高を受けて下落したと報じられました。";
+  assert.ok(hasIssue(localAnalysisIssues(wrongReason, built), CAUSAL_ISSUE));
+});
+
+test("K2 mixed case through regeneration: fixing one issue cannot introduce an unrelated cause", async () => {
+  const first = withValidCauseA();
+  first.x_post.lead_ja = "日経平均もTOPIXも下げました📉";
+  const second = withValidCauseA();
+  second.x_post.lead_ja = "円高も重しとなり、日経平均もTOPIX連動ETF（1306）も下げました📉";
+  const calls: Array<{ step: string; body: Record<string, unknown> }> = [];
+  const outcome = await generateSharedAnalysis(inputWithConfirmedCause(), requester([
+    { step: "generate", payload: first },
+    { step: "generate", payload: second },
+  ], calls), NOW);
+  assert.equal(outcome.ok, false);
+  assert.equal(!outcome.ok && outcome.error, "ANALYSIS_LOCAL_CHECK_FAILED");
+  assert.ok(!outcome.ok && hasIssue(outcome.issues, CAUSAL_ISSUE));
+  assert.deepEqual(calls.map((call) => call.step), ["generate", "generate"], "no Fact call is spent on it");
+
+  const fixed = await generateSharedAnalysis(inputWithConfirmedCause(), requester([
+    { step: "generate", payload: first },
+    { step: "generate", payload: withValidCauseA() },
+    { step: "fact", payload: { passed: true, issues: [] } },
+  ], []), NOW);
+  assert.equal(fixed.ok, true);
+});
+
+test("a cause the news states (a causal claim without disclaimer) can still be written as confirmed", () => {
+  const built = inputWithConfirmedCause();
+  const analysis = withValidCauseA();
   assert.deepEqual(localAnalysisIssues(analysis, built), []);
 
   // A "causal" label whose own text says the link is unconfirmed (seen 2026-09-25) does not license it.

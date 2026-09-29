@@ -269,13 +269,18 @@ const MULTI_DAY_WORDS = ["続伸", "続落", "反発", "反落", "連騰", "連�
 const ADVICE = /買い推奨|売り推奨|買うべき|売るべき|買い時|売り時|目標株価|おすすめ|推奨します|必ず(?:上が|下が|上昇|下落)|確実に(?:上が|下が|上昇|下落)|(?:上昇|下落)するでしょう|(?:上が|下が)るでしょう/u;
 /** Accurate names for the 1306 proxy; any other "TOPIX" reads as the index itself (checked after NFKC). */
 const TOPIX_PROXY_AT = /TOPIX連動型?(?:ETF|上場投信|投信)/y;
-/** Wording that gives a reason for a move (2026-09-29 16:35: US/semiconductor weakness stated as the cause). */
+/**
+ * Wording that gives a reason for a move (2026-09-29 16:35: US/semiconductor weakness stated as the cause).
+ * Each match starts right after the cause phrase, so the text before it names the cause.
+ */
 const CAUSAL_LINK = new RegExp([
-  "を受け(?:て|た|、)", "を背景に", "につれ", "連れ(?:安|高)", "に押され", "に引きずられ", "足を引っ張", "を嫌気", "を好感",
-  "の流れを引き継", "が波及", "に連動して(?:下落|上昇|下げ|上げ)", "の影響(?:で|から|を受け|とみ|と見)", "が影響し", "が響",
-  "が重(?:し|荷)(?:と|に)", "が(?:追い風|逆風|支え|下支え)(?:と|に)", "(?:原因|要因)(?:で|とな|にな|とみ|と見)", "が(?:原因|要因)",
-  "(?:株|市場|指数|円|ドル|金利|原油)(?:安|高)で(?!終え|引け|取引)",
-].join("|"));
+  "を受け(?:て|た|、)", "を背景に", "につれ", "に?連れ(?:安|高)", "に押され", "に引きずられ", "足を引っ張", "を嫌気", "を好感",
+  "の流れを引き継", "が波及", "に連動して(?:下落|上昇|下げ|上げ)", "の影響(?:で|から|を受け|とみ|と見)", "[がも]影響し", "[がも]響",
+  "[がも]重(?:し|荷)(?:と|に)", "[がも](?:追い風|逆風|支え|下支え)(?:と|に)", "(?:原因|要因)(?:で|とな|にな|とみ|と見)", "が(?:原因|要因)",
+  "(?<=(?:株|市場|指数|円|ドル|金利|原油)(?:安|高))で(?!終え|引け|取引)",
+].join("|"), "g");
+/** Words that follow a cause without naming it (「米株安の流れを受けて」). */
+const GENERIC_CAUSE = new Set(["流れ", "動き", "影響", "売り", "買い", "地合い", "展開", "傾向", "結果", "こと", "材料", "報道", "ニュース"]);
 /** A sentence that itself says the reason is not established. */
 const NEGATED = /(?:確認|断定|判断|特定)でき(?:ませ|な)|分かりませ|わかりませ|分からな|わからな|明記されて(?:い)?(?:ませ|な)|示されて(?:い)?(?:ませ|な)/;
 /** A hedge that still proposes a reason. */
@@ -300,16 +305,51 @@ export function topixMislabels(texts: string[]): string[] {
   return found;
 }
 
+/** The cause named before a causal link, split into its parts (「米株安・半導体株安」 → both). */
+export function causeParts(sentence: string, index: number, link: string): string[] {
+  let span = sentence.slice(0, index);
+  // 「米株安が東京市場下落の原因です」: the cause is the subject, not the words right before 原因.
+  if (/原因|要因/.test(link) && !link.startsWith("が") && span.includes("が")) span = span.slice(0, span.indexOf("が"));
+  const segments = span.replace(/[にでをがはのとも]+$/u, "").split(/[、，,「」（）()のはが]/u).map((part) => part.trim()).filter(Boolean);
+  while (segments.length > 1 && GENERIC_CAUSE.has(segments[segments.length - 1])) segments.pop();
+  const cause = segments[segments.length - 1] ?? "";
+  return cause.split(/・|と|や|および|及び/u).map((part) => part.trim()).filter(Boolean);
+}
+
+function longestCommonSubstring(a: string, b: string): number {
+  let best = 0;
+  let previous = new Array<number>(b.length + 1).fill(0);
+  for (let i = 1; i <= a.length; i += 1) {
+    const current = new Array<number>(b.length + 1).fill(0);
+    for (let j = 1; j <= b.length; j += 1) {
+      if (a[i - 1] === b[j - 1]) best = Math.max(best, (current[j] = previous[j - 1] + 1));
+    }
+    previous = current;
+  }
+  return best;
+}
+
+/** A cause part is supported when the news text contains it (or a 3+ character core of it, e.g. 半導体株). */
+function causeSupported(part: string, support: string): boolean {
+  const normalized = part.normalize("NFKC");
+  return normalized.length > 0 && longestCommonSubstring(normalized, support) >= Math.min(3, normalized.length);
+}
+
 /**
- * Sentences that attach a reason to a move when no news item states one. A causal claim counts as
- * confirmed only if it cites news and does not itself say the link is unconfirmed (2026-09-25 carried a
- * "causal" label on "因果は確認できません").
+ * Sentences that attach a reason to a move that no news item states. Each causal link is checked on its
+ * own cause against the text of the news cited by confirmed causal claims, so one supported cause does
+ * not license another (K2 on PR #57). A causal claim is confirmed only if it cites news and does not
+ * itself say the link is unconfirmed (2026-09-25 carried a "causal" label on "因果は確認できません").
  */
 export function unsupportedCausalSentences(analysis: GeneratedAnalysis, input: AnalysisInput): string[] {
-  const confirmed = analysis.claims.some((claim) =>
-    claim.claim_type === "causal" && claim.evidence_refs.some((ref) => input.newsRefs.has(ref)) && !NEGATED.test(claim.text_ja)
-  );
-  if (confirmed) return [];
+  const supportRefs = new Set(analysis.claims
+    .filter((claim) => claim.claim_type === "causal" && !NEGATED.test(claim.text_ja))
+    .flatMap((claim) => claim.evidence_refs.filter((ref) => input.newsRefs.has(ref))));
+  const support = input.news
+    .filter((item) => supportRefs.has(item.ref))
+    .map((item) => `${item.headline_ja}\n${item.summary_ja ?? ""}`)
+    .join("\n")
+    .normalize("NFKC");
   const texts = [
     analysis.headline_ja,
     analysis.market_summary_ja,
@@ -320,8 +360,14 @@ export function unsupportedCausalSentences(analysis: GeneratedAnalysis, input: A
   ];
   const found: string[] = [];
   for (const sentence of texts.flatMap((value) => value.split(/[。！？!?\n]/))) {
-    if (!CAUSAL_LINK.test(sentence)) continue;
+    const links = [...sentence.matchAll(CAUSAL_LINK)];
+    if (links.length === 0) continue;
     if (NEGATED.test(sentence) && !SPECULATION.test(sentence)) continue;
+    const supported = links.every((link) => {
+      const parts = causeParts(sentence, link.index, link[0]);
+      return parts.length > 0 && parts.every((part) => causeSupported(part, support));
+    });
+    if (supported) continue;
     const trimmed = sentence.trim();
     found.push(Array.from(trimmed).length > 40 ? `${Array.from(trimmed).slice(0, 40).join("")}…` : trimmed);
   }
