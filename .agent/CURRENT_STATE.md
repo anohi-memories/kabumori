@@ -2061,3 +2061,14 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - no destructive operations.
 - finish code: C2.
 - recommended Codex model: Sol（高）.
+
+
+## G3 account deletion Stage 2 E2E assigned
+
+- task_id: `x-social-mobile-account-deletion-prod-e2e-stage2-20260929`
+- scope: disposable-account-only production E2E for never-connected, social-only/shared-profile retention, disposable X-connected when safely available, retry/lost-response, and unrelated-data invariants.
+- before the first destructive valid-user action, Claude must STOP and obtain fresh explicit user confirmation.
+- Apple remains excluded unless separately configured and approved.
+- app feature activation remains OFF.
+- finish code: K3.
+- recommended Claude model: Opus5.5（高）.
