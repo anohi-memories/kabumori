@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: x-social-mobile-auth-phase2-final-acceptance-review-20260928
+- status: ready
+- task_id: kabumori-data-packet-prod-sync-verification-rollout-20260929
 - start_code: H1
 - finish_code: C1
-- source: `.agent/tasks/CODEX_TASK.md`
-- report: `.agent/CODEX_REPORT.md`
-- allocation: closed; Final C1 PASS-WITH-FIX; PR #47 accepted at `ed5f8b7` and merged as `fbddef2`
+- source: .agent/tasks/CODEX_TASK.md
+- report: .agent/CODEX_REPORT.md
+- allocation: take over G1 production-read blocker; independently preflight cron + app/x gates, then controlled single market-report-data-packet deploy/read-back only if safe. No source edits, no manual cycle. Recommended Sol（高）
 
 ## Codex H2
 - owner: codex
@@ -44,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: ready
+- status: review_required
 - task_id: kabumori-data-packet-session-reuse-prod-sync-20260929
 - start_code: G1
 - finish_code: K1
-- source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: re-issued after PR #56 K1/merge; deploy-only production sync of reviewed main `market-report-data-packet` including same-session reuse fix; no source edits, no manual cycle forcing. Recommended Sonnet5（高）
+- source: .agent/tasks/CLAUDE_TASK_1.md
+- allocation: STOP before mutation because production DB reads were blocked by G1 classifier. Source drift/tests proven; rollout continuation handed to H1. Do not restart concurrently. Recommended Sonnet5（高）
 
 ## Claude G2
 - owner: claude
