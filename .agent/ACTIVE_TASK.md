@@ -49,7 +49,7 @@
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: deploy-only production sync of reviewed main `market-report-data-packet` including same-session reuse fix; no source edits, no manual cycle forcing. Recommended Sonnet5（高）
+- allocation: re-issued after PR #56 K1/merge; deploy-only production sync of reviewed main `market-report-data-packet` including same-session reuse fix; no source edits, no manual cycle forcing. Recommended Sonnet5（高）
 
 ## Claude G2
 - owner: claude
