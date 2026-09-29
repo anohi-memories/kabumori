@@ -3,7 +3,7 @@
 // NOT deployed, NOT scheduled (no Cron), NOT connected to important-news-monitor, shadow, Fact,
 // Voice, app copy, Push or X. Layer 3 Web Search runs only when a request sets search.enabled and
 // OPENAI_API_KEY is present, and only within the DB-enforced daily budget. Requires migration
-// 20260928120000_news_discovery_observer.sql (not applied to production) and the secret
+// 20260929090000_news_discovery_observer.sql (not applied to production) and the secret
 // NEWS_DISCOVERY_OBSERVER_SECRET (not created); without the secret every call is refused (503).
 // Design: docs/news-sources/n3_observer_db_function.md
 import { postgrestRpcClient } from "../_shared/news_discovery/supabase_store.ts";

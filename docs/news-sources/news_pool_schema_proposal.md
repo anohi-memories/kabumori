@@ -149,7 +149,7 @@ v0 はコード内の `KNOWN_ALIASES_V0` と `stocks_master` からの自動生�
 
 ## 追記（N3、2026-09-28）: 実装済みの差分
 
-本案をもとに migration `supabase/migrations/20260928120000_news_discovery_observer.sql` を作成した（**未適用**）。本案からの主な変更点は次のとおり。詳細は n3_observer_db_function.md §2。
+本案をもとに migration `supabase/migrations/20260929090000_news_discovery_observer.sql` を作成した（**未適用**）。本案からの主な変更点は次のとおり。詳細は n3_observer_db_function.md §2。
 
 - テーブル名：すべて `news_discovery_` 接頭辞にした（本番ニュースのテーブルと取り違えないため）。
 - 追加テーブル：`news_discovery_search_config`、`news_discovery_searches`（限定 Web Search の予算と記録）。`company_aliases` は作らず、v0 はコード内の辞書のまま。

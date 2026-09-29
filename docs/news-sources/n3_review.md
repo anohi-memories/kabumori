@@ -214,7 +214,7 @@ git diff --check
 5. `supabase/functions/_shared/news_discovery/web_search_test.ts`
 6. `supabase/functions/_shared/news_discovery/n3_review_test.ts`（新規）
 7. `supabase/functions/news-discovery-observer/observer_handler.ts`
-8. `supabase/migrations/20260928120000_news_discovery_observer.sql`（未適用candidateのみ）
+8. `supabase/migrations/20260929090000_news_discovery_observer.sql`（未適用candidateのみ）
 9. `supabase/tests/news_discovery_observer_behavior.sql`
 10. `supabase/tests/news_discovery_observer_run.sh`（race出力先もworktree専用mktempへ変更）
 11. `docs/news-sources/n3_review.md`（本Report）

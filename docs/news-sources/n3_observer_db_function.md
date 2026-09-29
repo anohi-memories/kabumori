@@ -31,7 +31,7 @@ Layer 4  将来の有料ニュース API（NewsSourceAdapter の差し替え点�
 
 `NewsSignalStore` は Memory / JsonFile / Supabase の 3 実装。pipeline は DB 実装に依存しない。
 
-## 2. DB（migration `20260928120000_news_discovery_observer.sql`、**未適用**）
+## 2. DB（migration `20260929090000_news_discovery_observer.sql`、**未適用**）
 
 先頭に `SOURCE CANDIDATE ONLY` と明記。新規オブジェクトはすべて `news_discovery_` 接頭辞で、既存テーブル（`important_news_candidates`、`important_news_monitor_runs`、`ai_usage_events`、shadow、`stocks_master`）には触れない。
 

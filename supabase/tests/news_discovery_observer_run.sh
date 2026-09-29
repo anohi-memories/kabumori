@@ -23,7 +23,7 @@ esac
 db="kabumori_news_discovery_$$"
 owner="kb_news_discovery_owner"
 here="$(cd "$(dirname "$0")" && pwd)"
-migration="$here/../migrations/20260928120000_news_discovery_observer.sql"
+migration="$here/../migrations/20260929090000_news_discovery_observer.sql"
 psql_bin="${PSQL:-psql}"
 as_super=("$psql_bin" -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$super")
 as_owner=("$psql_bin" -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$db")

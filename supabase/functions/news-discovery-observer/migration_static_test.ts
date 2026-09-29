@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { SEARCH_BUDGET_DEFAULTS } from "../_shared/news_discovery/search_config.ts";
 
-const MIGRATION = new URL("../../migrations/20260928120000_news_discovery_observer.sql", import.meta.url);
+const MIGRATION = new URL("../../migrations/20260929090000_news_discovery_observer.sql", import.meta.url);
 const sql = await Deno.readTextFile(MIGRATION);
 const code = sql.replace(/--[^\n]*/g, ""); // statements only (comments name existing tables on purpose)
 

@@ -1,4 +1,4 @@
--- Rollback for 20260928120000_news_discovery_observer.sql (observation-only objects).
+-- Rollback for 20260929090000_news_discovery_observer.sql (observation-only objects).
 -- Drops ONLY news_discovery_* objects; nothing else is touched. Observation data is lost.
 begin;
 drop function if exists public.news_discovery_begin_run(jsonb);

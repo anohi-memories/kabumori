@@ -1,4 +1,4 @@
--- Disposable-only behavior proof for 20260928120000_news_discovery_observer.sql.
+-- Disposable-only behavior proof for 20260929090000_news_discovery_observer.sql.
 -- Run by news_discovery_observer_run.sh as the (non-superuser) owner, switching roles to prove
 -- the privilege model. Every check raises on failure (ON_ERROR_STOP).
 \set ON_ERROR_STOP 1

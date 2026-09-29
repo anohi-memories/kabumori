@@ -1,5 +1,5 @@
 // Supabase (PostgREST RPC) implementation of NewsSignalStore for the observation-only tables of
-// migration 20260928120000_news_discovery_observer.sql. The pipeline only sees NewsSignalStore.
+// migration 20260929090000_news_discovery_observer.sql. The pipeline only sees NewsSignalStore.
 //
 // Writes go exclusively through the news_discovery_* SECURITY DEFINER functions (service_role
 // only); the tables themselves grant no INSERT/UPDATE/DELETE to anyone.
