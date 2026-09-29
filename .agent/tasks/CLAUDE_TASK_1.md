@@ -294,6 +294,37 @@ Recommended model: **Sonnet5（高）**.
 ### Status
 `review_required` / next_owner `chatgpt`. Build `a3e85d80…` must finish before the user can install it (link above). Production mutation: 0.
 
+## K1 interim — PR #60 source OK, visual gate incomplete
+
+- verdict: **CONTINUE G1; not ready for final K1 PASS/merge yet**.
+- reviewed PR #60 head: `ccb62538c43e6e8e6d6df40b9cb760cf32d718a5`.
+- PR is open and mergeable.
+- changed files are exactly the intended 4:
+  - `assets/images/report-states/report_04_neutral.webp`
+  - `src/components/home/character-slot.tsx`
+  - `src/components/home/report-highlight-card.tsx`
+  - `tests/app/report-character_test.ts`
+- source scope is accepted for phase 1: fixed 04 only, no 10-state selector, no backend/production mutation.
+- reported checks: app tests 198/198 PASS; Expo export PASS; only the known two unrelated CSS-module TS errors.
+- current main is 4 commits ahead of the PR base, but those commits only change `.agent/**`; overlap with PR #60's 4 files = **0**.
+- Vercel failure is rate-limit-only; Netlify status is success; not a source blocker.
+
+### Remaining mandatory visual gate
+
+Before final K1:
+1. complete the simulator visual inspection for:
+   - title wrapping
+   - report card height
+   - Yume-chan/robot/tablet readability
+   - first-viewport compactness
+2. if needed, adjust only centralized CharacterSlot size/offset constants; do not redesign the card.
+3. after simulator presentation is acceptable, create exactly one fresh iOS internal/preview EAS build from the PR #60 head (or its micro-adjusted successor).
+4. report final build ID/source SHA/install link and exact CharacterSlot width/offsets.
+5. STOP for K1; do not merge PR #60.
+
+No Codex review is required.
+Recommended model: **Sonnet5（高）**.
+
 ---
 
 ## Archived predecessor state
