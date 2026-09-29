@@ -3,8 +3,8 @@
 - task_id: kabumori-home-v3-postmerge-ios-preview-qa-20260929
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（中）
 - purpose: K1 PASSでmerge済みのHome v3修正PR #53をfresh mainからiOS internal/preview buildし、ユーザーが実機でHome・Topic Detail・Settings safe-area・Bottom Navを最終確認できる状態にする。source変更やproduction mutationは行わない。
@@ -1354,3 +1354,103 @@ This is source-only; actual visual/layout correctness (report card fitting the f
 ### Next recommendation
 
 K1 review → merge if satisfied → new EAS `preview` build → user real-device QA, checking specifically: report card fits above the fold, character placeholder looks intentional, topic tap opens the detail screen with real multi-paragraph content, Settings fully operable without overlapping the status bar.
+
+## Report — G1 result (home v3 post-merge iOS preview QA build ready)
+
+- task_id: kabumori-home-v3-postmerge-ios-preview-qa-20260929
+- fresh main SHA at start: `135dcc9`
+- worktree/branch: independent scratch checkout (no source change, so no branch created)
+- merge SHA `3b9ca0424e1ef6e079cc852e45ff66d0271c001e` confirmed contained in fresh main via `git merge-base --is-ancestor`, and again in the build's own source commit.
+
+### Phase A — post-merge source verification
+
+- `deno test` on the full listed regression set (home-topic, topic-detail-catalog, settings-menu, app-tabs, dashboard, home-report-highlights, home-news-sections, home-news-visual, news-labels, news-presentation, report-presentation, account-deletion): **103/103 pass**.
+- `npx tsc --noEmit`: 0 new errors under `src/` (same 2 pre-existing, unrelated CSS-module errors as `main`).
+- `npx expo config --json`: resolves cleanly.
+- `npx expo export --platform web --clear`: full static export succeeds, **13/13 routes** (including `/ai`, `/settings`, `/topic-detail`, `/portfolio`, `/news`).
+- `git diff --check`: clean (fresh clone, no diff).
+- **No source edits made or needed.**
+
+### Phase B — EAS build selection
+
+- EAS/Expo login: `anohi-memories` (voxy1948.p3@gmail.com), Owner on both accounts.
+- Project linkage: `@anohi-memoriess-team/kabumori`, ID `eb80adf3-861e-4a48-a373-2d9a85b58899`.
+- Bundle identifier: `com.anohimemories.kabumori`.
+- `EXPO_PUBLIC_*` presence in `preview`: both present (`EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `EXPO_PUBLIC_SUPABASE_URL`) — names only, values never displayed.
+- Signing/provisioning: existing Ad Hoc distribution certificate (expires 2027-09-10) and provisioning profile (Developer Portal ID `5M79MS9DFQ`), both reused — **no new credentials generated, no Apple login/device-registration interaction needed**.
+- Reusable-build check: latest 3 `preview` builds' source commits (`6b59c3f...`, `f04ccf35...`, `12db8657...`) all predate PR #53's merge (`3b9ca042...`) — confirmed by absence, none is an ancestor-containing commit. The task's own flagged old build (`9f0e45a1...`) was correctly **not reused**. Created exactly one new build.
+
+### Build
+
+| Field | Value |
+| --- | --- |
+| Platform | iOS |
+| Profile | `preview` (internal distribution) |
+| Status | **finished** |
+| Build ID | `d9ed1da1-9542-45c7-b704-d89eaba9a978` |
+| Source commit | `135dcc96c394fba5948a45ea4eca45f7dea5d595` (fresh main at task start; contains PR #53's merge) |
+| Bundle identifier | `com.anohimemories.kabumori` |
+| Distribution certificate / provisioning profile | existing, reused — **no new credentials generated** |
+| Started / finished | 2026-09-29 14:02:27 / 14:07:24 |
+| Install link | https://expo.dev/accounts/anohi-memoriess-team/projects/kabumori/builds/d9ed1da1-9542-45c7-b704-d89eaba9a978 |
+
+### Source changes
+
+**0**, as expected.
+
+### Production mutation
+
+**0.** No Supabase mutation, no migration/DDL/DML, no Auth/SMTP config change, no EAS production secret/env change, no bundle identifier/projectId change, no App Store/TestFlight action.
+
+### Exact user QA checklist
+
+**A. Home first viewport**
+1. ヘッダーがすっきりしていて大きすぎない
+2. 今日のかぶモリレポートがコンパクトで、画面のおよそ半分を占めていない
+3. 以前の大きな丸+🌱が無くなっている
+4. 重要ニュースの入り口がファーストビュー付近で自然に見える
+5. キャラクター領域が壊れたアセットではなく、控えめなプレースホルダーに見える
+
+**B. 重要ニュース / 保有銘柄ニュース**
+6. 重要ニュースがデータがある場合およそ3件表示される
+7. カテゴリ／タイトル／時刻／重要度の階層が読みやすい
+8. あなたの保有銘柄 最新ニュースが存在し、空の場合も誠実に表示される
+
+**C. 今日のトピック**
+9. Homeカードにレベルバッジ＋タイトル＋プレビュー＋「詳しく読む →」が表示される
+10. カードをタップすると `/topic-detail` が開く
+11. 詳細画面はタップした通りの同じトピックを表示する（別の日/レベルのものに化けない）
+12. 詳細に「ひとことで／なぜ大事か／見るときのポイント／注意点」など複数の読みやすいセクションがある
+13. 戻る操作でHomeへ正しく戻る
+
+**D. Settings safe-area（リリースブロッカー級の確認）**
+14. Home右上から設定を開く
+15. 下部タブから設定を開く
+16. SETTINGS／設定のヘッダーが時計・Dynamic Island・電波・電池と重ならない
+17. 上部のすべての操作がタップ可能
+18. 投資知識レベルのサブ画面の戻るボタンが完全にsafe area内にある
+19. アカウント削除のサブ画面の戻るボタンが完全にsafe area内にある
+20. 投資知識レベル（初心者/中級者/上級者）を変更でき、変更が保存される
+
+**E. Bottom navigation**
+21. 表示順が正確に: ホーム／銘柄／レポート／AIに聞く／設定
+22. ポートと重要ニュースが独立した下部タブとして存在しない
+23. 既存のポートフォリオが設定から到達可能
+24. 既存のニュースがHomeのリンクから到達可能
+
+**F. 回帰確認**
+25. 今日のかぶモリレポートが引き続きその詳細を開ける
+26. 重要ニュース／保有銘柄ニュースが引き続き読み込まれる
+27. AIに聞くが誠実な準備中画面を開き、偽のチャットにならない
+28. ログアウト／パスワード再設定／アカウント削除の設定でクラッシュしない
+29. 致命的なエラー/赤画面が出ない
+
+I will not mark this checklist PASS myself; it needs the user's own observation on the device, per this task's own instruction.
+
+### Remaining issues
+
+None found in the automated/read-only checks. Waiting on the user's real-device confirmation of the checklist above.
+
+### Next recommendation
+
+Send the user the install link and checklist; once they report the result, a final G1 pass records PASS/issues for K1.
