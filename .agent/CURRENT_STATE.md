@@ -2125,3 +2125,22 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - production_mutation=0.
 - G3 assigned a UI/navigation-only fix; no backend change.
 - recommended Claude model: Sonnet5（高）.
+
+
+## Final K3 onboarding deletion entry fix
+- verdict: PASS.
+- PR #59 head `2a5fab88ddad660f8c359465c67c4aadcbc6ed00`.
+- onboarding-incomplete states now expose a secondary account-deletion entry and can open the deletion screen without Home.
+- recent-auth, typed confirmation, user/session pinning and feature-off behavior remain unchanged.
+- tests: mobile 78/78, data-view 14/14, typecheck/lint, Expo web+iOS export, diff/secret checks PASS.
+- production_mutation=0.
+- Codex review not required because this was UI/navigation only.
+- PR #59 squash-merged as `cbf3945c0c576695fc7d5d5cb2e108ae15f65bea`.
+
+
+## G3 Stage 2 E2E resumed after PR #59
+- task_id: `x-social-mobile-account-deletion-prod-e2e-stage2-resume-20260930`
+- use disposable identities only.
+- obtain fresh explicit user confirmation before first destructive valid-user action.
+- feature remains OFF.
+- recommended Claude model: Opus5.5（高）.
