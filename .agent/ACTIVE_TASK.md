@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: done
 - task_id: kabumori-market-report-analysis-prod-sync-content-guard-20260929
 - start_code: H1
 - finish_code: C1
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: deploy/read-back only for merged PR #57 market-report-analysis with consumer gates OFF; verify source identity, verify_jwt, cron, gates, other Functions unchanged. No manual cycle. Recommended Sol（高）
+- allocation: cancelled before execution as misrouted; production mutation 0. Task moved to G2. H1 must not run it concurrently.
 
 ## Codex H2
 - owner: codex
@@ -54,12 +54,12 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: done
-- task_id: kabumori-shared-analysis-content-guard-fix-20260929
+- status: ready
+- task_id: kabumori-market-report-analysis-prod-sync-content-guard-20260929
 - start_code: G2
 - finish_code: K2
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: closed; Final K2 PASS. PR #57 accepted at b8bbfe9 and merged as 9488f9e. Production rollout moved to H1; consumers remain OFF.
+- allocation: controlled production sync of merged PR #57 market-report-analysis only; consumers OFF, source read-back + verify_jwt/cron/gates/other-functions invariants, no manual cycle. Recommended Sonnet5（高）
 
 ## Claude G3
 - owner: claude
