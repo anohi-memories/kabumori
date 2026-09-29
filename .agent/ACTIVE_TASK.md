@@ -44,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: done
-- task_id: kabumori-data-packet-session-reuse-prod-sync-20260929
+- status: ready
+- task_id: kabumori-home-ui-continuation-20260929
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: closed; G1 STOP was superseded by H1 controlled rollout and Final C1 PASS. No remaining work; do not restart.
+- allocation: Home/UI/navigation continuation from merged PR #56. UI-only workstream; no market-report backend/DB/Edge Function work. Await concrete user UI instruction/screenshot before source edits. Recommended Sonnet5（高）
 
 ## Claude G2
 - owner: claude
