@@ -3,8 +3,8 @@
 - task_id: kabumori-home-ui-continuation-20260929
 - owner: claude
 - slot: claude-1
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: PR #56後の現行かぶモリアプリを基準に、ホーム画面・ナビ・メニュー・実機UIの継続改善をG1で担当する。この部屋のG1はUI系workstreamとして固定し、market-report backend / Edge Function / DB作業を混在させない。
@@ -252,6 +252,47 @@ Recommended model: **Sonnet5（高）**.
 - The historical market-report-data-packet blocker note is stale: that rollout was completed by H1 and accepted by Final C1. Do not restart or wait on that backend task from G1.
 - No Codex review is required for this low-risk UI-only phase.
 - recommended model: Sonnet5（高）.
+
+## Report — G1: Home report card, fixed approved 04 Yume-chan (phase 1) — PR #60 + iOS preview build queued
+
+- task_id: kabumori-home-ui-continuation-20260929 (phase 1: fixed 04)
+- result: implemented; **awaiting user real-device visual review** (phase 2 not started, by design)
+- fresh main at start: `4ffb85407d1fee32a1f04b2e907863ebf4887008` (isolated scratch clone, not shared checkout / G2)
+- PR: https://github.com/anohi-memories/kabumori/pull/60 — head `ccb62538c43e6e8e6d6df40b9cb760cf32d718a5`, branch `claude/home-report-yume-04-fixed-20260930`. **Not merged (no self-merge).**
+- iOS preview build (internal/Ad Hoc, from PR head, not from main): `a3e85d80-4369-40c1-97c0-d24dc75d68eb`, source `ccb62538…`, status at report time **NEW/queued** (`--no-wait`). https://expo.dev/accounts/anohi-memoriess-team/projects/kabumori/builds/a3e85d80-4369-40c1-97c0-d24dc75d68eb — same cert/profile as earlier preview builds; no production EAS env, no App Store/TestFlight.
+
+### Exact asset
+- Repo path: `assets/images/report-states/report_04_neutral.webp` (canonical name kept), 1,207,726 bytes, sha256 `d51dd2f91207bb48589268aca76b6025dd17ab5961165c089e64124452499c7a`, lossless VP8L WebP with alpha, 1536x1024.
+- Provenance: the user supplied it in `~/Desktop/ゆめちゃん素材/report_04_neutral.webp.png` (misnamed: actually an RGBA PNG, sha256 `131c7f1d62ae81e5b8f417348f37f4bc289fe7c57d3cbb5ea2a0b9ffd4cf7051`, 1536x1024; visually identical to the image the user attached in chat). Converted with `cwebp -lossless -exact`; decoded RGBA verified **pixel-identical (incl. alpha)** to the PNG. No redraw / crop / resize / recolor / substitution. The Desktop folder also contains `report_02_positive.webp.png`; it was NOT used or copied (phase 2).
+
+### changed_files (4)
+- `assets/images/report-states/report_04_neutral.webp` (new)
+- `src/components/home/character-slot.tsx` — 48x48 stub → 3:2 footprint `CHARACTER_SLOT_WIDTH=96` × `CHARACTER_SLOT_HEIGHT=64`; centralized knobs `CHARACTER_SLOT_WIDTH`, `CHARACTER_OFFSET_X=0`, `CHARACTER_OFFSET_Y=0`, `CHARACTER_ASPECT_RATIO`; `contentFit="contain"`, no `overflow:hidden`, no frame/bg/shadow, hidden from accessibility.
+- `src/components/home/report-highlight-card.tsx` — single `FIXED_REPORT_CHARACTER_SOURCE = require(...)` passed to the existing `CharacterSlot` seam; same image for loading/empty/error/report states. Layout of title/description/points/CTA unchanged.
+- `tests/app/report-character_test.ts` (new, 4 tests): asset hash/VP8L/alpha/1536x1024; card wires exactly the one fixed source (no other report-state file, no 10-state mapping); slot uncropped/decorative/knobs exported/no frame; footprint 3:2 and compact.
+- Not touched: data fetching, report selection, navigation, backend, DB, Edge Functions, consumer gates. **Backend/production mutation = 0.**
+
+### Tests / checks
+- `deno test --no-check --no-lock --allow-read tests/app/`: **198 passed / 0 failed** (194 + 4 new; navigation regression tests green).
+- `tsc` (src/): only the 2 known pre-existing CSS errors.
+- `expo export --platform web` (dummy env): PASS; `report_04_neutral.<hash>.webp` bundled by Metro.
+- diff whitespace check: clean.
+- **iOS Simulator live check** (disposable auth-bypass + fixture rig in a copy; no commit): iPhone 17 Pro 402pt and iPhone SE3 375pt (real simulator), 393/360/320pt emulated by max-width; screenshots in `scratchpad/yume-shots/` (local).
+
+### Simulator findings
+- Character fully visible, uncropped, transparent (verified against a pink card background: no box/halo), top-right of the card, 10pt gap to the text column.
+- Title 「今日の かぶモリレポート」 (189pt at 18pt bold) stays **one line at 402 / ~393 / 375pt** (margin 37 / – / 10pt). Card height is **unchanged vs the old 48pt stub at 375–402pt** (305pt with a report), because the text column (76pt) is taller than the 64pt image.
+- Description/points/CTA never overlap; description still 2 lines at 402pt. First viewport still reaches header → report card → important news heading (402pt: news items visible; SE3 667pt: heading visible, first item partly under the tab bar).
+- Legibility at 96pt: Yume-chan's face/expression clear; robot (with sprout) recognizable; tablet shape recognizable but chart contents not legible; wand visible. Not too small as a decorative accent; 112pt is only marginally better.
+
+### Remaining visual issues / questions for the user's real-device review
+1. **Title wraps to 2 lines (last glyph 「ト」 alone) below ~365pt width and at iOS Dynamic Type ≥ XXL** (would not wrap with the old 48pt stub). Current iPhones are ≥375pt so it is unaffected by default. Optional follow-up if the user wants: `numberOfLines={1}` + `adjustsFontSizeToFit`/`maxFontSizeMultiplier` on the title, or a width-aware slot (`min(96, screenWidth − 269 − 8)`). Not done — not requested, avoids scope creep.
+2. Size: 96pt kept (recommended; 1-line title is guaranteed up to a slot width of about screen width − 269, i.e. ≤106pt at 375pt). Anything larger than ~106pt needs the width-aware slot.
+3. Position/size/balance = user's call after the build. Micro-adjustments are one-line constant edits in `character-slot.tsx`.
+4. Phase 2 (other 9 states + selection contract) NOT started; wait for user's approval of phase 1.
+
+### Status
+`review_required` / next_owner `chatgpt`. Build `a3e85d80…` must finish before the user can install it (link above). Production mutation: 0.
 
 ---
 
