@@ -220,6 +220,8 @@ export function createObserverHandler(deps: ObserverDeps): (request: Request) =>
       ...deadline.stats,
       elapsed_ms: deadline.elapsedMs(),
       signals_persisted: run?.persistedCount ?? 0,
+      // Freshness guard: items dropped as stale (no schema change; lives in the execution JSON).
+      stale_filtered: run ? run.stats.reduce((total, s) => total + s.stale_filtered, 0) : 0,
     });
     try {
       let aliasIndex: AliasIndex | null = null;

@@ -42,6 +42,7 @@ const WWW_SCHEMELESS = /^www\.[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:[/?#:]|$)/i;
  */
 export function resolveHttpUrl(raw: string, base?: string): string | null {
   const value = raw.trim();
+  // deno-lint-ignore no-control-regex -- control characters inside a link are rejected on purpose
   if (!value || /[\s\u0000-\u001f\u007f]/.test(value)) return null;
   const candidate = WWW_SCHEMELESS.test(value) ? `https://${value}` : value;
   let url: URL;
@@ -121,6 +122,29 @@ export function parseTimestamp(raw: string | null): ParsedTime {
 }
 
 export const FUTURE_SKEW_TOLERANCE_MS = 60 * 60 * 1000;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Latest instant a parsed timestamp can denote. A date-only value ("YYYY-MM-DD", no zone) is still
+ * that calendar day somewhere until 12:00 UTC of the next day (UTC-12), so it is never treated as
+ * older than it can possibly be.
+ */
+function latestInstant(parsed: NonNullable<ParsedTime>): number {
+  const start = Date.parse(parsed.precision === "date" ? `${parsed.iso}T00:00:00Z` : parsed.iso);
+  return parsed.precision === "date" ? start + 36 * 60 * 60 * 1000 : start;
+}
+
+/**
+ * Freshness guard. Effective time = published, else updated (Atom feeds such as JMA only have
+ * updated). A newer update does not make an old publication new. No usable timestamp -> not stale
+ * (kept). Stale only when certainly older than the window (exactly maxAgeDays old is kept).
+ */
+export function isStale(published: ParsedTime, updated: ParsedTime, now: Date, maxAgeDays: number): boolean {
+  const effective = published ?? updated;
+  if (!effective) return false;
+  return now.getTime() - latestInstant(effective) > maxAgeDays * DAY_MS;
+}
 
 export function isFuture(parsed: ParsedTime, now: Date): boolean {
   return !!parsed && parsed.precision === "datetime" && Date.parse(parsed.iso) > now.getTime() + FUTURE_SKEW_TOLERANCE_MS;
