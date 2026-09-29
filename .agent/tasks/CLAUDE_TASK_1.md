@@ -3,8 +3,8 @@
 - task_id: kabumori-data-packet-session-reuse-prod-sync-20260929
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sonnet5（高）
 - purpose: K2で判明したproduction `market-report-data-packet` のsource遅れを解消し、mainに既に存在するsame-session reuse fix（`aecfa60`系）を、対象Edge Functionだけへcontrolled deployしてsource read-backまで確認する。新規source修正は禁止。
@@ -1893,3 +1893,36 @@ User-directed decisions (chat, 2026-09-29) — these **deviate from the previous
 
 ### Status
 `review_required` / next_owner `chatgpt` is set **only to hand this sync back to K1**. It does **not** mean the queued task was completed — it was not started. K1 please re-issue/confirm the queued task (or reassign it) after reading this.
+
+## Report — G1: STOPPED before mutation (production-read blocker); deploy NOT performed
+
+- task_id: kabumori-data-packet-session-reuse-prod-sync-20260929
+- result: **STOP / BLOCKED before any production mutation.** Production mutation = **0**. No deploy, no cron/flag/DB change, no source edit.
+- fresh main used for verification: `15a7ac72aba611f1eff734c38b3e6c517b4e691c` (isolated scratch clone; not the shared checkout, not G2). `aecfa60` is an ancestor of it (confirmed).
+
+### Pre-deploy proof completed (all read-only)
+- Production `market-report-data-packet` metadata (`supabase functions list --project-ref wsmznyzcvmuitkglfeuj`): **version 11**, updated_at == created_at (1789623825492, i.e. never redeployed), **verify_jwt=false** (must be preserved), no import_map, ezbr_sha256 `0508c3a8ae27ba5fca6e58bbf04608dc2652e2ff519fdcd12387f01bba952323`. Its recorded entrypoint points at a shared-checkout worktree path (`/Users/yuya/Developer/kabumori/.claude/worktrees/ios-push-e2e/supabase/functions/market-report-data-packet/index.ts`) — see deploy-path note below.
+- Production source downloaded (`supabase functions download ... --use-api`, read-only) and diffed against fresh main `supabase/functions/market-report-data-packet/**`. **Drift proven**:
+  - `session_reuse.ts` — **absent in production**, present in main.
+  - `handler.ts` — production lacks the `StoredPacketRow` import, `STORED_PACKET_LOOKBACK_DAYS/LIMIT`, the `stored_packets` fetch (`market_data_packets?...data_quality_status=in.(ok,partial)...`), and `storedPackets` passed to the builder.
+  - `packet_builder.ts` — production lacks `applySessionReuse` / `buildReuseIndex` / `storedPackets` input.
+  - `packet_schema.ts` — production lacks `ReusedFrom`, `reused_from`, `reused[]`, `REUSE_PROVIDER` and the `reuse_*` validation issues.
+  - `index.ts`, `mic_metrics.ts`, `session_logic.ts`, `yahoo_daily.ts` — identical.
+  - Only main has the tests/fixtures (`*_test.ts`, `test_fixtures.ts`), which are not part of the deployed bundle.
+  → production is missing the same-session reuse fix; a deploy is warranted.
+- Main tests: `deno test supabase/functions/market-report-data-packet/` = **42 passed / 0 failed** (includes `session_reuse_test.ts`, `handler_test.ts`, `packet_builder_test.ts`); diff whitespace check clean.
+
+### Exact blocker
+The task requires, before any mutation, confirming **cron unchanged** and **app_enabled=false / x_enabled=false**. Those are production DB reads. The auto-mode classifier denied them: `supabase db query --linked "select jobname, schedule, active from cron.job where command ilike '%market-report-data-packet%' ..."` → **denied, reason "[Production Reads]"** (same class as the earlier `db dump`/`db query` denials). Per the classifier instruction and the task ("If production-read/write permissions block the mandated checks, STOP before mutation and report the exact blocker") I did not retry, split the query, or use another route (no REST/service-key, no other tool). I also did not deploy without those pre-state records, because the post-deploy read-back needs a before/after comparison and the deploy is a mutation.
+Note: `supabase functions list/download` and `migration list` were allowed; only DB queries are blocked.
+
+### What K1/user needs to decide
+Option A (recommended): the user runs the small read-only SQL themselves (Supabase SQL editor) and pastes results to K1/G1, or grants a Bash permission rule for these read-only queries, then re-issue and G1 continues with the deploy:
+1. `select jobid, jobname, schedule, active, command from cron.job order by jobid;` (record; must be identical after deploy)
+2. read the `app_enabled` / `x_enabled` gate rows (location per the report-pipeline config; expected false / false)
+Option B: the user runs the deploy + read-back themselves.
+
+Deploy-path note (important): the production function's current entrypoint was built from the shared checkout, and a fresh clone has no `supabase/config.toml` (it is untracked in the shared checkout). Deploy must come from a clean clone of fresh main with the function directory verified, then byte read-back (`supabase functions download`, `diff -r` vs main, confirm `session_reuse.ts` exists, `verify_jwt` still false). Planned command (clean clone of main, config.toml supplied): `supabase functions deploy market-report-data-packet --project-ref wsmznyzcvmuitkglfeuj --no-verify-jwt` (keeps verify_jwt=false; explicit ref; single function).
+
+### Status
+Production mutation: 0. Rollback: not needed. `review_required` / next_owner `chatgpt` = STOP for K1 decision on the blocker; the deploy itself is **not done**.
