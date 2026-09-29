@@ -7,7 +7,7 @@
 - fresh_origin_main_at_start: `d79b0c8524af56cc56c5245f5037517fc689d917`; final report preparation base: `bb575627c6cf0e01da3c2b694822b9a2ef256435`. Intervening main changes did not touch H2's controls or the accepted deletion source.
 - independent_worktree: `/private/tmp/kabumori-h2-account-deletion-report-20260929`, H2-owned branch `codex/h2-account-deletion-report-20260929`. Only this previously clean H2 checkout was fast-forwarded. Formal shared checkout and other worktrees were not edited.
 - changed_files: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md` only. Source fixes / implementation commits: **0**.
-- commit_hash / push: this Report/TASK synchronization is pending until independently confirmed below; no source commit, merge or deploy by H2.
+- report_commit_hash: `6c9f680be8548ca65c01b029937be952cf0199c7` (H2 TASK/REPORT only). Push: **SUCCESS**, normal fast-forward to origin/main. Fresh remote read-back confirmed this commit's inclusion, this task_id at the Report head and TASK `review_required / next_owner: chatgpt`. This delivery acknowledgement changes only the H2 Report; no source commit, merge or deploy by H2.
 - production_mutation_by_H2: **0**.
 
 ### A — Migration production identity / RPC protection (sanitized)
@@ -45,7 +45,7 @@ Only a public legacy anon JWT, validated as an anon/non-user credential for the 
 | GET | 405 `METHOD_NOT_ALLOWED` | PASS |
 
 - Smoke: **7/7 PASS**. Valid-user requests **0**. State/audit remained **0/0** afterward; no deletion lifecycle started.
-- No regression suite was rerun: this is production read-back/HTTP verification, with no source change. The earlier exact-source checked-Deno/concurrency proofs remain historical evidence, not newly claimed test executions. `git diff --check` is required again for the control-file commit.
+- No regression suite was rerun: this is production read-back/HTTP verification, with no source change. The earlier exact-source checked-Deno/concurrency proofs remain historical evidence, not newly claimed test executions. Control-file `git diff --check` and staged diff check: **PASS**.
 
 ### D — STOP finding / production mutation audit / evidence limits
 
