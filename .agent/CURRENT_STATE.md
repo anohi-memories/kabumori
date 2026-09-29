@@ -1737,3 +1737,22 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - small bounded fixes allowed; design-level uncertainty must stop and report.
 - finish code: C2.
 - recommended Codex model: Sol（高）.
+
+
+## Final C2 PR #52 privileged account deletion review
+
+- verdict: **FAIL**.
+- reviewed draft PR #52 head `12146c4ab2bc635a2781b673146e1f8ad8350258`.
+- P1 blockers:
+  1. deletion not durably serialized against X OAuth reconnect or purge -> Auth deletion gap.
+  2. social-mobile deletion deletes shared Auth and cascades Kabumori main-app data without matching cross-product consent.
+  3. shared/corrupt Vault secret references are not rejected before privileged deletion.
+- P2 blockers:
+  - missing X credentials can be treated as revoke success,
+  - Apple single-use authorizationCode retry is not resumable,
+  - Edge web CORS/path support incomplete,
+  - client deletion state needs exact user/session pinning.
+- privileged RPC ACL/search_path and several tenant guards passed.
+- production_mutation=0.
+- PR #52 remains DRAFT/unmerged.
+- G3 assigned one coordinated correction task; recommended Opus5.5（高）.
