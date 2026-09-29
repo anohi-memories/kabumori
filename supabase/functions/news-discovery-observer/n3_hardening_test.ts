@@ -177,6 +177,30 @@ test("M1: search succeeds but its signals cannot be written -> usage kept, row c
   assert.equal((finish.totals as Record<string, number>).search_count, 1);
 });
 
+test("M1: the dedupe lookup fails after a paid search -> row still completed with usage, no further search, run failed", async () => {
+  const db = new Db();
+  db.failOn.set("news_discovery_find_duplicates", 2); // 1st = feed ingest, 2nd = the search's results
+  const provider = new Provider(() => ({
+    ok: true,
+    results: [{ url: "https://open.example/c", title: "Chip plant fire halts production", publisher: "open.example" }],
+    rejected_unverified: 0,
+    usage,
+  }));
+  const budget = new InMemorySearchBudget(undefined, () => NOW);
+  const { post } = setup({ db, provider, budget });
+  const response = await post({ sources: ["jp_mof_news"], search: { enabled: true, anomalies: [{ instrument: "SOX" }] } });
+  const body = await response.json();
+  assert.equal(provider.calls.length, 1, "no retry of the search, no further search after a DB failure");
+  assert.equal(budget.rows.filter((row) => row.status === "reserved").length, 0, "no row left reserved without usage");
+  assert.equal(budget.completions.length, 1);
+  assert.equal(budget.completions[0].status, "succeeded");
+  assert.equal(budget.completions[0].error_code, "SIGNAL_DEDUPE_FAILED");
+  assert.equal(budget.completions[0].result_count, 1);
+  assert.deepEqual(budget.completions[0].usage, usage, "usage kept");
+  assert.equal(body.status, "failed");
+  assert.equal(response.status, 500);
+});
+
 test("M1: search signals are persisted BEFORE the search row is completed", async () => {
   const db = new Db();
   const order: string[] = [];

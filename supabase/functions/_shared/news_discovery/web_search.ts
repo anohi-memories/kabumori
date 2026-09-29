@@ -597,36 +597,46 @@ export async function executeSearchStage(input: {
       });
     }
     const duplicatesBefore = input.run.duplicates.length;
-    const fresh = await input.run.ingest(source, items, {
-      via: `search:${request.lane}:${request.reason}`,
-      feedUrl: source.endpoint,
-      fetchedAt,
-      decorate: (signal) => {
-        const restriction = publisherRestriction(signal.canonical_url);
-        return {
-          ...signal,
-          search_id: reservation.search_id,
-          restricted_publisher: restriction?.scope === "no_direct_fetch",
-          needs_verification: restriction
-            ? [...new Set([...signal.needs_verification, "restricted_publisher_needs_primary" as const])]
-            : signal.needs_verification,
-        };
-      },
-    });
+    // Persist this search's signals BEFORE completing its row, so the DB can count what was really
+    // stored for this search_id. A DB failure after the paid call (dedupe lookup or write) keeps the
+    // search's usage (the row is completed with an error code) and is never "fixed" by searching
+    // again: no further search starts in this run.
+    let persistError: string | null = null;
+    let fresh: NewsSignal[] = [];
+    let persistedIds = new Set<string>();
+    try {
+      fresh = await input.run.ingest(source, items, {
+        via: `search:${request.lane}:${request.reason}`,
+        feedUrl: source.endpoint,
+        fetchedAt,
+        decorate: (signal) => {
+          const restriction = publisherRestriction(signal.canonical_url);
+          return {
+            ...signal,
+            search_id: reservation.search_id,
+            restricted_publisher: restriction?.scope === "no_direct_fetch",
+            needs_verification: restriction
+              ? [...new Set([...signal.needs_verification, "restricted_publisher_needs_primary" as const])]
+              : signal.needs_verification,
+          };
+        },
+      });
+    } catch (error) {
+      persistError = "SIGNAL_DEDUPE_FAILED";
+      stats.persist_failed = true;
+      input.log?.({ event: "news_discovery_search_persist_failed", search_id: reservation.search_id, error: error instanceof Error ? error.message.slice(0, 120) : "unknown" });
+    }
     const duplicates = input.run.duplicates.length - duplicatesBefore;
     const useful = fresh.filter(isUsefulSignal).length;
 
-    // Persist this search's signals BEFORE completing its row, so the DB can count what was really
-    // stored for this search_id. A write failure keeps the search's usage (the row is completed with
-    // an error code) and is never "fixed" by searching again: no further search starts in this run.
-    let persistError: string | null = null;
-    let persistedIds = new Set<string>();
-    try {
-      persistedIds = new Set((await input.run.persist(fresh)).inserted);
-    } catch (error) {
-      persistError = "SIGNAL_PERSIST_FAILED";
-      stats.persist_failed = true;
-      input.log?.({ event: "news_discovery_search_persist_failed", search_id: reservation.search_id, error: error instanceof Error ? error.message.slice(0, 120) : "unknown" });
+    if (!persistError) {
+      try {
+        persistedIds = new Set((await input.run.persist(fresh)).inserted);
+      } catch (error) {
+        persistError = "SIGNAL_PERSIST_FAILED";
+        stats.persist_failed = true;
+        input.log?.({ event: "news_discovery_search_persist_failed", search_id: reservation.search_id, error: error instanceof Error ? error.message.slice(0, 120) : "unknown" });
+      }
     }
     const persistedFresh = fresh.filter((signal) => persistedIds.has(signal.id));
     const persistedUseful = persistedFresh.filter(isUsefulSignal).length;
