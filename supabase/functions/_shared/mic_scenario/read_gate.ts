@@ -91,7 +91,16 @@ export type ScenarioSourceDomainView = {
   coverage_status: string | null;
   data_confidence: number | null;
   state_evaluated_at: string | null;
-  quality_changed_since_generation: boolean;
+  // Did this State's quality worsen since the Scenario was generated
+  // (narrative freshness, observation_status, coverage_status or
+  // data_confidence, compared with the evidence snapshot)?
+  //   true   comparable, and at least one dimension worsened
+  //   false  comparable, and nothing worsened
+  //   null   not comparable: integrity failure (read race, malformed
+  //          current/evidence, State row missing, identity/content drift)
+  //          or a live quality value that cannot be interpreted
+  // Informational only; the status is decided independently of this flag.
+  quality_changed_since_generation: boolean | null;
 };
 
 export type ScenarioReadResult = {
@@ -131,6 +140,7 @@ const CONTENT_FIELDS = [
 ] as const;
 const OBSERVATION_RANK: Record<string, number> = { fresh: 0, delayed_expected: 0, stale: 1, unknown: 2 };
 const COVERAGE_RANK: Record<string, number> = { full: 0, partial: 1, unavailable: 2 };
+const FRESHNESS_RANK: Record<string, number> = { fresh: 0, recent: 1, stale: 2 };
 const HOUR_MS = 60 * 60 * 1000;
 const EPSILON = 1e-9;
 
@@ -276,9 +286,96 @@ function derivedValidUntil(evidence: readonly ParsedEvidence[]): number {
   );
 }
 
+// Live quality values of one domain's State row, for display only. The
+// comparison flag starts as null (not comparable) and is set only after the
+// row has been matched to the evidence the Scenario AI saw.
+function liveView(domain: ScenarioDomain, row: StateRow | null, now: number): ScenarioSourceDomainView {
+  return {
+    domain,
+    narrative_freshness: classifyFreshness(domain, row?.ai_evaluated_at, now),
+    observation_status: typeof row?.observation_status === "string" && Object.hasOwn(OBSERVATION_RANK, row.observation_status)
+      ? row.observation_status : null,
+    coverage_status: typeof row?.coverage_status === "string" && Object.hasOwn(COVERAGE_RANK, row.coverage_status)
+      ? row.coverage_status : null,
+    data_confidence: isConfidence(row?.data_confidence) ? row.data_confidence : null,
+    state_evaluated_at: isTime(row?.ai_evaluated_at) ? row.ai_evaluated_at : null,
+    quality_changed_since_generation: null,
+  };
+}
+
+// Views for an integrity failure: live values where readable, never a
+// true/false comparison.
+function integrityViews(domains: readonly ScenarioDomain[] | null, states: unknown, now: number): ScenarioSourceDomainView[] {
+  if (!domains || !Array.isArray(states) || !states.every(isObject)) return [];
+  return domains.map((domain) => {
+    const rows = (states as StateRow[]).filter((row) => row.domain === domain);
+    return liveView(domain, rows.length === 1 ? rows[0] : null, now);
+  });
+}
+
+// Worsening of each quality dimension since generation. Reason codes are the
+// same ones the degraded status reports. `comparable` is false when a live
+// value cannot be interpreted (then "no change" cannot be claimed).
+function qualityDelta(row: StateRow, item: ParsedEvidence, now: number): { changed: string[]; comparable: boolean } {
+  const domain = item.domain;
+  const changed: string[] = [];
+  let comparable = true;
+  const freshness = classifyFreshness(domain, row.ai_evaluated_at, now);
+  if (!Object.hasOwn(FRESHNESS_RANK, freshness)) comparable = false;
+  else if (FRESHNESS_RANK[freshness] > FRESHNESS_RANK[item.freshness]) changed.push(`narrative_aged:${domain}`);
+  const observation = row.observation_status;
+  if (typeof observation !== "string" || !Object.hasOwn(OBSERVATION_RANK, observation)) comparable = false;
+  else if (OBSERVATION_RANK[observation] > OBSERVATION_RANK[item.snapshot.observation_status]) {
+    changed.push(`observation_worsened:${domain}`);
+  }
+  const coverage = row.coverage_status;
+  if (typeof coverage !== "string" || !Object.hasOwn(COVERAGE_RANK, coverage)) comparable = false;
+  else if (COVERAGE_RANK[coverage] > COVERAGE_RANK[item.snapshot.coverage_status]) changed.push(`coverage_worsened:${domain}`);
+  if (!isConfidence(row.data_confidence)) comparable = false;
+  else if (row.data_confidence < item.snapshot.data_confidence - EPSILON) changed.push(`data_confidence_decreased:${domain}`);
+  return { changed, comparable };
+}
+
+type SourceComparison = {
+  item: ParsedEvidence;
+  row: StateRow | null;
+  view: ScenarioSourceDomainView;
+  // Why the live row cannot be compared with the evidence, if it cannot.
+  integrity: "state_row_missing" | "state_row_duplicated" | "state_identity_drift" | "state_content_drift" | null;
+  changed: string[];
+};
+
+// Matches every evidence snapshot with its live State row. Same-run identical
+// re-saves are safe; changed AI content is not (the service role can write
+// these fields without advancing the run identity).
+function compareSources(evidence: readonly ParsedEvidence[], states: readonly StateRow[], now: number): SourceComparison[] {
+  return evidence.map((item) => {
+    const rows = states.filter((row) => row.domain === item.domain);
+    const row = rows.length === 1 ? rows[0] : null;
+    const view = liveView(item.domain, row, now);
+    const base = { item, row, view, changed: [] as string[] };
+    if (!row) return { ...base, integrity: rows.length === 0 ? "state_row_missing" : "state_row_duplicated" };
+    if (row.source_evaluation_run_id !== item.snapshot.source_evaluation_run_id ||
+      !isTime(row.ai_evaluated_at) || Date.parse(row.ai_evaluated_at) !== Date.parse(item.snapshot.ai_evaluated_at)) {
+      return { ...base, integrity: "state_identity_drift" };
+    }
+    if (["narrative", "bullish_factors", "bearish_factors", "key_risks", "ai_confidence"].some((key) =>
+      JSON.stringify(row[key as keyof StateRow]) !== JSON.stringify(item.snapshot[key as keyof StateSnapshot])
+    )) {
+      return { ...base, integrity: "state_content_drift" };
+    }
+    const delta = qualityDelta(row, item, now);
+    view.quality_changed_since_generation = delta.changed.length > 0 ? true : delta.comparable ? false : null;
+    return { ...base, integrity: null, changed: delta.changed };
+  });
+}
+
 export function evaluateScenarioRead(input: ScenarioReadInput, now: number): ScenarioReadResult {
   if (!Number.isFinite(now)) return result("invalid", ["invalid_read_time"]);
-  if (input.readRace) return result("invalid", ["read_race_detected"]);
+  if (input.readRace) {
+    const raceDomains = isObject(input.current) ? parseCurrent(input.current)?.domains ?? null : null;
+    return result("invalid", ["read_race_detected"], { source_domains: integrityViews(raceDomains, input.states, now) });
+  }
   if (!Array.isArray(input.evidence)) return result("invalid", ["evidence_malformed"]);
   if (!Array.isArray(input.states) || !input.states.every(isObject)) return result("invalid", ["state_rows_malformed"]);
   // 1. unavailable / missing row
@@ -294,7 +391,12 @@ export function evaluateScenarioRead(input: ScenarioReadInput, now: number): Sce
   const parsed = parseCurrent(current);
   const storedConfidence = isConfidence(current.confidence) ? current.confidence : null;
   if (!parsed) return result("invalid", ["current_malformed"], { stored_confidence: storedConfidence });
-  const base = { stored_confidence: parsed.confidence, evaluated_at: parsed.evaluatedAt };
+  const base = {
+    stored_confidence: parsed.confidence,
+    evaluated_at: parsed.evaluatedAt,
+    // Until evidence and live rows are matched, no quality comparison is claimed.
+    source_domains: integrityViews(parsed.domains, input.states, now),
+  };
 
   const run = input.run;
   if (!isObject(run) || run.id !== parsed.runId) return result("invalid", ["source_run_missing"], base);
@@ -337,8 +439,12 @@ export function evaluateScenarioRead(input: ScenarioReadInput, now: number): Sce
   const validUntil = Math.min(parsed.validUntil, derived);
   const withValidity = { ...base, valid_until: new Date(validUntil).toISOString() };
 
+  // Matching evidence with live States is informational until step 4 decides.
+  const comparisons = compareSources(evidence, input.states, now);
+  const views = comparisons.map((comparison) => comparison.view);
+
   // 3. expired
-  if (now >= validUntil) return result("expired", ["valid_until_passed"], withValidity);
+  if (now >= validUntil) return result("expired", ["valid_until_passed"], { ...withValidity, source_domains: views });
 
   // 4. live State revalidation
   const classification = classifyStates(input.states, now);
@@ -347,41 +453,11 @@ export function evaluateScenarioRead(input: ScenarioReadInput, now: number): Sce
   const invalidReasons: string[] = [];
   const invalidDomains: Array<{ domain: string; reason: string }> = [];
   const liveSources: UsableState[] = [];
-  const views: ScenarioSourceDomainView[] = [];
-
-  for (const item of evidence) {
-    const domain = item.domain;
-    const rows = input.states.filter((row) => row.domain === domain);
-    const row = rows.length === 1 ? rows[0] : null;
-    views.push({
-      domain,
-      narrative_freshness: classifyFreshness(domain, row?.ai_evaluated_at, now),
-      observation_status: typeof row?.observation_status === "string" && Object.hasOwn(OBSERVATION_RANK, row.observation_status)
-        ? row.observation_status : null,
-      coverage_status: typeof row?.coverage_status === "string" && Object.hasOwn(COVERAGE_RANK, row.coverage_status)
-        ? row.coverage_status : null,
-      data_confidence: isConfidence(row?.data_confidence) ? row.data_confidence : null,
-      state_evaluated_at: isTime(row?.ai_evaluated_at) ? row.ai_evaluated_at : null,
-      quality_changed_since_generation: false,
-    });
-    if (!row) {
-      invalidReasons.push(`state_row_missing:${domain}`);
-      invalidDomains.push({ domain, reason: rows.length === 0 ? "state_row_missing" : "state_row_duplicated" });
-      continue;
-    }
-    // Same-run identical re-saves are safe; changed AI content is not. The
-    // service role can write these fields without advancing the run identity.
-    if (row.source_evaluation_run_id !== item.snapshot.source_evaluation_run_id ||
-      !isTime(row.ai_evaluated_at) || Date.parse(row.ai_evaluated_at) !== Date.parse(item.snapshot.ai_evaluated_at)) {
-      invalidReasons.push(`state_identity_drift:${domain}`);
-      invalidDomains.push({ domain, reason: "state_identity_drift" });
-      continue;
-    }
-    if (["narrative", "bullish_factors", "bearish_factors", "key_risks", "ai_confidence"].some((key) =>
-      JSON.stringify(row[key as keyof StateRow]) !== JSON.stringify(item.snapshot[key as keyof StateSnapshot])
-    )) {
-      invalidReasons.push(`state_content_drift:${domain}`);
-      invalidDomains.push({ domain, reason: "state_content_drift" });
+  for (const comparison of comparisons) {
+    const domain = comparison.item.domain;
+    if (comparison.integrity) {
+      invalidReasons.push(`${comparison.integrity === "state_row_duplicated" ? "state_row_missing" : comparison.integrity}:${domain}`);
+      invalidDomains.push({ domain, reason: comparison.integrity });
       continue;
     }
     const live = usableByDomain.get(domain);
@@ -411,20 +487,8 @@ export function evaluateScenarioRead(input: ScenarioReadInput, now: number): Sce
   }
   for (const live of liveSources) {
     const domain = live.snapshot.domain;
-    const snap = evidence.find((item) => item.domain === domain)!;
     for (const weak of live.weakReasons) degraded.push(`${weak}:${domain}`);
-    const changed: string[] = [];
-    if (live.freshness === "recent" && snap.freshness === "fresh") changed.push(`narrative_aged:${domain}`);
-    if (OBSERVATION_RANK[live.snapshot.observation_status] > OBSERVATION_RANK[snap.snapshot.observation_status]) {
-      changed.push(`observation_worsened:${domain}`);
-    }
-    if (COVERAGE_RANK[live.snapshot.coverage_status] > COVERAGE_RANK[snap.snapshot.coverage_status]) {
-      changed.push(`coverage_worsened:${domain}`);
-    }
-    if (live.snapshot.data_confidence < snap.snapshot.data_confidence - EPSILON) changed.push(`data_confidence_decreased:${domain}`);
-    degraded.push(...changed);
-    const view = views.find((v) => v.domain === domain);
-    if (view) view.quality_changed_since_generation = changed.length > 0;
+    degraded.push(...(comparisons.find((comparison) => comparison.item.domain === domain)?.changed ?? []));
   }
 
   const missingCount = SCENARIO_DOMAINS.length - liveSources.length;

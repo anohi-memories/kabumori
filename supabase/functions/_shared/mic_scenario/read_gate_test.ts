@@ -569,3 +569,125 @@ test("review: confidence flooring cannot round above stored value or live cap at
   }
   assert.equal(evaluateScenarioRead(fixture(), NaN).status, "invalid");
 });
+
+// ------------------------------------------------------------------ quality_changed_since_generation: true | false | null
+const flag = (out: ReturnType<typeof evaluateScenarioRead>, domain: ScenarioDomain) =>
+  out.source_domains.find((d) => d.domain === domain)?.quality_changed_since_generation;
+
+test("quality flag: data_confidence 0.6 -> 0.2 is invalid AND reported as changed (Phase 3B Production case)", () => {
+  const input = fixture({
+    domains: ["rates", "equity_index"], confidence: 0.38, aiConfidence: 0.46,
+    generationStates: { rates: { data_confidence: 0.6, observation_status: "stale" } },
+    liveStates: { rates: { data_confidence: 0.2 } },
+  });
+  const out = evaluateScenarioRead(input, NOW);
+  // Decision unchanged: invalid, no content, no effective confidence.
+  assert.equal(out.status, "invalid");
+  assert.deepEqual(out.reason_codes, ["state_unusable:rates:data_confidence_too_low", "insufficient_usable_states"]);
+  assert.equal(out.scenario, null);
+  assert.equal(out.effective_confidence, null);
+  assert.equal(flag(out, "rates"), true);
+  assert.equal(flag(out, "equity_index"), false);
+  assert.equal(out.source_domains.find((d) => d.domain === "rates")!.data_confidence, 0.2);
+});
+
+test("quality flag: coverage full -> unavailable is invalid AND changed", () => {
+  const out = evaluateScenarioRead(fixture({ liveStates: { macro: { coverage_status: "unavailable" } } }), NOW);
+  assert.equal(out.status, "invalid");
+  assert.ok(out.reason_codes.includes("state_unusable:macro:coverage_unavailable"));
+  assert.equal(flag(out, "macro"), true);
+  assert.equal(flag(out, "rates"), false);
+});
+
+test("quality flag: observation fresh -> stale is degraded AND changed", () => {
+  const out = evaluateScenarioRead(fixture({ liveStates: { rates: { observation_status: "stale" } } }), NOW);
+  assert.equal(out.status, "degraded");
+  assert.equal(flag(out, "rates"), true);
+  assert.equal(flag(out, "equity_index"), false);
+});
+
+test("quality flag: nothing changed -> false (usable); an improvement is not a worsening", () => {
+  const out = evaluateScenarioRead(fixture(), NOW);
+  assert.equal(out.status, "usable");
+  assert.deepEqual(out.source_domains.map((d) => d.quality_changed_since_generation), [false, false, false]);
+  const improved = evaluateScenarioRead(
+    fixture({ generationStates: { rates: { data_confidence: 0.6 } }, liveStates: { rates: { data_confidence: 0.9 } } }),
+    NOW,
+  );
+  assert.equal(flag(improved, "rates"), false);
+});
+
+test("quality flag: narrative aging fresh -> recent alone is reported on the invalid path too", () => {
+  // equity_index makes the read invalid; rates only aged (no other change).
+  const out = evaluateScenarioRead(
+    fixture({ liveStates: { equity_index: { coverage_status: "unavailable" } } }),
+    Date.parse(EVALUATED) + 40 * HOUR,
+  );
+  assert.equal(out.status, "invalid");
+  assert.equal(out.source_domains.find((d) => d.domain === "rates")!.narrative_freshness, "recent");
+  assert.equal(flag(out, "rates"), true);
+});
+
+test("quality flag: expired Scenarios still report a trustworthy comparison", () => {
+  const input = fixture({ liveStates: { rates: { data_confidence: 0.5 } } });
+  const out = evaluateScenarioRead(input, Date.parse(input.current!.valid_until as string));
+  assert.equal(out.status, "expired");
+  assert.equal(out.scenario, null);
+  assert.equal(flag(out, "rates"), true);
+});
+
+test("quality flag: malformed evidence -> null (not comparable), decision unchanged", () => {
+  const input = fixture({ liveStates: { rates: { data_confidence: 0.2 } } });
+  delete (input.evidence[0].state_snapshot as Record<string, unknown>).key_risks;
+  const out = evaluateScenarioRead(input, NOW);
+  assert.equal(out.status, "invalid");
+  assert.deepEqual(out.reason_codes, ["evidence_malformed"]);
+  assert.ok(out.source_domains.length > 0);
+  assert.ok(out.source_domains.every((d) => d.quality_changed_since_generation === null));
+});
+
+test("quality flag: identity drift -> null even when quality also dropped", () => {
+  const out = evaluateScenarioRead(
+    fixture({ liveStates: { rates: { source_evaluation_run_id: "44444444-4444-4444-8444-444444444444", data_confidence: 0.2 } } }),
+    NOW,
+  );
+  assert.equal(out.status, "invalid");
+  assert.ok(out.reason_codes.includes("state_identity_drift:rates"));
+  assert.equal(flag(out, "rates"), null);
+  assert.equal(flag(out, "equity_index"), false, "other domains stay comparable");
+});
+
+test("quality flag: content drift and a missing row -> null", () => {
+  const drift = evaluateScenarioRead(fixture({ liveStates: { rates: { narrative: "rewritten", data_confidence: 0.2 } } }), NOW);
+  assert.equal(drift.status, "invalid");
+  assert.equal(flag(drift, "rates"), null);
+  const gone = fixture();
+  gone.states = gone.states.filter((row) => row.domain !== "rates");
+  assert.equal(flag(evaluateScenarioRead(gone, NOW), "rates"), null);
+});
+
+test("quality flag: read race -> invalid with every flag null", () => {
+  const input = { ...fixture({ liveStates: { rates: { data_confidence: 0.2 } } }), readRace: true };
+  const out = evaluateScenarioRead(input, NOW);
+  assert.equal(out.status, "invalid");
+  assert.deepEqual(out.reason_codes, ["read_race_detected"]);
+  assert.equal(out.scenario, null);
+  assert.ok(out.source_domains.length > 0);
+  assert.ok(out.source_domains.every((d) => d.quality_changed_since_generation === null));
+});
+
+test("quality flag: corrupted current -> no per-domain comparison at all", () => {
+  const input = fixture();
+  input.current!.base_case = null;
+  const out = evaluateScenarioRead(input, NOW);
+  assert.equal(out.status, "invalid");
+  assert.deepEqual(out.source_domains, []);
+});
+
+test("quality flag: an uninterpretable live value with no other worsening -> null, not false", () => {
+  // Unknown narrative freshness (clock skew) cannot be compared; nothing else worsened.
+  const input = fixture({ generationStates: { rates: { ai_evaluated_at: iso(GEN + 3 * 60 * 1000) } } });
+  const out = evaluateScenarioRead(input, GEN - 10 * 60 * 1000);
+  assert.equal(out.status, "invalid");
+  assert.equal(flag(out, "rates"), null);
+});
