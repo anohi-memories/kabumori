@@ -57,21 +57,14 @@
 - next gate: natural scheduled morning/close observation with consumers OFF. This C1 does not authorize consumer activation.
 - G2 PR #57 content-guard correction remains separate and unresolved.
 
-## K1 — data-packet production sync blocked; handed to H1
+## Final K1 — stale G1 data-packet task closed
 
-- verdict on G1 execution: STOP was correct; deploy NOT performed.
-- task: kabumori-data-packet-session-reuse-prod-sync-20260929.
-- production mutation: 0.
-- G1 independently proved production market-report-data-packet is stale and missing reviewed same-session reuse while fresh-main tests pass 42/42.
-- production function observed by G1: version 11, verify_jwt=false.
-- blocker: G1 execution classifier denied mandatory production DB reads for pg_cron and consumer gates; task correctly prohibited deploying without pre-state snapshots.
-- no source/DB/cron/gate/Auth/Vault mutation occurred.
-- do not require manual user SQL while a clean verification slot is available.
-- H1 assigned: kabumori-data-packet-prod-sync-verification-rollout-20260929.
-- H1 must independently read cron + canonical consumer gates, then deploy exactly one market-report-data-packet function only if all preconditions match, followed by source byte read-back and before/after invariant checks.
-- G1 must not restart this rollout concurrently.
-- recommended model for H1: Sol（高） because this is an Edge Function production mutation gate.
-- natural-cycle validation and consumer activation remain separate later gates.
+- verdict: **CLOSED / SUPERSEDED**.
+- original G1 task stopped correctly before mutation because production DB reads were blocked.
+- H1 later completed the exact rollout safely and Final C1 accepted it.
+- production is already on `market-report-data-packet` v12 with same-session reuse; cron/gates/verify_jwt/other Functions were unchanged.
+- no remaining G1 work exists for this task.
+- G1 is now done and must not be restarted for this rollout.
 
 ## Final K1 — PR #56 app navigation/menu/topics consolidation
 
