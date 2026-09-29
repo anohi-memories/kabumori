@@ -33,13 +33,13 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: x-social-mobile-account-deletion-privileged-review-20260928
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: assigned; privileged review of draft PR #52 account deletion boundary (service_role/Vault/Auth admin/X revoke/Apple revoke/partial failure); recommended Sol（高）
+- allocation: closed; Final C2 FAIL on PR #52 `12146c4`; returned to G3 for bundled account-deletion design correction
 
 ## Claude G1
 - owner: claude
@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
-- task_id: x-social-mobile-account-lifecycle-release-phase4-20260928
+- status: ready
+- task_id: x-social-mobile-account-deletion-correction-phase4b-20260929
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: Final K3 source-only PASS at draft PR #52 `12146c4`; privileged account-deletion boundary requires independent separate-Claude review before merge/apply/deploy; recommended Opus5.5（高）
+- allocation: reassigned after C2 FAIL; fix durable deletion state, cross-product deletion scope, Vault ownership, X/Apple revoke retry, CORS and client-session pinning; recommended Opus5.5（高）
 
 ## Claude G4
 - owner: claude
