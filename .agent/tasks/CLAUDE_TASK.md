@@ -3,8 +3,8 @@
 - task_id: kabumori-shared-analysis-content-guard-fix-20260929
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Opus5.5（高）
 - purpose: 2026-09-29大引けshared analysisがlocal check / Factで2回失敗した実例を再現し、1306の誤ラベルと根拠のない因果断定をsource側で最小修正する。transport retry・claim/idempotency・consumer gateは変えない。
@@ -2118,3 +2118,21 @@ Next gate: Monday 2026-09-28 natural morning 08:35 JST and close 17:15 JST read-
 
 
 
+
+## Final K2 — PR #57 accepted and merged
+
+- verdict: **PASS**.
+- accepted PR #57 head: `b8bbfe981735e6a2e42987011f1e4a4e7ab2824c`.
+- merge SHA: `9488f9e8b12bb1c7c0fcf872767d078ed818c128`.
+- final guard behavior accepted:
+  - 1306 cannot be relabeled as TOPIX index;
+  - unsupported causal assertions are rejected locally before Fact;
+  - one supported causal claim does not globally license unrelated causes;
+  - cause matching preserves direction/polarity and rejects inversions such as 半導体株安 -> 半導体株高;
+  - controlled aliases such as 米株 -> 米国株 retain direction.
+- final reported tests: content guard 16/16; market-report-analysis 51/51; data-packet 42/42; personalized-reports 125/125; x shared consumer 6/6; _shared 279/279; deno check/lint/diff PASS.
+- main-side changes since branch base had no overlap with PR #57 source files.
+- PR was mergeable. Vercel preview failure at the last head was rate-limit-only and not treated as a source blocker under project policy.
+- production mutation from G2: 0.
+- no Codex source review required here under reduced-review policy; production rollout is moved to H1.
+- consumer activation remains unapproved.
