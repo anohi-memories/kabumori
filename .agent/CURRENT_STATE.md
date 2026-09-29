@@ -40,6 +40,22 @@
 - かぶモリExpo/native本体はVercel制限の主対象ではないため、Netlify Web Preview対応は現時点では進めない。
 - かぶモリのiOS実機/TestFlight/native-only機能は従来どおりExpo/EAS/実機で確認する。
 
+## K1 — data-packet production sync blocked; handed to H1
+
+- verdict on G1 execution: STOP was correct; deploy NOT performed.
+- task: kabumori-data-packet-session-reuse-prod-sync-20260929.
+- production mutation: 0.
+- G1 independently proved production market-report-data-packet is stale and missing reviewed same-session reuse while fresh-main tests pass 42/42.
+- production function observed by G1: version 11, verify_jwt=false.
+- blocker: G1 execution classifier denied mandatory production DB reads for pg_cron and consumer gates; task correctly prohibited deploying without pre-state snapshots.
+- no source/DB/cron/gate/Auth/Vault mutation occurred.
+- do not require manual user SQL while a clean verification slot is available.
+- H1 assigned: kabumori-data-packet-prod-sync-verification-rollout-20260929.
+- H1 must independently read cron + canonical consumer gates, then deploy exactly one market-report-data-packet function only if all preconditions match, followed by source byte read-back and before/after invariant checks.
+- G1 must not restart this rollout concurrently.
+- recommended model for H1: Sol（高） because this is an Edge Function production mutation gate.
+- natural-cycle validation and consumer activation remain separate later gates.
+
 ## Final K1 — PR #56 app navigation/menu/topics consolidation
 
 - verdict: **PASS**.
