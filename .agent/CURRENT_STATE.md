@@ -69,6 +69,17 @@
 - next gate: natural scheduled morning/close observation with consumers OFF. This C1 does not authorize consumer activation.
 - G2 PR #57 content-guard correction remains separate and unresolved.
 
+## G1 restored to Home/UI workstream
+
+- user direction: continue this room as the Kabumori app UI/Home workstream.
+- G1 is now assigned `kabumori-home-ui-continuation-20260929`.
+- canonical baseline is merged PR #56 plus the accepted PR #53/#55 routing/UI work.
+- G1 scope: Home visual hierarchy, tabs/menu/navigation UX, stocks/news/topics/reports/AI/settings presentation, safe area, UI states and real-device visual QA.
+- market-report backend, Edge Functions, DB/RPC/migrations, cron, consumer gates and X are explicitly out of G1 scope in this room.
+- no speculative redesign is authorized: G1 should inspect/sync first and wait for the next concrete user screenshot/UI instruction before source edits.
+- recommended model: **Sonnet5（高）**.
+- completion code: K1.
+
 ## Final K1 — stale G1 data-packet task closed
 
 - verdict: **CLOSED / SUPERSEDED**.
