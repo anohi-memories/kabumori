@@ -3,8 +3,8 @@
 - task_id: kabumori-market-report-analysis-prod-sync-content-guard-20260929
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sonnet5（高）
 - purpose: K2 PASS/merge済みPR #57の `market-report-analysis` content guardを、consumer gate OFFのままproductionへ単一Function deployし、source read-back・verify_jwt・cron・consumer gate・他Function非変更を確認する。source実装は禁止。
@@ -164,6 +164,116 @@ Then:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for K2.
+
+## Report
+
+### Report — kabumori-market-report-analysis-prod-sync-content-guard-20260929
+
+- task_id：`kabumori-market-report-analysis-prod-sync-content-guard-20260929`
+- result：**PASS**。PR #57（merge `9488f9e`）の `market-report-analysis` を、単一のFunctionとして本番へdeployした。
+  - consumer gateはOFF/OFFのまま。
+  - 手動でのcycle実行はしていない。
+- fresh main SHA：`54013ff576f75870275893406055d4acce32f7d1`（`9488f9e` を含む）。
+  - merge後に `market-report-analysis/**` を変更したcommitはない。PR #57の最終head `b8bbfe9` とのsource差分もない。
+- worktree：G2専用checkout `/Users/yuya/Developer/kabumori-g2-market-report-reliability`（detached `54013ff`）。
+  - H1・G1・共有checkoutは使っていない。
+  - `supabase/config.toml` は存在しない。
+  - `supabase/.temp` にあるのは、CLIが作ったファイル（`cli-latest`、`linked-project.json`）だけ。
+- 所有者の確認：
+  - H1の同名TASKは取り消し済みで `done`。
+  - ほかのslot（G1 review_required、G3 account-delete、G4 idle、H2 done）に、同じFunctionやworkflowを扱うものはない。
+
+#### production version before/after
+
+- 変更前：`version 13`、updated_at 2026-09-28 18:49:33 JST（PR #45のdeploy）、ezbr `bf37b0555dc2…`
+- 変更後：`version 14`、updated_at **2026-09-30 00:27:49 JST**、ezbr `755f1534944c…`
+- `supabase functions list` の表示の版番号。
+
+#### source drift proof（deploy前）
+
+- 本番のsourceを、`--use-api` で8ファイルdownloadした（rollback用にscratchpad `mra-pre-pr57` へ保存済み）。
+- fresh mainとの比較：**違うのは `market-report-analysis/analysis_logic.ts` だけ**。ほかの7ファイルは一致した。
+- 本番の `analysis_logic.ts` は、PR #57より前のmain（`fc0afd3`）とbyte単位で一致した。
+- したがって、本番は古い版で、deployが必要（no-opではない）と判断した。
+
+#### tests/checks（fresh main、deploy前）
+
+- market-report-analysis：**51/51**
+  - うち content_guard 16/16、handler 6/6、transport_retry 14/14
+- `deno check`（market-report-analysis）：PASS
+- `deno lint`（runtimeの5ファイル）：問題なし
+- `git diff --check`：PASS
+
+#### deploy command/scope
+
+- 実行したcommand：
+  ```
+  supabase functions deploy market-report-analysis --workdir /Users/yuya/Developer/kabumori-g2-market-report-reliability --project-ref wsmznyzcvmuitkglfeuj --no-verify-jwt --use-api
+  ```
+  - 実行前に次を確認し、どれかが違えば止める形にした：toplevel、HEADの一致、作業ツリーがclean、config.tomlが無いこと。
+- 範囲：`market-report-analysis` の1 Functionだけ。
+  - db push、DB・schema・RPC・migration、cron、gate、Auth・Vault・secret、X、data-packetの変更はしていない。
+- 自動モードの安全判定で一度止まった。**ユーザーの許可（「きょか」）を得てから実行した**。
+
+#### source read-back identity（deploy後）
+
+- `--use-api` でdownloadした**8ファイルが、fresh mainとすべて一致**した。
+  - `_shared/kabumori_voice.ts`
+  - `_shared/market_report_packet.ts`
+  - `market-report-analysis/{analysis_input,analysis_logic,handler,index,transport_retry}.ts`
+  - `market-report-data-packet/session_logic.ts`
+- 補足：CLIはuploadの一覧に `market-report-data-packet/packet_schema.ts` も表示した。これはhandlerからの型だけのimportで、downloadされたsourceには含まれない（9/28の版も同じ8ファイル）。
+- PR #57の検査が本番のsourceに入っていることを確認した：
+  - **1306の保護**：`topixMislabels`、`TOPIX_PROXY_AT`
+  - **理由の混在の扱い**：`unsupportedCausalSentences` で、`supportRefs` と、因果表現ごとの `links.every` による照合
+  - **向きを保持した照合**：`causeParts`、`causeSupported`、`CAUSE_DIRECTION`、`SUPPORT_DIRECTION`、`DOWN_WORD`、`CAUSE_ALIASES`
+  - **作り直しの指示**：注記とclaim_typeの維持
+  - 前回の「3文字一致」（`longestCommonSubstring`）は残っていない（0件）。
+
+#### 設定の前後比較
+
+- verify_jwt：false → **false**（維持）
+- cron：変更なし。deploy前後のsnapshot（jobname、schedule、active、commandのmd5）が**byte単位で一致**した。
+  - data-packet：`50 22 * * 0-4`、`15 7 * * 1-5`
+  - analysis：`55 22 * * 0-4`、`5 23 * * 0-4`、`20 7 * * 1-5`、`35 7 * * 1-5`
+  - personalized-reports：`35 23 * * 0-4`、`15 8 * * 1-5`
+  - 以上8件はすべてactive。
+- app_enabled / x_enabled：false / false → **false / false**（settingsの行のupdated_atは2026-09-17のまま）
+
+#### other-function metadata check
+
+- 全19 Functionについて、slug、version、updated_at、verify_jwt、ezbrをdeploy前後で比較した。
+- 変わったのは `market-report-analysis` の1行だけ。ほかの18 Functionは完全に一致した（`market-report-data-packet` v12、`personalized-reports` v34、`x-test-post` v126 などを含む）。
+
+#### production mutations
+
+- **1件だけ**：2026-09-30 00:27 JST の `market-report-analysis` のdeploy。
+- それ以外は0件（手動のcycle実行、DB・Auth・Vault・X・cron・gateの変更はいずれも無い）。
+- 確認はすべて、read-onlyのSELECTと、sourceのdownload・一覧で行った。
+
+#### rollback status
+
+- rollbackはしていない（不要）。
+- deploy前の本番sourceは、scratchpad `mra-pre-pr57` に保存済み。`analysis_logic.ts` は `fc0afd3` と一致し、ほかは現行と同じ。必要なら、このFunctionだけを戻せる。
+
+#### remaining issues
+
+1. 検査の効果（共有packetの完成率が上がるか）は、自然なcycleでしか確かめられない。
+2. 因果の検査は、語彙と規則による近似。判定できない言い回しは、これまで通りFactで止まる。
+3. 朝刊のdata段階のblockは、G1のdata-packet同期（v12、Final C1でaccept済み）で改善される見込み。9/30朝の自然なcycleで確認する。
+4. OpenAIの残高は手動チャージ（`insufficient_quota` の429はretryしない）。
+
+#### next recommendation
+
+- 2026-09-30の自然な朝刊（07:50 data → 07:55 / 08:05 analysis）と大引け（16:15 → 16:20 / 16:35）を、read-onlyで観察する。
+- 観察する項目：
+  - data packetの品質（朝刊の日経平均の再利用）
+  - cycle_status、report_status、attempt、last_error
+  - report packetのidと重複の有無
+  - diagnosticsの `transport_*`
+  - 指摘の傾向：`TOPIX連動ETF（1306）をTOPIXと表記: 「…」`、`根拠の無い因果の断定: 「…」`、Factの指摘
+- 数営業日、朝刊・大引けとも完成が続くことを確認してから、consumerの有効化のfocused reviewに進む。
+- **本PASSは、consumerの有効化を承認するものではない。**
 
 ---
 
