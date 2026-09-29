@@ -209,8 +209,140 @@ test("[J] State quality impact (existing model, unchanged): any failed FRED run 
   // Retries are what keep a transient 502 from ever reaching this path.
 });
 
-test("defaults: budget fits the 150s platform limit with margin; attempts bounded", () => {
-  assert.ok(FRED_FETCH_BUDGET_MS <= 90_000);
+test("defaults: fetch budget leaves >= 25 s of the ~150 s limit; attempts and concurrency bounded", () => {
+  // ~2 s of non-fetch work was observed in Production; the rest is margin.
+  assert.ok(FRED_FETCH_BUDGET_MS <= 150_000 - 25_000);
+  assert.ok(FRED_FETCH_BUDGET_MS >= 108_000, "must not fail runs that succeeded sequentially (108-144 s) by default");
   assert.ok(FRED_MAX_ATTEMPTS >= 2 && FRED_MAX_ATTEMPTS <= 3);
   assert.ok(FRED_FETCH_CONCURRENCY >= 2 && FRED_FETCH_CONCURRENCY <= 5);
+});
+
+// ------------------------------------------------------------------ review additions
+test("review: all 4 workers hang at once: every in-flight request is aborted by the deadline", async () => {
+  const plan: Plan = Object.fromEntries(FRED_SERIES_MAPPINGS.map((m) => [m.seriesId, ["hang", "hang", "hang"]]));
+  const fred = fakeFred(plan);
+  const started = Date.now();
+  await assert.rejects(
+    fetchFredMetrics({ apiKey: "k", mappings: FRED_SERIES_MAPPINGS.slice(0, 4), timeoutMs: 60_000, budgetMs: 1_200, sleep: () => Promise.resolve() }, fred.impl),
+    /FRED_FETCH_FAILED: DGS2: timeout/,
+  );
+  assert.ok(Date.now() - started < 1_700);
+  assert.equal(fred.requests.length, 4, "no retry is started with < 1 s left");
+});
+
+test("review: a body that stalls after the headers is aborted by the attempt timeout and retried", async () => {
+  // Mirrors real Deno fetch (verified locally): aborting the signal errors the
+  // body stream with a TimeoutError DOMException.
+  let calls = 0;
+  const impl = ((_url: string, init?: RequestInit) => {
+    calls += 1;
+    if (calls > 1) return Promise.resolve(new Response(okBody(), { status: 200 }));
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"observations": ['));
+        init?.signal?.addEventListener("abort", () => controller.error(init.signal!.reason));
+      },
+    });
+    return Promise.resolve(new Response(body, { status: 200 }));
+  }) as unknown as typeof fetch;
+  const metrics = await fetchFredMetrics(
+    { apiKey: "k", mappings: FRED_SERIES_MAPPINGS.slice(0, 1), timeoutMs: 50, sleep: () => Promise.resolve() },
+    impl,
+  );
+  assert.equal(metrics.length, 1);
+  assert.equal(calls, 2);
+});
+
+test("review: several workers 502 at once: each retried independently, run succeeds", async () => {
+  const fred = fakeFred({ DGS2: [502], DGS10: [502], DFEDTARL: [502], DFEDTARU: [502] });
+  const metrics = await fetchFredMetrics({ apiKey: "k", now: fred.now, sleep: fred.sleep }, fred.impl);
+  assert.equal(metrics.length, 25);
+  for (const id of ["DGS2", "DGS10", "DFEDTARL", "DFEDTARU"]) assert.equal(count(fred.requests, id), 2, id);
+});
+
+test("review: a definitive failure stops other workers' retries and new series", async () => {
+  // DGS2 fails definitively (400) while DGS10 keeps answering 502.
+  const fred = fakeFred({ DGS2: [400], DGS10: [502, 502, 502] });
+  // A real (short) backoff lets DGS2's definitive failure land during DGS10's wait.
+  await assert.rejects(
+    fetchFredMetrics({ apiKey: "k", sleep: () => new Promise((r) => setTimeout(r, 10)) }, fred.impl),
+    /FRED_HTTP_ERROR: DGS2: status=400 \(attempts=1\)/,
+  );
+  assert.equal(count(fred.requests, "DGS10"), 1, "no retry after another series definitively failed");
+  // Workers that finished a series in the same tick may already have started
+  // their next one; after the failure is recorded no new series starts.
+  assert.ok(fred.requests.length < 2 * FRED_FETCH_CONCURRENCY, `requests ${fred.requests.length}`);
+});
+
+test("review: multiple failures are reported in mapping order regardless of completion order", async () => {
+  // VIXCLS (index 8) fails first in time; DGS10 (index 1) fails later but is reported first.
+  const slowFail = ((url: string) => {
+    const id = new URL(url).searchParams.get("series_id");
+    if (id === "VIXCLS") return Promise.resolve(new Response("x", { status: 400 }));
+    if (id === "DGS10") return new Promise<Response>((r) => setTimeout(() => r(new Response("x", { status: 404 })), 20));
+    return Promise.resolve(new Response(okBody(), { status: 200 }));
+  }) as unknown as typeof fetch;
+  const mappings = [FRED_SERIES_MAPPINGS[1], FRED_SERIES_MAPPINGS[8]];
+  await assert.rejects(
+    fetchFredMetrics({ apiKey: "k", mappings, sleep: () => Promise.resolve() }, slowFail),
+    /FRED_HTTP_ERROR: DGS10: status=404 \(attempts=1\); also failed: VIXCLS/,
+  );
+});
+
+test("review: Retry-After HTTP-date, 0, malformed and negative values", async () => {
+  const base = Date.parse("2026-09-29T21:00:00Z");
+  const run = async (retryAfter: string) => {
+    let clock = base;
+    const sleeps: number[] = [];
+    const fred = fakeFred({ SP500: [{ status: 503, retryAfter }] });
+    await fetchFredMetrics({
+      apiKey: "k", mappings: FRED_SERIES_MAPPINGS.slice(5, 6), now: () => clock,
+      sleep: (ms) => { sleeps.push(ms); clock += ms; return Promise.resolve(); },
+    }, fred.impl);
+    return sleeps;
+  };
+  assert.deepEqual(await run(new Date(base + 3_000).toUTCString()), [3_000], "HTTP-date within the cap");
+  assert.deepEqual(await run("0"), [500], "0 never goes below the backoff");
+  assert.deepEqual(await run("soon"), [500], "malformed -> backoff");
+  assert.deepEqual(await run("-5"), [500], "negative -> backoff");
+  await assert.rejects(run(new Date(base + 60_000).toUTCString()), /status=503 \(attempts=1\)/, "HTTP-date beyond the cap -> fail");
+});
+
+test("review: 408/409/425 are not retried (only 429/500/502/503/504 are)", async () => {
+  for (const status of [408, 409, 425]) {
+    const fred = fakeFred({ DGS2: [status] });
+    await assert.rejects(
+      fetchFredMetrics({ apiKey: "k", mappings: FRED_SERIES_MAPPINGS.slice(0, 1), now: fred.now, sleep: fred.sleep }, fred.impl),
+      new RegExp(`status=${status} \\(attempts=1\\)`),
+    );
+  }
+});
+
+test("review: same series under two mappings (units differ) are distinct requests, each exactly once", async () => {
+  const fred = fakeFred();
+  const cpi = FRED_SERIES_MAPPINGS.filter((m) => m.seriesId === "CPIAUCSL");
+  assert.equal(cpi.length, 2);
+  const metrics = await fetchFredMetrics({ apiKey: "k", mappings: cpi, now: fred.now, sleep: fred.sleep }, fred.impl);
+  assert.deepEqual(metrics.map((m) => m.metricKey), ["US_CPI", "US_CPI_YOY"]);
+  assert.equal(count(fred.requests, "CPIAUCSL"), 2);
+});
+
+test("review: concurrency 1 and 4, maxAttempts 1 and 3", async () => {
+  const serial = fakeFred();
+  await fetchFredMetrics({ apiKey: "k", concurrency: 1, now: serial.now, sleep: serial.sleep }, serial.impl);
+  assert.equal(serial.maxInFlight(), 1);
+  const parallel = fakeFred();
+  await fetchFredMetrics({ apiKey: "k", concurrency: 4, now: parallel.now, sleep: parallel.sleep }, parallel.impl);
+  assert.equal(parallel.maxInFlight(), 4);
+  const once = fakeFred({ DGS2: [502] });
+  await assert.rejects(
+    fetchFredMetrics({ apiKey: "k", maxAttempts: 1, now: once.now, sleep: once.sleep }, once.impl),
+    /DGS2: status=502 \(attempts=1\)/,
+  );
+});
+
+test("review: empty mappings return an empty list without requests", async () => {
+  const fred = fakeFred();
+  assert.deepEqual(await fetchFredMetrics({ apiKey: "k", mappings: [], now: fred.now, sleep: fred.sleep }, fred.impl), []);
+  assert.equal(fred.requests.length, 0);
 });

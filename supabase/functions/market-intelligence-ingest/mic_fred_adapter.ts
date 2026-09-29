@@ -342,18 +342,26 @@ export function normalizeFredObservation(
 // a single transient FRED 502 (DGS2, DGS10, NIKKEI225) failed the whole run.
 //
 // Now: bounded concurrency, bounded retry of transient failures only, and a
-// hard deadline for the whole fetch phase so the run always reaches its own
-// complete/fail write well inside the platform limit. Run semantics are
-// unchanged: every series must succeed or the run fails (no partial success,
-// see FetchFredMetricsParams); retries never write anything, because
-// persistence happens only after the whole fetch phase returns.
+// hard deadline for the whole FETCH phase: every FRED request ends (or is
+// aborted) by the deadline and no request starts after it. That bounds only
+// this phase. It does NOT guarantee the run's terminal write: the DB REST
+// calls before and after it (stale sweep, claim, metric/event writes,
+// complete/fail) have no timeout of their own, so a stalled DB call can
+// still outlive the platform limit and leave the run to the stale sweep.
+// Run semantics are unchanged: every series must succeed or the run fails
+// (no partial success); retries never write anything, because persistence
+// happens only after the whole fetch phase returns.
 export const FRED_FETCH_CONCURRENCY = 4;
 export const FRED_MAX_ATTEMPTS = 3;
 export const FRED_ATTEMPT_TIMEOUT_MS = 15_000;
-// Whole fetch phase. Leaves >= 60 s of the 150 s limit for the claim, the
-// stale sweep, the metric/event writes (~2 s observed) and the run's own
-// completed/failed write.
-export const FRED_FETCH_BUDGET_MS = 90_000;
+// Whole fetch phase, sized against the ~150 s pg_net / Edge request limit:
+// the non-fetch work around it took ~2 s in Production (claim ~0.3 s,
+// writes + completion ~1.8 s), so 120 s leaves ~25 s of margin. It is not
+// tighter on purpose: the speed-up from concurrency is not yet measured in
+// Production, and runs that already succeeded sequentially in 108-144 s must
+// not all start failing at the deadline if FRED serves parallel requests no
+// faster.
+export const FRED_FETCH_BUDGET_MS = 120_000;
 const FRED_BACKOFF_BASE_MS = 500;
 // A longer wait (e.g. a Retry-After asking for a minute) is not honored by
 // retrying early: the series fails instead.
@@ -449,6 +457,9 @@ async function fetchFredSeriesWithRetry(
     timeoutMs: number;
     maxAttempts: number;
     deadline: number;
+    // True once another series has definitively failed: the run will fail
+    // anyway, so no further retry is spent on this one.
+    stopped: () => boolean;
   },
   fetchImpl: typeof fetch,
 ): Promise<{ ok: true; observation: FredObservation } | { ok: false; failure: FredAttemptFailure; attempts: number }> {
@@ -470,12 +481,16 @@ async function fetchFredSeriesWithRetry(
     );
     if (outcome.ok) return outcome;
     last = outcome.failure;
-    if (!last.retryable || attempts >= params.maxAttempts) break;
+    if (!last.retryable || attempts >= params.maxAttempts || params.stopped()) break;
     const backoff = Math.min(FRED_BACKOFF_BASE_MS * 2 ** (attempts - 1), FRED_MAX_RETRY_DELAY_MS);
-    const delay = last.retryAfterMs ?? backoff;
+    // Retry-After can lengthen the wait, never shorten it below our backoff
+    // (e.g. "Retry-After: 0" must not turn into an immediate hammer).
+    const delay = Math.max(backoff, last.retryAfterMs ?? 0);
     if (delay > FRED_MAX_RETRY_DELAY_MS) break;
     if (params.now() + delay + FRED_MIN_ATTEMPT_MS > params.deadline) break;
     await params.sleep(delay);
+    // Another series may have failed definitively during the backoff.
+    if (params.stopped()) break;
   }
   return { ok: false, failure: last!, attempts };
 }
@@ -495,12 +510,13 @@ export async function fetchFredMetrics(
     timeoutMs: params.timeoutMs ?? FRED_ATTEMPT_TIMEOUT_MS,
     maxAttempts: Math.max(1, params.maxAttempts ?? FRED_MAX_ATTEMPTS),
     deadline: now() + (params.budgetMs ?? FRED_FETCH_BUDGET_MS),
+    stopped: () => failures.length > 0,
   };
   const concurrency = Math.max(1, Math.min(params.concurrency ?? FRED_FETCH_CONCURRENCY, mappings.length || 1));
 
   // Results keep mapping order so writes stay deterministic.
   const observations: Array<FredObservation | null> = mappings.map(() => null);
-  const failures: Array<{ seriesId: string; failure: FredAttemptFailure; attempts: number }> = [];
+  const failures: Array<{ index: number; seriesId: string; failure: FredAttemptFailure; attempts: number }> = [];
   let next = 0;
   const worker = async () => {
     while (next < mappings.length) {
@@ -511,13 +527,15 @@ export async function fetchFredMetrics(
       if (failures.length > 0) return;
       const outcome = await fetchFredSeriesWithRetry(mapping, settings, fetchImpl);
       if (outcome.ok) observations[index] = outcome.observation;
-      else failures.push({ seriesId: mapping.seriesId, failure: outcome.failure, attempts: outcome.attempts });
+      else failures.push({ index, seriesId: mapping.seriesId, failure: outcome.failure, attempts: outcome.attempts });
     }
   };
   await Promise.all(Array.from({ length: concurrency }, worker));
 
   if (failures.length > 0) {
-    const [first, ...others] = failures;
+    // Report in mapping order, not completion order, so the run error is
+    // deterministic for the same set of failed series.
+    const [first, ...others] = [...failures].sort((a, b) => a.index - b.index);
     const extra = others.length > 0 ? `; also failed: ${others.map((f) => f.seriesId).join(",")}` : "";
     throw new FredAdapterError(
       first.failure.code,
