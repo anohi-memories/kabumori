@@ -17,6 +17,7 @@ import { TrackedStockEditor } from '@/components/tracked-stock-editor';
 import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
 import { authErrorMessage, signOut } from '@/lib/auth';
 import { StockMaster, TrackedStock } from '@/lib/stocks';
+import { PortfolioSummary } from '@/components/portfolio-summary';
 import { stockScreenMode } from '@/lib/stock-search';
 import {
   defaultStockSection,
@@ -172,7 +173,7 @@ export default function TrackedStocksScreen() {
             <Text style={styles.logoutText}>ログアウト</Text>
           </Pressable>
         </View>
-        <Text style={styles.description}>登録銘柄の確認と、銘柄の検索・追加ができます。</Text>
+        <Text style={styles.description}>ポートフォリオ・ウォッチリストの確認と、銘柄の検索・追加ができます。</Text>
         <TextInput
           ref={searchInput}
           value={query}
@@ -241,6 +242,7 @@ export default function TrackedStocksScreen() {
               data={sectionItems}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.list}
+              ListHeaderComponent={section === 'holding' && !loading && !message ? <PortfolioSummary /> : null}
               refreshControl={<RefreshControl refreshing={loading && !!items.length} onRefresh={load} tintColor={colors.accent} />}
               ListEmptyComponent={!loading && !message ? <Text style={styles.message}>{stockSectionEmptyMessage(section)}</Text> : null}
               renderItem={({ item }) => {

@@ -54,12 +54,6 @@ export function settingsEntries(
       kind: 'info',
     },
     {
-      id: 'portfolio',
-      label: 'ポートフォリオ',
-      description: '保有・監視銘柄の一覧と損益を見る',
-      kind: 'action',
-    },
-    {
       id: 'topic-level',
       label: '今日のトピック 投資知識レベル',
       description: `現在: ${topicLevelLabel}`,

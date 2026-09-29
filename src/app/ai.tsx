@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/back-button';
 import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
 
 const palette = KABUMORI_COLORS.light;
@@ -12,6 +13,7 @@ export default function AiScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <View style={styles.content}>
+        <BackButton />
         <Text style={styles.eyebrow}>ASK KABUMORI AI</Text>
         <Text style={styles.title}>AIに聞いてみる</Text>
         <Text style={styles.body}>

@@ -18,8 +18,8 @@ SplashScreen.preventAutoHideAsync();
 
 // expo-router/unstable-native-tabs (see src/app/(tabs)/_layout.tsx) only
 // registers routes that have a matching NativeTabs.Trigger inside that same
-// route group -- router.push() to anything outside it (news/, portfolio,
-// topic-detail, search) silently does nothing if those routes are rendered
+// route group -- router.push() to anything outside it (topic-detail,
+// topics, settings, ai, search) silently does nothing if those routes are rendered
 // as if they were part of the tab group. This root Stack is what makes them
 // reachable: (tabs) is one full-screen Stack entry, and the rest are
 // ordinary pushed screens on top of it, each managing its own
@@ -30,9 +30,10 @@ function SignedInNavigator() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="news" />
-      <Stack.Screen name="portfolio" />
       <Stack.Screen name="topic-detail" />
+      <Stack.Screen name="topics" />
+      <Stack.Screen name="settings" />
+      <Stack.Screen name="ai" />
       <Stack.Screen name="search" />
     </Stack>
   );
