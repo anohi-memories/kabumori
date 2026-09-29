@@ -8,7 +8,8 @@
 - source_fixes: **0**. TASK's design-level/partial-destruction STOP policy was invoked; no unrelated OAuth/backend fixes were attempted.
 - changed_files (shared report only): `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md`.
 - implementation_commit: existing G3 head above; no H2 implementation commit.
-- report_commit_hash / push: this two-file report is prepared for normal origin/main synchronization; the actual resulting SHA and remote read-back are reported in the completion message. Do not treat preparation as a successful push.
+- report_commit_hash: `29e9a66de38770b9f0dff4b5e407c64736b94998` (H2 Report/TASK only).
+- push: **SUCCESS** to origin/main. Fresh remote read-back confirmed that commit's inclusion, this task_id at the Report head, and TASK `review_required / next_owner: chatgpt`. This follow-up changes only the push-result record; its final sync SHA is provided in the completion message.
 - deploy / merge / production_mutation: **0 / 0 / 0**.
 
 ### Merge-blocking findings
