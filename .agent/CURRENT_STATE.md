@@ -1871,3 +1871,13 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - PR #52 squash-merged to main as `136dcd2b35b161ccc4769da15b05e796f095e881`.
 - source-only completion; no production migration apply, Edge deploy, real deletion, Vault mutation, or real X/Apple revoke.
 - remaining rollout gates: exact migration apply/readback, Edge deploy/byte-compare, disposable-account real-device/provider E2E, cross-app delete coordination, and legal/support/retention decisions.
+
+
+## G3 account deletion production rollout preflight assigned
+
+- task_id: `x-social-mobile-account-deletion-prod-preflight-20260929`
+- accepted source: PR #52 squash merge `136dcd2b35b161ccc4769da15b05e796f095e881`.
+- scope: read-only production preflight for exact migration, owners/ACL/FKs/isolation/Auth/Vault/Storage/Edge prerequisites, rollback/recovery and disposable-account E2E plan.
+- no migration apply, Edge deploy, real deletion/revoke, Vault/Auth/provider mutation or activation.
+- finish code: K3.
+- recommended Claude model: Opus5.5（高）.
