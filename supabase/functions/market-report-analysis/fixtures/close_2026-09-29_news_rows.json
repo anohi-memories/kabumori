@@ -1,0 +1,440 @@
+[
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "349A0",
+    "company_name": "ＳＭＤＡＭ日本グロ株",
+    "coverage_categories": [
+      "japan_market",
+      "corporate",
+      "earnings"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-09-29 03:00:33.407737+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "09f920d3-e554-4fd4-a7da-24f10327a4ff",
+    "published_at": "2026-09-29 00:50:00+00",
+    "source_type": "tdnet",
+    "title": "2027年2月期 中間決算短信（2026年2月21日～2026年8月20日）"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "40040",
+    "company_name": "レゾナックＨＤ",
+    "coverage_categories": [
+      "oil_energy",
+      "japan_market",
+      "corporate"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-28 23:00:39.281168+00",
+    "generated_text": "【速報】レゾナックHD（4004）の完全子会社、クラサスケミカルが東証スタンダード市場に上場しました。これを受け、予定どおり10月1日付でパーシャル・スピンオフが実行されます。実行後、レゾナックHDの保有比率は20％未満となり、クラサスケミカルは連結子会社ではなくなります。\n\n出典: https://www.release.tdnet.info/inbs/140120260928540748.pdf",
+    "generation_fact_status": "failed",
+    "id": "1a6309fc-ce06-4eca-99b1-aa36880a859c",
+    "published_at": "2026-09-28 23:00:00+00",
+    "source_type": "tdnet",
+    "title": "クラサスケミカル株式会社の東京証券取引所スタンダード市場への新規上場に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "geopolitics"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-28 15:00:33.836102+00",
+    "generated_text": "【速報】イスラエルのベン・グビル国家安全保障相が、数百人のイスラエル人とともにエルサレム旧市街のアルアクサ・モスク敷地に立ち入ったと報じられました。警察の警備下で、午前中に敷地へ入った人は900人に上ったとされています。\n\nベン・グビル氏は「この場所の所有者は私たちだ」と発言。記事は地域情勢の緊張を伝えていますが、軍事衝突や日本市場への具体的な影響は確認されていません。\n\n出典: https://www.aljazeera.com/news/2026/9/28/ben-gvir-joins-hundreds-of-israelis-to-storm-al-aqsa-mosque-compound",
+    "generation_fact_status": "passed",
+    "id": "2307e1d2-792e-4aaf-ac63-4a17645ec02c",
+    "published_at": "2026-09-28 14:03:55+00",
+    "source_type": "breaking_market",
+    "title": "Ben-Gvir joins hundreds of Israelis to storm Al-Aqsa Mosque compound"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "92520",
+    "company_name": "Ｇ－ラストワンマイル",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-09-29 01:00:31.067702+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "29694c51-fe4e-4cd9-b5e1-4b4be59a0b76",
+    "published_at": "2026-09-28 23:30:00+00",
+    "source_type": "tdnet",
+    "title": "自己株式の取得状況及び取得終了に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "42200",
+    "company_name": "リケンテクノス",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-09-29 05:00:34.380044+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "50aa8769-6d5b-4144-8999-0d485f6f013d",
+    "published_at": "2026-09-29 01:30:00+00",
+    "source_type": "tdnet",
+    "title": "自己株式立会外買付取引（ＴｏＳＴＮｅＴ－３）による自己株式の取得結果に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "geopolitics",
+      "shipping_logistics"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-29 06:00:29.409+00",
+    "generated_text": "【速報】米・サウジ高官、地域安全保障を協議\n\nルビオ米国務長官とサウジのファイサル外相が、地域の安全保障や安定について協議しました。ホルムズ海峡の航行安全やイエメン情勢も話題に上がっています。\n\n協議で新たな政策決定があったとは確認されておらず、日本株への具体的な影響は見えていません。\n\n出典: https://www.aljazeera.com/news/2026/9/29/rubio-saudi-arabias-foreign-minister-hold-talks-on-yemen-hormuz-strait",
+    "generation_fact_status": "passed",
+    "id": "56732de8-4934-4e0f-b695-74f19e2f2b66",
+    "published_at": "2026-09-29 04:46:38+00",
+    "source_type": "breaking_market",
+    "title": "Rubio, Saudi Arabia’s foreign minister hold talks on Yemen, Hormuz Strait"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "637A0",
+    "company_name": "Ｐ－オーリーズ",
+    "coverage_categories": [
+      "corporate",
+      "earnings"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-09-29 00:00:29.51904+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "63029aac-b23d-4109-a941-690292546d1f",
+    "published_at": "2026-09-28 23:00:00+00",
+    "source_type": "tdnet",
+    "title": "東京証券取引所TOKYO PRO Market上場に伴う当社決算情報等のお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "geopolitics",
+      "regulation_policy"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-29 05:00:28.972756+00",
+    "generated_text": "【速報】米国、カナダ産の酒類・乳製品などの輸入禁止が発効。米加の貿易摩擦が続いています。\n\nカナダが米国製品に関税を課したことへの対抗措置で、対象にはオートバイも含まれます。カナダ側は追加報復を予定しておらず、首相は輸入禁止の経済的影響を「軽微」と説明しています。\n\n日本市場への具体的な影響は、現時点で確認できません。\n\n出典: https://www.bbc.co.uk/news/articles/cm1j43y146d2o",
+    "generation_fact_status": "passed",
+    "id": "765a079d-6ad3-4378-bd1b-62d765f43b1c",
+    "published_at": "2026-09-29 04:10:33+00",
+    "source_type": "breaking_market",
+    "title": "US ban on Canadian alcohol and dairy comes into effect as trade war drags on"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "31850",
+    "company_name": "Ｇ－夢展望",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-09-28 13:00:40.25022+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "7ebc037c-6a5b-4e63-8488-9317d7e45001",
+    "published_at": "2026-09-28 07:00:00+00",
+    "source_type": "tdnet",
+    "title": "第12回新株予約権（行使価額修正条項付）の第三者割当による発行に係る払込完了に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "62270",
+    "company_name": "ＡＩメカテック",
+    "coverage_categories": [
+      "fx",
+      "semiconductors",
+      "ai_tech",
+      "corporate",
+      "earnings"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-28 11:00:37.55486+00",
+    "generated_text": "【速報】AIメカテック（6227）が、海外の大手半導体関連メーカー2社から約45億円を受注しました。ウエハレベルパッケージ向けのテンポラリーボンダー・デボンダー装置で、売上計上は2028年6月期の予定です。円建ての受注で、為替変動の影響はありません。\n\n出典: https://www.release.tdnet.info/inbs/140120260928541186.pdf",
+    "generation_fact_status": "passed",
+    "id": "83fce291-1cf3-40bc-bdbb-1d9a1b82aa81",
+    "published_at": "2026-09-28 06:35:00+00",
+    "source_type": "tdnet",
+    "title": "大手半導体関連メーカーより大口受注のお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "31790",
+    "company_name": "シュッピン",
+    "coverage_categories": [
+      "corporate",
+      "earnings"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-09-28 07:00:46.34968+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "849a7775-b01a-41cd-96c5-df376ca224d0",
+    "published_at": "2026-09-28 06:30:00+00",
+    "source_type": "tdnet",
+    "title": "2026年８月度月次情報のお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "70130",
+    "company_name": "ＩＨＩ",
+    "coverage_categories": [
+      "corporate",
+      "earnings"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-29 02:00:30.161108+00",
+    "generated_text": "【速報】IHIはドイツ子会社Steinmüller Engineering GmbHの持分をすべて譲渡します。2027年3月期に、連結で約140億円をその他の費用に、個別で約170億円を特別損失に計上する予定です。通期業績予想は変更ありません。日本株では、損失計上と予想据え置きの両方を踏まえた反応になりそうです。\n\n出典: https://www.release.tdnet.info/inbs/140120260918538982.pdf",
+    "generation_fact_status": "failed",
+    "id": "862f1d49-04e1-400f-b8e7-7c9f7fcf36ad",
+    "published_at": "2026-09-29 00:00:00+00",
+    "source_type": "tdnet",
+    "title": "ドイツ子会社Steinmueller Engineering GmbHの持分の譲渡に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "55860",
+    "company_name": "Ｇ－ＬａｂｏｒｏＡＩ",
+    "coverage_categories": [
+      "semiconductors",
+      "ai_tech",
+      "corporate"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-28 14:00:41.242714+00",
+    "generated_text": "【速報】Laboro.AIが中期経営計画を公表。2030年9月期に売上高105億円、営業利益21億円を目指します。計画には数値コミットと戦略コミットがあり、M&Aや資本提携などは成長施策として挙げていますが、具体的な案件や規模は示されていません。\n\n出典: https://www.release.tdnet.info/inbs/140120260928540701.pdf",
+    "generation_fact_status": "failed",
+    "id": "90a0815f-28fa-4d79-925c-e45e0ad567f2",
+    "published_at": "2026-09-28 07:00:00+00",
+    "source_type": "tdnet",
+    "title": "中期経営計画（事業計画及び成長可能性に関する事項）策定に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "geopolitics",
+      "shipping_logistics"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-29 03:00:29.649562+00",
+    "generated_text": "【速報】ホルムズ海峡の再開案、カタールが仲介協議\n\nイランのアラグチ外相がニューヨークでカタールの仲介者と会い、ホルムズ海峡を再開する案について協議しました。米当局者は、イランの核問題が扱われない限り、戦争終結の合意はないと述べています。\n\nカタール側が協議内容を米国に伝える予定ですが、合意や海峡の再開は確認されていません。米国・イラン・カタールが関わる協議です。\n\n出典: https://www.aljazeera.com/news/2026/9/29/irans-araghchi-meets-qatari-mediators-as-us-insists-on-nuclear-talks",
+    "generation_fact_status": "passed",
+    "id": "9eb8e6e2-fd30-459d-ace9-998065a2e3e0",
+    "published_at": "2026-09-29 02:36:25+00",
+    "source_type": "breaking_market",
+    "title": "Iran’s Araghchi meets Qatari mediators as US calls for nuclear talks"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "japan_market"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-28 16:00:45.668227+00",
+    "generated_text": "【速報】SpaceXの大型ロケット「Starship」が初めて軌道に到達しました。打ち上げではStarlinkの衛星26基も投入されています。エンジン1基が早期に停止したものの、ミッションは計画どおり続行されました。日本株への直接的な影響は、入力情報からは確認できません。関係するのはSpaceXとStarlinkです。\n\n出典: https://www.aljazeera.com/news/2026/9/28/spacexs-showpiece-starship-rocket-reaches-orbit-for-first-time",
+    "generation_fact_status": "passed",
+    "id": "a877e6e8-8adc-4ee7-adf0-177691a23ed0",
+    "published_at": "2026-09-28 15:25:38+00",
+    "source_type": "breaking_market",
+    "title": "SpaceX’s showpiece Starship rocket reaches orbit for first time"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "55860",
+    "company_name": "Ｇ－ＬａｂｏｒｏＡＩ",
+    "coverage_categories": [
+      "semiconductors",
+      "ai_tech",
+      "japan_market",
+      "corporate",
+      "earnings"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-09-28 14:00:41.483119+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "afa04e29-757e-4a57-bc23-c1390c80980e",
+    "published_at": "2026-09-28 07:00:00+00",
+    "source_type": "tdnet",
+    "title": "株式会社マテリアル・コンセプトとの業務提携及び第三者割当増資引受に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "disaster"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-28 12:00:27.542598+00",
+    "generated_text": "【速報】メキシコ西岸にハリケーン「ポロ」が接近し、バハカリフォルニア・スル州では月曜遅くから火曜早朝にかけて上陸する見通しです。最大風速は約185km/h。米国立ハリケーンセンターは、生命に関わる洪水や土砂崩れ、高潮と大きな波への警戒を呼びかけています。観光地ロスカボスもある地域です。\n\n出典: https://www.bbc.co.uk/news/articles/cw8d3z5y7958o",
+    "generation_fact_status": "passed",
+    "id": "afe8d0c2-a363-4dc3-a506-4f2c99b88056",
+    "published_at": "2026-09-28 11:05:49+00",
+    "source_type": "breaking_market",
+    "title": "Mexico's Pacific coast braces for Hurricane Polo"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "44410",
+    "company_name": "トビラシステムズ",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-09-28 08:00:39.775624+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "c4db58bf-9d23-450d-ae85-aaa4c3537653",
+    "published_at": "2026-09-28 06:30:00+00",
+    "source_type": "tdnet",
+    "title": "株主優待制度の継続に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "87980",
+    "company_name": "アドバンスクリエイト",
+    "coverage_categories": [
+      "regulation_policy",
+      "corporate"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-29 05:00:34.604524+00",
+    "generated_text": "【速報】アドバンスクリエイト（8798）は、東証から、9月29日付で特別注意銘柄に指定し、上場契約違約金を徴求するとの通知を9月28日に受けたと発表しました。指定理由や違約金額は、この発表には記載されていません。\n\n出典: https://www.release.tdnet.info/inbs/140120260929541742.pdf",
+    "generation_fact_status": "passed",
+    "id": "c939a5ec-1f9b-4954-aef7-0c05ef3a0c94",
+    "published_at": "2026-09-29 01:45:00+00",
+    "source_type": "tdnet",
+    "title": "東京証券取引所による特別注意銘柄の指定及び上場契約違約金の徴求に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "geopolitics"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-28 12:00:27.377342+00",
+    "generated_text": "【速報】エチオピア北部でティグレ人民解放戦線（TPLF）と連邦政府軍の戦闘が再開。エチオピア軍司令官は、武装勢力をスーダンやエジプトなどが支援していると非難しました。スーダン軍はこれを「根拠がない」と否定し、逆にスーダンの準軍事組織RSFがエチオピア国内から支援を受けていると主張しています。各国の主張が対立しており、日本市場への具体的な影響は確認できません。\n\n出典: https://www.aljazeera.com/news/2026/9/28/ethiopia-accuses-sudan-egypt-of-backing-tigray-rebels-as-fighting-rages",
+    "generation_fact_status": "passed",
+    "id": "cb6522bb-7125-4c9c-8b0a-79f85e93185f",
+    "published_at": "2026-09-28 11:00:23+00",
+    "source_type": "breaking_market",
+    "title": "Ethiopia accuses Sudan, Egypt of backing Tigray rebels as fighting rages"
+  },
+  {
+    "app_copy_fact_status": "passed",
+    "app_summary_ja": "トランプ米大統領は、ミネソタ州を拠点とする鉄鋼メーカーがアイオワ州に150億ドルの製鉄所を建設する計画を発表した。生産開始は2030年を見込み、地域に1,700人超の雇用をもたらす可能性がある。",
+    "app_title_ja": "トランプ氏、アイオワ州の150億ドル鉄鋼工場計画を発表",
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "commodities",
+      "us_market",
+      "regulation_policy"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-28 21:00:33.212595+00",
+    "generated_text": "【速報】トランプ大統領、アイオワ州に150億ドルの製鉄所計画を発表。建設するのは、ミネソタ州を拠点とするMesabi Metallicsです。生産開始は2030年を予定しています。日本株への直接的な影響は、今回の情報からは確認できません。\n\n出典: https://www.aljazeera.com/economy/2026/9/28/trump-announces-15bn-steel-mill-project-in-iowa-before-us-midterms",
+    "generation_fact_status": "failed",
+    "id": "d41a6d09-c05c-4914-986b-25533962bc9f",
+    "published_at": "2026-09-28 20:04:27+00",
+    "source_type": "breaking_market",
+    "title": "Trump announces $15bn steel mill project in Iowa before US midterms"
+  },
+  {
+    "app_copy_fact_status": "failed",
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "geopolitics"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-28 17:00:38.340407+00",
+    "generated_text": "【速報】DMZの爆発、韓国が北朝鮮の地雷を疑う\n\n韓国軍は、非武装地帯（DMZ）で軍人3人が負傷した爆発について、国連軍司令部との暫定調査で、北朝鮮が最近設置した地雷が原因の可能性が高いと判断したと発表しました。原因はまだ暫定段階です。朝鮮半島をめぐるニュースですが、市場への具体的な影響は確認できていません。\n\n出典: https://www.aljazeera.com/news/2026/9/28/south-korea-suspects-north-korean-mines-behind-dmz-blast",
+    "generation_fact_status": "failed",
+    "id": "e765c2ec-0e76-4436-8aeb-c8234fb4646b",
+    "published_at": "2026-09-28 16:50:08+00",
+    "source_type": "breaking_market",
+    "title": "South Korea suspects North Korean mines behind DMZ blast"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "17230",
+    "company_name": "日本電技",
+    "coverage_categories": [
+      "corporate",
+      "earnings"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-28 12:00:38.138616+00",
+    "generated_text": "【速報】日本電技、株式の売出しを決議\n\n既存株主による売出しで、普通株式385万2,600株が対象です。売出価格は未定で、需要状況などを踏まえて決まります。オーバーアロットメントによる売出しも最大57万7,800株予定されていますが、実施の有無や株数は需要状況次第です。\n\n新株発行ではなく、既存株主が保有株を売り出す内容です。日本株では、売出価格の決定や需給面への反応が見られそうです。\n\n出典: https://www.release.tdnet.info/inbs/140120260924539460.pdf",
+    "generation_fact_status": "failed",
+    "id": "fb56a39a-2a67-4ed5-8146-caa45e566bd2",
+    "published_at": "2026-09-28 07:00:00+00",
+    "source_type": "tdnet",
+    "title": "株式の売出しに関するお知らせ"
+  }
+]
