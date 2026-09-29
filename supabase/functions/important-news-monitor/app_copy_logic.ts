@@ -155,7 +155,7 @@ export const APP_COPY_DRAFT_INSTRUCTIONS = [
   "title_ja: 60字以内。何が起きたかが分かる見出し。煽り、感嘆符、見出しラベル（【速報】等）は使いません。",
   "summary_ja: 1〜2文、200字以内。一覧で「何が起きたか」「誰・何に関係するか」が分かるようにします。",
   "detail_ja: 段落を空行（\\n\\n）で区切り、800字以内。原文が支える場合だけ2〜4個の短い段落にし、主体・場所・時刻、出来事の順序、公式発表、距離・人数・被害、発生後の運用状況など、要約や要点と重複しない追加の事実を優先します。原文の情報量が少ない場合は短い1段落で構いません。水増しや繰り返しをしません。",
-  "key_points_ja: 原文が支える場合は2〜4項目、各80字以内。各項目は別の短い事実にし、detail_jaの段落と同じ文を繰り返しません。原文が薄い場合に項目数を埋める必要はありません。",
+  "key_points_ja: 0項目、または2〜4項目にします（各80字以内）。1項目だけにはしません。各項目は別の短い事実にし、detail_jaの段落と同じ文を繰り返しません。原文が支える別々の事実が2つ未満なら、水増しせず空配列にします。",
   "市場や株価への影響・日本株との関連は別の表示項目で扱うため、detail_jaにはイベントの事実と確認済み状況だけを書き、一般的な市場コメントで水増ししません。",
   "URL、HTML、ハッシュタグ、絵文字、売買推奨、株価の上げ下げの断定は含めません。",
   "原文の情報が不足して正確に書けない場合は sufficient_information を false にし、各文字列を空、key_points_ja を空配列にしてください。",
@@ -167,13 +167,19 @@ export const APP_COPY_FACT_INSTRUCTIONS = [
   "自然な意訳や要約は許容します。ただし意味・確度・範囲が変わっていれば passed を false にします。issues は短い日本語で返してください。",
 ].join("\n");
 
-export function appCopyDraftRequestBody(source: AppCopySource): Record<string, unknown> {
+/** Appended to the draft instructions for the one retry after a single key point. */
+export const APP_COPY_KEY_POINTS_RETRY_INSTRUCTION =
+  "前回の出力では key_points_ja が1項目でした。key_points_ja は2〜4項目、または空配列にしてください（1項目は不可）。原文が支える別々の事実が2つ未満なら空配列にします。その他の項目も同じ基準で作り直してください。";
+
+export function appCopyDraftRequestBody(source: AppCopySource, keyPointsRetry = false): Record<string, unknown> {
   return {
     model: APP_COPY_MODEL,
     store: false,
     reasoning: { effort: "low" },
     max_output_tokens: 1800,
-    instructions: APP_COPY_DRAFT_INSTRUCTIONS,
+    instructions: keyPointsRetry
+      ? `${APP_COPY_DRAFT_INSTRUCTIONS}\n${APP_COPY_KEY_POINTS_RETRY_INSTRUCTION}`
+      : APP_COPY_DRAFT_INSTRUCTIONS,
     input: JSON.stringify(appCopyModelInput(source)),
     text: { format: { type: "json_schema", name: "important_news_app_copy", strict: true, schema: DRAFT_SCHEMA } },
   };
@@ -255,8 +261,10 @@ function safeCode(error: unknown): string {
 }
 
 /**
- * One generation, then (only if the local checks pass) one Fact check. Never
- * retries. Every failure mode returns status "failed" and no copy is shown.
+ * One generation, then (only if the local checks pass) one Fact check. The only retry is one more
+ * draft when the model returned exactly one key point (APP_COPY_KEY_POINTS_TOO_FEW), with the allowed
+ * count restated; API errors and every other failure are never retried. Every failure mode returns
+ * status "failed" and no copy is shown.
  */
 export async function generateAppCopy(source: AppCopySource, request: AppCopyRequester): Promise<AppCopyOutcome> {
   const outcome: AppCopyOutcome = {
@@ -276,7 +284,12 @@ export async function generateAppCopy(source: AppCopySource, request: AppCopyReq
   try {
     const draft = await request("draft", appCopyDraftRequestBody(source));
     account(draft);
-    const parsed = parseAppCopyDraft(draft.payload);
+    let parsed = parseAppCopyDraft(draft.payload);
+    if (parsed.error === "APP_COPY_KEY_POINTS_TOO_FEW") {
+      const retry = await request("draft", appCopyDraftRequestBody(source, true));
+      account(retry);
+      parsed = parseAppCopyDraft(retry.payload);
+    }
     if (!parsed.copy) {
       outcome.error = parsed.error;
       return outcome;
