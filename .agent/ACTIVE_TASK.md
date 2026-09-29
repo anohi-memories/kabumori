@@ -33,13 +33,13 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: x-social-mobile-account-deletion-final-acceptance-review-20260929
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: final focused acceptance of PR #52 fixed head `002d24a`; verify prior R1-R6 plus client-session pinning and merge readiness; recommended Sol（高）
+- allocation: closed; Final C2 FAIL at PR #52 `002d24a`; one remaining first-onboarding/deletion serialization P1 plus checked-Deno typing defect returned to G3
 
 ## Claude G1
 - owner: claude
@@ -65,11 +65,11 @@
 - owner: claude
 - slot: claude-3
 - status: ready
-- task_id: x-social-mobile-account-deletion-correction-phase4b-20260929
+- task_id: x-social-mobile-account-deletion-concurrency-fix-phase4c-20260929
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: reassigned after C2 FAIL; fix durable deletion state, cross-product deletion scope, Vault ownership, X/Apple revoke retry, CORS and client-session pinning; recommended Opus5.5（高）
+- allocation: focused correction after final H2 FAIL; common serialization between first-onboarding writer and deletion acquire + checked Deno typing fix; recommended Opus5.5（高）
 
 ## Claude G4
 - owner: claude
