@@ -14,7 +14,6 @@ test("every release-blocking entry is present and in a predictable order", () =>
     "account-email",
     "password",
     "notifications",
-    "portfolio",
     "topic-level",
     "privacy",
     "terms",
@@ -22,12 +21,6 @@ test("every release-blocking entry is present and in a predictable order", () =>
     "logout",
     "delete-account",
   ]);
-});
-
-test("the portfolio entry is a reachability link for the route dropped from the bottom tabs", () => {
-  const entry = settingsEntries(configured, { email: null }, "初心者向け").find((e) => e.id === "portfolio");
-  assert.ok(entry);
-  assert.equal(entry.kind, "action");
 });
 
 test("deleting the account is the last entry and is marked destructive", () => {

@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/back-button';
 import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
 import { fetchRecentReports } from '@/lib/personalized-reports';
 import {
@@ -60,6 +61,7 @@ export default function PortfolioScreen() {
       <ScrollView
         contentContainerStyle={styles.container}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={colors.accent} />}>
+        <BackButton />
         <Text style={styles.eyebrow}>PORTFOLIO</Text>
         <Text style={styles.title}>ポートフォリオ</Text>
         <Text style={styles.description}>保存済みの大引けレポートに含まれる終値から、保有銘柄の状況を確認できます。</Text>

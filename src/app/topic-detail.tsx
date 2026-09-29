@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { router, useLocalSearchParams } from 'expo-router';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/back-button';
 import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
 import { fetchDailyTopic } from '@/lib/daily-topic';
 import { isTopicLevel, TOPIC_LEVEL_LABEL, type HomeTopic } from '@/lib/home-topic';
@@ -55,9 +56,7 @@ export default function TopicDetailScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.container}>
-        <Pressable onPress={() => router.back()} accessibilityRole="button" style={styles.backButton}>
-          <Text style={styles.backText}>‹ Homeにもどる</Text>
-        </Pressable>
+        <BackButton />
 
         {status === 'loading' ? (
           <ActivityIndicator color={palette.accent} style={styles.status} />
@@ -101,8 +100,6 @@ export default function TopicDetailScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: palette.background },
   container: { padding: 20, paddingBottom: 60 },
-  backButton: { minHeight: 44, justifyContent: 'center' },
-  backText: { color: palette.accent, fontWeight: '800', fontSize: 15 },
   status: { marginTop: 40 },
   message: { color: palette.muted, fontSize: 15, lineHeight: 23, marginTop: 24 },
   eyebrow: { color: palette.accent, fontWeight: '900', letterSpacing: 1.4, fontSize: 11, marginTop: 16 },

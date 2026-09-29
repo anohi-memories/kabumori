@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { router, useFocusEffect } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/back-button';
 import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
 import { deleteSignedInAccount } from '@/lib/account-deletion-client';
 import { deleteConfirmationIssue } from '@/lib/account-deletion';
@@ -138,12 +139,12 @@ function SettingsMenu({
     if (entry.id === 'logout') return void logOut();
     if (entry.id === 'delete-account') return onDeleteAccount();
     if (entry.id === 'topic-level') return onOpenTopicLevel();
-    if (entry.id === 'portfolio') return router.push('/portfolio');
   }
 
   return (
     <>
       <View style={styles.headerRow}>
+        <BackButton />
         <Text style={styles.eyebrow}>SETTINGS</Text>
         <Text style={styles.title}>設定</Text>
       </View>
