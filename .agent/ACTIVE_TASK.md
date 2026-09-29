@@ -45,21 +45,21 @@
 - owner: claude
 - slot: claude-1
 - status: ready
-- task_id: kabumori-home-v3-routing-fix-postmerge-ios-preview-qa-20260929
+- task_id: kabumori-data-packet-session-reuse-prod-sync-20260929
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: PR #55 K1 PASS + merge `e8326163`; build one fresh EAS internal/preview iOS from current main and rerun user real-device navigation/Home/Topic/Settings QA. Broken build `d9ed1da1...` prohibited. Source/prod mutation prohibited. Recommended Sonnet5（中）
+- allocation: deploy-only production sync of reviewed main `market-report-data-packet` including same-session reuse fix; no source edits, no manual cycle forcing. Recommended Sonnet5（高）
 
 ## Claude G2
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-shared-analysis-prod-deploy-observe-20260928
+- task_id: kabumori-shared-analysis-content-guard-fix-20260929
 - start_code: G2
 - finish_code: K2
 - source: `.agent/tasks/CLAUDE_TASK.md`
-- allocation: in progress; shared-checkout config incident recovered; continue ONLY from `/Users/yuya/Developer/kabumori-g2-market-report-reliability` on fresh main `fc0afd32`; old PR #45 branch/worktree and shared checkout are forbidden for deploy; deploy only market-report-analysis with app/x gates OFF; recommended Sonnet5（高）
+- allocation: source/test fix for 9/29 shared close failures: 1306 proxy identity + unsupported causal assertion; no deploy/gates/data-packet edits. Recommended Opus5.5（高）
 
 ## Claude G3
 - owner: claude
