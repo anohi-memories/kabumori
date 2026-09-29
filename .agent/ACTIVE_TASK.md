@@ -44,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: done
-- task_id: kabumori-daily-topic-prod-apply-verify-20260928
+- status: ready
+- task_id: kabumori-daily-topic-real-device-qa-20260929
 - start_code: G1
 - finish_code: K1
 - source: `.agent/tasks/CLAUDE_TASK_1.md`
-- allocation: closed; ChatGPT applied the exact independently-reviewed daily-topic SQL only, production ACL/RLS/determinism/read-only checks PASS; authenticated role call PASS, anon denied; migration history intentionally unrepaired and broad db push remains forbidden until separate hygiene task
+- allocation: prepare/reuse one safest fresh-main iOS internal build for real-device QA of live daily-topic + settings level switching; no source/prod mutation expected; user performs physical iPhone acceptance. Recommended Sonnet5（中）
 
 ## Claude G2
 - owner: claude
