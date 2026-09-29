@@ -69,6 +69,15 @@
 - next gate: natural scheduled morning/close observation with consumers OFF. This C1 does not authorize consumer activation.
 - G2 PR #57 content-guard correction remains separate and unresolved.
 
+## G1 04 asset received
+
+- user supplied the exact approved neutral artwork.
+- verified source: 1536x1024 PNG, RGBA transparency.
+- canonical visual: Yume-chan + robot + pointer + tablet, exactly as supplied.
+- canonical app filename remains `assets/images/report-states/report_04_neutral.webp`.
+- allowed transform: lossless PNG -> WebP encoding with alpha preserved, no resize or visual edits.
+- phase 1 remains fixed 04 display only; dynamic 10-state selection remains deferred until visual placement approval.
+
 ## G1 UI phase — fixed report_04_neutral.webp first
 
 - user decision: add the approved 04 neutral Yume-chan artwork to the Home report card first and keep it fixed.
