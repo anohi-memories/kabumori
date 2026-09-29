@@ -3,8 +3,8 @@
 - task_id: kabumori-home-v3-topic-detail-safearea-correction-20260929
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: 実機QAで判明したHomeの最終デザイン差分、今日のトピックの情報量不足/詳細画面欠如、Settingsのsafe-area操作不能をまとめて修正する。G2/market-report-analysisには触れない。
@@ -1063,3 +1063,85 @@ None found. Waiting on the user's real-device confirmation of the checklist abov
 
 Send the user the install link and checklist; once they report the result, a final G1 pass records PASS/issues for K1.
 
+## Report — G1 result (home v3 correction: topic detail + Settings safe-area)
+
+- task_id: kabumori-home-v3-topic-detail-safearea-correction-20260929
+- fresh main SHA at start: `2cac308`
+- worktree/branch: independent scratch checkout, branch `claude/home-v3-topic-detail-safearea-20260929`
+- **result: implemented, tested, PR opened. Not self-merged. Production mutation 0.**
+
+### Root cause of Home visual drift
+
+Not a logic bug: the prior redesign (PR #46) kept the approved information order but used more generous padding/type scale and a bold filled-circle+emoji character placeholder than the approved v3 mock, and news rows had no explicit category label. Purely presentation density plus one missing field.
+
+### Exact v3 corrections
+
+- Report hero: padding 18→14, tighter type scale, character slot 64→48.
+- Character slot: replaced the filled circle + 🌱 with a quiet empty dashed-outline placeholder (no fill/glyph) until an approved cutout asset exists.
+- News rows: added a category label from existing `coverage_categories` data (no new fetch).
+- Ask AI entry: replaced the large disabled CTA with a compact input-field-styled row + tappable question chips, all navigating to the new `/ai` screen.
+
+### Topic detail architecture
+
+- `src/lib/topic-detail-catalog.ts`: static, curated, evergreen 4-section (ひとことで/なぜ大事か/見るときのポイント/注意点) detail entries, keyed by the tip's stable `title`. No real-time claims, no buy/sell advice — enforced by a regex guard test. Unknown title → `null`, fails soft to `base_text`.
+- `HomeTopic` extended with `id`/`category` (previously discarded from the RPC response).
+- `src/app/topic-detail.tsx`: re-fetches via the existing `get_daily_kabumori_tip` RPC with the tapped `(level, jstDate)`, renders only if the returned row's `id` matches the tapped topic's `id` — otherwise an honest mismatch message, never a silently-swapped topic. No new RPC.
+
+### Detail catalog coverage count
+
+**50/50** — verified by an exact string cross-check test against every title in `20260828213000_expand_tips_catalog.sql`'s seed `VALUES` block (not eyeballed), plus a reverse check that the catalog has no titles beyond the current seed.
+
+### Settings safe-area root cause + exact fix
+
+Root cause: Settings was a Modal + `SafeAreaView`. `react-native-safe-area-context`'s inset measurement is unreliable inside RN's own `Modal` (separate native window, outside the tree `SafeAreaProvider` measures) — a known class of issue, not reliably fixable with a `useSafeAreaInsets()` patch either.
+
+Fix (the task's own preferred option): moved Settings to a real top-level screen/tab, `src/app/settings.tsx` — a normal screen in the navigation tree shares the same `SafeAreaProvider` as every other screen and doesn't have this problem. Removed the now-unnecessary "閉じる" button; kept the existing "‹ 設定にもどる" back navigation on the delete-account/topic-level sub-views (already safe-area-correct as plain screen content).
+
+### Bottom nav before/after
+
+- Before: ホーム / 銘柄 / ポート / レポート / 重要ニュース
+- After (approved v3): ホーム / 銘柄 / レポート / AIに聞く / 設定
+- `portfolio.tsx` and `news/` **not deleted** — confirmed present in the static export (see Tests below). Reachability: news via Home's existing "すべて見る" links (unchanged); portfolio via a new "ポートフォリオ" entry added to Settings.
+- `/ai` (new): honest "準備中" screen.
+
+### Changed files (exact)
+
+- New: `src/app/ai.tsx`, `src/app/topic-detail.tsx`, `src/lib/topic-detail-catalog.ts`, `tests/app/app-tabs_test.ts`, `tests/app/topic-detail-catalog_test.ts`
+- Renamed: `src/components/settings-sheet.tsx` → `src/app/settings.tsx`
+- Modified: `src/app/index.tsx`, `src/components/app-tabs.tsx`, `src/components/home/ask-ai-entry.tsx`, `src/components/home/character-slot.tsx`, `src/components/home/home-news-section.tsx`, `src/components/home/report-highlight-card.tsx`, `src/components/home/topic-card.tsx`, `src/lib/home-topic.ts`, `src/lib/settings-menu.ts`, `tests/app/home-topic_test.ts`, `tests/app/settings-menu_test.ts`
+
+### Tests
+
+- New: `topic-detail-catalog_test.ts` (7 tests), `app-tabs_test.ts` (2 tests).
+- Updated: `home-topic_test.ts`, `settings-menu_test.ts`.
+- Full regression: **103/103 pass** across all Home/settings/topic/news/report/account-deletion suites.
+- `npx tsc --noEmit` — 0 new errors under `src/` (same 2 pre-existing, unrelated CSS-module errors as `main`).
+- `npx expo config --json` — resolves cleanly.
+- `npx expo export --platform web --clear` — full static export succeeds, **13/13 routes render**, including `/ai`, `/settings`, `/topic-detail`, and confirming `/portfolio`/`/news` still exist.
+- `git diff --check` — clean.
+
+### Production mutation
+
+**0.** UI/navigation/static-content source only.
+
+### PR / head SHA
+
+- PR: https://github.com/anohi-memories/kabumori/pull/53
+- Head: `e53465f` on `claude/home-v3-topic-detail-safearea-20260929`
+- Base: fresh `main` at `2cac308`
+- **Not self-merged.**
+
+### Real-device QA still required
+
+This is source-only; actual visual/layout correctness (report card fitting the first viewport, character placeholder reading as intentional, Settings header/buttons clearing the status bar on a real notch/Dynamic-Island device, topic detail readability) has **not** been confirmed on a physical iPhone. This predecessor task was explicitly a QA-fail replacement — I am not marking this PASS myself; a new EAS build + the user's real-device check is still needed.
+
+### Remaining issues
+
+1. Character cutout asset still doesn't exist — placeholder intentionally neutral/empty.
+2. Detail catalog covers only the 50 currently-seeded tips; any future tip needs a matching entry or fails soft to short `base_text`.
+3. `/ai` remains "準備中"; real AI chat route is a separate future task.
+4. Real-device visual QA (see above) not yet performed.
+
+### Next recommendation
+
+K1 review → merge if satisfied → new EAS `preview` build → user real-device QA, checking specifically: report card fits above the fold, character placeholder looks intentional, topic tap opens the detail screen with real multi-paragraph content, Settings fully operable without overlapping the status bar.
