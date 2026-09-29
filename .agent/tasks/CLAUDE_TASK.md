@@ -3,8 +3,8 @@
 - task_id: kabumori-shared-analysis-content-guard-fix-20260929
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Opus5.5（高）
 - purpose: 2026-09-29大引けshared analysisがlocal check / Factで2回失敗した実例を再現し、1306の誤ラベルと根拠のない因果断定をsource側で最小修正する。transport retry・claim/idempotency・consumer gateは変えない。
@@ -506,6 +506,91 @@ Then status -> review_required, next_owner -> chatgpt, STOP for K2.
 
 Recommended model: Opus5.5（高）.
 
+### Report — K2 correction（causal support must preserve direction/polarity）
+
+- result：**source-readyのPASS候補**。PR #57の同じbranchに、修正を1 commit追加した（force pushはしていない）。未merge、deployなし。
+- 着手時のfresh main：`b0e37f6`。branch `g2-shared-analysis-content-guard-20260929`、G2専用checkout。
+
+#### root cause（K2の指摘）
+
+- 前回の `causeSupported()` は、原因の語とニュースの文に**3文字以上の共通部分**があれば、裏付けありと判定していた。
+- そのため、原因の対象（「半導体株」）さえ一致すれば、向き（安と高）が逆でも合格していた。
+  - 例：ニュースは「半導体株安」なのに、「半導体株高を受けて…」が合格する。
+  - 例：ニュースは「米国株安」なのに、「米国株高を受けて…」が合格する。
+- あわせて、旧実装は「売り」「買い」を意味の無い語として読み飛ばしていた。そのため「半導体株の買い」の向きも失われていた。
+
+#### 採用した照合ルール（向きを保持する決め打ちの規則。類似度の照合はしない）
+
+1. **原因を「対象」と「向き」に分ける**
+   - 例：「半導体株安」→ 対象「半導体株」＋向き「安」。
+   - 向きの語：安・高、上昇・下落、上げ・下げ、買い・売り、急落・急騰、値下がり・値上がり、低下、反落・反発。
+   - 「半導体株の下落」「米国株の売り」のように助詞で分かれている場合も、対象＋向きとして読む（「売り」「買い」を読み飛ばす語から外した）。
+2. **向きのある原因の判定**
+   - ニュースの文（因果claimが引用したニュースの見出しと要約）に**同じ対象**があり、その直後10文字以内（文の区切りまで）に現れる**最初の向きの語**が**同じ向き**のときだけ、裏付けありとする。
+   - 例：「半導体株が売られた」は「半導体株安」を裏付けるが、「半導体株高」は裏付けない。
+   - 誤読を防ぐため、「安全」「安定」「安心」「高官」「高速」「高齢」は向きの語として扱わない。
+3. **向きの無い原因の判定**：ニュースに**そのまま**含まれている場合だけ、裏付けありとする。3文字の部分一致による緩和は廃止した。
+4. **言い換え**：決め打ちの対応表だけを使う（`米株`・`NY株`・`米国の株` → `米国株`）。原因とニュースの両方に同じ変換をかける。
+5. **これまでの扱いは維持**
+   - 因果表現ごとに原因を個別に照合する。
+   - A＋Bは、それぞれが独立に裏付けられたときだけ合格。
+   - 打ち消しのある文は許す（推測の語が無い場合）。
+   - claimの本文は裏付けとして使わない。
+6. **変えていないもの**：Fact検査の指示、transport retry、claim・idempotency・fencing、呼び出し回数の上限、model、gate、DB、cron、data-packet。
+
+#### 向きの逆転テストの before/after
+
+- 新しいテスト3件：
+  - 向きが逆なら不合格：
+    - ニュースが半導体株安の場合：`半導体株高を受けて…`、`米半導体株高…`、`半導体株の上昇…`、`半導体株の買いにつれて…`
+    - ニュースが米国株安の場合：`米国株高を受けて…`、`米株高を受けて…`
+  - 同じ向きなら言い換えても合格：
+    - `半導体株安を受けて…`、`米半導体株安…`、`半導体株の下落…`、`半導体株の売りにつれて…`
+    - 決め打ちの言い換え：`米国株安`・`米株安`・`米国株の下落`
+  - 有効な理由A＋向きが逆の理由B（x_post）は不合格。作り直しで向きが逆のBを足した場合も、Factを呼ぶ前にローカル検査で止まる。
+- **修正前（`485f4bf`）**：3件ともFAILED。
+  - 向きが逆の `半導体株高を受けて…` が合格していた。
+  - 言い換えの `米株安を受けて…` が不合格だった。
+  - 混在ケースで、向きが逆のBを検出できなかった。
+- **修正後**：`content_guard_test.ts` は **16/16 PASS**（既存13件＋新規3件）。
+
+#### full test results
+
+- market-report-analysis：**51/51**（handler・transport・qualityのテストを含む）
+- market-report-data-packet：42/42
+- personalized-reports：125/125
+- x-test-post shared consumer：6/6
+- `_shared`：279/279（`--no-check`。型エラーは既存の `brand_post_generator_test.ts` のもの）
+- 誤検出の確認：本番のFact合格packet 5件で、新しい検査に引っかかったのは**0件**。
+- `deno check`：PASS。`deno lint`（変更ファイル）：問題なし。`git diff --check`：PASS。
+
+#### PR / CI
+
+- PR：https://github.com/anohi-memories/kabumori/pull/57
+- 最終head：`b8bbfe981735e6a2e42987011f1e4a4e7ab2824c`
+  - 1回目のpushは、GitHub側の一時的なエラー（Internal Server Error）で拒否された。再試行で反映済み。
+- CIは、Web用のプレビューの確認だけで、Denoのテストは含まれていない（Denoのテストはlocalで実行した）。
+  - **Vercel：failure**。理由は「Deployment rate limited — retry in 24 hours」で、コードの問題ではない。CURRENT_STATEの方針どおり、ブロッカーとして扱わない。
+  - Netlify：Report作成時点で実行中。
+  - mergeable：MERGEABLE。
+
+#### production mutations
+
+- **0**（今回はDBの読み取りもしていない）。
+
+#### remaining issues
+
+1. 向きの判定は、対象の語の直後10文字以内に出る最初の向きの語で行う近似。
+   - ニュースが対照的な表現（例：「半導体株は売られたが、銀行株は買われた」）を使う場合は、対象ごとの直後の語で判定する。
+   - 判定できない言い回しは、これまで通りFactで止まる。
+2. 言い換えの対応表は3件だけ。対応表に無い略し方は不合格になり、作り直しが1回増えることがある（安全側の誤り）。
+3. 前回のReportの残課題（完成率は自然なcycleで確かめるしかない、など）は変わらない。
+
+#### recommendation
+
+- K2で確認したあと、mergeし、`market-report-analysis` だけを別gateでdeployしてbyte照合する。
+- そのあと、数営業日の自然なcycleで、完成率と指摘の傾向を観察する。
+- consumerの有効化の前のfocused reviewで、この因果の検査もあわせて確認する。
 
 ---
 
