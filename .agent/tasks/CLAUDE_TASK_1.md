@@ -1,3 +1,119 @@
+# Claude Task 1 — CURRENT TASK
+
+- task_id: kabumori-home-ui-continuation-20260929
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（高）
+- purpose: PR #56後の現行かぶモリアプリを基準に、ホーム画面・ナビ・メニュー・実機UIの継続改善をG1で担当する。この部屋のG1はUI系workstreamとして固定し、market-report backend / Edge Function / DB作業を混在させない。
+
+## Canonical UI baseline
+
+Accepted / merged:
+- PR #53: Home v3 / topic detail / settings safe-area等
+- PR #55: root Stack + (tabs) routing recovery
+- PR #56: latest navigation/menu/topics consolidation
+  - bottom tabs = ホーム / 銘柄 / ニュース / レポート / メニュー
+  - メニュー = 今日のトピック / AIに聞く / 設定
+  - portfolio is integrated into 銘柄 tab, not a standalone menu item
+  - /topics list exists
+  - pushed screens use shared BackButton
+- PR #56 merge SHA: `6946f810e7353ded46962053201e7cf060aca891`
+- latest PR #56 branch build before merge:
+  - build id: `4883189c-f180-4447-b57e-a8365bb8f401`
+  - source: `ad42874809b708fd218bd05de246d3490214f2b8`
+- user had already reported real-device PASS on earlier branch build at `16ae556`, but the final portfolio-in-銘柄 change in `ad42874` still needs user-facing visual QA.
+
+## Product/UI direction
+
+かぶモリはリアルタイム証券アプリではない。
+
+Home value hierarchy:
+1. 今日のかぶモリレポート
+2. 重要ニュース
+3. あなたの保有銘柄 最新ニュース
+4. 今日のトピック
+5. AIに聞く
+6. navigation
+
+Design:
+- iPhone vertical
+- white / ivory base
+- pale mint + deep green
+- rounded compact cards
+- information density high enough that first viewport reaches from Header through report and important news
+- cute but not childish
+- investment app credibility > decorative effects
+- do not add excessive plants, sparkles, speech bubbles, giant financial numbers or unrelated mascot elements
+
+## Scope for this UI continuation
+
+Allowed:
+- Home layout / spacing / card hierarchy / typography
+- tabs / menu / back-button UX
+- 銘柄 tab visual arrangement
+- news/topics/report/AI/settings navigation presentation
+- safe-area issues
+- loading / empty / error UI presentation
+- report-card visual container and future character-image slot
+- deterministic local UI helpers/tests
+- Expo/iOS preview build for visual QA when source changes warrant it
+
+Do not invent or replace backend contracts merely to improve visuals.
+Do not change report-generation logic, market-report Edge Functions, DB/RPC/migrations, cron, consumer gates, X posting or Auth/Vault.
+
+## Character/report-card constraint
+
+The Home report card is expected to support daily character-state artwork later.
+Do not invent new character art or hard-code unfinished assets.
+Keep the UI compatible with the approved 10-state concept, but only wire actual assets after their canonical files are available/approved.
+
+## Working method
+
+1. Use dedicated G1 worktree/checkout.
+2. Fresh-fetch origin/main; record exact SHA.
+3. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / this TASK.
+4. Inspect current Home and navigation source before editing.
+5. Do not overwrite user-directed PR #56 decisions.
+6. For each new user-requested UI change:
+   - make the narrowest implementation
+   - preserve navigation reachability tests
+   - add/update deterministic UI tests where practical
+   - run relevant app tests / Expo config/export / type/lint checks
+7. Create focused PRs; do not self-merge unless task explicitly authorizes it.
+8. For real-device visual changes, provide a fresh EAS internal/preview build only when useful; never reuse known-broken build `d9ed1da1...`.
+
+## Immediate next step
+
+No speculative redesign is authorized yet.
+
+Start by:
+- syncing to fresh main
+- auditing the current Home/UI implementation against this accepted baseline
+- identifying only concrete visual/UX mismatches still present after PR #56
+- do not modify source until a concrete user UI instruction or screenshot gives the next target
+
+When the user gives the next UI change in this room, implement it under this G1 task.
+
+## Completion / K1
+
+After a concrete UI increment:
+- report changed_files
+- tests/checks
+- PR/head
+- preview build if created
+- real-device QA status
+- remaining visual issues
+- no backend/production mutation
+
+Then status -> review_required, next_owner -> chatgpt, STOP for K1.
+
+---
+
+## Archived predecessor state
+
 # Claude Task 1
 
 - task_id: kabumori-data-packet-session-reuse-prod-sync-20260929
@@ -1943,3 +2059,4 @@ Production mutation: 0. Rollback: not needed. `review_required` / next_owner `ch
   - no DB/schema/RPC/Auth/Vault/secret/gate mutation
   - no manual cycle
 - Therefore there is no remaining G1 work on this task and it must not be restarted.
+
