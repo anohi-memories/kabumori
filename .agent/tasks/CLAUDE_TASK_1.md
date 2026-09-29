@@ -3,8 +3,8 @@
 - task_id: kabumori-data-packet-session-reuse-prod-sync-20260929
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: highest
 - recommended_model: Sonnet5（高）
 - purpose: K2で判明したproduction `market-report-data-packet` のsource遅れを解消し、mainに既に存在するsame-session reuse fix（`aecfa60`系）を、対象Edge Functionだけへcontrolled deployしてsource read-backまで確認する。新規source修正は禁止。
@@ -114,6 +114,16 @@ When complete:
 - status -> review_required
 - next_owner -> chatgpt
 - STOP for K1.
+
+## K1 re-issue after PR #56
+
+- PR #56 was independently reviewed by ChatGPT at head `ad42874809b708fd218bd05de246d3490214f2b8` and merged as `6946f810e7353ded46962053201e7cf060aca891`.
+- The app/navigation work is separate from this deploy-only backend task.
+- The prior G1 report explicitly states this queued `market-report-data-packet` task was **not started** and production mutation for it was 0.
+- This task is therefore re-issued unchanged in purpose, but must start again from fresh current main and re-run all mandatory pre-deploy checks.
+- Do not rely on the older expected SHA from prior notes; record current fresh main at startup.
+- If production-read/write permissions block the mandated checks, STOP before mutation and report the exact blocker.
+
 
 ---
 
