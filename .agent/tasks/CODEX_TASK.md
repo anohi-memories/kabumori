@@ -3,8 +3,8 @@
 - task_id: kabumori-market-report-analysis-prod-sync-content-guard-20260929
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sol（高）
 - purpose: K2 PASS/merge済みPR #57の `market-report-analysis` content guardを、consumer gate OFFのままproductionへ単一Function deployし、source read-back・verify_jwt・cron・consumer gate・他Function非変更を確認する。source実装は禁止。
@@ -459,3 +459,14 @@ Verdict: **PASS-WITH-FIX**.
 - post-C1 fresh-main check: current main advanced beyond the deployed commit only in agent/report control files; no `market-report-data-packet/**` or relevant shared-source change, so production v12 is not stale relative to current source.
 - natural-cycle morning/close validation remains a separate gate. Consumer activation remains unapproved.
 
+
+## Assignment correction — cancelled before execution
+
+- disposition: **CANCELLED / MISROUTED BEFORE START**.
+- reason: user clarified `kabumori-market-report-analysis-prod-sync-content-guard-20260929` belongs to G2, the owning implementation/rollout workstream, not H1.
+- execution: not started.
+- production mutation: 0.
+- deploy: none.
+- source changes: none.
+- continuation: moved to `.agent/tasks/CLAUDE_TASK.md` / G2 with recommended model Sonnet5（高）.
+- H1 is released from this assignment and must not run it concurrently.
