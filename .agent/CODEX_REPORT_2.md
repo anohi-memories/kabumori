@@ -8,7 +8,8 @@
 - fresh_origin_main_at_start: `a03fefc771e76f5bb53c5f54968fbffb269a0db8`; report-only synchronization base: `267ed44870304671c47c5af93a30e4d639880501`.
 - source_fixes / implementation_commit: **0 / existing G3 head above**. TASK's new-design-issue FAIL/STOP rule was applied; neither the concurrency design nor the test-only typing defect was patched.
 - changed_files: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md` only.
-- push: pending report-only commit/push and remote read-back at the time of writing; completion record follows after actual confirmation.
+- report_commit_hash: `5bd6545582160907371dc1ba5f577b0378a1828b` (H2 Report/TASK only).
+- push: **SUCCESS** to origin/main; fresh remote read-back confirmed this report commit is included, the current task_id is at the Report head, and TASK is `review_required / next_owner: chatgpt`. This follow-up only records the confirmed delivery result; its final sync SHA is provided in the completion message.
 - deploy / merge / production_mutation: **0 / 0 / 0**.
 
 ### Blocking finding — R1 P1: a pre-existing uncommitted first onboarding escapes the tombstone
