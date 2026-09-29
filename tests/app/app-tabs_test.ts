@@ -1,12 +1,12 @@
 // Pins the approved v3 bottom navigation (ホーム/銘柄/レポート/AIに聞く/設定).
-// app-tabs.tsx imports expo-router/unstable-native-tabs, which needs a real
-// RN/Expo runtime, so this reads the source as text -- the same
+// src/app/(tabs)/_layout.tsx imports expo-router/unstable-native-tabs, which
+// needs a real RN/Expo runtime, so this reads the source as text -- the same
 // static-analysis approach the rest of this suite uses for RN-only files.
 import assert from "node:assert/strict";
 import test from "node:test";
 
 async function source() {
-  return Deno.readTextFile(new URL("../../src/components/app-tabs.tsx", import.meta.url));
+  return Deno.readTextFile(new URL("../../src/app/(tabs)/_layout.tsx", import.meta.url));
 }
 
 test("the bottom tabs are exactly the approved v3 set, in order", async () => {
