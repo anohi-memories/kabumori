@@ -244,12 +244,12 @@ Recommended model: **Opus5.5（高）**.
 ## Report
 
 - 実行モデル: Opus 5.5（推奨どおり）
-- **result: READY_FOR_ROLLOUT**（条件付き。手順書の gate を順に通すこと）。STOP 条件には該当しなかった。
+- **result: READY_FOR_ROLLOUT_WITH_OPERATOR_GATES**。STOP 条件には該当しなかった。
 - fresh main commit: 開始時 `4c7176c`。PR #52 の squash は `136dcd2`。
 - production_mutation=0:
   - 本番に対しては、カタログの読み取りと集計値だけを見た。ユーザーの行、トークン、Vault の平文、secret の値は読んでいない。
   - apply / db push / deploy / Auth・コンソールの変更 / Vault の変更 / 削除 / 失効 / 投稿 / フラグの有効化は、いずれもなし。
-- **機密情報の扱い**: 権限の詳細、設定の名前、範囲外のセキュリティ所見は、リポジトリには記録せず、ユーザー（オペレーター）に直接伝えた（ユーザーの指示による）。
+- **機密情報の扱い**: ChatGPT の判断（sanitized publication）とユーザーの指示に従い、本番のセキュリティ上の詳細はリポジトリに記録していない。
 - 手順書: `apps/social-mobile/docs/account-deletion-rollout-runbook.md`（新規）。適用・読み戻し・ロールバック・デプロイ・E2E・gate をまとめた。
 
 ### migration identity
@@ -259,16 +259,17 @@ Recommended model: **Opus5.5（高）**.
 - 後続の migration は、参照先のオブジェクトに触れていない。
 - `db push` は不要で、禁止のまま。
 
-### production catalog / isolation / Auth / Vault / Storage findings（要約）
-- **権限**: migration を実行するロール（＝関数の owner）は、設計に必要な権限を持つ（11テーブルへの trigger 作成、Auth ユーザー行と Vault secret 行の DELETE）。
-- **テーブル**: 監視対象の11テーブルは、存在・RLS・列の型がすべて想定どおり。
-- **既存トリガー**: guard と両立することを確認した。Auth ユーザー表と Vault secret 表には、独自のトリガーが無い。
-- **外部キー**: レビュー時から変わっていない。Auth ユーザーを削除すると、認証まわりの全行（セッションと refresh token を含む）が CASCADE で消える。
-- **ワークスペースを作る経路**: 本番でも `begin_social_mobile_x_oauth_connection` だけ。オンボーディング RPC は repo と一致した。
-- **分離レベル**: どこにも上書きが無く、すべての対象経路が READ COMMITTED（PostgREST の既定）で動く。ロック待ちには上限があり、時間切れはエラー（安全側）になる。
-- **Auth の削除**: SQL での hard delete は、カタログ上、想定どおりの CASCADE になる。独自トリガーは無く、Storage の所有も無い。本体アプリのデータ（profiles）の保護は、ロックを取った状態で再確認する。JWT の即時無効化は前提にしていない。
-- **Storage**: social-mobile の依存は無い。
-- **Edge**: 未デプロイで、名前は空いている。必要な Supabase と X の設定はある（名前だけ確認、値は見ていない）。Apple の失効は未設定なので、Apple でログインしているユーザーは最初から拒否する（設計どおり）。
+### production findings（sanitized）
+- 確認した内容:
+  - 設計が前提とする本番の schema / 所有者 / ACL / 分離レベル / Auth / Vault / Storage を、読み取り専用で確認した。STOP 条件には当たらなかった。
+  - ワークスペースを作る経路は、レビュー済みのオンボーディング RPC だけ（repo と一致）。
+  - 対象の経路はすべて READ COMMITTED で動く。
+  - social-mobile の Storage 依存は無い。
+  - Apple の失効は未設定なので、Apple でログインしているユーザーは最初から拒否する。
+- 範囲外の既存所見:
+  - 既存のセキュリティ/設定上の所見を確認したが、意図的にリポジトリには記録していない。
+  - ロールアウト前、または並行して、別途非公開での運用対応が必要。
+  - 詳細な証拠はユーザー（オペレーター）が保持している。
 
 ### exact later plan / rollback / E2E（詳細は手順書 §2–7）
 - 流れ: 適用直前の再確認 → sha256 を確認したファイルを1トランザクションで適用（`supabase db query --linked --file`） → 読み戻し → Edge のデプロイ（`verify_jwt` は有効のまま） → download と diff で同一性確認 → 削除を伴わない動作確認。
@@ -279,7 +280,7 @@ Recommended model: **Opus5.5（高）**.
 ### legal/operator gates
 - 未決: social-mobile のプライバシーポリシー / 規約 / 問い合わせ先、監査の保持期間、履歴を保持しない方針の確定、「X に公開済みの投稿は残る」という文言の確認。
 - 調整: Kabumori の `account-delete`（稼働中）と共有ログインの扱い。G1/G2 で対応が必要。
-- 範囲外の所見（リポジトリには記録していない、ユーザーに直接伝達済み）: プロジェクト全体の権限 hardening、設定の整理を推奨する。
+- 範囲外の所見は、非公開での運用対応とする（リポジトリには記録しない）。
 
 ### changed_files
 - `.agent/tasks/CLAUDE_TASK_3.md`
@@ -294,5 +295,5 @@ Recommended model: **Opus5.5（高）**.
 
 ### recommended next step
 - 別途承認を得たうえで、手順書どおりに適用 → 読み戻し → デプロイ → 使い捨てアカウントでの E2E を進める。
-- Kabumori との調整と、権限の hardening は別 TASK にすることを推奨する。
+- Kabumori との調整と、範囲外所見への非公開での対応は、別 TASK にすることを推奨する。
 - STOP for K3。

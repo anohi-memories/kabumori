@@ -1,6 +1,6 @@
 # Social-mobile account deletion — production rollout runbook (preflight 2026-09-29)
 
-Preflight result: **READY_FOR_ROLLOUT, gated.** Nothing was applied or deployed (`production_mutation=0`).
+Preflight result: **READY_FOR_ROLLOUT_WITH_OPERATOR_GATES**. Nothing was applied or deployed (`production_mutation=0`).
 
 - Production was read only through catalog SELECTs, plus one aggregate count of Storage objects with an owner (0). No user rows, tokens or Vault plaintext were read.
 - Every step below is **for a later, separately approved task**. Each step has a STOP condition: on any delta from the expected values, stop and report.
@@ -15,24 +15,15 @@ Preflight result: **READY_FOR_ROLLOUT, gated.** Nothing was applied or deployed 
 | later migrations | `20260929090000_news_discovery_observer.sql` does not touch any referenced object |
 | Edge function | `supabase/functions/social-mobile-account-delete/` (`index.ts`, `http.ts`, `delete_logic.ts`, `apple_revoke.ts`); **not deployed**; the name is free |
 
-## 1. Production facts (read-only, 2026-09-29; security-sensitive detail kept out of the repository)
+## 1. Preflight outcome (sanitized)
 
-- **Ownership and capability.** The migration role and the resulting function owner have the capabilities the design needs: triggers on the 11 guarded tables, DELETE on the Auth user and Vault secret rows, and USAGE on the required schemas. This was verified read-only; the exact role/privilege matrix was shared with the operator only.
-- **Guarded tables.** All 11 exist, have RLS on, and have the expected columns and types.
-- **Existing triggers.** All are compatible with the guard:
-  - A BEFORE trigger on `post_execution_logs` sets `brand_id`. It fires before `social_mobile_deletion_guard` (name order), so the guard sees the final value.
-  - The AFTER triggers on `social_accounts` and `x_account_refresh_state_v2` react only to updates that deletion never performs, or that the guard refuses during deletion.
-  - The Auth user table and the Vault secret table have no custom triggers.
-- **FK graph.** Unchanged from review:
-  - The Auth user cascades to all Auth-owned rows (identities, sessions and their refresh tokens, MFA, OAuth, WebAuthn), to `profiles`, `admin_users`, `brand_memberships` and `social_account_oauth_states`.
-  - Every reference to `brands` / `social_accounts` / `scheduled_posts` is NO ACTION, except `brand_memberships` and `daily_content_plans` (CASCADE).
-- **Workspace creation.** The only function that creates rows in `brands` / `brand_memberships` is `begin_social_mobile_x_oauth_connection`.
-  - No policy, rule or scheduled job creates them; any direct write is still covered by the trigger.
-  - The onboarding RPCs are byte-identical to the repository (md5 of begin/consume/complete = `7679362b…` / `9da3c2fd…` / `ca070453…`).
-- **Isolation.** Nothing overrides `default_transaction_isolation` (role, database or function), so every target path runs READ COMMITTED, the PostgREST default. Lock waits are bounded by the existing timeouts; a timeout is an error, which fails closed.
-- **New-object privileges.** The candidate revokes every privilege on its new tables and functions from all client roles (and internal helpers from `service_role`). The read-back checks every privilege type.
-- **Storage.** No FK from any table into Storage, and no Storage object has an owner, so social-mobile has no Storage dependency.
-- **Edge configuration.** The platform-provided Supabase values and the same X client credentials used by `x-oauth-connect-user` are configured (names checked, values not read). Sign in with Apple revocation is **not configured**, so Apple-login users are refused, never partially deleted.
+- The live production schema, ownership, ACL, isolation, Auth, Vault and Storage assumptions required by the reviewed design were checked read-only. None of them hit a STOP condition.
+- The only workspace-creation path is the reviewed onboarding RPC, byte-identical to the repository (md5 of begin/consume/complete = `7679362b…` / `9da3c2fd…` / `ca070453…`).
+- Every target path runs READ COMMITTED.
+- social-mobile has no Storage dependency.
+- Sign in with Apple revocation is not configured, so Apple-login users are refused, never partially deleted.
+- Unrelated pre-existing security/configuration findings were observed and are intentionally excluded from this repository. They need separate private operational follow-up before or alongside rollout, as appropriate.
+- The detailed read-only evidence is held with the operator, not in the repository.
 
 ## 2. Pre-apply re-check (immediately before apply)
 
@@ -47,7 +38,7 @@ STOP if any of these changed:
 - a new workspace creator;
 - any isolation override;
 - a changed onboarding RPC md5;
-- the migration role no longer having the capabilities recorded in the operator-only preflight notes;
+- the migration role no longer having the capabilities recorded in the operator-held preflight evidence;
 - a Storage object with an owner.
 
 ## 3. Apply (single file, atomic, never `db push`, never `migration repair`)
@@ -175,7 +166,7 @@ supabase functions deploy social-mobile-account-delete --project-ref <ref>
 ```
 
 - Keep JWT verification **on**: do not pass `--no-verify-jwt`. `supabase functions list` must show `verify_jwt=true`. The function also re-verifies the caller through `/auth/v1/user`.
-- **Secrets.** No new secret is needed for X. Add `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_CLIENT_ID` (the native bundle id) and `APPLE_PRIVATE_KEY` only when Sign in with Apple is enabled.
+- **Configuration.** No new X configuration is needed (the function reuses the existing X client configuration). The Sign in with Apple revocation configuration (see `apple_revoke.ts`) is added only when Sign in with Apple is enabled.
 - **Source identity.** Run `supabase functions download social-mobile-account-delete` into a scratch directory and `diff -r` it against `supabase/functions/social-mobile-account-delete/` (the four source files). Any difference is a STOP.
 - **Smoke check (no deletion):**
   1. `OPTIONS` with `Origin` returns 204 and the CORS headers.
