@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-account-deletion-prod-stage1-verification-20260929
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Sol（高）
 - purpose: production Stage 1で適用済みのaccount deletion migration/Edge Functionを独立verificationし、Stage 2 disposable-account E2Eへ進めるか判定する。
@@ -129,3 +129,14 @@ Report:
 - production_mutation_by_H2=0
 
 Then status -> review_required, next_owner -> chatgpt, STOP for C2.
+
+## H2 verification outcome — 2026-09-29
+
+- result: **FAIL / STOP at the unrelated-production-change gate; target checks performed PASS.**
+- Migration hash, all 21 RPC bodies/signatures/security modes, intended permission surface, protected tables, 11 enabled guards, isolation and onboarding identity matched the accepted source.
+- `social-mobile-account-delete`: v1 ACTIVE, verify_jwt=true; runtime source matches the four accepted files exactly.
+- Non-destructive HTTP smoke: 7/7 PASS, retry 0, valid-user requests 0; state/audit rows stayed 0/0.
+- During verification, unrelated `market-report-data-packet` changed v11 -> v12. Its newer timestamp is after the deletion rollout. H1's completion Report subsequently reached fresh origin/main at `bb57562` and records the exact matching version/timestamp as its authorized single-function deploy. This resolves the observed provenance at the Report level; H2 did not attribute it to G3 or silently waive the explicit STOP condition.
+- Stage 2 readiness: **NO pending C2 reconciliation of the parallel deployment/invariant snapshot**; not a finding of a deletion implementation defect.
+- production_mutation_by_H2: **0**. No further production queries/requests were made after detecting the delta.
+- Full sanitized evidence and evidence limitations: `.agent/CODEX_REPORT_2.md` at this task's Report head.

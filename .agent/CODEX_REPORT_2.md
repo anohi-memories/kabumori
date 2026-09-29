@@ -1,3 +1,80 @@
+## H2 — Account deletion production Stage 1 independent verification — 2026-09-29
+
+- task_id: `x-social-mobile-account-deletion-prod-stage1-verification-20260929`
+- result / verdict: **FAIL / STOP at the unrelated-production-change verification gate. All target checks performed PASS; no deletion-source defect was identified.**
+- status: `review_required`; next_owner: `chatgpt`.
+- accepted_source_merge: `136dcd2b35b161ccc4769da15b05e796f095e881` (accepted PR #52 head `4bc819555c07c8792f5b78ea29aa6b9a35694042`).
+- fresh_origin_main_at_start: `d79b0c8524af56cc56c5245f5037517fc689d917`; final report preparation base: `bb575627c6cf0e01da3c2b694822b9a2ef256435`. Intervening main changes did not touch H2's controls or the accepted deletion source.
+- independent_worktree: `/private/tmp/kabumori-h2-account-deletion-report-20260929`, H2-owned branch `codex/h2-account-deletion-report-20260929`. Only this previously clean H2 checkout was fast-forwarded. Formal shared checkout and other worktrees were not edited.
+- changed_files: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md` only. Source fixes / implementation commits: **0**.
+- commit_hash / push: this Report/TASK synchronization is pending until independently confirmed below; no source commit, merge or deploy by H2.
+- production_mutation_by_H2: **0**.
+
+### A — Migration production identity / RPC protection (sanitized)
+
+- Exact file: `supabase/migrations/20260928160000_social_mobile_account_deletion_candidate.sql`.
+- Independently recomputed SHA-256: `7481078f91e87447216a2ae93e0c12b78ce6a68801205f4fdd74bb9bd6588657`, matching the approved value. There is no source delta from the accepted merge in this migration or deletion Edge directory.
+- Read-only production catalog read-back: **21/21** function names, signatures, body hashes and definer/invoker modes match the accepted file. Expected owner and empty search_path are preserved. Client execution is denied; intended service execution surface matches exactly. No unexpected overload/collision was found. Privilege detail and unrelated security observations are intentionally not published.
+- Both state/audit tables retain the reviewed columns, validated checks/keys, RLS and direct-access protection; no unexpected trigger/FK on these tables was present.
+- All **11/11** expected BEFORE INSERT OR UPDATE, FOR EACH ROW guards are enabled and call the reviewed guard function. Their definitions match the accepted structure.
+- READ COMMITTED remains the default/current isolation, with no incompatible database/role or relevant function override. Catalog inspection finds only the reviewed onboarding RPC as the workspace creator. All three existing onboarding RPC body hashes match the repository and runbook; no body change was caused by this migration.
+- State/audit aggregate counts before and after non-destructive smoke: **0 / 0**.
+- Migration-history version `20260928160000` remains **unrecorded (0 rows)**. This is the runbook's known consequence of exact direct SQL application, not evidence that the objects were absent. No history repair, reconcile, rollback or migration operation was performed by H2.
+
+### B — Edge production identity
+
+- `social-mobile-account-delete`: **version 1 / ACTIVE / verify_jwt=true**.
+- Production updated_at: **2026-09-29T13:05:33.691Z** (22:05:33.691 JST).
+- Retrieved runtime source through Supabase's read-only get-edge-function API. Exactly **4/4** files match the accepted repository source by SHA-256 over the returned source bytes: `index.ts`, `http.ts`, `delete_logic.ts`, `apple_revoke.ts`. No test/extra source files were included.
+- The exact source has no console/logger calls. Fixed error responses do not echo raw RPC/provider errors or credentials. Caller identity is revalidated before the deletion flow, and no caller-supplied user ID is trusted.
+- Production configuration **names only** were checked: Apple revocation configuration is absent; the accepted source keeps that path fail-closed. No configuration values/digests were output. Required existing X configuration was present; X was not contacted.
+- Deletion Function metadata remained unchanged across H2 verification. Other Function metadata was compared independently; the single parallel change below triggered STOP.
+
+### C — Independently repeated non-destructive HTTP smoke
+
+Only a public legacy anon JWT, validated as an anon/non-user credential for the exact project, was used where needed. No user session token, service-role bearer or authenticated user deletion request was sent. Keys/Authorization headers/raw request or response bodies were not printed or persisted. Each case was attempted once, retry **0**.
+
+| case | observed | verdict |
+| --- | --- | --- |
+| OPTIONS/CORS preflight | 204; expected origin/headers/methods | PASS |
+| POST without Authorization | 401 at gateway | PASS |
+| POST with malformed JWT | 401 at gateway | PASS |
+| unauthenticated preview | 401 `AUTH_REQUIRED` | PASS |
+| unauthenticated delete | 401 `AUTH_REQUIRED` | PASS |
+| invalid action | 400 `ACTION_REQUIRED` | PASS |
+| GET | 405 `METHOD_NOT_ALLOWED` | PASS |
+
+- Smoke: **7/7 PASS**. Valid-user requests **0**. State/audit remained **0/0** afterward; no deletion lifecycle started.
+- No regression suite was rerun: this is production read-back/HTTP verification, with no source change. The earlier exact-source checked-Deno/concurrency proofs remain historical evidence, not newly claimed test executions. `git diff --check` is required again for the control-file commit.
+
+### D — STOP finding / production mutation audit / evidence limits
+
+- Independent metadata snapshot detected one unrelated Function change during H2 verification:
+  - `market-report-data-packet`: **v11 -> v12**.
+  - before updated_at: `2026-09-17T05:43:45.492Z`.
+  - after updated_at: `2026-09-29T13:23:18.972Z` (22:23:18.972 JST).
+- This timestamp is **after** the deletion Function's Stage 1 deploy. H1 TASK separately authorizes that exact Function's controlled rollout. Its completion evidence was absent at the initial `f04d392` follow-up check, then arrived at fresh origin/main `bb57562` while H2 prepared this Report. The appended H1 Report records the exact matching **v12 / 22:23:18.972 JST** as its one authorized target deploy, with its own read-back showing all other 18 Functions unchanged. The observed change is therefore reconciled with H1's published delivery evidence, rather than attributed to G3. H2 still does not silently waive the current TASK's explicit unrelated-change STOP gate or perform more production operations.
+- Other **18/19** Function records, including the deletion Function, were unchanged across the two snapshots. **No further production queries or HTTP requests were made after the delta was detected.** H2 did not redeploy, revert, fix or investigate H1's implementation.
+- G3 Stage 1 Report declares only the accepted single-file migration and the new deletion Function deploy, with no real user/Vault/provider/post/activation operation. Current accepted object identity and zero state/audit rows independently corroborate no deletion lifecycle through this implementation.
+- Historical absence of arbitrary Auth/Vault/provider-console operations cannot be independently proven from current catalog/counts alone. G3's before/after operator-held evidence is not included in the public repository; its historical assertions are identified as G3 evidence rather than falsely claimed H2 measurements. No user/Vault plaintext, provider console or real token was inspected by H2.
+
+### E — C2 disposition / Stage 2 readiness / remaining gates
+
+- **Stage 2 readiness: NO until C2 reconciles the observed parallel rollout and accepts a coordinated invariant snapshot.** Target migration/Edge/non-destructive checks performed are green, but the overall no-unrelated-change acceptance gate did not pass. This STOP is not a claim that the deletion implementation is defective.
+- Do not repeat apply/deploy or perform a disposable-user deletion merely to clear this result. C2 should accept/reconcile the now-published H1 delivery against this exact delta and decide whether any further bounded read-only check is needed. A new check should explicitly allow the separately owned Function change; it is not automatically required by a deletion-source defect.
+- After that acceptance, separately authorize Stage 2 for never-connected, social-only/shared-main-profile retention, X-connected disposable users, lost-response/retry and unrelated-data invariants. None of those destructive/provider E2Es was performed here.
+- Apple production configuration and native E2E remain separate gates. Legal URLs/support, audit/history retention decisions, published-X-post wording, Kabumori cross-app deletion coordination and explicit app feature activation remain operator/product gates. No app activation is approved by this verification.
+- Supabase/PostgreSQL skills guided current official auth-header docs, changelog, least-privilege and lock/isolation review. This inspection requested no pgcrypto/index maintenance or broader security audit.
+
+### Safety / handoff
+
+- Production DB write/schema/RPC/RLS/migration/history/Vault/Storage/Auth/provider configuration/Cron/settings/secrets/OAuth/activation changes: **0** by H2.
+- Deploy, real X/Apple revoke, X post, OpenAI/Push call and valid-user deletion: **0**. Only the explicitly allowed seven non-destructive Function HTTP requests and read-only metadata/catalog/configuration-name checks occurred.
+- Source/app/admin/HANDOFF/root package/lock/.env, existing shared uncommitted changes, other slot TASK/Report files and dev servers: **untouched**. CLI-created local ignored/untracked cache is not staged or committed.
+- next_recommendation: C2 reconcile the parallel deployment and decide the bounded next verification gate. **STOP for C2; status review_required / next_owner chatgpt.**
+
+---
+
 ## H2 — PR #52 Phase 4c final concurrency acceptance — 2026-09-29
 
 - task_id: `x-social-mobile-account-deletion-final-concurrency-acceptance-20260929`
