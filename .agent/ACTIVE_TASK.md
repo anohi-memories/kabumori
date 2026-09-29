@@ -33,13 +33,13 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: x-social-mobile-account-deletion-prod-stage1-verification-20260929
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: independent production verification of Stage 1 migration/read-back + account-delete Edge deploy + non-destructive smoke; no real deletion/revoke; recommended Sol（高）
+- allocation: closed after C2 reconciliation; deletion target checks passed; no deletion defect
 
 ## Claude G1
 - owner: claude
@@ -65,11 +65,11 @@
 - owner: claude
 - slot: claude-3
 - status: ready
-- task_id: x-social-mobile-account-deletion-onboarding-entry-fix-20260930
+- task_id: x-social-mobile-account-deletion-prod-e2e-stage2-resume-20260930
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: UI/navigation-only deletion-entry fix for onboarding-incomplete states; no backend/production mutation; recommended Sonnet5（高）
+- allocation: resume Stage 2 disposable-account E2E after merged PR #59 UI fix; fresh user confirmation required before destructive valid-user action; recommended Opus5.5（高）
 
 ## Claude G4
 - owner: claude
