@@ -339,6 +339,17 @@ Answering K1's remaining mandatory visual gate (the earlier Report above already
 
 Status: `review_required` / next_owner `chatgpt`. STOP for K1.
 
+## User micro-adjustment round 1 — bigger Yume-chan, right third, bottom-aligned (user real-device feedback)
+
+- User request (chat, after trying build a3e85d80): 「もう少し大きく、右側1/3くらいはゆめちゃんでいい、下寄せで」.
+- Implemented under this task as the centralized-constants micro-adjustment K1 allowed; PR #60 new head `deeec369f1f6cc6b0427140d36b25bb2e0676ce2` (still not merged). Changed only `character-slot.tsx`, `report-highlight-card.tsx`, `tests/app/report-character_test.ts`.
+  - `CHARACTER_SLOT_WIDTH_PERCENT='36%'` of the card content width (replaces fixed 96pt), `aspectRatio 3:2` (about 110x73pt at 375pt, 120x80 at 402pt, ~33% of the card's outer width), `CHARACTER_OFFSET_X/Y = 0/0`, `flexShrink:0`; header row `alignItems:'flex-end'` (character sits on the bottom edge of the header block).
+  - Title now `numberOfLines={1}` + `adjustsFontSizeToFit` + `minimumFontScale 0.85` so the narrower text column shrinks the title slightly instead of wrapping a stray glyph (this also removes the earlier <365pt / Dynamic-Type-XXL wrap edge, not re-measured for Dynamic Type).
+- Checks: `deno test tests/app/` **199/0**; tsc(src) only the 2 known CSS errors; expo export web PASS; diff check clean. Simulator re-verified (iPhone 17 Pro 402pt, real SE3 375pt, emulated 360pt; report/empty/loading): title 1 line (scale 1.0 / ~0.98 / ~0.92), description 2 lines, card height 308.7 / 305.0 / 303.3pt (previous 305.0 / 305.5 / — ; the 96pt version wrapped and was 326.3 at 360pt), character bottom edge == description block bottom edge, uncropped, no overlap with text/points/CTA, first viewport still reaches important news.
+- New preview build (second and final for this round): `28686ad3-d164-4087-ba2f-e3dff28f871e`, source `deeec369…`, profile preview, INTERNAL. https://expo.dev/accounts/anohi-memoriess-team/projects/kabumori/builds/28686ad3-d164-4087-ba2f-e3dff28f871e (status at report time: queued; supersedes a3e85d80).
+- Backend/production mutation 0. Phase 2 not started. Pending: user real-device feedback on the new build.
+- Status: `review_required` / next_owner `chatgpt`.
+
 ---
 
 ## Archived predecessor state
