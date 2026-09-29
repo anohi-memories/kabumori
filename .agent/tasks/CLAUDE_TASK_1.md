@@ -325,6 +325,20 @@ Before final K1:
 No Codex review is required.
 Recommended model: **Sonnet5（高）**.
 
+## Final report — G1 PR #60 visual gate closed (after K1 interim)
+
+Answering K1's remaining mandatory visual gate (the earlier Report above already held the simulator results; this closes the build step):
+
+1. **Simulator visual inspection: done** on iPhone 17 Pro (402pt) and iPhone SE 3rd gen (375pt, real simulator), plus 393/360/320pt emulated. Title 1 line at >=375pt; card height unchanged vs the old stub at 375-402pt (305pt); character uncropped/transparent (pink-background check); text/points/CTA never covered; first viewport still reaches important news; robot/tablet shape legible, chart contents not. Known edge: title wraps (last glyph alone) below ~365pt and at Dynamic Type >= XXL — not changed (no clear layout issue at supported iPhone widths).
+2. **No constant adjustment was needed.** Exact CharacterSlot values in the build: `CHARACTER_SLOT_WIDTH=96`, `CHARACTER_SLOT_HEIGHT=64` (3:2 from 1536x1024), `CHARACTER_OFFSET_X=0`, `CHARACTER_OFFSET_Y=0`, `contentFit="contain"`, no overflow clipping, no frame/bg.
+3. **Exactly one fresh iOS internal/preview EAS build** (no other build made for this task): id `a3e85d80-4369-40c1-97c0-d24dc75d68eb`, status **FINISHED**, source = PR #60 head `ccb62538c43e6e8e6d6df40b9cb760cf32d718a5` (unchanged, no micro-adjustment), profile `preview`, distribution INTERNAL (Ad Hoc, existing cert/profile).
+   - Build page / install: https://expo.dev/accounts/anohi-memoriess-team/projects/kabumori/builds/a3e85d80-4369-40c1-97c0-d24dc75d68eb
+   - IPA: https://expo.dev/artifacts/eas/e_79pKxn-y_rt51XmR_i5rimZ-lB6HdpQMJXiqj3bFY.ipa (expires ~2026-10-13)
+4. PR #60 not merged. No backend/production mutation (0). Phase 2 (other 9 states / selection) not started.
+5. Pending only: the user's real-device visual feedback (size / position / balance). Micro-adjustments = one-line constant edits.
+
+Status: `review_required` / next_owner `chatgpt`. STOP for K1.
+
 ---
 
 ## Archived predecessor state
