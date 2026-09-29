@@ -1,5 +1,214 @@
 # Claude Task 1
 
+- task_id: kabumori-home-v3-postmerge-ios-preview-qa-20260929
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（中）
+- purpose: K1 PASSでmerge済みのHome v3修正PR #53をfresh mainからiOS internal/preview buildし、ユーザーが実機でHome・Topic Detail・Settings safe-area・Bottom Navを最終確認できる状態にする。source変更やproduction mutationは行わない。
+
+## Accepted K1 baseline
+
+PR #53:
+- title: `fix(home): v3 design correction, topic detail screen, Settings safe-area`
+- reviewed head: `e53465f7cd75fbd0a763347cca51343709f835c2`
+- K1 verdict: PASS
+- merge SHA: `3b9ca0424e1ef6e079cc852e45ff66d0271c001e`
+- merged_at: 2026-09-29 12:22 JST頃
+- production mutation before/through merge: 0
+- Codex review: not required under reduced-review policy
+
+Accepted scope:
+- Home v3 density correction
+- topic detail screen + curated 50/50 catalog
+- Settings moved from Modal to top-level safe-area screen/tab
+- Bottom Nav = ホーム / 銘柄 / レポート / AIに聞く / 設定
+- /ai is an honest 準備中 screen
+- no DB / migration / Auth / RLS / backend / G2 change
+
+PR #53 source verification:
+- 17 changed files, +896/-174
+- reported focused regression: 103/103 PASS
+- Expo web export: 13/13 routes
+- CI status observed at K1: Netlify success / Vercel success
+- PR branch was 10 commits behind main at K1, but main-side changes did not overlap the PR implementation files; GitHub mergeable=true and merge completed successfully.
+
+## Mandatory startup / isolation
+
+1. Use a fresh independent G1 worktree/checkout. Never reuse another slot's working directory.
+2. Fresh-fetch `origin/main`.
+3. Record the current main SHA.
+4. Confirm `3b9ca0424e1ef6e079cc852e45ff66d0271c001e` is an ancestor of fresh main.
+5. Read:
+   - `PROJECT_RULES.md`
+   - `.agent/ORCHESTRATION.md`
+   - `.agent/CURRENT_STATE.md`
+   - this TASK
+   - `app.json`
+   - `eas.json` if present
+   - `src/app/index.tsx`
+   - `src/app/settings.tsx`
+   - `src/app/topic-detail.tsx`
+   - `src/components/app-tabs.tsx`
+   - `src/components/home/report-highlight-card.tsx`
+   - `src/components/home/topic-card.tsx`
+6. Confirm no active G1 overlap was introduced after this assignment.
+7. G2 owns `supabase/functions/market-report-analysis/**`. Do not touch G2 or any MIC/X/news-ingestion backend workstream.
+
+If safe independent worktree cannot be prepared, STOP and report the conflict.
+
+## Phase A — post-merge source verification
+
+From fresh main, run the focused regression that covers:
+- home-topic
+- topic-detail-catalog
+- settings-menu
+- app-tabs
+- dashboard
+- home-report-highlights
+- home-news-sections
+- home-news-visual
+- news-labels
+- news-presentation
+- report-presentation
+- account-deletion
+
+Also run:
+- `npx tsc --noEmit` and distinguish the known unrelated CSS-module errors from new errors
+- `npx expo config --json`
+- `npx expo export --platform web --clear` when safe
+- `git diff --check`
+
+Expected:
+- no source edits
+- no newly introduced test/type/config/export failure
+
+If a concrete source/config blocker is found, STOP and report it. Do not patch ad hoc in this build task.
+
+## Phase B — EAS build selection
+
+Read-only preflight:
+- EAS/Expo login status
+- project linkage / projectId
+- iOS bundle identifier
+- available nonproduction/internal build profile
+- required `EXPO_PUBLIC_*` variable presence for that environment (names/presence only; never print values)
+- signing/provisioning/device registration readiness
+- latest internal/preview build source commit(s)
+
+Known old build:
+- build id `9f0e45a1-b2ec-4631-b04b-b510f90a475d`
+- source commit `6b59c3f722811dd76b8e8d9a7435c5604097c494`
+- this predates PR #53 and MUST NOT be reused for this QA.
+
+Reuse is allowed only if there is a newer installable internal build whose source commit already contains merge SHA `3b9ca042...`.
+Otherwise create exactly one safest nonproduction/internal iOS build from fresh main.
+
+## Build constraints
+
+Allowed:
+- one EAS internal/preview iOS build from fresh main if required
+- read-only EAS/Expo metadata checks
+- build-status verification
+- install link / QR information for the user
+
+Forbidden:
+- App Store submission
+- production App Store/TestFlight rollout
+- source changes
+- bundle identifier/projectId changes
+- EAS production secret/env mutations
+- Supabase DB/schema/data mutation
+- migration/DDL/DML
+- Auth/SMTP config mutation
+- G2 / MIC / X / news-ingestion backend changes
+
+If Apple login/device registration/credential interaction is required, STOP and report exactly the user action needed.
+
+## User real-device acceptance checklist
+
+Do not mark these PASS yourself. The user must physically confirm them on iPhone.
+
+### A. Home first viewport
+1. Header is clear and not oversized.
+2. 今日のかぶモリレポート is compact; it does not consume roughly half the screen.
+3. The old large circle + 🌱 is gone.
+4. The 重要ニュース entrance is naturally visible near the first viewport.
+5. Character area appears as a neutral placeholder, not a broken asset.
+
+### B. Important / holding news
+6. 重要ニュース shows roughly 3 items when data exists.
+7. category / title / time / importance hierarchy is readable.
+8. あなたの保有銘柄 最新ニュース remains present and honest when empty.
+
+### C. Today's Topic
+9. Home card shows level badge + title + preview + `詳しく読む →`.
+10. Tapping the card opens `/topic-detail`.
+11. Detail screen shows the exact same tapped topic, not another day's/level's topic.
+12. Detail contains multiple readable sections such as ひとことで / なぜ大事か / 見るときのポイント / 注意点.
+13. Back navigation returns cleanly to Home.
+
+### D. Settings safe-area — release-blocking check
+14. Open Settings from Home top-right.
+15. Open Settings from bottom tab.
+16. SETTINGS / 設定 header does not overlap the clock / Dynamic Island / signal / battery area.
+17. All top controls are tappable.
+18. Topic level subview back button is fully inside safe area.
+19. Account deletion subview back button is fully inside safe area.
+20. Topic level beginner/intermediate/advanced can still be changed and persists.
+
+### E. Bottom navigation
+21. Exact visible order:
+   - ホーム
+   - 銘柄
+   - レポート
+   - AIに聞く
+   - 設定
+22. ポート and 重要ニュース are not separate bottom tabs.
+23. Existing Portfolio remains reachable from Settings.
+24. Existing News remains reachable from Home's links.
+
+### F. Regression
+25. 今日のかぶモリレポート still opens its detail.
+26. 重要ニュース / 保有銘柄ニュース still load.
+27. AIに聞く opens the honest 準備中 screen and does not fake a chat.
+28. logout / password reset / account deletion settings do not crash.
+29. No fatal error/red screen.
+
+## Completion / K1
+
+Report:
+- task_id
+- fresh main SHA
+- worktree / branch
+- confirmation merge SHA `3b9ca042...` is contained
+- automated tests
+- tsc/config/export/diff results
+- EAS account/project/profile
+- reused build or newly created build
+- build id / source commit / status / install URL
+- signing/provisioning result
+- env presence checks (never secret values)
+- source changes (expected 0)
+- production mutation (expected 0)
+- exact user QA checklist
+- remaining issues
+- next_recommendation
+
+When complete:
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K1.
+
+
+---
+
+## Archived predecessor state
+
+# Claude Task 1
+
 - task_id: kabumori-home-v3-topic-detail-safearea-correction-20260929
 - owner: claude
 - slot: claude-1
