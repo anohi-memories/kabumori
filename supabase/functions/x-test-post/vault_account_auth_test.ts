@@ -193,6 +193,43 @@ test("future account: another brand uses the same generic path with its own clie
   assert.equal(db.accounts.ai_salaryman_lab_x.access, "tok_AI_expired");
 });
 
+test("publish guard inside each X request stops a retry after authority is revoked during refresh", async () => {
+  const db = new FakeCoreDb();
+  const x = fakeX([Response.json({ access_token: "tok_F_new", expires_in: 7200 })], new Set(["tok_F_new"]));
+  let allowed = true;
+  const refreshFetch: typeof fetch = async (input, init) => {
+    const response = await x.fetchImpl(input, init);
+    allowed = false; // Simulates a committed revoke while token refresh is in flight.
+    return response;
+  };
+  const auth = await load(db, FUTURE, refreshFetch);
+  await rejects(auth.send(async (accessToken) => {
+    if (!allowed) throw new Error("VAULT_PUBLISH_AUTHORITY_REVOKED");
+    return x.request(accessToken);
+  }), "VAULT_PUBLISH_AUTHORITY_REVOKED");
+  assert.deepEqual(x.creates, ["tok_F_expired"], "the refreshed token must never create a post");
+  assert.equal(x.tokenCalls.length, 1);
+});
+
+test("publish guard inside the X request stops proactive refresh from crossing revocation", async () => {
+  const db = new FakeCoreDb();
+  db.accounts.acct_future.expiresAt = new Date(Date.now() + 60_000).toISOString();
+  const x = fakeX([Response.json({ access_token: "tok_F_new", expires_in: 7200 })], new Set(["tok_F_new"]));
+  let allowed = true;
+  const refreshFetch: typeof fetch = async (input, init) => {
+    const response = await x.fetchImpl(input, init);
+    allowed = false;
+    return response;
+  };
+  const auth = await load(db, FUTURE, refreshFetch);
+  await rejects(auth.send(async (accessToken) => {
+    if (!allowed) throw new Error("VAULT_PUBLISH_AUTHORITY_REVOKED");
+    return x.request(accessToken);
+  }), "VAULT_PUBLISH_AUTHORITY_REVOKED");
+  assert.deepEqual(x.creates, [], "a proactive refresh must not send after revocation");
+  assert.equal(x.tokenCalls.length, 1);
+});
+
 test("unknown oauth_client_ref fails closed with zero token requests and the lease released", async () => {
   const db = new FakeCoreDb();
   db.accounts.acct_future.clientRef = "unapproved";

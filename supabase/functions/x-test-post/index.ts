@@ -80,6 +80,13 @@ import {
   dispatchAiLabScheduledBrandPost,
 } from "../_shared/brand/ai_lab_scheduled_brand_post.ts";
 import {
+  checkVaultAccountPublishAuthority,
+  completeVaultAccountBrandPost,
+  dispatchVaultAccountScheduledBrandPost,
+  loadSocialMobileContentSettingsForPublish,
+  VaultAccountConfirmedPostCompletionError,
+} from "../_shared/brand/vault_account_brand_post.ts";
+import {
   collectVoiceResponseDiagnostics,
   parseVoiceEvaluationOutput,
   VoiceEvaluationOutputError,
@@ -3154,11 +3161,15 @@ async function postToX(
   text: string,
   replyToId?: string,
   pollOptions?: string[] | null,
+  beforeCreate?: () => Promise<void>,
 ): Promise<unknown> {
   if (auth.vaultAccount) {
-    const sent = await auth.vaultAccount.send((accessToken) =>
-      requestXPost(accessToken, text, replyToId, pollOptions, "manual")
-    );
+    const sent = await auth.vaultAccount.send(async (accessToken) => {
+      // The auth port may refresh proactively or retry after a 401. Re-check
+      // after either refresh, immediately before each actual X create.
+      await beforeCreate?.();
+      return requestXPost(accessToken, text, replyToId, pollOptions, "manual");
+    });
     if (sent.status < 200 || sent.status >= 300) {
       console.error("X API request failed", { status: sent.status });
       throw new Error(`X_REQUEST_FAILED:${sent.status}`);
@@ -4008,7 +4019,70 @@ Deno.serve(async (req) => {
 
     if (scheduledPost.post_type === "brand_post") {
       if (brandContext.brand.id !== "ai_salaryman_lab") {
-        throw new Error("AI_LAB_DISPATCH_BRAND_MISMATCH");
+        // Stage 3B: any other Vault-backed account publishes through the generic,
+        // account-bound path; AI Lab below keeps its own reviewed dispatcher.
+        const vaultAccountId = brandContext.socialAccount?.id;
+        const vaultBrandPostBrandId = brandContext.brand.id;
+        if (!xAuth.vaultAccount || !vaultAccountId) throw new Error("VAULT_BRAND_POST_ACCOUNT_REQUIRED");
+        try {
+          const checkGenericPublishAuthority = () => checkVaultAccountPublishAuthority({
+            supabaseUrl,
+            serviceRoleKey,
+            scheduledPostId: scheduledPost.id,
+            socialAccountId: vaultAccountId,
+            brandId: vaultBrandPostBrandId,
+          });
+          const result = await dispatchVaultAccountScheduledBrandPost({
+            context: brandContext,
+            postType: scheduledPost.post_type,
+            scheduledPostId: scheduledPost.id,
+            socialAccountId: vaultAccountId,
+            openAiApiKey,
+            checkPublishAuthority: checkGenericPublishAuthority,
+            loadContentSettings: () => loadSocialMobileContentSettingsForPublish({
+              supabaseUrl,
+              serviceRoleKey,
+              brandId: vaultBrandPostBrandId,
+            }),
+            loadRecentFingerprints: () => loadAiLabRecentDedupeFingerprints({
+              supabaseUrl,
+              serviceRoleKey,
+            }),
+            publishText: (text) => postToX(xAuth, text, undefined, undefined, checkGenericPublishAuthority),
+            completePublishedPost: (args) => completeVaultAccountBrandPost({
+              supabaseUrl,
+              serviceRoleKey,
+              ...args,
+            }),
+          });
+          if (!result.fingerprintPersisted) {
+            console.error("VAULT_BRAND_POST_FINGERPRINT_PERSISTENCE_FAILED", {
+              scheduledPostId: scheduledPost.id,
+              xPostId: result.xPostId,
+            });
+          }
+          return jsonResponse({
+            schedule: {
+              id: scheduledPost.id,
+              postType: result.postType,
+              scheduledFor: scheduledPost.scheduled_for,
+            },
+            brandId: result.brandId,
+            characterCount: result.characterCount,
+            xPostId: result.xPostId,
+            fingerprintPersisted: result.fingerprintPersisted,
+            refreshExecuted: xAuth.refreshExecuted,
+          }, 201);
+        } catch (error) {
+          if (error instanceof VaultAccountConfirmedPostCompletionError) {
+            // Same protection as AI Lab: a confirmed X write is never failed (and replayed).
+            aiLabXPostConfirmedWithoutCompletion = true;
+            console.error("VAULT_BRAND_POST_CONFIRMED_BUT_COMPLETION_UNCONFIRMED", {
+              scheduledPostId: scheduledPost.id,
+            });
+          }
+          throw error;
+        }
       }
       try {
         const result = await dispatchAiLabScheduledBrandPost({
