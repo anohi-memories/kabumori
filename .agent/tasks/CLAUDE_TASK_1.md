@@ -406,6 +406,47 @@ Then:
 
 Recommended model: **Sonnet5（高）**.
 
+## Current-run override — EAS build conservation (2026-09-30)
+
+The user has only 2 EAS builds remaining for the current month and expects a low monthly build quota next month as well.
+
+For **this current Home visual rebuild**, do not create a new EAS/iOS cloud build during iterative UI work.
+
+Use local verification instead:
+- local Expo development/runtime
+- iOS Simulator
+- local screenshots / visual inspection
+- existing reusable dev/preview build only if it can reflect JS/assets without a new native build
+
+Continue iterating locally until the Home visual rebuild is substantially complete and visually coherent against the supplied reference.
+
+Do **not** spend an EAS build merely for:
+- spacing changes
+- typography changes
+- card sizing
+- asset placement
+- image/background swaps
+- Home layout iteration
+- color/radius/shadow tweaks
+- ordinary JS/TS UI changes
+
+A fresh EAS build is **not part of the current task completion gate** unless the user explicitly asks for one after local approval.
+
+For this run, completion should report:
+- local simulator/device-emulator verification
+- screenshots or precise visual findings where available
+- PR/head
+- tests/checks
+- remaining visual gaps
+- EAS build created: **no**
+- backend/production mutation: 0
+
+Do not block completion waiting for EAS.
+
+This is a current-run override. Starting with the **next G1 instruction sheet**, ChatGPT will formalize the build-conservation policy as the default project workflow: local/simulator first, EAS only at major milestones or when a native rebuild is technically required.
+
+Recommended model remains **Sonnet5（高）**.
+
 ---
 
 ## Archived previous G1 state
