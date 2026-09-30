@@ -1,3 +1,16 @@
+## Final K3 — native E3 blocked before destructive gate
+
+- verdict: **BLOCKED / safety stop**.
+- PR #63 source is already accepted and merged; no additional source review is required for this stop.
+- native iOS release/simulator verification confirmed the app can select real Supabase data instead of silently falling back to mock.
+- X connect reached the real authorization flow, but the X account used for the test was already connected to an existing production posting account, so the connection was rejected and E3 could not continue.
+- destructive production actions: 0. No account deletion, X revoke, Vault mutation, real X post, or feature activation was performed.
+- existing production posting accounts and credential references remained unchanged; the disposable test identity remains pending without a stored token.
+- next requirement: prepare a genuinely new disposable X account that is not connected to any production posting account, then resume E3. Fresh explicit user approval is still mandatory immediately before the first delete / revoke / credential-removal action.
+- no new Codex review required at this point; the remaining gate is operational E2E completion, not an unreviewed source change.
+- AI Lab diary: 候補あり — iOS版で実データ接続とX認証の確認を進めたが、テスト用アカウントが既存接続と重なっていたため安全側で停止。AIとの個人開発では、機能を進めること以上に「本番へ影響を出さない確認」に時間を使う日もある。
+- G3 remains occupied by this E3 workstream until the disposable-account requirement is resolved or the task is explicitly superseded.
+
 ## Final K1 PASS — Home visual rebuild PR #60
 
 - task: `kabumori-home-visual-rebuild-reference-20260930`
