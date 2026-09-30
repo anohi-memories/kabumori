@@ -75,12 +75,12 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: in_progress
 - task_id: x-ai-salaryman-dev-diary-pr61-merge-prod-rollout-20260930
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: merge accepted PR #61 exact head and deploy only x-test-post to production with read-back; no manual X post; recommended Opus5.5（高）
+- allocation: PR #61 merge independently confirmed as f0ea0a964797524022f0b8aa51a670a78806dd26. Explicit operator authorization granted to continue with x-test-post single-function production deploy/read-back only; no manual X post; recommended Opus5.5（高）
 
 ## Deferred
 
