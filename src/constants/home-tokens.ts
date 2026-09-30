@@ -8,7 +8,7 @@ export const HOME_LAYOUT = {
   /** Horizontal screen gutter shared by every section. */
   gutter: 16,
   /** Vertical gap between sections. */
-  sectionGap: 14,
+  sectionGap: 12,
   /** Corner radius of the big blocks (Hero, topic feature, lists). */
   radius: 18,
   /** Bottom padding so the last block clears the floating tab bar. */
@@ -38,19 +38,18 @@ export const HOME_COLORS = {
   important: '#d6403f',
 } as const;
 
-// Compact Report Hero geometry (pt). The character is an independent layer that
-// sits bottom-right above the CTA; everything else is laid out on the left.
+// Compact Report Hero geometry (pt). Layout: a top row (text column on the left, the character
+// layer flush to the top-right of the Hero) and, below it, the full-width points and the CTA. The
+// character therefore never sits on top of the long production-length points.
 export const HERO = {
   padding: 12,
   ctaHeight: 40,
   /** Space between the content above and the CTA row. */
   ctaGap: 10,
-  /** Left text/points column, as a share of the Hero content width. */
-  leftColumnPercent: '54%',
+  /** Left text column of the top row, as a share of the Hero width. */
+  leftColumnPercent: '52%',
   /** Character layer width, as a share of the Hero width. */
-  characterWidthPercent: '50%',
-  /** Right offset (pt) of the character layer inside the Hero. */
-  characterRight: 2,
+  characterWidthPercent: '48%',
   /** Maximum "today's points" shown on Home. */
   maxPoints: 3,
 } as const;

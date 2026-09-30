@@ -19,9 +19,6 @@ export const HERO_BACKGROUND_SOURCE: ImageSource | null = null;
 // independent of the rest of the Hero, so no layout change is needed then.
 const FIXED_REPORT_CHARACTER_SOURCE = require('@/assets/images/report-states/report_04_neutral.webp');
 
-// Character geometry: bottom-right, resting on the CTA row, never covering the left column.
-const CHARACTER_BOTTOM = HERO.padding + HERO.ctaHeight + HERO.ctaGap - 2;
-
 type HomeReportHeroProps = {
   palette: KabumoriPalette;
   report: PersonalizedReport | null;
@@ -46,9 +43,10 @@ export function HomeReportHero({ palette, report, points, loading, error, onOpen
         <Image source={HERO_BACKGROUND_SOURCE} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
       ) : null}
 
-      <View style={styles.content}>
-        {/* TitleBlock */}
-        <View style={styles.leftColumn}>
+      {/* Top row: TitleBlock on the left, CharacterLayer flush to the top-right (in flow, so the row
+          is always as tall as the character even while loading / empty). */}
+      <View style={styles.topRow}>
+        <View style={styles.titleBlock}>
           <View style={styles.pill}>
             <Text style={styles.pillText}>今日の</Text>
           </View>
@@ -63,50 +61,53 @@ export function HomeReportHero({ palette, report, points, loading, error, onOpen
           <Text style={[styles.description, { color: palette.muted }]} numberOfLines={2}>
             今日の市場とあなたの保有銘柄への影響をAIが整理しました。
           </Text>
+          {status === 'report' && report ? (
+            <View style={styles.pointsPill}>
+              <Text style={styles.pointsPillText}>今日のポイント</Text>
+              <Text style={[styles.reportKind, { color: palette.muted }]} numberOfLines={1}>
+                {reportTypeLabel(report.report_type)}
+              </Text>
+            </View>
+          ) : null}
         </View>
 
-        {/* PointsBox */}
-        <View style={styles.leftColumn}>
-          {status === 'loading' ? (
-            <Text style={[styles.status, { color: palette.muted }]}>読み込み中です…</Text>
-          ) : status === 'error' ? (
-            <View style={[styles.errorCard, { backgroundColor: palette.error }]}>
-              <Text style={[styles.errorText, { color: palette.muted }]}>{error}</Text>
-              <Pressable
-                onPress={onRetry}
-                style={[styles.retryButton, { backgroundColor: palette.accent }]}
-                accessibilityRole="button"
-                accessibilityLabel="もう一度読み込む">
-                <Text style={styles.retryText}>もう一度試す</Text>
-              </Pressable>
-            </View>
-          ) : status === 'report' && report ? (
-            <>
-              <View style={styles.pointsPill}>
-                <Text style={styles.pointsPillText}>今日のポイント</Text>
-                <Text style={[styles.reportKind, { color: palette.muted }]} numberOfLines={1}>
-                  {reportTypeLabel(report.report_type)}
+        {/* CharacterLayer: independent of the text layout */}
+        <CharacterSlot source={FIXED_REPORT_CHARACTER_SOURCE} style={styles.character} />
+      </View>
+
+      <View style={styles.lower}>
+        {/* PointsBox: full width, below the character */}
+        {status === 'loading' ? (
+          <Text style={[styles.status, { color: palette.muted }]}>読み込み中です…</Text>
+        ) : status === 'error' ? (
+          <View style={[styles.errorCard, { backgroundColor: palette.error }]}>
+            <Text style={[styles.errorText, { color: palette.muted }]}>{error}</Text>
+            <Pressable
+              onPress={onRetry}
+              style={[styles.retryButton, { backgroundColor: palette.accent }]}
+              accessibilityRole="button"
+              accessibilityLabel="もう一度読み込む">
+              <Text style={styles.retryText}>もう一度試す</Text>
+            </Pressable>
+          </View>
+        ) : status === 'report' && report ? (
+          <View style={styles.points}>
+            {shownPoints.map((point, index) => (
+              <View key={index} style={styles.pointRow}>
+                <View style={[styles.pointCircle, { backgroundColor: HOME_COLORS.point[index] }]}>
+                  <Text style={styles.pointNumber}>{index + 1}</Text>
+                </View>
+                <Text style={[styles.pointText, { color: palette.text }]} numberOfLines={2}>
+                  {point}
                 </Text>
               </View>
-              <View style={styles.points}>
-                {shownPoints.map((point, index) => (
-                  <View key={index} style={styles.pointRow}>
-                    <View style={[styles.pointCircle, { backgroundColor: HOME_COLORS.point[index] }]}>
-                      <Text style={styles.pointNumber}>{index + 1}</Text>
-                    </View>
-                    <Text style={[styles.pointText, { color: palette.text }]} numberOfLines={2}>
-                      {point}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </>
-          ) : (
-            <Text style={[styles.status, { color: palette.muted }]}>
-              今日のレポートはまだありません。生成され次第ここに表示されます。
-            </Text>
-          )}
-        </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={[styles.status, { color: palette.muted }]}>
+            今日のレポートはまだありません。生成され次第ここに表示されます。
+          </Text>
+        )}
 
         {/* CTA: the only navigation into the report */}
         <Pressable
@@ -123,12 +124,6 @@ export function HomeReportHero({ palette, report, points, loading, error, onOpen
           <Text style={[styles.ctaText, { color: hasReport ? '#fff' : palette.muted }]}>レポートを見る →</Text>
         </Pressable>
       </View>
-
-      {/* CharacterLayer: independent of the text layout */}
-      <CharacterSlot
-        source={FIXED_REPORT_CHARACTER_SOURCE}
-        style={{ position: 'absolute', right: HERO.characterRight, bottom: CHARACTER_BOTTOM, width: HERO.characterWidthPercent }}
-      />
     </View>
   );
 }
@@ -141,13 +136,16 @@ const styles = StyleSheet.create({
     backgroundColor: HOME_COLORS.heroBackground,
     overflow: 'hidden',
   },
-  content: { padding: HERO.padding },
-  leftColumn: { width: HERO.leftColumnPercent },
+  topRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  titleBlock: { width: HERO.leftColumnPercent, paddingTop: HERO.padding, paddingLeft: HERO.padding },
+  // Flush to the Hero's top-right corner; width is a share of the Hero, height follows the art.
+  character: { width: HERO.characterWidthPercent, marginLeft: 'auto' },
+  lower: { paddingHorizontal: HERO.padding, paddingBottom: HERO.padding },
   pill: { alignSelf: 'flex-start', backgroundColor: HOME_COLORS.pillGreen, borderRadius: 99, paddingHorizontal: 10, paddingVertical: 2 },
   pillText: { color: '#fff', fontSize: 11, fontWeight: '900' },
   title: { color: HOME_COLORS.brandGreen, fontSize: 23, lineHeight: 29, fontWeight: '900', marginTop: 2 },
   description: { fontSize: 11.5, lineHeight: 16, fontWeight: '600', marginTop: 3 },
-  pointsPill: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
+  pointsPill: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 7 },
   pointsPillText: {
     color: HOME_COLORS.pointsPillText,
     backgroundColor: HOME_COLORS.pointsPillBackground,
@@ -159,20 +157,20 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   reportKind: { flexShrink: 1, fontSize: 10, fontWeight: '800' },
-  points: { marginTop: 5, gap: 4 },
+  points: { gap: 4 },
   pointRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     backgroundColor: HOME_COLORS.pointsBoxBackground,
     borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 5,
-    minHeight: 34,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    minHeight: 36,
   },
   pointCircle: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   pointNumber: { color: '#fff', fontSize: 11, fontWeight: '900' },
-  pointText: { flex: 1, fontSize: 11.5, lineHeight: 15, fontWeight: '800' },
+  pointText: { flex: 1, fontSize: 12, lineHeight: 16, fontWeight: '800' },
   status: { fontSize: 12, lineHeight: 17, marginTop: 8 },
   errorCard: { borderRadius: 12, padding: 10, marginTop: 8 },
   errorText: { fontSize: 12, lineHeight: 17 },

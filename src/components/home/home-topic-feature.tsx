@@ -86,12 +86,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: HOME_COLORS.topicBorder,
     backgroundColor: HOME_COLORS.topicBackground,
-    padding: 14,
+    padding: 12,
     overflow: 'hidden',
-    minHeight: 118,
+    minHeight: 112,
     justifyContent: 'center',
   },
-  body: { gap: 8 },
+  body: {},
   // Left ~62%: the right side stays free for the (future) background illustration.
   text: { width: '62%', gap: 5 },
   levelBadge: {
@@ -108,7 +108,9 @@ const styles = StyleSheet.create({
   title: { fontSize: 16, lineHeight: 22, fontWeight: '900' },
   summary: { fontSize: 12, lineHeight: 17, fontWeight: '600' },
   cta: {
-    alignSelf: 'flex-end',
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
     backgroundColor: '#fff',
     color: '#17211a',
     fontSize: 12,

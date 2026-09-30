@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { companyInitial, newsTint, relativeTimeJa } from "../../src/lib/home-format.ts";
+import { companyInitial, companyMark, companyTint, newsTint, relativeTimeJa } from "../../src/lib/home-format.ts";
 
 const NOW = new Date("2026-09-30T12:00:00Z");
 
@@ -30,4 +30,18 @@ test("newsTint is deterministic from coverage categories with a neutral fallback
   assert.equal(newsTint(["unknown", "semiconductors"]).foreground, "#1f7a63");
   assert.deepEqual(newsTint(null), newsTint([]));
   assert.equal(newsTint([]).background, "#e9f3ec");
+});
+
+test("companyMark keeps companies with the same initial apart", () => {
+  assert.equal(companyMark("サンリオ"), "サン");
+  assert.equal(companyMark("サイバーエージェント"), "サイ");
+  assert.notEqual(companyMark("サンリオ"), companyMark("サイバーエージェント"));
+  assert.equal(companyMark("A"), "A");
+  assert.equal(companyMark(""), "·");
+});
+
+test("companyTint is deterministic per company", () => {
+  assert.deepEqual(companyTint("サンリオ"), companyTint("サンリオ"));
+  assert.deepEqual(companyTint(" サンリオ "), companyTint("サンリオ"));
+  assert.ok(companyTint("ニッスイ").background.startsWith("#"));
 });

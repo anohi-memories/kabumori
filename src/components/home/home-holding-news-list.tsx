@@ -6,7 +6,7 @@ import { HOME_COLORS, HOME_LAYOUT } from '@/constants/home-tokens';
 import type { ImportantStockNews } from '@/lib/important-news';
 import { categoryLabels } from '@/lib/news-labels';
 import { buildNewsPresentation } from '@/lib/news-presentation';
-import { companyInitial, newsTint, relativeTimeJa } from '@/lib/home-format';
+import { companyMark, companyTint, newsTint, relativeTimeJa } from '@/lib/home-format';
 import { HomeSectionHeader } from '@/components/home/home-section-header';
 
 type HomeHoldingNewsListProps = {
@@ -18,8 +18,8 @@ type HomeHoldingNewsListProps = {
 };
 
 // Dense rows (about 50pt each): initial tile | company + ticker / category + headline | time.
-// There is no company-logo data, so the tile is an initial on a category tint -- never a
-// fetched or invented logo.
+// There is no company-logo data, so the tile is the company's first two characters on a tint
+// derived from the name -- never a fetched or invented logo.
 export function HomeHoldingNewsList({ palette, items, loading, error, onRetry }: HomeHoldingNewsListProps) {
   return (
     <View>
@@ -48,8 +48,9 @@ export function HomeHoldingNewsList({ palette, items, loading, error, onRetry }:
 
         {items.map((item, index) => {
           const view = buildNewsPresentation(item);
-          const tint = newsTint(item.coverage_categories);
+          const tint = companyTint(item.company_name);
           const category = categoryLabels(item.coverage_categories)[0] ?? null;
+          const categoryTint = newsTint(item.coverage_categories);
           return (
             <Pressable
               key={item.news_id}
@@ -62,7 +63,7 @@ export function HomeHoldingNewsList({ palette, items, loading, error, onRetry }:
               accessibilityRole="button"
               accessibilityHint="ニュースの詳細を開きます">
               <View style={[styles.tile, { backgroundColor: tint.background }]}>
-                <Text style={[styles.tileText, { color: tint.foreground }]}>{companyInitial(item.company_name)}</Text>
+                <Text style={[styles.tileText, { color: tint.foreground }]}>{companyMark(item.company_name)}</Text>
               </View>
               <View style={styles.main}>
                 <View style={styles.nameLine}>
@@ -73,7 +74,7 @@ export function HomeHoldingNewsList({ palette, items, loading, error, onRetry }:
                 </View>
                 <View style={styles.headlineLine}>
                   {category ? (
-                    <Text style={[styles.category, { color: tint.foreground, backgroundColor: tint.background }]} numberOfLines={1}>
+                    <Text style={[styles.category, { color: categoryTint.foreground, backgroundColor: categoryTint.background }]} numberOfLines={1}>
                       {category}
                     </Text>
                   ) : null}
@@ -107,7 +108,7 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, minHeight: 50 },
   tile: { width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-  tileText: { fontSize: 15, fontWeight: '900' },
+  tileText: { fontSize: 12, fontWeight: '900' },
   main: { flex: 1, minWidth: 0, gap: 3 },
   nameLine: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
   company: { flexShrink: 1, fontSize: 13, fontWeight: '900' },

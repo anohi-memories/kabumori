@@ -22,9 +22,17 @@ export function relativeTimeJa(value: string, now: Date = new Date()): string {
   return `${then.getMonth() + 1}/${then.getDate()}`;
 }
 
-/** First character of a company name, for the initial tile shown when no logo data exists. */
+/** First character of a company name (kept for callers that want a single-character mark). */
 export function companyInitial(name: string): string {
   return Array.from(name.trim())[0] ?? '·';
+}
+
+/**
+ * First two characters of a company name, for the tile shown when no logo data exists. Two
+ * characters keep companies that share an initial (サンリオ / サイバーエージェント) apart.
+ */
+export function companyMark(name: string): string {
+  return Array.from(name.trim()).slice(0, 2).join('') || '·';
 }
 
 /** Category tint for the news media tile: deterministic from existing metadata, never fetched. */
@@ -45,6 +53,21 @@ const TINTS: Record<string, NewsTint> = {
 };
 
 const NEUTRAL_TINT: NewsTint = { background: '#e9f3ec', foreground: '#397449' };
+
+const COMPANY_TINTS: readonly NewsTint[] = [
+  { background: '#fde8ea', foreground: '#b3363c' },
+  { background: '#e7eefb', foreground: '#2f5fb3' },
+  { background: '#e6f4f1', foreground: '#1f7a63' },
+  { background: '#fff1dc', foreground: '#a4640f' },
+  { background: '#f0e9f8', foreground: '#6a3fa0' },
+];
+
+/** Per-company tint, deterministic from the name so a company keeps its colour across reloads. */
+export function companyTint(name: string): NewsTint {
+  let sum = 0;
+  for (const char of Array.from(name.trim())) sum += char.codePointAt(0) ?? 0;
+  return COMPANY_TINTS[sum % COMPANY_TINTS.length];
+}
 
 export function newsTint(categories: readonly string[] | null | undefined): NewsTint {
   const category = (categories ?? []).find((value) => value in TINTS);
