@@ -1,3 +1,15 @@
+## Final C1 PASS — PR #65 iOS X account switching source/security
+
+- verdict: **PASS**.
+- accepted exact PR head: `e5a66f5ba71f64b1a38d8f89faff3d0a31972949`.
+- H1 result: PASS-WITH-FIX (tests only); client/runtime source is unchanged from original PR head `e8a7785d5635096aa428899d28e629a95b7e3f31`.
+- original -> final head delta is exactly one test file: `apps/social-mobile/tests/x-connect-auth-session.test.mjs`.
+- focused 14/14, mobile 103/103, data-view/post-interaction 22/22, typecheck/lint/Web+iOS exports/diff checks PASS.
+- OAuth/security invariants accepted: PKCE/state/redirect/callback/host validation and server-side duplicate-account protection unchanged; no undocumented X parameter; no global cookie clearing; no DB/RLS/RPC/migration/Edge/Vault/Auth-provider mutation.
+- production mutation: 0; real X login/post/revoke: 0.
+- **merge remains HOLD**: safe operator provider-side E2E must still confirm a different X account can authenticate without silently reusing the previous browser session, including cancel/retry/reconnect.
+- H1 is closed/free. G4 remains review_required until that E2E and final merge decision.
+
 ## H1 PR #65 source review — 2026-10-01
 
 - verdict: **PASS-WITH-FIX (tests only)**, final PR head `e5a66f5ba71f64b1a38d8f89faff3d0a31972949` (initial `e8a7785`).
