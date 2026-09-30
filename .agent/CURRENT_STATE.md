@@ -2437,3 +2437,18 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - mandatory STOP and fresh user approval before account deletion, X revoke, or Vault mutation.
 - no real X post and feature remains OFF.
 - recommended Claude model: Opus5.5（高）.
+
+
+## Final K4 PR #61 production rollout
+- verdict: **PASS / rollout complete**.
+- PR #61 squash merge: `f0ea0a964797524022f0b8aa51a670a78806dd26`.
+- accepted source head: `67ee04b41e37553885d43f4630628d135061cbf8`.
+- production `x-test-post`: ACTIVE **v129**, `verify_jwt=false`.
+- duplicate same-source manual deploy moved v127 -> v128 -> v129; no further deploy is required.
+- G4 downloaded production v129 and byte-compared the deployed module graph against the accepted merge: **45/45 files matched**.
+- deployed bundle contains the expected diary snapshot import, strict calendar validation, AI Lab-only hashtag control and scheduled topic-seed wiring.
+- all-function metadata comparison found only `x-test-post` changed during this rollout; function count remained 20.
+- manual X posts / manual scheduled invocations: **0**.
+- natural scheduler later executed an AI Lab `brand_post` successfully under v129; no forced invocation was used.
+- DB/RLS/RPC/migration/Auth/Vault/Cron/settings/secret changes: none by this rollout.
+- remaining product limitation: automatic periodic development-progress aggregation is not implemented; diary updates still require Markdown edit -> snapshot regeneration -> commit -> x-test-post redeploy. The current latest diary entry is 2026-09-29 and will age out of the 3-day freshness window, after which evergreen topics are used rather than fabricating current progress.
