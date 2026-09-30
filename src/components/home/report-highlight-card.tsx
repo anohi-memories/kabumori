@@ -28,54 +28,59 @@ export function ReportHighlightCard({ palette, report, points, loading, error, o
 
   return (
     <View style={[styles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
-      <View style={styles.headRow}>
-        <View style={styles.headText}>
-          <Text style={[styles.eyebrow, { color: palette.accent }]}>TODAY&apos;S REPORT</Text>
-          <Text
-            style={[styles.title, { color: palette.text }]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.85}>
-            今日の かぶモリレポート
-          </Text>
+      <View style={styles.headText}>
+        <Text style={[styles.eyebrow, { color: palette.accent }]}>TODAY&apos;S REPORT</Text>
+        <Text
+          style={[styles.title, { color: palette.text }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.85}>
+          今日の かぶモリレポート
+        </Text>
+      </View>
+
+      {/* Body: text column on the left, the character on the right third-plus of the card,
+          bottom-aligned with the text block (approved layout: 理想の1枚目). */}
+      <View style={styles.bodyRow}>
+        <View style={styles.bodyText}>
           <Text style={[styles.description, { color: palette.muted }]}>
             今日の市場とあなたの保有銘柄への影響をAIが整理しました。
           </Text>
+
+          {status === 'loading' ? (
+            <Text style={[styles.emptyText, { color: palette.muted }]}>読み込み中です…</Text>
+          ) : status === 'error' ? (
+            <View style={[styles.errorCard, { backgroundColor: palette.error }]}>
+              <Text style={[styles.errorText, { color: palette.muted }]}>{error}</Text>
+              <Pressable onPress={onRetry} style={[styles.retryButton, { backgroundColor: palette.accent }]} accessibilityRole="button" accessibilityLabel="もう一度読み込む">
+                <Text style={styles.retryText}>もう一度試す</Text>
+              </Pressable>
+            </View>
+          ) : status === 'report' && report ? (
+            <>
+              <Text style={[styles.reportMeta, { color: palette.muted }]}>
+                {reportTypeLabel(report.report_type)}
+                {report.title_ja ? ` ・ ${report.title_ja}` : ''}
+              </Text>
+              <View style={styles.points}>
+                {points.map((point, index) => (
+                  <View key={index} style={styles.pointRow}>
+                    <View style={[styles.pointDot, { backgroundColor: palette.accent }]} />
+                    <Text style={[styles.pointText, { color: palette.text }]} numberOfLines={3}>
+                      {point}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          ) : (
+            <Text style={[styles.emptyText, { color: palette.muted }]}>
+              今日のレポートはまだありません。生成され次第ここに表示されます。
+            </Text>
+          )}
         </View>
         <CharacterSlot palette={palette} source={FIXED_REPORT_CHARACTER_SOURCE} />
       </View>
-
-      {status === 'loading' ? (
-        <Text style={[styles.emptyText, { color: palette.muted }]}>読み込み中です…</Text>
-      ) : status === 'error' ? (
-        <View style={[styles.errorCard, { backgroundColor: palette.error }]}>
-          <Text style={[styles.errorText, { color: palette.muted }]}>{error}</Text>
-          <Pressable onPress={onRetry} style={[styles.retryButton, { backgroundColor: palette.accent }]} accessibilityRole="button" accessibilityLabel="もう一度読み込む">
-            <Text style={styles.retryText}>もう一度試す</Text>
-          </Pressable>
-        </View>
-      ) : status === 'report' && report ? (
-        <>
-          <Text style={[styles.reportMeta, { color: palette.muted }]}>
-            {reportTypeLabel(report.report_type)}
-            {report.title_ja ? ` ・ ${report.title_ja}` : ''}
-          </Text>
-          <View style={styles.points}>
-            {points.map((point, index) => (
-              <View key={index} style={styles.pointRow}>
-                <View style={[styles.pointDot, { backgroundColor: palette.accent }]} />
-                <Text style={[styles.pointText, { color: palette.text }]} numberOfLines={2}>
-                  {point}
-                </Text>
-              </View>
-            ))}
-          </View>
-        </>
-      ) : (
-        <Text style={[styles.emptyText, { color: palette.muted }]}>
-          今日のレポートはまだありません。生成され次第ここに表示されます。
-        </Text>
-      )}
 
       <Pressable
         onPress={onOpen}
@@ -96,9 +101,10 @@ export function ReportHighlightCard({ palette, report, points, loading, error, o
 
 const styles = StyleSheet.create({
   card: { borderRadius: 18, borderWidth: 1, padding: 14 },
-  // flex-end: the character sits on the bottom edge of the header block.
-  headRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
-  headText: { flex: 1 },
+  headText: {},
+  // flex-end: the character sits on the bottom edge of the text block.
+  bodyRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
+  bodyText: { flex: 1, minWidth: 0 },
   eyebrow: { fontWeight: '900', letterSpacing: 1.4, fontSize: 11 },
   title: { fontSize: 18, fontWeight: '900', marginTop: 3 },
   description: { fontSize: 12, lineHeight: 17, marginTop: 4 },

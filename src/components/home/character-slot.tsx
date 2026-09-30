@@ -22,12 +22,12 @@ import type { KabumoriPalette } from '@/constants/kabumori-theme';
 // reaching all four edges, so it is shown with contentFit="contain" and never
 // cropped, framed or tinted.
 export const CHARACTER_ASPECT_RATIO = 1536 / 1024;
-// Share of the card's content width the character takes (about the right third);
+// Share of the card's content width the character takes (a bit under half, next to the text block);
 // the height follows from the aspect ratio, so the size scales with the screen.
-export const CHARACTER_SLOT_WIDTH_PERCENT = '36%';
+export const CHARACTER_SLOT_WIDTH_PERCENT = '46%';
 // Size of the empty placeholder shown when no artwork is passed.
 export const CHARACTER_PLACEHOLDER_SIZE = 48;
-export const CHARACTER_OFFSET_X = 0;
+export const CHARACTER_OFFSET_X = 6;
 export const CHARACTER_OFFSET_Y = 0;
 
 type CharacterSlotProps = {
