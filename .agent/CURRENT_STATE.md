@@ -2229,3 +2229,22 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - no deploy or real X post.
 - finish code: C2.
 - recommended Codex model: Luna（高）.
+
+
+## Final C2 PR #61 AI Lab dev-diary review
+- verdict: **FAIL / do not merge or deploy yet**.
+- topic wiring, freshness fallback and sanitizer direction are acceptable.
+- blocker 1: runtime availability of the Markdown diary asset is not proven for the real Supabase Edge deployment packaging; current read failure can silently fall back to evergreen.
+- blocker 2: shared no-fixed-hashtag prompt behavior also changes neutral profiles outside AI Lab.
+- no production mutation and no source fix by H2.
+- PR #61 remains open.
+- G4 assigned a bounded correction.
+
+
+## G4 PR #61 runtime correction assigned
+- task_id: `x-ai-salaryman-dev-diary-pr61-runtime-fix-20260930`
+- keep Markdown as canonical human/ChatGPT diary source while using a deployment-safe bundled runtime representation.
+- restore other no-fixed-hashtag profiles to prior behavior; make AI Lab exception explicit.
+- no production deploy or real X post.
+- finish code: K4.
+- recommended Claude model: Sonnet5（高）.
