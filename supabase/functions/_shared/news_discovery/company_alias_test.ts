@@ -26,6 +26,8 @@ const ROWS: StockMasterRow[] = [
   { ticker_code: "8118", company_name: "キング" },
   { ticker_code: "7769", company_name: "リズム" },
   { ticker_code: "2531", company_name: "宝ホールディングス" },
+  { ticker_code: "7504", company_name: "高速" },
+  { ticker_code: "9246", company_name: "プロジェクトホールディングス" },
   { ticker_code: "9999", company_name: "廃止テスト", is_listed: false },
 ];
 const index = buildAliasIndex(ROWS);
@@ -137,4 +139,55 @@ test("unreviewed short katakana official names only produce candidates", () => {
 
 test("one-character generated short names are never created (宝ホールディングス -> 宝)", () => {
   assert.deepEqual(all("株式会社金宝堂に対する措置命令"), []);
+});
+
+// N5-B: false confirmed tickers found by the 2026-09-30 production canary (real stocks_master, 4,443 rows).
+test("7504 高速: the kanji inside 高速取引 is not a company mention (candidate, never confirmed)", () => {
+  const title = "高速取引行為の動向（令和８年１月～６月）について公表しました。";
+  assert.deepEqual(confirmed(title), []);
+  const hit = all(title).find((c) => c.ticker === "7504");
+  assert.ok(hit, "recall: the match is kept as a candidate");
+  assert.equal(hit.status, "candidate");
+  assert.deepEqual(hit.match_types, ["WEAK_ALIAS"]);
+  assert.equal(hit.confirmation_basis, null);
+  for (const title of ["日本高速道路の料金", "高速道路の渋滞", "超高速通信の普及"]) assert.deepEqual(confirmed(title), [], title);
+});
+
+test("7504 高速: a bare mention or an explicit company form still confirms", () => {
+  assert.deepEqual(confirmed("高速、通期予想を上方修正"), ["7504"]);
+  assert.deepEqual(confirmed("株式会社高速が新工場を建設"), ["7504"]);
+  assert.deepEqual(confirmed("高速株式会社の決算"), ["7504"]);
+  assert.deepEqual(confirmed("高速取引行為の動向", "証券コード7504"), ["7504"]);
+});
+
+test("9246 プロジェクト: a generated short name alone is only a candidate", () => {
+  const title = "「FinTech実証実験ハブ・決済高度化プロジェクト（PIP）」支援決定案件について公表しました。";
+  assert.deepEqual(confirmed(title), []);
+  const hit = all(title).find((c) => c.ticker === "9246");
+  assert.ok(hit, "recall: the match is kept as a candidate");
+  assert.equal(hit.status, "candidate");
+  assert.deepEqual(hit.match_types, ["WEAK_ALIAS"]);
+  const entry = index.entries.find((e) => e.ticker === "9246" && e.alias === "プロジェクト");
+  assert.equal(entry?.origin, "generated");
+  assert.equal(entry?.strength, "WEAK_ALIAS");
+});
+
+test("9246 プロジェクト: the official name, a code or an explicit company form still confirms", () => {
+  assert.deepEqual(confirmed("プロジェクトホールディングスが増配を発表"), ["9246"]);
+  assert.deepEqual(confirmed("プロジェクト(9246)が新規上場"), ["9246"]);
+  assert.deepEqual(confirmed("プロジェクト株式会社の決算"), ["9246"]);
+  assert.deepEqual(confirmed("株式会社プロジェクトが提携"), ["9246"]);
+});
+
+test("generated short names are never STRONG; reviewed seeds and official names are unchanged", () => {
+  const generated = index.entries.filter((e) => e.origin === "generated");
+  assert.ok(generated.length > 0);
+  assert.ok(generated.every((e) => e.strength === "WEAK_ALIAS"), "no unreviewed generated alias is STRONG");
+  assert.deepEqual(confirmed("ソニー、新型カメラを発表"), ["6758"]); // seeded alias
+  assert.deepEqual(confirmed("トヨタとソニーが提携").sort(), ["6758", "7203"]);
+  assert.deepEqual(confirmed("日立、送配電事業を強化"), ["6501"]);
+  assert.deepEqual(confirmed("MUFG raises guidance"), ["8306"]);
+  assert.deepEqual(confirmed("ＮＴＴが新サービス"), ["9432"]);
+  assert.deepEqual(confirmed("任天堂、新型機を発表"), ["7974"]);
+  assert.deepEqual(confirmed("花王、値上げ"), ["4452"]); // 2-character kanji official name, bare mention
 });
