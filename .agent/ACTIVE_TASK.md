@@ -75,11 +75,11 @@
 - owner: claude
 - slot: claude-4
 - status: ready
-- task_id: x-ai-lab-diary-update-20260930
+- task_id: x-ai-lab-diary-snapshot-automation-20261001
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: First live use of the K1-K4 diary rule. Add only the public-safe 2026-09-30 K3/K4 development candidates to the AI Lab diary source, regenerate snapshot, run safety/parity/freshness tests, and reflect to production only through the controlled single-function path if required. No G1/G2 access. Recommended Opus5.5（高）.
+- allocation: User superseded the unstarted manual diary-update task. Implement automatic Markdown -> runtime snapshot generation plus parity/freshness/sanitizer/regression tests via GitHub Actions; normal K1-K4 diary writes should no longer consume G3/G4. Production deploy remains a separate safe gate. Recommended Sonnet5（高）.
 
 ## Deferred
 
