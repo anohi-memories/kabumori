@@ -2187,3 +2187,13 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - obtain fresh explicit user confirmation before first destructive valid-user action.
 - feature remains OFF.
 - recommended Claude model: Opus5.5（高）.
+
+
+## G4 会社員AIラボ development-diary content shift assigned
+- task_id: `x-ai-salaryman-dev-diary-content-shift-20260930`
+- goal: shift automatic posts from repetitive AI-usage tips to non-engineer individual-development diary content.
+- create a sanitized shared progress context readable by both the API post generator and ChatGPT.
+- raw orchestration/security/private data must never flow directly into posts.
+- other brands unchanged; no G3/Auth/account-deletion files.
+- production activation waits for K4 sample review.
+- recommended Claude model: Sonnet5（高）.
