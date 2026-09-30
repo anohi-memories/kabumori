@@ -584,6 +584,19 @@ Local iOS Simulator measurement completed afterwards (iPhone 17 Pro 402pt, real 
 - Screenshots (local scratchpad, not committed): yume-shots11/01_home_402pt.png, *_zoom_header_*.png, 02_home_360eq.png, 03_home_SE3_375.png.
 - Process notes: a second Metro run while the user was using the phone's Metro briefly caused a red "Unable to resolve" screen on the phone (shared node_modules cache); resolved by restarting the phone's Metro with `--clear`. Also an unrelated app "Social Operations" (jp.kabumori.social.e2elocal) was seen in the foreground of the shared iPhone 17 Pro simulator — not touched; another session may be using that simulator.
 
+## Report 5 — G1: header logo ported to fresh main (independent PR) — EAS build: NOT done
+
+- PR: https://github.com/anohi-memories/kabumori/pull/62 — branch `claude/home-header-logo-20260930`, head `805371d630b03e88bd506db612fdead250c4c2b0`, based on fresh `origin/main` `da48a88aba2150bc0d1c70550bb38292d960712a`. **Not merged.**
+- Method: the old branch was NOT merged. In a fresh independent clone of main, only the net effect of `32235e5` + `d48a458` was taken for exactly four paths (main's Home files were identical to those commits' parent, so `d48a458`'s version of the files is exactly the two commits applied): 
+  - `assets/images/home/kabumori_header_logo.webp` (sha256 `8152bc06c9a6d021a62195bba079acddc579765cd73edaa0418f97e6ab15c6fb`, lossless VP8L + alpha, 1719x463, margin-trimmed only)
+  - `src/components/home/home-header.tsx`, `tests/app/home-logo_test.ts`, `tests/app/home-structure_test.ts` (logo-related part only)
+- diff vs main: **exactly those 4 files** (+59/-25); verified no other path differs. Hero / News / Topic / Ask AI / Navigation / backend untouched.
+- Acceptance checklist (all confirmed): asset exists on the main-based branch; HomeHeader requires the official asset; temporary text brand/tagline removed; accessibilityLabel 「かぶモリ 株をAIで、もっと身近に。」; `contentFit="contain"`; slot 132x34pt; settings entry kept; header height unchanged (40pt, earlier Simulator numbers 402/375/360pt).
+- Tests: `deno test tests/app/` **218/218**; `home-logo_test.ts` + `home-structure_test.ts` 13/13; tsc(src) only the 2 known CSS errors; `expo export --platform web` PASS (logo bundled); `git diff --check` clean.
+- EAS build: **not done**. backend/production mutation: 0. The old branch `claude/home-report-yume-04-fixed-20260930` (PR #60, already merged as an earlier state) is left untouched.
+
+Status: `review_required` / next_owner `chatgpt`. STOP for K1.
+
 ---
 
 ## Archived previous G1 state
