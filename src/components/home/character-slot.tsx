@@ -1,54 +1,28 @@
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image, type ImageSource } from 'expo-image';
 
-import type { KabumoriPalette } from '@/constants/kabumori-theme';
-
-// Independently replaceable character illustration slot. Claude must not
-// generate new Yume-chan/robot artwork here -- this only lays out a footprint
-// that an approved transparent cutout fills without touching the card around it.
-// When no source is passed it renders a quiet, empty placeholder (a faint
-// dashed outline, no fill/emoji).
+// Independent character layer of the Home Report Hero. It only draws the image it is given:
+// the source is chosen by the caller (phase 1: one fixed approved 04 image; a later phase can swap
+// the source without touching the Hero layout) and the position/size come from `style`.
 //
-// Phase 1: the Home report card passes one fixed approved image
-// (report_04_neutral.webp) so the user can judge size/position on a real device.
-// Every visual knob lives in the constants below so micro-adjustments are a
-// one-line change:
-// - CHARACTER_SLOT_WIDTH_PERCENT: footprint width as a share of the card content
-//   width; height follows the artwork's canvas ratio
-// - CHARACTER_OFFSET_X / _Y: shift the artwork inside/outside its footprint
-//   (+x right, +y down) without moving the text column
-//
-// The Home card shows report_04_neutral_crop.webp: the approved 04 artwork with only the
-// empty left margin (the wand tip, 200px of 1536) removed so the face can be shown bigger
-// (1336x1024, transparent). The full approved report_04_neutral.webp stays in the repo as the
-// canonical source. The subject reaches all four edges, so it is shown with contentFit="contain"
-// and never cropped further, framed or tinted.
-export const CHARACTER_ASPECT_RATIO = 1336 / 1024;
-// Share of the card's content width the character takes (a bit over half, next to the header text);
-// the height follows from the aspect ratio, so the size scales with the screen.
-export const CHARACTER_SLOT_WIDTH_PERCENT = '55%';
-// Size of the empty placeholder shown when no artwork is passed.
-export const CHARACTER_PLACEHOLDER_SIZE = 48;
-export const CHARACTER_OFFSET_X = 6;
-export const CHARACTER_OFFSET_Y = 0;
+// The approved artwork (report_04_neutral.webp) is a transparent 1536x1024 cutout whose subject
+// reaches all four edges, so it is shown uncropped with contentFit="contain" and never framed,
+// tinted or given a glow/speech bubble. It is decorative: hidden from the accessibility tree.
+export const CHARACTER_ASPECT_RATIO = 1536 / 1024;
 
 type CharacterSlotProps = {
-  source?: ImageSource;
-  palette: KabumoriPalette;
+  source: ImageSource;
+  /** Absolute position/size supplied by the layout that owns this layer. */
+  style?: StyleProp<ViewStyle>;
 };
 
-export function CharacterSlot({ source, palette }: CharacterSlotProps) {
-  if (!source) {
-    return (
-      <View
-        style={[styles.placeholder, { borderColor: palette.border }]}
-        accessible={false}
-        importantForAccessibility="no-hide-descendants"
-      />
-    );
-  }
+export function CharacterSlot({ source, style }: CharacterSlotProps) {
   return (
-    <View style={styles.slot} accessible={false} importantForAccessibility="no-hide-descendants">
+    <View
+      pointerEvents="none"
+      style={[styles.slot, style]}
+      accessible={false}
+      importantForAccessibility="no-hide-descendants">
       <Image source={source} style={styles.image} contentFit="contain" accessible={false} />
     </View>
   );
@@ -56,19 +30,6 @@ export function CharacterSlot({ source, palette }: CharacterSlotProps) {
 
 const styles = StyleSheet.create({
   // No overflow clipping: an offset must never crop the artwork.
-  slot: {
-    width: CHARACTER_SLOT_WIDTH_PERCENT,
-    aspectRatio: CHARACTER_ASPECT_RATIO,
-    flexShrink: 0,
-    transform: [{ translateX: CHARACTER_OFFSET_X }, { translateY: CHARACTER_OFFSET_Y }],
-  },
-  placeholder: {
-    width: CHARACTER_PLACEHOLDER_SIZE,
-    height: CHARACTER_PLACEHOLDER_SIZE,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    opacity: 0.5,
-  },
+  slot: { aspectRatio: CHARACTER_ASPECT_RATIO },
   image: { width: '100%', height: '100%' },
 });

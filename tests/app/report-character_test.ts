@@ -1,7 +1,8 @@
-// Phase 1 of the Home report-card character: one fixed approved neutral artwork.
+// The Home Report Hero's character layer, phase 1: one fixed approved neutral (04) artwork.
 // The asset was converted losslessly (cwebp -lossless -exact) from the user's approved
-// transparent PNG (Desktop/ゆめちゃん素材/report_04_neutral.webp.png, sha256 131c7f1d...7051);
-// the decoded RGBA was verified pixel-identical to that PNG before it was committed.
+// transparent PNG (Desktop/ゆめちゃん素材/report_04_neutral.webp.png, sha256 131c7f1d...7051); the
+// decoded RGBA was verified pixel-identical to that PNG before it was committed. The file below is
+// the canonical 04 -- it is never cropped, redrawn or duplicated.
 // RN-only components are checked as text, like the rest of this suite.
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -9,9 +10,6 @@ import test from "node:test";
 const repoRoot = new URL("../../", import.meta.url);
 const ASSET = "assets/images/report-states/report_04_neutral.webp";
 const ASSET_SHA256 = "d51dd2f91207bb48589268aca76b6025dd17ab5961165c089e64124452499c7a";
-// Home card artwork: the same approved image with the empty left 200px (wand tip) removed, lossless.
-const CROP_ASSET = "assets/images/report-states/report_04_neutral_crop.webp";
-const CROP_SHA256 = "1cf612fa904e710b690acdbad7688f32219a09d7d4d27e20d28f6ef17847aea3";
 
 const read = (path: string) => Deno.readTextFile(new URL(path, repoRoot));
 
@@ -20,65 +18,50 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function assertLosslessAlphaWebp(path: string, sha: string, w: number, h: number) {
-  const bytes = await Deno.readFile(new URL(path, repoRoot));
+test("the approved 04 artwork is the exact committed lossless WebP with alpha, 1536x1024", async () => {
+  const bytes = await Deno.readFile(new URL(ASSET, repoRoot));
   assert.equal(new TextDecoder().decode(bytes.slice(0, 4)), "RIFF");
   assert.equal(new TextDecoder().decode(bytes.slice(8, 12)), "WEBP");
   assert.equal(new TextDecoder().decode(bytes.slice(12, 16)), "VP8L", "must stay lossless");
   // VP8L header: signature 0x2f, then 14-bit (width-1), 14-bit (height-1), 1-bit alpha_is_used.
   assert.equal(bytes[20], 0x2f);
   const bits = bytes[21] | (bytes[22] << 8) | (bytes[23] << 16) | (bytes[24] << 24);
-  assert.equal((bits & 0x3fff) + 1, w);
-  assert.equal(((bits >>> 14) & 0x3fff) + 1, h);
+  assert.equal((bits & 0x3fff) + 1, 1536);
+  assert.equal(((bits >>> 14) & 0x3fff) + 1, 1024);
   assert.equal((bits >>> 28) & 1, 1, "alpha channel must be present (transparent background)");
-  assert.equal(await sha256Hex(bytes), sha);
-}
-
-test("the approved 04 artwork is the exact committed lossless WebP with alpha, 1536x1024", () =>
-  assertLosslessAlphaWebp(ASSET, ASSET_SHA256, 1536, 1024));
-
-test("the Home card artwork is the approved 04 with only the left 200px removed: lossless, alpha, 1336x1024", () =>
-  assertLosslessAlphaWebp(CROP_ASSET, CROP_SHA256, 1336, 1024));
-
-test("the Home report card shows the one fixed 04 source in CharacterSlot, with no state selection", async () => {
-  const card = await read("src/components/home/report-highlight-card.tsx");
-  assert.ok(card.includes("require('@/assets/images/report-states/report_04_neutral_crop.webp')"));
-  assert.ok(/const FIXED_REPORT_CHARACTER_SOURCE = require\(/.test(card));
-  assert.ok(/<CharacterSlot palette=\{palette\} source=\{FIXED_REPORT_CHARACTER_SOURCE\} \/>/.test(card));
-  // Phase 2 (10-state selection) is out of scope: only the one asset may be referenced.
-  assert.equal((card.match(/report-states\//g) ?? []).length, 1);
-  assert.ok(!/report_0[0-35-9]|report_10/.test(card));
+  assert.equal(await sha256Hex(bytes), ASSET_SHA256);
 });
 
-test("CharacterSlot keeps the artwork uncropped, decorative and adjustable from constants", async () => {
+test("there is exactly one report-state artwork: no crop copy, no other states", async () => {
+  const names: string[] = [];
+  for await (const entry of Deno.readDir(new URL("assets/images/report-states/", repoRoot))) names.push(entry.name);
+  assert.deepEqual(names, ["report_04_neutral.webp"]);
+});
+
+test("the Hero uses the one fixed 04 source in the CharacterSlot layer, with no state selection", async () => {
+  const hero = await read("src/components/home/home-report-hero.tsx");
+  assert.ok(/const FIXED_REPORT_CHARACTER_SOURCE = require\('@\/assets\/images\/report-states\/report_04_neutral\.webp'\);/.test(hero));
+  assert.ok(/<CharacterSlot\s+source=\{FIXED_REPORT_CHARACTER_SOURCE\}/.test(hero));
+  assert.equal((hero.match(/report-states\//g) ?? []).length, 1);
+  assert.ok(!/report_0[0-35-9]|report_10/.test(hero));
+});
+
+test("CharacterSlot keeps the artwork uncropped, decorative and frameless", async () => {
   const slot = await read("src/components/home/character-slot.tsx");
   assert.ok(slot.includes('contentFit="contain"'));
-  assert.ok(!/overflow:\s*'hidden'/.test(slot), "an offset must never crop the artwork");
+  assert.ok(!/overflow:\s*'hidden'/.test(slot), "the layer must never crop the artwork");
   assert.ok(slot.includes('importantForAccessibility="no-hide-descendants"'));
   assert.ok(slot.includes("accessible={false}"));
-  for (const name of ["CHARACTER_SLOT_WIDTH_PERCENT", "CHARACTER_OFFSET_X", "CHARACTER_OFFSET_Y", "CHARACTER_ASPECT_RATIO"]) {
-    assert.ok(new RegExp(`export const ${name} =`).test(slot), name);
-  }
-  // No frame/glow/background around the transparent artwork.
+  assert.ok(/CHARACTER_ASPECT_RATIO = 1536 \/ 1024;/.test(slot), "must match the 1536x1024 canvas");
   const styles = slot.slice(slot.indexOf("StyleSheet.create"));
-  const slotStyle = styles.slice(styles.indexOf("slot:"), styles.indexOf("placeholder:"));
-  assert.ok(!/backgroundColor|border|shadow/.test(slotStyle));
+  assert.ok(!/backgroundColor|border|shadow/.test(styles), "no frame/glow/background around the transparent artwork");
 });
 
-test("the artwork takes the right ~55% of the card header, bottom-aligned with the header text", async () => {
-  const slot = await read("src/components/home/character-slot.tsx");
-  const percent = Number(/export const CHARACTER_SLOT_WIDTH_PERCENT = '(\d+)%';/.exec(slot)?.[1]);
-  assert.ok(percent >= 45 && percent <= 60, `${percent}% should stay around the right half of the header`);
-  assert.ok(/aspectRatio: CHARACTER_ASPECT_RATIO/.test(slot));
-  assert.ok(/CHARACTER_ASPECT_RATIO = 1336 \/ 1024;/.test(slot), "must match the crop asset canvas");
-  const card = await read("src/components/home/report-highlight-card.tsx");
-  assert.ok(/headRow: \{[^}]*alignItems: 'flex-end'/.test(card), "the character sits on the bottom edge of the header text");
-});
-
-test("the two-line report title is two Texts, and the long line shrinks instead of breaking a word", async () => {
-  const card = await read("src/components/home/report-highlight-card.tsx");
-  assert.ok(card.includes('accessibilityLabel="今日の かぶモリレポート"'), "one readable title for VoiceOver");
-  assert.ok(!/今日の かぶモリレポート\s*<\/Text>/.test(card), "no single-Text title with a space break");
-  const second = card.slice(card.indexOf("styles.titleSecondLine"), card.indexOf("かぶモリレポート\n"));
-  assert.ok(second.includes("numberOfLines={1}") && second.includes("adjustsFontSizeToFit") && second.includes("minimumFontScale"));
+test("the character is bottom-right, about half of the Hero, and rests above the CTA", async () => {
+  const tokens = await read("src/constants/home-tokens.ts");
+  const percent = Number(/characterWidthPercent: '(\d+)%'/.exec(tokens)?.[1]);
+  assert.ok(percent >= 42 && percent <= 56, `${percent}% should be about half of the Hero`);
+  const hero = await read("src/components/home/home-report-hero.tsx");
+  assert.ok(/position: 'absolute', right: HERO\.characterRight, bottom: CHARACTER_BOTTOM/.test(hero));
+  assert.ok(/CHARACTER_BOTTOM = HERO\.padding \+ HERO\.ctaHeight \+ HERO\.ctaGap/.test(hero));
 });
