@@ -2262,3 +2262,22 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - no production deploy or real X post.
 - finish code: K4.
 - recommended Claude model: Sonnet5（高）.
+
+
+## Final K4 PR #61 runtime correction
+- verdict: PASS for source correction.
+- PR #61 head `be146f7bd3cabfb5ae42200ad441b427928d58cf`.
+- runtime diary now uses an imported generated TypeScript snapshot derived from the canonical Markdown; no runtime filesystem/static-asset dependency remains.
+- Markdown/snapshot parity is tested and was manually proven to fail on drift.
+- hashtag control is now profile-scoped: AI Lab only; neutral no-fixed-hashtag and fixed-hashtag brands retain prior behavior.
+- relevant brand tests: 112/112 PASS; production_mutation=0.
+- final focused H2 re-review required before merge/deploy.
+
+
+## H2 PR #61 final review assigned
+- task_id: `x-ai-salaryman-dev-diary-pr61-final-review-20260930`
+- target: PR #61 head `be146f7bd3cabfb5ae42200ad441b427928d58cf`.
+- scope: verify resolution of runtime bundling/parity and hashtag cross-brand blockers, plus regression safety.
+- no deploy or real X post.
+- finish code: C2.
+- recommended Codex model: Luna（高）.
