@@ -9,6 +9,9 @@ import test from "node:test";
 const repoRoot = new URL("../../", import.meta.url);
 const ASSET = "assets/images/report-states/report_04_neutral.webp";
 const ASSET_SHA256 = "d51dd2f91207bb48589268aca76b6025dd17ab5961165c089e64124452499c7a";
+// Home card artwork: the same approved image with the empty left 200px (wand tip) removed, lossless.
+const CROP_ASSET = "assets/images/report-states/report_04_neutral_crop.webp";
+const CROP_SHA256 = "1cf612fa904e710b690acdbad7688f32219a09d7d4d27e20d28f6ef17847aea3";
 
 const read = (path: string) => Deno.readTextFile(new URL(path, repoRoot));
 
@@ -17,23 +20,29 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-test("the approved 04 artwork is the exact committed lossless WebP with alpha, 1536x1024", async () => {
-  const bytes = await Deno.readFile(new URL(ASSET, repoRoot));
+async function assertLosslessAlphaWebp(path: string, sha: string, w: number, h: number) {
+  const bytes = await Deno.readFile(new URL(path, repoRoot));
   assert.equal(new TextDecoder().decode(bytes.slice(0, 4)), "RIFF");
   assert.equal(new TextDecoder().decode(bytes.slice(8, 12)), "WEBP");
   assert.equal(new TextDecoder().decode(bytes.slice(12, 16)), "VP8L", "must stay lossless");
   // VP8L header: signature 0x2f, then 14-bit (width-1), 14-bit (height-1), 1-bit alpha_is_used.
   assert.equal(bytes[20], 0x2f);
   const bits = bytes[21] | (bytes[22] << 8) | (bytes[23] << 16) | (bytes[24] << 24);
-  assert.equal((bits & 0x3fff) + 1, 1536);
-  assert.equal(((bits >>> 14) & 0x3fff) + 1, 1024);
+  assert.equal((bits & 0x3fff) + 1, w);
+  assert.equal(((bits >>> 14) & 0x3fff) + 1, h);
   assert.equal((bits >>> 28) & 1, 1, "alpha channel must be present (transparent background)");
-  assert.equal(await sha256Hex(bytes), ASSET_SHA256);
-});
+  assert.equal(await sha256Hex(bytes), sha);
+}
+
+test("the approved 04 artwork is the exact committed lossless WebP with alpha, 1536x1024", () =>
+  assertLosslessAlphaWebp(ASSET, ASSET_SHA256, 1536, 1024));
+
+test("the Home card artwork is the approved 04 with only the left 200px removed: lossless, alpha, 1336x1024", () =>
+  assertLosslessAlphaWebp(CROP_ASSET, CROP_SHA256, 1336, 1024));
 
 test("the Home report card shows the one fixed 04 source in CharacterSlot, with no state selection", async () => {
   const card = await read("src/components/home/report-highlight-card.tsx");
-  assert.ok(card.includes("require('@/assets/images/report-states/report_04_neutral.webp')"));
+  assert.ok(card.includes("require('@/assets/images/report-states/report_04_neutral_crop.webp')"));
   assert.ok(/const FIXED_REPORT_CHARACTER_SOURCE = require\(/.test(card));
   assert.ok(/<CharacterSlot palette=\{palette\} source=\{FIXED_REPORT_CHARACTER_SOURCE\} \/>/.test(card));
   // Phase 2 (10-state selection) is out of scope: only the one asset may be referenced.
@@ -56,11 +65,12 @@ test("CharacterSlot keeps the artwork uncropped, decorative and adjustable from 
   assert.ok(!/backgroundColor|border|shadow/.test(slotStyle));
 });
 
-test("the artwork takes the right ~48% of the card header, 3:2, bottom-aligned with the header text", async () => {
+test("the artwork takes the right ~55% of the card header, bottom-aligned with the header text", async () => {
   const slot = await read("src/components/home/character-slot.tsx");
   const percent = Number(/export const CHARACTER_SLOT_WIDTH_PERCENT = '(\d+)%';/.exec(slot)?.[1]);
-  assert.ok(percent >= 40 && percent <= 50, `${percent}% should stay around 45% of the card body`);
+  assert.ok(percent >= 45 && percent <= 60, `${percent}% should stay around the right half of the header`);
   assert.ok(/aspectRatio: CHARACTER_ASPECT_RATIO/.test(slot));
+  assert.ok(/CHARACTER_ASPECT_RATIO = 1336 \/ 1024;/.test(slot), "must match the crop asset canvas");
   const card = await read("src/components/home/report-highlight-card.tsx");
   assert.ok(/headRow: \{[^}]*alignItems: 'flex-end'/.test(card), "the character sits on the bottom edge of the header text");
 });

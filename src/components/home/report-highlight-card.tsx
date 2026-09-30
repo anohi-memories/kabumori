@@ -7,7 +7,7 @@ import { CharacterSlot } from '@/components/home/character-slot';
 
 // Phase 1: one fixed approved neutral artwork, shown for every report/loading/empty
 // state. Phase 2 (after visual approval) replaces this constant with a selected source.
-const FIXED_REPORT_CHARACTER_SOURCE = require('@/assets/images/report-states/report_04_neutral.webp');
+const FIXED_REPORT_CHARACTER_SOURCE = require('@/assets/images/report-states/report_04_neutral_crop.webp');
 
 type ReportHighlightCardProps = {
   palette: KabumoriPalette;
@@ -44,7 +44,7 @@ export function ReportHighlightCard({ palette, report, points, loading, error, o
               style={[styles.title, styles.titleSecondLine, { color: palette.text }]}
               numberOfLines={1}
               adjustsFontSizeToFit
-              minimumFontScale={0.85}
+              minimumFontScale={0.75}
               importantForAccessibility="no">
               かぶモリレポート
             </Text>
