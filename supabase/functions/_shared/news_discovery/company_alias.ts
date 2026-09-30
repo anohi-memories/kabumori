@@ -6,6 +6,12 @@
 //   2. KNOWN_ALIASES_V0: a small, hand-checked list for verification tickers (no AI-generated aliases)
 // Matching is span-based: the longest alias wins an overlapping span, so "日立建機" never counts as
 // "日立", and a negative context ("リチウムイオン") suppresses the alias inside it.
+// Confirmation policy (N5-B, after the 2026-09-30 production canary confirmed 7504 "高速" from
+// "高速取引" and 9246 "プロジェクト" from "…プロジェクト（PIP）"): a dictionary hit that is not
+// hand-reviewed (a generated short name, or a short kanji official name embedded in a longer kanji
+// word) is only a candidate, unless the text also carries corroboration (ticker code, structured
+// ticker, a reviewed alias, a second alias, an explicit "株式会社" next to the name). Candidates are
+// never dropped: recall is kept, only the confirmed tier is made stricter.
 import type { TickerCandidate, TickerMatchType } from "./types.ts";
 
 export type StockMasterRow = {
@@ -238,11 +244,12 @@ function isShortKatakanaWord(value: string): boolean {
   return KATAKANA_ONLY.test(value) && [...value].length <= 3;
 }
 
-/** Minimum length before a generated short name is trusted as STRONG. */
-function shortNameStrength(alias: string): Exclude<AliasStrength, "EXACT_COMPANY_NAME"> {
-  if (isAscii(alias)) return alias.length >= 5 ? "STRONG_ALIAS" : "WEAK_ALIAS";
-  // 3-character katakana short names are often surnames ("ヤマダ"): only 4+ characters are strong.
-  return [...alias].length >= 4 ? "STRONG_ALIAS" : "WEAK_ALIAS";
+const HAN_ONLY = /^\p{Script=Han}+$/u;
+const HAN_CHAR = /\p{Script=Han}/u;
+
+/** A short (<= 3 characters) all-kanji name is usually an ordinary word (高速, 大和, 東北). */
+function isShortHanName(value: string): boolean {
+  return HAN_ONLY.test(value) && [...value].length <= 3;
 }
 
 export type AliasIndex = {
@@ -292,7 +299,8 @@ export function buildAliasIndex(
         ticker: row.ticker_code,
         company_name: name,
         alias: short,
-        strength: shortNameStrength(short),
+        // Unreviewed: never confirms on its own, however long (see the header comment and matchTickers).
+        strength: "WEAK_ALIAS",
         kind: "short_name",
         origin: "generated",
         context_terms: [],
@@ -439,6 +447,20 @@ function tickerCodeMatches(text: string, index: AliasIndex): Map<string, boolean
   return found;
 }
 
+/** True when a short all-kanji alias sits inside a longer run of kanji ("高速取引", "日本高速"). */
+function isEmbeddedShortHanName(span: Span, text: string): boolean {
+  if (!isShortHanName(span.entry.alias)) return false;
+  const before = span.start > 0 ? text[span.start - 1] : "";
+  const after = span.end < text.length ? text[span.end] : "";
+  return HAN_CHAR.test(before) || HAN_CHAR.test(after);
+}
+
+/** An explicit company form right next to the name ("株式会社○○", "○○株式会社", "○○(株)") is corroboration. */
+function hasCompanyFormContext(text: string, span: Span): boolean {
+  return /(株式会社|\(株\))\s*$/.test(text.slice(Math.max(0, span.start - 8), span.start)) ||
+    /^\s*(株式会社|\(株\))/.test(text.slice(span.end, span.end + 8));
+}
+
 const SCORE: Record<TickerMatchType, number> = {
   EXACT_COMPANY_NAME: 1,
   TICKER_CODE: 0.95,
@@ -456,12 +478,12 @@ export function matchTickers(input: MatchInput, index: AliasIndex): TickerCandid
   const title = normalizeAliasText(input.title);
   const summary = normalizeAliasText(input.summary ?? "");
   const fullText = `${title}\n${summary}`;
-  type Acc = { types: Set<TickerMatchType>; aliases: Set<string>; weakAliases: Set<string>; inTitle: boolean; contextHit: boolean };
+  type Acc = { types: Set<TickerMatchType>; aliases: Set<string>; weakAliases: Set<string>; inTitle: boolean; contextHit: boolean; companyContext: boolean };
   const acc = new Map<string, Acc>();
   const get = (ticker: string): Acc => {
     let value = acc.get(ticker);
     if (!value) {
-      value = { types: new Set(), aliases: new Set(), weakAliases: new Set(), inTitle: false, contextHit: false };
+      value = { types: new Set(), aliases: new Set(), weakAliases: new Set(), inTitle: false, contextHit: false, companyContext: false };
       acc.set(ticker, value);
     }
     return value;
@@ -471,11 +493,16 @@ export function matchTickers(input: MatchInput, index: AliasIndex): TickerCandid
     if (!text) continue;
     for (const span of findSpans(text, index)) {
       const item = get(span.entry.ticker);
-      item.types.add(span.entry.strength);
+      // An official short kanji name inside a longer kanji word ("高速" in "高速取引") is not a mention.
+      const strength = span.entry.strength === "EXACT_COMPANY_NAME" && isEmbeddedShortHanName(span, text)
+        ? "WEAK_ALIAS"
+        : span.entry.strength;
+      item.types.add(strength);
       item.aliases.add(span.entry.alias);
-      if (span.entry.strength === "WEAK_ALIAS") {
+      if (strength === "WEAK_ALIAS") {
         item.weakAliases.add(span.entry.alias);
         if (span.entry.context_terms.some((term) => fullText.includes(normalizeAliasText(term)))) item.contextHit = true;
+        if (hasCompanyFormContext(text, span)) item.companyContext = true;
       }
       item.inTitle ||= inTitle;
     }
@@ -499,14 +526,14 @@ export function matchTickers(input: MatchInput, index: AliasIndex): TickerCandid
   for (const [ticker, item] of acc) {
     const types = [...item.types];
     const onlyWeak = types.every((type) => type === "WEAK_ALIAS");
-    const confirmed = !onlyWeak || item.contextHit || item.weakAliases.size >= 2;
+    const confirmed = !onlyWeak || item.contextHit || item.companyContext || item.weakAliases.size >= 2;
     const basis: TickerCandidate["confirmation_basis"] = !confirmed
       ? null
       : types.includes("EXACT_COMPANY_NAME") || types.includes("STRONG_ALIAS")
       ? "strong_match"
       : types.includes("TICKER_CODE")
       ? "ticker_code"
-      : item.contextHit
+      : item.contextHit || item.companyContext
       ? "weak_with_context"
       : "multiple_weak";
     const base = Math.max(...types.map((type) => SCORE[type]));
