@@ -124,3 +124,22 @@ This authorization does NOT cover:
 - broader rollback or architecture changes
 
 If the deploy safety tool still refuses despite this explicit authorization, STOP and report the exact blocker without attempting broader workarounds.
+
+
+## Manual production deploy completed by user
+
+- User manually executed the approved isolated deploy procedure from merge commit `f0ea0a964797524022f0b8aa51a670a78806dd26`.
+- Terminal log shows `x-test-post` deployment completed successfully twice using the same isolated source and the same `--no-verify-jwt` option.
+- Read-only Supabase metadata check after the manual operation shows:
+  - `x-test-post` status: ACTIVE
+  - version: 129
+  - verify_jwt: false
+- The duplicate deploy means the function version incremented twice from the prior v127 baseline; do NOT deploy again.
+- Continue from Phase D only: read-only verification and final Report.
+- Required remaining checks:
+  1. compare deployed source against merge commit `f0ea0a964797524022f0b8aa51a670a78806dd26`
+  2. confirm expected AI Lab snapshot/import/date-validation/hashtag-scope files are exact
+  3. compare against the pre-deploy all-function metadata snapshot and verify no other Edge Function changed during this operation
+  4. confirm no manual X post/manual scheduled invocation
+  5. write final Report
+- No further production mutation is authorized.
