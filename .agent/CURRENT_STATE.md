@@ -2417,3 +2417,12 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - no real X post and feature remains OFF.
 - finish code: K3.
 - recommended Claude model: Opus5.5（高）.
+
+
+## Manual x-test-post deploy completed
+- user manually executed the isolated production deploy from accepted merge `f0ea0a964797524022f0b8aa51a670a78806dd26`.
+- terminal log shows successful `x-test-post` deploy twice with the same source and `--no-verify-jwt`.
+- read-only Supabase metadata now shows `x-test-post` ACTIVE v129, verify_jwt=false.
+- prior baseline was v127, so the duplicate same-source deploy accounts for two version increments.
+- no further deploy is needed or authorized.
+- G4 should continue with read-only source identity/all-function metadata/manual-post verification and final Report only.
