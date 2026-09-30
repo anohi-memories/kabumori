@@ -3,8 +3,8 @@
 - task_id: kabumori-home-visual-rebuild-reference-20260930
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: highest
 - recommended_model: Sonnet5（高）
 - purpose: ユーザーが提示した理想Home案を視覚正本として、現行Homeの見た目を「微調整」ではなくUIレイヤーを全面再構築する。データ取得・ナビ・ルーティング・既存機能・backend契約は再利用し、見た目とレイアウトだけを新規に組み直す。
@@ -487,6 +487,49 @@ New: home-header, home-report-hero, home-market-news-grid, home-holding-news-lis
 
 ### Status
 `review_required` / next_owner `chatgpt`. STOP for K1. No merge, no EAS build, production mutation 0.
+
+## K1 interim — 2026-09-30 Home visual rebuild
+
+Verdict: **CONTINUE G1 — source architecture accepted, final visual gate not yet passed.**
+
+What passed:
+- PR #60 is open/unmerged and mergeable.
+- Home presentation was genuinely rebuilt rather than merely restyling the old cards.
+- existing data orchestration/navigation/backend contracts remain intact in the reviewed diff.
+- approved `report_04_neutral.webp` remains the only report-state asset; no 10-state selector was introduced.
+- Header / Hero / market news / holding news / topic / Ask AI were split into dedicated Home components.
+- future Header-logo / Hero-background / Topic-background slots exist without requiring missing files.
+- no backend/DB/Edge Function/cron/gate/Auth/X mutation.
+- EAS build was correctly not created for this UI iteration.
+- PR reports local tests 216/216 PASS, Expo export PASS, known only two pre-existing CSS-module tsc errors.
+- PR base-to-current-main changed files do not overlap PR #60 files; GitHub reports the PR mergeable/clean.
+
+Why final K1 is not passed:
+- the implementation/report itself records a material visual gap from the user's canonical Home:
+  - Hero ~296pt vs reference ~213pt.
+  - total Home ~1016pt vs reference ~850pt.
+  - character is still smaller than the reference.
+- more importantly, the current Hero architecture puts the Character in the top row and the three point rows **full-width below the character**. The user's intended visual model is a layered Hero: background image at the bottom, compact text/points box toward the left/lower-left, and Yume-chan as an independent right-side layer over the same background. The current layout is safer for long text but does not yet reproduce that composition closely enough.
+- there is no simulator screenshot attached to the PR for K1 to visually compare with the canonical Home.
+
+Required next G1 increment:
+1. Keep all current data/navigation behavior and component split.
+2. Do not create an EAS build.
+3. Refine locally in iOS Simulator toward the canonical composition:
+   - target Hero height much closer to ~220–240pt where practical.
+   - make Yume-chan an independent right-side visual layer/anchor rather than letting her force the top-row height.
+   - place the compact "今日のポイント" box in the left/lower-left visual region of the Hero instead of three full-width rows below the character.
+   - preserve max 3 points, truncate/limit Home text rather than growing the Hero indefinitely.
+   - enlarge/reposition 04 so Yume-chan + robot are a real Hero focal point without text overlap/crop.
+   - keep the CTA compact at the bottom.
+   - continue reducing overall Home height toward the reference density.
+4. Keep Header-logo / Hero-background / Topic-background as replaceable slots until user assets arrive.
+5. Capture and report at least one iPhone Simulator screenshot/view for direct comparison before the next K1.
+6. Before final K1/merge, sync safely with fresh main and rerun relevant checks. Do not merge PR #60.
+
+No Codex review required at this stage: this is still a local UI/visual iteration.
+
+Recommended model: **Sonnet5（高）**.
 
 ---
 
