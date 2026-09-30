@@ -1,3 +1,16 @@
+## K4 interim — PR #65 iOS X account switching
+
+- verdict: **SOURCE PASS / MERGE HOLD**.
+- PR #65 is open and mergeable at exact head `e8a7785d5635096aa428899d28e629a95b7e3f31`.
+- source scope is narrow: iOS posting-account X auth requests a private/ephemeral auth session; Android/Web remain unchanged; PKCE/state/redirect/callback/server duplicate-account protection are untouched.
+- reported tests: focused 10/10, social-mobile 99/99, typecheck/lint/export/diff checks PASS.
+- production mutation: 0; real X post/revoke/account mutation: 0.
+- blocker before merge: the actual provider-side behavior (different X account can be authenticated instead of silently reusing the previous session) has not yet been confirmed by an operator.
+- focused Codex review is required because this is an OAuth/authentication boundary. H1 assigned on exact head; recommended model Sol（高）.
+- merge condition: H1/C1 source acceptance **and** safe operator provider-side account-switch E2E.
+- AI Lab diary: 候補あり — X接続で前回ログインしたアカウントが引き継がれ、別アカウントを選びにくい問題を見つけた。iOSでは通常ブラウザのログイン状態を共有しにくい認証方式へ切り替える修正を入れ、ソーステストとは別に実際のログイン画面でも確認する方針にした。
+- G4 remains review_required until the merge conditions are satisfied.
+
 ## X social-mobile next phase — E3 cleanup + X account switch fix
 
 - G3: disposable X account connection now succeeded with a genuinely new test identity. E3 may continue with read-only baseline, but must STOP for fresh explicit user approval immediately before the first account deletion / revoke / credential-removal action.
