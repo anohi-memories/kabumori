@@ -2339,3 +2339,23 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - no deploy or real X post.
 - finish code: C2.
 - recommended Codex model: Luna（中）.
+
+
+## Final K3 native data-source and delete UX fix
+- verdict: **PASS for source-only correction**.
+- PR #63 head `5f2eae26bb1ee60c2bd7c7885c06816e86e8d852`.
+- D1 native data-source selection now uses bundle-safe static Expo env access and shares one decision path with provider initialization.
+- invalid/incomplete configuration blocks truthfully; explicit mock preview remains supported.
+- D2 adds truthful visible web deletion-completion feedback while preserving native Alert and deletion protections.
+- D3 adds signup in-progress/success feedback, same-tick duplicate-submit protection and cooldown only after success.
+- tests: mobile 89/89, data-view 14/14, typecheck/lint, Expo web+iOS export, diff/secret checks PASS; production_mutation=0.
+- native E3 can resume after merge, but a focused review is required because this crosses the native real/mock boundary and Auth/deletion UX.
+
+
+## H1 PR #63 native data-source/Auth UX review assigned
+- task_id: `x-social-mobile-pr63-native-data-source-auth-ux-review-20260930`
+- target: PR #63 head `5f2eae26bb1ee60c2bd7c7885c06816e86e8d852`.
+- scope: native data-source selection, delete completion feedback, signup duplicate/success feedback and regression safety.
+- no deploy, real X operation or real-user deletion.
+- finish code: C1.
+- recommended Codex model: Luna（高）.
