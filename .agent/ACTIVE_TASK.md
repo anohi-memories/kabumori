@@ -33,13 +33,13 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: x-ai-salaryman-dev-diary-pr61-final-acceptance-20260930
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: final acceptance review of PR #61 head 67ee04b after strict calendar-date fix; no deploy; recommended Luna（中）
+- allocation: Final C2 PASS. PR #61 accepted for merge and separately controlled deploy.
 
 ## Claude G1
 - owner: claude
@@ -75,11 +75,11 @@
 - owner: claude
 - slot: claude-4
 - status: ready
-- task_id: x-ai-salaryman-dev-diary-pr61-date-validation-fix-20260930
+- task_id: x-ai-salaryman-dev-diary-pr61-merge-prod-rollout-20260930
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: strict calendar-date validation fix for PR #61 diary freshness logic; preserve accepted runtime snapshot and cross-brand hashtag behavior; no deploy; recommended Sonnet5（中）
+- allocation: merge accepted PR #61 exact head and deploy only x-test-post to production with read-back; no manual X post; recommended Opus5.5（高）
 
 ## Deferred
 
