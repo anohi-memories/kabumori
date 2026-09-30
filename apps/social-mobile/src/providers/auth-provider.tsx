@@ -22,6 +22,7 @@ import {
   ACCOUNT_DELETION_CONFIRMATION,
   ACCOUNT_DELETION_FUNCTION,
   deletionAvailability,
+  deletionResultMessage,
   parseDeletionPreview,
   parseDeletionResponse,
   sameDeletionContext,
@@ -74,6 +75,9 @@ type AuthContextValue = {
   signOut: () => Promise<{ ok: boolean; message?: string }>;
   /** Account deletion is offered only when enabled for this build (backend reviewed + deployed). */
   accountDeletion: DeletionAvailability;
+  /** Shown on the sign-in screen after a server-confirmed deletion (web has no Alert). */
+  deletionNotice: string | null;
+  dismissDeletionNotice: () => void;
   /** A fresh sign-in with one of the user's own methods; must end as the same user. */
   /** On success: the exact user + session the confirmation belongs to (deletion is pinned to it). */
   reauthenticate: (method: ReauthMethod, password?: string) => Promise<{ ok: true; context: DeletionContext; appleAuthorizationCode?: string } | { ok: false; cancelled?: boolean; message: string }>;
@@ -113,6 +117,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [settings, setSettings] = useState<ProviderSettings>(null);
   const [nativeApple, setNativeApple] = useState(false);
   const [recovery, setRecovery] = useState<RecoveryBinding>(null);
+  const [deletionNotice, setDeletionNotice] = useState<string | null>(null);
   const recoveryRef = useRef<RecoveryBinding>(null);
 
   useEffect(() => {
@@ -126,6 +131,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     });
     const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(appSession(nextSession));
+      // A signed-in session ends the "deleted" notice of the previous account.
+      if (nextSession) setDeletionNotice(null);
       setError(null);
       setLoading(false);
       // Recovery is bound to the exact user + session of the recovery link; any other
@@ -279,6 +286,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setSession(null);
     recoveryRef.current = null;
     setRecovery(null);
+    // Stated on the sign-in screen: exactly what happened to the login.
+    setDeletionNotice(deletionResultMessage(outcome));
     return outcome;
   }, [callDeletion, config.ok]);
 
@@ -343,10 +352,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
       return { ok: true };
     },
     accountDeletion: deletionAvailability({ enabledFlag: ACCOUNT_DELETION_ENABLED, backendAvailable: Boolean(supabase) }),
+    deletionNotice,
+    dismissDeletionNotice: () => setDeletionNotice(null),
     reauthenticate,
     previewDeletion,
     deleteAccount,
-  }), [deleteAccount, email, error, linkProvider, loading, previewDeletion, readiness, reauthenticate, recovery, releaseReport, session, settings, signInWithProvider]);
+  }), [deleteAccount, deletionNotice, email, error, linkProvider, loading, previewDeletion, readiness, reauthenticate, recovery, releaseReport, session, settings, signInWithProvider]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
