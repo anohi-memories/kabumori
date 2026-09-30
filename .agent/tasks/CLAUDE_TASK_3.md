@@ -87,3 +87,33 @@ If ready for destructive E3, report:
 - unrelated-data invariant snapshot
 - feature remains OFF
 Then status -> review_required, next_owner -> chatgpt, STOP for K3.
+
+
+## Merge confirmed by ChatGPT/GitHub connector
+
+- PR #63 has been squash-merged successfully.
+- accepted head: `5f2eae26bb1ee60c2bd7c7885c06816e86e8d852`
+- merge commit: `2648f38ac3a0e3421dbd6104b46c44dbd009b6d8`
+- merged_at: 2026-09-30T11:32:04Z
+- do NOT retry the merge.
+
+### Continue authorization
+
+Continue this existing G3 task from **Phase B — native E3 preparation** using fresh `origin/main` that contains merge commit `2648f38ac3a0e3421dbd6104b46c44dbd009b6d8`.
+
+You are authorized to:
+- prepare the local/native iOS development or simulator build from fresh main
+- use existing public Supabase URL/publishable or anon client key only
+- set `EXPO_PUBLIC_DATA_SOURCE=supabase`
+- verify the app is using real Supabase data and X-connect is reachable
+- use only the approved disposable social-mobile identity/X account
+- perform read-only state verification after X connection
+
+You are NOT authorized yet to:
+- delete the disposable social-mobile account
+- revoke the disposable X authorization/token
+- mutate Vault credentials through deletion
+- make a real X post
+- activate the feature
+
+Before the first destructive delete/revoke/Vault action, STOP and request fresh explicit user approval exactly as the TASK requires.
