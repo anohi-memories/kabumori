@@ -350,6 +350,18 @@ Status: `review_required` / next_owner `chatgpt`. STOP for K1.
 - Backend/production mutation 0. Phase 2 not started. Pending: user real-device feedback on the new build.
 - Status: `review_required` / next_owner `chatgpt`.
 
+## User micro-adjustment round 2 — layout redo to match the user's ideal mock (user real-device feedback on 28686ad3)
+
+- User feedback (chat, with the ideal mock image and a screenshot of the previous build): position/size "not changed at all", far from the ideal. The 36%-of-header version (28686ad3) was only ~110pt beside the header text.
+- Tried and measured (Simulator, long production-like points): (a) text column left + character 46% right in a body row -> card 372/389pt (+67/+84), point 2 truncated, big empty area above the character, SE3 news heading under the tab bar -> **rejected**. (b) final layout below.
+- Final: PR #60 head `72d0816e4d50ff776d8551d8dc1c1d8f68625374` (not merged). Changed only `character-slot.tsx`, `report-highlight-card.tsx`, `tests/app/report-character_test.ts`.
+  - Header row (`alignItems:'flex-end'`): left = eyebrow + **two-line title** (「今日の」 / 「かぶモリレポート」, 20pt; two Texts, the long line `numberOfLines=1` + `adjustsFontSizeToFit` min 0.85; a single Text with a newline drops line 2 under fit-shrink on iOS; VoiceOver reads one label) + description; right = CharacterSlot `CHARACTER_SLOT_WIDTH_PERCENT='48%'` of the header row (about 160x106 at 402pt, 146x97 at 375pt), `CHARACTER_OFFSET_X=6`, `CHARACTER_OFFSET_Y=0`, bottom edge == description bottom edge.
+  - Meta + points full width again (`numberOfLines=2`), so long production points are not truncated.
+- Checks: `deno test tests/app/` **199/0**; tsc(src) 2 known CSS errors only; expo export PASS; diff check clean. Simulator (5c27aa7 layout + the two-Text title experiment, measured in the same rig): card 335pt @402, 349pt @375 (original ~305, i.e. +30..+44pt — the price of the bigger art), title 2 lines split at the space (no shrink at 402/375, ~0.95x at 360), points never truncated, character uncropped with no overlap, first viewport still reaches the important-news heading on iPhone SE3 (card bottom ~481pt).
+- Preview build for this round: `627606e3-d039-48de-82af-74eaeb2a3c1a`, source `72d0816e…`, profile preview, INTERNAL — https://expo.dev/accounts/anohi-memoriess-team/projects/kabumori/builds/627606e3-d039-48de-82af-74eaeb2a3c1a (queued at report time). Supersedes a3e85d80 and 28686ad3.
+- Known trade-off for the user/K1: bigger art => card +30..+44pt. Description wraps to 3 lines at <=375pt (last glyph alone); shortening the description copy would fix it (not done, copy change).
+- Backend/production mutation 0. Phase 2 not started. Status: `review_required` / next_owner `chatgpt`; awaiting the user's real-device feedback.
+
 ---
 
 ## Archived predecessor state
