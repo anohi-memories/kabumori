@@ -2388,3 +2388,12 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - Native PR: Netlify preview passed; Vercel rate-limit check is not required under native Expo policy. No simulator/EAS/live auth or deletion E2E was performed.
 - No findings blocking source merge; production mutation 0. H1 awaits C1, then native E3 may resume.
 - Recommended model for C1: Luna（中）.
+
+
+## G4 PR #61 merge confirmed; deploy explicitly authorized
+- GitHub independently confirms PR #61 merged at `f0ea0a964797524022f0b8aa51a670a78806dd26`.
+- accepted reviewed head remains `67ee04b41e37553885d43f4630628d135061cbf8`.
+- do not retry the merge.
+- G4 is explicitly authorized to continue with the already-reviewed single-function production deploy of `x-test-post` only, preserving verify_jwt=false, then perform read-only source/version/metadata verification.
+- no DB/Auth/Vault/Cron/settings/secret changes and no manual X post/manual scheduled invocation.
+- recommended Claude model: Opus5.5（高）.
