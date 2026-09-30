@@ -173,7 +173,8 @@ test("draft prompt: keep hedges, no sentences about the input, no forced 'no imp
   assert.match(text, /元情報の不確実性・留保表現（『とみられる』『疑い』『意向』『可能性』『暫定』/);
   assert.match(text, /確定した事実として言い切りません/);
   assert.match(text, /『入力情報からは確認できません』『入力データでは〜』.*入力や情報源の扱いについて説明する文は書きません/);
-  assert.match(text, /『日本株への影響は確認できません』のような締めの一文を入れる必要はありません/);
+  assert.match(text, /日本株への影響、影響を受けそうな対象、市場反応は、元情報または確定済みjudgementに直接の根拠がない場合、締めにも本文にも追加しません/);
+  assert.match(text, /『日本株への影響は確認できません』のような締めの一文も不要です/);
   // Existing guards are still there.
   assert.match(text, /元情報にない数値、日付、固有名詞、因果、規模、将来予測を追加しません/);
 });
