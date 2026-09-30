@@ -1,3 +1,12 @@
+## H1 PR #65 source review — 2026-10-01
+
+- verdict: **PASS-WITH-FIX (tests only)**, final PR head `e5a66f5ba71f64b1a38d8f89faff3d0a31972949` (initial `e8a7785`).
+- Expo 57.0.3 JS/native source supports the iOS private-session option. Android/Web receive undefined and retain SDK defaults; OAuth state/PKCE/redirect/callback/server ownership remain unchanged.
+- H1 executed the actual hook and installed SDK JS with synthetic dependencies instead of relying on source-string assertions; focused 14/14, mobile 103/103, view/interaction 22/22, typecheck/lint/Web+iOS exports/diff checks PASS.
+- No client runtime changes by H1; test amendment pushed. Production mutation 0.
+- Source-safe to merge **conditional on C1 and safe operator provider-side account-switch E2E**. Actual device/browser behavior and exact native module version inside the installed development binary were not verified; keep merge hold.
+- H1 review_required / next_owner chatgpt. Recommended C1 model: Luna（中）.
+
 ## K4 interim — PR #65 iOS X account switching
 
 - verdict: **SOURCE PASS / MERGE HOLD**.

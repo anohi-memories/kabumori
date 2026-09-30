@@ -22,13 +22,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: x-social-mobile-pr65-ephemeral-x-auth-session-review-20261001
 - start_code: H1
 - finish_code: C1
+- next_owner: chatgpt
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Focused OAuth/authentication-boundary review of PR #65 exact head e8a7785d5635096aa428899d28e629a95b7e3f31. Verify iOS ephemeral auth-session use, PKCE/state/callback invariants, platform scope, tests, and source safety. No provider credentials or production mutation. Recommended Sol（高）.
+- allocation: H1 PASS-WITH-FIX (tests only) on PR #65 final head e5a66f5ba71f64b1a38d8f89faff3d0a31972949; focused 14/14 and mobile 103/103 PASS. Await C1 plus safe operator provider-side E2E before merge; production mutation 0. Recommended Luna（中） for C1.
 
 ## Codex H2
 - owner: codex

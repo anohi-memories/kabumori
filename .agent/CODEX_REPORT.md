@@ -777,3 +777,46 @@ Repeated the **exact same** SELECTs after deploy. All six row values/digests unc
 - changed_files by H1: shared control files only (`.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md`, H1 entry in `.agent/ACTIVE_TASK.md`, H1 snapshot in `.agent/CURRENT_STATE.md`); app source unchanged.
 - remaining_issues: none blocking source merge. Vercel rate-limit status is not a native-app merge gate under current policy.
 - next_recommendation: C1 confirm this exact-head **PASS**, then continue the separately scoped native E3 acceptance. No production/auth/provider mutation is authorized by this review. **推薦モデル：Luna（中）** for C1 confirmation.
+
+# H1 — PR #65 iOS X private authentication session (2026-10-01 JST)
+
+- task_id: `x-social-mobile-pr65-ephemeral-x-auth-session-review-20261001`
+- result: **PASS-WITH-FIX (tests only)**. No runtime/security defect found in the client change. Source is safe to merge **conditional on C1 and safe operator provider-side account-switch E2E**; merge remains on hold.
+- original target: PR #65 head `e8a7785d5635096aa428899d28e629a95b7e3f31`.
+- final reviewed head / commit_hash: `e5a66f5ba71f64b1a38d8f89faff3d0a31972949`. H1 changed only `apps/social-mobile/tests/x-connect-auth-session.test.mjs`; all app/runtime source remains identical to the original target.
+- isolation/startup: reused H1's clean independent checkout `/private/tmp/kabumori-h1-pr63-review-20260930`, own source/review and reporting branches. Fresh `git fetch origin` succeeded; main baseline `0e069e8e93358385d4f972d653d946aa4e459a27`. Shared dirty checkout and G3/G4 worktrees/Simulator were not altered. Read PROJECT_RULES/AGENTS/HANDOFF/ORCHESTRATION/current TASK/state/G4 Report. Current-main changes after the PR base do not overlap social-mobile source.
+
+## Platform/API result
+
+- Installed lock/package and module source are `expo-web-browser 57.0.3`. Its `AuthSessionOpenOptions` includes `preferEphemeralSession`; actual SDK JS forwards it to the native bridge. Swift `WebAuthSession` sets `ASWebAuthenticationSession.prefersEphemeralWebBrowserSession` after both custom-scheme and universal-link constructor paths. This app uses the existing custom scheme.
+- The helper returns `{ preferEphemeralSession: true }` only for iOS. Other platforms receive an explicit **undefined third argument** (not literally a two-argument call); the SDK's default `{}` behavior is unchanged. A test verifies omitted versus undefined SDK arguments are equivalent.
+- No dependency/plugin/config/native source changed. This JS change needs no new native option/config when the installed development binary already includes the locked native module. **The exact native module version inside that existing binary was not independently established**; confirm it or use a known matching build during operator E2E. No EAS/native build was performed.
+- [Official Expo SDK 57 WebBrowser documentation](https://docs.expo.dev/versions/v57.0.0/sdk/webbrowser/#authsessionopenoptions) confirms iOS scope and that browser support determines whether this request is honored. The option avoids normal-browser cookie sharing when honored; it cannot guarantee an X account chooser. Current user hint states the browser caveat on both connect surfaces and is sufficient for this bounded change.
+
+## OAuth/security invariants
+
+- Parent-to-candidate diff changes only imports, the browser-call options and explanatory copy. HTTPS/X host validation, random 32-byte state/verifier generation, S256 challenge, fixed redirect validation, real callback parser/state checks, authenticated app-JWT headers and callback body remain unchanged. No ownership IDs or undocumented provider parameters were added.
+- Executed mock success proves the exact request bodies, state/verifier/challenge and app-JWT header; negative probes reject wrong redirect/state/missing code and unsafe authorization host/protocol before callback/browser calls. Cancel/dismiss/provider denial, transient/terminal failures and non-success browser results cannot claim a connected handle. Single-flight and reconnect use fresh state/PKCE and the same iOS option.
+- Server duplicate-account protection and all DB/RLS/RPC/migration/Edge/Vault/Auth/provider/posting paths are byte-unchanged in the PR. No global cookies/browser data are cleared. App-login provider flow remains separate. No secret leakage found in changed source/tests; only synthetic test values were used.
+- Supabase skill security checklist was applied to credential separation and ownership boundaries. Its changelog index was attempted but returned an internal fetch error; no Supabase API/version/backend change is part of this PR. Expo package source and current official docs establish the changed API contract.
+
+## Test correction and verification
+
+The original tests mostly matched source strings. One purported server-protection test only searched the client hook, so it could not prove the server was untouched; an Android/Web label also overstated literal call arity. H1 narrowly replaced those claims with behavior checks, as explicitly allowed by the TASK. The actual hook is transpiled/executed with mocked React/Expo/Supabase dependencies and the real callback helpers; another check executes installed SDK JS through a captured native bridge. No live network/provider operation exists in this harness. Swift wiring is source-inspected, not a claim of device execution.
+
+| Verification | Result |
+| --- | --- |
+| Focused X auth-session suite | 14/14 PASS |
+| Full social-mobile `npm test` | 103/103 PASS |
+| Data-view + post-interaction | 22/22 PASS |
+| `npm run typecheck` / `npm run lint` | PASS / PASS |
+| Expo Web / iOS export, fresh Metro cache, synthetic public env | PASS / PASS (895 / 1224 modules; iOS JS/Hermes export only) |
+| PR scope / diff / secret checks | PASS; five intended client/test files, no forbidden paths |
+
+## Delivery and remaining gate
+
+- changed_files: H1 test file above plus H1-only completion controls (`.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md`, H1 entry in ACTIVE_TASK and H1 result section in CURRENT_STATE). Other slot TASKs/Reports preserved.
+- push: test amendment **PASS**, fast-forward pushed to the existing PR #65 branch; exact new source head `e5a66f5ba71f64b1a38d8f89faff3d0a31972949`. Report-control sync is performed separately; read-back must confirm review_required/next_owner before claiming delivery complete.
+- deploy / merge: none. production_mutation=0; real X login/post/revoke, credential entry, account deletion, DB/Vault/Auth/provider settings changes=0. No overlap with G3's destructive operational E3.
+- remaining_issues: safe operator E2E must confirm on a disposable account/device that prior normal-browser X identity is not silently reused and a different X account can authenticate, including cancel/retry/reconnect. The private-session request may be ignored by a browser/provider and requires truthful fallback expectations. Current copy acknowledges this; no success is inferred from source tests. Confirm the development binary's native module compatibility as above.
+- next_recommendation: C1 accept the final source head, retain merge hold until the TASK's operator account-switch E2E passes, then perform the normal source merge decision. **推薦モデル：Luna（中）** for C1. H1 stops after report synchronization; no provider-side automation is authorized.
