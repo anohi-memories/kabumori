@@ -1,16 +1,13 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import type { ImageSource } from 'expo-image';
+import { Image, type ImageSource } from 'expo-image';
 
 import type { KabumoriPalette } from '@/constants/kabumori-theme';
-import { HOME_COLORS } from '@/constants/home-tokens';
 
-// Asset slot: the wide "かぶモリ" brand logo. Set this to
-//   require('@/assets/images/home/kabumori_header_logo.webp')
-// when the file exists (it is intentionally NOT required while missing). Until then the header
-// shows the temporary text brand inside the same fixed-size slot, so swapping the asset is a
-// one-line change and never shifts the layout.
-export const HEADER_LOGO_SOURCE: ImageSource | null = null;
+// The approved brand logo (transparent WebP, 2005x784, lossless; the official artwork is shown
+// as-is: never recoloured, cropped or redrawn). It is shown with contentFit="contain" inside this
+// fixed-size slot so the layout never shifts; to replace it, swap the single require below.
+export const HEADER_LOGO_SOURCE: ImageSource = require('@/assets/images/home/kabumori_header_logo.webp');
 export const HEADER_LOGO_SLOT = { width: 132, height: 34 } as const;
 
 type HomeHeaderProps = {
@@ -19,18 +16,19 @@ type HomeHeaderProps = {
   date: string;
 };
 
-// Compact header: brand logo slot | small greeting + date | the existing settings entry.
+// Compact header: brand logo | small greeting + date | the existing settings entry.
 // No notification bell / profile button: those features do not exist yet, so no fake controls.
 export function HomeHeader({ palette, greeting, date }: HomeHeaderProps) {
   return (
     <View style={styles.row}>
-      <View style={[styles.logoSlot, HEADER_LOGO_SLOT]} accessible accessibilityRole="header" accessibilityLabel="かぶモリ">
-        {/* Temporary text brand; replaced by the logo image when HEADER_LOGO_SOURCE is set. */}
-        <Text style={[styles.brand, { color: HOME_COLORS.brandGreen }]}>かぶモリ</Text>
-        <Text style={[styles.tagline, { color: palette.muted }]} numberOfLines={1}>
-          株とAIで、もっと身近に。
-        </Text>
-      </View>
+      <Image
+        source={HEADER_LOGO_SOURCE}
+        style={HEADER_LOGO_SLOT}
+        contentFit="contain"
+        accessible
+        accessibilityRole="header"
+        accessibilityLabel="かぶモリ 株をAIで、もっと身近に。"
+      />
 
       <View style={styles.greeting}>
         <Text style={[styles.greetingText, { color: palette.text }]} numberOfLines={1}>
@@ -55,9 +53,6 @@ export function HomeHeader({ palette, greeting, date }: HomeHeaderProps) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 40 },
-  logoSlot: { justifyContent: 'center' },
-  brand: { fontSize: 19, lineHeight: 22, fontWeight: '900', letterSpacing: 0.5 },
-  tagline: { fontSize: 8.5, lineHeight: 11, fontWeight: '700' },
   greeting: { flex: 1, minWidth: 0, paddingLeft: 10, borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: '#c9d3cb' },
   greetingText: { fontSize: 12, fontWeight: '800' },
   date: { fontSize: 11, fontWeight: '700', marginTop: 1 },
