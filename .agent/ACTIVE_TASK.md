@@ -45,11 +45,11 @@
 - owner: claude
 - slot: claude-1
 - status: ready
-- task_id: kabumori-home-ui-continuation-20260929
+- task_id: kabumori-home-visual-rebuild-reference-20260930
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: K1 interim accepted PR #60 source, but final visual gate incomplete. Complete simulator check, adjust only CharacterSlot constants if needed, then create one fresh iOS preview build and STOP for K1. No backend, no 10-state selector, no Codex review. Recommended Sonnet5（高）
+- allocation: rebuild Home presentation from the user's visual reference. Preserve data/navigation/backend contracts, but replace old Home visual hierarchy with compact header, report Hero with asset slots + fixed 04, compact market/holding news, featured topic, compact honest AI entry, current 5 tabs. PR #60 must not merge as-is; reuse its exact 04 asset. Recommended Sonnet5（高）
 
 ## Claude G2
 - owner: claude
