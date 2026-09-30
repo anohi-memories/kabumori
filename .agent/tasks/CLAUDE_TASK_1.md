@@ -3,8 +3,8 @@
 - task_id: kabumori-home-visual-rebuild-reference-20260930
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sonnet5（高）
 - purpose: ユーザーが提示した理想Home案を視覚正本として、現行Homeの見た目を「微調整」ではなくUIレイヤーを全面再構築する。データ取得・ナビ・ルーティング・既存機能・backend契約は再利用し、見た目とレイアウトだけを新規に組み直す。
@@ -530,6 +530,36 @@ Required next G1 increment:
 No Codex review required at this stage: this is still a local UI/visual iteration.
 
 Recommended model: **Sonnet5（高）**.
+
+## Report 2 — G1: Home Hero reworked per K1 interim (layered Hero) — local/Simulator only, EAS build for this rebuild: NOT done
+
+- result: K1's required increment implemented; **the user viewed it live on their iPhone (dev-client + local Metro, real account) and said the look is good (「見た感じはいいと思う」)**. PR **not merged**.
+- PR: https://github.com/anohi-memories/kabumori/pull/60 — head `5f88ef12db6b93ce65dee9c4e565c9615baea8d1`, branch `claude/home-report-yume-04-fixed-20260930`. Screenshot for direct comparison is committed in the PR: `docs/ui-review/home-402pt-first-viewport-2026-09-30.webp` (iPhone 17 Pro 402pt, dummy fixtures, first viewport).
+- **EAS**: no build for the rebuild. One **development-client** build `37541c60-076b-4069-9659-25d3b22e8f35` was made at the user's explicit approval (after their dev app had been overwritten by an earlier preview build with the same bundle id) so that Home can be iterated live over local Metro without further builds. Total builds today: 4 preview (superseded Yume-chan tuning) + 1 development.
+- backend/production mutation: 0. No .env or secrets committed (a local copy of the project's public `.env` sits untracked in the scratch clone used for Metro).
+
+### What changed vs the previous head (0c298e0)
+- Hero is now a **layered block**: `CharacterSlot` = absolute right-side layer (`characterWidthPercent 50%`, `characterRight -2`, bottom = padding + CTA + gap), rendered **behind** the content so text can never be covered and it never drives the Hero height; left = 「今日の」pill + 24pt title + 2-line description (column 58%), a compact points box (column 58%, 3 rows, 10.5pt, max 2 lines, white rows, red/blue/orange circles), CTA 34pt (gap 6) pinned to the Hero's bottom edge via a flexGrow spacer; `HERO.minHeight 232` so sparse states (loading/empty/error) keep the composition.
+- Density: market media 44, holding rows 40 (tile 30), topic minHeight 96 (title 15/19), Ask AI 50, section gap 10.
+- Sparse-state status text kept at 84% of the points box so it never runs into the wand tip.
+
+### Measurements (Simulator, previous head a4889aa before the last tuning, then re-inspected on 4287cc7 screenshots)
+- a4889aa: Hero 261pt (report), content 957pt total (was 1015.7); character 191x128 at 402pt, overlap-free, wand tip tucks behind the points box; points: 402pt one '…' (point 2), 375pt two, 360pt three; sparse states had the CTA floating and the wand crossing the description — fixed in 4287cc7 (CTA at the bottom, character fully above it; verified in screenshots 02_*).
+- 4287cc7 tuning (heights −17pt expected, ~244pt Hero) was inspected from screenshots only; the automated re-measurement agent stalled twice, so exact final numbers per width are **not** re-recorded for 4287cc7/5f88ef1. Tests/export were re-run (below).
+- 5f88ef1 first viewport @402pt: Header + Hero + 重要ニュース (3 cards) + 保有銘柄 (3 rows) + the start of 今日のトピック.
+
+### Tests / checks (5f88ef1)
+`deno test tests/app/` **216/216**; tsc(src) 2 known CSS errors only; `expo export --platform web` PASS; diff check clean; character-layer test updated (absolute, behind text, bottom rests on CTA row, 44-60% width).
+
+### User direction for the next phase (chat, 2026-09-30) — please record for K1
+- The user will produce **illustrations for the whole 「今日のかぶモリレポート」 block: title, description and background all as artwork**, and **10 taller Yume-chan variants designed to overlay the background as-is** (transparent). Only the **「今日のポイント」 content stays live text**, changed on every report, and the user will adjust copy so each point fits in **2 lines**.
+- Implication for the code: keep `HERO_BACKGROUND_SOURCE` (cover) as the slot for the full Hero art (title/description then move out of RN Text into the art), keep the character an independent layer whose aspect/size become per-asset constants, and keep the points box as the only text layer with a hard 2-line limit. A Home point length cap (about 24 full-width chars at 375pt for 58% column at 10.5pt) should be agreed with G2/report generation; not implemented.
+
+### Remaining visual differences vs the reference
+Hero art/background scene and the 「今日のポイントはこちら！」bubble (art phase), news photos/summaries (no image field), header leaf logo (asset slot), point 2 still truncates at 402pt with production-length text until the copy is shortened.
+
+### Status
+`review_required` / next_owner `chatgpt`. STOP for K1. No merge.
 
 ---
 
