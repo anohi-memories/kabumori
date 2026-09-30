@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: in_progress
+- status: review_required
 - task_id: x-social-mobile-pr63-merge-native-e3-resume-20260930
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: PR #63 squash-merged as 2648f38ac3a0e3421dbd6104b46c44dbd009b6d8. Continue from Phase B native real-data/disposable-X E3 prep and read-only connection checks only; mandatory fresh user approval before delete/X revoke/Vault mutation; recommended Opus5.5（高）
+- allocation: Final K3 BLOCKED at safety stop. Native real-data path verified, but the X account used for E3 was already connected to an existing production posting account, so no destructive step was started. Requires a genuinely new disposable X account before resuming; fresh user approval remains mandatory immediately before delete/X revoke/Vault mutation. No additional Codex review required yet; recommended Opus5.5（高）
 
 ## Claude G4
 - owner: claude
