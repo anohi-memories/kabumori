@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: kabumori-market-report-analysis-prod-sync-content-guard-20260929
+- status: ready
+- task_id: x-social-mobile-pr63-native-data-source-auth-ux-review-20260930
 - start_code: H1
 - finish_code: C1
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: cancelled before execution as misrouted; production mutation 0. Task moved to G2. H1 must not run it concurrently.
+- allocation: focused pre-merge review of PR #63 native real-vs-mock selection and Auth/delete/signup UX; no production mutation; recommended Luna（高）
 
 ## Codex H2
 - owner: codex
@@ -64,12 +64,12 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: review_required
 - task_id: x-social-mobile-native-data-source-and-delete-ux-fix-20260930
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: fix native data-source mock fallback plus web delete-completion and signup-feedback blockers found in Stage 2 E2E; source-only, no production mutation; recommended Sonnet5（高）
+- allocation: K3 PASS source-only; PR #63 head 5f2eae2 fixes D1-D3. Awaiting H1 focused review before merge/native E3 resume. Recommended Sonnet5（高）
 
 ## Claude G4
 - owner: claude
