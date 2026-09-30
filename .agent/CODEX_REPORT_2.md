@@ -1,3 +1,26 @@
+## H2 — AI Lab development-diary PR #61 final acceptance review — 2026-09-30
+
+- task_id: `x-ai-salaryman-dev-diary-pr61-final-acceptance-20260930`
+- result / verdict: **PASS**. Strict calendar validation closes the final finding; PR #61 is safe to merge and later deploy from the reviewed source. H2 did not merge or deploy.
+- reviewed_head: PR #61 exact head `67ee04b41e37553885d43f4630628d135061cbf8`; open, GitHub mergeable=true. Fresh main SHA: `75383d6ebc36066247d37ac005c5fdc30e9aa685`; PR is 3 commits ahead / 5 behind. Main changes since merge-base have no overlap with the PR's 10 source paths.
+- prior_blockers:
+  - runtime Markdown packaging: **RESOLVED**. Runtime uses the ordinary import graph to load the generated snapshot; no runtime filesystem/static-asset dependency. Current-head canonical Markdown and snapshot were independently parsed and found byte-identical (2,068 characters); parity test remains.
+  - hashtag scope: **RESOLVED**. Only AI Lab opts into its own hashtag voice policy. Neutral social-mobile retains the prior no-hashtag instruction; the fixed-hashtag branch remains unchanged.
+  - impossible calendar dates: **RESOLVED**. `isValidCalendarDate` checks YYYY-MM-DD format and UTC year/month/day round-trip before an entry can survive sanitization. Impossible entries are excluded before freshness/topic selection and fall back to evergreen.
+- date_validation_tests: current head explicitly rejects `2026-09-31`, non-leap `2026-02-29`, out-of-range months/days and malformed shapes; accepts leap day `2028-02-29` and valid month-end dates; verifies impossible dates are dropped by sanitization and selection falls back to evergreen. The selector integration test uses `2026-09-31` against `2026-09-30`, but the independent sanitizer assertion directly catches the former shape-only bug.
+- safety_and_scope: AI Lab scheduled `brand_post` branch still selects the diary/evergreen topic and passes it as `topicSeed`. Snapshot parity passed; the committed diary has no matches for the sanitizer's URL/email/token/JWT/branch/task/commit/PR/schema denylist patterns. No G3/Auth/account-deletion, DB/RLS/RPC, migration, or credential files are in the PR diff. No other brand's hashtag behavior changed.
+- changed_files_by_H2: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md` only. PR source unchanged.
+- tests: G4 Report at this head records `ai_lab_dev_diary_context_test.ts` **29/29**, profile **7/7**, generator **13/13**, scheduled AI Lab **8/8**, shared brand suite **119/119** under Deno; changed-file `deno check`, `git diff --check`, and secret scan PASS. H2 independently counted current source test declarations: 29 / 7 / 13 / 8, coherent with the focused report. H2 did not rerun the test executables. GitHub combined status: Netlify preview success; Vercel preview failed only on build rate limit; no PR-triggered GitHub Actions runs were returned.
+- merge_deploy_safety: **PASS for merge and subsequent separately controlled deploy** based on reviewed source, clean task scope, and GitHub mergeability. The Vercel preview rate limit is not treated as a code blocker under current repository policy. No merge/deploy was performed or authorized by this review.
+- implementation_commit: G4 reports date-validation fix at PR head `67ee04b`; H2 made no source commit.
+- push: H2 review record synchronized to GitHub; only H2 TASK/REPORT changed.
+- production_mutation: **0**. Deploy **0**, real X/API **0**, DB/RLS/RPC/migration **0**, Cron/settings **0**.
+- remaining_issues: none found within this focused acceptance scope. Test execution results are G4-reported; H2 independently verified current-head test declaration counts, not execution.
+- safety_checks: no PR source edit, merge, deploy, production/API call, or unrelated workstream change.
+- next_recommendation: C2 may close this H2 review. Any merge/deploy remains a separate operation with its own authorization and preflight.
+
+---
+
 ## H2 — AI Lab development-diary PR #61 final focused review — 2026-09-30
 
 - task_id: `x-ai-salaryman-dev-diary-pr61-final-review-20260930`
