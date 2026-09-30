@@ -2302,3 +2302,21 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - no backend/migration/Edge/Auth-provider/production mutation.
 - finish code: K3.
 - recommended Claude model: Sonnet5（高）.
+
+
+## Final C2 PR #61 final review
+- verdict: **FAIL / do not merge or deploy yet**.
+- previous runtime packaging blocker: RESOLVED.
+- previous hashtag cross-brand blocker: RESOLVED.
+- remaining blocker: diary date validation accepts shape-valid but impossible calendar dates because JavaScript normalizes them, which can incorrectly pass freshness and allow a false current-progress topic.
+- no production mutation and no source fix by H2.
+- PR #61 remains open.
+
+
+## G4 PR #61 strict date validation fix assigned
+- task_id: `x-ai-salaryman-dev-diary-pr61-date-validation-fix-20260930`
+- scope: reject impossible calendar dates before freshness selection and add regressions.
+- preserve runtime snapshot/import architecture and hashtag behavior.
+- no deploy or real X post.
+- finish code: K4.
+- recommended Claude model: Sonnet5（中）.
