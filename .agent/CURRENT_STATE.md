@@ -1,3 +1,15 @@
+## K1 interim — G1 Home visual rebuild (2026-09-30)
+
+- PR #60 head reviewed: `0c298e0ce76addd5d7372374211dd4da9ccd5f8f`.
+- PR open, unmerged, GitHub mergeable/clean.
+- 19 changed files, UI-only scope; no overlap with files changed on main since the PR base.
+- architecture accepted: dedicated compact Header / Report Hero / market news / holding news / topic / Ask AI + asset slots; fixed approved 04 only.
+- Claude reports app tests 216/216 PASS, Expo export PASS, local iOS Simulator checks, EAS build 0.
+- final K1 **not passed** because visual density/composition still materially differs from canonical reference: Hero ~296pt vs ~213pt, Home ~1016pt vs ~850pt, character too small, points currently full-width below character instead of left/lower-left layered composition.
+- next: local Simulator refinement only; no EAS. Require screenshot/view comparison before next K1.
+- no Codex review yet.
+- recommended model: Sonnet5（高）.
+
 ## EAS build conservation — current G1 override
 
 - user reports only 2 EAS builds remain this month; future monthly allowance is also limited.
