@@ -24,7 +24,7 @@ import type { KabumoriPalette } from '@/constants/kabumori-theme';
 export const CHARACTER_ASPECT_RATIO = 1536 / 1024;
 // Share of the card's content width the character takes (a bit under half, next to the text block);
 // the height follows from the aspect ratio, so the size scales with the screen.
-export const CHARACTER_SLOT_WIDTH_PERCENT = '46%';
+export const CHARACTER_SLOT_WIDTH_PERCENT = '48%';
 // Size of the empty placeholder shown when no artwork is passed.
 export const CHARACTER_PLACEHOLDER_SIZE = 48;
 export const CHARACTER_OFFSET_X = 6;

@@ -56,17 +56,17 @@ test("CharacterSlot keeps the artwork uncropped, decorative and adjustable from 
   assert.ok(!/backgroundColor|border|shadow/.test(slotStyle));
 });
 
-test("the artwork takes the right ~45% of the card body, 3:2, bottom-aligned with the text block", async () => {
+test("the artwork takes the right ~48% of the card header, 3:2, bottom-aligned with the header text", async () => {
   const slot = await read("src/components/home/character-slot.tsx");
   const percent = Number(/export const CHARACTER_SLOT_WIDTH_PERCENT = '(\d+)%';/.exec(slot)?.[1]);
   assert.ok(percent >= 40 && percent <= 50, `${percent}% should stay around 45% of the card body`);
   assert.ok(/aspectRatio: CHARACTER_ASPECT_RATIO/.test(slot));
   const card = await read("src/components/home/report-highlight-card.tsx");
-  assert.ok(/bodyRow: \{[^}]*alignItems: 'flex-end'/.test(card), "the character sits on the bottom edge of the text block");
+  assert.ok(/headRow: \{[^}]*alignItems: 'flex-end'/.test(card), "the character sits on the bottom edge of the header text");
 });
 
-test("the report title shrinks instead of wrapping a stray glyph when the text column is narrow", async () => {
+test("the two-line report title shrinks instead of breaking a word when the text column is narrow", async () => {
   const card = await read("src/components/home/report-highlight-card.tsx");
   const title = card.slice(card.indexOf("styles.title, {"), card.indexOf("今日の かぶモリレポート"));
-  assert.ok(title.includes("numberOfLines={1}") && title.includes("adjustsFontSizeToFit") && title.includes("minimumFontScale"));
+  assert.ok(title.includes("numberOfLines={2}") && title.includes("adjustsFontSizeToFit") && title.includes("minimumFontScale"));
 });
