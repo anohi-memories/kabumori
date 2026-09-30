@@ -3,7 +3,7 @@
 - task_id: x-social-mobile-native-data-source-and-delete-ux-fix-20260930
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: critical
 - recommended_model: Sonnet5（高）
