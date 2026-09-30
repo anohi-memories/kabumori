@@ -22,13 +22,13 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: x-social-mobile-pr63-native-data-source-auth-ux-review-20260930
+- status: ready
+- task_id: x-social-mobile-pr65-ephemeral-x-auth-session-review-20261001
 - start_code: H1
 - finish_code: C1
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 PASS on exact PR #63 head 5f2eae2; safe for source merge; production mutation 0.
+- allocation: Focused OAuth/authentication-boundary review of PR #65 exact head e8a7785d5635096aa428899d28e629a95b7e3f31. Verify iOS ephemeral auth-session use, PKCE/state/callback invariants, platform scope, tests, and source safety. No provider credentials or production mutation. Recommended Sol（高）.
 
 ## Codex H2
 - owner: codex
@@ -74,12 +74,12 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: review_required
 - task_id: x-social-mobile-x-account-switch-auth-session-20261001
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: Fix iOS X OAuth account-switch UX so a prior browser login is not silently reused. Prefer documented Expo private/ephemeral auth-session behavior after verifying installed API; preserve Android/Web and PKCE/state/callback security. Production mutation 0. Recommended Sonnet5（高）.
+- allocation: K4 source review passed, but PR #65 remains unmerged pending H1 focused OAuth review and operator provider-side account-switch verification. Exact PR head e8a7785d5635096aa428899d28e629a95b7e3f31; production mutation 0. Recommended Sonnet5（高） if source follow-up is needed.
 
 ## Deferred
 
