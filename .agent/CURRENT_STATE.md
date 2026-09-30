@@ -1,3 +1,12 @@
+## X social-mobile next phase — E3 cleanup + X account switch fix
+
+- G3: disposable X account connection now succeeded with a genuinely new test identity. E3 may continue with read-only baseline, but must STOP for fresh explicit user approval immediately before the first account deletion / revoke / credential-removal action.
+- G3 destructive scope after approval: disposable account only; verify deletion result, per-account X authorization revoke, residue, and protected production invariants. No real X post.
+- G4: reproduced UX issue where iOS X auth reused the previous browser login and made account switching difficult. This is considered a real production UX defect worth fixing for multi-account X users.
+- current client uses Expo WebBrowser auth session; G4 will prefer the documented iOS private/ephemeral auth-session behavior if confirmed in the installed API, without global cookie clearing or undocumented X parameters.
+- G3 and G4 must use separate worktrees. G3 is operational verification and must not edit the X-connect source; G4 is source-only and must not touch the E3 disposable/protected production data.
+- recommended models: G3 Opus5.5（高） / G4 Sonnet5（高）.
+
 ## AI Lab diary automation LIVE — 2026-10-01
 
 - result: **PASS / live on main**.
