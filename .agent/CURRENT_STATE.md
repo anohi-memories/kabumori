@@ -2359,3 +2359,22 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - no deploy, real X operation or real-user deletion.
 - finish code: C1.
 - recommended Codex model: Luna（高）.
+
+
+## Final C2 PR #61 accepted
+- verdict: **PASS**.
+- accepted exact head: `67ee04b41e37553885d43f4630628d135061cbf8`.
+- runtime snapshot packaging, AI Lab-only hashtag control, strict calendar-date validation, freshness fallback, sanitizer scope and cross-brand behavior accepted.
+- H2 found no remaining issue in focused acceptance scope.
+- G4-reported tests at accepted head: context 29/29, profiles 7/7, generator 13/13, scheduled AI Lab 8/8, shared-brand suite 119/119; H2 independently verified test declaration counts.
+- production_mutation=0.
+- PR #61 may proceed to merge and separately controlled x-test-post production rollout.
+
+
+## G4 PR #61 merge and production rollout assigned
+- task_id: `x-ai-salaryman-dev-diary-pr61-merge-prod-rollout-20260930`
+- accepted head: `67ee04b41e37553885d43f4630628d135061cbf8`.
+- scope: exact PR merge, then single-function x-test-post production deploy/read-back.
+- no manual X post, DB/Auth/Vault/Cron mutation or broad deploy.
+- finish code: K4.
+- recommended Claude model: Opus5.5（高）.
