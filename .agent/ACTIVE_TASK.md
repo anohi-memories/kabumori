@@ -22,13 +22,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: x-social-mobile-pr63-native-data-source-auth-ux-review-20260930
 - start_code: H1
 - finish_code: C1
+- next_owner: chatgpt
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: focused pre-merge review of PR #63 native real-vs-mock selection and Auth/delete/signup UX; no production mutation; recommended Luna（高）
+- allocation: H1 PASS on exact PR #63 head 5f2eae2; awaiting C1; production mutation 0; recommended Luna（中）
 
 ## Codex H2
 - owner: codex
