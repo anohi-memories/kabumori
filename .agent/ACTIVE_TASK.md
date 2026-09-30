@@ -22,14 +22,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - task_id: x-social-mobile-pr65-ephemeral-x-auth-session-review-20261001
 - start_code: H1
 - finish_code: C1
-- next_owner: chatgpt
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: H1 PASS-WITH-FIX (tests only) on PR #65 final head e5a66f5ba71f64b1a38d8f89faff3d0a31972949; focused 14/14 and mobile 103/103 PASS. Await C1 plus safe operator provider-side E2E before merge; production mutation 0. Recommended Luna（中） for C1.
+- allocation: Final C1 PASS on PR #65 exact head e5a66f5ba71f64b1a38d8f89faff3d0a31972949. H1 changed tests only; runtime source unchanged. Source/security review accepted. Merge remains on hold solely for safe operator provider-side X account-switch E2E. Production mutation 0. H1 is free after fresh allocation.
 
 ## Codex H2
 - owner: codex
@@ -80,7 +80,7 @@
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: K4 source review passed, but PR #65 remains unmerged pending H1 focused OAuth review and operator provider-side account-switch verification. Exact PR head e8a7785d5635096aa428899d28e629a95b7e3f31; production mutation 0. Recommended Sonnet5（高） if source follow-up is needed.
+- allocation: Final C1 accepted PR #65 source/security at exact head e5a66f5ba71f64b1a38d8f89faff3d0a31972949. Merge is still held until safe operator provider-side account-switch E2E proves a different X account can authenticate without silent reuse. Production mutation 0.
 
 ## Deferred
 
