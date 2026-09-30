@@ -1,3 +1,28 @@
+## Final K2 — 2026-09-30 close shared cycle
+
+- verdict: **PASS by orchestrator read-only verification**.
+- prior G2 observation TASK had remained ready/Pending; ChatGPT completed the read-only verification directly at K2 rather than inventing a Claude Report.
+- natural close: data attempt 1 completed; analysis final status completed on scheduled attempt 2.
+- data packet: `321d799b-4d41-48e0-aedf-12d0ad257701`.
+- report packet: `2ea922ce-d2f0-457c-b235-8ad02bcb449d`.
+- accepted packet: Fact passed / local issues empty / final transport retries 0.
+- 9/30 values: Nikkei 66,753.72 (+1.94%); TOPIX-linked ETF (1306) 431.5 (+1.43%).
+- 1306 identity preserved; accepted output keeps the rise reason unconfirmed instead of inventing causality.
+- one current data packet and one current report packet; consumer gates remain app=false / x=false.
+- K2 production mutation: 0.
+- exact first-attempt content rejection is not preserved in the final cycle row or edge-log body, so it is intentionally not guessed.
+- shared morning + close technical foundation is naturally completing.
+- consumer activation remains blocked pending richer presentation and stronger date/session integrity.
+
+## G2 shared report v2 / rich presentation
+
+- assigned: `kabumori-shared-report-v2-rich-presentation-hard-facts-20261001`.
+- target: X ≈500-char readable digest; App market-wide materially longer structured narrative; same shared Fact spine.
+- quality policy: objective lies are Hard BLOCK; style/Voice/unknown-cause/data-gap issues are WARN when safely expressible so routine delivery is not suppressed unnecessarily.
+- exact 2026-10-01 mixed-session regression (old Nikkei value + newer 1306 value presented as one date) must be deterministically blocked in the new shared path.
+- source/tests/PR only; no deploy and no consumer gate activation.
+- recommended Claude model: **Opus5.5（高）**.
+
 ## Final C1 PASS — PR #65 iOS X account switching source/security
 
 - verdict: **PASS**.
