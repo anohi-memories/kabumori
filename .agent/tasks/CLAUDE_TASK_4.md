@@ -3,7 +3,7 @@
 - task_id: x-ai-salaryman-dev-diary-pr61-merge-prod-rollout-20260930
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Opus5.5（高）
