@@ -167,6 +167,29 @@ test("the same generator instructs Kabumori's own fixed hashtags when given a Ka
   assert.doesNotMatch(capturedInstructions, /文字数上限は設定されていません/u);
 });
 
+test("with no fixed_hashtags configured, the generator defers to the brand's own voice instructions instead of overriding them with 'never add a hashtag' (regression: AI Lab's #個人開発 policy must not be contradicted)", async () => {
+  let capturedInstructions = "";
+  const fetchImpl: typeof fetch = async (_input, init) => {
+    capturedInstructions = String(JSON.parse(String(init?.body)).instructions);
+    return Response.json({
+      output: [{ content: [{ type: "output_text", text: "今日は投稿の詳細画面を見直しました。 #個人開発" }] }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+  };
+  await generateBrandPost({
+    openAiApiKey: "fixture-only",
+    context: aiLabContext(),
+    postType: "brand_post",
+    fetchImpl,
+  });
+  // Must not tell the model to never add a hashtag -- that would directly contradict AI Lab's own
+  // "#個人開発 is the default hashtag" voice instruction elsewhere in this same prompt.
+  assert.doesNotMatch(capturedInstructions, /ハッシュタグは付けないでください/u);
+  assert.match(capturedInstructions, /固定のハッシュタグ指定はありません/u);
+  // The brand's own hashtag policy is still present in the same prompt.
+  assert.match(capturedInstructions, /#個人開発/u);
+});
+
 test("a disabled brand is rejected before any OpenAI call, and an unsupported post_type is rejected after context checks but still before use", async () => {
   let calls = 0;
   const fetchImpl: typeof fetch = async () => {
