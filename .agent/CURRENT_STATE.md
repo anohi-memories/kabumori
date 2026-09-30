@@ -1,3 +1,15 @@
+## AI Lab diary automation LIVE — 2026-10-01
+
+- result: **PASS / live on main**.
+- normal K1/K2/K3/K4 diary updates no longer require a G3/G4 task.
+- ChatGPT directly edits only the public-safe canonical Markdown diary; generated snapshot is never hand-edited in the normal path.
+- GitHub Actions automatically validates dates/sanitization, regenerates the runtime snapshot, runs parity/freshness/sanitizer/brand regression tests, and commits only the snapshot on success.
+- first real E2E: Markdown-only commit `b0c4de4c5ae0386ce73b5cf8504d53be95584dda` -> Actions run `36737155236` -> **49/49 PASS** -> bot snapshot commit `ee378347fe8c9d19a265291f91c17d8b7a42c2d8`.
+- recursion guard verified: snapshot-only bot commit triggered **0** new check runs.
+- production mutation: **0**. No automatic production deploy or X post is part of this workflow.
+- explicit boundary: live production posting code will use the new snapshot only after the existing separate single-function deploy/read-back gate.
+- G4 is free after this completion.
+
 ## G4 diary automation supersedes manual diary update
 
 - user decision: normal AI Lab diary updates must not consume G3/G4.
