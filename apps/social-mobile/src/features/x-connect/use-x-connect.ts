@@ -2,6 +2,8 @@ import * as Crypto from 'expo-crypto';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useRef, useState } from 'react';
+import { Platform } from 'react-native';
+import { xConnectAuthSessionOptions } from '@/features/x-connect/auth-session-options';
 import { base64ToBase64Url, bytesToHex, isRetryableOAuthError, parseOAuthReturn } from '@/lib/x-oauth-onboarding';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
@@ -66,7 +68,9 @@ export function useXConnect(onConnected?: () => void) {
         throw new Error('OAUTH_AUTHORIZATION_URL_INVALID');
       }
 
-      const browserResult = await WebBrowser.openAuthSessionAsync(authorizationUrl, redirectUri);
+      // iOS: private auth session so a previously logged-in X account is not silently reused and the
+      // person can pick the account to connect (see auth-session-options.ts). Other platforms unchanged.
+      const browserResult = await WebBrowser.openAuthSessionAsync(authorizationUrl, redirectUri, xConnectAuthSessionOptions(Platform.OS));
       if (browserResult.type === 'cancel' || browserResult.type === 'dismiss') {
         setState('cancelled');
         return;
