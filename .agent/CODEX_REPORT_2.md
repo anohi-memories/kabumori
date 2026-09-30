@@ -1,3 +1,24 @@
+## H2 — AI Lab development-diary PR #61 final focused review — 2026-09-30
+
+- task_id: `x-ai-salaryman-dev-diary-pr61-final-review-20260930`
+- result: **FAIL — do not merge/deploy yet.** No source edits, production operations, or PR actions were performed.
+- reviewed_head: PR #61 exact head `be146f7bd3cabfb5ae42200ad441b427928d58cf` (open, GitHub mergeable=true). Fresh `main` SHA at review: `0224ff7ed41380749ed677c1dc27942e916fcffb`; PR branch is 2 commits ahead / 16 behind. Main-side changes since merge-base do not overlap the 10 PR source paths, though the PR should be rechecked against main before merge.
+- prior_blocker_runtime_packaging: **RESOLVED in source.** Runtime loader imports `ai_lab_dev_diary_context.snapshot.ts` through the ordinary module graph; `ai_lab_dev_diary_context.ts` contains no runtime filesystem/static-asset read. The snapshot is parsed from the reviewed ref and was byte-identical to the canonical Markdown (2,068 characters). The parity test reads the Markdown only in the test process and compares it with the loader result.
+- prior_blocker_hashtag_scope: **RESOLVED in source.** `voiceControlsHashtags` is enabled only on the AI Lab profile; neutral `social_mobile_user_v1` keeps the explicit no-hashtag instruction; the fixed-hashtag branch remains first and unchanged. New regression tests cover neutral no-hashtag and fixed-hashtag behavior.
+- blocking_finding: `supabase/functions/_shared/brand/ai_lab_dev_diary_context.ts` validates dates with a shape-only `YYYY-MM-DD` regex (line 36 / sanitizer line 68), then constructs `new Date(date + T00:00:00Z)` for freshness (around line 190). Impossible calendar dates such as `2026-09-31` are normalized by JavaScript to a real following date rather than rejected. Near that normalized date, a malformed/stale diary entry can pass the freshness gate and supply a diary topic; if its prose says “today”, this can fabricate current-day progress. The current “malformed date” test covers slash format and non-date text, not an impossible calendar date. Require strict calendar round-trip validation plus a regression proving impossible dates fall back to evergreen before considering merge/deploy.
+- wiring_and_scope: `x-test-post/index.ts` selects the topic only inside the guarded AI Lab `brand_post` scheduled branch and passes it as `topicSeed` to `generateBrandPost`; no other brand dispatch path is changed. PR file list is 10 files, all diary context/shared brand generator/profile and the one AI Lab dispatch call site. No G3/Auth/account-deletion, DB/RLS/RPC, migration, or secret-bearing file changes were present.
+- sanitizer_safety: the selector sanitizes fields before topic choice and excludes future/stale/no-safe-entry cases to evergreen. The denylist is finite (as the code comments acknowledge), so the Markdown must remain curated public-safe material; it is not a general semantic secret detector. No actual secret was observed in the reviewed diary or snapshot.
+- tests: PR description reports earlier results: context 20/20, profile 7/7, generator 12/12, scheduled AI Lab 8/8, shared brand 109/109, isolated checks and diff check PASS. These counts are stale for the reviewed head: source now contains 22 context test declarations and 13 generator test declarations. GitHub combined status has Netlify preview success and Vercel preview failure due build-rate-limit; no PR-triggered GitHub Actions workflow run is available. A clean checkout/test rerun was not possible from this environment, so current-head test pass is **not independently verified**. The parity and cross-brand regression tests themselves were inspected.
+- changed_files_by_H2: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md` only. PR source files unchanged.
+- implementation_commit: none. H2 correction commit: none.
+- push: H2 control-file review record synchronized to GitHub; no source commit/push by H2.
+- deploy / real X post / production mutation: **0**.
+- remaining_issues: strict impossible-date rejection and regression; current-head test suite needs rerun with updated counts.
+- safety_checks: no source edit; no deploy; no real X post/API; no DB/RLS/RPC/Auth/account-deletion changes; no G3 files or credentials touched; no production mutation.
+- next_recommendation: return the impossible-date finding and stale/unverified test evidence to G4/ChatGPT for a small source+test correction and current-head rerun, then re-review the new exact PR head. Keep PR #61 unmerged and undeployed.
+
+---
+
 ## H2 — AI Lab development-diary PR #61 focused review — 2026-09-30
 
 - task_id: `x-ai-salaryman-dev-diary-pr61-review-20260930`
