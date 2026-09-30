@@ -79,7 +79,7 @@
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: PR #61 merge independently confirmed as f0ea0a964797524022f0b8aa51a670a78806dd26. Explicit operator authorization granted to continue with x-test-post single-function production deploy/read-back only; no manual X post; recommended Opus5.5（高）
+- allocation: user manually completed the isolated x-test-post deploy from accepted merge; Supabase now shows x-test-post v129 ACTIVE with verify_jwt=false. Duplicate same-source deploy occurred; do not deploy again. G4 must perform read-only Phase D verification/report only; recommended Opus5.5（高）
 
 ## Deferred
 
