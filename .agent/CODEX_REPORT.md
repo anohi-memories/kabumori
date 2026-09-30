@@ -761,3 +761,19 @@ Repeated the **exact same** SELECTs after deploy. All six row values/digests unc
 - deploy: **completed and independently read back**, single function only; merge/PR: none.
 - remaining_issues: natural morning/close success/reuse observation not performed in this rollout task; G2's separate content-guard correction remains unmerged/undeployed. Pre-existing test-only lint finding remains. Consumer activation still unapproved.
 - next_recommendation: C1 confirm this controlled-sync **PASS**, then arrange separately scoped natural-cycle observation with gates OFF. The existing packet schedules are 07:50 / 16:15 JST; do not invoke a real cycle manually. A source-sync PASS does not close G2 quality gates or authorize app/X cutover. **推薦モデル：Luna（中）** for C1 report confirmation. H1 stops here.
+
+
+# H1 — PR #63 native data-source and Auth UX review (2026-09-30)
+
+- task_id: `x-social-mobile-pr63-native-data-source-auth-ux-review-20260930`
+- result: **PASS**; reviewed exact PR #63 head `5f2eae26bb1ee60c2bd7c7885c06816e86e8d852`. No source edits.
+- GitHub re-check: PR open, unmerged, head unchanged, `mergeable=true`; Netlify deploy preview passed. Vercel check reports its 24-hour build rate limit; this is a native Expo app and current repository policy does not require Vercel for native PRs.
+- Cross-platform data source: statically referenced Expo public env values bundle correctly; intended `supabase` mode selects the real repository, explicit unset/empty/`mock` remains preview, and invalid or incomplete settings stay blocked (never silently mock). Shared initial status and repository selection use the same decision. No service-role or production-only secret exposure found.
+- Account-deletion UX: visible dismissible sign-in notice follows explicit server success; text distinguishes full login deletion from social-only deletion. Failure does not claim success; existing native Alert remains. Recent-auth/typed confirmation/session pinning/backend were unchanged.
+- Signup UX: synchronous ref guard blocks same-tick duplicates; busy/sent feedback and 60-second cooldown are limited to successful signup. Accessibility status semantics are present. No Auth policy/provider behavior changed.
+- Tests: app `npm test` **89/89 PASS**; data-view **14/14 PASS**; `npm run typecheck`, `npm run lint`, Expo Web export and iOS JS/Hermes export with synthetic public env, `git diff --check`, and focused secret/scope scan **PASS**.
+- Scope: exactly 10 changed files under `apps/social-mobile`; no DB/RLS/RPC/migration/Edge/Vault/X/Apple/production setting changes and no overlap with other current-main source changes. Production mutation **0**.
+- Limitations: no EAS/native binary build, Simulator/device interaction, live auth, real account deletion or provider operation was performed. These remain E3/runtime acceptance, not claims of this source review. Tests are deterministic/source-level for the changed boundaries.
+- changed_files by H1: shared control files only (`.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md`, H1 entry in `.agent/ACTIVE_TASK.md`, H1 snapshot in `.agent/CURRENT_STATE.md`); app source unchanged.
+- remaining_issues: none blocking source merge. Vercel rate-limit status is not a native-app merge gate under current policy.
+- next_recommendation: C1 confirm this exact-head **PASS**, then continue the separately scoped native E3 acceptance. No production/auth/provider mutation is authorized by this review. **推薦モデル：Luna（中）** for C1 confirmation.
