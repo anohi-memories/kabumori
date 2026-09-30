@@ -3,7 +3,7 @@
 - task_id: x-ai-salaryman-dev-diary-pr61-date-validation-fix-20260930
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Sonnet5（中）
