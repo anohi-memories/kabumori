@@ -49,7 +49,7 @@
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: rebuild Home presentation from the user's visual reference. Local Expo/iOS Simulator only for iterative UI verification; do NOT create a new EAS build in this run unless the user explicitly asks after local approval. Preserve data/navigation/backend contracts, reuse approved 04 asset, no 10-state selector yet. Recommended Sonnet5（高）
+- allocation: K1 interim: PR #60 architecture accepted but visual gate not passed. Continue local/Simulator only: compress Hero toward reference, move points to left/lower-left layered region, make 04 an independent larger right-side layer, reduce total Home height, attach simulator visual result. No EAS, no backend, no 10-state selector, no merge. Recommended Sonnet5（高）
 
 ## Claude G2
 - owner: claude
