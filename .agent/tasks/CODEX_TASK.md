@@ -1,61 +1,87 @@
 # Codex Task
 
-- task_id: x-social-mobile-pr63-native-data-source-auth-ux-review-20260930
+- task_id: x-social-mobile-pr65-ephemeral-x-auth-session-review-20261001
 - owner: codex
 - slot: codex-1
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: codex
 - priority: high
-- recommended_model: Luna（高）
-- target: PR #63 head `5f2eae26bb1ee60c2bd7c7885c06816e86e8d852`
+- recommended_model: Sol（高）
+- target: PR #65 exact head `e8a7785d5635096aa428899d28e629a95b7e3f31`
 
 ## Purpose
 
-Focused pre-merge review of the Stage 2 release-blocker fixes for native real-vs-mock data selection and Auth/deletion UX.
+Focused pre-merge OAuth/authentication-boundary review of the iOS X posting-account connection change that requests an ephemeral/private auth session so a previously logged-in X account is not silently reused.
+
+This is a source/security review only. Provider-side live account switching remains an operator E2E check and must not be simulated with protected production accounts.
 
 ## Verify
 
-1. Native data-source selection
-- Expo public env values are accessed in a bundle-safe static form
-- intended `supabase` mode selects the real repository on native
-- explicit preview/mock remains available
-- invalid or incomplete configuration blocks truthfully instead of silently falling back to mock
-- repository selection and provider initial state cannot disagree
-- no production-only secret/service_role is exposed
+### 1. Expo API / platform behavior
+- installed `expo-web-browser 57.0.3` actually supports `AuthSessionOpenOptions.preferEphemeralSession`
+- the option is valid for `openAuthSessionAsync` and is iOS-scoped as claimed
+- implementation passes `{ preferEphemeralSession: true }` only on iOS
+- Android/Web behavior is not unintentionally changed
+- no native rebuild/config/plugin change is required beyond the existing expo-web-browser native module already in the development build; flag uncertainty if this cannot be proven from source/package state
 
-2. Account deletion completion UX
-- web gets visible truthful completion feedback after confirmed deletion
-- full deletion vs social-only deletion wording matches actual behavior
-- failure does not show false success
-- native behavior remains intact
-- recent-auth, typed confirmation, exact user/session pinning and deletion backend are unchanged
+### 2. OAuth security invariants
+- authorization URL host/protocol validation remains unchanged
+- state generation/verification remains unchanged
+- PKCE verifier/challenge generation remains unchanged
+- callback redirect validation remains unchanged
+- callback request body and ownership binding remain unchanged
+- no undocumented X parameters were added
+- no global cookie/browser-data clearing was introduced
+- duplicate-X-account server protection is untouched
+- no token/Vault/DB/Auth/server-side write path was changed
 
-3. Signup feedback
-- duplicate same-tick submission is prevented
-- success message appears only after actual success
-- cooldown cannot falsely mask failure
-- accessibility/status behavior is reasonable
-- no Auth policy/provider behavior was changed
+### 3. Session/account-selection semantics
+- ephemeral session is an appropriate way to avoid sharing normal Safari/browser cookies for this posting-account connect flow
+- wording does not overpromise that an account chooser will always appear
+- reconnect path uses the same behavior
+- cancellation/dismiss/retry/error handling stays truthful
+- assess the caveat that the browser/provider may ignore the request, and whether the current UX copy is sufficient
 
-4. Scope / regressions
-- no DB/RLS/RPC/migration/Edge/Vault/X/Apple/production setting change
-- no overlap with G3 account-deletion backend ownership beyond UI/data-selection source
-- tests are sufficient for the changed boundaries
-- Expo web/iOS export remains valid
+### 4. Tests
+Review whether the new tests prove behavior rather than only source-string shape where possible.
+Run/re-run relevant:
+- focused X auth-session tests
+- full social-mobile test suite
+- typecheck
+- lint
+- any safe static/export checks useful for this boundary
+
+If a test is brittle or gives false confidence, fix only narrowly within PR scope and report the new exact head.
+
+### 5. Scope / safety
+Confirm:
+- PR changes only intended client files/tests
+- no overlap with G3 E3 destructive verification
+- no production mutation
+- no real X login/post/revoke
+- no DB/RLS/RPC/migration/Edge/Vault/Auth-provider mutation
 - no secret leakage
 
-## Production
+## Provider-side E2E boundary
 
-No deploy, no real X connect/revoke, no real user deletion, no provider mutation.
-production_mutation=0.
+Do NOT attempt to type X credentials, use protected production X accounts, revoke any authorization, or post to X.
+
+The operator must separately verify on a safe disposable account/device that the iOS auth sheet no longer silently reuses the previous X session and that a different X account can be authenticated.
+
+Codex should state whether source is safe to merge **conditional on that provider-side E2E**.
 
 ## Completion / C1
 
-Report PASS/FAIL, exact reviewed head, findings/fixes if any, tests, cross-platform data-source behavior, Auth/deletion UX safety, and whether PR #63 is safe to merge so native E3 can resume.
+Report:
+- verdict PASS / PASS-WITH-FIX / FAIL
+- exact reviewed head
+- findings and any fixes
+- OAuth/security invariant result
+- platform behavior result
+- test evidence
+- remaining provider-side caveat
+- production mutation = 0
+- whether PR #65 is source-safe to merge after operator E2E passes
+- next recommendation
 
-
-## H1 result — 2026-09-30
-
-- result: PASS on exact PR #63 head `5f2eae26bb1ee60c2bd7c7885c06816e86e8d852`; source merge is safe; production mutation 0.
-- Full findings and verification are in `.agent/CODEX_REPORT.md` under this task_id.
-- next_owner: chatgpt (C1).
+Then status -> review_required, next_owner -> chatgpt, STOP for C1.
