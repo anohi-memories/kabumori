@@ -74,12 +74,12 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
-- task_id: x-ai-lab-diary-snapshot-automation-20261001
+- status: idle
+- task_id: none
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: User superseded the unstarted manual diary-update task. Implement automatic Markdown -> runtime snapshot generation plus parity/freshness/sanitizer/regression tests via GitHub Actions; normal K1-K4 diary writes should no longer consume G3/G4. Production deploy remains a separate safe gate. Recommended Sonnet5（高）.
+- allocation: free after direct ChatGPT completion of AI Lab diary snapshot automation. PR #64 merged; real Markdown->Actions->snapshot E2E succeeded with 49/49 tests and production mutation 0. Normal K1-K4 diary updates no longer consume G3/G4.
 
 ## Deferred
 
