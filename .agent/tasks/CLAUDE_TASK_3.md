@@ -3,7 +3,7 @@
 - task_id: x-social-mobile-pr63-merge-native-e3-resume-20260930
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: critical
 - recommended_model: Opus5.5（高）
