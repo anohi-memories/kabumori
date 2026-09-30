@@ -1,58 +1,35 @@
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image, type ImageSource } from 'expo-image';
 
-import type { KabumoriPalette } from '@/constants/kabumori-theme';
-
-// Independently replaceable character illustration slot. Claude must not
-// generate new Yume-chan/robot artwork here -- this only lays out a fixed
-// footprint that a future approved cutout PNG can fill without touching the
-// card around it. There is currently no approved cutout asset in the repo,
-// so until one exists this renders a quiet, empty placeholder (a faint
-// dashed outline, no fill/emoji) rather than a bold decorative shape that
-// would read as a finished design element and drift from the approved v3
-// look.
+// Independent character layer of the Home Report Hero. It only draws the image it is given:
+// the source is chosen by the caller (phase 1: one fixed approved 04 image; a later phase can swap
+// the source without touching the Hero layout) and the position/size come from `style`.
 //
-// Expected future asset contract, so a same-size swap never shifts layout:
-// - transparent-background PNG cutout (no card/background baked in)
-// - square canvas, recommended 240x240 at @1x (@2x/@3x as usual)
-// - subject centered with even padding so it reads at this slot's small size
-export const CHARACTER_SLOT_SIZE = 48;
+// The approved artwork (report_04_neutral.webp) is a transparent 1536x1024 cutout whose subject
+// reaches all four edges, so it is shown uncropped with contentFit="contain" and never framed,
+// tinted or given a glow/speech bubble. It is decorative: hidden from the accessibility tree.
+export const CHARACTER_ASPECT_RATIO = 1536 / 1024;
 
 type CharacterSlotProps = {
-  source?: ImageSource;
-  palette: KabumoriPalette;
+  source: ImageSource;
+  /** Absolute position/size supplied by the layout that owns this layer. */
+  style?: StyleProp<ViewStyle>;
 };
 
-export function CharacterSlot({ source, palette }: CharacterSlotProps) {
-  if (!source) {
-    return (
-      <View
-        style={[styles.placeholder, { borderColor: palette.border }]}
-        accessible={false}
-        importantForAccessibility="no-hide-descendants"
-      />
-    );
-  }
+export function CharacterSlot({ source, style }: CharacterSlotProps) {
   return (
-    <View style={styles.slot} accessible={false} importantForAccessibility="no-hide-descendants">
-      <Image source={source} style={styles.image} contentFit="contain" />
+    <View
+      pointerEvents="none"
+      style={[styles.slot, style]}
+      accessible={false}
+      importantForAccessibility="no-hide-descendants">
+      <Image source={source} style={styles.image} contentFit="contain" accessible={false} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  slot: {
-    width: CHARACTER_SLOT_SIZE,
-    height: CHARACTER_SLOT_SIZE,
-    overflow: 'hidden',
-  },
-  placeholder: {
-    width: CHARACTER_SLOT_SIZE,
-    height: CHARACTER_SLOT_SIZE,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    opacity: 0.5,
-  },
+  // No overflow clipping: an offset must never crop the artwork.
+  slot: { aspectRatio: CHARACTER_ASPECT_RATIO },
   image: { width: '100%', height: '100%' },
 });

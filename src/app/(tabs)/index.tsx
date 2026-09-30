@@ -1,10 +1,9 @@
 import { useCallback, useMemo, useState } from 'react';
 import { router, useFocusEffect } from 'expo-router';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fetchMyImportantStockNews, type ImportantStockNews } from '@/lib/important-news';
-import { targetLabel } from '@/lib/news-labels';
 import { fetchRecentReports } from '@/lib/personalized-reports';
 import { formatDateJa, type PersonalizedReport } from '@/lib/report-presentation';
 import { dashboardGreeting, dashboardSectionError, todayJst } from '@/lib/dashboard';
@@ -14,10 +13,13 @@ import { fetchDailyTopic } from '@/lib/daily-topic';
 import { readTopicLevel } from '@/lib/topic-level-storage';
 import { topicKeyMatches, type HomeTopic, type TopicLevel, type TopicRequestKey } from '@/lib/home-topic';
 import { KABUMORI_COLORS, type KabumoriPalette } from '@/constants/kabumori-theme';
-import { ReportHighlightCard } from '@/components/home/report-highlight-card';
-import { HomeNewsSection } from '@/components/home/home-news-section';
-import { TopicCard } from '@/components/home/topic-card';
-import { AskAiEntry } from '@/components/home/ask-ai-entry';
+import { HOME_LAYOUT } from '@/constants/home-tokens';
+import { HomeHeader } from '@/components/home/home-header';
+import { HomeReportHero } from '@/components/home/home-report-hero';
+import { HomeMarketNewsGrid } from '@/components/home/home-market-news-grid';
+import { HomeHoldingNewsList } from '@/components/home/home-holding-news-list';
+import { HomeTopicFeature } from '@/components/home/home-topic-feature';
+import { HomeAskAiEntry } from '@/components/home/home-ask-ai-entry';
 
 export default function HomeScreen() {
   // Keep the core Kabumori screens on one light palette until a complete dark
@@ -90,23 +92,9 @@ export default function HomeScreen() {
       <ScrollView
         contentContainerStyle={styles.container}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={palette.accent} />}>
-        <View style={styles.titleRow}>
-          <View style={styles.titleMain}>
-            <Text style={[styles.eyebrow, { color: palette.accent }]}>{greeting.eyebrow}</Text>
-            <Text style={[styles.title, { color: palette.text }]}>{greeting.title}</Text>
-            <Text style={[styles.date, { color: palette.muted }]}>{today}</Text>
-          </View>
-          <Pressable
-            onPress={() => router.push('/settings')}
-            style={({ pressed }) => [styles.settingsButton, { backgroundColor: palette.accentSoft }, pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel="設定"
-            accessibilityHint="アカウント・通知・規約・ログアウトの設定を開きます">
-            <Text style={[styles.settingsText, { color: palette.muted }]}>設定</Text>
-          </Pressable>
-        </View>
+        <HomeHeader palette={palette} greeting={greeting.title} date={today} />
 
-        <ReportHighlightCard
+        <HomeReportHero
           palette={palette}
           report={report}
           points={highlights.points}
@@ -116,31 +104,23 @@ export default function HomeScreen() {
           onRetry={() => void load(true)}
         />
 
-        <HomeNewsSection
+        <HomeMarketNewsGrid
           palette={palette}
-          eyebrow="MARKET NEWS"
-          title="重要ニュース"
           items={newsSections.market}
           loading={loading && !news.length}
           error={errors.news}
-          emptyText="市場全体の重要ニュースはまだありません。"
-          itemSubtitle={(item) => targetLabel(item).detail}
           onRetry={() => void load(true)}
         />
 
-        <HomeNewsSection
+        <HomeHoldingNewsList
           palette={palette}
-          eyebrow="YOUR HOLDINGS"
-          title="あなたの保有銘柄 最新ニュース"
           items={newsSections.holding}
           loading={loading && !news.length}
           error={errors.news}
-          emptyText="保有銘柄に関連する新着ニュースはまだありません。"
-          itemSubtitle={(item) => `${item.ticker_code ?? ''} ${item.company_name}`.trim()}
           onRetry={() => void load(true)}
         />
 
-        <TopicCard
+        <HomeTopicFeature
           palette={palette}
           topic={displayedTopic}
           loading={loading && !displayedTopic}
@@ -155,7 +135,7 @@ export default function HomeScreen() {
           onRetry={() => void load(true)}
         />
 
-        <AskAiEntry palette={palette} />
+        <HomeAskAiEntry palette={palette} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -163,13 +143,13 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  container: { width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 110, gap: 14 },
-  titleRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  titleMain: { flex: 1 },
-  settingsButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, marginTop: 4 },
-  settingsText: { fontSize: 12, fontWeight: '800' },
-  eyebrow: { fontWeight: '900', letterSpacing: 2, fontSize: 12 },
-  title: { fontSize: 32, fontWeight: '900', marginTop: 5 },
-  date: { fontSize: 13, fontWeight: '700', marginTop: 4 },
-  pressed: { opacity: 0.7 },
+  container: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
+    paddingHorizontal: HOME_LAYOUT.gutter,
+    paddingTop: 8,
+    paddingBottom: HOME_LAYOUT.bottomInset,
+    gap: HOME_LAYOUT.sectionGap,
+  },
 });
