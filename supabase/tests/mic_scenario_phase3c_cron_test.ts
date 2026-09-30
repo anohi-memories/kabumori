@@ -152,17 +152,30 @@ Deno.test("Phase 3C migration: independent jobs, Vault name only, no request wit
   for (const job of scenario) {
     assert(job.name.startsWith("mic-scenario-"));
     assert(job.command.includes("name = 'mic_scenario_evaluator_cron_secret'"));
+    assert(job.command.includes("having count(*) = 1"), "ambiguous Vault name must not select an arbitrary secret");
+    assert(job.command.includes("count(*) filter (where decrypted_secret is not null and decrypted_secret <> '') = 1"));
     assert(/\bfrom secret\s*;?\s*$/.test(job.command.trim()), "request only from the secret CTE");
     assert(!job.command.includes("cross join"), "no other gate that could hide a never-running job");
     assert(job.command.includes("https://wsmznyzcvmuitkglfeuj.supabase.co/functions/v1/market-intelligence-scenario-evaluator"));
     assert(!job.command.includes("state-evaluator") && !job.command.includes("ingest"));
     assert(job.command.includes("timeout_milliseconds := 150000"));
+    assert(job.command.includes("body := '{\"trigger\":\"cron\"}'::jsonb"));
+    assert(job.command.includes("'X-Cron-Secret', secret.decrypted_secret"));
   }
   // Only cron.schedule of the two new names; no secret value, no unschedule/alter/delete.
   const code = sql.split("\n").filter((line) => !line.trim().startsWith("--")).join("\n");
   assertEquals([...code.matchAll(/cron\.(\w+)\(/g)].map((m) => m[1]), ["schedule", "schedule"]);
   assert(!/unschedule|alter\s|delete\s|drop\s|insert\s|vault\.create_secret/i.test(code));
   assert(!/eyJ|sk_|[0-9a-f]{32}/.test(code), "no secret-looking literal");
+  assert(/\bbegin\s*;[\s\S]*\bcommit\s*;/i.test(code), "both jobs must be one transaction");
+  for (const name of ["mic-scenario-after-state-0100", "mic-scenario-after-state-weekday"]) {
+    assert(code.includes(`where jobname = '${name}'`), `${name} must be checked before scheduling`);
+    assert(code.includes(`Cron conflict for ${name}; existing job not modified`), `${name} conflict must fail closed`);
+  }
+  assert(code.includes("v_job.command is distinct from v_command"));
+  assert(code.includes("v_job.active is distinct from true"));
+  assert(code.includes("v_job.database is distinct from current_database()"));
+  assert(code.includes("v_job.username is distinct from current_user"));
   // Existing MIC jobs stay exactly as before: no other job is defined by this file.
   const migrations = await readMigrations();
   const before = replayJobs(migrations.filter((m) => m.file !== PHASE3C));

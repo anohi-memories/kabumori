@@ -96,6 +96,7 @@ function createSim(initialStates: State[], opts: { openAi?: () => Promise<Respon
       hooks.beforeRpc?.();
       const run = runs.find((r) => r.id === body.p_run_id)!;
       if (run.status === "evaluated") return json([{ result_status: "already_applied" }]);
+      if (run.status !== "running") return json({ message: "MIC_SCENARIO_RUN_NOT_RUNNING" }, 400);
       if (body.p_expected_current_updated_at !== current.updated_at) return json({ message: "MIC_SCENARIO_STALE_DECISION" }, 400);
       const changed = (body.p_state_snapshots as State[]).some((snap) => {
         const live = states.get(snap.domain);
@@ -254,6 +255,46 @@ test("[G][I] a State changes during evaluation: the write fails closed, nothing 
   assert.equal(next.status, "evaluated");
   assert.equal(sim.current.source_state_run_ids.includes(uuid(30)), true);
   assert.equal(sim.stats.openAiCalls, 2, "a retry costs one more call; bounded by the slots per day");
+});
+
+test("State evaluator finishing after the 10-minute slot invalidates the partial Scenario until the next slot", async () => {
+  const sim = createSim(batch(10, "2026-09-29T21:15:00"));
+  sim.states.set("rates", stateRow("rates", 20, "2026-09-30T01:24:00"));
+  sim.states.set("equity_index", stateRow("equity_index", 22, "2026-09-30T01:24:00"));
+  const partial = await sim.invoke("2026-09-30T01:25:00");
+  assert.equal(partial.status, "evaluated");
+  assert.equal(sim.stats.openAiCalls, 1);
+
+  // The late macro commit happens AFTER the Scenario RPC, so that RPC cannot
+  // reject it retroactively. The read-time gate must reject identity drift.
+  sim.states.set("macro", stateRow("macro", 21, "2026-09-30T01:26:00"));
+  assert.equal(sim.current.source_state_run_ids.includes(uuid(21)), false);
+  const repaired = await sim.invoke("2026-09-30T06:25:00");
+  assert.equal(repaired.status, "evaluated");
+  assert.equal(sim.current.source_state_run_ids.includes(uuid(21)), true);
+  assert.equal(sim.stats.openAiCalls, 2, "the second batch costs one more model call");
+});
+
+test("an abnormally long in-flight run may incur two AI calls after stale reclamation, but only one Scenario commits", async () => {
+  let releaseFirst!: () => void;
+  const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+  let calls = 0;
+  const sim = createSim(batch(10, "2026-09-29T21:15:00"), {
+    openAi: async () => {
+      calls += 1;
+      if (calls === 1) await firstGate;
+      return new Response(JSON.stringify(responsePayload(validOutput())), { status: 200 });
+    },
+  });
+  const first = sim.invoke("2026-09-30T01:25:00");
+  await new Promise((r) => setTimeout(r, 10));
+  const second = await sim.invoke("2026-09-30T06:25:00");
+  assert.equal(second.status, "evaluated");
+  releaseFirst();
+  assert.equal((await first).status, "failed", "the stale run cannot commit after reclamation");
+  assert.equal(sim.stats.openAiCalls, 2, "claim does not prevent this abnormal double cost");
+  assert.equal(sim.counts().evaluated, 1);
+  assert.equal(sim.counts().failed, 1);
 });
 
 test("[H][I] Scenario failure leaves State alone and the next slot retries", async () => {
