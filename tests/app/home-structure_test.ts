@@ -33,18 +33,22 @@ test("the huge greeting heading is gone: the header is compact", async () => {
   assert.ok(!/bell|通知/.test(header.replace(/アカウント・通知・規約・ログアウトの設定を開きます/, "")), "no fake notification control");
 });
 
-test("asset slots exist and never require a file that is not in the repo", async () => {
-  const slots: Array<[string, string]> = [
-    ["src/components/home/home-header.tsx", "HEADER_LOGO_SOURCE"],
+test("asset slots: the header logo is wired; Hero and topic backgrounds stay empty until the art exists", async () => {
+  const header = await read("src/components/home/home-header.tsx");
+  assert.ok(/export const HEADER_LOGO_SOURCE: ImageSource = require\('@\/assets\/images\/home\/kabumori_header_logo\.webp'\);/.test(header));
+  assert.ok(/HEADER_LOGO_SLOT = \{ width: 132, height: 34 \}/.test(header));
+  assert.ok(header.includes('contentFit="contain"'), "logo is shown uncropped");
+  for (const [path, name] of [
     ["src/components/home/home-report-hero.tsx", "HERO_BACKGROUND_SOURCE"],
     ["src/components/home/home-topic-feature.tsx", "TOPIC_BACKGROUND_SOURCE"],
-  ];
-  for (const [path, name] of slots) {
+  ]) {
     const text = await read(path);
     assert.ok(new RegExp(`export const ${name}: ImageSource \\| null = null;`).test(text), `${name} slot`);
     assert.ok(!/require\('@\/assets\/images\/home\//.test(text.replace(/\/\/.*$/gm, "")), `${path} must not require a missing home asset`);
   }
-  await assert.rejects(Deno.stat(new URL("assets/images/home/", repoRoot)), "assets/images/home is created only when the art exists");
+  const names: string[] = [];
+  for await (const entry of Deno.readDir(new URL("assets/images/home/", repoRoot))) names.push(entry.name);
+  assert.deepEqual(names, ["kabumori_header_logo.webp"], "only assets that exist may be required");
 });
 
 test("the Hero shows at most three points, and only the CTA navigates", async () => {
