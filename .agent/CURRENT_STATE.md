@@ -1,3 +1,12 @@
+## EAS build conservation — current G1 override
+
+- user reports only 2 EAS builds remain this month; future monthly allowance is also limited.
+- current G1 Home rebuild must use local Expo / iOS Simulator for iterative visual work.
+- no new EAS build for spacing, typography, asset placement, backgrounds, card sizing, or ordinary JS/TS UI iteration.
+- current G1 completion no longer requires a fresh EAS build; local simulator verification + PR/tests is enough.
+- a new EAS build may be created only after user local approval and explicit request, or when a native/config change genuinely requires rebuilding.
+- starting with the next G1 instruction sheet, this local-first / milestone-only EAS policy becomes the formal default.
+
 ## G1 — Home visual rebuild from reference assigned
 
 - user decision: stop iterating on the old Home layout; rebuild the Home presentation layer from the visual reference.
