@@ -1,10 +1,394 @@
 # Claude Task 2 — CURRENT TASK
 
-- task_id: kabumori-shared-close-natural-observation-20260930
+- task_id: kabumori-shared-report-v2-rich-presentation-hard-facts-20261001
 - owner: claude
 - slot: claude-2
 - status: ready
 - next_owner: claude
+- priority: highest
+- recommended_model: Opus5.5（高）
+- purpose: 共通market-report基盤のFact正本を維持したまま、Xを約500字の読み物、アプリ市場全体をより詳しい長文へ進化させる。同時に「配信停止を増やさず、本当にダメな嘘だけは機械的に止める」Hard Fact / Quality WARN境界を実装する。consumer gateはOFFのまま。
+
+## User product decision
+
+The current short shared text is **not** the final product.
+
+Target positioning:
+
+- X = 市場全体の簡易版。ただし単調な箇条書きではなく、約500字の読み物として成立させる。
+- App 市場全体 = Xよりかなり詳しい完全版。見出し・絵文字・複数セクションを使い、朝刊/大引けを読み物として成立させる。
+- App マイポート = 同じ市場Fact正本 + 保有銘柄/個別材料の個人向け完全版。
+- XとAppが別々に市場を再分析してはいけない。市場の方向・数値・日付・ニュースFactは1つのshared packetを正本にする。
+
+User also clarified the delivery policy:
+
+- Fact/安全性を厳しくしすぎて日々の配信を止めるのは避ける。
+- 「分からないこと」は、分からないと明記して配信してよい。
+- Voice/文体/材料不足などの軽微問題はWARN寄りで、原則配信を止めない。
+- 日付・数値の明確な誤り、別日の値の混同、1306誤認、捏造などはBLOCK対象。
+
+## Accepted production baseline
+
+- 2026-09-30 morning natural shared cycle: PASS.
+- 2026-09-30 close natural shared cycle: PASS after scheduled analysis attempt 2.
+- production baseline:
+  - market-report-data-packet v12
+  - market-report-analysis v14
+  - app_enabled=false
+  - x_enabled=false
+- existing fact spine:
+  - immutable market_data_packet
+  - market_report_packet
+  - shared report_packet_id/content_hash
+  - Fact/local guard
+  - X shared consumer
+  - App shared market detail
+  - personalized layer
+- do not activate consumers in this task.
+
+## Critical regression from 2026-10-01 legacy App screenshot
+
+Observed legacy App morning output mixed different sessions and presented them as one date:
+
+- displayed as if 9/30:
+  - Nikkei 65,481.27 / -0.60%
+  - TOPIX-linked ETF 1306 431.5 / +1.43%
+- but 65,481.27 / -0.60% belongs to the prior 9/29 Nikkei close, while 431.5 / +1.43% belongs to 9/30 1306.
+
+This exact class of error must be impossible in the new shared presentation path.
+
+Do **not** spend this task patching the legacy report generator merely to keep the old path alive unless an unavoidable shared dependency is proven. The objective is to make the unified replacement safe and complete.
+
+## Mandatory startup / isolation
+
+1. Use the dedicated independent G2 worktree/checkout only.
+2. Read:
+   - PROJECT_RULES.md
+   - .agent/ORCHESTRATION.md
+   - .agent/CURRENT_STATE.md
+   - this TASK and predecessor reports
+   - docs/market-report-shared-platform/DESIGN.md
+3. Fresh-fetch origin/main and record SHA.
+4. Confirm no active slot owns:
+   - `supabase/functions/market-report-analysis/**`
+   - `supabase/functions/_shared/market_report_packet.ts`
+   - the same personalized market-detail contract
+5. Existing uncommitted work from another slot is off-limits.
+6. Source + tests + PR only. No deploy, no gate flip, no real X post.
+
+## Phase A — audit before design
+
+Read current:
+- `market-report-analysis/analysis_logic.ts`
+- `_shared/market_report_packet.ts`
+- `personalized-reports/market_detail.ts`
+- shared X consumer
+- personalized shared consumer / stored market section
+- tests that enforce current 60/50/60 X shape and 300-char market summary
+
+Document why the present shared output is short:
+- current X lead <=60
+- exactly 3 points <=50 each
+- closing <=60
+- market_summary around 300 chars
+- App has structured detail but no rich editorial narrative layer
+
+Do not merely increase character constants. Design a clean shared presentation contract.
+
+## Phase B — target presentation contract
+
+### X target
+
+Aim for **roughly 430–520 Japanese characters** when sufficient material exists.
+
+Required editorial shape should support:
+- fixed header added by code
+- short opening
+- `📌 今日の注目ポイント` or close equivalent
+- 3 concise points
+- one short context/background paragraph
+- one important-news paragraph when supported
+- `👀 今日見るポイント` / next-session watch
+- `💬 今日のひとこと`
+
+Emoji:
+- useful, restrained, human-readable
+- roughly 3–8 in the whole formatted X post
+- never use emoji to imply a direction that conflicts with data
+
+Do not make ~500 characters a hard safety BLOCK. If safe content is shorter because evidence is sparse, quality may WARN and delivery must remain possible.
+
+### App 市場全体 target
+
+Build a structured editorial narrative suitable for roughly **900–1500 Japanese characters** when enough evidence exists.
+
+Morning sections should support:
+- ☀️ 今日の市場をひとことで
+- 🇺🇸 前夜の米国市場
+- 🇯🇵 今日の日本株をどう見るか
+- 💹 為替・金利・半導体など
+- 📰 重要ニュース
+- 🔥 強い/注目テーマ
+- ⚠️ 注意テーマ・リスク
+- 👀 今日の注目点
+- data gaps / unknowns stated naturally where needed
+
+Close sections should support:
+- 🌙 今日の市場をひとことで
+- 🇯🇵 今日の日本株
+- 📊 主な値動き
+- 📰 確認できた材料
+- 🔥/⚠️ 強弱テーマ
+- ☀️ 朝刊との答え合わせ
+- 👀 明日以降の注目点
+- data gaps / unknowns
+
+Use structured fields/sections rather than one giant unstructured string where practical, so native UI can render them cleanly later.
+
+### App マイポート
+
+Do not put user holdings into the public/shared market packet.
+
+Preserve architecture:
+- Shared market story = same for everyone.
+- Personalized layer adds holdings/news/impact.
+- Market direction must not be re-decided independently per user.
+
+This task may adjust the personalized consumer contract only as needed to carry the richer shared market presentation safely.
+
+## Phase C — one fact spine, two presentation depths
+
+The shared market truth remains:
+- direction
+- metrics
+- session dates
+- claims/evidence
+- key news
+- themes
+- risks
+- data gaps
+
+X and App may have different wording/length, but must derive from that same truth.
+
+Preferred implementation principles:
+- deterministic metric/date/value formatting where possible
+- AI writes editorial connections and summaries, not raw market truth from memory
+- no Web/search or second independent market analysis in consumers
+- no X-only or App-only factual reinterpretation
+
+If a schema evolution is needed:
+- prefer a versioned/backward-compatible contract
+- preserve ability to read stored v1 packets or explicitly provide migration compatibility
+- do not silently reinterpret old packet shapes
+
+## Phase D — Hard BLOCK vs Quality WARN
+
+Implement a clearly testable separation.
+
+### Hard BLOCK — must stop/regenerate/fail closed
+
+At minimum:
+- numeric value does not match its source metric
+- date/session mismatch that materially changes the fact
+- two different sessions presented as if they are the same date
+- 1306 represented as TOPIX index
+- market direction/polarity inversion
+- unsupported causal assertion presented as confirmed cause
+- fabricated metric/news/entity not present in input
+- stale value presented as current/fresh
+- user/portfolio data leaking into public X/shared market section
+- malformed mandatory structured output
+- dangerous platform-invalid output if it cannot safely be rendered
+
+### Quality WARN — must not automatically suppress delivery
+
+At minimum:
+- prose shorter than target
+- optional section omitted because evidence is sparse
+- mild Voice/style weakness
+- fewer emoji than preferred
+- uncertain cause **when explicitly written as uncertain**
+- stale optional inputs when clearly labelled stale
+- data gaps explicitly acknowledged
+- stylistic repetition that is not a factual defect
+
+Do not turn a WARN into a Fact failure merely to satisfy style.
+
+If implementing a quality rewrite:
+- at most one bounded rewrite
+- re-check hard facts after rewrite
+- if rewrite fails but the original is hard-fact safe, preserve a safe fallback rather than suppressing delivery
+
+## Phase E — deterministic date/session integrity
+
+Add a machine-checkable guard for the class of bug seen on 2026-10-01.
+
+The new shared path must preserve the relationship:
+
+`metric key -> session_date -> value/change`
+
+A metric value may be reused from a prior verified packet, but its **original session_date remains authoritative**.
+
+Exact required regression fixture:
+
+- report trading date: 2026-10-01
+- Nikkei source:
+  - session_date = 2026-09-29
+  - value = 65,481.27
+  - change = -0.60%
+- 1306 source:
+  - session_date = 2026-09-30
+  - value = 431.5
+  - change = +1.43%
+
+Must reject as Hard BLOCK:
+- any wording equivalent to “9月30日は日経平均65,481.27（-0.60%）、1306は431.5（+1.43%）でした”
+
+Must allow safe alternatives such as:
+- explicitly say Nikkei is 9/29 data and 1306 is 9/30 data
+- or omit the stale/mismatched Nikkei narrative value and state it could not be confirmed for 9/30
+
+Do not rely only on the LLM Fact checker for this class. Add deterministic validation or deterministic rendering sufficient to make the mismatch non-deliverable.
+
+## Phase F — tests
+
+At minimum:
+
+### X richness
+- morning with rich evidence renders around target length/shape
+- close with rich evidence renders around target length/shape
+- exactly 3 key points where retained by design
+- context/news/watch/closing sections present when evidence supports them
+- quality-short output produces WARN, not hard failure
+- excessive/malformed output still handled safely
+
+### App richness
+- morning rich story sections
+- close rich story sections
+- morning-reference continuity on close
+- App story is materially more detailed than X
+- emoji/headings render as plain safe text fields
+- no portfolio/user data in shared story
+
+### Hard fact regression
+- exact 2026-10-01 mixed-session fixture above
+- correct session dates allowed
+- reused metric keeps original session date
+- wrong value for correct metric blocked
+- 1306 mislabel blocked
+- direction inversion blocked
+- unsupported cause blocked
+- unknown cause expressed as unknown allowed
+- stale optional metric explicitly labelled stale allowed
+- stale metric presented fresh blocked
+
+### Cross-consumer
+- same report_packet_id/content_hash feeds X and App
+- no second market re-analysis
+- App personalized layer adds user-specific content without changing shared market facts
+- privacy boundary remains intact
+
+### Existing
+- full market-report-analysis
+- shared packet tests
+- X shared consumer
+- personalized-reports shared consumer
+- broad relevant suites
+- deno check
+- deno lint
+- git diff --check
+
+## Cost / call-budget constraint
+
+Do not casually add a separate full market-analysis model call for X and another for App.
+
+Preferred:
+- one shared analysis/editorial generation that returns both presentation depths, or
+- a clearly bounded shared editorial step based on the already-established fact spine.
+
+Document:
+- model calls per cycle before/after
+- worst-case regeneration
+- Fact calls
+- expected cost delta
+
+If a second model pass is genuinely necessary for quality, justify it explicitly and keep it shared across both consumers.
+
+## Delivery / production constraints
+
+This TASK is **source + tests + focused PR only**.
+
+Forbidden:
+- production deploy
+- app_enabled=true
+- x_enabled=true
+- real X post
+- manual current-cycle invoke
+- cron change
+- migration/RPC/schema change unless absolutely required; if required, STOP and request a separate reviewed task
+- legacy X VOICE patch
+- unrelated news acquisition changes
+- G1 native UI changes
+
+## Completion conditions
+
+PASS candidate only if:
+1. X shared output can be a real ~500-char readable market digest.
+2. App market-wide output has a materially richer structured narrative.
+3. both use one shared fact/evidence spine.
+4. Hard Fact and Quality WARN are separated.
+5. the exact 10/1 mixed-session bug is deterministically blocked in the new path.
+6. unknown/insufficient evidence can still be delivered honestly rather than causing unnecessary suppression.
+7. privacy boundary remains intact.
+8. call budget is bounded/documented.
+9. no production mutation occurred.
+
+## Required Report
+
+- task_id/result
+- fresh main SHA
+- worktree/branch
+- audited current constraints
+- target contract chosen
+- schema/backward-compatibility decision
+- Hard BLOCK list
+- Quality WARN list
+- exact mixed-session regression result
+- X sample output + char count
+- App sample output + char count
+- morning/close sample results
+- changed_files
+- tests/check/lint
+- model-call/cost budget before/after
+- PR/head SHA
+- production mutation=0
+- remaining issues
+- recommendation for:
+  - Codex review
+  - production deploy with gates OFF
+  - natural-cycle observation
+  - later consumer activation
+
+When complete:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+Pending.
+
+---
+
+# Previous completed G2 task — 2026-09-30 close observation
+
+# Claude Task 2 — CURRENT TASK
+
+- task_id: kabumori-shared-close-natural-observation-20260930
+- owner: claude
+- slot: claude-2
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sonnet5（中）
 - purpose: 2026-09-30の自然な大引けshared cycleをread-onlyで観測し、PR #57 content guardを含む本番pipelineが大引けでも正常にpacketを完成できるか確認する。source変更・deploy・gate変更・manual invokeは禁止。
@@ -182,7 +566,42 @@ When complete:
 
 ## Report
 
-Pending.
+### Orchestrator completion — 2026-09-30 close natural observation
+
+- result: **PASS**, completed by ChatGPT as a read-only K2 verification because this observation TASK was still marked ready and had no Claude Report.
+- production cycle:
+  - trading_date: 2026-09-30
+  - report_type: close
+  - cycle_status: completed
+  - report_status: completed
+  - data attempts: 1
+  - report attempts: 2
+  - current_data_packet_id: `321d799b-4d41-48e0-aedf-12d0ad257701`
+  - current_report_packet_id: `2ea922ce-d2f0-457c-b235-8ad02bcb449d`
+  - final report_last_error: null
+- report packet:
+  - content_hash: `8b5e08e7988c6bf7340d2768c9bd3d3a4153cf9c29c5119f0a7a164b499b4b67`
+  - Fact: passed
+  - local_issues: []
+  - generation_attempts: 1 on the successful run
+  - market_direction: up
+  - 9/30 Nikkei: 66,753.72 (+1.94%)
+  - 9/30 TOPIX-linked ETF (1306): 431.5 (+1.43%)
+  - 1306 identity preserved
+  - no unsupported causal explanation in the accepted packet; the reason for the rise remains explicitly unconfirmed
+- transport diagnostics on the successful run:
+  - retries: 0
+  - retry_wait_ms: 0
+  - retry_exhausted: false
+- idempotency:
+  - one current data packet row
+  - one current report packet row
+  - final completed packet is unique
+- consumer gates: app_enabled=false / x_enabled=false
+- production mutation by this K2 verification: 0
+- note: attempt 1 returned HTTP 200 but did not complete the cycle. The final cycle row no longer preserves the first attempt's exact rejection reason, and the edge request log does not expose the response body. Do not invent its cause.
+- decision: shared morning + close foundations are now both naturally completing. Consumer activation is still blocked until the presentation layer is upgraded and the date/session hard-fact boundary is strengthened.
+
 
 ---
 
@@ -2886,4 +3305,5 @@ ChatGPT independently re-read production and accepts the G2 report:
 - production mutation from observation = 0
 
 This is the first natural morning PASS on the accepted v12/v14 shared pipeline. Consumer activation is still not authorized until the same-day close cycle is observed.
+
 
