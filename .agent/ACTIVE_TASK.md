@@ -65,11 +65,11 @@
 - owner: claude
 - slot: claude-3
 - status: ready
-- task_id: x-social-mobile-account-deletion-prod-e2e-stage2-resume-20260930
+- task_id: x-social-mobile-native-data-source-and-delete-ux-fix-20260930
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: resume Stage 2 disposable-account E2E after merged PR #59 UI fix; fresh user confirmation required before destructive valid-user action; recommended Opus5.5（高）
+- allocation: fix native data-source mock fallback plus web delete-completion and signup-feedback blockers found in Stage 2 E2E; source-only, no production mutation; recommended Sonnet5（高）
 
 ## Claude G4
 - owner: claude
