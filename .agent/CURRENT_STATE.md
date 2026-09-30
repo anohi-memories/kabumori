@@ -2320,3 +2320,22 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - no deploy or real X post.
 - finish code: K4.
 - recommended Claude model: Sonnet5（中）.
+
+
+## Final K4 PR #61 strict date validation fix
+- verdict: PASS for source correction.
+- PR #61 head `67ee04b41e37553885d43f4630628d135061cbf8`.
+- strict round-trip UTC calendar validation rejects impossible dates and preserves valid leap/month-end dates.
+- impossible dates cannot enter fresh diary selection and fall back to evergreen.
+- runtime snapshot architecture and cross-brand hashtag behavior unchanged.
+- relevant shared-brand tests: 119/119 PASS; production_mutation=0.
+- one final H2 acceptance review required before merge/deploy.
+
+
+## H2 PR #61 final acceptance assigned
+- task_id: `x-ai-salaryman-dev-diary-pr61-final-acceptance-20260930`
+- target: PR #61 head `67ee04b41e37553885d43f4630628d135061cbf8`.
+- scope: strict-date regression plus preservation of previously accepted runtime/hashtag/safety behavior.
+- no deploy or real X post.
+- finish code: C2.
+- recommended Codex model: Luna（中）.
