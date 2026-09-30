@@ -33,13 +33,13 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: x-social-mobile-account-deletion-prod-stage1-verification-20260929
+- status: ready
+- task_id: x-ai-salaryman-dev-diary-pr61-review-20260930
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: closed after C2 reconciliation; deletion target checks passed; no deletion defect
+- allocation: focused pre-production review of PR #61 AI Lab dev-diary generation, sanitizer and cross-brand shared-generator safety; no deploy; recommended Luna（高）
 
 ## Claude G1
 - owner: claude
