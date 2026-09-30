@@ -362,6 +362,21 @@ Status: `review_required` / next_owner `chatgpt`. STOP for K1.
 - Known trade-off for the user/K1: bigger art => card +30..+44pt. Description wraps to 3 lines at <=375pt (last glyph alone); shortening the description copy would fix it (not done, copy change).
 - Backend/production mutation 0. Phase 2 not started. Status: `review_required` / next_owner `chatgpt`; awaiting the user's real-device feedback.
 
+## User micro-adjustment round 3 — trimmed-margin art at 55% (user real-device feedback on 627606e3)
+
+- User installed 627606e3 (fresh install, confirmed via screenshot: 2-line title + bigger character render as designed) but said it was still far from the ideal mock: the face is about 60% of the ideal's size, because the approved 04 art is a wide 3:2 image whose left ~13% is mostly wand-tip margin.
+- **User decision (chat, AskUserQuestion): "画像の左の余白を切る"** — i.e. the user approved a derived asset with the wand-tip margin trimmed. This is an explicit, user-approved deviation from "no crop" in the task; the canonical approved file is untouched.
+- PR #60 head `4d7af1328289e508233f7bf72fa38fa7e96cdf8e` (not merged). Changes:
+  - New `assets/images/report-states/report_04_neutral_crop.webp`: the approved source PNG with only the left 200px removed (1336x1024), cwebp lossless `-exact`, decoded RGBA pixel-identical to the cropped source, sha256 `1cf612fa904e710b690acdbad7688f32219a09d7d4d27e20d28f6ef17847aea3`, 1,125,802 bytes. `report_04_neutral.webp` (full approved, sha `d51dd2f9…`) stays in the repo unchanged as the canonical source, now unused by the card. No redraw / recolor / resize.
+  - `character-slot.tsx`: `CHARACTER_ASPECT_RATIO=1336/1024`, `CHARACTER_SLOT_WIDTH_PERCENT='55%'`, `CHARACTER_OFFSET_X=6`, `CHARACTER_OFFSET_Y=0`.
+  - `report-highlight-card.tsx`: `FIXED_REPORT_CHARACTER_SOURCE` -> the crop; two-line title's long line `minimumFontScale 0.75`.
+  - tests: pins both assets (hash/size/alpha/lossless), crop wiring, 45-60% range.
+- Checks: `deno test tests/app/` **200/0**; tsc(src) 2 known CSS errors; expo export PASS (crop bundled); diff check clean.
+- Simulator (same rig): card 369pt @402 (335 before), 358pt @375 (349), ~357 @360; character 183x140pt @402, 168x129pt @375; title splits at the space at every width, no ellipsis; long line scale 0.94/0.86/0.81/~0.70(at 320, below the 0.75 floor); points 2 lines each, no truncation; character bottom edge == description bottom; no overlap; first viewport reaches the important-news heading on SE3 (card bottom ~490pt). Face (skin) width ~15% of the card (ideal mock ~23%); reaching 23% needs a tighter crop or a different composition — not done, needs user approval.
+- Known cosmetic issues (not fixed): wand stub cut ends mid-card, 15-17pt from the title; <=360pt: 「TODAY'S REPORT」 wraps to two lines and 「今日の」 stays 20pt while line 2 shrinks; description orphan glyph at <=375pt.
+- Preview build for this round: `21cbc11d-5026-404f-979a-3d294304d539`, source `4d7af132…`, profile preview, INTERNAL (queued at report time) — https://expo.dev/accounts/anohi-memoriess-team/projects/kabumori/builds/21cbc11d-5026-404f-979a-3d294304d539 . Supersedes a3e85d80, 28686ad3, 627606e3.
+- Backend/production mutation 0. Phase 2 not started. Status: `review_required` / next_owner `chatgpt`; awaiting the user's real-device feedback.
+
 ---
 
 ## Archived predecessor state
