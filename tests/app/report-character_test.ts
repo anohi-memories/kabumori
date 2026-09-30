@@ -65,8 +65,10 @@ test("the artwork takes the right ~48% of the card header, 3:2, bottom-aligned w
   assert.ok(/headRow: \{[^}]*alignItems: 'flex-end'/.test(card), "the character sits on the bottom edge of the header text");
 });
 
-test("the two-line report title shrinks instead of breaking a word when the text column is narrow", async () => {
+test("the two-line report title is two Texts, and the long line shrinks instead of breaking a word", async () => {
   const card = await read("src/components/home/report-highlight-card.tsx");
-  const title = card.slice(card.indexOf("styles.title, {"), card.indexOf("今日の かぶモリレポート"));
-  assert.ok(title.includes("numberOfLines={2}") && title.includes("adjustsFontSizeToFit") && title.includes("minimumFontScale"));
+  assert.ok(card.includes('accessibilityLabel="今日の かぶモリレポート"'), "one readable title for VoiceOver");
+  assert.ok(!/今日の かぶモリレポート\s*<\/Text>/.test(card), "no single-Text title with a space break");
+  const second = card.slice(card.indexOf("styles.titleSecondLine"), card.indexOf("かぶモリレポート\n"));
+  assert.ok(second.includes("numberOfLines={1}") && second.includes("adjustsFontSizeToFit") && second.includes("minimumFontScale"));
 });

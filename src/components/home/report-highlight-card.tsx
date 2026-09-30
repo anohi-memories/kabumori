@@ -34,13 +34,21 @@ export function ReportHighlightCard({ palette, report, points, loading, error, o
       <View style={styles.headRow}>
         <View style={styles.headText}>
           <Text style={[styles.eyebrow, { color: palette.accent }]}>TODAY&apos;S REPORT</Text>
-          <Text
-            style={[styles.title, { color: palette.text }]}
-            numberOfLines={2}
-            adjustsFontSizeToFit
-            minimumFontScale={0.85}>
-            今日の かぶモリレポート
-          </Text>
+          {/* Two Texts (not one Text with a newline): a newline plus adjustsFontSizeToFit makes
+              iOS drop the second line at the widths that need shrinking. */}
+          <View accessible accessibilityRole="header" accessibilityLabel="今日の かぶモリレポート">
+            <Text style={[styles.title, { color: palette.text }]} importantForAccessibility="no">
+              今日の
+            </Text>
+            <Text
+              style={[styles.title, styles.titleSecondLine, { color: palette.text }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
+              importantForAccessibility="no">
+              かぶモリレポート
+            </Text>
+          </View>
           <Text style={[styles.description, { color: palette.muted }]}>
             今日の市場とあなたの保有銘柄への影響をAIが整理しました。
           </Text>
@@ -104,6 +112,7 @@ const styles = StyleSheet.create({
   headText: { flex: 1, minWidth: 0 },
   eyebrow: { fontWeight: '900', letterSpacing: 1.4, fontSize: 11 },
   title: { fontSize: 20, fontWeight: '900', marginTop: 3 },
+  titleSecondLine: { marginTop: 0 },
   description: { fontSize: 12, lineHeight: 17, marginTop: 4 },
   reportMeta: { fontSize: 11, fontWeight: '800', marginTop: 10 },
   points: { marginTop: 8, gap: 6 },
