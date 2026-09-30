@@ -75,11 +75,11 @@
 - owner: claude
 - slot: claude-4
 - status: done
-- task_id: x-ai-salaryman-dev-diary-pr61-merge-prod-rollout-20260930
+- task_id: x-ai-lab-diary-k-check-orchestration-rule-20260930
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: Final K4 PASS. PR #61 merged as f0ea0a964797524022f0b8aa51a670a78806dd26; production x-test-post is ACTIVE v129 with verify_jwt=false; deployed source 45/45 matches accepted merge; only x-test-post changed; manual X posts 0. G4 slot may be reused after fresh allocation.
+- allocation: Final K4 PASS. K1-K4共通のAI Lab開発日記更新判定ルールを正式化。accepted report commit ff434d0; production mutation 0; Codex review不要。G4はfresh allocation後に再利用可能。
 
 ## Deferred
 
