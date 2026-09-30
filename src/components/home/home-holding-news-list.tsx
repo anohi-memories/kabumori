@@ -6,7 +6,7 @@ import { HOME_COLORS, HOME_LAYOUT } from '@/constants/home-tokens';
 import type { ImportantStockNews } from '@/lib/important-news';
 import { categoryLabels } from '@/lib/news-labels';
 import { buildNewsPresentation } from '@/lib/news-presentation';
-import { companyMark, companyTint, newsTint, relativeTimeJa } from '@/lib/home-format';
+import { companyMark, rowTint, newsTint, relativeTimeJa } from '@/lib/home-format';
 import { HomeSectionHeader } from '@/components/home/home-section-header';
 
 type HomeHoldingNewsListProps = {
@@ -19,7 +19,7 @@ type HomeHoldingNewsListProps = {
 
 // Dense rows (about 50pt each): initial tile | company + ticker / category + headline | time.
 // There is no company-logo data, so the tile is the company's first two characters on a tint
-// derived from the name -- never a fetched or invented logo.
+// chosen by row position (so neighbouring rows always differ) -- never a fetched or invented logo.
 export function HomeHoldingNewsList({ palette, items, loading, error, onRetry }: HomeHoldingNewsListProps) {
   return (
     <View>
@@ -48,7 +48,7 @@ export function HomeHoldingNewsList({ palette, items, loading, error, onRetry }:
 
         {items.map((item, index) => {
           const view = buildNewsPresentation(item);
-          const tint = companyTint(item.company_name);
+          const tint = rowTint(index);
           const category = categoryLabels(item.coverage_categories)[0] ?? null;
           const categoryTint = newsTint(item.coverage_categories);
           return (
@@ -106,8 +106,8 @@ const styles = StyleSheet.create({
     backgroundColor: HOME_COLORS.card,
     paddingHorizontal: 10,
   },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, minHeight: 50 },
-  tile: { width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 5, minHeight: 42 },
+  tile: { width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   tileText: { fontSize: 12, fontWeight: '900' },
   main: { flex: 1, minWidth: 0, gap: 3 },
   nameLine: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },

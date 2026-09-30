@@ -8,7 +8,7 @@ export const HOME_LAYOUT = {
   /** Horizontal screen gutter shared by every section. */
   gutter: 16,
   /** Vertical gap between sections. */
-  sectionGap: 12,
+  sectionGap: 10,
   /** Corner radius of the big blocks (Hero, topic feature, lists). */
   radius: 18,
   /** Bottom padding so the last block clears the floating tab bar. */

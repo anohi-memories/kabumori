@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { companyInitial, companyMark, companyTint, newsTint, relativeTimeJa } from "../../src/lib/home-format.ts";
+import { companyInitial, companyMark, newsTint, rowTint, relativeTimeJa } from "../../src/lib/home-format.ts";
 
 const NOW = new Date("2026-09-30T12:00:00Z");
 
@@ -40,8 +40,9 @@ test("companyMark keeps companies with the same initial apart", () => {
   assert.equal(companyMark(""), "·");
 });
 
-test("companyTint is deterministic per company", () => {
-  assert.deepEqual(companyTint("サンリオ"), companyTint("サンリオ"));
-  assert.deepEqual(companyTint(" サンリオ "), companyTint("サンリオ"));
-  assert.ok(companyTint("ニッスイ").background.startsWith("#"));
+test("rowTint gives neighbouring rows different colours and wraps around", () => {
+  const tints = [0, 1, 2, 3, 4, 5].map((index) => rowTint(index).background);
+  for (let index = 1; index < tints.length; index++) assert.notEqual(tints[index], tints[index - 1]);
+  assert.deepEqual(rowTint(5), rowTint(0));
+  assert.deepEqual(rowTint(-1), rowTint(4));
 });

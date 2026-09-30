@@ -107,7 +107,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   media: { height: MARKET_MEDIA_HEIGHT, justifyContent: 'center', alignItems: 'center' },
-  glyph: { fontSize: 22, fontWeight: '900', opacity: 0.55 },
+  // Top-right, clear of the importance badge (top-left) and the time chip (bottom-right).
+  glyph: { position: 'absolute', top: 6, right: 9, fontSize: 18, fontWeight: '900', opacity: 0.55 },
   importanceBadge: {
     position: 'absolute',
     top: 5,

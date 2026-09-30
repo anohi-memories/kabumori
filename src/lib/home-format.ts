@@ -62,11 +62,9 @@ const COMPANY_TINTS: readonly NewsTint[] = [
   { background: '#f0e9f8', foreground: '#6a3fa0' },
 ];
 
-/** Per-company tint, deterministic from the name so a company keeps its colour across reloads. */
-export function companyTint(name: string): NewsTint {
-  let sum = 0;
-  for (const char of Array.from(name.trim())) sum += char.codePointAt(0) ?? 0;
-  return COMPANY_TINTS[sum % COMPANY_TINTS.length];
+/** Tile tint by row position, so neighbouring rows are always different colours. */
+export function rowTint(index: number): NewsTint {
+  return COMPANY_TINTS[((index % COMPANY_TINTS.length) + COMPANY_TINTS.length) % COMPANY_TINTS.length];
 }
 
 export function newsTint(categories: readonly string[] | null | undefined): NewsTint {
