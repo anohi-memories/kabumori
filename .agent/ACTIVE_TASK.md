@@ -74,12 +74,12 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: in_progress
+- status: done
 - task_id: x-ai-salaryman-dev-diary-pr61-merge-prod-rollout-20260930
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: user manually completed the isolated x-test-post deploy from accepted merge; Supabase now shows x-test-post v129 ACTIVE with verify_jwt=false. Duplicate same-source deploy occurred; do not deploy again. G4 must perform read-only Phase D verification/report only; recommended Opus5.5（高）
+- allocation: Final K4 PASS. PR #61 merged as f0ea0a964797524022f0b8aa51a670a78806dd26; production x-test-post is ACTIVE v129 with verify_jwt=false; deployed source 45/45 matches accepted merge; only x-test-post changed; manual X posts 0. G4 slot may be reused after fresh allocation.
 
 ## Deferred
 
