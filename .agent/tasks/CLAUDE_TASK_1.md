@@ -1,5 +1,417 @@
 # Claude Task 1 — CURRENT TASK
 
+- task_id: kabumori-home-visual-rebuild-reference-20260930
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Sonnet5（高）
+- purpose: ユーザーが提示した理想Home案を視覚正本として、現行Homeの見た目を「微調整」ではなくUIレイヤーを全面再構築する。データ取得・ナビ・ルーティング・既存機能・backend契約は再利用し、見た目とレイアウトだけを新規に組み直す。
+
+## User decision — 最重要
+
+今までの「現行Homeをなるべく維持して少しずつ寄せる」方針は終了。
+
+今回からは、
+**Homeの機能は継承、Homeの見た目は全面新規**
+とする。
+
+ユーザーの理想Home画像を「参考」ではなく、Homeの**視覚的正本**として扱う。
+現行の白い縦長カード構成・巨大な挨拶ヘッダー・縦長ニュースリストを守ることを優先しない。
+
+ただし、以下の機能仕様は維持する:
+- Homeの既存データ取得
+- pull-to-refresh
+- loading / empty / error
+- reports / news / topic の既存API/RPC
+- root Stack / NativeTabs routing
+- bottom tabs = **ホーム / 銘柄 / ニュース / レポート / メニュー**
+- メニュー = トピック / AIに聞く / 設定
+- existing report/news/topic detail navigation
+- Auth / backend contracts
+
+## Visual reference — 目指す画面構成
+
+ユーザーが添付した理想Homeは、上から以下の構成。
+
+1. **Compact Header**
+   - 左: 横長の「かぶモリ」ブランドロゴ領域
+   - 中: 小さな挨拶 + 日付
+   - 右: action領域
+   - 現在の巨大な `KABUMORI` / `おはようございます` 見出しは廃止
+   - headerで縦スペースを使いすぎない
+
+2. **今日のかぶモリレポート Hero**
+   - Homeの主役
+   - 横長で一枚のビジュアルとして見えるHero
+   - 白〜淡いミントを基調
+   - 将来の専用背景画像をabsolute fillで差し込める構造
+   - 左上: 「今日の」pill + 大きな「かぶモリレポート」
+   - 左中: 1〜2行の短い説明
+   - 左下: 「今日のポイント」1〜3
+   - 右側: ゆめちゃん + ロボ
+   - 下部: 横幅いっぱいの「レポートを見る →」CTA
+   - 現行の「白い縦長テキストカード + 右上に小さいキャラ」構造は最終形として残さない
+
+3. **重要ニュース**
+   - section header + 「すべて見る」
+   - 理想案のような**横並びコンパクトカード**を基本とする
+   - 画面幅内に複数カードが見える情報密度
+   - 画像URL等が既存データに無い場合はbackendを増やさず、category/neutral media tileで成立させる
+   - fake remote image / fake dataは禁止
+
+4. **あなたの保有銘柄 最新ニュース**
+   - compact list
+   - 会社名 / ticker / category / headline / time
+   - 1行あたりの高さを抑える
+   - 会社ロゴデータが無い場合は捏造せず、initial/category tile等のUI代替でよい
+
+5. **今日のトピック**
+   - 横長featured card
+   - 将来の専用背景画像をabsolute fillで差し込める
+   - 左: level badge / title / short summary
+   - 右側: background illustration area
+   - CTA
+   - 現行の普通の白カード感から離す
+
+6. **AIに聞く**
+   - 理想案のようにcompact
+   - ただしbackendが未完成なら、使えるように見せかけない
+   - current honest「準備中」contractを壊さない
+   - /ai navigationは維持
+
+7. **Bottom Tabs**
+   - 現行確定:
+     **ホーム / 銘柄 / ニュース / レポート / メニュー**
+   - 理想画像の古いtab内容をコピーしない
+
+## New component architecture
+
+現行componentを無理に延命してCSSだけ変えるのではなく、Home専用presentation componentを新しく切ってよい。
+
+推奨構造:
+- `HomeHeader`
+- `HomeReportHero`
+- `HomeMarketNewsGrid`
+- `HomeHoldingNewsList`
+- `HomeTopicFeature`
+- `HomeAskAiEntry`
+
+HomeScreen/index側は既存のfetching/state orchestrationをできるだけ維持し、presentational layoutを新componentへ渡す。
+
+### Important
+
+`ReportHighlightCard` の現行レイアウトを「少し大きくする/色を変える」だけで済ませない。
+`TopicCard` も現行白カードの微修正だけで終わらせない。
+
+今回の目的は、**現行Homeの見た目を捨てて理想案のvisual hierarchyへ移行すること**。
+
+## Asset-slot-first strategy
+
+ユーザーは並行して以下の専用画像を制作する。
+
+まだ完成していないassetがあっても、先に**差し込み位置とレイアウト骨格**を作る。
+
+### A. Header logo slot
+将来:
+- `assets/images/home/kabumori_header_logo.webp`
+
+今はmissing assetをrequireしないこと。
+fixed-size slot / temporary text brandで成立させ、asset到着時に1箇所差し替え可能にする。
+
+### B. Report Hero background slot
+将来:
+- `assets/images/home/report_hero_background.webp`
+
+背景画像には文字・ゆめちゃんを焼き込まない想定。
+absolute fill + cover/contain方針をcomponent内に閉じる。
+asset未到着時は淡いmint/ivoryのsimple backgroundで成立させる。
+画像到着後にレイアウト変更不要な構造にする。
+
+### C. Topic background slot
+将来:
+- `assets/images/home/topic_background.webp`
+
+同様に、文字はReact Native Text。
+asset未到着時はsimple background。
+後から1ファイル差し替えで完成する構造。
+
+### D. Character layer — 04 fixed now
+PR #60で追加済みの正本:
+- `assets/images/report-states/report_04_neutral.webp`
+
+この04 assetは承認済みなので再利用する。
+ただしPR #60の96x64pt位置は**最終決定ではない**。
+新しいHeroに合わせて座標・サイズを決め直してよい。
+
+Phase 1では毎回04固定。
+**01〜10の動的切替はまだ実装しない。**
+
+後で切替sourceだけ交換できるよう、Character layerは独立させる。
+
+## Report Hero exact layout intent
+
+Heroは背景上にUIをレイヤーする。
+
+概念:
+```
+HomeReportHero
+├── BackgroundLayer
+├── TitleBlock
+│   ├── 今日の pill
+│   ├── かぶモリレポート
+│   └── short description
+├── PointsBox
+│   ├── 1 point
+│   ├── 2 point
+│   └── 3 point
+├── CharacterLayer
+│   └── report_04_neutral.webp
+└── CTA
+```
+
+### Points
+「今日のポイント」はHome向けにcompact表示。
+- 最大3件
+- 理想案の番号circle 1/2/3を使う
+- point 1 = red系
+- point 2 = blue系
+- point 3 = orange系
+- 各point 1〜2行程度
+- 原文が長い場合、Homeでは既存highlight dataを短く表示し、全文はreport detailへ
+- backend生成contractは変更しない
+- 個々のpoint行は独立navigationにしない
+- Hero CTAのみreport detailへ遷移
+
+### Character
+- 右下〜右中央を基準
+- textと重ならない
+- robot/tabletまで判別できる大きさ
+- transparent alphaをそのまま利用
+- crop禁止
+- glow/frame/speech bubble追加禁止
+- backgroundとは別layer
+
+### Hero height
+理想案の密度を優先。
+現在の2枚目のようにHeroだけでほぼ1画面を消費しない。
+目標:
+- Header + Hero + 「重要ニュース」section header/先頭が第一viewportに入る、またはそれにかなり近い
+- long Japanese textによる無制限height増加を避ける
+
+## Header behavior
+
+Headerはcompact。
+現在の巨大headingは廃止。
+
+asset未到着中の仮構成:
+- 左: fixed logo slot + temporary `かぶモリ` text
+- 中: greeting + date
+- 右: 既存機能で使えるactionのみ
+
+通知/profile機能が未実装ならfake buttonやfake unread badgeを作らない。
+既存Settings導線は残してよい。
+
+Header logo asset到着後にtemporary textを置換するだけにする。
+
+## Market News layout
+
+- `重要ニュース` + `すべて見る`
+- compact cards
+- ideally 3 cards across if readable on target iPhone width
+- if 3 across is too narrow, horizontal scroll with ~2.x cards visibleでもよい
+- title 2 lines max
+- category badge
+- relative time
+- media area fixed height
+- backendにimageが無ければneutral/category visual
+- no new API/backend field for images in this task
+
+## Holding News layout
+
+- compact rows
+- current vertical spacingを大幅に縮める
+- show company/ticker + headline + time
+- row tap behaviorはexisting contractを維持
+- no fabricated logo/network fetch
+
+## Topic feature layout
+
+```
+HomeTopicFeature
+├── BackgroundSlot
+├── LevelBadge
+├── Title
+├── ShortSummary
+└── CTA
+```
+
+- background illustration later
+- text always native UI
+- max title lines / summary linesを決めてheightを安定させる
+- existing topic detail navigationを維持
+
+## Ask AI
+
+visual densityは理想案へ近づける。
+ただしAI backendの状態を偽らない。
+「入力できるふりのtextbox」を置いて実際には何もできない、は避ける。
+現在のhonest準備中contractに沿ったcompact CTAにする。
+
+## Typography / spacing
+
+全体:
+- white / ivory base
+- pale mint
+- deep green
+- rounded corners
+- subtle border/shadow only
+- dense but readable
+- title hierarchy stronger
+- vertical whitespaceは今より圧縮
+- decorative plants/sparkles大量追加は禁止
+
+Homeの全section width/gutter/radiusを共通tokenへ寄せてよい。
+
+## Existing functionality — must preserve
+
+Do NOT break:
+- news loading
+- report loading
+- topic loading
+- pull to refresh
+- JST date rollover behavior
+- topic level
+- report detail navigation
+- news navigation
+- topics navigation
+- safe area
+- bottom tabs
+- menu routes
+- error/retry flows
+
+No changes:
+- Supabase schema
+- RPC
+- Edge Function
+- cron
+- market-report generation
+- consumer gates
+- Auth
+- Vault/secrets
+- X
+
+## PR #60 handling
+
+PR #60 must **not be merged as-is**.
+
+Preferred:
+- continue the same isolated G1 branch if safe, preserving the exact approved 04 asset and its asset integrity test
+- expand it into this Home visual rebuild
+- update PR title/body accordingly
+
+If branch safety/conflict makes that unsuitable, create a fresh G1 branch and carry forward only the exact approved 04 asset + relevant integrity test.
+Do not duplicate/diverge the canonical 04 file.
+
+No self-merge.
+
+## Worktree / startup
+
+1. dedicated G1 worktree only
+2. fresh fetch origin/main
+3. record exact main SHA
+4. confirm G2/H1 work does not overlap Home UI files
+5. inspect current Home data orchestration before replacing presentation
+6. preserve uncommitted work owned by other slots
+7. if isolation is unsafe, STOP
+
+## Implementation order
+
+1. create new Home presentation skeleton/components
+2. compact Header
+3. rebuild Report Hero with asset slots + fixed 04
+4. rebuild Market News layout
+5. rebuild Holding News layout
+6. rebuild Topic feature with background slot
+7. rebuild Ask AI compact presentation
+8. preserve bottom tabs
+9. run simulator visual check
+10. wait for incoming background/header/topic assets if available; insert without layout rewrite
+11. create iOS preview only after the screen is visually coherent
+
+## Tests / verification
+
+At minimum:
+- current app test suite
+- navigation regression tests
+- new Home structural tests that pin:
+  - section order
+  - bottom tab contract untouched
+  - fixed 04 only / no 10-state selector
+  - asset slots exist
+  - Hero points max 3
+- Expo config
+- Expo export
+- tsc/lint for changed scope
+- git diff --check
+
+Simulator:
+- narrow iPhone width
+- no title clipping
+- no Hero overflow
+- no character crop
+- no bottom-tab overlap
+- first viewport density visibly closer to reference
+
+## Acceptance criteria
+
+Do not claim success merely because the screen is "clean".
+
+PASS candidate only when:
+- visual hierarchy is recognizably the reference Home, not the old Home with styling tweaks
+- Header is compact
+- Report Hero looks like one designed visual block
+- 04 character is an integrated layer, not a tiny accessory
+- important news is compact and visual
+- holdings news is dense
+- topic is a featured visual card
+- Home vertical density is much closer to the reference
+- all existing behavior still works
+- no backend mutation
+
+## Delivery
+
+- focused PR only
+- no merge
+- no production mutation
+- simulator screenshots / description
+- once coherent, one fresh iOS internal/preview build
+- report:
+  - changed_files
+  - component architecture
+  - exact Hero dimensions
+  - exact 04 dimensions/offsets
+  - placeholder asset slot dimensions
+  - tests/checks
+  - PR/head
+  - EAS build id/link if created
+  - known visual gaps pending final assets
+  - backend/production mutation = 0
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K1.
+
+Recommended model: **Sonnet5（高）**.
+
+---
+
+## Archived previous G1 state
+
+# Claude Task 1 — CURRENT TASK
+
 - task_id: kabumori-home-ui-continuation-20260929
 - owner: claude
 - slot: claude-1
@@ -2326,4 +2738,5 @@ Production mutation: 0. Rollback: not needed. `review_required` / next_owner `ch
   - no DB/schema/RPC/Auth/Vault/secret/gate mutation
   - no manual cycle
 - Therefore there is no remaining G1 work on this task and it must not be restarted.
+
 
