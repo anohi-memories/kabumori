@@ -182,7 +182,8 @@ const styles = StyleSheet.create({
   pointCircle: { width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   pointNumber: { color: '#fff', fontSize: 10.5, fontWeight: '900' },
   pointText: { flex: 1, fontSize: 10.5, lineHeight: 13, fontWeight: '800' },
-  status: { fontSize: 12, lineHeight: 17 },
+  // Narrower than the points box so a short status never runs into the wand tip.
+  status: { fontSize: 12, lineHeight: 17, width: '84%' },
   errorCard: { borderRadius: 12, padding: 10 },
   errorText: { fontSize: 12, lineHeight: 17 },
   retryButton: { alignSelf: 'flex-start', borderRadius: 9, paddingHorizontal: 12, paddingVertical: 7, marginTop: 8 },
