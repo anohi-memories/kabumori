@@ -574,6 +574,16 @@ Hero art/background scene and the 「今日のポイントはこちら！」bubb
 
 Status: `review_required` / next_owner `chatgpt`. STOP for K1. No merge.
 
+### Addendum to Report 3 — Simulator numbers for the trimmed logo (d48a4585) now recorded
+
+Local iOS Simulator measurement completed afterwards (iPhone 17 Pro 402pt, real SE3 375pt simulator, ~360pt width emulation; disposable auth-bypass rig, Metro on its own port):
+- Logo slot 132x34pt; the image renders at ~126.2x34.0pt (1719x463 at 0.0734x), visible mark ~125x33pt (was ~74x19.5pt before the trim); 「かぶモリ」+leaf ~24pt tall, tagline ~7.3pt tall (small but legible on the real device).
+- Header row height stays **40pt** at 402/375/360; greeting/date column 171.3 / 144.5 / 129.3pt; 「今日のかぶモリ」78.6pt and the date 67.7pt fit on one line; 設定 button 46.7x28.3pt not clipped. The longest greeting 「今日もお疲れさまでした」 (~123pt, shown after 18:00) still fits at ~360pt (129pt) and would ellipsize only around 320pt.
+- No Hero/first-viewport shift: Hero y=58, height 247pt (402 and 375), total content 943pt — unchanged.
+- Optional, not done (would need user/K1 OK): slot 132x34 -> ~141x38 would make the tagline ~8pt but narrows the greeting column ~10pt.
+- Screenshots (local scratchpad, not committed): yume-shots11/01_home_402pt.png, *_zoom_header_*.png, 02_home_360eq.png, 03_home_SE3_375.png.
+- Process notes: a second Metro run while the user was using the phone's Metro briefly caused a red "Unable to resolve" screen on the phone (shared node_modules cache); resolved by restarting the phone's Metro with `--clear`. Also an unrelated app "Social Operations" (jp.kabumori.social.e2elocal) was seen in the foreground of the shared iPhone 17 Pro simulator — not touched; another session may be using that simulator.
+
 ---
 
 ## Archived previous G1 state
