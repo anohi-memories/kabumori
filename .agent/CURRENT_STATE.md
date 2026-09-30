@@ -1,3 +1,27 @@
+## G1 — Home visual rebuild from reference assigned
+
+- user decision: stop iterating on the old Home layout; rebuild the Home presentation layer from the visual reference.
+- task_id: `kabumori-home-visual-rebuild-reference-20260930`
+- G1 status: ready.
+- recommended model: **Sonnet5（高）**.
+- keep existing Home data fetching, pull-to-refresh, navigation, backend/RPC contracts and current bottom tabs.
+- rebuild visual layer:
+  - compact Header
+  - designed Report Hero
+  - fixed approved 04 CharacterLayer for now
+  - Hero background asset slot
+  - Header logo asset slot
+  - compact visual Market News
+  - dense Holding News
+  - Topic background asset slot / featured card
+  - compact honest AI entry
+- PR #60 is not to be merged as-is; reuse its exact approved 04 asset and integrity test while expanding/superseding the old layout.
+- no 10-state selector yet.
+- no backend / DB / Edge Function / cron / consumer gate / Auth / X mutation.
+- final visual assets can be inserted later without rebuilding layout.
+- completion: simulator -> coherent Home -> one iOS preview -> K1.
+
+
 
 ## Final K2 PR #57 production sync
 
