@@ -33,13 +33,13 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: x-ai-salaryman-dev-diary-pr61-final-review-20260930
+- status: ready
+- task_id: x-ai-salaryman-dev-diary-pr61-final-acceptance-20260930
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: C2 FAIL; prior runtime/hashtag blockers resolved, one impossible-calendar-date freshness bug remains. Returned to G4.
+- allocation: final acceptance review of PR #61 head 67ee04b after strict calendar-date fix; no deploy; recommended Luna（中）
 
 ## Claude G1
 - owner: claude
