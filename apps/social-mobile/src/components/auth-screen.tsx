@@ -1,21 +1,31 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { PROVIDER_LABELS, SIGN_UP_CHECK_EMAIL_MESSAGE } from '@/domain/auth-flows';
+import { emailSubmitView, type EmailMode } from '@/domain/auth-submit';
 import { useAuth } from '@/providers/auth-provider';
 
 type SocialProvider = 'x' | 'apple' | 'google';
-type EmailMode = 'sign_in' | 'sign_up' | 'reset';
 
 export function AuthScreen() {
   const auth = useAuth();
-  const { backendAvailable, error: authError, email: emailCaps, settingsKnown } = auth;
+  const { backendAvailable, error: authError, email: emailCaps, settingsKnown, deletionNotice, dismissDeletionNotice } = auth;
   const [busy, setBusy] = useState<SocialProvider | 'email' | null>(null);
   const [message, setMessage] = useState<{ tone: 'error' | 'info'; text: string } | null>(null);
   const [emailOpen, setEmailOpen] = useState(false);
   const [mode, setMode] = useState<EmailMode>('sign_in');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  // A ref blocks a second press in the same tick (state updates are async); the
+  // timestamp keeps the button visibly used after a successful sign-up.
+  const inFlight = useRef(false);
+  const [signUpSentAt, setSignUpSentAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (signUpSentAt === null) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [signUpSentAt]);
 
   // Offered only when enabled on the project AND configured for this build (never "verified" by source).
   const available = (provider: SocialProvider) => backendAvailable && auth.readiness(provider).usableNow;
@@ -29,10 +39,14 @@ export function AuthScreen() {
   }
 
   async function submitEmail() {
+    if (inFlight.current) return;
+    if (emailSubmitView({ mode, busy: false, allowed: true, signUpSentAt, now: Date.now() }).disabled) return;
     const trimmed = email.trim();
     if (!modeAllowed(mode)) { setMessage({ tone: 'error', text: 'この操作は現在利用できません。' }); return; }
     if (!trimmed || (mode !== 'reset' && !password)) { setMessage({ tone: 'error', text: 'メールアドレスとパスワードを入力してください。' }); return; }
+    inFlight.current = true;
     setBusy('email'); setMessage(null);
+    try {
     if (mode === 'sign_in') {
       const result = await auth.signIn(trimmed, password);
       if (!result.ok) setMessage({ tone: 'error', text: result.message ?? 'ログインできませんでした。' });
@@ -40,13 +54,22 @@ export function AuthScreen() {
       const result = await auth.signUpWithEmail(trimmed, password);
       if (!result.ok) setMessage({ tone: 'error', text: result.message });
       // Identical for a new address and an already-registered one (no enumeration).
-      else if (result.outcome === 'check_email') setMessage({ tone: 'info', text: SIGN_UP_CHECK_EMAIL_MESSAGE });
+      else if (result.outcome === 'check_email') {
+        // Only after the request actually succeeded.
+        setMessage({ tone: 'info', text: SIGN_UP_CHECK_EMAIL_MESSAGE });
+        setSignUpSentAt(Date.now()); setNow(Date.now());
+      }
     } else {
       const result = await auth.requestPasswordReset(trimmed);
       setMessage({ tone: result.ok ? 'info' : 'error', text: result.message });
     }
-    setBusy(null);
+    } finally {
+      inFlight.current = false;
+      setBusy(null);
+    }
   }
+
+  const submit = emailSubmitView({ mode, busy: busy === 'email', allowed: modeAllowed(mode), signUpSentAt, now });
 
   const socialButton = (provider: SocialProvider, primary = false) => {
     const enabled = available(provider);
@@ -74,6 +97,12 @@ export function AuthScreen() {
         <View style={styles.card}>
           <Text style={typography.title}>Social Operations</Text>
           <Text style={styles.subtitle}>AI運用担当者とSNS発信を整える</Text>
+          {deletionNotice ? (
+            <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.infoBox}>
+              <Text style={styles.info}>{deletionNotice}</Text>
+              <Pressable accessibilityRole="button" onPress={dismissDeletionNotice}><Text style={[styles.info, { fontWeight: '700', marginTop: 6 }]}>閉じる</Text></Pressable>
+            </View>
+          ) : null}
           {!backendAvailable ? <View style={styles.notice}><Text style={styles.noticeText}>{authError ?? 'Supabase環境変数を設定してください。'}（現在はサインインできません）</Text></View> : null}
           {backendAvailable && authError ? <View style={styles.notice}><Text style={styles.noticeText}>{authError}</Text></View> : null}
 
@@ -103,13 +132,17 @@ export function AuthScreen() {
                   <TextInput autoCapitalize="none" autoComplete={mode === 'sign_up' ? 'new-password' : 'password'} onChangeText={setPassword} placeholder="パスワード" secureTextEntry style={styles.input} value={password} />
                 </>
               ) : null}
-              <Pressable accessibilityRole="button" disabled={busy !== null || !modeAllowed(mode)} onPress={() => void submitEmail()} style={({ pressed }) => [styles.primary, (pressed || busy === 'email' || !modeAllowed(mode)) && styles.disabled]}>
-                {busy === 'email' ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{mode === 'sign_in' ? 'ログイン' : mode === 'sign_up' ? '登録する' : '再設定メールを送る'}</Text>}
+              <Pressable accessibilityRole="button" accessibilityState={{ disabled: busy !== null || submit.disabled, busy: busy === 'email' }} disabled={busy !== null || submit.disabled} onPress={() => void submitEmail()} style={({ pressed }) => [styles.primary, (pressed || busy === 'email' || submit.disabled) && styles.disabled]}>
+                {busy === 'email' ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><ActivityIndicator color="#fff" /><Text style={styles.primaryText}>{submit.label}</Text></View> : <Text style={styles.primaryText}>{submit.label}</Text>}
               </Pressable>
             </View>
           ) : null}
 
-          {message ? <Text style={message.tone === 'error' ? styles.error : styles.info}>{message.text}</Text> : null}
+          {message ? (
+            <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={message.tone === 'error' ? styles.errorBox : styles.infoBox}>
+              <Text style={message.tone === 'error' ? styles.error : styles.info}>{message.text}</Text>
+            </View>
+          ) : null}
           <Text style={styles.caption}>ここでのログインはアプリを使うためのものです。自動投稿に使うXアカウントは、ログイン後に別の手順で接続します。</Text>
         </View>
       </ScrollView>
@@ -136,8 +169,10 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: colors.primarySoft },
   tabText: { color: colors.muted, fontSize: 12, fontWeight: '700' },
   tabTextActive: { color: colors.primary },
-  error: { color: colors.danger, fontSize: 13 },
-  info: { color: colors.primary, fontSize: 13 },
+  error: { color: colors.danger, fontSize: 14, fontWeight: '700' },
+  info: { color: colors.primary, fontSize: 14 },
+  errorBox: { backgroundColor: colors.dangerSoft, borderRadius: radius.sm, padding: spacing.sm },
+  infoBox: { backgroundColor: colors.primarySoft, borderRadius: radius.sm, padding: spacing.sm },
   caption: { color: colors.muted, ...typography.caption, marginTop: spacing.sm },
   notice: { backgroundColor: colors.warningSoft, borderRadius: radius.sm, padding: spacing.sm },
   noticeText: { color: colors.warning, fontSize: 13 },

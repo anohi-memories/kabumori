@@ -195,7 +195,12 @@ test('account deletion: success only on the server\'s explicit confirmation; pin
   assert.deepEqual(plain(await harness.render().deleteAccount({ context, scope: 'social_and_login' })), { ok: false, code: 'SESSION_CHANGED' });
   assert.equal(requests.length, sent, 'no request is made for a switched session');
   harness.emit('SIGNED_IN', mine);
+  assert.equal(harness.render().deletionNotice, null, 'no notice before a confirmed deletion (failures never set one)');
   assert.deepEqual(plain(await harness.render().deleteAccount({ context, scope: 'social_and_login', appleAuthorizationCode: 'apple-code' })), { ok: true, loginDeleted: true, loginKept: false });
+  // D2: the sign-in screen states the result (web has no Alert), and it can be dismissed.
+  assert.equal(harness.render().deletionNotice, 'アカウントを削除しました。ご利用ありがとうございました。');
+  harness.render().dismissDeletionNotice();
+  assert.equal(harness.render().deletionNotice, null);
   assert.deepEqual(plain(harness.signOuts), [{ scope: 'local' }], 'local sign-out only after the server confirmed');
   assert.deepEqual(harness.removed, [`social-mobile:onboarding:v1:${uuid}`]);
   assert.equal(harness.render().session, null);
@@ -211,4 +216,15 @@ test('account deletion: success only on the server\'s explicit confirmation; pin
 test('account deletion is setup-pending unless the build enables it', async () => {
   const harness = await providerHarness();
   assert.equal(harness.render().accountDeletion, 'setup_pending');
+});
+
+test('D2: a social-only deletion states that the login and Kabumori data remain; a new sign-in clears the notice', async () => {
+  const uuid = '11111111-1111-4111-8111-111111111111';
+  const harness = await providerHarness({ fetchImpl: async () => ({ status: 200, json: async () => ({ ok: true, login_deleted: false }) }) });
+  harness.emit('SIGNED_IN', { ...session(uuid, 'session-u'), user: { id: uuid } });
+  const result = await harness.render().deleteAccount({ context: { userId: uuid, sessionId: 'session-u' }, scope: 'social_only' });
+  assert.equal(result.ok, true);
+  assert.match(harness.render().deletionNotice, /このアプリのデータを削除しました。ログイン用アカウントと「かぶモリ」のデータは残っています/u);
+  harness.emit('SIGNED_IN', harness.sessionB);
+  assert.equal(harness.render().deletionNotice, null, 'the next signed-in session ends the notice');
 });

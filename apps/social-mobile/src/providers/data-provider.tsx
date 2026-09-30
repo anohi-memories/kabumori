@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
-import { selectDataSource } from '@/data/repository-selection';
+import { initialDataStatus, selectDataSource } from '@/data/repository-selection';
 import type { SocialDataSnapshot } from '@/data/supabase-repository';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -9,7 +9,7 @@ const DataContext = createContext<DataContextValue | null>(null);
 
 export function DataProvider({ children }: PropsWithChildren) {
   const { session } = useAuth();
-  const [status, setStatus] = useState<DataStatus>(process.env.EXPO_PUBLIC_DATA_SOURCE === 'supabase' ? 'loading' : 'mock_preview');
+  const [status, setStatus] = useState<DataStatus>(initialDataStatus);
   const [reason, setReason] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<SocialDataSnapshot | null>(null);
   // Bumped after an account change (e.g. X connected) so the snapshot is re-read.

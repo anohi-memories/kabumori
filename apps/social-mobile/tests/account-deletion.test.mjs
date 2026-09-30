@@ -119,3 +119,11 @@ test('deletion screen: pinned confirmation gates the button; Apple code is dropp
   assert.ok(confirmed > 0 && confirmed < del.indexOf("signOut({ scope: 'local' })"), 'local sign-out only after a confirmed deletion');
   assert.doesNotMatch(del, /user_id|p_user_id/u, 'the request body never names a user');
 });
+
+test('D2: the sign-in screen renders the deletion result visibly (not only a native Alert)', async () => {
+  const authScreen = await read('src/components/auth-screen.tsx');
+  assert.match(authScreen, /\{deletionNotice \? \(/u, 'banner rendered from the provider state');
+  assert.match(authScreen, /onPress=\{dismissDeletionNotice\}/u);
+  const screen = await read('src/app/account-deletion.tsx');
+  assert.match(screen, /Alert\.alert\('削除しました'/u, 'native behavior is preserved');
+});
