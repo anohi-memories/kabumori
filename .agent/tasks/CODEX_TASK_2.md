@@ -1,39 +1,40 @@
 # Codex Task 2
 
-- task_id: x-ai-salaryman-dev-diary-pr61-final-review-20260930
+- task_id: x-ai-salaryman-dev-diary-pr61-final-acceptance-20260930
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: codex
 - priority: high
-- recommended_model: Luna（高）
-- target: PR #61 head `be146f7bd3cabfb5ae42200ad441b427928d58cf`
+- recommended_model: Luna（中）
+- target: PR #61 head `67ee04b41e37553885d43f4630628d135061cbf8`
 
 ## Purpose
 
-Final focused re-review after the previous C2 blockers were corrected.
+Final acceptance review of PR #61 after all previously identified blockers were corrected.
 
 ## Verify
 
-1. Runtime diary packaging
-- canonical Markdown remains the human/ChatGPT source
-- generated snapshot is imported through the normal module graph
-- no runtime filesystem/static-asset dependency remains
-- parity test prevents Markdown/snapshot drift
-- fresh/stale/unsafe fallback behavior remains correct
+1. Strict calendar-date validation
+- impossible dates are rejected
+- valid leap-day and month-end dates are accepted
+- impossible dates cannot pass freshness or current-progress selection
+- invalid dates fall back to evergreen
 
-2. Hashtag scope
-- only AI Lab may defer hashtag choice to its voice policy
-- neutral social-mobile no-fixed-hashtag behavior remains the previous no-hashtag behavior
-- fixed-hashtag brands remain unchanged
+2. Previously accepted fixes remain intact
+- runtime diary uses imported generated snapshot through module graph
+- Markdown/snapshot parity guard remains
+- AI Lab-only hashtag voice control remains scoped
+- neutral social-mobile no-hashtag behavior unchanged
+- fixed-hashtag brands unchanged
 
 3. Regression / safety
-- AI Lab topicSeed wiring still works
+- AI Lab topicSeed wiring remains correct
 - no fabricated "today" activity without fresh trusted diary context
 - sanitizer/public-safe curation rules remain
 - no G3/Auth/account-deletion or DB/RLS/RPC changes
 - no secret leakage
-- relevant tests are sufficient
+- current-head relevant tests are coherent with reported counts
 
 ## Production
 
@@ -42,4 +43,4 @@ production_mutation=0.
 
 ## Completion / C2
 
-Report PASS/FAIL, exact reviewed head, the two prior blocker dispositions, cross-brand behavior, tests, and whether PR #61 is safe to merge and deploy.
+Report PASS/FAIL, exact reviewed head, disposition of all prior blockers, test evidence, cross-brand safety, and whether PR #61 is safe to merge and deploy.
