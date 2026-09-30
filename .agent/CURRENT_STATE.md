@@ -1,3 +1,11 @@
+## G4 diary automation supersedes manual diary update
+
+- user decision: normal AI Lab diary updates must not consume G3/G4.
+- the previous G4 manual diary update task was still ready/unstarted and is superseded before execution.
+- new G4 task: implement ChatGPT direct Markdown writes plus automated snapshot generation and parity/freshness/sanitizer/regression checks.
+- production deploy remains a separate controlled gate.
+- recommended model: Sonnet5（高）.
+
 ## Final K4 PASS — AI Lab diary K-check orchestration rule
 
 - verdict: **PASS**.
