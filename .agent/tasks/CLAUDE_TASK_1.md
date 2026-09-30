@@ -3,8 +3,8 @@
 - task_id: kabumori-home-visual-rebuild-reference-20260930
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sonnet5（高）
 - purpose: ユーザーが提示した理想Home案を視覚正本として、現行Homeの見た目を「微調整」ではなくUIレイヤーを全面再構築する。データ取得・ナビ・ルーティング・既存機能・backend契約は再利用し、見た目とレイアウトだけを新規に組み直す。
@@ -446,6 +446,47 @@ Do not block completion waiting for EAS.
 This is a current-run override. Starting with the **next G1 instruction sheet**, ChatGPT will formalize the build-conservation policy as the default project workflow: local/simulator first, EAS only at major milestones or when a native rebuild is technically required.
 
 Recommended model remains **Sonnet5（高）**.
+
+## Report — G1: Home visual rebuild (task kabumori-home-visual-rebuild-reference-20260930) — local/Simulator only, EAS build: NOT done
+
+- result: implemented; visually close to the reference in structure, **not yet identical in density** (see gaps). Awaiting K1 / user review. **PR not merged.**
+- fresh main at start: `7a3951514acc96e8738432f1e323c7b75b980ebe` (isolated scratch clone; G2/H1 did not touch Home UI files).
+- PR: https://github.com/anohi-memories/kabumori/pull/60 — head `0c298e0ce76addd5d7372374211dd4da9ccd5f8f`, branch `claude/home-report-yume-04-fixed-20260930` (continued per TASK; title/body rewritten for the full rebuild; the earlier trimmed-art copy was deleted so the canonical 04 is the only artwork and its integrity test is kept).
+- **EAS build: not done** (per the user's new local-first policy; 4 preview builds a3e85d80 / 28686ad3 / 627606e3 / 21cbc11d were made earlier for the superseded Yume-chan micro-adjustments, none for the rebuild). No change needing a native build occurred.
+- Backend/production mutation: 0. Data fetching, pull-to-refresh, JST rollover, routing, 5 bottom tabs, menu routes unchanged.
+
+### Component architecture
+`src/app/(tabs)/index.tsx` keeps the orchestration and renders, in order: `HomeHeader` -> `HomeReportHero` -> `HomeMarketNewsGrid` -> `HomeHoldingNewsList` -> `HomeTopicFeature` -> `HomeAskAiEntry` (all in `src/components/home/`), sharing `HomeSectionHeader`, `CharacterSlot` (independent character layer), `src/constants/home-tokens.ts` (gutter 16, section gap 10, radius 18, colours, Hero geometry) and `src/lib/home-format.ts` (relative time, tile tints, company mark). Deleted: report-highlight-card, topic-card, home-news-section, ask-ai-entry.
+
+### changed_files
+New: home-header, home-report-hero, home-market-news-grid, home-holding-news-list, home-topic-feature, home-ask-ai-entry, home-section-header (components/home), constants/home-tokens.ts, lib/home-format.ts, tests/app/home-structure_test.ts, tests/app/home-format_test.ts. Modified: `(tabs)/index.tsx`, character-slot.tsx, tests/app/report-character_test.ts. Deleted: 4 old Home components, `report_04_neutral_crop.webp` (unused trimmed copy).
+
+### Exact dimensions (pt)
+- Header 40 (logo slot 132x34 temp text brand | greeting+date | 設定). No fake bell/profile.
+- Hero: `HERO.padding 12`, CTA 40 high (gap 10), left column 52%, **character layer 48% of Hero width, in flow, flush top-right** (402pt: 176.7x117.7; 375pt: 163.5x109; 360pt: 156.3x104.3; 320pt: 137.3x91.7), no offsets (no translate), uncropped 1536x1024 (aspect 3:2), full-width points below it. Hero height with a report 295.7 (402) / 295.0 (375); empty 223.7; loading 206.7; error 263.0.
+- Points: max 3, numbered circles red #e5484d / blue #2f7fd8 / orange #f5a524, rows 36pt x 2 lines, not tappable; CTA is the only navigation.
+- Market news: 3 cards across from window width (118 @402, 109 @375, 104 @360), 114 high, media tile 48, title 2 lines.
+- Holding rows 43-44pt (two-character mark tile with per-row tint, ticker, category chip, headline, time). Topic feature 123pt (min 104), right side left free for the background art. Ask AI 58pt, honest 準備中, no fake input/chips.
+- Placeholder asset slots (files not required while missing): `HEADER_LOGO_SOURCE` (132x34, future `assets/images/home/kabumori_header_logo.webp`), `HERO_BACKGROUND_SOURCE` (absolute fill/cover, future `report_hero_background.webp`), `TOPIC_BACKGROUND_SOURCE` (absolute fill/cover, future `topic_background.webp`).
+
+### Tests / checks
+- `deno test tests/app/`: **216 passed / 0 failed** (new: Home section order, old components gone, compact header, asset slots do not require missing files, Hero max 3 points + only CTA navigates, loading/error/empty branches, data orchestration unchanged, navigation targets kept, Ask AI honest, no remote/invented images, tokens; canonical 04 hash/VP8L/alpha/1536x1024, exactly one report-state file, character layer uncropped/frameless/top-right/no absolute; format helpers). Navigation regression tests green.
+- tsc(src): only the 2 known CSS-module errors. `expo export --platform web`: PASS. diff check: clean.
+
+### Simulator (local Expo, disposable auth-bypass + realistic long fixtures; iPhone 17 Pro 402pt, real SE3 375x667 simulator, 360/320pt width emulation)
+- No overflow/clipping/horizontal page scroll; no tab-bar overlap (bottom inset 110); character never cropped or over any text; titles one line at all widths (320pt shrinks to ~0.82); long production-style points 2 lines, no ellipsis at 402/375/360 (320pt: point 2 truncates).
+- First viewport: 402pt = Header + Hero + 重要ニュース (all 3 cards) + 保有銘柄 (3 rows) + the 今日のトピック heading; 375pt (667pt tall) = Header + Hero + 重要ニュース (3 cards) + 保有銘柄 heading.
+- Real taps: Hero CTA -> report detail; news card / holding row -> news detail; 設定; 重要ニュース・保有銘柄 「すべて見る」 -> /news; トピック 「すべて見る」 -> /topics; topic card -> topic-detail; AIに聞く -> /ai; pull-to-refresh OK (screen identical after). One observation: taps at the far-right x of the 保有銘柄 「すべて見る」 (x=345-350) did not register 3 times while x=325 did; the 重要ニュース link at the same x worked — probably the dev-build overlay gear button's touch area, unconfirmed; worth a real-device check.
+- Whole-content height 1015.7pt (402) / 1017.5pt (375).
+
+### Remaining visual differences vs the reference image
+1. Hero ~296pt vs the reference ~213pt: the reference points are short one-liners; production points are long (2 lines each). A Home-specific short point (about 20 full-width characters) would close most of this — that is a content-generation change, not done. The character is a bit smaller than the reference's (which is taller/cropped composition); 52% is the practical limit with the current left column.
+2. Market news cards have no photo and no 2-line summary; media is a category-tint tile (no image field in the feed, no fake images by design). Adding `app_summary_ja` (2 lines) would add ~28pt per card row.
+3. Density: content ~1016pt vs ~850pt in the reference; the header still uses a temporary text brand instead of the leaf logo, and the topic card's right side is empty until its background art arrives.
+4. Small: at ~320pt the description and point 2 truncate; topic CTA nearly touches its text at 320pt.
+
+### Status
+`review_required` / next_owner `chatgpt`. STOP for K1. No merge, no EAS build, production mutation 0.
 
 ---
 
