@@ -74,12 +74,12 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: idle
-- task_id: none
+- status: ready
+- task_id: x-ai-salaryman-dev-diary-content-shift-20260930
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: unassigned; user-requested close after safe Stage A STOP. Previous Phase 3 findings remain preserved; no source changes and no pending review.
+- allocation: 会社員AIラボをAI活用Tips中心から個人開発日記中心へ変更し、安全な共有開発進捗コンテキストを投稿AIとChatGPTで共有する。G3/Authには触れない。Recommended Sonnet5（高）
 
 ## Deferred
 
