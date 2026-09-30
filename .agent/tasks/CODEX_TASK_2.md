@@ -1,39 +1,39 @@
 # Codex Task 2
 
-- task_id: x-ai-salaryman-dev-diary-pr61-review-20260930
+- task_id: x-ai-salaryman-dev-diary-pr61-final-review-20260930
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: none
+- status: ready
+- next_owner: codex
 - priority: high
 - recommended_model: Luna（高）
-- target: PR #61 head `385e561fa93dee5eaa6dfc215016f2c79531a53a`
+- target: PR #61 head `be146f7bd3cabfb5ae42200ad441b427928d58cf`
 
 ## Purpose
 
-Focused pre-production review of the 会社員AIラボ development-diary content shift.
+Final focused re-review after the previous C2 blockers were corrected.
 
-## Review scope
+## Verify
 
-Verify only:
-- AI Lab scheduled generation actually receives the selected diary/evergreen topic seed
-- fresh diary vs no-progress fallback cannot fabricate "today" activity
-- sanitizer prevents raw internal/security/private context from entering the post prompt
-- shared `brand_post_generator` hashtag change does not alter brands with fixed hashtags
-- みお / かぶモリ / other brands remain behaviorally unchanged
-- the canonical Markdown load works in the Supabase Edge runtime as implemented
-- no DB/RLS/RPC/Auth/account-deletion changes
+1. Runtime diary packaging
+- canonical Markdown remains the human/ChatGPT source
+- generated snapshot is imported through the normal module graph
+- no runtime filesystem/static-asset dependency remains
+- parity test prevents Markdown/snapshot drift
+- fresh/stale/unsafe fallback behavior remains correct
+
+2. Hashtag scope
+- only AI Lab may defer hashtag choice to its voice policy
+- neutral social-mobile no-fixed-hashtag behavior remains the previous no-hashtag behavior
+- fixed-hashtag brands remain unchanged
+
+3. Regression / safety
+- AI Lab topicSeed wiring still works
+- no fabricated "today" activity without fresh trusted diary context
+- sanitizer/public-safe curation rules remain
+- no G3/Auth/account-deletion or DB/RLS/RPC changes
 - no secret leakage
-- tests are sufficient for the changed boundaries
-
-Also note explicitly:
-- diary Markdown is bundled at deploy time, so updating it currently requires redeploy
-- automatic periodic aggregation of development progress is NOT part of PR #61 and must not be represented as complete
-
-## Allowed fixes
-
-Only small bounded corrections directly required by findings.
-If a broader architecture change is needed, STOP and report instead.
+- relevant tests are sufficient
 
 ## Production
 
@@ -42,4 +42,4 @@ production_mutation=0.
 
 ## Completion / C2
 
-Report PASS/FAIL, findings, any fixes, tests, exact reviewed head, cross-brand safety, and whether PR #61 is safe to merge/deploy.
+Report PASS/FAIL, exact reviewed head, the two prior blocker dispositions, cross-brand behavior, tests, and whether PR #61 is safe to merge and deploy.
