@@ -64,22 +64,22 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
-- task_id: x-social-mobile-pr63-merge-native-e3-resume-20260930
+- status: ready
+- task_id: x-social-mobile-e3-delete-revoke-residue-20261001
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: Final K3 BLOCKED at safety stop. Native real-data path verified, but the X account used for E3 was already connected to an existing production posting account, so no destructive step was started. Requires a genuinely new disposable X account before resuming; fresh user approval remains mandatory immediately before delete/X revoke/Vault mutation. No additional Codex review required yet; recommended Opus5.5（高）
+- allocation: Disposable X account @tigers_torataro is now connected successfully. Continue E3 with read-only baseline, then mandatory fresh user approval immediately before account deletion. After approval verify deletion-triggered X revoke and residue/isolation. No real X post. Recommended Opus5.5（高）.
 
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: idle
-- task_id: none
+- status: ready
+- task_id: x-social-mobile-x-account-switch-auth-session-20261001
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: free after direct ChatGPT completion of AI Lab diary snapshot automation. PR #64 merged; real Markdown->Actions->snapshot E2E succeeded with 49/49 tests and production mutation 0. Normal K1-K4 diary updates no longer consume G3/G4.
+- allocation: Fix iOS X OAuth account-switch UX so a prior browser login is not silently reused. Prefer documented Expo private/ephemeral auth-session behavior after verifying installed API; preserve Android/Web and PKCE/state/callback security. Production mutation 0. Recommended Sonnet5（高）.
 
 ## Deferred
 
