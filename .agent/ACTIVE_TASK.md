@@ -33,13 +33,13 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: x-ai-salaryman-dev-diary-pr61-final-review-20260930
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: final focused re-review of PR #61 head be146f7 after runtime bundling/parity and hashtag-scope fixes; no deploy; recommended Luna（高）
+- allocation: C2 FAIL; prior runtime/hashtag blockers resolved, one impossible-calendar-date freshness bug remains. Returned to G4.
 
 ## Claude G1
 - owner: claude
@@ -75,11 +75,11 @@
 - owner: claude
 - slot: claude-4
 - status: ready
-- task_id: x-ai-salaryman-dev-diary-pr61-runtime-fix-20260930
+- task_id: x-ai-salaryman-dev-diary-pr61-date-validation-fix-20260930
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: fix PR #61 runtime diary bundling/proof and scope hashtag behavior to AI Lab without changing other brands; no deploy; recommended Sonnet5（高）
+- allocation: strict calendar-date validation fix for PR #61 diary freshness logic; preserve accepted runtime snapshot and cross-brand hashtag behavior; no deploy; recommended Sonnet5（中）
 
 ## Deferred
 
