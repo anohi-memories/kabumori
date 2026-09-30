@@ -44,12 +44,12 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- status: ready
-- task_id: kabumori-home-visual-rebuild-reference-20260930
+- status: idle
+- task_id: none
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: K1 interim: PR #60 architecture accepted but visual gate not passed. Continue local/Simulator only: compress Hero toward reference, move points to left/lower-left layered region, make 04 an independent larger right-side layer, reduce total Home height, attach simulator visual result. No EAS, no backend, no 10-state selector, no merge. Recommended Sonnet5（高）
+- allocation: free after Final K1 PASS of Home visual rebuild PR #60. Last accepted merge: 0ddf49132ecdab9b0d1afde8330556907cb34315. Next likely UI work is canonical asset insertion when header/Hero/topic artwork is ready.
 
 ## Claude G2
 - owner: claude
