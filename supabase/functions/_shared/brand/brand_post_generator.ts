@@ -107,16 +107,20 @@ export async function generateBrandPost({
     throw new BrandContextError("BRAND_POST_TYPE_UNSUPPORTED");
   }
 
-  // A brand with no configured fixed_hashtags may still have its own hashtag policy in
-  // voiceInstructions (e.g. AI Lab's "#個人開発 as the default, no stuffing"). This module is
-  // brand-agnostic and must not silently override that with a blanket "never add a hashtag" -- it
-  // only enforces a *fixed* tag when one is actually configured, and otherwise defers.
+  // Default (every profile except an explicit opt-in): with no fixed_hashtags configured, tell
+  // the model to never add one -- unchanged from the original, safe behavior for e.g.
+  // social_mobile_user_v1. A profile whose own voiceInstructions define their own hashtag policy
+  // (currently only AI Lab's "#個人開発 as default, no stuffing") opts in via
+  // BrandCodeProfile.voiceControlsHashtags so this generic module defers to that instead of
+  // contradicting it -- the opt-in is per-profile, never a brand-id check here.
   const hashtagInstruction =
     context.operationalSettings.fixed_hashtags.length > 0
       ? `本文の末尾にこのハッシュタグをそのまま付けてください: ${
         context.operationalSettings.fixed_hashtags.join(" ")
       }`
-      : "固定のハッシュタグ指定はありません。ハッシュタグを使うかどうか、使う場合に何を使うかは、上記の指示に従ってください。";
+      : context.codeProfile.voiceControlsHashtags
+      ? "固定のハッシュタグ指定はありません。ハッシュタグを使うかどうか、使う場合に何を使うかは、上記の指示に従ってください。"
+      : "ハッシュタグは付けないでください。";
   const lengthPolicy = context.codeProfile.postLengthPolicy;
   const instructions = [
     ...context.codeProfile.voiceInstructions,

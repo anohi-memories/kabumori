@@ -1,16 +1,27 @@
 // 会社員AIラボ（ai_salaryman_lab）の開発日記コンテキスト: 読み込み・sanitize・題材選択。
 //
-// 正本は隣接する ai_lab_dev_diary_context.md（git管理、人/ChatGPTが手で書き足す）。この
-// モジュールはそれを解析し、公開して問題ない内容だけを whitelist で通し、スケジュール投稿の
-// topicSeed を決める。Edge Function はデプロイ時に自分のディレクトリ以下をまるごとバンドル
-// するため、この.mdを同じディレクトリに置くだけで、コードの再デプロイなしに（Markdownの
-// 内容を書き換えて再デプロイした時点で）投稿に反映される -- 別のstorage/DB読み出しは実装して
-// いない。つまり「Markdownの更新にはこのfunctionの再デプロイが要る」という制約はそのまま
-// 正直に残る（TASKの「fake しない」原則どおり）。
+// 正本は隣接する ai_lab_dev_diary_context.md（git管理、人/ChatGPTが手で書き足す）。ただし
+// Supabase Edge Functionのデプロイは、functionが実際にimportするmodule graphだけをESZipへ
+// バンドルする（Deno/Supabase公式ドキュメント確認済み）。同じディレクトリに置いた
+// ファイルというだけでは、importされていない限りバンドルされる保証がない
+// （`supabase/config.toml`の`static_files`で明示宣言すれば別だが、この機能では宣言していない
+// し、新たに宣言すること自体が別の本番デプロイ設定変更になる）。
+//
+// そのためこのモジュールは、隣接する ai_lab_dev_diary_context.snapshot.ts
+// （generate_ai_lab_dev_diary_snapshot.tsが.mdから生成するcommit済みのTS定数）を通常の
+// `import`として読み込む。importされた定数は、他の_shared/brand/*.tsのimportと同じく、
+// module graphの一部として確実にバンドルされる。ファイル読み取りではないため、実行時に
+// 「読めない」という失敗モード自体が無い。
+//
+// 代わりに正直に残る制約: .mdを書き換えたら generate_ai_lab_dev_diary_snapshot.ts を実行して
+// snapshotを再生成し、両方をcommitしてから x-test-post を再デプロイしないと、投稿には反映
+// されない。ai_lab_dev_diary_context_test.tsのparity testが、.mdとsnapshotの乖離を検知する。
 //
 // 安全側の設計: 個々のフィールドに、内部識別子（ブランチ名・タスクID・テーブル名・コミット
 // ハッシュ・PR番号・鍵やトークンらしき文字列・メールアドレス・URL 等）が含まれていたら、その
 // フィールドを黙って通さない。`changed` が弾かれたらエントリ全体を候補から除外する。
+
+import { AI_LAB_DEV_DIARY_MARKDOWN_SNAPSHOT } from "./ai_lab_dev_diary_context.snapshot.ts";
 
 export type DevDiaryEntry = {
   date: string; // YYYY-MM-DD
@@ -194,8 +205,13 @@ export function selectAiLabTopicSeed({
   return { topic, source: "evergreen" };
 }
 
-/** Reads the canonical Markdown next to this module. The one IO seam; everything else here is pure. */
+/**
+ * Returns the bundled diary Markdown snapshot. This is a plain `import`-ed constant (see the
+ * header comment), not a file read, so there is no "missing/unreadable at runtime" failure mode
+ * for the production Edge path -- unlike a raw file read, which Supabase's deploy bundling does
+ * not guarantee for a non-imported sibling file. Kept async only so callers do not need to change
+ * between this and a future IO-backed source; today it never rejects.
+ */
 export async function loadAiLabDevDiaryMarkdown(): Promise<string> {
-  const { readFile } = await import("node:fs/promises");
-  return await readFile(new URL("./ai_lab_dev_diary_context.md", import.meta.url), "utf8");
+  return AI_LAB_DEV_DIARY_MARKDOWN_SNAPSHOT;
 }

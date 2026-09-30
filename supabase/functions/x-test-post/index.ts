@@ -4018,10 +4018,12 @@ Deno.serve(async (req) => {
       try {
         // Dev-diary content shift: pick a concrete recent-progress angle (sanitized, whitelisted --
         // see ai_lab_dev_diary_context.ts) when one exists, else a safe evergreen reflection. Never
-        // falls back to the brand-agnostic generator's own generic topic default for this brand. A
-        // markdown read failure (missing/unreadable file) must not block posting -- it just means no
-        // fresh diary angle is available, same as an empty file.
-        const diaryMarkdown = await loadAiLabDevDiaryMarkdown().catch(() => "");
+        // falls back to the brand-agnostic generator's own generic topic default for this brand.
+        // loadAiLabDevDiaryMarkdown() reads a bundled `import`-ed constant, not a file, so it never
+        // rejects; an empty/stale/unsafe diary yields no fresh entries, which selectAiLabTopicSeed
+        // already maps to the evergreen fallback (see ai_lab_dev_diary_context.ts), never a
+        // fabricated "today" claim.
+        const diaryMarkdown = await loadAiLabDevDiaryMarkdown();
         const { topic: aiLabTopicSeed } = selectAiLabTopicSeed({
           markdown: diaryMarkdown,
           now: new Date(),

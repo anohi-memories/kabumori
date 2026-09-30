@@ -251,16 +251,44 @@ angle: 角度B。
   assert.equal(second.topic, "角度B。");
 });
 
-// --- the real canonical file (not a fixture): every entry currently in it must parse and pass
-// sanitization whole, and the module must actually be able to load it from disk. ---
+// --- the real canonical file and its bundled snapshot (not a fixture) ---
+//
+// Supabase's Edge Function deploy bundles the module graph the function actually imports, not
+// every sibling file in a directory -- a non-imported ai_lab_dev_diary_context.md is not
+// guaranteed to reach production. So the *runtime* path (loadAiLabDevDiaryMarkdown, used by
+// index.ts) reads a committed, `import`-ed snapshot constant instead of the .md file. This parity
+// test is the guard against the two ever silently diverging (e.g. someone edits the Markdown and
+// forgets to rerun generate_ai_lab_dev_diary_snapshot.ts before committing).
 
-test("the real ai_lab_dev_diary_context.md loads, parses, and every entry passes sanitization intact", async () => {
+test("the bundled snapshot (what production actually loads) is byte-identical to a fresh read of the canonical Markdown -- no silent drift", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const freshMarkdown = await readFile(new URL("./ai_lab_dev_diary_context.md", import.meta.url), "utf8");
+  const bundledMarkdown = await loadAiLabDevDiaryMarkdown();
+  assert.equal(
+    bundledMarkdown,
+    freshMarkdown,
+    "ai_lab_dev_diary_context.snapshot.ts is stale -- rerun generate_ai_lab_dev_diary_snapshot.ts and commit both files",
+  );
+});
+
+test("the real diary content (via the same loader index.ts uses) loads, parses, and every entry passes sanitization intact", async () => {
   const markdown = await loadAiLabDevDiaryMarkdown();
   const raw = parseDevDiaryMarkdown(markdown);
   const safe = loadSanitizedDiaryEntries(markdown);
   assert.ok(raw.length > 0, "expected at least one diary entry in the canonical file");
   assert.equal(safe.length, raw.length, "no entry in the checked-in diary file should be flagged unsafe");
   for (const e of safe) assert.ok(e.changed.length > 0);
+});
+
+test("selectAiLabTopicSeed against the real bundled diary picks a diary-sourced (not evergreen) topic the day after its freshest entry", async () => {
+  const markdown = await loadAiLabDevDiaryMarkdown();
+  const entries = parseDevDiaryMarkdown(markdown);
+  const freshestDate = entries.map((e) => e.date).sort().at(-1);
+  assert.ok(freshestDate, "expected at least one dated entry");
+  const dayAfter = new Date(`${freshestDate}T00:00:00Z`);
+  dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
+  const result = selectAiLabTopicSeed({ markdown, now: dayAfter, random: () => 0 });
+  assert.equal(result.source, "diary");
 });
 
 test("evergreen topic seeds are themselves sanitized, non-empty, and phrased as ongoing reflections (not a specific past-tense 'today I did X' claim)", () => {

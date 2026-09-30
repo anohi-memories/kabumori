@@ -12,6 +12,16 @@ export type BrandCodeProfile = {
   defaultTopicSeed?: string;
   /** Omit to preserve existing behavior; future user settings can provide either generic mode. */
   postLengthPolicy?: PostLengthPolicy;
+  /**
+   * Default false/omitted (safe default for every existing and future profile): when no
+   * operational fixed_hashtags are configured, brand_post_generator.ts tells the model to never
+   * add a hashtag. Set true only for a profile whose own voiceInstructions define their own
+   * hashtag policy (currently only AI Lab's "#個人開発 as default, no stuffing") -- this is an
+   * explicit per-profile opt-in, never a brand-id check inside the generic generator, so every
+   * other no-fixed-hashtag profile (e.g. social_mobile_user_v1) keeps its prior no-hashtag
+   * behavior unless it opts in the same way.
+   */
+  voiceControlsHashtags?: boolean;
 };
 
 export const KABUMORI_CODE_PROFILE: BrandCodeProfile = {
@@ -65,6 +75,11 @@ export const AI_SALARYMAN_LAB_CODE_PROFILE: BrandCodeProfile = {
   dryRunPromptPreamble:
     "会社員AIラボの独立した dry-run。事実を追加せず、公開用本文や投稿戦略を完成させない。",
   postLengthPolicy: { mode: "limited", maxChars: 280 },
+  // Explicit opt-in (see BrandCodeProfile.voiceControlsHashtags): only this profile's own
+  // "#個人開発 as default, no stuffing" instruction above governs hashtag use when no fixed
+  // hashtag is configured. Every other no-fixed-hashtag profile keeps the prior "never add a
+  // hashtag" default.
+  voiceControlsHashtags: true,
 };
 
 /**
