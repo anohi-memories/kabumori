@@ -74,12 +74,12 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: done
-- task_id: x-ai-lab-diary-k-check-orchestration-rule-20260930
+- status: ready
+- task_id: x-ai-lab-diary-update-20260930
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: Final K4 PASS. K1-K4共通のAI Lab開発日記更新判定ルールを正式化。accepted report commit ff434d0; production mutation 0; Codex review不要。G4はfresh allocation後に再利用可能。
+- allocation: First live use of the K1-K4 diary rule. Add only the public-safe 2026-09-30 K3/K4 development candidates to the AI Lab diary source, regenerate snapshot, run safety/parity/freshness tests, and reflect to production only through the controlled single-function path if required. No G1/G2 access. Recommended Opus5.5（高）.
 
 ## Deferred
 
