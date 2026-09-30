@@ -1,10 +1,200 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-shared-close-natural-observation-20260930
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Sonnet5（中）
+- purpose: 2026-09-30の自然な大引けshared cycleをread-onlyで観測し、PR #57 content guardを含む本番pipelineが大引けでも正常にpacketを完成できるか確認する。source変更・deploy・gate変更・manual invokeは禁止。
+
+## Accepted baseline
+
+- 2026-09-30 morning shared cycle: Final K2 PASS.
+- production:
+  - market-report-data-packet v12
+  - market-report-analysis v14
+  - personalized-reports v34
+  - x-test-post v126
+- app_enabled=false / x_enabled=false.
+- accepted morning result:
+  - data packet completed once
+  - report packet completed once
+  - Fact passed / local issues empty
+  - no transport retry needed
+  - 1306 identity preserved
+  - unsupported causality absent
+  - no duplicate/idempotency issue
+
+## Timing rule
+
+Do not perform the substantive close observation before **2026-09-30 16:40 JST**.
+
+Natural schedule:
+- close data packet: 16:15 JST
+- close analysis: 16:20 JST
+- close analysis retry: 16:35 JST
+- legacy personalized app: 17:15 JST
+
+If G2 is invoked before 16:40 JST:
+- perform only read-only preflight
+- do not wait or poll continuously
+- do not mutate anything
+- report `WAIT_UNTIL_AFTER_1640_JST`
+- keep this TASK available for later continuation
+
+## Mandatory startup
+
+1. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / this TASK / morning Final K2.
+2. Fresh-read production versions and consumer settings.
+3. Require app_enabled=false / x_enabled=false.
+4. Confirm no active slot owns the same market-report workflow.
+5. No source checkout is needed unless read-only source comparison becomes necessary.
+
+## Read-only close observation
+
+After 16:40 JST inspect the 2026-09-30 `close` cycle.
+
+Capture:
+
+### cycle
+- cycle_status
+- report_status
+- attempt_count
+- report_attempt_count
+- current_data_packet_id
+- current_report_packet_id
+- last_error / report_last_error
+- started/completed/failed timestamps
+- diagnostics / report_diagnostics
+
+### data packet
+- id/content_hash
+- data_quality_status
+- required_missing
+- stale/reused/unavailable/intentional gaps
+- Nikkei / 1306 / other fresh close metrics needed by analysis
+
+### report packet
+- id/content_hash
+- Fact status
+- local issues
+- generation attempts
+- market_direction/headline
+- claims by type
+- x_post presence and exactly-3-points contract
+- key_news
+- data_gaps
+
+### morning-reference continuity
+Because this is the same trading day and the morning shared packet exists:
+- verify whether the close-side app/shared detail can reference the morning packet as designed
+- confirm no contradiction between morning and close identity/trading date
+- do not generate or mutate personalized reports manually
+
+### retry/idempotency
+- transport_retries/wait/reasons/exhausted/success_after_retry
+- data packet count = expected one completed current packet
+- report packet count = expected one completed current packet
+- scheduled retry must not create duplicate packet after success
+- no claim churn beyond expected failed-then-success pattern if content validation requires attempt 2
+
+## Specific PR #57 regressions
+
+1. 1306 must remain `TOPIX連動ETF（1306）`, never the TOPIX index.
+2. A supported cause must not license an unrelated cause.
+3. Direction/polarity must not invert (e.g. 株安 support cannot validate 株高 wording).
+4. If the exact reason is not confirmed, the output must retain uncertainty.
+5. Fact/local checks must remain strict; do not reinterpret a blocked output as success.
+
+## Classification if close does not complete
+
+Classify exactly one primary category where possible:
+- DATA
+- TRANSPORT
+- LOCAL_CONTENT_GUARD
+- FACT
+- OTHER
+
+If attempt 1 fails but attempt 2 completes:
+- report both
+- do not call that a pipeline failure if the final cycle is safely completed
+- note cost/latency implications separately
+
+If both attempts fail:
+- preserve safe diagnostics
+- do not hot-fix
+- STOP for K2
+
+## Forbidden
+
+- no source edits
+- no deploy
+- no DB writes
+- no cron mutation
+- no gate mutation
+- no manual Edge invoke
+- no manual retry
+- no real X post
+- no app notification manipulation
+- no legacy X VOICE fix
+
+## PASS criteria
+
+PASS if by the end of the natural retry window:
+- close data packet completed safely
+- exactly one current completed report packet exists
+- final report is Fact/local-valid
+- PR #57 identity/causality/polarity guards show no regression
+- retry diagnostics are coherent
+- no duplicate/idempotency issue
+- consumer gates remain OFF/OFF
+- production mutation from this observation is 0
+
+## Required Report
+
+- task_id/result
+- observation time JST
+- production versions
+- app/x gates
+- close cycle status/attempts/errors
+- data packet id/hash/quality
+- report packet id/hash
+- Fact/local status
+- transport diagnostics
+- 1306 guard result
+- causality/polarity guard result
+- morning-reference continuity result
+- duplicate/idempotency result
+- model calls/tokens/cost if recorded
+- production mutation=0
+- remaining issues
+- recommendation:
+  - ready for consumer-activation boundary review
+  - or additional natural observation
+  - or source fix required
+
+When complete:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+Pending.
+
+---
+
+# Previous completed G2 task — 2026-09-30 morning observation
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-shared-morning-natural-observation-20260930
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sonnet5（中）
 - purpose: 2026-09-30の自然な朝刊shared cycleをread-onlyで観測し、data packet・analysis packet・retry diagnostics・重複有無を確認する。source変更・deploy・gate変更・manual invokeは禁止。
@@ -2676,4 +2866,24 @@ Decision:
 - no Codex review is required for this deploy-only K2
 - consumer activation remains forbidden
 - next G2 is read-only observation of the 2026-09-30 natural morning cycle; close observation will be a separate follow-up after morning K2
+
+
+
+## Final K2 — 2026-09-30 morning natural shared-cycle observation
+
+Verdict: **PASS**.
+
+ChatGPT independently re-read production and accepts the G2 report:
+- morning cycle completed on first data attempt and first analysis attempt
+- data packet id `8cf1195b-4eab-4ad2-a558-fdef247afd1f`
+- report packet id `20507c64-c2cc-4d8e-8102-cacd079b1e55`
+- report Fact status passed, local issues empty
+- transport retries = 0 because no transient error occurred
+- TOPIX-linked ETF 1306 identity was preserved
+- unsupported causality was not asserted; Tokyo decline reason remained explicitly unconfirmed
+- no duplicate/idempotency issue observed
+- app_enabled=false / x_enabled=false remain unchanged
+- production mutation from observation = 0
+
+This is the first natural morning PASS on the accepted v12/v14 shared pipeline. Consumer activation is still not authorized until the same-day close cycle is observed.
 
