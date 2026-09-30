@@ -47,10 +47,12 @@
 ### 会社員AIラボ開発日記の更新判定（この部屋での運用）
 
 - 共有ルールは `.agent/ORCHESTRATION.md` の「会社員AIラボ開発日記の更新判定（K1 / K2 / K3 / K4 共通・必須）」。K1〜K4すべてが対象で、各Kを担当する部屋のちゃが、自分の完了確認の中で判定する。
-- この部屋: K3 / K4 の確認時に必ず判定し、結果の1行を Final K 項目に残す。記録価値があり、G3 / G4 に明確な空き枠があれば、開発日記更新TASKを作る。空きがなければ「候補あり」の1行だけを残し、次の割当時にまとめてTASK化する。
-- K1 / K2 はこの部屋の担当ではない。K1 / K2 のコードが来た場合は従来どおり「私の担当ではありません」とだけ返し、日記の判定もこの部屋では行わない（K1 / K2 の判定は、その担当の部屋で行われる）。
-- 例外: 開発日記更新TASKを作るときに限り、`.agent/CURRENT_STATE.md` の Final K1 / K2 項目にある `AI Lab diary: 候補あり` の1行（外部公開用の要約）だけを読み、TASKの題材に含めてよい。G1 / G2 のTASK本体・Report・statusを評価・変更・言及しない。
-- 共有メモの正本・更新手順・禁止事項・deploy条件は共有ルールのとおり。ユーザーから「メモ更新して」と言われるのを待たない。
+- この部屋ではK3 / K4の確認時に必ず判定し、Final Kへ `AI Lab diary: 候補あり` または `記録不要` を残す。
+- 候補ありなら、通常はG3 / G4へ日記更新TASKを作らず、ChatGPTが公開安全な候補だけを `supabase/functions/_shared/brand/ai_lab_dev_diary_context.md` へ実際の作業日付で直接追記する。
+- ChatGPTは通常の日記更新でMarkdown正本だけを直接編集し、生成snapshotは編集しない。Markdown push後のsnapshot生成・parity / freshness / sanitizer等の検証は `.github/workflows/ai-lab-diary-snapshot.yml` に任せる。
+- workflowが失敗した場合は失敗を記録し、コード/workflow修理が必要な場合だけ空いているG3 / G4へ修正TASKを作る。テスト失敗を無視してsnapshotを手修正したり、本番へ進めたりしない。
+- K1 / K2 はこの部屋の担当ではない。K1 / K2 のコードが来た場合は従来どおり「私の担当ではありません」とだけ返し、そのTASK本体・Report・statusには触れない。日記反映時に限り、CURRENT_STATEのFinal K1 / K2にある公開安全な `AI Lab diary: 候補あり` 行だけを利用できる。
+- 日記同期workflowはproduction deployやX投稿をしない。production反映が必要なら共有ルールの別production gateを使う。
 
 ### 質問の解釈
 

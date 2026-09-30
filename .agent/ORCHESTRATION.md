@@ -132,10 +132,12 @@ K1 / K2 / K3 / K4 のどの完了確認でも、ChatGPT（ちゃ）は上記の�
   - 記録不要: `- AI Lab diary: 記録不要 — <短い理由>`
 - 候補の要約と日記本文には、次を絶対に含めない: branch名、TASK ID、commit hash、PR番号、内部URL、email、token / JWT、password / secret、Authorization header、DB table名、RPC名、Edge Function内部名、Vault情報、production security情報、raw `.agent` 内容、その他攻撃面や内部構造を不必要に公開する情報。既存のdiary sanitizer / safetyルールは弱めない。
 - 記録価値ありの場合の反映:
-  - 共有メモの正本は `supabase/functions/_shared/brand/ai_lab_dev_diary_context.md`。更新はX自動投稿の担当枠（G3 / G4）の「開発日記更新TASK」として行う。
-  - 開発日記更新TASKは、明確に未割当のG3 / G4枠にだけ置く。既存割当は上書きしない。空き枠がない場合、または確認している部屋がG3 / G4を割り当てない部屋の場合は、上記の「候補あり」の1行を残すだけにし、X自動投稿側の次の割当時にまとめてTASK化する。複数の候補を1つのTASKにまとめてよい。
-  - 開発日記更新TASKの範囲: Markdown追記（作業を実際に行った日付・既存の書式）→ `generate_ai_lab_dev_diary_snapshot.ts` で `ai_lab_dev_diary_context.snapshot.ts` を再生成 → parity / freshness / sanitizer関連テスト → commit。
-  - 自動投稿への反映にdeployが必要な場合だけ、`x-test-post` 単一Functionをdeployする。accepted commit固定、isolated directory、single target、explicit project ref、verify_jwt明示、deploy後read-backの既存ルールを維持する。不要なdeployはしない。
+  - 共有メモの正本は `supabase/functions/_shared/brand/ai_lab_dev_diary_context.md`。通常のK1 / K2 / K3 / K4では、ChatGPT（ちゃ）がFinal Kに残した公開安全な候補だけを使い、実際の作業日付でこのMarkdownへ直接追記する。通常の日記更新のためにG3 / G4を消費しない。
+  - ChatGPTが通常の日記更新で直接編集してよいのは上記Markdown正本だけ。生成物 `ai_lab_dev_diary_context.snapshot.ts` は直接編集しない。
+  - Markdownのmain push後は `.github/workflows/ai-lab-diary-snapshot.yml` が自動でcanonical generatorを実行し、snapshotを再生成する。workflowはparity / freshness・calendar-date / sanitizer・関連brand regressionを検証し、すべてPASSした場合だけ生成snapshotをmainへfast-forwardでcommitする。
+  - workflowはMarkdown正本だけをtrigger対象とし、snapshotだけのbot commitでは再起動しない。raceやテスト失敗時はfail-closedでpushせず、既存内容を上書きしない。
+  - workflow失敗時はChatGPTがFinal KまたはCURRENT_STATEに失敗を記録する。コードやworkflowの修理が必要な場合だけ、本当に空いているG3 / G4へ修正TASKを作る。単なる通常の日記追記ではTASKを作らない。
+  - 自動workflowはproduction deploy、scheduler invoke、X投稿、DB / RLS / RPC / Auth / Vault / Cron / settings / secret変更を行わない。新しいsnapshotをproductionへ反映する必要がある場合は、従来のaccepted commit固定・isolated directory・single target・read-backを使う別のproduction gateとして扱う。
   - 日記エントリは直近数日分だけが自動投稿の題材になる。古い候補を反映するために、実施日を偽って新しい日付で書かない。
 - この判定は、Codexレビュー要否の判断とは独立して毎回行う。
 
