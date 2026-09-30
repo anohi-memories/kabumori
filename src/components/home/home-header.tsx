@@ -4,8 +4,8 @@ import { Image, type ImageSource } from 'expo-image';
 
 import type { KabumoriPalette } from '@/constants/kabumori-theme';
 
-// The approved brand logo (transparent WebP, 2005x784, lossless; the official artwork is shown
-// as-is: never recoloured, cropped or redrawn). It is shown with contentFit="contain" inside this
+// The approved brand logo (transparent WebP, 1719x463, lossless; only the empty transparent margin
+// of the official artwork was trimmed: never scaled, recoloured or redrawn). It is shown with contentFit="contain" inside this
 // fixed-size slot so the layout never shifts; to replace it, swap the single require below.
 export const HEADER_LOGO_SOURCE: ImageSource = require('@/assets/images/home/kabumori_header_logo.webp');
 export const HEADER_LOGO_SLOT = { width: 132, height: 34 } as const;
