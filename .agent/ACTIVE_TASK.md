@@ -49,7 +49,7 @@
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: rebuild Home presentation from the user's visual reference. Preserve data/navigation/backend contracts, but replace old Home visual hierarchy with compact header, report Hero with asset slots + fixed 04, compact market/holding news, featured topic, compact honest AI entry, current 5 tabs. PR #60 must not merge as-is; reuse its exact 04 asset. Recommended Sonnet5（高）
+- allocation: rebuild Home presentation from the user's visual reference. Local Expo/iOS Simulator only for iterative UI verification; do NOT create a new EAS build in this run unless the user explicitly asks after local approval. Preserve data/navigation/backend contracts, reuse approved 04 asset, no 10-state selector yet. Recommended Sonnet5（高）
 
 ## Claude G2
 - owner: claude
