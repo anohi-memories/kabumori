@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-pr63-native-data-source-auth-ux-review-20260930
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Luna（高）
 - target: PR #63 head `5f2eae26bb1ee60c2bd7c7885c06816e86e8d852`
