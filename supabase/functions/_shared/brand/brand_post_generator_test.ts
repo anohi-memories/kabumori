@@ -167,6 +167,60 @@ test("the same generator instructs Kabumori's own fixed hashtags when given a Ka
   assert.doesNotMatch(capturedInstructions, /文字数上限は設定されていません/u);
 });
 
+test("AI Lab (voiceControlsHashtags: true) is the sole opt-in: with no fixed_hashtags configured, the generator defers to its own voice instructions instead of overriding them with 'never add a hashtag' (regression: #個人開発 policy must not be contradicted)", async () => {
+  let capturedInstructions = "";
+  const fetchImpl: typeof fetch = async (_input, init) => {
+    capturedInstructions = String(JSON.parse(String(init?.body)).instructions);
+    return Response.json({
+      output: [{ content: [{ type: "output_text", text: "今日は投稿の詳細画面を見直しました。 #個人開発" }] }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+  };
+  await generateBrandPost({
+    openAiApiKey: "fixture-only",
+    context: aiLabContext(),
+    postType: "brand_post",
+    fetchImpl,
+  });
+  // Must not tell the model to never add a hashtag -- that would directly contradict AI Lab's own
+  // "#個人開発 is the default hashtag" voice instruction elsewhere in this same prompt.
+  assert.doesNotMatch(capturedInstructions, /ハッシュタグは付けないでください/u);
+  assert.match(capturedInstructions, /固定のハッシュタグ指定はありません/u);
+  // The brand's own hashtag policy is still present in the same prompt.
+  assert.match(capturedInstructions, /#個人開発/u);
+});
+
+test("a neutral no-fixed-hashtag profile without the opt-in (social_mobile_user_v1) keeps the prior 'never add a hashtag' instruction unchanged (H2 cross-brand scope fix)", async () => {
+  let capturedInstructions = "";
+  const fetchImpl: typeof fetch = async (_input, init) => {
+    capturedInstructions = String(JSON.parse(String(init?.body)).instructions);
+    return Response.json({
+      output: [{ content: [{ type: "output_text", text: "今日の小さな工夫のメモです。" }] }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+  };
+  const context = resolveBrandContext(
+    {
+      id: "user_workspace",
+      display_name: "My Workspace",
+      is_active: false,
+      publish_mode: "disabled",
+      code_profile_key: "social_mobile_user_v1",
+    },
+    null,
+    { brand_id: "user_workspace", fixed_hashtags: [], note_url: null, image_policy: {}, enabled_post_types: ["brand_post"] },
+  );
+  await generateBrandPost({
+    openAiApiKey: "fixture-only",
+    context,
+    postType: "brand_post",
+    generationPurpose: "social_mobile_preview",
+    fetchImpl,
+  });
+  assert.match(capturedInstructions, /ハッシュタグは付けないでください/u);
+  assert.doesNotMatch(capturedInstructions, /固定のハッシュタグ指定はありません/u);
+});
+
 test("a disabled brand is rejected before any OpenAI call, and an unsupported post_type is rejected after context checks but still before use", async () => {
   let calls = 0;
   const fetchImpl: typeof fetch = async () => {

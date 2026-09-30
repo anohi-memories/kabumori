@@ -80,6 +80,11 @@ import {
   dispatchAiLabScheduledBrandPost,
 } from "../_shared/brand/ai_lab_scheduled_brand_post.ts";
 import {
+  loadAiLabDevDiaryMarkdown,
+  selectAiLabTopicSeed,
+} from "../_shared/brand/ai_lab_dev_diary_context.ts";
+import { generateBrandPost } from "../_shared/brand/brand_post_generator.ts";
+import {
   collectVoiceResponseDiagnostics,
   parseVoiceEvaluationOutput,
   VoiceEvaluationOutputError,
@@ -4011,11 +4016,24 @@ Deno.serve(async (req) => {
         throw new Error("AI_LAB_DISPATCH_BRAND_MISMATCH");
       }
       try {
+        // Dev-diary content shift: pick a concrete recent-progress angle (sanitized, whitelisted --
+        // see ai_lab_dev_diary_context.ts) when one exists, else a safe evergreen reflection. Never
+        // falls back to the brand-agnostic generator's own generic topic default for this brand.
+        // loadAiLabDevDiaryMarkdown() reads a bundled `import`-ed constant, not a file, so it never
+        // rejects; an empty/stale/unsafe diary yields no fresh entries, which selectAiLabTopicSeed
+        // already maps to the evergreen fallback (see ai_lab_dev_diary_context.ts), never a
+        // fabricated "today" claim.
+        const diaryMarkdown = await loadAiLabDevDiaryMarkdown();
+        const { topic: aiLabTopicSeed } = selectAiLabTopicSeed({
+          markdown: diaryMarkdown,
+          now: new Date(),
+        });
         const result = await dispatchAiLabScheduledBrandPost({
           context: brandContext,
           postType: scheduledPost.post_type,
           scheduledPostId: scheduledPost.id,
           openAiApiKey,
+          generate: (args) => generateBrandPost({ ...args, topicSeed: aiLabTopicSeed }),
           loadRecentFingerprints: () => loadAiLabRecentDedupeFingerprints({
             supabaseUrl,
             serviceRoleKey,
