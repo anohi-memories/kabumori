@@ -121,6 +121,24 @@ statusが`ready`または`in_progress`のTASKだけ開始する。`idle` / `done
 
 単独`K`は、未評価の完了対象Claude枠が1つだけと明白な場合だけ使用する。複数ならK1〜K4を指定する。
 
+#### 会社員AIラボ開発日記の更新判定（K1 / K2 / K3 / K4 共通・必須）
+
+K1 / K2 / K3 / K4 のどの完了確認でも、ChatGPT（ちゃ）は上記の評価に加えて、必ず次を判定する。ユーザーから毎回「開発メモを更新して」と指示されることを前提にしない。
+
+- 判定: その作業内容に、会社員AIラボの「今日の個人開発」として外部公開してよい開発内容があり、開発日記共有メモへ残す価値があるか。
+- 題材として優先するもの: 新しく作った機能、UI改善、バグ修正、開発中に分かったこと、AIとの開発で試したこと、テストや確認で苦労したこと、個人開発上の工夫、仕様変更や設計改善。単なる内部作業ログではなく、「非エンジニア会社員がAIと個人開発している日記」の題材になるものを優先し、外部公開して安全な粒度へ要約する。
+- 判定結果は、そのKの完了記録（`.agent/CURRENT_STATE.md` の Final K 項目）に1行で残す。記録不要の場合も残す。
+  - 記録価値あり: `- AI Lab diary: 候補あり — <外部公開してよい1〜2文の要約>`
+  - 記録不要: `- AI Lab diary: 記録不要 — <短い理由>`
+- 候補の要約と日記本文には、次を絶対に含めない: branch名、TASK ID、commit hash、PR番号、内部URL、email、token / JWT、password / secret、Authorization header、DB table名、RPC名、Edge Function内部名、Vault情報、production security情報、raw `.agent` 内容、その他攻撃面や内部構造を不必要に公開する情報。既存のdiary sanitizer / safetyルールは弱めない。
+- 記録価値ありの場合の反映:
+  - 共有メモの正本は `supabase/functions/_shared/brand/ai_lab_dev_diary_context.md`。更新はX自動投稿の担当枠（G3 / G4）の「開発日記更新TASK」として行う。
+  - 開発日記更新TASKは、明確に未割当のG3 / G4枠にだけ置く。既存割当は上書きしない。空き枠がない場合、または確認している部屋がG3 / G4を割り当てない部屋の場合は、上記の「候補あり」の1行を残すだけにし、X自動投稿側の次の割当時にまとめてTASK化する。複数の候補を1つのTASKにまとめてよい。
+  - 開発日記更新TASKの範囲: Markdown追記（作業を実際に行った日付・既存の書式）→ `generate_ai_lab_dev_diary_snapshot.ts` で `ai_lab_dev_diary_context.snapshot.ts` を再生成 → parity / freshness / sanitizer関連テスト → commit。
+  - 自動投稿への反映にdeployが必要な場合だけ、`x-test-post` 単一Functionをdeployする。accepted commit固定、isolated directory、single target、explicit project ref、verify_jwt明示、deploy後read-backの既存ルールを維持する。不要なdeployはしない。
+  - 日記エントリは直近数日分だけが自動投稿の題材になる。古い候補を反映するために、実施日を偽って新しい日付で書かない。
+- この判定は、Codexレビュー要否の判断とは独立して毎回行う。
+
 ### F — 全体統括
 
 `F`は特定タスクの完了コードではない。以下を確認する。
