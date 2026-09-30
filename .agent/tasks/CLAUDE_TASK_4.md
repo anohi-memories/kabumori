@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-x-account-switch-auth-session-20261001
 - owner: claude
 - slot: claude-4
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: iOSのX OAuth接続時に前回ログインしたXアカウントが再利用され、複数Xアカウント利用者が接続先を切り替えにくい問題を、本番向けに安全に修正する。
@@ -126,3 +126,77 @@ Report:
 Then status -> review_required, next_owner -> chatgpt, STOP for K4.
 
 Because this changes an OAuth/authentication boundary, ChatGPT will decide at K4 whether focused Codex review is required before merge.
+
+
+## Report
+
+- task_id: x-social-mobile-x-account-switch-auth-session-20261001
+- result: **PASS（source・自動テスト）／実機でのXアカウント切替確認は未実施（操作者の確認が必要）**。PR #65（未merge）。
+- model_used: Sonnet 5.5
+- worktree: G4専用 `/Users/yuya/Developer/kabumori/.claude/worktrees/g4-x-admin-pr15`（G3のworktree・Simulatorは使っていない。G3はE3の運用確認のみで、`use-x-connect.ts`と関連テストは編集していないことを確認）
+
+### root cause
+
+`use-x-connect.ts`が`WebBrowser.openAuthSessionAsync(authorizationUrl, redirectUri)`をオプションなしで呼んでいた。iOSではこれが`ASWebAuthenticationSession`で、Safariのcookieを共有するため、直前にログインしたXアカウントがそのまま再利用され、別のアカウントを選べなかった。
+
+### exact source behavior changed
+
+- インストール済み`expo-web-browser 57.0.3`の型定義で、`AuthSessionOpenOptions.preferEphemeralSession`（`@platform ios`、既定`false`、「ブラウザが対応するかは利用者の既定ブラウザ次第」と明記）を確認。ネイティブ側も`ASWebAuthenticationSession.prefersEphemeralWebBrowserSession`へ配線済み（カスタムスキームのcallbackでも設定される）。未文書のXパラメータは追加していない。
+- **iOSだけ**、この第3引数`{ preferEphemeralSession: true }`を渡す。Android/Webは従来どおり2引数のまま（オプションなし）。再接続も同じhookなので同じ挙動になる。
+- 接続画面（アカウント画面・オンボーディングの接続ステップ）に、真実に沿った案内を1行追加: 「接続時に、Xのログイン画面で接続したいアカウントを選んで（またはログインして）ください。ブラウザの状態によっては、以前ログインしたアカウントが表示される場合があります。」（アカウント選択画面が必ず出るとは約束していない）。
+- 変更していないもの: state・PKCE・redirect URI検証・`x.com`ホスト許可・callback解析・リクエスト本文・cancel/dismiss/success/errorの状態処理、サーバー側のX重複アカウント保護、Edge Function、DB、Vault、アプリログイン用のprovider認証（`auth-client-flows.ts`）。cookie・ブラウザデータの削除は行っていない。
+
+### changed_files
+
+新規: `apps/social-mobile/src/features/x-connect/auth-session-options.ts`、`apps/social-mobile/tests/x-connect-auth-session.test.mjs`
+変更: `apps/social-mobile/src/features/x-connect/use-x-connect.ts`（3引数化、+5/-1）、`apps/social-mobile/src/app/accounts/index.tsx`（案内1行）、`apps/social-mobile/src/features/onboarding/onboarding-gate.tsx`（案内1行）
+サーバー・DB・Edge Function・G3のテストファイルの変更なし。onboardingの既存テストはモジュールのimportを厳密に検査するため、新規モジュールをimportせず案内文はリテラルにした。
+
+### tests
+
+- 新規`x-connect-auth-session.test.mjs`: **10/10 pass**（iOSは指定あり／Android・Web・その他は指定なし／型定義にiOS専用オプションが存在／hookがそのオプションだけを渡す／OAuth契約の各行が不変／状態処理が不変／cookie削除・追加パラメータなし／アプリログイン側が不変／案内文が両画面にあり「選べる」と約束していない）。変異検査: hookからオプションを外すとテストが失敗することを確認し、元に戻した。
+- `npm test`（social-mobile全体）: **99/99 pass**。data-view＋post-interaction: 22/22 pass。
+- `tsc --noEmit`: PASS。`expo lint`: PASS。Expo web export: 成功（895 modules）。Expo iOS export: 成功（1224 modules）。
+- `git diff --check`: PASS。secret scan: 該当なし。
+- EAS buildなし。ネイティブ側にオプションが既にあるため、この変更でネイティブ再ビルドは不要と判断（実機の開発ビルドが同じ`expo-web-browser`から作られている前提）。
+
+### local simulator result
+
+**未実施**。理由: (1) 起動中のSimulator（iPhone 17 Pro）はG3のE3検証の環境で、使わない指示のため使っていない。(2) 「別のXアカウントを実際に選べるか」の確認は、実際のXログイン画面へXアカウントの認証情報を入力する必要があり、エージェントは認証情報を入力しない（TASKも本番・保護アカウントの使用を禁止）。したがって、プロバイダ側の実際の挙動（ログイン画面が既ログインを引き継がないこと）は**未確認**。
+- 操作者の確認手順（案）: このブランチのJSを実機/Simulatorの開発ビルドに読み込み、Safariで複数のXアカウントのうち1つにログインした状態でアカウント画面の「Xアカウントを再接続」を押し、認証シートが既存のログインを引き継がずログイン画面から始まる（別のアカウントで認証できる）ことを確認する。使用するのは使い捨てアカウントのみ、投稿はしない。
+
+### commit_hash
+
+`e8a7785`（PR #65、ブランチ`g4/x-connect-ephemeral-auth-session-20261001`）。このReportのcommitはmainに別途push。
+
+### push/PR
+
+ブランチをpush済み。PR #65（OPEN、MERGEABLE）: https://github.com/anohi-memories/kabumori/pull/65 。未merge。
+
+### production mutation
+
+**0件**。deploy・DB/RLS/RPC/migration・Auth/Vault変更・X投稿・本番アカウント操作はいずれも無し。
+
+### remaining issues / platform caveats
+
+1. 実機でのプロバイダ側の挙動が未確認（上記）。`preferEphemeralSession`は「要求」で、ユーザーの既定ブラウザによっては尊重されない可能性がある（公式ドキュメントに明記）。案内文はそれに合わせて約束をしていない。
+2. 副作用: 非共有セッションのため、接続のたびにXへログインし直しになる（Safariのログイン状態・SSOは使われない）。パスワードマネージャーの自動入力の使い勝手は端末設定によって変わる可能性がある。
+3. Android/Webは今回のスコープ外（同等の文書化された手段がないため従来どおり）。Android側で同じ問題が出る場合は別TASKが必要。
+4. アプリログイン用のX認証（G3所有）は別の信頼ステップで、同様のアカウント再利用が起こりうるが、TASKの範囲外のため変更していない。
+
+### safety checks
+
+- OAuth/PKCE/state/redirect/callback検証・サーバー側の重複アカウント保護・秘密情報の取り扱いは変更なし（テストで固定）。
+- 未文書のX認可パラメータ、cookie・ブラウザデータ削除、他サービスからのサインアウトは導入していない。
+- 本番資格情報・保護アカウント・使い捨てE3アカウントに触れていない。実際のX投稿なし。
+
+### next recommendation
+
+1. OAuth/認証境界の変更なので、K4でCodexの焦点レビューの要否を判断（変更は約6行で、境界の検証ロジックは不変）。
+2. 操作者が実機（または自分のSimulator）で、上記の手順どおり使い捨てアカウント同士の切替を確認する。確認後にmerge。
+3. 問題がなければ、E3の再開・以降のXアカウント接続の手順に「毎回Xへログインし直しになる」旨を反映する。
+
+## Completion
+
+- status -> review_required
+- next_owner -> chatgpt
