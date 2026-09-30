@@ -35,6 +35,20 @@ export type DevDiaryEntry = {
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
 
+/**
+ * True only for a real calendar date, not merely the YYYY-MM-DD shape. `new Date(...)` silently
+ * normalizes an overflowing day/month (e.g. 2026-09-31 becomes 2026-10-01, 2026-02-29 -- 2026 is
+ * not a leap year -- becomes 2026-03-01), which could otherwise let an impossible or mistyped
+ * date pass freshness checks as if it were a real recent day. Round-trips the parsed UTC
+ * year/month/day back against the input to catch exactly that normalization.
+ */
+export function isValidCalendarDate(dateString: string): boolean {
+  if (!DATE_PATTERN.test(dateString)) return false;
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
 // Anything matching one of these disqualifies the *field* it appears in. Deliberately broad and
 // conservative: diary text is ordinary Japanese prose, so a false positive here just means one
 // field (or, if it's `changed`, one entry) is skipped -- never partially redacted and shipped.
@@ -61,10 +75,11 @@ export function isSanitizedDiaryField(text: string): boolean {
 /**
  * Returns a copy with every unsafe optional field dropped to null and every unsafe angle removed.
  * Returns null (the whole entry excluded) only when `changed` itself is missing/unsafe, or the date
- * is malformed -- `changed` is the one field every consumer of this module treats as required.
+ * is malformed or not a real calendar date -- `changed` is the one field every consumer of this
+ * module treats as required.
  */
 export function sanitizeDiaryEntry(entry: DevDiaryEntry): DevDiaryEntry | null {
-  if (!DATE_PATTERN.test(entry.date)) return null;
+  if (!isValidCalendarDate(entry.date)) return null;
   if (!isSanitizedDiaryField(entry.changed)) return null;
   return {
     date: entry.date,

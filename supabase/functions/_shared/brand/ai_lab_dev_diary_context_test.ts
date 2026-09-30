@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   EVERGREEN_TOPIC_SEEDS,
   isSanitizedDiaryField,
+  isValidCalendarDate,
   loadAiLabDevDiaryMarkdown,
   loadSanitizedDiaryEntries,
   parseDevDiaryMarkdown,
@@ -128,6 +129,54 @@ test("sanitizeDiaryEntry drops the whole entry when changed is unsafe or the dat
   assert.equal(sanitizeDiaryEntry(entry({ changed: "詳細は https://example.com で。" })), null);
   assert.equal(sanitizeDiaryEntry(entry({ date: "2026/09/28" })), null);
   assert.equal(sanitizeDiaryEntry(entry({ date: "not-a-date" })), null);
+});
+
+// --- strict calendar-date validation (not just the YYYY-MM-DD shape) ---
+//
+// JS silently normalizes an overflowing day/month instead of rejecting it (e.g. 2026-09-31
+// becomes 2026-10-01), so a shape-only check could let an impossible date slip through and later
+// be misread as a real, nearby date by the freshness window -- never as intended.
+
+test("isValidCalendarDate rejects an impossible day-of-month (2026-09-31: September has 30 days)", () => {
+  assert.equal(isValidCalendarDate("2026-09-31"), false);
+});
+
+test("isValidCalendarDate rejects Feb 29 on a non-leap year (2026-02-29)", () => {
+  assert.equal(isValidCalendarDate("2026-02-29"), false);
+});
+
+test("isValidCalendarDate accepts a real leap day (2028-02-29: 2028 is a leap year)", () => {
+  assert.equal(isValidCalendarDate("2028-02-29"), true);
+});
+
+test("isValidCalendarDate accepts valid month-end dates", () => {
+  assert.equal(isValidCalendarDate("2026-09-30"), true);
+  assert.equal(isValidCalendarDate("2026-01-31"), true);
+  assert.equal(isValidCalendarDate("2026-12-31"), true);
+});
+
+test("isValidCalendarDate rejects other impossible dates and malformed shapes", () => {
+  for (const invalid of ["2026-13-01", "2026-00-01", "2026-04-31", "2026-02-30", "2026/09/28", "not-a-date", "", "2026-9-1"]) {
+    assert.equal(isValidCalendarDate(invalid), false, invalid);
+  }
+});
+
+test("sanitizeDiaryEntry drops an entry with an impossible calendar date, even though it matches the YYYY-MM-DD shape", () => {
+  assert.equal(sanitizeDiaryEntry(entry({ date: "2026-09-31" })), null);
+  assert.equal(sanitizeDiaryEntry(entry({ date: "2026-02-29" })), null);
+  // A real date in the same shape still sanitizes normally.
+  assert.ok(sanitizeDiaryEntry(entry({ date: "2026-09-30" })));
+});
+
+test("an impossible-date entry never reaches diary/current-progress mode; selectAiLabTopicSeed falls back to evergreen", () => {
+  const markdown = `
+## 2026-09-31
+changed: 存在しない日付の変更。
+angle: 存在しない日付の角度。
+`;
+  const result = selectAiLabTopicSeed({ markdown, now: new Date("2026-09-30T09:00:00Z"), random: () => 0 });
+  assert.equal(result.source, "evergreen");
+  assert.ok(EVERGREEN_TOPIC_SEEDS.includes(result.topic));
 });
 
 test("sanitizeDiaryEntry drops only the unsafe optional field, keeps the rest, and filters unsafe angles", () => {
