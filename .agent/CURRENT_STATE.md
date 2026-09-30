@@ -2378,3 +2378,13 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - no manual X post, DB/Auth/Vault/Cron mutation or broad deploy.
 - finish code: K4.
 - recommended Claude model: Opus5.5（高）.
+
+
+## H1 PR #63 native data-source and Auth UX review — 2026-09-30
+
+- H1 result: **PASS**, exact head `5f2eae26bb1ee60c2bd7c7885c06816e86e8d852`; PR open/unmerged, GitHub mergeable=true.
+- Expo public env selection is static/bundle-safe and fails closed; web deletion confirmation is visible and truthful; signup duplicate guard/cooldown only claims success after success.
+- Tests: app 89/89 + data-view 14/14, typecheck/lint, Web+iOS JS exports, diff and secret/scope checks PASS.
+- Native PR: Netlify preview passed; Vercel rate-limit check is not required under native Expo policy. No simulator/EAS/live auth or deletion E2E was performed.
+- No findings blocking source merge; production mutation 0. H1 awaits C1, then native E3 may resume.
+- Recommended model for C1: Luna（中）.
