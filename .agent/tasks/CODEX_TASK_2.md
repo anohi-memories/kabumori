@@ -1,161 +1,45 @@
 # Codex Task 2
 
-- task_id: x-social-mobile-account-deletion-prod-stage1-verification-20260929
+- task_id: x-ai-salaryman-dev-diary-pr61-review-20260930
 - owner: codex
 - slot: codex-2
-- status: done
-- next_owner: none
-- priority: critical
-- recommended_model: Sol（高）
-- purpose: production Stage 1で適用済みのaccount deletion migration/Edge Functionを独立verificationし、Stage 2 disposable-account E2Eへ進めるか判定する。
+- status: ready
+- next_owner: codex
+- priority: high
+- recommended_model: Luna（高）
+- target: PR #61 head `385e561fa93dee5eaa6dfc215016f2c79531a53a`
 
-## Review target
+## Purpose
 
-- accepted source merge: `136dcd2b35b161ccc4769da15b05e796f095e881`
-- migration:
-  `supabase/migrations/20260928160000_social_mobile_account_deletion_candidate.sql`
-- expected sha256:
-  `7481078f91e87447216a2ae93e0c12b78ce6a68801205f4fdd74bb9bd6588657`
-- deployed Edge:
-  `social-mobile-account-delete`
-- G3 Stage 1 verdict: PASS
+Focused pre-production review of the 会社員AIラボ development-diary content shift.
 
-## Mandatory startup
+## Review scope
 
-1. Read ORCHESTRATION / CURRENT_STATE / this TASK / latest G3 Stage 1 Report / rollout runbook.
-2. Independent H2 worktree.
-3. Fresh fetch origin/main.
-4. Read current Supabase skill/changelog/docs.
-5. Production verification may use read-only catalog/function metadata and non-destructive HTTP smoke only.
-6. No destructive mutation.
+Verify only:
+- AI Lab scheduled generation actually receives the selected diary/evergreen topic seed
+- fresh diary vs no-progress fallback cannot fabricate "today" activity
+- sanitizer prevents raw internal/security/private context from entering the post prompt
+- shared `brand_post_generator` hashtag change does not alter brands with fixed hashtags
+- みお / かぶモリ / other brands remain behaviorally unchanged
+- the canonical Markdown load works in the Supabase Edge runtime as implemented
+- no DB/RLS/RPC/Auth/account-deletion changes
+- no secret leakage
+- tests are sufficient for the changed boundaries
 
-## Verification scope
+Also note explicitly:
+- diary Markdown is bundled at deploy time, so updating it currently requires redeploy
+- automatic periodic aggregation of development progress is NOT part of PR #61 and must not be represented as complete
 
-### A. Migration identity/read-back
-Independently verify:
-- migration source hash still matches accepted value
-- deployed function inventory/body identity matches expected source
-- function owners/search_path/EXECUTE grants are correct
-- anon/authenticated cannot execute privileged deletion RPCs
-- service_role execute surface matches intended functions only
-- state/audit tables have expected RLS/privilege posture
-- all expected guard triggers are present/enabled
-- no unexpected collisions/duplicate objects
-- isolation assumptions remain READ COMMITTED for intended paths
-- onboarding workspace-creator assumptions still hold
+## Allowed fixes
 
-Do not expose sensitive privilege detail in public report; sanitize.
+Only small bounded corrections directly required by findings.
+If a broader architecture change is needed, STOP and report instead.
 
-### B. Edge deployment verification
-Verify:
-- function ACTIVE
-- `verify_jwt=true`
-- deployed source matches accepted repository source
-- only intended source files included
-- no secret/token logging
-- Apple path remains fail-closed if production Apple config absent
-- no unrelated function/version changed by this rollout
+## Production
 
-### C. Non-destructive smoke
-Independently repeat safe checks:
-- OPTIONS/CORS
-- missing auth -> 401
-- malformed JWT -> 401
-- unauthenticated preview/delete request -> safe reject
-- invalid action -> 400
-- GET -> 405
-- no deletion state/audit rows created
-
-No valid authenticated deletion request.
-
-### D. Production mutation audit
-Confirm Stage 1 mutation scope was limited to:
-- accepted migration objects
-- new Edge function deploy
-and no:
-- user deletion
-- Vault token deletion
-- X revoke
-- Apple revoke
-- X post
-- provider/Auth console change
-- app activation flag.
-
-### E. Stage 2 readiness
-Assess whether it is safe to proceed to disposable-account E2E for:
-1. never-connected user
-2. social-only user with Kabumori profile retained
-3. X-connected disposable user
-4. lost-response/retry scenario
-5. unrelated-data invariants
-
-Apple E2E remains separately gated until Apple production configuration exists.
-
-## STOP conditions
-
-FAIL/STOP if:
-- any production read-back differs from reviewed source
-- ACL/search_path/owner surface is unsafe
-- guard trigger missing
-- Edge source/verify_jwt differs
-- smoke reaches destructive path unexpectedly
-- state/audit rows appear from non-destructive requests
-- unrelated production changes are detected
-- any sensitive detail would need to be published; sanitize instead.
-
-## Production constraints
-
-Absolutely no:
-- real user deletion
-- real X/Apple revoke
-- Vault mutation
-- Auth/provider config changes
-- feature activation
-- migration rewrite/rollback
-- Edge redeploy unless explicitly assigned as a bounded fix later.
+No deploy and no real X post.
+production_mutation=0.
 
 ## Completion / C2
 
-Report:
-- PASS / PASS-WITH-FIX / FAIL
-- migration production identity verdict
-- RPC/ACL/search_path verdict (sanitized)
-- trigger/isolation verdict
-- Edge deployment identity verdict
-- non-destructive smoke results
-- production mutation audit
-- Stage 2 readiness yes/no
-- remaining operator/legal/Apple/cross-app gates
-- production_mutation_by_H2=0
-
-Then status -> review_required, next_owner -> chatgpt, STOP for C2.
-
-## H2 verification outcome — 2026-09-29
-
-- result: **FAIL / STOP at the unrelated-production-change gate; target checks performed PASS.**
-- Migration hash, all 21 RPC bodies/signatures/security modes, intended permission surface, protected tables, 11 enabled guards, isolation and onboarding identity matched the accepted source.
-- `social-mobile-account-delete`: v1 ACTIVE, verify_jwt=true; runtime source matches the four accepted files exactly.
-- Non-destructive HTTP smoke: 7/7 PASS, retry 0, valid-user requests 0; state/audit rows stayed 0/0.
-- During verification, unrelated `market-report-data-packet` changed v11 -> v12. Its newer timestamp is after the deletion rollout. H1's completion Report subsequently reached fresh origin/main at `bb57562` and records the exact matching version/timestamp as its authorized single-function deploy. This resolves the observed provenance at the Report level; H2 did not attribute it to G3 or silently waive the explicit STOP condition.
-- Stage 2 readiness: **NO pending C2 reconciliation of the parallel deployment/invariant snapshot**; not a finding of a deletion implementation defect.
-- production_mutation_by_H2: **0**. No further production queries/requests were made after detecting the delta.
-- Full sanitized evidence and evidence limitations: `.agent/CODEX_REPORT_2.md` at this task's Report head.
-
-
-## Final C2 — Stage 1 production verification reconciled
-
-- verdict: **PASS after reconciliation**.
-- All deletion-target checks performed by H2 passed.
-- H2 STOP was triggered only by an unrelated concurrent Function version change.
-- That delta is reconciled by the separately owned H1 completion Report, which records the exact authorized `market-report-data-packet` v12 deployment and confirms all other Function metadata unchanged.
-- No deletion implementation or rollout defect was found.
-- Stage 2 disposable-account E2E may proceed under a new explicit G3 task.
-- production_mutation_by_H2=0.
-
-
-## Final C2 reconciliation
-- account-deletion target verification: PASS.
-- conservative STOP was reconciled as an authorized parallel deployment owned by another slot.
-- no account-deletion defect found.
-- Stage 2 may proceed.
-- production_mutation_by_H2=0.
+Report PASS/FAIL, findings, any fixes, tests, exact reviewed head, cross-brand safety, and whether PR #61 is safe to merge/deploy.
