@@ -7,7 +7,16 @@ import {
   failIngestionRun,
   MIC_STALE_RUN_THRESHOLD_MS,
   reconcileStaleIngestionRuns,
+  resolveTriggerType,
 } from "./mic_ingestion_run_logic.ts";
+
+test("resolveTriggerType: pg_cron's \"cron\" is scheduled; everything else (incl. no trigger) stays manual", () => {
+  assert.equal(resolveTriggerType("cron"), "scheduled");
+  assert.equal(resolveTriggerType("scheduled"), "scheduled");
+  for (const value of ["manual", "", undefined, null, 1, {}, "CRON", "cron "]) assert.equal(resolveTriggerType(value), "manual");
+  // Only values the mic_ingestion_runs CHECK allows can be produced.
+  for (const value of ["cron", "scheduled", "x"]) assert.ok(["manual", "scheduled"].includes(resolveTriggerType(value)));
+});
 import type { RestContext } from "./mic_writer_logic.ts";
 
 const ctx: RestContext = { supabaseUrl: "https://example.supabase.co", secretKey: "secret-key" };

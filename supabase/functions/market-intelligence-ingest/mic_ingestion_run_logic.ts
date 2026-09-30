@@ -33,6 +33,14 @@ export function computeRunWindow(sourceKey: string, now: Date = new Date()): str
   return `${sourceKey}:${bucket}`;
 }
 
+// mic_ingestion_runs.trigger_type only allows 'manual' | 'scheduled'. The pg_cron
+// jobs send {"trigger":"cron"} (and the e-Stat job sends no trigger), which
+// used to be recorded as 'manual' because only the literal "scheduled" was
+// recognized. Audit metadata only: nothing branches on it.
+export function resolveTriggerType(trigger: unknown): "manual" | "scheduled" {
+  return trigger === "cron" || trigger === "scheduled" ? "scheduled" : "manual";
+}
+
 export type ClaimIngestionRunParams = {
   sourceKey: string;
   runWindow: string;

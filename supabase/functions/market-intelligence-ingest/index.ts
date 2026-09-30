@@ -73,6 +73,7 @@ import {
   computeRunWindow,
   failIngestionRun,
   reconcileStaleIngestionRuns,
+  resolveTriggerType,
 } from "./mic_ingestion_run_logic.ts";
 import {
   readExistingMarketMetricValue,
@@ -512,7 +513,7 @@ Deno.serve(async (req) => {
       return response({ error: "FED_AI_ACTION_FAILED" }, 502);
     }
   }
-  const triggerType: "manual" | "scheduled" = requestBody.trigger === "scheduled" ? "scheduled" : "manual";
+  const triggerType = resolveTriggerType(requestBody.trigger);
   const requestedSources = Array.isArray(requestBody.sources)
     ? requestBody.sources.filter((s): s is SourceKeyWithFed =>
       typeof s === "string" && (ALL_SOURCE_KEYS as string[]).includes(s)
