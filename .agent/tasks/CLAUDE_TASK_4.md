@@ -93,3 +93,34 @@ Report:
 - next recommendation
 
 Then status -> review_required, next_owner -> chatgpt, STOP for K4.
+
+
+## Operator authorization after merge guard stop
+
+- ChatGPT independently verified on GitHub that PR #61 is **merged**.
+- merged_at: 2026-09-30T10:12:45Z
+- merge_commit: `f0ea0a964797524022f0b8aa51a670a78806dd26`
+- reviewed/accepted PR head remains `67ee04b41e37553885d43f4630628d135061cbf8`.
+- The prior merge command does not need to be retried.
+
+### Explicit permission to continue
+
+You are explicitly authorized to continue this existing G4 TASK from the post-merge point and perform the previously approved **single-function production deploy of `x-test-post` only**, followed by the exact read-back/verification already defined in Phase D.
+
+This authorization covers:
+- confirm fresh `origin/main` contains merge commit `f0ea0a964797524022f0b8aa51a670a78806dd26`
+- deploy exactly `x-test-post` to the existing production Supabase project
+- preserve current `verify_jwt=false`
+- perform read-only post-deploy source/version/metadata verification
+- write the G4 Report
+
+This authorization does NOT cover:
+- any other Edge Function
+- DB/RLS/RPC/migration changes
+- Auth/Vault/Cron/settings/secret changes
+- manual scheduled-post execution
+- manual/forced X post
+- unrelated PR merge/deploy
+- broader rollback or architecture changes
+
+If the deploy safety tool still refuses despite this explicit authorization, STOP and report the exact blocker without attempting broader workarounds.
