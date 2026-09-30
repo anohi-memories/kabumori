@@ -3,8 +3,8 @@
 - task_id: kabumori-home-visual-rebuild-reference-20260930
 - owner: claude
 - slot: claude-1
-- status: done
-- next_owner: none
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sonnet5（高）
 - purpose: ユーザーが提示した理想Home案を視覚正本として、現行Homeの見た目を「微調整」ではなくUIレイヤーを全面再構築する。データ取得・ナビ・ルーティング・既存機能・backend契約は再利用し、見た目とレイアウトだけを新規に組み直す。
@@ -560,6 +560,19 @@ Hero art/background scene and the 「今日のポイントはこちら！」bubb
 
 ### Status
 `review_required` / next_owner `chatgpt`. STOP for K1. No merge.
+
+## Report 3 — G1: Header brand logo (user-provided canonical logo) — local only, EAS build: NOT done
+
+- result: done; **the user checked it live on their iPhone (local dev-client + Metro) and said it looks good (「よくなった」)**. PR #60 **not merged**.
+- PR #60 head `d48a4585590731568c20e0e20ad16c90d5dbf100` (branch `claude/home-report-yume-04-fixed-20260930`). Commits: `32235e5` (logo wired) then `d48a458` (transparent margin trimmed).
+- Asset: `assets/images/home/kabumori_header_logo.webp` — from the user's `ヘッダーロゴ.png` (RGBA PNG 2005x784, sha256 `f5d152b7…e40c`, source of truth). Only the empty transparent margin was trimmed (content bounds at alpha>4 plus a 6px transparent margin: crop x 142..1861, y 163..626 → **1719x463**, aspect 3.713); everything outside the box has alpha ≤ 1; every pixel inside is unchanged (decoded RGBA verified identical to the source crop). Lossless (`cwebp -lossless -exact`), transparency kept. **No scaling, recolouring, redrawing, text/leaf resizing or aspect change.** sha256 `8152bc06c9a6d021a62195bba079acddc579765cd73edaa0418f97e6ab15c6fb`. The untrimmed first conversion (2005x784) was superseded (the visible mark was only ~19pt tall in the slot).
+- Wiring: `HEADER_LOGO_SOURCE = require('@/assets/images/home/kabumori_header_logo.webp')`, slot **unchanged 132x34pt**, `contentFit="contain"` (renders ~126x34pt); accessibility label 「かぶモリ 株をAIで、もっと身近に。」. The temporary text brand/tagline was removed; the rest of the header and other sections are untouched. `HERO_BACKGROUND_SOURCE` / `TOPIC_BACKGROUND_SOURCE` remain empty slots and are still not required.
+- Tests/checks: `deno test tests/app/` **218/218** (new `home-logo_test.ts` pins the asset sha/VP8L/alpha/1719x463 and the slot; `home-structure_test.ts` updated: only `kabumori_header_logo.webp` may exist under `assets/images/home/`); tsc(src) 2 known CSS errors; `expo export --platform web` PASS with the logo bundled; diff check clean.
+- Verification: the user's real iPhone (dev client + local Metro, real account). The automated iOS Simulator measurement for this small change did not complete (the verification agent was interrupted by an app restart and the shared Metro cache was disturbed by a second concurrent Metro), so exact header-row height/no-clipping numbers at 375/360pt were **not re-recorded**; nothing else in the header changed except the logo image replacing two Text nodes.
+- No EAS build for this change (the earlier development-client build `37541c60` from today is the one that enables live local iteration). Backend/production mutation 0.
+- Process note for the workflow: two Metro servers using the same `node_modules` symlink corrupt each other's cache (a red "Unable to resolve" screen on the phone); when live-testing on a device, do not run a second Metro against the same node_modules.
+
+Status: `review_required` / next_owner `chatgpt`. STOP for K1. No merge.
 
 ---
 
