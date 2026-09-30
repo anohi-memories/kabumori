@@ -3,8 +3,8 @@
 - task_id: kabumori-home-visual-rebuild-reference-20260930
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sonnet5（高）
 - purpose: ユーザーが提示した理想Home案を視覚正本として、現行Homeの見た目を「微調整」ではなくUIレイヤーを全面再構築する。データ取得・ナビ・ルーティング・既存機能・backend契約は再利用し、見た目とレイアウトだけを新規に組み直す。
@@ -2895,3 +2895,18 @@ Production mutation: 0. Rollback: not needed. `review_required` / next_owner `ch
 - Therefore there is no remaining G1 work on this task and it must not be restarted.
 
 
+
+## Final K1 — 2026-09-30 Home visual rebuild
+
+- verdict: PASS / MERGED
+- PR: #60
+- final head: `5f88ef12db6b93ce65dee9c4e565c9615baea8d1`
+- squash merge: `0ddf49132ecdab9b0d1afde8330556907cb34315`
+- local Simulator screenshot reviewed and accepted for this phase.
+- EAS build: 0
+- backend / production mutation: 0
+- Codex review: not required
+- tests reported by Claude: app 216/216 PASS; Expo export PASS; diff check clean; only the two known pre-existing CSS-module TypeScript errors remain.
+- accepted scope: compact header, layered report Hero, fixed approved 04 artwork, compact market/holding news, featured topic, honest Ask-AI entry, future header/Hero/topic asset slots.
+- deferred: final canonical background/logo assets, later 01-10 state selection, optional news imagery strategy, final spacing polish after asset insertion.
+- next recommended model for straightforward asset insertion: Sonnet5（中）.
