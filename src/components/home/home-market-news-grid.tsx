@@ -11,7 +11,7 @@ import { newsTint, relativeTimeJa } from '@/lib/home-format';
 import { HomeSectionHeader } from '@/components/home/home-section-header';
 
 export const MARKET_CARD_GAP = 8;
-export const MARKET_MEDIA_HEIGHT = 48;
+export const MARKET_MEDIA_HEIGHT = 44;
 // Three cards across, sized from the screen width so they always fill the row exactly.
 export const MARKET_CARD_COUNT = 3;
 
@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
     overflow: 'hidden',
   },
-  body: { padding: 7, gap: 4 },
+  body: { padding: 6, gap: 3 },
   category: { alignSelf: 'flex-start', fontSize: 10, fontWeight: '900', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2, overflow: 'hidden' },
   title: { fontSize: 11.5, lineHeight: 15, fontWeight: '900', minHeight: 30 },
   status: { marginVertical: 18 },

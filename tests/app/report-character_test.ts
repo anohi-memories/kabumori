@@ -57,13 +57,13 @@ test("CharacterSlot keeps the artwork uncropped, decorative and frameless", asyn
   assert.ok(!/backgroundColor|border|shadow/.test(styles), "no frame/glow/background around the transparent artwork");
 });
 
-test("the character is flush top-right, about half of the Hero, and never over the points", async () => {
+test("the character is an independent right-side layer behind the text, never driving the Hero height", async () => {
   const tokens = await read("src/constants/home-tokens.ts");
   const percent = Number(/characterWidthPercent: '(\d+)%'/.exec(tokens)?.[1]);
-  assert.ok(percent >= 42 && percent <= 56, `${percent}% should be about half of the Hero`);
+  assert.ok(percent >= 44 && percent <= 60, `${percent}% should make the character a real focal point`);
   const hero = await read("src/components/home/home-report-hero.tsx");
-  // The layer lives in the top row (in flow), before the full-width points block.
-  assert.ok(hero.indexOf("<CharacterSlot") < hero.indexOf("style={styles.points}"), "character comes before the points block");
-  assert.ok(/character: \{ width: HERO\.characterWidthPercent, marginLeft: 'auto' \}/.test(hero));
-  assert.ok(!/position: 'absolute'[^}]*CharacterSlot|CharacterSlot[^>]*position: 'absolute'/.test(hero));
+  assert.ok(/position: 'absolute', right: HERO\.characterRight, bottom: CHARACTER_BOTTOM, width: HERO\.characterWidthPercent/.test(hero));
+  assert.ok(/CHARACTER_BOTTOM = HERO\.padding \+ HERO\.ctaHeight \+ HERO\.ctaGap/.test(hero), "rests on the CTA row");
+  // Rendered before the content block so the text is drawn over it.
+  assert.ok(hero.indexOf("<CharacterSlot") < hero.indexOf("styles.content"), "character layer is behind the text");
 });

@@ -38,18 +38,24 @@ export const HOME_COLORS = {
   important: '#d6403f',
 } as const;
 
-// Compact Report Hero geometry (pt). Layout: a top row (text column on the left, the character
-// layer flush to the top-right of the Hero) and, below it, the full-width points and the CTA. The
-// character therefore never sits on top of the long production-length points.
+// Compact Report Hero geometry (pt). The Hero is a layered block: the character is an independent
+// absolute layer on the right (resting on the CTA row, behind the text), while the title block and a
+// compact points box sit on the left. The character never drives the Hero height.
 export const HERO = {
-  padding: 12,
-  ctaHeight: 40,
-  /** Space between the content above and the CTA row. */
-  ctaGap: 10,
-  /** Left text column of the top row, as a share of the Hero width. */
-  leftColumnPercent: '52%',
+  padding: 10,
+  ctaHeight: 36,
+  /** Space between the points box and the CTA row. */
+  ctaGap: 8,
+  /** Title / description column, as a share of the Hero width. */
+  titleColumnPercent: '58%',
+  /** Points box, as a share of the Hero width (a little of the wand tip may tuck behind it). */
+  pointsColumnPercent: '56%',
   /** Character layer width, as a share of the Hero width. */
-  characterWidthPercent: '48%',
+  characterWidthPercent: '52%',
+  /** Right offset (pt) of the character layer inside the Hero. */
+  characterRight: -2,
+  /** Keeps the layered composition while the Hero has little text (loading / empty). */
+  minHeight: 200,
   /** Maximum "today's points" shown on Home. */
   maxPoints: 3,
 } as const;
