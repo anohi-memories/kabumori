@@ -3,8 +3,8 @@
 - task_id: x-ai-salaryman-dev-diary-pr61-final-acceptance-20260930
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna（中）
 - target: PR #61 head `67ee04b41e37553885d43f4630628d135061cbf8`
