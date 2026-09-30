@@ -31,16 +31,47 @@ async function load(): Promise<Migration[]> {
 const code = (sql: string) => sql.split("\n").filter((line) => !line.trim().startsWith("--")).join("\n");
 const position = (migrations: Migration[], version: string) => migrations.findIndex((m) => m.version === version);
 
-Deno.test("[F] every filename parses and its version is a real calendar timestamp", async () => {
-  for (const { file, version } of await load()) {
-    const [y, mo, d, h, mi, s] = [version.slice(0, 4), version.slice(4, 6), version.slice(6, 8), version.slice(8, 10), version.slice(10, 12), version.slice(12, 14)].map(Number);
-    const date = new Date(Date.UTC(y, mo - 1, d, h, mi, s));
-    assert.equal(date.getUTCFullYear(), y, file);
-    assert.equal(date.getUTCMonth(), mo - 1, file);
-    assert.equal(date.getUTCDate(), d, file);
-    assert.equal(date.getUTCHours(), h, file);
-    assert.ok(y >= 2026 && y <= 2027, `${file}: implausible year`);
-  }
+// Why a component is wrong, or null for a real UTC calendar timestamp. Each
+// component is range-checked on its own (Date.UTC alone would silently roll an
+// overflowing field over -- second 60 becomes minute +1 -- and blame the wrong
+// component), then the whole is round-tripped through Date as a final guard.
+function invalidTimestampReason(version: string): string | null {
+  if (!/^\d{14}$/.test(version)) return "not 14 digits";
+  const [y, mo, d, h, mi, s] = [
+    version.slice(0, 4), version.slice(4, 6), version.slice(6, 8),
+    version.slice(8, 10), version.slice(10, 12), version.slice(12, 14),
+  ].map(Number);
+  if (y < 2026 || y > 2027) return "implausible year";
+  if (mo < 1 || mo > 12) return "invalid month";
+  if (d < 1 || d > new Date(Date.UTC(y, mo, 0)).getUTCDate()) return "invalid day";
+  if (h > 23) return "invalid hour";
+  if (mi > 59) return "invalid minute";
+  if (s > 59) return "invalid second";
+  const date = new Date(Date.UTC(y, mo - 1, d, h, mi, s));
+  const roundTrip = [
+    date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate(),
+    date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds(),
+  ];
+  return roundTrip.every((value, index) => value === [y, mo, d, h, mi, s][index]) ? null : "does not round-trip";
+}
+
+Deno.test("[F] every filename parses and its version is a real calendar timestamp (year..second)", async () => {
+  for (const { file, version } of await load()) assert.equal(invalidTimestampReason(version), null, file);
+});
+
+Deno.test("[F] timestamp validation rejects each invalid component (no migration file is created)", () => {
+  assert.equal(invalidTimestampReason("20260930123456"), null);
+  assert.equal(invalidTimestampReason("20260930235959"), null, "last valid second of the day");
+  assert.equal(invalidTimestampReason("20260930123460"), "invalid second");
+  assert.equal(invalidTimestampReason("20260930123499"), "invalid second");
+  assert.equal(invalidTimestampReason("20260930126000"), "invalid minute");
+  assert.equal(invalidTimestampReason("20260930246000"), "invalid hour");
+  assert.equal(invalidTimestampReason("20260931120000"), "invalid day");
+  assert.equal(invalidTimestampReason("20260230120000"), "invalid day");
+  assert.equal(invalidTimestampReason("20261330120000"), "invalid month");
+  assert.equal(invalidTimestampReason("20260900120000"), "invalid day");
+  assert.equal(invalidTimestampReason("2026093012345"), "not 14 digits");
+  assert.equal(invalidTimestampReason("20250930123456"), "implausible year");
 });
 
 Deno.test("[A][B] no two migrations share a version (duplicate version count is 0)", async () => {
