@@ -116,6 +116,8 @@ export function HomeReportHero({ palette, report, points, loading, error, onOpen
           )}
         </View>
 
+        <View style={styles.spacer} />
+
         {/* CTA: the only navigation into the report */}
         <Pressable
           onPress={onOpen}
@@ -145,13 +147,15 @@ const styles = StyleSheet.create({
     // Keeps the layered composition intact while loading / empty (few text lines).
     minHeight: HERO.minHeight,
   },
-  content: { padding: HERO.padding },
+  // flexGrow: the CTA stays on the Hero's bottom edge even when the Hero is at its minHeight.
+  content: { padding: HERO.padding, flexGrow: 1 },
   titleBlock: { width: HERO.titleColumnPercent },
   pill: { alignSelf: 'flex-start', backgroundColor: HOME_COLORS.pillGreen, borderRadius: 99, paddingHorizontal: 10, paddingVertical: 1 },
   pillText: { color: '#fff', fontSize: 11, fontWeight: '900' },
   title: { color: HOME_COLORS.brandGreen, fontSize: 24, lineHeight: 28, fontWeight: '900', marginTop: 1 },
   description: { fontSize: 11, lineHeight: 14, fontWeight: '600', marginTop: 2 },
-  pointsBox: { width: HERO.pointsColumnPercent, marginTop: 6 },
+  pointsBox: { width: HERO.pointsColumnPercent, marginTop: 4 },
+  spacer: { flexGrow: 1 },
   pointsPill: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   pointsPillText: {
     color: HOME_COLORS.pointsPillText,
@@ -164,7 +168,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   reportKind: { flexShrink: 1, fontSize: 10, fontWeight: '800' },
-  points: { marginTop: 4, gap: 3 },
+  points: { marginTop: 4, gap: 2 },
   pointRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -172,8 +176,8 @@ const styles = StyleSheet.create({
     backgroundColor: HOME_COLORS.pointsBoxBackground,
     borderRadius: 9,
     paddingHorizontal: 6,
-    paddingVertical: 2,
-    minHeight: 30,
+    paddingVertical: 1,
+    minHeight: 28,
   },
   pointCircle: { width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   pointNumber: { color: '#fff', fontSize: 10.5, fontWeight: '900' },

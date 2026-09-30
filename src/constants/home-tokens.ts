@@ -43,19 +43,19 @@ export const HOME_COLORS = {
 // compact points box sit on the left. The character never drives the Hero height.
 export const HERO = {
   padding: 10,
-  ctaHeight: 36,
+  ctaHeight: 34,
   /** Space between the points box and the CTA row. */
-  ctaGap: 8,
+  ctaGap: 6,
   /** Title / description column, as a share of the Hero width. */
   titleColumnPercent: '58%',
   /** Points box, as a share of the Hero width (a little of the wand tip may tuck behind it). */
-  pointsColumnPercent: '56%',
+  pointsColumnPercent: '58%',
   /** Character layer width, as a share of the Hero width. */
-  characterWidthPercent: '52%',
+  characterWidthPercent: '50%',
   /** Right offset (pt) of the character layer inside the Hero. */
   characterRight: -2,
   /** Keeps the layered composition while the Hero has little text (loading / empty). */
-  minHeight: 200,
+  minHeight: 232,
   /** Maximum "today's points" shown on Home. */
   maxPoints: 3,
 } as const;
