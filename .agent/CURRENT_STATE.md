@@ -1,3 +1,17 @@
+## Final K1 PASS — Home visual rebuild PR #60
+
+- task: `kabumori-home-visual-rebuild-reference-20260930`
+- result: PASS / merged.
+- final PR head: `5f88ef12db6b93ce65dee9c4e565c9615baea8d1`
+- squash merge: `0ddf49132ecdab9b0d1afde8330556907cb34315`
+- local simulator screenshot accepted for this phase.
+- EAS builds consumed: 0.
+- backend / production mutation: 0.
+- no Codex review required.
+- G1 is now free.
+- next likely Home increment: insert user-created header-logo / report-Hero-background / topic-background assets, then final local spacing polish. Keep local-first / EAS-at-major-milestones policy.
+- recommended model for straightforward asset insertion: Sonnet5（中）; use Sonnet5（高） only if layout restructuring is needed.
+
 ## K1 interim — G1 Home visual rebuild (2026-09-30)
 
 - PR #60 head reviewed: `0c298e0ce76addd5d7372374211dd4da9ccd5f8f`.
