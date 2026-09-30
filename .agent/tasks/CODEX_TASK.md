@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-pr65-ephemeral-x-auth-session-review-20261001
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sol（高）
 - target: PR #65 exact head `e8a7785d5635096aa428899d28e629a95b7e3f31`
@@ -95,3 +95,17 @@ Then status -> review_required, next_owner -> chatgpt, STOP for C1.
 - focused 14/14, mobile 103/103, data-view/post-interaction 22/22, typecheck/lint/Web+iOS exports/diff checks PASS.
 - source is safe to merge **after C1 and safe operator provider-side E2E pass**. Account switching on an actual device/browser remains unverified; keep merge hold.
 - production_mutation=0; see `.agent/CODEX_REPORT.md` for evidence and caveats.
+
+
+## Final C1
+
+- verdict: **PASS**
+- accepted PR: #65
+- accepted exact head: `e5a66f5ba71f64b1a38d8f89faff3d0a31972949`
+- H1 disposition: PASS-WITH-FIX (tests only). Runtime/client behavior remained unchanged from original head `e8a7785d5635096aa428899d28e629a95b7e3f31`.
+- H1-only source delta from original reviewed head: exactly one test file, `apps/social-mobile/tests/x-connect-auth-session.test.mjs`.
+- verification: focused 14/14, mobile 103/103, data-view/post-interaction 22/22, typecheck/lint/Web+iOS exports/diff checks PASS.
+- OAuth/security invariants accepted: PKCE/state/redirect/callback/host validation/server duplicate-account protection unchanged; no undocumented provider parameter; no cookie clearing; no DB/RLS/RPC/migration/Edge/Vault/Auth-provider change.
+- production mutation: 0.
+- merge decision: **HOLD** until safe operator provider-side E2E confirms a different X account can authenticate without silently reusing the prior normal-browser session, including cancel/retry/reconnect behavior.
+- H1 is closed and free. G4 remains review_required for the operator E2E/merge gate.
