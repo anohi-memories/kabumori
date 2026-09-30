@@ -2426,3 +2426,14 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - prior baseline was v127, so the duplicate same-source deploy accounts for two version increments.
 - no further deploy is needed or authorized.
 - G4 should continue with read-only source identity/all-function metadata/manual-post verification and final Report only.
+
+
+## PR #63 merged; G3 native E3 resume authorized
+- PR #63 exact accepted head `5f2eae26bb1ee60c2bd7c7885c06816e86e8d852` was squash-merged successfully.
+- merge commit: `2648f38ac3a0e3421dbd6104b46c44dbd009b6d8`.
+- changed scope remains the reviewed 10 `apps/social-mobile` source/test files.
+- G3 should not retry merge; continue from Phase B using fresh main.
+- allowed before destructive gate: local/native build, real Supabase mode verification, disposable X connection, read-only state verification.
+- mandatory STOP and fresh user approval before account deletion, X revoke, or Vault mutation.
+- no real X post and feature remains OFF.
+- recommended Claude model: Opus5.5（高）.
