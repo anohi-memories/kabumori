@@ -1,3 +1,35 @@
+## H2 — AI Lab development-diary PR #61 focused review — 2026-09-30
+
+- task_id: `x-ai-salaryman-dev-diary-pr61-review-20260930`
+- result: **FAIL — do not merge/deploy until the runtime asset blocker is resolved.** No code fix was made because the required asset packaging solution is outside the current review-only correction and cannot be proven from the available isolated checkout.
+- reviewed_head: PR #61 `385e561fa93dee5eaa6dfc215016f2c79531a53a`; PR remains open. Fresh GitHub comparison: origin/main `229ac6d7cc11d5a3a58b62a84c9a8ab178c7dab1`, PR head is 1 commit ahead / 7 behind. Changed-file list is limited to the 8 files reported by GitHub.
+- root_cause: The PR description says scheduled AI Lab posts always used the shared generator's static generic topic because no `topicSeed` was passed. The updated `x-test-post/index.ts` now selects a diary/evergreen seed and passes it to `generateBrandPost`; source inspection confirms this direct wiring.
+- blocking_finding:
+  - `ai_lab_dev_diary_context.ts` reads an adjacent Markdown file via `node:fs/promises` and `import.meta.url`. The source comment claims the full function directory is automatically bundled, but the PR does not add `supabase/config.toml` (confirmed 404 at the reviewed head) or another asset packaging mechanism.
+  - Supabase's official Wasm bundling guide says non-code static assets must be included through `static_files` in `supabase/config.toml`; it also notes static files require the CLI/Docker path and are not deployed via `--use-api`: [Supabase Edge Function static-file bundling](https://supabase.com/docs/guides/functions/wasm).
+  - The current catch in the scheduled dispatch converts any read failure to an empty string, so missing runtime asset silently selects evergreen topics. This masks failure and defeats the fresh-diary behavior. The Node/Deno local test that reads the checkout file does not prove deployment packaging/runtime availability.
+  - required follow-up: add a supported packaging path for the Markdown (or embed it as code), verify the produced Edge bundle contains it, and exercise the loader under the Supabase Edge runtime. Until then the TASK requirement “canonical Markdown load works in the Supabase Edge runtime” is unproven.
+- additional_scope_note:
+  - The shared generator's no-fixed-hashtag prompt changed from “do not add a hashtag” to “defer to the profile's voice instructions.” This correctly resolves AI Lab's conflicting `#個人開発` instruction and configured fixed hashtags still use the unchanged branch. It also changes the prompt for `social_mobile_user_v1`, which has no fixed hashtags; the added regression test covers AI Lab and a configured Kabumori hashtag case, but not this no-fixed-hashtag neutral profile. Confirm this broader prompt change is intended or scope it to profiles that declare a hashtag policy.
+- other_review:
+  - No database/RLS/RPC/Auth/account-deletion changes were present in the PR file list.
+  - The diary selector is explicitly wired in the scheduled branch; future-dated entries are rejected and missing/unsafe/stale entries use fixed evergreen seeds rather than claiming a current-day event.
+  - Sanitization covers the tested URL/email/token/branch/task/commit/PR/table/RLS/RPC categories. It is a finite pattern denylist, so it should not be described as a universal semantic detector for arbitrary personal/private prose; safety currently also depends on the Markdown being curated public-safe material.
+  - Cross-brand fixed-hashtag behavior is preserved by the branch condition, but the no-fixed-hashtag profile note above remains.
+- tests:
+  - PR description reports: diary context 20/20; brand profiles 7/7; generator 12/12; scheduled brand tests 8/8; shared brand suite 109/109; `git diff --check` clean; changed-file isolated `deno check` clean. These numbers were reported by the PR author, not independently rerun in this review.
+  - GitHub combined commit status currently shows Vercel and Netlify deploy-preview success only; it does not provide independent test results.
+  - Independent checkout/test attempt was blocked: GitHub DNS resolution failed when cloning into a new disposable `/private/tmp` checkout. No retry workaround was attempted. Review proceeded from GitHub's exact PR head files/patches and official Supabase docs.
+- changed_files: `.agent/CODEX_REPORT_2.md`, `.agent/tasks/CODEX_TASK_2.md` only for this review record; PR source unchanged.
+- implementation_commit: none; fixes none.
+- push: H2 control-file synchronization only; no PR source commit/push.
+- deploy: 0. Real X post/API: 0. Production mutation: 0.
+- remaining_issues: Resolve static asset packaging/runtime proof; decide whether no-fixed-hashtag behavior should affect the neutral social-mobile profile; independently run tests from a clean checkout when network access returns.
+- safety_checks: no production deploy or invocation; no database/RLS/RPC/Auth/account-deletion changes; no X/API calls; no source changes; no other slot files touched.
+- next_recommendation: Keep PR #61 blocked from merge/deploy until the Markdown runtime asset is demonstrably bundled and readable. Re-review the exact updated head and verify the neutral profile's hashtag behavior after the bounded follow-up.
+
+---
+
 ## H2 — Account deletion production Stage 1 independent verification — 2026-09-29
 
 - task_id: `x-social-mobile-account-deletion-prod-stage1-verification-20260929`
