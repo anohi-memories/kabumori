@@ -2281,3 +2281,24 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - no deploy or real X post.
 - finish code: C2.
 - recommended Codex model: Luna（高）.
+
+
+## Final K3 Stage 2 account-deletion E2E partial
+- verdict: **PARTIAL**.
+- E1 never-connected deletion: PASS.
+- E2 shared-Auth/social-only deletion: PASS; Kabumori login/profile retained while social data was removed.
+- E4 retry/idempotency: PASS.
+- E5 unrelated-data invariants: PASS.
+- E3 X-connected disposable flow: BLOCKED before X revoke/Vault mutation.
+- blocker D1: native social-mobile data-source selection can fall back to mock because the public Expo env is not read in a bundle-safe static form.
+- additional UX issues: web deletion completion feedback is not visible; signup feedback permits confusing repeated submission.
+- feature activation readiness: NO.
+- only disposable test identities were mutated; existing real users/accounts/workspaces were untouched.
+
+
+## G3 native data-source and delete UX fix assigned
+- task_id: `x-social-mobile-native-data-source-and-delete-ux-fix-20260930`
+- scope: D1 native real-vs-mock selection, D2 web deletion completion feedback, D3 signup feedback/duplicate-submit protection.
+- no backend/migration/Edge/Auth-provider/production mutation.
+- finish code: K3.
+- recommended Claude model: Sonnet5（高）.
