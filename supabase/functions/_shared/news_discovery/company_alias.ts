@@ -9,9 +9,11 @@
 // Confirmation policy (N5-B, after the 2026-09-30 production canary confirmed 7504 "高速" from
 // "高速取引" and 9246 "プロジェクト" from "…プロジェクト（PIP）"): a dictionary hit that is not
 // hand-reviewed (a generated short name, or a short kanji official name embedded in a longer kanji
-// word) is only a candidate, unless the text also carries corroboration (ticker code, structured
-// ticker, a reviewed alias, a second alias, an explicit "株式会社" next to the name). Candidates are
-// never dropped: recall is kept, only the confirmed tier is made stricter.
+// word, or an unreviewed kanji official name of <= 2 characters) is only a candidate, unless the text
+// also carries corroboration (ticker code, structured ticker, a reviewed alias, a context term, a second
+// alias, or "株式会社" attached to an *official* name). A generated short name is never confirmed by a
+// company form: "株式会社プロジェクト" is not necessarily プロジェクトホールディングス.
+// Candidates are never dropped: recall is kept, only the confirmed tier is made stricter.
 import type { TickerCandidate, TickerMatchType } from "./types.ts";
 
 export type StockMasterRow = {
@@ -47,6 +49,8 @@ export type AliasEntry = {
   context_terms: string[];
   /** Occurrences inside these phrases are ignored. */
   negative_terms: string[];
+  /** Official name of a hand-reviewed (seeded) ticker. Unreviewed <= 2-character kanji names never confirm alone. */
+  reviewed?: boolean;
 };
 
 export type KnownAliasSeed = {
@@ -247,7 +251,7 @@ function isShortKatakanaWord(value: string): boolean {
 const HAN_ONLY = /^\p{Script=Han}+$/u;
 const HAN_CHAR = /\p{Script=Han}/u;
 
-/** A short (<= 3 characters) all-kanji name is usually an ordinary word (高速, 大和, 東北). */
+/** A short (<= 3 characters) all-kanji name is often an ordinary word (高速, 平和, 大和, 東北). */
 function isShortHanName(value: string): boolean {
   return HAN_ONLY.test(value) && [...value].length <= 3;
 }
@@ -290,6 +294,7 @@ export function buildAliasIndex(
       origin: "stocks_master",
       context_terms: demoted?.context_terms ?? [],
       negative_terms: negatives,
+      reviewed: !!seed,
     });
     for (const short of generatedShortNames(name)) {
       if ([...short].length < 2) continue; // "宝" from 宝ホールディングス matches everything
@@ -447,9 +452,11 @@ function tickerCodeMatches(text: string, index: AliasIndex): Map<string, boolean
   return found;
 }
 
-/** True when a short all-kanji alias sits inside a longer run of kanji ("高速取引", "日本高速"). */
-function isEmbeddedShortHanName(span: Span, text: string): boolean {
-  if (!isShortHanName(span.entry.alias)) return false;
+function isAmbiguousShortHanName(span: Span, text: string): boolean {
+  const alias = span.entry.alias;
+  if (!isShortHanName(alias)) return false;
+  if ([...alias].length <= 2 && !span.entry.reviewed) return true;
+  // 3 characters: only when the name sits inside a longer run of kanji ("日本高速道路").
   const before = span.start > 0 ? text[span.start - 1] : "";
   const after = span.end < text.length ? text[span.end] : "";
   return HAN_CHAR.test(before) || HAN_CHAR.test(after);
@@ -493,8 +500,9 @@ export function matchTickers(input: MatchInput, index: AliasIndex): TickerCandid
     if (!text) continue;
     for (const span of findSpans(text, index)) {
       const item = get(span.entry.ticker);
-      // An official short kanji name inside a longer kanji word ("高速" in "高速取引") is not a mention.
-      const strength = span.entry.strength === "EXACT_COMPANY_NAME" && isEmbeddedShortHanName(span, text)
+      // A short kanji official name is an ordinary word until proven otherwise: <= 2 characters (平和,
+      // 高速) never confirm alone unless reviewed; 3 characters only when embedded in a longer kanji word.
+      const strength = span.entry.strength === "EXACT_COMPANY_NAME" && isAmbiguousShortHanName(span, text)
         ? "WEAK_ALIAS"
         : span.entry.strength;
       item.types.add(strength);
@@ -502,7 +510,10 @@ export function matchTickers(input: MatchInput, index: AliasIndex): TickerCandid
       if (strength === "WEAK_ALIAS") {
         item.weakAliases.add(span.entry.alias);
         if (span.entry.context_terms.some((term) => fullText.includes(normalizeAliasText(term)))) item.contextHit = true;
-        if (hasCompanyFormContext(text, span)) item.companyContext = true;
+        // "株式会社" only corroborates an official name; a generated short name may belong to another company.
+        if (span.entry.kind === "official_name" && span.entry.origin === "stocks_master" && hasCompanyFormContext(text, span)) {
+          item.companyContext = true;
+        }
       }
       item.inTitle ||= inTitle;
     }
