@@ -33,13 +33,13 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: x-ai-salaryman-dev-diary-pr61-review-20260930
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: focused pre-production review of PR #61 AI Lab dev-diary generation, sanitizer and cross-brand shared-generator safety; no deploy; recommended Luna（高）
+- allocation: C2 FAIL; runtime diary asset packaging unproven and no-fixed-hashtag shared behavior needs scoping. Returned to G4.
 
 ## Claude G1
 - owner: claude
@@ -75,11 +75,11 @@
 - owner: claude
 - slot: claude-4
 - status: ready
-- task_id: x-ai-salaryman-dev-diary-content-shift-20260930
+- task_id: x-ai-salaryman-dev-diary-pr61-runtime-fix-20260930
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: 会社員AIラボをAI活用Tips中心から個人開発日記中心へ変更し、安全な共有開発進捗コンテキストを投稿AIとChatGPTで共有する。G3/Authには触れない。Recommended Sonnet5（高）
+- allocation: fix PR #61 runtime diary bundling/proof and scope hashtag behavior to AI Lab without changing other brands; no deploy; recommended Sonnet5（高）
 
 ## Deferred
 
