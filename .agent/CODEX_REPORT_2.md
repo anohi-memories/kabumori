@@ -1,3 +1,30 @@
+## H2 — AI Lab topic-deduplication PR #66 focused review — 2026-10-01
+
+- task_id: x-ai-lab-pr66-topic-dedup-review-20261001
+- result / verdict: **PASS**. Source review and requested regression checks support merging PR #66; no source edits, merge, or deploy were performed.
+- reviewed_head: PR #66 exact head 4f692e4d805ccd3ee628058bb20ee6c1f62cdd6d; open, GitHub mergeable=true, Netlify preview and Vercel status both success.
+- fresh_main_at_report: 040ca2919bb42db7499c08aa59325b3a388607ef. PR base was 2d2d044bcce5804cfdd3b7f64e25b66e45db16fd; inspected the 22 main commits since that base. None touched the PR's seven source paths. Current PR head remains unchanged.
+- changed_files_reviewed: all seven task-scoped files: ai_lab_brand_post_store.ts, ai_lab_dev_diary_context.ts, ai_lab_scheduled_brand_post.ts, ai_lab_theme_guard.ts, ai_lab_topic_dedup_test.ts, brand_post_generator.ts, and x-test-post/index.ts.
+- findings: none blocking within scope.
+- root_cause_and_rotation: production entry uses deterministic rotation over sanitized, fresh diary units before evergreen; concrete changed/difficulty/decision facts are carried in every seed; generic angle candidates are excluded with reason codes; balance/interleave avoids adjacent same-entry selections when multiple entries exist. The 200-shape randomized cyclic test passed. A single-entry diary truthfully cycles distinct cuts and does not fabricate a new event.
+- counter: countAiLabBrandPostsBefore performs one read-only GET scoped by brand_id=ai_salaryman_lab, post_type=brand_post, and strict scheduled_for < current; it reads PostgREST exact count from content-range. HTTP/parse/network failure returns null and invokes deterministic scheduled-hour fallback without blocking. No unrelated brand/type rows affect the exact query.
+- guard/retry: exactly three total generation attempts (initial plus at most two content-only retries); rejected drafts are held out of publish/completion, while generator/transport errors are not automatically retried. After a passing draft, brand/type, character count, cross-brand duplicate and final pre-publish guards remain in sequence. Retry instructions contain reason categories, not rejected draft text. Generic-theme and opener checks are scoped to AI Lab.
+- cross_brand: omitted/empty extraInstructions adds no prompt lines; only the AI Lab dispatcher supplies new lines. Runtime brand/type checks remain in place. No neutral/Kabumori/Mio voice, hashtag, scheduling, OAuth/Vault, DB/RPC/migration, Cron, or X API behavior changed.
+- tests:
+  - deno test -A --no-check supabase/functions/_shared/brand/ai_lab_topic_dedup_test.ts: **24 passed / 0 failed**.
+  - related diary/scheduled/store/generator/dispatch-guard tests: **55 passed / 0 failed**.
+  - deno test -A --no-check supabase/functions: **2337 passed / 0 failed**.
+  - deno check on the five changed shared runtime modules: **pass**.
+  - deno check supabase/functions/x-test-post/index.ts: six existing type errors in OAuth/image/morning-lane code. The same check at PR base 2d2d044 produced the same six diagnostics; no new AI Lab diagnostic was introduced.
+  - git diff --check 2d2d044..4f692e4: **pass**.
+- known_limitations: published body text is not persisted, so true semantic comparison with actual recent AI Lab posts is unavailable; current guard is bounded regex-theme/opener detection plus rotation, not semantic comparison over persisted history. One fresh diary entry can only rotate distinct cuts. Diary edits can reorder rotation; on counter-read failure, scheduled-hour fallback assumes AI Lab schedule slots do not collide within an hour.
+- merge_deploy_safety: **safe to merge** based on exact reviewed head, requested tests, current mergeable status, and no overlapping main-side source paths. After merge, only x-test-post needs a separately controlled redeploy; no deploy was requested/performed here.
+- changed_by_H2: .agent/CODEX_REPORT_2.md and .agent/tasks/CODEX_TASK_2.md only. PR source files unchanged.
+- production_mutation: **0**. Merge **0**, deploy **0**, real X/API calls **0**, DB/schema/RPC/migration **0**, Cron/settings/OAuth/Vault changes **0**.
+- safety_checks: local fixtures/stubs only; no production invocation, real X post, database write, or external AI generation.
+- next_recommendation: C2 may close the review. Treat the semantic-history limitation as a separate future task if true recent-post comparison is required.
+
+---
 ## H2 — AI Lab development-diary PR #61 final acceptance review — 2026-09-30
 
 - task_id: `x-ai-salaryman-dev-diary-pr61-final-acceptance-20260930`
