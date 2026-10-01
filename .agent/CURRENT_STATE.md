@@ -1,3 +1,15 @@
+## G3 assigned — social-mobile native navigation cleanup
+
+- task_id: `x-social-mobile-native-link-navigation-cleanup-20261001`
+- status: **ready**.
+- confirmed main issues: Accounts 「ログイン方法」 still uses the proven-bad Link-asChild + function-style Pressable composition; Settings 「会話で相談する」 uses Link-asChild around a non-forwarding Card and is a dead tap.
+- required: fix those two issues, remove the accounts allowlist exception, narrowly audit app/components for only the same two proven invalid patterns, add regression coverage, and native-tap verify in an isolated G3 Simulator.
+- G4 PR #65 is already merged/final, so its former Accounts ownership no longer blocks this work.
+- strict non-scope: x-connect/OAuth/Auth/account-deletion/common-account/DB/RLS/RPC/Edge/Vault/scheduler/flags/deploy.
+- production mutation / real X operations expected: 0 / 0.
+- recommended Claude model: **Sonnet5（高）**.
+- K3 will decide merge; extra Codex review normally unnecessary if the final delta remains UI/navigation-only.
+
 ## Final K4 PASS — iOS X account switching
 
 - verdict: **PASS**.
