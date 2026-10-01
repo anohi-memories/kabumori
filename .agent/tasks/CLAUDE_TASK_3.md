@@ -1,3 +1,78 @@
+# Claude Task 3 — CURRENT TASK
+
+- task_id: x-ai-lab-dev-diary-kabumori-hero-8state-sync-20261002
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- priority: low
+- recommended_model: Sonnet5（中）
+- type: AI Lab public-safe development diary context sync
+- production_mutation_allowed: false
+
+## Purpose
+
+Final K1で完了した「かぶモリ Home Report Hero 8-state integration」を、会社員AIラボの公開安全な開発日記題材へ同期する。
+
+これはX投稿生成ロジックの改修ではない。
+共有メモ正本と、そのcommit済みruntime snapshotの同期だけを行う。
+
+## Source fact
+
+実際に完了・merge確認済みの事実:
+- かぶモリHomeのレポートHeroで、レポート内容に応じて8種類のキャラクター表情を切り替えるUIを実装した。
+- 追加AI呼び出しなしで、保存済みレポートの情報から表示状態を決める。
+- 画面幅や「今日のポイント」1〜3件の差でも崩れないよう調整した。
+- iOS Simulatorで複数幅を確認した。
+- EAS build / production backend mutationは行っていない。
+
+公開文にはPR番号、task_id、branch、commit SHA、内部テーブル/関数名、秘密情報を入れない。
+
+## Required changes
+
+1. `supabase/functions/_shared/brand/ai_lab_dev_diary_context.md`
+   - 2026-10-02に既存entryがあるため、**同日entryを増やさない**。
+   - 既存2026-10-02 entryはX自動投稿アプリの不具合修正について書かれているので、その内容を壊さない。
+   - 1日1entry原則を守るため、今回のKabumori Hero内容を同entryへ無理に混ぜない。
+   - 代わりに **2026-10-03 entryとして先取りして書かないこと**。
+   - 結論として、正本Markdownへ新しい日付entryを追加できないため、今回のK1内容は**保留メモとしてTASK Reportへ記録するだけ**にする。日付が変わって実際の10/03作業が発生した場合のみ別TASKで追加する。
+
+2. このTASKでは runtime snapshot / generator / tests を変更しない。
+
+## Important
+
+「K1で公開安全な題材候補がある」こと自体は記録するが、存在しない日付の開発日記を捏造しない。
+同日1entryルールを破らない。
+既存2026-10-02 entryを書き換えて異なる2つの開発内容を混在させない。
+
+## Tests
+
+- source diffが `.agent/**` のみであること
+- `git diff --check`
+
+## Completion
+
+Reportに以下を記録:
+- task_id
+- result
+- diary update performed: no
+- reason: existing 2026-10-02 entry + one-entry-per-day rule
+- preserved public-safe candidate text for future manual/next-day use
+- production mutation: 0
+- changed_files
+- next_recommendation
+
+その後:
+- status -> done
+- next_owner -> none
+- STOP.
+
+Recommended model: **Sonnet5（中）**.
+
+---
+
+## Archived previous G3 task
+
 # Claude Task 3
 
 - task_id: x-social-mobile-native-link-navigation-cleanup-20261001
