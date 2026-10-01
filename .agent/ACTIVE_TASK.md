@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: common-account-pr70-corrective-rereview-20261001
+- status: ready
+- task_id: common-account-pr70-readiness-authorization-rereview-20261002
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepted FAIL / CHANGES REQUIRED at PR #70 head eebe9405d758e0c120f9e6f1a70cdb1e973a0855. Previous six blockers resolved. New blockers: post-cascade guard loses admin/foreign blockers, ready state not invalidated by requirement/Apple changes, built-in checkpoint semantics can be weakened, entitlement ownership transfer leaves source version stale. Production mutation 0. H1 free after fresh allocation.
+- allocation: PR #70 exact head 47a2ed6a1635177ba82004eace4bddb42d9d53e3 の第2是正を再レビュー。Phase 1 no-enforce/no-Auth-delete責任分離、durable readiness + invalidation inventory、latest 7 adverse cases、old 6 blockers、checkpoint semantic integrity、observer trigger、ACL/preflight/rollbackを独立検証。merge/apply/deploy禁止。推薦モデル Sol（高）。
 
 ## Codex H2
 - owner: codex
@@ -91,14 +91,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: done
 - task_id: common-account-pr70-guard-boundary-corrective-20261002
 - start_code: G5
 - finish_code: K5
-- next_owner: chatgpt
+- next_owner: none
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: PR #70第2是正。post-cascade blocker再検証依存を廃し、durable pre-delete authorization/invalidation contract、requirement epoch、built-in checkpoint semantic integrity、entitlement ownership immutability/両側version invalidationを実装・テスト。Phase 1 no Auth delete、production変更禁止。推薦モデル Opus5.5（極高）。
+- allocation: Final K5 PASS to rereview。PR #70 exact head 47a2ed6a1635177ba82004eace4bddb42d9d53e3。Phase 1からenforcing guardを外し、durable readiness/invalidation foundationへ限定。production mutation 0、merge/apply/deploy HOLD、H1 rereview assigned。
 
 ## Deferred
 
