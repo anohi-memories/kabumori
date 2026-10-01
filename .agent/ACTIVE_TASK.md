@@ -83,13 +83,13 @@ ning social-mobile account-deletion UI release blockers only: root-cause/fix inv
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- next_owner: chatgpt
-- status: review_required
+- next_owner: claude
+- status: ready
 - task_id: x-social-mobile-x-account-switch-auth-session-20261001
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: Final C1 accepted PR #65 source/security at exact head e5a66f5ba71f64b1a38d8f89faff3d0a31972949. Merge is still held until safe operator provider-side account-switch E2E proves a different X account can authenticate without silent reuse. Production mutation 0.
+- allocation: K4 HOLD. PR #65 source/security is already accepted at exact head e5a66f5ba71f64b1a38d8f89faff3d0a31972949; only safe operator provider-side iOS account-switch E2E remains. Prepare isolated G4 simulator/device flow, user performs X credential/authorization interaction, verify different disposable account + cancel/retry/reconnect, no real X post. No source change unless E2E exposes a defect. Recommended Sonnet5（高）.
 
 ## Claude G5
 - owner: claude
