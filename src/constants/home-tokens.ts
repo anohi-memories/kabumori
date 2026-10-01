@@ -47,8 +47,11 @@ export const HERO = {
   /** Colour under/below the art when the live points make the Hero taller than the art. */
   fillColor: '#e4f0e6',
   /** Bottom padding under the CTA and its side margins. */
+  /** Side margins of the CTA. */
   padding: 10,
-  ctaHeight: 34,
+  /** Space under the CTA: the CTA sits almost on the bottom edge of the art. */
+  ctaBottomInset: 4,
+  ctaHeight: 30,
   /** Minimum space between the last point and the CTA. */
   ctaGap: 4,
   /**

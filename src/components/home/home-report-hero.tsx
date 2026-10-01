@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
   // Report kind (朝刊 / 大引け) sits right after the baked-in 「今日のポイント」 label.
   reportKind: { position: 'absolute', left: HERO.metaLeft, top: HERO.metaTop, fontSize: 11, fontWeight: '800' },
   // flexGrow: with the spacer, the CTA stays at the bottom edge of a Hero that is only as tall as the art.
-  content: { flexGrow: 1, paddingBottom: HERO.padding },
+  content: { flexGrow: 1, paddingBottom: HERO.ctaBottomInset },
   pointsColumn: { marginLeft: HERO.pointsLeft, width: HERO.pointsWidth },
   points: { gap: 2 },
   pointRow: {
