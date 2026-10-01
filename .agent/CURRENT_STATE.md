@@ -1,3 +1,17 @@
+## Final K3 PASS — social-mobile account deletion UI
+
+- verdict: **PASS**.
+- PR #68 accepted at exact head `ec292b50f8d9622a9c35dd1ce62a7d9ec1c1512b` and squash-merged as `c1f4f42ab78430ee0c214759b4ddac280b7f2265`.
+- root cause: expo-router `Link asChild` style merging dropped a function-valued Pressable style, so the button background/padding disappeared while its white label remained.
+- fix: the two affected navigation buttons now use standalone Pressable + router navigation; Settings now exposes account management above the long content form.
+- native iOS Simulator Release check: both labels visible; routes land correctly; deletion feature gate remains OFF.
+- tests: 94/94, typecheck/lint/diff PASS.
+- no deletion backend/scope/Auth/DB/RLS/RPC/Vault/OAuth/feature-flag change; production mutation 0; real X operations 0.
+- no Codex review required for this narrow UI-only fix.
+- remaining non-blocking UI findings are tracked separately: similar accounts-screen styling in G4-owned scope and dead/non-forwarding Link-asChild cards such as Settings 「会話で相談する」.
+- source is merged; no App Store/TestFlight/native binary release occurred in this K3.
+- G3 closed and reusable after fresh allocation.
+
 ## Final K2 — Presentation v2 production deploy
 
 - verdict: **PASS**.
