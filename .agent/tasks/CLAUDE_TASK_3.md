@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-e3-delete-revoke-residue-20261001
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: critical
 - recommended_model: Opus5.5（高）
 - continues_from: x-social-mobile-pr63-merge-native-e3-resume-20260930
@@ -134,3 +134,75 @@ Then status -> review_required, next_owner -> chatgpt, STOP for K3.
 ## Previous G3 task closure
 
 Previous task `x-social-mobile-pr63-merge-native-e3-resume-20260930` reached Final K3 BLOCKED only because the first X identity was already connected to a protected production posting account. No destructive action occurred. Its report and Final K3 state remain in Git history / CURRENT_STATE and are not to be re-executed.
+
+## Report — x-social-mobile-e3-delete-revoke-residue-20261001
+
+- task_id: x-social-mobile-e3-delete-revoke-residue-20261001
+- result: **PASS** (E3 complete: deletion, X revoke, residue, protected invariants all verified). Two UI findings and one retained-by-design item are listed under remaining issues.
+- model: Opus 5.5
+
+### Destructive approval boundary
+- Phase 1 (read-only baseline) finished, then STOP. Fresh explicit approval was requested in the conversation with the exact operation, expected effects and "feature stays OFF globally".
+- User answered "承認する（自分で削除ボタンを押す）" at 2026-09-30T15:50:00Z (JST 10/1 00:50). No older approval was reused.
+- The delete button was pressed once, by the user, in the local Simulator build. Claude pressed no destructive control.
+
+### Deletion result
+- App showed「削除しました — このアプリのデータを削除しました。ログイン用アカウントと「かぶモリ」のデータは残っています。」and returned to the login screen with the same notice banner (D2 fix confirmed on native).
+- Scope: `social_only` (the disposable login also has a main-app profile), as predicted in Phase 1.
+- Audit trail for the subject after the approval boundary (UTC): requested 15:57:07.42 → started 15:57:07.47 → x_revoked 15:57:07.91 → purged 15:57:07.95 → completed_social_only 15:57:08.05. No `failed` / `operator_required` / `blocked` row, no reason code. One attempt, no retry.
+
+### X revoke proof
+- Server-side: the flow stops with X_REVOKE_FAILED unless the X revoke endpoint returns success for both the refresh and the access token of exactly this account, and the `x_revoked` checkpoint is only written when the fingerprints of the revoked material match the credential set. The `x_revoked` audit row exists, followed by `purged`.
+- Provider-side (user read-only check, logged in as `@tigers_torataro`): the app is no longer listed under X "connected apps". Nothing was pressed there.
+- No global app revoke, no provider-console change, no real X post used as a test.
+
+### Residue matrix (disposable subject, before → after)
+| boundary | before | after | class |
+|---|---|---|---|
+| workspace | 1 | 0 | removed |
+| membership | 1 | 0 | removed |
+| social account (`tigers_torataro`, identity_verified, publish_enabled=false) | 1 | 0 | removed |
+| token references in Vault (access + refresh) | 2 | 0 | removed |
+| OAuth transient states (5 unconsumed) | 6 | 0 | removed |
+| refresh state / scheduled posts / post logs / claims / windows / fingerprints of the workspace | 0 | 0 | none existed |
+| deletion tombstone | 0 | 0 | none left (removed at finalize, as designed) |
+| deletion audit rows (hashed subject only) | 10 | 15 | expected retained audit |
+| Auth user / identity (email) / profile | 1 / 1 / 1 | 1 / 1 / 1 | expected retained (`social_only`: login belongs to the main app) |
+| Auth sessions / refresh tokens | 3 / 4 | 3 / 4 | expected retained with the login (device sign-out is local) |
+| handle present anywhere else | 0 | 0 | none |
+
+Unexpected residue: **none**.
+
+### Protected-account invariants (before = after, byte-equal hashes)
+- protected social accounts: 3, row hash (ids, workspace, platform user, both token references, publish flag, status, updated_at) unchanged
+- Vault rows referenced by protected accounts (id + updated_at hash) unchanged; all other Vault ids unchanged; Vault total 22 → 20 (= exactly the two disposable references)
+- refresh state count/hash, refresh rollout, non-user workspaces hash, the other pre-existing user workspace: unchanged
+- scheduled_posts 408, post_execution_logs 949 (latest timestamp unchanged, before the test), publish_claims 20, posting_windows 19, fingerprints 103: unchanged
+- auth users 4, profiles 2: unchanged
+- global totals changed only by the disposable rows: user workspaces 2→1, memberships 2→1, social accounts 4→3, OAuth states 28→22
+
+### Other fields
+- source changes: none committed. No PR.
+- local-only temporary config (uncommitted, not in any product build): `.env.local` (real-data mode + deletion flag), `app.config.js` (throwaway bundle id), generated `ios/`, and a one-line ephemeral auth-session option in the X-connect hook used only to pick the right X account. The hook edit has been reverted in the worktree; the other files stay untracked until K3, then are removed.
+- feature flag: the deletion entry is still gated by the client build flag, which is unset in every committed config. Nothing was enabled globally. No secret, Edge function, migration or provider setting was changed.
+- tests/checks: operational verification only (read-only SQL before/after diff). No code changed, so no test run.
+- production mutations performed exactly: (1) the user's X connect for the disposable account (new social account + 2 Vault references + OAuth states), done before this TASK; (2) one account-deletion call by the user, which revoked that X authorization and removed the rows above and wrote 5 audit rows. Nothing else.
+- real X posts = 0. No scheduler/manual publish.
+
+### Remaining issues
+1. **Invisible buttons on the Login methods screen (native iOS, Release build).** 「アカウントの削除について」and「投稿用のX接続を確認する」render as blank space; the hidden area is still tappable and navigates. The deletion entry is effectively undiscoverable for a signed-in, onboarded user (the onboarding-gate entry from PR #59 is visible and fine). Release blocker for the deletion feature; needs a source fix + Simulator check. Not fixed here (operational task).
+2. **Deletion entry is deep**: Home → アカウントを切り替える → ログイン方法 → bottom card. Not in the 設定 tab, where the user looked first. Consider a direct entry.
+3. X auth session reuses the previous X login (already assigned to G4).
+4. The disposable login itself remains in production (main-app profile exists → `social_only`). Removing it is a main-app (G1/G2) account-delete or operator action; not done.
+5. Unchanged release gates: Apple production config, legal URLs/texts, audit retention policy, main-app account-delete coordination.
+
+### Safety checks
+- no token plaintext, Vault plaintext, secret value/id or personal email in logs or this report
+- every destructive selector was the caller-bound deletion flow of the disposable user; no first-row fallback, no manual SQL mutation, no cleanup mutation
+- protected production posting accounts untouched and proven unchanged
+- dedicated G3 worktree only; G4 worktree and X-connect source untouched
+
+### Next recommendation
+- Final K3 for E3 = PASS candidate.
+- Open a small source task for issue 1 (and decide issue 2) before the deletion flag can be enabled in any product build.
+- Decide who removes the leftover disposable login (issue 4).
