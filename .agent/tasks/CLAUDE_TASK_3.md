@@ -1,5 +1,435 @@
 # Claude Task 3 — CURRENT TASK
 
+- task_id: x-social-mobile-ai-consult-v1-20261002
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Opus5.5（高）
+- type: feature implementation / AI conversation / Edge Function / authenticated settings proposal
+- production_mutation_allowed: false
+
+## Product goal
+
+X自動投稿アプリの「AIと相談する」を、現在のローカル疑似判定から**本当にAIと自然に会話できる機能**へ進める。
+
+この機能は投稿生成そのものではなく、その前段としてAIがユーザーを理解する場所。
+
+ユーザーは普通の会話で、
+- どんな投稿をしたいか相談する
+- AIから不足情報を質問してもらう
+- 発信テーマ、文体、読者、目的、NG表現などを整理する
+- 現在AIが理解している投稿方針を聞く
+- 簡単な雑談や一般的な質問をする
+ことができる。
+
+会話から設定変更候補が生まれても、**AIは勝手に保存しない**。
+必ずユーザーが内容を確認して「これで覚えて」等の明示操作をした後だけ、既存の投稿設定 / PersonaProfileへ保存する。
+
+過去X投稿の実取得・分析はこのTASKでは行わない。現在の同意導線・意図検出を壊さず、K3後に別G4 TASKとして接続できる境界だけ維持する。
+
+## Existing foundation — preserve and reuse
+
+Fresh mainで以下が既に存在する。
+
+- `apps/social-mobile/src/app/(tabs)/consult.tsx`
+  - 会話画面
+  - 保存前提案カード
+  - 明示確認
+  - existing settings/persona read/save
+- `apps/social-mobile/src/domain/content-settings.ts`
+  - `SocialMobileContentSettings`
+  - `PersonaProfile`
+- `apps/social-mobile/src/domain/content-settings-conversation.ts`
+  - bounded structured proposal
+  - untrusted AI-output validator
+  - publish/account/OAuth/token/scheduler controlsの拒否
+  - past-post learning intent scaffold
+- `apps/social-mobile/src/data/content-settings-repository.ts`
+  - existing `social_mobile_content_settings` storage
+  - settings + confirmed persona save
+  - settings-only saveがpersonaを消さない設計
+
+Current `createConversationalAssistantProposal()` is deterministic/local scaffolding. This TASK replaces the runtime conversation path with an authenticated server-side AI boundary while keeping deterministic helpers/validators useful for tests/fallback where appropriate.
+
+## Mandatory startup / isolation
+
+1. Read `PROJECT_RULES.md`, `CLAUDE.md`, `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, this TASK.
+2. Use an independent G3 worktree/checkout. Do not use G1/G2/G4/G5/H1/H2 worktrees, untracked files, simulator, Metro or branch.
+3. Fresh `origin/main`.
+4. Confirm G4 is done and PR #65 merged.
+5. Confirm G5/H1 common-account PR #70 work does not overlap intended runtime files.
+6. **Do not create or edit a DB migration in this TASK.** Existing `social_mobile_content_settings` schema/persona columns are the storage boundary. If production/source schema is actually insufficient, STOP and report the exact missing column/constraint instead of creating a migration while the common-account migration review is active.
+7. Inspect existing AI/LLM Edge Functions/shared helpers/model config and reuse the established provider/client/usage/error patterns. Do not introduce a new AI vendor or duplicate secret scheme.
+
+## Functional requirements
+
+### 1. Real conversational AI
+
+Implement an authenticated server-side AI conversation endpoint for social-mobile consultation.
+
+Preferred boundary:
+- a dedicated narrowly scoped Edge Function such as `social-mobile-consult`, unless repository conventions clearly point to an existing suitable endpoint.
+- client never receives AI provider secret.
+- no direct provider call from Expo client.
+
+Request should be bounded and include only what the assistant needs:
+- current brand/workspace id
+- current confirmed `SocialMobileContentSettings`
+- current confirmed `PersonaProfile` if present
+- bounded recent conversation turns from this consultation session
+- current user message
+
+Do not send:
+- OAuth tokens
+- X access/refresh tokens
+- Vault ids/plaintext
+- provider credentials
+- unrelated workspace data
+- raw account deletion/auth internals.
+
+Keep history bounded. Do not send an unlimited chat transcript.
+
+### 2. Natural conversation modes
+
+The AI must support at least these behaviors without requiring explicit mode buttons:
+
+**A. General conversation / simple questions**
+Examples:
+- 「今日何投稿しようかな」
+- 「Xってどれくらいの頻度がいい？」
+- 「最近ネタがない」
+- 「ちょっと疲れた」
+- simple casual conversation / brainstorming / general questions
+
+It should answer naturally.
+A normal answer **must not automatically create a settings proposal**.
+
+No web search/current-news browsing in v1. If the user asks for genuinely current/external facts that cannot be known from supplied context, the assistant should say that this consultation chat does not currently fetch live web information rather than inventing it.
+
+**B. Preference discovery**
+When the user wants help deciding posting style or has not supplied enough detail, AI should ask concise follow-up questions naturally.
+
+Important:
+- avoid a rigid questionnaire dump.
+- ask preferably 1 useful question at a time, at most 2 when tightly related.
+- do not force questions when enough information exists.
+- use already confirmed settings/persona so it does not repeatedly ask what it already knows.
+
+Useful dimensions include:
+- main themes
+- intended audience
+- purpose
+- tone/formality
+- post length / sentence length
+- emoji/punctuation tendencies
+- CTA style
+- hashtag tendency
+- topics/expressions to avoid
+- posting frequency preference
+- personal/private disclosure boundaries where explicitly discussed
+
+Do not invent personal facts.
+
+**C. Explain current understanding**
+If user asks things like:
+- 「今どういう設定になってる？」
+- 「俺の投稿方針どう理解してる？」
+AI should explain the currently saved settings/persona clearly without proposing a mutation unless the user asks to change something.
+
+**D. Settings/persona proposal**
+Only when the conversation contains a reasonably clear preference/change should the AI return a structured proposal delta.
+
+Examples:
+- 「もっと親しみやすくして」
+- 「AIの話を多めにしたい」
+- 「絵文字は少なめ」
+- 「週5回くらい」
+
+Proposal must be a **delta**, not a replacement snapshot, so unrelated saved fields are preserved.
+
+Ambiguous statements such as「AIの話多めでもいいかな」should be handled conversationally and may ask/offer confirmation rather than silently treating them as durable settings.
+
+### 3. Structured AI contract
+
+Keep/reuse `validateConversationalAssistantResult()` as the trust boundary and strengthen it if needed.
+
+Model output must be parsed as untrusted structured data containing conceptually:
+- assistant reply
+- optional settings delta
+- optional persona delta
+- follow-up questions
+- confidence / uncertainty
+- history-learning intent
+- requires confirmation = true for any persistent change
+- publish permission changed = false
+
+Add explicit distinction if helpful between:
+- chat-only response
+- clarification/question
+- proposal
+
+But do not allow the model to control:
+- auto-post on/off
+- publish permission
+- posting execution
+- scheduler
+- OAuth/account selection
+- Auth/session
+- deletion
+- secrets/tokens.
+
+Malformed/unsafe structured output must fail closed:
+- show a safe retryable assistant error or safe chat fallback
+- do not save anything
+- do not alter posting state.
+
+### 4. Confirmation and persistence
+
+Existing principle remains mandatory:
+
+**conversation → proposal → user confirmation → save**
+
+Never:
+- mutate settings on AI response arrival
+- mutate persona because AI “learned” something without confirmation
+- enable posting
+- create scheduled posts
+- change X connection.
+
+When user confirms:
+- apply only the returned delta to the latest known/safely refreshed saved state
+- preserve unrelated existing fields
+- save settings/persona using the existing repository/storage boundary
+- visibly report save success/failure.
+
+If a proposal became stale because saved settings changed during the conversation, prefer re-read/merge or require reconfirmation rather than silently overwriting unrelated newer settings.
+
+### 5. Conversation UX — functional only
+
+UI design will be substantially redesigned later. Do NOT spend time on polish.
+
+Functional minimum:
+- user message input
+- send action
+- visible assistant/user turns
+- loading state
+- retryable error state
+- proposal/“AIが理解した内容” block only when there is something persistent to confirm
+- clear explicit confirmation button
+- clear indication after successful save
+- user can keep chatting after a proposal/save
+- current settings can be explained through conversation.
+
+Do not redesign global navigation, theme, cards, spacing, animation, avatar, etc.
+
+### 6. Past-post learning handoff
+
+Do **not** fetch X history in this TASK.
+
+If user says:
+- 「過去の投稿を読んで」
+- 「自分の過去ポストから学んで」
+the AI may recognize the intent and explain that past-post learning requires explicit confirmation / the upcoming learning flow.
+
+Preserve a structured `historyLearningIntent` boundary so the next G4 task can attach:
+- verified connected X account
+- bounded post fetch
+- style analysis
+- user confirmation
+without redesigning this chat contract.
+
+No X API read/write in this TASK.
+
+## Authentication / authorization boundary
+
+Because this adds an Edge Function/API boundary:
+
+1. Require valid user JWT/session.
+2. Do not trust a client-supplied brand id by itself.
+3. Verify the caller has current allowed membership/ownership for that brand using the repository's established social-mobile authorization pattern.
+4. Do not use future/common-account service entitlement semantics from unmerged PR #70.
+5. Fail closed for missing/ambiguous membership.
+6. Never log Authorization headers, JWTs, user email, AI provider secrets, X tokens, or full sensitive conversation bodies.
+7. Prefer metadata-only logs: request id, result class, bounded lengths/counts, error code, duration/model usage if existing conventions support it.
+
+## Cost / abuse bounds
+
+Reuse existing AI cost/usage helpers if present.
+
+At minimum:
+- cap user message length
+- cap number of conversation turns sent
+- cap total context length
+- cap model output
+- one model call per send under normal path
+- no automatic recursive “agent” loops
+- no web search
+- no X API call
+- bounded timeout
+- deterministic error path.
+
+Use the least expensive existing model/config that safely supports the repository's structured-output contract; do not introduce a premium model simply because Claude is implementing the feature.
+
+## Data/privacy behavior
+
+For v1:
+- do not create a new table to persist raw chat transcripts.
+- raw conversation may live in screen/session state only.
+- durable memory is the **user-confirmed structured settings/persona**, not the entire transcript.
+- do not store raw conversation text in analytics/logs.
+- if existing observability captures request bodies, explicitly prevent consultation text from being logged there.
+
+This keeps the “AI learns me” behavior transparent: it remembers only what the user confirms.
+
+## Tests
+
+Add focused tests for at least:
+
+### Server/API
+- unauthenticated request rejected
+- caller without brand membership rejected
+- valid member accepted
+- bounded message/history input
+- oversized/malformed input rejected
+- AI secret never returned/logged
+- safe model response parses
+- malformed JSON/shape fails closed
+- model attempt to include publish/OAuth/token/scheduler/account controls rejected
+- chat-only response creates no proposal
+- proposal response cannot persist by itself
+- current-settings explanation path has no mutation
+- past-post intent creates no X API call
+- provider timeout/error is safe/retryable
+- model call count bounded
+
+### Domain/client
+- multi-turn assistant history sent in bounded form
+- normal chat displays reply without proposal card
+- follow-up question displays naturally
+- proposal displays only changed fields
+- explicit confirmation persists
+- unconfirmed proposal persists nothing
+- correction in later turn supersedes/replaces prior pending proposal safely
+- unrelated settings remain unchanged when applying a delta
+- existing persona not erased by settings-only confirmation
+- settings changed after proposal cannot be silently clobbered
+- general chat never toggles posting/scheduling/X connection
+- history-learning request stays consent-gated / no fetch.
+
+Run:
+- new focused tests
+- full social-mobile tests
+- relevant Edge Function/shared tests
+- typecheck / lint / runtime check per repo conventions
+- `git diff --check`
+- secret scan
+- scope diff check.
+
+No live paid AI call is required in automated tests; mock/stub the model boundary.
+
+## Local verification
+
+Use G3-owned environment only.
+
+Verify with local/mock AI responses or a safe dev invocation:
+1. greeting / casual conversation returns a natural answer
+2. 「どんな投稿にしたらいい？」 produces a useful follow-up question
+3. 「親しみやすく、AIの話を多めにしたい」 produces a reviewable proposal
+4. before confirmation, saved settings unchanged
+5. after explicit confirmation, local/test storage shows only intended changes
+6. 「今どういう設定？」 explains saved understanding
+7. 「過去投稿を読んで」 does not call X and remains consent-gated
+8. no posting/schedule/X connection side effect.
+
+Do not use real X posting or destructive production flows.
+
+## DB / migration rule
+
+**No new migration in this task.**
+Use the existing `social_mobile_content_settings` settings/persona storage.
+
+If the required production schema columns are absent or incompatible:
+- STOP
+- report exact evidence
+- do not create a migration
+- do not borrow/modify PR #70 common-account migration.
+
+## Explicit non-scope
+
+- actual past-X-post retrieval/analysis
+- AI-generated post creation
+- editing/regeneration/approval of a generated post
+- automatic posting
+- scheduled posting
+- X API read/write
+- x-connect/OAuth behavior
+- login provider changes
+- account deletion
+- common-account/service-entitlement implementation
+- new DB migration/schema
+- major UI redesign
+- production deploy
+- feature flag rollout.
+
+## Production / safety
+
+This is **source + tests + PR only**.
+
+Forbidden:
+- production Edge Function deploy
+- production DB mutation
+- migration apply
+- real X API operation
+- real X post
+- Vault mutation
+- Auth mutation
+- provider configuration mutation.
+
+## Completion / K3
+
+Report:
+- task_id
+- result
+- architecture / endpoint chosen
+- existing foundations reused
+- exact AI request/response trust boundary
+- authorization checks
+- chat modes implemented
+- confirmation/persistence semantics
+- changed_files
+- tests
+- local verification
+- AI/provider/model usage policy
+- DB migration = none
+- production mutation = 0
+- real X operations = 0
+- remaining issues
+- safety_checks
+- commit_hash / push / PR
+- next_recommendation.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K3.
+
+### Expected next stage
+
+Because this task introduces an authenticated AI Edge Function/API boundary, K3 should normally allocate a focused Codex review before merge.
+
+Likely review:
+- H2 if free
+- recommended Codex model: **Sol（高）**
+- focus: Auth/membership boundary, prompt/structured-output injection, no implicit persistence, cost bounds, no publish/X side effects.
+
+Only after source review/merge should G4 be assigned the real **past-post learning** integration.
+
+---
+
+# Claude Task 3 — CURRENT TASK
+
 - task_id: x-ai-lab-dev-diary-kabumori-hero-8state-sync-20261002
 - owner: claude
 - slot: claude-3
