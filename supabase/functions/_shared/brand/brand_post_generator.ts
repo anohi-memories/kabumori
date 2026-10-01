@@ -85,6 +85,7 @@ export async function generateBrandPost({
   topicSeed,
   generationPurpose = "scheduled",
   contentSettings,
+  extraInstructions = [],
   fetchImpl = fetch,
 }: {
   openAiApiKey: string;
@@ -93,6 +94,11 @@ export async function generateBrandPost({
   topicSeed?: string;
   generationPurpose?: "scheduled" | "social_mobile_preview";
   contentSettings?: SocialMobileContentSettings;
+  /**
+   * Caller-supplied, brand-scoped prompt lines (currently only AI Lab's diversity rules). Omitted/empty
+   * leaves the prompt byte-identical to before, so no other brand's generation changes.
+   */
+  extraInstructions?: readonly string[];
   fetchImpl?: typeof fetch;
 }): Promise<BrandPostDraft> {
   // Generation is allowed for dry_run and live (same rule as buildBrandDryRunPreview) -- only a
@@ -128,6 +134,7 @@ export async function generateBrandPost({
       ? [context.codeProfile.dryRunPromptPreamble]
       : []),
     ...(contentSettings ? socialMobileGenerationGuidance(contentSettings) : []),
+    ...extraInstructions,
     lengthPolicy
       ? "日本語で、自然な一つの投稿本文だけを書いてください。見出し・箇条書き記号・前置きは不要です。"
       : "日本語で、200〜400文字程度の自然な一つの投稿本文だけを書いてください。見出し・箇条書き記号・前置きは不要です。",
