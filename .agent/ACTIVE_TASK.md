@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: kabumori-pr67-shared-report-v2-hard-fact-review-20261001
+- status: ready
+- task_id: common-account-kabumori-delete-cross-service-safety-review-20261001
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 PASS-WITH-FIX; PR #67 final head d6f9c9a reviewed and accepted, merged to main 09975d02; production mutation from review=0; H1 is free after fresh allocation.
+- allocation: 共通アカウントPhase 0で確認した既存production Kabumori account deletionのcross-service Auth hard-delete riskをsource/security reviewし、必要なら最小のfail-closed source/test修正まで行う。production deploy/migration/Auth user deletion/OAuth revoke/Vault mutationは禁止。G3/G4のsocial-mobile scopeを変更しない。推薦モデル Sol（高）。
 
 ## Codex H2
 - owner: codex
@@ -94,14 +94,15 @@ ning social-mobile account-deletion UI release blockers only: root-cause/fix inv
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: done
 - task_id: common-account-v1-phase0-prod-readonly-inventory-20261001
 - start_code: G5
 - finish_code: K5
-- next_owner: chatgpt
+- next_owner: none
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: 共通アカウントv1 Phase 0。repository + productionのAuth/identity、Kabumori/X service population、ownership、RLS/service_role、deletion/cascade、OAuth/Vault境界をread-onlyでinventoryし、entitlement shadow-backfill判定を作る。実装/migration/RLS/Auth/OAuth/Vault/deploy/production mutationは禁止。G3/G4のsocial-mobile作業を変更しない。推薦モデル Opus5.5（極高）。
+- allocation: Final K5 PASS。共通アカウントv1 Phase 0 production/repository read-only inventory完了。production mutation 0、runtime source変更0。次のG5 Phase 1はH1安全レビューとG3/G4競合解消後にfresh allocationする。G5は再利用前にfresh空き確認必須。
+
 ## Deferred
 
 - PR #15 is closed with Final K4 PASS. PR #33 remains unmerged; its Auth/security review/merge decision can now be scheduled separately after fresh slot review.
