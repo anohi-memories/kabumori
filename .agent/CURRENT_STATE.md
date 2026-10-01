@@ -1,3 +1,13 @@
+## G3 assigned — finish social-mobile account deletion UI
+
+- task: `x-social-mobile-account-deletion-ui-release-finish-20261001`
+- recommended Claude model: **Sonnet5（高）**.
+- previous E3 operational deletion/revoke task is Final K3 PASS and preserved as history.
+- scope is UI-only release cleanup: root-cause/fix invisible native button labels on Login methods and add a discoverable account-management entry from Settings.
+- do not change current deletion scope/backend/Auth/RLS/RPC/Vault/OAuth semantics and do not implement the new common-account/service-entitlement design here.
+- do not touch G4 X account-switch files; PR #65 remains a separate held workstream.
+- source/tests/PR only; deletion feature gate remains globally OFF; production mutation 0; no destructive operation or real X action.
+
 ## K2 — PR #67 shared report v2 source candidate
 
 - verdict: **PASS to focused review; merge/deploy HOLD**.
