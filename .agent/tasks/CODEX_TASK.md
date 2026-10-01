@@ -1,5 +1,130 @@
 # Codex Task
 
+- task_id: common-account-kabumori-delete-cross-service-safety-review-20261001
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- priority: highest
+- recommended_model: Sol（高）
+- type: security review / bug fix / Auth deletion boundary
+- target: fresh origin/main; existing production-deployed Kabumori account deletion source
+- production_mutation_allowed: false
+
+## Purpose
+
+共通アカウントv1 Phase 0（G5）のread-only inventoryで確認された、既存Kabumori account deletionのcross-service lifecycle riskを独立レビューする。
+
+現在のKabumori deletionは共有Supabase Auth userをhard deleteする一方、X自動投稿側のworkspace / posting authorization / Vault credential / admin ownershipを認識しない。現時点で両service利用者は0人だが、共通ID導入後にそのまま残すと一サービスの退会が他serviceへ影響する。
+
+このTASKでは、まずsource/securityレビューを行い、**小さく安全で決定的な暫定fail-closed修正が可能なら source + tests まで実施してよい**。production deployはしない。
+
+## Mandatory startup / isolation
+
+1. PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / G5 Final K5 + Reportを読む。
+2. H1専用の独立worktree/checkoutを使用。
+3. fresh origin/mainを取得。
+4. G3はsocial-mobile account deletion UI、G4はX posting OAuth account-switchを扱っている。G3/G4のbranch/files/PRを変更・merge・rebase/resetしない。
+5. pending PRのchanged filesを確認し、Kabumori account-delete scopeと競合があればSTOP。
+
+## Facts from G5 to independently verify
+
+- production Kabumori account-delete is ACTIVE and verify_jwt=true.
+- source path hard-deletes the authenticated Supabase Auth user.
+- shared Auth hard delete cascades at least to Kabumori profile data, admin membership, X membership/OAuth-state references, while X workspace/social account/Vault credential can remain because they are not directly Auth-owned.
+- X authorization revoke is not performed by Kabumori deletion.
+- X social-mobile deletion has stronger cross-service/admin guards and service-specific cleanup, but must not be copied blindly.
+- current production population has no user simultaneously classified as Kabumori + user-facing X workspace owner, so this is a latent boundary defect rather than evidence of an already-corrupted shared user.
+
+Treat these as G5 findings to verify, not assumptions to silently trust.
+
+## Review questions
+
+1. Is the Kabumori hard-delete path actually reachable from current client UI and production deployment?
+2. Exactly which shared/cross-service rows cascade or remain orphaned if Auth user is deleted?
+3. Can an admin account currently delete itself through the Kabumori path?
+4. What is the smallest safe interim guard before common-account orchestrator exists?
+5. Should the interim path fail closed when any of the following exist:
+   - admin ownership
+   - X/social-mobile user-facing membership/workspace ownership
+   - active/pending posting OAuth state or other service footprint
+   - any other shared-account evidence found in source/production metadata
+6. Does the interim correction preserve legitimate Kabumori-only account deletion?
+7. Is server-side reauthentication/session freshness already adequate, or is a separate issue required? Do not expand into a large auth redesign in this TASK.
+8. What regression tests prove “Kabumori-only may delete” and “other-service/admin footprint cannot be hard-deleted here”?
+
+## Fix authority
+
+Allowed only if review shows a bounded source-only fix:
+
+- modify Kabumori account-delete Edge Function and narrowly related tests/docs
+- add a server-side fail-closed pre-delete ownership/other-service guard using existing schema
+- preserve current JWT verification and Auth ownership
+- return a truthful non-success error requiring common-account/service-specific lifecycle handling
+- add regression tests
+
+Do not introduce common_accounts/service_entitlements yet.
+Do not create/apply migrations or RLS changes in this TASK.
+
+If safe correction requires schema migration, new lifecycle orchestrator, provider revoke redesign, or broad cross-service semantics, **do not implement**; report CHANGES REQUIRED for G5 Phase 1.
+
+## Forbidden
+
+- production deploy
+- production DB write
+- migration apply
+- Auth user create/update/delete
+- identity link/unlink
+- X OAuth authorize/revoke
+- Vault secret read/write/delete
+- account deletion execution
+- real X operations
+- feature flag / Cron / secret / provider setting changes
+- G3/G4 source changes
+- common-account Phase 1 schema implementation
+
+Read-only production metadata checks are permitted only if already available through safe authorized tooling; never expose PII/secrets.
+
+## Required verification
+
+At minimum:
+
+- inspect account-delete source and client entry path
+- inspect current FK/cascade ownership relevant to cross-service deletion
+- focused account-delete tests
+- static/type/lint/diff checks appropriate to changed scope
+- tests for Kabumori-only allowed path if behavior preserved
+- tests for admin and X-service footprint blocked path if implemented
+- confirm no X revoke/Vault mutation is introduced into Kabumori service-only path
+- confirm production mutation = 0
+
+## Completion / C1
+
+Append a new report to `.agent/CODEX_REPORT.md`.
+
+Report:
+
+- PASS / PASS-WITH-FIX / FAIL
+- exact reviewed main/head and final head if source changed
+- confirmed risk and affected boundaries
+- findings by severity
+- interim guard decision
+- changed_files
+- tests
+- production mutation = 0
+- whether source is safe to merge
+- whether any production deploy is recommended/held
+- what remains for G5 common-account Phase 1
+- next recommendation
+
+At completion: status -> review_required, next_owner -> chatgpt, STOP for C1.
+
+---
+
+## Previous completed H1 task history — preserved below
+
+# Codex Task
+
 - task_id: kabumori-pr67-shared-report-v2-hard-fact-review-20261001
 - owner: codex
 - slot: codex-1
