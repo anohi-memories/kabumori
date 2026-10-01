@@ -71,13 +71,13 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
+- status: done
 - task_id: x-social-mobile-account-deletion-ui-release-finish-20261001
 - start_code: G3
 - finish_code: K3
-- next_owner: chatgpt
-- source: .agent/tasks/CLAUDE_TASK_3.md
-- allocation: canonical G3 TASK preserved; social-mobile account-deletion UI release finish awaits K3 review. No G2 overlap.
+- next_owner: none
+- source: `.agent/tasks/CLAUDE_TASK_3.md`
+- allocation: Final K3 PASS. PR #68 exact head ec292b50f8d9622a9c35dd1ce62a7d9ec1c1512b squash-merged as c1f4f42ab78430ee0c214759b4ddac280b7f2265. Native button visibility/navigation and Settings account-management entry verified. No deletion backend/Auth/DB/OAuth/Vault/flag change; no extra Codex review. G3 is free after fresh allocation.
 
 ## Claude G4
 - owner: claude
