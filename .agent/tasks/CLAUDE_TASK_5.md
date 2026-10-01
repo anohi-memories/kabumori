@@ -1,5 +1,339 @@
 # Claude Task 5 — CURRENT TASK
 
+- task_id: common-account-v1-phase1-additive-lifecycle-foundation-20261001
+- owner: claude
+- slot: claude-5
+- status: ready
+- next_owner: chatgpt
+- priority: highest
+- start_code: G5
+- finish_code: K5
+- recommended_model: Opus5.5（極高）
+- type: architecture + additive schema/lifecycle foundation source candidate
+- production_mutation_allowed: false
+
+## Purpose
+
+共通アカウントv1 Phase 1として、Phase 0 inventoryとH1/C1の削除境界レビューを踏まえ、**additiveでrollback可能な共通アカウント / service entitlement / lifecycle serialization基盤のsource候補**を作る。
+
+このTASKはsource・migration candidate・disposable testまで。
+**production migration apply / backfill / deploy / RLS enforcement / real Auth deletionは禁止。**
+
+中心設計：
+
+```text
+auth.users.id
+= 共通本人ID
+
+common_accounts
+= 共通アカウントapplication state
+
+service_entitlements
+= service利用登録
+
+public.profiles
+= Kabumori固有rootのまま
+
+brand_memberships
+= X workspace authorization / roleのまま
+```
+
+各アプリの新規登録は将来：
+
+```text
+共通アカウント作成 / 既存共通アカウント認証
++
+そのアプリのservice entitlement作成
+```
+
+Kabumoriから初回登録 → common account + kabumori entitlement。
+X自動投稿から初回登録 → common account + x_autopost entitlement。
+既存common accountが別serviceへ来た場合 → 本人認証後、そのservice entitlementだけ作る。
+
+## H1/C1 accepted safety constraint
+
+既存Kabumori account-deleteは、事前readだけを追加しても安全にならない。
+
+理由：
+
+1. Kabumori側が「X footprintなし」をread
+2. 並行してauthenticated userがX workspace/membership/OAuth stateを作成
+3. Kabumoriが別requestでAuth hard delete
+4. membership/stateだけcascadeし、workspace/social account/authorization/Vault等が残り得る
+
+したがってPhase 1では、削除/利用開始を直列化できる**明示的なlifecycle state / lock / durable deletion intent**を設計対象に含める。
+
+「最後にもう一度SELECTする」だけの修正は禁止。
+既存X deletion acquisitionをKabumoriへそのまま流用するのも禁止。
+
+## Mandatory startup / isolation
+
+開始前に必ず確認：
+
+- PROJECT_RULES.md
+- HANDOFF.md
+- .agent/ORCHESTRATION.md
+- .agent/CURRENT_STATE.md
+- .agent/ACTIVE_TASK.md
+- このG5 TASK
+- G1〜G4 / H1 / H2 TASK + Report
+- git status
+- git worktree list
+- fresh origin/main
+- open PR changed files
+
+G5専用の独立worktree / checkoutを使用。
+
+### Competition state at assignment
+
+- G3: account deletion UI fixはFinal K3 PASS・PR #68 merge済み。runtime deletion backendは変更していない。
+- G4: PR #65 X posting OAuth account-switch。source/securityはaccepted済みだが、provider-side operator E2E待ち。G4の5ファイルは触らない。
+- H1: deletion safety reviewはC1で閉じる。runtime candidateなし。
+- G1/G2: Kabumori Home / report系。Auth/lifecycle scopeと競合しないことをfresh確認する。
+- H2: fresh statusを確認。
+
+競合/ownership不明ならSTOP。
+
+## Phase 1 scope
+
+### A. Additive schema candidate
+
+新規migration candidateとして最低限：
+
+1. `common_accounts`
+2. `service_entitlements`
+3. lifecycle / deletion serialization primitive
+
+候補例：
+
+```text
+common_accounts
+  user_id PK/FK auth.users
+  status active/deleting/locked
+  lifecycle_version
+  timestamps
+
+service_entitlements
+  user_id
+  service_key
+  status provisioning/active/suspended/deleting/ended
+  source
+  activated_at
+  ended_at
+  timestamps
+  PK(user_id, service_key)
+
+account_lifecycle_operations
+  id
+  user_id
+  operation_type
+  status
+  current_step
+  started_at
+  updated_at
+  last_error_code
+```
+
+名前・列はレビューの上で調整してよい。
+
+重要：
+
+- additiveのみ
+- existing table rename/drop禁止
+- profiles / brand_memberships置換禁止
+- migration historyの不整合を前提に、単一migration candidate + exact preflightを設計
+- production db push禁止
+
+### B. Lifecycle serialization contract
+
+次を同時に満たす設計を作る：
+
+- service利用開始中はcommon account whole-deleteと競合しても片方がfail closed
+- common account deleting中は新規service entitlement/provisioningを開始できない
+- service-only deletionは他service/Authを残す
+- common account deletionは全active service cleanup完了後のみAuth hard delete可
+- admin/shared/unknown状態はfail closed
+- stale/retry/idempotencyを考慮
+- external OAuth revoke/Vault purge等はSaga stepとして扱い、DB transactionで全外部処理を原子的に扱ったふりをしない
+
+必要なら advisory lock / row lock / lifecycle_version / durable operation row を組み合わせる。
+**Auth hard delete直前までのserialization guaranteeを明文化**する。
+
+### C. Service start / stop RPC contract candidate
+
+少なくともsource candidateまたはSQL contractとして：
+
+- start_kabumori_service
+- start_x_autopost_service
+- begin/mark service deleting
+- finish service deletion
+- begin common account deletion
+- common account deletion eligibility/read model
+
+を検討する。
+
+ただし既存client wiringはこのTASKでは最小限または0でよい。
+G4 filesは触らない。
+
+### D. RLS / grants design
+
+新tableについて：
+
+- exposed schemaならRLS必須
+- authenticated userは自分のcommon account / entitlementをreadできる
+- clientから任意status/user_idを書き換えられない
+- writeは限定RPC/backend境界
+- TRUNCATE / REFERENCES / TRIGGER等の不要grantを明示revoke
+- SECURITY DEFINERが必要ならpublic exposure/EXECUTE PUBLICを避ける
+- fixed search_path
+- auth.uid ownership check
+- service_role依存を必要最小限
+
+既存Kabumori/X RLS enforcementはまだ変更しない。
+新しいhelperを既存policyへ差し込むのはPhase 2以降。
+
+### E. Shadow backfill candidate
+
+Phase 0のproduction aggregateを前提に、**productionでは実行しない**backfill SQL candidateを作る。
+
+ルール：
+
+- common_accounts: existing auth.usersごとに1
+- kabumori entitlement: legacy profilesをactive候補。source='legacy_profile'等、実利用証拠の弱いrowを区別可能にする
+- x_autopost entitlement: user-facing social_mobile_user_v1 self-service workspace ownerだけ
+- internal workspace/adminはconsumer x_autopost entitlementにしない
+- Auth-only userはcommon accountのみ
+- email一致でuser mergeしない
+
+backfillはidempotent / dry-run count可能にする。
+
+### F. Deletion safety future adapter contract
+
+既存Kabumori account-deleteをこのTASKでproduction-safeと宣言しない。
+
+source候補として必要なら：
+
+- legacy Kabumori hard-delete routeをcommon lifecycleへ委譲するadapter設計
+- service-only Kabumori withdrawal
+- whole common account deletion orchestrator
+
+の境界を明文化/テストする。
+
+ただしX revoke/Vault purge/Apple revokeの実処理を重複実装しない。
+既存social-mobile deletion adapterを将来どう呼ぶかはcontract化まで。
+
+### G. Registration/login future contract
+
+設計・tests/docsレベルで：
+
+- appから新規登録 → common account作成/確認 + service entitlement
+- existing common ID → login後、対象serviceのみ利用登録
+- login前のemailで既存account存在を断定しない
+- identity linkingは同一Auth userのみ
+- email一致だけで別Auth userをmergeしない
+- X login identity ≠ X posting authorization
+- Apple loginを共通account削除する際のrevoke step
+
+を固定する。
+
+## Do not touch in Phase 1
+
+- G4 PR #65 files:
+  - apps/social-mobile/src/features/x-connect/use-x-connect.ts
+  - related auth-session option/test
+  - accounts/onboarding copy owned by G4
+- production DB
+- production Auth users
+- production Vault secret
+- production OAuth
+- provider settings
+- real X accounts
+- current cron
+- existing Kabumori/X service data
+- profiles/brand_memberships rename/drop
+- existing RLS enforcement
+- account deletion production deploy
+- existing user backfill
+- identity link/unlink
+
+## Required testing
+
+Use disposable/local PostgreSQL or equivalent safe test environment.
+
+最低限：
+
+1. migration applies cleanly to representative schema
+2. re-apply/idempotency strategy is explicit
+3. RLS/grants least-privilege checks
+4. common account active -> service start allowed
+5. common account deleting -> service start denied
+6. service provisioning vs common delete concurrency both commit orders are safe
+7. service-only deletion leaves other entitlement/Auth intact
+8. whole-account deletion cannot finalize while active/provisioning service remains
+9. admin/shared/unknown fail closed where contract applies
+10. backfill dry-run counts/classifications
+11. no email-based merge
+12. no client arbitrary entitlement creation/status change
+13. git diff --check / SQL static checks / relevant unit tests
+
+Race safetyは単なる逐次mockだけでなく、可能なら2セッションPostgreSQL testで証明する。
+
+## Deliverables
+
+- versioned migration candidate
+- focused tests
+- design note / comments sufficient for lifecycle invariants
+- production rollout plan（未実行）
+- rollback plan
+- exact list of Phase 2 client/backend integration points
+- Report
+
+## Completion / K5
+
+Reportに：
+
+- task_id
+- result PASS / PARTIAL / BLOCKED
+- checked_main
+- worktree/isolation
+- schema candidate
+- lifecycle serialization invariant
+- RLS/grant model
+- backfill candidate + dry-run proof
+- concurrency/race proof
+- changed_files
+- tests
+- commit/PR
+- production mutation = 0
+- pending conflicts
+- remaining unknowns
+- rollout/rollback plan
+- next recommendation
+
+完了時 status -> review_required / next_owner -> chatgpt / STOP for K5。
+
+Auth/RLS/migration/lifecycleを横断する高リスクsource candidateなので、K5後は原則Sol（高）以上のCodexレビューを入れる。
+
+## Report
+
+- task_id: common-account-v1-phase1-additive-lifecycle-foundation-20261001
+- result: pending
+- changed_files: pending
+- tests: pending
+- commit_hash: pending
+- push: pending
+- deploy: prohibited
+- production_mutation: 0 expected
+- remaining_issues: pending
+- safety_checks: pending
+- next_recommendation: G5 Phase 1を開始する。
+
+---
+
+## Previous completed G5 task history — preserved below
+
+# Claude Task 5 — CURRENT TASK
+
 - task_id: common-account-v1-phase0-prod-readonly-inventory-20261001
 - owner: claude
 - slot: claude-5
