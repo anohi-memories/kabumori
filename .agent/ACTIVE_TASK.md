@@ -59,26 +59,25 @@
 
 ## Claude G2
 - owner: claude
-- slot: cl## Claude G2
-- owner: claude
-- slot: claude-2
-- next_owner: codex
-- status: review_required
-- task_id: kabumori-shared-report-v2-rich-presentation-hard-facts-20261001
-- start_code: G2
-- finish_code: K2
-- source: .agent/tas## Claude G2
-- owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-shared-report-v2-prod-deploy-20261001
+- task_id: kabumori-shared-report-v2-close-natural-observation-20261001
 - start_code: G2
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: deploy/read-back only of merged PR #67 Presentation v2 to production market-report-analysis; app/x gates remain OFF, no manual cycle, no personalized/x-test-post deploy; recommended Sonnet5（高）
+- allocation: read-only first natural Presentation v2 close observation after 2026-10-01 16:40 JST; no source/deploy/manual invoke/gate change; recommended Sonnet5（中）
 
-ning social-mobile account-deletion UI release blockers only: root-cause/fix invisible native Login methods buttons and add a discoverable Settings account-management entry. Preserve existing deletion backend/scope semantics and feature gate; no common-account/service-entitlement implementation, no G4 overlap, no deploy/destructive operation. Recommended Sonnet5（高）.
+## Claude G3
+- owner: claude
+- slot: claude-3
+- status: review_required
+- task_id: x-social-mobile-account-deletion-ui-release-finish-20261001
+- start_code: G3
+- finish_code: K3
+- next_owner: chatgpt
+- source: .agent/tasks/CLAUDE_TASK_3.md
+- allocation: canonical G3 TASK preserved; social-mobile account-deletion UI release finish awaits K3 review. No G2 overlap.
 
 ## Claude G4
 - owner: claude
