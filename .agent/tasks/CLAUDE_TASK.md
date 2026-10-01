@@ -3,8 +3,8 @@
 - task_id: kabumori-shared-report-v2-close-natural-observation-20261001
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sonnet5（中）
 - purpose: production market-report-analysis v17 / Presentation v2 の最初の自然な大引けcycle（2026-10-01）をread-onlyで観測し、実モデル生成の完成率・Hard/WARN境界・文章の厚み・コスト・重複を確認する。source変更・deploy・manual invoke・gate変更は禁止。
@@ -200,7 +200,145 @@ When complete:
 
 ## Report
 
-Pending.
+### Report — kabumori-shared-report-v2-close-natural-observation-20261001
+
+- task_id：`kabumori-shared-report-v2-close-natural-observation-20261001`
+- result：**FAIL**。Presentation v2の最初の自然な大引けcycle（2026-10-01）は、予定された2回のanalysisとも `ANALYSIS_LOCAL_CHECK_FAILED` で終わり、report packetは作られなかった。
+  - 分類：**local content（Hard）**。主因は、**因果の検査の誤検出**（ニュース本文に書かれた関係をそのまま伝えた文を、根拠の無い因果の断定として不合格にした）。v2で検査の対象をニュースの段落へ広げたことで表に出た。
+  - 副因（1回目だけ）：モデルがニュースのref（UUID）を書き間違えた。これは正しい検出。
+  - transportの失敗ではない（retry 0回）。data段階の失敗でもない。
+  - 利用者への影響は無い（gateはOFF/OFF）。hot-fixはしていない。
+- 観察時刻：2026-10-01 16:51〜16:55 JST（16:40以降）。read-onlyのSELECT、関数一覧の参照、手元での再現だけ。
+
+#### production versions / gates
+
+- `market-report-analysis`：一覧の表示は `v18`。updated_at 2026-10-01 14:21:13 JST、ezbr `b856cd48d3ca…` で、**G2がdeployしたv2のsourceのまま**（Final K2で受け入れ済みのv17と同じ内容）。
+  - 版番号だけが17 → 18に進んでいる。ほかのFunctionも同時に1つずつ進んでおり（data-packet 15、personalized-reports 37、x-test-post 132）、いずれもupdated_atとezbrは変わっていない。sourceの変更ではなく、プロジェクト全体の設定変更による番号の更新とみられる（誰が行ったかは確認していない）。
+- verify_jwt：false（4 Functionとも）
+- `app_enabled=false` / `x_enabled=false`（settingsの行のupdated_atは2026-09-17のまま）
+- cron：8件とも、deploy時のsnapshotと同じ（schedule、active、commandのmd5）。
+- 所有：ほかのslotに、market-report-analysisのworkflowを扱うものは無い。
+
+#### cycle / attempt / error summary
+
+- cycle `c329cca2…`（2026-10-01 / close）
+  - data段階：`cycle_status=completed`、`attempt_count=1`、16:15:01.22 → 16:15:01.60、`last_error=null`
+  - report：`report_status=failed`、`report_attempt_count=2`、`report_last_error=ANALYSIS_LOCAL_CHECK_FAILED`、`current_report_packet_id=null`
+- cronの実行：data 16:15、analysis 16:20、analysis-retry 16:35、すべて `succeeded`（HTTPは200で、本文が `status: failed`）。
+- **attempt 1（16:20）**：`ANALYSIS_LOCAL_CHECK_FAILED`。応答に残っている指摘（最後の生成のもの）：
+  - `根拠の無い因果の断定（ニュースに理由の記載なし）: 「韓国の9月輸出は前年同月比83.5％増の1,209億ドルで、AI向け半導体需要を…」 「業種・テーマでは、韓国の9月輸出が過去最高となり、AI向け半導体需要を背景に半導…」`
+  - `入力に無い ref: news:47b69d8a-4a57-40c1-b9c1-efddb404b0b1`
+  - `ニュースの根拠が無い causal: c5`
+  - attempt 1のdiagnostics（生成回数・費用）は、attempt 2で上書きされて残っていない。
+- **attempt 2（16:35:00.94 → 16:35:37.03、約36秒）**：`ANALYSIS_LOCAL_CHECK_FAILED`。
+  - 指摘：`根拠の無い因果の断定（ニュースに理由の記載なし）: 「AI向け半導体需要を背景に半導体輸出も大幅増と報じられました」`
+- 3回目のclaim枠は、scheduleされたrunが無いため未使用。
+
+#### data packet
+
+- id `7b61dd7d-0bac-4135-a5af-85a988ef8c75`、content_hash `debf335c872624572f964bb586ef23a86a1cd2ce6dbe896b8ab4b709ab0221e8`
+- `data_quality_status=partial`、`required_missing=[]`、`unavailable=[]`、`reused=[]`
+- stale：JGB 2年・10年。intentional gaps：日経平均先物、グロース250、業種別の騰落、経済指標の予定。
+- session：東京 2026-10-01、米国 2026-09-30。
+- 主な指標：日経平均 68,956.72（+3.30%）、1306 434.4円（+0.67%）、NYダウ −0.86%、S&P500 −0.25%、ナスダック総合 +0.24%、SOX ±0.00%。
+- data packetは1件。data段階に問題は無い。
+
+#### report packet / Presentation v2 field presence
+
+- **report packetは0件**（`market_report_packets` の 2026-10-01 / close）。
+- そのため、次は**確認できなかった**：`presentation_version`、`x_post` のv2項目、`app_story`、`session_views`、`key_news[].scope`、`fact.quality_warnings`。
+- 不合格になった下書きの本文は保存されない。残っているのは、指摘文に引用された文だけ。
+
+#### Hard / WARN diagnostics（attempt 2、cycleに保存された値）
+
+- `generation_attempts=2`、`content_regenerations=1`
+- `hard_rejections=local,local`（2回の生成とも、ローカル検査で不合格。Factは呼ばれていない）
+- `quality_rewrite=false`、`quality_rewrite_request_failed=false`、`delivered_generation=0`、`quality_warnings=""`
+- `transport_retries=0`、`transport_retry_wait_ms=0`、`transport_retry_reasons=""`、`transport_retry_exhausted=false`、`transport_success_after_retry=false`
+- 診断の区別は設計どおりに働いている：内容の作り直し（1回）、通信のretry（0回）、cronの再実行（`report_attempt_count=2`）が、別々に読める。指摘文に問題の文が引用されるので、原因を特定できた。
+
+#### root cause（手元で再現済み。推測ではない）
+
+- 入力の再構成：本番のdata packet `7b61dd7d` と、参照ニュース30件から、同じ `buildAnalysisInput` で入力を作った（モデルに渡ったのは上位15件）。
+- 該当のニュース（入力の9番目、範囲は `sector`、重要材料ではない）：
+  - 見出し：「韓国の9月輸出が過去最高、半導体需要で83.5％増」
+  - 要約：「…月間の過去最高を更新しました。**AI向け半導体需要の拡大を背景に、半導体輸出も大幅に増加しました。**」
+  - 正しいref：`news:47b69d8a-4a57-40c1-b9c1-efddb404a21b`
+- モデルの文：「AI向け半導体需要を背景に半導体輸出も大幅増と報じられました」。**ニュース本文に書かれた関係の言い換え**で、東京市場の値動きの理由を述べた文ではない。
+- 同じ文を `unsupportedCausalSentences` にかけた結果：
+  - A）因果のclaimが無い → **不合格**
+  - B）このニュースを正しいrefで引用する `causal` のclaimがある → 合格（原因の語「AI向け半導体需要」が、ニュース本文と一致する）
+  - C）`causal` のclaimはあるが、refが書き間違い → **不合格**（attempt 1の形）
+  - D）このニュースを `observation` のclaimで引用している → **不合格**
+- つまり、検査は「引用したニュースを `causal` 型のclaimにしたときだけ」ニュース内の因果を認める。一方、promptは `causal` を「値動きの理由をニュースが明記している場合」と定義している。韓国の輸出のニュースは東京市場の値動きの理由ではないので、モデルが `causal` を付けないのは指示どおりの動きで、その結果として不合格になる。
+- v2との関係：
+  - この検査（PR #57）の対象は、もともと見出し・要約・claims・Xの導入・3点・締めだった。
+  - PR #67で、対象を `x_post.context_ja` / `news_ja` と `app_story` の各項目へ広げた。
+  - ニュースの段落は、ニュースの中身を伝える場所なので、ニュース自身の「〜を背景に」「〜を受けて」が入りやすい。
+  - 9/30までの8件で誤検出が0件だったのは、v1のpacketにニュースの段落が無かったため。
+- refの書き間違い（attempt 1）：
+  - 正：`…efddb404a21b`、誤：`…efddb404b0b1`（36文字のUUIDの末尾）。
+  - 「入力に無い ref」と「ニュースの根拠が無い causal」の検出は正しい（捏造されたrefを通さない）。
+  - v2で出力が長くなり、UUIDを写す回数が増えたことが、書き間違いを増やしている可能性がある（1件の観察なので、頻度は不明）。
+
+#### actual factual-regression result
+
+- 完成したv2のpacketが無いため、指標の値・日付・1306・向き・因果・refなどの検査は、**実際の生成文では確認できなかった**。
+- 不合格の指摘から分かること：
+  - 指標と数値、日付、向き、1306、古い値、「材料なし」の検査は、最後の生成では指摘していない（attempt 1・2とも、指摘は因果とrefだけ）。
+  - 引用された文の数値（83.5％、1,209億ドル）は、入力のニュースにある値。
+- 最終的に配信された誤りは無い（packetが無い）。
+
+#### X / App の文字数と内容
+
+- 測定できなかった（packetが無い）。
+- 指摘文の引用から、モデルが `news_ja` に市場全体・業種のニュースを書き、アプリ側でも「業種・テーマでは、韓国の9月輸出が…」と書いていたことは分かる。文章の厚みを出そうとしている様子はあるが、評価できる量ではない。
+
+#### news-priority result
+
+- 入力の並びは設計どおり：市場全体8件 → 業種・テーマ1件（韓国の輸出）→ 個別企業6件（ニデックは10番目）。
+- 完成文が無いため、本文での優先順位は確認できなかった。
+
+#### model calls / tokens / cost
+
+- attempt 2：calls 2（生成2回。Factは0回）、入力 15,058トークン、出力 4,013トークン、`cost_usd=0.007827`。
+- attempt 1：保存されていない（上書き）。
+- 参考：v1の1回の生成の出力は約1,600〜1,800トークンだった。v2の1回の生成の出力は約2,000トークンで、見積もり（約3,100）より少ない。ただし、Factを含まない失敗runの値で、1件だけの観察。
+- 質の書き直しは発生していない（`quality_rewrite=false`）。
+
+#### duplicate / idempotency
+
+- data packet 1件、report packet 0件。重複は無い。
+- claimは2回（scheduleされた2回）、それぞれfailを1回記録。claimの繰り返しは無い。
+
+#### production mutation
+
+- **0**（read-onlyのSELECT、関数一覧の参照、手元での再現だけ。deploy、DB書き込み、cron・gateの変更、手動のinvoke・retry、X投稿はしていない）。
+
+#### remaining issues
+
+1. **因果の検査の誤検出**（主因）。ニュース自身に因果の表現がある日は、v2のcycleが落ちやすい。今日の入力では15件中1件だけだったが、それで2回とも落ちた。
+2. **refの書き間違い**。UUIDをそのまま写させる方式は、出力が長いv2では弱い。
+3. v2の完成文は、まだ1件も観察できていない。X・アプリの文字数、文章の質、HardとWARNの実際の比率、費用は未確認。
+4. attempt 1のdiagnosticsは、attempt 2で上書きされる（既存の仕様）。失敗した下書きの本文も残らない。
+5. 明朝（10/2）の朝刊の入力にも、同じニュースが含まれる可能性がある（朝刊は前回の引け以降のニュースを使う）。その場合、同じ理由で落ちる。
+6. gateはOFFなので、利用者への影響は無い。旧経路の配信は別の話で、変わらない。
+
+#### recommendation（source fix。hot-fixはしていない）
+
+- **10/2朝刊の観察より先に、source fixのTASKを推奨する**。直さずに観察を続けても、同じ理由の失敗を繰り返す可能性が高い。
+- 修正の方向（提案。設計の判断はK2・次のTASKで）：
+  1. **因果の検査の対象を「市場の値動きの理由」に限る**。
+     - 因果表現の結果側（〜を受けて／〜を背景に、の後ろ）が、市場の指標・市場を指す語（東京市場、日経平均、1306、米国株など）である文は、これまで通り、`causal` 型のclaimが引用するニュースでの裏付けを求める。
+     - 結果側が市場の指標ではない文（ニュースの中身の言い換え）は、**分析が引用しているニュース（claimの型は問わない。key_newsを含む）の本文**に、その原因の語が同じ向きで書かれていれば合格にする。
+     - これで、PR #57のK2の条件（Aが無関係のBを許さない、向きを保つ）は維持できる。原因の語を、毎回ニュース本文と照合するため。
+  2. **refの書き間違いを起こしにくくする**。モデルには短い別名（例：`news:1`〜`news:15`）を渡し、コードで本物のIDに戻す。存在しない別名は、これまで通り不合格にする。
+  3. 回帰テスト：今日の入力（data packet `7b61dd7d` とニュース）をfixtureにする。
+     - 「AI向け半導体需要を背景に半導体輸出も大幅増と報じられました」が、observationのclaimでの引用でも合格すること。
+     - 「AI向け半導体需要を背景に東京市場も上昇しました」が、ニュースに無い因果として不合格のままであること。
+     - 書き間違えたrefが不合格のままであること。
+- 代替案：修正までの間、`market-report-analysis` をPR #57の版（`9488f9e`）へ戻すと、v1の形で完成する状態に戻る。ただしgateがOFFの間は、失敗しても利用者への影響は無いので、戻すかどうかは「観察を続ける価値」と「修正までの時間」で決めればよい。G2からは、戻さずに修正を先に進めることを推奨する。
+- 修正とdeployのあと、最初の自然なcycleで、今回確認できなかった項目（v2の項目の有無、Xとアプリの文字数、Hard / WARNの比率、費用）を観察する。
 
 ---
 
