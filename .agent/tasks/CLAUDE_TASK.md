@@ -3,7 +3,7 @@
 - task_id: kabumori-shared-report-v2-rich-presentation-hard-facts-20261001
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: highest
 - recommended_model: Opus5.5（高）
