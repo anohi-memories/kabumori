@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-x-account-switch-auth-session-20261001
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: iOSのX OAuth接続時に前回ログインしたXアカウントが再利用され、複数Xアカウント利用者が接続先を切り替えにくい問題を、本番向けに安全に修正する。
@@ -311,3 +311,70 @@ production mutation 0 / 実X投稿 0（今回は読み取りと文書更新の�
 
 - status -> review_required
 - next_owner -> chatgpt
+
+
+## K4 follow-up 2 — isolated simulator provider proof
+
+- K4 verdict: **HOLD — source/review still PASS; prior follow-up stopped only because no isolated runnable native environment existed**.
+- PR #65 exact head remains `e5a66f5ba71f64b1a38d8f89faff3d0a31972949`, open / mergeable.
+- GitHub checks are green and fresh main has no overlap with PR #65's five source/test files.
+- G3 is now Final K3 done and its temporary simulator harness/app was removed. Do not reuse G3 files/worktree.
+- A native Simulator build is now considered **actually necessary** for the remaining provider proof and is authorized in this G4 follow-up.
+- Recommended model: **Sonnet5（高）**.
+
+### Environment plan
+
+1. Use the dedicated G4 worktree only.
+2. Boot a currently unused Simulator device (prefer a Shutdown device such as iPhone 17e rather than reusing another slot's active simulator).
+3. Build/install a Simulator-compatible development or Release-like build from PR #65 head.
+4. Do not use EAS unless local native build genuinely cannot perform the check.
+5. Use only public client configuration needed to reach the app login/X authorization flow. Do not copy secrets, service-role keys, Vault values, or untracked files owned by another slot.
+6. If the required public Supabase URL/publishable key cannot be obtained from a safe canonical/user-provided location, STOP and ask the operator for those public values rather than borrowing another slot's .env.
+
+### Non-mutating provider proof
+
+The goal of this follow-up is specifically to prove the iOS auth-session behavior **without creating a new production X connection**.
+
+Operator actions only:
+1. Sign in to the disposable/test app login as needed.
+2. In normal Safari, sign in to disposable X account A.
+3. Start the app's posting-X connect flow.
+4. Verify the auth session does **not** silently continue as A and instead presents a fresh login/authentication opportunity.
+5. The operator may enter disposable X account B credentials far enough to prove B can be authenticated/identified in the isolated auth session.
+6. **Do not press the final X authorization/consent action that would complete callback/linking or persist credentials.** Cancel/close before the app connection is created.
+7. Retry once and verify the flow is still usable and again does not silently reuse Safari A.
+8. Confirm no real X post occurred.
+
+This provider proof is sufficient for the native behavior because:
+- the actual source and Codex review already prove connect/reconnect share the same X-connect hook/auth-session option,
+- focused tests cover reconnect/cancel/retry and OAuth contract,
+- the only unverified platform fact was whether iOS/browser honors the ephemeral-session request enough to prevent silent reuse of the normal Safari identity.
+
+A production disposable X connection/reconnect is therefore **not required** for this K4 and must not be created merely for verification.
+
+### PASS criteria
+
+PASS if all are true:
+- isolated G4 Simulator/native build runs PR #65 head,
+- Safari account A is not silently forced through the app auth session,
+- operator can reach authentication as a different disposable account B,
+- cancel returns safely,
+- retry works,
+- no final provider authorization/linking is completed,
+- production DB/Vault/Auth/OAuth application state mutation = 0,
+- real X posts = 0,
+- runtime source remains unchanged.
+
+### After PASS
+
+- Record simulator/device/build context and operator-observed behavior.
+- Re-run/fresh-confirm PR head, mergeability/checks and no main overlap.
+- Do not modify runtime source.
+- Set status -> review_required, next_owner -> chatgpt and STOP for K4.
+- ChatGPT will make the final merge decision.
+
+### If FAIL
+
+- STOP with evidence.
+- Do not clear Safari cookies, add undocumented X params, or improvise provider workarounds.
+- Any runtime source change reopens focused review.
