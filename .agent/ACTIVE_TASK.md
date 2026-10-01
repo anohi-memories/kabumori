@@ -72,15 +72,13 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- next_owner: chatgpt
-- status: review_required
+- next_owner: none
+- status: done
 - task_id: x-social-mobile-e3-delete-revoke-residue-20261001
 - start_code: G3
 - finish_code: K3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- previous_allocation: Disposable X account @tigers_torataro is now connected successfully. Continue E3 with read-only baseline, then mandatory fresh user approval immediately before account deletion. After approval verify deletion-triggered X revoke and residue/isolation. No real X post. Recommended Opus5.5（高）.
-- allocation: 正本TASKはreview_required / next_owner chatgpt。E3のReportはK3確認待ち。この変更では完了判定・再割当しない。
-- snapshot_sync: 2026-10-01 JST; fresh mainのTASKヘッダから索引のみ更新。旧allocationはprevious_allocationとして保存。
+- allocation: Final K3 PASS. Disposable social-mobile service deletion E3 completed: X authorization revoked, service-specific workspace/membership/account/credentials/transient OAuth data removed, unexpected residue 0, protected production posting accounts unchanged, real X posts 0. Shared Auth/profile intentionally retained under social_only. No source change; no extra Codex review. Remaining UI release blocker: invisible native Login methods navigation buttons. G3 may be reused only after fresh allocation/competition check.
 
 ## Claude G4
 - owner: claude
