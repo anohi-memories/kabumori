@@ -3,8 +3,8 @@
 - task_id: common-account-kabumori-delete-cross-service-safety-review-20261001
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sol（高）
 - type: security review / bug fix / Auth deletion boundary
@@ -130,6 +130,19 @@ At completion: status -> review_required, next_owner -> chatgpt, STOP for C1.
 - runtime/source delta: 0; production mutation: 0; deploy: none. This TASK does not implement or authorize G5 Phase 1.
 - full evidence / proposed acceptance tests: appended .agent/CODEX_REPORT.md section for this task_id.
 - next: C1 review, then separately scope/authorize common lifecycle serialization, explicit service registration and recent reauthentication after G3/G4 conflict reconciliation. Recommendation: Sol（高）. H1 STOP.
+
+
+## Final C1 — Common account deletion safety
+
+- verdict: **FAIL / CHANGES REQUIRED accepted**.
+- accepted finding: the existing Kabumori hard-delete route is not common-account-safe. Admin self-deletion and cross-service ownership/orphan risk are confirmed source/security defects.
+- no runtime fix was accepted because a read-check followed by a separate Auth hard delete cannot serialize against concurrent service provisioning; a partial preflight would give false confidence.
+- current production corruption was not observed; dual Kabumori+user-facing-X users were 0 at review time.
+- production mutation from H1: 0.
+- runtime source candidate: none.
+- merge/deploy: none / HOLD.
+- next step: G5 Phase 1 additive common-account/service-entitlement/lifecycle foundation, source-only. It must provide an explicit lifecycle/serialization primitive before the Kabumori hard-delete route can be considered safe.
+- recommended G5 model: Opus5.5（極高）.
 
 ---
 
