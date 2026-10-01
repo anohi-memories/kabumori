@@ -53,8 +53,8 @@
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Final K1 PASS. PR #72 exact head b96c566353db82b967989dc5a5855a1324876bd4 squash-merged as fa0c714731e13ac87f38fc98e08cd127fb709192. Final 8-state Hero + approved background live on main; app tests 255/255, local Simulator verified, EAS build 0, backend/production mutation 0. No Codex review required. G1 free after fresh allocation.
-- recommended_model: Sonnet5（高）
+- allocation: Final K1 PASS. Base 8-state Hero PR #72 was already merged; follow-up PR #74 (global 6pt character/CTA lift + CTA height/inset) squash-merged as 9b37c350a3b9d1a936d0e03ddc281e315aba50f2, then final 02/07 aligned assets PR #75 squash-merged as 02ba0e2d728833fb76b74237cc3c237130bcdbf1. Final asset hashes pinned; app tests reported 255/255; EAS build 0; backend/production mutation 0; no Codex review required. G1 free after fresh allocation.
+- recommended_model: Sonnet5（中）
 ## Claude G2
 - owner: claude
 - slot: claude-2
