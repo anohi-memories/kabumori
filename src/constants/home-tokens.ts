@@ -51,8 +51,16 @@ export const HERO = {
   ctaHeight: 34,
   /** Minimum space between the last point and the CTA. */
   ctaGap: 4,
-  /** Side of the squares that hide the art's baked white rounded corners when the Hero grows below the art. */
-  cornerPatch: 14,
+  /**
+   * When the live points make the Hero taller than the art, the art's bottom edge ends inside the card.
+   * It is hidden by a soft fade to the fill colour drawn over the art AND the character: a ramp of
+   * non-overlapping strips (no banding) that is fully opaque for the last `fadeSolid` pt, which also
+   * hides the character's bottom edge and the art's baked white corners.
+   */
+  fadeStrips: 20,
+  fadeStripHeight: 2,
+  /** Strips (counted from the bottom) that are fully opaque. */
+  fadeSolidStrips: 9,
   /** Points column: left edge and width as shares of the Hero width (the baked underline spans 4.8%-44.8%). */
   pointsLeft: '4.8%',
   pointsWidth: '42%',
