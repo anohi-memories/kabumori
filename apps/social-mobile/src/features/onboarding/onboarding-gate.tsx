@@ -185,6 +185,7 @@ export function OnboardingGate({ children }: PropsWithChildren) {
             {step.step === 'connect_x' && step.resume ? <Text style={styles.muted}>前回の接続が完了していません。もう一度接続してください。</Text> : null}
             {signedInWithX ? <Text style={styles.muted}>Xでログインしました。このXアカウントを自動投稿にも使う場合は、下のボタンから投稿用の接続を行ってください（ログインとは別の許可です）。</Text> : null}
             <Text style={styles.muted}>{stateText}</Text>
+            <Text style={styles.muted}>接続時に、Xのログイン画面で接続したいアカウントを選んで（またはログインして）ください。ブラウザの状態によっては、以前ログインしたアカウントが表示される場合があります。</Text>
             {connectState === 'connecting' ? <ActivityIndicator color={colors.primary} /> : null}
             <Pressable
               accessibilityRole="button"

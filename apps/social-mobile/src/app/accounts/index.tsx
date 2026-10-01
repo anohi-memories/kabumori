@@ -48,6 +48,7 @@ export default function AccountsScreen() {
           </SectionTitle>
           {needsReconnect ? <Pill tone="warning">Xとの接続を確認できません。再接続してください。</Pill> : null}
           <Text style={styles.muted}>{stateText}</Text>
+          <Text style={styles.muted}>接続時に、Xのログイン画面で接続したいアカウントを選んで（またはログインして）ください。ブラウザの状態によっては、以前ログインしたアカウントが表示される場合があります。</Text>
           {connectState === 'connected' && verifiedHandle ? <Pill tone="success">確認済み {verifiedHandle}</Pill> : null}
           {connectState === 'connecting' ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
