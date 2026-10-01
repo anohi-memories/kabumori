@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-account-deletion-ui-release-finish-20261001
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - continues_from: x-social-mobile-e3-delete-revoke-residue-20261001
@@ -402,3 +402,50 @@ Unexpected residue: **none**.
 - AI Lab diary: 候補あり — 使い捨てアカウントで「このアプリだけ利用終了」の流れを最後まで試し、他のサービス用ログインを残したままX連携とアプリ専用データだけ消えることを確認した。
 - next: common-account design should replace the current proxy-style service-existence decision with an explicit service entitlement. Separately fix the native deletion/navigation button visibility before enabling self-service deletion broadly.
 
+
+## Report — x-social-mobile-account-deletion-ui-release-finish-20261001
+
+- task_id: x-social-mobile-account-deletion-ui-release-finish-20261001
+- result: **PASS** (source + tests + native visual check done; PR open for review). Model: Sonnet 5.5 (recommended Sonnet5（高）, switched by user before start).
+- PR: https://github.com/anohi-memories/kabumori/pull/68 (branch `claude/g3-deletion-ui-finish-20261001`, commit `ec292b5`)
+
+### Root cause of the invisible buttons
+- `<Link asChild>` renders expo-router's Slot, which uses radix `mergeProps`: `style = { ...slotStyle, ...childStyle }`.
+- A `Pressable` whose `style` is a function (`({ pressed }) => [...]`) spreads to `{}` → the button's background, padding and border were dropped; the label (`color: #FFFFFF`) stayed → white text on a near-white screen. The Pressable and its tap area still existed, hence "invisible but tappable".
+- Not Release-only and not `styles.buttonText`; it is the Link-asChild + function-style composition. Verified in `node_modules/@radix-ui/react-slot` (mergeProps) and `expo-router/build/ui/Slot.js` (only flattens the Slot's own style).
+
+### UX change
+- login-methods: the two buttons are standalone `Pressable` + `router.push('/accounts' | '/account-deletion')`, same style as before (primary / danger).
+- Settings: new「アカウント管理」card at the top (above the long content form, visible without scrolling): ログイン方法の確認 / 投稿用のXアカウントの接続 / アカウントの削除 are explained, button「アカウントを管理する」→ `/login-methods`. No destructive logic in Settings.
+- Deletion screen, reauth, typed confirmation, server-confirmed outcome, `social_only` / `social_and_login` semantics, feature gate: untouched. `EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED` not enabled anywhere.
+
+### changed_files
+- apps/social-mobile/src/app/login-methods.tsx
+- apps/social-mobile/src/app/(tabs)/settings.tsx
+- apps/social-mobile/tests/native-link-button-style.test.mjs (new)
+- No change to x-connect, accounts/index.tsx, Auth, DB/RLS/RPC/migrations, Vault, OAuth, Edge functions, flags.
+
+### tests / checks (clean env, no local .env.local)
+- `npm test` 94/94 pass (5 new), `npm run typecheck` exit 0, `npm run lint` exit 0, `git diff --check` clean.
+- New test: AST scan of src/app + src/components for `Link asChild` with a function-valued child style (one known file excepted, listed in the test), detector self-check, both labels live in standalone Pressables that navigate and keep button style, Settings entry opens `/login-methods` and sits above 「コンテンツ設定」.
+- Note: with a local `.env.local` present (my earlier real-data E2E file) `auth-release-readiness` "operator script" fails because the script reads it; unrelated to this change, passes without the file.
+
+### Native verification (iOS Simulator, Release build, sample-data mode, no production connection)
+- Settings → 「アカウント管理」card + button visible at top without scrolling.
+- Tap → ログイン方法 screen. 「投稿用のX接続を確認する」 (blue) and 「アカウントの削除について」 (red) both visibly render with white labels.
+- Tap 削除 → アカウントの削除 screen (shows 準備中 because the flag is unset — gate behavior preserved). Tap X-confirm → アカウント screen. Both land correctly.
+- Local-only harness used and removed: sample-data `.env.local`, a temporary auth-gate bypass in `_layout.tsx` (reverted, never committed), a throwaway bundle id. After the check: app uninstalled, `ios/`, `app.config.js`, `.env.local` and the env backup deleted. Untracked `supabase/.temp` and `supabase/config.toml` (CLI link files) remain untracked and unstaged.
+
+### Findings (not fixed, out of this TASK's boundary)
+1. `src/app/accounts/index.tsx`「ログイン方法」card has the same defect (Link asChild + function style → card styling lost; visible as a flat unstyled block). File is touched by G4 PR #65; fix there or after it merges, then drop it from the test's allowlist.
+2. Settings existing「会話で相談する」 card is a dead tap (verified on native): `Link asChild` child is `Card`, which does not accept `onPress`. Needs a separate small fix (Pressable + router.push, or let Card forward touch props). Also applies to other `Link asChild > Card/View` uses (accounts/index.tsx account rows, history/schedule rows) — worth auditing together.
+3. The same family of problem can silently return; the new test guards only Link-asChild-with-function-style, not non-forwarding children.
+
+### Production / safety
+- production mutation = 0, real X operations = 0, no deploy, no flag change, no destructive deletion, no secrets/tokens/emails in report.
+- Disposable E3 login/profile left in production untouched (belongs to the common-account decision).
+- G4 files and worktree untouched; own worktree only; explicit-path staging.
+
+### Remaining / next recommendation
+- Review and merge PR #68; then decide the fix for findings 1–2 (G4 / a follow-up).
+- Release gates unchanged: common-account deletion semantics, Apple production config, legal URLs/texts, audit retention, main-app account-delete coordination; deletion flag stays OFF.
