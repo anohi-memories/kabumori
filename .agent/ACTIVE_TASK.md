@@ -47,14 +47,13 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: claude
-- status: ready
+- next_owner: none
+- status: done
 - task_id: kabumori-home-report-hero-8-state-assets-20261001
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- previous_allocation: PR #62 header-logo work is merged (merge SHA 0224ff7ed41380749ed677c1dc27942e916fcffb); stale review_required state closed by ChatGPT before this allocation.
-- allocation: Home report Hero canonical background + final 8 Yume/robot states; deterministic selector from stored Fact-passed report only; no new AI/API; local Simulator first; EAS build 0; no backend/DB/RPC/Edge/Auth/X/production mutation.
+- allocation: Final K1 PASS. PR #72 exact head b96c566353db82b967989dc5a5855a1324876bd4 squash-merged as fa0c714731e13ac87f38fc98e08cd127fb709192. Final 8-state Hero + approved background live on main; app tests 255/255, local Simulator verified, EAS build 0, backend/production mutation 0. No Codex review required. G1 free after fresh allocation.
 - recommended_model: Sonnet5（高）
 ## Claude G2
 - owner: claude
