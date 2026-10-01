@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: common-account-pr70-lifecycle-foundation-review-20261001
+- status: ready
+- task_id: common-account-pr70-corrective-rereview-20261001
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepted FAIL / CHANGES REQUIRED. PR #70 old head 89cf128bd9219897806b2b641cce4866f6e16c52 is not merge-safe. Six reproduced blockers: managed Storage/Auth completion gap, stale preview/backfill, concurrent locked backfill, admin X entitlement, non-exact FK preflight, missing-settings rollback. Production mutation 0. H1 free after fresh allocation.
+- allocation: PR #70 corrective exact head eebe9405d758e0c120f9e6f1a70cdb1e973a0855 を再レビュー。前回6 blockersのregression、no-Auth-delete責任分離、version/backfill lock、managed checkpoints/Storage probe、exact preflight、rollback、guard/ACLを独立検証。merge/apply/deploy禁止。推薦モデル Sol（高）。
 
 ## Codex H2
 - owner: codex
@@ -92,14 +92,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: done
 - task_id: common-account-pr70-corrective-lifecycle-foundation-20261001
 - start_code: G5
 - finish_code: K5
-- next_owner: chatgpt
+- next_owner: none
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: PR #70 corrective Phase 1 foundation. SQL Auth DELETEをPhase 1責任から外し、managed deletionを後続orchestratorへ分離。H1の6反例をregression化し、preview/version、backfill lock、admin exclusion、exact FK preflight、rollback fail-closedを修正。production変更禁止。推薦モデル Opus5.5（極高）。
+- allocation: Final K5 PASS to rereview. PR #70 exact head eebe9405d758e0c120f9e6f1a70cdb1e973a0855; Phase 1 no longer deletes Auth user, six H1 blockers regression化済み、production mutation 0。merge/apply/deploy HOLD、H1 rereview assigned。
 
 ## Deferred
 
