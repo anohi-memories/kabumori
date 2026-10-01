@@ -1,5 +1,300 @@
 # Claude Task 5 — CURRENT TASK
 
+- task_id: common-account-pr70-corrective-lifecycle-foundation-20261001
+- owner: claude
+- slot: claude-5
+- status: ready
+- next_owner: chatgpt
+- priority: highest
+- start_code: G5
+- finish_code: K5
+- recommended_model: Opus5.5（極高）
+- type: corrective architecture / migration / lifecycle security
+- target_pr: #70
+- target_original_head: 89cf128bd9219897806b2b641cce4866f6e16c52
+- production_mutation_allowed: false
+
+## Purpose
+
+H1/C1でFAILとなったPR #70を、**共通アカウントv1 Phase 1の安全なadditive foundation**へ修正する。
+
+重要な方針変更：
+
+**Phase 1ではSupabase Auth userの実削除を完了させない。**
+
+このPhaseの責任は、
+- common account state
+- service entitlement
+- service start/stop serialization
+- whole-account deletion intent / durable Saga state
+- shadow backfill
+- least-privilege ACL/RLS
+- future common orchestratorが安全に使うためのDB contract
+
+まで。
+
+実際のmanaged Auth destruction（GoTrue/Admin API、Storage、sessions/identities、Apple/provider revoke等）は、後続の共通account deletion orchestrator Phaseで実装・検証する。
+
+PR #70を同じbranch/PR上で修正してよいが、fresh head/ownership/競合確認必須。
+
+## Mandatory startup / isolation
+
+- PROJECT_RULES / HANDOFF / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK
+- G5 prior Phase 1 Report
+- H1 PR #70 review full Report + Final C1
+- G1〜G4 / H1 / H2 fresh status
+- open PR changed files
+- git status / worktree list / fresh origin/main
+- G5独立worktree
+
+G4 PR #65 filesは触らない。
+他slot/branch未コミット変更は触らない。
+
+## Required corrections
+
+### 1. Remove managed Auth destruction from Phase 1
+
+Current candidateの `finalize_common_account_deletion` が直接 `DELETE FROM auth.users` して「completed」を返す設計は廃止する。
+
+Phase 1では例えば：
+
+```text
+started
+→ service cleanup checkpoints
+→ ready_for_managed_auth_delete
+```
+
+まで。
+
+DB側finalize/prepareは：
+- lifecycle stateをlock下で再検証
+- entitlement/service footprintを検査
+- managed cleanupが未完ならfail closed
+- **auth.usersを削除しない**
+- 「外部orchestratorが次に何をすべきか」を非secretな状態で返す
+
+とする。
+
+名前は設計に合わせて変更可。
+「finalize」という名前が実削除完了を誤解させるならrenameする。
+
+Phase 1 Report/docs/testsから「Auth削除完了」「Storage FKで止まる」等の過剰な保証を削除する。
+
+### 2. Managed ownership / Storage boundary
+
+H1 finding:
+- Storage ownershipはauth.users FKで守られていない。
+- SQL Auth DELETEだけではowned object metadata/実体のcleanupを保証できない。
+
+Phase 1では：
+- StorageをSQL DELETEしない
+- Storage cleanupを実装しない
+- actual managed Auth deleteをしない
+- future orchestrator prerequisiteとして、Storage/API cleanup + revalidation + retry/idempotencyをcontractへ明記
+- unknown managed-service ownershipはwhole-account delete readinessでfail closedに扱える拡張点を設計
+
+将来のorchestratorが必要なチェックポイントをoperation stateへ持たせる場合、Phase 1で安全なschemaだけ追加可。
+
+### 3. Fix stale preview / absent-account lifecycle version
+
+H1 findingをregression test化。
+
+必須：
+- account rowが存在しないpreviewと、その後のbackfill/service introductionで同じversionが有効のままにならない
+- absent stateにも明確なepoch/nonce/version semantics
+- entitlementを導入する全pathでconfirmation bindingがinvalidになる
+- old preview/versionでbegin deletionできない
+
+### 4. Serialize backfill against lifecycle state
+
+backfillはsnapshotだけでactive判定しない。
+
+必須：
+- auth.users → common_accounts の既定lock orderを守る
+- lock取得後にstatus/version/eligibility再検証
+- locked/deleting等へentitlementを付与しない
+- concurrent state transitionとの2-session race test
+- backfillによるentitlement追加時にlifecycle/preview versionを確実にinvalidate
+
+offline/quiescent前提に依存するならDB contractで強制し、単なる運用メモにしない。
+
+### 5. Exclude admin from X consumer backfill
+
+`admin_users` とself-service workspace ownerの交差ケースを明示除外。
+
+- adminはconsumer x_autopost entitlement対象外
+- Kabumori entitlementは別ルール
+- mixed-role regression testを追加
+
+### 6. Exact FK preflight
+
+tableに「何かAuth FKがある」だけでは不可。
+
+最低限、invariantに使うFKごとに：
+- referencing table
+- exact referencing column(s)
+- referenced schema/table
+- exact referenced column(s)
+- type compatibility
+- delete action
+- constraint validity
+- 必要ならdeferrability/timing
+
+を照合。
+
+H1のwrong-column FK counterexampleをcommitted regressionにする。
+
+### 7. Rollback requires affirmative safe shadow state
+
+settings row absenceを「rollback可」にしない。
+
+rollback前提：
+- settings rowが存在
+- modeがvalid shadow
+- in-flight lifecycle operationなし
+- downstream dependencyなし
+- integration/enforcement未開始
+
+missing / corrupt / enforce はfail closed。
+
+H1のmissing-settings counterexampleをregression test化。
+
+### 8. Guard semantics
+
+Phase 1 guardは、current production hard-deleteを安全化済みと主張しない。
+
+shadow defaultで既存挙動不変でもよいが、docsで明示する。
+
+enforce modeは後続integrationが揃うまで有効化禁止。
+
+実Auth deleteをPhase 1から削除することで、guardは：
+- legacy/direct hard delete protection
+- future orchestrator authorization boundary
+のfoundationとして再設計してよい。
+
+ただし「authorized」判定だけでStorage/provider cleanupまで保証したと扱わない。
+
+### 9. Session / recent-auth / provider cleanup
+
+H1 prior findingsのP2 recent reauthenticationはPhase 1 DB-onlyでは解決しない。
+
+明確にfuture orchestrator/client integration prerequisiteとして残す：
+- recent reauth
+- session revoke / stale JWT policy
+- Apple revoke
+- X posting authorization revoke
+- Vault purge
+- Storage API cleanup
+- managed Auth Admin API delete
+- post-delete read-back/audit/retry
+
+### 10. Preserve accepted good properties
+
+壊さない：
+- additive schema
+- profilesはKabumori root
+- brand_membershipsはX role/ownership
+- emailでaccount mergeしない
+- client arbitrary user/status write不可
+- public table RLS
+- least privilege grants
+- fixed search_path / schema qualification
+- service start vs deletion serialization
+- service-only deletion leaves other service/Auth untouched
+- external provider work is Saga, not fake transaction
+- G4 files untouched
+
+## Required tests
+
+H1の6 counterexampleを**全てcommitted regression test**にする。
+
+最低限：
+1. no SQL Auth DELETE / no false completed state
+2. Storage-owned-state scenario cannot be reported as account deletion completed by Phase 1
+3. absent preview -> backfill adds entitlement -> old confirmation rejected
+4. concurrent locked transition vs backfill -> entitlement not granted
+5. admin + self-service workspace -> x entitlement not granted
+6. wrong-column FK -> preflight rejects
+7. missing settings row -> rollback rejects
+8. original two-session provisioning/delete races remain safe
+9. rollback/reapply on valid shadow remains safe
+10. ACL/RLS/SECURITY DEFINER invariants
+11. mutation/defect-detection tests updated for new contract
+12. existing social-mobile deletion regression
+13. git diff --check / source invariants
+
+可能ならPostgreSQL 2-session race proofを継続。
+
+実Supabaseへのwrite/deleteはしない。
+
+## PR / delivery
+
+PR #70を更新する。
+- old headを勝手にmergeしない
+- new exact headをReport
+- changed filesを明記
+- architecture deltaを明記
+- PR remains merge HOLD until K5 + Codex rereview
+
+## Production safety
+
+禁止：
+- production migration/apply/backfill
+- auth.users delete
+- Auth Admin API delete
+- Storage delete
+- OAuth revoke
+- Vault mutation
+- identity link/unlink
+- deploy
+- RLS enforcement production change
+- feature flag/Cron/provider setting
+- real X operation
+
+production readも原則不要。必要ならK5で別途判断。
+
+## Completion / K5
+
+Report：
+- result
+- exact old/new PR head
+- architectural correction summary
+- no-Auth-delete proof
+- lifecycle/version/backfill serialization
+- exact preflight
+- rollback fail-closed
+- ACL/RLS
+- six H1 regression results
+- full test evidence
+- changed_files
+- production mutation=0
+- remaining managed-service/orchestrator prerequisites
+- rollout/rollback implications
+- next recommendation
+
+完了時 status -> review_required / next_owner -> chatgpt / STOP。
+
+K5後は、同じPRの再レビューをH1/H2の空き枠へ入れる。
+推薦レビュー：**Sol（高）**。
+production適用前：**Sol（極高）**。
+
+## Report
+
+- task_id: common-account-pr70-corrective-lifecycle-foundation-20261001
+- result: pending
+- old_pr_head: 89cf128bd9219897806b2b641cce4866f6e16c52
+- new_pr_head: pending
+- tests: pending
+- production_mutation: 0 expected
+- deploy: prohibited
+- next_recommendation: G5 corrective implementation on PR #70.
+
+---
+
+## Previous completed G5 task history — preserved below
+
+# Claude Task 5 — CURRENT TASK
+
 - task_id: common-account-v1-phase1-additive-lifecycle-foundation-20261001
 - owner: claude
 - slot: claude-5
