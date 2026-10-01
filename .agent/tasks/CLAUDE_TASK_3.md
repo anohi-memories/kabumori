@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-account-deletion-ui-release-finish-20261001
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（高）
 - continues_from: x-social-mobile-e3-delete-revoke-residue-20261001
@@ -449,3 +449,21 @@ Unexpected residue: **none**.
 ### Remaining / next recommendation
 - Review and merge PR #68; then decide the fix for findings 1–2 (G4 / a follow-up).
 - Release gates unchanged: common-account deletion semantics, Apple production config, legal URLs/texts, audit retention, main-app account-delete coordination; deletion flag stays OFF.
+
+
+## Final K3 — account deletion UI release finish
+
+- verdict: **PASS**.
+- accepted PR #68 exact head: `ec292b50f8d9622a9c35dd1ce62a7d9ec1c1512b`.
+- squash merged as `c1f4f42ab78430ee0c214759b4ddac280b7f2265`.
+- root cause accepted: `Link asChild` + function-valued Pressable style lost the button container styling, leaving white text on a light background.
+- fix accepted: standalone Pressable + router.push for the two affected buttons; Settings now has a visible account-management entry.
+- native iOS Simulator Release verification passed for visibility and navigation.
+- tests: 94/94, typecheck PASS, lint PASS, diff check PASS.
+- no account-deletion backend/state-machine/scope/feature-flag/Auth/DB/RLS/RPC/Vault/OAuth change.
+- G4 files untouched; PR #65 remains a separate account-switch workstream.
+- production mutation: 0; real X operations: 0.
+- extra Codex review: not required because this is a narrow UI/navigation fix with native verification and no security/backend boundary change.
+- remaining non-blocking findings: accounts screen has a similar styling issue in a G4-owned file; Settings 「会話で相談する」 and similar Link-asChild non-forwarding children need a separate UI follow-up.
+- app binary/TestFlight release was not performed by this task; merge makes the source ready for the next native build.
+- G3 closed and reusable only after fresh allocation.
