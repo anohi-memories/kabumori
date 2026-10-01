@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-x-account-switch-auth-session-20261001
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: ready
+- next_owner: claude
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: iOSのX OAuth接続時に前回ログインしたXアカウントが再利用され、複数Xアカウント利用者が接続先を切り替えにくい問題を、本番向けに安全に修正する。
@@ -200,3 +200,71 @@ Because this changes an OAuth/authentication boundary, ChatGPT will decide at K4
 
 - status -> review_required
 - next_owner -> chatgpt
+
+
+## K4 follow-up — operator provider-side E2E only
+
+- K4 verdict: **HOLD — source/review PASS, provider-side operator E2E remains**.
+- PR #65 exact head remains `e5a66f5ba71f64b1a38d8f89faff3d0a31972949`, open and mergeable.
+- Prior C1/source-security review already accepted this exact head; no additional Codex review is required unless runtime source changes.
+- Fresh main has advanced since the PR base, but none of the five PR #65 source/test files overlap main-side changes.
+- Do not change source unless the E2E exposes a real defect.
+
+### Goal
+
+Prepare and guide a safe operator-side iOS test proving:
+1. a previously logged-in X identity is not silently forced on the posting-account connect flow,
+2. the operator can authenticate a different disposable X account,
+3. cancel -> retry remains usable,
+4. reconnect uses the same behavior,
+5. no real X post occurs.
+
+### Environment isolation
+
+- Use the dedicated G4 worktree/checkout only.
+- Do not use G3's worktree, branch, or active simulator process.
+- If no separate simulator/device is safely available, STOP and report instead of sharing G3's environment.
+- Load PR #65 JS/source into a compatible existing development build. Do not rebuild unless actually necessary.
+- Do not use protected production posting accounts.
+- Use only disposable/test X identities controlled by the operator.
+
+### Operator interaction boundary
+
+Claude may:
+- prepare the app/simulator to the point immediately before X login/account selection,
+- tell the operator exactly what to tap,
+- observe app-side state after the operator action,
+- inspect non-secret logs/results.
+
+Claude must NOT:
+- type X passwords, passkeys, 2FA codes, recovery codes, or other credentials,
+- approve X authorization on the operator's behalf,
+- clear global browser cookies,
+- modify provider settings,
+- post to X.
+
+### PASS criteria
+
+PASS only if the operator confirms/observes:
+- starting from a normal browser state with X account A signed in, the posting-account connect/reconnect flow does not silently complete as A without an opportunity to authenticate,
+- account B can be authenticated intentionally in the auth session,
+- cancellation returns safely and retry works,
+- reconnect follows the same path,
+- no real post is created.
+
+Because `preferEphemeralSession` is a best-effort platform/browser request, it is acceptable if the UI is a fresh login screen rather than a literal account chooser. The required result is that the previous normal-browser session is not silently reused in a way that prevents choosing/authenticating another account.
+
+### After PASS
+
+- Do not merge PR #65 in G4.
+- Record exact operator-observed behavior, device/simulator context, cancel/retry/reconnect result, and real X posts = 0.
+- Set status -> review_required, next_owner -> chatgpt and STOP for another K4.
+- ChatGPT will perform the final merge/no-race decision.
+
+### If FAIL
+
+- Preserve evidence and STOP.
+- Do not improvise new OAuth parameters or cookie clearing.
+- If a source correction is required, report the smallest proposed change first; runtime-source change will require another focused review.
+
+Recommended model: **Sonnet5（高）**.
