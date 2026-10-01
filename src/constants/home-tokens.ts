@@ -49,9 +49,9 @@ export const HERO = {
   /** Bottom padding under the CTA and its side margins. */
   /** Side margins of the CTA. */
   padding: 10,
-  /** Space under the CTA: the CTA sits almost on the bottom edge of the art. */
-  ctaBottomInset: 4,
-  ctaHeight: 30,
+  /** Space under the CTA: the CTA sits right on the bottom edge of the art. */
+  ctaBottomInset: 0,
+  ctaHeight: 28,
   /** Minimum space between the last point and the CTA. */
   ctaGap: 4,
   /**
