@@ -3,8 +3,8 @@
 - task_id: kabumori-home-report-hero-8-state-assets-20261001
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sonnet5（高）
 - type: Kabumori Home UI / canonical asset integration / deterministic report-state presentation
@@ -3548,3 +3548,49 @@ Production mutation: 0. Rollback: not needed. `review_required` / next_owner `ch
 - G1 status: done / next_owner none.
 - no deploy, no EAS build, no backend/production mutation.
 - task complete; do not restart without a fresh allocation.
+
+
+## Final K1 — 2026-10-02 02/07 asset alignment + Hero position follow-up
+
+- verdict: **PASS / MERGED / G1 CLOSED**.
+- reviewed follow-ups:
+  - PR #74 exact head `ae9001b472d74a2892f0d572c538ab67b5992d6b`
+  - PR #75 exact head `eeb294c3ea8bb39417c46ba29436abb8c2cee091`
+- merge order / commits:
+  - PR #74 squash merge: `9b37c350a3b9d1a936d0e03ddc281e315aba50f2`
+  - PR #75 squash merge: `02ba0e2d728833fb76b74237cc3c237130bcdbf1`
+- fresh main after both merges: `02ba0e2d728833fb76b74237cc3c237130bcdbf1`.
+
+### Accepted #74 position follow-up
+- user had already approved the real-device position relationship.
+- CTA height 34 -> 28pt.
+- CTA bottom inset = 6pt.
+- one global character lift = 6pt for all eight states; no per-state offset/scale.
+- changed scope stayed Home UI + focused test only.
+- reported app tests: 255/255 PASS.
+- Netlify preview: PASS.
+- Vercel failure was build-rate-limit-only and is not a Kabumori native merge gate under current policy.
+- EAS build: 0.
+- backend/production mutation: 0.
+
+### Accepted #75 final 02/07 assets
+- changed files exactly:
+  - `assets/images/report-states/report_02_positive.webp`
+  - `assets/images/report-states/report_07_very_negative.webp`
+  - `tests/app/report-character_test.ts`
+- both final character files remain 1586x992 RGBA/lossless WebP.
+- main now pins:
+  - 02 sha256 `4b152fdbe5586c79549fe071868ae428c1b416e3253c15d2a4987e42672527fa`
+  - 07 sha256 `8927eae433315354a7ebb65df7c6e1316201ebf5c38b612c6194085db7d9e024`
+- reported conversion: user-approved PNG -> `cwebp -lossless -exact`, alpha preserved, no crop/resize/recolor.
+- reported app tests: 255/255 PASS.
+- Netlify + Vercel previews: PASS.
+- no app-side per-state correction was added; the images themselves carry the final alignment.
+- EAS build: 0.
+- backend/production mutation: 0.
+
+### Review decision
+- Codex review: **not required**. This is low-risk UI/asset-only follow-up with pinned asset hashes, focused regression tests, no backend/auth/data boundary changes, and user visual approval.
+- no remaining G1 implementation for this round.
+- AI Lab diary: **記録不要** — 2026-10-02 canonical diary entry already exists for another real task; do not create a duplicate same-day entry or falsify a future date.
+- G1 status: done / next_owner none.
