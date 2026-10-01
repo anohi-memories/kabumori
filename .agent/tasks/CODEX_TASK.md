@@ -3,8 +3,8 @@
 - task_id: kabumori-pr67-shared-report-v2-hard-fact-review-20261001
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sol（高）
 - target: PR #67 exact head `5877045f7554cd4e089fb3b79091bf8e2bb38456`
@@ -142,6 +142,40 @@ reportには verdict, original/final head, findings severity, Hard-vs-WARN, mixe
 - analysis 86/86 (presentation 22 + H1 adversarial 13 included); personalized 128/128; data-packet 42/42; X shared consumer 8/8; `_shared` 329/329 with --no-check. Target runtime check/lint/diff PASS.
 - existing `_shared` whole-suite type errors are documented separately; not a claim of a repository-wide clean typecheck.
 - production mutation=0. Actual v2 model output, ~500-Japanese-character X API posting entitlement/contract, and native story UI remain rollout prerequisites. Detailed findings and limits are appended to `.agent/CODEX_REPORT.md`.
+
+
+## Final C1 — PR #67
+
+- verdict: **PASS-WITH-FIX / accepted**
+- original G2 head: `5877045f7554cd4e089fb3b79091bf8e2bb38456`
+- H1 reviewed/fixed final head: `d6f9c9a0285920871d0ce86cc4559f9675c0ebb9`
+- H1 fixed nine demonstrated P2-class issues, including:
+  - safe-original loss on quality-rewrite request failure
+  - malformed nested-output parser escape
+  - metric value/change/date association holes
+  - stale-as-current wording
+  - mixed-direction emoji escape
+  - historical assertions in watch/caution escaping factual guards
+  - scoped absence false positive
+  - negated direction false positive
+  - model-input news ordering contradicting broad-first policy
+- final verification accepted:
+  - market-report-analysis 86/86
+  - H1 adversarial 13/13
+  - personalized-reports 128/128
+  - market-report-data-packet 42/42
+  - X shared consumer 8/8
+  - _shared 329/329 with --no-check
+  - target runtime check/lint/diff PASS
+- production mutation from H1: 0
+- fresh-main overlap check before merge: no runtime-file overlap with PR #67.
+- PR #67 final head was mergeable and was merged by ChatGPT.
+- merge/main SHA: `09975d02cc81b1614818951173a94aa8677291a0`
+- consumer gates remain OFF; this C1 does not authorize app/X activation.
+- rollout prerequisites still include:
+  - actual live-model v2 generation observation
+  - actual X long-post entitlement/provider acceptance before x_enabled
+  - native App story UI integration before app consumer activation
 
 ---
 
