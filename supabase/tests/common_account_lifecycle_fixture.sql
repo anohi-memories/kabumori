@@ -20,6 +20,23 @@ create table auth.identities (
   unique (user_id, provider)
 );
 
+-- Storage, shaped like production: the owner is recorded as plain text (and in
+-- the deprecated uuid column); neither references auth.users. The only foreign
+-- key is objects.bucket_id -> buckets.id.
+create schema storage;
+create table storage.buckets (
+  id text primary key,
+  owner uuid,
+  owner_id text
+);
+create table storage.objects (
+  id uuid primary key default gen_random_uuid(),
+  bucket_id text references storage.buckets (id),
+  name text,
+  owner uuid,
+  owner_id text
+);
+
 alter table public.profiles add column created_at timestamptz not null default now();
 alter table public.brand_memberships add column created_at timestamptz not null default now();
 
