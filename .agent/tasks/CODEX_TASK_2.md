@@ -1,5 +1,104 @@
 # Codex Task 2
 
+- task_id: x-ai-lab-pr66-topic-dedup-review-20261001
+- owner: codex
+- slot: codex-2
+- status: ready
+- next_owner: codex
+- priority: high
+- recommended_model: Luna（高）
+- target: PR #66 exact head `4f692e4d805ccd3ee628058bb20ee6c1f62cdd6d`
+- type: review / regression verification
+
+## Purpose
+
+Focused pre-merge review of the emergency Company AI Lab topic-deduplication fix. Verify that it actually prevents the observed same-theme repetition without introducing cross-brand behavior changes, unnecessary posting failures, or incorrect topic rotation.
+
+This is not an Auth/security/DB migration task. Do not broaden scope.
+
+## Review scope
+
+Changed source paths:
+- `supabase/functions/_shared/brand/ai_lab_brand_post_store.ts`
+- `supabase/functions/_shared/brand/ai_lab_dev_diary_context.ts`
+- `supabase/functions/_shared/brand/ai_lab_scheduled_brand_post.ts`
+- `supabase/functions/_shared/brand/ai_lab_theme_guard.ts`
+- `supabase/functions/_shared/brand/ai_lab_topic_dedup_test.ts`
+- `supabase/functions/_shared/brand/brand_post_generator.ts`
+- `supabase/functions/x-test-post/index.ts`
+
+## Verify
+
+1. Root-cause fix
+- fresh diary is selected ahead of evergreen while actually fresh
+- generic diary angles such as "調査だけの日 / コードを書かない日 / 手戻りを減らす" cannot immediately reappear through another wording
+- rotation does not accidentally repeat the same unit on adjacent scheduled posts when multiple safe units exist
+- one-entry diary behavior is truthful: different cuts may be reused but no fabricated "today" detail is introduced
+
+2. Rotation counter correctness
+- `countAiLabBrandPostsBefore` is read-only and correctly scoped to AI Lab + brand_post + scheduled time
+- PostgREST exact-count parsing is correct for the actual request shape
+- failure fallback is deterministic enough and cannot block the post
+- no unrelated scheduled rows can perturb the AI Lab counter
+
+3. Content guard / retry semantics
+- maximum generation attempts are exactly bounded
+- rejected drafts cannot be published or marked complete
+- final failure state is truthful and does not accidentally retry transport/publish
+- retry instructions do not leak rejected text or internal data
+- guard does not reject legitimate concrete diary posts merely because the factual seed itself contains a generic phrase
+- opening-pattern detection does not create excessive false positives
+
+4. Cross-brand isolation
+- `extraInstructions` omitted/empty leaves non-AI-Lab generator behavior unchanged
+- new guard is only imported/used from AI Lab paths
+- no Kabumori/Mio/neutral social-mobile hashtag/voice/generation behavior changes
+- no scheduler count, post frequency, Cron, X API, OAuth, Auth, Vault, DB schema/RPC/migration changes
+
+5. Tests
+- inspect the new 24 tests for behavior-level assertions, not only source-string checks
+- rerun focused new test file
+- rerun relevant AI Lab diary/snapshot/sanitizer/voice/generator/scheduled dispatch tests
+- run `deno check` on changed runtime modules
+- full function suite may be relied on if practical; distinguish baseline environment-only failures from candidate failures
+- `git diff --check`
+
+6. Known limitation
+- recent post body is not persisted, so true semantic comparison is not implemented. Confirm the PR does not claim otherwise and that the stopgap rotation/cooldown is internally consistent.
+
+## Safety
+
+- Source review only.
+- No merge.
+- No deploy.
+- No real X post.
+- No DB write or production mutation.
+- Do not change schema/RPC/Cron/OAuth/Auth/Vault.
+- If a source defect is small and unquestionably within PR scope, you may fix it on the PR branch and report exact delta; otherwise report finding and STOP.
+- Use an independent H2 worktree/checkout. Do not share G3/G4/H1 working directories.
+
+## Completion / C2
+
+Report:
+- PASS / PASS-WITH-FIX / FAIL
+- exact reviewed head and final head if changed
+- findings by severity
+- test evidence
+- cross-brand regression result
+- whether PR #66 is safe to merge
+- whether only `x-test-post` needs controlled production redeploy
+- production mutation = 0
+- real X posts = 0
+- remaining limitations
+
+Then status -> review_required, next_owner -> chatgpt and STOP.
+
+---
+
+## Previous completed H2 task preserved
+
+# Codex Task 2
+
 - task_id: x-ai-salaryman-dev-diary-pr61-final-acceptance-20260930
 - owner: codex
 - slot: codex-2
@@ -44,3 +143,4 @@ production_mutation=0.
 ## Completion / C2
 
 Report PASS/FAIL, exact reviewed head, disposition of all prior blockers, test evidence, cross-brand safety, and whether PR #61 is safe to merge and deploy.
+
