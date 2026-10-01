@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-x-account-switch-auth-session-20261001
 - owner: claude
 - slot: claude-4
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: iOSのX OAuth接続時に前回ログインしたXアカウントが再利用され、複数Xアカウント利用者が接続先を切り替えにくい問題を、本番向けに安全に修正する。
@@ -378,3 +378,61 @@ PASS if all are true:
 - STOP with evidence.
 - Do not clear Safari cookies, add undocumented X params, or improvise provider workarounds.
 - Any runtime source change reopens focused review.
+
+
+## Report — K4 follow-up 2: isolated provider proof (2026-10-01)
+
+- task_id: x-social-mobile-x-account-switch-auth-session-20261001
+- result: **PASS（操作者が実機で確認）**。PR #65 head のネイティブビルドで、X接続の認証セッションがSafariのログイン中アカウントAを引き継がず、別の使い捨てアカウントBで認証画面（最終の許可の手前）まで進めること、キャンセル後の再試行が同様に動くことを、操作者が観察した。runtime sourceは変更していない。
+- model_used: Sonnet 5.5
+- PR #65: exact head `e5a66f5ba71f64b1a38d8f89faff3d0a31972949`（OPEN、MERGEABLE、CLEAN、GitHub checks green）。**mergeしていない**（最終のmerge判断はChatGPT）。fresh mainにPR #65の5つのsource/testファイルとの重なりなし。
+
+### 環境（G3の環境・設定は不使用）
+
+- 実施はG4専用の一時フォルダのみ（PR #65 headを`git archive`で取り出し、`npm ci`、`expo prebuild`、`pod install`、`xcodebuild`）。G3・他slotのworktree/.env/Simulator/Metroには触れていない。リポジトリのsource・app.jsonは変更していない（検証用の変更は一時フォルダ内のみ）。
+- 公開クライアント設定（Supabase URL・publishable key）は操作者が提供。秘密鍵・service_role・Vaultは不使用。設定値は一時フォルダ内の未追跡`.env`のみ（コミットなし、このReportにも値を記載しない）。
+- **Simulator**（iPhone 17e、未使用機）: Debugビルドを作成・インストールし、アプリがログイン画面（実データ接続）まで起動することを確認。ただしClaude内の操作パネルにホームボタンがなく、SafariとアプリをSimulator上で行き来する検証が不便だったため、操作者の依頼で実機に切り替えた。このMacには`Simulator.app`本体が無い。
+- **実機**（操作者のiPhone 17 Pro、iOS 26系）: 一時フォルダでDebugビルド（ローカル署名、操作者の既存の開発用証明書、自動プロビジョニング）→ `devicectl`でインストール → 私のMetro（LAN、port 8081、一時フォルダのnode_modules）からJSを読み込み。EAS不使用。
+  - 検証用の一時変更（一時フォルダ内のみ）: bundle identifierを既存の開発用アプリと別の値（`…g4proof`）にして、操作者の既存アプリを上書きしない。署名可能にするため、Appleログインのentitlement（`usesAppleSignIn`と`expo-apple-authentication` plugin）を一時的に外した（今回の確認対象外）。
+  - アプリのJS（PR #65 headのsource）は、Metroが1386 modulesをbundleして実機に配信したことをログで確認。
+
+### 操作者が観察した結果（使い捨てアカウントのみ）
+
+操作者の報告（原文要旨）:
+1. SafariでXアカウントAにログインした状態で、アプリのXアカウント接続を開始 → **「ログイン画面から始まった（Aを引き継がなかった）」**。
+2. 別の使い捨てアカウントBで、**「許可の手前まで進めた」**（最終のX認可・consentは押していない）。
+3. 認証シートを閉じる → **アプリの「Xで認証」画面に戻った**（キャンセルで安全に戻る）。
+4. もう一度接続を開始 → **「ログインになった」**（再試行でも、Aを自動で引き継がずログイン画面から始まった）。
+
+### PASS criteria
+
+- isolated G4 native build runs PR #65 head: **満たす**（Simulator・実機の両方でPR #65 headのJSを実行。実機で操作者が確認）。
+- Safari account A is not silently forced through the app auth session: **満たす（操作者の観察）**。
+- operator can reach authentication as a different disposable account B: **満たす**（許可の手前まで）。
+- cancel returns safely / retry works: **満たす**（操作者の観察。3と4）。
+- no final provider authorization/linking completed: **満たす**（操作者は最終の許可を押していない）。
+- production DB/Vault/Auth/OAuth application state mutation = 0: **Claudeは0**。操作者はアプリに使い捨てのアプリアカウントでログイン（またはその登録）をした可能性があり、その場合は使い捨てのAuthユーザーが本番Authに1件作られている。このReportでは操作者の行為の内訳は確認していない。X側の接続（連携の保存・Vault）は作られていない（最終の許可を押していないため）。
+- real X posts = 0: 満たす。
+- runtime source remains unchanged: 満たす（PR #65 headのまま。変更・追加commitなし）。
+
+### 注意・補足
+
+- 未確認: 「再接続」ボタン（接続済みアカウントがある状態）での操作は今回は行っていない。TASKの判断どおり、接続と再接続は同じhook・同じ認証セッション設定を共有する（sourceとテストで確認済み）。
+- 操作者の観察は「ログイン画面から始まった」で、「アカウント選択画面」ではない。`preferEphemeralSession`はベストエフォートの要求であり、TASKのPASS基準（前のブラウザセッションの黙った再利用がない）を満たす挙動。
+- 副作用の再確認: 非共有セッションのため、接続のたびにXへログインし直しになる。
+- 後片付けのお願い（操作者）: iPhoneに検証用アプリ「Social Operations」（別のbundle id）が追加されている。不要なら削除してよい。使い捨てのアプリアカウント・Xアカウントも不要なら操作者側で整理する。Simulator（iPhone 17e）にも検証用アプリが残っている。
+- 私が起動した開発サーバー（port 8083、8081）は両方停止済み。他のslotの開発サーバーは停止していない。一時フォルダはMacの再起動等で消える。
+
+### production mutation / X posts
+
+Claudeによるproduction mutation 0。実X投稿 0。最終のX認可（接続の作成）は押されていない。
+
+### 次の推奨
+
+- ChatGPTがK4でPR #65の最終merge判断（head `e5a66f5`、checks green、main重なりなし、操作者の実機確認PASS）。
+- merge後、X接続の手順（E3など）に「接続のたびにXへログインし直し」の旨を反映する。
+
+## Completion
+
+- status -> review_required
+- next_owner -> chatgpt
