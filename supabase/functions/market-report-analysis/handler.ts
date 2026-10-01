@@ -15,7 +15,7 @@
 import type { MarketDataPacket } from "../market-report-data-packet/packet_schema.ts";
 import { decideRunWindow, type ReportType } from "../market-report-data-packet/session_logic.ts";
 import { buildAnalysisInput, type NewsTextRow } from "./analysis_input.ts";
-import { ANALYSIS_MODEL, generateSharedAnalysis, type Requester, reportContentHash } from "./analysis_logic.ts";
+import { ANALYSIS_MODEL, generateSharedAnalysis, generationDiagnostics, type Requester, reportContentHash } from "./analysis_logic.ts";
 import {
   fetchWithTransportRetry,
   newTransportStats,
@@ -222,6 +222,8 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
       deps.now,
     );
     Object.assign(diagnostics, transportDiagnostics(transport));
+    // Content regeneration (local / Fact rejection, quality rewrite) is not a transport retry.
+    Object.assign(diagnostics, generationDiagnostics(outcome.trace));
     diagnostics.calls = String(outcome.calls);
     diagnostics.input_tokens = String(outcome.inputTokens);
     diagnostics.output_tokens = String(outcome.outputTokens);

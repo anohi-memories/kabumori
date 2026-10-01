@@ -5,8 +5,13 @@
 // market_data_packet; the model only writes the explanatory text, and every
 // claim carries evidence refs. Consumers never re-analyse the market: X formats
 // x_post deterministically, the app copies market_section verbatim.
+//
+// Presentation v2 (2026-10-01) is additive: market_report_packets.schema_version is pinned to
+// "market_report_packet.v1" by a table check, so the richer X digest and the app story travel as
+// optional fields marked by presentation_version. A stored packet without them renders as before.
 
 export const REPORT_SCHEMA_VERSION = "market_report_packet.v1";
+export const PRESENTATION_VERSION = "market_presentation.v2";
 
 export type ReportType = "morning" | "close";
 export type MarketDirection = "up" | "down" | "mixed" | "flat" | "unknown";
@@ -29,9 +34,37 @@ export type Claim = {
   scope: "today" | "overnight" | "next";
 };
 
-export type KeyNews = { ref_id: string; headline_ja: string; why_it_matters_ja: string };
+/** How widely a news item matters: the whole market, a sector/theme, or one company. */
+export type NewsScope = "broad" | "sector" | "company";
+export type KeyNews = { ref_id: string; headline_ja: string; why_it_matters_ja: string; scope?: NewsScope };
 export type Theme = { name_ja: string; claim_ids: string[] };
-export type XPost = { lead_ja: string; points_ja: string[]; closing_ja: string };
+/** context_ja / news_ja / watch_ja exist only on presentation v2 packets (news_ja may be empty). */
+export type XPost = {
+  lead_ja: string;
+  points_ja: string[];
+  closing_ja: string;
+  context_ja?: string;
+  news_ja?: string;
+  watch_ja?: string;
+};
+/** Model-written prose for the app's market story; headings and metric lines are added in code. */
+export type AppStoryDraft = {
+  summary_ja: string;
+  overseas_ja: string;
+  japan_ja: string;
+  cross_asset_ja: string;
+  news_ja: string;
+  strong_ja: string;
+  caution_ja: string;
+  watch_ja: string;
+};
+/** Direction of one market session, decided in code. A morning packet has two different sessions. */
+export type SessionView = {
+  market: "tokyo" | "us";
+  session_date: string | null;
+  direction: MarketDirection;
+  basis: string[];
+};
 
 export type MarketReportPacket = {
   schema_version: typeof REPORT_SCHEMA_VERSION;
@@ -54,8 +87,16 @@ export type MarketReportPacket = {
   risks_ja: string[];
   data_gaps_ja: string[];
   x_post: XPost;
-  fact: { local_issues: string[]; ai_status: "passed"; generation_attempts: number };
+  presentation_version?: typeof PRESENTATION_VERSION;
+  app_story?: AppStoryDraft;
+  session_views?: SessionView[];
+  /** quality_warnings never block delivery; they are recorded for observation. */
+  fact: { local_issues: string[]; ai_status: "passed"; generation_attempts: number; quality_warnings?: string[] };
 };
+
+export function isPresentationV2(packet: MarketReportPacket): boolean {
+  return packet.presentation_version === PRESENTATION_VERSION && typeof packet.x_post.context_ja === "string";
+}
 
 // ---------------------------------------------------------------------------
 // X: deterministic formatting of the shared packet
@@ -71,35 +112,83 @@ const X_POINTS_TITLE: Record<ReportType, string> = {
   close: "📌 今日の3ポイント",
 };
 
-export const X_POST_MIN_CHARS = 150;
-export const X_POST_MAX_CHARS = 520;
+const X_WATCH_TITLE: Record<ReportType, string> = {
+  morning: "👀 今日見るポイント",
+  close: "👀 明日以降の注目点",
+};
+const X_CLOSING_TITLE = "💬 今日のひとこと";
+
+/** Below this a body is broken output, not a short digest. */
+export const X_POST_HARD_MIN_CHARS = 80;
+/** Above this the body is not safely postable. Length inside the hard bounds is a quality matter. */
+export const X_POST_HARD_MAX_CHARS = 900;
+/** Editorial target for the formatted body (header included, fixed hashtags excluded). */
+export const X_POST_TARGET_MIN_CHARS = 430;
+export const X_POST_TARGET_MAX_CHARS = 560;
+export const X_POST_EMOJI_MIN = 3;
+export const X_POST_EMOJI_MAX = 8;
 
 export function formatSharedXPost(packet: MarketReportPacket): string {
   const points = packet.x_post.points_ja.map((point) => `・${point.trim()}`).join("\n");
+  if (!isPresentationV2(packet)) {
+    return [
+      X_HEADERS[packet.report_type],
+      packet.x_post.lead_ja.trim(),
+      "",
+      X_POINTS_TITLE[packet.report_type],
+      points,
+      "",
+      `💬 ${packet.x_post.closing_ja.trim()}`,
+    ].join("\n");
+  }
+  const context = (packet.x_post.context_ja ?? "").trim();
+  const news = (packet.x_post.news_ja ?? "").trim();
+  const watch = (packet.x_post.watch_ja ?? "").trim();
+  // Optional paragraphs are dropped when the evidence did not support them.
   return [
-    X_HEADERS[packet.report_type],
-    packet.x_post.lead_ja.trim(),
-    "",
-    X_POINTS_TITLE[packet.report_type],
-    points,
-    "",
-    `💬 ${packet.x_post.closing_ja.trim()}`,
-  ].join("\n");
+    [X_HEADERS[packet.report_type], packet.x_post.lead_ja.trim()].join("\n"),
+    [X_POINTS_TITLE[packet.report_type], points].join("\n"),
+    context,
+    news ? `📰 ${news}` : "",
+    watch ? [X_WATCH_TITLE[packet.report_type], watch].join("\n") : "",
+    [X_CLOSING_TITLE, packet.x_post.closing_ja.trim()].join("\n"),
+  ].filter(Boolean).join("\n\n");
 }
 
-/** Codes for a formatted X body that must not be posted. */
+export function emojiCount(text: string): number {
+  return (text.match(/\p{Extended_Pictographic}/gu) ?? []).length;
+}
+
+/** Codes for a formatted X body that must not be posted (broken or platform-unsafe output only). */
 export function sharedXPostIssues(packet: MarketReportPacket, text: string): string[] {
   const issues: string[] = [];
   const length = Array.from(text).length;
-  if (length < X_POST_MIN_CHARS) issues.push("X_POST_TOO_SHORT");
-  if (length > X_POST_MAX_CHARS) issues.push("X_POST_TOO_LONG");
+  if (length < X_POST_HARD_MIN_CHARS) issues.push("X_POST_TOO_SHORT");
+  if (length > X_POST_HARD_MAX_CHARS) issues.push("X_POST_TOO_LONG");
   if (packet.x_post.points_ja.length !== 3 || packet.x_post.points_ja.some((point) => !point.trim())) {
     issues.push("X_POST_POINTS_INVALID");
   }
+  if (!packet.x_post.lead_ja.trim() || !packet.x_post.closing_ja.trim()) issues.push("X_POST_SECTION_EMPTY");
   if (/https?:\/\/|www\./i.test(text)) issues.push("X_POST_URL");
   if (/[#＃]\S/.test(text)) issues.push("X_POST_HASHTAG");
   if (/\n{3,}/.test(text)) issues.push("X_POST_BLANK_LINES");
   return issues;
+}
+
+/** Editorial shortfalls of a postable X body. These are recorded and never suppress the post. */
+export function sharedXPostWarnings(packet: MarketReportPacket, text: string): string[] {
+  const warnings: string[] = [];
+  const length = Array.from(text).length;
+  if (length < X_POST_TARGET_MIN_CHARS) warnings.push(`X_POST_SHORTER_THAN_TARGET:${length}`);
+  if (length > X_POST_TARGET_MAX_CHARS) warnings.push(`X_POST_LONGER_THAN_TARGET:${length}`);
+  const emoji = emojiCount(text);
+  if (emoji < X_POST_EMOJI_MIN || emoji > X_POST_EMOJI_MAX) warnings.push(`X_POST_EMOJI_COUNT:${emoji}`);
+  if (isPresentationV2(packet)) {
+    if (!(packet.x_post.context_ja ?? "").trim()) warnings.push("X_POST_CONTEXT_OMITTED");
+    if (!(packet.x_post.news_ja ?? "").trim()) warnings.push("X_POST_NEWS_OMITTED");
+    if (!(packet.x_post.watch_ja ?? "").trim()) warnings.push("X_POST_WATCH_OMITTED");
+  }
+  return warnings;
 }
 
 // ---------------------------------------------------------------------------

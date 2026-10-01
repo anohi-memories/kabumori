@@ -120,3 +120,40 @@ test("9: brief limits stay morning 120 / close 160", () => {
   assert.equal(REPORT_LIMITS.impactBriefMorning, 120);
   assert.equal(REPORT_LIMITS.impactBriefClose, 160);
 });
+
+// 2026-09-30 close: the app report was withheld by the Fact check after the overview said
+// 「個別材料が含まれていない入力」 while the packet held market and watch-list news. The report-level,
+// unscoped claim is now rejected by the local check (before Fact), and stays allowed when it is true.
+test("10: a report-level 'no material' claim without a scope is rejected while the packet holds news", () => {
+  const { snapshot, packet } = mixed();
+  const impacts = [
+    { ticker_code: "1111", stance: "neutral", basis: [], fact_ja: "会社1111が資料を公表しました。", inference_ja: "", watch_ja: "" },
+    { ticker_code: "2222", stance: "no_clear_material", basis: [], fact_ja: `${HOLDING_NO_MATERIAL_SENTENCE}。`, inference_ja: "", watch_ja: "" },
+  ];
+  const withOverview = (overview: string) => parseReportDraft({ ...draft(impacts), overview_ja: overview }).body!;
+  for (const overview of [
+    "保有銘柄の入力には個別材料がなく、前営業日の終値が確認ポイントです。",
+    "個別材料が含まれていない入力のため、指数の動きを確認します。",
+    "きょうは目立ったニュースはありません。",
+  ]) {
+    assert.deepEqual(localReportIssues(withOverview(overview), snapshot, packet), ["FALSE_BROAD_NO_MATERIAL_CLAIM"], overview);
+  }
+  // Scoped to one holding, or about something specific: allowed (the holding-level rule still applies).
+  for (const overview of [
+    "会社1111は資料を公表しました。会社2222についての個別ニュースはありません。",
+    "値動きの理由を説明するニュースは確認できません。",
+  ]) {
+    assert.deepEqual(localReportIssues(withOverview(overview), snapshot, packet), [], overview);
+  }
+  // With no news anywhere in the packet the statement is true and stays allowed.
+  const tracked = [{
+    trackedStockId: "t2222", tickerCode: "2222", companyName: "会社2222", sector: "サービス業",
+    trackingType: "holding" as const, quantity: 100, averagePrice: 900, positionType: "cash" as const, side: "long" as const,
+  }];
+  const emptySnapshot = buildSnapshot({
+    reportType: "morning", tradingDate: "2026-09-28", tracked, prices: new Map([["2222", FLAT]]),
+    indices: [{ label: "日経平均", series: FLAT }, { label: BENCHMARK_LABEL, series: FLAT }], news: [],
+  });
+  const quiet = parseReportDraft({ ...draft([impacts[1]]), overview_ja: "入力に個別の材料は含まれていません。" }).body!;
+  assert.deepEqual(localReportIssues(quiet, emptySnapshot, buildPacket(emptySnapshot, [])), []);
+});

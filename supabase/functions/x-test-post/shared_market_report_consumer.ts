@@ -4,8 +4,10 @@
 // Gate OFF (market_report_consumer_settings.x_enabled = false, the default):
 // index.ts runs its legacy generation unchanged.
 // Gate ON: the post body is formatted deterministically from the Fact-passed
-// market_report_packet.v1. No web search, no Yahoo fetch, no OpenAI call, no
-// Voice step here. If the shared packet is not completed the run fails closed
+// market_report_packet.v1 (the ~500-character digest when the packet carries
+// presentation v2, the short v1 body otherwise). No web search, no Yahoo fetch, no OpenAI call, no
+// Voice step here. Only broken or platform-unsafe output stops the post; length
+// or emoji shortfalls are recorded as quality_warnings and the post goes out. If the shared packet is not completed the run fails closed
 // with SHARED_MARKET_REPORT_UNAVAILABLE; it never falls back to a separate
 // legacy analysis, so X and the app cannot diverge.
 
@@ -15,6 +17,7 @@ import {
   type ReportType,
   type SharedMarketReportResult,
   sharedXPostIssues,
+  sharedXPostWarnings,
   tokyoDate,
 } from "../_shared/market_report_packet.ts";
 import { appendKabumoriReportFixedHashtags } from "./fixed_hashtags_logic.ts";
@@ -148,7 +151,7 @@ export async function publishSharedMarketReport(
     character_count: Array.from(body).length,
     fact_check_status: "passed",
     fact_check_notes: [`shared market_report_packet ${shared.report_packet_id}`],
-    market_data: baseMarketData,
+    market_data: { ...baseMarketData, quality_warnings: sharedXPostWarnings(shared.report, body) },
     ...(reportType === "close"
       ? { nikkei_data: closeMetricColumn(shared.data, "nikkei225"), topix_data: closeMetricColumn(shared.data, "topix_proxy_1306") }
       : {}),
