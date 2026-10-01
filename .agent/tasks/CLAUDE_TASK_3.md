@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-e3-delete-revoke-residue-20261001
 - owner: claude
 - slot: claude-3
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: critical
 - recommended_model: Opus5.5（高）
 - continues_from: x-social-mobile-pr63-merge-native-e3-resume-20260930
@@ -206,3 +206,20 @@ Unexpected residue: **none**.
 - Final K3 for E3 = PASS candidate.
 - Open a small source task for issue 1 (and decide issue 2) before the deletion flag can be enabled in any product build.
 - Decide who removes the leftover disposable login (issue 4).
+
+
+## Final K3 — E3 deletion/revoke/residue
+
+- verdict: **PASS**
+- accepted task: `x-social-mobile-e3-delete-revoke-residue-20261001`
+- operational result: the disposable social-mobile service data was deleted once after fresh approval; its X authorization was revoked; no unexpected residue remained.
+- accepted scope: `social_only`. The shared Supabase Auth user / login identity / main-app profile were intentionally retained.
+- residue: workspace, membership, social account, disposable X credential references/material, and OAuth transient state removed as designed; deletion audit retained as designed.
+- protected production posting accounts and their credential references/state remained unchanged.
+- real X posts: 0. No scheduler/manual publish. No global deletion flag enable. No source commit or PR from this task.
+- source changes: none. Local-only verification edits/config were not product changes; the X-connect temporary hook edit was reverted before report.
+- remaining release blocker: native iOS Login methods screen has invisible/tappable-only buttons for the deletion and posting-X navigation. Deletion entry is also too deep. Keep deletion feature globally gated until UI/flow work is addressed.
+- retained disposable login/profile is intentional under current `social_only` behavior and now becomes input to the new common-account/service-entitlement design rather than an E3 failure.
+- Codex review: **not required for this K3** because no implementation source changed and the purpose of this task was operational E2E of already reviewed boundaries. Re-review at the next source change / production activation gate.
+- AI Lab diary: 候補あり — 使い捨てアカウントで「このアプリだけ利用終了」の流れを最後まで試し、他のサービス用ログインを残したままX連携とアプリ専用データだけ消えることを確認した。
+- next: common-account design should replace the current proxy-style service-existence decision with an explicit service entitlement. Separately fix the native deletion/navigation button visibility before enabling self-service deletion broadly.
