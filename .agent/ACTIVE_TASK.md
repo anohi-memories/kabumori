@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - task_id: common-account-pr70-lifecycle-foundation-review-20261001
 - start_code: H1
 - finish_code: C1
-- next_owner: chatgpt
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: H1 completed FAIL / CHANGES REQUIRED, PR #70 head 89cf128bd9219897806b2b641cce4866f6e16c52 unchanged. Storage/Auth finalization, stale confirmation/backfill lock/admin exclusion, exact FK preflight and missing-settings rollback defects reproduced. Baseline 16 + 8 + 10 PASS; scratch row-lock mutation detected. Production mutation 0; source merge/apply/deploy HOLD. C1待ち、推薦モデル Sol（高）。G5未再割当。将来のproduction前はSol（極高）の別レビュー必須。
+- allocation: Final C1 accepted FAIL / CHANGES REQUIRED. PR #70 old head 89cf128bd9219897806b2b641cce4866f6e16c52 is not merge-safe. Six reproduced blockers: managed Storage/Auth completion gap, stale preview/backfill, concurrent locked backfill, admin X entitlement, non-exact FK preflight, missing-settings rollback. Production mutation 0. H1 free after fresh allocation.
 
 ## Codex H2
 - owner: codex
@@ -93,14 +93,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: done
-- task_id: common-account-v1-phase1-additive-lifecycle-foundation-20261001
+- status: ready
+- task_id: common-account-pr70-corrective-lifecycle-foundation-20261001
 - start_code: G5
 - finish_code: K5
-- next_owner: none
+- next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: Final K5 PASS to focused review. PR #70 exact head 89cf128bd9219897806b2b641cce4866f6e16c52; additive source/tests/docs only、production mutation 0。merge/apply/deploy HOLD、H1 review assigned。G5再利用前にfresh allocation必須。
+- allocation: PR #70 corrective Phase 1 foundation. SQL Auth DELETEをPhase 1責任から外し、managed deletionを後続orchestratorへ分離。H1の6反例をregression化し、preview/version、backfill lock、admin exclusion、exact FK preflight、rollback fail-closedを修正。production変更禁止。推薦モデル Opus5.5（極高）。
 
 ## Deferred
 
