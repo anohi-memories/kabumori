@@ -10,6 +10,11 @@ import {
   type BrandPostDraft,
   generateBrandPost,
 } from "./brand_post_generator.ts";
+import { collectAiLabContentViolations } from "./ai_lab_theme_guard.ts";
+
+// 汎用テーマ・「個人開発は、」書き出し・直近投稿との重複で弾かれた場合に、再生成する最大試行回数
+// （初回を含む）。全て不合格なら投稿せず失敗側に倒す（重複投稿を出すより1枠見送る方が安全）。
+export const AI_LAB_MAX_GENERATION_ATTEMPTS = 3;
 
 export type AiLabBrandPostCompletion = {
   fingerprintPersisted: boolean;
@@ -39,6 +44,9 @@ export async function dispatchAiLabScheduledBrandPost({
   publishText,
   completePublishedPost,
   generate = generateBrandPost,
+  topicSeed = "",
+  recentPostTexts = [],
+  onContentRejected,
 }: {
   context: BrandContext;
   postType: string;
@@ -55,7 +63,14 @@ export async function dispatchAiLabScheduledBrandPost({
     openAiApiKey: string;
     context: BrandContext;
     postType: string;
+    /** Violations of the previous attempt (empty on the first attempt) so the prompt can name them. */
+    retryViolations: readonly string[];
   }) => Promise<BrandPostDraft>;
+  /** The topic seed handed to the generator; a generic theme explicitly in the seed is allowed in the text. */
+  topicSeed?: string;
+  /** Recent own-post texts, when the caller has them. Hash-only history cannot supply these today. */
+  recentPostTexts?: readonly string[];
+  onContentRejected?: (info: { attempt: number; violations: readonly string[] }) => void;
 }): Promise<{
   brandId: "ai_salaryman_lab";
   postType: "brand_post";
@@ -72,10 +87,26 @@ export async function dispatchAiLabScheduledBrandPost({
   assertBrandPublishAllowed(context);
 
   const recentFingerprints = await loadRecentFingerprints();
-  const draft = await generate({ openAiApiKey, context, postType });
-  if (draft.brandId !== "ai_salaryman_lab" || draft.postType !== "brand_post") {
-    throw new BrandContextError("AI_LAB_GENERATION_CONTEXT_MISMATCH");
+  let draft: BrandPostDraft | null = null;
+  let retryViolations: readonly string[] = [];
+  for (let attempt = 1; attempt <= AI_LAB_MAX_GENERATION_ATTEMPTS; attempt += 1) {
+    const candidate = await generate({ openAiApiKey, context, postType, retryViolations });
+    if (candidate.brandId !== "ai_salaryman_lab" || candidate.postType !== "brand_post") {
+      throw new BrandContextError("AI_LAB_GENERATION_CONTEXT_MISMATCH");
+    }
+    const violations = collectAiLabContentViolations({
+      text: candidate.text,
+      seedText: topicSeed,
+      recentPostTexts,
+    });
+    if (violations.length === 0) {
+      draft = candidate;
+      break;
+    }
+    onContentRejected?.({ attempt, violations });
+    retryViolations = violations;
   }
+  if (!draft) throw new BrandContextError("AI_LAB_CONTENT_DIVERSITY_REJECTED");
 
   // Independent of the generation prompt and generator check: this is the final gate directly before
   // handing text to the existing X text-post abstraction.

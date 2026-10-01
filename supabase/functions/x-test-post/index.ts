@@ -72,6 +72,7 @@ import { loadBrandXTokens } from "../_shared/brand/token_loader.ts";
 import { xOAuthClientRegistryFromEnv } from "../_shared/x_v2_account_refresh.ts";
 import { createVaultAccountCredentialRpc, VaultAccountXAuth } from "./vault_account_auth.ts";
 import {
+  countAiLabBrandPostsBefore,
   loadAiLabRecentDedupeFingerprints,
   recordAndCompleteAiLabBrandPost,
 } from "../_shared/brand/ai_lab_brand_post_store.ts";
@@ -81,8 +82,9 @@ import {
 } from "../_shared/brand/ai_lab_scheduled_brand_post.ts";
 import {
   loadAiLabDevDiaryMarkdown,
-  selectAiLabTopicSeed,
+  selectAiLabRotatingTopicSeed,
 } from "../_shared/brand/ai_lab_dev_diary_context.ts";
+import { aiLabDiversityInstructions } from "../_shared/brand/ai_lab_theme_guard.ts";
 import { generateBrandPost } from "../_shared/brand/brand_post_generator.ts";
 import {
   collectVoiceResponseDiagnostics,
@@ -4020,20 +4022,52 @@ Deno.serve(async (req) => {
         // see ai_lab_dev_diary_context.ts) when one exists, else a safe evergreen reflection. Never
         // falls back to the brand-agnostic generator's own generic topic default for this brand.
         // loadAiLabDevDiaryMarkdown() reads a bundled `import`-ed constant, not a file, so it never
-        // rejects; an empty/stale/unsafe diary yields no fresh entries, which selectAiLabTopicSeed
-        // already maps to the evergreen fallback (see ai_lab_dev_diary_context.ts), never a
-        // fabricated "today" claim.
+        // rejects; an empty/stale/unsafe diary yields no fresh entries, which
+        // selectAiLabRotatingTopicSeed maps to the evergreen fallback (see ai_lab_dev_diary_context.ts),
+        // never a fabricated "today" claim.
         const diaryMarkdown = await loadAiLabDevDiaryMarkdown();
-        const { topic: aiLabTopicSeed } = selectAiLabTopicSeed({
+        // Duplicate-theme stopgap (2026-10-01): rotate through every fresh diary topic (never the same
+        // entry/topic twice in a row) instead of re-rolling the newest entry's angle at random. Post
+        // text is not persisted (only hashes), so the rotation index -- how many AI Lab brand posts were
+        // scheduled before this one -- stands in for "what was used recently". If that read fails, the
+        // scheduled hour still advances between posts, so a missing counter never blocks a post.
+        const rotationIndex = await countAiLabBrandPostsBefore({
+          supabaseUrl,
+          serviceRoleKey,
+          scheduledFor: scheduledPost.scheduled_for,
+        }) ?? Math.floor(Date.parse(scheduledPost.scheduled_for) / 3_600_000);
+        const selection = selectAiLabRotatingTopicSeed({
           markdown: diaryMarkdown,
           now: new Date(),
+          rotationIndex,
         });
+        // PROJECT_RULES: candidate exclusions are logged with machine-readable reason codes (no text).
+        console.info("AI_LAB_TOPIC_SELECTION", {
+          scheduledPostId: scheduledPost.id,
+          source: selection.source,
+          unitKey: selection.unitKey,
+          rotationIndex,
+          excluded: selection.exclusions,
+        });
+        const aiLabTopicSeed = selection.topic;
         const result = await dispatchAiLabScheduledBrandPost({
           context: brandContext,
           postType: scheduledPost.post_type,
           scheduledPostId: scheduledPost.id,
           openAiApiKey,
-          generate: (args) => generateBrandPost({ ...args, topicSeed: aiLabTopicSeed }),
+          topicSeed: aiLabTopicSeed,
+          onContentRejected: ({ attempt, violations }) =>
+            console.warn("AI_LAB_CONTENT_REJECTED", {
+              scheduledPostId: scheduledPost.id,
+              attempt,
+              violations,
+            }),
+          generate: ({ retryViolations, ...args }) =>
+            generateBrandPost({
+              ...args,
+              topicSeed: aiLabTopicSeed,
+              extraInstructions: aiLabDiversityInstructions(retryViolations),
+            }),
           loadRecentFingerprints: () => loadAiLabRecentDedupeFingerprints({
             supabaseUrl,
             serviceRoleKey,

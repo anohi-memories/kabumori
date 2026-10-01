@@ -71,6 +71,41 @@ export async function loadAiLabRecentDedupeFingerprints({
   return [...persisted, ...kabumoriReports];
 }
 
+/**
+ * Read-only: how many AI Lab brand_post schedule rows come strictly before `scheduledFor`. Consecutive
+ * posts get consecutive numbers, which is the rotation index for topic selection (no schema/RPC change,
+ * no new write). Returns null on any failure so the caller can fall back instead of blocking a post.
+ */
+export async function countAiLabBrandPostsBefore({
+  supabaseUrl,
+  serviceRoleKey,
+  scheduledFor,
+  fetchImpl = fetch,
+}: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  scheduledFor: string;
+  fetchImpl?: typeof fetch;
+}): Promise<number | null> {
+  try {
+    const params = new URLSearchParams({
+      select: "id",
+      brand_id: "eq.ai_salaryman_lab",
+      post_type: "eq.brand_post",
+      scheduled_for: `lt.${scheduledFor}`,
+      limit: "1",
+    });
+    const response = await fetchImpl(`${supabaseUrl}/rest/v1/scheduled_posts?${params}`, {
+      headers: { ...serviceHeaders(serviceRoleKey), Prefer: "count=exact" },
+    });
+    if (!response.ok) return null;
+    const total = /\/(\d+)$/u.exec(response.headers.get("content-range") ?? "")?.[1];
+    return total === undefined ? null : Number(total);
+  } catch {
+    return null;
+  }
+}
+
 export async function recordAndCompleteAiLabBrandPost({
   supabaseUrl,
   serviceRoleKey,
