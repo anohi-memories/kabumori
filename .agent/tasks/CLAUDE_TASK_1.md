@@ -3,8 +3,8 @@
 - task_id: kabumori-home-report-hero-8-state-assets-20261001
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sonnet5（高）
 - type: Kabumori Home UI / canonical asset integration / deterministic report-state presentation
@@ -505,6 +505,59 @@ Then:
 - STOP for K1.
 
 Recommended model: **Sonnet5（高）**.
+
+## Report — G1: Home Report Hero final background + 8-state characters (task kabumori-home-report-hero-8-state-assets-20261001)
+
+- task_id: `kabumori-home-report-hero-8-state-assets-20261001`
+- result: implemented and Simulator-verified; PR open, **not merged**.
+- fresh main SHA: `a18a6debd2aed6ee58cb0e0e2eedbcdb40f23640` (allocation SHA `724efddc…` was older; no Home-file changes on main since, no open PR touches Home/report-states files; independent clone/branch, not shared with other slots)
+- PR: https://github.com/anohi-memories/kabumori/pull/72 — branch `claude/g1-home-report-8-state-20261001`, head `b96c566353db82b967989dc5a5855a1324876bd4`
+- **EAS build created: no.** backend/production mutation: **0**. Tests/Simulator used local Expo + iOS Simulator only.
+
+### Assets (all from the user's PNGs in Desktop/ゆめちゃん素材; lossless WebP via `cwebp -lossless -exact`; decoded RGBA verified pixel-identical to each source PNG; alpha kept; no crop/resize/recolor/sharpen/denoise)
+- `assets/images/home/report_hero_background.webp` — 1586x992, opaque (source TOP.png; the TASK text says 1536x960 but the user's file is 1586x992 — used as supplied)
+- `assets/images/report-states/`: `report_01_very_positive`, `report_02_positive`, `report_04_uncertain`, `report_05_caution`, `report_06_negative`, `report_07_very_negative`, `report_08_volatile` — each **1586x992** RGBA; `report_03_neutral.webp` — **1536x960** RGBA (= the user's previously shown "04 neutral", byte-identical content). The 1536x960 vs 1586x992 difference was **not corrected** (reported): all eight are drawn contain on the same art box (aspect difference 0.07%, measured vertical slack 0.09pt).
+- The old `report_04_neutral.webp` was removed (it is now `report_03_neutral.webp`); runtime/tests no longer reference it, `FIXED_REPORT_CHARACTER_SOURCE`, or any 10-state wording.
+
+### State selection (`src/lib/report-character-state.ts`, pure: input = stored PersonalizedReport only; no network/AI/clock/randomness; never throws)
+- Signals: `body.tone` (positive/cautious), market direction (`market_detail.direction` first, else `market_section.market_direction`; up/down), holding_impacts (tailwind vs headwind majority; tie/neutral/no_clear_material score nothing), close only: finite `portfolio_snapshot.totals.day_change_percent` and `topix_change_percent` signs.
+- Volatile override first: explicit rough-market wording (乱高下, 値動きが激しい/荒い, ボラティリティが高い, 上下に大きく振れ, 急騰と急落 in one sentence, …) in `market_detail.today_claims/overnight_claims`, `market_section.claims`, `overview_ja`, `summary_ja`; sentences with hedge/risk wording (可能性, リスク, 懸念, 注意が必要, 場合 …) and `claim_type: watch_point` claims never trigger; risks/watch fields are not scanned; `mixed` alone or a severe negative score alone never gives 08.
+- Then: 01 (neg=0 and pos ≥ 4 close / ≥ 3 morning) → 02 (pos>neg) → 07 (pos=0 and neg ≥ 4/3) → 06 (neg−pos ≥ 2) → 05 (neg>pos) → on a tie: 04 if direction mixed/unknown, both signals present, data_gaps_ja present (detail or section), or no_clear_material stances dominate; else 03. Missing/legacy/malformed → 03. Loading/empty/error with no report → 03; a report on screen (even after a failed refresh) drives the state.
+- UI shows no state name / signal.
+
+### changed_files (22 vs main, +769/−184)
+- New: `src/lib/report-character-state.ts`, `src/lib/home-hero-geometry.ts`, `tests/app/report-character-state_test.ts`, `tests/app/home-hero-geometry_test.ts`, `assets/images/home/report_hero_background.webp`, `assets/images/report-states/report_01/02/03/04/05/06/07/08_*.webp`, `docs/ui-review/home-hero-8state-contact-sheet-402pt-2026-10-01.webp`, `…3points-fade-402pt…webp`, `…3points-fade-375pt…webp`.
+- Modified: `src/components/home/home-report-hero.tsx`, `src/components/home/character-slot.tsx`, `src/constants/home-tokens.ts`, `tests/app/home-structure_test.ts`, `tests/app/report-character_test.ts`. Deleted: `assets/images/report-states/report_04_neutral.webp`.
+- Untouched: header, news, holdings, topic, Ask AI, bottom tabs, navigation, report generation/backend.
+
+### Hero
+- Layers back→front: background art (baked 今日の / かぶモリレポート / description / 今日のポイント label; accessibilityLabel carries them, no native duplicate) → full-canvas character overlay (absolute fill, `contentFit="contain"`, `pointerEvents="none"`, no per-state scale/offset, no glow/frame) → live UI (短い 朝刊 / 大引け label, ①②③ red/blue/orange circles, 1–3 real points ≤ 2 lines each, no placeholder rows) → opaque deep-green CTA (last = in front of the character; the only navigation).
+- Hero height = art aspect (1586x992); only when 3 two-line points need more room does it grow, and then the art + character bottom fades smoothly (20 non-overlapping 2pt strips, bottom 18pt opaque) into the fill colour so the character's bottom edge / baked white corners / seam never show.
+
+### Tests / checks
+- `deno test tests/app/`: **255 passed / 0 failed** (includes: 8 assets hash/VP8L/alpha/dimensions, exactly 8 files + old file gone, 1:1 state→file mapping, no old naming, full-canvas rule/no per-state tweaks, selector fixtures for all 8 states, mixed-only / severe-negative-only / risk-wording ≠ volatile, missing/legacy → neutral, determinism, no network/AI/clock in the selector, Hero structure: no duplicated baked text, report type dynamic, 1–3 points, CTA the only navigation, loading/error/empty truthful).
+- `npx expo config --json` OK; `npx expo export --platform web` PASS (all 9 assets bundled); tsc(src): only the 2 known pre-existing CSS-module diagnostics (`animated-icon.web.tsx`, `constants/theme.ts`); `git diff --check` clean.
+
+### Simulator (local; disposable auth-bypass + fixture rig through the real selector; iPhone 17 Pro 402pt, real SE 3rd-gen simulator 375pt, 360pt width emulation)
+- Fixture outcomes (402pt, 2 points): 01 positive/up/tailwind → very_positive; 02 positive-only → positive; 03 neutral/flat → neutral; 04 mixed → uncertain; 05 cautious-only → caution; 06 cautious/down → negative; 07 cautious/down/2×headwind → very_negative; 08 close with 「値動きが激しい相場でした。」 → volatile (表示「大引け」). empty / loading / error → neutral image with the existing truthful texts and a disabled grey CTA. All eight images are visibly different.
+- Alignment: background+character composited and compared with screenshots in all eight states: best offset (0,0), ±4px worse. Background text crisp and shown once; character not cropped; points readable and in front of the character.
+- Heights (art 231.4 / 214.5 / 205.2pt at 402 / 375 / 360): 1 point = art height; 2 points 231.3 / 219 / 213.7; 3 two-line points 256.7 / 248 / 242.7 (earlier iterations 269.7 / 261 / 255.7 before the compact rows). 「重要ニュース」 stays in the first viewport at 402 and 375 (y≈387 and ≈336 with 3 points; SE also shows the holdings section).
+- CTA: real tap at the point where the character overlaps → `/reports/[id]` opens; taps on the character's face/body and on the point rows do not navigate. Pull-to-refresh re-runs the fetch. No red screen. Bottom tabs and other sections unchanged.
+- Screenshots (committed in the PR): `docs/ui-review/home-hero-8state-contact-sheet-402pt-2026-10-01.webp` (states 01/03/05/07/08), `home-hero-3points-fade-402pt…`, `…375pt…`.
+- Iterations driven by the Simulator (all fixed): 3-point growth exposed the character's bottom edge; 12-strip overlapping fade banded; baked white corners showed; corner patches left notches/bands at 375/360 → replaced by the smooth fade. Subtle: the fade ramp is 11 steps, so a 2.5× zoom shows faint 2pt steps (not visible at 1×).
+
+### Remaining issues
+- Points longer than ~24 full-width chars (402pt; ~23 at 375/360) end in 「…」 at the 2-line limit — expected; the user is adjusting the copy.
+- 03 is 1536x960 while the rest are 1586x992 (not corrected; no visible effect). 02/07 characters' own visible-size differences were not adjusted per the TASK.
+- Not run: SE-width CTA tap (simulator tap permission), real-device check of this branch's final composition (the user viewed the previous 04-only version live on iPhone and approved the direction).
+
+### safety_checks
+No backend/DB/RPC/Edge Function/cron/gate/Auth/X/account changes; no EAS build; no deploy; PR not merged; selector uses stored report fields only (no extra AI cost); no secrets committed (a local public `.env` copy stayed untracked); old assets/old naming removed rather than reused.
+
+### next_recommendation
+K1 review of PR #72 (UI-only, low risk, no Codex review needed per the review-optimisation policy); after merge, the user can view it live via the dev client; later: user-adjusted point copy (≤ 2 lines), optional smoother (more steps) fade if the zoomed steps matter.
+
+Status: `review_required` / next_owner `chatgpt`. STOP for K1.
 
 ---
 
