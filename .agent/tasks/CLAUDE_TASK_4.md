@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-x-account-switch-auth-session-20261001
 - owner: claude
 - slot: claude-4
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: iOSのX OAuth接続時に前回ログインしたXアカウントが再利用され、複数Xアカウント利用者が接続先を切り替えにくい問題を、本番向けに安全に修正する。
@@ -436,3 +436,21 @@ Claudeによるproduction mutation 0。実X投稿 0。最終のX認可（接続�
 
 - status -> review_required
 - next_owner -> chatgpt
+
+
+## Final K4 — X account-switch auth session
+
+- verdict: **PASS**.
+- accepted PR #65 exact head: `e5a66f5ba71f64b1a38d8f89faff3d0a31972949`.
+- squash merged as `6b1f2f6229a1b75743b57900d869368c2c5e8693`.
+- source/security review had already accepted this exact head; no runtime-source changes were made after review.
+- operator/native proof passed on an isolated G4 build: normal Safari X account A was not silently reused; a different disposable account B reached the final-consent boundary; cancel returned safely; retry again started at login.
+- final X authorization/consent was not completed; no social-account linking was created for this proof; real X posts = 0.
+- independent production read-only verification for the test window found 0 new Auth users, brand memberships, social accounts, OAuth states, token-store updates, or Vault secret creates/updates.
+- fresh merge gate: PR open/mergeable, head unchanged, checks green, no overlap with the five PR files despite main advancement.
+- no additional Codex review required because exact reviewed runtime source remained unchanged.
+- platform caveat: iOS private/ephemeral auth session is best-effort; the verified behavior was a fresh login screen rather than a guaranteed account chooser.
+- Android/Web behavior remains unchanged.
+- app binary/TestFlight was not released by this K4; the merge will be included in the next native build.
+- remaining separate UI follow-up: the accounts screen still has a Link-asChild styling issue identified by G3; not part of the OAuth fix.
+- G4 closed and reusable only after fresh allocation.
