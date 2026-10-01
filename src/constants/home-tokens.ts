@@ -50,7 +50,9 @@ export const HERO = {
   padding: 10,
   ctaHeight: 34,
   /** Minimum space between the last point and the CTA. */
-  ctaGap: 6,
+  ctaGap: 4,
+  /** Side of the squares that hide the art's baked white rounded corners when the Hero grows below the art. */
+  cornerPatch: 14,
   /** Points column: left edge and width as shares of the Hero width (the baked underline spans 4.8%-44.8%). */
   pointsLeft: '4.8%',
   pointsWidth: '42%',

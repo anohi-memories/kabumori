@@ -36,11 +36,6 @@ const REPORT_KIND_LABEL: Record<PersonalizedReport['report_type'], string> = { m
 // Readable summary of the baked-in art for VoiceOver (the picture itself carries the words).
 const HERO_ART_LABEL = '今日のかぶモリレポート。今日の市場とあなたの保有銘柄への影響をAIが整理しました。今日のポイント';
 
-// Fade steps that blend the bottom edge of the art into the fill colour when the live points make
-// the Hero taller than the art (see heroIsExtended).
-const FADE_STEPS = 12;
-const FADE_STEP_HEIGHT = 2.5;
-
 type HomeReportHeroProps = {
   palette: KabumoriPalette;
   report: PersonalizedReport | null;
@@ -83,19 +78,16 @@ export function HomeReportHero({ palette, report, points, loading, error, onOpen
           accessibilityRole="header"
           accessibilityLabel={HERO_ART_LABEL}
         />
-        {extended
-          ? Array.from({ length: FADE_STEPS }, (_, index) => (
-              <View
-                key={index}
-                pointerEvents="none"
-                style={[
-                  styles.fadeStrip,
-                  { bottom: (FADE_STEPS - 1 - index) * FADE_STEP_HEIGHT, opacity: (index + 1) / FADE_STEPS },
-                ]}
-              />
-            ))
-          : null}
         <CharacterSlot source={CHARACTER_SOURCES[characterState]} />
+        {/* When the live points make the Hero taller than the art, the art ends inside the card: its baked
+            white rounded corners and the character's bottom edge must not show. The CTA (drawn last) covers
+            the character's edge; these two small squares hide the baked corners. */}
+        {extended ? (
+          <>
+            <View pointerEvents="none" style={[styles.cornerPatch, { left: 0 }]} />
+            <View pointerEvents="none" style={[styles.cornerPatch, { right: 0 }]} />
+          </>
+        ) : null}
         {status === 'report' && report ? (
           <Text style={[styles.reportKind, { color: palette.muted }]} numberOfLines={1}>
             {REPORT_KIND_LABEL[report.report_type] ?? ''}
@@ -169,13 +161,13 @@ const styles = StyleSheet.create({
   },
   // Art + character share this box (absolute, top-left, full width, art aspect ratio).
   artBox: { position: 'absolute', top: 0, left: 0, right: 0 },
-  fadeStrip: { position: 'absolute', left: 0, right: 0, height: FADE_STEP_HEIGHT + 0.5, backgroundColor: HERO.fillColor },
+  cornerPatch: { position: 'absolute', bottom: 0, width: HERO.cornerPatch, height: HERO.cornerPatch, backgroundColor: HERO.fillColor },
   // Report kind (朝刊 / 大引け) sits right after the baked-in 「今日のポイント」 label.
   reportKind: { position: 'absolute', left: HERO.metaLeft, top: HERO.metaTop, fontSize: 11, fontWeight: '800' },
   // flexGrow: with the spacer, the CTA stays at the bottom edge of a Hero that is only as tall as the art.
   content: { flexGrow: 1, paddingBottom: HERO.padding },
   pointsColumn: { marginLeft: HERO.pointsLeft, width: HERO.pointsWidth },
-  points: { gap: 3 },
+  points: { gap: 2 },
   pointRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -183,12 +175,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.88)',
     borderRadius: 8,
     paddingHorizontal: 5,
-    paddingVertical: 2,
-    minHeight: 26,
+    paddingVertical: 1,
+    minHeight: 25,
   },
-  pointCircle: { width: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  pointCircle: { width: 15, height: 15, borderRadius: 7.5, alignItems: 'center', justifyContent: 'center' },
   pointNumber: { color: '#fff', fontSize: 10, fontWeight: '900' },
-  pointText: { flex: 1, fontSize: 10.5, lineHeight: 13, fontWeight: '800' },
+  pointText: { flex: 1, fontSize: 10.5, lineHeight: 12.5, fontWeight: '800' },
   spacer: { flexGrow: 1, minHeight: HERO.ctaGap },
   status: { fontSize: 12, lineHeight: 17 },
   errorCard: { borderRadius: 12, padding: 10 },
