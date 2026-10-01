@@ -3,17 +3,23 @@
 
 import { KABUMORI_VOICE } from "../_shared/kabumori_voice.ts";
 import {
+  type AppStoryDraft,
   type Claim,
   type ClaimType,
   formatSharedXPost,
   type KeyNews,
   type MarketReportPacket,
+  PRESENTATION_VERSION,
   REPORT_SCHEMA_VERSION,
   sharedXPostIssues,
+  sharedXPostWarnings,
   type Theme,
   type XPost,
 } from "../_shared/market_report_packet.ts";
+import { appStoryWarnings, buildAppMarketStory, orderKeyNews } from "../_shared/market_report_story.ts";
 import type { AnalysisInput } from "./analysis_input.ts";
+import { falseAbsenceClaims } from "../_shared/absence_claims.ts";
+import { emojiDirectionIssues, metricFactIssues } from "./hard_fact_guards.ts";
 
 export const ANALYSIS_MODEL = "gpt-5.6-luna";
 export const MAX_GENERATIONS = 2;
@@ -42,13 +48,18 @@ const COMMON = [
   "入力は1日分の値動き（前回値との比較）だけです。「続伸」「続落」「反発」「反落」「年初来」「最高値」「最安値」のような複数日の推移や記録を前提にする言葉は使いません。",
   "古い値（鮮度が「古い値」）は、その日付の値であることを明記したときだけ触れます。",
   "売買の推奨・断定、将来の値動きの断定、URL、ハッシュタグ、HTML、【速報】等のラベルは書きません。",
-  "x_post はX投稿用です。lead_ja は60字以内の導入1文、points_ja はちょうど3つで各50字以内、closing_ja は60字以内の一言です。見出しとハッシュタグはコードが付けるので書きません。",
+  "指標の値や前日比を書くときは、入力の「指標」でその指標に付いている「日付」を同じ文の中で、その指標より前に書きます（例: 「9月30日の日経平均は66,753.72（前日比+1.94%）」）。日付の違う指標を1つの文に並べるときは、それぞれの日付を書きます。ある指標の値・前日比を、別の指標や別の日付のものとして書きません。鮮度が「古い値」の指標は「◯月◯日時点」と書きます。",
+  "「材料がありません」「ニュースはありません」「個別材料がない」のように、範囲を示さずに無いと言い切りません（入力にニュースがあるためです）。無いと書くのは「東京市場の値動きの理由を説明するニュースは確認できません」のように、何について無いのかを限定したときだけです。",
+  "ニュースには「範囲」（市場全体 / 業種・テーマ / 個別企業）が付いています。市場全体の話（x_post・market_summary_ja・app_story）では、範囲が「市場全体」のニュース（金融政策、通商・規制、地政学、エネルギー、災害など）を先に扱い、次に「業種・テーマ」、最後に「個別企業」の順にします。「個別企業」の開示は、「市場全体」「業種・テーマ」のニュースが無いときか、それらを書いたうえで触れます。key_news もこの順に選びます。",
+  "「東京市場の方向」と「米国市場の方向」は、それぞれの日付の値動きとしてコードが決めたものです。朝刊では、前営業日の東京市場と前夜の米国市場を別々に書き、「市場の方向」のひとこと（まちまち等）だけで両方をまとめません。今日の値動きは予想せず、今日見る点として書きます。",
+  "x_post はX投稿用の約500字の読み物です。次の6つを書きます。lead_ja: 60字以内の導入1文。points_ja: ちょうど3つ、各45字以内の要点。context_ja: 90〜130字の背景の段落（値動きを日付つきでつなぐ。理由は確認できた場合だけ）。news_ja: 70〜110字の重要ニュースの段落（範囲が市場全体のものを優先。書けるニュースが無ければ空文字）。watch_ja: 50〜80字の次に見る点。closing_ja: 40〜60字の一言。見出し・小見出し（📌 📰 👀 💬）とハッシュタグはコードが付けるので書きません。",
+  "app_story はアプリの「市場全体」の読み物で、x_post より詳しく書きます。見出し・絵文字・指標の数値の一覧はコードが付けるので、各項目には説明の文章だけを書きます（数値を書く場合は上の日付のルールに従う）。summary_ja: 60〜110字で全体をひとこと。overseas_ja: 100〜170字で米国市場の値動き。japan_ja: 120〜200字で東京市場（朝刊は前営業日の結果と今日見る点、大引けは今日の結果）。cross_asset_ja: 80〜150字で為替・金利・半導体・原油。news_ja: 120〜220字で重要ニュースと市場との関係（関係が確認できなければそう書く）。strong_ja: 強い・注目テーマ（根拠が無ければ空文字）。caution_ja: 60〜130字で注意点・リスク。watch_ja: 60〜130字で次に見る点。根拠が足りない項目は無理に埋めず、空文字か短く「確認できません」と書きます。",
 ];
 
 const X_VOICE = [
   "x_post だけは次の文体方針に従います（他の項目は落ち着いた説明文）。",
   ...KABUMORI_VOICE,
-  "x_post の絵文字は lead_ja・points_ja・closing_ja 全体で0〜3個にします。",
+  "x_post の絵文字は全体で0〜3個にします（小見出しの絵文字はコードが付けます）。📈は上昇、📉は下落した指標の行だけに使い、データと逆の向きには使いません。",
 ];
 
 const MORNING = [
@@ -66,7 +77,7 @@ const GENERATION_SCHEMA = {
   additionalProperties: false,
   required: [
     "headline_ja", "market_summary_ja", "claims", "key_news", "strong_themes", "weak_themes",
-    "next_watch_ja", "risks_ja", "x_post",
+    "next_watch_ja", "risks_ja", "x_post", "app_story",
   ],
   properties: {
     headline_ja: { type: "string" },
@@ -112,11 +123,29 @@ const GENERATION_SCHEMA = {
     x_post: {
       type: "object",
       additionalProperties: false,
-      required: ["lead_ja", "points_ja", "closing_ja"],
+      required: ["lead_ja", "points_ja", "context_ja", "news_ja", "watch_ja", "closing_ja"],
       properties: {
         lead_ja: { type: "string" },
         points_ja: { type: "array", items: { type: "string" } },
+        context_ja: { type: "string" },
+        news_ja: { type: "string" },
+        watch_ja: { type: "string" },
         closing_ja: { type: "string" },
+      },
+    },
+    app_story: {
+      type: "object",
+      additionalProperties: false,
+      required: ["summary_ja", "overseas_ja", "japan_ja", "cross_asset_ja", "news_ja", "strong_ja", "caution_ja", "watch_ja"],
+      properties: {
+        summary_ja: { type: "string" },
+        overseas_ja: { type: "string" },
+        japan_ja: { type: "string" },
+        cross_asset_ja: { type: "string" },
+        news_ja: { type: "string" },
+        strong_ja: { type: "string" },
+        caution_ja: { type: "string" },
+        watch_ja: { type: "string" },
       },
     },
   },
@@ -140,7 +169,7 @@ export function generationRequestBody(input: AnalysisInput, previousIssues: stri
     model: ANALYSIS_MODEL,
     store: false,
     reasoning: { effort: "low" },
-    max_output_tokens: 6000,
+    max_output_tokens: 10000,
     instructions: [
       ...COMMON,
       ...(input.reportType === "close" ? CLOSE : MORNING),
@@ -149,7 +178,7 @@ export function generationRequestBody(input: AnalysisInput, previousIssues: stri
         ? [
           `前回の生成は次の理由で不合格でした。すべて解消してください: ${previousIssues.join(" / ")}`,
           // 2026-09-29 16:35: a regeneration turned an unconfirmed reason into an asserted cause.
-          "直すときは指摘された箇所を直します。不確実性の注記と claim_type は前回のまま保ち、指摘に無い箇所の表現を強めたり、新しい理由を足したりしません。",
+          "直すときは指摘された箇所を直します。不確実性の注記と claim_type は前回のまま保ち、指摘に無い箇所の表現を強めたり、新しい理由を足したりしません。長さや構成の指摘は、入力にある事実の範囲で直します。",
         ]
         : []),
       ...X_VOICE,
@@ -185,7 +214,11 @@ export type GeneratedAnalysis = {
   next_watch_ja: string[];
   risks_ja: string[];
   x_post: XPost;
+  /** Present on presentation v2 output; absent when a v1-shaped analysis is parsed. */
+  app_story?: AppStoryDraft;
 };
+
+const APP_STORY_KEYS = ["summary_ja", "overseas_ja", "japan_ja", "cross_asset_ja", "news_ja", "strong_ja", "caution_ja", "watch_ja"] as const;
 
 const CLAIM_TYPES = new Set<ClaimType>(["observation", "causal", "consistent_with", "insufficient_evidence", "watch_point"]);
 
@@ -200,6 +233,10 @@ function strings(value: unknown): string[] {
 export function parseGeneratedAnalysis(payload: unknown): GeneratedAnalysis | null {
   if (!payload || typeof payload !== "object") return null;
   const item = payload as Record<string, unknown>;
+  // Invalid structured members must regenerate, not escape as TypeError (including in a rewrite).
+  for (const key of ["claims", "key_news", "strong_themes", "weak_themes"]) {
+    if (Array.isArray(item[key]) && item[key].some((value) => !value || typeof value !== "object" || Array.isArray(value))) return null;
+  }
   const claims = Array.isArray(item.claims)
     ? item.claims.map((raw) => {
       const claim = raw as Record<string, unknown>;
@@ -218,6 +255,11 @@ export function parseGeneratedAnalysis(payload: unknown): GeneratedAnalysis | nu
         .filter((theme) => theme.name_ja)
       : [];
   const xPost = (item.x_post ?? {}) as Record<string, unknown>;
+  const story = item.app_story as Record<string, unknown> | undefined;
+  // v2 fields are kept only when the model returned them; a v1-shaped analysis stays v1.
+  const xV2 = typeof xPost.context_ja === "string"
+    ? { context_ja: text(xPost.context_ja), news_ja: text(xPost.news_ja), watch_ja: text(xPost.watch_ja) }
+    : {};
   const analysis: GeneratedAnalysis = {
     headline_ja: text(item.headline_ja),
     market_summary_ja: text(item.market_summary_ja),
@@ -230,7 +272,10 @@ export function parseGeneratedAnalysis(payload: unknown): GeneratedAnalysis | nu
     weak_themes: themes(item.weak_themes),
     next_watch_ja: strings(item.next_watch_ja),
     risks_ja: strings(item.risks_ja),
-    x_post: { lead_ja: text(xPost.lead_ja), points_ja: strings(xPost.points_ja), closing_ja: text(xPost.closing_ja) },
+    x_post: { lead_ja: text(xPost.lead_ja), points_ja: strings(xPost.points_ja), closing_ja: text(xPost.closing_ja), ...xV2 },
+    ...(story && typeof story === "object"
+      ? { app_story: Object.fromEntries(APP_STORY_KEYS.map((key) => [key, text(story[key])])) as AppStoryDraft }
+      : {}),
   };
   return analysis.headline_ja && analysis.market_summary_ja ? analysis : null;
 }
@@ -366,13 +411,20 @@ export function unsupportedCausalSentences(analysis: GeneratedAnalysis, input: A
     .map((item) => `${item.headline_ja}\n${item.summary_ja ?? ""}`)
     .join("\n");
   const canonicalSupport = canonicalCause(support);
+  const story = analysis.app_story;
   const texts = [
     analysis.headline_ja,
     analysis.market_summary_ja,
     ...analysis.claims.filter((claim) => claim.claim_type !== "watch_point").map((claim) => claim.text_ja),
     analysis.x_post.lead_ja,
     ...analysis.x_post.points_ja,
+    analysis.x_post.context_ja ?? "",
+    analysis.x_post.news_ja ?? "",
     analysis.x_post.closing_ja,
+    ...(story ? [story.summary_ja, story.overseas_ja, story.japan_ja, story.cross_asset_ja, story.news_ja, story.strong_ja] : []),
+    // Watch/caution fields can contain historical prose too: their field name is no fact exemption.
+    ...[analysis.x_post.watch_ja ?? "", ...(story ? [story.caution_ja, story.watch_ja] : []), ...analysis.next_watch_ja, ...analysis.risks_ja]
+      .flatMap((value) => value.split(/[。！？!?\n]/)).filter((value) => /ました|でした|した(?:[、]|$)|だった/u.test(value)),
   ];
   const found: string[] = [];
   for (const sentence of texts.flatMap((value) => value.split(/[。！？!?\n]/))) {
@@ -400,14 +452,54 @@ export function analysisTexts(analysis: GeneratedAnalysis): string[] {
     ...analysis.weak_themes.map((theme) => theme.name_ja),
     ...analysis.next_watch_ja,
     ...analysis.risks_ja,
-    analysis.x_post.lead_ja,
-    ...analysis.x_post.points_ja,
-    analysis.x_post.closing_ja,
-  ];
+    ...xPostTexts(analysis),
+    ...(analysis.app_story ? APP_STORY_KEYS.map((key) => analysis.app_story![key]) : []),
+  ].filter(Boolean);
 }
 
+function xPostTexts(analysis: GeneratedAnalysis): string[] {
+  const x = analysis.x_post;
+  return [x.lead_ja, ...x.points_ja, x.context_ja ?? "", x.news_ja ?? "", x.watch_ja ?? "", x.closing_ja].filter(Boolean);
+}
+
+/** Statements of what happened vs. forward-looking text, for the direction guard. */
+function guardTexts(analysis: GeneratedAnalysis) {
+  const x = analysis.x_post;
+  const story = analysis.app_story;
+  return {
+    factual: [
+      analysis.headline_ja,
+      analysis.market_summary_ja,
+      ...analysis.claims.filter((claim) => claim.claim_type !== "watch_point").map((claim) => claim.text_ja),
+      ...analysis.key_news.map((news) => news.why_it_matters_ja),
+      x.lead_ja, ...x.points_ja, x.context_ja ?? "", x.news_ja ?? "", x.closing_ja,
+      ...(story ? [story.summary_ja, story.overseas_ja, story.japan_ja, story.cross_asset_ja, story.news_ja, story.strong_ja] : []),
+    ].filter(Boolean),
+    forward: [
+      ...analysis.claims.filter((claim) => claim.claim_type === "watch_point").map((claim) => claim.text_ja),
+      ...analysis.next_watch_ja,
+      ...analysis.risks_ja,
+      x.watch_ja ?? "",
+      ...(story ? [story.caution_ja, story.watch_ja] : []),
+    ].filter(Boolean),
+  };
+}
+
+export type LocalCheck = {
+  /** Hard facts: the draft is regenerated, and the cycle fails closed if they remain. */
+  hard: string[];
+  /** Quality: recorded, may trigger one bounded rewrite, never suppresses a hard-fact-safe packet. */
+  warnings: string[];
+};
+
+/** Hard issues only (kept for callers that just need "is this deliverable"). */
 export function localAnalysisIssues(analysis: GeneratedAnalysis, input: AnalysisInput): string[] {
+  return localAnalysisCheck(analysis, input).hard;
+}
+
+export function localAnalysisCheck(analysis: GeneratedAnalysis, input: AnalysisInput): LocalCheck {
   const issues: string[] = [];
+  const warnings: string[] = [];
   const allowed = allowedNumbers(input);
   const texts = analysisTexts(analysis);
   const joined = texts.join("\n");
@@ -440,20 +532,30 @@ export function localAnalysisIssues(analysis: GeneratedAnalysis, input: Analysis
   if (input.sessionsDiffer && SAME_DAY.test(joined)) {
     issues.push("日付の違う東京市場と米国市場を「同じ日」と表現");
   }
-  const xText = [analysis.x_post.lead_ja, ...analysis.x_post.points_ja, analysis.x_post.closing_ja].join("\n");
-  if ((xText.match(DISCLAIMER) ?? []).length > 1) issues.push("X本文で不確実性の注記を繰り返している");
-  if ((analysis.market_summary_ja.match(DISCLAIMER) ?? []).length > 1) issues.push("要約で不確実性の注記を繰り返している");
+  // metric -> session date -> value / direction, stale values, and unscoped "no material" claims.
+  issues.push(...metricFactIssues(guardTexts(analysis), input));
+  issues.push(...emojiDirectionIssues(texts, input));
+  const absent = falseAbsenceClaims(texts, input.news.length > 0);
+  if (absent.length > 0) issues.push(`範囲を示さない「材料なし」の断定（入力にニュースあり）: ${absent.slice(0, 2).join(" ")}`);
+
+  // Quality from here to the editorial block: recorded, never a reason to withhold a safe packet.
+  const xText = xPostTexts(analysis).join("\n");
+  // The longer v2 digest has room for one note in the context and one in the closing.
+  const xDisclaimerLimit = typeof analysis.x_post.context_ja === "string" ? 2 : 1;
+  if ((xText.match(DISCLAIMER) ?? []).length > xDisclaimerLimit) warnings.push("X本文で不確実性の注記を繰り返している");
+  if ((analysis.market_summary_ja.match(DISCLAIMER) ?? []).length > 1) warnings.push("要約で不確実性の注記を繰り返している");
   if (analysis.claims.filter((claim) => claim.claim_type === "insufficient_evidence").length > 1) {
-    issues.push("insufficient_evidence の claim が複数ある（1件にまとめる）");
+    warnings.push("insufficient_evidence の claim が複数ある（1件にまとめる）");
   }
   if (input.majorNewsRefs.size > 0) {
-    if (!analysis.key_news.some((news) => input.majorNewsRefs.has(news.ref))) issues.push("重要材料のニュースが key_news に無い");
+    if (!analysis.key_news.some((news) => input.majorNewsRefs.has(news.ref))) warnings.push("重要材料のニュースが key_news に無い");
     if (input.majorKeywords.length > 0) {
       const mentions = (value: string) => input.majorKeywords.some((keyword) => value.includes(keyword));
-      if (!mentions(xText)) issues.push(`重要材料（${input.majorKeywords.join("・")}）がX本文に無い`);
-      if (!mentions(analysis.market_summary_ja)) issues.push(`重要材料（${input.majorKeywords.join("・")}）が要約に無い`);
+      if (!mentions(xText)) warnings.push(`重要材料（${input.majorKeywords.join("・")}）がX本文に無い`);
+      if (!mentions(analysis.market_summary_ja)) warnings.push(`重要材料（${input.majorKeywords.join("・")}）が要約に無い`);
     }
   }
+  warnings.push(...editorialPriorityWarnings(analysis, input));
   for (const word of MULTI_DAY_WORDS) if (joined.includes(word)) issues.push(`複数日を前提にする語: ${word}`);
 
   if (analysis.claims.length < 1) issues.push("claims が空");
@@ -474,22 +576,62 @@ export function localAnalysisIssues(analysis: GeneratedAnalysis, input: Analysis
       issues.push(`テーマの claim_ids が不正: ${theme.name_ja}`);
       continue;
     }
-    if (NON_THEME.test(theme.name_ja)) issues.push(`テーマではない（指数・方向差・報道）: ${theme.name_ja}`);
-    // A theme needs sector evidence: a news item or the semiconductor index.
-    const supported = theme.claim_ids.some((id) =>
-      (claimsById.get(id)?.evidence_refs ?? []).some((ref) => input.newsRefs.has(ref) || ref === "metric:sox")
-    );
-    if (!supported) issues.push(`テーマの根拠（ニュース等）が無い: ${theme.name_ja}`);
+    // An index name or an unsupported theme is dropped from the packet (assemblePacket) and recorded.
+    if (NON_THEME.test(theme.name_ja)) warnings.push(`テーマではない（指数・方向差・報道）: ${theme.name_ja}`);
+    else if (!themeSupported(theme, claimsById, input)) warnings.push(`テーマの根拠（ニュース等）が無い: ${theme.name_ja}`);
   }
   for (const news of analysis.key_news) {
     if (!input.newsRefs.has(news.ref)) issues.push(`入力に無いニュース: ${news.ref}`);
   }
-  if (Array.from(analysis.headline_ja).length > 60) issues.push("headline_ja が長すぎる");
-  if (Array.from(analysis.market_summary_ja).length > 400) issues.push("market_summary_ja が長すぎる");
+  if (Array.from(analysis.headline_ja).length > 60) warnings.push("headline_ja が長すぎる");
+  if (Array.from(analysis.market_summary_ja).length > 400) warnings.push("market_summary_ja が長すぎる");
 
   const draft = assemblePacket(input, analysis, { generatedAt: new Date(0), attempts: 1 });
-  issues.push(...sharedXPostIssues(draft, formatSharedXPost(draft)));
-  return [...new Set(issues)];
+  const post = formatSharedXPost(draft);
+  issues.push(...sharedXPostIssues(draft, post));
+  warnings.push(...sharedXPostWarnings(draft, post));
+  if (draft.app_story) warnings.push(...appStoryWarnings(buildAppMarketStory(draft)));
+  return { hard: [...new Set(issues)], warnings: [...new Set(warnings)] };
+}
+
+/** A theme needs sector evidence: a news item or the semiconductor index. */
+function themeSupported(theme: Theme, claimsById: Map<string, Claim>, input: AnalysisInput): boolean {
+  return theme.claim_ids.length > 0 && theme.claim_ids.some((id) =>
+    (claimsById.get(id)?.evidence_refs ?? []).some((ref) => input.newsRefs.has(ref) || ref === "metric:sox")
+  );
+}
+
+/** Themes that may be shown: real sector/theme names backed by evidence. */
+function deliverableThemes(themes: Theme[], analysis: GeneratedAnalysis, input: AnalysisInput): Theme[] {
+  const claimsById = new Map(analysis.claims.map((claim) => [claim.claim_id, claim]));
+  return themes.filter((theme) => !NON_THEME.test(theme.name_ja) && themeSupported(theme, claimsById, input));
+}
+
+function companyName(company: string): string {
+  return company.normalize("NFKC").replace(/\(\d{4}\)$/u, "").replace(/^G-/u, "").trim();
+}
+
+/**
+ * Market-wide editorial priority (2026-10-01: one company's impairment notice led the story while
+ * trade-policy and geopolitical items were available). Broad items come first; a single company's
+ * disclosure must not be the X digest's news when broad items exist.
+ */
+export function editorialPriorityWarnings(analysis: GeneratedAnalysis, input: AnalysisInput): string[] {
+  if (!input.news.some((item) => item.scope === "broad")) return [];
+  const warnings: string[] = [];
+  if (!analysis.key_news.some((news) => input.scopeByRef.get(news.ref) === "broad")) {
+    warnings.push("市場全体のニュースが key_news に無い（個別企業より先に扱う）");
+  }
+  const companies = input.news.filter((item) => item.scope === "company" && item.company)
+    .map((item) => companyName(item.company!)).filter((name) => name.length >= 2);
+  const x = analysis.x_post;
+  const named = (value: string) => companies.some((name) => value.normalize("NFKC").includes(name));
+  const digest = [x.lead_ja, ...x.points_ja, x.context_ja ?? "", x.closing_ja].join("\n");
+  // The digest names a single company while its news paragraph is missing or is about that company too.
+  if ((named(digest) || named(x.news_ja ?? "")) && (!(x.news_ja ?? "").trim() || named(x.news_ja ?? ""))) {
+    warnings.push("X本文が個別企業の開示を市場全体のニュースより前に扱っている");
+  }
+  return warnings;
 }
 
 // ---------------------------------------------------------------------------
@@ -499,12 +641,19 @@ export function localAnalysisIssues(analysis: GeneratedAnalysis, input: Analysis
 export function assemblePacket(
   input: AnalysisInput,
   analysis: GeneratedAnalysis,
-  meta: { generatedAt: Date; attempts: number },
+  meta: { generatedAt: Date; attempts: number; warnings?: string[] },
 ): MarketReportPacket {
-  const keyNews: KeyNews[] = analysis.key_news
+  // Broad-market items first, whatever order the model listed them in.
+  const keyNews: KeyNews[] = orderKeyNews(analysis.key_news
     .filter((news) => input.headlineByRef.has(news.ref))
     .slice(0, 5)
-    .map((news) => ({ ref_id: news.ref, headline_ja: input.headlineByRef.get(news.ref)!, why_it_matters_ja: news.why_it_matters_ja }));
+    .map((news) => ({
+      ref_id: news.ref,
+      headline_ja: input.headlineByRef.get(news.ref)!,
+      why_it_matters_ja: news.why_it_matters_ja,
+      scope: input.scopeByRef.get(news.ref) ?? "company",
+    })));
+  const v2 = typeof analysis.x_post.context_ja === "string" && !!analysis.app_story;
   return {
     schema_version: REPORT_SCHEMA_VERSION,
     report_type: input.reportType,
@@ -520,13 +669,20 @@ export function assemblePacket(
     major_moves: input.majorMoves,
     claims: analysis.claims,
     key_news: keyNews,
-    strong_themes: analysis.strong_themes,
-    weak_themes: analysis.weak_themes,
+    strong_themes: deliverableThemes(analysis.strong_themes, analysis, input),
+    weak_themes: deliverableThemes(analysis.weak_themes, analysis, input),
     next_watch_ja: analysis.next_watch_ja.slice(0, 3),
     risks_ja: analysis.risks_ja.slice(0, 3),
     data_gaps_ja: input.dataGapsJa,
     x_post: analysis.x_post,
-    fact: { local_issues: [], ai_status: "passed", generation_attempts: meta.attempts },
+    ...(v2 ? { presentation_version: PRESENTATION_VERSION, app_story: analysis.app_story } : {}),
+    session_views: input.sessionViews,
+    fact: {
+      local_issues: [],
+      ai_status: "passed",
+      generation_attempts: meta.attempts,
+      quality_warnings: meta.warnings ?? [],
+    },
   };
 }
 
@@ -534,9 +690,49 @@ export function lunaCostUsd(inputTokens: number, outputTokens: number): number {
   return Number(((inputTokens * 0.2 + outputTokens * 1.2) / 1_000_000).toFixed(6));
 }
 
+/**
+ * What happened inside one run, kept apart from transport retries (429 / 5xx / network, counted in
+ * transport_retry.ts) and from the scheduled cron retry (report_attempt_count on the cycle).
+ */
+export type GenerationTrace = {
+  /** Model generations in this run (1 or 2). */
+  generations: number;
+  /** Why a draft was rejected, in order: "invalid_output" | "local" | "fact". */
+  hardRejections: string[];
+  /** A hard-fact-safe draft was rewritten once for quality. */
+  qualityRewrite: boolean;
+  /** Which generation was delivered (0 when none). */
+  deliveredGeneration: number;
+  /** Quality warnings of the delivered packet. */
+  warnings: string[];
+  /** A quality-only request failed; no response body or exception message is retained. */
+  rewriteRequestFailed?: boolean;
+};
+
+type Usage = { calls: number; inputTokens: number; outputTokens: number; costUsd: number; trace: GenerationTrace };
 export type AnalysisOutcome =
-  | { ok: true; packet: MarketReportPacket; calls: number; inputTokens: number; outputTokens: number; costUsd: number }
-  | { ok: false; error: string; issues: string[]; calls: number; inputTokens: number; outputTokens: number; costUsd: number };
+  | ({ ok: true; packet: MarketReportPacket } & Usage)
+  | ({ ok: false; error: string; issues: string[] } & Usage);
+
+/** Warnings that are worth one rewrite; the rest are cosmetic and only recorded. */
+const COSMETIC_WARNING = /^X_POST_EMOJI_COUNT|LONGER_THAN_TARGET|が長すぎる$|^X_POST_NEWS_OMITTED$/;
+
+/** Rewrite instructions for quality warnings (codes are for diagnostics; the model gets plain text). */
+export function qualityRewriteHints(warnings: string[]): string[] {
+  return warnings.filter((warning) => !COSMETIC_WARNING.test(warning)).map((warning) => {
+    const [code, value] = warning.split(":");
+    switch (code) {
+      case "X_POST_SHORTER_THAN_TARGET":
+        return `x_post が短い（全体${value}字、目標は約500字）。context_ja・news_ja・watch_ja を入力にある事実で具体的に書く`;
+      case "X_POST_CONTEXT_OMITTED": return "x_post.context_ja が空。値動きを日付つきでつなぐ背景の段落を書く";
+      case "X_POST_WATCH_OMITTED": return "x_post.watch_ja が空。次に見る点を書く";
+      case "APP_STORY_SHORTER_THAN_TARGET":
+        return `app_story が短い（全体${value}字、目標は900字以上）。各項目を入力にある事実で具体的に書く`;
+      case "APP_STORY_SECTION_OMITTED": return `app_story の項目が空（${value}）。入力に根拠があれば書く`;
+      default: return warning;
+    }
+  });
+}
 
 export async function generateSharedAnalysis(
   input: AnalysisInput,
@@ -548,38 +744,90 @@ export async function generateSharedAnalysis(
   let outputTokens = 0;
   let issues: string[] = [];
   let lastError = "ANALYSIS_NOT_ATTEMPTED";
+  const trace: GenerationTrace = { generations: 0, hardRejections: [], qualityRewrite: false, deliveredGeneration: 0, warnings: [] };
   const usage = (step: StepResult) => {
     calls += 1;
     inputTokens += step.inputTokens;
     outputTokens += step.outputTokens;
   };
-  const result = () => ({ calls, inputTokens, outputTokens, costUsd: lunaCostUsd(inputTokens, outputTokens) });
+  const result = () => ({ calls, inputTokens, outputTokens, costUsd: lunaCostUsd(inputTokens, outputTokens), trace });
+  const deliver = (analysis: GeneratedAnalysis, attempt: number, warnings: string[]) => {
+    trace.deliveredGeneration = attempt;
+    trace.warnings = warnings;
+    return { ok: true as const, packet: assemblePacket(input, analysis, { generatedAt: now(), attempts: attempt, warnings }), ...result() };
+  };
+  // A draft that passed every hard check and the Fact check: never thrown away for quality reasons.
+  let safe: { analysis: GeneratedAnalysis; attempt: number; warnings: string[] } | null = null;
 
   for (let attempt = 1; attempt <= MAX_GENERATIONS; attempt += 1) {
-    const generated = await request("generate", generationRequestBody(input, issues));
+    let generated: StepResult;
+    trace.generations = attempt;
+    try {
+      generated = await request("generate", generationRequestBody(input, issues));
+    } catch (error) {
+      if (!safe) throw error;
+      trace.rewriteRequestFailed = true;
+      return deliver(safe.analysis, safe.attempt, safe.warnings);
+    }
     usage(generated);
     const analysis = parseGeneratedAnalysis(generated.payload);
     if (!analysis) {
       issues = ["出力の形式が不正"];
       lastError = "ANALYSIS_INVALID_OUTPUT";
+      trace.hardRejections.push("invalid_output");
       continue;
     }
-    const local = localAnalysisIssues(analysis, input);
-    if (local.length > 0) {
-      issues = local;
+    const local = localAnalysisCheck(analysis, input);
+    if (local.hard.length > 0) {
+      issues = local.hard;
       lastError = "ANALYSIS_LOCAL_CHECK_FAILED";
+      trace.hardRejections.push("local");
       continue;
     }
-    const verdict = await request("fact", factRequestBody(input, analysis));
+    let verdict: StepResult;
+    try {
+      verdict = await request("fact", factRequestBody(input, analysis));
+    } catch (error) {
+      if (!safe) throw error;
+      trace.rewriteRequestFailed = true;
+      return deliver(safe.analysis, safe.attempt, safe.warnings);
+    }
     usage(verdict);
     const fact = verdict.payload as { passed?: unknown; issues?: unknown };
-    if (fact?.passed === true) {
-      return { ok: true, packet: assemblePacket(input, analysis, { generatedAt: now(), attempts: attempt }), ...result() };
+    if (fact?.passed !== true) {
+      issues = Array.isArray(fact?.issues) ? fact.issues.filter((issue): issue is string => typeof issue === "string").slice(0, 10) : [];
+      lastError = "ANALYSIS_FACT_FAILED";
+      trace.hardRejections.push("fact");
+      continue;
     }
-    issues = Array.isArray(fact?.issues) ? fact.issues.filter((issue): issue is string => typeof issue === "string").slice(0, 10) : [];
-    lastError = "ANALYSIS_FACT_FAILED";
+    if (safe) {
+      // The quality rewrite is also hard-fact safe: keep whichever has fewer warnings (the rewrite on a tie).
+      return local.warnings.length <= safe.warnings.length
+        ? deliver(analysis, attempt, local.warnings)
+        : deliver(safe.analysis, safe.attempt, safe.warnings);
+    }
+    const hints = qualityRewriteHints(local.warnings);
+    if (hints.length === 0 || attempt === MAX_GENERATIONS) return deliver(analysis, attempt, local.warnings);
+    safe = { analysis, attempt, warnings: local.warnings };
+    trace.qualityRewrite = true;
+    issues = hints;
   }
+  // The rewrite failed a hard check: the safe original is delivered instead of suppressing the cycle.
+  if (safe) return deliver(safe.analysis, safe.attempt, safe.warnings);
   return { ok: false, error: lastError, issues, ...result() };
+}
+
+/** Flat, non-sensitive diagnostics: content regeneration is reported separately from transport retry. */
+export function generationDiagnostics(trace: GenerationTrace): Record<string, string> {
+  return {
+    generation_attempts: String(trace.generations),
+    content_regenerations: String(Math.max(0, trace.generations - 1)),
+    hard_rejections: trace.hardRejections.join(","),
+    quality_rewrite: String(trace.qualityRewrite),
+    quality_rewrite_request_failed: String(trace.rewriteRequestFailed ?? false),
+    delivered_generation: String(trace.deliveredGeneration),
+    quality_warnings: trace.warnings.join(" / ").slice(0, 600),
+  };
 }
 
 // ---------------------------------------------------------------------------

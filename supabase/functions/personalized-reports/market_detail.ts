@@ -8,6 +8,7 @@
 // X-side code (_shared/market_report_packet.ts, x-test-post) is read, never changed.
 
 import type { MarketReportPacket, ReportType } from "../_shared/market_report_packet.ts";
+import { type AppMarketStory, buildAppMarketStory } from "../_shared/market_report_story.ts";
 
 export type MetricFreshness = "fresh" | "stale" | "unavailable";
 
@@ -51,6 +52,9 @@ export type AppMarketDetail = {
   data_gaps_ja: string[];
   // Close only: what the shared morning analysis expected, shown next to the close result.
   morning_reference: MorningReference | null;
+  // The market-wide story (headings, prose and code-rendered fact lines) built from the same packet
+  // X is posted from. Additive: a client that does not know it keeps rendering the fields above.
+  story: AppMarketStory;
 };
 
 type RawMetric = Record<string, unknown>;
@@ -196,6 +200,7 @@ export function buildAppMarketDetail(input: {
     risks_ja: report.risks_ja,
     data_gaps_ja: report.data_gaps_ja,
     morning_reference: input.reportType === "close" ? morningReference(input.morningPacket ?? null) : null,
+    story: buildAppMarketStory(report, input.reportType === "close" ? input.morningPacket ?? null : null),
   };
 }
 

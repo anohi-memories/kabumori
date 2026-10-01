@@ -5,7 +5,7 @@
 // Direction and major moves are decided in code, never by the model.
 
 import type { MarketDataPacket, Metric } from "../market-report-data-packet/packet_schema.ts";
-import type { MajorMove, MarketDirection, ReportType } from "../_shared/market_report_packet.ts";
+import type { MajorMove, MarketDirection, NewsScope, ReportType, SessionView } from "../_shared/market_report_packet.ts";
 
 export const MAX_NEWS_ITEMS = 15;
 export const FLAT_THRESHOLD_PCT = 0.1;
@@ -35,6 +35,21 @@ export type NewsInputItem = {
   categories: string[];
   company: string | null;
   published_at: string | null;
+  /** Editorial reach of the item, decided from its categories and whether it names one company. */
+  scope: NewsScope;
+};
+
+/** What the hard-fact guards need to know about one metric: its own session and its own numbers. */
+export type MetricFact = {
+  key: string;
+  label: string;
+  sessionDate: string;
+  dateJa: string;
+  valueDisplay: string;
+  changeDisplay: string | null;
+  /** -1 / 0 / 1 from the day change; null when the packet has no day change for it. */
+  changeSign: number | null;
+  freshness: "fresh" | "stale";
 };
 
 export type AnalysisInput = {
@@ -58,6 +73,11 @@ export type AnalysisInput = {
   majorKeywords: string[];
   /** Japanese and US sessions are different calendar dates (e.g. close on 9/18 vs US 9/17). */
   sessionsDiffer: boolean;
+  /** Tokyo and US directions, each for its own session (a morning packet holds both). */
+  sessionViews: SessionView[];
+  metricFacts: MetricFact[];
+  /** Scope by news ref, for ordering key_news in the packet. */
+  scopeByRef: Map<string, NewsScope>;
 };
 
 const MAJOR_CATEGORIES = new Set(["monetary_policy"]);
@@ -70,8 +90,30 @@ const DIRECTION_JA: Record<MarketDirection, string> = {
   up: "上昇", down: "下落", mixed: "まちまち", flat: "ほぼ横ばい", unknown: "判断できず",
 };
 
+// Editorial reach. Ranking by coverage_severity alone promoted a single company's impairment notice
+// (critical) above trade-policy and geopolitical items on 2026-10-01, so the market-wide story orders
+// news by reach first: the whole market, then a sector/theme, then one company.
+const BROAD_CATEGORIES = new Set([
+  "monetary_policy", "fx", "rates", "geopolitics", "disaster", "oil_energy", "commodities", "shipping_logistics",
+  "us_market", "japan_market", "regulation_policy", "financial_system",
+]);
+const SYSTEMIC_CATEGORIES = new Set(["monetary_policy", "financial_system"]);
+const SECTOR_CATEGORIES = new Set(["semiconductors", "ai_tech"]);
+const SCOPE_RANK: Record<NewsScope, number> = { broad: 0, sector: 1, company: 2 };
+export const SCOPE_JA: Record<NewsScope, string> = { broad: "市場全体", sector: "業種・テーマ", company: "個別企業" };
+
+/** A company's own disclosure is company-scoped unless it is systemic (central bank / financial system). */
+export function newsScope(categories: readonly string[], hasCompany: boolean): NewsScope {
+  if (categories.some((category) => SYSTEMIC_CATEGORIES.has(category))) return "broad";
+  if (hasCompany) return "company";
+  if (categories.some((category) => BROAD_CATEGORIES.has(category))) return "broad";
+  return categories.some((category) => SECTOR_CATEGORIES.has(category)) ? "sector" : "company";
+}
+
+/** Must be surfaced in the market-wide story: policy decisions, and emergency/critical items that are not one company's. */
 export function isMajorNews(item: NewsInputItem): boolean {
-  return MAJOR_SEVERITIES.has(item.severity) || item.categories.some((category) => MAJOR_CATEGORIES.has(category));
+  return item.categories.some((category) => MAJOR_CATEGORIES.has(category)) ||
+    (MAJOR_SEVERITIES.has(item.severity) && item.scope !== "company");
 }
 
 const JAPANESE = /[ぁ-んァ-ヶ一-龠]/u;
@@ -116,8 +158,27 @@ const DIRECTION_KEYS: Record<ReportType, string[]> = {
   morning: ["dow", "sp500", "nasdaq_composite"],
 };
 
+const SESSION_KEYS: Record<SessionView["market"], string[]> = {
+  tokyo: ["nikkei225", "topix_proxy_1306"],
+  us: ["dow", "sp500", "nasdaq_composite"],
+};
+
 export function marketDirection(reportType: ReportType, metrics: Metric[]): { direction: MarketDirection; basis: string[] } {
-  const basis = DIRECTION_KEYS[reportType]
+  return directionOf(DIRECTION_KEYS[reportType], metrics);
+}
+
+/** Tokyo and US directions for their own sessions, so "mixed" on a morning never hides either one. */
+export function sessionViews(metrics: Metric[]): SessionView[] {
+  return (["tokyo", "us"] as const).map((market) => {
+    const { direction, basis } = directionOf(SESSION_KEYS[market], metrics);
+    const dates = basis.map((key) => metrics.find((metric) => metric.key === key)?.session_date).filter(Boolean) as string[];
+    // One date only when every basis metric shares it; otherwise the view has no single session date.
+    return { market, session_date: new Set(dates).size === 1 ? dates[0] : null, direction, basis };
+  });
+}
+
+function directionOf(keys: readonly string[], metrics: Metric[]): { direction: MarketDirection; basis: string[] } {
+  const basis = keys
     .map((key) => metrics.find((metric) => metric.key === key))
     .filter((metric): metric is Metric => Boolean(metric && metric.freshness === "fresh" && metric.change_pct !== null));
   if (basis.length === 0) return { direction: "unknown", basis: [] };
@@ -202,12 +263,13 @@ export function newsInputItems(rows: readonly NewsTextRow[], refIds: readonly st
       categories: Array.isArray(row.coverage_categories) ? row.coverage_categories : [],
       company: row.company_code ? `${row.company_name ?? ""}（${row.company_code.slice(0, 4)}）` : null,
       published_at: row.published_at,
+      scope: newsScope(Array.isArray(row.coverage_categories) ? row.coverage_categories : [], Boolean(row.company_code)),
       rank: SEVERITY_RANK[row.coverage_severity ?? ""] ?? 0,
       time: row.published_at ?? row.created_at,
     });
   }
   return items
-    .sort((a, b) => b.rank - a.rank || b.time.localeCompare(a.time))
+    .sort((a, b) => SCOPE_RANK[a.scope] - SCOPE_RANK[b.scope] || b.rank - a.rank || b.time.localeCompare(a.time))
     .slice(0, MAX_NEWS_ITEMS)
     .map(({ rank: _rank, time: _time, ...item }) => item);
 }
@@ -229,6 +291,23 @@ export function buildAnalysisInput(args: {
   const major = news.filter(isMajorNews);
   const majorText = major.map((item) => `${item.headline_ja} ${item.summary_ja ?? ""}`).join(" ");
   const sessionsDiffer = dataPacket.session.jpx_session_date !== dataPacket.session.us_session_date;
+  const views = sessionViews(dataPacket.metrics);
+  const viewJa = (market: SessionView["market"]) => {
+    const view = views.find((item) => item.market === market)!;
+    return view.session_date ? `${formatDateJa(view.session_date)}は${DIRECTION_JA[view.direction]}` : DIRECTION_JA[view.direction];
+  };
+  const facts: MetricFact[] = dataPacket.metrics.filter(usable).map((metric) => ({
+    key: metric.key,
+    label: metric.label,
+    sessionDate: metric.session_date!,
+    dateJa: formatDateJa(metric.session_date!),
+    valueDisplay: valueDisplay(metric),
+    changeDisplay: changePctDisplay(metric),
+    changeSign: metric.change_pct === null || metric.basis !== "daily_close"
+      ? null
+      : Math.abs(metric.change_pct) < FLAT_THRESHOLD_PCT ? 0 : Math.sign(metric.change_pct),
+    freshness: metric.freshness as "fresh" | "stale",
+  }));
 
   // Japanese keys only: English field names in the input leaked into the text on
   // 2026-09-18 ("change_pctは+1.38%"). Only the ref identifiers stay ASCII.
@@ -242,6 +321,9 @@ export function buildAnalysisInput(args: {
       : "東京市場と米国市場は同じ日付です。",
     市場の方向: DIRECTION_JA[direction],
     方向の根拠: basis.map((key) => `metric:${key}`),
+    // Each market's own session: a morning report must not merge these into one label.
+    東京市場の方向: viewJa("tokyo"),
+    米国市場の方向: viewJa("us"),
     指標: moves.map((move) => ({
       ref: `metric:${move.metric_key}`,
       名称: move.label,
@@ -250,12 +332,14 @@ export function buildAnalysisInput(args: {
       前日比: move.change_pct_display,
       鮮度: move.freshness === "fresh" ? "最新" : "古い値",
     })),
-    // Major policy/macro items first so they are not buried under company IR.
-    ニュース: [...news].sort((a, b) => Number(isMajorNews(b)) - Number(isMajorNews(a))).map((item) => ({
+    // Keep the same broad > sector > company order the guards/consumers see. The major flag
+    // communicates importance without promoting a narrow emergency above a broad-market item.
+    ニュース: news.map((item) => ({
       ref: item.ref,
       見出し: item.headline_ja,
       要約: item.summary_ja,
       重要材料: isMajorNews(item),
+      範囲: SCOPE_JA[item.scope],
       企業: item.company,
     })),
     取得できなかったデータ: gaps,
@@ -278,5 +362,8 @@ export function buildAnalysisInput(args: {
     majorNewsRefs: new Set(major.map((item) => item.ref)),
     majorKeywords: MAJOR_KEYWORDS.filter((keyword) => majorText.includes(keyword)),
     sessionsDiffer,
+    sessionViews: views,
+    metricFacts: facts,
+    scopeByRef: new Map(news.map((item) => [item.ref, item.scope])),
   };
 }

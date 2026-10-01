@@ -800,6 +800,48 @@ Phase 4・5 が各2週間安定してから、旧コード・`market_contexts`�
 
 ---
 
+## 15. Presentation v2（2026-10-01、consumer gate OFFのまま）
+
+共通packetの「正確だが短い」出力を、Xは約500字の読み物、アプリ「市場全体」は見出し付きの長文へ広げた。事実の正本は1つのまま。
+
+### 15.1 契約
+
+- `market_report_packets.schema_version` はtable checkで `market_report_packet.v1` に固定されている。**版は変えず、任意項目を足した**：`presentation_version = "market_presentation.v2"`、`x_post.context_ja / news_ja / watch_ja`、`app_story`、`session_views`、`key_news[].scope`、`fact.quality_warnings`。項目の無い保存済みpacketは、従来の短い形式で表示する。
+- 生成は1回のまま。同じ生成がXの6項目とアプリの8項目を返す（Xとアプリで別々に市場を分析しない）。呼び出しの上限は従来どおり、生成2回・Fact 2回。
+- **X**（`_shared/market_report_packet.ts`）：見出し → 導入 → 📌 3点 → 背景 → 📰 ニュース → 👀 次に見る点 → 💬 ひとこと。小見出しと絵文字はコードが付ける。根拠が薄い段落は省く。
+- **アプリ**（`_shared/market_report_story.ts`）：見出し・絵文字・指標の行はコードが描画し、AIの文は各セクションの本文だけ。指標は必ず**その指標自身の日付**の下に並ぶ。大引けの「朝刊との答え合わせ」は、同じ取引日の朝刊packetからコードで組み立てる。`market_detail.story` として保存する（既存の項目は変えない）。
+
+### 15.2 Hard BLOCK と Quality WARN
+
+- **Hard BLOCK**（作り直し。残れば fail closed）：
+  - 入力に無い数値
+  - 指標と数値の不一致
+  - 指標と日付の不一致（別日の値を1つの日付で書く）、「同じ日」の誤用
+  - 上げ下げの向きの逆転（語・前日比の符号・📈📉）
+  - 古い値を日付なしで記載
+  - 1306をTOPIXと表記
+  - 根拠の無い因果の断定
+  - 範囲を示さない「材料なし」の断定（入力にニュースがある場合）
+  - 入力に無いref・ニュース、複数日を前提にする語、売買推奨、URL・ハッシュタグ・HTML、内部の項目名、必須項目の欠落、Xの3点が3つでない・長さが投稿不能
+  - LLMのFact不合格
+- **Quality WARN**（記録するだけで、配信は止めない）：目標より短い・長い、任意セクションの省略、絵文字の数、不確実性の注記の繰り返し、`insufficient_evidence` の重複、テーマ名が指数・根拠なし（packetからは除く）、重要材料の未掲載、見出し・要約の長さ、ニュースの優先順位。
+- WARNだけの下書きは、1回だけ書き直しを試みる。書き直しがHardで落ちたら、安全な元の下書きを配信する（質の理由でcycleを落とさない）。
+
+### 15.3 日付・セッションの整合
+
+- `metric -> session_date -> value / change` は `market_data_packet` が正本。再利用した値も、元の `session_date` のまま扱う。
+- 2026-10-01の旧アプリ朝刊は、9/29の日経平均（65,481.27、−0.60%）と9/30の1306（431.5、+1.43%）を「9月30日」として並べた。新しい経路では、(a) コードが描画する行は指標ごとの日付付き、(b) AIの文は `hard_fact_guards.ts` が機械的に検査する。LLMのFactには頼らない。
+- 朝刊の `market_direction` は米国3指数の方向。東京（前営業日）と米国（前夜）は `session_views` で別々に持ち、読み物でも別のセクションに書く。
+
+### 15.4 ニュースの優先順位
+
+- `coverage_severity` だけで並べない。範囲（`broad` 市場全体 → `sector` 業種・テーマ → `company` 個別企業）を先に見る。範囲はカテゴリと企業コードの有無からコードで決める。
+- 「必ず取り上げる重要材料」は、政策決定と、個別企業のものではないemergency/critical。個別企業のcriticalな開示は、市場全体の話の必須項目にしない（マイポート側で扱える）。
+
+### 15.5 観測
+
+- 内容の作り直し（`generation_attempts` / `content_regenerations` / `hard_rejections` / `quality_rewrite`）、通信のretry（`transport_*`）、cronの再実行（`report_attempt_count`）は別々に記録する。
+
 ## 付録: 監査に使った主な場所
 
 - `supabase/functions/x-test-post/index.ts` — `selectMarketContext` 1146、`morningFactBasis` 1535、`generateMorningReport` 1548、`closeFactBasis` 1983、`generateCloseReport` 2069、`evaluateKabumoriVoice` 2755、morning 分岐 3939、close 分岐 4119、close 失敗保存 4230

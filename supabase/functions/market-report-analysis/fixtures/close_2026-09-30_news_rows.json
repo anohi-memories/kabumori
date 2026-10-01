@@ -1,0 +1,471 @@
+[
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "japan_market"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-29 23:00:34.162004+00",
+    "generated_text": "【速報】米国の消費者信頼感が9月に大きく悪化し、2014年以来の低水準になりました。米Conference Boardが公表した月次報告では、消費者は商品・サービスの値上がりを主な理由に挙げています。ガソリン価格も上昇し、AAAによると平均価格は1ガロン4.45ドル。前月から37セント高くなりました。\n\n出典: https://www.aljazeera.com/economy/2026/9/29/us-consumer-confidence-hits-its-lowest-level-since-2014-ahead-of-midterms",
+    "generation_fact_status": "passed",
+    "id": "0b9dd95d-46b0-47e8-9e8e-e9cde3e7b136",
+    "published_at": "2026-09-29 22:23:58+00",
+    "source_type": "breaking_market",
+    "title": "US consumer confidence hits its lowest level since 2014 ahead of midterms"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "25930",
+    "company_name": "伊藤園",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-09-29 12:00:38.647904+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "3814a8c0-733d-43a6-b6c3-9f396087fc21",
+    "published_at": "2026-09-29 07:00:00+00",
+    "source_type": "tdnet",
+    "title": "株主優待制度の廃止に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "semiconductors",
+      "ai_tech"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-30 01:00:38.581376+00",
+    "generated_text": "【速報】トランプ米大統領と主要AI企業の幹部が、AI開発の自主規制に関する協定に署名したと報じられました。企業はAIシステムに「強固な内部統制」を設け、独立した外部監査人と連携して統制の機能を評価し、取締役会に監査報告を検討する委員会を置く内容です。\n\n参加企業にはOpenAI、Anthropic、Meta、Google、Nvidiaが含まれます。協定の法的拘束力や日本企業への具体的な影響は明らかになっていません。\n\n出典: https://www.aljazeera.com/news/2026/9/29/trump-top-tech-firms-sign-accord-to-self-police-ai-development",
+    "generation_fact_status": "passed",
+    "id": "3dcb7364-05d9-417a-922d-94b8689b27c0",
+    "published_at": "2026-09-29 23:43:32+00",
+    "source_type": "breaking_market",
+    "title": "Trump, top tech firms sign accord to ‘self-police’ AI development"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "geopolitics",
+      "disaster"
+    ],
+    "coverage_severity": "emergency",
+    "created_at": "2026-09-30 06:00:03.84049+00",
+    "generated_text": "【速報】気象庁が津波予報を発表しました。内容は「若干の海面変動」で、津波警報・注意報ではありません。\n\n出典: https://www.data.jma.go.jp/developer/xml/data/20260930050818_0_VTSE41_010000.xml",
+    "generation_fact_status": "passed",
+    "id": "60d07123-b781-469b-bd39-495fd40c4aa7",
+    "published_at": "2026-09-30 05:08:17+00",
+    "source_type": "market_macro",
+    "title": "津波警報・注意報・予報a"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "27920",
+    "company_name": "ハニーズＨＬＤ",
+    "coverage_categories": [
+      "disaster",
+      "fx",
+      "corporate",
+      "earnings"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-29 08:00:43.340813+00",
+    "generated_text": "【速報】ハニーズホールディングス（2792）の2027年5月期第1四半期（2026年6月～8月）は、売上高が前年同期比6.7％減の129億円、営業利益は51.1％減の5億円、純利益は52.6％減の3億円でした。天候不順や節約志向による客数の伸び悩み、円安による仕入原価の上昇などが響いています。通期業績予想と配当予想に変更はありません。\n\n出典: https://www.release.tdnet.info/inbs/140120260928540923.pdf",
+    "generation_fact_status": "failed",
+    "id": "64801a40-0f43-4e47-abcc-3233d768e9a8",
+    "published_at": "2026-09-29 06:30:00+00",
+    "source_type": "tdnet",
+    "title": "2027年５月期 第１四半期決算短信〔日本基準〕（連結）"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "geopolitics"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-29 18:00:25.585375+00",
+    "generated_text": "【速報】エチオピアで戦闘が広がるなか、政府はエリトリア、スーダン、エジプトが国内の武装勢力を支援していると非難しました。エチオピア軍トップは、エリトリアが周辺国と国内勢力をつないでいるとも主張しています。\n\nエリトリア、スーダン、エジプトはいずれも非難を否定。地域紛争への拡大が懸念されています。日本株への具体的な影響は確認されていません。\n\n出典: https://www.aljazeera.com/news/2026/9/29/ethiopia-blames-regional-rivals-as-risk-of-conflict-spillover-rises",
+    "generation_fact_status": "passed",
+    "id": "65035df0-05b1-45d6-93f0-b5f6f0eeb99d",
+    "published_at": "2026-09-29 17:25:09+00",
+    "source_type": "breaking_market",
+    "title": "Ethiopia blames regional rivals as risk of conflict spillover rises"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "75750",
+    "company_name": "日本ライフライン",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-29 12:00:38.387224+00",
+    "generated_text": "【速報】日本ライフラインが、米国Cross Vascular社の全株式を取得し、完全子会社化することを決議しました。完全子会社のJLL Med USAを通じた買収で、取得価額と増資を合わせた概算額は約9億7,700万円です。株式譲渡の実行日は9月30日を予定しています。\n\nCross Vascular社は、心房中隔穿刺に関連する製品を開発し、米FDAの510(k)認証を取得済み。日本ライフラインは米国での事業基盤確立を買収の目的としており、今回の買収と増資による業績への影響は軽微としています。\n\n出典: https://www.release.tdnet.info/inbs/140120260929542005.pdf",
+    "generation_fact_status": "failed",
+    "id": "6b047f8e-0455-4fe4-81ed-636d7856d768",
+    "published_at": "2026-09-29 06:40:00+00",
+    "source_type": "tdnet",
+    "title": "米国Cross Vascular社の買収および増資に伴う特定子会社の異動に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": "failed",
+    "app_summary_ja": "アルゼンチンのミレイ大統領は、英国がフォークランド諸島沖のSea Lion油田プロジェクトを停止しなければ、国際海洋法裁判所に法的措置を求めると警告しました。英国には2週間の期限を示しています。",
+    "app_title_ja": "ミレイ大統領、フォークランド沖油田計画の停止を英国に要求",
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "geopolitics"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-29 10:00:26.719063+00",
+    "generated_text": "【速報】アルゼンチンのミレイ大統領が、フォークランド諸島沖のSea Lion油田開発をめぐり、英国に2週間以内の作業停止を要求しました。応じなければ、国際海洋法裁判所に開発停止を求める方針です。\n\n開発を進めるNavitasとRockhopperは、英国が発行した有効な探査ライセンスを保有していると主張しています。日本株では、現時点で大きな市場影響は見られていないようです。\n\n出典: https://www.aljazeera.com/news/2026/9/29/argentinas-milei-threatens-legal-action-over-falklands-oil-project",
+    "generation_fact_status": "failed",
+    "id": "78f507cf-7f51-49b1-b0f0-c07402ec2f58",
+    "published_at": "2026-09-29 09:17:22+00",
+    "source_type": "breaking_market",
+    "title": "Argentina’s Milei threatens legal action over Falklands oil project"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "47650",
+    "company_name": "ＳＢＩＧアセットＭ",
+    "coverage_categories": [
+      "ai_tech",
+      "corporate"
+    ],
+    "coverage_severity": "critical",
+    "created_at": "2026-09-30 00:00:38.665164+00",
+    "generated_text": "【重大速報】SBIグローバルアセットマネジメントとSBIインシュアランスグループが、吸収合併による経営統合で基本合意しました。存続会社はSBIグローバルアセットマネジメントで、SBIインシュアランスグループは消滅会社となる予定です。\n\n合併比率はSBIインシュアランスグループ株1株に対し、SBIグローバルアセットマネジメント株3.53株。交付する株式は約8,762万株を予定しています。SBIインシュアランスグループは2027年3月30日に上場廃止、合併の効力発生日は同年4月1日の予定です。\n\n実施には最終契約の締結、両社の臨時株主総会での承認、関係当局の認可などが条件。対象となるのは、両社の株主です。\n\n出典: https://www.release.tdnet.info/inbs/140120260929541595.pdf",
+    "generation_fact_status": "failed",
+    "id": "84832da2-4a98-4abb-b2e5-1a3d045b402a",
+    "published_at": "2026-09-29 23:30:00+00",
+    "source_type": "tdnet",
+    "title": "SBIグローバルアセットマネジメント株式会社とSBIインシュアランスグループ株式会社の吸収合併による経営統合に関する基本合意締結のお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "19440",
+    "company_name": "きんでん",
+    "coverage_categories": [
+      "corporate",
+      "earnings"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-30 07:00:40.819342+00",
+    "generated_text": "【速報】きんでん（1944）が、弘電社（1948）を完全子会社化しました。9月30日付で一連の取引が完了し、弘電社は三菱電機が保有していた株式を自己株式として取得。きんでんの議決権所有割合は100％になりました。\n\n連結業績への影響は現在精査中とのことです。\n\n出典: https://www.release.tdnet.info/inbs/140120260909533493.pdf",
+    "generation_fact_status": "passed",
+    "id": "89275bd7-c2a1-4c61-ad14-8a4aed4986c1",
+    "published_at": "2026-09-30 06:30:00+00",
+    "source_type": "tdnet",
+    "title": "株式会社弘電社の完全子会社化に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "geopolitics"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-29 20:00:27.487249+00",
+    "generated_text": "【速報】イラクから最後の米軍部隊が撤退し、20年以上にわたる米軍駐留が終了しました。米軍は2003年にイラクへ派遣されていました。イラク政府が今後の安全保障課題に単独で対応できるかが問われています。\n\n出典: https://www.aljazeera.com/video/inside-story/2026/9/29/can-iraq-handle-future-security-challenges-alone",
+    "generation_fact_status": "passed",
+    "id": "9fb691a0-9959-4854-bd99-e8ad40786f0b",
+    "published_at": "2026-09-29 19:05:03+00",
+    "source_type": "breaking_market",
+    "title": "Can Iraq handle future security challenges alone?"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "fx",
+      "regulation_policy"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-29 21:00:30.824383+00",
+    "generated_text": "【速報】米国がカナダ産の約10億ドル相当の輸入を禁止し、措置が火曜日早朝に発効しました。対象には酒類、乳製品、オートバイなどが含まれます。カナダが米国産品に対抗関税を課したことへのトランプ大統領の報復で、米加間の関税応酬が拡大しています。\n\n出典: https://www.aljazeera.com/economy/2026/9/29/us-ban-on-1bn-of-canadian-goods-takes-effect-in-trumps-latest-retaliation",
+    "generation_fact_status": "passed",
+    "id": "a0ebda48-29d0-4ec1-b9e4-0ba90c220d96",
+    "published_at": "2026-09-29 20:08:33+00",
+    "source_type": "breaking_market",
+    "title": "US ban on $1bn of Canadian goods takes effect in Trump’s latest retaliation"
+  },
+  {
+    "app_copy_fact_status": "passed",
+    "app_summary_ja": "100人を超えるイスラエル人入植者がヨルダン川西岸のパレスチナ人の村を襲撃し、イスラエル軍に付き添われて帰宅しようとした家族を妨げました。家族の住宅2軒が放火され、イスラエル治安部隊も襲撃の標的になりました。",
+    "app_title_ja": "イスラエル人入植者がヨルダン川西岸の村を襲撃、パレスチナ人家族の帰宅を阻止",
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "geopolitics"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-29 14:00:36.624483+00",
+    "generated_text": "【速報】ヨルダン川西岸で入植者100人超が襲撃\n\nパレスチナ人家族がイスラエル軍の同行で自宅に戻ろうとしたところ、入植者らが襲撃し、家族が所有する住宅2軒に放火したとBBCが報じました。イスラエルの最高裁判所は今月、家族が帰宅できるようにすべきだとの判断を示していたとされています。襲撃ではイスラエル治安部隊も攻撃されたとのことです。\n\n出典: https://www.bbc.co.uk/news/articles/cvlylj41egxgo",
+    "generation_fact_status": "failed",
+    "id": "a8b46f61-5eb7-47df-9419-833c7c990932",
+    "published_at": "2026-09-29 12:39:18+00",
+    "source_type": "breaking_market",
+    "title": "Israeli settlers attack West Bank village and block Palestinian family's return home"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "24540",
+    "company_name": "オールアバウト",
+    "coverage_categories": [
+      "corporate",
+      "earnings"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-09-29 10:00:39.385452+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "ab867c86-88a8-47bd-89ab-785baa5a7216",
+    "published_at": "2026-09-29 06:30:00+00",
+    "source_type": "tdnet",
+    "title": "2027年3月期第1四半期決算に関する質疑応答（要旨）"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "73260",
+    "company_name": "Ｇ－ＳＢＩインシュ",
+    "coverage_categories": [
+      "ai_tech",
+      "corporate"
+    ],
+    "coverage_severity": "critical",
+    "created_at": "2026-09-30 00:00:38.977691+00",
+    "generated_text": "【重大速報】SBIグローバルAMとSBIインシュアランスが経営統合へ\n\n両社が吸収合併による経営統合に基本合意しました。SBIグローバルアセットマネジメントが存続会社となり、SBIインシュアランスグループは消滅会社となる予定です。\n\n合併比率はSBIインシュアランスの普通株式1株に対し、SBIグローバルAM株3.53株。SBIインシュアランスは2027年3月30日に上場廃止、合併の効力発生日は同年4月1日の予定です。新たに交付するSBIグローバルAM株は約8,762万株を見込んでいます。\n\n実施には最終契約の締結、両社の臨時株主総会での承認、関係当局の認可などが条件です。現時点では基本合意で、日程や合併比率は変更される可能性があります。影響を受けるのは、両社の株主です。\n\n出典: https://www.release.tdnet.info/inbs/140120260929542247.pdf",
+    "generation_fact_status": "passed",
+    "id": "ae5e11a1-d4f5-4726-b4b8-b54472f7068e",
+    "published_at": "2026-09-29 23:30:00+00",
+    "source_type": "tdnet",
+    "title": "ＳＢＩグローバルアセットマネジメント株式会社とＳＢＩインシュアランスグループ株式会社の吸収合併による経営統合に関する基本合意書締結のお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "29750",
+    "company_name": "スター・マイカＨＤ",
+    "coverage_categories": [
+      "disaster",
+      "corporate",
+      "earnings"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-09-30 07:00:41.364235+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "b3f17ab3-54e0-4096-a809-c6b5f3d7182f",
+    "published_at": "2026-09-30 06:30:00+00",
+    "source_type": "tdnet",
+    "title": "2026年11月期 第３四半期決算短信〔日本基準〕（連結）"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "72730",
+    "company_name": "イクヨ",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-09-30 04:00:49.433846+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "b798c437-3694-46c6-9bc3-88a9d8ad5277",
+    "published_at": "2026-09-30 00:00:00+00",
+    "source_type": "tdnet",
+    "title": "当選方式による株主優待（ビットコイン活用型）の実施結果に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "268A0",
+    "company_name": "リガク",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-09-30 03:00:31.139739+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "bd207072-8e39-4d7c-a374-42bb152cd4be",
+    "published_at": "2026-09-29 23:59:00+00",
+    "source_type": "tdnet",
+    "title": "主要株主である筆頭株主の異動及びその他の関係会社の異動に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": "failed",
+    "app_summary_ja": "水曜日午前の取引で、日経平均株価は1.3％高の66,318.81となった。ソフトバンクグループや半導体関連株が上昇した一方、イラン戦争を巡る地政学的懸念も続いている。",
+    "app_title_ja": "日経平均が午前取引で1.3％上昇",
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "geopolitics",
+      "semiconductors",
+      "ai_tech",
+      "japan_market"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-09-30 05:00:30.00832+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "c6d5a61b-2992-4b32-94de-1a568a451d61",
+    "published_at": "2026-09-30 02:59:43+00",
+    "source_type": "breaking_market",
+    "title": "Asian benchmarks mostly rise despite ongoing worries about the Iran war"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "84730",
+    "company_name": "ＳＢＩ",
+    "coverage_categories": [
+      "ai_tech",
+      "corporate"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-30 04:00:49.703944+00",
+    "generated_text": "【速報】SBIインシュアランスグループは、2027年3月30日に上場廃止となる予定です。SBIグローバルアセットマネジメントを存続会社とする吸収合併で、両社は経営統合の基本合意書を締結しました。\n\n合併の効力発生日は2027年4月1日を予定。SBIホールディングスは、連結業績への影響は軽微としています。最終契約の締結や株主総会の承認、関係当局の認可などが条件です。\n\n出典: https://www.release.tdnet.info/inbs/140120260930542525.pdf",
+    "generation_fact_status": "failed",
+    "id": "cde06b34-00ed-4b0c-8384-f87cb3e27ee2",
+    "published_at": "2026-09-30 00:00:00+00",
+    "source_type": "tdnet",
+    "title": "当社子会社のＳＢＩグローバルアセットマネジメント株式会社とＳＢＩインシュアランスグループ株式会社の吸収合併による経営統合に関する基本合意書締結"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "us_market",
+      "regulation_policy"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-30 06:00:29.777833+00",
+    "generated_text": "【速報】米国防総省は、将官・提督のポストを合計20％削減する方針です。ヘグセス国防長官が、バージニア州の海兵隊基地クアンティコで行う演説で発表する見込みと報じられています。陸軍、海軍、空軍の幹部人事に関わる変更で、削減は2027年1月1日までに完了する予定です。\n\n出典: https://www.aljazeera.com/news/2026/9/30/hegseth-to-cut-number-of-us-general-and-admiral-positions-by-20",
+    "generation_fact_status": "passed",
+    "id": "cf216b23-ccf7-4c1f-88f7-4ee8fce9293f",
+    "published_at": "2026-09-30 05:05:35+00",
+    "source_type": "breaking_market",
+    "title": "Hegseth to cut number of US general and admiral positions by 20%"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "23710",
+    "company_name": "カカクコム",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-30 01:00:42.113346+00",
+    "generated_text": "【速報】カカクコムの公開買付けで、Kamgras 1は買付価格を1株3,680円から3,681円に変更しました。公開買付期間も2026年10月14日まで延長し、合計105営業日となります。\n\nベインキャピタルとLINEヤフー側の対抗提案もあり、カカクコムの特別委員会は両提案を検討する方針です。取締役会の賛同意見に変更はありません。\n\n出典: https://www.release.tdnet.info/inbs/140120260929542370.pdf",
+    "generation_fact_status": "failed",
+    "id": "d3a959e0-d5ba-46f3-80c5-bf8378bdc886",
+    "published_at": "2026-09-29 23:30:00+00",
+    "source_type": "tdnet",
+    "title": "（変更）「Kamgras １株式会社による当社株券等に対する公開買付けに関する賛同の意見表明及び応募推奨のお知らせ」の一部変更に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "23230",
+    "company_name": "ｆｏｎｆｕｎ",
+    "coverage_categories": [
+      "corporate",
+      "earnings"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-09-29 11:00:35.823793+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "dbbccdcd-99ce-4505-a02c-7182e4801ca4",
+    "published_at": "2026-09-29 06:30:00+00",
+    "source_type": "tdnet",
+    "title": "ICS株式会社の株式の取得（完全子会社化）に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "99760",
+    "company_name": "セキチュー",
+    "coverage_categories": [
+      "corporate",
+      "earnings"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-29 13:00:41.94496+00",
+    "generated_text": "【速報】セキチュー（9976）が2027年2月期の通期業績予想を修正。売上高は300億円で据え置き、営業利益は6億円（従来予想比20.0％増）、経常利益は6億円（同9.1％増）に上方修正しました。\n\n中間期の営業利益・経常利益・純利益も、前回予想を上回って着地。DIY部門の売上や賃貸収入が好調で、販促費などの削減も利益を押し上げたとしています。\n\n出典: https://www.release.tdnet.info/inbs/140120260928541396.pdf",
+    "generation_fact_status": "failed",
+    "id": "e569a715-9a6f-407d-9c09-3a18a4e6b0b6",
+    "published_at": "2026-09-29 07:00:00+00",
+    "source_type": "tdnet",
+    "title": "2027年２月期第２四半期(中間期)業績予想と実績との差異および通期業績予想の修正に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "geopolitics"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-30 05:00:29.857983+00",
+    "generated_text": "【速報】朝鮮半島のDMZで地雷爆発があり、韓国軍の要員3人が負傷しました。韓国側は爆発が北朝鮮の地雷によるものだった可能性が高いとして謝罪を要求し、休戦協定違反だとして「相応の措置」を取ると表明。北朝鮮側は関与を否定しています。日本市場への具体的な影響は示されていません。\n\n出典: https://www.bbc.co.uk/news/articles/cwj3dkvpm4e7o",
+    "generation_fact_status": "passed",
+    "id": "f496324f-5fcd-400c-9f02-23436c443acf",
+    "published_at": "2026-09-30 03:38:09+00",
+    "source_type": "breaking_market",
+    "title": "South Korea demands apology from Pyongyang for landmine blasts that injured three"
+  }
+]

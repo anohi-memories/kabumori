@@ -1,0 +1,256 @@
+{
+  "content_hash": "cec938c071986227e1678f45738a585cb1bc689a0c646fb613a6e211a3740a21",
+  "id": "466a79ed-8a75-4a9e-a6dc-cc7fddf12bf4",
+  "payload": {
+    "claims": [
+      {
+        "claim_id": "c1",
+        "claim_type": "observation",
+        "evidence_refs": [
+          "metric:nikkei225"
+        ],
+        "scope": "today",
+        "text_ja": "9月30日の日経平均は66,753.72（前日比+1.94%）でした。"
+      },
+      {
+        "claim_id": "c2",
+        "claim_type": "observation",
+        "evidence_refs": [
+          "metric:topix_proxy_1306"
+        ],
+        "scope": "today",
+        "text_ja": "9月30日のTOPIX連動ETF（1306）は431.5円（前日比+1.43%）でした。"
+      },
+      {
+        "claim_id": "c3",
+        "claim_type": "observation",
+        "evidence_refs": [
+          "metric:dow",
+          "metric:sp500",
+          "metric:nasdaq_composite"
+        ],
+        "scope": "overnight",
+        "text_ja": "9月30日の米国市場は、NYダウとS&P500が下落し、ナスダック総合が上昇しました。"
+      },
+      {
+        "claim_id": "c4",
+        "claim_type": "observation",
+        "evidence_refs": [
+          "metric:sox"
+        ],
+        "scope": "overnight",
+        "text_ja": "9月30日のフィラデルフィア半導体株指数（SOX）は12,628.62（前日比±0.00%）でした。"
+      },
+      {
+        "claim_id": "c5",
+        "claim_type": "observation",
+        "evidence_refs": [
+          "metric:usdjpy"
+        ],
+        "scope": "overnight",
+        "text_ja": "9月30日のドル円は157.00円でした。"
+      },
+      {
+        "claim_id": "c6",
+        "claim_type": "insufficient_evidence",
+        "evidence_refs": [
+          "metric:nikkei225",
+          "metric:topix_proxy_1306",
+          "metric:dow",
+          "metric:sp500",
+          "metric:nasdaq_composite"
+        ],
+        "scope": "today",
+        "text_ja": "日経平均とTOPIX連動ETF（1306）の上昇、米国株のまちまちな動きは確認できますが、値動きの理由は確認できません。"
+      },
+      {
+        "claim_id": "c7",
+        "claim_type": "watch_point",
+        "evidence_refs": [
+          "metric:dow",
+          "metric:sp500",
+          "metric:nasdaq_composite",
+          "metric:usdjpy"
+        ],
+        "scope": "next",
+        "text_ja": "今日の日本株では、米国株のまちまちな動きとドル円157.00円を確認します。"
+      }
+    ],
+    "data_content_hash": "72d11a91f7fbde40b0812c3433d05e95e215d97aa3e0c72251291329eb7b6712",
+    "data_gaps_ja": [
+      "日本国債2年利回りは8月31日時点の値です",
+      "日本国債10年利回りは8月31日時点の値です",
+      "日経平均先物は確認できる取得元がないため載せていません",
+      "業種別の騰落は取得元がないため載せていません",
+      "経済指標の予定は取得元がないため載せていません"
+    ],
+    "data_packet_id": "27533ef8-1a3e-4d59-b5db-c21c9662e6c1",
+    "direction_basis": [
+      "dow",
+      "sp500",
+      "nasdaq_composite"
+    ],
+    "fact": {
+      "ai_status": "passed",
+      "generation_attempts": 2,
+      "local_issues": []
+    },
+    "generated_at": "2026-09-30T22:55:34.500Z",
+    "headline_ja": "日経平均は上昇、海外株はまちまち",
+    "key_news": [
+      {
+        "headline_ja": "非金融資産の減損損失、契約損失引当金、仕入先からの求償請求に係る和解に伴う債務及び特別調査費用等の計上に関するお知らせ",
+        "ref_id": "news:66a75ea5-89fc-461d-9d22-da38b24c9203",
+        "why_it_matters_ja": "ニデックが非金融資産の減損損失などの計上を発表しました。重要材料として確認しておきたい企業ニュースです。"
+      },
+      {
+        "headline_ja": "トランプ氏、AI企業と自主協定を発表",
+        "ref_id": "news:b35b1001-60a1-4f82-a491-4f8466e11188",
+        "why_it_matters_ja": "米国でAI企業との自主協定が発表されました。法的拘束力はないとされています。"
+      },
+      {
+        "headline_ja": "鉄鋼過剰生産能力フォーラム、共同枠組み「ミルウォーキー・フレームワーク」で合意",
+        "ref_id": "news:ad979900-fb92-44bf-b2b3-aab6c6907aff",
+        "why_it_matters_ja": "鉄鋼の過剰生産能力をめぐり、各国の共同対応の枠組みで合意しました。"
+      },
+      {
+        "headline_ja": "ロシア、ウクライナのエネルギー施設を春以来最大規模で攻撃 ウクライナのコレツキー首相によると、ロシアが夜間にエネルギーインフラを攻撃し、主にキーウと周辺地域が標的になりました",
+        "ref_id": "news:31a59feb-698e-42e0-bb93-574c30e332d8",
+        "why_it_matters_ja": "ウクライナのエネルギーインフラへの攻撃が報じられ、電力供給への影響も伝えられています。"
+      }
+    ],
+    "major_moves": [
+      {
+        "change_pct_display": "+1.94%",
+        "freshness": "fresh",
+        "label": "日経平均",
+        "metric_key": "nikkei225",
+        "session_date": "2026-09-30",
+        "value_display": "66,753.72"
+      },
+      {
+        "change_pct_display": "+1.43%",
+        "freshness": "fresh",
+        "label": "TOPIX連動ETF（1306）",
+        "metric_key": "topix_proxy_1306",
+        "session_date": "2026-09-30",
+        "value_display": "431.5円"
+      },
+      {
+        "change_pct_display": "−0.86%",
+        "freshness": "fresh",
+        "label": "NYダウ",
+        "metric_key": "dow",
+        "session_date": "2026-09-30",
+        "value_display": "50,906.05"
+      },
+      {
+        "change_pct_display": "−0.25%",
+        "freshness": "fresh",
+        "label": "S&P500",
+        "metric_key": "sp500",
+        "session_date": "2026-09-30",
+        "value_display": "7,651.54"
+      },
+      {
+        "change_pct_display": "+0.24%",
+        "freshness": "fresh",
+        "label": "ナスダック総合",
+        "metric_key": "nasdaq_composite",
+        "session_date": "2026-09-30",
+        "value_display": "26,861.06"
+      },
+      {
+        "change_pct_display": "±0.00%",
+        "freshness": "fresh",
+        "label": "フィラデルフィア半導体株指数（SOX）",
+        "metric_key": "sox",
+        "session_date": "2026-09-30",
+        "value_display": "12,628.62"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "ドル円",
+        "metric_key": "usdjpy",
+        "session_date": "2026-09-30",
+        "value_display": "157.00円"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "米国2年債利回り",
+        "metric_key": "us2y",
+        "session_date": "2026-09-29",
+        "value_display": "4.89%"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "米国10年債利回り",
+        "metric_key": "us10y",
+        "session_date": "2026-09-29",
+        "value_display": "5.26%"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "stale",
+        "label": "日本国債2年利回り",
+        "metric_key": "jgb2y",
+        "session_date": "2026-08-31",
+        "value_display": "1.743%"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "stale",
+        "label": "日本国債10年利回り",
+        "metric_key": "jgb10y",
+        "session_date": "2026-08-31",
+        "value_display": "2.943%"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "WTI原油",
+        "metric_key": "wti",
+        "session_date": "2026-09-29",
+        "value_display": "96.16ドル"
+      },
+      {
+        "change_pct_display": null,
+        "freshness": "fresh",
+        "label": "ブレント原油",
+        "metric_key": "brent",
+        "session_date": "2026-09-29",
+        "value_display": "113.96ドル"
+      }
+    ],
+    "market_direction": "mixed",
+    "market_summary_ja": "9月30日の東京市場は、日経平均が66,753.72（前日比+1.94%）、TOPIX連動ETF（1306）が431.5円（前日比+1.43%）と上昇しました。9月30日の米国市場は、NYダウが50,906.05（前日比−0.86%）、S&P500が7,651.54（前日比−0.25%）、ナスダック総合が26,861.06（前日比+0.24%）とまちまちです。ニデックは非金融資産の減損損失などの計上を発表しました。東京市場の値動きとの関係は確認できません。",
+    "model": "gpt-5.6-luna",
+    "next_watch_ja": [
+      "米国株のまちまちな動きが日本株でどう受け止められるか。",
+      "ドル円157.00円の水準。",
+      "ニデックの減損損失などの計上に関する続報。"
+    ],
+    "report_type": "morning",
+    "risks_ja": [
+      "東京市場の値動きの理由は確認できません。",
+      "日本国債2年・10年利回りは8月31日時点の古い値です。",
+      "業種別の騰落と経済指標の予定は確認できません。"
+    ],
+    "schema_version": "market_report_packet.v1",
+    "strong_themes": [],
+    "trading_date": "2026-10-01",
+    "weak_themes": [],
+    "x_post": {
+      "closing_ja": "米国株とドル円157.00円も並べて見ます。",
+      "lead_ja": "日経平均は上昇、海外株はまちまちでした📊",
+      "points_ja": [
+        "9月30日の日経平均は66,753.72（前日比+1.94%）。",
+        "TOPIX連動ETF（1306）は431.5円（前日比+1.43%）。",
+        "ニデックは減損損失などの計上を発表。値動きとの関係は未確認です。"
+      ]
+    }
+  }
+}
