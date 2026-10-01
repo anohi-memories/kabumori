@@ -1,3 +1,18 @@
+## G2 v2 scope update after 2026-10-01 interim observation
+
+- accepted new evidence: shared completed 9/30 morning, 9/30 close, and 10/1 morning consecutively with gates OFF.
+- 10/1 morning required one content regeneration but no transport retry; guards repaired the draft and final Fact passed.
+- legacy path showed both non-delivery and factual regression, including the mixed-session App morning error.
+- decision: continue toward shared-v2; do not spend this task extending legacy X/App generators.
+- v2 scope now explicitly includes:
+  - market-wide editorial news prioritization (broad market/policy/geopolitics/sector > isolated corporate by default when supported),
+  - scoped absence claims,
+  - morning session-aware wording,
+  - separate observability for content regeneration vs transport retry,
+  - exact mixed-session hard-block fixture.
+- consumer gates remain OFF; source/tests/PR only.
+- recommended Claude model: **Opus5.5（高）**.
+
 ## Final K2 — 2026-09-30 close shared cycle
 
 - verdict: **PASS by orchestrator read-only verification**.
