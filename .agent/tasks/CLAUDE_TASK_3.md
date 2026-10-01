@@ -1,5 +1,183 @@
 # Claude Task 3
 
+- task_id: x-social-mobile-account-deletion-ui-release-finish-20261001
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（高）
+- continues_from: x-social-mobile-e3-delete-revoke-residue-20261001
+- purpose: E3で機能動作がPASSしたX自動投稿アプリのアカウント削除について、残っているnative iOS UIブロッカーを解消し、共通アカウント設計に踏み込まずに現行削除UIをリリース可能な見た目・導線まで仕上げる。
+
+## Context
+
+Previous G3 E3 reached Final K3 PASS:
+- disposable X authorization revoke succeeded
+- social-mobile workspace/membership/social account/X credential/OAuth transient data were removed
+- unexpected residue = 0
+- protected production posting accounts unchanged
+- shared Supabase Auth/login/main-app profile intentionally remained under current `social_only` behavior
+- real X posts = 0
+
+Remaining UI findings from the native iOS Release verification:
+1. On `login-methods`, the buttons for 「投稿用のX接続を確認する」 and 「アカウントの削除について」 can render as blank/invisible text while their tap area still works.
+2. Account deletion is too deep to discover; Settings has no direct account-management/deletion entry.
+
+A separate common-account/auth design effort is now defining the future company-wide account/service-entitlement model. This G3 task MUST NOT preempt or redesign that model.
+
+## Mandatory startup
+
+1. Read `PROJECT_RULES.md`, `CLAUDE.md`, `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, and this TASK.
+2. Fresh-check `origin/main`.
+3. Use an independent G3 worktree/checkout. Do not use G4/H1/H2 worktrees or simulator processes.
+4. Confirm G4 PR #65 owns X account-switch auth-session work and currently touches X-connect/account-selection paths. Do not edit G4-owned files.
+5. Confirm H2 PR #66 review and H1 PR #67 review do not overlap the files you intend to change.
+6. Preserve all previous G3 E3 reports below; do not rewrite historical results.
+
+## Allowed primary scope
+
+Prefer the smallest set necessary:
+- `apps/social-mobile/src/app/login-methods.tsx`
+- `apps/social-mobile/src/app/(tabs)/settings.tsx`
+- `apps/social-mobile/src/app/account-deletion.tsx` only if needed for UI consistency
+- narrowly related social-mobile UI tests
+- shared UI component only if the root cause is proven there and the change is demonstrably safe for all consumers
+
+Do NOT edit:
+- `apps/social-mobile/src/features/x-connect/**`
+- G4-owned account-switch files
+- Supabase Auth/provider flows
+- account-deletion backend/state machine
+- DB/RLS/RPC/migrations
+- Vault/token storage
+- OAuth ownership
+- service-entitlement/common-account design
+- production feature flags
+- scheduler/posting paths
+
+## Required work
+
+### 1. Root-cause the invisible native buttons
+
+Reproduce or inspect the iOS Release/native rendering path for:
+- 「投稿用のX接続を確認する」
+- 「アカウントの削除について」
+
+Determine why the text is invisible while the Pressable remains tappable.
+
+Do not merely change color blindly. Confirm whether the problem is caused by:
+- `Link asChild` + `Pressable`
+- inherited/native text/style behavior
+- shared `styles.buttonText`
+- Release-only rendering
+- another concrete cause
+
+Fix the actual source cause with the narrowest safe change.
+
+### 2. Make account management discoverable from Settings
+
+Add a clear, ordinary Settings entry for account/login management.
+
+Preferred UX:
+- a distinct account section/card in Settings
+- direct route to `/login-methods`
+- wording should make it obvious that login methods, X connection, and account/service deletion live there
+
+If a direct deletion shortcut is clearly safer/usably better, it may be added, but do not bypass the existing preview/re-auth/confirmation deletion screen.
+
+Do not move destructive logic into Settings.
+
+### 3. Preserve deletion truthfulness
+
+Current deletion UI must continue to:
+- preview what the server says will be deleted/kept
+- require fresh reauthentication
+- require the typed confirmation
+- report server-confirmed outcome only
+- keep the current feature-gate behavior
+
+Do not alter `social_only` / `social_and_login` semantics in this task. Those semantics will be reconsidered by the common-account project.
+
+### 4. Feature flag
+
+Do NOT globally enable `EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED` in this task.
+
+Goal is source/UI readiness only.
+
+After the common-account design decides the final deletion semantics, activation can be a separate controlled release step.
+
+## Tests / verification
+
+At minimum:
+- relevant social-mobile tests
+- new/updated UI/static tests proving the two button labels remain visibly rendered in native-compatible composition
+- Settings contains a discoverable account-management route
+- existing account-deletion preview/reauth/typed-confirmation behavior unchanged
+- no G4 X-connect source change
+- no Auth/DB/RLS/RPC/Vault/OAuth backend diff
+- typecheck
+- lint
+- `git diff --check`
+
+Native verification:
+- use local iOS Simulator / Release-like build where practical
+- visually confirm both affected button labels are visible
+- confirm both routes are tappable and land on the correct screens
+- confirm the Settings account entry is visible without requiring knowledge of hidden navigation
+- no EAS build unless truly required; explain if unavoidable
+
+## Production / safety
+
+- source + tests + PR only
+- no production deploy
+- no feature-flag enable
+- no destructive account deletion in this task
+- no real X login/revoke/post
+- production mutation = 0
+- do not remove the retained disposable Auth/profile from the E3 test; that now belongs to the common-account/account-lifecycle decision
+
+## Completion conditions
+
+- invisible button root cause identified
+- source fix implemented
+- both labels visible in native verification
+- Settings account-management entry added and verified
+- deletion semantics/backend unchanged
+- tests/typecheck/lint/diff checks pass
+- commit + push + PR
+- production mutation 0
+- real X operations 0
+
+## Report
+
+Include:
+- task_id
+- result
+- root cause of invisible buttons
+- UX change
+- changed_files
+- tests
+- native/simulator verification
+- proof deletion backend/semantics unchanged
+- proof no G4 overlap
+- commit_hash
+- push
+- PR
+- production mutation
+- real X operations
+- remaining issues
+- safety_checks
+- next_recommendation
+
+Then status -> review_required, next_owner -> chatgpt and STOP for K3.
+
+---
+
+## Previous completed G3 history — preserved below
+
+# Claude Task 3
+
 - task_id: x-social-mobile-e3-delete-revoke-residue-20261001
 - owner: claude
 - slot: claude-3
@@ -223,3 +401,4 @@ Unexpected residue: **none**.
 - Codex review: **not required for this K3** because no implementation source changed and the purpose of this task was operational E2E of already reviewed boundaries. Re-review at the next source change / production activation gate.
 - AI Lab diary: 候補あり — 使い捨てアカウントで「このアプリだけ利用終了」の流れを最後まで試し、他のサービス用ログインを残したままX連携とアプリ専用データだけ消えることを確認した。
 - next: common-account design should replace the current proxy-style service-existence decision with an explicit service entitlement. Separately fix the native deletion/navigation button visibility before enabling self-service deletion broadly.
+
