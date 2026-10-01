@@ -70,13 +70,13 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: x-social-mobile-account-deletion-ui-release-finish-20261001
+- status: ready
+- task_id: x-social-mobile-native-link-navigation-cleanup-20261001
 - start_code: G3
 - finish_code: K3
-- next_owner: none
+- next_owner: claude
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: Final K3 PASS. PR #68 exact head ec292b50f8d9622a9c35dd1ce62a7d9ec1c1512b squash-merged as c1f4f42ab78430ee0c214759b4ddac280b7f2265. Native button visibility/navigation and Settings account-management entry verified. No deletion backend/Auth/DB/OAuth/Vault/flag change; no extra Codex review. G3 is free after fresh allocation.
+- allocation: Fix remaining native Link-asChild navigation defects after merged PR #68/#65: Accounts 「ログイン方法」 lost card styling and Settings 「会話で相談する」 dead tap. Narrow audit of the same two proven patterns only, regression tests + local iOS Simulator. No x-connect/Auth/deletion/common-account/backend/deploy/production mutation. Recommended Sonnet5（高）.
 
 ## Claude G4
 - owner: claude
