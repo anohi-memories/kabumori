@@ -115,11 +115,42 @@ begin
 end;
 $$;
 
+-- A login whose account deletion is ready (no service, both checkpoints
+-- attested). Returns the operation id.
+create function pg_temp.ready_login(p_user uuid) returns text language plpgsql as $$
+declare
+  v_operation text;
+begin
+  perform public.fixture_login(p_user);
+  v_operation := pg_temp.begin_deletion(p_user, 0) ->> 'operation_id';
+  perform pg_temp.checkpoint(p_user, v_operation, 'session_revocation');
+  perform pg_temp.checkpoint(p_user, v_operation, 'storage_cleanup');
+  if pg_temp.prepare(p_user, v_operation) ->> 'status' is distinct from 'ready_for_managed_auth_delete' then
+    raise exception 'FAIL setup: ready login %', p_user;
+  end if;
+  return v_operation;
+end;
+$$;
+-- "<step>:<last error code>" of an operation, and whether its binding is set.
+create function pg_temp.op(p_operation text) returns text language sql as $$
+  select current_step || ':' || coalesce(last_error_code, '') || ':' ||
+         case when ready_at is null and ready_lifecycle_version is null and ready_requirement_epoch is null
+                   and ready_required_checkpoints is null then 'unbound' else 'bound' end
+    from private.account_lifecycle_operations where id = p_operation::uuid
+$$;
+create function pg_temp.authorization_of(p_user uuid) returns jsonb language sql as $$
+  select pg_temp.eligibility(p_user) -> 'authorization'
+$$;
+create function pg_temp.epoch() returns bigint language sql as $$
+  select requirement_epoch from private.account_lifecycle_settings
+$$;
+
 -- ---------------------------------------------------------------------------
 -- 0. The candidate installs in shadow mode, before integration, and backfills
 --    nothing by itself.
-select pg_temp.expect((select auth_delete_guard = 'shadow' and integration_state = 'not_started' from private.account_lifecycle_settings),
-  'installs in shadow mode, integration not started');
+select pg_temp.expect((select auth_delete_guard = 'shadow' and integration_state = 'not_started' and requirement_epoch = 1
+  from private.account_lifecycle_settings),
+  'installs in shadow mode, integration not started, requirement epoch 1');
 select pg_temp.expect((select array_agg(checkpoint_key || ':' || requirement order by checkpoint_key) from private.account_lifecycle_managed_checkpoints)
   = array['apple_revocation:apple_identity', 'session_revocation:always', 'storage_cleanup:always'], 'built-in managed checkpoints');
 select pg_temp.expect((select count(*) from public.common_accounts) = 0 and (select count(*) from public.service_entitlements) = 0,
@@ -281,6 +312,7 @@ from unnest(array['common_account_deletion_eligibility(gen_random_uuid())',
                   'withdraw_kabumori_service(gen_random_uuid())',
                   'begin_common_account_deletion(gen_random_uuid(), 0)',
                   'record_common_account_deletion_checkpoint(gen_random_uuid(), gen_random_uuid(), ''storage_cleanup'')',
+                  'clear_common_account_deletion_checkpoint(gen_random_uuid(), gen_random_uuid(), ''storage_cleanup'')',
                   'abort_common_account_deletion(gen_random_uuid(), gen_random_uuid())',
                   'prepare_common_account_auth_delete(gen_random_uuid(), gen_random_uuid())']) f;
 select pg_temp.expect(pg_temp.error_as('service_role', format('select public.%s', f)) like '%permission denied%', 'service_role ' || f)
@@ -288,6 +320,11 @@ from unnest(array['start_kabumori_service()', 'start_x_autopost_service()']) f;
 select pg_temp.expect(pg_temp.error_as(r, format('select private.%s', f)) like '%permission denied%', r || ' helper ' || f)
 from unnest(array['anon', 'authenticated', 'service_role']) r,
      unnest(array['account_lifecycle_lock(gen_random_uuid(), true, false)',
+                  'account_lifecycle_invalidate_readiness(null, ''X'')',
+                  'account_lifecycle_builtin_checkpoints()',
+                  'account_lifecycle_requirements_valid()',
+                  'account_lifecycle_readiness_refusal(gen_random_uuid(), ''{}''::jsonb)',
+                  'account_lifecycle_authorization_problems(gen_random_uuid(), gen_random_uuid())',
                   'account_lifecycle_footprint(gen_random_uuid())',
                   'account_lifecycle_deletion_blockers(gen_random_uuid(), ''active'')',
                   'account_lifecycle_managed_ownership(gen_random_uuid())',
@@ -323,22 +360,24 @@ select pg_temp.expect(
       and (p.proname like 'account\_lifecycle\_%' or p.proname in (
            'start_kabumori_service', 'start_x_autopost_service', 'common_account_deletion_eligibility',
            'begin_service_deletion', 'finish_service_deletion', 'abort_service_deletion', 'withdraw_kabumori_service',
-           'begin_common_account_deletion', 'record_common_account_deletion_checkpoint', 'abort_common_account_deletion',
-           'prepare_common_account_auth_delete'))) = 21
+           'begin_common_account_deletion', 'record_common_account_deletion_checkpoint',
+            'clear_common_account_deletion_checkpoint', 'abort_common_account_deletion',
+           'prepare_common_account_auth_delete'))) = 33
   and not exists (
     select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
      where n.nspname in ('public', 'private')
        and (p.proname like 'account\_lifecycle\_%' or p.proname in (
             'start_kabumori_service', 'start_x_autopost_service', 'common_account_deletion_eligibility',
             'begin_service_deletion', 'finish_service_deletion', 'abort_service_deletion', 'withdraw_kabumori_service',
-            'begin_common_account_deletion', 'record_common_account_deletion_checkpoint', 'abort_common_account_deletion',
+            'begin_common_account_deletion', 'record_common_account_deletion_checkpoint',
+            'clear_common_account_deletion_checkpoint', 'abort_common_account_deletion',
             'prepare_common_account_auth_delete'))
        and (has_function_privilege('anon', p.oid, 'execute')
             or p.proacl is null
             or exists (select 1 from aclexplode(p.proacl) a where a.grantee = 0)
             or not p.prosecdef
             or p.proconfig is distinct from array['search_path=""'])),
-  'all 21 candidate functions: SECURITY DEFINER, empty search_path, no PUBLIC or anon EXECUTE');
+  'all 33 candidate functions: SECURITY DEFINER, empty search_path, no PUBLIC or anon EXECUTE');
 select pg_temp.expect((select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.proname in ('start_kabumori_service', 'start_x_autopost_service') and p.pronargs = 0) = 2,
   'start RPCs take no argument: the person is auth.uid() only');
@@ -396,7 +435,7 @@ select pg_temp.expect(:'e' like '%ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND%'
 select public.fixture_login(pg_temp.uid(301), true, true);
 select pg_temp.start(pg_temp.uid(301), 'kabumori') as r \gset
 select pg_temp.expect(:'r'::jsonb ->> 'status' = 'active', '301 registered');
-select pg_temp.expect(pg_temp.eligibility(pg_temp.uid(301)) @> '{"account_status":"active","lifecycle_version":2,"blockers":[],"managed_ownership":[],"required_checkpoints":["session_revocation","storage_cleanup"],"services":[{"service_key":"kabumori","status":"active"}],"operation":null}'::jsonb,
+select pg_temp.expect(pg_temp.eligibility(pg_temp.uid(301)) @> '{"account_status":"active","lifecycle_version":2,"blockers":[],"managed_ownership":[],"required_checkpoints":["session_revocation","storage_cleanup"],"services":[{"service_key":"kabumori","status":"active"}],"operation":null,"authorization":{"state":"none"}}'::jsonb,
   'eligibility read model');
 select pg_temp.begin_deletion(pg_temp.uid(301), 1) as r \gset
 select pg_temp.expect(:'r'::jsonb = '{"status":"lifecycle_changed","lifecycle_version":2}'::jsonb
@@ -436,8 +475,13 @@ select pg_temp.expect(:'r'::jsonb -> 'missing_checkpoints' = '["storage_cleanup"
 select pg_temp.checkpoint(pg_temp.uid(301), :'op301', 'storage_cleanup') as r \gset
 select pg_temp.prepare(pg_temp.uid(301), :'op301') as r \gset
 select pg_temp.expect(:'r'::jsonb = jsonb_build_object('status', 'ready_for_managed_auth_delete', 'operation_id', :'op301', 'login_deleted', false,
+    'authorization', jsonb_build_object('lifecycle_version', pg_temp.version(pg_temp.uid(301)), 'requirement_epoch', pg_temp.epoch(),
+      'required_checkpoints', jsonb_build_array('session_revocation', 'storage_cleanup')),
     'next_steps', jsonb_build_array('revalidate_managed_ownership', 'managed_auth_admin_delete', 'post_delete_read_back_and_audit')),
-  'ready: the database tells the orchestrator what is next');
+  'ready: an authorization bound to version, epoch and required checkpoints, and what is next');
+select pg_temp.expect(pg_temp.op(:'op301') = 'ready_for_managed_auth_delete::bound'
+  and pg_temp.authorization_of(pg_temp.uid(301)) @> '{"state":"valid","required_checkpoints":["session_revocation","storage_cleanup"]}'::jsonb,
+  'the authorization is durable on the operation and reads as valid');
 -- H1 counterexample 1, first half: Phase 1 never deletes the login and has no
 -- "completed" state for an account deletion.
 select pg_temp.expect(pg_temp.login_exists(pg_temp.uid(301)) and pg_temp.account(pg_temp.uid(301)) = 'deleting'
@@ -677,19 +721,68 @@ alter table storage.objects rename column owner_id to owner_id_renamed;
 select pg_temp.prepare(pg_temp.uid(701), :'op701') as r \gset
 select pg_temp.expect(:'r'::jsonb -> 'managed_ownership' = '["MANAGED_STORAGE_SHAPE_UNKNOWN"]'::jsonb, 'unknown Storage shape fails closed');
 alter table storage.objects rename column owner_id_renamed to owner_id;
--- Extension point: a newly registered managed service blocks every deletion
--- until an orchestrator attests it; a damaged registry blocks too.
+-- Storage that cannot be read at all (here: owner_id is no longer text) is
+-- "may be owned", answered as not ready rather than as an error.
+alter table storage.objects alter column owner_id type uuid using owner_id::uuid;
+select pg_temp.prepare(pg_temp.uid(701), :'op701') as r \gset
+select pg_temp.expect(:'r'::jsonb -> 'managed_ownership' = '["MANAGED_STORAGE_PROBE_FAILED"]'::jsonb, 'an unreadable Storage probe fails closed');
+alter table storage.objects alter column owner_id type text;
+select pg_temp.prepare(pg_temp.uid(701), :'op701') ->> 'status' as r \gset
+select pg_temp.expect(:'r' = 'ready_for_managed_auth_delete', '701 ready');
+
+-- Extension point, and H1 F2 (new requirement): a newly registered managed
+-- service moves the requirement epoch, withdraws every existing readiness at
+-- once, and keeps every deletion not ready until an orchestrator attests it.
+select pg_temp.epoch() as e0 \gset
 insert into private.account_lifecycle_managed_checkpoints values ('new_managed_service_cleanup', 'always');
+select pg_temp.expect(pg_temp.epoch() = :e0 + 1 and pg_temp.op(:'op701') = 'cleanup:REQUIREMENT_EPOCH_CHANGED:unbound'
+  and pg_temp.authorization_of(pg_temp.uid(701)) = '{"state":"none"}'::jsonb,
+  'H1-F2: a new always-required checkpoint invalidates a readiness that was already granted');
 select pg_temp.prepare(pg_temp.uid(701), :'op701') as r \gset
 select pg_temp.expect(:'r'::jsonb -> 'missing_checkpoints' = '["new_managed_service_cleanup"]'::jsonb, 'a new managed-ownership requirement fails closed');
 delete from private.account_lifecycle_managed_checkpoints where checkpoint_key = 'new_managed_service_cleanup';
+select pg_temp.expect(pg_temp.epoch() = :e0 + 2, 'removing a requirement moves the epoch too');
+select pg_temp.prepare(pg_temp.uid(701), :'op701') ->> 'status' as r \gset
+select pg_temp.expect(:'r' = 'ready_for_managed_auth_delete', '701 ready again under the new epoch');
+
+-- I9 / H1 F3: the built-in checkpoints cannot be removed or given another
+-- meaning by ordinary maintenance.
+select pg_temp.expect(pg_temp.error_as(current_user::text, q) like '%ACCOUNT_LIFECYCLE_BUILTIN_CHECKPOINT_IMMUTABLE%', 'built-in immutable: ' || q)
+from unnest(array[
+  'delete from private.account_lifecycle_managed_checkpoints where checkpoint_key = ''storage_cleanup''',
+  'update private.account_lifecycle_managed_checkpoints set requirement = ''apple_identity'' where checkpoint_key = ''session_revocation''',
+  'update private.account_lifecycle_managed_checkpoints set requirement = ''always'' where checkpoint_key = ''apple_revocation''',
+  'update private.account_lifecycle_managed_checkpoints set checkpoint_key = ''renamed_cleanup'' where checkpoint_key = ''storage_cleanup''',
+  'truncate private.account_lifecycle_managed_checkpoints']) q;
+select pg_temp.expect(pg_temp.op(:'op701') = 'ready_for_managed_auth_delete::bound', 'refused maintenance changes nothing');
+-- Corruption (the maintenance guard bypassed) still fails closed. H1 F3: the
+-- built-in names are kept but session/storage are weakened to Apple-only. A
+-- person without an Apple identity and without any checkpoint must not
+-- become ready.
+alter table private.account_lifecycle_managed_checkpoints disable trigger account_lifecycle_guard_checkpoint_registry;
+update private.account_lifecycle_managed_checkpoints set requirement = 'apple_identity'
+ where checkpoint_key in ('session_revocation', 'storage_cleanup');
+select pg_temp.expect(pg_temp.op(:'op701') = 'cleanup:REQUIREMENT_EPOCH_CHANGED:unbound', 'the corrupting change itself withdraws readiness');
+select public.fixture_login(pg_temp.uid(702));
+select pg_temp.begin_deletion(pg_temp.uid(702), 0) ->> 'operation_id' as op702 \gset
+select pg_temp.prepare(pg_temp.uid(702), :'op702') as r \gset
+select pg_temp.expect(:'r'::jsonb ->> 'reason' = 'MANAGED_CHECKPOINT_REGISTRY_INVALID'
+  and pg_temp.eligibility(pg_temp.uid(702)) -> 'required_checkpoints' = 'null'::jsonb,
+  'H1-F3: built-in names with a weakened meaning make nothing ready');
+update private.account_lifecycle_managed_checkpoints b set requirement = c.requirement
+  from private.account_lifecycle_builtin_checkpoints() c where c.checkpoint_key = b.checkpoint_key;
+-- H1 F2 (removed built-in row).
 delete from private.account_lifecycle_managed_checkpoints where checkpoint_key = 'storage_cleanup';
 select pg_temp.prepare(pg_temp.uid(701), :'op701') as r \gset
-select pg_temp.expect(:'r'::jsonb ->> 'reason' = 'MANAGED_CHECKPOINT_REGISTRY_INVALID', 'a registry without its built-in rows fails closed');
+select pg_temp.expect(:'r'::jsonb ->> 'reason' = 'MANAGED_CHECKPOINT_REGISTRY_INVALID', 'H1-F2: a registry without a built-in row makes nothing ready');
 insert into private.account_lifecycle_managed_checkpoints values ('storage_cleanup', 'always');
+alter table private.account_lifecycle_managed_checkpoints enable trigger account_lifecycle_guard_checkpoint_registry;
+select pg_temp.prepare(pg_temp.uid(702), :'op702') -> 'missing_checkpoints' as r \gset
+select pg_temp.expect(:'r'::jsonb = '["session_revocation","storage_cleanup"]'::jsonb, 'with the contract restored both checkpoints are required again');
 select pg_temp.prepare(pg_temp.uid(701), :'op701') as r \gset
 select pg_temp.expect(:'r'::jsonb ->> 'status' = 'ready_for_managed_auth_delete' and pg_temp.login_exists(pg_temp.uid(701)), '701 ready again');
 select pg_temp.svc(format('select public.abort_common_account_deletion(%L::uuid, %L::uuid)', pg_temp.uid(701), :'op701')) as r \gset
+select pg_temp.svc(format('select public.abort_common_account_deletion(%L::uuid, %L::uuid)', pg_temp.uid(702), :'op702')) as r \gset
 
 -- Sign in with Apple: its revoke is one more required checkpoint.
 select public.fixture_login(pg_temp.uid(703));
@@ -707,10 +800,10 @@ select pg_temp.expect(:'r'::jsonb ->> 'status' = 'ready_for_managed_auth_delete'
 select pg_temp.svc(format('select public.abort_common_account_deletion(%L::uuid, %L::uuid)', pg_temp.uid(703), :'op703')) as r \gset
 
 -- ---------------------------------------------------------------------------
--- 8. Auth-delete guard. The plain "delete from auth.users" below is the TEST
---    standing in for whoever removes a login (today's legacy routes; later the
---    orchestrator through the managed API). The candidate never does it.
---    Shadow (installed default): existing deletion routes behave as before.
+-- 8. Auth-delete guard. In Phase 1 it only observes. The plain
+--    "delete from auth.users" below is the TEST standing in for whoever removes
+--    a login (today's legacy routes; later the orchestrator through the managed
+--    API). The candidate never does it.
 select public.fixture_login(pg_temp.uid(801), true, true);
 select pg_temp.start(pg_temp.uid(801), 'kabumori') as r \gset
 select pg_temp.svc(format('select public.begin_service_deletion(%L::uuid, ''kabumori'')', pg_temp.uid(801))) ->> 'operation_id' as op801 \gset
@@ -719,70 +812,263 @@ select pg_temp.expect(not pg_temp.login_exists(pg_temp.uid(801)) and pg_temp.acc
   and not exists (select 1 from public.profiles where id = pg_temp.uid(801))
   and (select status = 'login_removed' and last_error_code = 'ACCOUNT_REMOVED_EXTERNALLY' and user_id is null
          from private.account_lifecycle_operations where id = :'op801'::uuid),
-  'shadow mode: a legacy hard delete still works (it is NOT made safe); the lifecycle records are closed and scrubbed');
-
--- Enforce cannot be switched on before integration has started.
-select pg_temp.expect(pg_temp.error_as(current_user::text, 'update private.account_lifecycle_settings set auth_delete_guard = ''enforce''')
-  like '%violates check constraint%', 'enforce is refused while integration is not started');
-update private.account_lifecycle_settings set integration_state = 'started', auth_delete_guard = 'enforce';
-
-select public.fixture_login(pg_temp.uid(802), true, true);
-select pg_temp.start(pg_temp.uid(802), 'kabumori') as r \gset
-select coalesce(pg_temp.error_as(current_user::text, format('delete from auth.users where id = %L', pg_temp.uid(802))), '') as e \gset
-select pg_temp.expect(:'e' like '%COMMON_ACCOUNT_DELETE_NOT_AUTHORIZED%'
-  and pg_temp.login_exists(pg_temp.uid(802)) and exists (select 1 from public.profiles where id = pg_temp.uid(802))
-  and pg_temp.entitlement(pg_temp.uid(802), 'kabumori') = 'active',
-  'enforce: a hard delete of an active account is refused and nothing is lost');
--- Deleting but not ready: still refused.
-select pg_temp.begin_deletion(pg_temp.uid(802)) ->> 'operation_id' as op802 \gset
-select pg_temp.withdraw_kabumori(pg_temp.uid(802)) as r \gset
-select coalesce(pg_temp.error_as(current_user::text, format('delete from auth.users where id = %L', pg_temp.uid(802))), '') as e \gset
-select pg_temp.expect(:'e' like '%COMMON_ACCOUNT_DELETE_NOT_AUTHORIZED%' and pg_temp.login_exists(pg_temp.uid(802)),
-  'enforce: an operation that is not ready does not authorize a delete');
--- Ready, but managed ownership is visible again at the moment of the delete.
-select pg_temp.checkpoint(pg_temp.uid(802), :'op802', 'session_revocation') as r1 \gset
-select pg_temp.checkpoint(pg_temp.uid(802), :'op802', 'storage_cleanup') as r2 \gset
-select pg_temp.prepare(pg_temp.uid(802), :'op802') ->> 'status' as r \gset
-select pg_temp.expect(:'r' = 'ready_for_managed_auth_delete', '802 ready');
-insert into storage.objects (bucket_id, name, owner_id) values ('fake-bucket', 'fake/802.png', pg_temp.uid(802)::text);
-select coalesce(pg_temp.error_as(current_user::text, format('delete from auth.users where id = %L', pg_temp.uid(802))), '') as e \gset
-select pg_temp.expect(:'e' like '%COMMON_ACCOUNT_DELETE_NOT_AUTHORIZED%' and pg_temp.login_exists(pg_temp.uid(802)),
-  'enforce: ready is re-checked at the delete; visible Storage ownership refuses it');
-delete from storage.objects where owner_id = pg_temp.uid(802)::text;
--- Ready and clean: the boundary lets the login row go. It records that the
--- row disappeared, never that the account deletion completed.
+  'shadow: a legacy hard delete still works (it is NOT made safe); the lifecycle records are closed and scrubbed');
+-- A ready operation whose login disappears is recorded as an unverified
+-- observation, never as a completed account deletion.
+select pg_temp.ready_login(pg_temp.uid(802)) as op802 \gset
 delete from auth.users where id = pg_temp.uid(802);
-select pg_temp.expect(not pg_temp.login_exists(pg_temp.uid(802)) and pg_temp.account(pg_temp.uid(802)) = 'none'
-  and (select status = 'login_removed' and last_error_code is null and user_id is null and current_step = 'ready_for_managed_auth_delete'
+select pg_temp.expect(not pg_temp.login_exists(pg_temp.uid(802))
+  and (select status = 'login_removed' and last_error_code = 'LOGIN_REMOVED_WHILE_READY_UNVERIFIED' and user_id is null
          from private.account_lifecycle_operations where id = :'op802'::uuid)
   and not exists (select 1 from private.account_lifecycle_operations where operation_type = 'account_deletion' and status = 'completed'),
-  'enforce: a ready, clean operation is the only thing that authorizes the login row to go; no "completed" is recorded');
--- Ready, then a legacy creator (the real X onboarding RPC, not yet gated in
--- Phase 1) creates a workspace: the delete is refused, nothing is orphaned.
-select public.fixture_login(pg_temp.uid(805));
-select pg_temp.begin_deletion(pg_temp.uid(805), 0) ->> 'operation_id' as op805 \gset
-select pg_temp.checkpoint(pg_temp.uid(805), :'op805', 'session_revocation') as r1 \gset
-select pg_temp.checkpoint(pg_temp.uid(805), :'op805', 'storage_cleanup') as r2 \gset
-select pg_temp.prepare(pg_temp.uid(805), :'op805') ->> 'status' as r \gset
-select pg_temp.usr(pg_temp.uid(805), 'select to_jsonb(b) from public.begin_social_mobile_x_oauth_connection(repeat(''8'', 64), ''kabumori-social://oauth-callback'', now() + interval ''10 minutes'') b') as r \gset
-select coalesce(pg_temp.error_as(current_user::text, format('delete from auth.users where id = %L', pg_temp.uid(805))), '') as e \gset
-select pg_temp.expect(:'e' like '%COMMON_ACCOUNT_DELETE_NOT_AUTHORIZED%' and pg_temp.login_exists(pg_temp.uid(805))
-  and (select count(*) from public.brand_memberships where user_id = pg_temp.uid(805) and role = 'owner') = 1,
-  'enforce: a workspace created after "ready" stops the delete; the workspace keeps its owner');
--- The existing X saga (legacy scope rule: no profile => delete the login) is
--- stopped at its own operator state instead of removing the login.
+  'shadow: the removal of a ready login is an unverified observation; no "completed" is recorded');
+
+-- There is no enforcing mode in Phase 1, whatever the integration state.
+select pg_temp.expect(pg_temp.error_as(current_user::text, 'update private.account_lifecycle_settings set auth_delete_guard = ''enforce''')
+  like '%violates check constraint%', 'enforce does not exist');
+select pg_temp.expect(pg_temp.error_as(current_user::text, 'update private.account_lifecycle_settings set integration_state = ''started'', auth_delete_guard = ''enforce''')
+  like '%violates check constraint%', 'enforce does not exist even after integration started');
+
+-- Missing settings: nothing is authorized. Every login delete is refused, a
+-- ready and clean operation included, and readiness itself is withdrawn.
+select pg_temp.ready_login(pg_temp.uid(804)) as op804 \gset
 select public.fixture_user_with_workspace(pg_temp.uid(803), 'S803');
 select pg_temp.start(pg_temp.uid(803), 'x_autopost') as r \gset
+delete from private.account_lifecycle_settings;
+select pg_temp.expect(pg_temp.op(:'op804') = 'cleanup:REQUIREMENT_EPOCH_CHANGED:unbound', 'removing the settings row withdraws every readiness');
+select coalesce(pg_temp.error_as(current_user::text, format('delete from auth.users where id = %L', pg_temp.uid(804))), '') as e \gset
+select pg_temp.expect(:'e' like '%COMMON_ACCOUNT_DELETE_NOT_AUTHORIZED%' and pg_temp.login_exists(pg_temp.uid(804)),
+  'missing settings refuse every login delete');
+select pg_temp.prepare(pg_temp.uid(804), :'op804') as r \gset
+select pg_temp.expect(:'r'::jsonb ->> 'reason' = 'LIFECYCLE_SETTINGS_INVALID', 'and nothing can become ready without settings');
+-- The existing X saga (legacy scope rule: no profile => delete the login) is
+-- stopped at its own operator state instead of removing the login.
 select pg_temp.x_saga(pg_temp.uid(803), 'social_and_login') as r \gset
 select pg_temp.expect(:'r'::jsonb = '{"status":"operator_required","reason":"LOGIN_DELETE_BLOCKED"}'::jsonb
-  and pg_temp.login_exists(pg_temp.uid(803)), 'enforce: the legacy X login delete fails closed into its operator state');
--- A missing settings row is treated as enforce.
-delete from private.account_lifecycle_settings;
-select public.fixture_login(pg_temp.uid(804));
-select pg_temp.start(pg_temp.uid(804), 'kabumori') as r \gset
-select coalesce(pg_temp.error_as(current_user::text, format('delete from auth.users where id = %L', pg_temp.uid(804))), '') as e \gset
-select pg_temp.expect(:'e' like '%COMMON_ACCOUNT_DELETE_NOT_AUTHORIZED%' and pg_temp.login_exists(pg_temp.uid(804)), 'unknown guard mode fails closed');
+  and pg_temp.login_exists(pg_temp.uid(803)), 'a refused login delete lands in the legacy X saga''s operator state');
 insert into private.account_lifecycle_settings default values;
-select pg_temp.expect((select auth_delete_guard = 'shadow' and integration_state = 'not_started' from private.account_lifecycle_settings), 'guard back to shadow');
+select pg_temp.expect((select auth_delete_guard = 'shadow' and integration_state = 'not_started' from private.account_lifecycle_settings), 'settings restored');
+select pg_temp.svc(format('select public.abort_common_account_deletion(%L::uuid, %L::uuid)', pg_temp.uid(804), :'op804')) as r \gset
+
+-- ---------------------------------------------------------------------------
+-- 9. Durable authorization (I8) and its invalidators.
+--    (a) Changes this candidate can see withdraw a readiness at once.
+select pg_temp.ready_login(pg_temp.uid(1001)) as op \gset
+select pg_temp.expect(pg_temp.op(:'op') = 'ready_for_managed_auth_delete::bound'
+  and pg_temp.authorization_of(pg_temp.uid(1001)) ->> 'state' = 'valid', 'a ready operation carries a valid authorization');
+-- Entitlement inserted (operator SQL).
+insert into public.service_entitlements (user_id, service_key, status, source, activated_at)
+values (pg_temp.uid(1001), 'kabumori', 'active', 'operator', now());
+select pg_temp.expect(pg_temp.op(:'op') = 'cleanup:LIFECYCLE_VERSION_CHANGED:unbound'
+  and pg_temp.authorization_of(pg_temp.uid(1001)) = '{"state":"none"}'::jsonb, 'invalidator: entitlement insert');
+-- Entitlement updated.
+update public.service_entitlements set status = 'ended', ended_at = now() where user_id = pg_temp.uid(1001);
+select pg_temp.prepare(pg_temp.uid(1001), :'op') ->> 'status' as r \gset
+select pg_temp.expect(:'r' = 'ready_for_managed_auth_delete', '1001 ready again');
+update public.service_entitlements set status = 'active', ended_at = null where user_id = pg_temp.uid(1001);
+select pg_temp.expect(pg_temp.op(:'op') = 'cleanup:LIFECYCLE_VERSION_CHANGED:unbound', 'invalidator: entitlement update');
+-- Entitlement deleted.
+update public.service_entitlements set status = 'ended', ended_at = now() where user_id = pg_temp.uid(1001);
+select pg_temp.prepare(pg_temp.uid(1001), :'op') ->> 'status' as r \gset
+delete from public.service_entitlements where user_id = pg_temp.uid(1001);
+select pg_temp.expect(:'r' = 'ready_for_managed_auth_delete' and pg_temp.op(:'op') = 'cleanup:LIFECYCLE_VERSION_CHANGED:unbound',
+  'invalidator: entitlement delete');
+-- Account state changed (operator hold), and released again.
+select pg_temp.prepare(pg_temp.uid(1001), :'op') ->> 'status' as r \gset
+update public.common_accounts set status = 'locked' where user_id = pg_temp.uid(1001);
+select pg_temp.expect(:'r' = 'ready_for_managed_auth_delete' and pg_temp.op(:'op') = 'cleanup:LIFECYCLE_VERSION_CHANGED:unbound',
+  'invalidator: account state change');
+update public.common_accounts set status = 'deleting' where user_id = pg_temp.uid(1001);
+-- Checkpoint withdrawn by the orchestrator.
+select pg_temp.prepare(pg_temp.uid(1001), :'op') ->> 'status' as r \gset
+select pg_temp.svc(format('select public.clear_common_account_deletion_checkpoint(%L::uuid, %L::uuid, ''storage_cleanup'')', pg_temp.uid(1001), :'op')) as c \gset
+select pg_temp.expect(:'r' = 'ready_for_managed_auth_delete' and :'c'::jsonb = '{"status":"cleared","checkpoint":"storage_cleanup"}'::jsonb
+  and pg_temp.op(:'op') = 'cleanup:MANAGED_CHECKPOINT_CLEARED:unbound', 'invalidator: checkpoint cleared');
+select pg_temp.prepare(pg_temp.uid(1001), :'op') -> 'missing_checkpoints' as r \gset
+select pg_temp.expect(:'r'::jsonb = '["storage_cleanup"]'::jsonb, 'a cleared checkpoint must be attested again');
+select pg_temp.checkpoint(pg_temp.uid(1001), :'op', 'storage_cleanup') as c \gset
+-- Integration state transition.
+select pg_temp.prepare(pg_temp.uid(1001), :'op') ->> 'status' as r \gset
+select pg_temp.epoch() as e0 \gset
+update private.account_lifecycle_settings set integration_state = 'started';
+select pg_temp.expect(:'r' = 'ready_for_managed_auth_delete' and pg_temp.epoch() = :e0 + 1
+  and pg_temp.op(:'op') = 'cleanup:REQUIREMENT_EPOCH_CHANGED:unbound', 'invalidator: integration state transition');
+update private.account_lifecycle_settings set integration_state = 'not_started';
+select pg_temp.expect(pg_temp.error_as(current_user::text, 'update private.account_lifecycle_settings set requirement_epoch = 1')
+  like '%ACCOUNT_LIFECYCLE_EPOCH_CANNOT_DECREASE%', 'the requirement epoch can never go back');
+-- Things that change nothing leave the authorization valid: a refused service
+-- start, and a backfill (it grants nothing to an account that is deleting).
+select pg_temp.prepare(pg_temp.uid(1001), :'op') ->> 'status' as r \gset
+select pg_temp.start(pg_temp.uid(1001), 'x_autopost') ->> 'reason' as s \gset
+select private.account_lifecycle_backfill(true) as b \gset
+select pg_temp.expect(:'r' = 'ready_for_managed_auth_delete' and :'s' = 'ACCOUNT_DELETION_IN_PROGRESS'
+  and pg_temp.op(:'op') = 'ready_for_managed_auth_delete::bound'
+  and pg_temp.authorization_of(pg_temp.uid(1001)) ->> 'state' = 'valid',
+  'a refused start and a backfill leave a valid authorization valid');
+select pg_temp.svc(format('select public.abort_common_account_deletion(%L::uuid, %L::uuid)', pg_temp.uid(1001), :'op')) as r \gset
+
+--    The binding itself is checked, not only the withdrawal: with the
+--    withdrawing trigger switched off (as corruption would), a moved version
+--    or epoch still reads as stale.
+select pg_temp.ready_login(pg_temp.uid(1007)) as op1007 \gset
+alter table public.common_accounts disable trigger account_lifecycle_account_changed;
+update public.common_accounts set lifecycle_version = lifecycle_version + 1 where user_id = pg_temp.uid(1007);
+alter table public.common_accounts enable trigger account_lifecycle_account_changed;
+select pg_temp.expect(pg_temp.op(:'op1007') = 'ready_for_managed_auth_delete::bound'
+  and pg_temp.authorization_of(pg_temp.uid(1007)) = '{"state":"stale","problems":["LIFECYCLE_VERSION_CHANGED"]}'::jsonb,
+  'binding: a readiness decided against another lifecycle version is stale');
+select pg_temp.prepare(pg_temp.uid(1007), :'op1007') ->> 'status' as r \gset
+alter table private.account_lifecycle_settings disable trigger account_lifecycle_settings_changed;
+update private.account_lifecycle_settings set requirement_epoch = requirement_epoch + 1;
+alter table private.account_lifecycle_settings enable trigger account_lifecycle_settings_changed;
+select pg_temp.expect(:'r' = 'ready_for_managed_auth_delete' and pg_temp.op(:'op1007') = 'ready_for_managed_auth_delete::bound'
+  and pg_temp.authorization_of(pg_temp.uid(1007)) = '{"state":"stale","problems":["REQUIREMENT_EPOCH_CHANGED"]}'::jsonb,
+  'binding: a readiness decided against another requirement epoch is stale');
+select pg_temp.svc(format('select public.abort_common_account_deletion(%L::uuid, %L::uuid)', pg_temp.uid(1007), :'op1007')) as r \gset
+
+--    (b) Changes this candidate cannot see (they are written to existing or
+--    managed tables that Phase 1 does not wire). The stored step stays
+--    "ready", so the authorization must be, and is, re-evaluated before use:
+--    it reads as stale, and prepare refuses. This is exactly why Phase 1 has
+--    no enforcing guard.
+-- H1 F1: late admin membership.
+select pg_temp.ready_login(pg_temp.uid(1002)) as op1002 \gset
+insert into public.admin_users values (pg_temp.uid(1002));
+select pg_temp.expect(pg_temp.op(:'op1002') = 'ready_for_managed_auth_delete::bound'
+  and pg_temp.authorization_of(pg_temp.uid(1002)) = '{"state":"stale","problems":["ADMIN_ACCOUNT"]}'::jsonb,
+  'H1-F1: a late admin membership makes the authorization stale');
+select pg_temp.prepare(pg_temp.uid(1002), :'op1002') as r \gset
+select pg_temp.expect(:'r'::jsonb @> '{"status":"blocked","reasons":["ADMIN_ACCOUNT"]}'::jsonb
+  and pg_temp.op(:'op1002') = 'cleanup:ADMIN_ACCOUNT:unbound', 'H1-F1: stale readiness cannot be refreshed past a late admin blocker');
+-- H1 F1: late membership of an internal workspace.
+select pg_temp.ready_login(pg_temp.uid(1003)) as op1003 \gset
+insert into public.brand_memberships (brand_id, user_id, role) values ('kabumori', pg_temp.uid(1003), 'member');
+select pg_temp.expect(pg_temp.authorization_of(pg_temp.uid(1003)) = '{"state":"stale","problems":["X_WORKSPACE_NOT_SELF_SERVICE"]}'::jsonb,
+  'H1-F1: a late foreign membership makes the authorization stale');
+select pg_temp.prepare(pg_temp.uid(1003), :'op1003') as r \gset
+select pg_temp.expect(:'r'::jsonb @> '{"status":"blocked","reasons":["X_WORKSPACE_NOT_SELF_SERVICE"]}'::jsonb
+  and pg_temp.op(:'op1003') = 'cleanup:X_WORKSPACE_NOT_SELF_SERVICE:unbound', 'H1-F1: stale readiness cannot be refreshed past a late membership blocker');
+-- H1 F2: late Apple identity without its checkpoint.
+select pg_temp.ready_login(pg_temp.uid(1004)) as op1004 \gset
+insert into auth.identities (user_id, provider) values (pg_temp.uid(1004), 'apple');
+select pg_temp.expect(pg_temp.authorization_of(pg_temp.uid(1004))
+  = '{"state":"stale","problems":["REQUIRED_CHECKPOINTS_CHANGED","MANAGED_CHECKPOINTS_MISSING"]}'::jsonb,
+  'H1-F2: a late Apple identity makes the authorization stale: the required set is no longer the one it was bound to');
+select pg_temp.prepare(pg_temp.uid(1004), :'op1004') as r \gset
+select pg_temp.expect(:'r'::jsonb -> 'missing_checkpoints' = '["apple_revocation"]'::jsonb
+  and pg_temp.op(:'op1004') = 'cleanup:MANAGED_CHECKPOINTS_MISSING:unbound', 'H1-F2: the old readiness cannot be reused without apple_revocation');
+-- Late Storage object, and late legacy profile bootstrap.
+select pg_temp.ready_login(pg_temp.uid(1005)) as op1005 \gset
+insert into storage.objects (bucket_id, name, owner_id) values ('fake-bucket', 'fake/1005.png', pg_temp.uid(1005)::text);
+select pg_temp.expect(pg_temp.authorization_of(pg_temp.uid(1005)) = '{"state":"stale","problems":["MANAGED_OWNERSHIP_REMAINS"]}'::jsonb,
+  'a late Storage object makes the authorization stale');
+delete from storage.objects where owner_id = pg_temp.uid(1005)::text;
+select pg_temp.usr(pg_temp.uid(1005), 'select to_jsonb(public.ensure_my_profile())') as r \gset
+select pg_temp.expect(pg_temp.authorization_of(pg_temp.uid(1005)) = '{"state":"stale","problems":["UNREGISTERED_SERVICE_FOOTPRINT"]}'::jsonb,
+  'a late legacy profile makes the authorization stale');
+-- Shadow is not safety: a login whose stored readiness is stale (a late admin
+-- membership, never re-evaluated) can still be hard-deleted by a legacy route.
+-- Phase 1 records it as unverified; it does not claim to prevent it.
+select pg_temp.ready_login(pg_temp.uid(1006)) as op1006 \gset
+insert into public.admin_users values (pg_temp.uid(1006));
+delete from auth.users where id = pg_temp.uid(1006);
+select pg_temp.expect(not pg_temp.login_exists(pg_temp.uid(1006))
+  and (select status = 'login_removed' and last_error_code = 'LOGIN_REMOVED_WHILE_READY_UNVERIFIED' and user_id is null
+         from private.account_lifecycle_operations where id = :'op1006'::uuid),
+  'shadow allows a hard delete despite a late blocker (explicitly unsafe) and records it as unverified');
+
+-- ---------------------------------------------------------------------------
+-- 10. H1 F1, cascade order. The guard must not depend on whether the rows of
+--     a blocker are still visible when the cascade reaches common_accounts.
+--     A test-only probe records, inside the cascade and before the guard,
+--     whether the admin row is still there; the guard's answer is the same in
+--     both orders, because it looks at no blocker row at all.
+create table public.fixture_cascade_probe (user_id uuid primary key, admin_visible boolean not null);
+create function public.fixture_cascade_probe() returns trigger language plpgsql as $$
+begin
+  insert into public.fixture_cascade_probe
+  values (old.user_id, exists (select 1 from public.admin_users a where a.user_id = old.user_id));
+  return old;
+end;
+$$;
+create trigger aaa_fixture_cascade_probe before delete on public.common_accounts
+  for each row execute function public.fixture_cascade_probe();
+-- Which cascade the same DELETE runs first is decided by trigger name order.
+create function pg_temp.admin_cascades_first() returns boolean language sql as $$
+  select (select t.tgname from pg_trigger t join pg_constraint c on c.oid = t.tgconstraint
+           where c.conname = 'admin_users_user_id_fkey' and t.tgrelid = 'auth.users'::regclass
+             and t.tgfoid = 'pg_catalog."RI_FKey_cascade_del"'::regproc)
+       < (select t.tgname from pg_trigger t join pg_constraint c on c.oid = t.tgconstraint
+           where c.conname = 'common_accounts_user_id_fkey' and t.tgrelid = 'auth.users'::regclass
+             and t.tgfoid = 'pg_catalog."RI_FKey_cascade_del"'::regproc)
+$$;
+-- Order as installed.
+select pg_temp.admin_cascades_first() as first_a \gset
+select pg_temp.ready_login(pg_temp.uid(1011)) as op1011 \gset
+select pg_temp.ready_login(pg_temp.uid(1012)) as op1012 \gset
+insert into public.admin_users values (pg_temp.uid(1011)), (pg_temp.uid(1012));
+delete from private.account_lifecycle_settings;
+select coalesce(pg_temp.error_as(current_user::text, format('delete from auth.users where id = %L', pg_temp.uid(1011))), '') as e \gset
+select pg_temp.expect(:'e' like '%COMMON_ACCOUNT_DELETE_NOT_AUTHORIZED%' and pg_temp.login_exists(pg_temp.uid(1011))
+  and exists (select 1 from public.admin_users where user_id = pg_temp.uid(1011)),
+  'H1-F1: with nothing authorizing, a late admin''s login is not deleted (order as installed)');
+insert into private.account_lifecycle_settings default values;
+delete from auth.users where id = pg_temp.uid(1012);
+select admin_visible as visible_a from public.fixture_cascade_probe where user_id = pg_temp.uid(1012) \gset
+select pg_temp.expect(:'visible_a'::boolean = not :'first_a'::boolean,
+  'the probe sees the admin row exactly when its cascade has not run yet (order as installed)');
+-- The other order: the admin foreign key is re-created, so its cascade now
+-- runs after the one to common_accounts.
+alter table public.admin_users drop constraint admin_users_user_id_fkey;
+alter table public.admin_users add constraint admin_users_user_id_fkey foreign key (user_id) references auth.users (id) on delete cascade;
+select pg_temp.admin_cascades_first() as first_b \gset
+select pg_temp.ready_login(pg_temp.uid(1013)) as op1013 \gset
+select pg_temp.ready_login(pg_temp.uid(1014)) as op1014 \gset
+insert into public.admin_users values (pg_temp.uid(1013)), (pg_temp.uid(1014));
+delete from private.account_lifecycle_settings;
+select coalesce(pg_temp.error_as(current_user::text, format('delete from auth.users where id = %L', pg_temp.uid(1013))), '') as e \gset
+select pg_temp.expect(:'e' like '%COMMON_ACCOUNT_DELETE_NOT_AUTHORIZED%' and pg_temp.login_exists(pg_temp.uid(1013))
+  and exists (select 1 from public.admin_users where user_id = pg_temp.uid(1013)),
+  'H1-F1: the same refusal in the other cascade order');
+insert into private.account_lifecycle_settings default values;
+delete from auth.users where id = pg_temp.uid(1014);
+select admin_visible as visible_b from public.fixture_cascade_probe where user_id = pg_temp.uid(1014) \gset
+-- (If trigger names happen to sort the same way after the re-creation, the two
+-- orders coincide; the checks above still hold for the order that exists.)
+select pg_temp.expect(:'visible_b'::boolean = not :'first_b'::boolean
+  and (:'first_a'::boolean = :'first_b'::boolean or :'visible_a'::boolean is distinct from :'visible_b'::boolean),
+  'H1-F1: blocker visibility inside the cascade depends on the order; the guard''s answer does not');
+drop trigger aaa_fixture_cascade_probe on public.common_accounts;
+drop function public.fixture_cascade_probe();
+drop table public.fixture_cascade_probe;
+select pg_temp.svc(format('select public.abort_common_account_deletion(%L::uuid, %L::uuid)', u, o)) from (values
+  (pg_temp.uid(1011), :'op1011'), (pg_temp.uid(1013), :'op1013')) v(u, o);
+delete from public.admin_users where user_id in (pg_temp.uid(1002), pg_temp.uid(1011), pg_temp.uid(1013));
+
+-- ---------------------------------------------------------------------------
+-- 11. H1 F4: an entitlement cannot be moved to another person or service, so
+--     no account can change without its own version moving.
+select public.fixture_login(pg_temp.uid(1021));
+select public.fixture_login(pg_temp.uid(1022));
+select pg_temp.start(pg_temp.uid(1021), 'x_autopost') as r1 \gset
+select pg_temp.start(pg_temp.uid(1022), 'kabumori') as r2 \gset
+select pg_temp.version(pg_temp.uid(1021)) as v1, pg_temp.version(pg_temp.uid(1022)) as v2 \gset
+select coalesce(pg_temp.error_as(current_user::text, format(
+  'update public.service_entitlements set user_id = %L where user_id = %L', pg_temp.uid(1022), pg_temp.uid(1021))), '') as e1 \gset
+select coalesce(pg_temp.error_as(current_user::text, format(
+  'update public.service_entitlements set service_key = ''kabumori'' where user_id = %L', pg_temp.uid(1021))), '') as e2 \gset
+select pg_temp.expect(:'e1' like '%ACCOUNT_LIFECYCLE_ENTITLEMENT_OWNER_IMMUTABLE%' and :'e2' like '%ACCOUNT_LIFECYCLE_ENTITLEMENT_OWNER_IMMUTABLE%',
+  'H1-F4: an entitlement cannot be transferred to another person or service');
+select pg_temp.expect(pg_temp.version(pg_temp.uid(1021)) = :v1 and pg_temp.version(pg_temp.uid(1022)) = :v2
+  and pg_temp.entitlement(pg_temp.uid(1021), 'x_autopost') = 'active' and pg_temp.entitlement(pg_temp.uid(1022), 'x_autopost') = 'none',
+  'H1-F4: the refused transfer changed neither account');
+-- Moving a service is: end it for one person, start it for the other. Both
+-- versions move.
+select pg_temp.svc(format('select public.begin_service_deletion(%L::uuid, ''x_autopost'')', pg_temp.uid(1021))) ->> 'operation_id' as opx \gset
+select pg_temp.svc(format('select public.finish_service_deletion(%L::uuid, ''x_autopost'', %L::uuid)', pg_temp.uid(1021), :'opx')) as r1 \gset
+select pg_temp.start(pg_temp.uid(1022), 'x_autopost') as r2 \gset
+select pg_temp.expect(pg_temp.version(pg_temp.uid(1021)) > :v1 and pg_temp.version(pg_temp.uid(1022)) > :v2
+  and pg_temp.entitlement(pg_temp.uid(1021), 'x_autopost') = 'ended' and pg_temp.entitlement(pg_temp.uid(1022), 'x_autopost') = 'active',
+  'H1-F4: end here and start there moves both versions');
 
 select 'COMMON_ACCOUNT_LIFECYCLE_BEHAVIOR_PASS';

@@ -10,7 +10,8 @@
 --   * private.account_lifecycle_operations  durable deletion intent / saga record
 --   * private.account_lifecycle_managed_checkpoints  which managed-service
 --                                  cleanups an account deletion must attest
---   * private.account_lifecycle_settings    one row: guard mode, integration state
+--   * private.account_lifecycle_settings    one row: guard mode, integration
+--                                  state, requirement epoch
 --   * the RPC boundary that is the only writer of the above
 --
 -- What this deliberately does NOT do: it never deletes a login. No statement
@@ -46,6 +47,17 @@
 --      lock wait is the committed state.
 --   I7 lifecycle_version changes with every account-state or entitlement
 --      change, by trigger, whatever wrote it. 0 means "no account row yet".
+--      An entitlement can never move to another person or another service.
+--   I8 Readiness is a durable authorization bound to what it was decided
+--      against: the person's lifecycle_version, the requirement_epoch (which
+--      moves with every change of the checkpoint requirements or settings) and
+--      the exact set of checkpoints that was required. It is valid only while
+--      all three still match and a fresh evaluation still passes. Changes this
+--      file can see also drop the operation back to 'cleanup' at once.
+--   I9 The built-in checkpoints and their meaning are fixed: session_revocation
+--      and storage_cleanup always, apple_revocation for a person with an Apple
+--      identity. They cannot be changed or removed by ordinary maintenance,
+--      and a registry that does not match them exactly makes nothing ready.
 --
 -- Lock order (outermost first): auth.users row -> common_accounts row ->
 -- entitlement / operation rows -> service rows. This is the direction a login
@@ -53,12 +65,16 @@
 -- queue behind each other instead of deadlocking.
 --
 -- Auth-delete guard: a BEFORE DELETE trigger on common_accounts (reached by
--- the cascade from auth.users). Mode 'shadow' (installed here) allows every
--- delete, so existing deletion routes behave exactly as before; it does NOT
--- make them safe. Mode 'enforce' refuses a login delete unless a ready
--- operation exists and the database-visible state is still clean at that
--- moment. 'enforce' cannot be set before integration has started, and even
--- then an allowed delete says nothing about Storage or provider cleanup.
+-- the cascade from auth.users). In Phase 1 it has one mode, 'shadow': every
+-- delete is allowed, so existing deletion routes behave exactly as before. It
+-- observes; it does NOT make them safe. There is no 'enforce' in Phase 1 and
+-- no path on which this trigger authorizes a delete: it runs after other
+-- cascades may already have removed admin and membership rows, so it cannot
+-- rediscover blockers, and several things that must invalidate a readiness
+-- (admin and workspace membership changes, a new Apple identity, Storage
+-- uploads) are not wired to the lifecycle yet. A later phase that wires them
+-- adds an enforcing mode that validates the durable authorization of I8.
+-- Settings that are missing or not 'shadow' refuse every login delete.
 
 begin;
 
@@ -248,7 +264,11 @@ create table private.account_lifecycle_operations (
   current_step text not null default 'cleanup' check (current_step in ('cleanup', 'ready_for_managed_auth_delete')),
   -- Saga checkpoints attested by the orchestrator: {checkpoint_key: recorded_at}.
   checkpoints jsonb not null default '{}'::jsonb check (jsonb_typeof(checkpoints) = 'object'),
+  -- I8: what a readiness was decided against. All null unless ready.
   ready_at timestamptz,
+  ready_lifecycle_version bigint,
+  ready_requirement_epoch bigint,
+  ready_required_checkpoints text[],
   last_error_code text check (last_error_code is null or last_error_code ~ '^[A-Z][A-Z0-9_]{1,63}$'),
   started_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -259,35 +279,49 @@ create table private.account_lifecycle_operations (
   -- Phase 1 has no state that says a whole account was deleted.
   check (status <> 'completed' or operation_type = 'service_deletion'),
   check (current_step = 'cleanup' or operation_type = 'account_deletion'),
-  check ((current_step = 'ready_for_managed_auth_delete') = (ready_at is not null))
+  check ((current_step = 'ready_for_managed_auth_delete') = (ready_at is not null)),
+  check ((ready_at is null) = (ready_lifecycle_version is null)),
+  check ((ready_at is null) = (ready_requirement_epoch is null)),
+  check ((ready_at is null) = (ready_required_checkpoints is null))
 );
 create unique index account_lifecycle_operations_one_in_progress
   on private.account_lifecycle_operations (user_id, operation_type, coalesce(service_key, ''))
   where status = 'in_progress';
 
+create table private.account_lifecycle_settings (
+  id boolean primary key default true check (id),
+  -- Phase 1 has exactly one mode. An enforcing mode is added only by the later
+  -- phase that wires every readiness invalidator (see the header).
+  auth_delete_guard text not null default 'shadow' check (auth_delete_guard = 'shadow'),
+  -- Set to 'started' by the first integration phase (existing creators and
+  -- deletion routes wired to the lifecycle). Rollback is refused afterwards.
+  integration_state text not null default 'not_started' check (integration_state in ('not_started', 'started')),
+  -- I8: moves whenever the checkpoint requirements or these settings change.
+  requirement_epoch bigint not null default 1 check (requirement_epoch >= 1),
+  updated_at timestamptz not null default now()
+);
+insert into private.account_lifecycle_settings default values;
+
+-- I9: the built-in checkpoints and what each one means. This is the contract;
+-- the registry rows below must match it exactly.
+create function private.account_lifecycle_builtin_checkpoints()
+returns table (checkpoint_key text, requirement text)
+language sql immutable security definer set search_path = ''
+as $$
+  values ('apple_revocation', 'apple_identity'), ('session_revocation', 'always'), ('storage_cleanup', 'always')
+$$;
+
 -- Managed-service cleanups that the database cannot do or verify itself. An
--- account deletion is not ready until each applicable one is recorded. A newly
--- discovered kind of managed ownership is added here; every deletion then
--- fails closed until an orchestrator attests it.
+-- account deletion is not ready until each applicable one is recorded. The
+-- built-in rows are fixed (I9). A newly discovered kind of managed ownership is
+-- added as an extra row; every deletion then fails closed until an
+-- orchestrator attests it.
 create table private.account_lifecycle_managed_checkpoints (
   checkpoint_key text primary key check (checkpoint_key ~ '^[a-z][a-z0-9_]{1,62}$'),
   requirement text not null check (requirement in ('always', 'apple_identity'))
 );
-insert into private.account_lifecycle_managed_checkpoints (checkpoint_key, requirement) values
-  ('session_revocation', 'always'),
-  ('storage_cleanup', 'always'),
-  ('apple_revocation', 'apple_identity');
-
-create table private.account_lifecycle_settings (
-  id boolean primary key default true check (id),
-  auth_delete_guard text not null default 'shadow' check (auth_delete_guard in ('shadow', 'enforce')),
-  -- Set to 'started' by the first integration phase (existing creators and
-  -- deletion routes wired to the lifecycle). Rollback is refused afterwards.
-  integration_state text not null default 'not_started' check (integration_state in ('not_started', 'started')),
-  updated_at timestamptz not null default now(),
-  check (auth_delete_guard = 'shadow' or integration_state = 'started')
-);
-insert into private.account_lifecycle_settings default values;
+insert into private.account_lifecycle_managed_checkpoints (checkpoint_key, requirement)
+select b.checkpoint_key, b.requirement from private.account_lifecycle_builtin_checkpoints() b;
 
 -- 2. RLS / grants on the new tables --------------------------------------------
 -- Clients read their own rows; every write goes through the RPCs below.
@@ -357,6 +391,20 @@ begin
 end;
 $$;
 
+-- I8: drops every still-ready operation (of one person, or of everyone when
+-- p_user_id is null) back to cleanup. A readiness is never left standing
+-- across a change that this file can see.
+create function private.account_lifecycle_invalidate_readiness(p_user_id uuid, p_reason text)
+returns void language sql volatile security definer set search_path = ''
+as $$
+  update private.account_lifecycle_operations
+     set current_step = 'cleanup', ready_at = null, ready_lifecycle_version = null,
+         ready_requirement_epoch = null, ready_required_checkpoints = null,
+         last_error_code = p_reason, updated_at = now()
+   where status = 'in_progress' and current_step = 'ready_for_managed_auth_delete'
+     and (p_user_id is null or user_id = p_user_id)
+$$;
+
 -- I7: the version moves with the state, whoever changes it (RPC, backfill or an
 -- operator's SQL), so a confirmation taken before the change cannot be reused.
 create function private.account_lifecycle_touch_account()
@@ -378,6 +426,39 @@ create trigger account_lifecycle_touch_account
   before update on public.common_accounts
   for each row execute function private.account_lifecycle_touch_account();
 
+create function private.account_lifecycle_account_changed()
+returns trigger language plpgsql security definer set search_path = ''
+as $$
+begin
+  if new.lifecycle_version <> old.lifecycle_version or new.status <> old.status then
+    perform private.account_lifecycle_invalidate_readiness(new.user_id, 'LIFECYCLE_VERSION_CHANGED');
+  end if;
+  return null;
+end;
+$$;
+
+create trigger account_lifecycle_account_changed
+  after update on public.common_accounts
+  for each row execute function private.account_lifecycle_account_changed();
+
+-- An entitlement belongs to one person and one service for its whole life. A
+-- transfer would change two accounts while moving only one version; it is
+-- refused. Moving a service means ending it here and starting it there.
+create function private.account_lifecycle_guard_entitlement_identity()
+returns trigger language plpgsql security definer set search_path = ''
+as $$
+begin
+  if new.user_id is distinct from old.user_id or new.service_key is distinct from old.service_key then
+    raise exception 'ACCOUNT_LIFECYCLE_ENTITLEMENT_OWNER_IMMUTABLE';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger account_lifecycle_guard_entitlement_identity
+  before update on public.service_entitlements
+  for each row execute function private.account_lifecycle_guard_entitlement_identity();
+
 create function private.account_lifecycle_touch_entitlement()
 returns trigger language plpgsql security definer set search_path = ''
 as $$
@@ -393,6 +474,93 @@ $$;
 create trigger account_lifecycle_touch_entitlement
   after insert or update or delete on public.service_entitlements
   for each row execute function private.account_lifecycle_touch_entitlement();
+
+-- I9: a built-in row can be neither changed nor removed, and its name cannot
+-- be given another meaning. Restoring a missing built-in row is allowed.
+create function private.account_lifecycle_guard_checkpoint_registry()
+returns trigger language plpgsql security definer set search_path = ''
+as $$
+begin
+  if tg_op = 'TRUNCATE' then
+    raise exception 'ACCOUNT_LIFECYCLE_BUILTIN_CHECKPOINT_IMMUTABLE';
+  end if;
+  if tg_op in ('UPDATE', 'DELETE') and exists (
+    select 1 from private.account_lifecycle_builtin_checkpoints() b where b.checkpoint_key = old.checkpoint_key
+  ) then
+    raise exception 'ACCOUNT_LIFECYCLE_BUILTIN_CHECKPOINT_IMMUTABLE';
+  end if;
+  if tg_op in ('INSERT', 'UPDATE') and exists (
+    select 1 from private.account_lifecycle_builtin_checkpoints() b
+     where b.checkpoint_key = new.checkpoint_key and b.requirement <> new.requirement
+  ) then
+    raise exception 'ACCOUNT_LIFECYCLE_BUILTIN_CHECKPOINT_IMMUTABLE';
+  end if;
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger account_lifecycle_guard_checkpoint_registry
+  before insert or update or delete on private.account_lifecycle_managed_checkpoints
+  for each row execute function private.account_lifecycle_guard_checkpoint_registry();
+create trigger account_lifecycle_guard_checkpoint_registry_truncate
+  before truncate on private.account_lifecycle_managed_checkpoints
+  for each statement execute function private.account_lifecycle_guard_checkpoint_registry();
+
+-- I8: any change of the requirements moves the epoch (and, through the
+-- settings trigger below, drops every ready operation).
+create function private.account_lifecycle_requirements_changed()
+returns trigger language plpgsql security definer set search_path = ''
+as $$
+begin
+  update private.account_lifecycle_settings set requirement_epoch = requirement_epoch + 1;
+  return null;
+end;
+$$;
+
+create trigger account_lifecycle_requirements_changed
+  after insert or update or delete on private.account_lifecycle_managed_checkpoints
+  for each statement execute function private.account_lifecycle_requirements_changed();
+
+create function private.account_lifecycle_touch_settings()
+returns trigger language plpgsql security definer set search_path = ''
+as $$
+begin
+  if new.requirement_epoch < old.requirement_epoch then
+    raise exception 'ACCOUNT_LIFECYCLE_EPOCH_CANNOT_DECREASE';
+  end if;
+  if (new.integration_state is distinct from old.integration_state
+      or new.auth_delete_guard is distinct from old.auth_delete_guard)
+     and new.requirement_epoch = old.requirement_epoch then
+    new.requirement_epoch := old.requirement_epoch + 1;
+  end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+create trigger account_lifecycle_touch_settings
+  before update on private.account_lifecycle_settings
+  for each row execute function private.account_lifecycle_touch_settings();
+
+-- A removed or re-created settings row restarts the epoch, so no readiness may
+-- survive it either.
+create function private.account_lifecycle_settings_changed()
+returns trigger language plpgsql security definer set search_path = ''
+as $$
+begin
+  if tg_op <> 'UPDATE' or new.requirement_epoch <> old.requirement_epoch then
+    perform private.account_lifecycle_invalidate_readiness(null, 'REQUIREMENT_EPOCH_CHANGED');
+  end if;
+  return null;
+end;
+$$;
+
+create trigger account_lifecycle_settings_changed
+  after insert or update or delete on private.account_lifecycle_settings
+  for each row execute function private.account_lifecycle_settings_changed();
 
 -- What each service still holds for this person, read from the service's own
 -- tables. x_foreign: a workspace that is not the person's own self-service one.
@@ -496,11 +664,26 @@ begin
     end if;
   end loop;
   return '{}'::text[];
+exception when others then
+  -- Could not read Storage (privilege, changed column type, ...): not clean.
+  return array['MANAGED_STORAGE_PROBE_FAILED'];
 end;
 $$;
 
+-- I9: the registry matches the built-in contract exactly (every built-in row
+-- present, with its own meaning). Extra rows are allowed.
+create function private.account_lifecycle_requirements_valid()
+returns boolean language sql volatile security definer set search_path = ''
+as $$
+  select not exists (
+    select 1 from private.account_lifecycle_builtin_checkpoints() b
+      left join private.account_lifecycle_managed_checkpoints c on c.checkpoint_key = b.checkpoint_key
+     where c.requirement is distinct from b.requirement)
+$$;
+
 -- Which managed checkpoints this person's deletion needs. Null when the
--- registry lost one of its built-in rows: the caller treats that as not ready.
+-- registry does not match the built-in contract: the caller treats that as
+-- not ready.
 create function private.account_lifecycle_required_checkpoints(p_user_id uuid)
 returns text[] language plpgsql volatile security definer set search_path = ''
 as $$
@@ -508,14 +691,105 @@ declare
   v_apple boolean := exists (
     select 1 from auth.identities i where i.user_id = p_user_id and i.provider = 'apple');
 begin
-  if (select count(*) from private.account_lifecycle_managed_checkpoints c
-       where c.checkpoint_key in ('session_revocation', 'storage_cleanup', 'apple_revocation')) <> 3 then
+  if not private.account_lifecycle_requirements_valid() then
     return null;
   end if;
   return coalesce((
     select array_agg(c.checkpoint_key order by c.checkpoint_key)
       from private.account_lifecycle_managed_checkpoints c
      where c.requirement = 'always' or (c.requirement = 'apple_identity' and v_apple)), '{}'::text[]);
+end;
+$$;
+
+-- I4: everything a readiness depends on, evaluated now. Null = nothing stands
+-- in the way; otherwise the answer to give (with non-secret next steps).
+create function private.account_lifecycle_readiness_refusal(p_user_id uuid, p_checkpoints jsonb)
+returns jsonb language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_remaining jsonb;
+  v_blockers text[];
+  v_required text[];
+  v_missing text[];
+  v_managed text[];
+begin
+  select jsonb_agg(e.service_key order by e.service_key) into v_remaining
+    from public.service_entitlements e where e.user_id = p_user_id and e.status <> 'ended';
+  if v_remaining is not null then
+    return jsonb_build_object('status', 'not_ready', 'reason', 'SERVICES_REMAIN', 'services', v_remaining,
+      'next_steps', jsonb_build_array('end_remaining_services'));
+  end if;
+  -- With every entitlement ended, any remaining service row, admin membership
+  -- or foreign workspace is a blocker (UNREGISTERED_SERVICE_FOOTPRINT, ...).
+  v_blockers := private.account_lifecycle_deletion_blockers(p_user_id, 'deleting');
+  if cardinality(v_blockers) > 0 then
+    return jsonb_build_object('status', 'blocked', 'reasons', to_jsonb(v_blockers),
+      'next_steps', jsonb_build_array('operator_review'));
+  end if;
+  if not exists (select 1 from private.account_lifecycle_settings s where s.auth_delete_guard = 'shadow') then
+    return jsonb_build_object('status', 'not_ready', 'reason', 'LIFECYCLE_SETTINGS_INVALID',
+      'next_steps', jsonb_build_array('operator_review'));
+  end if;
+  v_required := private.account_lifecycle_required_checkpoints(p_user_id);
+  if v_required is null then
+    return jsonb_build_object('status', 'not_ready', 'reason', 'MANAGED_CHECKPOINT_REGISTRY_INVALID',
+      'next_steps', jsonb_build_array('operator_review'));
+  end if;
+  v_missing := array(select k from unnest(v_required) k where not p_checkpoints ? k order by k);
+  if cardinality(v_missing) > 0 then
+    return jsonb_build_object('status', 'not_ready', 'reason', 'MANAGED_CHECKPOINTS_MISSING',
+      'missing_checkpoints', to_jsonb(v_missing),
+      'next_steps', jsonb_build_array('complete_managed_cleanup_and_record_checkpoints'));
+  end if;
+  v_managed := private.account_lifecycle_managed_ownership(p_user_id);
+  if cardinality(v_managed) > 0 then
+    return jsonb_build_object('status', 'not_ready', 'reason', 'MANAGED_OWNERSHIP_REMAINS',
+      'managed_ownership', to_jsonb(v_managed),
+      'next_steps', jsonb_build_array('clean_managed_ownership_through_its_api_and_record_again'));
+  end if;
+  return null;
+end;
+$$;
+
+-- I8: why a readiness may not be relied on right now. Empty = still valid.
+-- The first three checks compare durable state only (nothing a cascade can
+-- erase); the last one re-evaluates everything, so it must run BEFORE any
+-- destructive step, never after.
+create function private.account_lifecycle_authorization_problems(p_user_id uuid, p_operation_id uuid)
+returns text[] language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_operation private.account_lifecycle_operations;
+  v_account public.common_accounts;
+  v_epoch bigint;
+  v_refusal jsonb;
+  v_problems text[] := '{}';
+begin
+  select * into v_operation from private.account_lifecycle_operations
+   where id = p_operation_id and user_id = p_user_id and operation_type = 'account_deletion';
+  if not found or v_operation.status <> 'in_progress'
+     or v_operation.current_step <> 'ready_for_managed_auth_delete' then
+    return array['NOT_READY'];
+  end if;
+  select * into v_account from public.common_accounts where user_id = p_user_id;
+  select s.requirement_epoch into v_epoch from private.account_lifecycle_settings s;
+  if v_account.status is distinct from 'deleting' then
+    v_problems := v_problems || 'ACCOUNT_DELETION_NOT_IN_PROGRESS'::text;
+  end if;
+  if v_account.lifecycle_version is distinct from v_operation.ready_lifecycle_version then
+    v_problems := v_problems || 'LIFECYCLE_VERSION_CHANGED'::text;
+  end if;
+  if v_epoch is distinct from v_operation.ready_requirement_epoch then
+    v_problems := v_problems || 'REQUIREMENT_EPOCH_CHANGED'::text;
+  end if;
+  if private.account_lifecycle_required_checkpoints(p_user_id) is distinct from v_operation.ready_required_checkpoints then
+    v_problems := v_problems || 'REQUIRED_CHECKPOINTS_CHANGED'::text;
+  end if;
+  v_refusal := private.account_lifecycle_readiness_refusal(p_user_id, v_operation.checkpoints);
+  if v_refusal is not null then
+    v_problems := v_problems || coalesce(v_refusal ->> 'reason', v_refusal -> 'reasons' ->> 0);
+  end if;
+  return v_problems;
 end;
 $$;
 
@@ -567,14 +841,14 @@ begin
 end;
 $$;
 
--- Auth-delete guard (reached by the cascade from auth.users). In 'enforce' it
--- is the authorization boundary for whoever removes the login later: it runs
--- inside the deleting transaction, which holds the auth.users row, so nothing
--- can be creating a row that references the login at that moment. It allows
--- the delete only for a ready operation whose database-visible state is still
--- clean. It cannot see Storage objects uploaded afterwards or provider grants:
--- "allowed" never means "cleanup verified". 23503 on purpose: the existing X
--- deletion maps a blocked login delete to its operator state.
+-- Auth-delete guard (reached by the cascade from auth.users). Phase 1 only
+-- observes: in 'shadow' it allows the delete, closes the person's open
+-- operations and clears their raw id. It authorizes nothing and is no safety
+-- for the existing deletion routes. It deliberately does not look at admin,
+-- membership or identity rows: other cascades of the same delete may already
+-- have removed them. Missing or unexpected settings refuse every delete.
+-- 23503 on purpose: the existing X deletion maps a blocked login delete to its
+-- operator state.
 create function private.account_lifecycle_guard_account_delete()
 returns trigger language plpgsql security definer set search_path = ''
 as $$
@@ -582,24 +856,13 @@ declare
   v_mode text;
 begin
   select s.auth_delete_guard into v_mode from private.account_lifecycle_settings s;
-  if coalesce(v_mode, 'enforce') <> 'shadow' then
-    if old.status <> 'deleting'
-       or not exists (
-         select 1 from private.account_lifecycle_operations o
-          where o.user_id = old.user_id and o.operation_type = 'account_deletion'
-            and o.status = 'in_progress' and o.current_step = 'ready_for_managed_auth_delete')
-       or exists (
-         select 1 from public.service_entitlements e
-          where e.user_id = old.user_id and e.status <> 'ended')
-       or cardinality(private.account_lifecycle_deletion_blockers(old.user_id, old.status)) > 0
-       or cardinality(private.account_lifecycle_managed_ownership(old.user_id)) > 0 then
-      raise exception 'COMMON_ACCOUNT_DELETE_NOT_AUTHORIZED' using errcode = '23503';
-    end if;
+  if v_mode is distinct from 'shadow' then
+    raise exception 'COMMON_ACCOUNT_DELETE_NOT_AUTHORIZED' using errcode = '23503';
   end if;
   update private.account_lifecycle_operations
      set status = 'login_removed',
          last_error_code = case
-           when operation_type = 'account_deletion' and current_step = 'ready_for_managed_auth_delete' then null
+           when current_step = 'ready_for_managed_auth_delete' then 'LOGIN_REMOVED_WHILE_READY_UNVERIFIED'
            else 'ACCOUNT_REMOVED_EXTERNALLY' end,
          finished_at = now(), updated_at = now()
    where user_id = old.user_id and status = 'in_progress';
@@ -627,23 +890,29 @@ as $$ select private.account_lifecycle_start_service((select auth.uid()), 'x_aut
 -- 5. Backend RPCs (service_role; p_user_id is the id the caller verified from
 --    the person's own token, never a value the client supplied) ------------------
 
--- Read model for a confirmation screen. Takes no lock: it is advice, and
--- begin_common_account_deletion re-evaluates everything under the lock.
--- lifecycle_version 0 = no account row. It is never a valid version of a row.
+-- Read model for a confirmation screen and for the orchestrator. Takes no
+-- lock: it is advice, and begin / prepare re-evaluate everything under the
+-- locks. lifecycle_version 0 = no account row. It is never a valid version of
+-- a row. authorization.state: 'none' (not ready), 'valid', or 'stale'.
 create function public.common_account_deletion_eligibility(p_user_id uuid)
 returns jsonb language plpgsql volatile security definer set search_path = ''
 as $$
 declare
   v_account public.common_accounts;
   v_operation private.account_lifecycle_operations;
+  v_problems text[];
 begin
   if p_user_id is null then raise exception 'ACCOUNT_LIFECYCLE_USER_REQUIRED'; end if;
   select * into v_account from public.common_accounts where user_id = p_user_id;
   select * into v_operation from private.account_lifecycle_operations o
    where o.user_id = p_user_id and o.operation_type = 'account_deletion' and o.status = 'in_progress';
+  if v_operation.id is not null then
+    v_problems := private.account_lifecycle_authorization_problems(p_user_id, v_operation.id);
+  end if;
   return jsonb_build_object(
     'account_status', coalesce(v_account.status, 'none'),
     'lifecycle_version', coalesce(v_account.lifecycle_version, 0),
+    'requirement_epoch', (select s.requirement_epoch from private.account_lifecycle_settings s),
     'services', coalesce((
       select jsonb_agg(jsonb_build_object('service_key', e.service_key, 'status', e.status) order by e.service_key)
         from public.service_entitlements e where e.user_id = p_user_id), '[]'::jsonb),
@@ -653,7 +922,14 @@ begin
     'operation', case when v_operation.id is null then null else jsonb_build_object(
       'operation_id', v_operation.id, 'step', v_operation.current_step,
       'recorded_checkpoints', (select coalesce(jsonb_agg(k order by k), '[]'::jsonb)
-                                 from jsonb_object_keys(v_operation.checkpoints) k)) end);
+                                 from jsonb_object_keys(v_operation.checkpoints) k)) end,
+    'authorization', case
+      when v_operation.id is null or v_problems = array['NOT_READY'] then jsonb_build_object('state', 'none')
+      when cardinality(v_problems) = 0 then jsonb_build_object('state', 'valid',
+        'lifecycle_version', v_operation.ready_lifecycle_version,
+        'requirement_epoch', v_operation.ready_requirement_epoch,
+        'required_checkpoints', to_jsonb(v_operation.ready_required_checkpoints))
+      else jsonb_build_object('state', 'stale', 'problems', to_jsonb(v_problems)) end);
 end;
 $$;
 
@@ -893,6 +1169,32 @@ begin
 end;
 $$;
 
+-- The orchestrator found that a cleanup no longer holds (for example Storage
+-- objects appeared again). The checkpoint is withdrawn and any readiness with it.
+create function public.clear_common_account_deletion_checkpoint(p_user_id uuid, p_operation_id uuid, p_checkpoint text)
+returns jsonb language plpgsql security definer set search_path = ''
+as $$
+declare
+  v_account public.common_accounts;
+begin
+  if p_checkpoint is null then
+    raise exception 'ACCOUNT_LIFECYCLE_CHECKPOINT_INVALID';
+  end if;
+  v_account := private.account_lifecycle_lock(p_user_id, false);
+  update private.account_lifecycle_operations
+     set checkpoints = checkpoints - p_checkpoint,
+         current_step = 'cleanup', ready_at = null, ready_lifecycle_version = null,
+         ready_requirement_epoch = null, ready_required_checkpoints = null,
+         last_error_code = 'MANAGED_CHECKPOINT_CLEARED', updated_at = now()
+   where id = p_operation_id and user_id = p_user_id
+     and operation_type = 'account_deletion' and status = 'in_progress';
+  if not found or v_account.user_id is null then
+    return jsonb_build_object('status', 'not_found');
+  end if;
+  return jsonb_build_object('status', 'cleared', 'checkpoint', p_checkpoint);
+end;
+$$;
+
 -- The person (or an operator) cancelled before the login was removed. Services
 -- that already ended stay ended; the account can start services again.
 create function public.abort_common_account_deletion(p_user_id uuid, p_operation_id uuid)
@@ -923,31 +1225,35 @@ begin
 end;
 $$;
 
--- I4: the last database step of an account deletion. It re-verifies everything
--- under the exclusive auth.users row lock and the common_accounts lock and
--- moves the operation to 'ready_for_managed_auth_delete'. It does NOT delete
--- the login, Storage objects, sessions or provider grants, and it never
--- reports a deletion as completed: it tells the orchestrator what is next.
--- Calling it again re-evaluates; a state that is no longer clean drops the
--- operation back to 'cleanup'.
+-- I4 + I8: the last database step of an account deletion, and the only way to
+-- obtain (or refresh) its authorization. Under the exclusive auth.users row
+-- lock, the common_accounts lock and a share lock on the settings row, it
+-- evaluates everything and, if clean, moves the operation to
+-- 'ready_for_managed_auth_delete' bound to the lifecycle_version, the
+-- requirement_epoch and the exact required checkpoints it was decided against.
+-- It does NOT delete the login, Storage objects, sessions or provider grants
+-- and never reports a deletion as completed: it tells the orchestrator what is
+-- next. Calling it again re-evaluates; a state that is no longer clean drops
+-- the operation back to 'cleanup'. The orchestrator must call it immediately
+-- before the managed delete: what this file cannot see changing (admin and
+-- workspace membership, identities, Storage) is only caught by evaluating.
 create function public.prepare_common_account_auth_delete(p_user_id uuid, p_operation_id uuid)
 returns jsonb language plpgsql security definer set search_path = ''
 as $$
 declare
   v_account public.common_accounts;
   v_operation private.account_lifecycle_operations;
-  v_remaining jsonb;
-  v_blockers text[];
+  v_epoch bigint;
   v_required text[];
-  v_missing text[];
-  v_managed text[];
-  v_result jsonb;
-  v_code text;
+  v_refusal jsonb;
 begin
   if p_user_id is null or p_operation_id is null then
     raise exception 'ACCOUNT_LIFECYCLE_USER_REQUIRED';
   end if;
   v_account := private.account_lifecycle_lock(p_user_id, false, true);
+  -- Before the operation row: a requirement change waits for this decision,
+  -- or this decision waits for it (same order as the change itself takes).
+  select s.requirement_epoch into v_epoch from private.account_lifecycle_settings s for share;
   select * into v_operation from private.account_lifecycle_operations
    where id = p_operation_id and user_id = p_user_id and operation_type = 'account_deletion'
    for update;
@@ -958,49 +1264,30 @@ begin
     return jsonb_build_object('status', 'not_ready', 'reason', 'ACCOUNT_DELETION_NOT_IN_PROGRESS');
   end if;
 
-  select jsonb_agg(e.service_key order by e.service_key) into v_remaining
-    from public.service_entitlements e where e.user_id = p_user_id and e.status <> 'ended';
-  -- With every entitlement ended, any remaining service row, admin membership
-  -- or foreign workspace is a blocker (UNREGISTERED_SERVICE_FOOTPRINT, ...).
-  v_blockers := private.account_lifecycle_deletion_blockers(p_user_id, 'deleting');
-  v_required := private.account_lifecycle_required_checkpoints(p_user_id);
-  v_missing := array(select k from unnest(v_required) k where not v_operation.checkpoints ? k order by k);
-  v_managed := private.account_lifecycle_managed_ownership(p_user_id);
-
-  if v_remaining is not null then
-    v_code := 'SERVICES_REMAIN';
-    v_result := jsonb_build_object('status', 'not_ready', 'reason', v_code, 'services', v_remaining,
-      'next_steps', jsonb_build_array('end_remaining_services'));
-  elsif cardinality(v_blockers) > 0 then
-    v_code := v_blockers[1];
-    v_result := jsonb_build_object('status', 'blocked', 'reasons', to_jsonb(v_blockers),
-      'next_steps', jsonb_build_array('operator_review'));
-  elsif v_required is null then
-    v_code := 'MANAGED_CHECKPOINT_REGISTRY_INVALID';
-    v_result := jsonb_build_object('status', 'not_ready', 'reason', v_code,
-      'next_steps', jsonb_build_array('operator_review'));
-  elsif cardinality(v_missing) > 0 then
-    v_code := 'MANAGED_CHECKPOINTS_MISSING';
-    v_result := jsonb_build_object('status', 'not_ready', 'reason', v_code, 'missing_checkpoints', to_jsonb(v_missing),
-      'next_steps', jsonb_build_array('complete_managed_cleanup_and_record_checkpoints'));
-  elsif cardinality(v_managed) > 0 then
-    v_code := 'MANAGED_OWNERSHIP_REMAINS';
-    v_result := jsonb_build_object('status', 'not_ready', 'reason', v_code, 'managed_ownership', to_jsonb(v_managed),
-      'next_steps', jsonb_build_array('clean_managed_ownership_through_its_api_and_record_again'));
-  end if;
-
-  if v_result is not null then
+  v_refusal := private.account_lifecycle_readiness_refusal(p_user_id, v_operation.checkpoints);
+  if v_refusal is not null then
     update private.account_lifecycle_operations
-       set current_step = 'cleanup', ready_at = null, last_error_code = v_code, updated_at = now()
+       set current_step = 'cleanup', ready_at = null, ready_lifecycle_version = null,
+           ready_requirement_epoch = null, ready_required_checkpoints = null,
+           last_error_code = coalesce(v_refusal ->> 'reason', v_refusal -> 'reasons' ->> 0), updated_at = now()
      where id = p_operation_id;
-    return v_result;
+    return v_refusal;
   end if;
+  v_required := private.account_lifecycle_required_checkpoints(p_user_id);
   update private.account_lifecycle_operations
-     set current_step = 'ready_for_managed_auth_delete', ready_at = now(), last_error_code = null, updated_at = now()
+     set current_step = 'ready_for_managed_auth_delete', ready_at = now(),
+         ready_lifecycle_version = v_account.lifecycle_version,
+         ready_requirement_epoch = v_epoch,
+         ready_required_checkpoints = v_required,
+         last_error_code = null, updated_at = now()
    where id = p_operation_id;
   return jsonb_build_object(
     'status', 'ready_for_managed_auth_delete', 'operation_id', p_operation_id,
     'login_deleted', false,
+    'authorization', jsonb_build_object(
+      'lifecycle_version', v_account.lifecycle_version,
+      'requirement_epoch', v_epoch,
+      'required_checkpoints', to_jsonb(v_required)),
     'next_steps', jsonb_build_array(
       'revalidate_managed_ownership', 'managed_auth_admin_delete', 'post_delete_read_back_and_audit'));
 end;
@@ -1160,12 +1447,23 @@ $$;
 -- nobody but their owner; they are reached only through the RPCs.
 
 revoke all on function private.account_lifecycle_lock(uuid, boolean, boolean) from public, anon, authenticated, service_role;
+revoke all on function private.account_lifecycle_invalidate_readiness(uuid, text) from public, anon, authenticated, service_role;
 revoke all on function private.account_lifecycle_touch_account() from public, anon, authenticated, service_role;
+revoke all on function private.account_lifecycle_account_changed() from public, anon, authenticated, service_role;
+revoke all on function private.account_lifecycle_guard_entitlement_identity() from public, anon, authenticated, service_role;
 revoke all on function private.account_lifecycle_touch_entitlement() from public, anon, authenticated, service_role;
 revoke all on function private.account_lifecycle_footprint(uuid) from public, anon, authenticated, service_role;
 revoke all on function private.account_lifecycle_deletion_blockers(uuid, text) from public, anon, authenticated, service_role;
 revoke all on function private.account_lifecycle_managed_ownership(uuid) from public, anon, authenticated, service_role;
+revoke all on function private.account_lifecycle_builtin_checkpoints() from public, anon, authenticated, service_role;
+revoke all on function private.account_lifecycle_guard_checkpoint_registry() from public, anon, authenticated, service_role;
+revoke all on function private.account_lifecycle_requirements_changed() from public, anon, authenticated, service_role;
+revoke all on function private.account_lifecycle_touch_settings() from public, anon, authenticated, service_role;
+revoke all on function private.account_lifecycle_settings_changed() from public, anon, authenticated, service_role;
+revoke all on function private.account_lifecycle_requirements_valid() from public, anon, authenticated, service_role;
 revoke all on function private.account_lifecycle_required_checkpoints(uuid) from public, anon, authenticated, service_role;
+revoke all on function private.account_lifecycle_readiness_refusal(uuid, jsonb) from public, anon, authenticated, service_role;
+revoke all on function private.account_lifecycle_authorization_problems(uuid, uuid) from public, anon, authenticated, service_role;
 revoke all on function private.account_lifecycle_start_service(uuid, text) from public, anon, authenticated, service_role;
 revoke all on function private.account_lifecycle_guard_account_delete() from public, anon, authenticated, service_role;
 revoke all on function private.account_lifecycle_backfill(boolean) from public, anon, authenticated, service_role;
@@ -1182,6 +1480,7 @@ revoke all on function public.abort_service_deletion(uuid, text, uuid) from publ
 revoke all on function public.withdraw_kabumori_service(uuid) from public, anon, authenticated, service_role;
 revoke all on function public.begin_common_account_deletion(uuid, bigint) from public, anon, authenticated, service_role;
 revoke all on function public.record_common_account_deletion_checkpoint(uuid, uuid, text) from public, anon, authenticated, service_role;
+revoke all on function public.clear_common_account_deletion_checkpoint(uuid, uuid, text) from public, anon, authenticated, service_role;
 revoke all on function public.abort_common_account_deletion(uuid, uuid) from public, anon, authenticated, service_role;
 revoke all on function public.prepare_common_account_auth_delete(uuid, uuid) from public, anon, authenticated, service_role;
 grant execute on function public.common_account_deletion_eligibility(uuid) to service_role;
@@ -1191,7 +1490,22 @@ grant execute on function public.abort_service_deletion(uuid, text, uuid) to ser
 grant execute on function public.withdraw_kabumori_service(uuid) to service_role;
 grant execute on function public.begin_common_account_deletion(uuid, bigint) to service_role;
 grant execute on function public.record_common_account_deletion_checkpoint(uuid, uuid, text) to service_role;
+grant execute on function public.clear_common_account_deletion_checkpoint(uuid, uuid, text) to service_role;
 grant execute on function public.abort_common_account_deletion(uuid, uuid) to service_role;
 grant execute on function public.prepare_common_account_auth_delete(uuid, uuid) to service_role;
+
+-- 8. Postflight: what was just installed is the affirmed starting state.
+do $$
+begin
+  if not private.account_lifecycle_requirements_valid()
+     or (select count(*) from private.account_lifecycle_managed_checkpoints) <> 3
+     or (select count(*) from private.account_lifecycle_settings
+          where auth_delete_guard = 'shadow' and integration_state = 'not_started' and requirement_epoch = 1) <> 1
+     or exists (select 1 from public.common_accounts)
+     or exists (select 1 from private.account_lifecycle_operations) then
+    raise exception 'COMMON_ACCOUNT_POSTFLIGHT_UNEXPECTED_STATE';
+  end if;
+end;
+$$;
 
 commit;

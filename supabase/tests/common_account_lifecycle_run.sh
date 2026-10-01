@@ -149,7 +149,7 @@ if grep -qiE 'auth\.admin|/auth/v1|deleteUser' <<<"$code"; then echo "FAIL the c
 # People are never matched by e-mail.
 if grep -qiE 'e-?mail' <<<"$code"; then echo "FAIL the candidate reads e-mail" >&2; exit 1; fi
 # Nothing existing is dropped, replaced or re-granted.
-if grep -iE '\b(drop|truncate|create or replace|alter (table|function|policy) (public|auth|vault|storage)\.)' <<<"$code" \
+if grep -iE '\bdrop[[:space:]]+(table|function|view|trigger|policy|index|schema|constraint|column)\b|\btruncate[[:space:]]+(table[[:space:]]+)?(only[[:space:]]+)?[a-z_"]+\.|create or replace|alter (table|function|policy) (public|auth|vault|storage)\.' <<<"$code" \
      | grep -qvE 'alter table public\.(common_accounts|service_entitlements) enable row level security'; then
   echo "FAIL the candidate alters, drops or replaces an existing object" >&2; exit 1
 fi
@@ -160,6 +160,8 @@ fi
 if grep -iE 'delete[[:space:]]+from' <<<"$flat" | grep -qvE 'delete[[:space:]]+from[[:space:]]+public\.profiles[[:space:]]+where[[:space:]]+id[[:space:]]*=[[:space:]]*p_user_id'; then
   echo "FAIL the candidate deletes from a table other than public.profiles" >&2; exit 1
 fi
+# Phase 1 has no enforcing guard mode: the word may appear in comments only.
+if grep -qi "'enforce'" <<<"$code"; then echo "FAIL the candidate defines an enforcing guard mode" >&2; exit 1; fi
 echo "COMMON_ACCOUNT_STATIC_NO_MANAGED_DELETE_PASS"
 
 # 4. Behavior.
@@ -176,6 +178,7 @@ start_sql() { as_user "$1" "select public.start_$2_service()"; }
 begin_sql() { as_service "select public.begin_common_account_deletion('$1', $2)"; }
 prepare_sql() { as_service "select public.prepare_common_account_auth_delete('$1', '$2')"; }
 checkpoint_sql() { as_service "select public.record_common_account_deletion_checkpoint('$1', '$2', '$3')"; }
+eligibility_sql() { as_service "select public.common_account_deletion_eligibility('$1')"; }
 onboard_sql() { as_user "$1" "select * from public.begin_social_mobile_x_oauth_connection(repeat('$2', 64), 'kabumori-social://oauth-callback', now() + interval '10 minutes')"; }
 count() { "${query[@]}" -c "select count(*) from $1"; }
 workspace() { echo "'u_' || substr(md5('$1'), 1, 24)"; }
@@ -199,10 +202,6 @@ deleting_login() {
   run "begin; $(begin_sql "$1" 0) commit;" | grep -q '"status": "started"' || { echo "FAIL setup deleting login $1" >&2; exit 1; }
   local op; op="$(operation_of "$1")"
   run "begin; $(checkpoint_sql "$1" "$op" session_revocation) $(checkpoint_sql "$1" "$op" storage_cleanup) commit;" >/dev/null
-}
-ready_login() {
-  deleting_login "$1"
-  run "begin; $(prepare_sql "$1" "$(operation_of "$1")") commit;" | grep -q '"status": "ready_for_managed_auth_delete"' || { echo "FAIL setup ready login $1" >&2; exit 1; }
 }
 pause_on() {  # pause any entitlement insert for this login, inside the writing transaction
   "${as_owner[@]}" <<SQL
@@ -393,40 +392,62 @@ grep -q '"applied": true' "$tmp/r10_backfill" || { echo "FAIL race10 backfill: $
 [[ "$("${query[@]}" -c "select c.status || ':' || e.status || ':' || (e.created_at <= c.updated_at) from public.common_accounts c join public.service_entitlements e using (user_id) where c.user_id = '$u'")" == "locked:active:true" ]] || { echo "FAIL race10 order" >&2; exit 1; }
 echo "COMMON_ACCOUNT_RACE_BACKFILL_THEN_LOCK_PASS"
 
-# Races 11 and 12: the guard as an authorization boundary (enforce mode, which
-# requires integration to have started). The delete below is the test standing
-# in for the future managed Auth delete of a READY operation.
-"${as_owner[@]}" -c "update private.account_lifecycle_settings set integration_state = 'started', auth_delete_guard = 'enforce'"
-# Race 11: the delete is uncommitted when the real X onboarding RPC arrives.
-# The creator waits on the login row and then fails on its own foreign key:
-# nothing is orphaned.
+# Race 11 (H1 F2): a requirement change (a new always-required checkpoint) is
+# uncommitted when the readiness check arrives. prepare waits on the settings
+# row and then decides against the new requirement: not ready.
 u="$(uid 913)"
-ready_login "$u"
-run "begin; delete from auth.users where id = '$u'; select pg_sleep(2); commit;" > "$tmp/r11_delete" 2>&1 &
+deleting_login "$u"
+op="$(operation_of "$u")"
+run "begin; insert into private.account_lifecycle_managed_checkpoints values ('race_requirement_a', 'always'); select pg_sleep(2); commit;" > "$tmp/r11_registry" 2>&1 &
 sleep 0.5
-run "begin; $(onboard_sql "$u" c) commit;" > "$tmp/r11_onboard" 2>&1 &
+run "begin; $(prepare_sql "$u" "$op") commit;" > "$tmp/r11_prepare" 2>&1 &
 wait
-if grep -qi 'error' "$tmp/r11_delete"; then echo "FAIL race11 authorized delete: $(cat "$tmp/r11_delete")" >&2; exit 1; fi
-grep -q 'violates foreign key constraint' "$tmp/r11_onboard" || { echo "FAIL race11 onboarding: $(cat "$tmp/r11_onboard")" >&2; exit 1; }
-left="$("${query[@]}" -c "select (select count(*) from auth.users where id = '$u') + (select count(*) from public.common_accounts where user_id = '$u')
-  + (select count(*) from public.brands where id = $(workspace "$u")) + (select count(*) from public.brand_memberships where user_id = '$u')
-  + (select count(*) from public.social_accounts where brand_id = $(workspace "$u"))
-  + (select count(*) from public.social_account_oauth_states where initiated_by_user_id = '$u' or brand_id = $(workspace "$u"))")"
-[[ "$left" == 0 ]] || { echo "FAIL race11 orphans: $left" >&2; exit 1; }
-[[ "$("${query[@]}" -c "select status from private.account_lifecycle_operations where subject_sha256 = encode(sha256(convert_to('$u', 'UTF8')), 'hex') and operation_type = 'account_deletion'")" == login_removed ]] || { echo "FAIL race11 operation state" >&2; exit 1; }
-# Race 12 (reverse order): the onboarding is uncommitted when the delete
-# arrives. The delete waits, then the guard sees the workspace and refuses.
+grep -q '"missing_checkpoints": \["race_requirement_a"\]' "$tmp/r11_prepare" || { echo "FAIL race11 readiness granted across a requirement change: $(cat "$tmp/r11_prepare")" >&2; exit 1; }
+"${as_owner[@]}" -c "delete from private.account_lifecycle_managed_checkpoints where checkpoint_key = 'race_requirement_a'"
+# Race 12 (reverse order): the readiness is granted but uncommitted when the
+# requirement change arrives. The change waits, then moves the epoch and
+# withdraws the readiness that was just granted.
 u="$(uid 914)"
-ready_login "$u"
-run "begin; $(onboard_sql "$u" d) select pg_sleep(2); commit;" > "$tmp/r12_onboard" 2>&1 &
+deleting_login "$u"
+op="$(operation_of "$u")"
+run "begin; $(prepare_sql "$u" "$op") select pg_sleep(2); commit;" > "$tmp/r12_prepare" 2>&1 &
 sleep 0.5
-run "begin; delete from auth.users where id = '$u'; commit;" > "$tmp/r12_delete" 2>&1 &
+run "begin; insert into private.account_lifecycle_managed_checkpoints values ('race_requirement_b', 'always'); commit;" > "$tmp/r12_registry" 2>&1 &
 wait
-if grep -qi 'error' "$tmp/r12_onboard"; then echo "FAIL race12 onboarding errored: $(cat "$tmp/r12_onboard")" >&2; exit 1; fi
-grep -q 'COMMON_ACCOUNT_DELETE_NOT_AUTHORIZED' "$tmp/r12_delete" || { echo "FAIL race12 delete not refused: $(cat "$tmp/r12_delete")" >&2; exit 1; }
-[[ "$(count "auth.users where id = '$u'")" == 1 && "$(count "public.brand_memberships where user_id = '$u' and role = 'owner'")" == 1 ]] || { echo "FAIL race12 login or ownership lost" >&2; exit 1; }
-"${as_owner[@]}" -c "update private.account_lifecycle_settings set auth_delete_guard = 'shadow', integration_state = 'not_started'"
-echo "COMMON_ACCOUNT_RACE_GUARD_BOUNDARY_PASS orphans=0"
+grep -q '"status": "ready_for_managed_auth_delete"' "$tmp/r12_prepare" || { echo "FAIL race12 prepare: $(cat "$tmp/r12_prepare")" >&2; exit 1; }
+[[ "$("${query[@]}" -c "select current_step || ':' || coalesce(last_error_code, '') from private.account_lifecycle_operations where id = '$op'")" == "cleanup:REQUIREMENT_EPOCH_CHANGED" ]] || { echo "FAIL race12 readiness survived a requirement change" >&2; exit 1; }
+"${as_owner[@]}" -c "delete from private.account_lifecycle_managed_checkpoints where checkpoint_key = 'race_requirement_b'"
+echo "COMMON_ACCOUNT_RACE_REQUIREMENT_CHANGE_PASS"
+
+# Race 13 (H1 F1): a late admin membership is uncommitted when the readiness
+# check arrives. Its insert holds the login row through its foreign key, so
+# prepare waits, then sees the admin and refuses.
+u="$(uid 916)"
+deleting_login "$u"
+op="$(operation_of "$u")"
+run "begin; insert into public.admin_users values ('$u'); select pg_sleep(2); commit;" > "$tmp/r13_admin" 2>&1 &
+sleep 0.5
+run "begin; $(prepare_sql "$u" "$op") commit;" > "$tmp/r13_prepare" 2>&1 &
+wait
+grep -q '"reasons": \["ADMIN_ACCOUNT"\]' "$tmp/r13_prepare" || { echo "FAIL race13 readiness granted past a late admin: $(cat "$tmp/r13_prepare")" >&2; exit 1; }
+# Race 14 (reverse order): the readiness is granted but uncommitted when the
+# admin membership arrives. Phase 1 does not intercept admin_users, so the
+# stored step stays ready -- and the authorization reads as stale, and the
+# next prepare withdraws it. Nothing in Phase 1 authorizes a delete on it.
+u="$(uid 917)"
+deleting_login "$u"
+op="$(operation_of "$u")"
+run "begin; $(prepare_sql "$u" "$op") select pg_sleep(2); commit;" > "$tmp/r14_prepare" 2>&1 &
+sleep 0.5
+run "begin; insert into public.admin_users values ('$u'); commit;" > "$tmp/r14_admin" 2>&1 &
+wait
+grep -q '"status": "ready_for_managed_auth_delete"' "$tmp/r14_prepare" || { echo "FAIL race14 prepare: $(cat "$tmp/r14_prepare")" >&2; exit 1; }
+run "begin; $(eligibility_sql "$u") commit;" > "$tmp/r14_eligibility" 2>&1
+grep -q '"authorization": {"state": "stale", "problems": \["ADMIN_ACCOUNT"\]}' "$tmp/r14_eligibility" || { echo "FAIL race14 stale authorization not reported: $(cat "$tmp/r14_eligibility")" >&2; exit 1; }
+run "begin; $(prepare_sql "$u" "$op") commit;" > "$tmp/r14_prepare2" 2>&1
+grep -q '"reasons": \["ADMIN_ACCOUNT"\]' "$tmp/r14_prepare2" || { echo "FAIL race14 stale readiness refreshed: $(cat "$tmp/r14_prepare2")" >&2; exit 1; }
+"${as_owner[@]}" -c "delete from public.admin_users where user_id in ('$(uid 916)', '$(uid 917)')"
+echo "COMMON_ACCOUNT_RACE_LATE_BLOCKER_PASS"
 
 # A lifecycle call outside READ COMMITTED would not see the state committed
 # during its lock wait: it is refused.
@@ -442,31 +463,46 @@ if grep -qi 'deadlock' "$tmp"/r*; then echo "FAIL deadlock detected" >&2; exit 1
 echo "COMMON_ACCOUNT_NO_DEADLOCK_PASS"
 
 # 6. Rollback runs only from an affirmed shadow state, and then restores the
-#    exact prior schema.
+#    exact prior schema. Each refusal leaves every object in place.
+registry="private.account_lifecycle_managed_checkpoints"
 rollback_refuses() {  # label, expected message
   if out="$("${as_owner[@]}" -f "$rollback" 2>&1)"; then echo "FAIL rollback ran: $1" >&2; exit 1; fi
   grep -qF "$2" <<<"$out" || { echo "FAIL rollback refusal for $1: $out" >&2; exit 1; }
   [[ "$("${query[@]}" -c "select to_regclass('public.common_accounts') is not null and to_regprocedure('private.account_lifecycle_guard_account_delete()') is not null")" == t ]] || { echo "FAIL rollback removed objects: $1" >&2; exit 1; }
 }
-rollback_refuses "deletion in flight" "COMMON_ACCOUNT_ROLLBACK_REFUSED_OPERATION_IN_PROGRESS"
+rollback_refuses "deletion in flight" "COMMON_ACCOUNT_ROLLBACK_REFUSED_OPERATIONS_EXIST"
 # Clear the shadow rows the tests left (shadow mode: plain deletes are allowed).
 "${as_owner[@]}" -c "delete from private.account_lifecycle_operations" -c "delete from public.common_accounts"
-# H1 counterexample 6: no settings row. The guard treats that as enforcing, so
+# H1 counterexample 6: no settings row. The guard treats that as "refuse", so
 # rollback must not treat it as "safe to remove the guard".
 "${as_owner[@]}" -c "delete from private.account_lifecycle_settings"
 rollback_refuses "missing settings row" "COMMON_ACCOUNT_ROLLBACK_REFUSED_SETTINGS_NOT_AFFIRMED"
 "${as_owner[@]}" -c "insert into private.account_lifecycle_settings default values"
-"${as_owner[@]}" -c "update private.account_lifecycle_settings set integration_state = 'started', auth_delete_guard = 'enforce'"
-rollback_refuses "guard enforcing" "COMMON_ACCOUNT_ROLLBACK_REFUSED_GUARD_ENFORCING"
-"${as_owner[@]}" -c "update private.account_lifecycle_settings set auth_delete_guard = 'shadow'"
+"${as_owner[@]}" -c "update private.account_lifecycle_settings set integration_state = 'started'"
 rollback_refuses "integration started" "COMMON_ACCOUNT_ROLLBACK_REFUSED_INTEGRATION_STARTED"
 "${as_owner[@]}" -c "update private.account_lifecycle_settings set integration_state = 'not_started'"
-"${as_owner[@]}" -c "delete from private.account_lifecycle_managed_checkpoints where checkpoint_key = 'storage_cleanup'"
-rollback_refuses "damaged checkpoint registry" "COMMON_ACCOUNT_ROLLBACK_REFUSED_SETTINGS_NOT_AFFIRMED"
-"${as_owner[@]}" -c "insert into private.account_lifecycle_managed_checkpoints values ('storage_cleanup', 'always')"
+# H1 F3: the built-in names are all present, but their meaning was weakened.
+"${as_owner[@]}" -c "alter table $registry disable trigger account_lifecycle_guard_checkpoint_registry" \
+  -c "update $registry set requirement = 'apple_identity' where checkpoint_key in ('session_revocation', 'storage_cleanup')"
+rollback_refuses "built-in checkpoint with a weakened meaning" "COMMON_ACCOUNT_ROLLBACK_REFUSED_REQUIREMENTS_NOT_AFFIRMED"
+"${as_owner[@]}" -c "update $registry set requirement = 'always' where checkpoint_key in ('session_revocation', 'storage_cleanup')" \
+  -c "delete from $registry where checkpoint_key = 'storage_cleanup'"
+rollback_refuses "missing built-in checkpoint" "COMMON_ACCOUNT_ROLLBACK_REFUSED_REQUIREMENTS_NOT_AFFIRMED"
+"${as_owner[@]}" -c "insert into $registry values ('storage_cleanup', 'always')" \
+  -c "alter table $registry enable trigger account_lifecycle_guard_checkpoint_registry" \
+  -c "insert into $registry values ('extension_requirement', 'always')"
+rollback_refuses "extension requirement registered" "COMMON_ACCOUNT_ROLLBACK_REFUSED_REQUIREMENTS_NOT_AFFIRMED"
+"${as_owner[@]}" -c "delete from $registry where checkpoint_key = 'extension_requirement'"
+# A finished operation is enough: it means deletion intent / readiness was used.
+u="$(uid 918)"
+"${as_owner[@]}" -c "select public.fixture_login('$u')" >/dev/null
+run "begin; $(begin_sql "$u" 0) commit;" >/dev/null
+run "begin; $(as_service "select public.abort_common_account_deletion('$u', '$(operation_of "$u")')") commit;" | grep -q '"status": "aborted"' || { echo "FAIL setup aborted operation" >&2; exit 1; }
+rollback_refuses "finished lifecycle operation" "COMMON_ACCOUNT_ROLLBACK_REFUSED_OPERATIONS_EXIST"
+"${as_owner[@]}" -c "delete from private.account_lifecycle_operations" -c "delete from public.common_accounts"
 u="$(uid 915)"
 registered_login "$u"
-rollback_refuses "a client already registered a service" "COMMON_ACCOUNT_ROLLBACK_REFUSED_INTEGRATION_STARTED"
+rollback_refuses "a client already registered a service" "COMMON_ACCOUNT_ROLLBACK_REFUSED_SELF_SERVICE_ENTITLEMENTS_EXIST"
 "${as_owner[@]}" -c "delete from public.service_entitlements" -c "update public.common_accounts set status = 'locked' where user_id = '$u'"
 rollback_refuses "operator hold present" "COMMON_ACCOUNT_ROLLBACK_REFUSED_ACCOUNT_NOT_ACTIVE"
 "${as_owner[@]}" -c "delete from public.common_accounts"
