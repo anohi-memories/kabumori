@@ -3,7 +3,7 @@
 - task_id: common-account-v1-phase0-prod-readonly-inventory-20261001
 - owner: claude
 - slot: claude-5
-- status: in_progress
+- status: review_required
 - next_owner: chatgpt
 - priority: highest
 - start_code: G5
@@ -393,151 +393,273 @@ raw production recordsは貼らない。
 
 ## Report
 
-> **中間報告（2026-10-01 JST）。status は `in_progress` のまま。K5対象ではない。**
-> repository / source inventory は完了。production read-only 集計は**未取得**（下記 `result` 参照）。
-
 - task_id: common-account-v1-phase0-prod-readonly-inventory-20261001
-- result: **PARTIAL（in progress）**。source側（C/D/E/F/G/H の repository 部分）は完了。production側（A/B の集計、C〜G の production 照合）は未実施。理由: このClaudeセッションの auto mode が production read（`supabase db query --linked`）を拒否した。回避は行っていない。ユーザーの許可、またはユーザー自身による実行待ち。
-- checked_main: `5414791`（開始時の fresh `origin/main`）。
-- worktree / isolation: G5専用 worktree（`.claude/worktrees/g5-f7a405`）、branch `claude/g5-common-account-phase0-20261001`（`origin/main` 基点）。他slotの worktree / branch / PR は未変更。用意されていた worktree branch は `origin/main` と分岐した古い基点（2096 commit 遅れ）だったため、`origin/main` から branch を切り直した（旧branchは未変更で残置）。
-- production_mutation: **0**。production read も 0（試行した `select` 1件は実行前に拒否された）。
-- changed_files: `.agent/tasks/CLAUDE_TASK_5.md` のみ。read-only クエリ一式は worktree 内の未追跡ディレクトリ `.g5-phase0/` にあり、commit していない。
-- tests: クエリ10本を、使い捨てのローカルPostgreSQL（偽データのみ、production非接続）で全件実行成功。runner は各ファイルが「単一SELECT・書き込み語なし・`decrypted_secrets` 不使用」であることを実行前に検査する。
-- commit_hash: `ea65135`（in_progress 記録）。本中間報告の commit は push 後に確定。
+- result: **PASS**（Phase 0 の A〜H を repository + production で確認。未確認事項は `remaining_issues` に明記）
+- checked_main: 開始時 `5414791`。Report push 直前に fresh `origin/main` を再確認。
+- worktree / isolation: G5専用 worktree（`.claude/worktrees/g5-f7a405`）、branch `claude/g5-common-account-phase0-20261001`（`origin/main` 基点）。他slotの worktree / branch / PR / TASK は未変更。用意されていた worktree branch は `origin/main` と分岐した古い基点（2096 commit 遅れ）だったため、`origin/main` から branch を切り直した（旧branchは未変更で残置）。
+- production_mutation: **0**。
+- production read の実行者: **ユーザー本人**。Claude セッションの auto mode が production read を拒否したため、G5 は単一SELECTのクエリ10本と runner を用意し、ユーザーが自分の端末で実行した。G5 は出力ファイル（件数・schema metadata・関数定義のみ）を読んだ。回避操作はしていない。
+- changed_files: `.agent/tasks/CLAUDE_TASK_5.md` のみ。クエリ一式と出力は worktree 内の未追跡ディレクトリ `.g5-phase0/` にあり、commit していない。
+- tests: クエリ10本を使い捨てローカルPostgreSQL（偽データのみ）で事前に全件実行成功。production では 9本が初回成功、`03_x_workspace` は production に存在しないテーブルを参照して失敗 → 該当 read-only SQL だけ修正して再実行し成功。runner は実行前に各ファイルが「単一SELECT・書き込み語なし・`decrypted_secrets` 不使用」であることを検査する。
+- commit_hash: 本 Report の commit（push 後の `origin/main` HEAD）。
 - push: `origin/main` へ fast-forward。
 - deploy: none（prohibited）。
 
-### Auth / identity aggregate
+### 最重要 finding（K5 で判断を推奨。修正はしていない）
 
-未取得（production read 待ち）。クエリ `01_auth_identity` を用意済み。出力は件数のみ（user総数、provider別identity数、複数identity保有数、provider組み合わせ、identityなし、email重複グループ数など）。
+1. **Kabumori `account-delete` は production に deploy 済みで ACTIVE**（`verify_jwt = true`、最終更新 2026-09-24）。処理は service role による Auth hard delete 1回だけで、X側（workspace / social account / Vault / X authorization revoke）を一切扱わない。再認証なし、server 側 feature flag なし、audit なし、admin guard なし。
+   - 現在「Kabumori と X の両方を持つ user」は 0人のため、孤児 workspace / 未revoke の X authorization は発生していない。経路は稼働中。
+   - 現在 `admin_users` の 1人は Kabumori の `profiles` と実利用データを持つ。その account が Kabumori アプリの退会を実行すると `admin_users` 行も cascade で消える（X側削除は同じ状況を `ADMIN_ACCOUNT` で block している）。
+2. **X削除の scope 判定は production でも `profiles` 行の有無**（`social_mobile_account_deletion_scope` と `finalize` を production の関数定義で確認）。`profiles` は Kabumori アプリが受け入れた全 session で自動生成されるため、利用登録の証拠として弱い。
+3. **`device_push_tokens` は production でも service_role に SELECT しか grant されていない。** `send-push-notifications` の無効 token DELETE は権限上成立しない（RLS は迂回しても table grant は必要）。今回の範囲外。
 
-source から分かること:
-- Kabumori アプリの login は **email + password のみ**（OAuth / Apple / Google / magic link なし）。
-- social-mobile は email / Google / Apple / X。X・Google は browser OAuth（PKCE）、Apple は iOS native（`signInWithIdToken`）＋他platformは browser。ただし `app.json` に `ios.bundleIdentifier` がなく native Apple は build 未設定。
-- provider は `GET /auth/v1/settings` で有効 かつ `EXPO_PUBLIC_AUTH_PROVIDERS` に宣言されたものだけ表示（default は email のみ）。production の provider enabled 状態は未確認。
+### Auth / identity aggregate（production）
+
+| 項目 | 件数 |
+| --- | --- |
+| Auth user 総数 | 4 |
+| identity 総数 | 4 |
+| provider 別 identity | email 4 / google 0 / apple 0 / x 0 / その他 0 |
+| 複数 identity を持つ user | 0 |
+| provider 組み合わせ | email のみ 4 |
+| identity なし user | 0 |
+| soft-deleted / anonymous / SSO / banned | 0 / 0 / 0 / 0 |
+| email 未確認 / email なし | 0 / 0 |
+| 最終 sign-in | 4人とも直近30日以内 |
+| 同一 email を持つ別 user の組 | 0 |
+| identity email が user email と異なる identity | 0 |
+
+- 異常状態は検出されず。自動 merge 候補の判定は行っていない。
+- `auth.users` への trigger（非internal）は production に存在しない。
+- Auth provider の enabled / callback 設定は未確認（設定読み出しは secret 露出の可能性があるため実施せず）。identity の実績としては email のみ。
+
+source から:
+- Kabumori アプリの login は email + password のみ。
+- social-mobile は email / Google / Apple / X。X・Google は browser OAuth（PKCE）、Apple は iOS native（`signInWithIdToken`）＋他platformは browser。`app.json` に `ios.bundleIdentifier` がなく native Apple は build 未設定。provider は `GET /auth/v1/settings` で有効 かつ `EXPO_PUBLIC_AUTH_PROVIDERS` に宣言されたものだけ表示（default は email のみ）。
 - `unlinkIdentity` は social-mobile のどこからも呼ばれない。`linkIdentity` は login-methods 画面のみ。
 
-### A/B/C/D population aggregate
+### A/B/C/D population aggregate（production、4 user）
 
-未取得（production read 待ち）。クエリ `02_population` を用意済み。3通りの定義で A/B/C/D を出す。
+「あり」の定義を3通りで集計した。
 
-- 定義1: `profiles` 行あり × user-facing workspace の owner membership あり
-- 定義2: `profiles` 行あり × `brand_memberships` 任意
-- 定義3: Kabumori 実利用（下記）あり × user-facing workspace の owner membership あり
+| 定義 | A: Kabumoriのみ | B: Xのみ | C: 両方 | D: どちらもなし |
+| --- | --- | --- | --- | --- |
+| 1. `profiles` 行あり × user-facing workspace の owner | 2 | 1 | 0 | 1 |
+| 2. `profiles` 行あり × `brand_memberships` 任意 | 2 | 1 | 0 | 1 |
+| 3. Kabumori 実利用あり × user-facing workspace の owner | 1 | 1 | 0 | 2 |
 
-### Kabumori legacy classification
+- 定義1と3の差は「`profiles` だけあって実利用の証拠がない user」1人。
+- D（定義1）の 1人は `profiles` も membership も `admin_users` も持たない Auth-only user。
 
-件数は未取得。分類ルールは確定:
+### Kabumori legacy classification（production）
 
-- `profiles` 行は **利用登録の証拠として弱い**。Kabumori アプリが受け入れた全 session で `prepareSession -> ensureProfile -> ensure_my_profile` が走り、`profiles(id)` を無条件に作る（cold start、全 `onAuthStateChange`、sign-in、password recovery link 経由の session を含む）。「Kabumoriを始める」明示ステップは存在しない。
-- `ensure_my_profile` が作るのは `profiles` だけ。`alert_settings` / `alert_category_settings` / `device_push_tokens` / `tracked_stocks` は後続の client 操作で作られる。
-- よって実利用の証拠は: `tracked_stocks`、`alert_settings` が default から変更済み、`alert_category_settings`、`notifications`、`device_push_tokens`、`personalized_reports`。`device_push_tokens` は login ごとに登録されるので「実機でログインした」証拠。
-- email confirmation 前で session がない sign-up は `profiles` を持たない（Auth-only に見える）。
+| 分類 | user 数 |
+| --- | --- |
+| `profiles` あり | 2 |
+| profile のみ（実利用の証拠なし） | 1 |
+| `tracked_stocks` あり（うち active） | 1（1） |
+| `alert_settings` 行あり | 1 |
+| `alert_category_settings` あり | 1 |
+| `notifications` あり | 1 |
+| `device_push_tokens` あり | 1 |
+| `personalized_reports` あり | 1 |
+| `profiles` なしで Kabumori データあり | 0 |
 
-### X legacy classification
+- 実利用の証拠がある 1人が上記すべてを持つ。この user は `admin_users` にも属する。
+- `profiles` 作成時期: sign-up から10分以内 1、それ以降 1。
+- `profiles` は利用登録の証拠として弱い: Kabumori アプリが受け入れた全 session で `prepareSession -> ensureProfile -> ensure_my_profile` が走り `profiles(id)` を無条件に作る（cold start、全 `onAuthStateChange`、sign-in、password recovery link 経由を含む）。「Kabumoriを始める」明示ステップは存在しない。`ensure_my_profile` は production に存在（SECURITY INVOKER、authenticated のみ実行可、本体は repo と一致）。
+- `ensure_my_profile` が作るのは `profiles` だけ。`alert_settings` 等は後続の client 操作で作られる。
+- 注: `alert_settings` の「default から変更済み」判定は初期9列だけを見た（結果 0）。production には `market_critical_news` / `notification_preset` / `emergency_alerts` の3列が追加されており、この3列は判定に含めていない。
 
-件数は未取得。分類ルールは確定:
+### X legacy classification（production）
 
-- 一般ユーザー workspace = `brands.code_profile_key = 'social_mobile_user_v1'` かつ id が `u_` + 24桁hex（`'u_' || substr(md5(user_id), 1, 24)`）、owner membership 1件。
-- internal / legacy = それ以外の `code_profile_key`（`kabumori_v1`、`ai_salaryman_lab_v1` など）。これらの membership と `admin_users` は operator 権限であり、consumer entitlement の backfill 候補に含めない。
-- workspace は login 時ではなく **初回の「Xを連携」開始時**に `begin_social_mobile_x_oauth_connection` が作る。social-mobile に sign-in しただけで連携を押していない user は X側に行が一切ない。
-- sub分類: `connection_status = 'identity_verified'`（連携完了） / `authorization_pending`（開始のみ）。
+workspace（`brands`）4件:
+
+| `code_profile_key` | 種別 | 件数 | `is_active` / `publish_mode` |
+| --- | --- | --- | --- |
+| `social_mobile_user_v1` | 一般ユーザー workspace（id は `u_` + 24桁hex） | 1 | false / disabled |
+| `kabumori_v1` | internal | 1 | true / live |
+| `ai_salaryman_lab_v1` | internal | 1 | true / live |
+| `mio_v1` | internal | 1 | false / disabled |
+
+| 項目 | 件数 |
+| --- | --- |
+| user-facing workspace | 1 |
+| user-facing owner membership / distinct user | 1 / 1 |
+| `brand_memberships` 総数 | 1（internal workspace の membership は 0） |
+| social account 総数 | 3（user-facing 1、internal 2） |
+| `identity_verified` | 3 |
+| `publish_enabled = true` | 2（internal のみ。user-facing は false） |
+| Vault 参照あり（access / refresh） | 2 / 2（user-facing 1、internal 1） |
+| user-facing workspace で予約投稿あり | 0 |
+| `(platform, platform_user_id)` 重複 | 0 |
+
+- `x_autopost` entitlement backfill 候補の定義: `code_profile_key = 'social_mobile_user_v1'` かつ id が本人の derived id（`'u_' || substr(md5(user_id), 1, 24)`）と一致する workspace の owner。該当 1人（`identity_verified`）。
+- internal 3 workspace は membership を持たず、`admin_users` と service role で運用されている。consumer entitlement の対象外。
+- workspace は login 時ではなく初回の「Xを連携」開始時に `begin_social_mobile_x_oauth_connection` が作る。social-mobile に sign-in しただけの user は X側に行がない。
+- production の `begin_social_mobile_x_oauth_connection` は repo の最新定義と一致（rollout runbook 記載の md5 と同じ値）。
 
 ### ownership findings
 
-Kabumori:
-- `profiles.id -> auth.users(id)` ON DELETE CASCADE。
-- `tracked_stocks` / `alert_settings` / `alert_category_settings` / `notifications` / `device_push_tokens` / `personalized_reports` はすべて `user_id -> profiles(id)` ON DELETE CASCADE。`auth.users` を直接参照しない。
-- つまり `profiles` 行の削除だけで Kabumori データは全 cascade し、Auth user は残せる構造。
+production の catalog で確認（source と一致）:
 
-X:
-- chain: `auth.users.id -> brand_memberships(user_id, role='owner') -> brands.id -> social_accounts.brand_id -> vault_*_secret_id -> vault.secrets`。`social_accounts` に user 列はない。
-- `auth.users` への FK（すべて CASCADE）: `profiles.id`、`admin_users.user_id`、`brand_memberships.user_id`、`social_account_oauth_states.initiated_by_user_id`。
-- `brands` / `social_accounts` / Vault secret / refresh state / `scheduled_posts` は `auth.users` を参照しない。
-- `social_accounts` に partial unique index `(platform, platform_user_id) where platform_user_id is not null`。1つのXアカウントは全体で1行にしか結び付かない。
+- `auth.users` への FK（public schema）: `profiles.id`、`admin_users.user_id`、`brand_memberships.user_id`、`social_account_oauth_states.initiated_by_user_id`。すべて ON DELETE CASCADE。
+- `profiles` への FK: `tracked_stocks` / `alert_settings` / `alert_category_settings` / `notifications` / `device_push_tokens` / `personalized_reports`。すべて `user_id -> profiles(id)` ON DELETE CASCADE。`profiles` 行の削除だけで Kabumori データは全 cascade し、Auth user は残せる。
+- `brands` への FK: `brand_memberships` と `daily_content_plans` だけ CASCADE。`social_accounts` / `scheduled_posts` / `post_execution_logs` / `posting_windows` / `publish_claims` / `published_content_fingerprints` / `social_account_oauth_states` / 各 report settings・runs は NO ACTION。
+- `social_accounts` への FK: `social_account_oauth_states` / `x_account_refresh_state_v2` / `x_account_refresh_rollout` / `published_content_fingerprints`。すべて NO ACTION。
+- `brands` / `social_accounts` / Vault secret は `auth.users` を参照しない。X の ownership chain は `auth.users.id -> brand_memberships(user_id, role='owner') -> brands.id -> social_accounts.brand_id -> vault_*_secret_id -> vault.secrets`。`social_accounts` に user 列はない。
+- unique: `social_accounts (brand_id, platform)`、partial unique `(platform, platform_user_id) where platform_user_id is not null`、`brand_memberships (brand_id, user_id)`。1つのXアカウントは全体で1行にしか結び付かない。
 - X login identity の subject と `social_accounts.platform_user_id` を突き合わせる処理は存在しない（login identity と posting authorization は分離済み）。
 
-schema再現性:
-- `brands` / `social_accounts` / `brand_settings` / `social_account_oauth_states` の `create table` は **main の migrations に存在しない**。定義は未マージ branch `feature/multibrand-foundation` と test fixture にしかない。main の migration だけでは production schema を再構築できない。
-- production の実 schema / FK / unique は未照合（クエリ `00_schema_catalog` 待ち）。
+孤児候補（production）:
+
+| 検査 | 件数 |
+| --- | --- |
+| brand のない membership | 0 |
+| brand のない social account | 0 |
+| member のいない user-facing workspace | 0 |
+| owner のいない user-facing workspace / その social account | 0 / 0 |
+| social account のない user-facing workspace | 0 |
+| owner が複数 / member が複数の user-facing workspace | 0 / 0 |
+| 複数の user-facing workspace を持つ user | 0 |
+| id pattern と `code_profile_key` の不一致 | 0 |
+
+schema 再現性:
+- `brands` / `social_accounts` / `brand_settings` / `social_account_oauth_states` の `create table` は main の migrations に存在しない（未マージ branch `feature/multibrand-foundation` と test fixture のみ）。
+- production の migration history は 58 version。repo の migration file は 99。一致は 31（最後の一致は `20260905140638`）。repo にあって history にない 68 件の中には、production に object が存在するもの（`ensure_my_profile`、`brand_memberships`、X OAuth onboarding、削除 candidate など）が含まれる。history にあって repo に file がない version が 27 件。**migration history は適用状態の指標として使えない。**
+- production に未適用と確認できたもの: `social_mobile_content_settings`（table なし）、`scheduled_posts.social_account_id`（列なし = v2 account-bound queue 未適用）。
+- deploy 済みだが main に source directory がない Edge Function: `x-oauth-connect`、`brand-post-dry-run`、`stocks-master-sync`、`stocks-new-listing-sync`。
 
 ### deletion / cascade findings
 
-重要度順。
+Kabumori（`account-delete`、production deploy 済み）:
+- bearer を `/auth/v1/user` で検証し、その user id に対して `DELETE /auth/v1/admin/users/{id}`（hard delete）を1回。request body は読まない。
+- Kabumori データは `profiles` 経由の cascade で消える。
+- 同時に `brand_memberships`、OAuth state、`admin_users` も cascade で消える。`brands` / `social_accounts` / Vault secret は残り、X authorization は revoke されない。
+- 再認証なし（email 再入力は client 側のみ）、feature flag なし、audit なし、admin guard なし、session revoke なし。再試行は「404 を成功扱い」のみ。
 
-1. **Kabumori `account-delete` は Auth hard delete で、X側を知らない。** `DELETE /auth/v1/admin/users/{id}` を service role で1回呼ぶだけ。`brand_memberships` と OAuth state は cascade で消えるが、`brands` / `social_accounts` / Vault secret は孤児として残り、X authorization は revoke されない。再認証なし（email 再入力は client 側のみ）、feature flag なし、audit なし、admin guard なし（`admin_users` も cascade）。production の deploy 状態は未確認（source header は "not deployed by the task that introduced it"）。deploy 済みなら、両サービス利用者が Kabumori から退会した時点で発生する実害。**修正はしていない。**
-2. **X削除の scope は `profiles` 行の有無が proxy。** `social_mobile_account_deletion_scope`: `profiles` あり → `social_only`、なし → `social_and_login`。`finalize` でも同じ判定で `auth.users` を削除。1 と組み合わせると `profiles` 行が事実上の「Kabumori entitlement」になっている。
-3. proxy が生む境界ケース:
-   - X専用 user が Kabumori アプリに一度 sign-in すると `profiles` が自動生成され、以後 X削除は永久に `social_only`（login が残る）。
-   - Kabumori user が social-mobile に sign-in しただけ（workspaceなし）だと `social_only` で消すものがない。
-   - social-mobile のみ・workspaceなしの user は login ごと削除される。
-4. X削除の順序（source）: bearer検証 → 確認文字列 → 直近認証（JWT `amr` 600秒以内）→ scope検証 → tombstone + lease 取得（同時に posting 停止）→ credential 取得 → X revoke（refresh → access）→ fingerprint 照合 → （該当時）Apple revoke → purge（refresh state → OAuth state → posts → `social_accounts` → `vault.secrets` → `brands`）→ finalize。state は `started -> x_revoked -> purged`、`operator_required` で停止。再試行は lease と state で冪等。
-5. X削除の blocker: `ADMIN_ACCOUNT` / `OWNS_OTHER_WORKSPACE` / `WORKSPACE_NOT_SELF_SERVICE` / `SHARED_WORKSPACE` / `WORKSPACE_ROLE_MISMATCH` / `POSTING_IN_PROGRESS` / `CREDENTIAL_REFRESH_IN_PROGRESS` / `CREDENTIAL_OWNERSHIP_AMBIGUOUS`。
-6. feature flag は client 側のみ（`EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED`）。server 側 flag はなく、function が deploy されていること自体が gate。
-7. session pinning は client 側のみ（`userId` + `sessionId` を再認証時に固定）。server は bearer `sub` + lease。
-8. `social_mobile_account_deletions.user_id` は `auth.users` への FK を持たない。進行中 tombstone は Auth user 削除後も残り得る。
+X（`social-mobile-account-delete`、production deploy 済み、`verify_jwt = true`）:
+- scope: `profiles` あり → `social_only`、なし → `social_and_login`。`finalize` でも同じ判定で `auth.users` を削除。
+- 順序: bearer 検証 → 確認文字列 → 直近認証（JWT `amr` 600秒以内）→ scope 検証 → tombstone + lease 取得（同時に posting 停止）→ credential 取得 → X revoke（refresh → access）→ fingerprint 照合 → （該当時）Apple revoke → purge（refresh state → OAuth state → posts → `social_accounts` → `vault.secrets` → `brands`）→ finalize。
+- state: `started -> x_revoked -> purged`、異常時 `operator_required`。lease と state で再試行は冪等。
+- blocker: `ADMIN_ACCOUNT` / `OWNS_OTHER_WORKSPACE` / `WORKSPACE_NOT_SELF_SERVICE` / `SHARED_WORKSPACE` / `WORKSPACE_ROLE_MISMATCH` / `POSTING_IN_PROGRESS` / `CREDENTIAL_REFRESH_IN_PROGRESS` / `CREDENTIAL_OWNERSHIP_AMBIGUOUS`。
+- feature flag は client 側のみ（`EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED`）。server 側は deploy されていること自体が gate。
+- session pinning は client 側のみ。server は bearer `sub` + lease。
+- `social_mobile_account_deletions.user_id` は `auth.users` への FK を持たない。
+
+production の削除実績（audit、件数のみ）:
+- 進行中 tombstone: 0。
+- audit 20 行、distinct subject 2。`requested` 4 / `started` 4 / `x_revoked` 4 / `purged` 4 / `completed_social_only` 3 / `completed`（login も削除）1。`blocked` / `failed` / `operator_required` は 0。
+
+現行の危険な境界:
+1. Kabumori 側の hard delete が X を知らない（上記「最重要 finding 1」）。
+2. `profiles` proxy（「最重要 finding 2」）。境界ケース:
+   - X専用 user が Kabumori アプリに一度 sign-in すると `profiles` が自動生成され、以後 X削除は `social_only`（login が残る）。現在の X専用 user 1人は `profiles` を持たないため、今は `social_and_login` と判定される。
+   - Kabumori user が social-mobile に sign-in しただけ（workspace なし）だと `social_only` で消すものがない。
+   - social-mobile のみ・workspace なしの user は login ごと削除される。
+3. 2つの削除経路が同じ Auth user を別々の条件で hard delete できる。共通の orchestrator がない。
 
 ### RLS / service_role findings
 
-client RLS（Kabumori）: 全 policy が `auth.uid() = user_id`（`profiles` は `= id`）のみ。共有 Auth project の authenticated user なら誰でも通る。service 利用登録の検査はどこにもない。
+production の policy は source と一致。対象 22 table はすべて RLS enabled（forced ではない）。
 
-client RLS（X）: `brand_memberships` は self-select のみ。`brands` / `social_accounts` / `scheduled_posts` / `post_execution_logs` / `posting_windows` は membership（任意role）で select。`social_mobile_content_settings` は owner のみ。書き込みは SECURITY DEFINER RPC 経由。
+client RLS（Kabumori）: `profiles` は `auth.uid() = id`、他 6 table は `auth.uid() = user_id`（`personalized_reports` は加えて `status = 'completed'` と `fact_status = 'passed'`）。共有 Auth project の authenticated user なら誰でも通る。service 利用登録の検査はない。
 
-将来「ownership条件 + entitlement active」が必要になる候補:
+client RLS（X）: `brand_memberships` は self-select のみ。`brands` / `social_accounts` / `scheduled_posts` / `post_execution_logs` / `posting_windows` は membership（任意 role）で select。admin 用 policy（`private.is_admin()`）が `scheduled_posts` / `post_execution_logs` / `posting_windows` に並存。書き込みは SECURITY DEFINER RPC 経由。
 
-- Kabumori client path: 上記7テーブルの全 policy、`ensure_my_profile`、`set_my_important_news_alert_preferences`、`get_my_important_stock_news`、`get_daily_kabumori_tip`（user検査が一切ない SECURITY DEFINER）。
-- Kabumori service_role producer（RLS迂回）: `claim_pending_push_notifications`、`enqueue_important_news_notifications`（wrapper と base）、`enqueue_personalized_report_notification`、`personalized_report_news_inputs`、`important_news_app_copy_targets`、`personalized-reports` function の `tracked_stocks` cohort query。**どの producer も `profiles` を列挙しない。** population の鍵は `tracked_stocks` / `alert_settings` / pending `notifications` / `device_push_tokens`。
-- X client path: `begin_social_mobile_x_oauth_connection`（authenticated なら誰でも workspace を作れる）、`consume_` / `complete_social_mobile_x_oauth_connection`、membership select policy 群。
-- X service_role path: `x-test-post` dispatcher（repo 定義の `claim_due_post` は brand filter なしで最古の pending を取る。production の本体は異なる可能性があり未照合）、Vault credential / refresh RPC、v2 queue（source のみ、未配線）、`read_social_mobile_history_access_token`（user + owner membership を見る唯一の service-role path）。一般ユーザー `u_` workspace は現状 publish できない（inactive/disabled で作成され、dispatch branch が特定 brand を要求する）。この経路を開ける時点が entitlement 検査の挿入点。
+`auth.uid()` を使う production 関数（8件）: `private.is_admin`、`begin_` / `consume_` / `complete_social_mobile_x_oauth_connection`（DEFINER、authenticated のみ）、`ensure_my_profile`（INVOKER）、`set_my_important_news_alert_preferences`（INVOKER）、`get_my_important_stock_news`（DEFINER）、`get_my_important_stock_news_phase5_base`（DEFINER、どの role にも実行権なし）。
 
-付随的な気付き（今回の範囲外、未修正）:
-- `device_push_tokens` は service_role に SELECT しか grant していないが、`send-push-notifications` は無効 token を DELETE し結果を検査していない。production grant が source と同じなら cleanup が黙って失敗している可能性。production 照合待ち。
-- `social_accounts` の SELECT grant は table 全体。member は Vault secret id 列（参照値であり secret 本体ではない）を読める。client は非secret列だけ select している。
+`social_mobile_account_deletion_*` は production で service_role のみ実行可（内部 helper はどの role にも実行権なし）。authenticated / anon からは実行不可。
 
-### OAuth / Vault findings（secretなし）
+将来「ownership 条件 + entitlement active」が必要になる候補:
+
+- Kabumori client path: 上記 7 table の全 policy、`ensure_my_profile`、`set_my_important_news_alert_preferences`、`get_my_important_stock_news`、`get_daily_kabumori_tip`（user 検査のない SECURITY DEFINER）。
+- Kabumori service_role producer（RLS 迂回）: `claim_pending_push_notifications`、`enqueue_important_news_notifications`（wrapper と base）、`enqueue_personalized_report_notification`、`personalized_report_news_inputs`、`important_news_app_copy_targets`、`personalized-reports` function の `tracked_stocks` cohort query。どの producer も `profiles` を列挙しない。population の鍵は `tracked_stocks` / `alert_settings` / pending `notifications` / `device_push_tokens`。production の cron に `send-push-notifications-dispatch`（毎分）、`personalized-reports-morning` / `-close`（平日）が存在。
+- X client path: `begin_social_mobile_x_oauth_connection`（authenticated なら誰でも workspace を作れる）、`consume_` / `complete_`、membership select policy 群。
+- X service_role path: `x-test-post` dispatcher（repo 定義の `claim_due_post` は brand filter なしで最古の pending を取る。production の本体は未照合）、Vault credential / refresh RPC、`read_social_mobile_history_access_token`（user + owner membership を見る唯一の service-role path）。production の cron に `dispatch-scheduled-posts`（毎分）が存在（job 名からの推定。command 列は読んでいない）。一般ユーザー `u_` workspace は現状 publish できない（inactive / disabled、予約投稿 0）。この経路を開ける時点が entitlement 検査の挿入点。
+
+付随的な気付き（範囲外、未修正）:
+- `device_push_tokens`: service_role は SELECT のみ（「最重要 finding 3」）。
+- `social_accounts` の SELECT grant は table 全体。member は Vault secret id 列（参照値）を読める。client は非secret 列だけ select している。
+- `TRUNCATE` / `REFERENCES` / `TRIGGER` が `authenticated` に残っている table が多い（`profiles`、`tracked_stocks`、`alert_settings`、`brand_memberships` など）。`anon` にも `admin_users` / `scheduled_posts` / `post_execution_logs` / `posting_windows` / `daily_content_plans` で残っている。Data API には TRUNCATE を発行する手段がないため直ちに悪用可能とは考えにくいが、検証はしていない。entitlement 用の新 table では明示的に revoke することを推奨。
+
+### OAuth / Vault findings（secret なし）
 
 - posting token 本体は `vault.secrets`。`social_accounts.vault_access_token_secret_id` / `vault_refresh_token_secret_id` は参照のみ。
-- transient state は `social_account_oauth_states`（`state_hash`、`redirect_uri`、`expires_at`、`initiated_by_user_id`）。PKCE verifier は server に保存しない（`code_verifier_vault_secret_id` は null で insert）。consume / complete は `initiated_by_user_id = auth.uid()` を検査。行は `consumed_at` を付けるだけで削除されず、消すのは削除 purge のみ。
-- `x-oauth-connect-user` は service role を使わない（user JWT で RPC）。
-- refresh は dispatcher 側のみ（env gate + account 単位 rollout）。connect function では refresh しない。
-- legacy Kabumori 投稿は `oauth_token_store`（暗号化済み列）+ env token で、Vault ではない。
-- reference 件数、orphan reference、transient state の集計は未取得（クエリ `03` / `04` 待ち）。`04` は `vault.secrets` の `id` 列だけを比較し、secret 本体・name・復号 view には触れない。
+- `x-oauth-connect-user` は service role を使わず user JWT で RPC を呼ぶ。refresh は dispatcher 側のみ。
+- legacy Kabumori 投稿は `oauth_token_store`（暗号化済み列、production に 1 行）+ env token で、Vault ではない。internal social account 1件は `identity_verified` だが Vault 参照を持たない（この legacy 経路）。
+
+production 集計（`vault.secrets` は `id` 列のみ比較。secret 本体・name・復号 view は読んでいない）:
+
+| 項目 | 件数 |
+| --- | --- |
+| `vault.secrets` 総数 | 20 |
+| access 参照 / うち orphan | 2 / 0 |
+| refresh 参照 / うち orphan | 2 / 0 |
+| 複数 account が共有する参照 | 0 |
+| OAuth state の verifier 参照 / うち orphan | 10 / 0 |
+| consume 済みまたは期限切れなのに Vault に残る verifier | 10 |
+| 上記3列から参照されない secret | 6（用途未調査） |
+| `x_account_refresh_state_v2` 行 | 1 |
+
+OAuth transient state（22 行）:
+
+| 所有 | 状態 | 件数 | initiator | verifier 参照 |
+| --- | --- | --- | --- | --- |
+| user-facing workspace | consumed | 6 | あり | なし |
+| user-facing workspace | 期限切れ・未consume | 6 | あり | なし |
+| internal workspace | consumed | 6 | なし | あり |
+| internal workspace | 期限切れ・未consume | 4 | なし | あり |
+
+- user-facing の state は `initiated_by_user_id` を持ち、PKCE verifier を server に保存しない（source と一致）。
+- internal の 10 行は admin 用 connect（`x-oauth-connect`、main に source なし）由来とみられ、verifier を Vault に保存し、完了・期限切れ後も 10 件すべて残っている。
+- state 行は consume / 期限切れ後も削除されない。消すのは X削除の purge だけ。定期 cleanup は存在しない。
 
 ### Apple revoke readiness
 
-- 実装は social-mobile の削除 function のみ（`apple_revoke.ts`）。authorization code を token endpoint で交換 → `id_token` の subject が本人の Apple identity であることを確認 → revoke endpoint。
-- 適用条件は `scope === 'social_and_login'` かつ provider に apple を含む場合のみ。`social_only` では revoke しない。
-- 必要 env（`APPLE_TEAM_ID` / `APPLE_KEY_ID` / `APPLE_CLIENT_ID` / `APPLE_PRIVATE_KEY`）がなければ `APPLE_REVOCATION_UNAVAILABLE` で fail closed。production の設定有無は未確認。
-- sign-in 時の authorization code は破棄、Apple refresh token は保存していない。削除時に native iOS で再認証して code を取り直す前提（他platformは「iPhoneアプリで」と案内）。
+- 実装は `social-mobile-account-delete` のみ（`apple_revoke.ts`）。authorization code を token endpoint で交換 → `id_token` の subject が本人の Apple identity であることを確認 → revoke endpoint。
+- 適用条件は `scope === 'social_and_login'` かつ provider に apple を含む場合だけ。`social_only` では revoke しない。
+- 必要 env がなければ `APPLE_REVOCATION_UNAVAILABLE` で fail closed。production の env 設定有無は未確認（secret 一覧は読んでいない）。
+- sign-in 時の authorization code は破棄、Apple refresh token は保存していない。削除時に native iOS で再認証して code を取り直す前提。
 - native Apple は build 未設定（`ios.bundleIdentifier` なし）。
+- production の Apple identity は **0 件**。現時点で Apple revoke が必要な user はいない。
 - Kabumori `account-delete` に Apple revoke はない（Kabumori アプリに Apple login がないため現状は不要）。
-- 共通アカウントの完全削除では、この revoke を service 単位ではなく共通アカウント層へ移す必要がある。
+- 共通アカウントの完全削除では、この revoke を service 単位ではなく共通アカウント層へ移す必要がある。Apple login を公開する前に実装・検証が必要。
 
-### ambiguous migration population
+### ambiguous migration population（production）
 
-件数は未取得。曖昧になる集団の定義は確定:
+| 集団 | 件数 |
+| --- | --- |
+| `profiles` のみで実利用の証拠がない user | 1 |
+| `profiles` と user-facing workspace の両方を持つ user | 0 |
+| Auth-only（どちらもなし） | 1 |
+| `admin_users` に属する user（Kabumori 実利用あり） | 1 |
+| internal workspace の membership を持つ user | 0 |
+| 同一 email の別 user / identity email の不一致 | 0 / 0 |
 
-- `profiles` のみで実利用の証拠がない user（自動生成か実利用か判別不能）。
-- `profiles` あり かつ user-facing workspace owner で、`profiles` の作成が membership より後（X user が Kabumori アプリを開いただけの可能性）。
-- Auth-only（D）。X側に行がない social-mobile sign-up、email未確認の Kabumori sign-up、admin 専用 account が混在し、DBからは区別できない。
-- internal workspace の membership / `admin_users` を持つ account。
-- 同一 email を持つ別 Auth user、identity email が user email と異なる identity（件数のみ取得予定。自動 merge はしない）。
+manual review 対象は 4人中 2人（profile のみ 1、Auth-only 1）。Auth-only の 1人が social-mobile の sign-up なのか Kabumori の sign-up なのかは DB から区別できない。
 
 ### recommended backfill rules（案。backfill は未実行）
 
-- `common_accounts`: `auth.users` 1行につき1行。merge しない。email 一致での統合はしない。
-- `kabumori` entitlement: `profiles` 行を持つ全 user を `active` で backfill（既存アクセスを壊さない側に倒す）。`source = 'legacy_profile'` と、実利用の証拠有無（`evidence`）を併記し、後から弱い候補だけ見直せるようにする。
-- `x_autopost` entitlement: user-facing workspace（`social_mobile_user_v1` かつ id が本人の derived id と一致）の owner を backfill。`identity_verified` と `authorization_pending` を区別して記録。internal workspace の membership と `admin_users` は対象外。
-- Auth-only: `common_accounts` のみ。entitlement は作らず、次回その app で認証した時の service 利用登録で作る。
-- manual review: 上記 ambiguous 集団。件数が出てから閾値を決める。
-- rollback: 新規テーブルの追加のみで既存列・既存 policy を変えないため、shadow 段階は drop で戻せる。
+| 規則 | 現時点の該当数（dry-run） |
+| --- | --- |
+| `common_accounts`: `auth.users` 1行につき1行。merge しない | 4 |
+| `kabumori` entitlement: `profiles` 行を持つ user を `active` で backfill。`source = 'legacy_profile'` と実利用の証拠有無を併記 | 2（証拠あり 1、profile のみ 1） |
+| `x_autopost` entitlement: user-facing workspace（`social_mobile_user_v1` かつ derived id 一致）の owner。`identity_verified` / `authorization_pending` を区別 | 1（`identity_verified`） |
+| entitlement なし（`common_accounts` のみ）。次回その app で認証した時の利用登録で作る | 1 |
+| manual review | 2 |
+
+- internal workspace の membership と `admin_users` は entitlement の対象外。admin が Kabumori を使っている場合は通常の `kabumori` entitlement を別途持つ（現状 1人）。
+- email 一致での統合はしない。
+- rollback: 新規 table の追加のみで既存列・既存 policy を変えないため、shadow 段階は drop で戻せる。
 - 導入順: shadow table + backfill（誰も読まない）→ dual-write（`ensure_my_profile` と `begin_social_mobile_x_oauth_connection` で entitlement を同時作成）→ parity 監視 → 削除 scope 判定を entitlement に切替 → RLS / producer の enforcement を flag 付きで最後に。
+- population が 4人と小さいため、backfill は件数照合を全数で行える。
 
 ### proposed implementation phases
 
-1. schema 追加（`common_accounts` / `service_entitlements`、self-select RLS、client 書き込み不可、service 利用登録 RPC）。production は migration history が source とずれているため、単一ファイルを preflight 付きで適用（`db push` 不可）。
+1. schema 追加（`common_accounts` / `service_entitlements`、self-select RLS、client 書き込み不可、`TRUNCATE` 等を明示 revoke、service 利用登録 RPC）。production は migration history が source とずれているため、単一ファイルを preflight 付きで適用（`db push` 不可）。
 2. shadow backfill + dual-write + parity query。
-3. 削除境界: X削除 scope の `profiles` proxy を entitlement に置換。Kabumori 退会を「`profiles` 削除（cascade）+ kabumori entitlement 終了」に変更し、Auth hard delete は「active entitlement が他にない」場合だけ共通の orchestrator 経由（X revoke / Vault purge / Apple revoke を含む）で行う。
+3. 削除境界: X削除 scope の `profiles` proxy を entitlement に置換。Kabumori 退会を「`profiles` 削除（cascade）+ kabumori entitlement 終了」に変更し、Auth hard delete は「active entitlement が他にない」場合だけ共通の orchestrator 経由（X revoke / Vault purge / Apple revoke / admin guard / 再認証 / audit を含む）で行う。Kabumori `account-delete` は deploy 済みのため、この Phase を待たずに admin guard と X workspace 保有時の fail-closed だけ先行する選択肢がある。
 4. 登録 / login UX: 各 app に service 利用登録ステップ、enumeration-safe な文言、Kabumori の `profiles` 自動生成を明示登録へ。
 5. enforcement: RLS と service_role producer に entitlement active 条件を flag 付きで追加。
 
@@ -567,23 +689,42 @@ admin: `apps/admin` は同じ Auth + `admin_users`。`profiles` を参照しな�
 
 ### conflicts / pending PRs affecting implementation
 
-- PR #65（G4、merge 保留）: `use-x-connect.ts`、`onboarding-gate.tsx`、`accounts/index.tsx` を変更。X posting OAuth start / provisioning の候補ファイルと重なる。
-- G3 branch `claude/g3-deletion-ui-finish-20261001`（in_progress）: `login-methods.tsx`、`(tabs)/settings.tsx` を変更。login methods / 削除導線の候補と重なる。
-- PR #41（Stage 3B prep）: `x-test-post/index.ts` と X account publish authority の新 migration。X service_role path の候補と重なる。
-- PR #66（H2 review中）: `x-test-post/index.ts`。
-- PR #33（admin password recovery）: `apps/admin` の auth 経路。
-- PR #67（G2）: 候補ファイルとの重なりは検出されず。
-- 実装 Phase は #65 と G3 の決着後に着手するのが安全。G5 はいずれも変更していない。
+Report 時点の fresh `origin/main` と open PR で確認。
 
-### tests / checks / read-only queries used（secret / PIIなし）
+- PR #65（G4、open、merge 保留）: `use-x-connect.ts`、`onboarding-gate.tsx`、`accounts/index.tsx`。X posting OAuth start / provisioning の候補と重なる。
+- PR #68（G3 の削除 UI 仕上げ、open）: `login-methods.tsx`、`(tabs)/settings.tsx`。login methods / 削除導線の候補と重なる。
+- PR #41（Stage 3B prep、open）: `x-test-post/index.ts` と X account publish authority の新 migration。X service_role path の候補と重なる。
+- PR #33（admin password recovery、open）: `apps/admin` の auth 経路。
+- PR #66 / #67 は調査中に merge 済み。merge 後の main でも、Auth / 削除 / X OAuth / social-mobile / migrations の候補ファイルに変更はない。#66 が触れた `x-test-post/index.ts` は X service_role path の候補。
+- 実装 Phase は #65 と #68 の決着後に着手するのが安全。G5 はいずれも変更していない。
 
-- source 調査: Kabumori 側・X 側を別々に read-only で棚卸し（path:line 付き）。削除 scope 判定、finalize、`account-delete`、`ensure_my_profile`、AuthProvider、workspace 作成 RPC、Apple revoke 条件、unique index は G5 が直接再読して確認。
-- production クエリ（未実行）: `00_schema_catalog`（catalog のみ）、`01_auth_identity`、`02_population`、`03_x_workspace`、`04_vault_reference_integrity`、`05_deletion_state`、`06_migration_history`、`07_cron_jobs`（command 列は取得しない）、`08_key_function_definitions`、`09_legacy_token_store`、および `supabase functions list`。出力は件数・schema metadata・関数定義のみ。
+### tests / checks / read-only queries used（secret / PII なし）
+
+- source 調査: Kabumori 側・X 側を read-only で棚卸し（path:line 付き）。削除 scope 判定、finalize、`account-delete`、`ensure_my_profile`、AuthProvider、workspace 作成 RPC、Apple revoke 条件、unique index、再認証窓は G5 が直接再読して確認。
+- production クエリ（ユーザー実行、すべて単一 SELECT）:
+  - `00_schema_catalog`: table / 列 / FK / unique / policy / grant / 関数の属性 / `auth.users` trigger（catalog のみ）
+  - `01_auth_identity`: user・identity の件数集計
+  - `02_population`: A/B/C/D と Kabumori / X の flag 別件数
+  - `03_x_workspace`: workspace / membership / social account / OAuth state の件数と孤児検査
+  - `04_vault_reference_integrity`: 参照の件数と orphan（`vault.secrets.id` のみ）
+  - `05_deletion_state`: tombstone と audit の件数
+  - `06_migration_history`: 適用済み version 一覧
+  - `07_cron_jobs`: job 名・schedule・active（command 列は取得しない）
+  - `08_key_function_definitions`: 境界関数 12 件の定義
+  - `09_legacy_token_store`: 行数のみ
+  - `supabase functions list`: Edge Function の name / version / status / `verify_jwt` / 更新時刻
 - GitHub: open PR の変更ファイル一覧を read-only で確認。
 
 - remaining_issues:
-  - production 集計と production 照合がすべて未取得（上記の「未取得」項目）。
-  - production の function deploy 状態（特に `account-delete`）、migration 適用履歴、Auth provider 設定、Apple revoke env の有無。
-  - `x-test-post` の起動元 cron は repo 外で設定されている可能性（source に `cron.schedule` なし）。
-- safety_checks: production mutation 0。production read 0。Vault secret 読み取り 0。Auth / identity / OAuth / deploy / merge / flag 変更 0。他slotの TASK / branch / PR 変更 0。source / runtime code 変更 0。Report に email / UUID / handle / platform user id / token / secret を含めていない。
-- next_recommendation: production read の扱いをユーザーが決める（G5 に read を許可する、またはユーザーが `.g5-phase0/run.sh` を実行して出力を G5 に渡す）。出力が揃い次第、G5 が件数を埋めて `review_required` にする。`account-delete` の deploy 状態が「deploy 済み」と確認できた場合は、K5 で H1/H2 review 要否の判断を推奨（上記 deletion finding 1）。
+  - Auth provider の enabled / redirect 設定は未確認（identity 実績は email のみ）。
+  - Apple revoke 用 env、その他 function secret の設定有無は未確認。
+  - `x-test-post` を起動する cron の command 本体、production の `claim_due_post` 本体は未照合。
+  - Vault の「参照されない 6 secret」と、残存する verifier 10 件の用途・要否は未調査（値は読んでいない）。
+  - deploy 済み function の code が main と一致するかは未照合（version と更新時刻のみ）。
+  - `alert_settings` の追加3列は「変更済み」判定に含めていない。
+  - Auth-only の 1人がどの app 由来かは DB から判別不能。
+- safety_checks: production mutation 0。G5 による production 接続 0（read はユーザーが実行）。Vault secret 値の読み取り 0。Auth / identity / OAuth / deploy / merge / flag / Cron 変更 0。backfill 0。他slotの TASK / branch / PR / 作業ファイル変更 0。source / runtime code 変更 0。Report に email / user UUID / X handle / platform user id / token / JWT / secret / Vault 参照の生値を含めていない。
+- next_recommendation:
+  1. K5 で、deploy 済み `account-delete` の扱い（admin guard と X workspace 保有時の fail-closed を先行するか、共通 orchestrator まで待つか）を判断。Auth 削除境界のため H1/H2 review 対象を推奨。
+  2. 共通アカウント v1 Phase 1（additive schema + shadow backfill 設計）を別 TASK で起票。#65 と G3 の決着後に着手。
+  3. `device_push_tokens` の service_role grant、残存 verifier secret と OAuth state の cleanup は別件として起票を検討。
