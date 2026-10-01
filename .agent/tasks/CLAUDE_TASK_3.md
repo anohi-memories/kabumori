@@ -707,3 +707,21 @@ Unexpected residue: **none**.
 - remaining non-blocking findings: accounts screen has a similar styling issue in a G4-owned file; Settings 「会話で相談する」 and similar Link-asChild non-forwarding children need a separate UI follow-up.
 - app binary/TestFlight release was not performed by this task; merge makes the source ready for the next native build.
 - G3 closed and reusable only after fresh allocation.
+
+
+## Final K3 — native Link navigation cleanup
+
+- verdict: **PASS**.
+- accepted PR #73 exact head: `645923ba87c8667073061d13a2fc46bbb31ebcbe`.
+- squash merged as `a81a60bb731e2c51aa907b4cc08234cb602c4f6a`.
+- scope remained UI/navigation-only: history, schedule, Settings, Accounts and the focused navigation regression test.
+- native Release-like Simulator verification confirmed all previously dead targets now navigate correctly and the Accounts 「ログイン方法」 card styling is restored.
+- audit accepted: all broken `Link asChild > Card/View` and function-style direct-child cases in app/components were fixed; remaining ActionButton cases are safe because they forward onPress to Pressable.
+- tests: social-mobile 113/113 PASS; typecheck PASS; lint PASS; git diff --check PASS.
+- no x-connect/OAuth/Auth/account-deletion/common-account/DB/RLS/RPC/Edge/Vault/flag/scheduler change.
+- production mutation: 0; real X operations: 0; deploy: none.
+- extra Codex review: not required because the final delta is narrow UI/navigation-only, shared primitives were not changed, and native before/after verification passed.
+- Netlify preview succeeded. Vercel status failure was only the known free-tier build-rate-limit and is not a candidate-quality failure for this native UI PR.
+- remaining UI issue: `/accounts/[id]` is now reachable but lacks a visible top header/back button; edge-swipe works. Treat separately as route/navigation polish.
+- no TestFlight/App Store/native production build was released by this task.
+- G3 closed and reusable after fresh allocation.
