@@ -1,3 +1,13 @@
+## G5 assigned — Common Account v1 Phase 0 read-only inventory
+
+- task_id: `common-account-v1-phase0-prod-readonly-inventory-20261001`
+- status: **ready**
+- scope: repository + production read-only migration preflight for shared account/Auth: provider aggregates, Kabumori/X A-B-C-D population, legacy entitlement candidates, ownership, RLS/service_role, deletion/cascade, OAuth/Vault boundary, Apple revoke readiness, and future registration/login impact map.
+- strict safety: no implementation, migration, RLS/Auth change, identity link/unlink, OAuth revoke, Vault secret read/mutation, deploy, backfill, account deletion or other production mutation.
+- concurrency: G5 was genuinely unassigned before allocation. G1/G2/G3/G4 and H1/H2 currently have separate workstreams. G3 account-deletion UI cleanup and G4 posting-OAuth auth-session scope must not be edited or merged by G5. Dedicated G5 worktree/checkout and fresh competition check required at start.
+- completion: update G5 Report, status -> review_required, then STOP for K5.
+- recommended model: **Opus5.5（極高）**.
+
 ## G3 assigned — finish social-mobile account deletion UI
 
 - task: `x-social-mobile-account-deletion-ui-release-finish-20261001`
