@@ -2964,3 +2964,10 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - Codex review: not required for this UI-only scope.
 - G1 is now free after fresh allocation.
 
+## K1 diary follow-up — Kabumori Hero 8-state — 2026-10-02
+- public-safe development-diary candidate exists for the completed Kabumori Hero work.
+- canonical diary already has a real 2026-10-02 entry and its documented contract is one entry per day.
+- no duplicate same-day entry and no future-dated 2026-10-03 entry were created.
+- candidate text is preserved in the current G3 Report for possible later reuse.
+- source/runtime diary files unchanged; production mutation 0.
+
