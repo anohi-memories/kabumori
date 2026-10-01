@@ -3,8 +3,8 @@
 - task_id: x-ai-lab-pr66-topic-dedup-review-20261001
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Luna（高）
 - target: PR #66 exact head `4f692e4d805ccd3ee628058bb20ee6c1f62cdd6d`
