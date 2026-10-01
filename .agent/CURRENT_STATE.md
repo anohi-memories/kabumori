@@ -1,3 +1,16 @@
+## Final K5 — Common Account v1 Phase 1
+
+- verdict: **PASS to focused Codex review; merge/apply/deploy HOLD**.
+- G5 source candidate: PR #70 exact head `89cf128bd9219897806b2b641cce4866f6e16c52`, open/mergeable, 7 files, additive migration/tests/docs only.
+- candidate adds common account + service entitlement + lifecycle serialization primitives, shadow backfill, least-privilege RLS/grants, deletion guard shadow mode, rollback and disposable race tests.
+- reported verification includes 16 lifecycle runner checks, 8 two-session race scenarios, 10 mutation-defect detections, rollback byte-match/reapply, existing social-mobile deletion regression and migration invariant checks.
+- production mutation/read from G5: 0; no migration/backfill/deploy/Auth/OAuth/Vault/Cron/flag changes.
+- fresh overlap check: PR #70 base-to-main change only touched G5 control file; no PR runtime overlap. G4 PR #65 files remain untouched.
+- H1 assigned `common-account-pr70-lifecycle-foundation-review-20261001` with **Sol（高）**. Focus: SQL Auth deletion semantics, lifecycle serialization, guard trigger, ACL/RLS/SECURITY DEFINER, backfill, preflight/rollback, Supabase compatibility.
+- no source merge or production apply is authorized by K5.
+- if H1 accepts the candidate, production preflight/apply still requires a separate **Sol（極高）** review and explicit approval.
+- AI Lab diary: 候補あり — 共通ログインとサービスごとの利用登録を分け、利用開始と全体削除の同時実行まで競合テストした進捗を2026-10-01の公開安全な日記へ反映。
+
 ## K4 HOLD 2 — PR #65 isolated provider proof
 
 - PR #65 remains open / mergeable at exact reviewed head `e5a66f5ba71f64b1a38d8f89faff3d0a31972949`; GitHub checks are green.
