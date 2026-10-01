@@ -38,24 +38,35 @@ export const HOME_COLORS = {
   important: '#d6403f',
 } as const;
 
-// Compact Report Hero geometry (pt). The Hero is a layered block: the character is an independent
-// absolute layer on the right (resting on the CTA row, behind the text), while the title block and a
-// compact points box sit on the left. The character never drives the Hero height.
+// Report Hero layout (pt / shares). The Hero is one piece of artwork with live UI laid over it (see
+// src/lib/home-hero-geometry.ts): the points column sits under the baked-in 「今日のポイント」 line, on
+// the left, clear of the character that occupies the right ~half of the art.
 export const HERO = {
+  /** Corner radius; a little above the ~3.5% radius baked into the art so its white corners are clipped. */
+  radius: 14,
+  /** Colour under/below the art when the live points make the Hero taller than the art. */
+  fillColor: '#e4f0e6',
+  /** Bottom padding under the CTA and its side margins. */
   padding: 10,
   ctaHeight: 34,
-  /** Space between the points box and the CTA row. */
-  ctaGap: 6,
-  /** Title / description column, as a share of the Hero width. */
-  titleColumnPercent: '58%',
-  /** Points box, as a share of the Hero width (a little of the wand tip may tuck behind it). */
-  pointsColumnPercent: '58%',
-  /** Character layer width, as a share of the Hero width. */
-  characterWidthPercent: '50%',
-  /** Right offset (pt) of the character layer inside the Hero. */
-  characterRight: -2,
-  /** Keeps the layered composition while the Hero has little text (loading / empty). */
-  minHeight: 232,
-  /** Maximum "today's points" shown on Home. */
+  /** Minimum space between the last point and the CTA. */
+  ctaGap: 4,
+  /**
+   * When the live points make the Hero taller than the art, the art's bottom edge ends inside the card.
+   * It is hidden by a soft fade to the fill colour drawn over the art AND the character: a ramp of
+   * non-overlapping strips (no banding) that is fully opaque for the last `fadeSolid` pt, which also
+   * hides the character's bottom edge and the art's baked white corners.
+   */
+  fadeStrips: 20,
+  fadeStripHeight: 2,
+  /** Strips (counted from the bottom) that are fully opaque. */
+  fadeSolidStrips: 9,
+  /** Points column: left edge and width as shares of the Hero width (the baked underline spans 4.8%-44.8%). */
+  pointsLeft: '4.8%',
+  pointsWidth: '42%',
+  /** Report kind (朝刊 / 大引け), right after the baked 「今日のポイント」 label. */
+  metaLeft: '31.5%',
+  metaTop: '44.3%',
+  /** Maximum "today's points" shown on Home (1-3 are shown; never an empty row). */
   maxPoints: 3,
 } as const;

@@ -33,33 +33,61 @@ test("the huge greeting heading is gone: the header is compact", async () => {
   assert.ok(!/bell|通知/.test(header.replace(/アカウント・通知・規約・ログアウトの設定を開きます/, "")), "no fake notification control");
 });
 
-test("asset slots: the header logo is wired; Hero and topic backgrounds stay empty until the art exists", async () => {
+test("asset slots: header logo and Hero background are wired; the topic background stays empty until the art exists", async () => {
   const header = await read("src/components/home/home-header.tsx");
   assert.ok(/export const HEADER_LOGO_SOURCE: ImageSource = require\('@\/assets\/images\/home\/kabumori_header_logo\.webp'\);/.test(header));
   assert.ok(/HEADER_LOGO_SLOT = \{ width: 132, height: 34 \}/.test(header));
   assert.ok(header.includes('contentFit="contain"'), "logo is shown uncropped");
-  for (const [path, name] of [
-    ["src/components/home/home-report-hero.tsx", "HERO_BACKGROUND_SOURCE"],
-    ["src/components/home/home-topic-feature.tsx", "TOPIC_BACKGROUND_SOURCE"],
-  ]) {
-    const text = await read(path);
-    assert.ok(new RegExp(`export const ${name}: ImageSource \\| null = null;`).test(text), `${name} slot`);
-    assert.ok(!/require\('@\/assets\/images\/home\//.test(text.replace(/\/\/.*$/gm, "")), `${path} must not require a missing home asset`);
-  }
+  const hero = await read("src/components/home/home-report-hero.tsx");
+  assert.ok(/export const HERO_BACKGROUND_SOURCE: ImageSource = require\('@\/assets\/images\/home\/report_hero_background\.webp'\);/.test(hero));
+  const topic = await read("src/components/home/home-topic-feature.tsx");
+  assert.ok(/export const TOPIC_BACKGROUND_SOURCE: ImageSource \| null = null;/.test(topic));
+  assert.ok(!/require\('@\/assets\/images\/home\//.test(topic.replace(/\/\/.*$/gm, "")), "topic must not require a missing home asset");
   const names: string[] = [];
   for await (const entry of Deno.readDir(new URL("assets/images/home/", repoRoot))) names.push(entry.name);
-  assert.deepEqual(names, ["kabumori_header_logo.webp"], "only assets that exist may be required");
+  assert.deepEqual(names.sort(), ["kabumori_header_logo.webp", "report_hero_background.webp"], "only assets that exist may be required");
 });
 
-test("the Hero shows at most three points, and only the CTA navigates", async () => {
+test("the Hero draws none of the baked-in art text natively (no double display)", async () => {
+  const hero = await code("src/components/home/home-report-hero.tsx");
+  // The title, description and the 今日のポイント label are in the picture; only the VoiceOver label mentions them.
+  const withoutLabel = hero.replace(/const HERO_ART_LABEL = '[^']*';/, "");
+  for (const baked of ["かぶモリレポート", "今日の市場とあなたの保有銘柄への影響をAIが整理しました", "今日のポイント", ">今日の<"]) {
+    assert.ok(!withoutLabel.includes(baked), `"${baked}" must not be drawn as native text`);
+  }
+  assert.ok(/HERO_ART_LABEL = '今日のかぶモリレポート。/.test(await read("src/components/home/home-report-hero.tsx")));
+});
+
+test("the Hero keeps only the live UI: report kind, numbered points and the CTA", async () => {
+  const hero = await read("src/components/home/home-report-hero.tsx");
+  assert.ok(hero.includes("REPORT_KIND_LABEL[report.report_type]") && hero.includes("morning: '朝刊', close: '大引け'"), "朝刊 / 大引け stays live and short");
+  assert.ok(hero.includes("HOME_COLORS.point[index]") && hero.includes("{index + 1}"), "numbered circles stay native");
+  assert.ok(hero.includes("レポートを見る →"));
+});
+
+test("the Hero shows 1-3 points: only real points, never an empty placeholder row", async () => {
   const hero = await read("src/components/home/home-report-hero.tsx");
   const tokens = await read("src/constants/home-tokens.ts");
   assert.ok(/maxPoints: 3/.test(tokens));
-  assert.ok(/points\.slice\(0, HERO\.maxPoints\)/.test(hero));
-  assert.equal((hero.match(/onPress=\{onOpen\}/g) ?? []).length, 1, "only the CTA opens the report");
+  assert.ok(/points\.filter\(\(point\) => point\.trim\(\)\.length > 0\)\.slice\(0, HERO\.maxPoints\)/.test(hero));
+  assert.ok(/shownPoints\.map\(/.test(hero), "rows come only from the real points");
+  assert.ok(!/Array\.from\(\{ length: HERO\.maxPoints/.test(hero) && !/\[0, 1, 2\]/.test(hero), "no fixed 3-row placeholder");
   assert.ok(/point: \['#e5484d', '#2f7fd8', '#f5a524'\]/.test(tokens), "red / blue / orange numbered circles");
+  assert.ok(/numberOfLines=\{2\}/.test(hero), "each point is at most two lines");
+});
+
+test("layer order: background -> character -> points -> CTA, and only the CTA navigates", async () => {
+  const hero = await read("src/components/home/home-report-hero.tsx");
+  const bg = hero.indexOf("<Image\n          source={HERO_BACKGROUND_SOURCE}");
+  const character = hero.indexOf("<CharacterSlot source=");
+  const points = hero.indexOf("styles.pointsColumn");
+  const cta = hero.indexOf("onPress={onOpen}");
+  assert.ok(bg > 0 && bg < character && character < points && points < cta, "z-order is defined by render order");
+  assert.equal((hero.match(/onPress=\{onOpen\}/g) ?? []).length, 1, "only the CTA opens the report");
   const pointRow = hero.slice(hero.indexOf("styles.pointRow"), hero.indexOf("styles.pointText"));
   assert.ok(!/Pressable/.test(pointRow), "point rows are not navigation targets");
+  // The CTA is opaque (deep green) and rendered last, so it covers the character where they overlap.
+  assert.ok(/backgroundColor: hasReport \? HOME_COLORS\.deepGreen : palette\.soft/.test(hero));
 });
 
 test("the Hero keeps its loading / error / empty branches and the CTA is disabled without a report", async () => {
@@ -67,6 +95,13 @@ test("the Hero keeps its loading / error / empty branches and the CTA is disable
   assert.ok(hero.includes("reportCardStatus(hasReport, loading, error)"));
   for (const branch of ["'loading'", "'error'", "'report'"]) assert.ok(hero.includes(`status === ${branch}`), branch);
   assert.ok(hero.includes("disabled={!hasReport}"));
+});
+
+test("the Hero is sized from the art's own aspect ratio, not fixed pixels", async () => {
+  const hero = await read("src/components/home/home-report-hero.tsx");
+  assert.ok(hero.includes("heroArtHeight(width)") && hero.includes("minHeight: artHeight"));
+  assert.ok(hero.includes("aspectRatio: HERO_ART_ASPECT"));
+  assert.ok(hero.includes("paddingTop: heroPointsTop(artHeight)"), "points start under the baked underline");
 });
 
 test("Home data orchestration is unchanged: same three fetches, refresh, JST rollover", async () => {
