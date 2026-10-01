@@ -3,8 +3,10 @@
 // `{ ...slotStyle, ...childStyle }`. A Pressable's function-valued style
 // (`({ pressed }) => [...]`) spreads to `{}`, so the button lost its background,
 // padding and border while its white label stayed -> blank button, tap area intact.
-// These checks keep that composition out of the screens and keep the account
-// entry points discoverable.
+// A second, related class: <Link asChild> only injects its press handler into
+// its direct child. `Card` and `View` do not accept/forward `onPress`, so a
+// Link around them is a dead tap on native. These checks keep both compositions
+// out of the screens and keep the account entry points discoverable.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
@@ -45,6 +47,54 @@ function linkAsChildFunctionStyle(sf) {
   return found;
 }
 
+/**
+ * Components that really receive the `onPress` <Link asChild> injects:
+ * RN touchables/Text and our own ActionButton (forwards onPress to a Pressable).
+ * Anything else (Card, View, ...) swallows it -> dead tap on native.
+ */
+const PRESS_FORWARDING = new Set(['Pressable', 'ActionButton', 'Text', 'TouchableOpacity', 'TouchableHighlight', 'TouchableWithoutFeedback']);
+
+/** `<Link asChild>` whose direct child cannot receive the injected press handler. */
+function linkAsChildNonInteractiveChild(sf) {
+  const found = [];
+  visit(sf, (node) => {
+    if (tagName(node) !== 'Link' || !attr(node, 'asChild')) return;
+    for (const child of children(node)) {
+      if (!PRESS_FORWARDING.has(tagName(child))) {
+        found.push(`${sf.fileName}:${sf.getLineAndCharacterOfPosition(child.getStart()).line + 1} <${tagName(child)}>`);
+      }
+    }
+  });
+  return found;
+}
+
+const brokenLink = (sf) => [...linkAsChildFunctionStyle(sf), ...linkAsChildNonInteractiveChild(sf)];
+
+function sample(source) {
+  return ts.createSourceFile('sample.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+}
+
+/** Pressables that navigate to `route` with router.push, with the ancestors they sit in. */
+function pressablesNavigatingTo(sf, route) {
+  const out = [];
+  visit(sf, (node, ancestors) => {
+    if (tagName(node) !== 'Pressable') return;
+    const onPress = attr(node, 'onPress')?.getText() ?? '';
+    if (onPress.includes('router.push') && onPress.includes(route)) out.push({ node, ancestors });
+  });
+  return out;
+}
+
+function assertStandaloneNavigation(sf, route, why) {
+  const found = pressablesNavigatingTo(sf, route);
+  assert.ok(found.length >= 1, `${why}: a Pressable pushes ${route}`);
+  for (const { node, ancestors } of found) {
+    assert.ok(!ancestors.some((a) => tagName(a) === 'Link'), `${why}: not wrapped in Link`);
+    assert.ok(attr(node, 'accessibilityRole'), `${why}: has an accessibility role`);
+  }
+  return found;
+}
+
 /** The Pressable that contains `label` as its text, with the ancestors it sits in. */
 function pressableWithLabel(sf, label) {
   let result = null;
@@ -68,34 +118,36 @@ async function appFiles() {
   return out.sort();
 }
 
-// Files owned by another in-flight change (X-connect / account switching). Same
-// defect, reported separately; remove from this list when it is fixed there.
-const KNOWN_UNFIXED = new Set(['src/app/accounts/index.tsx']);
-
-test('login-methods and settings never put a function-valued style under <Link asChild>', async () => {
+test('login-methods and settings contain neither broken Link-asChild composition', async () => {
   for (const file of ['src/app/login-methods.tsx', 'src/app/(tabs)/settings.tsx']) {
-    assert.deepEqual(linkAsChildFunctionStyle(await parse(file)), [], file);
+    assert.deepEqual(brokenLink(await parse(file)), [], file);
   }
 });
 
-test('no other screen or component adds the blank-button composition (known file excepted)', async () => {
+test('no screen or component anywhere in src/app and src/components has a broken Link-asChild child', async () => {
   const offenders = [];
-  for (const file of await appFiles()) {
-    if (KNOWN_UNFIXED.has(file)) continue;
-    offenders.push(...linkAsChildFunctionStyle(await parse(file)));
-  }
+  for (const file of await appFiles()) offenders.push(...brokenLink(await parse(file)));
   assert.deepEqual(offenders, []);
 });
 
-test('the detector flags the original composition (guards against a silent no-op test)', () => {
-  const sf = ts.createSourceFile(
-    'sample.tsx',
-    `export const x = <Link href="/a" asChild><Pressable style={({ pressed }) => [s.button, pressed && s.p]}><Text>a</Text></Pressable></Link>;`,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TSX,
-  );
-  assert.equal(linkAsChildFunctionStyle(sf).length, 1);
+test('the detectors flag the broken compositions (guards against a silent no-op test)', () => {
+  const fnStyle = sample(`export const x = <Link href="/a" asChild><Pressable style={({ pressed }) => [s.button, pressed && s.p]}><Text>a</Text></Pressable></Link>;`);
+  assert.equal(linkAsChildFunctionStyle(fnStyle).length, 1);
+  assert.equal(brokenLink(fnStyle).length, 1);
+  const card = sample(`export const x = <Link href="/a" asChild><Card><Text>a</Text></Card></Link>;`);
+  assert.equal(linkAsChildNonInteractiveChild(card).length, 1);
+  const view = sample(`export const x = <Link href="/a" asChild><View><Text>a</Text></View></Link>;`);
+  assert.equal(linkAsChildNonInteractiveChild(view).length, 1);
+});
+
+test('the detectors accept the compositions that do work on native', () => {
+  const good = sample(`
+    export const a = <Link href="/a" asChild><ActionButton label="x" onPress={() => {}} /></Link>;
+    export const b = <Link href="/a" asChild><Pressable style={styles.card}><Text>x</Text></Pressable></Link>;
+    export const c = <Link href="/a" asChild><Text>x</Text></Link>;
+    export const d = <Link href="/a"><Card><Text>x</Text></Card></Link>;
+  `);
+  assert.deepEqual(brokenLink(good), []);
 });
 
 test('the two login-methods buttons are standalone pressables that navigate on press', async () => {
@@ -126,4 +178,30 @@ test('Settings has a visible account-management entry that opens login-methods, 
   const text = sf.getFullText();
   for (const word of ['ログイン方法', '投稿用のXアカウントの接続', 'アカウントの削除']) assert.ok(text.includes(word), word);
   assert.ok(text.indexOf('アカウント管理') < text.indexOf('コンテンツ設定'), 'entry sits above the content form');
+});
+
+test('Accounts「ログイン方法」 card is an interactive element that navigates to /login-methods', async () => {
+  const sf = await parse('src/app/accounts/index.tsx');
+  const found = assertStandaloneNavigation(sf, "'/login-methods'", 'accounts → login-methods');
+  const text = found.map((f) => f.node.getText()).join('\n');
+  assert.ok(text.includes('ログイン方法'), 'readable label kept');
+  assert.ok(text.includes('styles.card'), 'card styling kept');
+});
+
+test('Accounts rows open the account detail through an interactive element', async () => {
+  const sf = await parse('src/app/accounts/index.tsx');
+  assertStandaloneNavigation(sf, "'/accounts/[id]'", 'accounts row');
+});
+
+test('Settings「会話で相談する」 is interactive and navigates to /(tabs)/consult', async () => {
+  const sf = await parse('src/app/(tabs)/settings.tsx');
+  const found = assertStandaloneNavigation(sf, "'/(tabs)/consult'", 'settings → consult');
+  const text = found.map((f) => f.node.getText()).join('\n');
+  assert.ok(text.includes('会話で相談する') && text.includes('自然な言葉で希望を伝え'), 'existing copy kept');
+});
+
+test('Schedule and History rows open the post detail through an interactive element', async () => {
+  for (const file of ['src/app/(tabs)/schedule.tsx', 'src/app/(tabs)/history.tsx']) {
+    assertStandaloneNavigation(await parse(file), "'/posts/[id]'", file);
+  }
 });

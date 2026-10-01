@@ -1,4 +1,4 @@
-import { Link } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { colors } from '@/constants/theme';
 import { ActionButton, Card, Pill, Screen, SectionTitle, styles } from '@/components/ui';
@@ -7,6 +7,7 @@ import { useActiveAccount } from '@/providers/active-account-provider';
 import { useDataStatus } from '@/providers/data-provider';
 
 export default function AccountsScreen() {
+  const router = useRouter();
   const { accounts, activeAccount, selectAccount } = useActiveAccount();
   const { status, reload } = useDataStatus();
   const { state: connectState, stateText, verifiedHandle, connect } = useXConnect(reload);
@@ -25,7 +26,7 @@ export default function AccountsScreen() {
         ) : null}
         {accounts.map((account) => (
           <Card key={account.id}>
-            <Link href={{ pathname: '/accounts/[id]', params: { id: account.id } }} asChild>
+            <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/accounts/[id]', params: { id: account.id } })} style={({ pressed }) => pressed && styles.buttonPressed}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: account.profile.avatarColor }} />
                 <View style={{ flex: 1 }}>
@@ -36,7 +37,7 @@ export default function AccountsScreen() {
                   {account.connectionStatus === 'connected' ? '接続済み' : '要再接続'}
                 </Pill>
               </View>
-            </Link>
+            </Pressable>
             <Text style={styles.muted}>投稿状態: {account.postingState === 'active' ? '稼働中' : '停止中'}</Text>
             <ActionButton label={activeAccount?.id === account.id ? '選択中' : 'このアカウントを選択'} onPress={() => selectAccount(account.id)} />
           </Card>
@@ -68,12 +69,10 @@ export default function AccountsScreen() {
           <Text style={styles.muted}>接続後も投稿機能は自動で有効になりません。</Text>
         </Card>
 
-        <Link href="/login-methods" asChild>
-          <Pressable accessibilityRole="button" style={({ pressed }) => [styles.card, pressed && styles.buttonPressed]}>
-            <Text style={{ color: colors.ink, fontWeight: '800' }}>ログイン方法</Text>
-            <Text style={styles.muted}>X・Apple・Google・メールアドレスのうち、アプリへのログインに使う方法を確認・追加できます。</Text>
-          </Pressable>
-        </Link>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/login-methods')} style={({ pressed }) => [styles.card, pressed && styles.buttonPressed]}>
+          <Text style={{ color: colors.ink, fontWeight: '800' }}>ログイン方法</Text>
+          <Text style={styles.muted}>X・Apple・Google・メールアドレスのうち、アプリへのログインに使う方法を確認・追加できます。</Text>
+        </Pressable>
       </ScrollView>
     </Screen>
   );
