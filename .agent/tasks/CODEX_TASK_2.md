@@ -1,3 +1,204 @@
+# Codex Task 2 — CURRENT TASK
+
+- task_id: common-account-pr70-preproduction-gate-20261002
+- owner: codex
+- slot: codex-2
+- status: ready
+- next_owner: codex
+- priority: highest
+- recommended_model: Sol（極高）
+- type: independent pre-production Auth/RLS/migration gate
+- target_main: `44121914b035e22380a4ca1bd8252a42713a2bbf`
+- accepted_source_head: `aa4d2d425d1d7c432d43c9ecfb8e978a40b80a65`
+- production_mutation_allowed: false
+
+## Purpose
+
+Merged common-account Phase 1 foundationの**production適用前最終ゲート**。
+
+このTASKは「productionへ入れてよいか」を判断するための独立検証であり、**production migration apply / backfill / deploy / Auth/Storage/OAuth/Vault mutationは一切しない**。
+
+C1でsource merge済みだが、それはproduction適用許可ではない。
+
+## Mandatory startup / isolation
+
+1. PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASKを読む。
+2. G5 Phase 0〜第2是正Report、H1全PR #70 review history、Final C1を読む。
+3. H2独立worktree/checkout。
+4. fresh origin/mainを取得し、`44121914b035e22380a4ca1bd8252a42713a2bbf` がancestorとして含まれることを確認。mainが進んでいても対象8 filesへの変更をfresh確認。
+5. H1/G5/H2以外のbranch/worktree/未commit変更に触れない。
+
+## Gate A — merged source integrity
+
+main上で以下を再確認：
+
+- accepted source deltaがexact reviewed fixを含む。
+- migration / tests / docsがmerge時に欠落・改変していない。
+- no SQL `DELETE FROM auth.users`.
+- no managed Storage/Vault/provider destructive SQL.
+- no enforcing Auth-delete guard in Phase 1.
+- current Kabumori legacy hard-deleteは未変更・unsafeと明記。
+- Phase 1責任はreadiness foundationまで。
+
+## Gate B — actual disposable Supabase proof
+
+ローカルPostgreSQLだけでは足りないため、**実Supabaseの使い捨て環境でmanaged boundaryを証明することがproduction適用条件**。
+
+ただし：
+- 既存production projectを破壊テストに使わない。
+- 既存ユーザー/Storage/OAuth/Vaultを使わない。
+- disposable environmentを安全に利用できる既存経路・projectが無い場合、勝手に新project/課金resourceを作らず **BLOCKED / operator prerequisite** として止める。
+- userが明示的に許可したdisposable projectまたは既存安全sandboxがある場合のみ実行。
+
+実証項目：
+- migration apply
+- public table Data API exposure/非露出
+- RLS self-select / client write denial
+- service_role direct table grant denial + RPC path
+- SECURITY DEFINER owner/search_path behavior
+- `auth.users`, `auth.identities`, sessions/token behaviorのmanaged境界
+- Storage API ownership cleanup semantics
+- `storage.objects.owner_id`/bucket probe compatibility
+- observer triggerがreal Auth Admin API deleteでどう発火/観測されるか
+- direct common row delete refusal
+- PostgREST RPC exposure / SQLSTATE / error mapping
+- rollback/reapply where safe
+- no real provider OAuth
+
+disposable proofができなければ「未証明」をPASS扱いしない。
+
+## Gate C — production read-only preflight
+
+productionには**SELECT / catalog readのみ**。
+
+必要：
+- exact schema/table/column/FK/type/delete action/validated/deferrability
+- required helper signatures
+- roles/grants/current RLS
+- migration history / version collision
+- target migration version未適用
+- target object name collisionなし
+- current Auth user count / legacy population aggregate（PIIなし）
+- Phase 0 backfill expected countsと現状差分
+- current `auth` / `storage` shape relevant to preflight
+- function ownerが必要readを持てるか
+- Data API exposure setting/behavior
+- pending/open PR or main migration collision
+
+PII/secret/token/raw user id/email/X handleをReportへ出さない。
+
+安全なproduction read経路が自動拒否される場合は回避しない。
+その場合は、ユーザー実行用の**read-only aggregate/preflight SQL**を作り、STOPして結果待ちにしてよい。
+
+## Gate D — backfill dry-run / parity
+
+production write禁止。
+
+read-only/dry-runで：
+- common_accounts candidate
+- kabumori entitlement candidate
+- x_autopost entitlement candidate
+- Auth-only
+- admin exclusion
+- ambiguous/manual-review
+- duplicate/unknown footprint
+- would-create counts
+
+Phase 0との差異を説明。
+email-based mergeはしない。
+
+## Gate E — rollout / rollback sequencing
+
+production適用をまだしない前提で、最終runbookを検証：
+
+1. exact preflight
+2. single migration apply（`db push`不可）
+3. read-back
+4. backfill dry-run
+5. explicit backfill approval
+6. backfill apply
+7. parity read-back
+8. Phase 2 integration
+9. Phase 3 deletion/orchestrator
+10. only later any enforcing boundary
+
+rollback:
+- integration開始前のみ
+- exact shadow state
+- no operation/use/dependency
+- built-in contract intact
+- one transaction / no partial teardown
+
+## Gate F — production safety disposition
+
+Reportは必ず3つを分離：
+
+1. **source merge status**
+2. **migration apply readiness**
+3. **backfill readiness**
+
+PASS source ≠ apply PASS ≠ backfill PASS。
+
+もしactual disposable Supabase proofまたはproduction read-only preflightが欠ける場合：
+- source can remain merged
+- production apply = HOLD
+- backfill = HOLD
+
+## Forbidden
+
+- production INSERT/UPDATE/DELETE
+- migration apply
+- backfill apply
+- Auth create/update/delete
+- Storage mutation
+- provider/OAuth revoke
+- Vault mutation/read secret
+- identity link/unlink
+- deploy
+- flag/Cron/provider settings
+- real X operation
+- enforcement enablement
+- destructive test on production
+
+## Required independent verification
+
+- rerun merged local lifecycle suite
+- mutation suite
+- social deletion regression
+- migration invariants
+- diff/static checks
+- actual disposable Supabase proof if authorized/safe
+- production read-only preflight if authorized/safe
+
+## Completion / C2
+
+Append `.agent/CODEX_REPORT_2.md`.
+
+Report:
+- PASS / PARTIAL / BLOCKED / FAIL
+- exact reviewed main
+- source integrity verdict
+- disposable Supabase proof verdict
+- production preflight verdict
+- backfill dry-run verdict
+- migration apply readiness
+- backfill readiness
+- unresolved prerequisites
+- production mutation = 0
+- exact next operator action
+- recommendation
+
+At completion:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C2
+
+No production apply is authorized by this TASK itself.
+
+---
+
+## Previous completed H2 task history — preserved below
+
 # Codex Task 2
 
 - task_id: x-ai-lab-pr66-topic-dedup-review-20261001
