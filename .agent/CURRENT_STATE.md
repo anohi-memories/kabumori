@@ -2953,3 +2953,14 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - finish code: K1.
 - recommended model: **Sonnet5（高）**.
 
+## Final K1 closure — Home Hero 8-state integration — 2026-10-02
+- verdict: **PASS / MERGED / G1 CLOSED**.
+- PR #72 accepted exact head: `b96c566353db82b967989dc5a5855a1324876bd4`.
+- squash merge: `fa0c714731e13ac87f38fc98e08cd127fb709192`.
+- final main source includes the approved Hero background + 8 character states with deterministic stored-report selection and no additional AI/API call.
+- app tests reported 255/255 PASS; local iOS Simulator verified 402pt / 375pt / 360pt and 1/2/3-point layouts.
+- EAS build: 0.
+- backend / DB / RPC / Edge Function / Cron / Auth / common-account / X / production mutation: 0.
+- Codex review: not required for this UI-only scope.
+- G1 is now free after fresh allocation.
+
