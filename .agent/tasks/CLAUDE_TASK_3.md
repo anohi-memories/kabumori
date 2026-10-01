@@ -1,5 +1,181 @@
 # Claude Task 3
 
+- task_id: x-social-mobile-native-link-navigation-cleanup-20261001
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- priority: medium
+- recommended_model: Sonnet5（高）
+- continues_from: x-social-mobile-account-deletion-ui-release-finish-20261001
+- purpose: PR #68 / PR #65 後に残った social-mobile の native navigation UI 不具合を、Link-asChild の既知パターンに限定して修正・再発防止する。
+
+## Confirmed current-main findings
+
+Fresh main で以下を確認済み。
+
+1. `apps/social-mobile/src/app/accounts/index.tsx`
+   - 「ログイン方法」カードがまだ `<Link asChild><Pressable style={({ pressed }) => ...}>`。
+   - PR #68 で確定した同じ root cause により、native で card styling が落ちる既知パターン。
+   - G4 PR #65 は Final K4 PASS で merge 済みのため、現在はG4所有競合なし。
+
+2. `apps/social-mobile/src/app/(tabs)/settings.tsx`
+   - 「会話で相談する」が `<Link asChild><Card>...`。
+   - `Card` は navigation press handler を受け取らないため、native確認で dead tap になっている。
+
+3. PR #68 の `native-link-button-style.test.mjs` には `accounts/index.tsx` の known allowlist が残っている。今回の修正後はこの例外を除去する。
+
+## Mandatory startup
+
+1. Read `PROJECT_RULES.md`, `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, this TASK.
+2. Use an independent G3 worktree/checkout.
+3. Fresh `origin/main`.
+4. Confirm G4 task is done and PR #65 is merged; do not reopen OAuth/auth-session work.
+5. Confirm H1/G5 common-account work does not overlap the UI files below.
+6. Do not reuse another slot's untracked files, .env, Simulator process, Metro process, branch, or worktree.
+
+## Primary required fixes
+
+### A. Accounts screen — 「ログイン方法」card
+
+Fix the remaining native styling defect in:
+- `apps/social-mobile/src/app/accounts/index.tsx`
+
+Requirements:
+- the whole intended card/tap target remains visibly styled on native iOS.
+- tap navigates to `/login-methods`.
+- preserve accessibility role / readable label.
+- do not change X-connect hook, connect/reconnect behavior, OAuth, PKCE, callback, or account data.
+- remove `accounts/index.tsx` from the known-unfixed allowlist once fixed.
+
+Prefer the already accepted safe pattern:
+- standalone `Pressable` + `router.push`
+rather than `Link asChild` around a function-styled Pressable.
+
+### B. Settings — 「会話で相談する」
+
+Fix:
+- `apps/social-mobile/src/app/(tabs)/settings.tsx`
+
+Requirements:
+- the card is visibly tappable.
+- tap navigates to `/(tabs)/consult`.
+- preserve the existing copy and overall layout.
+- no content-settings persistence logic change.
+
+Prefer explicit navigation with an interactive element rather than relying on `Link asChild` to inject press behavior into a component that does not forward it.
+
+## Narrow same-pattern audit
+
+Audit only `apps/social-mobile/src/app/**` and `apps/social-mobile/src/components/**` for these two specific invalid compositions:
+
+1. `Link asChild` + direct child with function-valued `style` that can be lost by Slot style merging.
+2. `Link asChild` + direct child such as `Card` / `View` that does not actually forward the injected press handler/ref and is therefore dead/non-interactive.
+
+For every match:
+- classify as broken / safe / false positive with concrete source reason.
+- fix only demonstrably broken navigation in the same family.
+- do not broaden into visual redesign or unrelated route cleanup.
+- if a shared UI component change is proposed, make it only if it is strictly safer/smaller than fixing the call sites and regression coverage proves all consumers remain safe.
+
+Potential rows mentioned by prior G3 report (history/schedule/account rows) are **audit candidates, not automatic edit targets**. Prove the issue before changing them.
+
+## Tests
+
+Update/extend `apps/social-mobile/tests/native-link-button-style.test.mjs` or a narrowly named companion test so that:
+
+- `accounts/index.tsx` is no longer allowlisted.
+- no `Link asChild` + function-valued direct-child style remains in app/components.
+- the detector also catches the proven dead `Link asChild > Card/View` class where the child cannot receive/forward press behavior.
+- detector self-tests prove the scanner actually fails on synthetic broken examples.
+- the Accounts 「ログイン方法」 target is an interactive element with explicit navigation to `/login-methods`.
+- Settings 「会話で相談する」 is interactive and explicitly navigates to `/(tabs)/consult`.
+- any additional call-site fix gets a focused route/navigation regression.
+
+Run:
+- social-mobile full tests
+- typecheck
+- lint
+- `git diff --check`
+- focused static/navigation tests
+- secret/scope diff check
+
+## Native verification
+
+Use a G3-owned local iOS Simulator environment only.
+
+Verify at minimum:
+1. Accounts → 「ログイン方法」 card has expected visible card styling and opens Login methods.
+2. Settings → 「会話で相談する」 visibly responds to tap and opens Consult.
+3. If any additional same-pattern call site was changed, visually/tap-verify that route too.
+4. No production data mutation is needed; sample/mock data preferred.
+5. No EAS build unless local verification is genuinely impossible.
+
+Temporary local auth/sample-data harness is allowed only if:
+- isolated to G3,
+- untracked/uncommitted,
+- reverted/removed after verification,
+- does not connect to protected production data.
+
+## Explicit non-scope
+
+Do NOT change:
+- `apps/social-mobile/src/features/x-connect/**`
+- OAuth / PKCE / callback / provider behavior
+- Supabase Auth/provider flows
+- account deletion backend/state machine
+- common-account/service-entitlement work
+- DB / RLS / RPC / migrations
+- Edge Functions
+- Vault/token storage
+- scheduler/posting
+- production feature flags
+- App Store/TestFlight/EAS release configuration
+
+## Production / safety
+
+- source + tests + PR only
+- production mutation = 0
+- real X operations = 0
+- no deploy
+- no account deletion
+- no provider login/revoke/post
+- do not expose secrets or personal credentials
+
+## Completion / K3
+
+Report:
+- task_id
+- result
+- exact broken Link-asChild patterns found
+- exact files fixed
+- audit matrix (broken / safe / false positive)
+- changed_files
+- tests
+- native simulator result
+- proof x-connect/Auth/deletion/common-account/backend scopes unchanged
+- commit_hash
+- push
+- PR
+- production mutation = 0
+- real X operations = 0
+- remaining issues
+- safety_checks
+- next_recommendation
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K3.
+
+Expected review policy:
+- if changes stay UI/navigation-only and native verification passes, additional Codex review is normally unnecessary.
+- if implementation touches shared interactive primitives broadly, Auth/OAuth, or any backend boundary, STOP and let ChatGPT decide review before merge.
+
+---
+
+# Claude Task 3
+
 - task_id: x-social-mobile-account-deletion-ui-release-finish-20261001
 - owner: claude
 - slot: claude-3
