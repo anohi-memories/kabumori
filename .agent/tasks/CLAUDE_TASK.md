@@ -3,8 +3,8 @@
 - task_id: kabumori-shared-report-v2-prod-deploy-20261001
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sonnet5（高）
 - purpose: C1 accepted/merged PR #67 Presentation v2 を、consumer gate OFFのまま production `market-report-analysis` のみに controlled deployし、deployed source identity・verify_jwt・cron・consumer settings・他Function非変更を確認する。自然cycle観測は次TASK。
@@ -170,7 +170,120 @@ Then:
 
 ## Report
 
-Pending.
+### Report — kabumori-shared-report-v2-prod-deploy-20261001
+
+- task_id：`kabumori-shared-report-v2-prod-deploy-20261001`
+- result：**PASS（対象Function）。ただし、K2の判断が必要な事項が1件ある**。
+  - PR #67（merge `09975d0`）の `market-report-analysis` を、単一のFunctionとして本番へdeployした。read-backは最新mainとmerge時点の両方に一致した。gateはOFF/OFFのまま、cronは変更なし、手動のcycle実行はしていない。
+  - **要判断**：deploy前後の全Functionの比較で、`x-test-post` も変わっていた（version 130 → 131）。更新時刻は **14:19:06 JST** で、私のdeploy（14:21:09開始）の2分前。私のdeployによるものではない（証拠は下の「other-function metadata comparison」）。私はrollbackも追加の操作もしていない。
+- fresh main SHA：`59108acab7c8445c169bbd05f24f10af4f120ce7`
+  - `09975d02cc81b1614818951173a94aa8677291a0` を含む。
+  - merge後に、`market-report-analysis/**` と、このFunctionが読み込む共有ファイル（`_shared/market_report_packet.ts`、`market_report_story.ts`、`absence_claims.ts`、`kabumori_voice.ts`、`market-report-data-packet/**`）を変更したcommitは無い。
+- worktree：G2専用checkout `/Users/yuya/Developer/kabumori-g2-market-report-reliability`（detached `59108ac`）。
+  - 共有checkoutではdeployもconfigの編集もしていない（DBのread-onlyなSELECTだけ）。
+  - `supabase/config.toml` は存在しない。
+- 所有の確認：ほかのslot（G1・G3・G4 review_required、G5 done、H1 ready＝account deleteのreview、H2 done）に、`market-report-analysis` を扱うものは無い。
+
+#### production version before/after
+
+- 変更前：`version 16`、updated_at 2026-09-30 00:27:49 JST（PR #57のdeploy）、ezbr `755f1534944c…`
+  - 一覧の版番号は9/30の時点では14だった。updated_atとezbrは変わっていないので、source自体は9/30のdeployのまま。
+- 変更後：`version 17`、updated_at **2026-10-01 14:21:13 JST**、ezbr `b856cd48d3ca…`
+
+#### deployed source identity/read-back
+
+- **deploy前**：`--use-api` でdownloadした8ファイルは、PR #57のmerge（`9488f9e`）と**すべて一致**。最新mainとは4ファイルが違った（`_shared/market_report_packet.ts`、`analysis_input.ts`、`analysis_logic.ts`、`handler.ts`）。古い版なので、deployが必要と判断した（no-opではない）。
+- **deploy後**：downloadした**11ファイルが、最新main（`59108ac`）とすべて一致**。merge時点（`09975d0`）とも11/11で一致。
+  - `_shared/{absence_claims,kabumori_voice,market_report_packet,market_report_story}.ts`
+  - `market-report-analysis/{analysis_input,analysis_logic,handler,hard_fact_guards,index,transport_retry}.ts`
+  - `market-report-data-packet/session_logic.ts`
+  - 補足：uploadの一覧には `market-report-data-packet/packet_schema.ts` もあるが、型だけのimportで、downloadされたsourceには含まれない（これまでと同じ）。
+- Presentation v2とH1の修正が本番のsourceにあることを確認した：
+  - **Hard / WARNの分離**：`LocalCheck`、`{ hard, warnings }` を返す検査、`qualityRewriteHints`
+  - **別日の値の混同・日付と値の検査**：`日付と指標の不一致`、`指標と数値の不一致`、H1追加の `値と前日比の取り違え`
+  - **質の書き直しが失敗したときの安全な元の文へのfallback**：`if (safe) return deliver(safe.analysis…`、H1追加の `rewriteRequestFailed` / `quality_rewrite_request_failed`（書き直しの通信失敗でも元の文を配信）
+  - **入れ子の不正な出力は作り直しへ**：H1追加の `Invalid structured members must regenerate`、`invalid_output` の記録
+  - **古い値を「現在・最新」と書く検査**：`古い値を日付なしで記載`、H1追加の `CURRENT_STALE_PREFIX` / `CURRENT_STALE_SUFFIX`
+  - **範囲を限定した「材料なし」の扱い**：`falseAbsenceClaims`、H1追加の限定条件の判定
+  - **ニュースの並び（市場全体が先）**：`SCOPE_RANK` による並び替え、H1追加の、モデル入力でも同じ順を保つ変更
+  - そのほか：`sessionViews`、`PRESENTATION_VERSION`、`buildAppMarketStory`、`generationDiagnostics`、H1追加の否定表現の扱い（`unnegated`）と、見る点・リスクの中の過去形の文も事実として検査する変更
+
+#### tests/check/lint/diff（最新main、deploy前）
+
+- market-report-analysis：**86/86**
+  - うち `presentation_v2_test.ts` 22/22、`h1_adversarial_test.ts` 13/13
+- `deno check`（runtimeの10ファイル）：PASS
+- `deno lint`（同10ファイル）：問題なし
+- `git diff --check`：PASS
+
+#### 設定の前後比較
+
+- verify_jwt：false → **false**（維持）
+- app_enabled / x_enabled：false / false → **false / false**（settingsの行のupdated_atは2026-09-17のまま）
+- cron：変更なし。deploy前後のsnapshot（8件のjobname、schedule、active、commandのmd5）が**完全に一致**。9/30のsnapshotとも同じ値。
+  - data-packet：`50 22 * * 0-4`、`15 7 * * 1-5`
+  - analysis：`55 22 * * 0-4`、`5 23 * * 0-4`、`20 7 * * 1-5`、`35 7 * * 1-5`
+  - personalized-reports：`35 23 * * 0-4`、`15 8 * * 1-5`
+- 今日のcycle：deploy前後とも、朝刊はcompleted（v1のpacket）、大引けは未開始。deployはcycleの状態を変えていない。
+
+#### other-function metadata comparison
+
+- 全20 Functionについて、slug、version、updated_at、verify_jwt、ezbrを比較した（deploy前の記録は14:18:38 JST）。
+- 変わったのは2行：
+  1. `market-report-analysis`：16 → 17、updated_at 14:21:13 JST（**本TASKのdeploy**）
+  2. `x-test-post`：130 → 131、updated_at **14:19:06 JST**、ezbr `08a511919337…` → `bb2ae6116536…`（**本TASKによるものではない**）
+- ほかの18 Functionは完全に一致した（`market-report-data-packet`、`personalized-reports` を含む）。
+- `x-test-post` が本TASKによるものではないと判断した根拠：
+  - 更新時刻（14:19:06）が、私のdeployの開始（14:21:09）より前で、事前記録（14:18:38）より後。
+  - 私のdeploy commandの対象は `market-report-analysis` だけで、CLIの応答も `"functions":["market-report-analysis"]`。
+  - 私の1回目のdeployは、自動モードの安全判定に拒否されて実行されていない（その対象も `market-report-analysis` だけ）。
+  - H2のReport（PR #66）に「`x-test-post` だけ、別途のcontrolled redeployが必要」とある。同時刻に、別の作業としてdeployされたと推定する（誰が行ったかは確認していない）。
+- 読み取りだけで確認した事実：本番の `x-test-post` は、**46ファイルすべてが最新main（`59108ac`）と一致**する。
+  - つまり、PR #67の `shared_market_report_consumer.ts` と `_shared/market_report_packet.ts`（v2のX整形）も、すでに本番の `x-test-post` に入っている。
+  - `x_enabled=false` なので、この経路は動かない（旧経路のまま）。
+- 本TASKでは、`x-test-post` のdeployは禁止事項。私は行っていない。K2で、このdeployの出所と受け入れを確認してほしい。
+
+#### deploy command/scope
+
+- 実行したcommand：
+  ```
+  supabase functions deploy market-report-analysis --workdir /Users/yuya/Developer/kabumori-g2-market-report-reliability --project-ref wsmznyzcvmuitkglfeuj --no-verify-jwt --use-api
+  ```
+  - 実行前に次を確認し、どれかが違えば止める形にした：toplevelの一致、HEADの一致、`09975d0` を含むこと、作業ツリーがclean、config.tomlが無いこと。
+- 範囲：`market-report-analysis` の1 Functionだけ。
+  - していないこと：broad deploy、db push、DB・schema・RPC・migration、cron、gate、Auth・Vault・secret、X、アプリ通知、手動のcycle実行、`personalized-reports` と `x-test-post` のdeploy。
+- 自動モードの安全判定で一度止まり、**ユーザーの許可（「許可」）を得てから実行した**。
+
+#### production mutations
+
+- **1件だけ**：2026-10-01 14:21 JST の `market-report-analysis` のdeploy。
+- それ以外は0件。確認は、read-onlyのSELECTと、sourceのdownload・一覧だけで行った。
+
+#### rollback source/status
+
+- rollbackはしていない（対象は正しくdeployされ、不要と判断）。
+- deploy前の本番sourceは、scratchpad `mra-pre-v2` に保存済み（8ファイル、PR #57のmerge `9488f9e` とbyte一致）。必要なら、`9488f9e` のsourceでこのFunctionだけを戻せる。
+
+#### remaining issues
+
+1. **`x-test-post` の同時刻のdeploy**（上記）。出所と受け入れの確認が必要。
+2. **実際のモデルでのv2の生成は、まだ一度も動いていない**。最初の数回は、新しいHard検査（特に、日付と指標の対応）で作り直しや失敗が増える可能性がある。
+3. `personalized-reports` は未deploy。アプリ側の `market_detail.story` と、概況の「材料なし」検査は、まだ本番に無い（gateを開ける前に必要）。アプリ画面（G1）の `story` の表示も未実装。
+4. 旧経路（gate OFFの現行配信）の誤りは、このdeployでは変わらない。
+5. OpenAIの残高は手動チャージ。v2は1回あたりの費用が増える（見積もり：約$0.0037 → 約$0.006）。
+
+#### recommendation for next natural-cycle observation
+
+- **今日（10/1）の大引けが、v2の最初の自然なcycle**（16:15 data → 16:20 / 16:35 analysis）。deployは14:21に完了したので、間に合っている。16:40 JST以降に、read-onlyで観察する。
+- 観察する項目：
+  - cycle_status、report_status、attempt、last_error
+  - packetの `presentation_version`、`x_post.context_ja / news_ja / watch_ja`、`app_story`、`session_views`、`key_news[].scope`
+  - diagnostics：`generation_attempts`、`content_regenerations`、`hard_rejections`、`quality_rewrite`、`quality_rewrite_request_failed`、`quality_warnings`、`transport_*`
+  - 整形したXの文字数と、アプリのストーリーの文字数（read-onlyでlocalに整形して測る）
+  - 費用（calls、tokens、cost）
+  - 失敗した場合は、指摘文（引用付き）から、どの検査で落ちたかを分類する
+- 明朝（10/2）の朝刊も続けて観察する。朝刊は、東京と米国のセッションを分ける書き方の最初の確認になる。
+- **本PASSは、consumerの有効化を承認するものではない。**
 
 ---
 
