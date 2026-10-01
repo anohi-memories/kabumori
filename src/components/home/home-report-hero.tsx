@@ -78,7 +78,7 @@ export function HomeReportHero({ palette, report, points, loading, error, onOpen
           accessibilityRole="header"
           accessibilityLabel={HERO_ART_LABEL}
         />
-        <CharacterSlot source={CHARACTER_SOURCES[characterState]} />
+        <CharacterSlot source={CHARACTER_SOURCES[characterState]} style={styles.characterLift} />
         {/* Taller than the art: fade the art + character's bottom into the fill colour (see HERO.fade*). */}
         {extended
           ? Array.from({ length: HERO.fadeStrips }, (_, index) => {
@@ -171,6 +171,8 @@ const styles = StyleSheet.create({
     backgroundColor: HERO.fillColor,
     overflow: 'hidden',
   },
+  // The whole character canvas moves up by one global amount (same for every state), together with the CTA.
+  characterLift: { top: -HERO.characterLift, bottom: HERO.characterLift },
   // Art + character share this box (absolute, top-left, full width, art aspect ratio).
   artBox: { position: 'absolute', top: 0, left: 0, right: 0 },
   fadeStrip: { position: 'absolute', left: 0, right: 0, height: HERO.fadeStripHeight, backgroundColor: HERO.fillColor },
