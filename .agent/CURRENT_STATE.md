@@ -1,3 +1,18 @@
+## Final K3 PASS — social-mobile deletion / X revoke E3
+
+- verdict: **PASS**.
+- one approved disposable-account deletion completed end-to-end with scope `social_only`.
+- service-specific workspace, membership, X social account, X authorization/credential material, transient OAuth state and owned service data were removed as designed.
+- unexpected residue: **0**. Retained deletion audit is intentional.
+- shared Supabase Auth user, login identity, sessions and main-app profile were intentionally retained because the current server classified the account as `social_only`.
+- protected production posting accounts, credential references, refresh/posting state and scheduler data were unchanged; real X posts = 0.
+- source changes / PR / deploy from this task: none. Global deletion feature flag remains off.
+- remaining release blocker: on native iOS Release, deletion and posting-X navigation buttons on Login methods can render without visible button text despite remaining tappable; deletion navigation is also too deep.
+- Codex review: **not required** at this K3 because no source implementation changed; review again when fixing UI/deletion behavior or before broad production activation.
+- common-account implication: current deletion scope uses a main-app presence proxy. The new shared-account design should replace that with explicit per-service entitlement/registration.
+- AI Lab diary: 候補あり — 使い捨てアカウントで「このアプリだけ利用終了」の流れを最後まで試し、他のサービス用ログインを残したままX連携とアプリ専用データだけ消えることを確認した。
+- G3 is complete; reuse only after a fresh allocation/competition check.
+
 ## Orchestration / current slot snapshot — G5 registration (2026-10-01 JST)
 
 - checked_main: `2d2d044bcce5804cfdd3b7f64e25b66e45db16fd`（fresh `origin/main`）。以下は各TASKの先頭メタデータを読み取ったスナップショットであり、完了判定・再割当は行っていない。
