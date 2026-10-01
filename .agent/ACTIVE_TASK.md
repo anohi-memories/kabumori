@@ -34,14 +34,14 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- next_owner: codex
-- status: ready
+- next_owner: none
+- status: done
 - task_id: x-ai-lab-pr66-topic-dedup-review-20261001
 - start_code: H2
 - finish_code: C2
 - source: `.agent/tasks/CODEX_TASK_2.md`
 - report: `.agent/CODEX_REPORT_2.md`
-- allocation: Focused pre-merge review of PR #66 exact head 4f692e4d805ccd3ee628058bb20ee6c1f62cdd6d. Check topic rotation/cooldown, bounded regeneration/fail-closed behavior, PostgREST count semantics, and cross-brand isolation. No deploy/merge/real X/production mutation. Recommended Luna（高）.
+- allocation: Final C2 PASS. PR #66 exact head 4f692e4d805ccd3ee628058bb20ee6c1f62cdd6d accepted as safe to merge after fresh no-race check. No H2 source changes. Production fix still requires separate controlled x-test-post redeploy/read-back; no DB/RPC/migration/Cron/OAuth/Vault change. H2 is free after fresh allocation.
 
 ## Claude G1
 - owner: claude
