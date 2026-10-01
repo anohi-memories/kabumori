@@ -61,12 +61,12 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-shared-report-v2-close-natural-observation-20261001
+- task_id: kabumori-shared-report-v2-delivery-first-causal-guard-calibration-20261001
 - start_code: G2
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: read-only first natural Presentation v2 close observation after 2026-10-01 16:40 JST; no source/deploy/manual invoke/gate change; recommended Sonnet5（中）
+- allocation: source/tests/PR only; calibrate false-positive causal Hard guard from 2026-10-01 close so sourced news-internal causality is deliverable while unsupported market causality/fabricated refs/date-value errors remain Hard; no deploy/gate/manual cycle; recommended Opus5.5（高）
 
 ## Claude G3
 - owner: claude
