@@ -1,3 +1,13 @@
+## K4 HOLD — PR #65 operator account-switch E2E remains
+
+- PR #65 exact head `e5a66f5ba71f64b1a38d8f89faff3d0a31972949` remains open / mergeable.
+- source/security review is already accepted; focused 14/14, mobile 103/103, data/post 22/22, typecheck/lint/export checks passed in the accepted review.
+- fresh main has advanced 67 commits from the PR base, but none of PR #65's five source/test files overlap those main-side changes.
+- sole remaining merge condition: operator provider-side iOS E2E proving a different disposable X account can authenticate without silent reuse of the prior normal-browser X session; also verify cancel/retry/reconnect.
+- no additional Codex review unless runtime source changes.
+- G4 returned to ready for this E2E only; recommended Sonnet5（高）.
+- no merge / deploy / real X post authorized by this K4.
+
 ## H1 completed — Kabumori deletion cross-service boundary (C1 pending)
 
 - task: `common-account-kabumori-delete-cross-service-safety-review-20261001`; status `review_required`, next_owner `chatgpt`.
