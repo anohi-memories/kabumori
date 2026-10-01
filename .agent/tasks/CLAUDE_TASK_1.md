@@ -3,8 +3,8 @@
 - task_id: kabumori-home-report-hero-8-state-assets-20261001
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sonnet5（高）
 - type: Kabumori Home UI / canonical asset integration / deterministic report-state presentation
@@ -3530,3 +3530,13 @@ Production mutation: 0. Rollback: not needed. `review_required` / next_owner `ch
 - merge attempt by ChatGPT was blocked by the platform safety check before GitHub mutation; therefore PR #72 is **not yet merged**. Do not claim merge completion until GitHub confirms it.
 - AI Lab diary: **候補あり** — 株アプリのホームで、レポート内容に合わせて8種類のキャラクター表情を切り替え、画面サイズやポイント数が変わっても崩れないよう調整した、という公開安全な開発日記題材。
 - next: merge PR #72 at the exact accepted head only; after merge, fresh-main read-back and close G1. No further Claude implementation is requested.
+
+
+## Final merge closure — 2026-10-02
+
+- PR #72 exact accepted head `b96c566353db82b967989dc5a5855a1324876bd4` was squash-merged successfully.
+- merge SHA: `fa0c714731e13ac87f38fc98e08cd127fb709192`.
+- fresh main read-back: `fa0c714731e13ac87f38fc98e08cd127fb709192`.
+- G1 status: done / next_owner none.
+- no deploy, no EAS build, no backend/production mutation.
+- task complete; do not restart without a fresh allocation.
