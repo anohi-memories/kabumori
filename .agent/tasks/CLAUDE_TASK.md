@@ -1,10 +1,301 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-shared-report-v2-delivery-first-causal-guard-calibration-20261001
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Opus5.5（高）
+- purpose: Presentation v2 の Hard Fact guard を「嘘だけ止める」方向へ再較正し、ニュース本文に根拠がある因果表現を誤ってHard BLOCKして日次配信を落とさないようにする。2026-10-01大引けの実失敗を回帰fixtureにする。source + tests + PRのみ。deploy/gate変更は禁止。
+
+## User decision — highest priority
+
+Delivery reliability is a product requirement.
+
+Do **not** make the validator stricter than the underlying fact problem.
+
+Target rule:
+
+> **客観的な嘘・日付/数値/参照の矛盾は止める。**
+> **入力に根拠があるニュース説明や、正直な不確実性・文体品質では配信を止めない。**
+
+A report that routinely disappears because a conservative checker misclassifies supported prose is itself a product-quality failure.
+
+## Exact production regression — 2026-10-01 close
+
+Natural v2 close failed twice.
+
+Final failing sentence:
+
+`AI向け半導体需要を背景に半導体輸出も大幅増と報じられました`
+
+Input news actually said, in substance:
+- South Korea September exports hit a record.
+- AI semiconductor demand expanded.
+- **AI demand was the background for the large increase in semiconductor exports.**
+
+Therefore this sentence is a supported paraphrase of the news event.
+
+It is **not** a claim that AI demand caused the Nikkei / Tokyo market to rise.
+
+Current validator incorrectly requires a market-level `causal` claim for causal wording even when the causal relationship belongs only to the news event.
+
+This false reject caused:
+- 2 scheduled analysis attempts to fail
+- report packet = 0
+- no v2 output to evaluate
+- unnecessary model cost
+- no user-facing report if this path were activated
+
+### Separate valid failure from attempt 1
+
+Attempt 1 also contained a mistyped/fabricated news ref:
+- correct: `news:47b69d8a-4a57-40c1-b9c1-efddb404a21b`
+- generated wrong ref differed at the tail
+
+That **must remain Hard BLOCK**.
+
+Do not weaken unknown/fabricated ref validation just to improve delivery.
+
+## Hard BLOCK policy after this fix
+
+Hard failure should remain for clear deterministic factual defects such as:
+
+- unsupported / fabricated number
+- metric value/change mismatch
+- metric date/session mismatch
+- different sessions presented as the same date
+- stale value presented as current/latest
+- wrong direction / sign / emoji polarity
+- 1306 presented as TOPIX index
+- fabricated/unknown news ref
+- causal statement that explains a market/index move without supporting evidence
+- causal statement that materially changes the cause/effect relationship from the cited source
+- false broad absence claim when relevant input exists
+- portfolio/user data leaking into shared/public content
+- malformed mandatory output that cannot be safely rendered
+
+## Must NOT be Hard BLOCK by itself
+
+Do not fail the whole report solely because:
+
+- a cited news item itself contains a cause/effect relationship and the generated sentence faithfully paraphrases it
+- a sentence says the reason for a market move is unknown
+- evidence is sparse and the prose is cautious
+- an optional section is thin/empty
+- style/Voice is imperfect
+- X/App length misses the preferred target
+- emoji count is imperfect
+- news wording is mildly awkward but factually supported
+- the claim is `observation` or `key_news` rather than `causal`, when the sentence is **describing the news event itself** rather than explaining a market move
+
+Those are PASS/WARN candidates when factually supported.
+
+## Required implementation approach
+
+### 1. Narrow the causal Hard check to the factual target
+
+Audit `unsupportedCausalSentences` / related logic.
+
+Distinguish at least:
+
+#### A. Market-move causal attribution
+
+Examples:
+- “AI需要を背景に日経平均が上昇した”
+- “米金利上昇を受けて東京市場が下落した”
+
+These explain a market/index/metric move.
+
+Keep strict:
+- require supported causal evidence
+- do not allow a random news item to license an unrelated market cause
+- direction/polarity must remain consistent
+
+#### B. News-event internal causal relationship
+
+Example:
+- “AI向け半導体需要を背景に半導体輸出も大幅増と報じられました”
+
+This describes the content of a news item.
+
+Allow when:
+- the relevant news item exists in input
+- the cause/effect relationship is supported by that news text
+- the generated sentence does not promote it into a cause of Tokyo/US market movement
+- the sentence does not materially reverse or strengthen the source beyond support
+
+Do **not** require the enclosing shared-market claim to be `claim_type=causal` merely because the news sentence contains words such as 「背景に」「受けて」「により」.
+
+Use the existing evidence structure if possible. Avoid adding a second LLM or web lookup.
+
+### 2. Preserve strict market-causality safety
+
+Required negative regression:
+
+Input news:
+- AI demand -> semiconductor exports increased
+
+Generated:
+- “AI向け半導体需要を背景に東京市場も上昇しました”
+
+Must remain **Hard FAIL** unless input specifically supports that market causality.
+
+Likewise:
+- supported cause A must not license unrelated cause B
+- news cause/effect direction must not invert
+- generic presence of a news ref must not authorize arbitrary causal prose
+
+### 3. Preserve unknown-ref strictness
+
+Mistyped/nonexistent news refs remain Hard FAIL.
+
+Do not add fuzzy UUID matching.
+
+If you want to reduce future model ref-copy errors, first evaluate a deterministic alias mapping such as `news:1..15`.
+
+But:
+- do not implement a large ref-contract migration casually in this task
+- only add short aliases if it can be done backward-compatibly, locally, and with tests
+- otherwise record it as a follow-up
+- the immediate blocker is the false causal rejection, not the UUID architecture
+
+### 4. Delivery-first fallback behavior
+
+Reconfirm:
+- once a safe Fact-passed draft exists, a later quality rewrite failure cannot suppress it
+- WARN remains deliverable
+- quality rewrite remains at most one bounded attempt
+- local Hard failures still get one content regeneration within the existing budget
+- do not add more generation attempts just to satisfy style
+
+No increase in max model calls for this fix.
+
+## Regression tests — mandatory
+
+Use a fixture derived from the actual 2026-10-01 close input.
+
+Must PASS:
+1. news internal causal paraphrase:
+   - source supports AI demand -> semiconductor exports increase
+   - generated sentence: `AI向け半導体需要を背景に半導体輸出も大幅増と報じられました`
+   - referenced as observation/key_news is acceptable
+2. cautious unknown market cause:
+   - `東京市場の上昇理由は、確認できる材料だけでは断定できません`
+3. same factual news sentence inside:
+   - X news paragraph
+   - App story news paragraph
+
+Must FAIL:
+4. `AI向け半導体需要を背景に東京市場も上昇しました` without market-causal evidence
+5. same source used to justify an unrelated market cause
+6. source says increase but output reverses to decrease
+7. mistyped/nonexistent news ref
+8. 10/1 mixed-session Nikkei/1306 date bug remains blocked
+9. stale-as-current remains blocked
+10. 1306->TOPIX mislabel remains blocked
+
+Also rerun:
+- full market-report-analysis
+- presentation_v2
+- H1 adversarial
+- transport retry
+- personalized relevant tests if shared helpers changed
+- X shared consumer if packet contract changed
+- deno check
+- deno lint
+- git diff --check
+
+## Product-level acceptance check
+
+Create deterministic sample output from the 2026-10-01 close fixture after the fix.
+
+We need to see that:
+- the supported Korean semiconductor-export news sentence no longer kills the report
+- unsupported Tokyo-market causality is still rejected
+- output remains readable
+- no new Hard regression is introduced
+
+Do not claim live-model success from deterministic tests.
+
+## Scope / safety
+
+Allowed:
+- `supabase/functions/market-report-analysis/**`
+- narrowly related shared guard helper/tests if truly required
+- docs/test fixtures needed for this regression
+
+Forbidden:
+- production deploy
+- manual production cycle
+- consumer gates
+- cron
+- DB/schema/RPC/migration
+- Auth/Vault/secrets
+- x-test-post deploy
+- personalized-reports deploy
+- legacy generator fixes
+- news acquisition changes
+- native App UI
+
+## Review cadence
+
+This is a focused correction to a reviewed validator.
+
+Do **not** allocate Codex before implementation.
+
+At K2:
+- if the delta is narrow and tests demonstrate both false-positive removal and strict negative regressions, ChatGPT may decide whether another Codex review is worth the cost.
+- if the fix broadens causal permissions significantly or changes shared evidence semantics, route to Codex then.
+
+## Completion conditions
+
+PASS candidate only if:
+- exact 10/1 false reject now passes
+- unsupported market causal attribution still fails
+- fabricated ref still fails
+- date/value/session/1306/stale guards still fail correctly
+- no extra model-call budget added
+- no production mutation
+
+## Required Report
+
+- task_id/result
+- fresh main SHA/worktree
+- exact root cause
+- exact code change
+- why it does not over-permit market causality
+- 10/1 positive regression result
+- negative/adversarial results
+- full test/check/lint/diff results
+- changed_files
+- PR/head SHA
+- model-call budget before/after
+- production mutation=0
+- remaining issues
+- recommendation: merge directly vs Codex review
+
+When complete:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+Pending.
+
+---
+
+# Previous completed G2 task — 2026-10-01 v2 close observation
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-shared-report-v2-close-natural-observation-20261001
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sonnet5（中）
 - purpose: production market-report-analysis v17 / Presentation v2 の最初の自然な大引けcycle（2026-10-01）をread-onlyで観測し、実モデル生成の完成率・Hard/WARN境界・文章の厚み・コスト・重複を確認する。source変更・deploy・manual invoke・gate変更は禁止。
@@ -4427,4 +4718,29 @@ Decision:
 - Presentation v2 production generator baseline is accepted.
 - consumer activation remains forbidden.
 - next G2 is read-only natural close observation on 2026-10-01 after 16:40 JST.
+
+
+
+## Final K2 — 2026-10-01 v2 close false-reject
+
+Verdict: **FAIL as a delivery policy / validator calibration; safety containment itself worked**.
+
+Independent ChatGPT production read-back:
+- 2026-10-01 close data cycle completed normally.
+- data packet: `7b61dd7d-0bac-4135-a5af-85a988ef8c75`.
+- report_status=failed after 2 natural analysis attempts.
+- final error: `ANALYSIS_LOCAL_CHECK_FAILED`.
+- final diagnostic issue:
+  `根拠の無い因果の断定（ニュースに理由の記載なし）: 「AI向け半導体需要を背景に半導体輸出も大幅増と報じられました」`
+- report packet count=0.
+- app_enabled=false / x_enabled=false.
+- production mutation from observation=0.
+
+K2 product decision:
+- the quoted sentence is a sourced causal relationship **inside the news event itself**, not an unsupported explanation of why Tokyo equities moved.
+- treating that as a Hard BLOCK is too strict and harms delivery reliability.
+- user explicitly prioritizes routine delivery reliability over over-strict content suppression.
+- Hard BLOCK must be reserved for objective falsehoods or materially unsafe factual contradictions.
+- uncertainty/style/news-summary semantics that are supportable from input should not suppress the entire report.
+- attempt-1 fabricated/mistyped news ref remains a valid Hard failure and must stay blocked.
 
