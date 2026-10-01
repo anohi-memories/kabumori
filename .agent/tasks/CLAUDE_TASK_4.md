@@ -1,3 +1,388 @@
+# Claude Task 4 — CURRENT TASK
+
+- task_id: x-social-mobile-publish-toggle-v1-20261002
+- owner: claude
+- slot: claude-4
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Opus5.5（高）
+- type: feature implementation / posting-permission boundary / authenticated Edge Function
+- production_mutation_allowed: false
+
+## Product goal
+
+X自動投稿アプリで、現在は表示だけしている「自動投稿 ON / OFF」を、ユーザーが安全に切り替えられる実機能にする。
+
+This task runs in parallel with G3 `x-social-mobile-ai-consult-v1-20261002`.
+
+G3 owns:
+- AI consultation
+- content settings/persona
+- consultation Edge/API boundary
+
+G4 MUST NOT touch those areas.
+
+G4 owns only the posting-permission toggle for an exact connected social account.
+
+## Why this is a good parallel task
+
+Fresh production/read-only inspection confirms:
+- `public.social_accounts.publish_enabled boolean not null` already exists and is the current runtime truth for posting enabled/disabled.
+- authenticated clients currently have SELECT only; there is no direct UPDATE policy/grant.
+- app already maps `publish_enabled=false` -> paused and true -> active.
+- current account/home UI can display ON/OFF but cannot change it.
+- no new DB column/table is required.
+- common-account PR #70 migration work remains separate.
+
+Therefore implement a narrow authenticated server-side write boundary using the existing schema, with **no migration**.
+
+## Mandatory startup / isolation
+
+1. Read `PROJECT_RULES.md`, `CLAUDE.md`, `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, this TASK.
+2. Use an independent G4 worktree/checkout.
+3. Fresh `origin/main`.
+4. Confirm G3 current task is `x-social-mobile-ai-consult-v1-20261002`; do not edit:
+   - `apps/social-mobile/src/app/(tabs)/consult.tsx`
+   - `apps/social-mobile/src/domain/content-settings*`
+   - `apps/social-mobile/src/data/content-settings-repository.ts`
+   - G3's consultation Edge Function/tests.
+5. Confirm G5/H1 common-account PR #70 files do not overlap intended G4 files.
+6. Do not reuse another slot's .env, simulator, Metro, untracked files, worktree or branch.
+7. Read the Supabase skill and inspect existing social-mobile Edge Function Auth/membership patterns before implementation.
+8. **No DB migration / RLS / grant change in this TASK.**
+
+## Current production facts to preserve
+
+Read-only inspection showed:
+- social account connection states include `authorization_pending` and `identity_verified`.
+- existing live accounts may have `publish_enabled=true/false`.
+- `brand_memberships.role` supports `owner/admin/member/viewer`.
+- current user-facing memberships observed are owners, but implementation must define role handling safely.
+- `brands` has `is_active` and `publish_mode` including live/disabled.
+- authenticated role has SELECT on social_accounts, not UPDATE.
+
+Do not weaken RLS or add direct client write access just to make the toggle easy.
+
+## Required architecture
+
+Implement a dedicated authenticated server-side action for the exact account, preferably a narrowly scoped Edge Function such as:
+
+`social-mobile-publish-setting`
+
+or follow the repository's existing naming convention if a better one exists.
+
+Client request conceptually:
+- `social_account_id`
+- `desired_enabled: boolean`
+- `expected_current_enabled: boolean`
+
+Do NOT trust a client-supplied brand id as authorization.
+
+Server derives/validates:
+1. valid caller JWT/user
+2. exact social account row by id
+3. account's actual `brand_id`
+4. caller membership for that exact brand
+5. permitted role
+6. account/platform/connection readiness
+7. current publish state
+8. stale-state conflict protection.
+
+## Authorization
+
+Fail closed.
+
+Minimum policy:
+- unauthenticated: reject
+- no membership: reject
+- `viewer`: reject
+- `member`: reject for v1 unless existing product policy clearly documents publish-control permission; default to owner/admin only
+- `owner` / `admin`: eligible subject to readiness checks
+
+Do not use unmerged common-account/service-entitlement semantics from PR #70.
+
+Do not allow one user's membership to toggle an account in another brand.
+
+Do not expose service-role credentials to the app.
+
+## ON behavior — strict enable gate
+
+Turning **ON** creates permission for future scheduled work to actually publish, so it must be stricter than OFF.
+
+Enable only if all source-of-truth checks pass:
+
+- exact social account exists
+- platform is X for this v1
+- account's brand exists
+- brand `is_active = true`
+- brand `publish_mode = 'live'`
+- connection status is the exact verified/usable state used by the current posting pipeline (production currently uses `identity_verified`; inspect runtime contract and do not guess)
+- `verified_at` is present if runtime uses it as verification evidence
+- required Vault credential **references** exist for the account
+- do not read/log/return Vault plaintext
+- no known connection state says reconnect/authorization pending
+- caller is allowed owner/admin
+- request's expected current value matches the current row
+
+If any prerequisite fails:
+- do not toggle
+- return a bounded user-safe error code/message
+- advise reconnect where appropriate
+- do not attempt X auth/post/revoke.
+
+Do not “repair” credentials in this endpoint.
+
+## OFF behavior — safety first
+
+Turning **OFF** should be easy and fail safe.
+
+An authorized owner/admin should be able to set `publish_enabled=false` even if:
+- X connection is degraded
+- tokens are missing
+- brand is inactive
+
+because disabling future publishing is the safer direction.
+
+Still require:
+- valid caller
+- exact account/brand membership
+- stale-state protection.
+
+OFF must NOT:
+- revoke X OAuth
+- delete credentials
+- delete scheduled posts
+- delete drafts/history
+- sign the user out
+- alter common-account state.
+
+It only disables the permission gate.
+
+## Concurrency / stale UI
+
+Use compare-and-set semantics.
+
+The client sends the state it believes is current.
+
+The server must not silently overwrite a state that changed after the screen loaded.
+
+Expected behavior:
+- expected matches -> perform/no-op safely
+- expected mismatches -> return conflict/stale result
+- client reloads current snapshot and asks user again if needed.
+
+Avoid double-tap races:
+- disable control while request is in flight
+- server side conditional update on exact id + expected current value
+- zero-row update after authorization/read => treat as stale/conflict, not success.
+
+## Exact mutation boundary
+
+The action may mutate only:
+
+`public.social_accounts.publish_enabled`
+
+(and an existing generic `updated_at` only if the repository's established update mechanism/trigger naturally does so).
+
+It must NOT mutate:
+- connection_status
+- verified_at
+- platform_user_id
+- oauth_client_ref
+- Vault refs
+- Vault contents
+- brands
+- brand_memberships
+- scheduled_posts
+- post_execution_logs
+- Auth
+- common-account/service-entitlement tables
+- content settings/persona
+- scheduler/Cron state.
+
+No X API call.
+
+## Client UX — functional only
+
+UI is going to be redesigned later. Do not polish.
+
+Place the control where account-specific operational settings already belong, preferably:
+- `apps/social-mobile/src/app/accounts/[id].tsx`
+
+Functional minimum:
+- clearly show current status
+- button/control to turn ON or OFF
+- ON requires an explicit confirmation explaining:
+  「ONにすると、条件を満たした投稿予定は自動でXへ投稿される可能性があります」
+  or equivalent truthful wording
+- OFF should clearly say future automatic publishing is stopped; do not claim queued data is deleted
+- loading state
+- success state
+- safe error state
+- stale conflict -> reload/reconfirm
+- disconnected/not-verified state -> ON disabled/explained; OFF remains available if currently ON
+- after success, reload shared data so Home/Accounts reflect source-of-truth state.
+
+Do not spend time on visual redesign, header polish, animations, spacing, icons, etc.
+
+## Relationship to approvalMode
+
+Keep these two concepts separate:
+
+- `social_accounts.publish_enabled` = whether this exact account is allowed to publish automatically
+- `content settings.approvalMode` = whether content requires human review
+
+This G4 task changes **only publish_enabled**.
+
+Do not edit content settings or AI consultation.
+
+Do not treat `auto_post_preference` as permission to toggle publish_enabled.
+
+## Tests
+
+### Edge/server
+
+At minimum:
+- unauthenticated -> rejected
+- account not found -> safe 404/blocked
+- no membership -> rejected
+- viewer/member -> rejected by v1 policy
+- owner/admin exact brand -> allowed
+- cross-brand account id -> rejected
+- ON blocked for authorization_pending/not verified
+- ON blocked if brand inactive
+- ON blocked if brand publish_mode disabled
+- ON blocked if required credential references absent
+- ON never reads/returns Vault plaintext
+- OFF allowed despite degraded connection for authorized owner/admin
+- stale expected state -> conflict/no mutation
+- duplicate/same-state request is deterministic/no harmful extra mutation
+- only publish_enabled changes
+- no scheduled_posts/post logs/Auth/Vault/content settings/common-account mutation
+- no X API/network call
+- secrets/JWT not logged or returned
+- method/content-type/input validation
+- bounded safe error codes.
+
+### Client/domain
+
+- current ON/OFF renders truthfully
+- ON confirmation is required
+- cancel confirmation -> no request
+- OFF wording does not imply deletion/revoke
+- request in flight prevents duplicate taps
+- success reloads snapshot
+- stale conflict reloads and does not pretend success
+- disconnected account cannot be enabled
+- currently-ON degraded account can still be disabled
+- account id passed is exact selected account
+- no G3 content-settings/consultation code imported or altered.
+
+Run:
+- focused new tests
+- full social-mobile tests
+- relevant Edge/shared tests
+- typecheck/lint/runtime checks per repo
+- `git diff --check`
+- secret scan
+- scope diff.
+
+## Local verification
+
+Use G4-owned mock/local environment.
+
+Verify functionally:
+1. OFF account -> press ON -> confirmation appears
+2. cancel -> no state change
+3. confirm against mocked eligible account -> UI becomes ON after reload
+4. ON -> OFF -> state becomes OFF
+5. authorization_pending account cannot be enabled
+6. stale-state response is shown safely
+7. no post is created/sent
+8. no X auth/revoke occurs.
+
+No real X post or production toggle is needed for this source task.
+
+## DB / migration rule
+
+**No migration, RLS change or grant change.**
+
+If implementation cannot safely provide the write boundary without schema/RPC changes:
+- STOP
+- report exact blocker
+- do not modify PR #70 or create a migration.
+
+## Explicit non-scope
+
+- AI consultation / persona
+- past-post learning
+- AI post generation
+- edit/regenerate/approve post content
+- retry failed scheduled post
+- scheduler/Cron changes
+- X OAuth connect/reconnect
+- token refresh logic
+- account deletion
+- common account/service entitlement
+- new DB schema
+- major UI redesign
+- production deploy.
+
+## Production / safety
+
+Source + tests + PR only.
+
+Forbidden:
+- production Edge deploy
+- production publish toggle
+- real X post
+- real X auth/revoke
+- Vault mutation
+- Auth mutation
+- DB migration/apply
+- Cron/scheduler mutation.
+
+Production mutation = 0.
+
+## Completion / K4
+
+Report:
+- task_id
+- result
+- endpoint/architecture
+- exact authorization policy
+- enable prerequisites
+- disable semantics
+- stale/CAS behavior
+- exact mutation boundary
+- changed_files
+- tests
+- local verification
+- proof G3 consultation files untouched
+- DB migration = none
+- production mutation = 0
+- real X operations = 0
+- commit / push / PR
+- remaining issues
+- safety checks
+- next recommendation.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K4.
+
+### Expected review
+
+This is a posting-permission/security boundary. K4 should normally allocate a focused Codex review before merge.
+
+Recommended Codex model: **Sol（高）**.
+
+Do not merge/deploy solely from Claude's self-review.
+
+---
+
 # Claude Task 4
 
 - task_id: x-social-mobile-x-account-switch-auth-session-20261001
