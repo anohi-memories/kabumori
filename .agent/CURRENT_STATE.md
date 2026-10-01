@@ -1,3 +1,15 @@
+## K2 — PR #67 shared report v2 source candidate
+
+- verdict: **PASS to focused review; merge/deploy HOLD**.
+- PR #67 exact head: `5877045f7554cd4e089fb3b79091bf8e2bb38456`; open / mergeable.
+- scope: 27 files, +4622/-146; production mutation=0.
+- main-side changes after PR base do not overlap PR #67 runtime files.
+- reported verification: analysis 73/73, personalized 128/128, X shared 8/8, data-packet 42/42, _shared 329/329; 8 historical Fact-passed packets replayed with 0 new Hard false positives; check/lint/diff PASS.
+- deterministic samples: X ~492–494 chars; App narrative ~1005–1042 chars; same shared fact spine.
+- exact 10/1 mixed-session regression is deterministically blocked; Hard factual defects are separated from non-blocking Quality WARN.
+- live-model v2 output is still unobserved; consumer gates remain app=false / x=false.
+- H1 assigned `kabumori-pr67-shared-report-v2-hard-fact-review-20261001`; recommended model **Sol（高）**.
+- H2 remains occupied by PR #66 and was not overwritten.
 ## H2 assigned — PR #66 AI Lab topic dedup review
 
 - task: `x-ai-lab-pr66-topic-dedup-review-20261001`
