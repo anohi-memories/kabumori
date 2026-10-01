@@ -1,3 +1,18 @@
+## Final K5 — PR #70 readiness authorization corrective
+
+- verdict: **PASS to focused Codex rereview; merge/apply/deploy HOLD**.
+- PR #70 exact head `47a2ed6a1635177ba82004eace4bddb42d9d53e3`, open/mergeable at K5.
+- key correction: Phase 1 has no enforcing Auth-delete guard. Auth-cascade trigger is observation/shadow only; readiness is durable state bound to lifecycle version + requirement epoch + required checkpoint set.
+- built-in checkpoint semantics are fixed/fail-closed; entitlement owner/service transfer is prohibited.
+- G5 reports previous six blockers and later seven adverse cases all covered by committed regressions.
+- reported verification: lifecycle 20 PASS; mutation 45/45 detected; social-mobile deletion 8 PASS; migration invariants 10 PASS; shell/diff checks clean.
+- production mutation/read: 0. No migration apply/backfill/Auth/Storage/OAuth/Vault/deploy/Cron/flag/provider change.
+- PR is 75 commits behind main, but fresh base-to-main comparison shows no overlap with its eight files.
+- H1 assigned `common-account-pr70-readiness-authorization-rereview-20261002`, recommended **Sol（高）**.
+- merge/apply remains blocked pending C1.
+- even after source acceptance, production preflight/apply requires a separate **Sol（極高）** review, actual disposable Supabase proof, exact production read-only catalog/history/ACL/FK checks, backfill dry-run/parity and explicit approval.
+- AI Lab diary: no update; 2026-10-02 already has a coherent X-app daily entry and should not be overwritten with a second unrelated workstream.
+
 ## Final K3 PASS — social-mobile native navigation cleanup
 
 - verdict: **PASS**.
