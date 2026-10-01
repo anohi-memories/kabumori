@@ -81,13 +81,13 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- next_owner: claude
-- status: ready
+- next_owner: none
+- status: done
 - task_id: x-social-mobile-x-account-switch-auth-session-20261001
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: K4 HOLD follow-up 2. PR #65 source/security remains accepted at exact head e5a66f5ba71f64b1a38d8f89faff3d0a31972949; checks green and no main overlap. Build an isolated unused iOS Simulator locally (now authorized as necessary), prove Safari account A is not silently reused and a different disposable B can authenticate, then cancel before final provider authorization so production connection/Vault mutation remains 0. Retry once; no real X post. No source change. Recommended Sonnet5（高）.
+- allocation: Final K4 PASS. PR #65 exact reviewed head e5a66f5ba71f64b1a38d8f89faff3d0a31972949 squash-merged as 6b1f2f6229a1b75743b57900d869368c2c5e8693 after isolated native operator proof. Safari account A was not silently reused; disposable B reached final-consent boundary; cancel/retry passed. Final X consent/linking not completed, production state mutation for the test window 0, real X posts 0. G4 is free after fresh allocation.
 
 ## Claude G5
 - owner: claude
