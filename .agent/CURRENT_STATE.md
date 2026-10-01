@@ -1,3 +1,16 @@
+## K4 HOLD 2 — PR #65 isolated provider proof
+
+- PR #65 remains open / mergeable at exact reviewed head `e5a66f5ba71f64b1a38d8f89faff3d0a31972949`; GitHub checks are green.
+- fresh main is 86 commits ahead of the original PR base but overlaps none of the five PR #65 source/test files.
+- prior G4 follow-up STOP is accepted as an environment blocker only: no isolated runnable Simulator build/public client config was available; source remained unchanged, production mutation 0, real X posts 0.
+- G3 is now complete, but G4 still must use its own worktree/environment.
+- G4 is returned to ready. An isolated local Simulator native build is now authorized because it is necessary to verify the only remaining platform behavior.
+- provider proof must stop before final X authorization/callback/linking: verify Safari account A is not silently reused, a different disposable B can authenticate, cancel/retry works, then close. This avoids creating production social-account/Vault state solely for testing.
+- reconnect path no longer requires a provider-side persisted connection for this gate because connect/reconnect use the same reviewed hook and automated tests already cover reconnect/cancel/retry; the missing evidence is specifically native iOS ephemeral-session behavior.
+- no new Codex review unless runtime source changes.
+- recommended Claude model: **Sonnet5（高）**.
+- AI Lab diary: 記録不要 at this HOLD; no new product behavior was completed.
+
 ## Final C1 — Common account deletion safety accepted
 
 - verdict: **FAIL / CHANGES REQUIRED accepted**.
