@@ -102,15 +102,14 @@ aude-3
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: idle
-- task_id: none
+- status: ready
+- task_id: common-account-v1-phase0-prod-readonly-inventory-20261001
 - start_code: G5
 - finish_code: K5
-- next_owner: none
+- next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: 未割当。用途を固定しない予備枠。ユーザーまたはChatGPTの明示割当時だけ使用し、idleだけで作業開始・MIC自動割当しない。
-
+- allocation: 共通アカウントv1 Phase 0。repository + productionのAuth/identity、Kabumori/X service population、ownership、RLS/service_role、deletion/cascade、OAuth/Vault境界をread-onlyでinventoryし、entitlement shadow-backfill判定を作る。実装/migration/RLS/Auth/OAuth/Vault/deploy/production mutationは禁止。G3/G4のsocial-mobile作業を変更しない。推薦モデル Opus5.5（極高）。
 ## Deferred
 
 - PR #15 is closed with Final K4 PASS. PR #33 remains unmerged; its Auth/security review/merge decision can now be scheduled separately after fresh slot review.
