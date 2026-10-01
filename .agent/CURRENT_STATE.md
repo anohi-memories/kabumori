@@ -1,3 +1,21 @@
+## Final C1 — PR #70 lifecycle foundation FAIL
+
+- verdict: **FAIL / CHANGES REQUIRED accepted**.
+- PR #70 head `89cf128bd9219897806b2b641cce4866f6e16c52` remains open/unmerged and is not approved for production apply.
+- H1 independently reproduced six blockers:
+  - SQL Auth deletion can report completion while Storage-owned state remains.
+  - absent-account preview can remain valid after backfill introduces a service.
+  - backfill can grant entitlement after concurrent account lock/state change.
+  - admin + self-service workspace can receive X consumer entitlement.
+  - migration preflight can accept an Auth FK on the wrong column.
+  - rollback can remove enforcement when lifecycle settings row is missing.
+- baseline lifecycle/race/ACL behavior had substantial passing evidence, but these blockers invalidate merge readiness.
+- production mutation from H1: 0; current production corruption was not established.
+- architecture correction: Phase 1 will no longer perform or claim managed Auth destruction. It will stop at durable lifecycle/service state and a readiness contract; actual Auth/Storage/provider/session cleanup moves to a later common-account orchestrator phase.
+- G5 assigned `common-account-pr70-corrective-lifecycle-foundation-20261001`, recommended **Opus5.5（極高）**, to amend PR #70 and commit all six H1 counterexamples as regression tests.
+- merge/apply/deploy/backfill remain HOLD.
+- after corrective K5, focused Codex rereview required; before any production apply, separate **Sol（極高）** review and explicit approval required.
+
 ## H1 completed — PR #70 lifecycle foundation review (2026-10-01 JST)
 
 - task_id: `common-account-pr70-lifecycle-foundation-review-20261001`; status `review_required`, next_owner `chatgpt`.
