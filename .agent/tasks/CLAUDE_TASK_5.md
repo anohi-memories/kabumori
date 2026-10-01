@@ -3,8 +3,8 @@
 - task_id: common-account-v1-phase1-additive-lifecycle-foundation-20261001
 - owner: claude
 - slot: claude-5
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - start_code: G5
 - finish_code: K5
@@ -1217,3 +1217,17 @@ Report 時点の fresh `origin/main` と open PR で確認。
 - security follow-up: production Kabumori account deletion currently hard-deletes the shared Auth user without X-service/admin-aware protection. This is an existing cross-service lifecycle risk and is assigned separately to H1 for source/security review and minimal fail-closed correction candidate. No production deploy is authorized by K5.
 - Codex review of Phase 0 itself: not required because G5 changed no runtime code and only performed read-only inventory. The newly discovered deletion boundary receives its own H1 review.
 - AI Lab diary: 記録不要 — 同日既存エントリが「共通部分とサービス固有部分を分け、サービス単位で安全に利用終了する」という今回の公開可能な要点をすでに含んでおり、重複追記はしない。
+
+
+## Final K5 — Phase 1 lifecycle foundation
+
+- verdict: **PASS to focused Codex review; merge/deploy/apply HOLD**.
+- accepted source candidate: PR #70 exact head `89cf128bd9219897806b2b641cce4866f6e16c52`, 7 files, additive schema/tests/docs only.
+- scope quality: no client/Edge/runtime wiring, no existing table/policy/grant/function rewrite, no G4 PR #65 file overlap.
+- concurrency evidence accepted as candidate evidence: real PostgreSQL two-session race coverage, both provisioning-vs-delete commit orders, existing profile/X onboarding creators, no-deadlock case, rollback/reapply, mutation checks.
+- production mutation: **0**; production read: 0; migration/backfill/deploy/Auth/OAuth/Vault/Cron changes: 0.
+- merge decision: **HOLD** pending H1 review of SQL Auth deletion semantics, lifecycle serialization, guard trigger, ACL/SECURITY DEFINER/search_path, preflight exactness, shadow backfill rules, rollback safety, and Supabase compatibility.
+- source candidate is not approval to apply migration or change production deletion behavior.
+- next reviewer: H1 `common-account-pr70-lifecycle-foundation-review-20261001`, recommended model **Sol（高）**.
+- pre-production migration/apply decision, if reached later, requires a separate **Sol（極高）** gate.
+- AI Lab diary: 候補あり — 共通ログインとサービスごとの利用登録を分ける土台を作り、利用開始と全体削除が同時に走るケースまで競合テストした内容を公開安全な表現で2026-10-01エントリへ反映。
