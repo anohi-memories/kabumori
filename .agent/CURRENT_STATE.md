@@ -1,3 +1,18 @@
+## Final K3 PASS — social-mobile native navigation cleanup
+
+- verdict: **PASS**.
+- PR #73 accepted at exact head `645923ba87c8667073061d13a2fc46bbb31ebcbe` and squash-merged as `a81a60bb731e2c51aa907b4cc08234cb602c4f6a`.
+- native iOS Release-like verification confirmed previously dead History, Schedule, Settings 「会話で相談する」 and Accounts rows now navigate correctly; Accounts 「ログイン方法」 styling is restored.
+- audit result: all proven-broken `Link asChild > Card/View` and function-style direct-child cases in app/components were removed; remaining ActionButton cases are safe because they forward press behavior.
+- tests: social-mobile 113/113 PASS; typecheck/lint/diff PASS.
+- scope remained UI/navigation-only; no x-connect/OAuth/Auth/account-deletion/common-account/DB/RLS/RPC/Edge/Vault/flag/scheduler change.
+- production mutation 0; real X operations 0; deploy 0.
+- no Codex review required for this narrow UI-only change.
+- Netlify preview passed; Vercel failure was the known free-tier build-rate-limit, not a candidate-quality failure.
+- remaining separate UI polish: `/accounts/[id]` is now reachable but has no visible header/back button; edge-swipe works.
+- no TestFlight/App Store/native production build from this task.
+- G3 closed and reusable after fresh allocation.
+
 ## Final C1 — PR #70 corrective rereview FAIL
 
 - verdict: **FAIL / CHANGES REQUIRED accepted**.
