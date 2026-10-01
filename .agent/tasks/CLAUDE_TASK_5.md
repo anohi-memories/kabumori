@@ -3,7 +3,7 @@
 - task_id: common-account-v1-phase1-additive-lifecycle-foundation-20261001
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: in_progress
 - next_owner: chatgpt
 - priority: highest
 - start_code: G5
