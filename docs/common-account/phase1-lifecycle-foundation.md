@@ -292,6 +292,11 @@ A `BEFORE DELETE` trigger on `common_accounts` runs when the cascade from
 - The guard looks at no admin, membership or identity row, so the order in
   which the delete's cascades run cannot change its answer (regression with
   both orders).
+- A direct maintenance DELETE of the common-account row while its Auth login
+  still exists is refused (`COMMON_ACCOUNT_ROW_DELETE_REQUIRES_LOGIN_REMOVAL`).
+  It must not falsely record login removal or scrub the durable intent's user
+  link. This checks observation truthfulness, not authorization to delete Auth;
+  real shadow Auth cascades are still allowed unconditionally.
 - The settings table accepts no value other than `shadow`. An enforcing mode
   does not exist in this candidate; the static check enforces that.
 - The guard protects nobody. A table owner or superuser can disable triggers.

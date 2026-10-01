@@ -859,6 +859,13 @@ begin
   if v_mode is distinct from 'shadow' then
     raise exception 'COMMON_ACCOUNT_DELETE_NOT_AUTHORIZED' using errcode = '23503';
   end if;
+  -- A direct maintenance DELETE of the application row is not removal of a
+  -- managed login. During the real Auth cascade the parent row is already
+  -- absent in this transaction; refuse anything else without falsifying the
+  -- durable observation or clearing its subject link.
+  if exists (select 1 from auth.users u where u.id = old.user_id) then
+    raise exception 'COMMON_ACCOUNT_ROW_DELETE_REQUIRES_LOGIN_REMOVAL' using errcode = '23503';
+  end if;
   update private.account_lifecycle_operations
      set status = 'login_removed',
          last_error_code = case

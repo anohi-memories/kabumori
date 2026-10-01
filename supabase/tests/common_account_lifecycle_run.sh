@@ -471,8 +471,9 @@ rollback_refuses() {  # label, expected message
   [[ "$("${query[@]}" -c "select to_regclass('public.common_accounts') is not null and to_regprocedure('private.account_lifecycle_guard_account_delete()') is not null")" == t ]] || { echo "FAIL rollback removed objects: $1" >&2; exit 1; }
 }
 rollback_refuses "deletion in flight" "COMMON_ACCOUNT_ROLLBACK_REFUSED_OPERATIONS_EXIST"
-# Clear the shadow rows the tests left (shadow mode: plain deletes are allowed).
-"${as_owner[@]}" -c "delete from private.account_lifecycle_operations" -c "delete from public.common_accounts"
+# TEST ONLY: remove fake logins through the shadow Auth cascade before clearing
+# durable operations. Direct common-row deletion must not impersonate it.
+"${as_owner[@]}" -c "delete from auth.users where id in (select user_id from public.common_accounts)" -c "delete from private.account_lifecycle_operations"
 # H1 counterexample 6: no settings row. The guard treats that as "refuse", so
 # rollback must not treat it as "safe to remove the guard".
 "${as_owner[@]}" -c "delete from private.account_lifecycle_settings"
@@ -499,13 +500,13 @@ u="$(uid 918)"
 run "begin; $(begin_sql "$u" 0) commit;" >/dev/null
 run "begin; $(as_service "select public.abort_common_account_deletion('$u', '$(operation_of "$u")')") commit;" | grep -q '"status": "aborted"' || { echo "FAIL setup aborted operation" >&2; exit 1; }
 rollback_refuses "finished lifecycle operation" "COMMON_ACCOUNT_ROLLBACK_REFUSED_OPERATIONS_EXIST"
-"${as_owner[@]}" -c "delete from private.account_lifecycle_operations" -c "delete from public.common_accounts"
+"${as_owner[@]}" -c "delete from auth.users where id in (select user_id from public.common_accounts)" -c "delete from private.account_lifecycle_operations"
 u="$(uid 915)"
 registered_login "$u"
 rollback_refuses "a client already registered a service" "COMMON_ACCOUNT_ROLLBACK_REFUSED_SELF_SERVICE_ENTITLEMENTS_EXIST"
 "${as_owner[@]}" -c "delete from public.service_entitlements" -c "update public.common_accounts set status = 'locked' where user_id = '$u'"
 rollback_refuses "operator hold present" "COMMON_ACCOUNT_ROLLBACK_REFUSED_ACCOUNT_NOT_ACTIVE"
-"${as_owner[@]}" -c "delete from public.common_accounts"
+"${as_owner[@]}" -c "delete from auth.users where id in (select user_id from public.common_accounts)"
 "${as_owner[@]}" -c "create view public.fixture_dependent as select user_id from public.common_accounts"
 rollback_refuses "downstream dependency" "because other objects depend on it"
 "${as_owner[@]}" -c "drop view public.fixture_dependent"

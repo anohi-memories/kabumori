@@ -104,6 +104,10 @@ mutation "rollback ignores that integration started" rollback \
 
 # === Second review, F1-F4 =========================================================
 # --- F1: no authorizing guard; stale readiness is never trusted --------------------
+mutation "application-row removal falsely records managed login deletion" candidate \
+  $'  if exists (select 1 from auth.users u where u.id = old.user_id) then\n    raise exception \'COMMON_ACCOUNT_ROW_DELETE_REQUIRES_LOGIN_REMOVAL\' using errcode = \'23503\';\n  end if;' \
+  "" \
+  "FAIL H1-observer: direct common-row deletion must not falsely record login removal"
 mutation "missing settings do not refuse a login delete" candidate \
   "  if v_mode is distinct from 'shadow' then" \
   "  if false then" \
@@ -115,7 +119,7 @@ mutation "an enforcing guard mode exists" candidate \
 mutation "the removal of a ready login is recorded without the unverified mark" candidate \
   "           when current_step = 'ready_for_managed_auth_delete' then 'LOGIN_REMOVED_WHILE_READY_UNVERIFIED'" \
   "           when current_step = 'ready_for_managed_auth_delete' then null" \
-  "FAIL shadow: the removal of a ready login is an unverified observation"
+  "FAIL H1-observer: actual Auth cascade still records login removal"
 mutation "an authorization is not re-evaluated before use" candidate \
   $'  v_refusal := private.account_lifecycle_readiness_refusal(p_user_id, v_operation.checkpoints);\n  if v_refusal is not null then\n    v_problems :=' \
   $'  v_refusal := null;\n  if v_refusal is not null then\n    v_problems :=' \

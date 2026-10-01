@@ -804,6 +804,28 @@ select pg_temp.svc(format('select public.abort_common_account_deletion(%L::uuid,
 --    "delete from auth.users" below is the TEST standing in for whoever removes
 --    a login (today's legacy routes; later the orchestrator through the managed
 --    API). The candidate never does it.
+-- The observer must not confuse owner maintenance on the application row
+-- with deletion of the managed login. Refuse direct common-row removal while
+-- Auth still exists, without closing or scrubbing its durable intent.
+select pg_temp.ready_login(pg_temp.uid(805)) as op805 \gset
+select coalesce(pg_temp.error_as(current_user::text, format(
+  'delete from public.common_accounts where user_id = %L', pg_temp.uid(805))), '') as direct805 \gset
+select pg_temp.expect(:'direct805' like '%COMMON_ACCOUNT_ROW_DELETE_REQUIRES_LOGIN_REMOVAL%'
+  and pg_temp.login_exists(pg_temp.uid(805))
+  and pg_temp.account(pg_temp.uid(805)) = 'deleting'
+  and (select status = 'in_progress' and user_id = pg_temp.uid(805)
+         from private.account_lifecycle_operations where id = :'op805'::uuid)
+  and pg_temp.authorization_of(pg_temp.uid(805)) ->> 'state' = 'valid',
+  'H1-observer: direct common-row deletion must not falsely record login removal');
+-- The same observer still allows an actual shadow Auth cascade and records
+-- it truthfully as an unverified observation, never a completed deletion.
+delete from auth.users where id = pg_temp.uid(805);
+select pg_temp.expect(not pg_temp.login_exists(pg_temp.uid(805))
+  and (select status = 'login_removed' and user_id is null
+              and last_error_code = 'LOGIN_REMOVED_WHILE_READY_UNVERIFIED'
+         from private.account_lifecycle_operations where id = :'op805'::uuid),
+  'H1-observer: actual Auth cascade still records login removal');
+
 select public.fixture_login(pg_temp.uid(801), true, true);
 select pg_temp.start(pg_temp.uid(801), 'kabumori') as r \gset
 select pg_temp.svc(format('select public.begin_service_deletion(%L::uuid, ''kabumori'')', pg_temp.uid(801))) ->> 'operation_id' as op801 \gset
