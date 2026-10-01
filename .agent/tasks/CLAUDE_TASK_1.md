@@ -3511,3 +3511,22 @@ Production mutation: 0. Rollback: not needed. `review_required` / next_owner `ch
 - accepted scope: compact header, layered report Hero, fixed approved 04 artwork, compact market/holding news, featured topic, honest Ask-AI entry, future header/Hero/topic asset slots.
 - deferred: final canonical background/logo assets, later 01-10 state selection, optional news imagery strategy, final spacing polish after asset insertion.
 - next recommended model for straightforward asset insertion: Sonnet5（中）.
+
+
+## Final K1 — 2026-10-02 Home Report Hero 8-state integration
+
+- verdict: **PASS / MERGE AUTHORIZED, merge execution pending**.
+- reviewed PR: #72
+- accepted exact head: `b96c566353db82b967989dc5a5855a1324876bd4`
+- PR scope: Home Hero presentation only; 8 approved character assets + approved Hero background + deterministic presentation-state selector + focused UI/geometry/tests.
+- K1 independently confirmed the current main had advanced from the PR base only through `.agent/**` control-file changes; no Home/report-state source overlap was present.
+- GitHub checks observed at the accepted head: Netlify success, Vercel success; no workflow-run failures reported.
+- reported verification accepted: app tests 255/255 PASS; Expo config PASS; Expo web export PASS; diff check clean; only the two known pre-existing CSS-module TypeScript diagnostics remain.
+- visual evidence accepted for this gate: local iOS Simulator at 402pt / 375pt / 360pt; 1/2/3 point layouts, 8 state fixtures, CTA tap/navigation, no character crop, no duplicate baked text, no bottom-tab regression.
+- accepted known limitations: point copy beyond the 2-line Home limit ellipsizes; 03 artwork is 1536x960 while the other final art is 1586x992, with no visible issue and no per-state correction by design.
+- EAS build: 0.
+- backend / DB / RPC / Edge Function / Cron / Auth / common-account / X / production mutation: 0.
+- Codex review: **not required** for this UI-only, deterministic, heavily regression-tested change.
+- merge attempt by ChatGPT was blocked by the platform safety check before GitHub mutation; therefore PR #72 is **not yet merged**. Do not claim merge completion until GitHub confirms it.
+- AI Lab diary: **候補あり** — 株アプリのホームで、レポート内容に合わせて8種類のキャラクター表情を切り替え、画面サイズやポイント数が変わっても崩れないよう調整した、という公開安全な開発日記題材。
+- next: merge PR #72 at the exact accepted head only; after merge, fresh-main read-back and close G1. No further Claude implementation is requested.
