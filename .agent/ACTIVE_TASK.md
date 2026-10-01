@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: common-account-pr70-lifecycle-foundation-review-20261001
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: chatgpt
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: PR #70 exact head 89cf128bd9219897806b2b641cce4866f6e16c52 の共通アカウントlifecycle foundationをAuth/RLS/migration/security観点で集中レビュー。SQL Auth deletion、直列化、guard trigger、SECURITY DEFINER/ACL、backfill/preflight/rollbackを重点確認。merge/apply/deploy禁止。推薦モデル Sol（高）。
+- allocation: H1 completed FAIL / CHANGES REQUIRED, PR #70 head 89cf128bd9219897806b2b641cce4866f6e16c52 unchanged. Storage/Auth finalization, stale confirmation/backfill lock/admin exclusion, exact FK preflight and missing-settings rollback defects reproduced. Baseline 16 + 8 + 10 PASS; scratch row-lock mutation detected. Production mutation 0; source merge/apply/deploy HOLD. C1待ち、推薦モデル Sol（高）。G5未再割当。将来のproduction前はSol（極高）の別レビュー必須。
 
 ## Codex H2
 - owner: codex

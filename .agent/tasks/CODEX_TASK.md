@@ -3,8 +3,8 @@
 - task_id: common-account-pr70-lifecycle-foundation-review-20261001
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused security / migration / Auth lifecycle review
@@ -172,6 +172,19 @@ PR #70 reported evidenceを鵜呑みにせず再実行/検査：
 - next recommendation
 
 完了時 status -> review_required / next_owner -> chatgpt / STOP for C1.
+
+## H1 completion — 2026-10-01 JST
+
+- verdict: **FAIL / CHANGES REQUIRED**; review completed, source merge/apply/deploy HOLD.
+- original/final PR #70 head: `89cf128bd9219897806b2b641cce4866f6e16c52` (unchanged).
+- P1: SQL Auth finalization can report completed with Storage-owned metadata remaining; ownership is not protected by an Auth FK. No production deletion was performed.
+- P2: backfill preserves version 1 for newly created accounts with new service entitlements, accepting an old empty preview; a two-session backfill can grant an active entitlement after an operator lock commits; admin + self-service-owner is not actually excluded.
+- P2: preflight accepts an unrelated-column Auth FK instead of the required user binding; rollback removes the effective-enforce guard when its settings row is missing.
+- independently rerun after reset: lifecycle runner 16 checks PASS, existing social deletion runner 8 checks PASS, migration invariants 10/10 PASS, bash syntax / invariant lint / diff checks PASS. Removing the common row lock in a scratch-only mutation is detected by race 7. Six additional safety counterexamples reproduced; standard suites do not cover them.
+- runtime/source fixes: none. Correcting managed Auth/Storage deletion and backfill/confirmation serialization requires the lifecycle contract work explicitly reserved for G5, not a partial safety claim.
+- production mutation=0; read-only catalog metadata only. Real disposable Supabase GoTrue/PostgREST/Storage proof is still required; local PostgreSQL is not that proof.
+- full findings, reproduction recipes, limits and delivery evidence appended to `.agent/CODEX_REPORT.md`; prior reports and other slots preserved.
+- next: **C1, 推薦モデル：Sol（高）**. After a separately assigned G5 correction, repeat focused review; **Sol（極高） pre-production review required** before any production apply. This completion does not allocate G5 or authorize production. H1 STOP.
 
 ---
 

@@ -992,3 +992,124 @@ Required regression tests for that future correction: verified unambiguously Kab
 - source_safe_to_merge: no new runtime candidate; existing cross-service hard-delete is **not approved as common-account-safe**. Control/report publication is safe; deploy recommendation **HOLD**, no deploy approval requested by this review.
 - remaining_issues: P1/P2 findings above; explicit service registration and lifecycle serialization; separate production mitigation authority; provider cleanup/recent-auth/session design; future behavior/concurrency E2E. No claim of already-corrupted users.
 - next_recommendation: **C1, 推薦モデル：Sol（高）** to accept findings and independently decide/scoped-authorize the next G5 Phase 1 or interim mitigation. This TASK does not allocate another slot or grant production authority. H1 status `review_required`, next_owner `chatgpt`; STOP after safe control synchronization/read-back.
+
+---
+
+# H1 — PR #70 common-account lifecycle foundation review (2026-10-01 JST)
+
+- task_id: `common-account-pr70-lifecycle-foundation-review-20261001`
+- result / verdict: **FAIL / CHANGES REQUIRED**. Review completed; source merge, production apply/backfill and deploy **HOLD**.
+- exact original / final source head: `89cf128bd9219897806b2b641cce4866f6e16c52` (unchanged), PR [#70](https://github.com/anohi-memories/kabumori/pull/70), base `26ea17942fb8900cd78a3c58959809aa86239ace`.
+- reviewed main: initial `2930f75f2b4fce4418e4b243a7c3720e6e9dfccd`; fresh resumed / completion baseline `93021d6d270c0aeabb3f4cd75a6affaaf54fd00a`. Base-to-main changes touch only orchestration/G5/G2 controls and the AI Lab diary/snapshot, not the seven PR source/test/doc files. PR head unchanged. G4 PR #65/client files untouched.
+- isolation: the reset removed the first `/private/tmp` checkout and cluster. Restored into a new H1-owned checkout `/private/tmp/kabumori-h1-resume.DHxA95/repo`, own review branch and separate control/report branch. Shared `/Users/yuya/Developer/kabumori` is dirty and was inspected read-only, never modified/staged/checked out. Synced `sources/`, other slots, servers and worktrees untouched.
+- startup: fresh fetch; current TASK ready verified directly on origin/main; PROJECT_RULES/AGENTS/HANDOFF/ORCHESTRATION, CURRENT_STATE/ACTIVE, G5 Phase 1 TASK/Report and prior C1 consulted. Entire candidate SQL/tests/runner/rollback/design reviewed. No subagent.
+
+## Independent findings — six reproduced counterexamples
+
+All SQL counterexamples used fake identities in a dedicated local PostgreSQL database, as the non-superuser fixture owner with explicit authenticated/service_role calls where applicable. There was no live Auth deletion or production backfill. Paths/line numbers below refer to the exact PR head.
+
+### 1. P1 — Auth DELETE reports completion while Storage-owned data remains
+
+`supabase/migrations/20261001150000_common_account_lifecycle_foundation.sql:785` directly deletes `auth.users`, catches FK violations, then returns `completed` (lines 795–799). The footprint/blocker helper checks Kabumori/X/admin data, not Storage ownership. The G5 Report's expectation that Storage ownership is blocked by an FK is not true for the independently inspected production schema.
+
+Read-only production catalog evidence: `storage.objects` / `storage.buckets` have deprecated `owner uuid` and current `owner_id text`; the only FK on these two tables is `objects.bucket_id -> buckets.id`. Neither ownership field references Auth. Auth users/sessions/identities are owned by `supabase_auth_admin`; Storage tables by `supabase_storage_admin`. No Storage contents, user ids, emails, tokens or Vault values were read. Earlier privilege metadata showed postgres DELETE ability; that does not prove managed-service behavior.
+
+Local reproduction: add minimal `storage.buckets(id,owner,owner_id)` and `storage.objects(id,bucket_id FK,owner,owner_id)` with that production ownership/FK shape. Give a fresh Auth-only fake user an object with `owner_id = user_id::text`; call begin(version 1), then finalize with its returned operation id as service_role. Actual outputs:
+
+```text
+STORAGE_OWNER_FINALIZE={"status":"completed"}
+STORAGE_ORPHAN=true
+```
+
+This is a schema-shaped PostgreSQL proof, **not an actual Supabase Storage/S3/GoTrue E2E** and not evidence of a current live orphan. It demonstrates that the SQL path has no ownership blocker: the Auth row disappears while the object metadata owner remains. SQL Auth deletion is not rejected merely because Auth is managed; current docs permit direct deletion in some contexts. The defect is this candidate's unsupported completion/cleanup guarantee. [Supabase ownership docs](https://supabase.com/docs/guides/storage/security/ownership) identify `owner_id`; [Storage schema docs](https://supabase.com/docs/guides/storage/schema/design) require object deletion through the Storage API, not metadata DELETE; [Auth user-management docs](https://supabase.com/docs/guides/auth/managing-user-data) document deletion/session/Storage restrictions.
+
+Required correction: explicitly enumerate/block managed-service and unknown ownership, establish provider cleanup ordering and reliable retry/failure behavior, and prove no concurrent producer can create new owned state between inventory/cleanup/Auth deletion. Merely adding a one-time Storage SELECT does not supply serialization (Storage ownership has no Auth FK). Do not delete Storage SQL metadata as a fix. Decide/document the supported final Auth destruction contract and demonstrate it on disposable real Supabase before claiming readiness. This is G5 lifecycle/managed-service architecture work, not a bounded H1 patch.
+
+### 2. P2 — backfill adds a service without invalidating an empty deletion preview
+
+Candidate lines 895–924 insert a new common account at default version 1 and its entitlements within one data-modifying CTE command. The `bumped` UPDATE cannot see the common row inserted by its sibling CTE; it increments pre-existing rows only. `common_account_deletion_eligibility` reports version 1 when the account row is absent; begin lines 639–658 treats that same 1 as valid.
+
+Actual sequence: fresh Auth-only fake user -> eligibility shows `account_status=none`, `services=[]`, `blockers=[]`, version 1 -> insert a legacy profile -> backfill(true) -> common row plus active Kabumori entitlement remain version 1 -> begin with the old 1 returns `started` with `services_to_end=[kabumori]`. Outputs:
+
+```text
+POST_BACKFILL_VERSION=1
+OLD_PREVIEW_ACCEPTED={"status":"started", "services_to_end":["kabumori"], ...}
+```
+
+No service cleanup/finalization was executed for this case. This violates the documented confirmation contract, not immediate deletion by begin alone. Require an unambiguous initial/absent-state epoch or equivalent consent binding and version invalidation for every entitlement-introducing path, including new-account backfill. Do not special-case the test by ignoring absent previews.
+
+### 3. P2 — backfill grants active entitlement after a concurrent account lock commits
+
+Candidate lines 891–928 materialize eligibility without acquiring the lifecycle auth/common locks, then insert entitlements and bump common state later. The snapshot's `account_status='active'` is stale by the time insertion occurs.
+
+Two-session proof: existing fake active common account + legacy profile but no entitlement; test-only BEFORE INSERT trigger pauses its backfill for 3 seconds. Detect `pg_stat_activity.wait_event='PgSleep'` (not a guessed delay), then a second owner/operator transaction sets account status `locked` and commits. Backfill resumes successfully. Actual `BACKFILL_GRANTED_WHILE_LOCKED=true`: status locked with active Kabumori entitlement. The pause trigger was removed afterward.
+
+This specifically reproduces concurrent operator hold/reserved-state transition; it does **not** claim that public begin can delete an unregistered legacy profile (that separate blocker correctly denies it). Require a consistent auth -> common lock order, post-lock eligibility/version revalidation and concurrency coverage for backfill, not only public start/finalize. The offline/quiescent-only assumption is not currently an enforced backfill contract.
+
+### 4. P2 — an admin who also owns a self-service workspace is not excluded
+
+Candidate `x_owner` lines 817–828 filters workspace/profile/sole-owner status but never checks `admin_users`. The `excluded_admin_users` field at line 882 merely counts admins and does not filter the insert.
+
+Fake user in admin_users plus sole owner of its correctly derived self-service workspace -> `ADMIN_IS_X_CANDIDATE=true`, then backfill -> `ADMIN_GRANTED_X=true`, while the same report says excluded_admin_users=1. Internal/shared workspace exclusion passes for the original fixtures, but it does not prove admin exclusion for mixed-role users. Add actual admin exclusion and test the intersection; keep Kabumori legacy evidence semantics distinct from X consumer grants. No production admin was modified.
+
+### 5. P2 — preflight accepts an unrelated-column Auth FK
+
+Candidate lines 109–134 ask whether profiles/membership/OAuth tables have **any** FK to auth.users (profiles additionally CASCADE). They do not bind `conkey/confkey` to the required caller/owner columns. The finalization serialization argument relies specifically on `brand_memberships.user_id` and OAuth `initiated_by_user_id` referencing Auth id, not some other column.
+
+Local drift proof, after rollback: remove `brand_memberships_user_id_fkey`; add nullable `unrelated_auth_id uuid REFERENCES auth.users(id) ON DELETE CASCADE`. Reapply the original unmodified candidate. It succeeds and produces `WRONG_COLUMN_FK_PREFLIGHT_ACCEPTED=true`, despite no Auth FK on membership.user_id. This is a hypothetical schema drift proof, **not a claim that production has that wrong FK**. Validate exact referencing/referenced columns, expected type and relevant timing/action/validation properties for every invariant-bearing dependency, plus required function signatures/columns; refuse mismatches atomically. Do not repair production schema under this TASK.
+
+### 6. P2 — rollback disables effective enforcement when the settings row is absent
+
+`supabase/tests/common_account_lifecycle_rollback.sql:16` rejects only if an existing row has mode other than shadow. Runtime guard (candidate lines 410–414) treats a missing row as enforce. Those contracts disagree.
+
+Local sequence: resolve all fake in-progress operations to aborted; delete the sole settings row. A direct Auth delete is correctly blocked with `COMMON_ACCOUNT_DELETE_NOT_AUTHORIZED`. Immediately run the original rollback: it succeeds, dropping the guard/common objects; `MISSING_SETTINGS_ROLLBACK_REMOVED_GUARD=true`. Require affirmative valid shadow state, not absence of a non-shadow row, and cover missing/corrupt state before teardown. No production rollback occurred.
+
+## Boundary verdicts / what passed
+
+- **Lifecycle serialization: partial PASS, overall insufficient.** Original start/delete both commit orders, old profile and real X onboarding creator races, duplicate operations/start, decision window, READ COMMITTED rejection and standalone legacy-delete lock order pass. Finalize holds auth FOR UPDATE then common FOR UPDATE through blocker checking/SQL delete in one transaction. External provider steps remain a saga; no cross-request atomicity is proven. Backfill and the absent-account version hole above prevent an overall PASS.
+- **SQL Auth deletion: CHANGES REQUIRED / production HOLD.** FK exception handling uses a subtransaction and leaves a retryable operation on 23503; unrelated unhandled errors roll back the call. This is not managed-service cleanup/session/identity equivalence. Real Supabase role boundaries, GoTrue behavior and JWT/session/Storage proof remain unexecuted. Do not claim deleted JWTs become instantly invalid; strict checks/recent reauthentication and future provider orchestration need separate integration gates.
+- **Guard: expected shadow/enforce/cascade/23503 behavior PASS in the local model**, rollback missing-setting defect FAIL. Trigger is on common_accounts only: users without common rows are not protected. Shadow intentionally allows legacy Auth deletes, so this PR does not make current Kabumori deletion safe. Full enrollment plus all creator/deleter wiring must precede enforcement. Table owners/superusers can disable triggers/use replica mode; application ACL does not constrain privileged maintenance. Legacy X finalization's 23503 -> `operator_required/LOGIN_DELETE_BLOCKED` is confirmed in real candidate source and exercised by the behavior suite.
+- **ACL/RLS/SECURITY DEFINER: PASS in tested model.** All four new tables have RLS. Public tables allow authenticated self SELECT on the intended columns only; no client write/TRUNCATE/REFERENCES/TRIGGER, no source/evidence SELECT, no service_role table grants. Client start is auth.uid()-bound, no arbitrary id argument. Private helpers/view denied to client roles; RPC EXECUTE limited to intended role after PUBLIC revoke in same transaction; empty search_path and schema-qualified targets; no user_metadata authorization. Service-role caller id verification is a future Edge obligation, not implemented by comments. No real PostgREST proof claimed.
+- **Backfill: FAIL** for findings 2–4. Idempotent/no overwrite/no email merge/legacy-profile evidence/auth-only behavior passed normal fixtures; mixed-role and concurrent-state exceptions did not.
+- **Preflight/rollback: FAIL** for findings 5–6. Additive one-transaction application, rejection of a missing known column/double apply, normal rollback byte-match and reapply passed. Added registered downstream view -> rollback refused with dependency error and transaction preserved common_accounts (`DEPENDENCY_ROLLBACK_PRESERVED=true`). This does not prove detection of untracked PL/pgSQL/dynamic/client dependencies; rollback is pre-integration only. Migration-history drift remains a separate exact production preflight/apply gate.
+- **Service semantics: normal fixture PASS**, global readiness FAIL. Kabumori-only withdrawal preserves login/X; X service cleanup uses the real existing saga; whole deletion cannot finalize with non-ended entitlement; admin/shared/internal/unregistered known footprints/Apple checkpoint denied as designed. Existing X profiles-proxy and current Kabumori hard-delete are explicitly **not corrected** by this source-only PR. No provider revoke was performed.
+
+## Independently executed verification (including reset recovery)
+
+The reset removed scratch state; all baseline suites and the material counterexamples were independently rerun on a fresh owned PostgreSQL **17.11** cluster, Unix socket only (no TCP/remote URI). Application SQL ran as `kb_common_account_owner`, non-superuser. The superuser only creates/drops throwaway DBs/roles. Production metadata was SELECT-only.
+
+| Check | Actual result |
+| --- | --- |
+| `common_account_lifecycle_run.sh` | **16 PASS checks**, including behavior/8 race scenarios/isolation/no deadlocks/schema-additive diff/normal rollback exact schema dump/reapply/cleanup |
+| `social_mobile_account_deletion_run.sh` | **8 PASS checks**, including real existing X lifecycle concurrency regression and cleanup |
+| `deno test --no-config --allow-read supabase/tests/migration_source_invariants_test.ts` | **10 passed / 0 failed** |
+| `bash -n supabase/tests/common_account_lifecycle_run.sh` | PASS |
+| `deno lint --no-config supabase/tests/migration_source_invariants_test.ts` | PASS |
+| Scratch-only mutation: remove common_accounts `FOR UPDATE` in account_lifecycle_lock | Original suite **fails race 7**, begin decided `started` on stale state; defective-copy process exit 1 is the expected detection |
+| Additional fake-DB cases | Six counterexamples above reproduced; registered dependency rollback preservation additionally PASS |
+| `git diff --check` / scope & history preservation | Checked before publication; runtime/source delta 0; H1 control changes only |
+
+The mutation proves that the race suite catches the decision-window defect; G5's claimed ten mutations were **not all independently repeated**. A scratch trigger/fixture setup initially failed on text-vs-jsonb output concatenation; fixed the harness casts, rebuilt the owned probe DB and reran successfully. An automatic local permission review timed out once; the allowed single retry succeeded. Neither incident was a candidate behavior result. The pre-interruption unfinished race was not assumed successful; it was rebuilt and measured after recovery.
+
+For repeatability, counterexample setup uses exactly the runner's baseline sequence: social_mobile_account_deletion_fixture -> real onboarding migration 20260919120000 -> reconnect 20260922003101 -> deletion candidate 20260928160000 -> common_account_lifecycle_fixture -> candidate 20261001150000. Call fixture_login with fresh fake ids, then follow the explicit SQL sequences above; never use a production connection. In the race, pause the *missing-entitlement* user's insertion and confirm PgSleep before committing the second transaction. The adversarial harness stayed in H1's scratch directory, not the PR or main runtime; its relevant recipes/output are preserved in this Report.
+
+Not performed: actual disposable Supabase GoTrue/PostgREST/Storage/S3 E2E, real supabase_auth_admin vs postgres actor proof, production version/collation/extension parity proof, provider/Apple revoke, native/device/client wiring, production apply/backfill/delete/deploy. Pure PostgreSQL stubs do not substitute for these. No SQL lint tool beyond actual PostgreSQL parse/apply/catalog tests and source/shell/Deno checks is claimed.
+
+## Correction / pre-production gates
+
+No runtime fix was made. Storage/Auth destruction and consistent preview/backfill lifecycle serialization require the contract/architecture work explicitly reserved for G5. Small admin/FK/rollback corrections alone would leave the destructive path unsafe; this Report is not a partial PASS-WITH-FIX. C1 should independently decide a bounded G5 corrective TASK (recommended **Opus5.5（極高）** for the managed-deletion/serialization contract), with each reproduced case made an executed regression. H1 has not allocated or overwritten G5.
+
+Before any production apply: corrected exact source head + repeated focused review; **separate Sol（極高） pre-production review required**; disposable actual Supabase proof of managed Auth/Storage/session/provider behavior and role/API boundaries; exact schema/FK/function/version/migration-history parity and conflict checks; validated fail-closed unknown ownership/cleanup ordering; stale-consent/backfill locking regression; safe rollback with confirmed shadow/no in-flight operation/no downstream dependencies; full creator/deleter/RLS gate wiring before enforcement. Require explicit production approval after those gates; no bulk db push/backfill is authorized here.
+
+Supabase security and PostgreSQL locking/privilege skills informed the managed-service, stale-JWT, exact-FK and serialized-state checks. Current official Auth/Storage docs were consulted; changelog Markdown retrieval had previously failed due unsupported content type, not repeatedly retried. A fixture passing under a single owner was not treated as full service proof.
+
+## Delivery / safety / next owner
+
+- changed_files: `.agent/CODEX_REPORT.md` (append only), current H1 header/completion in `.agent/tasks/CODEX_TASK.md`, H1 section only of `.agent/ACTIVE_TASK.md`, new H1 summary only in `.agent/CURRENT_STATE.md`. Prior histories/other-slot content preserved. PR's seven files unchanged; no candidate/source/test fix commit.
+- commit_hash: report/control commit containing this section; exact hash and confirmed GitHub read-back supplied in completion reply. Publication is only complete after remote verification, not inferred from this prepared text.
+- push: control-only GitHub synchronization; no push to PR #70 source branch, merge or deployment. Source head remains the exact original.
+- production_mutation: **0**. No Auth create/update/delete, migration/apply/backfill, RLS/GRANT change, Edge deploy, Vault secret read/write, OAuth/provider operation, Cron/flag/secret mutation, manual invocation or real X operation. Production catalog SELECTs contain schema metadata only, no user contents/PII/credentials.
+- cleanup: baseline/mutation runners dropped their own databases; the H1 probe database and cluster are disposed/stopped before handoff. Only owned fake data is removed; production data untouched. Scratch recipes/report checkout may remain for inspection.
+- remaining_issues: six source/security findings above and actual managed-service/integration prerequisites; no current production corruption established.
+- source_safe_to_merge: **NO** at `89cf128bd9219897806b2b641cce4866f6e16c52`; source merge/apply/deploy HOLD. Review/control publication is safe.
+- next_recommendation: **C1, 推薦モデル：Sol（高）**. Status `review_required`, next_owner `chatgpt`; STOP after verified report publication. Do not automatically begin G5, deploy or another task.

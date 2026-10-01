@@ -1,3 +1,15 @@
+## H1 completed — PR #70 lifecycle foundation review (2026-10-01 JST)
+
+- task_id: `common-account-pr70-lifecycle-foundation-review-20261001`; status `review_required`, next_owner `chatgpt`.
+- verdict: **FAIL / CHANGES REQUIRED**. Original/final PR head `89cf128bd9219897806b2b641cce4866f6e16c52`, unchanged. Source merge/apply/backfill/deploy HOLD.
+- P1: finalization reports completed in the local production-shaped Storage model while an owned object remains; production catalog confirms ownership has no Auth FK. No actual production deletion/orphan claimed.
+- P2: stale empty preview accepted after backfill adds a service; entitlement granted after concurrent operator lock; admin/self-service owner wrongly backfilled; wrong-column FK preflight accepted; missing settings permits rollback of the effective-enforce guard.
+- actual checks: original lifecycle 16 PASS, existing social deletion 8 PASS, migration invariants 10 PASS; syntax/lint/diff PASS; scratch removal of common row lock caught by race 7. Six counterexamples separately reproduced.
+- source fix=0. Core managed-service deletion/confirmation/backfill contract needs G5 correction, outside H1's bounded-fix authority. No G5 reassignment by H1.
+- production mutation=0; read-only schema metadata only. Local PostgreSQL does not prove GoTrue/PostgREST/Storage/provider E2E.
+- detailed evidence appended to `.agent/CODEX_REPORT.md`, prior reports/other-slot controls preserved.
+- next: **C1, 推薦モデル：Sol（高）**; then separately scoped G5 correction and repeat review. **Sol（極高） pre-production review remains mandatory**, followed by explicit approval. H1 STOP.
+
 ## K2 — 2026-10-01 Presentation v2 close false reject
 
 - verdict: **FAIL for validator calibration; safety containment itself worked**.
