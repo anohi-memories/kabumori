@@ -3,8 +3,8 @@
 - task_id: common-account-pr70-guard-boundary-corrective-20261002
 - owner: claude
 - slot: claude-5
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - start_code: G5
 - finish_code: K5
@@ -2150,3 +2150,23 @@ Report 時点の fresh `origin/main` と open PR で確認。
 - merge decision: **HOLD** pending H1 rereview of exact head `eebe9405d758e0c120f9e6f1a70cdb1e973a0855`.
 - production apply remains separately gated by **Sol（極高）** after source acceptance and real disposable Supabase proof.
 - AI Lab diary: 追加更新なし。2026-10-01 entry already covers the common-account concurrency/safety work at an appropriate public-safe level; avoid same-day duplicate detail.
+
+
+## Final K5 — PR #70 readiness authorization corrective
+
+- verdict: **PASS to focused Codex rereview; merge/apply/deploy HOLD**.
+- accepted source candidate for rereview: PR #70 exact head `47a2ed6a1635177ba82004eace4bddb42d9d53e3`, open/mergeable at K5 check.
+- architecture delta accepted for review:
+  - Phase 1 still performs no managed Auth deletion.
+  - Phase 1 no longer contains an enforcing deletion guard; the Auth-cascade trigger is observation/shadow only.
+  - readiness is durable state bound to lifecycle version + requirement epoch + required checkpoint set.
+  - built-in checkpoint semantics are immutable/fail-closed.
+  - entitlement owner/service transfer is prohibited.
+  - producers not yet wired to invalidate readiness keep enforcement out of Phase 1.
+- prior six H1 blockers remain reported PASS; the later seven adverse cases are now committed regressions and reported PASS.
+- reported candidate evidence: lifecycle runner 20 PASS, mutation suite 45/45 detected, social-mobile deletion 8 PASS, migration invariants 10 PASS, shell/diff checks clean.
+- production mutation/read: 0; no migration apply/backfill/Auth/Storage/OAuth/Vault/deploy/Cron/flag/provider change.
+- concurrency/competition: PR #70 is 75 commits behind main, but fresh base-to-main comparison has **no file overlap** with the eight PR files. Other slot branches/files were not touched.
+- merge decision: **HOLD** pending H1 rereview of exact head `47a2ed6a1635177ba82004eace4bddb42d9d53e3`.
+- production apply remains separately gated by **Sol（極高）**, disposable real Supabase proof, exact production read-only preflight/history/ACL/FK checks, and explicit approval.
+- AI Lab diary: **no update**. 2026-10-02 already has a different, coherent daily entry for the X app; do not overwrite/mix it merely to record another same-day workstream.
