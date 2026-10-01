@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-native-link-navigation-cleanup-20261001
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: medium
 - recommended_model: Sonnet5（高）
 - continues_from: x-social-mobile-account-deletion-ui-release-finish-20261001
@@ -171,6 +171,70 @@ Then:
 Expected review policy:
 - if changes stay UI/navigation-only and native verification passes, additional Codex review is normally unnecessary.
 - if implementation touches shared interactive primitives broadly, Auth/OAuth, or any backend boundary, STOP and let ChatGPT decide review before merge.
+
+
+## Report — x-social-mobile-native-link-navigation-cleanup-20261001
+
+- task_id: x-social-mobile-native-link-navigation-cleanup-20261001
+- result: **PASS** (source + tests + native before/after verification; PR open). Model: Sonnet 5.5.
+- PR: https://github.com/anohi-memories/kabumori/pull/73 (branch `claude/g3-native-link-cleanup-20261001`)
+- commit_hash: 645923ba (rebased on origin/main 0c27998b); push: done, branch pushed to origin.
+
+### Exact broken Link-asChild patterns found (all proven dead/broken on native BEFORE the fix)
+1. `Link asChild` + `Card`/`View` direct child: Link only injects its press handler into the direct child; `Card`/`View` do not accept/forward `onPress` -> tap does nothing.
+2. `Link asChild` + function-valued `style` on the direct child: radix Slot merges style as `{...slotStyle, ...childStyle}`, a function spreads to `{}` -> styling lost.
+
+### Exact files fixed
+- apps/social-mobile/src/app/(tabs)/history.tsx (row -> /posts/[id])
+- apps/social-mobile/src/app/(tabs)/schedule.tsx (row -> /posts/[id])
+- apps/social-mobile/src/app/(tabs)/settings.tsx (「会話で相談する」 -> /(tabs)/consult)
+- apps/social-mobile/src/app/accounts/index.tsx (account row -> /accounts/[id]; 「ログイン方法」 card -> /login-methods keeps styles.card)
+All now use a standalone `Pressable` + `router.push` (accessibilityRole="button"), copy/layout unchanged.
+
+### Audit matrix (src/app/** and src/components/**; every Link asChild)
+| site | direct child | verdict |
+|---|---|---|
+| (tabs)/index.tsx x5 (切り替える/予定/履歴/設定/相談) | ActionButton | safe (forwards onPress to Pressable; Home→アカウント verified on native) |
+| posts/[id].tsx 再接続 | ActionButton | safe (same class) |
+| (tabs)/history.tsx, (tabs)/schedule.tsx | Card | broken -> fixed (dead tap proven native) |
+| (tabs)/settings.tsx 会話で相談する | Card | broken -> fixed (dead tap proven native) |
+| accounts/index.tsx account row | View | broken -> fixed (dead tap proven native) |
+| accounts/index.tsx ログイン方法 | Pressable + function style | broken -> fixed (flat unstyled block proven native) |
+| login-methods.tsx, settings.tsx アカウント管理 | (fixed in PR #68) | safe |
+False positives: none.
+
+### changed_files
+- apps/social-mobile/src/app/(tabs)/history.tsx, (tabs)/schedule.tsx, (tabs)/settings.tsx, accounts/index.tsx
+- apps/social-mobile/tests/native-link-button-style.test.mjs
+
+### tests (clean env, no local .env.local)
+- `npm test` 113/113, typecheck exit 0, lint exit 0, `git diff --check` clean.
+- test file: allowlist for accounts/index.tsx removed; both broken classes detected app-wide (allowlist of press-forwarding components: Pressable/ActionButton/Text/Touchable*); detector self-tests fail on synthetic broken (Card, View, function-style Pressable) and pass on good examples; per-route navigation checks (/login-methods, /accounts/[id], /(tabs)/consult, /posts/[id]); new tests failed (6) against the unfixed code, pass after the fix.
+- scope diff check: no x-connect/Auth/DB/RLS/RPC/migrations/Edge/Vault/flag path in the diff; no secret-like string added.
+
+### Native simulator result (G3-owned device, iOS Simulator Release, sample data)
+- Own simulator "G3-nav-cleanup" created and used only (another slot's devices were not touched; one stray tap on another booted device's empty home-screen area happened before I pinned the device, no effect).
+- BEFORE: 履歴行, 投稿予定行, 会話で相談する, アカウント行 = no response after 8s; ログイン方法 = flat unstyled block.
+- AFTER: 履歴行 -> 投稿詳細 (8:20), 投稿予定行 -> 投稿詳細 (11:44), 会話で相談する -> AI相談 tab, アカウント行 -> アカウント詳細 (@kabumori), ログイン方法 card visibly styled and -> ログイン方法 screen. Home ActionButton path also works.
+- Local-only harness (sample-data .env.local, temporary auth-gate bypass in _layout.tsx, throwaway bundle id, generated ios/) used and removed; simulator deleted; nothing of it committed; package.json/.gitignore unchanged.
+
+### proof x-connect / Auth / deletion / common-account / backend unchanged
+- diff touches only the 4 screens + 1 test; `git diff --name-only` has no match for x-connect, supabase, migrations, env, auth-provider, account-deletion.
+
+### production mutation = 0, real X operations = 0
+No deploy, no flag change, no deletion, no provider login/revoke/post; sample-data build had no Supabase config.
+
+### remaining issues
+1. `/accounts/[id]` (アカウント詳細) shows no top header/back button. It was unreachable before (dead row); now reachable. Edge-swipe back works. Header config is route cleanup (out of scope) — decide separately.
+2. Any future `Link asChild` around a new non-forwarding component is now caught by the test; shared primitives were not changed.
+3. Unchanged release gates: common-account deletion semantics, Apple production config, legal URLs/texts, audit retention, main-app account-delete coordination; deletion flag stays OFF.
+
+### safety_checks
+- own worktree + own simulator only; explicit-path staging; no secrets/tokens/emails in report; G4/G5/H1 files untouched.
+
+### next_recommendation
+- Review/merge PR #73 (UI/navigation only; additional Codex review normally unnecessary per TASK).
+- Separate small task: give `/accounts/[id]` a visible header/back button (or confirm it is intended).
 
 ---
 
