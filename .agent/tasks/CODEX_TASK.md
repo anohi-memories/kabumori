@@ -1,5 +1,199 @@
 # Codex Task
 
+- task_id: common-account-pr70-corrective-rereview-20261001
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- priority: highest
+- recommended_model: Sol（高）
+- type: focused rereview / Auth lifecycle / migration security
+- target: PR #70 exact head `eebe9405d758e0c120f9e6f1a70cdb1e973a0855`
+- previous_failed_head: `89cf128bd9219897806b2b641cce4866f6e16c52`
+- production_mutation_allowed: false
+
+## Purpose
+
+PR #70 corrective headを再レビューし、前回H1が再現した6 blockersが本当に解消され、Phase 1の責任が「additive lifecycle foundation」に安全に縮小されたか確認する。
+
+**merge / production apply / backfill / deploy / Auth/Storage/OAuth/Vault mutationは禁止。**
+
+## Mandatory startup
+
+1. PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / G5 corrective TASK+Report / prior H1 PR #70 FAIL report / Final C1を読む。
+2. H1専用の独立worktree/checkout。
+3. fresh origin/main と PR #70 exact head `eebe9405d758e0c120f9e6f1a70cdb1e973a0855` を取得。headが違えばSTOP。
+4. base-to-main changed filesを再確認し、PR runtime/test/docとの競合があればSTOP。
+5. G4 PR #65など他slot/PRへ触れない。
+
+## First gate — architecture correction
+
+最初に確認：
+
+- candidate migration/runtimeに `DELETE FROM auth.users` が存在しない。
+- Phase 1はaccount deletionを「managed Auth削除準備完了」までしか進めない。
+- `completed` 等、Phase 1がmanaged account deletion完了を主張するstate/returnがない。
+- Storage/Auth/identity/session/provider cleanupをSQLで完了したふりをしない。
+- actual Auth Admin API delete / Storage API cleanup / provider revoke / session handlingはfuture orchestrator prerequisiteとして明示。
+- current Kabumori legacy hard-deleteがこのPRだけでは安全化されないことがtruthfulに残っている。
+
+この責任分離が崩れていればFAIL。
+
+## Re-run all six prior H1 counterexamples
+
+前回の反例を、PRにcommitされたregressionとして**独立に再実行**する。
+
+### 1. Managed Storage/Auth completion gap
+確認：
+- Phase 1 candidateはAuth/Storage managed schemaへ destructive writeしない。
+- Storage-owned stateがある場合、ready判定が少なくともfail closedする。
+- checkpointだけでStorage cleanup済みと盲信しない。
+- readyになってもloginは残る。
+- Phase 1は「削除完了」を返さない。
+
+注意：DB probeがcleanでも実Storage cleanup完了の証明にはならない。docs/return wordingが過剰保証していないか確認。
+
+### 2. Absent preview / stale confirmation
+- no common row previewのversion/epoch
+- backfill/service introduction後、old preview/versionが必ずinvalid
+- begin deletionがold confirmationでstartedにならない
+- version triggerがRPCだけでなくdirect/operator/backfill writeでも適切に動くか
+
+### 3. Backfill vs lock/state transition
+- auth.users -> common_accounts lock order
+- lock後にplan/status/versionを再評価
+- concurrent locked/deleting transition後にentitlement付与されない
+- reverse orderも安全
+- READ COMMITTED contract / fail-closed behavior
+
+### 4. Admin + self-service workspace
+- admin userはconsumer x_autopost entitlement backfill対象外
+- Kabumori entitlement semanticsとの区別
+- intersection case regression
+
+### 5. Exact FK preflight
+- exact referencing column / referenced column
+- expected type
+- delete action
+- validated
+- deferrability
+- helper function signature/return
+- unrelated-column Auth FK counterexample must fail atomically
+
+### 6. Rollback with missing/corrupt settings
+- settings row absent => rollback拒否
+- enforce/corrupt/non-shadow =>拒否
+- in-flight op / downstream dependency / integration started =>拒否
+- valid affirmative shadow stateだけrollback可
+- guard/objectがpartial teardownされない
+
+## New corrective areas
+
+### Managed checkpoint registry
+- built-in checkpoint欠損時fail closed
+- service_role/backendが任意にfalse successを作れないか、ACLとcaller contractを確認
+- checkpointはorchestrator申告でありDB検証ではないことが明確か
+- Apple identity条件、Storage/session required semantics
+- future extensibilityがunknown ownershipをsilent ignoreしないか
+
+### Storage read-only probe
+- SECURITY DEFINER ownerにproductionでSELECT権限が無い場合fail closedか
+- expected storage schema shape違いでfail closedか
+- owner/owner_id semanticsを誤解していないか
+- clean probeを「cleanup complete証明」として扱っていないか
+
+### Guard semantics
+- shadowは既存hard deleteを安全化しないことが明確
+- enforceはintegration not_started中に有効化できない
+- delete instantでaccount deleting / ready op / ended entitlements / blockers / managed ownershipを再評価
+- enforce許可 = DB-visible conditions only。provider/Storage cleanup保証ではない
+- legacy X deletionの23503 handlingとの整合
+
+### ACL / RLS / SECURITY DEFINER
+- 5 new tables RLS
+- self-select columns only
+- client writeなし
+- service_role table grantなし
+- RPC EXECUTE最小権限
+- PUBLIC/anon leakなし
+- empty search_path + qualified objects
+- user_metadata authorizationなし
+- start RPC arbitrary user idなし
+
+## Test verification
+
+少なくとも独立再実行：
+- `supabase/tests/common_account_lifecycle_run.sh`
+- `supabase/tests/common_account_lifecycle_mutations.sh`
+- `supabase/tests/social_mobile_account_deletion_run.sh`
+- migration source invariants
+- shell syntax/static checks
+- `git diff --check`
+
+G5 reported:
+- lifecycle runner: 19 PASS
+- mutation: 29/29 detected
+- social-mobile deletion: 8 PASS
+- migration invariants: 10 PASS
+
+数字を鵜呑みにせず、可能な範囲で再現する。
+
+mutation suiteについて、少なくとも前回6 blockersに対応するmutation/fixtureが「別の理由で偶然落ちる」だけでなく、狙ったinvariantを検出しているか見る。
+
+## Fix authority
+
+小さく決定的なPR #70 scope内のP1/P2/P3なら failing test -> minimal fix -> rerunを許可。
+
+以下はG5へCHANGES REQUIRED：
+- lifecycle contract変更
+- managed deletion責任分離の変更
+- schema/ACL architecture変更
+- provider/Storage orchestrator実装追加
+- client/Edge wiring追加
+- production-specific repair
+
+## Production gate
+
+このH1がPASSしてもproduction applyは承認しない。
+
+production前に別途必要：
+- **Sol（極高）**
+- disposable actual Supabase proof
+- exact production catalog/preflight read-only確認
+- migration-history conflict確認
+- Storage/GoTrue/session/role/API境界確認
+- backfill dry-run/parity
+- explicit user approval
+
+## Completion / C1
+
+`.agent/CODEX_REPORT.md`へ新reportをappend。
+
+必須：
+- PASS / PASS-WITH-FIX / FAIL
+- exact reviewed/final head
+- prior six blockers disposition
+- architecture responsibility verdict
+- lifecycle/version/backfill verdict
+- managed checkpoint/Storage probe verdict
+- preflight/rollback verdict
+- guard/ACL/RLS verdict
+- independent test evidence
+- changed_files
+- production_mutation=0
+- merge recommendation
+- remaining prerequisites
+- Sol（極高）pre-production gateの要否
+- next recommendation
+
+完了時 status -> review_required / next_owner -> chatgpt / STOP for C1.
+
+---
+
+## Previous completed H1 task history — preserved below
+
+# Codex Task
+
 - task_id: common-account-pr70-lifecycle-foundation-review-20261001
 - owner: codex
 - slot: codex-1
