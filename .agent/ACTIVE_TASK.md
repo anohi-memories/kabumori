@@ -59,12 +59,12 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-shared-report-v2-causal-calibration-prod-deploy-20261001
+- task_id: kabumori-shared-report-v2-quality-rewrite-calibration-20261002
 - start_code: G2
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: controlled production deploy/read-back of merged PR #71 causal-guard calibration to market-report-analysis only; gates OFF, no manual cycle; next live check is 10/2 morning; recommended Sonnet5（高）
+- allocation: source/tests/PR only; fix 10/2 live false editorial-priority WARN and stop near-target App length from triggering unnecessary quality rewrite; Hard Fact behavior unchanged; no deploy/gate/manual cycle; recommended Sonnet5（高）
 
 ## Claude G3
 - owner: claude
