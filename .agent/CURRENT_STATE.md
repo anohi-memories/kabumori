@@ -1,3 +1,15 @@
+## Final C1 — PR #70 source accepted and merged
+
+- verdict: **PASS-WITH-FIX / accepted**.
+- H1 reviewed PR #70 assigned head `47a2ed6a1635177ba82004eace4bddb42d9d53e3` and produced bounded fix `aa4d2d425d1d7c432d43c9ecfb8e978a40b80a65`.
+- bounded fix prevents direct application-row deletion from falsely recording login removal while Auth user still exists; actual Auth cascade remains shadow/unverified observation only.
+- final independent evidence accepted: lifecycle 20 PASS, mutations 46/46 detected, social deletion 8 PASS, migration invariants 10 PASS; old six blockers and latest seven adverse cases remain resolved.
+- PR branch fast-forwarded to exact reviewed fix, fresh main overlap 0, checks completed; PR #70 merged.
+- merge/main SHA: `44121914b035e22380a4ca1bd8252a42713a2bbf`.
+- source merge only. **Supabase migration is not applied. Backfill is not run. Auth/Storage/OAuth/Vault are unchanged.**
+- H2 assigned `common-account-pr70-preproduction-gate-20261002`, recommended **Sol（極高）**, for independent pre-production gate: actual disposable Supabase proof + production read-only preflight + backfill dry-run/parity.
+- production apply/backfill/deploy remain HOLD pending C2 and explicit approval.
+
 ## H1 completed — PR #70 readiness authorization rereview (2026-10-02 JST)
 
 - task_id: `common-account-pr70-readiness-authorization-rereview-20261002`; status `review_required`, next_owner `chatgpt`.
