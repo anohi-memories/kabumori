@@ -1,10 +1,190 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-shared-report-v2-causal-calibration-prod-deploy-20261001
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Sonnet5（高）
+- purpose: merged PR #71 causal-guard calibration を production `market-report-analysis` のみに controlled deployし、consumer gates OFFのまま exact source/read-back と非影響を確認する。明朝10/2の自然朝刊が最初のlive-model検証になる。
+
+## Accepted source
+
+- PR #71 head: `99e5058e7d3b2ea7695bad157902c68a5d62d06a`
+- merge/main SHA: `9bbafeaf4314f88bf5541ea5b6cf76e0e5c3a20e`
+- source K2 verdict: PASS.
+- key behavior:
+  - supported causal relationship inside a news event is deliverable
+  - unsupported market/index causality remains Hard
+  - fabricated/unknown refs remain Hard
+  - mixed-session/date-value/stale/current/1306 guards remain Hard
+  - call budget unchanged
+- reported tests:
+  - market-report-analysis 104/104
+  - personalized-reports 128/128
+  - X shared consumer 8/8
+  - data-packet 42/42
+  - _shared 361/361
+  - deno check/lint/diff PASS
+- consumer gates must remain:
+  - app_enabled=false
+  - x_enabled=false
+
+## Why Sonnet5（高）
+
+Implementation is complete. This is a narrow production Edge Function deployment/read-back gate with nontrivial production safety checks, but no design work.
+
+## Mandatory startup / isolation
+
+1. Read PROJECT_RULES, ORCHESTRATION, CURRENT_STATE, this TASK and Final K2 for PR #71.
+2. Use only the independent G2 checkout/worktree.
+3. Fresh-fetch origin/main.
+4. Require `9bbafeaf4314f88bf5541ea5b6cf76e0e5c3a20e` to be an ancestor of deployment HEAD.
+5. Confirm no later main commit changed:
+   - `supabase/functions/market-report-analysis/**`
+   - imported shared files used by this function
+   without separate acceptance.
+6. Confirm no active slot owns the same Function.
+7. Fail hard on directory mismatch; never fall back to the shared Developer checkout.
+
+## Preflight — read only
+
+Capture:
+- current production `market-report-analysis` version / updated_at / verify_jwt / ezbr
+- current deployed source identity sufficient for rollback
+- app_enabled / x_enabled
+- relevant cron rows/schedules/active/command hashes
+- all Edge Function metadata snapshot
+
+Require:
+- app_enabled=false
+- x_enabled=false
+- verify_jwt=false
+- cron unchanged
+- no ownership conflict
+
+Re-run from fresh main:
+- market-report-analysis full suite
+- causal_calibration test
+- presentation_v2
+- H1 adversarial
+- deno check
+- deno lint
+- git diff --check
+
+If production already matches the exact accepted source:
+- do not redeploy
+- report no-op PASS
+
+## Controlled deploy
+
+If stale, deploy exactly:
+
+`market-report-analysis`
+
+Use explicit project ref `wsmznyzcvmuitkglfeuj`.
+Preserve `verify_jwt=false`.
+
+Forbidden:
+- broad function deploy
+- personalized-reports deploy
+- x-test-post deploy
+- DB/schema/RPC/migration
+- cron mutation
+- app_enabled/x_enabled mutation
+- Auth/Vault/secrets
+- X post / app notification
+- manual market-report cycle
+- manual retry
+- legacy generator changes
+
+## Post-deploy verification
+
+Immediately:
+1. record target version / updated_at / verify_jwt / ezbr
+2. read back deployed source
+3. compare with fresh merged main
+4. confirm PR #71 behaviors are present:
+   - news-internal causal relation support
+   - market-effect strict branch
+   - fabricated ref guard unchanged
+   - date/value/session/stale/1306 hard guards unchanged
+5. app_enabled/x_enabled remain false/false
+6. cron unchanged
+7. compare all Edge Function metadata; only target may change due this task
+
+If another Function changes concurrently:
+- record exact timestamp/source identity
+- do not assume G2 caused it
+- STOP only if it creates overlap or safety uncertainty
+
+## Timing / natural observation
+
+Do **not** manually invoke a report after deploy.
+
+The next intended live-model check is the natural 2026-10-02 morning:
+- data 07:50 JST
+- analysis 07:55 JST
+- retry 08:05 JST
+
+This deploy task ends after read-back. Next K2 should assign a read-only morning observation task.
+
+## Failure / rollback
+
+If wrong source/function is deployed, verify_jwt changes, gates/cron change, or source read-back differs:
+- STOP
+- rollback only `market-report-analysis` to captured pre-deploy source if necessary and safe
+- report every mutation
+
+## Completion conditions
+
+PASS only if:
+- accepted PR #71 source is production truth for market-report-analysis
+- only target Function changed if deploy was needed
+- verify_jwt=false
+- gates OFF/OFF
+- cron unchanged
+- no manual cycle
+- rollback source known
+
+## Required Report
+
+- task_id/result
+- fresh main/worktree
+- production version before/after
+- source identity/read-back
+- tests/check/lint/diff
+- verify_jwt before/after
+- gates before/after
+- cron before/after
+- all-function metadata comparison
+- deploy command/scope
+- production mutations
+- rollback source/status
+- remaining issues
+- recommendation for 10/2 morning natural observation
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+Pending.
+
+---
+
+# Previous completed G2 task — causal guard calibration
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-shared-report-v2-delivery-first-causal-guard-calibration-20261001
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Opus5.5（高）
 - purpose: Presentation v2 の Hard Fact guard を「嘘だけ止める」方向へ再較正し、ニュース本文に根拠がある因果表現を誤ってHard BLOCKして日次配信を落とさないようにする。2026-10-01大引けの実失敗を回帰fixtureにする。source + tests + PRのみ。deploy/gate変更は禁止。
@@ -4934,4 +5114,25 @@ K2 product decision:
 - Hard BLOCK must be reserved for objective falsehoods or materially unsafe factual contradictions.
 - uncertainty/style/news-summary semantics that are supportable from input should not suppress the entire report.
 - attempt-1 fabricated/mistyped news ref remains a valid Hard failure and must stay blocked.
+
+
+
+## Final K2 — causal guard calibration accepted
+
+- verdict: **PASS / merge accepted**.
+- accepted PR: #71
+- accepted head: `99e5058e7d3b2ea7695bad157902c68a5d62d06a`
+- fresh no-race check before merge: main `e68b9cfbbe0b879669f56fb4bb871b6eaff029d8`; overlap with PR #71 files = 0; PR mergeable=true.
+- merge/main SHA: `9bbafeaf4314f88bf5541ea5b6cf76e0e5c3a20e`.
+- exact 10/1 false reject now passes.
+- unsupported market-causal attribution, fabricated ref, mixed-session date/value, stale/current, and 1306 mislabel regressions remain Hard failures.
+- full reported verification accepted: market-report-analysis 104/104; personalized 128/128; X shared 8/8; data-packet 42/42; _shared 361/361; check/lint/diff PASS.
+- model-call budget unchanged.
+- production mutation from source task/K2 merge: GitHub merge only; no Edge deploy/gate/manual cycle.
+- Codex review intentionally deferred until after live-model shadow observation because:
+  - this is a narrow validator calibration with extensive adversarial tests,
+  - consumer gates remain OFF,
+  - user explicitly prefers fewer unnecessary delivery-stopping gates,
+  - live behavior is more informative before another review.
+- before any app/x consumer activation, review need will be reassessed with live evidence.
 
