@@ -1,5 +1,517 @@
 # Claude Task 1 — CURRENT TASK
 
+- task_id: kabumori-home-report-hero-8-state-assets-20261001
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Sonnet5（高）
+- type: Kabumori Home UI / canonical asset integration / deterministic report-state presentation
+- allocation_main_sha: 724efddc9dd786db963818a4bbef631526a24d29
+- production_mutation_allowed: false
+
+## Purpose
+
+ユーザー承認済みの新しい「今日のかぶモリレポート」Hero正本へ移行し、最終確定した8種類のゆめちゃん＋AIロボ画像を実装する。
+
+今回の8段階は旧10段階案を廃止し、以下を唯一の正本とする。
+
+1. 01 Very Positive = 非常にいい
+2. 02 Positive = 前向き
+3. 03 Neutral = 普通
+4. 04 Uncertain = 様子見
+5. 05 Caution = 注意
+6. 06 Negative = 悪い
+7. 07 Very Negative = 非常に悪い
+8. 08 Volatile = 荒い
+
+Home Heroでは、その日の保存済みFact-passed personalized reportの構造化情報から**追加AI呼び出しなしで決定論的に**1状態を選び、対応画像を表示する。
+
+本TASKはHome UIのみ。report生成backend、DB、RPC、Edge Function、Auth、共通アカウント、X、Cron、consumer gateには触れない。
+
+## Previous G1 closure
+
+前G1のheader logo作業はPR #62が既にmerge済みであることをChatGPTが確認済み。
+- PR #62 merged = true
+- merge SHA: 0224ff7ed41380749ed677c1dc27942e916fcffb
+
+旧G1の `review_required` 表記は同期遅れであり、本TASKへの再割当を許可する。
+過去のReport本文は下部にarchiveして保護する。
+
+## Canonical assets — user-approved
+
+最終的にrepo内では以下の9ファイルを正本とする。
+
+### Hero background
+- `assets/images/home/report_hero_background.webp`
+
+### Character states
+- `assets/images/report-states/report_01_very_positive.webp`
+- `assets/images/report-states/report_02_positive.webp`
+- `assets/images/report-states/report_03_neutral.webp`
+- `assets/images/report-states/report_04_uncertain.webp`
+- `assets/images/report-states/report_05_caution.webp`
+- `assets/images/report-states/report_06_negative.webp`
+- `assets/images/report-states/report_07_very_negative.webp`
+- `assets/images/report-states/report_08_volatile.webp`
+
+### Asset provenance / safety
+
+これらはユーザーがChatGPT上で最終承認した画像を使う。
+Claudeが新規生成・描き直し・表情変更・色変更・crop・repositionしてはいけない。
+
+割当時点のmainには上記新asset一式はまだ存在しない。
+現在の旧 `assets/images/report-states/report_04_neutral.webp` は旧体系のassetであり、新03正本とは別物。
+
+作業開始時に、ユーザー提供の正本assetがG1 worktree/sessionから実際に参照可能か確認する。
+
+もし正本ファイルが不足している場合:
+- 古いassetを代用しない
+- screenshotから再生成しない
+- ChatGPT previewを勝手にcaptureしない
+- 似た画像を作らない
+- **STOPして不足ファイル名を列挙する**
+
+ユーザー提供がPNGの場合、repo格納用にlossless WebPへ変換してよいが、
+- pixel dimensions維持
+- alpha維持
+- cropなし
+- resizeなし
+- recolorなし
+- sharpening / denoiseなし
+- metadata以外の見た目変更なし
+とする。
+
+character 8枚は原則 1536x960 transparent canvasとして検査する。差異があれば勝手に補正せず報告。
+backgroundは1536x960のユーザー正本を使用する。
+
+## Hero visual canonical
+
+ユーザーが実機で確認した最終方向を正本とする。
+
+Hero上部visual stage:
+- 1536x960 = 8:5 の背景比率
+- 背景に固定で焼き込み済み:
+  - 「今日の」
+  - 「かぶモリレポート」
+  - 「今日の市場とあなたの保有銘柄への影響を AIが整理しました。」
+  - 「今日のポイント」
+  - skyline / subtle market chart / pale mint-white visual
+- 背景には numbered points / dynamic point text / report type / CTA / character は焼き込まない
+
+Native/dynamic UIとして残す:
+- `朝刊` / `大引け` の短いreport type label
+- 1/2/3 numbered circles
+- 1〜3件の今日のポイント本文
+- `レポートを見る →` Pressable
+- 8-state character layer
+
+### Important — no duplicated baked text
+
+現mainの `HomeReportHero` は title/description/「今日のポイント」pill をnative Textで描画している。
+新backgroundではそれらが画像に焼き込み済みなので、**視覚的に二重描画しない**。
+
+ただしaccessibilityは失わない。
+背景内の固定テキスト相当は、画像のaccessibilityLabelまたは非表示のaccessible semanticsで読み上げ可能にする。
+画面上へ同じTextを重ねてはいけない。
+
+## Character compositing — full-canvas 1:1
+
+今回のcharacter assetは、Hero backgroundと同じ1536x960 canvas上で位置調整済み。
+よって旧PR #60の「右側48% slotへcharacterを縮小配置する」方式を引き継がない。
+
+必須:
+- background visual stageとcharacter layerを同じ8:5領域に重ねる
+- character画像はfull-canvas overlay
+- absolute fill相当
+- per-stateの個別scale / translate / offsetは禁止
+- 8枚すべて同じlayout rule
+- `contentFit` は全canvasが欠けない設定
+- character transparent alphaをそのまま使用
+- characterをcropしない
+- glow / frame / shadow / speech bubbleを追加しない
+
+画像自体の微妙な見た目サイズ差はユーザー了承済み。
+8枚を無理にアプリ側で個別補正しない。
+
+現在の `CharacterSlot` は必要ならfull-stage overlay向けに安全にrefactorしてよい。
+旧 `CHARACTER_ASPECT_RATIO = 1536 / 1024` 前提は新assetに合わないので、そのまま残さない。
+
+## Dynamic points
+
+`今日のポイント`:
+- 1〜3件
+- 現在の `buildReportHighlights` と既存stored report dataを再利用
+- 最大3件
+- circle colorは現在の red / blue / orange を維持してよい
+- 本文はnative Text
+- report detailへ入るnavigationはHero CTAのみ
+- 1件/2件/3件すべてでレイアウト成立
+- 存在しない3件目の空行を予約しない
+
+Point textはcharacterより前面に置き、重なった場合も文字可読性を優先する。
+ユーザーはcharacterが少しpoint側へ入ることを許容している。
+ただし文字を隠してはいけない。
+
+## CTA
+
+- `レポートを見る →`
+- native Pressable
+- full-width deep green
+- visual stageの下部に配置
+- approved screenshotの密度を優先
+- 必要ならvisual stageの下端へ数pt重ねる程度は許容
+- CTAは最前面、完全にtap可能、文字がcharacterに隠れない
+- no report時は現在どおりdisabled / truthful
+
+## Report state selection — deterministic, no new AI/API
+
+新規pure helperを作り、例:
+- `src/lib/report-character-state.ts`
+
+型:
+- `very_positive`
+- `positive`
+- `neutral`
+- `uncertain`
+- `caution`
+- `negative`
+- `very_negative`
+- `volatile`
+
+このhelperはstored `PersonalizedReport` だけを入力にし、network/AI/time/randomnessを使わない。
+
+### Evidence inputs
+
+優先して既存のFact-passed structured fieldsを使用:
+
+1. `body.tone`
+   - positive -> positive signal
+   - cautious -> negative signal
+   - neutral -> no directional signal
+
+2. market direction
+   - `body.market_detail?.direction` を優先
+   - fallback `body.market_section?.market_direction`
+   - up -> positive signal
+   - down -> negative signal
+   - mixed / flat / unknown -> no directional score
+
+3. `body.holding_impacts[].stance`
+   - tailwind count > headwind count -> positive signal
+   - headwind count > tailwind count -> negative signal
+   - tie -> no score
+   - neutral / no_clear_materialはdirectional scoreにしない
+
+4. close reportのみ `portfolio_snapshot.totals`
+   - finite `day_change_percent > 0` -> positive signal
+   - < 0 -> negative signal
+   - finite `topix_change_percent > 0` -> positive signal
+   - < 0 -> negative signal
+   - zero/null -> no score
+
+Morningではclose-day numeric signsをstate判定へ追加しない。
+
+### Volatile override — conservative
+
+08 Volatileは「07より悪い」ではないため、単にnegative scoreが大きいだけでは絶対に選ばない。
+
+Fact-passed report本文に**明示的な荒い値動き表現**がある場合だけoverride可能。
+
+対象テキスト:
+- `market_detail.today_claims[].text_ja`
+- `market_detail.overnight_claims[].text_ja`
+- `market_section.claims[].text_ja`
+- `overview_ja`
+- `summary_ja`
+
+risk/watchだけの仮説文はvolatile triggerに使わない。
+
+認識候補の意味:
+- 乱高下
+- 値動きが激しい / 荒い
+- ボラティリティが高い
+- 上下に大きく振れる
+- 急騰と急落の両方が同じ文脈で示される
+
+単なる「mixed」だけでは08にしない。
+
+### Classification
+
+`positiveSignals` / `negativeSignals` を上記から数える。
+
+1. explicit volatile evidence -> 08 Volatile
+
+2. Very Positive:
+- negativeSignals = 0
+- close: positiveSignals >= 4
+- morning: positiveSignals >= 3
+-> 01 Very Positive
+
+3. Positive:
+- positiveSignals > negativeSignals
+-> 02 Positive
+
+4. Very Negative:
+- positiveSignals = 0
+- close: negativeSignals >= 4
+- morning: negativeSignals >= 3
+-> 07 Very Negative
+
+5. Negative:
+- negativeSignals - positiveSignals >= 2
+-> 06 Negative
+
+6. Caution:
+- negativeSignals > positiveSignals
+-> 05 Caution
+
+7. Tie / no directional majority:
+04 Uncertain if any:
+- market direction is mixed or unknown
+- positiveSignals > 0 and negativeSignals > 0
+- `market_detail.data_gaps_ja` has items
+- `market_section.data_gaps_ja` has items
+- no_clear_material stances dominate directional stances
+
+otherwise:
+-> 03 Neutral
+
+Missing report / malformed old report / insufficient data:
+-> 03 Neutral, never throw.
+
+### Important semantics
+
+このstateは投資結果の保証や予測ラベルではない。
+「保存済みレポートの材料・当日の結果・方向感を、Heroキャラクター表現へ写すpresentation state」。
+
+UIにstate名や売買シグナルを新規表示しない。
+
+## Asset mapping
+
+1 -> `report_01_very_positive.webp`
+2 -> `report_02_positive.webp`
+3 -> `report_03_neutral.webp`
+4 -> `report_04_uncertain.webp`
+5 -> `report_05_caution.webp`
+6 -> `report_06_negative.webp`
+7 -> `report_07_very_negative.webp`
+8 -> `report_08_volatile.webp`
+
+loading / empty / errorでcurrent reportが無い:
+-> 03 Neutral
+
+last-good/current reportが実際に表示されている場合:
+-> そのreportからstate決定。
+
+旧10-state naming / old `report_04_neutral.webp` 固定表示 / 01〜10コメントは除去する。
+
+新8assetが正しく入った後、旧 `assets/images/report-states/report_04_neutral.webp` は不要なら削除し、runtime/testから参照を完全に外す。
+「old neutral」と「new 04 uncertain」を混同しないこと。
+
+## Expected source scope
+
+主な許可範囲:
+
+- `assets/images/home/report_hero_background.webp`
+- `assets/images/report-states/*`
+- `src/components/home/home-report-hero.tsx`
+- `src/components/home/character-slot.tsx`
+- `src/constants/home-tokens.ts`（Hero geometryが必要な場合のみ）
+- `src/lib/report-character-state.ts`（new）
+- `tests/app/*home*report*`
+- `tests/app/*character*`
+- state helperのfocused test
+
+必要最小限なら `src/app/(tabs)/index.tsx` を変更してよい。
+
+Do not touch:
+- Supabase migrations
+- RPC
+- Edge Functions
+- personalized report generation/prompts/validators
+- Auth / account deletion / common account
+- X/social-mobile
+- Cron
+- consumer gates
+- production settings
+- G2 shared-report-v2 files
+
+G2は現在別backend/report-generation workstreamでready。
+Home presentationとの境界を維持する。
+
+## Startup / isolation
+
+1. PROJECT_RULES.md
+2. .agent/ORCHESTRATION.md
+3. .agent/CURRENT_STATE.md
+4. this G1 TASK
+5. fresh `origin/main`
+6. open PR list / other slot scope
+7. `git worktree list`
+
+を確認。
+
+G1専用の独立worktree/checkoutを使う。
+推奨branch:
+`claude/g1-home-report-8-state-20261001`
+
+他slotと同じdirectoryを共有しない。
+
+mainがallocation SHAから進んでいる場合、fresh mainを基準にし、Home関連の競合がないか再確認。
+pending workstreamが同じHome filesを変更していたらSTOP。
+
+## EAS build conservation — mandatory
+
+このTASKはJS/TS + image asset UI変更。
+原則として新しいEAS buildを使わない。
+
+使用:
+- local Expo
+- iOS Simulator
+- existing reusable dev build + local Metro（安全に使える場合）
+
+禁止:
+- spacing/asset/state selector確認だけの新EAS build
+
+native config/plugin/signing変更が本当に必要になった場合のみSTOPして報告。
+勝手にbuild枠を消費しない。
+
+Expected:
+- EAS build created = 0
+
+## Tests
+
+最低限:
+
+### Asset integrity
+- Hero background exists
+- 8 canonical state files exactly map to 8 states
+- character files have alpha
+- expected dimensionsを検査
+- old fixed asset referenceがruntimeから消えている
+- no per-state layout offsets/scales
+
+### State helper
+crafted fixturesで最低:
+- 01 Very Positive
+- 02 Positive
+- 03 Neutral
+- 04 Uncertain
+- 05 Caution
+- 06 Negative
+- 07 Very Negative
+- 08 Volatile
+- missing/legacy report -> Neutral
+- mixedだけでVolatileにならない
+- severe negativeだけでVolatileにならない
+- risk/watch hypothetical wordingだけでVolatileにならない
+
+### Hero structure
+- baked title/description/今日のポイントがnativeで重複しない
+- report type remains dynamic
+- 1/2/3 points
+- CTA only report navigation target
+- loading/error/empty truthful
+- state selector does not trigger network/AI
+
+### Existing
+- current app test suite
+- navigation regression
+- `npx expo config --json`
+- `npx expo export --platform web`
+- changed-scope tsc/lint
+- `git diff --check`
+
+Known pre-existing TypeScript diagnosticsはcandidate regressionと分離して報告。
+
+## Visual verification
+
+Local iOS Simulatorで最低:
+- ~402pt width
+- ~375pt width
+
+fixture:
+- 1 point
+- 2 points
+- 3 points
+
+state:
+- 01
+- 03
+- 05
+- 07
+- 08
+
+確認:
+- background text crisp / not duplicated
+- character not cropped
+- character canvas aligns with background
+- points readable
+- 2件でも不自然な空白が出ない
+- 3件でもoverflowしない
+- CTA always readable/tappable
+- important news section begins near current approved density
+- bottom tabs unchanged
+
+02/07等の画像自体の微小なvisible-size差は、並べて比較して気付く程度なら修正対象にしない。
+実際の単独Hero表示で不自然な場合だけ報告し、画像を再生成しない。
+
+## Acceptance criteria
+
+PASS candidate only if:
+
+- approved Hero background is live
+- baked fixed text is not duplicated
+- 8 approved character assets are live
+- 8-state mapping is exact
+- selector is deterministic / pure / no extra AI cost
+- 08 is volatility-specific, not generic severe-negative
+- no report -> neutral
+- 1/2/3 points all fit
+- Hero matches the user-approved real-device composition
+- header/news/holdings/topic/Ask AI/bottom tabs unchanged except unavoidable Hero spacing
+- EAS build = 0
+- backend/production mutation = 0
+
+## Delivery
+
+Focused PR only.
+No self-merge.
+No deploy.
+
+Report must include:
+- task_id
+- exact fresh main SHA
+- asset filenames + dimensions
+- whether source assets were PNG/WebP and exact allowed conversion
+- changed_files
+- exact state-selection implementation
+- fixture outcomes for all 8 states
+- simulator widths / 1-2-3 point results
+- screenshots or exact visual findings
+- tests/checks
+- PR/head
+- EAS build created: no
+- backend/production mutation: 0
+- remaining issues
+- safety_checks
+- next_recommendation
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K1.
+
+Recommended model: **Sonnet5（高）**.
+
+---
+
+## Archived previous G1 task state
+
+# Claude Task 1 — CURRENT TASK
+
 - task_id: kabumori-home-visual-rebuild-reference-20260930
 - owner: claude
 - slot: claude-1
