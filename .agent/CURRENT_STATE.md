@@ -1,3 +1,17 @@
+## G3 assigned — AI consultation v1
+
+- task_id: `x-social-mobile-ai-consult-v1-20261002`
+- status: **ready**.
+- product order: AI consultation/profile learning foundation first; post generation comes later.
+- current app already has consultation UI, deterministic proposal scaffolding, confirmed settings/persona storage and an untrusted structured-result validator. G3 will reuse these and replace the runtime pseudo-conversation with a real authenticated server-side AI conversation boundary.
+- behavior: natural chat/general questions, adaptive follow-up questions, explanation of current saved posting profile, and reviewable settings/persona deltas. Nothing is saved until explicit user confirmation.
+- durable memory is confirmed structured settings/persona only; raw transcript is not added to a new database table.
+- past-X-post retrieval/analysis is explicitly deferred to G4 after K3/source review; history intent remains consent-gated.
+- no new DB migration because common-account PR #70 migration review is active; if existing settings/persona schema is insufficient G3 must STOP rather than create a migration.
+- no X API call, post generation, publish/scheduler, OAuth/Auth-provider change, account deletion, common-account change or production deploy.
+- recommended Claude model: **Opus5.5（高）**.
+- because an authenticated AI Edge/API boundary is expected, K3 should normally allocate H2 focused review with **Sol（高）** before merge.
+
 ## Final K5 — PR #70 readiness authorization corrective
 
 - verdict: **PASS to focused Codex rereview; merge/apply/deploy HOLD**.
