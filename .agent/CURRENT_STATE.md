@@ -1,3 +1,18 @@
+## Final K5 — Common Account v1 Phase 0
+
+- verdict: **PASS**.
+- task: `common-account-v1-phase0-prod-readonly-inventory-20261001`; G5 changed no runtime/source code and made no production mutation.
+- production inventory completed through aggregate/read-only evidence: Auth/identity population, Kabumori/X user classification, ownership/cascade, RLS/service-role boundaries, OAuth/Vault references, deletion flows and Apple revoke readiness.
+- production population at review time: 4 Auth users; email identities only; no current user classified as both Kabumori and user-facing X workspace owner.
+- key lifecycle risk: the deployed Kabumori deletion path hard-deletes the shared Auth user without X-service/admin-aware cleanup/guarding. This can become a cross-service deletion/orphan risk once shared-account users span services.
+- current X deletion scope also relies on Kabumori profile presence as a proxy; Phase 1 must replace proxy semantics with explicit service registration/entitlement.
+- migration planning: additive common-account/service-entitlement shadow approach remains the preferred v1 direction; no backfill/migration was executed.
+- G5 Phase 1 is **HOLD** until the deletion-boundary review below and pending G3/G4 overlapping social-mobile Auth/deletion work are reconciled.
+- Codex review for G5 Phase 0 itself: not required (read-only/no runtime delta).
+- H1 assigned `common-account-kabumori-delete-cross-service-safety-review-20261001` for existing production Kabumori account-delete cross-service safety review and bounded source-only fail-closed correction candidate.
+- recommended H1 model: **Sol（高）**. No production deploy authorized.
+- AI Lab diary: 記録不要 — 2026-10-01既存エントリが、共通部分とサービス固有部分を分けてサービス単位で安全に利用終了するという今回の公開可能な要点をすでに記録しているため重複しない。
+
 ## Final C1 — PR #67 shared report Presentation v2
 
 - verdict: **PASS-WITH-FIX / accepted**.
