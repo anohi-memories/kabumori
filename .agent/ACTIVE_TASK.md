@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: common-account-pr70-readiness-authorization-rereview-20261002
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: chatgpt
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: PR #70 exact head 47a2ed6a1635177ba82004eace4bddb42d9d53e3 の第2是正を再レビュー。Phase 1 no-enforce/no-Auth-delete責任分離、durable readiness + invalidation inventory、latest 7 adverse cases、old 6 blockers、checkpoint semantic integrity、observer trigger、ACL/preflight/rollbackを独立検証。merge/apply/deploy禁止。推薦モデル Sol（高）。
+- allocation: H1 PASS-WITH-FIX。PR #70 original 47a2ed6 は未変更; final verified candidate aa4d2d425d1d7c432d43c9ecfb8e978a40b80a65 をH1専用branchへ保存。old 6 / latest 7 cases解消、直接common行削除の誤ったlogin_removed観測を局所修正。20 lifecycle PASS / 46 mutations detected / 8 social PASS / 10 invariants PASS。C1が修正取込を判断するまでPR merge HOLD、production mutation 0、apply/deploy禁止。推薦モデル Sol（高）。
 
 ## Codex H2
 - owner: codex

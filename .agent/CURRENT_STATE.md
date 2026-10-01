@@ -1,3 +1,14 @@
+## H1 completed — PR #70 readiness authorization rereview (2026-10-02 JST)
+
+- task_id: `common-account-pr70-readiness-authorization-rereview-20261002`; status `review_required`, next_owner `chatgpt`.
+- result: **PASS-WITH-FIX**. Original PR head `47a2ed6a1635177ba82004eace4bddb42d9d53e3` is unchanged; final verified candidate `aa4d2d425d1d7c432d43c9ecfb8e978a40b80a65` published to H1-only branch `codex/h1-pr70-readiness-review-20261002`.
+- old six blockers + latest seven adverse cases resolved independently; no Auth-destructive SQL or enforcing mode; durable readiness/version/epoch/set and explicit evaluation-only inventory accepted within Phase 1.
+- new bounded P2 fixed: deleting only a common application row could falsely record login_removed while Auth still existed. Regression first failed; minimal observation-integrity check now refuses it, while real shadow Auth cascades remain allowed.
+- final verification: lifecycle 20 PASS, mutation 46/46 DETECTED, existing X deletion 8 PASS, invariants 10 PASS, syntax/lint/diff PASS. Scratch probe proved both admin-visible/admin-gone cascade orders record unverified removal identically.
+- H1 did not update G5 branch/PR, merge runtime into main, or allocate another slot. **PR #70 merge HOLD until C1 accepts and arranges exact fix incorporation**; unchanged original head is not approved.
+- production read/mutation=0, real X operations=0; owned fake probe DB removed, local cluster stopped. Detailed evidence appended to `.agent/CODEX_REPORT.md`.
+- next: **C1, 推薦モデル：Sol（高）**. Production requires separate **Sol（極高）**, actual disposable Supabase proof, exact read-only preflight/history/ACL/API checks and explicit approval. H1 STOP.
+
 ## G3 assigned — AI consultation v1
 
 - task_id: `x-social-mobile-ai-consult-v1-20261002`

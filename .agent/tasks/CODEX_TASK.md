@@ -3,8 +3,8 @@
 - task_id: common-account-pr70-readiness-authorization-rereview-20261002
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused rereview / lifecycle readiness authorization / migration security
@@ -273,6 +273,18 @@ production前に別途必須：
 - next recommendation
 
 完了時 status -> review_required / next_owner -> chatgpt / STOP for C1.
+
+## H1 completion — 2026-10-02 JST
+
+- result: **PASS-WITH-FIX** for reviewed source plus H1's bounded correction; not approval to merge the unchanged PR head.
+- original PR #70 head: `47a2ed6a1635177ba82004eace4bddb42d9d53e3`; final verified candidate: `aa4d2d425d1d7c432d43c9ecfb8e978a40b80a65` on H1-only branch `codex/h1-pr70-readiness-review-20261002`. G5/PR source branch untouched.
+- responsibility gate PASS: no managed Auth/Storage/Vault write, no account-completed claim, no enforcing Auth deletion mode; unwired producers are evaluation-only and Phase 2/3 prerequisites are explicit.
+- old six blockers and latest seven adverse cases: independently verified resolved. Durable version/epoch/set binding, built-in exact semantics, ownership-transfer refusal, ACL/preflight/rollback PASS in the local model.
+- new P2 fixed: direct common-row deletion while Auth remains falsely recorded `login_removed` and scrubbed user_id. Failing regression -> seven-line identity-existence check -> regression/mutation rerun. Real shadow Auth cascades remain allowed; this is observation integrity, not deletion authorization.
+- independent verification: original 20 lifecycle PASS / 45 mutations DETECTED; final 20 lifecycle PASS / 46 mutations DETECTED; existing social deletion 8 PASS; invariants 10 PASS; syntax/lint/diff PASS. Additional cascade probe measured both visible/gone admin orders with identical unverified observations; Storage SELECT denial fails closed.
+- H1 fix published to its own branch only; no PR merge/update or main runtime change. C1 must decide incorporation of the exact fix before PR #70 merge; do not merge original `47a2ed6` unchanged.
+- production read/mutation=0; real X operations=0. Owned fake probe DB removed and own cluster stopped; detailed evidence appended to `.agent/CODEX_REPORT.md`.
+- next: **C1, 推薦モデル：Sol（高）**. Separate **Sol（極高）** pre-production review + actual disposable Supabase proof + exact production preflight/history/roles/API checks + explicit approval remain mandatory. H1 STOP after report synchronization.
 
 ---
 
