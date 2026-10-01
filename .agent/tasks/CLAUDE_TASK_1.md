@@ -3,8 +3,8 @@
 - task_id: kabumori-home-report-hero-8-state-assets-20261001
 - owner: claude
 - slot: claude-1
-- status: done
-- next_owner: none
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sonnet5（高）
 - type: Kabumori Home UI / canonical asset integration / deterministic report-state presentation
@@ -558,6 +558,14 @@ No backend/DB/RPC/Edge Function/cron/gate/Auth/X/account changes; no EAS build; 
 K1 review of PR #72 (UI-only, low risk, no Codex review needed per the review-optimisation policy); after merge, the user can view it live via the dev client; later: user-adjusted point copy (≤ 2 lines), optional smoother (more steps) fade if the zoomed steps matter.
 
 Status: `review_required` / next_owner `chatgpt`. STOP for K1.
+
+## Follow-up — G1: user-approved on-device Hero position tweaks after PR #72 merged (2026-10-02)
+
+- **Why**: PR #72 was merged at `b96c566` (merge `fa0c714`) before the user's on-device feedback was applied. The tweaks were committed on the old branch afterwards (`767d801`, `23292f9`, `131e324`) and are therefore **not in main**. The user viewed them live on their iPhone (dev client + local Metro, real account) and approved: 「位置関係はこれでOK」.
+- **Follow-up PR**: https://github.com/anohi-memories/kabumori/pull/74 — branch `claude/home-hero-cta-lift-20261002`, head `ae9001b472d74a2892f0d572c538ab67b5992d6b`, based on fresh main `deaa3a0031578206dfc6efaaa6cd9d329b9e47ef`. Only the net effect of those three commits was taken (the old branch was NOT merged); main's three affected files were verified identical to `b96c566` first. diff vs main = exactly 3 files (+16/−4): `src/constants/home-tokens.ts`, `src/components/home/home-report-hero.tsx`, `tests/app/report-character_test.ts`. **Not merged.**
+- Changes: `HERO.ctaHeight` 34 → 28pt (the CTA covered the tablet the robot holds); `HERO.ctaBottomInset` 6 (CTA sits near the art's bottom edge, a 6pt strip of plain background below); `HERO.characterLift` 6 — the whole character canvas is raised by one global 6pt (`characterLift: { top: -6, bottom: 6 }`, identical for all eight states; not a per-state offset), together with the CTA, so the picture-to-button relation is unchanged and the CTA still covers the character's bottom edge. Side effect the user accepted: the character's alignment with the baked skyline shifts by 6pt.
+- Checks: `deno test tests/app/` 255/255; tsc(src) only the 2 known CSS diagnostics; `git diff --check` clean. Not re-run in the Simulator (the user's live iPhone check is the verification). EAS build: none; backend/production mutation: 0.
+- Status: `review_required` / next_owner `chatgpt` for PR #74 only (the 8-state task itself stays done). STOP for K1.
 
 ---
 
