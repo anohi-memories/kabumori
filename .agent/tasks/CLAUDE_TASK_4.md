@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-x-account-switch-auth-session-20261001
 - owner: claude
 - slot: claude-4
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: iOSのX OAuth接続時に前回ログインしたXアカウントが再利用され、複数Xアカウント利用者が接続先を切り替えにくい問題を、本番向けに安全に修正する。
@@ -268,3 +268,46 @@ Because `preferEphemeralSession` is a best-effort platform/browser request, it i
 - If a source correction is required, report the smallest proposed change first; runtime-source change will require another focused review.
 
 Recommended model: **Sonnet5（高）**.
+
+
+## Report — operator E2E follow-up (2026-10-01)
+
+- task_id: x-social-mobile-x-account-switch-auth-session-20261001
+- result: **STOP — 安全に使える独立した検証環境がなく、操作者のE2Eを開始できない**。PR #65のsourceは変更していない。
+- model_used: Sonnet 5.5
+- PR #65: exact head `e5a66f5ba71f64b1a38d8f89faff3d0a31972949`（OPEN、MERGEABLE、2 commits、変更は同じ5ファイルのみ）。mergeしていない（TASKの指示どおり）。
+
+### 確認したこと（読み取りのみ）
+
+- 利用可能なSimulatorは `iPhone 17 Pro`（Booted）が1台＝G3のE3検証の環境のため使っていない。他の機種は Shutdown で、アプリが入っていない。
+- このMacにある `SocialOperations.app` のビルド（DerivedData）は実機向け（`iphoneos`）で、9/20のもの。**Simulatorで起動できる開発ビルドは存在しない**。Simulator用にするにはネイティブビルドが必要で、TASKは「実際に必要でない限り再ビルドしない」としている。
+- このworktreeにも共有checkoutにも `apps/social-mobile/.env` が無く、アプリを実データ接続（Supabaseのログイン・接続画面）まで進める公開設定値（`EXPO_PUBLIC_SUPABASE_URL`/publishable key/`EXPO_PUBLIC_DATA_SOURCE`）がこの環境に無い。G3のworktreeや環境から流用することは、環境分離のルール上しない。
+- 接続ボタンまで到達するには、アプリへのログイン（メール/パスワード等）と、Xのログイン（アカウントA・Bの認証情報）が必要で、いずれもエージェントは入力しない。
+
+### 選択肢（操作者の判断が必要）
+
+- **A. 実機iPhone＋既存の開発ビルド（推奨・最短）**: 実機の開発クライアントに、PR #65 head のJSを読み込む。必要なのは、操作者が実機の開発ビルドで使っている公開設定値（`.env`相当、秘密ではないpublishable keyのみ）をこのworktreeに置くことの許可と、他のMetro（G1・実機で使用中のもの）を止めるタイミングの調整。Metroは自分のworktree（独立したnode_modules）から1つだけ起動する。
+- **B. 新しいSimulatorにネイティブ開発ビルドを作る**: `iPhone 17e`などの未使用機種に開発ビルドを入れる。時間がかかり、TASKが避けている再ビルドに当たる。
+- **C. 操作者がローカルで自分で確認**: このPRのブランチのJSを、操作者の普段の開発環境で読み込んで、下の手順で確認する。結果（PASS/FAIL）だけをChatGPT/私に共有する。
+
+### 操作者の確認手順（A/Cで共通、使い捨てのXアカウントA・Bのみ）
+
+1. 端末のSafariで、使い捨てXアカウントAにログインしておく（通常のブラウザの状態）。
+2. アプリのアカウント画面（またはオンボーディング）で「Xアカウントを再接続」を押す。
+3. 認証シートが、Aで自動的に進まず、ログイン画面から始まるか（Aを引き継がず、別のアカウントBで認証できるか）を確認する。操作者がBで認証する。
+4. 別回で、認証シートを閉じて（キャンセル）→ もう一度押して再試行できるか確認する。
+5. 再接続（接続済みの状態から再度押す）でも、2〜3と同じ挙動か確認する。
+6. 実際のXへの投稿が作成されていないことを確認する（投稿を行う操作はしない）。
+
+### production mutation / X posts
+
+production mutation 0 / 実X投稿 0（今回は読み取りと文書更新のみ）。
+
+### 次の推奨
+
+操作者が A / B / C のどれかを選ぶ。Aの場合は、公開設定値の置き場所（このworktreeの`apps/social-mobile/.env`、未追跡）の許可と、Metroを使う順番の調整を教えてもらえれば、私がPR #65 head のJSを用意して、操作を1手ずつ案内する。
+
+## Completion
+
+- status -> review_required
+- next_owner -> chatgpt
