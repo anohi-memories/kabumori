@@ -3,7 +3,7 @@
 - task_id: common-account-pr70-guard-boundary-corrective-20261002
 - owner: claude
 - slot: claude-5
-- status: in_progress
+- status: review_required
 - next_owner: chatgpt
 - priority: highest
 - start_code: G5
@@ -299,12 +299,161 @@ production適用前：**Sol（極高）**。
 ## Report
 
 - task_id: common-account-pr70-guard-boundary-corrective-20261002
-- result: pending
-- old_pr_head: eebe9405d758e0c120f9e6f1a70cdb1e973a0855
-- new_pr_head: pending
-- production_mutation: 0 expected
-- deploy: prohibited
-- next_recommendation: implement corrective lifecycle authorization/invalidation contract on PR #70.
+- result: **PASS**（第2是正の source 候補・regression・mutation 証明まで完了。production 未適用。再レビュー待ち）
+- old_pr_head: `eebe9405d758e0c120f9e6f1a70cdb1e973a0855`
+- new_pr_head: `47a2ed6a1635177ba82004eace4bddb42d9d53e3`（旧 head の上に 1 commit。rebase / force-push なし）
+- PR: [#70](https://github.com/anohi-memories/kabumori/pull/70)（open、MERGEABLE、**merge HOLD**）。Report 時点の checks: passing 1 / pending 2 / failing 0。
+- checked_main: 開始時 `93885aa`。Report push 直前に fresh `origin/main` を再確認。
+- worktree / isolation: G5 専用 worktree。source は PR branch、Report は main 基点の control commit。push 前に remote PR head が `eebe940` のままであることを確認。他slotの worktree / branch / PR / TASK は未変更。open PR（#41 / #33 / #11 / #10 / #3）とのファイル重なりなし。main 側の変更（MIC phase3c）は PR のファイルと重ならない。
+- push: source は PR branch へ fast-forward。この Report は `origin/main` へ fast-forward。
+- deploy: none（prohibited）。
+- production_mutation: **0**。production への接続（read 含む）も 0。
+
+### startup で確認した Supabase docs / changelog（2026-10-02、公式文書の記述。挙動の実証ではない）
+
+- Auth: 削除は `auth.admin.deleteUser()`。発行済み access token は期限まで有効、refresh token は使えなくなる。**Storage object を所有する user はこの API では削除できない**。`auth` schema の Supabase 管理 object は予告なく変わり得る。
+- Storage: 所有は `owner_id`（token の `sub` 由来、`owner` は deprecated）。所有だけではアクセス制御にならない。**削除を含む全操作は Storage API 経由**（metadata 行だけ消すと実体が残る）。
+- changelog: `auth` / `storage` schema への独自 table・function 作成は不可（2025-03-18）。`public` の新規 table は既定で Data API に公開されなくなる（2026-04-28、既存 project は 2026-10-30 まで）。候補は明示 grant だけに依存しており既定の公開に依存しないが、client が読む 2 table が到達可能かは適用時に確認が必要。
+- これらを受けて、`auth.identities` や `storage.*` への trigger 追加は行っていない。
+
+### architecture delta
+
+1. **Phase 1 に enforcing guard は存在しない。** `common_accounts` の BEFORE DELETE trigger は観測のみ: `shadow` では全 delete を許可し、open な operation を `login_removed` として閉じ、raw id を消す。何も authorize しない。admin / membership / identity の行を一切見ない。settings が無い・`shadow` 以外なら全 login delete を拒否する。settings table は `shadow` 以外の値を受け付けない（CHECK）。静的チェックが「enforce を定義していない」ことを強制する。
+2. **readiness は durable な authorization。** `prepare` が operation 行に `ready_lifecycle_version` / `ready_requirement_epoch` / `ready_required_checkpoints` を記録する。この table は login への FK を持たないため、cascade では消えない。
+3. **requirement epoch を追加。** checkpoint 要件（registry）や settings が変わるたびに進む。
+4. **built-in checkpoint を固定の contract に。** 意味まで厳密照合する。
+5. **entitlement の所有者・service は不変。**
+6. 既存 table への trigger 追加・既存 creator の配線は行っていない（integration phase の責務）。追加のみ、managed schema への書き込みなし、は維持。
+
+### durable authorization / invalidation contract
+
+- 取得: `prepare_common_account_auth_delete` のみ。`auth.users` 行の排他ロック、`common_accounts` のロック、settings 行の share ロックの下で、account `deleting` / 全 entitlement `ended` / admin・foreign・shared・internal の blocker なし / 登録のないサービスデータなし / settings あり / registry が contract と一致 / 必須 checkpoint 記録済み / managed ownership probe clean、を満たした時だけ。
+- 有効性: `private.account_lifecycle_authorization_problems` が空。(a) 束縛した 3 値が現在値と一致、(b) 上記の再評価が今も通る、の両方。read model は `authorization.state` を `none` / `valid` / `stale`（理由付き）で返す。
+- 検証者: Phase 1 では `prepare`（取得・更新）と read model。orchestrator は managed delete の直前に `prepare` を呼ぶ義務がある。**guard は検証もしないし authorize もしない。**
+- 束縛した 3 値は durable な状態なので、将来の enforcing guard は cascade で消える行を見ずに比較できる。ただしそれが正しいのは、下表の全 producer が version か epoch を動かすよう配線された後だけ。
+
+### exact list of readiness invalidators
+
+| # | 遷移 | 書ける主体 | Phase 1 で捕捉 | readiness を無効化するもの |
+| --- | --- | --- | --- | --- |
+| 1 | entitlement の insert / update / delete | lifecycle RPC、backfill、operator SQL | **Yes**（trigger） | version が進み、operation が `cleanup` へ（`LIFECYCLE_VERSION_CHANGED`） |
+| 2 | entitlement を別 person / service へ移す | operator SQL | **Yes**（拒否） | 起こり得ない |
+| 3 | account の status / version 変更 | lifecycle RPC、operator SQL | **Yes**（trigger） | 同上 |
+| 4 | service start / provisioning | client の start RPC | **Yes**（`deleting` 中は拒否。それ以外は 1） | — |
+| 5 | backfill | operator | **Yes**（lifecycle lock。`active` 以外には付与しない） | — |
+| 6 | checkpoint 要件の追加・変更・削除 | operator SQL | **Yes**（epoch が進む。built-in は不変） | 全 ready operation が `cleanup` へ（`REQUIREMENT_EPOCH_CHANGED`） |
+| 7 | settings の変更（integration state）、行の削除・再作成 | operator、後続 migration | **Yes**（trigger） | epoch が進む / 再開。全 ready operation が `cleanup` へ |
+| 8 | checkpoint の取り消し | orchestrator（RPC） | **Yes** | `cleanup` へ（`MANAGED_CHECKPOINT_CLEARED`） |
+| 9 | admin membership の追加・削除 | service_role、operator | **No**（既存 table・未配線） | 再評価のみ: `ADMIN_ACCOUNT` |
+| 10 | X workspace membership の変更（自分用 / foreign / shared） | X onboarding RPC、service_role、operator | **No** | 再評価のみ |
+| 11 | blocker に関わる workspace 行（`brands` / `social_accounts` / OAuth state / X 削除 tombstone） | X connect RPC、X 削除 saga、operator | **No** | 再評価のみ |
+| 12 | Kabumori profile の作成（`ensure_my_profile`） | sign-in 済みの任意の client | **No** | 再評価のみ |
+| 13 | Apple identity の追加・削除 | GoTrue | **No**（managed schema） | 再評価のみ: `REQUIRED_CHECKPOINTS_CHANGED` |
+| 14 | Storage object / bucket の所有 | 有効な token を持つ client（Storage API 経由） | **No**（managed schema、FK なし） | 再評価のみ: `MANAGED_OWNERSHIP_REMAINS` |
+| 15 | login 行の削除 | 既存の退会経路、将来の orchestrator | guard trigger が観測 | operation を `login_removed` で閉じる |
+
+「再評価のみ」= 保存された step は誰かが評価するまで `ready` のまま。`prepare` と read model が検出し、`prepare` が取り消す。9〜14 が version / epoch を動かさない以上、束縛値だけでは信頼できない。**これが Phase 1 に enforcing guard を置かない理由。** 全行に regression があり、6・9・absent preview には 2-session race もある。
+
+### guard / enforce truthfulness
+
+- `shadow` は安全化ではない。regression で「stale な readiness + ready 後の admin を持つ login が shadow で hard-delete される」ことを示し、Phase 1 はそれを `LOGIN_REMOVED_WHILE_READY_UNVERIFIED` と記録するだけ、と明示している。
+- `enforce` は Phase 1 に存在しない（settings の CHECK、guard の実装、静的チェックの 3 箇所）。
+- guard は blocker 行を見ないため、cascade の順序で答えが変わらない（両方の順序で regression）。
+- guard が許可しても、Storage / provider cleanup について何も主張しない。
+- 既存の Kabumori hard-delete は安全化されていない。
+
+### checkpoint semantic integrity
+
+- contract: `session_revocation` = always、`storage_cleanup` = always、`apple_revocation` = apple_identity。候補内の関数が正本で、registry 行はこれと完全一致が必要。
+- trigger が built-in 行の変更・削除・改名・TRUNCATE を拒否（`ACCOUNT_LIFECYCLE_BUILTIN_CHECKPOINT_IMMUTABLE`）。
+- trigger を迂回した破損（名前は残して意味だけ弱める、行が欠ける）でも、`prepare` は `MANAGED_CHECKPOINT_REGISTRY_INVALID`。
+- rollback も意味まで照合する（contract を rollback ファイル自身に明記）。拡張行がある場合も拒否。
+- 拡張行（新しい managed ownership）は追加できる。追加・削除は epoch を進め、既存の readiness を取り消す。
+
+### entitlement transfer policy
+
+所有者・service の変更は不可（BEFORE UPDATE trigger、`ACCOUNT_LIFECYCLE_ENTITLEMENT_OWNER_IMMUTABLE`）。service を移す場合は「こちらで終了 → あちらで開始」で、両 account の version が進む。拒否された transfer で両 account の version が変わらないことを regression で確認。
+
+### previous six blocker regression status
+
+6 件すべて PASS のまま（no Auth delete / absent preview / backfill serialization / admin exclusion / exact FK preflight / rollback の肯定条件）。対応する mutation も全検出。
+
+### new seven adverse-case regression status
+
+| H1 の adverse case | committed regression | 結果 |
+| --- | --- | --- |
+| F1 ready 後の admin が authorize される | read model が `stale [ADMIN_ACCOUNT]`、`prepare` が拒否して取り消し。race 13 / 14（両順） | PASS |
+| F1 ready 後の foreign / internal membership | read model が `stale [X_WORKSPACE_NOT_SELF_SERVICE]`、`prepare` が拒否 | PASS |
+| F1 cascade 順序 | test 用 probe で「cascade 内で admin 行が見える / 見えない」の両順を作り、guard の答えが同じことを確認 | PASS |
+| F2 built-in registry 行の削除 | 通常保守では拒否。trigger 迂回時は `REGISTRY_INVALID` | PASS |
+| F2 新しい always 必須 checkpoint | epoch +1、既存 readiness を即時取り消し。race 11 / 12（両順） | PASS |
+| F2 ready 後の Apple identity | `stale [REQUIRED_CHECKPOINTS_CHANGED, MANAGED_CHECKPOINTS_MISSING]`、`prepare` は `apple_revocation` を要求 | PASS |
+| F3 built-in 名で意味だけ弱める | checkpoint 未記録・非 Apple の user が ready にならない。rollback も拒否 | PASS |
+| F4 entitlement の所有者移転 | 拒否。両 version 不変 | PASS |
+
+### full test evidence
+
+すべて使い捨てローカル PostgreSQL 17.11（Unix socket、偽データのみ、非 superuser owner）。commit 済みの tree で実行。
+
+`supabase/tests/common_account_lifecycle_run.sh` — **20 項目 PASS**
+
+1. exact preflight（8 種の不一致を拒否）
+2. 追加のみの適用（適用前の schema dump の全行が残る）＋ 再適用の拒否
+3. 静的チェック（`auth` / `storage` / `vault` への書き込みなし、enforcing guard mode なし、email を読まない、既存 object の変更なし）
+4. 挙動（11 section。backfill、ACL / RLS、start、ready までの全体削除、service-only 削除、fail closed、managed ownership と checkpoint contract、guard、authorization と invalidator、cascade 順序、entitlement の不変性）
+5. 2 セッション競合 14 種（前回の 12 種のうち guard 境界の 2 種を、要件変更 × prepare の両順と、late admin × prepare の両順に置き換え）
+6. isolation guard、deadlock なし
+7. rollback: 拒否 10 種の後、適用前と byte 一致で復元、再適用可
+
+`supabase/tests/common_account_lifecycle_mutations.sh` — **45/45 検出**
+
+- 各 mutation は「検出されるべき具体的な失敗メッセージ」を指定する。H1 が指摘した汎用 `FAIL` の matcher（login 行ロックの除去）は `FAIL race8 start`（deadlock）に固定した。
+- 新規の対象: guard が拒否しない / enforcing mode の定義 / account 変更・要件変更・epoch 変更が readiness を取り消さない / version・epoch・必須集合への束縛を検査しない / prepare が束縛を記録しない / prepare が要件変更と直列化しない / checkpoint 取り消しが readiness を残す / built-in を保守で変更できる / registry を名前だけで検証 / rollback が弱めた意味を受理 / rollback が完了済み operation を無視 / entitlement を移転できる、ほか。
+- 実ファイルは変更しない（実行後に tree clean を確認）。
+
+既存スイート: `social_mobile_account_deletion_run.sh` 8 項目 PASS（変更なし）、`migration_source_invariants_test.ts` 10 passed、`bash -n` OK、`git diff --check` clean。
+
+テスト作成中の事実: 挙動テストと runner は初回から通ったため、mutation で検証した。mutation は初回 43/45 が想定どおり、2 件は「想定と別のチェック」で検出されたため、想定を実際の検出箇所に固定した（未検出はなし）。静的チェックが新しい `TRUNCATE` trigger の定義を誤検出したため、文としての `drop` / `truncate` だけを見るよう直した。
+
+未実施: 実 Supabase（GoTrue / PostgREST / Storage / `supabase_auth_admin`）での検証。
+
+### changed_files（`eebe940` → `47a2ed6`、6 files、+1284 / −506）
+
+- `supabase/migrations/20261001150000_common_account_lifecycle_foundation.sql`
+- `supabase/tests/common_account_lifecycle_behavior.sql`
+- `supabase/tests/common_account_lifecycle_run.sh`
+- `supabase/tests/common_account_lifecycle_mutations.sh`
+- `supabase/tests/common_account_lifecycle_rollback.sql`
+- `docs/common-account/phase1-lifecycle-foundation.md`
+
+client / Edge Function / 既存 migration / 既存 RLS / 既存 table への trigger の変更は 0。関数は 21 → 33、RPC は `clear_common_account_deletion_checkpoint` を 1 つ追加。
+
+### remaining Phase 2/3 integration obligations
+
+- inventory の 9〜12 を配線する（writer が lifecycle を呼ぶ、または既存 table に trigger）。13〜14 は orchestrator / Auth 側の配線と stale-token 方針。
+- 既存 creator（`ensure_my_profile`、`begin_social_mobile_x_oauth_connection`）を lifecycle の下に入れる。
+- 既存の削除経路（Kabumori `account-delete`、X saga の scope 判定と自前の login 削除）を lifecycle へ移す。
+- orchestrator: 直近再認証、session revoke、Apple revoke、X revoke + Vault purge、Storage API cleanup と再列挙、直前の `prepare`、Auth Admin API による削除、削除後の read-back / audit。
+- 全 login の `common_accounts` への登録（backfill）。
+- 上記が揃ってから、別 migration で enforcing guard を追加する。束縛 3 値の比較を使う。
+- 実 Supabase の使い捨て project での証明。
+
+### remaining unknowns
+
+- production schema が exact preflight を通るか（今回 production read は行っていない）。
+- production で function owner が `storage.objects` / `storage.buckets` を読めるか（読めなければ `MANAGED_STORAGE_PROBE_FAILED` で not ready）。
+- Data API の既定公開の変更（2026-10-30 期限）が、client が読む 2 table にどう効くか。
+- cascade 順序の regression は trigger 名の順序に依存する。名前の並びが変わらない稀な場合は 1 順序のみの検証になる（その場合もテストは誤って失敗しないようにしてある）。
+
+### rollout / rollback implications
+
+- 適用順: 再レビュー → production 適用前の別レビュー → production catalog の read-only 照合 → 単一ファイル適用（`db push` 不可）→ backfill dry-run 照合 → backfill → integration → 削除経路の移行と orchestrator → その後に enforcing guard の追加。
+- Phase 1 を適用しても、既存の退会経路の挙動は変わらない。安全にもならない。
+- rollback は integration 開始前、かつ lifecycle が一度も使われていない状態（operation 行なし、registry が built-in のみ）でだけ可能。1 transaction で、部分的な取り壊しはない。
+
+- remaining_issues: 上記 obligations と unknowns。
+- safety_checks: production mutation 0、production 接続 0。`auth.users` 削除 / Auth Admin API / Storage 削除 / OAuth revoke / Vault 操作 / identity 変更 / deploy / flag・Cron 変更 / production の enforce 有効化 0。既存 table / policy / grant / function の変更 0（schema dump 比較で証明）。旧 PR head は merge していない。他slotの TASK / branch / PR 未変更。secret / PII を source・test・Report に含めていない。
+- next_recommendation: K5 の後、PR #70（head `47a2ed6`）の focused 再レビューを H1 / H2 の空き枠へ。推薦 Sol（高）。重点: guard が何も authorize しないこと、束縛 3 値と invalidator inventory の網羅性、built-in contract、rollback の肯定条件。production 適用前は Sol（極高）。
 
 ---
 
