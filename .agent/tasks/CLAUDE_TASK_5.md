@@ -3,7 +3,7 @@
 - task_id: common-account-pr70-guard-boundary-corrective-20261002
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: in_progress
 - next_owner: chatgpt
 - priority: highest
 - start_code: G5
