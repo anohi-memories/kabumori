@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: common-account-kabumori-delete-cross-service-safety-review-20261001
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: chatgpt
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: 共通アカウントPhase 0で確認した既存production Kabumori account deletionのcross-service Auth hard-delete riskをsource/security reviewし、必要なら最小のfail-closed source/test修正まで行う。production deploy/migration/Auth user deletion/OAuth revoke/Vault mutationは禁止。G3/G4のsocial-mobile scopeを変更しない。推薦モデル Sol（高）。
+- allocation: H1レビュー完了、C1待ち。既存Kabumori account-delete境界はFAIL / CHANGES REQUIRED。管理者削除・X側所属削除/残存リスクを独立確認。競合安全な修正はcommon lifecycle制御を要するためruntime修正なし。23 tests PASS、production mutation 0。G5 Phase 1への割当/本番変更は別工程、G3/G4は未変更。C1推薦モデル Sol（高）。
 
 ## Codex H2
 - owner: codex

@@ -908,3 +908,87 @@ G2's claimed eight production Fact-passed packet replays are accepted reported e
   5. Whole-_shared unrelated type errors remain outside this TASK; partial historical replay coverage is explicitly scoped above.
 - merge recommendation: source-safe **after C1 accepts the amended head**; no merge/deploy/activation automatically follows this report. Keep production gates OFF until the separate prerequisites/approvals are satisfied.
 - next_recommendation: C1 review of final head/report, **推薦モデル：Luna（中）**. H1 STOP after control read-back; do not continue into deployment or another task.
+
+---
+
+# H1 — Kabumori account deletion cross-service safety review (2026-10-01 JST)
+
+- task_id: `common-account-kabumori-delete-cross-service-safety-review-20261001`
+- result / verdict: **FAIL / CHANGES REQUIRED** for the existing account-deletion boundary. Review completed; no runtime correction claimed.
+- exact reviewed main: `59108acab7c8445c169bbd05f24f10af4f120ce7` at startup; completion baseline `6e262b0b2f17386c55924f757c19abc7d48b89e8`. The intervening commit changes only G2's Report, not reviewed runtime or H1 controls.
+- isolated checkout: `/private/tmp/kabumori-h1-pr63-review-20260930`, own branch `codex/h1-kabumori-delete-guard-20261001`. Shared Developer checkout, other slot worktrees/branches/dev servers and synced project sources were not changed.
+- startup: fresh origin/main, PROJECT_RULES / AGENTS / HANDOFF / ORCHESTRATION / CURRENT_STATE / H1 TASK / G5 Final K5 and full Report checked. Open PR changed-file checks (#68, #65, #41, #33, #11, #10, #3) found no current Kabumori account-delete runtime overlap. Existing historical H1 control PRs were not merged or reused.
+
+## Independent production / source verification
+
+Read-only function metadata/source and catalog/aggregate SELECTs were performed through the available Supabase connector. No user ids, emails, handles, credential values or Vault data were read into this Report. G5's findings were not treated as proof without this independent check.
+
+- production `account-delete`: **ACTIVE, version 8, verify_jwt=true**. Both retrieved files (`account-delete/index.ts`, `account-delete/delete_logic.ts`) are byte-equal to local main. Deployment bundle hash: `0f1cc97736e3e1add7e3f8068bcb83fec85dc421f83d7fe2a9276b6cb8f60c62`. Existing comments saying the introducing task did not deploy are historical, not current deployment evidence.
+- current main UI exposes Settings -> account deletion. `src/app/settings.tsx:183` implements email retyping then deletion; `src/lib/account-deletion-client.ts:8` invokes the deployed function with the current session token and public key. There is no cross-service/admin feature gate on this entry. Device-installed app reachability was not independently exercised.
+- `delete_logic.ts:89` resolves caller identity through `/auth/v1/user`; lines 93–104 then directly issue hard `DELETE /auth/v1/admin/users/{verified id}` using service role. It reads no ownership/other-service/tombstone state. Client ids cannot target a different user; caller JWT validation and non-success error reporting are intact. The service key remains server-only, fixed errors do not expose it, and no client metadata drives privileged authorization.
+- aggregate at review time: Auth users **4**, Kabumori profiles **2**, admin memberships **1**, admins with a Kabumori profile **1**, users with an X membership **1**, Kabumori + user-facing X dual users **0**, active unconsumed user-initiated OAuth states **0**, social deletion tombstones **0**, ownerless user-facing workspaces **0**. No current cross-service corruption is inferred from this snapshot; zero dual users is not a server-side protection.
+
+Production FK metadata confirms:
+
+| Shared Auth deletion effect | Boundary |
+| --- | --- |
+| `profiles.id`, `admin_users.user_id`, `brand_memberships.user_id`, `social_account_oauth_states.initiated_by_user_id` | Auth-owned references use ON DELETE CASCADE |
+| `tracked_stocks`, `alert_settings`, `alert_category_settings`, `notifications`, `device_push_tokens`, `personalized_reports` | User data cascades through profiles |
+| `brands`, `social_accounts`, workspace posting rows | No direct Auth ownership cascade removes these workspaces/accounts; other brand/account FKs do not turn Auth deletion into full workspace cleanup |
+| X authorization / Vault credentials | No revoke/cleanup in Kabumori function; potential remnants, not a claim that any token was inspected or an orphan currently exists |
+
+Non-internal trigger metadata contains **no trigger on auth.users or admin_users** and no pre-delete cross-service guard on profiles. The relevant X guard triggers run BEFORE INSERT OR UPDATE on workspaces/memberships/OAuth state, not when Auth cascade deletes memberships. The deployed OAuth-start RPC remains executable by `authenticated`, creates a workspace/membership, and updates social accounts. Existing deletion acquisition uses a tombstone/advisory lock and updates posting/workspace state; those are not operations this Kabumori function performs.
+
+## Findings by severity
+
+1. **P1 — admin self-deletion has no authorization guard.** `supabase/functions/account-delete/delete_logic.ts:89–104` allows any verified caller to reach the privileged hard-delete request, including an admin. `admin_users` then cascades if the Auth deletion succeeds. The current population contains one admin with a Kabumori profile, so this is not only a future dual-service case. No live deletion was used to establish it; Storage/other unrelated constraints could still make a particular Auth deletion fail, but they do not implement an admin policy.
+2. **P1 — one-service deletion can erase other-service ownership without ending its authorization.** The same path can remove X membership and user-initiated OAuth state, while workspace/social accounts and any associated credential/permission state are not cleaned up or revoked. The UI promises deletion of the login account without explaining that cross-service scope. Zero current dual users makes this a latent defect today, not safe behavior for common accounts.
+3. **P2 — no server-enforced recent reauthentication.** `/auth/v1/user` verifies a token/current user, not an explicit recent password/provider proof. Email retyping is client-only and is bypassable by a direct function request; there is no last-authentication/session-age check. Source tests accept a mock user whose last_sign_in_at is years old. After success, the app signs out best-effort, but the function provides no strict immediate access-token invalidation guarantee. Supabase documents that user deletion does not by itself make already-issued JWTs expire immediately. This is a separate common-lifecycle requirement, not justification for an unapproved auth redesign here.
+
+These are defects in existing source/production behavior, not introduced changes. The ordinary identity/secret/non-success boundaries covered by the 23 existing tests remain valid.
+
+## Interim guard decision — no runtime patch within this authority
+
+A fail-closed check should reject admin ownership, **any** relevant X membership/workspace, active/pending OAuth, existing deletion state, unknown/shared-service evidence and failed/malformed/incomplete reads. The user-facing response must be a non-success requiring a service-specific/common lifecycle path, without exposing ownership details. A caller who is unambiguously Kabumori-only should retain a lawful deletion path.
+
+However, an Edge-only sequence of read checks followed by a separate GoTrue/Auth DELETE is not deterministic exclusion:
+
+1. Kabumori checks read no X footprint.
+2. Concurrent authenticated OAuth-start creates/commits workspace, membership and state.
+3. Kabumori hard-deletes Auth; membership/state cascade, workspace/account can remain.
+
+This is a source/catalog-supported race analysis, **not** a live race reproduction. Repeating a final SELECT does not remove the check/delete gap. Absence of a workspace also does not encode an explicit other-service registration/entitlement, which Phase 0 identified as missing.
+
+The existing X `social_mobile_account_deletion_acquire` cannot be copied/called as a read-only Kabumori guard: it writes tombstone/audit state, disables posting/account authority, fails pending posts and chooses X-specific scope from profile presence. Its `social_only` scope intentionally preserves Auth when a Kabumori profile exists. The workspace advisory lock held by a read-only RPC transaction would expire before a later GoTrue request; it is not an across-request deletion lease. Reusing acquisition/finalization changes lifecycle/other-service semantics, while a new durable guard/serialization boundary requires separately authorized DB/orchestrator work.
+
+Therefore the TASK's explicit **“if schema/new lifecycle orchestrator/broad cross-service semantics are required, do not implement”** stop condition applies. No partial preflight is advertised as safe, no blanket disable of legitimate Kabumori-only deletion was silently introduced, and no X/Vault cleanup was added. **No runtime/source candidate exists to merge or deploy from this H1.** Production behavior remains unchanged and requires a separately approved mitigation/correction; this Report does not itself disable the risky route.
+
+## Verification / limits
+
+| Check | Actual result |
+| --- | --- |
+| `deno test --no-config --allow-read supabase/functions/account-delete/ tests/app/account-deletion_test.ts` | **23 passed / 0 failed**, final rerun against completion baseline |
+| Offline synthetic probes of current logic | **4/4** observed the mock hard-delete call for admin, X membership, pending OAuth and old last_sign_in_at; fake fetch only, no live network |
+| `deno check --no-config` (runtime entry and three focused test files) | PASS |
+| Runtime lint: index.ts / delete_logic.ts / src/lib/account-deletion.ts | PASS |
+| Combined account-delete + client-test lint | **5 existing require-await errors** in unchanged test mocks: delete_logic_test.ts:16,143; tests/app/account-deletion_test.ts:36,50,62 |
+| Source/caller/secret path, deployed byte read-back, FK/cascade/trigger/aggregate checks | Completed read-only |
+| `git diff --check` / control-history preservation check | PASS; exactly four H1 controls changed, prior Report/TASK/state and non-H1 index content preserved |
+
+The four probes establish **missing checks**, not the safety of a new guard; their footprint labels describe synthetic contexts the current function never queries. They were an in-memory Deno eval, not newly committed acceptance tests. No database race, real Auth deletion, X revoke, Vault mutation, iOS/device or provider E2E was run. No new source/type/lint error was introduced because runtime/tests are unchanged. Full-repository checks were not claimed.
+
+## G5 Phase 1 / separately scoped acceptance gates
+
+After C1 accepts the findings and G3/G4 overlap is reconciled, scope an explicit common/service lifecycle design rather than infer service membership solely from profile/workspace absence. It must distinguish Kabumori service withdrawal, X withdrawal and whole-login-account deletion, and serialize deletion intent with workspace/membership/OAuth provisioning. Admin/shared/unknown cases must fail closed; provider revoke, credential cleanup and Auth destruction need their own authorized ordering/consent/retry boundaries.
+
+Required regression tests for that future correction: verified unambiguously Kabumori-only allowed; admin/X/other-owner/pending OAuth/derived workspace without membership/deletion in progress/unknown service denied; lookup permission/network/malformed-data failures denied before any destructive call; concurrent create-vs-delete outcomes safe in **both** commit orders; service-only withdrawal leaves the other service/Auth untouched; stale/revoked sessions and recent-authentication rules; truthful client non-success; no secrets in errors/logs. These are proposed requirements, **not implemented/passing tests in this H1**.
+
+## Delivery / safety / next owner
+
+- changed_files: `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md` (append only), H1 section only of `.agent/ACTIVE_TASK.md`, new H1 section only of `.agent/CURRENT_STATE.md`. Prior reports and other slot controls/runtime remain intact, including pre-existing malformed index text outside H1.
+- commit_hash: runtime commit **none**; report/control commit is the Git commit containing this appended task_id section (exact hash to be supplied with confirmed publication/read-back in the completion reply).
+- push: control-only synchronization to GitHub is attempted after this report is committed; no source branch/PR push, merge or deployment is part of the review. Publication is complete only after remote task/report read-back; do not infer it from this prepared text.
+- deploy / Auth deletion / provider revoke / migration / production DB or Vault write / Cron or flags / real X operations: **none**. **production_mutation=0**. Read-only metadata/aggregate queries and function retrieval only; no credentials/PII exposed. Supabase skill security checklist drove independent Auth/cascade/key checks and the refusal to treat token validity or a preflight read as sufficient deletion safety. Official Auth deletion/current-user/managing-data docs were consulted; changelog index retrieval failed due unsupported markdown content type and was not repeatedly retried.
+- source_safe_to_merge: no new runtime candidate; existing cross-service hard-delete is **not approved as common-account-safe**. Control/report publication is safe; deploy recommendation **HOLD**, no deploy approval requested by this review.
+- remaining_issues: P1/P2 findings above; explicit service registration and lifecycle serialization; separate production mitigation authority; provider cleanup/recent-auth/session design; future behavior/concurrency E2E. No claim of already-corrupted users.
+- next_recommendation: **C1, 推薦モデル：Sol（高）** to accept findings and independently decide/scoped-authorize the next G5 Phase 1 or interim mitigation. This TASK does not allocate another slot or grant production authority. H1 status `review_required`, next_owner `chatgpt`; STOP after safe control synchronization/read-back.

@@ -3,8 +3,8 @@
 - task_id: common-account-kabumori-delete-cross-service-safety-review-20261001
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（高）
 - type: security review / bug fix / Auth deletion boundary
@@ -118,6 +118,18 @@ Report:
 - next recommendation
 
 At completion: status -> review_required, next_owner -> chatgpt, STOP for C1.
+
+## H1 completion — 2026-10-01 JST
+
+- result: **FAIL / CHANGES REQUIRED** for the existing shared-Auth hard-delete boundary; review itself completed.
+- independently confirmed production account-delete ACTIVE v8 / verify_jwt=true; both deployed source files byte-equal to reviewed main.
+- P1: admin self-deletion is not guarded; X membership/OAuth-state cascades can leave workspace/social-account/posting credentials behind. No actual account deletion was performed.
+- interim_guard_decision: no runtime fix. Separate read-only footprint checks followed by Auth DELETE retain a creation/deletion race. Existing X deletion acquisition writes tombstones/audit/posting state and has different service scope; copying it is not a bounded Kabumori guard.
+- tests: focused 23/23 PASS; offline missing-guard/freshness probes 4/4 confirmed current behavior; targeted typecheck/runtime lint PASS. Combined test lint has five pre-existing require-await findings.
+- reviewed main: startup 59108acab7c8445c169bbd05f24f10af4f120ce7; completion baseline 6e262b0b2f17386c55924f757c19abc7d48b89e8 (only G2 Report changed between them).
+- runtime/source delta: 0; production mutation: 0; deploy: none. This TASK does not implement or authorize G5 Phase 1.
+- full evidence / proposed acceptance tests: appended .agent/CODEX_REPORT.md section for this task_id.
+- next: C1 review, then separately scope/authorize common lifecycle serialization, explicit service registration and recent reauthentication after G3/G4 conflict reconciliation. Recommendation: Sol（高）. H1 STOP.
 
 ---
 

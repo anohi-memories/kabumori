@@ -1,3 +1,14 @@
+## H1 completed — Kabumori deletion cross-service boundary (C1 pending)
+
+- task: `common-account-kabumori-delete-cross-service-safety-review-20261001`; status `review_required`, next_owner `chatgpt`.
+- verdict: **FAIL / CHANGES REQUIRED** for the existing production hard-delete path; not evidence of an executed deletion or current orphan.
+- production source read-back: account-delete ACTIVE v8 / verify_jwt=true; both files byte-equal to reviewed main.
+- P1 risks: unguarded admin self-deletion and shared Auth cascades to X membership/OAuth state while X workspace/accounts/credentials may remain. Current aggregate: 4 Auth users, 2 Kabumori profiles, 1 admin with a profile, 1 X membership, 0 dual-service users, 0 ownerless user workspaces.
+- interim runtime guard: not implemented. Read checks followed by a separate Auth DELETE do not serialize concurrent workspace creation; borrowing the X deletion lease changes posting/lifecycle state and service scope. Safe correction requires a separately scoped common deletion boundary.
+- verification: focused tests 23/23; four offline vulnerability probes; targeted typecheck/runtime lint PASS. Combined test lint has five pre-existing require-await findings. No device/E2E/destructive deletion test claimed.
+- changed: H1 control/report files only; production mutation 0, deploy none. G3/G4 and previous reports remain unchanged.
+- next: C1 review with **Sol（高）**; then separately plan/authorize G5 Phase 1 lifecycle serialization, explicit service registration and recent reauthentication. No Phase 1 allocation/production approval follows automatically. H1 STOP.
+
 ## Final K5 — Common Account v1 Phase 0
 
 - verdict: **PASS**.
