@@ -1,3 +1,15 @@
+## Final C1 — Common account deletion safety accepted
+
+- verdict: **FAIL / CHANGES REQUIRED accepted**.
+- existing production Kabumori deletion is confirmed not common-account-safe: admin self-delete lacks a server authorization guard, and a one-service hard Auth delete can remove cross-service ownership references without revoking/cleaning the other service.
+- H1 intentionally made no runtime patch. A read-only preflight followed by a separate Auth hard delete has a create-vs-delete race and must not be represented as safe.
+- current production snapshot had 0 dual Kabumori + user-facing-X users, so no current cross-service corruption was established.
+- production mutation from H1: 0; runtime source candidate: none; deploy remains HOLD.
+- G3 deletion UI work is complete/merged. G4 PR #65 remains isolated and open for operator provider-side account-switch E2E only.
+- G5 assigned `common-account-v1-phase1-additive-lifecycle-foundation-20261001`: additive common-account/service-entitlement schema + lifecycle serialization foundation, shadow backfill candidate, and least-privilege RLS/grants. No production apply/backfill/deploy.
+- Phase 1 must serialize service provisioning vs whole-account deletion; simple final SELECT/preflight-only fixes are forbidden.
+- recommended G5 model: **Opus5.5（極高）**.
+
 ## Final K3 PASS — social-mobile account deletion UI
 
 - verdict: **PASS**.
