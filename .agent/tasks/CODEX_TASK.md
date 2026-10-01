@@ -3,8 +3,8 @@
 - task_id: common-account-pr70-corrective-rereview-20261001
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused rereview / Auth lifecycle / migration security
@@ -199,6 +199,23 @@ production前に別途必要：
 - source merge/apply/backfill/deploy: **HOLD**. No production reads or mutations during this rereview; production_mutation=0; no real X operations.
 - owned fake probe database removed and local cluster stopped; production data untouched. Detailed counterexamples, scope limits and prior-six dispositions appended to `.agent/CODEX_REPORT.md`.
 - next: **C1, 推薦モデル：Sol（高）**; C1 should decide a separate bounded G5 correction. Separate **Sol（極高）** pre-production review, actual disposable Supabase proof and explicit approval remain mandatory. H1 STOP after report synchronization.
+
+
+## Final C1 — PR #70 corrective rereview
+
+- verdict: **FAIL / CHANGES REQUIRED accepted**.
+- reviewed head: `eebe9405d758e0c120f9e6f1a70cdb1e973a0855` unchanged.
+- previous six blockers: **resolved and accepted**.
+- new accepted blockers:
+  1. P1: Auth-delete cascade ordering can remove admin / foreign membership rows before the common-account guard checks them, so delete-instant blocker revalidation is not reliable at that trigger point.
+  2. P2: a previously ready operation is not invalidated when required checkpoint registry / Apple identity requirements change.
+  3. P2: built-in checkpoint names can retain their names while their required semantics are corrupted.
+  4. P2: direct/operator entitlement ownership transfer bumps only the destination account version, leaving the source account stale.
+- production mutation/read from H1: 0.
+- merge/apply/backfill/deploy: **HOLD**.
+- architecture direction: preserve the accepted Phase 1 responsibility split (no managed Auth deletion). Do not make the common_accounts cascade trigger the sole correctness boundary for final Auth deletion. The future managed orchestrator must obtain durable pre-delete authorization from state that cannot be erased by Auth cascade ordering, and every readiness-relevant producer/requirement change must invalidate or revalidate that authorization.
+- next owner: G5 corrective task `common-account-pr70-guard-boundary-corrective-20261002`, recommended **Opus5.5（極高）**.
+- after corrective K5, focused Codex rereview required. Before any production apply, separate **Sol（極高）** gate remains mandatory.
 
 ---
 
