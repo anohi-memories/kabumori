@@ -3,8 +3,8 @@
 - task_id: common-account-pr70-corrective-lifecycle-foundation-20261001
 - owner: claude
 - slot: claude-5
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - start_code: G5
 - finish_code: K5
@@ -1675,3 +1675,17 @@ Report 時点の fresh `origin/main` と open PR で確認。
 - next reviewer: H1 `common-account-pr70-lifecycle-foundation-review-20261001`, recommended model **Sol（高）**.
 - pre-production migration/apply decision, if reached later, requires a separate **Sol（極高）** gate.
 - AI Lab diary: 候補あり — 共通ログインとサービスごとの利用登録を分ける土台を作り、利用開始と全体削除が同時に走るケースまで競合テストした内容を公開安全な表現で2026-10-01エントリへ反映。
+
+
+## Final K5 — PR #70 corrective foundation
+
+- verdict: **PASS to focused Codex rereview; merge/apply/deploy HOLD**.
+- accepted corrective source head: `eebe9405d758e0c120f9e6f1a70cdb1e973a0855` on PR #70, open/mergeable.
+- architecture correction accepted for review: Phase 1 no longer deletes `auth.users`; it stops at `ready_for_managed_auth_delete` / managed-cleanup readiness and leaves actual Auth/Storage/provider/session destruction to a later orchestrator.
+- H1 six reproduced blockers are now represented as committed regressions and are reported PASS by G5.
+- G5 evidence accepted as candidate evidence: lifecycle runner 19 PASS, mutation suite 29/29 detected, existing X deletion regression PASS, migration invariants PASS, git diff clean.
+- production mutation/read: 0; no migration apply/backfill/Auth delete/Storage delete/OAuth/Vault/deploy/flag/Cron change.
+- fresh overlap check: PR #70 files do not overlap base-to-main runtime changes.
+- merge decision: **HOLD** pending H1 rereview of exact head `eebe9405d758e0c120f9e6f1a70cdb1e973a0855`.
+- production apply remains separately gated by **Sol（極高）** after source acceptance and real disposable Supabase proof.
+- AI Lab diary: 追加更新なし。2026-10-01 entry already covers the common-account concurrency/safety work at an appropriate public-safe level; avoid same-day duplicate detail.
