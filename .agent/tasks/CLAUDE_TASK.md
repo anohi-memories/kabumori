@@ -1,10 +1,202 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-shared-report-v2-quality-rewrite-calibration-20261002
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（高）
+- purpose: 10/2朝刊の最初のlive Presentation v2で確認した、誤ったニュース優先度WARNと軽微な長さ不足による不要なquality rewriteを修正する。Hard Fact / Fact / transport / packet契約は変更しない。source + tests + PRのみ。
+
+## Product decision
+
+Delivery reliability and cost efficiency outrank cosmetic perfection.
+
+Quality WARN may be recorded, but a safe report should not spend another model generation merely because:
+- a broad-first news paragraph also mentions a company later, or
+- App story is only modestly below the preferred editorial length.
+
+Do **not** weaken any Hard Fact guard.
+
+## Exact live evidence — 2026-10-02 morning
+
+Completed packet:
+- report packet `7e11eb93-4ba4-4505-a965-8dac89d15158`
+- presentation v2
+- Fact passed / local issues=[]
+- formatted X = 486 chars
+- quality warnings:
+  - `X本文が個別企業の開示を市場全体のニュースより前に扱っている`
+  - `APP_STORY_SHORTER_THAN_TARGET:846`
+- diagnostics:
+  - quality_rewrite=true
+  - delivered_generation=1
+  - quality rewrite was not the delivered generation
+  - calls=3 / cost=$0.010230
+
+Actual X news paragraph:
+- broad geopolitical items first
+- Nidec company disclosure last
+
+Actual key_news:
+- broad
+- broad
+- broad
+- company
+
+Therefore the current editorial-priority warning is a deterministic false positive.
+
+## Required change A — fix editorial priority warning semantics
+
+Audit `editorialPriorityWarnings`.
+
+Current behavior effectively warns whenever a company name appears anywhere in `x_post.news_ja` while broad news exists.
+
+Replace this with a testable ordering rule.
+
+A broad-first X paragraph that later includes a company item must **not** warn.
+
+Warn only when the generated X story actually:
+- leads with a company disclosure before any available broad-market item, or
+- contains company-only news while broad-market evidence exists and is omitted.
+
+Prefer deterministic matching against the existing scoped input/key_news/headlines.
+
+Do not add an LLM call.
+
+Required fixtures:
+
+PASS / no priority warning:
+1. broad item first, company item later — exact 10/2 delivered shape.
+2. broad-only news.
+3. broad paragraph first; company detail appears only after it.
+
+WARN:
+4. company disclosure appears first and broad material is available but comes later.
+5. company-only paragraph while broad material exists.
+6. key_news contains no broad item although broad input exists.
+
+Do not make this a Hard failure.
+
+## Required change B — reduce unnecessary rewrite for near-target App length
+
+Keep `APP_STORY_SHORTER_THAN_TARGET:<n>` as telemetry if useful.
+
+But **a modest shortfall must not automatically trigger a rewrite**.
+
+The exact live case at 846 chars:
+- is structurally complete,
+- is fact-safe,
+- is close to the 900-char preference,
+- must be deliverable without a quality rewrite solely for length.
+
+Choose a clear, documented threshold/policy, for example:
+- 900+ = no short warning,
+- moderately short = WARN only, no rewrite,
+- materially thin = WARN + one bounded rewrite.
+
+Do not silently turn the preferred target into a new Hard limit.
+
+The threshold should be justified from current Presentation v2 section structure and tested. Avoid tuning to one exact number only.
+
+X length behavior:
+- preserve 430–560 as editorial target.
+- a postable, fact-safe body outside the target remains Quality WARN.
+- do not add rewrite attempts beyond the existing maximum.
+- the 486-char 10/2 X body must not trigger a length rewrite.
+
+## Required change C — preserve safe-original fallback
+
+Re-run and preserve:
+- safe original + quality warning + rewrite Hard -> safe original delivered
+- safe original + rewrite request failure -> safe original delivered
+- quality warning alone never suppresses cycle
+- transport retry remains separate
+- Hard Fact rejection behavior unchanged
+
+## Strict non-scope
+
+Do not change:
+- `unsupportedCausalSentences` / PR #71 causal calibration
+- metric/date/session/stale/1306/ref Hard guards
+- Fact prompt semantics
+- model choice
+- MAX_GENERATIONS / max call budget
+- report packet schema
+- news acquisition
+- personalized-reports
+- x-test-post
+- DB/RPC/migrations
+- cron/gates
+- production deployment
+
+## Tests
+
+At minimum:
+- exact 10/2 live warning fixture
+- editorial priority warning tests listed above
+- near-target App story = warning-only/no rewrite
+- materially thin App story = at most one rewrite
+- X 486 chars = no length warning/rewrite
+- safe-original fallback regressions
+- presentation_v2 full suite
+- H1 adversarial / content guard regressions
+- market-report-analysis full suite
+- deno check
+- deno lint
+- git diff --check
+
+If shared helper behavior changes, run relevant _shared/X consumer tests.
+
+## Completion conditions
+
+PASS candidate only if:
+- exact 10/2 broad-first/company-last false warning disappears
+- 846-char complete App story does not trigger a rewrite solely for length
+- genuinely bad news ordering still produces WARN
+- materially thin story can still request one bounded rewrite
+- no Hard Fact behavior changes
+- max model-call budget unchanged
+- production mutation=0
+
+## Required Report
+
+- task_id/result
+- fresh main/worktree
+- exact root cause
+- changed warning/rewrite policy
+- chosen App rewrite threshold and rationale
+- exact 10/2 fixture before/after
+- tests/check/lint/diff
+- changed_files
+- PR/head SHA
+- model-call budget before/after
+- expected call/cost effect on the 10/2 shape
+- production mutation=0
+- remaining issues
+- recommendation for merge/deploy/close natural observation
+
+When complete:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+Pending.
+
+---
+
+# Previous completed G2 task — PR #71 production deploy and first live morning
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-shared-report-v2-causal-calibration-prod-deploy-20261001
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sonnet5（高）
 - purpose: merged PR #71 causal-guard calibration を production `market-report-analysis` のみに controlled deployし、consumer gates OFFのまま exact source/read-back と非影響を確認する。明朝10/2の自然朝刊が最初のlive-model検証になる。
@@ -5226,4 +5418,60 @@ K2 product decision:
   - user explicitly prefers fewer unnecessary delivery-stopping gates,
   - live behavior is more informative before another review.
 - before any app/x consumer activation, review need will be reassessed with live evidence.
+
+
+
+## Final K2 — PR #71 production deploy + first live morning
+
+Verdict: **PASS for deploy; live morning PASS with non-blocking quality calibration issues**.
+
+Deploy verification accepted:
+- production `market-report-analysis` is v20, verify_jwt=false, ezbr `4250b5ceb848…`.
+- deployed source/read-back matched merged PR #71.
+- app_enabled=false / x_enabled=false remained OFF/OFF.
+- cron unchanged.
+- G2 production mutation was exactly one target Function deploy; no manual cycle.
+
+Independent live-model observation at 2026-10-02 08:17 JST:
+- natural morning data cycle completed.
+- report completed on the scheduled retry window:
+  - data attempts: 1
+  - report attempts: 2
+  - first scheduled analysis run failed; exact body/reason is not preserved in the cycle row/log body, so do not invent it.
+  - second scheduled run completed.
+- data packet: `eec5aee4-d4b9-4651-9625-6071a1084900`
+  - hash `08d40a1f1adb038dc08227fe906f6a2bf53d326d6cb0786da6a12bc24fc5a103`
+- report packet: `7e11eb93-4ba4-4505-a965-8dac89d15158`
+  - hash `09d0c3efdf9f09c83f31b225916a81043198f4e35d775ef5a33d3118be963ddf`
+  - presentation_version=`market_presentation.v2`
+  - Fact AI status=passed
+  - local_issues=[]
+  - one data packet / one report packet; no duplicate.
+- factual checks on delivered packet:
+  - 10/1 Nikkei 68,956.72 (+3.30%) correctly kept on 10/1.
+  - 10/1 TOPIX-linked ETF (1306) 434.4 (+0.67%) correctly identified; no TOPIX-index confusion.
+  - US values are separately dated 10/1.
+  - stale JGB values are explicitly labelled 8/31.
+  - no unsupported Tokyo-market causality was asserted; text says the relationship is unconfirmed.
+- delivery-first behavior worked:
+  - diagnostics: generation_attempts=2, content_regenerations=1, hard_rejections=local, quality_rewrite=true, quality_rewrite_request_failed=false, delivered_generation=1, transport_retries=0.
+  - a hard-safe original was retained/delivered even though the quality rewrite did not become the delivered generation.
+- quality warnings on delivered safe packet:
+  1. `X本文が個別企業の開示を市場全体のニュースより前に扱っている`
+  2. `APP_STORY_SHORTER_THAN_TARGET:846`
+- the first warning is **demonstrably a false positive** on the delivered packet:
+  - X news paragraph lists broad geopolitical items first, then Nidec last.
+  - `key_news` order is broad, broad, broad, company.
+  - current warning implementation triggers whenever a company is mentioned anywhere in the X news paragraph while broad news exists; it does not actually compare ordering.
+- the second warning is quality-only. An 846-char safe App story is close to the 900-char editorial target and should not by itself justify a costly rewrite under the delivery-first policy.
+- formatted X body from the delivered packet is **486 characters**, inside the 430–560 editorial target.
+- App narrative text is useful and structurally complete; it is slightly below the preferred target, not a safety defect.
+- final run usage: 3 model calls, 19,973 input tokens, 5,196 output tokens, $0.010230.
+- gates remain OFF/OFF; this observation caused production mutation=0.
+
+K2 decision:
+- PR #71 calibration materially improved reliability: the first live v2 packet completed and the safe-original fallback worked.
+- no new Hard-fact source change is justified from this sample.
+- next fix should target **quality-warning/rewrite calibration only**, so stylistic/near-target issues do not cause unnecessary model rewrites.
+- no Codex review required for that narrow quality-only change unless it touches Hard Fact behavior.
 
