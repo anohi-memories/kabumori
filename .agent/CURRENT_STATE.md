@@ -1,3 +1,18 @@
+## Final K4 PASS — iOS X account switching
+
+- verdict: **PASS**.
+- PR #65 accepted at exact reviewed head `e5a66f5ba71f64b1a38d8f89faff3d0a31972949` and squash-merged as `6b1f2f6229a1b75743b57900d869368c2c5e8693`.
+- isolated native operator proof confirmed that the posting-X auth session did not silently reuse Safari's logged-in account A; a different disposable account B could authenticate up to the final X consent boundary.
+- cancel returned safely and retry again opened a fresh login path.
+- final X consent/linking was intentionally not completed; real X posts = 0.
+- independent production read-only verification for the test window: 0 new Auth users, memberships, social accounts, OAuth states, token-store updates, or Vault secret creates/updates.
+- source/security review remained valid because runtime source did not change after the reviewed head; no further Codex review required.
+- fresh merge gate passed: checks green, head unchanged, no main overlap with the five PR files.
+- iOS ephemeral/private auth remains best-effort by platform/browser; verified outcome is prevention of silent normal-browser identity reuse, not a guaranteed account chooser.
+- Android/Web unchanged. No TestFlight/App Store/native binary release in this K4; source enters the next native build.
+- separate UI follow-up remains for the accounts-screen Link-asChild styling defect found by G3.
+- G4 closed and reusable after fresh allocation.
+
 ## Final K5 — PR #70 corrective lifecycle foundation
 
 - verdict: **PASS to focused Codex rereview; merge/apply/deploy HOLD**.
