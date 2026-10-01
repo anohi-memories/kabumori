@@ -1,5 +1,5 @@
 import type { UserIdentity } from '@supabase/supabase-js';
-import { Link } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { colors } from '@/constants/theme';
@@ -27,6 +27,7 @@ const statusTone = { linked: 'success', available: 'neutral', setup_pending: 'wa
  * unlink. Posting-account X is a separate connection managed on Accounts.
  */
 export default function LoginMethodsScreen() {
+  const router = useRouter();
   const { session, linkProvider, readiness, email, requestPasswordReset, releaseReport, accountDeletion } = useAuth();
   const { accounts } = useActiveAccount();
   const { status: dataStatus } = useDataStatus();
@@ -140,11 +141,10 @@ export default function LoginMethodsScreen() {
             <Text style={{ color: colors.ink }}>投稿用のX接続</Text>
             <Pill tone={postingX === 'connected' ? 'success' : postingX === 'needs_reconnect' ? 'warning' : 'neutral'}>{POSTING_X_STATUS_LABELS[postingX]}</Pill>
           </View>
-          <Link href="/accounts" asChild>
-            <Pressable accessibilityRole="button" style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}>
-              <Text style={styles.buttonText}>投稿用のX接続を確認する</Text>
-            </Pressable>
-          </Link>
+          {/* Navigate with onPress, not <Link asChild>: Slot merges `style` by spreading it, which drops a function-valued Pressable style (the white label then renders on no background). */}
+          <Pressable accessibilityRole="button" onPress={() => router.push('/accounts')} style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}>
+            <Text style={styles.buttonText}>投稿用のX接続を確認する</Text>
+          </Pressable>
         </Card>
 
         <Card>
@@ -167,11 +167,9 @@ export default function LoginMethodsScreen() {
         <Card>
           <Text style={{ color: colors.ink, fontWeight: '800' }}>アカウントの削除</Text>
           <Text style={styles.muted}>削除されるもの・残るものを確認してから削除できます。{accountDeletion === 'available' ? '' : 'アプリ内での削除は現在準備中です。'}</Text>
-          <Link href="/account-deletion" asChild>
-            <Pressable accessibilityRole="button" style={({ pressed }) => [styles.button, { backgroundColor: colors.danger }, pressed && styles.buttonPressed]}>
-              <Text style={styles.buttonText}>アカウントの削除について</Text>
-            </Pressable>
-          </Link>
+          <Pressable accessibilityRole="button" onPress={() => router.push('/account-deletion')} style={({ pressed }) => [styles.button, { backgroundColor: colors.danger }, pressed && styles.buttonPressed]}>
+            <Text style={styles.buttonText}>アカウントの削除について</Text>
+          </Pressable>
         </Card>
 
         {message ? <Pill tone={message.tone}>{message.text}</Pill> : null}
