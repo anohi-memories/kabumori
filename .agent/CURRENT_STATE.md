@@ -1,3 +1,19 @@
+## Final C1 — PR #70 corrective rereview FAIL
+
+- verdict: **FAIL / CHANGES REQUIRED accepted**.
+- reviewed head `eebe9405d758e0c120f9e6f1a70cdb1e973a0855` remains open/unmerged.
+- previous six H1 blockers are confirmed resolved.
+- new blockers accepted:
+  - P1: common_accounts cascade guard can execute after Auth CASCADE already erased admin / foreign membership blockers, so delete-instant table rechecks are not a reliable authorization boundary.
+  - P2: previously ready deletion authorization is not invalidated by checkpoint registry / Apple identity requirement changes.
+  - P2: built-in checkpoint names can retain names while their required semantics are weakened.
+  - P2: direct/operator entitlement ownership transfer invalidates destination version only, leaving source stale.
+- production mutation/read from H1: 0; no current production corruption established.
+- architecture direction: preserve no-managed-delete Phase 1. Replace reliance on post-cascade blocker discovery with a durable pre-delete authorization/invalidation contract prepared before managed deletion begins. Any producer not wired to invalidate readiness keeps enforce disabled.
+- G5 assigned `common-account-pr70-guard-boundary-corrective-20261002`, recommended **Opus5.5（極高）**.
+- PR #70 merge/apply/backfill/deploy remain HOLD.
+- after corrective K5, focused Codex rereview required; production apply still requires separate **Sol（極高）** review + real disposable Supabase proof + explicit approval.
+
 ## H1 completed — PR #70 corrective rereview (2026-10-01 JST)
 
 - task_id: `common-account-pr70-corrective-rereview-20261001`; status `review_required`, next_owner `chatgpt`.
