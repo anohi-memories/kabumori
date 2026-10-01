@@ -1,3 +1,16 @@
+## G4 assigned — social-mobile automatic publishing toggle v1
+
+- task_id: `x-social-mobile-publish-toggle-v1-20261002`
+- status: **ready**.
+- parallel-safe with G3 AI consultation: G4 owns only the per-social-account posting-permission toggle; it must not edit consultation/content-settings/persona files.
+- current production schema already has `social_accounts.publish_enabled`; authenticated clients have SELECT only, so G4 will add a narrow authenticated server-side write boundary rather than weakening RLS/direct grants.
+- ON is strict: exact account + owner/admin membership + active/live brand + verified X connection + required credential references + expected-state match.
+- OFF is fail-safe: authorized owner/admin may disable future publishing even when connection is degraded; it does not revoke X, delete tokens/posts, or alter Auth/common-account state.
+- stale UI is protected with compare-and-set semantics; only `publish_enabled` may change.
+- no DB migration/RLS/grant, X API, scheduler/Cron, post generation, AI consultation, account deletion, common-account work, or production deploy.
+- recommended Claude model: **Opus5.5（高）**.
+- because this changes a posting-permission/security boundary, K4 should normally allocate focused Codex review with **Sol（高）** before merge.
+
 ## Final C1 — PR #70 source accepted and merged
 
 - verdict: **PASS-WITH-FIX / accepted**.
