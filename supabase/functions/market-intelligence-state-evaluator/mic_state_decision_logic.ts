@@ -99,6 +99,64 @@ export function detectNewObservations(
   return observations;
 }
 
+// Exact decimal comparison for thresholds.
+//
+// Metric values and thresholds are short decimals (5.29, 2.943, 0.05), but
+// binary floating point cannot hold them exactly: in JS 5.29 - 5.24 is
+// 0.04999999999999982, so a move of exactly the 0.05 threshold used to be
+// judged "below threshold" (Production, rates US10Y, 2026-10-01). An epsilon
+// would only move that boundary somewhere else. Instead every number is read
+// back as the decimal it was written as (its shortest round-trip string) and
+// compared as scaled integers, so "exactly the threshold" is exactly equal.
+type Decimal = { digits: bigint; scale: number };
+
+function toDecimal(value: number): Decimal | null {
+  if (!Number.isFinite(value)) return null;
+  const text = String(value);
+  // 1e-7 / 1e21 style output: not a metric-sized decimal; caller falls back.
+  if (!/^-?\d+(?:\.\d+)?$/.test(text)) return null;
+  const negative = text.startsWith("-");
+  const [whole, fraction = ""] = (negative ? text.slice(1) : text).split(".");
+  const digits = BigInt(whole + fraction);
+  return { digits: negative ? -digits : digits, scale: fraction.length };
+}
+
+const rescale = (value: Decimal, scale: number): bigint => value.digits * 10n ** BigInt(scale - value.scale);
+const magnitude = (value: bigint): bigint => (value < 0n ? -value : value);
+
+function formatDecimal(digits: bigint, scale: number): string {
+  const text = magnitude(digits).toString().padStart(scale + 1, "0");
+  const whole = text.slice(0, text.length - scale);
+  const fraction = scale > 0 ? text.slice(text.length - scale).replace(/0+$/, "") : "";
+  return (digits < 0n ? "-" : "") + (fraction ? `${whole}.${fraction}` : whole);
+}
+
+export type ThresholdComparison = { reached: boolean; change: string };
+
+// |current - baseline| >= threshold, exactly. `change` is the exact difference.
+export function absChangeReaches(current: number, baseline: number, threshold: number): ThresholdComparison {
+  const [c, b, t] = [toDecimal(current), toDecimal(baseline), toDecimal(threshold)];
+  if (!c || !b || !t) {
+    const change = Math.abs(current - baseline);
+    return { reached: change >= threshold, change: String(change) };
+  }
+  const scale = Math.max(c.scale, b.scale, t.scale);
+  const change = magnitude(rescale(c, scale) - rescale(b, scale));
+  return { reached: change >= rescale(t, scale), change: formatDecimal(change, scale) };
+}
+
+// |current - baseline| / |baseline| * 100 >= thresholdPct, exactly, without
+// dividing: |current - baseline| * 100 >= thresholdPct * |baseline|.
+// Callers guarantee baseline !== 0.
+export function pctChangeReaches(current: number, baseline: number, thresholdPct: number): boolean {
+  const [c, b, t] = [toDecimal(current), toDecimal(baseline), toDecimal(thresholdPct)];
+  if (!c || !b || !t) return Math.abs((current - baseline) / baseline * 100) >= thresholdPct;
+  const scale = Math.max(c.scale, b.scale);
+  const change = magnitude(rescale(c, scale) - rescale(b, scale));
+  // Left side is in units of 10^-scale; the right side carries 10^-(scale + t.scale).
+  return change * 100n * 10n ** BigInt(t.scale) >= t.digits * magnitude(rescale(b, scale));
+}
+
 // Step 2: among the new observations, which ones cross this metric's
 // registered threshold (or are flagged always_material)? Any single
 // material metric makes the whole domain material -- per the design doc,
@@ -128,17 +186,20 @@ export function evaluateMaterialChange(
       continue;
     }
 
-    const absChange = Math.abs(observation.currentValue - observation.previousBaselineValue);
-    if (mapping.absChangeThreshold !== null && absChange >= mapping.absChangeThreshold) {
-      materialMetricKeys.push(observation.metricKey);
-      reasons.push(`${observation.metricKey}: abs_change ${absChange} >= ${mapping.absChangeThreshold}`);
-      continue;
+    if (mapping.absChangeThreshold !== null) {
+      const abs = absChangeReaches(observation.currentValue, observation.previousBaselineValue, mapping.absChangeThreshold);
+      if (abs.reached) {
+        materialMetricKeys.push(observation.metricKey);
+        reasons.push(`${observation.metricKey}: abs_change ${abs.change} >= ${mapping.absChangeThreshold}`);
+        continue;
+      }
     }
     if (mapping.pctChangeThreshold !== null && observation.previousBaselineValue !== 0) {
-      const pctChange = Math.abs(
-        (observation.currentValue - observation.previousBaselineValue) / observation.previousBaselineValue * 100,
-      );
-      if (pctChange >= mapping.pctChangeThreshold) {
+      if (pctChangeReaches(observation.currentValue, observation.previousBaselineValue, mapping.pctChangeThreshold)) {
+        // Displayed value only; the decision above is exact.
+        const pctChange = Math.abs(
+          (observation.currentValue - observation.previousBaselineValue) / observation.previousBaselineValue * 100,
+        );
         materialMetricKeys.push(observation.metricKey);
         reasons.push(`${observation.metricKey}: pct_change ${pctChange.toFixed(3)}% >= ${mapping.pctChangeThreshold}%`);
       }
