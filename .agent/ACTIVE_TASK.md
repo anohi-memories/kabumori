@@ -80,13 +80,13 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- next_owner: none
-- status: done
-- task_id: x-social-mobile-x-account-switch-auth-session-20261001
+- status: ready
+- task_id: x-social-mobile-publish-toggle-v1-20261002
 - start_code: G4
 - finish_code: K4
+- next_owner: claude
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: Final K4 PASS. PR #65 exact reviewed head e5a66f5ba71f64b1a38d8f89faff3d0a31972949 squash-merged as 6b1f2f6229a1b75743b57900d869368c2c5e8693 after isolated native operator proof. Safari account A was not silently reused; disposable B reached final-consent boundary; cancel/retry passed. Final X consent/linking not completed, production state mutation for the test window 0, real X posts 0. G4 is free after fresh allocation.
+- allocation: Implement real per-account automatic-publishing ON/OFF using existing social_accounts.publish_enabled through a new authenticated server-side boundary. Owner/admin only; strict enable prerequisites, fail-safe disable, CAS/stale protection, exact-account authorization. No DB migration/RLS/grant change, no X API call, no scheduler/content-generation/AI-consult/common-account changes, no production deploy. Recommended Opus5.5（高）. K4 should normally send this posting-permission boundary to Codex Sol（高） review before merge.
 
 ## Claude G5
 - owner: claude
