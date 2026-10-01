@@ -1,3 +1,16 @@
+## Final C1 — PR #67 shared report Presentation v2
+
+- verdict: **PASS-WITH-FIX / accepted**.
+- original G2 head `5877045f7`; H1 final reviewed head `d6f9c9a0285920871d0ce86cc4559f9675c0ebb9`.
+- H1 fixed nine demonstrated P2-class guard/fallback/order issues and added 13 adversarial tests.
+- final: analysis 86/86, personalized 128/128, data-packet 42/42, X shared 8/8, _shared 329/329 with --no-check; target runtime check/lint/diff PASS.
+- fresh overlap check showed no main runtime overlap; PR #67 merged -> `09975d02cc81b1614818951173a94aa8677291a0`.
+- review production mutation=0.
+- app/x gates are still OFF; C1 does not authorize consumer activation.
+- next G2: deploy only `market-report-analysis` v2 source with gates OFF and exact read-back; no manual cycle.
+- recommended Claude model: **Sonnet5（高）**.
+- later activation prerequisites remain: natural live-model v2 observation, X long-post provider/account capability verification, App native story UI integration.
+
 ## Final C2 PASS — PR #66 AI Lab topic dedup
 
 - verdict: **PASS**.
