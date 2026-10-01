@@ -1,5 +1,317 @@
 # Claude Task 5 — CURRENT TASK
 
+- task_id: common-account-pr70-guard-boundary-corrective-20261002
+- owner: claude
+- slot: claude-5
+- status: ready
+- next_owner: chatgpt
+- priority: highest
+- start_code: G5
+- finish_code: K5
+- recommended_model: Opus5.5（極高）
+- type: corrective lifecycle authorization / migration security
+- target_pr: #70
+- target_head: eebe9405d758e0c120f9e6f1a70cdb1e973a0855
+- production_mutation_allowed: false
+
+## Purpose
+
+PR #70の第2是正。
+
+前回6 blockersは解消済みとして保持しつつ、H1再レビューで見つかった新規4 findings（7 adverse cases）を修正し、Phase 1の責任を**additive lifecycle foundation / readiness authorization**に限定したまま安全性を上げる。
+
+重要：
+- Phase 1は `auth.users` を削除しない。
+- Phase 1はStorage / provider / session cleanupを完了したと主張しない。
+- current Kabumori legacy hard-deleteを安全化済みと主張しない。
+- common_accountsのcascade triggerを「唯一の正しさの砦」にしない。
+
+## Mandatory startup
+
+開始前に確認：
+
+- PROJECT_RULES / HANDOFF / ORCHESTRATION
+- CURRENT_STATE / ACTIVE_TASK
+- G5 previous Report
+- H1 corrective rereview full Report + Final C1
+- G1〜G4 / H1 / H2 current TASK / Report
+- open PR changed files
+- fresh origin/main
+- git status / worktree list
+- G5独立worktree
+
+Supabase taskなので、実装前にcurrent Supabase changelog/docsも確認すること。
+特に：
+- Auth user deletion / sessions
+- Storage ownership / deletion API
+- SECURITY DEFINER / RLS / Data API
+- managed auth/storage schema behavior
+
+training memoryだけで決めない。
+
+## Accepted properties — preserve
+
+以下は再び壊さない：
+
+- no SQL Auth DELETE
+- no Storage/Vault/provider destructive SQL
+- Phase 1 stops at readiness for future managed orchestrator
+- old six H1 blockers remain fixed
+- additive schema
+- profiles remain Kabumori-specific root
+- brand_memberships remain X authorization/role
+- no email-based account merge
+- client arbitrary user/status write denied
+- public table RLS
+- least-privilege grants
+- fixed search_path / schema qualification
+- service start/delete serialization
+- service-only delete preserves other service/Auth
+- external provider work remains Saga
+- G4 files untouched
+
+## New correction A — remove correctness dependence on post-cascade blocker visibility
+
+H1 F1 proved that a BEFORE DELETE trigger on `common_accounts` may run after other Auth FK CASCADE actions already removed `admin_users` / `brand_memberships`.
+
+Therefore:
+
+- Do not claim the common_accounts delete trigger can reliably rediscover every pre-delete blocker from tables that may already have cascaded.
+- Do not fix by simply querying the same rows again inside that trigger.
+
+Design a **durable pre-delete authorization / readiness token/state** that is established before the managed Auth delete actor starts, and invalidated whenever a relevant producer changes state.
+
+Required properties:
+
+1. Future managed orchestrator acquires authorization only after:
+   - account deleting
+   - all entitlements ended
+   - no admin / foreign/shared/internal blocker
+   - managed checkpoint requirements satisfied
+   - managed ownership probe ready
+   - lifecycle version / authorization epoch bound
+2. The authorization must live in state not erased before the guard can validate it.
+3. Auth delete guard may validate the durable authorization itself, but must not need already-cascaded admin/membership rows to reconstruct truth.
+4. Any relevant producer/change must invalidate authorization or move account back to cleanup/not-ready.
+5. If you cannot guarantee invalidation for a producer in Phase 1, enforce mode must remain unusable until integration wiring for that producer exists.
+6. shadow must remain explicitly unsafe for legacy hard-delete.
+
+Possible designs include a durable authorization row/epoch tied to lifecycle_version + requirement_version + subject/account, but choose based on proof, not this suggestion.
+
+Do not add managed Auth deletion implementation.
+
+## New correction B — readiness requirements must be versioned/invalidate ready state
+
+H1 F2:
+
+After an operation reached ready, these changes did not invalidate readiness:
+- built-in checkpoint registry row removed
+- new always-required checkpoint added
+- Apple identity added without apple_revocation checkpoint
+
+Required:
+
+- registry/requirement changes must change a durable requirement/version epoch.
+- readiness authorization binds to the exact requirement epoch.
+- Apple identity/provider requirement changes must invalidate previous readiness.
+- missing built-in requirement row = fail closed.
+- a late Apple identity cannot reuse an old ready authorization.
+- future new managed requirement cannot silently inherit old authorization.
+
+Because auth.identities may be deleted/cascaded by managed Auth later, authorization must be validated **before** destructive managed delete starts, not reconstructed after cascades.
+
+Add regressions for all three H1 cases.
+
+## New correction C — validate built-in checkpoint semantics, not names only
+
+H1 F3:
+
+`session_revocation` / `storage_cleanup` names could be retained while requirement semantics were changed to apple-only.
+
+Required exact semantics:
+
+- session_revocation => always
+- storage_cleanup => always
+- apple_revocation => apple_identity
+- built-ins cannot be silently weakened by normal owner maintenance
+- corruption / missing / duplicate / unexpected incompatible built-in mapping => fail closed
+- rollback must also require exact built-in semantics, not only key names
+
+If mutable registry semantics are needed for future extensions, separate immutable built-in contract from extension rows.
+
+Add semantic-corruption regressions.
+
+## New correction D — entitlement ownership transfer must invalidate both accounts or be prohibited
+
+H1 F4:
+
+operator SQL transferring `service_entitlements.user_id` from A to B bumped only B.
+
+Choose one safe contract:
+
+### Preferred simple option
+Make entitlement ownership transfer impossible after insert:
+- user_id immutable by trigger/constraint/RPC contract
+- service transfer requires end/delete old + insert new under lifecycle locks
+- direct owner UPDATE changing user_id fails closed
+
+OR, if transfer must exist:
+- lock source and destination in deterministic order
+- bump both lifecycle versions
+- invalidate ready authorization for both
+- test both stale confirmations
+
+Do not leave source account version stale.
+
+## Guard / enforcement contract
+
+Clarify roles:
+
+- `shadow`: observes/allows legacy delete; not safety.
+- `enforce`: only usable after integration_state proves all relevant creators/deleters/invalidators are wired.
+- guard validates a durable authorization/epoch prepared before managed delete.
+- guard does not claim Storage/provider cleanup was independently proven by DB.
+- provider/Storage cleanup still future orchestrator responsibility.
+
+If full correctness of `enforce` cannot be established without Phase 2/3 wiring, it is acceptable — and preferable — for Phase 1 to make enforce **unreachable/disabled** and ship only shadow/readiness foundation. Truthful incompleteness is better than a misleading guard.
+
+## Version/invalidation inventory
+
+Create an explicit table in docs/tests of every state transition that must invalidate deletion readiness, including at least:
+
+- service entitlement insert/update/delete
+- account status/version changes
+- admin membership/role changes
+- self-service/foreign/shared X membership changes
+- workspace ownership relevant to blockers
+- Apple identity/provider requirement changes
+- checkpoint requirement registry changes
+- managed ownership/checkpoint reset
+- backfill
+- service provisioning
+- future integration state transition
+
+For each:
+- who can write it
+- whether Phase 1 currently intercepts it
+- what invalidates readiness
+- if not wired yet, why enforce remains disabled
+
+This inventory is part of completion criteria.
+
+## Preflight / rollback
+
+Preserve prior exact FK preflight.
+
+Add/adjust checks for new durable authorization / immutable built-in semantics.
+
+Rollback must fail closed if:
+- settings absent/corrupt
+- built-in requirement semantics differ
+- authorization/readiness rows exist that imply integration use
+- integration started
+- in-flight operation
+- downstream dependency
+
+No partial teardown.
+
+## Required tests
+
+Commit regressions for all new H1 findings.
+
+At minimum:
+
+1. late admin blocker before managed delete cannot be authorized by stale readiness.
+2. late foreign/internal membership blocker cannot be authorized by stale readiness.
+3. CASCADE ordering variation cannot make guard trust erased blockers.
+4. built-in registry row removal invalidates/rejects readiness.
+5. new always-required checkpoint invalidates old readiness.
+6. late Apple identity without apple checkpoint invalidates old readiness.
+7. built-in name with weakened semantic mapping fails closed.
+8. rollback rejects semantic corruption.
+9. entitlement user_id transfer either fails or invalidates both source/destination versions.
+10. previous six H1 regressions still PASS.
+11. original service start/delete/backfill races still PASS.
+12. lifecycle mutation suite updated to detect new invalidation/authorization defects.
+13. social-mobile account deletion regression unchanged.
+14. migration invariants / shell syntax / diff check.
+
+Prefer real 2-session PostgreSQL tests where concurrency is material.
+
+Mutation suite must verify the intended invariant, not merely generic FAIL.
+
+## Production safety
+
+Forbidden:
+
+- production migration/apply/backfill
+- Auth create/update/delete
+- Storage delete
+- provider/OAuth revoke
+- Vault mutation
+- identity changes
+- deploy
+- Cron/flag/provider settings
+- real X operation
+- production enforce enablement
+
+production read is not needed for this corrective source task unless separately authorized.
+
+## PR / merge
+
+Update PR #70 on the same source branch after fresh head ownership check.
+
+- no force-push if avoidable
+- Report exact old/new head
+- PR remains merge HOLD until K5 + Codex rereview
+- do not merge
+
+## Completion / K5
+
+Report:
+
+- result
+- old/new PR head
+- architecture delta
+- durable authorization / invalidation contract
+- exact list of readiness invalidators
+- guard/enforce truthfulness
+- checkpoint semantic integrity
+- entitlement transfer policy
+- previous six blocker regression status
+- new seven adverse-case regression status
+- full test evidence
+- changed_files
+- production mutation=0
+- remaining Phase 2/3 integration obligations
+- rollout/rollback implications
+- next recommendation
+
+完了時：
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K5
+
+K5後はfocused Codex rereview。
+推薦：**Sol（高）**。
+production適用前：**Sol（極高）**。
+
+## Report
+
+- task_id: common-account-pr70-guard-boundary-corrective-20261002
+- result: pending
+- old_pr_head: eebe9405d758e0c120f9e6f1a70cdb1e973a0855
+- new_pr_head: pending
+- production_mutation: 0 expected
+- deploy: prohibited
+- next_recommendation: implement corrective lifecycle authorization/invalidation contract on PR #70.
+
+---
+
+## Previous completed G5 task history — preserved below
+
+# Claude Task 5 — CURRENT TASK
+
 - task_id: common-account-pr70-corrective-lifecycle-foundation-20261001
 - owner: claude
 - slot: claude-5
