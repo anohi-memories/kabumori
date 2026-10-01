@@ -1,0 +1,556 @@
+[
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "33960",
+    "company_name": "フェリシモ",
+    "coverage_categories": [
+      "fx",
+      "corporate",
+      "earnings"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-10-01 07:00:39.967503+00",
+    "generated_text": "【速報】フェリシモ、上期の経常利益予想を77.2％上方修正\n\n2027年2月期第2四半期累計の連結業績予想を修正しました。経常利益は262百万円、中間純利益は231百万円の見通しで、前回予想をそれぞれ114百万円、97百万円上回ります。為替差益の計上などが理由です。\n\n売上高予想は3.3％、営業利益予想は20.2％の下方修正。通期予想は据え置いています。\n\n出典: https://www.release.tdnet.info/inbs/140120260929541751.pdf",
+    "generation_fact_status": "failed",
+    "id": "1080c7d9-3b55-4ecf-8dca-99530809b0b7",
+    "published_at": "2026-10-01 06:30:00+00",
+    "source_type": "tdnet",
+    "title": "業績予想の修正に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "34010",
+    "company_name": "帝人",
+    "coverage_categories": [
+      "corporate",
+      "earnings"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 06:00:44.683402+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "1ab2a01f-47e3-4242-869b-b6cecb64a6a3",
+    "published_at": "2026-10-01 01:00:00+00",
+    "source_type": "tdnet",
+    "title": "（開示事項の経過）帝人フロンティア株式会社及び旭化成アドバンス株式会社の経営統合の完了に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "39400",
+    "company_name": "ノムラシステム",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 03:00:48.26959+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "214a9bbf-365d-4741-953d-0e8e67fcdd43",
+    "published_at": "2026-10-01 00:00:00+00",
+    "source_type": "tdnet",
+    "title": "自己株式の取得状況に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "80020",
+    "company_name": "丸紅",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 01:00:32.624125+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "2c6e21a8-22df-4d04-bdb8-4c1e7b5d227b",
+    "published_at": "2026-09-30 23:45:00+00",
+    "source_type": "tdnet",
+    "title": "自己株式の取得状況に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "55920",
+    "company_name": "Ｇ－くすりの窓口",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-09-30 23:00:31.917778+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "2f715095-c3a7-453c-99ee-ae271d1b7e1f",
+    "published_at": "2026-09-30 23:00:00+00",
+    "source_type": "tdnet",
+    "title": "自己株式取得状況に関するお知らせ（2026年９月度）"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "geopolitics"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-30 12:00:53.449834+00",
+    "generated_text": "【速報】ロシア、ウクライナのエネルギー施設を春以来最大規模で攻撃\n\nウクライナのコレツキー首相によると、ロシアが夜間にエネルギーインフラを攻撃し、主にキーウと周辺地域が標的になりました。各地で少なくとも6人が死亡、33人が負傷したと当局が発表しています。\n\n電力供給にも影響し、民間最大手のDTEKは、キーウで8,000世帯への電力を復旧したとしています。ロシア国防省はトリピリスカ発電所を標的の一つと発表しましたが、ウクライナ当局は確認していません。\n\n出典: https://www.bbc.co.uk/news/articles/ckjw5jx2l393o",
+    "generation_fact_status": "passed",
+    "id": "31a59feb-698e-42e0-bb93-574c30e332d8",
+    "published_at": "2026-09-30 11:47:27+00",
+    "source_type": "breaking_market",
+    "title": "Russia launches largest attack on Ukraine energy infrastructure since spring"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "80010",
+    "company_name": "伊藤忠",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 01:00:33.057394+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "336361ec-9b02-433c-9d66-b955239157b3",
+    "published_at": "2026-09-30 23:50:00+00",
+    "source_type": "tdnet",
+    "title": "自己株式の取得状況に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "disaster"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-30 23:00:31.16676+00",
+    "generated_text": "【速報】ネパールで豪雨と土砂崩れが相次ぎ、約30人が死亡しました。8月の大規模洪水で1,400人が死亡した同国では、1,900世帯以上が被災し、住宅240棟以上にも被害が出ています。道路や橋も流されました。\n\nアンナプルナ周遊路では数百人のトレッカーが登山を切り上げ、マナン郡やムスタン郡から多くの人がヘリコプターで避難しています。\n\n出典: https://www.bbc.co.uk/news/articles/c607l4l3vn0eo",
+    "generation_fact_status": "passed",
+    "id": "3bb29814-cdda-4d8f-8691-d4a4c46734b6",
+    "published_at": "2026-09-30 22:01:16+00",
+    "source_type": "breaking_market",
+    "title": "Trekkers helicoptered off mountains as more deadly landslides hit Nepal"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "geopolitics"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-10-01 02:00:27.465125+00",
+    "generated_text": "【速報】Flydubaiのドバイ発テルアビブ行きの便で、操縦士がもう一人の操縦士を刺し、逮捕されました。イスラエルのネタニヤフ首相は、犯人が機体を墜落させようとした可能性があると述べています。乗客と乗員が犯人を制圧し、機体はサウジアラビア北西部タブークの空港に無事着陸。刺された操縦士は病院に搬送され、容体は安定していると報じられています。\n\n出典: https://www.bbc.co.uk/news/articles/cqgmrm7xd8wyo",
+    "generation_fact_status": "passed",
+    "id": "3c3608d2-3ebc-4763-ac63-64f58b72ba76",
+    "published_at": "2026-10-01 01:59:11+00",
+    "source_type": "breaking_market",
+    "title": "'Hero' pilot stabbed by other pilot on Israel-bound plane, Israeli PM says"
+  },
+  {
+    "app_copy_fact_status": "passed",
+    "app_summary_ja": "シリアの東グータでガス管が爆発し、火災が発生しました。ガス供給不足により3つの発電所が停止し、計画停電の時間が増える見通しです。",
+    "app_title_ja": "シリアでガス管が爆発、3発電所が停止",
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "disaster",
+      "oil_energy"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-30 22:00:30.598558+00",
+    "generated_text": "【速報】シリアでガスパイプラインが爆発し、火災が発生。ガス供給不足でデイル・アリ、ナシリヤ、ティシュリーンの発電所3か所が停止しました。電力供給の減少により、計画停電の時間が増える見通しです。\n\n火災は続いており、爆発の原因はまだ特定されていません。\n\n出典: https://www.aljazeera.com/news/2026/9/30/gas-pipeline-explodes-in-syria-knocks-three-power-plants-offline",
+    "generation_fact_status": "failed",
+    "id": "428434bf-5484-473b-8e0c-f3b7a0e14ba9",
+    "published_at": "2026-09-30 21:01:13+00",
+    "source_type": "breaking_market",
+    "title": "Gas pipeline explodes in Syria, knocks three power plants offline"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-10-01 00:00:35.776129+00",
+    "generated_text": "【速報】米連邦地裁が、ParamountによるWarner Bros.の1,100億ドル買収を認める和解を承認しました。買収を阻止しようとしていた12州との和解で、判事は競争上の懸念に対応する「公正で合理的、誠実な方法」と述べています。\n\n出典: https://www.aljazeera.com/news/2026/9/30/us-judge-approves-settlement-allowing-paramount-to-acquire-warner-bros",
+    "generation_fact_status": "passed",
+    "id": "457790ae-1d50-4ac0-8826-41b7d2b16e53",
+    "published_at": "2026-09-30 23:15:00+00",
+    "source_type": "breaking_market",
+    "title": "US judge approves settlement allowing Paramount to acquire Warner Bros"
+  },
+  {
+    "app_copy_fact_status": "passed",
+    "app_summary_ja": "韓国の9月の輸出額は前年同月比83.5％増の1,209億ドルとなり、月間の過去最高を更新しました。AI向け半導体需要の拡大を背景に、半導体輸出も大幅に増加しました。",
+    "app_title_ja": "韓国の9月輸出が過去最高、半導体需要で83.5％増",
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "semiconductors",
+      "ai_tech"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-10-01 05:00:48.078916+00",
+    "generated_text": "【速報】韓国の2026年9月輸出、過去最高の1,209億ドルに\n前年同月比83.5％増で、初めて1,200億ドルを超えました。半導体の輸出は603億ドルと、前年同月比で260％超の増加。月間輸出額の過去最高を更新したと、韓国の暫定通関統計をもとに報じられています。\n\n出典: https://www.aljazeera.com/economy/2026/10/1/south-koreas-exports-hit-record-high-on-ai-boom",
+    "generation_fact_status": "failed",
+    "id": "47b69d8a-4a57-40c1-b9c1-efddb404a21b",
+    "published_at": "2026-10-01 04:08:15+00",
+    "source_type": "breaking_market",
+    "title": "South Korea’s exports hit record high on AI boom"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "34900",
+    "company_name": "アズ企画設計",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 06:00:44.902162+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "4b68349b-499e-443f-9481-d7fca4faabd8",
+    "published_at": "2026-10-01 01:00:00+00",
+    "source_type": "tdnet",
+    "title": "第三者割当による第７回新株予約権及び第８回新株予約権（行使価額修正条項選択権付）並びに第９回新株予約権（行使価額固定型）の月間行使状況に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "65940",
+    "company_name": "ニデック",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-30 14:01:00.417843+00",
+    "generated_text": "【速報】ニデック（6594）は、2026年3月期の有価証券報告書を提出し、過年度の財務諸表を修正再表示しました。その結果、過去5期に実施した配当・自己株式取得の総額が、会社法などに基づく分配可能額を超えていたと判明しています。\n\n対象は、2022年3月期の自己株式取得314億円、2023年3月期の配当・自己株式取得940億円、2024年3月期の同412億円、2025年3月期の同538億円、2026年3月期の配当230億円です。\n\n出典: https://www.release.tdnet.info/inbs/140120260930543386.pdf",
+    "generation_fact_status": "failed",
+    "id": "505fd42d-d017-4a41-8909-dd027313d79f",
+    "published_at": "2026-09-30 07:30:00+00",
+    "source_type": "tdnet",
+    "title": "過年度修正再表示に伴う分配可能額超過に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "66990",
+    "company_name": "ダイヤＨＤ",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 05:00:59.816151+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "567673a8-b2ab-4fd5-a768-dc0da14fe725",
+    "published_at": "2026-10-01 00:15:00+00",
+    "source_type": "tdnet",
+    "title": "第三者割当により発行された第８回新株予約権（行使価額修正条項付）の月間行使状況に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "31330",
+    "company_name": "Ｇ－海帆",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-30 13:00:54.213006+00",
+    "generated_text": "【速報】海帆（3133）の連結子会社、Kaihan Medicalが、イメージワンからの借入金1億2,500万円を返済期日の2026年9月30日までに返済できていません。借入金には年20％の遅延損害金が発生し、海帆が連帯保証しています。\n\nKaihan Medicalは返済方法と時期についてイメージワンと協議中。海帆は連結業績への影響を精査しています。\n\n出典: https://www.release.tdnet.info/inbs/140120260930543178.pdf",
+    "generation_fact_status": "failed",
+    "id": "61c30c68-3b7c-4a05-85c2-5d827c5b6835",
+    "published_at": "2026-09-30 07:30:00+00",
+    "source_type": "tdnet",
+    "title": "連結子会社の借入金の返済状況に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "65940",
+    "company_name": "ニデック",
+    "coverage_categories": [
+      "corporate",
+      "earnings"
+    ],
+    "coverage_severity": "critical",
+    "created_at": "2026-09-30 14:01:00.626968+00",
+    "generated_text": "【重大速報】ニデックは2026年3月期に、非金融資産の減損損失632,135百万円を計上。車載用製品の契約損失引当金22,496百万円と、仕入先からの求償請求の和解に伴う債務4,207百万円も計上し、一連の事案の調査・決算見直しにかかった特別調査費用等も追加しました。\n\nこれらは2026年9月30日公表の2026年3月期決算短信と有価証券報告書に反映されています。\n\n出典: https://www.release.tdnet.info/inbs/140120260930543399.pdf",
+    "generation_fact_status": "failed",
+    "id": "66a75ea5-89fc-461d-9d22-da38b24c9203",
+    "published_at": "2026-09-30 07:30:00+00",
+    "source_type": "tdnet",
+    "title": "非金融資産の減損損失、契約損失引当金、仕入先からの求償請求に係る和解に伴う債務及び特別調査費用等の計上に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "290A0",
+    "company_name": "Ｇ－Ｓｙｎｓ",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-30 23:00:32.102304+00",
+    "generated_text": "【速報】SynspectiveがRocket Labと、Electronロケットによる衛星20機の専用打上げ契約を締結しました。打上げは2028〜2031年の予定で、同社史上最大の打上げ契約です。Rocket Labにとっても、単一顧客とのマルチローンチ契約として最大規模とのこと。🛰️\n\n2026年12月期の業績予想への影響はないとしています。\n\n出典: https://www.release.tdnet.info/inbs/140120261001543778.pdf",
+    "generation_fact_status": "failed",
+    "id": "6c27f6f3-0f5c-4371-8347-00b448fad748",
+    "published_at": "2026-09-30 23:00:00+00",
+    "source_type": "tdnet",
+    "title": "Rocket Lab社との20機の衛星打上げ契約締結に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "ai_tech",
+      "us_market",
+      "regulation_policy"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-10-01 00:00:35.593433+00",
+    "generated_text": "【速報】米上院で、AIデータセンターなど大口電力利用者に、施設向けの電力インフラ費用を負担させるよう州規制当局に求める法案が否決されました。採決は57対43で、可決に必要な60票に届きませんでした。\n\n法案は、データセンターなどの電力需要増加に伴う家庭の電気料金負担を抑える狙いがありましたが、民主党議員からは義務づけが不十分だとの批判も出ていました。\n\n出典: https://www.aljazeera.com/news/2026/9/30/us-senate-rejects-bill-targeting-ai-data-centre-electricity-costs",
+    "generation_fact_status": "passed",
+    "id": "82cf5372-1796-49ca-a0e3-52636cbb82da",
+    "published_at": "2026-09-30 22:58:21+00",
+    "source_type": "breaking_market",
+    "title": "US Senate rejects bill targeting AI data centre electricity costs"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "39510",
+    "company_name": "朝日印刷",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 06:00:44.35641+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "9518a7d0-a035-492d-8b2e-651cecb6e06d",
+    "published_at": "2026-10-01 01:00:00+00",
+    "source_type": "tdnet",
+    "title": "自己株式の取得状況に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "47090",
+    "company_name": "ＩＤホールディングス",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-30 12:01:03.79652+00",
+    "generated_text": "【速報】ＩＤホールディングスは、外部有識者による諮問委員会を設置しました。委員会では、不正行為の被害額とその算定の合理性、組織的な関与があったかを検討します。被害額や関与の有無は、現時点では委員会の検討事項です。\n\n出典: https://www.release.tdnet.info/inbs/140120260930543071.pdf",
+    "generation_fact_status": "passed",
+    "id": "9d0513c2-6487-4cf3-9eb4-8cc52e13db53",
+    "published_at": "2026-09-30 07:30:00+00",
+    "source_type": "tdnet",
+    "title": "外部有識者による諮問委員会設置のお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "24990",
+    "company_name": "日本和装",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 07:00:39.674931+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "a786225b-1483-4e7d-b749-c657ee899cc0",
+    "published_at": "2026-10-01 06:30:00+00",
+    "source_type": "tdnet",
+    "title": "自己株式の取得状況に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "46840",
+    "company_name": "オービック",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 00:00:38.180629+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "a9a22d66-1840-4585-92bc-5accd18298e9",
+    "published_at": "2026-09-30 23:30:00+00",
+    "source_type": "tdnet",
+    "title": "自己株式の取得状況に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": "passed",
+    "app_summary_ja": "ジェイミソン・グリア大使が鉄鋼過剰生産能力に関する世界フォーラムの閣僚会合を議長として主宰し、共同対応の包括的枠組みで合意した。グリア大使は、各国の協調した取り組みを呼びかけた。",
+    "app_title_ja": "鉄鋼過剰生産能力フォーラム、共同枠組み「ミルウォーキー・フレームワーク」で合意",
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "us_market",
+      "regulation_policy"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-30 18:00:05.174751+00",
+    "generated_text": "【速報】鉄鋼の過剰生産能力に対処する枠組みで合意\n\n米通商代表部によると、鉄鋼過剰生産能力に関する国際フォーラムの閣僚会合で、共同の行動枠組み「ミルウォーキー・フレームワーク」に合意しました。グリア米通商代表は、各国に同様の措置を呼びかけています。具体的にどんな措置が取られるかは、まだ明らかになっていません。\n\n出典: https://ustr.gov/about/policy-offices/press-office/press-releases/2026/september/ambassador-greer-issues-statement-following-ministerial-meeting-global-forum-steel-excess-capacity",
+    "generation_fact_status": "failed",
+    "id": "ad979900-fb92-44bf-b2b3-aab6c6907aff",
+    "published_at": "2026-09-30 17:28:23+00",
+    "source_type": "market_macro",
+    "title": "Ambassador Greer Issues Statement Following the Ministerial Meeting of the Global Forum on Steel Excess Capacity"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "80310",
+    "company_name": "三井物産",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 00:00:38.637071+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "ae986eb4-2e31-48e5-a83f-0d4563122918",
+    "published_at": "2026-09-30 23:45:00+00",
+    "source_type": "tdnet",
+    "title": "自己株式の取得状況（途中経過）"
+  },
+  {
+    "app_copy_fact_status": "passed",
+    "app_summary_ja": "トランプ米大統領はホワイトハウスでAI企業の幹部と会い、「ホワイトハウス・スーパーインテリジェンス協定」を発表した。協定は企業に安全対策の内部整備を求めるが、法的拘束力はない。",
+    "app_title_ja": "トランプ氏、AI企業と自主協定を発表",
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "semiconductors",
+      "ai_tech",
+      "us_market",
+      "regulation_policy"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-30 21:00:45.438906+00",
+    "generated_text": "【速報】トランプ米大統領が、MetaやNvidia、Google、OpenAI、xAI、Anthropicの幹部とAIの安全対策に関する自主協定「ホワイトハウス・スーパーインテリジェンス協定」を結びました。企業に社内管理チームの設置や外部監査などを求める内容です。\n\nただし、法的拘束力や罰則はなく、政府に執行権限もありません。監査結果の公開も義務ではなく、安全策の実施方法は各社に委ねられています。\n\n出典: https://www.aljazeera.com/economy/2026/9/30/how-does-trumps-white-house-ai-accord-work",
+    "generation_fact_status": "failed",
+    "id": "b35b1001-60a1-4f82-a491-4f8466e11188",
+    "published_at": "2026-09-30 19:44:42+00",
+    "source_type": "breaking_market",
+    "title": "How does Trump’s White House AI accord work?"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "52570",
+    "company_name": "ノバシステム",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 05:01:00.037683+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "c0c4183f-db63-418a-86c5-ac4c13563d55",
+    "published_at": "2026-10-01 00:30:00+00",
+    "source_type": "tdnet",
+    "title": "自己株式の取得状況に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "65230",
+    "company_name": "ＰＨＣＨＤ",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-10-01 02:00:32.885913+00",
+    "generated_text": "【速報】東邦HDから初期提案　PHC HD「決定している事実はない」\n\n東邦ホールディングスから、PHCホールディングス（6523）の株式取得に関する法的拘束力のない初期的な提案を受けたことは事実と発表しました。買収は決定しておらず、提案の規模や条件も明らかになっていません。\n\n出典: https://www.release.tdnet.info/inbs/140120260930543785.pdf",
+    "generation_fact_status": "failed",
+    "id": "c3572c44-f414-4646-a770-4e8c47b081b4",
+    "published_at": "2026-09-30 23:55:00+00",
+    "source_type": "tdnet",
+    "title": "当社に関する一部報道について"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "geopolitics",
+      "ai_tech",
+      "regulation_policy"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-09-30 18:00:32.172387+00",
+    "generated_text": "【速報】英国の情報機関MI5が、中国の研究機関CGTRIとの協力を英国の研究者にやめるよう警告しました。CGTRIは、中国の情報機関MSSと「非常に強いつながり」があり、研究資金の主な目的はMSSの諜報能力を高めることだとMI5は主張しています。AIやサイバーセキュリティなどの分野で、英国を拠点とする研究者100人超が接触対象になったとのことです。\n\n今後も資金を受け取ったり協力を続けたりする研究者は、英国の2023年国家安全保障法に基づき、訴追されるリスクがあるとMI5は警告しています。中国政府からの反応は、記事時点ではありません。\n\n出典: https://www.aljazeera.com/news/2026/9/30/mi5-warns-uk-academics-to-cut-ties-with-chinese-group-over-alleged-spying",
+    "generation_fact_status": "passed",
+    "id": "c970a451-da6a-4800-ae41-976b4c71adbd",
+    "published_at": "2026-09-30 17:07:09+00",
+    "source_type": "breaking_market",
+    "title": "MI5 warns UK academics to cut ties with Chinese group over alleged spying"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "286A0",
+    "company_name": "Ｇ－ユカリア",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 02:00:33.282453+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "ed0d157e-2b35-4179-a0fd-b968d11ed97a",
+    "published_at": "2026-09-30 23:59:00+00",
+    "source_type": "tdnet",
+    "title": "自己株式の取得状況に関するお知らせ"
+  }
+]

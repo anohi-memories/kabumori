@@ -19,7 +19,7 @@ import {
 import { appStoryWarnings, buildAppMarketStory, orderKeyNews } from "../_shared/market_report_story.ts";
 import type { AnalysisInput } from "./analysis_input.ts";
 import { falseAbsenceClaims } from "../_shared/absence_claims.ts";
-import { emojiDirectionIssues, metricFactIssues } from "./hard_fact_guards.ts";
+import { emojiDirectionIssues, mentionsMarketMetric, metricFactIssues } from "./hard_fact_guards.ts";
 
 export const ANALYSIS_MODEL = "gpt-5.6-luna";
 export const MAX_GENERATIONS = 2;
@@ -39,6 +39,7 @@ const COMMON = [
   "「市場の方向」は入力で確定済みです。それと矛盾する方向（上昇/下落）を書きません。",
   "claims の claim_type は次の基準で付けます。observation: 指標の値動きそのもの。causal: 入力のニュース本文が理由として明記している場合だけ（evidence_refs に news の ref を必ず含める）。consistent_with: 同時期に確認できるが因果は確認できない組み合わせ。insufficient_evidence: 理由を確認できない値動き（理由を推測しない）。watch_point: 次に確認する点。",
   "値動きの理由として書けるのは、入力のニュースが理由として明記しているもの（causal の claim）だけです。それが無い日は、headline_ja・market_summary_ja・x_post・claims のどこでも、同時期の別の値動き（米国株、半導体株、為替など）やニュースを値動きの理由として結びつけません（「〜を受けて」「〜につれて」「〜安で下落」「〜の影響で」「〜が重しとなり」「〜が原因」など）。「〜の可能性」「〜とみられる」を付けても理由の推測なので書きません。同時期の値動きは日付を付けた別々の事実として並べ、理由は確認できないと1回だけ書きます。",
+  "ニュースの中身を伝える文（x_post.news_ja、app_story.news_ja、key_news、observation の claim）では、そのニュース本文に書かれている原因と結果を、本文の言い方に沿ってそのまま書いてかまいません（例: 本文が「需要の拡大を背景に輸出が増加」なら「需要を背景に輸出が増えたと報じられました」）。本文に因果の表現が無いニュースには「〜を受けて」「〜を背景に」を足しません。ニュースの中の原因を、東京市場・米国市場・指数の値動きの理由にはしません（それを書けるのは、ニュースが市場の値動きの理由として明記している場合だけです）。",
   "日付の違う市場（例: 前日の米国市場と当日の東京市場）を並べるときは、それぞれの日付を明記します（例: 「9月17日の米国市場は上昇、9月18日の東京市場では…」）。「同じ日」「同日」とは書きません。入力の「日付の注意」に従います。",
   "evidence_refs には入力の ref（metric:… または news:…）だけを入れます。ref は evidence_refs の中だけに書き、本文には書きません。",
   "入力の「重要材料」が true のニュース（中央銀行の政策決定など）がある場合は、その出来事そのもの（何が決まったか）を market_summary_ja と x_post に必ず入れます。値動きとの因果は、ニュースが理由として書いていない限り断定しません（出来事は事実として伝え、因果の確度は別に一言添える）。",
@@ -339,6 +340,22 @@ const CAUSE_ALIASES: Array<[RegExp, string]> = [[/米株/gu, "米国株"], [/NY�
 const NEGATED = /(?:確認|断定|判断|特定)でき(?:ませ|な)|分かりませ|わかりませ|分からな|わからな|明記されて(?:い)?(?:ませ|な)|示されて(?:い)?(?:ませ|な)/;
 /** A hedge that still proposes a reason. */
 const SPECULATION = /可能性|とみられ|と見られ|ようで|ようだ|かもしれ|と考えられ|と思われ|でしょう|だろう/;
+/** The effect side names the stock market as a whole (metric names are matched separately). */
+const MARKET_EFFECT = /株式市場|株式相場|株価指数|日本株|国内株|東証|全面(?:高|安)|市場全体|相場全体/u;
+/** A price move; with no subject of its own in the effect it is read as the market's move. */
+const PRICE_MOVE = /上昇|下落|(?<![利きし])上げ|(?<![利きし])下げ|反発|反落|続伸|続落|急騰|急落|買われ|売られ|値上がり|値下がり/u;
+/** A news text that is about a stock market, so it can support a market-level cause. */
+const NEWS_ABOUT_MARKET = /東京市場|東京株|日経|日本株|国内株|東証|TOPIX|株式市場|株式相場|株価指数|米国株|米株|米国市場|ダウ|ナスダック|S&P|株安|株高|アジア株|欧州株|原油|WTI|ブレント|ドル円|為替|円相場|円安|円高|金利|利回り|SOX|半導体株指数/u;
+/** How a news text itself ties a cause to its effect. */
+const NEWS_LINK = new RegExp(
+  `${CAUSAL_LINK.source}|により|によって|に伴(?:い|って)|ため|ことから|を理由に|をきっかけに|を機に|の結果|への(?:報復|対抗|対応)`,
+  "gu",
+);
+// 高 / 安 count as a direction only on a price word (株安, 円高): 不安, 安全, 最高 and 高官 are not moves.
+const EFFECT_UP = /増|拡大|上昇|伸び|改善|好調|上方|回復|急騰|(?<=株|円|ドル|金利|原油|価格|相場|指数)高/u;
+const EFFECT_DOWN = /減|縮小|下落|低下|悪化|不振|下方|急落|(?<=株|円|ドル|金利|原油|価格|相場|指数)安/u;
+/** 「…と報じられました」 and the like: how the sentence reports, not what it reports. */
+const REPORTING_TAIL = /と(?:報じられ|伝えられ|発表され|されてい|しています|のこと).*$/u;
 
 function excerpt(value: string, index: number, length: number): string {
   const start = Math.max(0, index - 12);
@@ -395,22 +412,115 @@ function causeSupported(part: string, support: string): boolean {
   return false;
 }
 
+function polarity(text: string): 1 | -1 | null {
+  const up = text.search(EFFECT_UP);
+  const down = text.search(EFFECT_DOWN);
+  if (up < 0 && down < 0) return null;
+  return down < 0 || (up >= 0 && up < down) ? 1 : -1;
+}
+
+/** Content character pairs of a text: hiragana and punctuation carry no topic, so they are dropped first. */
+function contentPairs(text: string): Set<string> {
+  const content = Array.from(text.normalize("NFKC").replace(/[^一-龠々ァ-ヶーA-Za-z0-9]/gu, ""));
+  if (content.length === 1) return new Set(content);
+  return new Set(content.slice(0, -1).map((character, index) => `${character}${content[index + 1]}`));
+}
+
+/** Share of the written text's content pairs that the source text also has (0 when it has no content). */
+function topicCoverage(written: string, source: string): number {
+  const pairs = contentPairs(written);
+  if (pairs.size === 0) return 0;
+  const available = contentPairs(source);
+  const single = [...pairs].every((pair) => Array.from(pair).length === 1);
+  const sourceText = source.normalize("NFKC");
+  return [...pairs].filter((pair) => single ? sourceText.includes(pair) : available.has(pair)).length / pairs.size;
+}
+
 /**
- * Sentences that attach a reason to a move that no news item states. Each causal link is checked on its
- * own cause, with its direction, against the text of the news cited by confirmed causal claims, so one
- * supported cause does not license another (K2 on PR #57). A causal claim is confirmed only if it cites
- * news and does not itself say the link is unconfirmed (2026-09-25 carried a "causal" label on
- * "因果は確認できません").
+ * The effect is a market / index move: it names a market metric or the market as a whole, or it is a
+ * price move whose subject is one (「日経平均は〜を受けて上昇」) or is not stated at all
+ * (「〜を背景に上昇しました」). A price move of a named non-market subject (「A社株は決算を受けて急騰」)
+ * is that subject's news.
+ */
+function isMarketEffect(effect: string, lead: string, input: AnalysisInput): boolean {
+  const market = (text: string) => MARKET_EFFECT.test(text) || mentionsMarketMetric(text, input);
+  if (market(effect)) return true;
+  const move = effect.search(PRICE_MOVE);
+  if (move < 0 || /[^、\s]{2,}(?:は|が|も)/u.test(effect.slice(0, move))) return false;
+  // The subject sits before the cause: 「Xは、Yを受けて上昇」. A date is not a subject.
+  const subject = lead.includes("は") ? lead.slice(0, lead.lastIndexOf("は")).replace(/\d{1,2}月\d{1,2}日|[0-9０-９]+/gu, "") : "";
+  return contentPairs(subject).size === 0 || market(subject);
+}
+
+/** The cause as written: the words before the link, from the last topic break (「韓国では、Xを背景に」 → X). */
+function causeSpan(sentence: string, index: number): string {
+  const span = sentence.slice(0, index).replace(/[にでをがはのとも]+$/u, "");
+  return span.split(/[、，,「」（）()]|では|には|とは|は/u).map((part) => part.trim()).filter(Boolean).pop() ?? "";
+}
+
+/** A restated cause must stay on the news item's cause; a restated effect on its effect. */
+const CAUSE_COVERAGE = 0.6;
+const EFFECT_COVERAGE = 0.5;
+/** When the cause is not a nameable phrase (「さまざまな要因で」) the whole sentence must be the news sentence. */
+const SENTENCE_COVERAGE = 0.8;
+
+/**
+ * A news item states this cause-and-effect itself (2026-10-01: 「AI向け半導体需要の拡大を背景に、半導体輸出も
+ * 大幅に増加」 restated as 「AI向け半導体需要を背景に半導体輸出も大幅増」). One sentence of one item must tie
+ * a cause to an effect with its own causal wording; every part of the written cause must be on that
+ * sentence's cause side, the written effect must be about that item, and neither side may move the
+ * other way (増 / 減, 株高 / 株安). The mere presence of a news item never supports a sentence, and a
+ * cause and effect swapped around do not match.
+ */
+function newsStatesRelation(sentence: string, index: number, link: string, effect: string, input: AnalysisInput): boolean {
+  const split = (span: string) => canonicalCause(span).split(/・|と|や|および|及び/u).map((part) => part.trim()).filter((part) => contentPairs(part).size > 0);
+  const causes = split(causeSpan(sentence, index));
+  const stated = canonicalCause(effect).replace(REPORTING_TAIL, "");
+  const hasEffect = contentPairs(stated).size > 0;
+  const same = (written: 1 | -1 | null, original: 1 | -1 | null) => written === null || original === null || written === original;
+  return input.news.some((item) => {
+    const text = canonicalCause(`${item.headline_ja}\n${item.summary_ja ?? ""}`);
+    if (hasEffect && topicCoverage(stated, text) < EFFECT_COVERAGE) return false;
+    return text.split(/[。\n]/u).some((source) => {
+      if (causes.length === 0) {
+        // No nameable cause: only the news sentence itself, with the same causal wording, is supported.
+        return source.includes(link) && topicCoverage(sentence, source) >= SENTENCE_COVERAGE && same(polarity(sentence), polarity(source));
+      }
+      return [...source.matchAll(NEWS_LINK)].some((match) => {
+        const sourceCause = source.slice(0, match.index);
+        const sourceEffect = source.slice(match.index + match[0].length);
+        // 「〜が響きました」: the effect is in another sentence. Supported only if the news says it the same way.
+        if (!hasEffect && contentPairs(sourceEffect.replace(REPORTING_TAIL, "")).size > 0) return false;
+        // Each written cause is compared with the part of the news cause it restates (「A上昇とB低下を受け」).
+        const sourceParts = split(causeSpan(source, match.index));
+        return causes.every((cause) => {
+          if (topicCoverage(cause, sourceCause) < CAUSE_COVERAGE) return false;
+          const restated = sourceParts.reduce((best, part) => topicCoverage(cause, part) > topicCoverage(cause, best) ? part : best, sourceParts[0] ?? "");
+          return same(polarity(cause), polarity(restated));
+        }) && same(polarity(stated), polarity(sourceEffect));
+      });
+    });
+  });
+}
+
+/**
+ * Sentences that give a reason the input does not support. Each causal link is checked on its own cause,
+ * with its direction, so one supported cause does not license another (K2 on PR #57).
+ *
+ * - A reason for a market / index move needs a confirmed causal claim: one that cites news and does not
+ *   itself say the link is unconfirmed (2026-09-25 carried a "causal" label on "因果は確認できません"). The
+ *   cited news must name the cause and be about a stock market, so a news item about something else
+ *   cannot be turned into the market's reason.
+ * - A sentence that restates a news item's own cause and effect is supported by that item's text,
+ *   whatever the claim type (2026-10-01 close: such a sentence failed both scheduled attempts).
  */
 export function unsupportedCausalSentences(analysis: GeneratedAnalysis, input: AnalysisInput): string[] {
   const supportRefs = new Set(analysis.claims
     .filter((claim) => claim.claim_type === "causal" && !NEGATED.test(claim.text_ja))
     .flatMap((claim) => claim.evidence_refs.filter((ref) => input.newsRefs.has(ref))));
-  const support = input.news
+  const causalNews = input.news
     .filter((item) => supportRefs.has(item.ref))
-    .map((item) => `${item.headline_ja}\n${item.summary_ja ?? ""}`)
-    .join("\n");
-  const canonicalSupport = canonicalCause(support);
+    .map((item) => canonicalCause(`${item.headline_ja}\n${item.summary_ja ?? ""}`));
   const story = analysis.app_story;
   const texts = [
     analysis.headline_ja,
@@ -431,9 +541,14 @@ export function unsupportedCausalSentences(analysis: GeneratedAnalysis, input: A
     const links = [...sentence.matchAll(CAUSAL_LINK)];
     if (links.length === 0) continue;
     if (NEGATED.test(sentence) && !SPECULATION.test(sentence)) continue;
-    const supported = links.every((link) => {
+    const supported = links.every((link, index) => {
+      const effect = sentence.slice(link.index + link[0].length, index + 1 < links.length ? links[index + 1].index : sentence.length);
+      // A market move needs a causal claim whose news is about a market; anything else must be what a
+      // news item itself says, whatever the claim type.
+      if (!isMarketEffect(effect, sentence.slice(0, link.index), input)) return newsStatesRelation(sentence, link.index, link[0], effect, input);
       const parts = causeParts(sentence, link.index, link[0]);
-      return parts.length > 0 && parts.every((part) => causeSupported(part, canonicalSupport));
+      return parts.length > 0 &&
+        parts.every((part) => causalNews.some((text) => NEWS_ABOUT_MARKET.test(text) && causeSupported(part, text)));
     });
     if (supported) continue;
     const trimmed = sentence.trim();

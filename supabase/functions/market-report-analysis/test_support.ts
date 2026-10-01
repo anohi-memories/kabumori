@@ -181,3 +181,60 @@ export function richMorning1001(input: AnalysisInput): GeneratedAnalysis {
     },
   };
 }
+
+/**
+ * 2026-10-01 close: Tokyo up on 10/1 (Nikkei +3.30%), US mixed on 9/30. The Korean export item states a
+ * cause inside the news (「AI向け半導体需要の拡大を背景に、半導体輸出も大幅に増加」); the analysis restates
+ * it in an observation claim, the X news paragraph and the app news section. This is the wording the
+ * first natural v2 close was rejected for.
+ */
+export function richClose1001(input: AnalysisInput): GeneratedAnalysis {
+  const korea = refOf(input, (headline) => headline.includes("韓国の9月輸出"));
+  const accord = refOf(input, (headline) => headline.includes("AI企業と自主協定"));
+  const senate = refOf(input, (headline) => headline.includes("米上院"));
+  const nidec = refOf(input, (headline, company) => !!company?.includes("ニデック") && headline.includes("減損損失"));
+  return {
+    headline_ja: "日経平均は+3.30%、東京市場は上昇",
+    market_summary_ja: "10月1日の東京市場は、日経平均が68,956.72（前日比+3.30%）、TOPIX連動ETF（1306）が434.4円（前日比+0.67%）と上昇しました。9月30日の米国市場はNYダウが50,906.05（前日比−0.86%）と下げ、ナスダック総合は26,861.06（前日比+0.24%）でした。韓国の9月輸出は過去最高と報じられています。東京市場の上昇理由は、確認できる材料だけでは断定できません。",
+    claims: [
+      { claim_id: "c1", text_ja: "10月1日の日経平均は68,956.72（前日比+3.30%）でした。", claim_type: "observation", evidence_refs: ["metric:nikkei225"], scope: "today" },
+      { claim_id: "c2", text_ja: "10月1日のTOPIX連動ETF（1306）は434.4円（前日比+0.67%）でした。", claim_type: "observation", evidence_refs: ["metric:topix_proxy_1306"], scope: "today" },
+      { claim_id: "c3", text_ja: "9月30日の米国市場は、NYダウとS&P500が下落し、ナスダック総合は上昇しました。", claim_type: "observation", evidence_refs: ["metric:dow", "metric:sp500", "metric:nasdaq_composite"], scope: "overnight" },
+      { claim_id: "c4", text_ja: "韓国の9月輸出は前年同月比83.5％増の1,209億ドルで、AI向け半導体需要を背景に半導体輸出も大幅増と報じられました。", claim_type: "observation", evidence_refs: [korea], scope: "today" },
+      { claim_id: "c5", text_ja: "東京市場の上昇理由は、確認できる材料だけでは断定できません。", claim_type: "insufficient_evidence", evidence_refs: [], scope: "today" },
+      { claim_id: "c6", text_ja: "米上院で否決された、データセンターの電力費用をめぐる法案の続報が確認点です。", claim_type: "watch_point", evidence_refs: [senate], scope: "next" },
+    ],
+    key_news: [
+      { ref: accord, why_it_matters_ja: "AI企業の安全対策に関わる自主協定です。" },
+      { ref: senate, why_it_matters_ja: "データセンターの電力費用の負担に関わる法案です。" },
+      { ref: korea, why_it_matters_ja: "半導体の需要と輸出の動きを見る材料です。" },
+      { ref: nidec, why_it_matters_ja: "減損損失などの計上に関する開示です。" },
+    ],
+    strong_themes: [],
+    weak_themes: [],
+    next_watch_ja: ["米国の主要3指数の方向", "ドル円の水準", "AI関連の政策の続報"],
+    risks_ja: ["米国株の方向がそろっていない点", "大きく上げた後の値動きの振れ"],
+    x_post: {
+      lead_ja: "10月1日の東京市場は、日経平均が+3.30%と大きく上昇しました📈",
+      points_ja: [
+        "日経平均は68,956.72（前日比+3.30%）",
+        "TOPIX連動ETF（1306）は434.4円（前日比+0.67%）",
+        "9月30日の米国はNYダウ−0.86%、ナスダック総合+0.24%",
+      ],
+      context_ja: "10月1日の東京市場は日経平均の上げ幅が大きく、TOPIX連動ETF（1306）も上昇しました。9月30日の米国市場はNYダウとS&P500が下落し、ナスダック総合は上昇と方向が分かれています。東京市場の上昇理由は、確認できる材料だけでは断定できません。",
+      news_ja: "韓国の9月輸出は過去最高で、AI向け半導体需要を背景に半導体輸出も大幅増と報じられました。米国ではトランプ大統領がAI企業と安全対策の自主協定を発表しています。",
+      watch_ja: "米国株の方向がそろうか、ドル円が157.00円近辺から動くか、AI関連の政策の続報が出るかを見ていきます。",
+      closing_ja: "大きく上げた日ほど、指数ごとの上げ幅の違いと材料を分けて見ておくと整理しやすいです。",
+    },
+    app_story: {
+      summary_ja: "10月1日の東京市場は、日経平均が大きく上昇し、TOPIX連動ETF（1306）も上昇して終えました。上昇の理由を説明するニュースは確認できておらず、値動きと材料を分けて整理します。",
+      overseas_ja: "9月30日の米国市場は、NYダウが50,906.05（前日比−0.86%）、S&P500が7,651.54（前日比−0.25%）と下げた一方、ナスダック総合は26,861.06（前日比+0.24%）と小幅に上昇しました。フィラデルフィア半導体株指数（SOX）は12,628.62（前日比±0.00%）でした。",
+      japan_ja: "10月1日の東京市場は、日経平均が68,956.72（前日比+3.30%）と大きく上げ、TOPIX連動ETF（1306）は434.4円（前日比+0.67%）でした。2つの指標は上げ幅に差があります。業種別の騰落は取得元がないため、どの業種が上げたかは確認できていません。",
+      cross_asset_ja: "ドル円は9月30日時点で157.00円でした。米国10年債利回りは9月29日時点で5.26%、WTI原油は9月29日時点で96.16ドルです。日本国債の利回りは8月31日時点の値しかなく、最新の水準は確認できていません。",
+      news_ja: "韓国の9月輸出は前年同月比83.5％増の1,209億ドルとなり、月間の過去最高を更新しました。AI向け半導体需要を背景に半導体輸出も大幅増と報じられました。米国では、トランプ大統領がAI企業と安全対策の自主協定を発表しました。米上院では、AIデータセンターなど大口の電力利用者に電力インフラ費用を負担させる法案が否決されています。これらと東京市場の上昇との関係は確認できていません。個別企業では、ニデックが減損損失などの計上を発表しました。",
+      strong_ja: "",
+      caution_ja: "米国の主要3指数は方向がそろっておらず、東京市場の大きな上昇が続くかは見通しにくい状況です。日本国債の利回りは8月31日時点の値までしか確認できていません。",
+      watch_ja: "次の米国市場で主要3指数の方向がそろうか、ドル円が157.00円近辺からどちらに動くかが確認点です。AI関連では、自主協定の運用や電力費用をめぐる議論の続報を見ていきます。",
+    },
+  };
+}
