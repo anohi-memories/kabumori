@@ -10,10 +10,6 @@ export const HERO_ART_WIDTH = 1586;
 export const HERO_ART_HEIGHT = 992;
 export const HERO_ART_ASPECT = HERO_ART_WIDTH / HERO_ART_HEIGHT;
 
-/** Character canvas (report_04_neutral.webp), drawn on the same box as the art. */
-export const HERO_CHARACTER_WIDTH = 1536;
-export const HERO_CHARACTER_HEIGHT = 960;
-
 /**
  * Where the live points start, as a share of the art height: just below the baked
  * "今日のポイント" underline (y=512 of 992 in the artwork).

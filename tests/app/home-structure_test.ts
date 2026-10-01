@@ -60,7 +60,7 @@ test("the Hero draws none of the baked-in art text natively (no double display)"
 
 test("the Hero keeps only the live UI: report kind, numbered points and the CTA", async () => {
   const hero = await read("src/components/home/home-report-hero.tsx");
-  assert.ok(hero.includes("reportTypeLabel(report.report_type)"), "朝刊 / 大引け stays live");
+  assert.ok(hero.includes("REPORT_KIND_LABEL[report.report_type]") && hero.includes("morning: '朝刊', close: '大引け'"), "朝刊 / 大引け stays live and short");
   assert.ok(hero.includes("HOME_COLORS.point[index]") && hero.includes("{index + 1}"), "numbered circles stay native");
   assert.ok(hero.includes("レポートを見る →"));
 });

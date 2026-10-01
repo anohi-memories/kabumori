@@ -4,9 +4,10 @@ import { Image, type ImageSource } from 'expo-image';
 
 import type { KabumoriPalette } from '@/constants/kabumori-theme';
 import { HERO, HOME_COLORS, HOME_LAYOUT } from '@/constants/home-tokens';
-import { reportTypeLabel, type PersonalizedReport } from '@/lib/report-presentation';
+import type { PersonalizedReport } from '@/lib/report-presentation';
 import { reportCardStatus } from '@/lib/home-report-highlights';
 import { heroArtHeight, heroIsExtended, heroPointsTop, heroWidth, HERO_ART_ASPECT } from '@/lib/home-hero-geometry';
+import { selectReportCharacterState, type ReportCharacterState } from '@/lib/report-character-state';
 import { CharacterSlot } from '@/components/home/character-slot';
 
 // The Hero background art (1586x992, lossless). The title 「今日の かぶモリレポート」, the description
@@ -14,10 +15,23 @@ import { CharacterSlot } from '@/components/home/character-slot';
 // double display). It is laid on the art box at its own aspect ratio, never cropped or stretched.
 export const HERO_BACKGROUND_SOURCE: ImageSource = require('@/assets/images/home/report_hero_background.webp');
 
-// Character layer, phase 1: the one approved neutral (04) artwork, shown for every state. It was made
-// on the same canvas as the background, so it is stacked on the art box 1:1. Phase 2 (after visual
-// approval) replaces this single constant with a selected source; no layout change is needed then.
-const FIXED_REPORT_CHARACTER_SOURCE = require('@/assets/images/report-states/report_04_neutral.webp');
+// Character layer: one of eight approved full-canvas images (1586x992, plus the 03 canvas at 1536x960),
+// chosen deterministically from the stored report by selectReportCharacterState (no network, no AI).
+// Static requires, because Metro resolves assets at build time. No report (loading / empty / error)
+// shows 03 neutral. Every state follows the same full-canvas rule: no per-state offsets or scales.
+const CHARACTER_SOURCES: Record<ReportCharacterState, ImageSource> = {
+  very_positive: require('@/assets/images/report-states/report_01_very_positive.webp'),
+  positive: require('@/assets/images/report-states/report_02_positive.webp'),
+  neutral: require('@/assets/images/report-states/report_03_neutral.webp'),
+  uncertain: require('@/assets/images/report-states/report_04_uncertain.webp'),
+  caution: require('@/assets/images/report-states/report_05_caution.webp'),
+  negative: require('@/assets/images/report-states/report_06_negative.webp'),
+  very_negative: require('@/assets/images/report-states/report_07_very_negative.webp'),
+  volatile: require('@/assets/images/report-states/report_08_volatile.webp'),
+};
+
+// Short report-type label shown after the baked-in 「今日のポイント」 label.
+const REPORT_KIND_LABEL: Record<PersonalizedReport['report_type'], string> = { morning: '朝刊', close: '大引け' };
 
 // Readable summary of the baked-in art for VoiceOver (the picture itself carries the words).
 const HERO_ART_LABEL = '今日のかぶモリレポート。今日の市場とあなたの保有銘柄への影響をAIが整理しました。今日のポイント';
@@ -38,7 +52,7 @@ type HomeReportHeroProps = {
 };
 
 // The Home hero: one designed block. Layers, back to front:
-//   1. background art -> 2. character (same 1:1 box) -> 3. live UI (report kind, 1-3 points)
+//   1. background art -> 2. character (same 1:1 box, one of 8 states) -> 3. live UI (report kind, 1-3 points)
 //   -> 4. CTA (opaque, so it covers the character's lower body where they overlap).
 // Individual points are NOT navigation targets -- the single CTA is the only way into the report.
 export function HomeReportHero({ palette, report, points, loading, error, onOpen, onRetry }: HomeReportHeroProps) {
@@ -52,6 +66,8 @@ export function HomeReportHero({ palette, report, points, loading, error, onOpen
   const width = heroWidth(windowWidth, HOME_LAYOUT.gutter);
   const artHeight = heroArtHeight(width);
   const extended = heroIsExtended(heroHeight, artHeight);
+  // The report on screen decides the expression; no report -> 03 neutral. Pure, no network/AI.
+  const characterState = selectReportCharacterState(report);
 
   return (
     <View
@@ -79,10 +95,10 @@ export function HomeReportHero({ palette, report, points, loading, error, onOpen
               />
             ))
           : null}
-        <CharacterSlot source={FIXED_REPORT_CHARACTER_SOURCE} style={StyleSheet.absoluteFill} />
+        <CharacterSlot source={CHARACTER_SOURCES[characterState]} />
         {status === 'report' && report ? (
           <Text style={[styles.reportKind, { color: palette.muted }]} numberOfLines={1}>
-            {reportTypeLabel(report.report_type)}
+            {REPORT_KIND_LABEL[report.report_type] ?? ''}
           </Text>
         ) : null}
       </View>
