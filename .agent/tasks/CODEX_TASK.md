@@ -1,5 +1,184 @@
 # Codex Task
 
+- task_id: common-account-pr70-lifecycle-foundation-review-20261001
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- priority: highest
+- recommended_model: Sol（高）
+- type: focused security / migration / Auth lifecycle review
+- target: PR #70 exact head `89cf128bd9219897806b2b641cce4866f6e16c52`
+- production_mutation_allowed: false
+
+## Purpose
+
+共通アカウントv1 Phase 1のadditive lifecycle foundationを独立レビューする。
+
+PR #70は、`common_accounts`、`service_entitlements`、durable lifecycle operation、shadow backfill、lifecycle RPC、Auth削除guard、RLS/grants、race testsをsource-onlyで追加する高リスク候補。
+
+**merge / production migration apply / backfill / deploy / Auth delete / OAuth/Vault操作は禁止。**
+
+## Mandatory startup / isolation
+
+1. PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / G5 Phase 1 TASK+Report / H1 prior C1を読む。
+2. H1独立worktree/checkout。
+3. fresh origin/main と PR #70 exact headを取得。headが変わっていたらSTOP。
+4. PR #70 base以降main変更を再確認し、runtime overlap/raceがあればSTOP。
+5. G4 PR #65は別workstream。G4 filesへ触れない。
+
+## Review priorities
+
+### A. Lifecycle serialization — 最優先
+
+- service start vs whole-account deletionの両commit orderが本当に安全か
+- auth.users row lock + common_accounts row lockのlock order
+- existing `ensure_my_profile` と `begin_social_mobile_x_oauth_connection` との競合証明
+- finalizeが同一transaction内でblocker再検証→Auth削除まで隙間なく行うか
+- READ COMMITTED限定が妥当か、他isolationでfail closedか
+- lifecycle_versionによる確認後変更検知
+- stale/retry/idempotency
+- deadlock possibilityとdocumented single-transaction assumption
+- advisory/row lockが外部Saga stepを原子的に扱ったふりをしていないか
+
+race testが本当に欠陥を検知するか、mutation evidenceも確認する。
+
+### B. SQLによる Auth user deletion
+
+特に深く確認：
+
+- Supabase/GoTrue管理下の `auth.users` をSQLでDELETEすることの妥当性
+- auth schema ownership/trigger/FK/session/identity/storage等との整合
+- existing X finalizeとの類似だけを根拠に安全扱いしていないか
+- delete failure時のtransaction rollback/fail-closed
+- session/JWT invalidation assumptions
+- future provider/Apple revoke ordering
+- production apply前に必要な実Supabase disposable proof
+
+必要なら「SQL deleteはsource candidateとして不採用、Edge/common orchestrator経由へ変更」などをCHANGES REQUIREDとして返す。
+
+### C. Auth deletion guard trigger
+
+- shadow / enforce semantics
+- settings row missing時のfail-closed
+- cascade時のtrigger behavior
+- legitimate service-only cleanupを誤blockしないか
+- existing X deletion sagaが23503を期待通り扱えるか（sourceで証明）
+- bypass path / owner role / SECURITY DEFINERからの削除
+- trigger disable/replica role等の考慮
+- rollback時にenforce状態を安全に扱うか
+
+### D. RLS / grants / SECURITY DEFINER
+
+- exposed public tablesはRLS enabledか
+- authenticatedはself SELECTのみか
+- source/legacy_evidence等の列制限
+- client INSERT/UPDATE/DELETE/TRUNCATE不可
+- PUBLIC/anon/authenticated/service_roleの不要grantが残らないか
+- service_role table grantなし + RPC-onlyが実運用可能か
+- SECURITY DEFINERのfixed search_path
+- function EXECUTE PUBLIC revoke ordering
+- helper/private schema exposure
+- auth.uid() ownership checks
+- user-controlled metadataをauthorizationに使っていないか
+
+### E. Backfill rules
+
+- common_accounts 1:1 with Auth users
+- Kabumori legacy profileをactive候補にすることの曖昧性をsourceで保持しているか
+- X entitlementがself-service user workspace ownerだけか
+- admin/internal workspace除外
+- Auth-only users
+- no email-based merge
+- existing rowsを上書きしない/idempotent
+- locked/deleting accountへ誤付与しない
+- sourceのmigration-history driftを悪化させない
+
+Phase 0のproduction aggregateはreference evidenceとして使えるが、このreviewでproduction backfillはしない。
+
+### F. Migration preflight / rollback
+
+- exact preflight object/column/FK/function dependency check
+- one transaction / partial apply防止
+- version collision
+- re-apply strategy
+- existing repo migration-history mismatchへの耐性
+- rollbackがcandidate-created objectsだけをdropするか
+- downstream依存がある状態でrollbackを拒否するか
+- rollback後再applyが成立するか
+
+### G. Service lifecycle semantics
+
+- service-only deleteは他service/Authを触らない
+- whole-account deleteは全service cleanup完了までfinalize不可
+- admin/shared/unknown/unregistered footprint fail closed
+- X posting OAuth authorizationとlogin identityを混同しない
+- Apple revoke checkpointはwhole-account flowだけの責任として妥当か
+- current X deletion scopeのprofiles proxyをこのPRがまだ切り替えていないことが明確か
+- current Kabumori hard-deleteがこのPRだけでは安全にならないと明示されているか
+
+## Required verification
+
+PR #70 reported evidenceを鵜呑みにせず再実行/検査：
+
+- `supabase/tests/common_account_lifecycle_run.sh`
+- behavior tests
+- two-session race tests
+- rollback/reapply
+- mutation tests or equivalent defect-detection validation
+- `social_mobile_account_deletion_run.sh`
+- migration source invariants
+- SQL lint/static checks where available
+- `git diff --check`
+- schema diff / ACL inspection
+
+可能なら disposable Supabase/PostgreSQL環境で、role/trigger/search_path/SQLSTATE挙動を追加検証。
+
+実productionへのwrite/apply/deleteは禁止。
+
+## Fix authority
+
+小さく決定的なP1/P2/P3でPR #70 scope内なら failing test -> minimal fix -> rerun を許可。
+
+ただし以下はG5へCHANGES REQUIREDで返す：
+
+- architecture変更
+- Auth削除方式の根本変更
+- lifecycle contract変更
+- schema/role modelの大幅変更
+- production-specific migration repair
+- client/Edge wiring追加
+
+## Completion / C1
+
+`.agent/CODEX_REPORT.md` に新規reportをappend。
+
+必須：
+
+- PASS / PASS-WITH-FIX / FAIL
+- exact original/final head
+- findings severity
+- lifecycle serialization verdict
+- SQL Auth deletion verdict
+- guard trigger verdict
+- ACL/RLS/SECURITY DEFINER verdict
+- backfill/preflight/rollback verdict
+- test evidence
+- changed_files
+- production mutation=0
+- merge recommendation
+- prerequisites before any production apply
+- whether **Sol（極高）** pre-production review is required
+- next recommendation
+
+完了時 status -> review_required / next_owner -> chatgpt / STOP for C1.
+
+---
+
+## Previous completed H1 task history — preserved below
+
+# Codex Task
+
 - task_id: common-account-kabumori-delete-cross-service-safety-review-20261001
 - owner: codex
 - slot: codex-1
