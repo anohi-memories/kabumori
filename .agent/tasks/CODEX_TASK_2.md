@@ -3,8 +3,8 @@
 - task_id: x-ai-lab-pr66-topic-dedup-review-20261001
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Luna（高）
 - target: PR #66 exact head `4f692e4d805ccd3ee628058bb20ee6c1f62cdd6d`
@@ -144,3 +144,17 @@ production_mutation=0.
 
 Report PASS/FAIL, exact reviewed head, disposition of all prior blockers, test evidence, cross-brand safety, and whether PR #61 is safe to merge and deploy.
 
+
+
+## Final C2 — PR #66 AI Lab topic dedup
+
+- verdict: **PASS**
+- accepted reviewed head: `4f692e4d805ccd3ee628058bb20ee6c1f62cdd6d`
+- PR #66 remains open and mergeable; H2 made no source changes.
+- review findings: no blocking issue in topic rotation/cooldown, bounded regeneration, PostgREST count fallback, or cross-brand isolation.
+- tests accepted: focused 24/24, related 55/55, full functions 2337/2337; changed shared runtime deno check PASS; x-test-post check has the same six pre-existing diagnostics as PR base and no new AI Lab diagnostic; diff check PASS.
+- known limitation accepted for this emergency fix: actual recent post bodies are not persisted, so this is rotation + bounded theme/opener guard rather than true semantic-history comparison.
+- merge disposition: **safe to merge** at the exact reviewed head after a fresh no-race check.
+- production disposition: merge does not itself activate the fix in production; only `x-test-post` needs a separately controlled redeploy and post-deploy source/read-back verification. No DB/RPC/migration/Cron/OAuth/Vault changes are required.
+- production mutation during review: 0. Real X posts/API calls: 0.
+- H2 closed; reuse only after fresh allocation.
