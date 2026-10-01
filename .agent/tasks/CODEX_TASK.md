@@ -3,8 +3,8 @@
 - task_id: common-account-pr70-lifecycle-foundation-review-20261001
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused security / migration / Auth lifecycle review
@@ -185,6 +185,25 @@ PR #70 reported evidenceを鵜呑みにせず再実行/検査：
 - production mutation=0; read-only catalog metadata only. Real disposable Supabase GoTrue/PostgREST/Storage proof is still required; local PostgreSQL is not that proof.
 - full findings, reproduction recipes, limits and delivery evidence appended to `.agent/CODEX_REPORT.md`; prior reports and other slots preserved.
 - next: **C1, 推薦モデル：Sol（高）**. After a separately assigned G5 correction, repeat focused review; **Sol（極高） pre-production review required** before any production apply. This completion does not allocate G5 or authorize production. H1 STOP.
+
+
+## Final C1 — PR #70 lifecycle foundation
+
+- verdict: **FAIL / CHANGES REQUIRED accepted**.
+- reviewed source head: `89cf128bd9219897806b2b641cce4866f6e16c52`; unchanged by H1.
+- merge/apply/deploy: **HOLD**.
+- accepted blockers:
+  1. SQL Auth DELETE can report completion while Storage-owned state remains; Phase 1 must not claim managed-account destruction safety.
+  2. absent-account preview version can remain valid after backfill adds service entitlement.
+  3. backfill can grant entitlement after a concurrent account lock/state change.
+  4. admin + self-service workspace intersection can receive x_autopost entitlement.
+  5. FK preflight validates table-level FK existence instead of exact invariant-bearing columns.
+  6. rollback can remove the guard when lifecycle settings row is missing even though runtime treats missing as enforce.
+- accepted approach: do **not** patch the SQL hard-delete path incrementally. Narrow Phase 1 to additive lifecycle/entitlement/serialization foundation and move actual managed Auth destruction to a later common-account orchestrator/integration phase.
+- production mutation from H1: 0.
+- current production corruption: not established.
+- next owner: G5 corrective task `common-account-pr70-corrective-lifecycle-foundation-20261001`, recommended **Opus5.5（極高）**.
+- after corrective K5, repeat focused Codex review. Before any production apply, separate **Sol（極高）** review remains mandatory.
 
 ---
 
