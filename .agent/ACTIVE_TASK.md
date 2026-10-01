@@ -60,7 +60,7 @@
 - start_code: G2
 - finish_code: K2
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: source-only shared report v2/rich presentation + Hard Fact vs Quality WARN boundary; X ~500 chars, App richer long-form, exact 10/1 mixed-session date/value regression must be deterministically blocked; consumers remain OFF; recommended Opus5.5（高）
+- allocation: source-only shared report v2/rich presentation + Hard Fact vs Quality WARN boundary; accepted 10/1 interim evidence: shared 3-cycle completion, legacy delivery failures/date bug, content-regeneration success; also implement tested market-wide news priority, scoped absence claims, and morning session-aware wording; X ~500 chars, App richer long-form; consumers remain OFF; recommended Opus5.5（高）
 
 ## Claude G3
 - owner: claude
