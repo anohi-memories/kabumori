@@ -77,6 +77,17 @@ aude-3
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
 - allocation: Final K3 PASS. Disposable social-mobile service deletion E3 completed: X authorization revoked, service-specific workspace/membership/account/credentials/transient OAuth data removed, unexpected residue 0, protected production posting accounts unchanged, real X posts 0. Shared Auth/profile intentionally retained under social_only. No source change; no extra Codex review. Remaining UI release blocker: invisible native Login methods navigation buttons. G3 may be reused only after fresh allocation/competition check.
 
+## Claude G3
+- owner: claude
+- slot: claude-3
+- next_owner: claude
+- status: ready
+- task_id: x-social-mobile-account-deletion-ui-release-finish-20261001
+- start_code: G3
+- finish_code: K3
+- source: `.agent/tasks/CLAUDE_TASK_3.md`
+- allocation: Finish the remaining social-mobile account-deletion UI release blockers only: root-cause/fix invisible native Login methods buttons and add a discoverable Settings account-management entry. Preserve existing deletion backend/scope semantics and feature gate; no common-account/service-entitlement implementation, no G4 overlap, no deploy/destructive operation. Recommended Sonnet5（高）.
+
 ## Claude G4
 - owner: claude
 - slot: claude-4
