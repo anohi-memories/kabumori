@@ -88,7 +88,7 @@
 - start_code: G4
 - finish_code: K4
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: K4 HOLD. PR #65 source/security is already accepted at exact head e5a66f5ba71f64b1a38d8f89faff3d0a31972949; only safe operator provider-side iOS account-switch E2E remains. Prepare isolated G4 simulator/device flow, user performs X credential/authorization interaction, verify different disposable account + cancel/retry/reconnect, no real X post. No source change unless E2E exposes a defect. Recommended Sonnet5（高）.
+- allocation: K4 HOLD follow-up 2. PR #65 source/security remains accepted at exact head e5a66f5ba71f64b1a38d8f89faff3d0a31972949; checks green and no main overlap. Build an isolated unused iOS Simulator locally (now authorized as necessary), prove Safari account A is not silently reused and a different disposable B can authenticate, then cancel before final provider authorization so production connection/Vault mutation remains 0. Retry once; no real X post. No source change. Recommended Sonnet5（高）.
 
 ## Claude G5
 - owner: claude
