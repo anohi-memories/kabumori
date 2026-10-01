@@ -78,7 +78,7 @@ export function HomeReportHero({ palette, report, points, loading, error, onOpen
           accessibilityRole="header"
           accessibilityLabel={HERO_ART_LABEL}
         />
-        <CharacterSlot source={CHARACTER_SOURCES[characterState]} />
+        <CharacterSlot source={CHARACTER_SOURCES[characterState]} style={styles.characterLift} />
         {/* Taller than the art: fade the art + character's bottom into the fill colour (see HERO.fade*). */}
         {extended
           ? Array.from({ length: HERO.fadeStrips }, (_, index) => {
@@ -171,13 +171,15 @@ const styles = StyleSheet.create({
     backgroundColor: HERO.fillColor,
     overflow: 'hidden',
   },
+  // The whole character canvas moves up by one global amount (same for every state), together with the CTA.
+  characterLift: { top: -HERO.characterLift, bottom: HERO.characterLift },
   // Art + character share this box (absolute, top-left, full width, art aspect ratio).
   artBox: { position: 'absolute', top: 0, left: 0, right: 0 },
   fadeStrip: { position: 'absolute', left: 0, right: 0, height: HERO.fadeStripHeight, backgroundColor: HERO.fillColor },
   // Report kind (朝刊 / 大引け) sits right after the baked-in 「今日のポイント」 label.
   reportKind: { position: 'absolute', left: HERO.metaLeft, top: HERO.metaTop, fontSize: 11, fontWeight: '800' },
   // flexGrow: with the spacer, the CTA stays at the bottom edge of a Hero that is only as tall as the art.
-  content: { flexGrow: 1, paddingBottom: HERO.padding },
+  content: { flexGrow: 1, paddingBottom: HERO.ctaBottomInset },
   pointsColumn: { marginLeft: HERO.pointsLeft, width: HERO.pointsWidth },
   points: { gap: 2 },
   pointRow: {

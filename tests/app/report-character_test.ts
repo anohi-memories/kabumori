@@ -92,7 +92,8 @@ test("the runtime no longer references the old fixed neutral asset or 10-state n
 test("the selected character is drawn by the one full-canvas rule, with no per-state layout tweaks", async () => {
   const hero = await read("src/components/home/home-report-hero.tsx");
   const slot = await read("src/components/home/character-slot.tsx");
-  assert.ok(/<CharacterSlot source=\{CHARACTER_SOURCES\[characterState\]\} \/>/.test(hero), "no per-state props");
+  assert.ok(/<CharacterSlot source=\{CHARACTER_SOURCES\[characterState\]\} style=\{styles\.characterLift\} \/>/.test(hero), "the same single global lift for every state");
+  assert.ok(/characterLift: \{ top: -HERO\.characterLift, bottom: HERO\.characterLift \}/.test(hero));
   assert.ok(hero.includes("selectReportCharacterState(report)"));
   // Full canvas: absolute fill, contain, uncropped, decorative, frameless, never takes touches.
   assert.ok(slot.includes("StyleSheet.absoluteFill"));
