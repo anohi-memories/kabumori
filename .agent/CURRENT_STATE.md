@@ -1,3 +1,16 @@
+## Final K5 — PR #70 corrective lifecycle foundation
+
+- verdict: **PASS to focused Codex rereview; merge/apply/deploy HOLD**.
+- PR #70 corrective exact head: `eebe9405d758e0c120f9e6f1a70cdb1e973a0855`, open/mergeable.
+- architecture correction: Phase 1 no longer deletes Supabase Auth users or claims managed-account deletion completion. It stops at durable lifecycle/readiness for a future managed orchestrator.
+- all six prior H1 counterexamples are now represented as committed regressions and reported PASS; G5 additionally reports 19 lifecycle checks and 29/29 mutation detections.
+- production mutation/read: 0; no migration apply/backfill/Auth/Storage/OAuth/Vault/deploy/Cron/flag changes.
+- fresh base-to-main comparison found no overlap with the eight PR #70 files.
+- H1 assigned `common-account-pr70-corrective-rereview-20261001`, recommended **Sol（高）**, exact-head rereview.
+- merge/apply remains blocked until C1 acceptance.
+- even after source acceptance, production preflight/apply requires separate **Sol（極高）** review, real disposable Supabase proof and explicit approval.
+- AI Lab diary: no duplicate update; 2026-10-01 already captures this common-account concurrency/safety work at public-safe granularity.
+
 ## Final C1 — PR #70 lifecycle foundation FAIL
 
 - verdict: **FAIL / CHANGES REQUIRED accepted**.
