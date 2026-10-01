@@ -1,10 +1,218 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-shared-report-v2-close-natural-observation-20261001
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Sonnet5（中）
+- purpose: production market-report-analysis v17 / Presentation v2 の最初の自然な大引けcycle（2026-10-01）をread-onlyで観測し、実モデル生成の完成率・Hard/WARN境界・文章の厚み・コスト・重複を確認する。source変更・deploy・manual invoke・gate変更は禁止。
+
+## Accepted baseline
+
+- PR #67 reviewed/fixed and merged.
+- production `market-report-analysis`: v17, verify_jwt=false.
+- `app_enabled=false`, `x_enabled=false`.
+- Presentation v2 source/read-back accepted by Final K2.
+- no consumer activation.
+- concurrent `x-test-post` v131 is a separate workstream mutation that predates the G2 deploy; it is not part of this observation task.
+
+## Timing rule
+
+Do not perform the substantive observation before **2026-10-01 16:40 JST**.
+
+Natural schedule:
+- close data packet: 16:15 JST
+- close analysis: 16:20 JST
+- close analysis retry: 16:35 JST
+
+If invoked before 16:40 JST:
+- do only read-only preflight
+- do not wait/poll continuously
+- do not mutate anything
+- report `WAIT_UNTIL_AFTER_1640_JST`
+- leave this TASK ready for later continuation
+
+## Mandatory startup / isolation
+
+1. Read PROJECT_RULES, ORCHESTRATION, CURRENT_STATE, this TASK and prior Final K2.
+2. Use read-only production inspection. Source checkout is unnecessary unless exact source comparison is needed.
+3. Fresh-check production versions and require:
+   - market-report-analysis v17 or a newer version only if separately accepted
+   - app_enabled=false
+   - x_enabled=false
+4. Confirm no other active slot owns the market-report-analysis workflow.
+5. Do not touch x-test-post, personalized-reports, legacy X/App generators, or any other slot's worktree.
+
+## Read-only observation after 16:40 JST
+
+Inspect the natural `2026-10-01 / close` cycle.
+
+### Cycle / idempotency
+
+Capture:
+- cycle_status
+- report_status
+- attempt_count
+- report_attempt_count
+- current_data_packet_id
+- current_report_packet_id
+- last_error / report_last_error
+- started/completed/failed timestamps
+- data packet count for the cycle
+- report packet count for the cycle
+- whether scheduled retry created no duplicate after success
+
+### Presentation v2 presence
+
+For the completed report packet, verify:
+- `presentation_version = market_presentation.v2`
+- x_post has:
+  - lead_ja
+  - exactly 3 points
+  - context_ja
+  - news_ja when supported
+  - watch_ja
+  - closing_ja
+- app_story exists with expected v2 sections
+- session_views exists
+- key_news entries carry scope where expected
+- fact.quality_warnings is present/meaningful
+
+If v2 fields are absent, classify as a production/source-contract failure. Do not patch.
+
+### Hard vs WARN behavior
+
+Capture diagnostics:
+- generation_attempts
+- content_regenerations
+- hard_rejections
+- quality_rewrite
+- quality_rewrite_request_failed
+- delivered_generation
+- quality_warnings
+- transport_retries
+- transport_retry_wait_ms
+- transport_retry_reasons
+- transport_retry_exhausted
+- transport_success_after_retry
+
+Interpretation:
+- Quality WARN alone is acceptable and must not be called a failure.
+- If a quality rewrite fails but the safe original is delivered, record that as expected fallback behavior.
+- Any final objective Hard fact defect is FAIL even if Fact status says pass.
+- If the cycle fails because of Hard/local/Fact, classify exactly and preserve the safe diagnostic text; do not hot-fix.
+
+### Factual regression checks
+
+Verify in the actual generated v2 packet:
+- every metric's value/change matches its source metric
+- every metric is attached to the correct session date
+- no reused/stale value is called current/latest
+- 1306 remains `TOPIX連動ETF（1306）`, never TOPIX index
+- no direction/sign/emoji inversion
+- no unsupported causality
+- no fabricated news/ref/entity
+- no false broad “材料なし” claim
+- uncertainty is allowed when honestly scoped
+
+### Editorial/product-quality checks
+
+Read actual generated content and report:
+- formatted X character count
+- App story narrative character count
+- whether X is materially around the intended ~500-char digest when evidence supports it
+- whether App story is materially richer than X
+- whether broad-market news is prioritized ahead of isolated company disclosure when both exist
+- whether repeated “確認できません” style is excessive
+- whether the text is useful/readable enough for product intent
+
+Do not fail solely because:
+- X is outside the target range but still structurally postable and fact-safe
+- App story is shorter/longer than target
+- optional section is empty for lack of evidence
+- emoji count is imperfect
+
+Those are Quality WARN unless they expose a factual or renderability problem.
+
+### Cost
+
+Capture:
+- model calls
+- input tokens
+- output tokens
+- recorded cost_usd
+- whether quality rewrite materially increased the cycle cost
+
+Do not extrapolate from one cycle as a stable average; just report the observed sample.
+
+## Forbidden
+
+- no source edit
+- no deploy
+- no manual Edge invoke
+- no manual retry
+- no DB write
+- no cron/gate/Auth/Vault/secret mutation
+- no real X post
+- no app notification manipulation
+- no personalized-reports deploy
+- no x-test-post deploy
+- no legacy-path repair
+
+## PASS criteria
+
+PASS if:
+- natural close cycle reaches one safe completed v2 packet by the end of the scheduled retry window
+- objective Hard facts are correct
+- diagnostics distinguish content regeneration / quality rewrite / transport retry
+- no duplicate/idempotency regression
+- consumer gates remain OFF/OFF
+- observation causes production mutation 0
+
+A Quality WARN does not make this task fail.
+
+## Required Report
+
+- task_id/result
+- observation time JST
+- production versions/gates
+- cycle/attempt/error summary
+- data packet id/hash/quality
+- report packet id/hash
+- Presentation v2 field presence
+- Hard/WARN diagnostics
+- actual factual-regression result
+- X char count + short content-quality assessment
+- App story char count + short content-quality assessment
+- news-priority result
+- model calls/tokens/cost
+- duplicate/idempotency result
+- production mutation=0
+- remaining issues
+- recommendation for 2026-10-02 morning observation or source fix
+
+When complete:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+Pending.
+
+---
+
+# Previous completed G2 task — Presentation v2 production deploy
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-shared-report-v2-prod-deploy-20261001
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sonnet5（高）
 - purpose: C1 accepted/merged PR #67 Presentation v2 を、consumer gate OFFのまま production `market-report-analysis` のみに controlled deployし、deployed source identity・verify_jwt・cron・consumer settings・他Function非変更を確認する。自然cycle観測は次TASK。
@@ -4054,4 +4262,31 @@ ChatGPT independently re-read production and accepts the G2 report:
 This is the first natural morning PASS on the accepted v12/v14 shared pipeline. Consumer activation is still not authorized until the same-day close cycle is observed.
 
 
+
+
+
+## Final K2 — Presentation v2 production deploy
+
+Verdict: **PASS**.
+
+Independent ChatGPT verification:
+- production `market-report-analysis` is v17, verify_jwt=false.
+- app_enabled=false / x_enabled=false remain unchanged.
+- all 8 market-report/personalized cron jobs remain active at the recorded schedules/command hashes.
+- deployed v2 source is present in production; G2 read-back matched accepted merged main.
+- G2 production mutation is accepted as exactly one `market-report-analysis` deploy.
+- no manual cycle, DB/schema/RPC/Auth/Vault/secret/X/gate mutation by G2.
+
+Concurrent `x-test-post` change:
+- x-test-post changed v130 -> v131 at 14:19:06 JST.
+- this predates G2's target deploy start at 14:21:09 JST.
+- PR #66 had been merged at 14:10 JST, and current x-test-post source matches latest main according to G2's read-back.
+- x_enabled remains false, so the shared X consumer is not active.
+- therefore this is treated as a separate concurrent workstream mutation, **not** a G2 scope violation and not a reason to rollback the accepted market-report-analysis deploy.
+- ownership/provenance should remain recorded separately; this K2 does not claim who executed that x-test-post deploy.
+
+Decision:
+- Presentation v2 production generator baseline is accepted.
+- consumer activation remains forbidden.
+- next G2 is read-only natural close observation on 2026-10-01 after 16:40 JST.
 
