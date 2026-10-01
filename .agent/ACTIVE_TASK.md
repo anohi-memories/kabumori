@@ -47,16 +47,15 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: chatgpt
-- status: review_required
-- task_id: kabumori-home-visual-rebuild-reference-20260930
+- next_owner: claude
+- status: ready
+- task_id: kabumori-home-report-hero-8-state-assets-20261001
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- previous_allocation: free after Final K1 PASS of Home visual rebuild PR #60. Last accepted merge: 0ddf49132ecdab9b0d1afde8330556907cb34315. Next likely UI work is canonical asset insertion when header/Hero/topic artwork is ready.
-- allocation: 正本TASKはreview_required / next_owner chatgpt。最新のheader-logo ReportはK1確認待ち。以前のPR #60完了記録は保持し、この変更では完了判定・再割当しない。
-- snapshot_sync: 2026-10-01 JST; fresh mainのTASKヘッダから索引のみ更新。旧allocationはprevious_allocationとして保存。
-
+- previous_allocation: PR #62 header-logo work is merged (merge SHA 0224ff7ed41380749ed677c1dc27942e916fcffb); stale review_required state closed by ChatGPT before this allocation.
+- allocation: Home report Hero canonical background + final 8 Yume/robot states; deterministic selector from stored Fact-passed report only; no new AI/API; local Simulator first; EAS build 0; no backend/DB/RPC/Edge/Auth/X/production mutation.
+- recommended_model: Sonnet5（高）
 ## Claude G2
 - owner: claude
 - slot: claude-2
