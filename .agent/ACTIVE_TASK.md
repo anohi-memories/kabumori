@@ -60,12 +60,12 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-shared-report-v2-delivery-first-causal-guard-calibration-20261001
+- task_id: kabumori-shared-report-v2-causal-calibration-prod-deploy-20261001
 - start_code: G2
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: source/tests/PR only; calibrate false-positive causal Hard guard from 2026-10-01 close so sourced news-internal causality is deliverable while unsupported market causality/fabricated refs/date-value errors remain Hard; no deploy/gate/manual cycle; recommended Opus5.5（高）
+- allocation: controlled production deploy/read-back of merged PR #71 causal-guard calibration to market-report-analysis only; gates OFF, no manual cycle; next live check is 10/2 morning; recommended Sonnet5（高）
 
 ## Claude G3
 - owner: claude
