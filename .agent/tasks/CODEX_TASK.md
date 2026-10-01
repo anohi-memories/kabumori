@@ -3,8 +3,8 @@
 - task_id: common-account-pr70-readiness-authorization-rereview-20261002
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused rereview / lifecycle readiness authorization / migration security
@@ -285,6 +285,28 @@ production前に別途必須：
 - H1 fix published to its own branch only; no PR merge/update or main runtime change. C1 must decide incorporation of the exact fix before PR #70 merge; do not merge original `47a2ed6` unchanged.
 - production read/mutation=0; real X operations=0. Owned fake probe DB removed and own cluster stopped; detailed evidence appended to `.agent/CODEX_REPORT.md`.
 - next: **C1, 推薦モデル：Sol（高）**. Separate **Sol（極高）** pre-production review + actual disposable Supabase proof + exact production preflight/history/roles/API checks + explicit approval remain mandatory. H1 STOP after report synchronization.
+
+
+## Final C1 — PR #70 readiness authorization
+
+- verdict: **PASS-WITH-FIX / accepted**.
+- assigned reviewed head: `47a2ed6a1635177ba82004eace4bddb42d9d53e3`.
+- H1 bounded fix candidate: `aa4d2d425d1d7c432d43c9ecfb8e978a40b80a65`, exactly one commit atop the assigned head.
+- accepted bounded fix: direct owner-maintenance deletion of `common_accounts` no longer falsely records `login_removed` while the Auth parent still exists; actual Auth cascade observation remains shadow/unverified and does not authorize deletion.
+- independent final evidence accepted:
+  - lifecycle runner 20 PASS
+  - mutation suite 46/46 detected
+  - social-mobile deletion 8 PASS
+  - migration invariants 10 PASS
+  - old six blockers resolved
+  - latest seven adverse cases resolved
+  - responsibility boundary remains no-enforce / no-managed-Auth-delete in Phase 1
+- PR #70 branch was fast-forwarded to exact reviewed fix `aa4d2d425d1d7c432d43c9ecfb8e978a40b80a65`; fresh main overlap = 0 files; PR checks completed successfully/neutral as expected.
+- PR #70 merged by ChatGPT.
+- merge/main SHA: `44121914b035e22380a4ca1bd8252a42713a2bbf`.
+- production mutation/read from H1/C1: 0.
+- **This merge does not apply the Supabase migration, run backfill, enable any guard, alter Auth/Storage/OAuth/Vault, or authorize production rollout.**
+- next: independent H2 pre-production gate `common-account-pr70-preproduction-gate-20261002`, recommended **Sol（極高）**.
 
 ---
 
