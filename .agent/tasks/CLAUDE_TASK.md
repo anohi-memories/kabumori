@@ -46,6 +46,65 @@ User also clarified the delivery policy:
   - personalized layer
 - do not activate consumers in this task.
 
+## K2 directive after 2026-10-01 interim observation
+
+The Interim note below is accepted as new evidence and **changes the emphasis of this TASK**, but does not change its identity or start status.
+
+Accepted observations:
+- shared completed three consecutive natural cycles: 9/30 morning, 9/30 close, 10/1 morning.
+- 10/1 shared morning passed after one content regeneration: `generation_attempts=2`, while transport retry remained 0. This is evidence that local/content guards can repair a bad draft without treating it as an upstream transport failure.
+- legacy delivery is now demonstrably less reliable:
+  - App 9/30 close was not delivered after Fact failure.
+  - X 9/30 close was not posted because close data was unavailable.
+  - X 10/1 morning was not posted after Fact failure.
+  - App 10/1 morning was delivered with a mixed-session date/value error.
+- therefore, do **not** spend this TASK extending the legacy path. The intended product path is shared-v2 -> controlled rollout -> legacy retirement/freeze after verification.
+- consumer gates remain OFF in this TASK.
+
+### Additional v2 requirement — editorial news priority
+
+The shared output must not simply take the first available company disclosure when broader market-relevant material exists.
+
+For X and App 市場全体, editorial priority should favor:
+1. broad market / central-bank / macro / trade-policy / regulation / geopolitical / energy / disaster developments with plausible market-wide relevance,
+2. major sector/systemic developments,
+3. isolated company disclosures only when they are unusually market-relevant.
+
+Do not rank by `coverage_severity` alone. Use only evidence already present in the shared input; no web search or outside knowledge in the consumer.
+
+The personalized / マイポート layer may separately elevate a company-specific item when it is relevant to the user's holdings. That must not change the public shared market story's factual spine.
+
+Add regression coverage using the 10/1 observation: when broad-market policy/geopolitical items and an isolated company impairment/disclosure coexist, the market-wide X/App story must not mechanically promote the isolated company item ahead of all broader-market items unless the scoring/contract can justify it from input evidence.
+
+### Additional v2 requirement — scoped absence claims
+
+Avoid broad statements such as “個別材料がない” when the input contains market news or holding-related news.
+
+Any absence statement must be scoped to the exact missing thing, for example:
+- “この保有銘柄について、確認できる個別ニュースはありません”
+- not “材料がありません” when other relevant material exists.
+
+If deterministic input proves the claimed absence false, classify it as Hard Fact failure. If the evidence is merely sparse/uncertain, use WARN-safe wording instead of blocking delivery.
+
+### Morning direction semantics
+
+Audit how `market_direction` is presented in a morning report. A morning packet can contain:
+- previous Japanese close,
+- overnight US moves,
+- cross-asset conditions.
+
+Do not let a single label such as `mixed` erase those session-specific facts. The reader-facing story should clearly separate “前営業日の東京市場” from “前夜の米国市場” and then state today's watch/setup without inventing a forecast.
+
+### Retry/regeneration observability
+
+Keep these distinct in code/tests/reporting:
+- content generation attempt / regeneration,
+- Fact/local rejection,
+- transport retry (429/5xx/network),
+- scheduled cron retry.
+
+The 10/1 morning example is specifically **content regeneration with transport_retries=0**. Do not report or implement it as a transport retry.
+
 ## Critical regression from 2026-10-01 legacy App screenshot
 
 Observed legacy App morning output mixed different sessions and presented them as one date:
@@ -197,6 +256,7 @@ At minimum:
 - fabricated metric/news/entity not present in input
 - stale value presented as current/fresh
 - user/portfolio data leaking into public X/shared market section
+- a deterministic false absence claim (for example saying no relevant material exists when matching input evidence exists)
 - malformed mandatory structured output
 - dangerous platform-invalid output if it cannot safely be rendered
 
@@ -282,6 +342,14 @@ At minimum:
 - stale optional metric explicitly labelled stale allowed
 - stale metric presented fresh blocked
 
+### Editorial-priority / delivery-policy
+- broad-market material outranks isolated company disclosure in the market-wide story when evidence supports that ordering
+- company-specific material can be elevated in マイポート without rewriting the shared public story
+- deterministic false absence claim is blocked
+- sparse/uncertain evidence uses scoped WARN-safe wording and remains deliverable
+- 10/1-style content regeneration is recorded separately from transport retry
+- morning reader-facing wording keeps previous-Tokyo and overnight-US sessions distinct even when top-level direction is mixed
+
 ### Cross-consumer
 - same report_packet_id/content_hash feeds X and App
 - no second market re-analysis
@@ -338,10 +406,11 @@ PASS candidate only if:
 3. both use one shared fact/evidence spine.
 4. Hard Fact and Quality WARN are separated.
 5. the exact 10/1 mixed-session bug is deterministically blocked in the new path.
-6. unknown/insufficient evidence can still be delivered honestly rather than causing unnecessary suppression.
-7. privacy boundary remains intact.
-8. call budget is bounded/documented.
-9. no production mutation occurred.
+6. market-wide news selection has an explicit, tested priority rule and does not mechanically elevate isolated corporate items over broader market material.
+7. unknown/insufficient evidence can still be delivered honestly rather than causing unnecessary suppression.
+8. privacy boundary remains intact.
+9. call budget is bounded/documented.
+10. no production mutation occurred.
 
 ## Required Report
 
@@ -354,6 +423,10 @@ PASS candidate only if:
 - Hard BLOCK list
 - Quality WARN list
 - exact mixed-session regression result
+- editorial news-priority result, including 10/1-style mixed news fixture
+- absence-claim scope result
+- morning direction/session-presentation result
+- regeneration vs transport-retry observability result
 - X sample output + char count
 - App sample output + char count
 - morning/close sample results
