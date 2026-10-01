@@ -1,3 +1,16 @@
+## Final K2 — PR #71 delivery-first causal guard calibration
+
+- verdict: **PASS / merged**.
+- accepted head: `99e5058e7d3b2ea7695bad157902c68a5d62d06a`.
+- fresh no-race check: no overlap with main changes; PR mergeable.
+- merged -> `9bbafeaf4314f88bf5541ea5b6cf76e0e5c3a20e`.
+- exact 10/1 false reject is fixed in deterministic regression tests.
+- unsupported market causality, fabricated refs, mixed-session/date-value errors, stale/current errors and 1306 mislabel remain Hard.
+- call budget unchanged; source task production mutation=0.
+- Codex review deferred until after live shadow observation because consumer gates remain OFF and current priority is validating delivery reliability with actual model output before spending another review cycle.
+- next G2: controlled market-report-analysis-only deploy/read-back; no gate activation/manual cycle.
+- recommended Claude model: **Sonnet5（高）**.
+
 ## G3 assigned — social-mobile native navigation cleanup
 
 - task_id: `x-social-mobile-native-link-navigation-cleanup-20261001`
