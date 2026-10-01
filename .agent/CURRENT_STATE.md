@@ -1,3 +1,17 @@
+## K2 — 2026-10-01 Presentation v2 close false reject
+
+- verdict: **FAIL for validator calibration; safety containment itself worked**.
+- natural close data completed, but report failed both analysis attempts with `ANALYSIS_LOCAL_CHECK_FAILED`; report packet=0.
+- final rejected sentence: `AI向け半導体需要を背景に半導体輸出も大幅増と報じられました`.
+- production input news actually supports that AI-demand -> semiconductor-export relationship. The sentence describes the news event; it does not claim that this caused the Nikkei/Tokyo market move.
+- current causal Hard guard is therefore over-strict for Presentation v2 news prose.
+- attempt-1 fabricated/mistyped news ref was a valid Hard failure and remains protected.
+- app/x gates remain OFF; observation mutation=0.
+- product decision: delivery reliability outranks over-strict suppression. Hard BLOCK should target objective lies/contradictions; supported news prose and honest uncertainty should remain deliverable.
+- next G2: focused source/test correction `kabumori-shared-report-v2-delivery-first-causal-guard-calibration-20261001`.
+- recommended Claude model: **Opus5.5（高）**.
+- no Codex allocated yet; K2 will decide after seeing the actual delta and adversarial tests.
+
 ## Final K5 — Common Account v1 Phase 1
 
 - verdict: **PASS to focused Codex review; merge/apply/deploy HOLD**.
