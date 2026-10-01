@@ -13,12 +13,12 @@ const read = (path: string) => Deno.readTextFile(new URL(path, repoRoot));
 const BACKGROUND = ["assets/images/home/report_hero_background.webp", 1586, 992, "befc7168c04051a9558c175ee9059d27b00677b0fcd1cd6b7a1ed1fe882fff11"] as const;
 const CHARACTERS: ReadonlyArray<readonly [string, number, number, string]> = [
   ["report_01_very_positive.webp", 1586, 992, "e125f2d2a71dc122ad940ad9939d98adc1a25992e4a426535f334610628adca7"],
-  ["report_02_positive.webp", 1586, 992, "f57d5246d94771660fb8cb6b3d533a103edde193ac989bd2f9a8551b2321ebad"],
+  ["report_02_positive.webp", 1586, 992, "4b152fdbe5586c79549fe071868ae428c1b416e3253c15d2a4987e42672527fa"],
   ["report_03_neutral.webp", 1536, 960, "14f2ab72933a47929f1f1c34a9b2e17c591082d020df3827c8aa6864242f19e3"],
   ["report_04_uncertain.webp", 1586, 992, "f25f942dd053ab9d247c93bf0834e0211f326f05be708c0872537fa1fbc4eab6"],
   ["report_05_caution.webp", 1586, 992, "c291282277b7efb62503d363476c9ca14f7b372febe2ebd4839542b757f199ae"],
   ["report_06_negative.webp", 1586, 992, "5452c3aa3ee426ddc84a7cfbc2b6ca2e4129a61fb2869f8d6626030fe89f5976"],
-  ["report_07_very_negative.webp", 1586, 992, "465fd4d297401bde14930f99ebb1dc3cd8b7ea5f249b818c25c7d9586f40efa9"],
+  ["report_07_very_negative.webp", 1586, 992, "8927eae433315354a7ebb65df7c6e1316201ebf5c38b612c6194085db7d9e024"],
   ["report_08_volatile.webp", 1586, 992, "a6f70662af9fbc907343a381373cf8ed8de53119af2afb70f5e1c9d5b60b0d96"],
 ];
 
