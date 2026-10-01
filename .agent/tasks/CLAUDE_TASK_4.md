@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-publish-toggle-v1-20261002
 - owner: claude
 - slot: claude-4
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: feature implementation / posting-permission boundary / authenticated Edge Function
@@ -839,3 +839,74 @@ Claudeによるproduction mutation 0。実X投稿 0。最終のX認可（接続�
 - app binary/TestFlight was not released by this K4; the merge will be included in the next native build.
 - remaining separate UI follow-up: the accounts screen still has a Link-asChild styling issue identified by G3; not part of the OAuth fix.
 - G4 closed and reusable only after fresh allocation.
+
+
+## Report — x-social-mobile-publish-toggle-v1-20261002 (2026-10-02)
+
+- task_id: x-social-mobile-publish-toggle-v1-20261002
+- result: **PASS（source・自動テスト）／deploy・実機確認は未実施**。PR [#76](https://github.com/anohi-memories/kabumori/pull/76)（未merge、source candidate）。
+- model_used: Sonnet 5.5（TASKの推奨は Opus5.5（高）。セッション内で自分のモデルは切り替えられなかったため、権限境界のレビューは Codex Sol で必ず行うこと）。
+
+### endpoint / architecture
+- 新規 Edge Function `social-mobile-publish-setting`（`logic.ts` 方針／`http.ts` PostgREST依存／`index.ts` 入口）。verify_jwt は ON のまま。POST のみ、`application/json` のみ、本文1KB以内。
+- 本文は厳密に3項目 `{social_account_id, desired_enabled, expected_current_enabled}`。`brand_id` などの余計な項目は無視せず 400。
+- 呼び出し元は Auth `/auth/v1/user` で検証。アカウントの本当の `brand_id` はサーバーが service key で読む。membership は呼び出し元JWT＋anon key（RLS適用）で読む。Vault の参照列は「有無」の真偽値にだけ変換し、返却・ログしない。Vault 平文は読まない。
+- クライアント: `apps/social-mobile/src/app/accounts/[id].tsx` に自動投稿カード（`features/publish-setting/*`、`domain/publish-setting.ts`）。
+
+### exact authorization policy
+- owner / admin のみ（対象アカウントの brand の membership）。viewer / member は 403 `PUBLISH_CONTROL_FORBIDDEN`（OFFも不可）。
+- 未認証 401。アカウント不存在／membership なし／他brand は区別できない同一の 404 `ACCOUNT_NOT_FOUND`（id の存在を漏らさない）。
+
+### enable prerequisites（ON）
+platform=x、brand `is_active`、`publish_mode='live'`、`connection_status='identity_verified'`、`platform_user_id`・`verified_at` あり、Vault参照（access/refresh）あり、`last_connection_error_code` なし、expected一致。接続系の失敗は `reconnect_recommended:true`。これらの接続条件は書き込みのWHEREにも含めており、読み取り後に接続が壊れても ON にならない（brand条件のみ書き込み前の読み取りで確認）。
+
+### disable semantics（OFF）
+owner/admin なら、接続劣化・資格情報欠落・brand無効でも常に可能。OAuth失効、資格情報・投稿・下書き・履歴の削除は一切しない。UI文言も「削除されない」と明記。
+
+### stale / CAS behavior
+- 期待値と実値が違えば 409 `STALE_STATE`（`current_enabled` 付き）。同一状態要求は書き込みなしの 200 `unchanged`。
+- 書き込みは条件付きPATCH1回。0行更新は成功扱いにせず再読込し、不存在→404／状態変化→STALE_STATE／ON時は接続条件不成立→CONNECTION_NOT_VERIFIED／OFF時の原因不明→503。アカウント削除中のガードトリガは 409 `ACCOUNT_BUSY`。二重送信は2回目が STALE_STATE。
+
+### exact mutation boundary
+- 変更するのは `social_accounts.publish_enabled` のみ（`id`・`brand_id`・期待値で絞った条件付き PATCH、ボディは `{publish_enabled}` のみ）。`updated_at` は意図的に変更しない（接続状態のリース用スタンプのため）。
+- 呼ぶ先は Auth user / social_accounts GET / brands GET / brand_memberships GET / social_accounts PATCH の5つだけ（テストで URL を網羅検証）。X API・Vault・RPC・他テーブル・Cron・Auth変更なし。
+
+### changed_files（PR #76、10ファイル）
+- `supabase/functions/social-mobile-publish-setting/{index,logic,http,logic_test,http_test}.ts`
+- `apps/social-mobile/src/domain/publish-setting.ts`
+- `apps/social-mobile/src/features/publish-setting/{use-publish-setting.ts,publish-setting-card.tsx}`
+- `apps/social-mobile/src/app/accounts/[id].tsx`（カード1行追加）
+- `apps/social-mobile/tests/publish-setting.test.mjs`
+
+### tests
+- Edge: `deno test` 37件 pass（logic 24 / http 13）、`deno check` pass。未認証、不存在、membershipなし、viewer/member、owner/admin、cross-brand、ON阻害13パターン、Vault平文なし・レスポンスに秘密なし、劣化時もOFF可、stale、読み取り〜書き込み間の競合、同一状態・二重送信、変更が publish_enabled のみ・他の呼び出しなし、X通信なし、ログに秘密なし、method/content-type/入力検証、エラーコードが有限集合。
+- social-mobile: `npm test` 134件 pass（新規21）、`src/domain/*.test.ts` pass、`tsc --noEmit` pass、`expo lint` exit 0。UI: 状態の正直な表示、ON確認必須、キャンセルで送信なし、OFF文言に削除表現なし、実行中の二重送信なし、成功で再読込、staleで再読込、未接続はON不可（説明表示）、劣化中のONでもOFF可、正確なaccount id、G3ファイルをimportしない。
+- `git diff --check` 問題なし、秘密スキャン問題なし。
+
+### local verification
+- TASK の確認項目 1〜8（ON押下→確認表示／キャンセルで変化なし／確認→再読込でON／ON→OFF／authorization_pending はON不可／staleの安全表示／投稿作成なし／X認証・失効なし）は、実コードのhook・カードをtranspileしたハーネス＋偽Supabaseで再現。
+- **Simulator・実機での確認は未実施**: 関数が未deployで、mockプレビューは仕様上スイッチを出さない（`mock_preview` では ON/OFF ともに不可）ため、起動しても実動作を確認できない。deploy後に、G4専用の使い捨てアカウントでの確認が必要。
+
+### proof G3 consultation files untouched
+PR #76 の変更10ファイルに `consult.tsx`、`content-settings*`、`content-settings-repository.ts`、G3の相談Edge Function/テストは含まれない（`git diff origin/main HEAD --name-only` を consult／content-settings／migrations／.agent で絞って該当なし）。クライアントのコードは `approvalMode`・`consult`・`content-settings` を参照しないことをテストで固定。PR #70・共通アカウント作業にも触れていない。
+
+### 固定項目
+- DB migration = **none**（RLS・grant 変更もなし）
+- production mutation = **0**（deploy・本番トグル・Vault/Auth/Cron変更・DB適用いずれもなし）
+- real X operations = **0**（X投稿・認証・失効なし）
+
+### commit / push / PR
+- branch `g4/social-mobile-publish-toggle-v1-20261002`、commit `a59a89e9`（origin/main 直上の1コミット）、push済み、PR #76 作成済み（CI は作成時点で pending 5・failing 0）。merge・deploy はしていない。
+
+### remaining issues
+1. **ON は brand の `publish_mode='live'` が前提**。多くの一般ワークスペースでは当面 ON できない（UIは理由を安全な文言で表示）。`live` にする運用手順は本TASK外。
+2. brand の `is_active`／`publish_mode` は書き込み前の読み取りで確認（接続条件のみ書き込みWHEREに含む）。わずかな TOCTOU があるが、実行時のパイプラインが brand を再確認するため、誤投稿には直結しない。Codex に判断してほしい点。
+3. クライアントは自分の role を知らない。viewer/member は押した後に 403 の説明が出る（事前に非表示にしていない）。
+4. 実機・Simulator 確認は deploy 後。
+5. モデルは Sonnet 5.5（推奨は Opus5.5（高））。
+
+### safety checks
+上記 mutation boundary のとおり。秘密（JWT・publishable key・service key・Vault参照）はコード・テスト・ログ・レポートに含めていない。`supabase/.temp/` は既存の未追跡で、コミットしていない。
+
+### next recommendation
+K4 で Codex **Sol（高）** による集中レビュー（認可境界、条件付きPATCHの網羅、brand条件のTOCTOU、`publish_mode` の運用前提）を割り当て。Codex 承認後に操作者が deploy（verify_jwt ON、byte確認）し、使い捨てアカウントで実機確認。merge/deploy は Claude の自己レビューだけでは行わない。
