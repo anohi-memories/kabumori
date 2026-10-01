@@ -23,14 +23,15 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - task_id: kabumori-pr67-shared-report-v2-hard-fact-review-20261001
 - start_code: H1
 - finish_code: C1
-- next_owner: chatgpt
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: H1 completed PR #67 source/test review PASS-WITH-FIX; original 5877045, final pushed head d6f9c9a0285920871d0ce86cc4559f9675c0ebb9. Analysis 86, personalized 128, data 42, X shared 8, _shared 329 pass; target check/lint/diff pass. C1 required before merge; no deploy/gate/real X/production mutation. Actual model output, long X posting contract and native story UI remain separate gates. Recommended Luna（中） for C1.
+- allocation: Final C1 PASS-WITH-FIX; PR #67 final head d6f9c9a reviewed and accepted, merged to main 09975d02; production mutation from review=0; H1 is free after fresh allocation.
+
 ## Codex H2
 - owner: codex
 - slot: codex-2
@@ -66,27 +67,18 @@
 - task_id: kabumori-shared-report-v2-rich-presentation-hard-facts-20261001
 - start_code: G2
 - finish_code: K2
-- source: .agent/tasks/CLAUDE_TASK.md
-- allocation: K2 source candidate accepted at PR #67 exact head 5877045f7554cd4e089fb3b79091bf8e2bb38456; independent H1 review required before merge/deploy; consumers remain OFF; H1 recommended Sol（高）
-aude-3
-- next_owner: none
-- status: done
-- task_id: x-social-mobile-e3-delete-revoke-residue-20261001
-- start_code: G3
-- finish_code: K3
-- source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: Final K3 PASS. Disposable social-mobile service deletion E3 completed: X authorization revoked, service-specific workspace/membership/account/credentials/transient OAuth data removed, unexpected residue 0, protected production posting accounts unchanged, real X posts 0. Shared Auth/profile intentionally retained under social_only. No source change; no extra Codex review. Remaining UI release blocker: invisible native Login methods navigation buttons. G3 may be reused only after fresh allocation/competition check.
-
-## Claude G3
+- source: .agent/tas## Claude G2
 - owner: claude
-- slot: claude-3
-- next_owner: claude
+- slot: claude-2
 - status: ready
-- task_id: x-social-mobile-account-deletion-ui-release-finish-20261001
-- start_code: G3
-- finish_code: K3
-- source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: Finish the remaining social-mobile account-deletion UI release blockers only: root-cause/fix invisible native Login methods buttons and add a discoverable Settings account-management entry. Preserve existing deletion backend/scope semantics and feature gate; no common-account/service-entitlement implementation, no G4 overlap, no deploy/destructive operation. Recommended Sonnet5（高）.
+- task_id: kabumori-shared-report-v2-prod-deploy-20261001
+- start_code: G2
+- finish_code: K2
+- next_owner: claude
+- source: .agent/tasks/CLAUDE_TASK.md
+- allocation: deploy/read-back only of merged PR #67 Presentation v2 to production market-report-analysis; app/x gates remain OFF, no manual cycle, no personalized/x-test-post deploy; recommended Sonnet5（高）
+
+ning social-mobile account-deletion UI release blockers only: root-cause/fix invisible native Login methods buttons and add a discoverable Settings account-management entry. Preserve existing deletion backend/scope semantics and feature gate; no common-account/service-entitlement implementation, no G4 overlap, no deploy/destructive operation. Recommended Sonnet5（高）.
 
 ## Claude G4
 - owner: claude
