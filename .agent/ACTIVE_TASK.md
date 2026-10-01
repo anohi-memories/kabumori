@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: common-account-pr70-corrective-rereview-20261001
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: chatgpt
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: PR #70 corrective exact head eebe9405d758e0c120f9e6f1a70cdb1e973a0855 を再レビュー。前回6 blockersのregression、no-Auth-delete責任分離、version/backfill lock、managed checkpoints/Storage probe、exact preflight、rollback、guard/ACLを独立検証。merge/apply/deploy禁止。推薦モデル Sol（高）。
+- allocation: H1 corrective rereview FAIL / CHANGES REQUIRED at unchanged PR #70 head eebe9405d758e0c120f9e6f1a70cdb1e973a0855。前回6 blockersと責任分離は解消確認。新規4 findings: cascade後guardのadmin/foreign blocker消失、ready後checkpoint/Apple要件変更、builtin requirement破損、entitlement所有者移動の旧version未更新。19 lifecycle PASS / 29 mutations detected / 8 social PASS / 10 invariants PASS、7 adverse cases再現。production mutation 0、merge/apply/deploy HOLD。C1待ち、推薦モデル Sol（高）。
 
 ## Codex H2
 - owner: codex

@@ -3,8 +3,8 @@
 - task_id: common-account-pr70-corrective-rereview-20261001
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused rereview / Auth lifecycle / migration security
@@ -187,6 +187,18 @@ production前に別途必要：
 - next recommendation
 
 完了時 status -> review_required / next_owner -> chatgpt / STOP for C1.
+
+## H1 corrective rereview completion — 2026-10-01 JST
+
+- verdict: **FAIL / CHANGES REQUIRED**; reviewed/final PR #70 head `eebe9405d758e0c120f9e6f1a70cdb1e973a0855`, unchanged.
+- architecture correction and all six prior blockers: independently verified resolved. Phase 1 no longer writes destructive Auth/Storage SQL or claims managed deletion completion.
+- new P1: Auth FK cascades can erase late admin/foreign-membership blockers before the common_accounts guard checks them; local trigger instrumentation proves this valid-shape ordering misses the blocker.
+- new P2: ready guard does not revalidate changed required checkpoints/Apple identity; built-in registry names can survive with unsafe requirement mappings; an operator entitlement user_id transfer bumps only the destination version.
+- independent tests: lifecycle 19 PASS markers; mutation 29/29 DETECTED; existing social deletion 8 PASS; migration invariants 10/10 PASS; shell syntax/lint/diff PASS. Seven additional adverse cases reproduced; Storage SELECT-denied/type-mismatch probes fail closed.
+- source/runtime fixes: none. The root delete-boundary/ready-invalidation correction requires lifecycle contract work reserved for G5, not an isolated partial PASS. H1 has not reallocated G5.
+- source merge/apply/backfill/deploy: **HOLD**. No production reads or mutations during this rereview; production_mutation=0; no real X operations.
+- owned fake probe database removed and local cluster stopped; production data untouched. Detailed counterexamples, scope limits and prior-six dispositions appended to `.agent/CODEX_REPORT.md`.
+- next: **C1, 推薦モデル：Sol（高）**; C1 should decide a separate bounded G5 correction. Separate **Sol（極高）** pre-production review, actual disposable Supabase proof and explicit approval remain mandatory. H1 STOP after report synchronization.
 
 ---
 

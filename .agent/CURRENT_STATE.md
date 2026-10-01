@@ -1,3 +1,15 @@
+## H1 completed — PR #70 corrective rereview (2026-10-01 JST)
+
+- task_id: `common-account-pr70-corrective-rereview-20261001`; status `review_required`, next_owner `chatgpt`.
+- verdict: **FAIL / CHANGES REQUIRED** at unchanged exact head `eebe9405d758e0c120f9e6f1a70cdb1e973a0855`. Merge/apply/backfill/deploy HOLD.
+- previous six blockers: all independently verified resolved; additive-only/no managed Auth destruction or false completion responsibility gate PASS.
+- new findings: P1 post-cascade guard can miss late admin/foreign-membership blockers; P2 already-ready operation accepts changed checkpoint/Apple requirements; P2 built-in requirement mapping corruption can skip mandatory checkpoints; P2 owner-side entitlement transfer leaves old account version unchanged.
+- evidence: lifecycle 19 PASS markers, mutation 29/29 DETECTED, existing social deletion 8 PASS, migration invariants 10 PASS, syntax/lint/diff PASS; seven additional fake-DB counterexamples and cascade instrumentation reproduced. Storage SELECT-denied/type-mismatch fail closed.
+- source fix=0; root delete-boundary/ready invalidation is lifecycle-contract correction reserved for G5. No G5 allocation/overwrite by H1.
+- production read/mutation=0 in this rereview; real X operations=0; no claim of current production corruption. Owned fake probe database removed; owned local cluster stopped.
+- detailed report append in `.agent/CODEX_REPORT.md`, prior histories and other slots preserved.
+- next: **C1, 推薦モデル：Sol（高）**. C1 should decide a separate corrective assignment; separate **Sol（極高）** pre-production review plus actual disposable Supabase proof and explicit approval remain required. H1 STOP.
+
 ## Final K2 — PR #71 delivery-first causal guard calibration
 
 - verdict: **PASS / merged**.
