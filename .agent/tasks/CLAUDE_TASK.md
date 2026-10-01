@@ -1,10 +1,188 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-shared-report-v2-prod-deploy-20261001
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Sonnet5（高）
+- purpose: C1 accepted/merged PR #67 Presentation v2 を、consumer gate OFFのまま production `market-report-analysis` のみに controlled deployし、deployed source identity・verify_jwt・cron・consumer settings・他Function非変更を確認する。自然cycle観測は次TASK。
+
+## Accepted source
+
+- PR #67 final reviewed head: `d6f9c9a0285920871d0ce86cc4559f9675c0ebb9`
+- merge/main SHA: `09975d02cc81b1614818951173a94aa8677291a0`
+- H1 verdict: PASS-WITH-FIX, Final C1 accepted.
+- accepted tests:
+  - market-report-analysis 86/86
+  - H1 adversarial 13/13
+  - personalized-reports 128/128
+  - data-packet 42/42
+  - X shared consumer 8/8
+  - _shared 329/329 with --no-check
+  - relevant check/lint/diff PASS
+- consumer gates must stay:
+  - app_enabled=false
+  - x_enabled=false
+
+## Why Sonnet5（高）
+
+Implementation/review is already complete. This task is a narrow production deployment/read-back gate, but it touches a production Edge Function and must verify exact source identity and no collateral mutation.
+
+## Mandatory startup / isolation
+
+1. Read PROJECT_RULES, ORCHESTRATION, CURRENT_STATE, this TASK, Final C1 PR #67.
+2. Use only the dedicated independent G2 checkout/worktree.
+3. Fresh-fetch `origin/main`.
+4. Require `09975d02cc81b1614818951173a94aa8677291a0` to be an ancestor of the deployment HEAD.
+5. Ensure no later main commit changed:
+   - `supabase/functions/market-report-analysis/**`
+   - imported shared files used by this function
+   without separate acceptance.
+6. Confirm no other slot owns `market-report-analysis`.
+7. Never fall back to the shared Developer checkout.
+8. Fail hard on directory mismatch: use `cd <dedicated-g2-path> || exit 1` or equivalent guard.
+
+## Production preflight — read only
+
+Capture:
+- current production `market-report-analysis` version / updated_at / verify_jwt
+- current deployed source/read-back sufficient for rollback identity
+- app_enabled / x_enabled
+- all market-report cron rows/schedules/active/command hash
+- all Edge Function metadata snapshot sufficient to prove only target changes
+
+Require:
+- app_enabled=false
+- x_enabled=false
+- verify_jwt=false remains the accepted target setting
+- no unexpected cron drift
+- no ownership conflict
+
+Re-run from exact fresh-main source before deploy:
+- market-report-analysis full suite
+- presentation_v2 + H1 adversarial
+- deno check on changed runtime target
+- deno lint on changed/new runtime target
+- git diff --check
+
+If production already matches the exact accepted v2 source:
+- do not redeploy
+- report no-op PASS
+
+## Controlled deploy
+
+If production is stale, deploy exactly one function:
+
+`market-report-analysis`
+
+Use explicit project ref `wsmznyzcvmuitkglfeuj` and preserve `verify_jwt=false`.
+
+Do not create/edit/copy a shared `supabase/config.toml` merely for deployment.
+
+Forbidden:
+- broad functions deploy
+- db push
+- DB/schema/RPC/migration
+- cron mutation
+- app_enabled/x_enabled mutation
+- Auth/Vault/secrets
+- X post/API call
+- app notification
+- manual current-cycle invocation
+- `personalized-reports` deploy
+- `x-test-post` deploy
+- legacy generator/VOICE changes
+
+## Post-deploy read-back
+
+Immediately:
+1. record target version / updated_at / verify_jwt
+2. download/read-back deployed runtime source
+3. compare deployment source against exact merged main
+4. prove Presentation v2/H1 fixes are present:
+   - Hard vs WARN split
+   - mixed-session/date-value guard
+   - safe original fallback after quality-rewrite failure
+   - malformed nested output regeneration path
+   - stale/current qualifier guard
+   - scoped absence handling
+   - broad-first model news ordering
+5. re-read app_enabled/x_enabled -> must remain false/false
+6. re-read cron -> unchanged
+7. compare Edge Function metadata -> only target function may change
+
+## Important timing
+
+Current task is **deploy/read-back only**.
+
+Do not wait for or manually trigger the 2026-10-01 close cycle inside this task.
+
+If this deploy completes before today's natural close analysis window, the next K2 will immediately assign a read-only 10/1 close observation task. If it misses that window, the next natural morning/close will be used instead.
+
+## Failure / rollback
+
+If:
+- wrong function/version/source is deployed,
+- verify_jwt changes unexpectedly,
+- cron/gate changes,
+- source read-back differs,
+- another Function changes,
+
+STOP immediately.
+
+Rollback only this Function to the captured pre-deploy exact source if necessary and safe. Report every mutation.
+
+## Completion conditions
+
+PASS only if:
+- exact accepted PR #67 v2 analysis source is in production
+- only `market-report-analysis` changed if deployment was needed
+- verify_jwt=false preserved
+- cron unchanged
+- app_enabled=false / x_enabled=false preserved
+- no manual cycle
+- no DB/Auth/Vault/X mutation
+- rollback source is known
+
+## Required Report
+
+- task_id / result
+- fresh main SHA / worktree
+- production version before/after
+- deployed source identity/read-back
+- tests/check/lint/diff
+- verify_jwt before/after
+- app/x gates before/after
+- cron before/after
+- other-function metadata comparison
+- deploy command/scope
+- production mutations
+- rollback source/status
+- remaining issues
+- recommendation for next natural-cycle observation
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+Pending.
+
+---
+
+# Previous completed G2 task — shared report v2 source
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-shared-report-v2-rich-presentation-hard-facts-20261001
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: codex
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Opus5.5（高）
 - purpose: 共通market-report基盤のFact正本を維持したまま、Xを約500字の読み物、アプリ市場全体をより詳しい長文へ進化させる。同時に「配信停止を増やさず、本当にダメな嘘だけは機械的に止める」Hard Fact / Quality WARN境界を実装する。consumer gateはOFFのまま。
@@ -823,6 +1001,16 @@ Verdict: **PASS to focused review; DO NOT MERGE / DEPLOY YET**.
 - H1 is free and will review PR #67. H2 remains occupied by PR #66 and must not be overwritten.
 - recommended Codex model: **Sol（高）**.
 
+
+
+## Final C1 handoff — PR #67 merged
+
+- H1 verdict: PASS-WITH-FIX.
+- accepted final PR head: `d6f9c9a0285920871d0ce86cc4559f9675c0ebb9`.
+- merge/main SHA: `09975d02cc81b1614818951173a94aa8677291a0`.
+- source v2 is accepted for gated-OFF production rollout.
+- no consumer activation is authorized.
+- next step: deploy only `market-report-analysis`, verify exact source/read-back and leave app/x gates OFF for natural-cycle observation.
 
 ---
 
@@ -3751,5 +3939,6 @@ ChatGPT independently re-read production and accepts the G2 report:
 - production mutation from observation = 0
 
 This is the first natural morning PASS on the accepted v12/v14 shared pipeline. Consumer activation is still not authorized until the same-day close cycle is observed.
+
 
 
