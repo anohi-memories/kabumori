@@ -69,14 +69,14 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: done
-- task_id: x-ai-lab-dev-diary-kabumori-hero-8state-sync-20261002
+- status: ready
+- task_id: x-social-mobile-ai-consult-v1-20261002
 - start_code: G3
 - finish_code: K3
-- next_owner: none
+- next_owner: claude
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: K1 development-diary judgment completed as no-op: 2026-10-02 already has a canonical diary entry and the one-entry-per-day rule is preserved, so no duplicate/future-dated diary content was added. Public-safe Kabumori Hero candidate is preserved in the G3 Report for later reuse. Production mutation 0. G3 free after fresh allocation.
-- recommended_model: Sonnet5（中）
+- allocation: Implement real AI consultation before post generation: authenticated server-side conversational AI, natural chat/questions, current-setting explanation, bounded settings/persona proposals, explicit user confirmation before persistence. Reuse existing content-settings/persona storage and validators; no DB migration, no past-X fetch, no post generation/publish/scheduler/OAuth/common-account changes, no production deploy. Recommended Opus5.5（高）. K3 should normally send the authenticated Edge/API boundary to H2 Sol（高） review before merge.
+
 ## Claude G4
 - owner: claude
 - slot: claude-4
