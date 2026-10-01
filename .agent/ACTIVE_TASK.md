@@ -23,15 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: x-social-mobile-pr65-ephemeral-x-auth-session-review-20261001
+- status: ready
+- task_id: kabumori-pr67-shared-report-v2-hard-fact-review-20261001
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 PASS on PR #65 exact head e5a66f5ba71f64b1a38d8f89faff3d0a31972949. H1 changed tests only; runtime source unchanged. Source/security review accepted. Merge remains on hold solely for safe operator provider-side X account-switch E2E. Production mutation 0. H1 is free after fresh allocation.
-
+- allocation: focused pre-merge review of PR #67 exact head 5877045f7554cd4e089fb3b79091bf8e2bb38456; Hard Fact vs Quality WARN, mixed-session guard, rewrite fallback/call budget, v1 compatibility, X/App privacy and news priority; no merge/deploy/gate/real X; recommended Sol（高）
 ## Codex H2
 - owner: codex
 - slot: codex-2
@@ -59,19 +58,17 @@
 
 ## Claude G2
 - owner: claude
+- slot: cl## Claude G2
+- owner: claude
 - slot: claude-2
-- next_owner: claude
-- status: in_progress
+- next_owner: codex
+- status: review_required
 - task_id: kabumori-shared-report-v2-rich-presentation-hard-facts-20261001
 - start_code: G2
 - finish_code: K2
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: source-only shared report v2/rich presentation + Hard Fact vs Quality WARN boundary; accepted 10/1 interim evidence: shared 3-cycle completion, legacy delivery failures/date bug, content-regeneration success; also implement tested market-wide news priority, scoped absence claims, and morning session-aware wording; X ~500 chars, App richer long-form; consumers remain OFF; recommended Opus5.5（高）
-- snapshot_sync: 2026-10-01 JST; fresh mainのTASKヘッダから索引のみ更新。既存allocationは維持。
-
-## Claude G3
-- owner: claude
-- slot: claude-3
+- allocation: K2 source candidate accepted at PR #67 exact head 5877045f7554cd4e089fb3b79091bf8e2bb38456; independent H1 review required before merge/deploy; consumers remain OFF; H1 recommended Sol（高）
+aude-3
 - next_owner: none
 - status: done
 - task_id: x-social-mobile-e3-delete-revoke-residue-20261001
