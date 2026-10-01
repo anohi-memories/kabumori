@@ -23,26 +23,26 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - task_id: common-account-pr70-readiness-authorization-rereview-20261002
 - start_code: H1
 - finish_code: C1
-- next_owner: chatgpt
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: H1 PASS-WITH-FIX。PR #70 original 47a2ed6 は未変更; final verified candidate aa4d2d425d1d7c432d43c9ecfb8e978a40b80a65 をH1専用branchへ保存。old 6 / latest 7 cases解消、直接common行削除の誤ったlogin_removed観測を局所修正。20 lifecycle PASS / 46 mutations detected / 8 social PASS / 10 invariants PASS。C1が修正取込を判断するまでPR merge HOLD、production mutation 0、apply/deploy禁止。推薦モデル Sol（高）。
+- allocation: Final C1 PASS-WITH-FIX accepted. H1 fix aa4d2d425d1d7c432d43c9ecfb8e978a40b80a65 incorporated into PR #70 and merged as 44121914b035e22380a4ca1bd8252a42713a2bbf. Source accepted; production migration/backfill/deploy NOT authorized. H1 free after fresh allocation.
 
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- next_owner: none
-- status: done
-- task_id: x-ai-lab-pr66-topic-dedup-review-20261001
+- status: ready
+- task_id: common-account-pr70-preproduction-gate-20261002
 - start_code: H2
 - finish_code: C2
-- source: `.agent/tasks/CODEX_TASK_2.md`
-- report: `.agent/CODEX_REPORT_2.md`
-- allocation: Final C2 PASS. PR #66 exact head 4f692e4d805ccd3ee628058bb20ee6c1f62cdd6d accepted as safe to merge after fresh no-race check. No H2 source changes. Production fix still requires separate controlled x-test-post redeploy/read-back; no DB/RPC/migration/Cron/OAuth/Vault change. H2 is free after fresh allocation.
+- next_owner: codex
+- source: .agent/tasks/CODEX_TASK_2.md
+- report: .agent/CODEX_REPORT_2.md
+- allocation: merged common-account Phase 1のproduction適用前独立ゲート。actual disposable Supabase proof、production read-only preflight、migration-history/schema/ACL/FK、backfill dry-run/parityを確認。production mutation/apply/backfill/deploy禁止。推薦モデル Sol（極高）。
 
 ## Claude G1
 - owner: claude
