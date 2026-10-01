@@ -1,3 +1,21 @@
+## Final K2 — PR #71 deploy + first live Presentation v2 morning
+
+- deploy verdict: **PASS**. Production `market-report-analysis` v20 contains accepted PR #71 source; verify_jwt=false; gates OFF/OFF; cron unchanged.
+- first live v2 morning (2026-10-02) also **completed safely** on the scheduled retry:
+  - data packet `eec5aee4-d4b9-4651-9625-6071a1084900`
+  - report packet `7e11eb93-4ba4-4505-a965-8dac89d15158`
+  - Fact passed / local issues empty / one report packet only.
+- factual integrity observed: session dates are separated correctly, 1306 identity preserved, stale JGB dates are explicit, no unsupported Tokyo-market cause asserted.
+- formatted X body is **486 chars**, on target.
+- delivery-first fallback worked: a safe original remained deliverable even after a quality rewrite path did not become the delivered generation.
+- live quality telemetry exposed two calibration issues:
+  1. false company-before-broad warning even though the X paragraph and key_news are broad-first/company-last;
+  2. 846-char complete App story triggers a rewrite solely for being modestly below the 900-char preference.
+- these are quality/cost issues, not Hard Fact issues. Final run used 3 calls / $0.010230.
+- next G2: quality-warning/rewrite calibration only. Hard guards and PR #71 causal semantics are frozen.
+- recommended Claude model: **Sonnet5（高）**.
+- no Codex review allocated for this narrow quality-only task.
+
 ## G4 assigned — social-mobile automatic publishing toggle v1
 
 - task_id: `x-social-mobile-publish-toggle-v1-20261002`
