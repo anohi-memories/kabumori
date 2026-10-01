@@ -2971,3 +2971,16 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - candidate text is preserved in the current G3 Report for possible later reuse.
 - source/runtime diary files unchanged; production mutation 0.
 
+## Final K1 — Home Hero 02/07 alignment + position follow-up — 2026-10-02
+- verdict: **PASS / MERGED / G1 CLOSED**.
+- PR #74 accepted exact head `ae9001b472d74a2892f0d572c538ab67b5992d6b`, squash merge `9b37c350a3b9d1a936d0e03ddc281e315aba50f2`.
+- PR #75 accepted exact head `eeb294c3ea8bb39417c46ba29436abb8c2cee091`, squash merge `02ba0e2d728833fb76b74237cc3c237130bcdbf1`.
+- final main after source merges: `02ba0e2d728833fb76b74237cc3c237130bcdbf1` (later .agent-only closure commits follow).
+- final Hero uses one global 6pt lift for every state, CTA height 28pt / bottom inset 6pt, with no per-state app offset.
+- final 02/07 aligned assets are live on main; pinned sha256: 02 `4b152fdbe5586c79549fe071868ae428c1b416e3253c15d2a4987e42672527fa`, 07 `8927eae433315354a7ebb65df7c6e1316201ebf5c38b612c6194085db7d9e024`.
+- reported app tests: 255/255 PASS. Netlify PASS for both; PR #75 Vercel PASS. PR #74 Vercel failure was rate-limit-only and is not a native Kabumori merge gate.
+- EAS build 0; backend / DB / RPC / Edge Function / Auth / X / production mutation 0.
+- Codex review: not required for this low-risk UI/asset-only follow-up.
+- AI Lab diary: 記録不要 — 2026-10-02 canonical diary entry already exists for another real task; duplicate same-day or future-dated entry was not created.
+- G1 is free after fresh allocation.
+
