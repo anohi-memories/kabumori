@@ -3,8 +3,8 @@
 - task_id: kabumori-shared-report-v2-delivery-first-causal-guard-calibration-20261001
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Opus5.5（高）
 - purpose: Presentation v2 の Hard Fact guard を「嘘だけ止める」方向へ再較正し、ニュース本文に根拠がある因果表現を誤ってHard BLOCKして日次配信を落とさないようにする。2026-10-01大引けの実失敗を回帰fixtureにする。source + tests + PRのみ。deploy/gate変更は禁止。
@@ -283,7 +283,198 @@ When complete:
 
 ## Report
 
-Pending.
+### Report — kabumori-shared-report-v2-delivery-first-causal-guard-calibration-20261001
+
+- task_id：`kabumori-shared-report-v2-delivery-first-causal-guard-calibration-20261001`
+- result：**source-readyのPASS候補**。PR #71（未merge、deployなし）。
+  - 10/1大引けで2回とも落ちた文は、合格するようになった。
+  - 根拠の無い市場の理由、refの書き間違い、日付・数値・古い値・1306の検査は、不合格のまま。
+  - 実際のモデルでの生成は確認していない（決定的なテストだけ）。
+- fresh main SHA：着手時 `56084d2`。作業branchは `216f749`（in_progressの記録commit）の上。
+- worktree/branch：G2専用checkout `/Users/yuya/Developer/kabumori-g2-market-report-reliability`、branch `g2-causal-guard-calibration-20261001`。
+- 所有の確認：PR #67のmerge後に、`market-report-analysis/**` を変更したcommitは無い。open PR（#70、#65、#41、#33ほか）は、このdirectoryを扱っていない。
+
+#### exact root cause
+
+- `unsupportedCausalSentences`（PR #57。PR #67で対象を拡大）は、因果表現（「〜を背景に」「〜を受けて」など）を含む文を、**文の内容に関係なく**、`causal` 型のclaimが引用するニュースだけで裏付けていた。
+- 一方、promptは `causal` を「値動きの理由をニュースが明記している場合」と定義している。ニュース自身の原因と結果（韓国の輸出が増えた理由）は、市場の値動きの理由ではない。そのためモデルは `observation` で引用するか、claimにしない。その結果、裏付けが空になり、Hardになった。
+- PR #67で、検査の対象に `x_post.news_ja` と `app_story.news_ja` が入った。ニュースの段落は、ニュース本文の因果をそのまま伝える場所なので、この誤検出が出るようになった。
+- 手元の再現（本番と同じ入力）：
+  - 同じ文は、`causal` のclaim＋正しいrefのときだけ合格だった。
+  - `observation` のclaim、claimなし、refの書き間違いでは、不合格だった。
+- 同じ仕組みに、**逆方向の穴**もあった。輸出のニュースを `causal` で引用すると、「AI向け半導体需要を背景に東京市場も上昇しました」が合格していた（修正前のコードで、テストにより確認）。
+  - `causal` 型のclaimがあれば、原因の語がニュースにあるかだけを見ており、ニュースが市場の話かどうかは見ていなかった。
+
+#### exact code change（`analysis_logic.ts` の `unsupportedCausalSentences`）
+
+因果表現ごとに、結果の側（表現の後ろ）で2つに分ける。
+
+- **A. 市場・指数・指標の値動きの理由**（`isMarketEffect`）
+  - 対象：
+    - 結果の側が、市場の指標や市場を指す語を含む場合（日経平均、東京市場、米国株、ドル円、原油の指標など。`hard_fact_guards.ts` の別名表を使う）。または「株式市場」「日本株」などを含む場合。
+    - 結果の側が、主語の無い値動き（「〜を背景に上昇しました」）の場合。
+    - 文の主語が市場・指標の場合（「日経平均は〜を受けて上昇」）。
+  - 判定：これまで通り、`causal` 型（打ち消しなし）のclaimが引用するニュースが、原因を同じ向きで述べていること（PR #57の、向きを保つ照合のまま）。
+  - **追加**：そのニュースが市場の話であること（`NEWS_ABOUT_MARKET`）。
+- **B. ニュースの中身の言い換え**（上記以外。`newsStatesRelation`）
+  - claimの型は問わない。入力のニュース1件の**1文**について、次をすべて満たすこと。
+    1. その文が、自分の因果の表現（「を背景に」「を受け」「により」「ため」「ことから」「を理由に」「が響」など）で、原因と結果を結んでいる。
+    2. 書かれた原因の各部分が、その文の**原因側**と重なる（ひらがなと記号を除いた内容語の、2文字組の重なりが0.6以上）。「AとB」は、それぞれが満たす必要がある。
+    3. 書かれた結果が、そのニュースの本文と重なる（0.5以上）。
+    4. 原因・結果とも、増減・高安の向きが、ニュースと逆でない。「高・安」は、株・円・金利などの価格の語に付く場合だけ向きとして読む（「不安」「最高」は向きではない）。
+  - ニュースに無い形の特例は2つだけ：
+    - 「〜などが響きました」のように、結果が同じ文に無い場合：ニュース側も同じ形のときだけ合格。
+    - 「さまざまな要因で」のように、原因が名詞でない場合：文全体がニュースの文と0.8以上重なるときだけ合格。
+- 補助：`hard_fact_guards.ts` に `mentionsMarketMetric` を追加（既存の別名表の公開だけ）。
+- promptに1行追加：
+  - ニュース本文の原因と結果は、本文の言い方に沿って書いてよい。
+  - 本文に因果の表現が無いニュースには、因果の表現を足さない。
+  - ニュースの中の原因を、市場・指数の値動きの理由にしない。
+- 変えていないもの：refの検査（入力に無いrefはHard）、ほかのHard検査、HardとWARNの分類、生成の流れ、Factの指示、packetの契約、handler、transport retry。
+
+#### why it does not over-permit market causality
+
+- 結果の側が市場・指標であれば、必ずAの厳しい判定になる。Bには入らない。「ニュースの原因 → 東京市場の値動き」は、Bで救済されない。
+- 主語の無い値動き（「〜を背景に上昇しました」）も、市場として扱う。主語が日付だけの場合も同じ。
+- Aは、修正前より**厳しくなった**（引用したニュースが市場の話であることを追加）。輸出のニュースを `causal` で引用しても、東京市場・米国株の理由にはできない。
+- Bは、次のすべてを同じニュースの同じ文で照合する：原因の語、因果の表現、結果の話題、向き。
+  - ニュースのrefがあるだけ、ニュースが入力にあるだけでは、合格にしない。
+  - 無関係の原因（「中東情勢の緊迫を背景に半導体輸出も…」「円安を背景に…」）は、不合格。
+  - 原因Aに、ニュースに無い原因Bを足した文（「AI向け半導体需要と円安を背景に…」）は、不合格。
+  - 無関係の結果（「…を背景に原油価格も上昇」「雇用も拡大」）は、不合格。
+  - 増減の反転（「大幅減」「需要の縮小を背景に」）は、不合格。
+  - 原因と結果の入れ替え（「半導体輸出の増加を背景にAI向け半導体需要が拡大」）は、不合格。
+- PR #57のK2の条件（有効な原因Aが無関係のBを許さない、向きを保つ、言い換えは決め打ち）は、Aの判定にそのまま残っている。既存の `content_guard_test.ts` 16件と `h1_adversarial_test.ts` 13件は、変更なしで合格。
+
+#### 10/1 positive regression result
+
+- fixture：本番の2026-10-01大引けの入力（data packet `7b61dd7d…` と参照ニュース30件。公開情報だけ）。
+- 「AI向け半導体需要を背景に半導体輸出も大幅増と報じられました」は、次のすべてで**合格**：
+  - `observation` のclaim
+  - Xのニュース段落
+  - アプリのニュース欄
+  - key_newsだけで引用した場合
+  - claimもkey_newsも無い場合（16:35の形）
+- 言い換えも合格：
+  - 「AI半導体の需要拡大を背景に半導体輸出が大きく増えたと報じられました」
+  - 「韓国の輸出統計では、AI向け半導体需要を背景に半導体輸出も大幅増となりました」
+  - ほか2文
+- 「東京市場の上昇理由は、確認できる材料だけでは断定できません」は合格。
+- 生成の流れの再現：
+  - 16:35の形の下書きは、1回目の生成でFactに進み、配信される（calls 2、`hard_rejections=[]`）。
+  - 16:20の形（refの書き間違い）は、1回作り直して配信される（calls 3）。2回とも書き間違えた場合は、fail closed。
+- サンプル出力（10/1大引けの実入力、手書きの生成文）：X **494字**・絵文字6個、アプリの読み物 974字（事実の行を含めて1,898字）、Hardの指摘なし・WARNなし。
+
+    【大引け】きょうの日本株まとめ🌙
+    10月1日の東京市場は、日経平均が+3.30%と大きく上昇しました📈
+
+    📌 今日の3ポイント
+    ・日経平均は68,956.72（前日比+3.30%）
+    ・TOPIX連動ETF（1306）は434.4円（前日比+0.67%）
+    ・9月30日の米国はNYダウ−0.86%、ナスダック総合+0.24%
+
+    10月1日の東京市場は日経平均の上げ幅が大きく、TOPIX連動ETF（1306）も上昇しました。9月30日の米国市場はNYダウとS&P500が下落し、ナスダック総合は上昇と方向が分かれています。東京市場の上昇理由は、確認できる材料だけでは断定できません。
+
+    📰 韓国の9月輸出は過去最高で、AI向け半導体需要を背景に半導体輸出も大幅増と報じられました。米国ではトランプ大統領がAI企業と安全対策の自主協定を発表しています。
+
+    👀 明日以降の注目点
+    米国株の方向がそろうか、ドル円が157.00円近辺から動くか、AI関連の政策の続報が出るかを見ていきます。
+
+    💬 今日のひとこと
+    大きく上げた日ほど、指数ごとの上げ幅の違いと材料を分けて見ておくと整理しやすいです。
+
+#### negative / adversarial results（すべてHardのまま）
+
+- 東京市場の理由への転用（claimなし、observation、`causal` のclaimありの3通りすべてで不合格）：
+  - 「AI向け半導体需要を背景に東京市場も上昇しました」
+  - 「…日経平均も大きく上昇しました」
+  - 「…日本株も買われました」
+  - 「…上昇しました」（主語なし）
+  - 見出しに書いた場合も不合格。
+- 無関係の市場の理由：「韓国の輸出増加を受けて日経平均は上昇」「AI向け半導体需要を背景に米国株も上昇」「米国株高を受けて東京市場は上昇」。
+- 無関係の原因・結果、増減の反転、原因と結果の入れ替え、原因の追加（上の節のとおり）。
+- refの書き間違い（`…efddb404b0b1`）：`入力に無い ref`。`causal` 型なら `ニュースの根拠が無い causal` も出る。key_newsの存在しないrefは `入力に無いニュース`。
+- 10/1の別日の値の混同（「9月30日は日経平均65,481.27（-0.60%）、1306は431.5（+1.43%）」）：`日付と指標の不一致`。
+- 古い値を日付なし・「現在の」で書く：不合格。1306→TOPIX：不合格。
+- 実ニュースの形での確認（本番のニュース文を入力に加えたもの）：向きを変えた文、原因を足した文、東京市場への転用は、不合格。
+
+#### 誤検出の確認（実データ）
+
+- 本番でFactに合格した共通packet 8件（実際のニュース入力つき）：因果の検査の指摘は **0件**。
+- 本番のニュースのうち、因果の表現を含む文22件（2026-09-01以降、17件のニュース）を、そのまま引用した場合：
+  - **21件が合格**。
+  - 1件（「ブレント原油は、…激化を受けて…上昇し」）は、指標の値動きの理由なので、設計どおり `causal` のclaimが必要（claimがあれば合格）。
+  - 較正の途中では3件が不合格だった（「不安」の「安」を下落と読む誤り、複数の原因で向きが違う文、結果が別の文にある文）。直したうえで、テストに固定した。
+
+#### full test/check/lint/diff results
+
+- market-report-analysis：**104/104**
+  - causal_calibration 18（新規）、presentation_v2 22、h1_adversarial 13、content_guard 16、transport_retry 14、ほか
+- personalized-reports：128/128（共有helperは変更していない。回帰として実行）
+- x-test-post shared consumer：8/8
+- market-report-data-packet：42/42
+- `_shared`：361/361（`--no-check`）
+- 修正前のコードでの新規テスト：最初の13件のうち8件がFAILED（誤検出と、通ってしまう市場の理由の両方）。
+- `deno check`（runtimeの9ファイル＋新規テスト）：PASS
+- `deno lint`（変更・新規の4ファイル）：問題なし
+- `git diff --check`：PASS
+
+#### changed_files（PR #71、7ファイル）
+
+- `supabase/functions/market-report-analysis/analysis_logic.ts`（因果の検査、promptの1行）
+- `supabase/functions/market-report-analysis/hard_fact_guards.ts`（`mentionsMarketMetric` の公開だけ）
+- `supabase/functions/market-report-analysis/causal_calibration_test.ts`（新規）
+- `supabase/functions/market-report-analysis/test_support.ts`（10/1大引けのサンプルを追加）
+- `supabase/functions/market-report-analysis/fixtures/close_2026-10-01_data_packet.json`（新規）
+- `supabase/functions/market-report-analysis/fixtures/close_2026-10-01_news_rows.json`（新規）
+- `docs/market-report-shared-platform/DESIGN.md`（§15.2.1 を追記）
+
+#### PR / head SHA
+
+- PR：https://github.com/anohi-memories/kabumori/pull/71
+- head：`99e5058e7d3b2ea7695bad157902c68a5d62d06a`
+- mergeable：MERGEABLE
+- CI：Netlifyのpreviewはsuccess。**Vercelはfailure**（デプロイ回数の上限によるもの。CURRENT_STATEの方針どおり、ブロッカーにしない）。CIにDenoのテストは無い（localで実行）。
+
+#### model-call budget before/after
+
+- **変更なし**。`MAX_GENERATIONS=2`、Factは最大2回、質の書き直しは最大1回で、その中に含まれる。
+- 追加の呼び出しは無い（検査はコードだけ）。promptは1行（約250字）増えた。
+- 10/1の形では、作り直しが減る方向。2回の生成が両方落ちる（calls 2、Fact 0）状態から、1回目でFactへ進む（calls 2で完成）状態になる。
+
+#### production mutation
+
+- **0**。行ったのは、read-onlyのSELECT（10/1大引けの入力、過去のpacketとニュース）と、手元での再現だけ。deploy、手動のinvoke、gate・cron・DBの変更はしていない。
+
+#### remaining issues
+
+1. **実際のモデルでは未確認**。完成率は、deploy後の自然なcycleで確かめる。
+2. Bの照合は、内容語の重なりによる近似。
+   - ニュース本文と語彙がほとんど重ならない言い換えは、不合格になりうる（安全側の誤り。作り直しで、指摘文に引用される）。
+   - 重なりが大きく、意味が違う文（増減以外の違い）は、通りうる。これはLLMのFactが最後の検査になる。
+3. 指標の値動きの理由（例：「ブレント原油は…を受けて上昇」）は、ニュースがそう書いていても、`causal` 型のclaimが必要（Aの厳しさを保つため、今回は変えていない）。
+   - モデルが `observation` で書くと不合格になる。promptは、この場合 `causal` を使うよう定めている。
+   - 頻度は、自然なcycleで見る。
+4. **refの短い別名（`news:1..15`）は実装していない**。評価：
+   - 利点：UUIDを写す誤りがなくなる。
+   - 懸念：
+     - 短い番号は、書き間違えても**別の有効なニュースを指してしまう**。今は、書き間違いが必ず「入力に無いref」として検出される。
+     - モデル入力・Factの入力・保存するpacketの3か所で、別名と本物のIDの対応を保つ必要があり、証拠の扱いが変わる。
+   - 今回の原因ではないため、別TASKでの検討を推奨する。
+   - 当面は、書き間違いは作り直しで直る前提。10/1の16:20は、因果の誤検出と重なって落ちた。
+5. attempt 1のdiagnosticsがattempt 2で上書きされる点、失敗した下書きの本文が残らない点は、変わらない。
+6. アプリの個人層（`personalized-reports`）の因果の扱いは、別の実装で、今回は対象外。
+
+#### recommendation: merge directly vs Codex review
+
+- **判断はK2に委ねる**。材料：
+  - 差分は `unsupportedCausalSentences` とpromptの1行に限られる。共有のhelper、packetの契約、ほかのFunction、呼び出し回数は変えていない。
+  - 市場の理由（A）は、緩めていない。1点、厳しくした。
+  - ただし、ニュースの言い換え（B）は、**新しい許可の経路**（claimの型を問わず、ニュース本文との重なりで合格にする）。「因果の許可を広げる」変更に当たる。
+- G2の推奨：
+  - 明朝（10/2 07:55）の朝刊に間に合わせることを優先するなら、K2の確認だけでmergeし、`market-report-analysis` を単独deploy（gate OFF）して、自然なcycleで観察する。gateがOFFの間は、誤りがあっても利用者には出ない。
+  - consumerの有効化の前に行うfocused reviewで、このBの経路（重なりのしきい値と特例2つ）をCodexに見てもらう。
+- deployは別TASK（本TASKでは禁止）。deployする場合は、これまでと同じ手順で行う（専用checkout、単一Function、byte照合、gate・cron・ほかのFunctionの前後比較）。
 
 ---
 
