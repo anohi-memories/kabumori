@@ -1,3 +1,12 @@
+## H2 assigned — PR #66 AI Lab topic dedup review
+
+- task: `x-ai-lab-pr66-topic-dedup-review-20261001`
+- target: PR #66 exact head `4f692e4d805ccd3ee628058bb20ee6c1f62cdd6d`
+- PR is open and GitHub reports mergeable=true. Current Netlify/Vercel preview checks are successful/neutral; no failing candidate check was found.
+- review focus: topic rotation/cooldown correctness, bounded regenerate-and-reject behavior, read-only schedule count semantics, and AI-Lab-only isolation.
+- rationale: 7 files / ~943 additions change production posting-content behavior, so one focused review is warranted; no Auth/DB/security boundary change, therefore Luna（高） rather than Sol.
+- no merge/deploy authorized by assignment. production mutation 0.
+
 ## Final K3 PASS — social-mobile deletion / X revoke E3
 
 - verdict: **PASS**.
