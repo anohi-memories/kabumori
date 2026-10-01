@@ -3,8 +3,8 @@
 - task_id: kabumori-shared-report-v2-causal-calibration-prod-deploy-20261001
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sonnet5（高）
 - purpose: merged PR #71 causal-guard calibration を production `market-report-analysis` のみに controlled deployし、consumer gates OFFのまま exact source/read-back と非影響を確認する。明朝10/2の自然朝刊が最初のlive-model検証になる。
@@ -172,7 +172,98 @@ Then:
 
 ## Report
 
-Pending.
+### Report — kabumori-shared-report-v2-causal-calibration-prod-deploy-20261001
+
+- task_id：`kabumori-shared-report-v2-causal-calibration-prod-deploy-20261001`
+- result：**PASS**。PR #71（merge `9bbafea`）の `market-report-analysis` を、単一のFunctionとして本番へdeployした。read-backは一致し、gateはOFF/OFFのまま、cronとほかの19 Functionは変わっていない。手動のcycle実行はしていない。
+- fresh main SHA：`6418e33238a3878aea2c8d28eba7c0cf3dc9d1de`
+  - `9bbafeaf4314f88bf5541ea5b6cf76e0e5c3a20e` を含む。
+  - merge後に、`market-report-analysis/**` と、このFunctionが読み込む共有ファイルを変更したcommitは無い。PR #71の最終head `99e5058` とのsource差分も無い。
+- worktree：G2専用checkout `/Users/yuya/Developer/kabumori-g2-market-report-reliability`（detached `6418e33`）。
+  - 共有checkoutではdeployもconfigの編集もしていない（DBのread-onlyなSELECTだけ）。
+  - `supabase/config.toml` は存在しない。
+- 所有の確認：ほかのslot（G1 review_required＝ホーム画面、G3 in_progress＝social-mobileのnavigation、G4・G5・H2 done、H1 review_required＝PR #70）に、`market-report-analysis` を扱うものは無い。
+
+#### production version before/after
+
+- 変更前：一覧の表示 `version 19`、updated_at 2026-10-01 14:21:13 JST、ezbr `b856cd48d3ca…`（PR #67のv2。G2の10/1のdeployのまま）
+- 変更後：`version 20`、updated_at **2026-10-02 00:02:09 JST**、ezbr `4250b5ceb848…`
+
+#### source identity / read-back
+
+- **deploy前**：`--use-api` でdownloadした11ファイルは、PR #67のmerge（`09975d0`）と**11/11で一致**。最新mainとの差分は2ファイルだけ（`analysis_logic.ts`、`hard_fact_guards.ts`）。古い版なので、deployが必要と判断した（no-opではない）。
+- **deploy後**：downloadした**11ファイルが、最新main（`6418e33`）と11/11で一致**。merge時点（`9bbafea`）とも11/11で一致。
+- PR #71の挙動が本番のsourceにあることを確認した：
+  - **ニュース内の因果の裏付け**：`newsStatesRelation`、`topicCoverage`、`CAUSE_COVERAGE`
+  - **市場の値動きの厳しい分岐**：`isMarketEffect`、`NEWS_ABOUT_MARKET`、`mentionsMarketMetric`
+  - **promptの追加行**：「本文に因果の表現が無いニュースには…足しません」
+  - **refの検査は変更なし**：`入力に無い ref`、`ニュースの根拠が無い causal`
+  - **日付・数値・古い値・1306の検査は変更なし**：`日付と指標の不一致`、`指標と数値の不一致`、`古い値を日付なしで記載`、`CURRENT_STALE_PREFIX`、`TOPIX連動ETF（1306）をTOPIXと表記`
+  - **呼び出しの上限は変更なし**：`MAX_GENERATIONS = 2`
+
+#### tests/check/lint/diff（最新main、deploy前）
+
+- market-report-analysis：**104/104**
+  - うち causal_calibration 18/18、presentation_v2 22/22、h1_adversarial 13/13
+- `deno check`（runtimeの10ファイル）：PASS
+- `deno lint`（同10ファイル）：問題なし
+- `git diff --check`：PASS
+
+#### 設定の前後比較
+
+- verify_jwt：false → **false**
+- app_enabled / x_enabled：false / false → **false / false**（settingsの行のupdated_atは2026-09-17のまま）
+- cron：変更なし。deploy前後のsnapshot（8件のjobname、schedule、active、commandのmd5）が**完全に一致**。10/1の記録とも同じ値。
+- cycleの状態：deploy前後とも同じ（10/1朝刊 completed、10/1大引け failed）。deployはcycleを変えていない。
+
+#### all-function metadata comparison
+
+- 全20 Functionについて、slug、version、updated_at、verify_jwt、ezbrを比較した（deploy前の記録は00:01:27 JST）。
+- **変わったのは `market-report-analysis` の1行だけ**。ほかの19 Functionは完全に一致した。同時刻の、ほかのFunctionの変更は無い。
+- 補足：一覧の版番号は、10/1の記録から全Functionで進んでいる（analysis 17→19、data-packet 14→16、personalized-reports 36→38、x-test-post 131→133）。いずれもupdated_atとezbrは変わっておらず、本TASKより前の、プロジェクト全体の設定変更による番号の更新とみられる（本TASKの前後比較には含まれない）。
+
+#### deploy command/scope
+
+- 実行したcommand：
+  ```
+  supabase functions deploy market-report-analysis --workdir /Users/yuya/Developer/kabumori-g2-market-report-reliability --project-ref wsmznyzcvmuitkglfeuj --no-verify-jwt --use-api
+  ```
+  - 実行前に次を確認し、どれかが違えば止める形にした：toplevelの一致、HEADの一致、`9bbafea` を含むこと、作業ツリーがclean、config.tomlが無いこと。
+- 範囲：`market-report-analysis` の1 Functionだけ。
+  - していないこと：broad deploy、`personalized-reports` と `x-test-post` のdeploy、DB・schema・RPC・migration、cron、gate、Auth・Vault・secret、X、アプリ通知、手動のcycle実行・retry。
+
+#### production mutations
+
+- **1件だけ**：2026-10-02 00:02 JST の `market-report-analysis` のdeploy。
+- それ以外は0件。確認は、read-onlyのSELECTと、sourceのdownload・一覧だけで行った。
+
+#### rollback source/status
+
+- rollbackはしていない（不要）。
+- deploy前の本番sourceは、scratchpad `mra-pre-pr71` に保存済み（11ファイル、PR #67のmerge `09975d0` とbyte一致）。必要なら、`09975d0` のsourceでこのFunctionだけを戻せる。
+
+#### remaining issues
+
+1. **実際のモデルでのv2の完成は、まだ0件**。較正後の最初の確認は、10/2の朝刊になる。
+2. ニュースの言い換えの照合は、内容語の重なりによる近似。ニュースと語彙が重ならない言い換えは、不合格になりうる（作り直しの対象）。
+3. 指標の値動きの理由は、ニュースがそう書いていても、`causal` 型のclaimが必要（厳しい側のまま）。
+4. refの書き間違いは、これまで通りHard。短い別名は未実装（別TASKの候補）。
+5. `personalized-reports` は未deploy。アプリ側の `market_detail.story` と概況の「材料なし」検査は、本番に無い。アプリ画面の `story` の表示も未実装。
+6. OpenAIの残高は手動チャージ（`insufficient_quota` の429はretryしない）。
+
+#### recommendation for 10/2 morning natural observation
+
+- 自然な朝刊：data 07:50 → analysis 07:55 → retry 08:05 JST。**08:10 JST以降**に、read-onlyで観察する。
+- 観察する項目：
+  - cycle_status、report_status、attempt、last_error、packetの重複
+  - `presentation_version`、`x_post` のv2項目、`app_story`、`session_views`、`key_news[].scope`、`fact.quality_warnings`
+  - diagnostics：`generation_attempts`、`content_regenerations`、`hard_rejections`、`quality_rewrite`、`quality_rewrite_request_failed`、`delivered_generation`、`quality_warnings`、`transport_*`
+  - 整形したXの文字数、アプリのストーリーの文字数（localで整形して測る）
+  - 朝刊の書き方：東京市場（前営業日）と米国市場（前夜）を分けているか、日付と値の対応
+  - 費用（calls、tokens、cost）
+  - 失敗した場合は、指摘文（引用付き）から、どの検査で落ちたかを分類する。特に、因果（市場側・ニュース側）と、refの書き間違い。
+- 朝刊の入力には、前回の引け以降のニュースが入る。10/1大引けと同じ、韓国の輸出のニュースが含まれる可能性があり、較正の効果を直接確認できる。
+- **本PASSは、consumerの有効化を承認するものではない。**
 
 ---
 
