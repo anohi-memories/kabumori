@@ -1,5 +1,5 @@
-import { Link } from 'expo-router';
-import { ScrollView, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { mockRepository } from '@/data/mock-repository';
 import { colors } from '@/constants/theme';
 import { Card, EmptyState, Pill, Screen, SectionTitle, styles } from '@/components/ui';
@@ -11,6 +11,7 @@ import { useDataStatus } from '@/providers/data-provider';
 const statusLabels: Record<PostStatus, { label: string; tone: 'neutral' | 'success' | 'warning' | 'danger' }> = { draft: { label: '下書き', tone: 'neutral' }, scheduled: { label: '投稿待ち', tone: 'warning' }, publishing: { label: '投稿中', tone: 'warning' }, published: { label: '投稿成功', tone: 'success' }, failed: { label: '失敗', tone: 'danger' } };
 
 export default function HistoryScreen() {
+  const router = useRouter();
   const { activeAccount } = useActiveAccount();
   const { status, reason, snapshot } = useDataStatus();
   const mockHistory = mockRepository.getHistory().filter((post) => post.accountId === activeAccount?.id);
@@ -35,7 +36,7 @@ export default function HistoryScreen() {
             .map((post) => {
               const status = statusLabels[post.status];
               return (
-                <Link key={post.id} href={{ pathname: '/posts/[id]', params: { id: post.id } }} asChild>
+                <Pressable key={post.id} accessibilityRole="button" onPress={() => router.push({ pathname: '/posts/[id]', params: { id: post.id } })} style={({ pressed }) => pressed && styles.buttonPressed}>
                   <Card>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                       <Text style={{ color: colors.ink, fontWeight: '700' }}>
@@ -46,7 +47,7 @@ export default function HistoryScreen() {
                     <Text style={{ color: colors.ink }}>{post.text || '（本文は投稿の確認画面で表示されます）'}</Text>
                     {post.status === 'failed' ? <Text style={styles.muted}>接続を確認して、必要なら内容を見直してください。</Text> : null}
                   </Card>
-                </Link>
+                </Pressable>
               );
             })
         ) : (

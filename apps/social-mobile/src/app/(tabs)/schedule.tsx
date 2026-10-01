@@ -1,5 +1,5 @@
-import { Link } from 'expo-router';
-import { ScrollView, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { mockRepository } from '@/data/mock-repository';
 import { colors } from '@/constants/theme';
 import { Card, EmptyState, Pill, Screen, SectionTitle, styles } from '@/components/ui';
@@ -12,6 +12,7 @@ const originLabels: Record<PostOrigin, string> = { ai_generated: 'AI生成', use
 const statusLabels: Record<PostStatus, { label: string; tone: 'neutral' | 'success' | 'warning' | 'danger' }> = { draft: { label: '下書き', tone: 'neutral' }, scheduled: { label: '投稿待ち', tone: 'warning' }, publishing: { label: '投稿中', tone: 'warning' }, published: { label: '投稿済み', tone: 'success' }, failed: { label: '失敗', tone: 'danger' } };
 
 export default function ScheduleScreen() {
+  const router = useRouter();
   const { activeAccount } = useActiveAccount();
   const { status, reason, snapshot } = useDataStatus();
   const mockPosts = mockRepository.getPlannedPosts().filter((post) => post.accountId === activeAccount?.id);
@@ -31,7 +32,7 @@ export default function ScheduleScreen() {
             .map((post) => {
               const status = statusLabels[post.status];
               return (
-                <Link key={post.id} href={{ pathname: '/posts/[id]', params: { id: post.id } }} asChild>
+                <Pressable key={post.id} accessibilityRole="button" onPress={() => router.push({ pathname: '/posts/[id]', params: { id: post.id } })} style={({ pressed }) => pressed && styles.buttonPressed}>
                   <Card>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                       <Text style={{ color: colors.ink, fontWeight: '800' }}>
@@ -42,7 +43,7 @@ export default function ScheduleScreen() {
                     <Text style={{ color: colors.ink }}>{post.text || '（本文は投稿の確認画面で表示されます）'}</Text>
                     <Text style={styles.muted}>{originLabels[post.origin]} ・ 実投稿は次フェーズ</Text>
                   </Card>
-                </Link>
+                </Pressable>
               );
             })
         ) : (
