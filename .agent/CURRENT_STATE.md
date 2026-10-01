@@ -2841,3 +2841,19 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - natural scheduler later executed an AI Lab `brand_post` successfully under v129; no forced invocation was used.
 - DB/RLS/RPC/migration/Auth/Vault/Cron/settings/secret changes: none by this rollout.
 - remaining product limitation: automatic periodic development-progress aggregation is not implemented; diary updates still require Markdown edit -> snapshot regeneration -> commit -> x-test-post redeploy. The current latest diary entry is 2026-09-29 and will age out of the 3-day freshness window, after which evergreen topics are used rather than fabricating current progress.
+
+## G1 assigned — Home report Hero 8-state integration — 2026-10-01
+
+- task_id: `kabumori-home-report-hero-8-state-assets-20261001`
+- previous stale G1 review_required state was reconciled: header-logo PR #62 is already merged as `0224ff7ed41380749ed677c1dc27942e916fcffb`.
+- target: user-approved 1536x960 Hero background plus final 8 character states (01 very positive / 02 positive / 03 neutral / 04 uncertain / 05 caution / 06 negative / 07 very negative / 08 volatile).
+- current main still has no Hero background and still fixes the old `report_04_neutral.webp`; G1 will replace that presentation only after the exact user-approved assets are available in its isolated worktree/session.
+- character composition uses full-canvas 1:1 overlay with the 8:5 Hero stage; no per-state scaling/offset and no artwork regeneration.
+- state selection is deterministic from stored Fact-passed report fields only; no extra AI/API call. Volatile is an explicit-evidence override, not “worse than very negative”.
+- Hero fixed title/description/「今日のポイント」 are baked into the approved background, so native duplicates must be removed while retaining accessibility semantics. Dynamic report type, 1–3 point rows and CTA stay native.
+- G2 remains a separate shared-report/backend workstream; G1 must not touch its generation/validator scope.
+- EAS conservation: local Expo/iOS Simulator only; new EAS build expected 0.
+- backend / DB / RPC / Edge Function / Auth / common-account / X / production mutation: 0.
+- finish code: K1.
+- recommended model: **Sonnet5（高）**.
+
