@@ -3,7 +3,7 @@
 - task_id: common-account-v1-phase1-additive-lifecycle-foundation-20261001
 - owner: claude
 - slot: claude-5
-- status: in_progress
+- status: review_required
 - next_owner: chatgpt
 - priority: highest
 - start_code: G5
@@ -317,16 +317,160 @@ Auth/RLS/migration/lifecycleを横断する高リスクsource candidateなので
 ## Report
 
 - task_id: common-account-v1-phase1-additive-lifecycle-foundation-20261001
-- result: pending
-- changed_files: pending
-- tests: pending
-- commit_hash: pending
-- push: pending
-- deploy: prohibited
-- production_mutation: 0 expected
-- remaining_issues: pending
-- safety_checks: pending
-- next_recommendation: G5 Phase 1を開始する。
+- result: **PASS**（source候補・disposable test・設計ノートまで完了。production は未適用。レビュー待ち）
+- checked_main: 開始時 `204ba32`。PR head は `26ea179` 基点。Report push 直前に fresh `origin/main` を再確認。
+- worktree / isolation: G5専用 worktree（`.claude/worktrees/g5-f7a405`）。source は branch `claude/g5-common-account-phase1-20261001`、Report は main 基点の control commit。他slotの worktree / branch / PR / TASK / dev server は未変更。G4 PR #65 のファイルには触れていない。
+- commit / PR: source commit `89cf128`、[PR #70](https://github.com/anohi-memories/kabumori/pull/70)（open、MERGEABLE、**merge HOLD**）。Report 時点の checks: Vercel / Netlify preview SUCCESS、失敗 0。
+- push: source は PR branch へ。この Report は `origin/main` へ fast-forward。
+- deploy: none（prohibited）。
+- production_mutation: **0**。production への接続（read 含む）も 0。migration apply / backfill / Auth 削除 / identity 変更 / Vault・OAuth 操作 / Cron・flag 変更はいずれも未実施。
+
+### changed_files（PR #70、7 files、+2340）
+
+- `supabase/migrations/20261001150000_common_account_lifecycle_foundation.sql` — migration 候補（単一ファイル、1 transaction）
+- `supabase/tests/common_account_lifecycle_fixture.sql` — 既存 fixture への追加（Kabumori 側 table、`auth.identities` など）
+- `supabase/tests/common_account_lifecycle_behavior.sql` — 挙動テスト
+- `supabase/tests/common_account_lifecycle_run.sh` — runner（適用・競合・rollback の証明）
+- `supabase/tests/common_account_lifecycle_rollback.sql` — rollback
+- `supabase/tests/migration_source_invariants_test.ts` — 予約 version に `20261001150000` を1行追加
+- `docs/common-account/phase1-lifecycle-foundation.md` — 設計ノート / rollout・rollback 計画 / Phase 2 接続点
+
+client / Edge Function / 既存 migration / 既存 RLS の変更は 0。
+
+### schema candidate
+
+追加のみ。既存 object の rename / drop / 再定義 / grant 変更なし。
+
+| object | 内容 |
+| --- | --- |
+| `public.common_accounts` | `user_id` PK → `auth.users` ON DELETE CASCADE、`status`（active / deleting / locked）、`lifecycle_version`、timestamps |
+| `public.service_entitlements` | PK `(user_id, service_key)` → `common_accounts` CASCADE、`service_key`（kabumori / x_autopost）、`status`（provisioning / active / suspended / deleting / ended）、`source`、`legacy_evidence`、`activated_at`、`ended_at` |
+| `private.account_lifecycle_operations` | durable deletion intent。`operation_type`（service_deletion / account_deletion）、`status`、`current_step`、Apple revoke checkpoint、`last_error_code`。in-progress は person × 種別 × service で1件（partial unique index）。raw user id は login 消滅時に消し、subject hash だけ残す |
+| `private.account_lifecycle_settings` | 1行。Auth削除ガードの mode（`shadow` 既定 / `enforce`） |
+| `private.account_lifecycle_backfill_plan`（view）＋ `private.account_lifecycle_backfill(p_apply)` | shadow backfill 候補（未実行） |
+
+- `provisioning` / `suspended` / `locked` は予約状態。この候補のどの RPC も作らない。全 gate が「サービスあり」として fail closed に扱う。
+- preflight（exact）: 二重適用、`private` schema、3 role、必要 table 15、必要列 9、既存 helper 関数 2、`profiles` と子 table の CASCADE、X 側行の `auth.users` 参照を検査。不足時は何も作らず中断。
+- 再適用戦略: 再実行不可（`COMMON_ACCOUNT_FOUNDATION_ALREADY_APPLIED`）。ファイル全体が 1 transaction なので部分適用は起きない。
+- `profiles` は Kabumori root のまま、`brand_memberships` は X の認可のまま。
+
+RPC（すべて SECURITY DEFINER、`search_path = ''`）:
+
+- client（authenticated、引数なし、本人は `auth.uid()` のみ）: `start_kabumori_service`、`start_x_autopost_service`
+- backend（service_role、`p_user_id` は検証済み JWT 由来）: `common_account_deletion_eligibility`、`begin_service_deletion`、`finish_service_deletion`、`abort_service_deletion`、`withdraw_kabumori_service`、`begin_common_account_deletion`、`mark_common_account_apple_revoked`、`abort_common_account_deletion`、`finalize_common_account_deletion`
+
+### lifecycle serialization invariant
+
+- I1: 全 lifecycle RPC は、本人の `auth.users` 行（KEY SHARE。finalize は FOR UPDATE）→ `common_accounts` 行（FOR UPDATE）の順にロックしてから状態を読む。
+- I2: サービス開始は account が `active` の時だけ。`begin_common_account_deletion` の commit 以降、全 start は `ACCOUNT_DELETION_IN_PROGRESS` で fail closed。
+- I3: service-only deletion は login・他 entitlement・他サービスの行に触れない。
+- I4: login 削除は `finalize` だけ。排他ロックを保持した同一 transaction 内で、全 entitlement が `ended`、サービス行なし、admin でない、foreign workspace なし、（Apple identity があれば）revoke checkpoint 済み、を再検証してから `auth.users` を削除する。
+- I5: admin / 共有・内部 workspace / entitlement のないサービスデータ / 予約状態は fail closed。
+- I6: READ COMMITTED 以外では例外。
+
+**Auth hard delete 直前までの guarantee**: `finalize` は `auth.users` 行を FOR UPDATE で取ってから検証する。サービスデータを作る処理は必ず `auth.users` を参照する行（profile / membership / OAuth state / common account）を insert するため、(a) ロック前に commit 済みなら検証で見えて拒否、(b) ロック中なら待たされ、自分の FK で失敗して transaction ごと rollback（先に insert した workspace 行も消える）。これは **既存・未変更の** `ensure_my_profile` と `begin_social_mobile_x_oauth_connection` に対しても成立する（実物で両方の commit 順を証明）。
+
+- 「最後にもう一度 SELECT する」方式ではない。read と delete の間に隙間がない（同一 transaction・行ロック下）。
+- 既存 X deletion acquisition を Kabumori へ流用していない。
+- 外部処理（X revoke / Vault purge / Apple revoke）は saga step。DB は checkpoint を記録するだけで、原子的に扱ったふりをしない。
+- lock order は login 削除の cascade と同じ向き（`auth.users` → `common_accounts` → …）。lifecycle 呼び出しと legacy hard delete が同時でも待ち合わせになり、deadlock しない。
+- `lifecycle_version`: backend は本人が確認画面で見た version を渡す。確認後にサービスが増えていれば `lifecycle_changed` を返し、確認していないものは消さない。
+- stale / retry: 各 step は lock 下の状態遷移なので再実行は現在状態を返す。進まない削除は `abort_common_account_deletion` で `active` に戻せる。
+
+**Auth削除ガード**: `common_accounts` の BEFORE DELETE trigger（`auth.users` からの cascade で発火）。`shadow`（導入時の既定）は全て許可し、既存経路の挙動は不変。`enforce` は finalize が同一 transaction で許可した削除以外を拒否する（SQLSTATE 23503。既存 X saga はこれを自身の `operator_required / LOGIN_DELETE_BLOCKED` に落とす）。設定行がなければ `enforce` 扱い。
+
+### RLS / grant model
+
+- 新 table 4つすべて RLS enabled。`public` の2 table は policy 1本ずつ（authenticated、`auth.uid() = user_id` の SELECT のみ）。
+- table 権限は `PUBLIC` / anon / authenticated / service_role から全 revoke（default の TRUNCATE / REFERENCES / TRIGGER も消える）。authenticated には列限定 SELECT のみ（`source` / `legacy_evidence` は不可）。**service_role には table 権限なし**（RPC 経由のみ）。
+- 関数は全て `PUBLIC` と全 role から EXECUTE を revoke し、RPC ごとに1 role へ grant。`private` の helper は owner 以外実行不可。create と revoke は同一 transaction。
+- client は任意の `user_id` / `status` を書けない（INSERT / UPDATE / DELETE / TRUNCATE すべて権限なし。start RPC は引数なし）。
+- 既存 Kabumori / X の RLS は未変更。
+
+### backfill candidate + dry-run proof
+
+`private.account_lifecycle_backfill(false)` が件数のみ、`(true)` が不足行を insert。冪等。既存 entitlement は書き換えない。`active` でない account には付与しない。email は一切読まない。
+
+Phase 0 の production 集計と同じ形の fixture（4 login）での dry-run:
+
+| 項目 | 結果 |
+| --- | --- |
+| auth_users / common_accounts_to_create | 4 / 4 |
+| kabumori 候補（activity あり / profile のみ） | 2（1 / 1） |
+| x_autopost 候補（identity_verified / pending） | 1（1 / 0） |
+| auth_only | 1 |
+| excluded_admin_users | 1 |
+
+追加ケース（計 11 login）: 共有 workspace・内部 workspace・self-service でない workspace は X entitlement 対象外、admin に consumer X entitlement なし、同一 email の2 login は2 account のまま（entitlement も共有されない）。apply 後の件数は計画どおり、2回目 apply は 0 件、self-service 済み entitlement と `locked` account は不変。
+
+**production では未実行。** 上表は disposable DB の fixture に対する結果であり、production の dry-run ではない。
+
+### concurrency / race proof（2 session、実 PostgreSQL）
+
+| # | シナリオ | 結果 |
+| --- | --- | --- |
+| 1 | start 未commit → deletion begin | begin は待ち、`lifecycle_changed`。再 begin は新サービスを含み、finalize は `SERVICES_REMAIN` |
+| 2 | deletion begin 未commit → start | start は待ち、`ACCOUNT_DELETION_IN_PROGRESS`。行は作られない |
+| 3 | finalize 未commit → lifecycle start + 既存 profile bootstrap + 実物 X onboarding | 3つとも待って失敗。orphans=0 |
+| 4 | 既存 creator 未commit → finalize（X onboarding / profile の2通り） | finalize は待ち、拒否。login と所有データは残る |
+| 5 | deletion begin ×2 | 1件 `started`、1件 `in_progress`。operation 1件 |
+| 6 | 初回 start ×2 | account 1、entitlement 1 |
+| 7 | 判断の途中（test用 trigger で start を RPC 内で一時停止）→ deletion begin | begin は待ち、`lifecycle_changed` |
+| 8 | lifecycle start（一時停止中）→ legacy hard delete | deadlock なし。delete は待ってから cascade、残存行 0 |
+
+加えて isolation guard（REPEATABLE READ は拒否）、全 race 出力に deadlock なし。
+
+### tests
+
+- `supabase/tests/common_account_lifecycle_run.sh`: **16 項目 PASS**（preflight 拒否 / 追加のみ適用 + 再適用拒否 / 静的チェック / 挙動 / race 8種 / isolation / no-deadlock / rollback / cleanup）。local PostgreSQL 17.11、偽データのみ。
+- 追加のみの証明: 適用前後の `pg_dump --schema-only` を比較し、適用前の全行が適用後も存在。rollback 後は適用前と byte 一致、その後の再適用も成功。
+- 挙動テストの対象: backfill、ACL / RLS、start、whole-account deletion、service-only deletion（Kabumori 単独、X 単独は**実物の social-mobile 削除 saga** と組み合わせ）、両サービス利用者の全体削除、admin / shared / internal / unregistered / 予約状態 / locked の fail closed、Apple checkpoint、ガード2モード。
+- **ミューテーション確認**: candidate に欠陥を10種入れ（login 行ロックを外す、account 行ロックを外す、deleting 判定を外す、ガードを無効化、finalize の blocker 再検証を外す、PUBLIC の EXECUTE を残す、version 検査を外す、既存 grant を変更、など）、**10種すべてテストが検出**。初版の race テストは account 行ロックの欠落を検出できなかったため、race 7 を追加して検出できるようにした。
+- 既存スイート: `social_mobile_account_deletion_run.sh` 8 項目 PASS（変更なし）、`migration_source_invariants_test.ts` 10 passed、`git diff --check` clean。
+- 未実施: 実 Supabase（GoTrue admin delete、PostgREST 経由、`supabase_auth_admin` role）での確認。production の PostgreSQL version との差の確認。
+
+### pending conflicts
+
+- PR #65（G4、open）: この PR とファイルの重なりなし。Phase 2 の X 側接続点（`onboarding-gate.tsx` など）は #65 決着後に着手。
+- PR #41（open）: `x-test-post` と X publish authority の migration。重なりなし。予約 version 一覧（invariants test）は同じファイルを触る可能性があるが、#41 の変更ファイルに含まれていない。
+- PR #33（open）: admin auth。重なりなし。
+- G1 / G2: Kabumori Home / report 系。Auth / lifecycle との重なりなし。
+
+### remaining unknowns / レビューで見てほしい点
+
+1. `finalize` は GoTrue admin API ではなく SQL で `auth.users` を削除する（既存 X finalize と同じ方式。直列化のため同一 transaction が必要）。Storage 等の FK で阻まれた場合は `AUTH_DELETE_BLOCKED` で停止する。実 Supabase での挙動は未確認。
+2. ガードが返す SQLSTATE を 23503 にしたのは、既存 X saga の handler に合わせるため。妥当性の判断。
+3. `start_kabumori_service` は entitlement と同時に `profiles` 行を作る。Phase 2 で `ensure_my_profile` を置き換える前提。
+4. lifecycle 呼び出しごとに `auth.users` 行を KEY SHARE でロックする。`finalize` を他の lifecycle RPC と同一 transaction で呼ぶとロック昇格で deadlock し得る（PostgreSQL が片方を中断。破損はしない）。finalize は単独 transaction を前提とする。
+5. X 側 helper 2関数（workspace id 導出、subject hash）を再利用している。X 削除 candidate が適用済みであることが前提（production は適用済み）。
+6. Kabumori 側の test fixture は手書きの最小形。production dump 由来ではない。
+7. shadow 期間中、既存 creator は entitlement を登録しないため「entitlement のないサービスデータ」が生じ得る。lifecycle はこれを `UNREGISTERED_SERVICE_FOOTPRINT` で拒否する（推測で消さない）。
+8. 直近再認証（H1 の P2）は未対応。Edge Function 側の Phase 3 で扱う。
+9. **既存 Kabumori `account-delete` はこの候補では安全にならない。** 経路・挙動とも未変更。
+
+### rollout / rollback plan（未実行。各 step は個別に承認）
+
+1. この候補のレビュー（Auth / RLS / lifecycle）。preflight が依存する catalog を read-only で再確認。
+2. 単一ファイルで適用（`db push` 不可）。read-back: table / policy / grant / 関数 ACL / ガード mode `shadow`。
+3. backfill dry-run を Phase 0 集計と照合 → backfill 適用 → 件数 read-back。
+4. Phase 2 dual-write（既存 creator 2つが entitlement も登録）。parity: backfill dry-run の to_create が 0 のまま。
+5. Phase 3: 削除経路を lifecycle へ（Kabumori は `withdraw_kabumori_service`、X は saga を begin / finish で包み scope 判定と自前の Auth 削除を除去、全体削除は orchestrator）。X の scope 規則が残る間は X → Kabumori の順。
+6. その後にガードを `enforce` へ。
+7. 最後に既存 RLS / producer へ entitlement 条件（flag 付き）。
+
+rollback: `common_account_lifecycle_rollback.sql` が候補の作成物だけを drop。ガードが `enforce`、または削除が進行中なら拒否。step 4 より前は何も依存していないため、失うのは shadow 行のみ。
+
+### Phase 2 の接続点（列挙のみ。未編集）
+
+- Kabumori: `src/lib/auth.ts`、`src/providers/auth-provider.tsx`、`src/app/_layout.tsx`、`public.ensure_my_profile()`、`src/app/settings.tsx`、`src/lib/account-deletion.ts`、`src/lib/account-deletion-client.ts`、`supabase/functions/account-delete/*`、`apps/kabumori-web/pages/account-deletion.html`
+- X（#65 決着後）: `apps/social-mobile/src/features/onboarding/onboarding-gate.tsx`、`apps/social-mobile/src/data/onboarding-repository.ts`、`public.begin_social_mobile_x_oauth_connection`、`supabase/functions/social-mobile-account-delete/*`、`social_mobile_account_deletion_scope` / `_finalize`
+- producer（最終 phase）: `claim_pending_push_notifications`、`enqueue_important_news_notifications`、`enqueue_personalized_report_notification`、`personalized_report_news_inputs`、`important_news_app_copy_targets`、`personalized-reports/index.ts`、`x-test-post/index.ts`
+
+詳細は `docs/common-account/phase1-lifecycle-foundation.md`（PR #70）。
+
+- remaining_issues: 上記「remaining unknowns」。production 未適用・未 backfill。
+- safety_checks: production mutation 0、production 接続 0。既存 table / policy / grant / function の変更 0（schema dump 比較で証明）。G4 ファイル未変更。他slotの TASK / branch / PR 未変更。secret / PII を source・test・Report に含めていない（test は偽 UUID と `example.test` のみ）。merge / deploy なし。
+- next_recommendation: K5 の後、PR #70 を Sol（高）以上の Codex レビューへ（重点: I4 の直列化と SQL による Auth 削除、ガード trigger、ACL、backfill 規則、preflight の exactness）。merge / 適用はレビューと別途承認の後。
 
 ---
 
