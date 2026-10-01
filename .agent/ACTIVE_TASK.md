@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - task_id: common-account-kabumori-delete-cross-service-safety-review-20261001
 - start_code: H1
 - finish_code: C1
-- next_owner: chatgpt
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: H1レビュー完了、C1待ち。既存Kabumori account-delete境界はFAIL / CHANGES REQUIRED。管理者削除・X側所属削除/残存リスクを独立確認。競合安全な修正はcommon lifecycle制御を要するためruntime修正なし。23 tests PASS、production mutation 0。G5 Phase 1への割当/本番変更は別工程、G3/G4は未変更。C1推薦モデル Sol（高）。
+- allocation: Final C1 accepted FAIL / CHANGES REQUIRED. Existing Kabumori Auth hard-delete route is not common-account-safe; no partial runtime fix was accepted because read-check + separate Auth delete cannot serialize against concurrent service provisioning. Runtime source change 0, production mutation 0. H1 free after fresh allocation.
 
 ## Codex H2
 - owner: codex
@@ -93,14 +93,14 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: done
-- task_id: common-account-v1-phase0-prod-readonly-inventory-20261001
+- status: ready
+- task_id: common-account-v1-phase1-additive-lifecycle-foundation-20261001
 - start_code: G5
 - finish_code: K5
-- next_owner: none
+- next_owner: chatgpt
 - source: .agent/tasks/CLAUDE_TASK_5.md
 - report: .agent/tasks/CLAUDE_TASK_5.md#report
-- allocation: Final K5 PASS。共通アカウントv1 Phase 0 production/repository read-only inventory完了。production mutation 0、runtime source変更0。次のG5 Phase 1はH1安全レビューとG3/G4競合解消後にfresh allocationする。G5は再利用前にfresh空き確認必須。
+- allocation: 共通アカウントv1 Phase 1。additive common_accounts / service_entitlements / lifecycle serialization foundation、shadow backfill candidate、RLS/grant modelをsource-onlyで作る。production migration/backfill/deploy禁止。G4 PR #65 filesは触らない。推薦モデル Opus5.5（極高）。
 
 ## Deferred
 
