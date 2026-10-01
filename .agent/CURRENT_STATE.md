@@ -1,3 +1,13 @@
+## H1 completed — PR #67 shared report v2 source review (2026-10-01 JST)
+
+- task_id: `kabumori-pr67-shared-report-v2-hard-fact-review-20261001`; status `review_required`, next_owner `chatgpt`.
+- verdict: **PASS-WITH-FIX**, source/tests only. Original `5877045f7554cd4e089fb3b79091bf8e2bb38456`; final pushed PR #67 head `d6f9c9a0285920871d0ce86cc4559f9675c0ebb9`.
+- deterministic factual guard holes/false positives, malformed structured output, safe-original fallback after exhausted quality-rewrite requests, and model-input news ordering fixed within TASK authority; 13 adversarial tests added.
+- analysis 86, personalized 128, data 42, X shared 8 = 264 PASS; `_shared` 329 PASS (--no-check). Target check/lint/diff PASS; unrelated whole-_shared type errors recorded in H1 Report.
+- production mutation=0; no merge/deploy/manual cycle/DB/Cron/gate/X operation. Consumer activation remains unapproved.
+- C1 decides source merge only. Rollout requires actual v2 model observations, verification of the ~500-Japanese-character X API posting contract/entitlement, and separate G1 native story rendering. G2's eight-packet production replay is reported evidence, not an independently repeated live DB audit by H1.
+- recommended C1 model: **Luna（中）**. H1 STOP after report sync; H2/PR #66 and other slot files untouched.
+
 ## G5 assigned — Common Account v1 Phase 0 read-only inventory
 
 - task_id: `common-account-v1-phase0-prod-readonly-inventory-20261001`

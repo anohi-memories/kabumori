@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: kabumori-pr67-shared-report-v2-hard-fact-review-20261001
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: chatgpt
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: focused pre-merge review of PR #67 exact head 5877045f7554cd4e089fb3b79091bf8e2bb38456; Hard Fact vs Quality WARN, mixed-session guard, rewrite fallback/call budget, v1 compatibility, X/App privacy and news priority; no merge/deploy/gate/real X; recommended Sol（高）
+- allocation: H1 completed PR #67 source/test review PASS-WITH-FIX; original 5877045, final pushed head d6f9c9a0285920871d0ce86cc4559f9675c0ebb9. Analysis 86, personalized 128, data 42, X shared 8, _shared 329 pass; target check/lint/diff pass. C1 required before merge; no deploy/gate/real X/production mutation. Actual model output, long X posting contract and native story UI remain separate gates. Recommended Luna（中） for C1.
 ## Codex H2
 - owner: codex
 - slot: codex-2

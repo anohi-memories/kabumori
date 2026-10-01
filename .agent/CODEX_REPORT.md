@@ -820,3 +820,91 @@ The original tests mostly matched source strings. One purported server-protectio
 - deploy / merge: none. production_mutation=0; real X login/post/revoke, credential entry, account deletion, DB/Vault/Auth/provider settings changes=0. No overlap with G3's destructive operational E3.
 - remaining_issues: safe operator E2E must confirm on a disposable account/device that prior normal-browser X identity is not silently reused and a different X account can authenticate, including cancel/retry/reconnect. The private-session request may be ignored by a browser/provider and requires truthful fallback expectations. Current copy acknowledges this; no success is inferred from source tests. Confirm the development binary's native module compatibility as above.
 - next_recommendation: C1 accept the final source head, retain merge hold until the TASK's operator account-switch E2E passes, then perform the normal source merge decision. **推薦モデル：Luna（中）** for C1. H1 stops after report synchronization; no provider-side automation is authorized.
+
+---
+
+# H1 — PR #67 shared market report Presentation v2 review (2026-10-01 JST)
+
+- task_id: `kabumori-pr67-shared-report-v2-hard-fact-review-20261001`
+- result / verdict: **PASS-WITH-FIX (source/tests)**. C1 required; no merge, deploy, consumer activation or real X operation performed.
+- original reviewed head: `5877045f7554cd4e089fb3b79091bf8e2bb38456`.
+- final reviewed / pushed source head: `d6f9c9a0285920871d0ce86cc4559f9675c0ebb9`, fast-forward pushed to `g2-shared-report-v2-20261001` / PR #67.
+- startup main: `7e28f338b61ebd3d9bb6f323d75f50cd4a10b4c9`; fresh main before source push / report preparation: `ea651356d91d93c636c3fe56402888e5e54d9d04`.
+- isolated owned checkout: `/private/tmp/kabumori-h1-pr63-review-20260930`, source review branch `codex/h1-pr67-fact-review-20261001`, separate control branch `codex/h1-pr67-report-20261001`. Shared Developer checkout and other slot directories/branches were not changed. H2/PR #66 remained isolated.
+
+## Findings — fixed within TASK's local-fix authority
+
+Every correction was driven by an executed failing adversarial assertion, followed by focused and regression reruns. Initial additional suite: 1 passed / 10 failed; further negation/news-order/false-positive probes were added and fixed. Final additional suite: 13/13 PASS.
+
+1. **P2 — safe draft lost on quality-request exception.** A first generation that passed local Hard checks and Fact was discarded if the quality generation or its Fact request exhausted 429 retries/threw. The handler then failed the cycle. Only after a safe draft exists, request failures now deliver that original; the first/no-safe-draft transport error still fails closed. `quality_rewrite_request_failed` is a boolean diagnostic, with no exception/body/credential logging.
+2. **P2 — malformed nested output bypassed regeneration.** Null/non-object members of claims/news/themes threw TypeError while parsing. They now classify as invalid output, consume the existing generation budget and can regenerate to a safe second draft.
+3. **P2 — factual association holes.** The guard accepted a metric's daily-change number as its absolute price (or vice versa), list subjects could borrow one member's session date, collectively wrong direction or signs. Separate value/change token sets, canonical numeric matching, referenced-member dates and member-specific signs now detect the tested cases. This also closes the mixed-session list variation of the 10/1 regression.
+4. **P2 — stale data described as current despite a correct historical date.** A correct date previously excused a contradictory “latest/current” qualifier. The new qualifier check is bound to the metric clause; unrelated latest news and explicit unavailable-current-value wording remain safe.
+5. **P2 — opposite emojis concealed in one mixed-direction line.** A line containing both chart emojis skipped the check. Japanese clause boundaries now let each chart emoji be compared with its own metric, without rejecting correctly paired down/up clauses.
+6. **P2 — historical assertions in caution/watch escaped factual checks.** Forward fields could contain an asserted past move/cause. Past-tense factual prose now receives direction and causal checks; future conditional watch wording remains allowed.
+7. **P2 — scoped absence false positive.** “この銘柄には材料がありません” / “日銀についてはニュースがありません” were classified as broad absence solely because は preceded the noun. Explicit local qualifiers now remain allowed; a later unscoped absence clause, “入力については…”, and original false broad-absence regressions still block when news exists. This does not claim a scoped statement is automatically true; existing holding-specific guards and the complete Fact check remain authoritative.
+8. **P2 — negative direction statement false positive.** “NYダウは上昇していません” was read as a positive assertion of a rise. Direct Japanese negations now do not become direction inversions; actual inverse statements still block.
+9. **P2 — actual model input contradicted broad-first ordering.** Although internal news was broad > sector > company, a second major-news sort promoted an emergency sector item ahead of a broad-market item. Model input now preserves the same deterministic reach ordering; importance remains explicitly marked without reordering the scope tiers.
+
+No remaining demonstrated P1/P2 issue in the reviewed PR scope after these fixes. Deterministic prose checks cover explicit supported wording patterns, not all possible Japanese paraphrases; they are not a replacement for the unchanged full Fact check. No architecture/model-call/schema change was made.
+
+## Hard vs WARN, mixed sessions, fallback and budgets
+
+- Hard checks still include unsupported numbers/refs/news, TOPIX proxy mislabel, unsupported asserted cause, materially wrong metric/date/direction, false broad absence, malformed mandatory content and unsafe structured output. Fact must return literal `passed: true` before any draft is safe.
+- Target prose/length, missing optional sections, emoji count and editorial weakness remain WARN. WARNs alone do not fail a locally/Fact-safe cycle. Unsupported themes are removed from the packet rather than delivered as facts.
+- Exact 10/1 regression: 9/29 Nikkei 65,481.27 / −0.60% cannot be put under 9/30 with 9/30 ETF 1306 431.5 / +1.43%. Original screenshot variants, list variant, honestly dated values, omitted unknown values, reused original-session values and code-rendered per-date App lines pass the required assertions.
+- Safe original + WARN -> rewrite Hard: original delivered; -> rewrite Fact failure: original delivered; -> generation/Fact exhausted 429: original delivered. No safe original -> persistent Hard or request failure: fail closed. Malformed nested first draft -> valid second draft: delivered.
+- Bounds unchanged: at most 2 content generations and 2 Fact calls. Transport retry retains its shared per-run budget (3 extra HTTP requests) and per-call cap (2). Tests of exhausted rewrite-generation / rewrite-Fact 429 use fake fetch/sleep: 5 / 6 HTTP requests respectively, 2 retries, original generation 1 delivered. No real network, waiting or LLM cost.
+- Content generations, local/Fact/invalid rejection, delivered generation, quality rewrite request failure and transport retries stay distinct. Existing handler test proves local rejection -> safe regeneration gives generation_attempts=2, content_regenerations=1, hard_rejections=local, transport_retries=0, one claim and one completion. Scheduled Cron retries remain outside this local loop.
+- Successful-response usage/cost counters retain existing semantics; failed requester calls without a returned StepResult do not invent token usage. No cost-estimate accuracy claim is made from mocked responses.
+
+## Compatibility, public output, App boundary and news
+
+- Existing SQL was inspected read-only: table schema_version remains `market_report_packet.v1`, payload permits additive JSON members, identity checks remain unchanged. Optional presentation_version / app_story / session_views do not require a migration. No migration file or DB setting was edited/applied.
+- Stored v1 fixtures still render the prior X format. App fallback copies existing summary/news/metrics and supplies dated fact lines; it does not invent a longer narrative. Report ID/data ID/hash contracts and canonical content-hash behavior are unchanged; generated_at remains excluded from content identity as before.
+- v2 X section order, exactly three nonempty points, optional context/news/watch, URL/hashtag/internal-label rejection and warning-only short safe output were reviewed/tested. Consumers format the same packet without another market generation or web lookup. The fixed brand hashtags remain appended in the existing trusted posting path.
+- App story and shared input have no holdings/user arguments; shared market facts remain verbatim while personalized information is separately added. Regression suites cover no cross-user/portfolio leakage, immutable shared identity and all-user shared-story equality. No native UI change was attempted.
+- News priority remains broad > sector > company; isolated company critical disclosures are kept as company news rather than mandatory market-wide leads. Model input now follows the same scope order. Existing systemic-category exceptions and company-code/category inference were reviewed; no taxonomy/schema change was introduced.
+- Genuine sparse input, unknown causes, scoped absence and future watch wording remain deliverable. False broad absence in shared and personalized paths remains a Hard code (`FALSE_BROAD_NO_MATERIAL_CLAIM` is in the existing block classification).
+
+## Verification
+
+Tests were run offline with mock provider/DB requests. `--no-config` isolates Deno from this clone's unrelated Node/mobile dependency resolution (the first unisolated attempt could not resolve local npm @types/node).
+
+| Verification | Result |
+| --- | --- |
+| market-report-analysis, all tests including transport/handler/content/quality | 86/86 PASS |
+| presentation_v2 (included above) / new H1 adversarial (included above) | 22/22 / 13/13 PASS |
+| personalized-reports full suite, including shared story/absence/boundaries | 128/128 PASS |
+| market-report-data-packet regressions | 42/42 PASS |
+| X shared-market consumer suite | 8/8 PASS |
+| Combined preceding full suites | 264 passed, 0 failed |
+| _shared full runtime suite with --no-check | 329 passed, 0 failed |
+| deno check, analysis + personalized runtime entries and X shared consumer | PASS |
+| deno lint, affected runtime files + new adversarial test | PASS |
+| git diff --check | PASS |
+
+Whole `_shared` suite **with** typechecking is not clean under installed Deno 2.9.6 / TypeScript 6.0.3: five errors, three in unchanged `brand/brand_post_generator_test.ts`, one in unchanged `brand/dispatch_gate_test.ts`, one BufferSource/Uint8Array generic error in unchanged `x_oauth2_post.ts`. These paths are byte-unchanged from the pre-PR base; they were not repaired or hidden as a successful whole-repository typecheck. Relevant changed runtime entries and checked targeted tests pass.
+
+G2's claimed eight production Fact-passed packet replays are accepted reported evidence, **not** eight new live DB replays performed by H1. H1 independently executed the committed stored-v1/date/session regression fixtures and safe-rich/unsafe/scoped/sparse probes. Actual model generation and natural production cycles were not invoked.
+
+## Changed files, delivery, safety and rollout prerequisites
+
+- source changed_files (H1 amendment only):
+  - `supabase/functions/market-report-analysis/h1_adversarial_test.ts` (new)
+  - `supabase/functions/market-report-analysis/hard_fact_guards.ts`
+  - `supabase/functions/market-report-analysis/analysis_logic.ts`
+  - `supabase/functions/market-report-analysis/analysis_input.ts`
+  - `supabase/functions/market-report-analysis/presentation_v2_test.ts` (diagnostic expectation)
+  - `supabase/functions/_shared/absence_claims.ts`
+- control changed_files: `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md`, H1-only ACTIVE_TASK entry and a new H1 CURRENT_STATE section. Previous histories and other slot status/content retained.
+- source commit_hash / push: `d6f9c9a0285920871d0ce86cc4559f9675c0ebb9` / confirmed fast-forward PR #67 branch push. Control files synchronized separately to main; completion requires read-back of the review_required/next_owner values.
+- deploy: none; merge: none; production_mutation: **0**. No production DB/API calls, gate toggles, manual report cycle, Cron/Auth/Vault/OAuth/secret change, X post/media upload or other Function deploy. App/X activation remains forbidden. Supabase skill safety boundaries kept this a source/offline review; no Supabase API-version/schema implementation occurred.
+- remaining_issues / rollout prerequisites:
+  1. C1 must accept exact final head before a source merge decision. Production deploy and consumer activation require separate authority.
+  2. Actual model-generated v2 completion rate, factual rejection rate, quality fallback frequency, prose quality and real token cost remain unobserved. Check natural cycles in a separately approved rollout; hand-written mocks are not live-model evidence.
+  3. Approximately 500 Japanese characters plus fixed hashtags require verification of the actual target X account/API long-post entitlement and posting contract. Source's 80–900 character bounds are application structural limits, **not proof of provider acceptance**. Do not turn X on or treat WARN-length output as provider-valid until this gate is established.
+  4. Native story rendering is a separate G1 scope; this PR only carries the structured story in market_detail. No native simulator/device story UI verification is claimed.
+  5. Whole-_shared unrelated type errors remain outside this TASK; partial historical replay coverage is explicitly scoped above.
+- merge recommendation: source-safe **after C1 accepts the amended head**; no merge/deploy/activation automatically follows this report. Keep production gates OFF until the separate prerequisites/approvals are satisfied.
+- next_recommendation: C1 review of final head/report, **推薦モデル：Luna（中）**. H1 STOP after control read-back; do not continue into deployment or another task.

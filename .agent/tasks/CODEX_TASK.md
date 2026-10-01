@@ -3,8 +3,8 @@
 - task_id: kabumori-pr67-shared-report-v2-hard-fact-review-20261001
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（高）
 - target: PR #67 exact head `5877045f7554cd4e089fb3b79091bf8e2bb38456`
@@ -132,6 +132,16 @@ architecture変更、DB/schema/migration、model-call architecture変更、produ
 reportには verdict, original/final head, findings severity, Hard-vs-WARN, mixed-session, rewrite/fallback/call budget, v1 compatibility, X privacy/output, App shared/personalized boundary, news priority/absence, tests, changed_files, production mutation=0, merge recommendation, rollout prerequisites を含める。
 
 完了時: status -> review_required / next_owner -> chatgpt / STOP for C1.
+
+## H1 completion — 2026-10-01 JST
+
+- verdict: **PASS-WITH-FIX (source/tests)**; STOP for C1, no merge/deploy/activation.
+- original head: `5877045f7554cd4e089fb3b79091bf8e2bb38456`.
+- final source head, pushed to PR #67: `d6f9c9a0285920871d0ce86cc4559f9675c0ebb9`.
+- corrected deterministic guard holes and false positives, malformed nested-output handling, exhausted quality-rewrite request fallback, and actual model-input news ordering; added 13 executed adversarial tests.
+- analysis 86/86 (presentation 22 + H1 adversarial 13 included); personalized 128/128; data-packet 42/42; X shared consumer 8/8; `_shared` 329/329 with --no-check. Target runtime check/lint/diff PASS.
+- existing `_shared` whole-suite type errors are documented separately; not a claim of a repository-wide clean typecheck.
+- production mutation=0. Actual v2 model output, ~500-Japanese-character X API posting entitlement/contract, and native story UI remain rollout prerequisites. Detailed findings and limits are appended to `.agent/CODEX_REPORT.md`.
 
 ---
 
