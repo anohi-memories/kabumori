@@ -1,3 +1,26 @@
+## Orchestration / current slot snapshot — G5 registration (2026-10-01 JST)
+
+- checked_main: `2d2d044bcce5804cfdd3b7f64e25b66e45db16fd`（fresh `origin/main`）。以下は各TASKの先頭メタデータを読み取ったスナップショットであり、完了判定・再割当は行っていない。
+- G5は未割当の予備Claude実装枠。用途は固定せず、ユーザーまたはChatGPTが明示割当した場合のみ使用。G1/G2=かぶモリ、G3/G4=Xの基本ルーティングを維持し、MIC用に自動消費しない。
+- `G5` → `.agent/tasks/CLAUDE_TASK_5.md`（ready / in_progressのみ開始）。`K5` → 同TASK末尾の `## Report` の完了確認。
+- 単独 `G` / `K` はG1〜G5から対象が1枠だけと明白な場合のみ使用。`F` はH1/H2 + G1〜G5の全7枠のTASK/ReportとACTIVE_TASK/CURRENT_STATEを確認する。
+- 独立worktree/checkoutルールはG1〜G5/H1/H2すべてに適用。既存TASK/Report・他slotのbranch・未コミット変更・dev serverを保護する。
+- 通常のK5でもORCHESTRATIONの会社員AIラボ開発日記の更新判定を適用する。
+
+| Slot | status（TASK正本） | task_id | next_owner | TASK |
+| --- | --- | --- | --- | --- |
+| H1 | `done` | `x-social-mobile-pr65-ephemeral-x-auth-session-review-20261001` | `none` | `.agent/tasks/CODEX_TASK.md` |
+| H2 | `done` | `x-ai-salaryman-dev-diary-pr61-final-acceptance-20260930` | `none` | `.agent/tasks/CODEX_TASK_2.md` |
+| G1 | `review_required` | `kabumori-home-visual-rebuild-reference-20260930` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_1.md` |
+| G2 | `in_progress` | `kabumori-shared-report-v2-rich-presentation-hard-facts-20261001` | `claude` | `.agent/tasks/CLAUDE_TASK.md` |
+| G3 | `review_required` | `x-social-mobile-e3-delete-revoke-residue-20261001` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_3.md` |
+| G4 | `review_required` | `x-social-mobile-x-account-switch-auth-session-20261001` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_4.md` |
+| G5 | `idle` | `none` | `none` | `.agent/tasks/CLAUDE_TASK_5.md` |
+
+- 既存索引との差分: G1のidle/none、G2のready、G3のreadyは正本TASKと不一致だったためACTIVE_TASKの索引だけ同期。G1/G3の以前のallocationはprevious_allocationとして保存し、G2のallocationと全既存TASK/Reportは変更しない。
+- G1/G3/G4はreview_requiredの既存TASK/Reportを保護する。H1/H2のdoneも新規未割当を意味しない。新規割当には必ず本文・Report・next_owner・競合・作業環境のfresh確認が必要。
+- 下記の過去の完了記録とArchived slot snapshotは履歴。現在の割当は各TASK/Reportと上記スナップショットを参照する。
+
 ## G2 v2 scope update after 2026-10-01 interim observation
 
 - accepted new evidence: shared completed 9/30 morning, 9/30 close, and 10/1 morning consecutively with gates OFF.
@@ -209,6 +232,7 @@
 
 - かぶモリアプリ実装は G1 / G2。
 - X自動投稿・複数ブランドX実装は G3 / G4。
+- `G5`: 予備のClaude実装スロット。用途は固定せず、ユーザーまたはChatGPTが明示割当した場合のみ使用する。既存の基本ルーティングの自動fallbackにはしない。
 - 各ペア内のどちらへ入れるかは、空き状況・競合・依存関係を見てChatGPTが判断する。
 - H1/H2はCodexのレビュー・バグ修正・検証枠。
 - ユーザーが個別TASKについて明示指定した場合はその指定を優先する。
@@ -555,7 +579,7 @@
 - no Codex review expected if scope stays UI/navigation/static educational content only.
 - recommended model: Sonnet5（高）.
 
-## Current slot snapshot
+## Archived slot snapshot — before G5 registration
 
 - H1: `review_required` — `x-social-mobile-auth-phase2-final-acceptance-review-20260928`; PASS-WITH-FIX at PR #47 `ed5f8b7` (initial G3 correction `5fd483a`); prior 7 + additional 3 source boundaries accepted. H1 pinned callback/recovery contexts, retained in-flight exchanges and limited provider authorize paths; fix pushed. Mobile 43/43 + data-view 14/14, typecheck/lint/Web+iOS export and four H1 mutation probes PASS; exact-head Preview SUCCESS. Production mutation 0; awaiting C1/source merge, real provider/device activation remains separately gated; see latest `.agent/CODEX_REPORT.md`.
 - H2: `idle` — unassigned; stale deferred PR #32 morning Fact-contract review was closed as obsolete after PR #32 had already been merged. Historical partial report preserved; slot is now genuinely reusable.
