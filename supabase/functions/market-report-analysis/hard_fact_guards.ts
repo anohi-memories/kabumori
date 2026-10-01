@@ -57,6 +57,9 @@ const DOWN_WORD = /下落|(?<![利きし])下げ|下が[っりる]|値下がり|
 /** A question or condition about a move is not a statement that it happened. */
 const HYPOTHETICAL = /かどうか|するか|続くか|なるか|すれば|した場合|する場合|となれば|なら(?:ば)?[、。]?/u;
 const STALE_MARKER = /時点|最新ではありません|古い値/u;
+const PAST_FACT = /ました|でした|した(?:[。!?,、]|$)|だった|してい(?:る|ます)/u;
+const CURRENT_STALE_PREFIX = /(?:今日|現在|直近)の(?:最新の)?$|最新の$/u;
+const CURRENT_STALE_SUFFIX = /(?:が|は)(?:現在|最新)(?:の(?:値|水準))?(?:です|でした|とな)/u;
 
 type Mention = { keys: string[]; start: number; end: number };
 
@@ -127,8 +130,14 @@ function directionIn(clause: string): 1 | -1 | null {
   if (HYPOTHETICAL.test(clause)) return null;
   const suffix = clause.match(/^(高|安)(?![いくけ値])/u);
   if (suffix) return suffix[1] === "高" ? 1 : -1;
-  const up = clause.search(UP_WORD);
-  const down = clause.search(DOWN_WORD);
+  const unnegated = (pattern: RegExp) => {
+    for (const match of clause.matchAll(new RegExp(pattern.source, "gu"))) {
+      if (!/^(?:は|も)?(?:してい(?:ませ|な)|し(?:ません|なかった|ない)|せず)/u.test(clause.slice(match.index + match[0].length))) return match.index;
+    }
+    return -1;
+  };
+  const up = unnegated(UP_WORD);
+  const down = unnegated(DOWN_WORD);
   if (up < 0 && down < 0) return null;
   return down < 0 || (up >= 0 && up < down) ? 1 : -1;
 }
@@ -156,11 +165,12 @@ export type GuardTexts = {
  */
 export function metricFactIssues(texts: GuardTexts, input: AnalysisInput): string[] {
   const facts = new Map(input.metricFacts.map((fact) => [fact.key, fact]));
-  const tokensOf = (fact: MetricFact) => new Set([...numericTokens(fact.valueDisplay), ...numericTokens(fact.changeDisplay ?? "")]);
+  const canonical = (token: string) => String(Number(token));
+  const tokensOf = (fact: MetricFact) => new Set([...numericTokens(fact.valueDisplay), ...numericTokens(fact.changeDisplay ?? "")].map(canonical));
   const ownTokens = new Map(input.metricFacts.map((fact) => [fact.key, tokensOf(fact)]));
-  const changeTokens = new Map(input.metricFacts.map((fact) => [fact.key, new Set(numericTokens(fact.changeDisplay ?? ""))]));
+  const valueTokens = new Map(input.metricFacts.map((fact) => [fact.key, new Set(numericTokens(fact.valueDisplay).map(canonical))]));
+  const changeTokens = new Map(input.metricFacts.map((fact) => [fact.key, new Set(numericTokens(fact.changeDisplay ?? "").map(canonical))]));
   const universe = new Set([...ownTokens.values()].flatMap((tokens) => [...tokens]));
-  const newsTokens = new Set(input.news.flatMap((item) => numericTokens(`${item.headline_ja} ${item.summary_ja ?? ""}`)));
   const issues: string[] = [];
 
   const check = (text: string, statesFacts: boolean) => {
@@ -176,29 +186,42 @@ export function metricFactIssues(texts: GuardTexts, input: AnalysisInput): strin
         const undated = scope.replace(DATE, (date) => " ".repeat(date.length));
         const allowed = new Set(mention.keys.flatMap((key) => [...ownTokens.get(key)!]));
         let statesValue = false;
+        const statedMembers = new Set<string>();
         for (const match of undated.matchAll(NUMBER)) {
           const valueLike = match[2].includes(".") || match[2].includes(",") || Boolean(match[3]);
           if (!valueLike) continue;
-          const token = match[2].replace(/,/g, "").replace(/^0+(?=\d)/, "");
+          const token = canonical(match[2].replace(/,/g, ""));
           if (allowed.has(token)) {
             statesValue = true;
+            const matched = members.filter((member) => ownTokens.get(member.key)!.has(token));
+            for (const member of matched) statedMembers.add(member.key);
+            // A % after a daily-close index is its change, not its absolute level (yield values are %).
+            const changeContext = match[3] === "%" && members.every((member) => !member.valueDisplay.includes("%"));
+            const valueContext = match[3] === "円" || match[3] === "ドル" || /(?:終値|水準|値)(?:は|が)?\s*$/.test(undated.slice(0, match.index));
+            if ((changeContext && !matched.some((member) => changeTokens.get(member.key)!.has(token))) ||
+                (valueContext && !matched.some((member) => valueTokens.get(member.key)!.has(token)))) {
+              issues.push(`指標と数値の不一致（値と前日比の取り違え）: ${quote(sentence)}`);
+            }
+            const targets = matched;
             // The sign printed in front of a day change must be the sign of that change.
-            if (members.length === 1 && changeTokens.get(members[0].key)!.has(token) && members[0].changeSign) {
+            for (const target of targets) {
+              if (!changeTokens.get(target.key)!.has(token) || !target.changeSign) continue;
               const printed = /[+]/.test(match[1]) ? 1 : /[-−▲▼]/.test(match[1]) ? -1 : 0;
-              if (printed !== 0 && printed !== members[0].changeSign) {
-                issues.push(`方向の逆転（前日比の符号が逆）: ${quote(sentence)}（${label}は前日比${members[0].changeDisplay}）`);
+              if (printed !== 0 && printed !== target.changeSign) {
+                issues.push(`方向の逆転（前日比の符号が逆）: ${quote(sentence)}（${target.label}は前日比${target.changeDisplay}）`);
               }
             }
-          } else if (universe.has(token) && !newsTokens.has(token)) {
+          } else if (universe.has(token)) {
             issues.push(`指標と数値の不一致（${label}の値ではない数値 ${match[2]}）: ${quote(sentence)}`);
           }
         }
-        const direction = statesFacts ? directionIn(firstClause(segment)) : null;
+        const direction = statesFacts || PAST_FACT.test(scope) ? directionIn(firstClause(segment)) : null;
         if (direction !== null) {
           const signed = members.filter((fact) => fact.changeSign === 1 || fact.changeSign === -1);
           const contradicted = signed.filter((fact) => fact.changeSign !== direction);
           // One metric must agree. A market word (米国株 / 東京市場) is rejected only when none of its metrics agrees.
-          if (signed.length > 0 && contradicted.length === signed.length) {
+          const collective = /そろって|全て|すべて|とも|いずれも/.test(scope);
+          if (signed.length > 0 && (contradicted.length === signed.length || collective && contradicted.length > 0)) {
             issues.push(`方向の逆転（${label}は${signed.map((fact) => `前日比${fact.changeDisplay}`).join("・")}）: ${quote(sentence)}`);
           }
         }
@@ -215,13 +238,18 @@ export function metricFactIssues(texts: GuardTexts, input: AnalysisInput): strin
         const stated = inClause
           ? `${Number(inClause[1])}月${Number(inClause[2])}日`
           : before && !takenByOtherMarket ? before.ja : null;
-        if (stated && !members.some((fact) => fact.dateJa === stated)) {
+        const datedMembers = statesValue ? members.filter((fact) => statedMembers.has(fact.key)) : members;
+        if (stated && (datedMembers.length > 0 && datedMembers.some((fact) => fact.dateJa !== stated))) {
           issues.push(`日付と指標の不一致（${label}は${[...new Set(members.map((fact) => fact.dateJa))].join("・")}の値、本文は${stated}）: ${quote(sentence)}`);
         }
         const stale = members.filter((fact) => fact.freshness === "stale");
         if (statesValue && stale.length > 0 && stale.length === members.length) {
           const dated = stale.every((fact) => sentence.includes(fact.dateJa)) || STALE_MARKER.test(sentence);
           if (!dated) issues.push(`古い値を日付なしで記載（${label}は${stale[0].dateJa}時点）: ${quote(sentence)}`);
+          const prefix = sentence.slice(0, mention.start).split("、").pop() ?? "";
+          if (CURRENT_STALE_PREFIX.test(prefix) || CURRENT_STALE_SUFFIX.test(firstClause(segment))) {
+            issues.push(`古い値を現在・最新として記載（${label}）: ${quote(sentence)}`);
+          }
         }
       });
     }
@@ -235,7 +263,7 @@ export function metricFactIssues(texts: GuardTexts, input: AnalysisInput): strin
 export function emojiDirectionIssues(texts: string[], input: AnalysisInput): string[] {
   const facts = new Map(input.metricFacts.map((fact) => [fact.key, fact]));
   const issues: string[] = [];
-  for (const line of texts.flatMap((text) => normalize(text).split(/[。\n]/u))) {
+  for (const line of texts.flatMap((text) => normalize(text).split(/[。\n、]/u))) {
     const up = line.includes("📈");
     const down = line.includes("📉");
     if (up === down) continue;

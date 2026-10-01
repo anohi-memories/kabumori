@@ -413,7 +413,7 @@ test("content regeneration is recorded apart from transport retry (the 10/1 morn
   assert.deepEqual(outcome.trace, { generations: 2, hardRejections: ["local"], qualityRewrite: false, deliveredGeneration: 2, warnings: [] });
   assert.deepEqual(generationDiagnostics(outcome.trace), {
     generation_attempts: "2", content_regenerations: "1", hard_rejections: "local", quality_rewrite: "false",
-    delivered_generation: "2", quality_warnings: "",
+    delivered_generation: "2", quality_warnings: "", quality_rewrite_request_failed: "false",
   });
   assert.equal(outcome.ok && outcome.packet.fact.generation_attempts, 2);
 });

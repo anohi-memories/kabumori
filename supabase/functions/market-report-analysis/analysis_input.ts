@@ -332,8 +332,9 @@ export function buildAnalysisInput(args: {
       前日比: move.change_pct_display,
       鮮度: move.freshness === "fresh" ? "最新" : "古い値",
     })),
-    // Major policy/macro items first, then by reach, so they are not buried under company IR.
-    ニュース: [...news].sort((a, b) => Number(isMajorNews(b)) - Number(isMajorNews(a))).map((item) => ({
+    // Keep the same broad > sector > company order the guards/consumers see. The major flag
+    // communicates importance without promoting a narrow emergency above a broad-market item.
+    ニュース: news.map((item) => ({
       ref: item.ref,
       見出し: item.headline_ja,
       要約: item.summary_ja,

@@ -233,6 +233,10 @@ function strings(value: unknown): string[] {
 export function parseGeneratedAnalysis(payload: unknown): GeneratedAnalysis | null {
   if (!payload || typeof payload !== "object") return null;
   const item = payload as Record<string, unknown>;
+  // Invalid structured members must regenerate, not escape as TypeError (including in a rewrite).
+  for (const key of ["claims", "key_news", "strong_themes", "weak_themes"]) {
+    if (Array.isArray(item[key]) && item[key].some((value) => !value || typeof value !== "object" || Array.isArray(value))) return null;
+  }
   const claims = Array.isArray(item.claims)
     ? item.claims.map((raw) => {
       const claim = raw as Record<string, unknown>;
@@ -418,6 +422,9 @@ export function unsupportedCausalSentences(analysis: GeneratedAnalysis, input: A
     analysis.x_post.news_ja ?? "",
     analysis.x_post.closing_ja,
     ...(story ? [story.summary_ja, story.overseas_ja, story.japan_ja, story.cross_asset_ja, story.news_ja, story.strong_ja] : []),
+    // Watch/caution fields can contain historical prose too: their field name is no fact exemption.
+    ...[analysis.x_post.watch_ja ?? "", ...(story ? [story.caution_ja, story.watch_ja] : []), ...analysis.next_watch_ja, ...analysis.risks_ja]
+      .flatMap((value) => value.split(/[。！？!?\n]/)).filter((value) => /ました|でした|した(?:[、]|$)|だった/u.test(value)),
   ];
   const found: string[] = [];
   for (const sentence of texts.flatMap((value) => value.split(/[。！？!?\n]/))) {
@@ -698,6 +705,8 @@ export type GenerationTrace = {
   deliveredGeneration: number;
   /** Quality warnings of the delivered packet. */
   warnings: string[];
+  /** A quality-only request failed; no response body or exception message is retained. */
+  rewriteRequestFailed?: boolean;
 };
 
 type Usage = { calls: number; inputTokens: number; outputTokens: number; costUsd: number; trace: GenerationTrace };
@@ -751,9 +760,16 @@ export async function generateSharedAnalysis(
   let safe: { analysis: GeneratedAnalysis; attempt: number; warnings: string[] } | null = null;
 
   for (let attempt = 1; attempt <= MAX_GENERATIONS; attempt += 1) {
-    const generated = await request("generate", generationRequestBody(input, issues));
-    usage(generated);
+    let generated: StepResult;
     trace.generations = attempt;
+    try {
+      generated = await request("generate", generationRequestBody(input, issues));
+    } catch (error) {
+      if (!safe) throw error;
+      trace.rewriteRequestFailed = true;
+      return deliver(safe.analysis, safe.attempt, safe.warnings);
+    }
+    usage(generated);
     const analysis = parseGeneratedAnalysis(generated.payload);
     if (!analysis) {
       issues = ["出力の形式が不正"];
@@ -768,7 +784,14 @@ export async function generateSharedAnalysis(
       trace.hardRejections.push("local");
       continue;
     }
-    const verdict = await request("fact", factRequestBody(input, analysis));
+    let verdict: StepResult;
+    try {
+      verdict = await request("fact", factRequestBody(input, analysis));
+    } catch (error) {
+      if (!safe) throw error;
+      trace.rewriteRequestFailed = true;
+      return deliver(safe.analysis, safe.attempt, safe.warnings);
+    }
     usage(verdict);
     const fact = verdict.payload as { passed?: unknown; issues?: unknown };
     if (fact?.passed !== true) {
@@ -801,6 +824,7 @@ export function generationDiagnostics(trace: GenerationTrace): Record<string, st
     content_regenerations: String(Math.max(0, trace.generations - 1)),
     hard_rejections: trace.hardRejections.join(","),
     quality_rewrite: String(trace.qualityRewrite),
+    quality_rewrite_request_failed: String(trace.rewriteRequestFailed ?? false),
     delivered_generation: String(trace.deliveredGeneration),
     quality_warnings: trace.warnings.join(" / ").slice(0, 600),
   };
