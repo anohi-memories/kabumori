@@ -71,6 +71,11 @@ export function numericTokens(value: string): string[] {
   return (normalize(value).match(/\d+(?:,\d{3})*(?:\.\d+)?/g) ?? []).map((token) => token.replace(/,/g, "").replace(/^0+(?=\d)/, ""));
 }
 
+/** Whether the text names a market metric or a whole market (日経平均, 東京市場, 米国株, ドル円, …). */
+export function mentionsMarketMetric(text: string, input: AnalysisInput): boolean {
+  return mentions(normalize(text), new Map(input.metricFacts.map((fact) => [fact.key, fact]))).length > 0;
+}
+
 function mentions(sentence: string, facts: Map<string, MetricFact>): Mention[] {
   const found: Mention[] = [];
   const add = (alias: string, keys: string[]) => {
