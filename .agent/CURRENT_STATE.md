@@ -1,3 +1,16 @@
+## Final K2 — Presentation v2 production deploy
+
+- verdict: **PASS**.
+- production `market-report-analysis` v17 accepted; verify_jwt=false.
+- deployed source/read-back matches merged PR #67 v2 baseline.
+- app_enabled=false / x_enabled=false confirmed; 8 relevant cron jobs remain active/unchanged.
+- G2 mutation accepted as one target Function deploy only; no manual cycle / DB / Auth / Vault / X / gate mutation.
+- concurrent x-test-post v130 -> v131 occurred at 14:19:06 JST, before G2 deploy started at 14:21:09 JST. PR #66 had merged at 14:10 JST and the deployed x-test-post source matches latest main per G2 read-back. It is therefore recorded as a separate concurrent workstream mutation, not a G2 violation. x_enabled=false, so the shared X consumer remains inactive.
+- no rollback required.
+- next G2: first natural Presentation v2 close observation after 16:40 JST on 2026-10-01.
+- recommended Claude model: **Sonnet5（中）**.
+- ACTIVE_TASK G2/G3 index section was found interleaved/corrupted by concurrent control-file updates; it has been rebuilt from the canonical G2 and G3 TASK headers without changing G3's underlying TASK.
+
 ## K4 HOLD — PR #65 operator account-switch E2E remains
 
 - PR #65 exact head `e5a66f5ba71f64b1a38d8f89faff3d0a31972949` remains open / mergeable.
