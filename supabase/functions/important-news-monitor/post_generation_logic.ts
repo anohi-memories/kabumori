@@ -453,24 +453,53 @@ function hasUnsupportedMarketAssertion(candidate: GenerationCandidate, generated
   );
 }
 
-function explicitYears(candidate: GenerationCandidate): string[] {
+// Dates whose year belongs to the news itself when the body labels them so ("発表日 2026-09-09",
+// "適用日 2027-03-31"). PDF text often spaces kanji out ("発 表 日"), so the labels tolerate whitespace.
+const EVENT_DATE_LABELS = [
+  "発表日", "公表日", "適用日", "効力発生日", "実施日", "開始日", "契約締結日", "締結日", "決定日", "施行日", "予定日", "上場日",
+];
+const spaced = (label: string) => Array.from(label).join("\\s*");
+const LABELLED_EVENT_YEAR = new RegExp(
+  `(?:${EVENT_DATE_LABELS.map(spaced).join("|")})\\s*[:：]?\\s*((?:19|20)\\d{2})`,
+  "gu",
+);
+const FIRST_FISCAL_PERIOD_YEAR = /((?:19|20)\d{2})\s*年\s*\d{1,2}\s*月\s*期/u;
+// Only in earnings disclosures is the first fiscal period the subject. In TOB, M&A, dividend and other
+// notices it is a reference ("所有割合は2027年3月期第1四半期決算短信に記載", "2027年3月期からの中期経営計画"),
+// which the first backtest of this rule showed failing five more posts.
+const SUBJECT_PERIOD_CATEGORIES = new Set<string>(["earnings", "earnings_revision_up", "earnings_revision_down"]);
+
+/**
+ * Years the generated post must state. Headline and judgement-reason years define the candidate and
+ * stay required. A body year is required only when it is the news's own year: the year of a labelled
+ * event date, or — in an earnings disclosure whose headline and reason carry no year — the first fiscal
+ * period the body names ("2026年3月期"). Years that merely occur in the body (prior-year comparison columns, earlier
+ * resolution or announcement dates, warrant exercise periods, historical references, long-range plans)
+ * are not required: 2026-09-30/10-02 showed six TDnet/AJ posts failing on exactly such years, and
+ * no rewrite could fix them. The set never exceeds the previous rule's (body years within one year of
+ * the publication year), so this can only stop failures, never add any.
+ */
+export function explicitYears(candidate: GenerationCandidate): string[] {
   const headlineEvidence = [candidate.title, candidate.judgementReason]
     .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
     .join("\n");
   const headlineYears = headlineEvidence.match(/(?:19|20)\d{2}/gu) ?? [];
 
-  // PDF/RSS bodies often contain historical legal references, page metadata, or URLs (for example
-  // the 1930 Tariff Act and a 2022 performance reference). Requiring every such year in a short post
-  // creates false Fact failures. Keep body years only when they are close to the candidate's event
-  // year; headline/judgement years remain required because they define the candidate itself.
   const publishedYear = Number(candidate.publishedAt.slice(0, 4));
-  const bodyYears = typeof candidate.bodySummary === "string"
-    ? candidate.bodySummary.match(/(?:19|20)\d{2}/gu) ?? []
-    : [];
-  const relevantBodyYears = Number.isFinite(publishedYear)
-    ? bodyYears.filter((year) => Math.abs(Number(year) - publishedYear) <= 1)
-    : bodyYears;
-  return [...new Set([...headlineYears, ...relevantBodyYears])];
+  // Only years the previous rule would have required can stay required (ASCII years in the raw body,
+  // within one year of publication): the narrowed rule is strictly a relaxation.
+  const previouslyRequired = new Set(
+    (typeof candidate.bodySummary === "string" ? candidate.bodySummary.match(/(?:19|20)\d{2}/gu) ?? [] : [])
+      .filter((year) => !Number.isFinite(publishedYear) || Math.abs(Number(year) - publishedYear) <= 1),
+  );
+  const nearPublication = (year: string) => previouslyRequired.has(year);
+  const body = typeof candidate.bodySummary === "string" ? candidate.bodySummary.normalize("NFKC") : "";
+  const subjectBodyYears = [...body.matchAll(LABELLED_EVENT_YEAR)].map((match) => match[1]);
+  if (headlineYears.length === 0 && SUBJECT_PERIOD_CATEGORIES.has(candidate.category)) {
+    const firstPeriod = body.match(FIRST_FISCAL_PERIOD_YEAR)?.[1];
+    if (firstPeriod) subjectBodyYears.push(firstPeriod);
+  }
+  return [...new Set([...headlineYears, ...subjectBodyYears.filter(nearPublication)])];
 }
 
 function hasMissingExplicitYear(candidate: GenerationCandidate, generatedText: string): boolean {
