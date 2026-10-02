@@ -4,7 +4,7 @@
 - owner: claude
 - slot: claude-3
 - status: review_required
-- next_owner: chatgpt
+- next_owner: codex
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: feature implementation / AI conversation / Edge Function / authenticated settings proposal
@@ -1329,3 +1329,16 @@ Unexpected residue: **none**.
 - remaining UI issue: `/accounts/[id]` is now reachable but lacks a visible top header/back button; edge-swipe works. Treat separately as route/navigation polish.
 - no TestFlight/App Store/native production build was released by this task.
 - G3 closed and reusable after fresh allocation.
+
+
+## K3 decision — PR #78 AI consultation v1
+
+- verdict: **PASS to focused Codex review; merge/deploy HOLD**.
+- review target: PR #78 exact head `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7`.
+- PR open/mergeable; fresh main +7 commits with no overlap across the 11 PR files.
+- Netlify success; Vercel failure is the known build-rate-limit signal.
+- source/test scope is consistent with AI consultation v1; no migration/deploy/production mutation/X operation.
+- K3 does not merge because the candidate adds an authenticated AI API plus user-confirmed durable settings/persona writes.
+- H2 assigned `x-social-mobile-pr78-ai-consult-review-20261002`, recommended **Sol（高）**.
+- key review includes real production `updated_at` CAS/trigger semantics and verify_jwt config, not only unit tests.
+- next_owner: codex; wait for C2.
