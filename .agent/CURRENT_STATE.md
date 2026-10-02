@@ -1,3 +1,13 @@
+## H1 completed — PR #76 publish-toggle security review (2026-10-02 JST)
+
+- task_id: `x-social-mobile-pr76-publish-toggle-review-20261002`; status `review_required`, next_owner `chatgpt`.
+- verdict: **FAIL / CHANGES REQUIRED**. Exact PR head `a59a89e9c585fb6e780e1af2ecc898c830f5524e` remains unchanged; merge/deploy HOLD.
+- blockers independently reproduced: membership revoked/demoted after lookup still permits service-role ON; brand disabled after lookup still permits ON, and an independently loaded runtime context can combine stale live-brand data with the newly enabled account. The cached send guard is not a fresh authorization check before each X write.
+- additional P2: unscoped no-match reread can expose a moved foreign account's state; ON not-null predicate accepts an identity that became empty; open ON confirmation can retarget another account or still submit after preview mode changes.
+- verification: Edge 37/37, mobile 134/134, domain 22/22; target runtime check/lint and mobile typecheck/lint PASS. X regression 48/48 with --no-check; checked X suite has two existing type errors, candidate test lint has five require-await helper warnings. Seven scratch server/runtime proof tests + two client proofs executed (counterexamples, not corrections).
+- correction needs a separately scoped transactional authorization boundary; no migration/RPC/publishing-runtime expansion made. Production catalog read attempts hit permission-review deadlines (no successful evidence); production writes/deploy/X operations = 0.
+- report: `.agent/CODEX_REPORT.md`. Next **C1, 推薦モデル：Sol（高）**; decide corrective scope without treating this report as production approval. H1 STOP.
+
 ## Final K2 — PR #77 quality rewrite calibration
 
 - verdict: **PASS / merged**.

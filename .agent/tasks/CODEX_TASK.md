@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-pr76-publish-toggle-review-20261002
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused review / posting-permission security boundary
@@ -249,6 +249,16 @@ Then:
 - STOP for C1.
 
 Recommended model: **Sol（高）**.
+
+## H1 completion — 2026-10-02 JST
+
+- verdict: **FAIL / CHANGES REQUIRED**; PR #76 merge/deploy HOLD.
+- reviewed exact head: `a59a89e9c585fb6e780e1af2ecc898c830f5524e`; candidate runtime is unchanged, no source fix or other-slot branch write.
+- blockers: membership revocation/demotion races still permit the service-role update; brand active/live TOCTOU is not made non-publishing by the actual cached runtime guard. Additional P2 findings: foreign-brand no-match reread, nonempty identity/readiness mismatch, unpinned client ON confirmation/preview transition.
+- independent verification: Edge 37/37, mobile 134/134, domain 22/22; mobile typecheck/lint and target runtime check/lint PASS; relevant X tests 48/48 with --no-check. Seven scratch HTTP/runtime proofs and two client proofs executed; these prove counterexamples, not fixed behavior.
+- verification limits: relevant X checked run fails on two pre-existing type errors; candidate test-directory Deno lint fails on five require-await test-helper warnings. Production catalog reads were attempted twice but permission-review deadlines returned no catalog evidence; no production write/deploy/X operation.
+- architecture/transaction-boundary correction is outside the no-migration/no-RPC-change authority; STOP for C1. Detailed findings, reproduction schedules and recommendations appended to `.agent/CODEX_REPORT.md`.
+- next recommendation: **C1, 推薦モデル：Sol（高）**; separately scope G4 corrective work. This H1 does not allocate G4 or authorize DB/runtime/production changes.
 
 ---
 

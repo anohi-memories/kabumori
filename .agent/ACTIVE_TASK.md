@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: x-social-mobile-pr76-publish-toggle-review-20261002
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: chatgpt
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Focused security review of PR #76 exact head a59a89e9c585fb6e780e1af2ecc898c830f5524e. Verify Auth/tenant isolation, owner/admin policy, strict ON prerequisites, fail-safe OFF, CAS/races, brand active/live TOCTOU vs runtime publish guard, exact publish_enabled-only mutation, JWT/config and safe client behavior. No merge/deploy/production toggle/X operation. Recommended Sol（高）.
+- allocation: H1 FAIL / CHANGES REQUIRED for PR #76 exact head a59a89e9c585fb6e780e1af2ecc898c830f5524e, unchanged. Executed membership revocation/demotion and brand/runtime mixed-snapshot counterexamples; additional readiness, foreign reread and client confirmation findings. No migration/RPC/runtime fix authorized, no merge/deploy/production toggle/X operation. Report synchronized; STOP for C1, recommended Sol（高）.
 
 ## Codex H2
 - owner: codex
