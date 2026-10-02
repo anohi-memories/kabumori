@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-pr76-publish-toggle-review-20261002
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused review / posting-permission security boundary
@@ -1452,3 +1452,25 @@ Then status -> review_required, next_owner -> chatgpt, STOP for C1.
 - production mutation: 0.
 - merge decision: **HOLD** until safe operator provider-side E2E confirms a different X account can authenticate without silently reusing the prior normal-browser session, including cancel/retry/reconnect behavior.
 - H1 is closed and free. G4 remains review_required for the operator E2E/merge gate.
+
+
+## Final C1 — PR #76 publish-toggle review
+
+- verdict: **FAIL / CHANGES REQUIRED accepted**.
+- reviewed exact head: `a59a89e9c585fb6e780e1af2ecc898c830f5524e`.
+- H1 source fix: none; the required correction crosses transaction/authorization/runtime publish boundaries and was correctly not improvised inside review.
+- accepted P1 blockers:
+  - membership authorization snapshot is not atomically bound to the privileged publish_enabled write;
+  - brand active/live TOCTOU can combine with cached runtime context and permit a new publish path without a single current state where brand-live + account-ON were simultaneously authoritative.
+- accepted P2 blockers:
+  - zero-row reread can expose foreign-tenant current state after account movement/revocation;
+  - ON readiness read/write predicates differ (including blank platform identity semantics);
+  - ON confirmation is not pinned to the exact account/context shown.
+- candidate tests passing do not override the independently reproduced adverse interleavings.
+- PR #76 remains open/unmerged; merge/deploy prohibited.
+- production mutation / real X operations from H1: 0 / 0.
+- G4 corrective assigned: `x-social-mobile-publish-toggle-transactional-corrective-20261003`.
+- required correction includes atomic caller/membership/brand/account/CAS authorization boundary plus fresh pre-send permission verification and client confirmation pinning.
+- G4 recommended model: **Opus5.5（極高）**.
+- after G4 correction, independent rereview required; recommended Codex model: **Sol（極高）**.
+- H1 closed and reusable after fresh allocation.
