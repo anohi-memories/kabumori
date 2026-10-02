@@ -36,13 +36,13 @@
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: x-social-mobile-pr78-ai-consult-review-20261002
+- task_id: x-social-mobile-content-settings-schema-prereq-review-20261002
 - start_code: H2
 - finish_code: C2
 - next_owner: codex
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Focused review of PR #78 exact head 6e9f78a31bae9b65599732a9b416dcb50f2bfbc7. Verify JWT/tenant isolation, forged-history/prompt injection, strict structured output, no implicit persistence, updated_at CAS against production schema/triggers, history-learning no-X boundary, cost/rate-limit rollout risk and verify_jwt config. No merge/deploy/production write/live AI/X operation. Recommended Sol（高）.
+- allocation: Review existing source-only social_mobile_content_settings migration candidate as PR #78 prerequisite. Verify JSON contract, owner-only RLS/grants, updated_at CAS, lifecycle/common-account compatibility, drift/idempotency, production catalog compatibility and local disposable behavior. No production apply/write/deploy. Recommended Sol（高）.
 
 ## Claude G1
 - owner: claude
@@ -75,7 +75,7 @@
 - finish_code: K3
 - next_owner: codex
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: K3 PASS to focused Codex review. PR #78 exact head 6e9f78a31bae9b65599732a9b416dcb50f2bfbc7 is open/mergeable; 11 files, source/tests only, no migration/deploy/production mutation/X operation. H2 review assigned before merge because this adds authenticated AI API + confirmed settings persistence. Recommended review Sol（高）.
+- allocation: C2 HOLD. PR #78 source remains unmerged. H2 found mandatory production schema prerequisite missing: public.social_mobile_content_settings does not exist, so confirmed settings/persona persistence and updated_at CAS cannot be approved. Existing source migration candidate is now under separate H2 review; no production apply authorized. Resume PR #78 review only after schema prerequisite is accepted/applied/read-back under explicit approval.
 
 ## Claude G4
 - owner: claude
