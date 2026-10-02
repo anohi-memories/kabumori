@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: done
 - task_id: x-social-mobile-pr76-publish-toggle-review-20261002
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Focused security review of PR #76 exact head a59a89e9c585fb6e780e1af2ecc898c830f5524e. Verify Auth/tenant isolation, owner/admin policy, strict ON prerequisites, fail-safe OFF, CAS/races, brand active/live TOCTOU vs runtime publish guard, exact publish_enabled-only mutation, JWT/config and safe client behavior. No merge/deploy/production toggle/X operation. Recommended Sol（高）.
+- allocation: Final C1 accepted FAIL / CHANGES REQUIRED on PR #76 head a59a89e9c585fb6e780e1af2ecc898c830f5524e. P1 membership-write race and brand active/live TOCTOU reproduced; P2 tenant reread/readiness/client-confirmation issues also accepted. No merge/deploy/source review fix. H1 free after fresh allocation.
 
 ## Codex H2
 - owner: codex
@@ -80,13 +80,13 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: review_required
-- task_id: x-social-mobile-publish-toggle-v1-20261002
+- status: ready
+- task_id: x-social-mobile-publish-toggle-transactional-corrective-20261003
 - start_code: G4
 - finish_code: K4
-- next_owner: codex
+- next_owner: claude
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: K4 PASS to focused Codex review. PR #76 exact head a59a89e9c585fb6e780e1af2ecc898c830f5524e is open/mergeable; CI green; main +5 commits with no overlap. Source/tests only, production mutation 0, X operations 0. H1 review assigned before merge because this is a posting-permission/security boundary. Recommended review Sol（高）.
+- allocation: Correct PR #76 after Final C1 FAIL. Build an atomic caller/membership/brand/account/CAS publish-toggle boundary, close brand TOCTOU with fresh pre-send authorization, prevent tenant-state reread leaks, align ON readiness semantics, and pin UI confirmation to exact account/context. New narrow migration/RPC allowed only for this boundary; no production apply/deploy/X operation. Recommended Opus5.5（極高）. Fresh Codex rereview Sol（極高） mandatory before merge.
 
 ## Claude G5
 - owner: claude
