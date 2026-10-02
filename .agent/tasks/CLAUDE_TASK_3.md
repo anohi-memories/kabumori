@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-ai-consult-v1-20261002
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: feature implementation / AI conversation / Edge Function / authenticated settings proposal
@@ -425,6 +425,93 @@ Likely review:
 - focus: Auth/membership boundary, prompt/structured-output injection, no implicit persistence, cost bounds, no publish/X side effects.
 
 Only after source review/merge should G4 be assigned the real **past-post learning** integration.
+
+
+## Report — x-social-mobile-ai-consult-v1-20261002
+
+- task_id: x-social-mobile-ai-consult-v1-20261002
+- result: **PASS (source + tests + PR; K3 / Codex review requested before merge)**. Model: Opus 5.5 (switched by the user before start).
+- PR: https://github.com/anohi-memories/kabumori/pull/78 — branch `claude/g3-ai-consult-v1-20261002`, commit `6e9f78a3` (rebased on origin/main `0c2c04e0`), pushed.
+
+### Architecture / endpoint chosen
+- New dedicated Edge Function `supabase/functions/social-mobile-consult` (`index.ts` + pure `logic.ts`). Read-only: it has no write path, no service-role client, no token/Vault adapter, no X adapter.
+- Client: `domain/consult-session.ts` (pure), `data/consult-client.ts` (functions.invoke), rewritten `app/(tabs)/consult.tsx`, versioned save in `data/content-settings-repository.ts`.
+- One deliberate tightening vs. the TASK text: saved settings/persona are **read server-side with the caller's JWT** instead of being sent by the client, so the request is only `brand_id` + `message` + bounded `history`. The assistant gets the same inputs; the client cannot inject "saved" state.
+
+### Existing foundations reused
+- Auth/ownership pattern of `social-mobile-brand-dry-run` (`/auth/v1/user` + RLS-scoped REST reads with the user JWT + `social_mobile_user_v1` profile check).
+- `_shared/brand/social_mobile_content_settings.ts` (`normalizeSocialMobileContentSettings`, `materializeSocialMobilePersonaProfile`).
+- OpenAI Responses API pattern and default model tier of `brand_post_generator.ts` (`gpt-5.6-luna`, `store:false`, low reasoning) and the strict `json_schema` output pattern already used in `market-intelligence-ingest`. Same `OPENAI_API_KEY` secret; no new vendor or secret.
+- `validateConversationalAssistantResult()` kept as the client trust boundary (strengthened), `applyConfirmedConversationProposal()`, existing `social_mobile_content_settings` storage, existing history-learning consent gate. `createConversationalAssistantProposal()` is kept only for the sample-data preview and tests.
+
+### Exact AI request / response trust boundary
+- Request to the model: system prompt + a data block of saved editable settings (+ read-only approval mode / generation time for explanation) and the **confirmed** persona only + bounded turns + the message. Never tokens, Vault ids, account/auth data, other workspaces.
+- Model output = untrusted. `sanitizeConsultModelOutput()` (server): exact top-level key set; allowlisted settings keys (preferredTone, themes, objective, frequencyTargetPerWeek, optionalNgWords, notes) and persona keys; types and lengths bounded; any key matching publish/account/oauth/token/secret/schedul/cron/approval/generationWindow/locale/password/session/delete/vault refused anywhere; `chat`/`question` can never carry a delta; a delta equal to the saved value is dropped; anything else -> `CONSULT_AI_MALFORMED` (502, retryable), nothing saved.
+- The client re-validates the envelope and result (`parseConsultResponse` -> `validateConversationalAssistantResult`), independently allowlisted; an envelope claiming a save/publish/X call is rejected.
+- Result always has `requiresConfirmation: true`, `publishPermissionChanged: false`; envelope pins `settings_saved/persona_saved/publish_attempted/scheduled_post_created/x_api_called: false`.
+
+### Authorization checks
+1. Bearer required -> Auth server verifies the user (identity checked before body parsing).
+2. `brand_memberships` read with the user's JWT, filtered by the **verified** user id + requested brand + role owner; row must match all three.
+3. `brands` row must exist for that id and be `social_mobile_user_v1`.
+4. Any missing/malformed/mismatched row -> 404/409, no settings read, no model call. No PR #70 / common-account semantics used. No service role anywhere.
+5. Logs are metadata only (request id, result class, counts/lengths, duration, model, token usage); message/history/reply text, Authorization, user id, brand id, email and keys are never logged or returned (tested).
+
+### Chat modes implemented
+chat (casual talk, general questions, brainstorming, explaining current settings — no proposal), question (1 question, at most 2), proposal (delta only, on a clear preference; hesitant statements are handled conversationally by prompt rule). No web/live info (the assistant says so). Requests to change posting/schedule/X connection/login/deletion are answered as chat with a pointer to the app screen.
+
+### Confirmation / persistence semantics
+- An arriving answer only updates on-screen session state. The only write path is 「これで覚えて」 -> re-read latest -> `planConfirmedSave` -> `saveConfirmedIfUnchanged`.
+- Delta applied onto the freshly read state: unrelated fields (including newer ones) are preserved.
+- If a field the proposal touches changed since the proposal was shown -> no write, user is asked to confirm again against the current state.
+- Save is a compare-and-swap on `updated_at` (insert when no row; a concurrent change/insert -> `stale`, nothing written).
+- Settings-only confirmation does not touch persona columns or relabel persona provenance; a persona delta is merged and saved as confirmed/conversation.
+- A newer proposal replaces the pending one; a plain answer leaves it; the user can dismiss it. Chat continues after a save.
+- Raw conversation lives in screen state only; no transcript table, no analytics.
+
+### Past-post learning handoff
+`historyLearningIntent` preserved (model flag OR deterministic match on the user's own words). It only opens the existing consent gate; no X call, no persona derived, `derivedProfile` always null. G4 can attach the verified-account fetch behind that gate without changing the chat contract.
+
+### changed_files
+- supabase/functions/social-mobile-consult/{index.ts,logic.ts,logic_test.ts} (new)
+- apps/social-mobile/src/domain/consult-session.ts (new), src/data/consult-client.ts (new)
+- apps/social-mobile/src/app/(tabs)/consult.tsx, src/data/content-settings-repository.ts, src/domain/content-settings-conversation.ts, src/domain/content-settings.ts
+- apps/social-mobile/tests/{consult.test.mjs,consult-screen.test.mjs} (new)
+
+### Pre-existing defect found and fixed (it blocked every save)
+The app validator rejected the saved default `generationWindow.endLocal = "24:00"` (DB constraint and server accept it), so `validateSocialMobileContentSettings(DEFAULTS)` was false and any settings save/read with the default window failed. Only the end time now accepts `24:00`; regression test added. Not a schema change.
+
+### tests
+- Server (`logic_test.ts`, 26): unauthenticated rejected; non-member / wrong role / wrong user rejected; valid owner accepted; bounded message/history; oversized/malformed/unknown-key input rejected; secret never returned/logged; safe response parses; malformed JSON/shape fails closed; publish/OAuth/token/scheduler/account/approval smuggling rejected; chat-only creates no proposal; proposal does not persist (handler performs only GETs); current-settings explanation has no mutation; past-post intent makes no X call; provider error/timeout safe + retryable; model call count = 1.
+- App domain (`consult.test.mjs`, 29) and real screen code driven with stubbed React + scripted AI + in-memory versioned store (`consult-screen.test.mjs`, 11): bounded multi-turn history; chat shows no proposal card; follow-up question; proposal shows only changed fields; confirmation persists; unconfirmed persists nothing; later correction replaces pending proposal; unrelated settings unchanged; persona not erased by settings-only confirmation; changed settings not clobbered (reconfirm + CAS); general chat never toggles posting/scheduling/X; history request stays consent-gated; retry; preview mode makes no call and no write.
+- End-to-end contract test: client -> real Edge handler (model stubbed) -> client validator -> save plan.
+- Mutation checks (10): removing the membership check, the chat-delta rule, the settings allowlist, the request-key allowlist, the CAS filter, the stale-conflict rule, the client allowlist, or leaking the message into the log each makes a test fail. The deep forbidden-key scan is redundant with the allowlists (defence in depth; noted in code).
+- Runs: `npm test` 153/153; typecheck 0; lint 0; `deno test` social-mobile-consult + dry-run + history-learning + `_shared/brand` 196/196; `deno check`, `deno lint` clean; `git diff --check` clean; secret scan and scope diff clean (no migration, x-connect, auth-provider, account-deletion, env, Vault, config path).
+- No live paid AI call was made.
+
+### Local verification (G3-owned, mock AI responses)
+1 greeting/casual -> natural reply, no proposal. 2 「どんな投稿にしたらいい？」 -> follow-up question. 3 「親しみやすく、AIの話を多めにしたい」 -> reviewable proposal (tone + themes only). 4 before confirmation the store is byte-identical, zero writes. 5 after 「これで覚えて」 the store shows only the intended changes. 6 「今どういう設定？」 -> explanation, no proposal. 7 「過去投稿を読んで」 -> consent gate only, no X call. 8 no posting/schedule/X-connection side effect (handler issues only GETs + one provider request). All executed through the real screen code and the real handler with stubs.
+
+### AI / provider / model usage policy
+OpenAI Responses API, `gpt-5.6-luna` (existing default tier), structured output, `max_output_tokens` 900, 25 s timeout, 1 call per send, no retry/tools/web search, `store:false`. Input caps: message 1000 chars, 12 turns x 1000 chars, 6000 chars total, 32 KB body.
+
+### DB migration = none. production mutation = 0. real X operations = 0. No deploy, no secret/config change.
+
+### remaining issues
+1. Live model behaviour (prompt quality, how reliably it distinguishes chat / question / proposal and hesitant statements) is **not verified**; it needs a dev invocation after deploy. Contract safety does not depend on it.
+2. No native (Simulator) visual check of the new screen in this task; behaviour is verified through the real screen code in tests. UI is functional-only by design.
+3. No per-user rate limit / usage accounting (no existing helper for social-mobile); only per-request caps. Recommend a quota before public rollout.
+4. The endpoint is not deployed; the app shows a retryable error until it is. Deploy with `verify_jwt` on (the function also verifies the user itself). Remember the worktree-root deploy caveat (byte-verify).
+5. Client-supplied `history` can contain forged assistant turns; they only influence the caller's own conversation and the output is still allowlisted. Worth a reviewer's look.
+6. A persona edited through conversation sets provenance to `conversation` even when it was derived from past posts (existing `source: result.provenance` rule kept; analysed count/date are preserved).
+7. Whether the production `social_mobile_content_settings` table exists was not checked (production reads are not available to this slot); the endpoint falls back to defaults if the table is absent, and the app already reports the table as unavailable.
+
+### safety_checks
+Own worktree/branch only; explicit-path staging; untracked `supabase/.temp`, `supabase/config.toml` left untouched; no other slot's files, simulator or Metro used; no secrets, tokens or personal emails in code, tests or this report.
+
+### next_recommendation
+- K3 -> focused Codex review (H2, Sol（高）) on: Auth/membership boundary, prompt / structured-output injection, no implicit persistence, cost bounds, no publish/X side effects.
+- After merge: controlled deploy + one dev conversation to tune the prompt; then G4 past-post learning behind the existing consent gate; add a per-user quota.
 
 ---
 
