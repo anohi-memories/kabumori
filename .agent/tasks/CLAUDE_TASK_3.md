@@ -1342,3 +1342,14 @@ Unexpected residue: **none**.
 - H2 assigned `x-social-mobile-pr78-ai-consult-review-20261002`, recommended **Sol（高）**.
 - key review includes real production `updated_at` CAS/trigger semantics and verify_jwt config, not only unit tests.
 - next_owner: codex; wait for C2.
+
+
+## C2 result — schema prerequisite missing
+
+- verdict: **HOLD / CHANGES REQUIRED before PR #78 merge**.
+- H2 confirmed production `public.social_mobile_content_settings` is absent.
+- PR #78 source head remains `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7`; no H2 source fix.
+- AI conversation source is not rejected on its merits; review stopped at the mandatory persistence/CAS prerequisite.
+- existing source-only migration candidate is undergoing a separate H2 review.
+- no production schema apply is authorized.
+- G3 remains review_required and blocked from merge/deploy until schema prerequisite and the remaining H2 PR #78 review gates are completed.
