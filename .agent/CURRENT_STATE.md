@@ -1,3 +1,18 @@
+## Final C2 — Common Account pre-production gate HOLD
+
+- verdict: **PARTIAL / operator prerequisite accepted**.
+- merged source remains accepted; this is not a source rollback.
+- production migration apply: **HOLD**.
+- production backfill apply: **HOLD**.
+- H2 independently reran merged local evidence: lifecycle 20 PASS, mutations 46/46 detected, social deletion 8 PASS, migration invariants 10/10 PASS.
+- production read-only catalog preflight found required tables/columns/FKs/helper contracts compatible, target migration not yet applied and no target object collision.
+- production backfill dry-run snapshot: Auth/common candidates 5, Kabumori 2, X 1, Auth-only 2, manual-review 3. Phase 0 had 4 Auth users; the additional user is Auth-only under current consumer-classification rules.
+- blocking prerequisite: no approved disposable nonproduction Supabase project/sandbox, so real GoTrue/PostgREST/Storage/managed-role/Data API proof is still NOT RUN.
+- production mutation/read safety: only authorized SELECT/catalog reads were used; writes/apply/backfill/Auth/Storage/OAuth/Vault/deploy/Cron/flag changes = 0.
+- next operator action: explicitly designate an approved disposable nonproduction Supabase environment, or separately authorize creation of one. Do not infer that any existing unrelated Supabase project is disposable.
+- after Gate B proof, C2/final rollout gate must separately decide migration apply and backfill apply; each remains separately approval-gated.
+- recommended model for resumed pre-production gate: **Sol（極高）**.
+
 ## K4 — PR #76 publish-toggle source PASS to Codex review
 
 - verdict: **PASS to focused Codex review; merge/deploy HOLD**.
