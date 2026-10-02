@@ -1,3 +1,23 @@
+## Final C1 — PR #76 publish-toggle review FAIL / corrective required
+
+- verdict: **FAIL / CHANGES REQUIRED**; PR #76 remains open/unmerged at exact head `a59a89e9c585fb6e780e1af2ecc898c830f5524e`.
+- H1 independently reproduced critical concurrency/authorization failures against the actual candidate code.
+- P1 R1: membership is checked as a snapshot, then a service-role PATCH can still enable/disable after the caller loses or is demoted from owner/admin.
+- P1 R2: brand active/live is checked separately from the write, while the posting runtime can reuse cached brand context. H1 reproduced an interleaving where there was no authoritative instant with brand active/live + account ON together, yet the runtime publish guard passed.
+- P2 R3: after account movement/revocation, the no-match service-role reread can expose foreign-tenant current state.
+- P2 R4: ON readiness read and write predicates differ; blank/whitespace platform identity and credential-structure semantics are not aligned with runtime authority checks.
+- P2 R5: an ON confirmation opened for account A can submit for account B after context/props change; preview transition can leave confirmation actionable.
+- positive baseline remains: initial JWT/account/member checks, ordinary boolean CAS, narrow publish_enabled PATCH, fail-safe OFF intent and most normal-path tests are useful but insufficient for merge.
+- H1 made no source fix because the safe repair requires a transaction/authorization boundary and runtime pre-send permission contract, outside bounded review authority.
+- production mutation=0; real X operations=0; PR merge/deploy=0.
+- G4 corrective assigned: `x-social-mobile-publish-toggle-transactional-corrective-20261003`.
+- corrective must atomically bind caller + current owner/admin membership + authoritative brand/account + expected state + ON prerequisites, add a fresh authoritative pre-send guard so stale cached state cannot begin a new X write, close tenant-safe reread semantics, align readiness checks and pin UI confirmation context.
+- narrow new migration/RPC is allowed only for this corrective source task; production apply remains forbidden.
+- G4 recommended Claude model: **Opus5.5（極高）**.
+- after K4, independent Codex rereview is mandatory; recommended **Sol（極高）**.
+- H1 closed/free after fresh allocation.
+- AI Lab diary: no update; this is a rejected internal candidate, not a completed product capability.
+
 ## Final C2 — PR #78 HOLD: production content-settings schema missing
 
 - verdict: **FAIL / CHANGES REQUIRED (schema prerequisite)**.
