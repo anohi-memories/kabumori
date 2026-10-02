@@ -1,3 +1,17 @@
+## Final K2 — corrected PR #79 to H1 review
+
+- verdict: **PASS to focused review; merge/deploy HOLD**.
+- PR #79 corrected head: `9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3`, open/mergeable.
+- G2 reproduced the prior K2 laundering gap on old head and reports it closed on the corrected head.
+- legitimate 10/2 watch-reference phrasing remains accepted; assertion-before-watch, wrong-date numeric/session, 10/1 mixed-session, stale/current, 1306, polarity, causality and unknown-ref cases remain Hard in reported regressions.
+- reported verification: session-date 10/10; market-report-analysis 123/123; personalized 128/128; X shared 8/8; data-packet 42/42; _shared 361/361; check/lint/diff PASS.
+- production mutation=0.
+- fresh K2 no-race check found PR mergeable with no overlap against current main in its three files.
+- H1 became genuinely free after its prior X publish-toggle C1 closed, so H1 is now assigned `kabumori-pr79-session-date-hard-guard-review-20261003`.
+- recommended Codex model: **Sol（高）**.
+- H1 must explicitly inspect WATCH_RELATION/MOVE_LIST/NOUN/PLACE and the pre-existing HYPOTHETICAL skip behavior before any merge.
+- PR #77 remains merged but production-unapplied; production rollout waits for C1 acceptance of PR #79, then both changes should be bundled into one market-report-analysis deploy with app/x gates OFF.
+
 ## Final C1 — PR #76 publish-toggle review FAIL / corrective required
 
 - verdict: **FAIL / CHANGES REQUIRED**; PR #76 remains open/unmerged at exact head `a59a89e9c585fb6e780e1af2ecc898c830f5524e`.
