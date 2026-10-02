@@ -342,7 +342,8 @@ test("10/1 replay: the packet that led with one company's impairment is reordere
   };
   const check = localAnalysisCheck(replay, input);
   assert.deepEqual(check.hard, [], "its facts were right");
-  assert.ok(has(check.warnings, "X本文が個別企業の開示を市場全体のニュースより前に扱っている"), check.warnings.join(" / "));
+  // The digest told the Nidec notice and none of the five broad items available that morning.
+  assert.ok(has(check.warnings, "X本文が個別企業の開示だけを扱い、市場全体のニュースに触れていない"), check.warnings.join(" / "));
   const ordered = assemblePacket(input, replay, { generatedAt: NOW(), attempts: 1 }).key_news;
   assert.deepEqual(ordered.map((news) => news.scope), ["broad", "broad", "broad", "company"]);
   assert.ok(ordered[3].headline_ja.includes("減損損失"), "the company notice is kept, after the market-wide items");
