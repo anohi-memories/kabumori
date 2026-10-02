@@ -1,3 +1,14 @@
+## K2 — PR #79 session-date guard calibration: CHANGES REQUIRED
+
+- PR #79 initial head `a70dfdd23257c6361b60f1b9221f6029b0fccaf9` remains open/unmerged; production mutation=0.
+- positive evidence accepted: exact 10/2 false rejects pass; wrong-date numeric/session, 10/1 mixed-session, stale/current, 1306, polarity, causality and unknown-ref protections remain covered; analysis 122/122 and broad regressions reported PASS.
+- fresh no-race check: PR mergeable and no overlap with current main in its three files.
+- K2 found a new Hard-boundary false-negative risk: sentence-wide `WATCH_FRAME` can let a later `確認します/注目です` launder an earlier same-sentence assertion such as `10月2日は、米国株高が続き、日本株の反応を確認します`.
+- decision: **do not merge / do not deploy**. Amend PR #79 so the prior-session move must itself participate in a recognized watch relation.
+- new G2 corrective: `kabumori-pr79-session-date-watch-relation-corrective-20261002`, recommended **Opus5.5（高）**.
+- next K2 requires focused Codex review before merge/deploy because this changes a Hard Fact boundary.
+- H1/H2 are both currently allocated to X-app reviews; they were not overwritten. If still occupied at next K2, PR #79 stays review-pending.
+
 ## K3 — PR #78 AI consultation v1 PASS to Codex review
 
 - verdict: **PASS to focused Codex review; merge/deploy HOLD**.
