@@ -35,6 +35,8 @@ export const SOCIAL_MOBILE_CONTENT_DEFAULTS: SocialMobileContentSettings = {
 };
 
 const timePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/u;
+// The window may end at midnight: the saved default, the database constraint and the server contract all use "24:00".
+const endTimePattern = /^(?:(?:[01]\d|2[0-3]):[0-5]\d|24:00)$/u;
 
 export function validateSocialMobileContentSettings(
   input: unknown,
@@ -49,7 +51,7 @@ export function validateSocialMobileContentSettings(
   if (typeof value.objective !== 'string' || value.objective.trim().length === 0 || value.objective.length > 160) return { ok: false, reason: '目的を確認してください。' };
   if (typeof value.frequencyTargetPerWeek !== 'number' || !Number.isInteger(value.frequencyTargetPerWeek) || value.frequencyTargetPerWeek < 0 || value.frequencyTargetPerWeek > 14) return { ok: false, reason: '週あたりの回数は0〜14で指定してください。' };
   if (value.approvalMode !== 'manual_review' && value.approvalMode !== 'auto_post_preference') return { ok: false, reason: '確認モードを確認してください。' };
-  if (generationWindow.timezone !== 'Asia/Tokyo' || typeof generationWindow.startLocal !== 'string' || !timePattern.test(generationWindow.startLocal) || typeof generationWindow.endLocal !== 'string' || !timePattern.test(generationWindow.endLocal) || typeof generationWindow.defaultGenerationLocal !== 'string' || !timePattern.test(generationWindow.defaultGenerationLocal) || (generationWindow.generationDayOffset !== -1 && generationWindow.generationDayOffset !== 0)) return { ok: false, reason: '生成時間帯を確認してください。' };
+  if (generationWindow.timezone !== 'Asia/Tokyo' || typeof generationWindow.startLocal !== 'string' || !timePattern.test(generationWindow.startLocal) || typeof generationWindow.endLocal !== 'string' || !endTimePattern.test(generationWindow.endLocal) || typeof generationWindow.defaultGenerationLocal !== 'string' || !timePattern.test(generationWindow.defaultGenerationLocal) || (generationWindow.generationDayOffset !== -1 && generationWindow.generationDayOffset !== 0)) return { ok: false, reason: '生成時間帯を確認してください。' };
   if (!Array.isArray(value.optionalNgWords) || value.optionalNgWords.length > 20 || value.optionalNgWords.some((item) => typeof item !== 'string' || item.length > 60)) return { ok: false, reason: '避けたい語句を確認してください。' };
   if (typeof value.notes !== 'string' || value.notes.length > 1000) return { ok: false, reason: 'メモは1000文字以内で入力してください。' };
   if (Object.keys(value).some((key) => /publish|token|secret|oauth/iu.test(key))) return { ok: false, reason: '投稿権限はこの設定から変更できません。' };
