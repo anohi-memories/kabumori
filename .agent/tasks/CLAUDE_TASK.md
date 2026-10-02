@@ -3,7 +3,7 @@
 - task_id: kabumori-shared-report-v2-morning-session-date-guard-calibration-20261002
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: highest
 - recommended_model: Opus5.5（高）
