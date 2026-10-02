@@ -68,6 +68,9 @@ const WATCH_FRAMES = [
   // the move as a noun with other wording
   "10月2日は、米国株の上昇が日本株でどう受け止められるかに注目です",
   "10月2日は、米国市場の上昇を受けた動きが続くかを確認します",
+  "10月2日は、米国株高が日本株に波及するかどうかを見ます",
+  "10月2日は、米国株高の影響を確認します",
+  "10月2日は、米国株高を踏まえて日本株の反応を見ます",
 ];
 
 test("PASS: today's date + a referred-to US move in a watch sentence is not a date mismatch", () => {
@@ -126,6 +129,46 @@ test("FAIL: saying the US session moved on 10/2 stays a hard reject", () => {
     "9月30日は、米国株高が日本株でどう表れるかを見ます",
   ]) {
     assert.ok(has(factual(sentence), "日付と指標の不一致（NYダウ・S&P500・ナスダック総合は10月1日の値"), `accepted: ${sentence} → ${factual(sentence).join(" / ")}`);
+  }
+});
+
+// K2 on PR #79 (head a70dfdd): the watch test was sentence-wide, so a watch phrase later in the sentence
+// excused an earlier statement that the US move is happening or continuing on 10/2.
+const ASSERTION_BEFORE_WATCH = [
+  "10月2日は、米国株高が続き、日本株の反応を確認します",
+  "10月2日は、米国株高が確認され、日本株の反応を確認します",
+  "10月2日は、米国株高が鮮明となり、日本株の反応に注目です",
+  "10月2日は、米国株高が一段と強まり、日本株の反応を見ます",
+  "10月2日は、米国株高が継続し、日本株を見る一日です",
+  "10月2日は、米国株高が続いています。日本株の反応を確認します",
+  // the same pattern with 「米国市場の上昇」
+  "10月2日は、米国市場の上昇が続き、日本株の反応を確認します",
+  "10月2日は、米国市場の上昇が確認され、日本株の反応を確認します",
+  "10月2日は、米国市場の上昇が鮮明となり、日本株の反応に注目です",
+  "10月2日は、米国市場の上昇が一段と強まり、日本株の反応を見ます",
+  // further shapes: the statement sits between the move and a real watch question
+  "10月2日は、米国株高が続き、日本株でどう表れるかを見ます",
+  "10月2日は、米国株高が進んだ東京市場でどう表れるかを見ます",
+  "10月2日は、米国株高を踏まえ、買いが先行し、日本株の反応を確認します",
+  "10月2日は、米国株高の受け止め方が分かれました",
+  "10月2日は、米国株高の流れが続き、日本株の反応を確認します",
+  // the same statements without a comma
+  "10月2日は、米国株高が続き日本株でどう表れるかを見ます",
+  "10月2日は、米国株高が鮮明となり日本株でどう表れるかを見ます",
+  "10月2日は、米国株高が強まり日本株に波及するかどうかを見ます",
+  "10月2日は、米国株高の影響が続き日本株の反応を確認します",
+  "10月2日は、米国株高を踏まえ、買いが先行し日本株の反応を確認します",
+  "10月2日は、米国株高を受けた買いが先行し、日本株の反応を確認します",
+];
+
+test("FAIL: a statement that the US move continues on 10/2 is not excused by a watch phrase later in the sentence", () => {
+  for (const sentence of ASSERTION_BEFORE_WATCH) {
+    const issues = metricFactIssues({ factual: [`${sentence}。`], forward: [] }, input);
+    assert.ok(has(issues, "日付と指標の不一致（NYダウ・S&P500・ナスダック総合は10月1日の値"), `accepted: ${sentence} → ${issues.join(" / ")}`);
+  }
+  for (const [field, place] of FIELDS) {
+    const issues = localAnalysisCheck(live((analysis) => place(analysis, ASSERTION_BEFORE_WATCH[0])), input).hard;
+    assert.ok(has(issues, US_ON_1002), `${field} accepted an assertion before a watch phrase`);
   }
 });
 

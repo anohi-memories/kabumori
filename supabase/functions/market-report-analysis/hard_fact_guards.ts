@@ -66,8 +66,32 @@ const CURRENT_STALE_SUFFIX = /(?:が|は)(?:現在|最新)(?:の(?:値|水準))?
  * (「上昇しました」「米国株高でした」「米国株高。」).
  */
 const REFERRED_MOVE = /^(?:が|を|の|や|へ|は|も|・|など|および|及び|と(?!な)|に(?!な)|で(?!し|す|あ))/u;
-/** The sentence is about what will be watched: non-past watch verbs, a 「どう…か」 question, a focus. */
-const WATCH_FRAME = /見ます|見る(?!と)|見たい|見てい(?:き|く)|確認します|確認する|確認したい|注目|焦点|見極め|どう[^。]*か|かどうか|続くか/u;
+/** Non-past wording that says something will be looked at. */
+const WATCH_VERB = "(?:見ます|見る(?!と)|見たい|見てい(?:き|く)|確認します|確認する|確認したい|注目|焦点|見極め)";
+/** Further moves of the same list: 「米国株高**や半導体株高**が…」. */
+const MOVE_LIST = /^(?:(?:や|と|・|および|及び)[^、。がをのはも]{1,14}?(?:高|安|上昇|下落))+/u;
+/** A noun phrase: kanji, katakana, Latin letters, digits and the joiners の / や / と / ・. No verb can be written with these. */
+const NOUN = "[一-龠々ァ-ヶーA-Za-z0-9のやと・]";
+/** Where the move shows: 「日本株で」「東京市場には」. */
+const PLACE = `(?:${NOUN}{1,16}(?:で|に|へ)(?:は|も)?)?`;
+/**
+ * The move itself is what will be watched. Read from right after the direction word; a watch phrase
+ * somewhere later in the sentence is not enough (K2 on PR #79: 「米国株高が続き、日本株の反応を確認します」
+ * says the move continues today and only then adds a watch). Between the move and the watch only noun
+ * phrases and particles may stand, so nothing can state that the move is happening.
+ *   - 「が（日本株で）どう…か」, then a watch verb.
+ *   - 「が（日本株に）続くか / 波及するかどうか」, then a watch verb.
+ *   - 「の受け止め方 / の影響 / の波及 / への反応（を）」 directly followed by the watch verb.
+ *   - 「を踏まえ（て）、日本株の反応を」 followed by the watch verb.
+ *   - 「を受けた動き（流れ・反応…）が続くか / どう…か」, then a watch verb.
+ */
+const WATCH_RELATION = new RegExp([
+  `^が${PLACE}どう[^、。]*?か.*${WATCH_VERB}`,
+  `^が${PLACE}(?:続くか|[一-龠々ァ-ヶー]{1,6}(?:する|される|できる)?かどうか).*${WATCH_VERB}`,
+  `^(?:の(?:受け止め方?|影響|波及)|への反応)(?:を|に|も|は)?(?:${NOUN}{1,12}(?:を|に|で))?${WATCH_VERB}`,
+  `^を踏まえて?、?(?:${NOUN}{1,12}(?:の|を|に|で|が|は|も)){0,3}${WATCH_VERB}`,
+  `^を受けた(?:動き|流れ|買い|売り|反応|値動き|展開)(?:が|は|も)(?:続くか|どう[^、。]*?か)[^、。]*?${WATCH_VERB}`,
+].join("|"), "u");
 /** The date is the sentence's topic (「10月2日は、…」), not attached to the metric (「10月2日の米国株」). */
 const TOPIC_AFTER_DATE = /^(?:は|には)/u;
 
@@ -146,10 +170,10 @@ function directionIn(clause: string): 1 | -1 | null {
 }
 
 /** The direction a clause gives its subject, and whether it only refers to that move as a noun. */
-function directionUse(clause: string): { direction: 1 | -1 | null; referred: boolean } {
+function directionUse(clause: string): { direction: 1 | -1 | null; referred: boolean; end: number } {
   const found = directionWord(clause);
-  if (!found) return { direction: null, referred: false };
-  return { direction: found.direction, referred: REFERRED_MOVE.test(clause.slice(found.end)) };
+  if (!found) return { direction: null, referred: false, end: 0 };
+  return { direction: found.direction, referred: REFERRED_MOVE.test(clause.slice(found.end)), end: found.end };
 }
 
 function directionWord(clause: string): { direction: 1 | -1; end: number } | null {
@@ -245,7 +269,7 @@ export function metricFactIssues(texts: GuardTexts, input: AnalysisInput): strin
             issues.push(`指標と数値の不一致（${label}の値ではない数値 ${match[2]}）: ${quote(sentence)}`);
           }
         }
-        const use = statesFacts || PAST_FACT.test(scope) ? directionUse(firstClause(segment)) : { direction: null, referred: false };
+        const use = statesFacts || PAST_FACT.test(scope) ? directionUse(firstClause(segment)) : { direction: null, referred: false, end: 0 };
         const direction = use.direction;
         if (direction !== null) {
           const signed = members.filter((fact) => fact.changeSign === 1 || fact.changeSign === -1);
@@ -271,11 +295,12 @@ export function metricFactIssues(texts: GuardTexts, input: AnalysisInput): strin
           : before && !takenByOtherMarket ? before.ja : null;
         const datedMembers = statesValue ? members.filter((fact) => statedMembers.has(fact.key)) : members;
         // 2026-10-02 07:55: 「10月2日は、米国株高が日本株でどう表れるかを見ます」. Today's date is the topic of
-        // a watch sentence and the move is only referred to as a noun, so the date does not date the move.
-        // Every condition must hold; a value, a change, a statement that the session moved, or a date
-        // attached to the metric (「10月2日の米国株」) is still checked.
+        // the sentence and the move is the thing to be watched, so the date does not date the move.
+        // Every condition must hold; a value, a change, a statement that the session moved or continues,
+        // or a date attached to the metric (「10月2日の米国株」) is still checked.
+        const afterMove = sentence.slice(mention.end + use.end).replace(MOVE_LIST, "");
         const watchFrame = !statesValue && use.referred && !inClause && !!before && !takenByOtherMarket &&
-          before.ja === tradingDateJa && TOPIC_AFTER_DATE.test(sentence.slice(before.end)) && WATCH_FRAME.test(sentence);
+          before.ja === tradingDateJa && TOPIC_AFTER_DATE.test(sentence.slice(before.end)) && WATCH_RELATION.test(afterMove);
         if (stated && !watchFrame && (datedMembers.length > 0 && datedMembers.some((fact) => fact.dateJa !== stated))) {
           issues.push(`日付と指標の不一致（${label}は${[...new Set(members.map((fact) => fact.dateJa))].join("・")}の値、本文は${stated}）: ${quote(sentence)}`);
         }
