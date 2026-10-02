@@ -3,7 +3,7 @@
 - task_id: kabumori-pr79-session-date-watch-relation-corrective-20261002
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: highest
 - recommended_model: Opus5.5（高）
