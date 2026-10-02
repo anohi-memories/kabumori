@@ -1,3 +1,18 @@
+## K3 — PR #78 AI consultation v1 PASS to Codex review
+
+- verdict: **PASS to focused Codex review; merge/deploy HOLD**.
+- PR #78 exact head `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7`, open/mergeable.
+- delta is 11 files: consultation screen/client/domain, confirmed settings repository path, content-setting validators, tests, and new read-only `social-mobile-consult` Edge Function/tests.
+- G3 reports: social-mobile 153/153 PASS; relevant Deno suite 196/196; typecheck/lint/check/diff/secret/scope clean; no migration, deploy, production mutation, paid live AI, X API or real X post.
+- source architecture preserves **conversation -> proposal -> explicit user confirmation -> save**. The Edge endpoint itself is intended read-only; durable memory is confirmed structured settings/persona only.
+- fresh K3 merge gate: main advanced 7 commits since PR base with **0 overlap** across PR #78's 11 files.
+- Netlify preview success. Vercel failure points to the known free-tier build-rate-limit and is not treated as a source-quality failure for this native/API candidate.
+- high-risk review points remain: JWT/member isolation, forged conversation history, prompt/structured-output injection, no implicit writes, client/server validator independence, `updated_at` CAS truth against actual production schema/trigger behavior, 24:00 validator narrowing, no-X history-learning boundary, per-user rate-limit rollout risk, and actual verify_jwt deployment configuration.
+- H1 remains occupied with PR #76 publish-toggle review. H2 was done/free after Final C2 and is freshly assigned `x-social-mobile-pr78-ai-consult-review-20261002`.
+- H2 recommended model: **Sol（高）**.
+- PR #78 must not merge/deploy until C2.
+- AI Lab diary: no update at this K3; feature is not merged/released and the current same-day diary already has a canonical entry.
+
 ## Final K2 — PR #77 quality rewrite calibration
 
 - verdict: **PASS / merged**.
