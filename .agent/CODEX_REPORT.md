@@ -1511,7 +1511,7 @@ Official current [Auth user management](https://supabase.com/docs/guides/auth/ma
 
 ### R1 — P1: hypothetical tail erases an already asserted wrong-date/direction fact
 
-`hard_fact_guards.ts:184` returns null when `HYPOTHETICAL` matches anywhere in the metric clause. With no numeric token, the later `if (!statesValue && direction === null) return` also skips date checking. The strengthened WATCH_RELATION is never reached.
+At reviewed PR head `9ce344b`, `hard_fact_guards.ts:180` returns null when `HYPOTHETICAL` matches anywhere in the metric clause. With no numeric token, the later `if (!statesValue && direction === null) return` at line 283 also skips date checking. The strengthened WATCH_RELATION is never reached.
 
 Independently reproduced against the 10/2 morning fixture (US metrics all positive, session 10/1):
 
