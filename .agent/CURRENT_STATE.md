@@ -1,3 +1,18 @@
+## K4 — PR #76 publish-toggle source PASS to Codex review
+
+- verdict: **PASS to focused Codex review; merge/deploy HOLD**.
+- G4 candidate PR #76 exact head `a59a89e9c585fb6e780e1af2ecc898c830f5524e`, open/mergeable.
+- changed files: 10, limited to account-detail publish-toggle client/domain/tests and new `social-mobile-publish-setting` Edge Function/tests.
+- reported verification accepted for routing: Edge 37 PASS + check; social-mobile 134 PASS + typecheck/lint/diff; no migration/RLS/grant; production mutation 0; real X operations 0.
+- fresh K4 merge gate: Netlify success, Vercel success; main advanced 5 commits since PR base with **0 overlap** across the 10 PR files.
+- source architecture is plausible but not final-approved because this changes the future-X-publishing permission boundary.
+- main review risks: exact Auth/brand membership isolation, service-role write safety, ON readiness predicates, fail-safe OFF, stale CAS, brand active/live TOCTOU vs runtime publish guard, Edge JWT/config truth, and exact publish_enabled-only mutation.
+- H2 is occupied by common-account preproduction gate; H1 is genuinely free and assigned `x-social-mobile-pr76-publish-toggle-review-20261002`.
+- H1 recommended model: **Sol（高）**.
+- PR #76 must not be merged/deployed until C1.
+- native/provider E2E remains a later post-review/deploy step using disposable state; no production toggle is authorized here.
+- AI Lab diary: no new entry at this K4. The source feature is not merged/released yet and 2026-10-02 already has a canonical daily entry.
+
 ## Final K2 — PR #71 deploy + first live Presentation v2 morning
 
 - deploy verdict: **PASS**. Production `market-report-analysis` v20 contains accepted PR #71 source; verify_jwt=false; gates OFF/OFF; cron unchanged.
