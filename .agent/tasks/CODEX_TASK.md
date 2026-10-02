@@ -1,3 +1,257 @@
+# Codex Task — CURRENT TASK
+
+- task_id: x-social-mobile-pr76-publish-toggle-review-20261002
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- priority: highest
+- recommended_model: Sol（高）
+- type: focused review / posting-permission security boundary
+- target_pr: 76
+- target_head: a59a89e9c585fb6e780e1af2ecc898c830f5524e
+- production_mutation_allowed: false
+
+## Purpose
+
+PR #76 の「アカウント単位の自動投稿 ON/OFF」実装を独立レビューする。
+
+これは単なるUIレビューではない。
+`social_accounts.publish_enabled` を変更し、将来のX自動投稿を許可/停止する**投稿権限境界**なので、Auth・tenant isolation・CAS・TOCTOU・実行時publish guardとの整合まで確認する。
+
+**merge / deploy / production toggle / DB mutation / X API / Vault mutation / Auth mutationは禁止。**
+
+## Mandatory startup / isolation
+
+1. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK.
+2. Read G4 current TASK + Report for `x-social-mobile-publish-toggle-v1-20261002`.
+3. Use independent H1 worktree/checkout.
+4. Fresh fetch `origin/main` and PR #76 exact head `a59a89e9c585fb6e780e1af2ecc898c830f5524e`.
+5. STOP if PR head differs.
+6. Confirm fresh base-to-main overlap for the 10 PR files. K4 found main ahead by 5 with overlap 0; re-check independently.
+7. Do not touch G3 AI-consult files/worktree or H2 common-account preproduction work.
+
+## Reviewed candidate facts to verify, not assume
+
+PR #76 reports:
+- new authenticated Edge Function `social-mobile-publish-setting`
+- request exactly `social_account_id / desired_enabled / expected_current_enabled`
+- service-side exact account lookup -> server-derived brand id
+- caller identity verified through Auth
+- membership checked for exact brand
+- owner/admin only
+- ON strict prerequisites
+- OFF remains possible for authorized owner/admin even when connection/brand state is degraded
+- CAS/expected-state semantics
+- exact write body only `publish_enabled`
+- no migration / RLS / grant change
+- no X API / Vault plaintext / scheduler mutation
+- source tests PASS
+- no production deploy.
+
+Independently prove or reject each of these.
+
+## Gate A — authentication and tenant isolation
+
+Verify:
+1. Missing/invalid JWT is rejected.
+2. User identity is derived from verified Auth result, never request body.
+3. Client cannot supply/override `brand_id`.
+4. Social account lookup returns the account's authoritative `brand_id`.
+5. Membership check binds the authenticated user to that exact brand.
+6. Cross-brand account ids cannot be toggled.
+7. account-not-found vs foreign-account behavior does not leak useful tenant existence.
+8. service-role use is strictly server-side and does not accidentally turn client input into an unrestricted admin write.
+9. viewer/member are denied; owner/admin only unless repository policy clearly proves another role is intended.
+10. Auth/JWT/service-role/Vault references are not logged or returned.
+
+Try concrete adversarial cases:
+- valid user + foreign account id
+- valid membership in brand A + account in brand B
+- same user multiple memberships
+- missing membership
+- viewer/member
+- spoofed brand_id extra field
+- malformed/duplicate/oversized JSON
+- non-POST / wrong content type.
+
+## Gate B — ON safety
+
+For `false -> true`, verify all source-of-truth prerequisites and their exact production semantics:
+
+- platform X
+- brand exists
+- brand active
+- brand publish_mode live
+- connection state is truly the state accepted by the runtime posting pipeline
+- platform_user_id / verified_at requirements match real runtime assumptions
+- required access/refresh Vault **references** are present
+- connection error state blocks
+- stale expected state blocks
+- account busy/lifecycle interactions fail closed where applicable.
+
+Do not accept a condition merely because tests encode it; compare to the actual posting pipeline / `assertBrandPublishAllowed` / token loading / account selection path.
+
+### Critical TOCTOU review
+
+G4 already disclosed that brand `is_active/publish_mode` are checked before the PATCH but are not part of the PATCH predicate.
+
+Determine whether this is safe enough because the actual publishing pipeline re-checks those brand conditions before any X write.
+
+- If runtime publish guard definitively re-checks brand active/live before every post and cannot be bypassed by this toggle, document why residual race is non-publishing.
+- If not, mark blocker and propose the smallest safe source correction.
+- Also inspect account connection/readiness races and ensure the PATCH predicate actually closes those.
+
+## Gate C — OFF safety
+
+For `true -> false`:
+- authorized owner/admin must be able to disable even when connection credentials are missing/degraded or brand is inactive.
+- OFF must not depend on Vault readability/validity.
+- no X revoke.
+- no token deletion.
+- no scheduled post/history deletion.
+- no Auth/common-account mutation.
+- exact state conflict still respected.
+
+Check that fail-safe OFF cannot be accidentally prevented by an ON-only prerequisite.
+
+## Gate D — CAS / concurrency
+
+Verify:
+- expected_current_enabled is mandatory boolean.
+- read mismatch -> 409/no mutation.
+- conditional update binds exact id + authoritative brand + expected current state.
+- zero updated rows are never blindly reported success.
+- race between read and write returns stale or prerequisite failure.
+- duplicate taps cannot create contradictory state.
+- same-state/idempotent request behavior is truthful.
+- response cannot say ON/OFF unless exact requested account/value is confirmed.
+
+Try concurrent counterexamples in unit/fake PostgREST harness where possible.
+
+## Gate E — exact mutation boundary
+
+Prove candidate can mutate only the intended setting.
+
+Review all HTTP calls and write bodies:
+- only `social_accounts.publish_enabled` may be patched
+- no connection_status
+- no verified_at
+- no platform_user_id
+- no oauth refs
+- no Vault
+- no brands
+- no memberships
+- no scheduled_posts
+- no post_execution_logs
+- no content settings/persona
+- no Auth/common account.
+
+Inspect whether database triggers on social_accounts cause additional relevant side effects. Read-only production catalog inspection is allowed if needed; production mutation is not.
+
+Review the decision not to touch `updated_at`:
+- confirm current pipeline meaning of updated_at/lease and whether leaving it unchanged is correct.
+- if DB trigger updates it anyway, document actual behavior.
+
+## Gate F — Edge Function exposure/config
+
+Verify:
+- function JWT verification is actually ON under repository/Supabase config, not merely assumed.
+- service key/provider credentials stay server-side.
+- no overly broad CORS/exposure issue if relevant to current client.
+- error codes are bounded/safe.
+- raw PostgREST/provider errors are not reflected to client.
+- no sensitive request/response body logging.
+- method/content-type/body-size validation is real.
+
+## Gate G — client truthfulness
+
+Review account-detail UI/hook:
+- ON requires explicit confirmation.
+- cancel makes zero request.
+- OFF wording does not imply revoke/delete.
+- loading blocks double tap.
+- stale/error reload behavior is safe.
+- mock preview cannot mutate.
+- disconnected OFF account cannot request ON.
+- degraded ON account can still request OFF.
+- exact selected account id/state is sent.
+- success only shown after server-confirmed exact account/value.
+- G3 consultation/content settings are untouched.
+- no accidental coupling of `approvalMode` with `publish_enabled`.
+
+UI aesthetics are out of scope.
+
+## Tests / independent verification
+
+Run at minimum:
+- PR's Edge logic/http tests
+- Deno check
+- full social-mobile tests
+- typecheck/lint
+- diff check
+- secret scan
+- relevant existing X publish-guard/token-loader tests
+- any focused adversarial tests needed for the findings above.
+
+If a defect is found and the correction is genuinely bounded/safe, H1 may make a **small review fix** on an H1-owned branch, but:
+- preserve original PR head evidence
+- add regression first where practical
+- do not merge
+- do not deploy
+- do not alter DB schema/migration/RLS/grants.
+If correction requires architecture or migration, STOP and report CHANGES REQUIRED.
+
+## Production safety
+
+Allowed:
+- source review
+- local tests
+- read-only production catalog/schema/config checks if needed.
+
+Forbidden:
+- Edge Function deploy
+- production publish toggle
+- production row mutation
+- real X API/post/auth/revoke
+- Vault mutation
+- Auth mutation
+- migration/backfill/Cron change.
+
+## Report
+
+Append to `.agent/CODEX_REPORT.md` without erasing history:
+
+- task_id
+- verdict: PASS / PASS-WITH-FIX / FAIL
+- reviewed exact head
+- findings severity
+- Auth/tenant isolation result
+- ON prerequisite result
+- brand TOCTOU analysis
+- OFF fail-safe result
+- CAS/concurrency result
+- exact mutation-boundary result
+- Edge config/JWT result
+- client truthfulness result
+- tests/adversarial checks
+- any changed_files + fix commit
+- production read/mutation
+- real X operations
+- remaining risks
+- merge recommendation
+- deployment/E2E recommendation
+- safety checks.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C1.
+
+Recommended model: **Sol（高）**.
+
+---
+
 # Codex Task
 
 - task_id: common-account-pr70-readiness-authorization-rereview-20261002
