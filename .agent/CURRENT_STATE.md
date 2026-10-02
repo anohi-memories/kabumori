@@ -1,3 +1,19 @@
+## Final C2 — PR #78 HOLD: production content-settings schema missing
+
+- verdict: **FAIL / CHANGES REQUIRED (schema prerequisite)**.
+- PR #78 exact head `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7` remains open/unmerged.
+- H2 performed one read-only production catalog check and proved `public.social_mobile_content_settings` does **not exist**; this is relation absence, not an empty/RLS-hidden table.
+- impact: current production cannot persist confirmed consultation settings/persona, and PR #78's `updated_at` optimistic concurrency cannot be validated or function.
+- this does **not** establish a defect in PR #78's AI conversation implementation; H2 correctly stopped before claiming unexecuted Auth/AI/injection gates as PASS.
+- H2 source changes: 0. Production writes/migrations/RLS/grants/deploy/Auth/Vault/X/live-AI operations: 0.
+- main already contains source-only candidate `supabase/migrations/20260922045046_social_mobile_content_settings_candidate.sql`; it defines the expected settings/persona table, owner RLS and updated_at trigger, but its comment explicitly says source candidate only and production has not applied it.
+- do not merge/deploy PR #78 yet.
+- do not apply the migration merely because it exists.
+- H2 is freshly reassigned `x-social-mobile-content-settings-schema-prereq-review-20261002` to independently review that existing candidate against current production catalog, RLS, JSON constraints, CAS semantics and lifecycle/common-account interactions.
+- recommended H2 model: **Sol（高）**.
+- after that review, C2 will decide whether a separate explicit production migration approval can be presented; only after successful apply/read-back may the remaining PR #78 security review resume.
+- AI Lab diary: no update; this is an internal blocked prerequisite, not a completed/released product capability.
+
 ## K2 — PR #79 session-date guard calibration: CHANGES REQUIRED
 
 - PR #79 initial head `a70dfdd23257c6361b60f1b9221f6029b0fccaf9` remains open/unmerged; production mutation=0.
