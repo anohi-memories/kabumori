@@ -35,14 +35,14 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: common-account-pr70-preproduction-gate-20261002
+- status: ready
+- task_id: x-social-mobile-pr78-ai-consult-review-20261002
 - start_code: H2
 - finish_code: C2
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Final C2 PARTIAL accepted. Source merge PASS. Production catalog/read-only preflight and backfill aggregate dry-run completed, production mutation 0. Migration apply/backfill remain HOLD because actual disposable Supabase GoTrue/PostgREST/Storage/managed-role proof is not run. Next step requires operator to designate an approved nonproduction disposable Supabase environment or separately authorize creation. H2 free only after fresh allocation.
+- allocation: Focused review of PR #78 exact head 6e9f78a31bae9b65599732a9b416dcb50f2bfbc7. Verify JWT/tenant isolation, forged-history/prompt injection, strict structured output, no implicit persistence, updated_at CAS against production schema/triggers, history-learning no-X boundary, cost/rate-limit rollout risk and verify_jwt config. No merge/deploy/production write/live AI/X operation. Recommended Sol（高）.
 
 ## Claude G1
 - owner: claude
@@ -69,13 +69,13 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: review_required
 - task_id: x-social-mobile-ai-consult-v1-20261002
 - start_code: G3
 - finish_code: K3
-- next_owner: claude
+- next_owner: codex
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: Implement real AI consultation before post generation: authenticated server-side conversational AI, natural chat/questions, current-setting explanation, bounded settings/persona proposals, explicit user confirmation before persistence. Reuse existing content-settings/persona storage and validators; no DB migration, no past-X fetch, no post generation/publish/scheduler/OAuth/common-account changes, no production deploy. Recommended Opus5.5（高）. K3 should normally send the authenticated Edge/API boundary to H2 Sol（高） review before merge.
+- allocation: K3 PASS to focused Codex review. PR #78 exact head 6e9f78a31bae9b65599732a9b416dcb50f2bfbc7 is open/mergeable; 11 files, source/tests only, no migration/deploy/production mutation/X operation. H2 review assigned before merge because this adds authenticated AI API + confirmed settings persistence. Recommended review Sol（高）.
 
 ## Claude G4
 - owner: claude
