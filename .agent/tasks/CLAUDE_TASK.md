@@ -3,8 +3,8 @@
 - task_id: kabumori-shared-report-v2-morning-session-date-guard-calibration-20261002
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Opus5.5（高）
 - purpose: 2026-10-02朝刊の1回目を落とした「今日の日付 + 前夜の米国株高を今日の注目材料として参照する文」を、米国市場の当日実績と誤解してHard BLOCKする日付guardの誤検出を狭く修正する。本物の別日数値混同は絶対に通さない。source + tests + PRのみ。deploy/gate/manual cycleは禁止。
@@ -205,7 +205,186 @@ When complete:
 
 ## Report
 
-Pending.
+### Report — kabumori-shared-report-v2-morning-session-date-guard-calibration-20261002
+
+- task_id：`kabumori-shared-report-v2-morning-session-date-guard-calibration-20261002`
+- result：**source-readyのPASS候補**。PR #79（未merge、deployなし）。
+  - 10/2朝刊の1回目を落とした文は、合格するようになった。
+  - 「10月2日の米国株は上昇しました」のような、セッションが動いたという言い切りと、値・前日比を別の日付で書く文は、不合格のまま。
+  - 10/1の別日の値の混同も、不合格のまま。
+- fresh main SHA：着手時 `c4da29a2`。作業branchは `85b40b46`（in_progressの記録commit）の上。PR #77のmerge `08a9f71` を含む。
+- worktree/branch：G2専用checkout `/Users/yuya/Developer/kabumori-g2-market-report-reliability`、branch `g2-session-date-guard-calibration-20261002`。
+- 所有の確認：open PR（#78、#76、#41、#33ほか）とほかのslotに、`market-report-analysis/**` を扱うものは無い。
+
+#### exact root cause
+
+- `metricFactIssues` は、指標（または市場を指す語）の言及ごとに、次のどちらかがあれば日付の照合を行う：その指標の数値が書かれている／向きの語がある。
+- 日付は「言及の直前にある、いちばん近い日付」を使う。
+- 「10月2日は、米国株高や半導体株高が日本株でどう表れるかを見ます」では：
+  - 「米国株」の直後の「高」が向きの語（別名＋高・安）として読まれ、照合の対象になった。
+  - 直前の日付は文頭の「10月2日」。
+  - 米国3指数のセッションは10月1日なので、不一致としてHardになった。
+- 実際の文の意味：「10月2日」は今日の見る点の日付で、「米国株高」はすでに分かっている10月1日のセッションを**名詞として参照**している。米国株が10月2日に動いたとは言っていない。
+- 検査が区別していなかったのは、次の2つ：
+  - 「セッションが動いた」という言い切り
+  - すでに起きた値動きへの参照
+- これらの文は、「見る点」の欄（`watch_ja` など）では通っていた。要約、Xの背景・締め、アプリの本文などの「事実を述べる欄」に書かれたときだけ落ちていた。
+
+#### exact date-scope rule chosen
+
+日付の照合から外すのは、次を**すべて**満たす場合だけ（`watchFrame`）。
+
+1. その指標の値・前日比を書いていない（`!statesValue`）。
+2. 向きの語が、名詞として参照されている（`REFERRED_MOVE`）。
+   - 向きの語の直後が、が／を／の／や／へ／は／も／・／など／と／に／で、のいずれか。
+   - 「となり」「になり」「でした」「です」は含めない。
+   - 例：「米国株高**が**…」「米国株高**を**踏まえ」「上昇**の**受け止め方」。
+   - 参照ではないもの：「上昇しました」「上昇し、」「上昇した」「米国株高でした」「米国株高となり」、文末の「米国株高」「上昇」（体言止め）。
+3. 日付が、文の主題になっている、レポートの取引日である。
+   - 日付は言及より前にあり、その指標の節の中の日付ではない。
+   - 日付がレポートの `tradingDate` と同じ。
+   - 日付の直後が「は」または「には」（`TOPIC_AFTER_DATE`）。「10月2日**の**米国株」のように指標にかかる形は対象外。
+4. 文が見る点を述べている（`WATCH_FRAME`）。
+   - 見ます／見る／見たい／見ていく／確認します／確認する／確認したい／注目／焦点／見極め／どう…か／かどうか／続くか。
+   - 過去形の「確認しました」は含まない。
+
+補足：
+- 「数値が無ければ日付を見ない」という広い緩和はしていない。
+- 事実を述べる欄を、まとめて「見る点」の扱いに移すこともしていない。
+- 向きの逆転の検査は、この場合もそのまま行う（「10月2日は、米国株安が…を見ます」は、向きの逆転でHard）。
+- 追加のLLM呼び出しは無い。promptは変えていない。
+
+#### why false dated completed-session statements still fail
+
+- **言い切りの形**は、条件2を満たさない。
+  - 「10月2日の米国株は上昇しました」「10月2日は米国株が上昇しました」：「上昇」の直後が「しました」。
+  - 「10月2日は米国株高でした」：直後が「でした」。
+  - 「10月2日は米国株高」「10月2日の米国市場は上昇」：直後が文末。
+  - 「10月2日は、米国株高となり、…」：直後が「とな」。
+  - 「10月2日は米国株が上昇し、日本株の反応を確認します」：直後が「し、」。うしろに見る点の述語があっても、不合格。
+  - 「10月2日は、米国株も上昇したことを確認します」「米国株が上昇した流れを確認します」：直後が「した」。
+- **日付が指標にかかる形**は、条件3を満たさない。
+  - 「10月2日の米国株高が日本株でどう表れるかを見ます」：日付の直後が「の」。
+- **見る点の文ではないもの**は、条件4を満たさない。
+  - 「10月2日は、米国株高が日本株を押し上げました」
+  - 「10月2日は、米国株の上昇を確認しました」
+- **取引日ではない日付**は、条件3を満たさない。
+  - 「9月30日は、米国株高が…を見ます」
+- **値・前日比を書いた文**は、条件1を満たさない。見る点の文でも不合格。
+  - 「10月2日は、NYダウ50,926.56の水準が日本株でどう表れるかを見ます」
+  - 「10月2日は、S&P500の+0.19%が…を見ます」
+  - 「10月2日は、日経平均68,956.72からの動きを確認します」
+
+#### exact 10/2 positive regressions（すべて合格）
+
+- 07:55に不合格になった3つの形：
+  - 「10月2日は、米国株高や半導体株高が日本株でどう表れるかを見ます」
+  - 「10月2日は、米国株高や半導体株高の受け止め方を確認する一日です」
+  - 「東京市場との関係は確認できないため、10月2日は米国株高や半導体株高が日本株でどう表れるかを見ます」
+- 指示書の追加の形：
+  - 「10月2日は、米国株高を踏まえ、日本株の反応を確認します」
+  - 「10月2日は、前夜の米国株高が日本株にどう波及するかではなく、実際の値動きを確認します」
+- 別の言い方：
+  - 「10月2日は、米国株の上昇が日本株でどう受け止められるかに注目です」
+  - 「10月2日は、米国市場の上昇を受けた動きが続くかを確認します」
+- 置き場所：要約（`market_summary_ja`）、Xの背景、Xの締め、アプリの `summary_ja`・`japan_ja`、observationのclaimのそれぞれに置いて、日付の不一致が出ないことを確認した（10/2に配信されたpacketを土台に使用）。
+- 日付を正しく書いた形（修正前から合格）：
+  - 「10月2日は、10月1日の米国株高が日本株でどう表れるかを見ます」
+  - 同じ文に、正しい日付の米国の数値を並べた形
+  - 東京と米国を、それぞれの日付で書いた形
+- 生成の流れの再現：07:55の形の下書きは、1回目の生成でFactへ進み、配信される（calls 2、`hard_rejections=[]`）。
+
+#### negative / adversarial regressions（すべてHardのまま）
+
+- 10/2の米国セッションの言い切り：上の節の各文。要約・X・アプリ・claimのどの欄に置いても不合格。
+- 別の日付に付いた値・前日比：
+  - 「10月2日のNYダウは50,926.56でした」
+  - 「10月2日はNYダウ50,926.56、S&P500 7,666.45でした」
+  - 「10月2日の日経平均は68,956.72（前日比+3.30%）でした」
+  - 見る点の文に数値を入れた形
+- ほかのHard検査（10/2に配信された下書きを変異させて確認）：
+  - 向きの逆転（参照の形の「米国株安が…を見ます」を含む）
+  - 古い値を日付なしで書く／現在の値として書く
+  - 1306→TOPIX
+  - 絵文字の向き
+  - 根拠の無い市場の因果（「米国株高を受けて東京市場も上昇しました」）
+  - 入力に無いref
+- 修正前のコードでも、これらはすべて不合格だった（緩んだものは無い）。
+
+#### 10/1 mixed-session result
+
+- fixture：取引日10/1、日経平均＝9/29のセッション（65,481.27、−0.60%、stale）、1306＝9/30のセッション。
+- **不合格のまま**：
+  - 「9月30日は日経平均65,481.27（-0.60%）、1306は431.5（+1.43%）でした」
+  - 実際に配信された旧アプリの文（「9月30日（水）は日経平均が65,481.27で-0.60%、…」）
+  - 見る点の言い方に値を入れた「10月1日は、日経平均65,481.27からの動きを確認します」
+  - 指摘：`日付と指標の不一致（日経平均は9月29日の値、本文は9月30日）`
+- `localAnalysisCheck` の経路でも不合格。既存の `presentation_v2_test.ts` と `causal_calibration_test.ts` の同じ回帰も、変更なしで合格。
+
+#### full tests/check/lint/diff
+
+- 新規 `session_date_calibration_test.ts`：**9/9**
+  - 修正前：通すべき4件がFAILED。止めるべき5件は、修正前も後もPASS（＝不合格のまま）。
+- market-report-analysis：**122/122**
+  - presentation_v2 22、causal_calibration 18、quality_calibration 9、h1_adversarial 13、content_guard 16、transport_retry 14 を含む。既存のテストは変更していない。
+- personalized-reports 128/128、x-test-post shared consumer 8/8、market-report-data-packet 42/42、`_shared` 361/361（`--no-check`）
+- `deno check`（runtimeの9ファイル＋新規テスト）：PASS
+- `deno lint`（変更・新規の2ファイル）：問題なし
+- `git diff --check`：PASS
+
+#### changed_files（PR #79、3ファイル）
+
+- `supabase/functions/market-report-analysis/hard_fact_guards.ts`
+  - `REFERRED_MOVE`、`WATCH_FRAME`、`TOPIC_AFTER_DATE` の追加
+  - `directionUse` / `directionWord`（向きの語の位置を返す形に分けた。`directionIn` の結果は同じ）
+  - `metricFactIssues` の日付の照合に、`watchFrame` の条件を追加
+- `supabase/functions/market-report-analysis/session_date_calibration_test.ts`（新規）
+- `docs/market-report-shared-platform/DESIGN.md`（§15.3.1 を追記）
+- 変えていないもの：`analysis_logic.ts`（prompt、因果、質の判定）、`_shared/**`、handler、transport retry、personalized-reports、x-test-post、migration。
+
+#### PR / head SHA
+
+- PR：https://github.com/anohi-memories/kabumori/pull/79
+- head：`a70dfdd23257c6361b60f1b9221f6029b0fccaf9`
+- model-call budget：変更なし（`MAX_GENERATIONS=2`。判定はコードだけ）。
+
+#### production mutation
+
+- **0**。行ったのは、read-onlyのSELECT（10/2大引けのcycleの状態の確認）だけ。deploy、手動のinvoke、gate・cron・DBの変更はしていない。
+
+#### 参考：10/2大引けの自然なcycle（read-only、本TASKの作業中に確認）
+
+- 本番は v20（PR #71まで。PR #77は未deploy）。
+- **1回目（16:20）で完成**：`report_attempt_count=1`、packet `bc7ca780…`、Fact passed。v2の大引けがliveで完成した最初の回。
+- diagnostics：`generation_attempts=2`、`hard_rejections=local`、`quality_rewrite=true`、`delivered_generation=1`、`quality_warnings=APP_STORY_SHORTER_THAN_TARGET:835`、calls 3、`cost_usd=0.009795`、transport retry 0。
+- 読み取れること：1回目の生成がFactまで合格 → 長さ835字のための質の書き直し → 書き直しはローカル検査で不合格 → 元の下書きを配信。PR #77をdeployすれば、この書き直しは発生しない（835は700〜899の帯）。
+- 日付の誤検出は、この回では出ていない。gateはOFF/OFF。
+
+#### remaining issues
+
+1. **実際のモデルでは未確認**。見る点の文の言い方は多様で、今回の条件に当てはまらない形は、これまで通りHardになる（安全側）。例：
+   - 「10月2日は、米国株が上昇した流れを確認します」（「上昇した」は言い切りの扱い）
+   - 「10月2日、米国株高が…」（日付の直後が読点だけ）
+   - 朝刊での頻度は、deploy後の自然なcycleで見る。
+2. 見る点の述語（`WATCH_FRAME`）と参照の助詞（`REFERRED_MOVE`）は、語のリストによる近似。4条件をすべて満たすのに実際は言い切りである文は、想定していない。そうした文があれば、LLMのFactが最後の検査になる。
+3. 質の書き直しがローカル検査で落ちた理由は、配信に成功したrunでは保存されない（10/2の朝刊・大引けとも）。書き直しが毎回落ちているなら、その原因は別途の調査対象。PR #77のdeploy後は、書き直し自体が減る。
+4. PR #77（質の書き直しの較正）は、merge済みだが本番に未deploy。
+5. 内容の質（確認できない旨の繰り返し、日本株との関わりが薄い地政学ニュース、ほぼ横ばいを「上昇」と書く）は、範囲外のまま。
+
+#### recommendation: Codex review vs merge, then combined deploy of PR #77 + this fix
+
+- **Codex review**：判断はK2に委ねる。材料：
+  - Hardの検査の境界を変える変更である。
+  - 差分は `metricFactIssues` の日付の照合の1条件だけ（3ファイル。既存テストの変更なし）。
+  - 4つの条件をすべて満たす場合だけ外す形で、止めるべき例は修正前後で同じ結果。
+  - G2の見立て：focusedなreviewを1回入れる価値はある。確認してほしい点は、`REFERRED_MOVE` と `WATCH_FRAME` の語のリストに、言い切りを通してしまう形が無いか。
+  - gateがOFFの間は利用者に出ないため、「先にdeployして自然なcycleで観察し、reviewはconsumerの有効化の前に行う」という順でも安全側。
+- **deploy**：merge後、PR #77とまとめて、`market-report-analysis` を1回だけ単独deployする（gate OFF、これまでと同じ手順とbyte照合）。
+  - 効果：朝刊の誤検出（本PR）と、不要な書き直し（PR #77）の両方が、次の自然なcycleから反映される。
+- **観察**：deploy後の朝刊で、次を確認する。
+  - 1回目で完成するか。
+  - `hard_rejections` の内訳（日付の不一致が再発しないか）。
+  - `quality_rewrite=false` になるか、calls・cost。
 
 ---
 
