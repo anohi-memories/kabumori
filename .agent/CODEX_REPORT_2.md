@@ -1,3 +1,177 @@
+## H2 — Common-account PR #70 production前ゲート — 2026-10-02 JST
+
+- task_id: common-account-pr70-preproduction-gate-20261002
+- result: **PARTIAL / mandatory real-Supabase proof BLOCKED（operator prerequisite）**。
+- source_merge_status: **PASS / merged**。source受入れとproduction適用可否は別判定。
+- migration_apply_readiness: **HOLD**。actual disposable Supabase proofが未実施で、production Data API exposureも未証明。
+- backfill_readiness: **HOLD**。read-only試算は完了したが、migration未適用・managed proof未実施・別途backfill明示承認が必要。
+- next_owner: chatgpt / **C2待ち**。production apply/backfill/deployは今回一切許可されていない。
+- exact_reviewed_main: 独立checkout/test時 `416de8fdac6a6f4c37740536759e0b09b96c81f4`。同期直前fresh GitHub main / FETCH_HEAD `e39b42f732a00c0dceb8e6f2542a83cc350b999e`。
+- merged_target: `44121914b035e22380a4ca1bd8252a42713a2bbf`。
+- accepted_source_head: `aa4d2d425d1d7c432d43c9ecfb8e978a40b80a65`。
+- implementation_commit: **新規なし**。上記accepted sourceがmerge済みで、H2によるsource修正なし。
+- changed_files: **.agent/CODEX_REPORT_2.md / .agent/tasks/CODEX_TASK_2.md の完了記録のみ**。既存Report/TASK履歴は保持。
+- deploy: 0。production mutation: 0。Auth/Storage/OAuth/Vault操作: 0。実X/OpenAI/Push: 0。
+- GitHub同期: このH2制御2ファイルだけをmainへ同期し、最新TASK/Reportをread-backする。同期commit SHAはH2完了応答およびGitHub file historyで確認可能（実装commitと混同しない）。
+
+### 判定を分離
+
+| Gate | 判定 | 証拠 / 限界 |
+| --- | --- | --- |
+| A: merged source integrity | PASS | accepted sourceの8ファイルとfresh mainはbyte-identical。target mergeをancestorとして包含。 |
+| B: actual disposable Supabase proof | BLOCKED / NOT RUN | 指定・承認済みの使い捨て実Supabase環境がない。ローカルPG成功をmanaged proofに読み替えない。 |
+| C: production read-only preflight | PARTIAL | SQL catalog/型/FK/helper/owner権限/history/既存RLS metadataは整合。PostgREST設定/実API境界は未証明。 |
+| D: backfill read-only parity | PASS（aggregate試算のみ） | 5 accounts / 2 Kabumori / 1 X候補。書き込みなし。Phase 0からの人口差分を下記に記録。 |
+| E: rollout / rollback | sequencing reviewed | applyとbackfillを別々に承認する順序が必須。managed環境でのrollback/reapplyは未実証。 |
+| F: production disposition | HOLD | source merge PASS ≠ migration apply PASS ≠ backfill PASS。 |
+
+### 作業環境・freshness・競合
+
+正式repo `/Users/yuya/Developer/kabumori` はread-onlyでstatus/branch/HEAD確認。既存未commit変更が多数あるため、そのcheckoutを作業に使っていない。ファイル変更/stage/commit/stash/resetはしていない。
+
+H2専用checkout: `/private/tmp/h2-common-account-gate-iZx94E/repo`。正式repoからshared cloneし、fresh GitHub mainのexact SHAへdetached checkout。cloneのoriginはローカル正式repoなので、**それをGitHub正本とは扱わず**、GitHub branches/main readと `git fetch https://github.com/anohi-memories/kabumori.git main` のFETCH_HEADを照合した。同期前にもfresh-checkし、同じH2 task_id/ready/codexとReport blob不変を確認。
+
+最新mainは他slotの.agent記録で進んでいたが、以下8ファイルはaccepted sourceから差分0:
+- `docs/common-account/phase1-lifecycle-foundation.md`
+- `supabase/migrations/20261001150000_common_account_lifecycle_foundation.sql`
+- `supabase/tests/common_account_lifecycle_behavior.sql`
+- `supabase/tests/common_account_lifecycle_fixture.sql`
+- `supabase/tests/common_account_lifecycle_mutations.sh`
+- `supabase/tests/common_account_lifecycle_rollback.sql`
+- `supabase/tests/common_account_lifecycle_run.sh`
+- `supabase/tests/migration_source_invariants_test.ts`
+
+G3 AI consultation / G4 publish toggleはcommon-account、migration、削除境界への変更禁止で対象非競合。G2は別market-report-analysis品質調整。open PR #41/#33/#11/#10/#3のchanged pathsにも対象8ファイルのoverlapなし。未mergeの別migration/認証作業はこのH2で適用・mergeしない。CURRENT_STATE/ACTIVE_TASK/他slot TASKは更新しない。
+
+### Gate A — source責任境界
+
+- migrationはadditive lifecycle/readiness foundation。既存Auth/Storage/Vault/providerのdestructive SQLなし。`DELETE FROM auth.users` はmigrationにない（隔離fixture/testの模擬Auth cascadeは別物）。
+- 5新テーブルはRLS ON。publicの2テーブルはauthenticatedの本人SELECTのみ、SELECT対象columnも限定。client writeなし、service_role直接table grantなし、backendは指定RPCのみ。
+- 33新関数はSECURITY DEFINER / empty search_path / schema-qualified。transaction内でdefault EXECUTEをrevokeし、public RPCは目的別にexact roleへgrant。private helperはownerのみ。
+- Phase 1はshadow only、enforcing modeなし。observerはmanaged login cleanupを代行しない。`ready_for_managed_auth_delete` はAuth削除完了ではない。
+- accepted fix: Auth rowが残ったままcommon application rowを直接DELETEすると23503で拒否し、login_removedを誤記録しない。Auth cascadeの模擬経路はshadow/unverified observationのまま。
+- readinessはlifecycle_version / requirement_epoch / exact required-checkpoint setへbound。built-in checkpoint意味の改変・entitlement owner/service transferは拒否。
+- **既存Kabumori legacy hard-deleteは未変更でunsafeのまま**。Phase 1のmerge/applyだけでは安全にならない。X legacy sagaも自動的にcommon lifecycleへ移行しない。
+- admin/foreign workspace/Apple identity/Storage等の未接続producerはfresh evaluationでのみ再確認される。すべてのwriter/deletion routeの統合前にenforceへ進めない。
+- checkpointはbackendのattestationであり、実際のsession/provider/Storage cleanupがDBだけで証明されたものではない。prepareと外部Auth Admin API deleteはatomicではない。
+
+### Gate B — 実Supabaseは未証明
+
+read-onlyのproject/branch inventoryではproduction `stock-x-autopost` と別の既存projectだけが確認でき、productionのbranchはdefault/mainのみ。**別既存projectを使い捨て環境と推測せず、勝手なproject作成/課金resource作成/破壊テストもしていない**。
+
+したがって以下はすべて実SupabaseではNOT RUN:
+- single migration apply / real role owner behavior
+- public/private Data API exposure、PostgREST RPC / SQLSTATE/error mapping
+- anon/authenticated本人SELECT・他人非露出・client write denial
+- service_role直接table grant denialとRPC-only path
+- GoTrue/Auth Admin API deleteでのobserver発火、direct application-row delete refusal
+- managed auth.identities / sessions / refresh token / stale JWT境界
+- Storage API cleanup / owner_idとbucket compatibilityの実動作
+- rollback/reapply
+- provider OAuth（今回実OAuthを行う計画もなし）
+
+ローカルPGのrole/fixture/SQL `auth.users` deleteはGoTrue・Storage・PostgRESTの代替証明にはならない。特にproductionの `supabase_auth_admin` はnonsuperuser / non-BYPASSRLSであり、実managed runtimeがtriggerをどう実行するかはNOT RUN。
+
+### Gate C — production SELECT/catalog preflight
+
+project `wsmznyzcvmuitkglfeuj` へ `BEGIN TRANSACTION READ ONLY` のSELECT/catalog queryのみ。DO/DDL/INSERT/UPDATE/DELETE/migration/RPC mutationは行っていない。PIIやtokenを取得・Reportへ出していない。
+
+catalog結果:
+- required 17 tables: 全存在。
+- source-derived 26 exact column/type checks: mismatch 0。
+- source-derived 14 exact FK checks: mismatch 0（referencing/referenced columns、型、delete action、validated、nondeferrableを含む）。
+- profilesへぶら下がるnon-CASCADE FK: 0。
+- private schema / anon / authenticated / service_role: 存在。
+- required helper 2件: `social_mobile_account_deletion_workspace(uuid)` / `social_mobile_account_deletion_subject(uuid)`、return text、owner postgres、immutable SQL、SECURITY INVOKER、empty search_path。client/service_role EXECUTEなし、postgres EXECUTEあり。既存pure helper定義も整合。
+- target新table/view/function/index name collision: 0。
+- target migration `20261001150000`: migration history未記録。current max history version `20260930090000`。
+- auth.users/identities PK(id)、profiles PK(id)、admin_users PK(user_id)、brand_memberships PK(brand_id,user_id)、brands PK(id)等をcatalog確認。必要な17テーブルすべて既存RLS ON / FORCE RLS OFF。
+- profiles/activity tablesはowner-self authenticated policy、admin_usersはself SELECT、workspace系はmember/self SELECT。OAuth-state/tombstoneテーブルにはclient policyなし。これはmetadata確認であり実JWT/RLS behavior testではない。
+- 計画上のmigration owner postgresはnonsuperuser/BYPASSRLS、必要Auth/Storage/legacy SELECT権限あり、auth.users SELECT/UPDATE（locking）、profiles INSERT/DELETE権限あり。新SECURITY DEFINER関数のmanaged環境実行は未証明。
+- managed shape: storage.objects/buckets owner_id:text、legacy owner:uuid、objects.bucket_id:text。auth.identities.user_id:uuid/provider:text、sessions.user_id:uuid、refresh_tokens.user_id:varchar/session_id:uuid。users→identities/sessions CASCADE、sessions→refresh_tokens CASCADEが確認でき、owner_id→auth.users FKはない。
+- SQL `current_setting('pgrst.db_schemas',true)` はnull、catalog上のexplicit pgrst.db_schemas configは空。**これをprivate schema非露出/安全の証明にはしない**。API gateway/service設定はこのSQL観測で確定できず、actual Data API exposure判定は未証明。
+- deletion関連Function metadataだけread-only確認: account-delete v10 ACTIVE / verify_jwt=true、social-mobile-account-delete v5 ACTIVE / true。H2のdeployは0。
+
+結論: **migration自身のSQL preflightに必要なcatalog条件はPASS**。しかし「実Supabase適用/managed role/API境界までPASS」とはしない。
+
+### Gate D — readonly backfill parity / Phase 0差分
+
+候補viewの既存Auth/legacy SELECTとpure helperをそのまま使い、新table未適用分のみtyped empty CTEで代替してaggregateした。未適用RPCを作成・呼出しせず、個人単位ID/email/handleは出力していない。`applied=false`。
+
+| Aggregate | 今回 | Phase 0 |
+| --- | ---: | ---: |
+| Auth users / common_accounts would-create | 5 | 4 |
+| Kabumori candidate / entitlement would-create | 2 | 2 |
+| Kabumori activity | 1 | 1 |
+| Kabumori profile-only | 1 | 1 |
+| X candidate / entitlement would-create | 1 | 1 |
+| X identity_verified | 1 | 1 |
+| X workspace_pending | 0 | 0 |
+| Auth-only（consumer entitlement candidateなし） | 2 | 1 |
+| dual-service | 0 | 0 |
+| admin_users | 1 | 1 |
+| profile-only + Auth-only manual review | 3 | 2 |
+
+その他今回aggregate:
+- admin exclusion: 1（adminでもcommon account対象。X consumer entitlementには入れない）。
+- excluded non-self-service memberships: 0。
+- multiple-owner workspace / orphan user-facing workspace / unexpected derived ownership: すべて0。
+
+Phase 0からAuth-only候補が1件増えたためaccount/manual-review countsが各1増。Kabumori/X判定は変化なし。「Auth-only」はview上のconsumer candidateなしの分類で、admin-excludedなloginも入り得る。用途を勝手に推測しない。profile-only1件とAuth-only2件は operator確認対象。email-based mergeなし。
+これらは単一read-only snapshotのwould-create countsであり、actual backfill成功・将来のcounts固定を保証しない。適用承認時には必ずfresh dry-runを再実行する。
+
+### Gate E — 必須rollout順序 / rollback
+
+source docs §15の「dry-run後apply」は、**今回TASKのより厳格な承認境界で補完**する。docsを勝手に書き換えず、本番runbookは次を満たす必要がある。
+
+1. operatorが使い捨て実Supabase環境を指定・明示承認し、Gate B全部を証明。
+2. C2で証拠を受け入れ、production fresh origin/main/競合/catalog/history/API configを再確認。
+3. **single migrationだけのproduction apply明示承認**を取得。`supabase db push` / history repairは禁止。
+4. exact source1ファイルをapply後、tables/columns/FKs/constraints/trigger/owner/grants/RLS/33関数ACL/search_path、shadow/not_started/epoch1、built-in registry、新account/operationが空をread-back。
+5. 実installed backfill(false) dry-runとPhase 0/今回試算をparity確認。manual-review/unknown populationをoperator確認。
+6. **migration applyとは別のbackfill apply明示承認**を取得してからbackfill(true)。counts/state/idempotencyをread-back。
+7. Phase 2 registration/creators/既存writersを統合。
+8. Phase 3 deletion adapters + Auth/Storage/session/provider orchestratorを別レビュー・検証。
+9. producerを完全に統合し、managed proofと明示承認を経て初めて新migrationでenforcementを検討。
+
+rollbackはintegration開始前で、exact shadow / not_started / built-in registry intact、operationは完了済みを含め0、non-active account0、self-registered entitlement0、依存0を肯定的に確認したときだけ。one transaction / DROPなしCASCADE / refusal時partial teardownなし。local suiteで10拒否case・exact baseline restoreを再確認した。ただしdynamic/client依存をPG catalogだけでは検知できないので、運用統合なしのoperator確認も必要。managed Supabase rollback/reapply proofはNOT RUN。
+
+### 独立test rerun
+
+H2専用PostgreSQL 17.11 / Unix socket only / fake data。non-superuser fixture ownerで実施。既存sourceを改変していない。
+
+| 検証 | 結果 |
+| --- | --- |
+| common_account_lifecycle_run.sh | **20 PASS markers / exit 0**。exact preflight8 drift、behavior、14二者race、isolation/no-deadlock、rollback10 refusal + exact restore/reapplyを含む。 |
+| common_account_lifecycle_mutations.sh（CAL_JOBS=4） | **46/46 DETECTED / exit 0**。各mutantは意図したnamed failureで検知。 |
+| social_mobile_account_deletion_run.sh | **8 PASS markers / exit 0**。behavior/acquire/reconnect/onboarding両順序/isolation/no-deadlock/cleanup。 |
+| deno test --no-config --allow-read supabase/tests/migration_source_invariants_test.ts | **10/10 PASS**。 |
+| 3 shell runner bash -n / invariants deno lint | PASS。 |
+| git diff --check / accepted8 files integrity / target ancestry | PASS。 |
+
+operator/harnessメモ: 初回local initdbはsandbox shared-memory permissionで起動前に失敗し、許可されたH2専用local操作として起動し直した。削除回帰の初回commandはCAL_変数を渡したためDEL_PGHOST requiredでfixture実行前に拒否されたが、正しいDEL_変数で8/8通過した。code/test修正や本番への切替はなし。
+完了時、test DBはすべてcleanupされpostgres/template0/template1だけであること確認。H2所有local clusterのみ停止済み。独立checkout clean。
+
+### Unresolved prerequisites / exact next operator action
+
+**本番適用には進めない。** C2はsource PASSを維持しつつ、Gate B/C未証明とmanual-review3件を受け取る。
+
+次の1手: **利用許可のあるdisposable非production Supabase project/sandboxを指定し、その環境だけにfake users/Storage fixture、migration apply、Auth Admin API deletion、Data API/RLS/ACL、rollback/reapplyを実施する明示承認を出す**。現在の別既存project/productionを流用しない。新project作成が必要なら課金を含め別承認を先に受ける。secretは安全な環境/connectorに設定し、チャットへ貼らない。real provider OAuthは不要。
+その後C2で再ゲートし、production migration適用とbackfill適用を別々に判断する。推薦モデル：**Sol（極高）**。
+
+### Safety checks
+
+- production INSERT/UPDATE/DELETE / migration apply / backfill: **0**。
+- deploy / Cron / flag / provider/settings変更: **0**。
+- real Auth create/update/delete / identity link-unlink / Storage write-delete / OAuth revoke / Vault mutation-read-secret: **0**。
+- production business/Edge Function手動実行 / X/OpenAI/Push: **0**（Supabase SELECT/catalog read-only connectorは実施）。
+- code・apps/admin・HANDOFF.md・root package/env・他slotファイル変更: **0**。
+- formal repo既存未commit変更へのH2変更/stage/commit/stash/reset: **0**。
+- PII/raw user id/email/handle/token/secret Report露出: **0**。
+- 全既存Report/TASK履歴を保持。review_required / next_owner: chatgptでSTOP for C2。
+
+---
+
 ## H2 — AI Lab topic-deduplication PR #66 focused review — 2026-10-01
 
 - task_id: x-ai-lab-pr66-topic-dedup-review-20261001
