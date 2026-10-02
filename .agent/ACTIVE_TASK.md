@@ -35,14 +35,14 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: common-account-pr70-preproduction-gate-20261002
 - start_code: H2
 - finish_code: C2
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: merged common-account Phase 1のproduction適用前独立ゲート。actual disposable Supabase proof、production read-only preflight、migration-history/schema/ACL/FK、backfill dry-run/parityを確認。production mutation/apply/backfill/deploy禁止。推薦モデル Sol（極高）。
+- allocation: Final C2 PARTIAL accepted. Source merge PASS. Production catalog/read-only preflight and backfill aggregate dry-run completed, production mutation 0. Migration apply/backfill remain HOLD because actual disposable Supabase GoTrue/PostgREST/Storage/managed-role proof is not run. Next step requires operator to designate an approved nonproduction disposable Supabase environment or separately authorize creation. H2 free only after fresh allocation.
 
 ## Claude G1
 - owner: claude
