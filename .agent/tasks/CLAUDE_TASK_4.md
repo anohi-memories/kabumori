@@ -3,7 +3,7 @@
 - task_id: x-social-mobile-publish-toggle-transactional-corrective-20261003
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: highest
 - recommended_model: Opus5.5（極高）
