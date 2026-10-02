@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: common-account-pr70-readiness-authorization-rereview-20261002
+- status: ready
+- task_id: x-social-mobile-pr76-publish-toggle-review-20261002
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 PASS-WITH-FIX accepted. H1 fix aa4d2d425d1d7c432d43c9ecfb8e978a40b80a65 incorporated into PR #70 and merged as 44121914b035e22380a4ca1bd8252a42713a2bbf. Source accepted; production migration/backfill/deploy NOT authorized. H1 free after fresh allocation.
+- allocation: Focused security review of PR #76 exact head a59a89e9c585fb6e780e1af2ecc898c830f5524e. Verify Auth/tenant isolation, owner/admin policy, strict ON prerequisites, fail-safe OFF, CAS/races, brand active/live TOCTOU vs runtime publish guard, exact publish_enabled-only mutation, JWT/config and safe client behavior. No merge/deploy/production toggle/X operation. Recommended Sol（高）.
 
 ## Codex H2
 - owner: codex
@@ -80,13 +80,13 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: review_required
 - task_id: x-social-mobile-publish-toggle-v1-20261002
 - start_code: G4
 - finish_code: K4
-- next_owner: claude
+- next_owner: codex
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: Implement real per-account automatic-publishing ON/OFF using existing social_accounts.publish_enabled through a new authenticated server-side boundary. Owner/admin only; strict enable prerequisites, fail-safe disable, CAS/stale protection, exact-account authorization. No DB migration/RLS/grant change, no X API call, no scheduler/content-generation/AI-consult/common-account changes, no production deploy. Recommended Opus5.5（高）. K4 should normally send this posting-permission boundary to Codex Sol（高） review before merge.
+- allocation: K4 PASS to focused Codex review. PR #76 exact head a59a89e9c585fb6e780e1af2ecc898c830f5524e is open/mergeable; CI green; main +5 commits with no overlap. Source/tests only, production mutation 0, X operations 0. H1 review assigned before merge because this is a posting-permission/security boundary. Recommended review Sol（高）.
 
 ## Claude G5
 - owner: claude
