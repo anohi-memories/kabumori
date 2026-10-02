@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-content-settings-schema-prereq-review-20261002
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（高）
 - type: migration / RLS / optimistic-concurrency prerequisite review
@@ -189,6 +189,21 @@ Append to `.agent/CODEX_REPORT_2.md`:
 Then status -> review_required, next_owner -> chatgpt, STOP for C2.
 
 Recommended model: **Sol（高）**.
+
+## H2 completion / C2 handoff — 2026-10-03 JST
+
+- verdict: **FAIL / CHANGES REQUIRED**. Unchanged historical candidate is NOT approved for production apply.
+- exact source: main `6ccaaf3a8bb4a2443e17412ae83421a6de7295e0`, migration SHA256 `b1167065e4177492b1139071055e89da2bf9db12b0e43e20dada1af07a996fdb`.
+- blockers: P1 JSON null/type/structured forbidden-key gaps; P1 inherited authenticated TRUNCATE/TRIGGER/etc ACL; P2 transaction-clock updated_at collision/regression; P2 silently accepted CHECK/FK drift.
+- live catalog: target table/function absent, version20260922045046 not applied, brand/membership/FK/self-SELECT compatible. Two READ ONLY catalog transactions; no user data read.
+- local PostgreSQL17.11 proof: 104 behavioral observations incl42 adverse observations (NOT all PASS), eight additional apply/drift/rollback/lifecycle markers, two-connection CAS winner1/loser0, concurrent INSERT23505, forced rollback PASS.
+- existing static/shared tests: Node7/7 PASS. Initial Deno type-check blocked on missing npm:@types/node; no dependency install or false typecheck PASS.
+- source/schema candidate changes0. Fake DB dropped, H2 cluster stopped. Full evidence and minimal reproductions in latest H2 Report (C2 needs no local artifact access).
+- next: bounded corrective migration proposal/task, preserve historical candidate by default; corrected proof and separate explicit production approval required. PR78 incomplete review remains HOLD until accepted apply/read-back.
+- production mutation/deploy/AI/X/Auth/OAuth/Vault/Storage/Cron0; formal repo existing changes/H1/other workstreams untouched.
+- Report publication: `c1a9a1102b3f80f1ebf19e7b0a4367a4bb3ab40a`, exact content read-back PASS. Final pre-report fresh main: `18251ae795dc064dc5616e4ce6f2052e1db4957b`.
+- status: review_required / next_owner: chatgpt. **STOP for C2**. Recommended review model: Sol（高）.
+
 
 ---
 
