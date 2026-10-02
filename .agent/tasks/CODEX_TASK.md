@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-pr76-publish-toggle-review-20261002
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused review / posting-permission security boundary
@@ -249,6 +249,14 @@ Then:
 - STOP for C1.
 
 Recommended model: **Sol（高）**.
+
+## H1 completion / delivery resume — 2026-10-02 JST
+
+- verdict: **FAIL / CHANGES REQUIRED**. Reviewed exact head `a59a89e9c585fb6e780e1af2ecc898c830f5524e`, unchanged/open. No source fix or merge/deploy/production change.
+- blocking findings: revoked/demoted membership can still authorize the privileged PATCH; brand active/live race is not made non-publishing by the cached runtime guard. Additional findings: foreign no-match reread, nonempty readiness mismatch, unpinned client confirmation/preview transition.
+- prior completed-review evidence: Edge 37/37, mobile 134/134, domain 22/22; target runtime check/lint and mobile typecheck/lint PASS; X regression 48/48 with --no-check; seven server/runtime + two client counterexample proofs. Existing shared checked-type errors and candidate test-helper lint failures are documented separately. No tests rerun for this delivery-only resume.
+- report synchronized via H1-dedicated TASK/REPORT only; shared CURRENT_STATE/ACTIVE_TASK remain untouched due concurrent other-slot updates. C1 should treat this TASK/REPORT as authoritative and safely align H1 index/summary later. GitHub publication complete only after normal push/read-back.
+- architecture/transactional correction requires separately scoped authority. No DB/RPC/publishing-runtime expansion. Full evidence `.agent/CODEX_REPORT.md`. Next **C1, 推薦モデル：Sol（高）**; STOP.
 
 ---
 
