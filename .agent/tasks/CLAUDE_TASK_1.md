@@ -1,5 +1,377 @@
 # Claude Task 1 — CURRENT TASK
 
+- task_id: kabumori-home-topic-3level-backgrounds-20261003
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（高）
+- type: Kabumori Home UI / topic background canonical asset integration / level-based presentation
+- allocation_main_sha: f2a6882c72b93918118e42c8d0261d1df892fa4b
+- production_mutation_allowed: false
+
+## Purpose
+
+かぶモリTOPの「今日のトピック」カードを、ユーザーが確定した3段階背景シリーズへ切り替える。
+
+表示レベル:
+- beginner = 初級者向け
+- intermediate = 中級者向け
+- advanced = 上級者向け
+
+既存の `topic.level` をそのまま使い、
+追加API・追加AI・DB/RPC変更なしで背景だけを決定論的に切り替える。
+
+今回の目的は**TOPカードの背景3段階を実機相当で比較できる状態にすること**。
+トピック本文の長文化・詳細画面の情報設計は次TASK。今回は広げない。
+
+## User-approved visual system
+
+### Beginner
+- theme color: very pale green / mint + ivory
+- meaning: 基本をやさしく学ぶ
+- motif: open book + simple chart + pencil + sprout
+- plant stage: 双葉
+
+### Intermediate
+- theme color: pale blue + ivory
+- meaning: 複数資料を比較・分析する
+- motif: open book + magnifying glass + several data cards / bar / line / pie charts
+- plant stage: 若い苗（葉が増えた状態）
+
+### Advanced
+- theme color: pale lavender + ivory
+- meaning: 複数指標・材料の関係を組み合わせて考える
+- motif: analysis book + small candlesticks + line/bar charts + relation-node card
+- plant stage: さらに成長した植物 + small flower
+
+3枚共通:
+- same series / same soft illustration touch
+- left ~60% is quiet text space
+- right upper-to-middle is illustration cluster
+- bottom-right ~15–20% remains open for CTA
+- no character, no logo, no baked UI text
+- no financial-ad/news-show feel
+
+## Canonical asset filenames
+
+Repo canonical paths:
+
+- `assets/images/home/topic_background_beginner.webp`
+- `assets/images/home/topic_background_intermediate.webp`
+- `assets/images/home/topic_background_advanced.webp`
+
+Source originals should be the user-approved clean PNGs, preferably:
+
+- `topic_background_beginner.png` / `初級.png`
+- `topic_background_intermediate.png` / `中級.png`
+- `topic_background_advanced.png` / `上級.png`
+
+Expected canonical canvas for this approved series:
+- **1942 × 809 px**
+- aspect ratio ≈ **2.4005:1**
+
+### Source-asset safety gate — mandatory
+
+The user has approved the clean generated backgrounds, but chat screenshots also exist for intermediate/advanced.
+
+**Do NOT use screenshot wrappers as source assets.**
+
+Reject any source that contains:
+- black editor/app chrome
+- 「編集」
+- share/export button
+- bottom toolbar/icons
+- rounded screenshot frame
+- any UI overlay not part of the illustration
+
+Before coding:
+1. look only in repo/user-provided local asset locations (e.g. exact user-supplied files on Desktop/Downloads/project import area) for the clean originals.
+2. require all 3 clean originals to be available.
+3. verify all 3 have the same 1942×809 canvas (or report an exact clean-original size mismatch before proceeding).
+4. if any clean original is missing, **STOP** and list exactly which original(s) are missing. Do not crop the screenshots. Do not inpaint them. Do not regenerate or approximate them.
+
+If clean PNG originals are available:
+- convert to lossless WebP only (`cwebp -lossless -exact` or equivalent)
+- no resize
+- no crop
+- no recolor
+- no retouch
+- no sharpening/denoise
+- preserve exact pixels except format encoding/metadata
+- verify decoded RGBA equivalence where practical
+
+## Current source
+
+Current `src/components/home/home-topic-feature.tsx` has:
+- `TOPIC_BACKGROUND_SOURCE: ImageSource | null = null`
+- one static future background slot
+- `topic.level` already available
+- text width about 62%
+- CTA bottom-right
+
+Current `src/lib/home-topic.ts` already defines:
+- `beginner`
+- `intermediate`
+- `advanced`
+and the correct Japanese labels.
+
+Do not change backend topic-level semantics.
+
+## Required implementation
+
+### 1. Exact level -> asset mapping
+
+Replace the single null slot with an explicit immutable mapping, e.g.:
+
+`TOPIC_BACKGROUND_SOURCES: Record<TopicLevel, ImageSource>`
+
+Mapping must be exactly:
+- beginner -> beginner asset
+- intermediate -> intermediate asset
+- advanced -> advanced asset
+
+Use only `topic.level`. No text heuristics, no randomness, no date-based visual guessing.
+
+For loading/error/empty where there is no current topic:
+- do not invent a level
+- keep current truthful states
+- a neutral plain card/background is acceptable
+- do not falsely show beginner just because it is the default preference
+
+### 2. Card geometry must respect the canonical artwork
+
+The approved source is ~2.4005:1.
+
+Make the loaded-topic card render the background without visually distorting it.
+
+Preferred:
+- card ratio close to source ratio
+- background absolute fill
+- `contentFit="cover"` only if the card ratio ensures no meaningful crop of the right-side illustration / CTA-safe area
+- otherwise choose the simplest no-distortion layout that preserves the approved composition
+
+Do **not** stretch the image.
+
+The left text and right illustration must remain visually balanced.
+
+### 3. Text / CTA overlay
+
+Keep native dynamic UI:
+- level badge
+- title
+- short summary
+- `詳しく見る →`
+
+Rules:
+- left text remains within the intended quiet area, approximately left 55–60%
+- title max 2 lines
+- summary max 2 lines
+- CTA stays bottom-right
+- CTA must sit in the intentionally empty bottom-right artwork area
+- CTA must remain fully tappable
+- background illustration must not reduce text readability
+- whole loaded card continues to open topic detail
+- avoid adding a second competing navigation target
+
+If needed, make the loaded Pressable fill the card so CTA positioning is stable.
+
+### 4. Level badge
+
+The label stays:
+- 初心者向け
+- 中級者向け
+- 上級者向け
+
+Do not change wording.
+
+A minimal level-tinted badge treatment is allowed only if it clearly improves harmony:
+- beginner pale green
+- intermediate pale blue
+- advanced pale lavender
+
+But do not redesign the card or create new UI complexity just for badge colors.
+
+## Explicit non-scope
+
+Do NOT change:
+- daily topic RPC
+- DB/schema/migration
+- topic selection/date logic
+- AsyncStorage level preference contract
+- topic detail content generation
+- topic detail page copy/structure
+- report Hero
+- news cards
+- portfolio screen
+- AI Ask
+- Auth/common-account
+- X/social-mobile
+- backend/Edge Functions/Cron
+- production settings
+
+## Worktree / conflict safety
+
+Before work:
+1. read `PROJECT_RULES.md`
+2. read `.agent/ORCHESTRATION.md`
+3. read `.agent/CURRENT_STATE.md`
+4. read this TASK
+5. fresh `origin/main`
+6. inspect open PRs / slot scopes
+7. `git worktree list`
+
+Use an independent G1 worktree/checkout.
+Recommended branch:
+`claude/g1-home-topic-backgrounds-20261003`
+
+At allocation time:
+- G1 is done/free
+- G2 owns PR #79 Hard Fact report-analysis work and does not overlap Home topic UI
+- current open PRs do not target Home topic files
+
+If a new concurrent PR/slot begins touching:
+- `src/components/home/home-topic-feature.tsx`
+- `src/lib/home-topic.ts`
+- `tests/app/home-topic_test.ts`
+- `assets/images/home/topic_background_*.webp`
+STOP for conflict resolution.
+
+## EAS build conservation — mandatory
+
+This is JS/TS + image asset UI work.
+
+Expected:
+- EAS build created = **0**
+
+Use:
+- local Expo
+- iOS Simulator
+- existing reusable dev client + local Metro if safe
+
+Do not consume a new EAS build for this task.
+
+## Tests
+
+At minimum:
+
+### Asset integrity
+- exactly 3 canonical topic background assets
+- expected dimensions / lossless format
+- no screenshot UI/chrome in accepted source
+- mapping covers all 3 TopicLevel values exactly once
+
+### Logic / structure
+- beginner maps to beginner
+- intermediate maps to intermediate
+- advanced maps to advanced
+- loading/error/empty remain truthful
+- no backend/API/AI is called by background selection
+- detail navigation still works
+- label wording unchanged
+
+### UI
+- loaded card uses actual level background
+- title / summary remain readable
+- CTA is visible and tappable
+- no background stretching
+- no CTA collision with illustration
+- Home section order unchanged
+
+Run:
+- relevant `tests/app/home-topic_test.ts`
+- Home/app deterministic test suite
+- navigation regressions
+- `npx expo config --json`
+- `npx expo export --platform web`
+- changed-scope typecheck/lint where supported
+- `git diff --check`
+
+Known pre-existing diagnostics must be separated from candidate regressions.
+
+## Visual verification — required
+
+Use local iOS Simulator, minimum:
+- ~402pt width
+- ~375pt width
+
+Create local-only fixtures for:
+- beginner
+- intermediate
+- advanced
+
+Do not commit fixture-only production behavior.
+
+Capture or inspect each loaded card with:
+- representative 2-line title
+- representative 2-line summary
+- CTA
+
+Confirm:
+- beginner = pale green / basic learning / sprout
+- intermediate = pale blue / comparison-analysis / young plant
+- advanced = pale lavender / multi-indicator relation / small flower
+- three cards clearly differ by more than color alone
+- left text position is stable across all 3
+- right illustration cluster stays within its intended region
+- bottom-right CTA area remains clear
+- card height does not jump by level
+- surrounding Home sections are unchanged
+
+Create one compact 3-state comparison screenshot/contact sheet in `docs/ui-review/` if useful for K1.
+
+## Acceptance criteria
+
+PASS candidate only if:
+- exact clean user-approved originals are used
+- no screenshot crop / regeneration / approximation
+- 3 levels map to the correct background
+- source artwork is not stretched
+- native title/summary/badge/CTA remain readable and interactive
+- level switching does not change layout geometry
+- 402/375pt visual checks pass
+- no EAS build
+- backend/production mutation = 0
+- no unrelated Home redesign
+
+## Delivery
+
+Focused PR only.
+Do not self-merge.
+No deploy.
+
+Report:
+- task_id
+- fresh main SHA
+- exact source asset discovery paths/names (do not expose private home path beyond a safe basename in user-facing summary)
+- source PNG dimensions
+- final WebP dimensions + hashes
+- changed_files
+- exact level mapping
+- card geometry/contentFit
+- 402/375 visual findings for all 3 levels
+- tests/checks
+- PR/head
+- EAS build created: no
+- backend/production mutation: 0
+- remaining issues
+- safety_checks
+- next_recommendation
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K1.
+
+Recommended model: **Sonnet5（高）**.
+
+---
+
+## Archived previous G1 task state
+
+# Claude Task 1 — CURRENT TASK
+
 - task_id: kabumori-home-report-hero-8-state-assets-20261001
 - owner: claude
 - slot: claude-1
