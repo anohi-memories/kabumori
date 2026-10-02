@@ -1,3 +1,21 @@
+## Final K2 — PR #77 quality rewrite calibration
+
+- verdict: **PASS / merged**.
+- accepted head: `7174179c17cdc89b840fd923ad7a2d706f1a0f91`.
+- fresh main comparison found no overlapping runtime changes; merged -> `08a9f7101f2655d51ee3d7d6d5af3705ef5fa4db`.
+- quality-only improvements accepted:
+  - broad-first/company-last X text no longer falsely WARNs;
+  - real company-first / company-only omissions still WARN;
+  - App 700–899 chars remains telemetry-only; <700 may request one bounded rewrite;
+  - safe-original fallback and call ceiling unchanged.
+- reported tests: quality 9/9; analysis 113/113; personalized 128/128; X shared 8/8; data-packet 42/42; _shared 361/361; check/lint/diff PASS.
+- no Hard Fact source changed in PR #77; no Codex review required.
+- production mutation=0 except GitHub merge. PR #77 is intentionally **not deployed separately**; bundle it with the next accepted analysis deploy.
+- newly accepted blocker from the Report: 10/2 07:55 had a separate Hard date/session false positive where the report trading date scoped a forward-looking Japan-watch sentence containing prior-session US-stock direction.
+- next G2: narrow Hard date/session calibration, source/tests/PR only.
+- recommended Claude model: **Opus5.5（高）**.
+- because the next task changes a Hard boundary, K2 must reassess focused Codex review before production deploy. H1/H2 are currently occupied and must not be overwritten.
+
 ## Final C2 — Common Account pre-production gate HOLD
 
 - verdict: **PARTIAL / operator prerequisite accepted**.
