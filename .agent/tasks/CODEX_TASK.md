@@ -1,5 +1,235 @@
 # Codex Task — CURRENT TASK
 
+- task_id: kabumori-pr79-session-date-hard-guard-review-20261003
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- priority: highest
+- recommended_model: Sol（高）
+- type: focused review / Hard Fact session-date boundary
+- target_pr: 79
+- target_head: 9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3
+- production_mutation_allowed: false
+
+## Purpose
+
+PR #79 の session-date Hard Fact guard の緩和を独立レビューする。
+
+狙いは、朝刊の正当な「今日の見る点 + 前夜の米国株高」表現を通しつつ、当日の米国市場が実際に上昇したかのような誤った事実主張、wrong-date数値、mixed-session混同をHardのまま止めること。
+
+**merge / deploy / gate change / manual cycle / DB/Auth/Vault/X mutationは禁止。**
+
+## Accepted G2 evidence to verify independently
+
+- PR #79 final candidate head: `9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3`
+- prior problematic head: `a70dfdd23257c6361b60f1b9221f6029b0fccaf9`
+- PR open / mergeable at K2.
+- changed files remain 3:
+  - `supabase/functions/market-report-analysis/hard_fact_guards.ts`
+  - `supabase/functions/market-report-analysis/session_date_calibration_test.ts`
+  - `docs/market-report-shared-platform/DESIGN.md`
+- G2 reported:
+  - session-date calibration 10/10
+  - market-report-analysis 123/123
+  - personalized-reports 128/128
+  - X shared consumer 8/8
+  - data-packet 42/42
+  - `_shared` 361/361
+  - deno check/lint/diff PASS
+- production mutation=0.
+
+## Mandatory startup / isolation
+
+1. Read PROJECT_RULES, `.agent/ORCHESTRATION.md`, `.agent/CURRENT_STATE.md`, G2 TASK/Report, this H1 TASK.
+2. Use independent H1 worktree/checkout. Do not share G2/H2/G3/G4 workspaces.
+3. Fresh-fetch `origin/main` and PR #79 exact head.
+4. STOP if PR head differs from `9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3`.
+5. Fresh compare PR files against main-side changes; if overlap exists, report and STOP before modifying.
+6. H2 remains occupied by X-app schema prerequisite review. Do not touch H2 TASK/branch/files.
+
+## Review Gate A — exact positive boundary
+
+Confirm these legitimate prior-session watch references do NOT produce the session-date Hard error:
+
+- `10月2日は、米国株高や半導体株高が日本株でどう表れるかを見ます`
+- `10月2日は、米国株高や半導体株高の受け止め方を確認する一日です`
+- `10月2日は、米国株高を踏まえ、日本株の反応を確認します`
+- `10月2日は、前夜の米国株高が日本株にどう波及するかではなく、実際の値動きを確認します`
+- `10月2日は、米国市場の上昇を受けた動きが続くかを確認します`
+- correct explicit prior-session-date forms.
+
+Check the same semantics in market_summary, X context/closing, App story and claims, not only dedicated watch fields.
+
+## Review Gate B — assertion-before-watch laundering
+
+Independently attack `WATCH_RELATION`, `MOVE_LIST`, `NOUN`, `PLACE`, `REFERRED_MOVE`, `TOPIC_AFTER_DATE`.
+
+At minimum these must remain Hard when packet US session is only 10/1:
+
+- `10月2日は、米国株高が続き、日本株の反応を確認します`
+- `10月2日は、米国株高が確認され、日本株の反応を確認します`
+- `10月2日は、米国株高が鮮明となり、日本株の反応に注目です`
+- `10月2日は、米国株高が一段と強まり、日本株の反応を見ます`
+- `10月2日は、米国株高が継続し、日本株を見る一日です`
+- `10月2日は、米国株高が続いています。日本株の反応を確認します`
+- same shapes with `米国市場の上昇`.
+- no-comma variants.
+- assertion first, then a real `どう表れるか` question.
+
+Try additional Japanese constructions not already in G2 tests. Focus on whether a verb/adjective can sneak through NOUN/PLACE or MOVE_LIST and reach an allowed relation.
+
+## Review Gate C — wrong-date facts remain strict
+
+Must Hard-fail:
+
+- `10月2日の米国株は上昇しました`
+- `10月2日は米国株高でした`
+- `10月2日のNYダウは50,926.56でした`
+- `10月2日はNYダウ50,926.56、S&P500 7,666.45でした`
+- any wrong-date metric value/change even inside watch wording.
+- 10/1 legacy mixed-session regression: 9/29 Nikkei value + 9/30 1306 under one 9/30 date.
+- stale-as-current.
+- 1306 -> TOPIX index.
+- direction/sign/emoji inversion.
+- fabricated/unknown ref.
+- unsupported market causality.
+
+Do not accept a relaxation that only shifts protection to the LLM Fact checker for objective date/value contradictions.
+
+## Review Gate D — pre-existing HYPOTHETICAL behavior
+
+G2 explicitly reported a pre-existing boundary:
+
+`HYPOTHETICAL` can cause direction/date checks to skip when a metric clause contains forms like `かどうか`, `続くか`, `すれば`, `なら`.
+
+Example to investigate carefully:
+`10月2日は、米国株高が強まり波及するかどうかを見ます`
+
+Determine whether this is:
+- safe because the grammar is genuinely hypothetical and no completed-session assertion is made, or
+- a real bypass where `強まり` asserts the wrong-date move before the hypothetical tail.
+
+Do not dismiss it merely because it predates PR #79. This review is the pre-deploy Hard-boundary gate.
+
+If a real deterministic bypass exists and the fix is small/local:
+- add failing regression first,
+- apply the minimal fix on an H1-owned branch / directly mergeable review commit,
+- rerun the full relevant suites,
+- report original and final head.
+
+If fixing it requires redesigning general clause parsing or materially changes product semantics, return **CHANGES REQUIRED** to G2 instead of broadening review scope.
+
+## Review Gate E — no over-strict delivery regression
+
+User's product policy remains:
+
+> 客観的な嘘・日付/数値/参照の矛盾は止める。正当な見る点・不確実性・軽微な文体品質で日次配信を落とさない。
+
+Verify PR #79 does not regress back into routine false rejects for normal morning phrasing.
+
+Specifically check likely model variants such as:
+- `前夜の米国株高を受け、日本株の反応を見る`
+- `米国株高の流れをどう受け止めるかが焦点`
+- `前日の米国株上昇を踏まえて、日本株の反応を確認する`
+
+If a phrase is rejected, classify whether it is reasonably safe to reject or likely to cause recurring delivery churn. Do not demand exhaustive Japanese NLP.
+
+## Review Gate F — PR #77 combined rollout compatibility
+
+PR #77 is merged but still production-unapplied. It changes quality WARN/rewrite calibration only.
+
+Confirm PR #79 does not interfere with:
+- PR #77 quality warning semantics,
+- safe-original fallback,
+- model-call ceiling,
+- packet schema.
+
+Later production rollout should be one `market-report-analysis` deploy containing both PR #77 and the accepted PR #79.
+
+## Required verification
+
+At exact reviewed head, run at minimum:
+- `session_date_calibration_test.ts`
+- presentation_v2
+- causal_calibration
+- quality_calibration
+- h1_adversarial
+- content_guard
+- transport retry
+- full market-report-analysis suite
+- personalized-reports relevant/full suite
+- X shared consumer
+- market-report-data-packet
+- `_shared` relevant/full suite if feasible
+- deno check
+- deno lint
+- git diff --check
+
+Add focused adversarial tests for any newly found bypass or false positive.
+
+## Fix authority
+
+H1 may fix only a small deterministic issue inside the same Hard-guard scope.
+
+Allowed small-fix examples:
+- one regex/relation boundary correction
+- one clause-classification predicate correction
+- regression tests/docs directly tied to the defect
+
+Return to G2 if the fix needs:
+- architecture redesign
+- model/prompt/call-budget changes
+- packet-contract changes
+- DB/migration/RPC changes
+- broader parsing framework
+- production-specific behavior changes
+
+## Forbidden
+
+- no merge
+- no production deploy
+- no app/x gate change
+- no manual Edge invoke/retry
+- no DB/schema/RPC/migration
+- no cron/Auth/Vault/secrets
+- no real X operation
+- no personalized-reports/x-test-post source changes
+- no unrelated news acquisition changes
+
+## Completion / C1
+
+Append a new section to `.agent/CODEX_REPORT.md`; preserve all history.
+
+Report:
+- verdict: PASS / PASS-WITH-FIX / CHANGES REQUIRED
+- original reviewed head / final head
+- findings by severity
+- positive watch-reference result
+- assertion-laundering result
+- wrong-date numeric/mixed-session result
+- HYPOTHETICAL assessment
+- delivery-false-positive assessment
+- PR #77 compatibility
+- tests/check/lint/diff
+- changed_files/fix commit if any
+- production mutation=0
+- merge recommendation
+- rollout prerequisites
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C1.
+
+Recommended model: **Sol（高）**.
+
+---
+
+# Previous completed H1 task — preserved history
+
+# Codex Task — CURRENT TASK
+
 - task_id: x-social-mobile-pr76-publish-toggle-review-20261002
 - owner: codex
 - slot: codex-1
