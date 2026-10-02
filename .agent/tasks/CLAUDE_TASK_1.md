@@ -3,8 +3,8 @@
 - task_id: kabumori-home-topic-3level-backgrounds-20261003
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - type: Kabumori Home UI / topic background canonical asset integration / level-based presentation
@@ -365,6 +365,53 @@ Then:
 - STOP for K1.
 
 Recommended model: **Sonnet5（高）**.
+
+## Report — G1: Home 「今日のトピック」 three-level backgrounds (task kabumori-home-topic-3level-backgrounds-20261003)
+
+- task_id: `kabumori-home-topic-3level-backgrounds-20261003`
+- result: implemented and Simulator-verified; PR open, **not merged**.
+- fresh main SHA: `520e43e2bde5ca2c3d4efb41d1f6fe356c885392` (allocation SHA `f2a6882c…` was older; no PR/slot touches the topic files; independent clone/branch)
+- PR: https://github.com/anohi-memories/kabumori/pull/80 — branch `claude/g1-home-topic-backgrounds-20261003`, head `2e5356a8a3e6af84ed9999929cd62556081cab65`
+- **EAS build created: no.** backend/production mutation: **0**.
+
+### Source assets (safety gate)
+- Discovery: the user's local assets folder (Desktop, folder `ゆめちゃん素材`), files `topic_background_beginner.png`, `topic_background_intermediate.png`, `topic_background_advanced.png`. All three clean originals present. An older extra `中級.png` (1944x809) was NOT used.
+- Each source: PNG RGB **1942x809**. Gate: border strips (12px) are light on all sides (min luma 200–235, corners pastel; mean luma 232–244) — no black editor/app chrome, no 「編集」, toolbar, share button or rounded screenshot frame; the three images were also seen in the chat and match. No crop/inpaint/regeneration.
+- Converted with `cwebp -lossless -exact` (no resize/crop/recolor/retouch/sharpen/denoise); decoded RGBA verified **pixel-identical** to each PNG.
+- Final WebP (all 1942x809, VP8L lossless): `assets/images/home/topic_background_beginner.webp` sha256 `9f7c50c743ebf79b0351ccc512a350bebebfec7705f7ba049a21444995b353c5` (892,968 B); `…_intermediate.webp` `d62958feecaff9ad5823608ed79b12010381a13ec14df6e192f6c42950539a0d` (870,722 B); `…_advanced.webp` `d9b32157e2c1cfdef294d2956463a1759b34c88acd8e26a4961115081d1fa3ee` (928,298 B).
+
+### Level mapping (exact, from `topic.level` only; `TOPIC_BACKGROUND_SOURCES: Record<TopicLevel, ImageSource>`)
+beginner → `topic_background_beginner.webp`; intermediate → `…_intermediate.webp`; advanced → `…_advanced.webp` (each required once; no text heuristic, date, randomness, network or AI). Loading / error / empty: plain neutral card with the existing truthful texts, **no level invented, no background shown**. Backend topic-level semantics and `home-topic.ts` untouched.
+
+### Card geometry
+- Loaded card: `width: '100%'` + `aspectRatio: 1942/809 (2.4005)`; background `absoluteFill`, `contentFit="cover"` (same ratio ⇒ exact fit, no stretch/crop). (First pass lacked `width: 100%` and measured 19pt short of the other sections — found in the Simulator and fixed.)
+- Native UI: level badge (文言 初心者向け/中級者向け/上級者向け unchanged; only a pale level tint), title ≤ 2 lines, summary ≤ 2 lines in the left `60%`; CTA 「詳しく見る →」 absolute bottom-right (`right 10 / bottom 6`); the whole card is one Pressable → `/topic-detail` (CTA is inside it: no second target).
+
+### Visual findings (iPhone 17 Pro 402pt, real SE 3rd-gen simulator 375pt, local fixtures, 2-line title + 2-line summary)
+- beginner = pale green, open book + chart + pencil + sprout; intermediate = pale blue, magnifier + several data cards/bar/line/pie + young plant; advanced = pale lavender, relation-node card + candlesticks + line/bar + small flower — clearly different by more than colour.
+- Card 370x154.3pt (402) / 343x142.5pt (375) = section width; **height identical for all three levels**; neighbours unchanged (holdings above, Ask AI below only shifted by the card's own height); left text x stable across levels; illustration stays right; bottom-right stays clear: CTA↔illustration min gap beginner 19.3 / intermediate 14.3 / advanced 10.0pt at 402pt, 15.5 / 11.0 / 7.0pt at 375pt; 375pt titles (all three) fit in 2 full lines; summary ends in 「…」 (intended).
+- Taps (CTA, card body, illustration) open `/topic-detail` once. loading/error/empty heights 96 / 105.3 / 96pt (error retry works); first viewport: at 402pt the header + top ~102pt of the card are above the tab bar; at 375pt the topic is below the first viewport (as before this change). Bottom tabs, no overflow/horizontal scroll, no red screen.
+- Screenshots in the PR: `docs/ui-review/home-topic-3level-contact-sheet-402pt-2026-10-03.webp`, `…first-viewport-402pt-beginner…`, `…card-375pt-advanced…`.
+
+### Tests / checks
+- `deno test tests/app/`: **266 passed / 0 failed** (new `home-topic-background_test.ts`: asset hash/VP8L/1942x809, exactly 3 files = 3 levels, exact 1:1 mapping, level-only selection (no heuristics/network/AI), truthful loading/error/empty, ratio/full-width/cover, 2+2 lines + CTA bottom-right + single navigation, labels unchanged, Home order unchanged; `home-structure_test.ts` asset-slot test updated). `npx expo config --json` OK; `npx expo export --platform web` PASS (3 backgrounds bundled); tsc(src): only the 2 known CSS-module diagnostics; `git diff --check` clean.
+
+### changed_files (10 vs main, +207/−50)
+3× `assets/images/home/topic_background_*.webp`, `src/components/home/home-topic-feature.tsx`, `src/constants/home-tokens.ts` (TOPIC_CARD), `tests/app/home-topic-background_test.ts` (new), `tests/app/home-structure_test.ts`, 3× `docs/ui-review/home-topic-*.webp`.
+
+### Remaining issues
+- Loaded card (154pt at 402) is ~+50–58pt taller than the plain loading/error/empty card (96–105pt), by design (art ratio) — the card "jumps" once when the topic loads.
+- At 375pt the topic section starts below the first viewport (also before this change).
+- In the dev client a dev-only gear overlay occasionally swallowed taps near the CTA's right edge (not an app issue).
+- Mac disk was ~97% full during verification (Simulator tooling hit ENOSPC once); scratch builds were removed afterwards.
+
+### safety_checks
+No topic RPC / DB / schema / selection-date logic / AsyncStorage contract / detail page / Hero / news / portfolio / Ask AI / Auth / X / backend / cron change; no EAS build; no deploy; PR not merged; screenshot-wrapper sources not used; no secrets committed (a local public `.env` copy stayed untracked).
+
+### next_recommendation
+K1 review of PR #80 (UI-only, low risk). Then the user can view it live on their iPhone via the dev client + local Metro; next task per the TASK: richer topic body / detail design.
+
+Status: `review_required` / next_owner `chatgpt`. STOP for K1.
 
 ---
 
