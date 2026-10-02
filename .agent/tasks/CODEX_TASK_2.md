@@ -3,8 +3,8 @@
 - task_id: common-account-pr70-preproduction-gate-20261002
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（極高）
 - type: independent pre-production Auth/RLS/migration gate
@@ -194,6 +194,22 @@ At completion:
 - STOP for C2
 
 No production apply is authorized by this TASK itself.
+
+## H2 completion — 2026-10-02 JST
+
+- result: **PARTIAL / Gate B BLOCKED（operator prerequisite）**。
+- source merge: PASS。accepted `aa4d2d425d1d7c432d43c9ecfb8e978a40b80a65` の8ファイルはfresh mainでも変更なし。target merge `44121914b035e22380a4ca1bd8252a42713a2bbf` 包含。
+- independent local tests: lifecycle20 PASS / mutation46 of46 DETECTED / social deletion8 PASS / migration invariants10 of10 PASS / shell-lint-diff PASS。
+- production read-only: 17 tables / 26 columns / 14 FKs / 2 helper契約整合、target migration未適用・新object collisionなし。PostgREST exposure setting/APIとactual managed Auth/Storageは未証明。
+- backfill readonly snapshot: accounts5 / Kabumori2 / X1 / Auth-only2 / manual-review3。Phase 0からAuth-only1件増。actual backfill0。
+- actual disposable Supabase: NOT RUN。指定・承認済みsandboxがないため既存project流用/新課金resource作成はしていない。
+- **migration apply HOLD / backfill HOLD**。source PASSをproduction適用許可に読み替えない。
+- next prerequisite: operatorがdisposable非production Supabase環境を指定・明示承認し、managed boundary proofを行う。C2再判断後にmigration applyとbackfill applyを別々に承認。
+- Report publication commit: `e27c63e0905131ac981380714a7e96738bce293f`。GitHub exact content / current task_id / old report history preservationをread-back確認。
+- final freshness/source check: `f8d0ab0ca1a30a6ff8c1fdf6ba4c471c5e3bea5a`（同期前に他slotの.agent変更のみ、対象8ソース差分0）。
+- code/deploy/production write/Auth/Storage/OAuth/Vault/X/OpenAI/Push変更: 0。正式repoの既存変更への操作0。他slot制御ファイル更新0。
+- status: review_required / next_owner: chatgpt。**STOP for C2**（推薦モデル：Sol（極高））。
+
 
 ---
 
