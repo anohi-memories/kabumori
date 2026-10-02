@@ -3191,3 +3191,15 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - AI Lab diary: 記録不要 — 2026-10-02 canonical diary entry already exists for another real task; duplicate same-day or future-dated entry was not created.
 - G1 is free after fresh allocation.
 
+## G1 assigned — Home Topic 3-level backgrounds — 2026-10-03
+- task_id: `kabumori-home-topic-3level-backgrounds-20261003`.
+- goal: wire the user-approved beginner/intermediate/advanced 「今日のトピック」 background series into Home using existing `topic.level` only.
+- visual semantics: beginner=pale green/basic learning/sprout; intermediate=pale blue/comparison-analysis/young plant; advanced=pale lavender/multi-indicator relation/small flower.
+- canonical repo targets: `assets/images/home/topic_background_beginner.webp`, `topic_background_intermediate.webp`, `topic_background_advanced.webp`.
+- source gate: only clean user-approved originals may be used. Chat/editor screenshots with black chrome, 「編集」, share/export controls or toolbar overlays must not be cropped, inpainted, regenerated or committed. Expected approved series canvas is 1942x809; if any clean original is missing, G1 must STOP and name the missing file(s).
+- implementation scope: Home topic presentation + focused tests/assets only; topic content/detail expansion is deferred to the next task.
+- local Simulator verification at ~402pt and ~375pt for all 3 levels; no new EAS build.
+- backend / DB / RPC / Edge / Auth / X / production mutation: 0.
+- recommended model: **Sonnet5（高）**.
+- finish code: K1.
+
