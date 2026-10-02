@@ -1,5 +1,262 @@
 # Codex Task 2 — CURRENT TASK
 
+- task_id: x-social-mobile-pr78-ai-consult-review-20261002
+- owner: codex
+- slot: codex-2
+- status: ready
+- next_owner: codex
+- priority: highest
+- recommended_model: Sol（高）
+- type: focused review / authenticated AI API / settings persistence safety
+- target_pr: 78
+- target_head: 6e9f78a31bae9b65599732a9b416dcb50f2bfbc7
+- production_mutation_allowed: false
+
+## Purpose
+
+PR #78「AI相談 v1」を独立レビューする。
+
+This is not a UI polish review. It adds:
+- authenticated Edge Function / AI provider boundary
+- saved settings/persona read path
+- untrusted structured AI output parsing
+- user-confirmed settings/persona persistence with optimistic concurrency.
+
+The review must prove that ordinary conversation, malicious/forged history, malformed model output, cross-tenant input, or a stale confirmation cannot silently mutate durable settings or reach posting/X/Auth/OAuth/scheduler boundaries.
+
+**merge / deploy / production settings write / AI live call / X API / Auth / Vault / migrationは禁止。**
+
+## Mandatory startup / isolation
+
+1. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK.
+2. Read G3 current TASK/Report `x-social-mobile-ai-consult-v1-20261002`.
+3. Independent H2 worktree/checkout.
+4. Fresh fetch origin/main and PR #78 exact head `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7`.
+5. STOP if head differs.
+6. Re-check base-to-main overlap for all 11 PR files. K3 found main +7 commits, overlap 0.
+7. H1 is simultaneously reviewing PR #76. PR #76 files are separate; do not touch H1 branch/worktree/files.
+8. No source merge/deploy from H2.
+
+## Gate A — Auth / tenant isolation
+
+Independently verify:
+
+- Bearer/JWT is required and actually validated against Auth.
+- verified user id, not request data/history, is the identity boundary.
+- `brand_id` supplied by the client is only a selector; it must not grant authority.
+- membership query is scoped to the verified caller and exact brand.
+- role policy is explicit and consistent with current social-mobile ownership model.
+- foreign brand id, foreign workspace, missing membership, forged user id, duplicate membership, malformed brand id all fail closed.
+- brand must be the intended `social_mobile_user_v1` profile/context.
+- no service-role key is used by the consultation endpoint.
+- no response/log leaks user id, email, JWT, Authorization, provider key, raw settings from another tenant, or conversation text.
+- production schema/RLS read-only inspection may be used to verify assumptions; no writes.
+
+Clarify whether owner-only is intentional/safe versus any existing member/admin product semantics. Over-restriction can be noted separately; tenant escape is a blocker.
+
+## Gate B — request/context integrity
+
+Verify hard bounds:
+- exact request key allowlist
+- message length
+- history turn count
+- per-turn length
+- total history size
+- total body size
+- role values
+- method/content type
+- no hidden settings/token/account fields accepted.
+
+Review client-supplied history:
+- user can forge prior assistant turns; confirm this can influence only their own model context, not authorization/persistence.
+- forged assistant text must not be treated as previously confirmed settings/persona.
+- server must use its own saved confirmed settings/persona read, not client-claimed state.
+- confirmed-only persona rule is real.
+
+Attempt prompt-injection cases where history/message tells the model to emit forbidden keys, publish, schedule, reveal secrets, or claim something is saved.
+
+## Gate C — AI provider / structured-output trust boundary
+
+Prove:
+- provider secret is server-only
+- model is called at most once per send
+- no tools/web/X API
+- `store:false` or equivalent no-retention setting is actually set
+- timeout/output bounds are enforced
+- provider errors are bounded/retryable without raw provider leakage
+- strict schema is used as claimed, but server still treats returned JSON as untrusted
+- exact top-level key allowlist
+- exact editable settings allowlist
+- exact persona allowlist
+- forbidden control keys (publish/account/oauth/token/secret/schedule/cron/approval/generationWindow/locale/password/session/delete/vault etc.) fail closed even when nested/obfuscated in plausible structures
+- chat/question modes cannot carry deltas
+- same-as-saved deltas are dropped
+- malformed/partial output cannot create a pending proposal.
+
+Check client-side validator independently rejects an unsafe success envelope even if server were compromised or buggy.
+
+## Gate D — no implicit persistence / confirmation
+
+Trace every write path.
+
+Prove:
+- receiving AI response creates no DB write
+- normal chat creates no proposal
+- question creates no persistent delta
+- proposal remains memory/UI only
+- only explicit 「これで覚えて」 reaches save
+- dismiss/correction/retry cannot accidentally save the prior proposal
+- later proposal supersedes prior pending proposal safely
+- settings-only confirmation cannot erase/relabel existing persona
+- persona changes remain confirmed and bounded
+- no path toggles publish_enabled, approval permission, scheduled posts, X connection, Auth or common-account state.
+
+The Edge Function itself should be read-only. Enumerate every network/data call and prove there is no write call.
+
+## Gate E — optimistic concurrency / production schema truth
+
+This is a critical review point.
+
+The implementation relies on `social_mobile_content_settings.updated_at` as a compare-and-swap version.
+
+Use read-only production catalog/schema inspection to verify:
+- table exists in the target production project
+- expected columns exist
+- exact type/nullability/default of `updated_at`
+- RLS/policies match client read/write assumptions
+- INSERT/UPDATE permissions are what the mobile client needs
+- whether a trigger automatically changes `updated_at` on every update
+- whether any existing upsert/update path can change settings without advancing `updated_at`.
+
+If `updated_at` does not reliably advance, CAS may be illusory and must be a blocker or receive a bounded source-safe correction only if no schema change is required.
+
+Test:
+- row absent -> competing insert
+- row present -> competing update
+- touched field changed after proposal
+- unrelated field changed after proposal
+- persona changed after proposal
+- simultaneous confirm from two devices
+- update returns zero rows
+- RLS denial
+- malformed saved settings.
+
+No production writes.
+
+Also review the bundled fix allowing only `generationWindow.endLocal = "24:00"`:
+- confirm DB/server semantics really allow 24:00 there
+- no other time field accidentally accepts it
+- no validation weakening beyond the intended field.
+
+## Gate F — history-learning boundary
+
+Past-post learning is NOT implemented here.
+
+Verify:
+- history intent can be detected/displayed only
+- no X history fetch
+- no X token read
+- no X API
+- no persona derived from posts
+- no hidden call through shared helpers
+- explicit consent boundary remains intact.
+
+## Gate G — cost / abuse / rollout
+
+Assess:
+- one call/send, 25s timeout, 900 output tokens, bounded input
+- no recursive loops/retries/tools
+- current absence of per-user quota/rate limit.
+
+Do not automatically fail solely because per-user rate limiting is absent if the feature remains undeployed/private-gated, but clearly classify whether it must be added before:
+- production deploy
+- public enablement
+- wider multi-user rollout.
+
+Check whether existing platform/Supabase protections provide any effective abuse ceiling; do not assume.
+
+## Gate H — config/deployment truth
+
+Verify:
+- repository config will deploy `social-mobile-consult` with JWT verification ON.
+- if no explicit function stanza exists, determine actual Supabase default/current project behavior rather than assuming.
+- no secret/config/migration changes are hidden outside the 11 PR files.
+- no production deployment has occurred.
+
+## Tests / adversarial verification
+
+Run independently:
+- PR Edge logic tests
+- Deno check/lint
+- full social-mobile tests
+- typecheck/lint
+- relevant shared brand/content-setting tests
+- diff check / secret scan
+- focused mutation/adversarial tests for findings.
+
+No paid/live AI call required; provider should be stubbed.
+
+If a bounded defect is found:
+- H2 may make a small review fix on an H2-owned branch if it changes only PR #78 source/tests and no migration/config/production state.
+- add regression first where practical.
+- preserve original reviewed head in report.
+- do not merge/deploy.
+If a fix requires DB migration/RLS policy change or architecture change, STOP with CHANGES REQUIRED.
+
+## Production safety
+
+Allowed:
+- code review
+- local tests
+- read-only production schema/catalog/RLS inspection.
+
+Forbidden:
+- production settings writes
+- Edge deploy
+- migration/RLS/grant apply
+- Auth mutation
+- Vault read plaintext/write
+- X API/history/post
+- live paid AI request
+- Cron/scheduler change.
+
+## Report
+
+Append to `.agent/CODEX_REPORT_2.md` without deleting history:
+
+- task_id
+- verdict PASS / PASS-WITH-FIX / FAIL
+- original exact head
+- final reviewed candidate if fix
+- Auth/tenant result
+- request/history integrity
+- AI structured-output/injection result
+- no-implicit-persistence result
+- CAS/updated_at production-schema result
+- 24:00 validation result
+- history-learning boundary
+- cost/rate-limit rollout classification
+- JWT/deployment config result
+- tests/adversarial checks
+- changed_files/fix commit if any
+- production reads/mutations
+- real AI/X operations
+- remaining risks
+- merge recommendation
+- deploy/public-rollout recommendation
+- safety checks.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C2.
+
+Recommended model: **Sol（高）**.
+
+---
+
+# Codex Task 2 — CURRENT TASK
+
 - task_id: common-account-pr70-preproduction-gate-20261002
 - owner: codex
 - slot: codex-2
