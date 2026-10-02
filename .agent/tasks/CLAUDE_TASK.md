@@ -1,10 +1,223 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-shared-report-v2-morning-session-date-guard-calibration-20261002
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Opus5.5（高）
+- purpose: 2026-10-02朝刊の1回目を落とした「今日の日付 + 前夜の米国株高を今日の注目材料として参照する文」を、米国市場の当日実績と誤解してHard BLOCKする日付guardの誤検出を狭く修正する。本物の別日数値混同は絶対に通さない。source + tests + PRのみ。deploy/gate/manual cycleは禁止。
+
+## Accepted baseline
+
+- PR #71 causal calibration merged and production v20にdeploy済み。
+- PR #77 quality rewrite calibration merged as `08a9f7101f2655d51ee3d7d6d5af3705ef5fa4db`, **まだproduction未deploy**。
+- app_enabled=false / x_enabled=false.
+- 10/2 morning final packet completed safely on scheduled retry.
+- this task may edit Hard Fact date/session logic, so it is higher risk than PR #77.
+- H1/H2 are currently owned by other tasks; do not overwrite them. Review routing is decided at K2 after fresh slot check.
+
+## Exact live regression — 2026-10-02 07:55 morning
+
+The first natural analysis run was rejected with:
+
+`日付と指標の不一致（NYダウ・S&P500・ナスダック総合は10月1日の値、本文は10月2日）`
+
+Observed rejected sentence shapes included:
+
+- `10月2日は、米国株高や半導体株高が日本株でどう表れるかを見ます`
+- `10月2日は、米国株高や半導体株高の受け止め方を確認する一日です`
+- `東京市場との関係は確認できないため、10月2日は米国株高や半導体株高が日本株でどう表れるかを見ます`
+
+Meaning:
+- `10月2日` dates today's Japanese-market watch/setup.
+- `米国株高 / 半導体株高` refers to the already-observed 10/1 US session.
+- the sentence does **not** claim that US stocks rose on 10/2.
+
+Current guard attaches the sentence-leading trading date to the later US-market mention whenever a direction word is present, even without a numeric value/session assertion.
+
+This is a delivery-harming false positive.
+
+## Product rule
+
+Hard date/session blocking exists to stop objective lies, especially:
+- wrong date attached to a concrete value/change,
+- wrong date attached to a clear completed-session market statement.
+
+It must **not** block a forward-looking sentence merely because today's date and yesterday's market move coexist in one sentence.
+
+### Must PASS
+
+At minimum:
+
+1. `10月2日は、米国株高や半導体株高が日本株でどう表れるかを見ます`
+2. `10月2日は、米国株高や半導体株高の受け止め方を確認する一日です`
+3. `10月2日は、米国株高を踏まえ、日本株の反応を確認します`
+4. `10月2日は、前夜の米国株高が日本株にどう波及するかではなく、実際の値動きを確認します`
+5. same semantics inside market_summary / X context / X closing / App prose, not only dedicated watch fields
+6. explicit correct form: `10月2日は、10月1日の米国株高が日本株でどう表れるかを見ます`
+
+These sentences may still be checked by unsupported-causality logic where appropriate. This task only removes the **wrong date/session attribution**.
+
+### Must FAIL
+
+Keep strict:
+
+1. `10月2日の米国株は上昇しました` when the packet only has the 10/1 US session.
+2. `10月2日は米国株が上昇しました` / `10月2日は米国株高でした`.
+3. `10月2日のNYダウは50,926.56でした` when that value is for 10/1.
+4. `10月2日はNYダウ50,926.56、S&P500 7,666.45でした`.
+5. exact 10/1 legacy mixed-session regression:
+   - `9月30日は日経平均65,481.27（-0.60%）、1306は431.5（+1.43%）でした`
+6. any metric value/change attached to the wrong session date.
+7. stale metric presented as current/latest.
+8. 1306 presented as TOPIX index.
+9. direction/sign/emoji inversion.
+10. fabricated/unknown ref and unsupported market causality remain unchanged in their own guards.
+
+## Implementation guidance
+
+Audit `metricFactIssues` in `hard_fact_guards.ts`.
+
+Do not solve this by broadly disabling date checks whenever no number is present.
+
+A direction-only statement can still make a false dated factual claim:
+- `10月2日の米国株は上昇しました`
+must remain Hard.
+
+Instead distinguish **completed-session assertion** from **today's forward-looking/watch frame**.
+
+Candidate signals may include:
+- sentence/metric clause is interrogative, conditional, or forward-looking: `見る`, `見ます`, `確認します`, `注目`, `どう表れるか`, `受け止め方`, `続くか`, `反応` etc.
+- the written date is the report trading date and grammatically scopes the watch/action rather than the prior-session metric fact.
+- past/completed assertions such as `上昇しました`, `上昇でした`, `米国株高でした`, concrete value/change, or explicit `10月2日の米国株` must stay strict.
+
+Prefer a small deterministic predicate with explicit tests over a broad NLP heuristic.
+
+Do not move factual prose wholesale into the `forward` bucket merely to bypass guards.
+
+## Guard invariants
+
+Do not weaken:
+- numeric metric/value matching
+- value-vs-change matching
+- printed sign validation
+- session-date matching for concrete numeric facts
+- stale/current guard
+- direction polarity
+- 1306 identity
+- PR #71 causal calibration
+- PR #77 quality behavior
+- report schema / model / call budget
+
+No new LLM call.
+
+## Exact regression tests
+
+Use the 10/2 morning data fixture already merged by PR #77 where practical.
+
+Add focused tests covering:
+- all PASS phrases above
+- all FAIL phrases above
+- same phrase placed in multiple factual presentation fields
+- correct prior-session explicit date remains PASS
+- trading-date + completed US-session assertion remains FAIL
+- forward-looking wording with a concrete wrong-date numeric US value remains FAIL
+- sentence with today's Japan date and previous-US move plus a **separate** correct numeric US date remains PASS
+- mixed Tokyo/US clauses where each has its own date remain PASS
+- 10/1 mixed-session numeric regression remains FAIL
+
+Also rerun:
+- metric/hard-fact full tests
+- presentation_v2
+- causal_calibration
+- quality_calibration
+- H1 adversarial
+- content_guard
+- market-report-analysis full suite
+- personalized/X/data-packet/_shared relevant regressions
+- deno check
+- deno lint
+- git diff --check
+
+## Scope / safety
+
+Allowed:
+- `supabase/functions/market-report-analysis/hard_fact_guards.ts`
+- focused market-report-analysis tests/fixtures
+- tiny analysis_logic prompt clarification only if strictly necessary and justified
+- DESIGN documentation
+
+Forbidden:
+- production deploy
+- manual invoke/retry
+- app/x gate change
+- DB/schema/RPC/migration
+- cron/Auth/Vault/secrets
+- personalized-reports
+- x-test-post
+- news acquisition
+- native App UI
+- additional model calls
+
+## Review requirement at K2
+
+Because this changes a Hard Fact boundary, K2 must reassess independent Codex review.
+
+- Do not overwrite H1/H2 if still occupied.
+- If the delta is extremely narrow and exhaustive adversarial tests prove the strict negative cases, ChatGPT may still choose a focused review before production deploy.
+- No production deploy is authorized by this TASK itself.
+
+## Completion conditions
+
+PASS candidate only if:
+- exact 10/2 false-positive phrases pass
+- clear 10/2-US-session false assertions still fail
+- concrete wrong-date values always fail
+- exact 10/1 mixed-session regression still fails
+- stale/current/1306/direction/causal/ref protections remain intact
+- PR #77 quality behavior remains intact
+- model-call budget unchanged
+- production mutation=0
+
+## Required Report
+
+- task_id/result
+- fresh main/worktree
+- exact root cause
+- exact date-scope rule chosen
+- why false dated completed-session statements still fail
+- exact 10/2 positive regressions
+- negative/adversarial regressions
+- 10/1 mixed-session result
+- full tests/check/lint/diff
+- changed_files
+- PR/head SHA
+- production mutation=0
+- remaining issues
+- recommendation: Codex review vs merge, then combined deploy of PR #77 + this fix
+
+When complete:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+Pending.
+
+---
+
+# Previous completed G2 task — quality rewrite calibration
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-shared-report-v2-quality-rewrite-calibration-20261002
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: 10/2朝刊の最初のlive Presentation v2で確認した、誤ったニュース優先度WARNと軽微な長さ不足による不要なquality rewriteを修正する。Hard Fact / Fact / transport / packet契約は変更しない。source + tests + PRのみ。
@@ -5634,4 +5847,26 @@ K2 decision:
 - no new Hard-fact source change is justified from this sample.
 - next fix should target **quality-warning/rewrite calibration only**, so stylistic/near-target issues do not cause unnecessary model rewrites.
 - no Codex review required for that narrow quality-only change unless it touches Hard Fact behavior.
+
+
+
+## Final K2 — PR #77 quality calibration
+
+- verdict: **PASS / merged**.
+- accepted PR: #77
+- accepted head: `7174179c17cdc89b840fd923ad7a2d706f1a0f91`
+- fresh no-race comparison before merge found no overlap between main-side changes and PR #77 files; PR was mergeable.
+- merge/main SHA: `08a9f7101f2655d51ee3d7d6d5af3705ef5fa4db`.
+- accepted behavior:
+  - broad-first/company-last X news no longer raises the false priority warning
+  - genuinely company-first/company-only-with-broad-input cases still WARN
+  - 700–899 App story remains telemetry-only and does not spend a rewrite
+  - <700 may still request one bounded rewrite
+  - safe-original fallback unchanged
+  - Hard Fact / causal / ref / date / stale / 1306 behavior was not changed by PR #77
+- reported verification accepted: quality calibration 9/9; market-report-analysis 113/113; personalized 128/128; X shared 8/8; data-packet 42/42; _shared 361/361; check/lint/diff PASS.
+- model-call ceiling unchanged.
+- production mutation from this source task/K2: GitHub merge only; no Edge deploy/gate/manual cycle.
+- PR #77 will **not** be deployed separately. It will be bundled into the next accepted market-report-analysis deploy after the morning session-date false-positive guard is fixed, to avoid unnecessary deployment churn.
+- no Codex review was added for PR #77 because it is quality-only and Hard behavior is unchanged.
 
