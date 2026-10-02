@@ -87,11 +87,11 @@ export const TOPIC_CARD = {
   artHeight: 809,
   aspectRatio: 1942 / 809,
   padding: 12,
-  /** Quiet text area on the left of the art. */
-  textWidth: '56%',
+  /** Quiet text area on the left of the art (60% keeps the 2-line beginner title whole at 375pt). */
+  textWidth: '60%',
   /** The CTA sits in the art's empty bottom-right corner. */
   ctaRight: 10,
-  ctaBottom: 8,
+  ctaBottom: 6,
   /** Minimal level tint for the badge only (pale green / pale blue / pale lavender). */
   badge: {
     beginner: { background: '#dff1e2', text: '#2f7a4a' },

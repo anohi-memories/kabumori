@@ -84,7 +84,7 @@ test("the card keeps the art's own aspect ratio: no stretching, one cover fill",
   assert.ok(/artWidth: 1942,/.test(tokens) && /artHeight: 809,/.test(tokens));
   assert.ok(/aspectRatio: 1942 \/ 809,/.test(tokens));
   const card = await read("src/components/home/home-topic-feature.tsx");
-  assert.ok(/cardLoaded: \{ aspectRatio: TOPIC_CARD\.aspectRatio \}/.test(card), "the loaded card has the art's ratio for every level");
+  assert.ok(/cardLoaded: \{ width: '100%', aspectRatio: TOPIC_CARD\.aspectRatio/.test(card), "the loaded card is full width and has the art's ratio for every level");
   assert.ok(card.includes('contentFit="cover"') && !/contentFit="fill"/.test(card), "cover on a same-ratio box is an exact fit");
   assert.ok(card.includes("StyleSheet.absoluteFill"));
 });

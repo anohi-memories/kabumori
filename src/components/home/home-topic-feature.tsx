@@ -104,7 +104,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   // The approved artwork's own ratio: the card is exactly as tall as the art needs, for every level.
-  cardLoaded: { aspectRatio: TOPIC_CARD.aspectRatio },
+  // width 100%: an aspectRatio-only box would not stretch across the row (it measured 19pt short of the other sections).
+  cardLoaded: { width: '100%', aspectRatio: TOPIC_CARD.aspectRatio, borderColor: 'rgba(23,33,26,0.06)' },
   cardPlain: { backgroundColor: HOME_COLORS.topicBackground, padding: 10, minHeight: 96, justifyContent: 'center' },
   pressFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, padding: TOPIC_CARD.padding },
   // Quiet text area: the left part of the art; the illustration cluster is on the right.
@@ -131,7 +132,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     borderRadius: 99,
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 6,
     overflow: 'hidden',
   },
   errorCard: { borderRadius: 12, padding: 12 },
