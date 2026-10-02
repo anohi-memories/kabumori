@@ -146,6 +146,7 @@ const RESERVED: Record<string, string> = {
   "20260921115317": "important_news_search_diagnostics", // PR 3 (already on main)
   "20260930090000": "mic_scenario_automation_cron_phase3c", // reserved for MIC Phase 3C
   "20261001150000": "common_account_lifecycle_foundation", // common account v1 Phase 1 (source candidate)
+  "20261003090000": "social_mobile_publish_permission_boundary", // PR 76 corrective (source candidate)
 };
 
 Deno.test("[E] versions reserved by open work are never used by a different migration", async () => {

@@ -1,100 +1,47 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  type AccountRow,
-  type BrandRow,
-  type CompareAndSetResult,
-  enablePrerequisiteFailure,
   handlePublishSetting,
+  MAX_BODY_BYTES,
   parsePublishSettingBody,
+  parsePublishSettingText,
+  type PublishSettingDecision,
   type PublishSettingDeps,
+  type PublishSettingRequest,
 } from "./logic.ts";
 
 const USER = "user-1";
 const TOKEN = "caller-jwt-secret-value";
 
-function account(overrides: Partial<AccountRow> = {}): AccountRow {
-  return {
-    id: "acct-1",
-    brand_id: "brand-a",
-    platform: "x",
-    connection_status: "identity_verified",
-    platform_user_id: "x-user-1",
-    verified_at: "2026-10-01T00:00:00Z",
-    last_connection_error_code: null,
-    publish_enabled: false,
-    has_access_secret_ref: true,
-    has_refresh_secret_ref: true,
-    ...overrides,
-  };
-}
-
-type World = {
-  accounts: Record<string, AccountRow>;
-  brands: Record<string, BrandRow>;
-  /** `${userId}:${brandId}` -> role */
-  roles: Record<string, string>;
-  tokens: Record<string, string>;
+type Harness = {
+  deps: PublishSettingDeps;
   calls: string[];
-  writes: Array<{ accountId: string; brandId: string; expected: boolean; desired: boolean; requireReadiness: boolean }>;
-  /** Run once, just before the compare-and-set, to simulate a concurrent change. */
-  beforeWrite?: (world: World) => void;
-  casResult?: CompareAndSetResult;
+  decided: Array<{ token: string; request: PublishSettingRequest }>;
 };
 
-function world(overrides: Partial<World> = {}): World {
+/** `decision` is what the database function answers; a function sees the request. */
+function harness(decision: PublishSettingDecision | ((request: PublishSettingRequest) => PublishSettingDecision)): Harness {
+  const calls: string[] = [];
+  const decided: Harness["decided"] = [];
   return {
-    accounts: { "acct-1": account() },
-    brands: { "brand-a": { id: "brand-a", is_active: true, publish_mode: "live" } },
-    roles: { [`${USER}:brand-a`]: "owner" },
-    tokens: { [TOKEN]: USER },
-    calls: [],
-    writes: [],
-    ...overrides,
-  };
-}
-
-function depsFor(w: World): PublishSettingDeps {
-  return {
-    async getUser(token) {
-      w.calls.push("getUser");
-      const id = w.tokens[token];
-      return id ? { id } : null;
-    },
-    async readAccount(accountId) {
-      w.calls.push("readAccount");
-      const row = w.accounts[accountId];
-      return row ? { ...row } : null;
-    },
-    async readBrand(brandId) {
-      w.calls.push("readBrand");
-      const row = w.brands[brandId];
-      return row ? { ...row } : null;
-    },
-    async readMembershipRole(_token, userId, brandId) {
-      w.calls.push("readMembershipRole");
-      return w.roles[`${userId}:${brandId}`] ?? null;
-    },
-    async compareAndSetPublishEnabled(input) {
-      w.calls.push("compareAndSet");
-      w.writes.push(input);
-      w.beforeWrite?.(w);
-      if (w.casResult) return w.casResult;
-      const row = w.accounts[input.accountId];
-      if (!row || row.brand_id !== input.brandId || row.publish_enabled !== input.expected) return "no_match";
-      if (input.requireReadiness) {
-        const ok = row.platform === "x" && row.connection_status === "identity_verified" && row.platform_user_id &&
-          row.verified_at && row.has_access_secret_ref && row.has_refresh_secret_ref && !row.last_connection_error_code;
-        if (!ok) return "no_match";
-      }
-      row.publish_enabled = input.desired;
-      return "updated";
+    calls,
+    decided,
+    deps: {
+      getUser(token) {
+        calls.push("getUser");
+        return Promise.resolve(token === TOKEN ? { id: USER } : null);
+      },
+      decide(token, request) {
+        calls.push("decide");
+        decided.push({ token, request });
+        return Promise.resolve(typeof decision === "function" ? decision(request) : decision);
+      },
     },
   };
 }
 
-function request(body: unknown, init: { method?: string; token?: string | null; contentType?: string } = {}): Request {
-  const headers: Record<string, string> = { "Content-Type": init.contentType ?? "application/json" };
+function request(body: unknown, init: { method?: string; token?: string | null; contentType?: string; headers?: Record<string, string> } = {}): Request {
+  const headers: Record<string, string> = { "Content-Type": init.contentType ?? "application/json", ...(init.headers ?? {}) };
   if (init.token !== null) headers.Authorization = `Bearer ${init.token ?? TOKEN}`;
   return new Request("https://example.test/functions/v1/social-mobile-publish-setting", {
     method: init.method ?? "POST",
@@ -109,34 +56,35 @@ const toggle = (desired: boolean, expected: boolean, id = "acct-1") => ({
   expected_current_enabled: expected,
 });
 
-async function run(w: World, req: Request) {
-  const response = await handlePublishSetting(req, depsFor(w));
+async function run(h: Harness, req: Request) {
+  const response = await handlePublishSetting(req, h.deps);
   return { status: response.status, body: await response.json().catch(() => null) as Record<string, unknown> | null };
 }
 
+const UPDATED_ON: PublishSettingDecision = { status: "updated", publishEnabled: true };
+
 // --- authentication / request validation ---------------------------------------------------------
 
-test("unauthenticated requests are rejected before any data is read", async () => {
+test("unauthenticated requests are rejected before the database is asked anything", async () => {
   for (const token of [null, "", "not-a-known-token"]) {
-    const w = world();
-    const { status, body } = await run(w, request(toggle(true, false), { token }));
+    const h = harness(UPDATED_ON);
+    const { status, body } = await run(h, request(toggle(true, false), { token }));
     assert.equal(status, 401, String(token));
     assert.equal(body?.error, "AUTH_REQUIRED");
-    assert.ok(!w.calls.includes("readAccount"));
-    assert.equal(w.writes.length, 0);
+    assert.ok(!h.calls.includes("decide"));
   }
 });
 
 test("only POST (and CORS preflight) is accepted", async () => {
-  const w = world();
-  assert.equal((await run(w, request(null, { method: "GET" }))).status, 405);
-  assert.equal((await run(w, request(null, { method: "PUT", token: TOKEN }))).status, 405);
-  const preflight = await handlePublishSetting(request(null, { method: "OPTIONS", token: null }), depsFor(w));
+  const h = harness(UPDATED_ON);
+  assert.equal((await run(h, request(null, { method: "GET" }))).status, 405);
+  assert.equal((await run(h, request(null, { method: "PUT" }))).status, 405);
+  const preflight = await handlePublishSetting(request(null, { method: "OPTIONS", token: null }), h.deps);
   assert.equal(preflight.status, 204);
-  assert.equal(w.calls.length, 0);
+  assert.equal(h.calls.length, 0);
 });
 
-test("body validation: content type, JSON, exact three fields with exact types, no client brand id", async () => {
+test("body validation: content type, JSON, exact three fields with exact types, no client brand or user id", async () => {
   const bad: unknown[] = [
     "not json",
     "",
@@ -145,6 +93,7 @@ test("body validation: content type, JSON, exact three fields with exact types, 
     {},
     { social_account_id: "acct-1", desired_enabled: true },
     { ...toggle(true, false), brand_id: "brand-a" },
+    { ...toggle(true, false), user_id: USER },
     { ...toggle(true, false), extra: 1 },
     { ...toggle(true, false), social_account_id: 5 },
     { ...toggle(true, false), social_account_id: "" },
@@ -152,263 +101,189 @@ test("body validation: content type, JSON, exact three fields with exact types, 
     { ...toggle(true, false), social_account_id: "x".repeat(101) },
     { ...toggle(true, false), desired_enabled: "true" },
     { ...toggle(true, false), expected_current_enabled: 0 },
+    { ...toggle(true, false), expected_current_enabled: null },
   ];
   for (const body of bad) {
-    const w = world();
-    const { status, body: out } = await run(w, request(body));
+    const h = harness(UPDATED_ON);
+    const { status, body: out } = await run(h, request(body));
     assert.equal(status, 400, JSON.stringify(body));
     assert.equal(out?.error, "REQUEST_INVALID");
-    assert.equal(w.writes.length, 0);
+    assert.ok(!h.calls.includes("decide"), JSON.stringify(body));
   }
-  const w = world();
-  assert.equal((await run(w, request(toggle(true, false), { contentType: "text/plain" }))).status, 400);
-  assert.equal((await run(w, request(" ".repeat(2000) + JSON.stringify(toggle(true, false))))).status, 400);
+  const h = harness(UPDATED_ON);
+  assert.equal((await run(h, request(toggle(true, false), { contentType: "text/plain" }))).status, 400);
+  assert.equal(h.decided.length, 0);
   assert.equal(parsePublishSettingBody(toggle(true, false)).socialAccountId, "acct-1");
 });
 
-// --- authorization ------------------------------------------------------------------------------
-
-test("account not found and no membership are indistinguishable (404, no existence leak) and write nothing", async () => {
-  const missing = world();
-  const a = await run(missing, request(toggle(true, false, "does-not-exist")));
-  const noMember = world({ roles: {} });
-  const b = await run(noMember, request(toggle(true, false)));
-  assert.deepEqual([a.status, a.body], [404, { success: false, error: "ACCOUNT_NOT_FOUND" }]);
-  assert.deepEqual([b.status, b.body], [404, { success: false, error: "ACCOUNT_NOT_FOUND" }]);
-  assert.equal(missing.writes.length + noMember.writes.length, 0);
+test("raw JSON must be unambiguous: duplicate keys (in any spelling) and escapes are rejected, not last-wins", async () => {
+  const ambiguous = [
+    // JSON.parse would keep the LAST value: OFF then ON.
+    '{"social_account_id":"acct-1","desired_enabled":false,"desired_enabled":true,"expected_current_enabled":false}',
+    '{"social_account_id":"acct-1","desired_enabled":true,"expected_current_enabled":true,"expected_current_enabled":false}',
+    '{"social_account_id":"other","social_account_id":"acct-1","desired_enabled":true,"expected_current_enabled":false}',
+    // The same key spelled with an escape parses to the same property.
+    '{"social_account_id":"acct-1","desired_enabled":false,"desired_enabl\\u0065d":true,"expected_current_enabled":false}',
+    '{"social_account_id":"acct\\u002d1","desired_enabled":true,"expected_current_enabled":false}',
+  ];
+  for (const text of ambiguous) {
+    assert.throws(() => parsePublishSettingText(text), /REQUEST_INVALID/u, text);
+    const h = harness(UPDATED_ON);
+    const { status } = await run(h, request(text));
+    assert.equal(status, 400, text);
+    assert.equal(h.decided.length, 0, text);
+  }
+  // Whitespace and key order are free.
+  const spaced = '\n { "expected_current_enabled" : false ,\t"desired_enabled": true, "social_account_id" : "acct-1" } ';
+  assert.deepEqual(parsePublishSettingText(spaced), { socialAccountId: "acct-1", desiredEnabled: true, expectedCurrentEnabled: false });
 });
 
-test("a member of ANOTHER brand cannot toggle this brand's account (cross-brand id guessing)", async () => {
-  const w = world({
-    accounts: { "acct-1": account(), "acct-b": account({ id: "acct-b", brand_id: "brand-b" }) },
-    brands: {
-      "brand-a": { id: "brand-a", is_active: true, publish_mode: "live" },
-      "brand-b": { id: "brand-b", is_active: true, publish_mode: "live" },
+test("the body is capped in BYTES while it is read: an oversized stream is cancelled, not buffered", async () => {
+  // Declared too long: refused before reading.
+  const declared = harness(UPDATED_ON);
+  const tooLong = await run(declared, request(toggle(true, false), { headers: { "Content-Length": String(MAX_BODY_BYTES + 1) } }));
+  assert.equal(tooLong.status, 400);
+  // No declared length: the stream is stopped as soon as the cap is crossed.
+  let pulled = 0;
+  let cancelled = false;
+  const chunk = new TextEncoder().encode(" ".repeat(200));
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      pulled += 1;
+      if (pulled > 1000) controller.close();
+      else controller.enqueue(chunk);
     },
-    roles: { [`${USER}:brand-a`]: "owner" }, // owner of A only
-  });
-  const { status, body } = await run(w, request(toggle(true, false, "acct-b")));
-  assert.equal(status, 404);
-  assert.equal(body?.error, "ACCOUNT_NOT_FOUND");
-  assert.equal(w.accounts["acct-b"].publish_enabled, false);
-  assert.equal(w.writes.length, 0);
+    cancel() {
+      cancelled = true;
+    },
+  }, { highWaterMark: 0 });
+  const h = harness(UPDATED_ON);
+  const streamed = await handlePublishSetting(
+    new Request("https://example.test/f", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
+      body: stream,
+      // @ts-ignore Deno/undici need this for a streaming request body.
+      duplex: "half",
+    }),
+    h.deps,
+  );
+  assert.equal(streamed.status, 400);
+  assert.equal(cancelled, true, "the body stream was cancelled");
+  assert.ok(pulled <= Math.ceil(MAX_BODY_BYTES / chunk.byteLength) + 2, `read ${pulled} chunks`);
+  assert.equal(h.decided.length, 0);
+  // Multi-byte characters count as bytes, not characters.
+  const wide = harness(UPDATED_ON);
+  const multibyte = await run(wide, request(JSON.stringify(toggle(true, false)) + "　".repeat(MAX_BODY_BYTES / 2)));
+  assert.equal(multibyte.status, 400);
+  // Invalid UTF-8 is refused.
+  const broken = await handlePublishSetting(
+    new Request("https://example.test/f", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
+      body: new Uint8Array([0x7b, 0xff, 0xfe, 0x7d]),
+    }),
+    harness(UPDATED_ON).deps,
+  );
+  assert.equal(broken.status, 400);
 });
 
-test("the membership consulted is the account's own brand, never a client value", async () => {
-  const seen: string[] = [];
-  const w = world();
-  const deps = depsFor(w);
-  const original = deps.readMembershipRole;
-  deps.readMembershipRole = (token, userId, brandId) => {
-    seen.push(brandId);
-    return original(token, userId, brandId);
-  };
-  const res = await handlePublishSetting(request(toggle(true, false)), deps);
-  assert.equal(res.status, 200);
-  assert.deepEqual(seen, ["brand-a"]);
-});
+// --- one decision, made by the database for the caller's own token ---------------------------------
 
-test("viewer and member are rejected by the v1 policy; owner and admin are allowed", async () => {
-  for (const role of ["viewer", "member", "something_else", ""]) {
-    const w = world({ roles: { [`${USER}:brand-a`]: role } });
-    const { status, body } = await run(w, request(toggle(true, false)));
-    assert.equal(status, 403, role);
-    assert.equal(body?.error, "PUBLISH_CONTROL_FORBIDDEN");
-    assert.equal(w.writes.length, 0);
-    assert.equal(w.accounts["acct-1"].publish_enabled, false);
-  }
-  for (const role of ["owner", "admin"]) {
-    const w = world({ roles: { [`${USER}:brand-a`]: role } });
-    const { status, body } = await run(w, request(toggle(true, false)));
-    assert.equal(status, 200, role);
-    assert.deepEqual(body, { success: true, status: "updated", account: { id: "acct-1", publish_enabled: true } });
-  }
-});
-
-test("viewer/member cannot even switch OFF", async () => {
-  const w = world({ accounts: { "acct-1": account({ publish_enabled: true }) }, roles: { [`${USER}:brand-a`]: "member" } });
-  const { status } = await run(w, request(toggle(false, true)));
-  assert.equal(status, 403);
-  assert.equal(w.accounts["acct-1"].publish_enabled, true);
-});
-
-// --- enabling: strict gate ----------------------------------------------------------------------
-
-const BLOCKERS: Array<[string, Partial<AccountRow>, Partial<BrandRow> | null, string, boolean]> = [
-  ["authorization pending", { connection_status: "authorization_pending" }, null, "CONNECTION_NOT_VERIFIED", true],
-  ["unconnected", { connection_status: "unconnected" }, null, "CONNECTION_NOT_VERIFIED", true],
-  ["failed (reconnect required)", { connection_status: "failed" }, null, "CONNECTION_NOT_VERIFIED", true],
-  ["connected but identity not verified", { connection_status: "connected" }, null, "CONNECTION_NOT_VERIFIED", true],
-  ["no platform user id", { platform_user_id: null }, null, "CONNECTION_NOT_VERIFIED", true],
-  ["no verified_at", { verified_at: null }, null, "CONNECTION_NOT_VERIFIED", true],
-  ["no access token reference", { has_access_secret_ref: false }, null, "CREDENTIALS_MISSING", true],
-  ["no refresh token reference", { has_refresh_secret_ref: false }, null, "CREDENTIALS_MISSING", true],
-  ["known connection error code", { last_connection_error_code: "X_REFRESH_UNCERTAIN" }, null, "CONNECTION_DEGRADED", true],
-  ["non-X platform", { platform: "instagram" }, null, "PLATFORM_NOT_SUPPORTED", false],
-  ["brand inactive", {}, { is_active: false }, "BRAND_INACTIVE", false],
-  ["brand publish_mode disabled", {}, { publish_mode: "disabled" }, "BRAND_PUBLISHING_NOT_LIVE", false],
-  ["brand publish_mode dry_run", {}, { publish_mode: "dry_run" }, "BRAND_PUBLISHING_NOT_LIVE", false],
-];
-
-test("ON is blocked, with a bounded code and no mutation, for every unmet prerequisite", async () => {
-  for (const [name, accountPatch, brandPatch, code, reconnect] of BLOCKERS) {
-    const w = world({
-      accounts: { "acct-1": account(accountPatch) },
-      brands: { "brand-a": { id: "brand-a", is_active: true, publish_mode: "live", ...(brandPatch ?? {}) } },
-    });
-    const { status, body } = await run(w, request(toggle(true, false)));
-    assert.equal(status, 409, name);
-    assert.equal(body?.error, code, name);
-    assert.equal(body?.reconnect_recommended === true, reconnect, name);
-    assert.equal(w.writes.length, 0, `${name}: nothing written`);
-    assert.equal(w.accounts["acct-1"].publish_enabled, false, name);
-  }
-});
-
-test("a missing brand row blocks ON", async () => {
-  const w = world({ brands: {} });
-  const { status, body } = await run(w, request(toggle(true, false)));
-  assert.equal(status, 409);
-  assert.equal(body?.error, "BRAND_INACTIVE");
-});
-
-test("prerequisite messages carry only a code (no credential, token or id material)", async () => {
-  const w = world({ accounts: { "acct-1": account({ has_access_secret_ref: false }) } });
-  const text = JSON.stringify((await run(w, request(toggle(true, false)))).body);
-  assert.doesNotMatch(text, /secret|token|vault|x-user-1|brand-a|jwt/iu);
-});
-
-test("enablePrerequisiteFailure is null only for a fully ready X account in a live, active brand", () => {
-  const brand: BrandRow = { id: "brand-a", is_active: true, publish_mode: "live" };
-  assert.equal(enablePrerequisiteFailure(account(), brand), null);
-  assert.equal(enablePrerequisiteFailure(account(), { ...brand, id: "other" })?.code, "BRAND_INACTIVE");
-});
-
-test("an eligible OFF -> ON succeeds and writes exactly one conditional change", async () => {
-  const w = world();
-  const { status, body } = await run(w, request(toggle(true, false)));
+test("exactly one decision call, with the caller's token and the three request fields, and nothing read afterwards", async () => {
+  const h = harness(UPDATED_ON);
+  const { status, body } = await run(h, request(toggle(true, false)));
   assert.equal(status, 200);
   assert.deepEqual(body, { success: true, status: "updated", account: { id: "acct-1", publish_enabled: true } });
-  assert.deepEqual(w.writes, [
-    { accountId: "acct-1", brandId: "brand-a", expected: false, desired: true, requireReadiness: true },
-  ]);
-  assert.equal(w.accounts["acct-1"].publish_enabled, true);
+  assert.deepEqual(h.calls, ["getUser", "decide"]);
+  assert.deepEqual(h.decided, [{
+    token: TOKEN,
+    request: { socialAccountId: "acct-1", desiredEnabled: true, expectedCurrentEnabled: false },
+  }]);
 });
 
-// --- disabling: safety first ---------------------------------------------------------------------
+test("the dependency surface has no privileged read or write this function could decide on by itself", () => {
+  const h = harness(UPDATED_ON);
+  assert.deepEqual(Object.keys(h.deps).sort(), ["decide", "getUser"]);
+});
 
-test("OFF is allowed for an owner/admin even when the connection is degraded, credentials are gone and the brand is inactive", async () => {
-  const w = world({
-    accounts: {
-      "acct-1": account({
-        publish_enabled: true,
-        connection_status: "failed",
-        platform_user_id: null,
-        verified_at: null,
-        has_access_secret_ref: false,
-        has_refresh_secret_ref: false,
-        last_connection_error_code: "X_REAUTH_REQUIRED",
-      }),
-    },
-    brands: { "brand-a": { id: "brand-a", is_active: false, publish_mode: "disabled" } },
-  });
-  const { status, body } = await run(w, request(toggle(false, true)));
+const MAPPING: Array<[PublishSettingDecision, number, Record<string, unknown>]> = [
+  [{ status: "updated", publishEnabled: true }, 200, { success: true, status: "updated", account: { id: "acct-1", publish_enabled: true } }],
+  [{ status: "unchanged", publishEnabled: true }, 200, { success: true, status: "unchanged", account: { id: "acct-1", publish_enabled: true } }],
+  [{ status: "not_found" }, 404, { success: false, error: "ACCOUNT_NOT_FOUND" }],
+  [{ status: "forbidden" }, 403, { success: false, error: "PUBLISH_CONTROL_FORBIDDEN" }],
+  [{ status: "busy" }, 409, { success: false, error: "ACCOUNT_BUSY" }],
+  [{ status: "auth_required" }, 401, { success: false, error: "AUTH_REQUIRED" }],
+  [{ status: "invalid" }, 400, { success: false, error: "REQUEST_INVALID" }],
+  [{ status: "blocked", reason: "PLATFORM_NOT_SUPPORTED" }, 409, { success: false, error: "PLATFORM_NOT_SUPPORTED" }],
+  [{ status: "blocked", reason: "BRAND_INACTIVE" }, 409, { success: false, error: "BRAND_INACTIVE" }],
+  [{ status: "blocked", reason: "BRAND_PUBLISHING_NOT_LIVE" }, 409, { success: false, error: "BRAND_PUBLISHING_NOT_LIVE" }],
+  [{ status: "blocked", reason: "CONNECTION_NOT_VERIFIED" }, 409, { success: false, error: "CONNECTION_NOT_VERIFIED", reconnect_recommended: true }],
+  [{ status: "blocked", reason: "CONNECTION_DEGRADED" }, 409, { success: false, error: "CONNECTION_DEGRADED", reconnect_recommended: true }],
+  [{ status: "blocked", reason: "CREDENTIALS_MISSING" }, 409, { success: false, error: "CREDENTIALS_MISSING", reconnect_recommended: true }],
+  [{ status: "blocked", reason: "CREDENTIALS_INVALID" }, 409, { success: false, error: "CREDENTIALS_INVALID", reconnect_recommended: true }],
+];
+
+test("every database answer maps to one bounded response for an ON request", async () => {
+  for (const [decision, expectedStatus, expectedBody] of MAPPING) {
+    const h = harness(decision);
+    // "unchanged" for an ON request means it was already ON and the caller expected ON.
+    const req = decision.status === "unchanged" ? toggle(true, true) : toggle(true, false);
+    const { status, body } = await run(h, request(req));
+    assert.equal(status, expectedStatus, JSON.stringify(decision));
+    assert.deepEqual(body, expectedBody, JSON.stringify(decision));
+    assert.equal(h.decided.length, 1);
+  }
+});
+
+test("a missing account and a foreign account are the same response (the database answers not_found for both)", async () => {
+  const a = await run(harness({ status: "not_found" }), request(toggle(true, false, "does-not-exist")));
+  const b = await run(harness({ status: "not_found" }), request(toggle(false, true, "someone-elses")));
+  assert.deepEqual(a, b);
+  assert.deepEqual(a.body, { success: false, error: "ACCOUNT_NOT_FOUND" });
+});
+
+test("stale: the real state is reported only from the database's own (authorized) answer", async () => {
+  const h = harness({ status: "stale", publishEnabled: true });
+  const { status, body } = await run(h, request(toggle(true, false)));
+  assert.equal(status, 409);
+  assert.deepEqual(body, { success: false, error: "STALE_STATE", current_enabled: true });
+});
+
+test("success is never reported for a value the database did not confirm", async () => {
+  // "updated" but with the opposite value, "unchanged" with a value that is not the requested one,
+  // and "stale" that claims the expected value: all inconsistent, all unavailable.
+  const cases: Array<[PublishSettingDecision, ReturnType<typeof toggle>]> = [
+    [{ status: "updated", publishEnabled: false }, toggle(true, false)],
+    [{ status: "unchanged", publishEnabled: false }, toggle(true, true)],
+    [{ status: "updated", publishEnabled: true }, toggle(false, true)],
+    [{ status: "stale", publishEnabled: false }, toggle(true, false)],
+  ];
+  for (const [decision, body] of cases) {
+    const out = await run(harness(decision), request(body));
+    assert.equal(out.status, 503, JSON.stringify(decision));
+    assert.deepEqual(out.body, { success: false, error: "PUBLISH_SETTING_UNAVAILABLE" });
+  }
+});
+
+test("an unknown database answer is unavailable, never success", async () => {
+  const h = harness({ status: "something_new" } as unknown as PublishSettingDecision);
+  const out = await run(h, request(toggle(true, false)));
+  assert.equal(out.status, 503);
+});
+
+test("OFF: the same single decision call; the response confirms OFF", async () => {
+  const h = harness({ status: "updated", publishEnabled: false });
+  const { status, body } = await run(h, request(toggle(false, true)));
   assert.equal(status, 200);
   assert.deepEqual(body, { success: true, status: "updated", account: { id: "acct-1", publish_enabled: false } });
-  assert.equal(w.accounts["acct-1"].publish_enabled, false);
-  assert.deepEqual(w.writes, [{ accountId: "acct-1", brandId: "brand-a", expected: true, desired: false, requireReadiness: false }]);
-  assert.ok(!w.calls.includes("readBrand"), "disabling does not depend on brand state");
-});
-
-test("OFF still requires the exact membership and stale protection", async () => {
-  const noMember = world({ accounts: { "acct-1": account({ publish_enabled: true }) }, roles: {} });
-  assert.equal((await run(noMember, request(toggle(false, true)))).status, 404);
-  const stale = world({ accounts: { "acct-1": account({ publish_enabled: false }) } });
-  const { status, body } = await run(stale, request(toggle(false, true)));
-  assert.equal(status, 409);
-  assert.equal(body?.error, "STALE_STATE");
-});
-
-// --- stale / compare-and-set --------------------------------------------------------------------
-
-test("a stale expected state is a conflict that reports the real state and mutates nothing", async () => {
-  const w = world({ accounts: { "acct-1": account({ publish_enabled: true }) } });
-  const { status, body } = await run(w, request(toggle(true, false)));
-  assert.equal(status, 409);
-  assert.deepEqual(body, { success: false, error: "STALE_STATE", current_enabled: true });
-  assert.equal(w.writes.length, 0);
-});
-
-test("a change that lands between the read and the write is caught by the conditional write (zero rows is not success)", async () => {
-  const w = world({
-    beforeWrite: (state) => {
-      state.accounts["acct-1"].publish_enabled = true; // someone else switched it ON first
-    },
-  });
-  const { status, body } = await run(w, request(toggle(true, false)));
-  assert.equal(status, 409);
-  assert.deepEqual(body, { success: false, error: "STALE_STATE", current_enabled: true });
-  assert.equal(w.writes.length, 1);
-});
-
-test("a connection that fails between the read and the enabling write cannot be enabled", async () => {
-  const w = world({
-    beforeWrite: (state) => {
-      state.accounts["acct-1"].connection_status = "failed";
-    },
-  });
-  const { status, body } = await run(w, request(toggle(true, false)));
-  assert.equal(status, 409);
-  assert.equal(body?.error, "CONNECTION_NOT_VERIFIED");
-  assert.equal(body?.reconnect_recommended, true);
-  assert.equal(w.accounts["acct-1"].publish_enabled, false);
-});
-
-test("a zero-row OFF write with an unchanged state is reported as unavailable, never as success", async () => {
-  const w = world({ accounts: { "acct-1": account({ publish_enabled: true }) }, casResult: "no_match" });
-  const { status, body } = await run(w, request(toggle(false, true)));
-  assert.equal(status, 503);
-  assert.equal(body?.error, "PUBLISH_SETTING_UNAVAILABLE");
-});
-
-test("an account removed between the read and the write is reported as not found", async () => {
-  const w = world({
-    beforeWrite: (state) => {
-      delete state.accounts["acct-1"];
-    },
-  });
-  const { status } = await run(w, request(toggle(true, false)));
-  assert.equal(status, 404);
-});
-
-test("a workspace deletion in progress blocks the change with a conflict", async () => {
-  const w = world({ casResult: "busy" });
-  const { status, body } = await run(w, request(toggle(true, false)));
-  assert.equal(status, 409);
-  assert.equal(body?.error, "ACCOUNT_BUSY");
-});
-
-test("same-state requests are deterministic no-ops (no write), and a double submit does not flip the state", async () => {
-  const on = world({ accounts: { "acct-1": account({ publish_enabled: true }) } });
-  const first = await run(on, request(toggle(true, true)));
-  assert.deepEqual(first.body, { success: true, status: "unchanged", account: { id: "acct-1", publish_enabled: true } });
-  assert.equal(on.writes.length, 0);
-
-  const w = world();
-  const a = await run(w, request(toggle(true, false)));
-  const b = await run(w, request(toggle(true, false))); // the same request sent twice
-  assert.equal(a.status, 200);
-  assert.equal(b.status, 409);
-  assert.equal(b.body?.error, "STALE_STATE");
-  assert.equal(w.accounts["acct-1"].publish_enabled, true);
-  assert.equal(w.writes.length, 1);
+  assert.deepEqual(h.decided[0].request, { socialAccountId: "acct-1", desiredEnabled: false, expectedCurrentEnabled: true });
 });
 
 test("unexpected dependency failures become a bounded unavailable error with no internals", async () => {
-  const w = world();
-  const deps = depsFor(w);
-  deps.readAccount = () => Promise.reject(new Error("db host 10.0.0.1 password=hunter2"));
-  const res = await handlePublishSetting(request(toggle(true, false)), deps);
+  const h = harness(UPDATED_ON);
+  h.deps.decide = () => Promise.reject(new Error("db host 10.0.0.1 password=hunter2"));
+  const res = await handlePublishSetting(request(toggle(true, false)), h.deps);
   assert.equal(res.status, 503);
   const text = JSON.stringify(await res.json());
   assert.equal(text, JSON.stringify({ success: false, error: "PUBLISH_SETTING_UNAVAILABLE" }));
@@ -416,8 +291,9 @@ test("unexpected dependency failures become a bounded unavailable error with no 
 });
 
 test("responses never echo the caller's token, and CORS headers allow only the needed methods", async () => {
-  const w = world();
-  const res = await handlePublishSetting(request(toggle(true, false)), depsFor(w));
-  assert.doesNotMatch(JSON.stringify(await res.json()), /caller-jwt-secret-value/u);
-  assert.equal(res.headers.get("Access-Control-Allow-Methods"), "POST, OPTIONS");
+  for (const [decision] of MAPPING) {
+    const res = await handlePublishSetting(request(toggle(true, false)), harness(decision).deps);
+    assert.doesNotMatch(JSON.stringify(await res.json()), /caller-jwt-secret-value|user-1/u);
+    assert.equal(res.headers.get("Access-Control-Allow-Methods"), "POST, OPTIONS");
+  }
 });

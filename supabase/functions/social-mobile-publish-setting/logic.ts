@@ -1,13 +1,24 @@
 // SOURCE CANDIDATE. Not deployed; independent review is mandatory before deploy.
 //
-// Per-account automatic-publishing ON/OFF for the social-mobile app. The one thing this function may
-// change is public.social_accounts.publish_enabled of one exact account, by compare-and-set. It makes
-// no X API call, reads no Vault plaintext and touches nothing else (no connection state, credentials,
-// scheduled posts, logs, content settings, Auth or Cron). Platform JWT verification must stay ON.
+// Per-account automatic-publishing ON/OFF for the social-mobile app.
 //
-// Authority: the caller's identity comes only from the Auth server. The account's own brand_id (read
-// server-side by exact account id) decides which membership applies; a client-supplied brand id is
-// neither accepted nor used. Only owner/admin of that exact brand may switch it.
+// This function decides nothing about who may switch what. It checks the request shape, confirms the
+// bearer token with the Auth server, and then makes ONE call: the database function
+// public.set_social_account_publish_enabled, with the CALLER'S OWN JWT. Inside that single transaction
+// the database identifies the caller (auth.uid()), locks the account, its brand and the caller's current
+// membership, and changes social_accounts.publish_enabled only if everything still holds
+// (supabase/migrations/20261003090000_social_mobile_publish_permission_boundary.sql). There is no
+// service-role key in this function, no table access, no second read after the decision, no X API call.
+// Platform JWT verification must stay ON.
+
+export type PublishSettingBlockedReason =
+  | "PLATFORM_NOT_SUPPORTED"
+  | "BRAND_INACTIVE"
+  | "BRAND_PUBLISHING_NOT_LIVE"
+  | "CONNECTION_NOT_VERIFIED"
+  | "CONNECTION_DEGRADED"
+  | "CREDENTIALS_MISSING"
+  | "CREDENTIALS_INVALID";
 
 export type PublishSettingErrorCode =
   | "METHOD_NOT_ALLOWED"
@@ -16,14 +27,27 @@ export type PublishSettingErrorCode =
   | "ACCOUNT_NOT_FOUND"
   | "PUBLISH_CONTROL_FORBIDDEN"
   | "STALE_STATE"
-  | "PLATFORM_NOT_SUPPORTED"
-  | "BRAND_INACTIVE"
-  | "BRAND_PUBLISHING_NOT_LIVE"
-  | "CONNECTION_NOT_VERIFIED"
-  | "CONNECTION_DEGRADED"
-  | "CREDENTIALS_MISSING"
   | "ACCOUNT_BUSY"
-  | "PUBLISH_SETTING_UNAVAILABLE";
+  | "PUBLISH_SETTING_UNAVAILABLE"
+  | PublishSettingBlockedReason;
+
+export const BLOCKED_REASONS: ReadonlySet<string> = new Set<PublishSettingBlockedReason>([
+  "PLATFORM_NOT_SUPPORTED",
+  "BRAND_INACTIVE",
+  "BRAND_PUBLISHING_NOT_LIVE",
+  "CONNECTION_NOT_VERIFIED",
+  "CONNECTION_DEGRADED",
+  "CREDENTIALS_MISSING",
+  "CREDENTIALS_INVALID",
+]);
+
+/** Blocked reasons for which reconnecting the X account is the way forward. */
+const RECONNECT_REASONS: ReadonlySet<string> = new Set<PublishSettingBlockedReason>([
+  "CONNECTION_NOT_VERIFIED",
+  "CONNECTION_DEGRADED",
+  "CREDENTIALS_MISSING",
+  "CREDENTIALS_INVALID",
+]);
 
 export class PublishSettingError extends Error {
   constructor(
@@ -36,52 +60,31 @@ export class PublishSettingError extends Error {
   }
 }
 
-/** What the server knows about the exact account. Vault references are reduced to presence booleans. */
-export type AccountRow = {
-  id: string;
-  brand_id: string;
-  platform: string;
-  connection_status: string;
-  platform_user_id: string | null;
-  verified_at: string | null;
-  last_connection_error_code: string | null;
-  publish_enabled: boolean;
-  has_access_secret_ref: boolean;
-  has_refresh_secret_ref: boolean;
+export type PublishSettingRequest = {
+  socialAccountId: string;
+  desiredEnabled: boolean;
+  expectedCurrentEnabled: boolean;
 };
 
-export type BrandRow = {
-  id: string;
-  is_active: boolean;
-  publish_mode: string;
-};
-
-export type CompareAndSetResult = "updated" | "no_match" | "busy";
+/** The database function's bounded answer (already shape-checked by the HTTP layer). */
+export type PublishSettingDecision =
+  | { status: "updated" | "unchanged" | "stale"; publishEnabled: boolean }
+  | { status: "blocked"; reason: PublishSettingBlockedReason }
+  | { status: "not_found" | "forbidden" | "busy" | "auth_required" | "invalid" };
 
 export type PublishSettingDeps = {
   /** Verified Auth user for this bearer token, or null if the token is not valid. */
   getUser(token: string): Promise<{ id: string } | null>;
-  readAccount(accountId: string): Promise<AccountRow | null>;
-  readBrand(brandId: string): Promise<BrandRow | null>;
-  /** The caller's own membership role for exactly this brand (read with the caller's JWT), or null. */
-  readMembershipRole(token: string, userId: string, brandId: string): Promise<string | null>;
   /**
-   * One conditional UPDATE of publish_enabled only: it matches only when the exact account still has
-   * `expected`; for enabling it must also still satisfy the readiness conditions.
+   * The one transactional decision, made by the database for the bearer of `token`. This function never
+   * passes a user id or a brand id: the database derives both.
    */
-  compareAndSetPublishEnabled(input: {
-    accountId: string;
-    brandId: string;
-    expected: boolean;
-    desired: boolean;
-    requireReadiness: boolean;
-  }): Promise<CompareAndSetResult>;
+  decide(token: string, request: PublishSettingRequest): Promise<PublishSettingDecision>;
 };
 
-export const ALLOWED_ROLES: ReadonlySet<string> = new Set(["owner", "admin"]);
-export const VERIFIED_CONNECTION_STATUS = "identity_verified";
 const ACCOUNT_ID_PATTERN = /^[A-Za-z0-9_-]{1,100}$/u;
-const MAX_BODY_CHARS = 1024;
+/** Bytes, enforced while reading: the body is never buffered beyond this. */
+export const MAX_BODY_BYTES = 512;
 const BODY_KEYS = ["social_account_id", "desired_enabled", "expected_current_enabled"] as const;
 
 export const CORS_HEADERS: Record<string, string> = {
@@ -95,6 +98,8 @@ function respond(body: Record<string, unknown>, status: number): Response {
   return Response.json(body, { status, headers: CORS_HEADERS });
 }
 
+const invalid = () => new PublishSettingError("REQUEST_INVALID", 400);
+
 function bearerToken(request: Request): string {
   const match = /^Bearer\s+(.+)$/iu.exec(request.headers.get("Authorization")?.trim() ?? "");
   const token = match?.[1]?.trim();
@@ -102,28 +107,18 @@ function bearerToken(request: Request): string {
   return token;
 }
 
-export type PublishSettingRequest = {
-  socialAccountId: string;
-  desiredEnabled: boolean;
-  expectedCurrentEnabled: boolean;
-};
-
-/** Exactly three fields; anything else (including a client-supplied brand id) is rejected, not ignored. */
+/** The parsed object must have exactly the three fields with exactly these types. */
 export function parsePublishSettingBody(raw: unknown): PublishSettingRequest {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    throw new PublishSettingError("REQUEST_INVALID", 400);
-  }
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw invalid();
   const body = raw as Record<string, unknown>;
   const keys = Object.keys(body);
-  if (keys.length !== BODY_KEYS.length || !BODY_KEYS.every((key) => keys.includes(key))) {
-    throw new PublishSettingError("REQUEST_INVALID", 400);
-  }
+  if (keys.length !== BODY_KEYS.length || !BODY_KEYS.every((key) => Object.hasOwn(body, key))) throw invalid();
   const { social_account_id, desired_enabled, expected_current_enabled } = body;
   if (
     typeof social_account_id !== "string" || !ACCOUNT_ID_PATTERN.test(social_account_id) ||
     typeof desired_enabled !== "boolean" || typeof expected_current_enabled !== "boolean"
   ) {
-    throw new PublishSettingError("REQUEST_INVALID", 400);
+    throw invalid();
   }
   return {
     socialAccountId: social_account_id,
@@ -132,49 +127,64 @@ export function parsePublishSettingBody(raw: unknown): PublishSettingRequest {
   };
 }
 
-async function readBody(request: Request): Promise<unknown> {
+/**
+ * The raw JSON text must be unambiguous too. JSON.parse keeps the LAST of two duplicate keys, so
+ * `{"desired_enabled":false,"desired_enabled":true,...}` would parse to ON. A valid body needs no
+ * escape and contains exactly four strings (three keys and the account id, which cannot contain a
+ * quote): no backslash and exactly eight double quotes means no key can occur twice, under any spelling.
+ */
+export function parsePublishSettingText(text: string): PublishSettingRequest {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw invalid();
+  }
+  const parsed = parsePublishSettingBody(raw);
+  if (text.includes("\\") || (text.match(/"/gu)?.length ?? 0) !== 8) throw invalid();
+  return parsed;
+}
+
+/** Reads at most MAX_BODY_BYTES; a longer body is refused without being read to the end. */
+async function readBodyText(request: Request): Promise<string> {
   const contentType = request.headers.get("Content-Type") ?? "";
-  if (!/^application\/json(?:\s*;.*)?$/iu.test(contentType.trim())) {
-    throw new PublishSettingError("REQUEST_INVALID", 400);
-  }
-  let text: string;
+  if (!/^application\/json(?:\s*;.*)?$/iu.test(contentType.trim())) throw invalid();
+  const declared = request.headers.get("Content-Length");
+  if (declared !== null && (!/^\d{1,9}$/u.test(declared) || Number(declared) > MAX_BODY_BYTES)) throw invalid();
+  const reader = request.body?.getReader();
+  if (!reader) throw invalid();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
   try {
-    text = await request.text();
-  } catch {
-    throw new PublishSettingError("REQUEST_INVALID", 400);
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_BODY_BYTES) {
+        await reader.cancel().catch(() => {});
+        throw invalid();
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    if (error instanceof PublishSettingError) throw error;
+    throw invalid();
   }
-  if (text.length === 0 || text.length > MAX_BODY_CHARS) throw new PublishSettingError("REQUEST_INVALID", 400);
+  if (total === 0) throw invalid();
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
   try {
-    return JSON.parse(text);
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } catch {
-    throw new PublishSettingError("REQUEST_INVALID", 400);
+    throw invalid();
   }
 }
 
-/**
- * Turning publishing ON lets future scheduled work really post, so it is checked against everything the
- * posting pipeline itself requires. A failure returns a bounded code (never credential details); the
- * connection/credential codes also say a reconnect is the way forward. Turning OFF never reaches here.
- */
-export function enablePrerequisiteFailure(account: AccountRow, brand: BrandRow | null): PublishSettingError | null {
-  if (account.platform !== "x") return new PublishSettingError("PLATFORM_NOT_SUPPORTED", 409);
-  if (!brand || brand.id !== account.brand_id || brand.is_active !== true) {
-    return new PublishSettingError("BRAND_INACTIVE", 409);
-  }
-  if (brand.publish_mode !== "live") return new PublishSettingError("BRAND_PUBLISHING_NOT_LIVE", 409);
-  if (
-    account.connection_status !== VERIFIED_CONNECTION_STATUS || !account.platform_user_id || !account.verified_at
-  ) {
-    return new PublishSettingError("CONNECTION_NOT_VERIFIED", 409, { reconnect_recommended: true });
-  }
-  if (!account.has_access_secret_ref || !account.has_refresh_secret_ref) {
-    return new PublishSettingError("CREDENTIALS_MISSING", 409, { reconnect_recommended: true });
-  }
-  if (account.last_connection_error_code) {
-    return new PublishSettingError("CONNECTION_DEGRADED", 409, { reconnect_recommended: true });
-  }
-  return null;
-}
+const unavailable = () => new PublishSettingError("PUBLISH_SETTING_UNAVAILABLE", 503);
 
 export async function handlePublishSetting(request: Request, deps: PublishSettingDeps): Promise<Response> {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -184,61 +194,43 @@ export async function handlePublishSetting(request: Request, deps: PublishSettin
     const token = bearerToken(request);
     const user = await deps.getUser(token);
     if (!user || !user.id) throw new PublishSettingError("AUTH_REQUIRED", 401);
-    const input = parsePublishSettingBody(await readBody(request));
+    const input = parsePublishSettingText(await readBodyText(request));
 
-    // A missing account and an account of a brand the caller does not belong to look identical, so the
-    // response does not reveal which account ids exist.
-    const account = await deps.readAccount(input.socialAccountId);
-    if (!account) throw new PublishSettingError("ACCOUNT_NOT_FOUND", 404);
-    const role = await deps.readMembershipRole(token, user.id, account.brand_id);
-    if (role === null) throw new PublishSettingError("ACCOUNT_NOT_FOUND", 404);
-    if (!ALLOWED_ROLES.has(role)) throw new PublishSettingError("PUBLISH_CONTROL_FORBIDDEN", 403);
-
-    // Stale-state protection first: the person confirmed a change against what they saw.
-    if (account.publish_enabled !== input.expectedCurrentEnabled) {
-      throw new PublishSettingError("STALE_STATE", 409, { current_enabled: account.publish_enabled });
+    const decision = await deps.decide(token, input);
+    switch (decision.status) {
+      case "updated":
+      case "unchanged":
+        // Success only when the database confirms exactly the requested value.
+        if (decision.publishEnabled !== input.desiredEnabled) throw unavailable();
+        return respond({
+          success: true,
+          status: decision.status,
+          account: { id: input.socialAccountId, publish_enabled: decision.publishEnabled },
+        }, 200);
+      case "stale":
+        // Only a current owner/admin of the account's brand ever gets this (and the value with it).
+        if (decision.publishEnabled === input.expectedCurrentEnabled) throw unavailable();
+        throw new PublishSettingError("STALE_STATE", 409, { current_enabled: decision.publishEnabled });
+      case "blocked":
+        throw new PublishSettingError(
+          decision.reason,
+          409,
+          RECONNECT_REASONS.has(decision.reason) ? { reconnect_recommended: true } : {},
+        );
+      case "not_found":
+        // A missing account and one the caller has no membership for are the same answer.
+        throw new PublishSettingError("ACCOUNT_NOT_FOUND", 404);
+      case "forbidden":
+        throw new PublishSettingError("PUBLISH_CONTROL_FORBIDDEN", 403);
+      case "busy":
+        throw new PublishSettingError("ACCOUNT_BUSY", 409);
+      case "auth_required":
+        throw new PublishSettingError("AUTH_REQUIRED", 401);
+      case "invalid":
+        throw invalid();
+      default:
+        throw unavailable();
     }
-    // Same state requested: nothing to write, answered deterministically.
-    if (input.desiredEnabled === account.publish_enabled) {
-      return respond({
-        success: true,
-        status: "unchanged",
-        account: { id: account.id, publish_enabled: account.publish_enabled },
-      }, 200);
-    }
-
-    if (input.desiredEnabled) {
-      const brand = await deps.readBrand(account.brand_id);
-      const failure = enablePrerequisiteFailure(account, brand);
-      if (failure) throw failure;
-    }
-
-    const result = await deps.compareAndSetPublishEnabled({
-      accountId: account.id,
-      brandId: account.brand_id,
-      expected: input.expectedCurrentEnabled,
-      desired: input.desiredEnabled,
-      requireReadiness: input.desiredEnabled,
-    });
-    if (result === "busy") throw new PublishSettingError("ACCOUNT_BUSY", 409);
-    if (result === "no_match") {
-      // Zero rows is never success: re-read to say what changed underneath.
-      const latest = await deps.readAccount(account.id);
-      if (!latest) throw new PublishSettingError("ACCOUNT_NOT_FOUND", 404);
-      if (latest.publish_enabled !== input.expectedCurrentEnabled) {
-        throw new PublishSettingError("STALE_STATE", 409, { current_enabled: latest.publish_enabled });
-      }
-      // Same state as expected but still no match: when enabling, the readiness conditions that are
-      // part of the write no longer hold (e.g. the connection just failed); when disabling there is
-      // no such condition, so this is unexpected and reported as unavailable, never as success.
-      if (!input.desiredEnabled) throw new PublishSettingError("PUBLISH_SETTING_UNAVAILABLE", 503);
-      throw new PublishSettingError("CONNECTION_NOT_VERIFIED", 409, { reconnect_recommended: true });
-    }
-    return respond({
-      success: true,
-      status: "updated",
-      account: { id: account.id, publish_enabled: input.desiredEnabled },
-    }, 200);
   } catch (error) {
     if (error instanceof PublishSettingError) {
       return respond({ success: false, error: error.code, ...error.extra }, error.status);

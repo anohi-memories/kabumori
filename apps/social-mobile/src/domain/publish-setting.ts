@@ -1,10 +1,16 @@
 import type { SocialAccount } from './types.ts';
 
-/** The one Edge Function that may change an account's automatic-publishing switch (server decides everything). */
+/** The one Edge Function that may change an account's automatic-publishing switch (the database decides everything). */
 export const PUBLISH_SETTING_FUNCTION = 'social-mobile-publish-setting';
 
 export const PUBLISH_ENABLE_CONFIRMATION = 'ONにすると、条件を満たした投稿予定は自動でXへ投稿される可能性があります。';
-export const PUBLISH_DISABLE_NOTE = 'OFFにすると、このアカウントへの自動投稿は行われなくなります。接続・下書き・投稿予定・履歴は削除されず、いつでもONに戻せます。';
+/** ON is a permission, not a promise that a post will go out. */
+export const PUBLISH_ENABLE_NOTE = 'ONは自動投稿の許可です。Xとの接続の状態などによっては、投稿が行われない場合があります。';
+/**
+ * OFF stops NEW sends. It cannot recall a post that is already being sent, deletes nothing, and turning
+ * it back ON is conditional (the connection and workspace must qualify at that time).
+ */
+export const PUBLISH_DISABLE_NOTE = 'OFFにすると、このアカウントで新しく始まる自動投稿は行われなくなります。すでに送信が始まっている投稿は取り消せません。Xとの接続・下書き・投稿予定・履歴は削除されません。もう一度ONにするには、その時点でXとの接続などの条件を満たしている必要があります。';
 
 export type PublishSettingRequest = {
   social_account_id: string;
@@ -54,11 +60,64 @@ export function publishSettingView(account: Pick<SocialAccount, 'platform' | 'co
   };
 }
 
-export function buildPublishSettingRequest(account: Pick<SocialAccount, 'id' | 'postingState'>, desiredEnabled: boolean): PublishSettingRequest {
+/** Everything an action depends on, as it is on screen right now. */
+export type PublishActionContext = {
+  accountId: string;
+  enabled: boolean;
+  canTurnOn: boolean;
+  canTurnOff: boolean;
+  preview: boolean;
+  /** The signed-in user the screen belongs to. */
+  userId: string | null;
+};
+
+export function publishActionContext(
+  account: Pick<SocialAccount, 'id' | 'platform' | 'connectionStatus' | 'postingState'>,
+  preview: boolean,
+  userId: string | null,
+): PublishActionContext {
+  const view = publishSettingView(account, preview);
+  return { accountId: account.id, enabled: view.enabled, canTurnOn: view.canTurnOn, canTurnOff: view.canTurnOff, preview, userId };
+}
+
+/**
+ * One switch action, pinned to exactly what the person saw when they asked for it: this account, this
+ * current state, this signed-in user. The request is built from the pinned values only, never from
+ * whatever the screen shows later.
+ */
+export type PublishAction = {
+  accountId: string;
+  desiredEnabled: boolean;
+  expectedEnabled: boolean;
+  userId: string;
+};
+
+/** Pins an action to the current context, or null when that action is not on offer right now. */
+export function pinPublishAction(context: PublishActionContext, desiredEnabled: boolean): PublishAction | null {
+  if (context.preview || !context.userId) return null;
+  if (desiredEnabled ? !context.canTurnOn : !context.canTurnOff) return null;
+  if (context.enabled === desiredEnabled) return null;
+  return { accountId: context.accountId, desiredEnabled, expectedEnabled: context.enabled, userId: context.userId };
+}
+
+/**
+ * Whether a pinned action may still be sent given what is on screen NOW. Any difference (another
+ * account, another state, preview, no longer eligible, another user) means it must not be sent; the
+ * person has to ask again against what they now see.
+ */
+export function publishActionStillValid(action: PublishAction, context: PublishActionContext): boolean {
+  return action.accountId === context.accountId
+    && action.expectedEnabled === context.enabled
+    && action.userId === context.userId
+    && !context.preview
+    && (action.desiredEnabled ? context.canTurnOn : context.canTurnOff);
+}
+
+export function buildPublishSettingRequest(action: PublishAction): PublishSettingRequest {
   return {
-    social_account_id: account.id,
-    desired_enabled: desiredEnabled,
-    expected_current_enabled: account.postingState === 'active',
+    social_account_id: action.accountId,
+    desired_enabled: action.desiredEnabled,
+    expected_current_enabled: action.expectedEnabled,
   };
 }
 
@@ -69,6 +128,8 @@ export type PublishSettingFailure = {
   reload: boolean;
 };
 
+const RECONNECT_MESSAGE = 'Xとの接続を確認できませんでした。Xアカウントを接続し直してから、もう一度お試しください。';
+
 const KNOWN_FAILURES: Record<string, { message: string; reload: boolean }> = {
   AUTH_REQUIRED: { message: 'ログインの有効期限が切れました。もう一度ログインしてください。', reload: false },
   REQUEST_INVALID: { message: '設定を変更できませんでした。アプリを再読み込みしてください。', reload: true },
@@ -78,9 +139,10 @@ const KNOWN_FAILURES: Record<string, { message: string; reload: boolean }> = {
   PLATFORM_NOT_SUPPORTED: { message: 'このプラットフォームの自動投稿はまだ利用できません。', reload: false },
   BRAND_INACTIVE: { message: 'このワークスペースは現在、自動投稿をONにできない状態です。', reload: true },
   BRAND_PUBLISHING_NOT_LIVE: { message: 'このワークスペースでは、まだ本番の自動投稿が有効になっていません。', reload: true },
-  CONNECTION_NOT_VERIFIED: { message: 'Xとの接続を確認できませんでした。Xアカウントを接続し直してから、もう一度お試しください。', reload: true },
+  CONNECTION_NOT_VERIFIED: { message: RECONNECT_MESSAGE, reload: true },
   CONNECTION_DEGRADED: { message: 'Xとの接続に確認が必要です。Xアカウントを接続し直してから、もう一度お試しください。', reload: true },
   CREDENTIALS_MISSING: { message: 'Xの接続情報が不足しています。Xアカウントを接続し直してから、もう一度お試しください。', reload: true },
+  CREDENTIALS_INVALID: { message: 'Xの接続情報を確認できませんでした。Xアカウントを接続し直してから、もう一度お試しください。', reload: true },
   ACCOUNT_BUSY: { message: 'このアカウントは現在変更できません。しばらくしてからもう一度お試しください。', reload: true },
   PUBLISH_SETTING_UNAVAILABLE: { message: '設定を変更できませんでした。時間をおいてもう一度お試しください。', reload: false },
 };

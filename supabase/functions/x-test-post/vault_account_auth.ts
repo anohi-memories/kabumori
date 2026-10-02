@@ -26,6 +26,17 @@
  * database refuses before any token request (rollout off, pilot limits,
  * another refresh in progress) keeps the current token for this request.
  *
+ * Publish permission (20261003090000_social_mobile_publish_permission_boundary.sql):
+ * the brand/account context the dispatcher loaded before generation can be
+ * minutes old by the time the post is sent. Every X write here is therefore
+ * immediately preceded by a fresh database check for the exact post + account
+ * (brand active and live, account publish_enabled and still the verified
+ * account, no account deletion, refresh state not blocked). The check is the
+ * last thing awaited before the request callback; if it refuses or cannot be
+ * reached, the request is not made. A request is "in flight" from the moment
+ * its check returned: an OFF committed after that does not recall it, and no
+ * later request (including the single 401 retry) starts without a new check.
+ *
  * Nothing here logs or returns token material; errors carry fixed codes only.
  */
 import {
@@ -48,6 +59,8 @@ export type XRequestResult = { status: number; body: unknown };
 /** The core RPCs, each bound to the running post + its exact account. */
 export type VaultAccountCredentialRpc = {
   read(ref: VaultAccountRef): Promise<VaultAccountCredential>;
+  /** Resolves only if a new X write for this post + account is permitted right now; otherwise throws a fixed code. */
+  assertPublishPermission(ref: VaultAccountRef): Promise<void>;
   begin(ref: VaultAccountRef): Promise<XRefreshLease>;
   commit(lease: XRefreshLease, ref: VaultAccountRef, accessToken: string, refreshToken: string | null, expiresIn: number | null): Promise<string>;
   release(lease: XRefreshLease, ref: VaultAccountRef, outcome: "not_rotated" | "reauth_required" | "uncertain", code: string): Promise<string>;
@@ -128,10 +141,14 @@ export class VaultAccountXAuth {
    * non-2xx); throws only fixed codes.
    */
   async send(request: (accessToken: string) => Promise<XRequestResult>): Promise<XRequestResult> {
+    // Before anything external (a token rotation included): is publishing still permitted?
+    await this.#assertPublishPermission();
     if (this.#refreshEnabled && !this.#refreshUsed && !this.#xWriteAccepted && this.#accessExpiresAt !== null
         && this.#accessExpiresAt - this.#now() <= PROACTIVE_MARGIN_MS) {
       await this.#refresh("proactive");
+      await this.#assertPublishPermission();
     }
+    // Invariant: the await directly before every request() is the permission check.
     const first = await request(this.#accessToken);
     if (first.status !== 401) return this.#observe(first);
     if (this.#refreshed) return await this.#rejectedAfterRefresh();
@@ -141,9 +158,19 @@ export class VaultAccountXAuth {
     }
     // 401: X did not accept the request, so refreshing and replaying it once is safe.
     await this.#refresh("reactive");
+    await this.#assertPublishPermission();
     const retried = await request(this.#accessToken);
     if (retried.status === 401) return await this.#rejectedAfterRefresh();
     return this.#observe(retried);
+  }
+
+  /** Fail closed: a refusal keeps its fixed code; an unreachable or unknown answer is "unavailable". */
+  async #assertPublishPermission(): Promise<void> {
+    try {
+      await this.#rpc.assertPublishPermission(this.#ref);
+    } catch (error) {
+      throw new Error(fixedCode(error, "X_PUBLISH_PERMISSION_UNAVAILABLE"));
+    }
   }
 
   #observe(result: XRequestResult): XRequestResult {
@@ -248,6 +275,10 @@ export function createVaultAccountCredentialRpc(
         throw new Error("X_CREDENTIAL_UNAVAILABLE");
       }
       return { accessToken: row.access_token, accessExpiresAt: row.access_expires_at as string | null };
+    },
+    async assertPublishPermission(ref) {
+      const out = await rpc("assert_x_publish_permission_for_legacy_post", post(ref), "X_PUBLISH_PERMISSION_UNAVAILABLE");
+      if (out !== "authorized") throw new Error("X_PUBLISH_PERMISSION_UNAVAILABLE");
     },
     async begin(ref) {
       const row = single(await rpc("begin_x_account_refresh_legacy_post", post(ref), "X_REFRESH_UNAVAILABLE"));
