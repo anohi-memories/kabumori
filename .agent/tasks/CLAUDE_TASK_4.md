@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-publish-toggle-transactional-corrective-20261003
 - owner: claude
 - slot: claude-4
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Opus5.5（極高）
 - type: corrective implementation / authorization transaction / posting safety / concurrency
@@ -1246,3 +1246,108 @@ K4 で Codex **Sol（高）** による集中レビュー（認可境界、条�
 - because this is a posting-permission/security boundary, K4 does not merge.
 - H1 assigned focused review `x-social-mobile-pr76-publish-toggle-review-20261002`, recommended **Sol（高）**.
 - next_owner: codex; wait for C1.
+
+
+## Report — x-social-mobile-publish-toggle-transactional-corrective-20261003 (2026-10-03)
+
+- task_id: x-social-mobile-publish-toggle-transactional-corrective-20261003
+- result: **PASS（source・自動テスト・使い捨てDBでの実証）／本番適用・deploy・実機確認は未実施**。PR [#76](https://github.com/anohi-memories/kabumori/pull/76) を是正（未merge、source candidate）。
+- model_used: Opus 5.5（TASK推奨は Opus5.5（極高）。セッションのモデルは Opus 5.5。推論強度の設定値は自分では確認できない）
+- old PR head（H1がFAILとした head、履歴に保持）: `a59a89e9c585fb6e780e1af2ecc898c830f5524e`
+- new exact head: `fe1e846e59c69b591d29c6d21fc23c7b702d19cd`（通常push。force-pushなし）
+
+### architecture chosen
+TASKの「Preferred direction」どおり。判断と書き込みを**DBの1トランザクション**へ移した。
+
+- 新migration `supabase/migrations/20261003090000_social_mobile_publish_permission_boundary.sql`（関数2つのみ。テーブル・policy・trigger・テーブル権限の変更なし。既存関数の `create or replace` なし）
+  - `public.set_social_account_publish_enabled(p_social_account_id text, p_desired_enabled boolean, p_expected_current_enabled boolean) returns jsonb` — 呼び出し元本人のJWTで実行。`auth.uid()` が本人。`authenticated` のみ実行可（`service_role`・`anon`・PUBLIC は不可）。user id／brand id の引数なし。
+  - `public.assert_x_publish_permission_for_legacy_post(uuid, text, text) returns text` — X送信直前の権限確認。`service_role` のみ。読み取り専用。
+- Edge `social-mobile-publish-setting`: **service role key を持たない**（環境変数からも読まない）。Auth確認（`/auth/v1/user`）＋上記RPCを呼び出し元JWTで1回呼ぶだけ。テーブルへのアクセス・判断後の再読込なし。
+- x-test-post `vault_account_auth.ts`: Vault連携アカウントのX送信（初回・401後の再送1回）の**直前に毎回**、権限確認RPCを呼ぶ。
+- 詳細・図・ロールアウト順・本番preflight用クエリ: `supabase/tests/social_mobile_publish_permission.md`
+
+SECURITY DEFINER の理由: `authenticated` は `social_accounts` に UPDATE 権限がなく、付与してはいけない（TASK指示）。この関数は1行の1列だけを書き、権限の入力はすべて `auth.uid()` とロックした行から得る。`search_path = ''`、全リレーションをスキーマ修飾。公式ドキュメント（Supabase「Database Functions」）で、definer関数は search_path 固定が必須・空が推奨、関数は既定で誰でも実行可能なので明示revokeが必要、を確認した。
+
+### original H1 findings R1–R5 disposition
+- **R1（membershipが古いスナップショット）: 解消**。呼び出し元のmembership行を、書き込みと同じトランザクション内で `FOR SHARE` ロックして読む。削除・降格は「先にcommit済みで見える」か「このトランザクションのcommitまで待つ」のどちらか。ON・OFF両方。Edgeには特権の書き込みが無いので、古い認可を使い回す経路そのものが無い。
+- **R2（brandのTOCTOU／実行時ガード）: 解消（対象経路を限定して明示）**。(a) brand行を `FOR SHARE` でロックしてONを判断・書き込み（brandが無効化済みならON不可、無効化は切替のcommitを待つ）。(b) Vault連携アカウントのX送信直前に、単一SQL文（＝単一スナップショット）でbrand active/live・アカウントON・verified・削除中でない等を確認。dispatcherが生成前に読んだ古いcontextでは送信できない。「実行時ガードがあるので無害」という前回の私の主張は誤りだった。
+- **R3（再読込で他テナント状態が漏れる）: 解消**。再読込を廃止。移動・削除・権限喪失はすべて同じ `not_found`（状態を含まない）。`stale`（現在値つき）と `blocked`（理由つき）は、ロック下で現在のowner/adminと確認できた相手にだけ返す。
+- **R4（ON判定の不一致）: 解消**。ロックした行に対する1つの判定に統一。`nullif(btrim(platform_user_id),'')`、`identity_verified`、`verified_at`、参照2つが存在・相違・他アカウントと非共有（実行時の `x_legacy_post_account` と同じ規則）、`last_connection_error_code` なし、refresh状態が `uncertain`/`reauth_required` でない。各ケースで「ONが拒否する状態は実行時も拒否する」ことをテスト。ONの意味は「許可が有効で構造的に適格」であり「次のX送信の成功保証ではない」（Vaultの中身は読まない）と文書・UI文言に明記。
+- **R5（確認が固定されていない）: 解消**。アクションを依頼時点の「アカウントid・期待状態・ログインユーザー」に固定。画面が一致しなくなったら確認を破棄（元に戻っても復活しない）。送信時にも最新の確定描画と照合するため、古い描画のボタンを押しても0リクエスト。画面側も `key={account.id}`。
+
+低リスク指摘: 重複JSONキー・エスケープを拒否（last-winsにしない）／本文は**読み取り中にバイト数**（512）で打ち切り／OFF文言から「いつでもONに戻せます」を削除し条件付きに、「送信が始まっている投稿は取り消せない」を明記／テストのlint指摘（require-await 5件）解消。
+
+### transaction / lock / authorization model
+- 順序（アカウント削除の関数と同じ向き: brand → memberships → accounts）:
+  1. `LOCK TABLE social_accounts IN ROW EXCLUSIVE MODE`（行ロックより先）
+  2. brand行 `FOR SHARE`
+  3. 呼び出し元のmembership行 `FOR SHARE`
+  4. アカウント行 `FOR UPDATE`
+- 1を先に取る理由: refreshのcommit関数は `SHARE ROW EXCLUSIVE`（テーブル）→ アカウント行の順。行ロック後にUPDATEでテーブルロックを取る（逆順）と、単回使用トークンを既に回転させたcommitとdeadlockし得る。変異テストで、この行を外すと実際にdeadlockが起きることを確認。
+- brandのメンバーでない呼び出し元は、ロックを取る前の確認で `not_found`。他テナントの行のロックを待たない・取らない（テストあり）。owner/adminでないメンバーは書き込みロックを取らない。
+- 待ちは有界（`lock_timeout = 3s`）。timeout・deadlock・削除ガードは `busy`（書き込みなし）。
+- `READ COMMITTED` 必須（Data APIの既定）。それ以外は拒否。
+
+### runtime fresh pre-send guard and exact in-flight semantics
+- 対象: `VaultAccountXAuth.send`（現在配線されている唯一のアカウント単位の送信経路＝AI Lab `brand_post`。将来のVault連携アカウントも同じ経路）。`request()` の直前の文が必ず権限確認であることをソース固定テストで担保。
+- **in-flightの定義**: 権限確認が `authorized` を返した時点から「送信中」。確認のスナップショットより前にcommitされたOFF／brand無効化は送信を止める。後にcommitされたものは、すでにXへ向かったリクエストを取り消さない。同じdispatch内の次のリクエスト（401後の再送、2件目）は新しい確認なしには始まらない。
+- fail closed: 確認に到達できない・関数が無い（migration未適用）・想定外の応答は `X_PUBLISH_PERMISSION_UNAVAILABLE` で送信しない。
+- `refreshing` は権限の拒否にしない（「他のrefresh進行中で拒否されたproactive refreshは現在のトークンを使い続ける」という既存の設計を維持）。
+- **対象外（主張しない）**: かぶモリの従来経路（env／`oauth_token_store`）、`important-news-monitor`（`publish_enabled` を見ていないことをgrepで確認）、未配線のv2 dispatcher、未mergeのPR #41。いずれも未変更。
+
+### ON / OFF semantics
+- ON: 上記R4の条件＋現在のowner/admin＋期待状態一致＋brand active/live＋削除中でない。refresh lease保持中は `busy`。
+- OFF: 現在のowner/admin・正確なアカウント・期待状態のみ必要。接続失敗・参照欠落・brand無効・refresh状態ブロックでも可能。`publish_enabled` 以外は何も変えない（失効・Vault・投稿・ログ・履歴・Authに副作用なし。全テーブルのハッシュ比較でテスト）。`updated_at` は変更しない。
+- アカウント削除中は ON・OFF とも `busy`（削除側が投稿中でないことを要求し、全writerをガードが拒否するため）。
+
+### tenant-safe error behavior
+存在しないid／非メンバー／移動済み／削除済み → 同一の `404 ACCOUNT_NOT_FOUND`（状態なし）。member/viewer → `403`（どの要求でも同一、状態なし）。`current_enabled` は現在のowner/adminにのみ。DB・バックエンドの文言は一切返さない（未知の応答は `503 PUBLISH_SETTING_UNAVAILABLE`）。
+
+### migration / RPC changed files
+- 追加: `supabase/migrations/20261003090000_social_mobile_publish_permission_boundary.sql`
+- 変更: `supabase/functions/social-mobile-publish-setting/{index,logic,http,logic_test,http_test}.ts`、追加 `migration_test.ts`
+- 変更: `supabase/functions/x-test-post/vault_account_auth.ts`、`vault_account_auth_test.ts`
+- 追加: `supabase/tests/social_mobile_publish_permission{.md,_fixture.sql,_behavior.sql,_run.sh,_mutations.sh,_postgrest_shim.ts,_e2e_test.ts}`
+- 変更: `supabase/tests/migration_source_invariants_test.ts`（予約versionに1行追加）
+- 変更: `apps/social-mobile/src/domain/publish-setting.ts`、`src/features/publish-setting/{use-publish-setting.ts,publish-setting-card.tsx}`、`src/app/accounts/[id].tsx`（`key`追加のみ）、`tests/publish-setting.test.mjs`
+- 計22ファイル（PR全体）。`x-test-post/index.ts` は未変更。G3の相談・content-settings、H2のcontent-settings schema、共通アカウント、`.agent/` は差分に含まれない（`git diff --name-only origin/main...HEAD` をgrepして該当なし）。
+
+### client confirmation pinning
+上記R5のとおり。回帰テスト: A確認→Bへ切替（0リクエスト、Aへ戻しても確認は復活しない）／再描画前に古いボタンを押す／preview化／状態変化（すでにON）／適格性喪失／別ユーザー・サインアウト／キャンセル／確認ボタン連打／OFFボタンの古い描画／結果が別アカウントのカードに表示されない。フック側・カード側の防御をそれぞれ外す変異で、対応するテストが落ちることを確認。
+
+### tests / adversarial interleavings
+すべてローカル・偽データ。実X API呼び出しなし。
+
+- **使い捨てPostgreSQL 17**（本物のmigration＝onboarding／reconnect／refresh core／rollout／アカウント削除 を積んだ上に候補を適用、非superuser所有者）: `social_mobile_publish_permission_run.sh` → APPLY / BEHAVIOR / RACE / E2E / CLEANUP すべてPASS。
+  - 並行: membership削除・降格が書き込み前に起きる（ON・OFF）／切替が判断を保持中は membership削除・降格・brand無効化・publish_mode変更・アカウント移動がすべてブロックされる／brand無効化→ON拒否／**H1のR2スケジュール**（ON未commit→dispatcherがbrand読取→brand無効化は待たされる→ONcommit→dispatcherがアカウント読取→送信前確認が `BRAND_DISABLED`）／他brandへの移動・自分の別brandへの移動・アカウント削除／同一ON二重・ON対OFF／未commitのOFFは送信確認に影響せずcommit後は拒否／アカウント削除と前後どちらの順でも／refresh commit型トランザクションとのロック順（deadlockなし）／有界待ち／非メンバーは他テナントのロックを待たない。
+  - E2E（`PUB_E2E=1`）: **実際のEdgeハンドラ・実際の `loadBrandContext`＋`assertBrandPublishAllowed`・実際の送信アダプタ**をHTTP経由で本物のSQLへ接続（Xのみ偽）。H1のR2スケジュールで「キャッシュ済みガードは通るが送信前確認が拒否し送信0件」を確認。5シナリオPASS。
+- **変異テスト** `social_mobile_publish_permission_mutations.sh`: 候補SQLを1か所ずつ壊した30件を**30/30検出**（membershipロックなし、brandロックなし、brand再確認なし、trimなし、CAS なし、テーブルロック順、権限付与の緩和、search_path など）。
+- Edge（型チェックあり）: publish-setting 39件（logic 15／http 14／migration契約 10）、`vault_account_auth_test` 29件（新規9件。送信前確認を外すと既存1件＋新規8件が落ちることを確認）。x-test-post＋_shared＋publish-setting 全体 925件PASS（`--no-check`）。変更ファイルの `deno check`・`deno lint` PASS。`x-test-post/index.ts` の型エラー6件は既存のまま（私の変更ファイルには無い）。
+- 既存テストの変更1件: 「2回目の401後は再認可」テストで、同一attempt内の後続リクエストが**Xへ送られなくなった**（`X_ACCOUNT_NOT_VERIFIED` で事前拒否）ため期待値を更新。
+- アプリ: `npm test` 145件（publish-setting 32件）、domain 22件、`tsc --noEmit`、`expo lint` すべてPASS。
+- `git diff --check`・秘密情報スキャン: 問題なし。
+
+### production read / mutation
+- production mutation = **0**（migration適用・RPC作成・Edge deploy・トグル・行変更・Vault/Auth/Cronなし）
+- production read = **0**。このworktreeはSupabase CLIが未link（共有checkoutには触れない）で、本番カタログの読み取りはしていない。**本番のトリガー一覧・権限は未確認**。適用前に操作者が流す読み取り専用クエリ4本をdocに記載（特に `social_accounts` に汎用の `updated_at` トリガーが無いこと）。
+- real X operations = **0**
+
+### commit / push / PR state
+- branch `g4/social-mobile-publish-toggle-v1-20261002`、commit `fe1e846e`（`a59a89e9` の上に1コミット）、push済み、PR #76 のタイトル・説明を更新。作成時点でCIは passing 2／failing 0／pending 1。mergeable。merge・deployはしていない。
+
+### remaining risks
+1. **適用順**: migrationを先に適用してからx-test-postをdeployすること。逆順だとAI Lab（Vault連携）の投稿がすべて `X_PUBLISH_PERMISSION_UNAVAILABLE` で失敗する（安全側）。かぶモリ本体の投稿経路は影響なし。AI Labの投稿は1件につきRPCが1回増える。
+2. **かぶモリ型アカウント（Vault参照なし）**: brandのowner/adminがこのスイッチでOFFにでき、ONには戻せない（`CREDENTIALS_MISSING`）。従来経路ではOFFは次回dispatchのcontext読込で効く。本番にkabumori brandのmembershipがあるかは未確認。スイッチの対象をVault連携アカウントに限定すべきかはK4/Codexの判断を仰ぎたい。
+3. **OFFとrefreshの競合**（既存仕様）: refreshの `begin`〜`commit` の間（約1秒）にOFFが入ると、commitがアカウント変更とみなし `uncertain`（再接続まで停止）になる。OFFをrefresh待ちにすると古いleaseでOFF不能になるため、OFF優先とした。
+4. 確認とXリクエストの間（ミリ秒）のOFFは取り消せない（上記in-flight定義のとおり）。DBロックをHTTP越しに保持できないため。
+5. PostgREST経由の実挙動はローカルのshimで代用。本番Data API・JWT・verify_jwtでの確認、実機確認は未実施（deploy後）。
+6. 共有参照チェックは他アカウント行をロックせずに読む（構造チェック。実行時に再確認される）。
+
+### safety checks / 作業中の出来事
+- 他slotのworktree・branch・dev server・未コミット変更には触れていない。H2のcontent-settings migration、G3のファイルも未変更。
+- 「Supabase skillを読む」: このセッションに該当skillが無かった（検索しても0件）。代わりに公式ドキュメントを確認した。
+- 既存migration 3ファイルの一部を読むBashコマンドが自動モードに1回拒否された。再試行・回避はせず、すでに読んだ内容と、ローカルDBへ実ファイルを適用した結果で進めた。
+- **ディスク満杯**: 最終の変異テスト再実行中にMacのディスクが100%になり、テスト用PostgreSQLが停止した。私のセッション用一時フォルダにあった PR #65 検証用のiOSビルド一式（`g4-sim-e2e`、4.0GB、使用中プロセスなしを確認）を削除して復旧し、全実証を再実行してPASSを確認した。**ディスクは現在も96%使用（空き約9GB）**なので、操作者側での整理を推奨。テスト用PostgreSQLと一時DBは停止・削除済み。
+
+### next recommendation
+K4でCodex **Sol（極高）** の独立再レビューを割り当て。重点: ロック順と待ち、SECURITY DEFINER関数のACL、`not_found` の一様性、送信前確認の対象範囲（かぶモリ従来経路を含めるか）、かぶモリ型アカウントのOFF可否、適用順。承認後に、操作者が preflight → migration単独適用 → read-back → x-test-post deploy → publish-setting deploy（verify_jwt ON）の順で実施。merge・適用・deployはClaudeの自己レビューだけでは行わない。
