@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-pr78-ai-consult-review-20261002
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused review / authenticated AI API / settings persistence safety
@@ -252,6 +252,21 @@ Then:
 - STOP for C2.
 
 Recommended model: **Sol（高）**.
+
+## H2 stop / C2 handoff — 2026-10-02 JST
+
+- verdict: **FAIL / CHANGES REQUIRED（production schema prerequisite BLOCKED、レビュー未完了）**。
+- original/final source head: `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7`、source修正なし。
+- read-only production catalog: `public.social_mobile_content_settings` **不存在**。columns/policies/grants/triggers/constraintsなし。
+- Gate Eのupdated_at/CAS/RLS/write権限は証明不可。TASKの「schema不足・migrationを要する場合はSTOP」に従い、DB追加/適用/回避はしない。
+- 他Auth/AI/confirmation/config/adversarial gatesは未完了。merge/deploy/public rollout **HOLD**。
+- tests: head/11-file overlap0/diff/clean checkout確認。mandatory-stopによりEdge/app/shared test rerun・mutation/typecheck/lintはNOT RUN。G3申告結果を独立PASSに読み替えない。
+- existing source candidate: `20260922045046_social_mobile_content_settings_candidate.sql`。sourceにあるだけでlive適用済みとは扱わない。今回適用承認/DB修正提案の実行なし。
+- Report publication commit: `e439c546caec0e9d99e930f5412e395ae7351f40`。exact content read-back確認済み、過去履歴保持。
+- production catalog SELECT 1 query、production writes/deploy/AI/X/Auth/Vault/Cron操作0。正式repo未commit変更/H1/他slot操作0。
+- next: C2でschema prerequisiteを別承認/工程として扱うかを判断。解決後に未完了レビューを再開（推薦モデル：Sol（高））。
+- status: review_required / next_owner: chatgpt。**STOP for C2**。
+
 
 ---
 
