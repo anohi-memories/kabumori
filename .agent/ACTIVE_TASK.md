@@ -47,14 +47,16 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: none
-- status: done
-- task_id: kabumori-home-report-hero-8-state-assets-20261001
+- next_owner: claude
+- status: ready
+- task_id: kabumori-home-topic-3level-backgrounds-20261003
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Final K1 PASS. Base 8-state Hero PR #72 was already merged; follow-up PR #74 (global 6pt character/CTA lift + CTA height/inset) squash-merged as 9b37c350a3b9d1a936d0e03ddc281e315aba50f2, then final 02/07 aligned assets PR #75 squash-merged as 02ba0e2d728833fb76b74237cc3c237130bcdbf1. Final asset hashes pinned; app tests reported 255/255; EAS build 0; backend/production mutation 0; no Codex review required. G1 free after fresh allocation.
-- recommended_model: So## Claude G2
+- allocation: TOP「今日のトピック」背景を beginner/intermediate/advanced の3段階へ切替実装。ユーザー承認済みの clean original 3枚だけを使用し、スクショUIのcrop/inpaint/再生成は禁止。topic.level のみで決定論的に切替。402/375ptで3状態比較、EAS build 0、backend/production mutation 0。clean original不足時はSTOP。
+- recommended_model: Sonnet5（高）
+
+## Claude G2
 - owner: claude
 - slot: claude-2
 - status: review_required
@@ -64,8 +66,6 @@
 - next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK.md
 - allocation: Final K2 PASS to focused H1 review; PR #79 exact head 9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3 remains open/unmerged; merge/deploy HOLD; H1 review recommended Sol（高）
-
-s5.5（高）
 
 ## Claude G3
 - owner: claude
