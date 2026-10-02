@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: x-social-mobile-pr76-publish-toggle-review-20261002
+- status: ready
+- task_id: kabumori-pr79-session-date-hard-guard-review-20261003
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepted FAIL / CHANGES REQUIRED on PR #76 head a59a89e9c585fb6e780e1af2ecc898c830f5524e. P1 membership-write race and brand active/live TOCTOU reproduced; P2 tenant reread/readiness/client-confirmation issues also accepted. No merge/deploy/source review fix. H1 free after fresh allocation.
+- allocation: focused review of PR #79 exact head 9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3; verify legitimate prior-session watch references pass while assertion laundering/wrong-date numeric/mixed-session remain Hard; explicitly inspect HYPOTHETICAL skip behavior; no merge/deploy/gate/manual cycle; recommended Sol（高）
 
 ## Codex H2
 - owner: codex
@@ -54,17 +54,18 @@
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
 - allocation: Final K1 PASS. Base 8-state Hero PR #72 was already merged; follow-up PR #74 (global 6pt character/CTA lift + CTA height/inset) squash-merged as 9b37c350a3b9d1a936d0e03ddc281e315aba50f2, then final 02/07 aligned assets PR #75 squash-merged as 02ba0e2d728833fb76b74237cc3c237130bcdbf1. Final asset hashes pinned; app tests reported 255/255; EAS build 0; backend/production mutation 0; no Codex review required. G1 free after fresh allocation.
-- recommended_model: Sonnet5（中）
-## Claude G2
+- recommended_model: So## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: review_required
 - task_id: kabumori-pr79-session-date-watch-relation-corrective-20261002
 - start_code: G2
 - finish_code: K2
-- next_owner: claude
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: amend PR #79 before review; fix sentence-wide watch-word laundering so only genuine prior-session watch references bypass date mismatch; preserve all concrete wrong-date/session Hard blocks; no merge/deploy/gate/manual cycle; recommended Opus5.5（高）
+- allocation: Final K2 PASS to focused H1 review; PR #79 exact head 9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3 remains open/unmerged; merge/deploy HOLD; H1 review recommended Sol（高）
+
+s5.5（高）
 
 ## Claude G3
 - owner: claude
