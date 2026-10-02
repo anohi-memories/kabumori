@@ -3,7 +3,7 @@
 - task_id: kabumori-shared-report-v2-quality-rewrite-calibration-20261002
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: in_progress
 - next_owner: claude
 - priority: high
 - recommended_model: Sonnet5（高）
