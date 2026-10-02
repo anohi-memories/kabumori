@@ -60,6 +60,16 @@ const STALE_MARKER = /時点|最新ではありません|古い値/u;
 const PAST_FACT = /ました|でした|した(?:[。!?,、]|$)|だった|してい(?:る|ます)/u;
 const CURRENT_STALE_PREFIX = /(?:今日|現在|直近)の(?:最新の)?$|最新の$/u;
 const CURRENT_STALE_SUFFIX = /(?:が|は)(?:現在|最新)(?:の(?:値|水準))?(?:です|でした|とな)/u;
+/**
+ * After a direction word, a particle that makes the move a noun the sentence goes on to talk about
+ * (「米国株高が…」「米国株高を踏まえ」「上昇の受け止め方」), as opposed to saying that it happened
+ * (「上昇しました」「米国株高でした」「米国株高。」).
+ */
+const REFERRED_MOVE = /^(?:が|を|の|や|へ|は|も|・|など|および|及び|と(?!な)|に(?!な)|で(?!し|す|あ))/u;
+/** The sentence is about what will be watched: non-past watch verbs, a 「どう…か」 question, a focus. */
+const WATCH_FRAME = /見ます|見る(?!と)|見たい|見てい(?:き|く)|確認します|確認する|確認したい|注目|焦点|見極め|どう[^。]*か|かどうか|続くか/u;
+/** The date is the sentence's topic (「10月2日は、…」), not attached to the metric (「10月2日の米国株」). */
+const TOPIC_AFTER_DATE = /^(?:は|には)/u;
 
 type Mention = { keys: string[]; start: number; end: number };
 
@@ -132,19 +142,32 @@ function firstClause(text: string): string {
 }
 
 function directionIn(clause: string): 1 | -1 | null {
+  return directionUse(clause).direction;
+}
+
+/** The direction a clause gives its subject, and whether it only refers to that move as a noun. */
+function directionUse(clause: string): { direction: 1 | -1 | null; referred: boolean } {
+  const found = directionWord(clause);
+  if (!found) return { direction: null, referred: false };
+  return { direction: found.direction, referred: REFERRED_MOVE.test(clause.slice(found.end)) };
+}
+
+function directionWord(clause: string): { direction: 1 | -1; end: number } | null {
   if (HYPOTHETICAL.test(clause)) return null;
   const suffix = clause.match(/^(高|安)(?![いくけ値])/u);
-  if (suffix) return suffix[1] === "高" ? 1 : -1;
+  if (suffix) return { direction: suffix[1] === "高" ? 1 : -1, end: 1 };
   const unnegated = (pattern: RegExp) => {
     for (const match of clause.matchAll(new RegExp(pattern.source, "gu"))) {
-      if (!/^(?:は|も)?(?:してい(?:ませ|な)|し(?:ません|なかった|ない)|せず)/u.test(clause.slice(match.index + match[0].length))) return match.index;
+      if (!/^(?:は|も)?(?:してい(?:ませ|な)|し(?:ません|なかった|ない)|せず)/u.test(clause.slice(match.index + match[0].length))) {
+        return { at: match.index, end: match.index + match[0].length };
+      }
     }
-    return -1;
+    return null;
   };
   const up = unnegated(UP_WORD);
   const down = unnegated(DOWN_WORD);
-  if (up < 0 && down < 0) return null;
-  return down < 0 || (up >= 0 && up < down) ? 1 : -1;
+  if (!up && !down) return null;
+  return !down || (up && up.at < down.at) ? { direction: 1, end: up!.end } : { direction: -1, end: down!.end };
 }
 
 function quote(sentence: string): string {
@@ -176,11 +199,13 @@ export function metricFactIssues(texts: GuardTexts, input: AnalysisInput): strin
   const valueTokens = new Map(input.metricFacts.map((fact) => [fact.key, new Set(numericTokens(fact.valueDisplay).map(canonical))]));
   const changeTokens = new Map(input.metricFacts.map((fact) => [fact.key, new Set(numericTokens(fact.changeDisplay ?? "").map(canonical))]));
   const universe = new Set([...ownTokens.values()].flatMap((tokens) => [...tokens]));
+  const [, tradingMonth, tradingDay] = input.tradingDate.split("-").map(Number);
+  const tradingDateJa = `${tradingMonth}月${tradingDay}日`;
   const issues: string[] = [];
 
   const check = (text: string, statesFacts: boolean) => {
     for (const sentence of sentences(text)) {
-      const dates = [...sentence.matchAll(DATE)].map((match) => ({ at: match.index, ja: `${Number(match[1])}月${Number(match[2])}日` }));
+      const dates = [...sentence.matchAll(DATE)].map((match) => ({ at: match.index, end: match.index + match[0].length, ja: `${Number(match[1])}月${Number(match[2])}日` }));
       const found = mentions(sentence, facts);
       found.forEach((mention, index) => {
         const members = mention.keys.map((key) => facts.get(key)!);
@@ -220,7 +245,8 @@ export function metricFactIssues(texts: GuardTexts, input: AnalysisInput): strin
             issues.push(`指標と数値の不一致（${label}の値ではない数値 ${match[2]}）: ${quote(sentence)}`);
           }
         }
-        const direction = statesFacts || PAST_FACT.test(scope) ? directionIn(firstClause(segment)) : null;
+        const use = statesFacts || PAST_FACT.test(scope) ? directionUse(firstClause(segment)) : { direction: null, referred: false };
+        const direction = use.direction;
         if (direction !== null) {
           const signed = members.filter((fact) => fact.changeSign === 1 || fact.changeSign === -1);
           const contradicted = signed.filter((fact) => fact.changeSign !== direction);
@@ -244,7 +270,13 @@ export function metricFactIssues(texts: GuardTexts, input: AnalysisInput): strin
           ? `${Number(inClause[1])}月${Number(inClause[2])}日`
           : before && !takenByOtherMarket ? before.ja : null;
         const datedMembers = statesValue ? members.filter((fact) => statedMembers.has(fact.key)) : members;
-        if (stated && (datedMembers.length > 0 && datedMembers.some((fact) => fact.dateJa !== stated))) {
+        // 2026-10-02 07:55: 「10月2日は、米国株高が日本株でどう表れるかを見ます」. Today's date is the topic of
+        // a watch sentence and the move is only referred to as a noun, so the date does not date the move.
+        // Every condition must hold; a value, a change, a statement that the session moved, or a date
+        // attached to the metric (「10月2日の米国株」) is still checked.
+        const watchFrame = !statesValue && use.referred && !inClause && !!before && !takenByOtherMarket &&
+          before.ja === tradingDateJa && TOPIC_AFTER_DATE.test(sentence.slice(before.end)) && WATCH_FRAME.test(sentence);
+        if (stated && !watchFrame && (datedMembers.length > 0 && datedMembers.some((fact) => fact.dateJa !== stated))) {
           issues.push(`日付と指標の不一致（${label}は${[...new Set(members.map((fact) => fact.dateJa))].join("・")}の値、本文は${stated}）: ${quote(sentence)}`);
         }
         const stale = members.filter((fact) => fact.freshness === "stale");
