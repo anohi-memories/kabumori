@@ -1,3 +1,111 @@
+## H2 — Content-settings schema prerequisite review — 2026-10-03 JST
+
+- task_id: x-social-mobile-content-settings-schema-prereq-review-20261002
+- verdict: **FAIL / CHANGES REQUIRED — existing candidate is not ready for production apply**.
+- status: review_required / next_owner: chatgpt; STOP for C2.
+- reviewed main: `6ccaaf3a8bb4a2443e17412ae83421a6de7295e0`; pre-publication fresh main: `46d4258158e76f8131b9103014e8356e78c2d8eb`. Target migration/consumer sources and H2 controls were unchanged between these checkpoints.
+- target: `supabase/migrations/20260922045046_social_mobile_content_settings_candidate.sql`
+- exact migration SHA256: `b1167065e4177492b1139071055e89da2bf9db12b0e43e20dada1af07a996fdb`; last source edit: `649111c002f9e19f39e872797e3018829fdd7dbc`.
+- PR #78 consumer inspected at exact head `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7`; this is schema review only, NOT completion of the remaining PR #78 Auth/AI/security gates.
+- implementation/source changes: **0**; no candidate rewrite, corrective migration creation, or PR merge.
+- repository changed_files: **.agent/CODEX_REPORT_2.md / .agent/tasks/CODEX_TASK_2.md only**, completion record with histories preserved.
+- production apply / deploy recommendation: **HOLD**. Do not present the unchanged candidate as approved for apply.
+
+### Independent production preflight — catalog only, READ ONLY
+
+Two explicit READ ONLY transactions against `wsmznyzcvmuitkglfeuj`; no user content/settings/PII/token query.
+
+- `public.social_mobile_content_settings` remains absent; touch function absent; migration history version `20260922045046` count **0**. No candidate-named function collision.
+- `brands.id` text PK; `brand_memberships.brand_id` text FK -> brands ON DELETE CASCADE; user_id uuid FK -> auth.users ON DELETE CASCADE; composite PK(brand_id,user_id); roles owner/admin/member/viewer. Required dependencies compatible.
+- Both referenced tables have RLS enabled. Membership self-SELECT binds verified `auth.uid()` to user_id, and authenticated has SELECT; candidate policy subqueries therefore do not recurse through content-settings.
+- `auth.uid()`: stable invoker UUID function, existing request.jwt.claim.sub/claims implementation. Local fixture uses the sub GUC path, not live Auth.
+- Important apply-specific fact: postgres/public default table ACL gives authenticated and service_role **TRUNCATE / REFERENCES / TRIGGER / MAINTAIN**, not DML. Candidate must normalize effective grants explicitly; source GRANT statements alone do not describe the eventual ACL.
+- Public CREATE is denied to anon/authenticated/service_role. Candidate trigger is invoker, not SECURITY DEFINER; no unqualified helper lookup in its body. Direct EXECUTE is revoked from PUBLIC/anon/authenticated/service_role.
+- Existing brand/membership deletion-guard triggers are present. This review did not invoke them or run real account deletion.
+
+### Findings — apply blockers / bounded corrections to assign separately
+
+**F1 / P1 — persisted JSON boundary is weaker than the stated contract** (`candidate.sql:35-67`).
+
+CHECK expressions can evaluate NULL and be accepted. Present-but-null locale/preferredTone/objective/approvalMode/frequency, notes:null, and missing/null generationWindow members were saved successfully under the authenticated owner role. `->>` also coerces types: preferredTone:number/bool, objective:bool, frequency:"3", dayOffset:"-1" pass. Arrays are count-only: numeric/object/null members and overlong strings pass. Locale en-US and arbitrary-looking timezone Fake/Zone are accepted by SQL even though current app/server use ja-JP/Asia-Tokyo.
+
+The forbidden-key denylist is incomplete. Owner direct INSERT/UPDATE can persist settings access_token/secret/oauth/publish_mode, nested generationWindow.publish_enabled, and persona secret/publishEnabled/historical_posts/nested token/wrong-type signals. Tests used ONLY synthetic "fake" values; no real secret read/saved. This proves **durable malformed/forbidden structured data**, not an actual publish-enabled mutation or cross-tenant/X exploit. Existing normal app writers validate/project data, but a browser validator is not the database security boundary.
+
+Small correction proposal: exact structured allowlists/types/required fields at both settings/window/persona levels, bounded string-array elements, null-safe rejection (`IS TRUE` / explicit missing-null checks), and compatible value constraints for current legitimate writers. Preserve legitimate endLocal=24:00 and valid persona metadata. Arbitrary human text in allowed notes cannot be semantically proven secret-free by a structural schema; do not promise that.
+
+**F2 / P1 — DELETE denial does not mean destruction denial with live default ACL** (`candidate.sql:88-91`).
+
+Reproducing production's exact defaults, authenticated has SELECT/INSERT/UPDATE, DELETE=false, but TRUNCATE=true, TRIGGER=true, REFERENCES=true, MAINTAIN=true. A local authenticated-role transaction truncated **all settings rows despite RLS**, then was rolled back. anon has no table privileges after REVOKE ALL. service_role inherits those non-DML rights and has no SELECT/INSERT/UPDATE.
+
+This is a confirmed SQL privilege flaw; there is **no claim that PostgREST exposes a TRUNCATE endpoint or an identified arbitrary-SQL production exploit**. Still it violates the requested least-privilege SELECT/INSERT/UPDATE-only contract.
+
+Small correction proposal: normalize PUBLIC/anon/authenticated/service-role table ACL, then grant only intended operations. Existing dry-run and PR78 reads use user JWT + publishable key, so missing service_role DML is not currently proven to break those readers; decide any future service-role requirement separately. Do not globally change database default privileges or unrelated tables.
+
+**F3 / P2 — timestamp is not a per-update version** (`candidate.sql:71-86`).
+
+updated_at is timestamptz NOT NULL DEFAULT now(), with BEFORE UPDATE trigger overwriting caller input. Ordinary distinct transactions advance it; concurrent CAS test had winner=1 / loser=0, and competing INSERT produced 23505 / one row.
+
+But `now()` is transaction-start time. Two updates within one transaction reuse the same timestamp: a second UPDATE with the original transaction version matched **1** row, not zero. A long-running earlier transaction also moved the version backwards after another transaction updated the row. This is a deterministic transaction-clock issue, not a probabilistic microsecond collision claim. No current single-row PostgREST race failure was demonstrated; its normal two-request race passed.
+
+Small correction proposal: retain the compatible timestamptz CAS contract, but use a server-owned strictly increasing value on UPDATE, e.g. `greatest(clock_timestamp(), old.updated_at + interval '1 microsecond')`, with insert timestamp ownership considered. Alternatively explicit revision counter would require coordinated schema/client work. Test same transaction, equal clock, regression/ABA, upsert, all writers before acceptance. No fix applied here.
+
+**F4 / P2 — IF NOT EXISTS silently accepts a drifted same-name table** (`candidate.sql:5-69`).
+
+Exact-shape reapply preserved rows/policies/trigger. But after locally removing JSON CHECKs and the brand FK, reapply succeeded and left **all three missing constraints missing**; malformed settings/persona then stored. CREATE TABLE IF NOT EXISTS is not schema reconciliation. Unexpected existing columns/types/constraints/grants/policies need fail-closed preflight or explicit versioned correction, not blind apply.
+
+Fresh transactional apply -> read-back -> ROLLBACK restored absence; a forced halfway error in an explicitly wrapped transaction restored the original two fake rows. The SQL file itself has no BEGIN/COMMIT; do not assume unwrapped/manual execution is atomic. It also does not itself write migration history: application tool / explicit authorized bookkeeping must be settled in a later rollout task, never repair/reconcile opportunistically.
+
+### Table/writer contract and accepted boundaries
+
+- Expected columns exist in the candidate: brand_id PK/FK cascade, settings/jsonb default, persona_profile/jsonb {}, provenance enum conversation/past_post_analysis/manual, confirmed=false, optional last_analyzed_at/count 0..1000, created_at/updated_at timestamptz defaults.
+- Default settings create successfully; valid lower/upper bounds and valid persona shape save; SQL endLocal 24:00 accepted, start/default 24:00 and end 24:01/prefix/suffix rejected.
+- Main mobile validator still rejects its own 24:00 default. PR78 contains the narrowly scoped endTimePattern fix; do not silently merge it via this schema task. Shared server normalizer/materializer inspected, and schema-invalid data can be dropped/defaulted, but that is not a durable DB constraint.
+- Existing settings screen calls repository.upsert; settings-only upsert omits persona. Local proof preserved confirmed persona. Existing saveConfirmedProposal and PR78 saveConfirmedIfUnchanged write same table; BEFORE UPDATE applies to their UPDATE/upsert paths. PR78 insert race / eq(updated_at) design depends on fixing/accepting F3 semantics, not merely the existence of a trigger.
+- Ordinary RLS: owner SELECT/INSERT/UPDATE work; member/admin/foreign owner SELECT hidden and UPDATE zero; unauthorized INSERT/cross-brand reassignment denied; anon reads/inserts denied; owner DELETE denied. Owner-only agrees with PR78 and existing repository, not broader publish-toggle owner/admin policy.
+- Brand FK cascade proved locally. Existing social-mobile purge explicitly deletes brands, so candidate settings rows follow that cascade without needing a new common-account table. Auth-only deletion removes membership, hides settings from caller, but leaves brand/settings until service workspace cleanup; this is not a proof of end-to-end managed deletion.
+- Common-account Phase1 foundation remains separately HOLD/unapplied; candidate has no new dependency on it. Lifecycle FK compatibility is source/schema-level, not managed Auth/Vault/Storage deletion certification.
+- Candidate creates one noninternal BEFORE UPDATE trigger on this table; no unrelated runtime triggers or tables were modified.
+
+### Independent local evidence / limitations
+
+H2-only disposable PostgreSQL **17.11**, Unix socket only, database `h2_settings_review`, synthetic users/brands; catalog-compatible required columns/FKs/self-membership RLS + actual public default ACL reproduced. Local postgres is a superuser for setup; client tests SET ROLE authenticated/anon and verify non-superuser RLS behavior. This is **not** managed Supabase/GoTrue/PostgREST E2E.
+
+- Behavioral harness: **104 observations** — 59 expected/harness assertions, **42 admitted-invalid/version-defect observations**, 3 effective-ACL observations. Not "104/104 product PASS"; the successful TRUNCATE reproduction is adverse evidence, not a safety PASS.
+- Additional apply/reapply/drift/rollback/cascade/upsert markers: 8 verified outputs.
+- Real two-connection INSERT race: PASS, winner one / loser 23505 / one stored row.
+- Forced-error transactional rollback: PASS, original two rows restored.
+- Existing source tests run with Node 24.19 type stripping: **7/7 PASS** (migration/static3 + shared-content4). They do not detect F1/F2/F3/F4; regex tests are not DB security proof.
+- Initial `deno test --allow-read` could not type-check due missing npm:@types/node in this clean checkout. No install/package/lock edit or type-check success claim. Same test files executed via standard Node runtime; Deno check remains environment-unverified.
+- Source checkout clean; git diff --check PASS; migration SHA256 unchanged.
+- Fake DB was dropped and H2-owned cluster stopped. Proof harness files remain outside repo in `/private/tmp/h2-settings-schema.tebpFt/`; **the findings/reproductions above are in this Report so C2 need not access local artifacts**.
+- Relevant docs: [PostgreSQL CHECK/null semantics](https://www.postgresql.org/docs/17/ddl-constraints.html), [transaction-time vs clock_timestamp](https://www.postgresql.org/docs/17/functions-datetime.html), [RLS including TRUNCATE exception](https://www.postgresql.org/docs/17/ddl-rowsecurity.html), [Supabase RLS](https://supabase.com/docs/guides/database/postgres/row-level-security).
+- Supabase skill changelog .md endpoint could not be opened by the web reader (400); used current official RLS docs instead. No speculative feature implementation.
+
+### Minimal disposable reproductions (NOT production instructions)
+
+After applying the **unchanged candidate** in a fake owner workspace:
+1. Owner UPDATE settings to its valid default with `locale:null`, or window `{}`: succeeds; invalid contract should reject.
+2. Owner UPDATE persona_profile to `{"secret":"fake","historical_posts":["fake"]}`: succeeds; structural deny boundary is incomplete.
+3. With production-default authenticated ACL, BEGIN / SET ROLE authenticated / TRUNCATE this table / SELECT count / ROLLBACK: count zero across tenants, despite DELETE denied.
+4. BEGIN; owner UPDATE once; UPDATE again WHERE updated_at=now(): second row count1; timestamp stays identical.
+5. Remove two CHECKs + brand FK in a transaction; rerun original candidate; catalog count for those three constraints remains0; ROLLBACK.
+No such mutation was performed on production.
+
+### Next action / C2 disposition / safety
+
+- **Do not separately approve production apply of the unchanged historical candidate.**
+- Assign a narrowly bounded corrective-schema task (recommended **Sol（高）** review, **Opus5.5（高）** implementation as appropriate). Default proposal is a new versioned hardening migration with explicit contract/ACL/drift checks and compatible monotonic CAS; preserve historical migration rather than silently rewriting a recorded source candidate. Decide whether original+corrective must be applied atomically or a consolidated never-applied candidate is explicitly permitted.
+- Corrected candidate must pass fresh local invalid-JSON/ACL/CAS/drift proof; then C2 can consider a **separate explicit production apply approval** with live preflight and read-back.
+- Only after accepted schema apply/read-back may PR78's unfinished independent review resume; schema PASS alone does not approve PR78 merge/deploy/public enablement.
+- production writes/apply/migration-history/RLS/grants/deploy/settings/DB change: **0**.
+- paid/live OpenAI / X / Push / Auth/OAuth/Vault/Storage / Cron/scheduler operations: **0**.
+- formal repo existing changes / H1/G3/G4/other workstream changes / apps/admin / HANDOFF / root package/lock/env changes: **0**.
+- Read-only catalog transactions: **2**. Actual user data reads: **0**. Secret/PII/report exposure: **0**.
+- H1 fresh task is PR79 Hard Fact review; G4 transactional publish-toggle corrective is distinct. Neither worktree/TASK/report/source touched.
+- Only H2 TASK/Report are synchronized via GitHub; publication SHAs identified in completion response and GitHub history. Preserve all prior entries; final status review_required / next_owner chatgpt.
+
+---
+
 ## H2 — PR #78 AI相談 v1 review：production schema前提不成立で停止 — 2026-10-02 JST
 
 - task_id: x-social-mobile-pr78-ai-consult-review-20261002
