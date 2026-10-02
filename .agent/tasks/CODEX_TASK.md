@@ -3,8 +3,8 @@
 - task_id: kabumori-pr79-session-date-hard-guard-review-20261003
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused review / Hard Fact session-date boundary
@@ -223,6 +223,15 @@ Then:
 - STOP for C1.
 
 Recommended model: **Sol（高）**.
+
+## H1 completion — 2026-10-03 JST
+
+- verdict: **CHANGES REQUIRED**. Exact PR #79 runtime head `9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3` remains unchanged and is not accepted for merge/deploy.
+- P1: a hypothetical tail skips prior asserted date/direction facts, including `10月2日の米国株は下落しており次も続くかを見ます`; all six factual placements return no Hard rejection.
+- P2: two ordinary prior-night watch variants falsely fail the date guard; P3: unused `directionIn` makes the changed-file lint fail.
+- Original suite 123/123 PASS; focused independent regressions 2 PASS / 2 FAIL; extended full suite 125 PASS / 2 FAIL. Other suites: personalized 128, X consumer 8, data-packet 42, shared 361 PASS (`--no-check` for those four).
+- H1 test-only evidence commit: `6140968378c44aecd2d40a1cc7d344f2e98e8b4e` on `codex/h1-pr79-hard-guard-review-20261003`. No runtime fix, no update to G2 branch/PR, no merge/deploy, production mutation=0.
+- Details appended to `.agent/CODEX_REPORT.md`. Next **C1, 推薦モデル：Sol（高）**, then narrowly scoped G2 correction; H1 STOP. Dedicated TASK/REPORT are authoritative; shared slot indexes are not overwritten.
 
 ---
 

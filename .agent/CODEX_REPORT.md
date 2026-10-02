@@ -1495,3 +1495,84 @@ Official current [Auth user management](https://supabase.com/docs/guides/auth/ma
 - Shared CURRENT_STATE/ACTIVE_TASK changed again during delivery. Per orchestration, do not overwrite or resolve those shared-file updates. Fresh main `6957a4f` has unchanged H1-dedicated TASK/REPORT; publish **only `.agent/tasks/CODEX_TASK.md` and `.agent/CODEX_REPORT.md`** from that base. Prior history is preserved exactly. Other-slot TASKs, CURRENT_STATE and ACTIVE_TASK are untouched.
 - Earlier branch-only synchronization HOLD is historical and superseded only after the dedicated-file main push/read-back succeeds. **Shared index/summary may still say ready**; C1 should use the authoritative H1 TASK/REPORT and safely update only H1 index/summary as needed. This H1 does not change G4/H2 allocation or take over their files.
 - No code fix, PR merge, deploy, production mutation or X operation. Next C1, 推薦モデル：Sol（高）. Exact canonical commit/push/read-back outcome reported in completion.
+
+---
+
+# H1 — PR #79 session-date Hard-boundary review (2026-10-03 JST)
+
+- task_id: `kabumori-pr79-session-date-hard-guard-review-20261003`
+- result / verdict: **CHANGES REQUIRED**. Do not merge or deploy the unchanged candidate.
+- original reviewed head / final runtime head: **`9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3`** / same. H1 made no runtime fix.
+- test-only evidence head: **`6140968378c44aecd2d40a1cc7d344f2e98e8b4e`**, normal push to H1-only branch `codex/h1-pr79-hard-guard-review-20261003`. The two failing tests intentionally assert the required behavior; this is NOT a green release candidate or a proposed runtime deployment commit.
+- isolation: H1-owned checkout `/private/tmp/kabumori-h1-resume.DHxA95/repo`; no shared Developer checkout, G2/H2/G4 branch or uncommitted work touched.
+- independently fetched fresh main `c1a9a11`, then `520e43e2bde5ca2c3d4efb41d1f6fe356c885392` for delivery. PR79 merge-base is `85b40b464c29311eae7fba84e13a50cb41dd1a52`, not head^; main-side intersection with the three PR files is **0**. GitHub read-back before delivery: PR open, exact head unchanged, 3 files, mergeable=true. Mergeability is not correctness approval.
+
+## Findings / required corrections
+
+### R1 — P1: hypothetical tail erases an already asserted wrong-date/direction fact
+
+`hard_fact_guards.ts:184` returns null when `HYPOTHETICAL` matches anywhere in the metric clause. With no numeric token, the later `if (!statesValue && direction === null) return` also skips date checking. The strengthened WATCH_RELATION is never reached.
+
+Independently reproduced against the 10/2 morning fixture (US metrics all positive, session 10/1):
+
+- `10月2日は、米国株高が強まり波及するかどうかを見ます。`
+- `10月2日は、米国株高が鮮明となり波及するかどうかを見ます。`
+- `10月2日は、米国株高が継続し波及するかどうかを見ます。`
+- **`10月2日の米国株は下落しており次も続くかを見ます。`**
+
+All four produce **no local Hard rejection**, in market_summary, X context, X closing, App summary, App japan, and an observation claim (24 checks). The last explicitly attaches the wrong date to US stocks and states a fall before asking whether it continues: both date and direction contradict the immutable input. It cannot be justified as a wholly hypothetical move. By contrast, `米国株高が強まるかどうか`, `米国株が上昇すれば`, and `米国株安が続くか` remain genuine uncertain/conditional controls and must not become factual assertions.
+
+This global skip predates PR79 and is independently visible in merge-base source. It is nevertheless a **blocking pre-deploy defect under Gate D**, not waived as unrelated history. Do not shift these objective contradictions to the LLM Fact checker.
+
+Required: distinguish a hypothesis governing the move from an earlier asserted move plus a hypothetical tail. Preserve the existing genuine conditional/negative controls and all Gate A positives. Do not merely blacklist the three reproduced verbs, remove hypothetical support wholesale, or accept another sentence-wide watch escape.
+
+### R2 — P2: normal prior-session watch wording still causes delivery false rejects
+
+Both following sentences produce the US 10/1-versus-10/2 date Hard error in all six factual placements (12 checks):
+
+- `10月2日は、前夜の米国株高を受け、日本株の反応を見る。`
+- `10月2日は、米国株高の流れをどう受け止めるかが焦点。`
+
+These do not assert that the US session rose today. The first explicitly refers to the previous night; the second asks how a known move will be received. They are plausible routine morning phrasing, not a safe-to-reject objective contradiction. WATCH_RELATION (`:88-94`) accepts `を踏まえ` and `を受けた動き…`, but not the simple `を受け、…を見る`; it accepts `の影響` but not `の流れをどう…か`. The original broad a70dfdd watch pattern included these watch verbs; the corrective narrowing leaves a recurring delivery-churn risk. The third requested variant, `前日の米国株上昇を踏まえて…確認する`, passes.
+
+Required: support these bounded reference relations while still rejecting assertion-before-watch, past confirmation, wrong-date numeric facts and R1. No blanket exemption for an explicit prior-night marker: a subsequent assertion may still describe today's move.
+
+### R3 — P3: reported changed-file lint PASS is not reproducible
+
+`directionIn` at `hard_fact_guards.ts:168` became unused after callers switched to `directionUse`. Running `deno lint` on the two PR TS files returns exit 1 / `no-unused-vars`; adding the H1 test file yields the same one finding. It was used in merge-base source. Remove the unused wrapper or otherwise resolve the actual lint finding; do not report the G2 lint evidence as independently accepted.
+
+## Other gates / safeguards verified
+
+- **Gate A PASS**: all mandated positive watch shapes and correctly dated prior-session values pass; summary/X/App/claims are covered by the candidate's checked tests, not watch-only fields.
+- **Gate B specified examples PASS**: existing assertion-before-watch, no-comma, assertion-then-real-question, past-watch and date-attached forms remain Hard. R1 adds a separate real bypass that these tests missed.
+- MOVE_LIST/NOUN/PLACE/REFERRED_MOVE/TOPIC inspected. MOVE_LIST can consume verbal material, e.g. bare `や上昇した半導体株高`; an undated relative past clause can itself refer to the prior session, so that alone is not proof of an objective lie. In added explicit-`今日` controls, `今日上昇した…` is rejected by the date guard; `今日反落した…` has no metricFactIssues rejection but localAnalysisCheck catches `反落` via the existing multi-day-word rule. The parallel-move regression therefore **passes**; this review does not falsely claim both are blocked by WATCH_RELATION or label a bare ambiguous past reference as a proved contradiction.
+- **Gate C PASS** for required wrong-date numeric/change cases, 9/29 Nikkei + 9/30 1306 mixed-date regression, stale/current, 1306 naming, sign/direction/emoji, unsupported market causality and unknown refs. These correct ordinary paths do not repair R1's nonnumeric conditional-tail bypass.
+- **Gate F PASS within source scope**: PR diff has no changes to `analysis_logic.ts`, `_shared`, or data-packet source. PR77 quality WARN/rewrite, safe-original fallback, packet contract and model-call ceiling remain unchanged; their tests pass. This does not authorize a production rollout.
+- H1 deliberately returns correction to G2: safely closing the combined hypothesis/assertion classification and reference-relation gaps needs a coordinated guard-boundary correction with positive and negative semantics proved together. A wrapper cleanup or an ad-hoc one-verb regex patch would not resolve the review. No broader parsing framework, model/prompt/call-budget/contract or production-specific change was attempted.
+
+## Independent test results
+
+Original exact runtime candidate, before H1 test addition:
+
+- full `market-report-analysis`: **123 PASS / 0 FAIL**, type-checked test run. Includes session-date 10, presentation_v2 22, causal_calibration 18, quality_calibration 9, h1_adversarial 13, content_guard 16, transport_retry 14.
+- `personalized-reports`: **128 PASS**, X shared consumer **8 PASS**, `market-report-data-packet` **42 PASS**, `_shared` **361 PASS**. These four were run with `--no-check --allow-all`; no claim of full shared/consumer TypeScript validation. Test doubles/fixtures only, no production invoke or real model/provider call.
+- `deno check --no-lock --node-modules-dir=auto` for analysis entrypoint plus session-date test: **PASS**. Additional check of analysis_input, analysis_logic, hard_fact_guards, handler, index, transport_retry and H1 boundary test: **PASS**, dependencies transitively checked.
+- changed-file `deno lint`: **FAIL**, one R3 unused-wrapper issue; separately verified exit 1. An earlier chained shell command ended with successful diff-check, but its lint error was retained and NOT counted as PASS.
+- `git diff --check`: **PASS**.
+
+H1 evidence at `6140968` (same runtime, one extra test file):
+
+- `h1_pr79_boundary_test.ts`: **2 PASS / 2 FAIL**. Failing: R1 hypothetical-tail assertion; R2 legitimate watch variants. Passing: explicitly current parallel-move controls; genuine hypotheses + original delivered packet.
+- extended full analysis: **125 PASS / 2 FAIL**. Existing 123 remain passing; independent failures are intentionally not skipped or rewritten to bless current broken behavior.
+- Initial scratch parallel-move test using ambiguous bare past modifiers had a third failure; refined it to explicit `今日` assertions to avoid equating legitimate prior-session relative clauses with a proven current-session claim. Final results above supersede that exploratory 1 PASS / 3 FAIL run.
+
+## Delivery / remaining issues / next step
+
+- changed_files_source: only `supabase/functions/market-report-analysis/h1_pr79_boundary_test.ts` on H1-owned evidence branch. Candidate runtime/docs and G2 PR branch unchanged; no fix commit is claimed.
+- changed_files_control: only H1 `.agent/tasks/CODEX_TASK.md` and append `.agent/CODEX_REPORT.md`, based on fresh main. Preserve prior TASK history and the existing Report byte-for-byte; no CURRENT_STATE/ACTIVE_TASK or other-slot write.
+- commit_hash_control / push: completion-report delivery commit; exact hash and remote verification in final response. Source evidence push returned success; remote SHA read-back is required before claiming final publication.
+- merge / deploy: **none**. Production reads/mutations **0/0**; DB/Auth/Vault/secrets/OAuth/Cron/gates, real X and manual Edge/model operations **0**. Supabase skill safety procedures informed the local-only verification; no production boundary was expanded.
+- remaining_issues: R1/R2/R3; no actual model run/native UI/production telemetry was requested or performed for this guard review.
+- next_recommendation: **C1, 推薦モデル：Sol（高）**. C1 should accept CHANGES REQUIRED and route a focused G2 source correction (**推薦モデル：Opus5.5（高）**), carrying the evidence tests plus all mandated controls. Do not allocate or overwrite a slot from this H1 review.
+- rollout prerequisites: corrected exact head + independent green positive/negative review; only afterward C1 may approve merge. Later PR77+accepted PR79 rollout remains one explicitly approved `market-report-analysis` deploy, app/x gates OFF, exact byte read-back, natural-cycle observation. No deployment/merge permission is implied by this report.
+- authoritative H1 TASK now `review_required`, next_owner `chatgpt`; shared indexes may be stale until C1 safely synchronizes H1 only. H1 STOP after dedicated report publication/read-back.
