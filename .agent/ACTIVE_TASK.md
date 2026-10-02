@@ -59,12 +59,12 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-shared-report-v2-morning-session-date-guard-calibration-20261002
+- task_id: kabumori-pr79-session-date-watch-relation-corrective-20261002
 - start_code: G2
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: source/tests/PR only; narrowly fix 10/2 morning false Hard date/session rejection for trading-date forward-looking sentences while preserving concrete wrong-date value/direction/session blocks; PR #77 already merged but not deployed; no deploy/gate/manual cycle; recommended Opus5.5（高）
+- allocation: amend PR #79 before review; fix sentence-wide watch-word laundering so only genuine prior-session watch references bypass date mismatch; preserve all concrete wrong-date/session Hard blocks; no merge/deploy/gate/manual cycle; recommended Opus5.5（高）
 
 ## Claude G3
 - owner: claude
