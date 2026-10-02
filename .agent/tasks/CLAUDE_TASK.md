@@ -6390,3 +6390,47 @@ Decision:
 - H1/H2 are both currently allocated to other reviews; do not overwrite them.
 - after the correction, K2 should run a focused Codex review before production deploy because this is a Hard Fact boundary.
 
+
+
+## Final K2 — corrected PR #79 source candidate
+
+Verdict: **PASS to focused Codex review; MERGE / DEPLOY HOLD**.
+
+Accepted source candidate:
+- PR #79 final head: `9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3`
+- PR remains open / mergeable.
+- current PR scope remains 3 files.
+- fresh main comparison at K2 found no overlap with PR #79 files.
+- production mutation=0.
+
+Accepted behavior:
+- the original 10/2 legitimate watch references still pass.
+- the K2-found laundering shapes such as `10月2日は、米国株高が続き、日本株の反応を確認します` now fail Hard.
+- assertion-before-watch variants, no-comma variants, and equivalent `米国市場の上昇` forms are covered.
+- concrete wrong-date values, explicit completed-session assertions, 10/1 mixed-session bug, stale/current, 1306, polarity, unsupported market causality and unknown refs remain Hard.
+- model-call budget is unchanged.
+
+Accepted verification reported by G2:
+- session_date_calibration 10/10
+- market-report-analysis 123/123
+- personalized-reports 128/128
+- X shared consumer 8/8
+- market-report-data-packet 42/42
+- _shared 361/361
+- deno check/lint/diff PASS
+
+Review gate:
+- a focused Codex review is still required because PR #79 changes a Hard Fact boundary.
+- H1 and H2 are both currently allocated to unrelated X-app reviews and must not be overwritten.
+- therefore PR #79 stays review-pending. No merge and no production deploy are authorized.
+- recommended reviewer model when a Codex slot becomes genuinely free: **Sol（高）**.
+- review should explicitly inspect:
+  - WATCH_RELATION / MOVE_LIST / NOUN / PLACE for over-permission,
+  - REFERRED_MOVE / TOPIC_AFTER_DATE boundary,
+  - the pre-existing HYPOTHETICAL behavior that can skip direction/date checks for clauses containing `かどうか` / `続くか`,
+  - all positive and adversarial regressions.
+
+Rollout after review, not before:
+- if Codex accepts the corrected Hard boundary, merge PR #79,
+- then deploy merged PR #77 + PR #79 together in one `market-report-analysis` deploy with app/x gates OFF,
+- then observe the next natural morning cycle read-only.
