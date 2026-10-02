@@ -1,10 +1,173 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-pr79-session-date-watch-relation-corrective-20261002
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Opus5.5（高）
+- purpose: PR #79 の日付/session Hard guard緩和を、後段にwatch語があるだけで誤った当日米国セッション主張まで通し得る境界から、prior-session move が実際にwatch対象として参照されている場合だけ通す狭い規則へ修正する。同じPR #79をamendする。source/testsのみ、deploy/mergeは禁止。
+
+## K2 finding
+
+Current PR #79 uses all of:
+- no metric value/change,
+- `use.referred`,
+- trading-date topic,
+- `WATCH_FRAME.test(sentence)`
+
+to skip the date mismatch.
+
+The last condition is sentence-wide. That means a later watch phrase can accidentally launder an earlier same-sentence assertion.
+
+Potential false-negative shapes:
+
+- `10月2日は、米国株高が続き、日本株の反応を確認します`
+- `10月2日は、米国株高が確認され、日本株の反応を確認します`
+- `10月2日は、米国株高が鮮明となり、日本株の反応に注目です`
+- `10月2日は、米国株高が一段と強まり、日本株の反応を見ます`
+
+These are not equivalent to:
+- `10月2日は、米国株高が日本株でどう表れるかを見ます`
+- `10月2日は、米国株高を踏まえ、日本株の反応を確認します`
+
+The first group can assert that the US move itself is occurring/continuing on 10/2. They must remain Hard if the packet only has the 10/1 US session.
+
+## Required design rule
+
+The exemption must prove that the direction/move is **syntactically/semantically part of the forward-looking watch relation**, not merely that:
+- the move is noun-like, and
+- some unrelated watch verb exists later in the same sentence.
+
+Prefer a narrow deterministic relation over a broad verb blacklist.
+
+Good approaches include a small set of supported watch relation shapes such as:
+- `<prior move> が ... どう ... か ... 見る/確認/注目`
+- `<prior move> の受け止め方 ... 確認/注目`
+- `<prior move> を踏まえ ... 確認/見る`
+- `<prior move> を受けた動きが続くか ...`
+- explicit `前夜の<move>`, `前営業日の<move>`, or the correct session date attached to the move
+
+Do not rely on a generic sentence-wide `確認します|注目|見る` match by itself.
+
+If a safer alternative is to require explicit prior-session markers for ambiguous shapes and clarify the generation prompt accordingly, that is acceptable **only if** it does not reintroduce routine retry churn. Explain the trade-off and test it.
+
+## Must PASS
+
+Keep all previously intended legitimate watch references:
+
+1. `10月2日は、米国株高や半導体株高が日本株でどう表れるかを見ます`
+2. `10月2日は、米国株高や半導体株高の受け止め方を確認する一日です`
+3. `東京市場との関係は確認できないため、10月2日は米国株高や半導体株高が日本株でどう表れるかを見ます`
+4. `10月2日は、米国株高を踏まえ、日本株の反応を確認します`
+5. `10月2日は、前夜の米国株高が日本株にどう波及するかではなく、実際の値動きを確認します`
+6. `10月2日は、米国市場の上昇を受けた動きが続くかを確認します`
+7. correct explicit-date forms.
+
+## Must FAIL — add these regressions
+
+In addition to every existing negative test, add:
+
+1. `10月2日は、米国株高が続き、日本株の反応を確認します`
+2. `10月2日は、米国株高が確認され、日本株の反応を確認します`
+3. `10月2日は、米国株高が鮮明となり、日本株の反応に注目です`
+4. `10月2日は、米国株高が一段と強まり、日本株の反応を見ます`
+5. `10月2日は、米国株高が継続し、日本株を見る一日です`
+6. `10月2日は、米国株高が続いています。日本株の反応を確認します`
+7. the same assertion-before-watch pattern with `米国市場の上昇` instead of `米国株高`.
+
+Also preserve:
+- `10月2日の米国株は上昇しました` FAIL
+- `10月2日は米国株高でした` FAIL
+- wrong-date numeric values FAIL
+- 10/1 mixed-session numeric bug FAIL
+- stale/current, 1306, polarity, causality, unknown-ref Hard guards unchanged.
+
+## Test strategy
+
+1. First add failing tests against current PR #79 head to prove the laundering gap.
+2. Apply the smallest deterministic correction.
+3. Re-run:
+   - session_date_calibration full suite
+   - presentation_v2
+   - causal_calibration
+   - quality_calibration
+   - h1_adversarial
+   - content_guard
+   - transport retry
+   - full market-report-analysis
+   - personalized 128+
+   - X shared consumer
+   - data-packet
+   - _shared
+   - deno check/lint
+   - git diff --check
+4. Existing PR #79 positive tests must remain green without weakening numeric/session protections.
+
+## PR / branch rule
+
+- amend **PR #79**, do not create a separate PR unless technically unavoidable.
+- record original head `a70dfdd23257c6361b60f1b9221f6029b0fccaf9` and final head.
+- fresh-check main overlap before push.
+- no merge in this TASK.
+
+## Production / rollout
+
+Forbidden:
+- deploy
+- manual invoke/retry
+- gate change
+- cron/DB/Auth/Vault/secret mutation
+- personalized-reports / x-test-post changes
+
+PR #77 quality calibration remains merged but production-unapplied. Keep bundling PR #77 + corrected PR #79 into one later market-report-analysis deploy.
+
+## Review routing
+
+This corrective still changes a Hard Fact boundary.
+
+At next K2:
+- if corrected source/tests pass, **focused Codex review is required before merge/deploy**.
+- H1/H2 are currently occupied. Do not overwrite them.
+- if neither H slot is free, leave PR #79 review-pending rather than bypassing the review.
+
+Recommended Codex reviewer when a slot frees: **Sol（高）**.
+
+## Completion report
+
+Include:
+- task_id/result
+- original/final PR #79 head
+- reproduced laundering counterexamples before fix
+- exact corrected watch-relation rule
+- all positive/negative results
+- 10/1 mixed-session result
+- full tests/check/lint/diff
+- changed_files
+- production mutation=0
+- recommendation for H1/H2 review
+
+When complete:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+Pending.
+
+---
+
+# Previous completed G2 task — PR #79 initial session-date calibration
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-shared-report-v2-morning-session-date-guard-calibration-20261002
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Opus5.5（高）
 - purpose: 2026-10-02朝刊の1回目を落とした「今日の日付 + 前夜の米国株高を今日の注目材料として参照する文」を、米国市場の当日実績と誤解してHard BLOCKする日付guardの誤検出を狭く修正する。本物の別日数値混同は絶対に通さない。source + tests + PRのみ。deploy/gate/manual cycleは禁止。
@@ -6048,4 +6211,34 @@ K2 decision:
 - production mutation from this source task/K2: GitHub merge only; no Edge deploy/gate/manual cycle.
 - PR #77 will **not** be deployed separately. It will be bundled into the next accepted market-report-analysis deploy after the morning session-date false-positive guard is fixed, to avoid unnecessary deployment churn.
 - no Codex review was added for PR #77 because it is quality-only and Hard behavior is unchanged.
+
+
+
+## Final K2 — PR #79 changes required
+
+Verdict: **CHANGES REQUIRED before Codex review / merge**.
+
+Accepted positives:
+- exact 10/2 morning false-positive phrases now pass.
+- concrete wrong-date values, completed-session assertions, 10/1 mixed-session regression, stale/current, 1306, polarity, causality and unknown refs remain covered by reported tests.
+- PR #79 head `a70dfdd23257c6361b60f1b9221f6029b0fccaf9` is open/mergeable.
+- fresh main comparison found no overlap with the three PR #79 files.
+- reported verification: session-date 9/9; market-report-analysis 122/122; personalized 128/128; X shared 8/8; data-packet 42/42; _shared 361/361; check/lint/diff PASS.
+- production mutation=0.
+
+New K2 blocker:
+- the relaxation is still too broad because `WATCH_FRAME` is tested anywhere in the sentence while `REFERRED_MOVE` only proves that the direction word is followed by a particle.
+- this can suppress the date/session check for a sentence that first makes a completed/current-session assertion and only later contains a watch verb.
+- adversarial examples that the current PR logic can plausibly let through:
+  - `10月2日は、米国株高が続き、日本株の反応を確認します`
+  - `10月2日は、米国株高が確認され、日本株の反応を確認します`
+  - `10月2日は、米国株高が鮮明となり、日本株の反応に注目です`
+- in these sentences, `10月2日` can genuinely be read as dating the US move. They must not bypass the session-date Hard guard merely because a later phrase says `確認します` or `注目です`.
+
+Decision:
+- do not merge PR #79 yet.
+- do not deploy PR #77/#79 yet.
+- tighten the exemption so the **watch relation itself** governs the referred prior-session move, rather than accepting any sentence that contains a watch word somewhere later.
+- H1/H2 are both currently allocated to other reviews; do not overwrite them.
+- after the correction, K2 should run a focused Codex review before production deploy because this is a Hard Fact boundary.
 
