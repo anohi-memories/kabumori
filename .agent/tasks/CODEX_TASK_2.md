@@ -3,8 +3,8 @@
 - task_id: common-account-pr70-preproduction-gate-20261002
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sol（極高）
 - type: independent pre-production Auth/RLS/migration gate
@@ -210,6 +210,32 @@ No production apply is authorized by this TASK itself.
 - code/deploy/production write/Auth/Storage/OAuth/Vault/X/OpenAI/Push変更: 0。正式repoの既存変更への操作0。他slot制御ファイル更新0。
 - status: review_required / next_owner: chatgpt。**STOP for C2**（推薦モデル：Sol（極高））。
 
+
+
+## Final C2 — Common account pre-production gate
+
+- verdict: **PARTIAL / operator prerequisite accepted**.
+- source_merge_status: **PASS / remains merged**.
+- migration_apply_readiness: **HOLD**.
+- backfill_readiness: **HOLD**.
+- accepted evidence:
+  - merged source integrity PASS
+  - local lifecycle 20 PASS
+  - mutation 46/46 DETECTED
+  - social deletion 8 PASS
+  - migration invariants 10/10 PASS
+  - production read-only catalog preflight substantially PASS for required schema/FK/helper/history conditions
+  - target migration not yet applied; no target object collision
+  - backfill dry-run snapshot: 5 Auth/common candidates, Kabumori 2, X 1, Auth-only 2, manual-review 3
+- mandatory blocker:
+  - no approved disposable nonproduction Supabase environment was available, so actual GoTrue/PostgREST/Storage/managed-role proof was not run.
+  - production Data API exposure/actual API behavior remains unproven.
+- production mutation: **0**.
+- no migration/backfill/deploy/Auth/Storage/OAuth/Vault/identity/Cron/flag operation was performed.
+- exact next operator action: designate an approved disposable nonproduction Supabase project/sandbox, or separately authorize creation of one, then rerun Gate B before any production apply decision.
+- existing production or unrelated Supabase projects must not be repurposed by assumption.
+- H2 is closed pending operator environment decision; no automatic production action or new task is authorized.
+- recommended model for resumed Gate B / final apply decision: **Sol（極高）**.
 
 ---
 
