@@ -3,8 +3,8 @@
 - task_id: kabumori-shared-report-v2-quality-rewrite-calibration-20261002
 - owner: claude
 - slot: claude-2
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: 10/2朝刊の最初のlive Presentation v2で確認した、誤ったニュース優先度WARNと軽微な長さ不足による不要なquality rewriteを修正する。Hard Fact / Fact / transport / packet契約は変更しない。source + tests + PRのみ。
@@ -184,7 +184,167 @@ When complete:
 
 ## Report
 
-Pending.
+### Report — kabumori-shared-report-v2-quality-rewrite-calibration-20261002
+
+- task_id：`kabumori-shared-report-v2-quality-rewrite-calibration-20261002`
+- result：**source-readyのPASS候補**。PR #77（未merge、deployなし）。
+  - 10/2朝刊の形では、誤った優先順位のWARNが消える。846字のアプリの長さ不足は記録だけになり、書き直しは発生しない。
+  - 本当に順番が悪い場合のWARN、明らかに薄い場合の書き直し、安全な元の下書きへのfallback、Hardの検査は変わっていない。
+- fresh main SHA：着手時 `84344d3e`。作業branchは `e39b42f7`（in_progressの記録commit）の上。
+- worktree/branch：G2専用checkout `/Users/yuya/Developer/kabumori-g2-market-report-reliability`、branch `g2-quality-rewrite-calibration-20261002`。
+- 所有の確認：PR #71のmerge後に、`market-report-analysis/**` を変更したcommitは無い。ほかのslotやopen PRに、このdirectoryを扱うものは無い。
+
+#### exact root cause
+
+- **A. ニュースの優先順位のWARN**（`editorialPriorityWarnings`）
+  - 条件は「市場全体のニュースが入力にあり、Xの本文かニュース段落に会社名が出ていて、ニュース段落が空か、段落に会社名がある」だった。
+  - つまり、ニュース段落に会社名が1つでもあれば、**順番に関係なく**WARNになった。
+  - 10/2に配信された段落は「市場全体では、イエメン…、ロシア側の警告、エチオピアの爆発…。ニデックの過年度決算修正も公表されています。」で、key_newsも broad, broad, broad, company の順。意図どおりの並びだったので、決定的な誤WARN。
+- **B. アプリの長さ不足による書き直し**（`qualityRewriteHints`）
+  - `APP_STORY_SHORTER_THAN_TARGET` は、900字未満なら字数に関係なく書き直しの対象だった。
+  - 10/2は846字（9セクションが揃い、事実の検査は合格）で、54字の不足のために生成を1回使った。
+- 結果：1回目の生成がFactまで合格 → 質の書き直し → 書き直しはローカル検査で不合格 → 元の下書きを配信。calls 3、`cost_usd=0.010230`。fallbackは設計どおりに働いたが、3回目の呼び出しは不要だった。
+
+#### changed warning / rewrite policy
+
+- **A. 優先順位は、Xの読み順での「順番」で判定する**
+  - 読む範囲：導入（`lead_ja`）→ ニュース段落（`news_ja`）。段落が空のときは、本文全体（導入、3点、背景、締め）。
+  - 個別企業の位置：入力の `company` 範囲のニュースの会社名が、最初に現れる位置（これまでと同じ会社名の取り方）。
+  - 市場全体のニュースの位置：入力の `broad` 範囲の各ニュースについて、見出し・要約の語（漢字・カタカナ・英字の連続から取った3文字）が、本文に最初に現れる位置。「市場」「株」「日経」「指数」「前日比」や数字を含む3文字は、どのレポートにも出るので数えない。
+  - 判定：
+    - 会社名が出ない → WARNなし
+    - 会社名が出て、市場全体のニュースに触れていない → WARN「X本文が個別企業の開示だけを扱い、市場全体のニュースに触れていない」
+    - 会社名が、市場全体のニュースより前に出る → WARN「X本文が個別企業の開示を市場全体のニュースより前に扱っている」
+    - 市場全体のニュースが先で、会社名が後 → WARNなし
+  - `key_news` に市場全体のニュースが無い場合のWARNは、変更なし。
+  - いずれもQuality WARNで、Hardにはしていない。LLMの呼び出しは足していない。
+  - 補足：ニュース段落があるとき、3点（`points_ja`）の中の会社名は順番の判定に入れない。3点は並列の要点で、ニュースの語りの順番は導入と段落で決まるため。
+- **B. アプリの長さは、帯で扱う**
+  - 900字以上：指摘なし
+  - 700〜899字：`APP_STORY_SHORTER_THAN_TARGET:<n>` を記録するだけ（書き直さない）
+  - 700字未満：記録＋書き直し1回
+  - 必須セクションの欠落（`APP_STORY_SECTION_OMITTED`）は、これまで通り書き直しの対象。
+- 書き直しの回数（最大1回）、`MAX_GENERATIONS=2`、安全な下書きの扱いは、変更なし。
+
+#### chosen App rewrite threshold and rationale
+
+- しきい値：**700字**（`APP_STORY_REWRITE_BELOW_CHARS`）。
+- 根拠（v2のセクション構成から）：
+  - 文字数の対象は「読み物の部分」＝ 見出し（headline）＋各セクションの見出し＋本文。
+  - promptが必須7項目に求める本文の最低字数の合計：60＋100＋120＋80＋120＋60＋60 ＝ **600字**（`strong_ja` は任意）。
+  - headlineと、各セクションの見出し・区切りの合計は約100字。fixtureの実測は100〜133字（9/17大引け 111、9/30大引け 104、10/1朝刊 123、10/1大引け 100、10/2朝刊のlive 133）。
+  - したがって、700字未満の読み物は、必須セクションのどれかが欠けているか、そのセクションの最低字数を下回っている。700字以上は、すべてのセクションが最低限は書かれている。
+- 1つの数字に合わせた調整ではない：しきい値の両側をテストした（699は書き直し、700と899は記録だけ）。10/2のlive（846）と、本文を短くした別の例の両方が「記録だけ」になる。
+- 目標（900〜1,500字）は変えていない。Hardの上限・下限にもしていない。
+
+#### exact 10/2 fixture before / after
+
+- fixture：本番の10/2朝刊の入力（data packet `eec5aee4…` と参照ニュース23件）と、配信されたpacket `7e11eb93…`（公開情報だけ）。
+- 修正前（`e39b42f7`）：
+  - hard：`[]`
+  - warnings：`X本文が個別企業の開示を市場全体のニュースより前に扱っている`、`APP_STORY_SHORTER_THAN_TARGET:846`
+  - 書き直しの指示：2件 → 質の書き直しが発生（本番の実績：calls 3）
+- 修正後：
+  - hard：`[]`
+  - warnings：`APP_STORY_SHORTER_THAN_TARGET:846` だけ
+  - 書き直しの指示：0件 → 生成1回＋Fact 1回で配信（`quality_rewrite=false`、`delivered_generation=1`）
+  - Xの本文は486字で、長さのWARNなし。
+- 優先順位の判定（10/2の入力で確認）：
+  - WARNなし：配信された段落そのもの／市場全体のニュースだけ／市場全体のあとで企業の詳細／3点に会社名があり段落は市場全体から始まる
+  - WARNあり：会社が先で市場全体が後／導入に会社名／会社だけの段落／段落が無く3点に会社だけ／`key_news` に市場全体が無い
+  - 市場全体のニュースが入力に無い場合：WARNなし（先に置くものが無い）
+  - WARNありの場合も、hardは `[]`（Hardにはならない）。書き直しは最大1回。
+
+#### tests/check/lint/diff
+
+- 新規 `quality_calibration_test.ts`：**9/9**（修正前は9件中6件がFAILED）
+- market-report-analysis：**113/113**
+  - presentation_v2 22、h1_adversarial 13、content_guard 16、causal_calibration 18、transport_retry 14 を含む
+  - `presentation_v2_test.ts` の1か所（10/1のv1 packetの再生）の期待値を更新した。そのXは、当日入力にあった市場全体のニュース5件に触れず、ニデックの開示だけを扱っている。新しい規則では、より正確な「個別企業の開示だけを扱い、市場全体のニュースに触れていない」になる。
+- fallbackの回帰（今回のテストでも確認）：
+  - 安全な元の下書き＋書き直しがHardで不合格 → 元の下書きを配信
+  - 安全な元の下書き＋書き直しのrequest失敗 → 元の下書きを配信（`rewriteRequestFailed=true`）
+  - Hardの不合格だけが続く → fail closed（変更なし）
+- personalized-reports 128/128、x-test-post shared consumer 8/8、market-report-data-packet 42/42、`_shared` 361/361（`--no-check`）。共有helperは変更していない（回帰として実行）。
+- `deno check`（runtimeの9ファイル＋変更したテスト）：PASS
+- `deno lint`（変更・新規の3ファイル）：問題なし
+- `git diff --check`：PASS
+
+#### changed_files（PR #77、7ファイル）
+
+- `supabase/functions/market-report-analysis/analysis_logic.ts`（`editorialPriorityWarnings`、`newsMentionIndex`、`worthRewrite`、`APP_STORY_REWRITE_BELOW_CHARS`）
+- `supabase/functions/market-report-analysis/quality_calibration_test.ts`（新規）
+- `supabase/functions/market-report-analysis/presentation_v2_test.ts`（期待値1か所）
+- `supabase/functions/market-report-analysis/fixtures/morning_2026-10-02_data_packet.json`（新規）
+- `supabase/functions/market-report-analysis/fixtures/morning_2026-10-02_news_rows.json`（新規）
+- `supabase/functions/market-report-analysis/fixtures/morning_2026-10-02_generated_report.json`（新規）
+- `docs/market-report-shared-platform/DESIGN.md`（§15.2.2 を追記）
+- 変えていないもの：`hard_fact_guards.ts`、`unsupportedCausalSentences`、Factのprompt、handler、transport retry、`_shared/**`、personalized-reports、x-test-post、migration。
+
+#### PR / head SHA
+
+- PR：https://github.com/anohi-memories/kabumori/pull/77
+- head：`7174179c17cdc89b840fd923ad7a2d706f1a0f91`
+- CI：Web用のpreviewの確認だけ（Denoのテストは含まれない。localで実行した）。
+
+#### model-call budget before / after
+
+- 上限は**変更なし**：`MAX_GENERATIONS=2`、Factは最大2回、質の書き直しは最大1回。
+- 追加の呼び出しは無い（判定はコードだけ）。
+
+#### expected call / cost effect on the 10/2 shape
+
+- 10/2の形（1回目の生成が合格。WARNは長さ846字と、誤った優先順位）：
+  - 修正前：calls 3（生成 → Fact → 書き直しの生成）、実績 `cost_usd=0.010230`（入力19,973、出力5,196トークン）
+  - 修正後：calls 2（生成 → Fact）。書き直しの生成1回分が無くなる。
+  - 見積もり：書き直しの生成1回は、入力 約9千、出力 約2.5千トークンで、約$0.0045〜0.005。約4〜5割の削減（1件の実績からの見積もりで、安定した平均ではない）。
+- 所要時間も、生成1回分（約15〜20秒）短くなる見込み。
+
+#### production mutation
+
+- **0**。行ったのは、read-onlyのSELECT（10/2朝刊の入力と、配信されたpacketの取得）と、手元での再現だけ。deploy、手動のinvoke、gate・cron・DBの変更はしていない。
+
+#### remaining issues
+
+1. **（本TASKの範囲外・要判断）10/2朝刊の1回目（07:55）は、日付と指標の検査の誤検出で落ちている。**
+   - 応答に残っている指摘：`日付と指標の不一致（NYダウ・S&P500・ナスダック総合は10月1日の値、本文は10月2日）`。引用された文は3つ：
+     - 「10月2日は、米国株高や半導体株高が日本株でどう表れるかを見ます」
+     - 「10月2日は、米国株高や半導体株高の受け止め方を確認する一日です」
+     - 「…確認できないため、10月2日は米国株高や半導体株高が…」
+   - 手元で再現した：
+     - これらの文が「事実を述べる欄」（要約、Xの導入・背景・締め、アプリの各本文）にあると、Hardになる。
+     - 「見る点」の欄（`watch_ja`、`next_watch_ja` など）では、ならない。
+     - 「今日は、米国株高が…」や「10月2日は、10月1日の米国株高が…」は、合格する。
+   - 原因：
+     - 文頭の「10月2日は」（今日＝取引日）を、後ろの「米国株高」の日付として読んでいる。
+     - 「米国株高」は、指標の別名＋向きの語なので、値を書いていなくても、日付の照合が走る。
+     - 実際の文は「今日は、前夜の米国株高が日本株でどう表れるかを見る」という意味で、米国株の値動きを10月2日のものとは言っていない。
+   - 影響：朝刊で起きやすい（今日の日付で、前夜の米国市場に触れる文）。10/2は2回目で完成したが、同じ形が2回続けば、packetは作られない。
+   - 修正案（別TASK）：次のどちらか、または両方。
+     - 値や前日比の数値を書いていない文では、日付の照合をしない（向きの語だけの文）。
+     - 文の日付が取引日で、「見ます・確認します・見たい・一日です」などの先を見る述語で終わる文は、日付の照合から外す。
+   - 10/1の「別日の値の混同」（「9月30日は日経平均65,481.27…」）は、値を書いた文なので、どちらの案でも止まる。
+   - `hard_fact_guards.ts` はHardの検査なので、本TASKでは変更していない。
+2. 質の書き直しが、なぜローカル検査で落ちたかは、記録に残っていない（`hard_rejections=local` だけ）。配信に成功したrunでは、指摘文を保存していないため。
+3. 内容の質（1件の観察）：
+   - 「東京市場との関係は確認できません」が複数の欄に出る。
+   - 市場全体のニュースは優先できているが、日本株との関わりが薄い地政学の話が並ぶ。
+   - 米国3指数が+0.04〜0.19%でも「そろって上昇」と書く。コードの方向判定は、±0.1%未満を横ばいとし、残りが上昇なら「上昇」になる。
+   - これらは今回の範囲外。
+4. Xの長さは、目標（430〜560字）の外なら、これまで通り書き直しの対象。アプリと同じ帯の扱いは入れていない（指示は目標の維持）。必要なら別途。
+5. 市場全体のニュースに「触れた」かどうかは、3文字の一致による近似。
+   - 見出しと語が重ならない言い換えは、「触れていない」と判定されうる。その場合はWARNになり、書き直しが1回発生する（配信は止まらない）。
+   - 逆に、一般的な語の偶然の一致で「触れた」と判定されると、WARNが出ない。
+
+#### recommendation for merge / deploy / close natural observation
+
+- **merge**：差分は、WARNの判定と書き直しの条件だけ。Hardの検査・Fact・契約は変えていない。K2の確認だけでmergeしてよいと考える。Codexのreviewは不要と判断する（判断はK2）。
+- **deploy**：merge後、`market-report-analysis` を単独deployする（gate OFF、これまでと同じ手順とbyte照合）。
+  - 今日の大引け（16:15 data → 16:20 / 16:35 analysis）に間に合えば、その回から呼び出しの削減が効く。
+- **観察**：次の自然なcycleで、次を確認する。
+  - `quality_rewrite` の有無、`quality_warnings`、calls・cost
+  - `hard_rejections` の内訳。特に、上記1の日付の誤検出が再発するか。
+- **優先度の提案**：上記1（日付の検査の誤検出）は、配信を止める側の問題なので、本PRのdeployとは別に、修正TASKを早めに出すことを推奨する。
 
 ---
 
