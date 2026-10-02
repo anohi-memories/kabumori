@@ -4,7 +4,7 @@
 - owner: claude
 - slot: claude-4
 - status: review_required
-- next_owner: chatgpt
+- next_owner: codex
 - priority: high
 - recommended_model: Opus5.5（高）
 - type: feature implementation / posting-permission boundary / authenticated Edge Function
@@ -910,3 +910,16 @@ PR #76 の変更10ファイルに `consult.tsx`、`content-settings*`、`content
 
 ### next recommendation
 K4 で Codex **Sol（高）** による集中レビュー（認可境界、条件付きPATCHの網羅、brand条件のTOCTOU、`publish_mode` の運用前提）を割り当て。Codex 承認後に操作者が deploy（verify_jwt ON、byte確認）し、使い捨てアカウントで実機確認。merge/deploy は Claude の自己レビューだけでは行わない。
+
+
+## K4 decision — PR #76 source candidate
+
+- verdict: **PASS to focused Codex review; merge/deploy HOLD**.
+- accepted review target: PR #76 exact head `a59a89e9c585fb6e780e1af2ecc898c830f5524e`.
+- PR is open/mergeable; Netlify and Vercel checks green.
+- fresh main is 5 commits ahead of the PR base with no overlap across the 10 PR files.
+- source/tests remain within posting-toggle boundary; no G3 consultation files, migration/RLS/grant, X API, scheduler or common-account changes.
+- production mutation 0 / real X operations 0.
+- because this is a posting-permission/security boundary, K4 does not merge.
+- H1 assigned focused review `x-social-mobile-pr76-publish-toggle-review-20261002`, recommended **Sol（高）**.
+- next_owner: codex; wait for C1.
