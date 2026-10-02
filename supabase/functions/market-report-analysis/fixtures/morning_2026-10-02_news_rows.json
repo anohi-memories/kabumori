@@ -1,0 +1,426 @@
+[
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "212A0",
+    "company_name": "フィットイージー",
+    "coverage_categories": [
+      "japan_market",
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 09:00:38.585963+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "0571e548-baaf-4c87-bebc-447c3626c4db",
+    "published_at": "2026-10-01 06:30:00+00",
+    "source_type": "tdnet",
+    "title": "2026年10月期 ９月度 主要KPI（会員数及び店舗数）についてのお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "geopolitics"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-10-01 14:00:34.573386+00",
+    "generated_text": "【速報】エチオピアの衝突、首都でも爆発と報道\n\nエチオピア北部で続く連邦軍と武装勢力の衝突が広がるなか、首都アディスアベバで爆発があったと報じられました。外交筋3人がロイターに証言したとされています。\n\n武装勢力の連合側は、首都で複数のドローン攻撃を実施し、一部は軍司令部を標的にしたと主張しています。\n\n出典: https://www.aljazeera.com/news/2026/10/1/blasts-heard-in-addis-ababa-as-ethiopia-conflict-widens-in-the-north",
+    "generation_fact_status": "passed",
+    "id": "0ca106f0-ba64-4a86-a3d2-0b0662fa560c",
+    "published_at": "2026-10-01 13:25:54+00",
+    "source_type": "breaking_market",
+    "title": "Blasts heard in Addis Ababa as Ethiopia conflict widens in the north"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "33960",
+    "company_name": "フェリシモ",
+    "coverage_categories": [
+      "fx",
+      "corporate",
+      "earnings"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-10-01 07:00:39.967503+00",
+    "generated_text": "【速報】フェリシモ、上期の経常利益予想を77.2％上方修正\n\n2027年2月期第2四半期累計の連結業績予想を修正しました。経常利益は262百万円、中間純利益は231百万円の見通しで、前回予想をそれぞれ114百万円、97百万円上回ります。為替差益の計上などが理由です。\n\n売上高予想は3.3％、営業利益予想は20.2％の下方修正。通期予想は据え置いています。\n\n出典: https://www.release.tdnet.info/inbs/140120260929541751.pdf",
+    "generation_fact_status": "failed",
+    "id": "1080c7d9-3b55-4ecf-8dca-99530809b0b7",
+    "published_at": "2026-10-01 06:30:00+00",
+    "source_type": "tdnet",
+    "title": "業績予想の修正に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "410A0",
+    "company_name": "Ｇ－ＧＭＯコマース",
+    "coverage_categories": [
+      "ai_tech",
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 10:00:40.599101+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "1b2093a4-f01f-49bd-b4b2-984e14199d29",
+    "published_at": "2026-10-01 06:31:00+00",
+    "source_type": "tdnet",
+    "title": "（開示事項の経過）GMO NIKKO・ GMOインサイトの株式取得（子会社化）完了に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "23530",
+    "company_name": "日駐",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 08:00:36.021539+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "32f224c8-294e-4dad-ae53-f9b730e28fd6",
+    "published_at": "2026-10-01 06:30:00+00",
+    "source_type": "tdnet",
+    "title": "自己株式の取得状況及び取得終了に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "97650",
+    "company_name": "オオバ",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 14:00:44.652679+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "336686b5-246a-45c9-9b46-5bb4b9cdf575",
+    "published_at": "2026-10-01 07:00:00+00",
+    "source_type": "tdnet",
+    "title": "自己株式の取得状況に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "geopolitics",
+      "shipping_logistics"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-10-01 20:00:30.996483+00",
+    "generated_text": "【速報】イエメンでは政府軍とフーシ派の戦闘が続いています。フーシ派は木曜日、タイズ県の複数の前線で攻撃を強めたと報じられました。先月に紅海沿岸を制圧した勢いを広げようとしているものの、空爆や険しい地形もあり、政府軍の陣地を大きく突破できていないとされています。\n\n政府軍は前線を維持し、フーシ派に大きな損害を与えたと主張。ただ、近く本格的な反攻に出る兆しは乏しく、軍の再編を進めているようです。\n\n出典: https://www.aljazeera.com/news/2026/10/1/after-red-sea-losses-yemens-government-forces-hold-the-line",
+    "generation_fact_status": "passed",
+    "id": "39c8fad7-7356-4f52-a222-ba34d9f850b5",
+    "published_at": "2026-10-01 19:05:25+00",
+    "source_type": "breaking_market",
+    "title": "After Red Sea losses, Yemen’s government forces hold the line"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "geopolitics"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-10-01 19:00:33.125101+00",
+    "generated_text": "【速報】プーチン大統領は、ロシア領カリーニングラードが直接攻撃を受けた場合、あらゆる兵器を使うと警告したとBBCが報じました。ロシア側は、NATOが同地域を封鎖しようとしていると非難し、西側がロシア本土との連絡を断とうとすれば核兵器も使う用意があると警告しています。プーチン氏は「誰も脅していない」と述べ、西側指導者の発言への対応だと主張しています。\n\n出典: https://www.bbc.co.uk/news/articles/cqg7k7v499jjo",
+    "generation_fact_status": "passed",
+    "id": "53e120bc-c65a-47b3-b5f6-7a6be06abf2a",
+    "published_at": "2026-10-01 18:09:03+00",
+    "source_type": "breaking_market",
+    "title": "Putin warns West that Russia is ready to use every weapon to protect Kaliningrad"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "66450",
+    "company_name": "オムロン",
+    "coverage_categories": [
+      "corporate",
+      "earnings"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-10-01 10:00:40.795484+00",
+    "generated_text": "【速報】オムロン、デバイス＆モジュール事業の譲渡完了\n\n事業は7月1日付でAratasに承継され、本日、Aratasの全株式をカーライル系のTCG2602に譲渡しました。あわせて、オムロンはTCG2602の親会社TCG2601に、議決権保有比率が5％となる出資を完了しています。\n\n出典: https://www.release.tdnet.info/inbs/140120260930543513.pdf",
+    "generation_fact_status": "passed",
+    "id": "5b4bd3b0-952a-4aef-b521-cc9d78fda5a4",
+    "published_at": "2026-10-01 06:35:00+00",
+    "source_type": "tdnet",
+    "title": "（開示事項の経過）デバイス＆モジュールソリューションビジネスに関する会社分割（吸収分割）及び株式譲渡（子会社等の異動）完了に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "74350",
+    "company_name": "ナ・デックス",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 12:00:44.525593+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "611cf400-b078-4beb-b5b6-b37c2e51edbc",
+    "published_at": "2026-10-01 06:40:00+00",
+    "source_type": "tdnet",
+    "title": "自己株式の取得状況に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "31740",
+    "company_name": "ハピネス＆Ｄ",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 12:00:44.319069+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "62885535-7f3c-4a5a-822c-450a8a3035b8",
+    "published_at": "2026-10-01 06:40:00+00",
+    "source_type": "tdnet",
+    "title": "第三者割当により発行された第14回新株予約権（行使価額修正条項付）の月間行使状況に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "23310",
+    "company_name": "ＡＬＳＯＫ",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-10-01 08:00:36.261547+00",
+    "generated_text": "【速報】ＡＬＳＯＫ（2331）は、日本ドライケミカル（1909）を連結子会社化すると発表しました。カーライルとの共同出資会社TCG2511が存続会社、日本ドライケミカルが消滅会社となる吸収合併を実施し、合併後にＡＬＳＯＫが取得する株式を含め、議決権所有割合は28.0％から51.2％に上がる計画です。\n\n合併の効力発生日は2027年１月１日の予定。業績や財務状況への影響は現在精査中です。\n\n出典: https://www.release.tdnet.info/inbs/140120260930542905.pdf",
+    "generation_fact_status": "failed",
+    "id": "66a304de-988d-46d5-852a-fb8ed15f12f6",
+    "published_at": "2026-10-01 06:30:00+00",
+    "source_type": "tdnet",
+    "title": "TCG2511株式会社の日本ドライケミカル株式会社との吸収合併による連結子会社化に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "17160",
+    "company_name": "第一カッター",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 13:00:43.515016+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "6b49b097-d327-493b-baf1-8ee8ba10e6fb",
+    "published_at": "2026-10-01 06:45:00+00",
+    "source_type": "tdnet",
+    "title": "自己株式の取得状況に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "22820",
+    "company_name": "日ハム",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 11:00:35.783044+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "72e6dac9-69ac-48c0-b996-e909b51e0791",
+    "published_at": "2026-10-01 06:40:00+00",
+    "source_type": "tdnet",
+    "title": "自己株式の取得状況に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "66760",
+    "company_name": "ＢＵＦＦＡＬＯ",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 11:00:36.033529+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "78de3a79-5827-4097-a1ca-8513286fd786",
+    "published_at": "2026-10-01 06:40:00+00",
+    "source_type": "tdnet",
+    "title": "自己株式の取得状況に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "21640",
+    "company_name": "地域新聞社",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 09:00:37.995668+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "90c471d7-3939-464d-982b-3eca2d835535",
+    "published_at": "2026-10-01 06:30:00+00",
+    "source_type": "tdnet",
+    "title": "第11回新株予約権（行使価額修正条項付）の月間行使状況に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": null,
+    "company_name": null,
+    "coverage_categories": [
+      "geopolitics"
+    ],
+    "coverage_severity": "high",
+    "created_at": "2026-10-01 18:00:33.831906+00",
+    "generated_text": "【速報】英国の空軍基地周辺の事件で追加逮捕\n\n英国の対テロ警察は、RAF Fairford付近で起きた事件に関連し、英・イランの二重国籍を持つ27歳の男性をテロ行為の準備の疑いで逮捕したと発表しました。ロンドン中心部で身柄を拘束したとのことです。別の英国籍の26歳男性も事情聴取を受けています。\n\n事件をめぐっては、先に逮捕された5人が保釈されています。\n\n出典: https://www.aljazeera.com/news/2026/10/1/british-police-arrest-uk-iranian-national-over-airbase-incident",
+    "generation_fact_status": "passed",
+    "id": "99bf1fdb-cb36-4eb7-9509-22acde9fae3c",
+    "published_at": "2026-10-01 16:55:47+00",
+    "source_type": "breaking_market",
+    "title": "British police arrest UK-Iranian national over airbase incident"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "24130",
+    "company_name": "エムスリー",
+    "coverage_categories": [
+      "japan_market",
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 08:00:36.426808+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "a5d06b17-5802-4adb-acfc-b988cba06b0f",
+    "published_at": "2026-10-01 06:30:00+00",
+    "source_type": "tdnet",
+    "title": "自己株式の取得状況に関するお知らせ (会社法第459条第1項の規定による定款の定めに基づく自己株式の取得)"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "24990",
+    "company_name": "日本和装",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 07:00:39.674931+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "a786225b-1483-4e7d-b749-c657ee899cc0",
+    "published_at": "2026-10-01 06:30:00+00",
+    "source_type": "tdnet",
+    "title": "自己株式の取得状況に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "190A0",
+    "company_name": "Ｇ－Ｃｈｏｒｄｉａ",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 09:00:38.242151+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "adc85571-6fa9-4a20-b0a8-b9f9edeb497d",
+    "published_at": "2026-10-01 06:30:00+00",
+    "source_type": "tdnet",
+    "title": "第12回新株予約権（行使価額修正条項付）の月間行使状況に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "65940",
+    "company_name": "ニデック",
+    "coverage_categories": [
+      "fx",
+      "ai_tech",
+      "corporate",
+      "earnings"
+    ],
+    "coverage_severity": "critical",
+    "created_at": "2026-10-01 13:00:43.944045+00",
+    "generated_text": "【重大速報】ニデックは不適切な会計処理に伴う過年度決算の修正を公表。2021年3月期から2025年3月期までの営業利益累計は8,199億円から4,373億円に修正され、2025年3月期末の純資産は修正前より4,769億円減少しました。\n\n2026年3月期は減損損失などを計上し、営業損失5,190億円。2027年3月期は営業利益2,000億円、当期利益1,000億円を見込む一方、配当は未定です。\n\n出典: https://www.release.tdnet.info/inbs/140120261001544567.pdf",
+    "generation_fact_status": "passed",
+    "id": "c8cbe103-df5b-4735-a76f-9a6edcd92d86",
+    "published_at": "2026-10-01 06:50:00+00",
+    "source_type": "tdnet",
+    "title": "再生に向けての変革"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "27210",
+    "company_name": "ＪＨＤ",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 13:00:44.183709+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "ddb65e28-3599-4932-839c-608f94493601",
+    "published_at": "2026-10-01 07:00:00+00",
+    "source_type": "tdnet",
+    "title": "第三者割当により発行された第10回新株予約権（行使価額修正条項付）の月間行使状況に関するお知らせ"
+  },
+  {
+    "app_copy_fact_status": null,
+    "app_summary_ja": null,
+    "app_title_ja": null,
+    "company_code": "72780",
+    "company_name": "エクセディ",
+    "coverage_categories": [
+      "corporate"
+    ],
+    "coverage_severity": "medium",
+    "created_at": "2026-10-01 14:00:44.492852+00",
+    "generated_text": null,
+    "generation_fact_status": null,
+    "id": "f3f4bc03-63b4-4ca9-a94c-0c837e00a0e7",
+    "published_at": "2026-10-01 07:00:00+00",
+    "source_type": "tdnet",
+    "title": "自己株式の取得状況に関するお知らせ"
+  }
+]

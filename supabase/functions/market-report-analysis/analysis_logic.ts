@@ -726,26 +726,55 @@ function companyName(company: string): string {
   return company.normalize("NFKC").replace(/\(\d{4}\)$/u, "").replace(/^G-/u, "").trim();
 }
 
+/** Words every market report uses: they do not show that a particular news item is being told. */
+const GENERIC_NEWS_GRAM = /市場|日経|株|指数|前日比|[0-9]/u;
+
+/**
+ * Where the text first tells this news item: the first place a 3-character piece of the item's own
+ * wording appears (「イエメン」「フーシ派」「カリーニングラード」). -1 when the text does not tell it.
+ */
+function newsMentionIndex(text: string, itemText: string): number {
+  let first = -1;
+  for (const run of itemText.normalize("NFKC").match(/[一-龠々ァ-ヶーA-Za-z]{3,}/gu) ?? []) {
+    const characters = Array.from(run);
+    for (let start = 0; start + 3 <= characters.length; start += 1) {
+      const gram = characters.slice(start, start + 3).join("");
+      if (GENERIC_NEWS_GRAM.test(gram)) continue;
+      const at = text.indexOf(gram);
+      if (at >= 0 && (first < 0 || at < first)) first = at;
+    }
+  }
+  return first;
+}
+
 /**
  * Market-wide editorial priority (2026-10-01: one company's impairment notice led the story while
- * trade-policy and geopolitical items were available). Broad items come first; a single company's
- * disclosure must not be the X digest's news when broad items exist.
+ * trade-policy and geopolitical items were available). This is an ordering rule over what the X digest
+ * says: broad-market news first, a single company's disclosure after it. Naming a company is not a
+ * problem in itself (2026-10-02: a paragraph that told three broad items and then Nidec was warned
+ * about, and a generation was spent rewriting it).
+ *
+ * The digest is read in order: the lead, then the news paragraph. Without a news paragraph the whole
+ * digest (lead, points, context, closing) is the story. Quality only; never a hard failure.
  */
 export function editorialPriorityWarnings(analysis: GeneratedAnalysis, input: AnalysisInput): string[] {
-  if (!input.news.some((item) => item.scope === "broad")) return [];
+  const broad = input.news.filter((item) => item.scope === "broad");
+  if (broad.length === 0) return [];
   const warnings: string[] = [];
   if (!analysis.key_news.some((news) => input.scopeByRef.get(news.ref) === "broad")) {
     warnings.push("市場全体のニュースが key_news に無い（個別企業より先に扱う）");
   }
+  const x = analysis.x_post;
+  const paragraph = (x.news_ja ?? "").trim();
+  const story = (paragraph ? [x.lead_ja, paragraph] : [x.lead_ja, ...x.points_ja, x.context_ja ?? "", x.closing_ja]).join("\n").normalize("NFKC");
   const companies = input.news.filter((item) => item.scope === "company" && item.company)
     .map((item) => companyName(item.company!)).filter((name) => name.length >= 2);
-  const x = analysis.x_post;
-  const named = (value: string) => companies.some((name) => value.normalize("NFKC").includes(name));
-  const digest = [x.lead_ja, ...x.points_ja, x.context_ja ?? "", x.closing_ja].join("\n");
-  // The digest names a single company while its news paragraph is missing or is about that company too.
-  if ((named(digest) || named(x.news_ja ?? "")) && (!(x.news_ja ?? "").trim() || named(x.news_ja ?? ""))) {
-    warnings.push("X本文が個別企業の開示を市場全体のニュースより前に扱っている");
-  }
+  const first = (positions: number[]) => positions.filter((at) => at >= 0).sort((a, b) => a - b)[0] ?? -1;
+  const company = first(companies.map((name) => story.indexOf(name)));
+  if (company < 0) return warnings;
+  const market = first(broad.map((item) => newsMentionIndex(story, `${item.headline_ja}\n${item.summary_ja ?? ""}`)));
+  if (market < 0) warnings.push("X本文が個別企業の開示だけを扱い、市場全体のニュースに触れていない");
+  else if (company < market) warnings.push("X本文が個別企業の開示を市場全体のニュースより前に扱っている");
   return warnings;
 }
 
@@ -829,12 +858,30 @@ export type AnalysisOutcome =
   | ({ ok: true; packet: MarketReportPacket } & Usage)
   | ({ ok: false; error: string; issues: string[] } & Usage);
 
-/** Warnings that are worth one rewrite; the rest are cosmetic and only recorded. */
+/**
+ * Below this the app story is materially thin and worth one rewrite. From 700 up to the preferred 900 it
+ * is complete and only recorded (2026-10-02: 846 characters cost a third model call).
+ *
+ * The narrative is the headline, the section headings and the prose. The prompt asks for at least
+ * 60 + 100 + 120 + 80 + 120 + 60 + 60 = 600 characters of prose over the seven required fields, and the
+ * headline plus the headings of those sections add about 100. A story under 700 therefore has a
+ * required section missing or under its own minimum; one at 700 or more has every section written.
+ */
+export const APP_STORY_REWRITE_BELOW_CHARS = 700;
+
+/** Warnings that are recorded but never worth a generation. */
 const COSMETIC_WARNING = /^X_POST_EMOJI_COUNT|LONGER_THAN_TARGET|が長すぎる$|^X_POST_NEWS_OMITTED$/;
+
+/** Worth one rewrite: everything that is not cosmetic, and an app story only when it is materially thin. */
+function worthRewrite(warning: string): boolean {
+  if (COSMETIC_WARNING.test(warning)) return false;
+  const [code, value] = warning.split(":");
+  return code !== "APP_STORY_SHORTER_THAN_TARGET" || Number(value) < APP_STORY_REWRITE_BELOW_CHARS;
+}
 
 /** Rewrite instructions for quality warnings (codes are for diagnostics; the model gets plain text). */
 export function qualityRewriteHints(warnings: string[]): string[] {
-  return warnings.filter((warning) => !COSMETIC_WARNING.test(warning)).map((warning) => {
+  return warnings.filter(worthRewrite).map((warning) => {
     const [code, value] = warning.split(":");
     switch (code) {
       case "X_POST_SHORTER_THAN_TARGET":
