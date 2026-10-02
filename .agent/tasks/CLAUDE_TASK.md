@@ -4,7 +4,7 @@
 - owner: claude
 - slot: claude-2
 - status: review_required
-- next_owner: chatgpt
+- next_owner: codex
 - priority: highest
 - recommended_model: Opus5.5（高）
 - purpose: PR #79 の日付/session Hard guard緩和を、後段にwatch語があるだけで誤った当日米国セッション主張まで通し得る境界から、prior-session move が実際にwatch対象として参照されている場合だけ通す狭い規則へ修正する。同じPR #79をamendする。source/testsのみ、deploy/mergeは禁止。
