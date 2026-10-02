@@ -1,3 +1,98 @@
+## H2 — PR #78 AI相談 v1 review：production schema前提不成立で停止 — 2026-10-02 JST
+
+- task_id: x-social-mobile-pr78-ai-consult-review-20261002
+- verdict: **FAIL / CHANGES REQUIRED（schema prerequisite BLOCKED・独立レビュー未完了）**。
+- original_exact_head: `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7`。GitHub PR #78 open/unmerged、指定head一致を確認。
+- final_reviewed_candidate: 元headのまま。source fix / implementation commitなし。
+- fresh_main: `9c8436cc12e781194314bcf2c66e0994a7fa0053`。PRとmainのmerge-base `0c2c04e031e6b8d10a4d0f30067a54f33daa7b3b`。
+- merge_recommendation: **HOLD / 未承認**。全gateを通したレビューではない。
+- deploy/public_rollout_recommendation: **HOLD**。今回deploy・実AI・production write許可なし。
+- changed_files: **.agent/CODEX_REPORT_2.md / .agent/tasks/CODEX_TASK_2.md の停止記録のみ**。過去履歴保持。
+- next_owner: chatgpt。review_requiredでSTOP for C2。
+
+### P1 — 必須の設定保存テーブルがproductionに存在しない
+
+project `wsmznyzcvmuitkglfeuj` へ1回の `BEGIN TRANSACTION READ ONLY` catalog SELECTを実施し、次を確認:
+
+```text
+to_regclass('public.social_mobile_content_settings') IS NOT NULL = false
+columns = []
+RLS = null
+grants = []
+policies = []
+triggers = []
+constraints = []
+```
+
+これは「RLSで行が見えない」「0件の空table」ではなく、**publicのrelationそのものが不存在**というcatalog証拠。利用者レコード/PII/設定値は読んでいない。
+
+影響:
+- `apps/social-mobile/src/data/content-settings-repository.ts:49` は当該tableのsettings/persona/updated_atをSELECTする。不存在時はunavailable扱いになる。
+- 同ファイル `:134` の明示確認保存は同tableへINSERTまたは `brand_id + updated_at` 条件のUPDATE。現行productionではその永続化を成立させられない。
+- `supabase/functions/social-mobile-consult/logic.ts:269` のsaved-state readは同table依存。一部のmissing table/column responseはdefaultsへfallbackする（`:290-294`）。**fallbackで会話できる可能性は、confirmed settings/persona保存やCASが成立する証明ではない**。このレビューでは本番Functionを呼んでいないので実際のHTTP fallback結果を断定しない。
+- Gate Eの `updated_at` exact型/nullability/default、RLS/SELECT/INSERT/UPDATE、touch trigger、すべての既存writerがversionを進めるかをlive schemaで証明できない。
+
+TASKは「required production schemaが不足し、migration/RLS変更を要する場合は勝手に追加せずSTOP with CHANGES REQUIRED」と定めている。よってsource変更・schema追加・migration適用へ進まず停止した。これは今回のPRによるproduction破損の証拠ではなく、既存schema prerequisite未成立の検出。
+
+### Existing source candidate（適用提案/承認ではない）
+
+指定headに `supabase/migrations/20260922045046_social_mobile_content_settings_candidate.sql` が既にあることを必要最小限確認した:
+- source上のCREATE TABLE定義あり。
+- source上 `updated_at timestamptz NOT NULL DEFAULT now()` とtouch trigger記載あり。
+
+**source候補の存在をproduction適用済みと読み替えない**。このH2でそのmigrationの安全性を全レビューしたわけではない。migration history修復・db push・適用、新migration作成、RLS追加はすべて0。
+
+### Startup / isolation / source freshness
+
+- PROJECT_RULES / AGENTS / HANDOFF / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / 最新H2 TASK、G3 current TASK/Reportを確認。
+- 正式repo `/Users/yuya/Developer/kabumori` はmainで多数の既存dirty changesを確認し、それには一切操作していない。
+- H2専用checkout `/private/tmp/h2-pr78-review.bZPBQe/repo` を新規作成し、指定PR headへdetached checkout。worktree/status clean。H1のPR #76 checkout/branch/filesには触れていない。
+- fresh GitHub mainをfetch。PR merge-baseからmainまで、PRの11 source/test paths overlapは0。
+- GitHub APIのbase.shaは移動するmain側refなので、diff検証には実merge-baseを使用。PR deltaはTASKどおり11 files、2661 additions / 115 deletions。別mainの.agent変更をPR source変更と混同していない。
+- `git diff --check <merge-base> HEAD`: PASS。
+
+### Review gatesの進捗（未検証をPASSにしない）
+
+| Gate | 結果 |
+| --- | --- |
+| A Auth/tenant isolation | **未完了**。Auth server GET、caller JWTのREST headers、owner/profile read周辺を部分確認したが、handler/adversarial全体未検証。owner-only妥当性/duplicate membership等も最終判定しない。 |
+| B request/history integrity | **未完了**。request allowlist/message/history boundsをsource上で部分確認。forged history/injection実証は未実施。 |
+| C provider/structured trust | **未完了**。契約sourceの一部を読んだだけで、server/client validator・partial output・nested controlsを独立実証していない。 |
+| D no implicit persistence | **未完了**。table依存のrepository save pathを確認したが、screen/confirmation全経路を独立検証していない。 |
+| E live CAS/schema | **BLOCKED**。production table不存在。 |
+| 24:00 narrowing | **未検証**。live DB constraintがないためserver/DB整合のPASSを出さない。 |
+| F history-learning no-X boundary | **未完了**。G3申告をレビュー済みと扱わない。 |
+| G cost/abuse | **未完了**。G3はper-request boundsのみ・per-user quotaなしと申告。public enablement前の制限要否はC2/再レビューで別判断。 |
+| H verify_jwt/deploy config | **未完了**。[official docs](https://supabase.com/docs/guides/functions/auth-headers)のdefault verify_jwt ONと実project/repo deploy truthを区別し、今回のconfig安全判定は出していない。 |
+
+### Tests / adversarial checks
+
+- exact PR head / merge-base-to-main overlap / clean checkout / diff check: **確認済みPASS**。
+- live schema/catalog SELECT: **成功、table不存在を確認**。
+- targeted Edge tests / Deno check-lint / social-mobile全test / app typecheck-lint / shared regressions / mutation-adversarial / full secret scan: **NOT RUN**。必須schema停止条件でレビューを打ち切ったため。
+- G3 Reportの153/153 app、196/196 Deno、26 Edge等は**申告履歴**であり、このH2で再実行・受入れした証拠ではない。
+- failing test: なし（testを実行していない）。阻害理由はread-only production catalogに基づくschema欠落であり、test結果を作っていない。
+
+### Exact next action / remaining issues
+
+C2がschema前提の扱いを決める。既存content-settings candidateを別のDB review/apply承認対象にするか、承認済み非production schemaで先にfull reviewを進めるかを明示する。**今回のH2から自動的に本番migration適用へ移らない**。
+
+必要なschemaを整える別承認/工程の後、production relation/columns/RLS/grants/updated_at triggerをread-backし、CASの実効性（全既存writersを含む）を検証。その後、同じexact PR headまたは新しく指定されたheadの残るA〜H/adversarial/testsを完了してからmerge/deploy可否を判断する。
+DB前提が解決しても、未検証のAI/Auth/security gatesまでPASS扱いしない。推薦モデル：**Sol（高）**。
+
+### Safety / sync
+
+- production reads: **catalog-only 1 query / READ ONLY transaction**。利用者データSELECTなし。
+- production INSERT/UPDATE/DELETE / migration / RLS/RPC/grant / backfill: **0**。
+- merge / Edge deploy / live paid AI / X API/history/upload/post / Push / Auth/OAuth/Vault操作 / Cron/settings変更: **0**。
+- source/test fix: **0**。正式repoの既存未commit変更への変更・削除・stage・commit・stash・reset: **0**。
+- H1/G3/G4/他workstream、apps/admin、HANDOFF/root package/env変更: **0**。
+- secret/JWT/user id/email/会話本文のReport露出: **0**。
+- この停止ReportとH2 TASKだけをGitHub mainへ同期し、read-back確認する。publication commitはGitHub file historyとH2完了応答で識別する。過去Report/TASKは保持。
+- review_required / next_owner: chatgpt。STOP for C2。
+
+---
+
 ## H2 — Common-account PR #70 production前ゲート — 2026-10-02 JST
 
 - task_id: common-account-pr70-preproduction-gate-20261002
