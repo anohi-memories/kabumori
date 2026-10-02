@@ -59,12 +59,12 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-shared-report-v2-quality-rewrite-calibration-20261002
+- task_id: kabumori-shared-report-v2-morning-session-date-guard-calibration-20261002
 - start_code: G2
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: source/tests/PR only; fix 10/2 live false editorial-priority WARN and stop near-target App length from triggering unnecessary quality rewrite; Hard Fact behavior unchanged; no deploy/gate/manual cycle; recommended Sonnet5（高）
+- allocation: source/tests/PR only; narrowly fix 10/2 morning false Hard date/session rejection for trading-date forward-looking sentences while preserving concrete wrong-date value/direction/session blocks; PR #77 already merged but not deployed; no deploy/gate/manual cycle; recommended Opus5.5（高）
 
 ## Claude G3
 - owner: claude
