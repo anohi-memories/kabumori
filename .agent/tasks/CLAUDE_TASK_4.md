@@ -1,5 +1,328 @@
 # Claude Task 4 — CURRENT TASK
 
+- task_id: x-social-mobile-publish-toggle-transactional-corrective-20261003
+- owner: claude
+- slot: claude-4
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Opus5.5（極高）
+- type: corrective implementation / authorization transaction / posting safety / concurrency
+- continues_from: x-social-mobile-publish-toggle-v1-20261002
+- blocked_pr: 76
+- reviewed_bad_head: a59a89e9c585fb6e780e1af2ecc898c830f5524e
+- production_mutation_allowed: false
+
+## C1 verdict / why this exists
+
+H1 independently reviewed PR #76 and returned **FAIL / CHANGES REQUIRED**. Do not merge or deploy the current PR head.
+
+The critical findings were reproduced against the real candidate code:
+
+1. **R1 P1 — membership authorization is a stale snapshot**
+   - caller can be owner/admin when read, lose/demote membership before the service-role PATCH, and the write still succeeds.
+   - applies to ON and OFF.
+   - this must be fixed by binding current authorization to the privileged state change atomically; another HTTP membership reread is not sufficient.
+
+2. **R2 P1 — brand active/live TOCTOU can still reach a publishable mixed snapshot**
+   - toggle can read active/live, brand can then become disabled, and stale toggle can still write ON.
+   - the current posting pipeline reuses cached brand context and does not prove a fresh active/live check immediately before the external X send.
+   - therefore the previous claim that downstream runtime guard makes this race harmless is false.
+
+3. **R3 P2 — zero-row/no-match reread can leak foreign-tenant state**
+   - after account movement/revocation, a service-role reread can return current_enabled from a brand the caller no longer owns.
+   - failure must collapse to the same safe not-found/unauthorized shape.
+
+4. **R4 P2 — initial ON readiness and write predicate differ**
+   - e.g. platform_user_id empty/whitespace can pass the write-side predicate after an eligible read.
+   - current runtime exact-account authority/credential loader has stricter semantics than PR #76.
+
+5. **R5 P2 — UI ON confirmation is not pinned to the account/context shown**
+   - confirmation opened for account A can submit for account B if props change.
+   - preview/context transitions can leave the confirm action live.
+
+Current PR #76 exact head remains open/unmerged. No production mutation or real X operation was performed.
+
+## Mandatory startup / isolation
+
+1. Read PROJECT_RULES, CLAUDE.md, ORCHESTRATION, CURRENT_STATE, this TASK.
+2. Read the full H1 report for `x-social-mobile-pr76-publish-toggle-review-20261002`.
+3. Independent G4 worktree/checkout only.
+4. Fresh origin/main and PR #76 branch/head.
+5. Preserve the original bad-head evidence. Do not force-push away review history without recording exact old/new heads.
+6. H2 is reviewing the separate `social_mobile_content_settings` schema prerequisite for PR #78. Do not touch that migration/table/RLS/function or G3 AI-consult files.
+7. Existing uncommitted files/worktrees/dev servers from other slots are off-limits.
+8. Read the Supabase skill before DB/RPC work.
+
+## Required architecture outcome
+
+The correction must create a **single authoritative server/database transaction boundary** for changing `social_accounts.publish_enabled`.
+
+Do not try to fix R1/R2 with a sequence of extra client/Edge GETs.
+
+Preferred direction:
+- Edge verifies bearer/request shape, then invokes a narrowly scoped DB function/RPC under the caller's authenticated JWT where `auth.uid()` is available.
+- the DB function locks/reads the exact account + authoritative brand + current membership in one transaction and performs the state transition only if all conditions are still true.
+- if repository conventions prove a safer equivalent design, use it, but the same atomic guarantees must be demonstrated.
+
+Do not grant general direct UPDATE rights on `social_accounts`.
+Do not use client-supplied user_id/brand_id as authority.
+Do not create a generic admin/service-role mutation surface.
+
+A new migration/RPC is allowed in this corrective task **only for this publish-toggle boundary** and must be reviewed independently before any production apply.
+
+## Atomic authorization requirements
+
+For every ON/OFF state change, inside the same transactional authority boundary:
+
+- identify caller from `auth.uid()` / verified JWT context
+- locate exact social account
+- derive its authoritative brand_id
+- prove a current membership for that exact caller+brand
+- role must be owner/admin
+- bind expected_current_enabled CAS
+- prevent account movement/brand movement/role demotion from succeeding on stale authority
+- return no foreign account/brand state after authority loss
+- safe not-found/forbidden responses must not become tenant existence/state oracles.
+
+Define lock order deliberately and test deadlock/concurrency behavior. Reuse existing lock order conventions where relevant.
+
+## ON requirements
+
+ON is high-risk and must atomically bind at minimum:
+
+- exact account/platform X
+- exact current brand
+- current brand active
+- current brand publish_mode live
+- current owner/admin membership
+- current publish_enabled = expected
+- connection_status exact usable state
+- platform_user_id nonempty after trim
+- verified_at present
+- required credential references present
+- references satisfy any non-plaintext structural constraints already enforced by the exact-account runtime helper (e.g. not equal/shared where source can prove this without exposing secrets)
+- no current connection error
+- any relevant account deletion/busy lifecycle guard.
+
+Do not claim token validity merely from references; actual credential loader/runtime may still fail safely.
+
+The read-side and mutation-side ON semantics must be the same authoritative transaction, not two divergent predicates.
+
+## OFF requirements
+
+OFF remains fail-safe:
+- current owner/admin + exact account + expected state required
+- must work even if connection degraded, credential refs missing, brand inactive/disabled
+- must not revoke OAuth, delete Vault material, delete posts/history, change Auth/common-account state
+- must not promise already in-flight external sends are cancelled unless a separately proven mechanism actually guarantees that.
+
+Update UX wording accordingly.
+
+## Runtime pre-send safety / R2 closure
+
+The actual X publishing path must have a **fresh authoritative permission check close enough to the external X send** to make stale cached brand/account context unable to authorize a new send.
+
+Inspect all actual X send paths for social-mobile/account-scoped publishing, including the scheduler/dispatcher and Vault-backed send adapter.
+
+Required invariant before starting a new external X write:
+- current brand still active/live
+- current social account still publish_enabled
+- current account is still the exact authorized/verified account with valid structural readiness
+- deletion/busy/reconnect-invalid state cannot pass.
+
+Prefer one reusable server-side exact-account publish-authority read/RPC rather than ad-hoc duplicated HTTP reads.
+
+Be explicit about in-flight semantics:
+- define the point after which a post is considered already in-flight
+- do not claim OFF can recall an X request already sent
+- ensure a new send cannot begin after OFF/brand disable has become authoritative.
+
+Add adverse interleaving tests that reproduce H1's R2 mixed-snapshot schedule and prove it now fails closed.
+
+Do not broaden into a scheduler redesign unrelated to this permission invariant.
+
+## R3 safe reread/error semantics
+
+Any conflict/no-match/after-write verification path must:
+- remain bound to the same caller/account/brand authority
+- not service-role reread foreign current_enabled or other state and return it
+- collapse moved/revoked/foreign rows to the safe not-found/unauthorized result.
+
+Test account brand transfer/deletion/membership revocation between stages.
+
+## R4 readiness semantic alignment
+
+Align all ON checks with the real runtime exact-account authority contract where applicable:
+- trim/nonempty platform_user_id
+- exact connection state
+- verified_at
+- credential ref structure
+- last connection error
+- any existing refresh/authority state that is required to safely claim the account is eligible.
+
+Do not overclaim what can only be checked when loading credentials.
+Document what ON means: "permission enabled and structurally eligible", not "future X send guaranteed".
+
+## R5 client confirmation pinning
+
+Fix the client so an ON confirmation is bound to the exact context the user saw:
+- account id
+- expected current enabled value
+- eligibility/preview context
+- auth/workspace context if relevant.
+
+If any of those change before confirm:
+- invalidate/close the confirmation
+- do not send a request.
+
+At submit, recheck preview/action eligibility.
+Add executed regressions for:
+- A confirmation then props switch to B
+- preview becomes true
+- account/current state changes
+- cancel
+- double tap/in-flight.
+
+Do not spend time on visual redesign.
+
+## Lower-risk hardening from H1
+
+Address when bounded and sensible:
+- clarify raw JSON "exact keys" claim; if duplicate raw-key rejection is not implemented, do not claim it
+- bound request allocation safely if practical; do not falsely describe char check as a streaming byte cap
+- revise OFF copy from 「いつでもONに戻せます」 to conditional wording
+- explain OFF does not revoke/delete and cannot recall an already-sent X request
+- clean the five `require-await` test lint findings if they are in the amended PR scope.
+
+These are secondary; do not let them distract from R1/R2.
+
+## Migration / RPC safety
+
+If a new migration/RPC is introduced:
+- unique timestamped migration file; do not edit unrelated historical migrations
+- narrow function signature
+- fixed `search_path`
+- explicit SECURITY DEFINER/INVOKER reasoning
+- least privilege grants
+- revoke from anon/public as appropriate
+- authenticated caller only if auth.uid semantics are required
+- no service_role-only hidden user identity argument
+- tenant/role/CAS/state validation inside transaction
+- deterministic bounded return shape/error codes
+- no secrets/tokens in return/logs
+- migration must be locally apply/reapply tested where safe
+- no production apply in G4.
+
+Check compatibility with current production schema read-only if possible; do not mutate production.
+
+## Tests
+
+Must include regressions that fail on original PR #76 behavior and pass on corrective candidate:
+
+### Authorization/concurrency
+- owner -> membership removed before write: rejected, no mutation
+- owner -> demoted viewer/member before write: rejected
+- account moves A->B: no state leak/no mutation
+- expected state changes concurrently: stale/no mutation
+- brand active/live -> disabled before ON: no ON
+- adverse mixed snapshot from H1 R2: no external-send authorization
+- concurrent ON/OFF races deterministic/fail-safe
+- account deletion/busy interaction
+- lock ordering / deadlock-safe bounded behavior.
+
+### ON readiness
+- blank/whitespace platform_user_id rejected atomically
+- null/missing verification fields rejected
+- invalid/missing/equal/shared credential references handled consistently with structural runtime authority contract
+- reconnect/error state rejected
+- valid owner/admin eligible path succeeds.
+
+### OFF
+- authorized owner/admin can disable with broken credentials/inactive brand
+- no revoke/delete/token/history/Auth side effect
+- new sends after authoritative OFF cannot begin
+- already in-flight semantics are truthful/tested as far as local harness permits.
+
+### Runtime publish guard
+- stale cached brand context cannot authorize a new X send after disable
+- stale cached account ON cannot authorize after OFF
+- exact account mismatch fails
+- no real X API call in tests.
+
+### Client
+- confirmation pinned to A; props B -> zero request
+- preview transition -> zero request
+- expected state transition -> reconfirm
+- normal ON confirmation/cancel/loading
+- OFF path remains usable.
+
+Run:
+- corrective focused tests
+- PR #76 existing tests
+- relevant publish guard/token loader/dispatch tests
+- full social-mobile tests
+- Deno check/lint for changed runtime/tests
+- typecheck/lint
+- diff check
+- secret/scope scan.
+
+## Explicit non-scope
+
+- G3 AI consultation/content settings/persona
+- H2 content-settings schema prerequisite migration
+- past-post learning
+- account deletion/common-account lifecycle
+- broad scheduler redesign
+- provider OAuth reconnect
+- UI redesign
+- production deploy/apply/toggle
+- real X operation.
+
+## Production safety
+
+Source/tests/PR amendment only.
+
+Forbidden:
+- production migration/RPC apply
+- Edge deploy
+- production publish toggle
+- DB row mutation
+- real X post/auth/revoke
+- Vault/Auth mutation
+- Cron mutation.
+
+## Completion / K4
+
+Report:
+- task_id/result
+- architecture chosen
+- original H1 findings R1–R5 disposition
+- transaction/lock/authorization model
+- runtime fresh pre-send guard and exact in-flight semantics
+- ON/OFF semantics
+- tenant-safe error behavior
+- migration/RPC changed files
+- client confirmation pinning
+- tests/adversarial interleavings
+- production read/mutation
+- real X operations
+- old PR head and new exact head
+- commit/push/PR state
+- remaining risks
+- safety checks
+- next recommendation.
+
+Then status -> review_required, next_owner -> chatgpt, STOP for K4.
+
+Because this task changes migration/RPC/auth/concurrency/X pre-send safety, K4 must allocate a fresh independent Codex rereview before merge.
+
+Recommended rereview model: **Sol（極高）**.
+
+---
+
+# Claude Task 4 — CURRENT TASK
+
 - task_id: x-social-mobile-publish-toggle-v1-20261002
 - owner: claude
 - slot: claude-4
