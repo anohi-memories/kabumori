@@ -6,6 +6,7 @@ import {
   EVERGREEN_TOPIC_SEEDS,
   loadAiLabDevDiaryMarkdown,
   selectAiLabRotatingTopicSeed,
+  type AiLabTopicUsage,
 } from "./ai_lab_dev_diary_context.ts";
 import {
   aiLabDiversityInstructions,
@@ -50,8 +51,13 @@ decided: ログイン状態を共有しにくい認証方法へ変更した。
 angle: テストが全部通っても、外部サービスのログイン画面は実際に触って確かめる必要があると分かった話。
 `;
 
-function select(rotationIndex: number, markdown = DIARY, recentPostTexts: string[] = []) {
-  return selectAiLabRotatingTopicSeed({ markdown, now: NOW, rotationIndex, recentPostTexts });
+function select(
+  rotationIndex: number,
+  markdown = DIARY,
+  recentPostTexts: string[] = [],
+  recentUsage: AiLabTopicUsage[] | null = [],
+) {
+  return selectAiLabRotatingTopicSeed({ markdown, now: NOW, rotationIndex, recentPostTexts, recentUsage });
 }
 
 // --- 1. fresh diary は generic evergreen より優先 -----------------------------------------------
@@ -65,70 +71,33 @@ test("fresh diary exists: every rotation step picks diary, never the generic eve
 });
 
 test("a generic diary angle (下調べだけで1日が終わる) is excluded with a reason code and never used as a topic", () => {
-  const selected = select(0);
+  // 新しい2件を使用済みにして、汎用角度を持つ 9/29 のイベントが選ばれる状況を作る。
+  const used: AiLabTopicUsage[] = [
+    { eventKey: "diary-2026-10-01-1", publishedAt: "2026-10-01T01:00:00Z" },
+    { eventKey: "diary-2026-09-30-1", publishedAt: "2026-09-30T09:00:00Z" },
+  ];
+  const selected = select(0, DIARY, [], used);
+  assert.equal(selected.eventKey, "diary-2026-09-29-1");
   const reasons = selected.exclusions.map((e) => `${e.candidate}:${e.reason}`);
-  assert.ok(reasons.some((r) => r.startsWith("2026-09-29#angle1:GENERIC_THEME:research_only_day")), reasons.join("\n"));
+  assert.ok(reasons.some((r) => r.startsWith("diary-2026-09-29-1#angle1:GENERIC_THEME:research_only_day")), reasons.join("\n"));
   for (let i = 0; i < 40; i += 1) {
-    assert.doesNotMatch(select(i).topic, /今回の切り口: 下調べだけで/u);
+    assert.doesNotMatch(select(i, DIARY, [], used).topic, /今回の切り口: 下調べだけで/u);
   }
 });
 
 test("diary seeds carry the concrete facts (what changed / what got stuck), not only an abstract angle", () => {
-  const unitKeys = new Set<string>();
   for (let i = 0; i < 40; i += 1) {
-    const selected = select(i);
-    unitKeys.add(selected.unitKey);
-    assert.match(selected.topic, /できごと: /u);
-  }
-  assert.ok(unitKeys.size >= 6, "multiple distinct concrete topics are available");
-});
-
-// --- 3. 同じ diary entry が連続しない -------------------------------------------------------------
-
-test("the same diary entry is never selected on two consecutive posts, including the cycle wrap-around", () => {
-  const keys = Array.from({ length: 60 }, (_, i) => select(i).unitKey);
-  const period = keys.indexOf(keys[0], 1);
-  assert.ok(period > 0, "rotation repeats within the sampled window");
-  for (let i = 0; i < period; i += 1) {
-    assert.notEqual(keys[i].split("#")[0], keys[(i + 1) % period].split("#")[0], `rotation ${i} -> ${i + 1}`);
+    assert.match(select(i).topic, /できごと: /u);
   }
 });
 
-test("no consecutive same-entry (cyclic) for many randomized entry/facet shapes", () => {
-  let seed = 7;
-  const rand = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
-  for (let trial = 0; trial < 200; trial += 1) {
-    const entryCount = 2 + Math.floor(rand() * 3); // 2..4 fresh entries
-    const markdown = Array.from({ length: entryCount }, (_, e) => {
-      const day = String(29 - e).padStart(2, "0");
-      const angles = Array.from({ length: Math.floor(rand() * 4) }, (_, a) => `angle: 切り口${e}-${a}を実際に試した話。`);
-      return [
-        `## 2026-09-${day}`,
-        `changed: 変更${e}を実施した。`,
-        rand() > 0.3 ? `difficulty: 詰まり${e}があった。` : "",
-        rand() > 0.3 ? `decided: 判断${e}をした。` : "",
-        ...angles,
-      ].filter(Boolean).join("\n");
-    }).join("\n\n");
-    const first = select(0, markdown);
-    const length = Array.from({ length: 60 }, (_, i) => select(i, markdown).unitKey);
-    const cycle = length.indexOf(first.unitKey, 1);
-    const size = cycle === -1 ? 60 : cycle;
-    for (let i = 0; i < size; i += 1) {
-      const a = length[i].split("#")[0];
-      const b = length[(i + 1) % size].split("#")[0];
-      assert.notEqual(a, b, `trial ${trial}: step ${i} of ${size} in ${length.slice(0, size).join(",")}`);
-    }
-  }
-});
+// --- 3. 同じ diary イベントは一度投稿したら fresh 期間中は再利用しない（2026-10-03 でイベント単位に変更）---
+// 2026-10-01 版の「同じエントリの切り口を巡回する」テストは、まさに今回の不具合の挙動なので廃止し、
+// ai_lab_event_dedupe_test.ts のイベント単位テストへ置き換えた。
 
-test("a topic is not reused until the whole rotation has been used (multi-day cooldown)", () => {
-  const first = select(0);
-  const keys: string[] = [];
-  for (let i = 0; i < 40; i += 1) keys.push(select(i).unitKey);
-  const cycle = keys.indexOf(first.unitKey, 1);
-  assert.ok(cycle >= 6, `rotation cycle should be several posts long, got ${cycle}`);
-  assert.equal(new Set(keys.slice(0, cycle)).size, cycle);
+test("rotationIndex never moves selection off the newest unused event (it only varies the angle)", () => {
+  const eventKeys = new Set(Array.from({ length: 40 }, (_, i) => select(i).eventKey));
+  assert.deepEqual([...eventKeys], ["diary-2026-10-01-1"]);
 });
 
 // --- 4. 別テーマの fresh diary は正常に選択される -------------------------------------------------
@@ -409,7 +378,7 @@ test("against the real bundled diary, the day after its freshest entry never yie
   const freshest = [...markdown.matchAll(/^## (\d{4}-\d{2}-\d{2})/gmu)].map((m) => m[1]).sort().at(-1)!;
   const now = new Date(`${freshest}T09:00:00Z`);
   for (let i = 0; i < 60; i += 1) {
-    const selected = selectAiLabRotatingTopicSeed({ markdown, now, rotationIndex: i });
+    const selected = selectAiLabRotatingTopicSeed({ markdown, now, rotationIndex: i, recentUsage: [] });
     assert.equal(selected.source, "diary");
     assert.match(selected.topic, /できごと: /u);
     // seed全体が汎用テーマ(切り口行)に当たらないこと: 切り口行だけを検査する

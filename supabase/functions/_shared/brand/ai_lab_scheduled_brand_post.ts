@@ -47,6 +47,7 @@ export async function dispatchAiLabScheduledBrandPost({
   topicSeed = "",
   recentPostTexts = [],
   onContentRejected,
+  recordTopicUsage,
 }: {
   context: BrandContext;
   postType: string;
@@ -71,12 +72,19 @@ export async function dispatchAiLabScheduledBrandPost({
   /** Recent own-post texts, when the caller has them. Hash-only history cannot supply these today. */
   recentPostTexts?: readonly string[];
   onContentRejected?: (info: { attempt: number; violations: readonly string[] }) => void;
+  /**
+   * Marks the selected topic event as used. Called exactly once, only after X confirmed the post (never on
+   * a generation, guard, or X failure) and before completion, so an uncertain completion still consumes
+   * the event. Any rejection/false is absorbed: it must never turn a confirmed X post into a retry.
+   */
+  recordTopicUsage?: (args: { scheduledPostId: string; xPostId: string }) => Promise<boolean>;
 }): Promise<{
   brandId: "ai_salaryman_lab";
   postType: "brand_post";
   characterCount: number;
   xPostId: string;
   fingerprintPersisted: boolean;
+  topicUsagePersisted: boolean | null;
 }> {
   if (context.brand.id !== "ai_salaryman_lab") {
     throw new BrandContextError("AI_LAB_DISPATCH_BRAND_MISMATCH");
@@ -132,6 +140,15 @@ export async function dispatchAiLabScheduledBrandPost({
   const xPostId = xPostIdFrom(xResponse);
   if (!xPostId) throw new Error("X_RESPONSE_MISSING_POST_ID");
 
+  let topicUsagePersisted: boolean | null = null;
+  if (recordTopicUsage) {
+    try {
+      topicUsagePersisted = await recordTopicUsage({ scheduledPostId, xPostId });
+    } catch {
+      topicUsagePersisted = false;
+    }
+  }
+
   let completion: AiLabBrandPostCompletion;
   try {
     completion = await completePublishedPost({
@@ -151,5 +168,6 @@ export async function dispatchAiLabScheduledBrandPost({
     characterCount,
     xPostId,
     fingerprintPersisted: completion.fingerprintPersisted,
+    topicUsagePersisted,
   };
 }

@@ -1,6 +1,7 @@
 import { BrandContextError } from "./brand_context.ts";
 import { fetchRecentKabumoriFingerprints } from "./kabumori_recent_fingerprints.ts";
 import type { PublishedFingerprint } from "./cross_brand_dedupe.ts";
+import { AI_LAB_EVENT_KEY_PATTERN, type AiLabTopicUsage } from "./ai_lab_dev_diary_context.ts";
 
 function serviceHeaders(serviceRoleKey: string): Record<string, string> {
   return { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` };
@@ -103,6 +104,108 @@ export async function countAiLabBrandPostsBefore({
     return total === undefined ? null : Number(total);
   } catch {
     return null;
+  }
+}
+
+/** 使用済みイベントを振り返る期間。fresh 期間（3日）より十分長く、evergreen のクールダウン（72時間）も含む。 */
+export const AI_LAB_TOPIC_USAGE_LOOKBACK_DAYS = 14;
+
+/**
+ * Read-only: AI Lab topics that were actually published within the lookback window (event keys only, no
+ * post text). Returns null on any failure or malformed row so the caller fails closed (skip diary events,
+ * use evergreen) instead of re-posting an event it cannot prove is unused.
+ */
+export async function loadAiLabTopicUsage({
+  supabaseUrl,
+  serviceRoleKey,
+  now = new Date(),
+  lookbackDays = AI_LAB_TOPIC_USAGE_LOOKBACK_DAYS,
+  fetchImpl = fetch,
+}: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  now?: Date;
+  lookbackDays?: number;
+  fetchImpl?: typeof fetch;
+}): Promise<AiLabTopicUsage[] | null> {
+  try {
+    const since = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
+    const params = new URLSearchParams({
+      select: "event_key,published_at",
+      brand_id: "eq.ai_salaryman_lab",
+      published_at: `gte.${since}`,
+      order: "published_at.desc",
+      limit: "200",
+    });
+    const response = await fetchImpl(`${supabaseUrl}/rest/v1/ai_lab_topic_event_usage?${params}`, {
+      headers: serviceHeaders(serviceRoleKey),
+    });
+    if (!response.ok) return null;
+    const rows = await response.json() as unknown;
+    if (!Array.isArray(rows)) return null;
+    const usage: AiLabTopicUsage[] = [];
+    for (const row of rows) {
+      const eventKey = (row as { event_key?: unknown })?.event_key;
+      const publishedAt = (row as { published_at?: unknown })?.published_at;
+      if (
+        typeof eventKey !== "string" || !AI_LAB_EVENT_KEY_PATTERN.test(eventKey) ||
+        typeof publishedAt !== "string" || Number.isNaN(Date.parse(publishedAt))
+      ) {
+        return null;
+      }
+      usage.push({ eventKey, publishedAt });
+    }
+    return usage;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Records that `eventKey` was actually published (call only after X confirmed the post). Idempotent per
+ * scheduled post (primary key + ignore-duplicates). Never throws: the X write already happened, so a
+ * failure here must not reach the outer failure handler (which could re-queue the post); it only means the
+ * event may be offered again, and the text-level guards remain as the second line of defense.
+ */
+export async function recordAiLabTopicUsage({
+  supabaseUrl,
+  serviceRoleKey,
+  eventKey,
+  unitKey,
+  scheduledPostId,
+  xPostId,
+  fetchImpl = fetch,
+}: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  eventKey: string;
+  unitKey: string;
+  scheduledPostId: string;
+  xPostId: string;
+  fetchImpl?: typeof fetch;
+}): Promise<boolean> {
+  try {
+    if (!AI_LAB_EVENT_KEY_PATTERN.test(eventKey)) return false;
+    const response = await fetchImpl(
+      `${supabaseUrl}/rest/v1/ai_lab_topic_event_usage?on_conflict=scheduled_post_id`,
+      {
+        method: "POST",
+        headers: {
+          ...serviceHeaders(serviceRoleKey),
+          "Content-Type": "application/json",
+          Prefer: "resolution=ignore-duplicates,return=minimal",
+        },
+        body: JSON.stringify({
+          scheduled_post_id: scheduledPostId,
+          event_key: eventKey,
+          unit_key: unitKey,
+          x_post_id: xPostId,
+        }),
+      },
+    );
+    return response.ok;
+  } catch {
+    return false;
   }
 }
 
