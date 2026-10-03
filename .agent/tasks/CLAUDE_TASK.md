@@ -3,8 +3,8 @@
 - task_id: kabumori-pr79-hypothetical-and-watch-phrasing-corrective-20261003
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Opus5.5（高）
 - purpose: H1のCHANGES REQUIREDを受け、PR #79のHard Fact境界をもう一度狭く修正する。P1のhypothetical-tailによるwrong-date/direction bypassを塞ぎ、同時にP2の正当な前夜watch表現のfalse rejectを減らし、P3 lintも解消する。同じPR #79をamend。source/testsのみ、merge/deployは禁止。
@@ -252,7 +252,69 @@ Then:
 
 ## Report
 
-Pending.
+### task_id / result
+- task_id: kabumori-pr79-hypothetical-and-watch-phrasing-corrective-20261003
+- result: **PASS candidate（source/testsのみ）**。P1を閉じ、正当な仮定は通過、P2の3文は日付Hard guardを通過、P3 lint exit 0。Codex focused rereview待ち。merge/deployなし。
+
+### PR #79 head
+- prior head: `9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3`
+- branch上の中間: `24c6203a`（H1の `h1_pr79_boundary_test.ts` を cherry-pick、author anohi-memories）
+- final head: `f7083ba6a810d5f9cdbe7090e4439f261e38bf0f`（通常push、force pushなし。PR #79 OPEN / MERGEABLE、本文に追加修正の節を追記）
+- push前のmain重なり確認：merge-base以降のmainに market-report-analysis / `_shared/market_report*` / DESIGN.md の変更なし（`.agent/` のみ）
+
+### P1 root cause と修正
+- root cause：`directionWord` が、向きの語のうしろの**節のどこか**に `HYPOTHETICAL`（かどうか/するか/続くか/すれば/なら…）があれば `null` を返していた。そのため「下落しており次も**続くか**」「強まり波及**するかどうか**」のように、先に値動きを言い切ってから仮定を足した節で、向きの検査も日付照合（`directionUse` → 早期return）も外れていた。
+- 修正（`hard_fact_guards.ts`）：
+  - `statedDirection(clause)` に従来の向き抽出を分離し、`{direction, end}` を返す。
+  - `directionWord` は、仮定の語までのあいだが `GOVERNED_BY_QUESTION = /^(?:が|は|も)?[一-龠々ァ-ヶー]{0,6}[ぁ-ん]{0,3}$/u` に合う場合だけ（＝仮定が向きの語に**直接かかる**）`null`。「が強まる」「が上昇す」「安が続く」は仮定、「しており次も」「が強まり波及する」「が鮮明となり波及する」「が継続し波及する」は言い切り。
+  - 新しいparser frameworkは入れていない（既存regexの範囲判定のみ）。
+
+### P2 watch-relation の拡張（正確な差分）
+- `WATCH_RELATION` に2形を追加：
+  - `^を(?:踏まえ|受け)て?、?(?:NOUN{1,12}(?:の|を|に|で|が|は|も)){0,3}WATCH_VERB` （「を受け、日本株の反応を見る」。従来は「踏まえ」のみ）
+  - `^の流れを?PLACEどう[^、。]*?か[^、。]*?WATCH_VERB`（「米国株高の流れをどう受け止めるかが焦点」）
+- `MOVE_LIST`（向きの語の直後の並列の読み飛ばし）を名詞の値動きだけに限定：`/^(?:(?:や|と|・|および|及び)[一-龠々ァ-ヶーA-Za-z0-9]{1,14}?(?:高|安|上昇|下落))+/u`
+- 他の条件（値・前日比なし、`REFERRED_MOVE`、日付が取引日かつ主題「10月2日は」、他市場に取られていない）はそのまま。「前夜」は免除条件にしていない。
+
+### P3
+- 未使用の `directionIn` を削除。`deno lint`（hard_fact_guards.ts / session_date_calibration_test.ts / h1_pr79_boundary_test.ts）：Checked 3 files、exit 0。lint suppressionなし。
+
+### Regressions
+- Must FAIL（すべてHard）：
+  1. `10月2日の米国株は下落しており次も続くかを見ます`（日付不一致＋向き逆転）
+  2–4. `…米国株高が強まり/鮮明となり/継続し 波及するかどうかを見ます`
+  5. 既存 assertion-before-watch（続き/確認され/鮮明となり/一段と強まり/継続し、読点なし形、米国市場の上昇の形）
+  - P2の否定形：`10月2日は、米国株高を受け、米国株高が続き、日本株を見る` / `…を受け、買いが先行し、日本株の反応を見る` / `…米国株高の流れが続き、日本株の反応を見る` / `…米国株高の流れが強まり、どう受け止めるかが焦点` / `10月2日は、前夜の米国株高が続き、日本株の反応を確認します` / `10月2日の前夜の米国株は上昇しました`
+  6–12. wrong-date値・前日比、10/1混在、stale、1306→TOPIX、向き/符号/絵文字、根拠の無い市場因果、未知ref：既存テストで不変
+- Must PASS（日付issueなし）：`10月2日は、前夜の米国株高を受け、日本株の反応を見る` / `10月2日は、米国株高の流れをどう受け止めるかが焦点` / `前日の米国株上昇を踏まえて、日本株の反応を確認する` / 既存10/2 watch文 / `米国株高が強まるかどうかを見る` / `米国株が上昇すれば、日本株の反応を見る` / `米国株安が続くかを見る`（向きも判定しない）/ 正しい日付の前営業日の値
+- six-placement P1 evidence：P1の4文を market_summary_ja、x_post.context_ja、x_post.closing_ja、app_story.summary_ja、app_story.japan_ja、observation claim の6か所それぞれに置き、`localAnalysisCheck(...).hard` に日付不一致（1は向き逆転も）が出ることを確認（test「P1: a move stated before a question or condition is still dated and directed, in all six placements」、H1「asserted move before a hypothetical tail」）。P2の3文は同じ6か所で日付issueなし。
+- 10/1 mixed-session：`9月30日は日経平均65,481.27（-0.60%）、1306は431.5（+1.43%）でした` ほか2文、Hardのまま（「日付と指標の不一致（日経平均は9月29日の値…）」）。
+
+### Full verification
+- session_date_calibration 14/14、h1_pr79_boundary 4/4、presentation_v2 22/22、causal_calibration 18/18、quality_calibration 9/9、h1_adversarial 13/13、content_guard 16/16、transport_retry 14/14
+- market-report-analysis full **131/131**、personalized-reports 128/128、X shared consumer 8/8、market-report-data-packet 42/42、`_shared` 361/361（`--no-check`）
+- `deno check --node-modules-dir=none`（market-report-analysis/index.ts・hard_fact_guards.ts・analysis_logic.ts・2テスト、personalized-reports/index.ts、x-test-post/shared_market_report_consumer_test.ts、market-report-data-packet/index.ts）：exit 0
+  - 参考：`x-test-post/index.ts` の check は既存の型エラー（x_oauth2_post / morning_greeting など、本PR未変更）で失敗。本変更をstashした状態でも同じく失敗することを確認。
+- `deno lint`（変更ファイル）exit 0、`git diff --check` exit 0
+- model呼び出し回数・prompt・model・packet契約：変更なし
+
+### changed_files（PR #79、9ce344b → f7083ba）
+- `supabase/functions/market-report-analysis/hard_fact_guards.ts`
+- `supabase/functions/market-report-analysis/session_date_calibration_test.ts`（P1/P2テスト4件追加）
+- `supabase/functions/market-report-analysis/h1_pr79_boundary_test.ts`（H1から取り込み）
+- `docs/market-report-shared-platform/DESIGN.md`（§15.3.1 にP1/P2を追記）
+
+### production mutation
+- **0**。deploy、invoke/retry、gate、cron、DB/RPC/migration、Auth/Vault/secrets、X操作、personalized-reports/x-test-post変更、ニュース取得変更：すべてなし。PR #77 は merged・本番未反映のまま。
+
+### remaining issues
+1. 「10月2日は、前夜の米国株高を受け、日本株の反応を見る」は日付Hard guardは通るが、`market_summary_ja`・`x_post.context_ja`・`x_post.closing_ja` 等に書くと、既存の因果ガード（PR #71、`CAUSAL_LINK` の「を受け、」＋効果側に「日本株」）で「根拠の無い因果の断定」としてHard。`x_post.watch_ja`・`app_story.watch_ja`・`next_watch_ja` では全体として通過（因果検査は過去形の文のみ対象）。TASKのP2は「session-date Hard guardを通る」なので因果ガードは変更していない。見る点の文で「〜を受け、…反応を見る」を因果から外すかはK2判断（変更するならCodex reviewの範囲も広がる）。prompt側は「〜を受けて」を理由として書かないよう既に指示している。
+2. 「10月2日は、米国株高が一段と強まるかどうかを見ます」のように、向きの語と仮定のあいだに漢字・かな・漢字・かなが続く仮定は、言い切りとして日付照合されHardになる（止める側に倒れる。実測で日付不一致1件）。DESIGN §15.3.1 に記載。
+3. 内容品質の既知事項（火山ニュース選定、内部語の漏れ、+0.04%を上昇と書く、確認できませんの反復）は本TASK範囲外で未着手。
+
+### Codex rereview の推奨
+- Hard Fact境界の変更なので、final head `f7083ba6a810d5f9cdbe7090e4439f261e38bf0f` を focused Codex rereview（**Sol 高**）へ。重点：`GOVERNED_BY_QUESTION` の範囲（6字/3字の上限で言い切りを仮定として通す形が無いか）、`WATCH_RELATION` の「を受け」「の流れを…どう…か」の追加、`MOVE_LIST` の名詞限定、remaining issue 1 の扱い。
+- rereview PASS後の PR #77 + PR #79 合同deployは別TASKで。
 
 ---
 
