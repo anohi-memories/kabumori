@@ -1,3 +1,21 @@
+## Final C1 — PR #82 AI Lab event-dedupe CHANGES REQUIRED
+
+- verdict: **CHANGES REQUIRED**; PR #82 exact head `08a7346ccd63f2ff540bd48149f1f1e65e6dbe09` remains open/unmerged.
+- P1 concurrency: two schedules can load the same empty usage state, select the same diary event under different angles, pass current guards and both reach X before either records usage. H1 reproduced two fake publishes.
+- P1 persistence/crash: X can succeed while topic-usage insert fails or the process stops before usage persistence; completion/fingerprint can still succeed or the outcome can be ambiguous, allowing a later slot to select/publish the same event again. The current swallow-on-usage-error rule preserves X retry safety but loses event-dedupe durability.
+- P2 identity: ordinal `diary-YYYY-MM-DD-N` event keys change under same-date insertion/reordering/parser removal, reviving a previously used event under a new key.
+- P2 idempotency/cooldown: conflicting duplicate scheduled_post_id can be silently ignored; exhausted evergreen fallback can violate the nominal 72h seed cooldown.
+- P2 migration drift: clean reapply works, but an existing same-name table with missing PK/CHECKs or wrong index can be silently accepted.
+- H1 safety evidence deliberately includes RED regressions: 2 controls PASS / 9 required safety failures; this validates the blockers, not the release candidate.
+- existing candidate happy-path tests remain useful but do not close the product invariant.
+- required correction contract: stable immutable non-sensitive event IDs; durable per-brand/per-event pre-X claim/reservation with fencing/ownership; pre-X failures may release safely; once provider/X outcome is possibly started/ambiguous, claim must stay blocked/quarantined until reconciled; confirmed X settles claim as published; metadata persistence failure must not reopen the event or trigger duplicate X retry.
+- do not hold a long DB transaction across X. Do not use scheduler spacing as proof.
+- migration must fail closed on incompatible pre-existing catalog and exact idempotency conflicts.
+- G3/G4 remain occupied by separate X work; no slot overwritten. Correction returns as direct Claude work in an independent worktree.
+- recommended Claude model: **Opus5.5（高）**; corrected candidate rereview **Sol（高）**.
+- production mutation / X / merge / deploy = 0.
+- H1 closed/free after fresh allocation.
+
 ## Final K2 — PR #77 + PR #79 production deploy PASS
 
 - verdict: **PASS**.
