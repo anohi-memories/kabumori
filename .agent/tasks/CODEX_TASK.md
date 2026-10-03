@@ -3,8 +3,8 @@
 - task_id: kabumori-pr79-session-date-hard-guard-review-20261003
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused review / Hard Fact session-date boundary
@@ -1713,3 +1713,17 @@ Then status -> review_required, next_owner -> chatgpt, STOP for C1.
 - G4 recommended model: **Opus5.5（極高）**.
 - after G4 correction, independent rereview required; recommended Codex model: **Sol（極高）**.
 - H1 closed and reusable after fresh allocation.
+
+
+## Final C1 — PR #79 hard-guard review
+
+- verdict: **CHANGES REQUIRED accepted**.
+- reviewed runtime head: `9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3`; unchanged/open/unmerged.
+- H1 found three required corrections:
+  1. **P1**: `HYPOTHETICAL` can erase an already asserted wrong-date/direction fact when a later hypothetical tail exists.
+  2. **P2**: ordinary prior-night watch wording still false-rejects and can cause delivery churn.
+  3. **P3**: changed-file lint is not clean because `directionIn` is now unused.
+- H1 test-only evidence commit: `6140968378c44aecd2d40a1cc7d344f2e98e8b4e`; not a runtime release candidate.
+- no merge/deploy/production mutation.
+- PR #79 returns to G2 for a narrow source correction; recommended Claude model **Opus5.5（高）**.
+- after correction, another focused Codex review is required before merge/deploy.
