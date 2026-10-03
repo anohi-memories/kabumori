@@ -4,7 +4,7 @@
 - owner: claude
 - slot: claude-2
 - status: review_required
-- next_owner: chatgpt
+- next_owner: codex
 - priority: highest
 - recommended_model: Opus5.5（高）
 - purpose: H1のCHANGES REQUIREDを受け、PR #79のHard Fact境界をもう一度狭く修正する。P1のhypothetical-tailによるwrong-date/direction bypassを塞ぎ、同時にP2の正当な前夜watch表現のfalse rejectを減らし、P3 lintも解消する。同じPR #79をamend。source/testsのみ、merge/deployは禁止。
@@ -6757,3 +6757,31 @@ Rollout after review, not before:
 - then deploy merged PR #77 + PR #79 together in one `market-report-analysis` deploy with app/x gates OFF,
 - then observe the next natural morning cycle read-only.
 
+
+
+## Final K2 — PR #79 corrected head to Codex rereview
+
+- verdict: **PASS to focused Codex rereview; merge/deploy HOLD**.
+- corrected PR #79 head: `f7083ba6a810d5f9cdbe7090e4439f261e38bf0f`.
+- PR remains open / mergeable.
+- fresh K2 comparison: current main `95fcb391f47296ebf5a7d880a03b834e430b1c6a`; overlap with PR #79 files = 0.
+- G2 reports prior H1 findings addressed:
+  - P1 hypothetical-tail bypass closed with a scoped `GOVERNED_BY_QUESTION` rule;
+  - genuine hypotheses remain non-factual;
+  - P2 ordinary prior-night watch variants now pass the session-date guard;
+  - P3 changed-file lint is clean;
+  - wrong-date numeric/session, 10/1 mixed-session, stale/current, 1306, polarity, unsupported causality, unknown-ref protections remain Hard.
+- reported verification accepted for routing:
+  - session_date_calibration 14/14
+  - h1_pr79_boundary 4/4
+  - market-report-analysis 131/131
+  - personalized-reports 128/128
+  - X shared consumer 8/8
+  - market-report-data-packet 42/42
+  - _shared 361/361
+  - deno check / changed-file lint / diff PASS
+- production mutation=0.
+- H1 is genuinely free and has been assigned `kabumori-pr79-hard-guard-rereview-20261003`.
+- recommended Codex model: **Sol（高）**.
+- rereview must also decide whether the separate causal guard still creates a delivery false-positive for `前夜の米国株高を受け、日本株の反応を見る` in factual presentation fields.
+- no merge/deploy until C1 accepts the rereview.
