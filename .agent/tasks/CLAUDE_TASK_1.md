@@ -3,8 +3,8 @@
 - task_id: kabumori-home-topic-3level-backgrounds-20261003
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（高）
 - type: Kabumori Home UI / topic background canonical asset integration / level-based presentation
@@ -4012,4 +4012,41 @@ Production mutation: 0. Rollback: not needed. `review_required` / next_owner `ch
 - Codex review: **not required**. This is low-risk UI/asset-only follow-up with pinned asset hashes, focused regression tests, no backend/auth/data boundary changes, and user visual approval.
 - no remaining G1 implementation for this round.
 - AI Lab diary: **記録不要** — 2026-10-02 canonical diary entry already exists for another real task; do not create a duplicate same-day entry or falsify a future date.
+- G1 status: done / next_owner none.
+
+
+## Final K1 — 2026-10-03 Home Topic 3-level backgrounds
+
+- verdict: **PASS / MERGED / G1 CLOSED**.
+- reviewed PR: #80.
+- accepted exact head: `2e5356a8a3e6af84ed9999929cd62556081cab65`.
+- squash merge: `d6031e228efbf01f94ada22879cd6315457c43f7`.
+- source scope: Home topic presentation + 3 approved background assets + focused tests/docs only.
+- exact mapping accepted:
+  - beginner -> pale green / basic learning / sprout
+  - intermediate -> pale blue / comparison-analysis / young plant
+  - advanced -> pale lavender / multi-indicator relation / small flower
+- clean originals: all 3 source PNGs were 1942x809; screenshot/editor wrappers were not used.
+- conversion accepted: lossless WebP, no resize/crop/recolor/retouch; pinned hashes in tests.
+- visual review accepted:
+  - 402pt contact sheet clearly distinguishes all 3 levels by more than color.
+  - 375pt advanced card keeps 2-line title/summary and CTA readable.
+  - card geometry is stable across levels; no stretch/crop; CTA remains in the intended bottom-right safe area.
+- reported verification accepted:
+  - app tests 266/266 PASS
+  - Expo config PASS
+  - Expo web export PASS
+  - diff check clean
+  - only the 2 known pre-existing CSS-module TypeScript diagnostics remain
+  - Netlify PASS
+  - Vercel PASS
+- accepted known limitations:
+  - loaded card is taller than loading/error/empty by ~50–58pt.
+  - long summary ellipsizes at 2 lines by design.
+  - 375pt first viewport placement is unchanged from before this feature.
+- EAS build: 0.
+- backend / DB / RPC / Edge Function / Auth / X / production mutation: 0.
+- Codex review: **not required**. This is low-risk UI/asset-only presentation work with deterministic level mapping and focused regression coverage.
+- AI Lab diary: **updated** for 2026-10-03 with a public-safe summary of the three difficulty backgrounds and visual growth concept. Snapshot workflow completed successfully and generated the canonical snapshot commit.
+- next: richer topic body/detail-screen design can be the next G1 task if the user chooses.
 - G1 status: done / next_owner none.
