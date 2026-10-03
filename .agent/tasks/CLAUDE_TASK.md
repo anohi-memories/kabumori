@@ -3,8 +3,8 @@
 - task_id: kabumori-shared-report-v2-pr77-pr79-prod-deploy-20261003
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sonnet5（高）
 - purpose: merged PR #77 quality calibration + C1-accepted PR #79 Hard-guard fixes を production `market-report-analysis` のみに1回で反映し、app/x consumer gates OFFのまま exact source/read-back と非影響を確認する。manual cycleは禁止。次の自然朝刊でlive-model挙動を見る。
@@ -210,7 +210,77 @@ Then:
 
 ## Report
 
-Pending.
+### task_id / result
+- task_id: kabumori-shared-report-v2-pr77-pr79-prod-deploy-20261003
+- result: **PASS（deploy実施）**。production `market-report-analysis` を merged PR #77 + PR #79/H1 のsourceへ1回で反映。11ファイルすべてfresh mainとbyte一致。target以外のFunction・verify_jwt・gates・cronは不変。manual cycleなし。
+
+### fresh main / worktree
+- deploy HEAD: `309b0cb8d4940cdf82bfdd92116f294ba290336c`（origin/main、detached）
+- `4dbf11f2848059cc967d942efc9d60613d855537`（PR #79 merge）はancestor：OK
+- `4dbf11f2..309b0cb8` に `supabase/functions/**` の変更なし（`.agent/` のみ）。market-report-analysis の import は `_shared/absence_claims.ts`・`kabumori_voice.ts`・`market_report_packet.ts`・`market_report_story.ts`・`market-report-data-packet/session_logic.ts`（`packet_schema.ts` は型のみ）
+- worktree: 専用 `/Users/yuya/Developer/kabumori-g2-market-report-reliability`（toplevel assert済み、`supabase/config.toml` なし、共有checkoutはdeploy/設定に未使用。共有checkoutは read-only `db query --linked` SELECTのみ）
+- 他slotの所有：CLAUDE_TASK_1/3/4/5・CODEX_TASK/2 のcurrent taskに `market-report-analysis` のactive所有なし（CODEX_TASK＝PR79 rereview done）
+
+### production version before/after
+- before: v20、updated_at 1790866929071（2026-10-02 00:02 JST）、verify_jwt=false、ezbr `4250b5ceb848…`
+- after: **v21**、updated_at 1791030222395（2026-10-03 21:23:42 JST頃）、verify_jwt=false、ezbr `fe5c1836cded…`
+- deploy実行: 2026-10-03 21:23:39〜21:23:45 JST（ユーザー許可「許可」後。1回目はauto mode classifierで拒否→ユーザー承認で実行）
+
+### exact deployed source / read-back
+- `supabase functions download market-report-analysis --use-api` をscratch dirへ取得し、`git show 309b0cb8:<path>` とbyte比較：
+  - market-report-analysis: index.ts / handler.ts / analysis_logic.ts / hard_fact_guards.ts / analysis_input.ts / transport_retry.ts → **same**
+  - _shared: absence_claims.ts / kabumori_voice.ts / market_report_packet.ts / market_report_story.ts → **same**
+  - market-report-data-packet/session_logic.ts → **same**
+- accepted logicの存在：`GOVERNED_BY_QUESTION`（PR #79/H1 P1）、`APP_STORY_REWRITE_BELOW_CHARS`・`editorialPriorityWarnings`（PR #77）、`rewriteRequestFailed`（safe-original fallback）を確認、`directionIn` なし。byte一致によりH1修正（`続くから/するから/なるから`、`一段と強まるかどうか`、terminal reaction-watchの因果扱い）を含むmerged sourceそのもの。
+- model/prompt/call ceiling/packet schema：mergedのまま（変更なし）
+
+### tests / check / lint / diff（fresh main 309b0cb8）
+- market-report-analysis full **136/136**、session-date 14/14、H1 boundary 9/9、presentation_v2 22/22、causal_calibration 18/18、quality_calibration 9/9、h1_adversarial 13/13、content_guard 16/16、transport_retry 14/14
+- personalized-reports 128/128、X shared consumer 8/8、market-report-data-packet 42/42、`_shared` 361/361（`--no-check`、既知の無関係type debtのため）
+- `deno check --node-modules-dir=none`：market-report-analysis/*.ts＋importする `_shared` 4ファイル → exit 0
+- `deno lint`：PR #77/#79 変更ファイル（7）exit 0、runtime 11ファイル exit 0。ディレクトリ全体では既存2件（`handler_test.ts:23`・`analysis_test.ts:34` の require-await、2026-09-17 `05a677f1e` 由来、今回未変更）＝新規ではない
+- `git diff --check` exit 0
+
+### verify_jwt / gates / cron
+- verify_jwt: false → **false**
+- `market_report_consumer_settings`: app_enabled=false / x_enabled=false（updated_at 2026-09-17 10:47:14 UTC）→ **完全一致**
+- cron（jobname ~ market|report|personal、8件）：schedule・active・md5(command) before/after **完全一致**
+  - market-report-analysis-morning `55 22 * * 0-4` / -morning-retry `5 23 * * 0-4`（md5 82f3090e…）
+  - market-report-analysis-close `20 7 * * 1-5` / -close-retry `35 7 * * 1-5`（md5 216cf5da…）
+  - market-report-data-packet-morning `50 22 * * 0-4` / -close `15 7 * * 1-5`
+  - personalized-reports-morning `35 23 * * 0-4` / -close `15 8 * * 1-5`
+  - すべて active=true
+
+### all-function metadata comparison
+- 20 Functionの version / updated_at / verify_jwt / ezbr_sha256 / status / entrypoint_path を before/after 比較
+- 変化は `market-report-analysis` のみ（version 20→21、updated_at、ezbr、entrypoint_pathのversion suffix `_20`→`_21`）
+- 他19本は全項目同一（personalized-reports v38、x-test-post v133、market-report-data-packet v16 ほか）。並行deployなし。
+
+### deploy command / scope
+- `supabase functions deploy market-report-analysis --workdir /Users/yuya/Developer/kabumori-g2-market-report-reliability --project-ref wsmznyzcvmuitkglfeuj --no-verify-jwt --use-api`
+- uploaded assets: market-report-analysis 6本、`_shared` 4本、market-report-data-packet/packet_schema.ts・session_logic.ts（import graph）。deployed functionは `market-report-analysis` の1本のみ。
+
+### production mutations
+- **1件のみ**：Edge Function `market-report-analysis` v20→v21
+- なし：他Function deploy、DB/schema/RPC/migration、cron、app/x gate、Auth/Vault/secrets、X操作、通知、manual cycle/invoke/retry、legacy generator
+
+### rollback source / status
+- rollback source = 本番v20のread-back。main `a76cb1217fd65f976234ea91815b551309ac814e`（PR #77 merge `08a9f710` の第1親、PR #71反映済み）と全11ファイルbyte一致を確認済み
+- rollbackは不要（実施なし）。必要時は `a76cb121` をdetachで同じ明示引数でdeployし、byte read-back
+
+### remaining issues
+1. live-model挙動は未観測（manual cycle禁止のため）。PR #77の700〜899字rewrite停止、PR #79の前夜watch文のdeliverability、Hardの維持は自然サイクルで確認が必要。
+2. 内容品質の既知事項（火山ニュースの選定、「重要材料として確認された…」の内部語、+0.04%を上昇と書く、「確認できません」の反復）は未TASK。
+3. app/x gateはOFFのまま。昨日の大引けがアプリに出ない件はgate OFFによるもの（本TASK範囲外）。
+4. 既存lint debt 2件（test files）・`x-test-post/index.ts` の既存type debtは無関係のまま。
+
+### 2026-10-05 朝の自然観測の推奨
+- read-onlyで：data 07:50 / analysis 07:55 / retry 08:05 JST（personalized 08:35 JSTはgate OFF）
+- 見る項目：`market_report_runs`（または同等）の status、`generation_attempts`・`content_regenerations`・`hard_rejections`・`quality_rewrite`・`quality_rewrite_request_failed`・`delivered_generation`・`quality_warnings`・`transport_*`、Fact結果、App story char_count（700〜899ならrewriteなしで配信されること）、session-date issueの有無、X/Appの本文（日付・向き・因果）
+- 07:55で完了なら retry 08:05 はno-opのはず。FAILなら次TASKでhard_rejectionsの文を確認。function versionがv21のままであることも確認。
+
+### next
+- status -> review_required / next_owner -> chatgpt。STOP for K2。
 
 ---
 
