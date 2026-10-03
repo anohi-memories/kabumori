@@ -1576,3 +1576,62 @@ H1 evidence at `6140968` (same runtime, one extra test file):
 - next_recommendation: **C1, 推薦モデル：Sol（高）**. C1 should accept CHANGES REQUIRED and route a focused G2 source correction (**推薦モデル：Opus5.5（高）**), carrying the evidence tests plus all mandated controls. Do not allocate or overwrite a slot from this H1 review.
 - rollout prerequisites: corrected exact head + independent green positive/negative review; only afterward C1 may approve merge. Later PR77+accepted PR79 rollout remains one explicitly approved `market-report-analysis` deploy, app/x gates OFF, exact byte read-back, natural-cycle observation. No deployment/merge permission is implied by this report.
 - authoritative H1 TASK now `review_required`, next_owner `chatgpt`; shared indexes may be stale until C1 safely synchronizes H1 only. H1 STOP after dedicated report publication/read-back.
+
+---
+
+# H1 — PR #79 corrected Hard-guard rereview (2026-10-03 JST)
+
+- task_id: `kabumori-pr79-hard-guard-rereview-20261003`
+- verdict / result: **PASS-WITH-FIX** for the exact corrected H1 candidate below. **Unchanged PR head f7083ba is not approved**: it still had the newly reproduced question-token bypass and causal-watch delivery false positive.
+- original reviewed head: **`f7083ba6a810d5f9cdbe7090e4439f261e38bf0f`**.
+- final verified head / fix commit: **`b6d2dce3cc45c73951e51d139fefeddad7e2906e`**. Direct descendant of the original head; one bounded correction commit on **H1-only** `codex/h1-pr79-rereview-20261003`. Normal push succeeded and `git ls-remote` independently returned this exact SHA.
+- mandatory isolation: H1-owned checkout `/private/tmp/kabumori-h1-resume.DHxA95/repo`, own source/report branches. Shared checkout, G2 branch/PR, H2 and other worktrees untouched. Startup main `cde3a7d`; delivery base `8aab09ca3cdd7a12752602db4eeafadcaf159ea9`.
+- original PR metadata independently read twice: open, exact f7083ba, four changed files; actual merge-base `85b40b464c29311eae7fba84e13a50cb41dd1a52`. Main-side intersection with PR files **0**, also **0** with the H1-added analysis_logic source file. Main's other-slot UI/news/diary changes are not adopted or overwritten by this review.
+
+## Gate results / findings / bounded H1 fixes
+
+**Prior P1/P2/P3:** G2's five required assertion-before-question sentences now produce a session-date Hard rejection in all six factual placements; the incorrect US fall also produces direction inversion. Original watch-reference examples, correct explicit prior-session dates and genuine conditions remain date-safe. The unused wrapper is gone and original three-file lint actually exits 0. Exact candidate's existing full analysis suite independently passes **131/131**.
+
+**New R1 — P1, fixed:** `HYPOTHETICAL` and the relation's `続くか` alternative matched a prefix of the causal assertion **`続くから`** (also `するから/なるから`). Before the H1 patch, both `10月2日は、米国株安が続くから反応を見ます。` and `10月2日の米国株は下落するから、反応を見ます。` produced **no local Hard issue**, although the US packet is only 10/1 and is positive. Separately, the 6-kanji/3-hiragana prefix admitted an asserted copula such as `10月2日の米国株は下落が明白で続くかを見ます。`.
+
+- Regression-first: added required date+direction checks across all six factual placements, not only `metricFactIssues` or a watch field. They failed against f7083ba.
+- Minimal correction: question `か` must not continue as `から`, in both HYPOTHETICAL and the two watch-relation branches. GOVERNED_BY_QUESTION excludes a prefix ending in continuative `で/し/て/り`; this distinguishes an already asserted premise from the next question without a general parser or blacklisting three particular example verbs.
+- Final checks include `明白で`, `確定し`, `明確となり`, punctuation/no-punctuation, particle forms and the case with **matching positive direction** (`米国株高が続くから`): that last still fails the date guard rather than relying on inversion. Genuine `強まるかどうか`, `上昇すれば`, `株安が続くか`, `強くなるか`, and past questions `上昇したかどうか/強まったかどうか` remain non-factual.
+
+**New R2 — P2, fixed / bounded degree modifiers:** the known `一段と強まるかどうか` and independently tested `さらに強まるかどうか` were honest questions but falsely treated as dated facts by the old prefix pattern. Added only these two degree-modifier tokens before the same bounded predicate; a further asserted predicate still fails the classification. Six-kanji and three-hiragana positive controls also pass. This is not unrestricted text between the move and a question.
+
+**Gate E / R3 — P2, fixed / causal interaction:** the date fix alone was insufficient: `前夜の米国株高を受け、日本株の反応を見る` still failed the causal Hard checker in all six factual placements. The existing original positive `米国市場の上昇を受けた動きが続くかを確認します` did too. These purely terminal plans/questions assert no effect that happened. Rejecting them is a real product-policy delivery false positive, not solved by moving text into watch fields or weakening a prompt.
+
+- H1 authority explicitly allows one narrow causal-watch classification correction. Added two anchored **whole-effect** predicates inside `unsupportedCausalSentences`:
+  - Only link `を受け、` or `を受けて`, followed by `日本株/東京市場` + `の反応/値動き/動き/受け止め方を` + terminal `見る/見ます/確認する/確認します`.
+  - Only link `を受けた`, followed by a fixed result noun (`動き/流れ/買い/売り/反応/値動き/展開`) + `が/は/も続くかを` + the same terminal watch verbs.
+- This removes no evidence requirement for an actual or speculative market effect, past confirmation, different causal links, or a watch followed by an assertion. It is per-link, with the entire effect span matched to the end; no sentence-wide watch shortcut. Cause-side metric/date/sign/ref checks still execute unchanged.
+- Before fixing, four added tests yielded **5 PASS / 3 FAIL** (the three failures: lexical/copula bypass, degree-modifier false reject, full-delivery causal watch). After fixing, all three pass. Added a separate causal negative test and cause-side contradiction test; final H1 boundary suite **9/9 PASS**.
+- Final pure-watch positives pass **all Hard guards** in all six factual placements. Negative cases retain unsupported-causality Hard: actual `日本株が上昇しました`, watch then assertion, watch-before-rise, watch-before-先行, `見ると上昇`, past confirmation, speculative `上昇が続く可能性`, `を受けた動きが続くから`, and `動きが強まり続くか`. Cause-side wrong-date NYダウ value, US direction inversion, incorrect change sign and unknown ref stay Hard.
+
+**Gates C/D / remaining safeguards PASS:** G2's six negative P2 relations, explicit prior-night marker followed by current assertion, date-attached prior-night wording, wrong-date numeric/change, the exact 10/1 mixed 9/29 Nikkei + 9/30 1306 regression, stale/current, 1306 naming, sign/direction/emoji, unsupported causality and fabricated refs remain protected. MOVE_LIST's narrowed nominal-only list no longer swallows the verbal assertion control. No test's unrelated failure is substituted for the required date/direction/causality invariant.
+
+**PR77 compatibility PASS:** H1 changes only Hard clause/question and terminal causal-watch classification, tests and the corresponding design notes. Quality WARN/rewrite code, safe-original fallback, prompt/model, MAX_GENERATIONS, transport/model call ceilings and packet schema are unchanged. Quality calibration, fallback and transport budget regressions pass.
+
+## Final independent verification
+
+At the corrected source tree (one source commit b6d2dce3):
+
+- full `market-report-analysis`: **136 PASS / 0 FAIL**, checked run; session-date **14**, H1 boundary **9**, presentation_v2 **22**, causal_calibration **18**, quality_calibration **9**, h1_adversarial **13**, content_guard **16**, transport_retry **14** included.
+- `personalized-reports`: **128 PASS**, X shared consumer **8 PASS**, data-packet **42 PASS**, all run **with type checking**. Rerun after the fix; no `--no-check` for these suites.
+- `_shared`: checked run **FAIL before tests**, five pre-existing unrelated type errors: three `never` capturedBody accesses in brand_post_generator_test, optional brand id in dispatch_gate_test, and ArrayBufferLike/BufferSource in x_oauth2_post. Those files are unchanged by PR/H1. Then full runtime suite **361 PASS** with **`--no-check`**. This is runtime verification, NOT a claim that the shared checked suite is clean.
+- explicit `deno check --no-lock --node-modules-dir=auto`: **PASS** for analysis index/guards/logic/two boundary tests, personalized index, X shared consumer test and data-packet index. Full analysis test run also checks all its test modules.
+- `deno lint` on all four relevant TS files (including the newly touched analysis_logic): **PASS, exit 0**, no suppression.
+- `git diff --check`: **PASS**; source diff from f7083ba only four files, 107 insertions / 6 deletions.
+- No real model, Edge, database, Auth or X test call. All runtime tests use local fixtures/test doubles. Consulted official [Supabase Deno unit-test guidance](https://supabase.com/docs/guides/functions/unit-test); the skill kept verification local/no production mutation. Changelog Markdown fetched once, returned unsupported content type, not treated as successful API-version verification; no Supabase API/config change was made.
+
+## Delivery / remaining obligations / C1
+
+- changed_files_source (H1 fix only): `supabase/functions/market-report-analysis/hard_fact_guards.ts`, `analysis_logic.ts`, `h1_pr79_boundary_test.ts`, `docs/market-report-shared-platform/DESIGN.md`.
+- commit_hash_source / push: **`b6d2dce3cc45c73951e51d139fefeddad7e2906e`**, H1-only branch normal push and remote SHA read-back confirmed. **G2 PR #79 head is still f7083ba**; no merge, source-main write, force-push or automatic PR incorporation by H1.
+- changed_files_control: only H1 `.agent/tasks/CODEX_TASK.md` + append `.agent/CODEX_REPORT.md`, based on fresh main. Prior histories preserved byte-for-byte; shared CURRENT_STATE/ACTIVE_TASK and all other-slot control files untouched. Exact control commit/push/read-back recorded in completion reply.
+- production reads / mutations: **0/0**; deploy, gate change, manual cycle/retry, DB/schema/RPC/migration, Cron/Auth/Vault/secrets, real X and real model/provider operations **0**. Supabase testing skill did not broaden authority.
+- remaining_issues: no blocking finding in the tested exact scope after the fix; `_shared` checked-type debt remains unrelated/unfixed. Finite Japanese patterns are still conservative for arbitrary long/unknown modifiers; no claim of exhaustive NLP. Actual live-model phrasing, first-cycle completion/cost/hard_rejection telemetry remain unverified until a separately approved natural-cycle rollout.
+- merge recommendation: **conditional source acceptance only for b6d2dce3 or verified equivalent incorporation**, not unchanged f7083ba. C1 should arrange exact bounded fix incorporation into the existing PR, confirm new PR head/source/read-back, fresh main overlap and required checks. Do not create or overwrite another slot TASK from this H1.
+- rollout prerequisites: C1 acceptance and source merge first; then separate explicit approval for one `market-report-analysis` deployment containing PR77 + accepted PR79, app/x gates OFF, exact byte read-back, natural cycle only. No production authorization is inferred from review PASS.
+- next_recommendation: **C1, 推薦モデル：Sol（高）**. TASK `review_required` / next_owner `chatgpt`; dedicated TASK/REPORT authoritative, shared indexes for C1 to align safely. H1 STOP after report publication/read-back.

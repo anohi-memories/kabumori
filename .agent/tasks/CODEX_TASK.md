@@ -3,8 +3,8 @@
 - task_id: kabumori-pr79-hard-guard-rereview-20261003
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused rereview / Hard Fact session-date+hypothetical boundary
@@ -216,6 +216,15 @@ Then:
 - STOP for C1.
 
 Recommended model: **Sol（高）**.
+
+## H1 completion — 2026-10-03 JST
+
+- verdict: **PASS-WITH-FIX**, conditional on incorporating the exact H1 correction, not the unchanged PR head.
+- original head: `f7083ba6a810d5f9cdbe7090e4439f261e38bf0f`; final verified source: `b6d2dce3cc45c73951e51d139fefeddad7e2906e` on H1-only `codex/h1-pr79-rereview-20261003` (push + remote SHA read-back confirmed).
+- Prior P1/P2 session-date/P3 fixed by G2. H1 regression-first fix additionally separates `続くから/するから` from questions, excludes asserted continuative premises, preserves bounded degree-adverb questions, and recognizes only full terminal reaction-watch effects in the causal checker.
+- Analysis 136 PASS (H1 boundary 9, session-date 14); personalized 128, X consumer 8, data-packet 42 PASS with type checking. Shared runtime 361 PASS with `--no-check`; its separate checked run failed on five existing unrelated errors. Entry-point check, changed-file lint and diff-check PASS.
+- Source change: four files only; no G2 branch/PR update, merge, deploy or production operation. Detailed evidence appended to `.agent/CODEX_REPORT.md`.
+- Next **C1, 推薦モデル：Sol（高）**: accept/arrange exact fix incorporation and verify PR head before any merge. Deployment remains a separate explicitly approved PR77+accepted PR79 bundle with gates OFF. H1 STOP; shared slot indexes are not overwritten.
 
 ---
 
