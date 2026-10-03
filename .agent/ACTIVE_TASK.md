@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: done
 - task_id: kabumori-pr79-session-date-hard-guard-review-20261003
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: focused review of PR #79 exact head 9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3; verify legitimate prior-session watch references pass while assertion laundering/wrong-date numeric/mixed-session remain Hard; explicitly inspect HYPOTHETICAL skip behavior; no merge/deploy/gate/manual cycle; recommended Sol（高）
+- allocation: Final C1 accepted CHANGES REQUIRED on PR #79 head 9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3. P1 hypothetical-tail bypass, P2 normal prior-night false rejects and P3 lint failure require G2 correction. No merge/deploy/production mutation. H1 is free after fresh allocation.
 
 ## Codex H2
 - owner: codex
@@ -58,18 +58,18 @@
 
 ## Claude G2
 - owner: claude
+- slot:## Claude G2
+- owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: kabumori-pr79-session-date-watch-relation-corrective-20261002
+- status: ready
+- task_id: kabumori-pr79-hypothetical-and-watch-phrasing-corrective-20261003
 - start_code: G2
 - finish_code: K2
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: Final K2 PASS to focused H1 review; PR #79 exact head 9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3 remains open/unmerged; merge/deploy HOLD; H1 review recommended Sol（高）
+- allocation: amend PR #79 after C1 CHANGES REQUIRED; close hypothetical-tail wrong-date/direction bypass, allow bounded normal prior-night watch phrasing, fix lint, preserve all Hard numeric/session/causal/ref protections; source/tests only, no merge/deploy/gate; recommended Opus5.5（高）
 
-## Claude G3
-- owner: claude
-- slot: claude-3
+ claude-3
 - status: ready
 - task_id: x-social-mobile-content-settings-schema-hardening-20261003
 - start_code: G3
