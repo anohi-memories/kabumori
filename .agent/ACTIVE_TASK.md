@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: done
 - task_id: kabumori-pr79-hard-guard-rereview-20261003
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: focused rereview of PR #79 exact head f7083ba6a810d5f9cdbe7090e4439f261e38bf0f after G2 corrected P1 hypothetical-tail bypass, P2 prior-night watch false rejects and P3 lint; explicitly assess causal-guard interaction; no merge/deploy/gate/manual cycle; recommended Sol（高）
+- allocation: Final C1 PASS-WITH-FIX accepted. Existing PR #79 branch fast-forwarded to exact H1 reviewed/fixed source b6d2dce3cc45c73951e51d139fefeddad7e2906e, fresh overlap 0, merged to main 4dbf11f2848059cc967d942efc9d60613d855537. No production deploy/gate/manual cycle. H1 free after fresh allocation.
 
 ## Codex H2
 - owner: codex
@@ -59,13 +59,13 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: review_required
-- task_id: kabumori-pr79-hypothetical-and-watch-phrasing-corrective-20261003
+- status: ready
+- task_id: kabumori-shared-report-v2-pr77-pr79-prod-deploy-20261003
 - start_code: G2
 - finish_code: K2
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: Final K2 PASS to focused H1 rereview at PR #79 head f7083ba6a810d5f9cdbe7090e4439f261e38bf0f; merge/deploy HOLD; recommended Codex Sol（高）
+- allocation: controlled production deploy/read-back of merged PR #77 + C1-accepted PR #79 to market-report-analysis only; app/x gates remain OFF, no manual cycle; next natural live observation on normal trading-day morning; recommended Sonnet5（高）
 
 ## Claude G3
 - owner: claude
