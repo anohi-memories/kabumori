@@ -1,3 +1,19 @@
+## PR #82 — AI Lab event-dedupe to H1 review
+
+- direct Claude implementation completed outside G1-G5, preserving active G3/G4 tasks.
+- PR #82 exact head `08a7346ccd63f2ff540bd48149f1f1e65e6dbe09`, open/mergeable.
+- changed files: 8, limited to AI Lab diary/topic selection/store/dispatch/tests/x-test-post plus dedicated migration `20261003090000_ai_lab_topic_event_usage.sql`.
+- candidate changes dedupe unit from TopicUnit/rotation to durable eventKey usage. One diary entry's changed/difficulty/decided/angles share one eventKey and should all cool down after publication.
+- reported verification: new 26 tests; Functions 2474/2474 PASS; disposable PostgreSQL migration proof 13 PASS; production mutation=0; real X operations=0; deploy=0.
+- Netlify/Vercel checks green.
+- fresh comparison: main is 13 commits ahead of PR base with **0 overlapping changed files**.
+- explicit unresolved risks requiring independent proof: concurrent dispatches may both select the same unused event before usage is recorded; a usage INSERT failure after confirmed X success may leave that event eligible later; eventKey uses same-date ordinal; migration uses IF NOT EXISTS and needs ACL/drift review.
+- scheduler spacing is not accepted as a correctness guarantee.
+- H1 assigned `ai-lab-pr82-event-dedupe-review-20261003`.
+- recommended model: **Sol（高）**.
+- merge/deploy/migration apply remain HOLD until C1.
+- H2 stays free for the upcoming G3 schema-hardening review.
+
 ## G1 allocation — Topic detail learning v2
 
 - task_id: `kabumori-topic-detail-learning-v2-20261003`
