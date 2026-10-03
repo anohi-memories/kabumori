@@ -1,3 +1,19 @@
+## Final C1 — PR #79 hard-guard review CHANGES REQUIRED
+
+- verdict: **CHANGES REQUIRED accepted**.
+- reviewed PR #79 runtime head remains `9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3`; open/unmerged.
+- H1 independently found:
+  - **P1**: sentence-wide `HYPOTHETICAL` can suppress an already asserted wrong-date/direction fact before a later hypothetical tail.
+  - **P2**: ordinary morning wording such as `前夜の米国株高を受け、日本株の反応を見る` and `米国株高の流れをどう受け止めるかが焦点` still false-rejects.
+  - **P3**: changed-file lint fails because `directionIn` became unused.
+- H1 original suite: analysis 123/123 PASS; focused evidence added 2 PASS / 2 FAIL; extended suite 125 PASS / 2 FAIL. Other relevant suites remained green.
+- H1 runtime source fix=0; test-only evidence commit `6140968378c44aecd2d40a1cc7d344f2e98e8b4e`; production mutation=0.
+- no merge / no deploy.
+- G2 corrective assigned: `kabumori-pr79-hypothetical-and-watch-phrasing-corrective-20261003`.
+- recommended Claude model: **Opus5.5（高）**.
+- next K2 must send the corrected exact head to a focused Codex rereview before merge/deploy; recommended **Sol（高）**.
+- PR #77 remains merged but production-unapplied; rollout still waits for PR #79 acceptance, then both changes should be bundled into one market-report-analysis deploy with app/x gates OFF.
+
 ## Final C2 — content-settings schema candidate FAIL / G3 hardening required
 
 - verdict: **FAIL / CHANGES REQUIRED**. Existing `20260922045046_social_mobile_content_settings_candidate.sql` is not approved for production apply.
