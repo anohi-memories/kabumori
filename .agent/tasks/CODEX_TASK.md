@@ -1,5 +1,127 @@
 # Codex Task — CURRENT TASK
 
+- task_id: ai-lab-pr82-event-dedupe-review-20261003
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- priority: highest
+- recommended_model: Sol（高）
+- type: focused review / AI Lab event dedupe / migration / concurrency
+- target_pr: 82
+- target_head: 08a7346ccd63f2ff540bd48149f1f1e65e6dbe09
+- production_mutation_allowed: false
+
+## Purpose
+
+PR #82を独立レビューする。
+目的は、会社員AIラボで同じ実際の開発イベントを changed / difficulty / decided / angle の別表現で繰り返し投稿する問題が、本当に構造的に閉じたかを確認すること。
+
+## Mandatory
+
+- independent H1 worktree
+- fresh origin/main
+- exact PR head確認。headが変わっていたらSTOP
+- G3/G4のworktree・migration・未commit変更に触れない
+- merge/deploy/production write/real X operation禁止
+
+## Must-review gates
+
+1. 9/30 fixtureで旧不具合を再現し、新実装で同一eventの全unitが1回のpublished usage後に除外されること。
+2. fresh未使用eventがあればそれを優先し、全部使用済みならevergreenへ行くこと。
+3. rotationIndexがused eventを復活させないこと。
+4. eventKey `diary-YYYY-MM-DD-N` の安定性。同日途中挿入・並べ替え・sanitize除外でfresh eventが別keyになり再投稿できないか。
+5. **同時実行レース**:
+   - A/Bが同じrecentUsageを読み、
+   - 同じ未使用eventを選び、
+   - 両方がX publishへ到達できないか。
+   scheduler間隔を安全性の根拠にしない。
+6. **usage保存失敗**:
+   - X成功
+   - usage insert失敗
+   - completion成功
+   - 次回history read成功
+   のとき同じeventが再選択されないか。
+7. X成功後のcrash window:
+   - X成功→usage前
+   - usage後→completion前
+   で二重X投稿安全性とevent dedupeの両方を評価。
+8. 必要ならreservation/claim方式を correction contract として提案:
+   - event単位unique claim
+   - lease/expiry
+   - pre-X failureでrelease
+   - X成功後published化
+   - crashでも同じeventの二重publishを防止。
+   大きな設計変更はレビュー中に実装しない。
+9. migration `20261003090000_ai_lab_topic_event_usage.sql`:
+   - CHECK
+   - PK/unique設計
+   - RLS
+   - effective ACL
+   - service_role SELECT/INSERT only
+   - TRUNCATE等が残らないこと
+   - IF NOT EXISTSでunsafe driftを黙って受け入れないか
+   - reapply/idempotency
+   - index/read query整合。
+10. `loadAiLabTopicUsage`:
+   - 14日lookback
+   - 200件limit
+   - malformed/read failure時fail-safe
+   - brand filter
+   - no raw post body storage。
+11. `recordAiLabTopicUsage`:
+   - on_conflict scheduled_post_id の意味
+   - 同じscheduled_post_idで別event/x idを黙ってignoreしてよいか。
+12. evergreen 72h seed / 48h generic theme cooldown。
+13. existing content guard / cross-brand fingerprint / final dispatch guardを維持。
+14. 他ブランド、朝刊/大引け、OAuth、Cronへ非影響。
+15. exclusion/logに本文や内部開発情報を出さない。
+
+## Tests
+
+- PR #82 focused tests
+- AI Lab topic dedupe
+- scheduled brand post
+- cross-brand fingerprint
+- relevant x-test-post/shared tests
+- changed runtime Deno check/lint
+- disposable PostgreSQL migration proof
+- diff check / secret-shape scan
+- 上記同時実行・usage失敗のadversarial testを追加して検証
+
+PASS条件:
+現実的な同時実行・usage失敗でも同じeventが再publishされない、または安全に阻止されること。
+
+CHANGES REQUIRED条件:
+同時dispatchやusage write failureで同じeventのpublishが現実的に再発するなら、scheduler間隔に関係なくFAIL。
+
+## Report
+
+`.agent/CODEX_REPORT.md`へ:
+- verdict
+- reviewed head
+- old bug reproduction
+- eventKey stability
+- concurrent selection result
+- usage failure result
+- crash-window result
+- migration/RLS/ACL/drift result
+- tests
+- production read/write
+- remaining risks
+- merge recommendation
+- rollout order
+
+status -> review_required
+next_owner -> chatgpt
+STOP for C1.
+
+Recommended model: **Sol（高）**.
+
+---
+
+# Codex Task — CURRENT TASK
+
 - task_id: kabumori-pr79-hard-guard-rereview-20261003
 - owner: codex
 - slot: codex-1
