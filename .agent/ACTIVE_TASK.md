@@ -35,14 +35,14 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: x-social-mobile-content-settings-schema-prereq-review-20261002
 - start_code: H2
 - finish_code: C2
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Review existing source-only social_mobile_content_settings migration candidate as PR #78 prerequisite. Verify JSON contract, owner-only RLS/grants, updated_at CAS, lifecycle/common-account compatibility, drift/idempotency, production catalog compatibility and local disposable behavior. No production apply/write/deploy. Recommended Sol（高）.
+- allocation: Final C2 accepted FAIL / CHANGES REQUIRED. Existing content-settings migration candidate has P1 JSON/ACL and P2 monotonic-CAS/drift blockers; no production apply. Corrective returned to G3. H2 free after fresh allocation.
 
 ## Claude G1
 - owner: claude
@@ -70,13 +70,13 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
-- task_id: x-social-mobile-ai-consult-v1-20261002
+- status: ready
+- task_id: x-social-mobile-content-settings-schema-hardening-20261003
 - start_code: G3
 - finish_code: K3
-- next_owner: codex
+- next_owner: claude
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: C2 HOLD. PR #78 source remains unmerged. H2 found mandatory production schema prerequisite missing: public.social_mobile_content_settings does not exist, so confirmed settings/persona persistence and updated_at CAS cannot be approved. Existing source migration candidate is now under separate H2 review; no production apply authorized. Resume PR #78 review only after schema prerequisite is accepted/applied/read-back under explicit approval.
+- allocation: Harden the blocked PR #78 persistence schema prerequisite. Preserve historical candidate by default; add a new versioned hardening migration with exact null/type/key JSON+persona contract, least-privilege ACL, strictly monotonic updated_at CAS semantics, and fail-closed drift checks. Local disposable SQL proof required. No production apply/deploy. Recommended Opus5.5（高）. Fresh H2 Sol（高） rereview required after K3.
 
 ## Claude G4
 - owner: claude
