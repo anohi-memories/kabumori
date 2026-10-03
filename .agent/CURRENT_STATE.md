@@ -3256,3 +3256,17 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - recommended model: **Sonnet5（高）**.
 - finish code: K1.
 
+## Final K1 — Home Topic 3-level backgrounds — 2026-10-03
+- verdict: **PASS / MERGED / G1 CLOSED**.
+- PR #80 exact accepted head: `2e5356a8a3e6af84ed9999929cd62556081cab65`.
+- squash merge: `d6031e228efbf01f94ada22879cd6315457c43f7`.
+- final source: 3 clean 1942x809 level backgrounds, exact `topic.level` mapping, same-ratio card geometry, native badge/title/summary/CTA retained.
+- visual review: 402pt contact sheet and 375pt advanced card accepted; all 3 levels differ by more than color, CTA/text remain readable, level switching does not alter geometry.
+- tests/checks: 266/266 PASS, Expo config PASS, Expo web export PASS, diff clean; only known pre-existing CSS-module TypeScript diagnostics remain.
+- Netlify PASS / Vercel PASS.
+- EAS build 0; backend / DB / RPC / Edge Function / Auth / X / production mutation 0.
+- Codex review: not required for this UI/asset-only deterministic presentation change.
+- AI Lab diary: 候補あり — 学習レベルごとに背景の色・教材モチーフ・植物の成長を変え、同じシリーズ感のまま難易度が一目で伝わるUIにした。2026-10-03 entryへ反映済み。snapshot sync workflow PASS.
+- next recommended product step: richer topic body / topic-detail UI and content depth.
+- G1 is free after fresh allocation.
+
