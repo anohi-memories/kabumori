@@ -1,3 +1,23 @@
+## Final C1 — PR #79 accepted and merged
+
+- verdict: **PASS-WITH-FIX / accepted**.
+- H1 reviewed original PR #79 head `f7083ba6a810d5f9cdbe7090e4439f261e38bf0f` and produced exact reviewed/fixed source `b6d2dce3cc45c73951e51d139fefeddad7e2906e`.
+- bounded H1 fixes:
+  - question tokens such as `続くか` no longer prefix-match causal assertions `続くから/するから/なるから`;
+  - asserted continuative premises remain factual and cannot be erased by a later question;
+  - bounded honest degree-modifier questions remain deliverable;
+  - terminal prior-night reaction-watch prose is no longer a causal Hard false positive;
+  - actual/speculative market effects still require evidence and objective date/value/sign/ref contradictions remain Hard.
+- H1 final verification: analysis 136/136, session-date 14/14, H1 boundary 9/9, personalized 128/128, X shared 8/8, data-packet 42/42; target check/lint/diff PASS. `_shared` runtime 361/361 with --no-check due documented unrelated checked-type debt.
+- C1 fast-forwarded the existing PR #79 head branch to exact H1 source with no force; fresh GitHub read-back confirmed exact head and mergeable=true.
+- fresh main overlap against all five PR files = 0.
+- PR #79 merged -> `4dbf11f2848059cc967d942efc9d60613d855537`.
+- source merge only; Edge deploy/gates/manual cycle/DB/Auth/Vault/X mutation = 0.
+- PR #77 remains merged but production-unapplied. G2 now owns one combined `market-report-analysis` deploy/read-back for PR #77 + PR #79 with app/x gates OFF.
+- next G2 task: `kabumori-shared-report-v2-pr77-pr79-prod-deploy-20261003`.
+- recommended Claude model: **Sonnet5（高）**.
+- after deploy acceptance, observe the next normal trading-day morning cycle read-only rather than forcing a weekend/manual run.
+
 ## Final K2 — corrected PR #79 to focused rereview
 
 - verdict: **PASS to focused Codex rereview; merge/deploy HOLD**.
