@@ -1,3 +1,25 @@
+## K3 — PR #81 content-settings hardening PASS to H2 rereview
+
+- verdict: **PASS to focused H2 rereview; merge/apply/deploy HOLD**.
+- PR #81 exact head `5595fb131813542c55c43bc783af623cdb9ea442`, open/mergeable.
+- 7 changed files: one new hardening migration, disposable SQL fixture/behavior/runner, one static Deno test, content-settings repository adjustment and focused app test.
+- historical candidate `20260922045046_social_mobile_content_settings_candidate.sql` remains byte-unchanged; new hardening migration is `20261003120000_social_mobile_content_settings_hardening.sql`.
+- G3 reports H2 blockers closed:
+  - F1 exact null/type/key JSON+persona contract;
+  - F2 effective least-privilege ACL with authenticated SELECT/INSERT/UPDATE only;
+  - F3 strictly monotonic server-owned `updated_at`;
+  - F4 fail-closed catalog drift guard with only enumerated CHECK/grant repair.
+- reported local proof: PostgreSQL 17.11 disposable cluster; 61 invalid settings + 24 invalid persona cases rejected; ACL/RLS/CAS/lifecycle/adverse drift tests; concurrent CAS one winner; long transaction no regression; mutation checks detected 8 weakened variants.
+- app/server verification: social-mobile 116/116; relevant Deno 158/158; typecheck/lint/Deno lint/bash syntax/diff PASS.
+- production reads 0; production mutations/apply/deploy/Auth/Vault/X/OpenAI/Cron 0.
+- fresh K3 merge check: main is 24 commits ahead of PR base with **0 overlap** across PR #81 files; Netlify and Vercel checks green.
+- PR #78 remains separate/unmerged and still depends on schema acceptance/apply/read-back before its unfinished Auth/AI review resumes.
+- H1 is occupied by PR #82 AI Lab event-dedupe review; H2 was free and is now assigned `x-social-mobile-pr81-content-settings-hardening-rereview-20261003`.
+- H2 must additionally verify actual Supabase migration transactionality, production default ACL/current grantees and that drift guards will not false-block legitimate managed metadata.
+- recommended H2 model: **Sol（高）**.
+- no production migration approval is granted by K3.
+- AI Lab diary: no update; this is an internal schema correction, not a merged/released user-facing capability.
+
 ## PR #82 — AI Lab event-dedupe to H1 review
 
 - direct Claude implementation completed outside G1-G5, preserving active G3/G4 tasks.
