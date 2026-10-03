@@ -1,3 +1,22 @@
+## Final K2 — corrected PR #79 to focused rereview
+
+- verdict: **PASS to focused Codex rereview; merge/deploy HOLD**.
+- PR #79 exact head: `f7083ba6a810d5f9cdbe7090e4439f261e38bf0f`, open/mergeable.
+- fresh no-race check: main `95fcb391f47296ebf5a7d880a03b834e430b1c6a`; overlap with PR #79 files = 0.
+- G2 reports previous H1 blockers corrected:
+  - P1 hypothetical-tail bypass closed while genuine hypotheses stay non-factual;
+  - P2 normal prior-night watch wording passes the session-date guard;
+  - P3 changed-file lint fixed;
+  - wrong-date numeric/session, 10/1 mixed-session, stale/current, 1306, polarity, unsupported causality and unknown-ref guards remain Hard.
+- reported verification: session-date 14/14; H1 boundary 4/4; analysis 131/131; personalized 128/128; X shared 8/8; data-packet 42/42; _shared 361/361; check/lint/diff PASS.
+- production mutation=0.
+- H1 was genuinely free and is now assigned `kabumori-pr79-hard-guard-rereview-20261003`.
+- recommended Codex model: **Sol（高）**.
+- rereview must explicitly test `GOVERNED_BY_QUESTION`, bounded WATCH_RELATION additions, MOVE_LIST narrowing, prior Hard invariants, and the separate causal-guard interaction for `前夜の米国株高を受け、日本株の反応を見る`.
+- no merge/deploy until C1.
+- PR #77 remains merged but production-unapplied; after PR #79 acceptance, bundle PR #77 + PR #79 into one `market-report-analysis` deploy with app/x gates OFF.
+- ACTIVE_TASK malformed G2/G3 index from prior concurrent edits was repaired from canonical G2/G3 TASK headers without changing G3's underlying task.
+
 ## Final C1 — PR #79 hard-guard review CHANGES REQUIRED
 
 - verdict: **CHANGES REQUIRED accepted**.
