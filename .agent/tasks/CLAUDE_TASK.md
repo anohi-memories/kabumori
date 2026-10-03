@@ -1,10 +1,228 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-shared-report-v2-20261005-morning-natural-observation
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（中）
+- purpose: production `market-report-analysis` v21（PR #77 + PR #79/H1）の最初の通常取引日朝刊をread-only観測し、配信信頼性・Hard/WARN境界・model call/costを実データで確認する。mutation/manual invokeは禁止。
+
+## Timing gate — strict
+
+Target natural schedule on Monday 2026-10-05 JST:
+- data packet: 07:50
+- analysis: 07:55
+- analysis retry: 08:05
+- personalized: 08:35, but app consumer gate is OFF and this TASK does not need to wait for it
+
+**Do not perform substantive observation before 2026-10-05 08:10 JST.**
+
+If started before 08:10 JST:
+- read-only preflight only
+- do not poll continuously
+- do not sleep/wait in a long-running shell
+- do not invoke any Function
+- report `WAIT_UNTIL_AFTER_2026-10-05_0810_JST`
+- leave TASK ready
+- STOP
+
+## Production baseline to verify
+
+Project: `wsmznyzcvmuitkglfeuj`
+
+Expected before observation:
+- `market-report-analysis` v21
+- verify_jwt=false
+- ezbr `fe5c1836cdeddabdb1300668a5f75ac92d3570872a1b1eb110798195991fa40c`
+- app_enabled=false
+- x_enabled=false
+- no manual cycle since deploy
+
+Fresh-read these; do not assume.
+
+## Observation — read only
+
+After 08:10 JST, inspect the natural 2026-10-05 morning cycle.
+
+### 1. Cycle execution
+
+Record:
+- data cycle status / attempts / errors / timestamps
+- report status / report attempts / errors / timestamps
+- current data_packet_id
+- current report_packet_id
+- whether 07:55 completed on first scheduled analysis attempt
+- whether 08:05 retry ran, and whether it was no-op or needed to recover
+- duplicate packet counts for this report_type/trading_date
+
+Do not invent the first-attempt reason if the exact reason/body is not retained.
+
+### 2. Presentation v2 fields
+
+Require a completed safe packet before calling the natural observation PASS.
+
+Inspect:
+- presentation_version
+- X lead / exactly 3 points / context / news / watch / closing
+- app_story sections
+- session_views
+- key_news scope/order
+- fact status
+- quality_warnings
+- diagnostics
+
+### 3. PR #77 live behavior
+
+Check:
+- formatted X character count
+- broad/sector/company ordering
+- no false `company before broad` warning when broad material actually leads
+- App story narrative char count
+- if App story is 700–899 chars and otherwise complete, it must **not** trigger a quality rewrite solely for length
+- if <700 and materially thin, one bounded rewrite is acceptable
+- quality WARN alone must not suppress the packet
+- safe-original fallback remains deliverable if a later quality rewrite fails
+
+Record:
+- generation_attempts
+- content_regenerations
+- quality_rewrite
+- quality_rewrite_request_failed
+- delivered_generation
+- quality_warnings
+- transport retries
+- total model calls/tokens/cost
+
+### 4. PR #79/H1 live behavior
+
+Inspect actual generated wording for:
+- today's Japan watch date vs prior-night US session
+- legitimate prior-session watch/reference prose
+- hypothetical/question wording
+- `を受け` reaction-watch wording
+
+Confirm there is no false Hard rejection for a safe watch sentence.
+
+At the same time, manually cross-check delivered factual prose against the immutable input:
+- metric value/change/date/session
+- stale/current wording
+- direction/sign/emoji
+- 1306 identity
+- news/ref existence
+- unsupported market/index causality
+- broad false absence claims
+
+If the first scheduled attempt fails due local Hard but retry later succeeds:
+- classify whether the rejection was a true defect or another false positive
+- this is not an automatic PASS merely because retry recovered
+- preserve exact diagnostic text when available
+
+### 5. Delivery reliability assessment
+
+Classify the natural cycle as one of:
+
+- **PASS_FIRST_TRY**
+  - first natural analysis completes
+  - Fact/local checks safe
+  - no unnecessary quality rewrite
+  - no duplicate/retry side effect
+
+- **PASS_WITH_RETRY**
+  - scheduled retry was genuinely needed but final packet is safe
+  - document exact reason and whether it indicates remaining calibration debt
+
+- **FAIL_FALSE_REJECT**
+  - safe/supported prose was blocked by local/Fact logic
+
+- **FAIL_FACTUAL_DEFECT**
+  - model produced an objective lie/contradiction and guard correctly blocked it, or unsafe final output escaped
+
+- **OBSERVATION_INCOMPLETE**
+  - cycle/data/provider infrastructure did not produce enough evidence
+
+Do not turn a stylistic WARN into FAIL.
+
+## Cost / usefulness
+
+Compare this cycle qualitatively to the 10/2 morning baseline:
+- 10/2 final run: 3 calls / about $0.010230
+- target after PR #77: avoid the extra quality rewrite for near-target complete output
+
+Do not require an exact lower dollar amount if input size/news volume changed. Focus on whether avoidable calls were removed.
+
+## Safety / forbidden
+
+Read-only only.
+
+Forbidden:
+- manual Edge invoke
+- manual retry
+- DB write
+- gate change
+- cron change
+- deploy
+- source edit
+- X post
+- app notification
+- Auth/Vault/secrets
+- legacy generator mutation
+
+Do not activate app/x consumers in this TASK.
+
+## Completion conditions
+
+PASS candidate only if:
+- natural 10/5 morning report packet safely completes
+- objective input facts are represented correctly
+- no false PR #79 watch/session/causal Hard rejection
+- PR #77 rewrite/warning behavior matches intended delivery-first policy
+- no duplicate packet/provider side effect
+- production mutation=0
+
+## Required Report
+
+- task_id/result classification
+- observation time JST
+- production function/gate read-back
+- cycle statuses/attempts/timestamps/errors
+- data/report packet ids/hashes
+- duplicate counts
+- Fact/local result
+- key diagnostics
+- actual X char count
+- App narrative char count
+- news ordering assessment
+- PR #77 behavior assessment
+- PR #79/H1 behavior assessment
+- objective factual cross-check
+- model calls/tokens/cost
+- retry/no-op behavior
+- production mutation=0
+- remaining issues
+- recommendation for same-day close natural observation vs next rollout step
+
+When complete:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+Pending.
+
+---
+
+# Previous completed G2 task — combined PR #77 + PR #79 production deploy
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-shared-report-v2-pr77-pr79-prod-deploy-20261003
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sonnet5（高）
 - purpose: merged PR #77 quality calibration + C1-accepted PR #79 Hard-guard fixes を production `market-report-analysis` のみに1回で反映し、app/x consumer gates OFFのまま exact source/read-back と非影響を確認する。manual cycleは禁止。次の自然朝刊でlive-model挙動を見る。
@@ -7073,4 +7291,20 @@ Rollout after review, not before:
 - recommended Codex model: **Sol（高）**.
 - rereview must also decide whether the separate causal guard still creates a delivery false-positive for `前夜の米国株高を受け、日本株の反応を見る` in factual presentation fields.
 - no merge/deploy until C1 accepts the rereview.
+
+
+
+## Final K2 — combined PR77+PR79 production deploy
+
+- verdict: **PASS**.
+- production `market-report-analysis` is now v21, verify_jwt=false, ezbr `fe5c1836cdeddabdb1300668a5f75ac92d3570872a1b1eb110798195991fa40c`.
+- independent ChatGPT read-back confirms v21 is ACTIVE and source includes the accepted PR #77/PR #79 runtime.
+- app_enabled=false / x_enabled=false remain unchanged.
+- all 8 relevant cron jobs remain active with the expected schedules and command hashes.
+- G2 reported exact deployed-source byte match against fresh main for the full 11-file import graph.
+- only `market-report-analysis` changed in the G2 before/after Edge Function metadata comparison.
+- no manual market-report invoke/retry, no consumer activation, no DB/Auth/Vault/X mutation.
+- accepted test evidence: analysis 136/136, personalized 128/128, X shared 8/8, data-packet 42/42, _shared runtime 361/361; target check/lint/diff PASS.
+- rollback source is production v20 and was captured/read-back; rollback not needed.
+- next step is read-only observation of the next natural 2026-10-05 morning cycle. No weekend/manual run.
 
