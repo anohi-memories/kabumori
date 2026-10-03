@@ -3,8 +3,8 @@
 - task_id: kabumori-pr79-hard-guard-rereview-20261003
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused rereview / Hard Fact session-date+hypothetical boundary
@@ -1960,3 +1960,31 @@ Then status -> review_required, next_owner -> chatgpt, STOP for C1.
 - PR #79 returns to G2 for a narrow source correction; recommended Claude model **Opus5.5（高）**.
 - after correction, another focused Codex review is required before merge/deploy.
 
+
+
+## Final C1 — PR #79 accepted and merged
+
+- verdict: **PASS-WITH-FIX / accepted**.
+- original rereviewed PR head: `f7083ba6a810d5f9cdbe7090e4439f261e38bf0f`.
+- exact H1 reviewed/fixed source: `b6d2dce3cc45c73951e51d139fefeddad7e2906e`.
+- H1 fix branch was a direct one-commit descendant of the PR head.
+- C1 fast-forwarded the existing PR #79 head branch to that exact H1 fix with no force.
+- fresh read-back confirmed PR #79 head exactly `b6d2dce3cc45c73951e51d139fefeddad7e2906e`, mergeable=true, with no overlap against fresh main.
+- PR #79 merged -> main `4dbf11f2848059cc967d942efc9d60613d855537`.
+- accepted H1 verification:
+  - market-report-analysis 136/136
+  - session-date 14/14
+  - H1 boundary 9/9
+  - personalized 128/128
+  - X shared consumer 8/8
+  - data-packet 42/42
+  - _shared runtime 361/361 with --no-check due documented pre-existing unrelated checked-type debt
+  - explicit target checks / changed-file lint / diff PASS
+- accepted bounded fixes include:
+  - `続くから/するから/なるから` no longer masquerade as questions;
+  - asserted continuative premises remain factual;
+  - bounded honest degree-modifier questions remain deliverable;
+  - ordinary prior-night reaction-watch prose no longer trips the causal Hard checker when the effect is purely terminal watch text;
+  - actual/speculative market effects and wrong-date/sign/ref facts remain protected.
+- production mutation from H1/C1 = 0 except normal GitHub branch fast-forward + merge; no Edge deploy/gate/manual cycle.
+- next rollout: one controlled `market-report-analysis` deploy containing already-merged PR #77 + accepted PR #79, app/x gates OFF, exact source read-back, then natural-cycle observation.
