@@ -55,14 +55,16 @@ const LIST_GAP = /^[、・,とや\s]*(?:および|及び)?[、・,とや\s]*$/u;
 const UP_WORD = /上昇|(?<![利きし])上げ|上が[っりる]|値上がり|反発|続伸|プラス/u;
 const DOWN_WORD = /下落|(?<![利きし])下げ|下が[っりる]|値下がり|反落|続落|マイナス/u;
 /** A question or condition about a move is not a statement that it happened. */
-const HYPOTHETICAL = /かどうか|するか|続くか|なるか|すれば|した場合|する場合|となれば|なら(?:ば)?[、。]?/u;
+const HYPOTHETICAL = /かどうか|(?:する|続く|なる)か(?!ら)|すれば|した場合|する場合|となれば|なら(?:ば)?[、。]?/u;
 /**
  * What may stand between a move and the question or condition about it for the move itself to be the
  * thing asked (「米国株高が強まるかどうか」「上昇すれば」「米国株安が続くか」): a subject particle and one
  * predicate (kanji then kana). A continuative or a second predicate means the move was stated first and
  * only then a question was added (H1 on PR #79: 「米国株は下落しており次も続くか」「米国株高が強まり波及するかどうか」).
  */
-const GOVERNED_BY_QUESTION = /^(?:が|は|も)?[一-龠々ァ-ヶー]{0,6}[ぁ-ん]{0,3}$/u;
+// A continuative copula/verb (「明白で」「定着し」) asserts a premise before the next question.
+// The two bounded degree modifiers still describe the predicate being questioned, not another event.
+const GOVERNED_BY_QUESTION = /^(?!.*(?:で|し|て|り)$)(?:が|は|も)?(?:一段と|さらに)?[一-龠々ァ-ヶー]{0,6}[ぁ-ん]{0,3}$/u;
 const STALE_MARKER = /時点|最新ではありません|古い値/u;
 const PAST_FACT = /ました|でした|した(?:[。!?,、]|$)|だった|してい(?:る|ます)/u;
 const CURRENT_STALE_PREFIX = /(?:今日|現在|直近)の(?:最新の)?$|最新の$/u;
@@ -96,11 +98,11 @@ const PLACE = `(?:${NOUN}{1,16}(?:で|に|へ)(?:は|も)?)?`;
  */
 const WATCH_RELATION = new RegExp([
   `^が${PLACE}どう[^、。]*?か.*${WATCH_VERB}`,
-  `^が${PLACE}(?:続くか|[一-龠々ァ-ヶー]{1,6}(?:する|される|できる)?かどうか).*${WATCH_VERB}`,
+  `^が${PLACE}(?:続くか(?!ら)|[一-龠々ァ-ヶー]{1,6}(?:する|される|できる)?かどうか).*${WATCH_VERB}`,
   `^(?:の(?:受け止め方?|影響|波及)|への反応)(?:を|に|も|は)?(?:${NOUN}{1,12}(?:を|に|で))?${WATCH_VERB}`,
   `^を(?:踏まえ|受け)て?、?(?:${NOUN}{1,12}(?:の|を|に|で|が|は|も)){0,3}${WATCH_VERB}`,
   `^の流れを?${PLACE}どう[^、。]*?か[^、。]*?${WATCH_VERB}`,
-  `^を受けた(?:動き|流れ|買い|売り|反応|値動き|展開)(?:が|は|も)(?:続くか|どう[^、。]*?か)[^、。]*?${WATCH_VERB}`,
+  `^を受けた(?:動き|流れ|買い|売り|反応|値動き|展開)(?:が|は|も)(?:続くか(?!ら)|どう[^、。]*?か)[^、。]*?${WATCH_VERB}`,
 ].join("|"), "u");
 /** The date is the sentence's topic (「10月2日は、…」), not attached to the metric (「10月2日の米国株」). */
 const TOPIC_AFTER_DATE = /^(?:は|には)/u;

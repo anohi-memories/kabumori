@@ -83,3 +83,87 @@ test("H1 PR79 controls: genuine hypotheticals and the known delivery remain Hard
     "10月2日は、米国株安が続くかを確認します。",
   ]) assert.deepEqual(metricFactIssues({ factual: [s], forward: [] }, input), [], s);
 });
+
+test("H1 rereview: causal から and an asserted copula before a question are not hypotheses", () => {
+  const accepted: string[] = [];
+  for (const s of [
+    "10月2日は、米国株安が続くから反応を見ます。",
+    "10月2日の米国株は下落するから、反応を見ます。",
+    "10月2日の米国株は下落が明白で続くかを見ます。",
+    "10月2日の米国株は下落が確定し続くかを見ます。",
+    "10月2日は、米国株安が明確となり続くかを見ます。",
+    "10月2日は、米国株安が明白で次の動きを見ます。",
+  ]) for (const [name, place] of fields) {
+    const a = draft();
+    place(a, s);
+    const issues = localAnalysisCheck(a, input).hard;
+    if (!dateIssue(issues) || !issues.some((i) => i.includes("方向の逆転"))) accepted.push(`${name}: ${s}`);
+  }
+  assert.deepEqual(accepted, []);
+  // A matching direction must not hide the wrong date via WATCH_RELATION either.
+  assert.ok(dateIssue(metricFactIssues({
+    factual: ["10月2日は、米国株高が続くから反応を見ます。"], forward: [],
+  }, input)));
+});
+
+test("H1 rereview: bounded degree adverbs do not make an honest question factual", () => {
+  for (const s of [
+    "10月2日は、米国株高が一段と強まるかどうかを見ます。",
+    "10月2日は、米国株高がさらに強まるかどうかを見ます。",
+    "10月2日は、米国株安がさらに続くかを見ます。",
+    "10月2日は、米国株高が強くなるかを見ます。",
+    "10月2日は、米国株が上昇したかどうかを確認します。",
+    "10月2日は、米国株高が強まったかどうかを確認します。",
+    "10月2日は、米国株高が再度大幅拡大するかどうかを見ます。",
+  ]) assert.deepEqual(metricFactIssues({ factual: [s], forward: [] }, input), [], s);
+});
+
+test("H1 rereview: a pure reaction watch is deliverable in all factual placements, not just date-safe", () => {
+  const rejected: string[] = [];
+  for (const s of [
+    "10月2日は、前夜の米国株高を受け、日本株の反応を見る。",
+    "10月2日は、前夜の米国株高を受けて、日本株の反応を確認します。",
+    "10月2日は、米国株高の流れをどう受け止めるかが焦点。",
+    "10月2日は、米国市場の上昇を受けた動きが続くかを確認します。",
+  ]) for (const [name, place] of fields) {
+    const a = draft();
+    place(a, s);
+    const issues = localAnalysisCheck(a, input).hard;
+    if (issues.length > 0) rejected.push(`${name}: ${s} -> ${issues.join(" / ")}`);
+  }
+  assert.deepEqual(rejected, []);
+});
+
+test("H1 rereview: a watch verb cannot launder an actual or speculative market causal claim", () => {
+  for (const s of [
+    "米国株高を受け、日本株が上昇しました。",
+    "米国株高を受け、日本株の反応を見て、上昇したことを確認します。",
+    "米国株高を受け、日本株の反応を見る前に上昇しました。",
+    "米国株高を受け、日本株の反応を見る一方、買いが先行しています。",
+    "米国株高を受け、日本株の反応を見ると上昇しました。",
+    "米国株高を受け、日本株の反応を確認した。",
+    "米国株高を受け、日本株の上昇が続く可能性があります。",
+    "米国株高を受けた動きが続くから確認します。",
+    "米国株高を受けた動きが強まり続くかを確認します。",
+  ]) {
+    const a = draft();
+    a.x_post.closing_ja = s;
+    assert.ok(localAnalysisCheck(a, input).hard.some((i) => i.includes("因果の断定")), s);
+  }
+});
+
+test("H1 rereview: the narrow causal watch exemption does not exempt facts in its cause", () => {
+  for (const [expected, s] of [
+    ["日付と指標の不一致", "10月2日のNYダウ50,926.56を受け、日本株の反応を見る。"],
+    ["方向の逆転", "10月2日は、前夜の米国株安を受け、日本株の反応を見る。"],
+    ["方向の逆転", "10月1日のS&P500の-0.19%を受け、日本株の反応を見る。"],
+  ]) for (const [name, place] of fields) {
+    const a = draft();
+    place(a, s);
+    assert.ok(localAnalysisCheck(a, input).hard.some((i) => i.includes(expected)), `${name}: ${s}`);
+  }
+  const a = draft();
+  a.claims[0].text_ja = "前夜の米国株高を受け、日本株の反応を見る。";
+  a.claims[0].evidence_refs = ["news:00000000-0000-4000-8000-000000000000"];
+  assert.ok(localAnalysisCheck(a, input).hard.some((i) => i.includes("入力に無い ref")));
+});
