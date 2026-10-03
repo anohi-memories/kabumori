@@ -3,8 +3,8 @@
 - task_id: kabumori-topic-detail-learning-v2-20261003
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: Home「今日のトピック」のTOPカードは短い要約のまま維持し、topic detailだけを「しっかり学べる」学習ページへ強化する。既存50トピックすべてに具体例・株価/相場との関係・覚えておくポイントを追加し、DB/RPC/API/AIを増やさず静的curated content + native UIだけで完結する。
@@ -316,6 +316,56 @@ Then:
 - STOP for K1.
 
 Recommended model: **Sonnet5（高）**.
+
+## Report — G1: topic detail learning v2 (task kabumori-topic-detail-learning-v2-20261003)
+
+- task_id: `kabumori-topic-detail-learning-v2-20261003`
+- result: implemented and Simulator-verified; PR open, **not merged**.
+- fresh main SHA: `c56c03b21b9883367f26d584fa20b36f1d401c28` (allocation SHA `309b0cb8…` was older). No open PR / slot touches `src/app/topic-detail.tsx`, `src/lib/topic-detail-catalog.ts` or their test (independent clone/branch).
+- PR: https://github.com/anohi-memories/kabumori/pull/83 — branch `claude/g1-topic-detail-learning-v2-20261003`, head `c810accebada37760a98a18bb184b50a61b7937b`
+- **EAS build created: no.** backend/DB/RPC/API/AI mutation: **0**.
+
+### worktree/branch isolation
+Dedicated scratch clone + branch; the shared checkout and other slots' worktrees/branches/dev servers were not used. A Simulator rig used its own Metro on a separate port only while the phone's Metro was stopped (shared node_modules cache rule).
+
+### changed_files
+`src/app/topic-detail.tsx`, `src/lib/topic-detail-catalog.ts`, `tests/app/topic-detail-catalog_test.ts` (replaced), `tests/app/topic-detail-screen_test.ts` (new), `docs/ui-review/topic-detail-3level-402pt-2026-10-03.webp`, `docs/ui-review/topic-detail-advanced-bottom-375pt-2026-10-03.webp`. Untouched: Home topic card, `daily-topic.ts`, `home-topic.ts`, DB/migrations/RPC/Edge Functions/Auth.
+
+### Final detail content model / section roles
+`TopicDetailEntry = { sections: TopicDetailSection[] }` with `TopicDetailSection = { role, heading, body }` and exactly five roles in fixed order: `basics` 「まずこれだけ」→ `why` 「なぜ大事？」→ `example` 「具体例」→ `market` 「株価・相場とどう関係する？」 (the ten 実践 topics: 「実践ではどう見る？」)→ `takeaway` 「覚えておくポイント」. Screen order: eyebrow → level badge + category → title → intro card (the fetched `topic.body`, same text as Home) → the five sections. 具体例 = level-tinted outlined card; 覚えておくポイント = calm accent-bar block; level accents pale green / blue / lavender (same palette as the Home topic badge).
+
+### How all 50 topics were covered
+Every one of the 50 seeded titles (initial 20 / intermediate 20 / practical 10) was written as a curated entry (avg ~355 chars, 295–430 per topic across the five sections; each section 25–200 chars). The test reads the seed migration `20260828213000_expand_tips_catalog.sql`, asserts the catalog title set equals it exactly (no missing/extra), and that 実践 = the last ten. Unknown title → `topicDetailFor` returns null → screen shows the intro summary + 「この用語の詳しい解説は準備中です。」 (nothing invented).
+
+### Representative examples (all explicitly 「たとえば（仮の数字です）…」 hypothetical)
+- 初級 PER: 1株あたり利益100円の会社A・Bで株価1,500円/3,000円ならPER 15倍/30倍。
+- 中級 ROE: 自己資本100億円・純利益10億円ならROE 10％、自己資本が200億円なら5％。
+- 実践 自社株買い: 発行1,000万株のうち100万株を消却すると、利益が同じならEPSは約11％上がる（実践ではどう見る？ = 取得上限と実際の進捗を確認）。
+
+### Content rules enforced by tests
+Evergreen only (no 現在の株価/本日/今日の市場/今週/最新/直近/具体的な年月日 etc.); no advice, prediction or guarantee wording; numbers only inside examples flagged hypothetical; no sentence repeated within or across topics; examples/takeaways unique across all 50.
+
+### Safety behavior preserved (pinned by `topic-detail-screen_test.ts`)
+`fetchDailyTopic(level, jstDate)` with the exact params, **id verified (`result.id !== id` → mismatch, fail-closed)**, error text, mismatch text, safe-area + BackButton unchanged; rendering adds no network/AI/DB call (imports pinned; one fetch only; catalog is static data). New: when params change the screen resets to loading and clears the previous topic (a reused screen no longer shows stale content). Labels unchanged.
+
+### Visual findings (Simulator: iPhone 17 Pro 402pt, real SE 3rd-gen sim 375pt; rig with real seeded titles/base_text)
+- Long 2-line titles (信用買い残…, 半導体株がSOX…) wrap cleanly under the badge row; level/category readable (category 1 line); no horizontal clipping; intro card clearly separated from the learning sections; sections 2–5 lines each, no wall-of-text feel; total scroll height ~1040–1150pt (1.3–1.8 screens); advanced shows 「実践ではどう見る？」, others 「株価・相場とどう関係する？」; back returns to Home and /topics; bottom padding 60pt + home indicator; loading/error/mismatch/fallback verified; Home topic card unchanged; Home→detail (CTA + body) and /topics→detail verified.
+- Simulator observations addressed in the final commit: beginner takeaway heading contrast 4.45:1 → 5.56:1 (AA), blue 6.13, lavender 6.62; example-card outline strengthened; intro and headings 15pt/weight aligned; reset-to-loading on new params. (The committed screenshots predate this small styling refinement.)
+
+### Tests / checks
+`deno test tests/app/` **284 passed / 0 failed** (catalog 16, screen 9 in the topic tests); `expo config --json` OK; `expo export --platform web` PASS; tsc(src): only the 2 known CSS-module diagnostics; `git diff --check` clean.
+
+### Remaining issues
+- Out of scope, noted: opening a past day from `/topics` still shows the eyebrow 「TODAY'S TOPIC」; no retry button on the detail error text (as before); a calculation like 「(60 ÷ 2,000)」 can break across lines (harmless).
+- Final styling refinements were verified numerically/by tests, not re-screenshotted.
+
+### safety_checks
+No DB/schema/RPC/Edge Function/Auth/AI/API change; no EAS build; no deploy; no real-time/market claims; no recommendation wording; PR not merged; no secrets committed.
+
+### next_recommendation
+K1 review of PR #83 (UI + static content, low risk). Then the user can read a few topics live on the dev client; a future task may connect a topic to same-day market facts only with an explicit trustworthy data source.
+
+Status: `review_required` / next_owner `chatgpt`. STOP for K1.
 
 ---
 
