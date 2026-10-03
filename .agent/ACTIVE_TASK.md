@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: kabumori-pr79-hard-guard-rereview-20261003
+- status: ready
+- task_id: ai-lab-pr82-event-dedupe-review-20261003
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 PASS-WITH-FIX accepted. Existing PR #79 branch fast-forwarded to exact H1 reviewed/fixed source b6d2dce3cc45c73951e51d139fefeddad7e2906e, fresh overlap 0, merged to main 4dbf11f2848059cc967d942efc9d60613d855537. No production deploy/gate/manual cycle. H1 free after fresh allocation.
+- allocation: Focused review of PR #82 exact head 08a7346ccd63f2ff540bd48149f1f1e65e6dbe09. Verify event-level dedupe, concurrent same-event selection, post-success usage persistence failure, crash windows, eventKey stability, migration ACL/RLS/drift/idempotency, and existing X/fingerprint/other-brand safety. No merge/deploy/production write/real X operation. Recommended Sol（高）.
 
 ## Codex H2
 - owner: codex
