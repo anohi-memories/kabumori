@@ -222,12 +222,19 @@ export function selectAiLabTopicSeed({
 }
 
 // ---------------------------------------------------------------------------------------------------
-// 応急修正(2026-10-01): 重複テーマ連投の止血。`selectAiLabTopicSeed`（上）は「最新エントリの角度1行を
-// 乱数で選ぶ」だけで、履歴も具体的な事実も使わなかったため、同じエントリ・同じ汎用角度が連続した。
-// 本番の呼び出し元(x-test-post)は下の `selectAiLabRotatingTopicSeed` を使う。上は既存テスト互換の旧実装。
+// 題材選定（本番の呼び出し元 x-test-post が使う）。`selectAiLabTopicSeed`（上）は既存テスト互換の旧実装。
+//
+// 重複判定の単位は「文章」でも「切り口(TopicUnit)」でもなく【実際の開発イベント】。1つの日記エントリ
+// から作る changed / difficulty / decided / angle の各切り口は、別々の投稿候補ではあっても同じイベントに
+// 属する（同じ eventKey を持つ）。2026-10-01 版は切り口ごとに巡回していたため、同じ出来事を言い換えて
+// 数時間おきに投稿できてしまった。
+//
+// 使用済みイベントは、X投稿の成功が確認された時点で ai_lab_topic_event_usage へ記録され
+// （ai_lab_brand_post_store.ts）、次回の選定で `recentUsage` として渡される。履歴が読めないときは
+// 日記を使わず evergreen に倒す（重複投稿を出すより安全）。
 // ---------------------------------------------------------------------------------------------------
 
-// evergreen seed ごとの汎用テーマタグ（EVERGREEN_TOPIC_SEEDS と同じ並び）。直近投稿が同じ汎用テーマなら避ける。
+// evergreen seed ごとの汎用テーマタグ（EVERGREEN_TOPIC_SEEDS と同じ並び）。直近に同じ汎用テーマを使っていたら避ける。
 const EVERGREEN_THEME_TAGS: ReadonlyArray<readonly AiLabGenericThemeId[]> = [
   ["unglamorous_work"],
   ["ai_trial_error"],
@@ -238,22 +245,49 @@ const EVERGREEN_THEME_TAGS: ReadonlyArray<readonly AiLabGenericThemeId[]> = [
   [],
 ];
 
+/** 同じ evergreen seed を再び使うまでの時間。 */
+export const AI_LAB_EVERGREEN_SEED_COOLDOWN_HOURS = 72;
+/** 同じ汎用テーマタグを持つ evergreen seed を続けて使わない時間。 */
+export const AI_LAB_EVERGREEN_THEME_COOLDOWN_HOURS = 48;
+
+/**
+ * イベントの安定ID。本文・内部識別子は含めない。
+ * - 日記: `diary-YYYY-MM-DD-N`（N は同じ日付の見出しの中での出現順、1始まり）。日付が違うエントリを
+ *   足しても既存キーは変わらない。同じ日付に2件目を足すときは末尾に追記する（途中に挿入すると順番がずれる）。
+ * - evergreen: `evergreen-N`（EVERGREEN_TOPIC_SEEDS の添字）。
+ * DB 側（ai_lab_topic_event_usage.event_key の CHECK）と同じ形。
+ */
+export const AI_LAB_EVENT_KEY_PATTERN = /^(?:diary-\d{4}-\d{2}-\d{2}-\d{1,2}|evergreen-\d{1,2})$/u;
+
+export function diaryEventKey(date: string, ordinal: number): string {
+  return `diary-${date}-${ordinal}`;
+}
+
+export function evergreenEventKey(index: number): string {
+  return `evergreen-${index}`;
+}
+
+/** 実際に投稿された題材の記録（ai_lab_topic_event_usage の1行）。 */
+export type AiLabTopicUsage = { eventKey: string; publishedAt: string };
+
 export type AiLabTopicExclusion = {
-  /** 非機密の識別子のみ（日付・種別）。本文は入れない。 */
+  /** 非機密の識別子のみ（eventKey / unitKey）。本文は入れない。 */
   candidate: string;
-  stage: "freshness" | "sanitize" | "theme_cooldown" | "recent_overlap";
+  stage: "freshness" | "sanitize" | "theme_cooldown" | "event_cooldown" | "recent_overlap";
   reason: string;
 };
 
 export type AiLabRotatingTopicSelection = {
   topic: string;
   source: "diary" | "evergreen";
-  /** 例: "2026-10-01#changed" / "evergreen#3"。ログ用の非機密ID。 */
+  /** 投稿成功後に使用済みとして記録するキー。同じエントリ由来の切り口は全て同じ値。 */
+  eventKey: string;
+  /** 例: "diary-2026-10-01-1#changed" / "evergreen-3"。ログ用の非機密ID。 */
   unitKey: string;
   exclusions: AiLabTopicExclusion[];
 };
 
-type TopicUnit = { key: string; entryDate: string; seed: string };
+type TopicUnit = { key: string; seed: string };
 
 function relativeDayLabel(age: number): string {
   if (age <= 0) return "今日";
@@ -261,9 +295,13 @@ function relativeDayLabel(age: number): string {
   return `${age}日前`;
 }
 
-/** 1エントリを「別々に語れる話題」の列へ分解する。どの話題にも同じエントリの具体的な事実を添える。 */
-function diaryUnitsFor(
+/**
+ * 1イベントの「切り口」を列挙する。どの切り口にも同じイベントの具体的な事実を添える。切り口は同じ
+ * イベントの言い換えにすぎないので、選定ではこのうち1つしか使わない（残りは同じ eventKey で消費される）。
+ */
+export function diaryUnitsFor(
   entry: DevDiaryEntry,
+  eventKey: string,
   age: number,
   exclusions: AiLabTopicExclusion[],
 ): TopicUnit[] {
@@ -275,79 +313,38 @@ function diaryUnitsFor(
   ].filter((line): line is string => line !== null).join("\n");
 
   const units: TopicUnit[] = [
-    {
-      key: `${entry.date}#changed`,
-      entryDate: entry.date,
-      seed: `${facts}\n今回の切り口: 何を作った・直したのか、実際に何が起きたのか`,
-    },
+    { key: `${eventKey}#changed`, seed: `${facts}\n今回の切り口: 何を作った・直したのか、実際に何が起きたのか` },
   ];
   if (entry.difficulty) {
-    units.push({
-      key: `${entry.date}#difficulty`,
-      entryDate: entry.date,
-      seed: `${facts}\n今回の切り口: どこで詰まり、何に気づいたのか`,
-    });
+    units.push({ key: `${eventKey}#difficulty`, seed: `${facts}\n今回の切り口: どこで詰まり、何に気づいたのか` });
   }
   if (entry.decided) {
-    units.push({
-      key: `${entry.date}#decided`,
-      entryDate: entry.date,
-      seed: `${facts}\n今回の切り口: なぜその判断（止める・変える・決める）をしたのか`,
-    });
+    units.push({ key: `${eventKey}#decided`, seed: `${facts}\n今回の切り口: なぜその判断（止める・変える・決める）をしたのか` });
   }
   entry.angles.forEach((angle, index) => {
-    // 具体的な出来事に触れない汎用角度（「下調べだけで1日」等）はクールダウン対象。使わない。
+    // 具体的な出来事に触れない汎用角度（「下調べだけで1日」等）は使わない。
     const generic = detectGenericThemes(angle);
     if (generic.length > 0) {
       exclusions.push({
-        candidate: `${entry.date}#angle${index + 1}`,
+        candidate: `${eventKey}#angle${index + 1}`,
         stage: "theme_cooldown",
         reason: `GENERIC_THEME:${generic.join(",")}`,
       });
       return;
     }
-    units.push({
-      key: `${entry.date}#angle${index + 1}`,
-      entryDate: entry.date,
-      seed: `${facts}\n今回の切り口: ${angle}`,
-    });
+    units.push({ key: `${eventKey}#angle${index + 1}`, seed: `${facts}\n今回の切り口: ${angle}` });
   });
   return units;
 }
 
-/**
- * 話題を「同じエントリが隣り合わない」巡回列に並べる（巡回の末尾→先頭も含む）。
- * 1エントリの話題数が他の合計を超えると隣り合いが避けられないため、超えた分は後ろの話題から落とす
- * （落とした事実は exclusions に残す）。エントリが1件だけのときは避けようがないので落とさず、
- * 同じエントリの別の切り口を順に使う。
- */
-function interleaveByEntry(
-  perEntry: TopicUnit[][],
-  exclusions: AiLabTopicExclusion[],
-): TopicUnit[] {
-  const groups = perEntry.filter((units) => units.length > 0).map((units) => [...units]);
-  if (groups.length > 1) {
-    for (;;) {
-      const total = groups.reduce((sum, units) => sum + units.length, 0);
-      const biggest = groups.reduce((a, b) => (b.length > a.length ? b : a));
-      if (biggest.length <= total - biggest.length) break;
-      const dropped = biggest.pop()!;
-      exclusions.push({ candidate: dropped.key, stage: "theme_cooldown", reason: "ENTRY_QUOTA_BALANCE" });
-    }
-  }
-  // 話題数の多いエントリから、偶数番目→奇数番目の順に詰めると、同じエントリは隣り合わない。
-  const ordered = groups
-    .map((units, index) => ({ units, index }))
-    .sort((a, b) => b.units.length - a.units.length || a.index - b.index)
-    .flatMap(({ units }) => units);
-  const slots: TopicUnit[] = new Array(ordered.length);
-  let position = 0;
-  for (const unit of ordered) {
-    if (position >= slots.length) position = 1;
-    slots[position] = unit;
-    position += 2;
-  }
-  return slots;
+/** 解析済みエントリに eventKey を振る（sanitize 前の並びで数えるので、危険なエントリを弾いても他のキーはずれない）。 */
+export function diaryEventsWithKeys(markdown: string): Array<{ entry: DevDiaryEntry; eventKey: string; ordinal: number }> {
+  const seen = new Map<string, number>();
+  return parseDevDiaryMarkdown(markdown).map((entry) => {
+    const ordinal = (seen.get(entry.date) ?? 0) + 1;
+    seen.set(entry.date, ordinal);
+    return { entry, eventKey: diaryEventKey(entry.date, ordinal), ordinal };
+  });
 }
 
 function pickByRotation<T>(items: readonly T[], rotationIndex: number): T {
@@ -356,84 +353,115 @@ function pickByRotation<T>(items: readonly T[], rotationIndex: number): T {
 }
 
 /**
- * 会社員AIラボの題材を1件選ぶ（応急修正版）。
+ * 会社員AIラボの題材を1件選ぶ。
  *
- * - 新しい開発日記（maxAgeDays以内）がある限り、evergreenより必ず優先する。
- * - 日記は最新1件ではなく、新鮮なエントリ全部の話題を「同じエントリが隣り合わない」列にし、
- *   `rotationIndex`（投稿ごとに1ずつ増える連番）で巡回する。新鮮なエントリが2件以上ある限り、連続する
- *   2投稿が同じエントリになることはない（1件だけのときは同じエントリの別の切り口を順に使う）。同じ話題の
- *   再登場は列の長さ分の投稿数が経った後（数日単位のクールダウン）。履歴DBを持たないため、これが
- *   「直近に使った話題を避ける」の実装。
- * - 汎用角度は話題に使わない。evergreenのみ、`recentPostTexts`（直近投稿本文。渡された場合のみ）と同じ
- *   汎用テーマのseedを避ける。
- * - 除外した候補は `exclusions` に理由コード付きで返す（PROJECT_RULES「候補選定と除外ログ」）。
+ * 優先順位:
+ *   1. fresh（maxAgeDays以内）かつ未使用のうち最新のイベント
+ *   2. 他の fresh 未使用イベント（1 が無い＝新しい順に次）
+ *   3. evergreen（同じ seed は72時間、同じ汎用テーマは48時間あけ、直近投稿本文が渡されれば同テーマも避ける）
+ *   同じ fresh イベントを別の切り口で再利用することはしない。
+ *
+ * - `recentUsage`: 実際に投稿された題材の記録（呼び出し側が期間を区切って読む）。`null` は「履歴が読めな
+ *   かった」を意味し、そのときは日記イベントを一切使わず evergreen に倒す。
+ * - `rotationIndex`: 使うイベントが決まった後、そのイベントのどの切り口で書くかと、evergreen の選択の
+ *   ばらつきにだけ使う。イベントのクールダウンを上書きする根拠にはしない。
+ * - 除外した候補は `exclusions` に理由コード付きで返す（PROJECT_RULES「候補選定と除外ログ」）。本文は入れない。
  */
 export function selectAiLabRotatingTopicSeed({
   markdown,
   now,
   rotationIndex,
+  recentUsage,
   maxAgeDays = 3,
   recentPostTexts = [],
 }: {
   markdown: string;
   now: Date;
   rotationIndex: number;
+  recentUsage: readonly AiLabTopicUsage[] | null;
   maxAgeDays?: number;
   recentPostTexts?: readonly string[];
 }): AiLabRotatingTopicSelection {
   const exclusions: AiLabTopicExclusion[] = [];
+  const usedEventKeys = new Set((recentUsage ?? []).map((usage) => usage.eventKey));
 
-  const fresh: Array<{ entry: DevDiaryEntry; age: number }> = [];
-  for (const raw of parseDevDiaryMarkdown(markdown)) {
+  const fresh: Array<{ entry: DevDiaryEntry; eventKey: string; ordinal: number; age: number }> = [];
+  for (const { entry: raw, eventKey, ordinal } of diaryEventsWithKeys(markdown)) {
     const entry = sanitizeDiaryEntry(raw);
     if (!entry) {
-      exclusions.push({ candidate: raw.date, stage: "sanitize", reason: "DIARY_ENTRY_UNSAFE_OR_INVALID" });
+      exclusions.push({ candidate: eventKey, stage: "sanitize", reason: "DIARY_ENTRY_UNSAFE_OR_INVALID" });
       continue;
     }
     const age = daysBetween(new Date(`${entry.date}T00:00:00Z`), now);
     if (age < 0) {
-      exclusions.push({ candidate: entry.date, stage: "freshness", reason: "DIARY_ENTRY_IN_FUTURE" });
+      exclusions.push({ candidate: eventKey, stage: "freshness", reason: "DIARY_ENTRY_IN_FUTURE" });
     } else if (age > maxAgeDays) {
-      exclusions.push({ candidate: entry.date, stage: "freshness", reason: "DIARY_ENTRY_STALE" });
+      exclusions.push({ candidate: eventKey, stage: "freshness", reason: "DIARY_ENTRY_STALE" });
+    } else if (recentUsage === null) {
+      exclusions.push({ candidate: eventKey, stage: "event_cooldown", reason: "EVENT_USAGE_UNAVAILABLE" });
+    } else if (usedEventKeys.has(eventKey)) {
+      exclusions.push({ candidate: eventKey, stage: "event_cooldown", reason: "RECENT_EVENT_USED" });
     } else {
-      fresh.push({ entry, age });
+      fresh.push({ entry, eventKey, ordinal, age });
     }
   }
-  fresh.sort((a, b) => (a.entry.date < b.entry.date ? 1 : a.entry.date > b.entry.date ? -1 : 0));
-
-  const diaryUnits = interleaveByEntry(
-    fresh.map(({ entry, age }) => diaryUnitsFor(entry, age, exclusions)),
-    exclusions,
+  // 新しい日付が先、同じ日付なら後から追記されたものが先。
+  fresh.sort((a, b) =>
+    a.entry.date < b.entry.date ? 1 : a.entry.date > b.entry.date ? -1 : b.ordinal - a.ordinal
   );
-  if (diaryUnits.length > 0) {
-    const unit = pickByRotation(diaryUnits, rotationIndex);
-    return { topic: unit.seed, source: "diary", unitKey: unit.key, exclusions };
+
+  for (const candidate of fresh) {
+    const units = diaryUnitsFor(candidate.entry, candidate.eventKey, candidate.age, exclusions);
+    if (units.length === 0) continue;
+    const unit = pickByRotation(units, rotationIndex);
+    return { topic: unit.seed, source: "diary", eventKey: candidate.eventKey, unitKey: unit.key, exclusions };
   }
 
-  // fresh な日記が本当に無い場合だけ evergreen。直近投稿と同じ汎用テーマのseedは避ける。
+  // fresh 未使用イベントが無い → evergreen。
+  const nowMs = now.getTime();
+  const hoursAgo = (iso: string) => (nowMs - Date.parse(iso)) / 3_600_000;
+  const lastUsedHoursAgo = new Map<number, number>();
   const recentThemes = new Set(recentPostTexts.flatMap((text) => detectGenericThemes(text)));
+  for (const usage of recentUsage ?? []) {
+    const match = /^evergreen-(\d{1,2})$/u.exec(usage.eventKey);
+    if (!match) continue;
+    const index = Number(match[1]);
+    const age = hoursAgo(usage.publishedAt);
+    if (!Number.isFinite(age)) continue;
+    if (!lastUsedHoursAgo.has(index) || age < lastUsedHoursAgo.get(index)!) lastUsedHoursAgo.set(index, age);
+    if (age < AI_LAB_EVERGREEN_THEME_COOLDOWN_HOURS) {
+      for (const tag of EVERGREEN_THEME_TAGS[index] ?? []) recentThemes.add(tag);
+    }
+  }
+
   const allowed: number[] = [];
   EVERGREEN_TOPIC_SEEDS.forEach((_, index) => {
+    const key = evergreenEventKey(index);
+    const lastUsed = lastUsedHoursAgo.get(index);
+    if (lastUsed !== undefined && lastUsed < AI_LAB_EVERGREEN_SEED_COOLDOWN_HOURS) {
+      exclusions.push({ candidate: key, stage: "event_cooldown", reason: "RECENT_EVERGREEN_USED" });
+      return;
+    }
     const overlap = EVERGREEN_THEME_TAGS[index]?.filter((id) => recentThemes.has(id)) ?? [];
     if (overlap.length > 0) {
-      exclusions.push({
-        candidate: `evergreen#${index}`,
-        stage: "recent_overlap",
-        reason: `RECENT_GENERIC_THEME:${overlap.join(",")}`,
-      });
-    } else {
-      allowed.push(index);
+      exclusions.push({ candidate: key, stage: "recent_overlap", reason: `RECENT_GENERIC_THEME:${overlap.join(",")}` });
+      return;
     }
+    allowed.push(index);
   });
-  // 全部が直近テーマと重なる場合でも投稿自体は止めない（ガード側の再生成が最終防衛線）。
-  const pool = allowed.length > 0 ? allowed : EVERGREEN_TOPIC_SEEDS.map((_, index) => index);
-  const index = pickByRotation(pool, rotationIndex);
-  return {
-    topic: EVERGREEN_TOPIC_SEEDS[index],
-    source: "evergreen",
-    unitKey: `evergreen#${index}`,
-    exclusions,
-  };
+
+  let index: number;
+  if (allowed.length > 0) {
+    index = pickByRotation(allowed, rotationIndex);
+  } else {
+    // 全部クールダウン中でも投稿自体は止めない: 一度も使っていない／最も前に使った seed にする。
+    index = EVERGREEN_TOPIC_SEEDS
+      .map((_, i) => i)
+      .reduce((best, i) => ((lastUsedHoursAgo.get(i) ?? Infinity) > (lastUsedHoursAgo.get(best) ?? Infinity) ? i : best));
+    exclusions.push({ candidate: evergreenEventKey(index), stage: "event_cooldown", reason: "EVERGREEN_POOL_EXHAUSTED_LEAST_RECENT" });
+  }
+  const key = evergreenEventKey(index);
+  return { topic: EVERGREEN_TOPIC_SEEDS[index], source: "evergreen", eventKey: key, unitKey: key, exclusions };
 }
 
 /**

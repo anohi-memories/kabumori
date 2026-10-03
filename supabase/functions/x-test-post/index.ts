@@ -74,6 +74,8 @@ import { createVaultAccountCredentialRpc, VaultAccountXAuth } from "./vault_acco
 import {
   countAiLabBrandPostsBefore,
   loadAiLabRecentDedupeFingerprints,
+  loadAiLabTopicUsage,
+  recordAiLabTopicUsage,
   recordAndCompleteAiLabBrandPost,
 } from "../_shared/brand/ai_lab_brand_post_store.ts";
 import {
@@ -4026,27 +4028,34 @@ Deno.serve(async (req) => {
         // selectAiLabRotatingTopicSeed maps to the evergreen fallback (see ai_lab_dev_diary_context.ts),
         // never a fabricated "today" claim.
         const diaryMarkdown = await loadAiLabDevDiaryMarkdown();
-        // Duplicate-theme stopgap (2026-10-01): rotate through every fresh diary topic (never the same
-        // entry/topic twice in a row) instead of re-rolling the newest entry's angle at random. Post
-        // text is not persisted (only hashes), so the rotation index -- how many AI Lab brand posts were
-        // scheduled before this one -- stands in for "what was used recently". If that read fails, the
-        // scheduled hour still advances between posts, so a missing counter never blocks a post.
-        const rotationIndex = await countAiLabBrandPostsBefore({
-          supabaseUrl,
-          serviceRoleKey,
-          scheduledFor: scheduledPost.scheduled_for,
-        }) ?? Math.floor(Date.parse(scheduledPost.scheduled_for) / 3_600_000);
+        // Event-level dedupe: a diary entry is one real development event, however many angles it
+        // offers. Events (and evergreen seeds) that were actually published are read back from
+        // ai_lab_topic_event_usage and excluded before any text is generated; an unreadable history
+        // (null) makes the selector skip diary events entirely and use evergreen. The rotation index
+        // only varies the angle/evergreen choice -- it never overrides an event cooldown. Post text is
+        // not stored anywhere, so recentPostTexts stays unset; the event keys carry the history.
+        const [rotationIndex, recentTopicUsage] = await Promise.all([
+          countAiLabBrandPostsBefore({
+            supabaseUrl,
+            serviceRoleKey,
+            scheduledFor: scheduledPost.scheduled_for,
+          }).then((count) => count ?? Math.floor(Date.parse(scheduledPost.scheduled_for) / 3_600_000)),
+          loadAiLabTopicUsage({ supabaseUrl, serviceRoleKey }),
+        ]);
         const selection = selectAiLabRotatingTopicSeed({
           markdown: diaryMarkdown,
           now: new Date(),
           rotationIndex,
+          recentUsage: recentTopicUsage,
         });
         // PROJECT_RULES: candidate exclusions are logged with machine-readable reason codes (no text).
         console.info("AI_LAB_TOPIC_SELECTION", {
           scheduledPostId: scheduledPost.id,
           source: selection.source,
+          eventKey: selection.eventKey,
           unitKey: selection.unitKey,
           rotationIndex,
+          usageHistoryAvailable: recentTopicUsage !== null,
           excluded: selection.exclusions,
         });
         const aiLabTopicSeed = selection.topic;
@@ -4073,12 +4082,26 @@ Deno.serve(async (req) => {
             serviceRoleKey,
           }),
           publishText: (text) => postToX(xAuth, text),
+          recordTopicUsage: ({ scheduledPostId, xPostId }) => recordAiLabTopicUsage({
+            supabaseUrl,
+            serviceRoleKey,
+            eventKey: selection.eventKey,
+            unitKey: selection.unitKey,
+            scheduledPostId,
+            xPostId,
+          }),
           completePublishedPost: (args) => recordAndCompleteAiLabBrandPost({
             supabaseUrl,
             serviceRoleKey,
             ...args,
           }),
         });
+        if (result.topicUsagePersisted === false) {
+          console.error("AI_LAB_TOPIC_USAGE_PERSISTENCE_FAILED", {
+            scheduledPostId: scheduledPost.id,
+            eventKey: selection.eventKey,
+          });
+        }
         if (!result.fingerprintPersisted) {
           console.error("AI_LAB_POST_FINGERPRINT_PERSISTENCE_FAILED", {
             scheduledPostId: scheduledPost.id,
@@ -4095,6 +4118,8 @@ Deno.serve(async (req) => {
           characterCount: result.characterCount,
           xPostId: result.xPostId,
           fingerprintPersisted: result.fingerprintPersisted,
+          topicEventKey: selection.eventKey,
+          topicUsagePersisted: result.topicUsagePersisted,
           refreshExecuted: xAuth.refreshExecuted,
         }, 201);
       } catch (error) {

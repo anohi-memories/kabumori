@@ -150,6 +150,8 @@ test("a confirmed 280-code-point post completes once even when fingerprint persi
     characterCount: 280,
     xPostId: "x-post-fixture",
     fingerprintPersisted: false,
+    // No recordTopicUsage hook supplied -> usage was not attempted.
+    topicUsagePersisted: null,
   });
   assert.deepEqual(completedArgs, {
     scheduledPostId: "schedule-fixture",
