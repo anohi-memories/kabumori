@@ -60,12 +60,12 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-shared-report-v2-pr77-pr79-prod-deploy-20261003
+- task_id: kabumori-shared-report-v2-20261005-morning-natural-observation
 - start_code: G2
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: controlled production deploy/read-back of merged PR #77 + C1-accepted PR #79 to market-report-analysis only; app/x gates remain OFF, no manual cycle; next natural live observation on normal trading-day morning; recommended Sonnet5（高）
+- allocation: read-only natural 2026-10-05 morning observation of production market-report-analysis v21 after PR #77 + PR #79 rollout; do not substantively observe before 08:10 JST, no polling/manual invoke/gate/deploy; inspect first-try vs retry, Hard/WARN boundaries, cost and factual integrity; recommended Sonnet5（中）
 
 ## Claude G3
 - owner: claude
