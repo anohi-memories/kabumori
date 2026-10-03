@@ -73,6 +73,7 @@ test("the example is a visually identifiable card and the takeaway is a distinct
   assert.ok(screen.includes("section.role === 'takeaway'") && screen.includes("styles.takeaway"));
   assert.ok(/takeaway: \{ borderRadius: 14, borderLeftWidth: 4/.test(screen), "accent-bar block");
   assert.ok(/exampleCard: \{ borderRadius: 14, borderWidth: 1/.test(screen));
+  assert.ok(/LEVEL_STRONG = \{\s*beginner: '#246a3e',\s*intermediate: '#22578f',\s*advanced: '#4d3d9e'/.test(screen), "darker heading tones for AA contrast");
 });
 
 test("level accents are the Home topic tints (green / blue / lavender) and labels are unchanged", async () => {
@@ -81,6 +82,12 @@ test("level accents are the Home topic tints (green / blue / lavender) and label
   assert.ok(/beginner: '#eef7f0'/.test(screen) && /intermediate: '#edf5fc'/.test(screen) && /advanced: '#f2effc'/.test(screen));
   const { TOPIC_LEVEL_LABEL } = await import("../../src/lib/home-topic.ts");
   assert.deepEqual(TOPIC_LEVEL_LABEL, { beginner: "初心者向け", intermediate: "中級者向け", advanced: "上級者向け" });
+});
+
+test("new params reset the screen to loading, never showing the previous topic", async () => {
+  const screen = await read("src/app/topic-detail.tsx");
+  const effect = screen.slice(screen.indexOf("useEffect(() => {"), screen.indexOf("fetchDailyTopic(level, jstDate)"));
+  assert.ok(effect.includes("setTopic(null);\n    setStatus('loading');"));
 });
 
 test("an uncovered title falls back truthfully: intro summary plus 準備中, nothing invented", async () => {
