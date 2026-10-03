@@ -1,5 +1,364 @@
 # Claude Task 3 — CURRENT TASK
 
+- task_id: x-social-mobile-content-settings-schema-hardening-20261003
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Opus5.5（高）
+- type: corrective implementation / DB migration / RLS / JSON contract / optimistic concurrency
+- continues_from: x-social-mobile-ai-consult-v1-20261002
+- blocks_pr: 78
+- production_mutation_allowed: false
+
+## C2 verdict / purpose
+
+H2 independently reviewed the existing source-only migration candidate:
+
+`supabase/migrations/20260922045046_social_mobile_content_settings_candidate.sql`
+
+and returned **FAIL / CHANGES REQUIRED**.
+
+PR #78 AI相談 v1 remains open/unmerged. The AI consultation source is not rejected on its merits; its durable settings/persona persistence prerequisite is not safe enough yet.
+
+This TASK hardens that schema prerequisite **in source + local disposable tests only**.
+
+Do NOT apply any migration to production.
+
+## Accepted H2 findings to correct
+
+### F1 / P1 — JSON boundary too weak
+
+The existing CHECKs allow durable malformed or forbidden data because SQL CHECK may evaluate NULL and pass, and `->>` coerces types.
+
+H2 reproduced acceptance of examples including:
+- required fields present but null
+- wrong scalar types that coerce through `->>`
+- malformed/missing generationWindow members
+- arrays with non-string/null/object members or overlong strings
+- structurally forbidden settings keys such as token/secret/oauth/publish controls
+- nested forbidden controls
+- persona fields with forbidden token/publish/history-like content or wrong types.
+
+The DB boundary must validate exact structured shape/types compatible with legitimate current app/server writers.
+
+### F2 / P1 — effective ACL too broad
+
+Production default ACL means the unchanged candidate can leave authenticated with non-DML privileges such as:
+- TRUNCATE
+- TRIGGER
+- REFERENCES
+- MAINTAIN
+
+H2 locally proved an authenticated role could TRUNCATE the settings table despite DELETE being denied.
+
+The corrected migration must normalize effective table privileges to true least privilege.
+
+### F3 / P2 — updated_at is not a robust version
+
+Current trigger uses `now()`, which is transaction-start time.
+
+H2 proved:
+- two updates within one transaction can retain the same timestamp
+- an earlier long-running transaction can write a timestamp older than a later transaction's version.
+
+PR #78 relies on `updated_at` as a compare-and-swap version, so the server-owned update value must be strictly monotonic for that row.
+
+### F4 / P2 — drift silently accepted
+
+`CREATE TABLE IF NOT EXISTS` lets a same-name but drifted table survive migration.
+H2 removed CHECK/FK constraints in a disposable DB, reran the original candidate, and migration succeeded while those constraints remained absent.
+
+The migration path must fail closed on unknown/unsafe drift rather than silently claim success.
+
+## Mandatory startup / isolation
+
+1. Read PROJECT_RULES, CLAUDE.md, ORCHESTRATION, CURRENT_STATE, this TASK.
+2. Read the full H2 report for `x-social-mobile-content-settings-schema-prereq-review-20261002`.
+3. Use independent G3 worktree/checkout.
+4. Fresh origin/main and PR #78 branch/head.
+5. Preserve original PR #78 head `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7` as review history.
+6. G4 is independently changing publish-toggle authorization/migration/RPC. Do not touch its migration/RPC/function/files. Use a unique migration version and confirm no filename/order collision before push.
+7. H1 is reviewing Kabumori PR #79. Do not touch H1/G2 files.
+8. Read Supabase skill before DB work.
+9. No production apply/write/deploy.
+
+## Migration strategy
+
+Default: **preserve the historical source-candidate migration and add a new versioned hardening migration**.
+
+Do not silently rewrite `20260922045046_social_mobile_content_settings_candidate.sql`.
+
+If you believe consolidation/editing the historical never-applied migration is materially safer, STOP and report exact migration-history evidence and rollout rationale before changing that strategy. Do not make that choice implicitly.
+
+The new hardening migration must work safely when:
+- the original candidate has just created the exact expected table, and
+- the exact candidate already exists in a disposable/local environment.
+
+Unknown drift must fail explicitly.
+
+Production currently has no target table and no applied version `20260922045046`; that fact does not authorize apply here.
+
+## Required corrected contract
+
+### 1. Exact durable settings shape
+
+Use current source types/normalizers as the canonical value contract.
+
+At DB level, reject missing/null/wrong-type/unknown structured fields as appropriate.
+
+Validate at minimum:
+- root `settings` is object
+- exact/approved root keys only
+- `locale` string and currently supported values
+- `preferredTone` string, bounded
+- `themes` array of bounded strings, bounded count and per-item length
+- `objective` string, bounded
+- `frequencyTargetPerWeek` JSON number/integer semantics matching current writers; do not accept string coercion unless current canonical writer intentionally stores strings (prove if so)
+- `approvalMode` exact allowed values
+- `generationWindow` object with approved keys only
+- timezone string constrained to current legitimate contract; do not invent support that app/server cannot consume
+- `startLocal` time, **24:00 forbidden**
+- `endLocal` time, **24:00 allowed**
+- `defaultGenerationLocal` time, **24:00 forbidden**
+- `generationDayOffset` actual canonical type and allowed values
+- `optionalNgWords` array of bounded strings, count and per-item length
+- `notes` string, bounded.
+
+The DB is a structural safety boundary. Do not claim it can detect whether arbitrary allowed human text semantically contains a "secret"; that is not realistic.
+
+### 2. Exact persona shape
+
+Derive exact allowed durable keys/types from the current `PersonaProfile` model and server materializer.
+
+Requirements:
+- root object only
+- exact approved keys only
+- bounded strings/arrays/numbers as applicable
+- no raw posts/history bodies
+- no token/OAuth/publish/account/scheduler/Auth controls
+- provenance/confirmed/analyzed metadata remain in dedicated columns where the current schema expects them, not silently duplicated into arbitrary JSON
+- existing legitimate conversation and future bounded past-post-analysis profiles remain representable.
+
+Do not weaken client/server validators to make malformed DB rows pass.
+
+### 3. Null-safe CHECK semantics
+
+Every invariant must evaluate to TRUE for a valid row, not merely "not false".
+
+Use explicit `IS TRUE`, `jsonb_typeof`, key-existence/keyset tests, helper functions if justified, or equivalent fail-closed SQL.
+
+Avoid unsafe cast order where malformed JSON can produce migration/runtime errors rather than a clean CHECK failure.
+
+If helper validation functions are introduced:
+- fixed search_path
+- least privilege
+- deterministic/immutable semantics where valid
+- no dynamic SQL
+- no user-controlled object names
+- explicit EXECUTE grants/revokes.
+
+### 4. Least-privilege ACL
+
+Normalize effective ACL for this table/function(s).
+
+At minimum:
+- PUBLIC: no table privileges
+- anon: no table privileges
+- authenticated: only the exact operations needed by current mobile settings flow (expected SELECT/INSERT/UPDATE)
+- DELETE denied
+- TRUNCATE denied
+- REFERENCES denied unless concretely needed
+- TRIGGER denied
+- MAINTAIN denied
+- service_role: grant only what a current proven server path actually needs; do not inherit broad defaults by accident.
+
+Do not globally alter database default privileges or unrelated tables.
+
+RLS remains enabled and owner-scoped to exact `brand_id + auth.uid()`.
+
+Test effective privileges, not only the GRANT statements in the file.
+
+### 5. Monotonic CAS version
+
+Keep compatibility with PR #78's `updated_at timestamptz` CAS unless a change is demonstrably necessary.
+
+Preferred bounded approach to evaluate:
+`greatest(clock_timestamp(), old.updated_at + interval '1 microsecond')`
+on every UPDATE, ignoring caller-supplied version.
+
+Requirements:
+- strictly greater than OLD.updated_at
+- cannot regress due to transaction-start time
+- same transaction repeated updates advance
+- normal concurrent CAS yields one winner
+- stale old timestamp yields zero updates
+- caller cannot set arbitrary future/past version
+- insert gets a server-owned initial version.
+
+If PostgreSQL timestamptz precision/serialization creates any remaining ABA/collision issue, document and fix before declaring PASS. A revision integer is allowed only if coordinated app/schema change is justified; avoid unnecessary scope expansion.
+
+### 6. Drift guard / migration safety
+
+The hardening migration must distinguish:
+- expected exact candidate shape -> harden successfully
+- already-hardened exact shape -> safe/idempotent behavior where migration tooling may re-run in disposable tests
+- unexpected same-name relation/column/FK/CHECK/function/trigger/policy drift -> explicit failure.
+
+Do not silently repair arbitrary unknown drift unless every repaired property is deliberately enumerated and safe.
+
+Validate:
+- expected columns/types/nullability/defaults
+- PK/FK target + ON DELETE action
+- expected relation kind/schema
+- policy/function/trigger identity where relevant.
+
+Avoid trusting constraint names alone; verify definitions/columns/actions for security-critical properties.
+
+### 7. FK / lifecycle compatibility
+
+Confirm:
+- `brand_id` text compatible with current `brands(id)`
+- FK ON DELETE CASCADE is still intended
+- settings row disappears with brand deletion
+- current common-account source work does not require a different owner key
+- no dependency on unapplied common-account production schema for this table to function
+- no interference with G4's new publish-toggle migration/RPC.
+
+## Local disposable proof
+
+Use G3-owned disposable PostgreSQL/Supabase environment only.
+
+Must execute:
+
+### Valid behavior
+- original candidate -> hardening migration succeeds
+- legitimate default row succeeds
+- current Settings screen payloads succeed
+- current PR #78 save/persona payloads succeed
+- endLocal 24:00 succeeds
+- startLocal/defaultGenerationLocal 24:00 fail
+- legitimate persona examples succeed.
+
+### Invalid JSON/persona
+Regression-test H2 adverse cases:
+- missing/null required fields
+- wrong scalar types
+- numeric/bool text coercion
+- malformed generationWindow
+- unknown root/window/persona keys
+- non-string array items
+- overlong array items
+- forbidden publish/token/oauth/account/scheduler-like structured keys
+- invalid persona shapes.
+
+### ACL/RLS
+Under representative roles:
+- owner SELECT/INSERT/UPDATE succeed
+- owner DELETE fails
+- owner TRUNCATE fails
+- owner cannot CREATE TRIGGER on table
+- owner cannot use REFERENCES privilege
+- member/viewer/nonmember/cross-brand fail DML/read as intended
+- anon fails
+- effective privilege queries prove only intended privileges.
+
+### CAS
+- distinct transactions advance
+- two updates in same transaction advance strictly
+- long-running earlier transaction cannot regress version
+- concurrent CAS exactly one winner
+- stale CAS zero rows
+- competing insert -> unique conflict
+- caller-supplied timestamp cannot control version.
+
+### Drift
+Create representative bad same-name structures:
+- missing FK
+- wrong FK target/action
+- missing/weak CHECK
+- wrong column type/nullability
+- wrong trigger/function/policy
+and prove hardening refuses unknown drift or explicitly repairs only the enumerated safe case.
+
+### Lifecycle
+- brand delete cascades settings row
+- no unrelated rows/tables touched.
+
+Drop disposable DB/cluster after proof.
+
+## Source consumers / tests
+
+Compare and run:
+- current content-settings domain validators
+- content-settings repository
+- shared server normalizer/materializer
+- PR #78 tests where source can be tested without production table
+- full social-mobile tests
+- relevant Deno/shared tests
+- migration-specific SQL test harness
+- typecheck/lint
+- `git diff --check`
+- secret/scope scan.
+
+Do not loosen application validators simply because the DB is hardened.
+
+## PR #78 handling
+
+You may amend PR #78 with the new hardening migration/tests if that is the cleanest ownership path, because G3 owns the blocked feature.
+
+If you do:
+- keep exact original head in Report
+- rebase/fresh-main safely
+- ensure no overlap with G4 migration/RPC work
+- update PR body truthfully
+- do not merge.
+
+Alternatively create a dedicated prerequisite PR and report dependency ordering. Choose based on smallest conflict and clearest rollout; document why.
+
+## Production safety
+
+Forbidden:
+- production migration apply
+- production settings INSERT/UPDATE/DELETE
+- production RLS/grant/function change
+- Edge deploy
+- Auth/Vault/X/OpenAI/Cron mutation
+- PR #78 merge.
+
+Read-only production catalog inspection is allowed only if needed to confirm no new collision since H2.
+
+## Completion / K3
+
+Report:
+- task_id/result
+- migration strategy chosen
+- original H2 F1-F4 disposition
+- exact table/settings/persona contract
+- ACL/RLS result
+- monotonic CAS design and proofs
+- drift handling
+- lifecycle/common-account compatibility
+- changed_files
+- local disposable SQL evidence
+- app/server tests
+- original PR #78 head and new PR/dependency head
+- production reads/mutations
+- remaining risks
+- safety checks
+- next recommendation.
+
+Then status -> review_required, next_owner -> chatgpt, STOP for K3.
+
+After K3, allocate fresh H2 review before any production apply or PR #78 merge.
+
+Recommended Codex rereview: **Sol（高）**.
+
+---
+
+# Claude Task 3 — CURRENT TASK
+
 - task_id: x-social-mobile-ai-consult-v1-20261002
 - owner: claude
 - slot: claude-3
