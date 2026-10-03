@@ -252,6 +252,32 @@ function extractTobOfferorName(normalizedBody: string): string | null {
   return match?.[1]?.trim() || null;
 }
 
+// The three extractors above need the label at the start of its own line.  PDF-to-text extraction also
+// produces "上 場 会 社 名 積水ハウス株式会社 上場取引所 東・名" or "会 社 名 ニデック株式会社 代表者名 …"
+// where the label sits mid-line (table cells flattened) and is followed by other cells.  These are the
+// same issuer-field labels, read only from the cover area of the document, with the value cut at the
+// next cell label.  Everything found here is only ever a *candidate*: it counts for identity only if it
+// then matches the trusted candidate.companyName in companyIdentityEvidence.
+// The label must not directly follow another CJK character, so "子会社名" / "親会社名" / "関連会社名"
+// (a *different* company's field) are never read as the issuer's own field.
+const ISSUER_FIELD_LABEL =
+  /(?<![\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}])(?:上\s*場\s*会\s*社\s*名|会\s*社\s*名|商\s*号)[ \t　]+/gu;
+const ISSUER_FIELD_VALUE_END =
+  /[ \t　]+(?:上\s*場\s*取\s*引\s*所|代\s*表\s*者|代\s*表\s*取\s*締\s*役|コ\s*ー\s*ド\s*番\s*号|証\s*券\s*コ\s*ー\s*ド|本\s*社|問\s*合\s*せ|U\s*R\s*L|T\s*E\s*L)|[ \t　]*\((?![株有合]\))/u;
+const ISSUER_FIELD_COVER_LENGTH = 800;
+
+function extractIssuerFieldNames(normalizedBody: string): string[] {
+  const cover = normalizedBody.slice(0, ISSUER_FIELD_COVER_LENGTH);
+  const names: string[] = [];
+  for (const match of cover.matchAll(ISSUER_FIELD_LABEL)) {
+    const rest = cover.slice((match.index ?? 0) + match[0].length).split("\n")[0];
+    const end = rest.search(ISSUER_FIELD_VALUE_END);
+    const value = (end >= 0 ? rest.slice(0, end) : rest).trim();
+    if (value.length >= 2) names.push(value);
+  }
+  return names;
+}
+
 // Many disclosure formats (subsidiary changes, overseas M&A, press releases, ...) introduce every
 // named party — issuer, subsidiary, or counterparty alike — as "NAME（…、以下「ALIAS」）" instead of a
 // fixed header. This collects every such (name, alias) pair without judging which party is the
@@ -277,21 +303,64 @@ function extractAliasedEntityNames(normalizedBody: string): string[] {
 function primarySourceCompanyNameCandidates(bodySummary: string | null): string[] {
   if (!bodySummary) return [];
   const normalized = bodySummary.normalize("NFKC");
-  const candidates = [
-    extractHeaderCompanyName(normalized),
-    extractListedCompanyName(normalized),
-    extractTobOfferorName(normalized),
-    ...extractAliasedEntityNames(normalized),
-  ].filter((value): value is string => typeof value === "string" && value.length > 0);
-  return [...new Set(candidates)];
+  return [...new Set([...issuerFieldNames(normalized), ...extractAliasedEntityNames(normalized)])];
 }
 
-function normalizedCompanyIdentity(value: string, stripTdnetMarketPrefix: boolean): string {
+// Every name the body states in an explicit issuer field (as opposed to a name merely mentioned in
+// prose or an "以下「…」" alias).  These are the names allowed to use the safe-suffix rule.
+function issuerFieldNames(normalizedBody: string): string[] {
+  const names = [
+    extractHeaderCompanyName(normalizedBody),
+    extractListedCompanyName(normalizedBody),
+    extractTobOfferorName(normalizedBody),
+    ...extractIssuerFieldNames(normalizedBody),
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+  return [...new Set(names)];
+}
+
+// Any sign that the body names its issuer in a labelled field, whether or not the value could be read.
+// When such a label exists, "当社" must not be assumed to mean the TDnet company (a joint filing or an
+// unreadable header may name somebody else), so the self-reference rule below stays off.
+const ISSUER_LABEL_PRESENT =
+  /(?<![\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}])(?:上\s*場\s*会\s*社\s*名|会\s*社\s*名|商\s*号|発\s*行\s*者\s*名|届\s*出\s*者|提\s*出\s*会\s*社|公開買付者の名称)/u;
+
+// The disclosure never names its issuer and refers to itself only as 当社.  TDnet delivers every
+// document under the issuing company's own code, so once the TDnet URL / code / entityKey signals have
+// been verified, 当社 is the metadata company.  This applies only when the body has no issuer label at
+// all (see ISSUER_LABEL_PRESENT) and names no issuer field, so it can never override a body that names
+// a different company.
+function refersToIssuerOnlyAsToSha(normalizedBody: string): boolean {
+  return normalizedBody.includes("当社") && !ISSUER_LABEL_PRESENT.test(normalizedBody);
+}
+
+// TDnet's short names abbreviate a trailing "ホールディングス" / "フィナンシャルグループ" as ＨＤ / ＦＧ
+// (ＰＨＣＨＤ, プロクレアＨＤ, ＡＦＣ-ＨＤ ...), while the disclosure body spells it out. Only these two
+// end-anchored, unambiguous abbreviations are expanded, and only with at least two characters of company
+// name in front of them: "AFC-HDアムスライフサイエンス" (HD in the middle) is a different company from
+// "AFC-HD" and must not collapse into it.
+const ABBREVIATION_EXPANSIONS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/(?<=.{2})hd$/u, "ホールディングス"],
+  [/(?<=.{2})fg$/u, "フィナンシャルグループ"],
+];
+
+function normalizedCompanyIdentity(
+  value: string,
+  stripTdnetMarketPrefix: boolean,
+  expandAbbreviations = true,
+): string {
   let normalized = value.normalize("NFKC").trim().toLowerCase();
   if (stripTdnetMarketPrefix) normalized = normalized.replace(/^[gps]-/u, "");
-  return normalized
+  // PDF-to-text extraction often spaces a name out ("株 式会 社プロク レアホールディ ング ス"), so
+  // whitespace is removed first; otherwise the legal-form removal below could never see "株式会社".
+  normalized = normalized
+    .replace(/\s/gu, "")
     .replace(/株式会社|有限会社|合同会社|合資会社|合名会社|\(株\)|（株）/gu, "")
-    .replace(/[\s・･._・\-]/gu, "");
+    .replace(/[・･._・\-]/gu, "");
+  if (!expandAbbreviations) return normalized;
+  for (const [pattern, expansion] of ABBREVIATION_EXPANSIONS) {
+    normalized = normalized.replace(pattern, expansion);
+  }
+  return normalized.replace(/ファイナンシャル/gu, "フィナンシャル");
 }
 
 // A 5-character securities code whose final character is literally "0" denotes the ordinary/common
@@ -318,6 +387,8 @@ const KNOWN_COMPANY_NAME_ALIASES: Readonly<Record<string, string>> = {
   "80010": "伊藤忠商事", // TSE 8001 伊藤忠商事株式会社 — DB short display name is "伊藤忠"
   "37790": "ジェイ・エスコムホールディングス", // TSE 3779 ジェイ・エスコムホールディングス — DB short display name is "Ｊ・エスコムＨＤ"
   "72790": "ハイレックスコーポレーション", // TSE 7279 ハイレックスコーポレーション — DB short display name is "ハイレックス"
+  "290A0": "Synspective", // TSE 290A 株式会社Synspective — DB short display name is "Ｇ－Ｓｙｎｓ" (truncated)
+  "47650": "SBIグローバルアセットマネジメント", // TSE 4765 SBIグローバルアセットマネジメント — DB short display name is "ＳＢＩＧアセットＭ"
 };
 
 // A code/entity match is necessary but not by itself sufficient to accept a name difference.  The
@@ -344,6 +415,17 @@ function namesMatchWithSafeSuffix(
   if (accepted.length < 2 || primary.length < 2) return false;
   if (accepted === primary) return true;
   if (!allowSafeSuffix) return false;
+  // The abbreviation expansion above only widens exact equality.  The "short form + safe suffix" rule
+  // keeps comparing the names as written, so a ＨＤ-expanded short name can never grow into a longer
+  // company name (e.g. ポールＨＤ -> ポールトゥウィンホールディングス stays rejected).
+  return shortFormWithSafeSuffix(
+    normalizedCompanyIdentity(acceptedName, true, false),
+    normalizedCompanyIdentity(primaryName, false, false),
+  );
+}
+
+function shortFormWithSafeSuffix(accepted: string, primary: string): boolean {
+  if (accepted.length < 2 || primary.length < 2) return false;
   // Only the already-known metadata/display name may be the short form.  Accepting the inverse
   // direction would turn a source's short name into an alias for a longer metadata name (e.g.
   // G-BASE -> BASE), which is exactly the kind of false integration this guard is meant to prevent.
@@ -355,11 +437,7 @@ function namesMatchWithSafeSuffix(
 export function companyIdentityEvidence(candidate: GenerationCandidate): CompanyIdentityEvidence {
   const candidateNames = primarySourceCompanyNameCandidates(candidate.bodySummary);
   const normalizedBody = candidate.bodySummary?.normalize("NFKC") ?? "";
-  const headerNames = new Set([
-    extractHeaderCompanyName(normalizedBody),
-    extractListedCompanyName(normalizedBody),
-    extractTobOfferorName(normalizedBody),
-  ].filter((value): value is string => typeof value === "string" && value.length > 0));
+  const headerNames = new Set(issuerFieldNames(normalizedBody));
   const companyCode = candidate.companyCode?.trim() || null;
   const metadataName = candidate.companyName?.trim() || null;
   let trustedTdnetSource = false;
@@ -392,13 +470,19 @@ export function companyIdentityEvidence(candidate: GenerationCandidate): Company
   const normalizedSecurityCode = companyCode !== null
     ? normalizeSecurityCodeForComparison(companyCode)
     : null;
+  // 当社-only disclosures: no issuer name exists in the body to compare, and the TDnet signals already
+  // identify the issuer.  primarySourceName stays null — the body names nobody, and offering an alias
+  // or a subsidiary picked up from the prose as "the primary source name" would misstate what was
+  // confirmed.
+  const selfReferenceConfirmed = identitySignalsVerified && metadataName !== null &&
+    matchedName === null && headerNames.size === 0 && refersToIssuerOnlyAsToSha(normalizedBody);
   return {
     metadataName,
-    primarySourceName: matchedName ?? candidateNames[0] ?? null,
+    primarySourceName: selfReferenceConfirmed ? null : matchedName ?? candidateNames[0] ?? null,
     companyCode,
     normalizedSecurityCode,
     displaySecurityCode: normalizedSecurityCode,
-    sameCompanyConfirmed: identitySignalsVerified && matchedName !== null,
+    sameCompanyConfirmed: selfReferenceConfirmed || (identitySignalsVerified && matchedName !== null),
   };
 }
 
