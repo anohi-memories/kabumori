@@ -3,8 +3,8 @@
 - task_id: ai-lab-pr82-event-dedupe-review-20261003
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused review / AI Lab event dedupe / migration / concurrency
@@ -2121,3 +2121,25 @@ Then status -> review_required, next_owner -> chatgpt, STOP for C1.
   - actual/speculative market effects and wrong-date/sign/ref facts remain protected.
 - production mutation from H1/C1 = 0 except normal GitHub branch fast-forward + merge; no Edge deploy/gate/manual cycle.
 - next rollout: one controlled `market-report-analysis` deploy containing already-merged PR #77 + accepted PR #79, app/x gates OFF, exact source read-back, then natural-cycle observation.
+
+
+## Final C1 — PR #82 AI Lab event dedupe
+
+- verdict: **CHANGES REQUIRED accepted**.
+- reviewed exact head: `08a7346ccd63f2ff540bd48149f1f1e65e6dbe09`.
+- accepted P1 blockers:
+  - two concurrent schedules can read the same unused event and both reach X before any usage row exists;
+  - X success followed by usage-persistence failure allows the same event to become eligible on a later slot;
+  - confirmed-X/before-usage and lost-response crash windows have no durable event ownership.
+- accepted P2 blockers:
+  - ordinal `diary-YYYY-MM-DD-N` IDs are not durable under same-date insertion/reordering/parser removal;
+  - conflicting duplicate scheduled_post_id can be silently ignored while reporting persistence success;
+  - exhausted evergreen pool can bypass the stated 72h cooldown;
+  - migration reapply silently accepts unsafe drift such as missing PK/CHECKs or wrong index.
+- H1 evidence branch `codex/h1-pr82-event-review-20261003` commit `100ab65f8142adc11916f467f68415d15cbc00b1` is RED evidence only and must not be merged as a release candidate.
+- PR #82 remains open/unmerged. Production mutation / real X / deploy = 0.
+- correction must use stable immutable event identity and durable pre-X event claim/reservation semantics with safe ambiguous-outcome handling; scheduler spacing is not a correctness guarantee.
+- G3/G4 are currently occupied, so no slot is overwritten. Return via direct Claude instruction in an independent worktree.
+- recommended Claude model: **Opus5.5（高）**.
+- corrected candidate requires fresh Codex rereview: **Sol（高）**.
+- H1 closed and reusable after fresh allocation.
