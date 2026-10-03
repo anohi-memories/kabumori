@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-pr81-content-settings-hardening-rereview-20261003
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused rereview / migration / RLS / JSON contract / CAS
@@ -267,6 +267,21 @@ Append to `.agent/CODEX_REPORT_2.md`:
 Then status -> review_required, next_owner -> chatgpt, STOP for C2.
 
 Recommended model: **Sol（高）**.
+
+
+## H2 completion — 2026-10-03 JST
+
+- result: **CHANGES REQUIRED**; exact PR81 head `5595fb131813542c55c43bc783af623cdb9ea442` unchanged.
+- Report synchronized to origin/main in commit `31b2569acb07799ca773913ae05b2a8566c9c1db`; all prior history preserved.
+- Existing proof suite ALL_PASS; social-mobile 116/116; related Deno 158/158 (--no-check); focused repository 3/3; typecheck/lint/diff checks passed.
+- Three extra DB reproductions remain: deferrable PK accepted / actual upsert 55000; unknown helper EXECUTE grant retained; historical infinity timestamp breaks strictly-monotonic CAS.
+- Actual CLI local per-file transaction and failure rollback proved; whole candidate+hardening chain needs explicit atomic production plan.
+- source fixes / production writes / deploy / live AI/X/Push / PR merge: 0.
+- Detailed evidence and bounded G3 correction proposals are at the Report top; do not reclassify the green ordinary suite as overall PASS.
+- status: review_required
+- next_owner: chatgpt
+- STOP for C2. No production apply or PR78 merge approval.
+
 
 ---
 
