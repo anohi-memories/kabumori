@@ -3,8 +3,8 @@
 - task_id: ai-lab-pr82-event-dedupe-review-20261003
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused review / AI Lab event dedupe / migration / concurrency
@@ -117,6 +117,17 @@ next_owner -> chatgpt
 STOP for C1.
 
 Recommended model: **Sol（高）**.
+
+## H1 completion — 2026-10-03 JST
+
+- verdict: **CHANGES REQUIRED**. Exact PR #82 head remains `08a7346ccd63f2ff540bd48149f1f1e65e6dbe09`, open/unmerged.
+- P1: same-event concurrent schedules both reach fake X; usage failure + successful completion permits next-slot republish; confirmed-X/before-usage and ambiguous-response windows lack durable event protection.
+- P2: ordinal event IDs revive used events after insertion/reordering/parser exclusion; ignored conflicting schedule ID falsely reports persistence; exhausted evergreen pool bypasses 72h; migration silently accepts missing PK/CHECKs/wrong index drift.
+- Candidate focused checked tests 96 PASS (new event tests 26); existing shared + x-test-post runtime 901 PASS with --no-check. H1 safety regressions intentionally RED: 2 control PASS / 9 required safety failures. Disposable PostgreSQL 17: 16 observation probes + four CHECK cases; unsafe drift/duplicate/conflict cases independently reproduced, not safety PASS.
+- Evidence-only source commit `100ab65f8142adc11916f467f68415d15cbc00b1` pushed/read-back on H1-only `codex/h1-pr82-event-review-20261003`; two test files, no runtime fix or PR #82 mutation. Do not merge this RED-test evidence branch as a release candidate.
+- Detailed correction contract / test and lint debt / local DB rollback+shutdown evidence appended to `.agent/CODEX_REPORT.md`.
+- Production read/write, model/provider/X operations, merge/deploy = 0. G3/G4 files and shared slot indexes untouched.
+- Next: **C1, 推薦モデル：Sol（高）**. Return for focused durable event-claim/identity/schema correction; do not merge/deploy unchanged PR #82. H1 STOP.
 
 ---
 
