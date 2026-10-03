@@ -1,3 +1,21 @@
+## G1 allocation — Topic detail learning v2
+
+- task_id: `kabumori-topic-detail-learning-v2-20261003`
+- status: ready
+- owner: Claude G1
+- recommended model: **Sonnet5（高）**
+- goal: keep Home topic card compact while enriching only the detail page for all 50 seeded topics.
+- current production truth checked read-only: 50 active tips = 初級20 / 中級20 / 実践10; `base_text` is intentionally short (41–66 chars, avg ~51.6).
+- current RPC truth checked read-only: `get_daily_kabumori_tip(text,date)` remains deterministic/STABLE and returns only id/title/category/base_text/difficulty; no mutation or AI.
+- current app truth: all 50 seeded titles already have curated detail entries, currently mostly 4 short sections. v2 adds a clearer learning flow with concrete example, price/market relationship, and memorable takeaway.
+- explicit safety: do not claim live/current-market linkage without a trusted same-day data source; use evergreen `相場ではどう見る？` style wording.
+- scope: `src/app/topic-detail.tsx`, `src/lib/topic-detail-catalog.ts`, focused tests only unless a tiny compatibility helper is proven necessary.
+- non-scope: DB/RPC/migration/Auth/Edge/API/AI/Home card/report/news/portfolio/X/common-account/production.
+- EAS build expected: 0.
+- G2 remains separate on `market-report-analysis` production deploy/read-back.
+- start gate: fresh origin/main + active PRs + independent worktree check; any concurrent ownership of target files => STOP.
+- allocation control commits: G1 TASK `89d95ec8fb320c7f03f535b44344fada87897cdf`; ACTIVE_TASK `29bab8d6d31f2ee41f3fe70dc42c69179de793c6`.
+
 ## Final C1 — PR #79 accepted and merged
 
 - verdict: **PASS-WITH-FIX / accepted**.
