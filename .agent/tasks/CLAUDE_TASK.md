@@ -1,5 +1,223 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-shared-report-v2-pr77-pr79-prod-deploy-20261003
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Sonnet5（高）
+- purpose: merged PR #77 quality calibration + C1-accepted PR #79 Hard-guard fixes を production `market-report-analysis` のみに1回で反映し、app/x consumer gates OFFのまま exact source/read-back と非影響を確認する。manual cycleは禁止。次の自然朝刊でlive-model挙動を見る。
+
+## Accepted source
+
+- PR #77: already merged, production-unapplied.
+- PR #79:
+  - G2 candidate `f7083ba6a810d5f9cdbe7090e4439f261e38bf0f`
+  - H1 reviewed/fixed exact source `b6d2dce3cc45c73951e51d139fefeddad7e2906e`
+  - C1 fast-forwarded PR branch to exact H1 source and verified read-back.
+  - merged main SHA: `4dbf11f2848059cc967d942efc9d60613d855537`
+- H1 final verdict: PASS-WITH-FIX.
+- accepted verification:
+  - market-report-analysis 136/136
+  - session-date 14/14
+  - H1 boundary 9/9
+  - personalized-reports 128/128
+  - X shared consumer 8/8
+  - data-packet 42/42
+  - _shared runtime 361/361 with --no-check due documented unrelated pre-existing type debt
+  - explicit target checks / changed-file lint / diff PASS
+
+## Accepted behavior
+
+Must be present in deployed source:
+- PR #77:
+  - broad-first/company-last does not false-WARN.
+  - 700–899-char App story is telemetry-only, not automatic rewrite.
+  - safe-original fallback preserved.
+- PR #79 + H1:
+  - legitimate prior-session watch prose remains deliverable.
+  - assertion-before-watch and wrong-date completed-session claims remain Hard.
+  - hypothetical tail cannot erase an earlier asserted wrong-date/wrong-direction fact.
+  - `続くから/するから/なるから` are not misread as questions.
+  - bounded honest questions such as `一段と強まるかどうか` remain deliverable.
+  - terminal reaction-watch phrasing like `前夜の米国株高を受け、日本株の反応を見る` does not false-Hard merely because of `を受け`.
+  - actual/speculative market effects still require evidence.
+  - wrong-date numbers, 10/1 mixed-session regression, stale/current, 1306 identity, sign/polarity, unsupported causality, unknown refs remain protected.
+- model/prompt/call ceiling/packet schema unchanged.
+
+## Why Sonnet5（高）
+
+Implementation/review is complete. This is a narrow production Edge Function deploy/read-back with strict production-safety verification and no design work.
+
+## Mandatory startup / isolation
+
+1. Read PROJECT_RULES, ORCHESTRATION, CURRENT_STATE, this TASK, Final C1 for PR #79.
+2. Use only the dedicated independent G2 checkout/worktree.
+3. Fresh-fetch `origin/main`.
+4. Require merge SHA `4dbf11f2848059cc967d942efc9d60613d855537` to be an ancestor of deployment HEAD.
+5. Fresh-check whether any later main commit changes:
+   - `supabase/functions/market-report-analysis/**`
+   - imported shared market-report files
+   If yes, compare and STOP unless clearly compatible and already accepted.
+6. Confirm no other active slot owns `market-report-analysis`.
+7. Never use/fallback to the shared Developer checkout.
+8. Fail hard on wrong directory/worktree.
+
+## Production preflight — READ ONLY
+
+Project:
+`wsmznyzcvmuitkglfeuj`
+
+Capture:
+- current production `market-report-analysis` version / updated_at / verify_jwt / source identity
+- rollback source identity
+- `market_report_consumer_settings.app_enabled`
+- `market_report_consumer_settings.x_enabled`
+- relevant market-report/personalized cron schedules/active/command hashes
+- all Edge Function metadata snapshot sufficient to prove only target changes
+
+Expected accepted baseline before this rollout was v20, but do not assume it. Fresh-read actual production.
+
+Require:
+- app_enabled=false
+- x_enabled=false
+- verify_jwt=false
+- no unexpected cron drift
+- no conflicting ownership
+
+If production already matches the exact merged source:
+- do not redeploy
+- report NO-OP PASS.
+
+## Pre-deploy verification from fresh main
+
+Run:
+- full market-report-analysis
+- session-date calibration
+- H1 boundary tests
+- presentation_v2
+- causal_calibration
+- quality_calibration
+- h1_adversarial
+- content_guard
+- transport_retry
+- relevant personalized-reports suite
+- X shared consumer
+- market-report-data-packet
+- _shared runtime suite
+- deno check on target runtime/source
+- deno lint changed/runtime files
+- git diff --check
+
+Document any known unrelated checked-type debt separately; do not call it new.
+
+## Controlled deploy
+
+If production is stale, deploy **exactly one** Edge Function:
+
+`market-report-analysis`
+
+Use explicit project ref `wsmznyzcvmuitkglfeuj`.
+Preserve `verify_jwt=false`.
+
+Forbidden:
+- broad function deploy
+- personalized-reports deploy
+- x-test-post deploy
+- DB/schema/RPC/migration
+- cron mutation
+- app_enabled/x_enabled mutation
+- Auth/Vault/secrets
+- X post/API operation
+- app notification mutation
+- manual market-report cycle
+- manual retry
+- legacy generator changes
+
+## Post-deploy read-back
+
+Immediately:
+1. record target version / updated_at / verify_jwt
+2. read back deployed source
+3. compare deployed source with fresh merged main
+4. prove PR #77 + PR #79/H1 accepted logic is present
+5. re-read app_enabled/x_enabled -> must remain false/false
+6. re-read cron -> unchanged
+7. compare all Edge Function metadata -> only target may change because of this task
+8. record rollback source
+
+If another Function changes concurrently:
+- record exact timing/identity
+- do not claim G2 caused it
+- stop only if overlap/safety becomes uncertain.
+
+## Timing / observation
+
+This TASK is deploy/read-back only.
+
+Do **not** manually invoke a report.
+
+Current date is Saturday 2026-10-03 JST. The next intended natural live-model observation is the next normal trading-day morning schedule, expected Monday 2026-10-05:
+- data 07:50 JST
+- analysis 07:55 JST
+- retry 08:05 JST
+
+Do not force a weekend cycle just to get evidence.
+
+Next K2 should assign a read-only natural-cycle observation after the deploy is accepted.
+
+## Failure / rollback
+
+If wrong source/function is deployed, verify_jwt changes, gates/cron change, or source read-back differs:
+- STOP immediately.
+- rollback only `market-report-analysis` to captured pre-deploy exact source if necessary and safe.
+- report every mutation.
+
+## Completion conditions
+
+PASS only if:
+- exact merged PR #77 + PR #79 accepted source is production truth for `market-report-analysis`
+- only target Function changed if deployment was needed
+- verify_jwt=false preserved
+- app/x gates remain OFF/OFF
+- cron unchanged
+- no manual cycle
+- rollback source known
+- production mutation fully enumerated
+
+## Required Report
+
+- task_id/result
+- fresh main SHA/worktree
+- production version before/after
+- exact deployed source identity/read-back
+- tests/check/lint/diff
+- verify_jwt before/after
+- gates before/after
+- cron before/after
+- all-function metadata comparison
+- deploy command/scope
+- production mutations
+- rollback source/status
+- remaining issues
+- recommendation for 2026-10-05 morning natural observation
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+Pending.
+
+---
+
+# Previous completed G2 task — PR #79 hypothetical/watch corrective
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-pr79-hypothetical-and-watch-phrasing-corrective-20261003
 - owner: claude
 - slot: claude-2
@@ -6785,3 +7003,4 @@ Rollout after review, not before:
 - recommended Codex model: **Sol（高）**.
 - rereview must also decide whether the separate causal guard still creates a delivery false-positive for `前夜の米国株高を受け、日本株の反応を見る` in factual presentation fields.
 - no merge/deploy until C1 accepts the rereview.
+
