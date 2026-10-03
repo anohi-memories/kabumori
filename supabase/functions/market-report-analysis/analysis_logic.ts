@@ -357,6 +357,14 @@ const EFFECT_DOWN = /減|縮小|下落|低下|悪化|不振|下方|急落|(?<=�
 /** 「…と報じられました」 and the like: how the sentence reports, not what it reports. */
 const REPORTING_TAIL = /と(?:報じられ|伝えられ|発表され|されてい|しています|のこと).*$/u;
 
+/**
+ * These terminal watch predicates report no effect that happened. Only the complete effect of this
+ * particular link may match: a watch verb somewhere before a real assertion is never an exemption.
+ * Do not extend this to hedge words, actual moves, past confirmation, or other causal-link types.
+ */
+const PURE_REACTION_WATCH = /^(?:日本株|東京市場)の(?:反応|値動き|動き|受け止め方)を(?:見る|見ます|確認する|確認します)$/u;
+const PURE_RESULT_QUESTION = /^(?:動き|流れ|買い|売り|反応|値動き|展開)(?:が|は|も)続くかを(?:見る|見ます|確認する|確認します)$/u;
+
 function excerpt(value: string, index: number, length: number): string {
   const start = Math.max(0, index - 12);
   const end = Math.min(value.length, index + length + 12);
@@ -543,6 +551,11 @@ export function unsupportedCausalSentences(analysis: GeneratedAnalysis, input: A
     if (NEGATED.test(sentence) && !SPECULATION.test(sentence)) continue;
     const supported = links.every((link, index) => {
       const effect = sentence.slice(link.index + link[0].length, index + 1 < links.length ? links[index + 1].index : sentence.length);
+      // 「前夜の米国株高を受け、日本株の反応を見る」 is a plan to observe, not a causal
+      // assertion that Japanese stocks rose. Facts in the cause still pass through metric/date guards.
+      const watchEffect = effect.trim().replace(/^、/u, "");
+      if ((/^(?:を受け、|を受けて)$/u.test(link[0]) && PURE_REACTION_WATCH.test(watchEffect)) ||
+          (link[0] === "を受けた" && PURE_RESULT_QUESTION.test(watchEffect))) return true;
       // A market move needs a causal claim whose news is about a market; anything else must be what a
       // news item itself says, whatever the claim type.
       if (!isMarketEffect(effect, sentence.slice(0, link.index), input)) return newsStatesRelation(sentence, link.index, link[0], effect, input);
