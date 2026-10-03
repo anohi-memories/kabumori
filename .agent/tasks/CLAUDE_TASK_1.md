@@ -1,5 +1,326 @@
 # Claude Task 1 — CURRENT TASK
 
+- task_id: kabumori-topic-detail-learning-v2-20261003
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（高）
+- purpose: Home「今日のトピック」のTOPカードは短い要約のまま維持し、topic detailだけを「しっかり学べる」学習ページへ強化する。既存50トピックすべてに具体例・株価/相場との関係・覚えておくポイントを追加し、DB/RPC/API/AIを増やさず静的curated content + native UIだけで完結する。
+
+## Allocation snapshot
+
+- allocated_at: 2026-10-03 JST
+- allocation main SHA: `309b0cb8d4940cdf82bfdd92116f294ba290336c`
+- G1 previous task `kabumori-home-topic-3level-backgrounds-20261003`: Final K1 PASS / merged / done
+- G2: separate `market-report-analysis` production deploy/read-back task; Hard Fact/backend scope, do not touch
+- open PRs at allocation were #82/#81/#78/#76 plus older unrelated PRs; no known mobile topic-detail ownership
+- target is app topic-detail UI/content only
+- before starting, fresh-check origin/main, open PRs, ACTIVE_TASK/CURRENT_STATE, and `git worktree list`; if any concurrent owner touches target files, STOP
+
+## Current truth — do not rediscover by redesigning unrelated parts
+
+Production `public.tips` currently has exactly 50 active tips:
+- 初級: 20
+- 中級: 20
+- 実践: 10
+
+Current `base_text`:
+- min 41 chars
+- max 66 chars
+- avg ~51.6 chars
+
+This short `base_text` is intentional and should remain the Home/TOP summary.
+
+Current data path:
+- app level: `beginner | intermediate | advanced`
+- DB difficulty: `初級 | 中級 | 実践`
+- `fetchDailyTopic()` calls read-only `get_daily_kabumori_tip(level, jstDate)`
+- RPC deterministically returns one active `public.tips` row for the level/date
+- detail re-fetches the exact same deterministic topic and verifies tapped `id`
+- existing detail content is local curated content in `src/lib/topic-detail-catalog.ts`, keyed by seeded title
+- all 50 seeded titles already have detail entries
+- unknown titles deliberately fall back to the RPC `base_text`; never fabricate content
+
+## Product goal
+
+### Home / TOP card
+Keep intentionally compact:
+- level badge
+- title
+- short `base_text`
+- 「詳しく見る →」
+
+Do NOT make Home more verbose.
+
+### Topic detail
+Turn the detail screen into a clear learning flow.
+
+Target reading order:
+1. topic identity — level / category / title
+2. short intro summary — use the fetched `topic.body` / `base_text`
+3. 「まずこれだけ」
+4. 「なぜ大事？」
+5. 「具体例」
+6. 「株価・相場とどう関係する？」
+7. 「覚えておくポイント」
+
+Equivalent natural Japanese headings are allowed when a topic needs slightly different wording, but the learning roles above must be represented.
+
+For advanced/practical topics, `「実践ではどう見る？」` may replace `「株価・相場とどう関係する？」` where that is clearer.
+
+## Important content rule
+
+Do NOT add a section claiming `今日の市場` / `今日の株価` / current real-time behavior in this task.
+
+Reason:
+- this task has no current-market data packet
+- static evergreen content must not imply live grounding
+
+Use evergreen wording such as:
+- 「相場ではどう見る？」
+- 「株価との関係」
+- 「実践ではどう見る？」
+- 「こんな場面を想像すると…」
+
+A future separate task may connect a topic to same-day market facts only after an explicit trustworthy data source is designed.
+
+## Curated content requirements — all 50 topics
+
+Enrich every existing seeded title.
+
+Each known title should have:
+- concise foundational explanation
+- why it matters
+- one concrete, easy-to-understand example
+- price/market/practical relationship
+- one memorable takeaway / caution
+
+Examples must be clearly hypothetical/educational when using numbers or scenarios.
+Do not imply the hypothetical value is a current quote, company result, market fact, or recommendation.
+
+Content style:
+- Japanese
+- plain and friendly
+- accurate enough for a beginner to learn from
+- no jargon left unexplained when avoidable
+- no buy/sell recommendation
+- no deterministic prediction
+- no specific current price/date
+- no invented company/event/fact
+- avoid alarmist language
+- avoid repeating the same sentence across sections
+- keep sections scan-friendly rather than essay-like
+
+The detail should feel meaningfully richer than current 4 short paragraphs, but not become a textbook wall of text.
+
+Suggested total explanatory body per topic:
+- roughly 220–550 Japanese characters across the detail sections
+- this is a design target, not permission to pad text
+
+## UI direction
+
+Keep the screen recognizably Kabumori:
+- ivory/light background
+- generous spacing
+- soft cards/section blocks
+- level accent:
+  - beginner: pale green
+  - intermediate: pale blue
+  - advanced: pale lavender
+- do not turn it into a brokerage terminal or finance-news page
+- no dense tables
+- no excessive icons
+- no decorative image generation required
+
+Recommended structure:
+- top header area with level badge + category + title
+- intro summary card using `topic.body`
+- section blocks/cards below
+- final takeaway block visually distinct but calm
+
+The content must remain easy to scan on normal iPhone widths.
+
+## Existing behavior to preserve
+
+Must preserve:
+- exact deterministic RPC fetch behavior
+- id verification before rendering detail
+- loading/error/mismatch states
+- Home topic background system
+- topic history screen
+- topic level preference contract
+- navigation params `id / level / jstDate`
+- unknown-title fail-safe fallback
+- level labels:
+  - 初心者向け
+  - 中級者向け
+  - 上級者向け
+
+Do not silently rename `advanced` to a new stored value.
+
+## Expected implementation scope
+
+Primary:
+- `src/app/topic-detail.tsx`
+- `src/lib/topic-detail-catalog.ts`
+- `tests/app/topic-detail-catalog_test.ts`
+
+Only if genuinely needed:
+- a small topic-detail-specific presentation helper/token file
+- focused tests for the detail UI contract
+
+Avoid touching:
+- `src/components/home/home-topic-feature.tsx`
+- `src/lib/daily-topic.ts`
+- `src/lib/home-topic.ts`
+unless a tiny compatibility change is proven necessary. If one is required, document why.
+
+## Explicit non-scope
+
+Do NOT change:
+- `public.tips` rows
+- DB schema
+- migrations
+- `get_daily_kabumori_tip`
+- Supabase grants/RLS/Auth
+- Edge Functions
+- AI/LLM calls
+- Web Search/API calls
+- report Hero
+- portfolio screen
+- news UI
+- X/social-mobile
+- common-account/auth
+- production settings
+- EAS/native config/plugins
+
+Production mutation: **0**.
+
+## Worktree / conflict safety
+
+Before work:
+1. read `PROJECT_RULES.md`
+2. read `.agent/ORCHESTRATION.md`
+3. read `.agent/CURRENT_STATE.md`
+4. read this TASK
+5. fresh `origin/main`
+6. inspect active slots / open PRs
+7. run `git worktree list`
+8. use an independent G1 worktree/checkout
+
+Recommended branch:
+`claude/g1-topic-detail-learning-v2-20261003`
+
+If any active work/PR touches:
+- `src/app/topic-detail.tsx`
+- `src/lib/topic-detail-catalog.ts`
+- `tests/app/topic-detail-catalog_test.ts`
+STOP and report the conflict.
+
+Do not use or modify another slot's worktree, branch, uncommitted files, or dev server.
+
+## EAS build conservation — mandatory
+
+This is JS/TS UI/content work.
+
+Expected:
+- EAS build created = **0**
+
+Use:
+- local Expo
+- iOS Simulator
+- existing reusable dev client + local Metro if safe
+
+Do not consume a new EAS build.
+
+## Tests / verification
+
+At minimum:
+
+### Catalog
+- exactly the 50 currently seeded titles are covered
+- no accidental extra/missing title
+- every known title contains all required learning roles
+- concrete example exists for every known title
+- takeaway exists for every known title
+- no blank heading/body
+- content length is substantial but bounded
+- evergreen guard forbids current-market/current-price/date claims
+- unknown title still returns null / fallback remains truthful
+
+### Navigation / safety
+- exact `id + level + jstDate` verification remains
+- mismatch stays fail-closed
+- fetch error remains honest
+- no new backend/API/AI call from detail render
+- Home TOP behavior unchanged
+- history -> detail still works
+
+### UI
+Verify at minimum ~402pt and ~375pt width:
+- long titles do not collide
+- level/category remain readable
+- intro summary is clearly separated from deeper learning
+- sections scan naturally
+- example section is visually identifiable
+- final takeaway is easy to find
+- no horizontal clipping
+- no excessive wall-of-text feel
+- safe-area/back navigation remains correct
+
+Run relevant deterministic app tests, Expo config, web export if supported, changed-scope type/lint, and `git diff --check`.
+Separate known pre-existing diagnostics from candidate regressions.
+
+## Acceptance criteria
+
+PASS candidate only if:
+- Home remains compact
+- detail is clearly richer and easier to learn from
+- all 50 seeded topics have curated concrete examples and takeaways
+- no real-time/current-market claim is fabricated
+- no DB/RPC/API/AI/backend change
+- no EAS build
+- loading/error/mismatch/fallback safety preserved
+- 402/375pt visual verification passes
+- focused PR only
+- no unrelated redesign
+
+## Delivery
+
+Create a focused PR.
+Do not self-merge.
+No production deploy.
+
+Report:
+- task_id
+- fresh main SHA
+- worktree/branch isolation check
+- changed_files
+- final detail content model / section roles
+- how all 50 topics were covered
+- representative beginner/intermediate/advanced examples
+- 402/375 visual findings
+- tests/checks
+- PR/head
+- EAS build created: no
+- backend/DB/RPC/API/AI mutation: 0
+- remaining issues
+- safety_checks
+- next_recommendation
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K1.
+
+Recommended model: **Sonnet5（高）**.
+
+---
+
+# Claude Task 1 — CURRENT TASK
+
 - task_id: kabumori-home-topic-3level-backgrounds-20261003
 - owner: claude
 - slot: claude-1
