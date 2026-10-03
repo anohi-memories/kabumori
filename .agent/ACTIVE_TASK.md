@@ -47,13 +47,13 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: none
-- status: done
-- task_id: kabumori-home-topic-3level-backgrounds-20261003
+- next_owner: claude
+- status: ready
+- task_id: kabumori-topic-detail-learning-v2-20261003
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Final K1 PASS. PR #80 exact head 2e5356a8a3e6af84ed9999929cd62556081cab65 squash-merged as d6031e228efbf01f94ada22879cd6315457c43f7. Three clean 1942x809 topic backgrounds map exactly by topic.level; app tests 266/266, 402/375pt visual checks accepted, EAS 0, backend/production mutation 0, no Codex review required. G1 free after fresh allocation.
+- allocation: Homeの短いtopic要約は維持し、topic detailのみを全50件のcurated learning flowへ強化する。具体例・相場/株価との関係・覚えておくポイントを追加し、DB/RPC/API/AI変更なし、EAS build 0。G2のmarket-report-analysis production作業とはscope分離。開始時にfresh main/open PR/worktree分離を再確認し、対象3ファイル競合時はSTOP。
 - recommended_model: Sonnet5（高）
 
 ## Claude G2
