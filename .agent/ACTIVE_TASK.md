@@ -47,13 +47,13 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: claude
-- status: ready
+- next_owner: none
+- status: done
 - task_id: kabumori-home-topic-3level-backgrounds-20261003
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: TOP「今日のトピック」背景を beginner/intermediate/advanced の3段階へ切替実装。ユーザー承認済みの clean original 3枚だけを使用し、スクショUIのcrop/inpaint/再生成は禁止。topic.level のみで決定論的に切替。402/375ptで3状態比較、EAS build 0、backend/production mutation 0。clean original不足時はSTOP。
+- allocation: Final K1 PASS. PR #80 exact head 2e5356a8a3e6af84ed9999929cd62556081cab65 squash-merged as d6031e228efbf01f94ada22879cd6315457c43f7. Three clean 1942x809 topic backgrounds map exactly by topic.level; app tests 266/266, 402/375pt visual checks accepted, EAS 0, backend/production mutation 0, no Codex review required. G1 free after fresh allocation.
 - recommended_model: Sonnet5（高）
 
 ## Claude G2
