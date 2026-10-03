@@ -1,5 +1,277 @@
 # Codex Task 2 — CURRENT TASK
 
+- task_id: x-social-mobile-pr81-content-settings-hardening-rereview-20261003
+- owner: codex
+- slot: codex-2
+- status: ready
+- next_owner: codex
+- priority: highest
+- recommended_model: Sol（高）
+- type: focused rereview / migration / RLS / JSON contract / CAS
+- target_pr: 81
+- target_head: 5595fb131813542c55c43bc783af623cdb9ea442
+- blocks_pr: 78
+- production_mutation_allowed: false
+
+## Purpose
+
+PR #81 は、前回H2がFAILにした `social_mobile_content_settings` schema candidate のF1〜F4を直す hardening migration。
+
+今回は以下を独立確認し、**本番適用候補として source-level PASS にできるか**を判断する。
+
+- F1 JSON/persona durable contract
+- F2 effective ACL least privilege
+- F3 strictly monotonic updated_at CAS
+- F4 fail-closed drift handling
+
+PASSしても本番適用は別承認。PR #78 AI相談のmergeもまだ不可。
+
+## Mandatory startup
+
+1. PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / G3 TASK+Report / prior H2 reportを読む。
+2. H2専用worktree。
+3. fresh origin/main。
+4. PR #81 exact head `5595fb131813542c55c43bc783af623cdb9ea442` を確認。head違いならSTOP。
+5. K3時点でmainはPR baseから24 commits ahead、PR81の7ファイルとのoverlap 0。freshに再確認。
+6. H1はPR #82 AI Lab review中。H1 worktree/filesへ触れない。
+7. G4 publish-toggle migration/RPCへ触れない。
+8. production apply/write/deploy禁止。
+
+## Gate A — migration chain / ordering
+
+Review:
+- historical `20260922045046_social_mobile_content_settings_candidate.sql` is byte-unchanged.
+- hardening file is new `20261003120000_social_mobile_content_settings_hardening.sql`.
+- ordering is valid relative to G4/PR82/current main migrations.
+- no timestamp collision.
+- migration can safely run only after the historical candidate as intended.
+- transactional application assumption is valid under the actual Supabase migration mechanism used by this repo.
+- if file has no BEGIN/COMMIT, determine whether the real deploy path supplies transactionality; do not assume from local `psql -1`.
+
+This is important because the Report says the migration "must run inside one transaction".
+
+## Gate B — F1 JSON/settings/persona contract
+
+Independently verify validator functions and CHECKs.
+
+Settings must match actual current source writers:
+- exact approved root keys
+- exact JSON types
+- no NULL loophole
+- no `->>` coercion loophole
+- ja-JP / Asia-Tokyo
+- frequency integer 0..14
+- approvalMode allowed set
+- exact generationWindow shape
+- start/default time reject 24:00
+- endLocal allows 24:00
+- generationDayOffset exact allowed type/value
+- bounded string arrays and nonblank semantics
+- notes bounds.
+
+Persona:
+- exact current durable keys only
+- bounded strings/arrays
+- sentenceLength enum
+- analysis/provenance fields remain columns, not JSON
+- no raw posts/history/token/oauth/publish/account/scheduler keys.
+
+Compare against:
+- current main Settings writer
+- PR #78 writer/materializer
+- any other writer of this table in repo.
+
+A source writer that emits a shape rejected by DB is a blocker.
+
+## Gate C — validator function security
+
+For helper functions:
+- schema/name/owner
+- IMMUTABLE/PARALLEL SAFE claims are truthful
+- fixed search_path
+- no dynamic SQL
+- no table/data access
+- no side effects
+- EXECUTE grants minimal and necessary
+- PostgREST exposure as public RPC returns only boolean and cannot be abused for data access.
+
+Check whether using public schema functions is acceptable for rollout or should be moved to a private schema before apply. Do not block solely for aesthetics; block for actual attack/surface risk.
+
+## Gate D — F2 effective ACL / RLS
+
+Use disposable PostgreSQL/Supabase proof.
+
+Prove effective privileges, not source text:
+- PUBLIC none
+- anon none
+- authenticated exactly SELECT/INSERT/UPDATE
+- authenticated cannot DELETE/TRUNCATE/REFERENCES/TRIGGER/MAINTAIN
+- service_role privileges are exactly what the chosen architecture requires; note that PR #78 Edge read path may or may not use service_role, verify actual code.
+- no unexpected column ACL
+- no unknown grantee survives hardening
+- RLS enabled
+- owner-only select/insert/update policy exact tenant binding
+- admin/member/viewer/nonmember/cross-brand blocked
+- no DELETE policy
+- policy subqueries work with actual brand_memberships RLS.
+
+Also inspect current production default ACL read-only if needed. K3 specifically lists this as a pre-apply residual risk.
+
+## Gate E — F3 CAS monotonicity
+
+Review trigger/function:
+- INSERT owns created_at and updated_at.
+- UPDATE preserves created_at.
+- UPDATE ignores caller-supplied updated_at.
+- `greatest(clock_timestamp(), old.updated_at + 1 microsecond)` strictly increases.
+- same transaction repeated updates advance.
+- long-running earlier transaction cannot regress.
+- concurrent old-version CAS gives exactly one winner.
+- stale token zero rows.
+- timestamp JSON/PostgREST round-trip equality is stable enough for PR #78.
+
+Try:
+- far-future old.updated_at
+- equal clock edge
+- multiple same-transaction updates
+- two concurrent connections
+- update after delete/recreate if feasible
+- upsert/insert-on-conflict paths used by current repository.
+
+Assess the theoretical delete+recreate old-token issue and whether it matters given brand lifecycle.
+
+## Gate F — F4 drift guard
+
+Independently review catalog checks.
+
+Must reject:
+- relation missing/wrong kind
+- column missing/extra/type/nullability drift
+- wrong PK
+- FK missing/wrong target/wrong delete action/not-valid/deferrable surprises
+- unexpected CHECK/UNIQUE/index
+- unexpected trigger/function binding
+- unexpected policy
+- unknown table/column grantee
+- post-hardening drift.
+
+Confirm only explicitly enumerated safe repair is accepted:
+- known candidate CHECK replacement
+- known overly broad grants normalization.
+
+Check for false positives against actual production catalog. A migration that will always stop on legitimate managed/Supabase metadata is not deployable.
+
+## Gate G — current rows / no hidden rewrite
+
+Production table is currently absent per prior H2 read, but candidate+hardening may be tested locally with rows.
+
+Verify:
+- invalid existing rows cause refusal, not silent mutation.
+- valid existing rows remain unchanged except server-owned version semantics going forward.
+- no data rewrite of settings/persona.
+- no unrelated table/role/default privilege mutation.
+
+## Gate H — lifecycle / common-account / G4 compatibility
+
+Confirm:
+- brand_id FK and CASCADE still match current main.
+- no dependency on unapplied common-account PR #70 production schema.
+- no conflict with G4 publish-toggle migration/RPC.
+- no collision with PR #82 AI Lab migration.
+- no change to Auth/Vault/X/scheduler.
+
+## Gate I — repository change
+
+Review app-side change:
+`apps/social-mobile/src/data/content-settings-repository.ts`
+
+Confirm removing analyzedAt/analyzedPostCount from persona_profile:
+- matches schema model
+- does not lose dedicated-column writes
+- does not erase existing confirmed persona metadata
+- PR #78 still composes cleanly after rebase.
+
+Run repository tests and inspect stale/confirm save path.
+
+## Tests
+
+Run independently:
+- `supabase/tests/social_mobile_content_settings_run.sh`
+- all SQL behavior/drift/ACL/CAS cases
+- same-transaction + multi-connection CAS
+- mutation checks if practical
+- social-mobile full test
+- content-settings repository focused tests
+- relevant `_shared/brand` and social-mobile dry-run tests
+- typecheck/lint/Deno lint
+- `git diff --check`
+- secret/scope scan.
+
+No paid AI/live X needed.
+
+## Production read-only preflight
+
+Allowed:
+- target table/function existence
+- migration history versions
+- `acldefault` / `pg_default_acl`
+- current roles/grantees relevant to this table
+- brands/brand_memberships dependent column/FK/RLS definitions
+- collision check for function/trigger/policy/index names.
+
+Do not read user content/settings/PII.
+
+Production mutation 0.
+
+## Verdict rules
+
+PASS:
+- F1-F4 independently closed;
+- migration chain and transactional apply semantics are safe;
+- current source writers are compatible;
+- no production catalog blocker.
+
+PASS-WITH-FIX:
+- only bounded source fix, fully re-tested, no architecture/schema redesign.
+
+CHANGES REQUIRED:
+- ACL/RLS escape;
+- validator mismatch;
+- CAS not actually monotonic;
+- drift guard unsafe;
+- transactionality assumption invalid;
+- real production catalog causes unavoidable stop or unsafe apply.
+
+## Report
+
+Append to `.agent/CODEX_REPORT_2.md`:
+- task_id
+- verdict
+- reviewed exact head
+- F1/F2/F3/F4 results
+- migration chain/transactionality
+- source-writer compatibility
+- effective ACL/RLS
+- CAS adversarial evidence
+- drift evidence
+- lifecycle/common-account/G4/PR82 compatibility
+- tests
+- production read-only findings
+- source fixes if any
+- production mutation
+- remaining risks
+- whether PR #81 may merge
+- whether production apply may be presented for separate approval
+- whether PR #78 review can resume after apply/read-back.
+
+Then status -> review_required, next_owner -> chatgpt, STOP for C2.
+
+Recommended model: **Sol（高）**.
+
+---
+
+# Codex Task 2 — CURRENT TASK
+
 - task_id: x-social-mobile-content-settings-schema-prereq-review-20261002
 - owner: codex
 - slot: codex-2
