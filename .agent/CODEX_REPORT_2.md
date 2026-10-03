@@ -1,3 +1,116 @@
+## H2 — PR #81 content-settings hardening rereview — 2026-10-03 JST
+
+- task_id: x-social-mobile-pr81-content-settings-hardening-rereview-20261003
+- verdict: **CHANGES REQUIRED — ordinary paths pass, three adversarial boundaries remain unclosed**.
+- status: review_required / next_owner: chatgpt; STOP for C2.
+- reviewed_exact_head: `5595fb131813542c55c43bc783af623cdb9ea442` (GitHub PR #81 open/unmerged; exact head checked at startup and completion).
+- fresh_main_start: `a633961056e5f8b628ae59c72163306c21c3f399`; pre-publication fresh_main: `fea45fe0f0656d22e8ffef2d750fd1b62035fd26`.
+- PR #78 original head remains `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7`, open/unmerged.
+- implementation/source fixes: **0**. This review does not rewrite the historical candidate or widen into a corrective implementation. Assign the bounded residual fixes back to G3 and re-review.
+- changed_files in repository: **.agent/CODEX_REPORT_2.md / .agent/tasks/CODEX_TASK_2.md only**; histories retained. PR81's seven files were reviewed, not changed.
+- implementation commit: none. Control-file publication uses normal GitHub Contents API commits; exact publication SHAs are confirmed by read-back and in the completion response/history.
+- PR81 merge recommendation: **HOLD**. Production apply recommendation: **HOLD**. PR78 review may resume only after accepted corrected prerequisite, separately approved atomic apply and read-back; this is not PR78 merge approval.
+
+### Residual findings (independently reproduced, fake local DB only)
+
+**R1 / P2 — deferrable primary key drift is silently accepted and breaks the actual Settings writer**  
+File `supabase/migrations/20261003120000_social_mobile_content_settings_hardening.sql:60-68`.
+
+The primary-key guard checks only count and conkey. It does not reject condeferrable/condeferrable-index semantics. After the original candidate, replacing its PK with `PRIMARY KEY (brand_id) DEFERRABLE INITIALLY IMMEDIATE` and applying hardening succeeds. Output: `DEFERRABLE_PK_ACCEPTED=true`. The real repository pattern `INSERT ... ON CONFLICT (brand_id) DO UPDATE`, executed as authenticated owner through RLS, then fails with SQLSTATE **55000**: `ON CONFLICT does not support deferrable unique constraints/exclusion constraints as arbiters`. This is a missing Gate F wrong-PK check, not an observed live broken table (production target is absent).
+
+Minimal correction: explicitly require the known immediate, nondeferrable PK/index contract, reject unexpected drift rather than changing someone else's PK, and add this drift + actual-upsert regression.
+
+**R2 / P2 — unexpected existing helper EXECUTE grant survives hardening**  
+File `...hardening.sql:448-458`; initial guard and postconditions do not assert helper ACL/owner identity.
+
+In an exact candidate DB, pre-create `public.social_mobile_content_settings_valid_persona(jsonb)` and grant EXECUTE to a synthetic unknown role. CREATE OR REPLACE preserves that role's existing ACL. REVOKE addresses only PUBLIC/anon/authenticated/service_role. Hardening succeeds and `UNKNOWN_HELPER_EXECUTE_SURVIVES=true`. The table ACL is correctly narrowed; this finding is specifically a **function-boundary least-privilege/drift** gap, not a table tenant escape. The resulting reviewed validators are pure booleans; no secret/data-read or X/publish exploit was demonstrated.
+
+Minimal correction: fail closed on unexpected pre-existing helper ownership/signatures/grantees, normalize only explicitly owned/known ACLs, and assert exact effective helper ACLs after apply. Cover unknown helper grant and post-hardening drift; do not globally alter default privileges.
+
+**R3 / P2 — valid historical infinity version survives and is not strictly monotonic**  
+File `...hardening.sql:299-310, 375-381`.
+
+The unchanged candidate permits an existing `updated_at='infinity'` (no insert ownership trigger/finite CHECK). Its settings/persona otherwise meet the new contract. Hardening accepts it without rewrite or refusal. `greatest(clock_timestamp(), infinity + 1 microsecond)` remains infinity. An authenticated owner UPDATE leaves `INFINITY_VERSION_STAYS=true`, and another UPDATE with the same old version changes **1** row (`REUSED_OLD_INFINITY_TOKEN_CHANGED=1`) rather than zero. Thus strict-per-row CAS is not established for every admitted existing row.
+
+This is **not** a problem with newly inserted hardened rows: their timestamps are server-owned finite wall-clock values. Normal finite/far-future versions, including 2999, pass. It is an unhandled historical-row precondition, and production currently has no target rows/table.
+
+Minimal correction: refuse non-finite existing version timestamps before hardening (do not silently rewrite them), enforce the finite version domain going forward, and add the infinity fixture. Document created_at handling separately if needed. Keep the existing finite CAS and app string-token interface.
+
+### F1-F4 disposition / gate summary
+
+| Original finding | Independent result |
+| --- | --- |
+| F1 JSON/persona | **Closed for inspected normalized writer shapes**: exact root/window keysets, explicit JSON types, null-safe CHECK, locale/timezone, integer bounds, per-item arrays, 24:00 only for end, persona allowlist and column metadata. 61 invalid settings + 24 invalid persona cases rejected. Structural validation cannot detect semantic secrets hidden in permitted human text. |
+| F2 effective table ACL/RLS | **Original table flaw closed**: PUBLIC/anon/service_role none; authenticated S/I/U only; DELETE/TRUNCATE/REFERENCES/TRIGGER/MAINTAIN denied; no column ACL; tenant/owner RLS passed. **Gate C helper ACL still fails R2**. |
+| F3 version | **Finite paths closed**, same-transaction and concurrent/long-transaction evidence passed. **Not globally closed for accepted historical infinity (R3)**. |
+| F4 drift | Existing 20 drift cases refused and enumerated repair passed. **Not closed for deferrable PK and helper ACL drift (R1/R2)**. |
+
+The existing PASS test suite does not prove the three omitted cases are safe. No source fix was mixed into the reviewed exact PR head.
+
+### Migration chain / actual transactionality
+
+- Historical `20260922045046_social_mobile_content_settings_candidate.sql` byte-unchanged, SHA256 `b1167065e4177492b1139071055e89da2bf9db12b0e43e20dada1af07a996fdb`.
+- New hardening version `20261003120000` is unique in PR81/current main, ordered after the historical candidate, and refuses absent target relation.
+- Independent SQL runner proves candidate+hardening in a single explicit transaction; invalid existing rows/drift refuse without partial hardening.
+- **Also tested the installed actual Supabase CLI 2.116.0**, not merely psql -1: separate disposable CLI project with exactly these two files, explicit DB URL bound to H2's local Unix socket. `migration up` succeeded; history contains exactly `20260922045046,20261003120000`.
+- A third **repo-external fake test migration**, create marker then raise, failed as intended. Read-back: `CLI_ATOMIC_MARKER_ABSENT=true`, failed history count=0. This proves per-file rollback through the real CLI.
+- Official pinned CLI source corroborates that headerless compatible statements plus history run in one extended-protocol batch. Neither reviewed file contains authored transaction controls or nontransactional statements. Source: [CLI migration apply](https://github.com/supabase/cli/blob/v2.116.0/apps/cli/src/legacy/shared/legacy-migration-apply.ts), [batch contract](https://github.com/supabase/cli/blob/v2.116.0/apps/cli/src/legacy/shared/legacy-db-connection.service.ts).
+- **Per-file atomicity is not whole-chain atomicity.** Normal migration-up commits the historical candidate before hardening. An interrupted/failed second file could leave the known weak candidate. No repository-owned production apply path establishing an outer transaction for both files was found. A later rollout must explicitly approve/prove an atomic two-file application or equivalent safe plan; do not infer this from the CLI's per-file guarantee.
+- No CLI db push, remote migration apply, history repair/reconcile or production transaction was used. CLI output calls the explicit supplied URL “remote database”, but it was the disposable local Unix socket, not Supabase production. First sandbox CLI help/version attempt failed writing CLI telemetry; ordinary approved help/version rerun succeeded, no app/secrets setting change.
+
+### Writer compatibility / repository change
+
+- Inspected main Settings upsert, conversation saveConfirmedProposal, PR78 saveConfirmedIfUnchanged and shared persona materializer/normalizer; no other writer of this table found in relevant source.
+- Normalized settings have exact nine durable keys and five window keys; blank NG strings are dropped, arrays bounded; persona proposals trim/filter/bound durable style signals.
+- PR81 deletes analyzedAt/analyzedPostCount from persona_profile only; dedicated persona_last_analyzed_at/count writes remain. Source object is not mutated; settings-only save omits persona columns, confirmed metadata retained.
+- Focused repository tests **3/3 PASS**; full app **116/116 PASS**.
+- PR78 CAS uses the returned timestamp **string**, not JS Date millisecond reconstruction; local JSON timestamp round-trip passed at microsecond precision. Managed PostgREST E2E was not run.
+- PR78 and PR81 source composition tested with `git merge-tree --write-tree`: clean, tree `f330f255bfcec3437c01d025c384eb4cabb384ef`. This is composition evidence, not a rebase/merge or independent PR78 approval.
+- Known pre-existing main validator rejects its own endLocal=24:00 default; PR78 contains its narrow fix. PR81 did not change this file; accepted finite-window saved shapes remain compatible. Record this dependency instead of claiming the unmerged main default flow works.
+- Shared server contract adds livePublishingEnabled=false **only to runtime guidance**, not durable repository JSON. That flag is not a writer-controlled DB publish permission.
+- PR78 and existing dry-run reads use caller JWT + publishable key. No service-role DML on this settings table is currently required.
+
+### Independent local tests / adversarial evidence
+
+H2 checkout `/private/tmp/h2-pr81-review.zzmdmR/repo`, detached exact PR head, clean. Own PostgreSQL **17.11**, Unix socket-only port 56434, non-superuser kb_smcs_owner setup role; client probes SET ROLE authenticated/anon/service_role. Synthetic users/brands only.
+
+- Original SQL runner: **ALL_PASS** (apply/reapply, single transaction, behavior incl. 61+24 invalid JSON, owner/RLS/ACL, same-tx CAS, two-connection one-winner CAS, long-tx no regression, competing insert, invalid existing-row refusal, 20 drift refusals, 3 enumerated repairs, cascade/unrelated preservation, cleanup).
+- Extra local adversarial cases: **three unresolved defects reproduced**, exact outputs above; valid existing-row full JSON comparison unchanged=true.
+- Independently ran **one** source-external now() mutant: suite failed at `same transaction advances strictly`, expected detection. Did not rerun/claim G3's other seven mutants.
+- Social-mobile full test **116/116 PASS**; repository focused **3/3 PASS** (subset, not additional distinct total).
+- Deno shared-brand + social-mobile-brand-dry-run **158/158 PASS**, explicitly `--no-check --allow-read`; this is runtime test success, not a separate Deno typecheck claim.
+- App TypeScript check PASS; app lint PASS; changed Deno static test lint PASS; bash syntax PASS; git diff --check PASS.
+- Dependencies installed lockfile-exact via npm ci --ignore-scripts in H2 isolated app only. No root package/lock or formal-repo dependency change; checkout remained clean.
+- Proof/artifacts are repo-external. All runner fake DBs removed, h2_pr81_adversarial and h2_pr81_cli dropped, H2-owned cluster stopped. Source/test files were not edited.
+- This is PostgreSQL/CLI local proof, not live Supabase Auth/PostgREST/managed deletion E2E.
+
+### Production read-only catalog / conflicts / lifecycle
+
+Exactly **3 READ ONLY catalog transactions**, no settings/user content/PII:
+- Target table and same-prefix functions absent; both migration history versions absent.
+- DB role for catalog tool = postgres; dependency tables owned by postgres.
+- postgres/public default table ACL remains anon/authenticated/service_role Dxtm (TRUNCATE/REFERENCES/TRIGGER/MAINTAIN); function default owner-only. Supabase_admin's separate defaults are broader and not conflated with postgres defaults. A rollout using a different creator role needs another preflight.
+- brands.id text PK; memberships brand_id text FK CASCADE, user_id uuid Auth FK CASCADE, composite PK, owner/admin/member/viewer check; RLS enabled; authenticated self-membership SELECT permitted. Public CREATE denied anon/authenticated.
+- Existing dependency deletion-guard triggers unchanged. Brand FK cascade proved locally, existing purge deletes brands, no new common-account schema dependency. No actual account deletion/Auth/Vault action.
+- PR81 seven changed paths have **zero overlap** with fresh main changes since merge-base. Later main movement before sync changed H1/index controls only; H2 control blobs unchanged.
+- H1 PR82 and G4 PR76 paths do not overlap PR81. PR81 version 20261003120000 differs from both.
+- **Out-of-scope coordination note:** current PR76 and PR82 each propose a different file with version 20261003090000. This pre-existing cross-PR timestamp collision was not changed and is not PR81's own version collision; orchestrator must settle it before combining their migration histories. Do not apply all repo migrations opportunistically.
+- H1 became done; G4 review_required on latest main. Their TASK/Report/source/checkouts were untouched.
+- Supabase skill changelog markdown endpoint returned unsupported content-type 400; no successful changelog read claimed. Used relevant security instructions and pinned CLI source/runtime proof.
+
+### Safety / C2 next recommendation
+
+- code changes / historical migration rewrite / PR merge / source push: **0**.
+- production DB write/schema/RPC/grant/migration/history/settings/deploy/Cron/scheduler: **0**.
+- live/paid OpenAI / X / Push / OAuth / Vault / Storage / user-account actions: **0**.
+- formal repo existing changes / other workstream modifications / apps/admin / HANDOFF / root package/lock/env: **0**.
+- actual user-content/PII/secret reads and exposure: **0**.
+- Control-file sync only, full prior TASK/Report preserved; normal conflict-checked publication with remote read-back, no force push/stash/reset.
+- C2: send G3 the bounded R1/R2/R3 corrections and explicit transaction-plan requirement. Suggested implementation Opus5.5（高）, rereview Sol（高）. Keep PR81/apply/PR78 HOLD. No production authorization is implied.
+- Final state: **review_required / next_owner: chatgpt**.
+
+---
+
 ## H2 — Content-settings schema prerequisite review — 2026-10-03 JST
 
 - task_id: x-social-mobile-content-settings-schema-prereq-review-20261002
