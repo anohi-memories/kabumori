@@ -1,5 +1,265 @@
 # Claude Task 2 — CURRENT TASK
 
+- task_id: kabumori-pr79-hypothetical-and-watch-phrasing-corrective-20261003
+- owner: claude
+- slot: claude-2
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Opus5.5（高）
+- purpose: H1のCHANGES REQUIREDを受け、PR #79のHard Fact境界をもう一度狭く修正する。P1のhypothetical-tailによるwrong-date/direction bypassを塞ぎ、同時にP2の正当な前夜watch表現のfalse rejectを減らし、P3 lintも解消する。同じPR #79をamend。source/testsのみ、merge/deployは禁止。
+
+## C1 accepted findings
+
+Reviewed PR #79 runtime head:
+`9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3`
+
+H1 verdict:
+**CHANGES REQUIRED**
+
+H1 test-only evidence:
+`6140968378c44aecd2d40a1cc7d344f2e98e8b4e`
+
+Do not treat that evidence commit as a runtime release candidate. Reproduce the semantics on the G2 branch.
+
+## P1 — HYPOTHETICAL must not erase an earlier asserted fact
+
+Current behavior can return no Hard issue if a metric clause contains a hypothetical tail anywhere.
+
+Examples H1 proved incorrectly pass:
+
+- `10月2日は、米国株高が強まり波及するかどうかを見ます`
+- `10月2日は、米国株高が鮮明となり波及するかどうかを見ます`
+- `10月2日は、米国株高が継続し波及するかどうかを見ます`
+- `10月2日の米国株は下落しており次も続くかを見ます`
+
+The last sentence is especially important:
+- date is wrong for the US session,
+- direction is wrong,
+- both assertions occur **before** the hypothetical tail.
+
+These must be Hard.
+
+### Preserve genuine hypotheses
+
+Do not simply remove hypothetical support.
+
+Forms such as the following should remain non-factual when they genuinely place the move itself inside the condition/question:
+
+- `米国株高が強まるかどうかを見る`
+- `米国株が上昇すれば、日本株の反応を見る`
+- `米国株安が続くかを見る`
+
+The key distinction is:
+
+**earlier asserted move + later hypothetical tail**  
+vs  
+**the move itself is hypothetical/conditional**.
+
+Implement the smallest deterministic clause-level distinction.
+
+Do not solve with a verb blacklist for only `強まり/鮮明/継続`.
+
+Do not move protection to LLM Fact only.
+
+## P2 — legitimate prior-night watch phrasing must not false-reject
+
+H1 independently confirmed these ordinary morning phrases currently false-reject in all factual placements:
+
+1. `10月2日は、前夜の米国株高を受け、日本株の反応を見る。`
+2. `10月2日は、米国株高の流れをどう受け止めるかが焦点。`
+
+These do **not** assert that the US market rose on 10/2.
+
+They must pass the session-date Hard guard.
+
+Also keep passing:
+- `前日の米国株上昇を踏まえて、日本株の反応を確認する`
+- existing Gate-A positive watch forms from PR #79
+- explicit correct prior-session date forms
+
+### Bounded relation expansion only
+
+Extend the watch relation only enough to cover safe prior-session reference shapes.
+
+Examples of acceptable bounded forms:
+- `<prior move> を受け、<Japan reaction> を見る/確認する`
+- `<prior move> の流れをどう受け止めるか...`
+
+But do not allow:
+- `10月2日は、米国株高を受け、米国株高が続き、日本株を見る`
+- `10月2日は、米国株高の流れが続き、日本株の反応を見る`
+- a completed/asserted wrong-date move merely because `前夜` appears somewhere earlier
+
+An explicit `前夜` marker is useful evidence but not a blanket exemption.
+
+## P3 — lint
+
+Remove or otherwise resolve the now-unused `directionIn` wrapper.
+
+Changed-file `deno lint` must exit 0.
+
+Do not hide the finding with lint suppression unless there is a concrete reason documented in the Report.
+
+## Mandatory regressions
+
+### Must FAIL Hard
+
+1. `10月2日の米国株は下落しており次も続くかを見ます`
+2. `10月2日は、米国株高が強まり波及するかどうかを見ます`
+3. `10月2日は、米国株高が鮮明となり波及するかどうかを見ます`
+4. `10月2日は、米国株高が継続し波及するかどうかを見ます`
+5. assertion-before-watch cases from prior K2:
+   - 続き
+   - 確認され
+   - 鮮明となり
+   - 一段と強まり
+   - 継続し
+6. wrong-date numeric values/change
+7. exact 10/1 mixed-session Nikkei/1306 bug
+8. stale-as-current
+9. 1306 -> TOPIX index
+10. direction/sign/emoji inversion
+11. unsupported market causality
+12. unknown/fabricated ref
+
+Run the critical P1 sentences through:
+- market_summary
+- X context
+- X closing
+- App summary
+- App japan
+- observation claim
+
+### Must PASS
+
+1. `10月2日は、前夜の米国株高を受け、日本株の反応を見る`
+2. `10月2日は、米国株高の流れをどう受け止めるかが焦点`
+3. `前日の米国株上昇を踏まえて、日本株の反応を確認する`
+4. existing 10/2 legitimate watch references
+5. `米国株高が強まるかどうかを見る`
+6. `米国株が上昇すれば、日本株の反応を見る`
+7. `米国株安が続くかを見る`
+8. correctly dated prior-session value statements
+
+Be careful with direction validation in genuine hypotheses: do not accidentally treat a conditional `米国株安が続くか` as an asserted direction.
+
+## Implementation guidance
+
+Audit:
+- `HYPOTHETICAL`
+- `directionWord` / `directionUse`
+- session-date early-return path
+- `WATCH_RELATION`
+- `MOVE_LIST`
+- `REFERRED_MOVE`
+- `TOPIC_AFTER_DATE`
+
+Prefer one of these designs:
+- determine whether the hypothetical marker occurs **before and governs** the move assertion, rather than anywhere in the clause;
+- or extract the move-expression span and classify only that span as factual vs hypothetical.
+
+Avoid a new broad parser framework.
+
+No prompt/model/call-budget change unless absolutely unavoidable; if you think it is necessary, STOP and report instead of expanding scope.
+
+## Full verification
+
+Run:
+- session_date_calibration
+- H1 equivalent boundary regressions
+- presentation_v2
+- causal_calibration
+- quality_calibration
+- h1_adversarial
+- content_guard
+- transport_retry
+- full market-report-analysis
+- personalized-reports full/relevant
+- X shared consumer
+- market-report-data-packet
+- _shared relevant/full
+- deno check
+- deno lint on changed files
+- git diff --check
+
+All must be green.
+
+## PR rule
+
+- amend **PR #79**
+- no new PR unless technically unavoidable
+- record prior head `9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3`
+- record final head
+- fresh-check main overlap before push
+- no merge in this TASK
+
+## Production / safety
+
+Forbidden:
+- deploy
+- manual invoke/retry
+- app/x gate change
+- cron
+- DB/schema/RPC/migration
+- Auth/Vault/secrets
+- X operation
+- personalized-reports/x-test-post changes
+- news acquisition changes
+
+PR #77 remains merged but production-unapplied.
+
+## Review requirement
+
+Because this remains a Hard Fact boundary, next K2 must send the corrected exact PR #79 head to a focused Codex rereview before merge/deploy.
+
+Recommended Codex model: **Sol（高）**.
+
+Do not bypass the rereview even if all local tests pass.
+
+## Completion conditions
+
+PASS candidate only if:
+- P1 hypothetical-tail bypass is closed,
+- genuine hypotheses still pass,
+- P2 normal prior-night phrasing no longer false-rejects,
+- all prior numeric/session/mixed-session/causal/ref protections remain strict,
+- lint/check/diff pass,
+- no model-call increase,
+- production mutation=0.
+
+## Required Report
+
+Include:
+- task_id/result
+- prior/final PR #79 head
+- exact P1 root cause and fix
+- exact P2 watch-relation expansion
+- P3 lint fix
+- positive/negative regressions
+- six-placement P1 evidence
+- 10/1 mixed-session result
+- full tests/check/lint/diff
+- changed_files
+- production mutation=0
+- remaining issues
+- recommendation for Codex rereview
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+Pending.
+
+---
+
+# Previous completed G2 task — PR #79 watch-relation corrective
+
+# Claude Task 2 — CURRENT TASK
+
 - task_id: kabumori-pr79-session-date-watch-relation-corrective-20261002
 - owner: claude
 - slot: claude-2
@@ -6434,3 +6694,4 @@ Rollout after review, not before:
 - if Codex accepts the corrected Hard boundary, merge PR #79,
 - then deploy merged PR #77 + PR #79 together in one `market-report-analysis` deploy with app/x gates OFF,
 - then observe the next natural morning cycle read-only.
+
