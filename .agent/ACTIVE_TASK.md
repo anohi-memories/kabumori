@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: done
 - task_id: ai-lab-pr82-event-dedupe-review-20261003
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Focused review of PR #82 exact head 08a7346ccd63f2ff540bd48149f1f1e65e6dbe09. Verify event-level dedupe, concurrent same-event selection, post-success usage persistence failure, crash windows, eventKey stability, migration ACL/RLS/drift/idempotency, and existing X/fingerprint/other-brand safety. No merge/deploy/production write/real X operation. Recommended Sol（高）.
+- allocation: Final C1 accepted CHANGES REQUIRED on PR #82 head 08a7346ccd63f2ff540bd48149f1f1e65e6dbe09. Concurrent same-event selection, post-success usage-write failure, ambiguous crash windows, mutable ordinal event IDs, conflicting idempotency, evergreen cooldown bypass and migration drift remain. No merge/deploy/production mutation. H1 free after fresh allocation.
 
 ## Codex H2
 - owner: codex
