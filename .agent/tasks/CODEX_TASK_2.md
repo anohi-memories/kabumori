@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-content-settings-schema-prereq-review-20261002
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sol（高）
 - type: migration / RLS / optimistic-concurrency prerequisite review
@@ -897,3 +897,22 @@ Report PASS/FAIL, exact reviewed head, disposition of all prior blockers, test e
 - production mutation: 0; live AI/X operations: 0.
 - existing source candidate `supabase/migrations/20260922045046_social_mobile_content_settings_candidate.sql` is present on main but is explicitly source-candidate-only and not applied to production.
 - next: independent review of that existing migration candidate against current production catalog and PR #78 CAS/RLS assumptions. Do not apply it yet.
+
+
+## Final C2 — content-settings schema prerequisite review
+
+- verdict: **FAIL / CHANGES REQUIRED accepted**.
+- unchanged historical candidate is NOT approved for production apply.
+- accepted blockers:
+  - P1 F1: null/type/unknown/forbidden JSON structure can pass durable CHECKs.
+  - P1 F2: effective default ACL leaves destructive/administrative privileges such as TRUNCATE/TRIGGER/REFERENCES/MAINTAIN to authenticated.
+  - P2 F3: updated_at=now() is not a strictly monotonic per-update version; same-transaction reuse and clock regression were reproduced.
+  - P2 F4: IF NOT EXISTS silently accepts same-name drift, including missing FK/CHECK constraints.
+- production target table remains absent; migration history does not show the candidate applied.
+- production mutation/apply/deploy: 0.
+- source changes from H2: 0.
+- G3 corrective assigned: `x-social-mobile-content-settings-schema-hardening-20261003`, recommended **Opus5.5（高）**.
+- default correction strategy: preserve historical candidate and add a new versioned hardening migration with exact JSON/persona contract, least-privilege ACL, monotonic CAS version, and explicit drift guard.
+- PR #78 remains merge/deploy HOLD.
+- after G3 K3, fresh H2 rereview required; recommended **Sol（高）**.
+- H2 closed and reusable after fresh allocation.
