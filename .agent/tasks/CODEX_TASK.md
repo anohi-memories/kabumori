@@ -1,5 +1,228 @@
 # Codex Task — CURRENT TASK
 
+- task_id: kabumori-pr79-hard-guard-rereview-20261003
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- priority: highest
+- recommended_model: Sol（高）
+- type: focused rereview / Hard Fact session-date+hypothetical boundary
+- target_pr: 79
+- target_head: f7083ba6a810d5f9cdbe7090e4439f261e38bf0f
+- previous_reviewed_head: 9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3
+- production_mutation_allowed: false
+
+## Purpose
+
+前回H1でCHANGES REQUIREDとなったPR #79の修正版を再レビューする。
+
+前回の3 findings:
+- P1 hypothetical tail が前半のwrong-date/wrong-direction断定を消す
+- P2 普通の前夜watch表現がfalse reject
+- P3 unused `directionIn` でlint fail
+
+が、Hard Fact境界を壊さず解消されたかを確認する。
+
+**merge / deploy / gate change / manual cycle / DB/Auth/Vault/X mutationは禁止。**
+
+## Mandatory startup / isolation
+
+1. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / G2 current TASK+Report / previous H1 report.
+2. Use independent H1 worktree.
+3. Fresh-fetch origin/main and PR #79 exact head `f7083ba6a810d5f9cdbe7090e4439f261e38bf0f`.
+4. STOP if PR head differs.
+5. Fresh compare PR files vs current main; K2 found overlap 0. Re-check independently.
+6. Do not touch H2 or other slot worktrees.
+
+## Gate A — P1 hypothetical-tail bypass
+
+Must Hard-fail in all six factual placements:
+- `10月2日の米国株は下落しており次も続くかを見ます`
+- `10月2日は、米国株高が強まり波及するかどうかを見ます`
+- `10月2日は、米国株高が鮮明となり波及するかどうかを見ます`
+- `10月2日は、米国株高が継続し波及するかどうかを見ます`
+- `10月2日は、米国株が上昇しており、さらに上昇するかを見ます`
+
+Six placements:
+- market_summary
+- X context
+- X closing
+- App summary
+- App japan
+- observation claim
+
+Check both:
+- wrong-date/session detection
+- wrong-direction detection where input direction contradicts text
+
+Do not accept protection that only happens through LLM Fact.
+
+## Gate B — genuine hypothetical/conditional forms
+
+These should remain non-factual for date/direction:
+- `米国株高が強まるかどうかを見る`
+- `米国株が上昇すれば、日本株の反応を見る`
+- `米国株安が続くかを見る`
+
+Attack `GOVERNED_BY_QUESTION`:
+- 6-kanji / 3-hiragana bounds
+- particles
+- nested predicates
+- continuative forms
+- punctuation/no punctuation
+- forms where an asserted predicate occurs before `かどうか/続くか`
+
+Goal: prove it does not let a completed assertion masquerade as a genuine hypothesis.
+
+If you find a deterministic bypass, add failing regression first.
+
+## Gate C — P2 bounded prior-night watch references
+
+Must pass the **session-date** guard:
+- `10月2日は、前夜の米国株高を受け、日本株の反応を見る`
+- `10月2日は、米国株高の流れをどう受け止めるかが焦点`
+- `前日の米国株上昇を踏まえて、日本株の反応を確認する`
+- all original PR #79 legitimate watch-reference shapes
+
+But must remain Hard:
+- `10月2日は、米国株高を受け、米国株高が続き、日本株を見る`
+- `10月2日は、米国株高を受け、買いが先行し、日本株の反応を見る`
+- `10月2日は、米国株高の流れが続き、日本株の反応を見る`
+- `10月2日は、米国株高の流れが強まり、どう受け止めるかが焦点`
+- `10月2日は、前夜の米国株高が続き、日本株の反応を確認します`
+- `10月2日の前夜の米国株は上昇しました`
+
+Inspect:
+- WATCH_RELATION new `を受け` branch
+- `の流れを…どう…か` branch
+- MOVE_LIST narrowing
+- REFERRED_MOVE / TOPIC_AFTER_DATE
+
+## Gate D — remaining Hard safeguards
+
+Must remain Hard:
+- wrong-date numeric values/change
+- exact 10/1 mixed-session Nikkei/1306 regression
+- stale-as-current
+- 1306 -> TOPIX index
+- direction/sign/emoji inversion
+- unsupported market causality
+- fabricated/unknown ref
+
+PR #77 quality calibration and safe-original fallback must remain unchanged.
+
+## Gate E — causality interaction for P2
+
+G2 reports:
+- the date guard now passes `前夜の米国株高を受け、日本株の反応を見る`
+- but in factual summary/context/closing fields, the **separate causal guard** may still Hard-block it because `を受け` + `日本株` looks causal.
+- in watch/next_watch fields it can pass.
+
+Assess this carefully.
+
+Question:
+Is that behavior acceptable under product policy, or would ordinary morning watch phrasing still routinely disappear from factual presentation fields despite the session-date fix?
+
+Do not automatically weaken causal guard.
+
+If you conclude this is a real recurring delivery false positive and the fix is small/deterministic within current scope, document the minimal correction and decide whether H1 can safely fix it.
+If it needs broader causal semantics, return CHANGES REQUIRED with a focused G2 follow-up instead.
+
+User policy:
+- objective lies/contradictions -> BLOCK
+- supported watch/reference phrasing and honest uncertainty should not routinely kill delivery
+
+## Gate F — lint/check truth
+
+Re-run changed-file lint and verify exit 0.
+Confirm unused `directionIn` is gone.
+Do not accept a report-only claim.
+
+## Required tests
+
+At minimum:
+- session_date_calibration
+- h1_pr79_boundary
+- presentation_v2
+- causal_calibration
+- quality_calibration
+- h1_adversarial
+- content_guard
+- transport_retry
+- full market-report-analysis
+- personalized-reports
+- X shared consumer
+- market-report-data-packet
+- _shared
+- deno check
+- deno lint changed files
+- git diff --check
+
+Use `--no-check` only where that suite already has known unrelated checked-type debt; report it precisely.
+
+## Fix authority
+
+H1 may make only small deterministic fixes inside this exact guard boundary.
+
+Allowed:
+- one clause-classification predicate correction
+- one WATCH_RELATION regex correction
+- one narrow causal-watch classification correction if clearly bounded
+- focused regression tests/docs
+
+Return CHANGES REQUIRED if fix requires:
+- general parser redesign
+- prompt/model/call-budget changes
+- packet/schema changes
+- DB/RPC/migration
+- broader causal architecture
+
+## Production safety
+
+Forbidden:
+- merge
+- deploy
+- app/x gate change
+- manual model/Edge invoke
+- DB/schema/RPC/migration
+- cron/Auth/Vault/secrets
+- real X operation
+
+Production mutation must remain 0.
+
+## Completion / C1
+
+Append to `.agent/CODEX_REPORT.md`.
+
+Report:
+- verdict PASS / PASS-WITH-FIX / CHANGES REQUIRED
+- original/final reviewed head
+- P1 result
+- genuine-hypothesis result
+- P2 result
+- causal interaction assessment
+- remaining Hard safeguards
+- lint/check result
+- tests
+- any fix commit / changed files
+- production mutation=0
+- merge recommendation
+- rollout prerequisites
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C1.
+
+Recommended model: **Sol（高）**.
+
+---
+
+# Previous completed H1 task — preserved history
+
+# Codex Task — CURRENT TASK
+
 - task_id: kabumori-pr79-session-date-hard-guard-review-20261003
 - owner: codex
 - slot: codex-1
@@ -1727,3 +1950,4 @@ Then status -> review_required, next_owner -> chatgpt, STOP for C1.
 - no merge/deploy/production mutation.
 - PR #79 returns to G2 for a narrow source correction; recommended Claude model **Opus5.5（高）**.
 - after correction, another focused Codex review is required before merge/deploy.
+
