@@ -1,3 +1,21 @@
+## Final C2 — content-settings schema candidate FAIL / G3 hardening required
+
+- verdict: **FAIL / CHANGES REQUIRED**. Existing `20260922045046_social_mobile_content_settings_candidate.sql` is not approved for production apply.
+- H2 production preflight still confirms target table/function absent and migration version unapplied; referenced brand/membership schema is compatible.
+- P1 F1: DB JSON CHECK boundary is too weak. NULL, type coercion, malformed nested structure and forbidden/unknown structured keys can be persisted under authenticated owner writes.
+- P1 F2: effective production-like default ACL leaves authenticated with non-DML capabilities including TRUNCATE/TRIGGER/REFERENCES/MAINTAIN; H2 locally demonstrated TRUNCATE despite DELETE denial.
+- P2 F3: `updated_at = now()` is transaction-start time, not a strict per-update version. Same-transaction timestamp reuse and version regression by a long-running earlier transaction were reproduced. Normal two-transaction CAS did produce one winner, but that does not close the deterministic clock issue.
+- P2 F4: `CREATE TABLE IF NOT EXISTS` silently accepts drift. H2 removed expected CHECK/FK constraints in a disposable DB, reran candidate, and it still succeeded without restoring/refusing the drift.
+- H2 made no source/schema changes and performed no production writes/apply/deploy/Auth/Vault/X/OpenAI/Cron operations.
+- PR #78 remains open/unmerged and blocked; unfinished Auth/AI/injection review is not considered PASS.
+- G3 is reassigned `x-social-mobile-content-settings-schema-hardening-20261003`.
+- default strategy: preserve historical candidate, add a new versioned hardening migration; exact JSON/persona allowlists/types/null safety, least-privilege effective ACL, monotonic server-owned CAS version, and explicit drift guard are mandatory.
+- local disposable PostgreSQL/Supabase proof is mandatory before K3.
+- production migration apply remains forbidden and will require separate explicit approval after independent review.
+- G3 recommended model: **Opus5.5（高）**.
+- after K3: fresh H2 review, recommended **Sol（高）**.
+- AI Lab diary: no update; this is an internal rejected schema candidate, not completed/released functionality.
+
 ## Final K2 — corrected PR #79 to H1 review
 
 - verdict: **PASS to focused review; merge/deploy HOLD**.
