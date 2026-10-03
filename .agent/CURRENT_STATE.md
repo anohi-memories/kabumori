@@ -1,3 +1,20 @@
+## Final K2 — PR #77 + PR #79 production deploy PASS
+
+- verdict: **PASS**.
+- production `market-report-analysis` fresh-read is **v21**, ACTIVE, `verify_jwt=false`, ezbr `fe5c1836cdeddabdb1300668a5f75ac92d3570872a1b1eb110798195991fa40c`.
+- production source read-back contains the merged PR #77 quality calibration and PR #79/H1 Hard-guard runtime.
+- G2 reported exact byte match against fresh main for the full deployed import graph.
+- only `market-report-analysis` changed in the before/after Edge Function metadata comparison.
+- app_enabled=false / x_enabled=false remain OFF/OFF.
+- all 8 relevant cron jobs remain active with unchanged schedules and command hashes.
+- tests accepted: analysis 136/136; personalized 128/128; X shared 8/8; data-packet 42/42; _shared runtime 361/361; target check/lint/diff PASS.
+- production mutation: exactly one Edge Function deploy, v20 -> v21. No manual cycle/retry, gate change, DB/Auth/Vault/X/notification mutation.
+- rollback source v20 captured; rollback not needed.
+- next G2: `kabumori-shared-report-v2-20261005-morning-natural-observation`, read-only.
+- timing gate: do not substantively observe before **2026-10-05 08:10 JST**; no polling or weekend/manual run.
+- recommended Claude model: **Sonnet5（中）**.
+- natural observation should classify first-try vs retry, verify PR #77 rewrite/cost behavior, PR #79 watch/session/causal behavior, factual integrity, packet duplication and model cost before any consumer activation decision.
+
 ## K3 — PR #81 content-settings hardening PASS to H2 rereview
 
 - verdict: **PASS to focused H2 rereview; merge/apply/deploy HOLD**.
