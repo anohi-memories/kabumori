@@ -4,7 +4,7 @@
 - owner: claude
 - slot: claude-3
 - status: review_required
-- next_owner: chatgpt
+- next_owner: codex
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: corrective implementation / DB migration / RLS / JSON contract / optimistic concurrency
@@ -1779,3 +1779,16 @@ Unexpected residue: **none**.
 - existing source-only migration candidate is undergoing a separate H2 review.
 - no production schema apply is authorized.
 - G3 remains review_required and blocked from merge/deploy until schema prerequisite and the remaining H2 PR #78 review gates are completed.
+
+
+## K3 decision — PR #81 content-settings hardening
+
+- verdict: **PASS to focused H2 rereview; merge/apply/deploy HOLD**.
+- accepted review target: PR #81 exact head `5595fb131813542c55c43bc783af623cdb9ea442`.
+- fresh main is 24 commits ahead of PR base with no overlap across the 7 PR files.
+- Netlify/Vercel checks green.
+- reported local evidence is sufficient to proceed to independent review, not to production apply.
+- H2 assigned `x-social-mobile-pr81-content-settings-hardening-rereview-20261003`, recommended **Sol（高）**.
+- production migration apply remains separately approval-gated.
+- PR #78 remains blocked until schema is independently accepted, applied with explicit approval, and read back.
+- next_owner: codex; wait for C2.
