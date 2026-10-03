@@ -56,6 +56,13 @@ const UP_WORD = /上昇|(?<![利きし])上げ|上が[っりる]|値上がり|�
 const DOWN_WORD = /下落|(?<![利きし])下げ|下が[っりる]|値下がり|反落|続落|マイナス/u;
 /** A question or condition about a move is not a statement that it happened. */
 const HYPOTHETICAL = /かどうか|するか|続くか|なるか|すれば|した場合|する場合|となれば|なら(?:ば)?[、。]?/u;
+/**
+ * What may stand between a move and the question or condition about it for the move itself to be the
+ * thing asked (「米国株高が強まるかどうか」「上昇すれば」「米国株安が続くか」): a subject particle and one
+ * predicate (kanji then kana). A continuative or a second predicate means the move was stated first and
+ * only then a question was added (H1 on PR #79: 「米国株は下落しており次も続くか」「米国株高が強まり波及するかどうか」).
+ */
+const GOVERNED_BY_QUESTION = /^(?:が|は|も)?[一-龠々ァ-ヶー]{0,6}[ぁ-ん]{0,3}$/u;
 const STALE_MARKER = /時点|最新ではありません|古い値/u;
 const PAST_FACT = /ました|でした|した(?:[。!?,、]|$)|だった|してい(?:る|ます)/u;
 const CURRENT_STALE_PREFIX = /(?:今日|現在|直近)の(?:最新の)?$|最新の$/u;
@@ -69,7 +76,7 @@ const REFERRED_MOVE = /^(?:が|を|の|や|へ|は|も|・|など|および|及�
 /** Non-past wording that says something will be looked at. */
 const WATCH_VERB = "(?:見ます|見る(?!と)|見たい|見てい(?:き|く)|確認します|確認する|確認したい|注目|焦点|見極め)";
 /** Further moves of the same list: 「米国株高**や半導体株高**が…」. */
-const MOVE_LIST = /^(?:(?:や|と|・|および|及び)[^、。がをのはも]{1,14}?(?:高|安|上昇|下落))+/u;
+const MOVE_LIST = /^(?:(?:や|と|・|および|及び)[一-龠々ァ-ヶーA-Za-z0-9]{1,14}?(?:高|安|上昇|下落))+/u;
 /** A noun phrase: kanji, katakana, Latin letters, digits and the joiners の / や / と / ・. No verb can be written with these. */
 const NOUN = "[一-龠々ァ-ヶーA-Za-z0-9のやと・]";
 /** Where the move shows: 「日本株で」「東京市場には」. */
@@ -82,14 +89,17 @@ const PLACE = `(?:${NOUN}{1,16}(?:で|に|へ)(?:は|も)?)?`;
  *   - 「が（日本株で）どう…か」, then a watch verb.
  *   - 「が（日本株に）続くか / 波及するかどうか」, then a watch verb.
  *   - 「の受け止め方 / の影響 / の波及 / への反応（を）」 directly followed by the watch verb.
- *   - 「を踏まえ（て）、日本株の反応を」 followed by the watch verb.
+ *   - 「を踏まえ（て）/ を受け（て）、日本株の反応を」 followed by the watch verb (H1 on PR #79: 「前夜の米国株高を
+ *     受け、日本株の反応を見る」).
+ *   - 「の流れを（どこで）どう…か」 with the watch verb in the same clause (「米国株高の流れをどう受け止めるかが焦点」).
  *   - 「を受けた動き（流れ・反応…）が続くか / どう…か」, then a watch verb.
  */
 const WATCH_RELATION = new RegExp([
   `^が${PLACE}どう[^、。]*?か.*${WATCH_VERB}`,
   `^が${PLACE}(?:続くか|[一-龠々ァ-ヶー]{1,6}(?:する|される|できる)?かどうか).*${WATCH_VERB}`,
   `^(?:の(?:受け止め方?|影響|波及)|への反応)(?:を|に|も|は)?(?:${NOUN}{1,12}(?:を|に|で))?${WATCH_VERB}`,
-  `^を踏まえて?、?(?:${NOUN}{1,12}(?:の|を|に|で|が|は|も)){0,3}${WATCH_VERB}`,
+  `^を(?:踏まえ|受け)て?、?(?:${NOUN}{1,12}(?:の|を|に|で|が|は|も)){0,3}${WATCH_VERB}`,
+  `^の流れを?${PLACE}どう[^、。]*?か[^、。]*?${WATCH_VERB}`,
   `^を受けた(?:動き|流れ|買い|売り|反応|値動き|展開)(?:が|は|も)(?:続くか|どう[^、。]*?か)[^、。]*?${WATCH_VERB}`,
 ].join("|"), "u");
 /** The date is the sentence's topic (「10月2日は、…」), not attached to the metric (「10月2日の米国株」). */
@@ -165,10 +175,6 @@ function firstClause(text: string): string {
   return text;
 }
 
-function directionIn(clause: string): 1 | -1 | null {
-  return directionUse(clause).direction;
-}
-
 /** The direction a clause gives its subject, and whether it only refers to that move as a noun. */
 function directionUse(clause: string): { direction: 1 | -1 | null; referred: boolean; end: number } {
   const found = directionWord(clause);
@@ -176,8 +182,19 @@ function directionUse(clause: string): { direction: 1 | -1 | null; referred: boo
   return { direction: found.direction, referred: REFERRED_MOVE.test(clause.slice(found.end)), end: found.end };
 }
 
+/**
+ * The direction a clause states, or null when there is none or the move itself is the subject of a
+ * question or condition. A question later in the clause does not cancel a move stated before it.
+ */
 function directionWord(clause: string): { direction: 1 | -1; end: number } | null {
-  if (HYPOTHETICAL.test(clause)) return null;
+  const found = statedDirection(clause);
+  if (!found) return null;
+  const question = clause.slice(found.end).search(HYPOTHETICAL);
+  if (question >= 0 && GOVERNED_BY_QUESTION.test(clause.slice(found.end, found.end + question))) return null;
+  return found;
+}
+
+function statedDirection(clause: string): { direction: 1 | -1; end: number } | null {
   const suffix = clause.match(/^(高|安)(?![いくけ値])/u);
   if (suffix) return { direction: suffix[1] === "高" ? 1 : -1, end: 1 };
   const unnegated = (pattern: RegExp) => {

@@ -247,3 +247,72 @@ test("replay 07:55: the rejected draft now reaches Fact in one generation; the c
   assert.equal(outcome.ok, true);
   assert.deepEqual([calls, outcome.trace.hardRejections, outcome.trace.deliveredGeneration], [["generate", "fact"], [], 1]);
 });
+
+// ---------------------------------------------------------------------------------------------
+// H1 on PR #79 (head 9ce344b): a question later in the clause must not cancel a move stated before it;
+// ordinary prior-night watch wording must not be read as today's US session.
+// ---------------------------------------------------------------------------------------------
+
+const STATED_THEN_ASKED = [
+  "10月2日の米国株は下落しており次も続くかを見ます",
+  "10月2日は、米国株高が強まり波及するかどうかを見ます",
+  "10月2日は、米国株高が鮮明となり波及するかどうかを見ます",
+  "10月2日は、米国株高が継続し波及するかどうかを見ます",
+  "10月2日は、米国株が上昇しており、さらに上昇するかを見ます",
+];
+
+test("P1: a move stated before a question or condition is still dated and directed, in all six placements", () => {
+  for (const sentence of STATED_THEN_ASKED) {
+    assert.ok(has(factual(sentence), "日付と指標の不一致（NYダウ・S&P500・ナスダック総合は10月1日の値"), `accepted: ${sentence}`);
+    for (const [field, place] of FIELDS) {
+      const issues = localAnalysisCheck(live((analysis) => place(analysis, sentence)), input).hard;
+      assert.ok(has(issues, DATE_ISSUE), `${field}: ${sentence} → ${issues.join(" / ")}`);
+    }
+  }
+  // The stated move is also checked against the session's direction (S&P500 was +0.19% on 10/1).
+  assert.ok(has(factual(STATED_THEN_ASKED[0]), "方向の逆転"), "a stated fall before the question is an inversion");
+});
+
+test("P1: a move that is itself the question or the condition is not a statement, so neither date nor direction is judged", () => {
+  for (const sentence of [
+    "10月2日は、米国株高が強まるかどうかを見ます",
+    "10月2日は、米国株が上昇すれば、日本株の反応を見ます",
+    "10月2日は、米国株が上昇すれば買いを検討します",
+    "10月2日は、米国株安が続くかを見ます",
+    "10月2日は、米国株安が続くかを確認します",
+    "米国株高が強まるかどうかを見る",
+    "米国株が上昇すれば、日本株の反応を見る",
+    "米国株安が続くかを見る",
+  ]) {
+    assert.deepEqual(factual(sentence), [], sentence);
+  }
+});
+
+test("P2: ordinary prior-night watch wording is not a date mismatch in any placement", () => {
+  for (const sentence of [
+    "10月2日は、前夜の米国株高を受け、日本株の反応を見る",
+    "10月2日は、米国株高の流れをどう受け止めるかが焦点",
+    "10月2日は、前日の米国株上昇を踏まえて、日本株の反応を確認する",
+    "前日の米国株上昇を踏まえて、日本株の反応を確認する",
+  ]) {
+    assert.ok(!has(factual(sentence), DATE_ISSUE), `${sentence} → ${factual(sentence).join(" / ")}`);
+    for (const [field, place] of FIELDS) {
+      const issues = localAnalysisCheck(live((analysis) => place(analysis, sentence)), input).hard;
+      assert.ok(!has(issues, DATE_ISSUE), `${field}: ${sentence} → ${issues.join(" / ")}`);
+    }
+  }
+});
+
+test("P2: the new shapes do not excuse a move stated between them and the watch", () => {
+  for (const sentence of [
+    "10月2日は、米国株高を受け、米国株高が続き、日本株を見る",
+    "10月2日は、米国株高を受け、買いが先行し、日本株の反応を見る",
+    "10月2日は、米国株高の流れが続き、日本株の反応を見る",
+    "10月2日は、米国株高の流れが強まり、どう受け止めるかが焦点",
+    // 「前夜」 is evidence, not an exemption
+    "10月2日は、前夜の米国株高が続き、日本株の反応を確認します",
+    "10月2日の前夜の米国株は上昇しました",
+  ]) {
+    assert.ok(has(factual(sentence), DATE_ISSUE), `accepted: ${sentence} → ${factual(sentence).join(" / ")}`);
+  }
+});
