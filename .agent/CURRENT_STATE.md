@@ -1,3 +1,19 @@
+## Final K1 — Topic detail learning v2 PASS / merged
+
+- verdict: **PASS**.
+- G1 task: `kabumori-topic-detail-learning-v2-20261003`.
+- PR #83 exact accepted head `c810accebada37760a98a18bb184b50a61b7937b` was squash-merged as `f5919eb6af3da51c0d4d4a6342ad23b3f0a68980`.
+- fresh pre-merge main `e2ccfcc2e50942ed709eefdb1e62f87cbd693286`; main had advanced 20 commits from G1's merge-base with **0 overlap** across the six PR files.
+- fresh GitHub mergeability was clean; no slot/file conflict.
+- Home topic card remains the short `base_text` summary. Detail now uses a five-role learning flow for all 50 seeded topics: basics -> why -> hypothetical example -> market/practical relation -> takeaway.
+- exact id/level/JST-date re-fetch and mismatch fail-closed behavior preserved; params change now clears stale detail before loading the new one.
+- accepted verification: 50/50 title coverage; 284/284 app tests; Expo config/export PASS; diff clean; 402pt + 375pt Simulator checks.
+- EAS build = 0. DB/RPC/API/AI/Auth/Edge/production mutation = 0.
+- Codex review: **not required**; static native UI + curated content only, no sensitive boundary, focused tests and visual verification are sufficient.
+- remaining non-blockers: past-topic detail eyebrow still says `TODAY'S TOPIC`; fetch-error state has no retry button; a calculation may line-wrap awkwardly.
+- AI Lab diary: **候補あり** — 「今日のトピック」を開くと、具体例・相場との関係・覚えておくポイントまで読める学習画面にし、初級〜上級の50テーマを同じ流れで学べるようにした。
+- G1 is done/free after fresh allocation.
+
 ## PR #82 corrective complete -> H1 durable-claim rereview
 
 - corrected PR #82 exact head `9f3b19a3cde490cf63735220ae191dcd4f11bdcb`, open/mergeable.
