@@ -3,8 +3,8 @@
 - task_id: ai-lab-pr82-claim-rereview-20261004
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused rereview / durable pre-X claim / migration / crash safety
@@ -2496,6 +2496,34 @@ Then status -> review_required, next_owner -> chatgpt, STOP for C1.
 - PR #82 remains open/unmerged. Production mutation / real X / deploy = 0.
 - correction must use stable immutable event identity and durable pre-X event claim/reservation semantics with safe ambiguous-outcome handling; scheduler spacing is not a correctness guarantee.
 - G3/G4 are currently occupied, so no slot is overwritten. Return via direct Claude instruction in an independent worktree.
+- recommended Claude model: **Opus5.5（高）**.
+- corrected candidate requires fresh Codex rereview: **Sol（高）**.
+- H1 closed and reusable after fresh allocation.
+
+
+## Final C1 — PR #82 durable-claim rereview
+
+- verdict: **CHANGES REQUIRED accepted**.
+- reviewed exact head: `9f3b19a3cde490cf63735220ae191dcd4f11bdcb`.
+- accepted improvements:
+  - ordinary two-worker diary race is closed under actual SQL-backed dispatch;
+  - provider_started precedes X without holding a DB transaction across X;
+  - claim_id fencing/lease prevents stale worker start/release/settle;
+  - settle failure after confirmed X retains a blocking claim and does not reopen the diary event;
+  - exact settlement/idempotency conflicts are materially improved;
+  - normal evergreen pool exhaustion no longer uses the old least-recent bypass.
+- accepted remaining blockers:
+  - P1 duplicate `event_id:` labels within one diary entry silently overwrite identity in runtime and current workflow validator, reviving a previously consumed event under a new key;
+  - P2 migration drift/ACL proof does not reject unsafe table/function ownership or inherited effective privileges;
+  - P2 real VaultAccountXAuth 401 maps to typed errors not recognized by the dispatcher release classifier, leaving a proven no-post case permanently ambiguous;
+  - P1 unresolved evergreen provider_started/ambiguous rows become reclaimable after 72h/48h solely by age, allowing a possibly-posted seed to be sent again;
+  - P2 confirmed evergreen cooldown uses claimed_at rather than published/settled time;
+  - P2 RPC candidate JSON accepts extra keys and non-canonical event/theme mappings, allowing cooldown/theme checks to be bypassed by malformed service-role input;
+  - P3 changed test files introduce net-new require-await lint debt.
+- H1 evidence branch `codex/h1-pr82-claims-20261004` commit `0801619f4bcd882dadc71deab5cd07493a7ea80a` is RED evidence only; do not merge as release candidate.
+- fresh main has advanced and now overlaps PR #82 in the canonical diary MD + snapshot. Correction must preserve the latest main diary/topic-detail entry and re-generate snapshot; do not overwrite it.
+- PR #82 remains open/unmerged; production mutation/read, real X/model/Vault/token operations, migration apply and deploy all remain 0.
+- G3/G4 remain occupied, so no implementation slot is overwritten. Correction should continue as direct Claude work in an independent worktree.
 - recommended Claude model: **Opus5.5（高）**.
 - corrected candidate requires fresh Codex rereview: **Sol（高）**.
 - H1 closed and reusable after fresh allocation.
