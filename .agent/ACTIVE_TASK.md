@@ -24,59 +24,59 @@
 - owner: codex
 - slot: codex-1
 - status: done
-- task_id: kabumori-pr79-session-date-hard-guard-review-20261003
+- task_id: ai-lab-pr82-event-dedupe-review-20261003
 - start_code: H1
 - finish_code: C1
 - next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepted CHANGES REQUIRED on PR #79 head 9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3. P1 hypothetical-tail bypass, P2 normal prior-night false rejects and P3 lint failure require G2 correction. No merge/deploy/production mutation. H1 is free after fresh allocation.
+- allocation: Final C1 accepted CHANGES REQUIRED on PR #82 head 08a7346ccd63f2ff540bd48149f1f1e65e6dbe09. Concurrent same-event selection, post-success usage-write failure, ambiguous crash windows, mutable ordinal event IDs, conflicting idempotency, evergreen cooldown bypass and migration drift remain. No merge/deploy/production mutation. H1 free after fresh allocation.
 
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: x-social-mobile-content-settings-schema-prereq-review-20261002
+- status: ready
+- task_id: x-social-mobile-pr81-content-settings-hardening-rereview-20261003
 - start_code: H2
 - finish_code: C2
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Final C2 accepted FAIL / CHANGES REQUIRED. Existing content-settings migration candidate has P1 JSON/ACL and P2 monotonic-CAS/drift blockers; no production apply. Corrective returned to G3. H2 free after fresh allocation.
+- allocation: Focused rereview of PR #81 exact head 5595fb131813542c55c43bc783af623cdb9ea442. Verify H2 F1-F4 closure: exact JSON/persona DB contract, effective least-privilege ACL/RLS, strictly monotonic updated_at CAS, fail-closed drift guard, real migration transactionality and production catalog compatibility. No merge/apply/deploy/production write. Recommended Sol（高）.
 
 ## Claude G1
 - owner: claude
 - slot: claude-1
 - next_owner: claude
 - status: ready
-- task_id: kabumori-home-topic-3level-backgrounds-20261003
+- task_id: kabumori-topic-detail-learning-v2-20261003
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: TOP「今日のトピック」背景を beginner/intermediate/advanced の3段階へ切替実装。ユーザー承認済みの clean original 3枚だけを使用し、スクショUIのcrop/inpaint/再生成は禁止。topic.level のみで決定論的に切替。402/375ptで3状態比較、EAS build 0、backend/production mutation 0。clean original不足時はSTOP。
+- allocation: Homeの短いtopic要約は維持し、topic detailのみを全50件のcurated learning flowへ強化する。具体例・相場/株価との関係・覚えておくポイントを追加し、DB/RPC/API/AI変更なし、EAS build 0。G2のmarket-report-analysis production作業とはscope分離。開始時にfresh main/open PR/worktree分離を再確認し、対象3ファイル競合時はSTOP。
 - recommended_model: Sonnet5（高）
 
 ## Claude G2
 - owner: claude
-- slot:## Claude G2
-- owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-pr79-hypothetical-and-watch-phrasing-corrective-20261003
+- task_id: kabumori-shared-report-v2-20261005-morning-natural-observation
 - start_code: G2
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: amend PR #79 after C1 CHANGES REQUIRED; close hypothetical-tail wrong-date/direction bypass, allow bounded normal prior-night watch phrasing, fix lint, preserve all Hard numeric/session/causal/ref protections; source/tests only, no merge/deploy/gate; recommended Opus5.5（高）
+- allocation: read-only natural 2026-10-05 morning observation of production market-report-analysis v21 after PR #77 + PR #79 rollout; do not substantively observe before 08:10 JST, no polling/manual invoke/gate/deploy; inspect first-try vs retry, Hard/WARN boundaries, cost and factual integrity; recommended Sonnet5（中）
 
- claude-3
-- status: ready
+## Claude G3
+- owner: claude
+- slot: claude-3
+- status: review_required
 - task_id: x-social-mobile-content-settings-schema-hardening-20261003
 - start_code: G3
 - finish_code: K3
-- next_owner: claude
+- next_owner: codex
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: Harden the blocked PR #78 persistence schema prerequisite. Preserve historical candidate by default; add a new versioned hardening migration with exact null/type/key JSON+persona contract, least-privilege ACL, strictly monotonic updated_at CAS semantics, and fail-closed drift checks. Local disposable SQL proof required. No production apply/deploy. Recommended Opus5.5（高）. Fresh H2 Sol（高） rereview required after K3.
+- allocation: K3 PASS to focused H2 rereview. PR #81 exact head 5595fb131813542c55c43bc783af623cdb9ea442 is open/mergeable; H2 F1-F4 are reported corrected with local disposable proof. No production apply/deploy/write. H2 review required before merge or any production migration approval. Recommended Sol（高）.
 
 ## Claude G4
 - owner: claude

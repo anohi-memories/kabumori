@@ -1,5 +1,370 @@
 # Codex Task — CURRENT TASK
 
+- task_id: ai-lab-pr82-event-dedupe-review-20261003
+- owner: codex
+- slot: codex-1
+- status: done
+- next_owner: none
+- priority: highest
+- recommended_model: Sol（高）
+- type: focused review / AI Lab event dedupe / migration / concurrency
+- target_pr: 82
+- target_head: 08a7346ccd63f2ff540bd48149f1f1e65e6dbe09
+- production_mutation_allowed: false
+
+## Purpose
+
+PR #82を独立レビューする。
+目的は、会社員AIラボで同じ実際の開発イベントを changed / difficulty / decided / angle の別表現で繰り返し投稿する問題が、本当に構造的に閉じたかを確認すること。
+
+## Mandatory
+
+- independent H1 worktree
+- fresh origin/main
+- exact PR head確認。headが変わっていたらSTOP
+- G3/G4のworktree・migration・未commit変更に触れない
+- merge/deploy/production write/real X operation禁止
+
+## Must-review gates
+
+1. 9/30 fixtureで旧不具合を再現し、新実装で同一eventの全unitが1回のpublished usage後に除外されること。
+2. fresh未使用eventがあればそれを優先し、全部使用済みならevergreenへ行くこと。
+3. rotationIndexがused eventを復活させないこと。
+4. eventKey `diary-YYYY-MM-DD-N` の安定性。同日途中挿入・並べ替え・sanitize除外でfresh eventが別keyになり再投稿できないか。
+5. **同時実行レース**:
+   - A/Bが同じrecentUsageを読み、
+   - 同じ未使用eventを選び、
+   - 両方がX publishへ到達できないか。
+   scheduler間隔を安全性の根拠にしない。
+6. **usage保存失敗**:
+   - X成功
+   - usage insert失敗
+   - completion成功
+   - 次回history read成功
+   のとき同じeventが再選択されないか。
+7. X成功後のcrash window:
+   - X成功→usage前
+   - usage後→completion前
+   で二重X投稿安全性とevent dedupeの両方を評価。
+8. 必要ならreservation/claim方式を correction contract として提案:
+   - event単位unique claim
+   - lease/expiry
+   - pre-X failureでrelease
+   - X成功後published化
+   - crashでも同じeventの二重publishを防止。
+   大きな設計変更はレビュー中に実装しない。
+9. migration `20261003090000_ai_lab_topic_event_usage.sql`:
+   - CHECK
+   - PK/unique設計
+   - RLS
+   - effective ACL
+   - service_role SELECT/INSERT only
+   - TRUNCATE等が残らないこと
+   - IF NOT EXISTSでunsafe driftを黙って受け入れないか
+   - reapply/idempotency
+   - index/read query整合。
+10. `loadAiLabTopicUsage`:
+   - 14日lookback
+   - 200件limit
+   - malformed/read failure時fail-safe
+   - brand filter
+   - no raw post body storage。
+11. `recordAiLabTopicUsage`:
+   - on_conflict scheduled_post_id の意味
+   - 同じscheduled_post_idで別event/x idを黙ってignoreしてよいか。
+12. evergreen 72h seed / 48h generic theme cooldown。
+13. existing content guard / cross-brand fingerprint / final dispatch guardを維持。
+14. 他ブランド、朝刊/大引け、OAuth、Cronへ非影響。
+15. exclusion/logに本文や内部開発情報を出さない。
+
+## Tests
+
+- PR #82 focused tests
+- AI Lab topic dedupe
+- scheduled brand post
+- cross-brand fingerprint
+- relevant x-test-post/shared tests
+- changed runtime Deno check/lint
+- disposable PostgreSQL migration proof
+- diff check / secret-shape scan
+- 上記同時実行・usage失敗のadversarial testを追加して検証
+
+PASS条件:
+現実的な同時実行・usage失敗でも同じeventが再publishされない、または安全に阻止されること。
+
+CHANGES REQUIRED条件:
+同時dispatchやusage write failureで同じeventのpublishが現実的に再発するなら、scheduler間隔に関係なくFAIL。
+
+## Report
+
+`.agent/CODEX_REPORT.md`へ:
+- verdict
+- reviewed head
+- old bug reproduction
+- eventKey stability
+- concurrent selection result
+- usage failure result
+- crash-window result
+- migration/RLS/ACL/drift result
+- tests
+- production read/write
+- remaining risks
+- merge recommendation
+- rollout order
+
+status -> review_required
+next_owner -> chatgpt
+STOP for C1.
+
+Recommended model: **Sol（高）**.
+
+## H1 completion — 2026-10-03 JST
+
+- verdict: **CHANGES REQUIRED**. Exact PR #82 head remains `08a7346ccd63f2ff540bd48149f1f1e65e6dbe09`, open/unmerged.
+- P1: same-event concurrent schedules both reach fake X; usage failure + successful completion permits next-slot republish; confirmed-X/before-usage and ambiguous-response windows lack durable event protection.
+- P2: ordinal event IDs revive used events after insertion/reordering/parser exclusion; ignored conflicting schedule ID falsely reports persistence; exhausted evergreen pool bypasses 72h; migration silently accepts missing PK/CHECKs/wrong index drift.
+- Candidate focused checked tests 96 PASS (new event tests 26); existing shared + x-test-post runtime 901 PASS with --no-check. H1 safety regressions intentionally RED: 2 control PASS / 9 required safety failures. Disposable PostgreSQL 17: 16 observation probes + four CHECK cases; unsafe drift/duplicate/conflict cases independently reproduced, not safety PASS.
+- Evidence-only source commit `100ab65f8142adc11916f467f68415d15cbc00b1` pushed/read-back on H1-only `codex/h1-pr82-event-review-20261003`; two test files, no runtime fix or PR #82 mutation. Do not merge this RED-test evidence branch as a release candidate.
+- Detailed correction contract / test and lint debt / local DB rollback+shutdown evidence appended to `.agent/CODEX_REPORT.md`.
+- Production read/write, model/provider/X operations, merge/deploy = 0. G3/G4 files and shared slot indexes untouched.
+- Next: **C1, 推薦モデル：Sol（高）**. Return for focused durable event-claim/identity/schema correction; do not merge/deploy unchanged PR #82. H1 STOP.
+
+---
+
+# Codex Task — CURRENT TASK
+
+- task_id: kabumori-pr79-hard-guard-rereview-20261003
+- owner: codex
+- slot: codex-1
+- status: done
+- next_owner: none
+- priority: highest
+- recommended_model: Sol（高）
+- type: focused rereview / Hard Fact session-date+hypothetical boundary
+- target_pr: 79
+- target_head: f7083ba6a810d5f9cdbe7090e4439f261e38bf0f
+- previous_reviewed_head: 9ce344b78f23f3bfc1cf033031f1c6ea6bf16fa3
+- production_mutation_allowed: false
+
+## Purpose
+
+前回H1でCHANGES REQUIREDとなったPR #79の修正版を再レビューする。
+
+前回の3 findings:
+- P1 hypothetical tail が前半のwrong-date/wrong-direction断定を消す
+- P2 普通の前夜watch表現がfalse reject
+- P3 unused `directionIn` でlint fail
+
+が、Hard Fact境界を壊さず解消されたかを確認する。
+
+**merge / deploy / gate change / manual cycle / DB/Auth/Vault/X mutationは禁止。**
+
+## Mandatory startup / isolation
+
+1. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / G2 current TASK+Report / previous H1 report.
+2. Use independent H1 worktree.
+3. Fresh-fetch origin/main and PR #79 exact head `f7083ba6a810d5f9cdbe7090e4439f261e38bf0f`.
+4. STOP if PR head differs.
+5. Fresh compare PR files vs current main; K2 found overlap 0. Re-check independently.
+6. Do not touch H2 or other slot worktrees.
+
+## Gate A — P1 hypothetical-tail bypass
+
+Must Hard-fail in all six factual placements:
+- `10月2日の米国株は下落しており次も続くかを見ます`
+- `10月2日は、米国株高が強まり波及するかどうかを見ます`
+- `10月2日は、米国株高が鮮明となり波及するかどうかを見ます`
+- `10月2日は、米国株高が継続し波及するかどうかを見ます`
+- `10月2日は、米国株が上昇しており、さらに上昇するかを見ます`
+
+Six placements:
+- market_summary
+- X context
+- X closing
+- App summary
+- App japan
+- observation claim
+
+Check both:
+- wrong-date/session detection
+- wrong-direction detection where input direction contradicts text
+
+Do not accept protection that only happens through LLM Fact.
+
+## Gate B — genuine hypothetical/conditional forms
+
+These should remain non-factual for date/direction:
+- `米国株高が強まるかどうかを見る`
+- `米国株が上昇すれば、日本株の反応を見る`
+- `米国株安が続くかを見る`
+
+Attack `GOVERNED_BY_QUESTION`:
+- 6-kanji / 3-hiragana bounds
+- particles
+- nested predicates
+- continuative forms
+- punctuation/no punctuation
+- forms where an asserted predicate occurs before `かどうか/続くか`
+
+Goal: prove it does not let a completed assertion masquerade as a genuine hypothesis.
+
+If you find a deterministic bypass, add failing regression first.
+
+## Gate C — P2 bounded prior-night watch references
+
+Must pass the **session-date** guard:
+- `10月2日は、前夜の米国株高を受け、日本株の反応を見る`
+- `10月2日は、米国株高の流れをどう受け止めるかが焦点`
+- `前日の米国株上昇を踏まえて、日本株の反応を確認する`
+- all original PR #79 legitimate watch-reference shapes
+
+But must remain Hard:
+- `10月2日は、米国株高を受け、米国株高が続き、日本株を見る`
+- `10月2日は、米国株高を受け、買いが先行し、日本株の反応を見る`
+- `10月2日は、米国株高の流れが続き、日本株の反応を見る`
+- `10月2日は、米国株高の流れが強まり、どう受け止めるかが焦点`
+- `10月2日は、前夜の米国株高が続き、日本株の反応を確認します`
+- `10月2日の前夜の米国株は上昇しました`
+
+Inspect:
+- WATCH_RELATION new `を受け` branch
+- `の流れを…どう…か` branch
+- MOVE_LIST narrowing
+- REFERRED_MOVE / TOPIC_AFTER_DATE
+
+## Gate D — remaining Hard safeguards
+
+Must remain Hard:
+- wrong-date numeric values/change
+- exact 10/1 mixed-session Nikkei/1306 regression
+- stale-as-current
+- 1306 -> TOPIX index
+- direction/sign/emoji inversion
+- unsupported market causality
+- fabricated/unknown ref
+
+PR #77 quality calibration and safe-original fallback must remain unchanged.
+
+## Gate E — causality interaction for P2
+
+G2 reports:
+- the date guard now passes `前夜の米国株高を受け、日本株の反応を見る`
+- but in factual summary/context/closing fields, the **separate causal guard** may still Hard-block it because `を受け` + `日本株` looks causal.
+- in watch/next_watch fields it can pass.
+
+Assess this carefully.
+
+Question:
+Is that behavior acceptable under product policy, or would ordinary morning watch phrasing still routinely disappear from factual presentation fields despite the session-date fix?
+
+Do not automatically weaken causal guard.
+
+If you conclude this is a real recurring delivery false positive and the fix is small/deterministic within current scope, document the minimal correction and decide whether H1 can safely fix it.
+If it needs broader causal semantics, return CHANGES REQUIRED with a focused G2 follow-up instead.
+
+User policy:
+- objective lies/contradictions -> BLOCK
+- supported watch/reference phrasing and honest uncertainty should not routinely kill delivery
+
+## Gate F — lint/check truth
+
+Re-run changed-file lint and verify exit 0.
+Confirm unused `directionIn` is gone.
+Do not accept a report-only claim.
+
+## Required tests
+
+At minimum:
+- session_date_calibration
+- h1_pr79_boundary
+- presentation_v2
+- causal_calibration
+- quality_calibration
+- h1_adversarial
+- content_guard
+- transport_retry
+- full market-report-analysis
+- personalized-reports
+- X shared consumer
+- market-report-data-packet
+- _shared
+- deno check
+- deno lint changed files
+- git diff --check
+
+Use `--no-check` only where that suite already has known unrelated checked-type debt; report it precisely.
+
+## Fix authority
+
+H1 may make only small deterministic fixes inside this exact guard boundary.
+
+Allowed:
+- one clause-classification predicate correction
+- one WATCH_RELATION regex correction
+- one narrow causal-watch classification correction if clearly bounded
+- focused regression tests/docs
+
+Return CHANGES REQUIRED if fix requires:
+- general parser redesign
+- prompt/model/call-budget changes
+- packet/schema changes
+- DB/RPC/migration
+- broader causal architecture
+
+## Production safety
+
+Forbidden:
+- merge
+- deploy
+- app/x gate change
+- manual model/Edge invoke
+- DB/schema/RPC/migration
+- cron/Auth/Vault/secrets
+- real X operation
+
+Production mutation must remain 0.
+
+## Completion / C1
+
+Append to `.agent/CODEX_REPORT.md`.
+
+Report:
+- verdict PASS / PASS-WITH-FIX / CHANGES REQUIRED
+- original/final reviewed head
+- P1 result
+- genuine-hypothesis result
+- P2 result
+- causal interaction assessment
+- remaining Hard safeguards
+- lint/check result
+- tests
+- any fix commit / changed files
+- production mutation=0
+- merge recommendation
+- rollout prerequisites
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C1.
+
+Recommended model: **Sol（高）**.
+
+## H1 completion — 2026-10-03 JST
+
+- verdict: **PASS-WITH-FIX**, conditional on incorporating the exact H1 correction, not the unchanged PR head.
+- original head: `f7083ba6a810d5f9cdbe7090e4439f261e38bf0f`; final verified source: `b6d2dce3cc45c73951e51d139fefeddad7e2906e` on H1-only `codex/h1-pr79-rereview-20261003` (push + remote SHA read-back confirmed).
+- Prior P1/P2 session-date/P3 fixed by G2. H1 regression-first fix additionally separates `続くから/するから` from questions, excludes asserted continuative premises, preserves bounded degree-adverb questions, and recognizes only full terminal reaction-watch effects in the causal checker.
+- Analysis 136 PASS (H1 boundary 9, session-date 14); personalized 128, X consumer 8, data-packet 42 PASS with type checking. Shared runtime 361 PASS with `--no-check`; its separate checked run failed on five existing unrelated errors. Entry-point check, changed-file lint and diff-check PASS.
+- Source change: four files only; no G2 branch/PR update, merge, deploy or production operation. Detailed evidence appended to `.agent/CODEX_REPORT.md`.
+- Next **C1, 推薦モデル：Sol（高）**: accept/arrange exact fix incorporation and verify PR head before any merge. Deployment remains a separate explicitly approved PR77+accepted PR79 bundle with gates OFF. H1 STOP; shared slot indexes are not overwritten.
+
+---
+
+# Previous completed H1 task — preserved history
+
+# Codex Task — CURRENT TASK
+
 - task_id: kabumori-pr79-session-date-hard-guard-review-20261003
 - owner: codex
 - slot: codex-1
@@ -1727,3 +2092,54 @@ Then status -> review_required, next_owner -> chatgpt, STOP for C1.
 - no merge/deploy/production mutation.
 - PR #79 returns to G2 for a narrow source correction; recommended Claude model **Opus5.5（高）**.
 - after correction, another focused Codex review is required before merge/deploy.
+
+
+
+## Final C1 — PR #79 accepted and merged
+
+- verdict: **PASS-WITH-FIX / accepted**.
+- original rereviewed PR head: `f7083ba6a810d5f9cdbe7090e4439f261e38bf0f`.
+- exact H1 reviewed/fixed source: `b6d2dce3cc45c73951e51d139fefeddad7e2906e`.
+- H1 fix branch was a direct one-commit descendant of the PR head.
+- C1 fast-forwarded the existing PR #79 head branch to that exact H1 fix with no force.
+- fresh read-back confirmed PR #79 head exactly `b6d2dce3cc45c73951e51d139fefeddad7e2906e`, mergeable=true, with no overlap against fresh main.
+- PR #79 merged -> main `4dbf11f2848059cc967d942efc9d60613d855537`.
+- accepted H1 verification:
+  - market-report-analysis 136/136
+  - session-date 14/14
+  - H1 boundary 9/9
+  - personalized 128/128
+  - X shared consumer 8/8
+  - data-packet 42/42
+  - _shared runtime 361/361 with --no-check due documented pre-existing unrelated checked-type debt
+  - explicit target checks / changed-file lint / diff PASS
+- accepted bounded fixes include:
+  - `続くから/するから/なるから` no longer masquerade as questions;
+  - asserted continuative premises remain factual;
+  - bounded honest degree-modifier questions remain deliverable;
+  - ordinary prior-night reaction-watch prose no longer trips the causal Hard checker when the effect is purely terminal watch text;
+  - actual/speculative market effects and wrong-date/sign/ref facts remain protected.
+- production mutation from H1/C1 = 0 except normal GitHub branch fast-forward + merge; no Edge deploy/gate/manual cycle.
+- next rollout: one controlled `market-report-analysis` deploy containing already-merged PR #77 + accepted PR #79, app/x gates OFF, exact source read-back, then natural-cycle observation.
+
+
+## Final C1 — PR #82 AI Lab event dedupe
+
+- verdict: **CHANGES REQUIRED accepted**.
+- reviewed exact head: `08a7346ccd63f2ff540bd48149f1f1e65e6dbe09`.
+- accepted P1 blockers:
+  - two concurrent schedules can read the same unused event and both reach X before any usage row exists;
+  - X success followed by usage-persistence failure allows the same event to become eligible on a later slot;
+  - confirmed-X/before-usage and lost-response crash windows have no durable event ownership.
+- accepted P2 blockers:
+  - ordinal `diary-YYYY-MM-DD-N` IDs are not durable under same-date insertion/reordering/parser removal;
+  - conflicting duplicate scheduled_post_id can be silently ignored while reporting persistence success;
+  - exhausted evergreen pool can bypass the stated 72h cooldown;
+  - migration reapply silently accepts unsafe drift such as missing PK/CHECKs or wrong index.
+- H1 evidence branch `codex/h1-pr82-event-review-20261003` commit `100ab65f8142adc11916f467f68415d15cbc00b1` is RED evidence only and must not be merged as a release candidate.
+- PR #82 remains open/unmerged. Production mutation / real X / deploy = 0.
+- correction must use stable immutable event identity and durable pre-X event claim/reservation semantics with safe ambiguous-outcome handling; scheduler spacing is not a correctness guarantee.
+- G3/G4 are currently occupied, so no slot is overwritten. Return via direct Claude instruction in an independent worktree.
+- recommended Claude model: **Opus5.5（高）**.
+- corrected candidate requires fresh Codex rereview: **Sol（高）**.
+- H1 closed and reusable after fresh allocation.

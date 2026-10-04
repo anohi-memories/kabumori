@@ -79,3 +79,23 @@ export const HERO = {
   /** Maximum "today's points" shown on Home (1-3 are shown; never an empty row). */
   maxPoints: 3,
 } as const;
+
+// Topic feature card (pt / shares). The approved three-level background series is 1942x809; the loaded
+// card has exactly that aspect ratio so the art is never stretched or meaningfully cropped.
+export const TOPIC_CARD = {
+  artWidth: 1942,
+  artHeight: 809,
+  aspectRatio: 1942 / 809,
+  padding: 12,
+  /** Quiet text area on the left of the art (60% keeps the 2-line beginner title whole at 375pt). */
+  textWidth: '60%',
+  /** The CTA sits in the art's empty bottom-right corner. */
+  ctaRight: 10,
+  ctaBottom: 6,
+  /** Minimal level tint for the badge only (pale green / pale blue / pale lavender). */
+  badge: {
+    beginner: { background: '#dff1e2', text: '#2f7a4a' },
+    intermediate: { background: '#d9ecfb', text: '#2a6aa8' },
+    advanced: { background: '#e6e0fa', text: '#5b4bb0' },
+  },
+} as const;

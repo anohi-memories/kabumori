@@ -1,3 +1,133 @@
+## Final C1 — PR #82 AI Lab event-dedupe CHANGES REQUIRED
+
+- verdict: **CHANGES REQUIRED**; PR #82 exact head `08a7346ccd63f2ff540bd48149f1f1e65e6dbe09` remains open/unmerged.
+- P1 concurrency: two schedules can load the same empty usage state, select the same diary event under different angles, pass current guards and both reach X before either records usage. H1 reproduced two fake publishes.
+- P1 persistence/crash: X can succeed while topic-usage insert fails or the process stops before usage persistence; completion/fingerprint can still succeed or the outcome can be ambiguous, allowing a later slot to select/publish the same event again. The current swallow-on-usage-error rule preserves X retry safety but loses event-dedupe durability.
+- P2 identity: ordinal `diary-YYYY-MM-DD-N` event keys change under same-date insertion/reordering/parser removal, reviving a previously used event under a new key.
+- P2 idempotency/cooldown: conflicting duplicate scheduled_post_id can be silently ignored; exhausted evergreen fallback can violate the nominal 72h seed cooldown.
+- P2 migration drift: clean reapply works, but an existing same-name table with missing PK/CHECKs or wrong index can be silently accepted.
+- H1 safety evidence deliberately includes RED regressions: 2 controls PASS / 9 required safety failures; this validates the blockers, not the release candidate.
+- existing candidate happy-path tests remain useful but do not close the product invariant.
+- required correction contract: stable immutable non-sensitive event IDs; durable per-brand/per-event pre-X claim/reservation with fencing/ownership; pre-X failures may release safely; once provider/X outcome is possibly started/ambiguous, claim must stay blocked/quarantined until reconciled; confirmed X settles claim as published; metadata persistence failure must not reopen the event or trigger duplicate X retry.
+- do not hold a long DB transaction across X. Do not use scheduler spacing as proof.
+- migration must fail closed on incompatible pre-existing catalog and exact idempotency conflicts.
+- G3/G4 remain occupied by separate X work; no slot overwritten. Correction returns as direct Claude work in an independent worktree.
+- recommended Claude model: **Opus5.5（高）**; corrected candidate rereview **Sol（高）**.
+- production mutation / X / merge / deploy = 0.
+- H1 closed/free after fresh allocation.
+
+## Final K2 — PR #77 + PR #79 production deploy PASS
+
+- verdict: **PASS**.
+- production `market-report-analysis` fresh-read is **v21**, ACTIVE, `verify_jwt=false`, ezbr `fe5c1836cdeddabdb1300668a5f75ac92d3570872a1b1eb110798195991fa40c`.
+- production source read-back contains the merged PR #77 quality calibration and PR #79/H1 Hard-guard runtime.
+- G2 reported exact byte match against fresh main for the full deployed import graph.
+- only `market-report-analysis` changed in the before/after Edge Function metadata comparison.
+- app_enabled=false / x_enabled=false remain OFF/OFF.
+- all 8 relevant cron jobs remain active with unchanged schedules and command hashes.
+- tests accepted: analysis 136/136; personalized 128/128; X shared 8/8; data-packet 42/42; _shared runtime 361/361; target check/lint/diff PASS.
+- production mutation: exactly one Edge Function deploy, v20 -> v21. No manual cycle/retry, gate change, DB/Auth/Vault/X/notification mutation.
+- rollback source v20 captured; rollback not needed.
+- next G2: `kabumori-shared-report-v2-20261005-morning-natural-observation`, read-only.
+- timing gate: do not substantively observe before **2026-10-05 08:10 JST**; no polling or weekend/manual run.
+- recommended Claude model: **Sonnet5（中）**.
+- natural observation should classify first-try vs retry, verify PR #77 rewrite/cost behavior, PR #79 watch/session/causal behavior, factual integrity, packet duplication and model cost before any consumer activation decision.
+
+## K3 — PR #81 content-settings hardening PASS to H2 rereview
+
+- verdict: **PASS to focused H2 rereview; merge/apply/deploy HOLD**.
+- PR #81 exact head `5595fb131813542c55c43bc783af623cdb9ea442`, open/mergeable.
+- 7 changed files: one new hardening migration, disposable SQL fixture/behavior/runner, one static Deno test, content-settings repository adjustment and focused app test.
+- historical candidate `20260922045046_social_mobile_content_settings_candidate.sql` remains byte-unchanged; new hardening migration is `20261003120000_social_mobile_content_settings_hardening.sql`.
+- G3 reports H2 blockers closed:
+  - F1 exact null/type/key JSON+persona contract;
+  - F2 effective least-privilege ACL with authenticated SELECT/INSERT/UPDATE only;
+  - F3 strictly monotonic server-owned `updated_at`;
+  - F4 fail-closed catalog drift guard with only enumerated CHECK/grant repair.
+- reported local proof: PostgreSQL 17.11 disposable cluster; 61 invalid settings + 24 invalid persona cases rejected; ACL/RLS/CAS/lifecycle/adverse drift tests; concurrent CAS one winner; long transaction no regression; mutation checks detected 8 weakened variants.
+- app/server verification: social-mobile 116/116; relevant Deno 158/158; typecheck/lint/Deno lint/bash syntax/diff PASS.
+- production reads 0; production mutations/apply/deploy/Auth/Vault/X/OpenAI/Cron 0.
+- fresh K3 merge check: main is 24 commits ahead of PR base with **0 overlap** across PR #81 files; Netlify and Vercel checks green.
+- PR #78 remains separate/unmerged and still depends on schema acceptance/apply/read-back before its unfinished Auth/AI review resumes.
+- H1 is occupied by PR #82 AI Lab event-dedupe review; H2 was free and is now assigned `x-social-mobile-pr81-content-settings-hardening-rereview-20261003`.
+- H2 must additionally verify actual Supabase migration transactionality, production default ACL/current grantees and that drift guards will not false-block legitimate managed metadata.
+- recommended H2 model: **Sol（高）**.
+- no production migration approval is granted by K3.
+- AI Lab diary: no update; this is an internal schema correction, not a merged/released user-facing capability.
+
+## PR #82 — AI Lab event-dedupe to H1 review
+
+- direct Claude implementation completed outside G1-G5, preserving active G3/G4 tasks.
+- PR #82 exact head `08a7346ccd63f2ff540bd48149f1f1e65e6dbe09`, open/mergeable.
+- changed files: 8, limited to AI Lab diary/topic selection/store/dispatch/tests/x-test-post plus dedicated migration `20261003090000_ai_lab_topic_event_usage.sql`.
+- candidate changes dedupe unit from TopicUnit/rotation to durable eventKey usage. One diary entry's changed/difficulty/decided/angles share one eventKey and should all cool down after publication.
+- reported verification: new 26 tests; Functions 2474/2474 PASS; disposable PostgreSQL migration proof 13 PASS; production mutation=0; real X operations=0; deploy=0.
+- Netlify/Vercel checks green.
+- fresh comparison: main is 13 commits ahead of PR base with **0 overlapping changed files**.
+- explicit unresolved risks requiring independent proof: concurrent dispatches may both select the same unused event before usage is recorded; a usage INSERT failure after confirmed X success may leave that event eligible later; eventKey uses same-date ordinal; migration uses IF NOT EXISTS and needs ACL/drift review.
+- scheduler spacing is not accepted as a correctness guarantee.
+- H1 assigned `ai-lab-pr82-event-dedupe-review-20261003`.
+- recommended model: **Sol（高）**.
+- merge/deploy/migration apply remain HOLD until C1.
+- H2 stays free for the upcoming G3 schema-hardening review.
+
+## G1 allocation — Topic detail learning v2
+
+- task_id: `kabumori-topic-detail-learning-v2-20261003`
+- status: ready
+- owner: Claude G1
+- recommended model: **Sonnet5（高）**
+- goal: keep Home topic card compact while enriching only the detail page for all 50 seeded topics.
+- current production truth checked read-only: 50 active tips = 初級20 / 中級20 / 実践10; `base_text` is intentionally short (41–66 chars, avg ~51.6).
+- current RPC truth checked read-only: `get_daily_kabumori_tip(text,date)` remains deterministic/STABLE and returns only id/title/category/base_text/difficulty; no mutation or AI.
+- current app truth: all 50 seeded titles already have curated detail entries, currently mostly 4 short sections. v2 adds a clearer learning flow with concrete example, price/market relationship, and memorable takeaway.
+- explicit safety: do not claim live/current-market linkage without a trusted same-day data source; use evergreen `相場ではどう見る？` style wording.
+- scope: `src/app/topic-detail.tsx`, `src/lib/topic-detail-catalog.ts`, focused tests only unless a tiny compatibility helper is proven necessary.
+- non-scope: DB/RPC/migration/Auth/Edge/API/AI/Home card/report/news/portfolio/X/common-account/production.
+- EAS build expected: 0.
+- G2 remains separate on `market-report-analysis` production deploy/read-back.
+- start gate: fresh origin/main + active PRs + independent worktree check; any concurrent ownership of target files => STOP.
+- allocation control commits: G1 TASK `89d95ec8fb320c7f03f535b44344fada87897cdf`; ACTIVE_TASK `29bab8d6d31f2ee41f3fe70dc42c69179de793c6`.
+
+## Final C1 — PR #79 accepted and merged
+
+- verdict: **PASS-WITH-FIX / accepted**.
+- H1 reviewed original PR #79 head `f7083ba6a810d5f9cdbe7090e4439f261e38bf0f` and produced exact reviewed/fixed source `b6d2dce3cc45c73951e51d139fefeddad7e2906e`.
+- bounded H1 fixes:
+  - question tokens such as `続くか` no longer prefix-match causal assertions `続くから/するから/なるから`;
+  - asserted continuative premises remain factual and cannot be erased by a later question;
+  - bounded honest degree-modifier questions remain deliverable;
+  - terminal prior-night reaction-watch prose is no longer a causal Hard false positive;
+  - actual/speculative market effects still require evidence and objective date/value/sign/ref contradictions remain Hard.
+- H1 final verification: analysis 136/136, session-date 14/14, H1 boundary 9/9, personalized 128/128, X shared 8/8, data-packet 42/42; target check/lint/diff PASS. `_shared` runtime 361/361 with --no-check due documented unrelated checked-type debt.
+- C1 fast-forwarded the existing PR #79 head branch to exact H1 source with no force; fresh GitHub read-back confirmed exact head and mergeable=true.
+- fresh main overlap against all five PR files = 0.
+- PR #79 merged -> `4dbf11f2848059cc967d942efc9d60613d855537`.
+- source merge only; Edge deploy/gates/manual cycle/DB/Auth/Vault/X mutation = 0.
+- PR #77 remains merged but production-unapplied. G2 now owns one combined `market-report-analysis` deploy/read-back for PR #77 + PR #79 with app/x gates OFF.
+- next G2 task: `kabumori-shared-report-v2-pr77-pr79-prod-deploy-20261003`.
+- recommended Claude model: **Sonnet5（高）**.
+- after deploy acceptance, observe the next normal trading-day morning cycle read-only rather than forcing a weekend/manual run.
+
+## Final K2 — corrected PR #79 to focused rereview
+
+- verdict: **PASS to focused Codex rereview; merge/deploy HOLD**.
+- PR #79 exact head: `f7083ba6a810d5f9cdbe7090e4439f261e38bf0f`, open/mergeable.
+- fresh no-race check: main `95fcb391f47296ebf5a7d880a03b834e430b1c6a`; overlap with PR #79 files = 0.
+- G2 reports previous H1 blockers corrected:
+  - P1 hypothetical-tail bypass closed while genuine hypotheses stay non-factual;
+  - P2 normal prior-night watch wording passes the session-date guard;
+  - P3 changed-file lint fixed;
+  - wrong-date numeric/session, 10/1 mixed-session, stale/current, 1306, polarity, unsupported causality and unknown-ref guards remain Hard.
+- reported verification: session-date 14/14; H1 boundary 4/4; analysis 131/131; personalized 128/128; X shared 8/8; data-packet 42/42; _shared 361/361; check/lint/diff PASS.
+- production mutation=0.
+- H1 was genuinely free and is now assigned `kabumori-pr79-hard-guard-rereview-20261003`.
+- recommended Codex model: **Sol（高）**.
+- rereview must explicitly test `GOVERNED_BY_QUESTION`, bounded WATCH_RELATION additions, MOVE_LIST narrowing, prior Hard invariants, and the separate causal-guard interaction for `前夜の米国株高を受け、日本株の反応を見る`.
+- no merge/deploy until C1.
+- PR #77 remains merged but production-unapplied; after PR #79 acceptance, bundle PR #77 + PR #79 into one `market-report-analysis` deploy with app/x gates OFF.
+- ACTIVE_TASK malformed G2/G3 index from prior concurrent edits was repaired from canonical G2/G3 TASK headers without changing G3's underlying task.
+
 ## Final C1 — PR #79 hard-guard review CHANGES REQUIRED
 
 - verdict: **CHANGES REQUIRED accepted**.
@@ -585,7 +715,7 @@
 | --- | --- | --- | --- | --- |
 | H1 | `done` | `x-social-mobile-pr65-ephemeral-x-auth-session-review-20261001` | `none` | `.agent/tasks/CODEX_TASK.md` |
 | H2 | `done` | `x-ai-salaryman-dev-diary-pr61-final-acceptance-20260930` | `none` | `.agent/tasks/CODEX_TASK_2.md` |
-| G1 | `review_required` | `kabumori-home-topic-3level-backgrounds-20261003` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_1.md` |
+| G1 | `review_required` | `kabumori-topic-detail-learning-v2-20261003` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_1.md` |
 | G2 | `in_progress` | `kabumori-shared-report-v2-rich-presentation-hard-facts-20261001` | `claude` | `.agent/tasks/CLAUDE_TASK.md` |
 | G3 | `review_required` | `x-social-mobile-e3-delete-revoke-residue-20261001` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_3.md` |
 | G4 | `review_required` | `x-social-mobile-x-account-switch-auth-session-20261001` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_4.md` |
@@ -3236,4 +3366,18 @@ No H1/H2 task was created. G3/G4 are now free for future explicit allocation.
 - backend / DB / RPC / Edge / Auth / X / production mutation: 0.
 - recommended model: **Sonnet5（高）**.
 - finish code: K1.
+
+## Final K1 — Home Topic 3-level backgrounds — 2026-10-03
+- verdict: **PASS / MERGED / G1 CLOSED**.
+- PR #80 exact accepted head: `2e5356a8a3e6af84ed9999929cd62556081cab65`.
+- squash merge: `d6031e228efbf01f94ada22879cd6315457c43f7`.
+- final source: 3 clean 1942x809 level backgrounds, exact `topic.level` mapping, same-ratio card geometry, native badge/title/summary/CTA retained.
+- visual review: 402pt contact sheet and 375pt advanced card accepted; all 3 levels differ by more than color, CTA/text remain readable, level switching does not alter geometry.
+- tests/checks: 266/266 PASS, Expo config PASS, Expo web export PASS, diff clean; only known pre-existing CSS-module TypeScript diagnostics remain.
+- Netlify PASS / Vercel PASS.
+- EAS build 0; backend / DB / RPC / Edge Function / Auth / X / production mutation 0.
+- Codex review: not required for this UI/asset-only deterministic presentation change.
+- AI Lab diary: 候補あり — 学習レベルごとに背景の色・教材モチーフ・植物の成長を変え、同じシリーズ感のまま難易度が一目で伝わるUIにした。2026-10-03 entryへ反映済み。snapshot sync workflow PASS.
+- next recommended product step: richer topic body / topic-detail UI and content depth.
+- G1 is free after fresh allocation.
 

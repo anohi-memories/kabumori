@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-content-settings-schema-hardening-20261003
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: codex
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: corrective implementation / DB migration / RLS / JSON contract / optimistic concurrency
@@ -354,6 +354,73 @@ Then status -> review_required, next_owner -> chatgpt, STOP for K3.
 After K3, allocate fresh H2 review before any production apply or PR #78 merge.
 
 Recommended Codex rereview: **Sol（高）**.
+
+## Report — x-social-mobile-content-settings-schema-hardening-20261003
+
+- task_id: x-social-mobile-content-settings-schema-hardening-20261003
+- result: **PASS (source + disposable local proof; nothing applied)**. Model: Opus 5.5.
+- PR: https://github.com/anohi-memories/kabumori/pull/81 — branch `claude/g3-content-settings-hardening-20261003`, head `5595fb13` (rebased on origin/main `cde3a7d3`), pushed. Not merged.
+- original PR #78 head: `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7` — **unchanged** (not amended, not rebased). Dependency order: #81 (review -> separate apply approval -> apply) first, then #78 rebased on it. `git merge-tree` of #78 onto #81: clean, no conflict (only shared file: content-settings-repository.ts).
+
+### Migration strategy
+- Kept `20260922045046_social_mobile_content_settings_candidate.sql` byte-unchanged as history; added `20261003120000_social_mobile_content_settings_hardening.sql` after it.
+- Unique version; G4 PR #76 uses `20261003090000_social_mobile_publish_permission_boundary.sql` and does not reference this table/its functions (grep of its migration on the fetched branch: 0 hits). No H1/G2/G4 file touched.
+- Chosen over amending #78: the table is a prerequisite of main's existing Settings screen too, so it can be reviewed/applied on its own and #78 stays a pure feature PR.
+- Must run inside one transaction (migration tool / `psql -1`); the file itself has no BEGIN/COMMIT. All checks run before the first change; post-conditions after the last.
+
+### H2 F1–F4 disposition
+- F1 FIXED: `social_mobile_content_settings_valid_settings(jsonb)` / `_valid_persona(jsonb)` (+ `_text_ok`, `_text_list_ok`): plpgsql IMMUTABLE PARALLEL SAFE, `search_path=pg_catalog`, no dynamic SQL, type checked before any cast, never NULL. CHECKs are `(... ) is true`. Candidate shape CHECKs replaced.
+- F2 FIXED: `revoke all ... from public, anon, authenticated, service_role` + `grant select, insert, update ... to authenticated`; validators EXECUTE to authenticated only (proven necessary: CHECK runs with the writer's privileges); version function EXECUTE to nobody. No default-privilege change. Post-condition asserts the exact effective ACL and zero column ACLs.
+- F3 FIXED: single trigger `social_mobile_content_settings_version` BEFORE INSERT OR UPDATE; INSERT sets created_at=updated_at=clock_timestamp(); UPDATE keeps created_at and sets `greatest(clock_timestamp(), old.updated_at + 1us)`. Old `touch_updated_at` trigger+function dropped. timestamptz stays (PR #78 CAS contract unchanged).
+- F4 FIXED: catalog drift guard (see below) + refusal when existing rows break the contract (`..._EXISTING_ROWS_INVALID`, nothing rewritten).
+
+### Exact table / settings / persona contract
+- Columns (exact set): brand_id text NOT NULL PK + FK -> public.brands(id) ON DELETE CASCADE; settings jsonb NOT NULL; persona_profile jsonb NOT NULL default {}; persona_provenance text NOT NULL in (conversation, past_post_analysis, manual); persona_confirmed boolean NOT NULL default false; persona_last_analyzed_at timestamptz NULL; persona_last_analyzed_count integer NULL 0..1000; created_at/updated_at timestamptz NOT NULL (server-owned).
+- settings: exactly {locale, preferredTone, themes, objective, frequencyTargetPerWeek, approvalMode, generationWindow, optionalNgWords, notes}; locale = "ja-JP"; preferredTone string 1..120 non-blank; themes array <=8 of non-blank strings <=100; objective 1..160 non-blank; frequencyTargetPerWeek JSON number, integer 0..14; approvalMode "manual_review"|"auto_post_preference"; generationWindow exactly {timezone="Asia/Tokyo", startLocal HH:MM (no 24:00), endLocal HH:MM or 24:00, defaultGenerationLocal HH:MM (no 24:00), generationDayOffset JSON number -1|0}; optionalNgWords array <=20 of non-blank strings <=60; notes string <=1000. Blank = only ASCII/full-width whitespace.
+- persona_profile: object with only {toneSignals <=20x80, recurringVocabulary <=30x50, topicSignals <=20x80, openingClosingPatterns <=20x100 (non-blank string items), punctuationEmoji/hashtagHabits/ctaStyle strings <=200, sentenceLength short|mixed|long}. source/confirmed/analyzedAt/analyzedPostCount are column data and refused as JSON keys.
+- Not claimed: semantic secret detection inside allowed free text.
+
+### ACL / RLS result
+Effective privileges (has_table_privilege, all 8 privileges incl. MAINTAIN) for anon/authenticated/service_role: only authenticated SELECT/INSERT/UPDATE; PUBLIC none; no column ACL. RLS enabled; the three owner policies recreated unchanged in meaning (`brand_id` + `(select auth.uid())` + role owner); no DELETE policy. Proven: owner SELECT/INSERT/UPDATE ok; owner DELETE/TRUNCATE/CREATE TRIGGER/REFERENCES/ALTER denied (42501); admin/member/viewer/non-member see 0, update 0, insert denied; owner A cannot update/insert/move rows to brand B/C; anon and service_role denied.
+
+### Monotonic CAS design and proofs
+Distinct transactions advance; two updates in one transaction advance strictly and the first version then matches 0; stale CAS 0 rows; current CAS 1 row; caller-supplied updated_at/created_at (future or past) ignored; update cannot move the version back; from a far-future stored version it still advances by exactly 1us per update; `to_json(updated_at)` token round-trips exactly. Two-connection: concurrent CAS on one version -> changed=1 / changed=0 and the first writer's value stored; an earlier long-running transaction updating after a later commit still ends strictly above it; two first inserts -> one row + duplicate key. Residual: only a delete+recreate of the same brand id combined with a backwards wall clock could reproduce an old token (users cannot DELETE; rows disappear only with their brand).
+
+### Drift handling
+Accepted states: exact candidate, or the hardened shape (safe re-run proven). Verified by definition: relation kind/schema, no inheritance/partition, exact column name/type/nullability/identity/generated set, single PK on brand_id, single FK brand_id -> brands.id ON DELETE CASCADE / ON UPDATE NO ACTION / validated / not deferrable, only known-named CHECKs, only the PK index, only the candidate/hardened trigger bound to its own function, only the three owner policies, grantees only owner/PUBLIC/anon/authenticated/service_role (table and column). Refused in proof (20): FK missing / retargeted / RESTRICT / NOT VALID / extra; column type / nullable / extra / missing; unknown CHECK; extra UNIQUE; extra index; unknown trigger; rebound trigger; extra policy; unknown table grantee; unknown column grantee; table missing; same-name view; drift introduced after hardening. Each refusal leaves no partial change. Enumerated repair only: weakened or missing known-named candidate CHECK, and over-broad grants to anon/authenticated/service_role -> replaced/normalised (proven).
+
+### Lifecycle / common-account compatibility
+brand_id text matches brands.id text; ON DELETE CASCADE kept and proven (also when the deleting role has no privilege on this table — the RI action runs as the table owner); other brand's row and an unrelated table untouched. No dependency on the unapplied common-account (PR #70) schema; owner key stays the existing brand membership model. No interaction with G4's publish-toggle migration/RPC.
+
+### changed_files (PR #81)
+- supabase/migrations/20261003120000_social_mobile_content_settings_hardening.sql (new)
+- supabase/tests/social_mobile_content_settings_{fixture.sql,behavior.sql,run.sh} (new)
+- supabase/functions/_shared/brand/social_mobile_content_settings_hardening_static_test.ts (new)
+- apps/social-mobile/src/data/content-settings-repository.ts (saveConfirmedProposal no longer copies analyzedAt/analyzedPostCount into persona_profile)
+- apps/social-mobile/tests/content-settings-repository.test.mjs (new)
+
+### Local disposable SQL evidence
+Homebrew PostgreSQL 17.11, own cluster, Unix socket under /private/tmp only, lc_messages=C, non-superuser owner, fixture default ACL = ALL to anon/authenticated/service_role (broader than production's TRUNCATE/REFERENCES/TRIGGER/MAINTAIN). Runner output: APPLY_AND_RERUN, SINGLE_TRANSACTION_APPLY, BEHAVIOR (61 invalid settings + 24 invalid persona cases rejected with 23514; legitimate default/Settings/bounds/24:00/PR78 persona/full analysis persona accepted; ACL/RLS; CAS; lifecycle), CONCURRENT_CAS_ONE_WINNER, LONG_TRANSACTION_NO_REGRESSION, COMPETING_INSERT_UNIQUE, EXISTING_INVALID_ROWS_REFUSED, DRIFT_REFUSED x20, ENUMERATED_REPAIR x3, CLEANUP -> `SOCIAL_MOBILE_CONTENT_SETTINGS_ALL_PASS`. Mutation checks (8): version via now(), no key-count check, FK action unchecked, frequency type unchecked, blank text allowed, startLocal unchecked, extra policy tolerated, ACL normalisation + post-condition removed -> each made the suite fail. All disposable databases dropped; cluster stopped and deleted.
+
+### App / server tests
+social-mobile `npm test` 116/116 (incl. 3 new repository tests); typecheck 0; lint 0; `deno test --no-check` `_shared/brand` + `social-mobile-brand-dry-run` 158/158 (incl. 5 new static invariants; candidate static tests still pass); `deno lint` clean; `bash -n` clean; `git diff --check` clean. App validators were not loosened. Note: main's app validator still rejects its own 24:00 default — fixed in PR #78 (not merged here, per H2).
+
+### Production reads / mutations
+Production reads: 0 (no catalog inspection needed; relied on H2's 2026-10-03 read-only facts). Production mutations / apply / deploy / RLS / grants / migration history: 0. OpenAI / X / Auth / Vault / Cron: 0.
+
+### Remaining risks
+1. If production's default ACL also grants this new table to a role other than anon/authenticated/service_role, the guard stops the migration (fail closed). Do a read-only `aclexplode(acldefault)` / default-ACL check in the apply preflight.
+2. Validators are public functions callable via PostgREST RPC by authenticated (pure boolean, no side effects). Moving them to a non-exposed schema would be a separate decision.
+3. Structural validation only; free text is not secret-scanned.
+4. Theoretical old-token reuse only after brand delete+recreate with a backwards clock (see CAS).
+5. Requires transactional application; not tested through managed Supabase/PostgREST (local PostgreSQL only).
+6. #78 must still be rebased after #81 and re-reviewed for its own A–H gates.
+
+### Safety checks
+Own G3 worktree/branch; explicit-path staging; no other slot's files; untracked supabase/.temp and supabase/config.toml left alone; no secrets/tokens/personal data in code, tests, PR or report.
+
+### Next recommendation
+H2 rereview of PR #81 (Sol（高）): contract completeness vs writers, ACL/default-ACL assumptions, CAS trigger, drift guard coverage. Then a separate, explicitly approved production apply with read-only preflight and read-back. Only after that, rebase PR #78 and resume its review.
 
 ---
 
@@ -1712,3 +1779,16 @@ Unexpected residue: **none**.
 - existing source-only migration candidate is undergoing a separate H2 review.
 - no production schema apply is authorized.
 - G3 remains review_required and blocked from merge/deploy until schema prerequisite and the remaining H2 PR #78 review gates are completed.
+
+
+## K3 decision — PR #81 content-settings hardening
+
+- verdict: **PASS to focused H2 rereview; merge/apply/deploy HOLD**.
+- accepted review target: PR #81 exact head `5595fb131813542c55c43bc783af623cdb9ea442`.
+- fresh main is 24 commits ahead of PR base with no overlap across the 7 PR files.
+- Netlify/Vercel checks green.
+- reported local evidence is sufficient to proceed to independent review, not to production apply.
+- H2 assigned `x-social-mobile-pr81-content-settings-hardening-rereview-20261003`, recommended **Sol（高）**.
+- production migration apply remains separately approval-gated.
+- PR #78 remains blocked until schema is independently accepted, applied with explicit approval, and read back.
+- next_owner: codex; wait for C2.
