@@ -47,13 +47,13 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: claude
-- status: ready
+- next_owner: none
+- status: done
 - task_id: kabumori-topic-detail-learning-v2-20261003
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Homeの短いtopic要約は維持し、topic detailのみを全50件のcurated learning flowへ強化する。具体例・相場/株価との関係・覚えておくポイントを追加し、DB/RPC/API/AI変更なし、EAS build 0。G2のmarket-report-analysis production作業とはscope分離。開始時にfresh main/open PR/worktree分離を再確認し、対象3ファイル競合時はSTOP。
+- allocation: Final K1 PASS. PR #83 exact head c810accebada37760a98a18bb184b50a61b7937b squash-merged as f5919eb6af3da51c0d4d4a6342ad23b3f0a68980. 全50トピックを5段階の静的学習フローへ強化し、Homeの短い要約は維持。284/284 tests、402/375pt visual checks、EAS 0、backend/DB/RPC/API/AI mutation 0。Codex review不要。G1 free after fresh allocation.
 - recommended_model: Sonnet5（高）
 
 ## Claude G2
