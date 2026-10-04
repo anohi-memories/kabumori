@@ -3,8 +3,8 @@
 - task_id: ai-lab-pr82-claim-rereview-20261004
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused rereview / durable pre-X claim / migration / crash safety
@@ -339,6 +339,18 @@ Then:
 - STOP for C1.
 
 Recommended model: **Sol（高）**.
+
+## H1 completion — 2026-10-04 JST
+
+- verdict: **CHANGES REQUIRED**. PR #82 exact head remains `9f3b19a3cde490cf63735220ae191dcd4f11bdcb`, open/unmerged; no runtime fix.
+- Previous ordinary diary concurrency, failed-settle and claim-id fencing blockers are closed in actual local SQL-backed dispatch controls. Remaining required corrections: duplicate scalar event_id silently renames identity in runtime and actual CI; API-owner/inherited-owner ACL drift is accepted; genuine Vault-path 401 becomes permanently ambiguous; unresolved evergreen claims reopen after cooldown age; cooldown timing and canonical payload/theme validation remain incomplete.
+- Candidate focused checked suites 97 PASS; existing shared + x-test-post runtime 907 PASS (--no-check); local SQL runner 96 PASS; Node workflow-related suites 49 PASS. H1 independent SQL/dispatcher safety tests: 6 controls PASS / 10 required failures; actual workflow validator: 2 controls PASS / 1 required failure. These RED tests are evidence, not a passing release suite.
+- Advisory-lock removal is detected by the existing two-session SQL runner; diary UNIQUE removal is independently detected by H1's direct-insert constraint control.
+- Three changed helper modules typecheck PASS. Full entrypoint has exactly the same six baseline type errors; runtime lint has the same four baseline issues. Changed test-file lint has 65 require-await diagnostics vs 25 at merge-base (40 net-new); no blanket check/lint PASS claim.
+- Evidence-only commit `0801619f4bcd882dadc71deab5cd07493a7ea80a` on H1-only `codex/h1-pr82-claims-20261004` contains two RED-test files; do not merge it as a release candidate.
+- Fresh main `1a713f8c7fc48629262c6cdc7c11fed1fa316e8e` now overlaps canonical diary MD + snapshot: preserve the new topic-detail diary content when correcting/freshening PR #82. No migration timestamp collision found on that fresh main.
+- H1-owned temporary databases removed and dedicated PostgreSQL stopped. Production reads/writes, real X/model/Vault/token operations, merge/deploy = 0. Other slot worktrees/control files untouched.
+- Detailed findings, limits and correction contract appended to `.agent/CODEX_REPORT.md`. Next: **C1, 推薦モデル：Sol（高）**; return for focused correction, HOLD merge/deploy. H1 STOP after control-file sync/read-back.
 
 ---
 
