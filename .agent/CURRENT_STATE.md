@@ -1,3 +1,22 @@
+## PR #82 corrective complete -> H1 durable-claim rereview
+
+- corrected PR #82 exact head `9f3b19a3cde490cf63735220ae191dcd4f11bdcb`, open/mergeable.
+- old rejected head preserved: `08a7346ccd63f2ff540bd48149f1f1e65e6dbe09`; update was fast-forward, no force push.
+- changed scope now 13 files and replaces post-X usage logging with a durable pre-X claim lifecycle.
+- stable explicit diary `event_id` replaces mutable same-date ordinal identity; canonical diary, snapshot and auto-sync CI are updated.
+- new migration: `20261004090000_ai_lab_topic_claims.sql`; old unapplied `20261003090000_ai_lab_topic_event_usage.sql` removed.
+- candidate flow: claim -> generation/guards -> provider_started commit -> X -> published/ambiguous/released settlement -> existing completion. No long DB transaction spans X.
+- candidate reports brand-scoped advisory serialization + diary-event active uniqueness + claim_id fencing, evergreen 72h/48h DB cooldown, pool-exhausted skip, explicit identity conflict handling and fail-closed migration drift comparison.
+- reported tests: Functions 2503/2503 PASS; SQL runner 96 PASS; SQL 6 and TS 8 mutation weakenings detected; H1 prior RED scenarios ported and GREEN.
+- production mutation=0; real X=0; merge/deploy=0.
+- GitHub checks: Netlify and Vercel success.
+- fresh comparison: main 3 commits ahead of PR base with **0 overlap** across PR #82 changed files.
+- H1 is freshly assigned `ai-lab-pr82-claim-rereview-20261004`.
+- H1 must independently validate provider error classification (especially 400/401/422/429 release vs 403/5xx ambiguous), fencing/lease, crash windows, exact idempotency, migration transactionality/ACL/drift and workflow event_id enforcement.
+- recommended Codex model: **Sol（高）**.
+- merge / migration apply / deploy remain HOLD until C1.
+- H2 remains dedicated to PR #81 and is not overwritten.
+
 ## Final C1 — PR #82 AI Lab event-dedupe CHANGES REQUIRED
 
 - verdict: **CHANGES REQUIRED**; PR #82 exact head `08a7346ccd63f2ff540bd48149f1f1e65e6dbe09` remains open/unmerged.
