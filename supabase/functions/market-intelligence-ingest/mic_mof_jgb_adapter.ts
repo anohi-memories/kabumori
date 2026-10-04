@@ -56,6 +56,7 @@ export function parseMofEraDate(raw: string): string {
     throw new MofAdapterError("MOF_INVALID_DATE", `unexpected date format: ${raw}`);
   }
   const [, era, yearStr, monthStr, dayStr] = match;
+  if (Number(yearStr) === 0) throw new MofAdapterError("MOF_INVALID_DATE", `invalid era year: ${raw}`);
   const baseYear = ERA_BASE_YEAR[era];
   const year = baseYear + Number(yearStr);
   const month = monthStr.padStart(2, "0");
@@ -115,8 +116,10 @@ export function collectMofObservations(
       }
       if (!isRealIsoDate(date)) continue;
       const raw = row[columnIndex]?.trim();
-      if (raw === undefined || !/^\d+(?:\.\d+)?$/.test(raw)) continue;
-      results.push({ metricKey: mapping.metricKey, date, value: Number(raw), sourceFile });
+      if (raw === undefined || !/^-?\d+(?:\.\d+)?$/.test(raw)) continue;
+      const value = Number(raw);
+      if (!Number.isFinite(value)) continue;
+      results.push({ metricKey: mapping.metricKey, date, value, sourceFile });
     }
   }
   return results;
@@ -222,6 +225,7 @@ async function loadMofFile(
   mappings: MofMaturityMapping[],
   timeoutMs: number,
   fetchImpl: typeof fetch,
+  latestAllowedDate: string,
 ): Promise<MofFileOutcome> {
   let text: string;
   try {
@@ -238,7 +242,8 @@ async function loadMofFile(
     const lines = text.split(/\r?\n/).filter((line) => line.length > 0);
     // Title + header and nothing else: a valid file with no rows yet.
     if (lines.length === 2 && lines[1].split(",")[0] === "基準日") return { status: "empty" };
-    const observations = collectMofObservations(parseMofJgbCsv(text), mappings, sourceFile);
+    const observations = collectMofObservations(parseMofJgbCsv(text), mappings, sourceFile)
+      .filter((observation) => observation.date <= latestAllowedDate);
     return observations.length > 0 ? { status: "ok", observations } : { status: "empty" };
   } catch (error) {
     const code = error instanceof MofAdapterError ? error.code : "MOF_MALFORMED_CSV";
@@ -266,16 +271,16 @@ export async function fetchMofJgbMetrics(
   const mappings = params.mappings ?? MOF_MATURITY_MAPPINGS;
   const timeoutMs = params.timeoutMs ?? 20_000;
   const fetchedAt = params.fetchedAt ?? new Date();
+  // Date-only observations may reach today's date in JST, not tomorrow in
+  // JST. A blanket +24h would admit a real future date before 15:00 UTC.
+  const latestAllowedDate = new Date(fetchedAt.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const [current, all] = await Promise.all([
-    loadMofFile(MOF_JGB_CURRENT_CSV_URL, "current", mappings, timeoutMs, fetchImpl),
-    loadMofFile(MOF_JGB_ALL_CSV_URL, "all", mappings, timeoutMs, fetchImpl),
+    loadMofFile(MOF_JGB_CURRENT_CSV_URL, "current", mappings, timeoutMs, fetchImpl, latestAllowedDate),
+    loadMofFile(MOF_JGB_ALL_CSV_URL, "all", mappings, timeoutMs, fetchImpl, latestAllowedDate),
   ]);
   if (current.status === "failed" && all.status === "failed") {
     throw new MofAdapterError(current.code, `current: ${current.detail}; all: ${all.code}: ${all.detail}`);
   }
-  // Japan is ahead of UTC, so a row dated "tomorrow" in UTC terms is possible;
-  // anything later is a bad date.
-  const latestAllowedDate = new Date(fetchedAt.getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const observations = mergeLatestMofObservations(
     all.status === "ok" ? all.observations : [],
     current.status === "ok" ? current.observations : [],

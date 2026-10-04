@@ -112,13 +112,16 @@ type Decimal = { digits: bigint; scale: number };
 
 function toDecimal(value: number): Decimal | null {
   if (!Number.isFinite(value)) return null;
-  const text = String(value);
-  // 1e-7 / 1e21 style output: not a metric-sized decimal; caller falls back.
-  if (!/^-?\d+(?:\.\d+)?$/.test(text)) return null;
-  const negative = text.startsWith("-");
-  const [whole, fraction = ""] = (negative ? text.slice(1) : text).split(".");
-  const digits = BigInt(whole + fraction);
-  return { digits: negative ? -digits : digits, scale: fraction.length };
+  // Number#toString also uses scientific notation at small/large magnitudes.
+  // Expand it as integers; never return to an imprecise float comparison.
+  const match = /^(-?)(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/.exec(String(value));
+  if (!match) return null;
+  const [, sign, whole, fraction = "", exponent = "0"] = match;
+  const scale = fraction.length - Number(exponent);
+  const digits = BigInt(whole + fraction) * (sign === "-" ? -1n : 1n);
+  return scale < 0
+    ? { digits: digits * 10n ** BigInt(-scale), scale: 0 }
+    : { digits, scale };
 }
 
 const rescale = (value: Decimal, scale: number): bigint => value.digits * 10n ** BigInt(scale - value.scale);
@@ -136,10 +139,7 @@ export type ThresholdComparison = { reached: boolean; change: string };
 // |current - baseline| >= threshold, exactly. `change` is the exact difference.
 export function absChangeReaches(current: number, baseline: number, threshold: number): ThresholdComparison {
   const [c, b, t] = [toDecimal(current), toDecimal(baseline), toDecimal(threshold)];
-  if (!c || !b || !t) {
-    const change = Math.abs(current - baseline);
-    return { reached: change >= threshold, change: String(change) };
-  }
+  if (!c || !b || !t || t.digits < 0n) return { reached: false, change: "invalid" };
   const scale = Math.max(c.scale, b.scale, t.scale);
   const change = magnitude(rescale(c, scale) - rescale(b, scale));
   return { reached: change >= rescale(t, scale), change: formatDecimal(change, scale) };
@@ -150,7 +150,7 @@ export function absChangeReaches(current: number, baseline: number, threshold: n
 // Callers guarantee baseline !== 0.
 export function pctChangeReaches(current: number, baseline: number, thresholdPct: number): boolean {
   const [c, b, t] = [toDecimal(current), toDecimal(baseline), toDecimal(thresholdPct)];
-  if (!c || !b || !t) return Math.abs((current - baseline) / baseline * 100) >= thresholdPct;
+  if (!c || !b || !t || t.digits < 0n || b.digits === 0n) return false;
   const scale = Math.max(c.scale, b.scale);
   const change = magnitude(rescale(c, scale) - rescale(b, scale));
   // Left side is in units of 10^-scale; the right side carries 10^-(scale + t.scale).

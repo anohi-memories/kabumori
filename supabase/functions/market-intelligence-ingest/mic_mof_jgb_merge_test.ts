@@ -76,6 +76,56 @@ const get = (metrics: Awaited<ReturnType<typeof fetchMofJgbMetrics>>, key: strin
   return metric;
 };
 
+test("negative yields are valid; placeholders, malformed numbers and overflow are not", async () => {
+  const m = mof(csv([
+    row("R8.9.29", "-0.15", "-0.02"),
+    row("R8.9.30", "-", "--0.1"),
+    row("R8.10.1", "9".repeat(400), "Infinity"),
+  ]), csv([]));
+  const metrics = await fetchMofJgbMetrics({ fetchedAt: FETCHED_AT }, m.impl);
+  assert.equal(get(metrics, "JGB2Y").value, -0.15);
+  assert.equal(get(metrics, "JGB10Y").value, -0.02);
+  assert.equal(get(metrics, "JGB2Y").observedDate, "2026-09-29");
+  assert.ok(metrics.every((metric) => Number.isFinite(metric.value)));
+});
+
+test("UTC/JST allowance rejects tomorrow until midnight JST, then accepts that date", async () => {
+  const current = csv([row("R8.10.3", "8", "9")]);
+  const history = csv([row("R8.10.2", "1.9", "3.0")]);
+  for (const at of ["2026-10-02T06:00:00Z", "2026-10-02T14:59:59Z"]) {
+    const m = mof(current, history);
+    const metric = get(await fetchMofJgbMetrics({ fetchedAt: new Date(at) }, m.impl), "JGB2Y");
+    assert.equal(metric.observedDate, "2026-10-02");
+    assert.deepEqual(metric.metadata?.mofFetch, { current: "empty", all: "ok" });
+  }
+  const m = mof(current, history);
+  assert.equal(get(await fetchMofJgbMetrics({ fetchedAt: new Date("2026-10-02T15:00:00Z") }, m.impl), "JGB2Y").observedDate, "2026-10-03");
+});
+
+test("future-only files fail closed instead of persisting a future Fact", async () => {
+  const m = mof(csv([row("R8.10.3", "1", "2")]), csv([row("R8.10.4", "3", "4")]));
+  await assert.rejects(() => fetchMofJgbMetrics({ fetchedAt: FETCHED_AT }, m.impl),
+    (error: unknown) => error instanceof MofAdapterError && error.code === "MOF_NO_VALID_OBSERVATION");
+});
+
+test("duplicate dates are deterministic: last valid value within a file, current over history", async () => {
+  const m = mof(csv([row("R8.10.1", "-0.1", "3.0"), row("R8.10.1", "-0.15", "-")]),
+    csv([row("R8.10.1", "9", "9")]));
+  const metrics = await fetchMofJgbMetrics({ fetchedAt: FETCHED_AT }, m.impl);
+  assert.equal(get(metrics, "JGB2Y").value, -0.15);
+  assert.equal(get(metrics, "JGB10Y").value, 3);
+});
+
+test("era year zero and impossible calendar dates never become observations", () => {
+  const parsed = parseMofJgbCsv(new TextDecoder("shift-jis").decode(csv([
+    row("R0.1.1", "9", "9"), row("H0.12.31", "9", "9"),
+    row("R8.2.30", "9", "9"), row("R6.2.29", "-0.1", "-0.05"),
+  ])));
+  assert.deepEqual(collectMofObservations(parsed).map(({ date, value }) => ({ date, value })), [
+    { date: "2024-02-29", value: -0.1 }, { date: "2024-02-29", value: -0.05 },
+  ]);
+});
+
 test("real files: history ends 2026-08-31, current has 2026-09-30 -> the 09-30 rows are used", async () => {
   const m = mof(bytes(REAL_CURRENT_BASE64), bytes(REAL_ALL_BASE64));
   const metrics = await fetchMofJgbMetrics({ fetchedAt: FETCHED_AT }, m.impl);

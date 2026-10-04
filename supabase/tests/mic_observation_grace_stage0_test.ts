@@ -8,6 +8,8 @@
 //   age = now - observed_date 00:00 UTC
 //   age <= lag -> fresh; age <= stale_after -> delayed_expected; else stale.
 import assert from "node:assert/strict";
+import { computeDataConfidence } from "../functions/market-intelligence-state-evaluator/mic_state_decision_logic.ts";
+import { classifyStates, type StateRow } from "../functions/_shared/mic_scenario/policy.ts";
 
 const MIGRATION = new URL("../migrations/20261002090000_mic_jgb_nikkei_observation_grace_stage0.sql", import.meta.url);
 const HOUR = 60 * 60 * 1000;
@@ -94,6 +96,30 @@ Deno.test("migration touches only the three metric rows: no DDL, no other metric
   assert.deepEqual([...keys].sort(), ["JGB10Y", "JGB2Y", "NIKKEI225"]);
   // Fails closed if the rows are not what was expected.
   assert.equal((code.match(/raise exception/g) ?? []).length, 2);
+  assert.match(code, /domain = 'rates'/);
+  assert.match(code, /expected_observation_lag_minutes is null and observation_stale_after_minutes is null/);
+  assert.match(code, /expected_observation_lag_minutes = 5760 and observation_stale_after_minutes = 14400/);
+  assert.match(code, /domain = 'equity_index'/);
+  assert.match(code, /observation_stale_after_minutes in \(7200, 11520\)/);
+});
+
+Deno.test("grace changes observation confidence, never narrative age; delayed_expected can still be strong", () => {
+  assert.equal(computeDataConfidence("full", "fresh", "fresh"), 1);
+  assert.equal(computeDataConfidence("full", "fresh", "delayed_expected"), 0.9);
+  assert.equal(computeDataConfidence("full", "fresh", "stale"), 0.6);
+  assert.equal(computeDataConfidence("full", "failed", "fresh"), 0.2);
+  const now = Date.parse("2026-10-02T06:00:00Z");
+  const row: StateRow = {
+    domain: "rates", narrative: "interpretation", bullish_factors: [], bearish_factors: [], key_risks: [],
+    ai_confidence: 0.9, data_confidence: 0.9, coverage_status: "full", observation_status: "delayed_expected",
+    ai_evaluated_at: new Date(now - HOUR).toISOString(),
+    source_evaluation_run_id: "11111111-1111-4111-8111-111111111111",
+  };
+  assert.equal(classifyStates([row], now).usable[0].usability, "strong", "existing Scenario contract: delayed is not automatically weak");
+  assert.equal(classifyStates([{ ...row, ai_evaluated_at: new Date(now - 48 * HOUR).toISOString() }], now).usable[0].usability, "weak");
+  const old = classifyStates([{ ...row, ai_evaluated_at: new Date(now - 97 * HOUR).toISOString() }], now);
+  assert.equal(old.usable.length, 0);
+  assert.ok(old.excluded.some(({ domain, reason }) => domain === "rates" && reason === "narrative_stale"));
 });
 
 Deno.test("JGB across the real 2026-09-18 -> 09-24 holiday cluster: never stale now (it was stale before)", async () => {

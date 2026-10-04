@@ -28,7 +28,7 @@
 --     10 d   Japanese holiday clusters are normal, not outages. The real
 --            file has no row between 2026-09-18 and 2026-09-24 (Respect for
 --            the Aged Day, a bridge holiday and the Autumnal Equinox): on
---            the morning of 09-25, before 09-24's row is published, the
+--            the morning of 09-25, before the 06:00 UTC ingest reads 09-24's row, the
 --            newest row is 7.25 days old. Golden Week and New Year produce
 --            the same shape. 10 days covers them with margin and still
 --            reports a real MOF outage within two weeks. A rare 10-day
@@ -58,20 +58,27 @@ begin
   set expected_observation_lag_minutes = 5760,   -- 96 h
       observation_stale_after_minutes = 14400,   -- 10 days
       updated_at = now()
-  where metric_key in ('JGB2Y', 'JGB10Y');
+  where metric_key in ('JGB2Y', 'JGB10Y')
+    and domain = 'rates'
+    and (
+      (expected_observation_lag_minutes is null and observation_stale_after_minutes is null)
+      or (expected_observation_lag_minutes = 5760 and observation_stale_after_minutes = 14400)
+    );
   get diagnostics v_count = row_count;
   if v_count <> 2 then
-    raise exception 'Expected JGB2Y and JGB10Y in mic_metric_domain_map, updated % row(s)', v_count;
+    raise exception 'Expected JGB2Y/JGB10Y in rates with original or Stage0 freshness, updated % row(s)', v_count;
   end if;
 
   update public.mic_metric_domain_map
   set observation_stale_after_minutes = 11520,   -- 8 days (fresh cutoff stays 4320 = 72 h)
       updated_at = now()
   where metric_key = 'NIKKEI225'
-    and expected_observation_lag_minutes = 4320;
+    and expected_observation_lag_minutes = 4320
+    and domain = 'equity_index'
+    and observation_stale_after_minutes in (7200, 11520);
   get diagnostics v_count = row_count;
   if v_count <> 1 then
-    raise exception 'Expected NIKKEI225 with a 72 h fresh cutoff in mic_metric_domain_map, updated % row(s)', v_count;
+    raise exception 'Expected NIKKEI225 in equity_index with original or Stage0 freshness, updated % row(s)', v_count;
   end if;
 end
 $migration$;

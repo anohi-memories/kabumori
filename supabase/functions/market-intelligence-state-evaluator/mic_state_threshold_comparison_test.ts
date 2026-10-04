@@ -138,12 +138,35 @@ test("evaluateMaterialChange: pct path and the abs-or-pct rule keep working", ()
   assert.match(nikkei.reason, /pct_change 3\.300% >= 1%/);
 });
 
-test("values that do not print as plain decimals fall back to the float comparison without throwing", () => {
-  assert.equal(absChangeReaches(2e-7, 1e-7, 1e-7).reached, legacyAbs(2e-7, 1e-7, 1e-7));
+test("exponent notation retains exact decimal boundaries without a float fallback", () => {
+  assert.equal(absChangeReaches(1.111e-7, 1.1e-7, 1.1e-9).reached, true);
+  assert.equal(absChangeReaches(1.1109e-7, 1.1e-7, 1.1e-9).reached, false);
+  assert.equal(absChangeReaches(-1.111e-7, -1.1e-7, 1.1e-9).change, "0.0000000011");
+  assert.equal(absChangeReaches(2e-7, 1e-7, 1e-7).reached, true);
   assert.equal(absChangeReaches(1e21, 1, 5).reached, true);
-  assert.equal(absChangeReaches(Number.NaN, 1, 0.05).reached, false);
   assert.equal(pctChangeReaches(2e-7, 1e-7, 50), true);
-  assert.equal(pctChangeReaches(Number.POSITIVE_INFINITY, 1, 50), true);
+  assert.equal(pctChangeReaches(1.111e-7, 1.1e-7, 1), true);
+  assert.equal(pctChangeReaches(1.1109e-7, 1.1e-7, 1), false);
+});
+
+test("integer scaling handles subnormal and maximum finite values without overflow", () => {
+  assert.equal(absChangeReaches(1e-323, 5e-324, 5e-324).reached, true);
+  assert.equal(absChangeReaches(Number.MAX_VALUE, -Number.MAX_VALUE, Number.MAX_VALUE).reached, true);
+  assert.equal(pctChangeReaches(1e-323, 5e-324, 100), true);
+  assert.equal(pctChangeReaches(Number.MAX_VALUE, -Number.MAX_VALUE, 200), true);
+  assert.equal(pctChangeReaches(Number.MAX_VALUE, -Number.MAX_VALUE, 201), false);
+});
+
+test("invalid numbers and negative thresholds fail closed; percentage zero baseline is undefined", () => {
+  for (const invalid of [NaN, Infinity, -Infinity]) {
+    for (const [current, baseline, threshold] of [[invalid, 1, 0.05], [1, invalid, 0.05], [1, 1, invalid]]) {
+      assert.equal(absChangeReaches(current, baseline, threshold).reached, false);
+      assert.equal(pctChangeReaches(current, baseline, threshold), false);
+    }
+  }
+  assert.equal(absChangeReaches(1, 1, -0.05).reached, false);
+  assert.equal(pctChangeReaches(1, 1, -0.05), false);
+  assert.equal(pctChangeReaches(1, 0, 1), false);
 });
 
 test("Production snapshot 2026-10-01 (rates): the baseline the State was written from vs the latest Facts", () => {
