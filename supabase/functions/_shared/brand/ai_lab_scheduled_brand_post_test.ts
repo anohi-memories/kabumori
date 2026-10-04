@@ -53,6 +53,25 @@ function draft(text: string): BrandPostDraft {
   };
 }
 
+// A fixed, always-available topic claim: these tests cover the dispatcher's X/completion safety, not the
+// event-claim lifecycle (ai_lab_event_dedupe_test.ts and supabase/tests/ai_lab_topic_claims_run.sh do).
+function fixtureTopicPort() {
+  const claim = {
+    claimId: "00000000-0000-0000-0000-0000000000aa",
+    kind: "evergreen" as const,
+    eventKey: "evergreen-2",
+    unitKey: "evergreen-2",
+    topic: "fixture topic",
+  };
+  return {
+    claim: async () => claim,
+    startProvider: async () => true,
+    release: async () => "RELEASED",
+    markAmbiguous: async () => "AMBIGUOUS",
+    settlePublished: async () => "PUBLISHED",
+  };
+}
+
 function baseArgs(
   overrides: Partial<Parameters<typeof dispatchAiLabScheduledBrandPost>[0]> =
     {},
@@ -62,6 +81,7 @@ function baseArgs(
     postType: "brand_post",
     scheduledPostId: "schedule-fixture",
     openAiApiKey: "fixture-only",
+    topic: fixtureTopicPort(),
     loadRecentFingerprints: async () => [],
     publishText: async () => ({ data: { id: "x-post-fixture" } }),
     completePublishedPost: async () => ({ fingerprintPersisted: true }),
@@ -150,8 +170,8 @@ test("a confirmed 280-code-point post completes once even when fingerprint persi
     characterCount: 280,
     xPostId: "x-post-fixture",
     fingerprintPersisted: false,
-    // No recordTopicUsage hook supplied -> usage was not attempted.
-    topicUsagePersisted: null,
+    topicEventKey: "evergreen-2",
+    topicSettlement: "PUBLISHED",
   });
   assert.deepEqual(completedArgs, {
     scheduledPostId: "schedule-fixture",

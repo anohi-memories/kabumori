@@ -1,7 +1,7 @@
 import { BrandContextError } from "./brand_context.ts";
 import { fetchRecentKabumoriFingerprints } from "./kabumori_recent_fingerprints.ts";
 import type { PublishedFingerprint } from "./cross_brand_dedupe.ts";
-import { AI_LAB_EVENT_KEY_PATTERN, type AiLabTopicUsage } from "./ai_lab_dev_diary_context.ts";
+import { AI_LAB_EVENT_KEY_PATTERN, type AiLabTopicCandidate } from "./ai_lab_dev_diary_context.ts";
 
 function serviceHeaders(serviceRoleKey: string): Record<string, string> {
   return { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` };
@@ -107,106 +107,187 @@ export async function countAiLabBrandPostsBefore({
   }
 }
 
-/** 使用済みイベントを振り返る期間。fresh 期間（3日）より十分長く、evergreen のクールダウン（72時間）も含む。 */
-export const AI_LAB_TOPIC_USAGE_LOOKBACK_DAYS = 14;
+// ---------------------------------------------------------------------------------------------------
+// 題材イベントの確保（claim）ライフサイクル。DB 側は migration 20261004090000_ai_lab_topic_claims.sql の
+// 5関数（service_role の EXECUTE のみ）。claim_id がフェンシングトークンで、どの関数も自分の claim しか変えない。
+// ---------------------------------------------------------------------------------------------------
 
-/**
- * Read-only: AI Lab topics that were actually published within the lookback window (event keys only, no
- * post text). Returns null on any failure or malformed row so the caller fails closed (skip diary events,
- * use evergreen) instead of re-posting an event it cannot prove is unused.
- */
-export async function loadAiLabTopicUsage({
+/** 確保できた題材。topic（生成に渡す題材文）は DB に送らず、ローカルの候補から引き当てる。 */
+export type AiLabClaimedTopic = {
+  claimId: string;
+  kind: "diary" | "evergreen";
+  eventKey: string;
+  unitKey: string;
+  topic: string;
+};
+
+export type AiLabTopicClaimResponse = {
+  claim: { claimId: string; kind: "diary" | "evergreen"; eventKey: string; unitKey: string } | null;
+  rejected: Array<{ eventKey: string; reason: string }>;
+  conflict: string | null;
+};
+
+/** ディスパッチャが使う題材ポート。X の前後で何を呼ぶかは ai_lab_scheduled_brand_post.ts が決める。 */
+export type AiLabTopicPort = {
+  /** 優先順の候補から1件を確保する。確保できなければ（全部使用済み・クールダウン中・衝突）例外。X には進まない。 */
+  claim: () => Promise<AiLabClaimedTopic>;
+  /** X へ送る直前に呼ぶ。true の場合だけ X へ進んでよい。 */
+  startProvider: (claim: AiLabClaimedTopic) => Promise<boolean>;
+  /** X 前の失敗、または X の明確な拒否（PROVIDER_REJECTED:<status>）での解除。結果の状態を返す。 */
+  release: (claim: AiLabClaimedTopic, reason: string) => Promise<string>;
+  /** X の結果が不明。再開放しない。 */
+  markAmbiguous: (claim: AiLabClaimedTopic, reason: string) => Promise<string>;
+  /** X の post id を確認した後の確定。"PUBLISHED" / "IDEMPOTENT"。衝突は例外。 */
+  settlePublished: (claim: AiLabClaimedTopic, xPostId: string) => Promise<string>;
+};
+
+const CLAIM_ERROR_CODE = /^AI_LAB_TOPIC_CLAIM_[A-Z_]+$/u;
+
+async function callAiLabTopicRpc(
+  {
+    supabaseUrl,
+    serviceRoleKey,
+    fetchImpl,
+  }: { supabaseUrl: string; serviceRoleKey: string; fetchImpl: typeof fetch },
+  name: string,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  const response = await fetchImpl(`${supabaseUrl}/rest/v1/rpc/${name}`, {
+    method: "POST",
+    headers: { ...serviceHeaders(serviceRoleKey), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    // DB が返した理由コード（AI_LAB_TOPIC_CLAIM_*）だけを通す。それ以外の本文はログにも例外にも出さない。
+    let code = "AI_LAB_TOPIC_RPC_FAILED";
+    try {
+      const message = (await response.json() as { message?: unknown })?.message;
+      if (typeof message === "string" && CLAIM_ERROR_CODE.test(message)) code = message;
+    } catch {
+      // keep the generic code
+    }
+    throw new BrandContextError(code);
+  }
+  return await response.json() as unknown;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
+
+/** 優先順の候補を DB に渡し、最初に確保できた1件（無ければ null）と、確保できなかった理由を受け取る。 */
+export async function claimAiLabTopic({
   supabaseUrl,
   serviceRoleKey,
-  now = new Date(),
-  lookbackDays = AI_LAB_TOPIC_USAGE_LOOKBACK_DAYS,
+  scheduledPostId,
+  candidates,
+  leaseSeconds = 900,
   fetchImpl = fetch,
 }: {
   supabaseUrl: string;
   serviceRoleKey: string;
-  now?: Date;
-  lookbackDays?: number;
+  scheduledPostId: string;
+  candidates: readonly AiLabTopicCandidate[];
+  leaseSeconds?: number;
   fetchImpl?: typeof fetch;
-}): Promise<AiLabTopicUsage[] | null> {
-  try {
-    const since = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
-    const params = new URLSearchParams({
-      select: "event_key,published_at",
-      brand_id: "eq.ai_salaryman_lab",
-      published_at: `gte.${since}`,
-      order: "published_at.desc",
-      limit: "200",
-    });
-    const response = await fetchImpl(`${supabaseUrl}/rest/v1/ai_lab_topic_event_usage?${params}`, {
-      headers: serviceHeaders(serviceRoleKey),
-    });
-    if (!response.ok) return null;
-    const rows = await response.json() as unknown;
-    if (!Array.isArray(rows)) return null;
-    const usage: AiLabTopicUsage[] = [];
-    for (const row of rows) {
-      const eventKey = (row as { event_key?: unknown })?.event_key;
-      const publishedAt = (row as { published_at?: unknown })?.published_at;
-      if (
-        typeof eventKey !== "string" || !AI_LAB_EVENT_KEY_PATTERN.test(eventKey) ||
-        typeof publishedAt !== "string" || Number.isNaN(Date.parse(publishedAt))
-      ) {
-        return null;
-      }
-      usage.push({ eventKey, publishedAt });
-    }
-    return usage;
-  } catch {
-    return null;
+}): Promise<AiLabTopicClaimResponse> {
+  const payload = await callAiLabTopicRpc({ supabaseUrl, serviceRoleKey, fetchImpl }, "claim_ai_lab_topic", {
+    p_scheduled_post_id: scheduledPostId,
+    // 題材文（topic）は送らない。キーとテーマタグだけ。
+    p_candidates: candidates.map((candidate) => ({
+      kind: candidate.kind,
+      event_key: candidate.eventKey,
+      unit_key: candidate.unitKey,
+      theme_tags: candidate.themeTags,
+    })),
+    p_lease_seconds: leaseSeconds,
+  });
+  if (!isRecord(payload) || !Array.isArray(payload.rejected)) {
+    throw new BrandContextError("AI_LAB_TOPIC_CLAIM_INVALID_RESPONSE");
   }
+  const rejected = payload.rejected.map((row) => {
+    if (!isRecord(row) || typeof row.event_key !== "string" || typeof row.reason !== "string") {
+      throw new BrandContextError("AI_LAB_TOPIC_CLAIM_INVALID_RESPONSE");
+    }
+    return { eventKey: row.event_key, reason: row.reason };
+  });
+  const conflict = typeof payload.conflict === "string" ? payload.conflict : null;
+  if (payload.claim === null || payload.claim === undefined) return { claim: null, rejected, conflict };
+  const claim = payload.claim;
+  if (
+    !isRecord(claim) || typeof claim.claim_id !== "string" || !UUID_PATTERN.test(claim.claim_id) ||
+    (claim.kind !== "diary" && claim.kind !== "evergreen") ||
+    typeof claim.event_key !== "string" || !AI_LAB_EVENT_KEY_PATTERN.test(claim.event_key) ||
+    typeof claim.unit_key !== "string"
+  ) {
+    throw new BrandContextError("AI_LAB_TOPIC_CLAIM_INVALID_RESPONSE");
+  }
+  return {
+    claim: { claimId: claim.claim_id, kind: claim.kind, eventKey: claim.event_key, unitKey: claim.unit_key },
+    rejected,
+    conflict,
+  };
 }
 
 /**
- * Records that `eventKey` was actually published (call only after X confirmed the post). Idempotent per
- * scheduled post (primary key + ignore-duplicates). Never throws: the X write already happened, so a
- * failure here must not reach the outer failure handler (which could re-queue the post); it only means the
- * event may be offered again, and the text-level guards remain as the second line of defense.
+ * 本番の題材ポート。claim() は呼ばれた時点の候補で DB に確保を依頼し、確保できた unitKey を候補の題材文へ
+ * 引き当てる。確保できない・衝突・引き当て不能はすべて例外（X には進まない）。
  */
-export async function recordAiLabTopicUsage({
+export function createAiLabTopicPort({
   supabaseUrl,
   serviceRoleKey,
-  eventKey,
-  unitKey,
   scheduledPostId,
-  xPostId,
+  candidates,
+  onClaimResult,
   fetchImpl = fetch,
 }: {
   supabaseUrl: string;
   serviceRoleKey: string;
-  eventKey: string;
-  unitKey: string;
   scheduledPostId: string;
-  xPostId: string;
+  candidates: readonly AiLabTopicCandidate[];
+  onClaimResult?: (result: AiLabTopicClaimResponse) => void;
   fetchImpl?: typeof fetch;
-}): Promise<boolean> {
-  try {
-    if (!AI_LAB_EVENT_KEY_PATTERN.test(eventKey)) return false;
-    const response = await fetchImpl(
-      `${supabaseUrl}/rest/v1/ai_lab_topic_event_usage?on_conflict=scheduled_post_id`,
-      {
-        method: "POST",
-        headers: {
-          ...serviceHeaders(serviceRoleKey),
-          "Content-Type": "application/json",
-          Prefer: "resolution=ignore-duplicates,return=minimal",
-        },
-        body: JSON.stringify({
-          scheduled_post_id: scheduledPostId,
-          event_key: eventKey,
-          unit_key: unitKey,
-          x_post_id: xPostId,
+}): AiLabTopicPort {
+  const rpc = { supabaseUrl, serviceRoleKey, fetchImpl };
+  const fence = (claim: AiLabClaimedTopic) => ({
+    p_claim_id: claim.claimId,
+    p_scheduled_post_id: scheduledPostId,
+    p_event_key: claim.eventKey,
+  });
+  const port: AiLabTopicPort = {
+    claim: async () => {
+      if (candidates.length === 0) throw new BrandContextError("AI_LAB_TOPIC_POOL_EXHAUSTED");
+      const result = await claimAiLabTopic({ supabaseUrl, serviceRoleKey, scheduledPostId, candidates, fetchImpl });
+      onClaimResult?.(result);
+      if (result.conflict) throw new BrandContextError("AI_LAB_TOPIC_SCHEDULE_CONFLICT");
+      if (!result.claim) throw new BrandContextError("AI_LAB_TOPIC_POOL_EXHAUSTED");
+      const claimed = result.claim;
+      const candidate = candidates.find((c) => c.unitKey === claimed.unitKey && c.eventKey === claimed.eventKey);
+      if (!candidate) {
+        // DB が候補に無いものを返した（起こらないはず）。確保は X 前なので解除して中断する。
+        await port.release({ ...claimed, topic: "" }, "PRE_X_CLAIM_MISMATCH").catch(() => "RELEASE_FAILED");
+        throw new BrandContextError("AI_LAB_TOPIC_CLAIM_INVALID_RESPONSE");
+      }
+      return { ...claimed, topic: candidate.topic };
+    },
+    startProvider: async (claim) =>
+      (await callAiLabTopicRpc(rpc, "start_ai_lab_topic_provider", fence(claim))) === true,
+    release: async (claim, reason) =>
+      String(await callAiLabTopicRpc(rpc, "release_ai_lab_topic_claim", { ...fence(claim), p_reason: reason })),
+    markAmbiguous: async (claim, reason) =>
+      String(await callAiLabTopicRpc(rpc, "mark_ai_lab_topic_claim_ambiguous", { ...fence(claim), p_reason: reason })),
+    settlePublished: async (claim, xPostId) =>
+      String(
+        await callAiLabTopicRpc(rpc, "settle_ai_lab_topic_claim_published", {
+          ...fence(claim),
+          p_unit_key: claim.unitKey,
+          p_x_post_id: xPostId,
         }),
-      },
-    );
-    return response.ok;
-  } catch {
-    return false;
-  }
+      ),
+  };
+  return port;
 }
 
 export async function recordAndCompleteAiLabBrandPost({

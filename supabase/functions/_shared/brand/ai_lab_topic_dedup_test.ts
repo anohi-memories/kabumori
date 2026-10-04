@@ -5,8 +5,7 @@ import test from "node:test";
 import {
   EVERGREEN_TOPIC_SEEDS,
   loadAiLabDevDiaryMarkdown,
-  selectAiLabRotatingTopicSeed,
-  type AiLabTopicUsage,
+  buildAiLabTopicCandidates,
 } from "./ai_lab_dev_diary_context.ts";
 import {
   aiLabDiversityInstructions,
@@ -33,31 +32,38 @@ const NOW = new Date("2026-10-01T03:00:00Z");
 
 const DIARY = `
 ## 2026-09-29
+event_id: 20260929-research-before-content-access
 changed: 投稿の中身を安全に読み書きする作業の前に、必要な下調べをした。
 difficulty: 担当者の判定がまだ正式にできない状態だと分かった。
 decided: 土台がないまま進めると矛盾が出そうなので、いったん手を止めた。
 angle: 下調べだけで1日が終わることもある、という個人開発のリアル。
 
 ## 2026-09-30
+event_id: 20260930-x-auth-test-account-overlap
 changed: iOS版で実データ接続とX認証の確認を進めた。
 difficulty: テスト用のXアカウントが既存の接続と重なっていた。
 decided: 先に進めるより安全側で止めることを優先した。
 angle: 開発の記録を、そのまま発信のネタに変える仕組みを整えた話。
 
 ## 2026-10-01
+event_id: 20261001-x-login-account-switch
 changed: Xを接続するとき、前回ログインしたアカウントが引き継がれる問題を見つけた。
 difficulty: ソース上のテストが通っても、実際のログイン画面で切り替えられるかは確認できない。
 decided: ログイン状態を共有しにくい認証方法へ変更した。
 angle: テストが全部通っても、外部サービスのログイン画面は実際に触って確かめる必要があると分かった話。
 `;
 
+// 候補の組み立て結果に「DB が先頭から、使用済みでない最初の1件を確保する」を当てはめたもの。DB 側の確保
+// そのものは ai_lab_event_dedupe_test.ts（ポート）と supabase/tests/ai_lab_topic_claims_run.sh（実SQL）で検証する。
 function select(
   rotationIndex: number,
   markdown = DIARY,
   recentPostTexts: string[] = [],
-  recentUsage: AiLabTopicUsage[] | null = [],
+  usedEventKeys: string[] = [],
 ) {
-  return selectAiLabRotatingTopicSeed({ markdown, now: NOW, rotationIndex, recentPostTexts, recentUsage });
+  const { candidates, exclusions } = buildAiLabTopicCandidates({ markdown, now: NOW, rotationIndex, recentPostTexts });
+  const chosen = candidates.find((candidate) => !usedEventKeys.includes(candidate.eventKey))!;
+  return { ...chosen, source: chosen.kind, exclusions };
 }
 
 // --- 1. fresh diary は generic evergreen より優先 -----------------------------------------------
@@ -72,14 +78,11 @@ test("fresh diary exists: every rotation step picks diary, never the generic eve
 
 test("a generic diary angle (下調べだけで1日が終わる) is excluded with a reason code and never used as a topic", () => {
   // 新しい2件を使用済みにして、汎用角度を持つ 9/29 のイベントが選ばれる状況を作る。
-  const used: AiLabTopicUsage[] = [
-    { eventKey: "diary-2026-10-01-1", publishedAt: "2026-10-01T01:00:00Z" },
-    { eventKey: "diary-2026-09-30-1", publishedAt: "2026-09-30T09:00:00Z" },
-  ];
+  const used = ["diary:20261001-x-login-account-switch", "diary:20260930-x-auth-test-account-overlap"];
   const selected = select(0, DIARY, [], used);
-  assert.equal(selected.eventKey, "diary-2026-09-29-1");
+  assert.equal(selected.eventKey, "diary:20260929-research-before-content-access");
   const reasons = selected.exclusions.map((e) => `${e.candidate}:${e.reason}`);
-  assert.ok(reasons.some((r) => r.startsWith("diary-2026-09-29-1#angle1:GENERIC_THEME:research_only_day")), reasons.join("\n"));
+  assert.ok(reasons.some((r) => r.startsWith("diary:20260929-research-before-content-access#angle1:GENERIC_THEME:research_only_day")), reasons.join("\n"));
   for (let i = 0; i < 40; i += 1) {
     assert.doesNotMatch(select(i, DIARY, [], used).topic, /今回の切り口: 下調べだけで/u);
   }
@@ -97,7 +100,7 @@ test("diary seeds carry the concrete facts (what changed / what got stuck), not 
 
 test("rotationIndex never moves selection off the newest unused event (it only varies the angle)", () => {
   const eventKeys = new Set(Array.from({ length: 40 }, (_, i) => select(i).eventKey));
-  assert.deepEqual([...eventKeys], ["diary-2026-10-01-1"]);
+  assert.deepEqual([...eventKeys], ["diary:20261001-x-login-account-switch"]);
 });
 
 // --- 4. 別テーマの fresh diary は正常に選択される -------------------------------------------------
@@ -105,6 +108,7 @@ test("rotationIndex never moves selection off the newest unused event (it only v
 test("a fresh diary about a different theme is selected normally, with its own concrete facts", () => {
   const markdown = `
 ## 2026-10-01
+event_id: 20261001-notification-settings
 changed: アプリの通知設定画面を作り直し、通知の種類ごとにオンオフできるようにした。
 difficulty: 古い設定の移行で、既存ユーザーの設定が消えそうになった。
 decided: 移行処理を先に作ってから画面を差し替えた。
@@ -129,7 +133,7 @@ test("no fresh diary: evergreen fallback works and rotates (not the same seed tw
 });
 
 test("a future-dated or unsafe diary entry never becomes a topic (falls back to evergreen)", () => {
-  const markdown = "## 2026-10-05\nchanged: まだ起きていない変更。\n\n## 2026-10-01\nchanged: 危険 https://example.com を含む。\n";
+  const markdown = "## 2026-10-05\nevent_id: 20261005-future\nchanged: まだ起きていない変更。\n\n## 2026-10-01\nevent_id: 20261001-unsafe\nchanged: 危険 https://example.com を含む。\n";
   const selected = select(0, markdown);
   assert.equal(selected.source, "evergreen");
   const reasons = selected.exclusions.map((e) => e.reason);
@@ -248,6 +252,13 @@ function dispatchWith(texts: string[], extra: Partial<Parameters<typeof dispatch
       postType: "brand_post",
       scheduledPostId: "schedule-fixture",
       openAiApiKey: "fixture-only",
+      topic: {
+        claim: async () => ({ claimId: "00000000-0000-0000-0000-0000000000aa", kind: "evergreen", eventKey: "evergreen-2", unitKey: "evergreen-2", topic: "" }),
+        startProvider: async () => true,
+        release: async () => "RELEASED",
+        markAmbiguous: async () => "AMBIGUOUS",
+        settlePublished: async () => "PUBLISHED",
+      },
       loadRecentFingerprints: async () => [],
       publishText: async (text) => {
         published.push(text);
@@ -378,8 +389,8 @@ test("against the real bundled diary, the day after its freshest entry never yie
   const freshest = [...markdown.matchAll(/^## (\d{4}-\d{2}-\d{2})/gmu)].map((m) => m[1]).sort().at(-1)!;
   const now = new Date(`${freshest}T09:00:00Z`);
   for (let i = 0; i < 60; i += 1) {
-    const selected = selectAiLabRotatingTopicSeed({ markdown, now, rotationIndex: i, recentUsage: [] });
-    assert.equal(selected.source, "diary");
+    const selected = buildAiLabTopicCandidates({ markdown, now, rotationIndex: i }).candidates[0];
+    assert.equal(selected.kind, "diary");
     assert.match(selected.topic, /できごと: /u);
     // seed全体が汎用テーマ(切り口行)に当たらないこと: 切り口行だけを検査する
     const focus = selected.topic.split("\n").find((line) => line.startsWith("今回の切り口: ")) ?? "";

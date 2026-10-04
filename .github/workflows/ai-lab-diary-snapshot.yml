@@ -37,6 +37,7 @@ jobs:
           import { readFile } from "node:fs/promises";
           import {
             isValidCalendarDate,
+            isValidDiaryEventId,
             parseDevDiaryMarkdown,
             sanitizeDiaryEntry,
           } from "./supabase/functions/_shared/brand/ai_lab_dev_diary_context.ts";
@@ -57,6 +58,7 @@ jobs:
           }).format(new Date());
 
           const seenDates = new Set();
+          const seenEventIds = new Set();
           for (const entry of entries) {
             if (!isValidCalendarDate(entry.date)) {
               throw new Error(`Invalid diary date: ${entry.date}`);
@@ -68,6 +70,15 @@ jobs:
               throw new Error(`Duplicate diary date: ${entry.date}`);
             }
             seenDates.add(entry.date);
+
+            // event_id is the stable key that stops the same development event from being posted twice.
+            if (!entry.eventId || !isValidDiaryEventId(entry.eventId, entry.date)) {
+              throw new Error(`Missing or invalid event_id (YYYYMMDD-slug matching the heading date): ${entry.date}`);
+            }
+            if (seenEventIds.has(entry.eventId)) {
+              throw new Error(`Duplicate event_id: ${entry.eventId}`);
+            }
+            seenEventIds.add(entry.eventId);
 
             const sanitized = sanitizeDiaryEntry(entry);
             if (!sanitized) {

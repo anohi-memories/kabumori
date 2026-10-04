@@ -73,9 +73,8 @@ import { xOAuthClientRegistryFromEnv } from "../_shared/x_v2_account_refresh.ts"
 import { createVaultAccountCredentialRpc, VaultAccountXAuth } from "./vault_account_auth.ts";
 import {
   countAiLabBrandPostsBefore,
+  createAiLabTopicPort,
   loadAiLabRecentDedupeFingerprints,
-  loadAiLabTopicUsage,
-  recordAiLabTopicUsage,
   recordAndCompleteAiLabBrandPost,
 } from "../_shared/brand/ai_lab_brand_post_store.ts";
 import {
@@ -83,8 +82,8 @@ import {
   dispatchAiLabScheduledBrandPost,
 } from "../_shared/brand/ai_lab_scheduled_brand_post.ts";
 import {
+  buildAiLabTopicCandidates,
   loadAiLabDevDiaryMarkdown,
-  selectAiLabRotatingTopicSeed,
 } from "../_shared/brand/ai_lab_dev_diary_context.ts";
 import { aiLabDiversityInstructions } from "../_shared/brand/ai_lab_theme_guard.ts";
 import { generateBrandPost } from "../_shared/brand/brand_post_generator.ts";
@@ -4020,61 +4019,61 @@ Deno.serve(async (req) => {
         throw new Error("AI_LAB_DISPATCH_BRAND_MISMATCH");
       }
       try {
-        // Dev-diary content shift: pick a concrete recent-progress angle (sanitized, whitelisted --
-        // see ai_lab_dev_diary_context.ts) when one exists, else a safe evergreen reflection. Never
-        // falls back to the brand-agnostic generator's own generic topic default for this brand.
-        // loadAiLabDevDiaryMarkdown() reads a bundled `import`-ed constant, not a file, so it never
-        // rejects; an empty/stale/unsafe diary yields no fresh entries, which
-        // selectAiLabRotatingTopicSeed maps to the evergreen fallback (see ai_lab_dev_diary_context.ts),
-        // never a fabricated "today" claim.
+        // Dev-diary content shift: the topic is a concrete recent development event (sanitized,
+        // whitelisted -- see ai_lab_dev_diary_context.ts) or a safe evergreen reflection. Never falls
+        // back to the brand-agnostic generator's own generic topic default for this brand.
+        // loadAiLabDevDiaryMarkdown() reads a bundled `import`-ed constant, not a file, so it never rejects.
         const diaryMarkdown = await loadAiLabDevDiaryMarkdown();
-        // Event-level dedupe: a diary entry is one real development event, however many angles it
-        // offers. Events (and evergreen seeds) that were actually published are read back from
-        // ai_lab_topic_event_usage and excluded before any text is generated; an unreadable history
-        // (null) makes the selector skip diary events entirely and use evergreen. The rotation index
-        // only varies the angle/evergreen choice -- it never overrides an event cooldown. Post text is
-        // not stored anywhere, so recentPostTexts stays unset; the event keys carry the history.
-        const [rotationIndex, recentTopicUsage] = await Promise.all([
-          countAiLabBrandPostsBefore({
-            supabaseUrl,
-            serviceRoleKey,
-            scheduledFor: scheduledPost.scheduled_for,
-          }).then((count) => count ?? Math.floor(Date.parse(scheduledPost.scheduled_for) / 3_600_000)),
-          loadAiLabTopicUsage({ supabaseUrl, serviceRoleKey }),
-        ]);
-        const selection = selectAiLabRotatingTopicSeed({
+        // Event-level dedupe with a pre-X claim: the candidates are built locally in priority order
+        // (fresh diary events newest first, one angle each, then evergreen seeds); the database
+        // (claim_ai_lab_topic, serialized per brand) claims the first one that is not already
+        // claimed/published/ambiguous and not in an evergreen cooldown. Nothing claimable means this
+        // slot is skipped -- the dispatcher never reaches X without a claim. The rotation index only
+        // varies the angle and the evergreen order; it never overrides a claim or a cooldown. Post text
+        // is not stored anywhere, so recentPostTexts stays unset.
+        const rotationIndex = await countAiLabBrandPostsBefore({
+          supabaseUrl,
+          serviceRoleKey,
+          scheduledFor: scheduledPost.scheduled_for,
+        }) ?? Math.floor(Date.parse(scheduledPost.scheduled_for) / 3_600_000);
+        const { candidates, exclusions } = buildAiLabTopicCandidates({
           markdown: diaryMarkdown,
           now: new Date(),
           rotationIndex,
-          recentUsage: recentTopicUsage,
         });
-        // PROJECT_RULES: candidate exclusions are logged with machine-readable reason codes (no text).
-        console.info("AI_LAB_TOPIC_SELECTION", {
+        const topicPort = createAiLabTopicPort({
+          supabaseUrl,
+          serviceRoleKey,
           scheduledPostId: scheduledPost.id,
-          source: selection.source,
-          eventKey: selection.eventKey,
-          unitKey: selection.unitKey,
-          rotationIndex,
-          usageHistoryAvailable: recentTopicUsage !== null,
-          excluded: selection.exclusions,
+          candidates,
+          // PROJECT_RULES: candidate exclusions are logged with machine-readable reason codes (no text).
+          onClaimResult: (claimResult) =>
+            console.info("AI_LAB_TOPIC_CLAIM", {
+              scheduledPostId: scheduledPost.id,
+              rotationIndex,
+              claimedEventKey: claimResult.claim?.eventKey ?? null,
+              claimedUnitKey: claimResult.claim?.unitKey ?? null,
+              conflict: claimResult.conflict,
+              rejectedByDatabase: claimResult.rejected,
+              excludedLocally: exclusions,
+            }),
         });
-        const aiLabTopicSeed = selection.topic;
         const result = await dispatchAiLabScheduledBrandPost({
           context: brandContext,
           postType: scheduledPost.post_type,
           scheduledPostId: scheduledPost.id,
           openAiApiKey,
-          topicSeed: aiLabTopicSeed,
+          topic: topicPort,
           onContentRejected: ({ attempt, violations }) =>
             console.warn("AI_LAB_CONTENT_REJECTED", {
               scheduledPostId: scheduledPost.id,
               attempt,
               violations,
             }),
-          generate: ({ retryViolations, ...args }) =>
+          generate: ({ retryViolations, topicSeed, ...args }) =>
             generateBrandPost({
               ...args,
-              topicSeed: aiLabTopicSeed,
+              topicSeed,
               extraInstructions: aiLabDiversityInstructions(retryViolations),
             }),
           loadRecentFingerprints: () => loadAiLabRecentDedupeFingerprints({
@@ -4082,24 +4081,17 @@ Deno.serve(async (req) => {
             serviceRoleKey,
           }),
           publishText: (text) => postToX(xAuth, text),
-          recordTopicUsage: ({ scheduledPostId, xPostId }) => recordAiLabTopicUsage({
-            supabaseUrl,
-            serviceRoleKey,
-            eventKey: selection.eventKey,
-            unitKey: selection.unitKey,
-            scheduledPostId,
-            xPostId,
-          }),
           completePublishedPost: (args) => recordAndCompleteAiLabBrandPost({
             supabaseUrl,
             serviceRoleKey,
             ...args,
           }),
         });
-        if (result.topicUsagePersisted === false) {
-          console.error("AI_LAB_TOPIC_USAGE_PERSISTENCE_FAILED", {
+        if (result.topicSettlement === "SETTLE_FAILED") {
+          // The event stays provider_started (never reopened); only the "published" label is missing.
+          console.error("AI_LAB_TOPIC_SETTLEMENT_FAILED", {
             scheduledPostId: scheduledPost.id,
-            eventKey: selection.eventKey,
+            eventKey: result.topicEventKey,
           });
         }
         if (!result.fingerprintPersisted) {
@@ -4118,8 +4110,8 @@ Deno.serve(async (req) => {
           characterCount: result.characterCount,
           xPostId: result.xPostId,
           fingerprintPersisted: result.fingerprintPersisted,
-          topicEventKey: selection.eventKey,
-          topicUsagePersisted: result.topicUsagePersisted,
+          topicEventKey: result.topicEventKey,
+          topicSettlement: result.topicSettlement,
           refreshExecuted: xAuth.refreshExecuted,
         }, 201);
       } catch (error) {

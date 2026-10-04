@@ -15,6 +15,7 @@ import {
 function entry(overrides: Partial<DevDiaryEntry> = {}): DevDiaryEntry {
   return {
     date: "2026-09-28",
+    eventId: "20260928-detail-screen-review",
     project: "個人で作っているアプリ",
     changed: "今日は投稿の詳細画面を見直した。",
     difficulty: "想定外のパターンに気づいて時間がかかった。",
@@ -30,6 +31,7 @@ function entry(overrides: Partial<DevDiaryEntry> = {}): DevDiaryEntry {
 test("parses one entry with every label, angle repeatable", () => {
   const markdown = `
 ## 2026-09-28
+event_id: 20260928-detail-screen-review
 project: 個人で作っているアプリ
 changed: 今日は投稿の詳細画面を見直した。
 difficulty: 想定外のパターンに気づいて時間がかかった。
@@ -42,6 +44,7 @@ angle: 二つ目の角度。
   assert.equal(entries.length, 1);
   assert.deepEqual(entries[0], {
     date: "2026-09-28",
+    eventId: "20260928-detail-screen-review",
     project: "個人で作っているアプリ",
     changed: "今日は投稿の詳細画面を見直した。",
     difficulty: "想定外のパターンに気づいて時間がかかった。",
