@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: done
 - task_id: ai-lab-pr82-claim-rereview-20261004
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Rereview PR #82 exact head 9f3b19a3cde490cf63735220ae191dcd4f11bdcb after C1 corrective. Verify durable pre-X claim, concurrency serialization, lease/fencing, provider-started ambiguous handling, exact idempotency, stable event_id+CI, evergreen cooldown skip, migration SECURITY DEFINER/ACL/RLS/drift, and no duplicate-X retry path. No merge/apply/deploy/production write/real X. Recommended Sol（高）.
+- allocation: Final C1 accepted CHANGES REQUIRED on PR #82 head 9f3b19a3cde490cf63735220ae191dcd4f11bdcb. Core diary concurrency/fencing is improved, but duplicate event_id labels, unsafe owner/inherited ACL drift, real-wrapper 401 classification, unresolved evergreen reclaim, claim-time cooldown semantics, non-canonical RPC payload acceptance and new test lint debt remain. No merge/deploy/production mutation. H1 free after fresh allocation.
 
 ## Codex H2
 - owner: codex
