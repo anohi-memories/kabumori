@@ -1,3 +1,22 @@
+## Final C1 — PR #82 durable-claim rereview CHANGES REQUIRED
+
+- verdict: **CHANGES REQUIRED**; PR #82 exact head `9f3b19a3cde490cf63735220ae191dcd4f11bdcb` remains open/unmerged.
+- previous core P1 improvement accepted: actual SQL-backed two-worker diary dispatch now results in one fake X; pre-X durable claim, provider_started boundary, claim_id fencing and settle-failure retention materially close the original race/reopen defect.
+- remaining P1: duplicate scalar `event_id:` labels within one diary entry overwrite the earlier value. Runtime and the actual snapshot workflow validator accept it, so a consumed diary event can be silently renamed and revived.
+- remaining P2 security: migration drift checks ignore unsafe relation/function owner identity and inherited role privileges. H1 reproduced successful reapply where service_role effectively inherited owner powers including TRUNCATE.
+- remaining P2 provider classification: actual VaultAccountXAuth converts a genuine 401 into typed `X_ACCESS_TOKEN_UNAUTHORIZED` / `X_ACCESS_TOKEN_REJECTED_AFTER_REFRESH`; the dispatcher only recognizes `X_REQUEST_FAILED:401`, so a proven no-post 401 becomes permanently ambiguous.
+- remaining P1 evergreen: unresolved provider_started/ambiguous evergreen rows become eligible again after 72h/48h purely by age. H1 time-simulation produced a second fake X while the first unresolved row remained settle-capable. Unresolved outcomes must stay quarantined until reconciled, regardless of cooldown age.
+- remaining P2 cooldown: published evergreen cooldown is currently measured from `claimed_at`, not actual publish/settlement time.
+- remaining P2 RPC contract: service-role candidate payload accepts extra keys and non-canonical event/theme mappings; e.g. an evergreen seed can lie about its theme tags and bypass the intended 48h generic-theme guard.
+- remaining P3: changed tests add net-new `require-await` lint debt; clean it without broad production lint suppression.
+- H1 evidence: candidate focused checked 97 PASS, existing runtime 907 PASS, supplied SQL runner 96 PASS, but independent safety harness still has required RED failures; evidence commit `0801619f4bcd882dadc71deab5cd07493a7ea80a` is not a release candidate.
+- fresh main now overlaps PR #82 in `ai_lab_dev_diary_context.md` and its snapshot due the merged topic-detail-learning diary update. Correction must fresh-merge/reconcile and preserve latest main content + stable IDs.
+- fresh GitHub comparison at C1: main is 13 commits ahead of PR base; exactly those 2 PR files overlap.
+- no production read/write, migration apply, real X/model/Vault/token operation, merge or deploy occurred.
+- G3/G4 remain occupied; do not overwrite them. Continue correction as direct Claude work in an independent worktree.
+- recommended Claude model: **Opus5.5（高）**; fresh rereview after correction: **Sol（高）**.
+- H1 closed/free after fresh allocation.
+
 ## Final K1 — Topic detail learning v2 PASS / merged
 
 - verdict: **PASS**.
