@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: ai-lab-pr82-event-dedupe-review-20261003
+- status: ready
+- task_id: ai-lab-pr82-claim-rereview-20261004
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepted CHANGES REQUIRED on PR #82 head 08a7346ccd63f2ff540bd48149f1f1e65e6dbe09. Concurrent same-event selection, post-success usage-write failure, ambiguous crash windows, mutable ordinal event IDs, conflicting idempotency, evergreen cooldown bypass and migration drift remain. No merge/deploy/production mutation. H1 free after fresh allocation.
+- allocation: Rereview PR #82 exact head 9f3b19a3cde490cf63735220ae191dcd4f11bdcb after C1 corrective. Verify durable pre-X claim, concurrency serialization, lease/fencing, provider-started ambiguous handling, exact idempotency, stable event_id+CI, evergreen cooldown skip, migration SECURITY DEFINER/ACL/RLS/drift, and no duplicate-X retry path. No merge/apply/deploy/production write/real X. Recommended Sol（高）.
 
 ## Codex H2
 - owner: codex
