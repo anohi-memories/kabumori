@@ -1,3 +1,22 @@
+## G1 allocation — Topic detail visual polish
+
+- task_id: `kabumori-topic-detail-visual-polish-20261005`
+- status: ready
+- owner: Claude G1
+- recommended model: **Sonnet5（高）**.
+- user will directly attach the approved visual reference showing `かぶモリ学習ノート`, a level-tinted Hero, numbered learning sections, distinct example card and final takeaway block.
+- implementation must treat the reference as visual direction only: native/dynamic text, no screenshot embedding, no baked copy.
+- preserve merged v2 behavior and all 50 curated topic texts; this is visual polish only.
+- preferred Hero uses existing approved beginner/intermediate/advanced topic artwork when it can be reused without distortion, meaningful crop or text collision; otherwise use native tint and report why.
+- normal sections stay light with numbered hierarchy; `具体例` and `覚えておくポイント` remain the emphasized blocks.
+- old `TODAY'S TOPIC` eyebrow should become `かぶモリ学習ノート`, resolving the past-topic label mismatch.
+- primary scope: `src/app/topic-detail.tsx`, `tests/app/topic-detail-screen_test.ts`; avoid catalog/content changes.
+- fresh allocation main: `d8a6fa7661b63a8e3c929f77232385369ebf3e94`; all current open PRs were checked and have **0 overlap** with the topic-detail target files/assets.
+- new Mac safety: clean base **`/Users/yuya/Developer/kabumori-fresh`**, fresh `origin/main`, independent G1 worktree/checkout. Old repo/worktrees must not be removed/reset/pruned.
+- EAS build expected: 0.
+- backend/DB/RPC/API/AI/Auth/Edge/production mutation: 0.
+- finish code: K1.
+
 ## K4 — PR #76 fresh-main integration PASS -> H2 final security rereview
 
 - verdict: **PASS to independent security rereview; merge/apply/deploy HOLD**.
