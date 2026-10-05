@@ -3,8 +3,8 @@
 - task_id: kabumori-shared-report-v2-editorial-three-points-20261005
 - owner: claude
 - slot: claude-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: 市況レポートの「今日のポイント」3点を、前日数値の単純列挙ではなく、その日の重要テーマ・注目点・注意点・出来事・背景が一目で分かり、詳細を読みたくなるeditorial headlineへ改善する。朝刊と大引けで役割を明確に分ける。既存の事実安全性・Hard Fact境界は弱めない。
