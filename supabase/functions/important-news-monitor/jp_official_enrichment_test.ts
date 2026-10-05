@@ -136,3 +136,35 @@ test("http errors, network errors, timeouts and empty pages map to reason codes"
   );
   assert.deepEqual(await fetchOfficialPageText("http://www.mof.go.jp/a", MOF), { ok: false, reason: "invalid_url" });
 });
+
+test("validateOfficialUrl rejects hostname tricks (trailing dot, punycode, encoding, userinfo, backslash, IP forms)", () => {
+  for (const bad of [
+    "https://www.mof.go.jp./a",
+    "https://xn--mof-go-jp.example/a",
+    "https://www.mof.go.jp.xn--evil/a",
+    "https://mof.go.jp%2eevil.com/a",
+    "https://www.mof.go.jp@evil.com/a",
+    "https://evil.com\\@www.mof.go.jp/a",
+    "https://evil.com#@www.mof.go.jp/a",
+    "https://0x7f000001/a",
+    "https://2130706433/a",
+    "https://[::ffff:127.0.0.1]/a",
+    "https://ｅｖｉｌ.com/a",
+    "https://notmof.go.jp/a",
+    "https://mof.go.jp.cn/a",
+  ]) assert.equal(validateOfficialUrl(bad, MOF), null, bad);
+  // Case and IDN-normalised official hosts are accepted, and the parser's own hostname is what is fetched.
+  assert.equal(validateOfficialUrl("https://WWW.MOF.GO.JP/a", MOF)?.hostname, "www.mof.go.jp");
+});
+
+test("a redirect to the project's own Supabase host or a metadata address is refused at the hop", async () => {
+  for (const location of ["https://abcd.supabase.co/rest/v1/x", "http://www.mof.go.jp/a", "https://www.mof.go.jp:8443/a"]) {
+    assert.deepEqual(
+      await fetchOfficialPageText("https://www.mof.go.jp/a", MOF, {
+        fetchImpl: () => Promise.resolve(new Response(null, { status: 302, headers: { location } })),
+      }),
+      { ok: false, reason: "host_not_allowed" },
+      location,
+    );
+  }
+});
