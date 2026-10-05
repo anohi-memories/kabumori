@@ -1,14 +1,22 @@
-import { useEffect, useState } from 'react';
-import { useLocalSearchParams } from 'expo-router';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Image, type ImageSource } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { BackButton } from '@/components/back-button';
 import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
 import { fetchDailyTopic } from '@/lib/daily-topic';
+import { goHome, goPastTopics } from '@/lib/detail-navigation';
 import { isTopicLevel, TOPIC_LEVEL_LABEL, type HomeTopic, type TopicLevel } from '@/lib/home-topic';
 import { topicDetailFor, type TopicDetailSection } from '@/lib/topic-detail-catalog';
+import {
+  createTopicViewCache,
+  decideLevelSwitch,
+  resolveTopicForLevel,
+  topicDetailRouteParams,
+  topicSwitchErrorMessage,
+  TOPIC_SWITCH_LEVELS,
+} from '@/lib/topic-detail-switch';
 import {
   splitTrailingCaution,
   TOPIC_DETAIL_ART_ASPECT,
@@ -17,6 +25,7 @@ import {
   topicDetailTitleStyle,
   TOPIC_DETAIL_ART_CLEAR_RATIO,
 } from '@/lib/topic-detail-presentation';
+import { formatTopicDate } from '@/lib/topic-history';
 
 const palette = KABUMORI_COLORS.light;
 
@@ -50,7 +59,12 @@ const FADE_STRIP_HEIGHT = 2;
 // level/date changed in the meantime (e.g. from another tab or a midnight
 // rollover while this screen was open).
 //
-// Layout (the "かぶモリ学習ノート" direction): back control -> notebook label -> level-aware Hero (badge,
+// Navigation: explicit ホーム / 過去のトピック destinations (never router.back(), so a cold deep link has
+// both too) and a 初級/中級/上級 selector that only changes what this open screen shows -- it resolves the
+// SAME jstDate through the same read-only fetch, keeps loaded levels in an in-memory cache, and never
+// writes the Settings level that drives Home.
+//
+// Layout (the "かぶモリ学習ノート" direction): destinations -> notebook label -> level selector -> level-aware Hero (badge,
 // category, large title, the fetched summary, level artwork on the right) -> numbered steps 1-3 -> a
 // tinted 具体例 card -> a calm 覚えておくポイント block. All text is native; the learning content is the
 // static curated catalog (src/lib/topic-detail-catalog.ts): rendering makes no network, AI or database
@@ -61,6 +75,12 @@ export default function TopicDetailScreen() {
   const insets = useSafeAreaInsets();
   const [status, setStatus] = useState<Status>('loading');
   const [topic, setTopic] = useState<HomeTopic | null>(null);
+  const [pendingLevel, setPendingLevel] = useState<TopicLevel | null>(null);
+  const [switchError, setSwitchError] = useState<TopicLevel | null>(null);
+  // Loaded topics by date+level for this open screen only (never persisted, never shared with Home).
+  const cache = useRef(createTopicViewCache()).current;
+  // A newer tap supersedes an older in-flight switch; a late result of the older one is dropped.
+  const switchSeq = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -70,6 +90,14 @@ export default function TopicDetailScreen() {
     if (!isTopicLevel(level) || !jstDate || !id) {
       setTopic(null);
       setStatus('mismatch');
+      return;
+    }
+    // A topic this screen already loaded for exactly these params (e.g. right after an in-screen switch
+    // updated the route) is shown as is: no second request for the same (level, jstDate).
+    const cached = cache.get(jstDate, level);
+    if (cached && cached.id === id) {
+      setTopic(cached);
+      setStatus('ok');
       return;
     }
     // New params (e.g. this screen reused by a deep link): never keep showing the previous topic.
@@ -82,6 +110,7 @@ export default function TopicDetailScreen() {
           setStatus('mismatch');
           return;
         }
+        cache.set(jstDate, result);
         setTopic(result);
         setStatus('ok');
       })
@@ -91,7 +120,50 @@ export default function TopicDetailScreen() {
     return () => {
       active = false;
     };
-  }, [params.id, params.level, params.jstDate]);
+  }, [params.id, params.level, params.jstDate, cache]);
+
+  const viewDate = typeof params.jstDate === 'string' ? params.jstDate : '';
+
+  // In-screen level switch: the target is the deterministic topic of the SAME date. On success the exact
+  // returned topic is shown and the route params become its real id/level/jstDate; on failure the current
+  // content stays and only a small message appears next to the selector.
+  const switchLevel = useCallback(
+    (target: TopicLevel) => {
+      if (!topic || !viewDate) return;
+      if (decideLevelSwitch(topic.level, target) === 'noop') {
+        // The shown level was tapped: nothing to load. It only drops a pending switch to another level.
+        switchSeq.current += 1;
+        setPendingLevel(null);
+        setSwitchError(null);
+        return;
+      }
+      if (pendingLevel === target) return;
+      const seq = (switchSeq.current += 1);
+      setSwitchError(null);
+      const show = (next: HomeTopic) => {
+        setTopic(next);
+        setStatus('ok');
+        setPendingLevel(null);
+        router.setParams(topicDetailRouteParams(next, viewDate));
+      };
+      const cached = cache.get(viewDate, target);
+      if (cached) {
+        show(cached);
+        return;
+      }
+      setPendingLevel(target);
+      void resolveTopicForLevel({ level: target, jstDate: viewDate, cache, fetchTopic: fetchDailyTopic }).then((result) => {
+        if (seq !== switchSeq.current) return;
+        if (result.ok) {
+          show(result.topic);
+        } else {
+          setPendingLevel(null);
+          setSwitchError(target);
+        }
+      });
+    },
+    [cache, pendingLevel, topic, viewDate],
+  );
 
   const detail = topic ? topicDetailFor(topic.title) : null;
   const colors = topic ? TOPIC_DETAIL_LEVEL_COLORS[topic.level] : null;
@@ -104,7 +176,24 @@ export default function TopicDetailScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView contentContainerStyle={[styles.container, { paddingBottom: 60 + insets.bottom }]}>
-        <BackButton />
+        <View style={styles.navRow}>
+          <Pressable
+            onPress={() => goHome(router)}
+            accessibilityRole="button"
+            accessibilityLabel="ホームへ"
+            hitSlop={8}
+            style={styles.navButton}>
+            <Text style={styles.navText}>‹ ホーム</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => goPastTopics(router)}
+            accessibilityRole="button"
+            accessibilityLabel="過去のトピックへ"
+            hitSlop={8}
+            style={styles.navButton}>
+            <Text style={styles.navText}>過去のトピック ›</Text>
+          </Pressable>
+        </View>
 
         {status === 'loading' ? (
           <ActivityIndicator color={palette.accent} style={styles.status} />
@@ -118,7 +207,37 @@ export default function TopicDetailScreen() {
             <View style={styles.labelRow} accessible accessibilityRole="header" accessibilityLabel="かぶモリ学習ノート">
               <Text style={styles.labelIcon}>🌱</Text>
               <Text style={[styles.labelText, { color: colors.strong }]}>かぶモリ学習ノート</Text>
+              {viewDate ? <Text style={styles.labelDate}>{formatTopicDate(viewDate)}</Text> : null}
             </View>
+
+            {/* Level selector: the same date, another level. Viewing only -- Home's saved level is never written. */}
+            <View style={[styles.switcher, { backgroundColor: colors.soft, borderColor: colors.outline }]}>
+              {TOPIC_SWITCH_LEVELS.map(({ level, label }) => {
+                const selected = topic.level === level;
+                const levelColors = TOPIC_DETAIL_LEVEL_COLORS[level];
+                return (
+                  <Pressable
+                    key={level}
+                    onPress={() => switchLevel(level)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${label}のトピック`}
+                    accessibilityState={{ selected, busy: pendingLevel === level }}
+                    accessibilityHint="同じ日の別のレベルに切り替えます。Homeの設定は変わりません。"
+                    style={[styles.switchSegment, selected && { backgroundColor: levelColors.strong }]}>
+                    {pendingLevel === level ? (
+                      <ActivityIndicator size="small" color={levelColors.strong} />
+                    ) : (
+                      <Text style={[styles.switchText, { color: selected ? '#ffffff' : levelColors.strong }]}>{label}</Text>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+            {switchError ? (
+              <Text style={styles.switchError} accessibilityLiveRegion="polite">
+                {topicSwitchErrorMessage(switchError)}
+              </Text>
+            ) : null}
 
             {/* Hero: level badge | category, large title, the short summary (the same base_text as Home) */}
             <View style={[styles.hero, { backgroundColor: colors.hero, minHeight: artHeight }]}>
@@ -257,9 +376,17 @@ const styles = StyleSheet.create({
   container: { paddingHorizontal: SCREEN_PADDING, paddingTop: 8 },
   status: { marginTop: 40 },
   message: { color: palette.muted, fontSize: 15, lineHeight: 23, marginTop: 24 },
+  navRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  navButton: { minHeight: 44, justifyContent: 'center' },
+  navText: { color: palette.accent, fontWeight: '800', fontSize: 15 },
   labelRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
   labelIcon: { fontSize: 18 },
   labelText: { fontSize: 16, fontWeight: '900', letterSpacing: 0.4 },
+  labelDate: { marginLeft: 'auto', color: palette.muted, fontSize: 13, fontWeight: '700' },
+  switcher: { marginTop: 12, flexDirection: 'row', borderRadius: 14, borderWidth: 1, padding: 3, gap: 3 },
+  switchSegment: { flex: 1, minHeight: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  switchText: { fontSize: 15, fontWeight: '900' },
+  switchError: { color: '#9a3a2c', fontSize: 13, lineHeight: 19, marginTop: 8 },
   hero: { marginTop: 14, borderRadius: 22, overflow: 'hidden' },
   artBox: { position: 'absolute', top: 0, left: 0, right: 0 },
   washRow: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, flexDirection: 'row' },

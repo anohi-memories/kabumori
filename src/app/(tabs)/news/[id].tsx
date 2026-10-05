@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { goNewsList } from '@/lib/detail-navigation';
 import { fetchMyImportantNewsItem, ImportantStockNews } from '@/lib/important-news';
 import { categoryLabels, formatNewsTime, importanceLabel, targetLabel } from '@/lib/news-labels';
 import { buildNewsPresentation } from '@/lib/news-presentation';
@@ -44,7 +45,7 @@ export default function ImportantNewsDetailScreen() {
         <Text style={styles.missingText}>
           {error || 'このニュースは表示できません。一覧の対象から外れた可能性があります。'}
         </Text>
-        <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/news'))} style={styles.backButton}>
+        <Pressable onPress={() => goNewsList(router)} style={styles.backButton}>
           <Text style={styles.backButtonText}>一覧へ戻る</Text>
         </Pressable>
       </View>
