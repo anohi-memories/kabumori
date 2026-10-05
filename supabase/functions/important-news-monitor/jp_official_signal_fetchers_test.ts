@@ -137,3 +137,15 @@ test("judgement guidance is added only for jp_official and does not claim JP imp
   assert.deepEqual(jpOfficialJudgementInstructions({ ...base, sourceName: "reuters" }), []);
   assert.match(JP_OFFICIAL_JUDGEMENT_GUIDANCE, /重要度の根拠になりません/);
 });
+
+test("flag OFF: the lane's only entry point is behind the env flag and fetchSources (no read, no HTTP, no insert)", async () => {
+  const source = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
+  const call = source.indexOf("await fetchJpOfficialSignalRows(");
+  assert.ok(call > 0);
+  assert.equal(source.indexOf("await fetchJpOfficialSignalRows(", call + 1), -1);
+  const guard = source.lastIndexOf('if (body.fetchSources === true && Deno.env.get("IMPORTANT_NEWS_JP_OFFICIAL_LANE") === "enabled")', call);
+  assert.ok(guard > 0 && call - guard < 400);
+  // Nothing JP-related other than declarations and zeroed counters runs before the guard.
+  const beforeGuard = source.slice(0, guard);
+  assert.equal(/fetchOfficialPageText\(|selectJpOfficialSignals\(/u.test(beforeGuard.replace(/^import[\s\S]*?;\n/gmu, "")), false);
+});
