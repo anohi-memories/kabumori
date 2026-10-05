@@ -1,3 +1,13 @@
+## Routing correction — PR #87 review queued, H2 restored to PR #76
+
+- During Final K2 handling for PR #87, a cross-chat allocation race was detected: CURRENT_STATE/G4 already reserved H2 for the higher-risk PR #76 final security rereview, while H2 TASK/ACTIVE index had not yet been synchronized.
+- The temporary PR #87 H2 assignment was **reverted before H2 started**.
+- H2 canonical task is restored to `x-social-mobile-pr76-final-security-rereview-20261005`, recommended **Sol（高）**.
+- PR #87 K2 verdict itself remains **PASS as an implementation candidate**, but its independent review is now **QUEUED / no slot assigned**.
+- PR #87 must not merge/deploy yet. After H2/PR #76 reaches C2 and H2 becomes genuinely free, assign the focused PR #87 review with recommended **Luna（高）**, unless fresh state provides another safe free review slot.
+- H1 remains allocated to common-account final review and was not overwritten.
+- No product source, PR head, production runtime, DB, consumer gate, X, Auth or Vault state was changed by this routing correction.
+
 ## Final K2 — PR #87 editorial three-points PASS to H2 review
 
 - verdict: **PASS to focused H2 review; merge/deploy HOLD**.
