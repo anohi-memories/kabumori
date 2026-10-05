@@ -1,3 +1,18 @@
+## K1 — Topic detail visual polish CODE PASS / VISUAL HOLD
+
+- verdict: **HOLD pending real-device visual acceptance**.
+- PR #84 exact reviewed head: `c9c173c153cbfd11229c9281b892d732728c3cd3`.
+- fresh main at K1: `45c964701cc6117f42eb75616c6640448c8f7bac`.
+- fresh GitHub state: open/unmerged, `mergeable=true`, `mergeable_state=clean`.
+- main advanced 11 commits from the PR merge-base; **0 overlap** with the four topic-detail PR files.
+- accepted code/safety evidence: 294/294 app tests, Expo config/export PASS, diff clean, no content catalog/Home/backend/DB/RPC/API/AI/Auth/Edge/native/EAS changes.
+- visual acceptance is incomplete because the new Mac currently has no iOS Simulator runtime and G1 therefore could not produce final 402pt/375pt implementation screenshots.
+- required device check before merge: long-title Hero wrap, canonical art wash/fade seam, beginner/intermediate/advanced balance, numbered-step rhythm, example/takeaway density, and 🌱/💡 rendering quality.
+- Codex review: **not required** for this UI-only change.
+- merge/deploy: HOLD.
+- AI Lab diary: **記録不要（現時点）** — user-facing visual change is not yet accepted/merged.
+- next_owner: user for iPhone visual confirmation; if approved, ChatGPT finalizes K1/merge; if not, return a small visual corrective to G1.
+
 ## PR #82 merged / H1 production read-only preflight allocated
 
 - PR #82 exact accepted head `9d30a68317dd523a96e6ce96bf7a0f6de23235d5` passed Netlify and Vercel after Final C1.
