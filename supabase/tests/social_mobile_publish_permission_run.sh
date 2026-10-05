@@ -6,6 +6,11 @@
 # core, refresh rollout, account deletion) and then the candidate, all as a
 # non-superuser owner; runs the behavior proof and the concurrency proofs;
 # drops the database. Fake data only; never production.
+# With PUB_E2E=1 it also runs the end-to-end proofs: the partial-rollout state
+# "guarded runtime, migration not applied" BEFORE applying the candidate, and
+# the post-migration scenarios after the race proofs.
+# The adverse role-graph proof is a separate runner that must run alone on the
+# cluster: social_mobile_publish_permission_acl.sh.
 # Usage: PUB_PGHOST=/private/tmp/<socket-dir> PUB_PGPORT=<port> \
 #        PUB_PGSUPER=<local superuser> supabase/tests/social_mobile_publish_permission_run.sh
 # PUB_CANDIDATE=<file> runs the same proof against another copy of the
@@ -63,6 +68,46 @@ for real in \
   20260928160000_social_mobile_account_deletion_candidate.sql; do
   "${as_owner[@]}" -f "$migrations/$real" >/dev/null
 done
+
+uid() { printf '00000000-0000-4000-8000-0000000002%02d' "$1"; }
+mk() { "${as_owner[@]}" -A -t -c "select public.fixture_brand('$1', '$2')"; }
+sql() { "${as_owner[@]}" -A -t -c "$1"; }
+
+# ---- End to end, before the candidate (optional: PUB_E2E=1, needs deno) ---------------
+# The first partial rollout state of the approved order: the guarded runtime is live, the
+# permission migration is not applied yet. The shim stays up for the end-to-end proof below.
+e2e_count() { # file, expected passes
+  grep -Eq "(^|[^0-9])$2 passed \| 0 failed" "$1" || fail "e2e did not pass exactly $2 scenarios: $(cat "$1")"
+  if grep -q 'ignored' "$1" && ! grep -q '0 ignored' "$1"; then fail "e2e scenarios were skipped: $(cat "$1")"; fi
+}
+if [[ "${PUB_E2E:-0}" == 1 ]]; then
+  command -v deno >/dev/null || fail "PUB_E2E=1 needs deno"
+  shim_port="${PUB_E2E_PORT:-$((54400 + $$ % 500))}"
+  # Started from a subshell so that the race proofs' bare `wait` does not wait for it.
+  (
+    PUB_PGHOST="$host" PUB_PGPORT="$port" PUB_DB="$db" PUB_OWNER="$owner" SHIM_PORT="$shim_port" \
+      SHIM_ANON_KEY="local-anon-$$" SHIM_SERVICE_KEY="local-service-$$" DENO_NO_PACKAGE_JSON=1 \
+      deno run --no-config --allow-net=127.0.0.1 --allow-env --allow-run=psql \
+      "$here/social_mobile_publish_permission_postgrest_shim.ts" > "$tmp/shim" 2>&1 &
+    echo $! > "$tmp/shim.pid"
+  )
+  shim_pid="$(cat "$tmp/shim.pid")"
+  trap 'kill "$shim_pid" 2>/dev/null || true; rm -rf "$tmp"; cleanup' EXIT
+  for _ in $(seq 1 100); do grep -q SHIM_READY "$tmp/shim" 2>/dev/null && break; sleep 0.1; done
+  grep -q SHIM_READY "$tmp/shim" || fail "e2e shim did not start: $(cat "$tmp/shim")"
+  e2e_env=(PUB_E2E_URL="http://127.0.0.1:$shim_port" PUB_E2E_ANON_KEY="local-anon-$$" PUB_E2E_SERVICE_KEY="local-service-$$" DENO_NO_PACKAGE_JSON=1 NO_COLOR=1)
+  pre_owner="$(uid 40)"
+  sql "select public.fixture_brand('$pre_owner', 'e2e_pre', 'brand_e2e_pre')" >/dev/null
+  sql "update public.social_accounts set publish_enabled = true where id = 'sa_e2e_pre'" >/dev/null
+  pre_post="$(sql "select public.fixture_running_post('brand_e2e_pre')")"
+  env "${e2e_env[@]}" \
+    PUB_E2E_FIXTURE="{\"owner\":\"$pre_owner\",\"workspace\":{\"brand\":\"brand_e2e_pre\",\"account\":\"sa_e2e_pre\",\"post\":\"$pre_post\"}}" \
+    deno test --no-config --allow-net=127.0.0.1 --allow-env --allow-read \
+    "$here/social_mobile_publish_permission_rollout_e2e_test.ts" > "$tmp/e2e_rollout" 2>&1 || fail "rollout e2e: $(cat "$tmp/e2e_rollout")"
+  e2e_count "$tmp/e2e_rollout" 2
+  echo "PUBLISH_PERMISSION_ROLLOUT_E2E_PASS"
+fi
+
 "${as_owner[@]}" -f "$candidate"
 if "${as_owner[@]}" -f "$candidate" > /dev/null 2>&1; then fail "re-apply was not refused"; fi
 echo "PUBLISH_PERMISSION_APPLY_PASS"
@@ -75,9 +120,6 @@ echo "PUBLISH_PERMISSION_BEHAVIOR_PASS"
 # ---- Concurrency proofs ----------------------------------------------------------
 # Every race uses its own user/workspace/account. "held" sessions keep their
 # transaction open with pg_sleep so the other session provably runs in between.
-uid() { printf '00000000-0000-4000-8000-0000000002%02d' "$1"; }
-mk() { "${as_owner[@]}" -A -t -c "select public.fixture_brand('$1', '$2')"; }
-sql() { "${as_owner[@]}" -A -t -c "$1"; }
 toggle() { echo "select public.fixture_toggle('$1', '$2', $3, $4)"; }
 enabled() { sql "select publish_enabled from public.social_accounts where id = '$1'"; }
 permission() { sql "select public.fixture_permission('$1', '$2', '$3')"; }
@@ -287,37 +329,26 @@ wait
 echo "PUBLISH_PERMISSION_RACE_PASS"
 
 # ---- End to end (optional: PUB_E2E=1, needs deno) -----------------------------------
-# The real Edge handler, the real brand-context loader / cached guard and the
-# real Vault send adapter, over HTTP, against the SQL above. Only X is fake.
+# The real Edge handler, the real brand-context loader / cached guard, the real
+# Vault send adapter and the real refresh SQL, over HTTP, against the SQL above,
+# through the shim started before the candidate. Only X is fake.
 if [[ "${PUB_E2E:-0}" == 1 ]]; then
-  command -v deno >/dev/null || fail "PUB_E2E=1 needs deno"
   e2e_owner="$(uid 31)"; e2e_viewer="$(uid 32)"; e2e_stranger="$(uid 33)"
   sql "insert into auth.users values ('$e2e_stranger')" >/dev/null
   workspaces=""
-  for name in basic blocked send r2 off; do
+  for name in basic blocked send r2 off f1v f1e retry retryoff; do
     brand="brand_e2e_$name"
     sql "select public.fixture_brand('$e2e_owner', 'e2e_$name', '$brand')" >/dev/null
     e2e_post="$(sql "select public.fixture_running_post('$brand')")"
     workspaces+="${workspaces:+,}\"$name\":{\"brand\":\"$brand\",\"account\":\"sa_e2e_$name\",\"post\":\"$e2e_post\"}"
   done
   sql "select public.fixture_member('brand_e2e_basic', '$e2e_viewer', 'viewer')" >/dev/null
-  shim_port="${PUB_E2E_PORT:-$((54400 + $$ % 500))}"
-  PUB_PGHOST="$host" PUB_PGPORT="$port" PUB_DB="$db" PUB_OWNER="$owner" SHIM_PORT="$shim_port" \
-    SHIM_ANON_KEY="local-anon-$$" SHIM_SERVICE_KEY="local-service-$$" DENO_NO_PACKAGE_JSON=1 \
-    deno run --no-config --allow-net=127.0.0.1 --allow-env --allow-run=psql \
-    "$here/social_mobile_publish_permission_postgrest_shim.ts" > "$tmp/shim" 2>&1 &
-  shim_pid=$!
-  trap 'kill "$shim_pid" 2>/dev/null || true; rm -rf "$tmp"; cleanup' EXIT
-  for _ in $(seq 1 100); do grep -q SHIM_READY "$tmp/shim" 2>/dev/null && break; sleep 0.1; done
-  grep -q SHIM_READY "$tmp/shim" || fail "e2e shim did not start: $(cat "$tmp/shim")"
-  PUB_E2E_URL="http://127.0.0.1:$shim_port" PUB_E2E_ANON_KEY="local-anon-$$" PUB_E2E_SERVICE_KEY="local-service-$$" \
+  env "${e2e_env[@]}" \
     PUB_E2E_FIXTURE="{\"owner\":\"$e2e_owner\",\"viewer\":\"$e2e_viewer\",\"stranger\":\"$e2e_stranger\",\"workspaces\":{$workspaces}}" \
-    DENO_NO_PACKAGE_JSON=1 deno test --no-config --allow-net=127.0.0.1 --allow-env --allow-read \
+    deno test --no-config --allow-net=127.0.0.1 --allow-env --allow-read \
     "$here/social_mobile_publish_permission_e2e_test.ts" > "$tmp/e2e" 2>&1 || fail "e2e: $(cat "$tmp/e2e")"
   kill "$shim_pid" 2>/dev/null || true
-  wait "$shim_pid" 2>/dev/null || true
-  grep -Eq '5 passed.*0 failed' "$tmp/e2e" || fail "e2e did not run all five scenarios: $(cat "$tmp/e2e")"
-  if grep -q 'ignored' "$tmp/e2e" && ! grep -q '0 ignored' "$tmp/e2e"; then fail "e2e scenarios were skipped: $(cat "$tmp/e2e")"; fi
+  e2e_count "$tmp/e2e" 9
   echo "PUBLISH_PERMISSION_E2E_PASS"
 fi
 

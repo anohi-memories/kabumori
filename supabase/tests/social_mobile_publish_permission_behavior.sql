@@ -104,8 +104,9 @@ select public.fixture_check(
 -- ---- 5. ON prerequisites ------------------------------------------------------
 -- Each case breaks exactly one prerequisite, asks for ON as the owner, then
 -- restores. The publish path's own check must refuse the same state when the
--- account is forced ON, so ON never grants what the runtime would not honor.
-create table public.fixture_cases (n int primary key, label text, break_sql text, restore_sql text, reason text, runtime text);
+-- account is forced ON, so ON never grants what the runtime would not honor:
+-- every case names the runtime refusal, none is skipped (exact parity).
+create table public.fixture_cases (n int primary key, label text, break_sql text, restore_sql text, reason text not null, runtime text not null);
 insert into public.fixture_cases values
   (1, 'brand inactive', $$update public.brands set is_active = false where id = %L$$, $$update public.brands set is_active = true where id = %L$$, 'BRAND_INACTIVE', 'BRAND_DISABLED'),
   (2, 'brand publish_mode disabled', $$update public.brands set publish_mode = 'disabled' where id = %L$$, $$update public.brands set publish_mode = 'live' where id = %L$$, 'BRAND_PUBLISHING_NOT_LIVE', 'BRAND_PUBLISH_MODE_DISABLED'),
@@ -117,12 +118,12 @@ insert into public.fixture_cases values
   (8, 'platform user id null', $$update public.social_accounts set platform_user_id = null where brand_id = %L$$, $$update public.social_accounts set platform_user_id = 'x_main' where brand_id = %L$$, 'CONNECTION_NOT_VERIFIED', 'X_ACCOUNT_NOT_VERIFIED'),
   (9, 'platform user id empty', $$update public.social_accounts set platform_user_id = '' where brand_id = %L$$, $$update public.social_accounts set platform_user_id = 'x_main' where brand_id = %L$$, 'CONNECTION_NOT_VERIFIED', 'X_ACCOUNT_NOT_VERIFIED'),
   (10, 'platform user id whitespace', $$update public.social_accounts set platform_user_id = '   ' where brand_id = %L$$, $$update public.social_accounts set platform_user_id = 'x_main' where brand_id = %L$$, 'CONNECTION_NOT_VERIFIED', 'X_ACCOUNT_NOT_VERIFIED'),
-  (11, 'verified_at missing', $$update public.social_accounts set verified_at = null where brand_id = %L$$, $$update public.social_accounts set verified_at = now() where brand_id = %L$$, 'CONNECTION_NOT_VERIFIED', null),
+  (11, 'verified_at missing', $$update public.social_accounts set verified_at = null where brand_id = %L$$, $$update public.social_accounts set verified_at = now() where brand_id = %L$$, 'CONNECTION_NOT_VERIFIED', 'X_ACCOUNT_NOT_VERIFIED'),
   (12, 'access reference missing', $$update public.social_accounts set vault_access_token_secret_id = null where brand_id = %L$$, null, 'CREDENTIALS_MISSING', 'X_CREDENTIAL_NOT_CONFIGURED'),
   (13, 'refresh reference missing', $$update public.social_accounts set vault_refresh_token_secret_id = null where brand_id = %L$$, null, 'CREDENTIALS_MISSING', 'X_CREDENTIAL_NOT_CONFIGURED'),
   (14, 'access and refresh are the same reference', $$update public.social_accounts set vault_refresh_token_secret_id = vault_access_token_secret_id where brand_id = %L$$, null, 'CREDENTIALS_INVALID', 'X_CREDENTIAL_NOT_CONFIGURED'),
   (15, 'a reference shared with another account', $$update public.social_accounts set vault_access_token_secret_id = (select vault_refresh_token_secret_id from public.social_accounts where id = 'sa_other') where brand_id = %L$$, null, 'CREDENTIALS_INVALID', 'X_REFRESH_SECRET_REF_SHARED'),
-  (16, 'connection error recorded', $$update public.social_accounts set last_connection_error_code = 'X_ACCESS_TOKEN_UNAUTHORIZED' where brand_id = %L$$, $$update public.social_accounts set last_connection_error_code = null where brand_id = %L$$, 'CONNECTION_DEGRADED', null),
+  (16, 'connection error recorded', $$update public.social_accounts set last_connection_error_code = 'X_ACCESS_TOKEN_UNAUTHORIZED' where brand_id = %L$$, $$update public.social_accounts set last_connection_error_code = null where brand_id = %L$$, 'CONNECTION_DEGRADED', 'X_ACCOUNT_CONNECTION_DEGRADED'),
   (17, 'refresh state uncertain', $$insert into public.x_account_refresh_state_v2 (social_account_id, status) select id, 'uncertain' from public.social_accounts where brand_id = %L$$, $$delete from public.x_account_refresh_state_v2 where social_account_id in (select id from public.social_accounts where brand_id = %L)$$, 'CONNECTION_DEGRADED', 'X_REFRESH_BLOCKED_UNCERTAIN'),
   (18, 'refresh state reauth required', $$insert into public.x_account_refresh_state_v2 (social_account_id, status) select id, 'reauth_required' from public.social_accounts where brand_id = %L$$, $$delete from public.x_account_refresh_state_v2 where social_account_id in (select id from public.social_accounts where brand_id = %L)$$, 'CONNECTION_DEGRADED', 'X_REFRESH_REAUTH_REQUIRED');
 
@@ -151,7 +152,7 @@ begin
     update public.social_accounts set publish_enabled = true where id = 'sa_main';
     v_runtime := public.fixture_permission(v_post, 'sa_main', v_ws);
     update public.social_accounts set publish_enabled = false where id = 'sa_main';
-    if c.runtime is not null and v_runtime is distinct from c.runtime then
+    if v_runtime is distinct from c.runtime then
       raise exception 'FAIL runtime with % -> % (expected %)', c.label, v_runtime, c.runtime;
     end if;
     if c.restore_sql is not null then
@@ -179,6 +180,13 @@ select public.fixture_check(
 select public.fixture_toggle(:'owner', 'sa_main', false, true) ->> 'status' as s \gset
 select public.fixture_check(:'s' = 'updated', 'back to OFF');
 select id as post from public.scheduled_posts where brand_id = :'ws' and status = 'running' limit 1 \gset
+-- A blank recorded error code is no error, for ON and for the publish path alike.
+update public.social_accounts set last_connection_error_code = '   ' where id = 'sa_main';
+select public.fixture_toggle(:'owner', 'sa_main', true, false) ->> 'status' as s \gset
+select public.fixture_permission(:'post', 'sa_main', :'ws') as p \gset
+select public.fixture_check(:'s' = 'updated' and :'p' = 'authorized', 'a blank connection error code blocks neither ON nor the send');
+select public.fixture_toggle(:'owner', 'sa_main', false, true) ->> 'status' as s \gset
+update public.social_accounts set last_connection_error_code = null where id = 'sa_main';
 insert into public.x_account_refresh_state_v2
   (social_account_id, status, lease_token, lease_kind, lease_post_id, lease_post_attempt, leased_at)
 values ('sa_main', 'refreshing', gen_random_uuid(), 'legacy_post', :'post', 1, now());

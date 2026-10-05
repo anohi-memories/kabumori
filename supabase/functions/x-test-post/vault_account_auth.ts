@@ -31,7 +31,10 @@
  * minutes old by the time the post is sent. Every X write here is therefore
  * immediately preceded by a fresh database check for the exact post + account
  * (brand active and live, account publish_enabled and still the verified
- * account, no account deletion, refresh state not blocked). The check is the
+ * account with its verification stamp, no recorded connection error, no
+ * account deletion, refresh state not blocked: everything ON requires). A
+ * recorded connection error therefore stops this account's sends until it is
+ * reconnected; a refresh in progress does not refuse. The check is the
  * last thing awaited before the request callback; if it refuses or cannot be
  * reached, the request is not made. A request is "in flight" from the moment
  * its check returned: an OFF committed after that does not recall it, and no

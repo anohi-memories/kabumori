@@ -5,10 +5,16 @@
 //   POST /rest/v1/rpc/set_social_account_publish_enabled      as `authenticated`, JWT subject set
 //   POST /rest/v1/rpc/read_x_publish_credential_for_legacy_post
 //   POST /rest/v1/rpc/assert_x_publish_permission_for_legacy_post   as `service_role`
+//   POST /rest/v1/rpc/{begin,commit}_x_account_refresh_legacy_post, release_x_account_refresh_v2,
+//        record_x_account_{access_unauthorized,rejected_after_refresh}   as `service_role` (token refresh)
 //   GET  /rest/v1/{brands,social_accounts,brand_settings}?<col>=eq.<v>   as `service_role` (brand context)
 //   POST /__fixture/brand                      test-only: set is_active / publish_mode of one brand
-// Each call is its own transaction, like the Data API. Refuses anything else, refuses non-/tmp socket
-// hosts, binds to 127.0.0.1 only. Started by social_mobile_publish_permission_run.sh (PUB_E2E=1).
+//   POST /__fixture/account                    test-only: set verified_at / last_connection_error_code
+//   POST /__fixture/refresh_rollout            test-only: enable token refresh for one account
+// A function that does not exist (the migration not applied yet) is answered like PostgREST does:
+// 404 PGRST202. Each call is its own transaction, like the Data API. Refuses anything else, refuses
+// non-/tmp socket hosts, binds to 127.0.0.1 only. Started by social_mobile_publish_permission_run.sh
+// (PUB_E2E=1).
 const host = Deno.env.get("PUB_PGHOST") ?? "";
 if (!/^\/(private\/)?tmp\//u.test(host)) throw new Error("Refusing: PUB_PGHOST must be a local /tmp socket directory");
 const port = Deno.env.get("PUB_PGPORT") ?? "";
@@ -37,11 +43,17 @@ async function psql(sql: string): Promise<{ ok: boolean; out: string; err: strin
   return { ok: result.success, out: new TextDecoder().decode(result.stdout).trim(), err: new TextDecoder().decode(result.stderr).trim() };
 }
 
-function literal(value: unknown, type: "text" | "boolean" | "uuid"): string {
+type ArgType = "text" | "boolean" | "uuid" | "integer";
+
+function literal(value: unknown, type: ArgType): string {
   if (value === null || value === undefined) return `null::${type}`;
   if (type === "boolean") {
     if (typeof value !== "boolean") throw new Error("bad argument");
     return value ? "true" : "false";
+  }
+  if (type === "integer") {
+    if (!Number.isSafeInteger(value)) throw new Error("bad argument");
+    return `${value}::integer`;
   }
   if (typeof value !== "string") throw new Error("bad argument");
   let tag = "a";
@@ -49,7 +61,8 @@ function literal(value: unknown, type: "text" | "boolean" | "uuid"): string {
   return `$${tag}$${value}$${tag}$::${type}`;
 }
 
-type RpcSpec = { role: "authenticated" | "service_role"; args: Record<string, "text" | "boolean" | "uuid">; rows: boolean };
+type RpcSpec = { role: "authenticated" | "service_role"; args: Record<string, ArgType>; rows: boolean };
+const POST_ARGS: Record<string, ArgType> = { p_scheduled_post_id: "uuid", p_social_account_id: "text", p_brand_id: "text" };
 const RPC: Record<string, RpcSpec> = {
   set_social_account_publish_enabled: {
     role: "authenticated",
@@ -66,6 +79,19 @@ const RPC: Record<string, RpcSpec> = {
     args: { p_scheduled_post_id: "uuid", p_social_account_id: "text", p_brand_id: "text" },
     rows: false,
   },
+  begin_x_account_refresh_legacy_post: { role: "service_role", args: POST_ARGS, rows: true },
+  commit_x_account_refresh_legacy_post: {
+    role: "service_role",
+    args: { p_lease_token: "uuid", p_social_account_id: "text", p_access_token: "text", p_refresh_token: "text", p_expires_in: "integer" },
+    rows: false,
+  },
+  release_x_account_refresh_v2: {
+    role: "service_role",
+    args: { p_lease_token: "uuid", p_social_account_id: "text", p_outcome: "text", p_error_code: "text" },
+    rows: false,
+  },
+  record_x_account_access_unauthorized: { role: "service_role", args: POST_ARGS, rows: false },
+  record_x_account_rejected_after_refresh: { role: "service_role", args: POST_ARGS, rows: false },
 };
 
 const TABLES: Record<string, string> = {
@@ -114,6 +140,9 @@ Deno.serve({ hostname: "127.0.0.1", port: Number(Deno.env.get("SHIM_PORT") ?? "5
       const result = await psql(`begin;\n${prelude}\n${call}\ncommit;\n`);
       if (!result.ok) {
         const message = /ERROR:\s+(.*)/u.exec(result.err)?.[1] ?? "error";
+        if (/^function public\.\w+\(.*\) does not exist$/u.test(message)) {
+          return json({ code: "PGRST202", message: `Could not find the function public.${rpc[1]} in the schema cache` }, 404);
+        }
         return json({ code: "P0001", message }, 400);
       }
       const lines = result.out.split("\n").filter((line) => line.trim() !== "");
@@ -142,6 +171,31 @@ Deno.serve({ hostname: "127.0.0.1", port: Number(Deno.env.get("SHIM_PORT") ?? "5
       if (typeof body.id !== "string" || typeof body.is_active !== "boolean" || typeof body.publish_mode !== "string") return json({}, 400);
       const result = await psql(
         `update public.brands set is_active = ${literal(body.is_active, "boolean")}, publish_mode = ${literal(body.publish_mode, "text")} where id = ${literal(body.id, "text")};\n`,
+      );
+      return result.ok ? json({ ok: true }) : json({ code: "XX000" }, 500);
+    }
+
+    // Test-only: an account's verification stamp and recorded connection error.
+    if (request.method === "POST" && url.pathname === "/__fixture/account") {
+      if (!isService(request)) return json({ code: "42501" }, 403);
+      const body = await request.json() as { id?: unknown; verified?: unknown; error_code?: unknown };
+      if (typeof body.id !== "string" || typeof body.verified !== "boolean" || (body.error_code !== null && typeof body.error_code !== "string")) {
+        return json({}, 400);
+      }
+      const result = await psql(
+        `update public.social_accounts set verified_at = ${body.verified ? "now()" : "null"}, ` +
+          `last_connection_error_code = ${literal(body.error_code, "text")} where id = ${literal(body.id, "text")};\n`,
+      );
+      return result.ok ? json({ ok: true }) : json({ code: "XX000" }, 500);
+    }
+
+    // Test-only: the operator enables token refresh for one account (Stage 3A rollout row).
+    if (request.method === "POST" && url.pathname === "/__fixture/refresh_rollout") {
+      if (!isService(request)) return json({ code: "42501" }, 403);
+      const body = await request.json() as { id?: unknown };
+      if (typeof body.id !== "string") return json({}, 400);
+      const result = await psql(
+        `insert into public.x_account_refresh_rollout (social_account_id, mode, reason_code) values (${literal(body.id, "text")}, 'enabled', 'E2E_FIXTURE');\n`,
       );
       return result.ok ? json({ ok: true }) : json({ code: "XX000" }, 500);
     }

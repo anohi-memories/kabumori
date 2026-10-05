@@ -10,8 +10,10 @@ import assert from "node:assert/strict";
 import { createHandler } from "../functions/social-mobile-publish-setting/http.ts";
 import { loadBrandContext } from "../functions/_shared/brand/brand_context.ts";
 import { assertBrandPublishAllowed } from "../functions/_shared/brand/publish_guard.ts";
+import { xOAuthClientRegistryFromEnv } from "../functions/_shared/x_v2_account_refresh.ts";
 import {
   createVaultAccountCredentialRpc,
+  type VaultAccountCredentialRpc,
   type VaultAccountRef,
   VaultAccountXAuth,
   type XRequestResult,
@@ -70,6 +72,68 @@ async function loadSender(ws: { brand: string; account: string; post: string }) 
 }
 const rejectsWith = (promise: Promise<unknown>, code: string) =>
   assert.rejects(promise, (error: unknown) => error instanceof Error && error.message === code);
+
+async function fixtureCall(path: string, body: Record<string, unknown>) {
+  const response = await fetch(`${shimUrl}/__fixture/${path}`, {
+    method: "POST",
+    headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  assert.equal(response.status, 200, path);
+  await response.body?.cancel();
+}
+const setAccount = (id: string, verified: boolean, errorCode: string | null) =>
+  fixtureCall("account", { id, verified, error_code: errorCode });
+
+/**
+ * The send step with token refresh ON (the real begin/commit SQL, a fake X token endpoint). X accepts
+ * only the refreshed token, so the first request is answered 401. `timeline` records every permission
+ * check and every X request in order; `afterRefresh` runs when the refreshed credential is read back,
+ * i.e. after the refresh committed and before the retry's permission check.
+ */
+async function loadRefreshingSender(ws: { brand: string; account: string; post: string }, afterRefresh?: () => Promise<void>) {
+  await fixtureCall("refresh_rollout", { id: ws.account });
+  const timeline: string[] = [];
+  const base = createVaultAccountCredentialRpc({ supabaseUrl: shimUrl, serviceRoleKey: serviceKey });
+  let reads = 0;
+  const rpc: VaultAccountCredentialRpc = {
+    ...base,
+    read: async (ref) => {
+      timeline.push("read");
+      const credential = await base.read(ref);
+      if (++reads === 2) await afterRefresh?.();
+      return credential;
+    },
+    assertPublishPermission: (ref) => {
+      timeline.push("permission");
+      return base.assertPublishPermission(ref);
+    },
+    begin: (ref) => {
+      timeline.push("begin");
+      return base.begin(ref);
+    },
+    commit: (lease, ref, access, refresh, expiresIn) => {
+      timeline.push("commit");
+      return base.commit(lease, ref, access, refresh, expiresIn);
+    },
+  };
+  const refreshed = "fake_e2e_refreshed_ACCESS";
+  const tokenEndpoint: typeof fetch = (input) => {
+    assert.equal(String(input), "https://api.x.com/2/oauth2/token");
+    return Promise.resolve(Response.json({ access_token: refreshed, refresh_token: "fake_e2e_refreshed_REFRESH", expires_in: 7200 }));
+  };
+  const auth = await VaultAccountXAuth.load({ scheduledPostId: ws.post, socialAccountId: ws.account, brandId: ws.brand }, rpc, {
+    resolveClient: xOAuthClientRegistryFromEnv((key) => ({ X_CLIENT_ID: "cid", X_CLIENT_SECRET: "csecret" } as Record<string, string>)[key]),
+    refreshEnabled: true,
+    fetchImpl: tokenEndpoint,
+  });
+  const request = (accessToken: string): Promise<XRequestResult> => {
+    const status = accessToken === refreshed ? 201 : 401;
+    timeline.push(`x:${status}`);
+    return Promise.resolve({ status, body: status === 201 ? { data: { id: "x_fake" } } : {} });
+  };
+  return { auth, request, timeline };
+}
 
 const e2e = (name: string, fn: (f: NonNullable<typeof fixture>) => Promise<void>) =>
   Deno.test({ name, ignore: !enabled, fn: () => fn(fixture!) });
@@ -163,4 +227,51 @@ e2e("stale cached account ON: the owner switches OFF during generation -> the se
   assertBrandPublishAllowed(cached);
   await rejectsWith(first.auth.send(first.request), "X_ACCOUNT_PUBLISH_DISABLED");
   assert.deepEqual(first.sends, ["fake-token"]);
+});
+
+// H2 F1: states ON refuses must be refused at send time too, by the final check itself.
+for (const [label, key, verified, errorCode, sendRefusal, onRefusal] of [
+  ["verified_at missing", "f1v", false, null, "X_ACCOUNT_NOT_VERIFIED", "CONNECTION_NOT_VERIFIED"],
+  ["a recorded connection error", "f1e", true, "X_ACCESS_TOKEN_UNAUTHORIZED", "X_ACCOUNT_CONNECTION_DEGRADED", "CONNECTION_DEGRADED"],
+] as const) {
+  e2e(`F1 ${label}: the send is refused with zero X requests, OFF still works, ON is refused for the same reason`, async (f) => {
+    const ws = f.workspaces[key];
+    assert.equal((await toggle(f.owner, ws.account, true, false)).status, 200);
+    const cached = await context(ws.brand);
+    assertBrandPublishAllowed(cached);
+    const { auth, sends, request } = await loadSender(ws); // loaded while eligible
+    await setAccount(ws.account, verified, errorCode); // ... and degraded before the send
+    await rejectsWith(auth.send(request), sendRefusal);
+    assert.deepEqual(sends, [], "nothing was sent to X");
+    assert.deepEqual(await toggle(f.owner, ws.account, false, true), {
+      status: 200, body: { success: true, status: "updated", account: { id: ws.account, publish_enabled: false } },
+    });
+    assert.deepEqual(await toggle(f.owner, ws.account, true, false), {
+      status: 409, body: { success: false, error: onRefusal, reconnect_recommended: true },
+    });
+    // Restored, the same account is eligible and sendable again.
+    await setAccount(ws.account, true, null);
+    assert.equal((await toggle(f.owner, ws.account, true, false)).status, 200);
+    const again = await loadSender(ws);
+    assert.equal((await again.auth.send(again.request)).status, 201);
+    assert.deepEqual(again.sends, ["fake-token"]);
+  });
+}
+
+e2e("401 -> refresh -> retry with the real refresh SQL: every X request is directly preceded by a fresh permission check", async (f) => {
+  const ws = f.workspaces.retry;
+  assert.equal((await toggle(f.owner, ws.account, true, false)).status, 200);
+  const { auth, request, timeline } = await loadRefreshingSender(ws);
+  assert.equal((await auth.send(request)).status, 201);
+  assert.deepEqual(timeline, ["read", "permission", "x:401", "begin", "commit", "read", "permission", "x:201"]);
+});
+
+e2e("OFF lands after the refresh committed and before the retry: the retry's own check refuses it; X saw only the rejected first request", async (f) => {
+  const ws = f.workspaces.retryoff;
+  assert.equal((await toggle(f.owner, ws.account, true, false)).status, 200);
+  const { auth, request, timeline } = await loadRefreshingSender(ws, async () => {
+    assert.equal((await toggle(f.owner, ws.account, false, true)).status, 200);
+  });
+  await rejectsWith(auth.send(request), "X_ACCOUNT_PUBLISH_DISABLED");
+  assert.deepEqual(timeline, ["read", "permission", "x:401", "begin", "commit", "read", "permission"]);
 });

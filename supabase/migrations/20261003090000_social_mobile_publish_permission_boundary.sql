@@ -1,8 +1,12 @@
 -- SOURCE CANDIDATE ONLY. NOT applied to production. Independent review is
 -- mandatory before any apply; apply as a single reviewed file (never db push).
--- Apply BEFORE deploying an x-test-post build that calls
--- assert_x_publish_permission_for_legacy_post: until this file is applied that
--- call fails and every Vault-backed post fails closed.
+-- Rollout order (supabase/tests/social_mobile_publish_permission.md, section 6):
+-- the x-test-post build that calls assert_x_publish_permission_for_legacy_post
+-- is deployed, read back and drained of older invocations FIRST; while this
+-- file is not applied that call fails and every Vault-backed post fails
+-- closed. Only then is this file applied. Applying it first would make the
+-- switch usable (directly, with any caller JWT) while an older sender that
+-- never asks for permission may still be running.
 --
 -- The one transactional boundary for per-account automatic publishing
 -- (public.social_accounts.publish_enabled), plus the fresh permission check
@@ -47,16 +51,33 @@
 --    service_role only. The existing exact-account contract
 --    (x_legacy_post_account) plus, in ONE statement and therefore one
 --    snapshot: post still running for this brand, brand active and live,
---    account publish_enabled, identity verified, credential references
---    present and distinct, no account deletion in progress, refresh state not
---    blocked. The publish path calls it directly before every X write, so a
+--    account publish_enabled, identity verified (status, non-blank platform
+--    user id AND verified_at), credential references present and distinct,
+--    no account deletion in progress, refresh state not blocked, and no
+--    recorded connection error. Every structural condition ON requires is
+--    therefore required again here, on the state at send time; the helper is
+--    not relied on for any of them. A refresh in progress is not a refusal.
+--    The publish path calls it directly before every X write, so a
 --    brand/account context cached earlier in the dispatch cannot authorize a
 --    send. A send is "in flight" from the moment this check returns; OFF or a
 --    brand disable committed before the check's snapshot stops the send, one
 --    committed after it does not recall a request already on its way to X.
 --
+-- 3. Privileges, exact and effective. Both functions are created by, and run
+--    as, the role that owns x_legacy_post_account (whose EXECUTE is
+--    owner-only); that role must not be a superuser. Whatever the creating
+--    role's default privileges add on these two new functions is removed
+--    from them (only them: no ALTER DEFAULT PRIVILEGES, no role membership
+--    change). Before COMMIT the file proves the result, including privileges
+--    inherited through role membership: PUBLIC and anon nothing,
+--    authenticated only the switch, service_role only the check, and no
+--    other role able to execute either one except the owner, roles that
+--    inherit the owner, roles that inherit the intended grantee (they act as
+--    that role) and superusers. Any other state aborts the whole file.
+--
 -- Transaction: one explicit transaction; apply alone with a tool that does NOT
--- wrap the file in another transaction; not re-runnable.
+-- wrap the file in another transaction; not re-runnable. A refusal at any
+-- point leaves nothing behind.
 begin;
 
 do $$
@@ -85,6 +106,19 @@ begin
   if to_regprocedure('public.set_social_account_publish_enabled(text,boolean,boolean)') is not null
      or to_regprocedure('public.assert_x_publish_permission_for_legacy_post(uuid,text,text)') is not null then
     raise exception 'PUBLISH_PERMISSION_PRECONDITION_ALREADY_APPLIED';
+  end if;
+  if to_regrole('anon') is null or to_regrole('authenticated') is null or to_regrole('service_role') is null then
+    raise exception 'PUBLISH_PERMISSION_PRECONDITION_ROLES';
+  end if;
+  -- The creator becomes the owner the two SECURITY DEFINER functions run as:
+  -- the exact-account helper's owner, never a superuser.
+  if (select p.proowner from pg_catalog.pg_proc p
+      where p.oid = 'public.x_legacy_post_account(uuid,text,text,boolean)'::regprocedure)
+       is distinct from (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user) then
+    raise exception 'PUBLISH_PERMISSION_PRECONDITION_OWNER';
+  end if;
+  if (select r.rolsuper from pg_catalog.pg_roles r where r.rolname = current_user) is distinct from false then
+    raise exception 'PUBLISH_PERMISSION_PRECONDITION_OWNER';
   end if;
 end $$;
 
@@ -274,13 +308,19 @@ begin
       when b.publish_mode is distinct from 'live' then 'BRAND_PUBLISH_MODE_DISABLED'
       when sa.publish_enabled is distinct from true then 'X_ACCOUNT_PUBLISH_DISABLED'
       when sa.platform is distinct from 'x' or sa.connection_status is distinct from 'identity_verified'
-        or nullif(btrim(sa.platform_user_id), '') is null then 'X_ACCOUNT_NOT_VERIFIED'
+        or nullif(btrim(sa.platform_user_id), '') is null
+        or sa.verified_at is null then 'X_ACCOUNT_NOT_VERIFIED'
       when sa.vault_access_token_secret_id is null or sa.vault_refresh_token_secret_id is null
         or sa.vault_access_token_secret_id = sa.vault_refresh_token_secret_id then 'X_CREDENTIAL_NOT_CONFIGURED'
       when exists (select 1 from public.social_mobile_account_deletions d where d.workspace_id = sa.brand_id)
         then 'SOCIAL_MOBILE_ACCOUNT_DELETION_IN_PROGRESS'
       when st.status = 'uncertain' then 'X_REFRESH_BLOCKED_UNCERTAIN'
       when st.status = 'reauth_required' then 'X_REFRESH_REAUTH_REQUIRED'
+      -- A recorded connection error (an unauthorized access token, a refresh
+      -- the token endpoint refused): the same state ON refuses. A completed
+      -- reconnection clears it; until then no send is authorized, so no
+      -- refresh is attempted for this account either.
+      when nullif(btrim(sa.last_connection_error_code), '') is not null then 'X_ACCOUNT_CONNECTION_DEGRADED'
       else 'authorized'
     end
   into v_code
@@ -302,13 +342,80 @@ exception
 end;
 $$;
 
--- Least privilege. The switch is for signed-in app users only (it is useless
--- without auth.uid(), so service_role is deliberately not granted); the
--- permission check is for the publishing service only.
+-- 3. Least privilege. The switch is for signed-in app users only (it is
+-- useless without auth.uid(), so service_role is deliberately not granted);
+-- the permission check is for the publishing service only.
 revoke all on function public.set_social_account_publish_enabled(text, boolean, boolean),
   public.assert_x_publish_permission_for_legacy_post(uuid, text, text)
 from public, anon, authenticated, service_role;
+
+-- Any other grantee the creating role's default privileges put on these two
+-- functions (any role, with or without grant option) is removed from them.
+do $$
+declare
+  r record;
+begin
+  for r in
+    select distinct f.signature, a.grantee
+    from (values ('public.set_social_account_publish_enabled(text,boolean,boolean)'),
+                 ('public.assert_x_publish_permission_for_legacy_post(uuid,text,text)')) f (signature)
+    join pg_catalog.pg_proc p on p.oid = f.signature::regprocedure
+    cross join pg_catalog.aclexplode(p.proacl) a
+    where a.grantee <> p.proowner
+  loop
+    execute format('revoke all on function %s from %s', r.signature,
+      case when r.grantee = 0 then 'public' else quote_ident(pg_catalog.pg_get_userbyid(r.grantee)) end);
+  end loop;
+end $$;
+
 grant execute on function public.set_social_account_publish_enabled(text, boolean, boolean) to authenticated;
 grant execute on function public.assert_x_publish_permission_for_legacy_post(uuid, text, text) to service_role;
+
+-- Postcondition: exact and effective EXECUTE. Raises (and so aborts the whole
+-- file) unless the privileges are exactly the intended ones.
+do $$
+declare
+  v_switch oid := 'public.set_social_account_publish_enabled(text,boolean,boolean)'::regprocedure;
+  v_check oid := 'public.assert_x_publish_permission_for_legacy_post(uuid,text,text)'::regprocedure;
+  v_owner oid := (select p.proowner from pg_catalog.pg_proc p
+                  where p.oid = 'public.x_legacy_post_account(uuid,text,text,boolean)'::regprocedure);
+  v_authenticated oid := 'authenticated'::regrole;
+  v_service oid := 'service_role'::regrole;
+begin
+  -- Definition: owned by the exact-account helper's owner, SECURITY DEFINER, empty search_path.
+  if (select count(*) from pg_catalog.pg_proc p
+      where p.oid in (v_switch, v_check) and p.proowner = v_owner and p.prosecdef
+        and p.proconfig @> array['search_path=""']) <> 2 then
+    raise exception 'PUBLISH_PERMISSION_EFFECTIVE_ACL';
+  end if;
+  -- Direct grants: besides the owner, exactly one plain EXECUTE each, nothing for PUBLIC.
+  if exists (
+       select 1 from pg_catalog.pg_proc p, pg_catalog.aclexplode(p.proacl) a
+       where p.oid in (v_switch, v_check) and a.grantee <> p.proowner
+         and not (a.privilege_type = 'EXECUTE' and not a.is_grantable
+                  and ((p.oid = v_switch and a.grantee = v_authenticated) or (p.oid = v_check and a.grantee = v_service))))
+     or (select count(*) from pg_catalog.pg_proc p, pg_catalog.aclexplode(p.proacl) a
+         where p.oid = v_switch and a.grantee = v_authenticated) <> 1
+     or (select count(*) from pg_catalog.pg_proc p, pg_catalog.aclexplode(p.proacl) a
+         where p.oid = v_check and a.grantee = v_service) <> 1 then
+    raise exception 'PUBLISH_PERMISSION_EFFECTIVE_ACL';
+  end if;
+  -- Effective privileges of the app roles, inherited ones included.
+  if has_function_privilege('anon', v_switch, 'execute') or has_function_privilege('anon', v_check, 'execute')
+     or not has_function_privilege('authenticated', v_switch, 'execute')
+     or has_function_privilege('authenticated', v_check, 'execute')
+     or not has_function_privilege('service_role', v_check, 'execute')
+     or has_function_privilege('service_role', v_switch, 'execute') then
+    raise exception 'PUBLISH_PERMISSION_EFFECTIVE_ACL';
+  end if;
+  -- Every other role: only by inheriting the owner or the intended grantee.
+  if exists (
+       select 1 from pg_catalog.pg_roles r
+       where not r.rolsuper and not pg_has_role(r.oid, v_owner, 'usage')
+         and ((has_function_privilege(r.oid, v_switch, 'execute') and not pg_has_role(r.oid, v_authenticated, 'usage'))
+           or (has_function_privilege(r.oid, v_check, 'execute') and not pg_has_role(r.oid, v_service, 'usage')))) then
+    raise exception 'PUBLISH_PERMISSION_EFFECTIVE_ACL';
+  end if;
+end $$;
 
 commit;

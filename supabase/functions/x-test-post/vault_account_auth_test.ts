@@ -28,6 +28,8 @@ type Account = {
   connection: "identity_verified" | "failed"; errorCode: string | null; publish: boolean;
   /** Stage 3A rollout authority; anything but null refuses begin before any Vault read. */
   rolloutRefusal: string | null;
+  /** verified_at is set (identity verification stamp). */
+  verified?: boolean;
 };
 
 /**
@@ -88,9 +90,11 @@ class FakeCoreDb implements VaultAccountCredentialRpc {
     if (!brand) throw new Error("BRAND_NOT_FOUND");
     if (!brand.active) throw new Error("BRAND_DISABLED");
     if (brand.mode !== "live") throw new Error(brand.mode === "dry_run" ? "BRAND_PUBLISH_MODE_DRY_RUN" : "BRAND_PUBLISH_MODE_DISABLED");
+    if (a.verified === false) throw new Error("X_ACCOUNT_NOT_VERIFIED");
     if (this.deleting.has(a.brand)) throw new Error("SOCIAL_MOBILE_ACCOUNT_DELETION_IN_PROGRESS");
     if (a.state === "uncertain") throw new Error("X_REFRESH_BLOCKED_UNCERTAIN");
     if (a.state === "reauth_required") throw new Error("X_REFRESH_REAUTH_REQUIRED");
+    if (a.errorCode?.trim()) throw new Error("X_ACCOUNT_CONNECTION_DEGRADED");
   }
   async read(ref: VaultAccountRef) {
     this.calls.push("read");
@@ -354,6 +358,9 @@ test("the same post attempt cannot refresh twice even across auth instances", as
   await rejects((await load(db, AI, x.fetchImpl)).send(x.request), "X_ACCESS_TOKEN_REJECTED_AFTER_REFRESH");
   db.accounts.ai_salaryman_lab_x.state = "idle";  // operator reset without reconnect
   db.accounts.ai_salaryman_lab_x.connection = "identity_verified";
+  // The recorded error is still there: the send-time permission check refuses first (H2 F1).
+  await rejects((await load(db, AI, x.fetchImpl)).send(x.request), "X_ACCOUNT_CONNECTION_DEGRADED");
+  db.accounts.ai_salaryman_lab_x.errorCode = null;  // ... and the reset cleared it too
   await rejects((await load(db, AI, x.fetchImpl)).send(x.request), "X_REFRESH_ALREADY_USED_FOR_ATTEMPT");
   assert.equal(x.tokenCalls.length, 1);
 });
@@ -654,6 +661,49 @@ test("the exact account must still be the brand's verified account at send time"
     await rejects(loaded.send(x.request), code);
     assert.deepEqual(x.creates, [], code);
   }
+});
+
+test("H2 F1: a missing verified_at or a recorded connection error at send time is refused before any X or token request", async () => {
+  const now = Date.parse("2026-10-05T00:00:00Z");
+  for (const [change, code] of [
+    [(a: Account) => { a.verified = false; }, "X_ACCOUNT_NOT_VERIFIED"],
+    [(a: Account) => { a.errorCode = "X_ACCESS_TOKEN_UNAUTHORIZED"; }, "X_ACCOUNT_CONNECTION_DEGRADED"],
+    [(a: Account) => { a.errorCode = "X_REFRESH_RATE_LIMITED"; }, "X_ACCOUNT_CONNECTION_DEGRADED"],
+  ] as const) {
+    const db = new FakeCoreDb();
+    // An expiring token: a proactive refresh would run if the check did not refuse first.
+    db.accounts.ai_salaryman_lab_x.expiresAt = new Date(now + 60_000).toISOString();
+    const x = timedX(db, [Response.json({ access_token: "tok_AI_new" })], new Set(["tok_AI_expired", "tok_AI_new"]));
+    const auth = await load(db, AI, x.fetchImpl, true, () => now);
+    change(db.accounts.ai_salaryman_lab_x);
+    await rejects(auth.send(x.request), code);
+    assert.deepEqual(x.creates, [], code);
+    assert.equal(x.tokenCalls.length, 0, code);
+    assert.deepEqual(db.timeline, ["read", "permission"], code);
+  }
+  // A blank code is no error.
+  const blank = new FakeCoreDb();
+  blank.accounts.ai_salaryman_lab_x.access = "tok_AI_valid";
+  blank.accounts.ai_salaryman_lab_x.errorCode = "  ";
+  const bx = timedX(blank, [], new Set(["tok_AI_valid"]));
+  assert.equal((await (await load(blank, AI, bx.fetchImpl)).send(bx.request)).status, 201);
+});
+
+test("H2 F1 consequence: a 401 recorded without a refresh stops the account's next attempt before X; a committed refresh clears the error before the retry's check", async () => {
+  const db = new FakeCoreDb();
+  const x = timedX(db, [], new Set(["tok_AI_valid"]));
+  await rejects((await load(db, AI, x.fetchImpl, false)).send(x.request), "X_ACCESS_TOKEN_UNAUTHORIZED");
+  assert.equal(db.accounts.ai_salaryman_lab_x.errorCode, "X_ACCESS_TOKEN_UNAUTHORIZED");
+  db.posts.post_ai.attempt = 2; // the next attempt of the same post
+  await rejects((await load(db, AI, x.fetchImpl, false)).send(x.request), "X_ACCOUNT_CONNECTION_DEGRADED");
+  assert.deepEqual(x.creates, ["tok_AI_expired"], "only the first (rejected) request reached X");
+
+  // Refresh enabled: the reactive refresh commits (clearing the error) before the retry's own check.
+  const refreshing = new FakeCoreDb();
+  const rx = timedX(refreshing, [Response.json({ access_token: "tok_AI_new", refresh_token: "rt_AI_2" })], new Set(["tok_AI_new"]));
+  assert.equal((await (await load(refreshing, AI, rx.fetchImpl)).send(rx.request)).status, 201);
+  assert.equal(refreshing.accounts.ai_salaryman_lab_x.errorCode, null);
+  assert.ok(precededByPermission(refreshing.timeline), refreshing.timeline.join(","));
 });
 
 test("fail closed: a permission check that cannot be reached or answers anything unexpected sends nothing", async () => {
