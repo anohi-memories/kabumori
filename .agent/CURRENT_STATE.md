@@ -1,3 +1,14 @@
+## AI Lab PR #82 rollout continuation -> G3
+
+- source implementation/review/main merge are complete.
+- production read-only preflight passed catalog/owner prerequisites; production mutation is still 0.
+- remaining blocker is operational: accepted migration owns its own COMMIT, so schema apply and CLI history insertion are not one atomic transaction.
+- chosen next step is **not another review**. G3 will create a bounded schema-first/history-second operator runner/runbook and prove failure states locally without editing the accepted migration/runtime.
+- G3 task: `ai-lab-pr82-production-rollout-runner-20261005`.
+- recommended Claude model: **Sonnet5（高）**.
+- future review policy: no automatic Sol. If K3 is clean and changes are only rollout tooling/docs/tests, prefer no extra review or one focused **Luna（高）** at most.
+- production migration/history writes, deploy, real X/OpenAI/Vault/OAuth/Cron changes remain forbidden in this task.
+
 ## Common Account hosted Gate B complete -> H1 final review — 2026-10-05
 
 - disposable hosted Supabase `common-account-gateb-20261005` accepted the exact merged Phase 1 migration.
