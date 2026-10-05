@@ -4,7 +4,7 @@
 - owner: claude
 - slot: claude-1
 - status: review_required
-- next_owner: chatgpt
+- next_owner: user
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: ユーザーがG1へ直接渡す「かぶモリ学習ノート / PERって何？」のUI見本画像を正本ベースに、現在のtopic detail機能・50トピック本文・fetch安全性を変えず、詳細画面の見た目だけを最終仕上げする。
@@ -489,7 +489,29 @@ No content/DB/RPC/Auth/AI/API/Edge/native/EAS change; no new dependency or asset
 ### next_recommendation
 User reviews the branch live on the iPhone (server provided); K1 reviews PR #84 after that or in parallel (UI-only, low risk). Restore the iOS Simulator runtime when convenient so future UI tasks regain Simulator verification.
 
-Status: `review_required` / next_owner `chatgpt`. STOP for K1.
+Status: `review_required` / next_owner `user`.
+
+### K1 — CODE PASS / VISUAL HOLD
+- verdict: **HOLD pending real-device visual acceptance**.
+- PR #84 exact reviewed head: `c9c173c153cbfd11229c9281b892d732728c3cd3`.
+- fresh main at K1: `45c964701cc6117f42eb75616c6640448c8f7bac`.
+- GitHub fresh state: `mergeable=true`, `mergeable_state=clean`.
+- main advanced 11 commits from the PR head's merge-base; **0 overlap** with the four topic-detail PR files.
+- code/safety side accepted: 294/294 app tests, Expo config/export PASS, diff clean, no catalog/Home/backend/DB/RPC/API/AI/Auth/Edge/native/EAS change.
+- visual acceptance is **not complete** because no iOS Simulator runtime was available and no 402pt/375pt screenshots from the final implementation exist.
+- must visually verify on a real iPhone before merge:
+  - Hero long-title wrapping at narrow width;
+  - canonical art + left-to-right wash / bottom fade seam;
+  - beginner/intermediate/advanced balance;
+  - numbered-section rhythm and body indentation;
+  - example/takeaway density;
+  - 🌱 / 💡 rendering and whether they look polished enough for Kabumori.
+- Codex review: **not required** for this UI-only task.
+- merge/deploy: HOLD.
+- AI Lab diary: **記録不要（現時点）** — user-facing visual change is not yet accepted/merged.
+- next: user opens the PR branch on iPhone and shares/approves the actual screen; then ChatGPT can finalize K1 or return a small corrective to G1.
+
+No production mutation. No merge.
 
 ---
 
