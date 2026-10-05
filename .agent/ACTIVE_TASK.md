@@ -71,13 +71,13 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: done
 - task_id: x-social-mobile-pr81-production-schema-gate-20261005
 - start_code: G3
 - finish_code: K3
-- next_owner: claude
+- next_owner: none
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: Resume the original post-review G3 path: production read-only preflight and ordered rollout gate for merged PR #81 content-settings schema. Do not apply ahead of pending earlier PR #76 migration by assumption. Freeze exact reviewed two-file atomic apply package, then STOP for fresh explicit production approval before any write. After approved apply + read-back PASS, PR #78 AI consultation may receive a separate fresh-main continuation task. Recommended Opus5.5（高）. No automatic extra Codex review after an exact clean apply/read-back.
+- allocation: Final K3 = intentional read-only HOLD. PR #81 production preflight is CLEAN, source hashes unchanged, production writes/deploy/X/OpenAI/Vault/OAuth/Cron = 0. Apply package was not frozen because earlier PR #76 migration 20261003090000 is still open/unmerged/unapplied. Do not apply PR #81 ahead by assumption. PR #78 remains blocked. Next orchestration step is K4 for completed PR #76 corrective; after PR #76 disposition is resolved, allocate a fresh G3 continuation for PR #81 production apply gate. No Codex review needed for this read-only HOLD.
 
 ## Claude G4
 - owner: claude
