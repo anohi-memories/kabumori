@@ -35,14 +35,14 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: x-social-mobile-pr81-content-settings-hardening-rereview-20261003
 - start_code: H2
 - finish_code: C2
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Focused rereview of PR #81 exact head 5595fb131813542c55c43bc783af623cdb9ea442. Verify H2 F1-F4 closure: exact JSON/persona DB contract, effective least-privilege ACL/RLS, strictly monotonic updated_at CAS, fail-closed drift guard, real migration transactionality and production catalog compatibility. No merge/apply/deploy/production write. Recommended Sol（高）.
+- allocation: Final C2 accepted CHANGES REQUIRED on PR #81 head 5595fb131813542c55c43bc783af623cdb9ea442. Residual blockers: deferrable PK drift breaks ON CONFLICT writer, helper function owner/EXECUTE ACL drift survives replacement, and historical infinity updated_at defeats strict CAS. Whole-chain production apply atomicity also needs an explicit safe plan. No merge/apply/deploy. H2 free after fresh allocation.
 
 ## Claude G1
 - owner: claude
@@ -70,13 +70,13 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
-- task_id: x-social-mobile-content-settings-schema-hardening-20261003
+- status: ready
+- task_id: x-social-mobile-pr81-hardening-residual-corrective-20261005
 - start_code: G3
 - finish_code: K3
-- next_owner: codex
+- next_owner: claude
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: K3 PASS to focused H2 rereview. PR #81 exact head 5595fb131813542c55c43bc783af623cdb9ea442 is open/mergeable; H2 F1-F4 are reported corrected with local disposable proof. No production apply/deploy/write. H2 review required before merge or any production migration approval. Recommended Sol（高）.
+- allocation: Bounded residual correction for PR #81 after Final C2. Reject deferrable PK/index drift, fail closed on helper function owner/EXECUTE ACL drift, refuse/enforce finite CAS timestamps, and produce a safe whole-chain production apply plan so weak candidate state is never exposed. Preserve closed JSON/RLS/ACL/finite-CAS behavior. No production apply/deploy/write. Recommended Opus5.5（高）. Fresh H2 Sol（高） rereview required after K3.
 
 ## Claude G4
 - owner: claude
