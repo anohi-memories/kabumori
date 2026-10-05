@@ -22,6 +22,7 @@ function entry(overrides: Partial<DevDiaryEntry> = {}): DevDiaryEntry {
     decided: "できないことは隠さず、理由つきで表示することにした。",
     remaining: "同じ考え方を他の画面にも広げる。",
     angles: ["嘘をつかないことを優先した話。"],
+    duplicateLabels: [],
     ...overrides,
   };
 }
@@ -51,6 +52,7 @@ angle: 二つ目の角度。
     decided: "できないことは隠さず、理由つきで表示することにした。",
     remaining: "同じ考え方を他の画面にも広げる。",
     angles: ["一つ目の角度。", "二つ目の角度。"],
+    duplicateLabels: [],
   });
 });
 

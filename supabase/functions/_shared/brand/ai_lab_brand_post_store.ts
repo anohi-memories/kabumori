@@ -133,7 +133,7 @@ export type AiLabTopicPort = {
   claim: () => Promise<AiLabClaimedTopic>;
   /** X へ送る直前に呼ぶ。true の場合だけ X へ進んでよい。 */
   startProvider: (claim: AiLabClaimedTopic) => Promise<boolean>;
-  /** X 前の失敗、または X の明確な拒否（PROVIDER_REJECTED:<status>）での解除。結果の状態を返す。 */
+  /** X 前の失敗、または X が投稿を作らなかったと証明できた失敗（PROVIDER_NO_POST:<evidence>）での解除。結果の状態を返す。 */
   release: (claim: AiLabClaimedTopic, reason: string) => Promise<string>;
   /** X の結果が不明。再開放しない。 */
   markAmbiguous: (claim: AiLabClaimedTopic, reason: string) => Promise<string>;

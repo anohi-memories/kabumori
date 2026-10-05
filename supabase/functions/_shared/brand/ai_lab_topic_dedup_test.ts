@@ -253,21 +253,21 @@ function dispatchWith(texts: string[], extra: Partial<Parameters<typeof dispatch
       scheduledPostId: "schedule-fixture",
       openAiApiKey: "fixture-only",
       topic: {
-        claim: async () => ({ claimId: "00000000-0000-0000-0000-0000000000aa", kind: "evergreen", eventKey: "evergreen-2", unitKey: "evergreen-2", topic: "" }),
-        startProvider: async () => true,
-        release: async () => "RELEASED",
-        markAmbiguous: async () => "AMBIGUOUS",
-        settlePublished: async () => "PUBLISHED",
+        claim: () => Promise.resolve({ claimId: "00000000-0000-0000-0000-0000000000aa", kind: "evergreen", eventKey: "evergreen-2", unitKey: "evergreen-2", topic: "" }),
+        startProvider: () => Promise.resolve(true),
+        release: () => Promise.resolve("RELEASED"),
+        markAmbiguous: () => Promise.resolve("AMBIGUOUS"),
+        settlePublished: () => Promise.resolve("PUBLISHED"),
       },
-      loadRecentFingerprints: async () => [],
-      publishText: async (text) => {
+      loadRecentFingerprints: () => Promise.resolve([]),
+      publishText: (text) => {
         published.push(text);
-        return { data: { id: "x-post-fixture" } };
+        return Promise.resolve({ data: { id: "x-post-fixture" } });
       },
-      completePublishedPost: async () => ({ fingerprintPersisted: true }),
-      generate: async ({ retryViolations }) => {
+      completePublishedPost: () => Promise.resolve({ fingerprintPersisted: true }),
+      generate: ({ retryViolations }) => {
         seenViolations.push(retryViolations);
-        return draftOf(texts[Math.min(call++, texts.length - 1)]);
+        return Promise.resolve(draftOf(texts[Math.min(call++, texts.length - 1)]));
       },
       ...extra,
     });
@@ -310,9 +310,9 @@ async function capturedInstructions(contextBrand: ReturnType<typeof aiLabContext
     postType: "brand_post",
     topicSeed: "固定の題材",
     extraInstructions: extra,
-    fetchImpl: (async (_url: unknown, init?: RequestInit) => {
+    fetchImpl: ((_url: unknown, init?: RequestInit) => {
       instructions = JSON.parse(String(init?.body)).instructions;
-      return new Response(JSON.stringify({ output: [{ content: [{ type: "output_text", text: "本文です。" }] }] }), { status: 200 });
+      return Promise.resolve(new Response(JSON.stringify({ output: [{ content: [{ type: "output_text", text: "本文です。" }] }] }), { status: 200 }));
     }) as typeof fetch,
   });
   return instructions;
@@ -363,9 +363,9 @@ test("countAiLabBrandPostsBefore reads the exact count from content-range and is
     supabaseUrl: "https://example.supabase.co",
     serviceRoleKey: "fixture-key",
     scheduledFor: "2026-10-01T03:00:00+00:00",
-    fetchImpl: (async (url: string, init?: RequestInit) => {
+    fetchImpl: ((url: string, init?: RequestInit) => {
       calls.push({ url: String(url), method: init?.method });
-      return new Response("[]", { status: 206, headers: { "content-range": "0-0/17" } });
+      return Promise.resolve(new Response("[]", { status: 206, headers: { "content-range": "0-0/17" } }));
     }) as typeof fetch,
   });
   assert.equal(count, 17);
@@ -377,9 +377,9 @@ test("countAiLabBrandPostsBefore reads the exact count from content-range and is
 
 test("countAiLabBrandPostsBefore returns null (caller falls back) on HTTP error, bad header, or thrown fetch", async () => {
   const base = { supabaseUrl: "https://example.supabase.co", serviceRoleKey: "k", scheduledFor: "2026-10-01T03:00:00Z" };
-  assert.equal(await countAiLabBrandPostsBefore({ ...base, fetchImpl: (async () => new Response("", { status: 500 })) as typeof fetch }), null);
-  assert.equal(await countAiLabBrandPostsBefore({ ...base, fetchImpl: (async () => new Response("[]", { status: 200 })) as typeof fetch }), null);
-  assert.equal(await countAiLabBrandPostsBefore({ ...base, fetchImpl: (async () => { throw new Error("network"); }) as typeof fetch }), null);
+  assert.equal(await countAiLabBrandPostsBefore({ ...base, fetchImpl: (() => Promise.resolve(new Response("", { status: 500 }))) as typeof fetch }), null);
+  assert.equal(await countAiLabBrandPostsBefore({ ...base, fetchImpl: (() => Promise.resolve(new Response("[]", { status: 200 }))) as typeof fetch }), null);
+  assert.equal(await countAiLabBrandPostsBefore({ ...base, fetchImpl: (() => Promise.reject(new Error("network"))) as typeof fetch }), null);
 });
 
 // --- 本物の日記 snapshot に対して ----------------------------------------------------------------

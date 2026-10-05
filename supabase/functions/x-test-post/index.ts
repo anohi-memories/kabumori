@@ -86,6 +86,7 @@ import {
   loadAiLabDevDiaryMarkdown,
 } from "../_shared/brand/ai_lab_dev_diary_context.ts";
 import { aiLabDiversityInstructions } from "../_shared/brand/ai_lab_theme_guard.ts";
+import { sendAiLabXPost } from "../_shared/brand/ai_lab_provider_outcome.ts";
 import { generateBrandPost } from "../_shared/brand/brand_post_generator.ts";
 import {
   collectVoiceResponseDiagnostics,
@@ -4080,7 +4081,18 @@ Deno.serve(async (req) => {
             supabaseUrl,
             serviceRoleKey,
           }),
-          publishText: (text) => postToX(xAuth, text),
+          // AI Lab is always on the exact-account Vault path. Its sends are observed per X request so that
+          // only a failure proven to have created no post (ai_lab_provider_outcome.ts) can release the
+          // topic claim; anything else stays ambiguous. postToX/VaultAccountXAuth behavior is unchanged.
+          publishText: (text) => {
+            const vaultAccount = xAuth.vaultAccount;
+            if (!vaultAccount) return postToX(xAuth, text);
+            return sendAiLabXPost({
+              send: (request) => vaultAccount.send(request),
+              request: (accessToken) => requestXPost(accessToken, text, undefined, undefined, "manual"),
+              onRequestFailedStatus: (status) => console.error("X API request failed", { status }),
+            });
+          },
           completePublishedPost: (args) => recordAndCompleteAiLabBrandPost({
             supabaseUrl,
             serviceRoleKey,

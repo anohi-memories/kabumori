@@ -71,6 +71,12 @@ jobs:
             }
             seenDates.add(entry.date);
 
+            // A one-line label (event_id, changed, ...) written twice must never be resolved as "last wins":
+            // that would let an edit rename an already-posted event and publish it again.
+            if (entry.duplicateLabels.length > 0) {
+              throw new Error(`Duplicate label(s) ${entry.duplicateLabels.join(", ")} in diary entry: ${entry.date}`);
+            }
+
             // event_id is the stable key that stops the same development event from being posted twice.
             if (!entry.eventId || !isValidDiaryEventId(entry.eventId, entry.date)) {
               throw new Error(`Missing or invalid event_id (YYYYMMDD-slug matching the heading date): ${entry.date}`);

@@ -64,11 +64,11 @@ function fixtureTopicPort() {
     topic: "fixture topic",
   };
   return {
-    claim: async () => claim,
-    startProvider: async () => true,
-    release: async () => "RELEASED",
-    markAmbiguous: async () => "AMBIGUOUS",
-    settlePublished: async () => "PUBLISHED",
+    claim: () => Promise.resolve(claim),
+    startProvider: () => Promise.resolve(true),
+    release: () => Promise.resolve("RELEASED"),
+    markAmbiguous: () => Promise.resolve("AMBIGUOUS"),
+    settlePublished: () => Promise.resolve("PUBLISHED"),
   };
 }
 
@@ -82,15 +82,15 @@ function baseArgs(
     scheduledPostId: "schedule-fixture",
     openAiApiKey: "fixture-only",
     topic: fixtureTopicPort(),
-    loadRecentFingerprints: async () => [],
-    publishText: async () => ({ data: { id: "x-post-fixture" } }),
-    completePublishedPost: async () => ({ fingerprintPersisted: true }),
-    generate: async (
+    loadRecentFingerprints: () => Promise.resolve([]),
+    publishText: () => Promise.resolve({ data: { id: "x-post-fixture" } }),
+    completePublishedPost: () => Promise.resolve({ fingerprintPersisted: true }),
+    generate: (
       { context: brand, postType }: {
         context: ReturnType<typeof context>;
         postType: string;
       },
-    ) => draft(`${brand.brand.id}:${postType}`),
+    ) => Promise.resolve(draft(`${brand.brand.id}:${postType}`)),
     ...overrides,
   };
 }
@@ -103,17 +103,17 @@ test("dry_run never enters the scheduled X dispatcher", async () => {
     () =>
       dispatchAiLabScheduledBrandPost(baseArgs({
         context: context("dry_run"),
-        loadRecentFingerprints: async () => {
+        loadRecentFingerprints: () => {
           fingerprintsRead += 1;
-          return [];
+          return Promise.resolve([]);
         },
-        generate: async () => {
+        generate: () => {
           generated += 1;
-          return draft("fixture");
+          return Promise.resolve(draft("fixture"));
         },
-        publishText: async () => {
+        publishText: () => {
           published += 1;
-          return { data: { id: "should-not-post" } };
+          return Promise.resolve({ data: { id: "should-not-post" } });
         },
       })),
     { message: "BRAND_PUBLISH_MODE_DRY_RUN" },
@@ -130,10 +130,10 @@ test("dispatch independently blocks 281 code points before the X callback", asyn
   await assert.rejects(
     () =>
       dispatchAiLabScheduledBrandPost(baseArgs({
-        generate: async () => draft("あ".repeat(281)),
-        publishText: async () => {
+        generate: () => Promise.resolve(draft("あ".repeat(281))),
+        publishText: () => {
           published += 1;
-          return { data: { id: "should-not-post" } };
+          return Promise.resolve({ data: { id: "should-not-post" } });
         },
       })),
     { message: "BRAND_POST_LENGTH_LIMIT_EXCEEDED" },
@@ -150,16 +150,16 @@ test("a confirmed 280-code-point post completes once even when fingerprint persi
     normalizedTextSha256: string;
   } | null = null;
   const result = await dispatchAiLabScheduledBrandPost(baseArgs({
-    generate: async () => draft(text),
-    publishText: async (sentText: string) => {
+    generate: () => Promise.resolve(draft(text)),
+    publishText: (sentText: string) => {
       order.push("publish");
       assert.equal(sentText, text);
-      return { data: { id: "x-post-fixture" } };
+      return Promise.resolve({ data: { id: "x-post-fixture" } });
     },
-    completePublishedPost: async (args: NonNullable<typeof completedArgs>) => {
+    completePublishedPost: (args: NonNullable<typeof completedArgs>) => {
       order.push("complete");
       completedArgs = args;
-      return { fingerprintPersisted: false };
+      return Promise.resolve({ fingerprintPersisted: false });
     },
   }));
 
@@ -186,13 +186,13 @@ test("confirmed X success plus uncertain completion fails closed without a retry
   await assert.rejects(
     () =>
       dispatchAiLabScheduledBrandPost(baseArgs({
-        publishText: async () => {
+        publishText: () => {
           publishCount += 1;
-          return { data: { id: "x-post-confirmed" } };
+          return Promise.resolve({ data: { id: "x-post-confirmed" } });
         },
-        completePublishedPost: async () => {
+        completePublishedPost: () => {
           completionCount += 1;
-          throw new Error("transport detail must not escape");
+          return Promise.reject(new Error("transport detail must not escape"));
         },
       })),
     (error: unknown) => error instanceof AiLabConfirmedPostCompletionError,
@@ -209,15 +209,15 @@ test("exact cross-brand duplicate is blocked before X", async () => {
   await assert.rejects(
     () =>
       dispatchAiLabScheduledBrandPost(baseArgs({
-        generate: async () => draft(text),
+        generate: () => Promise.resolve(draft(text)),
         loadRecentFingerprints: async () => [{
           brandId: "kabumori",
           normalizedTextSha256: await fingerprintText(text),
           publishedAt: new Date().toISOString(),
         }],
-        publishText: async () => {
+        publishText: () => {
           published += 1;
-          return { data: { id: "should-not-post" } };
+          return Promise.resolve({ data: { id: "should-not-post" } });
         },
       })),
     { message: "AI_LAB_CROSS_BRAND_DUPLICATE" },

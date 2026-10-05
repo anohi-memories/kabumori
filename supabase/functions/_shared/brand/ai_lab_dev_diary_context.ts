@@ -34,6 +34,11 @@ export type DevDiaryEntry = {
   decided: string | null;
   remaining: string | null;
   angles: string[];
+  /**
+   * 1エントリに2回以上書かれた1行ラベル（event_id / project / changed / difficulty / decided / remaining）。
+   * 空でなければエントリ全体が無効（後勝ちで event_id を差し替えて使用済みの出来事を別名で復活させない）。
+   */
+  duplicateLabels: string[];
 };
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
@@ -82,6 +87,7 @@ export function isSanitizedDiaryField(text: string): boolean {
  * module treats as required.
  */
 export function sanitizeDiaryEntry(entry: DevDiaryEntry): DevDiaryEntry | null {
+  if (entry.duplicateLabels.length > 0) return null;
   if (!isValidCalendarDate(entry.date)) return null;
   if (!isSanitizedDiaryField(entry.changed)) return null;
   return {
@@ -93,6 +99,7 @@ export function sanitizeDiaryEntry(entry: DevDiaryEntry): DevDiaryEntry | null {
     decided: entry.decided && isSanitizedDiaryField(entry.decided) ? entry.decided : null,
     remaining: entry.remaining && isSanitizedDiaryField(entry.remaining) ? entry.remaining : null,
     angles: entry.angles.filter((angle) => isSanitizedDiaryField(angle)),
+    duplicateLabels: [],
   };
 }
 
@@ -134,7 +141,7 @@ function isLabelLine(line: string): { label: Label; value: string } | null {
  */
 export function parseDevDiaryMarkdown(markdown: string): DevDiaryEntry[] {
   const entries: DevDiaryEntry[] = [];
-  let current: { date: string; eventId: string | null; project: string | null; changed: string | null; difficulty: string | null; decided: string | null; remaining: string | null; angles: string[] } | null = null;
+  let current: { date: string; eventId: string | null; project: string | null; changed: string | null; difficulty: string | null; decided: string | null; remaining: string | null; angles: string[]; seen: Set<string>; duplicateLabels: string[] } | null = null;
 
   function flush() {
     if (current && current.changed !== null) {
@@ -147,6 +154,7 @@ export function parseDevDiaryMarkdown(markdown: string): DevDiaryEntry[] {
         decided: current.decided,
         remaining: current.remaining,
         angles: current.angles,
+        duplicateLabels: current.duplicateLabels,
       });
     }
     current = null;
@@ -157,12 +165,22 @@ export function parseDevDiaryMarkdown(markdown: string): DevDiaryEntry[] {
     const heading = /^##\s+(\d{4}-\d{2}-\d{2})\s*$/u.exec(line);
     if (heading) {
       flush();
-      current = { date: heading[1], eventId: null, project: null, changed: null, difficulty: null, decided: null, remaining: null, angles: [] };
+      current = { date: heading[1], eventId: null, project: null, changed: null, difficulty: null, decided: null, remaining: null, angles: [], seen: new Set(), duplicateLabels: [] };
       continue;
     }
     if (!current) continue;
     const labeled = isLabelLine(line);
-    if (!labeled || labeled.value.length === 0) continue;
+    if (!labeled) continue;
+    // 1行ラベルは1エントリに1回だけ。2回目以降は値が空でも重複として記録し、後の値で上書きしない。
+    // 重複のあるエントリは sanitizeDiaryEntry が丸ごと無効にする（後勝ちで event_id を差し替えさせない）。
+    if (labeled.label !== "angle") {
+      if (current.seen.has(labeled.label)) {
+        if (!current.duplicateLabels.includes(labeled.label)) current.duplicateLabels.push(labeled.label);
+        continue;
+      }
+      current.seen.add(labeled.label);
+    }
+    if (labeled.value.length === 0) continue;
     if (labeled.label === "angle") {
       current.angles.push(labeled.value);
     } else if (labeled.label === "event_id") {
@@ -400,6 +418,10 @@ export function buildAiLabTopicCandidates({
 
   const fresh: Array<{ entry: DevDiaryEntry; eventKey: string; age: number }> = [];
   for (const raw of parsed) {
+    if (raw.duplicateLabels.length > 0) {
+      exclusions.push({ candidate: raw.date, stage: "sanitize", reason: `DIARY_DUPLICATE_LABEL:${raw.duplicateLabels.join(",")}` });
+      continue;
+    }
     const entry = sanitizeDiaryEntry(raw);
     if (!entry) {
       exclusions.push({ candidate: raw.date, stage: "sanitize", reason: "DIARY_ENTRY_UNSAFE_OR_INVALID" });
@@ -454,6 +476,6 @@ export function buildAiLabTopicCandidates({
  * not guarantee for a non-imported sibling file. Kept async only so callers do not need to change
  * between this and a future IO-backed source; today it never rejects.
  */
-export async function loadAiLabDevDiaryMarkdown(): Promise<string> {
-  return AI_LAB_DEV_DIARY_MARKDOWN_SNAPSHOT;
+export function loadAiLabDevDiaryMarkdown(): Promise<string> {
+  return Promise.resolve(AI_LAB_DEV_DIARY_MARKDOWN_SNAPSHOT);
 }

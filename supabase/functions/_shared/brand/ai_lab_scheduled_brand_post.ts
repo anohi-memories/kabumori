@@ -12,6 +12,7 @@ import {
 } from "./brand_post_generator.ts";
 import { collectAiLabContentViolations } from "./ai_lab_theme_guard.ts";
 import type { AiLabTopicPort } from "./ai_lab_brand_post_store.ts";
+import { AiLabProviderNoPostError } from "./ai_lab_provider_outcome.ts";
 
 // 汎用テーマ・「個人開発は、」書き出し・直近投稿との重複で弾かれた場合に、再生成する最大試行回数
 // （初回を含む）。全て不合格なら投稿せず失敗側に倒す（重複投稿を出すより1枠見送る方が安全）。
@@ -43,16 +44,6 @@ export function preXReleaseReason(error: unknown): string {
   if (message === "AI_LAB_CONTENT_DIVERSITY_REJECTED") return "PRE_X_CONTENT_REJECTED";
   if (message === "AI_LAB_CROSS_BRAND_DUPLICATE") return "PRE_X_FINGERPRINT_BLOCKED";
   return "PRE_X_FAILED";
-}
-
-/**
- * X が「明確に受け付けなかった」と言える応答だけを返す（その場合だけ確保を解除できる）。
- * 400/401/422/429 は X が投稿を作らずに返す拒否。403（重複投稿を含む）・5xx・通信断・タイムアウト・
- * 応答喪失・その他の例外は「投稿されていない」と証明できないので null（＝結果不明として保持）。
- */
-export function definitiveProviderRejection(error: unknown): number | null {
-  const match = /^X_REQUEST_FAILED:(400|401|422|429)$/u.exec(error instanceof Error ? error.message : "");
-  return match ? Number(match[1]) : null;
 }
 
 export async function dispatchAiLabScheduledBrandPost({
@@ -181,7 +172,7 @@ export async function dispatchAiLabScheduledBrandPost({
     throw new BrandContextError("AI_LAB_TOPIC_CLAIM_LOST");
   }
 
-  // 4. X。ここから先はイベントを自動で再開放しない（X が明確に拒否した場合を除く）。
+  // 4. X。ここから先はイベントを自動で再開放しない（X が投稿を作らなかったと証明できた場合を除く）。
   let xResponse: unknown;
   try {
     // Keep this second invocation adjacent to the X callback so later edits cannot accidentally add
@@ -189,10 +180,11 @@ export async function dispatchAiLabScheduledBrandPost({
     assertAiLabBrandPostDispatchAllowed(context, postType, draft.text);
     xResponse = await publishText(draft.text);
   } catch (error) {
-    const status = definitiveProviderRejection(error);
+    // 解除できるのは、送信の内側で「X が投稿を作らなかった」と観測できた型付きエラーだけ
+    // （ai_lab_provider_outcome.ts）。文字列からは判定しない。
     try {
-      if (status !== null) {
-        await topic.release(claim, `PROVIDER_REJECTED:${status}`);
+      if (error instanceof AiLabProviderNoPostError) {
+        await topic.release(claim, `PROVIDER_NO_POST:${error.evidence}`);
       } else {
         await topic.markAmbiguous(claim, "PROVIDER_OUTCOME_UNKNOWN");
       }
