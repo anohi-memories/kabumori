@@ -3,8 +3,8 @@
 - task_id: kabumori-detail-navigation-topic-level-switch-20261006
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: かぶモリの詳細画面から迷わず移動できるよう、トピック詳細で「同じ日の初級/中級/上級」を簡単に切替可能にし、トピック詳細と重要ニュース詳細の双方に明示的なHome/一覧導線を追加する。
@@ -380,6 +380,67 @@ Then:
 - STOP for K1.
 
 Recommended model: **Sonnet5（高）**.
+
+## Report — G1: detail navigation + topic level switch (task kabumori-detail-navigation-topic-level-switch-20261006)
+
+- task_id: `kabumori-detail-navigation-topic-level-switch-20261006`
+- result: implemented and Simulator-verified; one real defect found by the Simulator pass and fixed before the PR. PR open, **not merged**.
+- fresh main SHA (clone at start): `0c0f88be0e44ab0d8e730f4388afa4d2b0494141` (allocation SHA was `e303d81e`; main only advanced with agent/ops commits, 0 overlap with the target paths).
+- PR: https://github.com/anohi-memories/kabumori/pull/90 — branch `claude/g1-detail-navigation-topic-switch-20261006`, head `0dd2b5af7e4736a67b11645d08e61f3114b8619a` (1 commit).
+- **EAS build created: no (0).** backend/DB/RPC/API/AI/Auth/Edge/production mutation: **0**.
+
+### worktree isolation proof
+Independent clone of `origin/main` in the session scratchpad (own branch, own `.env` copy, `node_modules` symlink); overlap re-checked immediately before coding: all 7 open PRs (#87/#78/#41/#33/#11/#10/#3) touch none of the 8 target paths. The clean base `kabumori-fresh` and the old repo/worktrees were not modified; nothing deleted/pruned/reset. Only one Metro ran at a time (stopped afterwards; the user's iPhone server on 8081 was not running).
+
+### changed_files (9 code/test, +4 screenshots)
+`src/app/topic-detail.tsx`, `src/app/(tabs)/news/_layout.tsx`, `src/app/(tabs)/news/[id].tsx` (error-state button only), new `src/lib/topic-detail-switch.ts`, new `src/lib/detail-navigation.ts`, tests: `topic-detail-screen_test.ts` (updated), new `topic-detail-switch_test.ts`, new `detail-navigation_test.ts`. `topics.tsx`, `back-button.tsx`, `daily-topic.ts`, `home-topic.ts`, Home, catalog: untouched.
+
+### topic switch architecture / cache behaviour
+- Route params stay the source of truth for the screen; `viewDate = params.jstDate`.
+- Pure helper `resolveTopicForLevel({level, jstDate, cache, fetchTopic})`: cache hit → returns without a network call; else `fetchDailyTopic(level, jstDate)`; a null / wrong-level result = `unavailable`, a throw = `error` (never thrown to the UI, never cached).
+- In-memory per-screen cache `createTopicViewCache()` keyed by date+level (never persisted, never shared with Home). A verified direct load joins the cache.
+- Switch success: show the returned topic immediately, then `router.setParams({id, level, jstDate})` with the topic's real id. The route-param effect looks in the cache first (`cached.id === params.id`), so there is **no second fetch** for the same (level, date); a cached level switches instantly with zero fetches.
+- Failure: the current topic/status are untouched; only a small `accessibilityLiveRegion` message under the selector (`{レベル}のトピックを取得できませんでした。表示中の内容はそのままです。`). A newer tap supersedes an in-flight one (sequence token; a late older result is dropped). Tapping the shown level is a no-op (no fetch, no params change; it only drops a pending switch to another level).
+- Direct-route fail-closed contract unchanged: invalid params → mismatch, `result.id !== id` → mismatch, fetch error → error, new params reset to loading.
+
+### same-date proof
+Unit tests assert every switch calls the fetcher with exactly the viewed date (a past date, never today); the screen has no `todayJst/Date` use. Simulator: from /topics opened 10/1 (today−5), switching to 中級 stayed on 10月1日（木） with `params.jstDate=2026-10-01`.
+
+### no-Settings-write proof
+The detail screen does not import any storage / `topic-level-storage` module and contains no `setItem`/`writeTopicLevel` (test-pinned, plus a repo-wide scan that only Settings-side code writes the level). Simulator: Settings level `intermediate`; after switching to 上級 and 初級 in the detail, `kabumori:topic-level:v1` was still `intermediate` and Home's card still showed 中級 after 「ホーム」.
+
+### topic explicit navigation
+Top row: `‹ ホーム` (left) and `過去のトピック ›` (right), rendered above every status branch (loading/error/mismatch/deep-link states keep both). `goHome(router)` = `router.dismissTo('/')`, `goPastTopics(router)` = `router.dismissTo('/topics')` — expo-router POP_TO: pops back to the existing screen if it is below, otherwise replaces the detail with the target (no stacked copies, no loop). No `back()/canGoBack()`. Simulator: Home→detail→ホーム ⇒ stack `[(tabs)]` only; Home→detail→過去のトピック ⇒ `/topics`; topics→detail→過去のトピック→…loop ⇒ stack never exceeds `[tabs, topics, detail]`; Menu→今日のトピック→detail→ホーム ⇒ **Home tab selected**; cold deep link (`kabumori://topic-detail?…`, stack = detail only) ⇒ both buttons work.
+
+### news explicit navigation
+Stack header of `news/[id]`: left `‹ ニュース一覧` (`dismissTo('/news')`), right `ホーム`, `headerBackVisible: false` (no second back control); the header is a stack option so loading and missing/error states keep it; the in-body 「一覧へ戻る」 uses the same direct route. **Simulator found `dismissTo('/')` is a silent no-op from inside the nested news stack** (tested with real taps at 402/375 and via a direct call), so `ホーム` uses `goHomeFromNews`: `if (canDismiss()) dismissAll(); navigate('/')` — empties the news stack back to the list (no stale detail when the tab is reopened) and selects the Home tab. `replace('/')` (stacks a second (tabs)) and bare `navigate('/')` (leaves the detail open) were rejected after testing. Re-verified with real taps: Home market card → detail → ホーム ⇒ Home tab, news stack `[index]`; entries Home market card, Home holding row, news list tab, cold deep link all reach the list via ニュース一覧 and Home via ホーム; edge-swipe back still works with the custom header (375pt).
+
+### 402 / 375 findings
+- 402pt (iPhone 18 Pro): nav row y=8 h44; label row h≈22; selector h48 (3 × 116×40); Hero starts y≈152; Hero heights 189.7 (≤7 chars) / 233.3 (8–16) / 291.3 (17+). Balanced, Hero not crowded; accepted learning-note design intact.
+- 375pt (iPhone SE 3rd): 17+-char title: selector segments 107×40, nav `‹ ホーム` 52.5 + `過去のトピック ›` 108.5 in a 335 row (one line), date 79 wide, no wrap/overlap; Hero 283/190/225. Selector row pushes the Hero down ~60pt, still comfortable.
+- news header at 402/375: `‹ ニュース一覧` / `ニュース詳細` / `ホーム` fit, no double header, no clipping, tab bar intact (iOS 27 renders the header buttons as glass capsules).
+- Level colours: selected segment = that level's accent (green/blue/lavender), white text; follows the existing colour system.
+- Minor (accepted): the inline switch-error text pushes the Hero down ~46pt while visible; ニュース tab keeps stale `id` param after the stack is emptied (no visible effect).
+
+### tests / checks (head `0dd2b5af`)
+`deno test tests/app/` **322 passed / 0 failed** (focused: 48); tsc(src): no diagnostics; `expo config` OK; `expo export --platform web` PASS; `git diff --check` clean.
+
+### Screenshots (`docs/ui-review/`, WebP q80)
+`topic_switch_402pt.webp`, `topic_switch_375pt_long.webp`, `news_detail_header_375pt.webp`, `news_detail_home_action_402pt.webp`.
+
+### remaining issues
+- Verification was on the Simulator with an auth-bypass/fixture rig kept in the scratchpad only (not committed); the real iPhone dev-client check by the user is still useful (real feed data, touch feel, the iOS glass header).
+- 375pt rapid-tap race (A6) and Home→detail→past-topics at 375pt were not separately exercised (402pt covered; 375pt behaviour identical by code).
+- Flicker between switches was inspected via commit-level logs, not video.
+- SDK-27 dev client launch crash on iOS 27 remains an environment issue (Simulator runs used a scratchpad-only patched copy).
+
+### safety_checks
+No DB/RPC/RLS/Auth/Edge/AI/news/report-generation/catalog/native/config/EAS/production change; no new dependency; no storage write; `.env` and `node_modules` kept out of the commit; PR not merged.
+
+### next_recommendation
+K1 reviews PR #90 (UI/navigation-only, low risk: no Codex review needed). The user may try it on the iPhone (server on request).
+
+Status: `review_required` / next_owner `chatgpt`. STOP for K1.
 
 ---
 
