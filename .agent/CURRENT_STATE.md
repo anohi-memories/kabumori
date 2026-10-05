@@ -1,3 +1,25 @@
+## PR #82 residual corrective complete -> H1 final boundary rereview
+
+- direct Claude corrective updated PR #82 to exact head `51457826ea6c29d9c94ac0066786df8927fa1274`, open/unmerged/mergeable.
+- branch incorporated fresh main with normal merge history; canonical diary retained latest main topic-detail-learning content while preserving stable event IDs; snapshot regenerated.
+- PR now changes 14 files and adds `ai_lab_provider_outcome.ts`.
+- reported fixes target every prior C1 residual:
+  - duplicate scalar diary labels reject instead of last-wins;
+  - migration owner/role-membership/effective privilege pre/postconditions;
+  - actual X request-observation wrapper producing typed proven-no-post errors rather than string matching;
+  - provider_started/ambiguous evergreen quarantine without age-based reopening;
+  - published evergreen cooldown from `published_at`;
+  - exact canonical candidate JSON validation and DB-owned evergreen theme mapping;
+  - changed-file lint debt removed.
+- reported verification: Functions 2543/2543 PASS; disposable PostgreSQL runner 132 PASS; SQL mutations 15/15 detected; TS mutations 15/15 detected; changed lint 0 except unchanged main x-test-post diagnostics; production mutation=0; real X=0.
+- GitHub checks: Netlify and Vercel success.
+- fresh comparison: main is 13 commits ahead of PR base with **0 overlapping PR #82 changed files**.
+- migration versions remain distinct from PR #76 and PR #81.
+- H1 assigned `ai-lab-pr82-final-boundary-rereview-20261005`, recommended **Sol（高）**.
+- review must independently prove actual VaultAccountXAuth request-observation safety, `pg_has_role` owner-membership direction/transitivity, 73h unresolved evergreen quarantine, publish-time cooldown and canonical theme mapping.
+- merge/migration apply/deploy remain HOLD until C1.
+- H2 remains free; G3/G4 remain separately assigned and untouched.
+
 ## Final C2 — PR #81 content-settings hardening CHANGES REQUIRED
 
 - verdict: **CHANGES REQUIRED**; PR #81 exact reviewed head `5595fb131813542c55c43bc783af623cdb9ea442` remains open/unmerged.
