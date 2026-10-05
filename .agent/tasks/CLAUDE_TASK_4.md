@@ -4,7 +4,8 @@
 - owner: claude
 - slot: claude-4
 - status: in_progress
-- next_owner: user
+- next_owner: claude
+- production_mutation_window: **ACTIVE** — G4 PR76 S1–S5 (user approved 2026-10-06 ~01:00 JST; x-test-post + publish-setting deploy, migration 20261003090000 + one history row). Other slots: no production write until this line says CLOSED.
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: production rollout gate / read-only preflight / runtime-first deployment plan / migration gate
