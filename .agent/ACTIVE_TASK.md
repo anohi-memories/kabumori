@@ -35,14 +35,14 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: x-social-mobile-pr81-content-settings-hardening-rereview-20261003
+- status: ready
+- task_id: x-social-mobile-pr76-transactional-publish-toggle-rereview-20261005
 - start_code: H2
 - finish_code: C2
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Final C2 accepted CHANGES REQUIRED on PR #81 head 5595fb131813542c55c43bc783af623cdb9ea442. Residual blockers: deferrable PK drift breaks ON CONFLICT writer, helper function owner/EXECUTE ACL drift survives replacement, and historical infinity updated_at defeats strict CAS. Whole-chain production apply atomicity also needs an explicit safe plan. No merge/apply/deploy. H2 free after fresh allocation.
+- allocation: Final security rereview of PR #76 exact head 7f75c07a8c997b6a585e9c86dca01186eeea671f after fresh-main merge. Verify R1-R5 closure, lock/deadlock ordering, caller-JWT transactional authority, fresh pre-X permission coverage, tenant-safe errors, ON/OFF semantics, SECURITY DEFINER ACL, PostgREST/auth.uid assumptions, Kabumori-type account boundary and fail-closed rollout order. No merge/apply/deploy/production write/real X. Recommended Sol（極高）.
 
 ## Claude G1
 - owner: claude
@@ -81,13 +81,13 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: review_required
 - task_id: x-social-mobile-pr76-fresh-main-integration-20261005
 - start_code: G4
 - finish_code: K4
-- next_owner: claude
+- next_owner: codex
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: Integration-only freshness gate for PR #76. Current corrective head fe1e846e59c69b591d29c6d21fc23c7b702d19cd is open but non-mergeable because main advanced 133 commits. Exactly one overlapping file: supabase/tests/migration_source_invariants_test.ts; preserve latest main and add the PR76 reserved migration version 20261003090000. Merge fresh origin/main with no force/rebase, rerun security/regression suites, no functional redesign, no production apply/deploy/X. Recommended Sonnet5（高）. After K4, H1 Sol（極高） rereview mandatory.
+- allocation: K4 PASS to independent security rereview. PR #76 fresh head 7f75c07a8c997b6a585e9c86dca01186eeea671f is open/mergeable; only expected migration_source_invariants conflict was resolved while preserving current main. Fresh post-merge tests passed; production mutation/X/deploy=0. H2 review assigned because H1 is occupied by PR #82. Recommended Sol（極高）.
 
 ## Claude G5
 - owner: claude
