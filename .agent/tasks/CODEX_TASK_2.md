@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-pr81-residual-hardening-final-rereview-20261005
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（高）
 - type: independent final rereview / DB migration drift / function ACL / CAS finite-domain / rollout-plan review
