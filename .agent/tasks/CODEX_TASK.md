@@ -3,8 +3,8 @@
 - task_id: ai-lab-pr82-final-boundary-rereview-20261005
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused final rereview / provider outcome proof / claim quarantine / migration ACL-owner / canonical payload
@@ -323,6 +323,18 @@ Append to `.agent/CODEX_REPORT.md`:
 Then status -> review_required, next_owner -> chatgpt, STOP for C1.
 
 Recommended model: **Sol（高）**.
+
+## H1 completion — 2026-10-05
+
+- result: **PASS-WITH-FIX**, conditional on adopting the two bounded corrections; unchanged PR #82 head is not an unconditional PASS.
+- reviewed exact PR head: `51457826ea6c29d9c94ac0066786df8927fa1274`; PR remains open/unmerged and its branch was not changed.
+- corrected source/evidence head: `9d30a68317dd523a96e6ce96bf7a0f6de23235d5`, pushed/read-back on `codex/h1-pr82-final-20261005`.
+- findings fixed: checked Vault fixture resolver type (P3); invalid/not-ready/live index catalog drift detection (P2).
+- independent tests: focused checked 104 PASS; relevant Functions runtime 914 PASS; SQL runner 132 PASS; H1 boundaries 41 PASS; actual workflow regression 49 PASS. Counts overlap and must not be summed as unique tests.
+- static: four changed runtime helpers check PASS; nine changed TS files lint PASS; full entrypoint has the same six check errors / three lint diagnostics as fresh-main source.
+- production reads/writes/deploy/merge/X/OAuth/token/Vault/Cron mutation: 0.
+- details: appended final-boundary review in `.agent/CODEX_REPORT.md`.
+- next: C1 accepts/adopts the correction head, then decides source merge and separately authorized rollout. Recommended model: **Sol（高）**. STOP here; shared indices remain C1-owned.
 
 ---
 

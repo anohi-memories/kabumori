@@ -1758,3 +1758,76 @@ At the corrected source tree (one source commit b6d2dce3):
 - Future rollout only after source acceptance and separate production authority: inspect production catalog/owner/default ACL and old superseded-table presence read-only; certify exact SQL apply-wrapper/transaction behavior; apply only approved migration; verify catalog/ACL/function definitions; deploy only approved exact source; use authorized natural-cycle observation without manual X/backlog/candidate injection/Cron/token/gate changes. Cross-system exactly-once is not promised.
 - safety_checks: other workstreams, synced sources, ACTIVE_TASK/CURRENT_STATE/H2 and shared user changes preserved; all tests disposable/fake; no external production mutation. Supabase/Postgres skills guided stricter drift, effective-privilege and crash-boundary checks; did not expand authority.
 - next_recommendation: **C1, 推薦モデル：Sol（高）**. H1 TASK -> `review_required`, `next_owner: chatgpt`; STOP after exact H1 control-file sync/read-back. C1 owns shared index alignment.
+
+---
+
+# H1 — PR #82 final boundary rereview (2026-10-05)
+
+- task_id: `ai-lab-pr82-final-boundary-rereview-20261005`
+- result: **PASS-WITH-FIX**, only for the corrected source/evidence head below. Unchanged original PR head still has the two bounded findings; do not treat it as an unconditional PASS.
+- status: `review_required`; next_owner: `chatgpt`; recommended_model: **Sol（高）**.
+- reviewed exact PR head: `51457826ea6c29d9c94ac0066786df8927fa1274`; previous rejected head: `9f3b19a3cde490cf63735220ae191dcd4f11bdcb`.
+- source commits: `cf6bf2cf1113ac1bc083609a86ca97668484e013` (two corrections + independent tests), `9d30a68317dd523a96e6ce96bf7a0f6de23235d5` (align the independent fixture's synchronous resolver contract).
+- source push/read-back: final `9d30a68317dd523a96e6ce96bf7a0f6de23235d5` on `codex/h1-pr82-final-20261005`; PR #82 original branch was deliberately preserved. C1 must adopt these changes before accepting source.
+- fresh main before control synchronization: `1c633e846c8d3ae49ca95aa13b6063f26f85e052` (24 commits ahead of PR base `12af08b80e6e1cef1246ff115cd157b97885e780`); overlap with the original 14 PR files: **0**. Main changed only control/project instructions in that interval. No same migration timestamp found on main; G4/PR76 `20261003090000`, G3/PR81 `20261003120000`, PR82 `20261004090000` are distinct. No production migration ledger was read.
+- PR #82 read-back: OPEN, unmerged, mergeable=true, exact head unchanged, 14 files. No merge or check bypass.
+
+## Findings and bounded corrections
+
+1. **P3, fixed — new checked-test type error.** `realVaultAuth` returned `Promise.reject` from the synchronous `XOAuthClientResolver`, causing a new TS2739 diagnostic. It now throws synchronously. The analogous independent fixture also follows that contract. Runtime/OAuth behavior is unchanged.
+2. **P2, fixed — incomplete index drift proof.** Comparing `pg_get_indexdef` alone admitted a same-DDL partial UNIQUE index whose catalog marked it invalid/not ready. A disposable PostgreSQL catalog probe reproduced acceptance on the original candidate. The shape guard now compares `indisvalid`, `indisready`, and `indislive`; the same probe rejects with SCHEMA_DRIFT. PostgreSQL documents that invalid indexes do not guarantee uniqueness and not-ready indexes are ignored by inserts/updates: [PG17 index catalog](https://www.postgresql.org/docs/17/catalog-pg-index.html). This is a migration-source guard correction, not a production schema change.
+
+No remaining demonstrated P1/P2 finding in the corrected review scope. These fixes do not redesign the claim/provider protocol or expand production authority.
+
+## Gates A–C: identity, provider proof, dispatcher
+
+- Actual parser/sanitizer/candidate builder and extracted actual workflow validator reject missing/invalid/repeated event IDs and duplicate scalar labels before generation. The previous duplicate-label RED case now produces zero diary candidate and fails CI; no last-wins identity rewrite. Reordering/body/angle edits preserve an existing valid ID. All eight canonical public IDs were inspected for unsafe/internal identifiers; fresh-main topic-detail-learning prose is preserved, with intentional stable-ID metadata only. Canonical Markdown and generated snapshot match exact deterministic generator bytes.
+- Actual `VaultAccountXAuth.send` + observed sender were exercised with fake credential, refresh and request callbacks, not a copied auth implementation. Authentic 400/401/422/429 yield typed no-post evidence. Refresh-disabled 401 retains the transformed X_ACCESS_TOKEN_UNAUTHORIZED message and releases safely; genuine 401/refresh/401 retains X_ACCESS_TOKEN_REJECTED_AFTER_REFRESH; 401/refresh/success returns success. Mixed uncertainty, 403/408/3xx/5xx, transport/read errors and a local error merely mentioning 401 never become typed no-post. Failed proactive fake refresh is NOT_SENT only because no create-post callback ran.
+- Source uses fixed HTTPS `POST /2/tweets` and manual redirects; full response-text read must succeed before a response is observed as a status. Official [X create-post endpoint](https://docs.x.com/x-api/posts/create-post) and [X response contract](https://docs.x.com/x-api/fundamentals/response-codes-and-errors) establish success/error semantics. 422 is interpreted under [RFC9110 unprocessable-content semantics](https://www.rfc-editor.org/rfc/rfc9110.html#section-15.5.21), not a claim that X advertises a live endpoint-specific 422 guarantee. Safety depends on the actual authenticated response and these contracts, not message text; provider bugs/cross-system exactly-once are not certified by local tests.
+- Only `AiLabProviderNoPostError` releases after durable provider start. Generic errors remain ambiguous. Ambiguous-write or settle-write failure leaves provider_started blocked. Confirmed X completion failure never reopens the claim or retries X. Pre-X guards release only their own fenced claim; false/error/lost response from start-provider never reaches X. Real SQL-port/dispatcher integration and previous accepted concurrency/fencing controls pass.
+
+## Gates D–F: quarantine, publish clock, canonical payload
+
+- Real SQL (not an in-memory SQL substitute) blocks unresolved provider_started and ambiguous seeds and overlapping canonical themes after 73h, 7d and longer simulated age. Claimed rows block within lease and expire only pre-X. The previous 73h paused-sender/replacement case stays at **one fake X** with no replacement claim. No lease/age recovery of possible writes.
+- Published seed/theme cooldown uses server-owned `published_at`, not `claimed_at`: 72h seed and 48h theme, including +/- one-minute edge probes. Earlier claims cannot shorten the clock; released/expired claims do not consume confirmed cooldown. Correctly aged published rows may re-enter if no unresolved blocker remains.
+- RPC validates the entire bounded candidate array before expiring/inserting claims: exact four-key set/types, duplicate event keys, canonical seven evergreen seeds, unit equality, exact canonical theme arrays, diary syntax/unit relationship and empty diary themes. Extra/missing/wrong fields and malformed later candidates reject atomically with no earlier insertion. Executable SQL/TypeScript canonical-tag parity passes; caller-provided tags cannot bypass cooldown. No post body is stored.
+
+## Gates G–H: effective privileges and migration drift
+
+- Actual migration owner is a non-superuser/non-API local owner. Clean install/reapply succeeds; table and all five narrow functions retain that owner. Direct API table rights including PG17 MAINTAIN are false, column ACL absent; only service_role has narrow function EXECUTE. API/authenticator migration owners are refused.
+- Direct service_role/authenticated and nested service-role-to-owner membership were built locally. Effective TRUNCATE became true, `pg_has_role(api, owner, 'MEMBER')` was true, and reapply refused without changing the role graph. The reverse owner-to-API membership used by the clean fixture does not spuriously fail. This verifies the correct argument direction/transitivity in [PostgreSQL role information](https://www.postgresql.org/docs/17/functions-info.html).
+- API table/function owner drift (each named API role for function ownership), unexpected EXECUTE/table grantees, overloads, wrong PK/partial UNIQUE/index/check, RLS/policy/trigger and column-ACL drift are refused. Unknown-grant failures roll back rather than partially repairing the catalog. The additional invalid/not-ready index probe passes only after the H1 guard correction.
+- Two-session actual SQL race permits one active diary claim. Removing only the advisory lock from an outside-Git mutation copy is detected by the runner; removing only the diary UNIQUE is detected by the independent direct-insert control. Neither weakened copy was committed. This rereview did **not** independently rerun all claimed 15 SQL + 15 TS mutation variants.
+
+## Gate I / executed verification
+
+- Focused checked Deno suites (event, diary, topic, scheduled dispatcher, cross-brand): **104 PASS / 0 FAIL** after the bounded fixes.
+- Full relevant `_shared` + `x-test-post` runtime scope, with `--no-check`: **914 PASS / 0 FAIL**. No network permission granted.
+- Supplied disposable SQL runner, local PostgreSQL 17.11: **132 PASS**, including clean/reapply, two-session race, lease/fencing, canonical payload, age/publish-clock, ACL and drift. Re-run after the index-guard fix.
+- H1 independent real-SQL/dispatcher tests 20 + actual-workflow tests 3 + actual-Vault/provider matrix 18: **41 PASS / 0 FAIL** at final source head. Fake X/model/credential/refresh ports only.
+- Actual workflow's Node regression suites: **49 PASS / 0 FAIL**; deterministic generated snapshot parity PASS. Counts overlap with Deno suites and must not be summed as unique coverage.
+- Four changed runtime helpers: `deno check` PASS. Nine changed TypeScript helper/snapshot/test files: `deno lint` PASS; no broad disable introduced.
+- Full entrypoint check is **not clean**: the same **six known errors** occur on candidate and fresh-main source (Uint8Array/BufferSource/Blob/BodyInit, missing morning retry_count, timestamp_precision unknown). Full entrypoint lint has the same **three known diagnostics** (unused xWeightedLength/decryptToken, prefer-const). Diagnostic text matches exactly after path/line normalization. Main advanced only control files after the baseline checkout, leaving this source baseline unchanged.
+- `git diff --check` PASS; targeted secret/private-key/JWT-shape scan found no real-key matches; canonical event IDs contain no production UUID/token. Test credentials are explicit fixtures. Candidate claim of 2543 entire-Functions tests is not presented as independently run here.
+
+## Changed files / isolation / safety
+
+- `supabase/functions/_shared/brand/ai_lab_event_dedupe_test.ts`
+- `supabase/migrations/20261004090000_ai_lab_topic_claims.sql`
+- `supabase/tests/h1_pr82_claim_boundary_test.mjs`
+- `supabase/tests/h1_pr82_provider_matrix_test.mjs`
+- `supabase/tests/h1_pr82_workflow_boundary_test.mjs`
+- H1 control only: `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md`.
+
+- New-Mac rules followed: new isolated H1 source/base/report worktrees from `/Users/yuya/Developer/kabumori-fresh`; its primary checkout and all old/shared worktrees were preserved. Existing H1 report history is append-only; G1–G5/H2/ACTIVE_TASK/CURRENT_STATE were not edited. C1 owns shared-index alignment.
+- Relevant content-diversity, fingerprint/cross-brand dedupe, attempt-budget, completion and other-brand regressions pass. Source change remains AI Lab-only; no new model call, common-account behavior, Kabumori/Mio/OAuth/Vault implementation, scheduler/Cron or other-workstream mutation.
+- Production Supabase reads/writes, migration apply, deploy, real X/media/refresh/OAuth/Vault/token/Cron operations: **0**. No production credentials loaded. This review is not current production byte/catalog certification.
+- Local test databases confirmed absent and H1-owned local cluster stopped; local fake evidence files retained for reproducibility. A final local restart initially omitted its socket options and caused connection-only harness failure; it was stopped, restarted with the original local-only socket configuration, and all 41 tests passed again. No other session's database/server was stopped and no production data was created.
+- Supabase/Postgres skills guided effective-privilege, crash-boundary and index-state drift checks; they did not expand mutation authority.
+
+## C1 / merge / rollout recommendation
+
+- **C1, 推薦モデル：Sol（高）**: accept PASS-WITH-FIX only after adopting the two bounded corrections from final evidence head `9d30a68317dd523a96e6ce96bf7a0f6de23235d5` into PR #82 (normal owned workflow; no force push), verifying its updated exact head and required repository checks. Do not merge the uncorrected `51457826` as an unconditional PASS.
+- No demonstrated residual source blocker after fixes. Production rollout remains separately gated: read-only owner/default ACL/membership/catalog and migration-ledger compatibility; certify the actual approved apply wrapper/BEGIN-COMMIT behavior; apply only the approved migration and read back ACL/definitions; then deploy separately approved exact Function source. Production apply-wrapper/nested-transaction behavior has not been certified here.
+- No authorization for production apply/deploy, manual X, backlog/candidate injection, token/gate/Cron changes is inferred. Natural-cycle observation requires its own authorization. No exactly-once guarantee is claimed across PostgreSQL and X.
+- H1 is stopped at `review_required` / `next_owner: chatgpt`; do not restart until C1 assigns the next step. Control-file synchronization is a separate control-only main commit; source remains the read-back evidence branch, not merged.
