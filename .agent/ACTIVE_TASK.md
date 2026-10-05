@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: done
 - task_id: ai-lab-pr82-final-boundary-rereview-20261005
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final-focused rereview of PR #82 exact head 51457826ea6c29d9c94ac0066786df8927fa1274. Verify duplicate event_id rejection, actual Vault/X no-post proof, unresolved evergreen quarantine, publish-time cooldown, canonical candidate payload, owner/inheritance effective ACL, migration drift/idempotency, and preservation of prior concurrency/fencing guarantees. No merge/apply/deploy/production write/real X. Recommended Sol（高）.
+- allocation: Final C1 accepted H1 PASS-WITH-FIX. Reviewed PR #82 head 51457826ea6c29d9c94ac0066786df8927fa1274; adopted the two bounded H1 correction commits by normal fast-forward to exact PR head 9d30a68317dd523a96e6ce96bf7a0f6de23235d5. PR remains open/unmerged/mergeable; Vercel/Netlify checks are rerunning, so merge remains HOLD until green. Production apply/deploy/real X remain separately gated. H1 is free after fresh allocation. Recommended next verification model if needed: Luna（中）.
 
 ## Codex H2
 - owner: codex
