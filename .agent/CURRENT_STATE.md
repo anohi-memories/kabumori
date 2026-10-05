@@ -1,3 +1,29 @@
+## Final C1 + C2 — 2026-10-05
+
+### C1 — PR #82 production preflight
+- verdict: **PREFLIGHT COMPLETE / PRODUCTION ROLLOUT HOLD**.
+- production catalog/owner/ACL prerequisites for `20261004090000_ai_lab_topic_claims.sql` pass; target and superseded objects/history are absent.
+- exact deploy target is `x-test-post`; no Cron change required.
+- blocker is operational, not source: the accepted migration owns its own COMMIT, so Supabase CLI history insertion is not schema+ledger atomic. A history-write failure can leave complete schema without ledger.
+- no additional review task is allocated. Before production mutation, choose one narrowly specified apply/history policy and authorize it explicitly.
+- cold-ledger limitation remains: no historical event-claim backfill, so dedupe is forward-looking at cutover.
+- production mutation/apply/deploy/X/Vault/token/Cron = **0**.
+- H1 done/free.
+
+### C2 — PR #81 content-settings hardening
+- verdict: **PASS** for exact head `bcc01312c638f5922db4ffd6255ddddf6f611183`.
+- R1 deferrable/improper PK arbiter: CLOSED.
+- R2 helper owner/effective EXECUTE ACL drift: CLOSED.
+- R3 non-finite CAS timestamp domain: CLOSED.
+- prior JSON/RLS/table-ACL/CAS contract preserved.
+- reviewed atomic rollout plan accepted for a separate future production approval; ordinary db push/migration up is not the approved path for the two-file chain.
+- fresh merge gate: PR open/mergeable, Netlify+Vercel green, fresh-main overlap 0.
+- PR #81 squash-merged as main SHA `686f23a7094389b793470503fceb2f47a71f8fbf`.
+- production migration apply/deploy/Auth/Vault/X/OpenAI/Cron = **0**.
+- PR #78 remains blocked only on separately approved production schema apply/read-back before its remaining AI/Auth review resumes.
+- H2 and G3 done/free.
+- review policy: no extra post-merge review allocated; keep review count minimal and prefer Luna where future verification does not require Sol-level security depth.
+
 ## G1 resumed — Simulator visual verification after runtime install
 
 - task_id: `kabumori-topic-detail-visual-polish-20261005`
