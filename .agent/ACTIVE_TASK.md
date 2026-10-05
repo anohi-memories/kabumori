@@ -35,14 +35,14 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: x-social-mobile-pr81-residual-hardening-final-rereview-20261005
+- status: ready
+- task_id: x-social-mobile-pr76-final-security-rereview-20261005
 - start_code: H2
 - finish_code: C2
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Final C2 PASS. PR #81 exact reviewed head bcc01312c638f5922db4ffd6255ddddf6f611183 passed R1/R2/R3 and atomic rollout-plan review, then was squash-merged as 686f23a7094389b793470503fceb2f47a71f8fbf. Production apply remains separately gated. H2 free after fresh allocation.
+- allocation: Single final focused review of PR #76 exact head 5448e545f4a88bbf6597a981c0bcbe4c01043c30. Verify only F1 pre-send readiness parity, F2 exact/effective SECURITY DEFINER ACL, F3 fail-closed rollout, plus bounded regression of prior R1-R5. Review only; no source fix/merge/production apply/deploy/real X. Recommended Sol（高）. No routine extra review after PASS.
 
 ## Claude G1
 - owner: claude
@@ -82,13 +82,13 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: ready
+- status: review_required
 - task_id: x-social-mobile-pr76-final-security-corrective-20261005
 - start_code: G4
 - finish_code: K4
-- next_owner: claude
+- next_owner: codex
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: Bounded corrective for PR #76 after Final C2. Fix F1 pre-send readiness parity (verified_at / connection error), F2 exact/effective SECURITY DEFINER EXECUTE ACL under default/inherited grants, and F3 rollout ordering so every partial state fails closed. Preserve closed R1-R5 architecture and UI pinning. No production apply/deploy/write/real X. Recommended Opus5.5（高）; H2 Sol（極高） rereview required after K4.
+- allocation: Final K4 PASS to one focused H2 rereview. PR #76 exact head 5448e545f4a88bbf6597a981c0bcbe4c01043c30 is OPEN/mergeable; Netlify/Vercel green; fresh-main changed-file overlap 0. G4 reports F1/F2/F3 closed with local disposable/fake-X evidence. Production mutation/read/deploy/real X = 0. H2 review is final unless a concrete blocker is found. Recommended Sol（高）.
 
 ## Claude G5
 - owner: claude
