@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-pr76-final-security-rereview-20261005
 - owner: codex
 - slot: codex-2
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（高）
 - type: final focused security rereview / publish authorization / SECURITY DEFINER ACL / rollout safety
@@ -165,6 +165,18 @@ Review policy:
 - Do not recommend an additional routine review after PASS.
 
 Recommended model: **Sol（高）**.
+
+
+## H2 final independent review completion — 2026-10-06 JST
+
+- verdict: **PASS** on exact PR #76 head `5448e545f4a88bbf6597a981c0bcbe4c01043c30`; F1/F2/F3 closed; no source fixes.
+- evidence: disposable SQL apply/behavior/race/cleanup PASS; actual-adapter fake-X E2E 9 and missing-migration partial-state E2E 2 PASS; adverse ACL PASS; mutations 45/45 DETECTED; focused typed Deno 88/88; real-wrapper integration 39/39; app publish-setting 32/32; app typecheck/lint; bash syntax/diff/secret-pattern checks PASS.
+- availability consequence (connection error => reconnect required) accepted as documented fail-closed contract, not a blocker. Legacy-path and in-flight limitations retained.
+- final no-race evidence: fresh main `b836823c0cd27d41a08f9d2c40c65966b23cfda4`; exact PR head unchanged; changed-file overlap 0.
+- Report published/read back exactly on GitHub main: `4a64bdc353608bd4c16dbec52d23fa980b32f199`; latest Report has this task_id at the top; prior histories preserved.
+- changed_files: H2 Report/TASK only; reviewed source checkout remains clean. Production reads/mutations/deploy/real X/OpenAI/Push = 0; other slot and existing dirty checkout operations = 0.
+- merge recommendation: exact reviewed PR is safe to merge after final freshness gate; no extra routine independent review needed unless source changes/new blocker. Production rollout is a separate authorization and must follow guarded-runtime -> byte readback/drain -> migration -> ACL readback -> Edge/app sequence.
+- status: review_required / next_owner: chatgpt. **STOP for C2** (recommended Sol（高）).
 
 ---
 
