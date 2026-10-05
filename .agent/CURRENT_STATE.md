@@ -1,3 +1,21 @@
+## AI Lab Stage B runner false-positive fix merged — resume-history still requires approval
+
+- direct-copy Company AI Lab rollout correction completed outside G1-G5.
+- root cause of the production Stage B `function_acl` hash mismatch was confirmed as nondeterministic aggregate ordering from `string_agg(... ORDER BY 1)`, not an ACL privilege drift.
+- PR #88 exact source head `19515f6dab3486ec9f5acf771b1ca998a0f207e6` changed only:
+  - `supabase/tests/ai_lab_topic_claims_rollout.sh`
+  - `supabase/tests/ai_lab_topic_claims_rollout.md`
+- canonical `function_acl` descriptor now uses explicit schema + argument types + grantee/privilege/grantable, C collation ordering, and pinned read-back search_path. New expected hash: `5635c459265e8c99d22384083db40e89a1ba87c1ee7f3db2378073c1ae8c9532`.
+- local evidence: 108/108 proof checks PASS; 12/12 runner mutations detected; adverse ACL cases and search_path variants covered.
+- accepted migration/runtime remain unchanged; accepted migration SHA256 remains `30d8504173160f1dc9c3d7d1cf323d9890129d1ff117c2448aa1b2516629c09c`.
+- CI on PR head: Netlify/Vercel GREEN. Fresh-main changed-file overlap = 0.
+- PR #88 squash-merged as `81543e48acf6e227793d7a29fcc9e9653ce532a0`.
+- no extra Codex review allocated under minimal-review/Luna-first policy.
+- production was not accessed or mutated by this correction task. Current production checkpoint remains **schema present / migration history missing** from the earlier approved Stage A.
+- **Do not re-run Stage A.**
+- next production action, only after fresh explicit user approval: re-run corrected Stage B read-only verification against production, and only if EXACT, perform Stage C only (the reviewed `apply --resume-history` / exact history insert), then immediate ledger/postflight read-back.
+- x-test-post deploy remains separate and not authorized by this runner correction.
+
 ## G5 assigned — Common-account Phase 1 production migration gate — 2026-10-06
 
 - task_id: `common-account-v1-phase1-production-migration-gate-20261006`.
