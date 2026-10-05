@@ -3,8 +3,8 @@
 - task_id: kabumori-topic-detail-learning-v2-20261003
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: Home「今日のトピック」のTOPカードは短い要約のまま維持し、topic detailだけを「しっかり学べる」学習ページへ強化する。既存50トピックすべてに具体例・株価/相場との関係・覚えておくポイントを追加し、DB/RPC/API/AIを増やさず静的curated content + native UIだけで完結する。
@@ -365,7 +365,22 @@ No DB/schema/RPC/Edge Function/Auth/AI/API change; no EAS build; no deploy; no r
 ### next_recommendation
 K1 review of PR #83 (UI + static content, low risk). Then the user can read a few topics live on the dev client; a future task may connect a topic to same-day market facts only with an explicit trustworthy data source.
 
-Status: `review_required` / next_owner `chatgpt`. STOP for K1.
+Status: `done` / next_owner `none`.
+
+### Final K1 — accepted / merged
+- verdict: **PASS**.
+- PR #83 exact reviewed head: `c810accebada37760a98a18bb184b50a61b7937b`.
+- fresh main at K1 before merge: `e2ccfcc2e50942ed709eefdb1e62f87cbd693286`; the 20 commits since the G1 merge-base had **0 overlap** with the six PR files.
+- GitHub fresh mergeability read: `mergeable=true`, `mergeable_state=clean`; earlier normalized `mergeable=false` was stale.
+- squash merge: `f5919eb6af3da51c0d4d4a6342ad23b3f0a68980`.
+- accepted scope: topic-detail native UI + curated static learning content + focused tests/screenshots only.
+- accepted verification: 50/50 seeded topic coverage; five learning roles per topic; evergreen/hypothetical content guards; exact id/level/date fail-closed behavior; 284/284 app tests; Expo config/export PASS; diff check clean; 402pt/375pt Simulator verification.
+- EAS build: 0.
+- backend / DB / RPC / API / AI / Auth / Edge / production mutation: 0.
+- Codex review: **not required** — static UI/content-only scope, no sensitive boundary, focused deterministic tests and visual verification are sufficient.
+- remaining non-blockers: past-history detail still says `TODAY'S TOPIC`; no retry button on detail fetch error; occasional harmless line break inside a calculation.
+- AI Lab diary: **候補あり** — 「今日のトピック」を、短い要約から開くと具体例・相場との関係・覚えておくポイントまで学べる画面にし、初級〜上級の50テーマを同じ学習フローで読めるようにした。
+- next: G1 free after fresh allocation.
 
 ---
 

@@ -1,3 +1,57 @@
+## Final C1 — PR #82 durable-claim rereview CHANGES REQUIRED
+
+- verdict: **CHANGES REQUIRED**; PR #82 exact head `9f3b19a3cde490cf63735220ae191dcd4f11bdcb` remains open/unmerged.
+- previous core P1 improvement accepted: actual SQL-backed two-worker diary dispatch now results in one fake X; pre-X durable claim, provider_started boundary, claim_id fencing and settle-failure retention materially close the original race/reopen defect.
+- remaining P1: duplicate scalar `event_id:` labels within one diary entry overwrite the earlier value. Runtime and the actual snapshot workflow validator accept it, so a consumed diary event can be silently renamed and revived.
+- remaining P2 security: migration drift checks ignore unsafe relation/function owner identity and inherited role privileges. H1 reproduced successful reapply where service_role effectively inherited owner powers including TRUNCATE.
+- remaining P2 provider classification: actual VaultAccountXAuth converts a genuine 401 into typed `X_ACCESS_TOKEN_UNAUTHORIZED` / `X_ACCESS_TOKEN_REJECTED_AFTER_REFRESH`; the dispatcher only recognizes `X_REQUEST_FAILED:401`, so a proven no-post 401 becomes permanently ambiguous.
+- remaining P1 evergreen: unresolved provider_started/ambiguous evergreen rows become eligible again after 72h/48h purely by age. H1 time-simulation produced a second fake X while the first unresolved row remained settle-capable. Unresolved outcomes must stay quarantined until reconciled, regardless of cooldown age.
+- remaining P2 cooldown: published evergreen cooldown is currently measured from `claimed_at`, not actual publish/settlement time.
+- remaining P2 RPC contract: service-role candidate payload accepts extra keys and non-canonical event/theme mappings; e.g. an evergreen seed can lie about its theme tags and bypass the intended 48h generic-theme guard.
+- remaining P3: changed tests add net-new `require-await` lint debt; clean it without broad production lint suppression.
+- H1 evidence: candidate focused checked 97 PASS, existing runtime 907 PASS, supplied SQL runner 96 PASS, but independent safety harness still has required RED failures; evidence commit `0801619f4bcd882dadc71deab5cd07493a7ea80a` is not a release candidate.
+- fresh main now overlaps PR #82 in `ai_lab_dev_diary_context.md` and its snapshot due the merged topic-detail-learning diary update. Correction must fresh-merge/reconcile and preserve latest main content + stable IDs.
+- fresh GitHub comparison at C1: main is 13 commits ahead of PR base; exactly those 2 PR files overlap.
+- no production read/write, migration apply, real X/model/Vault/token operation, merge or deploy occurred.
+- G3/G4 remain occupied; do not overwrite them. Continue correction as direct Claude work in an independent worktree.
+- recommended Claude model: **Opus5.5（高）**; fresh rereview after correction: **Sol（高）**.
+- H1 closed/free after fresh allocation.
+
+## Final K1 — Topic detail learning v2 PASS / merged
+
+- verdict: **PASS**.
+- G1 task: `kabumori-topic-detail-learning-v2-20261003`.
+- PR #83 exact accepted head `c810accebada37760a98a18bb184b50a61b7937b` was squash-merged as `f5919eb6af3da51c0d4d4a6342ad23b3f0a68980`.
+- fresh pre-merge main `e2ccfcc2e50942ed709eefdb1e62f87cbd693286`; main had advanced 20 commits from G1's merge-base with **0 overlap** across the six PR files.
+- fresh GitHub mergeability was clean; no slot/file conflict.
+- Home topic card remains the short `base_text` summary. Detail now uses a five-role learning flow for all 50 seeded topics: basics -> why -> hypothetical example -> market/practical relation -> takeaway.
+- exact id/level/JST-date re-fetch and mismatch fail-closed behavior preserved; params change now clears stale detail before loading the new one.
+- accepted verification: 50/50 title coverage; 284/284 app tests; Expo config/export PASS; diff clean; 402pt + 375pt Simulator checks.
+- EAS build = 0. DB/RPC/API/AI/Auth/Edge/production mutation = 0.
+- Codex review: **not required**; static native UI + curated content only, no sensitive boundary, focused tests and visual verification are sufficient.
+- remaining non-blockers: past-topic detail eyebrow still says `TODAY'S TOPIC`; fetch-error state has no retry button; a calculation may line-wrap awkwardly.
+- AI Lab diary: **候補あり** — 「今日のトピック」を開くと、具体例・相場との関係・覚えておくポイントまで読める学習画面にし、初級〜上級の50テーマを同じ流れで学べるようにした。
+- G1 is done/free after fresh allocation.
+
+## PR #82 corrective complete -> H1 durable-claim rereview
+
+- corrected PR #82 exact head `9f3b19a3cde490cf63735220ae191dcd4f11bdcb`, open/mergeable.
+- old rejected head preserved: `08a7346ccd63f2ff540bd48149f1f1e65e6dbe09`; update was fast-forward, no force push.
+- changed scope now 13 files and replaces post-X usage logging with a durable pre-X claim lifecycle.
+- stable explicit diary `event_id` replaces mutable same-date ordinal identity; canonical diary, snapshot and auto-sync CI are updated.
+- new migration: `20261004090000_ai_lab_topic_claims.sql`; old unapplied `20261003090000_ai_lab_topic_event_usage.sql` removed.
+- candidate flow: claim -> generation/guards -> provider_started commit -> X -> published/ambiguous/released settlement -> existing completion. No long DB transaction spans X.
+- candidate reports brand-scoped advisory serialization + diary-event active uniqueness + claim_id fencing, evergreen 72h/48h DB cooldown, pool-exhausted skip, explicit identity conflict handling and fail-closed migration drift comparison.
+- reported tests: Functions 2503/2503 PASS; SQL runner 96 PASS; SQL 6 and TS 8 mutation weakenings detected; H1 prior RED scenarios ported and GREEN.
+- production mutation=0; real X=0; merge/deploy=0.
+- GitHub checks: Netlify and Vercel success.
+- fresh comparison: main 3 commits ahead of PR base with **0 overlap** across PR #82 changed files.
+- H1 is freshly assigned `ai-lab-pr82-claim-rereview-20261004`.
+- H1 must independently validate provider error classification (especially 400/401/422/429 release vs 403/5xx ambiguous), fencing/lease, crash windows, exact idempotency, migration transactionality/ACL/drift and workflow event_id enforcement.
+- recommended Codex model: **Sol（高）**.
+- merge / migration apply / deploy remain HOLD until C1.
+- H2 remains dedicated to PR #81 and is not overwritten.
+
 ## Final C1 — PR #82 AI Lab event-dedupe CHANGES REQUIRED
 
 - verdict: **CHANGES REQUIRED**; PR #82 exact head `08a7346ccd63f2ff540bd48149f1f1e65e6dbe09` remains open/unmerged.

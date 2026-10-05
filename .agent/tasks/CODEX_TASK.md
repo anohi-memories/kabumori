@@ -1,5 +1,361 @@
 # Codex Task — CURRENT TASK
 
+- task_id: ai-lab-pr82-claim-rereview-20261004
+- owner: codex
+- slot: codex-1
+- status: done
+- next_owner: none
+- priority: highest
+- recommended_model: Sol（高）
+- type: focused rereview / durable pre-X claim / migration / crash safety
+- target_pr: 82
+- target_head: 9f3b19a3cde490cf63735220ae191dcd4f11bdcb
+- previous_bad_head: 08a7346ccd63f2ff540bd48149f1f1e65e6dbe09
+- production_mutation_allowed: false
+
+## Purpose
+
+前回C1でCHANGES REQUIREDとなったPR #82の修正版を再レビューする。
+
+今回の修正は、単なるusage記録ではなく:
+- stable `event_id`
+- pre-X durable claim
+- provider_started / ambiguous / published state
+- fencing token
+- evergreen cooldownのDB強制
+- migration drift fail-closed
+へ設計変更されている。
+
+目的は「同じ実開発eventの言い換え連投」を、並行実行・DB失敗・process crash・X応答不明まで含めて本当に閉じたか確認すること。
+
+**merge / migration apply / Edge deploy / real X / production writeは禁止。**
+
+## Mandatory startup
+
+1. PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / previous H1 reportを読む。
+2. independent H1 worktree。
+3. fresh origin/main。
+4. PR #82 exact head `9f3b19a3cde490cf63735220ae191dcd4f11bdcb` を確認。違えばSTOP。
+5. K3/C1後の他slotを確認。H2はPR #81 review結果待ち、G3/G4は別workstream。触れない。
+6. fresh comparison。ChatGPT確認時点ではmainはPR baseから3 commits ahead、PR #82の13ファイルとのoverlap 0。
+7. migration timestamp/order collisionもfresh確認。
+
+## Gate A — previous P1: concurrent same-event publish
+
+最重要。
+
+2 worker / 2 scheduled_post が同時に同じ diary event を狙うケースを、実SQL + dispatcher harnessで再現する。
+
+必須:
+- 同じ候補リスト
+- 同じevent
+- 同時claim
+- advisory lockが効く
+- active diary event partial UNIQUEが効く
+- 勝者だけclaimを取得
+- 敗者は同eventでXへ進めない
+- 長いDB transactionをX跨ぎで保持していない。
+
+advisory lockだけ、UNIQUEだけ、どちらか片方を壊した mutation でもテストが検出するか確認。
+
+「scheduler間隔がある」は安全根拠にしない。
+
+## Gate B — fencing / lease
+
+`claim_id`が本当にfencing tokenとして機能するか。
+
+確認:
+- expired old claimのworkerがprovider_startedへ進めない
+- old workerがnew claimをreleaseできない
+- old workerがnew claimをpublishedへsettleできない
+- same scheduled_postの二重claimはexplicit conflict
+- lease expirationはclaimedのみ
+- provider_started/ambiguous/publishedはleaseで自動再開放されない
+- claimed lease expiration後の新claim取得が安全。
+
+## Gate C — provider_started boundary
+
+dispatcher順序を実コードで確認:
+
+claim
+→ generation / content guard / fingerprint
+→ provider_started DB commit
+→ X call
+→ result classification
+→ settle/ambiguous/release
+→ existing completion
+
+以下を個別にテスト:
+- generation failure
+- content diversity rejection
+- fingerprint duplicate
+- start-provider RPC false/error
+- provider call not started
+- provider 400
+- 401
+- 422
+- 429
+- 403
+- 5xx
+- timeout
+- network error
+- response missing id
+- process crash-equivalent after provider_started
+- process crash-equivalent after X success before settle
+- settle DB error
+- completion RPC error.
+
+X side effect may have occurred after provider_startedなら、eventが再利用可能にならないこと。
+
+## Gate D — “clear rejection” classification
+
+Candidate treats 400 / 401 / 422 / 429 as clearly no-post and releasable; 403 / 5xx are ambiguous.
+
+Independently inspect the actual `postToX` abstraction / error contract.
+
+Do not assume status alone if the wrapper cannot prove:
+- request was accepted/rejected before creating a post
+- status is authentic X response vs local/proxy failure.
+
+If any of 400/401/422/429 can be returned after an uncertain write in current abstraction, release is unsafe.
+
+Conversely, do not overblock clear pre-write failures if the abstraction proves them.
+
+Report exact evidence.
+
+## Gate E — settle idempotency / conflict
+
+Verify:
+- same claim + scheduled + event + unit + same xPostId => IDEMPOTENT
+- same claim + different xPostId => conflict
+- same claim + different event/unit => conflict
+- same scheduled_post + different active claim => conflict
+- NOT_FOUND does not become success
+- published cannot be released
+- ambiguous can only become published through exact identity match
+- released/expired cannot be settled published.
+
+Confirm DB return handling in TS does not misinterpret conflict strings/status.
+
+## Gate F — stable event_id
+
+Review diary parser + sanitizer + canonical MD + snapshot + CI.
+
+Must prove:
+- event_id required for runtime candidate
+- format bound to heading date
+- unique
+- reordering entries does not change ID
+- inserting another entry does not change existing ID
+- changing body/angles does not change ID
+- sanitizer cannot silently rewrite ID into another valid ID
+- duplicate/missing/unsafe event_id is excluded/fails CI
+- event_id does not expose task/branch/commit/PR/token/internal DB identifiers.
+
+Inspect all 8 current IDs for public safety.
+
+Important:
+CI currently also rejects duplicate diary dates. Determine whether this remains an intentional one-event-per-day contract. If yes, document. If future multiple events/day are desired, do not silently block them via date uniqueness while claiming event_id supports multiple events.
+
+## Gate G — diary snapshot workflow safety
+
+Review `.github/workflows/ai-lab-diary-snapshot.yml`.
+
+Verify:
+- validation imports are safe in GitHub Actions
+- snapshot generation deterministic
+- missing/invalid/duplicate event_id stops before write
+- generated-file-only diff remains enforced
+- race check still prevents non-fast-forward write
+- workflow cannot overwrite unrelated main changes
+- permissions remain minimal enough for intended auto-commit.
+
+No live workflow mutation required.
+
+## Gate H — evergreen behavior
+
+DB must enforce:
+- same seed 72h cooldown
+- overlapping generic theme 48h cooldown
+- all candidates blocked => **no claim**
+- dispatcher skips X with explicit safe failure/skip
+- no least-recent cooldown bypass
+- evergreen can eventually re-enter after cooldown
+- diary event remains permanently/non-reclaimably blocked once provider_started/ambiguous/published as designed.
+
+Check whether released/expired evergreen rows affect cooldown correctly.
+
+## Gate I — migration schema / drift / ACL
+
+Review `20261004090000_ai_lab_topic_claims.sql`.
+
+Must verify:
+- clean apply
+- clean reapply
+- explicit BEGIN/COMMIT behavior under repo deployment tooling
+- old superseded table presence => fail
+- wrong/missing column => fail
+- wrong/missing PK/CHECK/UNIQUE/index => fail
+- RLS/policies/triggers drift => fail
+- column/table ACL drift => fail or normalize only where explicitly intended
+- unexpected overloads => fail
+- exact function signatures
+- SECURITY DEFINER
+- `search_path=''`
+- fully-qualified object references inside functions
+- PUBLIC/anon/authenticated cannot execute
+- service_role execute only exact intended 5 functions
+- table direct privileges none
+- no TRUNCATE/TRIGGER/REFERENCES/MAINTAIN leakage
+- owner role / function owner cannot accidentally broaden exposure through PUBLIC execute default.
+
+Because another migration recently had `IF NOT EXISTS` drift issues, do not accept source-text claims without disposable proof.
+
+## Gate J — advisory lock / hash
+
+Review:
+`pg_advisory_xact_lock(hashtextextended('ai_lab_topic_claims:ai_salaryman_lab',0))`
+
+Confirm:
+- deterministic per database
+- all claim acquisition paths use same key
+- no alternate writer bypasses it
+- no realistic collision concern that changes correctness materially
+- lock ordering does not create deadlock with other locks/functions.
+
+## Gate K — candidate payload validation
+
+`claim_ai_lab_topic` accepts JSON candidates.
+
+Verify DB validates:
+- no unexpected candidate keys causing hidden behavior
+- exact kind/event/unit/theme relationships
+- invalid eventKey/unitKey fails closed
+- theme_tags contents/count
+- no text body stored in DB
+- max candidate count
+- no malformed candidate can bypass diary one-time or evergreen cooldown.
+
+If DB relies on table CHECK for some validation, confirm no candidate is partially acted upon before failure in a way that leaves bad state.
+
+## Gate L — completion / duplicate-X safety
+
+Existing `complete_ai_salaryman_lab_brand_post` was not changed.
+
+Verify integration:
+- event claim does not introduce a new retry of confirmed X
+- settle failure is absorbed/handled so outer failure path does not resend X
+- completion failure after published claim does not reopen event
+- ambiguous outcome never gets automatically retried as same event
+- scheduled-post failure handling remains compatible.
+
+Do not claim cross-system exactly-once beyond what is proven.
+
+## Gate M — other brands / unrelated paths
+
+Confirm no functional change to:
+- Kabumori morning/close reports
+- other X brands
+- OAuth
+- tokens/Vault
+- scheduler/Cron
+- common account
+- PR #81 content settings
+- PR #76 publish-toggle corrective.
+
+## Required tests
+
+Run independently:
+- Functions relevant suites
+- rewritten `ai_lab_event_dedupe_test.ts`
+- diary context tests
+- scheduled brand-post tests
+- topic dedupe tests
+- cross-brand dedupe tests
+- x-test-post relevant suites
+- SQL runner `supabase/tests/ai_lab_topic_claims_run.sh`
+- two-session concurrent claim
+- lease/fencing
+- provider classification
+- idempotency conflicts
+- drift adversarial cases
+- ACL effective privileges
+- CI validation script
+- changed-file Deno check/lint
+- git diff --check
+- secret/internal-id scan.
+
+Where full entrypoint `deno check` has the known six pre-existing errors, compare against merge-base and do not mislabel them as new.
+
+## Production read-only
+
+Optional only if needed:
+- migration ledger collision
+- target table/function existence
+- role/default ACL facts
+- aggregate scheduled-post metadata.
+
+No post text/token/Vault/PII read.
+
+Production write = 0.
+
+## Verdict
+
+PASS only if previous C1 blockers are closed under realistic adversarial concurrency/failure.
+
+PASS-WITH-FIX only for bounded correction fully verified by H1.
+
+CHANGES REQUIRED if:
+- two workers can still hit X for same diary event;
+- any ambiguous/possibly-posted outcome can reopen the event;
+- stable ID can silently change/revive;
+- migration drift/ACL/security boundary remains unsafe;
+- dispatcher can retry confirmed/possibly-confirmed X.
+
+## Report
+
+Append `.agent/CODEX_REPORT.md`:
+- verdict
+- exact head
+- previous P1/P2 disposition
+- concurrency proof
+- lease/fencing proof
+- provider-status classification evidence
+- crash/ambiguous outcome
+- settle/idempotency
+- event_id + CI
+- evergreen
+- migration/ACL/RLS/drift
+- other-brand impact
+- tests
+- production reads/writes
+- source fix if any
+- merge recommendation
+- rollout order.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C1.
+
+Recommended model: **Sol（高）**.
+
+## H1 completion — 2026-10-04 JST
+
+- verdict: **CHANGES REQUIRED**. PR #82 exact head remains `9f3b19a3cde490cf63735220ae191dcd4f11bdcb`, open/unmerged; no runtime fix.
+- Previous ordinary diary concurrency, failed-settle and claim-id fencing blockers are closed in actual local SQL-backed dispatch controls. Remaining required corrections: duplicate scalar event_id silently renames identity in runtime and actual CI; API-owner/inherited-owner ACL drift is accepted; genuine Vault-path 401 becomes permanently ambiguous; unresolved evergreen claims reopen after cooldown age; cooldown timing and canonical payload/theme validation remain incomplete.
+- Candidate focused checked suites 97 PASS; existing shared + x-test-post runtime 907 PASS (--no-check); local SQL runner 96 PASS; Node workflow-related suites 49 PASS. H1 independent SQL/dispatcher safety tests: 6 controls PASS / 10 required failures; actual workflow validator: 2 controls PASS / 1 required failure. These RED tests are evidence, not a passing release suite.
+- Advisory-lock removal is detected by the existing two-session SQL runner; diary UNIQUE removal is independently detected by H1's direct-insert constraint control.
+- Three changed helper modules typecheck PASS. Full entrypoint has exactly the same six baseline type errors; runtime lint has the same four baseline issues. Changed test-file lint has 65 require-await diagnostics vs 25 at merge-base (40 net-new); no blanket check/lint PASS claim.
+- Evidence-only commit `0801619f4bcd882dadc71deab5cd07493a7ea80a` on H1-only `codex/h1-pr82-claims-20261004` contains two RED-test files; do not merge it as a release candidate.
+- Fresh main `1a713f8c7fc48629262c6cdc7c11fed1fa316e8e` now overlaps canonical diary MD + snapshot: preserve the new topic-detail diary content when correcting/freshening PR #82. No migration timestamp collision found on that fresh main.
+- H1-owned temporary databases removed and dedicated PostgreSQL stopped. Production reads/writes, real X/model/Vault/token operations, merge/deploy = 0. Other slot worktrees/control files untouched.
+- Detailed findings, limits and correction contract appended to `.agent/CODEX_REPORT.md`. Next: **C1, 推薦モデル：Sol（高）**; return for focused correction, HOLD merge/deploy. H1 STOP after control-file sync/read-back.
+
+---
+
+# Codex Task — CURRENT TASK
+
 - task_id: ai-lab-pr82-event-dedupe-review-20261003
 - owner: codex
 - slot: codex-1
@@ -2140,6 +2496,34 @@ Then status -> review_required, next_owner -> chatgpt, STOP for C1.
 - PR #82 remains open/unmerged. Production mutation / real X / deploy = 0.
 - correction must use stable immutable event identity and durable pre-X event claim/reservation semantics with safe ambiguous-outcome handling; scheduler spacing is not a correctness guarantee.
 - G3/G4 are currently occupied, so no slot is overwritten. Return via direct Claude instruction in an independent worktree.
+- recommended Claude model: **Opus5.5（高）**.
+- corrected candidate requires fresh Codex rereview: **Sol（高）**.
+- H1 closed and reusable after fresh allocation.
+
+
+## Final C1 — PR #82 durable-claim rereview
+
+- verdict: **CHANGES REQUIRED accepted**.
+- reviewed exact head: `9f3b19a3cde490cf63735220ae191dcd4f11bdcb`.
+- accepted improvements:
+  - ordinary two-worker diary race is closed under actual SQL-backed dispatch;
+  - provider_started precedes X without holding a DB transaction across X;
+  - claim_id fencing/lease prevents stale worker start/release/settle;
+  - settle failure after confirmed X retains a blocking claim and does not reopen the diary event;
+  - exact settlement/idempotency conflicts are materially improved;
+  - normal evergreen pool exhaustion no longer uses the old least-recent bypass.
+- accepted remaining blockers:
+  - P1 duplicate `event_id:` labels within one diary entry silently overwrite identity in runtime and current workflow validator, reviving a previously consumed event under a new key;
+  - P2 migration drift/ACL proof does not reject unsafe table/function ownership or inherited effective privileges;
+  - P2 real VaultAccountXAuth 401 maps to typed errors not recognized by the dispatcher release classifier, leaving a proven no-post case permanently ambiguous;
+  - P1 unresolved evergreen provider_started/ambiguous rows become reclaimable after 72h/48h solely by age, allowing a possibly-posted seed to be sent again;
+  - P2 confirmed evergreen cooldown uses claimed_at rather than published/settled time;
+  - P2 RPC candidate JSON accepts extra keys and non-canonical event/theme mappings, allowing cooldown/theme checks to be bypassed by malformed service-role input;
+  - P3 changed test files introduce net-new require-await lint debt.
+- H1 evidence branch `codex/h1-pr82-claims-20261004` commit `0801619f4bcd882dadc71deab5cd07493a7ea80a` is RED evidence only; do not merge as release candidate.
+- fresh main has advanced and now overlaps PR #82 in the canonical diary MD + snapshot. Correction must preserve the latest main diary/topic-detail entry and re-generate snapshot; do not overwrite it.
+- PR #82 remains open/unmerged; production mutation/read, real X/model/Vault/token operations, migration apply and deploy all remain 0.
+- G3/G4 remain occupied, so no implementation slot is overwritten. Correction should continue as direct Claude work in an independent worktree.
 - recommended Claude model: **Opus5.5（高）**.
 - corrected candidate requires fresh Codex rereview: **Sol（高）**.
 - H1 closed and reusable after fresh allocation.

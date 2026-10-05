@@ -24,13 +24,13 @@
 - owner: codex
 - slot: codex-1
 - status: done
-- task_id: ai-lab-pr82-event-dedupe-review-20261003
+- task_id: ai-lab-pr82-claim-rereview-20261004
 - start_code: H1
 - finish_code: C1
 - next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepted CHANGES REQUIRED on PR #82 head 08a7346ccd63f2ff540bd48149f1f1e65e6dbe09. Concurrent same-event selection, post-success usage-write failure, ambiguous crash windows, mutable ordinal event IDs, conflicting idempotency, evergreen cooldown bypass and migration drift remain. No merge/deploy/production mutation. H1 free after fresh allocation.
+- allocation: Final C1 accepted CHANGES REQUIRED on PR #82 head 9f3b19a3cde490cf63735220ae191dcd4f11bdcb. Core diary concurrency/fencing is improved, but duplicate event_id labels, unsafe owner/inherited ACL drift, real-wrapper 401 classification, unresolved evergreen reclaim, claim-time cooldown semantics, non-canonical RPC payload acceptance and new test lint debt remain. No merge/deploy/production mutation. H1 free after fresh allocation.
 
 ## Codex H2
 - owner: codex
@@ -47,13 +47,13 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: claude
-- status: ready
+- next_owner: none
+- status: done
 - task_id: kabumori-topic-detail-learning-v2-20261003
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Homeの短いtopic要約は維持し、topic detailのみを全50件のcurated learning flowへ強化する。具体例・相場/株価との関係・覚えておくポイントを追加し、DB/RPC/API/AI変更なし、EAS build 0。G2のmarket-report-analysis production作業とはscope分離。開始時にfresh main/open PR/worktree分離を再確認し、対象3ファイル競合時はSTOP。
+- allocation: Final K1 PASS. PR #83 exact head c810accebada37760a98a18bb184b50a61b7937b squash-merged as f5919eb6af3da51c0d4d4a6342ad23b3f0a68980. 全50トピックを5段階の静的学習フローへ強化し、Homeの短い要約は維持。284/284 tests、402/375pt visual checks、EAS 0、backend/DB/RPC/API/AI mutation 0。Codex review不要。G1 free after fresh allocation.
 - recommended_model: Sonnet5（高）
 
 ## Claude G2
