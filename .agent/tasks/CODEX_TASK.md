@@ -3,8 +3,8 @@
 - task_id: common-account-gateb-managed-auth-final-review-20261005
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sol（極高）
 - type: final managed-Supabase Gate B evidence review / Auth deletion / stale-session boundary / production migration gate
@@ -172,6 +172,19 @@ Recommended model: **Sol（極高）**.
 - production migration may advance to C1's separately authorized exact-single-file mutation gate, with explicit apply/history failure policy. Backfill, rollback, enforcement, deletion/registration wiring and deploy remain HOLD/separately authorized.
 - this turn: source invariants 10/10, runner syntax and diff checks PASS; prior local 20 / 46 / 8 results remain prior evidence, not reruns.
 - production/test/photo mutations = 0; source changes = 0. Full gate dispositions/checklist appended to CODEX_REPORT. STOP for C1; recommended next model Sol（極高）.
+
+
+## Final C1 — 2026-10-06
+
+- verdict: **PASS-WITH-CONDITIONS ACCEPTED** for the common-account Phase 1 additive foundation.
+- hosted Gate B evidence is accepted for installation scope.
+- stale access JWT remained usable against Data API after Auth deletion; future destructive orchestration must close stale-token writer paths beyond session/refresh revocation alone.
+- observer remains observational/shadow-only and does not authorize deletion or claim whole-account completion.
+- Phase 1 production migration may proceed only through a separately approved exact-single-file mutation gate after fresh full preflight and a pinned apply/history failure policy.
+- ordinary db push, include-all migration, history repair/relabel, blind reapply, ad-hoc GRANT repair, automatic rollback, enforcement/deletion activation are not authorized.
+- backfill(true) remains HOLD and requires separate explicit approval after migration read-back and fresh backfill(false) parity review.
+- production mutation by C1: 0.
+- next recommended model for the production migration mutation gate: **Sol（極高）**.
 
 ---
 
