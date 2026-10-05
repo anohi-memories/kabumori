@@ -1,5 +1,231 @@
 # Claude Task 3 — CURRENT TASK
 
+- task_id: x-social-mobile-pr81-production-schema-gate-20261005
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Opus5.5（高）
+- type: production migration gate / read-only preflight / ordered rollout / post-apply read-back
+- source_pr: 81
+- merged_main_sha: 686f23a7094389b793470503fceb2f47a71f8fbf
+- blocks_pr: 78
+- production_mutation_allowed: false
+
+## Purpose
+
+PR #81 content-settings hardeningは source実装・H2最終レビュー・main mergeまで完了済み。
+
+本来の次工程は:
+
+1. production schemaのsame-day read-only preflight
+2. pending migration順序の確認
+3. explicit user approval後に、PR #81の2ファイルをreview済みのouter transactionでproductionへ適用
+4. separate-session read-back
+5. その完了後にPR #78 AI相談 v1をfresh mainへrebase/integrateして残りレビューを再開
+
+このTASKでは、まず1〜2と適用準備まで行う。
+
+**production mutationは、TASKに書いてあるだけでは許可しない。**
+実際のapply直前にユーザーの明示承認が必要。
+承認前は必ずSTOPする。
+
+## Mandatory startup / isolation
+
+1. Read PROJECT_RULES / CLAUDE.md / ORCHESTRATION / CURRENT_STATE / this TASK / Final C2 for PR #81 / H2 final report.
+2. New Mac clean base: `/Users/yuya/Developer/kabumori-fresh`.
+3. Fresh `origin/main`からG3専用の独立worktree/checkoutを使用。
+4. Confirm main contains PR #81 merge `686f23a7094389b793470503fceb2f47a71f8fbf`.
+5. Confirm these exact merged files are unchanged:
+   - `supabase/migrations/20260922045046_social_mobile_content_settings_candidate.sql`
+   - `supabase/migrations/20261003120000_social_mobile_content_settings_hardening.sql`
+6. G4/PR #76 is a separate workstream. Do not edit its files/worktree.
+7. Do not touch AI Lab PR #82 runtime/migration.
+8. Do not touch common-account G5/H1 work.
+9. No production user content/PII/token/Vault plaintext reads.
+
+## Gate A — fresh migration ordering / pending history
+
+Before any production mutation, read-only verify current source + production ledger.
+
+Relevant versions:
+- PR #76: `20261003090000_social_mobile_publish_permission_boundary`
+- PR #81: `20261003120000_social_mobile_content_settings_hardening`
+- merged PR #82: `20261004090000_ai_lab_topic_claims`
+- historical PR #81 candidate: `20260922045046_social_mobile_content_settings_candidate`
+
+Rules:
+- if PR #76's earlier `20261003090000` is still an active pending/unmerged/unapplied workstream, **do not apply PR #81 ahead of it by assumption**.
+- report the exact ordering conflict and STOP at read-only HOLD unless ChatGPT/user has separately resolved the rollout order.
+- do not fake/repair/reorder migration history to bypass this.
+- if PR #76 is merged and its production disposition is known, re-evaluate with fresh ledger.
+- PR #82 being merged does not authorize its production apply and must not be bundled.
+
+## Gate B — PR #81 production read-only preflight
+
+Use one explicit READ ONLY production transaction and verify:
+
+- target table `public.social_mobile_content_settings` absent unless an explicitly reviewed prior apply happened;
+- same-prefix helper functions absent unless exact reviewed shape exists;
+- both PR #81 migration versions absent from ledger unless already legitimately applied;
+- exact live `supabase_migrations.schema_migrations` column/constraint shape;
+- applying role identity;
+- `brands` / `brand_memberships` dependency shape;
+- current default table/function ACL relevant to the migration;
+- current API role membership graph;
+- no target-version/name collision;
+- no unexpected same-name relation/function/policy/trigger.
+
+If any drift from the H2-reviewed preconditions is found:
+- STOP;
+- do not apply;
+- do not repair;
+- report exact mismatch.
+
+## Gate C — freeze reviewed production apply package
+
+If A/B are clean and ordering is resolved, prepare but do not execute:
+
+- exact current main SHA;
+- SHA256 of both PR #81 SQL files;
+- exact migration version/name pairs;
+- exact operator command/runbook based on the H2-reviewed procedure;
+- pre-apply and post-apply read-back SQL;
+- failure/abort conditions.
+
+Reviewed apply policy:
+- direct operator-controlled `psql -X --single-transaction -v ON_ERROR_STOP=1`;
+- candidate + hardening + exact two migration-history records in the same outer transaction;
+- no `supabase db push`;
+- no `migration up`;
+- no Management API migration apply;
+- no history repair/reconcile;
+- no unrelated pending migration;
+- production connection supplied securely outside logs/chat.
+
+Do not change the two merged SQL files.
+
+## Mandatory STOP for approval
+
+When Gate A/B/C are complete, STOP before the first production write.
+
+Report to ChatGPT/user:
+- exact production project identity;
+- fresh main SHA;
+- exact migration hashes;
+- current ledger state;
+- PR #76 ordering status;
+- exact operation proposed;
+- expected schema/history changes;
+- rollback/abort behavior;
+- confirmation that no other migration/deploy is included.
+
+Then request explicit production-apply approval.
+
+Do not treat this TASK creation or a previous generic “continue” as mutation approval.
+
+## After explicit approval only — production apply
+
+Only if ChatGPT/user explicitly approves after the above STOP:
+
+1. repeat fresh same-day Gate A/B reads immediately before mutation;
+2. if any state changed -> STOP and invalidate approval;
+3. execute the exact reviewed outer transaction only;
+4. do not retry blindly on lost/ambiguous response;
+5. open a new separate read-only session and verify:
+   - both ledger rows exact;
+   - target table exact columns/types/nullability/defaults;
+   - PK/index immediate/nondeferrable/valid/ready/live;
+   - FK/check constraints exact;
+   - finite timestamp CHECK exact;
+   - RLS enabled and policies exact;
+   - table effective ACL exact;
+   - helper signatures/owners/search_path/exact effective EXECUTE;
+   - single expected version trigger;
+   - no unexpected overloads/grants/column ACL.
+6. if read-back mismatch:
+   - STOP;
+   - do not auto-drop;
+   - do not history-repair;
+   - do not proceed to PR #78;
+   - report exact committed state for separate recovery decision.
+
+No Edge deploy is part of this schema task.
+
+## PR #78 continuation gate
+
+Only after production PR #81 apply + read-back is PASS:
+
+- fresh-check PR #78 exact current head `6e9f78a31bae9b65599732a9b416dcb50f2bfbc7`;
+- do not silently merge/rebase it inside this same mutation step;
+- report that schema prerequisite is satisfied;
+- next G3 task should fresh-integrate/rebase PR #78 onto current main and resume its unfinished Auth/AI/security gates.
+
+PR #78 remains unmerged until that separate continuation.
+
+## Safety
+
+Forbidden before explicit mutation approval:
+- production INSERT/UPDATE/DELETE/DDL;
+- migration/history write;
+- Edge deploy;
+- Auth/Vault/OAuth/X/OpenAI mutation;
+- Cron/scheduler/settings changes;
+- PR #78 merge/deploy;
+- PR #76 changes.
+
+Always forbidden in this task:
+- rewriting accepted PR #81 migrations;
+- broad migration repair;
+- bundling PR #76 or PR #82;
+- production test data/user-content writes.
+
+## Verification
+
+Before approval:
+- read-only production catalog/ledger preflight;
+- local command/runbook syntax check;
+- verify exact source hashes;
+- `git diff --check`;
+- no source changes expected except .agent unless a bounded operator-readback script is truly necessary.
+
+After approved apply:
+- separate-session production read-back only;
+- no app/Edge/runtime test required for schema-only change beyond existing accepted source tests.
+
+## Completion / K3
+
+Report:
+- task_id/result
+- fresh main
+- PR #76 ordering disposition
+- production preflight
+- exact SQL hashes
+- whether approval was requested/received
+- exact production mutations, if any
+- post-apply read-back, if any
+- production deploy = 0
+- X/OpenAI/Vault/OAuth/Cron = 0
+- remaining blockers
+- whether PR #78 may now resume
+- next recommendation
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K3.
+
+Review policy:
+- this is execution of an already independently reviewed migration plan.
+- do **not** automatically add another Codex review after a clean exact apply/read-back.
+- if only read-only preflight/HOLD occurs, no review is needed.
+
+
+---
+
+# Withdrawn G3 allocation — user corrected routing; DO NOT EXECUTE
+
 - task_id: ai-lab-pr82-production-rollout-runner-20261005
 - owner: claude
 - slot: claude-3
