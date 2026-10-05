@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-pr81-content-settings-hardening-rereview-20261003
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sol（高）
 - type: focused rereview / migration / RLS / JSON contract / CAS
@@ -1203,3 +1203,25 @@ Report PASS/FAIL, exact reviewed head, disposition of all prior blockers, test e
 - PR #78 remains merge/deploy HOLD.
 - after G3 K3, fresh H2 rereview required; recommended **Sol（高）**.
 - H2 closed and reusable after fresh allocation.
+
+
+## Final C2 — PR #81 hardening rereview
+
+- verdict: **CHANGES REQUIRED accepted**.
+- reviewed exact head: `5595fb131813542c55c43bc783af623cdb9ea442`.
+- accepted closed areas:
+  - exact normalized JSON/persona durable contract for inspected writers;
+  - original effective table ACL/RLS flaw;
+  - finite-path monotonic CAS under ordinary/same-tx/concurrent/long-tx cases;
+  - most enumerated schema drift guards.
+- accepted residual blockers:
+  - R1 deferrable PK drift is accepted and breaks actual `ON CONFLICT (brand_id)` writer semantics;
+  - R2 unexpected helper function owner/EXECUTE ACL drift can survive `CREATE OR REPLACE`;
+  - R3 existing non-finite `updated_at` (infinity) defeats strict monotonic CAS and stale-token protection.
+- rollout blocker also accepted: Supabase CLI proof is per-file atomic only; applying candidate then hardening through normal migration-up can leave the weak candidate committed if the second file fails. A separately reviewed whole-chain production apply plan is required.
+- PR #81 remains open/unmerged; production apply/deploy and PR #78 resume remain HOLD.
+- G3 corrective assigned: `x-social-mobile-pr81-hardening-residual-corrective-20261005`, recommended **Opus5.5（高）**.
+- fresh C2 comparison: main is 62 commits ahead of PR81 base with **0 overlap** across PR81 files; PR remains mergeable at the reviewed head.
+- source fix by H2: none; production mutation=0.
+- after G3 K3, fresh H2 rereview required, recommended **Sol（高）**.
+- H2 closed/free after fresh allocation.
