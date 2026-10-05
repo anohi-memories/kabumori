@@ -3,8 +3,8 @@
 - task_id: ai-lab-pr82-production-readonly-preflight-20261005
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（高）
 - type: production read-only preflight / migration-ledger / catalog-ACL / rollout-order certification
@@ -118,6 +118,19 @@ Report:
 Then status -> review_required, next_owner -> chatgpt, STOP for C1.
 
 Do not create/apply/deploy anything.
+
+## H1 preflight completion — 2026-10-05
+
+- result: **PREFLIGHT COMPLETE / PRODUCTION ROLLOUT HOLD**. Target catalog/owner prerequisites pass; the exact production apply path still needs a separately reviewed decision.
+- merged source `80e11c9207d44599db26a25195f1ee0091484231` is in main; migration SHA256 `30d8504173160f1dc9c3d7d1cf323d9890129d1ff117c2448aa1b2516629c09c`.
+- production target/superseded migration ledger entries and objects: absent. API-to-postgres ownership membership: false. No target version/name collision.
+- actual CLI 2.116.0 + exact SQL local proof: clean/reapply pass; pre-COMMIT ACL failure leaves no target DDL/history; history INSERT failure after authored COMMIT leaves complete target DDL without history. This boundary must not be called schema+ledger atomic.
+- isolated one-file migration-up against an existing unmatched ledger rejects before apply. Production/source history is not globally aligned; no include-all, repair, bulk push, or history rewrite attempted.
+- exact deploy target: `x-test-post` only, after approved migration + catalog/API read-back. Baseline ACTIVE v133, verify_jwt=false; production does not yet contain the topic-claim path.
+- live AI Lab / active Cron require no manual POST smoke, old-worker drain and no overdue backlog at cutover; empty new ledger does not dedupe already-posted historical diary events.
+- source/runtime changes: 0; production mutations/deploy/X/Vault plaintext/token/refresh/Cron changes: 0. Local proof DBs cleaned and own cluster stopped.
+- full evidence and pre/post checklist appended to `.agent/CODEX_REPORT.md`.
+- next: C1 decides the exact single-file apply mechanism and schema/history failure policy before requesting any production authority. Recommended C1 **Sol（高）**; future mutation gate **Sol（極高）**. STOP here.
 
 ---
 
