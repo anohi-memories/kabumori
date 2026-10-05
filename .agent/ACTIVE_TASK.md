@@ -35,14 +35,14 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: x-social-mobile-pr76-transactional-publish-toggle-rereview-20261005
 - start_code: H2
 - finish_code: C2
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Final security rereview of PR #76 exact head 7f75c07a8c997b6a585e9c86dca01186eeea671f after fresh-main merge. Verify R1-R5 closure, lock/deadlock ordering, caller-JWT transactional authority, fresh pre-X permission coverage, tenant-safe errors, ON/OFF semantics, SECURITY DEFINER ACL, PostgREST/auth.uid assumptions, Kabumori-type account boundary and fail-closed rollout order. No merge/apply/deploy/production write/real X. Recommended Sol（極高）.
+- allocation: Final C2 accepted CHANGES REQUIRED on PR #76 head 7f75c07a8c997b6a585e9c86dca01186eeea671f. R1-R5 core architecture is largely closed, but F1 pre-send readiness parity, F2 exact/effective SECURITY DEFINER ACL under default/inherited grants, and F3 fail-closed partial rollout ordering require bounded G4 correction. No source fix/merge/apply/deploy/real X by H2. H2 free after fresh allocation.
 
 ## Claude G1
 - owner: claude
@@ -81,13 +81,13 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: review_required
-- task_id: x-social-mobile-pr76-fresh-main-integration-20261005
+- status: ready
+- task_id: x-social-mobile-pr76-final-security-corrective-20261005
 - start_code: G4
 - finish_code: K4
-- next_owner: codex
-- source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: K4 PASS to independent security rereview. PR #76 fresh head 7f75c07a8c997b6a585e9c86dca01186eeea671f is open/mergeable; only expected migration_source_invariants conflict was resolved while preserving current main. Fresh post-merge tests passed; production mutation/X/deploy=0. H2 review assigned because H1 is occupied by PR #82. Recommended Sol（極高）.
+- next_owner: claude
+- source: .agent/tasks/CLAUDE_TASK_4.md
+- allocation: Bounded corrective for PR #76 after Final C2. Fix F1 pre-send readiness parity (verified_at / connection error), F2 exact/effective SECURITY DEFINER EXECUTE ACL under default/inherited grants, and F3 rollout ordering so every partial state fails closed. Preserve closed R1-R5 architecture and UI pinning. No production apply/deploy/write/real X. Recommended Opus5.5（高）; H2 Sol（極高） rereview required after K4.
 
 ## Claude G5
 - owner: claude
