@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Image, type ImageSource } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
@@ -14,6 +14,8 @@ import {
   TOPIC_DETAIL_ART_ASPECT,
   TOPIC_DETAIL_LEVEL_COLORS,
   topicDetailStepNumber,
+  topicDetailTitleStyle,
+  TOPIC_DETAIL_ART_CLEAR_RATIO,
 } from '@/lib/topic-detail-presentation';
 
 const palette = KABUMORI_COLORS.light;
@@ -56,6 +58,7 @@ const FADE_STRIP_HEIGHT = 2;
 export default function TopicDetailScreen() {
   const params = useLocalSearchParams<{ id?: string; level?: string; jstDate?: string }>();
   const { width: windowWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [status, setStatus] = useState<Status>('loading');
   const [topic, setTopic] = useState<HomeTopic | null>(null);
 
@@ -94,10 +97,13 @@ export default function TopicDetailScreen() {
   const colors = topic ? TOPIC_DETAIL_LEVEL_COLORS[topic.level] : null;
   const heroWidth = Math.max(0, Math.min(windowWidth, 720) - SCREEN_PADDING * 2);
   const artHeight = heroWidth / TOPIC_DETAIL_ART_ASPECT;
+  const titleStyle = topic ? topicDetailTitleStyle(topic.title) : null;
+  // A long title starts below the illustration (badge row = 20 padding + ~33 badge).
+  const titleTop = titleStyle?.belowArt ? Math.max(14, artHeight * TOPIC_DETAIL_ART_CLEAR_RATIO - 53) : 14;
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.container}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <ScrollView contentContainerStyle={[styles.container, { paddingBottom: 60 + insets.bottom }]}>
         <BackButton />
 
         {status === 'loading' ? (
@@ -162,7 +168,14 @@ export default function TopicDetailScreen() {
                     </>
                   ) : null}
                 </View>
-                <Text style={styles.title}>{topic.title}</Text>
+                <Text
+                  style={[
+                    styles.title,
+                    titleStyle ? { fontSize: titleStyle.fontSize, lineHeight: titleStyle.lineHeight } : null,
+                    { marginTop: titleTop },
+                  ]}>
+                  {topic.title}
+                </Text>
                 <Text style={styles.summary}>{topic.body}</Text>
               </View>
             </View>
@@ -193,8 +206,8 @@ function DetailSection({ section, level }: { section: TopicDetailSection; level:
     return (
       <View style={[styles.exampleCard, { backgroundColor: colors.soft, borderColor: colors.outline }]}>
         <View style={styles.exampleHead}>
-          <View style={styles.bulb}>
-            <Text style={styles.bulbIcon}>💡</Text>
+          <View style={[styles.exampleMark, { backgroundColor: colors.badge }]}>
+            <Text style={[styles.exampleMarkText, { color: colors.strong }]}>例</Text>
           </View>
           <Text style={[styles.blockHeading, { color: colors.strong }]}>{section.heading}</Text>
         </View>
@@ -206,12 +219,10 @@ function DetailSection({ section, level }: { section: TopicDetailSection; level:
   // 覚えておくポイント: the end of the lesson, a calm tinted block with a strong left accent line.
   if (section.role === 'takeaway') {
     return (
-      <View style={[styles.takeaway, { backgroundColor: colors.badge, borderLeftColor: colors.strong }]}>
-        <View style={styles.takeawayText}>
-          <Text style={[styles.blockHeading, { color: colors.strong }]}>{section.heading}</Text>
-          <Text style={styles.takeawayBody}>{section.body}</Text>
-        </View>
-        <Text style={styles.takeawayIcon}>🌱</Text>
+      <View style={[styles.takeaway, { backgroundColor: colors.badge }]}>
+        <View style={[styles.takeawayBar, { backgroundColor: colors.strong }]} />
+        <Text style={[styles.blockHeading, { color: colors.strong }]}>{section.heading}</Text>
+        <Text style={styles.takeawayBody}>{section.body}</Text>
       </View>
     );
   }
@@ -231,7 +242,8 @@ function DetailSection({ section, level }: { section: TopicDetailSection; level:
       <View style={styles.stepBody}>
         <Text style={styles.body}>{lead}</Text>
         {caution ? (
-          <View style={[styles.cautionBand, { backgroundColor: colors.soft, borderLeftColor: colors.strong }]}>
+          <View style={[styles.cautionBand, { backgroundColor: colors.soft }]}>
+            <View style={[styles.cautionBar, { backgroundColor: colors.strong }]} />
             <Text style={styles.cautionText}>{caution}</Text>
           </View>
         ) : null}
@@ -242,7 +254,7 @@ function DetailSection({ section, level }: { section: TopicDetailSection; level:
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: PAGE_BACKGROUND },
-  container: { paddingHorizontal: SCREEN_PADDING, paddingTop: 8, paddingBottom: 60 },
+  container: { paddingHorizontal: SCREEN_PADDING, paddingTop: 8 },
   status: { marginTop: 40 },
   message: { color: palette.muted, fontSize: 15, lineHeight: 23, marginTop: 24 },
   labelRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
@@ -260,7 +272,7 @@ const styles = StyleSheet.create({
   category: { color: palette.muted, fontSize: 14, fontWeight: '700' },
   title: { color: '#17251d', fontSize: 34, lineHeight: 42, fontWeight: '900', marginTop: 14 },
   summary: { color: INK, fontSize: 15.5, lineHeight: 25, fontWeight: '500', marginTop: 12 },
-  sections: { marginTop: 30, gap: 30 },
+  sections: { marginTop: 28, gap: 28 },
   step: { gap: 12 },
   stepHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   stepCircle: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
@@ -268,17 +280,19 @@ const styles = StyleSheet.create({
   stepHeading: { flex: 1, fontSize: 21, lineHeight: 28, fontWeight: '900' },
   // Body copy is indented to line up under the heading text (circle 38 + gap 12).
   stepBody: { paddingLeft: 50, gap: 14 },
-  body: { color: INK, fontSize: 15.5, lineHeight: 26 },
-  cautionBand: { borderRadius: 12, borderLeftWidth: 4, paddingHorizontal: 14, paddingVertical: 12 },
+  body: { color: INK, fontSize: 15.5, lineHeight: 25 },
+  cautionBand: { borderRadius: 12, paddingLeft: 20, paddingRight: 14, paddingVertical: 12, overflow: 'hidden' },
+  // A straight accent bar inset from the band's rounded corners (not a curved border).
+  cautionBar: { position: 'absolute', left: 8, top: 10, bottom: 10, width: 4, borderRadius: 2 },
   cautionText: { color: '#17251d', fontSize: 15, lineHeight: 24, fontWeight: '800' },
   exampleCard: { borderRadius: 18, borderWidth: 1, padding: 18, gap: 12 },
   exampleHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  bulb: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#fbf0c6', alignItems: 'center', justifyContent: 'center' },
-  bulbIcon: { fontSize: 18 },
+  exampleMark: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  exampleMarkText: { fontSize: 17, fontWeight: '900' },
   blockHeading: { fontSize: 21, lineHeight: 28, fontWeight: '900' },
-  takeaway: { borderRadius: 18, borderLeftWidth: 5, paddingVertical: 18, paddingLeft: 18, paddingRight: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  takeawayText: { flex: 1, gap: 8 },
-  takeawayBody: { color: '#17251d', fontSize: 15.5, lineHeight: 26, fontWeight: '700' },
-  takeawayIcon: { fontSize: 30 },
+  takeaway: { borderRadius: 18, paddingVertical: 18, paddingLeft: 32, paddingRight: 18, gap: 8, overflow: 'hidden' },
+  // A straight accent line inset from the block's rounded corners.
+  takeawayBar: { position: 'absolute', left: 14, top: 16, bottom: 16, width: 5, borderRadius: 3 },
+  takeawayBody: { color: '#17251d', fontSize: 15.5, lineHeight: 25, fontWeight: '700' },
   note: { color: palette.muted, fontSize: 13, lineHeight: 20 },
 });

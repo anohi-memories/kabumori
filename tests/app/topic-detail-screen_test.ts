@@ -18,7 +18,7 @@ test("the safe fetch contract is unchanged: exact (level, jstDate), id verified,
   assert.ok(screen.includes(".catch(() => {") && screen.includes("setStatus('error')"));
   assert.ok(screen.includes("今日のトピックを取得できませんでした。もう一度お試しください。"));
   assert.ok(screen.includes("この内容は表示できません。Homeに戻ってもう一度開き直してください。"));
-  assert.ok(screen.includes("edges={['top', 'bottom']}") && screen.includes("<BackButton />"), "safe area + back button kept");
+  assert.ok(screen.includes("edges={['top']}") && screen.includes("60 + insets.bottom") && screen.includes("<BackButton />"), "safe area (bottom inset as scroll padding, so content is not cut at the home indicator) + back button kept");
 });
 
 test("rendering the learning content makes no network, AI or database call of its own", async () => {
@@ -60,7 +60,7 @@ test("reading order: back -> notebook label -> Hero (badge, category, title, sum
     "styles.hero,",
     "TOPIC_LEVEL_LABEL[topic.level]",
     "{topic.category}",
-    "styles.title}>{topic.title}",
+    "{ marginTop: titleTop },\n                  ]}>\n                  {topic.title}",
     "styles.summary}>{topic.body}",
     "detail.sections.map(",
   ];
@@ -116,8 +116,12 @@ test("the art wash is built from non-overlapping strips (no banding) and keeps t
 test("example is a tinted outlined card with a bulb; the takeaway is a calm accent-line block; steps are numbered circles", async () => {
   const screen = await read("src/app/topic-detail.tsx");
   assert.ok(/exampleCard: \{ borderRadius: 18, borderWidth: 1/.test(screen));
-  assert.ok(screen.includes("styles.bulb") && screen.includes("💡"));
-  assert.ok(/takeaway: \{ borderRadius: 18, borderLeftWidth: 5/.test(screen));
+  assert.ok(screen.includes("styles.exampleMark") && screen.includes(">例<"), "a 例 mark in a level-tinted circle (no emoji bulb)");
+  assert.ok(!screen.includes("💡"));
+  assert.ok(/takeaway: \{ borderRadius: 18, paddingVertical: 18, paddingLeft: 32/.test(screen));
+  assert.ok(/takeawayBar: \{ position: 'absolute', left: 14, top: 16, bottom: 16, width: 5/.test(screen), "a straight inset accent bar");
+  assert.ok(/cautionBar: \{ position: 'absolute', left: 8, top: 10, bottom: 10, width: 4/.test(screen));
+  assert.ok(!/borderLeftWidth/.test(screen), "no curved left borders");
   assert.ok(/stepCircle: \{ width: 38, height: 38, borderRadius: 19/.test(screen));
   assert.ok(!/stepCard|section: \{[^}]*borderWidth/.test(screen), "ordinary steps are not cards");
 });
@@ -136,8 +140,15 @@ test("long titles and badges wrap instead of colliding or clipping", async () =>
 
 test("body copy is 15-16pt with a comfortable line height", async () => {
   const screen = await read("src/app/topic-detail.tsx");
-  assert.ok(/body: \{ color: INK, fontSize: 15\.5, lineHeight: 26 \}/.test(screen));
+  assert.ok(/body: \{ color: INK, fontSize: 15\.5, lineHeight: 25 \}/.test(screen));
   assert.ok(/summary: \{[^}]*fontSize: 15\.5, lineHeight: 25/.test(screen));
+});
+
+test("a long title starts below the illustration and uses a smaller size; a short one keeps the large title", async () => {
+  const screen = await read("src/app/topic-detail.tsx");
+  assert.ok(screen.includes("topicDetailTitleStyle(topic.title)"));
+  assert.ok(screen.includes("artHeight * TOPIC_DETAIL_ART_CLEAR_RATIO - 53"));
+  assert.ok(screen.includes("{ marginTop: titleTop }"));
 });
 
 test("Home TOP behavior is untouched by this change", async () => {

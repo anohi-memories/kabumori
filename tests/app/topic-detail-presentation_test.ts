@@ -6,8 +6,10 @@ import { TOPIC_LEVELS } from "../../src/lib/home-topic.ts";
 import {
   splitTrailingCaution,
   TOPIC_DETAIL_ART_ASPECT,
+  TOPIC_DETAIL_ART_CLEAR_RATIO,
   TOPIC_DETAIL_LEVEL_COLORS,
   topicDetailStepNumber,
+  topicDetailTitleStyle,
 } from "../../src/lib/topic-detail-presentation.ts";
 
 function luminance(hex: string): number {
@@ -89,4 +91,19 @@ test("across the whole catalog the split is lossless and only ever touches marke
 
 test("the Hero art keeps the approved 1942x809 aspect ratio", () => {
   assert.equal(TOPIC_DETAIL_ART_ASPECT, 1942 / 809);
+});
+
+test("title sizing: 7 characters or fewer keep the large title; longer titles are smaller and start below the art", () => {
+  assert.deepEqual(topicDetailTitleStyle("PERって何？"), { fontSize: 34, lineHeight: 42, belowArt: false });
+  assert.deepEqual(topicDetailTitleStyle("ROEって何を見る指標？"), { fontSize: 28, lineHeight: 36, belowArt: true });
+  assert.deepEqual(topicDetailTitleStyle("信用買い残が多いと上値が重くなることがあるのはなぜ？"), { fontSize: 26, lineHeight: 34, belowArt: true });
+  assert.equal(TOPIC_DETAIL_ART_CLEAR_RATIO, 0.78);
+});
+
+test("every seeded title gets a size whose line height is at least 1.2x the font", () => {
+  for (const title of Object.keys(TOPIC_DETAIL_CATALOG)) {
+    const style = topicDetailTitleStyle(title);
+    assert.ok(style.lineHeight >= style.fontSize * 1.2, title);
+    assert.ok(style.fontSize >= 26 && style.fontSize <= 34, title);
+  }
 });
