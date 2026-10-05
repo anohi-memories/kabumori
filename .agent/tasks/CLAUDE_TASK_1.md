@@ -3,8 +3,8 @@
 - task_id: kabumori-topic-detail-visual-polish-20261005
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: ユーザーがG1へ直接渡す「かぶモリ学習ノート / PERって何？」のUI見本画像を正本ベースに、現在のtopic detail機能・50トピック本文・fetch安全性を変えず、詳細画面の見た目だけを最終仕上げする。
@@ -440,6 +440,56 @@ Then:
 - STOP for K1.
 
 Recommended model: **Sonnet5（高）**.
+
+## Report — G1: topic detail visual polish (task kabumori-topic-detail-visual-polish-20261005)
+
+- task_id: `kabumori-topic-detail-visual-polish-20261005`
+- result: implemented; **iOS Simulator verification NOT done (blocker, see below)**; live check on the user's iPhone pending. PR open, **not merged**.
+- fresh main SHA: `1c633e846c8d3ae49ca95aa13b6063f26f85e052`
+- PR: https://github.com/anohi-memories/kabumori/pull/84 — branch `claude/g1-topic-detail-visual-polish-20261005`, head `c9c173c153cbfd11229c9281b892d732728c3cd3`
+- **EAS build created: no.** backend/DB/RPC/API/AI/Auth/Edge/production mutation: **0**.
+
+### worktree / clean-base isolation proof
+Independent clone of `origin/main` in the session scratchpad (own branch, own node_modules symlink, own dev server); the clean base `/Users/yuya/Developer/kabumori-fresh` was confirmed to exist but not used or modified; the old `/Users/yuya/Developer/kabumori` repo/worktrees were not used as a base and nothing was deleted/renamed/pruned/reset. Open PRs touching the target files: none (checked at start; main had no changes to them since the allocation).
+
+### Reference image visible: **yes** (the user's 「かぶモリ学習ノート / PERって何？」 design image was in the session).
+
+### changed_files (4, +392/−114)
+`src/app/topic-detail.tsx`, `src/lib/topic-detail-presentation.ts` (new, pure), `tests/app/topic-detail-screen_test.ts`, `tests/app/topic-detail-presentation_test.ts` (new). Untouched: the 50-topic catalog text, `daily-topic.ts`, `home-topic.ts`, Home topic card.
+
+### final visual structure
+BackButton → 🌱 かぶモリ学習ノート (old TODAY'S TOPIC eyebrow removed) → level-aware Hero (rounded 22, level tint; badge 「初心者向け/中級者向け/上級者向け」 | category; title 34/42; the fetched `topic.body` summary 15.5/25 integrated in the Hero — no separate intro card) → numbered steps `1 まずこれだけ`, `2 なぜ大事？`, `3 株価・相場とどう関係する？` (advanced: `3 実践ではどう見る？`) with level-tinted 38pt circles, 21pt headings, body 15.5/26 indented under the heading text, no card per step → 具体例: pale-tint outlined 18pt card with a bulb → (inside step 3 only when the existing last sentence starts with ただし / ただ、/ もっとも) an inset band with a left accent bar (lossless split, nothing added; ~7 of 50 topics) → 覚えておくポイント: tinted block with a 5pt strong left accent line and a small 🌱. Page background ivory `#fbfbf6`, body ink `#2a3830`.
+
+### existing-art reuse decision
+**Reused** the canonical `assets/images/home/topic_background_{beginner,intermediate,advanced}.webp` at the top of the Hero at their own 1942:809 ratio (full card width, `contentFit="cover"` on a same-ratio box ⇒ no stretch/crop), mapped only by `topic.level`, untouched (no edit/re-encode/regeneration, no new asset). Readability under long titles is handled by a native left→right tint wash (20 equal flex strips, strongest under the text, clear over the right 40%) and a short non-overlapping bottom fade where the art ends inside a taller Hero. The art is decorative: `pointerEvents="none"`, hidden from accessibility.
+
+### Level system
+beginner pale green/mint, intermediate pale blue, advanced pale lavender; one component set, level colours from `TOPIC_DETAIL_LEVEL_COLORS` (hero/badge/soft/outline/strong). Tests assert every heading/accent colour is ≥ 4.5:1 on each tinted surface of its level and on the page background.
+
+### Behavior preserved (pinned by tests)
+All 50 texts and 5 roles, advanced market heading 「実践ではどう見る？」, hypothetical-number labelling, evergreen content, unknown-title truthful fallback (Hero summary + 「この用語の詳しい解説は準備中です。」), exact `id/level/jstDate` params, deterministic `fetchDailyTopic(level, jstDate)`, **id mismatch fail-closed**, loading/error/mismatch texts, safe area + BackButton, Home → detail, history → detail; no new network/AI/DB call from the visual layer (imports and single fetch pinned). Unchanged-by-design: new params still reset to loading.
+
+### Tests / checks
+`deno test tests/app/` **294 passed / 0 failed** (topic suites: 35); `npx expo config --json` OK; `npx expo export --platform web` PASS; tsc(src): only the 2 known CSS-module diagnostics; `git diff --check` clean.
+
+### 402pt / 375pt visual findings — NOT available
+The planned Simulator pass (402pt iPhone 17 Pro, 375pt SE 3rd gen; beginner/intermediate/advanced, long 3-line title, dense example, takeaway, history path, screenshots, comparison with the reference) **could not run: this Mac's iOS Simulator runtime is gone** (`xcrun simctl list runtimes` is empty; all devices `unavailable`; the CoreSimulator image list was emptied during the Mac migration/cleanup; restoring it needs an ~8 GB Apple download, e.g. `xcodebuild -downloadPlatform iOS`, which I did not run without the user's approval). Nothing was fabricated: no screenshots or measurements are claimed. Substitute evidence so far: tests (structure/safety/contrast/split), web export; pending: the user's live iPhone check (dev client + local Metro) of this branch.
+
+### Reference comparison (design intent only, from code review — not visual evidence)
+Matched in structure: back control, 学習ノート label, level-aware Hero with badge|category + large title + summary + illustration on the right, numbered circles 1–3, outlined 具体例 card with bulb, inset caution band, 覚えておくポイント block with thick left line + sprout. Deliberate differences: the illustration is the existing canonical level art (not the reference's book/pencil illustration, not regenerated); the formula-note mini illustration inside 具体例 is omitted (optional in the TASK); emoji stand in for icons (no new dependency).
+
+### Remaining issues
+- Visual verification outstanding (Simulator blocked; needs the runtime restored or the user's device review).
+- Risks to check on device: art/wash seam and readability for 3-line titles, Hero height, 34pt title wrapping at 375pt, emoji rendering.
+- Out of scope (unchanged): no retry button on the detail error text.
+
+### safety_checks
+No content/DB/RPC/Auth/AI/API/Edge/native/EAS change; no new dependency or asset; no deploy; PR not merged; no secrets committed (local public `.env` copy untracked).
+
+### next_recommendation
+User reviews the branch live on the iPhone (server provided); K1 reviews PR #84 after that or in parallel (UI-only, low risk). Restore the iOS Simulator runtime when convenient so future UI tasks regain Simulator verification.
+
+Status: `review_required` / next_owner `chatgpt`. STOP for K1.
 
 ---
 
