@@ -445,6 +445,8 @@ async function realVaultAuth() {
     { scheduledPostId: sid(1), socialAccountId: "fixture", brandId: "ai_salaryman_lab" },
     {
       read: () => Promise.resolve({ accessToken: "fixture-only", accessExpiresAt: null }),
+      // The send-time publish permission (20261003090000): granted here, so the X outcome is what is classified.
+      assertPublishPermission: () => Promise.resolve(),
       begin: () => Promise.reject(new Error("should not refresh")),
       commit: () => Promise.reject(new Error("should not refresh")),
       release: () => Promise.reject(new Error("should not refresh")),
