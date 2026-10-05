@@ -1,3 +1,17 @@
+## AI Lab PR #86 rollout runner merged — production mutation still HOLD
+
+- Direct-copy Company AI Lab rollout-tooling work completed outside G1-G5.
+- PR #86 exact head `35302261181f7f54e49870d7322d2112098fcd8c` changed only:
+  - `supabase/tests/ai_lab_topic_claims_rollout.sh`
+  - `supabase/tests/ai_lab_topic_claims_rollout.md`
+- accepted PR #82 migration/runtime remained unchanged; migration SHA256 remains `30d8504173160f1dc9c3d7d1cf323d9890129d1ff117c2448aa1b2516629c09c`.
+- local proof reported 87 PASS plus 10/10 mutation detections; existing topic-claims SQL runner/static checks, bash syntax, diff and secret/project-ref scans passed.
+- fresh merge gate: Netlify/Vercel green; main advanced only one .agent commit; changed-file overlap 0.
+- PR #86 squash-merged as `d618801fdfafce0439aada994a1cbddec2f631a9`.
+- no extra Codex review allocated; this is runner/docs/tests only and current evidence is sufficient under minimal-review/Luna-first policy.
+- production DB/history write, migration apply, Edge deploy, real X/OpenAI/Vault/OAuth/Cron change remain **0**.
+- next production gate requires fresh explicit user approval for the exact Stage A/B/C rollout sequence; source merge does not grant mutation authority.
+
 ## G2 retasked — editorial three-point improvement
 
 - user-requested UX correction: the report's three "today's points" must not default to three previous-session metric recaps.
