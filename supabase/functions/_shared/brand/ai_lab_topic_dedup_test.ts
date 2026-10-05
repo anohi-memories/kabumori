@@ -5,7 +5,7 @@ import test from "node:test";
 import {
   EVERGREEN_TOPIC_SEEDS,
   loadAiLabDevDiaryMarkdown,
-  selectAiLabRotatingTopicSeed,
+  buildAiLabTopicCandidates,
 } from "./ai_lab_dev_diary_context.ts";
 import {
   aiLabDiversityInstructions,
@@ -32,26 +32,38 @@ const NOW = new Date("2026-10-01T03:00:00Z");
 
 const DIARY = `
 ## 2026-09-29
+event_id: 20260929-research-before-content-access
 changed: 投稿の中身を安全に読み書きする作業の前に、必要な下調べをした。
 difficulty: 担当者の判定がまだ正式にできない状態だと分かった。
 decided: 土台がないまま進めると矛盾が出そうなので、いったん手を止めた。
 angle: 下調べだけで1日が終わることもある、という個人開発のリアル。
 
 ## 2026-09-30
+event_id: 20260930-x-auth-test-account-overlap
 changed: iOS版で実データ接続とX認証の確認を進めた。
 difficulty: テスト用のXアカウントが既存の接続と重なっていた。
 decided: 先に進めるより安全側で止めることを優先した。
 angle: 開発の記録を、そのまま発信のネタに変える仕組みを整えた話。
 
 ## 2026-10-01
+event_id: 20261001-x-login-account-switch
 changed: Xを接続するとき、前回ログインしたアカウントが引き継がれる問題を見つけた。
 difficulty: ソース上のテストが通っても、実際のログイン画面で切り替えられるかは確認できない。
 decided: ログイン状態を共有しにくい認証方法へ変更した。
 angle: テストが全部通っても、外部サービスのログイン画面は実際に触って確かめる必要があると分かった話。
 `;
 
-function select(rotationIndex: number, markdown = DIARY, recentPostTexts: string[] = []) {
-  return selectAiLabRotatingTopicSeed({ markdown, now: NOW, rotationIndex, recentPostTexts });
+// 候補の組み立て結果に「DB が先頭から、使用済みでない最初の1件を確保する」を当てはめたもの。DB 側の確保
+// そのものは ai_lab_event_dedupe_test.ts（ポート）と supabase/tests/ai_lab_topic_claims_run.sh（実SQL）で検証する。
+function select(
+  rotationIndex: number,
+  markdown = DIARY,
+  recentPostTexts: string[] = [],
+  usedEventKeys: string[] = [],
+) {
+  const { candidates, exclusions } = buildAiLabTopicCandidates({ markdown, now: NOW, rotationIndex, recentPostTexts });
+  const chosen = candidates.find((candidate) => !usedEventKeys.includes(candidate.eventKey))!;
+  return { ...chosen, source: chosen.kind, exclusions };
 }
 
 // --- 1. fresh diary は generic evergreen より優先 -----------------------------------------------
@@ -65,70 +77,30 @@ test("fresh diary exists: every rotation step picks diary, never the generic eve
 });
 
 test("a generic diary angle (下調べだけで1日が終わる) is excluded with a reason code and never used as a topic", () => {
-  const selected = select(0);
+  // 新しい2件を使用済みにして、汎用角度を持つ 9/29 のイベントが選ばれる状況を作る。
+  const used = ["diary:20261001-x-login-account-switch", "diary:20260930-x-auth-test-account-overlap"];
+  const selected = select(0, DIARY, [], used);
+  assert.equal(selected.eventKey, "diary:20260929-research-before-content-access");
   const reasons = selected.exclusions.map((e) => `${e.candidate}:${e.reason}`);
-  assert.ok(reasons.some((r) => r.startsWith("2026-09-29#angle1:GENERIC_THEME:research_only_day")), reasons.join("\n"));
+  assert.ok(reasons.some((r) => r.startsWith("diary:20260929-research-before-content-access#angle1:GENERIC_THEME:research_only_day")), reasons.join("\n"));
   for (let i = 0; i < 40; i += 1) {
-    assert.doesNotMatch(select(i).topic, /今回の切り口: 下調べだけで/u);
+    assert.doesNotMatch(select(i, DIARY, [], used).topic, /今回の切り口: 下調べだけで/u);
   }
 });
 
 test("diary seeds carry the concrete facts (what changed / what got stuck), not only an abstract angle", () => {
-  const unitKeys = new Set<string>();
   for (let i = 0; i < 40; i += 1) {
-    const selected = select(i);
-    unitKeys.add(selected.unitKey);
-    assert.match(selected.topic, /できごと: /u);
-  }
-  assert.ok(unitKeys.size >= 6, "multiple distinct concrete topics are available");
-});
-
-// --- 3. 同じ diary entry が連続しない -------------------------------------------------------------
-
-test("the same diary entry is never selected on two consecutive posts, including the cycle wrap-around", () => {
-  const keys = Array.from({ length: 60 }, (_, i) => select(i).unitKey);
-  const period = keys.indexOf(keys[0], 1);
-  assert.ok(period > 0, "rotation repeats within the sampled window");
-  for (let i = 0; i < period; i += 1) {
-    assert.notEqual(keys[i].split("#")[0], keys[(i + 1) % period].split("#")[0], `rotation ${i} -> ${i + 1}`);
+    assert.match(select(i).topic, /できごと: /u);
   }
 });
 
-test("no consecutive same-entry (cyclic) for many randomized entry/facet shapes", () => {
-  let seed = 7;
-  const rand = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
-  for (let trial = 0; trial < 200; trial += 1) {
-    const entryCount = 2 + Math.floor(rand() * 3); // 2..4 fresh entries
-    const markdown = Array.from({ length: entryCount }, (_, e) => {
-      const day = String(29 - e).padStart(2, "0");
-      const angles = Array.from({ length: Math.floor(rand() * 4) }, (_, a) => `angle: 切り口${e}-${a}を実際に試した話。`);
-      return [
-        `## 2026-09-${day}`,
-        `changed: 変更${e}を実施した。`,
-        rand() > 0.3 ? `difficulty: 詰まり${e}があった。` : "",
-        rand() > 0.3 ? `decided: 判断${e}をした。` : "",
-        ...angles,
-      ].filter(Boolean).join("\n");
-    }).join("\n\n");
-    const first = select(0, markdown);
-    const length = Array.from({ length: 60 }, (_, i) => select(i, markdown).unitKey);
-    const cycle = length.indexOf(first.unitKey, 1);
-    const size = cycle === -1 ? 60 : cycle;
-    for (let i = 0; i < size; i += 1) {
-      const a = length[i].split("#")[0];
-      const b = length[(i + 1) % size].split("#")[0];
-      assert.notEqual(a, b, `trial ${trial}: step ${i} of ${size} in ${length.slice(0, size).join(",")}`);
-    }
-  }
-});
+// --- 3. 同じ diary イベントは一度投稿したら fresh 期間中は再利用しない（2026-10-03 でイベント単位に変更）---
+// 2026-10-01 版の「同じエントリの切り口を巡回する」テストは、まさに今回の不具合の挙動なので廃止し、
+// ai_lab_event_dedupe_test.ts のイベント単位テストへ置き換えた。
 
-test("a topic is not reused until the whole rotation has been used (multi-day cooldown)", () => {
-  const first = select(0);
-  const keys: string[] = [];
-  for (let i = 0; i < 40; i += 1) keys.push(select(i).unitKey);
-  const cycle = keys.indexOf(first.unitKey, 1);
-  assert.ok(cycle >= 6, `rotation cycle should be several posts long, got ${cycle}`);
-  assert.equal(new Set(keys.slice(0, cycle)).size, cycle);
+test("rotationIndex never moves selection off the newest unused event (it only varies the angle)", () => {
+  const eventKeys = new Set(Array.from({ length: 40 }, (_, i) => select(i).eventKey));
+  assert.deepEqual([...eventKeys], ["diary:20261001-x-login-account-switch"]);
 });
 
 // --- 4. 別テーマの fresh diary は正常に選択される -------------------------------------------------
@@ -136,6 +108,7 @@ test("a topic is not reused until the whole rotation has been used (multi-day co
 test("a fresh diary about a different theme is selected normally, with its own concrete facts", () => {
   const markdown = `
 ## 2026-10-01
+event_id: 20261001-notification-settings
 changed: アプリの通知設定画面を作り直し、通知の種類ごとにオンオフできるようにした。
 difficulty: 古い設定の移行で、既存ユーザーの設定が消えそうになった。
 decided: 移行処理を先に作ってから画面を差し替えた。
@@ -160,7 +133,7 @@ test("no fresh diary: evergreen fallback works and rotates (not the same seed tw
 });
 
 test("a future-dated or unsafe diary entry never becomes a topic (falls back to evergreen)", () => {
-  const markdown = "## 2026-10-05\nchanged: まだ起きていない変更。\n\n## 2026-10-01\nchanged: 危険 https://example.com を含む。\n";
+  const markdown = "## 2026-10-05\nevent_id: 20261005-future\nchanged: まだ起きていない変更。\n\n## 2026-10-01\nevent_id: 20261001-unsafe\nchanged: 危険 https://example.com を含む。\n";
   const selected = select(0, markdown);
   assert.equal(selected.source, "evergreen");
   const reasons = selected.exclusions.map((e) => e.reason);
@@ -279,15 +252,22 @@ function dispatchWith(texts: string[], extra: Partial<Parameters<typeof dispatch
       postType: "brand_post",
       scheduledPostId: "schedule-fixture",
       openAiApiKey: "fixture-only",
-      loadRecentFingerprints: async () => [],
-      publishText: async (text) => {
-        published.push(text);
-        return { data: { id: "x-post-fixture" } };
+      topic: {
+        claim: () => Promise.resolve({ claimId: "00000000-0000-0000-0000-0000000000aa", kind: "evergreen", eventKey: "evergreen-2", unitKey: "evergreen-2", topic: "" }),
+        startProvider: () => Promise.resolve(true),
+        release: () => Promise.resolve("RELEASED"),
+        markAmbiguous: () => Promise.resolve("AMBIGUOUS"),
+        settlePublished: () => Promise.resolve("PUBLISHED"),
       },
-      completePublishedPost: async () => ({ fingerprintPersisted: true }),
-      generate: async ({ retryViolations }) => {
+      loadRecentFingerprints: () => Promise.resolve([]),
+      publishText: (text) => {
+        published.push(text);
+        return Promise.resolve({ data: { id: "x-post-fixture" } });
+      },
+      completePublishedPost: () => Promise.resolve({ fingerprintPersisted: true }),
+      generate: ({ retryViolations }) => {
         seenViolations.push(retryViolations);
-        return draftOf(texts[Math.min(call++, texts.length - 1)]);
+        return Promise.resolve(draftOf(texts[Math.min(call++, texts.length - 1)]));
       },
       ...extra,
     });
@@ -330,9 +310,9 @@ async function capturedInstructions(contextBrand: ReturnType<typeof aiLabContext
     postType: "brand_post",
     topicSeed: "固定の題材",
     extraInstructions: extra,
-    fetchImpl: (async (_url: unknown, init?: RequestInit) => {
+    fetchImpl: ((_url: unknown, init?: RequestInit) => {
       instructions = JSON.parse(String(init?.body)).instructions;
-      return new Response(JSON.stringify({ output: [{ content: [{ type: "output_text", text: "本文です。" }] }] }), { status: 200 });
+      return Promise.resolve(new Response(JSON.stringify({ output: [{ content: [{ type: "output_text", text: "本文です。" }] }] }), { status: 200 }));
     }) as typeof fetch,
   });
   return instructions;
@@ -383,9 +363,9 @@ test("countAiLabBrandPostsBefore reads the exact count from content-range and is
     supabaseUrl: "https://example.supabase.co",
     serviceRoleKey: "fixture-key",
     scheduledFor: "2026-10-01T03:00:00+00:00",
-    fetchImpl: (async (url: string, init?: RequestInit) => {
+    fetchImpl: ((url: string, init?: RequestInit) => {
       calls.push({ url: String(url), method: init?.method });
-      return new Response("[]", { status: 206, headers: { "content-range": "0-0/17" } });
+      return Promise.resolve(new Response("[]", { status: 206, headers: { "content-range": "0-0/17" } }));
     }) as typeof fetch,
   });
   assert.equal(count, 17);
@@ -397,9 +377,9 @@ test("countAiLabBrandPostsBefore reads the exact count from content-range and is
 
 test("countAiLabBrandPostsBefore returns null (caller falls back) on HTTP error, bad header, or thrown fetch", async () => {
   const base = { supabaseUrl: "https://example.supabase.co", serviceRoleKey: "k", scheduledFor: "2026-10-01T03:00:00Z" };
-  assert.equal(await countAiLabBrandPostsBefore({ ...base, fetchImpl: (async () => new Response("", { status: 500 })) as typeof fetch }), null);
-  assert.equal(await countAiLabBrandPostsBefore({ ...base, fetchImpl: (async () => new Response("[]", { status: 200 })) as typeof fetch }), null);
-  assert.equal(await countAiLabBrandPostsBefore({ ...base, fetchImpl: (async () => { throw new Error("network"); }) as typeof fetch }), null);
+  assert.equal(await countAiLabBrandPostsBefore({ ...base, fetchImpl: (() => Promise.resolve(new Response("", { status: 500 }))) as typeof fetch }), null);
+  assert.equal(await countAiLabBrandPostsBefore({ ...base, fetchImpl: (() => Promise.resolve(new Response("[]", { status: 200 }))) as typeof fetch }), null);
+  assert.equal(await countAiLabBrandPostsBefore({ ...base, fetchImpl: (() => Promise.reject(new Error("network"))) as typeof fetch }), null);
 });
 
 // --- 本物の日記 snapshot に対して ----------------------------------------------------------------
@@ -409,8 +389,8 @@ test("against the real bundled diary, the day after its freshest entry never yie
   const freshest = [...markdown.matchAll(/^## (\d{4}-\d{2}-\d{2})/gmu)].map((m) => m[1]).sort().at(-1)!;
   const now = new Date(`${freshest}T09:00:00Z`);
   for (let i = 0; i < 60; i += 1) {
-    const selected = selectAiLabRotatingTopicSeed({ markdown, now, rotationIndex: i });
-    assert.equal(selected.source, "diary");
+    const selected = buildAiLabTopicCandidates({ markdown, now, rotationIndex: i }).candidates[0];
+    assert.equal(selected.kind, "diary");
     assert.match(selected.topic, /できごと: /u);
     // seed全体が汎用テーマ(切り口行)に当たらないこと: 切り口行だけを検査する
     const focus = selected.topic.split("\n").find((line) => line.startsWith("今回の切り口: ")) ?? "";
