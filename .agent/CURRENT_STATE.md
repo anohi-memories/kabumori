@@ -1,3 +1,20 @@
+## Final K2 — PR #87 editorial three-points PASS to H2 review
+
+- verdict: **PASS to focused H2 review; merge/deploy HOLD**.
+- PR #87 exact head: `3561f1eaac41df0f23dcce8fdaace0decc654a0a`, open / mergeable / clean.
+- changed scope: 13 files across market-report prompt/telemetry/tests, personalized report market detail, App home-highlight presentation, and design docs. No DB/RPC/migration/auth/permission change.
+- user-facing behavior: morning 3 points are instructed to express today's focus/risk/watch axes; close 3 points express what happened, supported drivers/significance, and next watch. Numeric values move mainly to supporting body/context instead of dominating all three headlines.
+- X/App consistency: presentation-v2 App now prefers the same shared `points_ja` used by X; old/v1 stored reports retain existing fallback.
+- Hard Fact boundary: no guard decision logic changed; `MARKET_NAMES` export only. Existing date/session/value/sign/stale/1306/ref/unsupported-causality protections remain in the reported green suites.
+- delivery-first policy: new metric/near-duplicate detection is WARN/telemetry only; no rewrite trigger or new model call was added. Existing generation/fact call ceiling remains unchanged.
+- reported verification accepted for routing: market-report-analysis 147/147; personalized-reports 129/129; X shared 8/8; data-packet 42/42; _shared 415/415; App home highlights 17/17; relevant check/lint/diff PASS with one documented pre-existing lint item.
+- fresh no-race gate: current main is 6 commits beyond PR base, but those changes are orchestration/control files only; overlap with PR #87's 13 files = **0**.
+- production mutation / manual invoke / consumer gate / DB / Auth / Vault / X = **0**.
+- independent review is warranted because this crosses generation + personalized serialization + App presentation, but risk does not justify Sol. H2 assigned `kabumori-pr87-editorial-three-points-review-20261005`.
+- recommended Codex model: **Luna（高）**.
+- after C2 PASS: merge PR #87, then create a separate controlled deploy/observation step. Do not activate consumers until at least one natural morning and one natural close packet confirm the new headline behavior and factual guards.
+- AI Lab diary: **候補あり — 株アプリの朝刊・大引けで、数字の羅列だった「3つのポイント」を、その日の注目点や出来事が一目で伝わる見出しへ改善し、アプリと投稿で同じ要点を使うよう整理した。**
+
 ## Final K4 — PR #76 F1/F2/F3 corrective PASS -> one final H2 review
 
 - verdict: **PASS to one final focused H2 rereview; merge/apply/deploy HOLD**.
