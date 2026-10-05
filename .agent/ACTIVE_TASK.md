@@ -72,12 +72,12 @@
 - owner: claude
 - slot: claude-3
 - status: ready
-- task_id: ai-lab-pr82-production-rollout-runner-20261005
+- task_id: x-social-mobile-pr81-production-schema-gate-20261005
 - start_code: G3
 - finish_code: K3
 - next_owner: claude
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: Company AI Lab PR #82 source is merged/reviewed; remaining blocker is production apply/history failure policy only. Build a bounded schema-first/history-second operator runner + runbook + disposable failure-state proof without editing the accepted migration/runtime and without production mutation. G4/PR76 untouched. Recommended Sonnet5（高）. After K3, avoid automatic Sol review; prefer no extra review or one focused Luna（高） only if the rollout script warrants it.
+- allocation: Resume the original post-review G3 path: production read-only preflight and ordered rollout gate for merged PR #81 content-settings schema. Do not apply ahead of pending earlier PR #76 migration by assumption. Freeze exact reviewed two-file atomic apply package, then STOP for fresh explicit production approval before any write. After approved apply + read-back PASS, PR #78 AI consultation may receive a separate fresh-main continuation task. Recommended Opus5.5（高）. No automatic extra Codex review after an exact clean apply/read-back.
 
 ## Claude G4
 - owner: claude
