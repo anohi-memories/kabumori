@@ -60,12 +60,13 @@
 - owner: claude
 - slot: claude-2
 - status: ready
-- task_id: kabumori-shared-report-v2-20261005-morning-natural-observation
+- task_id: kabumori-shared-report-v2-20261005-close-natural-observation
 - start_code: G2
 - finish_code: K2
 - next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: read-only natural 2026-10-05 morning observation of production market-report-analysis v21 after PR #77 + PR #79 rollout; do not substantively observe before 08:10 JST, no polling/manual invoke/gate/deploy; inspect first-try vs retry, Hard/WARN boundaries, cost and factual integrity; recommended Sonnet5（中）
+- allocation: 2026-10-05大引け自然サイクルをread-onlyで後追い観測。朝刊はOpenAI 429によりOBSERVATION_INCOMPLETEで、PR #77/#79のlive挙動は未評価。16:15/16:20/16:35の自然実行が回復したか、report packetがあればFact/Hard-WARN境界・rewrite・cost・重複を評価する。manual invoke/deploy/gate/DB/X/Auth/Vault mutation禁止。
+- recommended_model: Sonnet5（中）
 
 ## Claude G3
 - owner: claude
