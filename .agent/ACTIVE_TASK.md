@@ -82,12 +82,12 @@
 - owner: claude
 - slot: claude-4
 - status: ready
-- task_id: x-social-mobile-publish-toggle-transactional-corrective-20261003
+- task_id: x-social-mobile-pr76-fresh-main-integration-20261005
 - start_code: G4
 - finish_code: K4
 - next_owner: claude
 - source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: Correct PR #76 after Final C1 FAIL. Build an atomic caller/membership/brand/account/CAS publish-toggle boundary, close brand TOCTOU with fresh pre-send authorization, prevent tenant-state reread leaks, align ON readiness semantics, and pin UI confirmation to exact account/context. New narrow migration/RPC allowed only for this boundary; no production apply/deploy/X operation. Recommended Opus5.5（極高）. Fresh Codex rereview Sol（極高） mandatory before merge.
+- allocation: Integration-only freshness gate for PR #76. Current corrective head fe1e846e59c69b591d29c6d21fc23c7b702d19cd is open but non-mergeable because main advanced 133 commits. Exactly one overlapping file: supabase/tests/migration_source_invariants_test.ts; preserve latest main and add the PR76 reserved migration version 20261003090000. Merge fresh origin/main with no force/rebase, rerun security/regression suites, no functional redesign, no production apply/deploy/X. Recommended Sonnet5（高）. After K4, H1 Sol（極高） rereview mandatory.
 
 ## Claude G5
 - owner: claude
