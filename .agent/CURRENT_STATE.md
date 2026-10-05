@@ -1,3 +1,18 @@
+## Common Account hosted Gate B complete -> H1 final review — 2026-10-05
+
+- disposable hosted Supabase `common-account-gateb-20261005` accepted the exact merged Phase 1 migration.
+- user Phase A fail-fast proof: **GATE_B_PHASE_A_PASS** for real Data API/RLS, client write denial, anon denial, service-role direct-table denial, RPC-only boundary, real Storage ownership blocker, Storage API cleanup, and readiness.
+- direct `common_accounts` delete while Auth user remained was refused with expected 23503-class `COMMON_ACCOUNT_ROW_DELETE_REQUIRES_LOGIN_REMOVAL`; row remained.
+- user Phase B fail-fast proof: **GATE_B_PHASE_B_PASS**.
+- real Auth Admin hard delete succeeded; Auth /user rejected afterward; refresh token rejected afterward.
+- critical hosted result: **old access JWT Data API: ALLOWED** after Auth deletion. Future destructive orchestrator must revoke/invalidate sessions before managed Auth delete; Auth-row deletion alone is insufficient.
+- hosted DB read-back for deleted fake user: auth.users 0, auth.identities 0, auth.sessions 0, auth.refresh_tokens 0, common_accounts 0, entitlements 0; durable lifecycle operation remained as `login_removed` and preserved the prior ready step observation.
+- production `stock-x-autopost` mutation: **0**. No real provider OAuth/X/Vault operation.
+- test project is being paused; photo-sharing `anohi-memories` is being restored. Do not reopen either from review without explicit authorization.
+- H1 assigned `common-account-gateb-managed-auth-final-review-20261005`, recommended **Sol（極高）**.
+- H1 is review-only. Production migration apply and backfill remain **HOLD** pending C1 and separate explicit user approval.
+- H2 left free for the planned G4/X security rereview path.
+
 ## Final C1 + C2 — 2026-10-05
 
 ### C1 — PR #82 production preflight
