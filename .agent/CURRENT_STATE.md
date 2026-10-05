@@ -1,3 +1,18 @@
+## Final K4 — PR #76 F1/F2/F3 corrective PASS -> one final H2 review
+
+- verdict: **PASS to one final focused H2 rereview; merge/apply/deploy HOLD**.
+- exact PR #76 head: `5448e545f4a88bbf6597a981c0bcbe4c01043c30`; previous H2-reviewed head `7f75c07a8c997b6a585e9c86dca01186eeea671f`.
+- fresh GitHub: PR OPEN / unmerged / mergeable=true; Netlify GREEN; Vercel GREEN.
+- current main is 29 commits beyond PR base; changed-file overlap with PR #76 = **0**.
+- G4 F1 proof: missing verified_at and nonblank last_connection_error_code now reject before fake X callback; normal eligible path still sends; 401 retry rechecks permission; OFF between refresh and retry blocks second send.
+- G4 F2 proof: two SECURITY DEFINER functions now normalize/refuse unexpected direct/default EXECUTE, validate owner/creator, assert effective inherited privileges, preserve empty search_path, and avoid global default-ACL/role-membership changes. Disposable ACL harness PASS; prior adverse default-grantee case reproduced against old head and closed on new head.
+- G4 F3 proof: rollout is runtime-first fail-closed; permission migration only after guarded runtime exact read-back/drain; publish-setting/app exposure last. Partial-state and abort-path tests/mutations pass.
+- broad local evidence reported: disposable PG behavior/race/E2E PASS; ACL_PASS; mutations 45/45 detected; focused typed Deno tests PASS; x-test-post/shared/publish-setting 984 PASS; app tests/typecheck/lint PASS.
+- production mutation/read/deploy/real X/OpenAI/Vault/Auth/Cron = **0**.
+- because this remains a SECURITY DEFINER + posting-authority + production-rollout boundary, one independent final review is warranted. To follow minimal-review/Luna-first policy without under-scoping a security boundary, reviewer is **Sol（高）**, not Sol（極高）.
+- H2 task: `x-social-mobile-pr76-final-security-rereview-20261005`.
+- this H2 review is the **last routine review** for PR #76; after PASS, do not add another review before merge unless a new concrete source change/blocker appears.
+
 ## Final K3 — PR #81 production schema gate = READ-ONLY HOLD
 
 - verdict: **HOLD by design / no production mutation**.
