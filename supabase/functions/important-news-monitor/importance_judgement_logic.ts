@@ -195,6 +195,17 @@ export async function judgeCandidateWithEscalation(
   };
 }
 
+/** Extra guidance for Japanese government releases (JP official lane); empty for every other source. */
+export const JP_OFFICIAL_JUDGEMENT_GUIDANCE =
+  "国内公的機関（source_name=jp_official）の発表です。公的機関の発表であること自体は重要度の根拠になりません。" +
+  "為替介入の実施、日銀の政策変更、大規模な財政・経済対策、GDP・CPI等の統計の大幅な乖離、金融機関への重い行政処分、" +
+  "大規模リコール・重大製品事故、大規模災害・特別警報など、規模と市場への影響が本文で具体的に確認できるものだけをimportant以上にします。" +
+  "実績が0円・変更なし・定例の公表、人事・会合・意見募集などはno_postです。海外ニュースの基準は変えません。";
+
+export function jpOfficialJudgementInstructions(candidate: JudgementCandidate): string[] {
+  return candidate.sourceName === "jp_official" ? [JP_OFFICIAL_JUDGEMENT_GUIDANCE] : [];
+}
+
 export async function requestImportantNewsJudgement(
   openAiApiKey: string,
   candidate: JudgementCandidate,
@@ -221,6 +232,7 @@ export async function requestImportantNewsJudgement(
         "most_importantは、入力だけで規模・予想外度・日本株への影響が具体的に確認できる場合に限ります。タイトルだけで『大型』『大幅』と推測しません。",
         "needs_solは、低信頼、重要度境界、複雑な数値・条件、情報差、most_important候補、fact needs_review、誤判定影響が大きい場合だけtrueにします。",
         "affected_entitiesには企業名、証券コード、市場・業種・テーマなど、入力から直接判断できる対象だけを入れます。reasonは短く具体的に日本語で記述します。",
+        ...jpOfficialJudgementInstructions(candidate),
         model === "gpt-6-sol"
           ? "Lunaの暫定判定を参考にしつつ、入力根拠から独立して再判定してください。情報不足は解消したことにせず、安全側へ倒してください。"
           : "通常判定です。Solが必要な場合だけneeds_solをtrueにしてください。",

@@ -46,11 +46,22 @@ import {
 } from "./important_news_grouping_logic.ts";
 import {
   MAX_BREAKING_MARKET_CANDIDATES_PER_FETCH,
+  MAX_JP_OFFICIAL_CANDIDATES_PER_FETCH,
   MAX_MARKET_MACRO_CANDIDATES_PER_FETCH,
   planImportantNewsCandidateBatch,
   planImportantNewsFetchGroups,
   planSourceFairCandidateBatch,
 } from "./fetch_resource_limit_logic.ts";
+import { fetchOfficialPageText } from "./jp_official_enrichment.ts";
+import { JP_OFFICIAL_SOURCES } from "./jp_official_filters.ts";
+import {
+  fetchJpOfficialSignalRows,
+  JP_OFFICIAL_ALLOWED_DOMAINS,
+  jpOfficialBodySummary,
+  type JpOfficialSelected,
+  selectJpOfficialSignals,
+  toJpOfficialIncomingCandidate,
+} from "./jp_official_signal_fetchers.ts";
 import {
   reconcileStaleImportantNewsRuns,
   runAfterBestEffortStaleRunReconciliation,
@@ -138,6 +149,9 @@ const SOURCE_POLICY: Record<string, { type: ImportantNewsSourceType; priority: 1
   tdnet: { type: "tdnet", priority: 1, domains: ["tdnet.info"] },
   company_ir: { type: "company_ir", priority: 1 },
   market_macro: { type: "market_macro", priority: 1, domains: MARKET_MACRO_ALLOWED_DOMAINS },
+  // JP official lane (JP Coverage Phase B): Japanese government releases read from news_discovery_signals.
+  // Stored as market_macro (no migration) under its own source_name, limited to the connected sources' domains.
+  jp_official: { type: "market_macro", priority: 1, domains: JP_OFFICIAL_ALLOWED_DOMAINS },
   breaking_market: { type: "breaking_market", priority: 1, domains: BREAKING_MARKET_SOURCE_DOMAINS },
   // Headline-trigger primary sources (2026-09-28): BBC World / Al Jazeera feed items stored as
   // breaking_market candidates under their own source_name; each is limited to its own domains.
@@ -2138,6 +2152,98 @@ Deno.serve(async (req) => {
       }
     }
 
+    // JP official lane (JP Coverage Phase B): Japanese government releases that news_discovery has already fetched,
+    // read from news_discovery_signals (SELECT only; the feeds are not fetched again and nothing is written to
+    // news_discovery_*).  Own quota (MAX_JP_OFFICIAL_CANDIDATES_PER_FETCH), independent of every lane above and
+    // below, so overseas / TDnet volume can never push it out.  No importance is implied: a release only gets as
+    // far as the existing importance judgement, after a deterministic theme filter (jp_official_filters.ts) and,
+    // for sources whose feed carries a title only, a short main text from the release's own official page.
+    // Off unless IMPORTANT_NEWS_JP_OFFICIAL_LANE=enabled.  Every failure is isolated here: it can add a
+    // sourceErrors entry but never fail the run, and a bad item never aborts the others.
+    const jpOfficialResults: CandidateResult[] = [];
+    const jpOfficial = {
+      enabled: false,
+      signalsRead: 0,
+      selected: 0,
+      alreadyKnown: 0,
+      inserted: 0,
+      deferred: 0,
+      enrichedPages: 0,
+      skipped: {} as Record<string, number>,
+      drops: {} as Record<string, number>,
+    };
+    const jpOfficialSkip = (reason: string) => {
+      jpOfficial.skipped[reason] = (jpOfficial.skipped[reason] ?? 0) + 1;
+    };
+    if (body.fetchSources === true && Deno.env.get("IMPORTANT_NEWS_JP_OFFICIAL_LANE") === "enabled") {
+      jpOfficial.enabled = true;
+      try {
+        const now = new Date();
+        const rows = await fetchJpOfficialSignalRows({ supabaseUrl, serviceRoleKey, now });
+        jpOfficial.signalsRead = rows.length;
+        const { selected, drops } = selectJpOfficialSignals(rows, now);
+        jpOfficial.selected = selected.length;
+        jpOfficial.drops = drops;
+
+        // Releases already stored are dropped BEFORE any page is fetched (url / title+entity / hash checks).
+        const novelBySource = new Map<string, Array<{ item: JpOfficialSelected }>>();
+        for (const item of selected) {
+          try {
+            const prepared = await prepareNewsCandidate(parseIncoming(toJpOfficialIncomingCandidate(item, null)));
+            if (await findStoredDuplicate(supabaseUrl, serviceRoleKey, prepared, true)) {
+              jpOfficial.alreadyKnown += 1;
+              continue;
+            }
+            novelBySource.set(item.sourceId, [...(novelBySource.get(item.sourceId) ?? []), { item }]);
+          } catch (error) {
+            sourceErrors.push(`jp_official:${item.sourceId}:${safeError(error)}`);
+          }
+        }
+
+        const batch = planSourceFairCandidateBatch(
+          [...novelBySource].map(([sourceKey, candidates]) => ({ sourceKey, candidates })),
+          MAX_JP_OFFICIAL_CANDIDATES_PER_FETCH,
+        );
+        jpOfficial.deferred = batch.deferredCandidateCount;
+        const budgetEnd = Date.now() + 25_000; // the page fetches of this lane never stretch the run
+        for (const { item } of batch.selectedCandidates) {
+          try {
+            if (Date.now() > budgetEnd) {
+              jpOfficialSkip("time_budget");
+              continue;
+            }
+            const config = JP_OFFICIAL_SOURCES[item.sourceId];
+            let enrichedText: string | null = null;
+            if (config.enrich) {
+              const page = await fetchOfficialPageText(item.sourceUrl, config.domains);
+              if (!page.ok) {
+                // Not stored: a title-only candidate could only end in "cannot confirm". It is retried on the
+                // next fetch while the release is still inside the freshness window.
+                jpOfficialSkip(`enrich_${page.reason}`);
+                continue;
+              }
+              enrichedText = page.text;
+              jpOfficial.enrichedPages += 1;
+            }
+            const bodySummary = jpOfficialBodySummary(item, enrichedText);
+            if (!bodySummary) {
+              jpOfficialSkip("no_body");
+              continue;
+            }
+            const prepared = await prepareNewsCandidate(parseIncoming(toJpOfficialIncomingCandidate(item, bodySummary)));
+            const saved = await insertCandidate(supabaseUrl, serviceRoleKey, prepared, null);
+            jpOfficialResults.push(saved);
+            if (saved.status === "duplicate") jpOfficial.alreadyKnown += 1;
+            else jpOfficial.inserted += 1;
+          } catch (error) {
+            sourceErrors.push(`jp_official:${item.sourceId}:${safeError(error)}`);
+          }
+        }
+      } catch (error) {
+        sourceErrors.push(`jp_official:${safeError(error)}`);
+      }
+    }
+
     // breaking_market lane (P0.5): same independence guarantee as market_macro above — its own quota,
     // its own fetch/dedupe/insert loop, never touching acquiredCandidates/allCandidates. Runs at most
     // MAX_DAILY_BREAKING_MARKET_SEARCHES_PER_FETCH web_search queries this cycle (selectDailyBreakingMarketQueries
@@ -2328,9 +2434,9 @@ Deno.serve(async (req) => {
     }
     await updateRun(supabaseUrl, serviceRoleKey, runId, {
       status: "completed",
-      fetched_count: allCandidates.length + marketMacroFetchedCount + breakingMarketFetchedCount,
-      duplicate_count: duplicateCount + marketMacroDuplicateCount + breakingMarketDuplicateCount,
-      new_candidate_count: newCandidateCount + marketMacroNewCandidateCount + breakingMarketNewCandidateCount,
+      fetched_count: allCandidates.length + marketMacroFetchedCount + breakingMarketFetchedCount + jpOfficial.selected,
+      duplicate_count: duplicateCount + marketMacroDuplicateCount + breakingMarketDuplicateCount + jpOfficial.alreadyKnown,
+      new_candidate_count: newCandidateCount + marketMacroNewCandidateCount + breakingMarketNewCandidateCount + jpOfficial.inserted,
       completed_at: new Date().toISOString(),
       error: sourceErrors.length ? sourceErrors.join(" | ").slice(0, 2000) : null,
     });
@@ -2355,6 +2461,7 @@ Deno.serve(async (req) => {
         providers: marketMacroProviderDiagnostics,
         results: marketMacroResults,
       },
+      jpOfficial: { ...jpOfficial, results: jpOfficialResults },
       breakingMarket: {
         queriesRun: breakingMarketQueriesRun,
         queryDiagnostics: breakingMarketDiagnostics,
