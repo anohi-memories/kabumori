@@ -1,3 +1,20 @@
+## Final C2 — PR #76 security rereview PASS / source merged / G4 production gate next
+
+- H2 verdict: **PASS** on exact head `5448e545f4a88bbf6597a981c0bcbe4c01043c30`.
+- F1 pre-send readiness parity: CLOSED.
+- F2 SECURITY DEFINER direct/effective ACL: CLOSED.
+- F3 runtime-first fail-closed rollout: CLOSED.
+- bounded R1-R5 regression: no blocker.
+- connection-error => reconnect-required behavior accepted as documented fail-closed availability tradeoff, not a security blocker.
+- focused evidence PASS: disposable PG apply/behavior/race/cleanup; actual-adapter fake-X E2E 9; missing-migration partial-state E2E 2; ACL harness; mutations 45/45; typed Deno 88/88; wrapper integration 39/39; app publish-setting 32/32; typecheck/lint/diff/secret checks.
+- final fresh merge gate: PR open/mergeable, Netlify/Vercel green, changed-file overlap with fresh main 0.
+- PR #76 squash-merged as `3c5f80a61d114d2936b761fc05ee3b3d69e85f63`.
+- no further routine source review is required.
+- production rollout is separately gated and must preserve exact order: guarded x-test-post first -> exact read-back/drain -> PR76 migration -> RPC/ACL read-back -> publish-setting Edge. No account toggle/real X is authorized.
+- G4 assigned `x-social-mobile-pr76-production-rollout-gate-20261006`, recommended **Opus5.5（高）**. First run is read-only preflight/package freeze and must STOP for explicit production approval.
+- G3/PR81 remains blocked until PR76 migration `20261003090000` is safely applied/read back.
+- H2 done/free.
+
 ## PR #87 review moved to free H1 — 2026-10-06
 
 - H1 previous common-account review is confirmed done / next_owner none and is genuinely free.
