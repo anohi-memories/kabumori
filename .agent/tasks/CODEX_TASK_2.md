@@ -1,5 +1,390 @@
 # Codex Task 2 — CURRENT TASK
 
+- task_id: x-social-mobile-pr76-transactional-publish-toggle-rereview-20261005
+- owner: codex
+- slot: codex-2
+- status: ready
+- next_owner: codex
+- priority: highest
+- recommended_model: Sol（極高）
+- type: final security rereview / authorization transaction / pre-send publish authority / migration RPC / concurrency
+- target_pr: 76
+- target_head: 7f75c07a8c997b6a585e9c86dca01186eeea671f
+- previous_bad_head: a59a89e9c585fb6e780e1af2ecc898c830f5524e
+- corrective_head_before_fresh_merge: fe1e846e59c69b591d29c6d21fc23c7b702d19cd
+- production_mutation_allowed: false
+
+## Purpose
+
+PR #76 publish-toggle corrective の最終独立レビュー。
+
+前回H1が再現したR1-R5:
+- stale membership authorization
+- brand active/live TOCTOU
+- foreign-tenant state reread leak
+- ON readiness mismatch
+- unpinned client confirmation
+
+に対して、G4は:
+- caller-JWT + auth.uid() による transactional DB authority
+- current membership/brand/account locking + CAS
+- narrow SECURITY DEFINER toggle RPC
+- fresh pre-X exact-account permission RPC
+- service-role writeをEdgeから除去
+- tenant-safe error collapse
+- UI confirmation pinning
+へ設計変更した。
+
+K4 freshness integration後の exact head を review し、source-level merge可否を判断する。
+
+**No merge, migration apply, Edge deploy, production write/toggle, Auth/Vault/Cron mutation, or real X operation.**
+
+## Freshness / isolation
+
+1. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / previous H1 report / G4 full Report.
+2. Independent H2 worktree/checkout.
+3. Fresh origin/main.
+4. Confirm PR #76 exact head `7f75c07a8c997b6a585e9c86dca01186eeea671f`; head mismatch -> STOP.
+5. Fresh K4 facts:
+   - PR open / unmerged / mergeable=true
+   - Netlify + Vercel success
+   - base after fresh merge = `d345f67402a782a303ce46c640f685271d76b681`
+   - current main is 8 commits ahead
+   - overlap across PR #76 changed files = **0**
+6. H1 is occupied by PR #82 AI-Lab review. Do not touch H1 worktree/files.
+7. G3 is implementing PR #81 residual fixes. Do not touch G3/PR81 files.
+8. Use an isolated H2 worktree and disposable DB only.
+
+## Gate A — R1 atomic membership authorization
+
+Independently verify `set_social_account_publish_enabled` against the actual migration SQL.
+
+Required:
+- caller identity comes from `auth.uid()`, not user-supplied id;
+- exact account determines authoritative brand;
+- current exact membership for caller+brand is owner/admin;
+- authorization and write are inside one DB transaction;
+- membership deletion/demotion committed before write causes rejection;
+- concurrent deletion/demotion waits or serializes safely if toggle holds locks;
+- ON and OFF both enforce current membership;
+- no stale pre-Edge membership snapshot can authorize the DB write;
+- no service-role write path in Edge remains.
+
+Reproduce original H1 owner->demoted/deleted interleavings.
+
+## Gate B — lock order / deadlock / bounded wait
+
+Review exact lock order:
+1. table lock
+2. brand
+3. membership
+4. account
+
+Compare to refresh/account-delete writers.
+
+Verify:
+- no opposite lock-order path creates realistic deadlock;
+- mutation test claiming deadlock without table lock is valid;
+- `lock_timeout=3s` behavior is bounded and fails closed;
+- timeout/deadlock maps to busy without state mutation;
+- nonmember does not wait on foreign-tenant row locks;
+- no lock is held across external HTTP/X.
+
+Use concurrent disposable-DB probes, not only source reasoning.
+
+## Gate C — R2 brand TOCTOU / pre-send authority
+
+This is critical.
+
+Verify toggle ON transaction and runtime pre-send guard independently.
+
+Before every actual Vault-backed X request:
+- brand active
+- brand publish_mode live
+- exact account still publish_enabled
+- exact X platform/account
+- structural verification/readiness still valid
+- not deleting/busy/invalid reconnect state
+
+must be freshly authoritative.
+
+Reproduce H1 mixed-snapshot schedule:
+- stale/cached brand context says live
+- brand disable/OFF becomes authoritative
+- a new X send must not start afterward.
+
+Also verify 401 retry path:
+- a second X request cannot start without another fresh permission check.
+
+Define accepted in-flight boundary precisely:
+- check succeeded -> request may begin;
+- OFF/disable committed after that cannot recall already-started request;
+- all later attempts require a fresh check.
+
+No claim of cancellation after request start.
+
+## Gate D — pre-send guard coverage
+
+G4 Report says current exact path is `VaultAccountXAuth.send`, used by AI Lab brand_post.
+
+Independently search current source for all social-mobile/account-scoped X send paths.
+
+Determine:
+- which paths are protected by the new RPC;
+- which paths are intentionally outside scope;
+- whether any active path can send using a social account while bypassing `publish_enabled`;
+- whether Kabumori/legacy env paths are correctly outside this feature or create a security/product contradiction.
+
+Do not broaden the PR unless an actual active bypass defeats the feature's stated guarantee.
+
+## Gate E — R3 tenant-safe result semantics
+
+Test:
+- nonexistent account
+- foreign brand
+- membership revoked
+- account moved A->B
+- account deleted
+- caller membership no longer owner/admin
+
+Responses must not reveal foreign `current_enabled`, brand state, or readiness details.
+
+Owner/admin may receive bounded stale/blocked state only while authority is current.
+
+Verify unknown DB/RPC responses map to generic unavailable, not raw backend text.
+
+## Gate F — R4 ON readiness alignment
+
+Compare toggle ON predicate with exact runtime credential/publish-authority contract.
+
+Verify at minimum:
+- platform = X
+- connection usable
+- trimmed nonempty platform_user_id
+- identity verified
+- verified_at present
+- required refs nonnull and structurally valid
+- refs not equal if forbidden
+- refs not shared across another account where required
+- no last connection error
+- refresh state blocks only intended unsafe states
+- account/brand deletion/busy constraints
+- brand active/live.
+
+Ensure ON does not falsely claim token validity; Vault content is not read.
+
+Test each rejected state and one valid owner/admin path.
+
+## Gate G — OFF fail-safe semantics
+
+OFF must:
+- require current owner/admin + exact account + expected state;
+- work despite inactive brand / broken credentials / missing refs / connection errors where safe;
+- not revoke OAuth/token/Vault;
+- not delete history/posts;
+- not mutate Auth/common account;
+- not promise already-started X is cancelled.
+
+Review refresh interaction:
+G4 intentionally allows OFF to win rather than wait through a refresh lease, potentially causing refresh commit to mark uncertain.
+
+Verify this is fail-safe and does not accidentally re-enable publication or expose credentials.
+
+## Gate H — SECURITY DEFINER / function ACL
+
+Review new migration:
+`20261003090000_social_mobile_publish_permission_boundary.sql`.
+
+For `set_social_account_publish_enabled` and `assert_x_publish_permission_for_legacy_post` verify:
+- exact signatures
+- fixed empty search_path
+- all relation/function references schema-qualified
+- no dynamic SQL
+- bounded return shape
+- no raw DB errors/secrets
+- PUBLIC execute revoked
+- anon denied
+- authenticated execute only toggle function
+- service_role denied toggle function unless concretely required
+- service_role execute only pre-send assert function
+- no broad table UPDATE grant added
+- no user-provided user_id/brand_id authority
+- no generic admin mutation surface.
+
+Check function owner/role/default privilege behavior in a production-like disposable role graph and fail closed if source migration would accidentally expose execute.
+
+## Gate I — migration drift / apply/reapply / collision
+
+Verify:
+- unique migration version in fresh repo/open PR set;
+- apply cleanly on the exact prerequisite migration chain;
+- reapply/idempotency behavior is deliberate;
+- existing conflicting function signatures/owners/ACLs do not silently become unsafe;
+- no table/policy/trigger changes outside intended boundary;
+- migration source invariant test includes the reserved version without deleting newer main reservations.
+
+Fresh K4 says no collision:
+- PR76 20261003090000
+- PR81 20261003120000
+- PR82 20261004090000
+
+Recheck independently.
+
+## Gate J — PostgREST / JWT / auth.uid semantics
+
+Local G4 E2E used a shim.
+
+Independently validate the SQL/security contract expected under real PostgREST:
+- caller-JWT RPC invokes as authenticated and `auth.uid()` resolves exact caller;
+- SECURITY DEFINER does not erase the caller identity needed by auth.uid();
+- service-role pre-send assert path is appropriate for runtime;
+- function grants/signatures are reachable only by intended roles;
+- verify_jwt expectation for the Edge is consistent with deployed runtime contract.
+
+A full production call is forbidden; use local PostgREST/Supabase if safely available, otherwise distinguish source proof from managed-runtime unverified assumptions.
+
+## Gate K — UI confirmation pinning
+
+Test actual hook/card behavior:
+- confirmation opened for account A, props switch B -> zero request;
+- switch back to A does not resurrect old confirmation;
+- eligibility changes -> invalidated;
+- preview becomes true -> invalidated;
+- auth user changes/signout -> invalidated;
+- expected publish state changes -> reconfirm;
+- stale rendered button cannot submit after context update;
+- double confirm/in-flight -> bounded behavior;
+- OFF path remains usable.
+
+No UI redesign.
+
+## Gate L — body/request hardening
+
+Verify bounded lower-risk fixes:
+- duplicate JSON raw keys rejected as claimed;
+- byte-size request cap is actually byte-aware and bounded while reading;
+- exact accepted keys only;
+- no backend error detail leaks;
+- OFF copy truthfully says already-sent/in-flight request cannot be recalled;
+- prior require-await lint debt is closed.
+
+## Gate M — Kabumori-type account product boundary
+
+G4 lists a remaining risk:
+Vault-ref-less / Kabumori-style account can potentially be turned OFF but cannot be turned back ON via this UI because ON requires Vault refs.
+
+Determine whether this is:
+- intended safe behavior,
+- a product/UX blocker,
+- or a dangerous cross-brand control surface.
+
+Inspect actual social account ownership/brand use in source and, only if useful, production **catalog/aggregate metadata read-only** without PII/content.
+
+Do not mutate any account.
+
+If the toggle UI can affect a legacy/Kabumori account whose publishing path does not honor the same pre-send guard, that may be a blocker because OFF would be misleading or asymmetrical. Classify explicitly.
+
+## Gate N — production rollout order
+
+No production changes, but define whether the proposed order is safe:
+
+1. read-only preflight catalog
+2. migration/RPC apply
+3. read-back grants/signatures
+4. deploy x-test-post pre-send guard
+5. deploy social-mobile-publish-setting Edge with expected JWT setting
+6. app release/feature exposure as appropriate.
+
+Check failure modes:
+- migration applied but no deploy
+- x-test-post deployed before migration
+- Edge deployed before migration
+- one function available / other unavailable.
+
+All partial rollout states must fail closed, not accidentally publish.
+
+## Required tests
+
+Independently run:
+- supplied disposable DB runner with `PUB_E2E=1`
+- race/adversarial suite
+- mutation suite 30/30
+- publish-setting Edge tests
+- migration contract tests
+- VaultAccountXAuth tests
+- relevant x-test-post/shared-brand tests
+- social-mobile app tests/domain tests
+- app typecheck/lint
+- changed runtime/test Deno check/lint
+- migration source invariants
+- git diff --check
+- secret/scope scan.
+
+Reproduce original H1 R1-R5 scenarios directly.
+
+Candidate reported after fresh merge:
+- migration invariants 10/10
+- focused Edge+Vault 68/68
+- runtime 925/925 (--no-check)
+- app 145/145 + domain 22/22
+- DB APPLY/BEHAVIOR/RACE/E2E/CLEANUP PASS
+- mutations 30/30 detected
+- no new x-test-post baseline diagnostics.
+
+Treat those as claims to verify independently.
+
+## Production read-only
+
+Allowed if useful, catalog/metadata only:
+- target function existence/collisions
+- social_accounts relevant triggers
+- effective grants/default ACL
+- migration ledger
+- aggregate existence of legacy/Kabumori-style accounts if it can be done without identifiers/content.
+
+No user content, tokens, Vault plaintext, emails or PII.
+
+Production writes = 0.
+
+## Verdict
+
+PASS only if R1-R5 are independently closed, runtime pre-send coverage is truthful, ACL/security-definer boundary is safe, and partial rollout fails closed.
+
+PASS-WITH-FIX only for small bounded fixes fully re-tested.
+
+CHANGES REQUIRED if any stale authority can still mutate/authorize X, tenant state leaks, active account send path bypasses required permission, or migration/RPC grants are unsafe.
+
+## Report
+
+Append to `.agent/CODEX_REPORT_2.md`:
+- task_id / verdict
+- exact reviewed head
+- R1-R5 disposition
+- lock/deadlock evidence
+- pre-send guard coverage/in-flight semantics
+- tenant-safe errors
+- ON/OFF semantics
+- SECURITY DEFINER/ACL
+- PostgREST/auth.uid evidence
+- migration drift/collision
+- client pinning
+- Kabumori-type account assessment
+- rollout ordering
+- tests
+- production reads/writes
+- source fixes if any
+- merge recommendation
+- deploy/apply recommendation
+- remaining risks.
+
+Then status -> review_required, next_owner -> chatgpt, STOP for C2.
+
+Recommended model: **Sol（極高）**.
+
+---
+
+# Codex Task 2 — CURRENT TASK
+
 - task_id: x-social-mobile-pr81-content-settings-hardening-rereview-20261003
 - owner: codex
 - slot: codex-2
