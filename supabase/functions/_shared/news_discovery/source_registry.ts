@@ -308,6 +308,9 @@ export const NEWS_SOURCE_REGISTRY: readonly SourceDefinition[] = [
     language: "en",
     source_type: "rss",
     endpoint: "https://ec.europa.eu/commission/presscorner/api/rss?language=en",
+    // gzip responses are close-delimited without a TLS close_notify: the production Edge Runtime fails the body
+    // read (N5-A and N5-C, 2/2). Uncompressed (~7 KB) the server answers chunked. See types.ts.
+    request_accept_encoding: "identity",
     fetch_interval_hint_sec: 30 * MINUTE,
     commercial_usage_status: PDL,
     trust_level: "official_primary",
