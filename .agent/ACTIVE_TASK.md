@@ -94,7 +94,7 @@
 ## Claude G5
 - owner: claude
 - slot: claude-5
-- status: ready
+- status: in_progress
 - task_id: common-account-v1-phase1-production-migration-gate-20261006
 - start_code: G5
 - finish_code: K5
