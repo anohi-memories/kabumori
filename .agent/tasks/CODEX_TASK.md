@@ -1,5 +1,170 @@
 # Codex Task — CURRENT TASK
 
+- task_id: common-account-gateb-managed-auth-final-review-20261005
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- priority: highest
+- recommended_model: Sol（極高）
+- type: final managed-Supabase Gate B evidence review / Auth deletion / stale-session boundary / production migration gate
+- production_mutation_allowed: false
+- test_project_mutation_allowed: false
+
+## Purpose
+
+PR #70 / common-account Phase 1 の source は既に main へ merge 済み。
+今回 ChatGPT + user が disposable hosted Supabase で Gate B を実施し、managed Auth / Storage / PostgREST の実挙動まで証拠を取った。
+
+このTASKは **実装ではなく最終独立レビュー**。
+「この証拠で Phase 1 migration の production apply gate を開けてよいか」を判定する。
+production apply / backfill / Auth delete / Storage delete / project pause/restore は一切しない。
+
+## Mandatory startup / isolation
+
+1. PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / this TASK / prior common-account H1/H2 reports を読む。
+2. 新Macでは `/Users/yuya/Developer/kabumori-fresh` の fresh origin/main を確認し、H1専用独立worktree/checkoutを使う。
+3. G1/G2/G4/H2 の現行作業を触らない。特に H2 は G4完了後のX security rereview用に温存する。
+4. production reads は必要最小限かつ read-only。PII/token/Vault plaintext を読まない。
+5. paused disposable project や写真共有 project を勝手に再起動/Pauseしない。remote mutation 0。
+
+## Accepted source baseline
+
+Common-account Phase 1:
+- original PR #70 merged source commit: `44121914b035e22380a4ca1bd8252a42713a2bbf`
+- accepted fixed source commit before merge: `aa4d2d425d1d7c432d43c9ecfb8e978a40b80a65`
+- target migration: `supabase/migrations/20261001150000_common_account_lifecycle_foundation.sql`
+
+Prior source/local tests:
+- lifecycle 20 PASS
+- mutations 46/46 DETECTED
+- social-mobile deletion 8 PASS
+- migration invariants 10/10 PASS
+
+## Hosted Supabase Gate B evidence — 2026-10-05
+
+Disposable hosted project:
+- name: `common-account-gateb-20261005`
+- ref: `wrmtvdgsxwmlzekvbmsa`
+- fake data only; no production data/provider OAuth
+- current disposition after proof: PAUSING / intended INACTIVE
+- production `stock-x-autopost`: mutation 0
+- photo-sharing `anohi-memories`: only temporary availability pause/restore; DB/Auth/Storage mutation 0
+
+### A. Exact hosted migration apply
+- production-shaped minimal fixture created in disposable project.
+- exact merged migration `20261001150000_common_account_lifecycle_foundation.sql` applied through hosted Supabase migration path.
+- result: SUCCESS.
+
+### B. Real Data API / RLS / RPC / Storage proof
+User ran fail-fast Phase A script and received:
+- `GATE_B_PHASE_A_PASS`
+
+That PASS requires all of these to have succeeded:
+- authenticated own `common_accounts` read = allowed
+- authenticated cross-user read = denied / zero rows
+- authenticated direct write = denied
+- anon direct read = denied
+- service-role direct table read = denied
+- service-role SECURITY DEFINER RPC boundary = works
+- real hosted Storage API upload by fake authenticated user = works
+- managed Storage ownership causes `prepare_common_account_auth_delete` to fail closed
+- object removed via Storage API, not SQL
+- after cleanup, readiness becomes `ready_for_managed_auth_delete`
+
+### C. Direct common row deletion guard
+ChatGPT executed hosted SQL while fake Auth user still existed:
+- direct DELETE of `public.common_accounts` rejected with expected foreign-key-class error / `COMMON_ACCOUNT_ROW_DELETE_REQUIRES_LOGIN_REMOVAL`
+- common-account row remained present
+- observer did not falsely mark login removed
+
+### D. Real Auth Admin hard delete
+User ran fail-fast Phase B and received:
+- `GATE_B_PHASE_B_PASS`
+- `old access JWT Data API: ALLOWED`
+
+Phase B PASS requires:
+- real Auth Admin API hard delete = success
+- `/auth/v1/user` with deleted user's token = rejected
+- refresh token after deletion = rejected
+- old already-issued access JWT was still accepted by Data API before expiry
+
+This reproduces the known stale-JWT hazard on actual hosted Supabase.
+
+### E. Hosted post-delete DB read-back
+After real Auth Admin delete, ChatGPT read back:
+- auth.users: 0 for deleted fake user
+- auth.identities: 0
+- auth.sessions: 0
+- auth.refresh_tokens: 0
+- public.common_accounts: 0
+- public.service_entitlements: 0
+- lifecycle `login_removed` operation: 1
+- same operation preserved `ready_for_managed_auth_delete` -> `login_removed` observation: 1
+
+This proves managed Auth cascade + observer boundary on hosted Supabase.
+
+## Critical security conclusion to review
+
+Actual hosted behavior proves:
+- deleting Auth user does **not** immediately invalidate already-issued access JWT for Data API authorization.
+- therefore the future common-account orchestrator must complete and attest **session revocation before Auth hard delete**.
+- Phase 1's built-in `session_revocation` checkpoint is therefore not optional.
+- a future destructive orchestrator must not treat "Auth row deleted" as sufficient session invalidation.
+
+Review whether current Phase 1 remains safe specifically because it **does not itself perform managed Auth deletion** and does not claim whole-account deletion complete.
+
+## Final gates
+
+Independently review source + recorded evidence and answer:
+
+1. Does hosted evidence close the previous Gate B managed-boundary unknowns enough for Phase 1 migration apply?
+2. Is stale-JWT behavior correctly contained by the current Phase 1 contract, or is a source blocker still present before even installing the additive foundation?
+3. Does observer behavior remain observational only and non-authorizing?
+4. Do RLS/grants/Data API results match intended least privilege?
+5. Does service-role table denial + RPC-only boundary match source grants?
+6. Does Storage ownership fail closed until API cleanup?
+7. Does managed Auth delete produce the intended cascade + durable operation observation?
+8. Is any rollback/reapply or PostgREST error-mapping proof still materially required before production apply, or can it be deferred because Phase 1 is additive/non-destructive and exact hosted apply succeeded?
+9. If production migration apply can proceed, specify exact preflight/apply/read-back sequence and STOP conditions.
+10. Backfill must remain a **separate explicit approval** after migration read-back.
+
+## Safety / forbidden
+
+- no production mutation/apply/backfill/deploy
+- no production Auth user operation
+- no Storage/Vault/provider OAuth mutation
+- no pause/restore of any Supabase project
+- no recreation of hosted destructive proof unless ChatGPT/user explicitly authorizes it
+- no source implementation in H1
+- if a source blocker is found: report CHANGES REQUIRED and return to ChatGPT/G5
+
+## Completion / C1
+
+Append to `.agent/CODEX_REPORT.md`:
+- task_id
+- verdict: PASS / PASS-WITH-CONDITIONS / CHANGES REQUIRED
+- exact source reviewed
+- disposition for each final gate
+- stale-JWT security implication
+- whether Phase 1 production migration apply may proceed to a **separately authorized mutation gate**
+- exact rollout/read-back checklist
+- whether backfill remains HOLD
+- remaining issues
+- production reads
+- production mutations = 0
+- test/photo project mutations = 0 from H1
+- recommended next model
+
+Then status -> review_required, next_owner -> chatgpt, STOP for C1.
+
+Recommended model: **Sol（極高）**.
+
+---
+
+# Previous H1 task history — preserved
+
+
 - task_id: ai-lab-pr82-production-readonly-preflight-20261005
 - owner: codex
 - slot: codex-1
