@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: review_required
+- status: done
 - task_id: kabumori-pr87-editorial-three-points-review-20261006
 - start_code: H1
 - finish_code: C1
-- next_owner: chatgpt
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: PR #87「今日のポイント3点」改善のfocused review。朝刊/大引けのeditorial契約、Hard Fact/因果安全性、WARN-only telemetry、model-call不増、X/App同一points_ja、旧レポートfallback、回帰テストを確認。source変更/merge/deploy/production mutation禁止。
+- allocation: Final C1 PASS。PR #87 exact reviewed head 3561f1eaac41df0f23dcce8fdaace0decc654a0a は独立レビューPASS後、squash-merged as 74e4dbff09e3b248164fd00bb720402d762ebcd8。source fix 0、production mutation 0。H1 free after fresh allocation。
 - recommended_model: Luna（高）
 
 ## Codex H2
@@ -60,14 +60,14 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: done
-- task_id: kabumori-shared-report-v2-editorial-three-points-20261005
+- status: ready
+- task_id: kabumori-pr87-controlled-production-deploy-20261006
 - start_code: G2
 - finish_code: K2
-- next_owner: none
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: Final K2 PASS to focused H2 review。PR #87 exact head 3561f1eaac41df0f23dcce8fdaace0decc654a0a。朝刊/大引けの3ポイントを数値列挙から重要テーマ見出しへ変更し、Appもshared points_ja優先へ。production mutation 0、merge/deploy HOLD。
-- recommended_model: Sonnet5（高）
+- allocation: PR #87 merge済み。market-report-analysis と personalized-reports の2 targetだけをexact fresh mainからcontrolled production deployし、before/after version・verify_jwt・source/import graph・consumer gates OFF・Cron不変をread-back。manual report/retry、consumer ON、DB/RPC/migration、X/通知、EAS禁止。G4/G5等のproduction mutationとは同時実行禁止。
+- recommended_model: Opus5.5（高）
 
 ## Claude G3
 - owner: claude
