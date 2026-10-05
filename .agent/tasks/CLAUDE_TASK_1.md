@@ -4,7 +4,7 @@
 - owner: claude
 - slot: claude-1
 - status: review_required
-- next_owner: chatgpt
+- next_owner: user
 - priority: high
 - recommended_model: Sonnet5（高）
 - purpose: かぶモリの詳細画面から迷わず移動できるよう、トピック詳細で「同じ日の初級/中級/上級」を簡単に切替可能にし、トピック詳細と重要ニュース詳細の双方に明示的なHome/一覧導線を追加する。
