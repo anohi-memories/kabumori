@@ -1,5 +1,141 @@
 # Codex Task 2 — CURRENT TASK
 
+- task_id: kabumori-pr87-editorial-three-points-review-20261005
+- owner: codex
+- slot: codex-2
+- status: ready
+- next_owner: codex
+- priority: high
+- recommended_model: Luna（高）
+- type: focused source review / editorial presentation / shared consumer consistency
+- target_pr: 87
+- target_head: 3561f1eaac41df0f23dcce8fdaace0decc654a0a
+- production_mutation_allowed: false
+
+## Purpose
+
+Review PR #87, which changes the market-report "today's 3 points" from metric recap lines into useful editorial headlines.
+
+User intent:
+- Morning: today's focus / risks / what to watch.
+- Close: what happened today / supported drivers / why it matters / next watch.
+- Numeric values should mainly live in supporting body/context, not dominate all three headlines.
+- No clickbait and no unsupported market causality.
+
+This is a focused independent review. Do not broaden into unrelated market-report redesign.
+
+## Freshness / isolation
+
+1. Read PROJECT_RULES, ORCHESTRATION, CURRENT_STATE, ACTIVE_TASK, G2 Report, and this TASK.
+2. Use an independent H2 worktree/checkout. Do not share G2/G1/G3/G4 directories.
+3. New-Mac base rule: new checkout/worktree must derive from fresh `/Users/yuya/Developer/kabumori-fresh`, never old `/Users/yuya/Developer/kabumori`.
+4. Fresh-fetch origin/main and PR #87.
+5. Require exact review head `3561f1eaac41df0f23dcce8fdaace0decc654a0a`. If head moved, STOP and report.
+6. K2 fresh comparison found main 6 commits ahead of PR base with overlap only in .agent control files; none of PR #87's 13 changed files overlapped. Re-check before final verdict.
+
+## Review gates
+
+### A — user-visible editorial contract
+Verify the prompt/source actually drives:
+- Morning 3 points toward today's focus / risk / watch axis, not completed-session claims.
+- Close 3 points toward what happened / supported driver / significance / next watch.
+- Metric-only three-line recaps are disfavored.
+- Exactly 3 points remains required.
+- Points are meaningfully distinct rather than near-duplicate paraphrases.
+- No hard-coded sector/theme claims that are absent from input evidence.
+
+### B — causal / factual safety
+Confirm:
+- PR #79/H1 Hard Fact behavior is unchanged.
+- points remain subject to existing date/session/value/sign/stale/1306/ref/causality/false-absence checks.
+- exporting `MARKET_NAMES` changes no Hard logic.
+- unsupported cause examples are still rejected.
+- honest uncertainty such as "主因は絞れず" remains allowed.
+- Morning watch language does not create new wrong-date/session assertions.
+
+### C — delivery-first / model calls
+Verify:
+- no new model call is introduced.
+- generation/fact call ceiling is unchanged.
+- `X_POINTS_METRIC_RECAP` and `X_POINTS_NEAR_DUPLICATE` are telemetry/WARN only and do not silently trigger rewrite.
+- PR #77 700–899-char delivery-first behavior and safe-original fallback remain unchanged.
+- prompt expansion is bounded and no hidden retry/rewrite path was added.
+
+### D — X/App shared truth
+Trace exact consumer path:
+- X uses `x_post.points_ja`.
+- presentation-v2 App path receives the same points in `market_detail.points_ja`.
+- Home card prefers shared points only when available.
+- v1 / old stored reports retain prior fallback behavior.
+- no second market analysis or divergent App-only interpretation is introduced.
+- schema additions are additive/optional and existing readers remain compatible.
+
+### E — regression quality
+Independently inspect/run focused tests for:
+- metric-rich morning fixture does not rely on three numeric recap lines as the desired output contract.
+- close fixture favors event/material/significance/next-watch framing.
+- unsupported causal headline remains Hard.
+- direction inversion / wrong date / 1306 / invalid point count remain Hard.
+- duplicate/near-duplicate telemetry behaves as intended.
+- home-report highlight source priority selects shared points without breaking fallback.
+- personalized-reports serialization/upgrade remains compatible.
+
+Run sufficient relevant suites:
+- market-report-analysis focused/full
+- session-date / H1 boundary / causal / quality / presentation / editorial-points
+- personalized-reports
+- X shared consumer
+- market-report-data-packet as relevant
+- app home-report-highlights
+- deno check/lint changed runtime files
+- git diff --check
+
+Do not manufacture a failure from documented unrelated pre-existing lint/type debt.
+
+## Scope / safety
+
+Review only unless a truly trivial review-only correction is necessary in control/test commentary. Do not change product source on PR #87 in H2. If source correction is needed, return CHANGES REQUIRED to ChatGPT/G2.
+
+Forbidden:
+- merge PR
+- deploy any Edge Function
+- manual market-report invoke/retry
+- DB/RPC/migration write
+- consumer gate change
+- Cron change
+- Auth/Vault/secret access
+- X post/API mutation
+- app notification
+- production mutation of any kind
+
+Read-only production observation is unnecessary unless source behavior cannot be established otherwise.
+
+## Completion / Report
+
+Append a new top section to `.agent/CODEX_REPORT_2.md` with:
+- verdict: PASS or CHANGES REQUIRED
+- exact reviewed head
+- freshness/no-overlap result
+- findings by A-E
+- tests
+- source changes by H2 = 0
+- production mutation = 0
+- merge recommendation
+- deploy recommendation
+- remaining risks
+- next recommendation
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C2.
+
+Recommended model: **Luna（高）**.
+
+---
+
+# Codex Task 2 — CURRENT TASK
+
 - task_id: x-social-mobile-pr76-final-security-rereview-20261005
 - owner: codex
 - slot: codex-2
