@@ -95,7 +95,7 @@ test("the Hero art keeps the approved 1942x809 aspect ratio", () => {
 
 test("title sizing: 7 characters or fewer keep the large title; longer titles are smaller and start below the art", () => {
   assert.deepEqual(topicDetailTitleStyle("PERって何？"), { fontSize: 34, lineHeight: 42, belowArt: false });
-  assert.deepEqual(topicDetailTitleStyle("ROEって何を見る指標？"), { fontSize: 28, lineHeight: 36, belowArt: true });
+  assert.deepEqual(topicDetailTitleStyle("ROEって何を見る指標？"), { fontSize: 27, lineHeight: 35, belowArt: true });
   assert.deepEqual(topicDetailTitleStyle("信用買い残が多いと上値が重くなることがあるのはなぜ？"), { fontSize: 26, lineHeight: 34, belowArt: true });
   assert.equal(TOPIC_DETAIL_ART_CLEAR_RATIO, 0.78);
 });

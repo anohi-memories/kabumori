@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
   cautionBand: { borderRadius: 12, paddingLeft: 20, paddingRight: 14, paddingVertical: 12, overflow: 'hidden' },
   // A straight accent bar inset from the band's rounded corners (not a curved border).
   cautionBar: { position: 'absolute', left: 8, top: 10, bottom: 10, width: 4, borderRadius: 2 },
-  cautionText: { color: '#17251d', fontSize: 15, lineHeight: 24, fontWeight: '800' },
+  cautionText: { color: '#17251d', fontSize: 14.5, lineHeight: 23, fontWeight: '800' },
   exampleCard: { borderRadius: 18, borderWidth: 1, padding: 18, gap: 12 },
   exampleHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   exampleMark: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },

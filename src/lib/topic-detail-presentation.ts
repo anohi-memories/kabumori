@@ -63,7 +63,8 @@ export const TOPIC_DETAIL_ART_ASPECT = 1942 / 809;
 /**
  * Title presentation by length (the art's illustration sits in the right ~40% of the Hero's top area):
  * - up to 7 characters: the large 34/42 title fits left of the illustration where it starts;
- * - 8-16 characters: 28/36, and the title starts below the illustration (rule below);
+ * - 8-16 characters: 27/35 (keeps 11-character titles such as ROEって何を見る指標？ on one line at 375pt), and the
+ *   title starts below the illustration (rule below);
  * - 17+ characters: 26/34, also below the illustration.
  * `belowArt` titles start at ART_CLEAR_RATIO of the art height so they can never run over the art.
  */
@@ -72,6 +73,6 @@ export const TOPIC_DETAIL_ART_CLEAR_RATIO = 0.78;
 export function topicDetailTitleStyle(title: string): { fontSize: number; lineHeight: number; belowArt: boolean } {
   const length = Array.from(title).length;
   if (length <= 7) return { fontSize: 34, lineHeight: 42, belowArt: false };
-  if (length <= 16) return { fontSize: 28, lineHeight: 36, belowArt: true };
+  if (length <= 16) return { fontSize: 27, lineHeight: 35, belowArt: true };
   return { fontSize: 26, lineHeight: 34, belowArt: true };
 }
