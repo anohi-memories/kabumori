@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-pr81-production-schema-gate-20261005
 - owner: claude
 - slot: claude-3
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: production migration gate / read-only preflight / ordered rollout / post-apply read-back
@@ -220,6 +220,48 @@ Review policy:
 - this is execution of an already independently reviewed migration plan.
 - do **not** automatically add another Codex review after a clean exact apply/read-back.
 - if only read-only preflight/HOLD occurs, no review is needed.
+
+## Report — x-social-mobile-pr81-production-schema-gate-20261005
+
+- task_id: x-social-mobile-pr81-production-schema-gate-20261005
+- result: **HOLD (read-only) — Gate B CLEAN, Gate A ordering unresolved; Gate C not frozen; no approval requested; production mutations 0.** Model: Opus 5.5.
+- fresh main at start: `2eebb066` (contains PR #81 merge `686f23a7094389b793470503fceb2f47a71f8fbf`). Isolated G3 worktree created from the new clean base: `/Users/yuya/Developer/kabumori-g3-schema-gate` (detached on origin/main).
+- exact SQL hashes (unchanged since the merge; `git diff 686f23a7..HEAD` empty for both):
+  - `20260922045046_social_mobile_content_settings_candidate.sql` sha256 `b1167065e4177492b1139071055e89da2bf9db12b0e43e20dada1af07a996fdb`
+  - `20261003120000_social_mobile_content_settings_hardening.sql` sha256 `83d44ccfd51bcd8fcd78d31236fa52d1d8f90c6642f12c5bb1586f9d1497467e`
+
+### Gate A — ordering: HOLD
+- PR #76 `20261003090000_social_mobile_publish_permission_boundary` is **OPEN / unmerged** (head `5448e545f4a88bbf6597a981c0bcbe4c01043c30`) and **absent from the production ledger**. It sorts before PR #81's `20261003120000`. CURRENT_STATE also records this order as unresolved. Per the TASK, PR #81 is not applied ahead of it by assumption; no history reorder/fake/repair.
+- PR #82 `20261004090000_ai_lab_topic_claims` is merged but **not applied** in production (ledger absent); it sorts after PR #81 and is not bundled.
+- Needed decision (ChatGPT/user): either apply PR #76's migration first when it is ready, or explicitly accept PR #81 going first (then a later PR #76 apply is out-of-order for the CLI and must use the same reviewed manual procedure or `--include-all`, decided then).
+
+### Gate B — production read-only preflight: CLEAN
+One `BEGIN TRANSACTION READ ONLY` catalog/ledger query (`transaction_read_only=on`), **run by the user in their own terminal** because Claude's production read was refused by the auto-mode classifier; Claude read only the user's output file. Query sha256 `f74fbc29f8e90961b86323aef2b3b9736ea11d98a3ffa44bf90c1b0f61617054` (syntax-tested first on a throwaway local PostgreSQL, since removed). No user content, PII, tokens or Vault data selected. Results (checked_at 2026-10-05T14:32:55Z, project `wsmznyzcvmuitkglfeuj`, PostgreSQL 17.6):
+- `public.social_mobile_content_settings` absent (no same-name relation in any schema); same-prefix routines 0, policies 0, triggers 0, constraints 0.
+- Ledger: 72 rows; versions 20260922045046 / 20261003090000 / 20261003120000 / 20261004090000 and matching names all **absent**; latest applied `20261002090000`. Ledger columns: version text NOT NULL PK, statements text[], name text, created_by text, idempotency_key text UNIQUE, rollback text[] — all but version nullable, no triggers, so the reviewed `(version, name)` history insert fits.
+- Applying role: `postgres` (current_user = session_user, not superuser), owner of `public.brands` — matches the hardening guard's owner rules.
+- Dependencies: brands.id text NOT NULL PK; brand_memberships(brand_id text FK -> brands ON DELETE CASCADE, user_id uuid FK -> auth.users ON DELETE CASCADE, role CHECK owner/admin/member/viewer, PK (brand_id,user_id)), RLS on, self-select policy for authenticated using `(select auth.uid()) = user_id`, authenticated SELECT granted; auth.uid() stable, not SECURITY DEFINER.
+- Default ACL (postgres, public): tables -> owner + anon/authenticated/service_role TRUNCATE/REFERENCES/TRIGGER/MAINTAIN (as H2 recorded; normalised by the hardening, allowed by its grantee guard); functions -> EXECUTE to postgres only. No global (all-schema) defaults. Public schema: USAGE for PUBLIC/anon/authenticated/service_role, CREATE only pg_database_owner.
+- Role graph: authenticator, postgres and supabase_realtime_admin are members of anon/authenticated/service_role (expected Supabase shape; inherited privileges therefore follow the hardened grants).
+- Verdict: no drift from the H2-reviewed preconditions.
+
+### Gate C — not frozen (ordering unresolved)
+The reviewed procedure remains `supabase/tests/social_mobile_content_settings_rollout.md` (one `psql -X --single-transaction -v ON_ERROR_STOP=1` session: candidate + hardening + two `(version, name)` history rows; no db push / migration up / Management API apply / repair; no other migration). It will be frozen with a fresh same-day preflight once the order is decided.
+
+### Approval / mutations
+- Production apply approval: **not requested** (Gate A HOLD). Production writes / DDL / history: **0**. Deploy: **0**. X/OpenAI/Vault/OAuth/Cron: **0**. PR #76/#78/#82 untouched.
+
+### Pre-existing ledger observations (not touched, outside PR #81)
+- `20260929090000_news_discovery_observer` exists in the repo but **not** in the production ledger (the history row known missing since the N3 canary).
+- Ledger contains `20260924001508` and `20260924024406`, which have **no file** on main (remote-only versions).
+Both matter for any future CLI `db push` and should be reconciled separately with approval; they do not affect the manual PR #81 procedure.
+
+### Remaining blockers / PR #78
+- Blocker: rollout order vs PR #76. PR #78 may **not** resume yet (schema prerequisite not applied).
+- Local evidence files (untracked, not committed): `/Users/yuya/Developer/kabumori-g3-schema-gate/.g3-local/pr81_preflight.sql` and `pr81_preflight_out.json` (catalog/ledger metadata only).
+
+### Next recommendation
+ChatGPT/user decide the PR #76 vs PR #81 order. Then reassign G3: fresh same-day preflight (same query), freeze the package, request explicit production approval, apply the reviewed outer transaction, separate-session read-back; only then fresh-integrate PR #78.
 
 
 ---
