@@ -1,3 +1,18 @@
+## Final C2 — PR #76 transactional publish-toggle CHANGES REQUIRED -> G4 corrective
+
+- verdict: **CHANGES REQUIRED accepted** on exact PR #76 head `7f75c07a8c997b6a585e9c86dca01186eeea671f`; PR remains open/unmerged.
+- H2 source changes: **0**. Review/verification only.
+- core R1-R5 disposition: transactional caller authority, membership/brand/account locking, original brand TOCTOU closure on guarded Vault path, tenant-safe error semantics, fail-safe OFF and UI confirmation pinning are materially accepted.
+- residual F1 / P2: pre-send authority still accepts two states that toggle ON rejects — missing `verified_at` and nonblank `last_connection_error_code`. H2 reproduced real local permission RPC + actual VaultAccountXAuth fake-X callback reaching the callback in both states.
+- residual F2 / P2: unexpected creator default EXECUTE grant can survive the migration; inherited role membership can make an app role effectively execute a function outside the intended exact ACL. Current production catalog did not show this adverse drift, but source must fail closed.
+- residual F3 / P2: documented migration-first rollout is not fail-closed. During migration-applied/old-runtime interval, caller can OFF through new RPC while old sender can still start a fake X request. Approved runbook must make guarded runtime active before toggle authority becomes usable, or prove an equivalent staged-grant sequence.
+- H2 disposable DB/race evidence supports the already-closed lock/deadlock/authority paths; production mutation/deploy/real X/Auth/Vault/Cron = **0**.
+- migration-version clarification: current merged PR #82 uses `20261004090000_ai_lab_topic_claims.sql`; PR #76 uses `20261003090000_social_mobile_publish_permission_boundary.sql`; PR #81 uses `20261003120000_social_mobile_content_settings_hardening.sql`. The stale H2 coordination note suggesting PR82 still used 20261003090000 is obsolete; current filenames were re-read and are distinct.
+- G4 assigned `x-social-mobile-pr76-final-security-corrective-20261005`, recommended **Opus5.5（高）**.
+- after K4, independent H2 rereview required, recommended **Sol（極高）**.
+- PR #76 merge / migration apply / Edge deploy / app exposure remain **HOLD**.
+- AI Lab diary: **記録不要** — this is internal authorization/security hardening, not a new released user-facing feature.
+
 ## K1 — Topic detail visual polish CODE PASS / VISUAL HOLD
 
 - verdict: **HOLD pending real-device visual acceptance**.
