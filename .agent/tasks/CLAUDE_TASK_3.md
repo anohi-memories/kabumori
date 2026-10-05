@@ -4,7 +4,7 @@
 - owner: claude
 - slot: claude-3
 - status: review_required
-- next_owner: chatgpt
+- next_owner: codex
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: bounded corrective implementation / migration drift / function ACL / CAS finite-domain / rollout plan
