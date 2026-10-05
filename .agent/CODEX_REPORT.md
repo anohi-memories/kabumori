@@ -1,3 +1,28 @@
+# H1 — PR #87 editorial “今日のポイント3点” review — 2026-10-06
+
+- task_id: `kabumori-pr87-editorial-three-points-review-20261006`
+- verdict: **PASS** for exact PR #87 head `3561f1eaac41df0f23dcce8fdaace0decc654a0a`.
+- GitHub read-back before verdict: PR OPEN, unmerged, `mergeable=true`, `mergeable_state=clean`; PR head unchanged.
+- Fresh `origin/main`: `e303d81e940d413ed62ec93885b09063b3661aee`; it is 44 commits beyond merge-base `a775ec8d4447bf0c84b12f6dedbd74e89be1a1c2`. Changed-file overlap with the PR's 13 files: **0**.
+- H1 product source changes: **0**. Production mutation/deploy/manual invocation/consumer activation/DB/Auth/Vault/X changes: **0**.
+
+## Review findings
+
+- **A — Editorial contract: PASS.** Morning instructions steer the three points toward today's focus, risks and watch axes; close instructions distinguish what happened, supported material/significance and the next watch. The exactly-three validation remains a hard requirement. The new metric-recap and near-duplicate detectors are narrow warning telemetry; the prompt adds no hard-coded sector or theme claim.
+- **B — Factual/causal safety: PASS.** `MARKET_NAMES` is exported for reuse; no Hard Fact decision logic was changed. Existing date/session, value/sign, stale-data, 1306 identity, reference, unsupported-causality and false-absence checks remain in the analysis path. The close causal and morning watch regressions pass.
+- **C — Delivery/model calls: PASS.** The new `X_POINTS_*` warnings are explicitly cosmetic and `qualityRewriteHints` does not turn them into a rewrite. No additional generation/fact call or retry was added; existing bounded delivery and safe-original behavior remains covered by regression tests.
+- **D — X/App shared truth: PASS.** X formatting consumes `x_post.points_ja`; presentation-v2 `market_detail.points_ja` copies those same values. The home card prefers shared points, while older/v1 data with no shared points keeps the pre-existing today-claims/checkpoints fallback. Type additions are optional/additive; no second App analysis path was introduced.
+- **E — Regression verification: PASS.** Focused/full runs: market-report-analysis **147/147**, personalized-reports **129/129**, X shared consumer **8/8**, App home highlights **17/17**, market-report-data-packet **42/42**. Deno check passed on changed runtime modules; Deno lint passed on the nine changed runtime/test files selected. `git diff --check` passed.
+
+## Caveats / recommendation
+
+- A broader lint invocation including `analysis_test.ts` reports the existing `require-await` at line 34. `git blame origin/main` confirms that line predates this PR and it is unchanged by PR #87; this is not a new blocker.
+- Deno's default type-checked invocation of the App test cannot resolve the Expo `@/` TypeScript path alias; the App behavior suite passes with `--no-check`. Server-side changed runtime modules pass typed `deno check`.
+- **Merge recommendation:** PASS after C1 acceptance. **Deploy recommendation:** no deploy in this H1; keep production rollout and natural morning/close observation as a separate controlled gate.
+- Remaining review blockers: none found. C1 / ChatGPT is the next owner. PR #87 remains unmerged; H1 did not alter its source.
+
+---
+
 # H1 — Phase 1D stopped before source candidate
 
 - task_id: `x-autopost-phase1d-claim-domain-partition-and-planner-authority-20260924`

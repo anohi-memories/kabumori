@@ -23,11 +23,11 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: review_required
 - task_id: kabumori-pr87-editorial-three-points-review-20261006
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: chatgpt
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
 - allocation: PR #87「今日のポイント3点」改善のfocused review。朝刊/大引けのeditorial契約、Hard Fact/因果安全性、WARN-only telemetry、model-call不増、X/App同一points_ja、旧レポートfallback、回帰テストを確認。source変更/merge/deploy/production mutation禁止。
