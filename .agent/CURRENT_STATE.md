@@ -1,3 +1,27 @@
+## G1 assigned — Detail navigation + same-day topic level switching
+
+- task_id: `kabumori-detail-navigation-topic-level-switch-20261006`
+- status: ready
+- owner: Claude G1
+- recommended model: **Sonnet5（高）**.
+- fresh allocation main: `e303d81e940d413ed62ec93885b09063b3661aee`.
+- G1 previous topic-detail polish is Final K1 PASS / merged / done; slot confirmed free.
+- fresh open-PR overlap check found **0 overlap** with topic-detail/topics/news-detail/news-layout/BackButton/daily-topic/home-topic target paths.
+- topic detail requirement:
+  - add compact 初級/中級/上級 selector;
+  - always switch on the same `jstDate`;
+  - do not write the saved Home topic level;
+  - exact id/fail-closed direct-navigation safety remains;
+  - switch failure keeps current content;
+  - prefer per-screen date+level cache to avoid duplicate refetch.
+- topic detail explicit destinations: **ホーム** and **過去のトピック**; do not rely on router.back history.
+- important-news detail explicit destinations: **ニュース一覧** and **ホーム**, including direct Home entry and deep-link/error cases.
+- preserve accepted topic learning-note visual design and news access/data behavior.
+- verify 375/402 Simulator, same-date three-level switching, past-date switching, explicit destination routes.
+- EAS build expected: 0.
+- backend/DB/RPC/API/AI/Auth/Edge/production mutation: 0.
+- finish code: K1.
+
 ## H1 PR #87 editorial three-points review — PASS, awaiting C1 — 2026-10-06
 
 - Exact reviewed head `3561f1eaac41df0f23dcce8fdaace0decc654a0a`; GitHub read-back: OPEN, unmerged, mergeable/clean.
