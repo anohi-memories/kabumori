@@ -48,14 +48,14 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: none
-- status: done
-- task_id: kabumori-topic-detail-visual-polish-20261005
+- next_owner: claude
+- status: ready
+- task_id: kabumori-detail-navigation-topic-level-switch-20261006
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Final K1 PASS。PR #84 exact head b7bf774b964ed740a00b904447f029351cebef80 を Simulator 402pt/375pt 実画面確認後に squash-merge、main 25582625cdc60208df3b1340f8c03eba75cf3340。297/297 tests、Expo config/export PASS、EAS 0、backend mutation 0。Codex review不要。G1 free。
-- recommended_model: Sonnet5（中）
+- allocation: トピック詳細で同じ日の初級/中級/上級を簡単に切替。Homeの保存済みレベル設定は変更しない。トピック詳細に「ホーム」「過去のトピック」明示導線、重要ニュース詳細に「ニュース一覧」「ホーム」明示導線を追加。履歴依存禁止、375/402 Simulator確認、EAS 0、backend mutation 0。
+- recommended_model: Sonnet5（高）
 
 ## Claude G2
 - owner: claude
