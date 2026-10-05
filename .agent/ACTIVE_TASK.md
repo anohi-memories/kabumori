@@ -35,14 +35,14 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: done
-- task_id: x-social-mobile-pr76-transactional-publish-toggle-rereview-20261005
+- status: ready
+- task_id: x-social-mobile-pr81-residual-hardening-final-rereview-20261005
 - start_code: H2
 - finish_code: C2
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Final C2 accepted CHANGES REQUIRED on PR #76 head 7f75c07a8c997b6a585e9c86dca01186eeea671f. R1-R5 core architecture is largely closed, but F1 pre-send readiness parity, F2 exact/effective SECURITY DEFINER ACL under default/inherited grants, and F3 fail-closed partial rollout ordering require bounded G4 correction. No source fix/merge/apply/deploy/real X by H2. H2 free after fresh allocation.
+- allocation: Independent final rereview of corrected PR #81 exact head bcc01312c638f5922db4ffd6255ddddf6f611183. Verify R1 non-deferrable ON-CONFLICT arbiter, R2 exact/effective helper ACL/owner under adverse role graphs, R3 finite CAS domain, preservation of prior JSON/RLS/ACL/CAS behavior, and the proposed atomic two-file production rollout/history plan. Review only; no source fix/merge/apply/deploy/write. Recommended Sol（高）.
 
 ## Claude G1
 - owner: claude
@@ -70,13 +70,13 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: ready
+- status: review_required
 - task_id: x-social-mobile-pr81-hardening-residual-corrective-20261005
 - start_code: G3
 - finish_code: K3
-- next_owner: claude
+- next_owner: codex
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: Bounded residual correction for PR #81 after Final C2. Reject deferrable PK/index drift, fail closed on helper function owner/EXECUTE ACL drift, refuse/enforce finite CAS timestamps, and produce a safe whole-chain production apply plan so weak candidate state is never exposed. Preserve closed JSON/RLS/ACL/finite-CAS behavior. No production apply/deploy/write. Recommended Opus5.5（高）. Fresh H2 Sol（高） rereview required after K3.
+- allocation: K3 PASS to independent H2 rereview. PR #81 exact head bcc01312c638f5922db4ffd6255ddddf6f611183 is open/mergeable; Netlify/Vercel green; fresh-main overlap 0. G3 reports R1 deferrable PK, R2 helper owner/effective ACL, R3 finite-version domain fixed, with atomic two-file rollout plan documented and production mutation 0. H2 review mandatory before merge/apply. Recommended rereview Sol（高）.
 
 ## Claude G4
 - owner: claude
