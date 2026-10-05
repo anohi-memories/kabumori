@@ -1,5 +1,168 @@
 # Codex Task 2 — CURRENT TASK
 
+- task_id: x-social-mobile-pr81-residual-hardening-final-rereview-20261005
+- owner: codex
+- slot: codex-2
+- status: ready
+- next_owner: codex
+- priority: highest
+- recommended_model: Sol（高）
+- type: independent final rereview / DB migration drift / function ACL / CAS finite-domain / rollout-plan review
+- target_pr: 81
+- target_head: bcc01312c638f5922db4ffd6255ddddf6f611183
+- previous_reviewed_bad_head: 5595fb131813542c55c43bc783af623cdb9ea442
+- production_mutation_allowed: false
+
+## Purpose
+
+G3 corrected the three residual findings from the previous H2 review of PR #81.
+
+This H2 task is **review/verification only**. Do not implement source fixes in this task. If any blocker remains, return CHANGES REQUIRED to ChatGPT/G3.
+
+Review exact head:
+`bcc01312c638f5922db4ffd6255ddddf6f611183`
+
+Required independent gates:
+
+### A — R1 deferrable PK / ON CONFLICT arbiter
+Prove with actual corrected migration + disposable PostgreSQL:
+- expected immediate/non-deferrable PK accepted;
+- DEFERRABLE / initially deferred / wrong/composite/missing PK rejected before mutation;
+- backing index is primary+unique+immediate+valid+ready+live, exact key, no predicate/expressions, correct access method/opclass/collation;
+- actual repository `INSERT ... ON CONFLICT (brand_id) DO UPDATE` works under the intended authenticated/RLS path;
+- unknown PK/index drift is refused, not silently repaired.
+
+### B — R2 helper function owner/effective ACL
+Independently verify:
+- only exact known helper signatures exist;
+- unexpected overload/name/procedure/owner/grantee is refused;
+- exact owner policy is safe;
+- PUBLIC/anon/service_role have no unintended effective EXECUTE;
+- authenticated executes only the validators genuinely required;
+- version trigger function is not directly callable by app roles unless strictly required;
+- inherited role membership cannot create unintended effective EXECUTE;
+- no global default-privilege or role-membership mutation;
+- failure rolls back without partial hardening.
+
+Reproduce the prior H2 unknown-EXECUTE case against the corrected migration.
+
+### C — R3 finite CAS domain
+Independently verify:
+- existing `updated_at = infinity/-infinity` is refused with no silent rewrite;
+- assess/verify `created_at` finite invariant consistently;
+- future valid finite timestamp such as year 2999 remains supported if intended;
+- post-hardening non-finite writes are rejected/neutralized safely;
+- server-owned monotonic version semantics remain;
+- same-transaction advances strictly;
+- concurrent CAS has one winner;
+- long-running earlier transaction does not regress version;
+- stale token changes zero rows;
+- PR #78 keeps using timestamp string without precision loss.
+
+### D — preserve prior closed contract
+Re-run enough evidence to ensure no regression in:
+- exact settings/persona JSON type/key/null contract;
+- endLocal 24:00 only;
+- authenticated table privileges exactly required DML;
+- DELETE/TRUNCATE/REFERENCES/TRIGGER/MAINTAIN denied;
+- owner-only RLS;
+- no service-role DML dependency;
+- FK cascade/lifecycle;
+- PR #78 composition compatibility.
+
+### E — whole-chain rollout plan
+This is a critical review gate.
+
+G3 proposes keeping:
+1. `20260922045046_social_mobile_content_settings_candidate.sql`
+2. `20261003120000_social_mobile_content_settings_hardening.sql`
+
+and applying both plus migration-history rows inside one operator-controlled outer transaction via `psql --single-transaction`.
+
+Independently review:
+- whether this is actually atomic for both schema + history under the production PostgreSQL/Supabase migration table;
+- exact `supabase_migrations.schema_migrations` column/constraint expectations must be confirmed before any future production mutation;
+- direct history insertion must not corrupt CLI expectations or duplicate state;
+- source filenames/names/version order are correct;
+- forced failure after hardening leaves neither schema nor history;
+- no normal `db push` / `migration up` path should expose the weak intermediate candidate;
+- preflight/read-back checklist is sufficient;
+- rollback/abort points are safe and explicit.
+
+Do **not** execute production apply or history insertion.
+
+### F — freshness / migration coordination
+Fresh K3 facts:
+- PR #81 exact head `bcc01312c638f5922db4ffd6255ddddf6f611183`
+- PR open/unmerged/mergeable=true
+- Netlify + Vercel success
+- fresh main comparison has **0 overlapping changed files**
+- current merged PR #82 migration is `20261004090000_ai_lab_topic_claims.sql`
+- PR #76 migration remains `20261003090000_social_mobile_publish_permission_boundary.sql`
+- PR #81 migration is `20261003120000_social_mobile_content_settings_hardening.sql`
+- therefore the older note claiming PR #76 and PR #82 share 20261003090000 is stale; re-read actual source and do not repeat it if no longer true.
+
+G4 is separately correcting PR #76. Do not touch G4 files/worktree.
+
+## Verification
+
+At minimum:
+- corrected disposable SQL runner;
+- adverse R1/R2/R3 regressions;
+- function effective-privilege graph;
+- actual upsert;
+- atomic-chain rehearsal;
+- relevant app repository tests;
+- social-mobile tests;
+- relevant Deno shared/static tests;
+- typecheck/lint/bash syntax/diff/secret scan.
+
+No live AI/X required.
+
+## Safety
+
+Forbidden:
+- source implementation fixes in H2;
+- PR merge;
+- production migration apply / db push;
+- production history repair/insert;
+- RLS/grant/function mutation;
+- Edge deploy;
+- Auth/Vault/X/OpenAI/Cron mutation;
+- real X operation.
+
+Read-only production catalog checks are allowed only if needed to validate the rollout plan and must not read user content/PII/secrets.
+
+## Completion / C2
+
+Append to `.agent/CODEX_REPORT_2.md`:
+- verdict PASS / CHANGES REQUIRED;
+- exact reviewed head;
+- R1/R2/R3 disposition;
+- prior closed-contract regression result;
+- atomic rollout-plan verdict;
+- migration-history safety verdict;
+- tests;
+- production reads performed;
+- production mutations = 0;
+- remaining risks;
+- merge recommendation;
+- production-apply recommendation;
+- next recommendation.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for C2.
+
+Recommended model: **Sol（高）**.
+
+---
+
+# Previous H2 task history — preserved below
+
+# Previous H2 task — preserved history
+
 - task_id: x-social-mobile-pr76-transactional-publish-toggle-rereview-20261005
 - owner: codex
 - slot: codex-2
