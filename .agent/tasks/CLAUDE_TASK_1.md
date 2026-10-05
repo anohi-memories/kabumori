@@ -531,6 +531,16 @@ Finally:
 
 ---
 
+### K1 recheck — continuation not yet executed
+- verdict: **NOT READY FOR K1**.
+- PR #84 remains at the pre-Simulator head `c9c173c153cbfd11229c9281b892d732728c3cd3`.
+- PR still has exactly 1 commit / 4 changed files and contains no final Simulator screenshot evidence.
+- no continuation Report was appended after the iOS runtime installation.
+- therefore the restored-runtime G1 continuation has not run yet.
+- no merge/review/deploy action taken.
+- next: run `G1` to perform the Simulator verification task above, then return with `K1`.
+- recommended model: **Sonnet5（中）**.
+
 ## Report — G1: topic detail visual polish (task kabumori-topic-detail-visual-polish-20261005)
 
 - task_id: `kabumori-topic-detail-visual-polish-20261005`
