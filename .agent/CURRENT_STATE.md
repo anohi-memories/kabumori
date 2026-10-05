@@ -1,3 +1,18 @@
+## G1 resumed — Simulator visual verification after runtime install
+
+- task_id: `kabumori-topic-detail-visual-polish-20261005`
+- status: ready
+- owner: Claude G1
+- recommended model: **Sonnet5（中）**.
+- user installed the iOS Simulator runtime on the new Mac, removing the only K1 visual blocker.
+- continuation is verification-first: reuse existing PR #84 / G1 branch if still safe; do not redesign or open a second PR.
+- required Simulator checks: ~402pt and ~375pt, beginner/intermediate/advanced, long title, dense example, takeaway, history path.
+-重点: Hero wrapping, art wash/fade seam, 375pt clipping/density, section rhythm, and whether 🌱/💡 look polished enough; only bounded visual corrections allowed.
+- capture final implementation screenshots under `docs/ui-review/`.
+- rerun focused/full app tests and standard Expo/diff checks after any correction.
+- EAS build = 0; backend/DB/RPC/API/AI/Auth/Edge/production mutation = 0.
+- finish with K1.
+
 ## Final K3 — PR #81 residual content-settings hardening PASS -> H2 rereview
 
 - verdict: **PASS to independent H2 rereview; merge/apply/deploy HOLD**.
