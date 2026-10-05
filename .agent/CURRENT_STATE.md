@@ -1,3 +1,20 @@
+## Final K3 — PR #81 production schema gate = READ-ONLY HOLD
+
+- verdict: **HOLD by design / no production mutation**.
+- merged PR #81 source remains accepted; candidate SHA256 `b1167065e4177492b1139071055e89da2bf9db12b0e43e20dada1af07a996fdb`, hardening SHA256 `83d44ccfd51bcd8fcd78d31236fa52d1d8f90c6642f12c5bb1586f9d1497467e`.
+- production read-only preflight was CLEAN on PostgreSQL 17.6:
+  - target table/functions/policies/triggers/constraints absent;
+  - PR #81 candidate/hardening history absent;
+  - live migration ledger shape matches the reviewed atomic procedure;
+  - applying role/dependency/default-ACL/role graph preconditions match H2 evidence.
+- Gate A blocks apply because PR #76 migration `20261003090000_social_mobile_publish_permission_boundary` sorts before PR #81 hardening `20261003120000` and PR #76 is still OPEN / unmerged / unapplied.
+- PR #81 was therefore **not** applied out of order; Gate C package was not frozen and no approval was requested.
+- production DB/history writes=0; deploy=0; X/OpenAI/Vault/OAuth/Cron=0.
+- PR #78 AI consultation remains blocked because its production schema prerequisite is not yet applied/read back.
+- no Codex review is needed for this K3 because there is no source change or production mutation to review.
+- G3 is closed/free after fresh allocation.
+- next orchestration step: **K4** on completed PR #76 corrective head `5448e545f4a88bbf6597a981c0bcbe4c01043c30`. Resolve PR #76 source/rollout disposition first, then create a fresh G3 continuation for PR #81 production apply.
+
 ## AI Lab production rollout — Stage A applied / Stage B STOP — 2026-10-05
 
 - user explicitly approved the Company AI Lab PR #82 production DB rollout limited to Stage A/B/C + postflight; x-test-post deploy/Cron/manual scheduler/real X remain out of scope.
