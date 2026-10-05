@@ -47,13 +47,13 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: none
-- status: done
-- task_id: kabumori-topic-detail-learning-v2-20261003
+- next_owner: claude
+- status: ready
+- task_id: kabumori-topic-detail-visual-polish-20261005
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Final K1 PASS. PR #83 exact head c810accebada37760a98a18bb184b50a61b7937b squash-merged as f5919eb6af3da51c0d4d4a6342ad23b3f0a68980. 全50トピックを5段階の静的学習フローへ強化し、Homeの短い要約は維持。284/284 tests、402/375pt visual checks、EAS 0、backend/DB/RPC/API/AI mutation 0。Codex review不要。G1 free after fresh allocation.
+- allocation: ユーザーがG1へ直接渡す「かぶモリ学習ノート / PERって何？」の見本画像を正本ベースに、topic detailのUIだけを最終仕上げする。上部をレベル別Hero化、通常セクションは番号付きで軽く、具体例と覚えておくポイントだけ特別カード化。50トピック本文・fetch/id安全性・Homeは維持。既存3段階topic背景の安全な再利用を優先。新Macのclean base /Users/yuya/Developer/kabumori-fresh から独立G1 worktree必須。EAS 0 / backend mutation 0。
 - recommended_model: Sonnet5（高）
 
 ## Claude G2
