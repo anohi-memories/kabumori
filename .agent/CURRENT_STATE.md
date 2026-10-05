@@ -11,6 +11,7 @@
 - Codex review: **not required** for this static native UI/presentation change.
 - AI Lab diary: **候補あり — 株アプリの学習画面を「かぶモリ学習ノート」として整え、初級〜上級の色や教材イラスト、読む順番、具体例・要点の見せ方を統一。小さいiPhoneや長いタイトルでも崩れないよう実画面で調整した。**
 - G1 done/free.
+- AI Lab diary canonical entry was added for 2026-10-06; automatic snapshot sync completed successfully as main commit `6ed04831dec31ba9ea2258edcc5afacd2adb6991`.
 
 ## Final C2 — PR #76 security rereview PASS / source merged / G4 production gate next
 
