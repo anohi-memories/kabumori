@@ -89,6 +89,7 @@ import {
   type GenerationRunner,
   type PostGenerationResult,
 } from "./post_generation_logic.ts";
+import { postgrestStocksMasterLookup, withStocksMasterName } from "./tdnet_stocks_master.ts";
 import {
   dispatchGeneration,
   type GenerationDispatchRepository,
@@ -939,7 +940,12 @@ async function selectCandidatesForGeneration(
     headers: headers(serviceRoleKey),
   });
   if (!result.ok) throw new Error("NEWS_GENERATION_CANDIDATE_LOOKUP_FAILED");
-  return (await result.json() as StoredGenerationCandidate[]).map(toGenerationCandidate);
+  const stocksMasterLookup = postgrestStocksMasterLookup(supabaseUrl, headers(serviceRoleKey));
+  return await Promise.all(
+    (await result.json() as StoredGenerationCandidate[]).map((row) =>
+      withStocksMasterName(toGenerationCandidate(row), stocksMasterLookup)
+    ),
+  );
 }
 
 // P0.6: candidate must already be claimed (status = 'generating', see claimCandidateForGeneration) before
@@ -1014,7 +1020,8 @@ function createGenerationRepository(
       if (!result.ok) throw new Error("NEWS_GENERATION_CLAIM_FAILED");
       const rows = await result.json() as StoredGenerationCandidate[];
       if (!rows[0]) return null;
-      return { ...toGenerationCandidate(rows[0]), status: "ready_for_generation" };
+      const stocksMasterLookup = postgrestStocksMasterLookup(supabaseUrl, headers(serviceRoleKey));
+      return { ...await withStocksMasterName(toGenerationCandidate(rows[0]), stocksMasterLookup), status: "ready_for_generation" };
     },
     async save(candidateId, generated) {
       const params = new URLSearchParams({ id: `eq.${candidateId}`, status: "eq.generating" });
