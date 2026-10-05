@@ -48,14 +48,14 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: user
-- status: review_required
+- next_owner: claude
+- status: ready
 - task_id: kabumori-detail-navigation-topic-level-switch-20261006
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: K1 CODE PASS / visual acceptance待ち。PR #90 exact head 0dd2b5af7e4736a67b11645d08e61f3114b8619a、open/mergeable/clean、fresh-main overlap 0、322/322 tests、402/375 Simulator確認済み。Codex不要。ユーザー承認後merge。
-- recommended_model: Sonnet5（高）
+- allocation: PR #90 visual correction。ナビ位置を全詳細画面で統一し、左＝一覧/戻り先、右＝ホームにする。トピック詳細のみ「‹ 過去のトピック」左／「ホーム」右へ変更。ニュース詳細は現状維持。375/402確認、focused tests、EAS 0、backend mutation 0。
+- recommended_model: Sonnet5（中）
 
 ## Claude G2
 - owner: claude
