@@ -23,26 +23,26 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: done
 - task_id: ai-lab-pr82-production-readonly-preflight-20261005
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: PR #82 source is merged to main as 80e11c9207d44599db26a25195f1ee0091484231 after Final C1 PASS-WITH-FIX and green Vercel/Netlify. Perform production **read-only** preflight only: migration ledger/collision, target catalog-owner-effective ACL, exact apply transaction semantics, deploy target/order, and pre/post read-back plan. No migration apply/deploy/write/real X/Vault plaintext/token/Cron change. Recommended Sol（高）.
+- allocation: Final C1 accepted production read-only preflight. Production catalog/owner prerequisites pass, but PR #82 rollout remains HOLD because the exact single-file apply/history failure policy is not yet selected. No additional review allocated. Production mutation/deploy/X = 0.
 
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: x-social-mobile-pr81-residual-hardening-final-rereview-20261005
 - start_code: H2
 - finish_code: C2
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Independent final rereview of corrected PR #81 exact head bcc01312c638f5922db4ffd6255ddddf6f611183. Verify R1 non-deferrable ON-CONFLICT arbiter, R2 exact/effective helper ACL/owner under adverse role graphs, R3 finite CAS domain, preservation of prior JSON/RLS/ACL/CAS behavior, and the proposed atomic two-file production rollout/history plan. Review only; no source fix/merge/apply/deploy/write. Recommended Sol（高）.
+- allocation: Final C2 PASS. PR #81 exact reviewed head bcc01312c638f5922db4ffd6255ddddf6f611183 passed R1/R2/R3 and atomic rollout-plan review, then was squash-merged as 686f23a7094389b793470503fceb2f47a71f8fbf. Production apply remains separately gated. H2 free after fresh allocation.
 
 ## Claude G1
 - owner: claude
@@ -70,13 +70,13 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
+- status: done
 - task_id: x-social-mobile-pr81-hardening-residual-corrective-20261005
 - start_code: G3
 - finish_code: K3
-- next_owner: codex
+- next_owner: none
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: K3 PASS to independent H2 rereview. PR #81 exact head bcc01312c638f5922db4ffd6255ddddf6f611183 is open/mergeable; Netlify/Vercel green; fresh-main overlap 0. G3 reports R1 deferrable PK, R2 helper owner/effective ACL, R3 finite-version domain fixed, with atomic two-file rollout plan documented and production mutation 0. H2 review mandatory before merge/apply. Recommended rereview Sol（高）.
+- allocation: Final C2 PASS and PR #81 squash-merged as 686f23a7094389b793470503fceb2f47a71f8fbf. R1 deferrable PK, R2 helper owner/effective ACL, R3 finite CAS domain accepted. Production apply not yet authorized. G3 free after fresh allocation.
 
 ## Claude G4
 - owner: claude
