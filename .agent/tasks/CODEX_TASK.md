@@ -1,5 +1,333 @@
 # Codex Task — CURRENT TASK
 
+- task_id: ai-lab-pr82-final-boundary-rereview-20261005
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- priority: highest
+- recommended_model: Sol（高）
+- type: focused final rereview / provider outcome proof / claim quarantine / migration ACL-owner / canonical payload
+- target_pr: 82
+- target_head: 51457826ea6c29d9c94ac0066786df8927fa1274
+- previous_bad_head: 9f3b19a3cde490cf63735220ae191dcd4f11bdcb
+- production_mutation_allowed: false
+
+## Purpose
+
+PR #82 の前回C1残件を独立再レビューする。
+
+Previous core design already materially improved:
+- durable pre-X claim
+- provider_started boundary
+- claim_id fencing
+- ordinary two-worker diary race closure
+- confirmed-X settle failure does not reopen event
+
+This rereview focuses only on the residual boundaries that previously caused CHANGES REQUIRED:
+1. duplicate scalar event_id labels
+2. unsafe owner / inherited effective privilege drift
+3. real Vault-path 401 no-post classification
+4. unresolved evergreen becoming reusable by age
+5. cooldown measured from claim instead of publish
+6. malformed/non-canonical RPC candidate payload
+7. net-new lint debt
+
+PASS only if those are independently closed **without regressing the previously accepted concurrency/fencing behavior**.
+
+No merge, migration apply, Edge deploy, production write, real X/Vault/token/OAuth/Cron mutation.
+
+## Mandatory startup
+
+1. Read PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / previous H1 reports.
+2. Independent H1 worktree.
+3. Fresh origin/main.
+4. Confirm PR #82 exact head `51457826ea6c29d9c94ac0066786df8927fa1274`. If moved, STOP.
+5. Fresh ChatGPT check:
+   - PR open / unmerged / mergeable=true
+   - 14 changed files
+   - Netlify/Vercel success
+   - main is 13 commits ahead of PR base
+   - overlap with PR #82 changed files = **0**
+6. G3 PR #81 and G4 PR #76 are active separate workstreams. Do not touch their files/worktrees.
+7. Check migration timestamp collision fresh:
+   - PR #82 uses `20261004090000_ai_lab_topic_claims.sql`
+   - PR #76 uses `20261003090000_social_mobile_publish_permission_boundary.sql`
+   - PR #81 uses `20261003120000_social_mobile_content_settings_hardening.sql`
+   No collision is expected.
+
+## Gate A — duplicate event_id identity
+
+Use the actual runtime parser/sanitizer/candidate builder and the actual workflow validation logic.
+
+Must prove:
+- exactly one event_id label per diary entry is required;
+- zero labels -> invalid;
+- two valid labels in one entry -> invalid, no last-wins behavior;
+- duplicate scalar labels for changed/difficulty/decided/etc follow the intended same contract;
+- duplicate label entry produces **zero runtime candidate**;
+- workflow fails before snapshot generation;
+- reordering/body/angle edits do not change a valid existing event_id;
+- fresh main diary content from topic-detail-learning is preserved exactly except intentional event_id metadata;
+- snapshot matches canonical markdown deterministically.
+
+Re-run the previous H1 duplicate-label RED evidence against the new actual workflow and runtime, not just a copied parser.
+
+## Gate B — provider outcome classification / actual Vault wrapper
+
+Review new:
+`supabase/functions/_shared/brand/ai_lab_provider_outcome.ts`
+
+This is a critical gate.
+
+The candidate claims no-post is proven only when:
+- no X request was made at all, or
+- every X response was one of 400/401/422/429.
+
+Independently verify with the **actual VaultAccountXAuth.send contract** and fake request callbacks:
+- pre-request credential/token failure -> no request observed -> releasable only if truly no X write path started;
+- genuine X 400/401/422/429 -> AiLabProviderNoPostError;
+- 401 transformed by VaultAccountXAuth into `X_ACCESS_TOKEN_UNAUTHORIZED` / `X_ACCESS_TOKEN_REJECTED_AFTER_REFRESH` still carries request-observation proof and releases safely;
+- first request 401 + refresh + second request success -> success, not release;
+- first request 401 + second request 401 -> proven no-post only if both are actual X non-write responses;
+- any timeout/network throw/response-read failure -> ambiguous;
+- 403 -> ambiguous;
+- 408 -> ambiguous;
+- 3xx -> ambiguous;
+- 5xx -> ambiguous;
+- mixed responses where any attempt is uncertain -> ambiguous;
+- a local/proxy/generated error code must never become proven no-post solely by message text.
+
+Inspect whether 400/401/422/429 are actually safe non-create outcomes for the exact X create-post endpoint/wrapper behavior represented here. If status semantics cannot prove that, do not PASS on assumption.
+
+No real token refresh/X call.
+
+## Gate C — dispatcher release/quarantine integration
+
+Actual dispatcher order:
+claim -> generate/guards -> startProvider -> sendAiLabXPost -> release/ambiguous/published -> completion.
+
+Verify:
+- only `AiLabProviderNoPostError` causes post-provider release;
+- generic Error string cannot cause release;
+- markAmbiguous failure leaves provider_started (still blocked);
+- settlePublished failure leaves provider_started (still blocked);
+- completion failure never reopens event and never routes confirmed X to retry;
+- pre-X failures still release only own fenced claim;
+- failed startProvider never reaches X.
+
+Re-run previous accepted two-worker diary concurrency and fencing controls to prove no regression.
+
+## Gate D — unresolved evergreen quarantine
+
+Use actual SQL, not an in-memory approximation.
+
+For an evergreen seed and overlapping theme:
+- `claimed` within lease blocks;
+- expired claimed can be reclaimed;
+- `provider_started` blocks same seed indefinitely, regardless of 73h/7d/long aging;
+- `ambiguous` blocks same seed indefinitely;
+- unresolved same-theme seed also blocks other evergreen candidate with overlapping canonical tag;
+- unresolved row must not become reusable just because claimed_at/provider_started_at is old;
+- published is the only state that enters ordinary reusable cooldown semantics.
+
+Explicitly repeat the previous H1 73h time-simulation. It must now stay at one fake X / no replacement claim.
+
+## Gate E — publish-time cooldown
+
+Verify with actual SQL:
+- same published seed blocked until 72h after **published_at**;
+- same generic theme blocked until 48h after **published_at**;
+- old claimed_at cannot shorten cooldown;
+- published_at is server-owned/settlement-owned and cannot be supplied by candidate payload;
+- after >72h seed may re-enter if no unresolved quarantine exists;
+- after >48h overlapping theme may re-enter subject to seed rule;
+- released/expired pre-X rows do not consume cooldown.
+
+Try edge times around 72h/48h boundaries.
+
+## Gate F — canonical candidate payload
+
+Review `claim_ai_lab_topic`.
+
+Must prove:
+- candidates array bounded;
+- every candidate fully validated **before** any state mutation;
+- exact keyset only: kind/event_key/unit_key/theme_tags;
+- extra key -> reject entire call with zero side effects;
+- duplicate event key -> reject entire call;
+- evergreen seed must be from canonical pool;
+- evergreen unit_key exactly equals event_key;
+- evergreen theme_tags exactly match canonical DB mapping, not caller-supplied truth;
+- wrong/missing/extra tags -> reject;
+- diary event_key syntax exact;
+- diary unit relationship exact:
+  changed/difficulty/decided/angleN only;
+- diary theme_tags must be empty;
+- malformed later candidate cannot leave an earlier claim inserted;
+- no post text/body stored.
+
+Compare DB canonical evergreen mapping against the TypeScript `EVERGREEN_THEME_TAGS` source. Any drift is a blocker unless a single source of truth or executable parity test guarantees equality.
+
+## Gate G — owner / role inheritance / effective ACL
+
+Review migration preflight and postconditions independently.
+
+The intended policy is:
+- table + five claim functions owned by migration owner;
+- migration owner is not anon/authenticated/service_role/authenticator;
+- API roles are not members of migration owner;
+- direct table privileges remain none for app/API roles;
+- only service_role may EXECUTE the five narrow functions;
+- no effective TRUNCATE/REFERENCES/TRIGGER/MAINTAIN or unintended table privilege via inheritance/ownership.
+
+Test local role graphs:
+1. expected clean owner -> migration succeeds.
+2. existing table owner = service_role -> fail.
+3. existing function owner = anon/authenticated/service_role -> fail.
+4. service_role inherits owner -> fail.
+5. authenticated inherits owner -> fail.
+6. nested membership chain to owner -> fail if PostgreSQL effective privilege allows owner powers through it.
+7. unexpected function EXECUTE grantee -> fail or deterministically normalize only if explicitly designed.
+8. unexpected table grant -> postcondition must close or reject per documented policy.
+9. PG17 MAINTAIN included.
+10. column ACL remains none.
+
+Do not modify role graph in migration.
+
+Critically inspect use of `pg_has_role(role, current_user, 'MEMBER')`: prove argument direction and transitive behavior are correct for the intended “API role can become owner role” test.
+
+## Gate H — migration drift/idempotency
+
+Clean apply + reapply must pass.
+
+Adversarially mutate:
+- missing/wrong PK
+- wrong partial UNIQUEs
+- wrong evergreen index
+- missing CHECK
+- wrong RLS flag
+- unexpected policy
+- unexpected trigger
+- column ACL
+- owner drift
+- function overload/signature
+- function owner
+- function EXECUTE ACL.
+
+Migration must fail closed on incompatible same-name objects.
+
+Check transaction/rollback on failure.
+
+## Gate I — lint / static quality
+
+Verify:
+- changed test files no longer add net-new `require-await` debt;
+- no broad lint disable introduced;
+- changed runtime helpers check/lint clean;
+- x-test-post baseline diagnostics are unchanged from fresh main;
+- git diff --check clean;
+- no secrets/internal IDs in event IDs/logs.
+
+Do not require unrelated main lint debt to be fixed.
+
+## Gate J — existing safety / other brands
+
+Confirm no regression to:
+- exact/cross-brand fingerprint dedupe;
+- content diversity guard;
+- AI Lab max attempts;
+- scheduled-post completion behavior;
+- other X brands;
+- Kabumori morning/close;
+- OAuth/token semantics;
+- Cron/scheduler;
+- common account;
+- G3/G4 workstreams.
+
+No additional OpenAI call.
+
+## Required tests
+
+Run independently:
+- full PR #82 focused checked suites;
+- actual H1 previous RED boundary cases;
+- actual workflow duplicate-label validator;
+- actual VaultAccountXAuth fake 401/refresh matrix;
+- dispatcher provider-outcome tests;
+- two-session SQL claim concurrency;
+- lease/fencing;
+- 73h unresolved evergreen quarantine;
+- publish-time cooldown edges;
+- malformed candidate JSON matrix;
+- owner/inheritance ACL matrix;
+- migration drift matrix;
+- full relevant Functions runtime tests;
+- changed runtime Deno check/lint;
+- changed test lint;
+- SQL runner;
+- git diff --check / secret scan.
+
+Candidate reported:
+- Functions 2543/2543 PASS
+- SQL 132 PASS
+- SQL mutations 15/15 detected
+- TS mutations 15/15 detected
+Treat these as claims to independently verify, not proof by themselves.
+
+## Production
+
+No production mutation.
+Optional read-only only if required to validate rollout compatibility:
+- owner/default ACL/membership graph
+- target object existence
+- migration ledger collision.
+
+No content/PII/token/Vault reads.
+
+## Verdict
+
+PASS only if all previous residual C1 blockers are closed and prior concurrency/fencing guarantees remain intact.
+
+PASS-WITH-FIX only for a truly bounded review fix with full rerun.
+
+CHANGES REQUIRED if:
+- any duplicate event_id path revives identity;
+- no-post classification can release an uncertain X attempt;
+- unresolved evergreen can re-enter by age;
+- caller can lie about canonical themes/payload;
+- role ownership/inheritance leaves effective unsafe privilege;
+- prior two-worker/fencing bug regresses.
+
+## Report
+
+Append to `.agent/CODEX_REPORT.md`:
+- verdict
+- reviewed exact head
+- duplicate event_id result
+- provider outcome proof
+- dispatcher release/quarantine result
+- evergreen unresolved result
+- publish-time cooldown result
+- canonical payload result
+- owner/inheritance/ACL result
+- migration drift/idempotency
+- previous concurrency/fencing regression
+- lint/static result
+- tests
+- production reads/writes
+- source fix if any
+- merge recommendation
+- rollout ordering recommendation.
+
+Then status -> review_required, next_owner -> chatgpt, STOP for C1.
+
+Recommended model: **Sol（高）**.
+
+---
+
+# Codex Task — CURRENT TASK
+
 - task_id: ai-lab-pr82-claim-rereview-20261004
 - owner: codex
 - slot: codex-1
