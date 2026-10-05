@@ -173,7 +173,9 @@ language sql stable as $shape$
       where a.attrelid = p_rel and a.attnum > 0 and not a.attisdropped),
     (select string_agg(format('con %s %s %s', c.conname, c.contype, pg_get_constraintdef(c.oid)), E'\n' order by c.conname)
        from pg_constraint c where c.conrelid = p_rel),
-    (select string_agg(format('idx %s %s', i.relname,
+    -- Matching DDL alone can hide an invalid/not-ready concurrent index build.
+    (select string_agg(format('idx %s valid=%s ready=%s live=%s %s', i.relname,
+                              x.indisvalid, x.indisready, x.indislive,
                               regexp_replace(pg_get_indexdef(i.oid), ' ON [^ ]+\.ai_lab_topic_claims ', ' ON T ')),
                        E'\n' order by i.relname)
        from pg_index x join pg_class i on i.oid = x.indexrelid where x.indrelid = p_rel),

@@ -451,7 +451,7 @@ async function realVaultAuth() {
       recordRejectedAfterRefresh: () => Promise.resolve("RECORDED"),
       recordAccessUnauthorized: () => Promise.resolve("RECORDED"),
     },
-    { resolveClient: () => Promise.reject(new Error("should not refresh")), refreshEnabled: false },
+    { resolveClient: () => { throw new Error("should not refresh"); }, refreshEnabled: false },
   );
 }
 
