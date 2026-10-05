@@ -23,15 +23,16 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: ready
+- status: done
 - task_id: common-account-gateb-managed-auth-final-review-20261005
 - start_code: H1
 - finish_code: C1
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final independent review of hosted managed-Supabase Gate B evidence for common-account Phase 1. Exact hosted migration apply + real RLS/Data API/Storage/Auth Admin delete passed; stale access JWT remained Data-API usable after Auth delete, so session_revocation-before-hard-delete is a critical future orchestrator requirement. Review only; production mutation/apply/backfill = 0.
+- allocation: Final C1 accepted PASS-WITH-CONDITIONS for common-account Phase 1 additive foundation. Hosted Gate B closes installation-level managed boundaries. Stale access JWT remained Data-API usable after Auth deletion, so future destructive orchestration requires live writer denial or proven expiry/quiescence beyond session revoke. Production migration/backfill remain separately gated; H1 free after fresh allocation.
 - recommended_model: Sol（極高）
+
 ## Codex H2
 - owner: codex
 - slot: codex-2
