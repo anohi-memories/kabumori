@@ -2249,3 +2249,16 @@ K4 確認後、TASK どおり H2 で Codex **Sol（極高）** の独立再レ�
 1. 操作者が `run_s0.sh` を実行する。
 2. K4／ユーザーが案 A を判断する（AI Lab の Stage B/C → 共通の x-test-post deploy → PR76 の S2〜S5 を1つの時間帯で行う）。
 3. 承認後、G4 が S0 を再実行してから、`OPERATOR_S1_S5.md` どおりに進める（コマンドは操作者が実行する可能性が高い）。
+
+### Addendum（2026-10-06、G4 再開時）
+- **AI Lab の DB ロールアウト完了を確認した**（CURRENT_STATE `6a953b92`: Stage B は EXACT、Stage C で history 1行、postflight も EXACT）。これで案 A の前提はそろった。
+- CURRENT_STATE 側も、main の x-test-post が PR76 のガードと AI Lab の重複防止ロジックを一緒に含むことを認めたうえで、「即席の deploy はせず、G4 の S0 → 承認 → runtime-first の手順」としている。
+- よって S1 の x-test-post deploy は、**PR76 のガードと PR82 の題材確保 runtime を同時に有効化する1回の deploy** として承認を求める（案 A）。
+  - deploy から PR76 migration 適用までの間、AI Lab は題材確保と生成（OpenAI）まで進み、送信前に `X_PUBLISH_PERMISSION_UNAVAILABLE` で止まる。確保は NOT_SENT として解放される。
+  - このため、AI Lab の投稿枠がない時間帯を選ぶ。
+- 固定パッケージ（migration `b2ed7c75…`、x-test-post `faaccc7a…`、publish-setting `a844d7fc…`）は最新 main `0c0f88be` でも不変。
+- 引き続き待っていること:
+  1. 操作者による `run_s0.sh` の実行。まだ結果がない。auto モードの拒否があるので、Claude は本番読み取りを再試行していない。
+  2. 上記を前提にした、S1〜S5 への明示的な本番承認。
+- G5（共通アカウントの本番 migration）は in_progress。本番変更が重ならないことを S1 直前に確認する。
+- status: in_progress / next_owner: user のまま。
