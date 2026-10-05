@@ -1,5 +1,222 @@
 # Claude Task 3 — CURRENT TASK
 
+- task_id: ai-lab-pr82-production-rollout-runner-20261005
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（高）
+- type: bounded production-rollout tooling / runbook / local rehearsal
+- source_pr: 82
+- merged_main_sha: 80e11c9207d44599db26a25195f1ee0091484231
+- target_migration: 20261004090000_ai_lab_topic_claims.sql
+- production_mutation_allowed: false
+
+## Purpose
+
+会社員AIラボ PR #82 の source implementation / review / main merge は完了済み。
+
+残っているのは production rollout の **適用方式だけ**。
+
+H1 read-only preflight で以下が確定している:
+- production target table/functions/history version は未存在
+- owner/default ACL/role-membership 前提は通る
+- exact deploy target は `x-test-post` のみ
+- Cron変更不要
+- migration本体は自前の BEGIN/COMMIT を持つ
+- Supabase CLI では migration SQL の COMMIT 後に history insert が走るため、schema + ledger は同一transactionにならない
+- history insert失敗時に「schemaは入ったがledgerがない」状態があり得る
+- migration本体を accepted source から書き換えてはいけない
+
+このTASKでは、accepted migrationを変更せずに、本番反映を安全・再現可能に行うための **operator runner / runbook / local proof** を作る。
+
+productionへの実行はしない。
+
+## Isolation / startup
+
+1. Read PROJECT_RULES / CLAUDE.md / ORCHESTRATION / CURRENT_STATE / H1 preflight report / this TASK.
+2. Use new Mac clean base `/Users/yuya/Developer/kabumori-fresh` with a fresh origin/main and independent G3 worktree.
+3. Confirm merged PR #82 SHA `80e11c9207d44599db26a25195f1ee0091484231` is ancestor of current main.
+4. G4 PR #76 is a separate active workstream. Do not touch PR #76 files/worktree/migration.
+5. PR #81 is merged. Do not alter its migration/history plan.
+6. No production connection, no production SQL, no deploy, no X call.
+
+## Chosen rollout policy
+
+Use the already-reviewed **schema-first / history-second checkpoint** policy rather than inventing a new migration or editing the accepted migration.
+
+The runner must make this explicit:
+
+### Stage A — exact schema apply
+- apply ONLY the exact merged `20261004090000_ai_lab_topic_claims.sql`
+- via direct psql/operator connection, not `supabase db push`, not `migration up`, not Management API
+- preserve the migration's own BEGIN/COMMIT exactly
+- ON_ERROR_STOP=1
+- no include-all / repair / history rewrite
+- no unrelated migrations
+
+### Stage B — mandatory read-back checkpoint
+After Stage A returns, before any history insertion:
+- catalog-read exact target table/index/constraint/RLS/function owner/signature/security/search_path/effective ACL
+- verify exactly five intended functions
+- verify no unsafe/default/public API privileges
+- verify target migration effects are fully present and safe
+- if response was lost/ambiguous, inspect catalog first; never blindly rerun
+- if catalog absent -> treat Stage A unapplied
+- if catalog fully correct -> proceed to Stage C only with the exact same frozen source/version/name
+- if catalog partial/unsafe -> STOP, no history write, no deploy, no automatic drop/down migration
+
+### Stage C — narrow history record
+Only after Stage B proves the target schema exactly correct:
+- insert only the exact migration history record for version `20261004090000`, name `ai_lab_topic_claims`
+- use a dedicated explicit transaction
+- re-read ledger immediately
+- never write/repair unrelated history rows
+- if insert fails, leave schema in place and STOP with `schema present / history missing`; do not deploy and do not automatically retry/repair
+
+The exact insert shape must be derived from the live ledger shape already documented by H1:
+`version text NOT NULL PK, statements text[], name text, created_by text, idempotency_key text UNIQUE, rollback text[]`.
+Do not assume fields beyond what is required; prove locally which minimal insert remains compatible with CLI pending/version detection.
+
+## Required deliverables
+
+Prefer adding:
+- `supabase/tests/ai_lab_topic_claims_rollout.sh`
+- `supabase/tests/ai_lab_topic_claims_rollout.md`
+
+The shell runner must default to **local/disposable only** and refuse accidental production execution unless an explicit operator-only environment switch is provided in a future authorized run. Do not embed production URL/project ref/credentials.
+
+It should support/rehearse:
+- preflight
+- Stage A exact migration apply
+- Stage B catalog verification
+- Stage C ledger insertion
+- postflight
+- failure modes
+
+Do not make it a generic migration runner.
+
+## Failure-state proof
+
+Use disposable PostgreSQL only and prove:
+
+1. clean success:
+   - no schema/no history
+   - Stage A -> exact schema
+   - Stage B PASS
+   - Stage C -> one exact history row
+   - postflight PASS
+
+2. migration SQL failure before COMMIT:
+   - no target schema
+   - no history
+
+3. lost/unknown Stage A response simulation:
+   - catalog determines whether schema exists
+   - runner never auto-reruns before catalog read-back
+
+4. Stage B detects unsafe/partial catalog:
+   - no history insertion
+   - no deploy recommendation
+
+5. Stage C history INSERT failure:
+   - schema remains exact
+   - history absent
+   - runner STOPs and marks operator-review-required
+   - no automatic history repair/retry
+
+6. rerun after fully completed rollout:
+   - detects exact schema + exact history and becomes no-op/read-only
+   - does not duplicate schema/history
+
+7. mismatch:
+   - wrong history name/version or drifted target object -> STOP
+
+## Production cutover runbook
+
+Document exact future order, but do NOT execute:
+
+1. same-day production read-only preflight
+2. verify no running/overdue AI Lab work
+3. freeze exact migration SHA and x-test-post source/import graph
+4. Stage A schema apply
+5. Stage B catalog/API-cache read-back
+6. Stage C exact history insert
+7. ledger read-back
+8. verify no in-flight/overdue old worker immediately before deploy
+9. deploy only exact `x-test-post`
+10. read back Function version/status/verify_jwt/source-byte graph
+11. no manual POST/scheduler/backlog injection
+12. separately authorized natural-cycle observation
+
+Document the cold-ledger limitation truthfully:
+- no historical event-claim backfill
+- dedupe guarantee is forward-looking from cutover
+- no retroactive no-repeat guarantee for already-posted diary topics
+
+## Scope / safety
+
+Allowed:
+- new rollout runner/docs/tests
+- local disposable DB proof
+- minimal static test updates if needed
+- .agent task/report
+
+Forbidden:
+- editing accepted migration `20261004090000_ai_lab_topic_claims.sql`
+- editing AI Lab runtime logic
+- production DB/history writes
+- Edge deploy
+- Cron/gate changes
+- real X/OpenAI/Vault/OAuth/token actions
+- PR #76 / PR #81 changes
+- generic migration-repair tooling
+
+## Verification
+
+Run:
+- rollout shell in disposable DB across all failure states
+- shell syntax
+- relevant migration source invariant/static checks
+- exact accepted migration SHA check
+- `git diff --check`
+- secret/project-ref scan
+
+No broad app/runtime test rerun required because runtime source is unchanged.
+
+## Completion / K3
+
+Report:
+- task_id/result
+- changed_files
+- accepted migration untouched proof + SHA
+- runner/runbook design
+- Stage A/B/C semantics
+- failure-state results
+- local tests
+- production reads/writes = 0
+- deploy/X/Vault/OAuth/Cron = 0
+- exact future production operator sequence
+- remaining risks
+- whether an additional Codex review is truly necessary
+- recommended reviewer model if needed, preferring Luna
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K3.
+
+Review policy:
+- do NOT automatically request Sol review.
+- If K3 shows only runner/docs/test additions and all local failure-state proofs pass, prefer either no extra review or at most **Luna（高）** for a single focused rollout-script review.
+
+---
+
+# Previous G3 task history — preserved below
+
+# Previous G3 task — preserved history
+
 - task_id: x-social-mobile-pr81-hardening-residual-corrective-20261005
 - owner: claude
 - slot: claude-3
