@@ -1,10 +1,229 @@
 # Claude Task 2 — CURRENT TASK
 
-- task_id: kabumori-shared-report-v2-20261005-close-natural-observation
+- task_id: kabumori-shared-report-v2-editorial-three-points-20261005
 - owner: claude
 - slot: claude-2
 - status: ready
 - next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（高）
+- purpose: 市況レポートの「今日のポイント」3点を、前日数値の単純列挙ではなく、その日の重要テーマ・注目点・注意点・出来事・背景が一目で分かり、詳細を読みたくなるeditorial headlineへ改善する。朝刊と大引けで役割を明確に分ける。既存の事実安全性・Hard Fact境界は弱めない。
+
+## User requirement — canonical
+
+現在の問題:
+- 「今日のポイント」3点が、3点とも前日の指数・騰落率などの数値要約になりやすい。
+- これでは「今日何を見るべきか」「今日は何が重要だったか」が伝わらず、詳細を開きたくなる見出しになっていない。
+
+望む体験:
+
+### 朝刊
+3ポイントは、**本日の注目点・要注意点・相場を見る軸**を出す。
+
+例の方向性:
+- 「半導体株の反応に注目」
+- 「円高進行には要注意」
+- 「米重要指標を前に様子見ムードも」
+- 「原油高が輸送・化学株の重しになるか」
+- 「前夜の米株高を日本株が引き継げるか」
+
+前日数値は必要なら**本文の根拠・補足**に書く。
+3ポイントの見出し自体を「日経平均 68,956円」「NYダウ +1.2%」「1306 +0.4%」のような数値3連発にしない。
+
+### 大引け
+3ポイントは、**今日何が起きたか／何が相場を動かしたか／何が重要だったか／次に何を見るか**を出す。
+
+例の方向性:
+- 「半導体株が上昇を主導」
+- 「円高進行で輸出株は重い展開」
+- 「大型株は堅調、内需はまちまち」
+- 「材料難のなか高値圏でもみ合い」
+- 「上昇したが主因は断定できず、明日は米指標待ち」
+
+具体的な指数値・騰落率・価格は**本文で説明**する。
+原因を見出しにする場合は、既存ニュース・market data・fact sourceで裏付けられる場合だけ。根拠が薄い場合は断定せず、観察事実または不確実性を正直に書く。
+
+## Editorial contract for the 3 points
+
+3点は次を満たすこと。
+
+1. **三つとも意味が違う**
+   - 同じ指数や同じ材料を言い換えただけの3点にしない。
+   - 可能なら「市場全体」「セクター/材料」「次に見る点」のように役割を分ける。
+
+2. **数値そのものを見出しの主役にしない**
+   - 数値は詳細本文・context・supporting textへ。
+   - 例外: 歴史的急変、政策金利、非常に重要な閾値など、その数値自体がニュースの核心である場合のみ headline 使用可。
+
+3. **一目で“なぜ読む価値があるか”が分かる**
+   - ただし煽り・釣りタイトルは禁止。
+   - 「何が起きた／何を見る／何に注意」の意味が短く伝わる。
+
+4. **朝刊と大引けを混同しない**
+   - 朝刊は forward-looking / watch / risk / focus。
+   - 大引けは completed-session recap / supported driver / significance / next watch。
+   - 朝刊で「今日上昇した」と未確定事実を断定しない。
+   - 大引けで「明日上がる」など将来を断定しない。
+
+5. **Hard Fact安全性を最優先**
+   - wrong date/session、stale/current、sign、1306 identity、存在しないref、unsupported causality、false broad absenceは従来どおりHard。
+   - 元ニュースに書かれているニュース内部の因果説明は使ってよい。
+   - 市場全体の上げ下げ原因は根拠がある場合だけ。
+   - 原因不明なら「主因は断定できない」と書いてよい。それを品質不足として落とさない。
+
+6. **“前日の数値3点”への退行をテストで防ぐ**
+   - 3ポイントすべてが bare metric / price / percentage recap になるケースを防ぐ。
+   - ただしmetricを含むこと自体をHard禁止にはしない。重要なのはheadlineの意味が数字ではなくtheme/insightであること。
+
+## Scope / preferred implementation
+
+最初に実際のconsumer pathを追跡し、「今日のポイント」3点をどのfieldが表示しているか確認すること。
+Presentation v2 / shared report truth sourceを壊さない。
+
+優先:
+- prompt / editorial instruction
+- formatter / presentation helper
+- narrow validation or quality telemetry
+- focused regression tests
+
+避ける:
+- market_data_packetの事実構造変更
+- market_report_packet schema破壊
+- Hard Fact guardの緩和
+- 新しいmodel call追加
+- call ceiling増加
+- DB schema/RPC/migration変更
+- consumer gate変更
+
+既存schemaで安全に実現できるならschema追加はしない。
+Quality改善のためだけに配信をHard BLOCKしない。delivery-first方針を維持する。
+
+## Supporting read-only evidence
+
+2026-10-05 morningはOpenAI 429でreport packetが生成されず、v21 live behaviorは未評価。
+開始時点で、2026-10-05 close natural cycleの保持済みデータを**read-onlyで短く確認してよい**。
+
+- close packetが存在すれば、現在の3ポイントがどう生成されているか実例として観察する。
+- 429でpacketが無ければ、その事実だけ記録して実装へ進む。
+- manual invoke / manual retryは禁止。
+- provider回復を待つためのpolling/sleepは禁止。
+
+過去のcompleted packet（例 10/2）もread-onlyで参考にしてよい。
+本TASKはprovider障害の解消待ちで止めない。
+
+## Required implementation behavior
+
+### Morning acceptance examples
+
+BAD:
+- 「日経平均 68,956.72円」
+- 「TOPIX連動ETF +0.67%」
+- 「NYダウ +0.42%」
+
+GOOD:
+- 「前夜の米株高を日本株が引き継げるか」
+- 「半導体株の強さが続くかに注目」
+- 「円相場の変化には要注意」
+
+GOOD detail body:
+- 見出しの下で前日終値、騰落率、US session、為替水準などを根拠として説明する。
+
+### Close acceptance examples
+
+BAD:
+- 「日経平均 +1.20%」
+- 「1306 +0.85%」
+- 「SOX +2.1%」
+
+GOOD:
+- 「半導体株が上昇を主導」
+- 「円高で輸出株には重さ」
+- 「明日は米指標と為替を確認」
+
+原因が裏付けられない場合:
+- 「上昇したが、主因は一つに絞れず」
+- 「大型株中心に上昇、材料は分散」
+など、観察可能な事実＋不確実性を優先する。
+
+## Verification
+
+最低限:
+- morning fixture: 前日market metricsが豊富でも3ポイントがmetric-only 3連発にならない
+- close fixture: completed-session factsから出来事/材料/意味を優先する
+- unsupported causeをheadlineに捏造しない
+- weak/no-cause inputで honest uncertainty が許容される
+- exactly 3 points維持
+- point duplication / near-duplicateを避ける
+- existing PR #77 quality behaviorを壊さない
+- existing PR #79/H1 session/watch/causal guardを壊さない
+- X/app shared truth source consistency維持
+- model call count ceiling不変
+- relevant market-report-analysis tests
+- presentation_v2 / quality / causal / session-date / content guard regressions
+- personalized-reports / X shared consumer / data-packet relevant tests
+- deno check/lint changed files
+- git diff --check
+
+## Git / delivery
+
+- fresh origin/mainから開始。
+- 専用G2 worktreeを確認。新規worktreeが必要なら `/Users/yuya/Developer/kabumori-fresh` をclean baseにする。
+- 他slotのbranch/worktree/未commit/dev serverを触らない。
+- source変更はbranch + PRにまとめる。
+- **production deploy禁止**。
+- consumer gate変更禁止。
+- manual report invoke禁止。
+- DB/RPC/migration/Auth/Vault/X操作禁止。
+
+## Completion conditions
+
+PASS candidate only if:
+- morning 3 pointsが「今日の注目・注意・見る軸」中心になる
+- close 3 pointsが「今日の出来事・根拠ある背景・重要性・次の注目」中心になる
+- 数値は主に本文根拠へ移る
+- metric-only 3連発への退行テストがある
+- unsupported market causalityを増やさない
+- Hard Fact boundaryを弱めない
+- model call ceilingを増やさない
+- existing shared consumer/schema compatibilityを維持
+- production mutation=0
+
+## Required Report
+
+- task_id / result
+- user-visible behavior before/after
+- actual field/consumer path identified
+- implementation approach
+- changed_files
+- morning fixture examples before/after
+- close fixture examples before/after
+- factual/causal safety notes
+- tests/check/lint/diff
+- model-call impact
+- schema compatibility
+- PR / commit / push
+- production mutation=0
+- remaining issues
+- whether close/morning natural observation is still needed before consumer activation
+
+When complete:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K2.
+
+## Report
+
+Pending.
+
+---
+
+# Claude Task 2 — CURRENT TASK
+
+- task_id: kabumori-shared-report-v2-20261005-close-natural-observation
+- owner: claude
+- slot: claude-2
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Sonnet5（中）
 - purpose: 2026-10-05大引けの自然サイクルをread-onlyで後追い観測し、朝に発生したOpenAI 429が夕方まで継続したか／回復したかを確認する。回復してreport packetが完成していれば、production market-report-analysis v21（PR #77 + PR #79/H1）のlive挙動を初めて実データで評価する。manual invoke・mutationは禁止。
@@ -167,7 +386,7 @@ When complete:
 
 ## Report
 
-Pending.
+- result: **SUPERSEDED_BEFORE_START** by explicit user request on 2026-10-05. No observation or production action was performed under this task. Its close-cycle read-only evidence may still be inspected as supporting evidence in the replacement task below, but this task itself must not be started.
 
 ---
 
