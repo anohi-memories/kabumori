@@ -1,3 +1,16 @@
+## G2 retasked — editorial three-point improvement
+
+- user-requested UX correction: the report's three "today's points" must not default to three previous-session metric recaps.
+- morning contract: prioritize today's focus / watch / risk / market-viewing axes. Prior-session numbers belong mainly in supporting detail.
+- close contract: prioritize what happened today / supported drivers / significance / next watch. Market causality must remain evidence-backed; honest uncertainty is allowed.
+- exact-three-points remains, but all three must carry distinct editorial meaning rather than numeric redundancy.
+- metric-only three-point regression coverage is required; presentation improvement must not weaken Hard Fact guards, increase model-call ceiling, split X/app truth sources, or turn quality issues into Hard delivery blocks.
+- previous close-only observation task was superseded before start; retained close evidence may be inspected read-only as supporting evidence, but provider recovery is not a prerequisite for implementation.
+- current G2: `kabumori-shared-report-v2-editorial-three-points-20261005`, status ready.
+- recommended Claude model: **Sonnet5（高）**.
+- production deploy/manual invoke/gate/DB/RPC/Auth/Vault/X mutation = forbidden in this task.
+- after K2, decide whether lightweight review is needed based on actual changed scope; do not auto-allocate Sol for presentation-only changes.
+
 ## K1 recheck — G1 Simulator continuation not yet executed
 
 - verdict: **NOT READY FOR K1**.
