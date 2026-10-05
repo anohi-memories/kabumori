@@ -1,5 +1,385 @@
 # Claude Task 5 — CURRENT TASK
 
+- task_id: common-account-v1-phase1-production-migration-gate-20261006
+- owner: claude
+- slot: claude-5
+- status: ready
+- next_owner: claude
+- priority: highest
+- start_code: G5
+- finish_code: K5
+- recommended_model: Opus5.5（極高）
+- type: production migration preflight / exact single-file rollout gate / read-back
+- production_project_ref: wsmznyzcvmuitkglfeuj
+- production_mutation_allowed: false_until_explicit_gate
+- backfill_allowed: false
+- auth_delete_allowed: false
+- deploy_allowed: false
+
+## Purpose
+
+Common-account v1 Phase 1 の additive lifecycle foundation は source review / hosted Gate B / Final C1 まで完了し、
+**foundation installation 自体は PASS-WITH-CONDITIONS** で受理済み。
+
+このTASKは、productionへ exact Phase 1 migration を安全に入れるための専用G5 gate。
+
+ただし開始時点では production write 権限はない。
+まず fresh read-only preflight と exact apply/history package の固定まで行い、
+**実際の production migration write の直前で必ず STOP してユーザーの明示承認を待つ。**
+
+承認後に同一TASKを再開した場合のみ、承認された exact migration 1本だけを適用し、
+直後に schema / ACL / RLS / function / migration-history read-back を行う。
+
+このTASKでは backfill(true)、削除フロー有効化、Edge deploy、Auth削除、Storage削除、OAuth/Vault操作は行わない。
+
+## Canonical accepted source
+
+Accepted foundation:
+- PR #70 merged source commit: `44121914b035e22380a4ca1bd8252a42713a2bbf`
+- accepted fixed source commit: `aa4d2d425d1d7c432d43c9ecfb8e978a40b80a65`
+- target migration:
+  `supabase/migrations/20261001150000_common_account_lifecycle_foundation.sql`
+- accepted migration SHA256:
+  `e632214b5602c12ee73d9a7475af36791138099a1a7fdba7e8fb521afc01cde3`
+
+Fresh main may contain later unrelated commits.
+Before any rollout work, prove target migration bytes still match the accepted SHA256 exactly.
+Mismatch => STOP. Do not “fix” production or amend the migration in this TASK.
+
+## Accepted Gate B / C1 facts
+
+Hosted disposable Supabase proof already established:
+- exact migration applies on a real managed Supabase project
+- authenticated own-row RLS read works
+- cross-user read denied
+- client direct write denied
+- anon read denied
+- service_role direct table access denied
+- narrow RPC boundary works
+- real Storage ownership blocks deletion readiness
+- Storage API cleanup allows readiness
+- direct common_accounts delete while Auth parent exists is refused
+- real Auth Admin hard delete cascades Auth/common/entitlement state as intended
+- durable login_removed lifecycle observation survives
+
+Critical hosted security result:
+- an already-issued access JWT remained usable against Data API after Auth deletion
+
+Therefore:
+- this Phase 1 foundation may be installed
+- but destructive orchestration / enforcement is NOT authorized here
+- session/global sign-out or refresh-token deletion alone must never be treated as stale-access-token invalidation
+- future deletion orchestration needs live writer denial or independently proven bounded-expiry/quiescence
+
+Do not re-open those architecture questions by weakening the accepted source.
+
+## Mandatory startup / isolation
+
+Before doing anything:
+
+1. Read:
+   - `PROJECT_RULES.md`
+   - `.agent/ORCHESTRATION.md`
+   - `.agent/CURRENT_STATE.md`
+   - `.agent/ACTIVE_TASK.md`
+   - this G5 TASK + prior G5 Report
+   - final H1/C1 common-account review/report
+2. Use the new-Mac clean base:
+   `/Users/yuya/Developer/kabumori-fresh`
+3. Fetch fresh `origin/main`.
+4. Create a **new G5-dedicated independent worktree/checkout** from fresh origin/main.
+5. Confirm it is not shared with G1-G4/H1/H2.
+6. Never checkout/reset/rebase/delete another slot branch/worktree.
+7. Confirm clean git status.
+8. Check current Supabase changelog/docs relevant to:
+   - migration/apply semantics
+   - Auth/RLS/Data API grants
+   - SECURITY DEFINER behavior
+   - managed Auth/Storage boundaries
+9. Confirm production target is exactly:
+   `wsmznyzcvmuitkglfeuj`
+   and not the disposable Gate B project or photo project.
+
+If safe independent worktree cannot be established => STOP.
+
+## Production-mutation mutex — critical
+
+G4 currently has a separate X/social-mobile production rollout workstream.
+Other slots may also advance while G5 is working.
+
+**No two slots may perform production mutation concurrently.**
+
+Before every production write:
+- fresh-fetch origin/main
+- re-read ACTIVE_TASK / CURRENT_STATE
+- inspect relevant G/H TASK states
+- confirm no other slot is in a production mutation/apply/deploy window
+- confirm no overlapping migration/RPC/Auth/permission work has landed since preflight
+
+If G4/G3/H1/H2 or another operator is applying/deploying/mutating the same production project:
+**STOP before write.**
+Read-only work may continue only if it cannot race with the mutation.
+
+Do not “win the race” by applying first.
+
+## Phase A — fresh production read-only preflight
+
+Production reads only.
+
+Re-run the full preflight immediately against current production, not historical snapshots.
+
+At minimum verify:
+
+### Migration/history collision
+- target version/name absent
+- no equivalent partial/manual foundation install
+- no unexpected same-version migration
+- no source/history collision
+- no prior failed partial target objects
+
+### Exact dependency shape
+Re-derive from current accepted migration and verify all production dependencies it expects, including the previously reviewed:
+- required relations
+- required columns/types/nullability
+- exact FK targets/actions/validation/deferrability
+- helper function signatures/definitions/owners
+- profile child cascade assumptions
+- X/social-mobile helper dependencies
+- `private` schema presence
+- Auth/Storage managed schema shapes actually relied on
+
+Use source-derived exact checks, not only counts.
+
+### Ownership / role graph / defaults
+Verify:
+- current execution/apply owner
+- relation/function owners
+- API roles and inherited role memberships
+- schema privileges
+- default privileges that could grant unexpected table/function rights
+- no unexpected overload/procedure/name collision
+- Data API exposed schemas/config relevant to the new public objects
+
+Unexpected owner/grantee/member/default ACL => STOP.
+
+### Current target objects
+All objects created by the foundation must be absent before first apply.
+If any target table/view/index/function/trigger/policy already exists:
+STOP and classify exact state.
+Do not drop, rename, repair or reapply.
+
+### Concurrent production work
+Verify no pending/active migration from G4/G3 or another workstream would make this preflight stale.
+If another production mutation lands after preflight, Phase A must be repeated before write.
+
+## Phase B — freeze the exact apply/history mechanism
+
+Before asking for mutation approval, document the exact command/tool/API path that will be used.
+
+Requirements:
+- exact one migration file only
+- exact SHA256 above
+- no ordinary `db push`
+- no include-all
+- no migration-history repair/relabel
+- no unrelated migration
+- no ad-hoc SQL edits
+- no blind retry
+- no assumption that schema + migration history are atomic unless actually proven for the chosen path
+
+The migration owns its own transaction boundary.
+Explicitly document:
+- who executes the SQL
+- how the filename/version/name are represented in migration history
+- when history is written
+- what happens if SQL succeeds but history bookkeeping fails
+- what happens if response is lost
+- what exact read-back determines:
+  - not applied
+  - schema present/history absent
+  - history present/schema invalid
+  - full success
+
+If the chosen mechanism cannot be made deterministic and fail-closed:
+STOP and report BLOCKED.
+Do not improvise a new production apply path.
+
+## Mandatory approval stop
+
+After Phase A + B are PASS:
+
+- write a concise approval package in the G5 Report:
+  - production project ref
+  - fresh main SHA
+  - migration path + SHA256
+  - preflight PASS summary
+  - exact apply mechanism
+  - exact migration-history policy
+  - exact failure/STOP rules
+  - expected read-back
+  - confirmation that backfill/deploy/Auth/Storage/OAuth/Vault are out of scope
+  - confirmation no other production mutation is active
+- set status to `review_required`
+- next_owner: `chatgpt`
+- STOP for K5
+
+**Do not apply the migration yet.**
+
+ChatGPT/user must explicitly approve the production mutation package.
+
+## Phase C — only after explicit production approval
+
+When the same G5 TASK is explicitly re-authorized:
+
+1. Re-read TASK / ACTIVE_TASK / CURRENT_STATE.
+2. Fresh origin/main and production-mutation mutex check again.
+3. Re-run any preflight element made stale by intervening changes.
+4. Reconfirm migration bytes/hash.
+5. Apply only the exact authorized migration through the frozen mechanism.
+6. Stop-on-error.
+
+Never:
+- rerun blindly after timeout/lost response
+- use ordinary db push
+- apply later migrations “while here”
+- fix ACLs manually
+- repair history without separate authority
+- roll back automatically
+
+If apply outcome is uncertain:
+perform read-only catalog + history classification and STOP.
+
+## Phase D — mandatory production read-back after successful apply
+
+Read-only verification immediately after apply.
+
+At minimum verify:
+
+### Schema/object exactness
+- all expected public/private relations
+- exact columns/defaults/constraints/checks
+- PK/FK actions and validation
+- indexes valid/ready/live
+- expected triggers enabled
+- expected policies
+- no unexpected overloads
+
+### Function security
+For every created function:
+- exact signature
+- owner
+- SECURITY DEFINER/INVOKER as intended
+- exact empty/fixed search_path contract
+- exact effective EXECUTE grantees including inherited roles
+- no PUBLIC/anon/authenticated/service_role privilege beyond intended design
+
+### Table/RLS/API privilege model
+- RLS enabled where expected
+- authenticated own-row SELECT only on intended public columns
+- client INSERT/UPDATE/DELETE/TRUNCATE denied
+- anon entry denied
+- service_role direct-table privilege denied
+- backend service_role uses only intended narrow RPCs
+- private view/helpers not exposed to API roles
+- default/inherited privileges do not defeat intended grants
+
+### Foundation defaults
+- settings row exists exactly once with expected shadow/not-started semantics
+- built-in checkpoint registry/requirements are exact
+- no enforcement mode accidentally enabled
+- no account/entitlement/operation population was created by migration itself
+- target migration history is exactly as approved
+
+### Existing dependency preservation
+Verify the migration did not mutate unrelated existing objects/grants/helpers.
+
+Any mismatch:
+STOP.
+Do not patch production inside this TASK unless a new explicit corrective authority is issued.
+
+## Explicitly out of scope
+
+This G5 task MUST NOT:
+- run `private.account_lifecycle_backfill(true)`
+- create production common_accounts/service_entitlements for existing users
+- activate client registration/service-start wiring
+- change Kabumori `ensure_my_profile`
+- change X onboarding
+- change current deletion routes
+- enable deletion enforcement
+- hard-delete any Auth user
+- revoke sessions/tokens
+- touch Apple/X OAuth
+- touch Vault secrets
+- delete Storage objects
+- deploy Edge Functions
+- change Cron
+- change feature flags
+- run real X
+- mutate photo-sharing or disposable Gate B projects
+
+After migration read-back PASS, backfill(false) may only be done if the specific read-only authority is clearly included in the next orchestration step; backfill(true) is always a separate explicit approval.
+
+## Completion / K5
+
+Report must contain:
+- task_id
+- result: PREFLIGHT_READY / APPLIED_PASS / BLOCKED / PARTIAL
+- checked_main
+- dedicated worktree/isolation
+- production project ref
+- migration path/hash
+- fresh preflight results
+- concurrent production-mutation check
+- chosen apply/history mechanism
+- exact approval boundary used
+- production writes actually performed
+- migration-history result
+- schema/RLS/ACL/function read-back
+- tests/checks
+- changed_files
+- commit_hash / push
+- deploy
+- backfill
+- remaining_issues
+- safety_checks
+- next_recommendation
+
+Never report apply/push/deploy/backfill as successful unless actually verified.
+
+### If stopping before approval
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- result -> `PREFLIGHT_READY`
+- production mutation = 0
+
+### If resumed after explicit approval and apply/read-back succeeds
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- result -> `APPLIED_PASS`
+- backfill = 0
+- deploy = 0
+
+## Review guidance after K5
+
+Do not automatically allocate another Codex review merely because this is a migration.
+ChatGPT will inspect the actual G5 evidence.
+
+If the exact approved migration applies cleanly and exhaustive read-back matches the already H1-reviewed source contract, an additional review may be unnecessary.
+If there is any production drift, uncertain history state, privilege mismatch, partial outcome or security ambiguity, allocate focused Codex review.
+
+Recommended Claude model: **Opus5.5（極高）**.
+
+## Report
+
+Pending.
+
+---
+
+# Previous G5 task history — preserved
+
+# Claude Task 5 — CURRENT TASK
+
 - task_id: common-account-pr70-guard-boundary-corrective-20261002
 - owner: claude
 - slot: claude-5
@@ -2170,3 +2550,4 @@ Report 時点の fresh `origin/main` と open PR で確認。
 - merge decision: **HOLD** pending H1 rereview of exact head `47a2ed6a1635177ba82004eace4bddb42d9d53e3`.
 - production apply remains separately gated by **Sol（極高）**, disposable real Supabase proof, exact production read-only preflight/history/ACL/FK checks, and explicit approval.
 - AI Lab diary: **no update**. 2026-10-02 already has a different, coherent daily entry for the X app; do not overwrite/mix it merely to record another same-day workstream.
+
