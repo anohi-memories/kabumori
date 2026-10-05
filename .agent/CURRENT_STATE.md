@@ -1,3 +1,14 @@
+## PR #87 review moved to free H1 — 2026-10-06
+
+- H1 previous common-account review is confirmed done / next_owner none and is genuinely free.
+- PR #87 remains open / unmerged / mergeable=true at exact head `3561f1eaac41df0f23dcce8fdaace0decc654a0a`.
+- fresh allocation check: current main is 24 commits beyond the PR merge-base with **0 overlap** across PR #87's 13 changed files.
+- H1 assigned `kabumori-pr87-editorial-three-points-review-20261006`.
+- review scope: morning/close editorial contract, Hard Fact/causal safety, WARN-only telemetry, unchanged model-call ceiling, X/App shared `points_ja`, legacy fallback, and focused regressions.
+- recommended Codex model: **Luna（高）**.
+- merge/deploy/consumer activation remain **HOLD** until C1.
+- H2 remains reserved for PR #76 security review and was not modified by this allocation.
+
 ## Routing correction — PR #87 review queued, H2 restored to PR #76
 
 - During Final K2 handling for PR #87, a cross-chat allocation race was detected: CURRENT_STATE/G4 already reserved H2 for the higher-risk PR #76 final security rereview, while H2 TASK/ACTIVE index had not yet been synchronized.
