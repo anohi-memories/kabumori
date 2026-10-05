@@ -1,5 +1,242 @@
 # Claude Task 3 — CURRENT TASK
 
+- task_id: x-social-mobile-pr81-hardening-residual-corrective-20261005
+- owner: claude
+- slot: claude-3
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Opus5.5（高）
+- type: bounded corrective implementation / migration drift / function ACL / CAS finite-domain / rollout plan
+- continues_from: x-social-mobile-content-settings-schema-hardening-20261003
+- target_pr: 81
+- current_head: 5595fb131813542c55c43bc783af623cdb9ea442
+- blocks_pr: 78
+- production_mutation_allowed: false
+
+## C2 verdict / purpose
+
+H2 rereview of PR #81 returned **CHANGES REQUIRED**.
+
+Important:
+- the original large F1 JSON/persona contract issue is closed for inspected writer shapes;
+- the original table ACL/RLS flaw is closed;
+- finite-path CAS and normal concurrency behavior are closed;
+- most drift checks are closed.
+
+This task is **not** a redesign. It must correct exactly the remaining adversarial boundaries and produce a safe production-apply plan.
+
+PR #81 remains open/unmerged. Production apply is still forbidden.
+
+## Freshness / isolation
+
+1. Read PROJECT_RULES / CLAUDE.md / ORCHESTRATION / CURRENT_STATE / this TASK / full H2 rereview report.
+2. Use the existing isolated G3 worktree only.
+3. Fetch fresh `origin/main`.
+4. Confirm PR #81 exact head is still `5595fb131813542c55c43bc783af623cdb9ea442` before editing. If head moved, STOP.
+5. Fresh C2 comparison: main is 62 commits ahead of PR base with **0 overlap** across PR #81 files; still recheck before push.
+6. G4 PR #76 and direct AI-Lab PR #82 are separate. Do not touch their migrations/files.
+7. No production apply/write/deploy/Auth/Vault/X/OpenAI/Cron mutation.
+
+## Residual R1 — reject deferrable PK drift
+
+Current hardening validates PK key columns/count but not enough of the PK/index semantics.
+
+H2 reproduced:
+- replace the expected PK with `PRIMARY KEY (brand_id) DEFERRABLE INITIALLY IMMEDIATE`;
+- hardening succeeds;
+- actual repository `INSERT ... ON CONFLICT (brand_id) DO UPDATE` then fails with SQLSTATE 55000.
+
+Correction requirements:
+- explicitly require the expected immediate, non-deferrable PK contract;
+- verify the backing unique index is usable as an ON CONFLICT arbiter;
+- reject deferrable / initially deferred / unexpected PK/index drift;
+- do **not** silently repair an unknown PK definition;
+- add a disposable DB regression using the actual Settings upsert pattern, not catalog-only assertions.
+
+Expected result:
+- exact candidate PK -> accepted;
+- deferrable/wrong PK -> hardening refuses before mutation;
+- real owner upsert remains successful after hardening.
+
+## Residual R2 — helper function owner / ACL drift
+
+H2 reproduced an existing helper function with an unexpected EXECUTE grant to another role. `CREATE OR REPLACE` preserved that ACL and hardening did not reject it.
+
+Correction requirements for all content-settings helper/version functions introduced or replaced by the hardening migration:
+- validate exact expected signatures;
+- fail closed on unexpected overloads;
+- validate owner identity/policy before replacement;
+- fail closed on unexpected pre-existing grantees / EXECUTE ACLs;
+- after creation/replacement, assert exact effective EXECUTE privileges;
+- PUBLIC / anon / service_role / unrelated roles must not inherit unexpected EXECUTE;
+- authenticated may EXECUTE only the validator helper(s) that genuinely must run under CHECK evaluation;
+- version trigger function must not be directly executable by app roles if not required;
+- do not globally modify default privileges or unrelated role memberships;
+- do not silently rewrite an unexpected owner/ACL drift unless the exact known transition is explicitly justified and tested.
+
+Use effective privilege checks, not only `proacl` text.
+
+Add regressions for:
+- unknown helper EXECUTE grant;
+- unexpected helper owner;
+- unexpected overload/signature;
+- post-hardening exact ACL.
+
+## Residual R3 — finite CAS domain / infinity
+
+H2 reproduced a valid historical row with:
+`updated_at = 'infinity'`
+
+The current trigger:
+`greatest(clock_timestamp(), old.updated_at + interval '1 microsecond')`
+cannot advance infinity, so the same old CAS token remains reusable.
+
+Correction requirements:
+- before hardening changes, explicitly refuse existing rows with non-finite `updated_at`;
+- also assess `created_at` finite-domain expectations and document/enforce consistently if needed for invariant safety;
+- do not silently rewrite historical infinity values;
+- enforce finite timestamps for future rows/updates with a DB constraint or equivalent fail-closed invariant;
+- server-owned INSERT/UPDATE version semantics remain unchanged for valid finite rows;
+- preserve PR #78 string-token interface.
+
+Add tests:
+- existing updated_at=infinity -> hardening fails before mutation;
+- negative infinity likewise;
+- future finite timestamp (e.g. year 2999) remains valid if intended;
+- post-hardening attempt to write non-finite version is rejected/overridden safely;
+- same-transaction, concurrent one-winner, long-running earlier transaction, stale-token zero-row behavior remain GREEN.
+
+## Whole-chain production apply plan
+
+H2 proved actual Supabase CLI 2.116.0 gives **per-file atomicity**, not whole-chain atomicity.
+
+The current chain is:
+1. `20260922045046_social_mobile_content_settings_candidate.sql`
+2. `20261003120000_social_mobile_content_settings_hardening.sql`
+
+A normal migration-up can commit (1), then fail before/inside (2), temporarily leaving the known weak candidate live.
+
+This task must produce a concrete rollout plan that avoids exposing the weak candidate.
+
+Preferred options to evaluate:
+- a reviewed operator-controlled outer transaction that applies both source files atomically and records migration history correctly/safely, OR
+- a new deployment-safe source strategy that avoids ever exposing the weak intermediate state, without rewriting already-applied production history (none exists yet) and without breaking repo migration semantics.
+
+Do not implement a production history repair or remote apply here.
+
+Because production currently has neither migration version applied and the target table is absent, you may propose a source consolidation strategy **only if** it is clearly safer, preserves auditability, and H2 can independently review it. Do not silently rewrite the historical candidate without explaining why.
+
+The completion report must state the exact intended production apply commands/transaction boundaries conceptually, but do not execute them.
+
+## Preserve closed behavior
+
+Do not regress:
+- exact settings/persona JSON/type/key validation;
+- endLocal 24:00 only;
+- authenticated table privileges exactly SELECT/INSERT/UPDATE;
+- DELETE/TRUNCATE/REFERENCES/TRIGGER/MAINTAIN denied;
+- owner-only RLS;
+- no service-role DML requirement;
+- server-owned finite monotonic updated_at;
+- CAS stale zero-row semantics;
+- brand FK cascade;
+- no durable publish/token/OAuth controls in settings/persona;
+- PR #78 source compatibility.
+
+## Tests
+
+Run independently after correction:
+
+### SQL / migration
+- original candidate -> corrected hardening
+- reapply exact hardened shape
+- all prior 20 drift cases
+- deferrable PK drift
+- wrong PK/index arbiter
+- unknown helper EXECUTE grant
+- unexpected helper owner
+- unexpected overload
+- infinity / -infinity existing versions
+- exact effective function ACL
+- table ACL/RLS
+- valid historical rows unchanged
+- invalid rows refuse
+- same-tx CAS
+- concurrent CAS one winner
+- long-tx no regression
+- actual repository upsert under authenticated owner
+- cascade lifecycle
+- no unrelated mutation.
+
+### App/source
+- focused content-settings repository tests
+- full social-mobile tests
+- PR #78 composition/merge-tree if useful
+- typecheck
+- lint
+- relevant Deno shared tests
+- bash syntax
+- `git diff --check`
+- secret/scope scan.
+
+Use disposable local PostgreSQL/Supabase only.
+
+## PR handling
+
+Prefer amending PR #81 normally.
+
+- preserve old reviewed head `5595fb131813542c55c43bc783af623cdb9ea442` in Report;
+- normal push only; no force push;
+- fresh-main integration only if needed;
+- do not merge.
+
+## Production safety
+
+Forbidden:
+- production migration apply / db push
+- migration history repair
+- production INSERT/UPDATE/DELETE
+- RLS/grant/function change
+- Edge deploy
+- Auth/Vault/X/OpenAI/Cron mutation
+- PR #78 merge/deploy.
+
+Read-only catalog checks are optional only if required to confirm no new collision; do not read user content/PII.
+
+## Completion / K3
+
+Report:
+- task_id/result
+- R1 deferrable-PK fix and proof
+- R2 helper owner/ACL fix and proof
+- R3 finite-version fix and proof
+- exact migration/source strategy chosen
+- whole-chain production apply plan
+- whether historical candidate changed and why
+- changed_files
+- SQL tests
+- app/Deno tests
+- old/new PR head
+- fresh-main overlap
+- production reads/mutations
+- remaining risks
+- safety checks
+- next recommendation.
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K3.
+
+After K3, H2 independent rereview is mandatory.
+
+Recommended H2 model: **Sol（高）**.
+
+---
+
+# Claude Task 3 — CURRENT TASK
+
 - task_id: x-social-mobile-content-settings-schema-hardening-20261003
 - owner: claude
 - slot: claude-3
