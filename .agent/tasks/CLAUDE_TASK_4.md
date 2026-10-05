@@ -1,5 +1,219 @@
 # Claude Task 4 — CURRENT TASK
 
+- task_id: x-social-mobile-pr76-production-rollout-gate-20261006
+- owner: claude
+- slot: claude-4
+- status: ready
+- next_owner: claude
+- priority: highest
+- recommended_model: Opus5.5（高）
+- type: production rollout gate / read-only preflight / runtime-first deployment plan / migration gate
+- source_pr: 76
+- merged_main_sha: 3c5f80a61d114d2936b761fc05ee3b3d69e85f63
+- production_mutation_allowed: false
+- blocks_g3_pr81: true
+
+## Purpose
+
+PR #76 publish-permission source implementation and final independent H2 security review are complete and PASS.
+PR #76 was squash-merged to main as:
+`3c5f80a61d114d2936b761fc05ee3b3d69e85f63`
+
+This task prepares the exact production rollout and performs only read-only preflight until fresh explicit user approval is obtained.
+
+Approved rollout order from final review:
+
+S0. production read-only preflight
+S1. deploy guarded `x-test-post` runtime first
+S2. byte/version read-back + old-run drain
+S3. apply `20261003090000_social_mobile_publish_permission_boundary.sql`
+S4. read back RPC definitions/ACL/effective privileges
+S5. deploy `social-mobile-publish-setting`
+S6. expose/use app control
+
+PR #81 production rollout is blocked until PR #76's earlier migration version `20261003090000` is safely applied/read back.
+
+## Startup / isolation
+
+1. Read ORCHESTRATION / CURRENT_STATE / final C2/H2 report / this TASK / PR #76 rollout runbook.
+2. Use new Mac clean base `/Users/yuya/Developer/kabumori-fresh` with a fresh independent G4 worktree.
+3. Confirm main contains merge `3c5f80a61d114d2936b761fc05ee3b3d69e85f63`.
+4. Confirm exact merged migration:
+   `supabase/migrations/20261003090000_social_mobile_publish_permission_boundary.sql`
+5. Confirm exact merged guarded runtime/import graph for `x-test-post`.
+6. Do not touch G3/PR81 content-settings files.
+7. Do not touch AI Lab PR82 rollout state except read-only coordination where required.
+8. No production write/deploy until explicit user approval after the preflight report.
+
+## S0 — mandatory same-day read-only preflight
+
+Read only, no tokens/plaintext/user content beyond bounded operational metadata.
+
+Verify:
+
+### migration/order
+- PR76 version `20261003090000` absent from production ledger unless legitimately already applied;
+- PR81 `20261003120000` and PR82 `20261004090000` states recorded exactly;
+- no duplicate/collision/name mismatch for PR76;
+- current ledger schema fits the reviewed migration method;
+- do not repair/reorder history.
+
+### current runtime
+- current deployed `x-test-post` version/status/verify_jwt;
+- prove whether deployed bytes are old unguarded or already exact guarded source;
+- identify exact next source bundle and SHA/file list to deploy;
+- no unrelated Edge function included.
+
+### production preconditions for migration
+- current_user/apply role and owner assumptions;
+- `x_legacy_post_account` owner;
+- anon/authenticated/service_role inheritance graph;
+- relevant default function privileges;
+- target RPCs absent unless exact reviewed shape already exists;
+- no unexpected same-name overloads;
+- current Vault-connected publish-enabled account count and whether any has nonblank `last_connection_error_code` / missing `verified_at`, using counts/booleans only;
+- no running/overdue Vault-backed posting work before future S1/S3 cutover;
+- do not read token plaintext.
+
+### rollout timing
+- determine a safe no-post window;
+- read actual platform/function execution constraints needed for the drain step rather than guessing;
+- freeze exact S0→S6 operator sequence and abort points.
+
+## Freeze exact production package
+
+Prepare:
+- fresh main SHA;
+- migration file SHA256;
+- exact x-test-post deploy file list + SHA256;
+- exact social-mobile-publish-setting deploy file list + SHA256;
+- exact read-back queries;
+- exact abort/rollback steps already reviewed;
+- exact expected production mutations.
+
+Do not modify source unless fresh-main incompatibility is discovered; if so STOP and report.
+
+## Mandatory STOP for user approval
+
+After S0 and package freeze, STOP before S1.
+
+Report:
+- production project identity;
+- current main SHA;
+- migration hash;
+- current deployed x-test-post version / guarded-or-old status;
+- migration ledger state;
+- target RPC state;
+- current relevant account readiness aggregate;
+- running/overdue count;
+- exact proposed S1→S6 operations;
+- expected temporary availability effect;
+- abort plan;
+- confirmation that PR81/PR82 are not bundled.
+
+Then request explicit production rollout approval.
+
+Do not interpret TASK creation or previous generic approvals for AI Lab as authorization for PR76 rollout.
+
+## After explicit approval only
+
+Re-run S0 immediately before first production mutation. If any material state changed, STOP and invalidate approval.
+
+Then execute exactly:
+
+### S1
+Deploy only exact guarded `x-test-post` from merged main.
+No other function.
+
+### S2
+Read back:
+- version/status/verify_jwt;
+- exact deployed source bytes/import graph;
+- confirm guarded runtime is active;
+- drain any old execution per reviewed runbook;
+- confirm no running/overdue work immediately before migration.
+
+If exact guarded runtime cannot be proven, STOP. No migration.
+
+### S3
+Apply only:
+`20261003090000_social_mobile_publish_permission_boundary.sql`
+
+Use the reviewed production method only.
+No db push/include-all/history repair/unrelated migration.
+
+### S4
+Read back:
+- exact two RPC signatures;
+- SECURITY DEFINER;
+- empty search_path;
+- owners;
+- direct ACL;
+- effective EXECUTE:
+  - PUBLIC/anon none
+  - authenticated toggle only
+  - service_role pre-send assertion only
+- no unexpected overload/grant;
+- migration history exact.
+
+If mismatch: STOP. Do not expose publish-setting.
+
+### S5
+Deploy only exact `social-mobile-publish-setting` with its reviewed JWT setting.
+Read back exact bytes/version/status/JWT setting.
+
+### S6
+Do not enable any specific account or trigger X posting automatically.
+App control exposure/real use remains a separate product/QA step unless explicitly included in a later authorization.
+
+## Safety
+
+Forbidden before explicit approval:
+- Edge deploy;
+- production DDL/history write;
+- publish toggle;
+- user/account mutation;
+- real X;
+- Auth/Vault/OAuth/token mutation;
+- Cron/scheduler change;
+- manual dispatch/backlog/candidate injection.
+
+Always forbidden:
+- source redesign;
+- migration repair/reorder;
+- bundling PR81/PR82;
+- token plaintext reads;
+- force posting.
+
+## Completion / K4
+
+Report:
+- task_id/result
+- fresh main
+- S0 preflight
+- exact hashes
+- approval requested/received
+- exact production actions if any
+- S1/S2/S3/S4/S5 results if authorized
+- migration ledger/read-back
+- Edge deploy read-back
+- production publish toggle/X = 0 unless separately authorized
+- remaining blockers
+- whether PR76 migration prerequisite is now satisfied for G3/PR81
+- next recommendation
+
+Then status -> review_required / next_owner -> chatgpt / STOP for K4.
+
+Review policy:
+- final source security review is already complete.
+- do not add routine Codex review after exact rollout/read-back PASS.
+- only review again if the production read-back reveals a concrete mismatch or source must change.
+
+
+---
+
+# Previous G4 task — preserved history
+
 - task_id: x-social-mobile-pr76-final-security-corrective-20261005
 - owner: claude
 - slot: claude-4
