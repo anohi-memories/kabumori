@@ -8,6 +8,7 @@
 import type { PersonalizedReport } from '@/lib/report-presentation';
 
 export type ReportHighlightsSource =
+  | 'shared_points'
   | 'today_claims'
   | 'checkpoints'
   | 'market_claims'
@@ -78,14 +79,18 @@ export function currentReport(reports: readonly PersonalizedReport[], today: str
 }
 
 /**
- * 2-3 short points from existing stored fields, most factual/specific first:
- * upgraded reports' today_claims, then older checkpoints_ja, then the shared
+ * 2-3 short points from existing stored fields, most editorial/specific first:
+ * the shared report's three headlines (the same ones X posts), then upgraded
+ * reports' today_claims, then older checkpoints_ja, then the shared
  * market_section claims, then a split of overview_ja, and finally the whole
  * summary_ja as a single fail-soft point when nothing else is usable.
  */
 export function buildReportHighlights(report: PersonalizedReport | null): ReportHighlights {
   if (!report) return { points: [], source: 'none' };
   const body = report.body;
+
+  const sharedPoints = fromStrings(body?.market_detail?.points_ja);
+  if (sharedPoints.length > 0) return { points: sharedPoints, source: 'shared_points' };
 
   const todayClaims = fromStrings(body?.market_detail?.today_claims?.map((claim) => claim.text_ja));
   if (todayClaims.length > 0) return { points: todayClaims, source: 'today_claims' };

@@ -19,7 +19,7 @@ import {
 import { appStoryWarnings, buildAppMarketStory, orderKeyNews } from "../_shared/market_report_story.ts";
 import type { AnalysisInput } from "./analysis_input.ts";
 import { falseAbsenceClaims } from "../_shared/absence_claims.ts";
-import { emojiDirectionIssues, mentionsMarketMetric, metricFactIssues } from "./hard_fact_guards.ts";
+import { emojiDirectionIssues, MARKET_NAMES, mentionsMarketMetric, metricFactIssues } from "./hard_fact_guards.ts";
 
 export const ANALYSIS_MODEL = "gpt-5.6-luna";
 export const MAX_GENERATIONS = 2;
@@ -53,7 +53,8 @@ const COMMON = [
   "「材料がありません」「ニュースはありません」「個別材料がない」のように、範囲を示さずに無いと言い切りません（入力にニュースがあるためです）。無いと書くのは「東京市場の値動きの理由を説明するニュースは確認できません」のように、何について無いのかを限定したときだけです。",
   "ニュースには「範囲」（市場全体 / 業種・テーマ / 個別企業）が付いています。市場全体の話（x_post・market_summary_ja・app_story）では、範囲が「市場全体」のニュース（金融政策、通商・規制、地政学、エネルギー、災害など）を先に扱い、次に「業種・テーマ」、最後に「個別企業」の順にします。「個別企業」の開示は、「市場全体」「業種・テーマ」のニュースが無いときか、それらを書いたうえで触れます。key_news もこの順に選びます。",
   "「東京市場の方向」と「米国市場の方向」は、それぞれの日付の値動きとしてコードが決めたものです。朝刊では、前営業日の東京市場と前夜の米国市場を別々に書き、「市場の方向」のひとこと（まちまち等）だけで両方をまとめません。今日の値動きは予想せず、今日見る点として書きます。",
-  "x_post はX投稿用の約500字の読み物です。次の6つを書きます。lead_ja: 60字以内の導入1文。points_ja: ちょうど3つ、各45字以内の要点。context_ja: 90〜130字の背景の段落（値動きを日付つきでつなぐ。理由は確認できた場合だけ）。news_ja: 70〜110字の重要ニュースの段落（範囲が市場全体のものを優先。書けるニュースが無ければ空文字）。watch_ja: 50〜80字の次に見る点。closing_ja: 40〜60字の一言。見出し・小見出し（📌 📰 👀 💬）とハッシュタグはコードが付けるので書きません。",
+  "x_post はX投稿用の約500字の読み物です。次の6つを書きます。lead_ja: 60字以内の導入1文。points_ja: ちょうど3つ、各40字以内の見出し（下の「3つのポイント」の決まりに従う）。context_ja: 90〜130字の背景の段落（値動きを日付つきでつなぐ。理由は確認できた場合だけ）。news_ja: 70〜110字の重要ニュースの段落（範囲が市場全体のものを優先。書けるニュースが無ければ空文字）。watch_ja: 50〜80字の次に見る点。closing_ja: 40〜60字の一言。見出し・小見出し（📌 📰 👀 💬）とハッシュタグはコードが付けるので書きません。",
+  "3つのポイント（x_post.points_ja）は、本文を読む前にその日の要点が一目で分かる見出しです。アプリの「今日のポイント」にも同じ3つが出ます。数値（指数の値・前日比・価格）を見出しの主役にしません。「日経平均は69,946.86（前日比+2.40%）」「NYダウ +0.42%」のような指標名と数値だけの見出しは書かず、値は context_ja と app_story に書きます（数値そのものがニュースの核心である場合、例えば政策金利の決定だけは例外）。3つは役割を分け、同じ指数や同じニュースを言い換えて2回使いません。煽りや釣りの言い方はしません。見出しも本文と同じ決まりに従います（入力と逆の方向を書かない、根拠の無い理由を見出しにしない、日付の違う市場を混ぜない、TOPIX連動ETF（1306）をTOPIXと書かない）。",
   "app_story はアプリの「市場全体」の読み物で、x_post より詳しく書きます。見出し・絵文字・指標の数値の一覧はコードが付けるので、各項目には説明の文章だけを書きます（数値を書く場合は上の日付のルールに従う）。summary_ja: 60〜110字で全体をひとこと。overseas_ja: 100〜170字で米国市場の値動き。japan_ja: 120〜200字で東京市場（朝刊は前営業日の結果と今日見る点、大引けは今日の結果）。cross_asset_ja: 80〜150字で為替・金利・半導体・原油。news_ja: 120〜220字で重要ニュースと市場との関係（関係が確認できなければそう書く）。strong_ja: 強い・注目テーマ（根拠が無ければ空文字）。caution_ja: 60〜130字で注意点・リスク。watch_ja: 60〜130字で次に見る点。根拠が足りない項目は無理に埋めず、空文字か短く「確認できません」と書きます。",
 ];
 
@@ -66,11 +67,13 @@ const X_VOICE = [
 const MORNING = [
   "これは朝刊です。前夜の米国市場と、東京市場の前営業日の終値、前回の引け以降に確認できたニュースから、今日の日本株で見る点を整理します。",
   "overseas_to_japan の観点は claims の scope=overnight で表し、日本株への影響は断定せず consistent_with か watch_point にします。",
+  "朝刊の3つのポイントは、今日の「注目点」「注意点」「相場を見る軸」です（例: 「前夜の米株高を日本株が引き継げるか」「半導体株の強さが続くかに注目」「為替の動きには要注意」）。今日の東京市場はまだ動いていないので、上昇した・下落したと言い切りません。前夜や前営業日の値動きに触れるときは入力の方向どおりに書き（下落した米国株を「米株高」と書かない）、値は本文に回します。",
 ];
 
 const CLOSE = [
   "これは大引けです。今日の東京市場の終値と、今日確認できたニュースから「今日の値動きと、確認できる範囲の理由」を整理します。",
   "指数の羅列にせず、その日の重要な出来事と値動きを読者が一度で分かるようにまとめます。理由を確認できたものは causal、確認できないものは insufficient_evidence にします。",
+  "大引けの3つのポイントは、「今日何が起きたか」「重要だった材料・相場を動かしたもの」「次に何を見るか」です（例: 「主要指数がそろって上昇、主因は絞れず」「（入力の重要ニュース）が最大の材料に」「次は米国株と為替の反応を確認」）。相場を動かした理由を見出しにできるのは、ニュースが理由として明記している（causal の claim がある）場合だけです。無いときは「上昇したが、主因は一つに絞れず」「大型株中心に上昇、材料は分散」のように、見えている事実と不確実性を書きます。明日以降の値動きは断定しません。業種や個別株の値動き（「半導体株が主導」「内需はまちまち」など）は、入力のニュースや指標に根拠があるときだけ書きます。",
 ];
 
 const GENERATION_SCHEMA = {
@@ -684,6 +687,7 @@ export function localAnalysisCheck(analysis: GeneratedAnalysis, input: AnalysisI
     }
   }
   warnings.push(...editorialPriorityWarnings(analysis, input));
+  warnings.push(...pointsEditorialWarnings(analysis.x_post.points_ja));
   for (const word of MULTI_DAY_WORDS) if (joined.includes(word)) issues.push(`複数日を前提にする語: ${word}`);
 
   if (analysis.claims.length < 1) issues.push("claims が空");
@@ -791,6 +795,54 @@ export function editorialPriorityWarnings(analysis: GeneratedAnalysis, input: An
   return warnings;
 }
 
+/** A value printed as a number: a decimal, a grouped number, or a number with a unit. Dates are removed first. */
+const POINT_VALUE = /\d+(?:,\d{3})+|\d+\.\d+|\d+\s*(?:%|円|ドル|bp|ポイント)/u;
+/** What a bare metric line is made of besides the metric names: particles, punctuation and move words. */
+const POINT_FILLER = /[\s、。・,()+\-−±▲▼%]|前日比|終値|取引終了|で終え(?:まし)?た|となりました|でした|です|しました|した|上昇|下落|上げ|下げ|反発|反落|横ばい|まちまち|そろって|いずれも|[はがもとのでに]/gu;
+/** From this many metric recaps the points are recorded as a recap (telemetry). */
+export const POINTS_METRIC_RECAP_WARN_AT = 2;
+/** Character-bigram overlap from which two points say the same thing. */
+export const POINTS_NEAR_DUPLICATE_AT = 0.5;
+
+/**
+ * A point that only reports where a metric ended: a name with its value or change (「日経平均は69,946.86
+ * （前日比+2.40%）」), or a name with a direction and nothing else (「米国株も上昇」). Containing a metric
+ * is fine; the point is a recap when nothing but the metric is left.
+ */
+export function isMetricRecapPoint(point: string): boolean {
+  const text = point.normalize("NFKC").replace(/\d{1,2}月\d{1,2}日/gu, "").replace(/\p{Extended_Pictographic}/gu, "");
+  if (POINT_VALUE.test(text)) return true;
+  let rest = text;
+  for (const name of MARKET_NAMES) rest = rest.split(name.normalize("NFKC")).join("");
+  return Array.from(rest.replace(POINT_FILLER, "")).length <= 1;
+}
+
+function pointGrams(point: string): Set<string> {
+  const characters = Array.from(point.normalize("NFKC").replace(/[\s、。・,()!?「」]|\p{Extended_Pictographic}/gu, ""));
+  return new Set(characters.slice(0, -1).map((character, index) => character + characters[index + 1]));
+}
+
+/**
+ * The three points are the headlines of the day (2026-10-05 close: all three were metric lines, 「日経平均は
+ * 69,946.86（前日比+2.40%）。」「TOPIX連動ETF（1306）は436.3円（前日比+1.42%）。」「10月2日のSOXは13,136.67
+ * （前日比+2.40%）。」). Quality only; never a hard failure.
+ */
+export function pointsEditorialWarnings(points: string[]): string[] {
+  const warnings: string[] = [];
+  const recaps = points.filter(isMetricRecapPoint).length;
+  if (recaps >= POINTS_METRIC_RECAP_WARN_AT) warnings.push(`X_POINTS_METRIC_RECAP:${recaps}`);
+  const grams = points.map(pointGrams);
+  const overlapping = grams.some((left, i) =>
+    grams.slice(i + 1).some((right) => {
+      const shared = [...left].filter((gram) => right.has(gram)).length;
+      const union = new Set([...left, ...right]).size;
+      return union > 0 && shared / union >= POINTS_NEAR_DUPLICATE_AT;
+    })
+  );
+  if (overlapping) warnings.push("X_POINTS_NEAR_DUPLICATE");
+  return warnings;
+}
+
 // ---------------------------------------------------------------------------
 // Assembly
 // ---------------------------------------------------------------------------
@@ -883,9 +935,13 @@ export type AnalysisOutcome =
 export const APP_STORY_REWRITE_BELOW_CHARS = 700;
 
 /** Warnings that are recorded but never worth a generation. */
-const COSMETIC_WARNING = /^X_POST_EMOJI_COUNT|LONGER_THAN_TARGET|が長すぎる$|^X_POST_NEWS_OMITTED$/;
+const COSMETIC_WARNING = /^X_POST_EMOJI_COUNT|LONGER_THAN_TARGET|が長すぎる$|^X_POST_NEWS_OMITTED$|^X_POINTS_/;
 
-/** Worth one rewrite: everything that is not cosmetic, and an app story only when it is materially thin. */
+/**
+ * Worth one rewrite: everything that is not cosmetic, and an app story only when it is materially thin.
+ * The points' editorial warnings are telemetry: the prompt asks for headlines, and a metric recap is safe
+ * text, so it is recorded rather than paid for with two more calls (PR #77's delivery-first budget).
+ */
 function worthRewrite(warning: string): boolean {
   if (COSMETIC_WARNING.test(warning)) return false;
   const [code, value] = warning.split(":");

@@ -69,7 +69,8 @@ test("10/2 live draft: the broad-first paragraph no longer warns, and 846 charac
   assert.ok(delivered.x_post.news_ja!.startsWith("市場全体では、イエメンで") && delivered.x_post.news_ja!.includes("ニデック"));
   const check = localAnalysisCheck(live(), input);
   assert.deepEqual(check.hard, []);
-  assert.deepEqual(check.warnings, ["APP_STORY_SHORTER_THAN_TARGET:846"], "length stays as telemetry");
+  // The live points were three metric lines (the shape the editorial points replace): recorded, not paid for.
+  assert.deepEqual(check.warnings, ["X_POINTS_METRIC_RECAP:3", "APP_STORY_SHORTER_THAN_TARGET:846"], "length and points stay as telemetry");
   assert.deepEqual(qualityRewriteHints(check.warnings), [], "nothing worth a generation");
   assert.deepEqual(editorialPriorityWarnings(live(), input), []);
 });
@@ -80,7 +81,7 @@ test("10/2 live draft: delivered in one generation and one Fact call (was three 
   assert.equal(outcome.ok, true);
   assert.deepEqual(calls, ["generate", "fact"]);
   assert.deepEqual([outcome.trace.qualityRewrite, outcome.trace.deliveredGeneration, outcome.trace.generations], [false, 1, 1]);
-  assert.deepEqual(outcome.ok && outcome.packet.fact.quality_warnings, ["APP_STORY_SHORTER_THAN_TARGET:846"]);
+  assert.deepEqual(outcome.ok && outcome.packet.fact.quality_warnings, ["X_POINTS_METRIC_RECAP:3", "APP_STORY_SHORTER_THAN_TARGET:846"]);
 });
 
 test("the 486-character X body is inside the target: no length warning", () => {
@@ -152,7 +153,7 @@ test("app length: a complete story modestly under 900 is a warning only", () => 
     const length = narrative(analysis);
     assert.ok(length >= APP_STORY_REWRITE_BELOW_CHARS && length < 900, `narrative ${length}`);
     const check = localAnalysisCheck(analysis, input);
-    assert.deepEqual(check.warnings, [`APP_STORY_SHORTER_THAN_TARGET:${length}`]);
+    assert.deepEqual(check.warnings, ["X_POINTS_METRIC_RECAP:3", `APP_STORY_SHORTER_THAN_TARGET:${length}`]);
     assert.deepEqual(qualityRewriteHints(check.warnings), []);
   }
 });
