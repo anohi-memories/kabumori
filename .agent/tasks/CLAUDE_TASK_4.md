@@ -4,7 +4,7 @@
 - owner: claude
 - slot: claude-4
 - status: review_required
-- next_owner: chatgpt
+- next_owner: codex
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: bounded corrective implementation / pre-send readiness parity / SECURITY DEFINER ACL / rollout fail-closed
