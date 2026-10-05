@@ -3,8 +3,8 @@
 - task_id: kabumori-pr87-editorial-three-points-review-20261006
 - owner: codex
 - slot: codex-1
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: high
 - recommended_model: Luna（高）
 - type: focused source review / editorial presentation / shared consumer consistency
