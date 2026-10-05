@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-pr76-fresh-main-integration-20261005
 - owner: claude
 - slot: claude-4
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（高）
 - type: integration-only / fresh-main merge / conflict resolution / regression verification
@@ -1492,3 +1492,70 @@ SECURITY DEFINER の理由: `authenticated` は `social_accounts` に UPDATE 権
 
 ### next recommendation
 K4でCodex **Sol（極高）** の独立再レビューを割り当て。重点: ロック順と待ち、SECURITY DEFINER関数のACL、`not_found` の一様性、送信前確認の対象範囲（かぶモリ従来経路を含めるか）、かぶモリ型アカウントのOFF可否、適用順。承認後に、操作者が preflight → migration単独適用 → read-back → x-test-post deploy → publish-setting deploy（verify_jwt ON）の順で実施。merge・適用・deployはClaudeの自己レビューだけでは行わない。
+
+
+## Report — x-social-mobile-pr76-fresh-main-integration-20261005 (2026-10-05)
+
+- task_id: x-social-mobile-pr76-fresh-main-integration-20261005
+- result: **PASS（統合のみ）**。PR [#76](https://github.com/anohi-memories/kabumori/pull/76) に最新mainを通常のmerge commitで取り込んだ。機能変更なし。未merge・未deploy。
+- model_used: Opus 5.5（TASK推奨は Sonnet5（高）。このセッションのモデルが Opus 5.5 のため）
+- old head: `fe1e846e59c69b591d29c6d21fc23c7b702d19cd`（開始時に PR #76 の head が一致することを確認。履歴に保持）
+- fresh main SHA merged: `d345f67402a782a303ce46c640f685271d76b681`
+- new exact PR head: `7f75c07a8c997b6a585e9c86dca01186eeea671f`（merge commit。親 = `fe1e846e` と `d345f674`。rebase・force-pushなし）
+- commit_hash: `7f75c07a`（merge commit 1つのみ）
+- changed_files（手で編集したもの）: `supabase/tests/migration_source_invariants_test.ts` の衝突解消のみ。main比較の PR 全体の変更ファイルは是正時と同じ22ファイル。
+- deploy: なし
+- worktree: 既存のG4専用worktree `.claude/worktrees/g4-x-admin-pr15` のみ使用（TASK指示どおり）。他slotのworktree・PR #81/#82 のファイルには触れていない。
+
+### conflict paths
+- `supabase/tests/migration_source_invariants_test.ts` のみ（TASKの想定どおり）。他のファイルは自動mergeで衝突なし。
+
+### exact conflict resolution
+`RESERVED` マップで、mainの行をすべてそのまま残し、PR #76 の予約1行をその後ろ（日付順）に置いた。mainとの差分はこの1行の追加だけ:
+
+```
+   "20261002090000": "mic_jgb_nikkei_observation_grace_stage0", // MIC State freshness Stage 0
++  "20261003090000": "social_mobile_publish_permission_boundary", // PR 76 corrective (source candidate)
+```
+
+### migration-version collision result
+- merge後の `supabase/migrations/` でversionの重複 0件。
+- open PR のmigrationと照合（`gh pr list` の全open PR）: PR #76 `20261003090000`、PR #81 `20261003120000_social_mobile_content_settings_hardening`、PR #82 `20261004090000_ai_lab_topic_claims`、PR #41 `20260927101423`／`20260927124300`、PR #3 `20260921115317`。**衝突なし**。
+- mainで増えたmigrationは `20261002090000_mic_jgb_nikkei_observation_grace_stage0.sql` の1本のみ。`social_accounts`／brand／membership／publish／refresh には触れていない（grepで確認）。
+- mainで変わった実行時コードのうち PR #76 の領域に関わるのは `_shared/brand/ai_lab_dev_diary_context.*`（文書と snapshot）だけ。`x-test-post` と `social-mobile-publish-setting` には main 側の変更なし。
+
+### tests（merge後のブランチで実施。すべてローカル・偽データ）
+1. migration source invariants: 10 passed / 0 failed
+2. publish-setting Edge（logic／http）＋ 3. migration契約 ＋ 4. `vault_account_auth_test.ts`: 型チェックあり 68 passed / 0 failed
+5. x-test-post ＋ `_shared` ＋ publish-setting 全体（`--no-check`）: 925 passed / 0 failed
+6. social-mobile アプリ: `npm test` 145 passed、domain 22 passed
+7. `tsc --noEmit`: PASS
+8. `expo lint`: PASS
+9. 変更した実行時・テストファイル11本の `deno check`・`deno lint`: PASS
+   - `x-test-post/index.ts` 全体の型エラーは既存のもの。fresh main（`d345f674` を scratch に展開）と merge後で、エラー内容・位置（8か所）とも**完全一致**。PR #76 による新規エラー 0。
+10. 使い捨て PostgreSQL 17（新Macで新規作成）: `social_mobile_publish_permission_run.sh`（`PUB_E2E=1`）→ APPLY / BEHAVIOR / RACE / E2E / CLEANUP すべてPASS。変異テスト `social_mobile_publish_permission_mutations.sh` → **30/30 検出**（TASK必須外の追加確認）
+11. `git diff --check`（main比較）: 問題なし
+12. 秘密情報スキャン（main比較の追加行）: 該当0件。スコープ: main比較の変更ファイルは是正時と同じ22ファイル。content-settings／AI Lab topic claims／相談／共通アカウント／`.agent/`／`.env` は含まれない。
+
+### compatibility issue
+なし。実装（`set_social_account_publish_enabled`、`assert_x_publish_permission_for_legacy_post`、ロック順、ACL、Edge挙動、送信前ガード、UIの確認固定）は一切変更していない。
+
+### push / read-back
+- push直前に PR head が `fe1e846e` のままであることを再確認してから、通常push（`fe1e846e..7f75c07a`）。force-pushなし。
+- read-back: ローカル HEAD = `origin/g4/social-mobile-publish-toggle-v1-20261002` = PR #76 `headRefOid` = `7f75c07a8c997b6a585e9c86dca01186eeea671f`。state OPEN、mergeable **MERGEABLE**（mergeStateStatus CLEAN）。
+- CI: push直後の時点で passing 1／failing 0／pending 5。完了は待っていない（K4で確認をお願いしたい）。
+- PRのタイトル・説明は変更していない。
+
+### production / safety
+- production mutation = **0**（migration適用・db push・Edge deploy・トグル操作・行変更・Auth/Vault/Cron変更なし）
+- production read = 0
+- real X operations = **0**
+- PR merge なし。テスト用PostgreSQLと一時DBは停止・削除済み。
+
+### remaining issues
+- 是正時の Report に書いた残リスク（適用順: migration → x-test-post deploy、かぶモリ型アカウントのOFF扱い、OFFとrefreshの競合、送信開始後のOFFは取り消せない、本番カタログ未確認など）はそのまま。今回の統合で増減なし。
+- Report記入時点で main は `5704de29` まで進んでいるが、増えた4コミットは `.agent/` の調整ファイルのみ（PR #76 のファイル・migrationへの影響なし）。
+- main がこの後さらに進むと、再び `RESERVED` マップで同種の衝突が起きうる（追記同士なので解消は機械的）。
+
+### next recommendation
+K4確認後、TASKどおり H1 で Codex **Sol（極高）** の独立再レビュー（対象 head は上記 new exact PR head）。merge・適用・deployは再レビュー承認後に操作者が実施。
