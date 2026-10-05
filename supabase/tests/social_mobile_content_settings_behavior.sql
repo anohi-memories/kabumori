@@ -300,10 +300,20 @@ begin
   perform t.ok(not exists (
     select 1 from pg_attribute a, aclexplode(a.attacl) acl
     where a.attrelid = 'public.social_mobile_content_settings'::regclass), 'no column privileges');
-  perform t.ok(has_function_privilege('authenticated', 'public.social_mobile_content_settings_valid_settings(jsonb)', 'EXECUTE'), 'authenticated may run validators');
-  perform t.ok(not has_function_privilege('anon', 'public.social_mobile_content_settings_valid_settings(jsonb)', 'EXECUTE'), 'anon may not');
-  perform t.ok(not has_function_privilege('service_role', 'public.social_mobile_content_settings_valid_persona(jsonb)', 'EXECUTE'), 'service_role may not');
-  perform t.ok(not has_function_privilege('authenticated', 'public.social_mobile_content_settings_version()', 'EXECUTE'), 'nobody calls the version function');
+  -- Effective EXECUTE, every function x every API role (and a role outside them).
+  perform t.ok(has_function_privilege(r, f::regprocedure, 'EXECUTE') = (r = 'authenticated' and f <> 'public.social_mobile_content_settings_version()'),
+               format('effective EXECUTE %s on %s', r, f))
+  from unnest(array['anon', 'authenticated', 'service_role', 'kb_smcs_stranger']) r,
+       unnest(array['public.social_mobile_content_settings_text_ok(jsonb, integer, boolean)',
+                    'public.social_mobile_content_settings_text_list_ok(jsonb, integer, integer)',
+                    'public.social_mobile_content_settings_valid_settings(jsonb)',
+                    'public.social_mobile_content_settings_valid_persona(jsonb)',
+                    'public.social_mobile_content_settings_version()']) f;
+  perform t.ok(not exists (
+    select 1 from pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) acl
+    where p.proname like 'social\_mobile\_content\_settings\_%' and acl.grantee = 0), 'PUBLIC executes nothing');
+  perform t.ok((select count(*) = 5 from pg_proc where proname like 'social\_mobile\_content\_settings\_%'), 'exactly five functions');
+  perform t.ok(to_regprocedure('public.social_mobile_content_settings_touch_updated_at()') is null, 'legacy touch function removed');
   perform t.ok((select relrowsecurity from pg_class where oid = 'public.social_mobile_content_settings'::regclass), 'RLS enabled');
 end;
 $$;
@@ -361,6 +371,34 @@ revoke execute on function public.social_mobile_content_settings_valid_settings(
 set local role authenticated;
 select t.as_user('00000000-0000-4000-8000-00000000000a');
 select t.rejects($q$update public.social_mobile_content_settings set settings = settings where brand_id = 'u_brand_a'$q$, '42501', 'validator EXECUTE is required by the CHECK');
+rollback;
+-- ...and so is EXECUTE on the helpers the validators call (nested calls are checked too).
+begin;
+revoke execute on function public.social_mobile_content_settings_text_list_ok(jsonb, integer, integer) from authenticated;
+set local role authenticated;
+select t.as_user('00000000-0000-4000-8000-00000000000a');
+select t.rejects($q$update public.social_mobile_content_settings set settings = settings where brand_id = 'u_brand_a'$q$, '42501', 'nested helper EXECUTE is required');
+rollback;
+begin;
+revoke execute on function public.social_mobile_content_settings_text_ok(jsonb, integer, boolean) from authenticated;
+set local role authenticated;
+select t.as_user('00000000-0000-4000-8000-00000000000a');
+select t.rejects($q$update public.social_mobile_content_settings set persona_profile = '{"ctaStyle": "x"}' where brand_id = 'u_brand_a'$q$, '42501', 'text helper EXECUTE is required');
+rollback;
+
+-- Finite versions (R3): caller values are overridden with finite ones, and even with the version
+-- trigger bypassed an infinite timestamp cannot be stored.
+begin;
+set local role authenticated;
+select t.as_user('00000000-0000-4000-8000-00000000000a');
+update public.social_mobile_content_settings set updated_at = 'infinity', created_at = '-infinity' where brand_id = 'u_brand_a';
+select t.ok((select isfinite(updated_at) and isfinite(created_at) from public.social_mobile_content_settings where brand_id = 'u_brand_a'), 'caller infinity overridden on update');
+rollback;
+begin;
+alter table public.social_mobile_content_settings disable trigger social_mobile_content_settings_version;
+select t.rejects($q$update public.social_mobile_content_settings set updated_at = 'infinity' where brand_id = 'u_brand_a'$q$, '23514', 'infinite updated_at refused by CHECK');
+select t.rejects($q$update public.social_mobile_content_settings set created_at = '-infinity' where brand_id = 'u_brand_a'$q$, '23514', 'infinite created_at refused by CHECK');
+select t.ok(t.affected($q$update public.social_mobile_content_settings set updated_at = '2999-06-01' where brand_id = 'u_brand_a'$q$) = 1, 'finite far-future version is valid');
 rollback;
 
 -- ===========================================================================================

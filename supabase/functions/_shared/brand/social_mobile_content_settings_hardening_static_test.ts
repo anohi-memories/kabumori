@@ -50,6 +50,35 @@ test("privileges: only this table/functions, nothing for anon/service_role, no d
   assert.match(sql, /authenticated=INSERT,authenticated=SELECT,authenticated=UPDATE/u);
 });
 
+test("R1: the primary key must be an immediate btree ON CONFLICT arbiter", async () => {
+  const sql = await read(hardeningPath);
+  assert.match(sql, /not con\.condeferrable and not con\.condeferred and con\.convalidated/u);
+  assert.match(sql, /i\.indisprimary and i\.indisunique and i\.indimmediate/u);
+  assert.match(sql, /am\.amname = 'btree'/u);
+});
+
+test("R2: same-prefix functions are exact, owned by the table owner, and have exact EXECUTE", async () => {
+  const sql = await read(hardeningPath);
+  for (const part of ["unexpected function or overload", "unexpected function owner", "unexpected function grantee", "function privileges", "effective function privileges"]) {
+    assert.ok(sql.includes(part), part);
+  }
+  assert.match(sql, /social_mobile_content_settings_valid_settings:authenticated'/u);
+});
+
+test("R3: versions are finite (existing rows refused, new ones constrained)", async () => {
+  const sql = await read(hardeningPath);
+  assert.match(sql, /SOCIAL_MOBILE_CONTENT_SETTINGS_HARDENING_EXISTING_ROWS_NONFINITE/u);
+  assert.match(sql, /check \(\(isfinite\(created_at\) and isfinite\(updated_at\)\) is true\)/u);
+  assert.ok(sql.indexOf("EXISTING_ROWS_NONFINITE") < sql.indexOf("$guard$;"), "refused before any change");
+});
+
+test("the rollout plan applies both files and their history in one outer transaction", async () => {
+  const plan = await read("supabase/tests/social_mobile_content_settings_rollout.md");
+  assert.match(plan, /--single-transaction -v ON_ERROR_STOP=1/u);
+  assert.match(plan, /20260922045046_social_mobile_content_settings_candidate\.sql[\s\S]*20261003120000_social_mobile_content_settings_hardening\.sql[\s\S]*schema_migrations/u);
+  assert.match(plan, /NOT executed/u);
+});
+
 test("version is server-owned and strictly increasing", async () => {
   const sql = await read(hardeningPath);
   assert.match(sql, /new\.updated_at := greatest\(clock_timestamp\(\), old\.updated_at \+ interval '1 microsecond'\)/u);

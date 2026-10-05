@@ -6,9 +6,16 @@
 --   F2  ACL: table privileges normalised to SELECT/INSERT/UPDATE for authenticated only.
 --   F3  version: updated_at is server-owned and strictly increases on every UPDATE.
 --   F4  drift: the existing relation is verified first; unknown drift aborts the migration.
+-- and the three residuals of the 2026-10-03 rereview:
+--   R1  the primary key must be immediate (not deferrable) and usable as the ON CONFLICT arbiter.
+--   R2  same-prefix functions: exact signatures, table owner, known grantees only; exact EXECUTE after.
+--   R3  versions must be finite: existing infinite timestamps are refused, new ones are impossible.
 --
 -- Run inside one transaction (the migration tool's, or psql --single-transaction): every check
 -- below happens before the first change, and the final assertions run after the last one.
+-- The tool's transaction covers ONE file. To never expose the weak candidate on its own, apply the
+-- candidate and this file together in one outer transaction (see
+-- supabase/tests/social_mobile_content_settings_rollout.md).
 
 -- ---------------------------------------------------------------------------------------------
 -- 0. Drift guard. Only two states are accepted:
@@ -57,12 +64,28 @@ begin
     raise exception 'SOCIAL_MOBILE_CONTENT_SETTINGS_HARDENING_DRIFT: unexpected columns';
   end if;
 
-  -- Primary key: exactly one, on brand_id.
+  -- Primary key: exactly one, on brand_id, immediate (not deferrable), validated, backed by a plain
+  -- valid btree unique index on that one column. The Settings writer upserts with
+  -- ON CONFLICT (brand_id), and a deferrable constraint cannot be an ON CONFLICT arbiter (55000).
   if (select count(*) from pg_constraint where conrelid = v_rel and contype = 'p') <> 1
      or not exists (
-       select 1 from pg_constraint
-       where conrelid = v_rel and contype = 'p'
-         and conkey = array[(select attnum from pg_attribute where attrelid = v_rel and attname = 'brand_id')]::int2[]
+       select 1
+       from pg_constraint con
+       join pg_index i on i.indexrelid = con.conindid
+       join pg_class ic on ic.oid = i.indexrelid
+       join pg_am am on am.oid = ic.relam
+       join pg_attribute a on a.attrelid = v_rel and a.attname = 'brand_id'
+       where con.conrelid = v_rel and con.contype = 'p'
+         and con.conkey = array[a.attnum]::int2[]
+         and not con.condeferrable and not con.condeferred and con.convalidated
+         and i.indrelid = v_rel and i.indisprimary and i.indisunique and i.indimmediate
+         and i.indisvalid and i.indisready and i.indislive
+         and i.indnatts = 1 and i.indnkeyatts = 1 and i.indkey[0] = a.attnum
+         and i.indpred is null and i.indexprs is null
+         and i.indcollation[0] = a.attcollation
+         and am.amname = 'btree'
+         and i.indclass[0] = (select opc.oid from pg_opclass opc
+                              where opc.opcmethod = am.oid and opc.opcintype = a.atttypid and opc.opcdefault)
      ) then
     raise exception 'SOCIAL_MOBILE_CONTENT_SETTINGS_HARDENING_DRIFT: primary key';
   end if;
@@ -93,7 +116,8 @@ begin
       'social_mobile_content_setting_persona_last_analyzed_count_check',
       'social_mobile_content_settings_analyzed_count_check',
       'social_mobile_content_settings_settings_contract',
-      'social_mobile_content_settings_persona_contract'));
+      'social_mobile_content_settings_persona_contract',
+      'social_mobile_content_settings_finite_versions'));
   if v_unknown is not null then
     raise exception 'SOCIAL_MOBILE_CONTENT_SETTINGS_HARDENING_DRIFT: unknown constraints';
   end if;
@@ -146,6 +170,55 @@ begin
         select oid from pg_roles where rolname in ('anon', 'authenticated', 'service_role'))
   ) then
     raise exception 'SOCIAL_MOBILE_CONTENT_SETTINGS_HARDENING_DRIFT: unexpected column grantee';
+  end if;
+
+  -- Functions with this table's name prefix: only the exact known signatures (no overloads, no other
+  -- names), owned by the table owner (CREATE OR REPLACE keeps the owner and the ACL), with grantees
+  -- limited to roles whose privileges are normalised below. Anything else is someone else's object.
+  if exists (
+    select 1 from pg_proc p
+    where p.pronamespace = 'public'::regnamespace
+      and p.proname like 'social\_mobile\_content\_settings\_%'
+      and p.oid not in (
+        select f from unnest(array[
+          to_regprocedure('public.social_mobile_content_settings_touch_updated_at()'),
+          to_regprocedure('public.social_mobile_content_settings_text_ok(jsonb, integer, boolean)'),
+          to_regprocedure('public.social_mobile_content_settings_text_list_ok(jsonb, integer, integer)'),
+          to_regprocedure('public.social_mobile_content_settings_valid_settings(jsonb)'),
+          to_regprocedure('public.social_mobile_content_settings_valid_persona(jsonb)'),
+          to_regprocedure('public.social_mobile_content_settings_version()')]::oid[]) f
+        where f is not null)
+  ) then
+    raise exception 'SOCIAL_MOBILE_CONTENT_SETTINGS_HARDENING_DRIFT: unexpected function or overload';
+  end if;
+  if exists (
+    select 1 from pg_proc p
+    where p.pronamespace = 'public'::regnamespace
+      and p.proname like 'social\_mobile\_content\_settings\_%'
+      and (p.proowner <> v_owner or p.prokind <> 'f')
+  ) then
+    raise exception 'SOCIAL_MOBILE_CONTENT_SETTINGS_HARDENING_DRIFT: unexpected function owner';
+  end if;
+  if exists (
+    select 1
+    from pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) acl
+    where p.pronamespace = 'public'::regnamespace
+      and p.proname like 'social\_mobile\_content\_settings\_%'
+      and acl.grantee <> p.proowner
+      and acl.grantee <> 0
+      and acl.grantee not in (
+        select oid from pg_roles where rolname in ('anon', 'authenticated', 'service_role'))
+  ) then
+    raise exception 'SOCIAL_MOBILE_CONTENT_SETTINGS_HARDENING_DRIFT: unexpected function grantee';
+  end if;
+
+  -- Existing versions must be finite. updated_at is a CAS token: infinity cannot advance
+  -- (infinity + 1us = infinity), so its token would stay valid forever. Refused, never rewritten.
+  if exists (
+    select 1 from public.social_mobile_content_settings s
+    where not isfinite(s.updated_at) or not isfinite(s.created_at)
+  ) then
+    raise exception 'SOCIAL_MOBILE_CONTENT_SETTINGS_HARDENING_EXISTING_ROWS_NONFINITE';
   end if;
 end;
 $guard$;
@@ -323,7 +396,8 @@ alter table public.social_mobile_content_settings
   drop constraint if exists social_mobile_content_setting_persona_last_analyzed_count_check,
   drop constraint if exists social_mobile_content_settings_analyzed_count_check,
   drop constraint if exists social_mobile_content_settings_settings_contract,
-  drop constraint if exists social_mobile_content_settings_persona_contract;
+  drop constraint if exists social_mobile_content_settings_persona_contract,
+  drop constraint if exists social_mobile_content_settings_finite_versions;
 
 alter table public.social_mobile_content_settings
   add constraint social_mobile_content_settings_settings_contract
@@ -333,7 +407,10 @@ alter table public.social_mobile_content_settings
   add constraint social_mobile_content_settings_persona_provenance_check
     check ((persona_provenance in ('conversation', 'past_post_analysis', 'manual')) is true),
   add constraint social_mobile_content_settings_analyzed_count_check
-    check (persona_last_analyzed_count is null or (persona_last_analyzed_count between 0 and 1000) is true);
+    check (persona_last_analyzed_count is null or (persona_last_analyzed_count between 0 and 1000) is true),
+  -- Finite versions even if the version trigger were ever bypassed (it always writes finite values).
+  add constraint social_mobile_content_settings_finite_versions
+    check ((isfinite(created_at) and isfinite(updated_at)) is true);
 
 -- Defaults re-stated (an enumerated, deliberate repair): the canonical first-run row.
 alter table public.social_mobile_content_settings
@@ -494,6 +571,51 @@ begin
       and (p.prosecdef or p.proconfig is distinct from array['search_path=pg_catalog'])
   ) then
     raise exception 'SOCIAL_MOBILE_CONTENT_SETTINGS_HARDENING_POSTCONDITION: function settings';
+  end if;
+
+  -- Exactly these five functions remain (by signature), all owned by the table owner.
+  if (select count(*) from pg_proc p
+      where p.pronamespace = 'public'::regnamespace and p.proname like 'social\_mobile\_content\_settings\_%') <> 5
+     or (select count(*) from pg_proc p
+         where p.proowner = (select relowner from pg_class where oid = v_rel)
+           and p.oid in (
+             to_regprocedure('public.social_mobile_content_settings_text_ok(jsonb, integer, boolean)'),
+             to_regprocedure('public.social_mobile_content_settings_text_list_ok(jsonb, integer, integer)'),
+             to_regprocedure('public.social_mobile_content_settings_valid_settings(jsonb)'),
+             to_regprocedure('public.social_mobile_content_settings_valid_persona(jsonb)'),
+             to_regprocedure('public.social_mobile_content_settings_version()'))) <> 5 then
+    raise exception 'SOCIAL_MOBILE_CONTENT_SETTINGS_HARDENING_POSTCONDITION: functions';
+  end if;
+
+  -- Exact EXECUTE grantees (besides the owner): authenticated on the four validators that a CHECK
+  -- runs under the writer's privileges, nobody on the version trigger function. Then the effective
+  -- view: PUBLIC, anon and service_role cannot execute any of them.
+  select string_agg(format('%s:%s', p.proname, coalesce(r.rolname, 'PUBLIC')), ','
+           order by p.proname collate "C", coalesce(r.rolname, 'PUBLIC') collate "C")
+    into v_privileges
+  from pg_proc p
+  cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) acl
+  left join pg_roles r on r.oid = acl.grantee
+  where p.pronamespace = 'public'::regnamespace and p.proname like 'social\_mobile\_content\_settings\_%'
+    and acl.grantee <> p.proowner;
+  if v_privileges is distinct from
+       'social_mobile_content_settings_text_list_ok:authenticated,'
+       'social_mobile_content_settings_text_ok:authenticated,'
+       'social_mobile_content_settings_valid_persona:authenticated,'
+       'social_mobile_content_settings_valid_settings:authenticated' then
+    raise exception 'SOCIAL_MOBILE_CONTENT_SETTINGS_HARDENING_POSTCONDITION: function privileges %', v_privileges;
+  end if;
+  if exists (
+    select 1 from pg_proc p, pg_roles r
+    where p.pronamespace = 'public'::regnamespace and p.proname like 'social\_mobile\_content\_settings\_%'
+      and r.rolname in ('anon', 'service_role')
+      and has_function_privilege(r.oid, p.oid, 'EXECUTE')
+  ) or exists (
+    select 1 from pg_proc p
+    where p.pronamespace = 'public'::regnamespace and p.proname = 'social_mobile_content_settings_version'
+      and has_function_privilege('authenticated', p.oid, 'EXECUTE')
+  ) then
+    raise exception 'SOCIAL_MOBILE_CONTENT_SETTINGS_HARDENING_POSTCONDITION: effective function privileges';
   end if;
 end;
 $post$;

@@ -76,6 +76,32 @@ fresh="$(new_db fresh)"
 q "$fresh" -1 -f "$candidate" -f "$hardening" >/dev/null || fail "candidate+hardening in one transaction"
 echo "SMCS_SINGLE_TRANSACTION_APPLY_PASS"
 
+# --- Whole-chain rollout rehearsal (see social_mobile_content_settings_rollout.md) --------------
+# The planned production apply: both files plus the migration-history rows in ONE outer transaction.
+history_table="create schema supabase_migrations; create table supabase_migrations.schema_migrations (version text primary key, statements text[], name text)"
+history_rows="insert into supabase_migrations.schema_migrations (version, name) values ('20260922045046', 'social_mobile_content_settings_candidate'), ('20261003120000', 'social_mobile_content_settings_hardening')"
+chain_ok="$(new_db chain_ok)"
+q "$chain_ok" -c "$history_table" >/dev/null
+q "$chain_ok" -1 -f "$candidate" -f "$hardening" -c "$history_rows" >/dev/null || fail "atomic chain apply"
+[[ "$(q "$chain_ok" -c "select string_agg(version, ',' order by version) from supabase_migrations.schema_migrations")" == 20260922045046,20261003120000 ]] || fail "atomic chain history"
+[[ "$(q "$chain_ok" -c "select count(*) from pg_constraint where conname = 'social_mobile_content_settings_settings_contract'")" == 1 ]] || fail "atomic chain hardened"
+# A failure anywhere in the second file leaves NOTHING: no weak table, no history rows.
+abort="$tmp/hardening_then_abort.sql"
+cat "$hardening" > "$abort"
+printf '\ndo $$ begin raise exception %s; end $$;\n' "'FORCED_FAILURE_AFTER_HARDENING'" >> "$abort"
+chain_fail="$(new_db chain_fail)"
+q "$chain_fail" -c "$history_table" >/dev/null
+if q "$chain_fail" -1 -f "$candidate" -f "$abort" -c "$history_rows" > "$tmp/chain_fail" 2>&1; then fail "forced failure did not fail"; fi
+grep -q FORCED_FAILURE_AFTER_HARDENING "$tmp/chain_fail" || fail "chain failure reason: $(cat "$tmp/chain_fail")"
+[[ "$(q "$chain_fail" -c "select to_regclass('public.social_mobile_content_settings') is null")" == t ]] || fail "weak candidate left behind"
+[[ "$(q "$chain_fail" -c "select count(*) from supabase_migrations.schema_migrations")" == 0 ]] || fail "history left behind"
+# Contrast: per-file transactions (what migration-up does) commit the weak candidate first.
+per_file="$(new_db per_file)"
+q "$per_file" -1 -f "$candidate" >/dev/null
+q "$per_file" -1 -f "$abort" >/dev/null 2>&1 || true
+[[ "$(q "$per_file" -c "select count(*) from pg_constraint where conname = 'social_mobile_content_settings_shape'")" == 1 ]] || fail "per-file contrast"
+echo "SMCS_ATOMIC_CHAIN_REHEARSAL_PASS (per-file apply would leave the weak candidate; outer transaction leaves nothing)"
+
 # --- Behaviour (contract, version, privileges, RLS, lifecycle) ---------------------------------
 out="$(q "$main" -f "$behavior" 2>&1)" || { echo "$out" >&2; fail "behavior"; }
 grep -q SOCIAL_MOBILE_CONTENT_SETTINGS_BEHAVIOR_PASS <<<"$out" || fail "behavior marker: $out"
@@ -131,11 +157,16 @@ grep -q SOCIAL_MOBILE_CONTENT_SETTINGS_HARDENING_EXISTING_ROWS_INVALID "$tmp/bad
 echo "SMCS_EXISTING_INVALID_ROWS_REFUSED_PASS"
 
 # --- Drift: unknown drift is refused; only the enumerated CHECK replacement is repaired --------
-# drift_refused <name> <sql applied after the candidate>
+# drift_refused <name> <sql applied after the candidate> [super]
+# With "super", the drift SQL runs as the local superuser (e.g. to give an object another owner).
 drift_refused() {
   local db; db="$(new_db "d_$1")"
   q "$db" -f "$candidate" >/dev/null
-  q "$db" -c "$2" >/dev/null
+  if [[ "${3:-}" == super ]]; then
+    "${as_super[@]}" -d "$db" -c "$2" >/dev/null
+  else
+    q "$db" -c "$2" >/dev/null
+  fi
   if q "$db" -1 -f "$hardening" > "$tmp/$1" 2>&1; then fail "drift accepted: $1"; fi
   grep -q SOCIAL_MOBILE_CONTENT_SETTINGS_HARDENING_DRIFT "$tmp/$1" || fail "drift $1 wrong error: $(cat "$tmp/$1")"
   # Nothing was changed: the candidate's shape CHECK and trigger are still there.
@@ -163,6 +194,50 @@ drift_refused grantee_unknown "grant select on $t_ to kb_smcs_stranger"
 drift_refused column_grantee_unknown "grant update (settings) on $t_ to kb_smcs_stranger"
 drift_refused table_missing "drop table $t_"
 drift_refused view_impostor "drop table $t_; create view $t_ as select 'x'::text as brand_id"
+# R1: a primary key that cannot be an ON CONFLICT arbiter, or is on other columns.
+pk="social_mobile_content_settings_pkey"
+drift_refused pk_deferrable "alter table $t_ drop constraint $pk; alter table $t_ add constraint $pk primary key (brand_id) deferrable initially immediate"
+drift_refused pk_initially_deferred "alter table $t_ drop constraint $pk; alter table $t_ add constraint $pk primary key (brand_id) deferrable initially deferred"
+drift_refused pk_composite "alter table $t_ drop constraint $pk; alter table $t_ add constraint $pk primary key (brand_id, created_at)"
+drift_refused pk_missing "alter table $t_ drop constraint $pk"
+# R2: same-prefix functions that are not exactly ours.
+fn="public.social_mobile_content_settings"
+# Pre-created helpers use the real parameter names, so CREATE OR REPLACE would succeed and keep the
+# unexpected owner/ACL if the guard did not stop it.
+drift_refused helper_unknown_grant "create function ${fn}_valid_persona(p_persona jsonb) returns boolean language sql immutable as 'select true'; grant execute on function ${fn}_valid_persona(jsonb) to kb_smcs_stranger"
+drift_refused touch_unknown_grant "grant execute on function ${fn}_touch_updated_at() to kb_smcs_stranger"
+drift_refused helper_overload "create function ${fn}_text_ok(p text) returns boolean language sql immutable as 'select true'"
+drift_refused helper_unknown_name "create function ${fn}_extra() returns boolean language sql immutable as 'select true'"
+drift_refused helper_procedure "create procedure ${fn}_valid_settings(p_settings jsonb) language sql as 'select 1'"
+drift_refused helper_owner "create function ${fn}_valid_settings(p_settings jsonb) returns boolean language sql immutable as 'select true'; alter function ${fn}_valid_settings(jsonb) owner to kb_smcs_stranger" super
+# R3: existing non-finite versions are refused, not rewritten.
+drift_refused_nonfinite() {
+  local db; db="$(new_db "n_$1")"
+  q "$db" -f "$candidate" >/dev/null
+  q "$db" -c "insert into $t_ (brand_id, created_at, updated_at) values ('u_brand_a', $2, $3)" >/dev/null
+  local row; row="$(q "$db" -c "select row_to_json(s)::text from $t_ s")"
+  if q "$db" -1 -f "$hardening" > "$tmp/n_$1" 2>&1; then fail "non-finite accepted: $1"; fi
+  grep -q SOCIAL_MOBILE_CONTENT_SETTINGS_HARDENING_EXISTING_ROWS_NONFINITE "$tmp/n_$1" || fail "non-finite $1 wrong error: $(cat "$tmp/n_$1")"
+  [[ "$(q "$db" -c "select count(*) from pg_proc where proname like 'social\_mobile\_content\_settings\_valid\_%'")" == 0 ]] || fail "non-finite $1 partially applied"
+  [[ "$(q "$db" -c "select row_to_json(s)::text from $t_ s")" == "$row" ]] || fail "non-finite $1 row rewritten"
+  echo "SMCS_NONFINITE_REFUSED_PASS $1"
+}
+drift_refused_nonfinite updated_infinity "now()" "'infinity'"
+drift_refused_nonfinite updated_minus_infinity "now()" "'-infinity'"
+drift_refused_nonfinite created_infinity "'infinity'" "now()"
+
+# Valid historical rows (including a finite far-future version) survive hardening byte-identical,
+# and the next update still advances that version.
+hist="$(new_db hist)"
+q "$hist" -f "$candidate" >/dev/null
+q "$hist" -c "insert into $t_ (brand_id, settings, persona_profile, persona_provenance, persona_confirmed, created_at, updated_at)
+  values ('u_brand_a', jsonb_set(t.default_settings(), '{themes}', '[\"個人開発\", \"AI活用\"]'), '{\"ctaStyle\": \"控えめ\"}', 'conversation', true, '2026-01-01', '2999-01-01')" >/dev/null
+before="$(q "$hist" -c "select row_to_json(s)::text from $t_ s")"
+q "$hist" -1 -f "$hardening" >/dev/null || fail "hardening with a valid historical row"
+[[ "$(q "$hist" -c "select row_to_json(s)::text from $t_ s")" == "$before" ]] || fail "historical row changed"
+q "$hist" -c "update $t_ set settings = settings" >/dev/null
+[[ "$(q "$hist" -c "select updated_at = '2999-01-01'::timestamptz + interval '1 microsecond' from $t_")" == t ]] || fail "far-future version did not advance"
+echo "SMCS_VALID_HISTORICAL_ROW_UNCHANGED_PASS"
 
 # Drift that appears after hardening is refused on re-run as well.
 post="$(new_db d_post)"
@@ -172,6 +247,14 @@ q "$post" -c "alter table $t_ drop constraint $fk" >/dev/null
 if q "$post" -1 -f "$hardening" > "$tmp/post" 2>&1; then fail "post-hardening drift accepted"; fi
 grep -q SOCIAL_MOBILE_CONTENT_SETTINGS_HARDENING_DRIFT "$tmp/post" || fail "post drift error: $(cat "$tmp/post")"
 echo "SMCS_DRIFT_REFUSED_PASS after_hardening"
+# A helper EXECUTE grant added after hardening is refused on re-run as well.
+postfn="$(new_db d_postfn)"
+q "$postfn" -f "$candidate" >/dev/null
+q "$postfn" -1 -f "$hardening" >/dev/null
+q "$postfn" -c "grant execute on function ${fn}_valid_settings(jsonb) to kb_smcs_stranger" >/dev/null
+if q "$postfn" -1 -f "$hardening" > "$tmp/postfn" 2>&1; then fail "post-hardening function grant accepted"; fi
+grep -q 'unexpected function grantee' "$tmp/postfn" || fail "post function drift error: $(cat "$tmp/postfn")"
+echo "SMCS_DRIFT_REFUSED_PASS after_hardening_function_grant"
 
 # Enumerated repair: a weakened or missing candidate CHECK is replaced by the hardened contract.
 # drift_repaired <name> <sql>
