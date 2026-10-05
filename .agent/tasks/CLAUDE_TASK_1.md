@@ -1,5 +1,450 @@
 # Claude Task 1 — CURRENT TASK
 
+- task_id: kabumori-topic-detail-visual-polish-20261005
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（高）
+- purpose: ユーザーがG1へ直接渡す「かぶモリ学習ノート / PERって何？」のUI見本画像を正本ベースに、現在のtopic detail機能・50トピック本文・fetch安全性を変えず、詳細画面の見た目だけを最終仕上げする。
+
+## Allocation snapshot
+
+- allocated_at: 2026-10-05 JST
+- fresh main SHA at allocation: `d8a6fa7661b63a8e3c929f77232385369ebf3e94`
+- previous G1 `kabumori-topic-detail-learning-v2-20261003`: Final K1 PASS / PR #83 merged / done
+- all current open PRs (#82/#81/#78/#76/#41/#33/#11/#10/#3) were checked and have **0 overlap** with the primary topic-detail files/assets listed below
+- G2 is separate report-observation work; G3/G4/H1/H2 are separate X/social/backend workstreams
+- this is UI-only visual polish; no backend, DB, RPC, API, AI, Auth, Edge, production or EAS work
+
+## Critical reference-image rule
+
+The user will send G1 a visual reference image showing the desired direction:
+- top back control
+- `かぶモリ学習ノート`
+- pale-green beginner Hero
+- `初心者向け | 指標`
+- large `PERって何？`
+- short summary inside the Hero
+- soft book / sprout / pencil / chart illustration on the Hero right side
+- numbered learning sections
+- a visually distinct `具体例` card
+- a visually distinct final `覚えておくポイント` block
+
+Treat that user-provided image as the **visual direction / design reference**.
+
+Do NOT:
+- embed the screenshot itself in the app
+- bake text into an image
+- copy screenshot pixels as a fixed UI
+- replace native text with image text
+- add a new image-generation workflow
+
+All copy remains native, dynamic, accessible UI.
+
+If the reference image is not actually visible in the current Claude session, **STOP and ask the user to resend it**. Do not invent a different design.
+
+## Product direction
+
+The reference image is preferred over the earlier plain detail screen.
+
+Target feel:
+- recognizably Kabumori
+- warm ivory / off-white page
+- calm Japanese learning-app feel
+- soft level-specific tint
+- generous whitespace
+- strong but not childish hierarchy
+- polished, production-quality native app
+- not a broker terminal
+- not a finance-news article
+- not a generic web blog
+- not a card wall
+
+The Home topic card remains the short entry point.
+The detail page becomes the polished learning notebook.
+
+## Preserve current product behavior — mandatory
+
+Current merged v2 behavior is accepted and should stay intact:
+- all 50 seeded topics
+- five learning roles
+  - basics
+  - why
+  - example
+  - market
+  - takeaway
+- beginner / intermediate / advanced level semantics
+- advanced market heading may remain `実践ではどう見る？`
+- current curated text content
+- hypothetical-number labeling
+- evergreen/no-current-market safety
+- unknown-title truthful fallback
+- exact `id / level / jstDate` params
+- deterministic `fetchDailyTopic(level, jstDate)`
+- id mismatch fail-closed
+- loading / error / mismatch states
+- Home -> detail
+- history -> detail
+- BackButton behavior
+
+This task is **not** a content rewrite.
+
+Do not edit the 50-topic catalog text unless a tiny presentation-only compatibility change is absolutely necessary and documented.
+
+## Desired screen composition
+
+### 1. Header / identity
+
+Reference direction:
+- existing BackButton at the top
+- underneath, a small brand-learning label:
+  - **かぶモリ学習ノート**
+- remove the old generic `TODAY'S TOPIC` eyebrow from the normal detail layout
+
+This also fixes the prior visual mismatch where a past topic still looked like "today's" content.
+
+If an existing suitable sprout/leaf icon or already-installed icon set can be reused safely, a tiny icon may accompany the label.
+Do not add a new dependency only for this icon.
+
+### 2. Level-aware Hero
+
+Create a polished Hero block under the learning-note label.
+
+Hero contains native/dynamic:
+- level badge:
+  - 初心者向け
+  - 中級者向け
+  - 上級者向け
+- category
+- topic title
+- short fetched `topic.body` summary
+
+The current separate intro card may be visually integrated into the Hero so the summary is not duplicated.
+
+Hero level system:
+- beginner: pale green / mint
+- intermediate: pale blue
+- advanced: pale lavender
+
+Use the reference image as the composition guide:
+- text-dominant left side
+- subtle illustration cluster on the right
+- large readable title
+- summary below title
+- rounded corners
+- soft border / very subtle shadow only if it improves hierarchy
+
+### 3. Existing canonical topic artwork
+
+Prefer reusing the existing approved canonical level artwork if it fits the reference safely:
+
+- `assets/images/home/topic_background_beginner.webp`
+- `assets/images/home/topic_background_intermediate.webp`
+- `assets/images/home/topic_background_advanced.webp`
+
+These already represent:
+- beginner: book + sprout/basic learning
+- intermediate: analysis/magnifier/young plant
+- advanced: multi-indicator/flower
+
+If reused:
+- use only `topic.level` for mapping
+- never stretch
+- do not materially crop important artwork
+- keep text readable at 375pt and 402pt
+- it is acceptable to soften/fade the artwork with a native overlay so long titles stay readable
+- do not edit/re-encode/regenerate the canonical assets
+
+If the canonical artwork cannot fit this Hero cleanly without distortion/crop/readability problems, use a simpler native-tint Hero and report why. Do not create new art.
+
+### 4. Main learning sections
+
+Do **not** turn every section into a separate card.
+
+Use the reference-image rhythm:
+- normal white/ivory page
+- generous vertical spacing
+- clear heading/body hierarchy
+- small level-colored number circles for the normal learning steps
+
+Preferred numbering:
+- `1 まずこれだけ`
+- `2 なぜ大事？`
+- `3 株価・相場とどう関係する？`
+  - advanced may show `3 実践ではどう見る？`
+
+The `具体例` and `覚えておくポイント` blocks remain special and do not need a numbered circle.
+
+Keep body copy easy to scan:
+- about 15–16pt native text
+- comfortable line-height
+- dark ink, not pure black
+- enough width/spacing for Japanese
+- no unnecessary separators
+
+### 5. 具体例 block
+
+Make the example easy to recognize.
+
+Reference direction:
+- pale level tint
+- ~16–18px corner radius
+- subtle outline
+- clear `具体例` heading
+- one small existing icon is allowed, e.g. bulb/note, without new dependency
+- hypothetical numbers can have subtle emphasis if implementable without parsing fragile free text
+
+Do NOT require custom per-topic diagrams/formula images.
+The small formula-note illustration in the reference is optional inspiration only.
+
+Do not add brittle text parsers merely to bold numbers.
+
+### 6. 株価・相場との関係
+
+Keep this as a normal learning section rather than another big card.
+
+A key caution sentence may be highlighted with:
+- a pale inset band, or
+- a small left accent bar
+
+only when it can be derived from the existing section presentation without inventing extra text.
+
+Do not fabricate a separate "important sentence" per topic.
+
+### 7. 覚えておくポイント
+
+Final takeaway should feel like the end of a lesson.
+
+Reference direction:
+- pale level tint
+- strong but calm left accent line
+- clear heading `覚えておくポイント`
+- current takeaway body
+- optional tiny existing sprout/leaf icon
+
+This should be visually easy to find when scrolling.
+
+## Cross-level visual system
+
+The user approved the beginner reference, but implementation must work across all levels.
+
+### Beginner
+- pale green
+- gentle/basic-learning feel
+- book/sprout motif where existing art allows
+
+### Intermediate
+- pale blue
+- more analytical feel
+- magnifier/data motif where existing art allows
+
+### Advanced
+- pale lavender
+- more mature/practical feel
+- multi-indicator/flower motif where existing art allows
+
+Do not make three unrelated screens.
+They must feel like one system with level-specific accents.
+
+## Layout / geometry guidance
+
+At 375pt and 402pt widths:
+- no horizontal clipping
+- Hero title may wrap naturally; design for long 2–3 line titles
+- illustration must never cover title/summary
+- badge/category should wrap safely if necessary
+- body should not feel cramped
+- content should not become dramatically longer only because of decoration
+- keep bottom safe-area spacing
+- keep BackButton comfortably tappable
+
+Use the reference image's density as a guide:
+- polished but airy
+- not oversized
+- not excessive blank space
+- about one clear visual rhythm throughout the page
+
+## Primary implementation scope
+
+Primary:
+- `src/app/topic-detail.tsx`
+- `tests/app/topic-detail-screen_test.ts`
+
+Allowed if genuinely needed:
+- one small topic-detail-specific token/presentation helper
+- existing Home/topic tokens if reuse is clearly appropriate
+- focused final screenshots under `docs/ui-review/`
+
+Avoid changing:
+- `src/lib/topic-detail-catalog.ts`
+- `src/lib/daily-topic.ts`
+- `src/lib/home-topic.ts`
+- `src/components/home/home-topic-feature.tsx`
+
+unless a tiny compatibility change is proven necessary.
+
+## Explicit non-scope
+
+Do NOT change:
+- any of the 50 learning texts for editorial reasons
+- Home topic card behavior/content
+- topic selection logic
+- AsyncStorage level preference
+- DB/schema/migrations
+- RPC
+- RLS/Auth
+- Edge Functions
+- API/Web Search
+- AI/LLM
+- report Hero
+- portfolio
+- news UI
+- X/social-mobile
+- common-account
+- production settings
+- native plugins/config/signing
+
+Production mutation: **0**.
+
+## Worktree / Mac safety — mandatory
+
+This is a **new task after the Mac migration**.
+
+Before work:
+1. read `PROJECT_RULES.md`
+2. read `.agent/ORCHESTRATION.md`
+3. read `.agent/CURRENT_STATE.md`
+4. read this TASK
+5. use clean base **`/Users/yuya/Developer/kabumori-fresh`**
+6. fresh `origin/main`
+7. inspect open PRs / active slot scopes
+8. run `git worktree list`
+9. create/use an independent G1 worktree/checkout from fresh main
+
+Recommended branch:
+`claude/g1-topic-detail-visual-polish-20261005`
+
+Do NOT use old `/Users/yuya/Developer/kabumori` as the new base.
+Do NOT delete/rename/prune/reset old repo or old worktrees.
+Do NOT share another slot's worktree, branch, uncommitted files or dev server.
+
+At allocation time, all current open PRs have 0 overlap with:
+- `src/app/topic-detail.tsx`
+- `src/lib/topic-detail-catalog.ts`
+- `tests/app/topic-detail-screen_test.ts`
+- the three canonical topic background assets
+
+Re-check immediately before coding. If overlap appears, STOP.
+
+## EAS conservation
+
+This is JS/TS UI work.
+
+Expected EAS build created: **0**.
+
+Use:
+- local Expo
+- iOS Simulator
+- existing reusable dev client if safe
+
+Do not create a new EAS build.
+
+## Verification
+
+### Functional preservation
+Verify:
+- Home -> detail
+- /topics history -> detail
+- exact params
+- id mismatch fail-closed
+- loading
+- error
+- unknown-title fallback
+- beginner/intermediate/advanced
+- no new backend/network/AI call from the visual layer
+
+### Visual
+At minimum:
+- ~402pt iPhone width
+- ~375pt iPhone width
+- beginner
+- intermediate
+- advanced
+- at least one long-title topic
+- representative dense example
+- bottom takeaway
+- past-history detail path
+
+Compare against the user-provided reference and record:
+- what was matched
+- any deliberate difference and why
+- whether existing canonical artwork could be reused safely
+
+Capture final implementation screenshots for K1 if practical.
+Do not treat the reference screenshot itself as implementation evidence.
+
+### Tests/checks
+Run:
+- focused topic-detail tests
+- full `deno test tests/app/` if practical
+- Expo config
+- web export if supported
+- changed-scope type/lint
+- `git diff --check`
+
+Separate pre-existing diagnostics from regressions.
+
+## Acceptance criteria
+
+PASS candidate only if:
+- the reference image's hierarchy and polish are recognizably reflected
+- screen looks more like a finished Kabumori learning product than the prior plain detail page
+- Home/topic behavior and all 50 contents remain intact
+- beginner/intermediate/advanced all look coherent
+- long titles remain safe
+- no screenshot/text baking
+- no new generated artwork/dependency unless explicitly justified
+- no backend/data/auth changes
+- EAS 0
+- focused PR only
+
+## Delivery
+
+Create a focused PR.
+Do not self-merge.
+No production deploy.
+
+Report:
+- task_id
+- fresh main SHA
+- worktree / clean-base isolation proof
+- reference image visible: yes/no
+- changed_files
+- final visual structure
+- existing-art reuse decision
+- beginner/intermediate/advanced findings
+- 402pt/375pt visual findings
+- tests/checks
+- PR/head
+- EAS build created: no
+- backend/DB/RPC/API/AI/Auth/Edge/production mutation: 0
+- remaining issues
+- safety_checks
+- next_recommendation
+
+Then:
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K1.
+
+Recommended model: **Sonnet5（高）**.
+
+---
+
+# Claude Task 1 — CURRENT TASK
+
 - task_id: kabumori-topic-detail-learning-v2-20261003
 - owner: claude
 - slot: claude-1
