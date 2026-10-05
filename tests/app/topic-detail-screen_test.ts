@@ -1,6 +1,6 @@
 // The topic detail screen is React Native, so its contract is pinned by reading the source as text,
-// like the rest of this suite: safety (deterministic fetch + exact id check) is unchanged, the new
-// learning flow renders in the agreed order, and rendering adds no network/AI/database call.
+// like the rest of this suite: safety (deterministic fetch + exact id check) is unchanged, the
+// 「かぶモリ学習ノート」 layout renders in the agreed order, and rendering adds no network/AI/database call.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -25,14 +25,15 @@ test("rendering the learning content makes no network, AI or database call of it
   const screen = await code("src/app/topic-detail.tsx");
   const imports = screen.match(/from '[^']+'/g) ?? [];
   assert.deepEqual(
-    imports.sort(),
+    [...new Set(imports)].sort(),
     [
       "from '@/components/back-button'",
-      "from '@/constants/home-tokens'",
       "from '@/constants/kabumori-theme'",
       "from '@/lib/daily-topic'",
       "from '@/lib/home-topic'",
       "from '@/lib/topic-detail-catalog'",
+      "from '@/lib/topic-detail-presentation'",
+      "from 'expo-image'",
       "from 'expo-router'",
       "from 'react'",
       "from 'react-native'",
@@ -42,46 +43,7 @@ test("rendering the learning content makes no network, AI or database call of it
   assert.equal((screen.match(/fetchDailyTopic\(/g) ?? []).length, 1, "the one existing deterministic fetch only");
   assert.ok(!/fetch\(|supabase|XMLHttp|openai|anthropic|\.rpc\(/i.test(screen));
   const catalog = (await read("src/lib/topic-detail-catalog.ts")).replace(/\/\/.*$/gm, "");
-  assert.ok(!/import |fetch\(|supabase|await |async /.test(catalog.replace(/^export type[^]*?\n\n/gm, "")), "the catalog is static data");
-});
-
-test("reading order: identity -> intro summary -> catalog sections in role order", async () => {
-  const screen = await read("src/app/topic-detail.tsx");
-  const order = [
-    "styles.eyebrow",
-    "TOPIC_LEVEL_LABEL[topic.level]",
-    "topic.category",
-    "styles.title}>{topic.title}",
-    "styles.introText}>{topic.body}",
-    "detail.sections.map(",
-  ];
-  const positions = order.map((needle) => screen.indexOf(needle));
-  for (const [index, position] of positions.entries()) assert.ok(position >= 0, `${order[index]} missing`);
-  assert.deepEqual([...positions].sort((a, b) => a - b), positions, "sections are out of order");
-});
-
-test("the intro is the Home summary (topic.body) in its own card, separate from the learning sections", async () => {
-  const screen = await read("src/app/topic-detail.tsx");
-  const intro = screen.slice(screen.indexOf("styles.intro,"), screen.indexOf("{detail ? ("));
-  assert.ok(intro.includes("{topic.body}"));
-  assert.ok(!/topic\.body/.test(screen.slice(screen.indexOf("{detail ? ("))), "topic.body is not repeated below the intro");
-});
-
-test("the example is a visually identifiable card and the takeaway is a distinct calm block", async () => {
-  const screen = await read("src/app/topic-detail.tsx");
-  assert.ok(screen.includes("section.role === 'example'") && screen.includes("styles.exampleCard"));
-  assert.ok(screen.includes("section.role === 'takeaway'") && screen.includes("styles.takeaway"));
-  assert.ok(/takeaway: \{ borderRadius: 14, borderLeftWidth: 4/.test(screen), "accent-bar block");
-  assert.ok(/exampleCard: \{ borderRadius: 14, borderWidth: 1/.test(screen));
-  assert.ok(/LEVEL_STRONG = \{\s*beginner: '#246a3e',\s*intermediate: '#22578f',\s*advanced: '#4d3d9e'/.test(screen), "darker heading tones for AA contrast");
-});
-
-test("level accents are the Home topic tints (green / blue / lavender) and labels are unchanged", async () => {
-  const screen = await read("src/app/topic-detail.tsx");
-  assert.ok(screen.includes("TOPIC_CARD.badge[topic.level]"));
-  assert.ok(/beginner: '#eef7f0'/.test(screen) && /intermediate: '#edf5fc'/.test(screen) && /advanced: '#f2effc'/.test(screen));
-  const { TOPIC_LEVEL_LABEL } = await import("../../src/lib/home-topic.ts");
-  assert.deepEqual(TOPIC_LEVEL_LABEL, { beginner: "初心者向け", intermediate: "中級者向け", advanced: "上級者向け" });
+  assert.ok(!/^import /m.test(catalog) && !/fetch\(|supabase|await |async /.test(catalog), "the catalog is static data");
 });
 
 test("new params reset the screen to loading, never showing the previous topic", async () => {
@@ -90,7 +52,77 @@ test("new params reset the screen to loading, never showing the previous topic",
   assert.ok(effect.includes("setTopic(null);\n    setStatus('loading');"));
 });
 
-test("an uncovered title falls back truthfully: intro summary plus 準備中, nothing invented", async () => {
+test("reading order: back -> notebook label -> Hero (badge, category, title, summary) -> numbered steps -> example -> takeaway", async () => {
+  const screen = await read("src/app/topic-detail.tsx");
+  const order = [
+    "<BackButton />",
+    'accessibilityLabel="かぶモリ学習ノート"',
+    "styles.hero,",
+    "TOPIC_LEVEL_LABEL[topic.level]",
+    "{topic.category}",
+    "styles.title}>{topic.title}",
+    "styles.summary}>{topic.body}",
+    "detail.sections.map(",
+  ];
+  const positions = order.map((needle) => screen.indexOf(needle));
+  for (const [index, position] of positions.entries()) assert.ok(position >= 0, `${order[index]} missing`);
+  assert.deepEqual([...positions].sort((a, b) => a - b), positions, "sections are out of order");
+  // The role blocks inside DetailSection: example and takeaway are special; steps are numbered.
+  const section = screen.slice(screen.indexOf("function DetailSection"));
+  assert.ok(section.indexOf("section.role === 'example'") < section.indexOf("section.role === 'takeaway'"));
+  assert.ok(section.includes("topicDetailStepNumber(section.role)"));
+});
+
+test("the old generic TODAY'S TOPIC eyebrow is gone (a past topic no longer looks like today's)", async () => {
+  const screen = await code("src/app/topic-detail.tsx");
+  assert.ok(!/TODAY|eyebrow/i.test(screen));
+  assert.ok((await read("src/app/topic-detail.tsx")).includes("かぶモリ学習ノート"));
+});
+
+test("the summary lives inside the Hero as the fetched topic.body, once, with no separate intro card", async () => {
+  const screen = await read("src/app/topic-detail.tsx");
+  assert.equal((screen.match(/topic\.body/g) ?? []).length, 1, "the summary is shown exactly once");
+  assert.ok(!/styles\.intro|introText/.test(screen));
+  const hero = screen.slice(screen.indexOf("styles.hero,"), screen.indexOf("{detail ? ("));
+  assert.ok(hero.includes("{topic.body}") && hero.includes("{topic.title}") && hero.includes("{topic.category}"));
+});
+
+test("Hero art: the existing canonical level artwork, level-only mapping, never stretched or regenerated", async () => {
+  const screen = await read("src/app/topic-detail.tsx");
+  for (const level of ["beginner", "intermediate", "advanced"]) {
+    assert.ok(screen.includes(`${level}: require('@/assets/images/home/topic_background_${level}.webp'),`), level);
+  }
+  assert.ok(screen.includes("HERO_ART[topic.level]"), "chosen from topic.level only");
+  assert.ok(screen.includes('contentFit="cover"') && !/contentFit="fill"/.test(screen));
+  assert.ok(screen.includes("heroWidth / TOPIC_DETAIL_ART_ASPECT"), "the art keeps its own aspect ratio");
+  assert.ok(screen.includes("pointerEvents=\"none\""), "decoration never takes touches");
+  assert.ok(screen.includes("accessible={false}"), "the art is hidden from the accessibility tree");
+  // No new image files for the detail screen: the canonical topic backgrounds are reused untouched.
+  const names: string[] = [];
+  for await (const entry of Deno.readDir(new URL("assets/images/home/", repoRoot))) names.push(entry.name);
+  assert.deepEqual(
+    names.sort(),
+    ["kabumori_header_logo.webp", "report_hero_background.webp", "topic_background_advanced.webp", "topic_background_beginner.webp", "topic_background_intermediate.webp"],
+  );
+});
+
+test("the art wash is built from non-overlapping strips (no banding) and keeps the right side clear", async () => {
+  const screen = await read("src/app/topic-detail.tsx");
+  assert.ok(/WASH_STRIPS = 20;/.test(screen) && /WASH_CLEAR_FROM = 12;/.test(screen), "the right 40% has no wash");
+  assert.ok(/flex: 1,\s*backgroundColor: colors\.hero,/.test(screen), "equal flex strips cannot overlap");
+  assert.ok(/bottom: \(FADE_STRIPS - 1 - index\) \* FADE_STRIP_HEIGHT/.test(screen), "2pt non-overlapping bottom fade strips");
+});
+
+test("example is a tinted outlined card with a bulb; the takeaway is a calm accent-line block; steps are numbered circles", async () => {
+  const screen = await read("src/app/topic-detail.tsx");
+  assert.ok(/exampleCard: \{ borderRadius: 18, borderWidth: 1/.test(screen));
+  assert.ok(screen.includes("styles.bulb") && screen.includes("💡"));
+  assert.ok(/takeaway: \{ borderRadius: 18, borderLeftWidth: 5/.test(screen));
+  assert.ok(/stepCircle: \{ width: 38, height: 38, borderRadius: 19/.test(screen));
+  assert.ok(!/stepCard|section: \{[^}]*borderWidth/.test(screen), "ordinary steps are not cards");
+});
+
+test("an uncovered title falls back truthfully: the Hero summary plus 準備中, nothing invented", async () => {
   const screen = await read("src/app/topic-detail.tsx");
   assert.ok(screen.includes("この用語の詳しい解説は準備中です。"));
   assert.ok(screen.includes("topicDetailFor(topic.title)"));
@@ -102,9 +134,14 @@ test("long titles and badges wrap instead of colliding or clipping", async () =>
   assert.ok(!/numberOfLines/.test(screen), "no truncation anywhere on the detail screen");
 });
 
+test("body copy is 15-16pt with a comfortable line height", async () => {
+  const screen = await read("src/app/topic-detail.tsx");
+  assert.ok(/body: \{ color: INK, fontSize: 15\.5, lineHeight: 26 \}/.test(screen));
+  assert.ok(/summary: \{[^}]*fontSize: 15\.5, lineHeight: 25/.test(screen));
+});
+
 test("Home TOP behavior is untouched by this change", async () => {
-  // The Home card keeps its short summary + CTA; this screen is the only consumer of the catalog.
   const card = await read("src/components/home/home-topic-feature.tsx");
   assert.ok(card.includes("{topic.body}") && card.includes("numberOfLines={2}"));
-  assert.ok(!card.includes("topic-detail-catalog"), "the Home card does not use the detail catalog");
+  assert.ok(!card.includes("topic-detail-catalog") && !card.includes("topic-detail-presentation"), "the Home card does not use the detail modules");
 });
