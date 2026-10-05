@@ -1,5 +1,612 @@
 # Claude Task 1 — CURRENT TASK
 
+- task_id: kabumori-topic-detail-visual-polish-20261005
+- owner: claude
+- slot: claude-1
+- status: ready
+- next_owner: claude
+- priority: high
+- recommended_model: Sonnet5（中）
+- purpose: ユーザーがG1へ直接渡す「かぶモリ学習ノート / PERって何？」のUI見本画像を正本ベースに、現在のtopic detail機能・50トピック本文・fetch安全性を変えず、詳細画面の見た目だけを最終仕上げする。
+
+## Allocation snapshot
+
+- allocated_at: 2026-10-05 JST
+- fresh main SHA at allocation: `d8a6fa7661b63a8e3c929f77232385369ebf3e94`
+- previous G1 `kabumori-topic-detail-learning-v2-20261003`: Final K1 PASS / PR #83 merged / done
+- all current open PRs (#82/#81/#78/#76/#41/#33/#11/#10/#3) were checked and have **0 overlap** with the primary topic-detail files/assets listed below
+- G2 is separate report-observation work; G3/G4/H1/H2 are separate X/social/backend workstreams
+- this is UI-only visual polish; no backend, DB, RPC, API, AI, Auth, Edge, production or EAS work
+
+## Critical reference-image rule
+
+The user will send G1 a visual reference image showing the desired direction:
+- top back control
+- `かぶモリ学習ノート`
+- pale-green beginner Hero
+- `初心者向け | 指標`
+- large `PERって何？`
+- short summary inside the Hero
+- soft book / sprout / pencil / chart illustration on the Hero right side
+- numbered learning sections
+- a visually distinct `具体例` card
+- a visually distinct final `覚えておくポイント` block
+
+Treat that user-provided image as the **visual direction / design reference**.
+
+Do NOT:
+- embed the screenshot itself in the app
+- bake text into an image
+- copy screenshot pixels as a fixed UI
+- replace native text with image text
+- add a new image-generation workflow
+
+All copy remains native, dynamic, accessible UI.
+
+If the reference image is not actually visible in the current Claude session, **STOP and ask the user to resend it**. Do not invent a different design.
+
+## Product direction
+
+The reference image is preferred over the earlier plain detail screen.
+
+Target feel:
+- recognizably Kabumori
+- warm ivory / off-white page
+- calm Japanese learning-app feel
+- soft level-specific tint
+- generous whitespace
+- strong but not childish hierarchy
+- polished, production-quality native app
+- not a broker terminal
+- not a finance-news article
+- not a generic web blog
+- not a card wall
+
+The Home topic card remains the short entry point.
+The detail page becomes the polished learning notebook.
+
+## Preserve current product behavior — mandatory
+
+Current merged v2 behavior is accepted and should stay intact:
+- all 50 seeded topics
+- five learning roles
+  - basics
+  - why
+  - example
+  - market
+  - takeaway
+- beginner / intermediate / advanced level semantics
+- advanced market heading may remain `実践ではどう見る？`
+- current curated text content
+- hypothetical-number labeling
+- evergreen/no-current-market safety
+- unknown-title truthful fallback
+- exact `id / level / jstDate` params
+- deterministic `fetchDailyTopic(level, jstDate)`
+- id mismatch fail-closed
+- loading / error / mismatch states
+- Home -> detail
+- history -> detail
+- BackButton behavior
+
+This task is **not** a content rewrite.
+
+Do not edit the 50-topic catalog text unless a tiny presentation-only compatibility change is absolutely necessary and documented.
+
+## Desired screen composition
+
+### 1. Header / identity
+
+Reference direction:
+- existing BackButton at the top
+- underneath, a small brand-learning label:
+  - **かぶモリ学習ノート**
+- remove the old generic `TODAY'S TOPIC` eyebrow from the normal detail layout
+
+This also fixes the prior visual mismatch where a past topic still looked like "today's" content.
+
+If an existing suitable sprout/leaf icon or already-installed icon set can be reused safely, a tiny icon may accompany the label.
+Do not add a new dependency only for this icon.
+
+### 2. Level-aware Hero
+
+Create a polished Hero block under the learning-note label.
+
+Hero contains native/dynamic:
+- level badge:
+  - 初心者向け
+  - 中級者向け
+  - 上級者向け
+- category
+- topic title
+- short fetched `topic.body` summary
+
+The current separate intro card may be visually integrated into the Hero so the summary is not duplicated.
+
+Hero level system:
+- beginner: pale green / mint
+- intermediate: pale blue
+- advanced: pale lavender
+
+Use the reference image as the composition guide:
+- text-dominant left side
+- subtle illustration cluster on the right
+- large readable title
+- summary below title
+- rounded corners
+- soft border / very subtle shadow only if it improves hierarchy
+
+### 3. Existing canonical topic artwork
+
+Prefer reusing the existing approved canonical level artwork if it fits the reference safely:
+
+- `assets/images/home/topic_background_beginner.webp`
+- `assets/images/home/topic_background_intermediate.webp`
+- `assets/images/home/topic_background_advanced.webp`
+
+These already represent:
+- beginner: book + sprout/basic learning
+- intermediate: analysis/magnifier/young plant
+- advanced: multi-indicator/flower
+
+If reused:
+- use only `topic.level` for mapping
+- never stretch
+- do not materially crop important artwork
+- keep text readable at 375pt and 402pt
+- it is acceptable to soften/fade the artwork with a native overlay so long titles stay readable
+- do not edit/re-encode/regenerate the canonical assets
+
+If the canonical artwork cannot fit this Hero cleanly without distortion/crop/readability problems, use a simpler native-tint Hero and report why. Do not create new art.
+
+### 4. Main learning sections
+
+Do **not** turn every section into a separate card.
+
+Use the reference-image rhythm:
+- normal white/ivory page
+- generous vertical spacing
+- clear heading/body hierarchy
+- small level-colored number circles for the normal learning steps
+
+Preferred numbering:
+- `1 まずこれだけ`
+- `2 なぜ大事？`
+- `3 株価・相場とどう関係する？`
+  - advanced may show `3 実践ではどう見る？`
+
+The `具体例` and `覚えておくポイント` blocks remain special and do not need a numbered circle.
+
+Keep body copy easy to scan:
+- about 15–16pt native text
+- comfortable line-height
+- dark ink, not pure black
+- enough width/spacing for Japanese
+- no unnecessary separators
+
+### 5. 具体例 block
+
+Make the example easy to recognize.
+
+Reference direction:
+- pale level tint
+- ~16–18px corner radius
+- subtle outline
+- clear `具体例` heading
+- one small existing icon is allowed, e.g. bulb/note, without new dependency
+- hypothetical numbers can have subtle emphasis if implementable without parsing fragile free text
+
+Do NOT require custom per-topic diagrams/formula images.
+The small formula-note illustration in the reference is optional inspiration only.
+
+Do not add brittle text parsers merely to bold numbers.
+
+### 6. 株価・相場との関係
+
+Keep this as a normal learning section rather than another big card.
+
+A key caution sentence may be highlighted with:
+- a pale inset band, or
+- a small left accent bar
+
+only when it can be derived from the existing section presentation without inventing extra text.
+
+Do not fabricate a separate "important sentence" per topic.
+
+### 7. 覚えておくポイント
+
+Final takeaway should feel like the end of a lesson.
+
+Reference direction:
+- pale level tint
+- strong but calm left accent line
+- clear heading `覚えておくポイント`
+- current takeaway body
+- optional tiny existing sprout/leaf icon
+
+This should be visually easy to find when scrolling.
+
+## Cross-level visual system
+
+The user approved the beginner reference, but implementation must work across all levels.
+
+### Beginner
+- pale green
+- gentle/basic-learning feel
+- book/sprout motif where existing art allows
+
+### Intermediate
+- pale blue
+- more analytical feel
+- magnifier/data motif where existing art allows
+
+### Advanced
+- pale lavender
+- more mature/practical feel
+- multi-indicator/flower motif where existing art allows
+
+Do not make three unrelated screens.
+They must feel like one system with level-specific accents.
+
+## Layout / geometry guidance
+
+At 375pt and 402pt widths:
+- no horizontal clipping
+- Hero title may wrap naturally; design for long 2–3 line titles
+- illustration must never cover title/summary
+- badge/category should wrap safely if necessary
+- body should not feel cramped
+- content should not become dramatically longer only because of decoration
+- keep bottom safe-area spacing
+- keep BackButton comfortably tappable
+
+Use the reference image's density as a guide:
+- polished but airy
+- not oversized
+- not excessive blank space
+- about one clear visual rhythm throughout the page
+
+## Primary implementation scope
+
+Primary:
+- `src/app/topic-detail.tsx`
+- `tests/app/topic-detail-screen_test.ts`
+
+Allowed if genuinely needed:
+- one small topic-detail-specific token/presentation helper
+- existing Home/topic tokens if reuse is clearly appropriate
+- focused final screenshots under `docs/ui-review/`
+
+Avoid changing:
+- `src/lib/topic-detail-catalog.ts`
+- `src/lib/daily-topic.ts`
+- `src/lib/home-topic.ts`
+- `src/components/home/home-topic-feature.tsx`
+
+unless a tiny compatibility change is proven necessary.
+
+## Explicit non-scope
+
+Do NOT change:
+- any of the 50 learning texts for editorial reasons
+- Home topic card behavior/content
+- topic selection logic
+- AsyncStorage level preference
+- DB/schema/migrations
+- RPC
+- RLS/Auth
+- Edge Functions
+- API/Web Search
+- AI/LLM
+- report Hero
+- portfolio
+- news UI
+- X/social-mobile
+- common-account
+- production settings
+- native plugins/config/signing
+
+Production mutation: **0**.
+
+## Worktree / Mac safety — mandatory
+
+This is a **new task after the Mac migration**.
+
+Before work:
+1. read `PROJECT_RULES.md`
+2. read `.agent/ORCHESTRATION.md`
+3. read `.agent/CURRENT_STATE.md`
+4. read this TASK
+5. use clean base **`/Users/yuya/Developer/kabumori-fresh`**
+6. fresh `origin/main`
+7. inspect open PRs / active slot scopes
+8. run `git worktree list`
+9. create/use an independent G1 worktree/checkout from fresh main
+
+Recommended branch:
+`claude/g1-topic-detail-visual-polish-20261005`
+
+Do NOT use old `/Users/yuya/Developer/kabumori` as the new base.
+Do NOT delete/rename/prune/reset old repo or old worktrees.
+Do NOT share another slot's worktree, branch, uncommitted files or dev server.
+
+At allocation time, all current open PRs have 0 overlap with:
+- `src/app/topic-detail.tsx`
+- `src/lib/topic-detail-catalog.ts`
+- `tests/app/topic-detail-screen_test.ts`
+- the three canonical topic background assets
+
+Re-check immediately before coding. If overlap appears, STOP.
+
+## EAS conservation
+
+This is JS/TS UI work.
+
+Expected EAS build created: **0**.
+
+Use:
+- local Expo
+- iOS Simulator
+- existing reusable dev client if safe
+
+Do not create a new EAS build.
+
+## Verification
+
+### Functional preservation
+Verify:
+- Home -> detail
+- /topics history -> detail
+- exact params
+- id mismatch fail-closed
+- loading
+- error
+- unknown-title fallback
+- beginner/intermediate/advanced
+- no new backend/network/AI call from the visual layer
+
+### Visual
+At minimum:
+- ~402pt iPhone width
+- ~375pt iPhone width
+- beginner
+- intermediate
+- advanced
+- at least one long-title topic
+- representative dense example
+- bottom takeaway
+- past-history detail path
+
+Compare against the user-provided reference and record:
+- what was matched
+- any deliberate difference and why
+- whether existing canonical artwork could be reused safely
+
+Capture final implementation screenshots for K1 if practical.
+Do not treat the reference screenshot itself as implementation evidence.
+
+### Tests/checks
+Run:
+- focused topic-detail tests
+- full `deno test tests/app/` if practical
+- Expo config
+- web export if supported
+- changed-scope type/lint
+- `git diff --check`
+
+Separate pre-existing diagnostics from regressions.
+
+## Acceptance criteria
+
+PASS candidate only if:
+- the reference image's hierarchy and polish are recognizably reflected
+- screen looks more like a finished Kabumori learning product than the prior plain detail page
+- Home/topic behavior and all 50 contents remain intact
+- beginner/intermediate/advanced all look coherent
+- long titles remain safe
+- no screenshot/text baking
+- no new generated artwork/dependency unless explicitly justified
+- no backend/data/auth changes
+- EAS 0
+- focused PR only
+
+## Delivery
+
+Create a focused PR.
+Do not self-merge.
+No production deploy.
+
+Report:
+- task_id
+- fresh main SHA
+- worktree / clean-base isolation proof
+- reference image visible: yes/no
+- changed_files
+- final visual structure
+- existing-art reuse decision
+- beginner/intermediate/advanced findings
+- 402pt/375pt visual findings
+- tests/checks
+- PR/head
+- EAS build created: no
+- backend/DB/RPC/API/AI/Auth/Edge/production mutation: 0
+- remaining issues
+- safety_checks
+- next_recommendation
+
+Then:
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K1.
+
+Recommended model: **Sonnet5（高）**.
+
+## K1 continuation — Simulator runtime restored
+
+The user has now installed the iOS Simulator runtime on the new Mac.
+
+This continuation is **verification-first**, not a redesign.
+
+Recommended model: **Sonnet5（中）**.
+
+### Start conditions
+1. fresh `origin/main`
+2. re-read this TASK / CURRENT_STATE
+3. confirm PR #84 exact current head and no new overlap
+4. confirm `xcrun simctl list runtimes` now shows an available iOS runtime
+5. use the same isolated G1 worktree/branch for PR #84 if it is still safe; do not create unrelated work or touch other slots
+
+### Required visual verification
+Run the final implementation in iOS Simulator and inspect at minimum:
+- ~402pt width
+- ~375pt width
+- beginner
+- intermediate
+- advanced
+- at least one long 2–3 line title
+- one dense example
+- final takeaway block
+- history -> detail path
+
+Specifically judge:
+- Hero title wrapping and text/art collision
+- canonical background art composition
+- left-to-right wash and bottom fade seam/banding
+- level/category readability
+- numbered-section rhythm and 50pt body indent
+- example-card density
+- takeaway balance
+- page scroll rhythm
+- 🌱 and 💡 rendering: if they look like generic emoji or visually cheap compared with the reference, replace them **without a new dependency** using the simplest existing/native option, or remove them if that looks cleaner
+- no clipping at 375pt
+- no unintended excessive Hero height
+
+### Allowed corrections
+Only small visual corrections proven necessary by the Simulator check:
+- spacing
+- font size/line-height
+- Hero padding/min-height
+- wash/fade values
+- icon/emoji presentation
+- section indentation
+- radius/border/tint balance
+
+Do not rewrite catalog content or change data/backend behavior.
+
+After any correction:
+- rerun focused topic-detail tests
+- run full `deno test tests/app/` if practical
+- Expo config
+- web export if supported
+- changed-scope type/lint
+- `git diff --check`
+
+### Evidence
+Capture final Simulator screenshots under `docs/ui-review/` for:
+- one 402pt representative full/upper screen
+- one 375pt long-title or lower-screen case
+- ideally enough evidence to show all three level accents without bloating the PR
+
+Update the existing PR #84; do not open a second PR.
+Do not merge.
+EAS build = 0.
+Production/backend mutation = 0.
+
+Then append a continuation result to the Report with:
+- runtime availability proof
+- whether any visual correction was needed
+- changed files/commit/head
+- 402pt findings
+- 375pt findings
+- beginner/intermediate/advanced findings
+- emoji/icon decision
+- screenshots added
+- tests
+- remaining issues
+
+Finally:
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K1.
+
+---
+
+## Report — G1: topic detail visual polish (task kabumori-topic-detail-visual-polish-20261005)
+
+- task_id: `kabumori-topic-detail-visual-polish-20261005`
+- result: implemented; **iOS Simulator verification NOT done (blocker, see below)**; live check on the user's iPhone pending. PR open, **not merged**.
+- fresh main SHA: `1c633e846c8d3ae49ca95aa13b6063f26f85e052`
+- PR: https://github.com/anohi-memories/kabumori/pull/84 — branch `claude/g1-topic-detail-visual-polish-20261005`, head `c9c173c153cbfd11229c9281b892d732728c3cd3`
+- **EAS build created: no.** backend/DB/RPC/API/AI/Auth/Edge/production mutation: **0**.
+
+### worktree / clean-base isolation proof
+Independent clone of `origin/main` in the session scratchpad (own branch, own node_modules symlink, own dev server); the clean base `/Users/yuya/Developer/kabumori-fresh` was confirmed to exist but not used or modified; the old `/Users/yuya/Developer/kabumori` repo/worktrees were not used as a base and nothing was deleted/renamed/pruned/reset. Open PRs touching the target files: none (checked at start; main had no changes to them since the allocation).
+
+### Reference image visible: **yes** (the user's 「かぶモリ学習ノート / PERって何？」 design image was in the session).
+
+### changed_files (4, +392/−114)
+`src/app/topic-detail.tsx`, `src/lib/topic-detail-presentation.ts` (new, pure), `tests/app/topic-detail-screen_test.ts`, `tests/app/topic-detail-presentation_test.ts` (new). Untouched: the 50-topic catalog text, `daily-topic.ts`, `home-topic.ts`, Home topic card.
+
+### final visual structure
+BackButton → 🌱 かぶモリ学習ノート (old TODAY'S TOPIC eyebrow removed) → level-aware Hero (rounded 22, level tint; badge 「初心者向け/中級者向け/上級者向け」 | category; title 34/42; the fetched `topic.body` summary 15.5/25 integrated in the Hero — no separate intro card) → numbered steps `1 まずこれだけ`, `2 なぜ大事？`, `3 株価・相場とどう関係する？` (advanced: `3 実践ではどう見る？`) with level-tinted 38pt circles, 21pt headings, body 15.5/26 indented under the heading text, no card per step → 具体例: pale-tint outlined 18pt card with a bulb → (inside step 3 only when the existing last sentence starts with ただし / ただ、/ もっとも) an inset band with a left accent bar (lossless split, nothing added; ~7 of 50 topics) → 覚えておくポイント: tinted block with a 5pt strong left accent line and a small 🌱. Page background ivory `#fbfbf6`, body ink `#2a3830`.
+
+### existing-art reuse decision
+**Reused** the canonical `assets/images/home/topic_background_{beginner,intermediate,advanced}.webp` at the top of the Hero at their own 1942:809 ratio (full card width, `contentFit="cover"` on a same-ratio box ⇒ no stretch/crop), mapped only by `topic.level`, untouched (no edit/re-encode/regeneration, no new asset). Readability under long titles is handled by a native left→right tint wash (20 equal flex strips, strongest under the text, clear over the right 40%) and a short non-overlapping bottom fade where the art ends inside a taller Hero. The art is decorative: `pointerEvents="none"`, hidden from accessibility.
+
+### Level system
+beginner pale green/mint, intermediate pale blue, advanced pale lavender; one component set, level colours from `TOPIC_DETAIL_LEVEL_COLORS` (hero/badge/soft/outline/strong). Tests assert every heading/accent colour is ≥ 4.5:1 on each tinted surface of its level and on the page background.
+
+### Behavior preserved (pinned by tests)
+All 50 texts and 5 roles, advanced market heading 「実践ではどう見る？」, hypothetical-number labelling, evergreen content, unknown-title truthful fallback (Hero summary + 「この用語の詳しい解説は準備中です。」), exact `id/level/jstDate` params, deterministic `fetchDailyTopic(level, jstDate)`, **id mismatch fail-closed**, loading/error/mismatch texts, safe area + BackButton, Home → detail, history → detail; no new network/AI/DB call from the visual layer (imports and single fetch pinned). Unchanged-by-design: new params still reset to loading.
+
+### Tests / checks
+`deno test tests/app/` **294 passed / 0 failed** (topic suites: 35); `npx expo config --json` OK; `npx expo export --platform web` PASS; tsc(src): only the 2 known CSS-module diagnostics; `git diff --check` clean.
+
+### 402pt / 375pt visual findings — NOT available
+The planned Simulator pass (402pt iPhone 17 Pro, 375pt SE 3rd gen; beginner/intermediate/advanced, long 3-line title, dense example, takeaway, history path, screenshots, comparison with the reference) **could not run: this Mac's iOS Simulator runtime is gone** (`xcrun simctl list runtimes` is empty; all devices `unavailable`; the CoreSimulator image list was emptied during the Mac migration/cleanup; restoring it needs an ~8 GB Apple download, e.g. `xcodebuild -downloadPlatform iOS`, which I did not run without the user's approval). Nothing was fabricated: no screenshots or measurements are claimed. Substitute evidence so far: tests (structure/safety/contrast/split), web export; pending: the user's live iPhone check (dev client + local Metro) of this branch.
+
+### Reference comparison (design intent only, from code review — not visual evidence)
+Matched in structure: back control, 学習ノート label, level-aware Hero with badge|category + large title + summary + illustration on the right, numbered circles 1–3, outlined 具体例 card with bulb, inset caution band, 覚えておくポイント block with thick left line + sprout. Deliberate differences: the illustration is the existing canonical level art (not the reference's book/pencil illustration, not regenerated); the formula-note mini illustration inside 具体例 is omitted (optional in the TASK); emoji stand in for icons (no new dependency).
+
+### Remaining issues
+- Visual verification outstanding (Simulator blocked; needs the runtime restored or the user's device review).
+- Risks to check on device: art/wash seam and readability for 3-line titles, Hero height, 34pt title wrapping at 375pt, emoji rendering.
+- Out of scope (unchanged): no retry button on the detail error text.
+
+### safety_checks
+No content/DB/RPC/Auth/AI/API/Edge/native/EAS change; no new dependency or asset; no deploy; PR not merged; no secrets committed (local public `.env` copy untracked).
+
+### next_recommendation
+User reviews the branch live on the iPhone (server provided); K1 reviews PR #84 after that or in parallel (UI-only, low risk). Restore the iOS Simulator runtime when convenient so future UI tasks regain Simulator verification.
+
+Status: `review_required` / next_owner `user`.
+
+### K1 — CODE PASS / VISUAL HOLD
+- verdict: **HOLD pending real-device visual acceptance**.
+- PR #84 exact reviewed head: `c9c173c153cbfd11229c9281b892d732728c3cd3`.
+- fresh main at K1: `45c964701cc6117f42eb75616c6640448c8f7bac`.
+- GitHub fresh state: `mergeable=true`, `mergeable_state=clean`.
+- main advanced 11 commits from the PR head's merge-base; **0 overlap** with the four topic-detail PR files.
+- code/safety side accepted: 294/294 app tests, Expo config/export PASS, diff clean, no catalog/Home/backend/DB/RPC/API/AI/Auth/Edge/native/EAS change.
+- visual acceptance is **not complete** because no iOS Simulator runtime was available and no 402pt/375pt screenshots from the final implementation exist.
+- must visually verify on a real iPhone before merge:
+  - Hero long-title wrapping at narrow width;
+  - canonical art + left-to-right wash / bottom fade seam;
+  - beginner/intermediate/advanced balance;
+  - numbered-section rhythm and body indentation;
+  - example/takeaway density;
+  - 🌱 / 💡 rendering and whether they look polished enough for Kabumori.
+- Codex review: **not required** for this UI-only task.
+- merge/deploy: HOLD.
+- AI Lab diary: **記録不要（現時点）** — user-facing visual change is not yet accepted/merged.
+- next: user opens the PR branch on iPhone and shares/approves the actual screen; then ChatGPT can finalize K1 or return a small corrective to G1.
+
+No production mutation. No merge.
+
+---
+
+# Claude Task 1 — CURRENT TASK
+
 - task_id: kabumori-topic-detail-learning-v2-20261003
 - owner: claude
 - slot: claude-1

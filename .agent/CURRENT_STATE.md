@@ -1,3 +1,206 @@
+## Final C1 + C2 — 2026-10-05
+
+### C1 — PR #82 production preflight
+- verdict: **PREFLIGHT COMPLETE / PRODUCTION ROLLOUT HOLD**.
+- production catalog/owner/ACL prerequisites for `20261004090000_ai_lab_topic_claims.sql` pass; target and superseded objects/history are absent.
+- exact deploy target is `x-test-post`; no Cron change required.
+- blocker is operational, not source: the accepted migration owns its own COMMIT, so Supabase CLI history insertion is not schema+ledger atomic. A history-write failure can leave complete schema without ledger.
+- no additional review task is allocated. Before production mutation, choose one narrowly specified apply/history policy and authorize it explicitly.
+- cold-ledger limitation remains: no historical event-claim backfill, so dedupe is forward-looking at cutover.
+- production mutation/apply/deploy/X/Vault/token/Cron = **0**.
+- H1 done/free.
+
+### C2 — PR #81 content-settings hardening
+- verdict: **PASS** for exact head `bcc01312c638f5922db4ffd6255ddddf6f611183`.
+- R1 deferrable/improper PK arbiter: CLOSED.
+- R2 helper owner/effective EXECUTE ACL drift: CLOSED.
+- R3 non-finite CAS timestamp domain: CLOSED.
+- prior JSON/RLS/table-ACL/CAS contract preserved.
+- reviewed atomic rollout plan accepted for a separate future production approval; ordinary db push/migration up is not the approved path for the two-file chain.
+- fresh merge gate: PR open/mergeable, Netlify+Vercel green, fresh-main overlap 0.
+- PR #81 squash-merged as main SHA `686f23a7094389b793470503fceb2f47a71f8fbf`.
+- production migration apply/deploy/Auth/Vault/X/OpenAI/Cron = **0**.
+- PR #78 remains blocked only on separately approved production schema apply/read-back before its remaining AI/Auth review resumes.
+- H2 and G3 done/free.
+- review policy: no extra post-merge review allocated; keep review count minimal and prefer Luna where future verification does not require Sol-level security depth.
+
+## G1 resumed — Simulator visual verification after runtime install
+
+- task_id: `kabumori-topic-detail-visual-polish-20261005`
+- status: ready
+- owner: Claude G1
+- recommended model: **Sonnet5（中）**.
+- user installed the iOS Simulator runtime on the new Mac, removing the only K1 visual blocker.
+- continuation is verification-first: reuse existing PR #84 / G1 branch if still safe; do not redesign or open a second PR.
+- required Simulator checks: ~402pt and ~375pt, beginner/intermediate/advanced, long title, dense example, takeaway, history path.
+-重点: Hero wrapping, art wash/fade seam, 375pt clipping/density, section rhythm, and whether 🌱/💡 look polished enough; only bounded visual corrections allowed.
+- capture final implementation screenshots under `docs/ui-review/`.
+- rerun focused/full app tests and standard Expo/diff checks after any correction.
+- EAS build = 0; backend/DB/RPC/API/AI/Auth/Edge/production mutation = 0.
+- finish with K1.
+
+## Final K3 — PR #81 residual content-settings hardening PASS -> H2 rereview
+
+- verdict: **PASS to independent H2 rereview; merge/apply/deploy HOLD**.
+- PR #81 old reviewed head `5595fb131813542c55c43bc783af623cdb9ea442` -> corrected exact head `bcc01312c638f5922db4ffd6255ddddf6f611183`, normal push/no force.
+- GitHub fresh read-back: PR OPEN / unmerged / mergeable=true; Netlify and Vercel **green**.
+- fresh main comparison: PR #81 changed files overlap current main changes = **0**.
+- R1 reported fixed: exact immediate/non-deferrable PK/index arbiter required; H2's deferrable-PK reproduction now refused; real ON CONFLICT writer remains valid.
+- R2 reported fixed: known helper signatures/owner only; unknown grant/owner/overload refused; exact effective EXECUTE postconditions; no global default privilege or role-membership mutation.
+- R3 reported fixed: existing non-finite created_at/updated_at refused before mutation; finite CHECK added; valid far-future finite versions remain valid; monotonic CAS behavior preserved.
+- G3 reported disposable SQL `SOCIAL_MOBILE_CONTENT_SETTINGS_ALL_PASS` with 48 PASS markers, 37 drift refusals, non-finite/adverse cases, app 116/116, relevant Deno 162/162, typecheck/lint/bash/diff clean.
+- historical candidate `20260922045046_social_mobile_content_settings_candidate.sql` remains unchanged; hardening migration `20261003120000...` amended only because it is unapplied.
+- proposed production strategy: do not use ordinary migration-up for the two-file chain; apply candidate + hardening + migration-history records inside one separately approved operator-controlled outer transaction, then read back. This plan itself still requires H2 validation before any production mutation.
+- migration-number clarification: PR #76 = `20261003090000`; PR #81 = `20261003120000`; merged PR #82 = `20261004090000`. Current source filenames are distinct; the old PR76/PR82 collision note is stale.
+- production reads/writes/apply/deploy/Auth/Vault/X/OpenAI/Cron from G3: **0**.
+- H2 assigned `x-social-mobile-pr81-residual-hardening-final-rereview-20261005`, recommended **Sol（高）**.
+- PR #78 remains blocked until PR #81 passes review and a separately approved safe production apply/read-back is completed.
+- AI Lab diary: **記録不要** — this is internal schema/security hardening, not a new released user-facing capability.
+
+## Final C2 — PR #76 transactional publish-toggle CHANGES REQUIRED -> G4 corrective
+
+- verdict: **CHANGES REQUIRED accepted** on exact PR #76 head `7f75c07a8c997b6a585e9c86dca01186eeea671f`; PR remains open/unmerged.
+- H2 source changes: **0**. Review/verification only.
+- core R1-R5 disposition: transactional caller authority, membership/brand/account locking, original brand TOCTOU closure on guarded Vault path, tenant-safe error semantics, fail-safe OFF and UI confirmation pinning are materially accepted.
+- residual F1 / P2: pre-send authority still accepts two states that toggle ON rejects — missing `verified_at` and nonblank `last_connection_error_code`. H2 reproduced real local permission RPC + actual VaultAccountXAuth fake-X callback reaching the callback in both states.
+- residual F2 / P2: unexpected creator default EXECUTE grant can survive the migration; inherited role membership can make an app role effectively execute a function outside the intended exact ACL. Current production catalog did not show this adverse drift, but source must fail closed.
+- residual F3 / P2: documented migration-first rollout is not fail-closed. During migration-applied/old-runtime interval, caller can OFF through new RPC while old sender can still start a fake X request. Approved runbook must make guarded runtime active before toggle authority becomes usable, or prove an equivalent staged-grant sequence.
+- H2 disposable DB/race evidence supports the already-closed lock/deadlock/authority paths; production mutation/deploy/real X/Auth/Vault/Cron = **0**.
+- migration-version clarification: current merged PR #82 uses `20261004090000_ai_lab_topic_claims.sql`; PR #76 uses `20261003090000_social_mobile_publish_permission_boundary.sql`; PR #81 uses `20261003120000_social_mobile_content_settings_hardening.sql`. The stale H2 coordination note suggesting PR82 still used 20261003090000 is obsolete; current filenames were re-read and are distinct.
+- G4 assigned `x-social-mobile-pr76-final-security-corrective-20261005`, recommended **Opus5.5（高）**.
+- after K4, independent H2 rereview required, recommended **Sol（極高）**.
+- PR #76 merge / migration apply / Edge deploy / app exposure remain **HOLD**.
+- AI Lab diary: **記録不要** — this is internal authorization/security hardening, not a new released user-facing feature.
+
+## K1 — Topic detail visual polish CODE PASS / VISUAL HOLD
+
+- verdict: **HOLD pending real-device visual acceptance**.
+- PR #84 exact reviewed head: `c9c173c153cbfd11229c9281b892d732728c3cd3`.
+- fresh main at K1: `45c964701cc6117f42eb75616c6640448c8f7bac`.
+- fresh GitHub state: open/unmerged, `mergeable=true`, `mergeable_state=clean`.
+- main advanced 11 commits from the PR merge-base; **0 overlap** with the four topic-detail PR files.
+- accepted code/safety evidence: 294/294 app tests, Expo config/export PASS, diff clean, no content catalog/Home/backend/DB/RPC/API/AI/Auth/Edge/native/EAS changes.
+- visual acceptance is incomplete because the new Mac currently has no iOS Simulator runtime and G1 therefore could not produce final 402pt/375pt implementation screenshots.
+- required device check before merge: long-title Hero wrap, canonical art wash/fade seam, beginner/intermediate/advanced balance, numbered-step rhythm, example/takeaway density, and 🌱/💡 rendering quality.
+- Codex review: **not required** for this UI-only change.
+- merge/deploy: HOLD.
+- AI Lab diary: **記録不要（現時点）** — user-facing visual change is not yet accepted/merged.
+- next_owner: user for iPhone visual confirmation; if approved, ChatGPT finalizes K1/merge; if not, return a small visual corrective to G1.
+
+## PR #82 merged / H1 production read-only preflight allocated
+
+- PR #82 exact accepted head `9d30a68317dd523a96e6ce96bf7a0f6de23235d5` passed Netlify and Vercel after Final C1.
+- fresh main comparison before merge showed **0 overlapping files** with the PR despite concurrent control-file updates.
+- PR #82 was squash-merged as main SHA `80e11c9207d44599db26a25195f1ee0091484231`.
+- GitHub read-back: PR closed/merged; main points to the merge SHA.
+- source merge only: production migration apply=0, Edge deploy=0, Cron/settings=0, real X=0, OAuth/Vault/token operations=0.
+- next gate is production **read-only** preflight, not rollout.
+- H1 assigned `ai-lab-pr82-production-readonly-preflight-20261005`, recommended **Sol（高）**.
+- H1 must verify migration ledger, superseded migration absence, production catalog/owner/effective ACL, exact migration apply transaction semantics, exact deploy target/order and pre/post read-back checklist.
+- H2 PR #76 and G3 PR #81 remain separate and must not be touched.
+- AI Lab diary: **記録不要** — merged change is internal duplicate-post/safety hardening rather than a new released user-facing capability.
+
+## Final C1 — PR #82 AI Lab event-dedupe PASS-WITH-FIX accepted / CI merge hold
+
+- verdict: **PASS-WITH-FIX accepted** for the corrected source.
+- H1 reviewed original PR #82 head `51457826ea6c29d9c94ac0066786df8927fa1274` and found two bounded residual issues: a checked-test synchronous resolver mismatch (P3) and incomplete invalid/not-ready index drift detection (P2).
+- H1 corrected those on evidence branch exact head `9d30a68317dd523a96e6ce96bf7a0f6de23235d5`; compare against the reviewed PR head is direct **ahead 2 / behind 0**.
+- C1 adopted that exact evidence head into the existing PR #82 branch by normal fast-forward; no force push.
+- GitHub read-back: PR #82 OPEN / unmerged / mergeable=true / exact head `9d30a68317dd523a96e6ce96bf7a0f6de23235d5`.
+- H1 evidence accepted: focused checked Deno 104/104; relevant runtime 914/914 (--no-check); disposable PostgreSQL runner 132 PASS; independent SQL/dispatcher/workflow/provider tests 41/41; workflow Node regressions 49/49; changed helper check/lint/diff/secret scan PASS. Known full-entrypoint diagnostics match fresh-main baseline and are not introduced by PR #82.
+- residual source blockers in reviewed scope: **none demonstrated after fixes**.
+- CI after C1 fast-forward: Vercel and Netlify are rerunning/pending; therefore **merge remains HOLD until required checks are green**.
+- production mutation / migration apply / deploy / real X / OAuth / Vault / token / Cron operations: **0**.
+- production rollout remains a separate high-risk gate: production catalog/owner/default-ACL/membership and migration-ledger read-only preflight, exact apply-wrapper transaction certification, approved migration apply/read-back, then exact Function deploy. No production authorization is implied by this C1.
+- H1 is done/free after fresh allocation.
+- AI Lab diary: **記録不要** — this C1 is internal safety hardening/review of duplicate-post prevention, not a new user-facing feature or released behavior.
+
+## G1 allocation — Topic detail visual polish
+
+- task_id: `kabumori-topic-detail-visual-polish-20261005`
+- status: ready
+- owner: Claude G1
+- recommended model: **Sonnet5（高）**.
+- user will directly attach the approved visual reference showing `かぶモリ学習ノート`, a level-tinted Hero, numbered learning sections, distinct example card and final takeaway block.
+- implementation must treat the reference as visual direction only: native/dynamic text, no screenshot embedding, no baked copy.
+- preserve merged v2 behavior and all 50 curated topic texts; this is visual polish only.
+- preferred Hero uses existing approved beginner/intermediate/advanced topic artwork when it can be reused without distortion, meaningful crop or text collision; otherwise use native tint and report why.
+- normal sections stay light with numbered hierarchy; `具体例` and `覚えておくポイント` remain the emphasized blocks.
+- old `TODAY'S TOPIC` eyebrow should become `かぶモリ学習ノート`, resolving the past-topic label mismatch.
+- primary scope: `src/app/topic-detail.tsx`, `tests/app/topic-detail-screen_test.ts`; avoid catalog/content changes.
+- fresh allocation main: `d8a6fa7661b63a8e3c929f77232385369ebf3e94`; all current open PRs were checked and have **0 overlap** with the topic-detail target files/assets.
+- new Mac safety: clean base **`/Users/yuya/Developer/kabumori-fresh`**, fresh `origin/main`, independent G1 worktree/checkout. Old repo/worktrees must not be removed/reset/pruned.
+- EAS build expected: 0.
+- backend/DB/RPC/API/AI/Auth/Edge/production mutation: 0.
+- finish code: K1.
+
+## K4 — PR #76 fresh-main integration PASS -> H2 final security rereview
+
+- verdict: **PASS to independent security rereview; merge/apply/deploy HOLD**.
+- old corrective head: `fe1e846e59c69b591d29c6d21fc23c7b702d19cd`.
+- fresh main merged by G4: `d345f67402a782a303ce46c640f685271d76b681`.
+- new exact PR #76 head: `7f75c07a8c997b6a585e9c86dca01186eeea671f`.
+- normal merge commit only; no rebase/force-push.
+- exactly one conflict occurred as predicted: `supabase/tests/migration_source_invariants_test.ts`.
+- resolution preserved all fresh-main RESERVED entries and added only `20261003090000_social_mobile_publish_permission_boundary`.
+- migration version collision check: none against main/open PRs; PR81 uses 20261003120000 and PR82 uses 20261004090000.
+- no functional publish-toggle/auth/RPC/UI code changed during freshness integration.
+- reported post-merge verification:
+  - migration invariants 10/10;
+  - publish-setting + migration + Vault focused 68/68;
+  - relevant runtime 925/925 (--no-check);
+  - social-mobile 145/145 + domain 22/22;
+  - typecheck/lint PASS;
+  - changed Deno check/lint PASS;
+  - disposable DB APPLY/BEHAVIOR/RACE/E2E/CLEANUP PASS;
+  - mutation suite 30/30 detected;
+  - diff/secret scan clean.
+- fresh GitHub state at K4: PR open/unmerged/mergeable=true; Netlify/Vercel success; current main 8 commits ahead of fresh base with **0 overlap** across PR files.
+- production read/write, migration apply, deploy, Auth/Vault/Cron mutation, real X = 0.
+- H1 is occupied by PR #82 final review, so free H2 is assigned `x-social-mobile-pr76-transactional-publish-toggle-rereview-20261005`.
+- H2 review must independently validate R1-R5, lock/deadlock behavior, SECURITY DEFINER grants, actual pre-send coverage, PostgREST/auth.uid semantics, Kabumori-style account boundary and fail-closed rollout ordering.
+- recommended Codex model: **Sol（極高）**.
+- no merge or production authorization is implied by K4.
+
+## PR #82 residual corrective complete -> H1 final boundary rereview
+
+- direct Claude corrective updated PR #82 to exact head `51457826ea6c29d9c94ac0066786df8927fa1274`, open/unmerged/mergeable.
+- branch incorporated fresh main with normal merge history; canonical diary retained latest main topic-detail-learning content while preserving stable event IDs; snapshot regenerated.
+- PR now changes 14 files and adds `ai_lab_provider_outcome.ts`.
+- reported fixes target every prior C1 residual:
+  - duplicate scalar diary labels reject instead of last-wins;
+  - migration owner/role-membership/effective privilege pre/postconditions;
+  - actual X request-observation wrapper producing typed proven-no-post errors rather than string matching;
+  - provider_started/ambiguous evergreen quarantine without age-based reopening;
+  - published evergreen cooldown from `published_at`;
+  - exact canonical candidate JSON validation and DB-owned evergreen theme mapping;
+  - changed-file lint debt removed.
+- reported verification: Functions 2543/2543 PASS; disposable PostgreSQL runner 132 PASS; SQL mutations 15/15 detected; TS mutations 15/15 detected; changed lint 0 except unchanged main x-test-post diagnostics; production mutation=0; real X=0.
+- GitHub checks: Netlify and Vercel success.
+- fresh comparison: main is 13 commits ahead of PR base with **0 overlapping PR #82 changed files**.
+- migration versions remain distinct from PR #76 and PR #81.
+- H1 assigned `ai-lab-pr82-final-boundary-rereview-20261005`, recommended **Sol（高）**.
+- review must independently prove actual VaultAccountXAuth request-observation safety, `pg_has_role` owner-membership direction/transitivity, 73h unresolved evergreen quarantine, publish-time cooldown and canonical theme mapping.
+- merge/migration apply/deploy remain HOLD until C1.
+- H2 remains free; G3/G4 remain separately assigned and untouched.
+
+## Final C2 — PR #81 content-settings hardening CHANGES REQUIRED
+
+- verdict: **CHANGES REQUIRED**; PR #81 exact reviewed head `5595fb131813542c55c43bc783af623cdb9ea442` remains open/unmerged.
+- H2 confirms the large original issues are substantially closed: normalized settings/persona JSON contract, table ACL/RLS least privilege, and finite normal-path monotonic CAS all pass independent local proof.
+- residual R1: a deferrable `PRIMARY KEY (brand_id)` is not rejected by the current drift guard. Hardening succeeds, but the actual repository `INSERT ... ON CONFLICT (brand_id) DO UPDATE` then fails with SQLSTATE 55000. Must reject deferrable/wrong arbiter drift.
+- residual R2: unexpected existing helper function EXECUTE ACL/owner drift can survive `CREATE OR REPLACE`. Table ACL is safe, but function-boundary least privilege is not fully fail-closed. Must verify exact owner/signature/effective EXECUTE grants and reject unknown drift.
+- residual R3: historical `updated_at='infinity'` is admitted by the candidate and cannot be advanced by `greatest(clock_timestamp(), old.updated_at + 1us)`. The same stale token can update repeatedly. Must refuse non-finite existing versions and enforce a finite version domain going forward.
+- migration tooling finding: actual Supabase CLI 2.116.0 proves per-file atomicity and failure rollback, but **not whole-chain atomicity**. Normal migration-up can commit the weak historical candidate before the hardening file. Production rollout needs an explicitly reviewed atomic/safe two-file plan or an equivalent source strategy; do not apply opportunistically.
+- production target table and both versions were absent at H2's read-only preflight; this reduces migration-history constraints but does not authorize apply.
+- app/source compatibility remains positive: social-mobile 116/116, repository focused 3/3, relevant Deno 158/158, PR78 source composition clean in local merge-tree.
+- fresh C2 comparison: main is 62 commits ahead of PR81 base with **0 overlapping PR81 files**; PR81 currently mergeable.
+- G3 assigned `x-social-mobile-pr81-hardening-residual-corrective-20261005`, recommended **Opus5.5（高）**.
+- PR81 merge, production apply and PR78 review/resume remain HOLD.
+- after K3, allocate fresh H2 rereview, recommended **Sol（高）**.
+- H2 closed/free after fresh allocation.
+- production mutation/deploy/live AI/X/Auth/Vault/Cron = 0.
+
 ## K4 — PR #76 corrective accepted as review candidate, fresh-main integration required first
 
 - G4 transactional corrective reported PASS on source/local disposable proof at exact head `fe1e846e59c69b591d29c6d21fc23c7b702d19cd`.
@@ -785,7 +988,7 @@
 | --- | --- | --- | --- | --- |
 | H1 | `done` | `x-social-mobile-pr65-ephemeral-x-auth-session-review-20261001` | `none` | `.agent/tasks/CODEX_TASK.md` |
 | H2 | `done` | `x-ai-salaryman-dev-diary-pr61-final-acceptance-20260930` | `none` | `.agent/tasks/CODEX_TASK_2.md` |
-| G1 | `review_required` | `kabumori-topic-detail-learning-v2-20261003` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_1.md` |
+| G1 | `review_required` | `kabumori-topic-detail-visual-polish-20261005` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_1.md` |
 | G2 | `in_progress` | `kabumori-shared-report-v2-rich-presentation-hard-facts-20261001` | `claude` | `.agent/tasks/CLAUDE_TASK.md` |
 | G3 | `review_required` | `x-social-mobile-e3-delete-revoke-residue-20261001` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_3.md` |
 | G4 | `review_required` | `x-social-mobile-x-account-switch-auth-session-20261001` | `chatgpt` | `.agent/tasks/CLAUDE_TASK_4.md` |

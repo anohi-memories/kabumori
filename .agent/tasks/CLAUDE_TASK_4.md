@@ -1,10 +1,202 @@
 # Claude Task 4 — CURRENT TASK
 
-- task_id: x-social-mobile-pr76-fresh-main-integration-20261005
+- task_id: x-social-mobile-pr76-final-security-corrective-20261005
 - owner: claude
 - slot: claude-4
 - status: ready
 - next_owner: claude
+- priority: highest
+- recommended_model: Opus5.5（高）
+- type: bounded corrective implementation / pre-send readiness parity / SECURITY DEFINER ACL / rollout fail-closed
+- target_pr: 76
+- reviewed_head: 7f75c07a8c997b6a585e9c86dca01186eeea671f
+- production_mutation_allowed: false
+
+## Purpose
+
+Final H2 rereview returned **CHANGES REQUIRED** on PR #76.
+
+The original R1-R5 architecture is substantially closed. Do not redesign the feature. Correct exactly these residual security boundaries:
+
+1. F1: pre-send permission readiness is weaker than toggle-ON readiness.
+2. F2: unexpected default/effective EXECUTE grants can survive on the two SECURITY DEFINER functions.
+3. F3: documented migration-first rollout leaves a temporary fail-open interval for old runtime.
+
+No production apply/deploy/write or real X operation.
+
+## Startup / isolation
+
+1. Read PROJECT_RULES / CLAUDE.md / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / this TASK / full latest H2 report.
+2. Continue only in the existing isolated G4 worktree for PR #76 if it is still safe/clean. Do not use G3/H1/H2 worktrees.
+3. Fetch fresh origin/main. Confirm PR #76 exact head is still `7f75c07a8c997b6a585e9c86dca01186eeea671f` before editing. If moved, STOP.
+4. G3 PR #81 remains active. Do not touch its content-settings migration/files.
+5. PR #82 is now merged; current main migration is `20261004090000_ai_lab_topic_claims.sql`. H2's older note claiming PR82 still uses 20261003090000 is stale. Current intended versions are:
+   - PR76: `20261003090000_social_mobile_publish_permission_boundary.sql`
+   - PR81: `20261003120000_social_mobile_content_settings_hardening.sql`
+   - merged PR82: `20261004090000_ai_lab_topic_claims.sql`
+   Recheck fresh before push.
+6. Normal push only; no force push/rebase of other slot work.
+
+## F1 — exact pre-send readiness parity
+
+H2 positively reproduced two states where toggle ON rejects but pre-send authority still returns authorized:
+
+- `connection_status='identity_verified'` but `verified_at IS NULL`
+- nonblank `last_connection_error_code` such as `X_ACCESS_TOKEN_UNAUTHORIZED`
+
+Required correction:
+- the final authoritative pre-send permission check must reject both;
+- use fixed bounded refusal codes; no raw DB/backend text;
+- do not weaken intended refreshing/current-token behavior;
+- do not rely on the earlier cached `x_legacy_post_account` helper to imply these checks;
+- preserve the existing exact-account / brand-live / publish_enabled / identity / credential-reference checks.
+
+Tests must include:
+- missing verified_at -> pre-send refused, actual fake X callback 0;
+- recorded connection error -> pre-send refused, fake X callback 0;
+- normal eligible account still sends through fake callback;
+- 401 retry still performs a fresh permission check before any second request;
+- OFF remains fail-safe.
+
+Update any documentation claiming full parity so it is exactly true.
+
+## F2 — SECURITY DEFINER exact effective ACL
+
+H2 reproduced:
+- creator/apply-role default privileges can grant EXECUTE to an unexpected role;
+- current migration revokes only known roles, so the extra grant survives;
+- inherited membership can make an app role effectively execute the wrong function.
+
+Correct the migration boundary for exactly:
+- `set_social_account_publish_enabled(text,boolean,boolean)`
+- `assert_x_publish_permission_for_legacy_post(uuid,text,text)`
+
+Required:
+- validate expected creator/owner assumptions;
+- inspect/refuse or narrowly normalize unexpected direct EXECUTE grants on these two functions only;
+- assert **effective** privileges after creation, including inherited role membership;
+- PUBLIC/anon must have none;
+- authenticated may execute only the user toggle;
+- service_role may execute only the pre-send assertion;
+- unrelated roles must not retain effective EXECUTE;
+- no global ALTER DEFAULT PRIVILEGES and no role-membership mutation;
+- do not broaden table grants;
+- fixed empty search_path / schema-qualified references remain.
+
+Add adverse disposable-role tests:
+- unexpected default EXECUTE grantee;
+- unrelated direct grantee;
+- inherited unexpected EXECUTE;
+- expected clean role graph;
+- reapply/idempotency;
+- failure rolls back with no partial security surface.
+
+If exact owner/creator policy cannot be made safe within this migration without broader architecture change, STOP and report rather than expanding scope.
+
+## F3 — rollout must fail closed in every partial state
+
+Current documented migration-first sequence is not accepted.
+
+H2 reproduced:
+- migration applied, old sender still active;
+- caller can toggle OFF through the new RPC;
+- old sender can still start an X request because it has no new pre-send guard.
+
+Produce and test an operational sequence where **all partial rollout states fail closed**.
+
+Preferred direction to prove:
+1. deploy guarded runtime first while permission RPC is absent -> Vault-backed sends fail closed with `X_PUBLISH_PERMISSION_UNAVAILABLE`;
+2. verify new runtime exact bytes/version/read-back;
+3. apply the reviewed permission migration;
+4. read back RPC definitions/ACL/effective privileges;
+5. only then expose/deploy the user-facing publish-setting Edge/app capability.
+
+Alternative staged-grant design is allowed only if simpler and independently provable, but do not add broad new architecture.
+
+Required tests/proof:
+- old runtime + new toggle authority must never be an allowed operational state in the approved runbook;
+- new guarded runtime + missing RPC => no X callback;
+- new guarded runtime + valid RPC + ON => fake X callback allowed;
+- new guarded runtime + OFF/brand-disabled => callback 0;
+- rollback/abort points are explicit;
+- no Cron/manual backlog/candidate injection required.
+
+No production execution in this task.
+
+## Preserve already-closed behavior
+
+Do not regress:
+- auth.uid transactional caller authority;
+- owner/admin membership locking;
+- brand/account/CAS locking;
+- lock ordering/deadlock protection;
+- tenant-safe errors;
+- fail-safe OFF;
+- UI confirmation pinning;
+- no service-role user toggle write path;
+- no OAuth/Vault revoke on OFF;
+- no cancellation claim for already-started X request;
+- fresh check before 401 retry;
+- current narrow publish-toggle scope.
+
+## Required verification
+
+Run after correction:
+- migration source invariants;
+- publish-setting Edge logic/http/migration tests;
+- actual VaultAccountXAuth tests;
+- new F1 adapter callback-zero tests;
+- disposable PostgreSQL apply/reapply/behavior/race/E2E;
+- new F2 default/effective ACL adverse role cases;
+- F3 partial-rollout fail-closed harness;
+- mutation suite expanded for F1/F2/F3;
+- social-mobile full tests;
+- app typecheck/lint;
+- changed Deno check/lint;
+- relevant x-test-post + shared tests;
+- git diff --check;
+- secret/scope scan.
+
+Use fake X only. No real X/OpenAI/production.
+
+## PR handling / completion
+
+Amend PR #76 normally and preserve reviewed head in Report.
+
+Report:
+- task_id/result
+- old/new exact PR head
+- F1 correction + executable proof
+- F2 correction + effective ACL proof
+- F3 exact approved rollout sequence + partial-state proof
+- changed_files
+- SQL/runtime/app tests
+- fresh-main overlap/conflicts
+- migration-version check
+- production mutation/read/deploy/X = 0
+- remaining risks
+- safety checks
+- next recommendation
+
+Then:
+- status -> review_required
+- next_owner -> chatgpt
+- STOP for K4.
+
+After K4, independent H2 rereview is mandatory.
+Recommended rereview model: **Sol（極高）**.
+
+---
+
+# Previous G4 task history — preserved below
+
+# Previous G4 task — preserved history
+
+- task_id: x-social-mobile-pr76-fresh-main-integration-20261005
+- owner: claude
+- slot: claude-4
+- status: review_required
+- next_owner: codex
 - priority: high
 - recommended_model: Sonnet5（高）
 - type: integration-only / fresh-main merge / conflict resolution / regression verification
@@ -1492,3 +1684,86 @@ SECURITY DEFINER の理由: `authenticated` は `social_accounts` に UPDATE 権
 
 ### next recommendation
 K4でCodex **Sol（極高）** の独立再レビューを割り当て。重点: ロック順と待ち、SECURITY DEFINER関数のACL、`not_found` の一様性、送信前確認の対象範囲（かぶモリ従来経路を含めるか）、かぶモリ型アカウントのOFF可否、適用順。承認後に、操作者が preflight → migration単独適用 → read-back → x-test-post deploy → publish-setting deploy（verify_jwt ON）の順で実施。merge・適用・deployはClaudeの自己レビューだけでは行わない。
+
+
+## Report — x-social-mobile-pr76-fresh-main-integration-20261005 (2026-10-05)
+
+- task_id: x-social-mobile-pr76-fresh-main-integration-20261005
+- result: **PASS（統合のみ）**。PR [#76](https://github.com/anohi-memories/kabumori/pull/76) に最新mainを通常のmerge commitで取り込んだ。機能変更なし。未merge・未deploy。
+- model_used: Opus 5.5（TASK推奨は Sonnet5（高）。このセッションのモデルが Opus 5.5 のため）
+- old head: `fe1e846e59c69b591d29c6d21fc23c7b702d19cd`（開始時に PR #76 の head が一致することを確認。履歴に保持）
+- fresh main SHA merged: `d345f67402a782a303ce46c640f685271d76b681`
+- new exact PR head: `7f75c07a8c997b6a585e9c86dca01186eeea671f`（merge commit。親 = `fe1e846e` と `d345f674`。rebase・force-pushなし）
+- commit_hash: `7f75c07a`（merge commit 1つのみ）
+- changed_files（手で編集したもの）: `supabase/tests/migration_source_invariants_test.ts` の衝突解消のみ。main比較の PR 全体の変更ファイルは是正時と同じ22ファイル。
+- deploy: なし
+- worktree: 既存のG4専用worktree `.claude/worktrees/g4-x-admin-pr15` のみ使用（TASK指示どおり）。他slotのworktree・PR #81/#82 のファイルには触れていない。
+
+### conflict paths
+- `supabase/tests/migration_source_invariants_test.ts` のみ（TASKの想定どおり）。他のファイルは自動mergeで衝突なし。
+
+### exact conflict resolution
+`RESERVED` マップで、mainの行をすべてそのまま残し、PR #76 の予約1行をその後ろ（日付順）に置いた。mainとの差分はこの1行の追加だけ:
+
+```
+   "20261002090000": "mic_jgb_nikkei_observation_grace_stage0", // MIC State freshness Stage 0
++  "20261003090000": "social_mobile_publish_permission_boundary", // PR 76 corrective (source candidate)
+```
+
+### migration-version collision result
+- merge後の `supabase/migrations/` でversionの重複 0件。
+- open PR のmigrationと照合（`gh pr list` の全open PR）: PR #76 `20261003090000`、PR #81 `20261003120000_social_mobile_content_settings_hardening`、PR #82 `20261004090000_ai_lab_topic_claims`、PR #41 `20260927101423`／`20260927124300`、PR #3 `20260921115317`。**衝突なし**。
+- mainで増えたmigrationは `20261002090000_mic_jgb_nikkei_observation_grace_stage0.sql` の1本のみ。`social_accounts`／brand／membership／publish／refresh には触れていない（grepで確認）。
+- mainで変わった実行時コードのうち PR #76 の領域に関わるのは `_shared/brand/ai_lab_dev_diary_context.*`（文書と snapshot）だけ。`x-test-post` と `social-mobile-publish-setting` には main 側の変更なし。
+
+### tests（merge後のブランチで実施。すべてローカル・偽データ）
+1. migration source invariants: 10 passed / 0 failed
+2. publish-setting Edge（logic／http）＋ 3. migration契約 ＋ 4. `vault_account_auth_test.ts`: 型チェックあり 68 passed / 0 failed
+5. x-test-post ＋ `_shared` ＋ publish-setting 全体（`--no-check`）: 925 passed / 0 failed
+6. social-mobile アプリ: `npm test` 145 passed、domain 22 passed
+7. `tsc --noEmit`: PASS
+8. `expo lint`: PASS
+9. 変更した実行時・テストファイル11本の `deno check`・`deno lint`: PASS
+   - `x-test-post/index.ts` 全体の型エラーは既存のもの。fresh main（`d345f674` を scratch に展開）と merge後で、エラー内容・位置（8か所）とも**完全一致**。PR #76 による新規エラー 0。
+10. 使い捨て PostgreSQL 17（新Macで新規作成）: `social_mobile_publish_permission_run.sh`（`PUB_E2E=1`）→ APPLY / BEHAVIOR / RACE / E2E / CLEANUP すべてPASS。変異テスト `social_mobile_publish_permission_mutations.sh` → **30/30 検出**（TASK必須外の追加確認）
+11. `git diff --check`（main比較）: 問題なし
+12. 秘密情報スキャン（main比較の追加行）: 該当0件。スコープ: main比較の変更ファイルは是正時と同じ22ファイル。content-settings／AI Lab topic claims／相談／共通アカウント／`.agent/`／`.env` は含まれない。
+
+### compatibility issue
+なし。実装（`set_social_account_publish_enabled`、`assert_x_publish_permission_for_legacy_post`、ロック順、ACL、Edge挙動、送信前ガード、UIの確認固定）は一切変更していない。
+
+### push / read-back
+- push直前に PR head が `fe1e846e` のままであることを再確認してから、通常push（`fe1e846e..7f75c07a`）。force-pushなし。
+- read-back: ローカル HEAD = `origin/g4/social-mobile-publish-toggle-v1-20261002` = PR #76 `headRefOid` = `7f75c07a8c997b6a585e9c86dca01186eeea671f`。state OPEN、mergeable **MERGEABLE**（mergeStateStatus CLEAN）。
+- CI: push直後の時点で passing 1／failing 0／pending 5。完了は待っていない（K4で確認をお願いしたい）。
+- PRのタイトル・説明は変更していない。
+
+### production / safety
+- production mutation = **0**（migration適用・db push・Edge deploy・トグル操作・行変更・Auth/Vault/Cron変更なし）
+- production read = 0
+- real X operations = **0**
+- PR merge なし。テスト用PostgreSQLと一時DBは停止・削除済み。
+
+### remaining issues
+- 是正時の Report に書いた残リスク（適用順: migration → x-test-post deploy、かぶモリ型アカウントのOFF扱い、OFFとrefreshの競合、送信開始後のOFFは取り消せない、本番カタログ未確認など）はそのまま。今回の統合で増減なし。
+- Report記入時点で main は `5704de29` まで進んでいるが、増えた4コミットは `.agent/` の調整ファイルのみ（PR #76 のファイル・migrationへの影響なし）。
+- main がこの後さらに進むと、再び `RESERVED` マップで同種の衝突が起きうる（追記同士なので解消は機械的）。
+
+### next recommendation
+K4確認後、TASKどおり H1 で Codex **Sol（極高）** の独立再レビュー（対象 head は上記 new exact PR head）。merge・適用・deployは再レビュー承認後に操作者が実施。
+
+
+## K4 decision — PR #76 fresh-main integration PASS
+
+- verdict: **PASS to independent security rereview; merge/apply/deploy HOLD**.
+- accepted fresh head: `7f75c07a8c997b6a585e9c86dca01186eeea671f`.
+- PR is open/unmerged/mergeable=true.
+- expected single conflict in `supabase/tests/migration_source_invariants_test.ts` was resolved by preserving fresh main and adding the PR76 reserved version only.
+- fresh GitHub comparison after integration: current main 8 commits ahead of base, **0 overlaps** across PR changed files.
+- Netlify/Vercel success.
+- functional corrective code was not changed by the integration task.
+- reported post-merge regression and disposable DB evidence is sufficient to proceed to independent review, not production.
+- H1 is occupied by PR #82; H2 assigned `x-social-mobile-pr76-transactional-publish-toggle-rereview-20261005`.
+- recommended H2 model: **Sol（極高）**.
+- production apply/deploy/toggle/X remain forbidden.
+- next_owner: codex; wait for C2.

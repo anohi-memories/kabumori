@@ -1758,3 +1758,153 @@ At the corrected source tree (one source commit b6d2dce3):
 - Future rollout only after source acceptance and separate production authority: inspect production catalog/owner/default ACL and old superseded-table presence read-only; certify exact SQL apply-wrapper/transaction behavior; apply only approved migration; verify catalog/ACL/function definitions; deploy only approved exact source; use authorized natural-cycle observation without manual X/backlog/candidate injection/Cron/token/gate changes. Cross-system exactly-once is not promised.
 - safety_checks: other workstreams, synced sources, ACTIVE_TASK/CURRENT_STATE/H2 and shared user changes preserved; all tests disposable/fake; no external production mutation. Supabase/Postgres skills guided stricter drift, effective-privilege and crash-boundary checks; did not expand authority.
 - next_recommendation: **C1, 推薦モデル：Sol（高）**. H1 TASK -> `review_required`, `next_owner: chatgpt`; STOP after exact H1 control-file sync/read-back. C1 owns shared index alignment.
+
+---
+
+# H1 — PR #82 final boundary rereview (2026-10-05)
+
+- task_id: `ai-lab-pr82-final-boundary-rereview-20261005`
+- result: **PASS-WITH-FIX**, only for the corrected source/evidence head below. Unchanged original PR head still has the two bounded findings; do not treat it as an unconditional PASS.
+- status: `review_required`; next_owner: `chatgpt`; recommended_model: **Sol（高）**.
+- reviewed exact PR head: `51457826ea6c29d9c94ac0066786df8927fa1274`; previous rejected head: `9f3b19a3cde490cf63735220ae191dcd4f11bdcb`.
+- source commits: `cf6bf2cf1113ac1bc083609a86ca97668484e013` (two corrections + independent tests), `9d30a68317dd523a96e6ce96bf7a0f6de23235d5` (align the independent fixture's synchronous resolver contract).
+- source push/read-back: final `9d30a68317dd523a96e6ce96bf7a0f6de23235d5` on `codex/h1-pr82-final-20261005`; PR #82 original branch was deliberately preserved. C1 must adopt these changes before accepting source.
+- fresh main before control synchronization: `1c633e846c8d3ae49ca95aa13b6063f26f85e052` (24 commits ahead of PR base `12af08b80e6e1cef1246ff115cd157b97885e780`); overlap with the original 14 PR files: **0**. Main changed only control/project instructions in that interval. No same migration timestamp found on main; G4/PR76 `20261003090000`, G3/PR81 `20261003120000`, PR82 `20261004090000` are distinct. No production migration ledger was read.
+- PR #82 read-back: OPEN, unmerged, mergeable=true, exact head unchanged, 14 files. No merge or check bypass.
+
+## Findings and bounded corrections
+
+1. **P3, fixed — new checked-test type error.** `realVaultAuth` returned `Promise.reject` from the synchronous `XOAuthClientResolver`, causing a new TS2739 diagnostic. It now throws synchronously. The analogous independent fixture also follows that contract. Runtime/OAuth behavior is unchanged.
+2. **P2, fixed — incomplete index drift proof.** Comparing `pg_get_indexdef` alone admitted a same-DDL partial UNIQUE index whose catalog marked it invalid/not ready. A disposable PostgreSQL catalog probe reproduced acceptance on the original candidate. The shape guard now compares `indisvalid`, `indisready`, and `indislive`; the same probe rejects with SCHEMA_DRIFT. PostgreSQL documents that invalid indexes do not guarantee uniqueness and not-ready indexes are ignored by inserts/updates: [PG17 index catalog](https://www.postgresql.org/docs/17/catalog-pg-index.html). This is a migration-source guard correction, not a production schema change.
+
+No remaining demonstrated P1/P2 finding in the corrected review scope. These fixes do not redesign the claim/provider protocol or expand production authority.
+
+## Gates A–C: identity, provider proof, dispatcher
+
+- Actual parser/sanitizer/candidate builder and extracted actual workflow validator reject missing/invalid/repeated event IDs and duplicate scalar labels before generation. The previous duplicate-label RED case now produces zero diary candidate and fails CI; no last-wins identity rewrite. Reordering/body/angle edits preserve an existing valid ID. All eight canonical public IDs were inspected for unsafe/internal identifiers; fresh-main topic-detail-learning prose is preserved, with intentional stable-ID metadata only. Canonical Markdown and generated snapshot match exact deterministic generator bytes.
+- Actual `VaultAccountXAuth.send` + observed sender were exercised with fake credential, refresh and request callbacks, not a copied auth implementation. Authentic 400/401/422/429 yield typed no-post evidence. Refresh-disabled 401 retains the transformed X_ACCESS_TOKEN_UNAUTHORIZED message and releases safely; genuine 401/refresh/401 retains X_ACCESS_TOKEN_REJECTED_AFTER_REFRESH; 401/refresh/success returns success. Mixed uncertainty, 403/408/3xx/5xx, transport/read errors and a local error merely mentioning 401 never become typed no-post. Failed proactive fake refresh is NOT_SENT only because no create-post callback ran.
+- Source uses fixed HTTPS `POST /2/tweets` and manual redirects; full response-text read must succeed before a response is observed as a status. Official [X create-post endpoint](https://docs.x.com/x-api/posts/create-post) and [X response contract](https://docs.x.com/x-api/fundamentals/response-codes-and-errors) establish success/error semantics. 422 is interpreted under [RFC9110 unprocessable-content semantics](https://www.rfc-editor.org/rfc/rfc9110.html#section-15.5.21), not a claim that X advertises a live endpoint-specific 422 guarantee. Safety depends on the actual authenticated response and these contracts, not message text; provider bugs/cross-system exactly-once are not certified by local tests.
+- Only `AiLabProviderNoPostError` releases after durable provider start. Generic errors remain ambiguous. Ambiguous-write or settle-write failure leaves provider_started blocked. Confirmed X completion failure never reopens the claim or retries X. Pre-X guards release only their own fenced claim; false/error/lost response from start-provider never reaches X. Real SQL-port/dispatcher integration and previous accepted concurrency/fencing controls pass.
+
+## Gates D–F: quarantine, publish clock, canonical payload
+
+- Real SQL (not an in-memory SQL substitute) blocks unresolved provider_started and ambiguous seeds and overlapping canonical themes after 73h, 7d and longer simulated age. Claimed rows block within lease and expire only pre-X. The previous 73h paused-sender/replacement case stays at **one fake X** with no replacement claim. No lease/age recovery of possible writes.
+- Published seed/theme cooldown uses server-owned `published_at`, not `claimed_at`: 72h seed and 48h theme, including +/- one-minute edge probes. Earlier claims cannot shorten the clock; released/expired claims do not consume confirmed cooldown. Correctly aged published rows may re-enter if no unresolved blocker remains.
+- RPC validates the entire bounded candidate array before expiring/inserting claims: exact four-key set/types, duplicate event keys, canonical seven evergreen seeds, unit equality, exact canonical theme arrays, diary syntax/unit relationship and empty diary themes. Extra/missing/wrong fields and malformed later candidates reject atomically with no earlier insertion. Executable SQL/TypeScript canonical-tag parity passes; caller-provided tags cannot bypass cooldown. No post body is stored.
+
+## Gates G–H: effective privileges and migration drift
+
+- Actual migration owner is a non-superuser/non-API local owner. Clean install/reapply succeeds; table and all five narrow functions retain that owner. Direct API table rights including PG17 MAINTAIN are false, column ACL absent; only service_role has narrow function EXECUTE. API/authenticator migration owners are refused.
+- Direct service_role/authenticated and nested service-role-to-owner membership were built locally. Effective TRUNCATE became true, `pg_has_role(api, owner, 'MEMBER')` was true, and reapply refused without changing the role graph. The reverse owner-to-API membership used by the clean fixture does not spuriously fail. This verifies the correct argument direction/transitivity in [PostgreSQL role information](https://www.postgresql.org/docs/17/functions-info.html).
+- API table/function owner drift (each named API role for function ownership), unexpected EXECUTE/table grantees, overloads, wrong PK/partial UNIQUE/index/check, RLS/policy/trigger and column-ACL drift are refused. Unknown-grant failures roll back rather than partially repairing the catalog. The additional invalid/not-ready index probe passes only after the H1 guard correction.
+- Two-session actual SQL race permits one active diary claim. Removing only the advisory lock from an outside-Git mutation copy is detected by the runner; removing only the diary UNIQUE is detected by the independent direct-insert control. Neither weakened copy was committed. This rereview did **not** independently rerun all claimed 15 SQL + 15 TS mutation variants.
+
+## Gate I / executed verification
+
+- Focused checked Deno suites (event, diary, topic, scheduled dispatcher, cross-brand): **104 PASS / 0 FAIL** after the bounded fixes.
+- Full relevant `_shared` + `x-test-post` runtime scope, with `--no-check`: **914 PASS / 0 FAIL**. No network permission granted.
+- Supplied disposable SQL runner, local PostgreSQL 17.11: **132 PASS**, including clean/reapply, two-session race, lease/fencing, canonical payload, age/publish-clock, ACL and drift. Re-run after the index-guard fix.
+- H1 independent real-SQL/dispatcher tests 20 + actual-workflow tests 3 + actual-Vault/provider matrix 18: **41 PASS / 0 FAIL** at final source head. Fake X/model/credential/refresh ports only.
+- Actual workflow's Node regression suites: **49 PASS / 0 FAIL**; deterministic generated snapshot parity PASS. Counts overlap with Deno suites and must not be summed as unique coverage.
+- Four changed runtime helpers: `deno check` PASS. Nine changed TypeScript helper/snapshot/test files: `deno lint` PASS; no broad disable introduced.
+- Full entrypoint check is **not clean**: the same **six known errors** occur on candidate and fresh-main source (Uint8Array/BufferSource/Blob/BodyInit, missing morning retry_count, timestamp_precision unknown). Full entrypoint lint has the same **three known diagnostics** (unused xWeightedLength/decryptToken, prefer-const). Diagnostic text matches exactly after path/line normalization. Main advanced only control files after the baseline checkout, leaving this source baseline unchanged.
+- `git diff --check` PASS; targeted secret/private-key/JWT-shape scan found no real-key matches; canonical event IDs contain no production UUID/token. Test credentials are explicit fixtures. Candidate claim of 2543 entire-Functions tests is not presented as independently run here.
+
+## Changed files / isolation / safety
+
+- `supabase/functions/_shared/brand/ai_lab_event_dedupe_test.ts`
+- `supabase/migrations/20261004090000_ai_lab_topic_claims.sql`
+- `supabase/tests/h1_pr82_claim_boundary_test.mjs`
+- `supabase/tests/h1_pr82_provider_matrix_test.mjs`
+- `supabase/tests/h1_pr82_workflow_boundary_test.mjs`
+- H1 control only: `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md`.
+
+- New-Mac rules followed: new isolated H1 source/base/report worktrees from `/Users/yuya/Developer/kabumori-fresh`; its primary checkout and all old/shared worktrees were preserved. Existing H1 report history is append-only; G1–G5/H2/ACTIVE_TASK/CURRENT_STATE were not edited. C1 owns shared-index alignment.
+- Relevant content-diversity, fingerprint/cross-brand dedupe, attempt-budget, completion and other-brand regressions pass. Source change remains AI Lab-only; no new model call, common-account behavior, Kabumori/Mio/OAuth/Vault implementation, scheduler/Cron or other-workstream mutation.
+- Production Supabase reads/writes, migration apply, deploy, real X/media/refresh/OAuth/Vault/token/Cron operations: **0**. No production credentials loaded. This review is not current production byte/catalog certification.
+- Local test databases confirmed absent and H1-owned local cluster stopped; local fake evidence files retained for reproducibility. A final local restart initially omitted its socket options and caused connection-only harness failure; it was stopped, restarted with the original local-only socket configuration, and all 41 tests passed again. No other session's database/server was stopped and no production data was created.
+- Supabase/Postgres skills guided effective-privilege, crash-boundary and index-state drift checks; they did not expand mutation authority.
+
+## C1 / merge / rollout recommendation
+
+- **C1, 推薦モデル：Sol（高）**: accept PASS-WITH-FIX only after adopting the two bounded corrections from final evidence head `9d30a68317dd523a96e6ce96bf7a0f6de23235d5` into PR #82 (normal owned workflow; no force push), verifying its updated exact head and required repository checks. Do not merge the uncorrected `51457826` as an unconditional PASS.
+- No demonstrated residual source blocker after fixes. Production rollout remains separately gated: read-only owner/default ACL/membership/catalog and migration-ledger compatibility; certify the actual approved apply wrapper/BEGIN-COMMIT behavior; apply only the approved migration and read back ACL/definitions; then deploy separately approved exact Function source. Production apply-wrapper/nested-transaction behavior has not been certified here.
+- No authorization for production apply/deploy, manual X, backlog/candidate injection, token/gate/Cron changes is inferred. Natural-cycle observation requires its own authorization. No exactly-once guarantee is claimed across PostgreSQL and X.
+- H1 is stopped at `review_required` / `next_owner: chatgpt`; do not restart until C1 assigns the next step. Control-file synchronization is a separate control-only main commit; source remains the read-back evidence branch, not merged.
+
+---
+
+# H1 — PR #82 production read-only preflight (2026-10-05)
+
+- task_id: `ai-lab-pr82-production-readonly-preflight-20261005`
+- verdict: **PREFLIGHT COMPLETE / PRODUCTION ROLLOUT HOLD**. Current target catalog and owner prerequisites pass. A safe, exact single-file production apply mechanism and its history-failure policy still require a C1 decision; catalog PASS is not deployment authority.
+- status: `review_required`; next_owner: `chatgpt`; recommended C1: **Sol（高）**, future high-risk mutation gate: **Sol（極高）**.
+- fresh main at start: `3b3708eab5fc97190096ab66543bdc5fb1c48434`; refreshed pre-report base: `ed9404b91d96226b941d66540d5520bd17364b47`. Latest G1 control updates were fast-forwarded without changing that slot.
+- accepted PR82 source `9d30a68317dd523a96e6ce96bf7a0f6de23235d5` is squash-merged at `80e11c9207d44599db26a25195f1ee0091484231`, verified ancestor of fresh main. Accepted Functions/target migration bytes match the merge. Later main news-discovery changes are outside the x-test-post import closure. No accepted source was corrected or rewritten.
+- exact migration: `supabase/migrations/20261004090000_ai_lab_topic_claims.sql`; SHA256 `30d8504173160f1dc9c3d7d1cf323d9890129d1ff117c2448aa1b2516629c09c`.
+- production project: `wsmznyzcvmuitkglfeuj`; read session/current role `postgres`; PostgreSQL **17.6**. No application credential/Vault plaintext loaded.
+
+## A — actual production ledger / collisions
+
+- Ledger has **72 rows**; no version `20261004090000` or name `ai_lab_topic_claims`. Superseded `20261003090000` / `ai_lab_topic_event_usage` also absent. PR76 version/name and PR81 version/name are absent too; no target collision found. Never repair a superseded/colliding entry if a later pre-apply check finds one: STOP.
+- Fresh main has **103 migration files**. Only **45** production rows match both repository version and name; **11** additional rows have matching names under other versions; **16** are unmatched by that filename/name comparison. **58** source files lack an exact version+name ledger match. This is a metadata comparison, NOT proof that 58 schemas are unapplied or that unmatched effects are absent.
+- Historical server-assigned timestamps and renamed/missing source history make the global chain unsuitable for an unreviewed bulk push. No reconciliation, include-all, migration repair, db pull/push, or unrelated schema inspection/repair was attempted. Existing history must be preserved.
+
+## B — actual production catalog / owner / ACL preconditions
+
+- Catalog query across schemas found **zero** `ai_lab_topic_*` relations/indexes and **zero** target/topic-named functions, including all five RPC names and possible overloads. Claim table and superseded table both absent; topic-named types/policies/user triggers absent. Therefore target owner/RLS/constraints/index state/function security/search_path/effective table/column/EXECUTE ACL are **not yet applicable**, not falsely reported as installed-and-safe.
+- Intended apply owner `postgres`: non-superuser, BYPASSRLS, public schema USAGE/CREATE and database TEMP available; built-in `pg_catalog.gen_random_uuid()` exists. No API role (anon/authenticated/service_role) or authenticator is a MEMBER of postgres, directly or transitively. Reverse postgres-to-API membership is true and expected; it is not owner authority flowing to the APIs.
+- Relevant postgres/public default ACL: table owner has `arwdDxtm`; anon/authenticated/service_role have `Dxtm` (including PG17 MAINTAIN); function schema default names postgres EXECUTE. The migration's exact REVOKE ALL, PUBLIC/function revokes and effective ACL postconditions address these defaults without globally rewriting them. No unexpected default grantee was found in that scope.
+- Migration ledger owner is postgres; INSERT is permitted. Columns are version/statements/name/created_by/idempotency_key/rollback, with PK(version), UNIQUE(idempotency_key), zero user triggers. Present metadata shows no artificial failing constraint; it cannot rule out transport/commit uncertainty.
+- PostgREST DDL/drop watch event triggers exist and are enabled. API schema-cache/readiness still requires post-apply verification; trigger presence alone is not an RPC smoke result.
+
+## C — exact tooling / transaction proof and STOP boundaries
+
+Used the installed **Supabase CLI 2.116.0** with a byte-identical copy of ONLY the merged migration in an H1-owned scratch directory, no linked project and an explicit H1 Unix-socket local DB URL. Local PostgreSQL 17.11, non-superuser owner named postgres, production-shaped API memberships/default grants. No production migration tool was invoked.
+
+| Local proof | Target relation/functions | Target history row | Result |
+|---|---|---|---|
+| exact clean CLI apply | present / 5 | 1 | PASS |
+| exact SQL reapply + CLI no-op | present / 5 | still 1 | PASS |
+| unexpected default grantee causes final ACL failure before COMMIT | absent / 0 | 0 | complete target rollback |
+| injected history CHECK refusal after the migration's COMMIT | present / 5 | 0 | demonstrated schema/history gap |
+| one-file CLI directory + prior ledger version absent locally | not applied | prior row unchanged | rejects before apply |
+
+- Exact SQL owns its BEGIN/COMMIT. All target DDL and ACL validation are atomic up to its authored COMMIT. Failure before that point leaves no target partial DDL/ACL. Temporary helper functions live only in pg_temp; clean read-back shows postgres owner, RLS true, zero policies/column ACL, zero invalid/not-ready/dead indexes, zero public helper copies.
+- **Schema + migration-history are NOT one atomic commit through this CLI for this authored-transaction file.** The CLI executes authored controls sequentially, then inserts history only after every file statement succeeds; cleanup ROLLBACK cannot undo an already executed COMMIT. This is independently demonstrated, not inferred from generic per-file claims. Pinned [CLI apply implementation](https://github.com/supabase/cli/blob/v2.116.0/apps/cli/src/legacy/shared/legacy-migration-apply.ts) corroborates the order.
+- **An isolated one-file `migration up` is not immediately production-compatible** with existing remote versions missing from that scratch directory. The local prior-history probe raises LegacyMigrationMissingLocalError without applying the target. [Pinned migration-up selector](https://github.com/supabase/cli/blob/v2.116.0/apps/cli/src/legacy/commands/migration/up/up.handler.ts) also verifies remote/local alignment and can upsert configured Vault secrets before applying files: a future runner must exclude Vault configuration, not use a shared full-project config opportunistically.
+- Do not solve either boundary with --include-all, fake history stubs, repair/revert, broad db push, an outer `psql -1` around an inner COMMIT, or editing this accepted migration in place.
+- The Supabase Management [apply-migration API](https://supabase.com/docs/reference/api/v1-apply-a-migration) exposes query/name and no client-specified version. Its server transaction/history wrapper for authored BEGIN/COMMIT is **not independently certified here**; previous tasks document generated history versions. Do not substitute that API and claim equivalent atomicity without reviewing the chosen path/version policy.
+- C1 must choose a separately reviewed single-file runner/history policy. Options require explicit scope: accept a documented schema-first/history-second checkpoint and mandatory read-back on any failure, or prove a specifically approved atomic body+ledger wrapper without changing unrelated code/history. No production wrapper/source candidate was created in this read-only task.
+- Failure/timeout safe stop: do not deploy; read catalog AND ledger. Neither target nor history => remain unapplied; fully safe target but missing history => STOP for narrowly authorized bookkeeping decision; history present but target wrong/missing => STOP; any unsafe/incompatible target => STOP. Never automatically drop/down-migrate, reopen claims, blindly rerun X, or relabel history. A missing response may mean commit happened.
+
+## D–E — exact deploy target / current live baseline
+
+- Static import-graph walk over all Function entrypoints finds the changed topic store/diary/snapshot/dispatcher/provider modules in **`x-test-post` only**. This is the only required Function deploy target. No migration dependency requires a scheduler/Cron/OAuth/other-Function change.
+- Live read-back baseline: x-test-post **ACTIVE v133**, **verify_jwt=false**, package digest `bb2ae611653674269c63405ee57c778f892519c08c6e41718f6a965b9809716b`. The deployed topic store/diary/snapshot/dispatcher/entrypoint differ from accepted merged bytes; provider observer is absent. VaultAccountXAuth source is byte-equal to merged source. Production does not already contain the PR82 claim mechanism.
+- Cron `dispatch-scheduled-posts` is active at `* * * * *`, invokes x-test-post. Only job metadata/boolean target tests read, never raw command/headers/body or secrets. No scheduling/frequency/authorization change is required by this PR.
+- AI Lab brand active=true, publish_mode=live; its one X account publish_enabled=true; enabled_post_types=[brand_post]. Ten existing active JST windows were read (07:30–08:30 through 22:00–23:00); no setting changed. These are live gates, not a paused test environment.
+- Final queue metadata snapshot **2026-10-05 14:05:30 JST**: running=0, overdue pending=0, future pending=5, next scheduled **16:11:08 JST**. Earlier aggregate queried an irrelevant `publishing` label; it was not used as safety proof. Source and final query use the actual `running`/`succeeded` status contract. Snapshot is point-in-time, not a future drain guarantee.
+- Rollout order: accepted exact migration only -> ledger/catalog/ACL/definitions/API cache read-back -> separately approved exact x-test-post deploy, preserving verify_jwt=false -> downloaded source-byte/import-closure + version/status read-back -> permitted non-posting readiness checks -> separately authorized natural-cycle observation.
+- Deploy-first is **AI-Lab send fail-closed** when claim RPC is missing: claim failure occurs before generation/start-provider/X. It can still claim/fail a schedule and load existing Vault credentials before that boundary, so it is not a read-only/no-side-effect smoke and is not an acceptable intentional ordering shortcut. Other brands do not use the topic RPC.
+- Migration-first leaves old consumers publishing under old logic until cutover. Zero running at one instant does not prove old warm workers drained. Recheck no in-flight/overdue work immediately before any separately approved cutover, allow old invocations to finish without force retry, and verify new source afterward. If a safe cutover cannot be established without changing gates/Cron, STOP and request that additional authority; do not infer it.
+- **Cold ledger limitation:** clean creation has no historical event claims. There is no historical post-to-event backfill in the approved SQL. Therefore already-posted diary topics from the old system may be selected again if still fresh; this task did not read old post text to guess mappings. C1 must accept forward-only dedupe at the cutover or separately scope a verified historical transition. No backfill/seed/injection was done, and no retrospective no-repeat guarantee is claimed.
+
+## Pre/post read-back checklist (future authority required)
+
+1. Freeze exact source SHA/hash and apply mechanism. Re-read project identity, current/session role, target/superseded version+name and object absence, default ACL/memberships, current Function digest, live gates/Cron and running/due queue counts. Any drift/collision => STOP.
+2. Apply ONLY the approved target using that reviewed mechanism. On error/lost response use the catalog+ledger checkpoint above; no automatic repair or deploy.
+3. Require target history version/name policy satisfied; table/index/constraint shape, valid+ready+live indexes, RLS/no unexpected policies/triggers, no column/API table rights including MAINTAIN, owner postgres, exactly five signatures, SECURITY DEFINER + empty search_path, only intended service EXECUTE, no public/private persistent helpers. Inspect definitions/digests, not mere function-name existence.
+4. Confirm API schema-cache exposure/readiness without mutating production claims. Catalog checks and download/source comparison are safe. GET method-guard (expected 405) can confirm reachability without scheduler/credential/model/X behavior if explicitly included in smoke authority; it does not prove RPC behavior. Do not send POST/default/unknown/dry-run modes: existing dry runs can generate/write, and unknown POST can enter normal dispatch. Actual functional SQL/dispatcher probes remain disposable/fake, not production test rows.
+5. Deploy only accepted exact x-test-post, verify_jwt=false unchanged; compare downloaded normalized-path files' UTF-8 bytes across the entire expected module graph, expected entrypoint/imports, new version/status/package digest. Existing digest must change; version alone is insufficient. No arbitrary other-Function redeploy to propagate shared modules.
+6. Natural observation only if separately approved: future naturally scheduled AI Lab brand_post, no manual invoke/backlog/seed, no gate/Cron/token change; read minimal claim state/schedule status/outcome metadata, no text/PII/Vault plaintext. Retain provider_started/ambiguous on uncertainty, never reopen/resend to make the test pass. Include cold-ledger and old-worker limits in acceptance criteria.
+
+## Safety / completion
+
+- production reads: necessary migration-ledger metadata, PG catalog/roles/default ACL/ledger shape/PostgREST trigger metadata, one target Function source/metadata, Cron metadata, AI Lab gate/window metadata and aggregate schedule state. No user/post content, tokens, secret values or Vault plaintext read. The Function inventory tool returned all metadata; detailed source retrieval was restricted to x-test-post.
+- production mutations **0**; production apply/deploy/repair/history rewrite/gate/Cron/OAuth/Vault/token/refresh/real X/media/model/manual scheduler operations **0**.
+- changed_files: `.agent/tasks/CODEX_TASK.md`, `.agent/CODEX_REPORT.md` only. No source commit/merge/deploy. Control report is append-only; prior review history and all G/H2/index files preserved. H1 isolated from kabumori-fresh; old/shared worktrees untouched.
+- local proof files retained outside Git at `/private/tmp/kabumori-h1-preflight-20261005.pdBLYW`; all **four** H1 throwaway DBs deleted after inspection and own cluster stopped. Their fake data can be recreated from the local proof script; no production residue. CLI-created own temporary metadata moved outside the worktree, not deleted/staged.
+- `git diff --check`: PASS before control sync. No runtime/type-test rerun is claimed for this source-unchanged task; previous accepted 104/914/132/41/49 proof remains separate history. This turn's exact clean/reapply/rollback/history/selection experiments are the apply-path evidence.
+- Supabase/Postgres skills guided least-privilege/default-ACL review and exact failure-boundary probes. Current changelog was checked (markdown fetch unsupported, HTML fallback); no unrelated upgrade/schema fix was performed.
+- next_recommendation: **C1（Sol・高）** accepts the read-only findings, resolves the apply-path/history and cold-ledger/cutover decisions, and only then requests narrowly specified production mutation authority (**Sol・極高**). H1 stops at review_required; shared-index alignment belongs to C1.

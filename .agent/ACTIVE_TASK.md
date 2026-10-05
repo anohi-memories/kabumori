@@ -24,37 +24,37 @@
 - owner: codex
 - slot: codex-1
 - status: done
-- task_id: ai-lab-pr82-claim-rereview-20261004
+- task_id: ai-lab-pr82-production-readonly-preflight-20261005
 - start_code: H1
 - finish_code: C1
 - next_owner: none
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepted CHANGES REQUIRED on PR #82 head 9f3b19a3cde490cf63735220ae191dcd4f11bdcb. Core diary concurrency/fencing is improved, but duplicate event_id labels, unsafe owner/inherited ACL drift, real-wrapper 401 classification, unresolved evergreen reclaim, claim-time cooldown semantics, non-canonical RPC payload acceptance and new test lint debt remain. No merge/deploy/production mutation. H1 free after fresh allocation.
+- allocation: Final C1 accepted production read-only preflight. Production catalog/owner prerequisites pass, but PR #82 rollout remains HOLD because the exact single-file apply/history failure policy is not yet selected. No additional review allocated. Production mutation/deploy/X = 0.
 
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
-- task_id: x-social-mobile-pr81-content-settings-hardening-rereview-20261003
+- status: done
+- task_id: x-social-mobile-pr81-residual-hardening-final-rereview-20261005
 - start_code: H2
 - finish_code: C2
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Focused rereview of PR #81 exact head 5595fb131813542c55c43bc783af623cdb9ea442. Verify H2 F1-F4 closure: exact JSON/persona DB contract, effective least-privilege ACL/RLS, strictly monotonic updated_at CAS, fail-closed drift guard, real migration transactionality and production catalog compatibility. No merge/apply/deploy/production write. Recommended Sol（高）.
+- allocation: Final C2 PASS. PR #81 exact reviewed head bcc01312c638f5922db4ffd6255ddddf6f611183 passed R1/R2/R3 and atomic rollout-plan review, then was squash-merged as 686f23a7094389b793470503fceb2f47a71f8fbf. Production apply remains separately gated. H2 free after fresh allocation.
 
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: none
-- status: done
-- task_id: kabumori-topic-detail-learning-v2-20261003
+- next_owner: claude
+- status: ready
+- task_id: kabumori-topic-detail-visual-polish-20261005
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: Final K1 PASS. PR #83 exact head c810accebada37760a98a18bb184b50a61b7937b squash-merged as f5919eb6af3da51c0d4d4a6342ad23b3f0a68980. 全50トピックを5段階の静的学習フローへ強化し、Homeの短い要約は維持。284/284 tests、402/375pt visual checks、EAS 0、backend/DB/RPC/API/AI mutation 0。Codex review不要。G1 free after fresh allocation.
-- recommended_model: Sonnet5（高）
+- allocation: iOS Simulator runtime導入後の最終UI確認を再開。PR #84の既存実装を402pt/375pt、初級/中級/上級、長タイトル、背景wash/fade、番号付き本文、具体例、要点、🌱/💡表示までSimulatorで確認し、必要なら小さな見た目修正のみ行う。別PR禁止、EAS 0、backend mutation 0。完了後K1。
+- recommended_model: Sonnet5（中）
 
 ## Claude G2
 - owner: claude
@@ -70,24 +70,24 @@
 ## Claude G3
 - owner: claude
 - slot: claude-3
-- status: review_required
-- task_id: x-social-mobile-content-settings-schema-hardening-20261003
+- status: done
+- task_id: x-social-mobile-pr81-hardening-residual-corrective-20261005
 - start_code: G3
 - finish_code: K3
-- next_owner: codex
+- next_owner: none
 - source: `.agent/tasks/CLAUDE_TASK_3.md`
-- allocation: K3 PASS to focused H2 rereview. PR #81 exact head 5595fb131813542c55c43bc783af623cdb9ea442 is open/mergeable; H2 F1-F4 are reported corrected with local disposable proof. No production apply/deploy/write. H2 review required before merge or any production migration approval. Recommended Sol（高）.
+- allocation: Final C2 PASS and PR #81 squash-merged as 686f23a7094389b793470503fceb2f47a71f8fbf. R1 deferrable PK, R2 helper owner/effective ACL, R3 finite CAS domain accepted. Production apply not yet authorized. G3 free after fresh allocation.
 
 ## Claude G4
 - owner: claude
 - slot: claude-4
 - status: ready
-- task_id: x-social-mobile-pr76-fresh-main-integration-20261005
+- task_id: x-social-mobile-pr76-final-security-corrective-20261005
 - start_code: G4
 - finish_code: K4
 - next_owner: claude
-- source: `.agent/tasks/CLAUDE_TASK_4.md`
-- allocation: Integration-only freshness gate for PR #76. Current corrective head fe1e846e59c69b591d29c6d21fc23c7b702d19cd is open but non-mergeable because main advanced 133 commits. Exactly one overlapping file: supabase/tests/migration_source_invariants_test.ts; preserve latest main and add the PR76 reserved migration version 20261003090000. Merge fresh origin/main with no force/rebase, rerun security/regression suites, no functional redesign, no production apply/deploy/X. Recommended Sonnet5（高）. After K4, H1 Sol（極高） rereview mandatory.
+- source: .agent/tasks/CLAUDE_TASK_4.md
+- allocation: Bounded corrective for PR #76 after Final C2. Fix F1 pre-send readiness parity (verified_at / connection error), F2 exact/effective SECURITY DEFINER EXECUTE ACL under default/inherited grants, and F3 rollout ordering so every partial state fails closed. Preserve closed R1-R5 architecture and UI pinning. No production apply/deploy/write/real X. Recommended Opus5.5（高）; H2 Sol（極高） rereview required after K4.
 
 ## Claude G5
 - owner: claude
