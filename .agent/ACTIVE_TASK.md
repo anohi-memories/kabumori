@@ -23,15 +23,15 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: ai-lab-pr82-production-readonly-preflight-20261005
+- status: ready
+- task_id: common-account-gateb-managed-auth-final-review-20261005
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepted production read-only preflight. Production catalog/owner prerequisites pass, but PR #82 rollout remains HOLD because the exact single-file apply/history failure policy is not yet selected. No additional review allocated. Production mutation/deploy/X = 0.
-
+- allocation: Final independent review of hosted managed-Supabase Gate B evidence for common-account Phase 1. Exact hosted migration apply + real RLS/Data API/Storage/Auth Admin delete passed; stale access JWT remained Data-API usable after Auth delete, so session_revocation-before-hard-delete is a critical future orchestrator requirement. Review only; production mutation/apply/backfill = 0.
+- recommended_model: Sol（極高）
 ## Codex H2
 - owner: codex
 - slot: codex-2
