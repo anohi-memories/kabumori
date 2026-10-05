@@ -3,8 +3,8 @@
 - task_id: kabumori-shared-report-v2-20261005-morning-natural-observation
 - owner: claude
 - slot: claude-2
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（中）
 - purpose: production `market-report-analysis` v21（PR #77 + PR #79/H1）の最初の通常取引日朝刊をread-only観測し、配信信頼性・Hard/WARN境界・model call/costを実データで確認する。mutation/manual invokeは禁止。
@@ -210,7 +210,66 @@ When complete:
 
 ## Report
 
-Pending.
+### task_id / result
+- task_id: kabumori-shared-report-v2-20261005-morning-natural-observation
+- result: **OBSERVATION_INCOMPLETE**（provider側）。10/5朝刊の分析は 07:55 / 08:05 とも `ANALYSIS_OPENAI_GENERATE_FAILED:429` で失敗し、report packetは0件。v21（PR #77 + PR #79/H1）のlive-model挙動は**未観測**。v21のコード起因の失敗ではない（model応答を1件も受け取っていない）。
+
+### observation time
+- 2026-10-05 09:11〜09:25 JST（08:10以降。read-onlyのみ）
+
+### production function / gate read-back
+- `market-report-analysis` v21、verify_jwt=false、ezbr `fe5c1836cdeddabdb1300668a5f75ac92d3570872a1b1eb110798195991fa40c`、updated 2026-10-03 21:23:42 JST → baseline一致
+- market-report-data-packet v16、personalized-reports v38、x-test-post v133（変化なし）
+- `market_report_consumer_settings`: app_enabled=false / x_enabled=false（updated_at 2026-09-17 10:47:14 UTC）
+- deploy後のmanual cycleなし：`market_report_packets` の最新 created_at は 2026-10-02 07:20:42 UTC（10/2大引け）。deploy後のpacketは0件。
+
+### cycle statuses / attempts / timestamps / errors（morning, trading_date 2026-10-05）
+- data：cycle_status=completed、attempt_count=1、started 07:50:01.018 / completed 07:50:01.602 JST、last_error=null、current_data_packet_id `5c6fd292-5448-4d59-8719-f76daaaa28d7`。diagnostics：yahoo ^N225/1306.T/^DJI/^GSPC/^IXIC/^SOX・mic_metrics・mic_thresholds・news_refs・stored_packets すべて ok
+- report：report_status=**failed**、report_attempt_count=2、最終 started 08:05:00.961 / failed 08:05:02.851 JST、report_last_error=`ANALYSIS_OPENAI_GENERATE_FAILED:429`、current_report_packet_id=null
+  - 07:55の1回目の失敗時刻・本文は、08:05の再試行で上書きされ保持されていない（attempt_count=2から2回とも失敗と判断。1回目の理由が同じ429とは行に残っていないので断定しない）
+- report_diagnostics（最終attempt）：model `gpt-5.6-luna`、metrics 13、news_items 15、direction up、`transport_retries=0`、`transport_retry_exhausted=false`、`transport_success_after_retry=false`
+  - `transport_retry.ts` は 429 を、本文が `insufficient_quota` の場合だけ再試行しない（JSONでない429は再試行する）。再試行0回で即失敗（約2秒）なので、**`insufficient_quota`（残高切れ）の429**と読める
+
+### account-wide 429（read-only cross-check）
+- `important_news_monitor_runs`：2026-10-03 14:00 UTCまで正常 → **2026-10-03 15:00 UTC（10/4 00:00 JST）以降、毎時すべて breaking_market の検索が429**、10/5 09:00 JSTの回まで継続
+- `morning_report_runs`（旧X朝刊）：08:20 / 08:22 / 08:25 JST すべて `MORNING_REPORT_LANE_A_US_MARKET_FAILED:429`
+- `post_execution_logs`：brand_post 08:13 JST `BRAND_POST_GENERATION_FAILED:429`、morning_report 3回 failed（429）
+- `personalized_reports`：08:35 JST morning `REPORT_OPENAI_FAILED:429`（旧アプリ朝刊も今朝は未生成）
+- → OpenAIのアカウント全体が10/4 0時JSTから429。2026-09-28と同じ「テスト期間の手動チャージ残高切れ」と整合（残高そのものはread-onlyで確認できないため、**残高確認はユーザー側**）
+
+### data / report packet ids / hashes / duplicates
+- data packet: `5c6fd292-5448-4d59-8719-f76daaaa28d7`
+- report packet: なし（hashなし）
+- duplicate: 2026-10-05の `market_report_packets` は0件（重複なし）。cycle行は morning 10/5 の1行のみ
+
+### Fact/local result・diagnostics・文字数・ニュース順
+- model応答なしのため、Fact/local check、generation_attempts、content_regenerations、quality_rewrite、quality_rewrite_request_failed、delivered_generation、quality_warnings、X文字数、App narrative文字数、key_news順は**すべて観測不能**（packetもreport_diagnosticsの該当項目も無い）
+
+### PR #77 / PR #79/H1 behavior assessment
+- **未評価**。今朝の失敗はOpenAIリクエストの段階で、local Hard/WARN・Fact・quality rewriteのどれにも到達していない。false Hard rejectもfactual defectも発生していない（判定材料なし）。PASSとは扱わない。
+
+### objective factual cross-check
+- 対象となる生成文が無いため実施不能。data packetは正常（全source ok、metrics 13、news 15）。
+
+### model calls / tokens / cost
+- 成功した生成呼び出し：0。packetが無いので `generation_calls / input_tokens / output_tokens / api_cost_usd` の記録なし。insufficient_quotaの429は課金されない想定だが、DBからは確認できない。
+- 10/2朝刊（3 calls / 約$0.010230）との比較は不能。
+
+### retry / no-op behavior
+- 08:05 retry：実行された（no-opではない）。同じ429で約2秒で失敗。transport層の再試行は0回で、残高切れの429で無駄な再試行をしない設計どおり。今朝の状況では、cron retryでもtransport retryでも回復できない。
+
+### production mutation
+- **0**。invoke / retry / DB write / gate / cron / deploy / source edit / X / 通知 / Auth / Vault / secrets：なし。read-only SELECT と `functions list` のみ。
+
+### remaining issues
+1. **OpenAIの429（残高切れの可能性が高い）が10/4 0時JSTから継続中**。ユーザーが残高・`insufficient_quota` を確認し、チャージする必要がある。チャージしないと、今日の大引け（data 16:15 / analysis 16:20 / retry 16:35 JST）、旧X・旧アプリ、important-news-monitorもすべて失敗が続く。
+2. v21のlive挙動（PR #77のrewrite抑制、PR #79/H1のwatch文の配信）は未観測のまま。
+3. cycle行は失敗理由を最後のattemptで上書きするので、07:55の1回目の理由が残らない（既知の診断上の制約。今回は全処理429で実害なし）。
+4. 本番cutover・launch前に、自動チャージまたは残高アラートを必須にすることを推奨（2026-09-28と同じ事象の再発）。
+
+### recommendation
+- OpenAIの残高確認・チャージ（ユーザー）を先に。チャージが今日16:20 JSTより前に済めば、**同日の大引けの自然サイクル（16:20 / 16:35 JST）をread-onlyで観測**するTASKを推奨（大引けで初めてv21を観測できる）。チャージが間に合わなければ、10/6朝刊（07:55 / 08:05 JST）の観測に回す。
+- manual invokeで埋め合わせはしない。
 
 ---
 
