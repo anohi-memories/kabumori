@@ -1,3 +1,18 @@
+## Final C1 — PR #82 AI Lab event-dedupe PASS-WITH-FIX accepted / CI merge hold
+
+- verdict: **PASS-WITH-FIX accepted** for the corrected source.
+- H1 reviewed original PR #82 head `51457826ea6c29d9c94ac0066786df8927fa1274` and found two bounded residual issues: a checked-test synchronous resolver mismatch (P3) and incomplete invalid/not-ready index drift detection (P2).
+- H1 corrected those on evidence branch exact head `9d30a68317dd523a96e6ce96bf7a0f6de23235d5`; compare against the reviewed PR head is direct **ahead 2 / behind 0**.
+- C1 adopted that exact evidence head into the existing PR #82 branch by normal fast-forward; no force push.
+- GitHub read-back: PR #82 OPEN / unmerged / mergeable=true / exact head `9d30a68317dd523a96e6ce96bf7a0f6de23235d5`.
+- H1 evidence accepted: focused checked Deno 104/104; relevant runtime 914/914 (--no-check); disposable PostgreSQL runner 132 PASS; independent SQL/dispatcher/workflow/provider tests 41/41; workflow Node regressions 49/49; changed helper check/lint/diff/secret scan PASS. Known full-entrypoint diagnostics match fresh-main baseline and are not introduced by PR #82.
+- residual source blockers in reviewed scope: **none demonstrated after fixes**.
+- CI after C1 fast-forward: Vercel and Netlify are rerunning/pending; therefore **merge remains HOLD until required checks are green**.
+- production mutation / migration apply / deploy / real X / OAuth / Vault / token / Cron operations: **0**.
+- production rollout remains a separate high-risk gate: production catalog/owner/default-ACL/membership and migration-ledger read-only preflight, exact apply-wrapper transaction certification, approved migration apply/read-back, then exact Function deploy. No production authorization is implied by this C1.
+- H1 is done/free after fresh allocation.
+- AI Lab diary: **記録不要** — this C1 is internal safety hardening/review of duplicate-post prevention, not a new user-facing feature or released behavior.
+
 ## G1 allocation — Topic detail visual polish
 
 - task_id: `kabumori-topic-detail-visual-polish-20261005`
