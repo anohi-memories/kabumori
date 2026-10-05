@@ -50,7 +50,8 @@ Accepted verification:
 4. Require main to contain merge `74e4dbff09e3b248164fd00bb720402d762ebcd8`.
 5. Confirm no uncommitted changes owned by another slot.
 6. Fresh-read production before mutation.
-7. G1/G4/G5 may be active in separate workstreams; do not touch their files/functions/migrations/settings.
+7. Fresh-check the production mutation mutex. If G4/G5/G3 or any other slot is actively performing or authorized to perform a production mutation at the same time, STOP before deploy. Read-only work may coexist, production writes/deploys may not.
+8. G1/G4/G5 may be active in separate workstreams; do not touch their files/functions/migrations/settings.
 
 ## Pre-deploy read-only gate
 
