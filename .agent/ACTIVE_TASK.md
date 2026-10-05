@@ -36,15 +36,14 @@
 ## Codex H2
 - owner: codex
 - slot: codex-2
-- status: ready
+- status: done
 - task_id: x-social-mobile-pr76-final-security-rereview-20261005
 - start_code: H2
 - finish_code: C2
-- next_owner: codex
+- next_owner: none
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: PR #76の最終セキュリティrereview。G4がF1/F2/F3を修正済み。pre-send readiness parity、SECURITY DEFINER effective ACL、runtime-first fail-closed rolloutを独立確認。production mutation/merge/deploy/real X禁止。
-- recommended_model: Sol（高）
+- allocation: Final C2 PASS on PR #76 exact head 5448e545f4a88bbf6597a981c0bcbe4c01043c30. F1/F2/F3 closed, availability tradeoff accepted, no extra review required. PR #76 squash-merged as 3c5f80a61d114d2936b761fc05ee3b3d69e85f63. H2 free after fresh allocation.
 
 ## Claude G1
 - owner: claude
@@ -84,13 +83,13 @@
 ## Claude G4
 - owner: claude
 - slot: claude-4
-- status: review_required
-- task_id: x-social-mobile-pr76-final-security-corrective-20261005
+- status: ready
+- task_id: x-social-mobile-pr76-production-rollout-gate-20261006
 - start_code: G4
 - finish_code: K4
-- next_owner: codex
+- next_owner: claude
 - source: .agent/tasks/CLAUDE_TASK_4.md
-- allocation: Final K4 PASS to one focused H2 rereview. PR #76 exact head 5448e545f4a88bbf6597a981c0bcbe4c01043c30 is OPEN/mergeable; Netlify/Vercel green; fresh-main changed-file overlap 0. G4 reports F1/F2/F3 closed with local disposable/fake-X evidence. Production mutation/read/deploy/real X = 0. H2 review is final unless a concrete blocker is found. Recommended Sol（高）.
+- allocation: PR #76 source is merged and final security review PASS. Perform same-day production read-only preflight and freeze the exact runtime-first rollout package, then STOP for fresh explicit approval before S1. Approved order: guarded x-test-post -> byte read-back/drain -> PR76 migration -> RPC/ACL read-back -> publish-setting Edge. No publish toggle or real X. This must complete before G3/PR81 production apply resumes. Recommended Opus5.5（高）.
 
 ## Claude G5
 - owner: claude
