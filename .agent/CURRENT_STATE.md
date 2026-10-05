@@ -1,3 +1,16 @@
+## G5 assigned — Common-account Phase 1 production migration gate — 2026-10-06
+
+- task_id: `common-account-v1-phase1-production-migration-gate-20261006`.
+- G5 was confirmed free: previous task status done / next_owner none.
+- goal: fresh production read-only preflight + exact single-file apply/history package for `20261001150000_common_account_lifecycle_foundation.sql`.
+- accepted migration SHA256: `e632214b5602c12ee73d9a7475af36791138099a1a7fdba7e8fb521afc01cde3`.
+- start with production mutation = 0; after preflight G5 must STOP for explicit user approval before the first production write.
+- after approval, only the exact accepted migration may be applied, followed by exhaustive schema/RLS/ACL/function/history read-back.
+- backfill(true), deletion activation, Auth/Storage/OAuth/Vault mutation, Edge deploy, Cron and real X are out of scope.
+- production mutation must not overlap the separate G4/G3 rollout path; fresh mutex/state check is mandatory before any write.
+- recommended Claude model: **Opus5.5（極高）**.
+- finish code: K5.
+
 ## Final K1 — Topic detail visual polish PASS / merged
 
 - verdict: **PASS**.
