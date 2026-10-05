@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-pr76-transactional-publish-toggle-rereview-20261005
 - owner: codex
 - slot: codex-2
-- status: review_required
-- next_owner: chatgpt
+- status: done
+- next_owner: none
 - priority: highest
 - recommended_model: Sol（極高）
 - type: final security rereview / authorization transaction / pre-send publish authority / migration RPC / concurrency
