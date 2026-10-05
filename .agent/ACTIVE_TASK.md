@@ -23,14 +23,14 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: ai-lab-pr82-final-boundary-rereview-20261005
+- status: ready
+- task_id: ai-lab-pr82-production-readonly-preflight-20261005
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepted H1 PASS-WITH-FIX. Reviewed PR #82 head 51457826ea6c29d9c94ac0066786df8927fa1274; adopted the two bounded H1 correction commits by normal fast-forward to exact PR head 9d30a68317dd523a96e6ce96bf7a0f6de23235d5. PR remains open/unmerged/mergeable; Vercel/Netlify checks are rerunning, so merge remains HOLD until green. Production apply/deploy/real X remain separately gated. H1 is free after fresh allocation. Recommended next verification model if needed: Luna（中）.
+- allocation: PR #82 source is merged to main as 80e11c9207d44599db26a25195f1ee0091484231 after Final C1 PASS-WITH-FIX and green Vercel/Netlify. Perform production **read-only** preflight only: migration ledger/collision, target catalog-owner-effective ACL, exact apply transaction semantics, deploy target/order, and pre/post read-back plan. No migration apply/deploy/write/real X/Vault plaintext/token/Cron change. Recommended Sol（高）.
 
 ## Codex H2
 - owner: codex
