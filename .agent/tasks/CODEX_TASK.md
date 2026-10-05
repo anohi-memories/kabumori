@@ -3,8 +3,8 @@
 - task_id: common-account-gateb-managed-auth-final-review-20261005
 - owner: codex
 - slot: codex-1
-- status: ready
-- next_owner: codex
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Sol（極高）
 - type: final managed-Supabase Gate B evidence review / Auth deletion / stale-session boundary / production migration gate
@@ -159,6 +159,19 @@ Append to `.agent/CODEX_REPORT.md`:
 Then status -> review_required, next_owner -> chatgpt, STOP for C1.
 
 Recommended model: **Sol（極高）**.
+
+## H1 completion — 2026-10-05
+
+- verdict: **PASS-WITH-CONDITIONS** for Phase 1 foundation installation only, not deletion activation or production execution authority.
+- exact accepted SQL remains byte-identical to `aa4d2d425d1d7c432d43c9ecfb8e978a40b80a65` / merged `44121914b035e22380a4ca1bd8252a42713a2bbf`; SHA256 `e632214b5602c12ee73d9a7475af36791138099a1a7fdba7e8fb521afc01cde3`.
+- recorded hosted Phase A/B + cascade read-back close the installation-level managed-role/RLS/Storage/Auth observer unknowns. H1 reviewed that recorded evidence; it did not rerun hosted destructive scripts or certify unprovided raw scripts/transcripts.
+- critical clarification: session/global sign-out revokes refresh/session state, NOT an already-issued access JWT. Future destructive orchestration must additionally close the stale-token writer window (live session/lifecycle authorization or an independently proven bounded-expiry/quiescence policy), then revalidate Storage and readiness. Checkpoint presence is not evidence that this has happened.
+- observer remains shadow-only and non-authorizing; no Phase 1 Auth/Storage deletion or account-deletion completed state. Existing legacy deletion routes remain unchanged/unsafe.
+- minimal production metadata: target history/relations/functions absent; no API-to-postgres membership; no unexpected apply-owner default grantee in the inspected scope. Full fresh pre-apply dependency/ACL/API/apply-path checks remain mandatory.
+- disposable test project read-only status: INACTIVE. No resume/pause/restore attempted.
+- production migration may advance to C1's separately authorized exact-single-file mutation gate, with explicit apply/history failure policy. Backfill, rollback, enforcement, deletion/registration wiring and deploy remain HOLD/separately authorized.
+- this turn: source invariants 10/10, runner syntax and diff checks PASS; prior local 20 / 46 / 8 results remain prior evidence, not reruns.
+- production/test/photo mutations = 0; source changes = 0. Full gate dispositions/checklist appended to CODEX_REPORT. STOP for C1; recommended next model Sol（極高）.
 
 ---
 
