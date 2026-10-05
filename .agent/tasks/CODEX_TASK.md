@@ -1,5 +1,128 @@
 # Codex Task — CURRENT TASK
 
+- task_id: ai-lab-pr82-production-readonly-preflight-20261005
+- owner: codex
+- slot: codex-1
+- status: ready
+- next_owner: codex
+- priority: highest
+- recommended_model: Sol（高）
+- type: production read-only preflight / migration-ledger / catalog-ACL / rollout-order certification
+- source_pr: 82
+- merged_main_sha: 80e11c9207d44599db26a25195f1ee0091484231
+- accepted_source_head: 9d30a68317dd523a96e6ce96bf7a0f6de23235d5
+- production_mutation_allowed: false
+
+## Purpose
+
+PR #82 の source review は Final C1 PASS-WITH-FIX accepted、CI green後に squash merge 済み。
+
+このTASKは **production反映前のread-only preflightだけ** を行う。
+migration apply / Edge deploy / Cron変更 / 実X / Vault plaintext / token refresh / production write は一切しない。
+
+C1で残した production gate を、実際の現在production状態に照らして「安全に適用できるか」「適用順は何か」「どこでSTOPすべきか」まで確定する。
+
+## Mandatory startup / isolation
+
+1. PROJECT_RULES / ORCHESTRATION / CURRENT_STATE / ACTIVE_TASK / this TASK / Final C1 / H1 final report を読む。
+2. 新Macでは `/Users/yuya/Developer/kabumori-fresh` の fresh origin/main を確認し、H1専用の独立worktree/checkoutを使う。他slot worktreeを共有・reset・rebase・削除しない。
+3. mainに PR #82 squash merge SHA `80e11c9207d44599db26a25195f1ee0091484231` が含まれることを確認する。source差分を勝手に追加修正しない。
+4. H2 PR #76 / G3 PR #81 は並行中。彼らのmigration/RPC/Edge/agent filesを変更しない。
+5. production readsは必要最小限。PII/user content/token plaintextは読まない。
+
+## Gate A — production migration ledger / collision
+
+Read-onlyで確認:
+- `20261004090000_ai_lab_topic_claims` がproduction migration ledgerに未適用か、既適用なら exact 状態を報告してSTOP。
+- superseded `20261003090000_ai_lab_topic_event_usage` がproductionへ適用されていないこと。存在する場合は勝手にrepairせずSTOP。
+- PR #76 `20261003090000_social_mobile_publish_permission_boundary`、PR #81 `20261003120000_social_mobile_content_settings_hardening` とのversion/name collisionがないこと。
+- current production ledgerとfresh main sourceの整合。
+
+## Gate B — production catalog preconditions
+
+PR #82 migrationが触る対象についてread-only catalog確認:
+- relation / index / constraint / policy / trigger / function signatures
+- relation/function owner
+- RLS flags
+- function security/search_path
+- effective EXECUTE/table privileges
+- column ACL
+- unexpected same-name object/overload
+- API rolesとownerのrole-membership継承関係
+
+migrationが「新規作成前提」なら、productionに対象objectが既に存在しないことを明示的に証明。
+存在する場合は migration のfail-closed条件と照合し、applyせずSTOP判定。
+
+Vault secret値・token値は読まない。
+
+## Gate C — exact migration apply semantics
+
+実際にproductionで使う予定のapply経路について、以下をsource/toolingレベルで証明:
+- migration 1ファイルがtransactionalに適用されるか
+- BEGIN/COMMITの実際の境界
+- failure時に部分DDL/ACLが残らないか
+- migration history記録のタイミング
+- apply後のread-back項目
+- rollbackを「安易なdown migration」で行わず、失敗時の安全な停止点
+
+production apply自体はしない。
+
+必要ならlocal disposable PostgreSQLで exact merged migration を clean apply / reapply / rollback-on-failure まで再確認してよい。
+
+## Gate D — deploy target / rollout order
+
+merged mainから、PR #82によってproductionへ反映が必要な **正確なFunction/deploy target** を特定する。
+
+確認:
+- migrationを先にする必要があるか
+- deployを先にするとfail-open/fail-closedどちらになるか
+- shared moduleをimportするdeploy target一覧
+- scheduler/Cron変更が必要か（原則不要のはず。必要ならBLOCK）
+- deploy後のread-back方法
+- old/new function version/source byte確認方法
+- real Xを使わずにできるpost-deploy smoke/readiness確認
+- natural-cycle観察をする場合の安全条件
+
+実X投稿、manual scheduler invoke、backlog/candidate injectionは禁止。
+
+## Gate E — production safety snapshot
+
+変更前のread-only baselineとして必要最小限を記録:
+-対象Function version/status/verify_jwt等
+- 対象Cron/scheduleの存在と変更不要性
+- AI Lab publish gate / relevant setting の現在状態（値を変更しない）
+- migration対象objectの有無
+- role/ACLの必要なmetadata
+
+秘密・ユーザー投稿本文・token・Vault plaintextは記録しない。
+
+## Completion / C1
+
+Report:
+- task_id / verdict
+- fresh main SHA
+- production migration ledger result
+- superseded migration presence/absence
+- catalog/owner/effective ACL result
+- exact apply transaction semantics
+- exact deploy target(s)
+- required rollout order
+- pre/post read-back checklist
+- blockers / remaining risks
+- production reads performed
+- production mutations = 0
+- real X/Vault plaintext/token operations = 0
+- whether production rollout may proceed to a separately authorized mutation gate
+- recommended model for mutation gate
+
+Then status -> review_required, next_owner -> chatgpt, STOP for C1.
+
+Do not create/apply/deploy anything.
+
+---
+
+# Previous H1 task — preserved history
+
 - task_id: ai-lab-pr82-final-boundary-rereview-20261005
 - owner: codex
 - slot: codex-1
