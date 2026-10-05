@@ -1,3 +1,18 @@
+## Final K2 — 2026-10-05 morning natural observation OBSERVATION_INCOMPLETE
+
+- verdict: **OBSERVATION_INCOMPLETE (provider-side 429)**. This is accepted as an incomplete live observation, **not** a failure of PR #77 / PR #79/H1.
+- G2 morning data cycle completed normally at 07:50 JST with one attempt and no data error; current data packet was produced successfully.
+- analysis did not produce a report packet. The retained final attempt failed at 08:05 JST with `ANALYSIS_OPENAI_GENERATE_FAILED:429`; report attempt count=2, packet count=0.
+- no model response reached the local Hard/WARN, Fact, quality-rewrite or delivery stages, so PR #77 rewrite behavior and PR #79/H1 watch/session/causal behavior remain **unassessed**.
+- read-only cross-check found multiple OpenAI-dependent jobs also returning 429 from 2026-10-04 00:00 JST onward, consistent with an account/provider quota/balance issue rather than this v21 runtime. Exact billing balance was not read.
+- production baseline remained market-report-analysis v21 / verify_jwt=false / app_enabled=false / x_enabled=false. Manual invoke/retry/deploy/gate/DB/Auth/Vault/X/notification mutation = **0**.
+- Codex review: **not required** for this K2. There is no code change or product defect to review; the missing evidence is operational/provider-side.
+- current G2 task is closed as done.
+- next G2: `kabumori-shared-report-v2-20261005-close-natural-observation`, status ready. Inspect the already-completed 10/5 close natural window read-only; if the provider recovered and a packet exists, perform the first live PR #77/#79 behavior assessment. If 429 persisted, classify OBSERVATION_INCOMPLETE again and recommend 10/6 morning observation.
+- recommended Claude model: **Sonnet5（中）**.
+- consumer activation remains **HOLD** until at least one completed v21 natural packet is observed safely.
+- AI Lab diary: **記録不要 — 外部API 429のread-only障害観測であり、公開日記に残す新機能・UI改善・実装成果ではない。**
+
 ## AI Lab PR #82 rollout continuation -> G3
 
 - source implementation/review/main merge are complete.
