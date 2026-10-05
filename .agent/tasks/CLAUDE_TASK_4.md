@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-pr76-production-rollout-gate-20261006
 - owner: claude
 - slot: claude-4
-- status: ready
-- next_owner: claude
+- status: in_progress
+- next_owner: user
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: production rollout gate / read-only preflight / runtime-first deployment plan / migration gate
@@ -2151,3 +2151,101 @@ K4 確認後、TASK どおり H2 で Codex **Sol（極高）** の独立再レ�
 - main テストスタブの1行修正
 
 承認後に、操作者が 6章の S0〜S6 を実施する。merge・適用・deploy は Claude の自己レビューだけでは行わない。
+
+
+## Report (interim) — x-social-mobile-pr76-production-rollout-gate-20261006 — S0 / package freeze / STOP before S1 (2026-10-06)
+
+- task_id: x-social-mobile-pr76-production-rollout-gate-20261006
+- result: **STOP before S1（承認待ち＋要判断）**。本番への書き込み・deploy は 0。
+  - S0 は一部だけ実施（Claude が読めた範囲）。残りの本番読み取りは auto モードに拒否されたため、操作者が実行する読み取り専用スクリプトを用意した。
+  - さらに、S1 の「main の x-test-post を deploy」は PR #82 の実行時コードを同時に有効化してしまう。この点を判断してもらう必要がある（後述）。
+- model_used: Opus 5.5（TASK 推奨 Opus5.5（高）と一致）
+- workspace: 新しい基準 `/Users/yuya/Developer/kabumori-fresh` から作った G4 専用 worktree `/Users/yuya/Developer/kabumori-g4-pr76-rollout`（branch `claude/g4-pr76-rollout-gate-20261006`、最新 main `718bf392` に fast-forward）。
+  - 未追跡で、stage しないもの: `supabase/config.toml`（project_id のみ）、`supabase/.temp/`（link 情報。旧共有 checkout からコピー）、`g4-preflight/`（読み取り・運用パッケージ）
+  - G3・H1・H2・G5・AI Lab の worktree には触れていない
+
+### 確認できた事実（ローカル・git）
+- main は PR #76 の squash merge `3c5f80a61d114d2936b761fc05ee3b3d69e85f63` を含む。
+- 次のファイルは H2 が PASS とした head `5448e545` と同一で、merge 後も main で未変更: migration、`x-test-post/vault_account_auth.ts`、`social-mobile-publish-setting/*`、runbook。
+- migration `20261003090000_social_mobile_publish_permission_boundary.sql` SHA-256: `b2ed7c756663d35b796c31138d4ab3e7fdea18107182bbd814a4f2e659c95f03`
+- x-test-post の import graph（main）: 48 ファイル、すべて `x-test-post/` と `_shared/` の中、外部 import なし。manifest SHA-256 `faaccc7af9996f23c4dc84334ddaf546b9fcc491f2208c16d68b1c6d6bc22531`
+- social-mobile-publish-setting: 3 ファイル、manifest SHA-256 `a844d7fc90cc5346495e09e52766170c4aa3436d54db728f3c1b24a009f698b4`
+- PR #81（content-settings）のファイルは、どちらの deploy 対象の import graph にも含まれない。
+- GitHub ワークフローに Edge の自動 deploy はない（日記の同期はコミットのみ）。
+- 記録上、最後の x-test-post の本番 deploy は v131（2026-10-01、PR #66 直後の main）。
+
+### S0（本番、読み取り専用）— Claude が実行できた範囲
+- project `wsmznyzcvmuitkglfeuj`（stock-x-autopost）。`db query --linked` の実行ロールは `postgres`、PostgreSQL 17.6（`170006`）。
+- ledger の形: `version`（PK）, `statements`, `name`, `created_by`, `idempotency_key`, `rollback`。72 行、最大 version は `20261002090000`。
+- `20261003090000`（PR76）・`20261003120000`（PR81）・`20261004090000`（PR82）はいずれも history 0 行。同名の別 version もない。
+  - PR82 は CURRENT_STATE の記録どおり「schema 適用済み・history 未記録」。
+  - 20261003090000 より新しい version の行は 0。順序の衝突はない（db push ではなく、行を明示的に記録する方式のため）。
+- 対象の2関数（どの schema・どの引数でも）: 0 件、同名の overload なし。
+- migration の前提: 必要なテーブル、`x_legacy_post_account(uuid,text,text,boolean)`、`auth.uid()`、列数（10／3／3）、anon・authenticated・service_role、いずれもそろっている。
+- **ここで auto モードが本番読み取りを拒否した（[Production Reads]）**。拒否後は同じ結果を他の手段で得ることはしていない。
+
+### S0 の残り（操作者が実行。読み取り専用）
+- `bash /Users/yuya/Developer/kabumori-g4-pr76-rollout/g4-preflight/run_s0.sh` → `g4-preflight/results/s0_results.json` に出力（件数・真偽値・version・ハッシュのみ）。
+- 内容:
+  - 所有者と作成ロール、ロール継承の真偽、owner の default function ACL
+  - social_accounts のトリガー名と、authenticated の直接書き込み権限
+  - アカウントの形ごとの件数
+  - Vault 連携・ON のうち、F1 で止まるもの（verified_at 欠落、エラー記録、refresh ブロック）の件数
+  - Vault 連携ブランドの running／期限切れ pending／次の予定時刻（AI Lab 個別も）
+  - x-test-post を呼ぶ Cron（名前・schedule・active のみ）
+  - pgrst event trigger
+  - AI Lab claims の有無
+  - Edge Function 一覧（version／status／verify_jwt／ezbr）
+  - 本番 x-test-post のソースを一時フォルダにダウンロードし、ハッシュだけで照合して削除（PR76 ガードの有無、PR82 runtime の有無、どの参照コミットと一致するか）
+- SQL は使い捨て PG17 上の fixture＋実前提 migration で事前に検証済み。そこで `string_agg … order by 1` の非決定性（AI Lab の Stage B 誤検出と同種）を見つけて修正した。
+
+### 要判断: x-test-post の deploy が PR #82 を同時に有効化する
+- PR #66（記録上の v131）以降に main で x-test-post の import graph を変えたコミット:
+  - PR #76: `vault_account_auth.ts`
+  - **PR #82**: `x-test-post/index.ts`、`_shared/brand/ai_lab_{brand_post_store,provider_outcome,scheduled_brand_post,dev_diary_context}.ts`
+  - 日記 snapshot の同期
+- よって TASK の S1「merged main の guarded x-test-post だけを deploy」を実行すると、**PR #82 の題材確保 runtime も本番で動き出す**。TASK の「PR81／PR82 を bundle しない」と矛盾する。
+- AI Lab 側は Stage A（schema）適用済み・Stage B 再検証と Stage C（history）が承認待ち。x-test-post の deploy は AI Lab 側でも「別途・未承認」。
+- 選択肢:
+  - A（推奨）: AI Lab の Stage B/C を先に完了し、1回の x-test-post deploy（main）を AI Lab の deploy と PR76 の S1 を兼ねるものとして、両方を明示的に承認する。その後 PR76 の S2〜S5。
+  - B: AI Lab の Stage B/C より先に main の x-test-post を deploy する。PR82 runtime は Stage A 済みの関数で動くが、AI Lab 側の承認前提を崩す。
+  - C: 本番版＋PR76 ガードだけの main 外の成果物を作る。未レビューのため非推奨。
+- どの案でも、S1〜S3 の間は Vault 連携（AI Lab）の送信が安全側で失敗する。PR82 runtime が動く場合は、その枠で題材の確保と生成（OpenAI）まで進んでから送信前に止まり、確保は解放される。AI Lab の投稿枠がない時間帯を選ぶ必要がある。
+- G5（共通アカウントの本番 migration）とは本番変更を重ねないこと（TASK 指示）。S1 直前に再確認する。
+
+### 固定した本番パッケージ（未実行）
+- `g4-preflight/OPERATOR_S1_S5.md` に、正確なコマンド・期待される本番変更・中止手順を固定した。
+- 期待される本番変更（これ以外はしない）:
+  1. x-test-post の deploy（verify_jwt=false のまま）
+  2. migration の自己完結トランザクション（関数2つと権限）
+  3. ledger に1行（`20261003090000`, `social_mobile_publish_permission_boundary`）
+  4. social-mobile-publish-setting の deploy（JWT 検証 ON）
+- トグル・データ行・secret・Cron・手動 dispatch・実 X はなし。
+- S3 は AI Lab と同じ3段階方式: Stage A（psql で migration 単独）→ Stage B（読み戻し）→ Stage C（履歴 insert のみ）。db push・migration up/repair・Management API での適用はしない。
+- 読み戻し: `s4_readback.sql`＋`check_s4.py`＋`expected_s4.json`。owner は postgres。シグネチャは schema・名前・引数型から組み立て、並びは C collation、本体は prosrc のハッシュ。ローカルで exact／段階違い／未適用の判定を確認し、search_path に依存しないことも確認した。
+- ドレイン: Supabase 公式ドキュメントの上限は1回の実行あたり 150 秒（Free）／400 秒（有料）。deploy 時に実行中だったリクエストの扱いは記載がない。このため deploy 完了から 15 分以上待ち、さらに「deploy 前に開始した running の投稿 = 0」を確認する。
+- deploy 後の読み戻し: `readback_function.sh <fn>`（一覧で version・status・verify_jwt を確認し、ソースをダウンロードしてハッシュで照合）。
+- パッケージのファイルの SHA-256 は、セッションの記録に保存してある（`run_s0.sh` `88cc4ed8…`、`s0_preflight.sql` `a6f5f342…`、`s4_readback.sql` `85704e9b…`、`OPERATOR_S1_S5.md` `11589271…` など）。
+
+### 承認状況
+- 承認依頼: **未受領**。以下の3点がそろうまで S1 に進まない。
+  1. 操作者による `run_s0.sh` の実行と結果の共有
+  2. 上記「PR #82 を同時に有効化する件」の判断
+  3. その判断を前提にした、S1〜S5 への明示的な本番承認
+- これまでの AI Lab 向けの承認や、TASK の作成を承認とはみなさない。
+
+### production / safety
+- 本番への書き込み = 0 / deploy = 0 / トグル = 0 / 実 X = 0 / Auth・Vault・OAuth・Cron の変更 = 0。本番読み取りは上記の SELECT のみ。
+- ローカルの使い捨て PG は停止・削除済み。リポジトリへの commit は、この Report 以外にない。
+
+### remaining blockers
+1. S0 の残り（操作者による実行）
+2. x-test-post／PR82 の扱いの判断（AI Lab の Stage B/C との順序を含む）
+3. 本番承認
+
+これらが済むまで、PR76 migration は未適用のまま。よって **G3／PR81 の前提はまだ満たされていない**。
+
+### next recommendation
+1. 操作者が `run_s0.sh` を実行する。
+2. K4／ユーザーが案 A を判断する（AI Lab の Stage B/C → 共通の x-test-post deploy → PR76 の S2〜S5 を1つの時間帯で行う）。
+3. 承認後、G4 が S0 を再実行してから、`OPERATOR_S1_S5.md` どおりに進める（コマンドは操作者が実行する可能性が高い）。
