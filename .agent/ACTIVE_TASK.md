@@ -36,13 +36,14 @@
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: x-social-mobile-pr76-final-security-rereview-20261005
+- task_id: kabumori-pr87-editorial-three-points-review-20261005
 - start_code: H2
 - finish_code: C2
 - next_owner: codex
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: Single final focused review of PR #76 exact head 5448e545f4a88bbf6597a981c0bcbe4c01043c30. Verify only F1 pre-send readiness parity, F2 exact/effective SECURITY DEFINER ACL, F3 fail-closed rollout, plus bounded regression of prior R1-R5. Review only; no source fix/merge/production apply/deploy/real X. Recommended Sol（高）. No routine extra review after PASS.
+- allocation: PR #87の「今日のポイント3点」改善をfocused review。朝刊/大引けのeditorial契約、Hard Fact/因果安全性、WARN-only telemetry、model-call不増、X/App同一points_ja、旧レポートfallback、回帰テストを確認。source変更/merge/deploy/production mutation禁止。
+- recommended_model: Luna（高）
 
 ## Claude G1
 - owner: claude
@@ -59,13 +60,13 @@
 ## Claude G2
 - owner: claude
 - slot: claude-2
-- status: ready
+- status: done
 - task_id: kabumori-shared-report-v2-editorial-three-points-20261005
 - start_code: G2
 - finish_code: K2
-- next_owner: claude
+- next_owner: none
 - source: .agent/tasks/CLAUDE_TASK.md
-- allocation: 市況レポート「今日のポイント」3点を、前日数値の列挙から、その日の重要テーマへ改善。朝刊は本日の注目・要注意・見る軸、大引けは今日の出来事・根拠ある背景・重要性・次の注目を優先し、数値は主に本文根拠へ。unsupported causalityは禁止、Hard Fact境界・call ceiling・shared truth sourceは維持。production deploy/manual invoke/gate/DB/RPC/Auth/Vault/X mutation禁止。
+- allocation: Final K2 PASS to focused H2 review。PR #87 exact head 3561f1eaac41df0f23dcce8fdaace0decc654a0a。朝刊/大引けの3ポイントを数値列挙から重要テーマ見出しへ変更し、Appもshared points_ja優先へ。production mutation 0、merge/deploy HOLD。
 - recommended_model: Sonnet5（高）
 
 ## Claude G3
