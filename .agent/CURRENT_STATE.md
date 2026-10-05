@@ -1,3 +1,20 @@
+## Final C2 — PR #81 content-settings hardening CHANGES REQUIRED
+
+- verdict: **CHANGES REQUIRED**; PR #81 exact reviewed head `5595fb131813542c55c43bc783af623cdb9ea442` remains open/unmerged.
+- H2 confirms the large original issues are substantially closed: normalized settings/persona JSON contract, table ACL/RLS least privilege, and finite normal-path monotonic CAS all pass independent local proof.
+- residual R1: a deferrable `PRIMARY KEY (brand_id)` is not rejected by the current drift guard. Hardening succeeds, but the actual repository `INSERT ... ON CONFLICT (brand_id) DO UPDATE` then fails with SQLSTATE 55000. Must reject deferrable/wrong arbiter drift.
+- residual R2: unexpected existing helper function EXECUTE ACL/owner drift can survive `CREATE OR REPLACE`. Table ACL is safe, but function-boundary least privilege is not fully fail-closed. Must verify exact owner/signature/effective EXECUTE grants and reject unknown drift.
+- residual R3: historical `updated_at='infinity'` is admitted by the candidate and cannot be advanced by `greatest(clock_timestamp(), old.updated_at + 1us)`. The same stale token can update repeatedly. Must refuse non-finite existing versions and enforce a finite version domain going forward.
+- migration tooling finding: actual Supabase CLI 2.116.0 proves per-file atomicity and failure rollback, but **not whole-chain atomicity**. Normal migration-up can commit the weak historical candidate before the hardening file. Production rollout needs an explicitly reviewed atomic/safe two-file plan or an equivalent source strategy; do not apply opportunistically.
+- production target table and both versions were absent at H2's read-only preflight; this reduces migration-history constraints but does not authorize apply.
+- app/source compatibility remains positive: social-mobile 116/116, repository focused 3/3, relevant Deno 158/158, PR78 source composition clean in local merge-tree.
+- fresh C2 comparison: main is 62 commits ahead of PR81 base with **0 overlapping PR81 files**; PR81 currently mergeable.
+- G3 assigned `x-social-mobile-pr81-hardening-residual-corrective-20261005`, recommended **Opus5.5（高）**.
+- PR81 merge, production apply and PR78 review/resume remain HOLD.
+- after K3, allocate fresh H2 rereview, recommended **Sol（高）**.
+- H2 closed/free after fresh allocation.
+- production mutation/deploy/live AI/X/Auth/Vault/Cron = 0.
+
 ## K4 — PR #76 corrective accepted as review candidate, fresh-main integration required first
 
 - G4 transactional corrective reported PASS on source/local disposable proof at exact head `fe1e846e59c69b591d29c6d21fc23c7b702d19cd`.
