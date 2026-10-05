@@ -23,15 +23,15 @@
 ## Codex H1
 - owner: codex
 - slot: codex-1
-- status: done
-- task_id: common-account-gateb-managed-auth-final-review-20261005
+- status: ready
+- task_id: kabumori-pr87-editorial-three-points-review-20261006
 - start_code: H1
 - finish_code: C1
-- next_owner: none
+- next_owner: codex
 - source: .agent/tasks/CODEX_TASK.md
 - report: .agent/CODEX_REPORT.md
-- allocation: Final C1 accepted PASS-WITH-CONDITIONS for common-account Phase 1 additive foundation. Hosted Gate B closes installation-level managed boundaries. Stale access JWT remained Data-API usable after Auth deletion, so future destructive orchestration requires live writer denial or proven expiry/quiescence beyond session revoke. Production migration/backfill remain separately gated; H1 free after fresh allocation.
-- recommended_model: Sol（極高）
+- allocation: PR #87「今日のポイント3点」改善のfocused review。朝刊/大引けのeditorial契約、Hard Fact/因果安全性、WARN-only telemetry、model-call不増、X/App同一points_ja、旧レポートfallback、回帰テストを確認。source変更/merge/deploy/production mutation禁止。
+- recommended_model: Luna（高）
 
 ## Codex H2
 - owner: codex
