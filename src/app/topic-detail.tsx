@@ -1,39 +1,47 @@
 import { useEffect, useState } from 'react';
 import { useLocalSearchParams } from 'expo-router';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Image, type ImageSource } from 'expo-image';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { KABUMORI_COLORS } from '@/constants/kabumori-theme';
-import { TOPIC_CARD } from '@/constants/home-tokens';
 import { fetchDailyTopic } from '@/lib/daily-topic';
-import { isTopicLevel, TOPIC_LEVEL_LABEL, type HomeTopic } from '@/lib/home-topic';
+import { isTopicLevel, TOPIC_LEVEL_LABEL, type HomeTopic, type TopicLevel } from '@/lib/home-topic';
 import { topicDetailFor, type TopicDetailSection } from '@/lib/topic-detail-catalog';
+import {
+  splitTrailingCaution,
+  TOPIC_DETAIL_ART_ASPECT,
+  TOPIC_DETAIL_LEVEL_COLORS,
+  topicDetailStepNumber,
+  topicDetailTitleStyle,
+  TOPIC_DETAIL_ART_CLEAR_RATIO,
+} from '@/lib/topic-detail-presentation';
 
 const palette = KABUMORI_COLORS.light;
 
 type Status = 'loading' | 'ok' | 'mismatch' | 'error';
 
-// Pale level tints for the example card and the takeaway block (same palette as the Home topic
-// badge: pale green / pale blue / pale lavender).
-const LEVEL_SOFT = {
-  beginner: '#eef7f0',
-  intermediate: '#edf5fc',
-  advanced: '#f2effc',
-} as const;
+const SCREEN_PADDING = 20;
+const PAGE_BACKGROUND = '#fbfbf6';
+const INK = '#2a3830';
 
-// Slightly stronger tones for the headings (so they clear the AA text contrast on the pale blocks) and
-// for the example card's outline (so the card stands out from the page background).
-const LEVEL_STRONG = {
-  beginner: '#246a3e',
-  intermediate: '#22578f',
-  advanced: '#4d3d9e',
-} as const;
-const LEVEL_OUTLINE = {
-  beginner: '#c9e4d0',
-  intermediate: '#c4dcf3',
-  advanced: '#d5ccf2',
-} as const;
+// The approved canonical level artwork (the same files the Home topic card uses; never edited, never
+// stretched). It is laid at the top of the Hero at its own aspect ratio, softened under the text.
+const HERO_ART: Record<TopicLevel, ImageSource> = {
+  beginner: require('@/assets/images/home/topic_background_beginner.webp'),
+  intermediate: require('@/assets/images/home/topic_background_intermediate.webp'),
+  advanced: require('@/assets/images/home/topic_background_advanced.webp'),
+};
+
+// The art is softened with a native tint wash so a long title stays readable: a left-to-right ramp
+// (strong under the text, none over the illustration on the right) and a short fade at the bottom edge
+// where the art ends inside a taller Hero. Strips never overlap, so the ramps have no banding.
+const WASH_STRIPS = 20;
+const WASH_SOLID_STRIPS = 4;
+const WASH_CLEAR_FROM = 12;
+const FADE_STRIPS = 12;
+const FADE_STRIP_HEIGHT = 2;
 
 // Re-fetches today's topic from the same deterministic RPC using the (level,
 // jstDate) passed as params, and only renders if the returned row's id
@@ -42,12 +50,15 @@ const LEVEL_OUTLINE = {
 // level/date changed in the meantime (e.g. from another tab or a midnight
 // rollover while this screen was open).
 //
-// Reading order: identity (level / category / title) -> short intro (the same base_text the Home
-// card shows) -> まずこれだけ -> なぜ大事？ -> 具体例 -> 株価・相場との関係 -> 覚えておくポイント.
-// The learning content is static curated text (src/lib/topic-detail-catalog.ts): rendering it makes
-// no network, AI or database call of its own.
+// Layout (the "かぶモリ学習ノート" direction): back control -> notebook label -> level-aware Hero (badge,
+// category, large title, the fetched summary, level artwork on the right) -> numbered steps 1-3 -> a
+// tinted 具体例 card -> a calm 覚えておくポイント block. All text is native; the learning content is the
+// static curated catalog (src/lib/topic-detail-catalog.ts): rendering makes no network, AI or database
+// call of its own.
 export default function TopicDetailScreen() {
   const params = useLocalSearchParams<{ id?: string; level?: string; jstDate?: string }>();
+  const { width: windowWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [status, setStatus] = useState<Status>('loading');
   const [topic, setTopic] = useState<HomeTopic | null>(null);
 
@@ -83,14 +94,16 @@ export default function TopicDetailScreen() {
   }, [params.id, params.level, params.jstDate]);
 
   const detail = topic ? topicDetailFor(topic.title) : null;
-  const accent = topic ? TOPIC_CARD.badge[topic.level] : null;
-  const soft = topic ? LEVEL_SOFT[topic.level] : null;
-  const strong = topic ? LEVEL_STRONG[topic.level] : null;
-  const outline = topic ? LEVEL_OUTLINE[topic.level] : null;
+  const colors = topic ? TOPIC_DETAIL_LEVEL_COLORS[topic.level] : null;
+  const heroWidth = Math.max(0, Math.min(windowWidth, 720) - SCREEN_PADDING * 2);
+  const artHeight = heroWidth / TOPIC_DETAIL_ART_ASPECT;
+  const titleStyle = topic ? topicDetailTitleStyle(topic.title) : null;
+  // A long title starts below the illustration (badge row = 20 padding + ~33 badge).
+  const titleTop = titleStyle?.belowArt ? Math.max(14, artHeight * TOPIC_DETAIL_ART_CLEAR_RATIO - 53) : 14;
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.container}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <ScrollView contentContainerStyle={[styles.container, { paddingBottom: 60 + insets.bottom }]}>
         <BackButton />
 
         {status === 'loading' ? (
@@ -99,26 +112,78 @@ export default function TopicDetailScreen() {
           <Text style={styles.message}>今日のトピックを取得できませんでした。もう一度お試しください。</Text>
         ) : status === 'mismatch' ? (
           <Text style={styles.message}>この内容は表示できません。Homeに戻ってもう一度開き直してください。</Text>
-        ) : topic && accent && soft && strong && outline ? (
+        ) : topic && colors ? (
           <>
-            <Text style={styles.eyebrow}>TODAY&apos;S TOPIC</Text>
-            <View style={styles.badgeRow}>
-              <View style={[styles.levelBadge, { backgroundColor: accent.background }]}>
-                <Text style={[styles.levelText, { color: accent.text }]}>{TOPIC_LEVEL_LABEL[topic.level]}</Text>
-              </View>
-              {topic.category ? <Text style={styles.category}>{topic.category}</Text> : null}
+            {/* Notebook label */}
+            <View style={styles.labelRow} accessible accessibilityRole="header" accessibilityLabel="かぶモリ学習ノート">
+              <Text style={styles.labelIcon}>🌱</Text>
+              <Text style={[styles.labelText, { color: colors.strong }]}>かぶモリ学習ノート</Text>
             </View>
-            <Text style={styles.title}>{topic.title}</Text>
 
-            {/* Intro: the short summary, clearly separate from the deeper learning below */}
-            <View style={[styles.intro, { backgroundColor: soft, borderColor: outline }]}>
-              <Text style={styles.introText}>{topic.body}</Text>
+            {/* Hero: level badge | category, large title, the short summary (the same base_text as Home) */}
+            <View style={[styles.hero, { backgroundColor: colors.hero, minHeight: artHeight }]}>
+              <View style={[styles.artBox, { height: artHeight }]} pointerEvents="none">
+                <Image source={HERO_ART[topic.level]} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
+                <View style={styles.washRow}>
+                  {Array.from({ length: WASH_STRIPS }, (_, index) => (
+                    <View
+                      key={index}
+                      style={{
+                        flex: 1,
+                        backgroundColor: colors.hero,
+                        opacity:
+                          index < WASH_SOLID_STRIPS
+                            ? 0.94
+                            : index >= WASH_CLEAR_FROM
+                              ? 0
+                              : 0.94 * (1 - (index - WASH_SOLID_STRIPS + 1) / (WASH_CLEAR_FROM - WASH_SOLID_STRIPS + 1)),
+                      }}
+                    />
+                  ))}
+                </View>
+                {Array.from({ length: FADE_STRIPS }, (_, index) => (
+                  <View
+                    key={index}
+                    style={[
+                      styles.fadeStrip,
+                      {
+                        backgroundColor: colors.hero,
+                        bottom: (FADE_STRIPS - 1 - index) * FADE_STRIP_HEIGHT,
+                        opacity: Math.min(1, (index + 1) / (FADE_STRIPS - 3)),
+                      },
+                    ]}
+                  />
+                ))}
+              </View>
+
+              <View style={styles.heroContent}>
+                <View style={styles.badgeRow}>
+                  <View style={[styles.levelBadge, { backgroundColor: colors.badge }]}>
+                    <Text style={[styles.levelText, { color: colors.strong }]}>{TOPIC_LEVEL_LABEL[topic.level]}</Text>
+                  </View>
+                  {topic.category ? (
+                    <>
+                      <View style={[styles.badgeDivider, { backgroundColor: colors.outline }]} />
+                      <Text style={styles.category}>{topic.category}</Text>
+                    </>
+                  ) : null}
+                </View>
+                <Text
+                  style={[
+                    styles.title,
+                    titleStyle ? { fontSize: titleStyle.fontSize, lineHeight: titleStyle.lineHeight } : null,
+                    { marginTop: titleTop },
+                  ]}>
+                  {topic.title}
+                </Text>
+                <Text style={styles.summary}>{topic.body}</Text>
+              </View>
             </View>
 
             {detail ? (
               <View style={styles.sections}>
                 {detail.sections.map((section) => (
-                  <DetailSection key={section.role} section={section} accentText={strong} accentBackground={accent.background} outline={outline} soft={soft} />
+                  <DetailSection key={section.role} section={section} level={topic.level} />
                 ))}
               </View>
             ) : (
@@ -133,64 +198,101 @@ export default function TopicDetailScreen() {
   );
 }
 
-function DetailSection({
-  section,
-  accentText,
-  accentBackground,
-  outline,
-  soft,
-}: {
-  section: TopicDetailSection;
-  accentText: string;
-  accentBackground: string;
-  outline: string;
-  soft: string;
-}) {
-  // 具体例: a tinted card so the example is easy to spot. 覚えておくポイント: a calm accent-bar block.
+function DetailSection({ section, level }: { section: TopicDetailSection; level: TopicLevel }) {
+  const colors = TOPIC_DETAIL_LEVEL_COLORS[level];
+
+  // 具体例: a pale level-tinted outlined card with a small bulb; always its own block.
   if (section.role === 'example') {
     return (
-      <View style={[styles.exampleCard, { backgroundColor: soft, borderColor: outline }]}>
-        <Text style={[styles.sectionHeading, { color: accentText }]}>{section.heading}</Text>
-        <Text style={styles.sectionBody}>{section.body}</Text>
+      <View style={[styles.exampleCard, { backgroundColor: colors.soft, borderColor: colors.outline }]}>
+        <View style={styles.exampleHead}>
+          <View style={[styles.exampleMark, { backgroundColor: colors.badge }]}>
+            <Text style={[styles.exampleMarkText, { color: colors.strong }]}>例</Text>
+          </View>
+          <Text style={[styles.blockHeading, { color: colors.strong }]}>{section.heading}</Text>
+        </View>
+        <Text style={styles.body}>{section.body}</Text>
       </View>
     );
   }
+
+  // 覚えておくポイント: the end of the lesson, a calm tinted block with a strong left accent line.
   if (section.role === 'takeaway') {
     return (
-      <View style={[styles.takeaway, { backgroundColor: accentBackground, borderLeftColor: accentText }]}>
-        <Text style={[styles.takeawayHeading, { color: accentText }]}>{section.heading}</Text>
+      <View style={[styles.takeaway, { backgroundColor: colors.badge }]}>
+        <View style={[styles.takeawayBar, { backgroundColor: colors.strong }]} />
+        <Text style={[styles.blockHeading, { color: colors.strong }]}>{section.heading}</Text>
         <Text style={styles.takeawayBody}>{section.body}</Text>
       </View>
     );
   }
+
+  // Numbered steps 1-3. A trailing 「ただし…」 sentence that already exists in the text is shown as an
+  // inset band with a left accent bar; nothing is added or rewritten.
+  const number = topicDetailStepNumber(section.role);
+  const { lead, caution } = splitTrailingCaution(section.body);
   return (
-    <View style={styles.section}>
-      <Text style={[styles.sectionHeading, { color: accentText }]}>{section.heading}</Text>
-      <Text style={styles.sectionBody}>{section.body}</Text>
+    <View style={styles.step}>
+      <View style={styles.stepHead}>
+        <View style={[styles.stepCircle, { backgroundColor: colors.badge }]}>
+          <Text style={[styles.stepNumber, { color: colors.strong }]}>{number}</Text>
+        </View>
+        <Text style={[styles.stepHeading, { color: colors.strong }]}>{section.heading}</Text>
+      </View>
+      <View style={styles.stepBody}>
+        <Text style={styles.body}>{lead}</Text>
+        {caution ? (
+          <View style={[styles.cautionBand, { backgroundColor: colors.soft }]}>
+            <View style={[styles.cautionBar, { backgroundColor: colors.strong }]} />
+            <Text style={styles.cautionText}>{caution}</Text>
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: palette.background },
-  container: { padding: 20, paddingBottom: 60 },
+  safeArea: { flex: 1, backgroundColor: PAGE_BACKGROUND },
+  container: { paddingHorizontal: SCREEN_PADDING, paddingTop: 8 },
   status: { marginTop: 40 },
   message: { color: palette.muted, fontSize: 15, lineHeight: 23, marginTop: 24 },
-  eyebrow: { color: palette.accent, fontWeight: '900', letterSpacing: 1.4, fontSize: 11, marginTop: 16 },
-  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' },
-  levelBadge: { borderRadius: 99, paddingHorizontal: 10, paddingVertical: 5 },
-  levelText: { fontSize: 11, fontWeight: '900' },
-  category: { color: palette.muted, fontSize: 12, fontWeight: '700' },
-  title: { color: palette.text, fontSize: 24, fontWeight: '900', lineHeight: 32, marginTop: 12 },
-  intro: { marginTop: 16, borderRadius: 14, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12 },
-  introText: { color: palette.text, fontSize: 15, lineHeight: 23, fontWeight: '500' },
-  sections: { marginTop: 22, gap: 20 },
-  section: { gap: 8 },
-  sectionHeading: { fontSize: 15, fontWeight: '900' },
-  sectionBody: { color: palette.text, fontSize: 15, lineHeight: 25 },
-  exampleCard: { borderRadius: 14, borderWidth: 1, padding: 16, gap: 8 },
-  takeaway: { borderRadius: 14, borderLeftWidth: 4, padding: 16, gap: 8 },
-  takeawayHeading: { fontSize: 15, fontWeight: '900' },
-  takeawayBody: { color: palette.text, fontSize: 15, lineHeight: 25, fontWeight: '700' },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  labelIcon: { fontSize: 18 },
+  labelText: { fontSize: 16, fontWeight: '900', letterSpacing: 0.4 },
+  hero: { marginTop: 14, borderRadius: 22, overflow: 'hidden' },
+  artBox: { position: 'absolute', top: 0, left: 0, right: 0 },
+  washRow: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, flexDirection: 'row' },
+  fadeStrip: { position: 'absolute', left: 0, right: 0, height: FADE_STRIP_HEIGHT },
+  heroContent: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 22 },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
+  levelBadge: { borderRadius: 99, paddingHorizontal: 14, paddingVertical: 7 },
+  levelText: { fontSize: 13, fontWeight: '900' },
+  badgeDivider: { width: 1.5, height: 18, borderRadius: 1 },
+  category: { color: palette.muted, fontSize: 14, fontWeight: '700' },
+  title: { color: '#17251d', fontSize: 34, lineHeight: 42, fontWeight: '900', marginTop: 14 },
+  summary: { color: INK, fontSize: 15.5, lineHeight: 25, fontWeight: '500', marginTop: 12 },
+  sections: { marginTop: 28, gap: 28 },
+  step: { gap: 12 },
+  stepHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  stepCircle: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  stepNumber: { fontSize: 18, fontWeight: '900' },
+  stepHeading: { flex: 1, fontSize: 21, lineHeight: 28, fontWeight: '900' },
+  // Body copy is indented to line up under the heading text (circle 38 + gap 12).
+  stepBody: { paddingLeft: 50, gap: 14 },
+  body: { color: INK, fontSize: 15.5, lineHeight: 25 },
+  cautionBand: { borderRadius: 12, paddingLeft: 20, paddingRight: 14, paddingVertical: 12, overflow: 'hidden' },
+  // A straight accent bar inset from the band's rounded corners (not a curved border).
+  cautionBar: { position: 'absolute', left: 8, top: 10, bottom: 10, width: 4, borderRadius: 2 },
+  cautionText: { color: '#17251d', fontSize: 14.5, lineHeight: 23, fontWeight: '800' },
+  exampleCard: { borderRadius: 18, borderWidth: 1, padding: 18, gap: 12 },
+  exampleHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  exampleMark: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  exampleMarkText: { fontSize: 17, fontWeight: '900' },
+  blockHeading: { fontSize: 21, lineHeight: 28, fontWeight: '900' },
+  takeaway: { borderRadius: 18, paddingVertical: 18, paddingLeft: 32, paddingRight: 18, gap: 8, overflow: 'hidden' },
+  // A straight accent line inset from the block's rounded corners.
+  takeawayBar: { position: 'absolute', left: 14, top: 16, bottom: 16, width: 5, borderRadius: 3 },
+  takeawayBody: { color: '#17251d', fontSize: 15.5, lineHeight: 25, fontWeight: '700' },
   note: { color: palette.muted, fontSize: 13, lineHeight: 20 },
 });
