@@ -47,14 +47,14 @@
 ## Claude G1
 - owner: claude
 - slot: claude-1
-- next_owner: user
-- status: review_required
+- next_owner: claude
+- status: ready
 - task_id: kabumori-topic-detail-visual-polish-20261005
 - start_code: G1
 - finish_code: K1
 - source: .agent/tasks/CLAUDE_TASK_1.md
-- allocation: K1 code-side PASS / visual HOLD. PR #84 exact head c9c173c153cbfd11229c9281b892d732728c3cd3 is open/mergeable/clean with 0 overlap against fresh main in the four topic-detail files. 294/294 tests, Expo config/export PASS, EAS 0, backend mutation 0. Final merge waits for real-iPhone visual confirmation because the new Mac has no iOS Simulator runtime; verify Hero wrapping/art fade/375pt density and emoji rendering. Codex review不要。
-- recommended_model: Sonnet5（高）
+- allocation: iOS Simulator runtime導入後の最終UI確認を再開。PR #84の既存実装を402pt/375pt、初級/中級/上級、長タイトル、背景wash/fade、番号付き本文、具体例、要点、🌱/💡表示までSimulatorで確認し、必要なら小さな見た目修正のみ行う。別PR禁止、EAS 0、backend mutation 0。完了後K1。
+- recommended_model: Sonnet5（中）
 
 ## Claude G2
 - owner: claude
