@@ -3,8 +3,8 @@
 - task_id: x-social-mobile-pr76-final-security-corrective-20261005
 - owner: claude
 - slot: claude-4
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: highest
 - recommended_model: Opus5.5（高）
 - type: bounded corrective implementation / pre-send readiness parity / SECURITY DEFINER ACL / rollout fail-closed
@@ -1767,3 +1767,173 @@ K4確認後、TASKどおり H1 で Codex **Sol（極高）** の独立再レビ�
 - recommended H2 model: **Sol（極高）**.
 - production apply/deploy/toggle/X remain forbidden.
 - next_owner: codex; wait for C2.
+
+
+## Report — x-social-mobile-pr76-final-security-corrective-20261005 (2026-10-05)
+
+- task_id: x-social-mobile-pr76-final-security-corrective-20261005
+- result: **PASS（source・自動テスト・使い捨てDBでの実証）／本番の適用・deploy・読み取り・実機確認は未実施**。PR [#76](https://github.com/anohi-memories/kabumori/pull/76) を是正（未merge、source candidate）。R1〜R5 の設計は変更なし。
+- model_used: Opus 5.5（TASK 推奨 Opus5.5（高）と一致）
+- old exact PR head（H2 がレビューした head、履歴に保持）: `7f75c07a8c997b6a585e9c86dca01186eeea671f`（作業開始時と push 直前の2回、PR head が一致することを確認）
+- new exact PR head: `5448e545f4a88bbf6597a981c0bcbe4c01043c30`（通常 push `7f75c07a..5448e545`。force-push・rebase なし）
+  - `a1a986ae` 是正本体（F1〜F3。差分は `7f75c07a..a1a986ae` で見られる）
+  - `ce1328c1` 最新 main `ef2f2018` の通常 merge（衝突なし）
+  - `5448e545` main の AI Lab テストのスタブに1行追加（テストのみ。下記「fresh-main」参照）
+- commit_hash: 上記3つ。push: 済み、read-back 一致（local = origin = PR headRefOid）。deploy: なし。
+- worktree: 既存の G4 専用 worktree `.claude/worktrees/g4-x-admin-pr15` のみ。G3・H1・H2 の worktree、PR #81 のファイルには触れていない。
+
+### F1 — 送信直前の条件を ON と完全に揃えた
+- 修正: `assert_x_publish_permission_for_legacy_post` の最終 SELECT 自体に2条件を追加した。ヘルパー `x_legacy_post_account` には頼らない。
+  - `sa.verified_at is null` → `X_ACCOUNT_NOT_VERIFIED`
+  - `nullif(btrim(sa.last_connection_error_code), '') is not null` → `X_ACCOUNT_CONNECTION_DEGRADED`（新しい固定コード）
+  - 判定順は refresh 状態の後。uncertain／reauth_required は従来どおり固有のコードで返る。
+  - `refreshing` は従来どおり拒否しない。proactive refresh が事前に拒否された場合も、従来どおり現在のトークンを使い続ける。
+- 実行可能な証明（すべてローカル・偽 X）:
+  - behavior SQL: ON 拒否 18 ケースすべてに実行時の拒否コードを必須化した（`runtime text not null`、スキップ廃止）。従来 null だった2ケース（verified_at 欠落・接続エラー記録）も一致。空白だけのエラーコードは ON・送信とも許可されることも確認した。
+  - E2E（実 SQL＋実 `VaultAccountXAuth`＋shim、X のみ偽）:
+    - verified_at 欠落／接続エラー記録 → 送信拒否、X コールバック 0。そのまま OFF は成功、ON は同じ理由で 409。復旧後は再び1回送信。
+    - 正常なアカウント → 1回送信。
+    - **実リフレッシュ SQL での 401 → refresh → 新しい確認 → 再送**: timeline が `read, permission, x:401, begin, commit, read, permission, x:201` になり、各 X リクエストの直前に必ず確認が入る。
+    - refresh の commit 後・再送前に OFF → 再送の確認が拒否、X は最初の 401 の1回だけ。
+  - 単体: 偽 DB を実 SQL と同じ条件に更新。トークン期限間近でも確認が先に拒否するのでトークン要求 0。401 記録後の次の試行は X に出る前に止まる。commit 済み refresh はエラーを消してから再送の確認を通る。
+  - 変異: 4件（verified_at 無視、接続エラー無視、空白コードをエラー扱い、refreshing を拒否）をすべて検出。
+- **影響（ドキュメントとコードコメントに明記）**: 接続エラーが記録されたアカウントは、再接続するまで自動投稿が止まる。対象は refresh できなかった 401、および token endpoint に拒否された refresh（429 `X_REFRESH_RATE_LIMITED` を含む）。その間 refresh も走らない（送信前に止まるため）。ON が既に拒否している状態と同じ。
+- 「パリティを case by case でテスト」という記述は、上記のとおり実際に完全一致になった。
+
+### F2 — SECURITY DEFINER の直接・実効 ACL
+- migration の修正（2関数だけが対象。ALTER DEFAULT PRIVILEGES・ロール所属・テーブル権限の変更はなし）:
+  1. 事前確認:
+     - anon・authenticated・service_role の存在（`PUBLISH_PERMISSION_PRECONDITION_ROLES`）
+     - 作成ロール = `x_legacy_post_account` の所有者。この関数の EXECUTE は所有者のみなので、機能上も必須（`PUBLISH_PERMISSION_PRECONDITION_OWNER`）
+     - 作成ロールが superuser でないこと（同じコード）
+  2. 既知ロールと PUBLIC を revoke した後、作成ロールの default privileges が新しい2関数に付けた付与を、どのロール宛てでも grant option の有無にかかわらず除去する（シグネチャは定数）。
+  3. COMMIT 前の事後確認（違えば `PUBLISH_PERMISSION_EFFECTIVE_ACL` でファイル全体を中止）:
+     - 定義: 所有者、SECURITY DEFINER、search_path=""
+     - 直接 ACL: 所有者以外は、それぞれ grant option なしの EXECUTE ちょうど1件。PUBLIC なし
+     - 実効権限（継承込み）: anon はどちらもなし、authenticated は switch のみ、service_role は check のみ
+     - その他の全ロール: 実行できるのは、所有者を継承するロール、その関数の想定付与先を継承するロール（そのロールとして振る舞う）、superuser に限る
+- 不利なロール構成のテスト `social_mobile_publish_permission_acl.sh`（新規、クラスター上で単独実行が必要）: 12 状況（毎回新しい DB）と再適用チェックで `ACL_PASS`。
+  - 適用され、余計な付与が残らないことを確認したケース:
+    - クリーンな構成（直接 ACL と実効権限の表が正確）
+    - schema 単位の default 付与（grant option 付き）
+    - DB 全体の default 付与
+    - その付与先を authenticated・anon が継承する構成
+  - 拒否され、2関数とも存在せず、default ACL・全関数 ACL・ロール所属の指紋が不変であることを確認したケース:
+    - 想定外ロールへの直接付与
+    - grant option 付き付与
+    - authenticated が service_role を継承
+    - anon が authenticated を継承
+    - service_role が所有者を継承
+    - 所有者以外による作成
+    - superuser による作成
+    - ヘルパーを superuser が所有し、その superuser が作成
+  - service_role を継承するロールは check だけを実行できる（許可範囲として明記）。
+  - 再適用は `PRECONDITION_ALREADY_APPLIED` で拒否され、権限は不変。
+- **旧 head `7f75c07a` の migration をこのテストにかけると「default grantee (schema)」で失敗し、余計なロールが grant option 付き EXECUTE を保持することを確認した**（H2 の F2 を再現）。新 migration は通過。
+- 変異 6 件をすべて検出（逐次実行）:
+  - 付与の除去なし
+  - grant option を許す
+  - 直接 ACL の確認なし
+  - app ロールの実効確認なし
+  - 所有者比較なし
+  - superuser 許可
+- 補足: 「その他の全ロール」ループは、直接 ACL 確認と除去処理から論理的に導かれる性質を実効権限の形で再確認するもので、単独では観測可能な差を生まない。そのため単独の変異は置いていない。直接 ACL 確認を外す変異は検出される。
+- 適用時の権限・所有者の前提を事前に確かめるため、読み取りクエリ f・g を追加した（作成ロールと superuser でないこと、ロール継承がすべて false、所有者の default ACL）。
+
+### F3 — 途中状態がすべて安全側になるロールアウト順
+- 承認手順（`supabase/tests/social_mobile_publish_permission.md` 6章。機械検査される `rollout-plan` ブロックつき）:
+  - **S0** 読み取り専用 preflight a〜g。Vault 連携の投稿予定がない時間帯を選ぶ。
+  - **S1** 送信前チェック付き x-test-post を deploy。S1〜S3 の間、AI Lab の投稿は `X_PUBLISH_PERMISSION_UNAVAILABLE` で安全側に失敗し、送信はされない。かぶモリ本体の投稿経路は変更しない。
+  - **S2** deploy 内容をバイト単位で照合し、15分以上待つ（実行時にプラットフォームの上限を確認）。さらにクエリ h（S1 前に開始した running の投稿）= 0 を確認する。手動 dispatch・Cron 変更・backlog や候補の注入はしない。
+  - **S3** migration を単独で適用。拒否された場合は何も作られないので停止（S2 の安全な状態のまま）。
+  - **S4** クエリ i・j で、定義・ACL・実効権限を読み戻す。
+  - **S5** publish-setting を JWT 検証 ON で deploy。
+  - **S6** アプリのコントロールを公開。
+- 中止経路:
+  - S1／S2 の後: x-test-post を前の版に戻す（スイッチがまだ存在しないので安全）。
+  - S3／S4 の後: まず `revoke execute … set_social_account_publish_enabled … from authenticated`。必要なら check も revoke（送信前チェック付きランタイムは安全側に失敗）。その後に初めてランタイムを戻す。
+  - S5／S6 の後: Edge を外す（アプリのコントロールはエラーで安全側に失敗）。以降は S3 の後と同じ。
+  - いずれも元に戻せる grant／revoke で、DROP はしない。
+- 証明:
+  - 状態遷移テスト `social_mobile_publish_permission_rollout_test.ts`（5件）:
+    - 前進の全状態と全中止経路の全状態で「旧ランタイムと使えるスイッチが同時に存在しない」
+    - 古い実行の排出が migration より前にある
+    - migration の直後に読み戻しがあり、Edge・アプリはその後
+    - preflight 以外の各 step に中止経路が1つずつある
+    - ランタイムを戻すのはスイッチが使えなくなった後だけ
+  - 途中状態 E2E `social_mobile_publish_permission_rollout_e2e_test.ts`（2件、**migration 未適用の実 DB**、shim は PostgREST と同じく 404 PGRST202 を返す）:
+    - ON の既存アカウントで送信 → `X_PUBLISH_PERMISSION_UNAVAILABLE`、X コールバック 0、トークン要求 0
+    - スイッチの Edge → 503、行は不変
+  - 適用後の状態（ON → 送信1回、OFF・ブランド無効 → 0）は上記の適用後 E2E で証明。
+  - 変異 5 件をすべて検出: migration 先行、排出なし、中止で先にランタイムを戻す、読み戻し前に Edge、migration 直後の中止経路なし。
+- migration ファイル冒頭の「Apply BEFORE deploying …」を削除し、ランタイム先行の手順を記載した（契約テストで固定）。
+
+### changed_files（是正コミット `a1a986ae`、13ファイル）
+- `supabase/migrations/20261003090000_social_mobile_publish_permission_boundary.sql`
+- `supabase/functions/x-test-post/vault_account_auth.ts`（コメントのみ）
+- `supabase/functions/x-test-post/vault_account_auth_test.ts`
+- `supabase/functions/social-mobile-publish-setting/migration_test.ts`
+- `supabase/tests/social_mobile_publish_permission.md`
+- `supabase/tests/social_mobile_publish_permission_behavior.sql`
+- `supabase/tests/social_mobile_publish_permission_e2e_test.ts`
+- `supabase/tests/social_mobile_publish_permission_postgrest_shim.ts`
+- `supabase/tests/social_mobile_publish_permission_run.sh`
+- `supabase/tests/social_mobile_publish_permission_mutations.sh`
+- 新規: `supabase/tests/social_mobile_publish_permission_acl.sh`、`supabase/tests/social_mobile_publish_permission_rollout_test.ts`、`supabase/tests/social_mobile_publish_permission_rollout_e2e_test.ts`
+- 追加コミット `5448e545`: `supabase/functions/_shared/brand/ai_lab_event_dedupe_test.ts`（スタブに1行のみ）
+- PR 全体の main との差分は 26 ファイル。content-settings・相談・共通アカウント・`.agent/`・`.env` は含まれない。
+- 公開 Edge コード（`social-mobile-publish-setting/{logic,http,index}.ts`）とアプリのコードは未変更。
+
+### SQL / runtime / app tests（最終 head `5448e545` の内容で実施。すべてローカル・偽データ・偽 X）
+- 使い捨て PostgreSQL 17.11（新しく作成、非 superuser 所有者、実際の前提 migration の上）:
+  - `run.sh`（`PUB_E2E=1`）→ ROLLOUT_E2E（2）/ APPLY（再適用拒否を含む）/ BEHAVIOR / RACE / E2E（9）/ CLEANUP すべて PASS
+- `acl.sh` → `ACL_PASS`
+- 変異テスト → **45/45 DETECTED**（SQL 34・権限 6・手順 5。従来の 30 件は維持。うち権限・search_path 系の4件は、適用時点の事後確認で拒否されるようになった）
+- Deno:
+  - publish-setting（logic 15 / http 14 / migration 契約 13）＋ `vault_account_auth_test` 31 ＋ migration invariants 10 ＋ rollout 5 = 88 件 PASS（型チェックあり）
+  - x-test-post＋`_shared`＋publish-setting 全体 984 件 PASS（`--no-check --allow-run`）
+  - 変更・追加した TS 12 ファイルの `deno check`・`deno lint` PASS
+- `x-test-post/index.ts` 全体の型診断: 既存の 6 件のみ。最新 main（`ef2f2018`）と内容・位置とも完全一致。PR による新規は 0。
+- アプリ: `npm test` 148 件（main で 3 件増）、domain 22 件、`tsc --noEmit`、`expo lint` PASS
+- `git diff --check`（main 比較）問題なし。秘密情報パターン 0 件。
+- CI（新 head）: Vercel・Netlify・Vercel Preview Comments は pass、Netlify のルール系 3 件は skipping。mergeable / CLEAN。
+
+### fresh-main overlap / conflicts
+- 作業中に main が `d345f674` から `ef2f2018` へ 53 コミット進んだ（PR #81・#82 の merge、`x-test-post/index.ts` などの変更）。PR #76 のファイルとの重なりは 0。merge も衝突なし。
+- **互換性で1点だけ要対応だった**:
+  - 内容: main の `ai_lab_event_dedupe_test.ts`（PR #82）が、PR #76 で必須になった `assertPublishPermission` を持たない RPC スタブで実物の送信ラッパーを使っていた。`--no-check` 実行では、全送信が `X_PUBLISH_PERMISSION_UNAVAILABLE` で安全側に止まり、3 テストが失敗した。
+  - 対応: スタブに許可を返す1行を追加（テストのみ、ランタイム変更なし）。型チェックも通る。
+  - 実ランタイムへの影響: main の AI Lab 結果判定（`ai_lab_provider_outcome.ts`）は、X リクエストが一度も出ていない失敗を NOT_SENT（題材の確保を解放）と扱う。送信前の新しい拒否も同じ扱いになるので、矛盾はない。
+- （記録）main の4件目の失敗に見えたのは、子プロセスで node を起動するテストを `--allow-run` なしで実行した私のコマンドの問題で、コードの問題ではなかった。
+
+### migration-version check
+- merge 後の `supabase/migrations/` で version の重複 0。
+- PR76 `20261003090000`、PR81（merge 済み）`20261003120000_social_mobile_content_settings_hardening`、PR82（merge 済み）`20261004090000_ai_lab_topic_claims` は互いに異なる。open PR #41・#3 の version とも衝突なし。
+- 予約表（`migration_source_invariants_test.ts`）の PR #76 の行は維持。テスト PASS。
+
+### production / safety
+- production mutation = **0** / production read = **0** / deploy = **0** / real X = **0**（OpenAI・Vault・Auth・Cron の操作もなし）
+- PR merge なし。
+- 使い捨てクラスター・DB・テスト用ロール・一時ディレクトリ・shim はすべて停止・削除済み。アプリロールの継承関係を変えるテストは、終了時に元に戻ることも確認した。
+- 他 slot のファイル・worktree・dev server には触れていない。
+
+### remaining risks
+1. **F1 の可用性への影響**: 接続エラーが記録されると、再接続まで AI Lab の自動投稿が止まる（429 の一時的な refresh 拒否も含む）。適用前にクエリ e で、該当する「Vault 連携・ON」アカウントの数を確認する必要がある。H2 の集計では Vault 連携・ON は 1 件だが、エラーの有無は未確認。一時的な 429 まで止めてよいかは K4／プロダクト判断を仰ぎたい。
+2. **F3 の可用性**: S1〜S3 の間は AI Lab の投稿が安全側で失敗する。投稿予定がない時間帯を選ぶ。待機時間（15分以上）は、Edge の最大実行時間を実行時に確認してから決める（プラットフォームの上限値は私が確認したものではない）。
+3. **本番の作成ロール**: 本番で `postgres` が適用し、かつ `x_legacy_post_account` の所有者が `postgres` であることが前提。H2 の読み取りでは成立しているが、実際の適用手段がこのロールで実行するかはクエリ f で確認する必要がある。違えば migration は安全側で拒否する。
+4. ロールアウトの中止経路は grant／revoke の SQL と deploy 操作で、状態遷移としては検証済みだが本番では未実施。
+5. 前回から継続: かぶモリ型（Vault 参照なし）アカウントの OFF／ON の非対称（H2 Gate M、公開範囲の判断が必要）、OFF と refresh の競合、送信開始後の OFF は取り消せない、managed PostgREST／JWT での実機確認は未実施。
+
+### safety checks
+- TASK の禁止事項（本番適用・db push・deploy・本番トグル・本番行変更・Auth／Vault／Cron 変更・実 X・merge）はすべて未実施。
+- `supabase/.temp/`（CLI の一時ファイル）はコミットしていない。stage は明示パスのみ。
+- 共有ルールファイル・他 slot の TASK・Report は変更していない（自分の TASK のステータスと Report だけ更新）。
+
+### next recommendation
+K4 確認後、TASK どおり H2 で Codex **Sol（極高）** の独立再レビューを行う（対象 head `5448e545`、是正差分は `7f75c07a..a1a986ae`）。重点:
+- F1: 接続エラー記録で止まることの可否
+- F2: 事後確認の論理と、本番の作成ロール
+- F3: 手順と待機の妥当性
+- main テストスタブの1行修正
+
+承認後に、操作者が 6章の S0〜S6 を実施する。merge・適用・deploy は Claude の自己レビューだけでは行わない。
