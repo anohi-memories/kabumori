@@ -1,3 +1,30 @@
+## AI Lab production rollout — Stage A applied / Stage B STOP — 2026-10-05
+
+- user explicitly approved the Company AI Lab PR #82 production DB rollout limited to Stage A/B/C + postflight; x-test-post deploy/Cron/manual scheduler/real X remain out of scope.
+- same-day preflight on production project `wsmznyzcvmuitkglfeuj` passed immediately before mutation:
+  - current_user=postgres
+  - PostgreSQL 17.6
+  - `public.ai_lab_topic_claims` absent
+  - superseded `public.ai_lab_topic_event_usage` absent
+  - target function count 0
+  - target migration history count 0 / stray history 0
+  - anon/authenticated/service_role are not members of postgres
+  - AI Lab running jobs 0 / overdue pending 0
+- exact merged migration blob `4f193f7ea1f812efd9e95907706b1b91eb1d283d` from main was applied as Stage A. Accepted SHA256 remains `30d8504173160f1dc9c3d7d1cf323d9890129d1ff117c2448aa1b2516629c09c`.
+- Stage B fresh read-only verification:
+  - table present
+  - exactly 5 target functions
+  - owner/effective table ACL/column ACL/function EXECUTE membership/overload/superseded-table semantic checks: **PASS / no mismatches**
+  - six of seven pinned catalog section hashes match
+  - only `function_acl` pinned hash mismatches: production actual `1720f5c85fc0cc888dfe034fb2bfed30d6734144bc3d4cb70c962b33d0a12094` vs runner expected `28ba64ffe31f3b0457b6e0d338734de5b23bfaeb170d84c24c1d6f934d5bcdb9`
+  - direct ACL read-back shows all five functions grant non-owner EXECUTE only to `service_role`, non-grantable; no unexpected grantee.
+- likely cause is runner catalog-hash serialization/environment dependence, not demonstrated privilege drift. Production default search_path includes public, so `regprocedure` string formatting omits the schema; this affects the hash representation.
+- per approved runbook, any Stage B hash mismatch is a mandatory STOP. **Stage C history was NOT written.**
+- current production checkpoint: **schema present / history missing**. Do not rerun Stage A. Future continuation must use the runner's explicit reviewed resume-history path only after correcting/reproving the Stage B descriptor or otherwise formally resolving the false-positive hash.
+- security advisor after Stage A reports the intended `ai_lab_topic_claims` pattern as INFO: RLS enabled with no policies. This is expected because direct table grants are absent and service_role uses the five narrow SECURITY DEFINER functions. No new warning names the five AI Lab functions as anon/authenticated executable.
+- production migration history write=0; Edge deploy=0; Cron=0; manual scheduler=0; real X/OpenAI/Vault/OAuth/token operation=0.
+- next: direct-copy Claude correction of runner descriptor only; preserve migration/runtime unchanged; local repro/proof; then separately authorize/resume Stage B -> Stage C. No Sol review by default; Luna(high) only if needed.
+
 ## AI Lab PR #86 rollout runner merged — production mutation still HOLD
 
 - Direct-copy Company AI Lab rollout-tooling work completed outside G1-G5.
