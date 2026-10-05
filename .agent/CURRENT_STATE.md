@@ -1,3 +1,14 @@
+## Routing correction — G3 restored / AI Lab direct instruction
+
+- User corrected the previous allocation: Company AI Lab PR #82 production-rollout work must **not** consume G3.
+- The accidental G3 task `ai-lab-pr82-production-rollout-runner-20261005` is withdrawn and preserved only as non-executable history.
+- G3 is restored to the original post-PR81 path: `x-social-mobile-pr81-production-schema-gate-20261005`.
+- G3 first performs production read-only preflight and migration-order coordination. PR #76 has earlier version `20261003090000`, so PR #81 `20261003120000` must not be applied ahead of it by assumption while PR #76 remains unresolved.
+- G3 prepares the exact H2-reviewed two-file atomic apply package, then **must STOP for fresh explicit production approval before any write**.
+- Only after PR #81 production apply + read-back PASS may PR #78 AI consultation v1 be fresh-integrated and its unfinished review resumed.
+- recommended Claude model for this DB/production gate: **Opus5.5（高）**.
+- Company AI Lab PR #82 rollout continuation will be given to the user as a direct-copy instruction outside G1-G5.
+
 ## Final K2 — 2026-10-05 morning natural observation OBSERVATION_INCOMPLETE
 
 - verdict: **OBSERVATION_INCOMPLETE (provider-side 429)**. This is accepted as an incomplete live observation, **not** a failure of PR #77 / PR #79/H1.
