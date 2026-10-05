@@ -1,3 +1,14 @@
+## K1 recheck — G1 Simulator continuation not yet executed
+
+- verdict: **NOT READY FOR K1**.
+- PR #84 is still at the pre-Simulator head `c9c173c153cbfd11229c9281b892d732728c3cd3`, with exactly 1 commit / 4 changed files.
+- no final Simulator screenshots or continuation commit are present, and no continuation Report was appended after the iOS runtime installation.
+- this means the resumed G1 verification task has not actually run yet.
+- no merge, review, deploy or production action taken.
+- G1 remains ready for the Simulator verification continuation.
+- recommended Claude model: **Sonnet5（中）**.
+- next: run `G1`, then return with `K1`.
+
 ## Routing correction — G3 restored / AI Lab direct instruction
 
 - User corrected the previous allocation: Company AI Lab PR #82 production-rollout work must **not** consume G3.
