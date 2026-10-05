@@ -36,14 +36,14 @@
 - owner: codex
 - slot: codex-2
 - status: ready
-- task_id: kabumori-pr87-editorial-three-points-review-20261005
+- task_id: x-social-mobile-pr76-final-security-rereview-20261005
 - start_code: H2
 - finish_code: C2
 - next_owner: codex
 - source: .agent/tasks/CODEX_TASK_2.md
 - report: .agent/CODEX_REPORT_2.md
-- allocation: PR #87の「今日のポイント3点」改善をfocused review。朝刊/大引けのeditorial契約、Hard Fact/因果安全性、WARN-only telemetry、model-call不増、X/App同一points_ja、旧レポートfallback、回帰テストを確認。source変更/merge/deploy/production mutation禁止。
-- recommended_model: Luna（高）
+- allocation: PR #76の最終セキュリティrereview。G4がF1/F2/F3を修正済み。pre-send readiness parity、SECURITY DEFINER effective ACL、runtime-first fail-closed rolloutを独立確認。production mutation/merge/deploy/real X禁止。
+- recommended_model: Sol（高）
 
 ## Claude G1
 - owner: claude
