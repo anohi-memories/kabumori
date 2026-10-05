@@ -119,6 +119,7 @@ export async function fetchSource(source: SourceDefinition, options: FetchOption
       ? "application/json"
       : "application/rss+xml, application/atom+xml, application/rdf+xml, application/xml, text/xml",
   };
+  if (source.request_accept_encoding) headers["Accept-Encoding"] = source.request_accept_encoding;
   const validator = options.validators?.get(url);
   if (validator?.etag) headers["If-None-Match"] = validator.etag;
   if (validator?.lastModified) headers["If-Modified-Since"] = validator.lastModified;
