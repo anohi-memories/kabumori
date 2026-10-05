@@ -3,10 +3,10 @@
 - task_id: kabumori-topic-detail-visual-polish-20261005
 - owner: claude
 - slot: claude-1
-- status: review_required
-- next_owner: user
+- status: ready
+- next_owner: claude
 - priority: high
-- recommended_model: Sonnet5（高）
+- recommended_model: Sonnet5（中）
 - purpose: ユーザーがG1へ直接渡す「かぶモリ学習ノート / PERって何？」のUI見本画像を正本ベースに、現在のtopic detail機能・50トピック本文・fetch安全性を変えず、詳細画面の見た目だけを最終仕上げする。
 
 ## Allocation snapshot
@@ -440,6 +440,96 @@ Then:
 - STOP for K1.
 
 Recommended model: **Sonnet5（高）**.
+
+## K1 continuation — Simulator runtime restored
+
+The user has now installed the iOS Simulator runtime on the new Mac.
+
+This continuation is **verification-first**, not a redesign.
+
+Recommended model: **Sonnet5（中）**.
+
+### Start conditions
+1. fresh `origin/main`
+2. re-read this TASK / CURRENT_STATE
+3. confirm PR #84 exact current head and no new overlap
+4. confirm `xcrun simctl list runtimes` now shows an available iOS runtime
+5. use the same isolated G1 worktree/branch for PR #84 if it is still safe; do not create unrelated work or touch other slots
+
+### Required visual verification
+Run the final implementation in iOS Simulator and inspect at minimum:
+- ~402pt width
+- ~375pt width
+- beginner
+- intermediate
+- advanced
+- at least one long 2–3 line title
+- one dense example
+- final takeaway block
+- history -> detail path
+
+Specifically judge:
+- Hero title wrapping and text/art collision
+- canonical background art composition
+- left-to-right wash and bottom fade seam/banding
+- level/category readability
+- numbered-section rhythm and 50pt body indent
+- example-card density
+- takeaway balance
+- page scroll rhythm
+- 🌱 and 💡 rendering: if they look like generic emoji or visually cheap compared with the reference, replace them **without a new dependency** using the simplest existing/native option, or remove them if that looks cleaner
+- no clipping at 375pt
+- no unintended excessive Hero height
+
+### Allowed corrections
+Only small visual corrections proven necessary by the Simulator check:
+- spacing
+- font size/line-height
+- Hero padding/min-height
+- wash/fade values
+- icon/emoji presentation
+- section indentation
+- radius/border/tint balance
+
+Do not rewrite catalog content or change data/backend behavior.
+
+After any correction:
+- rerun focused topic-detail tests
+- run full `deno test tests/app/` if practical
+- Expo config
+- web export if supported
+- changed-scope type/lint
+- `git diff --check`
+
+### Evidence
+Capture final Simulator screenshots under `docs/ui-review/` for:
+- one 402pt representative full/upper screen
+- one 375pt long-title or lower-screen case
+- ideally enough evidence to show all three level accents without bloating the PR
+
+Update the existing PR #84; do not open a second PR.
+Do not merge.
+EAS build = 0.
+Production/backend mutation = 0.
+
+Then append a continuation result to the Report with:
+- runtime availability proof
+- whether any visual correction was needed
+- changed files/commit/head
+- 402pt findings
+- 375pt findings
+- beginner/intermediate/advanced findings
+- emoji/icon decision
+- screenshots added
+- tests
+- remaining issues
+
+Finally:
+- status -> `review_required`
+- next_owner -> `chatgpt`
+- STOP for K1.
+
+---
 
 ## Report — G1: topic detail visual polish (task kabumori-topic-detail-visual-polish-20261005)
 
