@@ -3,8 +3,8 @@
 - task_id: kabumori-topic-detail-visual-polish-20261005
 - owner: claude
 - slot: claude-1
-- status: ready
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - priority: high
 - recommended_model: Sonnet5（中）
 - purpose: ユーザーがG1へ直接渡す「かぶモリ学習ノート / PERって何？」のUI見本画像を正本ベースに、現在のtopic detail機能・50トピック本文・fetch安全性を変えず、詳細画面の見た目だけを最終仕上げする。
@@ -612,6 +612,69 @@ Status: `review_required` / next_owner `user`.
 - next: user opens the PR branch on iPhone and shares/approves the actual screen; then ChatGPT can finalize K1 or return a small corrective to G1.
 
 No production mutation. No merge.
+
+## Report 2 — G1: topic detail visual polish, Simulator continuation (task kabumori-topic-detail-visual-polish-20261005)
+
+- result: **iOS Simulator verification done at 402pt and 375pt; small visual corrections were needed and applied.** PR #84 updated (no second PR), **not merged**.
+- PR: https://github.com/anohi-memories/kabumori/pull/84 — branch `claude/g1-topic-detail-visual-polish-20261005`, **head `b7bf774b964ed740a00b904447f029351cebef80`** (3 commits: `c9c173c1` initial → `8c010c2f` Simulator corrections → `b7bf774b` 375pt tweaks + screenshots).
+- **EAS build created: no (0).** backend/DB/RPC/API/AI/Auth/Edge/production mutation: **0**.
+
+### runtime availability proof
+`xcrun simctl list runtimes` shows iOS 27.0 and the iPhone 18 Pro / iPhone SE (3rd generation) device types are available again. The 402pt pass ran on an iPhone 18 Pro, the 375pt pass on a temporary iPhone SE (3rd gen) device (deleted afterwards). Metro was a local dev server (one at a time; the user's iPhone server was stopped meanwhile). The verification rig used an auth bypass + fixtures in a **scratchpad copy only — not committed**.
+Dev-client note: the SDK-27-built dev client crashes at launch on iOS 27 (UIScene lifecycle). The Simulator checks used a patched copy of the build (vtool SDK 26.0 + ad-hoc re-sign) in the scratchpad; nothing of that is in the repo. `expo run:ios` also needs `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8` (CocoaPods).
+
+### was a visual correction needed? **Yes** (first Simulator pass found real defects)
+1. Long titles (ROE… / 信用買い残… / 金利…) ran over the Hero illustration → titles of 8+ characters now use a smaller size and start below the art (`topicDetailTitleStyle`, `TOPIC_DETAIL_ART_CLEAR_RATIO = 0.78`).
+2. Left accent "borders" bent into arcs on the rounded caution band / takeaway block → replaced by straight absolutely-positioned inset bars (no `borderLeftWidth` anywhere; pinned by test).
+3. 💡 looked cheap → replaced by a level-tinted circle with 「例」.
+4. Right-hand 🌱 squeezed the takeaway text → removed from the takeaway (text now uses the full width).
+5. Content was hard-cut at the home indicator → bottom safe area moved into the scroll padding (`60 + insets.bottom`, `edges={['top']}`).
+6. Spacing trimmed slightly (section gap 28, body line height 25) — scroll heights dropped from 1388–1616pt to 1370–1544pt.
+Second pass (after `8c010c2f`) confirmed all of the above; two small 375pt leftovers were then fixed in `b7bf774b`: 8–16 character titles 28/36 → **27/35** (ROEって何を見る指標？ no longer breaks mid-word at 375pt) and caution text 15/24 → **14.5/23** (no lone trailing 「す。」 line in the 375pt caution band). These last two tweaks are test-covered and web-export checked but were **not re-screenshotted** after the change (the committed 375pt screenshot predates them).
+
+### changed files since the first Report
+`src/app/topic-detail.tsx`, `src/lib/topic-detail-presentation.ts`, `tests/app/topic-detail-screen_test.ts`, `tests/app/topic-detail-presentation_test.ts`, + 3 screenshots (below). Catalog text, `daily-topic.ts`, `home-topic.ts`, Home card untouched; fetch / `id` mismatch fail-closed / params contract unchanged.
+
+### 402pt findings (iPhone 18 Pro)
+- Hero height: PER 214.7, ROE 259.3, 信用買い残 291.3, 金利 291.3 (pt). Short title (PER) sits left of the art with no collision; long titles start below the illustration with a 11–15pt gap to the art.
+- Wash/fade: smooth, no visible banding at the wash seam or the bottom fade (equal-width strips / 2pt fade strips).
+- Numbered rhythm: 38pt circles, 21pt headings, body indent 50pt read cleanly; no card-per-step noise. Example card density comfortable; takeaway block balanced after removing the right emoji.
+- Bottom: 94pt of padding, takeaway is no longer cut by the home indicator.
+- Scroll heights (402): PER 1386, ROE 1370, 信用買い残 1452, 金利 1512.
+
+### 375pt findings (iPhone SE 3rd gen)
+- Hero heights: PER 215, ROE 287, 信用買い残 317, 金利 283. No horizontal clipping anywhere; art does not collide with titles.
+- Found + fixed (see above): ROE title mid-word break; lone trailing line in the caution band. 17+ character titles wrap to 3 lines cleanly at 26/34.
+- Scroll heights (375): PER 1402, ROE 1414, 信用買い残 1444, 金利 1544.
+- Remaining cosmetic: ~60pt of empty space left of the art above the long below-art titles (accepted; keeps text off the illustration).
+
+### beginner / intermediate / advanced
+Green (beginner PER), blue (intermediate ROE), lavender (advanced 信用買い残・金利) all read as one family: Hero tint, badge, circles, example outline and takeaway block follow `TOPIC_DETAIL_LEVEL_COLORS`; accent headings stay AA-contrast on their surfaces (test-pinned ≥ 4.5). No level looked washed-out or too heavy; the lavender art/wash seam is as clean as green/blue.
+
+### emoji / icon decision
+Keep **🌱** only on the 「かぶモリ学習ノート」 label (renders fine, no new dependency). **💡 replaced** by a 「例」 circle (no emoji). Takeaway **🌱 removed**. Straight accent bars instead of curved borders. No new icon dependency or asset.
+
+### screenshots added (`docs/ui-review/`, WebP q80)
+- `topic_detail_final_3level_402pt.webp` — 402pt, beginner/intermediate/advanced accents together
+- `topic_detail_final_375pt_long.webp` — 375pt long-title case
+- `topic_detail_final_bottom_402pt.webp` — 402pt lower screen (example, takeaway, bottom padding)
+Total ≈ 360 KB. (Full per-level/per-size PNGs stayed in the scratchpad, not committed.)
+
+### navigation checks
+Home → detail → back and `/topics` (history) → detail → back verified in the Simulator via the app's own handlers. loading / error / id-mismatch / unknown-title fallback states render fine. **Real finger taps were not verified** (the Simulator tool had no accessibility permission for taps); the user's iPhone review still covers touch.
+
+### tests (at head `b7bf774b`)
+`deno test tests/app/` **297 passed / 0 failed** (topic suites 38); `npx expo config --json` OK; `npx expo export --platform web` PASS; tsc(src): only the 2 known CSS-module diagnostics; `git diff --check` clean.
+
+### remaining issues
+- Final 27/35 title + 14.5 caution tweaks not re-screenshotted (low risk; confirm on the user's iPhone).
+- Real touch input not exercised in the Simulator.
+- SDK-27 dev client launch crash on iOS 27 is an environment issue (needs a rebuild with a newer SDK/Xcode, or the scratchpad workaround) — unrelated to this PR.
+
+### safety_checks
+No content/DB/RPC/Auth/AI/API/Edge/native/EAS change; no new dependency or asset beyond the three review screenshots; no deploy; PR not merged; no secrets committed (`.env` and `node_modules` explicitly kept out of every commit).
+
+Status: `review_required` / next_owner `chatgpt`. STOP for K1.
 
 ---
 
